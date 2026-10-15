@@ -129,7 +129,11 @@ impl Cpu {
     pub fn trap(&mut self, cause: u32, tval: u32, is_irq: bool) -> Exit {
         let epc = self.pc;
         if self.csr.mtvec == 0 && !is_irq {
-            return Exit::DoubleFault { cause, pc: epc, tval };
+            return Exit::DoubleFault {
+                cause,
+                pc: epc,
+                tval,
+            };
         }
         self.csr.mepc = epc;
         self.csr.mcause = if is_irq { 0x8000_0000 | cause } else { cause };
@@ -424,7 +428,8 @@ impl Cpu {
                         0x3020_0073 => {
                             // MRET：MIE <- MPIE, MPIE <- 1
                             let mpie = (self.csr.mstatus >> 7) & 1;
-                            self.csr.mstatus = (self.csr.mstatus & !(1 << 3)) | (mpie << 3) | (1 << 7);
+                            self.csr.mstatus =
+                                (self.csr.mstatus & !(1 << 3)) | (mpie << 3) | (1 << 7);
                             self.pc = self.csr.mepc;
                             self.instret += 1;
                             return Exit::Normal;

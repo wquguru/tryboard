@@ -54,7 +54,10 @@ pub fn expand(c: u16) -> Option<u32> {
     Some(match (op, f3) {
         (0, 0) => {
             // C.ADDI4SPN
-            let imm = (((c >> 7) & 0xf) << 6) | (((c >> 11) & 3) << 4) | (bit(c, 5) << 3) | (bit(c, 6) << 2);
+            let imm = (((c >> 7) & 0xf) << 6)
+                | (((c >> 11) & 3) << 4)
+                | (bit(c, 5) << 3)
+                | (bit(c, 6) << 2);
             if imm == 0 {
                 return None;
             }

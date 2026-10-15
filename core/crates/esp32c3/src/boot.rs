@@ -68,7 +68,8 @@ pub fn load_rom(m: &mut Esp32c3, elf_bytes: &[u8]) -> Result<(), String> {
     // ROM 启动代码（我们跳过了）会做的初始化：
     // 1. ets_printf 的输出挂到 UART（等价于调用 ets_install_uart_printf）
     let sym = |n: &str| elf.symbol(n).ok_or(format!("ROM 里没有符号 {n}"));
-    m.bus.mem_write(sym("_putc1")?, 4, sym("ets_write_char_uart")?);
+    m.bus
+        .mem_write(sym("_putc1")?, 4, sym("ets_write_char_uart")?);
     // 2. ROM 打印走 UART（g_uart_print=1），不走 USB-Serial-JTAG（g_usb_print=0，那是 USB 插着时才开）
     m.bus.mem_write(sym("g_uart_print")?, 1, 1);
     m.bus.mem_write(sym("g_usb_print")?, 1, 0);
@@ -91,7 +92,10 @@ pub fn load_rom(m: &mut Esp32c3, elf_bytes: &[u8]) -> Result<(), String> {
 /// 二级 bootloader 会按镜像头填写 ROM 的 flash 芯片描述（esp_rom_spiflash_chip_t）。
 fn init_flashchip(m: &mut Esp32c3, size_code: u8, jedec: u32) -> Result<(), String> {
     // rom_spiflash_legacy_data（esp32c3.rom.ld）是指针，指向 ROM .data 里的结构体
-    let p = m.bus.mem_read(0x3FCD_FFF0, 4).ok_or("读不到 rom_spiflash_legacy_data")?;
+    let p = m
+        .bus
+        .mem_read(0x3FCD_FFF0, 4)
+        .ok_or("读不到 rom_spiflash_legacy_data")?;
     let size = match size_code {
         0 => 1 << 20,
         1 => 2 << 20,
@@ -101,8 +105,13 @@ fn init_flashchip(m: &mut Esp32c3, size_code: u8, jedec: u32) -> Result<(), Stri
         _ => 4 << 20,
     };
     let id = ((jedec & 0xff) << 16) | (jedec & 0xff00) | ((jedec >> 16) & 0xff);
-    for (i, v) in [id, size, 64 << 10, 4 << 10, 256, 0xffff].iter().enumerate() {
-        m.bus.mem_write(p + 4 * i as u32, 4, *v).ok_or("写 g_rom_flashchip 失败")?;
+    for (i, v) in [id, size, 64 << 10, 4 << 10, 256, 0xffff]
+        .iter()
+        .enumerate()
+    {
+        m.bus
+            .mem_write(p + 4 * i as u32, 4, *v)
+            .ok_or("写 g_rom_flashchip 失败")?;
     }
     Ok(())
 }
@@ -167,13 +176,22 @@ pub fn parse_app(flash: &[u8], off: u32) -> Result<AppInfo, String> {
         segments.push((load, (p + 8) as u32, len));
         p += 8 + len as usize;
     }
-    Ok(AppInfo { offset: off, entry, segments })
+    Ok(AppInfo {
+        offset: off,
+        entry,
+        segments,
+    })
 }
 
 impl Esp32c3 {
     /// 新建一台机器：装 ROM、装 flash、做 bootloader 该做的事，PC 停在 app 入口。
     pub fn boot(rom_elf: &[u8], flash: Vec<u8>) -> Result<(Esp32c3, AppInfo), String> {
-        let mut m = Esp32c3 { cpu: Cpu::new(), bus: SocBus::default(), rom_symbols: HashMap::new(), hle: HashMap::new() };
+        let mut m = Esp32c3 {
+            cpu: Cpu::new(),
+            bus: SocBus::default(),
+            rom_symbols: HashMap::new(),
+            hle: HashMap::new(),
+        };
         load_rom(&mut m, rom_elf)?;
         let mut flash = flash;
         // 补齐到 4MB，避免 app 探测 flash 大小 / 读分区时越界
@@ -183,11 +201,14 @@ impl Esp32c3 {
         let off = find_app(&flash)?;
         let app = parse_app(&flash, off)?;
         for &(load, data, len) in &app.segments {
-            let in_flash = (IROM_LOW..IROM_HIGH).contains(&load) || (DROM_LOW..DROM_HIGH).contains(&load);
+            let in_flash =
+                (IROM_LOW..IROM_HIGH).contains(&load) || (DROM_LOW..DROM_HIGH).contains(&load);
             if in_flash {
                 // 64KB 页映射：vaddr 与 flash 偏移的页内偏移相同
                 if load & 0xffff != data & 0xffff {
-                    return Err(format!("段 0x{load:08x} 与 flash 偏移 0x{data:x} 页内偏移不一致"));
+                    return Err(format!(
+                        "段 0x{load:08x} 与 flash 偏移 0x{data:x} 页内偏移不一致"
+                    ));
                 }
                 let first = ((load & 0x7f_ffff) >> 16) as usize;
                 let last = (((load + len - 1) & 0x7f_ffff) >> 16) as usize;

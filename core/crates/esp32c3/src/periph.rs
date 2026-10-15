@@ -13,6 +13,7 @@ pub mod src {
     pub const USB_SERIAL_JTAG: u32 = 26;
     pub const RTC_CORE: u32 = 27;
     pub const RMT: u32 = 28;
+    pub const I2C_EXT0: u32 = 29;
     pub const TG0_T0: u32 = 32;
     pub const TG0_WDT: u32 = 33;
     pub const TG1_T0: u32 = 34;
@@ -35,7 +36,15 @@ pub struct Intc {
 
 impl Default for Intc {
     fn default() -> Self {
-        Intc { map: [0; 64], enable: 0, edge: 0, pri: [0; 32], thresh: 0, latched: 0, clock_gate: 1 }
+        Intc {
+            map: [0; 64],
+            enable: 0,
+            edge: 0,
+            pri: [0; 32],
+            thresh: 0,
+            latched: 0,
+            clock_gate: 1,
+        }
     }
 }
 
@@ -121,7 +130,13 @@ impl Default for Uart {
         regs[0x78 / 4] = 0x0320_0000;
         regs[0x7c / 4] = 0x0200_7220;
         regs[0x80 / 4] = 0x0000_0500;
-        Uart { tx: Vec::new(), rx: Default::default(), int_raw: 0x2, int_ena: 0, regs }
+        Uart {
+            tx: Vec::new(),
+            rx: Default::default(),
+            int_raw: 0x2,
+            int_ena: 0,
+            regs,
+        }
     }
 }
 
@@ -246,9 +261,13 @@ impl Systimer {
                     self.unit_latch[u] = self.count(u, now);
                 }
             }
-            0x0c => self.unit_load[0] = (self.unit_load[0] & 0xffff_ffff) | ((v as u64 & 0xfffff) << 32),
+            0x0c => {
+                self.unit_load[0] = (self.unit_load[0] & 0xffff_ffff) | ((v as u64 & 0xfffff) << 32)
+            }
             0x10 => self.unit_load[0] = (self.unit_load[0] & !0xffff_ffff) | v as u64,
-            0x14 => self.unit_load[1] = (self.unit_load[1] & 0xffff_ffff) | ((v as u64 & 0xfffff) << 32),
+            0x14 => {
+                self.unit_load[1] = (self.unit_load[1] & 0xffff_ffff) | ((v as u64 & 0xfffff) << 32)
+            }
             0x18 => self.unit_load[1] = (self.unit_load[1] & !0xffff_ffff) | v as u64,
             0x1c | 0x24 | 0x2c => {
                 let i = ((off - 0x1c) / 8) as usize;
@@ -264,7 +283,8 @@ impl Systimer {
                 let i = ((off - 0x50) / 4) as usize;
                 if self.target_conf[i] & (1 << 30) != 0 {
                     let unit = (self.target_conf[i] >> 31) as usize;
-                    self.target[i] = self.count(unit, now) + (self.target_conf[i] & 0x3ff_ffff) as u64;
+                    self.target[i] =
+                        self.count(unit, now) + (self.target_conf[i] & 0x3ff_ffff) as u64;
                 }
             }
             0x5c | 0x60 => {
@@ -341,7 +361,14 @@ impl Default for Timg {
             t0_latch: 0,
             t0_alarm: 0,
             t0_load: 0,
-            wdt_cfg: [0x0004_c000, 0xffff, 0x0186_a000, 0x03ff_ffff, 0x0fff_ffff, 0x0fff_ffff],
+            wdt_cfg: [
+                0x0004_c000,
+                0xffff,
+                0x0186_a000,
+                0x03ff_ffff,
+                0x0fff_ffff,
+                0x0fff_ffff,
+            ],
             wdt_wprotect: 0,
             rtccali: [0x0001_b000, 0, 0],
             int_ena: 0,
@@ -425,7 +452,8 @@ impl Timg {
             0x1c => self.t0_load = (self.t0_load & 0xffff_ffff) | ((v as u64 & 0x3f_ffff) << 32),
             0x20 => {
                 if self.t0config & (1 << 31) != 0 {
-                    self.t0_offset = self.t0_load as i64 - (self.src_ticks(now) / self.divider()) as i64;
+                    self.t0_offset =
+                        self.t0_load as i64 - (self.src_ticks(now) / self.divider()) as i64;
                 } else {
                     self.t0_offset = self.t0_load as i64;
                 }
@@ -461,7 +489,8 @@ impl Timg {
                 self.int_raw |= 1;
                 self.t0config &= !(1 << 10);
                 if self.t0config & (1 << 29) != 0 {
-                    self.t0_offset = self.t0_load as i64 - (self.src_ticks(now) / self.divider()) as i64;
+                    self.t0_offset =
+                        self.t0_load as i64 - (self.src_ticks(now) / self.divider()) as i64;
                 }
             } else {
                 let ticks = (self.t0_alarm - c) * self.divider();

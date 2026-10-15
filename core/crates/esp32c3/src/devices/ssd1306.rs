@@ -1,0 +1,291 @@
+//! SSD1306 128×64 单色 OLED（I2C）。命令语义按 SSD1306 数据手册（Solomon Systech）。
+//!
+//! 常见 0.96" 模组的面板安装方向使得"段重映射 A1 + COM 反向扫描 C8"时画面正立，
+//! 这里的显示朝向按这个约定换算。
+
+use crate::i2c::I2cDevice;
+use std::any::Any;
+
+pub const W: usize = 128;
+pub const H: usize = 64;
+
+#[derive(PartialEq)]
+enum Mode {
+    Horizontal,
+    Vertical,
+    Page,
+}
+
+pub struct Ssd1306 {
+    pub addr: u8,
+    pub gddram: [u8; W * H / 8],
+    pub display_on: bool,
+    pub charge_pump: bool,
+    pub contrast: u8,
+    pub inverse: bool,
+    pub entire_on: bool,
+    pub seg_remap: bool,
+    pub com_reverse: bool,
+    pub start_line: u8,
+    pub offset: u8,
+    mode: Mode,
+    col: u8,
+    page: u8,
+    col_start: u8,
+    col_end: u8,
+    page_start: u8,
+    page_end: u8,
+    /// I2C 控制字节状态：None = 下一个字节是控制字节
+    ctrl: Option<(bool, bool)>, // (Co, D/C)
+    cmd_buf: Vec<u8>,
+    /// 每次画面可能变化时递增，前端据此决定是否重传纹理
+    pub version: u32,
+    pub frame: Vec<u8>,
+    frame_version: u32,
+}
+
+impl Ssd1306 {
+    pub fn new(addr: u8) -> Self {
+        Ssd1306 {
+            addr,
+            gddram: [0; W * H / 8],
+            display_on: false,
+            charge_pump: false,
+            contrast: 0x7f,
+            inverse: false,
+            entire_on: false,
+            seg_remap: false,
+            com_reverse: false,
+            start_line: 0,
+            offset: 0,
+            mode: Mode::Page,
+            col: 0,
+            page: 0,
+            col_start: 0,
+            col_end: 127,
+            page_start: 0,
+            page_end: 7,
+            ctrl: None,
+            cmd_buf: Vec::new(),
+            version: 1,
+            frame: vec![0; W * H],
+            frame_version: 0,
+        }
+    }
+
+    /// 命令需要的参数个数
+    fn args_needed(c: u8) -> usize {
+        match c {
+            0x81 | 0x8d | 0x20 | 0xa8 | 0xd3 | 0xd5 | 0xd9 | 0xda | 0xdb => 1,
+            0x21 | 0x22 | 0xa3 => 2,
+            0x29 | 0x2a => 5,
+            0x26 | 0x27 => 6,
+            _ => 0,
+        }
+    }
+
+    fn command(&mut self, b: u8) {
+        self.cmd_buf.push(b);
+        let c = self.cmd_buf[0];
+        if self.cmd_buf.len() <= Self::args_needed(c) {
+            return;
+        }
+        let a = self.cmd_buf[1..].to_vec();
+        self.cmd_buf.clear();
+        self.version += 1;
+        match c {
+            0xae => self.display_on = false,
+            0xaf => self.display_on = true,
+            0x81 => self.contrast = a[0],
+            0x8d => self.charge_pump = a[0] & 0x04 != 0,
+            0x20 => {
+                self.mode = match a[0] & 3 {
+                    0 => Mode::Horizontal,
+                    1 => Mode::Vertical,
+                    _ => Mode::Page,
+                }
+            }
+            0x21 => {
+                self.col_start = a[0] & 0x7f;
+                self.col_end = a[1] & 0x7f;
+                self.col = self.col_start;
+            }
+            0x22 => {
+                self.page_start = a[0] & 7;
+                self.page_end = a[1] & 7;
+                self.page = self.page_start;
+            }
+            0xb0..=0xb7 => self.page = c & 7,
+            0x00..=0x0f => self.col = (self.col & 0xf0) | (c & 0x0f),
+            0x10..=0x1f => self.col = (self.col & 0x0f) | ((c & 0x07) << 4),
+            0x40..=0x7f => self.start_line = c & 0x3f,
+            0xa0 => self.seg_remap = false,
+            0xa1 => self.seg_remap = true,
+            0xc0 => self.com_reverse = false,
+            0xc8 => self.com_reverse = true,
+            0xa6 => self.inverse = false,
+            0xa7 => self.inverse = true,
+            0xa4 => self.entire_on = false,
+            0xa5 => self.entire_on = true,
+            0xd3 => self.offset = a[0] & 0x3f,
+            // 其余（时钟、预充电、COM 引脚、VCOMH、滚动）不影响静态画面
+            _ => {}
+        }
+    }
+
+    fn data(&mut self, b: u8) {
+        let i = self.page as usize * W + self.col as usize;
+        self.gddram[i] = b;
+        self.version += 1;
+        match self.mode {
+            Mode::Horizontal => {
+                if self.col >= self.col_end {
+                    self.col = self.col_start;
+                    self.page = if self.page >= self.page_end {
+                        self.page_start
+                    } else {
+                        self.page + 1
+                    };
+                } else {
+                    self.col += 1;
+                }
+            }
+            Mode::Vertical => {
+                if self.page >= self.page_end {
+                    self.page = self.page_start;
+                    self.col = if self.col >= self.col_end {
+                        self.col_start
+                    } else {
+                        self.col + 1
+                    };
+                } else {
+                    self.page += 1;
+                }
+            }
+            Mode::Page => {
+                if self.col < 127 {
+                    self.col += 1;
+                }
+            }
+        }
+    }
+
+    /// RAM 中某像素是否点亮（RAM 坐标）
+    pub fn ram_pixel(&self, col: usize, row: usize) -> bool {
+        self.gddram[(row / 8) * W + col] >> (row % 8) & 1 != 0
+    }
+
+    /// 观察者看到的画面：128×64，每像素 0..255 亮度（含开关、电荷泵、对比度、反色）。
+    pub fn render(&mut self) -> &[u8] {
+        if self.frame_version == self.version {
+            return &self.frame;
+        }
+        self.frame_version = self.version;
+        let lit = self.display_on && self.charge_pump;
+        // 对比度对亮度的影响是非线性的，低对比度仍然清晰可见
+        let level = (110.0 + 145.0 * (self.contrast as f32 / 255.0).sqrt()) as u8;
+        for y in 0..H {
+            for x in 0..W {
+                let col = if self.seg_remap { x } else { W - 1 - x };
+                let com = if self.com_reverse { y } else { H - 1 - y };
+                let row = (com + self.start_line as usize + self.offset as usize) % H;
+                let mut on = self.entire_on || self.ram_pixel(col, row);
+                if self.inverse {
+                    on = !on;
+                }
+                self.frame[y * W + x] = if lit && on { level } else { 0 };
+            }
+        }
+        &self.frame
+    }
+
+    pub fn lit_pixels(&mut self) -> usize {
+        self.render().iter().filter(|&&p| p > 0).count()
+    }
+
+    /// 文本示意（2×1 像素压成一个字符），给 CLI / 验收看
+    pub fn ascii(&mut self) -> String {
+        let f = self.render().to_vec();
+        let mut s = String::new();
+        for y in (0..H).step_by(2) {
+            for x in 0..W {
+                let a = f[y * W + x] > 0;
+                let b = f[(y + 1) * W + x] > 0;
+                s.push(match (a, b) {
+                    (true, true) => '█',
+                    (true, false) => '▀',
+                    (false, true) => '▄',
+                    _ => ' ',
+                });
+            }
+            s.push('\n');
+        }
+        s
+    }
+}
+
+impl I2cDevice for Ssd1306 {
+    fn address(&self) -> u8 {
+        self.addr
+    }
+    fn start(&mut self, read: bool) -> bool {
+        self.ctrl = None;
+        // I2C 接口下读不到 GDDRAM，只有状态字节；照样应答
+        let _ = read;
+        true
+    }
+    fn write(&mut self, b: u8) -> bool {
+        match self.ctrl {
+            None => self.ctrl = Some((b & 0x80 != 0, b & 0x40 != 0)),
+            Some((co, dc)) => {
+                if dc {
+                    self.data(b);
+                } else {
+                    self.command(b);
+                }
+                // Co=1：只跟一个数据字节，然后又是控制字节
+                if co {
+                    self.ctrl = None;
+                }
+            }
+        }
+        true
+    }
+    fn read(&mut self) -> u8 {
+        if self.display_on {
+            0x00
+        } else {
+            0x40
+        }
+    }
+    fn stop(&mut self) {
+        self.ctrl = None;
+    }
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn horizontal_fill_and_render() {
+        let mut d = Ssd1306::new(0x3c);
+        d.start(false);
+        for b in [
+            0x00, 0x8d, 0x14, 0xa1, 0xc8, 0x20, 0x00, 0x21, 0, 127, 0x22, 0, 7, 0xaf,
+        ] {
+            d.write(b);
+        }
+        d.stop();
+        d.start(false);
+        d.write(0x40);
+        d.write(0x01); // 第 0 列，最上面一个像素
+        d.stop();
+        let f = d.render().to_vec();
+        assert!(f[0] > 0, "左上角应点亮");
+        assert_eq!(f.iter().filter(|&&p| p > 0).count(), 1);
+    }
+}

@@ -14,14 +14,127 @@ const PITCH = 2.54;
 export const LEFT_PINS = ['GND', '3V3', '3V3', 'IO2', 'IO3', 'GND', 'RST', 'GND', 'IO0', 'IO1', 'IO10', 'GND', '5V', '5V', 'GND'];
 export const RIGHT_PINS = ['GND', 'TX', 'RX', 'GND', 'IO9', 'IO8', 'GND', 'IO7', 'IO6', 'IO5', 'IO4', 'GND', 'IO18', 'IO19', 'GND'];
 
+/** 示例里声明的外接元件（examples.json 的 scene.parts）。 */
+export type PartSpec =
+  | { type: 'led'; pin: number; color?: number; col?: number; label?: string }
+  | { type: 'oled'; addr: number; sda: number; scl: number; label?: string }
+  | { type: 'bme280'; addr: number; sda: number; scl: number; label?: string };
+
+export interface SceneSpec {
+  parts: PartSpec[];
+  /** 初始机位（毫米，世界坐标） */
+  view?: { position: [number, number, number]; target: [number, number, number] };
+}
+
+const DEFAULT_VIEW: Required<SceneSpec>['view'] = { position: [-40, 95, 105], target: [0, 6, 4] };
+
 export interface Bench {
+  /** 按示例声明重建外接元件和接线（开发板、面包板不动） */
+  setScene(spec: SceneSpec): void;
   setGpio(level: number, enable: number, pwm?: number[]): void;
+  /** OLED 画面：128×64 字节亮度 */
+  setOled(pixels: Uint8Array): void;
   setPowered(on: boolean): void;
   /** 板载 WS2812（GPIO8）颜色，0–255 */
   setRgb(rgb: number[]): void;
   onButton(cb: (name: 'BOOT' | 'RST', down: boolean) => void): void;
-  ledPin: number;
   dispose(): void;
+}
+
+const WIRE = { sda: 0x2f7fd6, scl: 0xf2c53a, vcc: 0xd33a2c, gnd: 0x2b2f36, sig: 0xf2a33a };
+
+/** 0.96" SSD1306 模组：竖插在面包板上，屏幕朝观察者。原点在排针根部。 */
+function oledModule(tex: THREE.Texture) {
+  const grp = new THREE.Group();
+  const W = 27, H = 27.5, T = 1.2;
+  const pcbTex = canvasTexture(512, 512, (g) => {
+    g.fillStyle = '#1d4c9c';
+    g.fillRect(0, 0, 512, 512);
+    g.fillStyle = '#e8eef8';
+    g.font = 'bold 30px Menlo, monospace';
+    g.textAlign = 'center';
+    ['GND', 'VCC', 'SCL', 'SDA'].forEach((t, i) => g.fillText(t, 256 + (i - 1.5) * 48 * 512 / W / 9.5, 488));
+    g.strokeStyle = '#e8eef8';
+    g.lineWidth = 4;
+    for (const [x, y] of [[30, 30], [482, 30], [30, 482], [482, 482]]) {
+      g.beginPath();
+      g.arc(x, y, 16, 0, Math.PI * 2);
+      g.stroke();
+    }
+  });
+  const side = new THREE.MeshStandardMaterial({ color: 0x173d80, roughness: 0.6 });
+  const pcb = new THREE.Mesh(new THREE.BoxGeometry(W, H, T), [side, side, side, side, new THREE.MeshStandardMaterial({ map: pcbTex, roughness: 0.55 }), side]);
+  pcb.position.y = 2.5 + H / 2;
+  pcb.castShadow = true;
+  grp.add(pcb);
+  // 玻璃面板（黑）+ 发光的有效显示区
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(26, 19.5, 1.4), new THREE.MeshStandardMaterial({ color: 0x07080a, roughness: 0.08, metalness: 0.3 }));
+  glass.position.set(0, pcb.position.y + 1.5, T / 2 + 0.7);
+  grp.add(glass);
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(21.74, 10.86), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+  screen.position.set(0, glass.position.y + 1.2, glass.position.z + 0.71);
+  grp.add(screen);
+  // 排针：塑料座 + 4 根针插进面包板
+  const header = new THREE.Mesh(new THREE.BoxGeometry(4 * PITCH, 2.5, 2.5), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 }));
+  header.position.set(0, 1.25, 0);
+  grp.add(header);
+  const gold = new THREE.MeshStandardMaterial({ color: 0xe8c66a, metalness: 1, roughness: 0.25 });
+  for (let i = 0; i < 4; i++) {
+    const pin = new THREE.Mesh(new THREE.BoxGeometry(0.64, 8, 0.64), gold);
+    pin.position.set((i - 1.5) * PITCH, 0, 0);
+    grp.add(pin);
+  }
+  return grp;
+}
+
+/** BME280 小板：紫色 PCB、金属壳传感器，竖插。原点在排针根部。 */
+function bmeModule() {
+  const grp = new THREE.Group();
+  const W = 13, H = 10.5, T = 1.2;
+  const tex = canvasTexture(256, 256, (g) => {
+    g.fillStyle = '#5b2a86';
+    g.fillRect(0, 0, 256, 256);
+    g.fillStyle = '#f1e9f7';
+    g.font = 'bold 26px Menlo, monospace';
+    g.textAlign = 'center';
+    g.fillText('BME280', 128, 40);
+    g.font = 'bold 19px Menlo, monospace';
+    ['VIN', 'GND', 'SCL', 'SDA'].forEach((t, i) => g.fillText(t, 128 + (i - 1.5) * 50, 238));
+  });
+  const side = new THREE.MeshStandardMaterial({ color: 0x48206b, roughness: 0.6 });
+  const pcb = new THREE.Mesh(new THREE.BoxGeometry(W, H, T), [side, side, side, side, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55 }), side]);
+  pcb.position.y = 2.5 + H / 2;
+  pcb.castShadow = true;
+  grp.add(pcb);
+  const can = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2.5, 0.95), new THREE.MeshStandardMaterial({ color: 0xc9ccd1, metalness: 0.9, roughness: 0.3 }));
+  can.position.set(0, pcb.position.y + 0.2, T / 2 + 0.47);
+  grp.add(can);
+  const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.2, 12), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+  hole.rotation.x = Math.PI / 2;
+  hole.position.set(0.6, can.position.y + 0.6, can.position.z + 0.48);
+  grp.add(hole);
+  const header = new THREE.Mesh(new THREE.BoxGeometry(4 * PITCH, 2.5, 2.5), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 }));
+  header.position.set(0, 1.25, 0);
+  grp.add(header);
+  const gold = new THREE.MeshStandardMaterial({ color: 0xe8c66a, metalness: 1, roughness: 0.25 });
+  for (let i = 0; i < 4; i++) {
+    const pin = new THREE.Mesh(new THREE.BoxGeometry(0.64, 8, 0.64), gold);
+    pin.position.set((i - 1.5) * PITCH, 0, 0);
+    grp.add(pin);
+  }
+  return grp;
+}
+
+function disposeTree(o: THREE.Object3D) {
+  o.traverse((c) => {
+    const m = c as THREE.Mesh;
+    m.geometry?.dispose();
+    const mats = Array.isArray(m.material) ? m.material : m.material ? [m.material] : [];
+    for (const mt of mats) {
+      (mt as THREE.MeshStandardMaterial).map?.dispose();
+      mt.dispose();
+    }
+  });
 }
 
 function canvasTexture(w: number, h: number, draw: (g: CanvasRenderingContext2D) => void, aniso = 8) {
@@ -403,51 +516,141 @@ export function createBench(container: HTMLElement): Bench {
   board.grp.updateMatrixWorld();
   const pinWorld = (key: string) => board.pinPositions[key].clone().applyMatrix4(board.grp.matrixWorld);
 
-  // LED 接 IO5：右排第 9 个
-  const ledPinKey = 'R' + RIGHT_PINS.indexOf('IO5');
-  const gpioPos = pinWorld(ledPinKey);
-  const gndPos = pinWorld('R' + RIGHT_PINS.indexOf('GND', 10));
-
-  const redLed = led(0xff2a1a);
-  const ledCol = 24;
-  redLed.grp.position.set(bb.colX(ledCol) + 1.27, BB_TOP + 2, bb.rowZ(7));
-  scene.add(redLed.grp);
-  const r = resistor();
-  r.position.set(bb.colX(ledCol - 2) - 0.0, BB_TOP + 1.5, bb.rowZ(7) + 0.0);
-  r.rotation.y = 0;
-  scene.add(r);
+  /** 开发板上某个引脚（'IO5'、'3V3'、'GND'…）的世界坐标；GND 取离 near 最近的那个 */
+  const pinByName = (name: string, near?: THREE.Vector3) => {
+    const cands: THREE.Vector3[] = [];
+    RIGHT_PINS.forEach((n, i) => n === name && cands.push(pinWorld('R' + i)));
+    LEFT_PINS.forEach((n, i) => n === name && cands.push(pinWorld('L' + i)));
+    if (!near) return cands[0];
+    return cands.sort((a, b) => a.distanceTo(near) - b.distanceTo(near))[0];
+  };
 
   const lift = (v: THREE.Vector3, y: number) => new THREE.Vector3(v.x, y, v.z);
   const top = BB_TOP + 0.2;
-  // IO5 → 电阻左端所在列
-  const wStart = lift(gpioPos, top);
-  const wEnd = new THREE.Vector3(bb.colX(ledCol - 4), top, bb.rowZ(9));
-  scene.add(wire([wStart, lift(wStart, 26), new THREE.Vector3((wStart.x + wEnd.x) / 2, 30, (wStart.z + wEnd.z) / 2 + 6), lift(wEnd, 22), wEnd], 0xf2a33a));
-  // LED 阴极 → GND
-  const gStart = new THREE.Vector3(bb.colX(ledCol + 1), top, bb.rowZ(9));
-  const gEnd = lift(gndPos, top);
-  scene.add(wire([gStart, lift(gStart, 18), new THREE.Vector3((gStart.x + gEnd.x) / 2, 24, (gStart.z + gEnd.z) / 2 + 10), lift(gEnd, 18), gEnd], 0x2b2f36));
+  /** 从开发板引脚拉一根跳线到面包板孔位，中间拱起 */
+  const jumper = (grp: THREE.Group, from: THREE.Vector3, to: THREE.Vector3, color: number, arc = 26, bow = 6) => {
+    const a = lift(from, top);
+    const b = lift(to, top);
+    grp.add(wire([a, lift(a, arc - 4), new THREE.Vector3((a.x + b.x) / 2, arc, (a.z + b.z) / 2 + bow), lift(b, arc - 6), b], color));
+  };
 
   // 标注
-  const label = (text: string, pos: THREE.Vector3) => {
-    const tex = canvasTexture(512, 128, (g) => {
+  const label = (grp: THREE.Group, text: string, pos: THREE.Vector3) => {
+    // 画布宽度按文字量取，标签不被裁切
+    const font = '600 38px Inter, Helvetica, sans-serif';
+    const probe = document.createElement('canvas').getContext('2d')!;
+    probe.font = font;
+    const w = Math.ceil(probe.measureText(text).width) + 64;
+    const tex = canvasTexture(w, 128, (g) => {
       g.fillStyle = 'rgba(14,17,20,0.78)';
       g.beginPath();
-      g.roundRect(4, 4, 504, 120, 24);
+      g.roundRect(4, 4, w - 8, 120, 24);
       g.fill();
       g.fillStyle = '#e9edf2';
-      g.font = '600 40px Inter, Helvetica, sans-serif';
+      g.font = font;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
-      g.fillText(text, 256, 66);
+      g.fillText(text, w / 2, 66);
     });
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
-    s.scale.set(20, 5, 1);
+    s.scale.set((5 * w) / 128, 5, 1);
     s.position.copy(pos);
     s.renderOrder = 10;
-    scene.add(s);
+    grp.add(s);
   };
-  label('GPIO5 → 220Ω → LED', new THREE.Vector3(bb.colX(ledCol - 1), 34, bb.rowZ(2) - 6));
+
+  interface LedState {
+    pin: number;
+    lens: THREE.MeshPhysicalMaterial;
+    light: THREE.PointLight;
+    now: number;
+    target: number;
+  }
+  let leds: LedState[] = [];
+  let parts = new THREE.Group();
+  scene.add(parts);
+  const oledData = new Uint8Array(128 * 64 * 4);
+  let oledTex: THREE.DataTexture | null = null;
+
+  function buildLed(grp: THREE.Group, p: Extract<PartSpec, { type: 'led' }>) {
+    const l = led(p.color ?? 0xff2a1a);
+    const col = p.col ?? 24;
+    l.grp.position.set(bb.colX(col) + 1.27, BB_TOP + 2, bb.rowZ(7));
+    grp.add(l.grp);
+    const r = resistor();
+    r.position.set(bb.colX(col - 2), BB_TOP + 1.5, bb.rowZ(7));
+    grp.add(r);
+    // IO → 电阻左端所在列；LED 阴极 → GND
+    const gpio = pinByName('IO' + p.pin);
+    const wEnd = new THREE.Vector3(bb.colX(col - 4), top, bb.rowZ(9));
+    jumper(grp, gpio, wEnd, WIRE.sig, 30, 6);
+    const gStart = new THREE.Vector3(bb.colX(col + 1), top, bb.rowZ(9));
+    jumper(grp, gStart, pinByName('GND', gStart), WIRE.gnd, 24, 10);
+    label(grp, p.label ?? `GPIO${p.pin} → 220Ω → LED`, new THREE.Vector3(bb.colX(col - 1), 34, bb.rowZ(2) - 6));
+    leds.push({ pin: p.pin, lens: l.lens, light: l.light, now: 0, target: 0 });
+  }
+
+  /**
+   * 4 针 I2C 模组：竖插在 e 行（靠中缝），跳线从模组背后插进同一列的 a 行，
+   * 这样线不会挡住屏幕。order 是模组从左到右的引脚功能。
+   */
+  function buildI2c(grp: THREE.Group, module: THREE.Group, firstCol: number, order: string[], sda: number, scl: number, height: number) {
+    module.position.set(bb.colX(firstCol + 1.5), BB_TOP, bb.rowZ(4));
+    module.rotation.x = -0.12; // 略向后仰，便于俯视
+    grp.add(module);
+    order.forEach((fn, i) => {
+      const hole = new THREE.Vector3(bb.colX(firstCol + i), top, bb.rowZ(0));
+      const map: Record<string, [string, number]> = {
+        GND: ['GND', WIRE.gnd],
+        VCC: ['3V3', WIRE.vcc],
+        VIN: ['3V3', WIRE.vcc],
+        SDA: ['IO' + sda, WIRE.sda],
+        SCL: ['IO' + scl, WIRE.scl],
+      };
+      const [pinName, color] = map[fn];
+      const a = lift(pinByName(pinName, hole), top);
+      const peak = height + 6 + i * 1.6;
+      // 先升起越过开发板，再在模组背后落下
+      grp.add(
+        wire(
+          [a, lift(a, 22 + i), new THREE.Vector3((a.x + hole.x) / 2, peak, Math.min(a.z, hole.z) - 6 - i * 1.5), new THREE.Vector3(hole.x, peak - 4, hole.z - 4), lift(hole, 14), hole],
+          color,
+        ),
+      );
+    });
+  }
+
+  function setScene(spec: SceneSpec) {
+    scene.remove(parts);
+    disposeTree(parts);
+    parts = new THREE.Group();
+    scene.add(parts);
+    leds = [];
+    oledTex = null;
+    for (const p of spec.parts) {
+      if (p.type === 'led') buildLed(parts, p);
+      if (p.type === 'oled') {
+        oledData.fill(0);
+        for (let i = 3; i < oledData.length; i += 4) oledData[i] = 255;
+        oledTex = new THREE.DataTexture(oledData, 128, 64, THREE.RGBAFormat);
+        oledTex.magFilter = THREE.NearestFilter;
+        oledTex.minFilter = THREE.LinearFilter;
+        oledTex.colorSpace = THREE.SRGBColorSpace;
+        oledTex.needsUpdate = true;
+        buildI2c(parts, oledModule(oledTex), 21, ['GND', 'VCC', 'SCL', 'SDA'], p.sda, p.scl, 40);
+        label(parts, p.label ?? `SSD1306 · I2C 0x${p.addr.toString(16).toUpperCase()} · SDA IO${p.sda} SCL IO${p.scl}`, new THREE.Vector3(bb.colX(22.5), 46, bb.rowZ(0) - 10));
+      }
+      if (p.type === 'bme280') {
+        buildI2c(parts, bmeModule(), 21, ['VIN', 'GND', 'SCL', 'SDA'], p.sda, p.scl, 22);
+        label(parts, p.label ?? `BME280 · I2C 0x${p.addr.toString(16)} · SDA IO${p.sda} SCL IO${p.scl}`, new THREE.Vector3(bb.colX(22.5), 34, bb.rowZ(0) - 8));
+      }
+    }
+    // 示例可以指定机位（比如凑近看屏幕）；没有就回到默认机位
+    const v = spec.view ?? DEFAULT_VIEW;
+    camera.position.set(...v.position);
+    controls.target.set(...v.target);
+    controls.update();
+  }
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
@@ -494,27 +697,28 @@ export function createBench(container: HTMLElement): Bench {
     renderer.domElement.style.cursor = pick(ev) ? 'pointer' : '';
   });
 
-  let ledTarget = 0;
-  let ledNow = 0;
   let raf = 0;
   const tick = () => {
     raf = requestAnimationFrame(tick);
     // LED 亮灭有很短的过渡，像真实 LED 被眼睛看到的样子
-    ledNow += (ledTarget - ledNow) * 0.55;
-    redLed.lens.emissiveIntensity = ledNow * 6;
-    redLed.light.intensity = ledNow * 60;
+    for (const l of leds) {
+      l.now += (l.target - l.now) * 0.55;
+      l.lens.emissiveIntensity = l.now * 6;
+      l.light.intensity = l.now * 60;
+    }
     controls.update();
     composer.render();
   };
   tick();
 
   return {
-    ledPin: 5,
+    setScene,
     setGpio(level, enable, pwm) {
       // PWM 驱动时 LED 亮度 ≈ 占空比（人眼对 5kHz 闪烁无感，看到的是平均亮度）
-      const d = pwm?.[5] ?? -1;
-      if (d >= 0) ledTarget = d;
-      else ledTarget = (enable >> 5) & 1 && (level >> 5) & 1 ? 1 : 0;
+      for (const l of leds) {
+        const d = pwm?.[l.pin] ?? -1;
+        l.target = d >= 0 ? d : (enable >> l.pin) & 1 && (level >> l.pin) & 1 ? 1 : 0;
+      }
     },
     setRgb(rgb) {
       const [r, g, b] = rgb.map((v) => v / 255);
@@ -528,6 +732,20 @@ export function createBench(container: HTMLElement): Bench {
       board.rgbMat.color.setRGB(0.87 + r * 0.13, 0.86 + g * 0.14, 0.82 + b * 0.18);
       board.rgbLight.color.setRGB(peak ? r / peak : 0, peak ? g / peak : 0, peak ? b / peak : 0);
       board.rgbLight.intensity = peak * 80 * k;
+    },
+    setOled(px) {
+      if (!oledTex) return;
+      // 显示第 0 行在上：纹理 v=1 在上，所以倒着写；亮像素是 OLED 常见的冷白偏蓝
+      for (let y = 0; y < 64; y++) {
+        for (let x = 0; x < 128; x++) {
+          const v = px[y * 128 + x] / 255;
+          const o = ((63 - y) * 128 + x) * 4;
+          oledData[o] = 10 + v * 150;
+          oledData[o + 1] = 12 + v * 215;
+          oledData[o + 2] = 16 + v * 239;
+        }
+      }
+      oledTex.needsUpdate = true;
     },
     setPowered(on) {
       board.pwrMat.emissiveIntensity = on ? 3 : 0;

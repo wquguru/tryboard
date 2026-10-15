@@ -193,5 +193,63 @@
    "primes=3512 crc=694b5a42 sum=1.644725",
    "TRYBOARD_OK bench"
   ]
+ },
+ {
+  "id": "oled",
+  "seconds": 2.5,
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c"
+  ],
+  "expect": [
+   "I2C scan (SDA=GPIO6, SCL=GPIO7): 0x3C  (1 device)",
+   "SSD1306 init OK",
+   "TRYBOARD_OK oled",
+   "frame 1 flushed"
+  ],
+  "numeric": [
+   {
+    "name": "1KB 帧传输耗时(us)",
+    "regex": "flushed in (\\d+) us",
+    "value": 23500,
+    "tol": 2500
+   }
+  ],
+  "oled_min_pixels": 1000
+ },
+ {
+  "id": "bme280",
+  "seconds": 4.5,
+  "args": [
+   "--i2c",
+   "bme280@0x76",
+   "--env",
+   "-7.25,88.5,95012"
+  ],
+  "expect": [
+   "I2C scan (SDA=GPIO6, SCL=GPIO7): 0x76",
+   "chip id 0x60 OK",
+   "TRYBOARD_OK bme280"
+  ],
+  "numeric": [
+   {
+    "name": "温度",
+    "regex": "T=(-?[\\d.]+) C",
+    "value": -7.25,
+    "tol": 0.02
+   },
+   {
+    "name": "湿度",
+    "regex": "H=([\\d.]+) %",
+    "value": 88.5,
+    "tol": 0.1
+   },
+   {
+    "name": "气压",
+    "regex": "P=([\\d.]+) hPa",
+    "value": 950.12,
+    "tol": 0.02
+   }
+  ]
  }
 ]

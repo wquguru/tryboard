@@ -13,7 +13,13 @@ pub struct SpiFlash {
 
 impl Default for SpiFlash {
     fn default() -> Self {
-        SpiFlash { regs: [0; 0x100 / 4], wel: false, jedec: 0x16_40_c8, erases: 0, programs: 0 }
+        SpiFlash {
+            regs: [0; 0x100 / 4],
+            wel: false,
+            jedec: 0x16_40_c8,
+            erases: 0,
+            programs: 0,
+        }
     }
 }
 
@@ -118,7 +124,9 @@ impl SpiFlash {
         } else if v & (1 << 31) != 0 {
             let len = ((self.regs[MISO_DLEN] & 0x3ff) as usize + 1) / 8;
             let a = addr & 0xff_ffff;
-            let data: Vec<u8> = (0..len).map(|k| flash.get(a + k).copied().unwrap_or(0xff)).collect();
+            let data: Vec<u8> = (0..len)
+                .map(|k| flash.get(a + k).copied().unwrap_or(0xff))
+                .collect();
             self.set_buf(&data);
         }
     }
@@ -148,9 +156,11 @@ impl SpiFlash {
                 self.wel = false;
                 None
             }
-            0x03 | 0x0b | 0x3b | 0x6b | 0xbb | 0xeb if has_addr => {
-                Some((0..miso_len).map(|k| flash.get(addr + k).copied().unwrap_or(0xff)).collect())
-            }
+            0x03 | 0x0b | 0x3b | 0x6b | 0xbb | 0xeb if has_addr => Some(
+                (0..miso_len)
+                    .map(|k| flash.get(addr + k).copied().unwrap_or(0xff))
+                    .collect(),
+            ),
             0x02 if mosi => {
                 let data = self.buf_bytes(mosi_len);
                 self.program(flash, addr, &data);

@@ -22,10 +22,28 @@ interface Exports {
   tb_ws2812_fetch(pin: number): number;
   tb_ws2812_ptr(): number;
   tb_ws2812_frames(pin: number): number;
+  tb_i2c_attach(kind: number, addr: number): number;
+  tb_env_set(temp: number, humidity: number, pressure: number): void;
+  tb_oled_version(): number;
+  tb_oled_ptr(): number;
+}
+
+export interface Env {
+  temp: number;
+  humidity: number;
+  pressure: number;
 }
 
 export type ToWorker =
-  | { type: 'boot'; wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer }
+  | {
+      type: 'boot';
+      wasm: ArrayBuffer;
+      rom: ArrayBuffer;
+      flash: ArrayBuffer;
+      i2c?: { kind: string; addr: number }[];
+      env?: Env;
+    }
+  | ({ type: 'env' } & Env)
   | { type: 'run' }
   | { type: 'pause' }
   | { type: 'speed'; factor: number }
@@ -36,6 +54,7 @@ export type FromWorker =
   | { type: 'booted' }
   | { type: 'error'; message: string }
   | { type: 'tick'; console: string; gpio: number; enable: number; pwm: number[]; simSeconds: number; ratio: number; running: boolean; leds?: number[][] }
+  | { type: 'oled'; pixels: Uint8Array }
   | { type: 'stopped'; reason: string };
 
 let ex: Exports | null = null;
@@ -125,6 +144,7 @@ function loop() {
     ratio: lastRatio,
     running,
   });
+  postOled(e);
   if (stop !== 0) {
     running = false;
     post({ type: 'stopped', reason: errorText(e) });
@@ -132,6 +152,20 @@ function loop() {
   }
   setTimeout(loop, 4);
 }
+
+let oledVersion = 0;
+/** OLED 画面变了才传（128×64 字节，转移所有权不拷贝两次） */
+function postOled(e: Exports) {
+  const v = e.tb_oled_version();
+  if (v === 0 || v === oledVersion) return;
+  const p = e.tb_oled_ptr();
+  if (!p) return;
+  oledVersion = v;
+  const px = new Uint8Array(new Uint8Array(e.memory.buffer, p, 128 * 64));
+  (self as unknown as Worker).postMessage({ type: 'oled', pixels: px } satisfies FromWorker, [px.buffer]);
+}
+
+const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2 };
 
 self.onmessage = async (ev: MessageEvent<ToWorker>) => {
   const m = ev.data;
@@ -149,11 +183,17 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
         post({ type: 'error', message: errorText(e) });
         return;
       }
+      for (const d of m.i2c ?? []) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
+      if (m.env) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
       ex = e;
       lastFrames = -1;
+      oledVersion = 0;
       post({ type: 'booted' });
       break;
     }
+    case 'env':
+      ex?.tb_env_set(m.temp, m.humidity, m.pressure);
+      break;
     case 'run':
       if (!ex || running) return;
       running = true;

@@ -59,7 +59,9 @@ pub fn call(kind: Hle, cpu: &mut Cpu, bus: &mut SocBus) {
             let (msb, lsb, data) = (a(3) & 7, a(4) & 7, a(5));
             let m = mask(msb, lsb);
             let old = bus.analog.read(block, reg);
-            bus.analog.regs.insert((block, reg), (old & !m) | (((data << lsb) as u8) & m));
+            bus.analog
+                .regs
+                .insert((block, reg), (old & !m) | (((data << lsb) as u8) & m));
             0
         }
     };
