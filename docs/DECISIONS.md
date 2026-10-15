@@ -91,3 +91,9 @@
 ## 2026-10-15 · MOVSP 的 Alloca 条件按 ISA / QEMU 修正
 - 决定：WINDOWSTART 在 WB−1..WB−3 都为 0（调用者帧已溢出到栈上）才触发 Alloca 异常；切片 1 写反了，测试也按写反的理解编写，与 QEMU 差分时发现。S3 SoC 分支也独立报告了这一点
 - 中断 API：SoC 驱动外部中断线用 `Cpu::set_irq_lines(mask)`（位 = CPU 中断号，电平型随线、边沿型 / NMI 上升沿锁存）；写 INTERRUPT 特殊寄存器只等于 INTSET（只能置软件中断 7/29），不能用来注入外部中断
+
+## 2026-10-15 · Wi-Fi 在 MAC 寄存器 + DMA 描述符层模拟
+- 决定：不 HLE 驱动函数，而是模拟 MAC 硬件接口（发送队列寄存器、lldesc 描述符、接收元数据头、中断位），802.11 帧交给 Rust 写的虚拟无线世界（虚拟 AP、以后的 DHCP / TCP）
+- 理由：IDF 5.5 的 Wi-Fi 数据通路函数基本都被 IDF 自己的库替换，ROM 里只剩跳转桩，按 ROM 地址拦截无效；按 app 符号拦截需要 ELF。硬件接口对 IDF / Arduino 各版本稳定，用户只要上传 .bin
+- 代价：要逆向寄存器语义（记录在 docs/WIFI.md）；PHY 校准等射频细节用"就绪位"糊过去
+- 替代：方案 c（需要 ELF 的符号级 HLE），实现快但对用户不友好

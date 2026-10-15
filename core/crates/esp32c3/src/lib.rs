@@ -8,6 +8,7 @@ pub mod i2c;
 pub mod periph;
 pub mod rmt;
 pub mod spiflash;
+pub mod wifi;
 
 use periph::*;
 use std::collections::HashMap;
@@ -80,6 +81,14 @@ pub struct SocBus {
     /// 访问了没有模型的寄存器：地址 → 次数
     pub unimpl: HashMap<u32, u64>,
     pub irq_dirty: bool,
+    pub wifi: wifi::WifiMac,
+    /// 硬件随机数发生器（WDEV_RND_REG）状态：xorshift，固定种子保证可复现
+    pub rng: u32,
+    /// 调试：监视某个 MMIO 地址，记录访问时的 PC（watch_pc 由运行循环填写）
+    pub watch: Option<(u32, u32)>,
+    pub watch_pc: u32,
+    /// （PC, 地址, 值, 是否写），按时间顺序
+    pub watch_hits: Vec<(u32, u32, u32, bool)>,
     pub next_event: u64,
     /// GPIO 电平变化记录（周期, 电平），前端按此驱动 LED 等
     pub gpio_log: Vec<(u64, u32)>,
@@ -118,6 +127,11 @@ impl Default for SocBus {
             regs: HashMap::new(),
             unimpl: HashMap::new(),
             irq_dirty: true,
+            wifi: Default::default(),
+            rng: 0x2545_f491,
+            watch: None,
+            watch_pc: 0,
+            watch_hits: Vec::new(),
             next_event: 0,
             gpio_log: Vec::new(),
             last_gpio: 0,
@@ -224,6 +238,15 @@ impl SocBus {
             0x6001_0000 => return self.uart1.read(off),
             0x6000_4000 => return self.gpio.read(off),
             0x6000_2000 => return self.spi1.read(off),
+            0x6002_6000 if off == 0xb0 => {
+                // WDEV_RND_REG：每次读都给新值（esp_random、lwIP 端口 / DNS 事务号都靠它）
+                let mut x = self.rng;
+                x ^= x << 13;
+                x ^= x >> 17;
+                x ^= x << 5;
+                self.rng = x;
+                return x;
+            }
             0x6001_9000 => return self.ledc.read(off),
             0x6004_0000 => return self.adc.read(off),
             0x6000_9000 if (4..=0x58).contains(&off) => return self.gpio.iomux[((off - 4) / 4) as usize],
@@ -257,7 +280,15 @@ impl SocBus {
             },
             _ => {}
         }
+        if (0x6003_3000..0x6003_6000).contains(&a) {
+            if let Some(v) = self.wifi_read(a) {
+                return v;
+            }
+        }
         if let Some(v) = boot::special_read(a, now) {
+            return v;
+        }
+        if let Some(v) = wifi::rf_read(a, self.regs.get(&a).copied().unwrap_or(0)) {
             return v;
         }
         *self.unimpl.entry(a).or_insert(0) += 1;
@@ -334,6 +365,9 @@ impl SocBus {
             }
             _ => {}
         }
+        if (0x6003_3000..0x6003_6000).contains(&a) && self.wifi_write(a, v) {
+            return;
+        }
         if !boot::special_write(a, v) {
             *self.unimpl.entry(a).or_insert(0) += 1;
         }
@@ -373,6 +407,7 @@ impl SocBus {
                 l |= 1 << s;
             }
         };
+        set(src::WIFI_MAC, self.wifi.irq());
         set(src::UART0, self.uart0.irq());
         set(src::UART1, self.uart1.irq());
         set(src::GPIO, self.gpio.irq());
@@ -431,7 +466,8 @@ impl SocBus {
         let n5 = self.rmt.update(now);
         let n6 = self.route_rmt(now);
         let n7 = self.i2c0.update(now);
-        self.next_event = n1.min(n2).min(n3).min(n4).min(n5).min(n6).min(n7);
+        let n8 = self.wifi_update(now);
+        self.next_event = n1.min(n2).min(n3).min(n4).min(n5).min(n6).min(n7).min(n8);
         let lv = self.levels();
         let pending = self.intc.pending(lv);
         cpu.irq_line = self.intc.select(pending);
@@ -461,6 +497,11 @@ impl Bus for SocBus {
         }
         if (MMIO_LOW..MMIO_HIGH).contains(&a) {
             let v = self.mmio_read(a & !3);
+            if let Some((lo, hi)) = self.watch {
+                if (lo..hi).contains(&a) && self.watch_hits.len() < 400_000 {
+                    self.watch_hits.push((self.watch_pc, a & !3, v, false));
+                }
+            }
             let sh = (a & 3) * 8;
             return Ok(match size {
                 4 => v,
@@ -502,6 +543,11 @@ impl Bus for SocBus {
                 };
                 (old & !mask) | ((v << sh) & mask)
             };
+            if let Some((lo, hi)) = self.watch {
+                if (lo..hi).contains(&aa) && self.watch_hits.len() < 400_000 {
+                    self.watch_hits.push((self.watch_pc, aa, v, true));
+                }
+            }
             self.mmio_write(aa, v);
             return Ok(());
         }
@@ -535,6 +581,7 @@ impl Esp32c3 {
         let hle = &self.hle;
         while cpu.cycles < end {
             bus.now = cpu.cycles;
+            bus.watch_pc = cpu.pc;
             if bus.irq_dirty || cpu.cycles >= bus.next_event {
                 bus.update(cpu);
             }

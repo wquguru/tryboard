@@ -216,5 +216,32 @@
   "controls": [
    "env"
   ]
+ },
+ {
+  "id": "wifi-scan",
+  "title": "Wi-Fi：扫描周围热点",
+  "about": "Wi-Fi 站点模式扫描，列出虚拟世界里的 4 个热点：SSID、信道、信号强度、加密方式。用的是真实 ESP-IDF Wi-Fi 驱动，模拟器在 MAC 寄存器和 DMA 层注入 802.11 Beacon。",
+  "tags": [
+   "✓ 仿真验证",
+   "Wi-Fi",
+   "802.11"
+  ],
+  "scene": {
+   "parts": []
+  }
+ },
+ {
+  "id": "wifi-http",
+  "title": "Wi-Fi：联网发 HTTP 请求",
+  "about": "连上开放热点 TryBoard-WiFi，DHCP 拿到 192.168.4.100，再用 esp_http_client 请求 http://tryboard.local（mDNS）和 example.com（DNS）。网络是模拟器里的虚拟世界，不会访问真实互联网。WPA2 加密热点暂不支持。",
+  "tags": [
+   "✓ 仿真验证",
+   "Wi-Fi",
+   "DHCP",
+   "HTTP"
+  ],
+  "scene": {
+   "parts": []
+  }
  }
 ]

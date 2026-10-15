@@ -267,5 +267,44 @@
     "tol": 0.02
    }
   ]
+ },
+ {
+  "id": "wifi-init",
+  "seconds": 3,
+  "expect": [
+   "wifi_init ok",
+   "TRYBOARD_OK wifi-init",
+   "start ok"
+  ]
+ },
+ {
+  "id": "wifi-scan",
+  "seconds": 4,
+  "expect": [
+   "找到 4 个 AP",
+   "AP TryBoard-WiFi    ch= 6 rssi= -42 auth=OPEN",
+   "AP TryBoard-WPA2    ch= 1 rssi= -55 auth=WPA2_PSK",
+   "AP Neighbor-5G-Ext  ch=11 rssi= -78 auth=WPA2_PSK",
+   "TRYBOARD_OK wifi-scan"
+  ]
+ },
+ {
+  "id": "wifi-connect",
+  "seconds": 4,
+  "expect": [
+   "已连接 TryBoard-WiFi ch=6",
+   "拿到 IP 192.168.4.100 网关 192.168.4.1 掩码 255.255.255.0",
+   "TRYBOARD_OK wifi-connect"
+  ]
+ },
+ {
+  "id": "wifi-http",
+  "seconds": 4,
+  "expect": [
+   "GET http://tryboard.local/hello.txt → 200，17 字节",
+   "正文：TRYBOARD_HTTP_OK",
+   "GET http://example.com/api/time → 200",
+   "TRYBOARD_OK wifi-http"
+  ]
  }
 ]

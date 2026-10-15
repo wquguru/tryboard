@@ -150,6 +150,12 @@ fn run(args: &[String]) {
     script.reverse();
     let pwm_pin: Option<usize> = opt(args, "--pwm-log").and_then(|s| s.parse().ok());
     let mut pwm_trace: Vec<(f64, f32, f32)> = Vec::new();
+    // --watch A 或 A-B（十六进制）：记录这段 MMIO 的访问
+    let hex = |s: &str| u32::from_str_radix(s.trim().trim_start_matches("0x"), 16).ok();
+    m.bus.watch = opt(args, "--watch").and_then(|s| match s.split_once('-') {
+        Some((a, b)) => Some((hex(a)?, hex(b)?)),
+        None => hex(&s).map(|a| (a, a + 4)),
+    });
     let trace: usize = opt(args, "--trace").and_then(|s| s.parse().ok()).unwrap_or(0);
     let mut ring = std::collections::VecDeque::new();
     let app_elf = std::path::Path::new(path)
@@ -196,7 +202,7 @@ fn run(args: &[String]) {
         }
         if let Some(p) = pwm_pin {
             if let Some((d, f)) = m.bus.pin_pwm(p) {
-                if pwm_trace.last().map_or(true, |l| (l.1 - d).abs() > 0.004 || (l.2 - f).abs() > 0.5) {
+                if pwm_trace.last().is_none_or(|l| (l.1 - d).abs() > 0.004 || (l.2 - f).abs() > 0.5) {
                     pwm_trace.push((now_s, d, f));
                 }
             }
@@ -261,6 +267,55 @@ fn run(args: &[String]) {
     eprintln!("[tryboard] 未建模寄存器 {} 个，访问最多的：", un.len());
     for (a, n) in un.iter().take(12) {
         eprintln!("    0x{:08x}  {:>8} 次", a, n);
+    }
+    if !m.bus.watch_hits.is_empty() {
+        // 顺序日志写文件，终端只给按（地址, 读写, PC）汇总
+        if let Some(path) = opt(args, "--watch-log") {
+            let mut f = String::new();
+            for (pc, a, v, w) in &m.bus.watch_hits {
+                f.push_str(&format!("{} 0x{a:08x} 0x{v:08x} {}\n", if *w { "W" } else { "R" }, syms.name(*pc)));
+            }
+            std::fs::write(&path, f).ok();
+        }
+        let mut by: std::collections::BTreeMap<(u32, bool, u32), (u32, u32)> = Default::default();
+        for (pc, a, v, w) in &m.bus.watch_hits {
+            let e = by.entry((*a, *w, *pc)).or_insert((0, *v));
+            e.0 += 1;
+            e.1 = *v;
+        }
+        eprintln!("[tryboard] 监视区间访问 {} 次：", m.bus.watch_hits.len());
+        for ((a, w, pc), (n, v)) in by {
+            eprintln!("    0x{a:08x} {} {:>6} 次 最后 0x{v:08x}  {}", if w { "写" } else { "读" }, n, syms.name(pc));
+        }
+    }
+    if let Some(spec) = opt(args, "--dump") {
+        // --dump 地址:长度（十六进制地址，十进制长度）
+        if let Some((a, n)) = spec.split_once(':') {
+            if let (Some(a), Ok(n)) = (hex(a), n.parse::<u32>()) {
+                for row in (0..n).step_by(16) {
+                    let bytes: Vec<String> = (row..(row + 16).min(n))
+                        .map(|i| format!("{:02x}", m.bus.load(a + i, 1).unwrap_or(0)))
+                        .collect();
+                    eprintln!("    {:08x}: {}", a + row, bytes.join(" "));
+                }
+            }
+        }
+    }
+    if args.iter().any(|a| a == "--wifi-log") {
+        let w = &m.bus.wifi;
+        eprintln!("[tryboard] Wi-Fi 空中日志：发送 {} 帧，接收 {} 帧，丢弃 {} 帧", w.tx_frames, w.rx_frames, w.rx_dropped);
+        for l in &w.log {
+            eprintln!("    {l}");
+        }
+    }
+    if args.iter().any(|a| a == "--dump-intc") {
+        let ic = &m.bus.intc;
+        eprintln!("[tryboard] 中断线 使能=0x{:08x} 边沿=0x{:08x} 阈值={} 当前线={}", ic.enable, ic.edge, ic.thresh, m.cpu.irq_line);
+        for (src, line) in ic.map.iter().enumerate() {
+            if *line != 0 {
+                eprintln!("    源 {src:>2} → 线 {line:>2}（优先级 {}）", ic.pri[*line as usize]);
+            }
+        }
     }
     if let Some(list) = opt(args, "--peek") {
         for a in list.split(',') {

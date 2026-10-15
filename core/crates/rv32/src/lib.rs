@@ -85,6 +85,9 @@ pub struct Cpu {
     pub cycles: u64,
     pub instret: u64,
     pub waiting: bool,
+    /// 硬件支持非对齐访存（ESP32-C3 对内部存储的非对齐读写由硬件拆分完成）。
+    /// 关闭时按 RISC-V 规范报非对齐异常（riscv-tests 用）。
+    pub misaligned_ok: bool,
     /// LR/SC 预约（C3 没有 A 扩展，这里保留给以后的芯片）。
     reservation: Option<u32>,
 }
@@ -114,6 +117,7 @@ impl Cpu {
             cycles: 0,
             instret: 0,
             waiting: false,
+            misaligned_ok: false,
             reservation: None,
         }
     }
@@ -260,12 +264,23 @@ impl Cpu {
                 if f3 == 3 || f3 > 5 {
                     illegal!();
                 }
-                if addr & (size - 1) != 0 {
-                    return self.trap(cause::LOAD_MISALIGNED, addr, false);
-                }
-                let v = match bus.load(addr, size) {
-                    Ok(v) => v,
-                    Err(_) => return self.trap(cause::LOAD_FAULT, addr, false),
+                let v = if addr & (size - 1) != 0 {
+                    if !self.misaligned_ok {
+                        return self.trap(cause::LOAD_MISALIGNED, addr, false);
+                    }
+                    let mut v = 0u32;
+                    for i in 0..size {
+                        match bus.load(addr.wrapping_add(i), 1) {
+                            Ok(b) => v |= b << (8 * i),
+                            Err(_) => return self.trap(cause::LOAD_FAULT, addr, false),
+                        }
+                    }
+                    v
+                } else {
+                    match bus.load(addr, size) {
+                        Ok(v) => v,
+                        Err(_) => return self.trap(cause::LOAD_FAULT, addr, false),
+                    }
                 };
                 let v = match f3 {
                     0 => sext(v, 8),
@@ -284,9 +299,15 @@ impl Cpu {
                     _ => illegal!(),
                 };
                 if addr & (size - 1) != 0 {
-                    return self.trap(cause::STORE_MISALIGNED, addr, false);
-                }
-                if bus.store(addr, size, b).is_err() {
+                    if !self.misaligned_ok {
+                        return self.trap(cause::STORE_MISALIGNED, addr, false);
+                    }
+                    for i in 0..size {
+                        if bus.store(addr.wrapping_add(i), 1, (b >> (8 * i)) & 0xff).is_err() {
+                            return self.trap(cause::STORE_FAULT, addr, false);
+                        }
+                    }
+                } else if bus.store(addr, size, b).is_err() {
                     return self.trap(cause::STORE_FAULT, addr, false);
                 }
                 if let Some(r) = self.reservation {
