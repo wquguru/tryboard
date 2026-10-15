@@ -56,7 +56,7 @@ dependencies = [
 name = "tryboard-wasm"
 version = "0.1.0"
 dependencies = [
- "tryboard-esp32c3",
+ "tryboard-machine",
  "tryboard-rv32",
  "tryboard-soc",
 ]

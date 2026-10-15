@@ -1,4 +1,4 @@
-import { createBench, type SceneSpec } from './board3d';
+import { createBench, type ChipId, type SceneSpec } from './board3d';
 import type { Env, FromWorker, ToWorker } from './worker';
 
 interface Example {
@@ -7,6 +7,8 @@ interface Example {
   about: string;
   tags: string[];
   scene?: SceneSpec;
+  /** 缺省 esp32c3 */
+  chip?: ChipId;
   /** 'env'：显示环境滑块（温度 / 湿度 / 气压）；对象：模拟输入滑块 */
   controls?: (string | AnalogControl)[];
 }
@@ -22,8 +24,31 @@ const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'modu
 const send = (m: ToWorker, transfer: Transferable[] = []) => worker.postMessage(m, transfer);
 
 let wasm: ArrayBuffer | null = null;
-let rom: ArrayBuffer | null = null;
 let flash: ArrayBuffer | null = null;
+/** 各芯片的 ROM（按需下载，esp-rom-elfs，Apache-2.0） */
+const roms: Partial<Record<ChipId, ArrayBuffer>> = {};
+const ROM_FILE: Record<ChipId, string> = { esp32c3: 'esp32c3_rev3_rom.elf', esp32s3: 'esp32s3_rev0_rom.elf' };
+const CHIP_LABEL: Record<ChipId, string> = { esp32c3: 'ESP32-C3 · 160MHz', esp32s3: 'ESP32-S3 · 双核 160MHz' };
+/** 板载 BOOT 键所在引脚（启动后由模拟器告知） */
+let bootPin = 9;
+
+/** 镜像是哪颗芯片：先找分区表（0x8000）里的 app，再读 ESP 镜像头的芯片 ID（5 = C3，9 = S3） */
+function imageChip(buf: ArrayBuffer): ChipId {
+  const b = new Uint8Array(buf);
+  const u32 = (o: number) => b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24);
+  let app = 0;
+  if (b[0x8000] === 0xaa && b[0x8001] === 0x50) {
+    for (let i = 0; i < 95; i++) {
+      const o = 0x8000 + i * 32;
+      if (b[o] !== 0xaa || b[o + 1] !== 0x50) break;
+      if (b[o + 2] === 0 && (b[o + 3] === 0 || b[o + 3] === 0x10)) {
+        app = u32(o + 4) >>> 0;
+        break;
+      }
+    }
+  }
+  return b[app] === 0xe9 && (b[app + 12] | (b[app + 13] << 8)) === 9 ? 'esp32s3' : 'esp32c3';
+}
 let running = false;
 let examples: Example[] = [];
 let scene: SceneSpec = { parts: [] };
@@ -70,8 +95,12 @@ async function fetchBuf(url: string) {
   return r.arrayBuffer();
 }
 
-function boot(autorun: boolean) {
-  if (!wasm || !rom || !flash) return;
+async function boot(autorun: boolean) {
+  if (!wasm || !flash) return;
+  const chip = imageChip(flash);
+  bench.setBoard(chip);
+  $('chip').textContent = CHIP_LABEL[chip];
+  const rom = (roms[chip] ??= await fetchBuf(`./rom/${ROM_FILE[chip]}`));
   consoleEl.textContent = '';
   log('[试板] 上电，加载固件…\n', 'sys');
   bench.setPowered(true);
@@ -85,6 +114,7 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
   const m = ev.data;
   switch (m.type) {
     case 'booted':
+      bootPin = m.bootPin;
       for (const [pin, a] of analog) send({ type: 'analog', pin, mv: a.mv });
       runBtn.disabled = resetBtn.disabled = false;
       if (pendingAutorun) {
@@ -98,7 +128,7 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       break;
     case 'tick':
       if (m.console) log(m.console);
-      bench.setGpio(m.gpio, m.enable, m.pwm);
+      bench.setGpio(m.gpio, m.enable, m.pwm, m.gpioHi, m.enableHi);
       if (m.leds) bench.setRgb(m.leds[0] ?? [0, 0, 0]);
       $('simtime').textContent = `${m.simSeconds.toFixed(3)} s`;
       if (m.running) {
@@ -143,14 +173,17 @@ $<HTMLInputElement>('upload').onchange = async (e) => {
   boot(true);
 };
 bench.onButton((name, down) => {
-  if (name === 'BOOT') send({ type: 'gpio', pin: 9, level: down ? 0 : -1 });
+  if (name === 'BOOT') send({ type: 'gpio', pin: bootPin, level: down ? 0 : -1 });
   if (name === 'RST' && !down) boot(true);
 });
 
 async function loadExample(id: string, autorun: boolean) {
   const ex = examples.find((e) => e.id === id)!;
-  $('about').innerHTML = `<p><b>${ex.title}</b></p><p>${ex.about}</p><p>${ex.tags.map((t) => `<span class="tag ${t.startsWith('✓') ? 'ok' : ''}">${t}</span>`).join('')}</p>`;
+  const chip = ex.chip ?? 'esp32c3';
+  const badge = `<span class="tag chip">${chip === 'esp32s3' ? 'ESP32-S3' : 'ESP32-C3'}</span>`;
+  $('about').innerHTML = `<p><b>${ex.title}</b></p><p>${ex.about}</p><p>${badge}${ex.tags.map((t) => `<span class="tag ${t.startsWith('✓') ? 'ok' : ''}">${t}</span>`).join('')}</p>`;
   scene = ex.scene ?? { parts: [] };
+  bench.setBoard(chip);
   bench.setScene(scene);
   analog.clear();
   if (ex.controls?.includes('env')) envControls();
@@ -214,9 +247,9 @@ exampleSel.onchange = () => loadExample(exampleSel.value, true);
 
 (async () => {
   try {
-    [wasm, rom] = await Promise.all([fetchBuf('./wasm/tryboard.wasm'), fetchBuf('./rom/esp32c3_rev3_rom.elf')]);
+    wasm = await fetchBuf('./wasm/tryboard.wasm');
     examples = await (await fetch('./fw/examples.json')).json();
-    for (const e of examples) exampleSel.add(new Option(e.title, e.id));
+    for (const e of examples) exampleSel.add(new Option(`${e.chip === 'esp32s3' ? '[S3] ' : ''}${e.title}`, e.id));
     const want = new URLSearchParams(location.search).get('example');
     const first = examples.find((e) => e.id === want) ?? examples[0];
     exampleSel.value = first.id;

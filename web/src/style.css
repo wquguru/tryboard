@@ -61,3 +61,4 @@ footer { padding: 6px 16px; font-size: 11px; color: #5f6976; border-top: 1px sol
 .nav { display: flex; gap: 2px; }
 .nav a { color: var(--muted); text-decoration: none; padding: 5px 10px; border-radius: 6px; font-size: 13px; }
 .nav a.on { color: var(--text); background: #1a2028; }
+.info #about .tag.chip { color: #f2a33a; border-color: #6b4a1c; }

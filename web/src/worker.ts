@@ -16,6 +16,10 @@ interface Exports {
   tb_cycles(): number;
   tb_gpio_level(): number;
   tb_gpio_enable(): number;
+  tb_gpio_level_hi(): number;
+  tb_gpio_enable_hi(): number;
+  tb_chip(): number;
+  tb_boot_pin(): number;
   tb_gpio_drive(pin: number, level: number): void;
   tb_uart_push(p: number, len: number): void;
   tb_pin_pwm(pin: number): number;
@@ -53,9 +57,22 @@ export type ToWorker =
   | { type: 'uart'; text: string };
 
 export type FromWorker =
-  | { type: 'booted' }
+  | { type: 'booted'; chip: 'esp32c3' | 'esp32s3'; bootPin: number }
   | { type: 'error'; message: string }
-  | { type: 'tick'; console: string; gpio: number; enable: number; pwm: number[]; simSeconds: number; ratio: number; running: boolean; leds?: number[][] }
+  | {
+      type: 'tick';
+      console: string;
+      gpio: number;
+      enable: number;
+      /** GPIO32 以上（S3）的电平 / 使能 */
+      gpioHi: number;
+      enableHi: number;
+      pwm: number[];
+      simSeconds: number;
+      ratio: number;
+      running: boolean;
+      leds?: number[][];
+    }
   | { type: 'oled'; pixels: Uint8Array }
   | { type: 'stopped'; reason: string };
 
@@ -65,8 +82,9 @@ let speed = 1;
 let simAnchor = 0; // 开始计时时的模拟周期
 let wallAnchor = 0;
 const decoder = new TextDecoder();
-/** 板载 WS2812 所在引脚 */
-const LED_PIN = 8;
+/** 板载 WS2812 所在引脚（C3 GPIO8，S3 GPIO48）与引脚数，按芯片在启动后设置 */
+let LED_PIN = 8;
+let NPINS = 22;
 let lastFrames = -1;
 
 /** 板载灯带有新帧时返回各灯 [r,g,b]，否则 undefined（省掉无变化时的消息体积） */
@@ -95,7 +113,7 @@ function copyIn(e: Exports, data: ArrayBuffer) {
 /** 每个引脚的 PWM 占空比（-1 表示没有 PWM） */
 function pwmAll(e: Exports) {
   const out: number[] = [];
-  for (let p = 0; p < 22; p++) out.push(e.tb_pin_pwm(p));
+  for (let p = 0; p < NPINS; p++) out.push(e.tb_pin_pwm(p));
   return out;
 }
 
@@ -141,6 +159,8 @@ function loop() {
     leds: leds(e),
     gpio: e.tb_gpio_level(),
     enable: e.tb_gpio_enable(),
+    gpioHi: e.tb_gpio_level_hi(),
+    enableHi: e.tb_gpio_enable_hi(),
     pwm: pwmAll(e),
     simSeconds: e.tb_cycles() / CPU_HZ,
     ratio: lastRatio,
@@ -188,9 +208,12 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       for (const d of m.i2c ?? []) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
       if (m.env) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
       ex = e;
+      const s3 = e.tb_chip() === 9;
+      LED_PIN = s3 ? 48 : 8;
+      NPINS = s3 ? 49 : 22;
       lastFrames = -1;
       oledVersion = 0;
-      post({ type: 'booted' });
+      post({ type: 'booted', chip: s3 ? 'esp32s3' : 'esp32c3', bootPin: e.tb_boot_pin() });
       break;
     }
     case 'env':
@@ -209,7 +232,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       break;
     case 'pause':
       running = false;
-      if (ex) post({ type: 'tick', console: '', gpio: ex.tb_gpio_level(), enable: ex.tb_gpio_enable(), pwm: pwmAll(ex), simSeconds: ex.tb_cycles() / CPU_HZ, ratio: 0, running });
+      if (ex) post({ type: 'tick', console: '', gpio: ex.tb_gpio_level(), enable: ex.tb_gpio_enable(), gpioHi: ex.tb_gpio_level_hi(), enableHi: ex.tb_gpio_enable_hi(), pwm: pwmAll(ex), simSeconds: ex.tb_cycles() / CPU_HZ, ratio: 0, running });
       break;
     case 'speed':
       speed = m.factor;

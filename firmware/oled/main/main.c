@@ -8,6 +8,12 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
+#if CONFIG_IDF_TARGET_ESP32S3
+#define CHIP_NAME "ESP32-S3"
+#else
+#define CHIP_NAME "ESP32-C3"
+#endif
+
 #ifndef PIN_SDA
 #define PIN_SDA 6
 #endif
@@ -131,7 +137,7 @@ void app_main(void)
         memset(fb, 0, sizeof fb);
         rect(0, 0, 128, 64, 0);
         text(16, 5, "TryBoard", 2);
-        text(10, 24, "ESP32-C3+SSD1306", 1);
+        text(10, 24, CHIP_NAME "+SSD1306", 1);
         text(10, 34, "I2C 0x3C @400kHz", 1);
         // 进度条：每秒前进一格
         rect(10, 46, 108, 10, 0);
