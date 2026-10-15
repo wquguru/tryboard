@@ -77,3 +77,36 @@ impl Cpu {
         Ok(Flow::Next)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{sr, Bus, BusFault, Cpu};
+
+    struct Ram(Vec<u8>);
+    impl Bus for Ram {
+        fn load(&mut self, a: u32, s: u32) -> Result<u32, BusFault> {
+            let o = a as usize;
+            let b = self.0.get(o..o + s as usize).ok_or(BusFault)?;
+            Ok(b.iter().enumerate().fold(0, |v, (i, x)| v | (*x as u32) << (8 * i)))
+        }
+        fn store(&mut self, _: u32, _: u32, _: u32) -> Result<(), BusFault> {
+            Ok(())
+        }
+    }
+
+    /// 乘累加 + 并行装载：先用当前 m 值计算，再装入新值、更新指针
+    #[test]
+    fn mula_ldinc_uses_current_m() {
+        let mut ram = Ram(vec![0; 64]);
+        ram.0[4..8].copy_from_slice(&0x3333_4444u32.to_le_bytes());
+        let mut c = Cpu::new();
+        c.sr[(sr::M0 + 1) as usize] = 0x1111_2222;
+        c.sr[(sr::M0 + 2) as usize] = 0x0005_0006;
+        c.set_a(8, 0);
+        // mula.dd.ll.ldinc m0, a8, m1, m2：op2=0 op1=8 r=4（w=0、x=m1）s=8 t=0（y=m2）
+        let _ = c.exec_mac16(&mut ram, 0, 8, 4, 8, 0);
+        assert_eq!(c.sr[sr::ACCLO as usize], 0x2222 * 6);
+        assert_eq!(c.sr[sr::M0 as usize], 0x3333_4444);
+        assert_eq!(c.a(8), 4);
+    }
+}

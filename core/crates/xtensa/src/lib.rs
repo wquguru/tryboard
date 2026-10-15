@@ -970,11 +970,11 @@ impl Cpu {
                     // TLB 类（S3 只有区域保护）：按 vaddr 高 3 位选区域
                     let region = (as_ >> 29) as usize;
                     match r {
+                        // RxTLB0：区域基址；RxTLB1：基址 | 属性；PxTLB：基址 | 1（命中）。均与 QEMU 对照
                         3 | 11 => self.set_a(t, as_ & 0xe000_0000),
-                        7 => self.set_a(t, self.itlb_attr[region]),
-                        15 => self.set_a(t, self.dtlb_attr[region]),
-                        5 => self.set_a(t, (as_ & 0xe000_0000) | self.itlb_attr[region]),
-                        13 => self.set_a(t, (as_ & 0xe000_0000) | self.dtlb_attr[region]),
+                        7 => self.set_a(t, (as_ & 0xe000_0000) | self.itlb_attr[region]),
+                        15 => self.set_a(t, (as_ & 0xe000_0000) | self.dtlb_attr[region]),
+                        5 | 13 => self.set_a(t, (as_ & 0xe000_0000) | 1),
                         6 => self.itlb_attr[region] = at & 0xf,
                         14 => self.dtlb_attr[region] = at & 0xf,
                         4 | 12 => {}
