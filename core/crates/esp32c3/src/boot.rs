@@ -208,6 +208,8 @@ impl Esp32c3 {
         let jedec = m.bus.spi1.jedec;
         init_flashchip(&mut m, size_code, jedec)?;
         m.cpu.pc = app.entry;
+        // C3 硬件支持非对齐访存（Wi-Fi 库会对非对齐地址写 32 位哨兵值）
+        m.cpu.misaligned_ok = true;
         // ROM 的 .stack_pro 顶端，bootloader 跳进 app 时用的就是这个栈
         m.cpu.x[2] = 0x3FCD_E710;
         Ok((m, app))

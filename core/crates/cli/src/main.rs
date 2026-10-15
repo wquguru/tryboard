@@ -152,7 +152,7 @@ fn run(args: &[String]) {
         }
         if let Some(p) = pwm_pin {
             if let Some((d, f)) = m.bus.pin_pwm(p) {
-                if pwm_trace.last().map_or(true, |l| (l.1 - d).abs() > 0.004 || (l.2 - f).abs() > 0.5) {
+                if pwm_trace.last().is_none_or(|l| (l.1 - d).abs() > 0.004 || (l.2 - f).abs() > 0.5) {
                     pwm_trace.push((now_s, d, f));
                 }
             }

@@ -4,6 +4,8 @@
 //! 发出的 802.11 帧交给 [`world::World`]（虚拟 AP），世界的回应写进接收描述符并触发 MAC 中断。
 
 pub mod frame;
+pub mod net;
+pub mod tcp;
 pub mod world;
 
 use crate::periph::CPU_HZ;
@@ -28,7 +30,6 @@ pub fn rf_read(a: u32, stored: u32) -> Option<u32> {
 const MAC_INT_ENA: u32 = 0x6003_3c34;
 const MAC_INT_ST: u32 = 0x6003_3c3c;
 const MAC_INT_CLR: u32 = 0x6003_3c40;
-const RX_CTRL: u32 = 0x6003_3084;
 const RX_FIRST_DESC: u32 = 0x6003_3088;
 const RX_LAST_DESC: u32 = 0x6003_3090;
 const TXQ_DONE: u32 = 0x6003_3cb0;
@@ -99,7 +100,7 @@ impl SocBus {
             TXQ_DONE => w.tx_done,
             0x6003_3ca8 => 0,
             RX_LAST_DESC => w.rx_last & 0xf_ffff,
-            a if (TXQ_RESULT0 - 76 * (TXQ_NUM - 1)..=TXQ_RESULT0).contains(&a) && (TXQ_RESULT0 - a) % 76 == 0 => {
+            a if (TXQ_RESULT0 - 76 * (TXQ_NUM - 1)..=TXQ_RESULT0).contains(&a) && (TXQ_RESULT0 - a).is_multiple_of(76) => {
                 w.tx_result[((TXQ_RESULT0 - a) / 76) as usize]
             }
             // TSF 计时器（微秒）
@@ -121,7 +122,7 @@ impl SocBus {
                 self.wifi.rx_cur = Some(v);
                 return false;
             }
-            a if (TXQ0 - 8 * (TXQ_NUM - 1)..=TXQ0).contains(&a) && (TXQ0 - a) % 8 == 0 => {
+            a if (TXQ0 - 8 * (TXQ_NUM - 1)..=TXQ0).contains(&a) && (TXQ0 - a).is_multiple_of(8) => {
                 let q = ((TXQ0 - a) / 8) as usize;
                 if v & 0x8000_0000 != 0 {
                     self.wifi_tx(q, v);
@@ -293,3 +294,6 @@ impl SocBus {
         next
     }
 }
+
+#[cfg(test)]
+mod tests;

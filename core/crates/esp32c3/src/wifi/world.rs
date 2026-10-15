@@ -2,6 +2,7 @@
 //! 世界只认帧，不关心芯片内部；它产出"空中到达"的帧，由 MAC 模型写进接收描述符。
 
 use super::frame::{self, fc, Mac};
+use super::net::{self, Eth};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Auth {
@@ -43,6 +44,7 @@ pub struct World {
     pub sta: Vec<StaState>,
     pub sta_mac: Mac,
     pub aid: u16,
+    pub net: net::Net,
 }
 
 impl Default for World {
@@ -54,7 +56,7 @@ impl Default for World {
             ap("CoffeeShop", [0x02, 0x54, 0x42, 0xa0, 0x00, 0x04], 6, -70, Auth::Open, ""),
         ];
         let n = aps.len();
-        World { aps, seq: 0, channel: 1, sta: vec![StaState::Idle; n], sta_mac: [0; 6], aid: 1 }
+        World { aps, seq: 0, channel: 1, sta: vec![StaState::Idle; n], sta_mac: [0; 6], aid: 1, net: Default::default() }
     }
 }
 
@@ -185,10 +187,57 @@ impl World {
                 "去认证 / 去关联".into()
             }
             fc::NULL | fc::QOS_NULL => "空数据帧（省电状态通告）".into(),
-            x if x & 0x0c == 0x08 => "数据帧".into(),
+            x if x & 0x0c == 0x08 => {
+                let Some(i) = target else { return ("数据帧 → 未知 BSSID".into(), out, false) };
+                if self.sta[i] != StaState::Assoc {
+                    return ("数据帧（未关联，丢弃）".into(), out, acked);
+                }
+                if h.fc1 & 0x40 != 0 {
+                    // 受保护（加密）帧：WPA2 数据通路尚未实现
+                    return ("加密数据帧（暂不支持）".into(), out, acked);
+                }
+                if body.len() < 8 || body[..6] != [0xaa, 0xaa, 0x03, 0, 0, 0] {
+                    return ("数据帧（非 LLC/SNAP）".into(), out, acked);
+                }
+                let eth = Eth {
+                    dst: h.a3,
+                    src: h.a2,
+                    ethertype: u16::from_be_bytes([body[6], body[7]]),
+                    payload: body[8..].to_vec(),
+                };
+                let before = self.net.log.len();
+                let replies = self.net.on_eth(&eth, tsf_us);
+                let (rssi, channel, bssid) = (self.aps[i].rssi, self.aps[i].channel, self.aps[i].bssid);
+                for (k, r) in replies.into_iter().enumerate() {
+                    let f = self.data_from_ds(&r, &bssid);
+                    out.push(Air { delay_us: 300 + 200 * k as u64, frame: f, rssi, channel });
+                }
+                let notes: Vec<String> = self.net.log[before..].to_vec();
+                format!(
+                    "数据帧 {} 0x{:04x} {}B{}",
+                    frame::mac_str(&eth.dst),
+                    eth.ethertype,
+                    eth.payload.len(),
+                    if notes.is_empty() { String::new() } else { format!("：{}", notes.join("；")) }
+                )
+            }
             x => format!("帧 FC=0x{x:02x}"),
         };
         (desc, out, acked)
+    }
+
+    /// 以太网帧 → AP 发出的数据帧（FromDS：a1 目的、a2 BSSID、a3 源）
+    fn data_from_ds(&mut self, e: &Eth, bssid: &Mac) -> Vec<u8> {
+        let seq = self.next_seq();
+        let mut f = vec![fc::DATA, 0x02, 0, 0];
+        f.extend_from_slice(&e.dst);
+        f.extend_from_slice(bssid);
+        f.extend_from_slice(&e.src);
+        f.extend_from_slice(&(seq << 4).to_le_bytes());
+        f.extend_from_slice(&[0xaa, 0xaa, 0x03, 0, 0, 0]);
+        f.extend_from_slice(&e.ethertype.to_be_bytes());
+        f.extend_from_slice(&e.payload);
+        f
     }
 
     /// 已关联的 AP（信标要持续发，否则芯片会判定信标丢失而断线）

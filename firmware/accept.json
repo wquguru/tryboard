@@ -213,5 +213,14 @@
    "AP Neighbor-5G-Ext  ch=11 rssi= -78 auth=WPA2_PSK",
    "TRYBOARD_OK wifi-scan"
   ]
+ },
+ {
+  "id": "wifi-connect",
+  "seconds": 4,
+  "expect": [
+   "已连接 TryBoard-WiFi ch=6",
+   "拿到 IP 192.168.4.100 网关 192.168.4.1 掩码 255.255.255.0",
+   "TRYBOARD_OK wifi-connect"
+  ]
  }
 ]

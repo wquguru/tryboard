@@ -61,3 +61,14 @@
 - CLI：`--wifi-log` 打印空中日志（每帧的时间、方向、长度、信道、RSSI、类型）。
 
 扫描结果（4 个 AP，SSID / 信道 / RSSI / 加密方式全对，按 RSSI 排序）与 IDF 的主动扫描流程一致：每个信道一个探测请求、驻留约 120ms。
+
+## 阶段 3：认证、关联、DHCP（wifi-connect ✅）
+
+空中流程（`--wifi-log` 实录）：带 SSID 的定向探测请求逐信道扫描 → ch6 收到探测响应 → 去认证（IDF 连接前的惯例）→ 开放系统认证 → 关联（AID 1）→ 数据帧 DHCP DISCOVER / OFFER / REQUEST / ACK → 两次 ARP 冲突检测（不能回应）→ 空数据帧通告省电。拿到 IP 约在启动后 0.69 秒（模拟时间）。
+
+- 已关联后虚拟 AP 每 102.4ms 发信标，否则芯片会因信标丢失断线。
+- 虚拟局域网（`wifi/net.rs`）：网关 192.168.4.1（MAC 02:54:42:ff:00:01），DHCP 分配 192.168.4.100/24，网关兼 DNS；ARP 只替网关和局域网其它地址回应，不回应芯片自己的地址（否则 DHCP 冲突检测失败）；ICMP 回显。
+- 数据帧：ToDS 方向 a1=BSSID、a2=源、a3=目的；FromDS 方向 a1=目的、a2=BSSID、a3=源；载荷前 8 字节 LLC/SNAP（AA AA 03 00 00 00 + 以太类型）。AP 不带 WMM / HT 元素，所以芯片发普通数据帧（非 QoS）。
+- 虚拟互联网（`wifi/tcp.rs`）：所有域名解析到网关；网关 80 端口跑一个最小 HTTP/1.1 服务（`/`、`/hello.txt`、`/api/time`，可注入自定义页面），TCP 只做被动打开，不重传（虚拟网络不丢包）。
+
+CPU 修正：ESP32-C3 硬件支持非对齐访存（`esf_buf_alloc_dynamic` 往非对齐地址写 32 位哨兵 0xDEADBEEF），rv32 核加了 `misaligned_ok`，C3 打开；riscv-tests 仍按规范报异常。
