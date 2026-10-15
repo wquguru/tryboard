@@ -129,11 +129,14 @@ impl Net {
                 if dport == 67 {
                     return self.dhcp(data);
                 }
-                if dport == 53 {
+                // 普通 DNS（发给网关 53 端口），以及 .local 名字的 mDNS 查询（224.0.0.251:5353，
+                // 按 RFC 6762 §6.7 "传统单播"方式直接回给查询方的端口，ID 与问题原样带回）
+                if dport == 53 || dport == 5353 {
                     if let Some(ans) = self.tcp.dns(data) {
                         self.log.push(ans.1);
-                        let u = udp(dst, src, 53, sport, &ans.0);
-                        return vec![self.reply_ip(&e.src, src, dst, 17, &u)];
+                        let from = if dport == 53 { dst } else { GW_IP };
+                        let u = udp(from, src, dport, sport, &ans.0);
+                        return vec![self.reply_ip(&e.src, src, from, 17, &u)];
                     }
                 }
                 vec![]

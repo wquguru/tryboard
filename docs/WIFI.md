@@ -72,3 +72,9 @@
 - 虚拟互联网（`wifi/tcp.rs`）：所有域名解析到网关；网关 80 端口跑一个最小 HTTP/1.1 服务（`/`、`/hello.txt`、`/api/time`，可注入自定义页面），TCP 只做被动打开，不重传（虚拟网络不丢包）。
 
 CPU 修正：ESP32-C3 硬件支持非对齐访存（`esf_buf_alloc_dynamic` 往非对齐地址写 32 位哨兵 0xDEADBEEF），rv32 核加了 `misaligned_ok`，C3 打开；riscv-tests 仍按规范报异常。
+
+## 阶段 4a：HTTP（wifi-http ✅，开放网络）
+
+`esp_http_client` 依次 GET `http://tryboard.local/hello.txt`（`.local` 走 mDNS：查询发往 224.0.0.251:5353，虚拟网关按"传统单播"回给查询方端口）和 `http://example.com/api/time`（普通 DNS → 网关）。空中流程：DNS → ARP 网关 → TCP 三次握手 → HTTP 请求 → 响应 + FIN → ACK / FIN。
+
+顺带补了硬件随机数寄存器 WDEV_RND_REG（0x600260B0）：之前读回常数，lwIP 选端口 / DNS 事务号时会一直等"新随机数"。现在是固定种子的 xorshift，结果可复现。

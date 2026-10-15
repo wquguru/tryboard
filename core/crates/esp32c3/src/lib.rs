@@ -79,6 +79,8 @@ pub struct SocBus {
     pub unimpl: HashMap<u32, u64>,
     pub irq_dirty: bool,
     pub wifi: wifi::WifiMac,
+    /// 硬件随机数发生器（WDEV_RND_REG）状态：xorshift，固定种子保证可复现
+    pub rng: u32,
     /// 调试：监视某个 MMIO 地址，记录访问时的 PC（watch_pc 由运行循环填写）
     pub watch: Option<(u32, u32)>,
     pub watch_pc: u32,
@@ -122,6 +124,7 @@ impl Default for SocBus {
             unimpl: HashMap::new(),
             irq_dirty: true,
             wifi: Default::default(),
+            rng: 0x2545_f491,
             watch: None,
             watch_pc: 0,
             watch_hits: Vec::new(),
@@ -227,6 +230,15 @@ impl SocBus {
             0x6001_0000 => return self.uart1.read(off),
             0x6000_4000 => return self.gpio.read(off),
             0x6000_2000 => return self.spi1.read(off),
+            0x6002_6000 if off == 0xb0 => {
+                // WDEV_RND_REG：每次读都给新值（esp_random、lwIP 端口 / DNS 事务号都靠它）
+                let mut x = self.rng;
+                x ^= x << 13;
+                x ^= x >> 17;
+                x ^= x << 5;
+                self.rng = x;
+                return x;
+            }
             0x6001_9000 => return self.ledc.read(off),
             0x6004_0000 => return self.adc.read(off),
             0x6000_9000 if (4..=0x58).contains(&off) => return self.gpio.iomux[((off - 4) / 4) as usize],

@@ -222,5 +222,15 @@
    "拿到 IP 192.168.4.100 网关 192.168.4.1 掩码 255.255.255.0",
    "TRYBOARD_OK wifi-connect"
   ]
+ },
+ {
+  "id": "wifi-http",
+  "seconds": 4,
+  "expect": [
+   "GET http://tryboard.local/hello.txt → 200，17 字节",
+   "正文：TRYBOARD_HTTP_OK",
+   "GET http://example.com/api/time → 200",
+   "TRYBOARD_OK wifi-http"
+  ]
  }
 ]
