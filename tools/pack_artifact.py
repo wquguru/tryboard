@@ -35,6 +35,9 @@ for dp, _, fns in os.walk(out):
             continue
         if fn.endswith(('.bin', '.elf')):
             data = open(full, 'rb').read()
+            if fn.endswith('.bin'):
+                # 合并镜像常被补齐到整片 flash 大小，尾部全是 0xFF；模拟器加载时会自动补齐
+                data = data.rstrip(b'\xff')
             os.remove(full)
             full += '.b64.txt'
             rel += '.b64.txt'
