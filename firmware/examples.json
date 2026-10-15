@@ -216,5 +216,59 @@
   "controls": [
    "env"
   ]
+ },
+ {
+  "id": "s3-usb-keyboard",
+  "title": "S3 原生 USB：变身键盘 + 鼠标",
+  "about": "ESP32-S3 用芯片自带的 USB OTG（TinyUSB）把自己报成 HID 键盘 + 鼠标：插上电脑 1 秒后自动打出一行字、让鼠标画个正方形，之后每按一次 BOOT 键再来一遍。左边的虚拟电脑会完整走一遍枚举（取描述符、设地址、读报告描述符），再把收到的按键还原成文字。C3 / C6 的 USB 口只能当串口，做不了这个。",
+  "tags": [
+   "✓ 仿真验证",
+   "ESP32-S3",
+   "USB OTG",
+   "HID",
+   "TinyUSB"
+  ],
+  "scene": {
+   "parts": [],
+   "view": {
+    "position": [
+     -140,
+     140,
+     185
+    ],
+    "target": [
+     -78,
+     14,
+     2
+    ]
+   }
+  }
+ },
+ {
+  "id": "s3-usb-cdc",
+  "title": "S3 原生 USB：虚拟串口（CDC-ACM）",
+  "about": "ESP32-S3 用原生 USB 做一个 CDC-ACM 虚拟串口：电脑上会多出一个 COM 口 / ttyACM，不经过 USB 转串口芯片。在下面的「USB 串口终端」里输入一行，板子把它转成大写回给你。",
+  "tags": [
+   "✓ 仿真验证",
+   "ESP32-S3",
+   "USB OTG",
+   "CDC-ACM",
+   "TinyUSB"
+  ],
+  "scene": {
+   "parts": [],
+   "view": {
+    "position": [
+     -140,
+     140,
+     185
+    ],
+    "target": [
+     -78,
+     14,
+     2
+    ]
+   }
+  }
  }
 ]

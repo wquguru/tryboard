@@ -36,9 +36,20 @@ static void on_rx(int itf, cdcacm_event_t *event)
     }
 }
 
+static const char *strings[] = {
+    (char[]){0x09, 0x04}, // 英语
+    "TryBoard",           // 厂商
+    "TryBoard Serial",    // 产品
+    "000002",             // 序列号
+    "CDC-ACM",
+};
+
 void app_main(void)
 {
-    const tinyusb_config_t cfg = {0};
+    const tinyusb_config_t cfg = {
+        .string_descriptor = strings,
+        .string_descriptor_count = sizeof(strings) / sizeof(strings[0]),
+    };
     ESP_ERROR_CHECK(tinyusb_driver_install(&cfg));
     tinyusb_config_cdcacm_t acm = {
         .usb_dev = TINYUSB_USBDEV_0,

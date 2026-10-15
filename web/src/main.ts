@@ -1,5 +1,7 @@
 import { createBench, type SceneSpec } from './board3d';
 import type { Env, FromWorker, ToWorker } from './worker';
+import { createUsbPanel } from './usbpanel';
+import type { UsbView } from './usb3d';
 
 interface Example {
   id: string;
@@ -22,7 +24,36 @@ const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'modu
 const send = (m: ToWorker, transfer: Transferable[] = []) => worker.postMessage(m, transfer);
 
 let wasm: ArrayBuffer | null = null;
-let rom: ArrayBuffer | null = null;
+/** 各芯片的 ROM（按需下载）：5 = ESP32-C3，9 = ESP32-S3 */
+const roms = new Map<number, ArrayBuffer>();
+const ROM_URL: Record<number, string> = { 5: './rom/esp32c3_rev3_rom.elf', 9: './rom/esp32s3_rev0_rom.elf' };
+/** 当前固件的芯片；BOOT 键在 C3 上是 GPIO9，在 S3 上是 GPIO0 */
+let chip = 5;
+
+/** 读 flash 镜像里 app 的芯片 ID（分区表 0x8000 → factory / ota_0 → 镜像头偏移 12） */
+function chipOf(buf: ArrayBuffer) {
+  const b = new Uint8Array(buf);
+  const u32 = (o: number) => b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24);
+  let off = -1;
+  if (b[0x8000] === 0xaa && b[0x8001] === 0x50) {
+    for (let i = 0; i < 95; i++) {
+      const o = 0x8000 + i * 32;
+      if (b[o] !== 0xaa || b[o + 1] !== 0x50) break;
+      if (b[o + 2] === 0 && (b[o + 3] === 0 || b[o + 3] === 0x10)) {
+        off = u32(o + 4);
+        break;
+      }
+    }
+  } else if (b[0] === 0xe9) off = 0;
+  if (off < 0 || off + 14 > b.length) return 5;
+  const id = b[off + 12] | (b[off + 13] << 8);
+  return id === 9 ? 9 : 5;
+}
+
+async function romFor(c: number) {
+  if (!roms.has(c)) roms.set(c, await fetchBuf(ROM_URL[c]));
+  return roms.get(c)!;
+}
 let flash: ArrayBuffer | null = null;
 let running = false;
 let examples: Example[] = [];
@@ -70,15 +101,22 @@ async function fetchBuf(url: string) {
   return r.arrayBuffer();
 }
 
-function boot(autorun: boolean) {
-  if (!wasm || !rom || !flash) return;
+async function boot(autorun: boolean) {
+  if (!wasm || !flash) return;
   consoleEl.textContent = '';
-  log('[试板] 上电，加载固件…\n', 'sys');
+  chip = chipOf(flash);
+  $('chip').textContent = chip === 9 ? 'ESP32-S3 · 160MHz' : 'ESP32-C3 · 160MHz';
+  log(`[试板] 上电（${chip === 9 ? 'ESP32-S3' : 'ESP32-C3'}），加载固件…\n`, 'sys');
   bench.setPowered(true);
   bench.setRgb([0, 0, 0]);
+  bench.setUsb(null);
+  usbPanel.reset();
   pendingAutorun = autorun;
+  const rom = await romFor(chip);
   send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: i2cDevices(), env: { ...env } });
 }
+
+const usbPanel = createUsbPanel(document.querySelector('.panel.info')!, (text) => send({ type: 'usbcdc', text }));
 let pendingAutorun = false;
 
 worker.onmessage = (ev: MessageEvent<FromWorker>) => {
@@ -110,6 +148,12 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
     case 'oled':
       bench.setOled(m.pixels);
       break;
+    case 'usb': {
+      const v: UsbView | null = m.json ? JSON.parse(m.json) : null;
+      usbPanel.update(v);
+      bench.setUsb(v);
+      break;
+    }
     case 'stopped':
       setRunning(false);
       log(`\n[试板] 停止：${m.reason}\n`, 'err');
@@ -143,7 +187,7 @@ $<HTMLInputElement>('upload').onchange = async (e) => {
   boot(true);
 };
 bench.onButton((name, down) => {
-  if (name === 'BOOT') send({ type: 'gpio', pin: 9, level: down ? 0 : -1 });
+  if (name === 'BOOT') send({ type: 'gpio', pin: chip === 9 ? 0 : 9, level: down ? 0 : -1 });
   if (name === 'RST' && !down) boot(true);
 });
 
@@ -214,7 +258,7 @@ exampleSel.onchange = () => loadExample(exampleSel.value, true);
 
 (async () => {
   try {
-    [wasm, rom] = await Promise.all([fetchBuf('./wasm/tryboard.wasm'), fetchBuf('./rom/esp32c3_rev3_rom.elf')]);
+    wasm = await fetchBuf('./wasm/tryboard.wasm');
     examples = await (await fetch('./fw/examples.json')).json();
     for (const e of examples) exampleSel.add(new Option(e.title, e.id));
     const want = new URLSearchParams(location.search).get('example');

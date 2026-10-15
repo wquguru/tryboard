@@ -159,7 +159,7 @@ fn utf16(d: &[u8]) -> String {
         return String::new();
     }
     let n = (d[0] as usize).min(d.len());
-    let w: Vec<u16> = d[2..n].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+    let w: Vec<u16> = d[2..n].as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c)).collect();
     String::from_utf16_lossy(&w)
 }
 
@@ -658,6 +658,36 @@ impl Host {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// TinyUSB 的 TUD_HID_REPORT_DESC_KEYBOARD / MOUSE 开头片段（带报告 ID 1 / 2）
+    #[test]
+    fn report_ids_by_application() {
+        let d = [
+            0x05, 0x01, 0x09, 0x06, 0xa1, 0x01, 0x85, 0x01, 0x05, 0x07, 0xc0, // 键盘，报告 1
+            0x05, 0x01, 0x09, 0x02, 0xa1, 0x01, 0x85, 0x02, 0x09, 0x01, 0xa1, 0x00, 0xc0, 0xc0, // 鼠标，报告 2
+        ];
+        assert_eq!(parse_report_desc(&d), vec![(1, HidKind::Keyboard), (2, HidKind::Mouse)]);
+    }
+
+    #[test]
+    fn keycodes_to_text() {
+        assert_eq!(keycode_char(0x0b, true), Some('H'));
+        assert_eq!(keycode_char(0x08, false), Some('e'));
+        assert_eq!(keycode_char(0x1e, true), Some('!'));
+        assert_eq!(keycode_char(0x28, false), Some('\n'));
+        assert_eq!(keycode_char(0x2c, false), Some(' '));
+    }
+
+    #[test]
+    fn utf16_string_descriptor() {
+        let d = [10, 3, b'T', 0, b'r', 0, b'y', 0, b'B', 0];
+        assert_eq!(utf16(&d), "TryB");
     }
 }
 

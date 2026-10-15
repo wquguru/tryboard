@@ -6,6 +6,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { createUsbHost, type UsbView } from './usb3d';
 
 // 单位：毫米
 const PITCH = 2.54;
@@ -46,6 +47,8 @@ export interface Bench {
   /** 板载 WS2812（GPIO8）颜色，0–255 */
   setRgb(rgb: number[]): void;
   onButton(cb: (name: 'BOOT' | 'RST', down: boolean) => void): void;
+  /** 原生 USB：固件枚举出设备后接上虚拟电脑（null 拔掉） */
+  setUsb(v: UsbView | null): void;
   dispose(): void;
 }
 
@@ -839,6 +842,7 @@ export function createBench(container: HTMLElement): Bench {
     renderer.domElement.style.cursor = pick(ev) ? 'pointer' : pickPot(ev) || dragging ? 'ew-resize' : '';
   });
 
+  let usbHost: ReturnType<typeof createUsbHost> | null = null;
   let raf = 0;
   const tick = () => {
     raf = requestAnimationFrame(tick);
@@ -913,6 +917,19 @@ export function createBench(container: HTMLElement): Bench {
     },
     onButton(cb) {
       buttonCb = cb;
+    },
+    setUsb(v) {
+      if (!v) {
+        usbHost?.dispose();
+        usbHost = null;
+        return;
+      }
+      if (!usbHost) {
+        board.grp.updateMatrixWorld();
+        // 开发板 Type-C 口口沿（板子局部坐标）→ 世界坐标
+        usbHost = createUsbHost(scene, board.grp.localToWorld(new THREE.Vector3(0, 2.4, -26)));
+      }
+      usbHost.update(v);
     },
     dispose() {
       cancelAnimationFrame(raf);
