@@ -243,5 +243,37 @@
   "scene": {
    "parts": []
   }
+ },
+ {
+  "id": "nvs",
+  "title": "NVS：断电也记得的开机次数",
+  "about": "开机计数存进 flash 里的 NVS 分区，每次 esp_restart 后加一，第三次停下。模拟器的 flash 会真实地被擦写，复位后内容保留——和真板子一样。",
+  "tags": [
+   "✓ 仿真验证",
+   "NVS",
+   "flash 擦写",
+   "软件复位"
+  ],
+  "scene": {
+   "parts": []
+  }
+ },
+ {
+  "id": "arduino-blink",
+  "title": "Arduino：Blink",
+  "about": "用 Arduino IDE / arduino-cli（esp32 核心 3.x）编译的 Blink，导出的 merged.bin 直接上传就能跑。GPIO5 接 LED。",
+  "tags": [
+   "✓ 仿真验证",
+   "Arduino",
+   "GPIO"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "led",
+     "pin": 5
+    }
+   ]
+  }
  }
 ]

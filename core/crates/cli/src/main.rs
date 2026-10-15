@@ -135,6 +135,7 @@ fn run(args: &[String]) {
     let mut stop = Stop::Budget;
     let mut done = 0u64;
     let stdout = std::io::stdout();
+    let mut resets = 0;
     // 定时输入脚本：时间（模拟秒）:动作；动作 gpioN=0|1|z、uart=文本（\\n 为换行）
     let mut script: Vec<(f64, String)> = opt(args, "--script")
         .map(|s| {
@@ -221,6 +222,16 @@ fn run(args: &[String]) {
             lock.write_all(&c).ok();
             lock.flush().ok();
             out.extend_from_slice(&c);
+        }
+        if let Stop::Reset(r) = stop {
+            // 软件复位：重新上电（flash / NVS 保留），最多 50 次，防止崩溃重启死循环跑满
+            resets += 1;
+            eprintln!("[tryboard] 软件复位（原因 {r}），第 {resets} 次重新上电");
+            if resets > 50 || m.reboot(r).is_err() {
+                break;
+            }
+            stop = Stop::Budget;
+            continue;
         }
         if stop != Stop::Budget {
             break;

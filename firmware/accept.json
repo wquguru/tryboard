@@ -306,5 +306,28 @@
    "GET http://example.com/api/time → 200",
    "TRYBOARD_OK wifi-http"
   ]
+ },
+ {
+  "id": "nvs",
+  "seconds": 3,
+  "expect": [
+   "开机第 1 次",
+   "开机第 2 次（复位原因 3）",
+   "开机第 3 次",
+   "TRYBOARD_OK nvs"
+  ]
+ },
+ {
+  "id": "arduino-blink",
+  "seconds": 2.5,
+  "expect": [
+   "Arduino blink start",
+   "LED ON (1)",
+   "TRYBOARD_OK arduino-blink"
+  ],
+  "gpio_toggles": {
+   "pin": 5,
+   "min": 3
+  }
  }
 ]

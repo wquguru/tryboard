@@ -74,6 +74,17 @@ pub extern "C" fn tb_run(cycles: f64) -> i32 {
         OUT.with(|o| o.borrow_mut().extend_from_slice(&con));
         match r {
             Stop::Budget => 0,
+            Stop::Reset(reason) => {
+                // 软件复位：在内核里直接重新上电（flash / NVS 保留），页面感知不到中断
+                OUT.with(|o| o.borrow_mut().extend_from_slice("\n[试板] 软件复位，重新上电\n".as_bytes()));
+                match m.reboot(reason) {
+                    Ok(()) => 0,
+                    Err(e) => {
+                        ERR.with(|x| *x.borrow_mut() = e);
+                        1
+                    }
+                }
+            }
             Stop::Fault { cause, pc, tval } => {
                 ERR.with(|e| {
                     *e.borrow_mut() =

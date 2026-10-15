@@ -81,6 +81,10 @@ pub struct SocBus {
     /// 访问了没有模型的寄存器：地址 → 次数
     pub unimpl: HashMap<u32, u64>,
     pub irq_dirty: bool,
+    /// 固件请求复位（RTC_CNTL_OPTIONS0 的 SW_SYS_RST / SW_PROCPU_RST），值为下次上电的复位原因
+    pub reset_request: Option<u32>,
+    /// 本次上电的复位原因（RTC_CNTL_RESET_STATE 低 6 位）：1 上电、3 软件系统复位、12 软件 CPU 复位
+    pub reset_reason: u32,
     pub wifi: wifi::WifiMac,
     /// 硬件随机数发生器（WDEV_RND_REG）状态：xorshift，固定种子保证可复现
     pub rng: u32,
@@ -127,6 +131,8 @@ impl Default for SocBus {
             regs: HashMap::new(),
             unimpl: HashMap::new(),
             irq_dirty: true,
+            reset_request: None,
+            reset_reason: 1,
             wifi: Default::default(),
             rng: 0x2545_f491,
             watch: None,
@@ -285,6 +291,9 @@ impl SocBus {
                 return v;
             }
         }
+        if a == 0x6000_8038 {
+            return self.reset_reason | (self.reset_reason << 6);
+        }
         if let Some(v) = boot::special_read(a, now) {
             return v;
         }
@@ -299,6 +308,9 @@ impl SocBus {
         let now = self.now;
         let (base, off) = (a & !0xfff, a & 0xfff);
         self.irq_dirty = true;
+        if a == 0x6000_8000 && v & (1 << 31 | 1 << 5) != 0 {
+            self.reset_request = Some(if v & (1 << 31) != 0 { 3 } else { 12 });
+        }
         match base {
             0x6000_0000 => {
                 self.uart0.write(off, v);
@@ -564,6 +576,8 @@ pub enum Stop {
     Fault { cause: u32, pc: u32, tval: u32 },
     /// 碰到没实现的 HLE 函数
     Hle(u32),
+    /// 固件请求复位（esp_restart、看门狗、panic 后重启）；调用 reboot() 重新上电
+    Reset(u32),
 }
 
 pub struct Esp32c3 {
@@ -571,6 +585,8 @@ pub struct Esp32c3 {
     pub bus: SocBus,
     pub rom_symbols: HashMap<u32, String>,
     pub hle: HashMap<u32, hle::Hle>,
+    /// 留一份 ROM，复位重新上电时用
+    pub rom_elf: Vec<u8>,
 }
 
 impl Esp32c3 {
@@ -584,6 +600,9 @@ impl Esp32c3 {
             bus.watch_pc = cpu.pc;
             if bus.irq_dirty || cpu.cycles >= bus.next_event {
                 bus.update(cpu);
+            }
+            if let Some(r) = bus.reset_request.take() {
+                return Stop::Reset(r);
             }
             match cpu.step(bus) {
                 Exit::Normal => {}
@@ -632,6 +651,22 @@ impl Esp32c3 {
             }
         }
         Stop::Budget
+    }
+
+    /// 复位后重新上电：flash 内容（含 NVS）保留，RAM 与外设清零，CPU 周期继续累计
+    pub fn reboot(&mut self, reason: u32) -> Result<(), String> {
+        let flash = std::mem::take(&mut self.bus.flash);
+        let (mut m, _) = Esp32c3::boot(&self.rom_elf, flash)?;
+        m.bus.reset_reason = reason;
+        m.bus.gpio.ext_in = self.bus.gpio.ext_in;
+        m.bus.gpio.ext_driven = self.bus.gpio.ext_driven;
+        m.bus.adc.pin_mv = self.bus.adc.pin_mv;
+        let t = self.cpu.cycles;
+        m.cpu.cycles = t;
+        m.bus.now = t;
+        m.bus.next_event = 0;
+        *self = m;
+        Ok(())
     }
 
     pub fn console_take(&mut self) -> Vec<u8> {

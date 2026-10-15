@@ -9,6 +9,8 @@ pub struct SpiFlash {
     /// 编程 / 擦除次数（给 UI 和磨损统计用）
     pub erases: u64,
     pub programs: u64,
+    /// 状态寄存器 SR1–SR3（SR2 位 1 = QE，四线模式要靠它）；SR1 的 WEL 由 wel 单独维护
+    pub sr: [u8; 3],
 }
 
 impl Default for SpiFlash {
@@ -19,6 +21,7 @@ impl Default for SpiFlash {
             jedec: 0x16_40_c8,
             erases: 0,
             programs: 0,
+            sr: [0; 3],
         }
     }
 }
@@ -39,6 +42,10 @@ impl SpiFlash {
             return 0;
         }
         self.regs.get((off / 4) as usize).copied().unwrap_or(0)
+    }
+
+    fn sr1(&self) -> u8 {
+        self.sr[0] | if self.wel { 2 } else { 0 }
     }
 
     fn buf_bytes(&self, n: usize) -> Vec<u8> {
@@ -106,7 +113,15 @@ impl SpiFlash {
             let id = self.jedec;
             self.set_buf(&id.to_le_bytes()[..3]);
         } else if v & (1 << 27) != 0 {
-            self.regs[RD_STATUS] = if self.wel { 2 } else { 0 };
+            self.regs[RD_STATUS] = self.sr1() as u32;
+        } else if v & (1 << 26) != 0 {
+            // WRSR：写入值取自 RD_STATUS 寄存器（低字节 SR1，次字节 SR2）
+            if self.wel {
+                let st = self.regs[RD_STATUS];
+                self.sr[0] = st as u8 & !3;
+                self.sr[1] = (st >> 8) as u8;
+                self.wel = false;
+            }
         } else if v & (1 << 25) != 0 {
             let len = (addr >> 24).max(1);
             let data = self.buf_bytes(len);
@@ -146,8 +161,32 @@ impl SpiFlash {
         }
         let reply: Option<Vec<u8>> = match cmd as u8 {
             0x9f => Some(self.jedec.to_le_bytes()[..3].to_vec()),
-            0x05 => Some(vec![if self.wel { 2 } else { 0 }]),
-            0x35 | 0x15 => Some(vec![0]),
+            0x05 => Some(vec![self.sr1()]),
+            0x35 => Some(vec![self.sr[1]]),
+            0x15 => Some(vec![self.sr[2]]),
+            // 写状态寄存器：0x01 写 SR1（可带 SR2），0x31 写 SR2，0x11 写 SR3
+            0x01 | 0x31 | 0x11 if mosi => {
+                if self.wel {
+                    let d = self.buf_bytes(mosi_len.max(1));
+                    match cmd as u8 {
+                        0x01 => {
+                            self.sr[0] = d[0] & !3;
+                            if d.len() > 1 {
+                                self.sr[1] = d[1];
+                            }
+                        }
+                        0x31 => self.sr[1] = d[0],
+                        _ => self.sr[2] = d[0],
+                    }
+                    self.wel = false;
+                }
+                None
+            }
+            // 易失写使能（0x50）：允许随后写状态寄存器
+            0x50 => {
+                self.wel = true;
+                None
+            }
             0x06 => {
                 self.wel = true;
                 None

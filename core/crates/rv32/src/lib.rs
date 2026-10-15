@@ -82,7 +82,9 @@ pub struct Cpu {
     pub hle_lo: u32,
     pub hle_hi: u32,
     pub hle_addrs: Vec<u32>,
+    /// 模拟时间基准（CPU 周期）。固件改写周期计数 CSR 只改 cycle_bias，不能让时间跳变
     pub cycles: u64,
+    pub cycle_bias: u64,
     pub instret: u64,
     pub waiting: bool,
     /// 硬件支持非对齐访存（ESP32-C3 对内部存储的非对齐读写由硬件拆分完成）。
@@ -115,6 +117,7 @@ impl Cpu {
             hle_hi: 0,
             hle_addrs: Vec::new(),
             cycles: 0,
+            cycle_bias: 0,
             instret: 0,
             waiting: false,
             misaligned_ok: false,
@@ -502,8 +505,8 @@ impl Cpu {
     fn csr_read(&self, addr: u32) -> Option<u32> {
         use csr::*;
         Some(match addr {
-            MCYCLE | CYCLE | MPCCR | UPCCR => self.cycles as u32,
-            MCYCLEH | CYCLEH => (self.cycles >> 32) as u32,
+            MCYCLE | CYCLE | MPCCR | UPCCR => self.cycles.wrapping_add(self.cycle_bias) as u32,
+            MCYCLEH | CYCLEH => (self.cycles.wrapping_add(self.cycle_bias) >> 32) as u32,
             MINSTRET | INSTRET => self.instret as u32,
             MINSTRETH | INSTRETH => (self.instret >> 32) as u32,
             TIME => self.cycles as u32,
@@ -515,8 +518,16 @@ impl Cpu {
     fn csr_write(&mut self, addr: u32, v: u32) {
         use csr::*;
         match addr {
-            MCYCLE | MPCCR | UPCCR => self.cycles = (self.cycles & !0xffff_ffff) | v as u64,
-            MCYCLEH => self.cycles = (self.cycles & 0xffff_ffff) | ((v as u64) << 32),
+            MCYCLE | MPCCR | UPCCR => {
+                let cur = self.cycles.wrapping_add(self.cycle_bias);
+                let want = (cur & !0xffff_ffff) | v as u64;
+                self.cycle_bias = want.wrapping_sub(self.cycles);
+            }
+            MCYCLEH => {
+                let cur = self.cycles.wrapping_add(self.cycle_bias);
+                let want = (cur & 0xffff_ffff) | ((v as u64) << 32);
+                self.cycle_bias = want.wrapping_sub(self.cycles);
+            }
             MINSTRET => self.instret = (self.instret & !0xffff_ffff) | v as u64,
             MINSTRETH => self.instret = (self.instret & 0xffff_ffff) | ((v as u64) << 32),
             _ => self.csr.write(addr, v),

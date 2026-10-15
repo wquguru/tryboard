@@ -30,7 +30,6 @@ pub fn special_read(a: u32, now: u64) -> Option<u32> {
         0x6000_8010 => (now * 136_000 / CPU_HZ) as u32,
         0x6000_8014 => ((now * 136_000 / CPU_HZ) >> 32) as u32,
         // RTC_CNTL_RESET_STATE：上电复位（1）
-        0x6000_8038 => 1 | (1 << 6),
         _ => return None,
     })
 }
@@ -191,6 +190,7 @@ impl Esp32c3 {
             bus: SocBus::default(),
             rom_symbols: HashMap::new(),
             hle: HashMap::new(),
+            rom_elf: rom_elf.to_vec(),
         };
         load_rom(&mut m, rom_elf)?;
         let mut flash = flash;
