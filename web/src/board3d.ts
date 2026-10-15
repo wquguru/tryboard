@@ -736,8 +736,11 @@ export function createBench(container: HTMLElement): Bench {
     servos = [];
     pots = [];
     oledTex = null;
+    // 多个同类元件依次往左排，避免叠在同一列
+    let ledN = 0;
+    let i2cN = 0;
     for (const p of spec.parts) {
-      if (p.type === 'led') buildLed(parts, p);
+      if (p.type === 'led') buildLed(parts, { ...p, col: p.col ?? 24 - 4 * ledN++ });
       if (p.type === 'servo') buildServo(parts, p);
       if (p.type === 'pot') buildPot(parts, p);
       if (p.type === 'oled') {
@@ -748,11 +751,11 @@ export function createBench(container: HTMLElement): Bench {
         oledTex.minFilter = THREE.LinearFilter;
         oledTex.colorSpace = THREE.SRGBColorSpace;
         oledTex.needsUpdate = true;
-        buildI2c(parts, oledModule(oledTex), 21, ['GND', 'VCC', 'SCL', 'SDA'], p.sda, p.scl, 40);
+        buildI2c(parts, oledModule(oledTex), 21 - 7 * i2cN++, ['GND', 'VCC', 'SCL', 'SDA'], p.sda, p.scl, 40);
         label(parts, p.label ?? `SSD1306 · I2C 0x${p.addr.toString(16).toUpperCase()} · SDA IO${p.sda} SCL IO${p.scl}`, new THREE.Vector3(bb.colX(22.5), 46, bb.rowZ(0) - 10));
       }
       if (p.type === 'bme280') {
-        buildI2c(parts, bmeModule(), 21, ['VIN', 'GND', 'SCL', 'SDA'], p.sda, p.scl, 22);
+        buildI2c(parts, bmeModule(), 21 - 7 * i2cN++, ['VIN', 'GND', 'SCL', 'SDA'], p.sda, p.scl, 22);
         label(parts, p.label ?? `BME280 · I2C 0x${p.addr.toString(16)} · SDA IO${p.sda} SCL IO${p.scl}`, new THREE.Vector3(bb.colX(22.5), 34, bb.rowZ(0) - 8));
       }
     }

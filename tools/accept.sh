@@ -119,6 +119,9 @@ if [ $NO_WEB = 0 ]; then
     echo "$r" | grep -q FAIL && fail=1
     echo "$r" | grep -q 页面错误 && fail=1
   done
+  r=$(node tools/webtest/editor.mjs 2>&1 | tail -1)
+  echo "- 元件编辑器（上传固件 + 加 BME280 / LED）：$r" >> $REPORT
+  echo "$r" | grep -q PASS || fail=1
 fi
 echo -e "\n结论：$([ $fail = 0 ] && echo '全部通过' || echo '有失败项')" >> $REPORT
 cat $REPORT

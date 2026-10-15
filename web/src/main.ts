@@ -1,4 +1,5 @@
 import { createBench, type SceneSpec } from './board3d';
+import { mountEditor, needsReboot } from './editor';
 import type { Env, FromWorker, ToWorker } from './worker';
 
 interface Example {
@@ -139,7 +140,22 @@ $<HTMLInputElement>('upload').onchange = async (e) => {
   const f = (e.target as HTMLInputElement).files?.[0];
   if (!f) return;
   flash = await f.arrayBuffer();
-  $('about').innerHTML = `<p>自定义固件：${f.name}（${(f.size / 1024).toFixed(0)} KB）</p><p class="muted">支持 ESP-IDF / Arduino 构建出的完整 flash 镜像（含分区表），或单独的 app .bin。</p>`;
+  $('about').innerHTML = `<p>自定义固件：${f.name}（${(f.size / 1024).toFixed(0)} KB）</p><p class="muted">支持 ESP-IDF / Arduino 构建出的完整 flash 镜像（含分区表），或单独的 app .bin。在下面「面包板元件」里按你的实物接线加元件。</p>`;
+  customFirmware = true;
+  exampleControls = [];
+  let opt = exampleSel.querySelector('option[value="__custom"]') as HTMLOptionElement | null;
+  if (!opt) exampleSel.add((opt = new Option('', '__custom')));
+  opt.text = `自定义：${f.name}`;
+  exampleSel.value = '__custom';
+  try {
+    scene = JSON.parse(localStorage.getItem(CUSTOM_KEY) ?? '') as SceneSpec;
+  } catch {
+    scene = { parts: [] };
+  }
+  bench.setScene(scene);
+  syncControls();
+  editor.render();
+  ($('editorBox') as HTMLDetailsElement).open = true;
   boot(true);
 };
 bench.onButton((name, down) => {
@@ -148,16 +164,55 @@ bench.onButton((name, down) => {
 });
 
 async function loadExample(id: string, autorun: boolean) {
+  customFirmware = false;
   const ex = examples.find((e) => e.id === id)!;
   $('about').innerHTML = `<p><b>${ex.title}</b></p><p>${ex.about}</p><p>${ex.tags.map((t) => `<span class="tag ${t.startsWith('✓') ? 'ok' : ''}">${t}</span>`).join('')}</p>`;
   scene = ex.scene ?? { parts: [] };
   bench.setScene(scene);
-  analog.clear();
-  if (ex.controls?.includes('env')) envControls();
-  for (const c of ex.controls ?? []) if (typeof c === 'object' && c.type === 'analog') analogControl(c);
+  exampleControls = ex.controls ?? [];
+  syncControls();
+  editor.render();
   flash = await fetchBuf(`./fw/${id}/flash.bin`);
   boot(autorun);
 }
+
+let exampleControls: (string | AnalogControl)[] = [];
+
+/** 面板上的滑块由场景决定：有 BME280 就给环境滑块，每个电位器一个旋钮滑块（示例可给初值） */
+function syncControls() {
+  $('controls').innerHTML = '';
+  analog.clear();
+  if (scene.parts.some((p) => p.type === 'bme280')) envControls();
+  for (const p of scene.parts) {
+    if (p.type !== 'pot') continue;
+    const preset = exampleControls.find((c): c is AnalogControl => typeof c === 'object' && c.type === 'analog' && c.pin === p.pin);
+    analogControl(preset ?? { type: 'analog', pin: p.pin, label: `电位器（GPIO${p.pin}）`, max_mv: 3300, value: 1650 });
+  }
+}
+
+const CUSTOM_KEY = 'tryboard-custom-scene';
+const editor = mountEditor(
+  $('editor'),
+  () => scene,
+  (next) => {
+    const reboot = needsReboot(scene, next);
+    scene = next;
+    bench.setScene(scene);
+    syncControls();
+    if (customFirmware) {
+      try {
+        localStorage.setItem(CUSTOM_KEY, JSON.stringify(scene));
+      } catch {
+        /* 隐私模式下存不了，不影响使用 */
+      }
+    }
+    if (reboot) {
+      log('\n[试板] I2C 器件变了，重新上电\n', 'sys');
+      boot(true);
+    }
+  },
+);
+let customFirmware = false;
 
 /** 环境滑块：改的是虚拟世界，传感器读到的随之变化 */
 function envControls() {
@@ -179,7 +234,7 @@ function envControls() {
     };
     box.appendChild(row);
   }
-  $('about').appendChild(box);
+  $('controls').appendChild(box);
 }
 
 /** 模拟输入滑块（电位器等）：与 3D 旋钮双向同步 */
@@ -207,10 +262,12 @@ function analogControl(c: AnalogControl) {
   hint.className = 'muted';
   hint.textContent = c.label + '：拖滑块或直接拖 3D 里的旋钮';
   box.append(hint, row);
-  $('about').appendChild(box);
+  $('controls').appendChild(box);
 }
 
-exampleSel.onchange = () => loadExample(exampleSel.value, true);
+exampleSel.onchange = () => {
+  if (exampleSel.value !== '__custom') loadExample(exampleSel.value, true);
+};
 
 (async () => {
   try {

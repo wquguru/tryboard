@@ -61,3 +61,15 @@ footer { padding: 6px 16px; font-size: 11px; color: #5f6976; border-top: 1px sol
 .nav { display: flex; gap: 2px; }
 .nav a { color: var(--muted); text-decoration: none; padding: 5px 10px; border-radius: 6px; font-size: 13px; }
 .nav a.on { color: var(--text); background: #1a2028; }
+#controls { padding: 0 14px 8px; }
+#controls .muted { margin-top: 6px; }
+.editor summary { cursor: pointer; list-style: none; }
+.editor summary::-webkit-details-marker { display: none; }
+#editor { padding: 10px 14px 14px; font-size: 13px; }
+#editor .parts { list-style: none; margin: 0 0 8px; padding: 0; }
+#editor .parts li { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--line); }
+#editor .warn { color: var(--err); font-size: 12px; margin: 6px 0; }
+#editor .add { display: grid; gap: 6px; }
+#editor .add select, #editor .add button { width: 100%; font-size: 12px; padding: 5px 8px; }
+#editor .fields { display: flex; gap: 6px; flex-wrap: wrap; }
+#editor .fields label { display: grid; gap: 2px; color: var(--muted); font-size: 11px; flex: 1; min-width: 90px; }
