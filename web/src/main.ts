@@ -65,10 +65,18 @@ function setRunning(r: boolean) {
   runBtn.textContent = r ? '❚❚ 暂停' : '▶ 运行';
 }
 
+/** 发布到不托管二进制的环境时（页面带 <meta name="tryboard-pack" content="b64">），固件与 ROM 以 base64 文本存放 */
+const PACKED = document.querySelector('meta[name="tryboard-pack"]')?.getAttribute('content') === 'b64';
+
 async function fetchBuf(url: string) {
-  const r = await fetch(url);
+  const packed = PACKED && /\.(bin|elf)$/.test(url);
+  const r = await fetch(packed ? url + '.b64.txt' : url);
   if (!r.ok) throw new Error(`${url}: ${r.status}`);
-  return r.arrayBuffer();
+  if (!packed) return r.arrayBuffer();
+  const bin = atob((await r.text()).trim());
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
 }
 
 function boot(autorun: boolean) {
