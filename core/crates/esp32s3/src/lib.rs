@@ -6,6 +6,7 @@
 pub mod boot;
 pub mod hle;
 pub mod periph;
+pub mod usb;
 
 use periph::*;
 use std::collections::HashMap;
@@ -74,6 +75,8 @@ pub struct SocBus {
     pub extmem: Extmem,
     pub ledc: Ledc,
     pub analog: Analog,
+    /// 原生 USB OTG（Option 只为在推进时临时拿出来，让控制器 DMA 能借用总线访问内存；平时恒为 Some）
+    pub usb: Option<Box<usb::Usb>>,
     pub efuse: [u32; 0x200 / 4],
     /// SYSTEM_CPU_INTR_FROM_CPU_0..3
     pub from_cpu: u32,
@@ -111,6 +114,7 @@ impl Default for SocBus {
             extmem: Extmem::default(),
             ledc: Ledc::default(),
             analog: Analog::default(),
+            usb: Some(Box::default()),
             efuse: boot::default_efuse(),
             from_cpu: 0,
             usj_tx: Vec::new(),
@@ -212,6 +216,9 @@ impl SocBus {
 
     fn mmio_read(&mut self, a: u32) -> u32 {
         let now = self.now;
+        if usb::Usb::contains(a) {
+            return self.usb.as_mut().map(|u| u.read(a)).unwrap_or(0);
+        }
         let (base, off) = (a & !0xfff, a & 0xfff);
         match base {
             0x6000_0000 => return self.uart0.read(off),
@@ -252,6 +259,13 @@ impl SocBus {
         let now = self.now;
         let (base, off) = (a & !0xfff, a & 0xfff);
         self.irq_dirty = true;
+        if usb::Usb::contains(a) {
+            if let Some(u) = self.usb.as_mut() {
+                u.write(a, v);
+                u.kick(now);
+            }
+            return;
+        }
         match base {
             0x6000_0000 => {
                 self.uart0.write(off, v);
@@ -336,6 +350,7 @@ impl SocBus {
         set(src::UART1, self.uart1.irq());
         set(src::GPIO, self.gpio.irq());
         set(src::LEDC, self.ledc.irq());
+        set(usb::SRC_USB, self.usb.as_ref().is_some_and(|u| u.irq()));
         for i in 0..3 {
             set(src::SYSTIMER_TARGET0 + i, self.systimer.irq(i as usize));
         }
@@ -354,11 +369,28 @@ impl SocBus {
         let n2 = self.timg0.update(now);
         let n3 = self.timg1.update(now);
         let n4 = self.ledc.update(now);
-        self.next_event = n1.min(n2).min(n3).min(n4);
+        let n5 = match self.usb.take() {
+            Some(mut u) => {
+                let n = u.update(now, self);
+                self.usb = Some(u);
+                n
+            }
+            None => u64::MAX,
+        };
+        self.next_event = n1.min(n2).min(n3).min(n4).min(n5);
         let lv = self.levels();
         let (level, rising) = self.intm.lines(&lv);
         cpu.set_extern_lines(level, rising);
         self.irq_dirty = false;
+    }
+}
+
+impl usb::dwc2::Mem for SocBus {
+    fn rd8(&mut self, a: u32) -> u8 {
+        self.mem_read(a, 1).unwrap_or(0) as u8
+    }
+    fn wr8(&mut self, a: u32, v: u8) {
+        self.mem_write(a, 1, v as u32);
     }
 }
 
