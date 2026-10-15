@@ -27,6 +27,12 @@ pub trait Bus {
         let b2 = self.load(addr.wrapping_add(2), 1)?;
         Ok(b0 | (b1 << 8) | (b2 << 16))
     }
+    /// RER：读外部寄存器（ESP32-S3 上没有挂外部寄存器的外设时读 0）
+    fn rer(&mut self, _addr: u32) -> u32 {
+        0
+    }
+    /// WER：写外部寄存器
+    fn wer(&mut self, _addr: u32, _val: u32) {}
 }
 
 /// op0 为 8..=13 的是 16 位密度指令
@@ -165,6 +171,9 @@ pub struct Cpu {
     irq_latched: u32,
     /// 上次检查 CCOMPARE 时的周期数
     last_cc: u64,
+    /// 区域保护（ESP32-S3 无 MMU）：8 个 512MB 区域的指令 / 数据属性，WITLB / WDTLB 写、RITLB1 / RDTLB1 读
+    pub itlb_attr: [u32; 8],
+    pub dtlb_attr: [u32; 8],
     /// FPU 寄存器 f0..f15（位模式）与 FCR / FSR
     pub fr: [u32; 16],
     pub fcr: u32,
@@ -196,6 +205,9 @@ impl Cpu {
             irq_ext: 0,
             irq_latched: 0,
             last_cc: 0,
+            // 复位属性 2（可读写执行、旁路），与 QEMU 对照
+            itlb_attr: [2; 8],
+            dtlb_attr: [2; 8],
             fr: [0; 16],
             fcr: 0,
             fsr: 0,
@@ -941,7 +953,11 @@ impl Cpu {
                     2 => self.sr[sr::SAR as usize] = (as_ & 3) << 3,
                     3 => self.sr[sr::SAR as usize] = 32 - ((as_ & 3) << 3),
                     4 => self.sr[sr::SAR as usize] = s | ((t & 1) << 4),
-                    6 | 7 => {} // RER / WER：外部寄存器，未建模
+                    6 => {
+                        let v = bus.rer(as_);
+                        self.set_a(t, v);
+                    }
+                    7 => bus.wer(as_, at),
                     8 => self.windowbase = self.windowbase.wrapping_add(sext(t, 4)) & 15,
                     14 => {
                         let v = if as_ as i32 >= 0 { as_ } else { !as_ };
@@ -950,6 +966,21 @@ impl Cpu {
                     15 => self.set_a(t, as_.leading_zeros()),
                     _ => return self.illegal(),
                 },
+                5 => {
+                    // TLB 类（S3 只有区域保护）：按 vaddr 高 3 位选区域
+                    let region = (as_ >> 29) as usize;
+                    match r {
+                        3 | 11 => self.set_a(t, as_ & 0xe000_0000),
+                        7 => self.set_a(t, self.itlb_attr[region]),
+                        15 => self.set_a(t, self.dtlb_attr[region]),
+                        5 => self.set_a(t, (as_ & 0xe000_0000) | self.itlb_attr[region]),
+                        13 => self.set_a(t, (as_ & 0xe000_0000) | self.dtlb_attr[region]),
+                        6 => self.itlb_attr[region] = at & 0xf,
+                        14 => self.dtlb_attr[region] = at & 0xf,
+                        4 | 12 => {}
+                        _ => return self.illegal(),
+                    }
+                }
                 6 => match s {
                     0 => self.set_a(r, at.wrapping_neg()),
                     1 => self.set_a(r, (at as i32).unsigned_abs()),
@@ -1002,6 +1033,8 @@ impl Cpu {
                     };
                     self.set_br(r, v);
                 }
+                6 => self.set_a(r, (as_ < at) as u32),
+                7 => self.set_a(r, ((as_ as i32) < at as i32) as u32),
                 8 => self.set_a(r, as_.wrapping_mul(at)),
                 10 => self.set_a(r, ((as_ as u64 * at as u64) >> 32) as u32),
                 11 => self.set_a(r, ((as_ as i32 as i64 * at as i32 as i64) >> 32) as u32),
@@ -1139,7 +1172,7 @@ fn max_quad(insn: u32, narrow: bool, ps: u32) -> u32 {
             },
             (0, 4) => match r {
                 0..=3 => q(&[s]),
-                14 | 15 => q(&[s, t]),
+                6 | 7 | 14 | 15 => q(&[s, t]),
                 _ => 0,
             },
             (0, 6) => q(&[r, t]),

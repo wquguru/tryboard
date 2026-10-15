@@ -31,9 +31,11 @@
     rur     a4, threadptr
     EXPECT  a4, 0x3FC90000, 7
     /* CCOUNT 单调递增 */
+    /* CCOUNT 单调递增（QEMU sim 按 40MHz 虚拟时间计，所以多跑一段再比） */
     rsr     a5, ccount
-    nop
-    nop
+    movi    a7, 200
+2:  addi    a7, a7, -1
+    bnez    a7, 2b
     rsr     a6, ccount
     sub     a7, a6, a5
     bgei    a7, 2, 1f

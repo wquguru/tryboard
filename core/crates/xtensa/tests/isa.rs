@@ -112,6 +112,8 @@ fn qemu_bin() -> Option<PathBuf> {
 fn run_qemu(qemu: &Path, elf: &Path) -> Result<Vec<u8>, String> {
     let mut child = Command::new(qemu)
         .args(["-M", "sim", "-cpu", "esp32s3", "-nographic", "-monitor", "none"])
+        // icount：定时器按指令数确定性触发（否则 CCOMPARE 中断由宿主计时器异步送达，时刻不确定）
+        .args(["-icount", "shift=0,sleep=off"])
         .args(["-semihosting-config", "enable=on,target=native"])
         .arg("-device")
         .arg(format!("loader,file={},cpu-num=0", elf.display()))
@@ -205,6 +207,11 @@ fn xtensa_selfcheck() {
                 if let Some(q) = &qemu {
                     match run_qemu(q, p) {
                         Ok(qo) => {
+                            // XT_SAVE=1：两边的原始输出存到 build/<名字>.{ours,qemu}.bin，便于离线分析
+                            if std::env::var("XT_SAVE").is_ok() {
+                                let _ = std::fs::write(build.join(format!("{name}.ours.bin")), &r.out);
+                                let _ = std::fs::write(build.join(format!("{name}.qemu.bin")), &qo);
+                            }
                             compared_words += r.out.len().max(qo.len()) / 4;
                             let n = diff(&name, &r.out, &qo);
                             if n > 0 {

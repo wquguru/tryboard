@@ -272,4 +272,4 @@ cp_lazy:    .word 0        /* 非 0：协处理器禁用异常时打开 CPENABLE
 dump_end:   .word dump     /* DUMP 写指针 */
 irq_log:    .space 4 * 33  /* [0] 条数，之后每条 (级别<<24)|线掩码 */
 hisave:     .space 16 * 8
-dump:       .space 4 * 6000
+dump:       .space 4 * 16000
