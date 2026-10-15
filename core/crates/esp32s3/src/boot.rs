@@ -72,7 +72,9 @@ pub fn load_rom(m: &mut Esp32s3, elf_bytes: &[u8]) -> Result<(), String> {
     m.bus.mem_write(sym("g_uart_print")?, 1, 1);
     m.bus.mem_write(sym("g_usb_print")?, 1, 0);
     for (name, kind) in crate::hle::TABLE {
-        m.hle.insert(sym(name)?, *kind);
+        // 有的 ROM 函数在 ELF 里只有跳转表项 __call_<名字>（地址与 ROM 链接脚本里的一致）
+        let a = elf.symbol(name).or_else(|| elf.symbol(&format!("__call_{name}"))).ok_or(format!("ROM 里没有符号 {name}"))?;
+        m.hle.insert(a, *kind);
     }
     let mut addrs: Vec<u32> = m.hle.keys().copied().collect();
     addrs.sort();
@@ -159,10 +161,53 @@ fn flash_size(code: u8) -> usize {
     }
 }
 
+/// 入口帧"调用者 sp"指向的溢出保存区：借用 ROM 的 level 5 / level 4 中断栈（_Pri_5_Stack / _Pri_4_Stack），
+/// app 装了自己的向量表后 ROM 不再用它们
+const SPILL_PRO: u32 = 0x3FCE_E8E0 + 64;
+const SPILL_APP: u32 = 0x3FCE_E380 + 64;
+
+/// 以 CALLINC=0 进入一个窗口 ABI 函数：ENTRY 不转窗口，入口帧就是最老的一帧（WINDOWSTART 只有它），
+/// 以后窗口溢出不会去溢出一个并不存在的调用者帧。
+/// 溢出处理程序溢出最老一帧时会读 [该帧 sp - 12] 当作"调用者的 sp"、把 a4..a11 存到它下面；
+/// 真机上那里是调用者帧溢出时写下的值，我们没有调用者，所以先执行入口的 ENTRY，再在 [sp-12] 填一个空闲区的指针。
+fn enter_windowed(c: &mut Cpu, bus: &mut SocBus, entry: u32, stack: u32, spill: u32) -> Result<(), String> {
+    c.windowbase = 0;
+    c.windowstart = 1;
+    c.set_a(1, stack);
+    c.set_a(0, 0);
+    c.write_sr(sr::PS, PS_WOE | PS_UM);
+    c.pc = entry;
+    let first = bus.fetch(entry).unwrap_or(0);
+    if first & 0xff == 0x36 {
+        c.step(bus);
+        let sp = c.a(1);
+        bus.mem_write(sp.wrapping_sub(12), 4, spill).ok_or("写入口帧保存区失败")?;
+    }
+    Ok(())
+}
+
 impl Esp32s3 {
+    /// 启动核 1（真机：ROM 里核 1 的复位代码拿到 ets_set_appcpu_boot_addr 设的地址后跳过去）。
+    /// 栈用 ROM 的 .stack_app 顶端（__stack_app，0x3FCED710）；时间与核 0 对齐。
+    pub fn start_app_cpu(&mut self, entry: u32) {
+        let mut c = Cpu::new();
+        c.prid = 0xabab;
+        c.cycles = self.cpu.cycles;
+        if enter_windowed(&mut c, &mut self.bus, entry, 0x3FCE_D710, SPILL_APP).is_ok() {
+            c.hle_lo = self.cpu.hle_lo;
+            c.hle_hi = self.cpu.hle_hi;
+            c.hle_addrs = self.cpu.hle_addrs.clone();
+            self.cpu1 = c;
+            self.cpu1_on = true;
+        }
+    }
+
     /// 新建一台机器：装 ROM、装 flash、做 bootloader 该做的事，PC 停在 app 入口（call_start_cpu0）
     pub fn boot(rom_elf: &[u8], flash: Vec<u8>) -> Result<(Esp32s3, AppInfo), String> {
-        let mut m = Esp32s3 { cpu: Cpu::new(), bus: SocBus::default(), rom_symbols: HashMap::new(), hle: HashMap::new() };
+        let mut cpu1 = Cpu::new();
+        // PRID：核 0 0xCDCD、核 1 0xABAB（IDF 用位 13 区分核号）
+        cpu1.prid = 0xabab;
+        let mut m = Esp32s3 { cpu: Cpu::new(), cpu1, cpu1_on: false, bus: SocBus::default(), rom_symbols: HashMap::new(), hle: HashMap::new() };
         load_rom(&mut m, rom_elf)?;
         let mut flash = flash;
         let off = find_app(&flash)?;
@@ -196,25 +241,9 @@ impl Esp32s3 {
         let jedec = m.bus.spi1.jedec;
         init_flashchip(&mut m, size_code, jedec)?;
 
-        // 以 CALLINC=0 进入 app：ENTRY 不转窗口，app 入口帧就是最老的一帧（WINDOWSTART 只有它），
-        // 以后窗口溢出不会去溢出一个并不存在的 bootloader 调用者帧（那帧的栈保存区是空的，溢出会写到 0 附近）。
-        // 栈用 ROM 的 .stack_pro 顶端（0x3FCEB710），与真 bootloader 跳入 app 时一致。
-        let c = &mut m.cpu;
-        c.windowbase = 0;
-        c.windowstart = 1;
-        c.set_a(1, 0x3FCE_B710);
-        c.set_a(0, 0);
-        c.write_sr(sr::PS, PS_WOE | PS_UM);
-        c.pc = app.entry;
-        // 窗口溢出处理程序溢出最老一帧时会读 [该帧 sp - 12] 当作"调用者的 sp"，把 a4..a11 存到它下面。
-        // 真机上那里是 bootloader 帧溢出时写下的值；我们没有 bootloader 帧，所以先执行入口的 ENTRY，
-        // 再在 [sp-12] 填一个指向空闲栈区（ROM .stack_app，单核时不用）的指针。
-        let first = m.bus.fetch(app.entry).unwrap_or(0);
-        if first & 0xff == 0x36 {
-            m.cpu.step(&mut m.bus);
-            let sp = m.cpu.a(1);
-            m.bus.mem_write(sp.wrapping_sub(12), 4, 0x3FCE_B710 + 48).ok_or("写入口帧保存区失败")?;
-        }
+        // 栈用 ROM 的 .stack_pro 顶端（__stack，0x3FCEB710），与真 bootloader 跳入 app 时一致
+        let entry = app.entry;
+        enter_windowed(&mut m.cpu, &mut m.bus, entry, 0x3FCE_B710, SPILL_PRO)?;
         Ok((m, app))
     }
 }

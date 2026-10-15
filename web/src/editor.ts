@@ -1,19 +1,34 @@
 // 元件编辑器：用户按自己的实物接线，往面包板上加 / 删元件。
 // 上传自己的固件时最有用：示例自带接线，自定义固件的接线只有用户知道。
-import type { PartSpec, SceneSpec } from './board3d';
+import { BOARDS, type ChipId, type PartSpec, type SceneSpec } from './board3d';
 
-/** C3 开发板上可接外设的引脚（避开 flash 12–17）；ADC 只有 0–4 */
-const PINS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 19, 20, 21];
-const ADC_PINS = [0, 1, 2, 3, 4];
-const PIN_HINT: Record<number, string> = {
-  2: 'strapping',
-  8: 'strapping · 板载 RGB',
-  9: 'strapping · BOOT 键',
-  18: 'USB D-',
-  19: 'USB D+',
-  20: 'UART0 RX',
-  21: 'UART0 TX',
+/** 各芯片的 ADC1 引脚与引脚提示（strapping、板载占用、USB、串口、PSRAM） */
+const CHIP_PINS: Record<ChipId, { adc: number[]; hint: Record<number, string>; avoid: number[] }> = {
+  esp32c3: {
+    adc: [0, 1, 2, 3, 4],
+    hint: { 2: 'strapping', 8: 'strapping · 板载 RGB', 9: 'strapping · BOOT 键', 18: 'USB D-', 19: 'USB D+', 20: 'UART0 RX', 21: 'UART0 TX' },
+    avoid: [],
+  },
+  esp32s3: {
+    adc: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    hint: { 0: 'strapping · BOOT 键', 3: 'strapping', 45: 'strapping', 46: 'strapping', 19: 'USB D-', 20: 'USB D+', 48: '板载 RGB' },
+    // N16R8：GPIO35–37 接八线 PSRAM，排针上有但不能用
+    avoid: [35, 36, 37],
+  },
 };
+let chip: ChipId = 'esp32c3';
+/** 当前开发板排针上引出的 GPIO（按丝印顺序，去掉不能用的） */
+const PINS_OF = (c: ChipId) => {
+  const b = BOARDS[c];
+  return [...b.left, ...b.right]
+    .filter((n) => /^IO\d+$/.test(n))
+    .map((n) => Number(n.slice(2)))
+    .filter((p) => !CHIP_PINS[c].avoid.includes(p))
+    .sort((a, b) => a - b);
+};
+let PINS = PINS_OF(chip);
+let ADC_PINS = CHIP_PINS[chip].adc;
+let PIN_HINT = CHIP_PINS[chip].hint;
 
 type Kind = PartSpec['type'];
 const KINDS: { kind: Kind; name: string; desc: string }[] = [
@@ -25,7 +40,7 @@ const KINDS: { kind: Kind; name: string; desc: string }[] = [
 ];
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-const pinOpt = (p: number, sel: number) => `<option value="${p}" ${p === sel ? 'selected' : ''}>IO${p}${PIN_HINT[p] ? `（${PIN_HINT[p]}）` : ''}</option>`;
+const pinOpt = (p: number, sel: number): string => `<option value="${p}" ${p === sel ? 'selected' : ''}>IO${p}${PIN_HINT[p] ? `（${PIN_HINT[p]}）` : ''}</option>`;
 
 export function describe(p: PartSpec): string {
   switch (p.type) {
@@ -119,5 +134,16 @@ export function mountEditor(root: HTMLElement, get: () => SceneSpec, set: (s: Sc
     };
   };
   render();
-  return { render };
+  return {
+    render,
+    /** 切换芯片后引脚列表跟着当前开发板变 */
+    setChip(c: ChipId) {
+      if (c === chip) return;
+      chip = c;
+      PINS = PINS_OF(c);
+      ADC_PINS = CHIP_PINS[c].adc;
+      PIN_HINT = CHIP_PINS[c].hint;
+      render();
+    },
+  };
 }

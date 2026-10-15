@@ -16,7 +16,8 @@
      "pin": 5
     }
    ]
-  }
+  },
+  "chip": "esp32c3"
  },
  {
   "id": "button",
@@ -37,7 +38,8 @@
      "pin": 5
     }
    ]
-  }
+  },
+  "chip": "esp32c3"
  },
  {
   "id": "fade",
@@ -59,7 +61,8 @@
      "pin": 5
     }
    ]
-  }
+  },
+  "chip": "esp32c3"
  },
  {
   "id": "servo",
@@ -92,7 +95,8 @@
      30
     ]
    }
-  }
+  },
+  "chip": "esp32c3"
  },
  {
   "id": "echo",
@@ -102,7 +106,8 @@
    "✓ 仿真验证",
    "UART 接收",
    "中断"
-  ]
+  ],
+  "chip": "esp32c3"
  },
  {
   "id": "hello",
@@ -113,7 +118,8 @@
    "UART",
    "SYSTIMER",
    "ESP-IDF 5.5"
-  ]
+  ],
+  "chip": "esp32c3"
  },
  {
   "id": "pot",
@@ -147,7 +153,8 @@
      "pin": 2
     }
    ]
-  }
+  },
+  "chip": "esp32c3"
  },
  {
   "id": "rgb",
@@ -158,7 +165,8 @@
    "RMT",
    "WS2812",
    "led_strip 3.0"
-  ]
+  ],
+  "chip": "esp32c3"
  },
  {
   "id": "oled",
@@ -191,7 +199,8 @@
      -4
     ]
    }
-  }
+  },
+  "chip": "esp32c3"
  },
  {
   "id": "bme280",
@@ -215,7 +224,8 @@
   },
   "controls": [
    "env"
-  ]
+  ],
+  "chip": "esp32c3"
  },
  {
   "id": "wifi-scan",
@@ -228,7 +238,8 @@
   ],
   "scene": {
    "parts": []
-  }
+  },
+  "chip": "esp32c3"
  },
  {
   "id": "wifi-http",
@@ -242,7 +253,8 @@
   ],
   "scene": {
    "parts": []
-  }
+  },
+  "chip": "esp32c3"
  },
  {
   "id": "nvs",
@@ -256,7 +268,8 @@
   ],
   "scene": {
    "parts": []
-  }
+  },
+  "chip": "esp32c3"
  },
  {
   "id": "arduino-blink",
@@ -274,7 +287,8 @@
      "pin": 5
     }
    ]
-  }
+  },
+  "chip": "esp32c3"
  },
  {
   "id": "s3-usb-keyboard",
@@ -282,7 +296,6 @@
   "about": "ESP32-S3 用芯片自带的 USB OTG（TinyUSB）把自己报成 HID 键盘 + 鼠标：插上电脑 1 秒后自动打出一行字、让鼠标画个正方形，之后每按一次 BOOT 键再来一遍。左边的虚拟电脑会完整走一遍枚举（取描述符、设地址、读报告描述符），再把收到的按键还原成文字。C3 / C6 的 USB 口只能当串口，做不了这个。",
   "tags": [
    "✓ 仿真验证",
-   "ESP32-S3",
    "USB OTG",
    "HID",
    "TinyUSB"
@@ -301,7 +314,8 @@
      2
     ]
    }
-  }
+  },
+  "chip": "esp32s3"
  },
  {
   "id": "s3-usb-cdc",
@@ -309,7 +323,6 @@
   "about": "ESP32-S3 用原生 USB 做一个 CDC-ACM 虚拟串口：电脑上会多出一个 COM 口 / ttyACM，不经过 USB 转串口芯片。在下面的「USB 串口终端」里输入一行，板子把它转成大写回给你。",
   "tags": [
    "✓ 仿真验证",
-   "ESP32-S3",
    "USB OTG",
    "CDC-ACM",
    "TinyUSB"
@@ -328,6 +341,116 @@
      2
     ]
    }
+  },
+  "chip": "esp32s3"
+ },
+ {
+  "id": "s3-blink",
+  "chip": "esp32s3",
+  "title": "点灯（S3）：GPIO5 驱动 LED",
+  "about": "和 C3 版同一份源码，换成 ESP32-S3 开发板（N16R8：16MB flash + 8MB PSRAM，双核）。GPIO5 经 220Ω 接 LED，每 500ms 翻转。",
+  "tags": [
+   "✓ 仿真验证",
+   "GPIO",
+   "双核 FreeRTOS",
+   "ESP-IDF 5.5"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "led",
+     "pin": 5
+    }
+   ]
   }
+ },
+ {
+  "id": "s3-rgb",
+  "chip": "esp32s3",
+  "title": "板载 RGB（S3）：GPIO48 的 WS2812",
+  "about": "S3 开发板的板载 RGB 灯在 GPIO48（部分新版板子改到 GPIO38）。RMT 外设按 WS2812 时序发数据，红 → 绿 → 蓝 → 白循环。",
+  "tags": [
+   "✓ 仿真验证",
+   "RMT",
+   "WS2812",
+   "led_strip"
+  ]
+ },
+ {
+  "id": "s3-oled",
+  "chip": "esp32s3",
+  "title": "OLED 屏（S3）：SSD1306",
+  "about": "0.96 英寸 128×64 OLED 走 I2C（地址 0x3C，SDA=GPIO8、SCL=GPIO9，400kHz）。与 C3 版同一份源码，只改了引脚。",
+  "tags": [
+   "✓ 仿真验证",
+   "I2C",
+   "SSD1306"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "oled",
+     "addr": 60,
+     "sda": 8,
+     "scl": 9
+    }
+   ],
+   "view": {
+    "position": [
+     -18,
+     72,
+     88
+    ],
+    "target": [
+     8,
+     16,
+     -4
+    ]
+   }
+  }
+ },
+ {
+  "id": "s3-pot",
+  "chip": "esp32s3",
+  "title": "电位器（S3）：ADC 调亮度",
+  "about": "电位器滑片接 GPIO4（ADC1 通道 3，12dB 衰减，量程约 0–3.1V），读数当作 GPIO5 上 LED 的 PWM 占空比。S3 的单次采样走 RTC 的 SENS 控制器，与 C3 不同，固件代码不用改。",
+  "tags": [
+   "✓ 仿真验证",
+   "ADC",
+   "LEDC"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "led",
+     "pin": 5
+    },
+    {
+     "type": "pot",
+     "pin": 4
+    }
+   ]
+  },
+  "controls": [
+   {
+    "type": "analog",
+    "pin": 4,
+    "label": "电位器（GPIO4）",
+    "max_mv": 3300,
+    "value": 1200
+   }
+  ]
+ },
+ {
+  "id": "s3-dual",
+  "chip": "esp32s3",
+  "title": "双核（S3）：任务钉在两个核上",
+  "about": "两个任务分别固定在核 0 / 核 1，用自旋锁保护的计数器各加 2 万次、经队列跨核传消息，再用 esp_ipc 让核 1 执行一个函数。计数正确说明两核交替执行与原子操作都对。",
+  "tags": [
+   "✓ 仿真验证",
+   "双核",
+   "FreeRTOS SMP",
+   "esp_ipc"
+  ]
  }
 ]

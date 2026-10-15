@@ -119,7 +119,7 @@ PY
 if [ $NO_WEB = 0 ]; then
   echo -e "\n## 网页（Chrome 无头 + wasm）" >> $REPORT
   tools/build_web.sh >/dev/null 2>&1 || { echo "构建失败" >> $REPORT; fail=1; }
-  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接"; do
+  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接" s3-blink:TRYBOARD_OK s3-rgb:TRYBOARD_OK s3-dual:TRYBOARD_OK; do
     ex=${spec%%:*}; want=${spec#*:}
     r=$(node tools/webtest/webtest.mjs "$ex" "$want" 2>&1 | head -3)
     echo "$r" | sed 's/^/- /' >> $REPORT

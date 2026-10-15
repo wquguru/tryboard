@@ -1,5 +1,5 @@
-import { createBench, type SceneSpec } from './board3d';
-import { mountEditor, needsReboot } from './editor';
+import { createBench, type ChipId, type SceneSpec } from "./board3d";
+import { mountEditor, needsReboot } from "./editor";
 import type { Env, FromWorker, ToWorker } from './worker';
 import { createUsbPanel } from './usbpanel';
 import type { UsbView } from './usb3d';
@@ -10,6 +10,8 @@ interface Example {
   about: string;
   tags: string[];
   scene?: SceneSpec;
+  /** 缺省 esp32c3 */
+  chip?: ChipId;
   /** 'env'：显示环境滑块（温度 / 湿度 / 气压）；对象：模拟输入滑块 */
   controls?: (string | AnalogControl)[];
 }
@@ -25,37 +27,31 @@ const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'modu
 const send = (m: ToWorker, transfer: Transferable[] = []) => worker.postMessage(m, transfer);
 
 let wasm: ArrayBuffer | null = null;
-/** 各芯片的 ROM（按需下载）：5 = ESP32-C3，9 = ESP32-S3 */
-const roms = new Map<number, ArrayBuffer>();
-const ROM_URL: Record<number, string> = { 5: './rom/esp32c3_rev3_rom.elf', 9: './rom/esp32s3_rev0_rom.elf' };
-/** 当前固件的芯片；BOOT 键在 C3 上是 GPIO9，在 S3 上是 GPIO0 */
-let chip = 5;
+let flash: ArrayBuffer | null = null;
+/** 各芯片的 ROM（按需下载，esp-rom-elfs，Apache-2.0） */
+const roms: Partial<Record<ChipId, ArrayBuffer>> = {};
+const ROM_FILE: Record<ChipId, string> = { esp32c3: 'esp32c3_rev3_rom.elf', esp32s3: 'esp32s3_rev0_rom.elf' };
+const CHIP_LABEL: Record<ChipId, string> = { esp32c3: 'ESP32-C3 · 160MHz', esp32s3: 'ESP32-S3 · 双核 160MHz' };
+/** 板载 BOOT 键所在引脚（启动后由模拟器告知） */
+let bootPin = 9;
 
-/** 读 flash 镜像里 app 的芯片 ID（分区表 0x8000 → factory / ota_0 → 镜像头偏移 12） */
-function chipOf(buf: ArrayBuffer) {
+/** 镜像是哪颗芯片：先找分区表（0x8000）里的 app，再读 ESP 镜像头的芯片 ID（5 = C3，9 = S3） */
+function imageChip(buf: ArrayBuffer): ChipId {
   const b = new Uint8Array(buf);
   const u32 = (o: number) => b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24);
-  let off = -1;
+  let app = 0;
   if (b[0x8000] === 0xaa && b[0x8001] === 0x50) {
     for (let i = 0; i < 95; i++) {
       const o = 0x8000 + i * 32;
       if (b[o] !== 0xaa || b[o + 1] !== 0x50) break;
       if (b[o + 2] === 0 && (b[o + 3] === 0 || b[o + 3] === 0x10)) {
-        off = u32(o + 4);
+        app = u32(o + 4) >>> 0;
         break;
       }
     }
-  } else if (b[0] === 0xe9) off = 0;
-  if (off < 0 || off + 14 > b.length) return 5;
-  const id = b[off + 12] | (b[off + 13] << 8);
-  return id === 9 ? 9 : 5;
+  }
+  return b[app] === 0xe9 && (b[app + 12] | (b[app + 13] << 8)) === 9 ? 'esp32s3' : 'esp32c3';
 }
-
-async function romFor(c: number) {
-  if (!roms.has(c)) roms.set(c, await fetchBuf(ROM_URL[c]));
-  return roms.get(c)!;
-}
-let flash: ArrayBuffer | null = null;
 let running = false;
 let examples: Example[] = [];
 let scene: SceneSpec = { parts: [] };
@@ -112,16 +108,18 @@ async function fetchBuf(url: string) {
 
 async function boot(autorun: boolean) {
   if (!wasm || !flash) return;
+  const chip = imageChip(flash);
+  bench.setBoard(chip);
+  $('chip').textContent = CHIP_LABEL[chip];
+  const rom = (roms[chip] ??= await fetchBuf(`./rom/${ROM_FILE[chip]}`));
   consoleEl.textContent = '';
-  chip = chipOf(flash);
-  $('chip').textContent = chip === 9 ? 'ESP32-S3 · 160MHz' : 'ESP32-C3 · 160MHz';
-  log(`[试板] 上电（${chip === 9 ? 'ESP32-S3' : 'ESP32-C3'}），加载固件…\n`, 'sys');
+  log(`[试板] 上电（${chip === 'esp32s3' ? 'ESP32-S3' : 'ESP32-C3'}），加载固件…\n`, 'sys');
+  editor.setChip(chip);
   bench.setPowered(true);
   bench.setRgb([0, 0, 0]);
   bench.setUsb(null);
   usbPanel.reset();
   pendingAutorun = autorun;
-  const rom = await romFor(chip);
   send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: i2cDevices(), env: { ...env } });
 }
 
@@ -132,6 +130,7 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
   const m = ev.data;
   switch (m.type) {
     case 'booted':
+      bootPin = m.bootPin;
       for (const [pin, a] of analog) send({ type: 'analog', pin, mv: a.mv });
       runBtn.disabled = resetBtn.disabled = false;
       if (pendingAutorun) {
@@ -145,7 +144,7 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       break;
     case 'tick':
       if (m.console) log(m.console);
-      bench.setGpio(m.gpio, m.enable, m.pwm);
+      bench.setGpio(m.gpio, m.enable, m.pwm, m.gpioHi, m.enableHi);
       if (m.leds) bench.setRgb(m.leds[0] ?? [0, 0, 0]);
       $('simtime').textContent = `${m.simSeconds.toFixed(3)} s`;
       if (m.running) {
@@ -211,15 +210,18 @@ $<HTMLInputElement>('upload').onchange = async (e) => {
   boot(true);
 };
 bench.onButton((name, down) => {
-  if (name === 'BOOT') send({ type: 'gpio', pin: chip === 9 ? 0 : 9, level: down ? 0 : -1 });
+  if (name === 'BOOT') send({ type: 'gpio', pin: bootPin, level: down ? 0 : -1 });
   if (name === 'RST' && !down) boot(true);
 });
 
 async function loadExample(id: string, autorun: boolean) {
   customFirmware = false;
   const ex = examples.find((e) => e.id === id)!;
-  $('about').innerHTML = `<p><b>${ex.title}</b></p><p>${ex.about}</p><p>${ex.tags.map((t) => `<span class="tag ${t.startsWith('✓') ? 'ok' : ''}">${t}</span>`).join('')}</p>`;
+  const chip = ex.chip ?? 'esp32c3';
+  const badge = `<span class="tag chip">${chip === 'esp32s3' ? 'ESP32-S3' : 'ESP32-C3'}</span>`;
+  $('about').innerHTML = `<p><b>${ex.title}</b></p><p>${ex.about}</p><p>${badge}${ex.tags.map((t) => `<span class="tag ${t.startsWith('✓') ? 'ok' : ''}">${t}</span>`).join('')}</p>`;
   scene = ex.scene ?? { parts: [] };
+  bench.setBoard(chip);
   bench.setScene(scene);
   exampleControls = ex.controls ?? [];
   syncControls();
@@ -325,7 +327,7 @@ exampleSel.onchange = () => {
   try {
     wasm = await fetchBuf('./wasm/tryboard.wasm');
     examples = await (await fetch('./fw/examples.json')).json();
-    for (const e of examples) exampleSel.add(new Option(e.title, e.id));
+    for (const e of examples) exampleSel.add(new Option(`${e.chip === 'esp32s3' ? '[S3] ' : ''}${e.title}`, e.id));
     const want = new URLSearchParams(location.search).get('example');
     const first = examples.find((e) => e.id === want) ?? examples[0];
     exampleSel.value = first.id;

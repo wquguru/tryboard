@@ -8,6 +8,8 @@ pub mod src {
     pub const UART1: u32 = 28;
     pub const LEDC: u32 = 35;
     pub const RMT: u32 = 40;
+    pub const I2C_EXT0: u32 = 42;
+    pub const I2C_EXT1: u32 = 43;
     pub const TG0_T0: u32 = 50;
     pub const TG1_T0: u32 = 53;
     pub const SYSTIMER_TARGET0: u32 = 57;
@@ -193,6 +195,9 @@ pub struct Gpio {
     pub board_pullup: u64,
     pub last_level: u64,
     pub strap: u32,
+    /// 由外设信号（RMT 等，经 GPIO 矩阵）驱动的引脚：掩码与电平
+    pub periph_mask: u64,
+    pub periph_level: u64,
 }
 
 impl Default for Gpio {
@@ -211,6 +216,8 @@ impl Default for Gpio {
             last_level: 1,
             // GPIO0 拉高 → SPI 启动
             strap: 0x8,
+            periph_mask: 0,
+            periph_level: 0,
         }
     }
 }
@@ -230,7 +237,17 @@ impl Gpio {
             }
         }
         let undriven = !driven & !self.ext_driven;
-        (self.out & driven) | (self.ext_in & self.ext_driven & !driven) | (pull & undriven & MASK)
+        let out = (self.out & !self.periph_mask) | (self.periph_level & self.periph_mask);
+        (out & driven) | (self.ext_in & self.ext_driven & !driven) | (pull & undriven & MASK)
+    }
+
+    pub fn set_periph_level(&mut self, pin: u32, on: bool) {
+        self.periph_mask |= 1 << pin;
+        if on {
+            self.periph_level |= 1 << pin;
+        } else {
+            self.periph_level &= !(1 << pin);
+        }
     }
 
     pub fn sense(&mut self) {
@@ -308,9 +325,68 @@ impl Gpio {
             0x58 => self.status &= !hi,
             0x74..=0x134 => self.pin[((off - 0x74) / 4) as usize] = v,
             0x154..=0x550 => self.func_in[((off - 0x154) / 4) as usize] = v,
-            0x554..=0x614 => self.func_out[((off - 0x554) / 4) as usize] = v,
+            0x554..=0x614 => {
+                let pin = ((off - 0x554) / 4) as usize;
+                self.func_out[pin] = v;
+                // 改回普通 GPIO 输出（信号 256）时不再由外设驱动
+                if v & 0x1ff == 0x100 {
+                    self.periph_mask &= !(1 << pin);
+                }
+            }
             _ => {}
         }
+    }
+}
+
+// ---------------------------------------------------------------- SAR ADC 单次采样（S3 走 RTC 的 SENS 控制器）
+/// S3 的单次采样由 SENS（0x60008800）完成，与 C3 的 APB_SARADC 不同：
+/// SAR_MEAS1_CTRL2（0x0C）：数据 [15:0]、完成位 16、启动位 17、通道位图 sar1_en_pad [30:19]；
+/// SAR_MEAS2_CTRL2（0x30）同理给 ADC2；SAR_ATTEN1 / 2（0x14 / 0x38）每通道 2 位衰减。
+/// ADC1 通道 n = GPIO(n+1)，ADC2 通道 n = GPIO(n+11)。量程按数据手册衰减档近似：0dB≈950mV、2.5dB≈1250mV、6dB≈1750mV、12dB≈3100mV。
+pub struct SensAdc {
+    pub regs: [u32; 0x100 / 4],
+    pub pin_mv: [f32; NPINS],
+    pub noise_lsb: u32,
+    seed: u32,
+}
+
+impl Default for SensAdc {
+    fn default() -> Self {
+        SensAdc { regs: [0; 0x100 / 4], pin_mv: [0.0; NPINS], noise_lsb: 2, seed: 0x1234_5678 }
+    }
+}
+
+impl SensAdc {
+    pub fn read(&self, off: u32) -> Option<u32> {
+        self.regs.get((off / 4) as usize).copied()
+    }
+
+    pub fn write(&mut self, off: u32, v: u32) -> bool {
+        let Some(old) = self.regs.get((off / 4) as usize).copied() else { return false };
+        let mut v = v;
+        if off == 0x0c || off == 0x30 {
+            let unit = if off == 0x0c { 0 } else { 1 };
+            if v & (1 << 17) == 0 {
+                v &= !(1 << 16); // 启动位清零：完成位也清
+            } else if old & (1 << 17) == 0 {
+                let pads = (v >> 19) & 0xfff;
+                let raw = self.sample(unit, pads.trailing_zeros());
+                v = (v & !0xffff) | raw | (1 << 16);
+            }
+        }
+        self.regs[(off / 4) as usize] = v;
+        true
+    }
+
+    fn sample(&mut self, unit: u32, ch: u32) -> u32 {
+        let atten_reg = self.regs[if unit == 0 { 0x14 / 4 } else { 0x38 / 4 }];
+        let atten = (atten_reg >> (ch * 2)) & 3;
+        let full = [950.0, 1250.0, 1750.0, 3100.0][atten as usize];
+        let pin = if unit == 0 { ch + 1 } else { ch + 11 } as usize;
+        let mv = if ch < 10 { self.pin_mv.get(pin).copied().unwrap_or(0.0) } else { 0.0 };
+        self.seed = self.seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
+        let n = if self.noise_lsb > 0 { (self.seed >> 16) % (2 * self.noise_lsb + 1) } else { 0 } as i32 - self.noise_lsb as i32;
+        ((mv / full * 4095.0).round() as i32 + n).clamp(0, 4095) as u32
     }
 }
 

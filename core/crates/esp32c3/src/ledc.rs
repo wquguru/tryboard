@@ -1,5 +1,5 @@
-//! LEDC（LED PWM 控制器）：4 个低速定时器 + 6 个通道，含硬件渐变（fade）与中断。
-//! 寄存器见 soc/esp32c3/register/soc/ledc_reg.h。PWM 波形不逐周期模拟，按时间惰性计算占空比。
+//! LEDC（LED PWM 控制器）：4 个低速定时器 + 6（C3）/ 8（S3）个通道，含硬件渐变（fade）与中断。
+//! 寄存器见 soc/esp32c3|esp32s3/register/soc/ledc_reg.h（两者布局相同）。PWM 波形不逐周期模拟，按时间惰性计算占空比。
 
 use crate::periph::CPU_HZ;
 
@@ -35,7 +35,8 @@ pub struct Channel {
 #[derive(Default)]
 pub struct Ledc {
     pub timers: [Timer; 4],
-    pub ch: [Channel; 6],
+    /// 8 个通道的空间（S3 有 8 个、C3 只有前 6 个；C3 固件不会碰后两个）
+    pub ch: [Channel; 8],
     pub conf: u32,
     pub int_raw: u32,
     pub int_ena: u32,
@@ -84,7 +85,7 @@ impl Ledc {
 
     pub fn read(&self, off: u32) -> u32 {
         match off {
-            0x00..=0x74 => {
+            0x00..=0x9c => {
                 let (n, r) = ((off / 0x14) as usize, off % 0x14);
                 let c = &self.ch[n];
                 match r {
@@ -114,7 +115,7 @@ impl Ledc {
 
     pub fn write(&mut self, off: u32, v: u32, now: u64) {
         match off {
-            0x00..=0x74 => {
+            0x00..=0x9c => {
                 let (n, r) = ((off / 0x14) as usize, off % 0x14);
                 match r {
                     0x00 => {
@@ -174,7 +175,7 @@ impl Ledc {
     /// 推进渐变；返回下一个事件时刻
     pub fn update(&mut self, now: u64) -> u64 {
         let mut next = u64::MAX;
-        for n in 0..6 {
+        for n in 0..8 {
             if !self.ch[n].fading {
                 continue;
             }

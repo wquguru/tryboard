@@ -1,4 +1,5 @@
-//! ESP32-S3 SoC：存储映射（含 PSRAM）、外设分发、直接启动、运行循环。单核启动（核 1 保持停住）。
+//! ESP32-S3 SoC：存储映射（含 PSRAM）、外设分发、直接启动、双核运行循环。
+//! 核 1 在固件调用 ROM 的 ets_set_appcpu_boot_addr 时启动（HLE），两核按固定量子交替执行（确定性）。
 //!
 //! 与 C3 同族、寄存器布局一致的外设（UART、SYSTIMER、TIMG、SPI1 flash、LEDC）复用 tryboard-esp32c3 的模型；
 //! S3 特有的中断矩阵、EXTMEM、49 脚 GPIO 在 periph.rs。
@@ -10,7 +11,9 @@ pub mod usb;
 
 use periph::*;
 use std::collections::HashMap;
+use tryboard_esp32c3::i2c::I2c;
 use tryboard_esp32c3::ledc::Ledc;
+use tryboard_esp32c3::rmt::{Rmt, RmtLayout, Ws2812};
 use tryboard_esp32c3::periph::{Systimer, Timg, Uart};
 use tryboard_esp32c3::spiflash::SpiFlash;
 use tryboard_xtensa::{sr, Bus, BusFault, Cpu, Exit};
@@ -70,6 +73,12 @@ pub struct SocBus {
     pub timg0: Timg,
     pub timg1: Timg,
     pub intm: Intmatrix,
+    /// 核 1 的中断矩阵（INTERRUPT_CORE1_*，在核 0 那张表之后 0x800）
+    pub intm1: Intmatrix,
+    /// 每个核当前的外部中断线（update 时算出，轮到该核执行前交给它）
+    pub lines: [u32; 2],
+    /// 固件请求启动核 1 的入口（ets_set_appcpu_boot_addr，HLE 里设置）
+    pub appcpu_boot: Option<u32>,
     pub gpio: Gpio,
     pub spi1: SpiFlash,
     pub extmem: Extmem,
@@ -77,6 +86,14 @@ pub struct SocBus {
     pub analog: Analog,
     /// 原生 USB OTG（Option 只为在推进时临时拿出来，让控制器 DMA 能借用总线访问内存；平时恒为 Some）
     pub usb: Option<Box<usb::Usb>>,
+    /// RMT（4 发送 + 4 接收）与挂在引脚上的 WS2812 解码器
+    pub rmt: Rmt,
+    pub ws2812: HashMap<u32, Ws2812>,
+    /// I2C0（0x60013000）/ I2C1（0x60027000），模型与 C3 相同
+    pub i2c0: I2c,
+    pub i2c1: I2c,
+    /// SAR ADC 单次采样（SENS）
+    pub adc: SensAdc,
     pub efuse: [u32; 0x200 / 4],
     /// SYSTEM_CPU_INTR_FROM_CPU_0..3
     pub from_cpu: u32,
@@ -109,12 +126,20 @@ impl Default for SocBus {
             timg0: Timg::default(),
             timg1: Timg::default(),
             intm: Intmatrix::default(),
+            intm1: Intmatrix::default(),
+            lines: [0; 2],
+            appcpu_boot: None,
             gpio: Gpio::default(),
             spi1,
             extmem: Extmem::default(),
             ledc: Ledc::default(),
             analog: Analog::default(),
             usb: Some(Box::default()),
+            rmt: Rmt::new(RmtLayout::S3),
+            ws2812: HashMap::new(),
+            i2c0: I2c::default(),
+            i2c1: I2c::default(),
+            adc: SensAdc::default(),
             efuse: boot::default_efuse(),
             from_cpu: 0,
             usj_tx: Vec::new(),
@@ -228,6 +253,14 @@ impl SocBus {
             0x6000_7000 if off < 0x200 => return self.efuse[(off / 4) as usize],
             0x6000_9000 if (4..=0xc4).contains(&off) => return self.gpio.iomux[((off - 4) / 4) as usize],
             0x6001_9000 => return self.ledc.read(off),
+            0x6001_6000 => return self.rmt.read(off),
+            0x6001_3000 => return self.i2c0.read(off),
+            0x6002_7000 => return self.i2c1.read(off),
+            0x6000_8000 if off >= 0x800 => {
+                if let Some(v) = self.adc.read(off - 0x800) {
+                    return v;
+                }
+            }
             0x6001_F000 => return self.timg0.read(off, now),
             0x6002_0000 => return self.timg1.read(off, now),
             0x6002_3000 => return self.systimer.read(off, now),
@@ -240,7 +273,8 @@ impl SocBus {
             0x6000_E000 if off == 0x40 => return self.regs.get(&a).copied().unwrap_or(0) | (1 << 24),
             0x600C_2000 => {
                 let lv = self.levels();
-                if let Some(v) = self.intm.read(off, &lv) {
+                let r = if off >= 0x800 { self.intm1.read(off - 0x800, &lv) } else { self.intm.read(off, &lv) };
+                if let Some(v) = r {
                     return v;
                 }
             }
@@ -289,6 +323,14 @@ impl SocBus {
                 return;
             }
             0x6001_9000 => return self.ledc.write(off, v, now),
+            0x6001_6000 => return self.rmt.write(off, v, now),
+            0x6001_3000 => return self.i2c0.write(off, v, now),
+            0x6002_7000 => return self.i2c1.write(off, v, now),
+            0x6000_8000 if off >= 0x800 => {
+                if self.adc.write(off - 0x800, v) {
+                    return;
+                }
+            }
             0x6001_F000 => return self.timg0.write(off, v, now),
             0x6002_0000 => return self.timg1.write(off, v, now),
             0x6002_3000 => return self.systimer.write(off, v, now),
@@ -310,7 +352,8 @@ impl SocBus {
                 return;
             }
             0x600C_2000 => {
-                if self.intm.write(off, v) {
+                let done = if off >= 0x800 { self.intm1.write(off - 0x800, v) } else { self.intm.write(off, v) };
+                if done {
                     return;
                 }
             }
@@ -351,6 +394,9 @@ impl SocBus {
         set(src::GPIO, self.gpio.irq());
         set(src::LEDC, self.ledc.irq());
         set(usb::SRC_USB, self.usb.as_ref().is_some_and(|u| u.irq()));
+        set(src::RMT, self.rmt.irq());
+        set(src::I2C_EXT0, self.i2c0.irq());
+        set(src::I2C_EXT1, self.i2c1.irq());
         for i in 0..3 {
             set(src::SYSTIMER_TARGET0 + i, self.systimer.irq(i as usize));
         }
@@ -362,14 +408,56 @@ impl SocBus {
         l
     }
 
-    /// 推进定时器、把外部中断线送进 CPU
-    pub fn update<C: IrqCpu>(&mut self, cpu: &mut C) {
+    /// 把 RMT 输出跳变经 GPIO 矩阵送到引脚：更新引脚电平、喂给挂在引脚上的 WS2812 解码器。
+    /// 返回解码器下一次需要检查（帧结束判定）的时刻。
+    fn route_rmt(&mut self, now: u64) -> u64 {
+        let l = self.rmt.layout;
+        let mut next = u64::MAX;
+        let mut edges = std::mem::take(&mut self.rmt.edges);
+        for pin in 0..NPINS as u32 {
+            let sel = self.gpio.func_out[pin as usize] & 0x1ff;
+            if !(l.sig_out0..l.sig_out0 + l.ntx as u32).contains(&sel) {
+                continue;
+            }
+            let ch = (sel - l.sig_out0) as u8;
+            let dec = self.ws2812.entry(pin).or_default();
+            for &(t, c, lv) in &edges {
+                if c == ch {
+                    dec.feed(t, lv);
+                }
+            }
+            next = next.min(dec.finalize(now));
+            self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
+        }
+        edges.clear();
+        self.rmt.edges = edges;
+        next
+    }
+
+    /// 引脚上的 PWM：经 GPIO 矩阵路由到该引脚的 LEDC 通道输出（占空比, 频率）。
+    /// S3 的 LEDC 输出信号是 73..=80（LEDC_LS_SIG_OUT0..7_IDX）
+    pub fn pin_pwm(&self, pin: usize) -> Option<(f32, f32)> {
+        let f = *self.gpio.func_out.get(pin)?;
+        let sig = f & 0x1ff;
+        if (73..=80).contains(&sig) && self.gpio.enable & (1 << pin) != 0 {
+            let (d, hz) = self.ledc.output((sig - 73) as usize)?;
+            let inv = f & (1 << 9) != 0;
+            return Some((if inv { 1.0 - d } else { d }, hz));
+        }
+        None
+    }
+
+    /// 推进定时器、按两个核各自的中断矩阵算出外部中断线（存进 lines，轮到该核时交给它）
+    pub fn update(&mut self) {
         let now = self.now;
         let n1 = self.systimer.update(now);
         let n2 = self.timg0.update(now);
         let n3 = self.timg1.update(now);
         let n4 = self.ledc.update(now);
-        let n5 = match self.usb.take() {
+        let n5 = self.rmt.update(now);
+        let n6 = self.route_rmt(now);
+        let n7 = self.i2c0.update(now).min(self.i2c1.update(now));
+        let n8 = match self.usb.take() {
             Some(mut u) => {
                 let n = u.update(now, self);
                 self.usb = Some(u);
@@ -377,10 +465,12 @@ impl SocBus {
             }
             None => u64::MAX,
         };
-        self.next_event = n1.min(n2).min(n3).min(n4).min(n5);
+        self.next_event = n1.min(n2).min(n3).min(n4).min(n5).min(n6).min(n7).min(n8);
         let lv = self.levels();
-        let (level, rising) = self.intm.lines(&lv);
-        cpu.set_extern_lines(level, rising);
+        // 边沿型线由核自己检测上升沿，这里把电平和本次上升沿一起给出
+        let (l0, r0) = self.intm.lines(&lv);
+        let (l1, r1) = self.intm1.lines(&lv);
+        self.lines = [l0 | r0, l1 | r1];
         self.irq_dirty = false;
     }
 }
@@ -391,18 +481,6 @@ impl usb::dwc2::Mem for SocBus {
     }
     fn wr8(&mut self, a: u32, v: u8) {
         self.mem_write(a, 1, v as u32);
-    }
-}
-
-/// SoC → CPU 的中断接口：外部中断线（位 = CPU 中断号）交给核，裁决（INTENABLE、PS.INTLEVEL、level 向量）在核里完成。
-pub trait IrqCpu {
-    /// level：电平型线的当前输入；rising：本次新出现的边沿（边沿型线由核自己锁存）
-    fn set_extern_lines(&mut self, level: u32, rising: u32);
-}
-
-impl IrqCpu for Cpu {
-    fn set_extern_lines(&mut self, level: u32, rising: u32) {
-        self.set_irq_lines(level | rising);
     }
 }
 
@@ -485,50 +563,97 @@ pub enum Stop {
 }
 
 pub struct Esp32s3 {
+    /// 核 0（PRO CPU）
     pub cpu: Cpu,
+    /// 核 1（APP CPU），cpu1_on 之前不执行
+    pub cpu1: Cpu,
+    pub cpu1_on: bool,
     pub bus: SocBus,
     pub rom_symbols: HashMap<u32, String>,
     pub hle: HashMap<u32, hle::Hle>,
 }
 
+/// 两核交替执行的量子（周期）：小到让核间中断、自旋锁及时生效，大到切换开销可忽略
+const QUANTUM: u64 = 256;
+
+/// 跑一个核直到它的周期数到 `until`。`idle_until`：这个核进入 WAITI 时允许快进到的最远时刻。
+fn run_core(
+    k: usize,
+    cpu: &mut Cpu,
+    bus: &mut SocBus,
+    hle: &HashMap<u32, hle::Hle>,
+    until: u64,
+    idle_until: u64,
+) -> Option<Stop> {
+    cpu.set_irq_lines(bus.lines[k]);
+    while cpu.cycles < until {
+        // 外设时间取两核中走得最远的那个，保证单调
+        if cpu.cycles > bus.now {
+            bus.now = cpu.cycles;
+        }
+        if bus.irq_dirty || bus.now >= bus.next_event {
+            bus.update();
+            cpu.set_irq_lines(bus.lines[k]);
+        }
+        match cpu.step(bus) {
+            Exit::Normal => {
+                // ROM 异常向量（0x40000300 Kernel / 0x40000340 User / 0x400003C0 Double）：
+                // app 正常运行时 VECBASE 指向 IRAM，落到这里说明出事了
+                let pc = cpu.pc;
+                if (0x4000_0300..0x4000_0400).contains(&pc) && cpu.read_sr(sr::VECBASE) == ROM_LOW {
+                    return Some(Stop::Fault {
+                        cause: cpu.read_sr(sr::EXCCAUSE),
+                        epc: cpu.read_sr(sr::EPC1),
+                        vaddr: cpu.read_sr(sr::EXCVADDR),
+                    });
+                }
+                if bus.irq_dirty {
+                    // 本核写了外设（可能清掉 / 触发了中断）：马上重算
+                    bus.update();
+                    cpu.set_irq_lines(bus.lines[k]);
+                }
+            }
+            Exit::Waiti => {
+                // 空闲：快进到下一个外设事件或 CCOMPARE 定时器中断
+                let target = bus.next_event.min(cpu.next_timer_event().unwrap_or(u64::MAX)).min(idle_until);
+                if target > cpu.cycles {
+                    cpu.cycles = target;
+                } else {
+                    cpu.cycles += 1;
+                }
+            }
+            Exit::Hle(pc) => match hle.get(&pc) {
+                Some(kind) => hle::call(*kind, cpu, bus),
+                None => return Some(Stop::Hle(pc)),
+            },
+            Exit::Break(v) => return Some(Stop::Break(v)),
+            // 半主机调用：固件只在 QEMU 测试里用，这里忽略
+            Exit::Simcall => {}
+        }
+    }
+    None
+}
+
 impl Esp32s3 {
     pub fn run(&mut self, budget: u64) -> Stop {
         let end = self.cpu.cycles.saturating_add(budget);
-        let cpu = &mut self.cpu;
-        let bus = &mut self.bus;
-        let hle = &self.hle;
-        while cpu.cycles < end {
-            bus.now = cpu.cycles;
-            if bus.irq_dirty || cpu.cycles >= bus.next_event {
-                bus.update(cpu);
+        while self.cpu.cycles < end {
+            let q_end = (self.cpu.cycles + QUANTUM).min(end);
+            // 两核都空闲时可以一起快进到下一个事件；否则核 0 的快进不能越过本量子（核 1 可能马上给它发核间中断）
+            let both_idle = !self.cpu1_on || self.cpu1.waiting;
+            let idle0 = if both_idle { end } else { q_end };
+            if let Some(s) = run_core(0, &mut self.cpu, &mut self.bus, &self.hle, q_end, idle0) {
+                return s;
             }
-            match cpu.step(bus) {
-                Exit::Normal => {
-                    // ROM 异常向量（0x40000300 Kernel / 0x40000340 User / 0x400003C0 Double）：
-                    // app 正常运行时 VECBASE 指向 IRAM，落到这里说明出事了
-                    let pc = cpu.pc;
-                    if (0x4000_0300..0x4000_0400).contains(&pc) && cpu.read_sr(sr::VECBASE) == ROM_LOW {
-                        return Stop::Fault {
-                            cause: cpu.read_sr(sr::EXCCAUSE),
-                            epc: cpu.read_sr(sr::EPC1),
-                            vaddr: cpu.read_sr(sr::EXCVADDR),
-                        };
-                    }
+            if self.cpu1_on {
+                // 核 1 追到核 0 的时间，不超过它
+                let t = self.cpu.cycles;
+                if let Some(s) = run_core(1, &mut self.cpu1, &mut self.bus, &self.hle, t, t) {
+                    return s;
                 }
-                Exit::Waiti => {
-                    // 空闲：快进到下一个外设事件或 CCOMPARE 定时器中断
-                    let target = bus.next_event.min(cpu.next_timer_event().unwrap_or(u64::MAX)).min(end);
-                    if target > cpu.cycles {
-                        cpu.cycles = target;
-                    }
-                }
-                Exit::Hle(pc) => match hle.get(&pc) {
-                    Some(k) => hle::call(*k, cpu, bus),
-                    None => return Stop::Hle(pc),
-                },
-                Exit::Break(v) => return Stop::Break(v),
-                // 半主机调用：固件只在 QEMU 测试里用，这里忽略
-                Exit::Simcall => {}
+            }
+            if let Some(entry) = self.bus.appcpu_boot.take() {
+                self.start_app_cpu(entry);
             }
         }
         Stop::Budget

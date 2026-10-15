@@ -1,7 +1,8 @@
 // 编辑器测试：上传 bme280 固件 → 加 BME280 + LED → 应重启并读到传感器
 import puppeteer from 'puppeteer-core';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
-const root = '<repo-root>';
+import { fileURLToPath } from 'node:url';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dist = root + '/web/dist';
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = http.createServer((req, res) => { const u = decodeURIComponent(new URL(req.url, 'http://x').pathname); const f = path.join(dist, u === '/' ? 'index.html' : u); if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(res); });

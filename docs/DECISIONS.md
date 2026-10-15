@@ -66,12 +66,12 @@
 - 理由：并行开发期间 C3 crate 正被频繁修改，现在抽 `soc` 公共层会和其它分支大面积冲突；依赖关系单向、以后搬家只改 use 路径
 - 替代：把同族外设移进 crates/soc，C3 / S3 都依赖它（等分支合并稳定后做）
 
-## 2026-10-15 · S3 先单核启动，CALLINC=0 进入口并补入口帧保存区
+## 2026-10-15 · S3 先单核启动，CALLINC=0 进入口并补入口帧保存区（单核部分已被"S3 双核"取代）
 - 决定：s3-hello 用 CONFIG_FREERTOS_UNICORE=y；入口以 PS.CALLINC=0、WINDOWSTART=1 进入，先执行 ENTRY，再在 [sp-12] 填一个指向 ROM .stack_app（单核时空闲）的指针
 - 理由：我们跳过了 bootloader，没有真实的调用者帧。用假的 CALL8 调用者帧会在第一次窗口溢出时把空保存区当指针（写到 0 附近，双重异常）；CALLINC=0 让 app 入口成为最老的一帧，只剩溢出处理程序要读 [sp-12] 这一处，补上即可
 - 替代：完整跑 ROM + 二级 bootloader（栈帧天然正确，代价是要模拟更多启动期硬件）；双核在核实现中断后再做
 
-## 2026-10-15 · 核缺的少数指令用 SoC 侧垫片顶上（临时）
+## 2026-10-15 · 核缺的少数指令用 SoC 侧垫片顶上（临时，已删除：核已实现）
 - 决定：SALT/SALTU、WITLB/WDTLB 等 TLB 族、RER/WER 在非法指令异常入口由 S3 SoC 代执行；核里 MOVSP 多报的 Alloca 由垫片撤回
 - 理由：这些都在 tryboard-xtensa 里，本分支约定不改核（另一个分支在改中断 / FPU）；垫片集中在 `esp32s3/src/shim.rs` 一个文件，核补齐后整文件删除即可
 - 替代：直接在核里实现（正确做法，合并时做；MOVSP 条件是一行修正：三个 WINDOWSTART 位"全为 0"才报 Alloca）
@@ -111,3 +111,23 @@
 - 决定：`tb_boot` 先读镜像头芯片 ID（5 = C3，9 = S3），各自放在独立的 thread_local；页面按同一规则（`chipOf`）下载对应 ROM
 - 理由：改动最小，不打扰 C3 现有接口；以后若做多板联动再抽象成 trait 对象
 - 替代：统一的 `Machine` trait——等 S3 外设和 C3 对齐（另一分支在做）后再收拢
+## 2026-10-15 · S3 双核：HLE 启动核 1，固定量子交替
+- 决定：不模拟 ROM 里核 1 的复位等待代码，而是在 `ets_set_appcpu_boot_addr` 入口 HLE 拿到 call_start_cpu1 直接启动核 1；两核按 256 周期量子在同一线程里交替（确定性），都空闲时一起快进
+- 理由：确定性（同一固件每次跑结果相同，验收可复现）；单线程适合 wasm；量子足够小，跨核中断 / 自旋锁的延迟在微秒级，FreeRTOS SMP 与 esp_ipc 正常
+- 替代：两核真并行（多线程 + 原子内存），快但不确定、wasm 里要 SharedArrayBuffer
+
+## 2026-10-15 · 外设复用 C3 模型并按芯片参数化，不另立公共 crate
+- 决定：S3 继续依赖 tryboard-esp32c3 的外设模型；寄存器排布有差异的（RMT）加布局参数，LEDC 扩到 8 通道；另立 `tryboard-machine` 做芯片无关外壳给 CLI / wasm 用
+- 理由：两颗芯片的这些外设寄存器逐项一致（I2C、LEDC、UART、SYSTIMER），搬到 tryboard-soc 只会制造合并冲突；真正需要"一套接口"的是 CLI 和网页
+- 替代：把外设整体搬进 tryboard-soc，等第三颗芯片（C6）加进来时再做
+
+## 2026-10-15 · S3 示例与 C3 共用源码
+- 决定：firmware/s3-* 的 CMakeLists 直接编译 C3 示例的 main.c，用 `target_compile_definitions` 覆盖引脚（LED、I2C、ADC 通道）
+- 理由：示例逻辑不分芯片，复制源码会分叉；同一份代码在两颗芯片上都过验收，本身就是"可移植"的演示
+- 替代：每颗芯片一份源码
+
+## 2026-10-15 · S3 对齐分支与 USB / 复位 / Wi-Fi 合流
+- 决定：CLI 与 wasm 只经 `tryboard-machine` 的 `Machine` 访问芯片；USB OTG 走 `Machine::usb()/usb_mut()`（C3 返回 None），软件复位走 `Machine::reboot()`。C3 专用的调试参数（--watch / --dump / --wifi-log / --dump-intc）在 CLI 里按 `Machine::C3` 分支处理
+- S3 软件复位暂不支持：`Machine::reboot` 对 S3 返回错误，固件会停在 esp_restart；以后在 S3 SoC 里按 RTC_CNTL 软件复位位实现
+- 网页元件编辑器的引脚列表取自当前开发板排针（S3 去掉 GPIO35–37，因为 N16R8 的八线 PSRAM 占用）
+- `.gitignore` 里 node_modules / firmware/build 改成不带尾斜杠，免得 worktree 里的软链接被当成文件提交

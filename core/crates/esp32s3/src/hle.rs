@@ -14,6 +14,8 @@ pub enum Hle {
     I2cReadRegMask,
     I2cWriteReg,
     I2cWriteRegMask,
+    /// ets_set_appcpu_boot_addr(addr)：记下核 1 入口，由运行循环启动核 1（真机上是 ROM 里核 1 的复位代码在等这个地址）
+    SetAppCpuBootAddr,
 }
 
 pub const TABLE: &[(&str, Hle)] = &[
@@ -21,6 +23,7 @@ pub const TABLE: &[(&str, Hle)] = &[
     ("rom_i2c_readReg_Mask", Hle::I2cReadRegMask),
     ("rom_i2c_writeReg", Hle::I2cWriteReg),
     ("rom_i2c_writeReg_Mask", Hle::I2cWriteRegMask),
+    ("ets_set_appcpu_boot_addr", Hle::SetAppCpuBootAddr),
 ];
 
 fn mask(msb: u32, lsb: u32) -> u8 {
@@ -40,6 +43,12 @@ pub fn call(kind: Hle, cpu: &mut Cpu, bus: &mut SocBus) {
         }
         Hle::I2cWriteReg => {
             bus.analog.regs.insert((block, reg), a(3) as u8);
+            0
+        }
+        Hle::SetAppCpuBootAddr => {
+            if a(0) != 0 {
+                bus.appcpu_boot = Some(a(0));
+            }
             0
         }
         Hle::I2cWriteRegMask => {

@@ -4,7 +4,9 @@
 #include "freertos/task.h"
 #include "led_strip.h"
 
+#ifndef LED_GPIO
 #define LED_GPIO 8
+#endif
 
 static const struct {
     const char *name;

@@ -1,20 +1,14 @@
 //! 原生命令行：跑固件、跑 riscv-tests、出未实现寄存器报告。
 
-mod s3;
-
 use std::io::Write;
 use std::time::Instant;
-use tryboard_esp32c3::devices::{
-    bme280::{Bme280, Env},
-    ssd1306::Ssd1306,
-};
-use tryboard_esp32c3::{Esp32c3, Stop};
+use tryboard_machine::{Chip, Machine, SensorEnv, Stop, CPU_HZ};
 use tryboard_rv32::{elf::Elf, Bus, BusFault, Cpu, Exit};
 
 fn usage() -> ! {
     eprintln!(
         "用法:
-  tryboard run <flash.bin> [--rom <rom.elf>] [--seconds <模拟秒数>] [--expect <文本>] [--uart-in <文本>]
+  tryboard run <flash.bin>（芯片按镜像头自动识别：ESP32-C3 / ESP32-S3）[--rom <rom.elf>] [--seconds <模拟秒数>] [--expect <文本>] [--uart-in <文本>]
                [--script \"0.5:gpio9=0; 0.6:gpio9=z; 1.0:uart=ping\\n\"] [--trace N] [--gpio-log] [--pwm-log PIN] [--ws2812-log]
                [--i2c ssd1306@0x3c,bme280@0x76] [--env 温度,湿度,气压Pa] [--oled]
   tryboard riscv-test <test.elf>..."
@@ -22,11 +16,9 @@ fn usage() -> ! {
     std::process::exit(2)
 }
 
-fn default_rom() -> String {
+fn default_rom(chip: Chip) -> String {
     let here = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    here.join("../../../third_party/esp-rom-elfs/esp32c3_rev3_rom.elf")
-        .to_string_lossy()
-        .into_owned()
+    here.join("../../../third_party/esp-rom-elfs").join(chip.rom_file()).to_string_lossy().into_owned()
 }
 
 fn main() {
@@ -77,66 +69,48 @@ fn opt(args: &[String], name: &str) -> Option<String> {
 fn run(args: &[String]) {
     let Some(path) = args.first() else { usage() };
     let flash = std::fs::read(path).unwrap_or_else(|e| panic!("读固件 {path}: {e}"));
-    // 按镜像头芯片 ID 分派：5 = ESP32-C3，9 = ESP32-S3
-    if tryboard_esp32s3::boot::image_chip_id(&flash) == Some(tryboard_esp32s3::boot::CHIP_ID) {
-        return s3::run(args, path, flash);
-    }
-    let rom_path = opt(args, "--rom").unwrap_or_else(default_rom);
-    let seconds: f64 = opt(args, "--seconds")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(5.0);
+    let chip = Chip::from_image(&flash).unwrap_or(Chip::Esp32c3);
+    let rom_path = opt(args, "--rom").unwrap_or_else(|| default_rom(chip));
+    let seconds: f64 = opt(args, "--seconds").and_then(|s| s.parse().ok()).unwrap_or(5.0);
     let expect = opt(args, "--expect");
     let rom = std::fs::read(&rom_path).unwrap_or_else(|e| panic!("读 ROM {rom_path}: {e}"));
-    let (mut m, app) = match Esp32c3::boot(&rom, flash) {
+    let (mut m, app) = match Machine::boot(&rom, flash) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("启动失败: {e}");
             std::process::exit(1)
         }
     };
-    eprintln!(
-        "[tryboard] app @0x{:x} 入口 0x{:08x}，{} 段",
-        app.offset,
-        app.entry,
-        app.segments.len()
-    );
+    eprintln!("[tryboard] {} app @0x{:x} 入口 0x{:08x}，{} 段", chip.name(), app.offset, app.entry, app.segments);
     if let Some(s) = opt(args, "--uart-in") {
-        m.bus.uart0.push_rx(s.replace("\\n", "\n").as_bytes());
+        m.uart_push(s.replace("\\n", "\n").as_bytes());
     }
     // 外接 I2C 器件：--i2c ssd1306@0x3c,bme280@0x76
     if let Some(spec) = opt(args, "--i2c") {
         for item in spec.split(',') {
             let (kind, addr) = item.split_once('@').unwrap_or((item, "0"));
             let addr = u8::from_str_radix(addr.trim_start_matches("0x"), 16).unwrap_or(0);
-            match tryboard_esp32c3::devices::make_i2c(kind, addr) {
-                Some(d) => m.bus.i2c0.attach(d),
-                None => {
-                    eprintln!("不认识的 I2C 器件 {kind}");
-                    std::process::exit(2)
-                }
+            if !m.i2c_attach(kind, addr) {
+                eprintln!("不认识的 I2C 器件 {kind}");
+                std::process::exit(2)
             }
         }
     }
     // 环境：--env 温度,湿度,气压(Pa)
     if let Some(e) = opt(args, "--env") {
         let v: Vec<f64> = e.split(',').filter_map(|x| x.parse().ok()).collect();
-        if let (Some(b), [t, h, p]) = (m.bus.i2c0.device::<Bme280>(), v.as_slice()) {
-            b.env = Env {
-                temp_c: *t,
-                humidity: *h,
-                pressure_pa: *p,
-            };
+        if let [t, h, p] = v.as_slice() {
+            m.env_set(SensorEnv { temp_c: *t, humidity: *h, pressure_pa: *p });
         }
     }
-    let total = (seconds * tryboard_esp32c3::periph::CPU_HZ as f64) as u64;
-    let slice = tryboard_esp32c3::periph::CPU_HZ / 100; // 10ms 一片
+    let total = (seconds * CPU_HZ as f64) as u64;
     let t0 = Instant::now();
     let mut out = Vec::new();
     let mut stop = Stop::Budget;
     let mut done = 0u64;
     let stdout = std::io::stdout();
     let mut resets = 0;
-    // 定时输入脚本：时间（模拟秒）:动作；动作 gpioN=0|1|z、uart=文本（\\n 为换行）
+    // 定时输入脚本：时间（模拟秒）:动作；动作 gpioN=0|1|z、mvN=毫伏、uart=文本、usbcdc=文本（\\n 为换行）
     let mut script: Vec<(f64, String)> = opt(args, "--script")
         .map(|s| {
             s.split(';')
@@ -147,75 +121,64 @@ fn run(args: &[String]) {
                 .collect()
         })
         .unwrap_or_default();
-    script.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-    script.reverse();
+    script.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
     let pwm_pin: Option<usize> = opt(args, "--pwm-log").and_then(|s| s.parse().ok());
     let mut pwm_trace: Vec<(f64, f32, f32)> = Vec::new();
     // --watch A 或 A-B（十六进制）：记录这段 MMIO 的访问
     let hex = |s: &str| u32::from_str_radix(s.trim().trim_start_matches("0x"), 16).ok();
-    m.bus.watch = opt(args, "--watch").and_then(|s| match s.split_once('-') {
+    let watch = opt(args, "--watch").and_then(|s| match s.split_once('-') {
         Some((a, b)) => Some((hex(a)?, hex(b)?)),
         None => hex(&s).map(|a| (a, a + 4)),
     });
+    if let Machine::C3(c) = &mut m {
+        c.bus.watch = watch;
+    }
     let trace: usize = opt(args, "--trace").and_then(|s| s.parse().ok()).unwrap_or(0);
     let mut ring = std::collections::VecDeque::new();
-    let app_elf = std::path::Path::new(path)
-        .with_file_name("app.elf")
-        .to_string_lossy()
-        .into_owned();
+    let app_elf = std::path::Path::new(path).with_file_name("app.elf").to_string_lossy().into_owned();
     let syms = Syms::load(&[rom_path.clone(), app_elf]);
     while done < total {
-        let now_s = m.cpu.cycles as f64 / tryboard_esp32c3::periph::CPU_HZ as f64;
+        let now_s = m.cycles() as f64 / CPU_HZ as f64;
         while script.last().is_some_and(|e| e.0 <= now_s) {
             let (_, act) = script.pop().unwrap();
-            if let Some(rest) = act.strip_prefix("gpio") {
-                if let Some((pin, lv)) = rest.split_once('=') {
-                    let pin: u32 = pin.parse().unwrap_or(0);
-                    let bit = 1 << pin;
-                    match lv {
-                        "z" => m.bus.gpio.ext_driven &= !bit,
-                        _ => {
-                            m.bus.gpio.ext_driven |= bit;
-                            if lv == "1" {
-                                m.bus.gpio.ext_in |= bit;
-                            } else {
-                                m.bus.gpio.ext_in &= !bit;
-                            }
-                        }
-                    }
-                    let now = m.cpu.cycles;
-                    m.bus.gpio_changed(now);
-                }
-            } else if let Some(rest) = act.strip_prefix("mv") {
+            if let Some((pin, lv)) = act.strip_prefix("gpio").and_then(|r| r.split_once('=')) {
+                let pin: u32 = pin.parse().unwrap_or(0);
+                let level = match lv {
+                    "z" => -1,
+                    "1" => 1,
+                    _ => 0,
+                };
+                m.gpio_drive(pin, level);
+            } else if let Some((pin, mv)) = act.strip_prefix("mv").and_then(|r| r.split_once('=')) {
                 // mvN=电压：引脚 N 上的模拟电压（毫伏）
-                if let Some((pin, mv)) = rest.split_once('=') {
-                    if let (Ok(p), Ok(v)) = (pin.parse::<usize>(), mv.parse::<f32>()) {
-                        if p < 22 {
-                            m.bus.adc.pin_mv[p] = v;
-                        }
-                    }
+                if let (Ok(p), Ok(v)) = (pin.parse::<usize>(), mv.parse::<f32>()) {
+                    m.analog_set(p, v);
                 }
             } else if let Some(t) = act.strip_prefix("uart=") {
-                m.bus.uart0.push_rx(t.replace("\\n", "\n").as_bytes());
-                m.bus.irq_dirty = true;
+                m.uart_push(t.replace("\\n", "\n").as_bytes());
+            } else if let Some(t) = act.strip_prefix("usbcdc=") {
+                // 虚拟电脑往 USB 虚拟串口里写
+                if let Some(u) = m.usb_mut() {
+                    u.host.cdc_tx.extend_from_slice(t.replace("\\n", "\n").as_bytes());
+                }
             }
             eprintln!("[tryboard] {now_s:.3}s 输入: {act}");
         }
         if let Some(p) = pwm_pin {
-            if let Some((d, f)) = m.bus.pin_pwm(p) {
+            if let Some((d, f)) = m.pin_pwm(p) {
                 if pwm_trace.last().is_none_or(|l| (l.1 - d).abs() > 0.004 || (l.2 - f).abs() > 0.5) {
                     pwm_trace.push((now_s, d, f));
                 }
             }
         }
-        let slice = if script.is_empty() && pwm_pin.is_none() { slice } else { tryboard_esp32c3::periph::CPU_HZ / 1000 };
-        let before = m.cpu.cycles;
+        let slice = if script.is_empty() && pwm_pin.is_none() { CPU_HZ / 100 } else { CPU_HZ / 1000 };
+        let before = m.cycles();
         stop = if trace > 0 {
             m.run_traced(slice.min(total - done), &mut ring, trace)
         } else {
             m.run(slice.min(total - done))
         };
-        done += m.cpu.cycles - before;
+        done += m.cycles() - before;
         let c = m.console_take();
         if !c.is_empty() {
             let mut lock = stdout.lock();
@@ -243,95 +206,85 @@ fn run(args: &[String]) {
         }
     }
     let wall = t0.elapsed().as_secs_f64();
-    let sim = m.cpu.cycles as f64 / tryboard_esp32c3::periph::CPU_HZ as f64;
+    let sim = m.cycles() as f64 / CPU_HZ as f64;
     eprintln!(
-        "\n[tryboard] 停止: {stop:?}  pc=0x{:08x} {}  模拟 {sim:.3}s / 实际 {wall:.3}s（{:.1} MIPS）",
-        m.cpu.pc,
-        m.symbol_at(m.cpu.pc).unwrap_or(""),
-        m.cpu.instret as f64 / wall / 1e6
+        "\n[tryboard] 停止: {stop:?}  pc=0x{:08x}  模拟 {sim:.3}s / 实际 {wall:.3}s（{:.1} MIPS）",
+        m.pc(),
+        m.instret() as f64 / wall / 1e6
     );
-    eprintln!(
-        "[tryboard] pc {}  ra {}",
-        syms.name(m.cpu.pc),
-        syms.name(m.cpu.x[1])
-    );
+    eprintln!("[tryboard] {}", m.debug_state(&|a| syms.name(a)));
     if trace > 0 {
         eprintln!("[tryboard] 最近的跳转目标：");
         for pc in &ring {
             eprintln!("    {}", syms.name(*pc));
         }
     }
-    if let Stop::Fault { cause, pc, tval } = stop {
-        eprintln!(
-            "[tryboard] 异常 cause={cause} pc=0x{pc:08x} tval=0x{tval:08x} ra=0x{:08x}",
-            m.cpu.x[1]
-        );
+    match &stop {
+        Stop::Fault(s) => eprintln!("[tryboard] 异常：{s}"),
+        Stop::Hle(s) => eprintln!("[tryboard] 未实现的 HLE: {s}"),
+        Stop::Reset(r) => eprintln!("[tryboard] 软件复位（原因 {r}）后无法重新上电"),
+        Stop::Budget => {}
     }
-    if let Stop::Hle(pc) = stop {
-        eprintln!(
-            "[tryboard] 未实现的 HLE: 0x{pc:08x} {}",
-            m.symbol_at(pc).unwrap_or("?")
-        );
-    }
-    let mut un: Vec<_> = m.bus.unimpl.iter().collect();
-    un.sort_by(|a, b| b.1.cmp(a.1));
+    let un = m.unimpl();
     eprintln!("[tryboard] 未建模寄存器 {} 个，访问最多的：", un.len());
     for (a, n) in un.iter().take(12) {
         eprintln!("    0x{:08x}  {:>8} 次", a, n);
     }
-    if !m.bus.watch_hits.is_empty() {
-        // 顺序日志写文件，终端只给按（地址, 读写, PC）汇总
-        if let Some(path) = opt(args, "--watch-log") {
-            let mut f = String::new();
-            for (pc, a, v, w) in &m.bus.watch_hits {
-                f.push_str(&format!("{} 0x{a:08x} 0x{v:08x} {}\n", if *w { "W" } else { "R" }, syms.name(*pc)));
+    if let Machine::C3(c) = &mut m {
+        if !c.bus.watch_hits.is_empty() {
+            // 顺序日志写文件，终端只给按（地址, 读写, PC）汇总
+            if let Some(path) = opt(args, "--watch-log") {
+                let mut f = String::new();
+                for (pc, a, v, w) in &c.bus.watch_hits {
+                    f.push_str(&format!("{} 0x{a:08x} 0x{v:08x} {}\n", if *w { "W" } else { "R" }, syms.name(*pc)));
+                }
+                std::fs::write(&path, f).ok();
             }
-            std::fs::write(&path, f).ok();
+            let mut by: std::collections::BTreeMap<(u32, bool, u32), (u32, u32)> = Default::default();
+            for (pc, a, v, w) in &c.bus.watch_hits {
+                let e = by.entry((*a, *w, *pc)).or_insert((0, *v));
+                e.0 += 1;
+                e.1 = *v;
+            }
+            eprintln!("[tryboard] 监视区间访问 {} 次：", c.bus.watch_hits.len());
+            for ((a, w, pc), (n, v)) in by {
+                eprintln!("    0x{a:08x} {} {:>6} 次 最后 0x{v:08x}  {}", if w { "写" } else { "读" }, n, syms.name(pc));
+            }
         }
-        let mut by: std::collections::BTreeMap<(u32, bool, u32), (u32, u32)> = Default::default();
-        for (pc, a, v, w) in &m.bus.watch_hits {
-            let e = by.entry((*a, *w, *pc)).or_insert((0, *v));
-            e.0 += 1;
-            e.1 = *v;
-        }
-        eprintln!("[tryboard] 监视区间访问 {} 次：", m.bus.watch_hits.len());
-        for ((a, w, pc), (n, v)) in by {
-            eprintln!("    0x{a:08x} {} {:>6} 次 最后 0x{v:08x}  {}", if w { "写" } else { "读" }, n, syms.name(pc));
-        }
-    }
-    if let Some(spec) = opt(args, "--dump") {
-        // --dump 地址:长度（十六进制地址，十进制长度）
-        if let Some((a, n)) = spec.split_once(':') {
-            if let (Some(a), Ok(n)) = (hex(a), n.parse::<u32>()) {
-                for row in (0..n).step_by(16) {
-                    let bytes: Vec<String> = (row..(row + 16).min(n))
-                        .map(|i| format!("{:02x}", m.bus.load(a + i, 1).unwrap_or(0)))
-                        .collect();
-                    eprintln!("    {:08x}: {}", a + row, bytes.join(" "));
+        if let Some(spec) = opt(args, "--dump") {
+            // --dump 地址:长度（十六进制地址，十进制长度）
+            if let Some((a, n)) = spec.split_once(':') {
+                if let (Some(a), Ok(n)) = (hex(a), n.parse::<u32>()) {
+                    for row in (0..n).step_by(16) {
+                        let bytes: Vec<String> = (row..(row + 16).min(n))
+                            .map(|i| format!("{:02x}", c.bus.load(a + i, 1).unwrap_or(0)))
+                            .collect();
+                        eprintln!("    {:08x}: {}", a + row, bytes.join(" "));
+                    }
                 }
             }
         }
-    }
-    if args.iter().any(|a| a == "--wifi-log") {
-        let w = &m.bus.wifi;
-        eprintln!("[tryboard] Wi-Fi 空中日志：发送 {} 帧，接收 {} 帧，丢弃 {} 帧", w.tx_frames, w.rx_frames, w.rx_dropped);
-        for l in &w.log {
-            eprintln!("    {l}");
+        if args.iter().any(|a| a == "--wifi-log") {
+            let w = &c.bus.wifi;
+            eprintln!("[tryboard] Wi-Fi 空中日志：发送 {} 帧，接收 {} 帧，丢弃 {} 帧", w.tx_frames, w.rx_frames, w.rx_dropped);
+            for l in &w.log {
+                eprintln!("    {l}");
+            }
         }
-    }
-    if args.iter().any(|a| a == "--dump-intc") {
-        let ic = &m.bus.intc;
-        eprintln!("[tryboard] 中断线 使能=0x{:08x} 边沿=0x{:08x} 阈值={} 当前线={}", ic.enable, ic.edge, ic.thresh, m.cpu.irq_line);
-        for (src, line) in ic.map.iter().enumerate() {
-            if *line != 0 {
-                eprintln!("    源 {src:>2} → 线 {line:>2}（优先级 {}）", ic.pri[*line as usize]);
+        if args.iter().any(|a| a == "--dump-intc") {
+            let ic = &c.bus.intc;
+            eprintln!("[tryboard] 中断线 使能=0x{:08x} 边沿=0x{:08x} 阈值={} 当前线={}", ic.enable, ic.edge, ic.thresh, c.cpu.irq_line);
+            for (src, line) in ic.map.iter().enumerate() {
+                if *line != 0 {
+                    eprintln!("    源 {src:>2} → 线 {line:>2}（优先级 {}）", ic.pri[*line as usize]);
+                }
             }
         }
     }
     if let Some(list) = opt(args, "--peek") {
         for a in list.split(',') {
             if let Ok(a) = u32::from_str_radix(a.trim().trim_start_matches("0x"), 16) {
-                let v = m.bus.load(a, 4).unwrap_or(0xdead_beef);
+                let v = m.peek(a).unwrap_or(0xdead_beef);
                 eprintln!("[tryboard] peek 0x{a:08x} = 0x{v:08x}");
             }
         }
@@ -348,11 +301,11 @@ fn run(args: &[String]) {
         eprintln!("[tryboard] PWM GPIO{p}: {} 次变化，占空比 {:.3}..{:.3}，频率 {:.1}Hz", pwm_trace.len(), mn, mx, freq);
     }
     if args.iter().any(|a| a == "--gpio-log") {
-        let log = &m.bus.gpio_log;
-        for pin in 0..22 {
+        let log = m.gpio_log();
+        for pin in 0..chip.npins() {
             let mut n = 0;
-            let mut prev = 0u32;
-            for (_, lv) in log {
+            let mut prev = m.gpio_reset_level();
+            for (_, lv) in &log {
                 if (lv ^ prev) >> pin & 1 != 0 {
                     n += 1;
                 }
@@ -364,40 +317,41 @@ fn run(args: &[String]) {
         }
     }
     if args.iter().any(|a| a == "--ws2812-log") {
-        let mut pins: Vec<_> = m.bus.ws2812.iter().collect();
+        let mut pins: Vec<_> = m.ws2812().iter().collect();
         pins.sort_by_key(|(p, _)| **p);
         for (pin, d) in pins {
             eprintln!("[tryboard] WS2812 GPIO{pin} 共 {} 帧", d.frames);
             for (t, rgb) in &d.history {
                 let cols: Vec<String> = rgb.iter().map(|c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])).collect();
-                eprintln!("    {:.4}s {}", *t as f64 / tryboard_esp32c3::periph::CPU_HZ as f64, cols.join(" "));
+                eprintln!("    {:.4}s {}", *t as f64 / CPU_HZ as f64, cols.join(" "));
             }
         }
     }
-    if m.bus.i2c0.transactions > 0 {
-        eprintln!(
-            "[tryboard] I2C 事务 {} 次，NACK {} 次",
-            m.bus.i2c0.transactions, m.bus.i2c0.nacks
-        );
+    if args.iter().any(|a| a == "--usb-log") {
+        match m.usb() {
+            Some(u) => print_usb(u),
+            None => eprintln!("[tryboard] 这颗芯片没有原生 USB OTG"),
+        }
     }
-    if let Some(o) = m.bus.i2c0.device::<Ssd1306>() {
+    let (tr, nack) = m.i2c_stats();
+    if tr > 0 {
+        eprintln!("[tryboard] I2C 事务 {tr} 次，NACK {nack} 次");
+    }
+    let show_oled = args.iter().any(|a| a == "--oled");
+    if let Some(o) = m.oled() {
         let n = o.lit_pixels();
         eprintln!(
             "[tryboard] OLED 点亮像素 {n}（显示{}，电荷泵{}）",
             if o.display_on { "开" } else { "关" },
             if o.charge_pump { "开" } else { "关" }
         );
-        if args.iter().any(|a| a == "--oled") {
+        if show_oled {
             eprint!("{}", o.ascii());
         }
     }
     if let Some(e) = expect {
         let ok = String::from_utf8_lossy(&out).contains(e.as_str());
-        eprintln!(
-            "[tryboard] 期望输出 {:?}: {}",
-            e,
-            if ok { "PASS" } else { "FAIL" }
-        );
+        eprintln!("[tryboard] 期望输出 {:?}: {}", e, if ok { "PASS" } else { "FAIL" });
         std::process::exit(if ok { 0 } else { 1 });
     }
 }
@@ -474,4 +428,26 @@ fn riscv_tests(paths: &[String]) {
     }
     println!("{} 个测试，失败 {}", paths.len(), fail);
     std::process::exit(if fail == 0 { 0 } else { 1 });
+}
+
+/// 虚拟主机看到的情况：枚举日志、设备信息、键盘输入、鼠标、USB 串口
+fn print_usb(u: &tryboard_esp32s3::usb::Usb) {
+    let h = &u.host;
+    eprintln!("[tryboard] USB 主机：{}", h.state_name());
+    for l in &h.log {
+        eprintln!("[usb] {l}");
+    }
+    let i = &h.info;
+    if i.vid != 0 {
+        eprintln!("[tryboard] USB 设备 {:04x}:{:04x} \"{}\" / \"{}\" 序列号 \"{}\"", i.vid, i.pid, i.manufacturer, i.product, i.serial);
+    }
+    if !h.typed.is_empty() {
+        eprintln!("[tryboard] USB 键盘输入: {:?}", h.typed);
+    }
+    if h.mouse.3 > 0 {
+        eprintln!("[tryboard] USB 鼠标报告 {} 次，位置 ({}, {})，按键 {}", h.mouse.3, h.mouse.0, h.mouse.1, h.mouse.2);
+    }
+    if !h.cdc_rx.is_empty() {
+        eprintln!("[tryboard] USB 串口收到: {:?}", String::from_utf8_lossy(&h.cdc_rx));
+    }
 }

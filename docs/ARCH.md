@@ -37,8 +37,11 @@ web/（Vite + TS）
 - 中断：外设给出电平 → 中断矩阵（源 → CPU 线）→ 使能 / 优先级 / 阈值裁决 → `cpu.irq_line`。边沿型线锁存，写 CPU_INT_CLEAR 清除。
 - 时间：CPU 恒定 160MHz、每条指令 1 周期（CPI 模型以后按真机标定）。SYSTIMER 16MHz、APB 80MHz、XTAL 40MHz、RC 慢时钟 136kHz。WFI 时直接快进到下一个定时器事件。
 
+## 芯片无关外壳（`core/crates/machine`）
+- `enum Machine { C3, S3 }`：按镜像头芯片 ID（5 / 9）选芯片，给 CLI 和 wasm 一套接口（运行、控制台、GPIO 读写、PWM、ADC 电压、WS2812、I2C 器件、OLED、调试状态）。加新芯片只改这里。
+
 ## 浏览器
-- wasm 导出见 `core/crates/wasm/src/lib.rs`（`tb_*`）。没有 import，实例化时传 `{}`。
+- wasm 导出见 `core/crates/wasm/src/lib.rs`（`tb_*`）。没有 import，实例化时传 `{}`。主线程先读镜像头判断芯片、下载对应 ROM，再 `tb_boot`；`tb_chip` / `tb_boot_pin` 告诉前端换哪块板、BOOT 键在哪个脚；S3 的 GPIO32 以上用 `tb_gpio_level_hi` / `tb_gpio_enable_hi`。
 - 资源：`/wasm/tryboard.wasm`、`/rom/esp32c3_rev3_rom.elf`（附 Apache-2.0 LICENSE）、`/fw/<示例>/flash.bin` 与 `/fw/examples.json`。
 - 渲染：three.js WebGL2 + 后期泛光（LED 发光）。WebGPU 等 three 的 WebGPU 渲染器稳定后再切。
 
@@ -55,9 +58,11 @@ web/（Vite + TS）
 - 存储映射（soc/esp32s3/include/soc/soc.h）：SRAM 512KB 一块缓冲，以 IRAM 0x40370000 为 0：SRAM0 32KB（只有 I 总线）、SRAM1 416KB（I 0x40378000 = D 0x3FC88000）、SRAM2 64KB（只有 D 总线，0x3FCF0000）。ROM 0x40000000–0x40060000，DROM 掩膜 0x3FF00000 → ROM 物理 0x40040000（与 C3 相同）。RTC 慢速内存 0x50000000、快速内存 0x600FE000（各 8KB）。
 - cache 窗口：IROM 0x42000000、DROM 0x3C000000 各 32MB，共用 512 项 MMU（0x600C5000，线性地址 = vaddr & 0x1FFFFFF，64KB 页）；表项位 13..0 页号、位 14 无效、位 15 选 PSRAM。默认板型 N16R8：16MB flash（GD25Q128，JEDEC C8 40 18）+ 8MB PSRAM。
 - 直接启动同 C3：ROM 各 .data* 初值装进 DRAM 顶部、_putc1 / g_uart_print / g_usb_print、rom_spiflash_legacy_data（0x3FCEFFE4）、RTC_XTAL / APB 存储寄存器（S3 上是 RTC_CNTL 0xC0 / 0xC4）。窗口 ABI 的入口处理：以 PS.CALLINC=0 进 call_start_cpu0，SP = ROM .stack_pro 顶（0x3FCEB710）；先执行入口的 ENTRY，再在 [sp-12] 填一个指向 ROM .stack_app 空闲区的指针——窗口溢出处理程序溢出最老一帧时会从那里取"调用者 SP"存 a4..a11。
-- 中断：S3 的中断矩阵只把源映射到 CPU 线（INTERRUPT_CORE0_*_MAP，偏移 4×源）；级别 / 类型是 Xtensa 配置固定的（core-isa.h：电平线 0–5、8、9、12、13、17–21、23–27、31，边沿线 10、22、28、30，NMI 14，定时器 6/15/16，软件 7/29）。SoC 通过 `IrqCpu` 把外部电平线写进 INTERRUPT SR、边沿线上升沿置位，并在有可响应中断时把 WAITI 唤醒；真正的中断裁决与进向量留给核。
+- 中断：S3 的中断矩阵只把源映射到 CPU 线（INTERRUPT_CORE0_*_MAP，偏移 4×源；核 1 的表在 +0x800）；级别 / 类型是 Xtensa 配置固定的（core-isa.h）。`SocBus::update` 按两张矩阵算出每个核的外部线，轮到哪个核执行就 `cpu.set_irq_lines(lines[k])`；裁决与进向量在核里。
+- 双核：固件调 ROM 的 `ets_set_appcpu_boot_addr(call_start_cpu1)` 时 HLE 记下入口，运行循环随即启动核 1（栈 = ROM .stack_app 顶 0x3FCED710，PRID 0xABAB，周期数与核 0 对齐）。两核按 256 周期量子交替：核 0 跑一个量子，核 1 追到核 0 的时间；核 0 的 WAITI 快进不越过量子，除非核 1 也在 WAITI（这时一起快进到下一个事件）。指令级交替保证 S32C1I 原子；外设看到的时间取两核中较快者，保持单调。
 - HLE：rom_i2c_* 在 ROM 函数入口（ENTRY 之前）拦截，此时窗口仍是调用者的：参数在 a(4·CALLINC+2..)，返回地址在 a(4·CALLINC)（高 2 位为 CALLINC），返回值写回 a(4·CALLINC+2)，PC 直接回到调用点之后。
-- `shim.rs`：核还缺的少数指令在"非法指令异常刚进向量"时由 SoC 代执行（SALT/SALTU、TLB 族、RER/WER），以及撤回核里 MOVSP 多报的 Alloca。核补齐后删除。
+- 外设：与 C3 同族的模型直接复用 tryboard-esp32c3（UART、SYSTIMER、TIMG、SPI1、LEDC、I2C + 器件、RMT + WS2812），按芯片参数化的只有 RMT（`RmtLayout`：通道数、寄存器块起点、RAM 偏移、GPIO 矩阵信号号）；S3 独有的是中断矩阵、EXTMEM、49 脚 GPIO、SENS 单次 ADC（periph.rs）。
+- 入口帧溢出保存区：核 0 / 核 1 分别借用 ROM 的 level 5 / level 4 中断栈（app 装了自己的向量表后 ROM 不再用）。
 - 崩溃检测：落进 ROM 异常向量（VECBASE 仍为 0x40000000 时）停机报 EXCCAUSE / EPC1；app 装了自己的 VECBASE 后，崩溃由固件自己的 panic 处理程序打印（Guru Meditation），CLI 照常转发。
 - 中断：32 条线，级别 / 类型按 core-isa.h（外部电平、外部边沿 10/22/28/30、NMI 14、软件 7/29、定时器 6/15/16、性能计数 11）。`INTERRUPT` = 锁存位（边沿 / NMI / 软件 / 定时器）| 外部电平线。可响应条件：挂起 & INTENABLE 的最高级别 > max(PS.INTLEVEL, EXCM ? 3 : 0)。level 1 走 User/Kernel 向量（EXCCAUSE=4），level n≥2 存 EPC_n / EPS_n、置 INTLEVEL=n 与 EXCM，跳 VECBASE+0x180/0x1C0/0x200/0x240/0x280/0x2C0。
 - SoC 接口：`set_irq_lines(mask)` 驱动外部线；`step()` 遇 WAITI 返回 `Exit::Waiti`，SoC 可把 `cpu.cycles` 直接推到 `next_timer_event()`（及自己外设的下一事件），下一次 step 会补检 CCOMPARE 越过；`Exit::Simcall` 可当空操作；`Bus::rer/wer` 给外部寄存器（默认读 0）。
