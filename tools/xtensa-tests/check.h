@@ -29,3 +29,18 @@
 test_main:
     entry   a1, 64
     .endm
+
+/* 追加一个值到 dump（与 QEMU 逐字节对照）。用 a14 / a15 */
+    .macro DUMP reg
+    movi    a15, dump_end
+    l32i    a14, a15, 0
+    s32i    \reg, a14, 0
+    addi    a14, a14, 4
+    s32i    a14, a15, 0
+    .endm
+
+/* 读 irq_log 条数 / 第 n 条 */
+    .macro IRQ_COUNT reg
+    movi    a15, irq_log
+    l32i    \reg, a15, 0
+    .endm
