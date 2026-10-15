@@ -468,7 +468,7 @@ impl Cpu {
     fn csr_read(&self, addr: u32) -> Option<u32> {
         use csr::*;
         Some(match addr {
-            MCYCLE | CYCLE | MPCCR => self.cycles as u32,
+            MCYCLE | CYCLE | MPCCR | UPCCR => self.cycles as u32,
             MCYCLEH | CYCLEH => (self.cycles >> 32) as u32,
             MINSTRET | INSTRET => self.instret as u32,
             MINSTRETH | INSTRETH => (self.instret >> 32) as u32,
@@ -481,7 +481,7 @@ impl Cpu {
     fn csr_write(&mut self, addr: u32, v: u32) {
         use csr::*;
         match addr {
-            MCYCLE | MPCCR => self.cycles = (self.cycles & !0xffff_ffff) | v as u64,
+            MCYCLE | MPCCR | UPCCR => self.cycles = (self.cycles & !0xffff_ffff) | v as u64,
             MCYCLEH => self.cycles = (self.cycles & 0xffff_ffff) | ((v as u64) << 32),
             MINSTRET => self.instret = (self.instret & !0xffff_ffff) | v as u64,
             MINSTRETH => self.instret = (self.instret & 0xffff_ffff) | ((v as u64) << 32),

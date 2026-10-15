@@ -29,6 +29,8 @@ pub const INSTRETH: u32 = 0xc82;
 pub const MPCER: u32 = 0x7e0;
 pub const MPCMR: u32 = 0x7e1;
 pub const MPCCR: u32 = 0x7e2;
+/// 用户态别名（C3 ROM 的 ets_delay_us 读这个）
+pub const UPCCR: u32 = 0x802;
 
 pub struct Csrs {
     pub mstatus: u32,

@@ -1,0 +1,4 @@
+[
+  {"id": "hello", "seconds": 3, "expect": ["Hello world!", "4MB flash", "revision v0.4", "TRYBOARD_OK hello"], "qemu": true},
+  {"id": "blink", "seconds": 2.2, "expect": ["LED ON  (0)", "LED OFF (3)", "TRYBOARD_OK blink"], "gpio_toggles": {"pin": 5, "min": 4}}
+]

@@ -76,12 +76,14 @@ function loop() {
     simAnchor = e.tb_cycles();
     wallAnchor = performance.now();
   }
-  ratioWall += performance.now() - t0 + 0.0001;
-  ratioSim += ((e.tb_cycles() - startCycles) / CPU_HZ) * 1000;
-  if (ratioWall > 250) {
-    lastRatio = ratioSim / Math.max(ratioWall, performance.now() - now) ;
-    ratioWall = 0;
-    ratioSim = 0;
+  // 倍速 = 一段墙钟时间内推进的模拟时间 / 这段墙钟时间
+  if (ratioWall === 0) {
+    ratioWall = now;
+    ratioSim = startCycles;
+  } else if (now - ratioWall > 500) {
+    lastRatio = ((e.tb_cycles() - ratioSim) / CPU_HZ) * 1000 / (now - ratioWall);
+    ratioWall = now;
+    ratioSim = e.tb_cycles();
   }
   const len = e.tb_console_len();
   const text = len ? decoder.decode(new Uint8Array(e.memory.buffer, e.tb_console_ptr(), len)) : '';
@@ -126,6 +128,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
     case 'run':
       if (!ex || running) return;
       running = true;
+      ratioWall = 0;
       simAnchor = ex.tb_cycles();
       wallAnchor = performance.now();
       loop();

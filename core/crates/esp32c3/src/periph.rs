@@ -338,7 +338,7 @@ impl Default for Timg {
             t0_load: 0,
             wdt_cfg: [0x0004_c000, 0xffff, 0x0186_a000, 0x03ff_ffff, 0x0fff_ffff, 0x0fff_ffff],
             wdt_wprotect: 0,
-            rtccali: [0x0001_3000, 0, 0],
+            rtccali: [0x0001_b000, 0, 0],
             int_ena: 0,
             int_raw: 0,
             regclk: 0,
@@ -433,15 +433,11 @@ impl Timg {
             0x60 => {}
             0x64 => self.wdt_wprotect = v,
             0x68 => {
-                // 校准：start 置位立刻完成，结果 = 慢时钟周期数 × XTAL/慢时钟
-                let mut c = v & !(1 << 15);
-                if v & (1 << 31) != 0 {
-                    let max = ((v >> 16) & 0x7fff) as u64;
-                    let val = max * XTAL_HZ / SLOW_HZ;
-                    self.rtccali[1] = ((val as u32) & 0x1ff_ffff) << 7;
-                    c |= 1 << 15;
-                }
-                self.rtccali[0] = c;
+                // 校准瞬间完成：RDY 恒为 1，结果 = 慢时钟周期数 × XTAL/慢时钟
+                let max = ((v >> 16) & 0x7fff) as u64;
+                let val = max * XTAL_HZ / SLOW_HZ;
+                self.rtccali[1] = ((val as u32) & 0x1ff_ffff) << 7;
+                self.rtccali[0] = v | (1 << 15);
             }
             0x6c => {}
             0x80 => self.rtccali[2] = v,
@@ -544,6 +540,47 @@ impl Gpio {
             0x154..=0x350 => self.func_in[((off - 0x154) / 4) as usize] = v,
             0x554..=0x5a8 => self.func_out[((off - 0x554) / 4) as usize] = v,
             _ => {}
+        }
+    }
+}
+
+// ---------------------------------------------------------------- EXTMEM（cache 控制）
+/// cache 操作（失效、同步、预载、锁定、冻结）在模拟器里瞬间完成：使能位自清，完成位置 1。
+/// cache 本身不建模（flash 读直接经 MMU 翻译），所以这些操作没有别的副作用。
+pub struct Extmem {
+    pub regs: [u32; 0x100 / 4],
+}
+
+impl Default for Extmem {
+    fn default() -> Self {
+        let mut regs = [0u32; 0x100 / 4];
+        regs[0x1c / 4] = 1 << 2; // LOCK_DONE
+        regs[0x28 / 4] = 1 << 1; // SYNC_DONE
+        regs[0x34 / 4] = 1 << 1; // PRELOAD_DONE
+        regs[0x40 / 4] = 1 << 3; // AUTOLOAD_DONE
+        regs[0x00] = 1; // ICACHE_ENABLE（bootloader 已开 cache）
+        Extmem { regs }
+    }
+}
+
+impl Extmem {
+    pub fn read(&self, off: u32) -> u32 {
+        match off {
+            0xb0 => 1, // CACHE_STATE：空闲
+            _ => self.regs.get((off / 4) as usize).copied().unwrap_or(0),
+        }
+    }
+
+    pub fn write(&mut self, off: u32, v: u32) {
+        let v = match off {
+            0x1c => (v & !3) | 4,
+            0x28 | 0x34 => (v & !1) | 2,
+            0x40 => v | 8,
+            0xcc => (v & !4) | if v & 1 != 0 { 4 } else { 0 },
+            _ => v,
+        };
+        if let Some(r) = self.regs.get_mut((off / 4) as usize) {
+            *r = v;
         }
     }
 }

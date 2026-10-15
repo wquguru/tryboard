@@ -65,6 +65,45 @@ pub fn load_rom(m: &mut Esp32c3, elf_bytes: &[u8]) -> Result<(), String> {
             m.rom_symbols.entry(*addr).or_insert_with(|| name.clone());
         }
     }
+    // ROM 启动代码（我们跳过了）会做的初始化：
+    // 1. ets_printf 的输出挂到 UART（等价于调用 ets_install_uart_printf）
+    let sym = |n: &str| elf.symbol(n).ok_or(format!("ROM 里没有符号 {n}"));
+    m.bus.mem_write(sym("_putc1")?, 4, sym("ets_write_char_uart")?);
+    // 2. ROM 打印走 UART（g_uart_print=1），不走 USB-Serial-JTAG（g_usb_print=0，那是 USB 插着时才开）
+    m.bus.mem_write(sym("g_uart_print")?, 1, 1);
+    m.bus.mem_write(sym("g_usb_print")?, 1, 0);
+    // HLE 拦截表
+    for (name, kind) in crate::hle::TABLE {
+        m.hle.insert(sym(name)?, *kind);
+    }
+    let mut addrs: Vec<u32> = m.hle.keys().copied().collect();
+    addrs.sort();
+    m.cpu.hle_lo = ROM_LOW;
+    m.cpu.hle_hi = ROM_HIGH;
+    m.cpu.hle_addrs = addrs;
+    // ROM 启动时写进 RTC 存储寄存器的时钟信息（rom/rtc.h：RTC_XTAL_FREQ_REG = STORE4，RTC_APB_FREQ_REG = STORE5，高低半字相同）
+    m.bus.regs.insert(0x6000_80B8, 0x0028_0028);
+    let apb = 80_000_000u32 >> 12;
+    m.bus.regs.insert(0x6000_80BC, apb | (apb << 16));
+    Ok(())
+}
+
+/// 二级 bootloader 会按镜像头填写 ROM 的 flash 芯片描述（esp_rom_spiflash_chip_t）。
+fn init_flashchip(m: &mut Esp32c3, size_code: u8, jedec: u32) -> Result<(), String> {
+    // rom_spiflash_legacy_data（esp32c3.rom.ld）是指针，指向 ROM .data 里的结构体
+    let p = m.bus.mem_read(0x3FCD_FFF0, 4).ok_or("读不到 rom_spiflash_legacy_data")?;
+    let size = match size_code {
+        0 => 1 << 20,
+        1 => 2 << 20,
+        2 => 4 << 20,
+        3 => 8 << 20,
+        4 => 16 << 20,
+        _ => 4 << 20,
+    };
+    let id = ((jedec & 0xff) << 16) | (jedec & 0xff00) | ((jedec >> 16) & 0xff);
+    for (i, v) in [id, size, 64 << 10, 4 << 10, 256, 0xffff].iter().enumerate() {
+        m.bus.mem_write(p + 4 * i as u32, 4, *v).ok_or("写 g_rom_flashchip 失败")?;
+    }
     Ok(())
 }
 
@@ -134,7 +173,7 @@ pub fn parse_app(flash: &[u8], off: u32) -> Result<AppInfo, String> {
 impl Esp32c3 {
     /// 新建一台机器：装 ROM、装 flash、做 bootloader 该做的事，PC 停在 app 入口。
     pub fn boot(rom_elf: &[u8], flash: Vec<u8>) -> Result<(Esp32c3, AppInfo), String> {
-        let mut m = Esp32c3 { cpu: Cpu::new(), bus: SocBus::default(), rom_symbols: HashMap::new() };
+        let mut m = Esp32c3 { cpu: Cpu::new(), bus: SocBus::default(), rom_symbols: HashMap::new(), hle: HashMap::new() };
         load_rom(&mut m, rom_elf)?;
         let mut flash = flash;
         // 补齐到 4MB，避免 app 探测 flash 大小 / 读分区时越界
@@ -164,7 +203,10 @@ impl Esp32c3 {
                 }
             }
         }
+        let size_code = flash[off as usize + 3] >> 4;
         m.bus.flash = flash;
+        let jedec = m.bus.spi1.jedec;
+        init_flashchip(&mut m, size_code, jedec)?;
         m.cpu.pc = app.entry;
         // ROM 的 .stack_pro 顶端，bootloader 跳进 app 时用的就是这个栈
         m.cpu.x[2] = 0x3FCD_E710;

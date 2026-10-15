@@ -49,11 +49,13 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | 内核单元测试 | `cd core && cargo test` |
 | 构建验收固件 | `tools/build_fw.sh [名字]` |
 | 原生跑固件 | `cd core && cargo run -p tryboard-cli --release -- run ../firmware/build/<名字>/flash.bin` |
-| 跑全部验收 | `tools/accept.sh`（输出 `Reviews/accept.md`，并更新 `docs/STATUS.md`） |
+| 跑全部验收 | `tools/accept.sh [--no-web] [--no-qemu]`（输出 `Reviews/accept.md`；验收用例在 `firmware/accept.json`） |
+| 定位卡死 / 崩溃 | `tryboard run <flash.bin> --trace 40`（打印最近跳转目标，自动加载同目录 app.elf 符号） |
+| 下载第三方输入（ROM、riscv-tests） | `tools/fetch_third_party.sh` |
 | QEMU 对照 | `tools/oracle_qemu.sh <名字>` |
 | 构建 wasm + 网页 | `tools/build_web.sh` |
 | 本地试网页 | `cd web && npm run dev` |
-| 网页冒烟测试 | `node tools/webtest/webtest.mjs` |
+| 网页冒烟测试 | `node tools/webtest/webtest.mjs <示例> <期望文本>`（截图到 `Reviews/web/`） |
 
 ## 6. 工作方式
 1. **改需求先改文档**，再写代码。自主决定写进 `docs/DECISIONS.md`（日期、决定、理由、替代）。
@@ -76,8 +78,8 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 
 | # | 里程碑 | 完成标准 |
 |---|---|---|
-| M0 | ☐ 内核起步（ESP32-C3） | RV32IMC 核过 riscv-tests；直接启动 IDF `hello_world` 打印与 QEMU 一致；FreeRTOS 调度、`vTaskDelay` 正常 |
-| M1 | ☐ GPIO 与网页 | `blink` 在浏览器里驱动 3D 板载 LED；wasm 首包 ≤ 2MB（不含 3D 素材）；串口面板 |
+| M0 | ☑ 内核起步（ESP32-C3） | RV32IMC 核过 riscv-tests；直接启动 IDF `hello_world` 打印与 QEMU 一致；FreeRTOS 调度、`vTaskDelay` 正常 |
+| M1 | ☑ GPIO 与网页 | `blink` 在浏览器里驱动 3D 板载 LED；wasm 首包 ≤ 2MB（不含 3D 素材）；串口面板 |
 | M2 | ☐ 常用外设 | LEDC、RMT（WS2812）、I2C（SSD1306、BME280）、SPI、ADC、定时器；各有验收固件 |
 | M3 | ☐ 面包板与 3D 世界 | 拖放元件、连线、舵机 / 灯带 / 屏幕在 3D 里有反馈 |
 | M4 | ☐ ESP32-S3（Xtensa LX7） | 同 M0–M2 验收在 S3 上通过 |

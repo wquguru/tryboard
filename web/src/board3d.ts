@@ -60,7 +60,7 @@ function breadboard(cols: number) {
   const d = 55;
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(w, 8.5, d),
-    new THREE.MeshStandardMaterial({ color: 0xf1ede4, roughness: 0.75 }),
+    new THREE.MeshStandardMaterial({ color: 0xd8d3c8, roughness: 0.8 }),
   );
   body.position.y = 4.25;
   body.castShadow = body.receiveShadow = true;
@@ -341,18 +341,18 @@ export function createBench(container: HTMLElement): Bench {
   scene.background = new THREE.Color(0x0e1114);
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = 0.55;
+  scene.environmentIntensity = 0.4;
 
   const camera = new THREE.PerspectiveCamera(35, 1, 1, 2000);
-  camera.position.set(-70, 120, 135);
+  camera.position.set(-40, 95, 105);
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(8, 4, 0);
+  controls.target.set(0, 6, 4);
   controls.enableDamping = true;
   controls.maxPolarAngle = Math.PI * 0.47;
   controls.minDistance = 40;
   controls.maxDistance = 420;
 
-  const key = new THREE.DirectionalLight(0xfff3e0, 2.2);
+  const key = new THREE.DirectionalLight(0xfff3e0, 1.25);
   key.position.set(-80, 160, 60);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
@@ -421,22 +421,22 @@ export function createBench(container: HTMLElement): Bench {
       g.roundRect(4, 4, 504, 120, 24);
       g.fill();
       g.fillStyle = '#e9edf2';
-      g.font = '600 52px Inter, Helvetica, sans-serif';
+      g.font = '600 40px Inter, Helvetica, sans-serif';
       g.textAlign = 'center';
       g.textBaseline = 'middle';
       g.fillText(text, 256, 66);
     });
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
-    s.scale.set(24, 6, 1);
+    s.scale.set(20, 5, 1);
     s.position.copy(pos);
     s.renderOrder = 10;
     scene.add(s);
   };
-  label('GPIO5 → 220Ω → LED', new THREE.Vector3(bb.colX(ledCol - 1), 24, bb.rowZ(7) + 2));
+  label('GPIO5 → 220Ω → LED', new THREE.Vector3(bb.colX(ledCol - 1), 34, bb.rowZ(2) - 6));
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.9, 0.5, 0.88);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.8, 0.3, 1.6);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
@@ -487,7 +487,7 @@ export function createBench(container: HTMLElement): Bench {
     // LED 亮灭有很短的过渡，像真实 LED 被眼睛看到的样子
     ledNow += (ledTarget - ledNow) * 0.55;
     redLed.lens.emissiveIntensity = ledNow * 6;
-    redLed.light.intensity = ledNow * 2500;
+    redLed.light.intensity = ledNow * 60;
     controls.update();
     composer.render();
   };

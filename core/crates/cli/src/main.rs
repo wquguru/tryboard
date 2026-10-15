@@ -28,6 +28,36 @@ fn main() {
     }
 }
 
+/// 符号表：ROM + app.elf（与 flash.bin 同目录时自动加载），按地址找最近的符号。
+struct Syms(Vec<(u32, String)>);
+impl Syms {
+    fn load(paths: &[String]) -> Syms {
+        let mut v = Vec::new();
+        for p in paths {
+            if let Ok(b) = std::fs::read(p) {
+                if let Ok(e) = Elf::parse(&b) {
+                    for (n, a, _) in e.symbols {
+                        if a != 0 && !n.starts_with('$') && !n.starts_with(".L") {
+                            v.push((a, n));
+                        }
+                    }
+                }
+            }
+        }
+        v.sort();
+        Syms(v)
+    }
+    fn name(&self, a: u32) -> String {
+        match self.0.partition_point(|(x, _)| *x <= a) {
+            0 => format!("0x{a:08x}"),
+            i => {
+                let (b, n) = &self.0[i - 1];
+                format!("0x{a:08x} {n}+0x{:x}", a - b)
+            }
+        }
+    }
+}
+
 fn opt(args: &[String], name: &str) -> Option<String> {
     args.iter().position(|a| a == name).and_then(|i| args.get(i + 1).cloned())
 }
@@ -57,9 +87,17 @@ fn run(args: &[String]) {
     let mut stop = Stop::Budget;
     let mut done = 0u64;
     let stdout = std::io::stdout();
+    let trace: usize = opt(args, "--trace").and_then(|s| s.parse().ok()).unwrap_or(0);
+    let mut ring = std::collections::VecDeque::new();
+    let app_elf = std::path::Path::new(path).with_file_name("app.elf").to_string_lossy().into_owned();
+    let syms = Syms::load(&[rom_path.clone(), app_elf]);
     while done < total {
         let before = m.cpu.cycles;
-        stop = m.run(slice.min(total - done));
+        stop = if trace > 0 {
+            m.run_traced(slice.min(total - done), &mut ring, trace)
+        } else {
+            m.run(slice.min(total - done))
+        };
         done += m.cpu.cycles - before;
         let c = m.console_take();
         if !c.is_empty() {
@@ -85,6 +123,13 @@ fn run(args: &[String]) {
         m.symbol_at(m.cpu.pc).unwrap_or(""),
         m.cpu.instret as f64 / wall / 1e6
     );
+    eprintln!("[tryboard] pc {}  ra {}", syms.name(m.cpu.pc), syms.name(m.cpu.x[1]));
+    if trace > 0 {
+        eprintln!("[tryboard] 最近的跳转目标：");
+        for pc in &ring {
+            eprintln!("    {}", syms.name(*pc));
+        }
+    }
     if let Stop::Fault { cause, pc, tval } = stop {
         eprintln!("[tryboard] 异常 cause={cause} pc=0x{pc:08x} tval=0x{tval:08x} ra=0x{:08x}", m.cpu.x[1]);
     }
@@ -96,6 +141,22 @@ fn run(args: &[String]) {
     eprintln!("[tryboard] 未建模寄存器 {} 个，访问最多的：", un.len());
     for (a, n) in un.iter().take(12) {
         eprintln!("    0x{:08x}  {:>8} 次", a, n);
+    }
+    if args.iter().any(|a| a == "--gpio-log") {
+        let log = &m.bus.gpio_log;
+        for pin in 0..22 {
+            let mut n = 0;
+            let mut prev = 0u32;
+            for (_, lv) in log {
+                if (lv ^ prev) >> pin & 1 != 0 {
+                    n += 1;
+                }
+                prev = *lv;
+            }
+            if n > 0 {
+                eprintln!("[tryboard] GPIO{pin} 翻转 {n} 次");
+            }
+        }
     }
     if let Some(e) = expect {
         let ok = String::from_utf8_lossy(&out).contains(e.as_str());

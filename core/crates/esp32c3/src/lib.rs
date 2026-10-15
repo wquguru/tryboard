@@ -1,7 +1,9 @@
 //! ESP32-C3 SoC：存储映射、外设分发、直接启动（替代二级 bootloader）、运行循环。
 
 pub mod boot;
+pub mod hle;
 pub mod periph;
+pub mod spiflash;
 
 use periph::*;
 use std::collections::HashMap;
@@ -47,6 +49,9 @@ pub struct SocBus {
     pub timg1: Timg,
     pub intc: Intc,
     pub gpio: Gpio,
+    pub spi1: spiflash::SpiFlash,
+    pub extmem: Extmem,
+    pub analog: hle::Analog,
     pub efuse: [u32; 0x200 / 4],
     /// SYSTEM_CPU_INTR_FROM_CPU_0..3
     pub from_cpu: u32,
@@ -80,6 +85,9 @@ impl Default for SocBus {
             timg1: Timg::default(),
             intc: Intc::default(),
             gpio: Gpio::default(),
+            spi1: Default::default(),
+            extmem: Extmem::default(),
+            analog: Default::default(),
             efuse: boot::default_efuse(),
             from_cpu: 0,
             usj_tx: Vec::new(),
@@ -161,6 +169,8 @@ impl SocBus {
             0x6000_0000 => return self.uart0.read(off),
             0x6001_0000 => return self.uart1.read(off),
             0x6000_4000 => return self.gpio.read(off),
+            0x6000_2000 => return self.spi1.read(off),
+            0x600C_4000 if off < 0x100 => return self.extmem.read(off),
             0x6001_F000 => return self.timg0.read(off, now),
             0x6002_0000 => return self.timg1.read(off, now),
             0x6002_3000 => return self.systimer.read(off, now),
@@ -202,6 +212,8 @@ impl SocBus {
                 return;
             }
             0x6001_0000 => return self.uart1.write(off, v),
+            0x6000_2000 => return self.spi1.write(off, v, &mut self.flash),
+            0x600C_4000 if off < 0x100 => return self.extmem.write(off, v),
             0x6000_4000 => {
                 self.gpio.write(off, v);
                 let lv = self.gpio.level();
@@ -233,8 +245,11 @@ impl SocBus {
                 return;
             }
             0x6004_3000 if off == 0 => {
+                // USB-Serial-JTAG 是 IDF 默认的第二控制台，内容与 UART0 重复；单独存，不进主控制台
                 self.usj_tx.push(v as u8);
-                self.console.push(v as u8);
+                if self.usj_tx.len() > 1 << 16 {
+                    self.usj_tx.drain(..1 << 15);
+                }
                 return;
             }
             _ => {}
@@ -336,6 +351,7 @@ pub struct Esp32c3 {
     pub cpu: Cpu,
     pub bus: SocBus,
     pub rom_symbols: HashMap<u32, String>,
+    pub hle: HashMap<u32, hle::Hle>,
 }
 
 impl Esp32c3 {
@@ -343,6 +359,7 @@ impl Esp32c3 {
         let end = self.cpu.cycles.saturating_add(budget);
         let cpu = &mut self.cpu;
         let bus = &mut self.bus;
+        let hle = &self.hle;
         while cpu.cycles < end {
             bus.now = cpu.cycles;
             if bus.irq_dirty || cpu.cycles >= bus.next_event {
@@ -357,8 +374,36 @@ impl Esp32c3 {
                         cpu.cycles = target;
                     }
                 }
-                Exit::Hle(pc) => return Stop::Hle(pc),
+                Exit::Hle(pc) => match hle.get(&pc) {
+                    Some(k) => hle::call(*k, cpu, bus),
+                    None => return Stop::Hle(pc),
+                },
                 Exit::DoubleFault { cause, pc, tval } => return Stop::Fault { cause, pc, tval },
+            }
+        }
+        Stop::Budget
+    }
+
+    /// 调试用：单步跑，记录最近的跳转目标（PC 不连续处），用于定位卡死 / 崩溃。
+    pub fn run_traced(&mut self, budget: u64, ring: &mut std::collections::VecDeque<u32>, cap: usize) -> Stop {
+        let end = self.cpu.cycles.saturating_add(budget);
+        let mut last = self.cpu.pc;
+        while self.cpu.cycles < end {
+            let before = self.cpu.cycles;
+            let r = self.run(1);
+            let pc = self.cpu.pc;
+            if pc != last.wrapping_add(2) && pc != last.wrapping_add(4) {
+                if ring.len() == cap {
+                    ring.pop_front();
+                }
+                ring.push_back(pc);
+            }
+            last = pc;
+            if r != Stop::Budget {
+                return r;
+            }
+            if self.cpu.cycles == before {
+                self.cpu.cycles += 1;
             }
         }
         Stop::Budget
