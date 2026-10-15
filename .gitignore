@@ -13,3 +13,5 @@
 /third_party/
 .DS_Store
 /.claude/worktrees/
+/web/public/fw/
+/web/public/rom/
