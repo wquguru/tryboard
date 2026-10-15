@@ -47,7 +47,7 @@ impl Intc {
             0x104 => self.enable,
             0x108 => self.edge,
             0x10c => 0,
-            0x114..=0x190 => self.pri[((off - 0x114) / 4 + 1) as usize] as u32,
+            0x114..=0x190 => self.pri[((off - 0x114) / 4) as usize] as u32,
             0x194 => self.thresh,
             0x7fc => 0x2007210,
             _ => return None,
@@ -61,7 +61,7 @@ impl Intc {
             0x104 => self.enable = v,
             0x108 => self.edge = v,
             0x10c => self.latched &= !v,
-            0x114..=0x190 => self.pri[((off - 0x114) / 4 + 1) as usize] = (v & 15) as u8,
+            0x114..=0x190 => self.pri[((off - 0x114) / 4) as usize] = (v & 15) as u8,
             0x194 => self.thresh = v & 15,
             _ => return false,
         }
@@ -480,8 +480,9 @@ pub struct Gpio {
     pub func_in: [u32; 128],
     pub status: u32,
     pub strap: u32,
-    /// 外设输出信号（LEDC 等）按信号号给出的电平，GPIO 矩阵据此决定引脚电平
-    pub periph_out: Vec<(u32, bool)>,
+    /// 由外设信号（RMT 等，经 GPIO 矩阵）驱动的引脚：掩码与电平
+    pub periph_mask: u32,
+    pub periph_level: u32,
 }
 
 impl Default for Gpio {
@@ -496,7 +497,8 @@ impl Default for Gpio {
             func_in: [0; 128],
             status: 0,
             strap: 0xc, // GPIO2 / GPIO8 拉高 → SPI 启动
-            periph_out: Vec::new(),
+            periph_mask: 0,
+            periph_level: 0,
         }
     }
 }
@@ -505,7 +507,17 @@ impl Gpio {
     /// 引脚的实际电平（输出使能时取输出，否则取外部输入）。
     pub fn level(&self) -> u32 {
         let driven = self.enable & 0x3f_ffff;
-        (self.out & driven) | (self.ext_in & !driven)
+        let out = (self.out & !self.periph_mask) | (self.periph_level & self.periph_mask);
+        (out & driven) | (self.ext_in & !driven)
+    }
+
+    pub fn set_periph_level(&mut self, pin: u32, on: bool) {
+        self.periph_mask |= 1 << pin;
+        if on {
+            self.periph_level |= 1 << pin;
+        } else {
+            self.periph_level &= !(1 << pin);
+        }
     }
 
     pub fn read(&mut self, off: u32) -> u32 {
@@ -538,7 +550,14 @@ impl Gpio {
             0x4c => self.status &= !v,
             0x74..=0xc8 => self.pin[((off - 0x74) / 4) as usize] = v,
             0x154..=0x350 => self.func_in[((off - 0x154) / 4) as usize] = v,
-            0x554..=0x5a8 => self.func_out[((off - 0x554) / 4) as usize] = v,
+            0x554..=0x5a8 => {
+                let pin = ((off - 0x554) / 4) as usize;
+                self.func_out[pin] = v;
+                // 改回普通 GPIO 输出（信号 128）时不再由外设驱动
+                if v & 0xff == 0x80 {
+                    self.periph_mask &= !(1 << pin);
+                }
+            }
             _ => {}
         }
     }

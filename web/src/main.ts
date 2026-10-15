@@ -55,6 +55,7 @@ function boot(autorun: boolean) {
   consoleEl.textContent = '';
   log('[试板] 上电，加载固件…\n', 'sys');
   bench.setPowered(true);
+  bench.setRgb([0, 0, 0]);
   pendingAutorun = autorun;
   send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0) });
 }
@@ -77,6 +78,7 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
     case 'tick':
       if (m.console) log(m.console);
       bench.setGpio(m.gpio, m.enable);
+      if (m.leds) bench.setRgb(m.leds[0] ?? [0, 0, 0]);
       $('simtime').textContent = `${m.simSeconds.toFixed(3)} s`;
       if (m.running) {
         const r = $('ratio');

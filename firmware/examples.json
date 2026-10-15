@@ -1,14 +1,35 @@
 [
-  {
-    "id": "blink",
-    "title": "点灯：GPIO5 驱动 LED",
-    "about": "最经典的第一个程序。GPIO5 经 220Ω 电阻接一颗红色 LED，FreeRTOS 任务每 500ms 翻转一次电平，串口同步打印状态。",
-    "tags": ["✓ 仿真验证", "GPIO", "FreeRTOS", "ESP-IDF 5.5"]
-  },
-  {
-    "id": "hello",
-    "title": "Hello World：芯片信息与计时",
-    "about": "ESP-IDF 的入门程序：打印芯片型号、版本、flash 大小、剩余堆内存，并用 esp_timer 测量 vTaskDelay(500ms) 实际耗时。",
-    "tags": ["✓ 仿真验证", "UART", "SYSTIMER", "ESP-IDF 5.5"]
-  }
+ {
+  "id": "blink",
+  "title": "点灯：GPIO5 驱动 LED",
+  "about": "最经典的第一个程序。GPIO5 经 220Ω 电阻接一颗红色 LED，FreeRTOS 任务每 500ms 翻转一次电平，串口同步打印状态。",
+  "tags": [
+   "✓ 仿真验证",
+   "GPIO",
+   "FreeRTOS",
+   "ESP-IDF 5.5"
+  ]
+ },
+ {
+  "id": "rgb",
+  "title": "彩灯：板载 WS2812（RMT）",
+  "about": "板载可寻址 RGB 灯珠接在 GPIO8。ESP-IDF 的 led_strip 组件用 RMT 外设按 WS2812 时序（高电平 0.4µs 表示 0、0.8µs 表示 1）发出 24 位颜色，红、绿、蓝、白每 400ms 轮换。模拟器在引脚上把波形解码回颜色。",
+  "tags": [
+   "✓ 仿真验证",
+   "RMT",
+   "WS2812",
+   "led_strip 3.0"
+  ]
+ },
+ {
+  "id": "hello",
+  "title": "Hello World：芯片信息与计时",
+  "about": "ESP-IDF 的入门程序：打印芯片型号、版本、flash 大小、剩余堆内存，并用 esp_timer 测量 vTaskDelay(500ms) 实际耗时。",
+  "tags": [
+   "✓ 仿真验证",
+   "UART",
+   "SYSTIMER",
+   "ESP-IDF 5.5"
+  ]
+ }
 ]

@@ -3,6 +3,7 @@
 pub mod boot;
 pub mod hle;
 pub mod periph;
+pub mod rmt;
 pub mod spiflash;
 
 use periph::*;
@@ -52,6 +53,9 @@ pub struct SocBus {
     pub spi1: spiflash::SpiFlash,
     pub extmem: Extmem,
     pub analog: hle::Analog,
+    pub rmt: rmt::Rmt,
+    /// 挂在各引脚上的 WS2812 解码器（引脚被 GPIO 矩阵连到 RMT 输出时自动创建）
+    pub ws2812: HashMap<u32, rmt::Ws2812>,
     pub efuse: [u32; 0x200 / 4],
     /// SYSTEM_CPU_INTR_FROM_CPU_0..3
     pub from_cpu: u32,
@@ -88,6 +92,8 @@ impl Default for SocBus {
             spi1: Default::default(),
             extmem: Extmem::default(),
             analog: Default::default(),
+            rmt: rmt::Rmt::default(),
+            ws2812: HashMap::new(),
             efuse: boot::default_efuse(),
             from_cpu: 0,
             usj_tx: Vec::new(),
@@ -174,6 +180,7 @@ impl SocBus {
             0x6001_F000 => return self.timg0.read(off, now),
             0x6002_0000 => return self.timg1.read(off, now),
             0x6002_3000 => return self.systimer.read(off, now),
+            0x6001_6000 => return self.rmt.read(off),
             0x600C_2000 => {
                 if off == 0x110 {
                     let lv = self.levels();
@@ -226,6 +233,7 @@ impl SocBus {
             0x6001_F000 => return self.timg0.write(off, v, now),
             0x6002_0000 => return self.timg1.write(off, v, now),
             0x6002_3000 => return self.systimer.write(off, v, now),
+            0x6001_6000 => return self.rmt.write(off, v, now),
             0x600C_2000 => {
                 if self.intc.write(off, v) {
                     return;
@@ -270,6 +278,7 @@ impl SocBus {
         };
         set(src::UART0, self.uart0.irq());
         set(src::UART1, self.uart1.irq());
+        set(src::RMT, self.rmt.irq());
         set(src::SYSTIMER_TARGET0, self.systimer.irq(0));
         set(src::SYSTIMER_TARGET0 + 1, self.systimer.irq(1));
         set(src::SYSTIMER_TARGET0 + 2, self.systimer.irq(2));
@@ -281,13 +290,40 @@ impl SocBus {
         l
     }
 
+    /// 把 RMT 输出跳变经 GPIO 矩阵送到引脚：更新引脚电平、喂给挂在引脚上的 WS2812 解码器。
+    /// 返回解码器下一次需要检查（帧结束判定）的时刻。
+    fn route_rmt(&mut self, now: u64) -> u64 {
+        let mut next = u64::MAX;
+        let mut edges = std::mem::take(&mut self.rmt.edges);
+        for pin in 0..self.gpio.func_out.len() as u32 {
+            let sel = self.gpio.func_out[pin as usize] & 0xff;
+            if !(rmt::SIG_OUT0..rmt::SIG_OUT0 + 2).contains(&sel) {
+                continue;
+            }
+            let ch = (sel - rmt::SIG_OUT0) as u8;
+            let dec = self.ws2812.entry(pin).or_default();
+            for &(t, c, lv) in &edges {
+                if c == ch {
+                    dec.feed(t, lv);
+                }
+            }
+            next = next.min(dec.finalize(now));
+            self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
+        }
+        edges.clear();
+        self.rmt.edges = edges;
+        next
+    }
+
     /// 推进定时器、重新裁决中断线。
     pub fn update(&mut self, cpu: &mut Cpu) {
         let now = self.now;
         let n1 = self.systimer.update(now);
         let n2 = self.timg0.update(now);
         let n3 = self.timg1.update(now);
-        self.next_event = n1.min(n2).min(n3);
+        let n4 = self.rmt.update(now);
+        let n5 = self.route_rmt(now);
+        self.next_event = n1.min(n2).min(n3).min(n4).min(n5);
         let lv = self.levels();
         let pending = self.intc.pending(lv);
         cpu.irq_line = self.intc.select(pending);

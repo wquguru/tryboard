@@ -1,4 +1,121 @@
 [
-  {"id": "hello", "seconds": 3, "expect": ["Hello world!", "4MB flash", "revision v0.4", "TRYBOARD_OK hello"], "qemu": true},
-  {"id": "blink", "seconds": 2.2, "expect": ["LED ON  (0)", "LED OFF (3)", "TRYBOARD_OK blink"], "gpio_toggles": {"pin": 5, "min": 4}}
+ {
+  "id": "hello",
+  "seconds": 3,
+  "expect": [
+   "Hello world!",
+   "4MB flash",
+   "revision v0.4",
+   "TRYBOARD_OK hello"
+  ],
+  "qemu": true
+ },
+ {
+  "id": "blink",
+  "seconds": 2.2,
+  "expect": [
+   "LED ON  (0)",
+   "LED OFF (3)",
+   "TRYBOARD_OK blink"
+  ],
+  "gpio_toggles": {
+   "pin": 5,
+   "min": 4
+  }
+ },
+ {
+  "id": "rgb",
+  "seconds": 2.2,
+  "expect": [
+   "RGB red (0)",
+   "RGB white (3)",
+   "TRYBOARD_OK rgb"
+  ],
+  "ws2812": {
+   "pin": 8,
+   "min_frames": 5,
+   "frames": [
+    [
+     "#ff0000"
+    ],
+    [
+     "#00ff00"
+    ],
+    [
+     "#0000ff"
+    ],
+    [
+     "#ffffff"
+    ]
+   ]
+  }
+ },
+ {
+  "id": "strip",
+  "seconds": 0.5,
+  "expect": [
+   "frame 2",
+   "TRYBOARD_OK strip"
+  ],
+  "ws2812": {
+   "pin": 8,
+   "min_frames": 3,
+   "frames": [
+    [
+     "#00ff00",
+     "#10ef01",
+     "#20df02",
+     "#30cf03",
+     "#40bf04",
+     "#50af05",
+     "#609f06",
+     "#708f07",
+     "#807f08",
+     "#906f09",
+     "#a05f0a",
+     "#b04f0b",
+     "#c03f0c",
+     "#d02f0d",
+     "#e01f0e",
+     "#f00f0f"
+    ],
+    [
+     "#10ef01",
+     "#20df02",
+     "#30cf03",
+     "#40bf04",
+     "#50af05",
+     "#609f06",
+     "#708f07",
+     "#807f08",
+     "#906f09",
+     "#a05f0a",
+     "#b04f0b",
+     "#c03f0c",
+     "#d02f0d",
+     "#e01f0e",
+     "#f00f0f",
+     "#00ff00"
+    ],
+    [
+     "#20df02",
+     "#30cf03",
+     "#40bf04",
+     "#50af05",
+     "#609f06",
+     "#708f07",
+     "#807f08",
+     "#906f09",
+     "#a05f0a",
+     "#b04f0b",
+     "#c03f0c",
+     "#d02f0d",
+     "#e01f0e",
+     "#f00f0f",
+     "#00ff00",
+     "#10ef01"
+    ]
+   ]
+  }
+ }
 ]

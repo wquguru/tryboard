@@ -17,6 +17,8 @@ export const RIGHT_PINS = ['GND', 'TX', 'RX', 'GND', 'IO9', 'IO8', 'GND', 'IO7',
 export interface Bench {
   setGpio(level: number, enable: number): void;
   setPowered(on: boolean): void;
+  /** 板载 WS2812（GPIO8）颜色，0–255 */
+  setRgb(rgb: number[]): void;
   onButton(cb: (name: 'BOOT' | 'RST', down: boolean) => void): void;
   ledPin: number;
   dispose(): void;
@@ -226,6 +228,19 @@ function devboard() {
   pwr.position.set(W * 0.3, T / 2 + 0.3, -L / 2 + 14);
   grp.add(pwr);
 
+  // 板载 WS2812（5050 封装，GPIO8）：白色塑料框 + 半透明扩散面
+  const rgbBody = new THREE.Mesh(new THREE.BoxGeometry(5, 1.5, 5), new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.6 }));
+  rgbBody.position.set(-W * 0.26, T / 2 + 0.75, -L / 2 + 15);
+  rgbBody.castShadow = true;
+  grp.add(rgbBody);
+  const rgbMat = new THREE.MeshStandardMaterial({ color: 0xdedbd2, emissive: 0x000000, emissiveIntensity: 1, roughness: 0.3 });
+  const rgbLens = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 0.1, 32), rgbMat);
+  rgbLens.position.set(rgbBody.position.x, T / 2 + 1.52, rgbBody.position.z);
+  grp.add(rgbLens);
+  const rgbLight = new THREE.PointLight(0xffffff, 0, 70, 2);
+  rgbLight.position.set(rgbBody.position.x, T / 2 + 5, rgbBody.position.z);
+  grp.add(rgbLight);
+
   // 排针：塑料座 + 镀金针
   const pinGeo = new THREE.BoxGeometry(0.64, 11.5, 0.64);
   const gold = new THREE.MeshStandardMaterial({ color: 0xe8c66a, metalness: 1, roughness: 0.25 });
@@ -247,7 +262,7 @@ function devboard() {
     h.position.set(x, -T / 2 - 1.25, -L / 2 + 6.6 + 7 * PITCH);
     grp.add(h);
   }
-  return { grp, buttons, pwrMat, pinPositions, L };
+  return { grp, buttons, pwrMat, rgbMat, rgbLight, pinPositions, L };
 }
 
 function led(color: number) {
@@ -498,6 +513,19 @@ export function createBench(container: HTMLElement): Bench {
     setGpio(level, enable) {
       const on = (enable >> 5) & 1 && (level >> 5) & 1;
       ledTarget = on ? 1 : 0;
+    },
+    setRgb(rgb) {
+      const [r, g, b] = rgb.map((v) => v / 255);
+      const peak = Math.max(r, g, b);
+      // 发光强度跟亮度走；颜色用归一化后的色相，避免暗色时泛光发灰
+      // 真 LED 的蓝光在眼里也很亮，但按亮度公式只有绿的 1/10：按色相补偿，蓝灯才不至于发不出光
+      const lum = peak ? (0.2126 * r + 0.7152 * g + 0.0722 * b) / peak : 1;
+      const k = Math.min(4, Math.max(1, 0.25 / lum));
+      board.rgbMat.emissive.setRGB(r, g, b);
+      board.rgbMat.emissiveIntensity = 7 * k;
+      board.rgbMat.color.setRGB(0.87 + r * 0.13, 0.86 + g * 0.14, 0.82 + b * 0.18);
+      board.rgbLight.color.setRGB(peak ? r / peak : 0, peak ? g / peak : 0, peak ? b / peak : 0);
+      board.rgbLight.intensity = peak * 80 * k;
     },
     setPowered(on) {
       board.pwrMat.emissiveIntensity = on ? 3 : 0;
