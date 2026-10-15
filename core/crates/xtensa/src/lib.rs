@@ -2,9 +2,12 @@
 //! 64 个物理 AR + 窗口 ABI、16 位密度指令、零开销循环、MUL16/MUL32/DIV32、NSA/MIN/MAX/SEXT/CLAMPS、
 //! 布尔寄存器、S32C1I、硬件非对齐访存、VECBASE 复位值 0x40000000。
 //!
-//! 本切片未实现：中断（INTERRUPT/INTENABLE 的裁决与 level 向量）、FPU、MAC16、PIE（EE.*）。
-//! 这些指令目前一律按非法指令（EXCCAUSE 0）进异常，见各处 TODO。
+//! 中断：32 条线，类型 / 级别按 core-isa.h 的 XCHAL_INTn_TYPE / LEVEL；外部线由 SoC 经 `set_irq_lines` 驱动，
+//! 定时器中断来自 CCOMPARE0..2（线 6 / 15 / 16）。FPU（单精度，CP0，受 CPENABLE 门控）与 MAC16 见 fpu.rs / mac16.rs。
+//! 未实现：PIE（EE.*）指令，按非法指令（EXCCAUSE 0）进异常。
 
+mod fpu;
+mod mac16;
 pub mod sr;
 
 /// 访存失败时由总线返回，核据此进入异常。
@@ -24,6 +27,12 @@ pub trait Bus {
         let b2 = self.load(addr.wrapping_add(2), 1)?;
         Ok(b0 | (b1 << 8) | (b2 << 16))
     }
+    /// RER：读外部寄存器（ESP32-S3 上没有挂外部寄存器的外设时读 0）
+    fn rer(&mut self, _addr: u32) -> u32 {
+        0
+    }
+    /// WER：写外部寄存器
+    fn wer(&mut self, _addr: u32, _val: u32) {}
 }
 
 /// op0 为 8..=13 的是 16 位密度指令
@@ -40,6 +49,31 @@ pub mod cause {
     pub const LOAD_STORE_ERROR: u32 = 3;
     pub const ALLOCA: u32 = 5;
     pub const DIVIDE_BY_ZERO: u32 = 6;
+    pub const LEVEL1_INTERRUPT: u32 = 4;
+    /// Coprocessor n Disabled = 32 + n
+    pub const COPROCESSOR0_DISABLED: u32 = 32;
+}
+
+/// 中断配置（ESP32-S3 core-isa.h）
+pub mod irq {
+    /// XCHAL_INTn_LEVEL
+    pub const LEVEL: [u8; 32] = [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 7, 3, 5, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 3, 4, 3, 4, 5,
+    ];
+    /// 外部电平型
+    pub const EXT_LEVEL: u32 = !(EXT_EDGE | NMI | SOFTWARE | TIMER | PROFILING);
+    /// 外部边沿型（10、22、28、30）
+    pub const EXT_EDGE: u32 = 1 << 10 | 1 << 22 | 1 << 28 | 1 << 30;
+    /// NMI（14，边沿）
+    pub const NMI: u32 = 1 << 14;
+    /// 软件中断（7、29），INTSET 置位、INTCLEAR 清除
+    pub const SOFTWARE: u32 = 1 << 7 | 1 << 29;
+    /// 定时器（CCOMPARE0/1/2 → 6/15/16），写对应 CCOMPARE 清除
+    pub const TIMER: u32 = 1 << 6 | 1 << 15 | 1 << 16;
+    pub const TIMER_LINE: [u32; 3] = [6, 15, 16];
+    /// 性能计数溢出（11），模拟器不产生
+    pub const PROFILING: u32 = 1 << 11;
+    pub const EXCM_LEVEL: u32 = 3;
 }
 
 /// 相对 VECBASE 的向量偏移（core-isa.h）
@@ -53,6 +87,8 @@ pub mod vec {
     pub const KERNEL: u32 = 0x300;
     pub const USER: u32 = 0x340;
     pub const DOUBLE: u32 = 0x3c0;
+    /// level 2..=7 的中断向量（7 为 NMI）
+    pub const LEVEL: [u32; 8] = [0, 0, 0x180, 0x1c0, 0x200, 0x240, 0x280, 0x2c0];
 }
 
 // PS 字段
@@ -72,6 +108,8 @@ pub enum Exit {
     Waiti,
     /// BREAK / BREAK.N（调试器断点；测试里当作"程序结束"）
     Break(u32),
+    /// SIMCALL（模拟器调用，a2 为功能号）。PC 已越过该指令；不关心的 SoC 当作空操作即可
+    Simcall,
 }
 
 const B4CONST: [u32; 16] = [
@@ -127,6 +165,19 @@ pub struct Cpu {
     pub hle_addrs: Vec<u32>,
     /// 处理器 ID（ESP32-S3：核 0 为 0xCDCD，核 1 为 0xABAB）
     pub prid: u32,
+    /// SoC 驱动的外部中断线电平（位 = CPU 中断号）
+    irq_ext: u32,
+    /// 锁存的挂起位：边沿、NMI、软件、定时器
+    irq_latched: u32,
+    /// 上次检查 CCOMPARE 时的周期数
+    last_cc: u64,
+    /// 区域保护（ESP32-S3 无 MMU）：8 个 512MB 区域的指令 / 数据属性，WITLB / WDTLB 写、RITLB1 / RDTLB1 读
+    pub itlb_attr: [u32; 8],
+    pub dtlb_attr: [u32; 8],
+    /// FPU 寄存器 f0..f15（位模式）与 FCR / FSR
+    pub fr: [u32; 16],
+    pub fcr: u32,
+    pub fsr: u32,
 }
 
 impl Default for Cpu {
@@ -151,10 +202,21 @@ impl Cpu {
             hle_hi: 0,
             hle_addrs: Vec::new(),
             prid: 0xcdcd,
+            irq_ext: 0,
+            irq_latched: 0,
+            last_cc: 0,
+            // 复位属性 2（可读写执行、旁路），与 QEMU 对照
+            itlb_attr: [2; 8],
+            dtlb_attr: [2; 8],
+            fr: [0; 16],
+            fcr: 0,
+            fsr: 0,
         };
         // 复位：PS.INTLEVEL=15、EXCM=1；VECBASE 复位值
         c.sr[sr::PS as usize] = 0x1f;
         c.sr[sr::VECBASE as usize] = 0x4000_0000;
+        // ATOMCTL 复位值（core 配置）。S32C1I 不按它区分内存属性：S3 内部 SRAM 上原子操作总能成功
+        c.sr[sr::ATOMCTL as usize] = 0x28;
         c
     }
 
@@ -200,7 +262,9 @@ impl Cpu {
             sr::PRID => self.prid,
             sr::SAR => self.sar(),
             sr::LITBASE => self.sr[n as usize] & 0xffff_f001,
-            // TODO(中断切片)：INTERRUPT 读回挂起位
+            sr::INTERRUPT => self.pending(),
+            // INTCLEAR 只写
+            sr::INTCLEAR => 0,
             _ => self.sr[n as usize & 0xff],
         }
     }
@@ -209,10 +273,20 @@ impl Cpu {
         match n {
             sr::WINDOWBASE => self.windowbase = v & 15,
             sr::WINDOWSTART => self.windowstart = v & 0xffff,
-            sr::CCOUNT => self.cycles = (self.cycles & !0xffff_ffff) | v as u64,
+            sr::CCOUNT => {
+                self.cycles = (self.cycles & !0xffff_ffff) | v as u64;
+                self.last_cc = self.cycles;
+            }
             sr::PRID => {}
             sr::SAR => self.sr[n as usize] = v & 0x3f,
-            // TODO(中断切片)：INTSET / INTCLEAR 改挂起位，CCOMPAREn 写清定时器中断
+            // 写 INTERRUPT 即 INTSET：只能置软件中断位
+            sr::INTERRUPT => self.irq_latched |= v & irq::SOFTWARE,
+            sr::INTCLEAR => self.irq_latched &= !(v & (irq::SOFTWARE | irq::EXT_EDGE | irq::NMI)),
+            sr::CCOMPARE0..=sr::CCOMPARE2 => {
+                self.tick_timers();
+                self.sr[n as usize] = v;
+                self.irq_latched &= !(1 << irq::TIMER_LINE[(n - sr::CCOMPARE0) as usize]);
+            }
             _ => self.sr[n as usize & 0xff] = v,
         }
     }
@@ -220,15 +294,112 @@ impl Cpu {
     pub fn read_ur(&self, n: u32) -> u32 {
         match n {
             sr::UR_THREADPTR => self.threadptr,
-            // TODO(FPU 切片)：FCR / FSR
+            sr::UR_FCR => self.fcr,
+            sr::UR_FSR => self.fsr,
             _ => 0,
         }
     }
 
     pub fn write_ur(&mut self, n: u32, v: u32) {
-        if n == sr::UR_THREADPTR {
-            self.threadptr = v;
+        match n {
+            sr::UR_THREADPTR => self.threadptr = v,
+            sr::UR_FCR => self.fcr = v & fpu::FCR_MASK,
+            sr::UR_FSR => self.fsr = v & fpu::FSR_MASK,
+            _ => {}
         }
+    }
+
+    // ------------------------------------------------------------ 中断
+    /// SoC 驱动外部中断线（位 = CPU 中断号）。边沿型 / NMI 线在上升沿锁存
+    pub fn set_irq_lines(&mut self, mask: u32) {
+        let rising = mask & !self.irq_ext;
+        self.irq_latched |= rising & (irq::EXT_EDGE | irq::NMI);
+        self.irq_ext = mask;
+    }
+
+    /// INTERRUPT 寄存器：挂起的中断
+    pub fn pending(&self) -> u32 {
+        self.irq_latched | (self.irq_ext & irq::EXT_LEVEL)
+    }
+
+    /// 检查 CCOUNT 自上次以来是否越过了某个 CCOMPARE，越过则挂起对应定时器中断。
+    /// SoC 直接改 `cycles`（WAITI 快进）也没关系：下次 step 会补检。
+    fn tick_timers(&mut self) {
+        let (last, now) = (self.last_cc, self.cycles);
+        if now == last {
+            return;
+        }
+        let span = now.wrapping_sub(last);
+        for i in 0..3 {
+            let c = self.sr[(sr::CCOMPARE0 + i as u32) as usize];
+            // 从 last 往后第一次 CCOUNT == c 的距离（1..=2^32）
+            let d = match c.wrapping_sub(last as u32) {
+                0 => 1u64 << 32,
+                d => d as u64,
+            };
+            if d <= span {
+                self.irq_latched |= 1 << irq::TIMER_LINE[i];
+            }
+        }
+        self.last_cc = now;
+    }
+
+    /// 下一个能唤醒 CPU 的定时器事件（绝对周期数），供 SoC 在 WAITI 时快进
+    pub fn next_timer_event(&self) -> Option<u64> {
+        let en = self.sr[sr::INTENABLE as usize];
+        (0..3)
+            .filter(|&i| en & (1 << irq::TIMER_LINE[i]) != 0)
+            .map(|i| {
+                let c = self.sr[(sr::CCOMPARE0 + i as u32) as usize];
+                let d = match c.wrapping_sub(self.cycles as u32) {
+                    0 => 1u64 << 32,
+                    d => d as u64,
+                };
+                self.cycles + d
+            })
+            .min()
+    }
+
+    /// 当前允许响应的最高级别挂起中断（1..=7），没有则 0
+    fn irq_to_take(&self) -> u32 {
+        let p = self.pending() & self.sr[sr::INTENABLE as usize];
+        if p == 0 {
+            return 0;
+        }
+        let ps = self.ps();
+        let mut min = ps & PS_INTLEVEL;
+        if ps & PS_EXCM != 0 {
+            min = min.max(irq::EXCM_LEVEL);
+        }
+        let mut best = 0u32;
+        let mut m = p;
+        while m != 0 {
+            let i = m.trailing_zeros();
+            m &= m - 1;
+            best = best.max(irq::LEVEL[i as usize] as u32);
+        }
+        if best > min {
+            best
+        } else {
+            0
+        }
+    }
+
+    /// 进入中断：level 1 走 User / Kernel 一般异常向量（EXCCAUSE=4），level ≥2 走各自向量
+    fn take_interrupt(&mut self, level: u32) {
+        let ps = self.ps();
+        if level == 1 {
+            self.sr[sr::EXCCAUSE as usize] = cause::LEVEL1_INTERRUPT;
+            self.sr[sr::EPC1 as usize] = self.pc;
+            self.set_ps(ps | PS_EXCM);
+            self.pc = self.vecbase() + if ps & PS_UM != 0 { vec::USER } else { vec::KERNEL };
+        } else {
+            self.sr[(sr::EPC1 + level - 1) as usize] = self.pc;
+            self.sr[(sr::EPS2 + level - 2) as usize] = ps;
+            self.set_ps((ps & !PS_INTLEVEL) | level | PS_EXCM);
+            self.pc = self.vecbase() + vec::LEVEL[level as usize];
+        }
+        self.waiting = false;
     }
 
     // ------------------------------------------------------------ 异常
@@ -281,7 +452,12 @@ impl Cpu {
 
     // ------------------------------------------------------------ 执行
     pub fn step<B: Bus>(&mut self, bus: &mut B) -> Exit {
-        // TODO(中断切片)：在这里按 PS.INTLEVEL / INTENABLE 裁决挂起中断
+        self.tick_timers();
+        let level = self.irq_to_take();
+        if level != 0 {
+            self.take_interrupt(level);
+            return Exit::Normal;
+        }
         if self.waiting {
             self.cycles += 1;
             return Exit::Waiti;
@@ -646,7 +822,8 @@ impl Cpu {
                     return Ok(Flow::Jump(pc.wrapping_add(4).wrapping_add(sext(imm8, 8))));
                 }
             }
-            // TODO(FPU 切片)：op0=3 LSCI（LSI/SSI/LSIU/SSIU）；TODO(MAC16)：op0=4
+            3 => return self.exec_lsci(bus, t, s, r, imm8),
+            4 => return self.exec_mac16(bus, t, s, r, op1, op2),
             _ => return self.illegal(),
         }
         Ok(Flow::Next)
@@ -684,9 +861,10 @@ impl Cpu {
                         }
                     }
                     1 => {
-                        // MOVSP at, as：调用者的帧都已在栈上才允许挪栈，否则 Alloca 异常让处理程序先溢出
+                        // MOVSP at, as：前 3 个四元组里都没有活帧起点（调用者已溢出到栈上，
+                        // 它的基本保存区在旧 sp 下方）→ Alloca 异常，由处理程序搬保存区；否则直接传送
                         let wb = self.windowbase;
-                        if (1..=3).any(|k| self.ws_bit(wb + 16 - k)) && self.ps() & PS_WOE != 0 {
+                        if !(1..=3).any(|k| self.ws_bit(wb + 16 - k)) {
                             self.exception(cause::ALLOCA, 0);
                             return Ok(Flow::Done);
                         }
@@ -735,7 +913,10 @@ impl Cpu {
                             self.exception(cause::SYSCALL, 0);
                             return Ok(Flow::Done);
                         }
-                        // SIMCALL：当作空操作
+                        // SIMCALL：交给外层（测试里实现半主机输出 / 退出），PC 先越过
+                        self.pc = pc.wrapping_add(3);
+                        self.instret += 1;
+                        return Err(Exit::Simcall);
                     }
                     6 => {
                         let ps = self.ps();
@@ -772,7 +953,11 @@ impl Cpu {
                     2 => self.sr[sr::SAR as usize] = (as_ & 3) << 3,
                     3 => self.sr[sr::SAR as usize] = 32 - ((as_ & 3) << 3),
                     4 => self.sr[sr::SAR as usize] = s | ((t & 1) << 4),
-                    6 | 7 => {} // RER / WER：外部寄存器，未建模
+                    6 => {
+                        let v = bus.rer(as_);
+                        self.set_a(t, v);
+                    }
+                    7 => bus.wer(as_, at),
                     8 => self.windowbase = self.windowbase.wrapping_add(sext(t, 4)) & 15,
                     14 => {
                         let v = if as_ as i32 >= 0 { as_ } else { !as_ };
@@ -781,6 +966,21 @@ impl Cpu {
                     15 => self.set_a(t, as_.leading_zeros()),
                     _ => return self.illegal(),
                 },
+                5 => {
+                    // TLB 类（S3 只有区域保护）：按 vaddr 高 3 位选区域
+                    let region = (as_ >> 29) as usize;
+                    match r {
+                        // RxTLB0：区域基址；RxTLB1：基址 | 属性；PxTLB：基址 | 1（命中）。均与 QEMU 对照
+                        3 | 11 => self.set_a(t, as_ & 0xe000_0000),
+                        7 => self.set_a(t, (as_ & 0xe000_0000) | self.itlb_attr[region]),
+                        15 => self.set_a(t, (as_ & 0xe000_0000) | self.dtlb_attr[region]),
+                        5 | 13 => self.set_a(t, (as_ & 0xe000_0000) | 1),
+                        6 => self.itlb_attr[region] = at & 0xf,
+                        14 => self.dtlb_attr[region] = at & 0xf,
+                        4 | 12 => {}
+                        _ => return self.illegal(),
+                    }
+                }
                 6 => match s {
                     0 => self.set_a(r, at.wrapping_neg()),
                     1 => self.set_a(r, (at as i32).unsigned_abs()),
@@ -833,6 +1033,8 @@ impl Cpu {
                     };
                     self.set_br(r, v);
                 }
+                6 => self.set_a(r, (as_ < at) as u32),
+                7 => self.set_a(r, ((as_ as i32) < at as i32) as u32),
                 8 => self.set_a(r, as_.wrapping_mul(at)),
                 10 => self.set_a(r, ((as_ as u64 * at as u64) >> 32) as u32),
                 11 => self.set_a(r, ((as_ as i32 as i64 * at as i32 as i64) >> 32) as u32),
@@ -885,10 +1087,20 @@ impl Cpu {
                     }
                 }
                 14 => {
-                    let v = self.read_ur((s << 4) | t);
+                    let n = (s << 4) | t;
+                    if fpu::is_fp_ur(n) && !self.cp0_enabled() {
+                        return self.cp0_disabled();
+                    }
+                    let v = self.read_ur(n);
                     self.set_a(r, v);
                 }
-                _ => self.write_ur((r << 4) | s, at),
+                _ => {
+                    let n = (r << 4) | s;
+                    if fpu::is_fp_ur(n) && !self.cp0_enabled() {
+                        return self.cp0_disabled();
+                    }
+                    self.write_ur(n, at)
+                }
             },
             4 | 5 => {
                 // EXTUI ar, at, shift, mask
@@ -914,7 +1126,9 @@ impl Cpu {
                     _ => return self.illegal(),
                 }
             }
-            // TODO(FPU 切片)：op1=8 LSCX、10 FP0、11 FP1
+            8 => return self.exec_lscx(bus, t, s, r, op2),
+            10 => return self.exec_fp0(t, s, r, op2),
+            11 => return self.exec_fp1(t, s, r, op2),
             _ => {
                 let _ = insn;
                 return self.illegal();
@@ -958,7 +1172,7 @@ fn max_quad(insn: u32, narrow: bool, ps: u32) -> u32 {
             },
             (0, 4) => match r {
                 0..=3 => q(&[s]),
-                14 | 15 => q(&[s, t]),
+                6 | 7 | 14 | 15 => q(&[s, t]),
                 _ => 0,
             },
             (0, 6) => q(&[r, t]),

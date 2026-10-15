@@ -37,6 +37,9 @@ pub const ICOUNT: u32 = 236;
 pub const ICOUNTLEVEL: u32 = 237;
 pub const EXCVADDR: u32 = 238;
 pub const CCOMPARE0: u32 = 240;
+pub const CCOMPARE2: u32 = 242;
+pub const EPC2: u32 = 178;
+pub const EXCSAVE2: u32 = 210;
 pub const MISC0: u32 = 244;
 
 /// 用户寄存器（RUR / WUR）

@@ -6,7 +6,6 @@
 pub mod boot;
 pub mod hle;
 pub mod periph;
-mod shim;
 
 use periph::*;
 use std::collections::HashMap;
@@ -363,27 +362,15 @@ impl SocBus {
     }
 }
 
-/// SoC → CPU 的中断接口。
-///
-/// TODO(合并 Xtensa 中断切片后)：中断裁决（INTENABLE、PS.INTLEVEL、level 向量）应在 tryboard-xtensa 的
-/// `Cpu::step` 里完成，届时这个 trait 的实现改成调用核提供的接口即可。现在的实现只把外部线写进
-/// INTERRUPT 特殊寄存器，并在有可响应的中断时让 WAITI 醒来；核还不会真正进入中断向量。
+/// SoC → CPU 的中断接口：外部中断线（位 = CPU 中断号）交给核，裁决（INTENABLE、PS.INTLEVEL、level 向量）在核里完成。
 pub trait IrqCpu {
-    /// level：外部电平线当前输入（替换 INTERRUPT 中对应位）；rising：本次新出现的边沿线（置位，等 INTCLEAR 清）
+    /// level：电平型线的当前输入；rising：本次新出现的边沿（边沿型线由核自己锁存）
     fn set_extern_lines(&mut self, level: u32, rising: u32);
 }
 
 impl IrqCpu for Cpu {
     fn set_extern_lines(&mut self, level: u32, rising: u32) {
-        let i = sr::INTERRUPT as usize;
-        let ext = EXTERN_LEVEL_LINES | NMI_LINE;
-        self.sr[i] = (self.sr[i] & !ext) | (level & ext) | rising;
-        // WAITI 唤醒：有使能的挂起中断，且其级别高于 PS.INTLEVEL
-        let pend = self.sr[i] & self.sr[sr::INTENABLE as usize];
-        let lvl = self.ps() & 0xf;
-        if self.waiting && (0..32).any(|n| pend & (1 << n) != 0 && LINE_LEVEL[n] as u32 > lvl) {
-            self.waiting = false;
-        }
+        self.set_irq_lines(level | rising);
     }
 }
 
@@ -485,9 +472,6 @@ impl Esp32s3 {
             }
             match cpu.step(bus) {
                 Exit::Normal => {
-                    if shim::fixup_illegal(cpu, bus) {
-                        continue;
-                    }
                     // ROM 异常向量（0x40000300 Kernel / 0x40000340 User / 0x400003C0 Double）：
                     // app 正常运行时 VECBASE 指向 IRAM，落到这里说明出事了
                     let pc = cpu.pc;
@@ -500,7 +484,8 @@ impl Esp32s3 {
                     }
                 }
                 Exit::Waiti => {
-                    let target = bus.next_event.min(end);
+                    // 空闲：快进到下一个外设事件或 CCOMPARE 定时器中断
+                    let target = bus.next_event.min(cpu.next_timer_event().unwrap_or(u64::MAX)).min(end);
                     if target > cpu.cycles {
                         cpu.cycles = target;
                     }
@@ -510,6 +495,8 @@ impl Esp32s3 {
                     None => return Stop::Hle(pc),
                 },
                 Exit::Break(v) => return Stop::Break(v),
+                // 半主机调用：固件只在 QEMU 测试里用，这里忽略
+                Exit::Simcall => {}
             }
         }
         Stop::Budget

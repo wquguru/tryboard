@@ -44,6 +44,11 @@
 | eFuse | 🟡 | 芯片版本 v0.2、MAC、PSRAM_CAP=8MB | 只读 |
 | 模拟前端（regi2c） | 🟡 | HLE（窗口 ABI 返回），ocode 校准通过；BBPLL 校准完成位（I2C_MST_ANA_CONF0 bit24） | 不建模模拟电路 |
 | 双核 | ☐ | — | 后续：核 1 由 SYSTEM_CORE_1_CONTROL 放行 + ets_set_appcpu_boot_addr，需第二个 Cpu 实例与跨核中断 |
+| CPU Xtensa LX7 基础 ISA + 窗口 | ✅ | `tools/xtensa-tests` 11/11 自检；与 QEMU（sim 机器 + esp32s3 核配置）逐字差分 14215 字、0 不一致；深递归覆盖六种窗口溢出 / 下溢 | 差分发现并修正 MOVSP 的 Alloca 条件方向；PIE（EE.*）未做 |
+| 中断（核内） | ✅ | irq 测试与 QEMU 一致：软件中断 level 1/3、INTLEVEL / EXCM 屏蔽、CCOMPARE0/1/2、WAITI 唤醒、INTSET/INTCLEAR；单元测试：外部电平 / 边沿线、NMI | 外部线由 SoC 调 `cpu.set_irq_lines(mask)`；WAITI 时用 `next_timer_event()` 快进 |
+| FPU（单精度） | ✅ | fp 测试 18 个特殊值两两组合 × 4 种舍入：加减乘、乘加 / 减、转换、比较、条件传送、装载存储、FSR 标志、__divsf3 与 sqrtf 序列，全部与 QEMU 一致 | 除法 / 开方分步指令按 QEMU 的模型（序列结果正确，分步中间值不保证同真机）；RECIP0/RSQRT0 有意偏离 QEMU（给出正确结果） |
+| MAC16 | 🟡 | 乘 / 乘累加 / 乘减四种来源、40 位 ACC、LDINC/LDDEC 与 QEMU 一致 | 并行装载形式 QEMU 读到旧 m 值，未对照，按"用当前值"实现并单元测试；newlib / IDF 不生成 MAC16 |
+| S3 专用杂项 | ✅ | SALT/SALTU、区域保护 TLB 指令（W/R/P/I × I/D）与 QEMU 一致 | RER/WER 走 `Bus::rer/wer`（默认读 0） |
 
 ## 网页
 | 项 | 状态 |

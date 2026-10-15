@@ -20,18 +20,22 @@
     wsr     a3, misc0
     rsr     a4, misc0
     EXPECT  a4, 0x12345678, 5
-    /* PRID：ESP32-S3 核 0 */
+    /* PRID：ESP32-S3 核 0 为 0xCDCD；QEMU 的 sim 机器不设 PRID（读 0），对照时也接受 0 */
     rsr     a4, prid
+    beqz    a4, 1f
     EXPECT  a4, 0xCDCD, 6
+1:
     /* THREADPTR */
     movi    a3, 0x3FC90000
     wur     a3, threadptr
     rur     a4, threadptr
     EXPECT  a4, 0x3FC90000, 7
     /* CCOUNT 单调递增 */
+    /* CCOUNT 单调递增（QEMU sim 按 40MHz 虚拟时间计，所以多跑一段再比） */
     rsr     a5, ccount
-    nop
-    nop
+    movi    a7, 200
+2:  addi    a7, a7, -1
+    bnez    a7, 2b
     rsr     a6, ccount
     sub     a7, a6, a5
     bgei    a7, 2, 1f
@@ -95,8 +99,25 @@
     EXPECT  a5, 3, 20
     wsr     a4, ps
     rsync
-    /* MOVSP：调用者帧都还在寄存器里 → Alloca 异常（cause 5） */
+    /* MOVSP：调用者帧（_start，WINDOWSTART 在 wb-2）还在寄存器里 → 直接传送，无异常 */
+    EXC_COUNT a6
     movsp   a3, a1
+    EXC_COUNT a4
+    sub     a4, a4, a6
+    EXPECT  a4, 0, 21
+    sub     a4, a3, a1
+    EXPECT  a4, 0, 22
+    /* 把调用者的 WINDOWSTART 位清掉（假装已溢出到栈上）→ Alloca 异常（cause 5） */
+    rsr     a7, windowstart
+    rsr     a4, windowbase
+    movi    a5, 1
+    ssl     a4
+    sll     a5, a5
+    wsr     a5, windowstart
+    rsync
+    movsp   a3, a1
+    wsr     a7, windowstart
+    rsync
     EXC_CAUSE a4
-    EXPECT  a4, 5, 21
+    EXPECT  a4, 5, 23
     PASS

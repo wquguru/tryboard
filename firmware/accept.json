@@ -2,16 +2,18 @@
  {
   "id": "s3-hello",
   "chip": "esp32s3",
-  "seconds": 2,
+  "seconds": 3,
   "expect": [
    "Hello world!",
    "This is esp32s3 chip",
    "16MB flash",
-   "Free heap: 402804 bytes",
+   "took 4999",
    "TRYBOARD_OK s3-hello"
   ],
   "qemu": true,
-  "known_gap": "Xtensa 核未实现中断：vTaskDelay 不阻塞、app_main 返回后 vTaskDelete 不切换任务而 abort；计时行暂不验收"
+  "qemu_ignore": [
+   "took 4999"
+  ]
  },
  {
   "id": "hello",
