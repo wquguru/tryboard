@@ -66,3 +66,12 @@ web/（Vite + TS）
 - MAC16：40 位 ACC、m0..m3、LDINC/LDDEC 与并行装载形式；区域保护 TLB 指令（8 个 512MB 区域属性）；SALT/SALTU。
 - 未实现：PIE（EE.*）指令，按非法指令处理。
 - 验收：`tools/xtensa-tests/*.S` 自检汇编（`build.sh` 用 xtensa-esp32s3-elf-gcc 构建），`cargo test -p tryboard-xtensa` 跑全部并统计六个窗口向量的命中次数；`window` 测试必须六种都触发。本机有乐鑫 QEMU 时同一 ELF 在 QEMU 上跑一遍逐字差分，见 `tools/xtensa-tests/README.md`。
+
+## 原生 USB OTG（ESP32-S3，`crates/esp32s3/src/usb/`）
+- `dwc2.rs`：Synopsys DWC2 设备模式（基址 0x60080000，中断源 38）。寄存器按 DWC2 编程模型；ID / 硬件配置读回 S2/S3 实测值（GSNPSID 0x4F54400A = 4.00a，CSRST 自清；GHWCFG2 0x224DD930、GHWCFG3 0x00C804B5、GHWCFG4 0xD3F0A030）。
+  - 两条数据通路：GAHBCFG.DMAEN=1 时按 DIEPDMAn / DOEPDMAn 直接读写内存（SETUP 写到 DOEPDMA0 后指针 +8、置 STUP、关 EP0 OUT）；否则走 Slave：GRXSTSP 弹出状态字、FIFO 窗口读数据，IN 数据由固件写入各端点发送 FIFO（按 32 位字，含包尾填充，取包时按 tsiz 算包长并丢弃填充）。
+  - 中断：GINTSTS 的 RXFLVL / IEPINT / OEPINT / OTGINT / BOUTNAKEFF 由状态实时算出；DAINT = 各端点 (DxEPINT & DxEPMSK)，IN 端点在 DIEPEMPMSK 置位时加上 TXFE（发送 FIFO 空）。
+  - 线上事务不逐位模拟：虚拟主机以"SETUP / IN / OUT 令牌"为单位调用 `setup` / `token_in` / `token_out`，得到 ACK（含数据）/ NAK / STALL。
+- `host.rs`：虚拟主机。DCTL.SDIS 清零即视为 D+ 上拉接入 → 10ms 去抖 → 总线复位（USBRST）→ 10ms 后 ENUMDNE（全速）→ 恢复期 → 枚举。控制传输是一个小状态机（SETUP → 数据 IN / OUT → 状态），NAK 就下一拍重试，2 秒无进展判超时。配置后按端点间隔轮询 HID 中断 IN、CDC 批量 IN，CDC 批量 OUT 发送队列。
+- 调度：设备接上总线后，SoC 每 0.25ms 唤醒一次推进主机（`SocBus::update` 里把 `usb` 从 Option 临时取出，借总线给 DMA 访问内存）；断开后不再唤醒，不影响空闲快进。
+- 对外：CLI `--usb-log`、脚本 `usbcdc=文本`；wasm `tb_usb_version` / `tb_usb_json` / `tb_usb_json_ptr` / `tb_usb_cdc_send`，JSON 结构见 `web/src/usb3d.ts` 的 `UsbView`。

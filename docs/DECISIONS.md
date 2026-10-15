@@ -91,3 +91,18 @@
 ## 2026-10-15 · MOVSP 的 Alloca 条件按 ISA / QEMU 修正
 - 决定：WINDOWSTART 在 WB−1..WB−3 都为 0（调用者帧已溢出到栈上）才触发 Alloca 异常；切片 1 写反了，测试也按写反的理解编写，与 QEMU 差分时发现。S3 SoC 分支也独立报告了这一点
 - 中断 API：SoC 驱动外部中断线用 `Cpu::set_irq_lines(mask)`（位 = CPU 中断号，电平型随线、边沿型 / NMI 上升沿锁存）；写 INTERRUPT 特殊寄存器只等于 INTSET（只能置软件中断 7/29），不能用来注入外部中断
+
+## 2026-10-15 · USB 按"令牌事务"模拟，Slave 与 DMA 两条通路都做
+- 决定：DWC2 控制器不模拟线上比特、CRC、数据翻转位，虚拟主机以 SETUP / IN / OUT 令牌为单位交互；控制器同时支持 Slave（FIFO）与 Buffer DMA
+- 理由：esp_tinyusb 默认 Buffer DMA（CONFIG_TINYUSB_MODE_DMA），TinyUSB 原版与其它栈常用 Slave，用户拿来的固件两种都有；令牌粒度足以让真实 TinyUSB 栈完整走完枚举与类协议，而逐位模拟只会拖慢速度、不增加教学价值
+- 替代：抓 USB 包给"协议分析仪"视图——令牌层已经有完整信息，以后可以直接记录成 pcap
+
+## 2026-10-15 · 虚拟主机内置在 SoC 里，类驱动只做 HID 与 CDC-ACM
+- 决定：主机（"另一头的电脑 / 手机"）用 Rust 写在 `esp32s3/src/usb/host.rs`，枚举后只驱动 HID（键盘 / 鼠标）与 CDC-ACM；NCM / MSC / 音频只识别接口类型
+- 理由：键盘 / 鼠标与虚拟串口是最常见的 S3 USB 玩法，也是"插手机"类视频（执言）的前置知识；NCM 需要一个最小 IP 栈（ARP / ICMP / DHCP），留给 Wi-Fi 虚拟网络做完后复用
+- 替代：把主机放到浏览器 JS 里——会让 CLI 验收拿不到同样的结果，不选
+
+## 2026-10-15 · wasm 里 C3 / S3 两台机器并存、按镜像芯片 ID 选
+- 决定：`tb_boot` 先读镜像头芯片 ID（5 = C3，9 = S3），各自放在独立的 thread_local；页面按同一规则（`chipOf`）下载对应 ROM
+- 理由：改动最小，不打扰 C3 现有接口；以后若做多板联动再抽象成 trait 对象
+- 替代：统一的 `Machine` trait——等 S3 外设和 C3 对齐（另一分支在做）后再收拢
