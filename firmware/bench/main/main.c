@@ -5,6 +5,9 @@
 #include <stdint.h>
 #include "esp_cpu.h"
 #include "esp_timer.h"
+#ifndef CONFIG_BENCH_ROUNDS
+#define CONFIG_BENCH_ROUNDS 3
+#endif
 
 static uint8_t sieve[32768];
 
@@ -39,7 +42,7 @@ static float fsum(int n)
 
 void app_main(void)
 {
-    for (int round = 0; round < 3; round++) {
+    for (int round = 0; round < CONFIG_BENCH_ROUNDS; round++) {
         int64_t t0 = esp_timer_get_time();
         uint32_t c0 = esp_cpu_get_cycle_count();
         int p = primes();

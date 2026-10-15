@@ -185,5 +185,13 @@
     ]
    ]
   }
+ },
+ {
+  "id": "bench",
+  "seconds": 5,
+  "expect": [
+   "primes=3512 crc=694b5a42 sum=1.644725",
+   "TRYBOARD_OK bench"
+  ]
  }
 ]

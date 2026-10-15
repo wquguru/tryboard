@@ -33,11 +33,18 @@ pub const RTC_HIGH: u32 = 0x5000_2000;
 pub const MMIO_LOW: u32 = 0x6000_0000;
 pub const MMIO_HIGH: u32 = 0x600D_1000;
 
+/// 取指缓存：直接映射，按 PC 索引，存译好的 32 位指令与长度（压缩指令已展开）。
+/// 标签 1 表示无效（合法 PC 恒为偶数）。
+const ICACHE_BITS: u32 = 15;
+const ICACHE_MASK: usize = (1 << ICACHE_BITS) - 1;
+const ICACHE_INVALID: u32 = 1;
+
 pub const MMU_BASE: u32 = 0x600C_5000;
 pub const MMU_ENTRIES: usize = 128;
 pub const MMU_INVALID: u32 = 1 << 8;
 
 pub struct SocBus {
+    icache: Vec<(u32, u32, u32)>,
     pub sram: Vec<u8>,
     pub rtc: Vec<u8>,
     pub rom: Vec<u8>,
@@ -79,6 +86,7 @@ pub struct SocBus {
 impl Default for SocBus {
     fn default() -> Self {
         SocBus {
+            icache: vec![(ICACHE_INVALID, 0, 0); ICACHE_MASK + 1],
             sram: vec![0; (IRAM_HIGH - IRAM_LOW) as usize],
             rtc: vec![0; (RTC_HIGH - RTC_LOW) as usize],
             rom: vec![0; (ROM_HIGH - ROM_LOW) as usize],
@@ -122,10 +130,14 @@ fn rd(buf: &[u8], off: usize, size: u32) -> Option<u32> {
     }
 }
 
+/// 定长写（避免 copy_from_slice 变长拷贝退化成 memmove 调用）
 #[inline(always)]
 fn wr(buf: &mut [u8], off: usize, size: u32, v: u32) -> Option<()> {
-    let b = buf.get_mut(off..off + size as usize)?;
-    b.copy_from_slice(&v.to_le_bytes()[..size as usize]);
+    match size {
+        4 => buf.get_mut(off..off + 4)?.copy_from_slice(&v.to_le_bytes()),
+        2 => buf.get_mut(off..off + 2)?.copy_from_slice(&(v as u16).to_le_bytes()),
+        _ => *buf.get_mut(off)? = v as u8,
+    }
     Some(())
 }
 
@@ -163,13 +175,36 @@ impl SocBus {
 
     pub fn mem_write(&mut self, a: u32, size: u32, v: u32) -> Option<()> {
         if (DRAM_LOW..DRAM_HIGH).contains(&a) {
-            wr(&mut self.sram, (a + DRAM_TO_IRAM - IRAM_LOW) as usize, size, v)
+            let ia = a + DRAM_TO_IRAM;
+            self.icache_invalidate(ia);
+            wr(&mut self.sram, (ia - IRAM_LOW) as usize, size, v)
         } else if (IRAM_LOW..IRAM_HIGH).contains(&a) {
+            self.icache_invalidate(a);
             wr(&mut self.sram, (a - IRAM_LOW) as usize, size, v)
         } else if (RTC_LOW..RTC_HIGH).contains(&a) {
+            self.icache_invalidate(a);
             wr(&mut self.rtc, (a - RTC_LOW) as usize, size, v)
         } else {
             None
+        }
+    }
+
+    /// 写可执行内存：失效覆盖这个字的取指缓存项（指令最长 4 字节，可能从前一个半字开始）
+    #[inline(always)]
+    fn icache_invalidate(&mut self, a: u32) {
+        let base = a & !1;
+        for pc in [base.wrapping_sub(2), base, base + 2] {
+            let e = &mut self.icache[((pc >> 1) as usize) & ICACHE_MASK];
+            if e.0 == pc {
+                e.0 = ICACHE_INVALID;
+            }
+        }
+    }
+
+    /// MMU 表或 flash 内容变了：整个取指缓存作废
+    pub fn icache_flush(&mut self) {
+        for e in self.icache.iter_mut() {
+            e.0 = ICACHE_INVALID;
         }
     }
 
@@ -227,7 +262,14 @@ impl SocBus {
                 return;
             }
             0x6001_0000 => return self.uart1.write(off, v),
-            0x6000_2000 => return self.spi1.write(off, v, &mut self.flash),
+            0x6000_2000 => {
+                let (e, p) = (self.spi1.erases, self.spi1.programs);
+                self.spi1.write(off, v, &mut self.flash);
+                if (e, p) != (self.spi1.erases, self.spi1.programs) {
+                    self.icache_flush();
+                }
+                return;
+            }
             0x6001_9000 => return self.ledc.write(off, v, now),
             0x6004_0000 => return self.adc.write(off, v),
             0x6000_9000 if (4..=0x58).contains(&off) => {
@@ -260,7 +302,10 @@ impl SocBus {
                 return;
             }
             0x600C_5000 if (off as usize) < MMU_ENTRIES * 4 => {
-                self.mmu[(off / 4) as usize] = v & 0x1ff;
+                if self.mmu[(off / 4) as usize] != v & 0x1ff {
+                    self.mmu[(off / 4) as usize] = v & 0x1ff;
+                    self.icache_flush();
+                }
                 return;
             }
             0x6004_3000 if off == 0 => {
@@ -372,6 +417,20 @@ impl SocBus {
 }
 
 impl Bus for SocBus {
+    #[inline(always)]
+    fn fetch_decoded(&mut self, addr: u32) -> Result<(u32, u32), BusFault> {
+        let idx = ((addr >> 1) as usize) & ICACHE_MASK;
+        let e = self.icache[idx];
+        if e.0 == addr {
+            return Ok((e.1, e.2));
+        }
+        let lo = self.mem_read(addr, 2).ok_or(BusFault)?;
+        let raw = if lo & 3 != 3 { lo } else { lo | (self.mem_read(addr + 2, 2).ok_or(BusFault)? << 16) };
+        let (insn, len) = tryboard_rv32::decode_raw(raw);
+        self.icache[idx] = (addr, insn, len);
+        Ok((insn, len))
+    }
+
     #[inline]
     fn load(&mut self, a: u32, size: u32) -> Result<u32, BusFault> {
         if let Some(v) = self.mem_read(a, size) {

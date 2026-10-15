@@ -25,6 +25,25 @@ pub trait Bus {
         let hi = self.load(addr.wrapping_add(2), 2)?;
         Ok(lo | (hi << 16))
     }
+    /// 取指并译成 32 位形式：返回（指令, 长度）。非法压缩指令返回（原 16 位, 2），由核判非法。
+    /// SoC 可以重写它，把译好的结果缓存起来。
+    #[inline]
+    fn fetch_decoded(&mut self, addr: u32) -> Result<(u32, u32), BusFault> {
+        Ok(decode_raw(self.fetch(addr)?))
+    }
+}
+
+/// 原始取指字 → （32 位指令, 长度）
+#[inline(always)]
+pub fn decode_raw(raw: u32) -> (u32, u32) {
+    if raw & 3 != 3 {
+        match expand(raw as u16) {
+            Some(i) => (i, 2),
+            None => (raw & 0xffff, 2),
+        }
+    } else {
+        (raw, 4)
+    }
 }
 
 pub mod cause {
@@ -154,19 +173,14 @@ impl Cpu {
         if pc & 1 != 0 {
             return self.trap(cause::INSN_MISALIGNED, pc, false);
         }
-        let raw = match bus.fetch(pc) {
+        let (insn, len) = match bus.fetch_decoded(pc) {
             Ok(v) => v,
             Err(_) => return self.trap(cause::INSN_FAULT, pc, false),
         };
         self.cycles += 1;
-        let (insn, len) = if raw & 3 != 3 {
-            match expand(raw as u16) {
-                Some(i) => (i, 2),
-                None => return self.trap(cause::ILLEGAL, raw & 0xffff, false),
-            }
-        } else {
-            (raw, 4)
-        };
+        if insn & 3 != 3 {
+            return self.trap(cause::ILLEGAL, insn, false);
+        }
         self.exec(bus, insn, len)
     }
 
