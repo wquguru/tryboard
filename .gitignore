@@ -15,3 +15,5 @@
 /.claude/worktrees/
 /web/public/fw/
 /web/public/rom/
+/tools/xtensa-tests/build/
+/third_party

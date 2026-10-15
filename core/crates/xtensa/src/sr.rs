@@ -1,0 +1,45 @@
+//! 特殊寄存器（SR）与用户寄存器（UR）编号，见 Xtensa ISA RM 第 5 章 / binutils xtensa-modules。
+
+pub const LBEG: u32 = 0;
+pub const LEND: u32 = 1;
+pub const LCOUNT: u32 = 2;
+pub const SAR: u32 = 3;
+pub const BR: u32 = 4;
+pub const LITBASE: u32 = 5;
+pub const SCOMPARE1: u32 = 12;
+pub const ACCLO: u32 = 16;
+pub const ACCHI: u32 = 17;
+pub const M0: u32 = 32;
+pub const WINDOWBASE: u32 = 72;
+pub const WINDOWSTART: u32 = 73;
+pub const IBREAKENABLE: u32 = 96;
+pub const MEMCTL: u32 = 97;
+pub const ATOMCTL: u32 = 99;
+pub const DDR: u32 = 104;
+pub const IBREAKA0: u32 = 128;
+pub const DBREAKA0: u32 = 144;
+pub const DBREAKC0: u32 = 160;
+pub const EPC1: u32 = 177;
+pub const DEPC: u32 = 192;
+pub const EPS2: u32 = 194;
+pub const EXCSAVE1: u32 = 209;
+pub const CPENABLE: u32 = 224;
+pub const INTERRUPT: u32 = 226;
+pub const INTCLEAR: u32 = 227;
+pub const INTENABLE: u32 = 228;
+pub const PS: u32 = 230;
+pub const VECBASE: u32 = 231;
+pub const EXCCAUSE: u32 = 232;
+pub const DEBUGCAUSE: u32 = 233;
+pub const CCOUNT: u32 = 234;
+pub const PRID: u32 = 235;
+pub const ICOUNT: u32 = 236;
+pub const ICOUNTLEVEL: u32 = 237;
+pub const EXCVADDR: u32 = 238;
+pub const CCOMPARE0: u32 = 240;
+pub const MISC0: u32 = 244;
+
+/// 用户寄存器（RUR / WUR）
+pub const UR_THREADPTR: u32 = 231;
+pub const UR_FCR: u32 = 232;
+pub const UR_FSR: u32 = 233;
