@@ -1,0 +1,9 @@
+[package]
+name = "tryboard-esp32c3"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+tryboard-rv32 = { path = "../rv32" }
+tryboard-soc = { path = "../soc" }

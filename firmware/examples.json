@@ -1,0 +1,14 @@
+[
+  {
+    "id": "blink",
+    "title": "点灯：GPIO5 驱动 LED",
+    "about": "最经典的第一个程序。GPIO5 经 220Ω 电阻接一颗红色 LED，FreeRTOS 任务每 500ms 翻转一次电平，串口同步打印状态。",
+    "tags": ["✓ 仿真验证", "GPIO", "FreeRTOS", "ESP-IDF 5.5"]
+  },
+  {
+    "id": "hello",
+    "title": "Hello World：芯片信息与计时",
+    "about": "ESP-IDF 的入门程序：打印芯片型号、版本、flash 大小、剩余堆内存，并用 esp_timer 测量 vTaskDelay(500ms) 实际耗时。",
+    "tags": ["✓ 仿真验证", "UART", "SYSTIMER", "ESP-IDF 5.5"]
+  }
+]

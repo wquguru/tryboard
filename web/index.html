@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TryBoard 试板</title>
+    <meta name="description" content="在浏览器里运行真实的 ESP32 固件：买板子之前，先把项目跑一遍。" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <div class="brand"><span class="logo">◧</span> TryBoard <span class="cn">试板</span></div>
+      <div class="controls">
+        <label class="select">
+          <span>示例</span>
+          <select id="example"></select>
+        </label>
+        <button id="run" class="primary" disabled>▶ 运行</button>
+        <button id="reset" disabled>⟲ 复位</button>
+        <label class="select">
+          <span>速度</span>
+          <select id="speed">
+            <option value="0.25">0.25×</option>
+            <option value="1" selected>1×</option>
+            <option value="4">4×</option>
+            <option value="100">尽快</option>
+          </select>
+        </label>
+        <label class="upload">上传固件<input id="upload" type="file" accept=".bin" /></label>
+      </div>
+      <div class="status"><span id="chip">ESP32-C3 · 160MHz</span><span id="simtime">0.000 s</span><span id="ratio">—</span></div>
+    </header>
+    <main>
+      <section id="stage"><div id="hint">拖动旋转 · 滚轮缩放 · 点击板上的 BOOT / RST 按键</div></section>
+      <aside>
+        <div class="panel">
+          <div class="panel-head">串口监视器 <span class="muted">UART0 · 115200</span><button id="clear" class="ghost">清空</button></div>
+          <pre id="console"></pre>
+          <form id="uartForm"><input id="uartIn" placeholder="发送到串口（回车）" autocomplete="off" /></form>
+        </div>
+        <div class="panel info">
+          <div class="panel-head">这个示例</div>
+          <div id="about"></div>
+        </div>
+      </aside>
+    </main>
+    <footer>ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif. ROM 来自 esp-rom-elfs（Apache-2.0）。</footer>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,14 @@
+/core/target/
+/firmware/build/
+/firmware/*/build/
+/firmware/*/sdkconfig
+/firmware/*/sdkconfig.old
+/firmware/*/managed_components/
+/firmware/*/dependencies.lock
+/web/node_modules/
+/web/dist/
+/web/public/wasm/
+/Reviews/
+/tools/webtest/node_modules/
+/third_party/
+.DS_Store
