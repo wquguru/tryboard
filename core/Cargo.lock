@@ -38,3 +38,10 @@ dependencies = [
  "tryboard-rv32",
  "tryboard-soc",
 ]
+
+[[package]]
+name = "tryboard-xtensa"
+version = "0.1.0"
+dependencies = [
+ "tryboard-rv32",
+]

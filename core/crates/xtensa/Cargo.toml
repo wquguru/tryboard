@@ -1,0 +1,11 @@
+[package]
+name = "tryboard-xtensa"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+# 只在测试里借用 rv32 crate 的最小 ELF 解析器
+tryboard-rv32 = { path = "../rv32" }
