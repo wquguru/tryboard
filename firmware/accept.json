@@ -267,5 +267,97 @@
     "tol": 0.02
    }
   ]
+ },
+ {
+  "id": "s3-dual",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "expect": [
+   "msg 101 (task 1 ran on core 1)",
+   "counter=40000 (expect 40000), ipc ran on core 1",
+   "TRYBOARD_OK s3-dual"
+  ]
+ },
+ {
+  "id": "s3-blink",
+  "seconds": 2.2,
+  "expect": [
+   "LED ON  (0)",
+   "LED OFF (3)",
+   "TRYBOARD_OK blink"
+  ],
+  "gpio_toggles": {
+   "pin": 5,
+   "min": 4
+  },
+  "chip": "esp32s3"
+ },
+ {
+  "id": "s3-rgb",
+  "seconds": 2.2,
+  "expect": [
+   "RGB red (0)",
+   "RGB white (3)",
+   "TRYBOARD_OK rgb"
+  ],
+  "ws2812": {
+   "pin": 48,
+   "min_frames": 5,
+   "frames": [
+    [
+     "#ff0000"
+    ],
+    [
+     "#00ff00"
+    ],
+    [
+     "#0000ff"
+    ],
+    [
+     "#ffffff"
+    ]
+   ]
+  },
+  "chip": "esp32s3"
+ },
+ {
+  "id": "s3-oled",
+  "seconds": 2.5,
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c"
+  ],
+  "expect": [
+   "I2C scan (SDA=GPIO8, SCL=GPIO9): 0x3C  (1 device)",
+   "SSD1306 init OK",
+   "TRYBOARD_OK oled",
+   "frame 1 flushed"
+  ],
+  "numeric": [
+   {
+    "name": "1KB 帧传输耗时(us)",
+    "regex": "flushed in (\\d+) us",
+    "value": 23500,
+    "tol": 2500
+   }
+  ],
+  "oled_min_pixels": 1000,
+  "chip": "esp32s3"
+ },
+ {
+  "id": "s3-pot",
+  "seconds": 1.5,
+  "script": "0.0:mv4=0; 0.4:mv4=1550; 0.8:mv4=3000",
+  "expect": [
+   "ADC raw=2046",
+   "TRYBOARD_OK pot"
+  ],
+  "pwm": {
+   "pin": 5,
+   "freq": 5000,
+   "min": 0.0,
+   "max": 0.968
+  },
+  "chip": "esp32s3"
  }
 ]

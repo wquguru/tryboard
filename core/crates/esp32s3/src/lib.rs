@@ -10,7 +10,9 @@ pub mod periph;
 
 use periph::*;
 use std::collections::HashMap;
+use tryboard_esp32c3::i2c::I2c;
 use tryboard_esp32c3::ledc::Ledc;
+use tryboard_esp32c3::rmt::{Rmt, RmtLayout, Ws2812};
 use tryboard_esp32c3::periph::{Systimer, Timg, Uart};
 use tryboard_esp32c3::spiflash::SpiFlash;
 use tryboard_xtensa::{sr, Bus, BusFault, Cpu, Exit};
@@ -81,6 +83,14 @@ pub struct SocBus {
     pub extmem: Extmem,
     pub ledc: Ledc,
     pub analog: Analog,
+    /// RMT（4 发送 + 4 接收）与挂在引脚上的 WS2812 解码器
+    pub rmt: Rmt,
+    pub ws2812: HashMap<u32, Ws2812>,
+    /// I2C0（0x60013000）/ I2C1（0x60027000），模型与 C3 相同
+    pub i2c0: I2c,
+    pub i2c1: I2c,
+    /// SAR ADC 单次采样（SENS）
+    pub adc: SensAdc,
     pub efuse: [u32; 0x200 / 4],
     /// SYSTEM_CPU_INTR_FROM_CPU_0..3
     pub from_cpu: u32,
@@ -121,6 +131,11 @@ impl Default for SocBus {
             extmem: Extmem::default(),
             ledc: Ledc::default(),
             analog: Analog::default(),
+            rmt: Rmt::new(RmtLayout::S3),
+            ws2812: HashMap::new(),
+            i2c0: I2c::default(),
+            i2c1: I2c::default(),
+            adc: SensAdc::default(),
             efuse: boot::default_efuse(),
             from_cpu: 0,
             usj_tx: Vec::new(),
@@ -231,6 +246,14 @@ impl SocBus {
             0x6000_7000 if off < 0x200 => return self.efuse[(off / 4) as usize],
             0x6000_9000 if (4..=0xc4).contains(&off) => return self.gpio.iomux[((off - 4) / 4) as usize],
             0x6001_9000 => return self.ledc.read(off),
+            0x6001_6000 => return self.rmt.read(off),
+            0x6001_3000 => return self.i2c0.read(off),
+            0x6002_7000 => return self.i2c1.read(off),
+            0x6000_8000 if off >= 0x800 => {
+                if let Some(v) = self.adc.read(off - 0x800) {
+                    return v;
+                }
+            }
             0x6001_F000 => return self.timg0.read(off, now),
             0x6002_0000 => return self.timg1.read(off, now),
             0x6002_3000 => return self.systimer.read(off, now),
@@ -286,6 +309,14 @@ impl SocBus {
                 return;
             }
             0x6001_9000 => return self.ledc.write(off, v, now),
+            0x6001_6000 => return self.rmt.write(off, v, now),
+            0x6001_3000 => return self.i2c0.write(off, v, now),
+            0x6002_7000 => return self.i2c1.write(off, v, now),
+            0x6000_8000 if off >= 0x800 => {
+                if self.adc.write(off - 0x800, v) {
+                    return;
+                }
+            }
             0x6001_F000 => return self.timg0.write(off, v, now),
             0x6002_0000 => return self.timg1.write(off, v, now),
             0x6002_3000 => return self.systimer.write(off, v, now),
@@ -348,6 +379,9 @@ impl SocBus {
         set(src::UART1, self.uart1.irq());
         set(src::GPIO, self.gpio.irq());
         set(src::LEDC, self.ledc.irq());
+        set(src::RMT, self.rmt.irq());
+        set(src::I2C_EXT0, self.i2c0.irq());
+        set(src::I2C_EXT1, self.i2c1.irq());
         for i in 0..3 {
             set(src::SYSTIMER_TARGET0 + i, self.systimer.irq(i as usize));
         }
@@ -359,6 +393,45 @@ impl SocBus {
         l
     }
 
+    /// 把 RMT 输出跳变经 GPIO 矩阵送到引脚：更新引脚电平、喂给挂在引脚上的 WS2812 解码器。
+    /// 返回解码器下一次需要检查（帧结束判定）的时刻。
+    fn route_rmt(&mut self, now: u64) -> u64 {
+        let l = self.rmt.layout;
+        let mut next = u64::MAX;
+        let mut edges = std::mem::take(&mut self.rmt.edges);
+        for pin in 0..NPINS as u32 {
+            let sel = self.gpio.func_out[pin as usize] & 0x1ff;
+            if !(l.sig_out0..l.sig_out0 + l.ntx as u32).contains(&sel) {
+                continue;
+            }
+            let ch = (sel - l.sig_out0) as u8;
+            let dec = self.ws2812.entry(pin).or_default();
+            for &(t, c, lv) in &edges {
+                if c == ch {
+                    dec.feed(t, lv);
+                }
+            }
+            next = next.min(dec.finalize(now));
+            self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
+        }
+        edges.clear();
+        self.rmt.edges = edges;
+        next
+    }
+
+    /// 引脚上的 PWM：经 GPIO 矩阵路由到该引脚的 LEDC 通道输出（占空比, 频率）。
+    /// S3 的 LEDC 输出信号是 73..=80（LEDC_LS_SIG_OUT0..7_IDX）
+    pub fn pin_pwm(&self, pin: usize) -> Option<(f32, f32)> {
+        let f = *self.gpio.func_out.get(pin)?;
+        let sig = f & 0x1ff;
+        if (73..=80).contains(&sig) && self.gpio.enable & (1 << pin) != 0 {
+            let (d, hz) = self.ledc.output((sig - 73) as usize)?;
+            let inv = f & (1 << 9) != 0;
+            return Some((if inv { 1.0 - d } else { d }, hz));
+        }
+        None
+    }
+
     /// 推进定时器、按两个核各自的中断矩阵算出外部中断线（存进 lines，轮到该核时交给它）
     pub fn update(&mut self) {
         let now = self.now;
@@ -366,7 +439,10 @@ impl SocBus {
         let n2 = self.timg0.update(now);
         let n3 = self.timg1.update(now);
         let n4 = self.ledc.update(now);
-        self.next_event = n1.min(n2).min(n3).min(n4);
+        let n5 = self.rmt.update(now);
+        let n6 = self.route_rmt(now);
+        let n7 = self.i2c0.update(now).min(self.i2c1.update(now));
+        self.next_event = n1.min(n2).min(n3).min(n4).min(n5).min(n6).min(n7);
         let lv = self.levels();
         // 边沿型线由核自己检测上升沿，这里把电平和本次上升沿一起给出
         let (l0, r0) = self.intm.lines(&lv);

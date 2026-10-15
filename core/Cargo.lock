@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "tryboard-esp32c3",
  "tryboard-esp32s3",
+ "tryboard-machine",
  "tryboard-rv32",
  "tryboard-soc",
  "tryboard-xtensa",
@@ -26,6 +27,16 @@ name = "tryboard-esp32s3"
 version = "0.1.0"
 dependencies = [
  "tryboard-esp32c3",
+ "tryboard-rv32",
+ "tryboard-xtensa",
+]
+
+[[package]]
+name = "tryboard-machine"
+version = "0.1.0"
+dependencies = [
+ "tryboard-esp32c3",
+ "tryboard-esp32s3",
  "tryboard-rv32",
  "tryboard-xtensa",
 ]
