@@ -5,7 +5,9 @@ impl Bus for Ram {
     fn load(&mut self, a: u32, s: u32) -> Result<u32, BusFault> {
         let a = a as usize;
         let b = self.0.get(a..a + s as usize).ok_or(BusFault)?;
-        Ok(b.iter().enumerate().fold(0, |v, (i, x)| v | (*x as u32) << (8 * i)))
+        Ok(b.iter()
+            .enumerate()
+            .fold(0, |v, (i, x)| v | (*x as u32) << (8 * i)))
     }
     fn store(&mut self, a: u32, s: u32, v: u32) -> Result<(), BusFault> {
         let a = a as usize;

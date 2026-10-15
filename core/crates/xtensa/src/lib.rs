@@ -74,8 +74,27 @@ pub enum Exit {
     Break(u32),
 }
 
-const B4CONST: [u32; 16] = [0xffff_ffff, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 32, 64, 128, 256];
-const B4CONSTU: [u32; 16] = [32768, 65536, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 32, 64, 128, 256];
+const B4CONST: [u32; 16] = [
+    0xffff_ffff,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    10,
+    12,
+    16,
+    32,
+    64,
+    128,
+    256,
+];
+const B4CONSTU: [u32; 16] = [
+    32768, 65536, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 32, 64, 128, 256,
+];
 
 #[inline(always)]
 fn sext(v: u32, bits: u32) -> u32 {
@@ -224,7 +243,12 @@ impl Cpu {
         } else {
             self.sr[sr::EPC1 as usize] = self.pc;
             self.set_ps(ps | PS_EXCM);
-            self.pc = self.vecbase() + if ps & PS_UM != 0 { vec::USER } else { vec::KERNEL };
+            self.pc = self.vecbase()
+                + if ps & PS_UM != 0 {
+                    vec::USER
+                } else {
+                    vec::KERNEL
+                };
         }
         self.waiting = false;
     }
@@ -279,12 +303,19 @@ impl Cpu {
         if self.window_check(max_quad(insn, narrow, self.ps())) {
             return Exit::Normal;
         }
-        let flow = if narrow { self.exec_narrow(bus, insn) } else { self.exec(bus, insn) };
+        let flow = if narrow {
+            self.exec_narrow(bus, insn)
+        } else {
+            self.exec(bus, insn)
+        };
         match flow {
             Ok(Flow::Next) => {
                 let mut next = pc.wrapping_add(len);
                 // 零开销循环：顺序执行到 LEND 且 LCOUNT≠0 时回到 LBEG
-                if next == self.sr[sr::LEND as usize] && self.sr[sr::LCOUNT as usize] != 0 && self.ps() & PS_EXCM == 0 {
+                if next == self.sr[sr::LEND as usize]
+                    && self.sr[sr::LCOUNT as usize] != 0
+                    && self.ps() & PS_EXCM == 0
+                {
                     self.sr[sr::LCOUNT as usize] -= 1;
                     next = self.sr[sr::LBEG as usize];
                 }
@@ -335,7 +366,9 @@ impl Cpu {
             8 => {
                 // L32I.N at, as, r*4
                 let a = self.a(s).wrapping_add(r << 2);
-                let Some(v) = self.load(bus, a, 4) else { return Ok(Flow::Done) };
+                let Some(v) = self.load(bus, a, 4) else {
+                    return Ok(Flow::Done);
+                };
                 self.set_a(t, v);
             }
             9 => {
@@ -353,7 +386,11 @@ impl Cpu {
                 if t & 8 == 0 {
                     // MOVI.N as, imm7（-32..95）
                     let imm = ((t & 7) << 4) | r;
-                    let v = if imm >= 96 { imm.wrapping_sub(128) } else { imm };
+                    let v = if imm >= 96 {
+                        imm.wrapping_sub(128)
+                    } else {
+                        imm
+                    };
                     self.set_a(s, v);
                 } else {
                     // BEQZ.N / BNEZ.N as, pc+4+imm6
@@ -432,9 +469,15 @@ impl Cpu {
                 // L32R：地址 = ((PC+3) 对齐到 4) + 1 扩展的 imm16<<2；LITBASE 打开时以它为基址
                 let imm = 0xfffc_0000 | ((insn >> 8) << 2);
                 let lb = self.sr[sr::LITBASE as usize];
-                let base = if lb & 1 != 0 { lb & 0xffff_f000 } else { pc.wrapping_add(3) & !3 };
+                let base = if lb & 1 != 0 {
+                    lb & 0xffff_f000
+                } else {
+                    pc.wrapping_add(3) & !3
+                };
                 let a = base.wrapping_add(imm);
-                let Some(v) = self.load(bus, a, 4) else { return Ok(Flow::Done) };
+                let Some(v) = self.load(bus, a, 4) else {
+                    return Ok(Flow::Done);
+                };
                 self.set_a(t, v);
             }
             2 => {
@@ -447,7 +490,9 @@ impl Cpu {
                             _ => (4, 2),
                         };
                         let a = base.wrapping_add(imm8 << sh);
-                        let Some(mut v) = self.load(bus, a, size) else { return Ok(Flow::Done) };
+                        let Some(mut v) = self.load(bus, a, size) else {
+                            return Ok(Flow::Done);
+                        };
                         if r == 9 {
                             v = sext(v, 16);
                         }
@@ -471,8 +516,12 @@ impl Cpu {
                     14 => {
                         // S32C1I：与 SCOMPARE1 相等才写入；at 总是得到旧值
                         let a = base.wrapping_add(imm8 << 2);
-                        let Some(old) = self.load(bus, a, 4) else { return Ok(Flow::Done) };
-                        if old == self.sr[sr::SCOMPARE1 as usize] && !self.store(bus, a, 4, self.a(t)) {
+                        let Some(old) = self.load(bus, a, 4) else {
+                            return Ok(Flow::Done);
+                        };
+                        if old == self.sr[sr::SCOMPARE1 as usize]
+                            && !self.store(bus, a, 4, self.a(t))
+                        {
                             return Ok(Flow::Done);
                         }
                         self.set_a(t, old);
@@ -494,7 +543,11 @@ impl Cpu {
                 let n = (insn >> 4) & 3;
                 let m = (insn >> 6) & 3;
                 match n {
-                    0 => return Ok(Flow::Jump(pc.wrapping_add(4).wrapping_add(sext(insn >> 6, 18)))),
+                    0 => {
+                        return Ok(Flow::Jump(
+                            pc.wrapping_add(4).wrapping_add(sext(insn >> 6, 18)),
+                        ))
+                    }
                     1 => {
                         let v = self.a(s) as i32;
                         let taken = match m {
@@ -504,7 +557,9 @@ impl Cpu {
                             _ => v >= 0,
                         };
                         if taken {
-                            return Ok(Flow::Jump(pc.wrapping_add(4).wrapping_add(sext(insn >> 12, 12))));
+                            return Ok(Flow::Jump(
+                                pc.wrapping_add(4).wrapping_add(sext(insn >> 12, 12)),
+                            ));
                         }
                     }
                     2 => {
@@ -533,7 +588,9 @@ impl Cpu {
                             0 | 1 => {
                                 let taken = self.br(s) == (r == 1);
                                 if taken {
-                                    return Ok(Flow::Jump(pc.wrapping_add(4).wrapping_add(sext(imm8, 8))));
+                                    return Ok(Flow::Jump(
+                                        pc.wrapping_add(4).wrapping_add(sext(imm8, 8)),
+                                    ));
                                 }
                             }
                             8..=10 => {
@@ -558,7 +615,9 @@ impl Cpu {
                             let c = B4CONSTU[r as usize];
                             let taken = if m == 2 { v < c } else { v >= c };
                             if taken {
-                                return Ok(Flow::Jump(pc.wrapping_add(4).wrapping_add(sext(imm8, 8))));
+                                return Ok(Flow::Jump(
+                                    pc.wrapping_add(4).wrapping_add(sext(imm8, 8)),
+                                ));
                             }
                         }
                     },
@@ -594,7 +653,16 @@ impl Cpu {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn exec_qrst<B: Bus>(&mut self, bus: &mut B, insn: u32, t: u32, s: u32, r: u32, op1: u32, op2: u32) -> Result<Flow, Exit> {
+    fn exec_qrst<B: Bus>(
+        &mut self,
+        bus: &mut B,
+        insn: u32,
+        t: u32,
+        s: u32,
+        r: u32,
+        op1: u32,
+        op2: u32,
+    ) -> Result<Flow, Exit> {
         let pc = self.pc;
         let (as_, at) = (self.a(s), self.a(t));
         match op1 {
@@ -686,7 +754,11 @@ impl Cpu {
                         // ANY4 / ALL4 / ANY8 / ALL8：bt ← bs..bs+n 的或 / 与
                         let n = if r < 10 { 4 } else { 8 };
                         let bits = (self.sr[sr::BR as usize] >> s) & ((1 << n) - 1);
-                        let v = if r & 1 == 0 { bits != 0 } else { bits == (1 << n) - 1 };
+                        let v = if r & 1 == 0 {
+                            bits != 0
+                        } else {
+                            bits == (1 << n) - 1
+                        };
                         self.set_br(t, v);
                     }
                     _ => return self.illegal(),
@@ -701,7 +773,7 @@ impl Cpu {
                     3 => self.sr[sr::SAR as usize] = 32 - ((as_ & 3) << 3),
                     4 => self.sr[sr::SAR as usize] = s | ((t & 1) << 4),
                     6 | 7 => {} // RER / WER：外部寄存器，未建模
-                    8 => self.windowbase = (self.windowbase + sext(t, 4)) & 15,
+                    8 => self.windowbase = self.windowbase.wrapping_add(sext(t, 4)) & 15,
                     14 => {
                         let v = if as_ as i32 >= 0 { as_ } else { !as_ };
                         self.set_a(t, v.leading_zeros().saturating_sub(1).min(31));
@@ -829,7 +901,9 @@ impl Cpu {
                 let a = as_.wrapping_add((r << 2).wrapping_sub(64));
                 match op2 {
                     0 => {
-                        let Some(v) = self.load(bus, a, 4) else { return Ok(Flow::Done) };
+                        let Some(v) = self.load(bus, a, 4) else {
+                            return Ok(Flow::Done);
+                        };
                         self.set_a(t, v);
                     }
                     4 => {

@@ -12,3 +12,5 @@
 /tools/webtest/node_modules/
 /third_party/
 .DS_Store
+/tools/xtensa-tests/build/
+/third_party
