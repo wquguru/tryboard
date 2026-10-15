@@ -11,7 +11,7 @@
    "TRYBOARD_OK s3-hello"
   ],
   "qemu": true,
-  "qemu_ignore": [
+  "qemu_skip": [
    "took 4999"
   ]
  },
