@@ -1,5 +1,5 @@
 //! `tryboard run` 的 ESP32-S3 分支（镜像头芯片 ID = 9 时走这里）。参数与 C3 相同的子集：
-//! --rom --seconds --expect --uart-in --script（gpioN / uart）--trace --peek --gpio-log
+//! --rom --seconds --expect --uart-in --script（gpioN / uart / usbcdc）--trace --peek --gpio-log --usb-log
 
 use super::{opt, Syms};
 use std::io::Write;
@@ -71,6 +71,9 @@ pub fn run(args: &[String], path: &str, flash: Vec<u8>) {
             } else if let Some(t) = act.strip_prefix("uart=") {
                 m.bus.uart0.push_rx(t.replace("\\n", "\n").as_bytes());
                 m.bus.irq_dirty = true;
+            } else if let Some(t) = act.strip_prefix("usbcdc=") {
+                // 虚拟电脑往 USB 虚拟串口里写
+                m.bus.usb.as_mut().unwrap().host.cdc_tx.extend_from_slice(t.replace("\\n", "\n").as_bytes());
             }
             eprintln!("[tryboard] {now_s:.3}s 输入: {act}");
         }
@@ -169,9 +172,34 @@ pub fn run(args: &[String], path: &str, flash: Vec<u8>) {
             }
         }
     }
+    if args.iter().any(|a| a == "--usb-log") {
+        print_usb(m.bus.usb.as_ref().unwrap());
+    }
     if let Some(e) = expect {
         let ok = String::from_utf8_lossy(&out).contains(e.as_str());
         eprintln!("[tryboard] 期望输出 {:?}: {}", e, if ok { "PASS" } else { "FAIL" });
         std::process::exit(if ok { 0 } else { 1 });
+    }
+}
+
+/// 虚拟主机看到的情况：枚举日志、设备信息、键盘输入、鼠标、USB 串口
+fn print_usb(u: &tryboard_esp32s3::usb::Usb) {
+    let h = &u.host;
+    eprintln!("[tryboard] USB 主机：{}", h.state_name());
+    for l in &h.log {
+        eprintln!("[usb] {l}");
+    }
+    let i = &h.info;
+    if i.vid != 0 {
+        eprintln!("[tryboard] USB 设备 {:04x}:{:04x} \"{}\" / \"{}\" 序列号 \"{}\"", i.vid, i.pid, i.manufacturer, i.product, i.serial);
+    }
+    if !h.typed.is_empty() {
+        eprintln!("[tryboard] USB 键盘输入: {:?}", h.typed);
+    }
+    if h.mouse.3 > 0 {
+        eprintln!("[tryboard] USB 鼠标报告 {} 次，位置 ({}, {})，按键 {}", h.mouse.3, h.mouse.0, h.mouse.1, h.mouse.2);
+    }
+    if !h.cdc_rx.is_empty() {
+        eprintln!("[tryboard] USB 串口收到: {:?}", String::from_utf8_lossy(&h.cdc_rx));
     }
 }

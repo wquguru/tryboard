@@ -40,6 +40,14 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
     missing = [e for e in t['expect'] if e not in out]
     notes = []
     if missing: notes.append('缺少输出: ' + ', '.join(missing))
+    # stderr_expect：模拟器侧观察到的结果（如虚拟 USB 主机解码出的键盘输入），不是固件自己打印的
+    for e in t.get('stderr_expect', []):
+        if e not in err:
+            missing.append(e)
+            notes.append(f'模拟器侧缺少: {e}')
+    if t.get('stderr_expect'):
+        nok = sum(e in err for e in t['stderr_expect'])
+        notes.append(f'主机侧核对 {nok}/{len(t["stderr_expect"])}')
     if re.search(r'Guru Meditation|abort\(\)|panic', out): notes.append('固件崩溃'); missing.append('crash')
     g = t.get('gpio_toggles')
     if g:
@@ -111,7 +119,7 @@ PY
 if [ $NO_WEB = 0 ]; then
   echo -e "\n## 网页（Chrome 无头 + wasm）" >> $REPORT
   tools/build_web.sh >/dev/null 2>&1 || { echo "构建失败" >> $REPORT; fail=1; }
-  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw"; do
+  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接"; do
     ex=${spec%%:*}; want=${spec#*:}
     r=$(node tools/webtest/webtest.mjs "$ex" "$want" 2>&1 | head -3)
     echo "$r" | sed 's/^/- /' >> $REPORT

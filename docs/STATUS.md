@@ -43,6 +43,8 @@
 | GPIO（49 脚）/ IO_MUX | 🟡 | — | 输出 / 输入 / 上下拉 / 中断状态已写，未有 S3 示例验收 |
 | eFuse | 🟡 | 芯片版本 v0.2、MAC、PSRAM_CAP=8MB | 只读 |
 | 模拟前端（regi2c） | 🟡 | HLE（窗口 ABI 返回），ocode 校准通过；BBPLL 校准完成位（I2C_MST_ANA_CONF0 bit24） | 不建模模拟电路 |
+| USB OTG（DWC2，设备模式） | ✅ | s3-usb-keyboard（esp_tinyusb 默认 Buffer DMA）：虚拟主机完成枚举（描述符 / SET_ADDRESS / 字符串 / SET_CONFIGURATION / HID 报告描述符），解码出键盘输入 "Hello from TryBoard!\n"、鼠标 80 次报告画正方形回原点；s3-usb-cdc（Slave / FIFO 方式）：SET_LINE_CODING、DTR，双向收发 ECHO；网页面板与 3D 笔记本同步显示 | 控制 / 中断 / 批量端点；GRXSTSP 接收队列、各 IN 端点发送 FIFO、DIEPEMPMSK / TXFE；SNAK/EPDIS/SGONAK 等握手位瞬间生效；不模拟线上比特、数据翻转位、ISO 端点、主机模式、挂起 / 远程唤醒；USB_WRAP / PHY 选择寄存器只读回 |
+| 虚拟 USB 主机 | ✅ | 同上 | 0.25ms 一拍、1ms 帧发 SOF；类驱动：HID（按报告描述符识别键盘 / 鼠标报告 ID，美式布局还原文字）、CDC-ACM；CDC-NCM 网卡、MSC、音频只识别接口类型，不驱动 |
 | 双核 | ☐ | — | 后续：核 1 由 SYSTEM_CORE_1_CONTROL 放行 + ets_set_appcpu_boot_addr，需第二个 Cpu 实例与跨核中断 |
 | CPU Xtensa LX7 基础 ISA + 窗口 | ✅ | `tools/xtensa-tests` 11/11 自检；与 QEMU（sim 机器 + esp32s3 核配置）逐字差分 14215 字、0 不一致；深递归覆盖六种窗口溢出 / 下溢 | 差分发现并修正 MOVSP 的 Alloca 条件方向；PIE（EE.*）未做 |
 | 中断（核内） | ✅ | irq 测试与 QEMU 一致：软件中断 level 1/3、INTLEVEL / EXCM 屏蔽、CCOMPARE0/1/2、WAITI 唤醒、INTSET/INTCLEAR；单元测试：外部电平 / 边沿线、NMI | 外部线由 SoC 调 `cpu.set_irq_lines(mask)`；WAITI 时用 `next_timer_event()` 快进 |
@@ -57,6 +59,8 @@
 | 1× 实时 / 加速 | ✅ blink、hello 在 Chrome 无头模式下 1.00× |
 | 3D 工作台 | ✅ 面包板 + 开发板 + LED 随 GPIO 亮灭；板载 WS2812（GPIO8）随解码颜色发光；BOOT / RST 可点 |
 | 3D 工作台 | ✅ 面包板 + 开发板 + LED 随 GPIO 亮灭；BOOT / RST 可点；示例按 `scene.parts` 声明元件与接线（LED / SSD1306 / BME280），可指定机位 |
+| ESP32-S3 固件 | ✅ wasm 按镜像芯片 ID 选 C3 / S3，按芯片下载 ROM；S3 的 BOOT 键为 GPIO0（3D 板子仍是 C3 外形） |
+| 虚拟电脑（USB） | ✅ 侧栏面板（设备描述符、接口、枚举过程、键盘输入、鼠标轨迹、USB 串口终端可输入）；3D 笔记本经 USB 线接到板子，屏幕实时显示 |
 | OLED 实时画面 | ✅ 帧缓冲变了才传，128×64 最近邻纹理 |
 | 环境滑块 | ✅ 温度 / 湿度 / 气压 → `tb_env_set`，webtest 验证读数跟随 |
 | 串口输入 | 🟡 已接线，缺验收固件 |

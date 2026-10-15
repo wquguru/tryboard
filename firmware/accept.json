@@ -329,5 +329,44 @@
    "pin": 5,
    "min": 3
   }
+ },
+ {
+  "id": "s3-usb-keyboard",
+  "chip": "esp32s3",
+  "seconds": 4,
+  "args": [
+   "--usb-log"
+  ],
+  "expect": [
+   "USB 已连接",
+   "TRYBOARD_OK usb-keyboard"
+  ],
+  "stderr_expect": [
+   "USB 主机：已配置",
+   "VID 0x303A PID 0x4004",
+   "\"TryBoard Keyboard\"",
+   "报告 1=键盘，报告 2=鼠标",
+   "USB 键盘输入: \"Hello from TryBoard!\\n\"",
+   "USB 鼠标报告 80 次，位置 (0, 0)"
+  ]
+ },
+ {
+  "id": "s3-usb-cdc",
+  "chip": "esp32s3",
+  "seconds": 2,
+  "args": [
+   "--usb-log"
+  ],
+  "script": "1.0:usbcdc=hello\\n; 1.3:usbcdc=ping\\n",
+  "expect": [
+   "USB 已连接",
+   "CDC 收到：hello",
+   "TRYBOARD_OK usb-cdc"
+  ],
+  "stderr_expect": [
+   "CDC-ACM 控制接口",
+   "SET_CONTROL_LINE_STATE DTR=1",
+   "USB 串口收到: \"Hi from TryBoard CDC\\r\\nECHO: HELLO\\r\\nECHO: PING\\r\\n\""
+  ]
  }
 ]

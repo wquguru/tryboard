@@ -27,6 +27,11 @@ interface Exports {
   tb_env_set(temp: number, humidity: number, pressure: number): void;
   tb_oled_version(): number;
   tb_oled_ptr(): number;
+  tb_usb_version(): number;
+  tb_usb_json(): number;
+  tb_usb_json_ptr(): number;
+  tb_usb_cdc_send(p: number, len: number): void;
+  tb_chip(): number;
 }
 
 export interface Env {
@@ -50,13 +55,16 @@ export type ToWorker =
   | { type: 'pause' }
   | { type: 'speed'; factor: number }
   | { type: 'gpio'; pin: number; level: number }
-  | { type: 'uart'; text: string };
+  | { type: 'uart'; text: string }
+  | { type: 'usbcdc'; text: string };
 
 export type FromWorker =
   | { type: 'booted' }
   | { type: 'error'; message: string }
   | { type: 'tick'; console: string; gpio: number; enable: number; pwm: number[]; simSeconds: number; ratio: number; running: boolean; leds?: number[][] }
   | { type: 'oled'; pixels: Uint8Array }
+  /** 原生 USB 虚拟主机的状态（JSON，结构见 usb3d.ts 的 UsbView），有变化才发 */
+  | { type: 'usb'; json: string }
   | { type: 'stopped'; reason: string };
 
 let ex: Exports | null = null;
@@ -147,6 +155,7 @@ function loop() {
     running,
   });
   postOled(e);
+  postUsb(e);
   if (stop !== 0) {
     running = false;
     post({ type: 'stopped', reason: errorText(e) });
@@ -165,6 +174,19 @@ function postOled(e: Exports) {
   oledVersion = v;
   const px = new Uint8Array(new Uint8Array(e.memory.buffer, p, 128 * 64));
   (self as unknown as Worker).postMessage({ type: 'oled', pixels: px } satisfies FromWorker, [px.buffer]);
+}
+
+let usbVersion = 0;
+function postUsb(e: Exports) {
+  const v = e.tb_usb_version();
+  if (v === usbVersion) return;
+  usbVersion = v;
+  if (v === 0) {
+    post({ type: 'usb', json: '' });
+    return;
+  }
+  const n = e.tb_usb_json();
+  post({ type: 'usb', json: decoder.decode(new Uint8Array(e.memory.buffer, e.tb_usb_json_ptr(), n)) });
 }
 
 const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2 };
@@ -190,6 +212,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       ex = e;
       lastFrames = -1;
       oledVersion = 0;
+      usbVersion = -1;
       post({ type: 'booted' });
       break;
     }
@@ -221,6 +244,15 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
     case 'gpio':
       ex?.tb_gpio_drive(m.pin, m.level);
       break;
+    case 'usbcdc': {
+      if (!ex) return;
+      const b = new TextEncoder().encode(m.text);
+      const p = ex.tb_alloc(b.length);
+      new Uint8Array(ex.memory.buffer, p, b.length).set(b);
+      ex.tb_usb_cdc_send(p, b.length);
+      ex.tb_free(p, b.length);
+      break;
+    }
     case 'uart': {
       if (!ex) return;
       const b = new TextEncoder().encode(m.text);

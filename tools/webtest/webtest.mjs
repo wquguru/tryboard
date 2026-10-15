@@ -72,6 +72,27 @@ if (ok && example === 'pot') {
   console.log(`[webtest] 旋钮 → ADC 读数约 2400mV: ${seen ? 'PASS' : 'FAIL'}`);
   ok = ok && seen;
 }
+// 原生 USB：虚拟电脑面板要显示枚举结果；键盘示例要收到那行字，CDC 示例从面板输入后要收到回显
+if (ok && example === 's3-usb-keyboard') {
+  let seen = false;
+  for (let i = 0; i < 40 && !seen; i++) {
+    seen = await page.$eval('#usbTyped', (e) => e.textContent.includes('Hello from TryBoard!')).catch(() => false);
+    if (!seen) await new Promise((r) => setTimeout(r, 250));
+  }
+  console.log(`[webtest] 虚拟电脑收到键盘输入: ${seen ? 'PASS' : 'FAIL'}`);
+  ok = ok && seen;
+}
+if (ok && example === 's3-usb-cdc') {
+  await page.type('#usbCdcIn', 'ping');
+  await page.keyboard.press('Enter');
+  let seen = false;
+  for (let i = 0; i < 40 && !seen; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    seen = await page.$eval('#usbCdcOut', (e) => e.textContent.includes('ECHO: PING')).catch(() => false);
+  }
+  console.log(`[webtest] USB 串口终端 ping → ECHO: PING: ${seen ? 'PASS' : 'FAIL'}`);
+  ok = ok && seen;
+}
 // 多拍几张，抓到 LED 亮和灭两种状态
 for (let i = 0; i < 3; i++) {
   await page.screenshot({ path: path.join(outDir, `${example}-${i}.png`) });
