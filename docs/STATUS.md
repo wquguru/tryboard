@@ -33,30 +33,27 @@
 ## ESP32-S3
 | 模块 | 状态 | 验收 | 备注 |
 |---|---|---|---|
-| CPU Xtensa LX7 基础 ISA + 窗口 | 🟡 | `tools/xtensa-tests` 8/8；深递归覆盖六种窗口溢出 / 下溢 | 缺中断、FPU、MAC16、PIE；未与 QEMU 差分；缺 SALT/SALTU、TLB 族、RER/WER（S3 crate 里有临时垫片）；**MOVSP 的 Alloca 条件反了**（应为 WINDOWSTART[WB-1..WB-3] 全 0 才报，现为任一为 1 就报；垫片撤回多报，少报的情况救不回来） |
-| 启动（直接启动 + ROM） | ✅ | s3-hello 单核：从 call_start_cpu0 跑到 app_main，打印芯片信息 / 16MB flash / Free heap 402804，与 QEMU 逐行一致 | CALLINC=0 进入口、入口帧 [sp-12] 填指向 ROM .stack_app 的指针；核 1 不启动（UNICORE） |
-| **当前止步点** | ⚠️ | `tryboard run firmware/build/s3-hello/flash.bin` | `vTaskDelay(500ms)` 约 2µs 就返回、app_main 返回后 vTaskDelete 不切换任务 → `abort()` → 进 `esp_restart_noos+0x104` 空转。原因：核不响应中断（SYSTIMER 节拍、任务切换都依赖 level-1 中断）。SoC 侧已把外部中断线写进 INTERRUPT SR，等核实现中断裁决 |
-| 存储映射 / MMU / PSRAM | ✅ | 单元测试：flash / PSRAM 页翻译、PSRAM 可写、SRAM I/D 别名 | 512 项 MMU（位 15 选 PSRAM）；8MB PSRAM 只有存储与映射，PSRAM 芯片初始化流程（MSPI / OPI 命令）未模拟，CONFIG_SPIRAM 固件尚未验收 |
-| 中断矩阵（核 0） | 🟡 | 单元测试：电平线、边沿线上升沿、复位映射到线 16 = 不连接 | 99 个源；INTR_STATUS 可读；核 1 矩阵未做 |
-| UART / SYSTIMER / TIMG / SPI1 flash / LEDC | 🟡 | s3-hello 启动期使用（控制台、RTC 校准、flash 识别 GD 16MB） | 复用 C3 模型（寄存器布局同族）；TIMG 的 T1、LEDC 的通道 6/7 未建模 |
-| EXTMEM（I/D cache 分开） | ✅ | 启动期 freeze / sync / autoload 轮询通过 | cache 操作瞬间完成 |
-| GPIO（49 脚）/ IO_MUX | 🟡 | — | 输出 / 输入 / 上下拉 / 中断状态已写，未有 S3 示例验收 |
-| eFuse | 🟡 | 芯片版本 v0.2、MAC、PSRAM_CAP=8MB | 只读 |
-| 模拟前端（regi2c） | 🟡 | HLE（窗口 ABI 返回），ocode 校准通过；BBPLL 校准完成位（I2C_MST_ANA_CONF0 bit24） | 不建模模拟电路 |
-| 双核 | ☐ | — | 后续：核 1 由 SYSTEM_CORE_1_CONTROL 放行 + ets_set_appcpu_boot_addr，需第二个 Cpu 实例与跨核中断 |
-| CPU Xtensa LX7 基础 ISA + 窗口 | ✅ | `tools/xtensa-tests` 11/11 自检；与 QEMU（sim 机器 + esp32s3 核配置）逐字差分 14215 字、0 不一致；深递归覆盖六种窗口溢出 / 下溢 | 差分发现并修正 MOVSP 的 Alloca 条件方向；PIE（EE.*）未做 |
-| 中断（核内） | ✅ | irq 测试与 QEMU 一致：软件中断 level 1/3、INTLEVEL / EXCM 屏蔽、CCOMPARE0/1/2、WAITI 唤醒、INTSET/INTCLEAR；单元测试：外部电平 / 边沿线、NMI | 外部线由 SoC 调 `cpu.set_irq_lines(mask)`；WAITI 时用 `next_timer_event()` 快进 |
-| FPU（单精度） | ✅ | fp 测试 18 个特殊值两两组合 × 4 种舍入：加减乘、乘加 / 减、转换、比较、条件传送、装载存储、FSR 标志、__divsf3 与 sqrtf 序列，全部与 QEMU 一致 | 除法 / 开方分步指令按 QEMU 的模型（序列结果正确，分步中间值不保证同真机）；RECIP0/RSQRT0 有意偏离 QEMU（给出正确结果） |
-| MAC16 | 🟡 | 乘 / 乘累加 / 乘减四种来源、40 位 ACC、LDINC/LDDEC 与 QEMU 一致 | 并行装载形式 QEMU 读到旧 m 值，未对照，按"用当前值"实现并单元测试；newlib / IDF 不生成 MAC16 |
-| S3 专用杂项 | ✅ | SALT/SALTU、区域保护 TLB 指令（W/R/P/I × I/D）与 QEMU 一致 | RER/WER 走 `Bus::rer/wer`（默认读 0） |
+| CPU Xtensa LX7 | ✅ | `tools/xtensa-tests` 11/11 自检；与 QEMU 逐字差分 14215 字、0 不一致；深递归覆盖六种窗口溢出 / 下溢 | 含中断、CCOMPARE、FPU、MAC16、SALT/SALTU、TLB 族、RER/WER；PIE（EE.*）未做 |
+| 启动（直接启动 + ROM） | ✅ | s3-hello（单核）与 QEMU 逐行一致；FreeRTOS 延时 499.9ms | 入口帧溢出保存区借用 ROM level 4/5 中断栈 |
+| 双核 | ✅ | s3-dual：两任务各钉一核、自旋锁计数 2×20000 准确、跨核队列、esp_ipc 在核 1 执行 | `ets_set_appcpu_boot_addr` HLE 启动核 1（栈 ROM .stack_app），PRID 0xABAB；每核一张中断矩阵；两核按 256 周期量子确定性交替，都空闲时一起快进；外设时间取两核中较快者（单调） |
+| 存储映射 / MMU / PSRAM | ✅ | 单元测试：flash / PSRAM 页翻译、PSRAM 可写、SRAM I/D 别名 | 8MB PSRAM 只有存储与映射，PSRAM 芯片初始化（MSPI / OPI）未模拟，CONFIG_SPIRAM 固件尚未验收 |
+| 中断矩阵（核 0 / 核 1） | ✅ | 单元测试 + s3-dual（FROM_CPU 跨核中断、两核各自 SYSTIMER 节拍） | 99 个源；核 1 表在 +0x800 |
+| GPIO（49 脚）/ IO_MUX | ✅ | s3-blink：GPIO5 翻转 | 外设信号经 GPIO 矩阵驱动引脚（RMT）；输出信号号 256 = 普通 GPIO |
+| LEDC | ✅ | s3-pot：5kHz PWM 占空比跟随 ADC | 与 C3 同一模型（扩到 8 通道），输出信号 73..80 |
+| RMT + WS2812 | ✅ | s3-rgb：GPIO48 解码 6 帧，前 4 帧颜色逐颗一致 | 与 C3 同一模型，按 `RmtLayout::S3`（4 发 4 收、RAM +0x800、信号 81..84）参数化 |
+| I2C0 / I2C1 | ✅ | s3-oled：扫描只应答 0x3C，1KB 帧 400kHz 约 24.0ms，点亮 1636 像素 | 与 C3 同一模型（寄存器布局逐项一致），I2C1 在 0x60027000 |
+| SAR ADC 单次（SENS） | ✅ | s3-pot：0 / 1550 / 3000mV 读数正确 | S3 单次采样走 RTC 的 SENS（0x60008800），不是 APB_SARADC；衰减档量程近似 950 / 1250 / 1750 / 3100mV；ADC2 仲裁标志、连续模式未做 |
+| UART / SYSTIMER / TIMG / SPI1 flash | ✅ | 控制台、FreeRTOS 节拍、RTC 校准、flash 识别 GD 16MB | 复用 C3 模型；TIMG 的 T1 未建模 |
+| EXTMEM / eFuse / 模拟前端 | 🟡 | 启动期轮询通过；芯片版本 v0.2、PSRAM_CAP=8MB | cache 操作瞬间完成；eFuse 只读；regi2c HLE |
+| USB OTG / Wi-Fi / BLE | ☐ | — | USB OTG 在另一分支开发 |
 
 ## 网页
 | 项 | 状态 |
 |---|---|
-| wasm 内核 | ✅ 115KB，无 import |
+| wasm 内核 | ✅ 约 230KB（C3 + S3 两颗芯片），无 import；按镜像头自动选芯片（`tryboard-machine`） |
 | 1× 实时 / 加速 | ✅ blink、hello 在 Chrome 无头模式下 1.00× |
-| 3D 工作台 | ✅ 面包板 + 开发板 + LED 随 GPIO 亮灭；板载 WS2812（GPIO8）随解码颜色发光；BOOT / RST 可点 |
-| 3D 工作台 | ✅ 面包板 + 开发板 + LED 随 GPIO 亮灭；BOOT / RST 可点；示例按 `scene.parts` 声明元件与接线（LED / SSD1306 / BME280），可指定机位 |
+| 3D 工作台 | ✅ 面包板 + 开发板 + LED 随 GPIO 亮灭；板载 WS2812（C3 GPIO8 / S3 GPIO48）随解码颜色发光；BOOT / RST 可点；示例按 `scene.parts` 声明元件与接线，可指定机位 |
+| 按芯片换板 | ✅ C3 板（2×15 针）/ S3 板（2×22 针、UART / USB 双口、N16R8）；元件按当前板子的引脚重新接线；网页验收 s3-blink、s3-rgb、s3-dual 1.00× 实时 |
 | OLED 实时画面 | ✅ 帧缓冲变了才传，128×64 最近邻纹理 |
 | 环境滑块 | ✅ 温度 / 湿度 / 气压 → `tb_env_set`，webtest 验证读数跟随 |
 | 串口输入 | 🟡 已接线，缺验收固件 |

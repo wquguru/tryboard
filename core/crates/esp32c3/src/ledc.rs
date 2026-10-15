@@ -98,7 +98,7 @@ impl Ledc {
             }
             0xa0..=0xbc => {
                 let t = ((off - 0xa0) / 8) as usize;
-                if off % 8 == 0 {
+                if off.is_multiple_of(8) {
                     self.timers[t].conf & !(1 << 25)
                 } else {
                     0
@@ -130,7 +130,7 @@ impl Ledc {
                     _ => {}
                 }
             }
-            0xa0..=0xbc if off % 8 == 0 => {
+            0xa0..=0xbc if off.is_multiple_of(8) => {
                 let t = ((off - 0xa0) / 8) as usize;
                 let tm = &mut self.timers[t];
                 tm.conf = v;

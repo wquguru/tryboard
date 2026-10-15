@@ -294,7 +294,7 @@ impl Machine {
             Machine::S3(m) => &m.bus.unimpl,
         };
         let mut v: Vec<_> = m.iter().map(|(a, n)| (*a, *n)).collect();
-        v.sort_by(|a, b| b.1.cmp(&a.1));
+        v.sort_by_key(|x| std::cmp::Reverse(x.1));
         v
     }
 
