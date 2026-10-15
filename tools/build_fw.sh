@@ -12,9 +12,12 @@ for n in "${names[@]}"; do
   src="$ROOT/firmware/$n"
   out="$ROOT/firmware/build/$n"
   mkdir -p "$out"
-  echo "== $n"
-  (cd "$src" && idf.py -B "$out/idf" set-target esp32c3 >/dev/null 2>&1 || true; cd "$src" && idf.py -B "$out/idf" build >"$out/build.log" 2>&1) || { tail -30 "$out/build.log"; exit 1; }
-  (cd "$out/idf" && python -m esptool --chip esp32c3 merge_bin -o "$out/flash.bin" @flash_args >/dev/null)
+  # 目标芯片取自 sdkconfig.defaults 的 CONFIG_IDF_TARGET，缺省 esp32c3
+  target=$(sed -n 's/^CONFIG_IDF_TARGET="\(.*\)"/\1/p' "$src/sdkconfig.defaults" 2>/dev/null | head -1)
+  target=${target:-esp32c3}
+  echo "== $n ($target)"
+  (cd "$src" && idf.py -B "$out/idf" set-target "$target" >/dev/null 2>&1 || true; cd "$src" && idf.py -B "$out/idf" build >"$out/build.log" 2>&1) || { tail -30 "$out/build.log"; exit 1; }
+  (cd "$out/idf" && python -m esptool --chip "$target" merge_bin -o "$out/flash.bin" @flash_args >/dev/null)
   cp "$out/idf/$n.elf" "$out/app.elf"
   ls -la "$out/flash.bin" | awk '{print "   flash.bin", $5, "bytes"}'
 done

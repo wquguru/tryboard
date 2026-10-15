@@ -1,5 +1,7 @@
 //! 原生命令行：跑固件、跑 riscv-tests、出未实现寄存器报告。
 
+mod s3;
+
 use std::io::Write;
 use std::time::Instant;
 use tryboard_esp32c3::devices::{
@@ -74,13 +76,17 @@ fn opt(args: &[String], name: &str) -> Option<String> {
 
 fn run(args: &[String]) {
     let Some(path) = args.first() else { usage() };
+    let flash = std::fs::read(path).unwrap_or_else(|e| panic!("读固件 {path}: {e}"));
+    // 按镜像头芯片 ID 分派：5 = ESP32-C3，9 = ESP32-S3
+    if tryboard_esp32s3::boot::image_chip_id(&flash) == Some(tryboard_esp32s3::boot::CHIP_ID) {
+        return s3::run(args, path, flash);
+    }
     let rom_path = opt(args, "--rom").unwrap_or_else(default_rom);
     let seconds: f64 = opt(args, "--seconds")
         .and_then(|s| s.parse().ok())
         .unwrap_or(5.0);
     let expect = opt(args, "--expect");
     let rom = std::fs::read(&rom_path).unwrap_or_else(|e| panic!("读 ROM {rom_path}: {e}"));
-    let flash = std::fs::read(path).unwrap_or_else(|e| panic!("读固件 {path}: {e}"));
     let (mut m, app) = match Esp32c3::boot(&rom, flash) {
         Ok(v) => v,
         Err(e) => {

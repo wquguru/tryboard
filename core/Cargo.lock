@@ -7,8 +7,10 @@ name = "tryboard-cli"
 version = "0.1.0"
 dependencies = [
  "tryboard-esp32c3",
+ "tryboard-esp32s3",
  "tryboard-rv32",
  "tryboard-soc",
+ "tryboard-xtensa",
 ]
 
 [[package]]
@@ -17,6 +19,15 @@ version = "0.1.0"
 dependencies = [
  "tryboard-rv32",
  "tryboard-soc",
+]
+
+[[package]]
+name = "tryboard-esp32s3"
+version = "0.1.0"
+dependencies = [
+ "tryboard-esp32c3",
+ "tryboard-rv32",
+ "tryboard-xtensa",
 ]
 
 [[package]]
