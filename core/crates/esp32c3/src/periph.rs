@@ -636,3 +636,68 @@ impl Extmem {
         }
     }
 }
+
+// ---------------------------------------------------------------- APB_SARADC（单次采样）
+/// ADC1 通道 0..4 = GPIO0..4，ADC2 通道 0 = GPIO5。电压由外部（网页旋钮 / 测试脚本）设定。
+/// 量程按数据手册的衰减档位近似：0dB≈750mV、2.5dB≈1050mV、6dB≈1300mV、12dB≈2500mV。
+pub struct Adc {
+    pub regs: [u32; 0x400 / 4],
+    /// 每个引脚上的电压（mV）
+    pub pin_mv: [f32; 22],
+    /// 噪声幅度（LSB），真实 ADC 读数有抖动；0 关闭
+    pub noise_lsb: u32,
+    seed: u32,
+}
+
+impl Default for Adc {
+    fn default() -> Self {
+        Adc { regs: [0; 0x400 / 4], pin_mv: [0.0; 22], noise_lsb: 2, seed: 0x1234_5678 }
+    }
+}
+
+impl Adc {
+    pub fn read(&self, off: u32) -> u32 {
+        match off {
+            0x48 => self.regs[0x44 / 4] & self.regs[0x40 / 4],
+            0x3fc => 0x2007171,
+            _ => self.regs[(off / 4) as usize],
+        }
+    }
+
+    pub fn write(&mut self, off: u32, v: u32) {
+        let i = (off / 4) as usize;
+        match off {
+            0x4c => self.regs[0x44 / 4] &= !v,
+            0x20 => {
+                let rising = v & (1 << 29) != 0 && self.regs[i] & (1 << 29) == 0;
+                self.regs[i] = v;
+                if rising {
+                    self.sample(v);
+                }
+            }
+            _ => self.regs[i] = v,
+        }
+    }
+
+    fn sample(&mut self, cfg: u32) {
+        // 哪个 ADC 完成由 adc1/adc2_onetime_sample 使能位决定（校准时通道字段可能指向内部通道）
+        let chan = (cfg >> 25) & 0xf;
+        let unit = if cfg & (1 << 31) != 0 { 0 } else { 1 };
+        let ch = chan & 7;
+        let atten = (cfg >> 23) & 3;
+        let pin = if unit == 0 { ch as usize } else { 5 };
+        let full = [750.0, 1050.0, 1300.0, 2500.0][atten as usize];
+        let mv = if (unit == 0 && ch <= 4) || (unit == 1 && ch == 0) { self.pin_mv[pin] } else { 0.0 };
+        // 线性同余噪声，保证可复现
+        self.seed = self.seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
+        let n = if self.noise_lsb > 0 { (self.seed >> 16) % (2 * self.noise_lsb + 1) } else { 0 } as i32 - self.noise_lsb as i32;
+        let raw = ((mv / full * 4095.0).round() as i32 + n).clamp(0, 4095) as u32;
+        if unit == 0 {
+            self.regs[0x2c / 4] = raw;
+            self.regs[0x44 / 4] |= 1 << 31;
+        } else {
+            self.regs[0x30 / 4] = raw;
+            self.regs[0x44 / 4] |= 1 << 30;
+        }
+    }
+}

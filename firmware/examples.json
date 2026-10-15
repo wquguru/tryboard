@@ -70,5 +70,27 @@
    "SYSTIMER",
    "ESP-IDF 5.5"
   ]
+ },
+ {
+  "id": "pot",
+  "title": "电位器：ADC 调亮度",
+  "about": "电位器滑片接 GPIO2（ADC1 通道 2，12dB 衰减，量程约 0–2.5V），读数直接当作 GPIO5 上 LED 的 PWM 占空比。拖动旋钮看读数和亮度一起变。ADC 读数带 ±2 LSB 噪声，和真机一样会轻微跳动。",
+  "tags": [
+   "✓ 仿真验证",
+   "ADC",
+   "LEDC"
+  ],
+  "pins": {
+   "led": 5
+  },
+  "controls": [
+   {
+    "type": "analog",
+    "pin": 2,
+    "label": "电位器（GPIO2）",
+    "max_mv": 3300,
+    "value": 1200
+   }
+  ]
  }
 ]

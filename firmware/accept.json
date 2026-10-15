@@ -75,5 +75,20 @@
    "min": 0.025,
    "max": 0.125
   }
+ },
+ {
+  "id": "pot",
+  "seconds": 1.5,
+  "script": "0.0:mv2=0; 0.4:mv2=1250; 0.8:mv2=2400",
+  "expect": [
+   "ADC raw=2046",
+   "TRYBOARD_OK pot"
+  ],
+  "pwm": {
+   "pin": 5,
+   "freq": 5000,
+   "min": 0.0,
+   "max": 0.96
+  }
  }
 ]

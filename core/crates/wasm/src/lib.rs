@@ -151,3 +151,15 @@ pub unsafe extern "C" fn tb_uart_push(p: *const u8, len: usize) {
         }
     })
 }
+
+/// 设置引脚上的模拟电压（毫伏），给 ADC 读
+#[no_mangle]
+pub extern "C" fn tb_analog_set(pin: u32, mv: f32) {
+    M.with(|c| {
+        if let Some(m) = c.borrow_mut().as_mut() {
+            if let Some(p) = m.bus.adc.pin_mv.get_mut(pin as usize) {
+                *p = mv;
+            }
+        }
+    })
+}

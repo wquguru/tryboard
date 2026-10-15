@@ -129,6 +129,15 @@ fn run(args: &[String]) {
                     let now = m.cpu.cycles;
                     m.bus.gpio_changed(now);
                 }
+            } else if let Some(rest) = act.strip_prefix("mv") {
+                // mvN=电压：引脚 N 上的模拟电压（毫伏）
+                if let Some((pin, mv)) = rest.split_once('=') {
+                    if let (Ok(p), Ok(v)) = (pin.parse::<usize>(), mv.parse::<f32>()) {
+                        if p < 22 {
+                            m.bus.adc.pin_mv[p] = v;
+                        }
+                    }
+                }
             } else if let Some(t) = act.strip_prefix("uart=") {
                 m.bus.uart0.push_rx(t.replace("\\n", "\n").as_bytes());
                 m.bus.irq_dirty = true;

@@ -18,7 +18,8 @@
 | 模拟前端（regi2c） | 🟡 | HLE，ocode 校准通过 | 不建模模拟电路本身 |
 | USB-Serial-JTAG | 🟡 | 第二控制台输出被吞掉 | 网页里暂不显示 |
 | LEDC | ✅ | fade：5kHz 13 位硬件渐变时序与 IDF 计算一致；servo：50Hz 脉宽 | 不逐周期出波形，按占空比给出引脚 PWM |
-| RMT / I2C / SPI2 / ADC / I2S | ☐ | — | M2（RMT、I2C 在分支开发中） |
+| ADC（APB_SARADC 单次） | ✅ | pot：0 / 1250 / 2400mV 读数误差 < 1LSB+噪声 | 衰减档线性近似、±2LSB 噪声；连续模式（DMA）未做；eFuse 校准数据未提供（adc_cali 不可用） |
+| RMT / I2C / SPI2 / I2S | ☐ | — | M2（RMT、I2C 在分支开发中） |
 | Wi-Fi / BLE | ☐ | — | M6 / M7 |
 
 ## 网页

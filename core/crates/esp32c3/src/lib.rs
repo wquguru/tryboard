@@ -54,6 +54,7 @@ pub struct SocBus {
     pub extmem: Extmem,
     pub analog: hle::Analog,
     pub ledc: ledc::Ledc,
+    pub adc: Adc,
     pub efuse: [u32; 0x200 / 4],
     /// SYSTEM_CPU_INTR_FROM_CPU_0..3
     pub from_cpu: u32,
@@ -91,6 +92,7 @@ impl Default for SocBus {
             extmem: Extmem::default(),
             analog: Default::default(),
             ledc: Default::default(),
+            adc: Adc::default(),
             efuse: boot::default_efuse(),
             from_cpu: 0,
             usj_tx: Vec::new(),
@@ -174,6 +176,7 @@ impl SocBus {
             0x6000_4000 => return self.gpio.read(off),
             0x6000_2000 => return self.spi1.read(off),
             0x6001_9000 => return self.ledc.read(off),
+            0x6004_0000 => return self.adc.read(off),
             0x6000_9000 if (4..=0x58).contains(&off) => return self.gpio.iomux[((off - 4) / 4) as usize],
             0x600C_4000 if off < 0x100 => return self.extmem.read(off),
             0x6001_F000 => return self.timg0.read(off, now),
@@ -219,6 +222,7 @@ impl SocBus {
             0x6001_0000 => return self.uart1.write(off, v),
             0x6000_2000 => return self.spi1.write(off, v, &mut self.flash),
             0x6001_9000 => return self.ledc.write(off, v, now),
+            0x6004_0000 => return self.adc.write(off, v),
             0x6000_9000 if (4..=0x58).contains(&off) => {
                 self.gpio.iomux[((off - 4) / 4) as usize] = v;
                 self.gpio_changed(now);
@@ -358,10 +362,25 @@ impl Bus for SocBus {
             let v = if size == 4 {
                 v
             } else {
-                // 子字写：读-改-写（只对没有副作用的寄存器有意义）
+                // 子字写（编译器对位域常用 sb/sh）：先读外设当前值再合并。
+                // UART FIFO 读有出队副作用，不能拿来做读-改-写
                 let sh = (a & 3) * 8;
                 let mask = if size == 2 { 0xffff } else { 0xff } << sh;
-                let old = self.regs.get(&aa).copied().unwrap_or(0);
+                let old = if aa == 0x6000_0000 || aa == 0x6001_0000 {
+                    0
+                } else {
+                    let before = self.unimpl.get(&aa).copied();
+                    let v = self.mmio_read(aa);
+                    match before {
+                        Some(n) => {
+                            self.unimpl.insert(aa, n);
+                        }
+                        None => {
+                            self.unimpl.remove(&aa);
+                        }
+                    }
+                    v
+                };
                 (old & !mask) | ((v << sh) & mask)
             };
             self.mmio_write(aa, v);
