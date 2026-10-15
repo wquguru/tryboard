@@ -28,7 +28,17 @@
 ## ESP32-S3
 | 模块 | 状态 | 验收 | 备注 |
 |---|---|---|---|
-| CPU Xtensa LX7 基础 ISA + 窗口 | 🟡 | `tools/xtensa-tests` 8/8；深递归覆盖六种窗口溢出 / 下溢 | 缺中断、FPU、MAC16、PIE；未与 QEMU 差分 |
+| CPU Xtensa LX7 基础 ISA + 窗口 | 🟡 | `tools/xtensa-tests` 8/8；深递归覆盖六种窗口溢出 / 下溢 | 缺中断、FPU、MAC16、PIE；未与 QEMU 差分；缺 SALT/SALTU、TLB 族、RER/WER（S3 crate 里有临时垫片）；**MOVSP 的 Alloca 条件反了**（应为 WINDOWSTART[WB-1..WB-3] 全 0 才报，现为任一为 1 就报；垫片撤回多报，少报的情况救不回来） |
+| 启动（直接启动 + ROM） | ✅ | s3-hello 单核：从 call_start_cpu0 跑到 app_main，打印芯片信息 / 16MB flash / Free heap 402804，与 QEMU 逐行一致 | CALLINC=0 进入口、入口帧 [sp-12] 填指向 ROM .stack_app 的指针；核 1 不启动（UNICORE） |
+| **当前止步点** | ⚠️ | `tryboard run firmware/build/s3-hello/flash.bin` | `vTaskDelay(500ms)` 约 2µs 就返回、app_main 返回后 vTaskDelete 不切换任务 → `abort()` → 进 `esp_restart_noos+0x104` 空转。原因：核不响应中断（SYSTIMER 节拍、任务切换都依赖 level-1 中断）。SoC 侧已把外部中断线写进 INTERRUPT SR，等核实现中断裁决 |
+| 存储映射 / MMU / PSRAM | ✅ | 单元测试：flash / PSRAM 页翻译、PSRAM 可写、SRAM I/D 别名 | 512 项 MMU（位 15 选 PSRAM）；8MB PSRAM 只有存储与映射，PSRAM 芯片初始化流程（MSPI / OPI 命令）未模拟，CONFIG_SPIRAM 固件尚未验收 |
+| 中断矩阵（核 0） | 🟡 | 单元测试：电平线、边沿线上升沿、复位映射到线 16 = 不连接 | 99 个源；INTR_STATUS 可读；核 1 矩阵未做 |
+| UART / SYSTIMER / TIMG / SPI1 flash / LEDC | 🟡 | s3-hello 启动期使用（控制台、RTC 校准、flash 识别 GD 16MB） | 复用 C3 模型（寄存器布局同族）；TIMG 的 T1、LEDC 的通道 6/7 未建模 |
+| EXTMEM（I/D cache 分开） | ✅ | 启动期 freeze / sync / autoload 轮询通过 | cache 操作瞬间完成 |
+| GPIO（49 脚）/ IO_MUX | 🟡 | — | 输出 / 输入 / 上下拉 / 中断状态已写，未有 S3 示例验收 |
+| eFuse | 🟡 | 芯片版本 v0.2、MAC、PSRAM_CAP=8MB | 只读 |
+| 模拟前端（regi2c） | 🟡 | HLE（窗口 ABI 返回），ocode 校准通过；BBPLL 校准完成位（I2C_MST_ANA_CONF0 bit24） | 不建模模拟电路 |
+| 双核 | ☐ | — | 后续：核 1 由 SYSTEM_CORE_1_CONTROL 放行 + ets_set_appcpu_boot_addr，需第二个 Cpu 实例与跨核中断 |
 
 ## 网页
 | 项 | 状态 |

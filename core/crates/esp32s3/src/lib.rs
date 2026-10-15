@@ -90,9 +90,8 @@ pub struct SocBus {
 
 impl Default for SocBus {
     fn default() -> Self {
-        let mut spi1 = SpiFlash::default();
         // GD25Q128：16MB
-        spi1.jedec = 0x18_40_c8;
+        let spi1 = SpiFlash { jedec: 0x18_40_c8, ..Default::default() };
         SocBus {
             sram: vec![0; SRAM_SIZE],
             rtc_slow: vec![0; (RTC_SLOW_HIGH - RTC_SLOW_LOW) as usize],
@@ -548,5 +547,53 @@ impl Esp32s3 {
 
     pub fn symbol_at(&self, pc: u32) -> Option<&str> {
         self.rom_symbols.get(&pc).map(|s| s.as_str())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mmu_flash_and_psram() {
+        let mut b = SocBus { flash: vec![0; 1 << 20], ..Default::default() };
+        b.flash[0x2_0004] = 0xab;
+        b.psram[0x1_0008] = 0xcd;
+        // DROM 0x3C010000 → flash 页 2；DROM 0x3C800000（线性页 128）→ PSRAM 页 1
+        b.mmu[1] = 2;
+        b.mmu[128] = MMU_PSRAM | 1;
+        assert_eq!(b.mem_read(0x3C01_0004, 1), Some(0xab));
+        assert_eq!(b.mem_read(0x3C80_0008, 1), Some(0xcd));
+        // PSRAM 可写、flash 映射不可写
+        assert!(b.mem_write(0x3C80_0000, 4, 0x1234_5678).is_some());
+        assert!(b.mem_write(0x3C01_0000, 4, 1).is_none());
+        // 无效页
+        assert_eq!(b.mem_read(0x3C02_0000, 4), None);
+    }
+
+    #[test]
+    fn sram_aliases() {
+        let mut b = SocBus::default();
+        b.mem_write(0x3FC8_8000, 4, 0xdead_beef).unwrap();
+        assert_eq!(b.mem_read(0x4037_8000, 4), Some(0xdead_beef));
+        // SRAM2 只在 D 总线
+        b.mem_write(0x3FCF_0000, 4, 7).unwrap();
+        assert_eq!(b.mem_read(0x3FCF_0000, 4), Some(7));
+    }
+
+    #[test]
+    fn intmatrix_routes_level_and_edge() {
+        let mut m = Intmatrix::default();
+        let mut lv = [0u64; 2];
+        lv[(src::SYSTIMER_TARGET0 / 64) as usize] |= 1 << (src::SYSTIMER_TARGET0 % 64);
+        // 映射到电平线 9
+        m.map[src::SYSTIMER_TARGET0 as usize] = 9;
+        assert_eq!(m.lines(&lv), (1 << 9, 0));
+        // 映射到边沿线 10：只在第一次出现时给出上升沿
+        m.map[src::SYSTIMER_TARGET0 as usize] = 10;
+        assert_eq!(m.lines(&lv), (0, 1 << 10));
+        assert_eq!(m.lines(&lv), (0, 0));
+        // 复位值映射到线 16（定时器线）等于不连接
+        assert_eq!(Intmatrix::default().lines(&lv), (0, 0));
     }
 }
