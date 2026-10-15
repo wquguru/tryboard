@@ -78,10 +78,12 @@ pub struct SocBus {
     /// 访问了没有模型的寄存器：地址 → 次数
     pub unimpl: HashMap<u32, u64>,
     pub irq_dirty: bool,
+    pub wifi: wifi::WifiMac,
     /// 调试：监视某个 MMIO 地址，记录访问时的 PC（watch_pc 由运行循环填写）
-    pub watch: Option<u32>,
+    pub watch: Option<(u32, u32)>,
     pub watch_pc: u32,
-    pub watch_hits: Vec<(u32, u32, bool)>,
+    /// （PC, 地址, 值, 是否写），按时间顺序
+    pub watch_hits: Vec<(u32, u32, u32, bool)>,
     pub next_event: u64,
     /// GPIO 电平变化记录（周期, 电平），前端按此驱动 LED 等
     pub gpio_log: Vec<(u64, u32)>,
@@ -119,6 +121,7 @@ impl Default for SocBus {
             regs: HashMap::new(),
             unimpl: HashMap::new(),
             irq_dirty: true,
+            wifi: Default::default(),
             watch: None,
             watch_pc: 0,
             watch_hits: Vec::new(),
@@ -250,6 +253,11 @@ impl SocBus {
             },
             _ => {}
         }
+        if (0x6003_3000..0x6003_6000).contains(&a) {
+            if let Some(v) = self.wifi_read(a) {
+                return v;
+            }
+        }
         if let Some(v) = boot::special_read(a, now) {
             return v;
         }
@@ -329,6 +337,9 @@ impl SocBus {
             }
             _ => {}
         }
+        if (0x6003_3000..0x6003_6000).contains(&a) && self.wifi_write(a, v) {
+            return;
+        }
         if !boot::special_write(a, v) {
             *self.unimpl.entry(a).or_insert(0) += 1;
         }
@@ -368,6 +379,7 @@ impl SocBus {
                 l |= 1 << s;
             }
         };
+        set(src::WIFI_MAC, self.wifi.irq());
         set(src::UART0, self.uart0.irq());
         set(src::UART1, self.uart1.irq());
         set(src::GPIO, self.gpio.irq());
@@ -416,10 +428,10 @@ impl SocBus {
         let n2 = self.timg0.update(now);
         let n3 = self.timg1.update(now);
         let n4 = self.ledc.update(now);
-        self.next_event = n1.min(n2).min(n3).min(n4);
-        let n4 = self.rmt.update(now);
-        let n5 = self.route_rmt(now);
-        self.next_event = n1.min(n2).min(n3).min(n4).min(n5);
+        let n5 = self.rmt.update(now);
+        let n6 = self.route_rmt(now);
+        let n7 = self.wifi_update(now);
+        self.next_event = n1.min(n2).min(n3).min(n4).min(n5).min(n6).min(n7);
         let lv = self.levels();
         let pending = self.intc.pending(lv);
         cpu.irq_line = self.intc.select(pending);
@@ -449,8 +461,10 @@ impl Bus for SocBus {
         }
         if (MMIO_LOW..MMIO_HIGH).contains(&a) {
             let v = self.mmio_read(a & !3);
-            if self.watch == Some(a & !3) && self.watch_hits.len() < 4096 {
-                self.watch_hits.push((self.watch_pc, v, false));
+            if let Some((lo, hi)) = self.watch {
+                if (lo..hi).contains(&a) && self.watch_hits.len() < 400_000 {
+                    self.watch_hits.push((self.watch_pc, a & !3, v, false));
+                }
             }
             let sh = (a & 3) * 8;
             return Ok(match size {
@@ -493,8 +507,10 @@ impl Bus for SocBus {
                 };
                 (old & !mask) | ((v << sh) & mask)
             };
-            if self.watch == Some(aa) && self.watch_hits.len() < 4096 {
-                self.watch_hits.push((self.watch_pc, v, true));
+            if let Some((lo, hi)) = self.watch {
+                if (lo..hi).contains(&aa) && self.watch_hits.len() < 400_000 {
+                    self.watch_hits.push((self.watch_pc, aa, v, true));
+                }
             }
             self.mmio_write(aa, v);
             return Ok(());

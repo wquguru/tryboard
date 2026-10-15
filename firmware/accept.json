@@ -202,5 +202,16 @@
    "TRYBOARD_OK wifi-init",
    "start ok"
   ]
+ },
+ {
+  "id": "wifi-scan",
+  "seconds": 4,
+  "expect": [
+   "找到 4 个 AP",
+   "AP TryBoard-WiFi    ch= 6 rssi= -42 auth=OPEN",
+   "AP TryBoard-WPA2    ch= 1 rssi= -55 auth=WPA2_PSK",
+   "AP Neighbor-5G-Ext  ch=11 rssi= -78 auth=WPA2_PSK",
+   "TRYBOARD_OK wifi-scan"
+  ]
  }
 ]

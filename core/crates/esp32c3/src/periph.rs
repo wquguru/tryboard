@@ -6,6 +6,7 @@ pub const CPU_HZ: u64 = 160_000_000;
 
 // ---------------------------------------------------------------- 中断源编号（soc/interrupts.h）
 pub mod src {
+    pub const WIFI_MAC: u32 = 0;
     pub const GPIO: u32 = 16;
     pub const UART0: u32 = 21;
     pub const UART1: u32 = 22;
