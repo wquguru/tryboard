@@ -19,6 +19,9 @@ interface Exports {
   tb_gpio_drive(pin: number, level: number): void;
   tb_uart_push(p: number, len: number): void;
   tb_pin_pwm(pin: number): number;
+  tb_ws2812_fetch(pin: number): number;
+  tb_ws2812_ptr(): number;
+  tb_ws2812_frames(pin: number): number;
 }
 
 export type ToWorker =
@@ -32,7 +35,7 @@ export type ToWorker =
 export type FromWorker =
   | { type: 'booted' }
   | { type: 'error'; message: string }
-  | { type: 'tick'; console: string; gpio: number; enable: number; pwm: number[]; simSeconds: number; ratio: number; running: boolean }
+  | { type: 'tick'; console: string; gpio: number; enable: number; pwm: number[]; simSeconds: number; ratio: number; running: boolean; leds?: number[][] }
   | { type: 'stopped'; reason: string };
 
 let ex: Exports | null = null;
@@ -41,6 +44,21 @@ let speed = 1;
 let simAnchor = 0; // 开始计时时的模拟周期
 let wallAnchor = 0;
 const decoder = new TextDecoder();
+/** 板载 WS2812 所在引脚 */
+const LED_PIN = 8;
+let lastFrames = -1;
+
+/** 板载灯带有新帧时返回各灯 [r,g,b]，否则 undefined（省掉无变化时的消息体积） */
+function leds(e: Exports): number[][] | undefined {
+  const f = e.tb_ws2812_frames(LED_PIN);
+  if (f === lastFrames) return undefined;
+  lastFrames = f;
+  const n = e.tb_ws2812_fetch(LED_PIN);
+  const b = new Uint8Array(e.memory.buffer, e.tb_ws2812_ptr(), n * 3);
+  const out: number[][] = [];
+  for (let i = 0; i < n; i++) out.push([b[i * 3], b[i * 3 + 1], b[i * 3 + 2]]);
+  return out;
+}
 const post = (m: FromWorker) => (self as unknown as Worker).postMessage(m);
 
 function errorText(e: Exports) {
@@ -99,6 +117,7 @@ function loop() {
   post({
     type: 'tick',
     console: text,
+    leds: leds(e),
     gpio: e.tb_gpio_level(),
     enable: e.tb_gpio_enable(),
     pwm: pwmAll(e),
@@ -131,6 +150,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
         return;
       }
       ex = e;
+      lastFrames = -1;
       post({ type: 'booted' });
       break;
     }

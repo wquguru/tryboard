@@ -491,8 +491,9 @@ pub struct Gpio {
     pub func_in: [u32; 128],
     pub status: u32,
     pub strap: u32,
-    /// 外设输出信号（LEDC 等）按信号号给出的电平，GPIO 矩阵据此决定引脚电平
-    pub periph_out: Vec<(u32, bool)>,
+    /// 由外设信号（RMT 等，经 GPIO 矩阵）驱动的引脚：掩码与电平
+    pub periph_mask: u32,
+    pub periph_level: u32,
 }
 
 impl Default for Gpio {
@@ -510,7 +511,8 @@ impl Default for Gpio {
             func_in: [0; 128],
             status: 0,
             strap: 0xc, // GPIO2 / GPIO8 拉高 → SPI 启动
-            periph_out: Vec::new(),
+            periph_mask: 0,
+            periph_level: 0,
         }
     }
 }
@@ -529,7 +531,9 @@ impl Gpio {
             }
         }
         let undriven = !driven & !self.ext_driven;
-        (self.out & driven) | (self.ext_in & self.ext_driven & !driven) | (pull & undriven & 0x3f_ffff)
+        // 经 GPIO 矩阵由外设（RMT 等）驱动的引脚取外设电平
+        let out = (self.out & !self.periph_mask) | (self.periph_level & self.periph_mask);
+        (out & driven) | (self.ext_in & self.ext_driven & !driven) | (pull & undriven & 0x3f_ffff)
     }
 
     /// 电平变化后按每个引脚的中断类型置 STATUS 位（GPIO_PINn_INT_TYPE：1 上升 2 下降 3 双沿 4 低电平 5 高电平）。
@@ -558,6 +562,15 @@ impl Gpio {
     /// GPIO 中断输出：STATUS 中且该引脚 INT_ENA（位 13..17，CPU 中断位 13）开启
     pub fn irq(&self) -> bool {
         (0..22).any(|i| self.status & (1 << i) != 0 && (self.pin[i] >> 13) & 0x1f != 0)
+    }
+
+    pub fn set_periph_level(&mut self, pin: u32, on: bool) {
+        self.periph_mask |= 1 << pin;
+        if on {
+            self.periph_level |= 1 << pin;
+        } else {
+            self.periph_level &= !(1 << pin);
+        }
     }
 
     pub fn read(&mut self, off: u32) -> u32 {
@@ -590,7 +603,14 @@ impl Gpio {
             0x4c => self.status &= !v,
             0x74..=0xc8 => self.pin[((off - 0x74) / 4) as usize] = v,
             0x154..=0x350 => self.func_in[((off - 0x154) / 4) as usize] = v,
-            0x554..=0x5a8 => self.func_out[((off - 0x554) / 4) as usize] = v,
+            0x554..=0x5a8 => {
+                let pin = ((off - 0x554) / 4) as usize;
+                self.func_out[pin] = v;
+                // 改回普通 GPIO 输出（信号 128）时不再由外设驱动
+                if v & 0xff == 0x80 {
+                    self.periph_mask &= !(1 << pin);
+                }
+            }
             _ => {}
         }
     }

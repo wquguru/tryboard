@@ -237,6 +237,17 @@ fn run(args: &[String]) {
             }
         }
     }
+    if args.iter().any(|a| a == "--ws2812-log") {
+        let mut pins: Vec<_> = m.bus.ws2812.iter().collect();
+        pins.sort_by_key(|(p, _)| **p);
+        for (pin, d) in pins {
+            eprintln!("[tryboard] WS2812 GPIO{pin} 共 {} 帧", d.frames);
+            for (t, rgb) in &d.history {
+                let cols: Vec<String> = rgb.iter().map(|c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])).collect();
+                eprintln!("    {:.4}s {}", *t as f64 / tryboard_esp32c3::periph::CPU_HZ as f64, cols.join(" "));
+            }
+        }
+    }
     if let Some(e) = expect {
         let ok = String::from_utf8_lossy(&out).contains(e.as_str());
         eprintln!("[tryboard] 期望输出 {:?}: {}", e, if ok { "PASS" } else { "FAIL" });

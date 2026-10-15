@@ -8,6 +8,7 @@ thread_local! {
     static M: RefCell<Option<Esp32c3>> = const { RefCell::new(None) };
     static OUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     static ERR: RefCell<String> = const { RefCell::new(String::new()) };
+    static WS: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
 
 #[no_mangle]
@@ -137,6 +138,34 @@ pub extern "C" fn tb_pin_pwm(pin: u32) -> f32 {
 #[no_mangle]
 pub extern "C" fn tb_pin_pwm_freq(pin: u32) -> f32 {
     M.with(|c| c.borrow().as_ref().and_then(|m| m.bus.pin_pwm(pin as usize)).map(|p| p.1).unwrap_or(0.0))
+}
+
+/// 引脚 pin 上 WS2812 灯带最近一帧：拷进内部缓冲（每颗 r,g,b 三字节），返回灯珠数。
+/// 之后用 tb_ws2812_ptr 读取。没有灯带返回 0。
+#[no_mangle]
+pub extern "C" fn tb_ws2812_fetch(pin: u32) -> usize {
+    M.with(|c| {
+        let b = c.borrow();
+        let rgb: Vec<u8> = b
+            .as_ref()
+            .and_then(|m| m.bus.ws2812.get(&pin))
+            .map(|d| d.rgb.iter().flatten().copied().collect())
+            .unwrap_or_default();
+        let n = rgb.len() / 3;
+        WS.with(|w| *w.borrow_mut() = rgb);
+        n
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn tb_ws2812_ptr() -> *const u8 {
+    WS.with(|w| w.borrow().as_ptr())
+}
+
+/// 引脚 pin 上已解码的帧数（前端据此判断颜色是否更新）
+#[no_mangle]
+pub extern "C" fn tb_ws2812_frames(pin: u32) -> f64 {
+    M.with(|c| c.borrow().as_ref().and_then(|m| m.bus.ws2812.get(&pin)).map(|d| d.frames as f64).unwrap_or(0.0))
 }
 
 /// # Safety

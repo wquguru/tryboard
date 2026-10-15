@@ -326,13 +326,7 @@ impl Cpu {
                             ((a as i32) / (b as i32)) as u32
                         }
                     }
-                    (1, 5) => {
-                        if b == 0 {
-                            u32::MAX
-                        } else {
-                            a / b
-                        }
-                    }
+                    (1, 5) => a.checked_div(b).unwrap_or(u32::MAX),
                     (1, 6) => {
                         if b == 0 {
                             a

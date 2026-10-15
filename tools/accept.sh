@@ -34,6 +34,7 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
     cmd = [f'{root}/core/target/release/tryboard', 'run', fw, '--seconds', str(t['seconds']), '--gpio-log']
     if t.get('script'): cmd += ['--script', t['script']]
     if t.get('pwm'): cmd += ['--pwm-log', str(t['pwm']['pin'])]
+    if t.get('ws2812'): cmd += ['--ws2812-log']
     p = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
     out, err = p.stdout, p.stderr
     missing = [e for e in t['expect'] if e not in out]
@@ -56,6 +57,21 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
             notes.append(f"PWM {f:.0f}Hz 占空比 {lo:.3f}..{hi:.3f}")
             if abs(f - pw['freq']) > pw['freq'] * 0.01 or abs(lo - pw['min']) > 0.01 or abs(hi - pw['max']) > 0.01:
                 missing.append('pwm')
+    w = t.get('ws2812')
+    if w:
+        # 解码出的帧：'[tryboard] WS2812 GPIO8 共 N 帧' 之后每行 '    时间s #rrggbb ...'
+        sec = re.search(rf"WS2812 GPIO{w['pin']} 共 (\d+) 帧\n((?:    .*\n?)*)", err)
+        nf = int(sec.group(1)) if sec else 0
+        frames = [l.split()[1:] for l in sec.group(2).splitlines()] if sec else []
+        notes.append(f"WS2812 GPIO{w['pin']} 解码 {nf} 帧")
+        if nf < w.get('min_frames', 1): missing.append('ws2812 帧数')
+        bad_frames = [i for i, want in enumerate(w.get('frames', [])) if i >= len(frames) or frames[i] != want]
+        if bad_frames:
+            missing.append('ws2812 颜色')
+            i = bad_frames[0]
+            notes.append(f"第 {i} 帧应为 {' '.join(w['frames'][i])}，实际 {' '.join(frames[i]) if i < len(frames) else '无'}")
+        else:
+            notes.append(f"前 {len(w.get('frames', []))} 帧颜色逐颗一致")
     speed = re.search(r'模拟 ([\d.]+)s / 实际 ([\d.]+)s', err)
     if speed: notes.append(f"模拟 {speed.group(1)}s 用时 {speed.group(2)}s")
     if t.get('qemu') and not no_qemu:
@@ -73,7 +89,7 @@ PY
 if [ $NO_WEB = 0 ]; then
   echo -e "\n## 网页（Chrome 无头 + wasm）" >> $REPORT
   tools/build_web.sh >/dev/null 2>&1 || { echo "构建失败" >> $REPORT; fail=1; }
-  for ex in blink hello; do
+  for ex in blink hello rgb; do
     r=$(node tools/webtest/webtest.mjs $ex TRYBOARD_OK 2>&1 | head -3)
     echo "- $r" >> $REPORT
     echo "$r" | grep -q PASS || fail=1
