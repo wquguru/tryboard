@@ -8,8 +8,12 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
+#ifndef PIN_SDA
 #define PIN_SDA 6
+#endif
+#ifndef PIN_SCL
 #define PIN_SCL 7
+#endif
 #define OLED_ADDR 0x3C
 
 static i2c_master_bus_handle_t bus;

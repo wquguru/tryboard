@@ -1,4 +1,5 @@
-//! ESP32-S3 SoC：存储映射（含 PSRAM）、外设分发、直接启动、运行循环。单核启动（核 1 保持停住）。
+//! ESP32-S3 SoC：存储映射（含 PSRAM）、外设分发、直接启动、双核运行循环。
+//! 核 1 在固件调用 ROM 的 ets_set_appcpu_boot_addr 时启动（HLE），两核按固定量子交替执行（确定性）。
 //!
 //! 与 C3 同族、寄存器布局一致的外设（UART、SYSTIMER、TIMG、SPI1 flash、LEDC）复用 tryboard-esp32c3 的模型；
 //! S3 特有的中断矩阵、EXTMEM、49 脚 GPIO 在 periph.rs。
@@ -69,6 +70,12 @@ pub struct SocBus {
     pub timg0: Timg,
     pub timg1: Timg,
     pub intm: Intmatrix,
+    /// 核 1 的中断矩阵（INTERRUPT_CORE1_*，在核 0 那张表之后 0x800）
+    pub intm1: Intmatrix,
+    /// 每个核当前的外部中断线（update 时算出，轮到该核执行前交给它）
+    pub lines: [u32; 2],
+    /// 固件请求启动核 1 的入口（ets_set_appcpu_boot_addr，HLE 里设置）
+    pub appcpu_boot: Option<u32>,
     pub gpio: Gpio,
     pub spi1: SpiFlash,
     pub extmem: Extmem,
@@ -106,6 +113,9 @@ impl Default for SocBus {
             timg0: Timg::default(),
             timg1: Timg::default(),
             intm: Intmatrix::default(),
+            intm1: Intmatrix::default(),
+            lines: [0; 2],
+            appcpu_boot: None,
             gpio: Gpio::default(),
             spi1,
             extmem: Extmem::default(),
@@ -233,7 +243,8 @@ impl SocBus {
             0x6000_E000 if off == 0x40 => return self.regs.get(&a).copied().unwrap_or(0) | (1 << 24),
             0x600C_2000 => {
                 let lv = self.levels();
-                if let Some(v) = self.intm.read(off, &lv) {
+                let r = if off >= 0x800 { self.intm1.read(off - 0x800, &lv) } else { self.intm.read(off, &lv) };
+                if let Some(v) = r {
                     return v;
                 }
             }
@@ -296,7 +307,8 @@ impl SocBus {
                 return;
             }
             0x600C_2000 => {
-                if self.intm.write(off, v) {
+                let done = if off >= 0x800 { self.intm1.write(off - 0x800, v) } else { self.intm.write(off, v) };
+                if done {
                     return;
                 }
             }
@@ -347,8 +359,8 @@ impl SocBus {
         l
     }
 
-    /// 推进定时器、把外部中断线送进 CPU
-    pub fn update<C: IrqCpu>(&mut self, cpu: &mut C) {
+    /// 推进定时器、按两个核各自的中断矩阵算出外部中断线（存进 lines，轮到该核时交给它）
+    pub fn update(&mut self) {
         let now = self.now;
         let n1 = self.systimer.update(now);
         let n2 = self.timg0.update(now);
@@ -356,21 +368,11 @@ impl SocBus {
         let n4 = self.ledc.update(now);
         self.next_event = n1.min(n2).min(n3).min(n4);
         let lv = self.levels();
-        let (level, rising) = self.intm.lines(&lv);
-        cpu.set_extern_lines(level, rising);
+        // 边沿型线由核自己检测上升沿，这里把电平和本次上升沿一起给出
+        let (l0, r0) = self.intm.lines(&lv);
+        let (l1, r1) = self.intm1.lines(&lv);
+        self.lines = [l0 | r0, l1 | r1];
         self.irq_dirty = false;
-    }
-}
-
-/// SoC → CPU 的中断接口：外部中断线（位 = CPU 中断号）交给核，裁决（INTENABLE、PS.INTLEVEL、level 向量）在核里完成。
-pub trait IrqCpu {
-    /// level：电平型线的当前输入；rising：本次新出现的边沿（边沿型线由核自己锁存）
-    fn set_extern_lines(&mut self, level: u32, rising: u32);
-}
-
-impl IrqCpu for Cpu {
-    fn set_extern_lines(&mut self, level: u32, rising: u32) {
-        self.set_irq_lines(level | rising);
     }
 }
 
@@ -453,50 +455,97 @@ pub enum Stop {
 }
 
 pub struct Esp32s3 {
+    /// 核 0（PRO CPU）
     pub cpu: Cpu,
+    /// 核 1（APP CPU），cpu1_on 之前不执行
+    pub cpu1: Cpu,
+    pub cpu1_on: bool,
     pub bus: SocBus,
     pub rom_symbols: HashMap<u32, String>,
     pub hle: HashMap<u32, hle::Hle>,
 }
 
+/// 两核交替执行的量子（周期）：小到让核间中断、自旋锁及时生效，大到切换开销可忽略
+const QUANTUM: u64 = 256;
+
+/// 跑一个核直到它的周期数到 `until`。`idle_until`：这个核进入 WAITI 时允许快进到的最远时刻。
+fn run_core(
+    k: usize,
+    cpu: &mut Cpu,
+    bus: &mut SocBus,
+    hle: &HashMap<u32, hle::Hle>,
+    until: u64,
+    idle_until: u64,
+) -> Option<Stop> {
+    cpu.set_irq_lines(bus.lines[k]);
+    while cpu.cycles < until {
+        // 外设时间取两核中走得最远的那个，保证单调
+        if cpu.cycles > bus.now {
+            bus.now = cpu.cycles;
+        }
+        if bus.irq_dirty || bus.now >= bus.next_event {
+            bus.update();
+            cpu.set_irq_lines(bus.lines[k]);
+        }
+        match cpu.step(bus) {
+            Exit::Normal => {
+                // ROM 异常向量（0x40000300 Kernel / 0x40000340 User / 0x400003C0 Double）：
+                // app 正常运行时 VECBASE 指向 IRAM，落到这里说明出事了
+                let pc = cpu.pc;
+                if (0x4000_0300..0x4000_0400).contains(&pc) && cpu.read_sr(sr::VECBASE) == ROM_LOW {
+                    return Some(Stop::Fault {
+                        cause: cpu.read_sr(sr::EXCCAUSE),
+                        epc: cpu.read_sr(sr::EPC1),
+                        vaddr: cpu.read_sr(sr::EXCVADDR),
+                    });
+                }
+                if bus.irq_dirty {
+                    // 本核写了外设（可能清掉 / 触发了中断）：马上重算
+                    bus.update();
+                    cpu.set_irq_lines(bus.lines[k]);
+                }
+            }
+            Exit::Waiti => {
+                // 空闲：快进到下一个外设事件或 CCOMPARE 定时器中断
+                let target = bus.next_event.min(cpu.next_timer_event().unwrap_or(u64::MAX)).min(idle_until);
+                if target > cpu.cycles {
+                    cpu.cycles = target;
+                } else {
+                    cpu.cycles += 1;
+                }
+            }
+            Exit::Hle(pc) => match hle.get(&pc) {
+                Some(kind) => hle::call(*kind, cpu, bus),
+                None => return Some(Stop::Hle(pc)),
+            },
+            Exit::Break(v) => return Some(Stop::Break(v)),
+            // 半主机调用：固件只在 QEMU 测试里用，这里忽略
+            Exit::Simcall => {}
+        }
+    }
+    None
+}
+
 impl Esp32s3 {
     pub fn run(&mut self, budget: u64) -> Stop {
         let end = self.cpu.cycles.saturating_add(budget);
-        let cpu = &mut self.cpu;
-        let bus = &mut self.bus;
-        let hle = &self.hle;
-        while cpu.cycles < end {
-            bus.now = cpu.cycles;
-            if bus.irq_dirty || cpu.cycles >= bus.next_event {
-                bus.update(cpu);
+        while self.cpu.cycles < end {
+            let q_end = (self.cpu.cycles + QUANTUM).min(end);
+            // 两核都空闲时可以一起快进到下一个事件；否则核 0 的快进不能越过本量子（核 1 可能马上给它发核间中断）
+            let both_idle = !self.cpu1_on || self.cpu1.waiting;
+            let idle0 = if both_idle { end } else { q_end };
+            if let Some(s) = run_core(0, &mut self.cpu, &mut self.bus, &self.hle, q_end, idle0) {
+                return s;
             }
-            match cpu.step(bus) {
-                Exit::Normal => {
-                    // ROM 异常向量（0x40000300 Kernel / 0x40000340 User / 0x400003C0 Double）：
-                    // app 正常运行时 VECBASE 指向 IRAM，落到这里说明出事了
-                    let pc = cpu.pc;
-                    if (0x4000_0300..0x4000_0400).contains(&pc) && cpu.read_sr(sr::VECBASE) == ROM_LOW {
-                        return Stop::Fault {
-                            cause: cpu.read_sr(sr::EXCCAUSE),
-                            epc: cpu.read_sr(sr::EPC1),
-                            vaddr: cpu.read_sr(sr::EXCVADDR),
-                        };
-                    }
+            if self.cpu1_on {
+                // 核 1 追到核 0 的时间，不超过它
+                let t = self.cpu.cycles;
+                if let Some(s) = run_core(1, &mut self.cpu1, &mut self.bus, &self.hle, t, t) {
+                    return s;
                 }
-                Exit::Waiti => {
-                    // 空闲：快进到下一个外设事件或 CCOMPARE 定时器中断
-                    let target = bus.next_event.min(cpu.next_timer_event().unwrap_or(u64::MAX)).min(end);
-                    if target > cpu.cycles {
-                        cpu.cycles = target;
-                    }
-                }
-                Exit::Hle(pc) => match hle.get(&pc) {
-                    Some(k) => hle::call(*k, cpu, bus),
-                    None => return Stop::Hle(pc),
-                },
-                Exit::Break(v) => return Stop::Break(v),
-                // 半主机调用：固件只在 QEMU 测试里用，这里忽略
-                Exit::Simcall => {}
+            }
+            if let Some(entry) = self.bus.appcpu_boot.take() {
+                self.start_app_cpu(entry);
             }
         }
         Stop::Budget
