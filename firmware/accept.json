@@ -1,4 +1,79 @@
 [
-  {"id": "hello", "seconds": 3, "expect": ["Hello world!", "4MB flash", "revision v0.4", "TRYBOARD_OK hello"], "qemu": true},
-  {"id": "blink", "seconds": 2.2, "expect": ["LED ON  (0)", "LED OFF (3)", "TRYBOARD_OK blink"], "gpio_toggles": {"pin": 5, "min": 4}}
+ {
+  "id": "hello",
+  "seconds": 3,
+  "expect": [
+   "Hello world!",
+   "4MB flash",
+   "revision v0.4",
+   "TRYBOARD_OK hello"
+  ],
+  "qemu": true
+ },
+ {
+  "id": "blink",
+  "seconds": 2.2,
+  "expect": [
+   "LED ON  (0)",
+   "LED OFF (3)",
+   "TRYBOARD_OK blink"
+  ],
+  "gpio_toggles": {
+   "pin": 5,
+   "min": 4
+  }
+ },
+ {
+  "id": "button",
+  "seconds": 1.5,
+  "script": "0.5:gpio9=0; 0.6:gpio9=z; 1.0:gpio9=0; 1.1:gpio9=z",
+  "expect": [
+   "BUTTON PRESSED 1",
+   "BUTTON PRESSED 2",
+   "TRYBOARD_OK button"
+  ],
+  "gpio_toggles": {
+   "pin": 5,
+   "min": 2
+  }
+ },
+ {
+  "id": "echo",
+  "seconds": 1,
+  "script": "0.3:uart=hello tryboard\\n; 0.6:uart=ping\\n",
+  "expect": [
+   "ECHO: hello tryboard",
+   "pong",
+   "TRYBOARD_OK echo"
+  ]
+ },
+ {
+  "id": "fade",
+  "seconds": 3.6,
+  "expect": [
+   "渐亮完成，duty=8191",
+   "渐灭完成，duty=0",
+   "TRYBOARD_OK fade"
+  ],
+  "pwm": {
+   "pin": 5,
+   "freq": 5000,
+   "min": 0.0,
+   "max": 1.0
+  }
+ },
+ {
+  "id": "servo",
+  "seconds": 2.6,
+  "expect": [
+   "舵机 -> 180°",
+   "TRYBOARD_OK servo"
+  ],
+  "pwm": {
+   "pin": 6,
+   "freq": 50,
+   "min": 0.025,
+   "max": 0.125
+  }
+ }
 ]

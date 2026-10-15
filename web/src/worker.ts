@@ -18,6 +18,7 @@ interface Exports {
   tb_gpio_enable(): number;
   tb_gpio_drive(pin: number, level: number): void;
   tb_uart_push(p: number, len: number): void;
+  tb_pin_pwm(pin: number): number;
 }
 
 export type ToWorker =
@@ -31,7 +32,7 @@ export type ToWorker =
 export type FromWorker =
   | { type: 'booted' }
   | { type: 'error'; message: string }
-  | { type: 'tick'; console: string; gpio: number; enable: number; simSeconds: number; ratio: number; running: boolean }
+  | { type: 'tick'; console: string; gpio: number; enable: number; pwm: number[]; simSeconds: number; ratio: number; running: boolean }
   | { type: 'stopped'; reason: string };
 
 let ex: Exports | null = null;
@@ -50,6 +51,13 @@ function copyIn(e: Exports, data: ArrayBuffer) {
   const p = e.tb_alloc(data.byteLength);
   new Uint8Array(e.memory.buffer, p, data.byteLength).set(new Uint8Array(data));
   return p;
+}
+
+/** 每个引脚的 PWM 占空比（-1 表示没有 PWM） */
+function pwmAll(e: Exports) {
+  const out: number[] = [];
+  for (let p = 0; p < 22; p++) out.push(e.tb_pin_pwm(p));
+  return out;
 }
 
 let ratioWall = 0;
@@ -93,6 +101,7 @@ function loop() {
     console: text,
     gpio: e.tb_gpio_level(),
     enable: e.tb_gpio_enable(),
+    pwm: pwmAll(e),
     simSeconds: e.tb_cycles() / CPU_HZ,
     ratio: lastRatio,
     running,
@@ -135,7 +144,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       break;
     case 'pause':
       running = false;
-      if (ex) post({ type: 'tick', console: '', gpio: ex.tb_gpio_level(), enable: ex.tb_gpio_enable(), simSeconds: ex.tb_cycles() / CPU_HZ, ratio: 0, running });
+      if (ex) post({ type: 'tick', console: '', gpio: ex.tb_gpio_level(), enable: ex.tb_gpio_enable(), pwm: pwmAll(ex), simSeconds: ex.tb_cycles() / CPU_HZ, ratio: 0, running });
       break;
     case 'speed':
       speed = m.factor;

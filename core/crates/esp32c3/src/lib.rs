@@ -2,6 +2,7 @@
 
 pub mod boot;
 pub mod hle;
+pub mod ledc;
 pub mod periph;
 pub mod spiflash;
 
@@ -52,6 +53,7 @@ pub struct SocBus {
     pub spi1: spiflash::SpiFlash,
     pub extmem: Extmem,
     pub analog: hle::Analog,
+    pub ledc: ledc::Ledc,
     pub efuse: [u32; 0x200 / 4],
     /// SYSTEM_CPU_INTR_FROM_CPU_0..3
     pub from_cpu: u32,
@@ -88,6 +90,7 @@ impl Default for SocBus {
             spi1: Default::default(),
             extmem: Extmem::default(),
             analog: Default::default(),
+            ledc: Default::default(),
             efuse: boot::default_efuse(),
             from_cpu: 0,
             usj_tx: Vec::new(),
@@ -170,6 +173,8 @@ impl SocBus {
             0x6001_0000 => return self.uart1.read(off),
             0x6000_4000 => return self.gpio.read(off),
             0x6000_2000 => return self.spi1.read(off),
+            0x6001_9000 => return self.ledc.read(off),
+            0x6000_9000 if (4..=0x58).contains(&off) => return self.gpio.iomux[((off - 4) / 4) as usize],
             0x600C_4000 if off < 0x100 => return self.extmem.read(off),
             0x6001_F000 => return self.timg0.read(off, now),
             0x6002_0000 => return self.timg1.read(off, now),
@@ -213,14 +218,16 @@ impl SocBus {
             }
             0x6001_0000 => return self.uart1.write(off, v),
             0x6000_2000 => return self.spi1.write(off, v, &mut self.flash),
+            0x6001_9000 => return self.ledc.write(off, v, now),
+            0x6000_9000 if (4..=0x58).contains(&off) => {
+                self.gpio.iomux[((off - 4) / 4) as usize] = v;
+                self.gpio_changed(now);
+                return;
+            }
             0x600C_4000 if off < 0x100 => return self.extmem.write(off, v),
             0x6000_4000 => {
                 self.gpio.write(off, v);
-                let lv = self.gpio.level();
-                if lv != self.last_gpio {
-                    self.last_gpio = lv;
-                    self.gpio_log.push((now, lv));
-                }
+                self.gpio_changed(now);
                 return;
             }
             0x6001_F000 => return self.timg0.write(off, v, now),
@@ -260,6 +267,31 @@ impl SocBus {
         self.regs.insert(a, v);
     }
 
+    /// 引脚电平可能变了：做边沿检测、记日志
+    pub fn gpio_changed(&mut self, now: u64) {
+        self.gpio.sense();
+        let lv = self.gpio.level();
+        if lv != self.last_gpio {
+            self.last_gpio = lv;
+            self.gpio_log.push((now, lv));
+            if self.gpio_log.len() > 1 << 16 {
+                self.gpio_log.drain(..1 << 15);
+            }
+        }
+        self.irq_dirty = true;
+    }
+
+    /// 引脚上的 PWM：经 GPIO 矩阵路由到该引脚的 LEDC 通道输出（占空比, 频率）
+    pub fn pin_pwm(&self, pin: usize) -> Option<(f32, f32)> {
+        let sig = self.gpio.func_out.get(pin)? & 0xff;
+        if (45..=50).contains(&sig) && self.gpio.enable & (1 << pin) != 0 {
+            let (d, f) = self.ledc.output((sig - 45) as usize)?;
+            let inv = self.gpio.func_out[pin] & (1 << 8) != 0;
+            return Some((if inv { 1.0 - d } else { d }, f));
+        }
+        None
+    }
+
     /// 所有中断源的当前电平（位 = 源编号）
     fn levels(&self) -> u64 {
         let mut l = 0u64;
@@ -270,6 +302,8 @@ impl SocBus {
         };
         set(src::UART0, self.uart0.irq());
         set(src::UART1, self.uart1.irq());
+        set(src::GPIO, self.gpio.irq());
+        set(src::LEDC, self.ledc.irq());
         set(src::SYSTIMER_TARGET0, self.systimer.irq(0));
         set(src::SYSTIMER_TARGET0 + 1, self.systimer.irq(1));
         set(src::SYSTIMER_TARGET0 + 2, self.systimer.irq(2));
@@ -287,7 +321,8 @@ impl SocBus {
         let n1 = self.systimer.update(now);
         let n2 = self.timg0.update(now);
         let n3 = self.timg1.update(now);
-        self.next_event = n1.min(n2).min(n3);
+        let n4 = self.ledc.update(now);
+        self.next_event = n1.min(n2).min(n3).min(n4);
         let lv = self.levels();
         let pending = self.intc.pending(lv);
         cpu.irq_line = self.intc.select(pending);

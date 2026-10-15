@@ -76,7 +76,7 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       break;
     case 'tick':
       if (m.console) log(m.console);
-      bench.setGpio(m.gpio, m.enable);
+      bench.setGpio(m.gpio, m.enable, m.pwm);
       $('simtime').textContent = `${m.simSeconds.toFixed(3)} s`;
       if (m.running) {
         const r = $('ratio');

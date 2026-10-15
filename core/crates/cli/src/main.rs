@@ -9,6 +9,7 @@ fn usage() -> ! {
     eprintln!(
         "用法:
   tryboard run <flash.bin> [--rom <rom.elf>] [--seconds <模拟秒数>] [--expect <文本>] [--uart-in <文本>]
+               [--script \"0.5:gpio9=0; 0.6:gpio9=z; 1.0:uart=ping\\n\"] [--trace N] [--gpio-log] [--pwm-log PIN]
   tryboard riscv-test <test.elf>..."
     );
     std::process::exit(2)
@@ -87,11 +88,61 @@ fn run(args: &[String]) {
     let mut stop = Stop::Budget;
     let mut done = 0u64;
     let stdout = std::io::stdout();
+    // 定时输入脚本：时间（模拟秒）:动作；动作 gpioN=0|1|z、uart=文本（\\n 为换行）
+    let mut script: Vec<(f64, String)> = opt(args, "--script")
+        .map(|s| {
+            s.split(';')
+                .filter_map(|e| {
+                    let (t, a) = e.trim().split_once(':')?;
+                    Some((t.trim().parse().ok()?, a.trim().to_string()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    script.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    script.reverse();
+    let pwm_pin: Option<usize> = opt(args, "--pwm-log").and_then(|s| s.parse().ok());
+    let mut pwm_trace: Vec<(f64, f32, f32)> = Vec::new();
     let trace: usize = opt(args, "--trace").and_then(|s| s.parse().ok()).unwrap_or(0);
     let mut ring = std::collections::VecDeque::new();
     let app_elf = std::path::Path::new(path).with_file_name("app.elf").to_string_lossy().into_owned();
     let syms = Syms::load(&[rom_path.clone(), app_elf]);
     while done < total {
+        let now_s = m.cpu.cycles as f64 / tryboard_esp32c3::periph::CPU_HZ as f64;
+        while script.last().is_some_and(|e| e.0 <= now_s) {
+            let (_, act) = script.pop().unwrap();
+            if let Some(rest) = act.strip_prefix("gpio") {
+                if let Some((pin, lv)) = rest.split_once('=') {
+                    let pin: u32 = pin.parse().unwrap_or(0);
+                    let bit = 1 << pin;
+                    match lv {
+                        "z" => m.bus.gpio.ext_driven &= !bit,
+                        _ => {
+                            m.bus.gpio.ext_driven |= bit;
+                            if lv == "1" {
+                                m.bus.gpio.ext_in |= bit;
+                            } else {
+                                m.bus.gpio.ext_in &= !bit;
+                            }
+                        }
+                    }
+                    let now = m.cpu.cycles;
+                    m.bus.gpio_changed(now);
+                }
+            } else if let Some(t) = act.strip_prefix("uart=") {
+                m.bus.uart0.push_rx(t.replace("\\n", "\n").as_bytes());
+                m.bus.irq_dirty = true;
+            }
+            eprintln!("[tryboard] {now_s:.3}s 输入: {act}");
+        }
+        if let Some(p) = pwm_pin {
+            if let Some((d, f)) = m.bus.pin_pwm(p) {
+                if pwm_trace.last().map_or(true, |l| (l.1 - d).abs() > 0.004 || (l.2 - f).abs() > 0.5) {
+                    pwm_trace.push((now_s, d, f));
+                }
+            }
+        }
+        let slice = if script.is_empty() && pwm_pin.is_none() { slice } else { tryboard_esp32c3::periph::CPU_HZ / 1000 };
         let before = m.cpu.cycles;
         stop = if trace > 0 {
             m.run_traced(slice.min(total - done), &mut ring, trace)
@@ -141,6 +192,25 @@ fn run(args: &[String]) {
     eprintln!("[tryboard] 未建模寄存器 {} 个，访问最多的：", un.len());
     for (a, n) in un.iter().take(12) {
         eprintln!("    0x{:08x}  {:>8} 次", a, n);
+    }
+    if let Some(list) = opt(args, "--peek") {
+        for a in list.split(',') {
+            if let Ok(a) = u32::from_str_radix(a.trim().trim_start_matches("0x"), 16) {
+                let v = m.bus.load(a, 4).unwrap_or(0xdead_beef);
+                eprintln!("[tryboard] peek 0x{a:08x} = 0x{v:08x}");
+            }
+        }
+    }
+    if let Some(p) = pwm_pin {
+        let duties: Vec<f32> = pwm_trace.iter().map(|x| x.1).collect();
+        let (mn, mx) = duties.iter().fold((1f32, 0f32), |(a, b), d| (a.min(*d), b.max(*d)));
+        let freq = pwm_trace.last().map(|x| x.2).unwrap_or(0.0);
+        if std::env::var("TB_PWM_DUMP").is_ok() {
+            for (t, d, f) in pwm_trace.iter().step_by((pwm_trace.len() / 40).max(1)) {
+                eprintln!("    {t:.3}s duty={d:.3} {f:.0}Hz");
+            }
+        }
+        eprintln!("[tryboard] PWM GPIO{p}: {} 次变化，占空比 {:.3}..{:.3}，频率 {:.1}Hz", pwm_trace.len(), mn, mx, freq);
     }
     if args.iter().any(|a| a == "--gpio-log") {
         let log = &m.bus.gpio_log;

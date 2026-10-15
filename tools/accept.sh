@@ -31,8 +31,10 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
     fw = f"{root}/firmware/build/{t['id']}/flash.bin"
     if not os.path.exists(fw):
         print(f"| {t['id']} | ❌ | 未构建 |"); bad += 1; continue
-    p = subprocess.run([f'{root}/core/target/release/tryboard', 'run', fw, '--seconds', str(t['seconds']), '--gpio-log'],
-                       capture_output=True, text=True, errors='replace')
+    cmd = [f'{root}/core/target/release/tryboard', 'run', fw, '--seconds', str(t['seconds']), '--gpio-log']
+    if t.get('script'): cmd += ['--script', t['script']]
+    if t.get('pwm'): cmd += ['--pwm-log', str(t['pwm']['pin'])]
+    p = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
     out, err = p.stdout, p.stderr
     missing = [e for e in t['expect'] if e not in out]
     notes = []
@@ -44,6 +46,16 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
         n = int(m.group(1)) if m else 0
         notes.append(f"GPIO{g['pin']} 翻转 {n} 次")
         if n < g['min']: missing.append('gpio')
+    pw = t.get('pwm')
+    if pw:
+        m = re.search(r'PWM GPIO\d+: (\d+) 次变化，占空比 ([\d.]+)\.\.([\d.]+)，频率 ([\d.]+)Hz', err)
+        if not m:
+            notes.append('没有 PWM 输出'); missing.append('pwm')
+        else:
+            lo, hi, f = float(m.group(2)), float(m.group(3)), float(m.group(4))
+            notes.append(f"PWM {f:.0f}Hz 占空比 {lo:.3f}..{hi:.3f}")
+            if abs(f - pw['freq']) > pw['freq'] * 0.01 or abs(lo - pw['min']) > 0.01 or abs(hi - pw['max']) > 0.01:
+                missing.append('pwm')
     speed = re.search(r'模拟 ([\d.]+)s / 实际 ([\d.]+)s', err)
     if speed: notes.append(f"模拟 {speed.group(1)}s 用时 {speed.group(2)}s")
     if t.get('qemu') and not no_qemu:

@@ -1,14 +1,74 @@
 [
-  {
-    "id": "blink",
-    "title": "点灯：GPIO5 驱动 LED",
-    "about": "最经典的第一个程序。GPIO5 经 220Ω 电阻接一颗红色 LED，FreeRTOS 任务每 500ms 翻转一次电平，串口同步打印状态。",
-    "tags": ["✓ 仿真验证", "GPIO", "FreeRTOS", "ESP-IDF 5.5"]
-  },
-  {
-    "id": "hello",
-    "title": "Hello World：芯片信息与计时",
-    "about": "ESP-IDF 的入门程序：打印芯片型号、版本、flash 大小、剩余堆内存，并用 esp_timer 测量 vTaskDelay(500ms) 实际耗时。",
-    "tags": ["✓ 仿真验证", "UART", "SYSTIMER", "ESP-IDF 5.5"]
+ {
+  "id": "blink",
+  "title": "点灯：GPIO5 驱动 LED",
+  "about": "最经典的第一个程序。GPIO5 经 220Ω 电阻接一颗红色 LED，FreeRTOS 任务每 500ms 翻转一次电平，串口同步打印状态。",
+  "tags": [
+   "✓ 仿真验证",
+   "GPIO",
+   "FreeRTOS",
+   "ESP-IDF 5.5"
+  ]
+ },
+ {
+  "id": "button",
+  "title": "按键：中断切换 LED",
+  "about": "板载 BOOT 键接在 GPIO9（按下接地）。下降沿触发 GPIO 中断，ISR 把时间戳送进队列，任务里做 50ms 消抖后翻转 GPIO5 的 LED。点 3D 板子上的 BOOT 键试试。",
+  "tags": [
+   "✓ 仿真验证",
+   "GPIO 中断",
+   "FreeRTOS 队列"
+  ],
+  "pins": {
+   "led": 5
   }
+ },
+ {
+  "id": "fade",
+  "title": "呼吸灯：LEDC 硬件渐变",
+  "about": "LEDC 输出 5kHz、13 位 PWM，用硬件渐变让 LED 渐亮渐灭。注意：代码写的是 1000ms，但 IDF 把每步增量向下取整（8191÷5000→1），真机上一次渐变实际约 1.64 秒——模拟器如实复现了这个细节。",
+  "tags": [
+   "✓ 仿真验证",
+   "LEDC",
+   "PWM",
+   "中断"
+  ],
+  "pins": {
+   "led": 5
+  }
+ },
+ {
+  "id": "servo",
+  "title": "舵机：50Hz PWM 控制角度",
+  "about": "SG90 类舵机用 50Hz PWM 控制，脉宽 0.5–2.5ms 对应 0–180°。GPIO6 依次转到 0/45/90/135/180°。",
+  "tags": [
+   "✓ 仿真验证",
+   "LEDC",
+   "PWM"
+  ],
+  "pins": {
+   "servo": 6
+  }
+ },
+ {
+  "id": "echo",
+  "title": "串口回显：UART 收发",
+  "about": "安装 UART 驱动后逐字节读取串口，每收到一行就回显；输入 ping 回复 pong。在右侧串口框输入文字后回车。",
+  "tags": [
+   "✓ 仿真验证",
+   "UART 接收",
+   "中断"
+  ]
+ },
+ {
+  "id": "hello",
+  "title": "Hello World：芯片信息与计时",
+  "about": "ESP-IDF 的入门程序：打印芯片型号、版本、flash 大小、剩余堆内存，并用 esp_timer 测量 vTaskDelay(500ms) 实际耗时。",
+  "tags": [
+   "✓ 仿真验证",
+   "UART",
+   "SYSTIMER",
+   "ESP-IDF 5.5"
+  ]
+ }
 ]

@@ -121,9 +121,22 @@ pub extern "C" fn tb_gpio_drive(pin: u32, level: i32) {
                     m.bus.gpio.ext_in &= !bit;
                 }
             }
-            m.bus.irq_dirty = true;
+            let now = m.cpu.cycles;
+            m.bus.gpio_changed(now);
         }
     })
+}
+
+/// 引脚 PWM 占空比（0..1）；没有 PWM 时返回 -1
+#[no_mangle]
+pub extern "C" fn tb_pin_pwm(pin: u32) -> f32 {
+    M.with(|c| c.borrow().as_ref().and_then(|m| m.bus.pin_pwm(pin as usize)).map(|p| p.0).unwrap_or(-1.0))
+}
+
+/// 引脚 PWM 频率（Hz）
+#[no_mangle]
+pub extern "C" fn tb_pin_pwm_freq(pin: u32) -> f32 {
+    M.with(|c| c.borrow().as_ref().and_then(|m| m.bus.pin_pwm(pin as usize)).map(|p| p.1).unwrap_or(0.0))
 }
 
 /// # Safety

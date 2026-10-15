@@ -15,7 +15,7 @@ export const LEFT_PINS = ['GND', '3V3', '3V3', 'IO2', 'IO3', 'GND', 'RST', 'GND'
 export const RIGHT_PINS = ['GND', 'TX', 'RX', 'GND', 'IO9', 'IO8', 'GND', 'IO7', 'IO6', 'IO5', 'IO4', 'GND', 'IO18', 'IO19', 'GND'];
 
 export interface Bench {
-  setGpio(level: number, enable: number): void;
+  setGpio(level: number, enable: number, pwm?: number[]): void;
   setPowered(on: boolean): void;
   onButton(cb: (name: 'BOOT' | 'RST', down: boolean) => void): void;
   ledPin: number;
@@ -495,9 +495,11 @@ export function createBench(container: HTMLElement): Bench {
 
   return {
     ledPin: 5,
-    setGpio(level, enable) {
-      const on = (enable >> 5) & 1 && (level >> 5) & 1;
-      ledTarget = on ? 1 : 0;
+    setGpio(level, enable, pwm) {
+      // PWM 驱动时 LED 亮度 ≈ 占空比（人眼对 5kHz 闪烁无感，看到的是平均亮度）
+      const d = pwm?.[5] ?? -1;
+      if (d >= 0) ledTarget = d;
+      else ledTarget = (enable >> 5) & 1 && (level >> 5) & 1 ? 1 : 0;
     },
     setPowered(on) {
       board.pwrMat.emissiveIntensity = on ? 3 : 0;

@@ -47,7 +47,7 @@ impl Intc {
             0x104 => self.enable,
             0x108 => self.edge,
             0x10c => 0,
-            0x114..=0x190 => self.pri[((off - 0x114) / 4 + 1) as usize] as u32,
+            0x114..=0x190 => self.pri[((off - 0x114) / 4) as usize] as u32,
             0x194 => self.thresh,
             0x7fc => 0x2007210,
             _ => return None,
@@ -61,7 +61,7 @@ impl Intc {
             0x104 => self.enable = v,
             0x108 => self.edge = v,
             0x10c => self.latched &= !v,
-            0x114..=0x190 => self.pri[((off - 0x114) / 4 + 1) as usize] = (v & 15) as u8,
+            0x114..=0x190 => self.pri[((off - 0x114) / 4) as usize] = (v & 15) as u8,
             0x194 => self.thresh = v & 15,
             _ => return false,
         }
@@ -131,7 +131,7 @@ impl Uart {
             0x00 => {
                 let v = self.rx.pop_front().unwrap_or(0) as u32;
                 if self.rx.is_empty() {
-                    self.int_raw &= !1;
+                    self.int_raw &= !(1 | (1 << 8));
                 }
                 v
             }
@@ -167,8 +167,13 @@ impl Uart {
 
     pub fn push_rx(&mut self, data: &[u8]) {
         self.rx.extend(data.iter().copied());
+        let thr = (self.regs[0x24 / 4] & 0x1ff) as usize;
+        if self.rx.len() >= thr.max(1) {
+            self.int_raw |= 1; // RXFIFO_FULL
+        }
+        // RXFIFO_TOUT：真机在线路空闲若干字符时间后触发；这里一批数据到达即视为空闲
         if !self.rx.is_empty() {
-            self.int_raw |= 1; // RXFIFO_FULL（阈值按 1 处理，让驱动尽快取走）
+            self.int_raw |= 1 << 8;
         }
     }
 }
@@ -470,6 +475,12 @@ impl Timg {
 
 // ---------------------------------------------------------------- GPIO（输出 / 输入 / 引脚配置）
 pub struct Gpio {
+    /// IO_MUX 引脚寄存器（上下拉、输入使能、功能选择）
+    pub iomux: [u32; 22],
+    /// 板上固定的上拉（如 BOOT 键所在的 GPIO9）
+    pub board_pullup: u32,
+    /// 上一次的引脚电平，用于边沿检测
+    pub last_level: u32,
     pub out: u32,
     pub enable: u32,
     /// 外部驱动到引脚上的电平（按键、传感器），未驱动的输入读到 pull 决定的电平
@@ -487,6 +498,9 @@ pub struct Gpio {
 impl Default for Gpio {
     fn default() -> Self {
         Gpio {
+            iomux: [0; 22],
+            board_pullup: 1 << 9,
+            last_level: 1 << 9,
             out: 0,
             enable: 0,
             ext_in: 0,
@@ -502,10 +516,48 @@ impl Default for Gpio {
 }
 
 impl Gpio {
-    /// 引脚的实际电平（输出使能时取输出，否则取外部输入）。
+    /// 引脚的实际电平：输出使能时取输出；否则外部驱动优先，再看上下拉（IO_MUX FUN_WPU 位 8 / FUN_WPD 位 7）。
     pub fn level(&self) -> u32 {
         let driven = self.enable & 0x3f_ffff;
-        (self.out & driven) | (self.ext_in & !driven)
+        let mut pull = self.board_pullup;
+        for (i, r) in self.iomux.iter().enumerate() {
+            if r & (1 << 8) != 0 {
+                pull |= 1 << i;
+            }
+            if r & (1 << 7) != 0 && self.board_pullup & (1 << i) == 0 {
+                pull &= !(1 << i);
+            }
+        }
+        let undriven = !driven & !self.ext_driven;
+        (self.out & driven) | (self.ext_in & self.ext_driven & !driven) | (pull & undriven & 0x3f_ffff)
+    }
+
+    /// 电平变化后按每个引脚的中断类型置 STATUS 位（GPIO_PINn_INT_TYPE：1 上升 2 下降 3 双沿 4 低电平 5 高电平）。
+    pub fn sense(&mut self) {
+        let lv = self.level();
+        let rise = lv & !self.last_level;
+        let fall = !lv & self.last_level;
+        for i in 0..22 {
+            let ty = (self.pin[i] >> 7) & 7;
+            let b = 1u32 << i;
+            let hit = match ty {
+                1 => rise & b != 0,
+                2 => fall & b != 0,
+                3 => (rise | fall) & b != 0,
+                4 => lv & b == 0,
+                5 => lv & b != 0,
+                _ => false,
+            };
+            if hit {
+                self.status |= b;
+            }
+        }
+        self.last_level = lv;
+    }
+
+    /// GPIO 中断输出：STATUS 中且该引脚 INT_ENA（位 13..17，CPU 中断位 13）开启
+    pub fn irq(&self) -> bool {
+        (0..22).any(|i| self.status & (1 << i) != 0 && (self.pin[i] >> 13) & 0x1f != 0)
     }
 
     pub fn read(&mut self, off: u32) -> u32 {
