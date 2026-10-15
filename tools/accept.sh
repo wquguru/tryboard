@@ -103,10 +103,12 @@ PY
 if [ $NO_WEB = 0 ]; then
   echo -e "\n## 网页（Chrome 无头 + wasm）" >> $REPORT
   tools/build_web.sh >/dev/null 2>&1 || { echo "构建失败" >> $REPORT; fail=1; }
-  for ex in blink hello rgb oled bme280; do
-    r=$(node tools/webtest/webtest.mjs $ex TRYBOARD_OK 2>&1 | head -3)
-    echo "- $r" >> $REPORT
+  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw"; do
+    ex=${spec%%:*}; want=${spec#*:}
+    r=$(node tools/webtest/webtest.mjs "$ex" "$want" 2>&1 | head -3)
+    echo "$r" | sed 's/^/- /' >> $REPORT
     echo "$r" | grep -q PASS || fail=1
+    echo "$r" | grep -q FAIL && fail=1
     echo "$r" | grep -q 页面错误 && fail=1
   done
 fi

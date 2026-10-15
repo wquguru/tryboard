@@ -18,7 +18,11 @@ export const RIGHT_PINS = ['GND', 'TX', 'RX', 'GND', 'IO9', 'IO8', 'GND', 'IO7',
 export type PartSpec =
   | { type: 'led'; pin: number; color?: number; col?: number; label?: string }
   | { type: 'oled'; addr: number; sda: number; scl: number; label?: string }
-  | { type: 'bme280'; addr: number; sda: number; scl: number; label?: string };
+  | { type: 'bme280'; addr: number; sda: number; scl: number; label?: string }
+  /** SG90 舵机：信号接 pin，舵盘角度按 PWM 脉宽（0.5–2.5ms → 0–180°） */
+  | { type: 'servo'; pin: number; freq?: number; label?: string }
+  /** 10kΩ 电位器：两端接 3V3 / GND，滑片接 pin（ADC），旋钮可拖动 */
+  | { type: 'pot'; pin: number; label?: string };
 
 export interface SceneSpec {
   parts: PartSpec[];
@@ -34,6 +38,10 @@ export interface Bench {
   setGpio(level: number, enable: number, pwm?: number[]): void;
   /** OLED 画面：128×64 字节亮度 */
   setOled(pixels: Uint8Array): void;
+  /** 电位器位置 0..1（面板滑块改了以后同步 3D 旋钮） */
+  setPot(pin: number, v: number): void;
+  /** 用户在 3D 里拖动电位器旋钮 */
+  onPot(cb: (pin: number, v: number) => void): void;
   setPowered(on: boolean): void;
   /** 板载 WS2812（GPIO8）颜色，0–255 */
   setRgb(rgb: number[]): void;
@@ -378,6 +386,69 @@ function devboard() {
   return { grp, buttons, pwrMat, rgbMat, rgbLight, pinPositions, L };
 }
 
+/** SG90 舵机：蓝色壳体 + 安装耳 + 白色单臂舵盘。原点在壳体底面中心。 */
+function servoModel() {
+  const grp = new THREE.Group();
+  const blue = new THREE.MeshPhysicalMaterial({ color: 0x2d5bd3, roughness: 0.35, transmission: 0.15, thickness: 2 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(22.5, 22.7, 11.8), blue);
+  body.position.y = 11.35;
+  body.castShadow = true;
+  grp.add(body);
+  const ears = new THREE.Mesh(new THREE.BoxGeometry(32.2, 2.5, 11.8), blue);
+  ears.position.y = 15.9;
+  grp.add(ears);
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(5.9, 5.9, 4, 32), blue);
+  top.position.set(-5.4, 24.7, 0);
+  grp.add(top);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.4, 3, 24), new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.5 }));
+  shaft.position.set(-5.4, 28, 0);
+  grp.add(shaft);
+  const horn = new THREE.Group();
+  const white = new THREE.MeshStandardMaterial({ color: 0xf7f7f4, roughness: 0.55 });
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 2, 24), white);
+  horn.add(hub);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(16, 1.6, 4.6), white);
+  arm.position.x = 8;
+  horn.add(arm);
+  const tip = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.3, 1.6, 20), white);
+  tip.position.x = 16;
+  horn.add(tip);
+  horn.position.set(-5.4, 30, 0);
+  horn.traverse((o) => (o.castShadow = true));
+  grp.add(horn);
+  return { grp, horn };
+}
+
+/** 旋转电位器（R16 规格）：蓝色方壳 + 金属轴 + 黑色带指示线的旋钮。原点在引脚根部。 */
+function potModel() {
+  const grp = new THREE.Group();
+  const shell = new THREE.Mesh(new THREE.BoxGeometry(9.8, 9.8, 5), new THREE.MeshStandardMaterial({ color: 0x2e63b8, roughness: 0.6 }));
+  shell.position.set(0, 4.9 + 1, 0);
+  shell.rotation.x = Math.PI / 2;
+  shell.position.y = 3.5;
+  grp.add(shell);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 3.5, 4, 24), new THREE.MeshStandardMaterial({ color: 0xc9ccd1, metalness: 0.9, roughness: 0.3 }));
+  shaft.position.y = 8;
+  grp.add(shaft);
+  const knob = new THREE.Group();
+  const kmat = new THREE.MeshStandardMaterial({ color: 0x1b1d21, roughness: 0.55 });
+  const k = new THREE.Mesh(new THREE.CylinderGeometry(5.6, 6, 7, 40), kmat);
+  knob.add(k);
+  const mark = new THREE.Mesh(new THREE.BoxGeometry(1, 0.4, 4.6), new THREE.MeshBasicMaterial({ color: 0xf2a33a }));
+  mark.position.set(0, 3.6, -2.6);
+  knob.add(mark);
+  knob.position.y = 13.5;
+  knob.traverse((o) => (o.castShadow = true));
+  grp.add(knob);
+  const legMat = new THREE.MeshStandardMaterial({ color: 0xcfd2d6, metalness: 1, roughness: 0.3 });
+  for (const x of [-PITCH, 0, PITCH]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.6, 4, 0.6), legMat);
+    leg.position.set(x, -1, 0);
+    grp.add(leg);
+  }
+  return { grp, knob, hit: k };
+}
+
 function led(color: number) {
   const grp = new THREE.Group();
   const lens = new THREE.MeshPhysicalMaterial({
@@ -567,6 +638,9 @@ export function createBench(container: HTMLElement): Bench {
     target: number;
   }
   let leds: LedState[] = [];
+  let servos: { pin: number; horn: THREE.Group; freq: number; angle: number; target: number }[] = [];
+  let pots: { pin: number; knob: THREE.Group; hit: THREE.Mesh; v: number }[] = [];
+  let potCb: ((pin: number, v: number) => void) | null = null;
   let parts = new THREE.Group();
   scene.add(parts);
   const oledData = new Uint8Array(128 * 64 * 4);
@@ -620,15 +694,52 @@ export function createBench(container: HTMLElement): Bench {
     });
   }
 
+  function buildServo(grp: THREE.Group, p: Extract<PartSpec, { type: 'servo' }>) {
+    // 舵机放在面包板外侧的垫子上，三根线：信号 → IO、红 → 5V、棕 → GND
+    const m = servoModel();
+    m.grp.position.set(bb.colX(24), 0, bb.rowZ(9) + 42);
+    m.grp.rotation.y = Math.PI;
+    grp.add(m.grp);
+    const plug = new THREE.Vector3(bb.colX(24) - 6, 4, bb.rowZ(9) + 30);
+    const cols: [string, number][] = [['IO' + p.pin, 0xf28c28], ['5V', 0xd33a2c], ['GND', 0x6b4a2b]];
+    cols.forEach(([pin, color], i) => {
+      const a = lift(pinByName(pin, plug), top);
+      const b = new THREE.Vector3(plug.x + i * 1.2, 4, plug.z);
+      grp.add(wire([a, lift(a, 18 + i), new THREE.Vector3((a.x + b.x) / 2, 26 + i, (a.z + b.z) / 2 + 8), lift(b, 10), b], color));
+    });
+    label(grp, p.label ?? `SG90 舵机 · 信号 IO${p.pin} · 50Hz`, new THREE.Vector3(bb.colX(24), 44, bb.rowZ(9) + 42));
+    servos.push({ pin: p.pin, horn: m.horn, freq: p.freq ?? 50, angle: 90, target: 90 });
+  }
+
+  function buildPot(grp: THREE.Group, p: Extract<PartSpec, { type: 'pot' }>) {
+    const m = potModel();
+    const col = 19;
+    m.grp.position.set(bb.colX(col), BB_TOP + 1, bb.rowZ(8));
+    grp.add(m.grp);
+    // 左端 → 3V3、滑片 → IO、右端 → GND（从面包板同列的 j 行引出）
+    const ends: [number, string, number][] = [[col - 1, '3V3', WIRE.vcc], [col, 'IO' + p.pin, WIRE.sig], [col + 1, 'GND', WIRE.gnd]];
+    for (const [c, pin, color] of ends) {
+      const hole = new THREE.Vector3(bb.colX(c), top, bb.rowZ(9));
+      jumper(grp, pinByName(pin, hole), hole, color, 20 + (c - col) * 2, 6);
+    }
+    label(grp, p.label ?? `电位器 · 滑片 → IO${p.pin}（ADC）· 拖动旋钮`, new THREE.Vector3(bb.colX(col), 36, bb.rowZ(9) + 6));
+    pots.push({ pin: p.pin, knob: m.knob, hit: m.hit, v: 0.36 });
+    m.knob.rotation.y = -(0.36 - 0.5) * 1.5 * Math.PI;
+  }
+
   function setScene(spec: SceneSpec) {
     scene.remove(parts);
     disposeTree(parts);
     parts = new THREE.Group();
     scene.add(parts);
     leds = [];
+    servos = [];
+    pots = [];
     oledTex = null;
     for (const p of spec.parts) {
       if (p.type === 'led') buildLed(parts, p);
+      if (p.type === 'servo') buildServo(parts, p);
+      if (p.type === 'pot') buildPot(parts, p);
       if (p.type === 'oled') {
         oledData.fill(0);
         for (let i = 3; i < oledData.length; i += 4) oledData[i] = 255;
@@ -678,6 +789,37 @@ export function createBench(container: HTMLElement): Bench {
     ray.setFromCamera(new THREE.Vector2(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1), camera);
     return ray.intersectObjects(board.buttons)[0]?.object as THREE.Mesh | undefined;
   };
+  // 电位器：按住旋钮左右拖动转动（270° 行程）
+  let dragging: { pot: (typeof pots)[number]; x0: number; v0: number } | null = null;
+  const pickPot = (ev: PointerEvent) => {
+    const rect = renderer.domElement.getBoundingClientRect();
+    ray.setFromCamera(new THREE.Vector2(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1), camera);
+    const hit = ray.intersectObjects(pots.map((p) => p.hit))[0];
+    return hit ? pots.find((p) => p.hit === hit.object) : undefined;
+  };
+  const turnPot = (pot: (typeof pots)[number], v: number) => {
+    pot.v = Math.min(1, Math.max(0, v));
+    pot.knob.rotation.y = -(pot.v - 0.5) * 1.5 * Math.PI;
+  };
+  renderer.domElement.addEventListener('pointerdown', (ev) => {
+    const pot = pickPot(ev);
+    if (pot) {
+      controls.enabled = false;
+      dragging = { pot, x0: ev.clientX, v0: pot.v };
+      return;
+    }
+  });
+  window.addEventListener('pointermove', (ev) => {
+    if (!dragging) return;
+    turnPot(dragging.pot, dragging.v0 + (ev.clientX - dragging.x0) / 240);
+    potCb?.(dragging.pot.pin, dragging.pot.v);
+  });
+  window.addEventListener('pointerup', () => {
+    if (dragging) {
+      dragging = null;
+      controls.enabled = true;
+    }
+  });
   renderer.domElement.addEventListener('pointerdown', (ev) => {
     const b = pick(ev);
     if (!b) return;
@@ -694,7 +836,7 @@ export function createBench(container: HTMLElement): Bench {
     controls.enabled = true;
   });
   renderer.domElement.addEventListener('pointermove', (ev) => {
-    renderer.domElement.style.cursor = pick(ev) ? 'pointer' : '';
+    renderer.domElement.style.cursor = pick(ev) ? 'pointer' : pickPot(ev) || dragging ? 'ew-resize' : '';
   });
 
   let raf = 0;
@@ -705,6 +847,12 @@ export function createBench(container: HTMLElement): Bench {
       l.now += (l.target - l.now) * 0.55;
       l.lens.emissiveIntensity = l.now * 6;
       l.light.intensity = l.now * 60;
+    }
+    // 舵机有转速上限（SG90 约 0.1s / 60°），舵盘追目标角度
+    for (const sv of servos) {
+      const step = 600 / 60;
+      sv.angle += Math.max(-step, Math.min(step, sv.target - sv.angle));
+      sv.horn.rotation.y = ((sv.angle - 90) * Math.PI) / 180;
     }
     controls.update();
     composer.render();
@@ -719,6 +867,19 @@ export function createBench(container: HTMLElement): Bench {
         const d = pwm?.[l.pin] ?? -1;
         l.target = d >= 0 ? d : (enable >> l.pin) & 1 && (level >> l.pin) & 1 ? 1 : 0;
       }
+      for (const sv of servos) {
+        const d = pwm?.[sv.pin] ?? -1;
+        if (d <= 0) continue;
+        const us = (d * 1e6) / sv.freq;
+        sv.target = Math.max(0, Math.min(180, ((us - 500) / 2000) * 180));
+      }
+    },
+    setPot(pin, v) {
+      const pot = pots.find((p) => p.pin === pin);
+      if (pot) turnPot(pot, v);
+    },
+    onPot(cb) {
+      potCb = cb;
     },
     setRgb(rgb) {
       const [r, g, b] = rgb.map((v) => v / 255);

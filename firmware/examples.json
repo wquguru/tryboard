@@ -72,6 +72,26 @@
   ],
   "pins": {
    "servo": 6
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "servo",
+     "pin": 6
+    }
+   ],
+   "view": {
+    "position": [
+     -20,
+     90,
+     150
+    ],
+    "target": [
+     20,
+     10,
+     30
+    ]
+   }
   }
  },
  {
@@ -121,6 +141,10 @@
     {
      "type": "led",
      "pin": 5
+    },
+    {
+     "type": "pot",
+     "pin": 2
     }
    ]
   }

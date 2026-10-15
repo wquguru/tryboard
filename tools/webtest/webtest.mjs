@@ -45,7 +45,7 @@ for (let i = 0; i < 120; i++) {
 }
 const secs = ((Date.now() - t0) / 1000).toFixed(1);
 // 环境滑块：把温度拖到 31.5°C，传感器读数要跟着变（验证 UI → worker → 模拟器件 → 固件 全链路）
-if (ok && (await page.$('.env input'))) {
+if (ok && example === 'bme280' && (await page.$('.env input'))) {
   await page.$eval('.env input', (el) => {
     el.value = '31.5';
     el.dispatchEvent(new Event('input'));
@@ -56,6 +56,20 @@ if (ok && (await page.$('.env input'))) {
     seen = (await page.$eval('#console', (e) => e.textContent)).includes('T=31.50 C');
   }
   console.log(`[webtest] 环境滑块 → 读数 31.50°C: ${seen ? 'PASS' : 'FAIL'}`);
+  ok = ok && seen;
+}
+// 旋钮：滑块拖到 2400mV，ADC 读数要跟着变（UI → worker → ADC → 固件）
+if (ok && example === 'pot') {
+  await page.$eval('.env input', (el) => {
+    el.value = '2400';
+    el.dispatchEvent(new Event('input'));
+  });
+  let seen = false;
+  for (let i = 0; i < 40 && !seen; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    seen = /约 2[34]\d\d mV/.test(await page.$eval('#console', (e) => e.textContent));
+  }
+  console.log(`[webtest] 旋钮 → ADC 读数约 2400mV: ${seen ? 'PASS' : 'FAIL'}`);
   ok = ok && seen;
 }
 // 多拍几张，抓到 LED 亮和灭两种状态

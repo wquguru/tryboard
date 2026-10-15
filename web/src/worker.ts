@@ -19,6 +19,7 @@ interface Exports {
   tb_gpio_drive(pin: number, level: number): void;
   tb_uart_push(p: number, len: number): void;
   tb_pin_pwm(pin: number): number;
+  tb_analog_set(pin: number, mv: number): void;
   tb_ws2812_fetch(pin: number): number;
   tb_ws2812_ptr(): number;
   tb_ws2812_frames(pin: number): number;
@@ -44,6 +45,7 @@ export type ToWorker =
       env?: Env;
     }
   | ({ type: 'env' } & Env)
+  | { type: 'analog'; pin: number; mv: number }
   | { type: 'run' }
   | { type: 'pause' }
   | { type: 'speed'; factor: number }
@@ -193,6 +195,9 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
     }
     case 'env':
       ex?.tb_env_set(m.temp, m.humidity, m.pressure);
+      break;
+    case 'analog':
+      ex?.tb_analog_set(m.pin, m.mv);
       break;
     case 'run':
       if (!ex || running) return;

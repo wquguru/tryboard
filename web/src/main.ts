@@ -7,8 +7,8 @@ interface Example {
   about: string;
   tags: string[];
   scene?: SceneSpec;
-  /** 'env'：显示环境滑块（温度 / 湿度 / 气压） */
-  controls?: string[];
+  /** 'env'：显示环境滑块（温度 / 湿度 / 气压）；对象：模拟输入滑块 */
+  controls?: (string | AnalogControl)[];
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -27,6 +27,15 @@ let flash: ArrayBuffer | null = null;
 let running = false;
 let examples: Example[] = [];
 let scene: SceneSpec = { parts: [] };
+interface AnalogControl {
+  type: 'analog';
+  pin: number;
+  label: string;
+  max_mv: number;
+  value: number;
+}
+/** 各引脚上的模拟电压（mV）：复位后要重新下发 */
+const analog = new Map<number, { mv: number; max: number }>();
 const env: Env = { temp: 23.5, humidity: 45, pressure: 101325 };
 
 /** 场景里的 I2C 器件 → 模拟总线上要挂的器件 */
@@ -76,6 +85,7 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
   const m = ev.data;
   switch (m.type) {
     case 'booted':
+      for (const [pin, a] of analog) send({ type: 'analog', pin, mv: a.mv });
       runBtn.disabled = resetBtn.disabled = false;
       if (pendingAutorun) {
         send({ type: 'run' });
@@ -142,7 +152,9 @@ async function loadExample(id: string, autorun: boolean) {
   $('about').innerHTML = `<p><b>${ex.title}</b></p><p>${ex.about}</p><p>${ex.tags.map((t) => `<span class="tag ${t.startsWith('✓') ? 'ok' : ''}">${t}</span>`).join('')}</p>`;
   scene = ex.scene ?? { parts: [] };
   bench.setScene(scene);
+  analog.clear();
   if (ex.controls?.includes('env')) envControls();
+  for (const c of ex.controls ?? []) if (typeof c === 'object' && c.type === 'analog') analogControl(c);
   flash = await fetchBuf(`./fw/${id}/flash.bin`);
   boot(autorun);
 }
@@ -167,6 +179,34 @@ function envControls() {
     };
     box.appendChild(row);
   }
+  $('about').appendChild(box);
+}
+
+/** 模拟输入滑块（电位器等）：与 3D 旋钮双向同步 */
+function analogControl(c: AnalogControl) {
+  analog.set(c.pin, { mv: c.value, max: c.max_mv });
+  const box = document.createElement('div');
+  box.className = 'env';
+  const row = document.createElement('label');
+  row.innerHTML = `<span>旋钮</span><input type="range" min="0" max="${c.max_mv}" step="10" value="${c.value}" /><output>${c.value} mV</output>`;
+  const input = row.querySelector('input')!;
+  const out = row.querySelector('output')!;
+  const apply = (mv: number, from3d: boolean) => {
+    analog.set(c.pin, { mv, max: c.max_mv });
+    out.textContent = `${mv.toFixed(0)} mV`;
+    if (from3d) input.value = String(mv);
+    else bench.setPot(c.pin, mv / c.max_mv);
+    send({ type: 'analog', pin: c.pin, mv });
+  };
+  input.oninput = () => apply(Number(input.value), false);
+  bench.onPot((pin, v) => {
+    if (pin === c.pin) apply(v * c.max_mv, true);
+  });
+  bench.setPot(c.pin, c.value / c.max_mv);
+  const hint = document.createElement('div');
+  hint.className = 'muted';
+  hint.textContent = c.label + '：拖滑块或直接拖 3D 里的旋钮';
+  box.append(hint, row);
   $('about').appendChild(box);
 }
 
