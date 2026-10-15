@@ -1,7 +1,9 @@
 //! ESP32-C3 SoC：存储映射、外设分发、直接启动（替代二级 bootloader）、运行循环。
 
 pub mod boot;
+pub mod devices;
 pub mod hle;
+pub mod i2c;
 pub mod periph;
 pub mod spiflash;
 
@@ -50,6 +52,7 @@ pub struct SocBus {
     pub intc: Intc,
     pub gpio: Gpio,
     pub spi1: spiflash::SpiFlash,
+    pub i2c0: i2c::I2c,
     pub extmem: Extmem,
     pub analog: hle::Analog,
     pub efuse: [u32; 0x200 / 4],
@@ -86,6 +89,7 @@ impl Default for SocBus {
             intc: Intc::default(),
             gpio: Gpio::default(),
             spi1: Default::default(),
+            i2c0: Default::default(),
             extmem: Extmem::default(),
             analog: Default::default(),
             efuse: boot::default_efuse(),
@@ -105,8 +109,12 @@ impl Default for SocBus {
 #[inline(always)]
 fn rd(buf: &[u8], off: usize, size: u32) -> Option<u32> {
     match size {
-        4 => buf.get(off..off + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])),
-        2 => buf.get(off..off + 2).map(|b| u16::from_le_bytes([b[0], b[1]]) as u32),
+        4 => buf
+            .get(off..off + 4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])),
+        2 => buf
+            .get(off..off + 2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]) as u32),
         _ => buf.get(off).map(|b| *b as u32),
     }
 }
@@ -152,7 +160,12 @@ impl SocBus {
 
     pub fn mem_write(&mut self, a: u32, size: u32, v: u32) -> Option<()> {
         if (DRAM_LOW..DRAM_HIGH).contains(&a) {
-            wr(&mut self.sram, (a + DRAM_TO_IRAM - IRAM_LOW) as usize, size, v)
+            wr(
+                &mut self.sram,
+                (a + DRAM_TO_IRAM - IRAM_LOW) as usize,
+                size,
+                v,
+            )
         } else if (IRAM_LOW..IRAM_HIGH).contains(&a) {
             wr(&mut self.sram, (a - IRAM_LOW) as usize, size, v)
         } else if (RTC_LOW..RTC_HIGH).contains(&a) {
@@ -170,6 +183,7 @@ impl SocBus {
             0x6001_0000 => return self.uart1.read(off),
             0x6000_4000 => return self.gpio.read(off),
             0x6000_2000 => return self.spi1.read(off),
+            0x6001_3000 => return self.i2c0.read(off),
             0x600C_4000 if off < 0x100 => return self.extmem.read(off),
             0x6001_F000 => return self.timg0.read(off, now),
             0x6002_0000 => return self.timg1.read(off, now),
@@ -184,7 +198,13 @@ impl SocBus {
                 }
             }
             0x600C_5000 if (off as usize) < MMU_ENTRIES * 4 => return self.mmu[(off / 4) as usize],
-            0x6000_8000 if off >= 0x800 => return self.efuse.get(((off - 0x800) / 4) as usize).copied().unwrap_or(0),
+            0x6000_8000 if off >= 0x800 => {
+                return self
+                    .efuse
+                    .get(((off - 0x800) / 4) as usize)
+                    .copied()
+                    .unwrap_or(0)
+            }
             0x6004_3000 => match off {
                 0x04 => return 0x2, // EP1_CONF：IN 端点有空位
                 0x08 => return 0x8, // INT_RAW：SERIAL_IN_EMPTY
@@ -213,6 +233,7 @@ impl SocBus {
             }
             0x6001_0000 => return self.uart1.write(off, v),
             0x6000_2000 => return self.spi1.write(off, v, &mut self.flash),
+            0x6001_3000 => return self.i2c0.write(off, v, now),
             0x600C_4000 if off < 0x100 => return self.extmem.write(off, v),
             0x6000_4000 => {
                 self.gpio.write(off, v);
@@ -270,11 +291,18 @@ impl SocBus {
         };
         set(src::UART0, self.uart0.irq());
         set(src::UART1, self.uart1.irq());
+        set(src::I2C_EXT0, self.i2c0.irq());
         set(src::SYSTIMER_TARGET0, self.systimer.irq(0));
         set(src::SYSTIMER_TARGET0 + 1, self.systimer.irq(1));
         set(src::SYSTIMER_TARGET0 + 2, self.systimer.irq(2));
-        set(src::TG0_T0, self.timg0.int_raw & self.timg0.int_ena & 1 != 0);
-        set(src::TG1_T0, self.timg1.int_raw & self.timg1.int_ena & 1 != 0);
+        set(
+            src::TG0_T0,
+            self.timg0.int_raw & self.timg0.int_ena & 1 != 0,
+        );
+        set(
+            src::TG1_T0,
+            self.timg1.int_raw & self.timg1.int_ena & 1 != 0,
+        );
         for i in 0..4 {
             set(src::FROM_CPU0 + i, self.from_cpu & (1 << i) != 0);
         }
@@ -287,7 +315,8 @@ impl SocBus {
         let n1 = self.systimer.update(now);
         let n2 = self.timg0.update(now);
         let n3 = self.timg1.update(now);
-        self.next_event = n1.min(n2).min(n3);
+        let n4 = self.i2c0.update(now);
+        self.next_event = n1.min(n2).min(n3).min(n4);
         let lv = self.levels();
         let pending = self.intc.pending(lv);
         cpu.irq_line = self.intc.select(pending);
@@ -385,7 +414,12 @@ impl Esp32c3 {
     }
 
     /// 调试用：单步跑，记录最近的跳转目标（PC 不连续处），用于定位卡死 / 崩溃。
-    pub fn run_traced(&mut self, budget: u64, ring: &mut std::collections::VecDeque<u32>, cap: usize) -> Stop {
+    pub fn run_traced(
+        &mut self,
+        budget: u64,
+        ring: &mut std::collections::VecDeque<u32>,
+        cap: usize,
+    ) -> Stop {
         let end = self.cpu.cycles.saturating_add(budget);
         let mut last = self.cpu.pc;
         while self.cpu.cycles < end {

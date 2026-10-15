@@ -2,6 +2,10 @@
 //! 一个 wasm 实例只跑一台机器（多块板子就开多个实例 / Worker）。
 
 use std::cell::RefCell;
+use tryboard_esp32c3::devices::{
+    bme280::{Bme280, Env},
+    ssd1306::Ssd1306,
+};
 use tryboard_esp32c3::{Esp32c3, Stop};
 
 thread_local! {
@@ -29,7 +33,12 @@ pub unsafe extern "C" fn tb_free(p: *mut u8, len: usize) {
 /// # Safety
 /// 指针必须指向 tb_alloc 分配、长度正确的缓冲区
 #[no_mangle]
-pub unsafe extern "C" fn tb_boot(rom: *const u8, rom_len: usize, flash: *const u8, flash_len: usize) -> i32 {
+pub unsafe extern "C" fn tb_boot(
+    rom: *const u8,
+    rom_len: usize,
+    flash: *const u8,
+    flash_len: usize,
+) -> i32 {
     let rom = std::slice::from_raw_parts(rom, rom_len);
     let flash = std::slice::from_raw_parts(flash, flash_len).to_vec();
     match Esp32c3::boot(rom, flash) {
@@ -65,11 +74,19 @@ pub extern "C" fn tb_run(cycles: f64) -> i32 {
         match r {
             Stop::Budget => 0,
             Stop::Fault { cause, pc, tval } => {
-                ERR.with(|e| *e.borrow_mut() = format!("CPU 异常 cause={cause} pc=0x{pc:08x} tval=0x{tval:08x}"));
+                ERR.with(|e| {
+                    *e.borrow_mut() =
+                        format!("CPU 异常 cause={cause} pc=0x{pc:08x} tval=0x{tval:08x}")
+                });
                 1
             }
             Stop::Hle(pc) => {
-                ERR.with(|e| *e.borrow_mut() = format!("未实现的 ROM 函数 0x{pc:08x} {}", m.symbol_at(pc).unwrap_or("")));
+                ERR.with(|e| {
+                    *e.borrow_mut() = format!(
+                        "未实现的 ROM 函数 0x{pc:08x} {}",
+                        m.symbol_at(pc).unwrap_or("")
+                    )
+                });
                 2
             }
         }
@@ -92,7 +109,12 @@ pub extern "C" fn tb_console_clear() {
 
 #[no_mangle]
 pub extern "C" fn tb_cycles() -> f64 {
-    M.with(|c| c.borrow().as_ref().map(|m| m.cpu.cycles as f64).unwrap_or(0.0))
+    M.with(|c| {
+        c.borrow()
+            .as_ref()
+            .map(|m| m.cpu.cycles as f64)
+            .unwrap_or(0.0)
+    })
 }
 
 #[no_mangle]
@@ -136,5 +158,65 @@ pub unsafe extern "C" fn tb_uart_push(p: *const u8, len: usize) {
             m.bus.uart0.push_rx(d);
             m.bus.irq_dirty = true;
         }
+    })
+}
+
+/// 在 I2C 总线上接一个器件。kind：1 = SSD1306，2 = BME280。返回 0 成功。
+#[no_mangle]
+pub extern "C" fn tb_i2c_attach(kind: u32, addr: u32) -> i32 {
+    let name = match kind {
+        1 => "ssd1306",
+        2 => "bme280",
+        _ => return 1,
+    };
+    M.with(|c| {
+        match (
+            c.borrow_mut().as_mut(),
+            tryboard_esp32c3::devices::make_i2c(name, addr as u8),
+        ) {
+            (Some(m), Some(d)) => {
+                m.bus.i2c0.attach(d);
+                0
+            }
+            _ => 1,
+        }
+    })
+}
+
+/// 设置环境（作用于 BME280 等环境传感器）
+#[no_mangle]
+pub extern "C" fn tb_env_set(temp_c: f64, humidity: f64, pressure_pa: f64) {
+    M.with(|c| {
+        if let Some(m) = c.borrow_mut().as_mut() {
+            if let Some(b) = m.bus.i2c0.device::<Bme280>() {
+                b.env = Env {
+                    temp_c,
+                    humidity,
+                    pressure_pa,
+                };
+            }
+        }
+    })
+}
+
+/// OLED 画面版本号：变了才需要重新取像素。没有 OLED 时返回 0。
+#[no_mangle]
+pub extern "C" fn tb_oled_version() -> u32 {
+    M.with(|c| {
+        c.borrow_mut()
+            .as_mut()
+            .and_then(|m| m.bus.i2c0.device::<Ssd1306>().map(|o| o.version))
+            .unwrap_or(0)
+    })
+}
+
+/// OLED 画面：128×64 字节，每像素 0..255 亮度（含开关、对比度）。没有 OLED 时返回空指针。
+#[no_mangle]
+pub extern "C" fn tb_oled_ptr() -> *const u8 {
+    M.with(|c| {
+        c.borrow_mut()
+            .as_mut()
+            .and_then(|m| m.bus.i2c0.device::<Ssd1306>().map(|o| o.render().as_ptr()))
+            .unwrap_or(std::ptr::null())
     })
 }

@@ -44,6 +44,20 @@ for (let i = 0; i < 120; i++) {
   await new Promise((r) => setTimeout(r, 250));
 }
 const secs = ((Date.now() - t0) / 1000).toFixed(1);
+// 环境滑块：把温度拖到 31.5°C，传感器读数要跟着变（验证 UI → worker → 模拟器件 → 固件 全链路）
+if (ok && (await page.$('.env input'))) {
+  await page.$eval('.env input', (el) => {
+    el.value = '31.5';
+    el.dispatchEvent(new Event('input'));
+  });
+  let seen = false;
+  for (let i = 0; i < 40 && !seen; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    seen = (await page.$eval('#console', (e) => e.textContent)).includes('T=31.50 C');
+  }
+  console.log(`[webtest] 环境滑块 → 读数 31.50°C: ${seen ? 'PASS' : 'FAIL'}`);
+  ok = ok && seen;
+}
 // 多拍几张，抓到 LED 亮和灭两种状态
 for (let i = 0; i < 3; i++) {
   await page.screenshot({ path: path.join(outDir, `${example}-${i}.png`) });

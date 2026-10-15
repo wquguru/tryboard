@@ -3,7 +3,26 @@
     "id": "blink",
     "title": "点灯：GPIO5 驱动 LED",
     "about": "最经典的第一个程序。GPIO5 经 220Ω 电阻接一颗红色 LED，FreeRTOS 任务每 500ms 翻转一次电平，串口同步打印状态。",
-    "tags": ["✓ 仿真验证", "GPIO", "FreeRTOS", "ESP-IDF 5.5"]
+    "tags": ["✓ 仿真验证", "GPIO", "FreeRTOS", "ESP-IDF 5.5"],
+    "scene": { "parts": [{ "type": "led", "pin": 5 }] }
+  },
+  {
+    "id": "oled",
+    "title": "OLED 屏：SSD1306 显示文字和图形",
+    "about": "0.96 英寸 128×64 OLED 走 I2C（地址 0x3C，SDA=GPIO6、SCL=GPIO7，400kHz）。程序先扫描总线，再初始化屏幕，每秒刷新一帧：标题、两行说明、走动的进度条。串口会打印每帧 1KB 显存经 I2C 传输的耗时（约 24ms，与真机一致）。",
+    "tags": ["✓ 仿真验证", "I2C", "SSD1306", "ESP-IDF 5.5"],
+    "scene": {
+      "parts": [{ "type": "oled", "addr": 60, "sda": 6, "scl": 7 }],
+      "view": { "position": [-18, 72, 88], "target": [8, 16, -4] }
+    }
+  },
+  {
+    "id": "bme280",
+    "title": "温湿度气压：BME280 传感器",
+    "about": "BME280 走 I2C（地址 0x76，SDA=GPIO6、SCL=GPIO7）。程序读芯片 ID 和出厂校准参数，按数据手册公式换算温度、湿度、气压，每秒打印一次。拖动下面的滑块改变虚拟环境，读数会跟着变。",
+    "tags": ["✓ 仿真验证", "I2C", "BME280", "ESP-IDF 5.5"],
+    "scene": { "parts": [{ "type": "bme280", "addr": 118, "sda": 6, "scl": 7 }] },
+    "controls": ["env"]
   },
   {
     "id": "hello",

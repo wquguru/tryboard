@@ -31,7 +31,7 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
     fw = f"{root}/firmware/build/{t['id']}/flash.bin"
     if not os.path.exists(fw):
         print(f"| {t['id']} | ❌ | 未构建 |"); bad += 1; continue
-    p = subprocess.run([f'{root}/core/target/release/tryboard', 'run', fw, '--seconds', str(t['seconds']), '--gpio-log'],
+    p = subprocess.run([f'{root}/core/target/release/tryboard', 'run', fw, '--seconds', str(t['seconds']), '--gpio-log'] + t.get('args', []),
                        capture_output=True, text=True, errors='replace')
     out, err = p.stdout, p.stderr
     missing = [e for e in t['expect'] if e not in out]
@@ -44,6 +44,20 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
         n = int(m.group(1)) if m else 0
         notes.append(f"GPIO{g['pin']} 翻转 {n} 次")
         if n < g['min']: missing.append('gpio')
+    # 数值核对：固件打印的读数与模拟环境设定值之差在容差内（每一次读数都要满足）
+    for nchk in t.get('numeric', []):
+        vals = [float(v) for v in re.findall(nchk['regex'], out)]
+        worst = max((abs(v - nchk['value']) for v in vals), default=None)
+        if worst is None or worst > nchk['tol']:
+            missing.append(nchk['name'])
+            notes.append(f"{nchk['name']} 偏差 {worst} 超过 {nchk['tol']}")
+        else:
+            notes.append(f"{nchk['name']} {len(vals)} 次读数误差 ≤ {worst:g}")
+    if 'oled_min_pixels' in t:
+        m = re.search(r'OLED 点亮像素 (\d+)', err)
+        n = int(m.group(1)) if m else 0
+        notes.append(f"OLED 点亮 {n} 像素")
+        if n < t['oled_min_pixels']: missing.append('oled')
     speed = re.search(r'模拟 ([\d.]+)s / 实际 ([\d.]+)s', err)
     if speed: notes.append(f"模拟 {speed.group(1)}s 用时 {speed.group(2)}s")
     if t.get('qemu') and not no_qemu:
@@ -61,7 +75,7 @@ PY
 if [ $NO_WEB = 0 ]; then
   echo -e "\n## 网页（Chrome 无头 + wasm）" >> $REPORT
   tools/build_web.sh >/dev/null 2>&1 || { echo "构建失败" >> $REPORT; fail=1; }
-  for ex in blink hello; do
+  for ex in blink hello oled bme280; do
     r=$(node tools/webtest/webtest.mjs $ex TRYBOARD_OK 2>&1 | head -3)
     echo "- $r" >> $REPORT
     echo "$r" | grep -q PASS || fail=1

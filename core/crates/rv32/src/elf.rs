@@ -73,8 +73,16 @@ impl Elf {
                 let off = u32le(b, o + 16) as usize;
                 let size = u32le(b, o + 20) as usize;
                 let name_off = strtab + u32le(b, o) as usize;
-                let end = b[name_off..].iter().position(|&c| c == 0).map(|p| name_off + p).unwrap_or(name_off);
-                let data = if kind == 1 { b.get(off..off + size).ok_or("节越界")?.to_vec() } else { Vec::new() };
+                let end = b[name_off..]
+                    .iter()
+                    .position(|&c| c == 0)
+                    .map(|p| name_off + p)
+                    .unwrap_or(name_off);
+                let data = if kind == 1 {
+                    b.get(off..off + size).ok_or("节越界")?.to_vec()
+                } else {
+                    Vec::new()
+                };
                 sections.push(Section {
                     name: String::from_utf8_lossy(&b[name_off..end]).into_owned(),
                     kind,
@@ -99,7 +107,11 @@ impl Elf {
                     let value = u32le(b, s + 4);
                     let sz = u32le(b, s + 8);
                     let start = stroff + name;
-                    let end = b[start..].iter().position(|&c| c == 0).map(|p| start + p).unwrap_or(start);
+                    let end = b[start..]
+                        .iter()
+                        .position(|&c| c == 0)
+                        .map(|p| start + p)
+                        .unwrap_or(start);
                     let n = String::from_utf8_lossy(&b[start..end]).into_owned();
                     if !n.is_empty() {
                         symbols.push((n, value, sz));
@@ -107,7 +119,12 @@ impl Elf {
                 }
             }
         }
-        Ok(Elf { entry, segments, sections, symbols })
+        Ok(Elf {
+            entry,
+            segments,
+            sections,
+            symbols,
+        })
     }
 
     pub fn symbol(&self, name: &str) -> Option<u32> {

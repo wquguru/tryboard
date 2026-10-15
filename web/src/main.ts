@@ -1,11 +1,14 @@
-import { createBench } from './board3d';
-import type { FromWorker, ToWorker } from './worker';
+import { createBench, type SceneSpec } from './board3d';
+import type { Env, FromWorker, ToWorker } from './worker';
 
 interface Example {
   id: string;
   title: string;
   about: string;
   tags: string[];
+  scene?: SceneSpec;
+  /** 'env'：显示环境滑块（温度 / 湿度 / 气压） */
+  controls?: string[];
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -23,6 +26,14 @@ let rom: ArrayBuffer | null = null;
 let flash: ArrayBuffer | null = null;
 let running = false;
 let examples: Example[] = [];
+let scene: SceneSpec = { parts: [] };
+const env: Env = { temp: 23.5, humidity: 45, pressure: 101325 };
+
+/** 场景里的 I2C 器件 → 模拟总线上要挂的器件 */
+function i2cDevices() {
+  const kind: Record<string, string> = { oled: 'ssd1306', bme280: 'bme280' };
+  return scene.parts.flatMap((p) => ('addr' in p && kind[p.type] ? [{ kind: kind[p.type], addr: p.addr }] : []));
+}
 
 function log(text: string, cls?: string) {
   const atBottom = consoleEl.scrollTop + consoleEl.clientHeight >= consoleEl.scrollHeight - 8;
@@ -56,7 +67,7 @@ function boot(autorun: boolean) {
   log('[试板] 上电，加载固件…\n', 'sys');
   bench.setPowered(true);
   pendingAutorun = autorun;
-  send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0) });
+  send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: i2cDevices(), env: { ...env } });
 }
 let pendingAutorun = false;
 
@@ -83,6 +94,9 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
         r.textContent = `${m.ratio.toFixed(2)}× 实时`;
         r.classList.toggle('slow', m.ratio < 0.9);
       }
+      break;
+    case 'oled':
+      bench.setOled(m.pixels);
       break;
     case 'stopped':
       setRunning(false);
@@ -124,8 +138,34 @@ bench.onButton((name, down) => {
 async function loadExample(id: string, autorun: boolean) {
   const ex = examples.find((e) => e.id === id)!;
   $('about').innerHTML = `<p><b>${ex.title}</b></p><p>${ex.about}</p><p>${ex.tags.map((t) => `<span class="tag ${t.startsWith('✓') ? 'ok' : ''}">${t}</span>`).join('')}</p>`;
+  scene = ex.scene ?? { parts: [] };
+  bench.setScene(scene);
+  if (ex.controls?.includes('env')) envControls();
   flash = await fetchBuf(`./fw/${id}/flash.bin`);
   boot(autorun);
+}
+
+/** 环境滑块：改的是虚拟世界，传感器读到的随之变化 */
+function envControls() {
+  const box = document.createElement('div');
+  box.className = 'env';
+  const rows: [keyof Env, string, number, number, number, (v: number) => string][] = [
+    ['temp', '温度', -20, 50, 0.5, (v) => `${v.toFixed(1)} °C`],
+    ['humidity', '湿度', 0, 100, 1, (v) => `${v.toFixed(0)} %`],
+    ['pressure', '气压', 90000, 110000, 50, (v) => `${(v / 100).toFixed(1)} hPa`],
+  ];
+  for (const [k, name, min, max, step, fmt] of rows) {
+    const row = document.createElement('label');
+    row.innerHTML = `<span>${name}</span><input type="range" min="${min}" max="${max}" step="${step}" value="${env[k]}" /><output>${fmt(env[k])}</output>`;
+    const input = row.querySelector('input')!;
+    input.oninput = () => {
+      env[k] = Number(input.value);
+      row.querySelector('output')!.textContent = fmt(env[k]);
+      send({ type: 'env', ...env });
+    };
+    box.appendChild(row);
+  }
+  $('about').appendChild(box);
 }
 
 exampleSel.onchange = () => loadExample(exampleSel.value, true);

@@ -49,6 +49,7 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | 内核单元测试 | `cd core && cargo test` |
 | 构建验收固件 | `tools/build_fw.sh [名字]` |
 | 原生跑固件 | `cd core && cargo run -p tryboard-cli --release -- run ../firmware/build/<名字>/flash.bin` |
+| 带外接器件跑 | `tryboard run <flash.bin> --i2c ssd1306@0x3c,bme280@0x76 --env 23.5,45,101325 --oled`（`--oled` 打印屏幕字符画） |
 | 跑全部验收 | `tools/accept.sh [--no-web] [--no-qemu]`（输出 `Reviews/accept.md`；验收用例在 `firmware/accept.json`） |
 | 定位卡死 / 崩溃 | `tryboard run <flash.bin> --trace 40`（打印最近跳转目标，自动加载同目录 app.elf 符号） |
 | 下载第三方输入（ROM、riscv-tests） | `tools/fetch_third_party.sh` |
