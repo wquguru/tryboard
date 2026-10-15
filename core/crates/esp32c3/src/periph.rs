@@ -189,6 +189,8 @@ pub struct Systimer {
     pub target_conf: [u32; 3],
     pub int_ena: u32,
     pub int_raw: u32,
+    /// 单次模式比较器只在"装载后第一次计数到达"时触发一次；之后即使计数仍 ≥ 目标也不再触发
+    pub armed: [bool; 3],
 }
 
 impl Default for Systimer {
@@ -202,6 +204,7 @@ impl Default for Systimer {
             target_conf: [0; 3],
             int_ena: 0,
             int_raw: 0,
+            armed: [false; 3],
         }
     }
 }
@@ -239,7 +242,16 @@ impl Systimer {
 
     pub fn write(&mut self, off: u32, v: u32, now: u64) {
         match off {
-            0x00 => self.conf = v,
+            0x00 => {
+                // 比较器从关到开：重新装弹
+                for i in 0..3 {
+                    let bit = 1 << (24 - i);
+                    if v & bit != 0 && self.conf & bit == 0 {
+                        self.armed[i] = true;
+                    }
+                }
+                self.conf = v;
+            }
             0x04 | 0x08 => {
                 let u = ((off - 4) / 4) as usize;
                 if v & (1 << 30) != 0 {
@@ -262,6 +274,7 @@ impl Systimer {
             0x50..=0x58 => {
                 // COMPx_LOAD：把 target / period 生效。周期模式下从当前计数起算
                 let i = ((off - 0x50) / 4) as usize;
+                self.armed[i] = true;
                 if self.target_conf[i] & (1 << 30) != 0 {
                     let unit = (self.target_conf[i] >> 31) as usize;
                     self.target[i] = self.count(unit, now) + (self.target_conf[i] & 0x3ff_ffff) as u64;
@@ -292,8 +305,9 @@ impl Systimer {
             let cnt = self.count(unit, now);
             let periodic = self.target_conf[i] & (1 << 30) != 0;
             if cnt >= self.target[i] {
-                if self.int_raw & (1 << i) == 0 || periodic {
+                if self.armed[i] || periodic {
                     self.int_raw |= 1 << i;
+                    self.armed[i] = false;
                 }
                 if periodic {
                     let period = (self.target_conf[i] & 0x3ff_ffff) as u64;
@@ -306,6 +320,9 @@ impl Systimer {
                 } else {
                     continue;
                 }
+            }
+            if !periodic && !self.armed[i] {
+                continue;
             }
             let delta = self.target[i] - cnt;
             next = next.min(now + delta * 10);

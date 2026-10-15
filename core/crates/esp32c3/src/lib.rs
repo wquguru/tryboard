@@ -6,6 +6,7 @@ pub mod ledc;
 pub mod periph;
 pub mod rmt;
 pub mod spiflash;
+pub mod wifi;
 
 use periph::*;
 use std::collections::HashMap;
@@ -77,6 +78,10 @@ pub struct SocBus {
     /// 访问了没有模型的寄存器：地址 → 次数
     pub unimpl: HashMap<u32, u64>,
     pub irq_dirty: bool,
+    /// 调试：监视某个 MMIO 地址，记录访问时的 PC（watch_pc 由运行循环填写）
+    pub watch: Option<u32>,
+    pub watch_pc: u32,
+    pub watch_hits: Vec<(u32, u32, bool)>,
     pub next_event: u64,
     /// GPIO 电平变化记录（周期, 电平），前端按此驱动 LED 等
     pub gpio_log: Vec<(u64, u32)>,
@@ -114,6 +119,9 @@ impl Default for SocBus {
             regs: HashMap::new(),
             unimpl: HashMap::new(),
             irq_dirty: true,
+            watch: None,
+            watch_pc: 0,
+            watch_hits: Vec::new(),
             next_event: 0,
             gpio_log: Vec::new(),
             last_gpio: 0,
@@ -243,6 +251,9 @@ impl SocBus {
             _ => {}
         }
         if let Some(v) = boot::special_read(a, now) {
+            return v;
+        }
+        if let Some(v) = wifi::rf_read(a, self.regs.get(&a).copied().unwrap_or(0)) {
             return v;
         }
         *self.unimpl.entry(a).or_insert(0) += 1;
@@ -438,6 +449,9 @@ impl Bus for SocBus {
         }
         if (MMIO_LOW..MMIO_HIGH).contains(&a) {
             let v = self.mmio_read(a & !3);
+            if self.watch == Some(a & !3) && self.watch_hits.len() < 4096 {
+                self.watch_hits.push((self.watch_pc, v, false));
+            }
             let sh = (a & 3) * 8;
             return Ok(match size {
                 4 => v,
@@ -479,6 +493,9 @@ impl Bus for SocBus {
                 };
                 (old & !mask) | ((v << sh) & mask)
             };
+            if self.watch == Some(aa) && self.watch_hits.len() < 4096 {
+                self.watch_hits.push((self.watch_pc, v, true));
+            }
             self.mmio_write(aa, v);
             return Ok(());
         }
@@ -512,6 +529,7 @@ impl Esp32c3 {
         let hle = &self.hle;
         while cpu.cycles < end {
             bus.now = cpu.cycles;
+            bus.watch_pc = cpu.pc;
             if bus.irq_dirty || cpu.cycles >= bus.next_event {
                 bus.update(cpu);
             }

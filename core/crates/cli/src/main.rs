@@ -103,6 +103,7 @@ fn run(args: &[String]) {
     script.reverse();
     let pwm_pin: Option<usize> = opt(args, "--pwm-log").and_then(|s| s.parse().ok());
     let mut pwm_trace: Vec<(f64, f32, f32)> = Vec::new();
+    m.bus.watch = opt(args, "--watch").and_then(|s| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok());
     let trace: usize = opt(args, "--trace").and_then(|s| s.parse().ok()).unwrap_or(0);
     let mut ring = std::collections::VecDeque::new();
     let app_elf = std::path::Path::new(path).with_file_name("app.elf").to_string_lossy().into_owned();
@@ -201,6 +202,27 @@ fn run(args: &[String]) {
     eprintln!("[tryboard] 未建模寄存器 {} 个，访问最多的：", un.len());
     for (a, n) in un.iter().take(12) {
         eprintln!("    0x{:08x}  {:>8} 次", a, n);
+    }
+    if !m.bus.watch_hits.is_empty() {
+        let mut by_pc: std::collections::BTreeMap<(u32, bool), (u32, u32)> = Default::default();
+        for (pc, v, w) in &m.bus.watch_hits {
+            let e = by_pc.entry((*pc, *w)).or_insert((0, *v));
+            e.0 += 1;
+            e.1 = *v;
+        }
+        eprintln!("[tryboard] 监视 0x{:08x}（前 {} 次访问）：", m.bus.watch.unwrap_or(0), m.bus.watch_hits.len());
+        for ((pc, w), (n, v)) in by_pc {
+            eprintln!("    {} {}  {n} 次  最后值 0x{v:08x}", if w { "写" } else { "读" }, syms.name(pc));
+        }
+    }
+    if args.iter().any(|a| a == "--dump-intc") {
+        let ic = &m.bus.intc;
+        eprintln!("[tryboard] 中断线 使能=0x{:08x} 边沿=0x{:08x} 阈值={} 当前线={}", ic.enable, ic.edge, ic.thresh, m.cpu.irq_line);
+        for (src, line) in ic.map.iter().enumerate() {
+            if *line != 0 {
+                eprintln!("    源 {src:>2} → 线 {line:>2}（优先级 {}）", ic.pri[*line as usize]);
+            }
+        }
     }
     if let Some(list) = opt(args, "--peek") {
         for a in list.split(',') {

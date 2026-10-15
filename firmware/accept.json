@@ -193,5 +193,14 @@
    "primes=3512 crc=694b5a42 sum=1.644725",
    "TRYBOARD_OK bench"
   ]
+ },
+ {
+  "id": "wifi-init",
+  "seconds": 3,
+  "expect": [
+   "wifi_init ok",
+   "TRYBOARD_OK wifi-init",
+   "start ok"
+  ]
  }
 ]
