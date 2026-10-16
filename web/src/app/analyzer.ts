@@ -66,6 +66,7 @@ function defaultChannels(parts: PartSpec[], chip: string): Channel[] {
       ch.push({ id: `GPIO${p.b}`, kind: 'pin', pin: p.b, label: `GPIO${p.b}`, role: '编码器 B' });
       if (p.sw !== undefined) ch.push({ id: `GPIO${p.sw}`, kind: 'pin', pin: p.sw, label: `GPIO${p.sw}`, role: '编码器按键' });
     }
+    if (p.type === 'ws2812') ch.push({ id: `RGB${p.pin}`, kind: 'ws', pin: p.pin, label: `GPIO${p.pin}` });
     if (p.type === 'hcsr04') {
       ch.push({ id: `GPIO${p.trig}`, kind: 'pin', pin: p.trig, label: `GPIO${p.trig}`, role: 'Trig' });
       ch.push({ id: `GPIO${p.echo}`, kind: 'pin', pin: p.echo, label: `GPIO${p.echo}`, role: 'Echo' });

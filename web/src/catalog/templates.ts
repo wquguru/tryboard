@@ -42,7 +42,7 @@ export interface BuyLine {
 }
 
 export interface ProcureTemplate {
-  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'blank';
+  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'blank';
   title: string;
   /** 对应关卡（firmware/levels.json id，07 关的变体写 07:spin） */
   level: string | null;
@@ -168,6 +168,105 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
     firmware: { wifi: false },
   },
   {
+    id: 'lamp',
+    title: '旋钮台灯',
+    level: 'lamp-3',
+    product: 'lamp',
+    board: 's3-devkitc1-v10',
+    required: [
+      { partId: 's3-devkitc1-v10', qty: 1, why: '验收固件按 S3' },
+      { partId: 'ws2812-stick8', qty: 1, why: '灯：8 颗 WS2812，DIN 接 GPIO5' },
+      { partId: 'encoder', qty: 1, why: '旋钮：转调亮度 / 颜色，按下切换' },
+      CABLE,
+      { partId: 'dupont-ff', qty: 1, why: '模块排针直接连开发板' },
+      { partId: 'enclosure-lamp', qty: 1, why: '灯座 + 乳白灯罩' },
+    ],
+    suggested: [
+      { partId: 'psu-5v2a', qty: 1, checked: true, why: '灯条单独供电：8 颗满白约 480 mA，加上板子超过电脑 USB 的 500 mA' },
+      { partId: 'dc-jack', qty: 1, checked: true, why: '电源插头转面包板' },
+      { partId: 'level-ahct125', qty: 1, checked: true, why: '5 V 灯条要 ≥ 3.5 V 的数据电平，3.3 V 直推偶尔会乱色' },
+      { partId: 'breadboard-830', qty: 1, checked: true, why: '先搭通再装壳' },
+      { partId: 'dupont-mm', qty: 1, checked: true, why: '面包板上跳线' },
+      { partId: 'cap-1000uf', qty: 1, checked: false, why: '灯条电源两端稳压，长灯条必加' },
+    ],
+    wiring: [
+      { part: 'ws2812-stick8', pin: '5V', net: 'EXT5V' },
+      { part: 'ws2812-stick8', pin: 'DIN', net: 'GPIO5', via: 'level-shifter' },
+      { part: 'ws2812-stick8', pin: 'GND', net: 'GND' },
+      { part: 'encoder', pin: 'GND', net: 'GND' },
+      { part: 'encoder', pin: '+', net: '3V3' },
+      { part: 'encoder', pin: 'SW', net: 'GPIO15' },
+      { part: 'encoder', pin: 'DT', net: 'GPIO7' },
+      { part: 'encoder', pin: 'CLK', net: 'GPIO6' },
+      { part: 'dc-jack', pin: '+', net: 'EXT5V' },
+      { part: 'dc-jack', pin: '-', net: 'GND' },
+    ],
+    firmware: { wifi: false },
+  },
+  {
+    id: 'ruler',
+    title: '超声波尺子',
+    level: 'ruler-3',
+    product: 'ruler',
+    board: 's3-devkitc1-v10',
+    required: [
+      { partId: 's3-devkitc1-v10', qty: 1, why: '验收固件按 S3' },
+      { partId: 'hc-sr04', qty: 1, why: '测距：Trig GPIO17，Echo 分压后进 GPIO18' },
+      { partId: 'resistor-kit', qty: 1, why: 'Echo 是 5 V：1 kΩ / 2 kΩ 分压到约 3.3 V' },
+      { partId: 'ssd1306', qty: 1, why: '显示距离' },
+      { partId: 'buzzer-module', qty: 1, why: '越近响得越急（GPIO5）' },
+      CABLE,
+      { partId: 'dupont-mf', qty: 1, why: '模块排针接面包板' },
+      { partId: 'enclosure-ruler', qty: 1, why: '手持外壳，前面两个探头孔' },
+    ],
+    suggested: [
+      { partId: 'breadboard-830', qty: 1, checked: true, why: '分压电阻插在面包板上' },
+      { partId: 'dupont-mm', qty: 1, checked: true, why: '面包板上跳线' },
+      { partId: 'dupont-ff', qty: 1, checked: false, why: '装进外壳时直接连排针' },
+    ],
+    wiring: [
+      { part: 'hc-sr04', pin: 'VCC', net: '5V' },
+      { part: 'hc-sr04', pin: 'Trig', net: 'GPIO17' },
+      { part: 'hc-sr04', pin: 'Echo', net: 'GPIO18', via: 'divider' },
+      { part: 'hc-sr04', pin: 'GND', net: 'GND' },
+      { part: 'ssd1306', pin: 'GND', net: 'GND' },
+      { part: 'ssd1306', pin: 'VCC', net: '3V3' },
+      { part: 'ssd1306', pin: 'SCL', net: 'GPIO9' },
+      { part: 'ssd1306', pin: 'SDA', net: 'GPIO8' },
+      { part: 'buzzer-module', pin: 'VCC', net: '3V3' },
+      { part: 'buzzer-module', pin: 'I/O', net: 'GPIO5' },
+      { part: 'buzzer-module', pin: 'GND', net: 'GND' },
+    ],
+    firmware: { wifi: false },
+  },
+  {
+    id: 'tilt',
+    title: '体感小人',
+    level: 'tilt-3',
+    product: 'tilt',
+    board: 's3-devkitc1-v10',
+    required: [
+      { partId: 's3-devkitc1-v10', qty: 1, why: '验收固件按 S3' },
+      { partId: 'qmi8658', qty: 1, why: '感知倾斜（I2C 0x6B）' },
+      { partId: 'gc9a01', qty: 1, why: '圆屏：小豆在上面滑' },
+      CABLE,
+      { partId: 'dupont-ff', qty: 1, why: '模块排针直接连开发板' },
+      { partId: 'enclosure-tilt', qty: 1, why: '圆盘外壳，圆屏在顶面' },
+    ],
+    suggested: [
+      { partId: 'breadboard-830', qty: 1, checked: false, why: '想先在面包板上试' },
+      { partId: 'dupont-mm', qty: 1, checked: false, why: '面包板上跳线' },
+    ],
+    wiring: [
+      ...GC9A01_WIRING,
+      { part: 'qmi8658', pin: 'VIN', net: '3V3' },
+      { part: 'qmi8658', pin: 'GND', net: 'GND' },
+      { part: 'qmi8658', pin: 'SCL', net: 'GPIO9' },
+      { part: 'qmi8658', pin: 'SDA', net: 'GPIO8' },
+    ],
+    firmware: { wifi: false },
+  },
+  {
     id: 'usbkey',
     title: 'USB 小键盘',
     level: 'usbkey-3',
@@ -271,7 +370,7 @@ export function bomTotal(picks: Pick[], board?: string): { lo: number; hi: numbe
 }
 
 /** 元件库 → 实验台场景元件类型（与 examples.json scene.parts[].type 同名） */
-const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key' };
+const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812' };
 /** 按键键帽上的字（usbkey：K1–K3 发 a / b / c，K4 宏键） */
 const KEY_CAPS = ['a', 'b', 'c', 'M'];
 
@@ -325,6 +424,25 @@ export function toScene(picks: Pick[], wiring: Wire[]): { type: string; [k: stri
     } else if (type === 'led') {
       const pin = gpioOf(key, 'io');
       if (pin !== undefined) out.push({ type, pin });
+    } else if (type === 'encoder' || type === 'hcsr04' || type === 'ws2812') {
+      // 按丝印找（编码器三根信号线同为 digital-out 类型，按类型分不开）
+      const byLabel = (label: string) => {
+        const w = wiring.find((x) => x.part === key && x.pin === label);
+        const m = w && /^GPIO(\d+)$/.exec(w.net);
+        return m ? Number(m[1]) : undefined;
+      };
+      if (type === 'encoder') {
+        const a = byLabel('CLK'), b = byLabel('DT'), sw = byLabel('SW');
+        if (a !== undefined && b !== undefined) out.push({ type, a, b, ...(sw !== undefined ? { sw } : {}) });
+      } else if (type === 'hcsr04') {
+        const trig = byLabel('Trig'), echo = byLabel('Echo');
+        const div = wiring.find((x) => x.part === key && x.pin === 'Echo')?.via === 'divider';
+        // 障碍物先放在 15 cm（台面上探头、挡板、开发板都在默认机位里）
+        if (trig !== undefined && echo !== undefined) out.push({ type, trig, echo, ...(div ? {} : { divider: false }), cm: 15 });
+      } else {
+        const pin = byLabel('DIN');
+        if (pin !== undefined) out.push({ type, pin, ...(p.partId === 'ws2812-strip' ? { n: 60 } : {}) });
+      }
     } else if (type === 'key') {
       // 一个清单行可以是好几颗按键：每根接到 GPIO 的 A 脚出一颗
       wiring.filter((w) => w.part === key && w.pin === 'A' && /^GPIO\d+$/.test(w.net)).forEach((w, i) => out.push({ type, pin: Number(w.net.slice(4)), cap: KEY_CAPS[i] ?? String(i + 1), label: `K${i + 1} · ${w.net}` }));

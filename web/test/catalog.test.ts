@@ -13,8 +13,9 @@ const examples: { id: string; scene: { parts: unknown[] }; pins?: Record<string,
 
 const clone = (p: Part): Part => structuredClone(p);
 
-test('元件库 40–60 件，id 唯一', () => {
-  assert.ok(PARTS.length >= 40 && PARTS.length <= 60, `现在 ${PARTS.length} 件`);
+// P2-09 起加了三个新作品的外壳，上限从 60 放到 70（docs/DECISIONS.md 2026-10-16 P2-09）
+test('元件库 40–70 件，id 唯一', () => {
+  assert.ok(PARTS.length >= 40 && PARTS.length <= 70, `现在 ${PARTS.length} 件`);
   assert.equal(new Set(PARTS.map((p) => p.id)).size, PARTS.length);
   assert.equal(Object.keys(PART_BY_ID).length, PARTS.length);
   assert.ok(BOARDS.length >= 4);
@@ -163,8 +164,8 @@ test('schema 校验：开发板缺来源 URL / 板载占用写错 / 屏引脚对
 });
 
 // ───────── 采购模版 ─────────
-test('模版：五个、必选件都在库里，数量为正', () => {
-  assert.deepEqual(PROCURE_TEMPLATES.map((t) => t.id), ['weather', 'spin', 'lens', 'usbkey', 'blank']);
+test('模版：八个、必选件都在库里，数量为正', () => {
+  assert.deepEqual(PROCURE_TEMPLATES.map((t) => t.id), ['weather', 'spin', 'lens', 'lamp', 'ruler', 'tilt', 'usbkey', 'blank']);
   for (const t of PROCURE_TEMPLATES) {
     assert.ok(PART_BY_ID[t.board]?.kind === 'board', t.id);
     for (const l of [...t.required, ...t.suggested]) {
@@ -212,8 +213,21 @@ test('模版：去掉 BME280 出现阻断提示（P0-07 验收的规则部分）
   assert.equal(f.level, 'block');
 });
 
-test('模版：三个作品默认清单 + 接线无阻断、无警告', () => {
-  for (const id of ['weather', 'spin', 'lens', 'usbkey', 'blank']) assert.deepEqual(problems(templateInput(id)), [], id);
+test('模版：各作品默认清单 + 接线无阻断、无警告', () => {
+  for (const id of ['weather', 'spin', 'lens', 'usbkey', 'lamp', 'ruler', 'tilt', 'blank']) assert.deepEqual(problems(templateInput(id)), [], id);
+});
+
+test('模版：台灯去掉外接电源 → 只靠 USB 的警告（灯条满白 480 mA）', () => {
+  const inp = templateInput('lamp');
+  inp.parts = inp.parts.filter((p) => p.partId !== 'psu-5v2a' && p.partId !== 'dc-jack');
+  inp.wiring = inp.wiring.filter((w) => w.part !== 'dc-jack').map((w) => (w.net === 'EXT5V' ? { ...w, net: '5V' } : w));
+  assert.ok(problems(inp).some((x) => x.id === 'R20' && x.level === 'warn'));
+});
+
+test('模版：尺子的 Echo 不分压 → 5 V 进 GPIO 的提醒', () => {
+  const inp = templateInput('ruler');
+  inp.wiring = inp.wiring.map((w) => (w.part === 'hc-sr04' && w.pin === 'Echo' ? { part: w.part, pin: w.pin, net: w.net } : w));
+  assert.ok(problems(inp).some((x) => x.id === 'R17'));
 });
 
 test('模版：接线引用的针脚都在元件库里', () => {
@@ -227,7 +241,7 @@ test('模版：接线引用的针脚都在元件库里', () => {
 });
 
 test('toScene 与 firmware/examples.json 的 scene 一致', () => {
-  for (const id of ['weather', 'spin', 'lens', 'usbkey']) {
+  for (const id of ['weather', 'spin', 'lens', 'usbkey', 'lamp', 'ruler', 'tilt']) {
     const ex = examples.find((e) => e.id === id)!;
     const inp = templateInput(id);
     assert.deepEqual(toScene(inp.parts, inp.wiring), ex.scene.parts, id);
@@ -235,8 +249,8 @@ test('toScene 与 firmware/examples.json 的 scene 一致', () => {
 });
 
 test('模版圆屏 / 舵机接线与 examples.json 的 pins 一致', () => {
-  const map: Record<string, [string, string]> = { lcd_sclk: ['gc9a01', 'SCL'], lcd_mosi: ['gc9a01', 'SDA'], lcd_cs: ['gc9a01', 'CS'], lcd_dc: ['gc9a01', 'DC'], lcd_rst: ['gc9a01', 'RES'], lcd_bl: ['gc9a01', 'BLK'], servo: ['sg90', '橙 PWM'], buzzer: ['buzzer-module', 'I/O'] };
-  for (const id of ['weather', 'spin', 'lens']) {
+  const map: Record<string, [string, string]> = { lcd_sclk: ['gc9a01', 'SCL'], lcd_mosi: ['gc9a01', 'SDA'], lcd_cs: ['gc9a01', 'CS'], lcd_dc: ['gc9a01', 'DC'], lcd_rst: ['gc9a01', 'RES'], lcd_bl: ['gc9a01', 'BLK'], servo: ['sg90', '橙 PWM'], buzzer: ['buzzer-module', 'I/O'], strip: ['ws2812-stick8', 'DIN'], a: ['encoder', 'CLK'], b: ['encoder', 'DT'], sw: ['encoder', 'SW'], trig: ['hc-sr04', 'Trig'], echo: ['hc-sr04', 'Echo'] };
+  for (const id of ['weather', 'spin', 'lens', 'lamp', 'ruler', 'tilt']) {
     const ex = examples.find((e) => e.id === id)!;
     const t = PROCURE_TEMPLATES.find((x) => x.id === id)!;
     for (const [k, gpio] of Object.entries(ex.pins ?? {})) {

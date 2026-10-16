@@ -14,15 +14,16 @@ export interface Level {
   script?: string;
   expect?: string[];
   gpio_toggles?: { pin: number; min: number; max?: number };
-  pwm?: { pin: number; freq: number; min: number; max: number; tol?: number; from?: number; steps?: number[] };
-  ws2812?: { pin: number; min_frames?: number; frames?: string[][]; dominant?: 'r' | 'g' | 'b' };
+  pwm?: { pin: number; freq: number; min: number; max: number; tol?: number; from?: number; steps?: number[]; beeps?: { from: number; to: number; min: number; max: number }[] };
+  /** last：最后一帧逐颗看（灯数、亮几颗、亮的颜色 ±tol） */
+  ws2812?: { pin: number; min_frames?: number; frames?: string[][]; dominant?: 'r' | 'g' | 'b'; last?: { count: number; lit?: number; rgb: string; tol?: number } };
   numeric?: { name: string; regex: string; value: number; tol: number }[];
   oled_min_pixels?: number;
   lcd_min_pixels?: number;
   /** 串口里某段文字至少出现几次（如眨眼 BLINK） */
   serial_count?: { text: string; min: number }[];
   /** 圆屏最后一帧里某种颜色（±tol，按通道最大差）的像素数，可选水平重心范围（判"画了什么、画在哪"） */
-  lcd_colors?: { name: string; rgb: string; min: number; max?: number; tol?: number; cx?: [number, number] }[];
+  lcd_colors?: { name: string; rgb: string; min: number; max?: number; tol?: number; cx?: [number, number]; cy?: [number, number] }[];
   /** USB 虚拟主机看到的（关卡带 --usb-log）：设备状态、键盘打出的字（P2-12） */
   usb?: { state?: string; typed?: string };
   /** 这一关属于哪个作品的专属检查点（spin-1 这类）；没有就是气象站 / 第 07 关的通用关卡 */
@@ -155,6 +156,17 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
         const ms = (d: number) => ((d * 1000) / pw.freq).toFixed(1);
         res.push({ ok: !miss.length, text: `脉宽依次出现 ${pw.steps.map(ms).join(' → ')} ms` + (miss.length ? `：缺 ${miss.map(ms).join('、')} ms` : '') });
       }
+      for (const b of pw.beeps ?? []) {
+        // 响了几声：时间窗里占空比从 0（或没有输出）变成 > 0 的次数（蜂鸣器节奏，"越近越急"）
+        let n = 0;
+        let prev = 0;
+        for (const [d, at] of ch) {
+          if (d > 0 && prev === 0 && b.from <= at && at <= b.to) n++;
+          prev = d;
+        }
+        const want = b.min === b.max ? `${b.min}` : `${b.min}–${b.max}`;
+        res.push({ ok: b.min <= n && n <= b.max, text: `GPIO${pw.pin} ${b.from}–${b.to} s 响 ${n} 声（要 ${want}）` });
+      }
     }
   }
   const w = l.ws2812;
@@ -173,6 +185,20 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
       const k = 'rgb'.indexOf(w.dominant);
       ok = ok && rgb[k] > 0 && rgb[k] === Math.max(...rgb) && rgb.filter((x) => x === rgb[k]).length === 1;
       text += `，最后一帧 ${last}（要${{ r: '红', g: '绿', b: '蓝' }[w.dominant]}色）`;
+    }
+    if (w.last) {
+      // 最后一帧逐颗看：灯数、亮了几颗、亮的颜色（每通道 ±tol）
+      const L = w.last;
+      const last = frames.length ? frames[frames.length - 1] : [];
+      const want = parseInt(L.rgb.slice(1), 16);
+      const tol = L.tol ?? 0;
+      const litWant = L.lit ?? L.count;
+      const lit = last.filter((c) => c !== '#000000');
+      const near = (c: string) => Math.max(...[16, 8, 0].map((sh) => Math.abs(((parseInt(c.slice(1), 16) >> sh) & 255) - ((want >> sh) & 255)))) <= tol;
+      const good = last.length === L.count && lit.length === litWant && lit.every(near);
+      ok = ok && good;
+      text += `，最后一帧 ${last.length} 颗、亮 ${lit.length} 颗（要 ${L.count} 颗、亮 ${litWant} 颗 ${L.rgb} ±${tol}）`;
+      if (!good) text += `：${last.join(' ') || '（没有帧）'}`;
     }
     res.push({ ok, text });
   }
@@ -208,7 +234,7 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
     }
   }
   if (l.lcd_colors?.length) {
-    const seen = [...report.matchAll(/LCD 颜色 #([0-9a-f]{6}) (\d+) 像素，重心 ([\d.]+),([\d.]+)/g)].map((m) => ({ k: m[1], n: Number(m[2]), x: Number(m[3]) }));
+    const seen = [...report.matchAll(/LCD 颜色 #([0-9a-f]{6}) (\d+) 像素，重心 ([\d.]+),([\d.]+)/g)].map((m) => ({ k: m[1], n: Number(m[2]), x: Number(m[3]), y: Number(m[4]) }));
     const top = seen.slice(0, 4).map((e) => `#${e.k} ${e.n}`).join('、') || '（全黑）';
     for (const c of l.lcd_colors) {
       const want = parseInt(c.rgb.slice(1), 16);
@@ -222,6 +248,11 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
         const cx = n ? hit.reduce((a, e) => a + e.n * e.x, 0) / n : -1;
         ok = ok && c.cx[0] <= cx && cx <= c.cx[1];
         text += `，水平重心 ${n ? cx.toFixed(1) : '—'}（要 ${c.cx[0]}–${c.cx[1]}）`;
+      }
+      if (c.cy) {
+        const cy = n ? hit.reduce((a, e) => a + e.n * e.y, 0) / n : -1;
+        ok = ok && c.cy[0] <= cy && cy <= c.cy[1];
+        text += `，竖直重心 ${n ? cy.toFixed(1) : '—'}（要 ${c.cy[0]}–${c.cy[1]}）`;
       }
       if (!ok) text += `；画面主色 ${top}`;
       res.push({ ok, text });

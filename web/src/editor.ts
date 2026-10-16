@@ -58,6 +58,8 @@ export function describe(p: PartSpec): string {
       return `编码器 · CLK IO${p.a} / DT IO${p.b}${p.sw !== undefined ? ` / SW IO${p.sw}` : ''}`;
     case 'hcsr04':
       return `HC-SR04 · Trig IO${p.trig} / Echo IO${p.echo}`;
+    case 'ws2812':
+      return `WS2812 灯条 × ${p.n ?? 8} · DIN IO${p.pin}`;
     case 'oled':
       return `OLED · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl}`;
     case 'bme280':

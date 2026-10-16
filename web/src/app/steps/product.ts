@@ -4,6 +4,7 @@
 import { createProduct3D, type ProductScene } from '../product3d';
 import { createLcd3D, webglOk, type Lcd3D } from '../lcd3d';
 import { createTilt3D, type Tilt3D } from '../tilt3d';
+import { createWork3D, type WorkKind, type WorkProduct3D } from '../works3d';
 import { gravity } from '../../imupose';
 import { createLensProduct, createSpinProduct } from '../../views/lcdproducts';
 import { TEMPLATES, type Template } from '../../views/templates';
@@ -48,6 +49,21 @@ const FIRST3: Record<string, [string, string][]> = {
     ['看圆屏颜色对不对', '颜色反了是没开反色（INVON），红蓝对调是 RGB / BGR 顺序配错。'],
     ['实测透镜高度', '透镜离屏 8 mm 左右放大约 1.35×（估算）；真透镜焦距不同，拿尺子量一下再定卡槽。'],
   ],
+  lamp: [
+    ['先只接灯条、不接旋钮', '烧 lamp-1 的固件，8 颗都亮成暖白再往下走；颜色对调（红绿互换）是 GRB 顺序写错了。'],
+    ['灯条单独供电、共地', '灯条 5 V 接外接电源，地一定要和开发板连在一起；不共地时数据线没有参考，灯会乱闪。'],
+    ['旋钮方向和手感', '顺时针变亮才顺手；反了就把 CLK / DT 两根线对调。真 EC11 有机械抖动，PCNT 的 glitch 滤波别关。'],
+  ],
+  ruler: [
+    ['先量分压', 'Echo 经 1 kΩ / 2 kΩ 后用万用表量，最高约 3.3 V；没分压直接进 GPIO 会伤芯片。'],
+    ['拿卷尺对一遍', '对着墙在 10 / 50 / 100 cm 各量一次；声速随温度变（20 ℃ 约 343 m/s），差 1–2 % 是正常的。'],
+    ['探头要露出外壳', '探头缩在孔里时读数会变成几厘米、蜂鸣器一直响；装壳后再对着远处的墙试一次。'],
+  ],
+  tilt: [
+    ['先读姿态再画', '烧 tilt-1 的固件，平放时俯仰、横滚都接近 0；WHO_AM_I 不是 0x05 先查地址（SA0 接地是 0x6A）。'],
+    ['认方向', '把右边放低，横滚应该变正；不对就是模块转了方向，要么转回来，要么在固件里给符号取反。'],
+    ['看圆屏颜色对不对', '颜色反了是没开反色（INVON），红蓝对调是 RGB / BGR 顺序配错。'],
+  ],
 };
 
 /** 不能模拟的项：网页给不出、只能上真机看 */
@@ -71,6 +87,21 @@ const CANNOT: Record<string, [string, string][]> = {
   ],
   lens: [
     ['透镜实际放大与畸变', '放大倍数是按卡槽高度估算的'],
+    ['圆屏亮度、可视角度', '这里只有帧缓冲颜色'],
+  ],
+  lamp: [
+    ['灯的真实亮度和色温', '这里按固件写的 0–255 画发光强度，不是光度学计算；灯罩的散光效果是示意'],
+    ['EC11 的手感与抖动', '模拟器里旋钮是干净的正交波形，真机触点会抖'],
+    ['电源压降', '满白 480 mA 是估算，长灯条的线损和压降没算'],
+  ],
+  ruler: [
+    ['斜面、软物体、窄物体的回波', '这里障碍物是正对探头的平面，真机遇到斜面 / 布料可能测不到'],
+    ['温度对声速的影响', '固件按 343 m/s 算，模拟器也按 343 m/s 出回波'],
+    ['蜂鸣器音色和音量', '这里是方波示意'],
+  ],
+  tilt: [
+    ['六轴的零偏、噪声和温漂', '模拟器的读数就是设定的姿态，没有噪声'],
+    ['手持时的晃动', '这里的姿态是你拖出来的，真机手一抖小豆也会跟着动'],
     ['圆屏亮度、可视角度', '这里只有帧缓冲颜色'],
   ],
 };
@@ -101,7 +132,27 @@ const PARTS: Record<string, { id: string; name: string; about: string }[]> = {
     { id: 'dome', name: '凸透镜罩', about: 'Ø40 mm 平凸透镜，离屏高度决定放大倍数（估算）。3D 里的折射是示意（transmission / ior 1.5），不是光学仿真。' },
     { id: 'boot', name: 'BOOT 键', about: '换表情。' },
   ],
+  lamp: [
+    { id: 'strip', name: 'WS2812 × 8 · 导光柱', about: 'DIN 接 GPIO5（RMT）。每颗灯的颜色就是模拟器从引脚波形里解码出来的那一帧。' },
+    { id: 'knob', name: 'EC11 旋钮', about: 'CLK GPIO6 · DT GPIO7 · SW GPIO15，PCNT 4 倍频。拖动或滚轮转，点一下 = 按下（切换亮度 / 颜色模式）。' },
+    { id: 'shade', name: '乳白灯罩', about: '3D 打印乳白 PLA。灯条贴着灯罩壁时罩上会有一排亮点（装法影响，估算）。' },
+  ],
+  ruler: [
+    { id: 'sonar', name: 'HC-SR04 探头', about: 'Trig GPIO17 · Echo 经分压接 GPIO18。模拟器按挡板距离出回波宽度（343 m/s）。' },
+    { id: 'oled', name: 'OLED 0.96″', about: 'SSD1306（0x3C）：大字距离 + 距离条，画面就是模拟器里的帧缓冲。' },
+    { id: 'buzzer', name: '无源蜂鸣器', about: 'GPIO5，2.7 kHz：1 m 以内响 40 ms、停 距离 × 5 ms，10 cm 以内一直响。默认静音。' },
+    { id: 'board', name: '木挡板', about: '拖着它在桌上前后挪：距离从探头正面量起，桌上的卷尺 0 刻度对准探头。' },
+  ],
+  tilt: [
+    { id: 'disc', name: '圆盘外壳', about: '拖动它倾斜：往右拖右边放低（横滚 +），往下拖前边放低（俯仰 +）。' },
+    { id: 'imu', name: 'QMI8658 六轴', about: 'I2C 0x6B。模拟器按圆盘姿态算重力分量；装反时俯仰、横滚都反号（装法影响）。' },
+    { id: 'lcd', name: '圆屏 GC9A01', about: 'SPI2，小豆就画在这块屏上，画面来自模拟器里的帧缓冲。' },
+  ],
 };
+
+/** 这几个作品的成品是 works3d.ts（P2-09） */
+const WORK3D = new Set(['lamp', 'ruler', 'tilt']);
+const COLOR_LABEL: Record<string, string> = { warm: '暖白', red: '红', green: '绿', blue: '蓝', purple: '紫', white: '白' };
 
 /** lens 固件串口里的表情名 */
 const MOOD_LABEL: Record<string, string> = { normal: '平常', happy: '开心', love: '喜欢', sleepy: '困了' };
@@ -137,6 +188,14 @@ export function productStep(): StepImpl {
   let tiltNode: HTMLElement | null = null;
   let tiltTimer = 0;
   let svgProduct: { update(f: LiveFrame, room: number, fx: object): void } | null = null;
+  let work3d: WorkProduct3D | null = null;
+  // P2-09：台灯的亮度 / 模式 / 颜色、尺子的读数与蜂鸣节奏、小豆的位置（从串口整行解析）
+  let lamp = { level: 0, mode: '', color: '' };
+  let ruler = { dist: '', beep: '' };
+  let bean = { pos: '', edges: 0 };
+  /** 用户摆出来的距离 / 姿态（装法影响之前）；离开成品时还原 */
+  let rawCm = 25;
+  let rawPose = { pitch: 0, roll: 0, yaw: 0 };
   let raf = 0;
   let timer = 0;
   let sel = '';
@@ -159,7 +218,7 @@ export function productStep(): StepImpl {
   const sim = () => ctx?.session.sim ?? null;
   const frame = (): LiveFrame => sim()?.frame ?? emptyFrame();
 
-  function event(icon: string, label: string, status?: TimelineStep['status']) {
+  let event = (icon: string, label: string, status?: TimelineStep['status']) => {
     const t = storeRef?.get().simSeconds ?? 0;
     events.push({ id: `ev:${events.length}`, icon, label: `${label} · ${t.toFixed(1)} s`, status });
     if (events.length > 60) events.splice(0, events.length - 60);
@@ -167,12 +226,23 @@ export function productStep(): StepImpl {
       ctx.shell.timeline.setSteps(events);
       ctx.shell.timeline.setCurrent(events.length - 1);
     }
-  }
+  };
 
+  /** 进成品之前的串口（本次上电以来）：只更新状态，不往事件时间线里记 */
+  let quiet = false;
   function onSerial(text: string) {
     // 按整行处理：串口文本可能在一行中间被切成两次 tick
     const lines = (tail + text).split('\n');
     tail = lines.pop() ?? '';
+    const ev = event;
+    if (quiet) event = () => {};
+    try {
+      parseLines(lines);
+    } finally {
+      event = ev;
+    }
+  }
+  function parseLines(lines: string[]) {
     for (const raw of lines) {
       const l = raw.trim();
       if (l === 'ALARM ON') {
@@ -187,6 +257,24 @@ export function productStep(): StepImpl {
       } else if (l === 'LOOK FRONT' || l === 'LOOK AROUND') {
         look = l === 'LOOK FRONT' ? 'front' : 'around';
         event('↻', look === 'front' ? '转回正面，停住' : '继续左右转身');
+      } else if (/^LEVEL \d+$/.test(l)) {
+        lamp.level = Number(l.slice(6));
+      } else if (l === 'MODE color' || l === 'MODE level') {
+        lamp.mode = l.slice(5);
+        event('◎', lamp.mode === 'color' ? '旋钮改成换颜色' : '旋钮改成调亮度');
+      } else if (/^COLOR \d+ \w+$/.test(l)) {
+        lamp.color = l.split(' ')[2];
+      } else if (/^DIST /.test(l)) {
+        ruler.dist = l.slice(5);
+      } else if (/^BEEP /.test(l)) {
+        const b = l.slice(5);
+        if (b !== ruler.beep) event(b === 'off' ? '○' : '♪', b === 'off' ? '蜂鸣器停' : b === 'on' ? '太近了：蜂鸣器一直响' : `蜂鸣节奏：停 ${b.replace('gap=', '')}`, b === 'on' ? 'bad' : undefined);
+        ruler.beep = b;
+      } else if (/^EDGE /.test(l)) {
+        bean.edges++;
+        event('◉', `小豆滑到边上（${l.slice(5)}）`);
+      } else if (/^POS /.test(l)) {
+        bean.pos = l.slice(4).replace(/ pitch=.*$/, '');
       } else if (l === 'UNIT F' || l === 'UNIT C') {
         unitF = l === 'UNIT F';
         event('°', `OLED 换成 ${unitF ? '℉' : '℃'}`);
@@ -248,11 +336,11 @@ ${how ? `<details class="tg" open><summary><span>${preview ? '参考装法' : '�
     c.shell.props.innerHTML = `${preview ? `${sec('参考成品')}<p class="note">${esc(previewWhy())}。这里按默认正确装法、跑实验台上现在的固件；你自己装完以后，这里换成你的装法。</p>` : ''}${p ? `${sec('选中')}<div class="ph">${esc(p.name)}</div><p class="note">${esc(p.about)}</p>` : ''}
 ${sec('成品 · 同一份固件，模拟没有重启')}
 ${row('运行', 'run')}
-${weather ? `${row('气象站周围', 'air')}${row('BME280 读到', 'rt')}${row('OLED 单位', 'unit')}${row('表盘指针', 'needle')}${row('板载 RGB', 'rgb')}${row('蜂鸣器', 'buzz')}${row('热源', 'heat')}` : w === 'spin' ? `${row('舵机', 'servo')}${row('转台', 'turn')}${row('状态', 'look')}` : w === 'usbkey' ? `${row('电脑看到', 'usbstate')}${row('打出的字', 'typed')}` : `${row('表情', 'mood')}${row('透镜', 'lens')}`}
-${off ? `<p class="note bad">装法：BME280 贴着芯片，读数比周围高 ${off.toFixed(1)} ℃（估算）。回「组装」改放通风口旁。</p>` : ''}
+${weather ? `${row('气象站周围', 'air')}${row('BME280 读到', 'rt')}${row('OLED 单位', 'unit')}${row('表盘指针', 'needle')}${row('板载 RGB', 'rgb')}${row('蜂鸣器', 'buzz')}${row('热源', 'heat')}` : w === 'spin' ? `${row('舵机', 'servo')}${row('转台', 'turn')}${row('状态', 'look')}` : w === 'usbkey' ? `${row('电脑看到', 'usbstate')}${row('打出的字', 'typed')}` : w === 'lens' ? `${row('表情', 'mood')}${row('透镜', 'lens')}` : w === 'lamp' ? `${row('灯条', 'strip')}${row('亮度 / 颜色', 'lampst')}${row('旋钮模式', 'lampmode')}${row('旋钮', 'knob')}` : w === 'ruler' ? `${row('挡板距离', 'cm')}${row('探头量到', 'cmfx')}${row('固件读到', 'rdist')}${row('蜂鸣器', 'buzz')}` : `${row('圆盘姿态', 'tpose')}${row('六轴读到', 'tfx')}${row('小豆', 'bean')}`}
+${off ? `<p class="note bad">装法：BME280 贴着芯片，读数比周围高 ${off.toFixed(1)} ℃（估算）。回「组装」改放通风口旁。</p>` : ''}${fxNote()}
 ${assembly()?.effects.usbBlocked ? `<p class="note bad">装法：开发板转了 180°，USB 口顶着前墙，线插不进去，电脑看不到设备。回「组装」把 USB 口朝背面开孔。</p>` : ''}
 ${harnessHtml()}
-<div class="btns">${c.session.audio.hasSound ? `<button type="button" class="btn" id="pSound" aria-pressed="false">声音：关</button>` : ''}${weather ? `<button type="button" class="btn" id="pHeat">热源：关</button>` : ''}${w === 'usbkey' ? '' : `<button type="button" class="btn" id="pBoot">按住 BOOT</button>`}</div>
+<div class="btns">${c.session.audio.hasSound ? `<button type="button" class="btn" id="pSound" aria-pressed="false">声音：关</button>` : ''}${weather ? `<button type="button" class="btn" id="pHeat">热源：关</button>` : ''}${w === 'lamp' ? '<button type="button" class="btn" id="pKnobL">旋钮 −1</button><button type="button" class="btn" id="pKnobR">旋钮 +1</button><button type="button" class="btn" id="pKnobP">按旋钮</button>' : w === 'ruler' ? '<button type="button" class="btn" id="pNear">挡板近 10 cm</button><button type="button" class="btn" id="pFar">挡板远 10 cm</button>' : w === 'tilt' ? '<button type="button" class="btn" id="pTiltR">右边放低</button><button type="button" class="btn" id="pTiltL">左下放低</button><button type="button" class="btn" id="pLevel">放平</button>' : w === 'usbkey' ? '' : '<button type="button" class="btn" id="pBoot">按住 BOOT</button>'}</div>
 ${cur3d() ? `${sec('拍照 · 录像')}<div class="btns"><button type="button" class="btn" id="pPhoto">拍照</button><button type="button" class="btn" id="pRec">${rec ? `录制中 ${rec.elapsed().toFixed(0)} / ${RECORD_SECONDS} s` : `录 ${RECORD_SECONDS} 秒`}</button></div><p class="note">拍照：当前视角 2× 分辨率 PNG（超采样）；录像：画布 webm，声音开着时把蜂鸣器一起录进去。文件直接下载。</p>` : ''}
 ${sec('串口 · 最近几行')}<pre class="brief serial-tail" data-live="serial"></pre>
 ${sec('真机到手先做这三件事')}<ol class="first3">${first}</ol>
@@ -266,11 +354,61 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
       boot.onpointerdown = () => pressBoot(true);
       boot.onpointerup = boot.onpointerleave = () => pressBoot(false);
     }
+    const on = (id: string, f: () => void) => {
+      const b = c.shell.props.querySelector<HTMLButtonElement>(id);
+      if (b) b.onclick = f;
+    };
+    on('#pKnobL', () => turnKnob(-1));
+    on('#pKnobR', () => turnKnob(1));
+    on('#pKnobP', () => onTool('p-knob'));
+    on('#pNear', () => moveBoard(-10));
+    on('#pFar', () => moveBoard(10));
+    on('#pTiltR', () => tiltTo({ pitch: 0, roll: 25, yaw: 0 }));
+    on('#pTiltL', () => tiltTo({ pitch: 20, roll: -25, yaw: 0 }));
+    on('#pLevel', () => tiltTo({ pitch: 0, roll: 0, yaw: 0 }));
     const ph = c.shell.props.querySelector<HTMLButtonElement>('#pPhoto');
     if (ph) ph.onclick = () => void photo();
     const rb = c.shell.props.querySelector<HTMLButtonElement>('#pRec');
     if (rb) rb.onclick = () => record();
     updateLive();
+  }
+
+  /** 装法带来的提示（台灯亮点 / 探头被挡 / 六轴装反） */
+  function fxNote() {
+    const fx = assembly()?.effects ?? {};
+    if (fx.glare) return '<p class="note bad">装法：灯条贴着灯罩，罩上一排刺眼亮点（估算）。回「组装」把灯条贴到导光柱上。</p>';
+    if (fx.sonarBlock) return `<p class="note bad">装法：探头缩在外壳孔里，模拟器里的 HC-SR04 只能量到孔壁（约 ${fx.sonarBlock} cm），蜂鸣器一直响。回「组装」让探头伸出前面板。</p>`;
+    if (fx.imuFlip) return '<p class="note bad">装法：六轴装反了，模拟器里读到的俯仰、横滚都反号，小豆往高处爬。回「组装」把箭头朝前装。</p>';
+    return '';
+  }
+  function turnKnob(steps: number) {
+    if (!ctx) return;
+    ctx.session.turnEncoder(steps);
+    knobPos += steps;
+  }
+  let knobPos = 0;
+  /** 尺子：把用户摆的距离（装法之前）送进模拟器；探头被挡时只能量到孔壁 */
+  function applyDistance(cm: number) {
+    rawCm = cm;
+    const b = assembly()?.effects.sonarBlock ?? 0;
+    ctx?.session.setDistance(b ? Math.min(cm, b) : cm);
+  }
+  function moveBoard(d: number) {
+    const cm = Math.max(2, Math.min(80, rawCm + d));
+    work3d?.setDistance(cm);
+    applyDistance(cm);
+    event('↔', `挡板挪到 ${cm.toFixed(0)} cm`);
+  }
+  /** 体感小人：用户摆的姿态 → 六轴看到的姿态（装反时俯仰、横滚反号） */
+  function applyPose(p: { pitch: number; roll: number; yaw: number }) {
+    rawPose = { ...p };
+    const flip = assembly()?.effects.imuFlip;
+    ctx?.session.setPose(flip ? { pitch: -p.pitch, roll: -p.roll, yaw: p.yaw } : p);
+  }
+  function tiltTo(p: { pitch: number; roll: number; yaw: number }) {
+    work3d?.setPose(p);
+    applyPose(p);
+    event('⟋', p.pitch || p.roll ? `倾斜：俯仰 ${p.pitch}°、横滚 ${p.roll}°` : '放平');
   }
 
   // ------------------------------------------------------------ 线束（P2-11，估算）
@@ -303,7 +441,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
 
   // ------------------------------------------------------------ 拍照 / 录 10 秒（P2-10）
   function cur3d(): { capture(): Capturable } | null {
-    return scene3d ?? lcd3d ?? keypad;
+    return scene3d ?? lcd3d ?? keypad ?? work3d;
   }
   async function photo() {
     const c = ctx;
@@ -416,6 +554,26 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     }
     const ht = el.querySelector<HTMLButtonElement>('#pHeat');
     if (ht) ht.textContent = heat.on ? '热源：开' : '热源：关';
+    if (c.work.id === 'lamp') {
+      const strip = f.strips?.[5] ?? [];
+      const st = el.querySelector<HTMLElement>('[data-live="strip"]');
+      if (st) st.innerHTML = strip.length ? strip.map((x) => `<i class="sw" style="background:${ledCss(x) ?? '#222'}"></i>`).join('') + ` #${(strip[0] ?? [0, 0, 0]).map((x) => x.toString(16).padStart(2, '0')).join('')}` : '灭';
+      // 固件上电是亮度 4、暖白，只在变了的时候才打印 LEVEL / COLOR
+      set('lampst', lamp.level || lamp.color || strip.some((x) => Math.max(...x) > 0) ? `亮度 ${lamp.level || 4}/8 · ${COLOR_LABEL[lamp.color] ?? (lamp.color || '暖白')}${lamp.level || lamp.color ? '' : '（上电默认）'}` : '等固件打印…');
+      set('lampmode', lamp.mode === 'color' ? '换颜色（再按一下回到调亮度）' : '调亮度（按一下改成换颜色）');
+      set('knob', `${knobPos >= 0 ? '+' : ''}${knobPos} 格（从进成品算起）`);
+    } else if (c.work.id === 'ruler') {
+      const b = assembly()?.effects.sonarBlock ?? 0;
+      set('cm', `${rawCm.toFixed(1)} cm`);
+      set('cmfx', b && rawCm > b ? `约 ${b} cm（被孔壁挡住）` : `${Math.min(rawCm, b || rawCm).toFixed(1)} cm`, !!b && rawCm > b);
+      set('rdist', ruler.dist || '等固件打印…');
+      set('buzz', `${ruler.beep === 'on' ? '一直响' : ruler.beep.startsWith('gap=') ? `响 40 ms · 停 ${ruler.beep.slice(4)}` : '不响'} · ${au.muted ? '静音' : '出声'}`, ruler.beep === 'on');
+    } else if (c.work.id === 'tilt') {
+      const flip = assembly()?.effects.imuFlip;
+      set('tpose', `俯仰 ${rawPose.pitch.toFixed(0)}° · 横滚 ${rawPose.roll.toFixed(0)}°`);
+      set('tfx', flip ? `俯仰 ${(-rawPose.pitch).toFixed(0)}° · 横滚 ${(-rawPose.roll).toFixed(0)}°（装反了）` : '和圆盘一致', !!flip);
+      set('bean', bean.pos ? `${bean.pos} · 碰边 ${bean.edges} 次` : '等固件打印…');
+    }
     const pre = el.querySelector<HTMLElement>('[data-live="serial"]');
     if (pre) {
       const lines = c.session.consoleText().split('\n').filter((l) => l.trim());
@@ -426,9 +584,11 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
   function syncToolbar() {
     const c = ctx!;
     const weather = c.work.id === 'weather';
+    const w = c.work.id;
+    const act = w === 'lamp' ? [{ id: 'p-knob', label: '按旋钮' }] : w === 'ruler' ? [{ id: 'p-near', label: '挡板近' }, { id: 'p-far', label: '挡板远' }] : w === 'tilt' ? [{ id: 'p-level', label: '放平' }] : [{ id: 'p-boot', label: '按键' }, ...(weather ? [{ id: 'p-heat', label: heat.on ? '热源：开' : '热源' }] : [])];
     c.shell.toolbar.setGroups([
-      ...(scene3d || lcd3d || keypad ? [{ id: 'nav', tools: [{ id: 'p-orbit', label: '旋转', key: '拖动' }, { id: 'p-home', label: '复位视角' }] }] : []),
-      ...(c.work.id === 'usbkey' ? [] : [{ id: 'act', tools: [{ id: 'p-boot', label: '按键' }, ...(weather ? [{ id: 'p-heat', label: heat.on ? '热源：开' : '热源' }] : [])] }]),
+      ...(scene3d || lcd3d || keypad || work3d ? [{ id: 'nav', tools: [{ id: 'p-orbit', label: '旋转', key: '拖动' }, { id: 'p-home', label: '复位视角' }] }] : []),
+      ...(c.work.id === 'usbkey' ? [] : [{ id: 'act', tools: act }]),
       ...(c.session.audio.hasSound ? [{ id: 'snd', tools: [{ id: 'p-sound', label: c.session.audio.state.muted ? '声音：关' : '声音：开' }] }] : []),
       ...(cur3d() ? [{ id: 'media', tools: [{ id: 'p-photo', label: '拍照' }, { id: 'p-rec', label: rec ? '停止录像' : `录 ${RECORD_SECONDS} 秒` }] }] : []),
       { id: 'run', tools: [{ id: 'p-rerun', label: '再跑一次', primary: true }] },
@@ -472,7 +632,9 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     }
     const a = c.store.get().assembly;
     const off = a?.effects.sensorOffset ?? 0;
-    c.shell.setVerdict(alarm ? '报警中 ≥ 30 ℃' : off ? '读数偏高（装法）' : a?.retest ? '复测 ✓ · 成品' : '成品', alarm || off ? 'bad' : a?.retest ? 'ok' : 'idle');
+    const fx = a?.effects ?? {};
+    const fxBad = fx.glare ? '灯罩有亮点（装法）' : fx.sonarBlock ? '读数被挡（装法）' : fx.imuFlip ? '方向反了（装法）' : '';
+    c.shell.setVerdict(alarm ? '报警中 ≥ 30 ℃' : off ? '读数偏高（装法）' : fxBad || (a?.retest ? '复测 ✓ · 成品' : '成品'), alarm || off || fxBad ? 'bad' : a?.retest ? 'ok' : 'idle');
     c.shell.onVerdict(() => (location.hash = 'assemble'));
   }
 
@@ -481,11 +643,19 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     if (!c || c.store.get().step !== 'product') return;
     if (id === 'p-sound') toggleSound();
     else if (id === 'p-heat') toggleHeat();
-    else if (id === 'p-home') (scene3d ?? lcd3d ?? keypad)?.resetView();
+    else if (id === 'p-home') (scene3d ?? lcd3d ?? keypad ?? work3d)?.resetView();
     else if (id === 'p-photo') void photo();
     else if (id === 'p-rec') record();
     else if (id === 'p-rerun') c.session.reboot();
-    else if (id === 'p-level') c.session.setPose({ pitch: 0, roll: 0, yaw: 0 });
+    else if (id === 'p-level') {
+      if (WORK3D.has(c.work.id)) tiltTo({ pitch: 0, roll: 0, yaw: 0 });
+      else c.session.setPose({ pitch: 0, roll: 0, yaw: 0 });
+    } else if (id === 'p-knob') {
+      c.session.pressEncoder(true);
+      setTimeout(() => ctx?.session.pressEncoder(false), 150);
+      event('●', '按旋钮');
+    } else if (id === 'p-near') moveBoard(-10);
+    else if (id === 'p-far') moveBoard(10);
     else if (id === 'p-boot') {
       pressBoot(true);
       setTimeout(() => pressBoot(false), 150);
@@ -517,6 +687,31 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
         heat: () => ({ ...heat, air }),
         unit: () => (unitF ? 'F' : 'C'),
         alarm: () => alarm,
+      };
+    } else if (WORK3D.has(c.work.id) && webglOk()) {
+      work3d = createWork3D(node, {
+        kind: c.work.id as WorkKind,
+        frame: () => frame(),
+        effects: () => assembly()?.effects ?? {},
+        sounding: () => c.session.audio.state.sounding,
+        onKnob: (n) => turnKnob(n),
+        onKnobPress: (d) => {
+          c.session.pressEncoder(d);
+          if (d) event('●', '按旋钮');
+        },
+        onDistance: (cm) => applyDistance(cm),
+        distance: c.session.distance,
+        onPose: (p) => applyPose(p),
+        pose: c.store.get().pose,
+      });
+      (window as unknown as { __tbProduct: unknown }).__tbProduct = {
+        handlePos: () => work3d!.handleScreenPos(),
+        azimuth: () => work3d!.azimuth(),
+        state: () => work3d!.state(),
+        lamp: () => ({ ...lamp }),
+        ruler: () => ({ ...ruler, raw: rawCm }),
+        bean: () => ({ ...bean }),
+        strip: () => frame().strips?.[5] ?? [],
       };
     } else if (c.work.id === 'usbkey') {
       const press = (pin: number, d: boolean) => {
@@ -564,7 +759,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
       box.className = 'prod-svg';
       node.appendChild(box);
       const h = { boot: (d: boolean) => pressBoot(d), temp: () => {} };
-      svgProduct = c.work.id === 'spin' ? createSpinProduct(box, h, { servoPin: 4 }) : createLensProduct(box, h);
+      svgProduct = c.work.id === 'spin' ? createSpinProduct(box, h, { servoPin: 4 }) : c.work.id === 'lens' ? createLensProduct(box, h) : TEMPLATES[c.work.id].product(box, h, { servoPin: 4 });
       const note = document.createElement('div');
       note.className = 'p3-disclaimer';
       note.textContent = '外观示意（2D：这台设备不支持 WebGL）';
@@ -636,6 +831,10 @@ ${sec('固件读到 · 串口最近一行')}${row('俯仰', 'tip')}${row('横滚
         hooked = true;
         storeRef = c.store;
         c.shell.toolbar.onTool(onTool);
+        // 先把挂上之前的串口过一遍（台灯上电时打印的 LAMP ON / LEVEL 等），只更新状态
+        quiet = true;
+        onSerial(c.session.consoleText() + '\n');
+        quiet = false;
         c.session.onConsole((t) => onSerial(t));
         c.store.subscribe((s, prev) => {
           if (s.run > prev.run) {
@@ -643,6 +842,9 @@ ${sec('固件读到 · 串口最近一行')}${row('俯仰', 'tip')}${row('横滚
             alarm = false;
             mood = '';
             look = '';
+            lamp = { level: 0, mode: '', color: '' };
+            ruler = { dist: '', beep: '' };
+            bean = { pos: '', edges: 0 };
             event('▶', `上电 · 运行 #${s.run}`);
           }
         }, ['run']);
@@ -680,6 +882,17 @@ ${sec('固件读到 · 串口最近一行')}${row('俯仰', 'tip')}${row('横滚
       if (!events.length && c.store.get().run) event('▶', `${preview ? '参考成品 · ' : ''}开机 · 运行 #${c.store.get().run}${a.effects.sensorOffset ? `，传感器 +${a.effects.sensorOffset} ℃` : ''}`);
       scene3d?.start();
       lcd3d?.start();
+      work3d?.start();
+      // 装法影响进模拟器：尺子的探头被挡、六轴装反（离开成品时还原成用户摆的样子）
+      if (c.work.id === 'ruler') {
+        rawCm = c.session.distance < 0 ? 25 : c.session.distance;
+        work3d?.setDistance(rawCm);
+        applyDistance(rawCm);
+      } else if (c.work.id === 'tilt') {
+        rawPose = { ...c.store.get().pose };
+        work3d?.setPose(rawPose);
+        applyPose(rawPose);
+      }
       keypad?.start();
       keypad?.setBlocked(!!a.effects.usbBlocked);
       if (keypad || keypadSvg) {
@@ -721,9 +934,12 @@ ${sec('固件读到 · 串口最近一行')}${row('俯仰', 'tip')}${row('横滚
       raf = 0;
       scene3d?.stop();
       lcd3d?.stop();
+      work3d?.stop();
       keypad?.stop();
       rec?.stop();
       if (ctx) {
+        if (ctx.work.id === 'ruler') ctx.session.setDistance(rawCm);
+        if (ctx.work.id === 'tilt') ctx.session.setPose(rawPose);
         // 离开成品：撤掉温漂和热源，回到室温
         if (heat.on) scene3d?.setHeat(false);
         heat = { on: false, prox: 0 };

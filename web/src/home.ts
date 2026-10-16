@@ -11,6 +11,35 @@ import { bomTotal, getTemplate, templatePicks } from './catalog/templates';
 import { CHECKED_AT, getPart } from './catalog/parts';
 import { HOME_WORKS, WORKS } from './app/works';
 import { createKeypadView } from './views/keypad';
+import { TEMPLATES } from './views/templates';
+import { emptyFrame, type LiveFrame } from './views/common';
+import type { LiveOptions } from './live';
+
+// P2-09 新作品的卡片：示意图用成品的 2D 视图喂一帧演示数据；「看真实固件跑」时的器件配置和演示输入（按模拟时间）。
+type LiveCfg = Pick<LiveOptions, 'i2c' | 'lcd' | 'encoder' | 'sonar'>;
+const EXTRA: Record<string, { live: LiveCfg; demo: Partial<LiveFrame>; script?: (sim: LiveSim, t: number) => void }> = {
+  lamp: {
+    live: { i2c: [], encoder: { a: 6, b: 7, sw: 15 } },
+    demo: { strips: { 5: Array.from({ length: 8 }, () => [0x40, 0x26, 0x0c]) } },
+    // 演示：每 1.5 秒顺时针转一格（亮度 4 → 8 再停在顶）
+    script: (sim, t) => t % 1.5 < 0.1 && sim.turnEncoder(1),
+  },
+  ruler: {
+    live: { i2c: [{ kind: 'ssd1306', addr: 0x3c }], sonar: { trig: 17, echo: 18, cm: 42 } },
+    demo: {},
+    // 演示：挡板在 60 → 15 cm 之间来回
+    script: (sim, t) => sim.setDistance(Math.round(37.5 + 22.5 * Math.cos(t / 3))),
+  },
+  tilt: {
+    live: { i2c: [{ kind: 'qmi8658', addr: 0x6b }], lcd: true },
+    demo: {},
+    // 演示：每 2 秒换一个倾斜方向
+    script: (sim, t) => {
+      const k = Math.floor(t / 2) % 4;
+      if (t % 2 < 0.1) sim.setImu({ pitch: [0, 20, 0, -20][k], roll: [25, 0, -25, 0][k], yaw: 0 });
+    },
+  },
+};
 
 const escH = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 document.getElementById('works')!.innerHTML = HOME_WORKS.map(
@@ -76,16 +105,23 @@ for (const el of document.querySelectorAll<HTMLElement>('.wk')) {
 const cards: Card[] = [...document.querySelectorAll<HTMLElement>('.wk')].map((root) => {
   const kind = root.dataset.work as ShowKind;
   const prev = root.querySelector<HTMLElement>('[data-show]')!;
-  createShowcase(prev, kind);
+  showcase(prev, kind);
   return { kind, root, prev, status: root.querySelector<HTMLElement>('[data-status]')!, btn: root.querySelector<HTMLButtonElement>('[data-run]')!, sim: null };
 });
+
+/** 示意图：老三件用 showcase.ts 的插画；新作品用成品 2D 视图 + 一帧演示数据 */
+function showcase(el: HTMLElement, kind: string) {
+  const x = EXTRA[kind];
+  if (!x) return createShowcase(el, kind as ShowKind);
+  TEMPLATES[kind].product(el, { boot: () => {}, temp: () => {} }, { servoPin: SERVO }).update({ ...emptyFrame(), running: true, ...x.demo }, ENV.temp, {});
+}
 
 function stop(c: Card) {
   if (!c.sim) return;
   c.sim.dispose();
   c.sim = null;
   c.root.classList.remove('live');
-  createShowcase(c.prev, c.kind);
+  showcase(c.prev, c.kind);
   c.btn.textContent = '看真实固件跑';
   c.status.textContent = IDLE;
 }
@@ -93,14 +129,16 @@ function stop(c: Card) {
 function run(c: Card) {
   for (const o of cards) if (o !== c) stop(o);
   const h = { boot: (d: boolean) => c.sim?.press(d), temp: (d: number) => c.sim?.setTemp(c.sim.env.temp + d) };
-  const lcdView = c.kind === 'spin' ? createSpinProduct(c.prev, h, { servoPin: SERVO }) : c.kind === 'lens' ? createLensProduct(c.prev, h) : null;
+  const x = EXTRA[c.kind];
+  const lcdView = x ? TEMPLATES[c.kind].product(c.prev, h, { servoPin: SERVO }) : c.kind === 'spin' ? createSpinProduct(c.prev, h, { servoPin: SERVO }) : c.kind === 'lens' ? createLensProduct(c.prev, h) : null;
   const wView = c.kind === 'weather' ? createProductView(c.prev, h, { servoPin: SERVO }) : null;
   // USB 小键盘：点键帽 = 按下 GPIO4..7（接地），虚拟电脑屏幕上是 USB 主机收到的字
   const kView = c.kind === 'usbkey' ? createKeypadView(c.prev, { press: (pin, d) => c.sim?.pressPin(pin, d) }) : null;
   let tail = '';
+  let lastT = -1;
   const sim = new LiveSim({
     fw: `./fw/${c.kind}/flash.bin`,
-    ...FW[c.kind],
+    ...(x ? x.live : FW[c.kind]),
     env: ENV,
     onConsole(text) {
       // 状态行显示串口最后一行（weather 是 T= H= P= 读数）
@@ -109,7 +147,15 @@ function run(c: Card) {
       const last = lines.map((l) => l.trim()).filter(Boolean).pop();
       if (last) c.status.textContent = `串口：${last.slice(0, 80)}`;
     },
-    onFrame: (f) => (lcdView ? lcdView.update(f, ENV.temp, {}) : wView ? wView.update(f, sim.env.temp, 0) : undefined),
+    onFrame: (f, t) => {
+      if (lcdView) lcdView.update(f, ENV.temp, {});
+      else wView?.update(f, sim.env.temp, 0);
+      // 新作品的演示输入（按模拟时间，每 0.1 s 看一次）
+      if (x?.script && Number.isFinite(t) && Math.floor(t * 10) !== Math.floor(lastT * 10)) {
+        lastT = t;
+        x.script(sim, t);
+      }
+    },
     onUsb: (v) => kView?.setUsb(v),
   });
   c.sim = sim;

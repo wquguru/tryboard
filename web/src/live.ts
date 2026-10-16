@@ -103,6 +103,7 @@ export class LiveSim {
         this.frame.pwm = m.pwm;
         this.frame.running = m.running;
         if (m.leds) this.frame.rgb = m.leds[0] ?? null;
+        if (m.strips) this.frame.strips = { ...this.frame.strips, ...m.strips };
         o.onFrame?.(this.frame, m.simSeconds);
         o.onPwm?.(m.pwmEvents, m.simSeconds);
       } else if (m.type === 'inputlog') {

@@ -3,6 +3,7 @@
 import type { LiveFrame } from './common';
 import { createProductView, type ProductHandlers } from './product';
 import { createLensProduct, createSpinProduct } from './lcdproducts';
+import { createLampProduct, createRulerProduct, createTiltProduct, type WorkEffects } from './workproducts';
 import { createKeypadView } from './keypad';
 
 export interface Spot {
@@ -28,7 +29,7 @@ export interface Part {
   spots?: Spot[];
   okMsg?: [string, string];
 }
-export interface Effects {
+export interface Effects extends WorkEffects {
   sensorOffset?: number;
   hornOffset?: number;
   lensScale?: number;
@@ -37,6 +38,34 @@ export interface Effects {
   antennaDb?: number;
   /** USB 口装反、被外壳挡住（usbkey）：插不了线，虚拟电脑看不到设备 */
   usbBlocked?: boolean;
+}
+
+/** 探头缩进外壳孔里时，回波先从孔壁回来：读数截到这么多厘米（估算，未经真机标定） */
+export const SONAR_BLOCK_CM = 3;
+
+/**
+ * 装法对验收输入的影响（开机复测用）：探头被挡 → 每个 dist= 都截到 sonarBlock；六轴装反 → imu= 的俯仰、横滚反号。
+ * 这样复测跑的是"装好以后传感器真正看到的东西"，过不过由同一套判定说了算。
+ */
+export function effectScript(script: string | undefined, fx: Effects): string | undefined {
+  if (!script || (!fx.sonarBlock && !fx.imuFlip)) return script;
+  return script
+    .split(';')
+    .map((e) => {
+      const m = /^(\s*[\d.]+\s*:\s*)(dist|imu)=(.*)$/.exec(e);
+      if (!m) return e;
+      if (m[2] === 'dist' && fx.sonarBlock) {
+        const d = Number(m[3]);
+        return `${m[1]}dist=${d < 0 || d > fx.sonarBlock ? fx.sonarBlock : d}`;
+      }
+      if (m[2] === 'imu' && fx.imuFlip) {
+        const v = m[3].split(',').map(Number);
+        const flip = v.map((x, i) => (i === 0 || i === 1 || i === 3 || i === 4 ? -x : x)).map((x) => (Object.is(x, -0) ? 0 : x));
+        return `${m[1]}imu=${flip.join(',')}`;
+      }
+      return e;
+    })
+    .join(';');
 }
 export interface Picked {
   placed: string[];
@@ -173,6 +202,112 @@ export const LENS: Template = {
   product: (el, h) => createLensProduct(el, h),
 };
 
+const KNOB_MINI = '<rect x="28" y="12" width="44" height="36" rx="3" fill="#1f55b0"/><circle cx="50" cy="30" r="13" fill="#1B1D21"/><rect x="48" y="18" width="4" height="8" fill="#F2F2F2"/>';
+const STRIP_MINI = '<rect x="4" y="22" width="92" height="16" rx="2" fill="#16181b"/>' + Array.from({ length: 8 }, (_, i) => `<rect x="${9 + i * 11}" y="26" width="8" height="8" fill="#F2F0EA"/><circle cx="${13 + i * 11}" cy="30" r="2.6" fill="#FFB060"/>`).join('');
+const OLED_MINI = '<rect x="12" y="4" width="76" height="52" rx="3" fill="#1C4F86"/><rect x="18" y="12" width="64" height="34" fill="#050608"/><path d="M26 24 L46 24 M26 32 L60 32" stroke="#D7F3FF" stroke-width="3"/>';
+
+export const LAMP: Template = {
+  id: 'lamp',
+  caption: 'lamp · 灯座 80×60×36 mm，灯罩 Ø70 mm（估算）',
+  intro: ['把台灯装起来', '从灯座开始'],
+  tray: ['shade', 'knob', 'base', 'strip', 'board'],
+  parts: [
+    { id: 'base', name: '灯座', short: '灯座', ghost: [0, 0, 180, 100], okMsg: ['灯座就位', 'DC 插座和 USB-C 在背面'],
+      mini: '<rect x="4" y="14" width="92" height="36" rx="8" fill="#3A3936"/><rect x="40" y="6" width="20" height="10" fill="#E8E5DE"/>',
+      iso: '<rect width="180" height="100" rx="16" fill="#3A3936" stroke="#141414" stroke-width="1.5"/><rect x="80" y="34" width="20" height="32" rx="3" fill="#E8E5DE"/>' },
+    { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [20, 20, 120, 60], okMsg: ['开发板卡进灯座', 'GPIO5→灯条 · GPIO6/7/15→旋钮'], mini: BOARD_MINI, iso: BOARD_ISO },
+    { id: 'knob', name: 'EC11 旋钮', short: '旋钮', ghost: [132, 56, 40, 36], okMsg: ['旋钮轴穿过前面板', '露出 7 mm，按得到'], mini: KNOB_MINI,
+      iso: '<rect x="132" y="56" width="40" height="36" rx="3" fill="#1f55b0"/><circle cx="152" cy="74" r="12" fill="#1B1D21"/>' },
+    { id: 'strip', name: 'WS2812 灯条', short: '灯条', spotSize: [96, 18], mini: STRIP_MINI,
+      iso: '<rect width="96" height="18" rx="2" fill="#16181b"/>' + Array.from({ length: 8 }, (_, i) => `<circle cx="${8 + i * 11.4}" cy="9" r="3.4" fill="#FFB060"/>`).join(''),
+      spots: [
+        { key: 'A', label: '贴在导光柱上（离灯罩 15 mm）', at: [42, 41], ok: true, msg: ['灯条贴在导光柱上', '光打在灯罩上是均匀的一片'] },
+        { key: 'B', label: '贴着灯罩内壁', at: [42, 4], ok: false, msg: ['灯珠贴着灯罩', '罩子上 8 个刺眼亮点，光不匀（估算）'] },
+      ] },
+    { id: 'shade', name: '乳白灯罩', short: '灯罩', ghost: [0, 0, 180, 100], okMsg: ['灯罩扣上了', '点「开机看成品」'],
+      mini: '<path d="M20 56 C14 30 24 6 50 4 C76 6 86 30 80 56 Z" fill="#F4F1EA" stroke="#BDB9B0" stroke-width="2"/>',
+      iso: '<rect width="180" height="100" rx="40" fill="#F4F1EA" stroke="#BDB9B0" stroke-width="1.5" opacity="0.7"/>' },
+  ],
+  checks: (s) => [
+    row('灯条位置', has(s, 'strip'), s.choice.strip === 'A', '导光柱上，离灯罩 15 mm，光均匀', '贴着灯罩，罩上一排亮点'),
+    row('旋钮', has(s, 'knob'), true, '轴露出面板 7 mm，按得到'),
+    row('电源', has(s, 'base'), true, '灯条走外接 5 V，DC 插座在背面'),
+    row('总高', has(s, 'shade'), true, '110 mm'),
+  ],
+  effects: (s) => ({ glare: s.choice.strip === 'B' }),
+  product: (el) => createLampProduct(el, { pin: 5 }),
+};
+
+export const RULER: Template = {
+  id: 'ruler',
+  caption: 'ruler · 外壳 90×48×30 mm，探头孔 Ø17 mm（估算）',
+  intro: ['把尺子装起来', '从后壳开始'],
+  tray: ['front', 'oled', 'sonar', 'buzzer', 'shell', 'board'],
+  parts: [
+    { id: 'shell', name: '后壳', short: '后壳', ghost: [0, 0, 180, 100], okMsg: ['后壳就位', 'USB-C 开孔在尾部'],
+      mini: '<rect width="100" height="60" rx="8" fill="#2B5FD9" stroke="#1E4BB5" stroke-width="1.5"/><rect x="6" y="6" width="88" height="48" rx="5" fill="#244FB8"/>',
+      iso: '<rect width="180" height="100" rx="12" fill="#2B5FD9" stroke="#1E4BB5" stroke-width="1.5"/><rect x="8" y="8" width="164" height="84" rx="8" fill="#244FB8"/><rect x="172" y="30" width="8" height="40" fill="#141414"/>' },
+    { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [14, 20, 120, 60], okMsg: ['开发板卡进卡扣', 'GPIO17/18→探头 · SDA/SCL→屏 · GPIO5→蜂鸣器'], mini: BOARD_MINI,
+      iso: '<rect x="14" y="20" width="120" height="60" rx="3" fill="#141414"/><rect x="68" y="28" width="56" height="44" rx="2" fill="#BDB9B0"/>' },
+    { id: 'sonar', name: 'HC-SR04 探头', short: '探头', spotSize: [26, 72],
+      mini: '<rect x="8" y="16" width="84" height="28" rx="3" fill="#2F7FC8"/><circle cx="30" cy="30" r="11" fill="#B8BCC2"/><circle cx="70" cy="30" r="11" fill="#B8BCC2"/>',
+      iso: '<rect width="26" height="72" rx="3" fill="#2F7FC8"/><circle cx="13" cy="18" r="10" fill="#B8BCC2"/><circle cx="13" cy="54" r="10" fill="#B8BCC2"/>',
+      spots: [
+        { key: 'A', label: '探头伸出前面板孔', at: [150, 14], ok: true, msg: ['两个探头从孔里探出 1 mm', '声波直接打到前方物体'] },
+        { key: 'B', label: '探头缩在孔后 6 mm', at: [140, 14], ok: false, msg: ['探头缩在孔里', `回波先从孔壁回来：读数变成约 ${SONAR_BLOCK_CM} cm，蜂鸣器一直响`] },
+      ] },
+    { id: 'buzzer', name: '无源蜂鸣器模块', short: '蜂鸣器', ghost: [108, 72, 28, 24], okMsg: ['蜂鸣器对准出声孔', '声音从侧面出来'],
+      mini: '<rect x="30" y="10" width="40" height="40" rx="3" fill="#1f55b0"/><circle cx="50" cy="30" r="14" fill="#141416"/>',
+      iso: '<rect x="108" y="72" width="28" height="24" rx="2" fill="#1f55b0"/><circle cx="122" cy="84" r="9" fill="#141416"/>' },
+    { id: 'oled', name: 'OLED 0.96″', short: 'OLED', ghost: [30, 30, 80, 40], okMsg: ['屏幕对准顶面窗口', '排线 8 cm'], mini: OLED_MINI,
+      iso: '<rect x="30" y="30" width="80" height="40" rx="3" fill="#1C4F86"/><rect x="36" y="36" width="68" height="28" fill="#050608"/>' },
+    { id: 'front', name: '顶盖 + 前面板', short: '顶盖', ghost: [0, 0, 180, 100], okMsg: ['合上了', '点「开机看成品」'],
+      mini: '<rect width="100" height="60" rx="8" fill="#3A6DE0" stroke="#1E4BB5" stroke-width="1.5"/><rect x="18" y="16" width="44" height="26" rx="2" fill="none" stroke="#F2F2F2" stroke-width="2"/>',
+      iso: '<rect width="180" height="100" rx="12" fill="#3A6DE0" stroke="#1E4BB5" stroke-width="1.5" opacity="0.7"/><rect x="36" y="36" width="68" height="28" rx="2" fill="none" stroke="#F2F2F2" stroke-width="2"/>' },
+  ],
+  checks: (s) => [
+    row('探头位置', has(s, 'sonar'), s.choice.sonar === 'A', '探出前面板 1 mm，量到的就是前方', `缩在孔里，读数约 ${SONAR_BLOCK_CM} cm`),
+    row('Echo 分压', has(s, 'board'), true, '1 kΩ / 2 kΩ 在 Echo 线上'),
+    row('屏幕排线', has(s, 'oled'), true, '8 cm，需要 ≥ 6 cm'),
+    row('出声孔', has(s, 'buzzer'), true, '蜂鸣器正对侧面出声孔'),
+  ],
+  effects: (s) => ({ sonarBlock: s.choice.sonar === 'B' ? SONAR_BLOCK_CM : 0 }),
+  product: (el) => createRulerProduct(el),
+};
+
+export const TILT: Template = {
+  id: 'tilt',
+  caption: 'tilt · 圆盘 Ø56 × 26 mm（估算）',
+  intro: ['把体感小人装起来', '从底壳开始'],
+  tray: ['lcd', 'imu', 'lid', 'base', 'board'],
+  parts: [
+    { id: 'base', name: '圆盘底壳', short: '底壳', ghost: [0, 0, 180, 100], okMsg: ['底壳就位', 'USB-C 开孔在侧面'],
+      mini: '<ellipse cx="50" cy="32" rx="46" ry="24" fill="#ECE9E2" stroke="#BDB9B0" stroke-width="1.5"/>',
+      iso: '<rect width="180" height="100" rx="46" fill="#ECE9E2" stroke="#BDB9B0" stroke-width="1.5"/><path d="M150 50 L166 50 M160 44 L166 50 L160 56" stroke="#8A867E" stroke-width="2" fill="none"/>' },
+    { id: 'imu', name: 'QMI8658 六轴', short: '六轴', ghost: [128, 37, 34, 26],
+      mini: '<rect x="30" y="14" width="40" height="32" rx="3" fill="#1C6B4A"/><rect x="44" y="24" width="12" height="12" fill="#141414"/><path d="M50 18 L50 10 M46 14 L50 10 L54 14" stroke="#F2F2F2" stroke-width="2" fill="none"/>',
+      iso: '<rect x="128" y="37" width="34" height="26" rx="2" fill="#1C6B4A"/><rect x="139" y="44" width="12" height="12" fill="#141414"/>',
+      spots: [
+        { key: 'A', label: '平贴底板、箭头朝前', ok: true, msg: ['六轴平贴底板，X 轴朝前', '往哪边歪，小豆就往哪边滑'] },
+        { key: 'B', label: '转了 180° 装反', ok: false, msg: ['六轴装反了', '俯仰、横滚都反号：小豆往高处爬'] },
+      ] },
+    { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [10, 20, 110, 60], okMsg: ['开发板放进底壳', 'SPI→圆屏 · I2C→六轴'], mini: BOARD_MINI,
+      iso: '<rect x="10" y="20" width="110" height="60" rx="3" fill="#141414"/><rect x="62" y="28" width="52" height="44" rx="2" fill="#BDB9B0"/>' },
+    { id: 'lcd', name: '圆屏 GC9A01', short: '圆屏', ghost: [54, 14, 72, 72], okMsg: ['圆屏卡进顶面', '屏幕朝上'], mini: LCD_MINI, iso: LCD_ISO },
+    { id: 'lid', name: '顶盖', short: '顶盖', ghost: [0, 0, 180, 100], okMsg: ['顶盖压住圆屏', '点「开机看成品」'],
+      mini: '<circle cx="50" cy="30" r="27" fill="none" stroke="#BDB9B0" stroke-width="7"/>',
+      iso: '<rect width="180" height="100" rx="46" fill="#F2EFE8" stroke="#BDB9B0" stroke-width="1.5" opacity="0.7"/><circle cx="90" cy="50" r="36" fill="none" stroke="#141414" stroke-width="2"/>' },
+  ],
+  checks: (s) => [
+    row('六轴方向', has(s, 'imu'), s.choice.imu === 'A', '平贴、箭头朝前，方向对', '装反了，小豆往高处爬'),
+    row('六轴位置', has(s, 'imu'), true, '在圆盘中心附近，转动时不额外甩'),
+    row('圆屏排线', has(s, 'lcd'), true, '8 cm，够到开发板'),
+    row('总高', has(s, 'lid'), true, '26 mm'),
+  ],
+  effects: (s) => ({ imuFlip: s.choice.imu === 'B' }),
+  product: (el) => createTiltProduct(el),
+};
+
 const KEYS_ISO = [0, 1, 2, 3].map((i) => `<rect x="${36 + i * 30}" y="38" width="20" height="20" rx="3" fill="#1B1D21"/>`).join('');
 const CAPS_ISO = [0, 1, 2, 3].map((i) => `<rect x="${32 + i * 30}" y="34" width="28" height="28" rx="5" fill="${i === 3 ? '#0D99FF' : '#F2EFE8'}" stroke="#141414" stroke-width="1.5"/>`).join('');
 
@@ -212,4 +347,4 @@ export const USBKEY: Template = {
   },
 };
 
-export const TEMPLATES: Record<string, Template> = { weather: WEATHER, spin: SPIN, lens: LENS, usbkey: USBKEY };
+export const TEMPLATES: Record<string, Template> = { weather: WEATHER, spin: SPIN, lens: LENS, usbkey: USBKEY, lamp: LAMP, ruler: RULER, tilt: TILT };

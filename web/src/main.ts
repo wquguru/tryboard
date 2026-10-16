@@ -279,6 +279,10 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       frame.pwm = m.pwm;
       frame.running = m.running;
       if (m.leds) frame.rgb = m.leds[0] ?? null;
+      if (m.strips) {
+        frame.strips = { ...frame.strips, ...m.strips };
+        for (const [pin, leds] of Object.entries(m.strips)) bench.setStrip(Number(pin), leds);
+      }
       asm?.update(frame, env.temp);
       audio.push(m.pwmEvents, m.simSeconds);
       if (m.pins?.encPos != null) bench.setEncoder(m.pins.encPos);

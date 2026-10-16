@@ -482,5 +482,345 @@
    "typed": "aHello TryBoard\n"
   },
   "assembly": true
+ },
+ {
+  "id": "lamp-1",
+  "work": "lamp",
+  "title": "灯带点亮",
+  "goal": "8 颗灯逐颗亮成暖白",
+  "pass": "1.5 秒内串口出现 LAMP ON 8；WS2812 GPIO5 至少 8 帧（逐颗点亮），最后一帧 8 颗都亮、都是 #40260C（每通道 ±2）",
+  "buy": "ESP32-S3 开发板、WS2812 8 灯灯条",
+  "learn": "RMT 发送、WS2812 时序、GRB 顺序",
+  "brief": "用 ESP-IDF 5.5 给 ESP32-S3 写固件：\n· WS2812 8 灯灯条：DIN 接 GPIO5（经 74AHCT125 升到 5 V；模拟器里电平不影响），5V / GND 接开发板 5V / GND。线上是 GRB 顺序、800 kHz：0 码高 0.3 µs 低 0.9 µs，1 码高 0.9 µs 低 0.3 µs，一帧 8 × 24 位，帧与帧之间保持低电平 ≥ 280 µs。用 ESP-IDF 自带的 RMT 发送驱动（driver/rmt_tx.h）+ rmt_new_bytes_encoder 就够，不需要 led_strip 组件\n· 上电立即逐颗点亮：每 60 ms 多亮一颗，8 颗都亮以后串口打印 LAMP ON 8。颜色是暖白 #FF9933 的 64/255 亮度：每个通道 = 原值 × 64 / 255（整数除法），即 R=64 G=38 B=12（#40260C）。没亮的灯发 0\n· 点亮以后保持不变，不要再闪",
+  "ref": "lamp-strip",
+  "seconds": 1.5,
+  "expect": [
+   "LAMP ON 8"
+  ],
+  "ws2812": {
+   "pin": 5,
+   "min_frames": 8,
+   "last": {
+    "count": 8,
+    "lit": 8,
+    "rgb": "#40260C",
+    "tol": 2
+   }
+  }
+ },
+ {
+  "id": "lamp-2",
+  "work": "lamp",
+  "title": "旋钮读数",
+  "goal": "灯亮着，串口报出旋钮转了几格、按了几次",
+  "pass": "0.6 秒顺时针转 3 格、1.0 秒逆时针转 5 格、1.4 秒按 100 ms：串口出现 KNOB 3、KNOB -2、PRESS 1；灯带仍是 8 颗 #40260C（±2）",
+  "buy": "EC11 旋转编码器模块",
+  "learn": "PCNT 正交计数、机械按键消抖",
+  "brief": "在上一个检查点（灯带点亮）的固件上加旋钮，ESP32-S3：\n· 灯带接线、上电逐颗点亮和 LAMP ON 8 都与上一个检查点一样\n· EC11 旋转编码器模块：CLK=GPIO6，DT=GPIO7，SW=GPIO15（按下接地，开内部上拉）。用 PCNT（driver/pulse_cnt.h）按 ESP-IDF 示例 peripherals/pcnt/rotary_encoder 的配法：两个通道，通道 A 边沿 = GPIO6、电平 = GPIO7，通道 B 边沿 = GPIO7、电平 = GPIO6，4 倍频，±100 设为上下限并开 accum_count，glitch 滤波 1 µs。这样顺时针转计数增加，一格 4 个计数\n· 每 10 ms 看一次：格数 = 计数 / 4，格数变了就打印 KNOB <格数>（可能是负数，例如 KNOB -2）\n· 按键软件消抖 20–50 ms（一次按下最短 100 ms，消抖窗口不能比它长），每按下一次打印 PRESS <第几次>，松手不打印\n· 这一关旋钮不改灯",
+  "ref": "lamp-knob",
+  "seconds": 2,
+  "args": [
+   "--encoder",
+   "6,7,15"
+  ],
+  "script": "0.6:enc=+3; 1.0:enc=-5; 1.4:encsw=1; 1.5:encsw=0",
+  "expect": [
+   "LAMP ON 8",
+   "KNOB 3",
+   "KNOB -2",
+   "PRESS 1"
+  ],
+  "ws2812": {
+   "pin": 5,
+   "min_frames": 8,
+   "last": {
+    "count": 8,
+    "lit": 8,
+    "rgb": "#40260C",
+    "tol": 2
+   }
+  }
+ },
+ {
+  "id": "lamp-3",
+  "work": "lamp",
+  "title": "合体 · 旋钮台灯",
+  "goal": "转旋钮调亮度，按一下改成调颜色",
+  "pass": "0.5 秒顺时针 2 格 → LEVEL 6；0.9 秒按下 → MODE color；1.3 秒顺时针 2 格 → COLOR 2 green；1.7 秒按下 → MODE level；2.0 秒顺时针 5 格 → LEVEL 8（到顶不再加）；最后一帧 8 颗都是 #108020（每通道 ±2）；网页上另外要求装配无警告（几何估算，命令行不判）",
+  "buy": "3D 打印灯座 + 灯罩",
+  "learn": "状态机：同一个旋钮在两种模式下做不同的事",
+  "brief": "把前两个检查点合成一盏旋钮台灯，ESP32-S3：\n· 灯带、旋钮接线和上一个检查点一样（灯条 DIN=GPIO5；编码器 CLK=GPIO6、DT=GPIO7、SW=GPIO15，PCNT 4 倍频，顺时针计数增加，一格 4 个计数）\n· 上电逐颗点亮，打印 LAMP ON 8（同 lamp-1：暖白，亮度档 4）\n· 亮度档 L 从 1 到 8，上电是 4；颜色表 6 种，上电是 0：0 warm #FF9933、1 red #FF2020、2 green #20FF40、3 blue #2040FF、4 purple #C040FF、5 white #FFFFFF。8 颗灯始终同一个颜色：每个通道 = 颜色原值 × (L × 16) / 255（整数除法），例如 L=4 的暖白是 #40260C\n· 两种模式，上电是亮度模式：亮度模式下转一格 L 加减 1（到 1、8 就夹住），每次变了打印 LEVEL <L>；颜色模式下转一格换下一个 / 上一个颜色（循环），打印 COLOR <编号> <名字>，例如 COLOR 2 green\n· 按一下旋钮（消抖 20–50 ms，一次按下最短 100 ms）切换模式，打印 MODE color 或 MODE level\n· 亮度、颜色一变就立刻刷新灯带；不要在开头额外等待",
+  "ref": "lamp",
+  "seconds": 2.6,
+  "args": [
+   "--encoder",
+   "6,7,15"
+  ],
+  "script": "0.5:enc=+2; 0.9:encsw=1; 1.0:encsw=0; 1.3:enc=+2; 1.7:encsw=1; 1.8:encsw=0; 2.0:enc=+5",
+  "expect": [
+   "LAMP ON 8",
+   "LEVEL 6",
+   "MODE color",
+   "COLOR 2 green",
+   "MODE level",
+   "LEVEL 8"
+  ],
+  "ws2812": {
+   "pin": 5,
+   "min_frames": 8,
+   "last": {
+    "count": 8,
+    "lit": 8,
+    "rgb": "#108020",
+    "tol": 2
+   }
+  },
+  "assembly": "lamp"
+ },
+ {
+  "id": "ruler-1",
+  "work": "ruler",
+  "title": "测距打印",
+  "goal": "每 0.1 秒量一次距离，串口打印",
+  "pass": "障碍物先放在 42 cm、1.2 秒拿走：每一行距离读数都在 42.0 ± 0.3 cm，至少 8 行；拿走后串口出现 DIST ---",
+  "buy": "ESP32-S3 开发板、HC-SR04 超声波、1 kΩ + 2 kΩ 电阻（分压）",
+  "learn": "RMT 接收量脉宽、5 V 器件接 3.3 V 引脚要分压",
+  "brief": "用 ESP-IDF 5.5 给 ESP32-S3 写固件：\n· HC-SR04（5 V 供电）：Trig=GPIO17，Echo 经 1 kΩ / 2 kΩ 分压接 GPIO18（Echo 是 5 V，不分压会伤 GPIO）。每 100 ms 测一次：Trig 拉高 10 µs；Echo 高电平宽度（µs）× 343 m/s ÷ 2 就是距离，四舍五入到 0.1 cm（例如 2449 µs → 42.0 cm）。推荐用 RMT 接收（driver/rmt_rx.h，1 MHz 分辨率，signal_range_max_ns = 25 ms）量 Echo 宽度，也可以用 GPIO 中断 + esp_timer。前方没东西时 Echo 会拉高约 38 ms 才落下：宽度超过 25 ms 或 60 ms 内没量到，都算测不到\n· 每次测量串口打印一行，格式完全一致：DIST 42.0 cm（一位小数）；测不到打印 DIST ---\n· 上电立即开始测，不要先等待",
+  "ref": "ruler-dist",
+  "seconds": 1.8,
+  "args": [
+   "--sonar",
+   "17,18"
+  ],
+  "script": "0:dist=42; 1.2:dist=-1",
+  "expect": [
+   "DIST ---"
+  ],
+  "numeric": [
+   {
+    "name": "距离(cm)",
+    "regex": "DIST (\\d+\\.\\d) cm",
+    "value": 42.0,
+    "tol": 0.3
+   }
+  ],
+  "serial_count": [
+   {
+    "text": " cm",
+    "min": 8
+   }
+  ]
+ },
+ {
+  "id": "ruler-2",
+  "work": "ruler",
+  "title": "OLED 显示",
+  "goal": "屏上大字显示距离，下面一条距离条",
+  "pass": "障碍物在 42 cm：每行读数在 42.0 ± 0.3 cm；OLED 点亮 ≥ 300 像素",
+  "buy": "0.96″ OLED（SSD1306）",
+  "learn": "I2C、单色帧缓冲、自带字体",
+  "brief": "在上一个检查点（测距打印）的固件上加 OLED，ESP32-S3：\n· 测距接线、方法和打印格式与上一个检查点一样（Trig=GPIO17，Echo 分压后接 GPIO18；DIST 42.0 cm / DIST ---）\n· OLED SSD1306（128×64）：I2C 地址 0x3C，SDA=GPIO8，SCL=GPIO9（400 kHz）。每次测完刷新：第一行用 2 倍大字（5×7 字体放大成 10×14）写距离，例如 42.0 cm，测不到写 --- cm；下面画一条距离条：外框 128×12（y=44 起），里面实心部分宽 = 距离(cm) × 128 / 200（超过 200 cm 按 200 算）\n· ESP-IDF 不带字体，自己带一套 5×7 点阵字库",
+  "ref": "ruler-oled",
+  "seconds": 1.5,
+  "args": [
+   "--sonar",
+   "17,18",
+   "--i2c",
+   "ssd1306@0x3c"
+  ],
+  "script": "0:dist=42",
+  "numeric": [
+   {
+    "name": "距离(cm)",
+    "regex": "DIST (\\d+\\.\\d) cm",
+    "value": 42.0,
+    "tol": 0.3
+   }
+  ],
+  "oled_min_pixels": 300
+ },
+ {
+  "id": "ruler-3",
+  "work": "ruler",
+  "title": "合体 · 倒车雷达尺子",
+  "goal": "越近蜂鸣器响得越急，太近一直响",
+  "pass": "障碍物 60 cm → 1.5 秒移到 15 cm → 2.5 秒移到 150 cm：GPIO5 是 2.7 kHz、占空比 0–50%；0.3–1.5 秒响 2–5 声，1.8–2.5 秒响 4–9 声（更急），2.8–3.2 秒不响；串口出现 DIST 15.0 cm；OLED 点亮 ≥ 300 像素；网页上另外要求装配无警告（几何估算，命令行不判）",
+  "buy": "无源蜂鸣器模块（三针）、3D 打印外壳",
+  "learn": "LEDC 出方波、两个任务（测距 / 发声）配合",
+  "brief": "把前两个检查点合成一把会叫的超声波尺子（倒车雷达），ESP32-S3：\n· 测距、OLED 和上一个检查点完全一样（Trig=GPIO17，Echo 分压后接 GPIO18；OLED 0x3C，SDA=GPIO8，SCL=GPIO9；串口 DIST 42.0 cm / DIST ---）\n· 无源蜂鸣器模块 I/O 接 GPIO5：LEDC 输出 2700 Hz 方波，响 = 占空比 50%，停 = 占空比 0（不要停 LEDC 定时器或改成别的引脚功能）\n· 节奏按最近一次距离 d（cm）：d < 10 一直响；10 ≤ d < 100 响 40 ms、停 d × 5 ms，再循环（60 cm 停 300 ms，15 cm 停 75 ms）；d ≥ 100 或测不到就不响\n· 测距和发声分开做（例如蜂鸣放在单独的 FreeRTOS 任务里），发声不能拖慢每 100 ms 一次的测量\n· 节奏变了可以打印 BEEP gap=<毫秒> ms / BEEP on / BEEP off（不验收）",
+  "ref": "ruler",
+  "seconds": 3.2,
+  "args": [
+   "--sonar",
+   "17,18",
+   "--i2c",
+   "ssd1306@0x3c"
+  ],
+  "script": "0:dist=60; 1.5:dist=15; 2.5:dist=150",
+  "expect": [
+   "DIST 15.0 cm"
+  ],
+  "pwm": {
+   "pin": 5,
+   "freq": 2700,
+   "min": 0.0,
+   "max": 0.5,
+   "tol": 0.01,
+   "beeps": [
+    {
+     "from": 0.3,
+     "to": 1.5,
+     "min": 2,
+     "max": 5
+    },
+    {
+     "from": 1.8,
+     "to": 2.5,
+     "min": 4,
+     "max": 9
+    },
+    {
+     "from": 2.8,
+     "to": 3.2,
+     "min": 0,
+     "max": 0
+    }
+   ]
+  },
+  "oled_min_pixels": 300,
+  "assembly": "ruler"
+ },
+ {
+  "id": "tilt-1",
+  "work": "tilt",
+  "title": "读姿态",
+  "goal": "读出板子往哪边歪、歪了多少度",
+  "pass": "姿态设成俯仰 -12.5°、横滚 33°：串口出现 WHO_AM_I 0x05，每一行 POSE 的俯仰在 -12.5 ± 0.5°、横滚在 33.0 ± 0.5°，至少 8 行",
+  "buy": "ESP32-S3 开发板、QMI8658 六轴模块",
+  "learn": "I2C 读寄存器、用重力分量算倾角",
+  "brief": "用 ESP-IDF 5.5 给 ESP32-S3 写固件：\n· QMI8658 六轴：I2C 地址 0x6B，SDA=GPIO8，SCL=GPIO9（400 kHz）。WHO_AM_I（寄存器 0x00）应读到 0x05。初始化：0x60 写 0xB0 软复位、等 20 ms；CTRL1（0x02）写 0x40 打开地址自增（不开的话连续读一直读同一个寄存器）；CTRL2（0x03）写 0x15（±4 g）；CTRL7（0x08）写 0x01 打开加速度计。加速度从 0x35 起 6 字节：AX、AY、AZ，各 16 位小端有符号，±4 g 时 8192 LSB/g。roll = atan2(ay, az)，pitch = atan2(-ax, √(ay² + az²))，换成度\n· 初始化完串口打印 QMI8658 WHO_AM_I 0x05（读到别的值就照实打印）\n· 之后每 100 ms 读一次，打印一行，格式完全一致：POSE pitch=-12.5 roll=33.0（一位小数，可能是负数）\n· 上电立即开始，不要先等待",
+  "ref": "tilt-pose",
+  "seconds": 1.5,
+  "args": [
+   "--i2c",
+   "qmi8658@0x6b"
+  ],
+  "script": "0:imu=-12.5,33,0",
+  "expect": [
+   "WHO_AM_I 0x05"
+  ],
+  "numeric": [
+   {
+    "name": "俯仰(°)",
+    "regex": "POSE pitch=(-?[\\d.]+)",
+    "value": -12.5,
+    "tol": 0.5
+   },
+   {
+    "name": "横滚(°)",
+    "regex": "POSE pitch=-?[\\d.]+ roll=(-?[\\d.]+)",
+    "value": 33.0,
+    "tol": 0.5
+   }
+  ],
+  "serial_count": [
+   {
+    "text": "POSE ",
+    "min": 8
+   }
+  ]
+ },
+ {
+  "id": "tilt-2",
+  "work": "tilt",
+  "title": "圆屏画小人",
+  "goal": "圆屏正中站着小豆",
+  "pass": "1.5 秒内串口出现 TRYBOARD_OK；圆屏深蓝底（#10213A ±24）≥ 30000 像素；黄色身体（#FFC933 ±24）1400–2400 像素、重心在 (114–126, 114–126)；青色眼睛（#7CF5FF ±24）≥ 80",
+  "buy": "1.28″ 圆屏 GC9A01",
+  "learn": "SPI 屏幕、esp_lcd、RGB565 与反色",
+  "brief": "在上一个检查点（读姿态）的固件上加圆屏，ESP32-S3：\n· IMU 接线和初始化与上一个检查点一样（这一关不用读姿态，但初始化要留着）\n· 圆屏 GC9A01（240×240）接 SPI2：SCLK=GPIO12，MOSI=GPIO11，CS=GPIO10，DC=GPIO14，RST=GPIO13，背光 GPIO15（高电平亮）。用 ESP-IDF 的 esp_lcd + espressif/esp_lcd_gc9a01 组件；这类模组要开反色（esp_lcd_panel_invert_color(true)），颜色顺序选 BGR（LCD_RGB_ELEMENT_ORDER_BGR），否则颜色不对\n· 小豆（原创形象）：整屏深蓝 #10213A 底；一圈跑道环 #3A5A80（离圆心 108–112 像素的圆环）；小豆的身体是黄色 #FFC933 实心圆，半径 28；身体上一块深色 #141414 圆角矩形眼罩，40×18、圆角 9，中心在身体中心上方 6 像素；眼罩里两只青色 #7CF5FF 圆角矩形眼睛，每只 8×12、圆角 4，中心在身体中心左右 9 像素、上方 6 像素；下面一张深色笑嘴（圆心在身体中心下方 9 像素、外半径 8、线宽 3 的下半圆弧）\n· 小豆站在屏幕正中（身体中心 120,120）。画一次就行，画完串口打印 TRYBOARD_OK\n· 上电立即开始，整个过程在 1.5 秒内完成",
+  "ref": "tilt-face",
+  "seconds": 1.5,
+  "args": [
+   "--i2c",
+   "qmi8658@0x6b",
+   "--spi",
+   "gc9a01"
+  ],
+  "expect": [
+   "TRYBOARD_OK"
+  ],
+  "lcd_colors": [
+   {
+    "name": "深蓝底",
+    "rgb": "#10213A",
+    "min": 30000
+   },
+   {
+    "name": "黄色身体",
+    "rgb": "#FFC933",
+    "min": 1400,
+    "max": 2400,
+    "cx": [
+     114,
+     126
+    ],
+    "cy": [
+     114,
+     126
+    ]
+   },
+   {
+    "name": "青色眼睛",
+    "rgb": "#7CF5FF",
+    "min": 80
+   }
+  ]
+ },
+ {
+  "id": "tilt-3",
+  "work": "tilt",
+  "title": "合体 · 体感小人",
+  "goal": "板子往哪边歪，小豆就往哪边滑",
+  "pass": "平放 0.5 秒 → 右边放低（横滚 25°）→ 1.8 秒改成左下放低（俯仰 20°、横滚 -25°）：串口 EDGE 至少 2 次（先碰右边、再碰左下）；3.2 秒时黄色身体（#FFC933 ±24）1400–2400 像素、重心在 (35–85, 140–195)，即停在左下边上；网页上另外要求装配无警告（几何估算，命令行不判）",
+  "buy": "3D 打印圆盘外壳",
+  "learn": "把传感器读数变成画面里的运动；只重画变了的那几行",
+  "brief": "把前两个检查点合成一个体感小人，ESP32-S3：\n· IMU、圆屏接线与前两个检查点一样（QMI8658 0x6B，SDA=GPIO8，SCL=GPIO9；圆屏 SPI2，反色 + BGR），小豆的画法与上一个检查点一样，上电站在正中并打印 TRYBOARD_OK\n· 每 20 ms 读一次姿态（pitch / roll，度），按倾斜方向滑：vx = (vx + roll × 0.03) × 0.9，vy = (vy + pitch × 0.03) × 0.9（像素 / 帧），x += vx，y += vy。roll > 0 往右（x 增大），pitch > 0 往下（y 增大）\n· 小豆的身体中心离屏幕中心 (120,120) 最远 82 像素：超出时沿半径方向拉回到 82 的圆上，并去掉速度里朝外的那一部分（贴着边继续滑，不要停住，也不要弹回来）\n· 每次从离开边到碰到边打印一行 EDGE x=<x> y=<y>（整数）\n· 每帧要快：只重画新旧位置覆盖的那几行（先画背景和跑道环，再画小豆），一次 draw_bitmap 送屏；整屏重画会太慢\n· 可以每 200 ms 打印一行 POS x=<x> y=<y>（不验收）",
+  "ref": "tilt",
+  "seconds": 3.2,
+  "args": [
+   "--i2c",
+   "qmi8658@0x6b",
+   "--spi",
+   "gc9a01"
+  ],
+  "script": "0:imu=0,0,0; 0.5:imu=0,25,0; 1.8:imu=20,-25,0",
+  "expect": [
+   "TRYBOARD_OK",
+   "EDGE"
+  ],
+  "serial_count": [
+   {
+    "text": "EDGE",
+    "min": 2
+   }
+  ],
+  "lcd_colors": [
+   {
+    "name": "黄色身体",
+    "rgb": "#FFC933",
+    "min": 1400,
+    "max": 2400,
+    "cx": [
+     35,
+     85
+    ],
+    "cy": [
+     140,
+     195
+    ]
+   }
+  ],
+  "assembly": "tilt"
  }
 ]

@@ -48,6 +48,25 @@ async function open(url) {
   await page.goto(base + url, { waitUntil: 'load' });
   return page;
 }
+/** 点一个会被重画的元素：在页面里按选择器现找现点（不持有节点句柄，避免 Node is detached） */
+async function clickEl(page, sel) {
+  await page.waitForSelector(sel, { timeout: 30000 });
+  for (let i = 0; i < 10; i++) {
+    // HTML 元素直接 click()；SVG 里的零件（没有 click()）用真鼠标点，节点被换掉就重找
+    const kind = await page.evaluate((s) => { const e = document.querySelector(s); if (!e) return 'none'; if (typeof e.click === 'function') { e.click(); return 'done'; } return 'svg'; }, sel);
+    if (kind === 'done') return;
+    if (kind === 'svg') {
+      try {
+        await page.click(sel);
+        return;
+      } catch {
+        /* 重画中，重找 */
+      }
+    }
+    await sleep(200);
+  }
+  throw new Error(`点不到 ${sel}`);
+}
 async function waitFor(page, fn, arg, ms = 30000) {
   const t0 = Date.now();
   while (Date.now() - t0 < ms) {
@@ -84,7 +103,7 @@ async function runRef(page, id) {
   fs.writeFileSync(path.join(outDir, `levels-${id}-web.json`), JSON.stringify(raw, null, 1));
   return { ok: /✓ 通过/.test(text), fp: await fpOf(page), text };
 }
-for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']], ['usbkey', ['usbkey-1', 'usbkey-2', 'usbkey-3']]]) {
+for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']], ['usbkey', ['usbkey-1', 'usbkey-2', 'usbkey-3']], ['lamp', ['lamp-1', 'lamp-2', 'lamp-3']], ['ruler', ['ruler-1', 'ruler-2', 'ruler-3']], ['tilt', ['tilt-1', 'tilt-2', 'tilt-3']]]) {
   const page = await open(`/app.html?work=${work}#bench`);
   for (const id of cps) {
     const r = await runRef(page, id);
@@ -193,12 +212,60 @@ async function openAsm(example) {
   await page.close();
 }
 
+{
+  // P2-09：超声波尺子在工作台组装，探头缩在孔里 → 开机复测里模拟器的 HC-SR04 也只能量到孔壁（读数 3 cm、蜂鸣器一直响），
+  // 判定项真的挂掉；改成"伸出前面板"再复测通过。先用自己上传的固件过三个检查点（解锁组装）
+  const page = await open('/app.html?work=ruler#bench');
+  try {
+    for (const [id, ref] of [['ruler-1', 'ruler-dist'], ['ruler-2', 'ruler-oled'], ['ruler-3', 'ruler']]) {
+      await page.waitForSelector(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`, { timeout: 30000 });
+      await clickEl(page, `#tree .tn[data-kind="checkpoint"][data-id="${id}"]`);
+      await page.waitForSelector('#props [data-drop="check"] input:not([disabled])', { timeout: 30000 });
+      // 属性面板会被重画：拿到输入框就立刻上传，节点被换掉就重找
+      for (let k = 0; ; k++) {
+        try {
+          const input = await page.$('#props [data-drop="check"] input:not([disabled])');
+          await input.uploadFile(path.join(root, `firmware/build/${ref}/flash.bin`));
+          break;
+        } catch (e) {
+          if (k >= 4) throw e;
+          await sleep(300);
+        }
+      }
+      // 先等进入"模拟中"，再等这一关的结论（免得读到上一关的结论就去点下一关）
+      await waitFor(page, () => !!document.querySelector('#props .drop.busy'), null, 15000);
+      await waitFor(page, () => /✓ 通过|✗/.test(document.querySelector('#props .verdict-line')?.textContent ?? '') && !document.querySelector('#props .drop.busy'), null, 120000);
+    }
+    await page.evaluate(() => (location.hash = 'assemble'));
+    await page.waitForSelector('.asm-box [data-part]', { timeout: 30000 });
+    const build = async (pick) => {
+      for (const k of ['shell', 'board', 'sonar', 'buzzer', 'oled', 'front']) {
+        await clickEl(page, `.asm-box [data-part="${k}"]`);
+        if (k === 'sonar') await clickEl(page, `.asm-box [data-k="pick${pick}"]`);
+      }
+      await clickEl(page, '#toolbar [data-tool="asm-retest"]');
+      // 先等进入"复测中"，再等跑完（免得读到上一次的结果）
+      await waitFor(page, () => /复测中/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 10000);
+      await waitFor(page, () => !!document.querySelector('#props .verdict-line') && !/复测中/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 120000);
+      return page.$eval('#props', (e) => e.textContent);
+    };
+    const bad = await build('B');
+    report('组装 · ruler：探头缩在孔里 → 开机复测读不到 15 cm、节奏不对（装法进模拟器）', /✗ 未通过/.test(bad) && /✗串口出现 “DIST 15\.0 cm”/.test(bad) && /1\.8–2\.5 s 响 0 声/.test(bad), bad.match(/复测结果.{0,160}/)?.[0]);
+    await clickEl(page, '#toolbar [data-tool="asm-reset"]').catch(() => {});
+    const good = await build('A');
+    report('组装 · ruler：探头伸出前面板 → 开机复测通过', /✓ 通过/.test(good) && /装配 6\/6，没有警告/.test(good), good.match(/复测结果.{0,60}/)?.[0]);
+  } catch (e) {
+    report('组装 · ruler：流程跑完', false, String(e).slice(0, 200));
+  }
+  await page.close();
+}
+
 // ---- 5. 作品首页
 {
   const home = await open('/home.html');
   const cards = await home.$$eval('.wk', (els) => els.map((e) => ({ work: e.dataset.work, go: e.querySelector('[data-go]')?.getAttribute('href'), cps: e.querySelector('[data-cps]')?.textContent })));
-  // 卡片由作品定义（web/src/app/works.ts）生成：P2-12 加了 USB 小键盘
-  report('首页：四张作品卡（气象站 / 小黄 / 透镜 / USB 小键盘）', cards.map((c) => c.work).join() === 'weather,spin,lens,usbkey', JSON.stringify(cards.map((c) => c.work)));
+  // 卡片由作品定义（web/src/app/works.ts）生成：P2-12 加了 USB 小键盘，P2-09 加了旋钮台灯、超声波尺子、体感小人
+  report('首页：七张作品卡（气象站 / 小黄 / 透镜 / USB 小键盘 / 旋钮台灯 / 超声波尺子 / 体感小人）', cards.map((c) => c.work).join() === 'weather,spin,lens,usbkey,lamp,ruler,tilt', JSON.stringify(cards.map((c) => c.work)));
   await home.screenshot({ path: path.join(outDir, 'levels-home-0.png') });
   // 气象站卡：跑真实固件 → 状态行是串口读数、成品屏幕有 OLED 画面；按住 BOOT → 固件切 ℉，屏幕重画
   await home.click('[data-run="weather"]');
@@ -223,6 +290,13 @@ async function openAsm(example) {
   await home.click('[data-run="lens"]');
   const lens = await waitFor(home, () => !!document.querySelector('.wk[data-work="lens"] image[data-k="lcd"][href]'), null, 20000);
   report('首页：透镜卡跑真实固件 → 圆屏有画面', lens);
+  // P2-09 自动生成的卡片也能跑真实固件：尺子卡 OLED 有画面、读数随演示挡板变；台灯卡灯条亮
+  await home.click('[data-run="ruler"]');
+  const ruler = await waitFor(home, () => !!document.querySelector('.wk[data-work="ruler"] image[data-k="oled"][href]') && /DIST \d/.test(document.querySelector('.wk[data-work="ruler"] [data-status]').textContent), null, 30000);
+  report('首页：尺子卡跑真实固件 → OLED 有画面、串口有距离', ruler);
+  await home.click('[data-run="lamp"]');
+  const lamp = await waitFor(home, () => document.querySelector('.wk[data-work="lamp"] [data-k="led0"]')?.getAttribute('fill') !== '#2A2A28', null, 30000);
+  report('首页：台灯卡跑真实固件 → 灯条亮', lamp);
   // USB 小键盘卡：跑真实固件 → 虚拟电脑枚举出 TryBoard Macro Pad；点 K1 键帽 → 屏幕上打出 a
   await home.click('[data-run="usbkey"]');
   const enumd = await waitFor(home, () => /TryBoard Macro Pad/.test(document.querySelector('.wk[data-work="usbkey"] [data-k="dev"]')?.textContent ?? ''), null, 20000);
