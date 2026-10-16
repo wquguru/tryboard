@@ -21,12 +21,7 @@ interface Example {
   scene?: SceneSpec;
 }
 
-export const WORKS: Record<string, WorkDef> = {
-  weather: { id: 'weather', title: '桌面气象站', example: 'weather', checkpoints: ['01', '02', '03', '04', '05', '06'] },
-  spin: { id: 'spin', title: '会转身的小黄', example: 'spin', checkpoints: ['01', '02', '05', '07-spin'] },
-  lens: { id: 'lens', title: '透镜里的小人', example: 'lens', checkpoints: ['01', '02', '07-lens'] },
-  blank: { id: 'blank', title: '空白实验台', example: null, checkpoints: [] },
-};
+export { WORKS } from './works';
 
 /** 串口里 weather 固件的读数行（格式由第 06 关任务书规定） */
 const READING = /T=(-?[\d.]+) C H=([\d.]+) % P=([\d.]+) hPa/g;

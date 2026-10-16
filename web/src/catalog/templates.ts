@@ -1,7 +1,7 @@
 // 采购模版：每个作品要买什么（必选不可去 / 建议可增减）、买完怎么摆上实验台（默认接线）。
 // 接线与 firmware/examples.json 里同名示例的 scene 一致（catalog.test.ts 对拍），
 // 引脚与 firmware/levels.json 第 06 关 / 第 07 关 spin、lens 的任务书一致。
-import { getPart, type Part } from './parts.ts';
+import { getPart, type LcdPins, type Part } from './parts.ts';
 
 /** 选中的一件：key 区分同型号多件（缺省用 partId） */
 export interface Pick {
@@ -29,6 +29,10 @@ export interface FirmwareUse {
   wifi?: boolean;
   /** 固件把哪个 GPIO 当板载彩灯（R23） */
   rgbGpio?: number;
+  /** 固件要用 PSRAM（大帧缓冲、摄像头、音频；R30） */
+  psram?: boolean;
+  /** 固件按哪套引脚驱动板载屏（R32：微雪圆屏触摸版 / 无触摸版不同） */
+  lcdPins?: LcdPins;
 }
 
 export interface BuyLine {

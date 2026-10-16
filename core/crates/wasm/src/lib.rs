@@ -384,6 +384,7 @@ pub extern "C" fn tb_report() -> usize {
         }
         if let Some(d) = m.lcd() {
             let _ = writeln!(o, "[tryboard] LCD GC9A01 非黑像素 {}", d.lit_pixels());
+            o.push_str(&d.color_report());
         }
         o
     });

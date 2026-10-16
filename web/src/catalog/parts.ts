@@ -66,6 +66,27 @@ export interface Pin {
   note?: string;
 }
 
+export type OnboardKind = 'rgb' | 'led' | 'boot' | 'button' | 'lcd' | 'imu' | 'touch' | 'ir' | 'adc' | 'other';
+export type BusRole = 'spi-sclk' | 'spi-mosi' | 'spi-miso' | 'i2c-sda' | 'i2c-scl';
+
+export interface Onboard {
+  gpio: number;
+  what: string;
+  kind: OnboardKind;
+  /** 这根线是可以共用的总线（外接件同一角色的针脚接上来只算提醒；其它用法判阻断） */
+  share?: BusRole;
+}
+
+/** 屏的控制线（R32 比较板子与固件） */
+export interface LcdPins {
+  sclk: number;
+  mosi: number;
+  cs: number;
+  dc: number;
+  rst: number;
+  bl: number;
+}
+
 export interface BoardInfo {
   chip: ChipId;
   /** 同一型号的硬件版本（DevKitC-1 v1.0 / v1.1 彩灯脚不同，R23） */
@@ -75,8 +96,14 @@ export interface BoardInfo {
   psramMB: number | null;
   /** 八线 PSRAM 占 GPIO33–37（R03）；null = 待核 */
   psram: 'none' | 'quad' | 'octal' | null;
-  /** 板载占用：kind=boot 的 BOOT 键交给 strapping 规则，其它交给 R24 */
-  onboard: { gpio: number; what: string; kind: 'rgb' | 'led' | 'boot' | 'other' }[];
+  /** 板载占用：kind=boot 的 BOOT 键交给 strapping 规则，其它交给 R24（lcd / imu / touch 的独占线判阻断） */
+  onboard: Onboard[];
+  /** 板上已经焊了、和元件库某个件等价的器件（R29：再外接一份是重复购买 / 抢引脚） */
+  builtin?: { partId: string; what: string }[];
+  /** 板载屏的引脚（R32：同一款板不同版本屏脚不同，固件按另一版写会黑屏） */
+  lcd?: LcdPins;
+  /** 资料来源 URL（官方用户指南 / wiki / 原理图优先） */
+  urls: string[];
   /** 板载 WS2812 所在 GPIO；没有为 null */
   rgbGpio: number | null;
   /** 板载 3.3 V 稳压器（R21） */
@@ -180,7 +207,7 @@ function header(list: (number | string)[], names: Record<number, string> = {}): 
     if (typeof x === 'number') return pin(names[x] ?? `GPIO${x}`, 'io', 3.3, { gpio: x, dir: 'bi' });
     if (x === 'GND' || x === 'G') return GND('GND');
     if (x === '3V3') return pin('3V3', 'power', 3.3);
-    if (x === '5V' || x === 'VBUS') return pin(x, 'power', 5);
+    if (x === '5V' || x === 'VBUS' || x === 'VSYS') return pin(x, 'power', 5);
     if (x === 'RST' || x === 'EN') return pin(x, 'rst', 3.3);
     return pin(x, 'nc', null);
   });
@@ -210,6 +237,7 @@ const BOARD_CURRENT_NOTE = '整板电流按芯片数据手册 + 估算在规则�
 
 export const PARTS: Part[] = [
   // ───────── 开发板 ─────────
+  // 每块板的来源 URL 在 board.urls；查不到或几处资料互相矛盾的字段写进 todo（P1-12）
   P({
     id: 's3-devkitc1-v10',
     name: 'ESP32-S3-DevKitC-1 v1.0（N16R8）',
@@ -228,6 +256,7 @@ export const PARTS: Part[] = [
       chip: 'esp32s3', family: 'devkitc1', version: 'v1.0', flashMB: 16, psramMB: 8, psram: 'octal',
       onboard: [{ gpio: 48, what: '板载 WS2812 彩灯', kind: 'rgb' }, { gpio: 0, what: 'BOOT 键', kind: 'boot' }],
       rgbGpio: 48, ldo: { model: null, maxMa: null }, usb: 'both', charger: false,
+      urls: ['https://docs.espressif.com/projects/esp-dev-kits/zh_CN/latest/esp32s3/esp32-s3-devkitc-1/user_guide_v1.0.html'],
     },
     sources: ['乐鑫 ESP32-S3-DevKitC-1 用户指南（v1.0 / v1.1 引脚表、彩灯 GPIO）', 'ESP32-S3-WROOM-1 数据手册（N16R8 = 16 MB flash + 8 MB 八线 PSRAM）'],
     todo: ['sizeMm：advisor/data.ts 写 26×63 mm，未见出处', 'board.ldo：稳压器型号与额定电流按原理图录入', 'currentMa：整板静态电流未测', 'model：内存配置以实物丝印为准（市售多为 N16R8，乐鑫官方订购表待核）'],
@@ -251,6 +280,7 @@ export const PARTS: Part[] = [
       chip: 'esp32s3', family: 'devkitc1', version: 'v1.1', flashMB: 16, psramMB: 8, psram: 'octal',
       onboard: [{ gpio: 38, what: '板载 WS2812 彩灯', kind: 'rgb' }, { gpio: 0, what: 'BOOT 键', kind: 'boot' }],
       rgbGpio: 38, ldo: { model: null, maxMa: null }, usb: 'both', charger: false,
+      urls: ['https://docs.espressif.com/projects/esp-dev-kits/zh_CN/latest/esp32s3/esp32-s3-devkitc-1/user_guide.html'],
     },
     sources: ['乐鑫 ESP32-S3-DevKitC-1 用户指南 v1.1（彩灯改为 GPIO38）'],
     todo: ['sizeMm：同 v1.0', 'board.ldo：稳压器型号与额定电流按原理图录入', 'currentMa：整板静态电流未测'],
@@ -260,7 +290,7 @@ export const PARTS: Part[] = [
     id: 'luat-s3',
     name: '合宙 ESP32-S3 核心板',
     kind: 'board',
-    model: '合宙 CORE-ESP32-S3（具体内存配置待核）',
+    model: '合宙 ESP32S3-Luatos-Core（内存配置待核）',
     chips: ['esp32s3'],
     pins: null,
     voltage: { supply: [5, 5], logic: 3.3 },
@@ -271,13 +301,35 @@ export const PARTS: Part[] = [
     keywords: '合宙 ESP32S3 核心板',
     supplyNet: '5V',
     board: {
-      chip: 'esp32s3', family: 'luat-core', flashMB: null, psramMB: null, psram: null,
-      onboard: [{ gpio: 0, what: 'BOOT 键', kind: 'boot' }],
+      chip: 'esp32s3', family: 'luat-core', flashMB: 8, psramMB: null, psram: null,
+      onboard: [
+        { gpio: 10, what: '板载 LED A（高电平亮）', kind: 'led' },
+        { gpio: 11, what: '板载 LED B（高电平亮）', kind: 'led' },
+        { gpio: 0, what: 'BOOT 键', kind: 'boot' },
+      ],
       rgbGpio: null, ldo: { model: null, maxMa: null }, usb: null, charger: false,
+      urls: [
+        'https://wiki.luatos.com/chips/esp32s3/board.html',
+        'https://github.com/zephyrproject-rtos/zephyr/tree/main/boards/luatos/esp32s3_luatos_core',
+        'https://docs.zephyrproject.org/latest/boards/luatos/esp32s3_luatos_core/doc/index.html',
+      ],
     },
-    sources: ['合宙 wiki（docs.openluat.com），未取得原理图授权，只录事实'],
-    todo: ['pins：排针表未录入', 'board.flashMB：按卖家型号', 'board.psramMB：按卖家型号', 'board.psram：确认是否八线 PSRAM（R8）', 'board.onboard：板载 LED 引脚未核', 'board.usb：USB 口类型未核', 'board.ldo', 'sizeMm', 'currentMa'],
-    note: '便宜、玩家多。不同批次内存配置不同，买前看清 flash / PSRAM 字样；若是 R8（八线 PSRAM）同样不能用 GPIO33–37。',
+    sources: [
+      'Zephyr esp32s3_luatos_core.dtsi（Apache-2.0）：LED GPIO10 / GPIO11 高电平亮、BOOT GPIO0、flash 8 MB',
+      '合宙 wiki（wiki.luatos.com，2026-10 抓取失败，未取得原理图授权，只录事实）',
+    ],
+    todo: [
+      'pins：排针表未录入（合宙 wiki 本次打不开，Zephyr 只有引脚图片）',
+      'board.flashMB：Zephyr 写 8 MB，Zephyr 页面另一版本与卖家常见 16 MB 说法不一致，以丝印为准',
+      'board.psramMB：Zephyr 页面称 8 MB PSRAM，未见合宙原文',
+      'board.psram：是否八线 PSRAM 待核（R03 按"待核"给提醒）',
+      'board.onboard：Zephyr 文档另提到"可寻址彩灯 GPIO38"，与 dtsi 只有两颗普通 LED 矛盾，待原理图核',
+      'board.usb：USB 口类型（原生 / CH343 转串口）未核',
+      'board.ldo',
+      'sizeMm',
+      'currentMa',
+    ],
+    note: '便宜、玩家多。板载两颗 LED 在 GPIO10 / 11（接外设会跟着亮）。不同批次内存配置不同，买前看清 flash / PSRAM 字样；若是 R8（八线 PSRAM）同样不能用 GPIO33–37。',
   }),
   P({
     id: 'xiao-s3',
@@ -297,10 +349,11 @@ export const PARTS: Part[] = [
       chip: 'esp32s3', family: 'xiao', flashMB: 8, psramMB: 8, psram: 'octal',
       onboard: [{ gpio: 21, what: '用户 LED（低电平亮）', kind: 'led' }, { gpio: 0, what: 'BOOT 键', kind: 'boot' }],
       rgbGpio: null, ldo: { model: null, maxMa: null }, usb: 'native', charger: true,
+      urls: ['https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/', 'https://github.com/platformio/platform-espressif32/blob/develop/boards/seeed_xiao_esp32s3.json'],
     },
     sources: ['Seeed Wiki XIAO ESP32S3 引脚表（只录事实，Wiki 源码 GPL-3.0 不搬）', 'PlatformIO seeed_xiao_esp32s3.json：memory_type qio_opi（八线 PSRAM）'],
-    todo: ['board.ldo：稳压器额定电流未核', 'currentMa', 'sizeMm[2]：板厚（含元件）未核'],
-    note: '只引出 11 个 GPIO；GPIO21 接了板载用户 LED；背面有锂电焊盘和充电电路。',
+    todo: ['board.ldo：稳压器额定电流未核', 'currentMa', 'sizeMm[2]：板厚（含元件）未核', 'board.psram：Seeed Wiki 只写 8 MB，八线来自 PlatformIO qio_opi'],
+    note: '只引出 11 个 GPIO（D0–D10 = GPIO1–9、43、44）；GPIO21 接了板载用户 LED；D2 = GPIO3 是 strapping 脚（JTAG 来源，默认 eFuse 下不影响启动）；D6 / D7 是 UART0；背面有锂电焊盘和充电电路。',
   }),
   P({
     id: 'c3-devkitm1',
@@ -320,6 +373,7 @@ export const PARTS: Part[] = [
       chip: 'esp32c3', family: 'devkitm1', flashMB: 4, psramMB: 0, psram: 'none',
       onboard: [{ gpio: 8, what: '板载 WS2812 彩灯', kind: 'rgb' }, { gpio: 9, what: 'BOOT 键', kind: 'boot' }],
       rgbGpio: 8, ldo: { model: null, maxMa: null }, usb: 'uart', charger: false,
+      urls: ['https://docs.espressif.com/projects/esp-dev-kits/zh_CN/latest/esp32c3/esp32-c3-devkitm-1/user_guide.html'],
     },
     sources: ['乐鑫 ESP32-C3-DevKitM-1 用户指南（J1 / J3 引脚表、彩灯 GPIO8、BOOT GPIO9）'],
     todo: ['pins：排针顺序按用户指南手录，待脚本对 arduino-esp32 variants 核对', 'board.usb：USB 口是否只有 USB-UART 待核', 'board.ldo', 'sizeMm', 'currentMa'],
@@ -329,7 +383,7 @@ export const PARTS: Part[] = [
     id: 'xiao-c3',
     name: 'Seeed XIAO ESP32C3',
     kind: 'board',
-    model: 'XIAO ESP32C3（4 MB flash）',
+    model: 'XIAO ESP32C3（4 MB flash，无 PSRAM）',
     chips: ['esp32c3'],
     pins: xiaoPins([2, 3, 4, 5, 6, 7, 21, 20, 8, 9, 10]),
     voltage: { supply: [5, 5], logic: 3.3 },
@@ -343,10 +397,152 @@ export const PARTS: Part[] = [
       chip: 'esp32c3', family: 'xiao', flashMB: 4, psramMB: 0, psram: 'none',
       onboard: [{ gpio: 9, what: 'BOOT 键', kind: 'boot' }],
       rgbGpio: null, ldo: { model: null, maxMa: null }, usb: 'native', charger: true,
+      urls: ['https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/'],
     },
-    sources: ['Seeed Wiki XIAO ESP32C3 引脚表', 'arduino-esp32 variants/XIAO_ESP32C3（读来核对，不复制）'],
-    todo: ['board.ldo', 'currentMa', 'sizeMm[2]：板厚（含元件）未核'],
-    note: 'D0 / D8 / D9 = GPIO2 / 8 / 9，全是 strapping 脚——典型坑；D6 / D7 是 UART0。',
+    sources: ['Seeed Wiki XIAO ESP32C3 引脚表（D0 / D8 / D9 = GPIO2 / 8 / 9 标为 strapping；无 LED_BUILTIN）', 'arduino-esp32 variants/XIAO_ESP32C3（读来核对，不复制）'],
+    todo: ['board.ldo：Seeed Wiki 电源脚一节写 3V3 可取 700 mA、规格表写 500 mA，互相矛盾', 'currentMa', 'sizeMm[2]：板厚（含元件）未核'],
+    note: 'D0 / D8 / D9 = GPIO2 / 8 / 9，全是 strapping 脚——典型坑；D9 同时是 BOOT 键。D6 / D7 是 UART0。没有 PSRAM、没有用户 LED。',
+  }),
+  P({
+    id: 'm5-atoms3',
+    name: 'M5Stack AtomS3',
+    kind: 'board',
+    model: 'M5Stack AtomS3（ESP32-S3FN8：8 MB 片内 flash，无 PSRAM；0.85″ 128×128 屏）',
+    chips: ['esp32s3'],
+    // 底部排针 G5 / G6 / G7 / G8 / G38 / G39 + HY2.0-4P（Grove）口 G1 / G2
+    pins: [...header(['5V', 'G', '3V3', 5, 6, 7, 8, 38, 39]), pin('Grove 白(G1)', 'io', 3.3, { gpio: 1, dir: 'bi' }), pin('Grove 黄(G2)', 'io', 3.3, { gpio: 2, dir: 'bi' })],
+    voltage: { supply: [5, 5], logic: 3.3 },
+    currentMa: { typ: null, peak: null, est: true, source: BOARD_CURRENT_NOTE },
+    sizeMm: [24, 24, 13],
+    sim: { level: 'estimated', model: 'esp32s3' },
+    price: [85, 120],
+    keywords: 'M5Stack AtomS3 ESP32-S3 带屏',
+    supplyNet: '5V',
+    board: {
+      chip: 'esp32s3', family: 'm5-atoms3', flashMB: 8, psramMB: 0, psram: 'none',
+      onboard: [
+        { gpio: 21, what: '板载屏 MOSI', kind: 'lcd', share: 'spi-mosi' },
+        { gpio: 17, what: '板载屏 SCK', kind: 'lcd', share: 'spi-sclk' },
+        { gpio: 15, what: '板载屏 CS', kind: 'lcd' },
+        { gpio: 33, what: '板载屏 DC(RS)', kind: 'lcd' },
+        { gpio: 34, what: '板载屏 RST', kind: 'lcd' },
+        { gpio: 16, what: '板载屏背光', kind: 'lcd' },
+        { gpio: 38, what: '板载 IMU MPU6886 的 SDA（0x68，与底部排针共用总线）', kind: 'imu', share: 'i2c-sda' },
+        { gpio: 39, what: '板载 IMU MPU6886 的 SCL', kind: 'imu', share: 'i2c-scl' },
+        { gpio: 41, what: '屏下按键（低电平按下）', kind: 'button' },
+        { gpio: 4, what: '红外发射管', kind: 'ir' },
+      ],
+      rgbGpio: null, ldo: { model: null, maxMa: null }, usb: 'native', charger: false,
+      urls: ['https://docs.m5stack.com/zh_CN/core/AtomS3', 'https://github.com/m5stack/M5Unified'],
+    },
+    sources: ['M5Stack 文档 AtomS3（屏 GC9107 引脚、IMU MPU6886 0x68 on G38/G39、排针 G5–G8 / G38 / G39、Grove G1 / G2）', 'M5Unified（MIT）：按键 GPIO41 低电平按下', 'ESP32-S3 数据手册订购信息：S3FN8 = 8 MB 片内 flash、无 PSRAM'],
+    todo: [
+      'board.onboard：红外发射 GPIO4 来自 AtomS3 Lite 资料，完整版 AtomS3 原理图待核',
+      'board.usb：M5 文档只写"Type-C 供电与下载"，未写是否原生 USB（Arduino 配置 USB_CDC_ON_BOOT=1 倾向原生），待原理图核',
+      'board.ldo',
+      'currentMa',
+      'sizeMm：M5 官网 24×24×13 mm，未逐项核实',
+    ],
+    note: '自带外壳和 0.85″ 屏，但对外只有 8 个 GPIO（排针 6 个 + Grove 2 个），其中 G38 / G39 还和板载 IMU 共用 I2C。接多个模块很快就不够用。',
+  }),
+  P({
+    id: 'ws-s3-lcd128',
+    name: '微雪 ESP32-S3-LCD-1.28 圆屏板（无触摸）',
+    kind: 'board',
+    model: 'Waveshare ESP32-S3-LCD-1.28（ESP32-S3R2：2 MB 四线 PSRAM + 16 MB 外置 flash；板载 1.28″ GC9A01 圆屏、QMI8658 IMU）',
+    chips: ['esp32s3'],
+    // 两排 1.27 mm 排针 H1 / H2：按 NuttX 板级文档 GPIO 表（标明"以原理图为准"）
+    pins: header(['VSYS', 'G', '3V3', 'RST', 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46]),
+    voltage: { supply: [5, 5], logic: 3.3 },
+    currentMa: { typ: null, peak: null, est: true, source: BOARD_CURRENT_NOTE },
+    sizeMm: null,
+    sim: { level: 'estimated', model: 'esp32s3' },
+    price: [70, 110],
+    keywords: '微雪 ESP32-S3-LCD-1.28 圆屏',
+    supplyNet: '5V',
+    board: {
+      chip: 'esp32s3', family: 'ws-lcd128', version: '无触摸', flashMB: 16, psramMB: 2, psram: 'quad',
+      onboard: [
+        { gpio: 10, what: '板载圆屏 SCLK', kind: 'lcd', share: 'spi-sclk' },
+        { gpio: 11, what: '板载圆屏 MOSI', kind: 'lcd', share: 'spi-mosi' },
+        { gpio: 9, what: '板载圆屏 CS', kind: 'lcd' },
+        { gpio: 8, what: '板载圆屏 DC', kind: 'lcd' },
+        { gpio: 12, what: '板载圆屏 RST', kind: 'lcd' },
+        { gpio: 40, what: '板载圆屏背光', kind: 'lcd' },
+        { gpio: 6, what: '板载 IMU QMI8658 的 SDA', kind: 'imu', share: 'i2c-sda' },
+        { gpio: 7, what: '板载 IMU QMI8658 的 SCL', kind: 'imu', share: 'i2c-scl' },
+        { gpio: 47, what: '板载 IMU INT1', kind: 'imu' },
+        { gpio: 48, what: '板载 IMU INT2', kind: 'imu' },
+        { gpio: 1, what: '电池电压检测（200 k / 100 k 分压）', kind: 'adc' },
+        { gpio: 0, what: 'BOOT 键', kind: 'boot' },
+      ],
+      builtin: [{ partId: 'gc9a01', what: '板载 1.28″ GC9A01 圆屏' }],
+      lcd: { sclk: 10, mosi: 11, cs: 9, dc: 8, rst: 12, bl: 40 },
+      rgbGpio: null, ldo: { model: 'ME6217C33M5G', maxMa: 800 }, usb: 'uart', charger: true,
+      urls: [
+        'https://www.waveshare.com/wiki/ESP32-S3-LCD-1.28',
+        'https://nuttx.apache.org/docs/latest/platforms/xtensa/esp32s3/boards/esp32s3-ws-lcd128/index.html',
+      ],
+    },
+    sources: ['微雪 wiki ESP32-S3-LCD-1.28（引脚表、ME6217C33M5G 800 mA、ETA6096 充电、CH343P 转串口、S3R2 + 16 MB flash）', 'NuttX esp32s3-ws-lcd128 板级文档（H1 / H2 排针与 GPIO 对应）'],
+    todo: [
+      'pins：排针按 NuttX 文档 GPIO 表录入，GPIO19 / 20 / 43 / 44 是否引出待对原理图',
+      'board.onboard：微雪 wiki 引脚表同时列了 TP_INT GPIO5（无触摸版不该有），以原理图为准',
+      'sizeMm',
+      'currentMa',
+    ],
+    note: '"一板到位"：圆屏、IMU、锂电充电都在板上，不用再买 GC9A01。屏已占 GPIO8–12 与 GPIO40（触摸版屏复位改 GPIO14、背光改 GPIO2，两版固件不通用）。USB 是 CH343P 转串口。',
+  }),
+  P({
+    id: 'ws-s3-touch-lcd128',
+    name: '微雪 ESP32-S3-Touch-LCD-1.28 圆屏板（触摸）',
+    kind: 'board',
+    model: 'Waveshare ESP32-S3-Touch-LCD-1.28（ESP32-S3R2；GC9A01 圆屏 + CST816S 触摸 + QMI8658 IMU）',
+    chips: ['esp32s3'],
+    // 只有一个 SH1.0 接口 P2 引出 GPIO15–18 / 21 / 33
+    pins: header(['VSYS', 'G', 'RST', 0, 15, 16, 17, 18, 21, 33]),
+    voltage: { supply: [5, 5], logic: 3.3 },
+    currentMa: { typ: null, peak: null, est: true, source: BOARD_CURRENT_NOTE },
+    sizeMm: null,
+    sim: { level: 'estimated', model: 'esp32s3' },
+    price: [80, 120],
+    keywords: '微雪 ESP32-S3-Touch-LCD-1.28 触摸圆屏',
+    supplyNet: '5V',
+    board: {
+      chip: 'esp32s3', family: 'ws-lcd128', version: '触摸', flashMB: 16, psramMB: 2, psram: 'quad',
+      onboard: [
+        { gpio: 10, what: '板载圆屏 SCLK', kind: 'lcd', share: 'spi-sclk' },
+        { gpio: 11, what: '板载圆屏 MOSI', kind: 'lcd', share: 'spi-mosi' },
+        { gpio: 12, what: '板载圆屏 MISO', kind: 'lcd', share: 'spi-miso' },
+        { gpio: 9, what: '板载圆屏 CS', kind: 'lcd' },
+        { gpio: 8, what: '板载圆屏 DC', kind: 'lcd' },
+        { gpio: 14, what: '板载圆屏 RST', kind: 'lcd' },
+        { gpio: 2, what: '板载圆屏背光', kind: 'lcd' },
+        { gpio: 6, what: '板载触摸 CST816S / IMU 的 SDA', kind: 'touch', share: 'i2c-sda' },
+        { gpio: 7, what: '板载触摸 CST816S / IMU 的 SCL', kind: 'touch', share: 'i2c-scl' },
+        { gpio: 5, what: '触摸中断 TP_INT', kind: 'touch' },
+        { gpio: 13, what: '触摸复位 TP_RST', kind: 'touch' },
+        { gpio: 4, what: 'IMU INT1', kind: 'imu' },
+        { gpio: 3, what: 'IMU INT2', kind: 'imu' },
+        { gpio: 1, what: '电池电压检测（200 k / 100 k 分压）', kind: 'adc' },
+        { gpio: 0, what: 'BOOT 键', kind: 'boot' },
+      ],
+      builtin: [{ partId: 'gc9a01', what: '板载 1.28″ GC9A01 圆屏（带触摸）' }],
+      lcd: { sclk: 10, mosi: 11, cs: 9, dc: 8, rst: 14, bl: 2 },
+      rgbGpio: null, ldo: { model: null, maxMa: null }, usb: 'uart', charger: true,
+      urls: [
+        'https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-1.28',
+        'https://nuttx.apache.org/docs/latest/platforms/xtensa/esp32s3/boards/esp32s3-ws-lcd128/index.html',
+      ],
+    },
+    sources: ['微雪 wiki ESP32-S3-Touch-LCD-1.28（引脚表：屏 RST GPIO14、背光 GPIO2、TP_RST GPIO13、IMU INT 4 / 3）', 'NuttX esp32s3-ws-lcd128 板级文档（触摸版 P2 接口 GPIO15–18 / 21 / 33）'],
+    todo: [
+      'board.onboard：微雪 wiki 表另把 GPIO4 / 5 标成 MOSFET1_CS / MOSFET2_CS，与 IMU INT1 / TP_INT 重叠，待原理图核',
+      'board.ldo：稳压器型号未在触摸版 wiki 找到（无触摸版是 ME6217C33M5G 800 mA）',
+      'sizeMm',
+      'currentMa',
+    ],
+    note: '和无触摸版同一款外形，但屏复位在 GPIO14、背光在 GPIO2（无触摸版是 GPIO12 / 40），固件要按版本改引脚。对外只有 SH1.0 接口上的 6 个 GPIO。',
   }),
 
   // ───────── 传感器 ─────────

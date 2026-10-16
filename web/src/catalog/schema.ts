@@ -1,10 +1,11 @@
 // 元件库 schema 校验与核价提醒（P0-06）。
 // 校验在单测（web/test/catalog.test.ts）和 tools/accept.sh 里跑：数据录错直接让验收失败，
 // 而不是等页面上显示出错的价格或引脚。
-import { PARTS, type Kind, type Part } from './parts.ts';
+import { PARTS, type Kind, type OnboardKind, type Part } from './parts.ts';
 
 const KINDS: Kind[] = ['board', 'sensor', 'display', 'actuator', 'input', 'audio', 'power', 'cable', 'passive', 'module', 'proto', 'enclosure'];
 const CHIPS = ['esp32c3', 'esp32s3'];
+const ONBOARD_KINDS: OnboardKind[] = ['rgb', 'led', 'boot', 'button', 'lcd', 'imu', 'touch', 'ir', 'adc', 'other'];
 /** 核价日期：YYYY-MM（只记年月）或 YYYY-MM-DD */
 export const CHECKED_AT_RE = /^(\d{4})-(0[1-9]|1[0-2])(?:-(0[1-9]|[12]\d|3[01]))?$/;
 
@@ -104,6 +105,20 @@ export function validatePart(p: Part, all: Part[] = PARTS): string[] {
       req(p.chips.length === 1 && p.chips[0] === p.board.chip, 'board.chip 与 chips 不一致');
       const gp = (p.pins ?? []).map((x) => x.gpio).filter((g) => g !== undefined);
       if (p.board.rgbGpio !== null && p.pins) req(gp.includes(p.board.rgbGpio) || p.board.onboard.some((o) => o.gpio === p.board!.rgbGpio), 'rgbGpio 不在板上');
+      // P1-12：每块板都要有可点开的来源；板载占用、内置件、屏引脚互相对得上
+      const b = p.board;
+      req(Array.isArray(b.urls) && b.urls.length > 0, 'board.urls 至少一个来源 URL');
+      for (const u of b.urls ?? []) req(/^https:\/\/[^\s]+$/.test(u), `board.urls 只能是 https 链接：${u}`);
+      for (const o of b.onboard) {
+        req(ONBOARD_KINDS.includes(o.kind), `board.onboard kind 未知：${o.kind}`);
+        req(Number.isInteger(o.gpio) && o.gpio >= 0 && o.gpio <= 48, `board.onboard GPIO${o.gpio} 超出范围`);
+        req(o.what.trim().length > 0, `board.onboard GPIO${o.gpio} 缺 what`);
+      }
+      const dup = b.onboard.map((o) => o.gpio).filter((g, i, a) => a.indexOf(g) !== i);
+      req(dup.length === 0, `board.onboard 同一个 GPIO 写了两次：${dup.join(', ')}`);
+      for (const x of b.builtin ?? []) req(ids.has(x.partId), `board.builtin 指向不存在的件 ${x.partId}`);
+      if (b.lcd) for (const [k, g] of Object.entries(b.lcd)) req(b.onboard.some((o) => o.gpio === g && o.kind === 'lcd'), `board.lcd.${k} = GPIO${g} 不在 onboard 的屏占用里`);
+      if (b.version !== undefined) req(!!b.family, '有 version 就要有 family（R23 / R32 按 family 找同款另一版）');
     }
   } else req(!p.board, '只有 kind = board 能带 board 信息');
   if (p.provides) req(p.provides.maxMa > 0, 'provides.maxMa 必须为正');

@@ -151,7 +151,7 @@ sys.exit(0 if burst and servo else 1)
 PY
 then :; else fail=1; fi
 
-# 网页单测（元件库 schema、核价提醒、规则引擎 R01–R27）：纯 Node，不需要浏览器，--no-web 也跑
+# 网页单测（元件库 schema、核价提醒、规则引擎 R01–R32）：纯 Node，不需要浏览器，--no-web 也跑
 command -v node >/dev/null || { [ -s ~/.nvm/nvm.sh ] && . ~/.nvm/nvm.sh >/dev/null; }
 echo -e "\n## 网页单测（web/test，node --test）\n\`\`\`" >> $REPORT
 (cd web && npm test --silent > ../Reviews/web-unit.log 2>&1); ut=$?
@@ -178,8 +178,8 @@ if [ $NO_WEB = 0 ]; then
   done
   r=$(node tools/webtest/levels.mjs 2>&1 | grep '^\[levels\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  # 要看到汇总行（"[levels] PASS（…"）才算过：脚本中途崩了时最后一行是某一项的 PASS，不能算
-  echo "$r" | tail -1 | grep -q '^\[levels\] PASS（' || fail=1
+  # 最后一行必须是汇总行；脚本中途崩溃时最后一行是某条单项的 PASS，不能算过
+  echo "$r" | tail -1 | grep -q '^\[levels\] PASS（' || { echo "- [levels] 脚本没跑完" >> $REPORT; fail=1; }
   r=$(node tools/webtest/replay.mjs 2>&1 | grep '^\[replay\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   # 要看到汇总行（"[replay] PASS（…"）才算过：脚本中途崩了时最后一行是某一项的 PASS，不能算

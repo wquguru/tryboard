@@ -19,6 +19,12 @@ export interface Level {
   numeric?: { name: string; regex: string; value: number; tol: number }[];
   oled_min_pixels?: number;
   lcd_min_pixels?: number;
+  /** 串口里某段文字至少出现几次（如眨眼 BLINK） */
+  serial_count?: { text: string; min: number }[];
+  /** 圆屏最后一帧里某种颜色（±tol，按通道最大差）的像素数，可选水平重心范围（判"画了什么、画在哪"） */
+  lcd_colors?: { name: string; rgb: string; min: number; max?: number; tol?: number; cx?: [number, number] }[];
+  /** 这一关属于哪个作品的专属检查点（spin-1 这类）；没有就是气象站 / 第 07 关的通用关卡 */
+  work?: string;
   /** true 等同 'weather'；字符串是装配模板名 */
   assembly?: boolean | string;
   /** 有多个成品可选（第 07 关）：每个都是一套完整的条件 */
@@ -167,6 +173,30 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
     const m = report.match(/LCD GC9A01 非黑像素 (\d+)/);
     const n = m ? Number(m[1]) : 0;
     res.push({ ok: n >= l.lcd_min_pixels, text: `圆屏点亮 ${n} 像素（要 ≥ ${l.lcd_min_pixels}）` });
+  }
+  for (const c of l.serial_count ?? []) {
+    const n = out.split(c.text).length - 1;
+    res.push({ ok: n >= c.min, text: `串口 “${c.text}” 出现 ${n} 次（要 ≥ ${c.min}）` });
+  }
+  if (l.lcd_colors?.length) {
+    const seen = [...report.matchAll(/LCD 颜色 #([0-9a-f]{6}) (\d+) 像素，重心 ([\d.]+),([\d.]+)/g)].map((m) => ({ k: m[1], n: Number(m[2]), x: Number(m[3]) }));
+    const top = seen.slice(0, 4).map((e) => `#${e.k} ${e.n}`).join('、') || '（全黑）';
+    for (const c of l.lcd_colors) {
+      const want = parseInt(c.rgb.slice(1), 16);
+      const tol = c.tol ?? 24;
+      const near = (k: string) => Math.max(...[16, 8, 0].map((sh) => Math.abs(((parseInt(k, 16) >> sh) & 255) - ((want >> sh) & 255)))) <= tol;
+      const hit = seen.filter((e) => near(e.k));
+      const n = hit.reduce((a, e) => a + e.n, 0);
+      let ok = n >= c.min && (c.max === undefined || n <= c.max);
+      let text = `圆屏${c.name}（${c.rgb} ±${tol}）${n} 像素（要 ≥ ${c.min}${c.max !== undefined ? ` 且 ≤ ${c.max}` : ''}）`;
+      if (c.cx) {
+        const cx = n ? hit.reduce((a, e) => a + e.n * e.x, 0) / n : -1;
+        ok = ok && c.cx[0] <= cx && cx <= c.cx[1];
+        text += `，水平重心 ${n ? cx.toFixed(1) : '—'}（要 ${c.cx[0]}–${c.cx[1]}）`;
+      }
+      if (!ok) text += `；画面主色 ${top}`;
+      res.push({ ok, text });
+    }
   }
   return res;
 }

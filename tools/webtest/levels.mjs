@@ -72,7 +72,7 @@ async function runRef(page, id) {
       await page.click(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`);
       break;
     } catch (e) {
-      if (i >= 4 || !/detached/i.test(String(e))) throw e;
+      if (i >= 4) throw e;
       await sleep(300);
     }
   }
@@ -84,7 +84,7 @@ async function runRef(page, id) {
   fs.writeFileSync(path.join(outDir, `levels-${id}-web.json`), JSON.stringify(raw, null, 1));
   return { ok: /✓ 通过/.test(text), fp: await fpOf(page), text };
 }
-for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['07-spin']], ['lens', ['07-lens']]]) {
+for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']]]) {
   const page = await open(`/app.html?work=${work}#bench`);
   for (const id of cps) {
     const r = await runRef(page, id);
@@ -235,11 +235,10 @@ async function openAsm(example) {
     await Promise.all([p.waitForNavigation({ waitUntil: 'load' }), p.click(`.wk[data-work="${c.work}"] [data-go]`)]);
     const u = new URL(p.url());
     const n = c.cps.match(/\d+/)?.[0];
-    // 采购页的结论按钮显示的是清单提醒，检查点数在实验台的结论按钮上：落地采购后切到实验台再比
-    const landed = u.hash === '#shop';
+    // 采购页的结论按钮显示规则提醒数（P0-07 起），检查点进度要到实验台看
     await p.evaluate(() => (location.hash = 'bench'));
-    const v = landed && (await waitFor(p, (n) => new RegExp(`检查点 0?\\d*/${n}`).test(document.getElementById('verdict')?.textContent ?? ''), n, 30000));
-    report(`首页「做这个」（${c.work}）→ app.html?work=${c.work}#shop，检查点数 ${n} 与工作台一致`, u.pathname.endsWith('/app.html') && u.searchParams.get('work') === c.work && u.hash === '#shop' && v, u.pathname + u.search + u.hash);
+    const v = await waitFor(p, (n) => new RegExp(`检查点 0?\\d*/${n}`).test(document.getElementById('verdict')?.textContent ?? ''), n, 30000);
+    report(`首页「做这个」（${c.work}）→ app.html?work=${c.work}#shop，检查点数 ${n} 与工作台一致`, u.pathname.endsWith('/app.html') && u.searchParams.get('work') === c.work && u.hash === '#shop' && v, p.url().replace(base, ''));
     await p.close();
   }
   for (const [sel, want, check] of [['#ownIdea', '/advisor.html', () => !!document.querySelector('#templates')], ['#haveFw', '/app.html', () => new URLSearchParams(location.search).get('work') === 'blank' && location.hash === '#bench' && /空白实验台/.test(document.getElementById('workName')?.textContent ?? '')]]) {

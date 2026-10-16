@@ -135,7 +135,14 @@ function linesOf(b: Bom): Line[] {
   // 开发板一行永远在最上面：模版里的板子换过就显示换后的
   const boardLine = [...t.required, ...t.suggested].find((l) => getPart(l.partId).kind === 'board');
   add(b.board, 1, b.board === t.board ? (boardLine?.why ?? '跑固件') : `换过的开发板（模版是 ${shortName(t.board)}）`, true);
-  for (const l of t.required) if (getPart(l.partId).kind !== 'board') add(l.partId, l.qty, l.why, true);
+  // 换成自带同款器件的板（微雪圆屏板自带 GC9A01）：模版的必选件降为可去掉的建议件，R29 说为什么
+  const builtin = getPart(b.board).board?.builtin ?? [];
+  for (const l of t.required) {
+    if (getPart(l.partId).kind === 'board') continue;
+    const bi = builtin.find((x) => x.partId === l.partId);
+    if (bi) add(l.partId, l.qty, `板上已经有${bi.what}，不用再买`, false);
+    else add(l.partId, l.qty, l.why, true);
+  }
   for (const l of t.suggested) if (getPart(l.partId).kind !== 'board') add(l.partId, l.qty, l.why, false);
   for (const p of b.picks) if (getPart(p.partId).kind !== 'board') add(p.partId, p.qty ?? 1, b.extra[p.partId] ?? '你加的', false);
   return out;
@@ -174,7 +181,10 @@ export function shopStep(): StepImpl {
       else select(l.partId);
       return;
     }
-    commit(l.checked ? { t: 'remove', partId: l.partId } : { t: 'add', partId: l.partId });
+    // 模版必选、但新板子上已经焊了的件：日志里的普通 remove 会被"必选不能去"拦下，按 R29 的一键去掉记
+    const builtin = !!getPart(bom().board).board?.builtin?.some((x) => x.partId === l.partId);
+    if (l.checked && builtin) commit({ t: 'fix', fix: { action: 'remove', partId: l.partId }, rule: 'R29' });
+    else commit(l.checked ? { t: 'remove', partId: l.partId } : { t: 'add', partId: l.partId });
     select(l.partId);
   }
 
@@ -239,6 +249,19 @@ ${group('case', '外壳')}
   const kvT = (k: string, v: string) => `<div class="kv col"><span class="k">${k}</span><span class="v txt">${v}</span></div>`;
   const sec = (t: string) => `<div class="sec">${t}</div>`;
 
+  /** 开发板的规格与板载占用（P1-12）：换板时一眼看出差在哪 */
+  function boardSpec(part: Part) {
+    const b = part.board!;
+    const USB = { native: '芯片原生 USB', uart: 'USB 转串口芯片', both: '原生 USB + USB 转串口（两个口）' } as const;
+    const psram = b.psram === 'none' || b.psramMB === 0 ? '无' : b.psramMB === null || b.psram === null ? '待核' : `${b.psramMB} MB（${b.psram === 'octal' ? '八线，占 GPIO33–37' : '四线'}）`;
+    const gpios = (part.pins ?? []).filter((p) => p.gpio !== undefined).length;
+    const occ = b.onboard.map((o) => `GPIO${o.gpio} ${esc(o.what)}`).join('<br>');
+    const todo = part.todo.filter((t) => t.startsWith('board') || t.startsWith('pins')).map((t) => esc(t)).join('<br>');
+    return `${sec('板子')}${b.version ? kv('版本', esc(b.version)) : ''}${kv('flash', b.flashMB === null ? '待核' : `${b.flashMB} MB`)}${kv('PSRAM', psram)}${kv('USB', b.usb ? USB[b.usb] : '待核')}${kv('引出 GPIO', part.pins ? String(gpios) : '待核')}
+${occ ? kvT('板载占用', occ) : ''}${todo ? kvT('待核', todo) : ''}
+<div class="btns">${b.urls.map((u, i) => `<a class="btn" href="${esc(u)}" target="_blank" rel="noopener noreferrer">资料 ${i + 1} ↗</a>`).join('')}</div>`;
+  }
+
   function fixLabel(f: Finding) {
     const fx = f.fix!;
     return fx.action === 'add' ? `一键补上 ${shortName(fx.partId)}` : fx.action === 'remove' ? `一键去掉 ${shortName(fx.partId)}` : `一键换成 ${shortName(fx.partId)}`;
@@ -273,6 +296,7 @@ ${v.supply ? kv('供电', v.supply[0] === v.supply[1] ? `${v.supply[0]} V` : `${
 ${cur.typ !== null || cur.peak !== null ? kv(`电流${cur.est ? '（估算）' : ''}`, `${cur.typ ?? '—'} / 峰值 ${cur.peak ?? '—'} mA`) : ''}
 ${part.i2cAddr ? kv('I2C 地址', `${hex(part.i2cAddr.default)}${part.i2cAddr.alt.length ? ' / ' + part.i2cAddr.alt.map(hex).join(' / ') : ''}`) : ''}
 ${part.sizeMm ? kv('尺寸', `${part.sizeMm[0]} × ${part.sizeMm[1]}${part.sizeMm[2] !== null ? ' × ' + part.sizeMm[2] : ''} mm`) : ''}
+${part.board ? boardSpec(part) : ''}
 ${sec('参考价')}${kv(`参考价${qty > 1 ? ` ×${qty}` : ''}`, range(pr.lo * qty, pr.hi * qty))}${kv('核价日期', esc(pr.checkedAt))}
 <p class="note">参考价，${esc(pr.source)}${pr.verified ? '' : '。'}以店铺实际为准。</p>
 ${sec('模拟程度')}<div class="field sim-${part.sim.level}">${SIM[part.sim.level]}${part.sim.model ? `<div class="muted">${esc(part.sim.model)}</div>` : ''}</div>
@@ -344,6 +368,9 @@ ${sec('去店铺搜')}<div class="btns"><a class="btn" href="${esc(part.searchUr
     const tb = document.getElementById('toolbar')!.getBoundingClientRect();
     const st = c.shell.stage.getBoundingClientRect();
     c.shell.card.show({ x: tb.right - st.left - 140, y: tb.top - st.top - 8 }, box);
+    // 卡片挂在 3D 台面里，层级在零件平铺（stepLayer）下面：开着时让平铺不接鼠标，否则点不到卡上的板子
+    const tiles = layer?.querySelector<HTMLElement>('.shop-stage');
+    if (tiles) tiles.style.pointerEvents = 'none';
   }
 
   function onTool(id: string) {
@@ -409,6 +436,7 @@ ${sec('去店铺搜')}<div class="btns"><a class="btn" href="${esc(part.searchUr
         hooked = true;
         c.shell.toolbar.onTool(onTool);
         c.shell.timeline.onSeek((i) => onSeek(i));
+        c.shell.card.onHide(() => layer?.querySelector<HTMLElement>('.shop-stage')?.style.removeProperty('pointer-events'));
       }
       c.shell.toolbar.setGroups([
         { id: 'tpl', tools: PROCURE_TEMPLATES.map((t) => ({ id: `tpl:${t.id}`, label: TPL_SHORT[t.id] ?? t.title })) },

@@ -93,11 +93,17 @@ export const BOARD_S3: BoardSpec = makeSpec({
 
 export const BOARDS: Record<ChipId, BoardSpec> = { esp32c3: BOARD_C3, esp32s3: BOARD_S3 };
 
+/** 圆屏 GC9A01 在各芯片上的固定接线（内核按这个接线建模，见 core 的 lcd_pin） */
+export const LCD_WIRING: Record<ChipId, { sclk: number; mosi: number; cs: number; dc: number; rst: number; bl: number }> = {
+  esp32s3: { sclk: 12, mosi: 11, cs: 10, dc: 14, rst: 13, bl: 15 },
+  esp32c3: { sclk: 6, mosi: 7, cs: 10, dc: 5, rst: 4, bl: 3 },
+};
+
 /** 示例里声明的外接元件（examples.json 的 scene.parts）。 */
 export type PartSpec =
   | { type: 'led'; pin: number; color?: number; col?: number; label?: string }
   | { type: 'oled'; addr: number; sda: number; scl: number; label?: string }
-  /** 1.28″ 圆屏 GC9A01（SPI2）：SCLK=12、MOSI=11、CS=10、DC=14、RST=13、背光=15 */
+  /** 1.28″ 圆屏 GC9A01（SPI2）：引脚按芯片固定，见 LCD_WIRING（S3：SCLK=12、MOSI=11、CS=10、DC=14、RST=13、背光=15；C3：6、7、10、5、4、3） */
   | { type: 'gc9a01'; spi?: number; label?: string }
   | { type: 'bme280'; addr: number; sda: number; scl: number; label?: string }
   /** SG90 舵机：信号接 pin，舵盘角度按 PWM 脉宽（0.5–2.5ms → 0–180°） */
@@ -1410,15 +1416,17 @@ export function createBench(container: HTMLElement): Bench {
     registerPart('gc9a01', m.grp);
     registerModulePins('gc9a01', m.grp, m.pins, m.labels);
     grp.add(m.grp);
+    // 引脚与内核的接线约定一致：S3 见 esp32s3::lcd_pin，C3 见 esp32c3::lcd_pin（firmware/common/round_lcd.h 同）
+    const p = LCD_WIRING[board.spec.chip];
     const order: [string, number, string][] = [
       ['GND', WIRE.gnd, 'LCD 地'],
       ['3V3', WIRE.vcc, 'LCD 供电'],
-      ['IO12', WIRE.scl, 'SPI SCLK'],
-      ['IO11', WIRE.sda, 'SPI MOSI'],
-      ['IO13', WIRE.sig, 'LCD RST'],
-      ['IO14', 0x8f5bd6, 'LCD DC'],
-      ['IO10', 0x3f8fd6, 'LCD CS'],
-      ['IO15', 0xd6d6d6, 'LCD 背光'],
+      [`IO${p.sclk}`, WIRE.scl, 'SPI SCLK'],
+      [`IO${p.mosi}`, WIRE.sda, 'SPI MOSI'],
+      [`IO${p.rst}`, WIRE.sig, 'LCD RST'],
+      [`IO${p.dc}`, 0x8f5bd6, 'LCD DC'],
+      [`IO${p.cs}`, 0x3f8fd6, 'LCD CS'],
+      [`IO${p.bl}`, 0xd6d6d6, 'LCD 背光'],
     ];
     order.forEach(([pinName, color, role], i) => {
       moduleWire(grp, pinName, new THREE.Vector3(colX(firstCol + i), top, rowZ(0)), color, `gc9a01:${m.labels[i]}`, 50 + i * 1.4, i);
@@ -1634,7 +1642,8 @@ export function createBench(container: HTMLElement): Bench {
         lcdTex.colorSpace = THREE.SRGBColorSpace;
         lcdTex.needsUpdate = true;
         buildSpiLcd(parts, roundLcdModule(lcdTex), 16);
-        label(parts, p.label ?? 'GC9A01 圆屏 · SPI2 · SCLK IO12 MOSI IO11 CS IO10 DC IO14', new THREE.Vector3(colX(19.5), 52, rowZ(0) - 10));
+        const w = LCD_WIRING[board.spec.chip];
+        label(parts, p.label ?? `GC9A01 圆屏 · SPI2 · SCLK IO${w.sclk} MOSI IO${w.mosi} CS IO${w.cs} DC IO${w.dc}`, new THREE.Vector3(colX(19.5), 52, rowZ(0) - 10));
       }
       if (p.type === 'bme280') {
         buildI2c(parts, 'bme280', 'BME280', bmeModule(), i2cCol, p.sda, p.scl, 22);
