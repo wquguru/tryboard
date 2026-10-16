@@ -19,6 +19,8 @@ fn usage() -> ! {
                [--elec-report]（各节点最低电压、峰值电流、欠压复位次数）；脚本动作 power=usb|ext
                [--encoder A,B[,SW]]（EC11 旋转编码器；脚本动作 enc=+N / enc=-N 转 N 格、encsw=1|0 按下 / 松开）
                [--sonar TRIG,ECHO] [--dist 厘米]（HC-SR04；脚本动作 dist=厘米，负数 = 前方没有东西）
+               [--i2s max98357a,inmp441]（S3：喇叭 BCLK=16 LRC=17 DIN=18，麦克风 SCK=39 WS=40 SD=41；C3：喇叭 0/1/2，麦克风 0/1/3）
+               [--mic <声音.wav>]（INMP441 循环听这段 WAV，自动接上麦克风）[--audio-wav <喇叭输出.wav>]
   tryboard elec-net <网表.cir> [--at 秒,秒...]（直流 / 瞬态求解，与 ngspice 对照用，见 tools/elec）
   tryboard riscv-test <test.elf>..."
     );
@@ -27,7 +29,10 @@ fn usage() -> ! {
 
 fn default_rom(chip: Chip) -> String {
     let here = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    here.join("../../../third_party/esp-rom-elfs").join(chip.rom_file()).to_string_lossy().into_owned()
+    here.join("../../../third_party/esp-rom-elfs")
+        .join(chip.rom_file())
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn main() {
@@ -96,7 +101,9 @@ fn run(args: &[String]) {
     let flash = std::fs::read(path).unwrap_or_else(|e| panic!("读固件 {path}: {e}"));
     let chip = Chip::from_image(&flash).unwrap_or(Chip::Esp32c3);
     let rom_path = opt(args, "--rom").unwrap_or_else(|| default_rom(chip));
-    let seconds: f64 = opt(args, "--seconds").and_then(|s| s.parse().ok()).unwrap_or(5.0);
+    let seconds: f64 = opt(args, "--seconds")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(5.0);
     let expect = opt(args, "--expect");
     let rom = std::fs::read(&rom_path).unwrap_or_else(|e| panic!("读 ROM {rom_path}: {e}"));
     let (mut m, app) = match Machine::boot(&rom, flash) {
@@ -106,7 +113,13 @@ fn run(args: &[String]) {
             std::process::exit(1)
         }
     };
-    eprintln!("[tryboard] {} app @0x{:x} 入口 0x{:08x}，{} 段", chip.name(), app.offset, app.entry, app.segments);
+    eprintln!(
+        "[tryboard] {} app @0x{:x} 入口 0x{:08x}，{} 段",
+        chip.name(),
+        app.offset,
+        app.entry,
+        app.segments
+    );
     if let Some(s) = opt(args, "--uart-in") {
         m.uart_push(s.replace("\\n", "\n").as_bytes());
     }
@@ -134,11 +147,34 @@ fn run(args: &[String]) {
             }
         }
     }
+    // I2S 音频器件：--i2s max98357a,inmp441；--mic 声音.wav
+    if let Some(spec) = opt(args, "--i2s") {
+        for kind in spec.split(',') {
+            if !m.i2s_attach(kind) {
+                eprintln!("不支持的 I2S 器件 {kind}（目前有 max98357a、inmp441）");
+                std::process::exit(2)
+            }
+        }
+    }
+    if let Some(path) = opt(args, "--mic") {
+        let b = std::fs::read(&path).unwrap_or_else(|e| panic!("读 {path}: {e}"));
+        match tryboard_esp32c3::devices::audio::parse_wav(&b) {
+            Ok((rate, x)) => m.mic_wav(rate as f64, x),
+            Err(e) => {
+                eprintln!("--mic {path}: {e}");
+                std::process::exit(2)
+            }
+        }
+    }
     // 环境：--env 温度,湿度,气压(Pa)
     if let Some(e) = opt(args, "--env") {
         let v: Vec<f64> = e.split(',').filter_map(|x| x.parse().ok()).collect();
         if let [t, h, p] = v.as_slice() {
-            m.env_set(SensorEnv { temp_c: *t, humidity: *h, pressure_pa: *p });
+            m.env_set(SensorEnv {
+                temp_c: *t,
+                humidity: *h,
+                pressure_pa: *p,
+            });
         }
     }
     // 供电：--power usb|ext、--servo GPIO（舵机电流从哪路电取，见 tryboard-elec）
@@ -190,7 +226,9 @@ fn run(args: &[String]) {
     let stdout = std::io::stdout();
     let mut resets = 0;
     // 定时输入：--script 与 --inputs 文件（网页导出的输入日志）合在一起，按时间先后施加
-    let mut script = opt(args, "--script").map(|s| parse_script(&s)).unwrap_or_default();
+    let mut script = opt(args, "--script")
+        .map(|s| parse_script(&s))
+        .unwrap_or_default();
     let inputs = opt(args, "--inputs");
     if let Some(p) = &inputs {
         let text = std::fs::read_to_string(p).unwrap_or_else(|e| panic!("读输入日志 {p}: {e}"));
@@ -220,15 +258,33 @@ fn run(args: &[String]) {
     if let Some(w) = trace_io.as_mut() {
         let mask = match opt(args, "--trace-pins").as_deref() {
             None | Some("all") => u64::MAX,
-            Some(list) => list.split(',').filter_map(|x| x.trim().trim_start_matches("GPIO").parse::<u32>().ok()).filter(|p| *p < 64).fold(0u64, |a, p| a | 1 << p),
+            Some(list) => list
+                .split(',')
+                .filter_map(|x| x.trim().trim_start_matches("GPIO").parse::<u32>().ok())
+                .filter(|p| *p < 64)
+                .fold(0u64, |a, p| a | 1 << p),
         };
         m.io_watch(mask);
-        writeln!(w, "# tryboard trace-io v1 · {} · 观察 GPIO 掩码 0x{mask:x}", chip.name()).ok();
+        writeln!(
+            w,
+            "# tryboard trace-io v1 · {} · 观察 GPIO 掩码 0x{mask:x}",
+            chip.name()
+        )
+        .ok();
     }
-    let trace: usize = opt(args, "--trace").and_then(|s| s.parse().ok()).unwrap_or(0);
+    let trace: usize = opt(args, "--trace")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
     let mut ring = std::collections::VecDeque::new();
-    let app_elf = std::path::Path::new(path).with_file_name("app.elf").to_string_lossy().into_owned();
+    let app_elf = std::path::Path::new(path)
+        .with_file_name("app.elf")
+        .to_string_lossy()
+        .into_owned();
     let syms = Syms::load(&[rom_path.clone(), app_elf]);
+    let has_audio = m.audio().is_some();
+    let mut audio_wav: Option<(String, Vec<i16>)> =
+        opt(args, "--audio-wav").map(|p| (p, Vec::new()));
+    let mut audio_rate = 0f32;
     while done < total {
         let now_s = m.cycles() as f64 / CPU_HZ as f64;
         while script.get(si).is_some_and(|e| e.0 <= now_s) {
@@ -251,7 +307,11 @@ fn run(args: &[String]) {
                 // env=温度,湿度,气压(Pa)：网页上拖环境滑块
                 let v: Vec<f64> = e.split(',').filter_map(|x| x.trim().parse().ok()).collect();
                 if let [t, h, p] = v.as_slice() {
-                    m.env_set(SensorEnv { temp_c: *t, humidity: *h, pressure_pa: *p });
+                    m.env_set(SensorEnv {
+                        temp_c: *t,
+                        humidity: *h,
+                        pressure_pa: *p,
+                    });
                 }
             } else if let Some(v) = act.strip_prefix("imu=") {
                 // imu=pitch,roll,yaw[,速率]：网页上拖倾斜滑块 / 转动成品
@@ -287,14 +347,19 @@ fn run(args: &[String]) {
             } else if let Some(t) = act.strip_prefix("usbcdc=") {
                 // 虚拟电脑往 USB 虚拟串口里写
                 if let Some(u) = m.usb_mut() {
-                    u.host.cdc_tx.extend_from_slice(t.replace("\\n", "\n").as_bytes());
+                    u.host
+                        .cdc_tx
+                        .extend_from_slice(t.replace("\\n", "\n").as_bytes());
                 }
             }
             eprintln!("[tryboard] {now_s:.3}s 输入: {act}");
         }
         if let Some(p) = pwm_pin {
             if let Some((d, f)) = m.pin_pwm(p) {
-                if pwm_trace.last().is_none_or(|l| (l.1 - d).abs() > 0.004 || (l.2 - f).abs() > 0.5) {
+                if pwm_trace
+                    .last()
+                    .is_none_or(|l| (l.1 - d).abs() > 0.004 || (l.2 - f).abs() > 0.5)
+                {
                     pwm_trace.push((now_s, d, f));
                 }
             }
@@ -302,7 +367,20 @@ fn run(args: &[String]) {
         // 有 --inputs 时始终 1ms 一片：与网页实时运行（worker.ts）的时间片完全相同，S3 双核的交替点才一致，重放逐周期复现
         // 接了舵机也 1ms 一片：供电网络按每片的芯片活动 / PWM 推进，片长与网页相同结果才相同
         // --trace-io 也是 1ms 一片：网页 worker 就这样切，事件序列才能与网页逐条对拍
-        let slice = if si >= script.len() && pwm_pin.is_none() && inputs.is_none() && servo.is_none() && trace_io.is_none() && encoder.is_none() && sonar.is_none() { CPU_HZ / 100 } else { CPU_HZ / 1000 };
+        // 接了音频器件也 1ms 一片：功放电流按每片放出的声音算，与网页相同
+        let slice = if si >= script.len()
+            && pwm_pin.is_none()
+            && inputs.is_none()
+            && servo.is_none()
+            && trace_io.is_none()
+            && encoder.is_none()
+            && sonar.is_none()
+            && !has_audio
+        {
+            CPU_HZ / 100
+        } else {
+            CPU_HZ / 1000
+        };
         let before = m.cycles();
         stop = if trace > 0 {
             m.run_traced(slice.min(total - done), &mut ring, trace)
@@ -310,6 +388,14 @@ fn run(args: &[String]) {
             m.run(slice.min(total - done))
         };
         done += m.cycles() - before;
+        if let Some((_, buf)) = audio_wav.as_mut() {
+            for b in m.audio_take() {
+                if buf.is_empty() {
+                    audio_rate = b.rate;
+                }
+                buf.extend_from_slice(&b.data);
+            }
+        }
         if let Some(w) = trace_io.as_mut() {
             for e in m.io_take() {
                 writeln!(w, "{}", e.line()).ok();
@@ -352,7 +438,10 @@ fn run(args: &[String]) {
     }
     if let Some(mut w) = trace_io.take() {
         w.flush().ok();
-        eprintln!("[tryboard] 逻辑分析仪事件 {io_count} 条（缓冲溢出丢弃 {}）", m.io_dropped());
+        eprintln!(
+            "[tryboard] 逻辑分析仪事件 {io_count} 条（缓冲溢出丢弃 {}）",
+            m.io_dropped()
+        );
     }
     let wall = t0.elapsed().as_secs_f64();
     let sim = m.cycles() as f64 / CPU_HZ as f64;
@@ -387,11 +476,16 @@ fn run(args: &[String]) {
             if let Some(path) = opt(args, "--watch-log") {
                 let mut f = String::new();
                 for (pc, a, v, w) in &c.bus.watch_hits {
-                    f.push_str(&format!("{} 0x{a:08x} 0x{v:08x} {}\n", if *w { "W" } else { "R" }, syms.name(*pc)));
+                    f.push_str(&format!(
+                        "{} 0x{a:08x} 0x{v:08x} {}\n",
+                        if *w { "W" } else { "R" },
+                        syms.name(*pc)
+                    ));
                 }
                 std::fs::write(&path, f).ok();
             }
-            let mut by: std::collections::BTreeMap<(u32, bool, u32), (u32, u32)> = Default::default();
+            let mut by: std::collections::BTreeMap<(u32, bool, u32), (u32, u32)> =
+                Default::default();
             for (pc, a, v, w) in &c.bus.watch_hits {
                 let e = by.entry((*a, *w, *pc)).or_insert((0, *v));
                 e.0 += 1;
@@ -399,7 +493,12 @@ fn run(args: &[String]) {
             }
             eprintln!("[tryboard] 监视区间访问 {} 次：", c.bus.watch_hits.len());
             for ((a, w, pc), (n, v)) in by {
-                eprintln!("    0x{a:08x} {} {:>6} 次 最后 0x{v:08x}  {}", if w { "写" } else { "读" }, n, syms.name(pc));
+                eprintln!(
+                    "    0x{a:08x} {} {:>6} 次 最后 0x{v:08x}  {}",
+                    if w { "写" } else { "读" },
+                    n,
+                    syms.name(pc)
+                );
             }
         }
         if let Some(spec) = opt(args, "--dump") {
@@ -417,10 +516,16 @@ fn run(args: &[String]) {
         }
         if args.iter().any(|a| a == "--dump-intc") {
             let ic = &c.bus.intc;
-            eprintln!("[tryboard] 中断线 使能=0x{:08x} 边沿=0x{:08x} 阈值={} 当前线={}", ic.enable, ic.edge, ic.thresh, c.cpu.irq_line);
+            eprintln!(
+                "[tryboard] 中断线 使能=0x{:08x} 边沿=0x{:08x} 阈值={} 当前线={}",
+                ic.enable, ic.edge, ic.thresh, c.cpu.irq_line
+            );
             for (src, line) in ic.map.iter().enumerate() {
                 if *line != 0 {
-                    eprintln!("    源 {src:>2} → 线 {line:>2}（优先级 {}）", ic.pri[*line as usize]);
+                    eprintln!(
+                        "    源 {src:>2} → 线 {line:>2}（优先级 {}）",
+                        ic.pri[*line as usize]
+                    );
                 }
             }
         }
@@ -442,14 +547,22 @@ fn run(args: &[String]) {
     }
     if let Some(p) = pwm_pin {
         let duties: Vec<f32> = pwm_trace.iter().map(|x| x.1).collect();
-        let (mn, mx) = duties.iter().fold((1f32, 0f32), |(a, b), d| (a.min(*d), b.max(*d)));
+        let (mn, mx) = duties
+            .iter()
+            .fold((1f32, 0f32), |(a, b), d| (a.min(*d), b.max(*d)));
         let freq = pwm_trace.last().map(|x| x.2).unwrap_or(0.0);
         if std::env::var("TB_PWM_DUMP").is_ok() {
             for (t, d, f) in pwm_trace.iter().step_by((pwm_trace.len() / 40).max(1)) {
                 eprintln!("    {t:.3}s duty={d:.3} {f:.0}Hz");
             }
         }
-        eprintln!("[tryboard] PWM GPIO{p}: {} 次变化，占空比 {:.3}..{:.3}，频率 {:.1}Hz", pwm_trace.len(), mn, mx, freq);
+        eprintln!(
+            "[tryboard] PWM GPIO{p}: {} 次变化，占空比 {:.3}..{:.3}，频率 {:.1}Hz",
+            pwm_trace.len(),
+            mn,
+            mx,
+            freq
+        );
         // 变化记录：占空比@时刻（三位小数相同的相邻记录合并），关卡验收据此判断"依次出现的台阶"和"稳定后的值"
         let mut steps: Vec<String> = Vec::new();
         let mut last = String::new();
@@ -484,7 +597,10 @@ fn run(args: &[String]) {
         for (pin, d) in pins {
             eprintln!("[tryboard] WS2812 GPIO{pin} 共 {} 帧", d.frames);
             for (t, rgb) in &d.history {
-                let cols: Vec<String> = rgb.iter().map(|c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])).collect();
+                let cols: Vec<String> = rgb
+                    .iter()
+                    .map(|c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]))
+                    .collect();
                 eprintln!("    {:.4}s {}", *t as f64 / CPU_HZ as f64, cols.join(" "));
             }
         }
@@ -527,7 +643,10 @@ fn run(args: &[String]) {
     }
     if let Some(d) = m.lcd() {
         let n = d.lit_pixels();
-        eprintln!("[tryboard] LCD GC9A01 非黑像素 {n}（显示{}）", if d.showing() { "开" } else { "关" });
+        eprintln!(
+            "[tryboard] LCD GC9A01 非黑像素 {n}（显示{}）",
+            if d.showing() { "开" } else { "关" }
+        );
         eprint!("{}", d.color_report());
         eprintln!(
             "[tryboard] LCD GC9A01 命令 {} 条（厂商寄存器 {} 条），像素写入 {}，背光{}",
@@ -543,9 +662,20 @@ fn run(args: &[String]) {
             }
         }
     }
+    eprint!("{}", m.audio_report());
+    if let Some((path, buf)) = audio_wav {
+        match std::fs::write(&path, wav16(audio_rate.round() as u32, &buf)) {
+            Ok(()) => eprintln!("[tryboard] 喇叭输出已存为 {path}（{} 个样本）", buf.len()),
+            Err(e) => eprintln!("[tryboard] 写 {path} 失败: {e}"),
+        }
+    }
     if let Some(e) = expect {
         let ok = String::from_utf8_lossy(&out).contains(e.as_str());
-        eprintln!("[tryboard] 期望输出 {:?}: {}", e, if ok { "PASS" } else { "FAIL" });
+        eprintln!(
+            "[tryboard] 期望输出 {:?}: {}",
+            e,
+            if ok { "PASS" } else { "FAIL" }
+        );
         std::process::exit(if ok { 0 } else { 1 });
     }
 }
@@ -561,7 +691,13 @@ fn elec_net(args: &[String]) {
             std::process::exit(2)
         }
     };
-    let at: Vec<f64> = opt(args, "--at").map(|s| s.split(',').filter_map(tryboard_elec::spice::value).collect()).unwrap_or_default();
+    let at: Vec<f64> = opt(args, "--at")
+        .map(|s| {
+            s.split(',')
+                .filter_map(tryboard_elec::spice::value)
+                .collect()
+        })
+        .unwrap_or_default();
     for (t, v) in nl.run(&at) {
         for (k, name) in nl.names.iter().enumerate().skip(1) {
             println!("v({name})@{t:e} = {:.9e}", v[k]);
@@ -652,17 +788,46 @@ fn print_usb(u: &tryboard_esp32s3::usb::Usb) {
     }
     let i = &h.info;
     if i.vid != 0 {
-        eprintln!("[tryboard] USB 设备 {:04x}:{:04x} \"{}\" / \"{}\" 序列号 \"{}\"", i.vid, i.pid, i.manufacturer, i.product, i.serial);
+        eprintln!(
+            "[tryboard] USB 设备 {:04x}:{:04x} \"{}\" / \"{}\" 序列号 \"{}\"",
+            i.vid, i.pid, i.manufacturer, i.product, i.serial
+        );
     }
     if !h.typed.is_empty() {
         eprintln!("[tryboard] USB 键盘输入: {:?}", h.typed);
     }
     if h.mouse.3 > 0 {
-        eprintln!("[tryboard] USB 鼠标报告 {} 次，位置 ({}, {})，按键 {}", h.mouse.3, h.mouse.0, h.mouse.1, h.mouse.2);
+        eprintln!(
+            "[tryboard] USB 鼠标报告 {} 次，位置 ({}, {})，按键 {}",
+            h.mouse.3, h.mouse.0, h.mouse.1, h.mouse.2
+        );
     }
     if !h.cdc_rx.is_empty() {
-        eprintln!("[tryboard] USB 串口收到: {:?}", String::from_utf8_lossy(&h.cdc_rx));
+        eprintln!(
+            "[tryboard] USB 串口收到: {:?}",
+            String::from_utf8_lossy(&h.cdc_rx)
+        );
     }
+}
+
+/// 单声道 16 位 PCM WAV
+fn wav16(rate: u32, x: &[i16]) -> Vec<u8> {
+    let n = (x.len() * 2) as u32;
+    let mut b = Vec::with_capacity(44 + n as usize);
+    b.extend_from_slice(b"RIFF");
+    b.extend_from_slice(&(36 + n).to_le_bytes());
+    b.extend_from_slice(b"WAVEfmt ");
+    b.extend_from_slice(&16u32.to_le_bytes());
+    b.extend_from_slice(&[1, 0, 1, 0]);
+    b.extend_from_slice(&rate.to_le_bytes());
+    b.extend_from_slice(&(rate * 2).to_le_bytes());
+    b.extend_from_slice(&[2, 0, 16, 0]);
+    b.extend_from_slice(b"data");
+    b.extend_from_slice(&n.to_le_bytes());
+    for v in x {
+        b.extend_from_slice(&v.to_le_bytes());
+    }
+    b
 }
 
 #[cfg(test)]

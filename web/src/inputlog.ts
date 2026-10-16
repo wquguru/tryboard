@@ -46,6 +46,9 @@ export interface InputLog {
   sonar?: { trig: number; echo: number };
   /** 触摸控制器 INT 接的 GPIO：重放时变成 --touch-int */
   touchInt?: number;
+  /** 上电时接的 I2S 音频器件（max98357a / inmp441）与麦克风听的测试 WAV（tools/audio/ 下的文件名）：重放时变成 --i2s / --mic */
+  i2s?: string[];
+  mic?: string;
   events: InputEvent[];
   /** 取日志那一刻的模拟时间（毫秒）：重放跑到这里（--seconds）就与网页上看到的一致 */
   endMs?: number;
@@ -127,6 +130,8 @@ export function cliArgs(log: InputLog, fw: string, inputsFile: string, seconds?:
   if (log.encoder) a.push('--encoder', [log.encoder.a, log.encoder.b, ...(log.encoder.sw !== undefined ? [log.encoder.sw] : [])].join(','));
   if (log.sonar) a.push('--sonar', `${log.sonar.trig},${log.sonar.echo}`);
   if (log.touchInt !== undefined) a.push('--touch-int', String(log.touchInt));
+  if (log.i2s?.length) a.push('--i2s', log.i2s.join(','));
+  if (log.mic) a.push('--mic', `tools/audio/${log.mic}`);
   a.push('--inputs', inputsFile);
   return a;
 }

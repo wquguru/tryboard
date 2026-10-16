@@ -836,5 +836,45 @@
     }
    ]
   }
+ },
+ {
+  "id": "s3-i2s-tone",
+  "title": "I2S 放音：MAX98357A 喇叭放 440 Hz",
+  "about": "ESP32-S3 的 I2S0 以标准 Philips 格式（44.1 kHz、16 位、单声道复制到左右声道）经 GDMA 把 440 Hz 正弦送给 MAX98357A 功放（BCLK=GPIO16、LRC=GPIO17、DIN=GPIO18），驱动 4Ω 小喇叭。i2s_channel_write 被 DMA 的 EOF 中断按播放速度卡住，所以串口里写入速度正好是采样率。点工具栏「声音」听；面板上同时显示模拟器收到的 PCM 读数和网页输出端测到的主频。",
+  "tags": [
+   "✓ 仿真验证",
+   "I2S",
+   "GDMA",
+   "Web Audio",
+   "ESP-IDF 5.5"
+  ],
+  "chip": "esp32s3",
+  "scene": {
+   "parts": [
+    {
+     "type": "max98357a"
+    }
+   ]
+  }
+ },
+ {
+  "id": "s3-i2s-mic",
+  "title": "I2S 录音：INMP441 麦克风读 RMS 与频率",
+  "about": "ESP32-S3 的 I2S1 以 16 kHz、32 位槽、左声道读 INMP441 数字麦克风（SCK=GPIO39、WS=GPIO40、SD=GPIO41，L/R 接地），每 1024 个样本算一次 RMS 和过零频率打印出来。麦克风默认听一段 1 kHz 测试 WAV（我们自己合成的，按模拟时间取样，每次结果一样）；面板里可换成扫频、安静，或授权后接浏览器麦克风（只玩，不进验收）。",
+  "tags": [
+   "✓ 仿真验证",
+   "I2S",
+   "GDMA",
+   "INMP441",
+   "ESP-IDF 5.5"
+  ],
+  "chip": "esp32s3",
+  "scene": {
+   "parts": [
+    {
+     "type": "inmp441"
+    }
+   ]
+  }
  }
 ]

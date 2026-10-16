@@ -13,10 +13,12 @@ pub mod usb;
 use periph::*;
 use std::collections::HashMap;
 use tryboard_esp32c3::crypto_hw::{self, AesHw, ShaHw};
+use tryboard_esp32c3::devices::audio::{self, Audio, PortIo};
 use tryboard_esp32c3::devices::gc9a01::Gc9a01;
 use tryboard_esp32c3::gdma::{DmaMem, Gdma, GdmaLayout};
 use tryboard_esp32c3::gpspi::GpSpi;
 use tryboard_esp32c3::i2c::I2c;
+use tryboard_esp32c3::i2s::I2s;
 use tryboard_esp32c3::iotrace::IoTrace;
 use tryboard_esp32c3::devices::pins::PinDevices;
 use tryboard_esp32c3::ledc::Ledc;
@@ -93,8 +95,21 @@ pub mod lcd_pin {
     pub const RST: u32 = 13;
     pub const BL: u32 = 15;
 }
-/// GDMA 的外设编号（soc/gdma_channel.h：SOC_GDMA_TRIG_PERIPH_SPI2）
+/// GDMA 的外设编号（soc/gdma_channel.h：SOC_GDMA_TRIG_PERIPH_SPI2 / _I2S0 / _I2S1）
 const GDMA_PERI_SPI2: u32 = 0;
+const GDMA_PERI_I2S: [u32; 2] = [3, 4];
+/// GPIO 矩阵信号（gpio_sig_map.h）：I2S0O_SD_OUT_IDX = I2S0I_SD_IN_IDX = 25，I2S1 为 30
+const SIG_I2S_SD: [usize; 2] = [25, 30];
+/// I2S 音频器件的接线约定：喇叭（MAX98357A）用 16/17/18，麦克风（INMP441）用 39/40/41——
+/// 避开圆屏（10..15）、I2C（8/9）、舵机 / LED（4/5）、WS2812（48）、USB（19/20）和八线 PSRAM（33..37）
+pub mod i2s_pin {
+    pub const SPK_BCLK: u32 = 16;
+    pub const SPK_LRC: u32 = 17;
+    pub const SPK_DIN: u32 = 18;
+    pub const MIC_SCK: u32 = 39;
+    pub const MIC_WS: u32 = 40;
+    pub const MIC_SD: u32 = 41;
+}
 /// GPIO 矩阵输出信号 FSPICS0_OUT_IDX（gpio_sig_map.h）与 IO_MUX 功能号 FUNC_GPIO10_FSPICS0
 const SIG_FSPICS0: u32 = 110;
 const IOMUX_FUNC_FSPICS0: u32 = 4;
@@ -149,6 +164,9 @@ pub struct SocBus {
     pub gdma: Gdma,
     /// 挂在 SPI2 上的圆屏（CLI `--spi gc9a01` / wasm `tb_lcd_attach`）
     pub lcd: Option<Box<Gc9a01>>,
+    /// I2S0（0x6000F000）/ I2S1（0x6002D000），模型与 C3 相同；挂在上面的音频器件（引脚见 `i2s_pin`）
+    pub i2s: [I2s; 2],
+    pub audio: Audio,
     /// SAR ADC 单次采样（SENS）
     pub adc: SensAdc,
     /// Wi-Fi MAC + 虚拟世界（Option 只为推进 / 发送时临时取出来借总线；平时恒为 Some）
@@ -223,6 +241,8 @@ impl Default for SocBus {
             spi2: GpSpi::default(),
             gdma: Gdma::new(GdmaLayout::S3),
             lcd: None,
+            i2s: [I2s::new(0, true), I2s::new(1, true)],
+            audio: Audio::default(),
             adc: SensAdc::default(),
             wifi: Some(Box::new(WifiMac::new(WifiLayout::S3))),
             sha: ShaHw::default(),
@@ -372,6 +392,8 @@ impl SocBus {
             0x6003_F000 => return self.gdma.read(off),
             crypto_hw::SHA_BASE => return self.sha.read(off),
             crypto_hw::AES_BASE => return self.aes.read(off),
+            0x6000_F000 => return self.i2s[0].read(off),
+            0x6002_D000 => return self.i2s[1].read(off),
             0x6000_8000 if off >= 0x800 => {
                 if let Some(v) = self.adc.read(off - 0x800) {
                     return v;
@@ -531,6 +553,8 @@ impl SocBus {
                 self.aes = x;
                 return;
             }
+            0x6000_F000 => return self.i2s[0].write(off, v, now),
+            0x6002_D000 => return self.i2s[1].write(off, v, now),
             0x6000_8000 if off >= 0x800 => {
                 if self.adc.write(off - 0x800, v) {
                     return;
@@ -694,6 +718,8 @@ impl SocBus {
         set(src::I2C_EXT0, self.i2c0.irq());
         set(src::I2C_EXT1, self.i2c1.irq());
         set(src::SPI2, self.spi2.irq());
+        set(src::I2S0, self.i2s[0].irq());
+        set(src::I2S1, self.i2s[1].irq());
         for ch in 0..self.gdma.layout.nch as u32 {
             set(src::DMA_IN_CH0 + ch, self.gdma.in_irq(ch as usize));
             set(src::DMA_OUT_CH0 + ch, self.gdma.out_irq(ch as usize));
@@ -861,6 +887,7 @@ impl SocBus {
             self.wifi = Some(w);
             n
         };
+        let n13 = self.i2s_update(now, 0).min(self.i2s_update(now, 1));
         let n8 = match self.usb.take() {
             Some(mut u) => {
                 let n = u.update(now, self);
@@ -880,13 +907,70 @@ impl SocBus {
             .min(n9)
             .min(n10)
             .min(n11)
-            .min(n12);
+            .min(n12)
+            .min(n13);
         let lv = self.levels();
         // 边沿型线由核自己检测上升沿，这里把电平和本次上升沿一起给出
         let (l0, r0) = self.intm.lines(&lv);
         let (l1, r1) = self.intm1.lines(&lv);
         self.lines = [l0 | r0, l1 | r1];
         self.irq_dirty = false;
+    }
+}
+
+impl SocBus {
+    /// I2S 口 k 收发推进：按 GPIO 矩阵判断喇叭 DIN / 麦克风 SD 是不是接在这个口的数据线上，再借总线让 GDMA 搬数据
+    fn i2s_update(&mut self, now: u64, k: usize) -> u64 {
+        if !self.i2s[k].tx.running && !self.i2s[k].rx.running {
+            return u64::MAX;
+        }
+        let sig = SIG_I2S_SD[k];
+        let speaker = self.audio.speaker.as_ref().is_some_and(|s| {
+            self.gpio
+                .func_out
+                .get(s.pins.data as usize)
+                .is_some_and(|f| (f & 0x1ff) as usize == sig)
+        });
+        // FUNCn_IN_SEL_CFG：位 5..0 引脚、位 7 经 GPIO 矩阵
+        let f = self.gpio.func_in[sig];
+        let mic = self
+            .audio
+            .mic
+            .as_ref()
+            .is_some_and(|m| f & (1 << 7) != 0 && f & 0x3f == m.pins.data);
+        let mut g = std::mem::replace(&mut self.gdma, Gdma::placeholder());
+        let mut au = std::mem::take(&mut self.audio);
+        let mut i2s = std::mem::replace(&mut self.i2s[k], I2s::new(k as u8, true));
+        let mut io = PortIo {
+            audio: &mut au,
+            speaker,
+            mic,
+        };
+        let n = i2s.update(now, &mut g, self, GDMA_PERI_I2S[k], &mut io);
+        self.i2s[k] = i2s;
+        self.audio = au;
+        self.gdma = g;
+        n
+    }
+
+    /// 接 MAX98357A 喇叭 / INMP441 麦克风（引脚见 `i2s_pin`）
+    pub fn attach_speaker(&mut self) {
+        use i2s_pin::*;
+        let p = audio::Pins {
+            bclk: SPK_BCLK,
+            ws: SPK_LRC,
+            data: SPK_DIN,
+        };
+        self.audio.speaker = Some(Box::new(audio::Max98357a::new(p)));
+    }
+    pub fn attach_mic(&mut self) {
+        use i2s_pin::*;
+        let p = audio::Pins {
+            bclk: MIC_SCK,
+            ws: MIC_WS,
+            data: MIC_SD,
+        };
+        self.audio.mic = Some(Box::new(audio::Inmp441::new(p)));
     }
 }
 

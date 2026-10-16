@@ -6,6 +6,8 @@ pub mod src {
     pub const WIFI_MAC: u32 = 0;
     pub const GPIO: u32 = 16;
     pub const SPI2: u32 = 21;
+    pub const I2S0: u32 = 25;
+    pub const I2S1: u32 = 26;
     pub const UART0: u32 = 27;
     pub const UART1: u32 = 28;
     pub const LEDC: u32 = 35;

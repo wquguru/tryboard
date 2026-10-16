@@ -67,7 +67,7 @@
 | P2-03 | IMU（MPU6050 / QMI8658，由成品转动驱动） | 固件验收 | ☑ 2026-10-16：两颗 IMU 模型 + s3-imu / s3-qmi8658，accept 设定姿态读数误差 ≤ 0.2°、陀螺 ≤ 0.08 °/s；倾斜滑块、拖 3D 模块转台面、成品页转倾角仪盒子三种来源，输入日志 `imu=p,r,y[,速率]` 与 CLI 逐行一致（Reviews/ab/P2-03.md） |
 | P2-04 | HC-SR04（RMT 接收 / 定时，3D 射线测距） | 固件验收 | ☑ 2026-10-16：HC-SR04 引脚器件（Trig → Echo 宽 = 2 × 距离 / 343 m/s）；s3-ultrasonic accept 覆盖 25 / 100 / 300 cm + 超量程；3D 障碍物拖动（射线测距）、滑块 / 快捷按钮；Echo 5 V 风险进接线检查 W2（复用 R17）；15 mA 进 5V 轨（Reviews/ab/P2-04.md） |
 | P2-05 | RMT 接收 | 固件验收 | ☑ 2026-10-16：RMT 接收通道（S3 / C3 布局）+ 滤波 + 空闲结束 + 乒乓阈值；s3-ultrasonic 用 IDF rmt_rx 测 Echo 宽度；C3 只有单元测试（Reviews/ab/P2-05.md） |
-| P2-06 | I2S + GDMA 接收：MAX98357A 放音、INMP441（验收用固定 WAV，网页可接麦克风） | 固件验收；Web Audio 采样比对 | ☐ |
+| P2-06 | I2S + GDMA 接收：MAX98357A 放音、INMP441（验收用固定 WAV，网页可接麦克风） | 固件验收；Web Audio 采样比对 | ☑ s3-i2s-tone（喇叭 440.0 Hz，网页输出端也测得 440.0 Hz）、s3-i2s-mic（I2S1，读回 WAV 1000.0 Hz / RMS 0.3533）；C3 的 I2S0 只有单元测试 |
 | P2-07 | LVGL：先测速度，够则支持动画 | 基准报告 | ◐ 能跑动画、模拟时间帧率正确；整屏重画的界面网页只有约 0.2–0.4× 实时（未达 0.5×），见 STATUS「LVGL」与 Reviews/ab/P2-07.md |
 | P2-08 | S3 Wi-Fi（复用 C3 MAC 模型） | wifi-http S3 版 | ☑ 2026-10-16：MAC 模型移到 tryboard-soc 共用；s3-wifi-init / scan / connect / http / wpa2 验收通过，网页 s3-wifi-http（Reviews/ab/P2-08.md） |
 | P2-09 | 新作品：旋钮台灯、超声波尺子、体感小人、USB 小键盘（各含检查点、参考固件、采购模版、成品） | 参考固件全过 | ☐ |

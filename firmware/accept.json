@@ -1160,5 +1160,51 @@
    "TOUCH DOWN"
   ],
   "lcd_min_pixels": 40000
+ },
+ {
+  "id": "s3-i2s-tone",
+  "chip": "esp32s3",
+  "seconds": 1.5,
+  "args": [
+   "--i2s",
+   "max98357a"
+  ],
+  "expect": [
+   "TONE 440 Hz @ 44100 Hz",
+   "TRYBOARD_OK s3-i2s-tone"
+  ],
+  "audio": {
+   "freq": 440,
+   "tol": 1,
+   "rate": 44100,
+   "min_rms": 0.3
+  }
+ },
+ {
+  "id": "s3-i2s-mic",
+  "chip": "esp32s3",
+  "seconds": 1.2,
+  "args": [
+   "--mic",
+   "tools/audio/sine1k.wav"
+  ],
+  "expect": [
+   "MIC INMP441 on I2S1 @ 16000 Hz",
+   "TRYBOARD_OK s3-i2s-mic"
+  ],
+  "numeric": [
+   {
+    "name": "过零频率(Hz)",
+    "regex": "MIC rms=[\\d.]+ freq=([\\d.]+) Hz",
+    "value": 1000,
+    "tol": 1
+   },
+   {
+    "name": "RMS",
+    "regex": "MIC rms=([\\d.]+)",
+    "value": 0.3536,
+    "tol": 0.002
+   }
+  ]
  }
 ]

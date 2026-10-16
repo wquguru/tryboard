@@ -68,6 +68,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   bench.setScene(scene);
   const buzzerPins = scene.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : []));
   audio.setPins(buzzerPins);
+  audio.setSpeaker(scene.parts.some((p) => p.type === 'max98357a'));
+  /** I2S 音频器件（引脚按芯片固定）：喇叭的声音走同一个声音开关；麦克风听 1 kHz 测试 WAV */
+  const i2sOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'max98357a' || p.type === 'inmp441' ? [p.type] : []));
 
   const i2cOf = (parts: PartSpec[]) => {
     const kind: Record<string, string> = { oled: 'ssd1306', bme280: 'bme280', mpu6050: 'mpu6050', qmi8658: 'qmi8658', cst816s: 'cst816s' };
@@ -157,8 +160,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       if (JSON.stringify(next) !== JSON.stringify(s.scene)) bench.setScene(next);
       s.scene = next;
       s.power = power;
-      s.sim?.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts), touchInt: touchIntOf(next.parts) });
+      s.sim?.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts), touchInt: touchIntOf(next.parts), i2s: i2sOf(next.parts) });
       audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
+      audio.setSpeaker(next.parts.some((p) => p.type === 'max98357a'));
       bumpEdit();
     },
     onTick(cb) {
@@ -181,7 +185,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     mark: () => s.sim?.mark() ?? Promise.resolve(0),
     async seek(job: SeekJob) {
       const sim = s.sim!;
-      const snap = await sim.seek(job);
+      const snap = await sim.seek({ ...job, i2s: job.i2s ?? i2sOf(s.scene.parts) });
       consoleBuf = snap.stdout.length > 200_000 ? snap.stdout.slice(-150_000) : snap.stdout;
       tail = consoleBuf.slice(-80);
       hooks.onConsoleReset?.(consoleBuf);
@@ -200,7 +204,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       s.sim?.continueRun();
     },
     applyScene(next, power) {
-      const devs = (sc: SceneSpec) => JSON.stringify([i2cOf(sc.parts), sc.parts.some((p) => p.type === 'gc9a01'), servoOf(sc.parts) ?? null, encoderOf(sc.parts) ?? null, sonarOf(sc.parts)?.trig ?? null, sonarOf(sc.parts)?.echo ?? null, touchIntOf(sc.parts) ?? null]);
+      const devs = (sc: SceneSpec) => JSON.stringify([i2cOf(sc.parts), sc.parts.some((p) => p.type === 'gc9a01'), servoOf(sc.parts) ?? null, encoderOf(sc.parts) ?? null, sonarOf(sc.parts)?.trig ?? null, sonarOf(sc.parts)?.echo ?? null, touchIntOf(sc.parts) ?? null, i2sOf(sc.parts)]);
       const rebootNeeded = devs(next) !== devs(s.scene);
       const same = JSON.stringify(next) === JSON.stringify(s.scene);
       const extBefore = !!s.power?.ext5v;
@@ -210,7 +214,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       if (!s.hasImu()) bench.setPose(null);
       const hadExt = extBefore;
       if (s.sim && rebootNeeded) {
-        s.sim.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts), touchInt: touchIntOf(next.parts) });
+        s.sim.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts), touchInt: touchIntOf(next.parts), i2s: i2sOf(next.parts) });
+        audio.setSpeaker(next.parts.some((p) => p.type === 'max98357a'));
         s.sim.setPower(powerMode());
         s.reboot();
       } else if (s.sim && hadExt !== !!power?.ext5v) s.sim.setPower(powerMode());
@@ -320,6 +325,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       sonar: sonarOf(s.scene.parts),
       touchInt: touchIntOf(s.scene.parts),
       power: powerMode(),
+      i2s: i2sOf(s.scene.parts),
+      onPcm: (b) => audio.pushPcm(b),
       env: store.get().env,
       onConsole(text) {
         consoleBuf += text;
@@ -379,6 +386,10 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
           const sp = servoOf(s.scene.parts);
           if (sp !== undefined && m.elec.servoAngle !== null) bench.setServoAngle(sp, m.elec.servoAngle);
         }
+        if (m.audio) {
+          audio.setSim(m.audio);
+          bench.setAudio(m.audio.frames > 0 ? m.audio.rms : 0, m.audio.micFrames > 0 ? 0.35 : 0);
+        }
         for (const t of m.brownouts ?? []) for (const cb of [...brownSubs]) cb(t);
         if (m.pins) {
           const prev = s.frame.pins;
@@ -406,6 +417,10 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     });
     // 观察设置在上电之前发出（worker 按顺序处理）：从第 0 个周期就按这份掩码记，命令行 --trace-pins 同一份就能对拍
     sim.watchIo(ioMask[0], ioMask[1]);
+    if (s.scene.parts.some((p) => p.type === 'inmp441'))
+      void fetchBuf('./audio/sine1k.wav')
+        .then((b) => sim.setMic('wav', b, 'sine1k.wav'))
+        .catch(() => {});
     return sim;
   }
 
