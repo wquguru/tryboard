@@ -3,10 +3,11 @@
 // 纯函数：同样的接线永远给同样的结论。
 import type { PartSpec } from '../board3d';
 import { RULE_BY_ID, netVolt, type Confidence } from '../catalog/rules.ts';
-import { partId, partInfo, type BenchWire } from './wiring.ts';
+import { i2cBuses, partId, partInfo, type BenchWire } from './wiring.ts';
+import { i2cLoad, i2cText } from './harness.ts';
 
 export interface WireFault {
-  rule: 'W1' | 'W2' | 'W3' | 'W4' | 'W5';
+  rule: 'W1' | 'W2' | 'W3' | 'W4' | 'W5' | 'W6';
   level: 'block' | 'warn';
   title: string;
   /** 标红的线（3D 台面里的导线 id） */
@@ -24,6 +25,7 @@ export const WIRE_RULES: Record<WireFault['rule'], { title: string; source: stri
   W3: { title: 'LED 没有限流电阻', source: '5 mm LED 规格书（20 mA 额定）；ESP32 数据手册 GPIO 驱动电流', confidence: '数据手册' },
   W4: { title: '缺地', source: '电路常识：器件和开发板不共地，信号没有参考电平', confidence: '我们的规则' },
   W5: { title: 'I2C 地址冲突', source: RULE_BY_ID.R15.source, confidence: RULE_BY_ID.R15.confidence },
+  W6: { title: 'I2C 线太长', source: 'I2C 规范 UM10204 §7.1：t_r = 0.8473·R·C，400 kHz 上限 300 ns；线电容 1 pF/cm、模块 10 kΩ 上拉为估算', confidence: '必须上真机' },
 };
 
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
@@ -89,6 +91,12 @@ export function checkWiring(parts: PartSpec[], wires: BenchWire[]): WireFault[] 
       const ws = live.filter((w) => who.includes(w.part) && w.pinRole === 'bus' && w.pin === 'SDA').map((w) => w.id);
       push('W5', 'block', ws, `地址 ${hex(addr)} 冲突`, `${who.map(name).join(' 和 ')} 都是 ${hex(addr)}，在同一条 SDA / SCL 上：两个器件同时应答，读数错乱。改其中一个的地址跳线（BME280 0x76 / 0x77，SSD1306 0x3C / 0x3D）。`);
     }
+  }
+  // W6：线太长，总线电容大，上升时间超过 I2C 规范（P2-11，估算；内核里同一个公式让读数出错 / 器件不应答）
+  for (const b of i2cBuses(parts, live)) {
+    const l = i2cLoad(b.wireCm, b.parts.length);
+    if (l.verdict === 'ok') continue;
+    push('W6', l.verdict === 'fail' ? 'block' : 'warn', b.wires, `上升 ${l.rise.toFixed(0)} ns`, `${b.parts.map(name).join('、')} 的 SDA 线一共 ${b.wireCm.toFixed(0)} cm（估算，必须上真机）：${i2cText(l)}。`);
   }
   return out;
 }

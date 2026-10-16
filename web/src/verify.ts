@@ -13,10 +13,10 @@ export interface VerifyOutcome {
   error?: string;
 }
 
-export async function verifyLevel(l: Level, flash: ArrayBuffer, onProgress?: (sim: number) => void, envOverride?: { temp: number; humidity: number; pressure: number }): Promise<VerifyOutcome> {
+export async function verifyLevel(l: Level, flash: ArrayBuffer, onProgress?: (sim: number) => void, envOverride?: { temp: number; humidity: number; pressure: number }, harness?: { i2cWire?: number; antenna?: number }): Promise<VerifyOutcome> {
   const [wasm, rom] = await Promise.all([loadWasm(), loadRom(imageChip(flash))]);
-  const { i2c, env, lcd, servo, power } = bootOptions(l);
-  const job: VerifyJob = { wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), seconds: l.seconds ?? 2, i2c, env: envOverride ?? env, script: l.script, pwmPin: l.pwm?.pin, lcd, servo, power };
+  const { i2c, env, lcd, servo, power, usb, i2cWire, antenna } = bootOptions(l);
+  const job: VerifyJob = { wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), seconds: l.seconds ?? 2, i2c, env: envOverride ?? env, script: l.script, pwmPin: l.pwm?.pin, lcd, servo, power, usb, i2cWire: harness?.i2cWire ?? i2cWire, antenna: harness?.antenna ?? antenna };
   const w = new Worker(new URL('./verify-worker.ts', import.meta.url), { type: 'module' });
   const msg = await new Promise<Extract<VerifyMsg, { type: 'done' }>>((resolve) => {
     w.onmessage = (ev: MessageEvent<VerifyMsg>) => {

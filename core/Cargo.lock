@@ -23,6 +23,7 @@ version = "0.1.0"
 name = "tryboard-esp32c3"
 version = "0.1.0"
 dependencies = [
+ "tryboard-elec",
  "tryboard-rv32",
  "tryboard-soc",
 ]

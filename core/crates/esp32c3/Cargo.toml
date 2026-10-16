@@ -7,3 +7,5 @@ license.workspace = true
 [dependencies]
 tryboard-rv32 = { path = "../rv32" }
 tryboard-soc = { path = "../soc" }
+# I2C 总线负载（线长 → 上升时间，P2-11）的公式在电路 crate 里，网页同一套常数
+tryboard-elec = { path = "../elec" }

@@ -77,10 +77,20 @@ pub enum Hw {
     S3(Esp32s3),
 }
 
+/// 外接线束（P2-11，估算，必须上真机）：I2C 排线总长、天线被金属件 / 电池挡住的衰减。
+/// 和供电网络一样是外部世界：跨软件复位保留，复位后重新挂到新的总线 / Wi-Fi 模型上
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Harness {
+    /// None = 理想总线（不算上升时间；之前所有用例都这样跑）
+    pub i2c_wire_cm: Option<f64>,
+    pub antenna_loss_db: i32,
+}
+
 /// 一台机器 = 芯片 + 开发板供电网络（tryboard-elec）。供电网络跨复位保留（它是外部世界）
 pub struct Machine {
     pub hw: Hw,
     pub elec: Board,
+    harness: Harness,
 }
 
 pub struct BootInfo {
@@ -94,11 +104,11 @@ impl Machine {
         match Chip::from_image(&flash) {
             Some(Chip::Esp32s3) => {
                 let (m, a) = Esp32s3::boot(rom, flash)?;
-                Ok((Machine { hw: Hw::S3(m), elec: Board::new(ChipKind::S3) }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
+                Ok((Machine { hw: Hw::S3(m), elec: Board::new(ChipKind::S3), harness: Harness::default() }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
             }
             Some(Chip::Esp32c3) | None => {
                 let (m, a) = Esp32c3::boot(rom, flash)?;
-                Ok((Machine { hw: Hw::C3(m), elec: Board::new(ChipKind::C3) }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
+                Ok((Machine { hw: Hw::C3(m), elec: Board::new(ChipKind::C3), harness: Harness::default() }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
             }
         }
     }
@@ -110,6 +120,7 @@ impl Machine {
             Hw::C3(m) => m.reboot(reason)?,
             Hw::S3(m) => m.reboot(reason)?,
         }
+        self.apply_harness();
         // 我们不跑 ROM 引导，ROM 每次复位都会打印的头三行由这里补上（复位原因与 ROM 的写法一致），
         // 网页和命令行串口里都能看到 rst:0x..（上电那一次不补：现有用例的串口输出保持不变）
         let banner = rom_banner(self.chip(), reason);
@@ -121,6 +132,46 @@ impl Machine {
         match &mut self.hw {
             Hw::C3(m) => m.bus.console.extend_from_slice(b),
             Hw::S3(m) => m.bus.console.extend_from_slice(b),
+        }
+    }
+
+    pub fn harness(&self) -> Harness {
+        self.harness
+    }
+
+    /// I2C 排线总长（cm）；None = 理想总线
+    pub fn set_i2c_wire(&mut self, cm: Option<f64>) {
+        self.harness.i2c_wire_cm = cm.map(|c| c.max(0.0));
+        self.apply_harness();
+    }
+
+    /// 天线遮挡（dB，≥ 0）
+    pub fn set_antenna_loss(&mut self, db: i32) {
+        self.harness.antenna_loss_db = db.max(0);
+        self.apply_harness();
+    }
+
+    fn apply_harness(&mut self) {
+        let h = self.harness;
+        self.i2c0().wire_cm = h.i2c_wire_cm;
+        self.wifi_mut().world.antenna_loss_db = h.antenna_loss_db;
+    }
+
+    /// I2C0 总线负载：(上升时间 ns, 当前频率下的上限 ns, 结论)；理想总线 None
+    pub fn i2c_load(&mut self) -> Option<(f64, f64, tryboard_elec::i2cbus::Verdict)> {
+        self.i2c0().load()
+    }
+
+    /// 因上升时间超标读错的字节数、地址不应答次数（估算）
+    pub fn i2c_slow_stats(&mut self) -> (u64, u64) {
+        let b = self.i2c0();
+        (b.slow_bytes, b.slow_nacks)
+    }
+
+    fn wifi_mut(&mut self) -> &mut tryboard_esp32c3::wifi::WifiMac {
+        match &mut self.hw {
+            Hw::C3(m) => m.bus.wifi_mut(),
+            Hw::S3(m) => m.bus.wifi_mut(),
         }
     }
 
@@ -569,3 +620,54 @@ fn s3_stop(m: &Esp32s3, r: tryboard_esp32s3::Stop) -> Stop {
 
 pub use tryboard_esp32c3::devices::bme280::Env as SensorEnv;
 pub use tryboard_elec::board::Power as PowerMode;
+
+/// I2C 排线（P2-11）的一行结论；没设线长（理想总线）返回 None。命令行与网页共用这段文字
+pub fn harness_i2c_line(m: &mut Machine) -> Option<String> {
+    use tryboard_elec::i2cbus::Verdict;
+    let cm = m.harness().i2c_wire_cm?;
+    let (rise, limit, v) = m.i2c_load()?;
+    let khz = m.i2c0().scl_hz() / 1000.0;
+    let (bad, nacks) = m.i2c_slow_stats();
+    let what = match v {
+        Verdict::Ok => "在规范内".to_string(),
+        Verdict::Marginal => format!("超出规范：读回的字节会错（已读错 {bad} 字节）"),
+        Verdict::Fail => format!("超出两倍：器件不应答（NACK {nacks} 次）"),
+    };
+    Some(format!("[tryboard] I2C 排线 {cm} cm：上升时间 {rise:.0} ns，{khz:.0} kHz 允许 {limit:.0} ns，{what}（估算，必须上真机）"))
+}
+
+/// 天线遮挡（P2-11）的一行结论；没遮挡返回 None
+pub fn harness_wifi_line(m: &Machine) -> Option<String> {
+    use tryboard_esp32c3::wifi::world::{LINK_MIN_DBM, SCAN_MIN_DBM};
+    let db = m.harness().antenna_loss_db;
+    if db == 0 {
+        return None;
+    }
+    let w = &m.wifi().world;
+    let aps: Vec<String> = (0..w.aps.len())
+        .map(|i| {
+            let r = w.rssi(i) as i32;
+            let note = if r < SCAN_MIN_DBM {
+                "（收不到）"
+            } else if r < LINK_MIN_DBM {
+                "（连不上）"
+            } else {
+                ""
+            };
+            format!("{} {r} dBm{note}", w.aps[i].ssid)
+        })
+        .collect();
+    Some(format!("[tryboard] 天线遮挡 {db} dB：{}（估算，必须上真机）", aps.join("、")))
+}
+
+/// 关卡验收要看的 USB 虚拟主机结论（P2-12）：主机状态 + 键盘打出的字。
+/// 命令行 `--usb-log` 打印的就是这两行（另有枚举日志等），网页 wasm tb_usb_report 同一段文字，指纹两边一致
+pub fn usb_report_lines(m: &Machine) -> String {
+    let Some(u) = m.usb() else { return String::new() };
+    let h = &u.host;
+    let mut o = format!("[tryboard] USB 主机：{}\n", h.state_name());
+    if !h.typed.is_empty() {
+        o.push_str(&format!("[tryboard] USB 键盘输入: {:?}\n", h.typed));
+    }
+    o
+}

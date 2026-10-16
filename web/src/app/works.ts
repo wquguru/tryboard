@@ -1,13 +1,18 @@
-// 作品定义：每个作品走哪几个检查点（firmware/levels.json 的关卡 id）。
-// 单独成文件，首页（home.ts）也读它来显示检查点数，不必拉进整套实验台代码。
+// 作品定义：每个作品走哪几个检查点（firmware/levels.json 的关卡 id）、首页卡片上写什么。
+// 单独成文件，首页（home.ts）也读它来生成作品卡、显示检查点数，不必拉进整套实验台代码：加一个作品只要在这里加一项。
 // 原则：每过一个检查点作品就多一样东西；最后一个带装配（assembly）的检查点是"合体"。
 import type { WorkDef } from './types';
 
 export const WORKS: Record<string, WorkDef> = {
-  weather: { id: 'weather', title: '桌面气象站', example: 'weather', checkpoints: ['01', '02', '03', '04', '05', '06'] },
+  weather: { id: 'weather', title: '桌面气象站', example: 'weather', checkpoints: ['01', '02', '03', '04', '05', '06'], card: { chip: 'ESP32-S3', blurb: '屏幕显示温度、湿度、气压，舵机表盘指着温度，彩灯按冷热变色。' } },
   // 画脸 → 转身 → 合体（眼珠跟随 + 按键回头）
-  spin: { id: 'spin', title: '会转身的小黄', example: 'spin', checkpoints: ['spin-1', 'spin-2', '07-spin'] },
+  spin: { id: 'spin', title: '会转身的小黄', example: 'spin', checkpoints: ['spin-1', 'spin-2', '07-spin'], card: { chip: 'ESP32-S3', blurb: '站在舵机转台上，圆屏当脸；按一下按键它转过来看你。' } },
   // 眼睛 + 眨眼 → 按键换表情 → 合体（四种表情循环）
-  lens: { id: 'lens', title: '透镜里的小人', example: 'lens', checkpoints: ['lens-1', 'lens-2', '07-lens'] },
+  lens: { id: 'lens', title: '透镜里的小人', example: 'lens', checkpoints: ['lens-1', 'lens-2', '07-lens'], card: { chip: 'ESP32-S3', blurb: '圆屏上的表情被凸透镜罩放大，看起来像立在罩子里；按键换表情。' } },
+  // 枚举成功 → 按键发字母 → 合体（宏键 + 装壳）。P2-12
+  usbkey: { id: 'usbkey', title: 'USB 小键盘', example: 'usbkey', checkpoints: ['usbkey-1', 'usbkey-2', 'usbkey-3'], card: { chip: 'ESP32-S3', blurb: '四个键插上电脑就能打字：三个键发 a / b / c，第四个是宏键，一下打出一整句。' } },
   blank: { id: 'blank', title: '空白实验台', example: null, checkpoints: [] },
 };
+
+/** 首页上的作品（有卡片的），按定义顺序 */
+export const HOME_WORKS = Object.values(WORKS).filter((w) => w.card);

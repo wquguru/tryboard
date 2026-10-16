@@ -120,19 +120,22 @@ export function createUsbHost(scene: THREE.Scene, port: THREE.Vector3) {
 
     // 左：文本编辑器（键盘输入）或串口终端
     const isCdc = v.interfaces.some((s) => s.includes('CDC-ACM'));
+    // 只有键盘、没有鼠标（USB 小键盘）：编辑器占满整屏，不画鼠标区
+    const mouse = !isCdc && (v.mouse.reports > 0 || v.interfaces.some((s) => s.includes('鼠标')) || v.log.some((s) => s.startsWith('HID 报告描述符') && s.includes('鼠标')));
     g.fillStyle = '#0a0f18';
-    g.fillRect(24, 156, isCdc ? SW - 48 : 560, SH - 180);
+    g.fillRect(24, 156, mouse ? 560 : SW - 48, SH - 180);
     g.fillStyle = '#5f6f86';
     g.font = '20px Inter, "PingFang SC", sans-serif';
     g.fillText(isCdc ? '串口终端（/dev/ttyACM0）' : '文本编辑器', 40, 186);
     g.fillStyle = '#e8edf5';
     g.font = '28px Menlo, monospace';
     const text = (isCdc ? v.cdc : v.typed).replace(/\r/g, '');
-    const lines = text.split('\n').slice(-9);
-    lines.forEach((l, i) => g.fillText(l + (i === lines.length - 1 ? '▌' : ''), 40, 232 + i * 38));
+    const lines = text.split('\n').slice(mouse || isCdc ? -9 : -8);
+    if (!mouse && !isCdc) g.font = '40px Menlo, monospace';
+    lines.forEach((l, i) => g.fillText(l + (i === lines.length - 1 ? '▌' : ''), 40, (mouse || isCdc ? 232 : 244) + i * (mouse || isCdc ? 38 : 50)));
 
-    // 右：鼠标区（只有 HID 设备时）
-    if (!isCdc) {
+    // 右：鼠标区（有鼠标报告的 HID 设备）
+    if (mouse) {
       const ax = 608, ay = 156, aw = SW - ax - 24, ah = SH - 180;
       g.fillStyle = '#0a0f18';
       g.fillRect(ax, ay, aw, ah);

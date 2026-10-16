@@ -3,7 +3,8 @@
 // 点树和点台面（ScenePickApi.onPick）改的是同一个 selection；属性面板只跟着 selection 走。
 import type { PickTarget, ScreenPoint } from '../../scene-api';
 import { CHIP_HEAT_OFFSET } from '../../views/templates';
-import { partId, partInfo, usedPins, wiresOf, type WireMods } from '../wiring';
+import { benchI2cWire, i2cBuses, partId, partInfo, usedPins, wiresOf, type WireMods } from '../wiring';
+import { i2cLoad, i2cText } from '../harness';
 import { checkWiring, faultByWire, type WireFault } from '../wirecheck';
 import { PinTrace, bit, drawScope, meterVolts, pinKind, powerVolts, pwmText } from '../pinscope';
 import { diffRuns, summarize, type BenchStep } from '../history';
@@ -14,6 +15,7 @@ import { servoAngle, ledCss } from '../../views/common';
 import type { AppState, CheckOutcome, Selection, StepCtx, StepImpl } from '../types';
 import { getAnalyzer } from '../analyzer';
 import { extModelsOn, setExtModels } from '../../extmodels';
+import { RECORD_SECONDS, recordCanvas, takePhoto, type Recording } from '../capture';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
@@ -227,10 +229,48 @@ ${c.work.checkpoints.length ? group('checkpoint', '检查点', `${passedCount(c,
     }
     const fs = faults.filter((f) => f.wires.includes(id));
     const power = w.part === 'servo' && w.pinRole === 'power';
+    // I2C 线可以拉长（P2-11）：同一条总线上所有模块的 SDA 线加起来算总线电容
+    const bus = w.pinRole === 'bus' ? i2cBuses(c.session.scene.parts, benchWires()).find((b) => b.parts.includes(w.part)) : undefined;
+    const lenHtml = bus
+      ? `${sec('线长 · 估算，必须上真机')}<label class="slider"><input type="range" id="wireLen" min="5" max="150" step="1" value="${w.lenCm}" aria-label="${esc(partInfo(c.session.scene.parts.find((p) => partId(p) === w.part)!).name)} 的线长" /><output class="mono" id="wireLenV">${w.lenCm} cm</output></label>
+${row('这条总线', `${bus.parts.length} 个模块 · SDA 共 ${bus.wireCm.toFixed(0)} cm`)}<p class="note" id="wireLenNote">${esc(i2cText(i2cLoad(bus.wireCm, bus.parts.length)))}</p>`
+      : '';
     el.innerHTML = `${sec('连线')}<div class="ph">${esc(w.a)} → ${esc(w.b)}</div>${row('作用', esc(w.role))}${row('颜色', w.color + '色杜邦线')}${row('开发板一端', esc(w.a), '', w.from ? 'bad' : '')}${w.from ? row('原来接在', esc(w.from)) : ''}${row('零件一端', esc(w.b))}${w.ohm !== undefined ? row('限流电阻', w.ohm ? `${w.ohm} Ω` : '没有', '', w.ohm ? '' : 'bad') : ''}${w.missing ? row('状态', '没插上', '', 'bad') : ''}
 ${sec(fs.length ? `接线检查 · ${fs.length} 处问题` : '接线检查')}${fs.length ? fs.map(faultHtml).join('') : '<div class="res ok"><span class="mk">✓</span><span>这根线没发现问题</span></div>'}
+${lenHtml}
 ${power ? renderPowerInline() : ''}`;
     bindPowerToggle(el);
+    const len = el.querySelector<HTMLInputElement>('#wireLen');
+    if (len && bus) {
+      const others = bus.wireCm - w.lenCm;
+      len.oninput = () => {
+        const v = Number(len.value);
+        el.querySelector('#wireLenV')!.textContent = `${v} cm`;
+        el.querySelector('#wireLenNote')!.textContent = i2cText(i2cLoad(others + v, bus.parts.length));
+      };
+      len.onchange = () => setWireLen(w.part, Number(len.value));
+    }
+  }
+
+  /** 拉长 / 缩短一个模块的线（进时间线；模拟器里在线换总线负载，固件下一次读就受影响） */
+  function setWireLen(part: string, cm: number) {
+    const c = ctx!;
+    const ses = c.session;
+    const mods: WireMods = { ...ses.wireMods, lenCm: { ...ses.wireMods.lenCm, [part]: cm } };
+    const name = partInfo(ses.scene.parts.find((p) => partId(p) === part)!).name;
+    c.hist?.op({ k: 'wiring', mods, scene: ses.scene, label: `${name} 线长 ${cm} cm` });
+    ses.setWireMods(mods);
+    applyBenchHarness();
+  }
+
+  /** 实验台的线束交给模拟器：只在改过线长时才算总线负载；天线在面包板上没有遮挡 */
+  function applyBenchHarness() {
+    const ses = ctx!.session;
+    const cm = benchI2cWire(ses.scene.parts, ses.wireMods);
+    const h: { i2cWire?: number; antenna?: number } = {};
+    if ((ses.harness.i2cWire ?? -1) !== cm) h.i2cWire = cm;
+    if ((ses.harness.antenna ?? 0) !== 0) h.antenna = 0;
+    if (Object.keys(h).length) ses.setHarness(h);
   }
   const faultHtml = (f: WireFault) => `<div class="res bad"><span class="mk">✗</span><span><b>${esc(f.title)}</b> · ${esc(f.detail)}<br><span class="muted">${f.rule} · ${esc(f.confidence)} · ${esc(f.source)}</span></span></div>`;
   const renderPowerInline = () => {
@@ -862,12 +902,42 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
       if (b) b.textContent = on ? '外部模型：开' : '外部模型：关';
       c.shell.toast(on ? '外部模型：舵机、USB-C 口、蜂鸣器换成 KiCad / Adafruit 的 3D 模型（署名见第三方授权页）' : '外部模型关：全部回到程序生成');
     }
-    else if (id === 'button') {
+    else if (id === 'photo') {
+      // 拍照（P2-10）：台面当前视角的 2× 静帧
+      void takePhoto(c.session.bench.capture(), `${c.work.id}-bench`, `${c.work.title} · 实验台`)
+        .then((r) => c.shell.toast(`已下载 ${r.name}（${r.width}×${r.height}）`))
+        .catch((e) => c.shell.toast(`拍照失败：${e}`));
+    } else if (id === 'rec') {
+      if (benchRec) return benchRec.stop();
+      try {
+        const r = recordCanvas(c.session.bench.capture().renderer.domElement, `${c.work.id}-bench`, c.session.audio.recordStream());
+        benchRec = r;
+        setRecLabel(`停止 0/${RECORD_SECONDS} s`);
+        const tick = setInterval(() => benchRec === r && setRecLabel(`停止 ${Math.min(RECORD_SECONDS, r.elapsed()).toFixed(0)}/${RECORD_SECONDS} s`), 500);
+        void r.done
+          .then((v) => ctx?.shell.toast(`已下载 ${v.name}（${(v.bytes / 1024).toFixed(0)} KB${v.audio ? '，含声音' : ''}）`))
+          .catch((e) => ctx?.shell.toast(`录像失败：${e}`))
+          .finally(() => {
+            clearInterval(tick);
+            if (benchRec === r) benchRec = null;
+            setRecLabel('录像');
+          });
+      } catch (e) {
+        c.shell.toast(`录像失败：${e}`);
+      }
+    } else if (id === 'button') {
       c.session.pressBoot(true);
       setTimeout(() => c.session.pressBoot(false), 150);
       c.shell.toast('按了一下 BOOT（GPIO0）');
     } else c.shell.toast('这个工具由后续任务实现');
   }
+
+  /** 实验台正在录的 10 秒（P2-10） */
+  let benchRec: Recording | null = null;
+  const setRecLabel = (t: string) => {
+    const b = document.querySelector<HTMLButtonElement>('button[data-tool="rec"]');
+    if (b) b.textContent = t;
+  };
 
   // ------------------------------------------------------------ 造错误接线（验收用的 debug 钩子，?debug=1 才挂出）
   function injectWiring(kind: 'drive' | '5v' | 'nores' | 'nognd' | 'addr' | 'clear'): string[] {
@@ -927,6 +997,7 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
           w.__tbApp ??= {};
           w.__tbApp.injectWiring = (k: Parameters<typeof injectWiring>[0]) => (ctx ? injectWiring(k) : []);
           w.__tbApp.faults = () => faults.map((f) => ({ rule: f.rule, wires: f.wires, short: f.short }));
+          w.__tbApp.setWireLen = (part: string, cm: number) => ctx && setWireLen(part, cm);
         }
       }
       c.shell.toolbar.setGroups([
@@ -934,6 +1005,7 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
         { id: 'edit', tools: [{ id: 'place', label: '放置', todo: true }, { id: 'wire', label: '连线', todo: true }] },
         { id: 'measure', tools: [{ id: 'meter', label: '万用表' }, { id: 'ruler', label: '尺子' }, { id: 'scope', label: '示波器' }] },
         { id: 'look', tools: [{ id: 'ext', label: extModelsOn() ? '外部模型：开' : '外部模型：关' }] },
+        { id: 'media', tools: [{ id: 'photo', label: '拍照' }, { id: 'rec', label: benchRec ? '停止录像' : '录像' }] },
         { id: 'act', tools: [{ id: 'heat', label: '热源' }, { id: 'button', label: '按键' }] },
         { id: 'run', tools: [{ id: 'rerun', label: '再跑一次', primary: true }] },
       ]);
@@ -941,6 +1013,7 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
       if (!c.store.get().selection) c.store.set({ selection: c.work.checkpoints.length ? { kind: 'part', id: 'bme280' } : { kind: 'firmware', id: 'main' } });
       if (!c.session.scene.parts.some((p) => partId(p) === 'bme280') && c.store.get().selection?.id === 'bme280') c.store.set({ selection: { kind: 'part', id: 'board' } });
       recheckWiring();
+      applyBenchHarness();
       renderTree();
       renderProps();
       syncChrome();

@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 主题在首帧前定好（web/src/theme.ts 同一规则：localStorage tb-theme，否则跟随系统） -->
+    <script>try{var t=localStorage.getItem('tb-theme')}catch(e){}document.documentElement.dataset.theme=t==='dark'||t==='light'?t:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'</script>
     <title>关卡已并入工作台 · 试板 TryBoard</title>
     <meta name="robots" content="noindex" />
     <!-- 旧关卡页（P0-21 下线）：7 关变成工作台里各作品的检查点。#04 → 桌面气象站检查点 04；#07 / #07-spin → 小黄；#07-lens → 透镜小人 -->
@@ -18,8 +20,11 @@
     </script>
     <noscript><meta http-equiv="refresh" content="0; url=./app.html?work=weather#bench" /></noscript>
     <style>
-      body { margin: 0; font: 13px/1.5 'PingFang SC', 'Microsoft YaHei', sans-serif; color: #1e1e1e; background: #fff; display: grid; place-items: center; min-height: 100vh; }
-      a { color: #0d99ff; }
+      /* DESIGN §2 亮 / 暗两套（与 app.css 同值）；data-theme 由上面的内联脚本设 */
+      :root { --bg: #ffffff; --fg: #1e1e1e; --accent: #0d99ff; color-scheme: light; }
+      :root[data-theme='dark'] { --bg: #17181b; --fg: #e8eaed; --accent: #3aa8ff; color-scheme: dark; }
+      body { margin: 0; font: 13px/1.5 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif; color: var(--fg); background: var(--bg); display: grid; place-items: center; min-height: 100vh; }
+      a { color: var(--accent); }
     </style>
   </head>
   <body>

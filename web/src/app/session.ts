@@ -14,6 +14,7 @@ import type { AppState, Env, Session, WorkDef } from './types';
 import type { Store } from './store';
 import { currentTheme, onTheme } from '../theme';
 import { IoStore, decodeEvents } from './iotrace';
+import type { UsbView } from '../usb3d';
 
 interface Example {
   id: string;
@@ -81,6 +82,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   // 逻辑分析仪：事件仓库整页一份（跟着每次上电 / 回退重放 reset），观察哪些 GPIO 由分析仪决定
   const io = new IoStore();
   const ioSubs = new Set<() => void>();
+  const harnessSubs = new Set<(text: string) => void>();
+  const usbSubs = new Set<(v: UsbView | null) => void>();
   let ioMask = [0, 0];
   const defaultIoPins = (sc: SceneSpec, c: string) => {
     const pins = new Set<number>([c === 'esp32s3' ? 0 : 9]);
@@ -172,8 +175,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       audio.reset();
       bench.setPowered(true);
       store.set({ running: false, reading: lastReading(snap.stdout), simSeconds: snap.simSeconds, env: { ...sim.env } });
-      // 回退停住那一刻的供电（日志里最后一次切换）
+      // 回退停住那一刻的供电（日志里最后一次切换）、线束
       s.power = { ext5v: sim.powerMode() === 'ext' };
+      s.harness = sim.harness();
       return snap;
     },
     continueRun() {
@@ -224,6 +228,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     pressBoot(down) {
       s.sim?.press(down);
     },
+    pressPin(pin, down) {
+      s.sim?.pressPin(pin, down);
+    },
     setEnv(e: Partial<Env>) {
       s.sim?.setEnv(e);
       store.set((st) => ({ env: { ...st.env, ...e, ...(s.sim ? { temp: s.sim.env.temp } : {}) } }));
@@ -247,6 +254,22 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       for (let p = 0; p < 64; p++) if ((p < 32 ? ioMask[0] >>> p : ioMask[1] >>> (p - 32)) & 1) out.push(p);
       return out;
     },
+    harness: {},
+    setHarness(h) {
+      s.harness = { ...s.harness, ...h };
+      s.sim?.setHarness(h);
+      bumpEdit();
+    },
+    harnessText: '',
+    onHarness(cb) {
+      harnessSubs.add(cb);
+      return () => harnessSubs.delete(cb);
+    },
+    usb: null,
+    onUsb(cb) {
+      usbSubs.add(cb);
+      return () => usbSubs.delete(cb);
+    },
     watchIo(pins) {
       ioMask = [0, 0];
       for (const p of pins) if (p >= 0 && p < 64) ioMask[p < 32 ? 0 : 1] |= 1 << p % 32;
@@ -263,7 +286,17 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       lcd: s.scene.parts.some((p) => p.type === 'gc9a01'),
       servo: servoOf(s.scene.parts),
       power: powerMode(),
+      harness: s.harness,
       env: store.get().env,
+      onUsb(v) {
+        s.usb = v;
+        bench.setUsb(v);
+        for (const cb of [...usbSubs]) cb(v);
+      },
+      onHarness(text) {
+        s.harnessText = text;
+        for (const cb of [...harnessSubs]) cb(text);
+      },
       onConsole(text) {
         consoleBuf += text;
         if (consoleBuf.length > 200_000) consoleBuf = consoleBuf.slice(-150_000);
@@ -337,6 +370,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     return sim;
   }
 
+  bench.onKey((pin, down) => s.pressPin(pin, down));
   bench.onButton((name, down) => {
     if (name === 'BOOT') s.pressBoot(down);
     if (name === 'RST' && !down) s.reboot();

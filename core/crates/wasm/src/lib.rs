@@ -359,7 +359,54 @@ pub extern "C" fn tb_elec_report() -> usize {
     n
 }
 
+// ---------------------------------------------------------------- 线束（P2-11，估算）
+
+/// I2C 排线总长（cm）；负数 = 理想总线（不算上升时间）
+#[no_mangle]
+pub extern "C" fn tb_i2c_wire(cm: f64) {
+    with((), |m| {
+        m.set_i2c_wire(if cm < 0.0 { None } else { Some(cm) })
+    })
+}
+
+/// 天线被金属件 / 电池挡住的衰减（dB）
+#[no_mangle]
+pub extern "C" fn tb_antenna_loss(db: i32) {
+    with((), |m| m.set_antenna_loss(db))
+}
+
+/// 线束结论（与命令行同样的文字，没设就是空），返回长度；内容用 tb_report_ptr 读
+#[no_mangle]
+pub extern "C" fn tb_harness_report() -> usize {
+    let r = with(String::new(), |m| {
+        let mut o = String::new();
+        for l in [
+            tryboard_machine::harness_i2c_line(m),
+            tryboard_machine::harness_wifi_line(m),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            o.push_str(&l);
+            o.push('\n');
+        }
+        o
+    });
+    let n = r.len();
+    REPORT.with(|b| *b.borrow_mut() = r);
+    n
+}
+
 // ---------------------------------------------------------------- 原生 USB（ESP32-S3）
+
+/// 关卡验收的 USB 结论（= 命令行 --usb-log 的"USB 主机：…"与"USB 键盘输入: …"两行），返回长度；内容用 tb_report_ptr 读
+#[no_mangle]
+pub extern "C" fn tb_usb_report() -> usize {
+    let r = with(String::new(), |m| tryboard_machine::usb_report_lines(m));
+    let n = r.len();
+    REPORT.with(|b| *b.borrow_mut() = r);
+    n
+}
 
 fn json_str(s: &str) -> String {
     let mut o = String::with_capacity(s.len() + 2);

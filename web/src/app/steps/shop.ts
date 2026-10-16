@@ -73,7 +73,7 @@ const SIM: Record<Part['sim']['level'], string> = {
   estimated: '行为近似：只进估算，读数不一定准',
   none: '模拟器里没有它：只算进清单和规则',
 };
-const TPL_SHORT: Record<string, string> = { weather: '气象站', spin: '小黄', lens: '透镜小人', blank: '空白' };
+const TPL_SHORT: Record<string, string> = { weather: '气象站', spin: '小黄', lens: '透镜小人', usbkey: '小键盘', blank: '空白' };
 
 /** 零件平铺用的示意小图（不是外观模型，只帮人认出是哪一类） */
 function glyph(p: Part): string {
@@ -83,6 +83,7 @@ function glyph(p: Part): string {
   if (p.id.startsWith('buzzer')) return svg(`<rect x="18" y="6" width="28" height="28" rx="3" fill="${p.id === 'buzzer-module' ? '#2f5f9e' : 'none'}"/><circle cx="32" cy="20" r="11" fill="#1f1f1f"/><circle cx="32" cy="20" r="3" fill="#555"/>`);
   if (p.id === 'led-kit') return svg(`${['#e74c3c', '#f1c40f', '#2ecc71', '#3498db'].map((col, i) => `<path d="M${10 + i * 13} 22 a5 5 0 0 1 10 0 v6 h-10 z" fill="${col}"/><rect x="${12 + i * 13}" y="28" width="1.5" height="9" fill="#aaa"/><rect x="${17 + i * 13}" y="28" width="1.5" height="7" fill="#aaa"/>`).join('')}`);
   if (p.id.startsWith('cap-')) return svg(`<rect x="24" y="4" width="16" height="26" rx="3" fill="#1f3b73"/><rect x="34" y="4" width="4" height="26" fill="#9fb3d9"/><rect x="28" y="30" width="2" height="8" fill="#aaa"/><rect x="34" y="30" width="2" height="6" fill="#aaa"/>`);
+  if (p.id === 'button') return svg(`${[0, 1, 2, 3].map((i) => `<rect x="${6 + i * 14}" y="12" width="11" height="11" rx="2" fill="#1f1f1f"/><circle cx="${11.5 + i * 14}" cy="17.5" r="3.2" fill="#555"/>`).join('')}`);
   if (p.id === 'lens-dome') return svg(`<ellipse cx="32" cy="24" rx="20" ry="8" fill="#dfeefb" stroke="#9cc3e6"/><path d="M12 24 Q32 0 52 24" fill="#eef6fd" stroke="#9cc3e6"/>`);
   switch (p.kind) {
     case 'board':
@@ -307,7 +308,7 @@ ${part.note ? `<p class="note">${esc(part.note)}</p>` : ''}
 ${sec('去店铺搜')}<div class="btns"><a class="btn" href="${esc(part.searchUrl.taobao)}" target="_blank" rel="noopener noreferrer">淘宝搜索 ↗</a><a class="btn" href="${esc(part.searchUrl.szlcsc)}" target="_blank" rel="noopener noreferrer">立创商城搜索 ↗</a></div>
 <p class="note">搜索词：<span class="mono">${esc(part.keywords)}</span>。只是搜索页，不是推荐某家店。</p>`;
     } else detail = `${sec('零件')}<div class="tree-empty">点左边清单或中间的零件看详情</div>`;
-    const caseT = part && /^enclosure-(weather|spin|lens)$/.test(part.id) ? part.id.slice('enclosure-'.length) : null;
+    const caseT = part && /^enclosure-(weather|spin|lens|usbkey)$/.test(part.id) ? part.id.slice('enclosure-'.length) : null;
     c.shell.props.innerHTML = rules + (caseT ? caseDetail(caseT) : '') + detail;
     if (caseT) wireCase(caseT);
     c.shell.props.querySelectorAll<HTMLButtonElement>('[data-fix]').forEach((btn) => {

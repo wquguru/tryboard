@@ -15,7 +15,10 @@ export type InputEvent =
   /** 串口 / USB 虚拟串口输入 */
   | { tMs: number; kind: 'uart' | 'usbcdc'; text: string }
   /** 供电切换（P1-02）：usb = 舵机吃 USB 的 5V；ext = 舵机由外接 5 V 供电。脚本动作 power=usb|ext */
-  | { tMs: number; kind: 'supply'; mode: 'usb' | 'ext' };
+  | { tMs: number; kind: 'supply'; mode: 'usb' | 'ext' }
+  /** 线束（P2-11，估算）：I2C 排线总长（cm，负数 = 理想总线）、天线遮挡（dB）。脚本动作 i2cwire=cm / antenna=dB */
+  | { tMs: number; kind: 'i2cwire'; cm: number }
+  | { tMs: number; kind: 'antenna'; db: number };
 
 /** 还没盖时间戳的事件（worker 施加时补上 tMs） */
 export type InputAction = InputEvent extends infer E ? (E extends unknown ? Omit<E, 'tMs'> : never) : never;
@@ -63,6 +66,10 @@ export function action(e: InputEvent): string | null {
       return `usbcdc=${esc(e.text)}`;
     case 'supply':
       return `power=${e.mode}`;
+    case 'i2cwire':
+      return `i2cwire=${e.cm}`;
+    case 'antenna':
+      return `antenna=${e.db}`;
     case 'power':
       return null;
   }

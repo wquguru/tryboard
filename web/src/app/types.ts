@@ -11,7 +11,8 @@ import type { Toolbar } from './toolbar';
 import type { Card } from './card';
 import type { BomHistory } from './bom';
 import type { SeekJob } from '../live';
-import type { ElecFrame, FromWorker, Snapshot } from '../worker';
+import type { ElecFrame, FromWorker, Harness, Snapshot } from '../worker';
+import type { UsbView } from '../usb3d';
 import type { WireMods } from './wiring';
 import type { BenchHistory } from './benchhist';
 import type { IoStore } from './iotrace';
@@ -25,7 +26,7 @@ export const STEPS: { id: StepId; label: string }[] = [
   { id: 'product', label: '成品' },
 ];
 
-export type WorkId = 'weather' | 'spin' | 'lens' | 'blank';
+export type WorkId = 'weather' | 'spin' | 'lens' | 'usbkey' | 'blank';
 
 /** 选中的对象。kind 与构建树的分组一一对应；pin / wire / button 来自台面拾取 */
 export type SelKind = 'part' | 'wire' | 'power' | 'env' | 'firmware' | 'checkpoint' | 'pin' | 'button' | 'run' | 'tool';
@@ -101,6 +102,8 @@ export interface WorkDef {
   example: string | null;
   /** 检查点：levels.json 的关卡 id（含 07-spin 这样的子关） */
   checkpoints: string[];
+  /** 首页作品卡（没有就不上首页，比如空白实验台） */
+  card?: { chip: string; blurb: string };
 }
 
 /** 实时模拟与 3D 台面：整页只有一份，切步骤不重建 */
@@ -154,6 +157,8 @@ export interface Session {
   /** 换固件在台面上跑（用户拖进来的 .bin） */
   loadFirmware(buf: ArrayBuffer, name: string): void;
   pressBoot(down: boolean): void;
+  /** 外接按键（面包板上的 key、成品小键盘）：按下接地 */
+  pressPin(pin: number, down: boolean): void;
   setEnv(e: Partial<Env>): void;
   consoleText(): string;
   /** 逻辑分析仪事件（本次上电 / 回退重放以来），P1-05 */
@@ -164,6 +169,15 @@ export interface Session {
   ioPins(): number[];
   /** 改观察的 GPIO：立刻生效（之前没观察的引脚从此刻起才有记录），之后每次上电沿用 */
   watchIo(pins: number[]): void;
+  /** 线束（P2-11，估算）：I2C 排线总长、天线遮挡；在线生效并进输入日志，之后每次上电沿用 */
+  harness: Harness;
+  setHarness(h: Harness): void;
+  /** 线束结论（模拟器给的文字：上升时间 / RSSI），没设就是空 */
+  harnessText: string;
+  onHarness(cb: (text: string) => void): () => void;
+  /** 原生 USB 虚拟主机看到的（P2-12）；null = 没有 USB 设备 */
+  usb: UsbView | null;
+  onUsb(cb: (v: UsbView | null) => void): () => void;
 }
 
 export interface Shell {

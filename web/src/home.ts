@@ -1,5 +1,5 @@
-// 作品首页（DESIGN §1、§5）：三张作品卡。卡片先放示意图；点「看真实固件跑」换成模拟器驱动的成品画面，
-// 同一时间只跑一份（每份是一个 wasm worker），看不见就暂停。
+// 作品首页（DESIGN §1、§5）：作品卡按 app/works.ts 的作品定义生成（加一个作品就多一张卡）。卡片先放示意图；
+// 点「看真实固件跑」换成模拟器驱动的成品画面，同一时间只跑一份（每份是一个 wasm worker），看不见就暂停。
 import { LiveSim } from './live';
 import { themeToggle } from './theme';
 
@@ -9,7 +9,24 @@ import { createProductView } from './views/product';
 import { createLensProduct, createSpinProduct } from './views/lcdproducts';
 import { bomTotal, getTemplate, templatePicks } from './catalog/templates';
 import { CHECKED_AT, getPart } from './catalog/parts';
-import { WORKS } from './app/works';
+import { HOME_WORKS, WORKS } from './app/works';
+import { createKeypadView } from './views/keypad';
+
+const escH = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+document.getElementById('works')!.innerHTML = HOME_WORKS.map(
+  (w) => `<article class="wk" data-work="${w.id}">
+  <div class="wk-prev" data-show="${w.id}"></div>
+  <div class="wk-status mono" data-status>示意图 · 点「看真实固件跑」换成模拟器画面</div>
+  <div class="wk-body">
+    <div class="wk-h"><h2>${escH(w.title)}</h2><span class="mono muted">${escH(w.card!.chip)}</span></div>
+    <p class="wk-d">${escH(w.card!.blurb)}</p>
+    <div class="kv col"><span class="k">要买</span><span class="v txt" data-buy>—</span></div>
+    <div class="kv"><span class="k">检查点</span><span class="v mono" data-cps>${w.checkpoints.length} 个</span></div>
+    <div class="kv"><span class="k">参考价</span><span class="v mono" data-price>—</span></div>
+    <div class="wk-act"><button type="button" class="btn" data-run="${w.id}">看真实固件跑</button><a class="btn primary" data-go href="./app.html?work=${w.id}#shop">做这个</a></div>
+  </div>
+</article>`,
+).join('');
 
 const SERVO = 4;
 const ENV = { temp: 23.5, humidity: 45, pressure: 101325 };
@@ -17,6 +34,7 @@ const FW: Record<ShowKind, { lcd: boolean; i2c: { kind: string; addr: number }[]
   weather: { lcd: false, i2c: [{ kind: 'ssd1306', addr: 0x3c }, { kind: 'bme280', addr: 0x76 }] },
   spin: { lcd: true, i2c: [] },
   lens: { lcd: true, i2c: [] },
+  usbkey: { lcd: false, i2c: [] },
 };
 // 卡片上的"要买"和参考价从元件库算，和采购页默认清单同一口径（必选 + 默认勾选的建议件，bomTotal），不写死
 const yuan = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
@@ -77,6 +95,8 @@ function run(c: Card) {
   const h = { boot: (d: boolean) => c.sim?.press(d), temp: (d: number) => c.sim?.setTemp(c.sim.env.temp + d) };
   const lcdView = c.kind === 'spin' ? createSpinProduct(c.prev, h, { servoPin: SERVO }) : c.kind === 'lens' ? createLensProduct(c.prev, h) : null;
   const wView = c.kind === 'weather' ? createProductView(c.prev, h, { servoPin: SERVO }) : null;
+  // USB 小键盘：点键帽 = 按下 GPIO4..7（接地），虚拟电脑屏幕上是 USB 主机收到的字
+  const kView = c.kind === 'usbkey' ? createKeypadView(c.prev, { press: (pin, d) => c.sim?.pressPin(pin, d) }) : null;
   let tail = '';
   const sim = new LiveSim({
     fw: `./fw/${c.kind}/flash.bin`,
@@ -89,7 +109,8 @@ function run(c: Card) {
       const last = lines.map((l) => l.trim()).filter(Boolean).pop();
       if (last) c.status.textContent = `串口：${last.slice(0, 80)}`;
     },
-    onFrame: (f) => (lcdView ? lcdView.update(f, ENV.temp, {}) : wView!.update(f, sim.env.temp, 0)),
+    onFrame: (f) => (lcdView ? lcdView.update(f, ENV.temp, {}) : wView ? wView.update(f, sim.env.temp, 0) : undefined),
+    onUsb: (v) => kView?.setUsb(v),
   });
   c.sim = sim;
   c.root.classList.add('live');

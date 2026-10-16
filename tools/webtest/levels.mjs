@@ -60,7 +60,7 @@ async function waitFor(page, fn, arg, ms = 30000) {
 // 原生内核的结论与指纹
 const native = {};
 const cli = (() => { try { return execFileSync(path.join(root, 'tools/check.py'), ['--ref', '--all'], { encoding: 'utf8' }); } catch (e) { return e.stdout; } })();
-for (const m of cli.matchAll(/第 ([\w-]+) 关 .*?：(\S+)\s+指纹 (\S+)/g)) native[m[1]] = { ok: m[2] === '通过', fp: m[3] };
+for (const m of cli.matchAll(/第 ([\w-]+) 关 .*：(通过|未通过)\s+指纹 (\S+)/g)) native[m[1]] = { ok: m[2] === '通过', fp: m[3] };
 
 // ---- 1. 工作台检查点：参考固件，指纹与命令行一致
 const fpOf = (page) => page.$eval('#props .kv .v.fp', (e) => e.textContent.trim()).catch(() => '');
@@ -84,7 +84,7 @@ async function runRef(page, id) {
   fs.writeFileSync(path.join(outDir, `levels-${id}-web.json`), JSON.stringify(raw, null, 1));
   return { ok: /✓ 通过/.test(text), fp: await fpOf(page), text };
 }
-for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']]]) {
+for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']], ['usbkey', ['usbkey-1', 'usbkey-2', 'usbkey-3']]]) {
   const page = await open(`/app.html?work=${work}#bench`);
   for (const id of cps) {
     const r = await runRef(page, id);
@@ -197,7 +197,8 @@ async function openAsm(example) {
 {
   const home = await open('/home.html');
   const cards = await home.$$eval('.wk', (els) => els.map((e) => ({ work: e.dataset.work, go: e.querySelector('[data-go]')?.getAttribute('href'), cps: e.querySelector('[data-cps]')?.textContent })));
-  report('首页：三张作品卡（气象站 / 小黄 / 透镜）', cards.map((c) => c.work).join() === 'weather,spin,lens', JSON.stringify(cards.map((c) => c.work)));
+  // 卡片由作品定义（web/src/app/works.ts）生成：P2-12 加了 USB 小键盘
+  report('首页：四张作品卡（气象站 / 小黄 / 透镜 / USB 小键盘）', cards.map((c) => c.work).join() === 'weather,spin,lens,usbkey', JSON.stringify(cards.map((c) => c.work)));
   await home.screenshot({ path: path.join(outDir, 'levels-home-0.png') });
   // 气象站卡：跑真实固件 → 状态行是串口读数、成品屏幕有 OLED 画面；按住 BOOT → 固件切 ℉，屏幕重画
   await home.click('[data-run="weather"]');
@@ -222,6 +223,16 @@ async function openAsm(example) {
   await home.click('[data-run="lens"]');
   const lens = await waitFor(home, () => !!document.querySelector('.wk[data-work="lens"] image[data-k="lcd"][href]'), null, 20000);
   report('首页：透镜卡跑真实固件 → 圆屏有画面', lens);
+  // USB 小键盘卡：跑真实固件 → 虚拟电脑枚举出 TryBoard Macro Pad；点 K1 键帽 → 屏幕上打出 a
+  await home.click('[data-run="usbkey"]');
+  const enumd = await waitFor(home, () => /TryBoard Macro Pad/.test(document.querySelector('.wk[data-work="usbkey"] [data-k="dev"]')?.textContent ?? ''), null, 20000);
+  const k1 = await home.$eval('.wk[data-work="usbkey"] [data-k="key0"]', (e) => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
+  await home.mouse.move(k1[0], k1[1]);
+  await home.mouse.down();
+  await sleep(200);
+  await home.mouse.up();
+  const typedA = await waitFor(home, () => /^a▌?$/.test(document.querySelector('.wk[data-work="usbkey"] [data-k="l0"]')?.textContent ?? ''), null, 10000);
+  report('首页：USB 小键盘卡跑真实固件 → 电脑枚举出键盘，点 K1 打出 a', enumd && typedA);
   await home.screenshot({ path: path.join(outDir, 'levels-home-full.png'), fullPage: true });
   await home.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
   await sleep(300);

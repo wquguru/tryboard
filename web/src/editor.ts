@@ -52,6 +52,8 @@ export function describe(p: PartSpec): string {
       return `电位器 · 滑片 IO${p.pin}`;
     case 'buzzer':
       return `无源蜂鸣器 · IO${p.pin}`;
+    case 'key':
+      return `按键 ${p.cap ?? ''} · IO${p.pin}（按下接地）`;
     case 'oled':
       return `OLED · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl}`;
     case 'bme280':

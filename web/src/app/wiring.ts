@@ -1,6 +1,7 @@
 // 实验台的接线：由场景声明（examples.json / 采购清单摆上来的 scene）推出来，再叠上"改接线"（注入的错误接线）。
 // 纯函数，node --test 直接测；id 按 scene-api 约定 'wire:<板上针脚>~<零件>:<丝印>'，与 3D 台面一致。
 import type { PartSpec } from '../board3d';
+import { BENCH_WIRE_CM } from './harness.ts';
 
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
 
@@ -12,11 +13,11 @@ export interface PartInfo {
 }
 
 /** 零件类型 → 中文显示名（时间线、提示条、构建树统一用这份，不让英文 type 名漏到界面上） */
-export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: '舵机', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED' };
+export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: '舵机', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED', key: '按键' };
 export const partLabel = (type: string) => PART_LABEL[type as PartSpec['type']] ?? '零件';
 
 export function partId(p: PartSpec) {
-  return p.type === 'led' ? `led:${p.pin}` : p.type;
+  return p.type === 'led' || p.type === 'key' ? `${p.type}:${p.pin}` : p.type;
 }
 
 export function partInfo(p: PartSpec, ext5v = false): PartInfo {
@@ -33,6 +34,8 @@ export function partInfo(p: PartSpec, ext5v = false): PartInfo {
       return { name: `电位器（GPIO${p.pin}）`, model: '10 kΩ 旋钮电位器', iface: `滑片 GPIO${p.pin}（ADC）`, power: '3V3' };
     case 'led':
       return { name: `LED（GPIO${p.pin}）`, model: '5 mm LED + 220 Ω 限流电阻', iface: `GPIO${p.pin}，高电平亮`, power: '经 GPIO' };
+    case 'key':
+      return { name: `按键 ${p.cap ?? ''}（GPIO${p.pin}）`, model: '6×6 mm 轻触开关 + 键帽', iface: `GPIO${p.pin}，按下接地（内部上拉）`, power: '不用供电' };
     case 'buzzer':
       return { name: '无源蜂鸣器', model: '无源蜂鸣器模块（三针，带三极管，LEDC 方波驱动）', iface: `I/O → GPIO${p.pin}`, power: '3V3' };
   }
@@ -59,6 +62,8 @@ export interface BenchWire {
   missing?: boolean;
   /** 被改接过（原来接在哪） */
   from?: string;
+  /** 线长（cm，估算；P2-11 I2C 上升时间用） */
+  lenCm: number;
 }
 
 /** 改接线：给规则检查造错误接线用（debug 钩子 / 以后的连线工具），按 3D 里已有导线的 id 改 */
@@ -69,6 +74,8 @@ export interface WireMods {
   retarget?: Record<string, string>;
   /** 去掉限流电阻的 LED（零件 id） */
   noResistor?: string[];
+  /** 拉长 / 缩短某个零件的那几根线（零件 id → cm，P2-11）；没写的按 BENCH_WIRE_CM */
+  lenCm?: Record<string, number>;
 }
 
 export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): BenchWire[] {
@@ -78,7 +85,7 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
     const b = `${part}:${pin}`;
     let id = `wire:${drawnA}~${b}`;
     for (let k = 2; w.some((x) => x.id === id); k++) id = `wire:${drawnA}~${b}#${k}`;
-    w.push({ id, a, b, part, pin, role, pinRole, color, ...extra });
+    w.push({ id, a, b, part, pin, role, pinRole, color, lenCm: mods.lenCm?.[part] ?? BENCH_WIRE_CM, ...extra });
   };
   for (const p of parts) {
     const id = partId(p);
@@ -101,6 +108,10 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
       add('GND', id, 'GND', '地', 'gnd', '黑');
     } else if (p.type === 'led') {
       add(`GPIO${p.pin}`, id, 'IN', '输出（经 220 Ω）', 'load', '橙', { ohm: 220 });
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+    } else if (p.type === 'key') {
+      // 按键只在按下时把引脚拉到地：它不推高电平，和 GPIO 输出不算"输出接输出"
+      add(`GPIO${p.pin}`, id, 'IN', '按键（按下接地）', 'load', '橙');
       add('GND', id, 'GND', '地', 'gnd', '黑');
     } else if (p.type === 'buzzer') {
       // 三针模块：I/O 经模块上的三极管驱动蜂鸣器，GPIO 只推基极
@@ -130,4 +141,28 @@ export function usedPins(wires: BenchWire[]): string[] {
   return [...seen];
 }
 
-export const emptyMods = (m: WireMods | null | undefined) => !m || (!m.drop?.length && !m.noResistor?.length && !Object.keys(m.retarget ?? {}).length);
+export const emptyMods = (m: WireMods | null | undefined) => !m || (!m.drop?.length && !m.noResistor?.length && !Object.keys(m.retarget ?? {}).length && !Object.keys(m.lenCm ?? {}).length);
+
+/** I2C 总线：同一对 SDA / SCL 上的模块和 SDA 线总长（cm）。线长按 SDA 那根算（SCL 同长） */
+export function i2cBuses(parts: PartSpec[], wires: BenchWire[]): { key: string; parts: string[]; wireCm: number; wires: string[] }[] {
+  const out = new Map<string, { key: string; parts: string[]; wireCm: number; wires: string[] }>();
+  for (const p of parts) {
+    if (p.type !== 'oled' && p.type !== 'bme280') continue;
+    const key = `GPIO${p.sda}/GPIO${p.scl}`;
+    const b = out.get(key) ?? { key, parts: [], wireCm: 0, wires: [] };
+    const id = partId(p);
+    b.parts.push(id);
+    const own = wires.filter((w) => w.part === id && w.pinRole === 'bus' && !w.missing);
+    b.wireCm += own.find((w) => w.pin === 'SDA')?.lenCm ?? 0;
+    b.wires.push(...own.map((w) => w.id));
+    out.set(key, b);
+  }
+  return [...out.values()];
+}
+
+/** 实验台改过线长才把线束交给模拟器（没改 = 理想总线，与命令行默认一致）；返回 cm，-1 = 理想 */
+export function benchI2cWire(parts: PartSpec[], mods: WireMods): number {
+  if (!Object.keys(mods.lenCm ?? {}).length) return -1;
+  const buses = i2cBuses(parts, wiresOf(parts, false, mods));
+  return buses.length ? Math.max(...buses.map((b) => b.wireCm)) : -1;
+}

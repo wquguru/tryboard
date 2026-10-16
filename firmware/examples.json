@@ -637,5 +637,65 @@
   "scene": {
    "parts": []
   }
+ },
+ {
+  "id": "usbkey",
+  "chip": "esp32s3",
+  "title": "USB 小键盘：4 个键 + 宏键",
+  "about": "ESP32-S3 用原生 USB（TinyUSB）把自己报成 HID 键盘，产品名 TryBoard Macro Pad。面包板上四个轻触按键接 GPIO4 / 5 / 6 / 7（另一端接地，内部上拉）：K1–K3 发 a / b / c，K4 是宏键，一下打出 Hello TryBoard 再换行。左边的虚拟电脑会走一遍枚举，再把收到的按键还原成文字。点 3D 里的键帽试试。",
+  "tags": [
+   "✓ 仿真验证",
+   "USB OTG",
+   "HID",
+   "TinyUSB",
+   "GPIO"
+  ],
+  "pins": {
+   "k1": 4,
+   "k2": 5,
+   "k3": 6,
+   "k4": 7
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "key",
+     "pin": 4,
+     "cap": "a",
+     "label": "K1 · GPIO4"
+    },
+    {
+     "type": "key",
+     "pin": 5,
+     "cap": "b",
+     "label": "K2 · GPIO5"
+    },
+    {
+     "type": "key",
+     "pin": 6,
+     "cap": "c",
+     "label": "K3 · GPIO6"
+    },
+    {
+     "type": "key",
+     "pin": 7,
+     "cap": "M",
+     "label": "K4 · GPIO7"
+    }
+   ],
+   "view": {
+    "position": [
+     -18,
+     200,
+     285
+    ],
+    "target": [
+     -11,
+     0,
+     16
+    ]
+   }
+  },
+  "assembly": "usbkey"
  }
 ]

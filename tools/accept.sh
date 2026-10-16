@@ -53,7 +53,11 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
     if t.get('stderr_expect'):
         nok = sum(e in err for e in t['stderr_expect'])
         notes.append(f'主机侧核对 {nok}/{len(t["stderr_expect"])}')
-    if re.search(r'Guru Meditation|abort\(\)|panic', out): notes.append('固件崩溃'); missing.append('crash')
+    if re.search(r'Guru Meditation|abort\(\)|panic', out):
+        # crash_expected：用例本来就是要验"故障让固件崩"（如 I2C 线太长导致 NACK → ESP_ERROR_CHECK abort）
+        if t.get('crash_expected'): notes.append('固件按预期崩溃（' + t['crash_expected'] + '）')
+        else: notes.append('固件崩溃'); missing.append('crash')
+    elif t.get('crash_expected'): notes.append('应该崩溃却没崩'); missing.append('crash_expected')
     g = t.get('gpio_toggles')
     if g:
         m = re.search(rf"GPIO{g['pin']} 翻转 (\d+) 次", err)
@@ -176,7 +180,7 @@ console.log(s.length ? '核价提醒：' + s.length + ' 件超过 120 天未核�
 if [ $NO_WEB = 0 ]; then
   echo -e "\n## 网页（Chrome 无头 + wasm）" >> $REPORT
   tools/build_web.sh >/dev/null 2>&1 || { echo "构建失败" >> $REPORT; fail=1; }
-  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接" s3-blink:TRYBOARD_OK s3-rgb:TRYBOARD_OK s3-dual:TRYBOARD_OK weather:TRYBOARD_OK lens:TRYBOARD_OK spin:TRYBOARD_OK s3-wifi-http:TRYBOARD_OK; do
+  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接" s3-blink:TRYBOARD_OK s3-rgb:TRYBOARD_OK s3-dual:TRYBOARD_OK weather:TRYBOARD_OK lens:TRYBOARD_OK spin:TRYBOARD_OK s3-wifi-http:TRYBOARD_OK "usbkey:TRYBOARD_OK usbkey"; do
     ex=${spec%%:*}; want=${spec#*:}
     r=$(node tools/webtest/webtest.mjs "$ex" "$want" 2>&1 | head -3)
     echo "$r" | sed 's/^/- /' >> $REPORT
@@ -207,6 +211,14 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/traceio.mjs 2>&1 | grep '^\[traceio\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[traceio\] PASS（' || { echo "- [traceio] 脚本没跑完" >> $REPORT; fail=1; }
+  # 拍照 / 录 10 秒（P2-10）：下载的 PNG 尺寸 = 画布 ×2、webm 视频轨尺寸 = 画布、声音开着有 Opus 轨
+  r=$(node tools/webtest/media.mjs 2>&1 | grep '^\[media\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[media\] PASS（' || { echo "- [media] 脚本没跑完" >> $REPORT; fail=1; }
+  # 线束（P2-11）：线长 → W6 + 读数跑偏 / NACK，金属近天线 → RSSI；USB 小键盘（P2-12）首页 → 成品打字
+  r=$(node tools/webtest/harness.mjs 2>&1 | grep '^\[harness\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[harness\] PASS（' || { echo "- [harness] 脚本没跑完" >> $REPORT; fail=1; }
   r=$(node tools/webtest/editor.mjs 2>&1 | tail -1)
   echo "- 元件编辑器（上传固件 + 加 BME280 / LED）：$r" >> $REPORT
   echo "$r" | grep -q PASS || fail=1

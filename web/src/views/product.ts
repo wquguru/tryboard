@@ -4,6 +4,8 @@ import { dialLabel, dialTicks, envBoxSvg, envButtons, holdButton, ledCss, mount,
 export interface ProductHandlers {
   boot(down: boolean): void;
   temp(delta: number): void;
+  /** 外接按键（USB 小键盘的 K1–K4）：按下接地 */
+  press?(pin: number, down: boolean): void;
 }
 
 export function createProductView(el: HTMLElement, h: ProductHandlers, opts: { servoPin: number }) {

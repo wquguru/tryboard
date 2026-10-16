@@ -71,9 +71,9 @@
 | P2-07 | LVGL：先测速度，够则支持动画 | 基准报告 | ☐ |
 | P2-08 | S3 Wi-Fi（复用 C3 MAC 模型） | wifi-http S3 版 | ☑ 2026-10-16：MAC 模型移到 tryboard-soc 共用；s3-wifi-init / scan / connect / http / wpa2 验收通过，网页 s3-wifi-http（Reviews/ab/P2-08.md） |
 | P2-09 | 新作品：旋钮台灯、超声波尺子、体感小人、USB 小键盘（各含检查点、参考固件、采购模版、成品） | 参考固件全过 | ☐ |
-| P2-10 | 拍照（path tracer 静帧）/ 录 10 秒 | 生成文件 | ☐ |
-| P2-11 | 线长影响 I2C、天线遮挡（标"必须上真机"） | 用例 | ☐ |
-| P2-12 | USB 键盘作品展示（已有 OTG） | 成品页 | ☐ |
+| P2-10 | 拍照（path tracer 静帧）/ 录 10 秒 | 生成文件 | ☑ 2026-10-16：没装 three-gpu-pathtracer，改用 2× 输出 + 超采样 + 渐变背景；录像 MediaRecorder webm 含声音；media.mjs 检查文件（Reviews/ab/P2-10.md） |
+| P2-11 | 线长影响 I2C、天线遮挡（标"必须上真机"） | 用例 | ☑ 2026-10-16：确定性模型（上升时间 / RSSI），accept weather-i2c-long / -nack、wifi-scan-antenna / wifi-connect-antenna；实验台 W6、组装滑块（Reviews/ab/P2-11.md） |
+| P2-12 | USB 键盘作品展示（已有 OTG） | 成品页 | ☑ 2026-10-16：作品 usbkey（三检查点 + 采购 + 组装 + 3D 成品打字），首页卡片由作品定义生成（Reviews/ab/P2-12.md） |
 
 ## P3 · 以后再说
 蓝牙（M7）、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。

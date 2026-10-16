@@ -1,5 +1,8 @@
 import { PARTS, TEMPLATES, type Cap, type Template } from './data';
 import { capName, recommend, type Confidence, type Need, type Plan } from './engine';
+import { themeToggle } from '../theme';
+
+document.querySelector('.top nav')!.after(themeToggle());
 
 const $ = (id: string) => document.getElementById(id)!;
 const SELECTABLE_CAPS: Cap[] = ['wifi', 'ble', 'bt_classic', 'thread', 'zigbee', 'usb_otg', 'camera', 'audio_in', 'audio_out', 'psram', 'display_rgb', 'touch', 'dac'];
@@ -20,7 +23,7 @@ function applyTemplate(t: Template) {
 
 function renderControls() {
   $('templates').innerHTML = TEMPLATES.map(
-    (t) => `<button class="tpl ${t.id === current.id ? 'on' : ''}" data-t="${t.id}"><div class="em">${t.emoji}</div><b>${esc(t.title)}</b><span>${esc(t.blurb)}</span></button>`,
+    (t) => `<button class="tpl ${t.id === current.id ? 'on' : ''}" data-t="${t.id}"><b>${esc(t.title)}</b><span>${esc(t.blurb)}</span></button>`,
   ).join('');
   $('caps').innerHTML = SELECTABLE_CAPS.map((c) => `<span class="chip ${need.caps.includes(c) ? 'on' : ''}" data-cap="${c}">${capName(c)}</span>`).join('');
   $('parts').innerHTML = Object.values(PARTS)

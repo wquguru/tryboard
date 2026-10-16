@@ -33,6 +33,9 @@ export interface Ex {
   tb_reset_count?(): number;
   tb_power_set?(mode: number): void;
   tb_servo_attach?(pin: number): void;
+  tb_usb_report?(): number;
+  tb_i2c_wire?(cm: number): void;
+  tb_antenna_loss?(db: number): void;
 }
 
 export interface SimJob {
@@ -50,6 +53,11 @@ export interface SimJob {
   power?: 'usb' | 'ext';
   /** 始终 1ms 一片（= CLI 的 --inputs）：重放网页实时运行导出的输入日志时用 */
   fixedSlice?: boolean;
+  /** = CLI --usb-log：观察记录里带上 USB 虚拟主机的状态与键盘输入（P2-12） */
+  usb?: boolean;
+  /** = CLI --i2c-wire / --antenna-loss（P2-11，估算） */
+  i2cWire?: number;
+  antenna?: number;
 }
 
 export interface SimResult {
@@ -118,6 +126,8 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
   e.tb_reset_limit?.(50);
   if (j.servo !== undefined) e.tb_servo_attach?.(j.servo);
   if (j.power) e.tb_power_set?.(j.power === 'ext' ? 1 : 0);
+  if (j.i2cWire !== undefined) e.tb_i2c_wire?.(j.i2cWire);
+  if (j.antenna !== undefined) e.tb_antenna_loss?.(j.antenna);
 
   const script = parseScript(j.script);
   let si = 0;
@@ -141,6 +151,8 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         if (v.length === 3 && v.every((x) => !Number.isNaN(x))) e.tb_env_set(v[0], v[1], v[2]);
       } else if (act.startsWith('uart=')) bytesIn(e, new TextEncoder().encode(act.slice(5).replaceAll('\\n', '\n')), (p, n) => e.tb_uart_push(p, n));
       else if (act.startsWith('power=')) e.tb_power_set?.(act.slice(6).trim() === 'ext' ? 1 : 0);
+      else if (act.startsWith('i2cwire=')) e.tb_i2c_wire?.(Number(act.slice(8)));
+      else if (act.startsWith('antenna=')) e.tb_antenna_loss?.(Number(act.slice(8)) | 0);
       else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));
     }
     if (j.pwmPin !== undefined) {
@@ -186,6 +198,11 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
   if (tail) hooks.onConsole?.(tail);
   const rn = e.tb_report();
   let report = dec.decode(new Uint8Array(e.memory.buffer, e.tb_report_ptr(), rn));
+  // 顺序与 tools/check.py 的 canonical_report 一致：GPIO → WS2812 → OLED → LCD → USB → PWM
+  if (j.usb && e.tb_usb_report) {
+    const un = e.tb_usb_report();
+    report += dec.decode(new Uint8Array(e.memory.buffer, e.tb_report_ptr(), un));
+  }
   if (j.pwmPin !== undefined) {
     let mn = 1, mx = 0;
     for (const [d] of trace) {

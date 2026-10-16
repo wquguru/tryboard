@@ -12,6 +12,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { servoAngle } from '../views/common';
 import { currentTheme, onTheme, type Theme } from '../theme';
 import { EXT, extModelsOn, loadExt, reportExt } from '../extmodels';
+import { capturableOf, type Capturable } from './capture';
 
 export interface LcdFrame {
   pwm: number[];
@@ -40,6 +41,8 @@ export interface Lcd3D {
   turn(): number;
   /** 用了哪些外部模型（测试 / 截图核对） */
   ext(): string[];
+  /** 拍照 / 录像（P2-10） */
+  capture(): Capturable;
 }
 
 /** WebGL 不可用时由调用方退回 SVG 成品 */
@@ -627,5 +630,6 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     },
     turn: () => theta,
     ext: () => [...usedExt],
+    capture: () => capturableOf(renderer, scene, composer),
   };
 }

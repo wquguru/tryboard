@@ -3,6 +3,7 @@
 import type { LiveFrame } from './common';
 import { createProductView, type ProductHandlers } from './product';
 import { createLensProduct, createSpinProduct } from './lcdproducts';
+import { createKeypadView } from './keypad';
 
 export interface Spot {
   key: string;
@@ -31,6 +32,11 @@ export interface Effects {
   sensorOffset?: number;
   hornOffset?: number;
   lensScale?: number;
+  /** 线束（P2-11，估算）：I2C 排线总长（只有带 I2C 模块的作品）、天线遮挡（dB）；进模拟器 */
+  i2cWireCm?: number;
+  antennaDb?: number;
+  /** USB 口装反、被外壳挡住（usbkey）：插不了线，虚拟电脑看不到设备 */
+  usbBlocked?: boolean;
 }
 export interface Picked {
   placed: string[];
@@ -167,4 +173,43 @@ export const LENS: Template = {
   product: (el, h) => createLensProduct(el, h),
 };
 
-export const TEMPLATES: Record<string, Template> = { weather: WEATHER, spin: SPIN, lens: LENS };
+const KEYS_ISO = [0, 1, 2, 3].map((i) => `<rect x="${36 + i * 30}" y="38" width="20" height="20" rx="3" fill="#1B1D21"/>`).join('');
+const CAPS_ISO = [0, 1, 2, 3].map((i) => `<rect x="${32 + i * 30}" y="34" width="28" height="28" rx="5" fill="${i === 3 ? '#0D99FF' : '#F2EFE8'}" stroke="#141414" stroke-width="1.5"/>`).join('');
+
+export const USBKEY: Template = {
+  id: 'usbkey',
+  caption: 'usbkey · 外壳 80×44×22 mm（估算）',
+  intro: ['把小键盘装起来', '从底壳开始'],
+  tray: ['caps', 'board', 'plate', 'base', 'keys'],
+  parts: [
+    { id: 'base', name: '底壳', short: '底壳', ghost: [0, 0, 180, 100], okMsg: ['底壳就位', '背面有 USB-C 开孔'],
+      mini: '<rect width="100" height="60" rx="8" fill="#E9E5DC" stroke="#8A867E" stroke-width="1.5"/><rect x="6" y="6" width="88" height="48" rx="5" fill="#D6D1C6"/><rect x="0" y="22" width="6" height="14" fill="#3A3936"/>',
+      iso: SHELL_ISO },
+    { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [20, 20, 120, 60], mini: BOARD_MINI, iso: BOARD_ISO,
+      spots: [
+        { key: 'U', label: 'USB / OTG 口朝背面开孔', ok: true, msg: ['USB 口对准开孔', '线插得进去，电脑认得到键盘'] },
+        { key: 'R', label: '转了 180° 装（USB 口朝前）', ok: false, msg: ['USB 口顶着前墙', '线插不进去，电脑看不到设备'] },
+      ] },
+    { id: 'keys', name: '轻触按键 × 4', short: '按键', ghost: [30, 32, 120, 32], okMsg: ['按键卡进定位板下面', 'K1–K4 = GPIO4–7，另一端接地'],
+      mini: '<rect x="4" y="18" width="92" height="24" rx="3" fill="#2A2A28"/>' + [0, 1, 2, 3].map((i) => `<rect x="${10 + i * 22}" y="22" width="16" height="16" rx="2" fill="#1B1D21" stroke="#555"/>`).join(''),
+      iso: KEYS_ISO },
+    { id: 'plate', name: '定位板', short: '定位板', ghost: [0, 0, 180, 100], okMsg: ['定位板盖上', '4 个键孔对准按键'],
+      mini: '<rect width="100" height="60" rx="8" fill="#F2EFE8" stroke="#8A867E" stroke-width="1.5"/>' + [0, 1, 2, 3].map((i) => `<rect x="${12 + i * 21}" y="22" width="14" height="14" fill="#8A867E"/>`).join(''),
+      iso: '<rect width="180" height="100" rx="10" fill="#F2EFE8" stroke="#8A867E" stroke-width="1.5" opacity="0.7"/>' + [0, 1, 2, 3].map((i) => `<rect x="${34 + i * 30}" y="36" width="24" height="24" fill="#3A3936"/>`).join('') },
+    { id: 'caps', name: '键帽 × 4', short: '键帽', ghost: [30, 32, 120, 32], okMsg: ['键帽按上了', '点「开机看成品」'],
+      mini: [0, 1, 2, 3].map((i) => `<rect x="${6 + i * 23}" y="16" width="20" height="20" rx="4" fill="${i === 3 ? '#0D99FF' : '#F2EFE8'}" stroke="#141414"/>`).join(''),
+      iso: CAPS_ISO },
+  ],
+  checks: (s) => [
+    row('USB 口朝向', has(s, 'board'), s.choice.board === 'U', '对准背面开孔', '朝前，线插不进去'),
+    row('按键行程', has(s, 'caps'), true, '键帽离定位板 1.5 mm，按得到底'),
+    row('内腔高度', has(s, 'plate'), true, '按键 + 开发板用了 14 / 18 mm'),
+  ],
+  effects: (s) => ({ usbBlocked: s.choice.board === 'R' }),
+  product: (el, h) => {
+    const v = createKeypadView(el, { press: (pin, d) => h.press?.(pin, d) });
+    return { update: () => {}, setUsb: v.setUsb };
+  },
+};
+
+export const TEMPLATES: Record<string, Template> = { weather: WEATHER, spin: SPIN, lens: LENS, usbkey: USBKEY };

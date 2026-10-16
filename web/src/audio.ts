@@ -100,6 +100,17 @@ export class BuzzerAudio {
     this.onChange?.();
   }
 
+  private recDest: MediaStreamAudioDestinationNode | null = null;
+  /** 录屏（P2-10）要混进去的声音：声音开着才有（关着就是静音视频）；同一个节点同时接扬声器和录音 */
+  recordStream(): MediaStream | null {
+    if (!this.ctx || !this.analyser || this.state.muted) return null;
+    if (!this.recDest) {
+      this.recDest = this.ctx.createMediaStreamDestination();
+      this.analyser.connect(this.recDest);
+    }
+    return this.recDest.stream;
+  }
+
   /** worker 的 tick：本 tick 内的 PWM 变化 + 当前模拟时刻 */
   push(events: PwmEvent[] | undefined, simNow: number) {
     this.lastSim = simNow;

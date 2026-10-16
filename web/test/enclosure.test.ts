@@ -48,7 +48,20 @@ test('小黄：底座太矮装不下舵机', () => {
   assert.ok(caseLayout('spin', { ...DEFAULT_PARAMS.spin, height: 24 }, sel()).warnings.some((w) => w.id === 'servo-height'));
 });
 
-for (const t of ['weather', 'spin', 'lens']) {
+test('USB 小键盘（P2-12）：默认 22 mm 装得下 DevKitC-1 + 按键，没有警告；压到 14 mm 报按键太高', () => {
+  const L = caseLayout('usbkey', DEFAULT_PARAMS.usbkey, sel());
+  assert.deepEqual(L.warnings, []);
+  assert.deepEqual(L.outer, [44, 80, 22]);
+  assert.ok(L.slots.board.U && L.slots.board.R && L.slots.keys[''] && L.slots.caps[''].prims.length === 4);
+  // 装反的开发板：USB 口那块（第 3 个 prim）在另一端
+  const uy = L.slots.board.U.prims[2].at[1], ry = L.slots.board.R.prims[2].at[1];
+  assert.ok(uy < 0 && ry > uy, `${uy} → ${ry}`);
+  const low = caseLayout('usbkey', { ...DEFAULT_PARAMS.usbkey, height: 14 }, sel());
+  assert.ok(low.warnings.some((w) => w.id === 'key-height'), JSON.stringify(low.warnings));
+  assert.ok(low.minHeight > 14 && low.minHeight <= 22, String(low.minHeight));
+});
+
+for (const t of ['weather', 'spin', 'lens', 'usbkey']) {
   test(`${t}：Manifold 布尔出的网格是封闭实体，导出 STL / 3MF 能读回`, () => {
     const L = caseLayout(t, { ...DEFAULT_PARAMS[t], height: t === 'lens' ? 75 : DEFAULT_PARAMS[t].height }, sel());
     const m = buildCaseMeshes(M, L);

@@ -23,6 +23,8 @@ export interface Level {
   serial_count?: { text: string; min: number }[];
   /** 圆屏最后一帧里某种颜色（±tol，按通道最大差）的像素数，可选水平重心范围（判"画了什么、画在哪"） */
   lcd_colors?: { name: string; rgb: string; min: number; max?: number; tol?: number; cx?: [number, number] }[];
+  /** USB 虚拟主机看到的（关卡带 --usb-log）：设备状态、键盘打出的字（P2-12） */
+  usb?: { state?: string; typed?: string };
   /** 这一关属于哪个作品的专属检查点（spin-1 这类）；没有就是气象站 / 第 07 关的通用关卡 */
   work?: string;
   /** true 等同 'weather'；字符串是装配模板名 */
@@ -62,7 +64,12 @@ export function bootOptions(l: Level) {
   const sv = val('--servo');
   const servo = sv === undefined ? undefined : Number(sv);
   const power = val('--power') === 'ext' ? ('ext' as const) : ('usb' as const);
-  return { i2c, env, lcd, servo, power };
+  // 线束（P2-11，估算）：I2C 排线总长、天线遮挡
+  const wv = val('--i2c-wire');
+  const i2cWire = wv === undefined ? undefined : Number(wv);
+  const av = val('--antenna-loss');
+  const antenna = av === undefined ? undefined : Number(av);
+  return { i2c, env, lcd, servo, power, usb: a.includes('--usb-log'), i2cWire, antenna };
 }
 
 /** 与命令行一致的定时输入脚本：时间（模拟秒）:动作，`;` 或换行分隔，`#` 开头是注释（CLI 的 parse_script） */
@@ -180,6 +187,17 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
   for (const c of l.serial_count ?? []) {
     const n = out.split(c.text).length - 1;
     res.push({ ok: n >= c.min, text: `串口 “${c.text}” 出现 ${n} 次（要 ≥ ${c.min}）` });
+  }
+  if (l.usb) {
+    const m = report.match(/USB 主机：(\S+)/);
+    const st = m ? m[1] : '没有 USB 设备';
+    if (l.usb.state !== undefined) res.push({ ok: st === l.usb.state, text: `电脑看到的 USB 设备：${st}（要${l.usb.state}）` });
+    if (l.usb.typed !== undefined) {
+      const t = report.match(/^\[tryboard\] USB 键盘输入: (".*")$/m);
+      const got: string = t ? JSON.parse(t[1]) : '';
+      const shown = (x: string) => x.replaceAll('\n', '↵');
+      res.push({ ok: got === l.usb.typed, text: `电脑上打出 “${shown(got)}”（要 “${shown(l.usb.typed)}”）` });
+    }
   }
   if (l.lcd_colors?.length) {
     const seen = [...report.matchAll(/LCD 颜色 #([0-9a-f]{6}) (\d+) 像素，重心 ([\d.]+),([\d.]+)/g)].map((m) => ({ k: m[1], n: Number(m[2]), x: Number(m[3]) }));
