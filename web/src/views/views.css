@@ -28,3 +28,5 @@
   .tb-env button { font-size: 13px; }
   .as-b { font-size: 11px; min-height: 28px; padding: 0 10px; }
 }
+.lp-root { aspect-ratio: 1000 / 560; }
+.lp-boot { position: absolute; right: 2.4%; bottom: 5%; }

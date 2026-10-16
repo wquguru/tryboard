@@ -28,7 +28,8 @@ import json, subprocess, sys, os, re
 root, no_qemu = sys.argv[1], sys.argv[2] == '1'
 bad = 0
 for t in json.load(open(f'{root}/firmware/accept.json')):
-    fw = f"{root}/firmware/build/{t['id']}/flash.bin"
+    # fw：同一固件跑多个用例（如不同环境温度）时指定固件目录，缺省与 id 相同
+    fw = f"{root}/firmware/build/{t.get('fw', t['id'])}/flash.bin"
     if not os.path.exists(fw):
         print(f"| {t['id']} | ❌ | 未构建 |"); bad += 1; continue
     cmd = [f'{root}/core/target/release/tryboard', 'run', fw, '--seconds', str(t['seconds']), '--gpio-log'] + t.get('args', [])
@@ -129,7 +130,7 @@ echo '```' >> $REPORT
 if [ $NO_WEB = 0 ]; then
   echo -e "\n## 网页（Chrome 无头 + wasm）" >> $REPORT
   tools/build_web.sh >/dev/null 2>&1 || { echo "构建失败" >> $REPORT; fail=1; }
-  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接" s3-blink:TRYBOARD_OK s3-rgb:TRYBOARD_OK s3-dual:TRYBOARD_OK; do
+  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接" s3-blink:TRYBOARD_OK s3-rgb:TRYBOARD_OK s3-dual:TRYBOARD_OK weather:TRYBOARD_OK lens:TRYBOARD_OK spin:TRYBOARD_OK; do
     ex=${spec%%:*}; want=${spec#*:}
     r=$(node tools/webtest/webtest.mjs "$ex" "$want" 2>&1 | head -3)
     echo "$r" | sed 's/^/- /' >> $REPORT

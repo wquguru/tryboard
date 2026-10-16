@@ -309,6 +309,17 @@ fn run(args: &[String]) {
             }
         }
         eprintln!("[tryboard] PWM GPIO{p}: {} 次变化，占空比 {:.3}..{:.3}，频率 {:.1}Hz", pwm_trace.len(), mn, mx, freq);
+        // 变化记录：占空比@时刻（三位小数相同的相邻记录合并），关卡验收据此判断"依次出现的台阶"和"稳定后的值"
+        let mut steps: Vec<String> = Vec::new();
+        let mut last = String::new();
+        for (t, d, _) in &pwm_trace {
+            let k = format!("{d:.3}");
+            if k != last {
+                steps.push(format!("{k}@{t:.3}"));
+                last = k;
+            }
+        }
+        eprintln!("[tryboard] PWM GPIO{p} 变化 {}", steps.join(" "));
     }
     if args.iter().any(|a| a == "--gpio-log") {
         let log = m.gpio_log();

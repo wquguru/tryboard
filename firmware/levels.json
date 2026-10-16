@@ -3,97 +3,220 @@
   "id": "01",
   "title": "点灯",
   "goal": "外接 LED 每 0.5 秒翻转一次",
-  "pass": "2.2 秒内 GPIO5 至少翻转 4 次",
+  "pass": "上电后 2.2 秒内 GPIO5 至少翻转 4 次",
   "buy": "ESP32-S3 开发板、LED、220Ω 电阻",
   "learn": "GPIO 输出、FreeRTOS 延时",
-  "brief": "用 ESP-IDF 5.5 给 ESP32-S3 写固件：\nGPIO5 接一颗 LED（经 220Ω 电阻），每 500 ms 翻转一次。\n每次翻转在串口打印一行状态。",
+  "brief": "用 ESP-IDF 5.5 给 ESP32-S3 写固件：\nGPIO5 接一颗 LED（经 220Ω 电阻，高电平亮），上电先熄灭，之后每 500 ms 翻转一次。\n每次翻转在串口打印一行，例如 LED ON / LED OFF。\n上电后立即开始闪，不要先等待。",
   "ref": "s3-blink",
   "seconds": 2.2,
-  "gpio_toggles": { "pin": 5, "min": 4 }
+  "gpio_toggles": {
+   "pin": 5,
+   "min": 4
+  }
  },
  {
   "id": "02",
   "title": "按键",
   "goal": "按一下 BOOT，灯切换一次",
-  "pass": "0.5 s、1.0 s 各按一次 BOOT，GPIO5 正好翻转 2 次",
+  "pass": "0.5 s、1.0 s 各按一次 BOOT（每次按 100 ms），GPIO5 正好翻转 2 次",
   "buy": "不用加",
   "learn": "GPIO 输入、中断、消抖",
-  "brief": "ESP32-S3，BOOT 键在 GPIO0（按下接地，用内部上拉）。\n每按一次，GPIO5 上的 LED 在亮和灭之间切换一次。\n要做软件消抖（≥ 30 ms），松手不能再切换。\n上电时 LED 保持熄灭，不要自己闪。",
+  "brief": "ESP32-S3，BOOT 键在 GPIO0（按下接地，用内部上拉）。\n每按一次，GPIO5 上的 LED 在亮和灭之间切换一次。\n要做软件消抖（30–50 ms），松手不能再切换。一次按下最短可能只有 100 ms，消抖窗口不能比它长。\n上电时 LED 保持熄灭，不要自己闪。",
   "ref": "s3-button",
   "seconds": 1.5,
   "script": "0.5:gpio0=0; 0.6:gpio0=z; 1.0:gpio0=0; 1.1:gpio0=z",
-  "gpio_toggles": { "pin": 5, "min": 2, "max": 2 }
+  "gpio_toggles": {
+   "pin": 5,
+   "min": 2,
+   "max": 2
+  }
  },
  {
   "id": "03",
   "title": "屏幕",
   "goal": "OLED 上画出文字",
-  "pass": "SSD1306 点亮至少 300 个像素，串口打印 TRYBOARD_OK",
+  "pass": "OLED 点亮至少 150 个像素，串口出现 TRYBOARD_OK",
   "buy": "0.96″ OLED（SSD1306，I2C）",
   "learn": "I2C、帧缓冲",
-  "brief": "ESP32-S3 接一块 SSD1306 OLED：I2C 地址 0x3C，SDA=GPIO8，SCL=GPIO9。\n初始化屏幕，画两行文字。\n画完后串口打印 TRYBOARD_OK。",
+  "brief": "ESP32-S3 接一块 0.96″ SSD1306 OLED（128×64）：I2C 地址 0x3C，SDA=GPIO8，SCL=GPIO9。\n初始化屏幕，画两行英文文字，每行至少 8 个字符（例如 Hello TryBoard / ESP32-S3 OLED）。\n画完后串口打印 TRYBOARD_OK。",
   "ref": "s3-oled",
   "seconds": 2.5,
-  "args": ["--i2c", "ssd1306@0x3c"],
-  "expect": ["TRYBOARD_OK"],
-  "oled_min_pixels": 300
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c"
+  ],
+  "expect": [
+   "TRYBOARD_OK"
+  ],
+  "oled_min_pixels": 150
  },
  {
   "id": "04",
   "title": "传感器",
   "goal": "读出温度、湿度、气压",
-  "pass": "环境设为 −7.25 ℃ / 88.5 % / 950.12 hPa，每次读数都在容差内",
+  "pass": "环境设为 −7.25 ℃ / 88.5 % / 950.12 hPa，每行读数分别在 ±0.02 ℃ / ±0.1 % / ±0.02 hPa 内",
   "buy": "BME280 模块（I2C）",
   "learn": "传感器补偿公式、同一条 I2C 挂多个设备",
-  "brief": "ESP32-S3 接 BME280：I2C 地址 0x76，SDA=GPIO8，SCL=GPIO9。\n用数据手册里的补偿公式，每秒读一次，串口按这个格式打印：\nT=23.50 C H=45.0 % P=1013.25 hPa\n（温度两位小数，湿度一位，气压两位）",
+  "brief": "ESP32-S3 接 BME280：I2C 地址 0x76，SDA=GPIO8，SCL=GPIO9（同一条总线上可能还有别的设备，只和 0x76 通信）。\n按数据手册的补偿公式（推荐 4.2.3 节的整数版本），每秒读一次，串口每次打印一行，格式必须完全一致：\nT=23.50 C H=45.0 % P=1013.25 hPa\n（温度两位小数，可能是负数，如 T=-7.25 C；湿度一位；气压两位，单位 hPa。）",
   "ref": "s3-bme280",
   "seconds": 4.5,
-  "args": ["--i2c", "ssd1306@0x3c,bme280@0x76", "--env", "-7.25,88.5,95012"],
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c,bme280@0x76",
+   "--env",
+   "-7.25,88.5,95012"
+  ],
   "numeric": [
-   { "name": "温度", "regex": "T=(-?[\\d.]+) C", "value": -7.25, "tol": 0.02 },
-   { "name": "湿度", "regex": "H=([\\d.]+) %", "value": 88.5, "tol": 0.1 },
-   { "name": "气压", "regex": "P=([\\d.]+) hPa", "value": 950.12, "tol": 0.02 }
+   {
+    "name": "温度",
+    "regex": "T=(-?[\\d.]+) C",
+    "value": -7.25,
+    "tol": 0.02
+   },
+   {
+    "name": "湿度",
+    "regex": "H=([\\d.]+) %",
+    "value": 88.5,
+    "tol": 0.1
+   },
+   {
+    "name": "气压",
+    "regex": "P=([\\d.]+) hPa",
+    "value": 950.12,
+    "tol": 0.02
+   }
   ]
  },
  {
   "id": "05",
   "title": "表盘",
   "goal": "舵机从 0° 转到 180°",
-  "pass": "GPIO4 输出 50 Hz PWM，脉宽从 0.5 ms 扫到 2.5 ms",
+  "pass": "3 秒内 GPIO4 是 50 Hz，脉宽依次出现 0.5、1.0、1.5、2.0、2.5 ms",
   "buy": "SG90 舵机",
   "learn": "LEDC PWM、脉宽和角度",
-  "brief": "ESP32-S3 用 LEDC 在 GPIO4 输出 50 Hz PWM 控制 SG90 舵机。\n脉宽 0.5 ms 对应 0°，2.5 ms 对应 180°。\n依次转到 0°、45°、90°、135°、180°，每个角度停 0.5 秒。",
+  "brief": "ESP32-S3 用 LEDC 在 GPIO4 输出 50 Hz PWM 控制 SG90 舵机。\n脉宽 0.5 ms 对应 0°，2.5 ms 对应 180°，中间线性。\n上电立即从 0° 开始，依次转到 0°、45°、90°、135°、180°，每个角度停 0.5 秒，然后循环。不要在开头额外等待。",
   "ref": "s3-servo",
-  "seconds": 2.6,
-  "pwm": { "pin": 4, "freq": 50, "min": 0.025, "max": 0.125 }
+  "seconds": 3,
+  "pwm": {
+   "pin": 4,
+   "freq": 50,
+   "min": 0.025,
+   "max": 0.125,
+   "steps": [
+    0.025,
+    0.05,
+    0.075,
+    0.1,
+    0.125
+   ]
+  }
  },
  {
   "id": "06",
   "title": "装壳",
   "goal": "组成桌面气象站，装进外壳",
-  "pass": "23.5 ℃ 时指针脉宽 1.675 ms、彩灯绿色、按 BOOT 切到 ℉；装配无警告",
+  "pass": "环境 23.5 ℃：1 秒后舵机脉宽稳定在 1.675 ms（±0.04）、彩灯绿色、2.0 秒按 BOOT 后串口出现 UNIT F、OLED 点亮 ≥ 300 像素；网页上另外要求装配无警告（几何估算，命令行不判）",
   "buy": "3D 打印外壳",
   "learn": "把前几关组合起来；传感器为什么要远离芯片",
-  "brief": "把前面几关合成一个 ESP32-S3 桌面气象站：\n· BME280（0x76）和 OLED（0x3C）共用 I2C：SDA=GPIO8，SCL=GPIO9\n· 每 500 ms 读一次，OLED 第一行大字显示温度，第二行显示湿度和气压\n· 舵机 GPIO4，50 Hz，脉宽 = 0.5 + 温度/40×2 ms（0–40 ℃ 表盘）\n· 板载 WS2812（GPIO48）：低于 18 ℃ 蓝，低于 28 ℃ 绿，否则红\n· BOOT（GPIO0）切换 ℃/℉，切到华氏时串口打印 UNIT F\n· 每次读数打印 T=23.50 C H=45.0 % P=1013.25 hPa",
+  "brief": "把前面几关合成一个 ESP32-S3 桌面气象站：\n· BME280（0x76）和 OLED（0x3C，128×64）共用 I2C：SDA=GPIO8，SCL=GPIO9\n· 每 500 ms 读一次。OLED 第一行用 2 倍大字显示温度，第二行显示湿度和气压\n· 舵机 GPIO4，50 Hz，脉宽 = 0.5 + 温度(℃)/40×2 ms（0–40 ℃ 表盘，超出范围夹住）。舵机始终按摄氏度算，不受 ℃/℉ 切换影响\n· 板载 WS2812（GPIO48）：低于 18 ℃ 蓝，低于 28 ℃ 绿，否则红\n· BOOT（GPIO0，按下接地，内部上拉，消抖 30 ms）切换 ℃/℉，只影响 OLED 显示；切到华氏时串口打印 UNIT F，切回时打印 UNIT C\n· 每次读数串口打印一行，始终用摄氏度、格式完全一致：T=23.50 C H=45.0 % P=1013.25 hPa",
   "ref": "weather",
   "seconds": 3,
-  "args": ["--i2c", "ssd1306@0x3c,bme280@0x76", "--env", "23.5,45,101325"],
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c,bme280@0x76",
+   "--env",
+   "23.5,45,101325"
+  ],
   "script": "2.0:gpio0=0; 2.1:gpio0=z",
-  "expect": ["UNIT F"],
-  "numeric": [{ "name": "温度", "regex": "T=(-?[\\d.]+) C", "value": 23.5, "tol": 0.02 }],
-  "pwm": { "pin": 4, "freq": 50, "min": 0.08375, "max": 0.08375, "tol": 0.002 },
-  "ws2812": { "pin": 48, "min_frames": 1, "dominant": "g" },
+  "expect": [
+   "UNIT F"
+  ],
+  "numeric": [
+   {
+    "name": "温度",
+    "regex": "T=(-?[\\d.]+) C",
+    "value": 23.5,
+    "tol": 0.02
+   }
+  ],
+  "pwm": {
+   "pin": 4,
+   "freq": 50,
+   "min": 0.08375,
+   "max": 0.08375,
+   "tol": 0.002,
+   "from": 1.0
+  },
+  "ws2812": {
+   "pin": 48,
+   "min_frames": 1,
+   "dominant": "g"
+  },
   "oled_min_pixels": 300,
   "assembly": true
  },
  {
   "id": "07",
   "title": "毕业作品",
-  "goal": "三选一，自己写通过条件",
-  "pass": "你自己定：写得越具体，AI 越难糊弄你",
+  "goal": "三选一：会转身的小黄、透镜小人，或自己定",
+  "pass": "选一个成品，按它的通过条件验收；也可以自己写条件",
   "buy": "看你选哪个",
   "learn": "先定验收，再让 AI 写",
   "brief": "挑一个成品：会转身的小黄、透镜里的小人、温湿度检测器。\n先写清楚「怎样算做好了」：哪个引脚、什么波形、屏上显示什么、串口打印什么。\n把这些条件连同需求一起交给 AI。",
-  "ref": null
+  "ref": null,
+  "variants": [
+   {
+    "key": "spin",
+    "title": "会转身的小黄",
+    "goal": "舵机转台 + 圆屏脸，左右转身",
+    "buy": "1.28″ 圆屏 GC9A01、SG90 舵机、3D 打印身体",
+    "learn": "SPI 屏幕、舵机和屏幕配合",
+    "pass": "3 秒内 GPIO4 50 Hz、脉宽在 0.83–2.17 ms 之间来回（±60°）；串口出现 SPIN -60、SPIN +60；2.6 秒按 BOOT 后出现 LOOK FRONT；圆屏点亮 ≥ 20000 像素",
+    "brief": "ESP32-S3 做一个会转身的桌面小人：\n· 圆屏 GC9A01（240×240）接 SPI2：SCLK=GPIO12，MOSI=GPIO11，CS=GPIO10，DC=GPIO14，RST=GPIO13，背光 GPIO15（高电平亮）。用 ESP-IDF 的 esp_lcd + espressif/esp_lcd_gc9a01 组件\n· 屏上画一张脸（黄色底、两只眼睛），眼珠朝转动方向看\n· 舵机 GPIO4，LEDC 50 Hz：以 90° 为中心在 30°–150° 之间来回转，2 秒一个来回（脉宽 0.5 ms = 0°，2.5 ms = 180°）。上电立即开始转\n· 转到最左打印 SPIN -60，转到最右打印 SPIN +60\n· BOOT（GPIO0，按下接地，内部上拉）按一下：停在正面 90° 并打印 LOOK FRONT；再按一下接着转并打印 LOOK AROUND",
+    "ref": "spin",
+    "seconds": 3,
+    "args": [
+     "--spi",
+     "gc9a01"
+    ],
+    "script": "2.6:gpio0=0; 2.8:gpio0=z",
+    "expect": [
+     "SPIN -60",
+     "SPIN +60",
+     "LOOK FRONT"
+    ],
+    "pwm": {
+     "pin": 4,
+     "freq": 50,
+     "min": 0.0417,
+     "max": 0.1083,
+     "tol": 0.003
+    },
+    "lcd_min_pixels": 20000,
+    "assembly": "spin"
+   },
+   {
+    "key": "lens",
+    "title": "透镜里的小人",
+    "goal": "圆屏眼睛 + 凸透镜罩，换表情",
+    "buy": "1.28″ 圆屏 GC9A01、Ø40 mm 凸透镜罩",
+    "learn": "SPI 屏幕、动画、按键切状态",
+    "pass": "串口出现 MOOD 0 normal；2.0 秒按 BOOT 后出现 MOOD 1 happy；圆屏点亮 ≥ 3000 像素",
+    "brief": "ESP32-S3 做一个透镜小人：\n· 圆屏 GC9A01（240×240）接 SPI2：SCLK=GPIO12，MOSI=GPIO11，CS=GPIO10，DC=GPIO14，RST=GPIO13，背光 GPIO15（高电平亮）。用 ESP-IDF 的 esp_lcd + espressif/esp_lcd_gc9a01 组件\n· 黑底上画一对青色（#7CF5FF）圆角矩形眼睛，带白色高光、粉色腮红；每 3 秒眨一次眼\n· 4 种表情：0 normal、1 happy、2 love、3 sleepy。上电是 normal，并打印 MOOD 0 normal\n· BOOT（GPIO0，按下接地，内部上拉，消抖 30 ms）每按一次换下一个表情，打印 MOOD <编号> <名字>，例如 MOOD 1 happy",
+    "ref": "lens",
+    "seconds": 3,
+    "args": [
+     "--spi",
+     "gc9a01"
+    ],
+    "script": "2.0:gpio0=0; 2.2:gpio0=z",
+    "expect": [
+     "MOOD 0 normal",
+     "MOOD 1 happy"
+    ],
+    "lcd_min_pixels": 3000,
+    "assembly": "lens"
+   }
+  ]
  }
 ]

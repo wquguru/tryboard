@@ -31,6 +31,9 @@ interface Exports {
   tb_env_set(temp: number, humidity: number, pressure: number): void;
   tb_oled_version(): number;
   tb_oled_ptr(): number;
+  tb_lcd_attach(): number;
+  tb_lcd_version(): number;
+  tb_lcd_ptr(): number;
   tb_usb_version(): number;
   tb_usb_json(): number;
   tb_usb_json_ptr(): number;
@@ -52,6 +55,8 @@ export type ToWorker =
       flash: ArrayBuffer;
       i2c?: { kind: string; addr: number }[];
       env?: Env;
+      /** 挂 GC9A01 圆屏（SPI2） */
+      lcd?: boolean;
     }
   | ({ type: 'env' } & Env)
   | { type: 'analog'; pin: number; mv: number }
@@ -80,6 +85,8 @@ export type FromWorker =
       leds?: number[][];
     }
   | { type: 'oled'; pixels: Uint8Array }
+  /** GC9A01：240×240 RGBA，画面变了才发 */
+  | { type: 'lcd'; pixels: Uint8Array }
   /** 原生 USB 虚拟主机的状态（JSON，结构见 usb3d.ts 的 UsbView），有变化才发 */
   | { type: 'usb'; json: string }
   | { type: 'stopped'; reason: string };
@@ -175,6 +182,7 @@ function loop() {
     running,
   });
   postOled(e);
+  postLcd(e);
   postUsb(e);
   if (stop !== 0) {
     running = false;
@@ -194,6 +202,22 @@ function postOled(e: Exports) {
   oledVersion = v;
   const px = new Uint8Array(new Uint8Array(e.memory.buffer, p, 128 * 64));
   (self as unknown as Worker).postMessage({ type: 'oled', pixels: px } satisfies FromWorker, [px.buffer]);
+}
+
+let lcdVersion = 0;
+let lcdLast = 0;
+/** 圆屏 240×240×4 = 230KB：画面变了才传，并且最多 30 帧/秒 */
+function postLcd(e: Exports) {
+  if (!e.tb_lcd_version) return;
+  const v = e.tb_lcd_version();
+  const now = performance.now();
+  if (v === 0 || v === lcdVersion || now - lcdLast < 33) return;
+  const p = e.tb_lcd_ptr();
+  if (!p) return;
+  lcdVersion = v;
+  lcdLast = now;
+  const px = new Uint8Array(new Uint8Array(e.memory.buffer, p, 240 * 240 * 4));
+  (self as unknown as Worker).postMessage({ type: 'lcd', pixels: px } satisfies FromWorker, [px.buffer]);
 }
 
 let usbVersion = 0;
@@ -229,12 +253,14 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       }
       for (const d of m.i2c ?? []) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
       if (m.env) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
+      if (m.lcd && e.tb_lcd_attach) e.tb_lcd_attach();
       ex = e;
       const s3 = e.tb_chip() === 9;
       LED_PIN = s3 ? 48 : 8;
       NPINS = s3 ? 49 : 22;
       lastFrames = -1;
       oledVersion = 0;
+      lcdVersion = 0;
       usbVersion = -1;
       post({ type: "booted", chip: s3 ? "esp32s3" : "esp32c3", bootPin: e.tb_boot_pin() });
       break;

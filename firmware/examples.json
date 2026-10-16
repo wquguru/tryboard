@@ -523,7 +523,8 @@
      "spi": 2
     }
    ]
-  }
+  },
+  "assembly": "lens"
  },
  {
   "id": "spin",
@@ -559,6 +560,7 @@
      "pin": 4
     }
    ]
-  }
+  },
+  "assembly": "spin"
  }
 ]

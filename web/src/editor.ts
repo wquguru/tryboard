@@ -54,13 +54,15 @@ export function describe(p: PartSpec): string {
       return `OLED · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl}`;
     case 'bme280':
       return `BME280 · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl}`;
+    case 'gc9a01':
+      return 'GC9A01 圆屏 · SPI2 · SCLK IO12 / MOSI IO11 / CS IO10 / DC IO14 / RST IO13 / BL IO15';
   }
 }
 
 /** I2C 器件变了要重新上电（器件在上电时挂到总线上） */
 export const needsReboot = (a: SceneSpec, b: SceneSpec) => {
   const i2c = (s: SceneSpec) =>
-    JSON.stringify(s.parts.filter((p) => p.type === 'oled' || p.type === 'bme280'));
+    JSON.stringify(s.parts.filter((p) => p.type === 'oled' || p.type === 'bme280' || p.type === 'gc9a01'));
   return i2c(a) !== i2c(b);
 };
 
@@ -77,6 +79,8 @@ export function conflicts(s: SceneSpec): string[] {
     if (p.type === 'oled' || p.type === 'bme280') {
       claim(p.sda, 'I2C SDA', true);
       claim(p.scl, 'I2C SCL', true);
+    } else if (p.type === 'gc9a01') {
+      for (const pin of [12, 11, 10, 14, 13, 15]) claim(pin, 'GC9A01 圆屏');
     } else claim(p.pin, describe(p));
   }
   const addrs = s.parts.flatMap((p) => ('addr' in p ? [p.addr] : []));

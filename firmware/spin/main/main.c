@@ -18,14 +18,14 @@
 #define CENTER_US 1500
 #define SWING_US 667 // 60° 对应的脉宽（0.5–2.5ms 映射 0–180°）
 #define EYE_Y 104
-#define EYE_DX 48
+#define EYE_DX 30
 #define PUPIL_MAX 13
-// 眼睛所在的行带：只重画这一段
-#define BAND_Y0 (EYE_Y - 44)
-#define BAND_Y1 (EYE_Y + 44)
+// 屏幕眼罩（深色圆角矩形）所在的行带：只重画这一段
+#define BAND_Y0 (EYE_Y - 46)
+#define BAND_Y1 (EYE_Y + 46)
 
 static QueueHandle_t btn_q;
-static uint16_t C_SKIN, C_STRAP, C_RIM, C_WHITE, C_IRIS, C_PUPIL, C_MOUTH;
+static uint16_t C_SKIN, C_VISOR, C_EYE, C_WHITE, C_MOUTH;
 
 static void IRAM_ATTR on_press(void *arg)
 {
@@ -59,19 +59,17 @@ static void servo_us(uint32_t us)
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
 }
 
-// 眼睛：护目镜灰框 + 眼白 + 棕色虹膜 + 黑瞳孔；look = 眼珠水平偏移（像素）
+// 眼睛：试板原创"小黄"的样子——一块深色屏幕眼罩，里面两只青色圆角矩形眼睛（不是护目镜，不画镜框和头带）。
+// look = 眼睛水平偏移（像素）
 static void draw_eyes(int look)
 {
-    // 先把眼睛这条带子恢复成皮肤 + 护目镜带
     for (int y = BAND_Y0; y < BAND_Y1; y++)
-        for (int x = 0; x < LCD_W; x++) fb_px(x, y, (y > EYE_Y - 12 && y < EYE_Y + 12) ? C_STRAP : C_SKIN);
+        for (int x = 0; x < LCD_W; x++) fb_px(x, y, C_SKIN);
+    fb_rrect(120 - 74, EYE_Y - 44, 148, 88, 32, C_VISOR);
     for (int i = -1; i <= 1; i += 2) {
-        int cx = 120 + i * EYE_DX;
-        fb_circle(cx, EYE_Y, 40, C_RIM);
-        fb_circle(cx, EYE_Y, 31, C_WHITE);
-        fb_circle(cx + look, EYE_Y + 2, 14, C_IRIS);
-        fb_circle(cx + look, EYE_Y + 2, 7, C_PUPIL);
-        fb_circle(cx + look - 5, EYE_Y - 4, 3, C_WHITE);
+        int cx = 120 + i * EYE_DX + look;
+        fb_rrect(cx - 14, EYE_Y - 28, 28, 56, 14, C_EYE);
+        fb_circle(cx - 4, EYE_Y - 16, 5, C_WHITE);
     }
 }
 
@@ -85,13 +83,11 @@ static void draw_face(int look)
 
 void app_main(void)
 {
-    C_SKIN = rgb(0xFFD84A);
-    C_STRAP = rgb(0x303030);
-    C_RIM = rgb(0x9AA0A6);
+    C_SKIN = rgb(0xFFC933);
+    C_VISOR = rgb(0x141414);
+    C_EYE = rgb(0x7CF5FF);
     C_WHITE = rgb(0xFFFFFF);
-    C_IRIS = rgb(0x7A4A20);
-    C_PUPIL = rgb(0x101010);
-    C_MOUTH = rgb(0x5A3A1A);
+    C_MOUTH = rgb(0x141414);
     lcd_init();
     servo_init();
     draw_face(0);

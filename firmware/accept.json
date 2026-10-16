@@ -571,6 +571,46 @@
   "oled_min_pixels": 1000
  },
  {
+  "id": "weather-hot",
+  "fw": "weather",
+  "chip": "esp32s3",
+  "seconds": 2,
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c,bme280@0x76",
+   "--env",
+   "35,45,101325"
+  ],
+  "expect": [
+   "LED=red PWM=2250us",
+   "TRYBOARD_OK weather"
+  ],
+  "numeric": [
+   {
+    "name": "温度",
+    "regex": "T=(-?[\\d.]+) C",
+    "value": 35.0,
+    "tol": 0.02
+   }
+  ],
+  "pwm": {
+   "pin": 4,
+   "freq": 50,
+   "min": 0.1125,
+   "max": 0.1125
+  },
+  "ws2812": {
+   "pin": 48,
+   "min_frames": 2,
+   "frames": [
+    [
+     "#200000"
+    ]
+   ]
+  },
+  "oled_min_pixels": 1000
+ },
+ {
   "id": "s3-button",
   "chip": "esp32s3",
   "seconds": 1.5,

@@ -8,6 +8,7 @@ export interface LiveOptions {
   fw: string | ArrayBuffer;
   i2c: { kind: string; addr: number }[];
   env: Env;
+  lcd?: boolean;
   onConsole?(text: string): void;
   onFrame?(f: LiveFrame, simSeconds: number): void;
 }
@@ -33,6 +34,9 @@ export class LiveSim {
         this.frame.running = m.running;
         if (m.leds) this.frame.rgb = m.leds[0] ?? null;
         o.onFrame?.(this.frame, m.simSeconds);
+      } else if (m.type === 'lcd') {
+        this.frame.lcd = m.pixels;
+        o.onFrame?.(this.frame, NaN);
       } else if (m.type === 'oled') {
         this.frame.oled = m.pixels;
         o.onFrame?.(this.frame, NaN);
@@ -50,7 +54,7 @@ export class LiveSim {
     const [wasm, flash] = [await loadWasm(), this.flash];
     const rom = await loadRom(imageChip(flash));
     Object.assign(this.frame, emptyFrame());
-    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed() });
+    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd });
   }
   reset() {
     return this.start();
@@ -74,6 +78,9 @@ export class LiveSim {
   setOffset(d: number) {
     this.sensorOffset = d;
     this.send({ type: 'env', ...this.sensed() });
+  }
+  dispose() {
+    this.w.terminate();
   }
   pause() {
     this.send({ type: 'pause' });

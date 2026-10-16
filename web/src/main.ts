@@ -17,8 +17,8 @@ interface Example {
   chip?: ChipId;
   /** 'env'：显示环境滑块（温度 / 湿度 / 气压）；对象：模拟输入滑块 */
   controls?: (string | AnalogControl)[];
-  /** 有装配视图（零件装进外壳、开机看成品） */
-  assembly?: boolean;
+  /** 有装配视图（零件装进外壳、开机看成品）：模板名（weather / spin / lens），true 等同 weather */
+  assembly?: boolean | string;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -97,7 +97,7 @@ async function boot(autorun: boolean) {
   bench.setUsb(null);
   usbPanel.reset();
   pendingAutorun = autorun;
-  send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: i2cDevices(), env: sensedEnv() });
+  send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: i2cDevices(), env: sensedEnv(), lcd: scene.parts.some((p) => p.type === 'gc9a01') });
 }
 
 const usbPanel = createUsbPanel(document.querySelector('.panel.info')!, (text) => send({ type: 'usbcdc', text }));
@@ -137,6 +137,11 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
     case 'oled':
       bench.setOled(m.pixels);
       frame.oled = m.pixels;
+      asm?.update(frame, env.temp);
+      break;
+    case 'lcd':
+      bench.setLcd(m.pixels);
+      frame.lcd = m.pixels;
       asm?.update(frame, env.temp);
       break;
     case 'usb': {
@@ -210,7 +215,7 @@ async function loadExample(id: string, autorun: boolean) {
   syncControls();
   editor.render();
   flash = await fetchBuf(`./fw/${id}/flash.bin`);
-  setupAssembly(!!ex.assembly);
+  setupAssembly(ex.assembly ? (typeof ex.assembly === 'string' ? ex.assembly : 'weather') : null);
   boot(autorun);
 }
 
@@ -227,7 +232,8 @@ function setView(v: '3d' | 'asm') {
   $('hint').hidden = v === 'asm';
 }
 viewTabs.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.onclick = () => setView(b.dataset.v as '3d' | 'asm')));
-function setupAssembly(on: boolean) {
+function setupAssembly(template: string | null) {
+  const on = !!template;
   viewTabs.hidden = !on;
   sensorOffset = 0;
   asmOffset = 0;
@@ -262,7 +268,7 @@ function setupAssembly(on: boolean) {
       },
       step: (t) => log(`[试板] 装配：${t}\n`, 'sys'),
     },
-    { servoPin: 4 },
+    { servoPin: 4, template: template! },
   );
   asm.update(frame, env.temp);
 }

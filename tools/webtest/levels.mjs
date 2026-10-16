@@ -59,7 +59,7 @@ const resultText = (page) => page.$eval('.lv-result', (e) => e.textContent).catc
 // 原生内核的结论与指纹
 const native = {};
 const cli = (() => { try { return execFileSync(path.join(root, 'tools/check.py'), ['--ref', '--all'], { encoding: 'utf8' }); } catch (e) { return e.stdout; } })();
-for (const m of cli.matchAll(/第 (\d+) 关 \S+：(\S+)\s+指纹 (\S+)/g)) native[m[1]] = { ok: m[2] === '通过', fp: m[3] };
+for (const m of cli.matchAll(/第 ([\w-]+) 关 .*?：(\S+)\s+指纹 (\S+)/g)) native[m[1]] = { ok: m[2] === '通过', fp: m[3] };
 
 // ---- 1. 每关参考固件（第 6 关先装配）
 const page = await open('/levels.html#01');
@@ -106,7 +106,7 @@ for (const id of ['01', '02', '03', '04', '05', '06']) {
     const done = await assemble('B');
     report('装配：鼠标拖拽 6/6（传感器贴芯片）', done);
     const bad = await runRef('06');
-    report('第 06 关：传感器贴芯片 → 不通过', !bad.ok && /贴着芯片/.test(bad.text) && /温度.*偏差 2\.5/.test(bad.text), bad.text.match(/温度[^✓✗]*/)?.[0]);
+    report('第 06 关：传感器贴芯片 → 不通过', !bad.ok && /有警告/.test(bad.text) && /温度.*偏差 2\.5/.test(bad.text), bad.text.match(/温度[^✓✗]*/)?.[0]);
     await page.screenshot({ path: path.join(outDir, 'levels-06-bad.png'), fullPage: true });
     await page.click('#asm [data-k="reset"]');
     await page.$eval('#asm', (e) => e.scrollIntoView({ block: 'center' }));
@@ -122,6 +122,49 @@ for (const id of ['01', '02', '03', '04', '05', '06']) {
   if (!r.ok) console.log(r.text);
   if (id === '01') await page.screenshot({ path: path.join(outDir, 'levels-01.png'), fullPage: true });
 }
+
+// spin 装配：舵盘直接按上（错一个齿）→ 开机后成品上提示偏角，圆屏有画面
+await page.evaluate(() => (location.hash = '07-spin'));
+await page.waitForSelector('#asm [data-template="spin"]');
+await page.$eval('#asm', (e) => e.scrollIntoView({ block: 'center' }));
+await page.click('#asm [data-part="base"]');
+await page.click('#asm [data-part="servo"]');
+await page.click('#asm [data-k="pickX"]');
+for (const k of ['board', 'lcd', 'body', 'hair']) await page.click(`#asm [data-part="${k}"]`);
+await page.click('#asm [data-k="power"]');
+const spinOk = await waitFor(page, () => !!document.querySelector('#asm [data-k="product"]:not([hidden]) image[href]') && /装偏 14\.4°/.test(document.querySelector('#asm [data-k="note"]')?.textContent ?? ''), null, 20000);
+report('第 07 关 · spin 装配：舵盘装偏 → 成品提示偏 14.4°，圆屏有画面', spinOk);
+await sleep(600);
+await page.screenshot({ path: path.join(outDir, 'levels-07-spin.png'), fullPage: true });
+{
+  const r = await runRef('07-spin');
+  report('第 07 关 · spin：舵盘装偏 → 验收不通过（有装配警告）', !r.ok && /有警告/.test(r.text) && r.fp === native['07-spin']?.fp, r.fp);
+  await page.$eval('#asm', (e) => e.scrollIntoView({ block: 'center' }));
+  await page.click('#asm [data-k="reopen"]');
+  await page.click('#asm [data-k="reset"]');
+  await page.click('#asm [data-part="base"]');
+  await page.click('#asm [data-part="servo"]');
+  await page.click('#asm [data-k="pickC"]');
+  for (const k of ['board', 'lcd', 'body', 'hair']) await page.click(`#asm [data-part="${k}"]`);
+}
+await page.evaluate(() => (location.hash = '07-lens'));
+await page.waitForSelector('#asm [data-template="lens"]');
+await page.$eval('#asm', (e) => e.scrollIntoView({ block: 'center' }));
+for (const k of ['base', 'board', 'lcd', 'bezel', 'dome']) await page.click(`#asm [data-part="${k}"]`);
+await page.click('#asm [data-k="pickH"]');
+await page.click('#asm [data-k="power"]');
+const lensOk = await waitFor(page, () => !!document.querySelector('#asm [data-k="product"]:not([hidden]) image[href]'), null, 20000);
+report('第 07 关 · lens 装配 → 开机后圆屏有画面', lensOk);
+await sleep(600);
+await page.$eval('#asm', (e) => e.scrollIntoView({ block: 'center' }));
+await page.screenshot({ path: path.join(outDir, 'levels-07-lens.png') });
+for (const v of ['lens', 'spin']) {
+  const r = await runRef(`07-${v}`);
+  const n = native[`07-${v}`];
+  report(`第 07 关 · ${v} 参考固件`, r.ok && n?.ok && r.fp === n.fp, `网页 ${r.ok ? '通过' : '未通过'} ${r.fp} / 命令行 ${n?.fp}`);
+  if (!r.ok) console.log(r.text);
+}
+
 
 // ---- 3. 上传自己的固件（C3 版点灯也满足第 1 关的条件）
 await page.evaluate(() => (location.hash = '01'));
@@ -149,6 +192,12 @@ await sleep(250);
 await home.mouse.up();
 const changed = await waitFor(home, (h) => document.querySelector('#bench image').getAttribute('href') !== h, before, 5000);
 report('首页：按 BOOT 后屏幕重画（切 ℉）', changed);
+await home.click('[data-run="spin"]');
+const homeSpin = await waitFor(home, () => !!document.querySelector('[data-show="spin"] image[href]'), null, 20000);
+report('首页：小黄卡片「跑真实固件」→ 圆屏有画面', homeSpin);
+await sleep(800);
+await home.$eval('[data-show="spin"]', (e) => e.scrollIntoView({ block: 'center' }));
+await home.screenshot({ path: path.join(outDir, 'levels-home-spin.png') });
 await home.screenshot({ path: path.join(outDir, 'levels-home-full.png'), fullPage: true });
 await home.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
 await sleep(300);

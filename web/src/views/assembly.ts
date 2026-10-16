@@ -1,167 +1,128 @@
-// 拖拽装配：把六个零件按从下到上的顺序装进外壳，装完开机看成品。
-// 装配检查是几何估算（尺寸、线长、温漂），不是仿真；但"传感器贴着芯片"会真实地改变模拟器里传感器读到的温度，
-// 成品屏幕上的读数随之偏高——同一份固件，装法不同，结果不同。
+// 拖拽装配：按模板把零件从下到上装进外壳，装完开机看成品（模板见 templates.ts）。
+// 装配检查是几何估算，但装法的影响会进成品：传感器贴着芯片 → 模拟器里传感器真的读到更高温度；
+// 舵盘装偏 / 透镜高度 → 成品画面变化（标明估算）。
 import { mount, type LiveFrame } from './common';
-import { createProductView, type ProductHandlers } from './product';
+import type { ProductHandlers } from './product';
+import { CHIP_HEAT_OFFSET, TEMPLATES, type Effects, type Part, type Picked, type Template } from './templates';
 
-export type PartId = 'shell' | 'board' | 'bme' | 'servo' | 'oled' | 'front';
-export const ORDER: PartId[] = ['shell', 'board', 'bme', 'servo', 'oled', 'front'];
-const NAME: Record<PartId, string> = { shell: '后壳', board: 'ESP32-S3 开发板', bme: 'BME280', servo: 'SG90 舵机', oled: 'OLED 0.96″', front: '前面板' };
-const SHORT: Record<PartId, string> = { shell: '后壳', board: '开发板', bme: 'BME280', servo: '舵机', oled: 'OLED', front: '前面板' };
-/** 传感器贴着芯片时比室温高多少（估算：ESP32-S3 满载壳内温升的量级，未经真机标定） */
-export const CHIP_HEAT_OFFSET = 2.5;
-const OK_MSG: Record<string, [string, string]> = {
-  shell: ['后壳就位', 'USB-C 开孔朝后'],
-  board: ['开发板卡进卡扣', 'GPIO4→舵机 · SDA/SCL→屏和传感器'],
-  bmeA: ['传感器靠着通风口', '读到的就是室温'],
-  bmeB: ['传感器贴着芯片', `芯片发热，读数会偏高约 ${CHIP_HEAT_OFFSET} ℃`],
-  servo: ['舵机轴对准表盘中心', '指针从 0 ℃ 扫到 40 ℃'],
-  oled: ['屏幕排线 8 cm', '从开发板够得到前面板'],
-  front: ['合上了', '点「开机看成品」'],
-};
-const INTRO: [string, string] = ['把零件拖进壳里', '从最底下那层开始'];
-
-// 零件盘里的平面小图（100×60）
-const MINI: Record<PartId, string> = {
-  shell: '<rect width="100" height="60" rx="8" fill="#E9E5DC" stroke="#8A867E" stroke-width="1.5"/><rect x="6" y="6" width="88" height="48" rx="5" fill="#D6D1C6"/><path d="M86 18 L92 18 M86 26 L92 26 M86 34 L92 34 M86 42 L92 42" stroke="#8A867E" stroke-width="2"/><rect y="24" width="6" height="12" fill="#3A3936"/>',
-  board: '<rect x="2" y="10" width="96" height="40" rx="3" fill="#141414"/><rect x="50" y="15" width="42" height="30" rx="2" fill="#BDB9B0"/><rect y="22" width="8" height="14" fill="#8A867E"/><circle cx="22" cy="18" r="3.5" fill="#22C55E"/>',
-  bme: '<rect x="32" y="12" width="36" height="34" rx="3" fill="#6A3FA0"/><rect x="44" y="22" width="12" height="12" fill="#C9C6BF"/><path d="M38 46 L38 54 M46 46 L46 54 M54 46 L54 54 M62 46 L62 54" stroke="#E8C547" stroke-width="2"/>',
-  servo: '<rect x="20" y="16" width="60" height="30" rx="3" fill="#2B5FD9"/><rect x="12" y="24" width="76" height="6" rx="2" fill="#2B5FD9"/><circle cx="36" cy="16" r="8" fill="#F7F6F3"/><path d="M36 16 L60 6" stroke="#F7F6F3" stroke-width="4" stroke-linecap="round"/>',
-  oled: '<rect x="12" y="4" width="76" height="52" rx="3" fill="#1C4F86"/><rect x="18" y="12" width="64" height="34" fill="#050608"/><path d="M26 24 L46 24 M26 32 L60 32" stroke="#D7F3FF" stroke-width="3"/>',
-  front: '<rect width="100" height="60" rx="8" fill="#F2EFE8" stroke="#8A867E" stroke-width="1.5"/><path d="M28 28 A22 22 0 0 1 72 28" fill="none" stroke="#141414" stroke-width="2"/><rect x="32" y="34" width="36" height="16" rx="2" fill="none" stroke="#141414" stroke-width="2"/>',
-};
-// 装好后的等轴测样子（局部坐标在 180×100 的壳内）
-const ISO: Record<Exclude<PartId, 'bme'>, string> = {
-  shell: '<rect width="180" height="100" rx="10" fill="#E9E5DC" stroke="#8A867E" stroke-width="1.5"/><rect x="8" y="8" width="164" height="84" rx="6" fill="#D6D1C6"/><rect y="40" width="10" height="20" fill="#3A3936"/><path d="M160 30 L172 30 M160 40 L172 40 M160 50 L172 50 M160 60 L172 60 M160 70 L172 70" stroke="#8A867E" stroke-width="2.5"/>',
-  board: '<rect x="20" y="20" width="120" height="60" rx="3" fill="#141414"/><rect x="74" y="28" width="56" height="44" rx="2" fill="#BDB9B0"/><rect x="14" y="40" width="10" height="18" fill="#8A867E"/><circle cx="50" cy="32" r="4" fill="#22C55E"/>',
-  servo: '<rect x="56" y="14" width="56" height="30" rx="3" fill="#2B5FD9"/><rect x="74" y="4" width="10" height="10" fill="#F7F6F3"/>',
-  oled: '<rect x="50" y="52" width="80" height="40" rx="3" fill="#1C4F86"/><rect x="56" y="58" width="68" height="28" fill="#050608"/>',
-  front: '<rect width="180" height="100" rx="10" fill="#F2EFE8" stroke="#8A867E" stroke-width="1.5" opacity="0.7"/><path d="M50 46 A40 40 0 0 1 130 46" fill="none" stroke="#141414" stroke-width="2"/><rect x="56" y="58" width="68" height="28" rx="3" fill="none" stroke="#141414" stroke-width="2"/>',
-};
-const BME_ISO = '<rect width="36" height="30" rx="2" fill="#6A3FA0"/><rect x="12" y="9" width="12" height="12" fill="#C9C6BF"/>';
-const GHOST: Record<Exclude<PartId, 'bme'>, number[]> = { shell: [0, 0, 180, 100], board: [20, 20, 120, 60], servo: [56, 14, 56, 30], oled: [50, 52, 80, 40], front: [0, 0, 180, 100] };
-/** BME280 的两个可选位置：A 通风口旁，B 开发板芯片旁 */
-const BME_AT = { A: [128, 40], B: [74, 28] } as const;
-export type BmeSpot = keyof typeof BME_AT;
-const TRAY: PartId[] = ['servo', 'shell', 'oled', 'bme', 'front', 'board']; // 故意打乱
+export { CHIP_HEAT_OFFSET };
 
 const layerY = (L: number) => 292 - L * 30;
 const iso = (L: number, x: number, y: number) => [505 + 0.866 * x - 0.866 * y, layerY(L) + 0.5 * x + 0.5 * y];
 const ghostRect = (r: number[], k: string) =>
   `<rect data-k="g_${k}" x="${r[0]}" y="${r[1]}" width="${r[2]}" height="${r[3]}" rx="4" fill="#FF7A1A" fill-opacity="0.14" stroke="#FF7A1A" stroke-width="2" stroke-dasharray="6 5" opacity="0"/>`;
-
-export interface AssemblyState {
-  placed: PartId[];
-  bme: BmeSpot | null;
-}
-
-/** 装配检查（估算）：返回 [颜色, 文字]，没装到的项目显示 — */
-export function assemblyChecks(s: AssemblyState): { label: string; ok: boolean | null; text: string }[] {
-  const has = (k: PartId) => s.placed.includes(k);
-  return [
-    { label: '传感器位置', ok: has('bme') ? s.bme === 'A' : null, text: has('bme') ? (s.bme === 'B' ? `! 贴着芯片，偏高约 ${CHIP_HEAT_OFFSET} ℃` : '✓ 通风口旁，读数准') : '—' },
-    { label: '屏幕排线', ok: has('oled') ? true : null, text: has('oled') ? '✓ 8 cm，需要 ≥ 6 cm' : '—' },
-    { label: '舵机轴心', ok: has('servo') ? true : null, text: has('servo') ? '✓ 对准表盘中心' : '—' },
-    { label: '内腔高度', ok: has('front') ? true : null, text: has('front') ? '✓ 用了 27 / 32 mm' : '—' },
-  ];
-}
+/** 有位置差别的选择（如传感器放哪）可以拖到对应位置；没有位置差别的（如舵盘对不对中）放下后弹出选择 */
+const positional = (p: Part) => !!p.spots?.every((s) => s.at);
 
 export interface AssemblyHandlers extends ProductHandlers {
-  /** 传感器偏移变了（宿主据此改模拟器里传感器看到的温度） */
+  /** 装法对模拟器的影响变了（目前是传感器偏移） */
   offset(delta: number): void;
-  /** 每一步操作（记进"你的操作"/串口） */
   step?(text: string): void;
-  /** 进入 / 离开成品视图 */
   mode?(m: 'build' | 'product'): void;
 }
 
-export function createAssembly(el: HTMLElement, h: AssemblyHandlers, opts: { servoPin: number }) {
-  const st: AssemblyState & { msg: [string, string]; bad: boolean; choosing: boolean; mode: 'build' | 'product' } = { placed: [], bme: null, msg: INTRO, bad: false, choosing: false, mode: 'build' };
+export function createAssembly(el: HTMLElement, h: AssemblyHandlers, opts: { servoPin: number; template?: string }) {
+  const T: Template = TEMPLATES[opts.template ?? 'weather'];
+  const P = T.parts;
+  const byId = Object.fromEntries(P.map((p) => [p.id, p])) as Record<string, Part>;
+  const N = P.length;
+  const st: Picked & { msg: [string, string]; bad: boolean; choosing: string | null; mode: 'build' | 'product' } = { placed: [], choice: {}, msg: T.intro, bad: false, choosing: null, mode: 'build' };
+
   const svg: string[] = [];
   svg.push('<text x="28" y="44" fill="#F7F6F3" font-size="15" font-weight="700">零件盘</text><text x="84" y="44" fill="#9FBFB0" class="tb-mono" font-size="11">拖进壳里 · 也可以点一下</text>');
-  TRAY.forEach((k, i) => {
+  T.tray.forEach((k, i) => {
+    const p = byId[k];
     const cx = 28 + (i % 2) * 156, cy = 62 + Math.floor(i / 2) * 120;
-    svg.push(`<g data-k="card_${k}" data-part="${k}" class="as-card" transform="translate(${cx} ${cy})" tabindex="0" role="button" aria-label="${NAME[k]}"><rect data-k="cs_${k}" width="144" height="108" rx="10" fill="#24392F" stroke="#3B5C4F" stroke-width="1.5"/><g transform="translate(22 12)">${MINI[k]}</g><text x="72" y="96" fill="#F7F6F3" font-size="12" font-weight="700" text-anchor="middle">${NAME[k]}</text><text data-k="ok_${k}" x="132" y="20" fill="#22C55E" class="tb-mono" font-size="14" font-weight="700" text-anchor="end" opacity="0">✓</text></g>`);
+    svg.push(`<g data-k="card_${k}" data-part="${k}" class="as-card" transform="translate(${cx} ${cy})" tabindex="0" role="button" aria-label="${p.name}"><rect data-k="cs_${k}" width="144" height="108" rx="10" fill="#24392F" stroke="#3B5C4F" stroke-width="1.5"/><g transform="translate(22 12)">${p.mini}</g><text x="72" y="96" fill="#F7F6F3" font-size="12" font-weight="700" text-anchor="middle">${p.name}</text><text data-k="ok_${k}" x="132" y="20" fill="#22C55E" class="tb-mono" font-size="14" font-weight="700" text-anchor="end" opacity="0">✓</text></g>`);
   });
   svg.push('<text x="28" y="446" fill="#9FBFB0" class="tb-mono" font-size="11">装错顺序会被拦下：上一层压着下一层</text>');
-  svg.push('<text x="356" y="44" fill="#C9D6CF" class="tb-mono" font-size="12" font-weight="700">weather · 外壳 70×50×32 mm（估算）</text>');
+  svg.push(`<text x="356" y="44" fill="#C9D6CF" class="tb-mono" font-size="12" font-weight="700">${T.caption}</text>`);
   svg.push('<ellipse cx="545" cy="470" rx="170" ry="22" fill="#1E332A"/>');
-  ORDER.forEach((k, L) => {
+  const labels: string[] = [];
+  P.forEach((p, L) => {
     svg.push(`<g transform="matrix(0.866 0.5 -0.866 0.5 505 ${layerY(L)})">`);
-    if (k === 'bme') {
-      svg.push(ghostRect([BME_AT.A[0], BME_AT.A[1], 36, 30], 'bmeA') + ghostRect([BME_AT.B[0], BME_AT.B[1], 36, 30], 'bmeB'));
-      svg.push(`<g data-k="po_bme" opacity="0">${BME_ISO}</g>`);
+    if (positional(p)) {
+      for (const s of p.spots!) svg.push(ghostRect([s.at![0], s.at![1], p.spotSize![0], p.spotSize![1]], p.id + s.key));
+      svg.push(`<g data-k="po_${p.id}" opacity="0">${p.iso}</g>`);
+      p.spots!.forEach((s, i) => {
+        const c = iso(L, s.at![0] + p.spotSize![0] / 2, s.at![1] + p.spotSize![1] / 2);
+        labels.push(`<text data-k="gl_${p.id}${s.key}" x="${c[0] + (i ? -40 : 40)}" y="${c[1] + 4}" fill="#FF7A1A" font-size="12" font-weight="700" text-anchor="${i ? 'end' : 'start'}" opacity="0">${i ? s.label.replace(/^放/, '') + ' →' : '← ' + s.label.replace(/^放/, '')}</text>`);
+      });
     } else {
-      svg.push(ghostRect(GHOST[k], k));
-      svg.push(`<g data-k="po_${k}" opacity="0">${ISO[k]}</g>`);
+      svg.push(ghostRect(p.ghost!, p.id));
+      svg.push(`<g data-k="po_${p.id}" opacity="0">${p.iso}</g>`);
     }
     svg.push('</g>');
   });
-  const ga = iso(2, 164, 55), gb = iso(2, 74, 43);
+  svg.push(...labels);
   svg.push('<text data-k="gl" fill="#FF7A1A" font-size="13" font-weight="700" text-anchor="middle"></text>');
-  svg.push(`<text data-k="glA" x="${ga[0] + 8}" y="${ga[1]}" fill="#FF7A1A" font-size="12" font-weight="700" opacity="0">← 通风口旁</text>`);
-  svg.push(`<text data-k="glB" x="${gb[0] - 10}" y="${gb[1]}" fill="#FF7A1A" font-size="12" font-weight="700" text-anchor="end" opacity="0">开发板旁 →</text>`);
   svg.push('<rect x="704" y="24" width="272" height="512" rx="12" fill="#1A1A19"/>');
-  svg.push('<text x="724" y="58" fill="#F7F6F3" font-size="16" font-weight="700">装配</text><text data-k="n" x="956" y="58" fill="#F7F6F3" class="tb-mono" font-size="16" font-weight="700" text-anchor="end">0/6</text>');
-  for (let i = 0; i < 6; i++) svg.push(`<rect data-k="seg${i}" x="${724 + i * 39}" y="70" width="33" height="6" rx="3" fill="#2E2E2B"/>`);
-  ['传感器位置', '屏幕排线', '舵机轴心', '内腔高度'].forEach((r, i) => {
+  svg.push(`<text x="724" y="58" fill="#F7F6F3" font-size="16" font-weight="700">装配</text><text data-k="n" x="956" y="58" fill="#F7F6F3" class="tb-mono" font-size="16" font-weight="700" text-anchor="end">0/${N}</text>`);
+  const segW = (234 - (N - 1) * 6) / N;
+  for (let i = 0; i < N; i++) svg.push(`<rect data-k="seg${i}" x="${(724 + i * (segW + 6)).toFixed(1)}" y="70" width="${segW.toFixed(1)}" height="6" rx="3" fill="#2E2E2B"/>`);
+  T.checks({ placed: [], choice: {} }).forEach((r, i) => {
     const y = 116 + i * 52;
-    svg.push(`<text x="724" y="${y}" fill="#8A867E" font-size="12">${r}</text><text data-k="rv${i}" x="724" y="${y + 22}" fill="#55534F" font-size="13" font-weight="700">—</text>`);
+    svg.push(`<text x="724" y="${y}" fill="#8A867E" font-size="12">${r.label}</text><text data-k="rv${i}" x="724" y="${y + 22}" fill="#55534F" font-size="13" font-weight="700">—</text>`);
   });
   svg.push('<rect x="716" y="330" width="248" height="78" rx="8" fill="#0E0E0D"/>');
   svg.push('<text data-k="ma" x="732" y="362" fill="#F7F6F3" font-size="14" font-weight="700"></text><text data-k="mb" x="732" y="390" fill="#C9C6BF" font-size="12"></text>');
-  svg.push('<text x="724" y="522" fill="#6E6A63" class="tb-mono" font-size="10">尺寸、线长、温漂均为估算</text>');
+  svg.push('<text x="724" y="522" fill="#6E6A63" class="tb-mono" font-size="10">尺寸、线长、温漂、角度均为估算</text>');
   svg.push('<g data-k="float" style="pointer-events:none" opacity="0"><rect x="-8" y="-8" width="116" height="76" rx="10" fill="#FF7A1A" fill-opacity="0.18"/>');
-  for (const k of ORDER) svg.push(`<g data-k="f_${k}" opacity="0">${MINI[k]}</g>`);
+  for (const p of P) svg.push(`<g data-k="f_${p.id}" opacity="0">${p.mini}</g>`);
   svg.push('</g>');
+  const choosers = P.filter((p) => p.spots)
+    .map((p) => `<div data-k="choose_${p.id}" class="as-choose" hidden>${p.spots!.map((s, i) => `<button type="button" data-k="pick${s.key}" class="as-b ${i ? 'as-light' : 'as-hot'}">${s.label}</button>`).join('')}</div>`)
+    .join('');
 
   const q = mount(
     el,
-    `<div class="tb-view as-root">
+    `<div class="tb-view as-root" data-template="${T.id}">
 <div data-k="build" class="as-layer">
-<svg data-k="svg" viewBox="0 0 1000 560" role="group" aria-label="拖拽装配：把六个零件按从下到上的顺序装进外壳">
+<svg data-k="svg" viewBox="0 0 1000 560" role="group" aria-label="拖拽装配：把零件按从下到上的顺序装好">
 <defs><pattern id="as-grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 L0 40" fill="none" stroke="#3B5C4F"/></pattern></defs>
 <rect width="1000" height="560" fill="#2E4A3F"/><rect width="1000" height="560" fill="url(#as-grid)"/>
 ${svg.join('\n')}
 </svg>
-<div data-k="choose" class="as-choose" hidden><button type="button" data-k="pickA" class="as-b as-hot">放通风口旁</button><button type="button" data-k="pickB" class="as-b as-light">放开发板旁</button></div>
+${choosers}
 <div class="as-actions"><button type="button" data-k="power" class="as-b as-hot" hidden>开机看成品 →</button><button type="button" data-k="reset" class="as-b as-ghost">重来</button></div>
 </div>
 <div data-k="product" class="as-layer" hidden><div data-k="productView"></div><button type="button" data-k="reopen" class="as-b as-light as-reopen">拆开重装</button></div>
 </div>`,
   );
-  const product = createProductView(q<HTMLElement>('productView'), h, opts);
+  const product = T.product(q<HTMLElement>('productView'), h, opts);
   const svgEl = q<SVGSVGElement>('svg');
+  const fx = (): Effects => T.effects(st);
 
-  const offset = () => (st.bme === 'B' ? CHIP_HEAT_OFFSET : 0);
-  function place(id: PartId, spot?: BmeSpot) {
-    const next = ORDER[st.placed.length];
+  function place(id: string, spot?: string) {
+    const next = P[st.placed.length]?.id;
     if (id !== next) {
       st.bad = true;
-      st.choosing = false;
-      st.msg = [`还不能装「${SHORT[id]}」`, next ? `先装「${SHORT[next]}」，它在更下面` : '已经装完了'];
-      h.step?.(`装${SHORT[id]} ✗`);
+      st.choosing = null;
+      st.msg = [`还不能装「${byId[id].short}」`, next ? `先装「${byId[next].short}」，它在更下面` : '已经装完了'];
+      h.step?.(`装${byId[id].short} ✗`);
       return render();
     }
-    if (id === 'bme' && !spot) {
-      st.choosing = true;
+    const p = byId[id];
+    if (p.spots && !spot) {
+      st.choosing = id;
       st.bad = false;
-      st.msg = ['BME280 放哪？', '通风口旁，还是开发板旁'];
+      st.msg = [`${p.short}怎么装？`, p.spots.map((s) => s.label).join('，还是')];
       return render();
     }
-    const before = offset();
+    const before = fx().sensorOffset ?? 0;
     st.placed.push(id);
-    if (id === 'bme') st.bme = spot!;
-    st.choosing = false;
-    st.bad = spot === 'B';
-    st.msg = OK_MSG[id === 'bme' ? 'bme' + spot : id];
-    h.step?.(`装${SHORT[id]}${spot === 'B' ? '（贴着芯片）' : spot === 'A' ? '（通风口旁）' : ''}`);
-    if (offset() !== before) h.offset(offset());
+    const s = p.spots?.find((x) => x.key === spot);
+    if (s) st.choice[id] = s.key;
+    st.choosing = null;
+    st.bad = !!s && !s.ok;
+    st.msg = s ? s.msg : p.okMsg ?? ['装好了', ''];
+    h.step?.(`装${p.short}${s ? `（${s.label}）` : ''}`);
+    if ((fx().sensorOffset ?? 0) !== before) h.offset(fx().sensorOffset ?? 0);
     render();
   }
   function reset() {
-    const before = offset();
-    Object.assign(st, { placed: [], bme: null, msg: INTRO, bad: false, choosing: false });
+    const before = fx().sensorOffset ?? 0;
+    Object.assign(st, { placed: [], choice: {}, msg: T.intro, bad: false, choosing: null });
     setMode('build');
     if (before) h.offset(0);
     h.step?.('重新装');
@@ -177,36 +138,42 @@ ${svg.join('\n')}
 
   function render() {
     const n = st.placed.length;
-    const next = ORDER[n];
-    const has = (k: PartId) => st.placed.includes(k);
-    for (const k of ORDER) {
+    const next = P[n]?.id;
+    const done = (k: string) => st.placed.includes(k);
+    for (const p of P) {
+      const k = p.id;
       const card = q(`card_${k}`);
-      card.setAttribute('opacity', has(k) ? '0.4' : '1');
-      card.classList.toggle('as-done', has(k));
-      card.setAttribute('aria-disabled', String(has(k)));
+      card.setAttribute('opacity', done(k) ? '0.4' : '1');
+      card.classList.toggle('as-done', done(k));
+      card.setAttribute('aria-disabled', String(done(k)));
       q(`cs_${k}`).setAttribute('stroke', k === next && st.bad ? '#FF7A1A' : '#3B5C4F');
-      q(`ok_${k}`).setAttribute('opacity', has(k) ? '1' : '0');
-      q(`po_${k}`).setAttribute('opacity', has(k) ? '1' : '0');
-      if (k !== 'bme') q(`g_${k}`).setAttribute('opacity', k === next ? '0.9' : '0');
+      q(`ok_${k}`).setAttribute('opacity', done(k) ? '1' : '0');
+      q(`po_${k}`).setAttribute('opacity', done(k) ? '1' : '0');
+      if (positional(p)) {
+        for (const s of p.spots!) {
+          q(`g_${k}${s.key}`).setAttribute('opacity', k === next ? '0.9' : '0');
+          q(`gl_${k}${s.key}`).setAttribute('opacity', k === next ? '1' : '0');
+        }
+        const at = p.spots!.find((s) => s.key === st.choice[k])?.at ?? p.spots![0].at!;
+        q(`po_${k}`).setAttribute('transform', `translate(${at[0]} ${at[1]})`);
+      } else q(`g_${k}`).setAttribute('opacity', k === next ? '0.9' : '0');
+      if (p.spots) q<HTMLElement>(`choose_${k}`).hidden = st.choosing !== k;
     }
-    for (const s of ['A', 'B']) {
-      q(`g_bme${s}`).setAttribute('opacity', next === 'bme' ? '0.9' : '0');
-      q(`glB`).setAttribute('opacity', next === 'bme' ? '1' : '0');
-      q(`glA`).setAttribute('opacity', next === 'bme' ? '1' : '0');
-    }
-    const bp = BME_AT[st.bme ?? 'A'];
-    q('po_bme').setAttribute('transform', `translate(${bp[0]} ${bp[1]})`);
     const gl = q('gl');
-    if (next && next !== 'bme') {
-      const L = ORDER.indexOf(next);
+    const np = next ? byId[next] : null;
+    if (np && !positional(np)) {
+      const L = P.indexOf(np);
       const c = iso(L, 90, 50);
       gl.setAttribute('x', String(c[0]));
       gl.setAttribute('y', String(c[1] - 70 + L * 2));
       gl.textContent = '放这里';
     } else gl.textContent = '';
-    q('n').textContent = `${n}/6`;
-    for (let i = 0; i < 6; i++) q(`seg${i}`).setAttribute('fill', i < n ? (i === 2 && st.bme === 'B' ? '#FF7A1A' : '#22C55E') : '#2E2E2B');
-    assemblyChecks(st).forEach((c, i) => {
+    q('n').textContent = `${n}/${N}`;
+    P.forEach((p, i) => {
+      const s = p.spots?.find((x) => x.key === st.choice[p.id]);
+      q(`seg${i}`).setAttribute('fill', i < n ? (s && !s.ok ? '#FF7A1A' : '#22C55E') : '#2E2E2B');
+    });
+    T.checks(st).forEach((c, i) => {
       const t = q(`rv${i}`);
       t.textContent = c.text;
       t.setAttribute('fill', c.ok === null ? '#55534F' : c.ok ? '#22C55E' : '#FF7A1A');
@@ -214,8 +181,7 @@ ${svg.join('\n')}
     q('ma').textContent = st.msg[0];
     q('mb').textContent = st.msg[1];
     q('ma').setAttribute('fill', st.bad ? '#FF7A1A' : '#F7F6F3');
-    q<HTMLElement>('choose').hidden = !st.choosing;
-    q<HTMLElement>('power').hidden = n !== 6;
+    q<HTMLElement>('power').hidden = n !== N;
   }
 
   // 拖动：pointerdown 在卡片上，move / up 挂在窗口上；几乎没动就当作"点一下"
@@ -226,7 +192,8 @@ ${svg.join('\n')}
     return [p.x, p.y];
   };
   const float = q('float');
-  for (const k of ORDER) {
+  for (const p of P) {
+    const k = p.id;
     const card = q(`card_${k}`);
     card.addEventListener('keydown', (e) => {
       const key = (e as KeyboardEvent).key;
@@ -242,18 +209,14 @@ ${svg.join('\n')}
       const start = toSvg(ev.clientX, ev.clientY);
       let last = start;
       let moved = false;
-      const show = () => {
-        float.setAttribute('transform', `translate(${last[0] - 50} ${last[1] - 30})`);
-        float.setAttribute('opacity', '1');
-        for (const j of ORDER) q(`f_${j}`).setAttribute('opacity', j === k ? '1' : '0');
-      };
       const move = (m: PointerEvent) => {
         last = toSvg(m.clientX, m.clientY);
         if (Math.hypot(last[0] - start[0], last[1] - start[1]) > 6) moved = true;
-        if (moved) {
-          card.setAttribute('opacity', '0.35');
-          show();
-        }
+        if (!moved) return;
+        card.setAttribute('opacity', '0.35');
+        float.setAttribute('transform', `translate(${last[0] - 50} ${last[1] - 30})`);
+        float.setAttribute('opacity', '1');
+        for (const j of P) q(`f_${j.id}`).setAttribute('opacity', j.id === k ? '1' : '0');
       };
       const up = () => {
         window.removeEventListener('pointermove', move);
@@ -263,19 +226,23 @@ ${svg.join('\n')}
         if (!moved) return place(k);
         const [x, y] = last;
         if (x < 340 || x > 700 || y < 40 || y > 530) return render(); // 放回零件盘
-        if (k === 'bme' && ORDER[st.placed.length] === 'bme') {
-          const a = iso(2, BME_AT.A[0] + 18, BME_AT.A[1] + 15);
-          const b = iso(2, BME_AT.B[0] + 18, BME_AT.B[1] + 15);
-          place(k, Math.hypot(x - a[0], y - a[1]) <= Math.hypot(x - b[0], y - b[1]) ? 'A' : 'B');
+        if (positional(p) && P[st.placed.length]?.id === k) {
+          const L = P.indexOf(p);
+          let best = p.spots![0].key, dist = Infinity;
+          for (const s of p.spots!) {
+            const c = iso(L, s.at![0] + p.spotSize![0] / 2, s.at![1] + p.spotSize![1] / 2);
+            const d = Math.hypot(x - c[0], y - c[1]);
+            if (d < dist) [best, dist] = [s.key, d];
+          }
+          place(k, best);
         } else place(k);
       };
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
       window.addEventListener('pointercancel', up);
     });
+    for (const s of p.spots ?? []) q(`choose_${k}`).querySelector(`[data-k="pick${s.key}"]`)!.addEventListener('click', () => place(k, s.key));
   }
-  q('pickA').addEventListener('click', () => place('bme', 'A'));
-  q('pickB').addEventListener('click', () => place('bme', 'B'));
   q('reset').addEventListener('click', reset);
   q('power').addEventListener('click', () => {
     setMode('product');
@@ -285,12 +252,14 @@ ${svg.join('\n')}
   render();
 
   return {
+    template: T.id,
     update(f: LiveFrame, roomTemp: number) {
-      if (st.mode === 'product') product.update(f, roomTemp, offset());
+      if (st.mode === 'product') product.update(f, roomTemp, fx());
     },
-    state: (): AssemblyState & { mode: string } => ({ placed: [...st.placed], bme: st.bme, mode: st.mode }),
+    state: () => ({ placed: [...st.placed], choice: { ...st.choice }, mode: st.mode, total: N }),
+    effects: fx,
     /** 装完且没有警告 */
-    clean: () => st.placed.length === 6 && st.bme === 'A',
+    clean: () => st.placed.length === N && P.every((p) => !p.spots || p.spots.find((s) => s.key === st.choice[p.id])?.ok),
     place,
     reset,
   };

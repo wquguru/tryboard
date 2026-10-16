@@ -14,11 +14,21 @@ export interface Level {
   script?: string;
   expect?: string[];
   gpio_toggles?: { pin: number; min: number; max?: number };
-  pwm?: { pin: number; freq: number; min: number; max: number; tol?: number };
+  pwm?: { pin: number; freq: number; min: number; max: number; tol?: number; from?: number; steps?: number[] };
   ws2812?: { pin: number; min_frames?: number; frames?: string[][]; dominant?: 'r' | 'g' | 'b' };
   numeric?: { name: string; regex: string; value: number; tol: number }[];
   oled_min_pixels?: number;
-  assembly?: boolean;
+  lcd_min_pixels?: number;
+  /** true 等同 'weather'；字符串是装配模板名 */
+  assembly?: boolean | string;
+  /** 有多个成品可选（第 07 关）：每个都是一套完整的条件 */
+  variants?: (Omit<Level, 'id'> & { key: string })[];
+  key?: string;
+}
+
+/** 展开子关（07-spin、07-lens），与 tools/check.py 的 expand 一致 */
+export function expandLevels(levels: Level[]): Level[] {
+  return levels.flatMap((l) => [l, ...(l.variants ?? []).map((v) => ({ ...v, id: `${l.id}-${v.key}`, title: `${l.title} · ${v.title}` }))]);
 }
 
 export interface CheckResult {
@@ -42,7 +52,8 @@ export function bootOptions(l: Level) {
     });
   const e = val('--env')?.split(',').map(Number);
   const env = e ? { temp: e[0], humidity: e[1], pressure: e[2] } : undefined;
-  return { i2c, env };
+  const lcd = (val('--spi') ?? '').split(',').includes('gc9a01');
+  return { i2c, env, lcd };
 }
 
 /** 与命令行一致的定时输入脚本：时间（模拟秒）:动作 */
@@ -90,12 +101,36 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
   const pw = l.pwm;
   if (pw) {
     const m = report.match(new RegExp(`PWM GPIO${pw.pin}: (\\d+) 次变化，占空比 ([\\d.]+)\\.\\.([\\d.]+)，频率 ([\\d.]+)Hz`));
-    if (!m) res.push({ ok: false, text: `GPIO${pw.pin} 没有 PWM 输出` });
+    if (!m || Number(m[4]) === 0) res.push({ ok: false, text: `GPIO${pw.pin} 没有 PWM 输出` });
     else {
-      const lo = Number(m[2]), hi = Number(m[3]), f = Number(m[4]);
+      let lo = Number(m[2]), hi = Number(m[3]);
+      const f = Number(m[4]);
+      const sm = report.match(new RegExp(`PWM GPIO${pw.pin} 变化 (.*)`));
+      const ch = sm ? [...sm[1].matchAll(/([\d.]+)@([\d.]+)/g)].map((x) => [Number(x[1]), Number(x[2])]) : [];
+      if (pw.from !== undefined && ch.length) {
+        // 只看稳定以后：from 时刻正在输出的值 + 之后的变化
+        const before = ch.filter(([, t]) => t <= pw.from!).map(([d]) => d);
+        const win = [...before.slice(-1), ...ch.filter(([, t]) => t > pw.from!).map(([d]) => d)];
+        lo = Math.min(...win);
+        hi = Math.max(...win);
+      }
       const tol = pw.tol ?? 0.01;
       const ok = Math.abs(f - pw.freq) <= pw.freq * 0.01 && Math.abs(lo - pw.min) <= tol && Math.abs(hi - pw.max) <= tol;
-      res.push({ ok, text: `GPIO${pw.pin} PWM ${f.toFixed(0)} Hz，脉宽 ${((lo * 1000) / f).toFixed(3)}–${((hi * 1000) / f).toFixed(3)} ms` });
+      const when = pw.from !== undefined ? `，${pw.from} s 以后` : '';
+      res.push({ ok, text: `GPIO${pw.pin} PWM ${f.toFixed(0)} Hz${when}，占空比 ${lo.toFixed(3)}–${hi.toFixed(3)}（约 ${((lo * 1000) / f).toFixed(2)}–${((hi * 1000) / f).toFixed(2)} ms）` });
+      if (pw.steps) {
+        const seq = ch.map(([d]) => d);
+        let i = 0;
+        const miss: number[] = [];
+        for (const want of pw.steps) {
+          let j = i;
+          while (j < seq.length && Math.abs(seq[j] - want) > 0.002) j++;
+          if (j === seq.length) miss.push(want); // 没找到不移动游标，后面的台阶照样能对上
+          else i = j + 1;
+        }
+        const ms = (d: number) => ((d * 1000) / pw.freq).toFixed(1);
+        res.push({ ok: !miss.length, text: `脉宽依次出现 ${pw.steps.map(ms).join(' → ')} ms` + (miss.length ? `：缺 ${miss.map(ms).join('、')} ms` : '') });
+      }
     }
   }
   const w = l.ws2812;
@@ -127,6 +162,11 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
     const m = report.match(/OLED 点亮像素 (\d+)/);
     const n = m ? Number(m[1]) : 0;
     res.push({ ok: n >= l.oled_min_pixels, text: `OLED 点亮 ${n} 像素（要 ≥ ${l.oled_min_pixels}）` });
+  }
+  if (l.lcd_min_pixels !== undefined) {
+    const m = report.match(/LCD GC9A01 非黑像素 (\d+)/);
+    const n = m ? Number(m[1]) : 0;
+    res.push({ ok: n >= l.lcd_min_pixels, text: `圆屏点亮 ${n} 像素（要 ≥ ${l.lcd_min_pixels}）` });
   }
   return res;
 }

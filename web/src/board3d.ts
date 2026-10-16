@@ -69,6 +69,8 @@ export const BOARDS: Record<ChipId, BoardSpec> = { esp32c3: BOARD_C3, esp32s3: B
 export type PartSpec =
   | { type: 'led'; pin: number; color?: number; col?: number; label?: string }
   | { type: 'oled'; addr: number; sda: number; scl: number; label?: string }
+  /** 1.28″ 圆屏 GC9A01（SPI2）：SCLK=12、MOSI=11、CS=10、DC=14、RST=13、背光=15 */
+  | { type: 'gc9a01'; spi?: number; label?: string }
   | { type: 'bme280'; addr: number; sda: number; scl: number; label?: string }
   /** SG90 舵机：信号接 pin，舵盘角度按 PWM 脉宽（0.5–2.5ms → 0–180°） */
   | { type: 'servo'; pin: number; freq?: number; label?: string }
@@ -92,6 +94,8 @@ export interface Bench {
   setBoard(chip: ChipId): void;
   /** OLED 画面：128×64 字节亮度 */
   setOled(pixels: Uint8Array): void;
+  /** GC9A01 画面：240×240 RGBA */
+  setLcd(rgba: Uint8Array): void;
   /** 电位器位置 0..1（面板滑块改了以后同步 3D 旋钮） */
   setPot(pin: number, v: number): void;
   /** 用户在 3D 里拖动电位器旋钮 */
@@ -106,6 +110,28 @@ export interface Bench {
 }
 
 const WIRE = { sda: 0x2f7fd6, scl: 0xf2c53a, vcc: 0xd33a2c, gnd: 0x2b2f36, sig: 0xf2a33a };
+
+/** 1.28″ GC9A01 圆屏模组：圆形 PCB 竖插在面包板上，8 针。原点在排针根部。 */
+function roundLcdModule(tex: THREE.Texture) {
+  const grp = new THREE.Group();
+  const R = 19, T = 1.2;
+  const pcb = new THREE.Mesh(new THREE.CylinderGeometry(R, R, T, 64), new THREE.MeshStandardMaterial({ color: 0x1d1d1c, roughness: 0.6 }));
+  pcb.rotation.x = Math.PI / 2;
+  pcb.position.y = 3 + R;
+  pcb.castShadow = true;
+  grp.add(pcb);
+  const tab = new THREE.Mesh(new THREE.BoxGeometry(22, 6, T), new THREE.MeshStandardMaterial({ color: 0x1d1d1c, roughness: 0.6 }));
+  tab.position.y = 3;
+  grp.add(tab);
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(17, 17, 1.2, 64), new THREE.MeshStandardMaterial({ color: 0x07080a, roughness: 0.08, metalness: 0.3 }));
+  glass.rotation.x = Math.PI / 2;
+  glass.position.set(0, pcb.position.y, T / 2 + 0.6);
+  grp.add(glass);
+  const screen = new THREE.Mesh(new THREE.CircleGeometry(16.25, 64), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+  screen.position.set(0, pcb.position.y, glass.position.z + 0.61);
+  grp.add(screen);
+  return grp;
+}
 
 /** 0.96" SSD1306 模组：竖插在面包板上，屏幕朝观察者。原点在排针根部。 */
 function oledModule(tex: THREE.Texture) {
@@ -602,7 +628,7 @@ export function createBench(container: HTMLElement): Bench {
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0e1114);
+  scene.background = new THREE.Color(0x161615);
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   scene.environmentIntensity = 0.4;
@@ -715,6 +741,8 @@ export function createBench(container: HTMLElement): Bench {
   scene.add(parts);
   const oledData = new Uint8Array(128 * 64 * 4);
   let oledTex: THREE.DataTexture | null = null;
+  const lcdData = new Uint8Array(240 * 240 * 4);
+  let lcdTex: THREE.DataTexture | null = null;
 
   function buildLed(grp: THREE.Group, p: Extract<PartSpec, { type: 'led' }>) {
     const l = led(p.color ?? 0xff2a1a);
@@ -738,6 +766,20 @@ export function createBench(container: HTMLElement): Bench {
    * 4 针 I2C 模组：竖插在 e 行（靠中缝），跳线从模组背后插进同一列的 a 行，
    * 这样线不会挡住屏幕。order 是模组从左到右的引脚功能。
    */
+  /** 圆屏：8 根线（GND VCC SCL SDA RES DC CS BLK），SCL/SDA 在这里是 SPI 的 SCLK/MOSI */
+  function buildSpiLcd(grp: THREE.Group, module: THREE.Group, firstCol: number) {
+    module.position.set(colX(firstCol + 3.5), BB_TOP, bb.rowZ(4));
+    module.rotation.x = -0.12;
+    grp.add(module);
+    const order: [string, number][] = [['GND', WIRE.gnd], ['3V3', WIRE.vcc], ['IO12', WIRE.scl], ['IO11', WIRE.sda], ['IO13', WIRE.sig], ['IO14', 0x8f5bd6], ['IO10', 0x3fb37f], ['IO15', 0xd6d6d6]];
+    order.forEach(([pinName, color], i) => {
+      const hole = new THREE.Vector3(colX(firstCol + i), top, bb.rowZ(0));
+      const a = lift(pinByName(pinName, hole), top);
+      const peak = 50 + i * 1.4;
+      grp.add(wire([a, lift(a, 22 + i), new THREE.Vector3((a.x + hole.x) / 2, peak, Math.min(a.z, hole.z) - 6 - i * 1.5), new THREE.Vector3(hole.x, peak - 4, hole.z - 4), lift(hole, 14), hole], color));
+    });
+  }
+
   function buildI2c(grp: THREE.Group, module: THREE.Group, firstCol: number, order: string[], sda: number, scl: number, height: number) {
     module.position.set(colX(firstCol + 1.5), BB_TOP, bb.rowZ(4));
     module.rotation.x = -0.12; // 略向后仰，便于俯视
@@ -824,6 +866,7 @@ export function createBench(container: HTMLElement): Bench {
     servos = [];
     pots = [];
     oledTex = null;
+    lcdTex = null;
     // 多个同类元件依次往左排，避免叠在同一列
     let ledN = 0;
     let i2cN = 0;
@@ -841,6 +884,16 @@ export function createBench(container: HTMLElement): Bench {
         oledTex.needsUpdate = true;
         buildI2c(parts, oledModule(oledTex), 21 - 7 * i2cN++, ["GND", "VCC", "SCL", "SDA"], p.sda, p.scl, 40);
         label(parts, p.label ?? `SSD1306 · I2C 0x${p.addr.toString(16).toUpperCase()} · SDA IO${p.sda} SCL IO${p.scl}`, new THREE.Vector3(colX(22.5), 46, bb.rowZ(0) - 10));
+      }
+      if (p.type === 'gc9a01') {
+        lcdData.fill(0);
+        for (let i = 3; i < lcdData.length; i += 4) lcdData[i] = 255;
+        lcdTex = new THREE.DataTexture(lcdData, 240, 240, THREE.RGBAFormat);
+        lcdTex.flipY = true;
+        lcdTex.colorSpace = THREE.SRGBColorSpace;
+        lcdTex.needsUpdate = true;
+        buildSpiLcd(parts, roundLcdModule(lcdTex), 16);
+        label(parts, p.label ?? 'GC9A01 圆屏 · SPI2 · SCLK IO12 MOSI IO11 CS IO10 DC IO14', new THREE.Vector3(colX(19.5), 52, bb.rowZ(0) - 10));
       }
       if (p.type === "bme280") {
         buildI2c(parts, bmeModule(), 21 - 7 * i2cN++, ["VIN", "GND", "SCL", "SDA"], p.sda, p.scl, 22);
@@ -996,6 +1049,11 @@ export function createBench(container: HTMLElement): Bench {
       board.rgbMat.color.setRGB(0.87 + r * 0.13, 0.86 + g * 0.14, 0.82 + b * 0.18);
       board.rgbLight.color.setRGB(peak ? r / peak : 0, peak ? g / peak : 0, peak ? b / peak : 0);
       board.rgbLight.intensity = peak * 80 * k;
+    },
+    setLcd(px) {
+      if (!lcdTex) return;
+      lcdData.set(px.subarray(0, lcdData.length));
+      lcdTex.needsUpdate = true;
     },
     setOled(px) {
       if (!oledTex) return;

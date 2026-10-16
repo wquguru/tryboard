@@ -3,6 +3,8 @@ import { LiveSim } from './live';
 import { createBenchView } from './views/bench';
 import { createAssembly } from './views/assembly';
 import { createShowcase, type ShowKind } from './views/showcase';
+import { createProductView } from './views/product';
+import { createLensProduct, createSpinProduct } from './views/lcdproducts';
 import levelsJson from '../../firmware/levels.json';
 import type { Level } from './checks';
 
@@ -57,6 +59,38 @@ io.observe($('assembly'));
 sim.start().catch((e) => ($('benchLine').textContent = `加载失败：${e}`));
 
 document.querySelectorAll<HTMLElement>('[data-show]').forEach((el) => createShowcase(el, el.dataset.show as ShowKind));
+
+// 成品卡片：点「跑真实固件」把示意换成模拟器驱动的成品视图（再点回到示意）
+const SHOW_FW: Record<ShowKind, { lcd: boolean; i2c: { kind: string; addr: number }[] }> = {
+  spin: { lcd: true, i2c: [] },
+  lens: { lcd: true, i2c: [] },
+  weather: { lcd: false, i2c: [{ kind: 'ssd1306', addr: 0x3c }, { kind: 'bme280', addr: 0x76 }] },
+};
+document.querySelectorAll<HTMLButtonElement>('[data-run]').forEach((btn) => {
+  const kind = btn.dataset.run as ShowKind;
+  const el = document.querySelector<HTMLElement>(`[data-show="${kind}"]`)!;
+  let s: LiveSim | null = null;
+  btn.onclick = () => {
+    if (s) {
+      s.dispose();
+      s = null;
+      createShowcase(el, kind);
+      btn.textContent = '跑真实固件';
+      return;
+    }
+    const h = { boot: (d: boolean) => s?.press(d), temp: (d: number) => s?.setTemp(s.env.temp + d) };
+    const view = kind === 'spin' ? createSpinProduct(el, h, { servoPin: SERVO }) : kind === 'lens' ? createLensProduct(el, h) : null;
+    const wv = kind === 'weather' ? createProductView(el, h, { servoPin: SERVO }) : null;
+    s = new LiveSim({
+      fw: `./fw/${kind}/flash.bin`,
+      ...SHOW_FW[kind],
+      env: { temp: 23.5, humidity: 45, pressure: 101325 },
+      onFrame: (f) => (view ? view.update(f, 23.5, {}) : wv!.update(f, s!.env.temp, 0)),
+    });
+    s.start().catch(() => (btn.textContent = '加载失败'));
+    btn.textContent = '回到示意';
+  };
+});
 
 const levels = levelsJson as Level[];
 $('path').innerHTML = levels

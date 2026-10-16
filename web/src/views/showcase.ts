@@ -1,11 +1,11 @@
-// 成品示意：会转身的小黄、透镜里的小人、温湿度检测器。这些是外观示意，不跑固件（圆屏 GC9A01 还没建模）。
+// 成品示意：会转身的小黄、透镜里的小人、温湿度检测器。这里只是外观示意，不跑固件；首页的「跑真实固件」会换成由模拟器驱动的成品视图。
 import { dialTicks, mount } from './common';
 
 export type ShowKind = 'spin' | 'lens' | 'weather';
 const SPEC: Record<ShowKind, string> = {
-  spin: '小黄 · 舵机转台 ±60° · ESP32-C3',
+  spin: '小黄 · 舵机转台 ±60° · ESP32-S3',
   lens: '透镜小人 · 1.28″ 圆屏 GC9A01 · ESP32-S3',
-  weather: '温湿度检测器 · OLED + BME280 · ESP32-C3',
+  weather: '温湿度检测器 · OLED + BME280 · ESP32-S3',
 };
 const ARIA: Record<ShowKind, string> = {
   spin: '可以转身的小黄桌面机器人，站在舵机转台上',

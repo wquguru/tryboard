@@ -1,12 +1,11 @@
 // 关卡页：7 关，每关的通过条件来自 firmware/levels.json，判定规则与 tools/check.py 相同。
 // 参考固件通过只说明关卡本身能过；只有你上传的固件通过才记进度（存在本机浏览器里）。
 import levelsJson from '../../firmware/levels.json';
-import { checkCommand, type Level } from './checks';
+import { bootOptions, checkCommand, type Level } from './checks';
 import { verifyLevel, type VerifyOutcome } from './verify';
 import { fetchBuf } from './assets';
 import { LiveSim } from './live';
-import { createAssembly, CHIP_HEAT_OFFSET } from './views/assembly';
-import { createShowcase, type ShowKind } from './views/showcase';
+import { createAssembly } from './views/assembly';
 
 const levels = levelsJson as Level[];
 const $ = (id: string) => document.getElementById(id)!;
@@ -33,18 +32,28 @@ const results: Record<string, { who: string; out: VerifyOutcome }> = {};
 let running = false;
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-const selected = () => levels.find((l) => '#' + l.id === location.hash) ?? levels.find((l) => !progress[l.id]) ?? levels[0];
+const done = (l: Level) => !!progress[l.id] || (l.variants ?? []).some((v) => progress[`${l.id}-${v.key}`]);
+/** 选中的关（标签页）：#07-spin 也算选中第 07 关 */
+const selected = () => levels.find((l) => location.hash === '#' + l.id || location.hash.startsWith(`#${l.id}-`)) ?? levels.find((l) => !done(l)) ?? levels[0];
+/** 实际验收的那一套条件：有成品可选的关取选中的成品（默认第一个） */
+function current(): Level {
+  const l = selected();
+  if (!l.variants?.length) return l;
+  const key = location.hash.startsWith(`#${l.id}-`) ? location.hash.slice(l.id.length + 2) : l.variants[0].key;
+  const v = l.variants.find((x) => x.key === key) ?? l.variants[0];
+  return { ...v, id: `${l.id}-${v.key}`, title: `${l.title} · ${v.title}` };
+}
 
 function renderTabs() {
   const cur = selected();
-  const firstTodo = levels.find((l) => !progress[l.id]);
-  $('passed').textContent = `已通过 ${levels.filter((l) => progress[l.id]).length} / ${levels.length}`;
+  const firstTodo = levels.find((l) => !done(l));
+  $('passed').textContent = `已通过 ${levels.filter(done).length} / ${levels.length}`;
   $('tabs').innerHTML = levels
     .map((l) => {
-      const done = !!progress[l.id];
-      const now = !done && l === firstTodo;
-      return `<button type="button" role="tab" class="lv-tab ${done ? 'done' : now ? 'now' : ''}" aria-selected="${l === cur}" data-id="${l.id}">
-<span class="top"><span class="num">${l.id}</span><span class="chip">${done ? '已通过' : now ? '下一关' : '未开始'}</span></span>
+      const ok = done(l);
+      const now = !ok && l === firstTodo;
+      return `<button type="button" role="tab" class="lv-tab ${ok ? 'done' : now ? 'now' : ''}" aria-selected="${l === cur}" data-id="${l.id}">
+<span class="top"><span class="num">${l.id}</span><span class="chip">${ok ? '已通过' : now ? '下一关' : '未开始'}</span></span>
 <span class="t">${l.title}</span><span class="g">${l.goal}</span></button>`;
     })
     .join('');
@@ -63,12 +72,17 @@ function resultHtml(l: Level) {
 }
 
 function renderDetail() {
-  const l = selected();
+  const parent = selected();
+  const l = current();
   const up = uploads[l.id];
   const canRun = !!l.ref;
   const inLab = l.ref && examples.includes(l.ref);
+  const picker = parent.variants?.length
+    ? `<div class="lv-btns" role="radiogroup" aria-label="选一个成品">${parent.variants.map((v) => `<a class="btn ${l.id === `${parent.id}-${v.key}` ? 'dark' : ''}" role="radio" aria-checked="${l.id === `${parent.id}-${v.key}`}" href="#${parent.id}-${v.key}">${v.title}</a>`).join('')}</div><span style="font-size:14px;color:var(--dim)">也可以自己定成品：先写清楚通过条件（引脚、波形、屏上显示、串口打印），再交给 AI。</span>`
+    : '';
   $('detail').innerHTML = `<div class="col">
-<div style="display:flex;flex-direction:column;gap:6px"><span class="mono" style="font-size:13px;font-weight:700;color:var(--accent-ink)">第 ${l.id} 关</span><h2 style="font-size:34px">${l.title}</h2><span style="font-size:17px;color:var(--dim)">${l.goal}</span></div>
+${picker}
+<div style="display:flex;flex-direction:column;gap:6px"><span class="mono" style="font-size:13px;font-weight:700;color:var(--accent-ink)">第 ${parent.id} 关</span><h2 style="font-size:34px">${l.title}</h2><span style="font-size:17px;color:var(--dim)">${l.goal}</span></div>
 <div class="lv-f"><span class="lv-k">通过条件</span><span style="font-size:17px;font-weight:700">${l.pass}</span></div>
 <div class="lv-row"><div><span class="lv-k">新增零件</span><span>${l.buy}</span></div><div><span class="lv-k">学到</span><span>${l.learn}</span></div></div>
 ${canRun ? `<div class="lv-btns">
@@ -103,7 +117,7 @@ ${canRun ? `<span class="lv-k">验收命令 · 你和 AI 用同一条</span><pre
     const f = (e.target as HTMLInputElement).files?.[0];
     if (!f) return;
     uploads[l.id] = { name: f.name, buf: await f.arrayBuffer() };
-    if (l.assembly) live?.load(uploads[l.id].buf);
+    if (l.assembly && liveFor === l.id) live?.load(uploads[l.id].buf);
     run(l, uploads[l.id].buf, f.name, true);
   };
   $('runRef').onclick = async () => run(l, await fetchBuf(`./fw/${l.ref}/flash.bin`), `参考固件 ${l.ref}`, false);
@@ -117,13 +131,12 @@ async function run(l: Level, flash: ArrayBuffer, who: string, own: boolean) {
   const st = () => document.getElementById('runState');
   try {
     // 第 6 关：装配也算。传感器贴着芯片，模拟器里的传感器就读到更高的温度
-    const bad = l.assembly && asm?.state().bme === 'B';
-    const env = l.assembly ? { temp: 23.5 + (bad ? CHIP_HEAT_OFFSET : 0), humidity: 45, pressure: 101325 } : undefined;
+    const env = l.assembly ? { temp: 23.5 + (asm?.effects().sensorOffset ?? 0), humidity: 45, pressure: 101325 } : undefined;
     const out = await verifyLevel(l, flash, (t) => { const e = st(); if (e) e.textContent = `模拟中 ${t.toFixed(1)} / ${l.seconds} s…`; }, env);
     if (l.assembly) {
       const s = asm!.state();
-      const ok = s.placed.length === 6 && s.bme === 'A';
-      out.results.push({ ok, text: s.placed.length < 6 ? `装配 ${s.placed.length}/6，还没装完（在下面拖零件）` : ok ? '装配 6/6，没有警告' : `装配 6/6，但传感器贴着芯片（读数偏高约 ${CHIP_HEAT_OFFSET} ℃）` });
+      const ok = asm!.clean();
+      out.results.push({ ok, text: s.placed.length < s.total ? `装配 ${s.placed.length}/${s.total}，还没装完（在下面拖零件）` : ok ? `装配 ${s.total}/${s.total}，没有警告` : `装配 ${s.total}/${s.total}，但有警告（看装配区右侧的检查）` });
       out.ok = out.results.every((r) => r.ok);
     }
     results[l.id] = { who, out };
@@ -139,58 +152,80 @@ async function run(l: Level, flash: ArrayBuffer, who: string, own: boolean) {
   renderDetail();
 }
 
-// 第 6 关的装配区、第 7 关的成品示意
+// 有装配的关（第 06 关、第 07 关的成品）：装配区跑这一关的固件（上传过就跑你的）
 let live: LiveSim | null = null;
+let liveFor = '';
 let asm: ReturnType<typeof createAssembly> | null = null;
 let extraFor = '';
+/** 每关的装配区单独保留：切到别的关再切回来，装到一半的进度还在 */
+const asmCache: Record<string, { node: HTMLElement; asm: ReturnType<typeof createAssembly> }> = {};
+const NOTE: Record<string, string> = {
+  weather: 'BME280 贴着芯片，读数会偏高，验收就过不了',
+  spin: '舵盘没回中位就装，"正面"会歪一个齿（14.4°）',
+  lens: '透镜卡在低档贴着屏幕，就几乎不放大',
+};
 function renderExtra() {
-  const l = selected();
+  const l = current();
   if (extraFor === l.id) return;
   extraFor = l.id;
-  live?.pause();
   const box = $('extra');
   box.innerHTML = '';
-  if (l.assembly) {
-    box.innerHTML = `<div class="stack" style="gap:12px"><div class="sec-head"><h2 style="font-size:28px">装进壳里</h2><span class="mono">拖零件 → 合上 → 开机</span></div><div id="asm"></div><div class="note"><span>↑ 装好再点上面的验收：BME280 贴着芯片，读数会偏高，验收就过不了</span><span>${uploads[l.id] ? '跑的是你上传的固件' : '跑的是参考固件 weather'}</span></div></div>`;
-    let productMode = false;
-    let offset = 0;
-    const apply = () => live!.setOffset(productMode ? offset : 0);
-    live ??= new LiveSim({
+  asm = null;
+  if (!l.assembly) {
+    live?.pause();
+    return;
+  }
+  const template = typeof l.assembly === 'string' ? l.assembly : 'weather';
+  const cached = asmCache[l.id];
+  if (cached) {
+    box.appendChild(cached.node);
+    asm = cached.asm;
+  } else box.innerHTML = `<div class="stack" style="gap:12px"><div class="sec-head"><h2 style="font-size:28px">装起来</h2><span class="mono">拖零件 → 装好 → 开机</span></div><div id="asm"></div><div class="note"><span>↑ 装好再点上面的验收：${NOTE[template]}</span><span>${uploads[l.id] ? '跑的是你上传的固件' : `跑的是参考固件 ${l.ref}`}</span></div></div>`;
+  let productMode = false;
+  let offset = 0;
+  if (liveFor !== l.id) {
+    live?.dispose();
+    const { i2c, env, lcd } = bootOptions(l);
+    live = new LiveSim({
       fw: uploads[l.id]?.buf ?? `./fw/${l.ref}/flash.bin`,
-      i2c: [{ kind: 'ssd1306', addr: 0x3c }, { kind: 'bme280', addr: 0x76 }],
-      env: { temp: 23.5, humidity: 45, pressure: 101325 },
+      i2c,
+      lcd,
+      env: env ?? { temp: 23.5, humidity: 45, pressure: 101325 },
       onFrame: (f) => asm?.update(f, live!.env.temp),
     });
-    asm = createAssembly(
-      $('asm'),
-      {
-        boot: (d) => live!.press(d),
-        temp: (d) => live!.setTemp(live!.env.temp + d),
-        offset: (d) => {
-          offset = d;
-          apply();
+    liveFor = l.id;
+    live.start();
+  } else live?.resume();
+  if (cached) {
+    // 装配区里的装法影响（传感器偏移）要重新告诉新起的模拟器
+    if (cached.asm.state().mode === 'product') live!.setOffset(cached.asm.effects().sensorOffset ?? 0);
+    return;
+  }
+  const apply = () => live!.setOffset(productMode ? offset : 0);
+  asm = createAssembly(
+    $('asm'),
+    {
+      boot: (d) => live!.press(d),
+      temp: (d) => live!.setTemp(live!.env.temp + d),
+      offset: (d) => {
+        offset = d;
+        apply();
+      },
+      mode: (m) => {
+        productMode = m === 'product';
+        apply();
+        if (productMode) live!.resume();
+      },
+      step: () => {
+        if (results[l.id]) {
           delete results[l.id];
           renderDetail();
-        },
-        mode: (m) => {
-          productMode = m === 'product';
-          apply();
-          if (productMode) live!.resume();
-        },
-        step: () => {
-          if (results[l.id]) {
-            delete results[l.id];
-            renderDetail();
-          }
-        },
+        }
       },
-      { servoPin: 4 },
-    );
-    live.start();
-  } else if (!l.ref) {
-    box.innerHTML = `<div class="grid3">${(['spin', 'lens', 'weather'] as ShowKind[]).map((k) => `<div class="stack" style="gap:10px"><div data-show="${k}"></div><span style="font-weight:900;font-size:18px">${{ spin: '会转身的小黄', lens: '透镜里的小人', weather: '温湿度检测器' }[k]}</span><span style="font-size:14px;color:var(--dim)">${{ spin: '第 5 关的舵机 + 一块小屏', lens: '换成 1.28″ 圆屏 GC9A01（模拟器暂不支持）', weather: '第 6 关装好的就是它' }[k]}</span></div>`).join('')}</div>`;
-    box.querySelectorAll<HTMLElement>('[data-show]').forEach((el) => createShowcase(el, el.dataset.show as ShowKind));
-  }
+    },
+    { servoPin: 4, template },
+  );
+  asmCache[l.id] = { node: box.firstElementChild as HTMLElement, asm };
 }
 
 function render() {

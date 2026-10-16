@@ -3,12 +3,14 @@
 /** 模拟器给视图的一帧：OLED 像素、各引脚 PWM 占空比、板载彩灯、是否在跑 */
 export interface LiveFrame {
   oled: Uint8Array | null;
+  /** GC9A01 圆屏：240×240 RGBA；没有圆屏时为 null */
+  lcd: Uint8Array | null;
   pwm: number[];
   rgb: number[] | null;
   running: boolean;
 }
 
-export const emptyFrame = (): LiveFrame => ({ oled: null, pwm: [], rgb: null, running: false });
+export const emptyFrame = (): LiveFrame => ({ oled: null, lcd: null, pwm: [], rgb: null, running: false });
 
 /** 在容器里放一段 SVG/HTML，返回按 data-k 取元素的函数 */
 let uid = 0;
@@ -52,6 +54,16 @@ export function oledImage(px: Uint8Array): string {
   }
   g.putImageData(img, 0, 0);
   return oledCanvas.toDataURL();
+}
+
+const lcdCanvas = document.createElement('canvas');
+lcdCanvas.width = 240;
+lcdCanvas.height = 240;
+/** GC9A01 240×240 RGBA → data URL */
+export function lcdImage(rgba: Uint8Array): string {
+  const g = lcdCanvas.getContext('2d')!;
+  g.putImageData(new ImageData(new Uint8ClampedArray(rgba.buffer, rgba.byteOffset, 240 * 240 * 4), 240, 240), 0, 0);
+  return lcdCanvas.toDataURL();
 }
 
 /** 0–40 ℃ 半圆表盘的刻度路径 */

@@ -27,6 +27,7 @@ interface Ex {
   tb_env_set(t: number, h: number, p: number): void;
   tb_report(): number;
   tb_report_ptr(): number;
+  tb_lcd_attach?(): number;
 }
 
 export interface VerifyJob {
@@ -38,6 +39,7 @@ export interface VerifyJob {
   env?: { temp: number; humidity: number; pressure: number };
   script?: string;
   pwmPin?: number;
+  lcd?: boolean;
 }
 
 export type VerifyMsg =
@@ -71,13 +73,14 @@ self.onmessage = async (ev: MessageEvent<VerifyJob>) => {
   }
   for (const d of j.i2c) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
   if (j.env) e.tb_env_set(j.env.temp, j.env.humidity, j.env.pressure);
+  if (j.lcd) e.tb_lcd_attach?.();
 
   const script = parseScript(j.script);
   let si = 0;
   const total = Math.floor(j.seconds * CPU_HZ);
   let done = 0;
   let out = '';
-  const trace: [number, number][] = [];
+  const trace: [number, number, number][] = [];
   const f32 = Math.fround;
   let error: string | undefined;
   let lastPost = 0;
@@ -96,7 +99,7 @@ self.onmessage = async (ev: MessageEvent<VerifyJob>) => {
       if (d >= 0) {
         const f = e.tb_pin_pwm_freq(j.pwmPin);
         const l = trace[trace.length - 1];
-        if (!l || Math.abs(f32(l[0] - d)) > f32(0.004) || Math.abs(f32(l[1] - f)) > f32(0.5)) trace.push([d, f]);
+        if (!l || Math.abs(f32(l[0] - d)) > f32(0.004) || Math.abs(f32(l[1] - f)) > f32(0.5)) trace.push([d, f, now]);
       }
     }
     const slice = si >= script.length && j.pwmPin === undefined ? CPU_HZ / 100 : CPU_HZ / 1000;
@@ -126,6 +129,14 @@ self.onmessage = async (ev: MessageEvent<VerifyJob>) => {
     }
     const freq = trace.length ? trace[trace.length - 1][1] : 0;
     report += `[tryboard] PWM GPIO${j.pwmPin}: ${trace.length} 次变化，占空比 ${mn.toFixed(3)}..${mx.toFixed(3)}，频率 ${freq.toFixed(1)}Hz\n`;
+    const steps: string[] = [];
+    let last = '';
+    for (const [d, , t] of trace) {
+      const k = d.toFixed(3);
+      if (k !== last) steps.push(`${k}@${t.toFixed(3)}`);
+      last = k;
+    }
+    report += `[tryboard] PWM GPIO${j.pwmPin} 变化 ${steps.join(' ')}\n`;
   }
   post({ type: 'done', stdout: out, report, sim: e.tb_cycles() / CPU_HZ, error });
 };
