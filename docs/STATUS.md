@@ -102,4 +102,5 @@
 | 拖拽装配 | ✅ | 鼠标真实拖拽 6/6；顺序错被拦；BME280 贴芯片 → 第 6 关温度偏差 2.5、不通过 | 几何检查为估算，未经真机标定 |
 | 成品视图 | ✅ | 开机后 OLED 有画面（真实固件帧） | 首页、关卡页、实验台三处 |
 | 首页实时实验桌 | ✅ | 串口 T=23.50、按 BOOT 屏幕重画、390px 宽无横向滚动 | 看不见时暂停模拟 |
+| 真实器材 3D 台面（P0-10 / P0-11） | ✅ | agent-browser：weather / spin / C3 示例截图，针脚丝印可辨；highlight / setWireFault / measure / setHeat / setTheme 各截一张；console 无 error（Reviews/ab/P0-10.md） | 外观示意；中端机帧率未实测（基线 weather 228 calls / 11 万三角形）；属性面板实时值待外壳 |
 | 成品示意（小黄 / 透镜 / 检测器） | 🟡 | — | 只是外观示意；内核已有 GC9A01 圆屏（`tb_lcd_*`），lens / spin 固件已能跑，网页显示待接 |

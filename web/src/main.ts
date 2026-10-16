@@ -28,6 +28,10 @@ const resetBtn = $<HTMLButtonElement>('reset');
 const exampleSel = $<HTMLSelectElement>('example');
 
 const bench = createBench($('stage'));
+// 验收脚本要直接调 ScenePickApi；只在 ?debug=1 时暴露，正式页面不挂全局
+if (new URLSearchParams(location.search).get('debug') === '1') {
+  (window as unknown as { __bench: typeof bench }).__bench = bench;
+}
 const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
 const send = (m: ToWorker, transfer: Transferable[] = []) => worker.postMessage(m, transfer);
 
