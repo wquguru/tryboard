@@ -4,6 +4,7 @@
 //! 执行模型：写 CTR.trans_start 后，按命令表 COMD0..7 立即对器件执行读写（器件看到的字节序与真机一致），
 //! 但"总线忙"和完成中断推迟到按 SCL 时序算出的真实耗时之后，驱动看到的时序与真机一致。
 
+use crate::iotrace::{i2cbit, kind, IoEvent};
 use std::any::Any;
 use std::collections::VecDeque;
 
@@ -53,6 +54,12 @@ pub struct I2c {
     pending: Option<(u64, u32)>,
     pub transactions: u64,
     pub nacks: u64,
+    /// 事务层事件（逻辑分析仪）：SocBus 每次写寄存器后搬进 IoTrace
+    pub events: Vec<IoEvent>,
+    /// 起始之后、停止之前（命令表分几批执行时，后一批的 RSTART 是重复起始）
+    in_txn: bool,
+    /// 事件里的控制器编号位（I2C1 = i2cbit::PORT1）
+    pub port_bit: u16,
 }
 
 impl Default for I2c {
@@ -76,11 +83,19 @@ impl Default for I2c {
             pending: None,
             transactions: 0,
             nacks: 0,
+            events: Vec::new(),
+            in_txn: false,
+            port_bit: 0,
         }
     }
 }
 
 impl I2c {
+    /// 第二个控制器（S3 的 I2C1）：事件里带 PORT1 位
+    pub fn with_port(port_bit: u16) -> Self {
+        I2c { port_bit, ..I2c::default() }
+    }
+
     pub fn attach(&mut self, dev: Box<dyn I2cDevice>) {
         let a = dev.address();
         self.devices.retain(|d| d.address() != a);
@@ -152,6 +167,7 @@ impl I2c {
                 if v & (1 << 10) != 0 {
                     self.pending = None;
                     self.cur = None;
+                    self.in_txn = false;
                 }
                 if v & (1 << 5) != 0 && v & (1 << 4) != 0 {
                     self.run_commands(now);
@@ -201,6 +217,9 @@ impl I2c {
         let mut bits: u64 = 0;
         let mut ints = 0u32;
         let mut nacked = false;
+        // 事件时刻 = 开始时刻 + 已经过去的 SCL 位数 × 每位周期（与完成中断的时刻同一套算法）
+        let bc = self.bit_cycles();
+        let pb = self.port_bit;
         for idx in 0..8 {
             let reg = 0x58 / 4 + idx;
             let cmd = self.regs[reg];
@@ -215,13 +234,18 @@ impl I2c {
             self.regs[reg] |= 1 << 31;
             match opc {
                 op::RSTART => {
+                    let b = pb | if self.in_txn { i2cbit::RESTART } else { 0 };
+                    self.events.push(IoEvent { t: now + bits * bc, kind: kind::I2C_START, a: 0, b, v: bc.min(u32::MAX as u64) as u32 });
+                    self.in_txn = true;
                     self.need_addr = true;
                     bits += 1;
                 }
                 op::WRITE => {
                     for _ in 0..n {
                         let b = self.tx.pop_front().unwrap_or(0xff);
+                        let t = now + bits * bc;
                         bits += 9;
+                        let is_addr = self.need_addr;
                         let acked = if self.need_addr {
                             self.need_addr = false;
                             let addr = b >> 1;
@@ -236,6 +260,12 @@ impl I2c {
                                 None => false,
                             }
                         };
+                        let nack = if acked { 0 } else { i2cbit::NACK };
+                        self.events.push(if is_addr {
+                            IoEvent { t, kind: kind::I2C_ADDR, a: b >> 1, b: pb | (b & 1) as u16 | nack, v: 0 }
+                        } else {
+                            IoEvent { t, kind: kind::I2C_DATA, a: b, b: pb | nack, v: 0 }
+                        });
                         let level = if acked { 0 } else { 1 };
                         if ack_en && level != ack_exp {
                             nacked = true;
@@ -251,7 +281,10 @@ impl I2c {
                             Some(i) => self.devices[i].read(),
                             None => 0xff, // 没人驱动 SDA：上拉读到全 1
                         };
-                        let _ = (k, ack_val);
+                        // 主机在每个读字节后回 ACK_VALUE（最后一个字节通常是 NACK，告诉从机不要了）
+                        let _ = k;
+                        let nack = if ack_val != 0 { i2cbit::NACK } else { 0 };
+                        self.events.push(IoEvent { t: now + bits * bc, kind: kind::I2C_DATA, a: b, b: pb | i2cbit::READ | nack, v: 0 });
                         if self.rx.len() < FIFO_LEN {
                             self.rx.push_back(b);
                         } else {
@@ -261,6 +294,8 @@ impl I2c {
                     }
                 }
                 op::STOP => {
+                    self.events.push(IoEvent { t: now + bits * bc, kind: kind::I2C_STOP, a: 0, b: pb, v: 0 });
+                    self.in_txn = false;
                     if let Some(i) = self.cur.take() {
                         self.devices[i].stop();
                     }
@@ -278,7 +313,7 @@ impl I2c {
             }
         }
         self.int_raw |= int::TRANS_START;
-        let done = now + bits.max(1) * self.bit_cycles();
+        let done = now + bits.max(1) * bc;
         self.pending = Some((done, ints));
     }
 
@@ -297,5 +332,49 @@ impl I2c {
 
     pub fn irq(&self) -> bool {
         self.int_raw & self.int_ena != 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::devices::bme280::Bme280;
+
+    fn cmd(op: u32, n: u32, ack_en: bool, ack_val: u32) -> u32 {
+        op << 11 | (ack_en as u32) << 8 | ack_val << 10 | n
+    }
+
+    /// 读 BME280 的 0xF7 起 8 字节，分两批命令（第二批以 RSTART 开头 = 重复起始），事件序列与真机总线上一致
+    #[test]
+    fn events_burst_read_with_restart() {
+        let mut b = I2c::default();
+        b.attach(Box::new(Bme280::new(0x76)));
+        // 第一批：START 0x76 W · 0xF7 · END
+        b.write(0x1c, 0x76 << 1, 0);
+        b.write(0x1c, 0xf7, 0);
+        b.regs[0x58 / 4] = cmd(op::RSTART, 0, false, 0);
+        b.regs[0x58 / 4 + 1] = cmd(op::WRITE, 2, true, 0);
+        b.regs[0x58 / 4 + 2] = cmd(op::END, 0, false, 0);
+        b.write(0x04, 1 << 5 | 1 << 4, 0);
+        // 第二批：RESTART 0x76 R · 7 字节 ACK · 1 字节 NACK · STOP
+        b.write(0x1c, 0x76 << 1 | 1, 100_000);
+        b.regs[0x58 / 4] = cmd(op::RSTART, 0, false, 0);
+        b.regs[0x58 / 4 + 1] = cmd(op::WRITE, 1, true, 0);
+        b.regs[0x58 / 4 + 2] = cmd(op::READ, 7, false, 0);
+        b.regs[0x58 / 4 + 3] = cmd(op::READ, 1, false, 1);
+        b.regs[0x58 / 4 + 4] = cmd(op::STOP, 0, false, 0);
+        b.write(0x04, 1 << 5 | 1 << 4, 100_000);
+        let kinds: Vec<String> = b.events.iter().map(|e| e.line().split_once(' ').unwrap().1.to_string()).collect();
+        let bc = b.events[0].v as u64;
+        let (st, rst) = (format!("I2C0 START {bc}"), format!("I2C0 RESTART {bc}"));
+        assert_eq!(&kinds[..4], [st.as_str(), "I2C0 ADDR 76 W ACK", "I2C0 DATA f7 W ACK", rst.as_str()]);
+        assert_eq!(kinds[4], "I2C0 ADDR 76 R ACK");
+        assert_eq!(kinds.iter().filter(|k| k.contains(" R ")).count(), 9);
+        assert!(kinds[12].ends_with("R NACK"));
+        assert_eq!(kinds[13], "I2C0 STOP");
+        // 时刻按 SCL 位：起始 1 位、每字节 9 位
+        assert_eq!(b.events[1].t, bc);
+        assert_eq!(b.events[2].t, 10 * bc);
+        assert_eq!(b.events[4].t, 100_000 + bc);
     }
 }

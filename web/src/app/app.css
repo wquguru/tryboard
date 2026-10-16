@@ -676,3 +676,63 @@ canvas.scope { display: block; width: 100%; height: 96px; border: 1px solid var(
 /* 暗色下零件缩略图（黑色线材、电源头）在深色卡片上看不清：垫一块浅底，像商品图 */
 :root[data-theme='dark'] .pc-g { background: #c9ced6; border-radius: 6px; }
 :root[data-theme='dark'] .pc.off .pc-g { opacity: 0.35; }
+
+/* ---------- 逻辑分析仪（P1-05）：实验台底部，夹在两栏之间；打开时工具条让到它上面 ---------- */
+.analyzer {
+  position: fixed;
+  left: calc(268px + 2 * var(--gap));
+  right: calc(304px + 2 * var(--gap));
+  bottom: calc(var(--tl-h) + var(--gap));
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+}
+.analyzer[hidden] { display: none; }
+body:not([data-step='bench']) .analyzer { display: none; }
+body.ana-open[data-step='bench'] .toolbar { bottom: calc(var(--tl-h) + var(--gap) + var(--ana-h, 260px) + 8px); }
+body.ana-open[data-step='bench'] .disclaimer { bottom: calc(var(--tl-h) + var(--ana-h, 260px) + 72px); }
+body.ana-open[data-step='bench'] .toast { bottom: calc(var(--tl-h) + var(--ana-h, 260px) + 72px); }
+.ana-h { display: flex; align-items: center; gap: 6px; padding: 5px 8px 5px 12px; border-bottom: 1px solid var(--line-soft); min-width: 0; }
+.ana-t { font-size: 11px; font-weight: 500; color: var(--muted); flex: none; }
+.ana-src { font-size: 11px; flex: none; }
+.ana-read { font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
+.ana-sp { flex: 0 0 4px; }
+.ana-sep { width: 1px; align-self: stretch; background: var(--line); margin: 2px 2px; flex: none; }
+.ana-b { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 2px 8px; cursor: pointer; font: inherit; font-size: 12px; flex: none; white-space: nowrap; }
+.ana-b:hover { background: var(--field); }
+.ana-b[aria-pressed='true'] { background: var(--accent-bg); color: var(--accent); border-color: #b9e0ff; }
+.ana-b:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ana-span { font-size: 11px; min-width: 62px; text-align: center; flex: none; }
+.ana-body { position: relative; height: var(--ana-cv-h, 200px); }
+.ana-cv { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+.ana-f { display: flex; gap: 16px; justify-content: space-between; padding: 4px 12px 6px; border-top: 1px solid var(--line-soft); font-size: 11px; min-height: 24px; }
+.ana-f .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- ⌘K 命令框（P1-06） ---------- */
+.cmdk-list {
+  position: fixed;
+  top: calc(var(--gap) + 42px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(460px, calc(100vw - 2 * 268px - 4 * var(--gap)));
+  min-width: 300px;
+  max-height: min(420px, 60vh);
+  overflow: auto;
+  padding: 4px;
+  z-index: 5;
+  background: #fff;
+}
+.cmdk-list[hidden] { display: none; }
+.ck-g { font-size: 11px; font-weight: 500; color: var(--muted); padding: 8px 10px 4px; }
+.ck-i { display: flex; align-items: baseline; gap: 8px; width: 100%; border: 0; background: transparent; text-align: left; font: inherit; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+.ck-i[aria-selected='true'] { background: var(--accent-bg); }
+.ck-i .ck-l { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ck-i .ck-m { color: var(--muted); font-family: var(--mono); font-size: 11px; flex: none; }
+.ck-i mark { background: none; color: var(--accent); font-weight: 500; }
+.ck-empty { color: var(--muted); padding: 10px; font-size: 12px; }
+.ck-foot { display: flex; gap: 12px; color: var(--muted); font-size: 11px; padding: 6px 10px 4px; border-top: 1px solid var(--line-soft); margin-top: 4px; }
+@media (max-width: 760px) {
+  .analyzer, .cmdk-list { display: none !important; }
+}

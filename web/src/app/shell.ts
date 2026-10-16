@@ -1,4 +1,4 @@
-// 工作台外壳：路由（?work= + #步骤）、步骤注册、右上结论 / 下一步、⌘K 占位、提示条。
+// 工作台外壳：路由（?work= + #步骤）、步骤注册、右上结论 / 下一步、提示条（⌘K 在 cmdk.ts）。
 // 步骤切换只换面板内容；实时模拟和 3D 台面在 session 里，整页只有一份。
 import { STEPS, type Shell, type StepCtx, type StepId, type StepImpl } from './types';
 import { createTimeline } from './timeline';
@@ -54,22 +54,7 @@ export function createShell(): Shell {
       toastTimer = window.setTimeout(() => (t.hidden = true), 2600);
     },
   };
-  // ⌘K：只是占位输入框（命令执行由后续任务实现）
-  const cmd = $<HTMLInputElement>('cmdk');
-  document.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-      e.preventDefault();
-      cmd.focus();
-      cmd.select();
-    }
-  });
-  cmd.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      shell.toast('命令框还只是占位：搜零件、量 3V3、设室温这些命令由后续任务实现');
-      cmd.blur();
-    }
-    if (e.key === 'Escape') cmd.blur();
-  });
+  // ⌘K 命令框要用到 session / 时间线，由 main.ts 在它们建好之后接上（cmdk.ts）
   document.querySelectorAll<HTMLButtonElement>('.viewcube button').forEach((b) => (b.onclick = () => shell.toast(`视角「${b.title}」由 3D 台面后续接上，现在可以直接拖动旋转`)));
   return shell;
 }

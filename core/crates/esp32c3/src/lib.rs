@@ -8,6 +8,7 @@ pub mod gpspi;
 pub mod hle;
 pub mod ledc;
 pub mod i2c;
+pub mod iotrace;
 pub mod periph;
 pub mod rmt;
 pub mod spiflash;
@@ -102,6 +103,8 @@ pub struct SocBus {
     /// GPIO 电平变化记录（周期, 电平），前端按此驱动 LED 等
     pub gpio_log: Vec<(u64, u32)>,
     last_gpio: u32,
+    /// 逻辑分析仪事件（P1-05）
+    pub iotrace: iotrace::IoTrace,
 }
 
 impl Default for SocBus {
@@ -148,6 +151,7 @@ impl Default for SocBus {
             next_event: 0,
             gpio_log: Vec::new(),
             last_gpio: 0,
+            iotrace: iotrace::IoTrace::new(0),
         }
     }
 }
@@ -346,10 +350,20 @@ impl SocBus {
                 self.gpio_changed(now);
                 return;
             }
-            0x6001_3000 => return self.i2c0.write(off, v, now),
+            0x6001_3000 => {
+                self.i2c0.write(off, v, now);
+                if !self.i2c0.events.is_empty() {
+                    self.iotrace.extend(&mut self.i2c0.events);
+                }
+                return;
+            }
             0x600C_4000 if off < 0x100 => return self.extmem.write(off, v),
             0x6000_4000 => {
                 self.gpio.write(off, v);
+                // 使能（0x20..0x2c）和输出信号选择（FUNC_OUT_SEL 0x554 起）决定哪个引脚上有 PWM
+                if (0x20..0x2c).contains(&off) || off >= 0x554 {
+                    self.iotrace.pwm_dirty = true;
+                }
                 self.gpio_changed(now);
                 return;
             }
@@ -403,6 +417,7 @@ impl SocBus {
         let lv = self.gpio.level();
         if lv != self.last_gpio {
             self.last_gpio = lv;
+            self.iotrace.gpio(now, lv as u64);
             self.gpio_log.push((now, lv));
             if self.gpio_log.len() > 1 << 16 {
                 self.gpio_log.drain(..1 << 15);
@@ -420,6 +435,19 @@ impl SocBus {
             return Some((if inv { 1.0 - d } else { d }, f));
         }
         None
+    }
+
+    /// LEDC 或 GPIO 矩阵改过：把各引脚此刻的 PWM 交给事件记录（没变的引脚不记）
+    fn trace_pwm(&mut self, now: u64) {
+        if !self.iotrace.pwm_scan_needed(self.ledc.rev) {
+            return;
+        }
+        self.iotrace.pwm_dirty = false;
+        self.iotrace.ledc_rev = self.ledc.rev;
+        for pin in 0..self.gpio.func_out.len() {
+            let p = self.pin_pwm(pin);
+            self.iotrace.pwm(now, pin, p);
+        }
     }
 
     /// 所有中断源的当前电平（位 = 源编号）
@@ -466,12 +494,16 @@ impl SocBus {
             }
             let ch = (sel - rmt::SIG_OUT0) as u8;
             let dec = self.ws2812.entry(pin).or_default();
+            let frames = dec.frames;
             for &(t, c, lv) in &edges {
                 if c == ch {
                     dec.feed(t, lv);
                 }
             }
             next = next.min(dec.finalize(now));
+            if dec.frames != frames {
+                self.iotrace.ws2812(now, pin, &dec.rgb);
+            }
             self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
         }
         edges.clear();
@@ -490,6 +522,7 @@ impl SocBus {
         let n6 = self.route_rmt(now);
         let n7 = self.i2c0.update(now);
         let n8 = self.wifi_update(now);
+        self.trace_pwm(now);
         self.next_event = n1.min(n2).min(n3).min(n4).min(n5).min(n6).min(n7).min(n8);
         let lv = self.levels();
         let pending = self.intc.pending(lv);
@@ -672,6 +705,7 @@ impl Esp32c3 {
         m.bus.gpio.ext_in = self.bus.gpio.ext_in;
         m.bus.gpio.ext_driven = self.bus.gpio.ext_driven;
         m.bus.adc.pin_mv = self.bus.adc.pin_mv;
+        m.bus.iotrace = self.bus.iotrace.carry();
         let t = self.cpu.cycles;
         m.cpu.cycles = t;
         m.bus.now = t;

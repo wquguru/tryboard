@@ -54,6 +54,7 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | 带外接器件跑 | `tryboard run <flash.bin> --i2c ssd1306@0x3c,bme280@0x76 --env 23.5,45,101325 --oled`（`--oled` 打印屏幕字符画）；S3 圆屏：`--spi gc9a01 --lcd-ppm Reviews/x.ppm`，再 `tools/ppm2png.py Reviews/x.ppm Reviews/x.png` 看图 |
 | 跑全部验收 | `tools/accept.sh [--no-web] [--no-qemu]`（输出 `Reviews/accept.md`；验收用例在 `firmware/accept.json`） |
 | 定位卡死 / 崩溃 | `tryboard run <flash.bin> --trace 40`（打印最近跳转目标，自动加载同目录 app.elf 符号） |
+| 逻辑分析仪事件 | `tryboard run <flash.bin> --trace-io Reviews/io.txt [--trace-pins 4,8]`（GPIO / PWM / WS2812 / I2C 事务，按周期盖戳；与网页逐条对拍：`node tools/webtest/traceio.mjs`） |
 | 下载第三方输入（ROM、riscv-tests） | `tools/fetch_third_party.sh` |
 | QEMU 对照 | `tools/oracle_qemu.sh <名字>` |
 | 构建 wasm + 网页 | `tools/build_web.sh` |

@@ -13,6 +13,7 @@ import levelsJson from '../../../firmware/levels.json';
 import type { AppState, Env, Session, WorkDef } from './types';
 import type { Store } from './store';
 import { currentTheme, onTheme } from '../theme';
+import { IoStore, decodeEvents } from './iotrace';
 
 interface Example {
   id: string;
@@ -78,6 +79,21 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const tickSubs = new Set<(m: Extract<FromWorker, { type: 'tick' }>) => void>();
   const bootSubs = new Set<() => void>();
   const endSubs = new Set<(snap: Snapshot) => void>();
+  // 逻辑分析仪：事件仓库整页一份（跟着每次上电 / 回退重放 reset），观察哪些 GPIO 由分析仪决定
+  const io = new IoStore();
+  const ioSubs = new Set<() => void>();
+  let ioMask = [0, 0];
+  const defaultIoPins = (sc: SceneSpec, c: string) => {
+    const pins = new Set<number>([c === 'esp32s3' ? 0 : 9]);
+    for (const p of sc.parts) {
+      if ('pin' in p && p.type !== 'pot') pins.add(p.pin);
+      if ('sda' in p) {
+        pins.add(p.sda);
+        pins.add(p.scl);
+      }
+    }
+    return [...pins].sort((a, b) => a - b);
+  };
   const bumpEdit = () => store.set((st) => ({ editRev: st.editRev + 1 }));
   const lastReading = (text: string) => {
     let m: RegExpExecArray | null = null;
@@ -210,10 +226,27 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       return () => consoleSubs.delete(cb);
     },
     consoleText: () => consoleBuf,
+    io,
+    onIo(cb) {
+      ioSubs.add(cb);
+      return () => ioSubs.delete(cb);
+    },
+    ioPins() {
+      const out: number[] = [];
+      for (let p = 0; p < 64; p++) if ((p < 32 ? ioMask[0] >>> p : ioMask[1] >>> (p - 32)) & 1) out.push(p);
+      return out;
+    },
+    watchIo(pins) {
+      ioMask = [0, 0];
+      for (const p of pins) if (p >= 0 && p < 64) ioMask[p < 32 ? 0 : 1] |= 1 << p % 32;
+      ioMask = [ioMask[0] >>> 0, ioMask[1] >>> 0];
+      s.sim?.watchIo(ioMask[0], ioMask[1]);
+    },
   };
+  s.watchIo(defaultIoPins(scene, chip));
 
   function makeSim(fw: string | ArrayBuffer) {
-    const sim = new LiveSim({
+    const sim: LiveSim = new LiveSim({
       fw,
       i2c: i2cOf(s.scene.parts),
       lcd: s.scene.parts.some((p) => p.type === 'gc9a01'),
@@ -241,6 +274,12 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       },
       onRunEnd(snap) {
         for (const cb of [...endSubs]) cb(snap);
+      },
+      onIo(m) {
+        if (m.reset) io.reset();
+        io.coreDropped = m.dropped;
+        if (m.data.byteLength) io.append(decodeEvents(m.data));
+        for (const cb of [...ioSubs]) cb();
       },
       onSeekProgress(t) {
         store.set({ simSeconds: t });
@@ -273,6 +312,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         }
       },
     });
+    // 观察设置在上电之前发出（worker 按顺序处理）：从第 0 个周期就按这份掩码记，命令行 --trace-pins 同一份就能对拍
+    sim.watchIo(ioMask[0], ioMask[1]);
     return sim;
   }
 

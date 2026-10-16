@@ -40,6 +40,8 @@ pub struct Ledc {
     pub conf: u32,
     pub int_raw: u32,
     pub int_ena: u32,
+    /// 输出可能变了就 +1（参数生效、定时器改配置、渐变走一步）：事件记录据此决定要不要重新看各引脚的 PWM
+    pub rev: u64,
 }
 
 impl Ledc {
@@ -132,6 +134,7 @@ impl Ledc {
             }
             0xa0..=0xbc if off.is_multiple_of(8) => {
                 let t = ((off - 0xa0) / 8) as usize;
+                self.rev += 1;
                 let tm = &mut self.timers[t];
                 tm.conf = v;
                 tm.paused = v & (1 << 22) != 0;
@@ -142,13 +145,17 @@ impl Ledc {
             }
             0xc8 => self.int_ena = v,
             0xcc => self.int_raw &= !v,
-            0xd0 => self.conf = v,
+            0xd0 => {
+                self.conf = v;
+                self.rev += 1;
+            }
             _ => {}
         }
     }
 
     /// 通道参数生效：占空比、输出使能、渐变启动
     fn para_up(&mut self, n: usize, now: u64) {
+        self.rev += 1;
         let conf0 = self.ch[n].conf0;
         let conf1 = self.ch[n].conf1;
         let timer = (conf0 & 3) as usize;
@@ -182,6 +189,9 @@ impl Ledc {
             let period = self.period_cycles(self.ch[n].timer);
             let full = 1u32 << self.timers[self.ch[n].timer].res;
             let c = &mut self.ch[n];
+            if c.fading && now >= c.fade_next {
+                self.rev += 1;
+            }
             while c.fading && now >= c.fade_next {
                 let step = c.fade_scale << 4;
                 c.duty = if c.fade_inc {

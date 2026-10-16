@@ -10,6 +10,8 @@ import type { AppState, StepCtx, WorkId } from './types';
 import { createBenchHistory } from './benchhist';
 import { initTheme, themeToggle } from '../theme';
 import { partLabel } from './wiring';
+import { createCmdk } from './cmdk';
+import { getAnalyzer } from './analyzer';
 
 export { registerStep } from './shell';
 
@@ -73,6 +75,9 @@ const ownsTimeline = () => store.get().step === 'bench';
     restoreAssembly(ctx);
     ctx.hist = createBenchHistory(ctx, { placeLabels: session.scene.parts.map((p) => partLabel(p.type)), placed: !!placed });
     (window as unknown as { __tbApp: Record<string, unknown> }).__tbApp.hist = ctx.hist;
+    const app = (window as unknown as { __tbApp: Record<string, unknown> }).__tbApp;
+    app.cmdk = createCmdk(ctx);
+    app.analyzer = getAnalyzer(ctx);
     store.subscribe(() => ctx.hist!.op({ k: 'scene', scene: session.scene, power: session.power, count: session.scene.parts.length }), ['sceneRev']);
     // 结论按钮：实验台显示检查点进度；采购、组装、成品挂载时自己设
     const verdict = () => {

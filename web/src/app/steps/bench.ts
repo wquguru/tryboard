@@ -12,6 +12,7 @@ import { verifyLevel } from '../../verify';
 import { fetchBuf } from '../../assets';
 import { servoAngle, ledCss } from '../../views/common';
 import type { AppState, CheckOutcome, Selection, StepCtx, StepImpl } from '../types';
+import { getAnalyzer } from '../analyzer';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
@@ -244,7 +245,9 @@ ${power ? renderPowerInline() : ''}`;
     el.innerHTML = `${sec('针脚')}<div class="ph mono">${esc(id)}</div>${row('丝印', esc(pin?.label ?? id))}${row('角色', esc(pin?.role ?? (wires[0]?.role || '没接东西')))}${to ? rowT('接到', esc(to)) : ''}
 ${sec('实时值')}${kind === 'gpio' ? `${row('方向', '', 'pdir')}${row('电平', '', 'plv')}${row('PWM 频率', '', 'pf')}${row('脉宽', '', 'pw2')}${row('占空比', '', 'pd')}` : kind === 'i2c' ? `${row('I2C 角色', esc(wires.map((w) => `${w.pin === 'SDA' ? 'SDA 数据' : 'SCL 时钟'} → ${partName(w.part)}`).join('；')))}${row('电平', '', 'plv')}${row('总线', '开漏，模块上拉到 3V3')}` : `${row('电压', esc(powerVolts(id, !!c.session.power?.ext5v)))}${row('可信度', '估算')}`}
 ${sec('示波器')}<canvas class="scope" data-live="scope" width="280" height="96" aria-label="${esc(id)} 波形"></canvas><p class="note" data-live="scopeNote"></p>
+${kind === 'gpio' || kind === 'i2c' ? `<div class="btns"><button type="button" class="btn" data-ana="${esc(id)}">在分析仪里打开</button></div><p class="note">${kind === 'i2c' ? '逻辑分析仪按 I2C 事务解码（起始、地址、每个字节和应答），带寄存器注释。' : '逻辑分析仪画的是内核按周期记下的事件（电平变化、PWM 占空比 / 频率），不是 tick 采样。'}</p>` : ''}
 ${fs.length ? sec('接线检查') + fs.map(faultHtml).join('') : ''}`;
+    el.querySelector<HTMLButtonElement>('[data-ana]')?.addEventListener('click', (e) => getAnalyzer(c).open((e.currentTarget as HTMLButtonElement).dataset.ana));
     updateLive();
   }
   const partName = (pid: string) => {
@@ -760,11 +763,8 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
     } else if (id === 'ruler') setRuler(!ruler);
     else if (id === 'rerun') c.session.reboot();
     else if (id === 'heat') toggleHeat();
-    else if (id === 'scope') {
-      const pin = benchWires().find((w) => /^GPIO/.test(w.a) && w.pinRole !== 'bus')?.a ?? benchWires()[0]?.a;
-      if (pin) select({ kind: 'pin', id: pin });
-      c.shell.toast('示波器在针脚的属性面板里：点台面上的针脚或左边「引脚」');
-    } else if (id === 'button') {
+    else if (id === 'scope') getAnalyzer(c).toggle();
+    else if (id === 'button') {
       c.session.pressBoot(true);
       setTimeout(() => c.session.pressBoot(false), 150);
       c.shell.toast('按了一下 BOOT（GPIO0）');
@@ -872,6 +872,7 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
       unsubs.forEach((u) => u());
       unsubs = [];
       closeCard();
+      // 分析仪属于实验台：离开时由 CSS 藏起来（body[data-step]），状态保留，回来接着看
       if (ruler) {
         ruler = null;
         ctx?.session.pick.measure?.(null);

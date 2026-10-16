@@ -44,6 +44,10 @@ interface Exports {
   tb_usb_cdc_send(p: number, len: number): void;
   tb_report(): number;
   tb_report_ptr(): number;
+  tb_io_watch?(lo: number, hi: number): void;
+  tb_io_take?(): number;
+  tb_io_ptr?(): number;
+  tb_io_dropped?(): number;
 }
 
 export interface Env {
@@ -91,7 +95,9 @@ export type ToWorker =
       untilMs: number;
     }
   /** 记一个时间点：回 mark 消息（时间线上"这一步发生在模拟第几毫秒"） */
-  | { type: 'mark'; id: number };
+  | { type: 'mark'; id: number }
+  /** 逻辑分析仪要观察的 GPIO（位掩码，lo = GPIO0..31，hi = GPIO32..）；之后每次上电都沿用 */
+  | { type: 'ioWatch'; lo: number; hi: number };
 
 /** 引脚 PWM 的一次变化（模拟时刻 t 秒；duty < 0 表示不再输出 PWM） */
 export interface PwmEvent {
@@ -132,6 +138,8 @@ export type FromWorker =
   | { type: 'seekProgress'; simSeconds: number }
   | { type: 'seeked'; snap: Snapshot; bootPin: number }
   | { type: 'mark'; id: number; tMs: number }
+  /** 逻辑分析仪事件（tb_io_take 的原始记录，每条 16 字节）；reset = 新上电，之前的作废 */
+  | { type: 'io'; reset: boolean; data: Uint8Array; dropped: number }
   | { type: 'stopped'; reason: string };
 
 /** 一次上电到此刻的完整记录：指纹 = fingerprint(stdout, report)，与验收 worker / 命令行同一算法 */
@@ -231,6 +239,33 @@ function takePwmEvents() {
   return v;
 }
 
+// ---- 逻辑分析仪事件：每批时间片之后从内核取走，攒着随 tick 发给主线程（上电 / 回退时先发一条 reset）
+let ioLo = 0;
+let ioHi = 0;
+let ioChunks: Uint8Array[] = [];
+let ioBytes = 0;
+function drainIo(e: Exports) {
+  if (!e.tb_io_take) return;
+  const n = e.tb_io_take();
+  if (!n) return;
+  const b = new Uint8Array(new Uint8Array(e.memory.buffer, e.tb_io_ptr!(), n * 16));
+  ioChunks.push(b);
+  ioBytes += b.byteLength;
+}
+function flushIo(e: Exports, reset = false) {
+  drainIo(e);
+  if (!reset && !ioBytes) return;
+  const data = new Uint8Array(ioBytes);
+  let o = 0;
+  for (const c of ioChunks) {
+    data.set(c, o);
+    o += c.byteLength;
+  }
+  ioChunks = [];
+  ioBytes = 0;
+  (self as unknown as Worker).postMessage({ type: 'io', reset, data, dropped: e.tb_io_dropped?.() ?? 0 } satisfies FromWorker, [data.buffer]);
+}
+
 let ratioWall = 0;
 let ratioSim = 0;
 let lastRatio = 1;
@@ -249,6 +284,7 @@ function loop() {
     // 固定 1ms 一片（不按"还差多少"切）：S3 双核的交替点取决于每片的起点，和 CLI 一样切才能逐周期重放
     stop = e.tb_run(CPU_HZ / 1000);
     if (watchPins.length) samplePwm(e);
+    drainIo(e);
     if (stop !== 0) break;
     behind = targetCycles - e.tb_cycles();
   }
@@ -285,6 +321,7 @@ function loop() {
     ratio: lastRatio,
     running,
   });
+  flushIo(e);
   postOled(e);
   postLcd(e);
   postUsb(e);
@@ -360,6 +397,10 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   for (const d of m.i2c ?? []) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
   if (m.env) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
   if (m.lcd && e.tb_lcd_attach) e.tb_lcd_attach();
+  e.tb_io_watch?.(ioLo, ioHi);
+  ioChunks = [];
+  ioBytes = 0;
+  flushIo(e, true);
   inputLog = { version: 1, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, events: [] };
   record(e, { kind: 'power', on: true });
   if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
@@ -422,6 +463,7 @@ function seekTo(e: Exports, events: InputEvent[], untilMs: number) {
     }
     if (watchPins.length) samplePwm(e);
     const stop = e.tb_run(CPU_HZ / 1000);
+    drainIo(e);
     const len = e.tb_console_len();
     if (len) keepStdout(decoder.decode(new Uint8Array(e.memory.buffer, e.tb_console_ptr(), len)));
     e.tb_console_clear();
@@ -451,6 +493,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       const e = await bootWasm(m);
       if (!e) return;
       seekTo(e, m.events, m.untilMs);
+      flushIo(e);
       post({ type: 'seeked', snap: snapshot(e), bootPin: e.tb_boot_pin() });
       postPaused(e);
       postOled(e);
@@ -458,6 +501,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       break;
     }
     case 'snapshot':
+      if (ex) flushIo(ex);
       if (ex) post({ type: 'snapshot', snap: snapshot(ex) });
       break;
     case 'mark':
@@ -488,7 +532,15 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       break;
     case 'pause':
       running = false;
-      if (ex) postPaused(ex);
+      if (ex) {
+        flushIo(ex);
+        postPaused(ex);
+      }
+      break;
+    case 'ioWatch':
+      ioLo = m.lo >>> 0;
+      ioHi = m.hi >>> 0;
+      ex?.tb_io_watch?.(ioLo, ioHi);
       break;
     case 'speed':
       speed = m.factor;

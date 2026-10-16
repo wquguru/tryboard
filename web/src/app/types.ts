@@ -14,6 +14,7 @@ import type { SeekJob } from '../live';
 import type { FromWorker, Snapshot } from '../worker';
 import type { WireMods } from './wiring';
 import type { BenchHistory } from './benchhist';
+import type { IoStore } from './iotrace';
 
 export type StepId = 'shop' | 'bench' | 'assemble' | 'product';
 export const STEPS: { id: StepId; label: string }[] = [
@@ -150,6 +151,14 @@ export interface Session {
   pressBoot(down: boolean): void;
   setEnv(e: Partial<Env>): void;
   consoleText(): string;
+  /** 逻辑分析仪事件（本次上电 / 回退重放以来），P1-05 */
+  io: IoStore;
+  /** 事件仓库有新事件或被 reset */
+  onIo(cb: () => void): () => void;
+  /** 正在观察的 GPIO（PWM / WS2812 / I2C 不受它限制） */
+  ioPins(): number[];
+  /** 改观察的 GPIO：立刻生效（之前没观察的引脚从此刻起才有记录），之后每次上电沿用 */
+  watchIo(pins: number[]): void;
 }
 
 export interface Shell {
