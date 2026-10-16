@@ -1,0 +1,124 @@
+// 实验台的接线：由场景声明（examples.json / 采购清单摆上来的 scene）推出来，再叠上"改接线"（注入的错误接线）。
+// 纯函数，node --test 直接测；id 按 scene-api 约定 'wire:<板上针脚>~<零件>:<丝印>'，与 3D 台面一致。
+import type { PartSpec } from '../board3d';
+
+const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
+
+export interface PartInfo {
+  name: string;
+  model: string;
+  iface: string;
+  power: string;
+}
+
+export function partId(p: PartSpec) {
+  return p.type === 'led' ? `led:${p.pin}` : p.type;
+}
+
+export function partInfo(p: PartSpec, ext5v = false): PartInfo {
+  switch (p.type) {
+    case 'bme280':
+      return { name: 'BME280', model: 'Bosch BME280 模块（温度 / 湿度 / 气压）', iface: `I2C ${hex(p.addr)} · SDA GPIO${p.sda} · SCL GPIO${p.scl}`, power: '3V3' };
+    case 'oled':
+      return { name: 'SSD1306 OLED', model: '0.96″ 128×64 单色 OLED（SSD1306）', iface: `I2C ${hex(p.addr)} · SDA GPIO${p.sda} · SCL GPIO${p.scl}`, power: '3V3' };
+    case 'servo':
+      return { name: 'SG90 舵机', model: 'SG90 9 g 微型舵机，50 Hz PWM，0.5–2.5 ms → 0–180°', iface: `信号 GPIO${p.pin}`, power: ext5v ? '5V（外接 5 V 2 A）' : '5V（USB 直供）' };
+    case 'gc9a01':
+      return { name: 'GC9A01 圆屏', model: '1.28″ 240×240 RGB 圆屏（GC9A01）', iface: 'SPI2 · SCLK 12 · MOSI 11 · CS 10 · DC 14 · RST 13 · BL 15', power: '3V3' };
+    case 'pot':
+      return { name: `电位器（GPIO${p.pin}）`, model: '10 kΩ 旋钮电位器', iface: `滑片 GPIO${p.pin}（ADC）`, power: '3V3' };
+    case 'led':
+      return { name: `LED（GPIO${p.pin}）`, model: '5 mm LED + 220 Ω 限流电阻', iface: `GPIO${p.pin}，高电平亮`, power: '经 GPIO' };
+    case 'buzzer':
+      return { name: '无源蜂鸣器', model: '无源蜂鸣器（LEDC 方波驱动）', iface: `GPIO${p.pin}`, power: '经 GPIO' };
+  }
+}
+
+/** 零件针脚在电路里的角色：drive = 这根针自己往外推电平（会和 GPIO 输出打架），load = 由 GPIO 驱动，
+ *  bus = 开漏总线，power / gnd = 电源 */
+export type PinRole = 'drive' | 'load' | 'bus' | 'power' | 'gnd';
+
+export interface BenchWire {
+  id: string;
+  /** 开发板一端（网络名：GPIOn / 3V3 / 5V / EXT5V / GND） */
+  a: string;
+  /** 零件一端 '<零件 id>:<丝印>' */
+  b: string;
+  part: string;
+  pin: string;
+  role: string;
+  pinRole: PinRole;
+  color: string;
+  /** 串联限流电阻（Ω），只有 LED 有；0 = 没有电阻 */
+  ohm?: number;
+  /** 改接线把它拔了（台面上还画着，规则检查当它不存在） */
+  missing?: boolean;
+  /** 被改接过（原来接在哪） */
+  from?: string;
+}
+
+/** 改接线：给规则检查造错误接线用（debug 钩子 / 以后的连线工具），按 3D 里已有导线的 id 改 */
+export interface WireMods {
+  /** 拔掉的线 */
+  drop?: string[];
+  /** 改接到另一个网络：线 id → 新网络 */
+  retarget?: Record<string, string>;
+  /** 去掉限流电阻的 LED（零件 id） */
+  noResistor?: string[];
+}
+
+export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): BenchWire[] {
+  const w: BenchWire[] = [];
+  // 线的 id 用 3D 台面画的那一端（舵机 VCC 在台面上总是画到 5V 针；外接 5 V 时网络改成 EXT5V，id 不变）
+  const add = (a: string, part: string, pin: string, role: string, pinRole: PinRole, color: string, extra: Partial<BenchWire> = {}, drawnA = a) => {
+    const b = `${part}:${pin}`;
+    let id = `wire:${drawnA}~${b}`;
+    for (let k = 2; w.some((x) => x.id === id); k++) id = `wire:${drawnA}~${b}#${k}`;
+    w.push({ id, a, b, part, pin, role, pinRole, color, ...extra });
+  };
+  for (const p of parts) {
+    const id = partId(p);
+    if (p.type === 'bme280' || p.type === 'oled') {
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+      add('3V3', id, p.type === 'bme280' ? 'VIN' : 'VCC', '供电', 'power', '红');
+      add(`GPIO${p.scl}`, id, 'SCL', 'I2C 时钟', 'bus', '黄');
+      add(`GPIO${p.sda}`, id, 'SDA', 'I2C 数据', 'bus', '绿');
+    } else if (p.type === 'servo') {
+      add(`GPIO${p.pin}`, id, 'PWM', 'PWM 信号', 'load', '橙');
+      add(ext5v ? 'EXT5V' : '5V', id, 'VCC', ext5v ? '供电（外接 5 V）' : '供电（USB 5 V）', 'power', '红', {}, '5V');
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+    } else if (p.type === 'gc9a01') {
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+      add('3V3', id, 'VCC', '供电', 'power', '红');
+      for (const [g, n, r] of [[12, 'SCL', 'SPI SCLK'], [11, 'SDA', 'SPI MOSI'], [13, 'RES', 'LCD RST'], [14, 'DC', 'LCD DC'], [10, 'CS', 'LCD CS'], [15, 'BLK', 'LCD 背光']] as const) add(`GPIO${g}`, id, n, r, 'load', '橙');
+    } else if (p.type === 'pot') {
+      add('3V3', id, 'VCC', '供电', 'power', '红');
+      add(`GPIO${p.pin}`, id, 'OUT', '模拟输入（滑片）', 'drive', '橙');
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+    } else if (p.type === 'led') {
+      add(`GPIO${p.pin}`, id, 'IN', '输出（经 220 Ω）', 'load', '橙', { ohm: 220 });
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+    }
+  }
+  const drop = new Set(mods.drop ?? []);
+  const nores = new Set(mods.noResistor ?? []);
+  for (const x of w) {
+    if (drop.has(x.id)) x.missing = true;
+    const to = mods.retarget?.[x.id];
+    if (to && to !== x.a) {
+      x.from = x.a;
+      x.a = to;
+    }
+    if (x.ohm !== undefined && nores.has(x.part)) x.ohm = 0;
+  }
+  return w;
+}
+
+/** 用到的开发板针脚（构建树"引脚"分组只列这些） */
+export function usedPins(wires: BenchWire[]): string[] {
+  const seen = new Set<string>();
+  for (const w of wires) if (!w.missing) seen.add(w.a);
+  return [...seen];
+}
+
+export const emptyMods = (m: WireMods | null | undefined) => !m || (!m.drop?.length && !m.noResistor?.length && !Object.keys(m.retarget ?? {}).length);

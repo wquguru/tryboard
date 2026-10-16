@@ -42,7 +42,8 @@ interface Exports {
   tb_usb_json(): number;
   tb_usb_json_ptr(): number;
   tb_usb_cdc_send(p: number, len: number): void;
-  tb_chip(): number;
+  tb_report(): number;
+  tb_report_ptr(): number;
 }
 
 export interface Env {
@@ -73,7 +74,24 @@ export type ToWorker =
   /** 每个时间片采样这些引脚的 PWM，有变化就带模拟时刻放进 tick 的 pwmEvents（蜂鸣器出声用） */
   | { type: 'watchPwm'; pins: number[] }
   /** 要本次上电以来的输入日志，回 inputlog 消息 */
-  | { type: 'getInputLog' };
+  | { type: 'getInputLog' }
+  /** 本次上电以来的输入日志 + 串口全文 + 观察记录（算运行指纹用），回 snapshot 消息；不打断运行 */
+  | { type: 'snapshot' }
+  /** 时间线回退（P0-03）：重新上电，按输入日志在原来的模拟时刻施加，快进到 untilMs 后停住（不按墙钟），回 seeked */
+  | {
+      type: 'seek';
+      wasm: ArrayBuffer;
+      rom: ArrayBuffer;
+      flash: ArrayBuffer;
+      i2c?: { kind: string; addr: number }[];
+      env?: Env;
+      lcd?: boolean;
+      /** 上电以后施加的输入（不含上电和上电时的环境），时间 = 原来施加时的模拟时刻 */
+      events: InputEvent[];
+      untilMs: number;
+    }
+  /** 记一个时间点：回 mark 消息（时间线上"这一步发生在模拟第几毫秒"） */
+  | { type: 'mark'; id: number };
 
 /** 引脚 PWM 的一次变化（模拟时刻 t 秒；duty < 0 表示不再输出 PWM） */
 export interface PwmEvent {
@@ -110,9 +128,37 @@ export type FromWorker =
   /** 原生 USB 虚拟主机的状态（JSON，结构见 usb3d.ts 的 UsbView），有变化才发 */
   | { type: 'usb'; json: string }
   | { type: 'inputlog'; log: InputLog }
+  | { type: 'snapshot'; snap: Snapshot }
+  | { type: 'seekProgress'; simSeconds: number }
+  | { type: 'seeked'; snap: Snapshot; bootPin: number }
+  | { type: 'mark'; id: number; tMs: number }
   | { type: 'stopped'; reason: string };
 
+/** 一次上电到此刻的完整记录：指纹 = fingerprint(stdout, report)，与验收 worker / 命令行同一算法 */
+export interface Snapshot {
+  log: InputLog;
+  stdout: string;
+  report: string;
+  simSeconds: number;
+  /** 串口太长没存全（指纹不可用） */
+  truncated: boolean;
+}
+
 let ex: Exports | null = null;
+// 本次上电以来的串口全文（算运行指纹要从上电开始的全部字节）；超过 4MB 不再存，指纹标"太长"
+const STDOUT_CAP = 4 << 20;
+let bootStdout = '';
+let stdoutTruncated = false;
+function keepStdout(text: string) {
+  if (stdoutTruncated || !text) return;
+  if (bootStdout.length + text.length > STDOUT_CAP) stdoutTruncated = true;
+  else bootStdout += text;
+}
+function snapshot(e: Exports): Snapshot {
+  const n = e.tb_report();
+  const report = decoder.decode(new Uint8Array(e.memory.buffer, e.tb_report_ptr(), n));
+  return { log: { ...structuredClone(inputLog), endMs: cyclesToMs(e.tb_cycles()) }, stdout: bootStdout, report, simSeconds: e.tb_cycles() / CPU_HZ, truncated: stdoutTruncated };
+}
 let running = false;
 let speed = 1;
 let simAnchor = 0; // 开始计时时的模拟周期
@@ -223,6 +269,7 @@ function loop() {
   const len = e.tb_console_len();
   const text = len ? decoder.decode(new Uint8Array(e.memory.buffer, e.tb_console_ptr(), len)) : '';
   e.tb_console_clear();
+  keepStdout(text);
   post({
     type: 'tick',
     console: text,
@@ -264,11 +311,11 @@ function postOled(e: Exports) {
 let lcdVersion = 0;
 let lcdLast = 0;
 /** 圆屏 240×240×4 = 230KB：画面变了才传，并且最多 30 帧/秒 */
-function postLcd(e: Exports) {
+function postLcd(e: Exports, force = false) {
   if (!e.tb_lcd_version) return;
   const v = e.tb_lcd_version();
   const now = performance.now();
-  if (v === 0 || v === lcdVersion || now - lcdLast < 33) return;
+  if (v === 0 || v === lcdVersion || (!force && now - lcdLast < 33)) return;
   const p = e.tb_lcd_ptr();
   if (!p) return;
   lcdVersion = v;
@@ -292,50 +339,137 @@ function postUsb(e: Exports) {
 
 const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2 };
 
+function postPaused(e: Exports) {
+  post({ type: 'tick', console: '', leds: leds(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running });
+}
+
+type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean };
+/** 上电：建 wasm 实例、挂器件、设环境、开一份新的输入日志 */
+async function bootWasm(m: BootMsg): Promise<Exports | null> {
+  const { instance } = await WebAssembly.instantiate(m.wasm, {});
+  const e = instance.exports as unknown as Exports;
+  const rp = copyIn(e, m.rom);
+  const fp = copyIn(e, m.flash);
+  const r = e.tb_boot(rp, m.rom.byteLength, fp, m.flash.byteLength);
+  e.tb_free(rp, m.rom.byteLength);
+  e.tb_free(fp, m.flash.byteLength);
+  if (r !== 0) {
+    post({ type: 'error', message: errorText(e) });
+    return null;
+  }
+  for (const d of m.i2c ?? []) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
+  if (m.env) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
+  if (m.lcd && e.tb_lcd_attach) e.tb_lcd_attach();
+  inputLog = { version: 1, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, events: [] };
+  record(e, { kind: 'power', on: true });
+  if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
+  pwmLast = new Map();
+  pwmEvents = [];
+  bootStdout = '';
+  stdoutTruncated = false;
+  ex = e;
+  const s3 = e.tb_chip() === 9;
+  LED_PIN = s3 ? 48 : 8;
+  NPINS = s3 ? 49 : 22;
+  lastFrames = -1;
+  oledVersion = 0;
+  lcdVersion = 0;
+  usbVersion = -1;
+  return e;
+}
+
+/** 施加一条输入（实时运行收到的消息和回退重放走同一个函数，记进日志的时刻就是施加时的模拟时刻） */
+function apply(e: Exports, ev: InputAction) {
+  switch (ev.kind) {
+    case 'env':
+      e.tb_env_set(ev.temp, ev.humidity, ev.pressure);
+      break;
+    case 'pot':
+      e.tb_analog_set(ev.pin, ev.mv);
+      break;
+    case 'gpio':
+      e.tb_gpio_drive(ev.pin, ev.level);
+      break;
+    case 'uart':
+    case 'usbcdc': {
+      const b = new TextEncoder().encode(ev.text);
+      const p = e.tb_alloc(b.length);
+      new Uint8Array(e.memory.buffer, p, b.length).set(b);
+      if (ev.kind === 'uart') e.tb_uart_push(p, b.length);
+      else e.tb_usb_cdc_send(p, b.length);
+      e.tb_free(p, b.length);
+      break;
+    }
+    case 'power':
+      return;
+  }
+  record(e, ev);
+}
+
+/**
+ * 回退重放：与实时运行同样 1ms 一片、输入在时间片之间施加。原来的事件发生在某个时间片边界（施加时的周期数），
+ * 这里在同一个边界施加，所以逐周期重现；跑到 untilMs 所在的边界停住，那一刻的事件不施加（属于下一步）。
+ */
+function seekTo(e: Exports, events: InputEvent[], untilMs: number) {
+  const until = Math.round(untilMs * (CPU_HZ / 1000));
+  const evs = events.filter((x) => x.kind !== 'power').map((x) => ({ at: Math.round(x.tMs * (CPU_HZ / 1000)), x }));
+  let i = 0;
+  let lastPost = performance.now();
+  while (e.tb_cycles() < until) {
+    while (i < evs.length && evs[i].at <= e.tb_cycles()) {
+      const { tMs: _t, ...act } = evs[i++].x;
+      apply(e, act as InputAction);
+    }
+    if (watchPins.length) samplePwm(e);
+    const stop = e.tb_run(CPU_HZ / 1000);
+    const len = e.tb_console_len();
+    if (len) keepStdout(decoder.decode(new Uint8Array(e.memory.buffer, e.tb_console_ptr(), len)));
+    e.tb_console_clear();
+    if (stop !== 0) break;
+    const now = performance.now();
+    if (now - lastPost > 100) {
+      lastPost = now;
+      post({ type: 'seekProgress', simSeconds: e.tb_cycles() / CPU_HZ });
+    }
+  }
+  // 停住时刻之前的串口输出已经在快照里；主线程用快照的 stdout 重建串口面板
+  pwmEvents = [];
+}
+
 self.onmessage = async (ev: MessageEvent<ToWorker>) => {
   const m = ev.data;
   switch (m.type) {
     case 'boot': {
       running = false;
-      const { instance } = await WebAssembly.instantiate(m.wasm, {});
-      const e = instance.exports as unknown as Exports;
-      const rp = copyIn(e, m.rom);
-      const fp = copyIn(e, m.flash);
-      const r = e.tb_boot(rp, m.rom.byteLength, fp, m.flash.byteLength);
-      e.tb_free(rp, m.rom.byteLength);
-      e.tb_free(fp, m.flash.byteLength);
-      if (r !== 0) {
-        post({ type: 'error', message: errorText(e) });
-        return;
-      }
-      for (const d of m.i2c ?? []) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
-      if (m.env) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
-      if (m.lcd && e.tb_lcd_attach) e.tb_lcd_attach();
-      inputLog = { version: 1, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, events: [] };
-      record(e, { kind: 'power', on: true });
-      if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
-      pwmLast = new Map();
-      pwmEvents = [];
-      ex = e;
-      const s3 = e.tb_chip() === 9;
-      LED_PIN = s3 ? 48 : 8;
-      NPINS = s3 ? 49 : 22;
-      lastFrames = -1;
-      oledVersion = 0;
-      lcdVersion = 0;
-      usbVersion = -1;
-      post({ type: "booted", chip: s3 ? "esp32s3" : "esp32c3", bootPin: e.tb_boot_pin() });
+      const e = await bootWasm(m);
+      if (!e) return;
+      post({ type: 'booted', chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', bootPin: e.tb_boot_pin() });
       break;
     }
+    case 'seek': {
+      running = false;
+      const e = await bootWasm(m);
+      if (!e) return;
+      seekTo(e, m.events, m.untilMs);
+      post({ type: 'seeked', snap: snapshot(e), bootPin: e.tb_boot_pin() });
+      postPaused(e);
+      postOled(e);
+      postLcd(e, true);
+      break;
+    }
+    case 'snapshot':
+      if (ex) post({ type: 'snapshot', snap: snapshot(ex) });
+      break;
+    case 'mark':
+      post({ type: 'mark', id: m.id, tMs: ex ? cyclesToMs(ex.tb_cycles()) : 0 });
+      break;
     case 'env':
       if (!ex) return;
-      ex.tb_env_set(m.temp, m.humidity, m.pressure);
-      record(ex, { kind: 'env', temp: m.temp, humidity: m.humidity, pressure: m.pressure });
+      apply(ex, { kind: 'env', temp: m.temp, humidity: m.humidity, pressure: m.pressure });
       break;
     case 'analog':
       if (!ex) return;
-      ex.tb_analog_set(m.pin, m.mv);
-      record(ex, { kind: 'pot', pin: m.pin, mv: m.mv });
+      apply(ex, { kind: 'pot', pin: m.pin, mv: m.mv });
       break;
     case 'watchPwm':
       watchPins = [...m.pins];
@@ -354,7 +488,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       break;
     case 'pause':
       running = false;
-      if (ex) post({ type: 'tick', console: '', gpio: ex.tb_gpio_level(), enable: ex.tb_gpio_enable(), gpioHi: ex.tb_gpio_level_hi(), enableHi: ex.tb_gpio_enable_hi(), pwm: pwmAll(ex), pwmFreq: pwmFreqAll(ex), pwmEvents: takePwmEvents(), simSeconds: ex.tb_cycles() / CPU_HZ, ratio: 0, running });
+      if (ex) postPaused(ex);
       break;
     case 'speed':
       speed = m.factor;
@@ -365,28 +499,12 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       break;
     case 'gpio':
       if (!ex) return;
-      ex.tb_gpio_drive(m.pin, m.level);
-      record(ex, { kind: 'gpio', pin: m.pin, level: m.level });
+      apply(ex, { kind: 'gpio', pin: m.pin, level: m.level });
       break;
-    case 'usbcdc': {
+    case 'usbcdc':
+    case 'uart':
       if (!ex) return;
-      const b = new TextEncoder().encode(m.text);
-      const p = ex.tb_alloc(b.length);
-      new Uint8Array(ex.memory.buffer, p, b.length).set(b);
-      ex.tb_usb_cdc_send(p, b.length);
-      ex.tb_free(p, b.length);
-      record(ex, { kind: 'usbcdc', text: m.text });
+      apply(ex, { kind: m.type, text: m.text });
       break;
-    }
-    case 'uart': {
-      if (!ex) return;
-      const b = new TextEncoder().encode(m.text);
-      const p = ex.tb_alloc(b.length);
-      new Uint8Array(ex.memory.buffer, p, b.length).set(b);
-      ex.tb_uart_push(p, b.length);
-      ex.tb_free(p, b.length);
-      record(ex, { kind: 'uart', text: m.text });
-      break;
-    }
   }
 };
