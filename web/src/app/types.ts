@@ -15,6 +15,7 @@ import type { ElecFrame, FromWorker, Snapshot } from '../worker';
 import type { WireMods } from './wiring';
 import type { BenchHistory } from './benchhist';
 import type { IoStore } from './iotrace';
+import type { CaseParams } from './enclosure';
 
 export type StepId = 'shop' | 'bench' | 'assemble' | 'product';
 export const STEPS: { id: StepId; label: string }[] = [
@@ -78,6 +79,8 @@ export interface AppState {
   hist: { n: number; cur: number; seeked: boolean; busy: boolean; runs: number };
   /** 组装步骤的结果（成品步骤读它）：null = 还没开始装 */
   assembly: AssemblyState | null;
+  /** 参数化外壳（P1-08）：高度、壁厚、圆角；采购页外壳详情改，组装步骤按它生成外壳。存 localStorage 'tryboard-app-case:<work>' */
+  caseParams: CaseParams;
 }
 
 export interface AssemblyState {

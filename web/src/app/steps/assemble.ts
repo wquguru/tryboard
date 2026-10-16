@@ -1,4 +1,5 @@
-// ③ 组装：沿用 views/assembly.ts 的装配引擎（SVG 等轴测）和 templates.ts 的模版，外壳化：
+// ③ 组装：3D 视图（app/asm3d.ts，参数化外壳 + 拖到槽位吸附，P1-07）；WebGL 不可用或 ?asm=svg 时用
+// views/assembly.ts 的 SVG 等轴测兜底。两种视图共用 views/asmcore.ts 的规则和 templates.ts 的模版：
 // 左树 = 装配层（从下往上）；右栏 = 选中层说明 + "装法会改变什么"（估算）；时间线 = 每装一层一步 + 开机复测，可回退。
 // 回退不存快照：清空后按时间线重放前 i 步（确定性重算）。开机复测用装好的状态（传感器偏移进 env）跑同一份固件验收。
 import { createAssembly } from '../../views/assembly';
@@ -9,6 +10,22 @@ import { fetchBuf } from '../../assets';
 import { ownFirmware, passedCount } from './bench';
 import type { AssemblyState, StepCtx, StepImpl } from '../types';
 import type { TimelineStep } from '../timeline';
+import type { Assembly3D } from '../asm3d';
+import { caseFor, layoutFor, layoutKey } from '../casemesh';
+import type { CaseLayout } from '../enclosure';
+
+type SvgAsm = ReturnType<typeof createAssembly>;
+type AsmView = SvgAsm | Assembly3D;
+const is3d = (a: AsmView): a is Assembly3D => (a as Assembly3D).kind === '3d';
+/** 3D 装配要 WebGL2；?asm=svg 强制用平面视图（测试 / 兜底） */
+function want3d() {
+  if (new URLSearchParams(location.search).get('asm') === 'svg') return false;
+  try {
+    return !!document.createElement('canvas').getContext('webgl2');
+  } catch {
+    return false;
+  }
+}
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const sec = (t: string) => `<div class="sec">${t}</div>`;
@@ -96,7 +113,12 @@ export function assembleStep(): StepImpl {
   let T: Template | null = null;
   /** 装配视图整页只建一次：切到别的步骤再回来，装到一半的进度还在 */
   let node: HTMLElement | null = null;
-  let asm: ReturnType<typeof createAssembly> | null = null;
+  let asm: AsmView | null = null;
+  /** 当前视图按哪份外壳参数建的（参数 / 清单变了就重建，装配步骤按时间线重放） */
+  let builtKey = '';
+  let layout: CaseLayout | null = null;
+  let section = false;
+  let loading = false;
   let entries: Entry[] = [];
   let cur = -1;
   let replaying = false;
@@ -259,9 +281,24 @@ ${!p.spots && p.okMsg ? rowT('说明', esc(p.okMsg.join('，'))) : ''}
 ${choose}
 ${impact ? sec('装法会改变什么 · 估算') + impact : ''}
 ${sec('装配检查 · 几何估算，未经真机标定')}${checks}
-${effectsLine()}`;
+${effectsLine()}
+${caseLine()}`;
     el.querySelectorAll<HTMLButtonElement>('[data-spot]').forEach((b) => (b.onclick = () => asm!.place(p.id, b.dataset.spot)));
+    el.querySelector<HTMLButtonElement>('#toCase')?.addEventListener('click', (e) => {
+      ctx!.store.set({ selection: { kind: 'part', id: (e.currentTarget as HTMLElement).dataset.enc! } });
+      location.hash = 'shop';
+    });
     el.querySelector<HTMLButtonElement>('[data-place]')?.addEventListener('click', () => asm!.place(p.id));
+  }
+
+  /** 参数化外壳的尺寸与警告（与采购页外壳详情同一份布局） */
+  function caseLine() {
+    if (!layout) return '';
+    const L = layout;
+    const enc = `enclosure-${T!.id}`;
+    const warn = L.warnings.map((w) => `<div class="res bad"><span class="mk">!</span><span>${esc(w.text)}</span></div>`).join('');
+    return `${sec('外壳 · 参数化，估算')}${row(L.shape === 'rect' ? '外形' : '底座', L.shape === 'rect' ? `${L.outer[0]} × ${L.outer[1]} × ${L.outer[2]} mm` : `Ø${L.outer[0]} × ${L.outer[2]} mm`)}${row('内腔 / 需要', `${L.inner} / ${L.need} mm`, L.inner < L.need ? 'bad' : '')}${row('壁厚 · 圆角', `${L.params.wall} · ${L.params.radius} mm`)}${warn}
+<div class="btns"><button type="button" class="btn" id="toCase" data-enc="${enc}">改高度 · 导出 STL / 3MF</button></div>`;
   }
 
   function effectsLine() {
@@ -359,6 +396,11 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
   }
 
   function renderRuler() {
+    if (is3d(asm!)) {
+      if (asm.ruler() !== ruler) asm.setRuler(ruler);
+      if (asm.section() !== section) asm.setSection(section);
+      return;
+    }
     const svg = asm!.svg;
     svg.querySelector('[data-k="ruler"]')?.remove();
     if (!ruler || T!.id !== 'weather') return;
@@ -400,7 +442,12 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
     c.shell.setNext('开机看成品 →', done ? 'product' : null, `装完才能开机（${s.placed.length}/${s.total}）`);
     c.shell.toolbar.setGroups([
       { id: 'nav', tools: [{ id: 'asm-select', label: '选择', key: 'V' }] },
-      { id: 'view', tools: [{ id: 'asm-explode', label: asm!.exploded() ? '合上' : '炸开' }, ...(T!.id === 'weather' ? [{ id: 'asm-ruler', label: ruler ? '尺子：开' : '尺子' }] : [])] },
+      {
+        id: 'view',
+        tools: is3d(asm!)
+          ? [{ id: 'asm-explode', label: asm!.exploded() ? '合上' : '炸开' }, { id: 'asm-section', label: section ? '剖面：开' : '剖面' }, { id: 'asm-ruler', label: ruler ? '尺子：开' : '尺子' }, { id: 'asm-home', label: '复位视角' }]
+          : [{ id: 'asm-explode', label: asm!.exploded() ? '合上' : '炸开' }, ...(T!.id === 'weather' ? [{ id: 'asm-ruler', label: ruler ? '尺子：开' : '尺子' }] : [])],
+      },
       { id: 'edit', tools: [{ id: 'asm-undo', label: '退一步' }, { id: 'asm-reset', label: '重来' }] },
       { id: 'run', tools: [{ id: 'asm-retest', label: testing ? '复测中…' : '开机复测', primary: true }] },
     ]);
@@ -408,7 +455,14 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
   }
 
   function renderAll() {
-    if (!ctx || !asm) return;
+    if (!ctx) return;
+    if (!asm) {
+      if (loading) {
+        ctx.shell.props.innerHTML = `${sec('组装')}<div class="tree-empty">正在生成参数化外壳（Manifold）和 3D 场景…</div>`;
+        ctx.shell.setVerdict('组装 · 加载中', 'idle');
+      }
+      return;
+    }
     renderTree();
     renderProps();
     renderTimeline();
@@ -424,6 +478,11 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
     } else if (id === 'asm-ruler') {
       ruler = !ruler;
       renderAll();
+    } else if (id === 'asm-section') {
+      section = !section;
+      renderAll();
+    } else if (id === 'asm-home') {
+      if (is3d(asm)) asm.resetView();
     } else if (id === 'asm-select') {
       ruler = false;
       renderAll();
@@ -433,12 +492,23 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
     else if (id === 'asm-retest') void retest();
   }
 
-  function build(c: StepCtx) {
+  /** 按时间线把装配重放进（新建的）视图 */
+  function replayView() {
+    if (!asm) return;
+    replaying = true;
+    asm.reset();
+    for (const p of placesUpTo(cur)) asm.place(p.id, p.spot);
+    replaying = false;
+    const next = T!.parts[asm.state().placed.length];
+    sel = next?.id ?? T!.parts[0].id;
+  }
+
+  function buildSvg(c: StepCtx) {
     node = document.createElement('div');
     node.className = 'asm-shell';
     node.innerHTML = '<div class="asm-box"></div>';
     const box = node.querySelector<HTMLElement>('.asm-box')!;
-    asm = createAssembly(
+    const a = createAssembly(
       box,
       {
         boot: (d) => c.session.pressBoot(d),
@@ -450,18 +520,69 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
       { servoPin: 4, template: T!.id },
     );
     // 右边的"装配"小面板由外壳的属性面板代替：裁掉 SVG 右侧 300 宽
-    asm.svg.setAttribute('viewBox', '0 0 704 560');
-    // 刷新后恢复：按存下的步骤重放
-    if (c.store.get().assembly) {
-      replaying = true;
-      for (const e of loadEntries(c.work.id)) {
-        if (e.kind === 'place') asm.place(e.id, e.spot);
-        push(e);
+    a.svg.setAttribute('viewBox', '0 0 704 560');
+    asm = a;
+    builtKey = 'svg';
+    layout = layoutFor(T!.id, c.store.get().bom, c.store.get().caseParams);
+    replayView();
+  }
+
+  function build3d(c: StepCtx, key: string) {
+    node = document.createElement('div');
+    node.className = 'asm3d-stage';
+    node.innerHTML = '<div class="a3-loading">正在生成外壳…</div>';
+    const host = node;
+    builtKey = key;
+    loading = true;
+    const s = c.store.get();
+    void (async () => {
+      try {
+        const [{ createAssembly3D }, cm] = await Promise.all([import('../asm3d'), caseFor(T!.id, s.bom, s.caseParams)]);
+        if (node !== host) return; // 期间又重建了
+        host.replaceChildren();
+        const v = createAssembly3D(host, { template: T!, layout: cm.layout, meshes: cm.meshes, onStep: () => onAsmStep() });
+        asm = v;
+        layout = cm.layout;
+        (window as unknown as { __tbAsm3d: unknown }).__tbAsm3d = v;
+        replayView();
+        if (ctx && ctx.store.get().step === 'assemble') v.start();
+      } catch (e) {
+        if (node !== host) return;
+        c.shell.toast(`3D 外壳加载失败，改用平面装配：${e}`);
+        const parent = host.parentElement;
+        buildSvg(c);
+        if (parent) parent.replaceChild(node!, host);
+      } finally {
+        if (node === host || builtKey === 'svg') loading = false;
+        renderAll();
       }
-      replaying = false;
-    }
-    const next = T!.parts[asm.state().placed.length];
-    sel = next?.id ?? T!.parts[0].id;
+    })();
+  }
+
+  function build(c: StepCtx) {
+    // 刷新后恢复：按存下的步骤重放
+    entries = [];
+    cur = -1;
+    if (c.store.get().assembly) for (const e of loadEntries(c.work.id)) push(e);
+    sel = T!.parts[0].id;
+    if (want3d()) build3d(c, currentKey(c));
+    else buildSvg(c);
+  }
+  const currentKey = (c: StepCtx) => {
+    const s = c.store.get();
+    return layoutKey(layoutFor(T!.id, s.bom, s.caseParams));
+  };
+  /** 外壳参数 / 清单变了：丢掉旧视图，按时间线重放进新视图 */
+  function rebuildIfStale(c: StepCtx) {
+    if (!node || builtKey === 'svg') return;
+    const key = currentKey(c);
+    if (key === builtKey) return;
+    if (asm && is3d(asm)) asm.dispose();
+    asm = null;
+    layout = null;
+    node.remove();
+    node = null;
+    build3d(c, key);
   }
 
   return {
@@ -499,10 +620,13 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
         return;
       }
       if (!node) build(c);
+      else rebuildIfStale(c);
       el.appendChild(node!);
+      if (asm && is3d(asm)) asm.start();
       renderAll();
     },
     unmount() {
+      if (asm && is3d(asm)) asm.stop();
       unsubs.forEach((u) => u());
       unsubs = [];
       ctx = null;

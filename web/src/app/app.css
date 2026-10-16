@@ -502,6 +502,21 @@ body:not([data-step='bench']) .stage { filter: saturate(0.4) opacity(0.45); }
 .asm-shell .as-actions { display: none; }
 .asm-shell .as-choose { left: 77.4%; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
 .asm-shell .as-light { border: 1px solid var(--line); }
+/* 3D 装配（P1-07）：和成品一样铺满台面区域，面板浮在上面 */
+.asm3d-stage { position: fixed; inset: 0 0 var(--tl-h) 0; background: var(--prod-bg); overflow: hidden; }
+.asm3d-stage canvas { display: block; width: 100% !important; height: 100% !important; }
+.a3-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; }
+.a3-tags { position: absolute; inset: 0; pointer-events: none; }
+.a3-tag.slot { background: #fff4ea; border-color: #ff7a1a; color: #b44a00; font-weight: 500; }
+.a3-tag.ruler { background: var(--panel); border-color: #f24822; color: #f24822; font-family: var(--mono); font-weight: 600; }
+.a3-choose { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; gap: 6px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); z-index: 2; }
+.a3-choose b { font-size: 12px; }
+.a3-disc { bottom: 76px; }
+.case-ps { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.case-p { display: grid; grid-template-columns: 48px 1fr 58px 22px; align-items: center; gap: 6px; font-size: 12px; }
+.case-p .k { color: var(--muted); }
+.case-p input[type='number'] { width: 58px; font-size: 12px; padding: 2px 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--field); color: var(--fg); }
+.okc { color: var(--ok); }
 .asm-msg { display: flex; flex-direction: column; gap: 2px; background: var(--field); border-radius: 6px; padding: 8px 10px; }
 .asm-msg span { color: var(--muted); font-size: 12px; }
 .asm-msg.bad { background: var(--bad-bg); }
@@ -532,7 +547,7 @@ a.tn { text-decoration: none; }
 .serial-tail { min-height: 60px; max-height: 120px; }
 @media (max-width: 760px) {
   .asm-shell, .prod-svg { position: static; transform: none; }
-  .prod-stage { position: relative; inset: auto; height: 340px; border-radius: var(--r); }
+  .prod-stage, .asm3d-stage { position: relative; inset: auto; height: 340px; border-radius: var(--r); }
   .p3-disclaimer { left: 8px; bottom: 8px; }
   /* 组装、成品有自己的画面：实验台台面不只是藏起来，还不占位置 */
   body[data-step='assemble'] .stage, body[data-step='product'] .stage { display: none; }

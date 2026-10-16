@@ -379,3 +379,23 @@
 - 行为：关卡都不带 `--servo`，所以 CLI、网页验收、npm 包三方指纹与合并前 main 相同（npm_parity 全一致）；只有实验台实时运行按台面接线接舵机、走供电网络。worker `boot` 同时带 `servo` / `power` 与逻辑分析仪 `ioWatch`，tick 同时带 `elec` / `brownouts`，`io` 消息照旧
 - accept.sh：levels / replay / elec / interact / traceio 一律要求最后一行是汇总行 `[x] PASS（`，否则记"脚本没跑完"
 - ⌘K "量 3V3" 的提示改为指向工具条万用表（P1-04 已有）
+
+## 2026-10-16 · 3D 装配（P1-07）与参数化外壳 + STL / 3MF 导出（P1-08）
+- 依赖（LICENSING.md ✅ 列表里的两项，网页侧第一次引入第三方运行时库，均懒加载，不进首包）：
+  - `manifold-3d` **3.2.1**（Apache-2.0，2025-08-06 发布）：外壳布尔运算。`manifold.wasm` 476 KB + JS 43 KB（dist 里另有一份 77 KB 的 manifold.js 原样副本：emscripten 的 node 分支用 `new URL(…, import.meta.url)` 指它，vite 照样发出，浏览器从不请求），只在组装步骤建 3D 视图、采购页点"导出"时下载。没选最新 3.5.x：3.3.0 起 npm 包把 CLI 的依赖（gltf-transform、sharp 原生库、esbuild-wasm 等十几个）写进了 `dependencies`，`npm install` 会拉几十 MB；3.2.1 零依赖，API 相同。包里没有 NOTICE 文件，licenses.html 由 gen_licenses.mjs 自动列出（附 LICENSE 全文）
+  - `three-mesh-bvh` **0.9.15**（MIT，2026-09-09 发布，peer three ≥ 0.159）：外壳网格建 BVH，拖动落点、尺子取点的射线走 `acceleratedRaycast`（只挂在外壳网格上，不改全局 `Mesh.prototype.raycast`）。进 asm3d 懒加载块
+  - vite 打包没问题（`new URL('manifold.wasm', import.meta.url)` 之外再显式 `?url` 导入、`locateFile` 指过去），没用上"自己写简单 CSG"的退路
+- 包体积：首包 app 块 169 → 193 KB（+24 KB：外壳布局 / 导出器 / 采购页外壳详情），共享块（three 等）652 → 682 KB（+30 KB：3D 装配用到的 three 类被打进共享块）；懒加载：asm3d 63 KB、Manifold 43 KB + wasm 476 KB、STLLoader 3 KB、3MFLoader 19 KB（自带 fflate）。wasm 内核首包未变
+- 外壳布局是纯函数（`web/src/app/enclosure.ts`，node --test 直接跑，Manifold 模块实例作参数传入），按作品模版 + 清单里零件的尺寸（元件库 `sizeMm`，没有的用常见规格并标"估算"）算槽位、开孔、定位柱与警告；参数 = 高度 / 壁厚 / 圆角（圆壳没有圆角），存 `localStorage['tryboard-app-case:<work>']`，进 store 的 `caseParams`
+  - 气象站：50 × 70 方壳（与成品 3D 一致），后壳 + 前面板（顶盖带 2 mm 止口）。开发板贴左墙（USB 口朝下、背面开孔），舵机挂在前面板下、开发板右侧（轴孔对准舵机轴），OLED 在舵机耳朵下方（窗 22 × 11.5 mm），BME280 两个位置：A 右墙通风槽旁的立柱上（底面另开 3 个通气孔）、B 趴在模组屏蔽罩上。默认高 32 mm、壁厚 2：内腔 28 mm ≥ 舵机 31 − 轴伸出 4 = 27 mm（与模版"内腔用了 27 / 32 mm"一致）；低于 31 mm 出"太矮"警告并给最低高度
+  - 小黄：Ø60 底座（舵机仓开在顶板）+ 身体（圆柱 + 压扁的球顶，开圆屏窗 Ø34、舵盘座与中心排线孔）；开发板竖放在身体里，顶端躲不开球顶就警告
+  - 透镜小人：Ø50 底座（圆屏台阶离顶 4 mm）+ 屏幕外框（底沿压屏、两档卡扣差 8 mm）。默认清单的 DevKitC-1（63 × 26，尺寸待核）平放进不了 Ø46 内腔，默认就会出警告：加高到 ≥ 73 mm 改竖放，或换 XIAO S3。这是真实的选型风险，保留警告，不为了"默认无警告"改数据
+  - 只算零件与外壳的包围关系，不做零件之间的干涉检测；壁厚、间隙、止口、立柱都是示意尺寸，未经打印验证
+- 导出：二进制 STL（两个零件放在同一个文件里）、3MF（自己打的 zip，只存储不压缩，CRC32 + 本地头 + 中央目录；`[Content_Types].xml` + `_rels/.rels` + `3D/3dmodel.model`，单位 mm，两个 object）。导出前按打印朝向摆：底壳外底面贴床，顶盖翻过来贴床放旁边（小黄身体是球顶，正着放）。下载前在页面里用 three.js 自带的 STLLoader / 3MFLoader 读回一遍，三角形数对不上就标红。`npm test`（enclosure.test.ts）在 node 里跑真 Manifold：每条边恰好两个三角形（封闭流形）、STLLoader 读回三角形数 / 包围盒、3MF 解压后顶点 / 三角形数；3MFLoader 要 DOMParser，放到网页测试（asm3d.mjs）里读回
+- 3D 装配：`web/src/app/asm3d.ts`，与成品一样铺满台面区域。外壳网格来自参数化外壳（与导出的同一份），零件是按尺寸搭的简单体（盒子 / 圆柱 / 球冠）。没装的零件按缩放后宽度在外壳后上方排一排（最大边缩到 26 mm）；拖动时在外壳顶上方 8 mm 的水平面上走，离下一件的槽位中心 16 mm 内就吸过去（BME280 两个槽位都发亮，吸到哪个算哪个），松手在外壳范围内但没吸到：有位置差别的取最近槽位，否则照常装（顺序错照样被拦）。舵盘中位 / 透镜档位这类"同一位置、不同装法"仍是放下后弹选择按钮（3D 里浮在槽位上，右栏也有）
+  - 规则只有一份：状态与 place / reset 抽到 `views/asmcore.ts`，SVG 视图（`views/assembly.ts`）和 3D 视图都用它；装法影响、检查、温漂仍在 templates.ts。store 的 `assembly` 结构不变，成品步骤、开机复测照旧
+  - 工具：炸开（每层往上拉 16 mm，缓动）、剖面（clippingPlanes 裁掉靠近相机的半边，切口用"只画背面、涂橙色"的办法当截面）、尺子（BME280 到芯片的直线距离 + 在外壳表面点两点量距离，BVH 射线）、复位视角
+  - 外壳参数或清单变了，回到组装时丢掉旧视图重建，再按时间线重放（和回退同一套确定性重算）
+  - 兜底：没有 WebGL2、Manifold 加载失败、或 URL 带 `?asm=svg` 时用原来的 SVG 视图（尺子仍只有气象站）
+- 测试：`tools/webtest/asm3d.mjs`（进 accept.sh）用真实鼠标（puppeteer mouse down / move / up）拖到槽位，零件飞回托盘时等它停稳再按；检查点进度用 localStorage 预置（与"自己的固件通过"同一份存储，验收本身在 levels.mjs 测）。levels.mjs 里的装配用例测的是旧实验台 index.html 的 SVG 视图，不受影响，没改
+- 替代：(a) three-bvh-csg 做布尔——实时预览快，但不保证流形，导出给切片软件可能破面；(b) JSCAD——体积大、API 偏脚本；(c) 3MF 用 fflate 压缩——three 自带的 fflate 只在 examples 里，引进来等于多一个依赖，而 3 个文件存储不压缩只多几十 KB；(d) 用物理引擎做吸附——只要"离槽位多近"，距离判断就够
