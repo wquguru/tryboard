@@ -7,8 +7,13 @@ import { CHIP_HEAT_OFFSET, TEMPLATES, type Effects, type Part, type Picked, type
 
 export { CHIP_HEAT_OFFSET };
 
-const layerY = (L: number) => 292 - L * 30;
-const iso = (L: number, x: number, y: number) => [505 + 0.866 * x - 0.866 * y, layerY(L) + 0.5 * x + 0.5 * y];
+/** 层间距：平时 30；"炸开"时拉大，层与层不再互相压着，方便看清每层装了什么 */
+const GAP = 30;
+const EXPLODED = 46;
+const layerYg = (L: number, gap: number) => 292 - L * gap;
+const isoG = (L: number, x: number, y: number, gap: number) => [505 + 0.866 * x - 0.866 * y, layerYg(L, gap) + 0.5 * x + 0.5 * y];
+const layerY = (L: number) => layerYg(L, GAP);
+const iso = (L: number, x: number, y: number) => isoG(L, x, y, GAP);
 const ghostRect = (r: number[], k: string) =>
   `<rect data-k="g_${k}" x="${r[0]}" y="${r[1]}" width="${r[2]}" height="${r[3]}" rx="4" fill="#FF7A1A" fill-opacity="0.14" stroke="#FF7A1A" stroke-width="2" stroke-dasharray="6 5" opacity="0"/>`;
 /** 有位置差别的选择（如传感器放哪）可以拖到对应位置；没有位置差别的（如舵盘对不对中）放下后弹出选择 */
@@ -39,13 +44,16 @@ export function createAssembly(el: HTMLElement, h: AssemblyHandlers, opts: { ser
   svg.push(`<text x="356" y="44" fill="#C9D6CF" class="tb-mono" font-size="12" font-weight="700">${T.caption}</text>`);
   svg.push('<ellipse cx="545" cy="470" rx="170" ry="22" fill="#1E332A"/>');
   const labels: string[] = [];
+  /** 层内标签（"← 通风口旁"）的位置随层间距变，记下来炸开时重算 */
+  const labelAt: { k: string; L: number; x: number; y: number; i: number }[] = [];
   P.forEach((p, L) => {
-    svg.push(`<g transform="matrix(0.866 0.5 -0.866 0.5 505 ${layerY(L)})">`);
+    svg.push(`<g data-k="layer${L}" transform="matrix(0.866 0.5 -0.866 0.5 505 ${layerY(L)})">`);
     if (positional(p)) {
       for (const s of p.spots!) svg.push(ghostRect([s.at![0], s.at![1], p.spotSize![0], p.spotSize![1]], p.id + s.key));
       svg.push(`<g data-k="po_${p.id}" opacity="0">${p.iso}</g>`);
       p.spots!.forEach((s, i) => {
         const c = iso(L, s.at![0] + p.spotSize![0] / 2, s.at![1] + p.spotSize![1] / 2);
+        labelAt.push({ k: `gl_${p.id}${s.key}`, L, x: s.at![0] + p.spotSize![0] / 2, y: s.at![1] + p.spotSize![1] / 2, i });
         labels.push(`<text data-k="gl_${p.id}${s.key}" x="${c[0] + (i ? -40 : 40)}" y="${c[1] + 4}" fill="#FF7A1A" font-size="12" font-weight="700" text-anchor="${i ? 'end' : 'start'}" opacity="0">${i ? s.label.replace(/^放/, '') + ' →' : '← ' + s.label.replace(/^放/, '')}</text>`);
       });
     } else {
@@ -92,6 +100,17 @@ ${choosers}
   const product = T.product(q<HTMLElement>('productView'), h, opts);
   const svgEl = q<SVGSVGElement>('svg');
   const fx = (): Effects => T.effects(st);
+  let gap = GAP;
+  function setExplode(on: boolean) {
+    gap = on ? EXPLODED : GAP;
+    P.forEach((_, L) => q(`layer${L}`).setAttribute('transform', `matrix(0.866 0.5 -0.866 0.5 505 ${layerYg(L, gap)})`));
+    for (const a of labelAt) {
+      const c = isoG(a.L, a.x, a.y, gap);
+      q(a.k).setAttribute('x', String(c[0] + (a.i ? -40 : 40)));
+      q(a.k).setAttribute('y', String(c[1] + 4));
+    }
+    render();
+  }
 
   function place(id: string, spot?: string) {
     const next = P[st.placed.length]?.id;
@@ -163,7 +182,7 @@ ${choosers}
     const np = next ? byId[next] : null;
     if (np && !positional(np)) {
       const L = P.indexOf(np);
-      const c = iso(L, 90, 50);
+      const c = isoG(L, 90, 50, gap);
       gl.setAttribute('x', String(c[0]));
       gl.setAttribute('y', String(c[1] - 70 + L * 2));
       gl.textContent = '放这里';
@@ -230,7 +249,7 @@ ${choosers}
           const L = P.indexOf(p);
           let best = p.spots![0].key, dist = Infinity;
           for (const s of p.spots!) {
-            const c = iso(L, s.at![0] + p.spotSize![0] / 2, s.at![1] + p.spotSize![1] / 2);
+            const c = isoG(L, s.at![0] + p.spotSize![0] / 2, s.at![1] + p.spotSize![1] / 2, gap);
             const d = Math.hypot(x - c[0], y - c[1]);
             if (d < dist) [best, dist] = [s.key, d];
           }
@@ -262,5 +281,14 @@ ${choosers}
     clean: () => st.placed.length === N && P.every((p) => !p.spots || p.spots.find((s) => s.key === st.choice[p.id])?.ok),
     place,
     reset,
+    /** 最近一条提示（标题、说明）和它是不是警告 */
+    message: () => ({ title: st.msg[0], text: st.msg[1], bad: st.bad }),
+    /** 正在等用户选装法的零件 */
+    choosing: () => st.choosing,
+    setExplode,
+    exploded: () => gap !== GAP,
+    /** 某层局部坐标 → SVG 坐标（随炸开变化），给尺子之类的叠加层用 */
+    isoPoint: (L: number, x: number, y: number) => isoG(L, x, y, gap),
+    svg: svgEl,
   };
 }

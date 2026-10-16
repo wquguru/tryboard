@@ -2,6 +2,8 @@
 import type { Bench, SceneSpec } from '../board3d';
 import type { ScenePickApi, ScreenPoint } from '../scene-api';
 import type { LiveSim } from '../live';
+import type { BuzzerAudio } from '../audio';
+import type { Effects } from '../views/templates';
 import type { Level } from '../checks';
 import type { Store } from './store';
 import type { Timeline } from './timeline';
@@ -58,6 +60,19 @@ export interface AppState {
   /** 正在验收的检查点（同一时间只跑一个） */
   verifying: string | null;
   verifyProgress: number;
+  /** 组装步骤的结果（成品步骤读它）：null = 还没开始装 */
+  assembly: AssemblyState | null;
+}
+
+export interface AssemblyState {
+  placed: string[];
+  choice: Record<string, string>;
+  total: number;
+  /** 装完且没有警告 */
+  clean: boolean;
+  effects: Effects;
+  /** 最近一次开机复测：null = 还没测 */
+  retest: boolean | null;
 }
 
 export interface WorkDef {
@@ -80,7 +95,16 @@ export interface Session {
   chip: 'esp32c3' | 'esp32s3';
   levels: Level[];
   /** 最近一帧：PWM 占空比、彩灯、OLED */
-  frame: { pwm: number[]; rgb: number[] | null; oled: Uint8Array | null };
+  frame: { pwm: number[]; rgb: number[] | null; oled: Uint8Array | null; lcd: Uint8Array | null };
+  /** 台面上正在跑的固件镜像（参考固件或用户拖进来的） */
+  fwBuf: ArrayBuffer | null;
+  /** 蜂鸣器出声（默认静音），接在实时模拟的 PWM 事件上 */
+  audio: BuzzerAudio;
+  /** 装法带来的传感器偏移（℃），只在成品步骤里生效 */
+  sensorOffset: number;
+  setSensorOffset(d: number): void;
+  /** 订阅串口新文本，返回取消函数 */
+  onConsole(cb: (text: string) => void): () => void;
   /** 重新上电（"再跑一次"） */
   reboot(): void;
   /** 换固件在台面上跑（用户拖进来的 .bin） */
@@ -98,6 +122,8 @@ export interface Shell {
   card: Card;
   /** 右上结论按钮的文字与状态 */
   setVerdict(text: string, state: 'ok' | 'bad' | 'idle'): void;
+  /** 点结论按钮做什么（每个步骤挂载时自己设） */
+  onVerdict(fn: (() => void) | null): void;
   /** 右上"下一步"按钮：to 为 null 时置灰 */
   setNext(label: string, to: StepId | null, why?: string): void;
   /** 底部一行提示（几秒后消失） */

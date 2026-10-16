@@ -2,6 +2,7 @@
 import { createBench, type PartSpec, type SceneSpec } from '../board3d';
 import type { ScenePickApi } from '../scene-api';
 import { LiveSim } from '../live';
+import { BuzzerAudio } from '../audio';
 import { fetchBuf, imageChip } from '../assets';
 import { expandLevels, type Level } from '../checks';
 import levelsJson from '../../../firmware/levels.json';
@@ -39,6 +40,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   let lastOled: Uint8Array | null = null;
   let lastLcd: Uint8Array | null = null;
   let tail = '';
+  const consoleSubs = new Set<(text: string) => void>();
+  // 蜂鸣器声音整页一份（默认静音）：实验台、成品共用，声音开关在成品页
+  const audio = new BuzzerAudio();
 
   const examples: Example[] = await fetch('./fw/examples.json')
     .then((r) => r.json())
@@ -48,6 +52,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const chip = ex?.chip ?? 'esp32s3';
   bench.setBoard(chip);
   bench.setScene(scene);
+  const buzzerPins = scene.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : []));
+  audio.setPins(buzzerPins);
 
   const i2cOf = (parts: PartSpec[]) => {
     const kind: Record<string, string> = { oled: 'ssd1306', bme280: 'bme280' };
@@ -63,13 +69,17 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     fwSize: 0,
     chip,
     levels,
-    frame: { pwm: [], rgb: null, oled: null },
+    frame: { pwm: [], rgb: null, oled: null, lcd: null },
+    fwBuf: null,
+    audio,
+    sensorOffset: 0,
     reboot() {
       if (!s.sim) return;
       bench.setPowered(true);
       s.sim.reset();
     },
     loadFirmware(buf, name) {
+      s.fwBuf = buf;
       s.fwName = name;
       s.fwSize = buf.byteLength;
       s.chip = imageChip(buf);
@@ -88,6 +98,14 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       s.sim?.setEnv(e);
       store.set((st) => ({ env: { ...st.env, ...e, ...(s.sim ? { temp: s.sim.env.temp } : {}) } }));
     },
+    setSensorOffset(d) {
+      s.sensorOffset = d;
+      s.sim?.setOffset(d);
+    },
+    onConsole(cb) {
+      consoleSubs.add(cb);
+      return () => consoleSubs.delete(cb);
+    },
     consoleText: () => consoleBuf,
   };
 
@@ -101,6 +119,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         consoleBuf += text;
         if (consoleBuf.length > 200_000) consoleBuf = consoleBuf.slice(-150_000);
         hooks.onConsole(text);
+        for (const cb of [...consoleSubs]) cb(text);
         // 读数行可能跨两次 tick，拼上一段尾巴再找
         const buf = tail + text;
         let m: RegExpExecArray | null = null;
@@ -111,6 +130,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       onBoot(c) {
         s.chip = c;
         tail = '';
+        audio.reset();
+        if (buzzerPins.length) sim.watchPwm(buzzerPins);
         store.set((st) => ({ run: st.run + 1, running: true, reading: null }));
       },
       onTick(m) {
@@ -121,6 +142,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         const st = store.get();
         if (Math.abs(st.simSeconds - m.simSeconds) >= 0.05 || st.running !== m.running) store.set({ simSeconds: m.simSeconds, running: m.running });
       },
+      onPwm: (ev, t) => audio.push(ev, t),
       onFrame(f) {
         if (f.oled && f.oled !== lastOled) {
           lastOled = f.oled;
@@ -129,6 +151,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         }
         if (f.lcd && f.lcd !== lastLcd) {
           lastLcd = f.lcd;
+          s.frame.lcd = f.lcd;
           bench.setLcd(f.lcd);
         }
       },
@@ -143,6 +166,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
 
   if (ex) {
     const buf = await fetchBuf(`./fw/${ex.id}/flash.bin`);
+    s.fwBuf = buf;
     s.fwSize = buf.byteLength;
     s.chip = imageChip(buf);
     bench.setPowered(true);
