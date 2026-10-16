@@ -302,3 +302,62 @@
 - 决定：`Machine` 从 enum 改成 `struct { hw: Hw, elec: Board }`（`Hw::C3 / Hw::S3`）：供电网络是外部世界，跨复位保留。顺带修了 C3 `reboot` 丢外接 I2C 器件 / WS2812 解码 / GPIO 记录的问题（与 S3 一致）
 - 网页：worker tick 带 `elec`（5V / 3V3 / 舵机 / 外接节点电压、各路电流、3V3 最低、峰值电流、复位次数、是否按住、舵机角度、供电）和 `brownouts`（新出现的复位时刻）；供电快捷卡片 / 属性面板的 USB ↔ 外接 5 V 真正在线切换（worker `power` 消息 → 输入日志 `supply` 事件 → 脚本 `power=usb|ext`，回退时按原时刻重放）；时间线把欠压复位记成一步（0.5 s 内连着的合并、记次数）；万用表点针读电压（电源脚 = 节点电压；信号脚按逻辑电平 × 当时的 3V3；PWM 脚读平均值）。InputLog 加 `servo` / `power`（上电时的），`cliArgs` 拼出 `--servo N --power X`
 - 不做 / 遗留：USB 口二极管、地线压降、LDO 动态响应、电机电感（τ ≈ 0.15 ms，比步长还短）、芯片在 1.8–2.4 V 之间的异常行为（flash 读错等）、低于约 1.8 V 应是上电复位而不是欠压复位；复位后我们跳过 ROM / 二级引导（真机约 0.3 s），所以 USB 下复位间隔只有约 11 ms，比真机密；去抖时钟、USB 限流斜率、舵机全部参数都要真机标定（P1 的"买零件做真机标定"）
+## 2026-10-16 · 本地 npm 包 `tryboard`（P1-14）与暗色 / 手机只读（P1-15）
+- 打包：`packages/tryboard/`（private，不发布）。`tools/build_npm.sh` 用 web/node_modules 里已有的 esbuild（vite 自带，不新增依赖）把 `src/cli.ts` 连同网页的 `checks.ts`（判定 + 指纹）、`simrun.ts`（运行循环）、`inputlog.ts` 打成一个 `dist/cli.mjs`，再 `npm pack`。判定只有网页一份，CLI 不另写
+- 运行循环从 `verify-worker.ts` 抽到 `web/src/simrun.ts`（纯函数，无 DOM / Worker），网页验收与 npm 包共用；`imageChip` 也挪进去，assets.ts 转调
+- 对拍时发现两处与原生 CLI 的分歧并修正：(1) wasm `tb_run` 在软件复位时往控制台插一行"[试板] 软件复位，重新上电"，原生只写 stderr——simrun 把它从串口输出里去掉（网页实时串口照旧显示）；(2) 原生崩溃重启最多 50 次就停，wasm 无上限——simrun 第 51 次复位就停。两处都让网页验收与 check.py 指纹在"固件崩溃重启"时也一致。另外 check.py 的 `from` 秒数改按 JS 写法（1.0 → 1），原生 CLI 重新上电失败时打印原因
+- ROM：构建时从 `third_party/esp-rom-elfs` 拷两颗芯片的 ELF（esp32c3_rev3、esp32s3_rev0）进包，附 `LICENSE-esp-rom-elfs.txt`（Apache-2.0 全文）、`NOTICE.txt`（来源 release、README 版权行、ROM 第三方清单）；包目录的产物（dist / wasm / rom / levels.json / tgz）全部 .gitignore，仓库只有脚本（LICENSING 规则 1）
+- `--ref` 不进 npm 包（不带参考固件）；`check` 支持 `--level` / `--all` / `--inputs`（脚本文本或 InputLog JSON），`run` 支持 `--seconds --i2c --env --spi --inputs --script --pwm-log`，串口到 stdout、观察记录与指纹到 stderr
+- 网页命令提示改为 `npx tryboard check app.bin --level NN`，下面注明"本地包，尚未发布"并保留 `tools/check.py` 给仓库开发者
+- 暗色：DESIGN §2 变量在 `:root[data-theme=dark]` 反转，另加 `--surface / --stage-bg / --on-accent` 等原来写死的颜色变量。`<head>` 内联一行脚本在首帧前按 localStorage `tb-theme` 或系统设置定 data-theme（不闪白）；`web/src/theme.ts` 负责切换按钮与系统切换跟随；3D 台面调 `setTheme`，成品场景换背景 / 桌面色。暗色下主按钮文字用深色（亮蓝底白字对比度不够）；零件缩略图垫浅底
+- 手机只读：沿用已有的 ≤ 760px 堆叠断点（覆盖 ≤ 600px 的要求）；新增：组装 / 成品步骤隐藏空台面不占位、清单勾选不可改、时间线不再用 scrollIntoView（会把整页拽到底部）；成品锁着时手机上按默认装法预览 3D 成品（手机上没法上传固件，否则永远看不到成品），属性面板写明"手机只读预览"
+- 替代：(a) CLI 直接 `node --experimental-strip-types` 跑网页 TS——要求 Node 23+ 且 import 要写扩展名；(b) 暗色用 `prefers-color-scheme` 媒体查询 + 选择器两套变量——要写两遍，改用首帧前内联脚本只写一遍
+## 2026-10-16 · 走查修补：成品先看参考、蜂鸣器 3D、首页价格、舵机走线
+- 成品页不再整页锁住：没装完（或检查点没全过、组装还锁着）时显示**参考成品**——参考装配 = 每个零件都装上、有装法选择的取正确的那种（`referenceAssembly(T)`，温漂 0），跑的是实验台上现在的那份固件（模拟不重启）。顶部琥珀色横条"参考成品 · 你还没装配"+ 原因（检查点 n/6 或组装 n/6），右栏首节同样说明，构建树装法分组叫"参考装法"，结论按钮"参考成品 · 还没装配"；下一步按钮在检查点没全过时是「去完成检查点 →」（选中第一个没过的检查点），全过后是「去组装 →」。真正装完以后照旧用自己的装法（温漂、复测结果）
+  - 理由：先看到成品长什么样才有动力去做检查点；参考装法本身就是正确答案，不泄露验收（验收看的是自己的固件）
+  - 替代：(a) 保持锁住只放截图——看不到真实固件驱动的成品；(b) 用参考固件跑成品——会和实验台的模拟分叉成两份，违背"整页一份模拟"
+- 3D 无源蜂鸣器模块：蓝色 PCB 15 × 22、Φ12 × 8.5 黑色蜂鸣器、TO-92 三极管、VCC I/O GND 丝印、直排针朝上，平放在面包板前面的桌上（靠 I/O 针），三根杜邦线（母头插排针）接 3V3 / GPIOn / GND；占空比在 0..1 之间（有方波）时振膜轻微起伏、冒两道蓝色声波弧（示意）。`wiresOf` 加蜂鸣器三根线（id 与 3D 一致）
+- 舵机挪到信号针与 5V 针中间的正前方，跳线拱高降到面包板面 + 13–19 mm 并往前弓：原来从面包板右前方拱过开发板，默认机位下挡住 BOOT 键和 BME280。C3 舵机示例去掉写死的机位，改按包围盒取景
+- 零件"中心"（`project()` / 尺子 / 卡片定位）取看得见的本体包围盒，不算拾取盒、金针和接触阴影；竖插模组的针脚拾取盒从 0..5.5 mm 降到 0..4 mm：原来点 BME280 中心选中的是它的 GND 针
+- 首页卡片的"要买"和参考价从元件库算（`templatePicks` 默认勾选 + `bomTotal`，与采购页合计同一口径，bom.test.ts 对拍），去掉写死数字；零件显示名统一用 `wiring.ts` 的 `PART_LABEL`（舵机、蜂鸣器、圆屏……）
+- 验收脚本：accept.sh 判 levels / replay / interact 时改为必须看到汇总行（`[x] PASS（…`）。原来只看最后一行有没有 PASS，levels.mjs 在 07-spin 点构建树时偶发 "Node is detached" 崩掉，最后一行恰好是"检查点 06 PASS"，于是把崩溃和后面 3 项失败都盖住了。levels.mjs 点检查点改为节点被重画时重找再点；"做这个 → 检查点数一致"一项改为落地采购页后切到实验台再看结论按钮（采购页的结论按钮早已改成清单提醒，这项一直是失败的）
+## 2026-10-16 · 逻辑分析仪事件缓冲（P1-05）与 ⌘K 命令框（P1-06）
+- 决定：内核里加一个有上限的事件环形缓冲（`core/crates/esp32c3/src/iotrace.rs`，C3 / S3 的 SocBus 各一份，软件复位时搬到新总线）。每条 16 字节小端：`t u64（CPU 周期）| kind u8 | a u8 | b u16 | v u32`。kind：1 GPIO（a 引脚，b 电平）、2 PWM（a 引脚，b 占空比 × 65535，v 频率毫赫，0 = 不再输出）、3 WS2812 帧（a 引脚，b 灯珠数，v 第一颗 0xRRGGBB）、10 I2C 起始（b 位 2 = 重复起始，v = 一个 SCL 位的周期数）、11 地址（a 7 位地址，b 位 0 读 / 位 1 NACK）、12 数据字节（同上，位 0 = 方向）、13 停止；b 位 15 = I2C1
+- 上限：内核 65536 条（1 MB），满了丢最老的并计数（`tb_io_dropped`）；网页 worker 每批时间片（≤ 20 ms）取走一次，正常用不满。网页主线程仓库 40 万条，满了丢最老的一半、按剩下的重建通道（分析仪把丢掉的那段画灰）
+- 只有 GPIO 受"观察"掩码限制（`tb_io_watch` / `--trace-pins`）：固件逐位翻转的脚每秒可达百万次变化，全记会塞满缓冲；PWM、WS2812、I2C 变化本来就少，总是记。网页默认观察台面上接了东西的脚 + BOOT，掩码在上电前发给 worker，所以从第 0 个周期起就按它记
+- I2C 事件来自主机模型的事务层（执行命令表时），时刻 = 事务开始 + 已过的 SCL 位数 × 每位周期（与完成中断同一套算法），不逐 SCL 边沿；所以 I2C 事件会比记录它的那一刻"晚"（预先盖戳），对拍按记录先后比前 N 条。PWM 在 SocBus::update 里按"LEDC 修改计数 / GPIO 使能与矩阵改过"重新扫各引脚，没变不记
+- 所有字段都是整数（占空比 1/65535、频率毫赫），文本格式（`IoEvent::line` / `iotrace.ts eventLine`）两边逐字相同，没有浮点格式化差异。CLI `--trace-io` 强制 1 ms 一片（与网页 worker 相同），网页事件 = CLI 重放的前 N 条（traceio.mjs）
+- 性能（CLI，模拟 60 s 墙钟，三次）：weather 主干 0.90 s / 本分支只记不导出 0.88 s / 导出全部 0.91 s；fade（LEDC 硬件渐变，约 5000 条 PWM 事件 / 秒）0.07–0.12 s / 0.09 s / 0.17 s——只记不导出看不出差别，导出成文本约 0.3 µs / 条；网页 weather 实时倍速分析仪开 / 关都是 1.00×
+- 分析仪画法：canvas 2D，只画可视窗口（各通道二分查找起点）；I2C 的 SCL / SDA 按事务和位时序重建（位宽 ≥ 1.2 px 画位级波形 + 每字节泡泡 + 整句，缩小时事务画成活动块，挨得近的并成"n 个事务 · 0x76 ×1 · 0x3C ×2"）；PWM 一个周期 ≥ 3 px 画方波（相位从占空比生效时刻起算，示意），否则画包络 + 平均电平虚线 + "50 Hz · 1.675 ms"；占空比 0 / 100% 画直线。寄存器注释只做 BME280（0x76/0x77）和 SSD1306（0x3C/0x3D）
+- ⌘K：顶部输入框 + 下拉；全局 ⌘K / Ctrl+K 在焦点处于别的输入框（input / textarea / select / contenteditable）时不拦截。命令里改状态的走现有通道（`hist.op` + `session.setEnv / setPower / reboot`、`hist.seek`），所以时间线照常记步、回退照常可用。量 3V3 先选中 3V3 针并提示"万用表在 P1-04 中"。最近命令存 `localStorage['tryboard-cmdk-recent']`（6 条）
+- 公共接口：wasm 新增 `tb_io_watch / tb_io_take / tb_io_ptr / tb_io_dropped`；Machine 新增 `io_watch / io_cap / io_take / io_dropped`，导出 `IoEvent`；CLI 新增 `--trace-io` / `--trace-pins`；worker 新增 `ioWatch` 入、`io` 出消息；LiveSim 加 `onIo` / `watchIo`；Session 加 `io / onIo / ioPins / watchIo`；外壳去掉 ⌘K 占位（shell.ts），由 `cmdk.ts` 接；`__tbApp.analyzer`、`__tbApp.cmdk` 测试钩子
+- 替代：(a) worker 每个时间片采样引脚（现有 PinTrace 做法）——1 ms 分辨率看不到 I2C 字节和 PWM 边沿；(b) 逐 SCL 边沿模拟 I2C——要改 I2C 模型的执行方式，且对驱动没有可见差别；(c) 事件用 JSON 传——每条几十字节，400 kHz I2C 一秒上万条
+## 2026-10-16 · 小黄 / 透镜小人拆检查点（P1-11）
+- 原则"每过一个检查点作品就多一样东西"。小黄：spin-1 画脸（圆屏 + 静态脸）→ spin-2 转身（+ 舵机 ±60° 往复）→ 07-spin 合体（+ 眼珠跟随、BOOT 回头、装配）。透镜：lens-1 眼睛 + 眨眼 → lens-2 按键换表情（normal ↔ happy）→ 07-lens 合体（四种表情循环、装配）。合体直接用第 07 关的变体，不另起 `spin-3`：毕业作品与作品最后一关是同一份条件，参考固件也是同一份（spin / lens）
+- 新检查点放 levels.json 顶层、带 `"work"` 字段，id 用 `spin-1` 这种（check.py `--level spin-1`），不嵌进 variants：CLI / 网页的展开逻辑、build_web.sh 复制参考固件都不用改。旧关卡页已重定向到工作台，顶层多几条不影响
+- 只看串口和"非黑像素"判不出"画的是不是脸、眼睛在哪"，所以观察记录加颜色统计（前 12 种颜色的像素数 + 重心），新判定 `lcd_colors`（颜色 ±24、像素数上下限、水平重心范围）和 `serial_count`。重心判"眼睛对称 / 回正"，上下限判"开心弯眼比睁眼少"，心形眼颜色判"切到了 love"。只看最后一帧，所以每个检查点的输入脚本都让结束时刻落在确定的画面上（按键后、眨眼间隙）。代价：所有带圆屏的关卡指纹变了（CLI 与网页同算，对拍不受影响）
+- 07-spin 加 EYE R / EYE L 串口约定判眼珠跟随（只有最后一帧，看不出运动过程）；07-lens 改成 6 次按键转一圈回到 normal 再到 love，`serial_count` 判 MOOD 0 normal / MOOD 2 love 各 ≥ 2 次
+- 任务书按 BRIEF_TRIALS 的经验写：坐标、尺寸、颜色值、反色 + BGR、"上电不要先等待"、开 PWM 时就是起点脉宽、消抖上限、按键最短间隔都写进去。自测：只按任务书另写了一份逐像素函数渲染的固件（不用 round_lcd.h），6 关里 4 关第一次过；07-spin 第一次挂在自测代码自己的眼珠逻辑错误；lens-1 第一次挂在"逐像素整屏重画一帧约 150 ms，一次眨眼拖到 1.2 s，4.5 s 内没出 BLINK 1"——把窗口放宽到 5.5 s，并在任务书里写明"整屏重画别超过 100 ms"，第二次过（记录在 Reviews/ab/P1-11.md，自测工程未提交）
+- 替代：(a) 用 `--lcd-ppm` 对整帧做模板比对——太严，自己写的画法略有不同就挂；(b) 在固件串口里报颜色 / 坐标——判的是固件自述，不是屏上真画了什么
+
+## 2026-10-16 · C3 接 SPI2 / GDMA 圆屏（P1-13）
+- C3 复用 S3 的 `gpspi.rs` / `gdma.rs`，差异参数化：`GdmaLayout` 加通道组起点、组内 LINK / PERI_SEL / EOF 描述符 / FIFO 状态偏移、复位值，以及"中断寄存器按方向放在组内（S3）还是集中在 0x00 起、IN / OUT 共用（C3）"；C3 共用寄存器的位与按方向存的位之间用一张映射表换算
+- C3 圆屏接线：SCLK=6、MOSI=7、CS=10 用 SPI2 的 IO_MUX 直连脚；DC=5、RST=4、背光=3 选 DevKitM-1 排针上空闲、又不是 strapping 的脚（2、8、9 是 strapping，8 还接着板载 RGB）。`firmware/common/round_lcd.h` 按 `CONFIG_IDF_TARGET_ESP32C3` 选引脚，也允许 include 前 `#define` 覆盖；board3d 的圆屏连线按芯片取 `LCD_WIRING`
+- C3 的 `spi_ll_clear_int_stat` 是直接写 `dma_int_raw.trans_done = 0`（S3 写 INT_CLR），不支持写 RAW 时 trans_done 一直是 1，第二次传输前断言 `spi_ll_get_running_cmd(hw) == 0` 失败。模型改成写 RAW 即覆盖（S3 不写 RAW，不受影响）
+- crypto_hw 的 AES / SHA DMA：链表头改从 GDMA 模型取（`channel_for_peri` + `configured_link`），不再自己按寄存器地址读 `regs`。搬数据没改用 `Gdma::take_out / put_in`：IDF 的加速器驱动先配链表再置 start、再启动加速器，时序上 start 不一定先于触发，`take_out` 只认已启动的通道；要完全改用得给 GDMA 加"按配置的链表取数据"的入口，留作以后
+
+## 2026-10-16 · 开发板库与版本差异规则（P1-12）
+- 开发板从 6 块到 9 块：新增 M5Stack AtomS3、微雪 ESP32-S3-LCD-1.28（无触摸）、微雪 ESP32-S3-Touch-LCD-1.28；合宙 ESP32-S3 核心板、XIAO ESP32S3 / C3 补齐引脚、板载外设、strapping、USB、PSRAM 与来源。每块板数据记来源 URL（`board.urls`），查不到或资料互相矛盾的字段标待核（清单见 Reviews/ab/P1-12.md）
+- schema 加 `urls`、`builtin`（板载外设及占用的脚）、`lcd`（板载屏接线）字段；`onboard.share` 表示可与外接件共用的总线（I2C 这类），屏 / IMU / 触摸的线是独占的
+- 规则 R28–R32：排针上的 strapping 脚、板上已有又外接一份、要 PSRAM 但板子没有、GPIO 不够、板载屏引脚和固件不符；R24 改为屏 / IMU / 触摸独占线被外接件占用时判阻断。每条有正反用例（web/test/rules.test.ts）
+- 换到板上已经带了的件（如微雪圆屏板 + 外接圆屏），模版的必选件降为建议件，由 R29 提示去掉，而不是硬塞两块屏
+- 替代：板子特有的坑写成每块板一条专用规则——条数随板子线性增长；现在按"板载外设占线 / strapping / 资源不够"几类通用规则读板子数据
+
+## 2026-10-16 · 合并 main（P1-05 / P1-11–15）进电气分支（P1-01–04）
+- `Machine` 已是 `{hw, elec}`：main 的 `io_*`、C3 `lcd()` / `spi_stats()` 改成按 `self.hw` 匹配；C3 接圆屏也把 GC9A01 电流记进供电网络（与 S3 一致）。C3 `reboot` 同时保留外接 I2C / WS2812 / GPIO 记录（电气分支）、`iotrace.carry()` 与 `lcd.take()`（main）
+- CLI：`--trace-io` / `--trace-pins` 与 `--power` / `--servo` / `--elec-report` 并存；接了舵机或带 `--trace-io` 都 1 ms 一片；欠压复位与软件复位分开提示，重新上电失败打印原因
+- 复位计数：电气分支已去掉 wasm 往串口插的"[试板] 软件复位，重新上电"（改为 `Machine::reboot` 补打 ROM 头 `rst:0x..`，CLI 与网页逐字节相同），main 的 simrun 靠这行数复位、做"最多 50 次"。改为 wasm 新增 `tb_reset_limit(n)` / `tb_reset_count()`：simrun 设 50，第 51 次复位 `tb_run` 返回 3、停在复位前不再上电（与 CLI `resets > 50 → break` 同一周期、同一串口）；网页实时页不设上限，行为不变。替代：在 simrun 里数 `rst:0x` 行——固件自己也可能打印这串，不可靠
+- simrun（网页验收 + npm 包共用）加 `servo` / `power` 与脚本动作 `power=`；npm 包 `check` / `run` 加 `--servo` / `--power`（与 check.py 一样叠加在关卡参数上；InputLog 里的 servo 字段两边都不读，只转事件）
+- 行为：关卡都不带 `--servo`，所以 CLI、网页验收、npm 包三方指纹与合并前 main 相同（npm_parity 全一致）；只有实验台实时运行按台面接线接舵机、走供电网络。worker `boot` 同时带 `servo` / `power` 与逻辑分析仪 `ioWatch`，tick 同时带 `elec` / `brownouts`，`io` 消息照旧
+- accept.sh：levels / replay / elec / interact / traceio 一律要求最后一行是汇总行 `[x] PASS（`，否则记"脚本没跑完"
+- ⌘K "量 3V3" 的提示改为指向工具条万用表（P1-04 已有）

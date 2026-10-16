@@ -93,18 +93,24 @@ export const BOARD_S3: BoardSpec = makeSpec({
 
 export const BOARDS: Record<ChipId, BoardSpec> = { esp32c3: BOARD_C3, esp32s3: BOARD_S3 };
 
+/** 圆屏 GC9A01 在各芯片上的固定接线（内核按这个接线建模，见 core 的 lcd_pin） */
+export const LCD_WIRING: Record<ChipId, { sclk: number; mosi: number; cs: number; dc: number; rst: number; bl: number }> = {
+  esp32s3: { sclk: 12, mosi: 11, cs: 10, dc: 14, rst: 13, bl: 15 },
+  esp32c3: { sclk: 6, mosi: 7, cs: 10, dc: 5, rst: 4, bl: 3 },
+};
+
 /** 示例里声明的外接元件（examples.json 的 scene.parts）。 */
 export type PartSpec =
   | { type: 'led'; pin: number; color?: number; col?: number; label?: string }
   | { type: 'oled'; addr: number; sda: number; scl: number; label?: string }
-  /** 1.28″ 圆屏 GC9A01（SPI2）：SCLK=12、MOSI=11、CS=10、DC=14、RST=13、背光=15 */
+  /** 1.28″ 圆屏 GC9A01（SPI2）：引脚按芯片固定，见 LCD_WIRING（S3：SCLK=12、MOSI=11、CS=10、DC=14、RST=13、背光=15；C3：6、7、10、5、4、3） */
   | { type: 'gc9a01'; spi?: number; label?: string }
   | { type: 'bme280'; addr: number; sda: number; scl: number; label?: string }
   /** SG90 舵机：信号接 pin，舵盘角度按 PWM 脉宽（0.5–2.5ms → 0–180°） */
   | { type: 'servo'; pin: number; freq?: number; label?: string }
   /** 10kΩ 电位器：两端接 3V3 / GND，滑片接 pin（ADC），旋钮可拖动 */
   | { type: 'pot'; pin: number; label?: string }
-  /** 无源蜂鸣器：接 pin，LEDC 方波驱动；网页声音见 audio.ts（3D 外观另行实现，这里先不画） */
+  /** 无源蜂鸣器模块（三针）：I/O 接 pin，LEDC 方波驱动；网页声音见 audio.ts，3D 里响的时候振膜起伏、冒声波 */
   | { type: 'buzzer'; pin: number; label?: string };
 
 export interface SceneSpec {
@@ -924,6 +930,96 @@ function servoModel() {
   return { grp, horn };
 }
 
+/** 无源蜂鸣器模块（三针，带 S8550 三极管）：蓝色 PCB 15 × 22、Φ12 × 8.5 黑色蜂鸣器、
+ *  VCC I/O GND 丝印、直排针朝上（平放在桌面上，杜邦母头从上面插）。原点在 PCB 底面中心，排针在 -z 一侧（朝开发板）。 */
+const BUZZER_PINS = ['VCC', 'I/O', 'GND'];
+function buzzerModule() {
+  const grp = new THREE.Group();
+  const W = 15, H = 22, T = 1.2;
+  const S = 28;
+  const tex = canvasTexture(W * S, H * S, (g) => {
+    const cw = W * S, ch = H * S;
+    g.fillStyle = '#1f55b0';
+    g.fillRect(0, 0, cw, ch);
+    // 贴图上沿 = 排针一侧
+    g.fillStyle = '#d9b860';
+    for (let i = 0; i < 3; i++) {
+      g.beginPath();
+      g.arc(cw / 2 + (i - 1) * PITCH * S, 2 * S, 0.8 * S, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.fillStyle = '#eef3fb';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = `bold ${1.05 * S}px "JetBrains Mono", Menlo, monospace`;
+    BUZZER_PINS.forEach((t, i) => g.fillText(t, cw / 2 + (i - 1) * PITCH * 1.25 * S, 4.4 * S));
+    g.strokeStyle = '#eef3fb';
+    g.lineWidth = 0.18 * S;
+    g.beginPath();
+    g.arc(cw / 2, ch - 7.5 * S, 6.6 * S, 0, Math.PI * 2);
+    g.stroke();
+    g.font = `bold ${0.9 * S}px Helvetica, sans-serif`;
+    g.fillText('Q1', cw / 2 - 4.6 * S, 7.4 * S);
+    g.fillText('R1', cw / 2 + 4.6 * S, 7.4 * S);
+  });
+  const pcb = modulePcb(W, H, T, [], tex, 0x18458f);
+  // modulePcb 是竖立的（y 向上 0..H）；平放：绕 x 转到水平，贴图上沿落在 -z
+  const flat = new THREE.Group();
+  flat.rotation.x = -Math.PI / 2;
+  pcb.position.y = -H / 2;
+  flat.add(pcb);
+  flat.position.y = 1.2 + T / 2;
+  grp.add(flat);
+  const pcbTop = 1.2 + T;
+  // 底面焊点把板子垫起来一点
+  const feet = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.7, 0.7, 1.2, 10), MAT.tin, 3);
+  const m = new THREE.Matrix4();
+  for (let i = 0; i < 3; i++) feet.setMatrixAt(i, m.makeTranslation((i - 1) * PITCH, 0.6, -H / 2 + 2));
+  grp.add(feet);
+  // 蜂鸣器：黑色塑料圆柱 + 顶面声孔；振膜（声孔里的深色圆片）响的时候轻微起伏
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, 8.5, 48), new THREE.MeshStandardMaterial({ color: 0x141416, roughness: 0.48 }));
+  const bz = H / 2 - 7.5;
+  body.position.set(0, pcbTop + 4.25, bz);
+  body.castShadow = true;
+  grp.add(body);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(4.6, 0.25, 8, 40).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x2a2b2e, roughness: 0.4 }));
+  ring.position.set(0, pcbTop + 8.5, bz);
+  grp.add(ring);
+  const membrane = new THREE.Mesh(new THREE.CircleGeometry(1.1, 24).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x050506, roughness: 0.9 }));
+  membrane.position.set(0, pcbTop + 8.52, bz);
+  grp.add(membrane);
+  // 三极管（TO-92 黑色半圆柱）与贴片电阻
+  const q = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 4.5, 24, 1, false, 0, Math.PI), MAT.chip);
+  q.position.set(-4.6, pcbTop + 2.25, -H / 2 + 7.4);
+  q.castShadow = true;
+  grp.add(q);
+  const r = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 0.8), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5 }));
+  r.position.set(4.6, pcbTop + 0.25, -H / 2 + 6);
+  grp.add(r);
+  // 排针：黑塑料座 + 金针（朝上）
+  const plastic = new THREE.Mesh(new THREE.BoxGeometry(3 * PITCH, 2.5, 2.5), MAT.plastic);
+  plastic.position.set(0, pcbTop + 1.25, -H / 2 + 2);
+  grp.add(plastic);
+  const pins = new THREE.InstancedMesh(new THREE.BoxGeometry(0.64, 8.5, 0.64), MAT.gold, 3);
+  for (let i = 0; i < 3; i++) pins.setMatrixAt(i, m.makeTranslation((i - 1) * PITCH, pcbTop + 4.25, -H / 2 + 2));
+  grp.add(pins);
+  // 杜邦母头插在排针上：插头底在塑料座顶面
+  const plugAt = [0, 1, 2].map((i) => new THREE.Vector3((i - 1) * PITCH, pcbTop + 2.5, -H / 2 + 2));
+  // 声波提示：蜂鸣器上方两道弧，响的时候出现并向外扩
+  const waves = new THREE.Group();
+  const waveMat = new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.8, depthWrite: false });
+  for (const k of [0, 1]) {
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(4 + k * 2.6, 0.32, 6, 24, Math.PI * 0.6), waveMat);
+    arc.rotation.z = Math.PI * 0.2;
+    arc.raycast = () => {};
+    waves.add(arc);
+  }
+  waves.position.set(0, pcbTop + 12, bz);
+  waves.visible = false;
+  grp.add(waves);
+  return { grp, plugAt, labels: BUZZER_PINS, membrane, waves, waveMat, size: [W, H] as const };
+}
+
 /** 旋转电位器（R16 规格）：蓝色方壳 + 金属轴 + 黑色带指示线的旋钮。原点在引脚根部。 */
 function potModel() {
   const grp = new THREE.Group();
@@ -1231,7 +1327,8 @@ export function createBench(container: HTMLElement): Bench {
   };
   const registerModulePins = (partId: string, root: THREE.Group, pins: THREE.Vector3[], labels: string[]) => {
     const recs = labels.map((l, i) => ({ id: `${partId}:${l}`, label: l, anchor: pins[i].clone(), parent: root }));
-    pinHits(root, recs, pins.map((p) => new THREE.Vector3(p.x, 2.5, p.z)), [2.3, 6, 2.8], modulePins);
+    // 拾取盒只罩住排针塑料座和 PCB 最底下一点：再高就盖住模块本体，点模块中间会选成针脚
+    pinHits(root, recs, pins.map((p) => new THREE.Vector3(p.x, 2, p.z)), [2.3, 4, 2.8], modulePins);
   };
 
   // 标注（零件说明，浅色药丸）
@@ -1272,6 +1369,7 @@ export function createBench(container: HTMLElement): Bench {
   let leds: LedState[] = [];
   let servos: { pin: number; horn: THREE.Group; freq: number; angle: number; target: number; phys?: boolean }[] = [];
   let pots: { pin: number; knob: THREE.Group; hit: THREE.Mesh; v: number }[] = [];
+  let buzzers: { pin: number; membrane: THREE.Mesh; waves: THREE.Group; waveMat: THREE.MeshBasicMaterial; on: boolean }[] = [];
   let potCb: ((pin: number, v: number) => void) | null = null;
   let parts = new THREE.Group();
   scene.add(parts);
@@ -1320,15 +1418,17 @@ export function createBench(container: HTMLElement): Bench {
     registerPart('gc9a01', m.grp);
     registerModulePins('gc9a01', m.grp, m.pins, m.labels);
     grp.add(m.grp);
+    // 引脚与内核的接线约定一致：S3 见 esp32s3::lcd_pin，C3 见 esp32c3::lcd_pin（firmware/common/round_lcd.h 同）
+    const p = LCD_WIRING[board.spec.chip];
     const order: [string, number, string][] = [
       ['GND', WIRE.gnd, 'LCD 地'],
       ['3V3', WIRE.vcc, 'LCD 供电'],
-      ['IO12', WIRE.scl, 'SPI SCLK'],
-      ['IO11', WIRE.sda, 'SPI MOSI'],
-      ['IO13', WIRE.sig, 'LCD RST'],
-      ['IO14', 0x8f5bd6, 'LCD DC'],
-      ['IO10', 0x3f8fd6, 'LCD CS'],
-      ['IO15', 0xd6d6d6, 'LCD 背光'],
+      [`IO${p.sclk}`, WIRE.scl, 'SPI SCLK'],
+      [`IO${p.mosi}`, WIRE.sda, 'SPI MOSI'],
+      [`IO${p.rst}`, WIRE.sig, 'LCD RST'],
+      [`IO${p.dc}`, 0x8f5bd6, 'LCD DC'],
+      [`IO${p.cs}`, 0x3f8fd6, 'LCD CS'],
+      [`IO${p.bl}`, 0xd6d6d6, 'LCD 背光'],
     ];
     order.forEach(([pinName, color, role], i) => {
       moduleWire(grp, pinName, new THREE.Vector3(colX(firstCol + i), top, rowZ(0)), color, `gc9a01:${m.labels[i]}`, 50 + i * 1.4, i);
@@ -1362,7 +1462,10 @@ export function createBench(container: HTMLElement): Bench {
     registerPart('servo', root);
     grp.add(root);
     const m = servoModel();
-    const sx = colX(24), sz = rowZ(9) + 44;
+    // 摆在信号针和 5V 针中间的正前方：线短、不从开发板（BOOT 键）和 BME280 上方拱过去
+    const sigX = pinCands('IO' + p.pin)[0].p.x;
+    const v5X = pinCands('5V')[0].p.x;
+    const sx = (sigX + v5X) / 2 + 8, sz = rowZ(9) + 44;
     m.grp.position.set(sx, 0, sz);
     m.grp.rotation.y = Math.PI;
     root.add(m.grp);
@@ -1399,11 +1502,11 @@ export function createBench(container: HTMLElement): Bench {
     cols.forEach(([pin, color, end, role], i) => {
       const b = pinLocal[labels.indexOf(end)].clone();
       const a = boardHole(pin, b);
-      // 起点先升过相邻插头顶（面包板面 + 11 mm），再拱向舵机
-      addWire(grp, [a, lift(a, top + 15 + i), new THREE.Vector3((a.x + b.x) / 2, top + 25 + i * 2, (a.z + b.z) / 2 + 4), lift(b, 22), b], color, pin, `servo:${end}`);
+      // 起点先升过相邻插头顶（面包板面 + 11 mm），再低低地往前拱向舵机：拱高了从默认机位看会挡住板上的 BOOT 键和 BME280
+      addWire(grp, [a, lift(a, top + 13 + i), new THREE.Vector3((a.x + b.x) / 2, top + 15 + i * 2, (a.z + b.z) / 2 + 8), lift(b, 20), b], color, pin, `servo:${end}`);
       addRole(apiId(pin), role);
     });
-    label(grp, p.label ?? `SG90 舵机 · 信号 IO${p.pin} · 50Hz`, new THREE.Vector3(sx, 46, sz));
+    label(grp, p.label ?? `SG90 舵机 · 信号 IO${p.pin} · 50Hz`, new THREE.Vector3(sx, 38, sz + 12));
     servos.push({ pin: p.pin, horn: m.horn, freq: p.freq ?? 50, angle: 90, target: 90 });
   }
 
@@ -1426,6 +1529,43 @@ export function createBench(container: HTMLElement): Bench {
     label(grp, p.label ?? `电位器 · 滑片 → IO${p.pin}（ADC）· 拖动旋钮`, new THREE.Vector3(colX(col), 36, rowZ(9) + 6));
     pots.push({ pin: p.pin, knob: m.knob, hit: m.hit, v: 0.36 });
     m.knob.rotation.y = -(0.36 - 0.5) * 1.5 * Math.PI;
+  }
+
+  function buildBuzzer(grp: THREE.Group, p: Extract<PartSpec, { type: 'buzzer' }>) {
+    // 模块平放在面包板前面的桌上，靠近 I/O 针；三根杜邦线（母头插模块排针）接到开发板 3V3 / GPIO / GND
+    const root = new THREE.Group();
+    registerPart('buzzer', root);
+    grp.add(root);
+    const m = buzzerModule();
+    const sig = pinCands('IO' + p.pin)[0].p;
+    const bx = sig.x - 18, bz = Math.sign(sig.z || 1) * (BB.D / 2 + 15);
+    m.grp.position.set(bx, 0, bz);
+    // 排针朝开发板那一侧
+    if (bz < 0) m.grp.rotation.y = Math.PI;
+    root.add(m.grp);
+    // 接触阴影不挂在可选中的零件下面：选中描边会把阴影片的大方框也描出来
+    const shadow = contactShadow(m.size[0], m.size[1], 0.3);
+    shadow.position.set(bx, shadow.position.y, bz);
+    grp.add(shadow);
+    m.grp.updateMatrixWorld(true);
+    const local = m.plugAt.map((v) => v.clone());
+    // 针脚拾取盒套在杜邦母头上（模块平放，排针比竖插模组的高）
+    const recs = m.labels.map((l, i) => ({ id: `buzzer:${l}`, label: l, anchor: local[i].clone(), parent: m.grp }));
+    pinHits(m.grp, recs, local.map((v) => v.clone().setY(v.y + 4)), [2.4, 9, 2.8], modulePins);
+    const ends: [string, number, string, string][] = [
+      ['3V3', WIRE.vcc, 'VCC', '蜂鸣器模块供电'],
+      ['IO' + p.pin, WIRE.sig, 'I/O', '蜂鸣器（LEDC 方波）'],
+      ['GND', WIRE.gnd, 'GND', '蜂鸣器模块地'],
+    ];
+    ends.forEach(([pin, color, end, role], i) => {
+      const b = local[m.labels.indexOf(end)].clone().applyMatrix4(m.grp.matrixWorld);
+      const a = boardHole(pin, b);
+      const h = top + 12 + i * 1.5;
+      addWire(grp, [a, lift(a, h), new THREE.Vector3((a.x + b.x) / 2, h + 2, (a.z + b.z) / 2 + Math.sign(bz) * 4), lift(b, h - 2), b], color, pin, `buzzer:${end}`);
+      addRole(apiId(pin), role);
+    });
+    label(grp, p.label ?? `无源蜂鸣器 · I/O → IO${p.pin}`, new THREE.Vector3(bx, 6, bz + Math.sign(bz) * 20));
+    buzzers.push({ pin: p.pin, membrane: m.membrane, waves: m.waves, waveMat: m.waveMat, on: false });
   }
 
   let lastScene: SceneSpec = { parts: [] };
@@ -1465,6 +1605,7 @@ export function createBench(container: HTMLElement): Bench {
     leds = [];
     servos = [];
     pots = [];
+    buzzers = [];
     oledTex = null;
     lcdTex = null;
     holeUse = new Map();
@@ -1482,6 +1623,7 @@ export function createBench(container: HTMLElement): Bench {
       if (p.type === 'led') buildLed(parts, { ...p, col: p.col ?? 24 - 4 * ledN++ });
       if (p.type === 'servo') buildServo(parts, p);
       if (p.type === 'pot') buildPot(parts, p);
+      if (p.type === 'buzzer') buildBuzzer(parts, p);
       if (p.type === 'oled') {
         oledData.fill(0);
         for (let i = 3; i < oledData.length; i += 4) oledData[i] = 255;
@@ -1502,7 +1644,8 @@ export function createBench(container: HTMLElement): Bench {
         lcdTex.colorSpace = THREE.SRGBColorSpace;
         lcdTex.needsUpdate = true;
         buildSpiLcd(parts, roundLcdModule(lcdTex), 16);
-        label(parts, p.label ?? 'GC9A01 圆屏 · SPI2 · SCLK IO12 MOSI IO11 CS IO10 DC IO14', new THREE.Vector3(colX(19.5), 52, rowZ(0) - 10));
+        const w = LCD_WIRING[board.spec.chip];
+        label(parts, p.label ?? `GC9A01 圆屏 · SPI2 · SCLK IO${w.sclk} MOSI IO${w.mosi} CS IO${w.cs} DC IO${w.dc}`, new THREE.Vector3(colX(19.5), 52, rowZ(0) - 10));
       }
       if (p.type === 'bme280') {
         buildI2c(parts, 'bme280', 'BME280', bmeModule(), i2cCol, p.sda, p.scl, 22);
@@ -1686,7 +1829,15 @@ export function createBench(container: HTMLElement): Bench {
     if (!o) return null;
     // 开发板量到芯片（屏蔽罩中心），其它零件取包围盒中心
     if (t.id === 'board') return new THREE.Vector3(0, board.T / 2 + 3, board.L / 2 - board.spec.module.L / 2).applyMatrix4(board.grp.matrixWorld);
-    return new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
+    // 其它零件取看得见的本体的包围盒中心：不算拾取盒、金针和接触阴影，免得"中心"落到插进面包板的排针上（点中心选中的是针脚而不是模块）
+    const box = new THREE.Box3();
+    o.updateMatrixWorld(true);
+    o.traverse((c) => {
+      const m = c as THREE.Mesh;
+      if (!m.isMesh || m.material === MAT.hit || m.material === MAT.gold || m.renderOrder < 0) return;
+      box.union(new THREE.Box3().setFromObject(m));
+    });
+    return (box.isEmpty() ? new THREE.Box3().setFromObject(o) : box).getCenter(new THREE.Vector3());
   };
 
   const project = (t: PickTarget): ScreenPoint | null => {
@@ -1874,6 +2025,19 @@ export function createBench(container: HTMLElement): Bench {
       sv.angle += Math.max(-step, Math.min(step, sv.target - sv.angle));
       sv.horn.rotation.y = ((sv.angle - 90) * Math.PI) / 180;
     }
+    // 蜂鸣器响：振膜轻微起伏 + 声波弧向外扩（示意，真实振动是 kHz 级，看不见）
+    for (const bz of buzzers) {
+      bz.waves.visible = bz.on;
+      if (!bz.on) {
+        bz.membrane.position.y = bz.membrane.userData.y0 ??= bz.membrane.position.y;
+        continue;
+      }
+      const ph = (t0 / 600) % 1;
+      bz.waves.scale.setScalar(0.85 + ph * 0.4);
+      bz.waveMat.opacity = 0.85 * (1 - ph);
+      bz.membrane.userData.y0 ??= bz.membrane.position.y;
+      bz.membrane.position.y = bz.membrane.userData.y0 + 0.12 * Math.sin(t0 / 25);
+    }
     if (heat.visible) {
       const k = 1 + 0.06 * Math.sin(t0 / 260);
       heat.scale.set(heatBase * k, heatBase * k, 1);
@@ -1913,6 +2077,11 @@ export function createBench(container: HTMLElement): Bench {
       for (const l of leds) {
         const d = pwm?.[l.pin] ?? -1;
         l.target = d >= 0 ? d : bit(enable, enableHi, l.pin) && bit(level, levelHi, l.pin) ? 1 : 0;
+      }
+      // 无源蜂鸣器只在有方波时响（占空比在 0..1 之间；常高 / 常低都不响）
+      for (const bz of buzzers) {
+        const d = pwm?.[bz.pin] ?? -1;
+        bz.on = d > 0 && d < 1;
       }
       for (const sv of servos) {
         const d = pwm?.[sv.pin] ?? -1;

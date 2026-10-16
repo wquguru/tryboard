@@ -8,11 +8,14 @@ pub mod gpspi;
 pub mod hle;
 pub mod ledc;
 pub mod i2c;
+pub mod iotrace;
 pub mod periph;
 pub mod rmt;
 pub mod spiflash;
 pub mod wifi;
 
+use devices::gc9a01::Gc9a01;
+use gdma::{DmaMem, Gdma, GdmaLayout};
 use periph::*;
 use std::collections::HashMap;
 use tryboard_rv32::{Bus, BusFault, Cpu, Exit};
@@ -44,6 +47,22 @@ pub const MMIO_HIGH: u32 = 0x600D_1000;
 const ICACHE_BITS: u32 = 15;
 const ICACHE_MASK: usize = (1 << ICACHE_BITS) - 1;
 const ICACHE_INVALID: u32 = 1;
+
+/// 圆屏 GC9A01 在 C3 上的接线约定：SCLK / MOSI / CS 用 SPI2 的 IO_MUX 直连脚（soc/spi_pins.h），
+/// DC / RST / 背光用 DevKitM-1 排针上空闲、又不是 strapping 的普通 GPIO（2、8、9 是 strapping，8 还接着板载 RGB）
+pub mod lcd_pin {
+    pub const SCLK: u32 = 6;
+    pub const MOSI: u32 = 7;
+    pub const CS: u32 = 10;
+    pub const DC: u32 = 5;
+    pub const RST: u32 = 4;
+    pub const BL: u32 = 3;
+}
+/// GDMA 外设编号（soc/gdma_channel.h：SOC_GDMA_TRIG_PERIPH_SPI2）
+const GDMA_PERI_SPI2: u32 = 0;
+/// GPIO 矩阵输出信号 FSPICS0_OUT_IDX（gpio_sig_map.h）与 IO_MUX 功能号 FUNC_GPIO10_FSPICS0（io_mux_reg.h）
+const SIG_FSPICS0: u32 = 68;
+const IOMUX_FUNC_FSPICS0: u32 = 2;
 
 pub const MMU_BASE: u32 = 0x600C_5000;
 pub const MMU_ENTRIES: usize = 128;
@@ -91,6 +110,11 @@ pub struct SocBus {
     pub wifi: wifi::WifiMac,
     pub sha: crypto_hw::ShaHw,
     pub aes: crypto_hw::AesHw,
+    /// GP-SPI2 主机 + GDMA（3 通道）。GDMA 也给 AES / SHA 的 DMA 模式用
+    pub spi2: gpspi::GpSpi,
+    pub gdma: Gdma,
+    /// 挂在 SPI2 上的圆屏（CLI `--spi gc9a01` / wasm `tb_lcd_attach`），引脚见 `lcd_pin`
+    pub lcd: Option<Box<Gc9a01>>,
     /// 硬件随机数发生器（WDEV_RND_REG）状态：xorshift，固定种子保证可复现
     pub rng: u32,
     /// 调试：监视某个 MMIO 地址，记录访问时的 PC（watch_pc 由运行循环填写）
@@ -102,6 +126,8 @@ pub struct SocBus {
     /// GPIO 电平变化记录（周期, 电平），前端按此驱动 LED 等
     pub gpio_log: Vec<(u64, u32)>,
     last_gpio: u32,
+    /// 逻辑分析仪事件（P1-05）
+    pub iotrace: iotrace::IoTrace,
 }
 
 impl Default for SocBus {
@@ -141,6 +167,9 @@ impl Default for SocBus {
             wifi: Default::default(),
             sha: Default::default(),
             aes: Default::default(),
+            spi2: Default::default(),
+            gdma: Gdma::new(GdmaLayout::C3),
+            lcd: None,
             rng: 0x2545_f491,
             watch: None,
             watch_pc: 0,
@@ -148,6 +177,7 @@ impl Default for SocBus {
             next_event: 0,
             gpio_log: Vec::new(),
             last_gpio: 0,
+            iotrace: iotrace::IoTrace::new(0),
         }
     }
 }
@@ -266,6 +296,8 @@ impl SocBus {
             0x6004_0000 => return self.adc.read(off),
             0x6000_9000 if (4..=0x58).contains(&off) => return self.gpio.iomux[((off - 4) / 4) as usize],
             0x6001_3000 => return self.i2c0.read(off),
+            0x6002_4000 => return self.spi2.read(off),
+            0x6003_F000 => return self.gdma.read(off),
             0x600C_4000 if off < 0x100 => return self.extmem.read(off),
             0x6001_F000 => return self.timg0.read(off, now),
             0x6002_0000 => return self.timg1.read(off, now),
@@ -346,10 +378,27 @@ impl SocBus {
                 self.gpio_changed(now);
                 return;
             }
-            0x6001_3000 => return self.i2c0.write(off, v, now),
+            0x6001_3000 => {
+                self.i2c0.write(off, v, now);
+                if !self.i2c0.events.is_empty() {
+                    self.iotrace.extend(&mut self.i2c0.events);
+                }
+                return;
+            }
+            0x6002_4000 => {
+                if self.spi2.write(off, v) {
+                    self.spi2_transfer(now);
+                }
+                return;
+            }
+            0x6003_F000 => return self.gdma.write(off, v),
             0x600C_4000 if off < 0x100 => return self.extmem.write(off, v),
             0x6000_4000 => {
                 self.gpio.write(off, v);
+                // 使能（0x20..0x2c）和输出信号选择（FUNC_OUT_SEL 0x554 起）决定哪个引脚上有 PWM
+                if (0x20..0x2c).contains(&off) || off >= 0x554 {
+                    self.iotrace.pwm_dirty = true;
+                }
                 self.gpio_changed(now);
                 return;
             }
@@ -401,8 +450,15 @@ impl SocBus {
     pub fn gpio_changed(&mut self, now: u64) {
         self.gpio.sense();
         let lv = self.gpio.level();
+        if let Some(l) = self.lcd.as_mut() {
+            // RST 低有效，只在固件真的把脚驱动为低时复位（模组板上有上拉）；背光高电平亮
+            let en = self.gpio.enable;
+            l.set_reset(en >> lcd_pin::RST & 1 != 0 && lv >> lcd_pin::RST & 1 == 0);
+            l.set_backlight(lv >> lcd_pin::BL & 1 != 0);
+        }
         if lv != self.last_gpio {
             self.last_gpio = lv;
+            self.iotrace.gpio(now, lv as u64);
             self.gpio_log.push((now, lv));
             if self.gpio_log.len() > 1 << 16 {
                 self.gpio_log.drain(..1 << 15);
@@ -422,6 +478,19 @@ impl SocBus {
         None
     }
 
+    /// LEDC 或 GPIO 矩阵改过：把各引脚此刻的 PWM 交给事件记录（没变的引脚不记）
+    fn trace_pwm(&mut self, now: u64) {
+        if !self.iotrace.pwm_scan_needed(self.ledc.rev) {
+            return;
+        }
+        self.iotrace.pwm_dirty = false;
+        self.iotrace.ledc_rev = self.ledc.rev;
+        for pin in 0..self.gpio.func_out.len() {
+            let p = self.pin_pwm(pin);
+            self.iotrace.pwm(now, pin, p);
+        }
+    }
+
     /// 所有中断源的当前电平（位 = 源编号）
     fn levels(&self) -> u64 {
         let mut l = 0u64;
@@ -437,6 +506,10 @@ impl SocBus {
         set(src::LEDC, self.ledc.irq());
         set(src::RMT, self.rmt.irq());
         set(src::I2C_EXT0, self.i2c0.irq());
+        set(src::SPI2, self.spi2.irq());
+        for ch in 0..self.gdma.layout.nch as u32 {
+            set(src::DMA_CH0 + ch, self.gdma.in_irq(ch as usize) || self.gdma.out_irq(ch as usize));
+        }
         set(src::SYSTIMER_TARGET0, self.systimer.irq(0));
         set(src::SYSTIMER_TARGET0 + 1, self.systimer.irq(1));
         set(src::SYSTIMER_TARGET0 + 2, self.systimer.irq(2));
@@ -466,12 +539,16 @@ impl SocBus {
             }
             let ch = (sel - rmt::SIG_OUT0) as u8;
             let dec = self.ws2812.entry(pin).or_default();
+            let frames = dec.frames;
             for &(t, c, lv) in &edges {
                 if c == ch {
                     dec.feed(t, lv);
                 }
             }
             next = next.min(dec.finalize(now));
+            if dec.frames != frames {
+                self.iotrace.ws2812(now, pin, &dec.rgb);
+            }
             self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
         }
         edges.clear();
@@ -490,11 +567,99 @@ impl SocBus {
         let n6 = self.route_rmt(now);
         let n7 = self.i2c0.update(now);
         let n8 = self.wifi_update(now);
-        self.next_event = n1.min(n2).min(n3).min(n4).min(n5).min(n6).min(n7).min(n8);
+        self.trace_pwm(now);
+        let (n9, spi_done) = self.spi2.update(now);
+        if spi_done {
+            if let Some(ch) = self.spi2.dma_out_ch.take() {
+                self.gdma.out_done(ch);
+            }
+        }
+        self.next_event = n1.min(n2).min(n3).min(n4).min(n5).min(n6).min(n7).min(n8).min(n9);
         let lv = self.levels();
         let pending = self.intc.pending(lv);
         cpu.irq_line = self.intc.select(pending);
         self.irq_dirty = false;
+    }
+}
+
+impl SocBus {
+    /// 在 SPI2 上接一块 GC9A01 圆屏（引脚见 `lcd_pin`）
+    pub fn attach_lcd(&mut self) {
+        self.lcd = Some(Box::default());
+        let now = self.now;
+        self.gpio_changed(now);
+    }
+
+    /// 圆屏的片选：CS 脚经 IO_MUX / GPIO 矩阵接到 SPI2 的 CS0 时由控制器在传输期间拉低；
+    /// 否则当普通 GPIO 看，固件驱动为低才算选中
+    fn lcd_selected(&self) -> bool {
+        let pin = lcd_pin::CS as usize;
+        let via_iomux = (self.gpio.iomux[pin] >> 12) & 7 == IOMUX_FUNC_FSPICS0;
+        let via_matrix = self.gpio.func_out[pin] & 0xff == SIG_FSPICS0;
+        if via_iomux || via_matrix {
+            self.spi2.cs0_enabled()
+        } else {
+            self.gpio.enable >> pin & 1 != 0 && self.gpio.level() >> pin & 1 == 0
+        }
+    }
+
+    /// 固件写了 SPI2 CMD.USR：取数据（W 寄存器或 GDMA 描述符链）、交给圆屏，再按 SPI 时钟计时。
+    /// 与 S3 的同名函数逻辑相同（模型共用，只有引脚与信号号不同）
+    fn spi2_transfer(&mut self, now: u64) {
+        let p = self.spi2.plan();
+        let mut bytes = p.head.clone();
+        let mut out_ch = None;
+        // 把 GDMA 临时取出来，借总线读写内存
+        let mut g = std::mem::replace(&mut self.gdma, Gdma::placeholder());
+        if p.mosi_bits > 0 {
+            let n = p.mosi_bits.div_ceil(8) as usize;
+            let mut data = if p.dma_tx {
+                match g.out_channel_for(GDMA_PERI_SPI2) {
+                    Some(ch) => {
+                        out_ch = Some(ch);
+                        g.take_out(ch, n, self)
+                    }
+                    None => Vec::new(),
+                }
+            } else {
+                self.spi2.tx_buffer(n)
+            };
+            // DMA 给的数据不够：移位寄存器里是 0
+            data.resize(n, 0);
+            bytes.extend_from_slice(&data);
+        }
+        if p.miso_bits > 0 {
+            // 没有会应答的从机，MISO 上拉读到全 1
+            let rx = vec![0xffu8; p.miso_bits.div_ceil(8) as usize];
+            if p.dma_rx {
+                if let Some(ch) = g.in_channel_for(GDMA_PERI_SPI2) {
+                    g.put_in(ch, &rx, self);
+                }
+            } else {
+                self.spi2.rx_fill(&rx);
+            }
+        }
+        self.gdma = g;
+        let selected = self.lcd_selected();
+        let dc = self.gpio.level() >> lcd_pin::DC & 1 != 0;
+        if let (Some(l), true) = (self.lcd.as_mut(), selected) {
+            for b in bytes {
+                l.byte(dc, b);
+            }
+        }
+        self.spi2.begin(now, &p, out_ch);
+    }
+}
+
+impl DmaMem for SocBus {
+    fn rd8(&mut self, a: u32) -> u8 {
+        self.mem_read(a, 1).unwrap_or(0) as u8
+    }
+    fn rd32(&mut self, a: u32) -> u32 {
+        self.mem_read(a, 4).unwrap_or(0)
+    }
+    fn wr32(&mut self, a: u32, v: u32) {
+        self.mem_write(a, 4, v);
     }
 }
 
@@ -676,6 +841,9 @@ impl Esp32c3 {
         m.bus.i2c0.devices = std::mem::take(&mut self.bus.i2c0.devices);
         m.bus.ws2812 = std::mem::take(&mut self.bus.ws2812);
         m.bus.gpio_log = std::mem::take(&mut self.bus.gpio_log);
+        m.bus.iotrace = self.bus.iotrace.carry();
+        // 外接屏不随芯片复位消失（它的复位脚由固件重新驱动）
+        m.bus.lcd = self.bus.lcd.take();
         let t = self.cpu.cycles;
         m.cpu.cycles = t;
         m.bus.now = t;

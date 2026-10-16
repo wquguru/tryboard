@@ -7,6 +7,8 @@ use tryboard_esp32c3::devices::{
     gc9a01::Gc9a01,
     ssd1306::Ssd1306,
 };
+use tryboard_esp32c3::iotrace::IoTrace;
+pub use tryboard_esp32c3::iotrace::IoEvent;
 use tryboard_esp32c3::rmt::Ws2812;
 use tryboard_esp32c3::Esp32c3;
 use tryboard_esp32s3::Esp32s3;
@@ -396,11 +398,16 @@ impl Machine {
         self.i2c0().device::<Ssd1306>()
     }
 
-    /// 在 SPI2 上接一块屏（目前只有 "gc9a01"，引脚见 tryboard_esp32s3::lcd_pin）。
-    /// 只有 ESP32-S3 建模了 GP-SPI2 + GDMA，C3 返回 false
+    /// 在 SPI2 上接一块屏（目前只有 "gc9a01"）。引脚按芯片不同：
+    /// S3 见 tryboard_esp32s3::lcd_pin，C3 见 tryboard_esp32c3::lcd_pin
     pub fn lcd_attach(&mut self, kind: &str) -> bool {
         match (&mut self.hw, kind) {
             (Hw::S3(m), "gc9a01") => {
+                m.bus.attach_lcd();
+                self.elec.add_module("gc9a01");
+                true
+            }
+            (Hw::C3(m), "gc9a01") => {
                 m.bus.attach_lcd();
                 self.elec.add_module("gc9a01");
                 true
@@ -412,7 +419,7 @@ impl Machine {
     pub fn lcd(&mut self) -> Option<&mut Gc9a01> {
         match &mut self.hw {
             Hw::S3(m) => m.bus.lcd.as_deref_mut(),
-            Hw::C3(_) => None,
+            Hw::C3(m) => m.bus.lcd.as_deref_mut(),
         }
     }
 
@@ -420,7 +427,7 @@ impl Machine {
     pub fn spi_stats(&self) -> (u64, u64) {
         match &self.hw {
             Hw::S3(m) => (m.bus.spi2.transfers, m.bus.spi2.bytes),
-            Hw::C3(_) => (0, 0),
+            Hw::C3(m) => (m.bus.spi2.transfers, m.bus.spi2.bytes),
         }
     }
 
@@ -430,6 +437,33 @@ impl Machine {
             Hw::C3(m) => m.bus.gpio_log.iter().map(|(t, l)| (*t, *l as u64)).collect(),
             Hw::S3(m) => m.bus.gpio_log.clone(),
         }
+    }
+
+    fn iotrace(&mut self) -> &mut IoTrace {
+        match &mut self.hw {
+            Hw::C3(m) => &mut m.bus.iotrace,
+            Hw::S3(m) => &mut m.bus.iotrace,
+        }
+    }
+
+    /// 逻辑分析仪要观察的 GPIO（位 = 引脚号）。PWM / WS2812 / I2C 事件总是记
+    pub fn io_watch(&mut self, mask: u64) {
+        self.iotrace().watch = mask;
+    }
+
+    /// 事件缓冲上限（条）；0 = 不记
+    pub fn io_cap(&mut self, cap: usize) {
+        self.iotrace().cap = cap;
+    }
+
+    /// 取走事件缓冲里的全部事件（按记录先后）
+    pub fn io_take(&mut self) -> Vec<IoEvent> {
+        self.iotrace().take()
+    }
+
+    /// 缓冲满了丢掉的条数
+    pub fn io_dropped(&mut self) -> u64 {
+        self.iotrace().dropped
     }
 
     /// 上电时的引脚电平（gpio_log 的起点）

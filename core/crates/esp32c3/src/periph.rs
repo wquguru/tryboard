@@ -8,6 +8,7 @@ pub const CPU_HZ: u64 = 160_000_000;
 pub mod src {
     pub const WIFI_MAC: u32 = 0;
     pub const GPIO: u32 = 16;
+    pub const SPI2: u32 = 19;
     pub const UART0: u32 = 21;
     pub const UART1: u32 = 22;
     pub const LEDC: u32 = 23;
@@ -20,6 +21,8 @@ pub mod src {
     pub const TG1_T0: u32 = 34;
     pub const TG1_WDT: u32 = 35;
     pub const SYSTIMER_TARGET0: u32 = 37;
+    /// GDMA 每通道一个源（IN / OUT 共用）：ETS_DMA_CH0..2_INTR_SOURCE
+    pub const DMA_CH0: u32 = 44;
     pub const FROM_CPU0: u32 = 50;
 }
 

@@ -1,0 +1,8 @@
+# 构建产物（tools/build_npm.sh 生成）：ROM 不进 git（LICENSING 规则 1）
+/dist/
+/wasm/
+/rom/
+/levels.json
+/LICENSE-esp-rom-elfs.txt
+/NOTICE.txt
+/*.tgz

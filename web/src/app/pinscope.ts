@@ -107,7 +107,7 @@ export function drawScope(cv: HTMLCanvasElement, kind: PinKind, trace: PinTrace,
   const g = cv.getContext('2d')!;
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, W, H);
-  g.fillStyle = '#FBFBFB';
+  g.fillStyle = css('--scope-bg', '#FBFBFB');
   g.fillRect(0, 0, W, H);
   // 网格：横 4 格、竖 10 格
   g.strokeStyle = css('--line-soft', '#F0F0F0');

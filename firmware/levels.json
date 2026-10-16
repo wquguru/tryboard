@@ -168,11 +168,11 @@
    {
     "key": "spin",
     "title": "会转身的小黄",
-    "goal": "舵机转台 + 圆屏脸，左右转身",
+    "goal": "转身 + 眼珠跟随 + 按键回头",
     "buy": "1.28″ 圆屏 GC9A01、SG90 舵机、3D 打印身体",
     "learn": "SPI 屏幕、舵机和屏幕配合",
-    "pass": "3 秒内 GPIO4 50 Hz、脉宽在 0.83–2.17 ms 之间来回（±60°）；串口出现 SPIN -60、SPIN +60；2.6 秒按 BOOT 后出现 LOOK FRONT；圆屏点亮 ≥ 20000 像素",
-    "brief": "ESP32-S3 做一个会转身的桌面小人：\n· 圆屏 GC9A01（240×240）接 SPI2：SCLK=GPIO12，MOSI=GPIO11，CS=GPIO10，DC=GPIO14，RST=GPIO13，背光 GPIO15（高电平亮）。用 ESP-IDF 的 esp_lcd + espressif/esp_lcd_gc9a01 组件\n· 屏上画一张脸（黄色底、两只眼睛），眼珠朝转动方向看\n· 舵机 GPIO4，LEDC 50 Hz：以 90° 为中心在 30°–150° 之间来回转，2 秒一个来回（脉宽 0.5 ms = 0°，2.5 ms = 180°）。上电立即开始转\n· 转到最左打印 SPIN -60，转到最右打印 SPIN +60\n· BOOT（GPIO0，按下接地，内部上拉）按一下：停在正面 90° 并打印 LOOK FRONT；再按一下接着转并打印 LOOK AROUND",
+    "pass": "3 秒内 GPIO4 50 Hz、脉宽在 0.83–2.17 ms 之间来回（±60°）；串口出现 SPIN -60、SPIN +60、EYE R、EYE L；2.6 秒按 BOOT 后出现 LOOK FRONT，3 秒时眼珠回到正中（青色眼睛水平重心 114–126）；圆屏点亮 ≥ 20000 像素、黄色脸 ≥ 20000",
+    "brief": "ESP32-S3 做一个会转身的桌面小人（前两个检查点的合体）：\n· 圆屏 GC9A01（240×240）接 SPI2：SCLK=GPIO12，MOSI=GPIO11，CS=GPIO10，DC=GPIO14，RST=GPIO13，背光 GPIO15（高电平亮）。用 ESP-IDF 的 esp_lcd + espressif/esp_lcd_gc9a01 组件；这类模组要开反色（esp_lcd_panel_invert_color(true)），颜色顺序选 BGR（LCD_RGB_ELEMENT_ORDER_BGR），否则颜色不对\n· 小黄的脸（坐标以屏幕左上角为 0,0）：整屏黄色 #FFC933 底；一块深色 #141414 圆角矩形眼罩，148×88、圆角 32、中心 (120,104)；眼罩里两只青色 #7CF5FF 圆角矩形眼睛，每只 28×56、圆角 14，中心 (90,104) 和 (150,104)，各带一个半径 5 的白色高光；下方一张深色笑嘴（圆心 (120,160)、半径 34、线宽 6 的下半圆弧）\n· 舵机 GPIO4，LEDC 50 Hz：以 90° 为中心在 30°–150° 之间来回转（±60°），2 秒一个来回、每 20 ms 一步（脉宽 0.5 ms = 0°，2.5 ms = 180°）。上电立即开始转。转到最左打印 SPIN -60，转到最右打印 SPIN +60\n· 眼珠跟随：舵机往 + 方向（脉宽变大）转时两只眼睛一起往右偏 13 像素，往回转时往左偏 13 像素；每 20 ms 最多挪 4 像素。眼睛到最右（+13）打印 EYE R，到最左（-13）打印 EYE L。只重画眼罩那一段行带就够快\n· BOOT（GPIO0，按下接地，内部上拉，消抖 50 ms）按一下：停在正面 90°（脉宽 1.5 ms）、眼睛回到正中，打印 LOOK FRONT；再按一下接着转并打印 LOOK AROUND",
     "ref": "spin",
     "seconds": 3,
     "args": [
@@ -183,6 +183,8 @@
     "expect": [
      "SPIN -60",
      "SPIN +60",
+     "EYE R",
+     "EYE L",
      "LOOK FRONT"
     ],
     "pwm": {
@@ -193,29 +195,222 @@
      "tol": 0.003
     },
     "lcd_min_pixels": 20000,
+    "lcd_colors": [
+     {
+      "name": "黄色脸",
+      "rgb": "#FFC933",
+      "min": 20000
+     },
+     {
+      "name": "青色眼睛",
+      "rgb": "#7CF5FF",
+      "min": 1500,
+      "cx": [
+       114,
+       126
+      ]
+     }
+    ],
     "assembly": "spin"
    },
    {
     "key": "lens",
     "title": "透镜里的小人",
-    "goal": "圆屏眼睛 + 凸透镜罩，换表情",
+    "goal": "四种表情循环，装进凸透镜罩",
     "buy": "1.28″ 圆屏 GC9A01、Ø40 mm 凸透镜罩",
     "learn": "SPI 屏幕、动画、按键切状态",
-    "pass": "串口出现 MOOD 0 normal；2.0 秒按 BOOT 后出现 MOOD 1 happy；圆屏点亮 ≥ 3000 像素",
-    "brief": "ESP32-S3 做一个透镜小人：\n· 圆屏 GC9A01（240×240）接 SPI2：SCLK=GPIO12，MOSI=GPIO11，CS=GPIO10，DC=GPIO14，RST=GPIO13，背光 GPIO15（高电平亮）。用 ESP-IDF 的 esp_lcd + espressif/esp_lcd_gc9a01 组件\n· 黑底上画一对青色（#7CF5FF）圆角矩形眼睛，带白色高光、粉色腮红；每 3 秒眨一次眼\n· 4 种表情：0 normal、1 happy、2 love、3 sleepy。上电是 normal，并打印 MOOD 0 normal\n· BOOT（GPIO0，按下接地，内部上拉，消抖 30 ms）每按一次换下一个表情，打印 MOOD <编号> <名字>，例如 MOOD 1 happy",
+    "pass": "0.9 秒起每 0.4 秒按一次 BOOT，共 6 次：串口依次出现 MOOD 1 happy、MOOD 2 love、MOOD 3 sleepy，MOOD 0 normal、MOOD 2 love 各至少 2 次（转了一圈）；3.3 秒时圆屏是心形眼（#FF4F8B ±24）≥ 1500 像素、水平重心 110–130；圆屏点亮 ≥ 3000 像素",
+    "brief": "ESP32-S3 做一个透镜小人（前两个检查点的合体）：\n· 圆屏 GC9A01（240×240）接 SPI2：SCLK=GPIO12，MOSI=GPIO11，CS=GPIO10，DC=GPIO14，RST=GPIO13，背光 GPIO15（高电平亮）。用 ESP-IDF 的 esp_lcd + espressif/esp_lcd_gc9a01 组件；这类模组要开反色（esp_lcd_panel_invert_color(true)），颜色顺序选 BGR（LCD_RGB_ELEMENT_ORDER_BGR），否则颜色不对\n· 黑底；一对青色 #7CF5FF 圆角矩形眼睛，每只 52×84、圆角 20，中心 (72,112) 和 (168,112)；每只眼睛左上角两个白色高光（半径 9 和 4）；两只眼睛外下方各一块粉色 #FF8FB8 椭圆腮红，中心 (42,170) 和 (198,170)，半轴 18×10\n· 每 3 秒眨一次眼（同 lens-1：6 帧 × 30 ms），眨完打印 BLINK <次数>；只有 normal 和 sleepy 眨眼\n· 4 种表情循环：0 normal、1 happy（同 lens-2 的弯眼 + 笑嘴）、2 love（心形眼：中心 (72,112) 和 (168,112)、宽约 60 的粉红 #FF4F8B 心形，各带一个白色小高光；加青色笑嘴）、3 sleepy（眼睛只剩下面三分之一，右上角画一个白色小 z）。腮红一直在\n· 上电是 normal，打印 MOOD 0 normal\n· BOOT（GPIO0，按下接地，内部上拉，消抖 30 ms）每按一次换下一个表情（sleepy 之后回到 normal），立刻重画并打印 MOOD <编号> <名字>，例如 MOOD 1 happy。两次按键最短间隔 0.4 秒，眨眼动画不能吞掉按键",
     "ref": "lens",
-    "seconds": 3,
+    "seconds": 3.3,
     "args": [
      "--spi",
      "gc9a01"
     ],
-    "script": "2.0:gpio0=0; 2.2:gpio0=z",
+    "script": "0.9:gpio0=0; 1.0:gpio0=z; 1.3:gpio0=0; 1.4:gpio0=z; 1.7:gpio0=0; 1.8:gpio0=z; 2.1:gpio0=0; 2.2:gpio0=z; 2.5:gpio0=0; 2.6:gpio0=z; 2.9:gpio0=0; 3.0:gpio0=z",
     "expect": [
-     "MOOD 0 normal",
-     "MOOD 1 happy"
+     "MOOD 1 happy",
+     "MOOD 2 love",
+     "MOOD 3 sleepy"
     ],
     "lcd_min_pixels": 3000,
+    "serial_count": [
+     {
+      "text": "MOOD 0 normal",
+      "min": 2
+     },
+     {
+      "text": "MOOD 2 love",
+      "min": 2
+     }
+    ],
+    "lcd_colors": [
+     {
+      "name": "心形眼",
+      "rgb": "#FF4F8B",
+      "min": 1500,
+      "cx": [
+       110,
+       130
+      ]
+     }
+    ],
     "assembly": "lens"
+   }
+  ]
+ },
+ {
+  "id": "spin-1",
+  "work": "spin",
+  "title": "画脸",
+  "goal": "圆屏点亮，画出小黄的脸",
+  "pass": "2 秒内串口出现 TRYBOARD_OK；圆屏点亮 ≥ 40000 像素，其中黄色（#FFC933 ±24）≥ 20000、深色眼罩（#141414 ±24）≥ 5000、青色眼睛（#7CF5FF ±24）≥ 1500 且水平重心在 114–126（两眼对称、正视前方）",
+  "buy": "ESP32-S3 开发板、1.28″ 圆屏 GC9A01",
+  "learn": "SPI 屏幕、esp_lcd、RGB565 与反色",
+  "brief": "用 ESP-IDF 5.5 给 ESP32-S3 写固件：\n· 圆屏 GC9A01（240×240）接 SPI2：SCLK=GPIO12，MOSI=GPIO11，CS=GPIO10，DC=GPIO14，RST=GPIO13，背光 GPIO15（高电平亮）。用 ESP-IDF 的 esp_lcd + espressif/esp_lcd_gc9a01 组件；这类模组要开反色（esp_lcd_panel_invert_color(true)），颜色顺序选 BGR（LCD_RGB_ELEMENT_ORDER_BGR），否则颜色不对\n· 小黄的脸（坐标以屏幕左上角为 0,0）：整屏黄色 #FFC933 底；一块深色 #141414 圆角矩形眼罩，148×88、圆角 32、中心 (120,104)；眼罩里两只青色 #7CF5FF 圆角矩形眼睛，每只 28×56、圆角 14，中心 (90,104) 和 (150,104)，各带一个半径 5 的白色高光；下方一张深色笑嘴（圆心 (120,160)、半径 34、线宽 6 的下半圆弧）\n· 画一次就行，不要动画。画完串口打印 TRYBOARD_OK。\n· 上电立即开始，不要先等待；整个过程要在 2 秒内完成（含初始化）",
+  "ref": "spin-face",
+  "seconds": 2,
+  "args": [
+   "--spi",
+   "gc9a01"
+  ],
+  "expect": [
+   "TRYBOARD_OK"
+  ],
+  "lcd_min_pixels": 40000,
+  "lcd_colors": [
+   {
+    "name": "黄色脸",
+    "rgb": "#FFC933",
+    "min": 20000
+   },
+   {
+    "name": "深色眼罩",
+    "rgb": "#141414",
+    "min": 5000
+   },
+   {
+    "name": "青色眼睛",
+    "rgb": "#7CF5FF",
+    "min": 1500,
+    "cx": [
+     114,
+     126
+    ]
+   }
+  ]
+ },
+ {
+  "id": "spin-2",
+  "work": "spin",
+  "title": "转身",
+  "goal": "脸不变，舵机带着它左右转",
+  "pass": "3 秒内 GPIO4 是 50 Hz、脉宽在 0.83–2.17 ms 之间来回（±60°）；串口出现 SPIN -60、SPIN +60；圆屏上黄色脸 ≥ 20000 像素、青色眼睛 ≥ 1500 像素",
+  "buy": "SG90 舵机",
+  "learn": "LEDC PWM、舵机和屏幕各管各的",
+  "brief": "在上一个检查点（小黄的脸）的固件上加舵机转台，ESP32-S3：\n· 圆屏接线、脸的画法与上一个检查点完全一样（圆屏 GC9A01（240×240）接 SPI2：SCLK=GPIO12，MOSI=GPIO11，CS=GPIO10，DC=GPIO14，RST=GPIO13，背光 GPIO15（高电平亮）），脸画一次就行，眼睛保持正视\n· 舵机 GPIO4，LEDC 50 Hz。脉宽 0.5 ms = 0°、2.5 ms = 180°，中间线性。以 90° 为中心在 30°–150° 之间来回转（即 ±60°，脉宽 0.833–2.167 ms），2 秒一个来回，每 20 ms 走一步\n· 一开 PWM 就从 30°（-60°）开始，不要先输出别的脉宽；上电立即开始，不要额外等待\n· 每次走到最左（30°）打印 SPIN -60，走到最右（150°）打印 SPIN +60",
+  "ref": "spin-turn",
+  "seconds": 3,
+  "args": [
+   "--spi",
+   "gc9a01"
+  ],
+  "expect": [
+   "SPIN -60",
+   "SPIN +60"
+  ],
+  "pwm": {
+   "pin": 4,
+   "freq": 50,
+   "min": 0.0417,
+   "max": 0.1083,
+   "tol": 0.003
+  },
+  "lcd_colors": [
+   {
+    "name": "黄色脸",
+    "rgb": "#FFC933",
+    "min": 20000
+   },
+   {
+    "name": "青色眼睛",
+    "rgb": "#7CF5FF",
+    "min": 1500
+   }
+  ]
+ },
+ {
+  "id": "lens-1",
+  "work": "lens",
+  "title": "眼睛 + 眨眼",
+  "goal": "圆屏上一对会眨的眼睛",
+  "pass": "5.5 秒内串口出现 TRYBOARD_OK、BLINK 1；结束时圆屏上青色眼睛（#7CF5FF ±24）≥ 5000 像素且水平重心在 112–128、白色高光（#FFFFFF ±24）≥ 100、粉色腮红（#FF8FB8 ±24）≥ 600",
+  "buy": "ESP32-S3 开发板、1.28″ 圆屏 GC9A01",
+  "learn": "SPI 屏幕、整帧缓冲、简单动画",
+  "brief": "用 ESP-IDF 5.5 给 ESP32-S3 写一个透镜小人的眼睛：\n· 圆屏 GC9A01（240×240）接 SPI2：SCLK=GPIO12，MOSI=GPIO11，CS=GPIO10，DC=GPIO14，RST=GPIO13，背光 GPIO15（高电平亮）。用 ESP-IDF 的 esp_lcd + espressif/esp_lcd_gc9a01 组件；这类模组要开反色（esp_lcd_panel_invert_color(true)），颜色顺序选 BGR（LCD_RGB_ELEMENT_ORDER_BGR），否则颜色不对\n· 黑底；一对青色 #7CF5FF 圆角矩形眼睛，每只 52×84、圆角 20，中心 (72,112) 和 (168,112)；每只眼睛左上角两个白色高光（半径 9 和 4）；两只眼睛外下方各一块粉色 #FF8FB8 椭圆腮红，中心 (42,170) 和 (198,170)，半轴 18×10\n· 画好后串口打印 TRYBOARD_OK。上电立即开始，不要先等待\n· 眨眼：画好后每隔 3 秒眨一次。眨眼是 6 帧、每帧停 30 ms，眼睛高度依次是原来的 60%、25%、5%、25%、60%、100%（以眼睛中心为准上下收，最矮 8 像素；高度不到一半时不画高光；腮红一直在）。每眨完一次打印 BLINK <第几次>，例如 BLINK 1\n· 眨完要回到完全睁开。每一帧要画得快：整屏重画一次别超过 100 ms（用整帧缓冲、一次 draw_bitmap 送屏；逐像素算形状太慢时只重画眼睛所在的行带），否则一次眨眼会拖到 1 秒以上",
+  "ref": "lens-blink",
+  "seconds": 5.5,
+  "args": [
+   "--spi",
+   "gc9a01"
+  ],
+  "expect": [
+   "TRYBOARD_OK",
+   "BLINK 1"
+  ],
+  "lcd_colors": [
+   {
+    "name": "青色眼睛",
+    "rgb": "#7CF5FF",
+    "min": 5000,
+    "cx": [
+     112,
+     128
+    ]
+   },
+   {
+    "name": "白色高光",
+    "rgb": "#FFFFFF",
+    "min": 100
+   },
+   {
+    "name": "粉色腮红",
+    "rgb": "#FF8FB8",
+    "min": 600
+   }
+  ]
+ },
+ {
+  "id": "lens-2",
+  "work": "lens",
+  "title": "按键换表情",
+  "goal": "按 BOOT 在平常和开心之间切换",
+  "pass": "1.5 秒按一次 BOOT（按 100 ms）：串口出现 MOOD 0 normal、MOOD 1 happy；2.5 秒时圆屏是开心表情——青色（#7CF5FF ±24）在 800–4500 像素之间（弯眼 + 笑嘴，比睁开的眼睛少）、粉色腮红 ≥ 600",
+  "buy": "不用加",
+  "learn": "GPIO 中断、消抖、按键切状态",
+  "brief": "在上一个检查点（眼睛 + 眨眼）的固件上加按键换表情，ESP32-S3：\n· 圆屏接线、眼睛、腮红、眨眼都和上一个检查点一样\n· 两种表情：0 normal（上一个检查点的眼睛，会眨）、1 happy（^ ^ 弯眼：圆心 (72,122) 和 (168,122)、外半径 30、线宽 12 的上半圆弧，青色；再加一张青色笑嘴：圆心 (120,168)、外半径 18、线宽 5 的下半圆弧；happy 不眨眼）。两种表情腮红都在\n· 上电是 normal，打印 MOOD 0 normal\n· BOOT（GPIO0，按下接地，内部上拉）每按一次切换表情并立刻重画，打印 MOOD <编号> <名字>，例如 MOOD 1 happy。软件消抖 30 ms；一次按下最短 100 ms，消抖窗口不能比它长；松手不能再切换",
+  "ref": "lens-mood",
+  "seconds": 2.5,
+  "args": [
+   "--spi",
+   "gc9a01"
+  ],
+  "script": "1.5:gpio0=0; 1.6:gpio0=z",
+  "expect": [
+   "MOOD 0 normal",
+   "MOOD 1 happy"
+  ],
+  "lcd_colors": [
+   {
+    "name": "青色弯眼",
+    "rgb": "#7CF5FF",
+    "min": 800,
+    "max": 4500
+   },
+   {
+    "name": "粉色腮红",
+    "rgb": "#FF8FB8",
+    "min": 600
    }
   ]
  }

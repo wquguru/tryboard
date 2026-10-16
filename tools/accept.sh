@@ -135,7 +135,31 @@ echo -e "\n## 关卡（firmware/levels.json，参考固件）\n\`\`\`" >> $REPOR
 tools/check.py --ref --all >> $REPORT 2>&1 || fail=1
 echo '```' >> $REPORT
 
-# 网页单测（元件库 schema、核价提醒、规则引擎 R01–R27）：纯 Node，不需要浏览器，--no-web 也跑
+# npm 本地包（packages/tryboard，P1-14）：打包后用 `npx ./tryboard-*.tgz check` 逐关与 check.py 对拍结论、整段输出（含指纹）、退出码
+command -v node >/dev/null || { [ -s ~/.nvm/nvm.sh ] && . ~/.nvm/nvm.sh >/dev/null; }
+echo -e "\n## npm 本地包对拍（npx tryboard check vs tools/check.py）" >> $REPORT
+if tools/build_npm.sh > Reviews/npm-build.log 2>&1; then
+  tail -1 Reviews/npm-build.log >> $REPORT
+  echo >> $REPORT
+  tools/npm_parity.sh >> $REPORT 2>&1 || fail=1
+else
+  echo "打包失败（见 Reviews/npm-build.log）" >> $REPORT; fail=1
+fi
+# 逻辑分析仪事件（命令行）：weather 跑 2 秒，--trace-io 里要有 BME280 从 0xF7 起读 8 字节、舵机 50 Hz PWM
+echo -e "\n## 逻辑分析仪事件（--trace-io）" >> $REPORT
+core/target/release/tryboard run firmware/build/weather/flash.bin --seconds 2 --i2c ssd1306@0x3c,bme280@0x76 --trace-io Reviews/trace-io-weather.txt >/dev/null 2>Reviews/trace-io-weather.err
+if python3 - Reviews/trace-io-weather.txt >> $REPORT <<'PY'
+import re, sys
+L = [l.strip().split(' ', 1)[1] for l in open(sys.argv[1]) if l[0].isdigit()]
+s = '|'.join(L)
+burst = re.search(r'I2C0 DATA f7 W ACK\|I2C0 RESTART \d+\|I2C0 ADDR 76 R ACK\|(I2C0 DATA .. R ACK\|){7}I2C0 DATA .. R NACK\|I2C0 STOP', s)
+servo = any(re.fullmatch(r'PWM 4 \d+ 50000', l) for l in L)
+print(f"- 事件 {len(L)} 条；0x76 从 0xF7 读 8 字节：{'✅' if burst else '❌'}；GPIO4 50 Hz PWM：{'✅' if servo else '❌'}")
+sys.exit(0 if burst and servo else 1)
+PY
+then :; else fail=1; fi
+
+# 网页单测（元件库 schema、核价提醒、规则引擎 R01–R32）：纯 Node，不需要浏览器，--no-web 也跑
 command -v node >/dev/null || { [ -s ~/.nvm/nvm.sh ] && . ~/.nvm/nvm.sh >/dev/null; }
 echo -e "\n## 网页单测（web/test，node --test）\n\`\`\`" >> $REPORT
 (cd web && npm test --silent > ../Reviews/web-unit.log 2>&1); ut=$?
@@ -162,16 +186,23 @@ if [ $NO_WEB = 0 ]; then
   done
   r=$(node tools/webtest/levels.mjs 2>&1 | grep '^\[levels\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q PASS || fail=1
+  # 最后一行必须是汇总行；脚本中途崩溃时最后一行是某条单项的 PASS，不能算过
+  echo "$r" | tail -1 | grep -q '^\[levels\] PASS（' || { echo "- [levels] 脚本没跑完" >> $REPORT; fail=1; }
   r=$(node tools/webtest/replay.mjs 2>&1 | grep '^\[replay\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q PASS || fail=1
+  # 要看到汇总行（"[replay] PASS（…"）才算过：脚本中途崩了时最后一行是某一项的 PASS，不能算
+  echo "$r" | tail -1 | grep -q '^\[replay\] PASS（' || { echo "- [replay] 脚本没跑完" >> $REPORT; fail=1; }
   r=$(node tools/webtest/elec.mjs 2>&1 | grep '^\[elec\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q PASS || fail=1
+  echo "$r" | tail -1 | grep -q '^\[elec\] PASS（' || { echo "- [elec] 脚本没跑完" >> $REPORT; fail=1; }
   r=$(node tools/webtest/interact.mjs 2>&1 | grep '^\[interact\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q PASS || fail=1
+  # 要看到汇总行（"[interact] PASS（…"）才算过：脚本中途崩了时最后一行是某一项的 PASS，不能算
+  echo "$r" | tail -1 | grep -q '^\[interact\] PASS（' || { echo "- [interact] 脚本没跑完" >> $REPORT; fail=1; }
+  # 逻辑分析仪事件（P1-05）：网页实时事件 = 命令行 --trace-io 重放（逐条），回退后重建的也一致
+  r=$(node tools/webtest/traceio.mjs 2>&1 | grep '^\[traceio\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[traceio\] PASS（' || { echo "- [traceio] 脚本没跑完" >> $REPORT; fail=1; }
   r=$(node tools/webtest/editor.mjs 2>&1 | tail -1)
   echo "- 元件编辑器（上传固件 + 加 BME280 / LED）：$r" >> $REPORT
   echo "$r" | grep -q PASS || fail=1

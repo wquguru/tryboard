@@ -23,14 +23,15 @@
 | RMT 发送 | ✅ | rgb：1 颗 WS2812 四色逐帧一致；strip：16 颗 × 3 帧逐颗一致（384 条目，靠阈值中断乒乓填充 + 回绕） | 时钟源 / 组分频 / 通道分频、mem_size 借块、回绕、连续（循环）模式与循环计数中断、结束 / 阈值 / 出错中断；未做载波、APB FIFO 模式 |
 | RMT 接收 | ☐ | — | 寄存器可读写，没有外部输入源，不会产生接收数据 |
 | WS2812 解码器 | ✅ | 同上 | 引脚连到 RMT 输出时自动挂上；高电平 >0.6µs 判 1，低电平 ≥40µs 提交一帧 |
-| SPI2 / GDMA / I2S | ☐ | — | 模型已在 crate 里（S3 在用），C3 尚未接线；I2S 未做 |
+| SPI2 / GDMA | ✅ | c3-lcd：esp_lcd + esp_lcd_gc9a01 标准写法（SPI_DMA_CH_AUTO、40MHz），整帧 115200 字节拆 6 次 DMA，再每 50ms 局部刷新；CLI `--spi gc9a01` 与网页 3D 台面圆屏都有画面（四色扇区 + 白环，非黑 35409 像素） | 与 S3 共用 `gpspi.rs` / `gdma.rs`；GDMA 按 C3 排布（3 通道、通道组从 0x70 起、中断寄存器集中在 0x00 起且 IN / OUT 共用，`GdmaLayout::C3`）。C3 驱动直接写 DMA_INT_RAW 清 trans_done，模型据此支持写 RAW。圆屏接线 SCLK=6 MOSI=7 CS=10 DC=5 RST=4 背光=3（`esp32c3::lcd_pin`） |
+| I2S | ☐ | — | 未做 |
 | I2C0 主机 | ✅ | oled：总线扫描只应答 0x3C、1KB 帧 400kHz 传输 23.8ms（理论 23.2ms）；bme280：END 分段、重复起始读 | 命令表 COMD0–7、TX/RX FIFO、NACK / END / 完成中断、按 SCL 配置算事务耗时；未做：从机模式、10 位地址、超时与仲裁丢失（不会发生）、时钟延展 |
 | 虚拟器件 SSD1306 | ✅ | 帧缓冲点亮 1636 像素、网页截图可读 | 命令解析：寻址模式 / 窗口 / 页模式、电荷泵、开关、对比度、反色、重映射；滚动不做 |
 | 虚拟器件 BME280 | ✅ | 设定 -7.25°C / 88.5% / 950.12hPa，固件按数据手册公式读回误差 0；网页滑块改温度后读数跟随 | 原始 ADC 由补偿公式二分反解；强制 / 正常模式测量时序；无噪声、无 IIR 滤波 |
 | LEDC / RMT / SPI2 / ADC / I2S | ☐ | — | M2 |
 | Wi-Fi STA（开放网络） | ✅ | wifi-init / wifi-scan / wifi-connect / wifi-http：扫描 4 个 AP、关联、DHCP、DNS / mDNS、HTTP GET | MAC 寄存器 + DMA 描述符层；只有 STA，没有 SoftAP / 省电 / 802.11n 聚合 |
 | Wi-Fi WPA2-PSK | ✅ | wifi-wpa2：四次握手完成、拿到 IP、两次 HTTP GET 成功（数据帧全程 CCMP，DHCP 广播走 GTK）；wifi-wpa2-bad：错口令时 AP 判 MIC 失败、IDF 自己报 `reason=15`（4WAY_HANDSHAKE_TIMEOUT），重连时 AP 已被 IDF 拉黑报 `reason=205`，不崩溃 | 只做 PSK + CCMP（不做 TKIP、WPA3-SAE、PMF/802.11w、GTK 轮换）；密钥表字 1 高位只解了"组密钥"位；未经真机标定 |
-| SHA / AES 加速器 | ✅ | 单元测试（FIPS 180 / FIPS 197 / SP 800-38A 向量经寄存器接口）；WPA2 握手（PBKDF2 4096 轮走块模式、HMAC 走 DMA 模式、Key Unwrap 走 AES DMA） | SHA-384/512、AES-GCM 硬件 GHASH、中断模式未做；GDMA 只读 PERI_SEL / LINK 寄存器，没有完整通道模型 |
+| SHA / AES 加速器 | ✅ | 单元测试（FIPS 180 / FIPS 197 / SP 800-38A 向量经寄存器接口）；WPA2 握手（PBKDF2 4096 轮走块模式、HMAC 走 DMA 模式、Key Unwrap 走 AES DMA） | SHA-384/512、AES-GCM 硬件 GHASH、中断模式未做；链表头改从 GDMA 模型（`channel_for_peri` / `configured_link`）取；搬数据仍用本模块的 gather / scatter（驱动先配链表、后置 start，`take_out` 只认已启动的通道），GDMA 通道的完成中断不置 |
 | BLE | ☐ | — | M7 |
 | BLE | ☐ | — | M7 |
 
@@ -73,8 +74,8 @@
 | GP-SPI2 主机 | ✅ | lens / spin：esp_lcd + esp_lcd_gc9a01 标准写法（spi_bus_initialize SPI_DMA_CH_AUTO、轮询发命令、队列发像素），40MHz，整帧 115200 字节拆 6 次 DMA | 命令 / 地址 / 哑周期 / MOSI 各阶段、W0..W15 与 DMA 两条数据通路、TRANS_DONE 中断、按 SPI 时钟计时；不模拟逐位时序与 FIFO；MISO 恒读全 1；双 / 四 / 八线模式按单线计时；从机模式未做 |
 | GDMA（5 通道） | 🟡 | 同上：描述符链（每次传输 5 个描述符）、owner 回写、OUT_EOF | 单元测试覆盖链表遍历 / 回写 / 中断；RX 方向只有"填描述符 + SUC_EOF"，未经固件验收；不模拟突发、FIFO、优先级、内存到内存 |
 | 虚拟器件 GC9A01 圆屏 | ✅ | lens：四种表情逐一截图核对（眼睛 / 高光 / 腮红 / 心形 / ^ ^ / 困了），开心表情非黑 3208 像素；spin：小黄脸非黑 45244 像素 | 按"常黑 IPS + BGR 子像素"建模（未经真机标定）；厂商初始化命令 42 条只计数；TE、滚动、部分显示、读显存未做 |
-| 装配成品 lens（透镜小人） | ✅ | 启动 MOOD 0 normal、每 3 秒眨眼（BLINK n）、BOOT 切 MOOD 1 happy → 2 love → 3 sleepy | 场景层验收 |
-| 装配成品 spin（会转身的小黄） | ✅ | GPIO4 50Hz 占空比 0.042..0.108（脉宽 0.833–2.167ms）、SPIN ±60 交替、BOOT 后 LOOK FRONT（1.5ms）；眼珠随转向重画 | 舵机机械响应不建模 |
+| 装配成品 lens（透镜小人） | ✅ | 启动 MOOD 0 normal、每 3 秒眨眼（BLINK n）、BOOT 切 MOOD 1 happy → 2 love → 3 sleepy → 0 normal；检查点 lens-1（lens-blink）、lens-2（lens-mood）、07-lens 参考固件全过 | 场景层验收 |
+| 装配成品 spin（会转身的小黄） | ✅ | GPIO4 50Hz 占空比 0.042..0.108（脉宽 0.833–2.167ms）、SPIN ±60 交替、眼珠随转向重画（EYE R / EYE L）、BOOT 后 LOOK FRONT（1.5ms）且眼珠回正（青色重心 119.7）；检查点 spin-1（spin-face）、spin-2（spin-turn）、07-spin 参考固件全过 | 舵机机械响应不建模 |
 | USB OTG / Wi-Fi / BLE | ☐ | — | USB OTG 在另一分支开发 |
 
 ## 电气（`core/crates/elec`，C3 / S3 共用）
@@ -101,7 +102,7 @@
 | OLED 实时画面 | ✅ 帧缓冲变了才传，128×64 最近邻纹理 |
 | 环境滑块 | ✅ 温度 / 湿度 / 气压 → `tb_env_set`，webtest 验证读数跟随 |
 | 串口输入 | 🟡 已接线，缺验收固件 |
-| 蜂鸣器出声（P0-14） | ✅ weather GPIO5 无源蜂鸣器：worker 每 1ms 采样 `tb_pin_pwm` / `tb_pin_pwm_freq`，按模拟时刻排进 Web Audio（方波，默认静音，点「声音」开）；agent-browser：35℃ 时 lastFreq 2700.1 Hz、分析节点 2695 Hz，降到 25℃ 停。3D 里还没画蜂鸣器（P0-17）；只出一个声道（多个蜂鸣器取第一个在响的） |
+| 蜂鸣器出声（P0-14） | ✅ weather GPIO5 无源蜂鸣器：worker 每 1ms 采样 `tb_pin_pwm` / `tb_pin_pwm_freq`，按模拟时刻排进 Web Audio（方波，默认静音，点「声音」开）；agent-browser：35℃ 时 lastFreq 2700.1 Hz、分析节点 2695 Hz，降到 25℃ 停。3D 蜂鸣器模块已画（响时有声波示意）；只出一个声道（多个蜂鸣器取第一个在响的） |
 | 输入日志 / 重放（P0-19） | ✅ worker 按模拟时间记下按键 / 环境 / 电位器 / 串口输入，「导出输入」给出 `tryboard run --inputs` 文本；replay.mjs：鼠标按 3D BOOT + 温度 35 → 网页串口与 CLI 重放逐字节相同（1502 字节），网页重放与 CLI 指纹相同。限制：日志从上电开始，复位即新日志；装配视图 / 元件编辑器改接线不记（会重新上电） |
 
 > 2026-10-15 合流：S3 对齐（双核、共享外设、S3 开发板网页）与 USB OTG、Wi-Fi、软件复位、元件编辑器同时可用；S3 软件复位尚未支持（见 DECISIONS）。2026-10-16：S3 软件复位已支持（见上表"软件复位"）。
@@ -124,5 +125,12 @@
 | 工作台外壳 app.html（P0-01/02/15） | ✅ | agent-browser：weather 实验台跑起来、点 BME280 改温度读数 23.50 → 32.00、检查点 01–06 上传参考固件 6/6 通过且指纹与 check.py 逐个一致、切组装再切回模拟时间连续（运行 #1 不变）、390×844 无横向溢出、console / errors 无 error（Reviews/ab/P0-01.md） | 组装 / 成品为占位；点台面选中待 board3d 实现 ScenePickApi；levels.mjs 未迁移到新页面 |
 | 成品示意（小黄 / 透镜 / 检测器） | 🟡 | — | 只是外观示意；内核已有 GC9A01 圆屏（`tb_lcd_*`），lens / spin 固件已能跑，网页显示待接 |
 | 元件库 / 采购模版 / 规则引擎（数据层） | 🟡 | `cd web && npm test`：57 个用例全过（schema、核价提醒、模版对拍 examples.json、R01–R27 各正反用例） | 53 件、27 条规则；价格为代理估计未人工核价，多处字段待核（`todoList()`），规则未经人逐条复核、未经真机标定；页面见下一行 |
+| 开发板库 + 版本差异规则（P1-12） | 🟡 | `npm test` 86 个用例全过（R28–R32 与改分级的 R24 各正反用例，换板前后集成用例）；agent-browser：小黄换 XIAO S3 出现 6 条 R04、换微雪圆屏板出现 R24 阻断 + R29 并可一键去掉外接圆屏（Reviews/ab/P1-12.md） | 9 块板、32 条规则；引脚为官方资料整理的行为级数据，未经真机标定；合宙排针、XIAO C3 3V3 电流、AtomS3 红外 / USB、微雪两版排针等标待核 |
 | 采购页 + 摆上实验台（P0-07 / P0-09） | ✅ | `npm test` 64 个用例（含 bom.test.ts：日志重放、时间线回退、去电源提醒 + 一键补、placement 对拍 examples.json）；agent-browser：气象站清单 12 件 / ¥97.5–230、去 5 V 电源出 2 条提醒并一键补回、BME280 去不掉、切小黄、时间线回第一步、摆上实验台场景与清单一致（OLED / BME280 / 舵机 / 蜂鸣器）、无电源时供电只显示 USB、390×844 无横向溢出、console / errors 无 error（Reviews/ab/P0-07.md、P0-09.md） | 价格是代理估计（未人工核价）；中间台面是 SVG 示意卡片不是 3D；换开发板不换固件（实验台按固件芯片摆）；从元件库加的件没有默认接线，不摆上台；欠压只显示不模拟 |
 | 实验台交互（P0-03 / 04 / 11 / 12 / 13，P0-15 核实） | ✅ | `npm test` 新增 interact.test.ts（时间线折叠 / 回退目标 / 截断、运行对比、W1–W5、线 id 与 3D 一致）；`tools/webtest/interact.mjs`（进 accept.sh）：三作品默认接线无问题、鼠标点 3D GPIO4 → 50 Hz / 1.675 ms + 示波器、BME280 卡片拖温度 / 热源 +8 / 量到芯片 58.2 mm、供电线切外接 5 V、回退到运行 → 指纹与收尾一致且与命令行 `--inputs` 重放 + check.py 一致、回退后再跑丢掉后面的运行、尺子 24.4 mm、五种注入错误接线各标红；agent-browser 截图与 console / errors 无 error（Reviews/ab/P0-03/04/11/12/13.md） | 供电切换只改清单和显示（欠压 P1-02）；改接 / 拔线时 3D 线仍画在原针上（只标红）；示波器 PWM 波形按占空比合成（相位示意）、I2C 只画示意、电源电压是标称估算；热源 +8 ℃、温漂按距离线性都是估算 |
+| npm 本地包 `npx tryboard check`（P1-14） | ✅ | `tools/npm_parity.sh`（进 accept.sh）：8 关参考固件 + 3 个错配用例，`npx ./tryboard-0.1.0.tgz check` 与 `tools/check.py` 整段输出（含指纹）和退出码逐字一致；`run` 串口与原生 CLI 逐字节一致（bme280）；包约 0.9 MB（Reviews/ab/P1-14.md） | 未发布到 npm；不带参考固件（无 `--ref`）；不带 `--watch / --trace` 等调试开关 |
+| 暗色模式 / 手机只读（P1-15） | ✅ | agent-browser：390×844 四步 + 首页无横向溢出、编辑工具隐藏、成品 3D 预览；1440×900 暗色四步 + 首页 + 授权页；console / errors 无 error（Reviews/ab/P1-15.md） | levels.html / advisor.html / index.html 未做暗色；手机上组装步骤仍是"锁着"说明，不预览装配；部分 three.js 器件材质在暗色下未调 |
+
+| 走查修补（首页价格、中文零件名、3D 蜂鸣器、参考成品、舵机走线） | ✅ | `npm test` 79 个用例（新增：首页价与采购页合计对拍、蜂鸣器三根线、显示名无英文）；agent-browser（Reviews/ab/polish.md）：首页三卡价格与采购页合计一致（气象站 ¥97.5–230）、实验台看到蜂鸣器模块并点中、31 ℃ 报警时声波弧出现、时间线全中文、未装配打开成品页显示参考成品与「去完成检查点 →」、默认机位中心点击 BME280 / BOOT / GPIO4 / 蜂鸣器 / 舵机都选中、console / errors 无 error；accept.sh 改为必须看到各网页脚本的汇总行（原来会把 levels.mjs 中途崩溃和 3 项失败盖住，已修） | 蜂鸣器声波是示意；参考成品用的是实验台当前固件（还没上传自己的就是参考固件）；小黄 / 透镜成品仍是 SVG |
+| 逻辑分析仪（P1-05） | ✅ | 内核事件缓冲（观察的 GPIO / PWM / WS2812 帧 / I2C 事务，按周期盖戳）；`cargo test`：I2C 两批命令 + 重复起始的事件序列与时刻、环形上限、PWM 去重、文本格式；`npm test` iotrace.test.ts：字节解码 / 文本行与 Rust 逐字相同、事务解码与 BME280 / SSD1306 注释；`tools/webtest/traceio.mjs`（进 accept.sh）：weather 实时运行 5707 条事件 = 命令行 `--trace-io` 按同一输入日志重放的前 5707 条（逐字），回退到运行 #1 后重建的 3594 条也一致；accept.sh 命令行段：0x76 从 0xF7 读 8 字节、GPIO4 50 Hz；agent-browser：I2C 位级解码 + "读气压、温度、湿度原始值"、缩放、PWM 包络 / 方波 + 光标 Δ 20.000 ms、回退同步、console / errors 无 error（Reviews/ab/P1-05.md） | I2C 的 SCL / SDA 波形按事务和位时序重建（不是逐边沿模拟：时钟延展、上升时间、毛刺都看不到）；PWM 相位从占空比生效时刻起算（真机计数器相位未建模）；只记被观察的 GPIO（默认是台面上接了东西的脚 + BOOT，分析仪加通道时补上，加之前的历史没有）；网页仓库上限 40 万条、内核缓冲 65536 条 |
+| ⌘K 命令框（P1-06） | ✅ | `npm test`：模糊匹配、参数识别（室温 N、第 n 次运行）、最近命令；traceio.mjs 用 `cmdk.exec('室温 35')` 触发报警；agent-browser 真键盘：⌘K「室温 35」回车 → 35 ℃ 报警、「外接 5」→ 运行 #2、「回到第 1」→ 回退且指纹一致 ✓、「量 3v3」→ 提示 P1-04 中、「gpio4」→ 针脚面板、↓ 回车切步骤、最近命令置顶、焦点在温度滑块上时 ⌘K 不弹（Reviews/ab/P1-06.md） | 选中零件只高亮不转镜头（ScenePickApi 没有聚焦接口）；万用表未实现（P1-04） |

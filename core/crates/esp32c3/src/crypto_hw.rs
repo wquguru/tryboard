@@ -2,8 +2,10 @@
 //!
 //! 为什么要模拟：IDF 默认打开 MBEDTLS_HARDWARE_SHA / AES，Wi-Fi 的 WPA2 四次握手（PBKDF2、
 //! HMAC-SHA1 MIC、AES Key Unwrap）全经过它们；不建模时寄存器读回 0，sha_hal 发现全零摘要直接 abort。
-//! 两者的 DMA 模式要从 GDMA 描述符取 / 写数据：GDMA 通道本身不在这里建模，只按 GDMA 的
-//! OUT/IN_PERI_SEL 找到接到本外设的通道，读它的 OUTLINK / INLINK 描述符地址（见 docs/DECISIONS.md）。
+//! 两者的 DMA 模式要从 GDMA 描述符取 / 写数据：通过 SoC 的 GDMA 模型（`gdma.rs`，C3 排布）按
+//! OUT/IN_PERI_SEL 找到接到本外设的通道、取它配置的链表头。搬数据仍走本文件的 gather / scatter：
+//! IDF 的 AES / SHA 驱动先配链表、再启动加速器，GDMA 的 start 位不一定在触发之前置上，
+//! 不能用 `Gdma::take_out`（它只认已启动的通道）。
 
 use crate::wifi::crypto::{sha1_block, Aes};
 use crate::SocBus;
@@ -11,12 +13,6 @@ use crate::SocBus;
 pub const SHA_BASE: u32 = 0x6003_b000;
 pub const AES_BASE: u32 = 0x6003_a000;
 
-const GDMA_BASE: u32 = 0x6003_f000;
-const GDMA_CH_STRIDE: u32 = 0xc0;
-const GDMA_IN_LINK: u32 = 0x80;
-const GDMA_IN_PERI_SEL: u32 = 0xa0;
-const GDMA_OUT_LINK: u32 = 0xe0;
-const GDMA_OUT_PERI_SEL: u32 = 0x100;
 /// GDMA 外设编号（soc/gdma_channel.h）
 const PERI_AES: u32 = 6;
 const PERI_SHA: u32 = 7;
@@ -157,18 +153,8 @@ impl ShaHw {
 impl SocBus {
     /// 某个外设接到的 GDMA 通道的描述符链头（out = 内存 → 外设）
     fn gdma_link(&self, peri: u32, out: bool) -> Option<u32> {
-        let (sel, link) = if out {
-            (GDMA_OUT_PERI_SEL, GDMA_OUT_LINK)
-        } else {
-            (GDMA_IN_PERI_SEL, GDMA_IN_LINK)
-        };
-        (0..3).find_map(|ch| {
-            let base = GDMA_BASE + ch * GDMA_CH_STRIDE;
-            let p = self.regs.get(&(base + sel)).copied().unwrap_or(0x3f) & 0x3f;
-            (p == peri).then(|| {
-                0x3fc0_0000 | (self.regs.get(&(base + link)).copied().unwrap_or(0) & 0xf_ffff)
-            })
-        })
+        let ch = self.gdma.channel_for_peri(peri, out)?;
+        Some(self.gdma.configured_link(ch, out))
     }
 
     /// 沿发送描述符链（lldesc）读出最多 n 字节

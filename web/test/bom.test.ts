@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { initialHistory, placement, push, replay, ruleInput, validHistory } from '../src/app/bom.ts';
 import { problems } from '../src/catalog/rules.ts';
+import { bomTotal, getTemplate, templatePicks } from '../src/catalog/templates.ts';
 
 const examples = JSON.parse(readFileSync(new URL('../../firmware/examples.json', import.meta.url), 'utf8')) as { id: string; scene?: { parts: unknown[] } }[];
 
@@ -57,6 +58,25 @@ test('换开发板：清单里的板子跟着换，接线不变（C3 的 GPIO9 �
   assert.ok(problems(ruleInput(b)).length > 0);
 });
 
+test('换开发板（P1-12）：小黄换 XIAO S3 → 板子一行变了，R04 出现；换微雪圆屏板 → R29 一键去掉外接圆屏', () => {
+  const h0 = initialHistory('spin');
+  const before = new Set(problems(ruleInput(replay(h0))).map((f) => f.id));
+  const h1 = push(h0, { t: 'board', partId: 'xiao-s3' });
+  const b1 = replay(h1);
+  assert.equal(b1.board, 'xiao-s3');
+  assert.ok(b1.picks.some((p) => p.partId === 'xiao-s3') && !b1.picks.some((p) => p.partId === 's3-devkitc1-v10'));
+  const after = new Set(problems(ruleInput(b1)).map((f) => f.id));
+  assert.ok(!before.has('R04') && after.has('R04'), 'XIAO S3 没引出 GPIO10–15');
+  const h2 = push(h0, { t: 'board', partId: 'ws-s3-lcd128' });
+  const r29 = problems(ruleInput(replay(h2))).find((f) => f.id === 'R29')!;
+  assert.ok(r29);
+  const h3 = push(h2, { t: 'fix', fix: r29.fix!, rule: 'R29' });
+  const b3 = replay(h3);
+  assert.ok(!b3.picks.some((p) => p.partId === 'gc9a01'));
+  const left = problems(ruleInput(b3));
+  assert.ok(!left.some((f) => f.id === 'R29' || f.id === 'R27'), JSON.stringify(left.map((f) => f.id)));
+});
+
 test('从元件库加的件：没有默认接线的不摆上台，列为 skipped', () => {
   const h = push(initialHistory('blank'), { t: 'add', partId: 'ssd1306' });
   const b = replay(h);
@@ -72,4 +92,13 @@ test('日志校验：坏数据不重放', () => {
   assert.ok(!validHistory({ ops: [{ t: 'template', id: 'weather' }, { t: 'add', partId: 'gone' }], cur: 1 }));
   assert.ok(!validHistory({ ops: [], cur: 0 }));
   assert.ok(!validHistory(null));
+});
+
+test('首页参考价与采购页合计同一口径（templatePicks 默认勾选 + bomTotal）', () => {
+  for (const id of ['weather', 'spin', 'lens']) {
+    const shop = replay(initialHistory(id));
+    const a = bomTotal(shop.picks, shop.board);
+    const home = bomTotal(templatePicks(id), getTemplate(id).board);
+    assert.deepEqual([home.lo, home.hi, home.lines.length], [a.lo, a.hi, a.lines.length], id);
+  }
 });

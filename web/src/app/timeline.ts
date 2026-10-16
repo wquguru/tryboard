@@ -42,7 +42,13 @@ export function createTimeline(el: HTMLElement): Timeline {
       b.onclick = () => cbs.forEach((f) => f(i, s));
       el.appendChild(b);
     });
-    el.querySelector('.tl-step.on')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    // 只横向滚时间线自己：scrollIntoView 会连带滚整页（手机上面板堆叠、整页可滚，一跑起来就被拽到页底）
+    const on = el.querySelector<HTMLElement>('.tl-step.on');
+    if (on) {
+      const l = on.getBoundingClientRect().left - el.getBoundingClientRect().left + el.scrollLeft, r = l + on.offsetWidth;
+      if (l < el.scrollLeft) el.scrollLeft = l;
+      else if (r > el.scrollLeft + el.clientWidth) el.scrollLeft = r - el.clientWidth;
+    }
   }
   return {
     setSteps(s) {

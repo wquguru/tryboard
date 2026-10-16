@@ -782,6 +782,8 @@
    "TRYBOARD_OK spin",
    "SPIN -60",
    "SPIN +60",
+   "EYE R",
+   "EYE L",
    "LOOK FRONT"
   ],
   "pwm": {
@@ -791,5 +793,82 @@
    "max": 0.1083
   },
   "lcd_min_pixels": 40000
+ },
+ {
+  "id": "spin-face",
+  "chip": "esp32s3",
+  "seconds": 2,
+  "args": [
+   "--spi",
+   "gc9a01"
+  ],
+  "expect": [
+   "TRYBOARD_OK spin-face"
+  ],
+  "lcd_min_pixels": 40000
+ },
+ {
+  "id": "spin-turn",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--spi",
+   "gc9a01"
+  ],
+  "expect": [
+   "TRYBOARD_OK spin-turn",
+   "SPIN -60",
+   "SPIN +60"
+  ],
+  "pwm": {
+   "pin": 4,
+   "freq": 50,
+   "min": 0.0417,
+   "max": 0.1083
+  },
+  "lcd_min_pixels": 40000
+ },
+ {
+  "id": "lens-blink",
+  "chip": "esp32s3",
+  "seconds": 4.5,
+  "args": [
+   "--spi",
+   "gc9a01"
+  ],
+  "expect": [
+   "TRYBOARD_OK lens-blink",
+   "BLINK 1"
+  ],
+  "lcd_min_pixels": 5000
+ },
+ {
+  "id": "lens-mood",
+  "chip": "esp32s3",
+  "seconds": 2.5,
+  "args": [
+   "--spi",
+   "gc9a01"
+  ],
+  "script": "1.5:gpio0=0; 1.6:gpio0=z",
+  "expect": [
+   "MOOD 0 normal",
+   "TRYBOARD_OK lens-mood",
+   "MOOD 1 happy"
+  ],
+  "lcd_min_pixels": 2000
+ },
+ {
+  "id": "c3-lcd",
+  "chip": "esp32c3",
+  "seconds": 2,
+  "args": [
+   "--spi",
+   "gc9a01"
+  ],
+  "expect": [
+   "TRYBOARD_OK c3-lcd"
+  ],
+  "lcd_min_pixels": 30000
  }
 ]

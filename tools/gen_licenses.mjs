@@ -194,6 +194,8 @@ const html = `<!doctype html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 主题在首帧前定好（web/src/theme.ts 同一规则：localStorage tb-theme，否则跟随系统） -->
+    <script>try{var t=localStorage.getItem('tb-theme')}catch(e){}document.documentElement.dataset.theme=t==='dark'||t==='light'?t:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'</script>
     <title>第三方授权 · 试板 TryBoard</title>
     <meta name="description" content="试板 TryBoard 使用的第三方代码、芯片 ROM、固件组件、字体与素材的来源、许可证与署名。" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect x=%222%22 y=%222%22 width=%2212%22 height=%2212%22 rx=%222%22 fill=%22%230D99FF%22/%3E%3C/svg%3E" />
@@ -207,6 +209,7 @@ const html = `<!doctype html>
     <header class="pg-head">
       <a class="brand" href="./home.html"><b>试板</b><span class="mono">TRYBOARD</span></a>
       <nav aria-label="站点"><a href="./home.html">作品</a><a href="./advisor.html">选型助手</a><a href="./app.html?work=blank#bench">空白实验台</a><a class="on" href="./licenses.html">第三方授权</a></nav>
+      <button type="button" class="theme-btn" id="themeBtn"></button>
     </header>
     <main class="pg-main lic">
       <h1>第三方授权</h1>
@@ -218,6 +221,15 @@ const html = `<!doctype html>
       <span>TryBoard 试板：在浏览器里运行 ESP32 系列芯片的真实固件，compatible with Arduino。ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.</span>
       <span><a href="./licenses.html">第三方授权</a></span>
     </footer>
+    <script>
+      // 亮 / 暗切换（与 web/src/theme.ts 相同的存储键；这一页是生成的静态页，不走打包）
+      (function () {
+        var b = document.getElementById('themeBtn'), r = document.documentElement;
+        function sync() { var d = r.dataset.theme === 'dark'; b.textContent = d ? '☾ 暗' : '☀ 亮'; b.title = d ? '切到亮色' : '切到暗色'; b.setAttribute('aria-pressed', String(d)); }
+        b.onclick = function () { var t = r.dataset.theme === 'dark' ? 'light' : 'dark'; r.dataset.theme = t; try { localStorage.setItem('tb-theme', t); } catch (e) {} sync(); };
+        sync();
+      })();
+    </script>
   </body>
 </html>
 `;

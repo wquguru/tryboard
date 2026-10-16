@@ -11,6 +11,10 @@ export interface PartInfo {
   power: string;
 }
 
+/** 零件类型 → 中文显示名（时间线、提示条、构建树统一用这份，不让英文 type 名漏到界面上） */
+export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: '舵机', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED' };
+export const partLabel = (type: string) => PART_LABEL[type as PartSpec['type']] ?? '零件';
+
 export function partId(p: PartSpec) {
   return p.type === 'led' ? `led:${p.pin}` : p.type;
 }
@@ -30,7 +34,7 @@ export function partInfo(p: PartSpec, ext5v = false): PartInfo {
     case 'led':
       return { name: `LED（GPIO${p.pin}）`, model: '5 mm LED + 220 Ω 限流电阻', iface: `GPIO${p.pin}，高电平亮`, power: '经 GPIO' };
     case 'buzzer':
-      return { name: '无源蜂鸣器', model: '无源蜂鸣器（LEDC 方波驱动）', iface: `GPIO${p.pin}`, power: '经 GPIO' };
+      return { name: '无源蜂鸣器', model: '无源蜂鸣器模块（三针，带三极管，LEDC 方波驱动）', iface: `I/O → GPIO${p.pin}`, power: '3V3' };
   }
 }
 
@@ -97,6 +101,11 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
       add('GND', id, 'GND', '地', 'gnd', '黑');
     } else if (p.type === 'led') {
       add(`GPIO${p.pin}`, id, 'IN', '输出（经 220 Ω）', 'load', '橙', { ohm: 220 });
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+    } else if (p.type === 'buzzer') {
+      // 三针模块：I/O 经模块上的三极管驱动蜂鸣器，GPIO 只推基极
+      add('3V3', id, 'VCC', '供电', 'power', '红');
+      add(`GPIO${p.pin}`, id, 'I/O', '方波驱动（LEDC）', 'load', '橙');
       add('GND', id, 'GND', '地', 'gnd', '黑');
     }
   }

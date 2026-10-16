@@ -82,19 +82,7 @@
      "type": "servo",
      "pin": 6
     }
-   ],
-   "view": {
-    "position": [
-     -20,
-     90,
-     150
-    ],
-    "target": [
-     20,
-     10,
-     30
-    ]
-   }
+   ]
   },
   "chip": "esp32c3"
  },
@@ -225,6 +213,35 @@
   "controls": [
    "env"
   ],
+  "chip": "esp32c3"
+ },
+ {
+  "id": "c3-lcd",
+  "title": "圆屏：ESP32-C3 + GC9A01（SPI2 + GDMA）",
+  "about": "1.28 英寸 240×240 圆屏 GC9A01 走 C3 的 SPI2（40MHz，GDMA 搬数据）：SCLK=GPIO6、MOSI=GPIO7、CS=GPIO10（这三根是 SPI2 的 IO_MUX 直连脚），DC=GPIO5、RST=GPIO4、背光=GPIO3（高电平亮），VCC 接 3.3V。固件先整屏画四色扇区 + 白环测试图，再让一个白球沿圆周走，每 50ms 局部刷新一次。C3 的 400KB SRAM 放得下一整帧（115KB）缓冲。",
+  "tags": [
+   "✓ 仿真验证",
+   "SPI",
+   "GDMA",
+   "GC9A01",
+   "ESP-IDF 5.5"
+  ],
+  "pins": {
+   "lcd_sclk": 6,
+   "lcd_mosi": 7,
+   "lcd_cs": 10,
+   "lcd_dc": 5,
+   "lcd_rst": 4,
+   "lcd_bl": 3
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "gc9a01",
+     "spi": 2
+    }
+   ]
+  },
   "chip": "esp32c3"
  },
  {

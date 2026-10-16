@@ -8,6 +8,7 @@
 //! 圆形可视区之外的像素看不见，不计入点亮统计，渲染为透明。
 
 use std::any::Any;
+use std::fmt::Write as _;
 
 pub const W: usize = 240;
 pub const H: usize = 240;
@@ -287,6 +288,32 @@ impl Gc9a01 {
             .chunks(4)
             .filter(|p| p[3] != 0 && (p[0] | p[1] | p[2]) != 0)
             .count()
+    }
+
+    /// 观察记录里的颜色统计：圆形可视区内每种非黑颜色的像素数与重心，取像素数最多的前 12 种
+    /// （且 ≥ 50 像素，过滤零星噪点）。检查点用它判"画了什么颜色、画在哪"（levels.json 的 lcd_colors）。
+    /// 命令行与 wasm 的观察记录都调这一个函数，逐字节一致才能对指纹。
+    pub fn color_report(&mut self) -> String {
+        use std::collections::HashMap;
+        let mut m: HashMap<u32, (u64, u64, u64)> = HashMap::new();
+        for (i, p) in self.render().chunks(4).enumerate() {
+            if p[3] == 0 || (p[0] | p[1] | p[2]) == 0 {
+                continue;
+            }
+            let c = (p[0] as u32) << 16 | (p[1] as u32) << 8 | p[2] as u32;
+            let e = m.entry(c).or_default();
+            e.0 += 1;
+            e.1 += (i % W) as u64;
+            e.2 += (i / W) as u64;
+        }
+        let mut v: Vec<_> = m.into_iter().filter(|e| e.1 .0 >= 50).collect();
+        // 像素数从多到少，同数按颜色值排，保证顺序确定
+        v.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then(a.0.cmp(&b.0)));
+        let mut o = String::new();
+        for (c, (n, sx, sy)) in v.into_iter().take(12) {
+            let _ = writeln!(o, "[tryboard] LCD 颜色 #{c:06x} {n} 像素，重心 {:.1},{:.1}", sx as f64 / n as f64, sy as f64 / n as f64);
+        }
+        o
     }
 
     /// 显示是否开着（DISPON 且退出睡眠）

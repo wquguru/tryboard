@@ -26,6 +26,8 @@ export interface LiveOptions {
   onRunEnd?(snap: Snapshot): void;
   /** 回退快进的进度（模拟秒） */
   onSeekProgress?(simSeconds: number): void;
+  /** 逻辑分析仪事件（原始记录）；reset = 新上电 / 回退重放开始，之前的作废 */
+  onIo?(m: Extract<FromWorker, { type: 'io' }>): void;
 }
 
 /** 回退到某次运行的某个时刻（P0-03）：用那次运行的固件、器件、环境和输入日志 */
@@ -73,6 +75,8 @@ export class LiveSim {
         this.bootPin = m.bootPin;
         this.seekWaiter?.(m.snap);
         this.seekWaiter = null;
+      } else if (m.type === 'io') {
+        o.onIo?.(m);
       } else if (m.type === 'seekProgress') {
         o.onSeekProgress?.(m.simSeconds);
       } else if (m.type === 'mark') {
@@ -214,6 +218,10 @@ export class LiveSim {
       this.logWaiters.push(r);
       this.send({ type: 'getInputLog' });
     });
+  }
+  /** 逻辑分析仪观察的 GPIO（位掩码）；PWM / WS2812 / I2C 事件不用观察也会记 */
+  watchIo(lo: number, hi: number) {
+    this.send({ type: 'ioWatch', lo, hi });
   }
   /** 每个时间片采样这些引脚的 PWM（蜂鸣器），变化经 onPwm 回调 */
   watchPwm(pins: number[]) {

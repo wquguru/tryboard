@@ -11,6 +11,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { servoAngle } from '../views/common';
+import { currentTheme, onTheme, type Theme } from '../theme';
 
 export interface ProductFrame {
   pwm: number[];
@@ -114,8 +115,11 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
   renderer.domElement.style.touchAction = 'none';
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color('#EEF1F5');
-  scene.fog = new THREE.Fog('#EEF1F5', 30, 60);
+  // 背景与桌面跟随页面主题（DESIGN §2 暗色）；成品本身的材质颜色不变
+  const BG = { light: '#EEF1F5', dark: '#1D2024' }, DESK = { light: '#E4E8EE', dark: '#2A2D32' };
+  const bgColor = new THREE.Color(BG[currentTheme()]);
+  scene.background = bgColor;
+  scene.fog = new THREE.Fog(bgColor, 30, 60);
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   scene.environmentIntensity = 0.45;
@@ -139,7 +143,13 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
   scene.add(sun, new THREE.HemisphereLight('#FFFFFF', '#C9CED6', 0.35));
 
   // 桌面
-  const desk = new THREE.Mesh(new THREE.CircleGeometry(40, 64), new THREE.MeshStandardMaterial({ color: '#E4E8EE', roughness: 0.92 }));
+  const desk = new THREE.Mesh(new THREE.CircleGeometry(40, 64), new THREE.MeshStandardMaterial({ color: DESK[currentTheme()], roughness: 0.92 }));
+  const applyTheme = (t: Theme) => {
+    bgColor.set(BG[t]);
+    scene.fog!.color.set(BG[t]);
+    (desk.material as THREE.MeshStandardMaterial).color.set(DESK[t]);
+  };
+  const offTheme = onTheme(applyTheme);
   desk.rotation.x = -Math.PI / 2;
   desk.receiveShadow = true;
   scene.add(desk);
@@ -497,6 +507,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
     dispose() {
       cancelAnimationFrame(raf);
       raf = 0;
+      offTheme();
       ro.disconnect();
       controls.dispose();
       composer.dispose();

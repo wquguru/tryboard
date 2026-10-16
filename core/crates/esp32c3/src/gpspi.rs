@@ -128,7 +128,10 @@ impl GpSpi {
             reg::DMA_INT_ENA => self.int_ena = v,
             reg::DMA_INT_CLR => self.int_raw &= !v,
             reg::DMA_INT_SET => self.int_raw |= v,
-            reg::DMA_INT_RAW | reg::DMA_INT_ST => {}
+            // C3 的驱动直接写 RAW 清 trans_done（spi_ll_clear_int_stat：dma_int_raw.trans_done = 0），
+            // RAW 在 C3 上是 R/W/WTC；S3 走 INT_CLR，不写这里
+            reg::DMA_INT_RAW => self.int_raw = v,
+            reg::DMA_INT_ST => {}
             _ => {
                 if let Some(r) = self.regs.get_mut((off / 4) as usize) {
                     *r = v;

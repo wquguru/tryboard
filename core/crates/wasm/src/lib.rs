@@ -12,6 +12,9 @@ thread_local! {
     static WS: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     static USB_JSON: RefCell<String> = const { RefCell::new(String::new()) };
     static REPORT: RefCell<String> = const { RefCell::new(String::new()) };
+    static IO: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    // 本次上电以来 tb_run 里做过几次复位重新上电；上限（u32::MAX = 不限）给离线验收对齐 CLI 的"最多 50 次"
+    static RESETS: std::cell::Cell<(u32, u32)> = const { std::cell::Cell::new((0, u32::MAX)) };
 }
 
 fn with<R>(default: R, f: impl FnOnce(&mut Machine) -> R) -> R {
@@ -60,6 +63,7 @@ pub unsafe extern "C" fn tb_boot(rom: *const u8, rom_len: usize, flash: *const u
     match Machine::boot(rom, flash) {
         Ok((m, _)) => {
             M.with(|c| *c.borrow_mut() = Some(m));
+            RESETS.with(|r| r.set((0, u32::MAX)));
             0
         }
         Err(e) => {
@@ -90,7 +94,19 @@ pub extern "C" fn tb_error_len() -> usize {
     ERR.with(|c| c.borrow().len())
 }
 
-/// 跑 cycles 个 CPU 周期。返回 0=跑满，1=异常，2=未实现 HLE，-1=没有机器。
+/// 复位次数上限：超过后 tb_run 不再重新上电、返回 3（与 CLI 的"最多 50 次"一致）。tb_boot 时恢复成不限
+#[no_mangle]
+pub extern "C" fn tb_reset_limit(n: u32) {
+    RESETS.with(|r| r.set((r.get().0, n)));
+}
+
+/// 本次上电以来 tb_run 里复位重新上电的次数（软件复位 + 欠压复位）
+#[no_mangle]
+pub extern "C" fn tb_reset_count() -> u32 {
+    RESETS.with(|r| r.get().0)
+}
+
+/// 跑 cycles 个 CPU 周期。返回 0=跑满，1=异常，2=未实现 HLE，3=复位次数超过上限（停在复位前），-1=没有机器。
 #[no_mangle]
 pub extern "C" fn tb_run(cycles: f64) -> i32 {
     with(-1, |m| {
@@ -102,6 +118,11 @@ pub extern "C" fn tb_run(cycles: f64) -> i32 {
             Stop::Reset(reason) => {
                 // 软件复位 / 欠压复位：在内核里直接重新上电（flash / NVS 保留），页面感知不到中断。
                 // ROM 的复位头（rst:0x..）由 Machine::reboot 写进串口，与命令行逐字节相同
+                let (n, lim) = RESETS.with(|r| r.get());
+                RESETS.with(|r| r.set((n + 1, lim)));
+                if n + 1 > lim {
+                    return 3;
+                }
                 match m.reboot(reason) {
                     Ok(()) => 0,
                     Err(e) => {
@@ -460,6 +481,7 @@ pub extern "C" fn tb_report() -> usize {
         }
         if let Some(d) = m.lcd() {
             let _ = writeln!(o, "[tryboard] LCD GC9A01 非黑像素 {}", d.lit_pixels());
+            o.push_str(&d.color_report());
         }
         o
     });
@@ -471,4 +493,39 @@ pub extern "C" fn tb_report() -> usize {
 #[no_mangle]
 pub extern "C" fn tb_report_ptr() -> *const u8 {
     REPORT.with(|b| b.borrow().as_ptr())
+}
+
+// ---------------------------------------------------------------- 逻辑分析仪事件（P1-05）
+
+/// 要观察的 GPIO（lo = GPIO0..31，hi = GPIO32..）。PWM / WS2812 / I2C 事件总是记。上电后设，重新上电要再设
+#[no_mangle]
+pub extern "C" fn tb_io_watch(lo: u32, hi: u32) {
+    with((), |m| m.io_watch(lo as u64 | (hi as u64) << 32))
+}
+
+/// 取走内核事件缓冲：每条 16 字节（t u64 | kind u8 | a u8 | b u16 | v u32，小端，含义见 tryboard_esp32c3::iotrace），
+/// 拷进内部缓冲，返回条数；之后用 tb_io_ptr 读 条数 × 16 字节
+#[no_mangle]
+pub extern "C" fn tb_io_take() -> usize {
+    let ev = with(Vec::new(), |m| m.io_take());
+    IO.with(|b| {
+        let mut b = b.borrow_mut();
+        b.clear();
+        b.reserve(ev.len() * 16);
+        for e in &ev {
+            b.extend_from_slice(&e.to_bytes());
+        }
+    });
+    ev.len()
+}
+
+#[no_mangle]
+pub extern "C" fn tb_io_ptr() -> *const u8 {
+    IO.with(|b| b.borrow().as_ptr())
+}
+
+/// 内核缓冲满了丢掉的条数（自上电起累计）
+#[no_mangle]
+pub extern "C" fn tb_io_dropped() -> f64 {
+    with(0.0, |m| m.io_dropped() as f64)
 }
