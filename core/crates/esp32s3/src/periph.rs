@@ -4,6 +4,7 @@
 /// 中断源编号（soc/esp32s3/include/soc/interrupts.h，用 clang 编译头文件求得）
 pub mod src {
     pub const GPIO: u32 = 16;
+    pub const SPI2: u32 = 21;
     pub const UART0: u32 = 27;
     pub const UART1: u32 = 28;
     pub const LEDC: u32 = 35;
@@ -13,6 +14,8 @@ pub mod src {
     pub const TG0_T0: u32 = 50;
     pub const TG1_T0: u32 = 53;
     pub const SYSTIMER_TARGET0: u32 = 57;
+    pub const DMA_IN_CH0: u32 = 66;
+    pub const DMA_OUT_CH0: u32 = 71;
     pub const FROM_CPU0: u32 = 79;
     pub const USB_SERIAL_JTAG: u32 = 96;
     pub const MAX: usize = 99;

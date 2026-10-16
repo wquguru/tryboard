@@ -284,6 +284,8 @@ impl Esp32s3 {
         bus.i2c1.devices = std::mem::take(&mut old.i2c1.devices);
         bus.gpio_log = std::mem::take(&mut old.gpio_log);
         bus.ws2812 = std::mem::take(&mut old.ws2812);
+        // 外接圆屏是外部世界的一部分：复位后屏还在（画面由新固件重画）
+        bus.lcd = old.lcd.take();
         let flash = std::mem::take(&mut old.flash);
         let rom = std::mem::take(&mut self.rom_elf);
         let (mut m, _) = Esp32s3::boot_with(&rom, flash, bus)?;

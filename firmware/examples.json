@@ -494,5 +494,71 @@
    "env"
   ],
   "assembly": true
+ },
+ {
+  "id": "lens",
+  "chip": "esp32s3",
+  "title": "透镜小人：圆屏上的一对眼睛",
+  "about": "ESP32-S3 成品。圆屏 GC9A01（240×240，SPI2）：SCLK=GPIO12、MOSI=GPIO11、CS=GPIO10、DC=GPIO14、RST=GPIO13、背光=GPIO15（高电平亮），VCC 接 3.3V。固件用 ESP-IDF 的 esp_lcd + espressif/esp_lcd_gc9a01 驱动（SPI 40MHz、GDMA 传输），画一对青色圆角矩形眼睛、白色高光和粉色腮红，每 3 秒眨一次眼。按 BOOT 键（GPIO0）切换表情：平常 → 开心 → 喜欢 → 困了，串口打印 MOOD 1 happy 这类。",
+  "tags": [
+   "✓ 仿真验证",
+   "SPI",
+   "GDMA",
+   "GC9A01",
+   "esp_lcd",
+   "GPIO 中断"
+  ],
+  "pins": {
+   "lcd_sclk": 12,
+   "lcd_mosi": 11,
+   "lcd_cs": 10,
+   "lcd_dc": 14,
+   "lcd_rst": 13,
+   "lcd_bl": 15
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "gc9a01",
+     "spi": 2
+    }
+   ]
+  }
+ },
+ {
+  "id": "spin",
+  "chip": "esp32s3",
+  "title": "会转身的小黄：舵机转台 + 圆屏脸",
+  "about": "ESP32-S3 成品。舵机信号接 GPIO4（LEDC 50Hz），以 90° 为中心在 ±60° 之间来回转，2 秒一个来回（脉宽 1.5 ± 0.667ms）；圆屏 GC9A01（240×240，SPI2）：SCLK=GPIO12、MOSI=GPIO11、CS=GPIO10、DC=GPIO14、RST=GPIO13、背光=GPIO15（高电平亮），VCC 接 3.3V。屏上是小黄的脸，眼珠朝转动方向看。按 BOOT 键（GPIO0）让它停在正面（90°）并打印 LOOK FRONT，再按一次接着转。",
+  "tags": [
+   "✓ 仿真验证",
+   "SPI",
+   "GDMA",
+   "GC9A01",
+   "LEDC",
+   "舵机",
+   "GPIO 中断"
+  ],
+  "pins": {
+   "servo": 4,
+   "lcd_sclk": 12,
+   "lcd_mosi": 11,
+   "lcd_cs": 10,
+   "lcd_dc": 14,
+   "lcd_rst": 13,
+   "lcd_bl": 15
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "gc9a01",
+     "spi": 2
+    },
+    {
+     "type": "servo",
+     "pin": 4
+    }
+   ]
+  }
  }
 ]
