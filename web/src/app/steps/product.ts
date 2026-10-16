@@ -1,7 +1,8 @@
-// ④ 成品：气象站是 three.js 3D 成品（product3d.ts），小黄 / 透镜小人先挂现有的 SVG 成品（3D 化留给 P1-10）。
+// ④ 成品：气象站是 three.js 3D 成品（product3d.ts），小黄 / 透镜小人是 lcd3d.ts（P1-10）；WebGL 不可用时退回 lcdproducts.ts 的 SVG 成品。
 // 用的是整页共享的那个实时模拟，不重启：进来时把装法的温漂加到传感器上，离开时撤掉。
 // 热源改的是"气象站周围的温度"（env），一阶滞后逼近目标，模拟壳子有热惯性；读数、表盘、灯、报警全来自固件。
 import { createProduct3D, type ProductScene } from '../product3d';
+import { createLcd3D, webglOk, type Lcd3D } from '../lcd3d';
 import { createLensProduct, createSpinProduct } from '../../views/lcdproducts';
 import { TEMPLATES, type Template } from '../../views/templates';
 import { passedCount } from './bench';
@@ -67,17 +68,20 @@ const PARTS: Record<string, { id: string; name: string; about: string }[]> = {
     { id: 'bme', name: 'BME280', about: '温度 / 湿度 / 气压，I2C 0x76。装在哪决定它读到的是不是室温。' },
   ],
   spin: [
-    { id: 'body', name: '小黄身体', about: '站在 SG90 转台上，脸是一块 1.28″ 圆屏。' },
+    { id: 'body', name: '小黄身体', about: '原创形象：黄色胶囊身体、头顶一缕卷发、正面一块深色屏幕眼罩（圆屏就在里面）、工具腰带。站在 SG90 转台上。' },
     { id: 'servo', name: 'SG90 转台', about: 'GPIO4 PWM，±60° 来回转身。' },
     { id: 'lcd', name: '圆屏 GC9A01', about: 'SPI2，画面来自模拟器里的帧缓冲。' },
     { id: 'boot', name: 'BOOT 键', about: '按住转回正面。' },
   ],
   lens: [
     { id: 'lcd', name: '圆屏 GC9A01', about: 'SPI2，画面来自模拟器里的帧缓冲。' },
-    { id: 'dome', name: '凸透镜罩', about: '离屏高度决定放大倍数（估算）。' },
+    { id: 'dome', name: '凸透镜罩', about: 'Ø40 mm 平凸透镜，离屏高度决定放大倍数（估算）。3D 里的折射是示意（transmission / ior 1.5），不是光学仿真。' },
     { id: 'boot', name: 'BOOT 键', about: '换表情。' },
   ],
 };
+
+/** lens 固件串口里的表情名 */
+const MOOD_LABEL: Record<string, string> = { normal: '平常', happy: '开心', love: '喜欢', sleepy: '困了' };
 
 const WORK_LIST: { id: WorkId; title: string }[] = [
   { id: 'weather', title: '桌面气象站' },
@@ -103,6 +107,7 @@ export function productStep(): StepImpl {
   let hooked = false;
   let node: HTMLElement | null = null;
   let scene3d: ProductScene | null = null;
+  let lcd3d: Lcd3D | null = null;
   let svgProduct: { update(f: LiveFrame, room: number, fx: object): void } | null = null;
   let raf = 0;
   let timer = 0;
@@ -114,6 +119,9 @@ export function productStep(): StepImpl {
   // 事件与固件状态
   const events: TimelineStep[] = [];
   let unitF = false;
+  /** lens 的表情、spin 是不是停在正面（从串口整行解析） */
+  let mood = '';
+  let look = '';
   let alarm = false;
   let tail = '';
   /** 还没装配完：用参考装配展示（"先看参考成品"），顶部标明 */
@@ -145,6 +153,12 @@ export function productStep(): StepImpl {
       } else if (l === 'ALARM OFF') {
         alarm = false;
         event('✓', '报警解除', 'ok');
+      } else if (/^MOOD \d+ \w+$/.test(l)) {
+        mood = l.split(' ')[2];
+        event('☺', `换表情：${MOOD_LABEL[mood] ?? mood}`);
+      } else if (l === 'LOOK FRONT' || l === 'LOOK AROUND') {
+        look = l === 'LOOK FRONT' ? 'front' : 'around';
+        event('↻', look === 'front' ? '转回正面，停住' : '继续左右转身');
       } else if (l === 'UNIT F' || l === 'UNIT C') {
         unitF = l === 'UNIT F';
         event('°', `OLED 换成 ${unitF ? '℉' : '℃'}`);
@@ -206,7 +220,7 @@ ${how ? `<details class="tg" open><summary><span>${preview ? '参考装法' : '�
     c.shell.props.innerHTML = `${preview ? `${sec('参考成品')}<p class="note">${esc(previewWhy())}。这里按默认正确装法、跑实验台上现在的固件；你自己装完以后，这里换成你的装法。</p>` : ''}${p ? `${sec('选中')}<div class="ph">${esc(p.name)}</div><p class="note">${esc(p.about)}</p>` : ''}
 ${sec('成品 · 同一份固件，模拟没有重启')}
 ${row('运行', 'run')}
-${weather ? `${row('气象站周围', 'air')}${row('BME280 读到', 'rt')}${row('OLED 单位', 'unit')}${row('表盘指针', 'needle')}${row('板载 RGB', 'rgb')}${row('蜂鸣器', 'buzz')}${row('热源', 'heat')}` : row('舵机', 'servo')}
+${weather ? `${row('气象站周围', 'air')}${row('BME280 读到', 'rt')}${row('OLED 单位', 'unit')}${row('表盘指针', 'needle')}${row('板载 RGB', 'rgb')}${row('蜂鸣器', 'buzz')}${row('热源', 'heat')}` : w === 'spin' ? `${row('舵机', 'servo')}${row('转台', 'turn')}${row('状态', 'look')}` : `${row('表情', 'mood')}${row('透镜', 'lens')}`}
 ${off ? `<p class="note bad">装法：BME280 贴着芯片，读数比周围高 ${off.toFixed(1)} ℃（估算）。回「组装」改放通风口旁。</p>` : ''}
 <div class="btns">${c.session.audio.hasBuzzer ? `<button type="button" class="btn" id="pSound" aria-pressed="false">声音：关</button>` : ''}${weather ? `<button type="button" class="btn" id="pHeat">热源：关</button>` : ''}<button type="button" class="btn" id="pBoot">按住 BOOT</button></div>
 ${sec('串口 · 最近几行')}<pre class="brief serial-tail" data-live="serial"></pre>
@@ -269,6 +283,11 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     set('buzz', `${au.sounding ? `响 ${au.lastFreq} Hz` : alarm ? '报警中（间歇）' : '不响'} · ${au.muted ? '静音' : '出声'}`, alarm);
     set('heat', heat.on ? `开 · 离通风口 ${(heat.prox * 100).toFixed(0)}%` : '关');
     set('servo', a === null ? '没有 PWM' : `${a.toFixed(1)}°`);
+    if (lcd3d) set('turn', `${lcd3d.turn() >= 0 ? '+' : ''}${lcd3d.turn().toFixed(0)}°（0 = 正面）`);
+    set('look', look === 'front' ? '停在正面（BOOT 继续）' : look === 'around' ? '左右转身' : '左右转身');
+    set('mood', mood ? `${MOOD_LABEL[mood] ?? mood}（BOOT 换下一个）` : '等固件打印…');
+    const k = assembly()?.effects.lensScale ?? 1.35;
+    set('lens', `${k > 1.2 ? '高档 8 mm' : '低档 1 mm'} · 放大约 ${k.toFixed(2)}×（估算）`, k < 1.2);
     const snd = el.querySelector<HTMLButtonElement>('#pSound');
     if (snd) {
       snd.textContent = au.muted ? '声音：关' : '声音：开';
@@ -287,7 +306,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     const c = ctx!;
     const weather = c.work.id === 'weather';
     c.shell.toolbar.setGroups([
-      ...(weather ? [{ id: 'nav', tools: [{ id: 'p-orbit', label: '旋转', key: '拖动' }, { id: 'p-home', label: '复位视角' }] }] : []),
+      ...(scene3d || lcd3d ? [{ id: 'nav', tools: [{ id: 'p-orbit', label: '旋转', key: '拖动' }, { id: 'p-home', label: '复位视角' }] }] : []),
       { id: 'act', tools: [{ id: 'p-boot', label: '按键' }, ...(weather ? [{ id: 'p-heat', label: heat.on ? '热源：开' : '热源' }] : [])] },
       ...(c.session.audio.hasBuzzer ? [{ id: 'snd', tools: [{ id: 'p-sound', label: c.session.audio.state.muted ? '声音：关' : '声音：开' }] }] : []),
       { id: 'run', tools: [{ id: 'p-rerun', label: '再跑一次', primary: true }] },
@@ -340,7 +359,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     if (!c || c.store.get().step !== 'product') return;
     if (id === 'p-sound') toggleSound();
     else if (id === 'p-heat') toggleHeat();
-    else if (id === 'p-home') scene3d?.resetView();
+    else if (id === 'p-home') (scene3d ?? lcd3d)?.resetView();
     else if (id === 'p-rerun') c.session.reboot();
     else if (id === 'p-boot') {
       pressBoot(true);
@@ -374,6 +393,24 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
         unit: () => (unitF ? 'F' : 'C'),
         alarm: () => alarm,
       };
+    } else if (webglOk()) {
+      const w = c.work.id as 'spin' | 'lens';
+      lcd3d = createLcd3D(node, {
+        kind: w,
+        frame,
+        servoPin: 4,
+        effects: () => assembly()?.effects ?? {},
+        sounding: () => c.session.audio.state.sounding,
+        onBoot: (d) => pressBoot(d),
+      });
+      (window as unknown as { __tbProduct: unknown }).__tbProduct = {
+        buttonPos: () => lcd3d!.buttonScreenPos(),
+        azimuth: () => lcd3d!.azimuth(),
+        turn: () => lcd3d!.turn(),
+        ext: () => lcd3d!.ext(),
+        mood: () => mood,
+        look: () => look,
+      };
     } else {
       const box = document.createElement('div');
       box.className = 'prod-svg';
@@ -382,7 +419,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
       svgProduct = c.work.id === 'spin' ? createSpinProduct(box, h, { servoPin: 4 }) : createLensProduct(box, h);
       const note = document.createElement('div');
       note.className = 'p3-disclaimer';
-      note.textContent = '外观示意（2D，3D 成品待做）';
+      note.textContent = '外观示意（2D：这台设备不支持 WebGL）';
       node.appendChild(note);
     }
   }
@@ -406,6 +443,8 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
           if (s.run > prev.run) {
             unitF = false;
             alarm = false;
+            mood = '';
+            look = '';
             event('▶', `上电 · 运行 #${s.run}`);
           }
         }, ['run']);
@@ -438,6 +477,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
       air = room;
       if (!events.length && c.store.get().run) event('▶', `${preview ? '参考成品 · ' : ''}开机 · 运行 #${c.store.get().run}${a.effects.sensorOffset ? `，传感器 +${a.effects.sensorOffset} ℃` : ''}`);
       scene3d?.start();
+      lcd3d?.start();
       if (svgProduct) loopSvg();
       timer = window.setInterval(() => {
         tickHeat();
@@ -460,6 +500,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
       cancelAnimationFrame(raf);
       raf = 0;
       scene3d?.stop();
+      lcd3d?.stop();
       if (ctx) {
         // 离开成品：撤掉温漂和热源，回到室温
         if (heat.on) scene3d?.setHeat(false);

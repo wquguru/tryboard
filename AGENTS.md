@@ -57,6 +57,7 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | 逻辑分析仪事件 | `tryboard run <flash.bin> --trace-io Reviews/io.txt [--trace-pins 4,8]`（GPIO / PWM / WS2812 / I2C 事务，按周期盖戳；与网页逐条对拍：`node tools/webtest/traceio.mjs`） |
 | 下载第三方输入（ROM、riscv-tests） | `tools/fetch_third_party.sh` |
 | QEMU 对照 | `tools/oracle_qemu.sh <名字>` |
+| 外部 3D 模型（STEP → glb，只用 LICENSING ✅ 来源） | `(cd tools/models && npm ci)` 一次；`node tools/models/fetch.mjs && node tools/models/convert.mjs`（清单 `tools/models/models.json`，产物 + SOURCES.md 在 `assets/models/<名字>/`） |
 | 构建 wasm + 网页 | `tools/build_web.sh` |
 | 本地试网页 | `cd web && npm run dev` |
 | 网页冒烟测试 | `node tools/webtest/webtest.mjs <示例> <期望文本>`（截图到 `Reviews/web/`） |

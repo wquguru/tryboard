@@ -10,6 +10,7 @@ import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createUsbHost, type UsbView } from './usb3d';
+import { EXT, extModelsOn, loadExt, onExtModels, reportExt, type ExtName } from './extmodels';
 import type { PickTarget, PinInfo, ScenePickApi, ScreenPoint } from './scene-api';
 
 // 单位：毫米
@@ -144,9 +145,22 @@ export interface Bench extends ScenePickApi {
   buttonScreenPos(name: 'BOOT' | 'RST'): [number, number] | null;
   /** 原生 USB：固件枚举出设备后接上虚拟电脑（null 拔掉） */
   setUsb(v: UsbView | null): void;
+  /** 外部模型替换件（P1-09）开关；extModels() 列出此刻场景里实际显示的外部模型 */
+  setExtModels(on: boolean): void;
+  extModels(): string[];
   /** 性能基线：上一帧的绘制调用、三角形数与平均帧间隔 */
   stats(): { calls: number; triangles: number; frameMs: number; cpuMs: number; geometries: number; textures: number };
   dispose(): void;
+}
+
+/** 外部模型替换位（P1-09）：程序生成的几件 proc 是默认；开了外部模型就藏起来，挂上 glb，fit 负责摆位置。
+ *  fit(null) 还原程序生成版（例如把为外部模型挪过的振膜挪回去）。 */
+interface ExtSlot {
+  root: THREE.Object3D;
+  name: ExtName;
+  proc: THREE.Object3D[];
+  fit(m: THREE.Group | null): void;
+  model?: THREE.Group | null;
 }
 
 /** 杜邦线颜色惯例（DESIGN §4）：红电源、黑地、黄 SCL、绿 SDA、橙信号 */
@@ -586,6 +600,7 @@ function devboard(spec: BoardSpec) {
   const shellShape = roundRect(8.94, 3.26, 1.6);
   shellShape.holes.push(roundRect(8.3, 2.62, 1.3, new THREE.Path()));
   const shellGeo = new THREE.ExtrudeGeometry(shellShape, { depth: 7.35, bevelEnabled: false, curveSegments: 10 });
+  const extSlots: ExtSlot[] = [];
   for (const x of usbX) {
     const shell = new THREE.Mesh(shellGeo, MAT.steel);
     shell.position.set(x, T / 2 + 1.63, -L / 2 - 0.6);
@@ -600,6 +615,17 @@ function devboard(spec: BoardSpec) {
     const tongue = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.7, 4.2), MAT.plug);
     tongue.position.set(x, T / 2 + 1.63, -L / 2 - 0.6 + 2.0);
     grp.add(tongue);
+    // 可选：KiCad 的 GCT USB4105 母座（glb 开口朝 +z、贴片面 y=0、外壳长 7.4 mm）：转 180° 让开口朝板边
+    extSlots.push({
+      root: grp,
+      name: EXT.usbC,
+      proc: [shell, back, inner, tongue],
+      fit(m) {
+        if (!m) return;
+        m.rotation.y = Math.PI;
+        m.position.set(x, T / 2, -L / 2 - 0.6 + 3.7);
+      },
+    });
   }
 
   // 按键 BOOT / RST（贴片轻触开关：黑色底座 + 金属盖板 + 按柱）
@@ -702,7 +728,7 @@ function devboard(spec: BoardSpec) {
   pinHits(grp, recs, centers, [2.3, pinTop - headerY + 1.25 + 0.6, 2.3], pinRecs);
   // 原生 USB 口口沿（setUsb 用）
   const usbPort = new THREE.Vector3(usbX[0], T / 2 + 1.6, -L / 2 - 0.6);
-  return { grp, buttons, pwrMat, rgbMat, rgbLight, pinPositions, pinRecs, usbPort, L, T, spec };
+  return { grp, buttons, pwrMat, rgbMat, rgbLight, pinPositions, pinRecs, usbPort, L, T, spec, extSlots };
 }
 
 // ---------------------------------------------------------------- 模组与元件
@@ -893,6 +919,7 @@ function servoModel() {
   sticker.position.set(0, 8, 5.95);
   grp.add(sticker);
   const tower = new THREE.Mesh(new THREE.CylinderGeometry(5.9, 5.9, 4, 32), blue);
+  const shaftTop = 29.5;
   tower.position.set(-5.4, 24.7, 0);
   grp.add(tower);
   const shaft = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.4, 3, 24), new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.5 }));
@@ -921,11 +948,26 @@ function servoModel() {
   const screw = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.4, 16), MAT.steel);
   screw.position.y = 2.3;
   horn.add(screw);
-  horn.position.set(-5.4, 29.5, 0);
+  horn.position.set(-5.4, shaftTop, 0);
   horn.traverse((o) => (o.castShadow = true));
   grp.add(horn);
   grp.add(contactShadow(32, 12, 0.35));
-  return { grp, horn };
+  // 可选：Adafruit 1143（与 SG90 同外形的 9 g 舵机）。glb 转轴在原点、壳体沿 -z、底面 y=-18.8、花键顶 y=+11.9（mm）。
+  // 转 -90° 让壳体沿 +x、转轴落在 x=-5.4；舵盘仍是程序生成的（原模型没有舵盘），抬到花键顶上
+  const ext: ExtSlot = {
+    root: grp,
+    name: EXT.servo,
+    proc: [body, ears, tower, shaft],
+    fit(m) {
+      if (m) {
+        m.rotation.y = -Math.PI / 2;
+        m.position.set(-5.4, 18.8, 0);
+      }
+      horn.position.y = m ? 18.8 + 11.9 - 0.6 : shaftTop;
+      sticker.position.z = m ? 6.05 : 5.95;
+    },
+  };
+  return { grp, horn, ext };
 }
 
 /** 无源蜂鸣器模块（三针，带 S8550 三极管）：蓝色 PCB 15 × 22、Φ12 × 8.5 黑色蜂鸣器、
@@ -1015,7 +1057,19 @@ function buzzerModule() {
   waves.position.set(0, pcbTop + 12, bz);
   waves.visible = false;
   grp.add(waves);
-  return { grp, plugAt, labels: BUZZER_PINS, membrane, waves, waveMat, size: [W, H] as const };
+  // 可选：KiCad Buzzer_12x9.5RM7.6（glb 引脚在 x=0 / 7.6、本体高 9.5、底面 y=0，mm）：本体中心对准、振膜和声波抬到新顶面
+  const ext: ExtSlot = {
+    root: grp,
+    name: EXT.buzzer,
+    proc: [body, ring],
+    fit(m) {
+      if (m) m.position.set(-3.8, pcbTop, bz);
+      const topY = pcbTop + (m ? 9.5 : 8.5);
+      membrane.position.y = topY + 0.02;
+      waves.position.y = topY + 3.5;
+    },
+  };
+  return { grp, plugAt, labels: BUZZER_PINS, membrane, waves, waveMat, size: [W, H] as const, ext };
 }
 
 /** 旋转电位器（R16 规格）：蓝色方壳 + 金属轴 + 黑色带指示线的旋钮。原点在引脚根部。 */
@@ -1257,6 +1311,47 @@ export function createBench(container: HTMLElement): Bench {
   // 面包板与开发板随芯片切换（setBoard），外接元件按 partOffset 整体平移
   const BB_TOP = BB.H;
   scene.add(breadboard());
+  // 外部模型（P1-09）：默认程序生成；开了就懒加载 glb 换掉替换位里的程序生成件，关掉换回来
+  let extOn = extModelsOn();
+  let slots: ExtSlot[] = [];
+  const attached = (o: THREE.Object3D) => {
+    while (o.parent) o = o.parent;
+    return o === scene;
+  };
+  const loading = new Set<ExtSlot>();
+  function applySlot(sl: ExtSlot) {
+    if (!extOn || !sl.model) {
+      sl.proc.forEach((p) => (p.visible = true));
+      if (sl.model) sl.model.visible = false;
+      sl.fit(null);
+      if (extOn && sl.model === undefined && !loading.has(sl)) {
+        loading.add(sl);
+        void loadExt(sl.name).then((m) => {
+          loading.delete(sl);
+          sl.model = m;
+          if (m) sl.root.add(m);
+          if (attached(sl.root)) applySlot(sl);
+        });
+      }
+      return;
+    }
+    sl.proc.forEach((p) => (p.visible = false));
+    sl.model.visible = true;
+    sl.fit(sl.model);
+  }
+  const useSlot = (sl: ExtSlot) => {
+    slots = slots.filter((x) => attached(x.root));
+    slots.push(sl);
+    applySlot(sl);
+  };
+  const extList = () => slots.filter((x) => attached(x.root) && extOn && x.model && x.model.visible).map((x) => x.name);
+  const setExt = (on: boolean) => {
+    extOn = on;
+    slots = slots.filter((x) => attached(x.root));
+    slots.forEach(applySlot);
+  };
+  const offExt = onExtModels(setExt);
+  const offReport = reportExt(extList);
   let board = devboard(BOARD_C3);
   const placeBoard = () => {
     // 板子长边沿 x：旋转 -90°，USB 朝左；排针座落在面包板表面
@@ -1264,6 +1359,7 @@ export function createBench(container: HTMLElement): Bench {
     board.grp.position.set((board.spec.boardCol - (board.spec.cols - 1) / 2) * PITCH, BB_TOP + 2.5 + board.T / 2, 0);
     scene.add(board.grp);
     board.grp.updateMatrixWorld();
+    board.extSlots.forEach(useSlot);
   };
   placeBoard();
   /** 元件用的面包板列号（按当前开发板平移；列号基准沿用旧版半块面包板，示例机位不变） */
@@ -1460,13 +1556,14 @@ export function createBench(container: HTMLElement): Bench {
     registerPart('servo', root);
     grp.add(root);
     const m = servoModel();
+    root.add(m.grp);
+    useSlot(m.ext);
     // 摆在信号针和 5V 针中间的正前方：线短、不从开发板（BOOT 键）和 BME280 上方拱过去
     const sigX = pinCands('IO' + p.pin)[0].p.x;
     const v5X = pinCands('5V')[0].p.x;
     const sx = (sigX + v5X) / 2 + 8, sz = rowZ(9) + 44;
     m.grp.position.set(sx, 0, sz);
     m.grp.rotation.y = Math.PI;
-    root.add(m.grp);
     // 3P 母头：黑色塑料，开口朝上
     const plug = new THREE.Vector3(sx - 8, 0, rowZ(9) + 26);
     const housing = new THREE.Mesh(new THREE.BoxGeometry(7.6, 12, 2.6), MAT.plug);
@@ -1541,6 +1638,7 @@ export function createBench(container: HTMLElement): Bench {
     // 排针朝开发板那一侧
     if (bz < 0) m.grp.rotation.y = Math.PI;
     root.add(m.grp);
+    useSlot(m.ext);
     // 接触阴影不挂在可选中的零件下面：选中描边会把阴影片的大方框也描出来
     const shadow = contactShadow(m.size[0], m.size[1], 0.3);
     shadow.position.set(bx, shadow.position.y, bz);
@@ -2178,11 +2276,15 @@ export function createBench(container: HTMLElement): Bench {
     setHeat,
     measure,
     setTheme: applyTheme,
+    setExtModels: setExt,
+    extModels: extList,
     stats() {
       return { ...lastInfo, frameMs: Math.round(frameMs * 10) / 10, cpuMs: Math.round(cpuMs * 100) / 100, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures };
     },
     dispose() {
       cancelAnimationFrame(raf);
+      offExt();
+      offReport();
       ro.disconnect();
       overlay.remove();
       renderer.dispose();
