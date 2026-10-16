@@ -77,6 +77,11 @@ export class LiveSim {
     this.flash = null;
     return this.start();
   }
+  /** 换外接器件（按清单重摆台面）：下次 start / reset 生效 */
+  configure(p: { i2c: LiveOptions['i2c']; lcd?: boolean }) {
+    this.o.i2c = p.i2c;
+    this.o.lcd = p.lcd;
+  }
   press(down: boolean) {
     this.send({ type: 'gpio', pin: this.bootPin, level: down ? 0 : -1 });
   }

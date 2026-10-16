@@ -9,6 +9,7 @@ import type { Store } from './store';
 import type { Timeline } from './timeline';
 import type { Toolbar } from './toolbar';
 import type { Card } from './card';
+import type { BomHistory } from './bom';
 
 export type StepId = 'shop' | 'bench' | 'assemble' | 'product';
 export const STEPS: { id: StepId; label: string }[] = [
@@ -60,6 +61,10 @@ export interface AppState {
   /** 正在验收的检查点（同一时间只跑一个） */
   verifying: string | null;
   verifyProgress: number;
+  /** 采购清单的操作日志（清单由它重放，见 bom.ts）；存 localStorage 'tryboard-app-shop:<work>' */
+  bom: BomHistory;
+  /** 实验台场景换过几次（"摆上实验台"每次 +1，时间线据此记一步） */
+  sceneRev: number;
   /** 组装步骤的结果（成品步骤读它）：null = 还没开始装 */
   assembly: AssemblyState | null;
 }
@@ -90,6 +95,10 @@ export interface Session {
   pick: Partial<ScenePickApi>;
   sim: LiveSim | null;
   scene: SceneSpec;
+  /** 供电：null = 作品默认台面（只显示 USB 5 V）；从清单摆上来时记下有没有外接 5 V */
+  power: { ext5v: boolean } | null;
+  /** 按清单换台面（P0-09）：重建外接元件；I2C / 圆屏变了就带着当前固件重新上电 */
+  applyScene(scene: SceneSpec, power: { ext5v: boolean }): void;
   fwName: string;
   fwSize: number;
   chip: 'esp32c3' | 'esp32s3';
@@ -121,11 +130,11 @@ export interface Shell {
   timeline: Timeline;
   card: Card;
   /** 右上结论按钮的文字与状态 */
-  setVerdict(text: string, state: 'ok' | 'bad' | 'idle'): void;
+  setVerdict(text: string, state: 'ok' | 'bad' | 'warn' | 'idle'): void;
   /** 点结论按钮做什么（每个步骤挂载时自己设） */
   onVerdict(fn: (() => void) | null): void;
-  /** 右上"下一步"按钮：to 为 null 时置灰 */
-  setNext(label: string, to: StepId | null, why?: string): void;
+  /** 右上"下一步"按钮：to 为 null 时置灰；给了 onGo 就由它负责跳转 */
+  setNext(label: string, to: StepId | null, why?: string, onGo?: () => void): void;
   /** 底部一行提示（几秒后消失） */
   toast(text: string): void;
   /** 台面容器（快捷卡片坐标相对它） */

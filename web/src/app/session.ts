@@ -30,7 +30,12 @@ export interface SessionHooks {
   onConsole(text: string): void;
 }
 
-export async function createSession(stage: HTMLElement, work: WorkDef, store: Store<AppState>, hooks: SessionHooks): Promise<Session> {
+export interface SessionOpts {
+  /** 上次在采购页"摆上实验台"存下的场景；没有就用作品默认台面（examples.json） */
+  placed?: { scene: SceneSpec; ext5v: boolean } | null;
+}
+
+export async function createSession(stage: HTMLElement, work: WorkDef, store: Store<AppState>, hooks: SessionHooks, opts: SessionOpts = {}): Promise<Session> {
   const bench = createBench(stage);
   // 拾取接口由 board3d 另行实现；没实现的方法就不调（点不到台面，但不报错）
   const pick = bench as unknown as Partial<ScenePickApi>;
@@ -48,7 +53,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     .then((r) => r.json())
     .catch(() => []);
   const ex = work.example ? examples.find((e) => e.id === work.example) : undefined;
-  const scene: SceneSpec = ex?.scene ?? { parts: [] };
+  // 摆过清单就用清单的零件，机位仍用作品默认
+  const scene: SceneSpec = opts.placed ? { ...ex?.scene, ...opts.placed.scene } : (ex?.scene ?? { parts: [] });
   const chip = ex?.chip ?? 'esp32s3';
   bench.setBoard(chip);
   bench.setScene(scene);
@@ -65,6 +71,20 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     pick,
     sim: null,
     scene,
+    power: opts.placed ? { ext5v: opts.placed.ext5v } : null,
+    applyScene(next, power) {
+      const devs = (sc: SceneSpec) => JSON.stringify([i2cOf(sc.parts), sc.parts.some((p) => p.type === 'gc9a01')]);
+      const rebootNeeded = devs(next) !== devs(s.scene);
+      const same = JSON.stringify(next) === JSON.stringify(s.scene);
+      s.scene = next;
+      s.power = power;
+      if (!same) bench.setScene(next);
+      if (s.sim && rebootNeeded) {
+        s.sim.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01') });
+        s.reboot();
+      }
+      store.set((st) => ({ sceneRev: st.sceneRev + 1 }));
+    },
     fwName: ex ? `${ex.id}/flash.bin` : '',
     fwSize: 0,
     chip,
@@ -84,7 +104,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       s.fwSize = buf.byteLength;
       s.chip = imageChip(buf);
       bench.setBoard(s.chip);
-      bench.setScene(scene);
+      bench.setScene(s.scene);
       bench.setPowered(true);
       if (!s.sim) {
         s.sim = makeSim(buf);
@@ -112,8 +132,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   function makeSim(fw: string | ArrayBuffer) {
     const sim = new LiveSim({
       fw,
-      i2c: i2cOf(scene.parts),
-      lcd: scene.parts.some((p) => p.type === 'gc9a01'),
+      i2c: i2cOf(s.scene.parts),
+      lcd: s.scene.parts.some((p) => p.type === 'gc9a01'),
       env: store.get().env,
       onConsole(text) {
         consoleBuf += text;

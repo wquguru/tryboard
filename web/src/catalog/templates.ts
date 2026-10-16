@@ -69,10 +69,12 @@ const SERVO_EXT_WIRING: Wire[] = [
   { part: 'dc-jack', pin: '+', net: 'EXT5V' },
   { part: 'dc-jack', pin: '-', net: 'GND' },
 ];
-const SERVO_POWER: BuyLine[] = [
-  { partId: 'sg90', qty: 1, why: '表盘 / 转身用的舵机' },
-  { partId: 'psu-5v2a', qty: 1, why: '舵机单独供电：从电脑 USB 取电启动瞬间会掉压复位' },
-  { partId: 'dc-jack', qty: 1, why: '电源插头转面包板' },
+const SERVO: BuyLine = { partId: 'sg90', qty: 1, why: '表盘 / 转身用的舵机' };
+// 舵机电源放建议件（默认勾选）：去掉后由 R27 / R20 当场说后果（只靠 USB 会掉压复位），
+// 实验台也照"只有 USB"摆，给欠压演示留口子（docs/DECISIONS.md 2026-10-16 采购页）
+const SERVO_SUPPLY: (BuyLine & { checked: boolean })[] = [
+  { partId: 'psu-5v2a', qty: 1, checked: true, why: '舵机单独供电：从电脑 USB 取电启动瞬间会掉压复位' },
+  { partId: 'dc-jack', qty: 1, checked: true, why: '电源插头转面包板' },
 ];
 const CABLE: BuyLine = { partId: 'usb-c-cable', qty: 1, why: '烧录和看串口，要能传数据的线' };
 
@@ -87,12 +89,13 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
       { partId: 's3-devkitc1-v10', qty: 1, why: '固件和 3D 板都按 v1.0（彩灯 GPIO48）' },
       { partId: 'bme280', qty: 1, why: '温度 / 湿度 / 气压' },
       { partId: 'ssd1306', qty: 1, why: '显示读数' },
-      ...SERVO_POWER,
+      SERVO,
       CABLE,
       { partId: 'dupont-mf', qty: 1, why: '模块排针接面包板' },
       { partId: 'enclosure-weather', qty: 1, why: '装壳关（第 06 关）' },
     ],
     suggested: [
+      ...SERVO_SUPPLY,
       { partId: 'breadboard-830', qty: 1, checked: true, why: '先在面包板上搭通再装壳' },
       { partId: 'dupont-mm', qty: 1, checked: true, why: '面包板上跳线' },
       { partId: 'buzzer-module', qty: 1, checked: true, why: '温度超限蜂鸣报警（固件 GPIO5，成品页能听到）' },
@@ -124,12 +127,13 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
     required: [
       { partId: 's3-devkitc1-v10', qty: 1, why: '验收固件按 S3' },
       { partId: 'gc9a01', qty: 1, why: '圆屏脸' },
-      ...SERVO_POWER,
+      SERVO,
       CABLE,
       { partId: 'dupont-ff', qty: 1, why: '圆屏排针直接连开发板' },
       { partId: 'enclosure-spin', qty: 1, why: '身体 + 转台底座' },
     ],
     suggested: [
+      ...SERVO_SUPPLY,
       { partId: 'breadboard-830', qty: 1, checked: true, why: '先搭通再装壳' },
       { partId: 'dupont-mm', qty: 1, checked: true, why: '面包板上跳线' },
       { partId: 'cap-1000uf', qty: 1, checked: false, why: '舵机电源两端稳压' },

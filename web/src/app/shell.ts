@@ -39,12 +39,12 @@ export function createShell(): Shell {
     onVerdict(fn) {
       $('verdict').onclick = fn;
     },
-    setNext(label, to, why) {
+    setNext(label, to, why, onGo) {
       const b = $<HTMLButtonElement>('next');
       b.textContent = label;
       b.disabled = !to;
       b.title = to ? '' : (why ?? '');
-      b.onclick = () => to && (location.hash = to);
+      b.onclick = () => to && (onGo ? onGo() : (location.hash = to));
     },
     toast(text) {
       const t = $('toast');

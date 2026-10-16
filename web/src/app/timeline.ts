@@ -32,7 +32,8 @@ export function createTimeline(el: HTMLElement): Timeline {
       }
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'tl-step' + (i === cur ? ' on' : '') + (s.status ? ' ' + s.status : '');
+      // 点回中间某步后，后面的步骤画淡（还在，接着改会被丢掉）
+      b.className = 'tl-step' + (i === cur ? ' on' : '') + (cur >= 0 && i > cur ? ' after' : '') + (s.status ? ' ' + s.status : '');
       b.setAttribute('role', 'listitem');
       b.dataset.id = s.id;
       b.innerHTML = `<span class="tl-ic"></span><span class="tl-t"></span>${s.status ? `<span class="tl-st">${mark[s.status]}</span>` : ''}`;

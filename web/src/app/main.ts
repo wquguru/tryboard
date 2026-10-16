@@ -3,9 +3,9 @@ import { createStore } from './store';
 import { createShell, registerStep, startRouter } from './shell';
 import { createSession, WORKS } from './session';
 import { benchStep, passedCount, restoreChecks } from './steps/bench';
-import { placeholderStep } from './steps/placeholder';
 import { assembleStep, restoreAssembly } from './steps/assemble';
 import { productStep } from './steps/product';
+import { loadBom, loadPlaced, shopStep } from './steps/shop';
 import type { AppState, StepCtx, WorkId } from './types';
 import type { TimelineStep } from './timeline';
 
@@ -32,6 +32,8 @@ const store = createStore<AppState>({
   verifying: null,
   verifyProgress: 0,
   assembly: null,
+  bom: loadBom(work.id),
+  sceneRev: 0,
 });
 const shell = createShell();
 
@@ -44,15 +46,15 @@ function log(text: string) {
   if (atBottom) con.scrollTop = con.scrollHeight;
 }
 
-registerStep('shop', placeholderStep('① 采购', 'P0-07', '模版带出必选零件、规则当场说后果、参考价与合计。'));
+registerStep('shop', shopStep());
 registerStep('bench', benchStep());
 registerStep('assemble', assembleStep());
 registerStep('product', productStep());
 
 // 时间线：本任务只显示"放零件 / 连线 / 运行 #n / 验收"，回退由 P0-03 接 onSeek
-// 组装、成品有自己的时间线（装配步骤 / 事件），这份只在采购、实验台显示
+// 采购、组装、成品各有自己的时间线（清单变更 / 装配步骤 / 事件），这份只在实验台显示
 const history: TimelineStep[] = [];
-const ownsTimeline = () => ['shop', 'bench'].includes(store.get().step);
+const ownsTimeline = () => store.get().step === 'bench';
 function renderHistory() {
   shell.timeline.setSteps(history);
   shell.timeline.setCurrent(history.length - 1);
@@ -65,13 +67,15 @@ shell.timeline.onSeek((_i, s) => ownsTimeline() && shell.toast(`回到「${s.lab
 
 (async () => {
   try {
-    const session = await createSession(shell.stage, work, store, { onConsole: log });
+    const placed = loadPlaced(work.id);
+    const session = await createSession(shell.stage, work, store, { onConsole: log }, { placed });
     (window as unknown as { __tbApp: unknown }).__tbApp = { store, session };
     const ctx: StepCtx = { work, store, session, shell };
     restoreChecks(ctx);
     restoreAssembly(ctx);
     for (const p of session.scene.parts) pushHistory({ id: `place:${p.type}`, icon: '+', label: `放 ${p.type === 'bme280' ? 'BME280' : p.type === 'oled' ? 'OLED' : p.type === 'servo' ? 'SG90' : p.type === 'gc9a01' ? '圆屏' : p.type}` });
     if (session.scene.parts.length) pushHistory({ id: 'wire', icon: '~', label: '连线' });
+    if (placed) pushHistory({ id: 'scene:placed', icon: '⇢', label: `按清单摆上 ${session.scene.parts.length} 件` });
     store.subscribe((s, prev) => {
       if (s.run > prev.run) {
         for (const h of history) if (h.id.startsWith('run:')) h.status = undefined;
@@ -79,8 +83,13 @@ shell.timeline.onSeek((_i, s) => ownsTimeline() && shell.toast(`回到「${s.lab
       }
       for (const [id, r] of Object.entries(s.checks)) if (prev.checks[id] !== r && r.rows.length) pushHistory({ id: `check:${id}:${history.length}`, icon: '◎', label: `验收 ${id}`, status: r.ok ? 'ok' : 'bad' });
     }, ['run', 'checks']);
-    // 结论按钮：采购、实验台显示检查点进度；组装、成品挂载时自己设
+    store.subscribe((s) => pushHistory({ id: `scene:${s.sceneRev}`, icon: '⇢', label: `按清单摆上 ${session.scene.parts.length} 件` }), ['sceneRev']);
+    // 结论按钮：实验台显示检查点进度；采购、组装、成品挂载时自己设
     const verdict = () => {
+      if (store.get().step === 'shop') {
+        shell.onVerdict(() => (document.getElementById('props')!.scrollTop = 0));
+        return;
+      }
       if (!ownsTimeline()) return;
       const n = work.checkpoints.length;
       const d = passedCount(ctx);

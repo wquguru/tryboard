@@ -47,7 +47,7 @@ interface Wire {
   color: string;
 }
 /** 接线由场景声明推出来；id 按 scene-api 约定 'wire:<板上针脚>~<零件>:<丝印>' */
-function wiresOf(parts: PartSpec[]): Wire[] {
+function wiresOf(parts: PartSpec[], ext5v = false): Wire[] {
   const w: Wire[] = [];
   const add = (a: string, b: string, role: string, color: string) => w.push({ id: `wire:${a}~${b}`, a, b, role, color });
   for (const p of parts) {
@@ -59,7 +59,7 @@ function wiresOf(parts: PartSpec[]): Wire[] {
       add('GND', `${id}:GND`, '地', '黑');
     } else if (p.type === 'servo') {
       add(`GPIO${p.pin}`, `${id}:SIG`, 'PWM 信号', '橙');
-      add('5V', `${id}:VCC`, '供电', '红');
+      add(ext5v ? 'EXT5V' : '5V', `${id}:VCC`, ext5v ? '供电（外接 5 V）' : '供电', '红');
       add('GND', `${id}:GND`, '地', '黑');
     } else if (p.type === 'gc9a01') {
       for (const [g, n] of [[12, 'SCL'], [11, 'SDA'], [10, 'CS'], [14, 'DC'], [13, 'RST'], [15, 'BLK']] as const) add(`GPIO${g}`, `${id}:${n}`, `SPI ${n}`, '橙');
@@ -129,7 +129,7 @@ export function benchStep(): StepImpl {
     const s = c.store.get();
     const ses = c.session;
     const parts = ses.scene.parts;
-    const wires = wiresOf(parts);
+    const wires = wiresOf(parts, !!ses.power?.ext5v);
     const item = (sel: Selection, label: string, meta = '', status = '') =>
       `<button type="button" class="tn ${selEq(s.selection, sel) ? 'on' : ''}" data-kind="${sel.kind}" data-id="${esc(sel.id)}" role="treeitem" aria-selected="${selEq(s.selection, sel)}"><span class="tn-l">${label}</span>${meta ? `<span class="tn-m">${meta}</span>` : ''}${status}</button>`;
     const group = (key: string, title: string, count: string, body: string) =>
@@ -149,7 +149,7 @@ export function benchStep(): StepImpl {
     c.shell.tree.innerHTML = `<div role="tree" aria-label="构建树">
 ${group('part', '零件', String(parts.length + 1), partItems)}
 ${group('wire', '连线', String(wires.length), wireItems)}
-${group('power', '供电', '', item({ kind: 'power', id: 'usb' }, 'USB 5 V（电脑）', '5V'))}
+${group('power', '供电', '', item({ kind: 'power', id: 'usb' }, 'USB 5 V（电脑）', '5V') + (ses.power?.ext5v ? item({ kind: 'power', id: 'ext5v' }, '外接 5 V 2 A（舵机）', 'EXT5V') : ''))}
 ${group('env', '环境', '', item({ kind: 'env', id: 'room' }, '室内', `<span class="mono">${env.temp.toFixed(1)} °C</span>`))}
 ${group('firmware', '固件', '', ses.fwName ? item({ kind: 'firmware', id: 'main' }, esc(ses.fwName), ses.fwSize ? `${(ses.fwSize / 1024).toFixed(0)} KB` : '') : item({ kind: 'firmware', id: 'main' }, '还没有固件', '拖 .bin 进来'))}
 ${c.work.checkpoints.length ? group('checkpoint', '检查点', `${passedCount(c, s)}/${c.work.checkpoints.length}`, cps) : ''}
@@ -176,6 +176,16 @@ ${c.work.checkpoints.length ? group('checkpoint', '检查点', `${passedCount(c,
     if (sel.kind === 'checkpoint') return renderCheckpoint(sel.id);
     if (sel.kind === 'env') return renderEnv();
     if (sel.kind === 'firmware') return renderFirmware();
+    if (sel.kind === 'power' && c.session.power) {
+      // 从采购清单摆上来的台面：按清单说清楚舵机从哪取电（欠压演示留给 P1 电气，这里只显示）
+      const ext = c.session.power.ext5v;
+      const hasServo = c.session.scene.parts.some((p) => p.type === 'servo');
+      el.innerHTML =
+        sel.id === 'ext5v'
+          ? `${sec('供电')}<div class="ph">外接 5 V 2 A</div>${rowT('来源', '5 V 2 A 电源适配器 → DC 母座 → 面包板电源轨')}${rowT('给谁', '舵机；地线和开发板 GND 接在一起')}${row('可信度', '估算')}`
+          : `${sec('供电')}<div class="ph">USB 5 V（电脑）</div>${rowT('来源', 'USB-C 接电脑，5 V，最多约 500 mA')}${rowT('3V3', '板载 LDO 稳压，给 BME280 / OLED')}${rowT('5V 轨', ext ? '只给开发板；舵机走外接 5 V' : hasServo ? '直通 USB，舵机也从这里取电' : '直通 USB')}${row('可信度', '估算')}${!ext && hasServo ? '<p class="note bad">清单里没有舵机电源：舵机只靠 USB，一转板子可能复位。欠压演示由后续任务（P1 电气）接上，现在只显示。</p>' : ''}`;
+      return;
+    }
     if (sel.kind === 'power') {
       el.innerHTML = `${sec('供电')}<div class="ph">USB 5 V（电脑）</div>${rowT('来源', 'USB-C 接电脑，5 V')}${rowT('3V3', '板载 LDO 稳压，给 BME280 / OLED')}${rowT('5V 轨', '直通 USB，给舵机')}${row('可信度', '估算')}<p class="note">换外接 5 V、看舵机一转板子会不会复位：由后续任务（P0-04 / P1 电气）实现。</p>`;
       return;
