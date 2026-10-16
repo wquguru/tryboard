@@ -91,7 +91,7 @@
 | OLED 实时画面 | ✅ 帧缓冲变了才传，128×64 最近邻纹理 |
 | 环境滑块 | ✅ 温度 / 湿度 / 气压 → `tb_env_set`，webtest 验证读数跟随 |
 | 串口输入 | 🟡 已接线，缺验收固件 |
-| 蜂鸣器出声（P0-14） | ✅ weather GPIO5 无源蜂鸣器：worker 每 1ms 采样 `tb_pin_pwm` / `tb_pin_pwm_freq`，按模拟时刻排进 Web Audio（方波，默认静音，点「声音」开）；agent-browser：35℃ 时 lastFreq 2700.1 Hz、分析节点 2695 Hz，降到 25℃ 停。3D 里还没画蜂鸣器（P0-17）；只出一个声道（多个蜂鸣器取第一个在响的） |
+| 蜂鸣器出声（P0-14） | ✅ weather GPIO5 无源蜂鸣器：worker 每 1ms 采样 `tb_pin_pwm` / `tb_pin_pwm_freq`，按模拟时刻排进 Web Audio（方波，默认静音，点「声音」开）；agent-browser：35℃ 时 lastFreq 2700.1 Hz、分析节点 2695 Hz，降到 25℃ 停。3D 蜂鸣器模块已画（响时有声波示意）；只出一个声道（多个蜂鸣器取第一个在响的） |
 | 输入日志 / 重放（P0-19） | ✅ worker 按模拟时间记下按键 / 环境 / 电位器 / 串口输入，「导出输入」给出 `tryboard run --inputs` 文本；replay.mjs：鼠标按 3D BOOT + 温度 35 → 网页串口与 CLI 重放逐字节相同（1502 字节），网页重放与 CLI 指纹相同。限制：日志从上电开始，复位即新日志；装配视图 / 元件编辑器改接线不记（会重新上电） |
 
 > 2026-10-15 合流：S3 对齐（双核、共享外设、S3 开发板网页）与 USB OTG、Wi-Fi、软件复位、元件编辑器同时可用；S3 软件复位尚未支持（见 DECISIONS）。2026-10-16：S3 软件复位已支持（见上表"软件复位"）。
@@ -119,3 +119,4 @@
 | npm 本地包 `npx tryboard check`（P1-14） | ✅ | `tools/npm_parity.sh`（进 accept.sh）：8 关参考固件 + 3 个错配用例，`npx ./tryboard-0.1.0.tgz check` 与 `tools/check.py` 整段输出（含指纹）和退出码逐字一致；`run` 串口与原生 CLI 逐字节一致（bme280）；包约 0.9 MB（Reviews/ab/P1-14.md） | 未发布到 npm；不带参考固件（无 `--ref`）；不带 `--watch / --trace` 等调试开关 |
 | 暗色模式 / 手机只读（P1-15） | ✅ | agent-browser：390×844 四步 + 首页无横向溢出、编辑工具隐藏、成品 3D 预览；1440×900 暗色四步 + 首页 + 授权页；console / errors 无 error（Reviews/ab/P1-15.md） | levels.html / advisor.html / index.html 未做暗色；手机上组装步骤仍是"锁着"说明，不预览装配；部分 three.js 器件材质在暗色下未调 |
 
+| 走查修补（首页价格、中文零件名、3D 蜂鸣器、参考成品、舵机走线） | ✅ | `npm test` 79 个用例（新增：首页价与采购页合计对拍、蜂鸣器三根线、显示名无英文）；agent-browser（Reviews/ab/polish.md）：首页三卡价格与采购页合计一致（气象站 ¥97.5–230）、实验台看到蜂鸣器模块并点中、31 ℃ 报警时声波弧出现、时间线全中文、未装配打开成品页显示参考成品与「去完成检查点 →」、默认机位中心点击 BME280 / BOOT / GPIO4 / 蜂鸣器 / 舵机都选中、console / errors 无 error；accept.sh 改为必须看到各网页脚本的汇总行（原来会把 levels.mjs 中途崩溃和 3 项失败盖住，已修） | 蜂鸣器声波是示意；参考成品用的是实验台当前固件（还没上传自己的就是参考固件）；小黄 / 透镜成品仍是 SVG |

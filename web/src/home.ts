@@ -7,6 +7,8 @@ document.querySelector('.pg-head nav')!.after(themeToggle());
 import { createShowcase, type ShowKind } from './views/showcase';
 import { createProductView } from './views/product';
 import { createLensProduct, createSpinProduct } from './views/lcdproducts';
+import { bomTotal, getTemplate, templatePicks } from './catalog/templates';
+import { CHECKED_AT, getPart } from './catalog/parts';
 
 const SERVO = 4;
 const ENV = { temp: 23.5, humidity: 45, pressure: 101325 };
@@ -15,6 +17,25 @@ const FW: Record<ShowKind, { lcd: boolean; i2c: { kind: string; addr: number }[]
   spin: { lcd: true, i2c: [] },
   lens: { lcd: true, i2c: [] },
 };
+// 卡片上的"要买"和参考价从元件库算，和采购页默认清单同一口径（必选 + 默认勾选的建议件，bomTotal），不写死
+const yuan = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
+const shortName = (id: string) => getPart(id).name.split(/[（(]/)[0].trim();
+const ACCESSORY = new Set(['cable', 'proto', 'power', 'passive']);
+const KIND_NAME: Record<string, string> = { cable: '线材', proto: '面包板', power: '电源', passive: '阻容' };
+for (const root of document.querySelectorAll<HTMLElement>('.wk')) {
+  const id = root.dataset.work!;
+  const t = getTemplate(id);
+  const picks = templatePicks(id);
+  const total = bomTotal(picks, t.board);
+  const main = total.lines.filter((l) => !ACCESSORY.has(l.part.kind));
+  const rest = total.lines.filter((l) => ACCESSORY.has(l.part.kind));
+  const buy = root.querySelector<HTMLElement>('[data-buy]');
+  const kinds = [...new Set(rest.map((l) => KIND_NAME[l.part.kind] ?? '配件'))];
+  if (buy) buy.textContent = `${main.map((l) => shortName(l.part.id)).join('、')}${rest.length ? `；另配 ${rest.length} 种配件（${kinds.join('、')}）` : ''}`;
+  const price = root.querySelector<HTMLElement>('[data-price]');
+  if (price) price.innerHTML = `¥${yuan(total.lo)}–${yuan(total.hi)} <span class="muted">估算 · 核价 ${CHECKED_AT}</span>`;
+}
+
 const IDLE = '示意图 · 点「看真实固件跑」换成模拟器画面';
 
 interface Card {

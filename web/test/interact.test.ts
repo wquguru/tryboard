@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { diffRuns, fold, replayInputs, runResult, seekTarget, truncate, type BenchStep, type RunRec } from '../src/app/history.ts';
-import { wiresOf } from '../src/app/wiring.ts';
+import { PART_LABEL, partLabel, wiresOf } from '../src/app/wiring.ts';
 import { checkWiring } from '../src/app/wirecheck.ts';
 
 const env = (temp: number) => ({ temp, humidity: 45, pressure: 101325 });
@@ -88,4 +88,19 @@ test('线 id 与 3D 台面一致', () => {
   for (const id of ['wire:GND~oled:GND', 'wire:3V3~oled:VCC', 'wire:GPIO9~oled:SCL', 'wire:GPIO8~oled:SDA', 'wire:3V3~bme280:VIN', 'wire:GND~bme280:GND', 'wire:GPIO4~servo:PWM', 'wire:5V~servo:VCC', 'wire:GND~servo:GND']) assert.ok(ids.includes(id), id);
   // 外接 5 V：网络换成 EXT5V，id 仍按台面画的 5V 针
   assert.equal(wiresOf(parts(), true).find((w) => w.id === 'wire:5V~servo:VCC')?.a, 'EXT5V');
+});
+
+test('蜂鸣器模块三根线：VCC → 3V3、I/O → GPIO5、GND（与 3D 台面同一套 id）', () => {
+  const w = wiresOf([{ type: 'buzzer', pin: 5 }]);
+  assert.deepEqual(w.map((x) => x.id), ['wire:3V3~buzzer:VCC', 'wire:GPIO5~buzzer:I/O', 'wire:GND~buzzer:GND']);
+  assert.deepEqual(rules([{ type: 'buzzer', pin: 5 }] as never[]), []);
+});
+
+test('零件显示名全是中文 / 型号，不漏英文 type 名', () => {
+  for (const [type, name] of Object.entries(PART_LABEL)) {
+    assert.notEqual(name, type, type);
+    assert.equal(partLabel(type), name);
+  }
+  assert.equal(partLabel('buzzer'), '蜂鸣器');
+  assert.equal(partLabel('servo'), '舵机');
 });

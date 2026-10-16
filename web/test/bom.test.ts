@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { initialHistory, placement, push, replay, ruleInput, validHistory } from '../src/app/bom.ts';
 import { problems } from '../src/catalog/rules.ts';
+import { bomTotal, getTemplate, templatePicks } from '../src/catalog/templates.ts';
 
 const examples = JSON.parse(readFileSync(new URL('../../firmware/examples.json', import.meta.url), 'utf8')) as { id: string; scene?: { parts: unknown[] } }[];
 
@@ -72,4 +73,13 @@ test('日志校验：坏数据不重放', () => {
   assert.ok(!validHistory({ ops: [{ t: 'template', id: 'weather' }, { t: 'add', partId: 'gone' }], cur: 1 }));
   assert.ok(!validHistory({ ops: [], cur: 0 }));
   assert.ok(!validHistory(null));
+});
+
+test('首页参考价与采购页合计同一口径（templatePicks 默认勾选 + bomTotal）', () => {
+  for (const id of ['weather', 'spin', 'lens']) {
+    const shop = replay(initialHistory(id));
+    const a = bomTotal(shop.picks, shop.board);
+    const home = bomTotal(templatePicks(id), getTemplate(id).board);
+    assert.deepEqual([home.lo, home.hi, home.lines.length], [a.lo, a.hi, a.lines.length], id);
+  }
 });

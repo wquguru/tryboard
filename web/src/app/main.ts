@@ -9,6 +9,7 @@ import { loadBom, loadPlaced, shopStep } from './steps/shop';
 import type { AppState, StepCtx, WorkId } from './types';
 import { createBenchHistory } from './benchhist';
 import { initTheme, themeToggle } from '../theme';
+import { partLabel } from './wiring';
 
 export { registerStep } from './shell';
 
@@ -70,8 +71,7 @@ const ownsTimeline = () => store.get().step === 'bench';
     const ctx: StepCtx = { work, store, session, shell };
     restoreChecks(ctx);
     restoreAssembly(ctx);
-    const names: Record<string, string> = { bme280: 'BME280', oled: 'OLED', servo: 'SG90', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED' };
-    ctx.hist = createBenchHistory(ctx, { placeLabels: session.scene.parts.map((p) => names[p.type] ?? p.type), placed: !!placed });
+    ctx.hist = createBenchHistory(ctx, { placeLabels: session.scene.parts.map((p) => partLabel(p.type)), placed: !!placed });
     (window as unknown as { __tbApp: Record<string, unknown> }).__tbApp.hist = ctx.hist;
     store.subscribe(() => ctx.hist!.op({ k: 'scene', scene: session.scene, power: session.power, count: session.scene.parts.length }), ['sceneRev']);
     // 结论按钮：实验台显示检查点进度；采购、组装、成品挂载时自己设
