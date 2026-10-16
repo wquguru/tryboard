@@ -206,3 +206,11 @@
 - 检查点进度：只有自己上传的固件通过才计数（与关卡页一致），存 `localStorage['tryboard-app-checks:<work>']`。第 06 关的"装配无警告"在实验台上显示为"·（在组装步骤判定）"，不计入通过与否——与命令行 check.py 一致，组装接进来（P0-16）后再补判
 - LiveSim 加了 `onTick` / `onBoot` / `setEnv`：外壳要拿引脚电平驱动 3D、要计"运行 #n"、要改湿度气压；旧页面不受影响
 - 替代：每步一个独立 HTML（切步骤必然重载模拟，违背 P0-01）；引入状态库（违反"不加依赖"）
+
+## 2026-10-16 · 作品首页、第三方授权页、旧页面下线（P0-05 / P0-20 / P0-21）
+- 首页：替换旧 home.html，白底极简（复用 app/app.css 的变量和 .btn/.kv/.sec，页面版式在 src/page.css）。首屏三张作品卡，卡片先放成品示意图，点「看真实固件跑」换成 views/ 的成品视图（真实固件，同一时间只跑一份 worker，滚出视口暂停）。旧的米色 / 墨绿底用 CSS 盖掉 SVG fill 属性统一成台面浅灰，不改视图代码（关卡页 / 实验台还在用）。"做这个" → `app.html?work=<id>#shop`；"我有自己的想法" → advisor.html（样式后续统一）；"已经有固件了" → `app.html?work=blank#bench`。旧首页的装配区、7 关路线、示例墙去掉（装配进组装步骤，关卡成了检查点，示例在空白实验台下拉里）
+- 参考价暂用 catalog 合入前的估算（¥89–144 / ¥95–150 / ¥70–110），标"估算"，HTML 里留 TODO 指向 catalog。检查点数写死在卡片上，levels.mjs 对拍工作台的"检查点 0/N"保证一致（不 import session.ts，免得首页打包 three.js）
+- 授权页：tools/gen_licenses.mjs 在 build_web.sh 里生成 web/licenses.html（不进仓库；vite 入口在文件存在时才加，单独 npm run build 也能过）。来源：package.json 运行时依赖 + LICENSE 全文、package-lock 构建期依赖（标"不随网站分发"）、Cargo.lock 第三方 crate（当前无）、esp-rom-elfs LICENSE / README 版权行 / ROM 第三方清单、web/public/fw 实际发布的固件的 managed_components（许可证从 LICENSE 正文识别，版权取 SPDX-FileCopyrightText）、字体、SOURCES.md（现在没有，写明程序生成）。发现乐鑫修改版 MIT 组件就失败退出（规则 5）
+- 旧页面：levels.html 改为跳转页（#01–#06 → weather，#07 / #07-spin → spin，#07-lens → lens，带 `&cp=`），app 只加了最小的 `cp` 参数（初始 selection 选中该检查点，不属于该作品就忽略）。levels.ts / levels.css 暂不删（并行分支可能在改，免得合并冲突；P0-16 接手装配验收后删）。index.html 保留为空白实验台，页头加"新工作台 →"，去掉"关卡"
+- 测试：levels.mjs 的关卡页用例迁到 app.html（每个检查点参考固件指纹与 check.py 对拍、上传自己的固件、进度记住）；拖拽装配迁到 index.html 的装配视图（同一个 views/assembly）。原来"BME280 贴芯片 → 第 06 关验收不过"改成"开机后固件读数 T=26.00（偏 2.5 ℃）"，"舵盘装偏 → 07-spin 验收不过"改成"成品提示偏 14.4°"：工作台实验台不判装配（与命令行一致），判定由 P0-16 组装步骤补回
+- 替代：保留旧关卡页另起名字（两套检查点 UI 并存，违背 P0-21）；授权页放 public/ 内联样式（要复制一份 CSS）

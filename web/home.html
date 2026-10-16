@@ -4,100 +4,104 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>试板 TryBoard</title>
-    <meta name="description" content="AI 写的 ESP32 固件，先在网页实验桌上跑一遍：真实固件，虚拟外设，跑通了再买板子。" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect x=%222%22 y=%222%22 width=%2212%22 height=%2212%22 rx=%222%22 fill=%22%23FF4F00%22/%3E%3C/svg%3E" />
+    <meta name="description" content="挑一个作品，先在网页里把它做一遍：买什么、固件写没写对、装起来什么样。支持 ESP32 系列芯片，跑的是真实固件。" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect x=%222%22 y=%222%22 width=%2212%22 height=%2212%22 rx=%222%22 fill=%22%230D99FF%22/%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" />
-    <link rel="stylesheet" href="./src/site.css" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
+    <link rel="stylesheet" href="./src/app/app.css" />
     <link rel="stylesheet" href="./src/views/views.css" />
+    <link rel="stylesheet" href="./src/page.css" />
   </head>
-  <body>
-    <header class="site-head pad wrap">
-      <a class="brand" href="./home.html"><b>试板</b><span>TRYBOARD</span></a>
-      <nav><a href="./levels.html">关卡</a><a href="#examples">示例</a><a href="#cli">命令行</a><a class="strong" href="./index.html">实验台 →</a></nav>
+  <body class="page">
+    <header class="pg-head">
+      <a class="brand" href="./home.html"><b>试板</b><span class="mono">TRYBOARD</span></a>
+      <nav aria-label="站点">
+        <a href="#works">作品</a><a href="./advisor.html">选型助手</a><a href="./app.html?work=blank#bench">空白实验台</a>
+      </nav>
     </header>
 
-    <section class="pad" style="padding-top: 56px">
-      <div class="wrap stack" style="gap: 40px">
-        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 24px">
-          <div style="display: flex; flex-direction: column; gap: 20px; max-width: 760px">
-            <span class="bar6"></span>
-            <h1 style="font-size: clamp(38px, 5.4vw, 72px)">AI 写的固件，先在实验桌上跑一遍</h1>
-            <p class="lead">真实固件，虚拟外设。跑通了再买板子。</p>
+    <main class="pg-main">
+      <section class="hero">
+        <h1>挑一个作品，先在网页上做一遍</h1>
+        <p class="lead">买什么、固件写没写对、装进壳里什么样，都在买零件之前看清楚。跑的是真实固件，不是动画。</p>
+        <ol class="flow mono" aria-label="四个步骤"><li><span>1</span>采购</li><li><span>2</span>实验台</li><li><span>3</span>组装</li><li><span>4</span>成品</li></ol>
+      </section>
+
+      <section id="works" class="works" aria-label="作品">
+        <article class="wk" data-work="weather">
+          <div class="wk-prev" data-show="weather"></div>
+          <div class="wk-status mono" data-status>示意图 · 点「看真实固件跑」换成模拟器画面</div>
+          <div class="wk-body">
+            <div class="wk-h"><h2>桌面气象站</h2><span class="mono muted">ESP32-S3</span></div>
+            <p class="wk-d">屏幕显示温度、湿度、气压，舵机表盘指着温度，彩灯按冷热变色。</p>
+            <div class="kv col"><span class="k">要买</span><span class="v txt">ESP32-S3 开发板、BME280 模块、0.96″ OLED、SG90 舵机、面包板和杜邦线</span></div>
+            <div class="kv"><span class="k">检查点</span><span class="v mono" data-cps>6 个</span></div>
+            <!-- TODO(P0-catalog)：参考价改从 web/src/catalog 的采购数据算，带核价日期 -->
+            <div class="kv"><span class="k">参考价</span><span class="v mono">¥89–144 <span class="muted">估算</span></span></div>
+            <div class="wk-act"><button type="button" class="btn" data-run="weather">看真实固件跑</button><a class="btn primary" data-go href="./app.html?work=weather#shop">做这个</a></div>
           </div>
-          <div style="display: flex; gap: 12px; flex-wrap: wrap">
-            <a class="btn dark" href="./index.html">打开实验台</a>
-            <a class="btn" href="./levels.html">从第 1 关开始</a>
+        </article>
+        <article class="wk" data-work="spin">
+          <div class="wk-prev" data-show="spin"></div>
+          <div class="wk-status mono" data-status>示意图 · 点「看真实固件跑」换成模拟器画面</div>
+          <div class="wk-body">
+            <div class="wk-h"><h2>会转身的小黄</h2><span class="mono muted">ESP32-S3</span></div>
+            <p class="wk-d">站在舵机转台上，圆屏当脸；按一下按键它转过来看你。</p>
+            <div class="kv col"><span class="k">要买</span><span class="v txt">ESP32-S3 开发板、1.28″ 圆屏（GC9A01）、SG90 舵机、转台外壳</span></div>
+            <div class="kv"><span class="k">检查点</span><span class="v mono" data-cps>4 个</span></div>
+            <!-- TODO(P0-catalog)：参考价改从 web/src/catalog 的采购数据算，带核价日期 -->
+            <div class="kv"><span class="k">参考价</span><span class="v mono">¥95–150 <span class="muted">估算</span></span></div>
+            <div class="wk-act"><button type="button" class="btn" data-run="spin">看真实固件跑</button><a class="btn primary" data-go href="./app.html?work=spin#shop">做这个</a></div>
           </div>
+        </article>
+        <article class="wk" data-work="lens">
+          <div class="wk-prev" data-show="lens"></div>
+          <div class="wk-status mono" data-status>示意图 · 点「看真实固件跑」换成模拟器画面</div>
+          <div class="wk-body">
+            <div class="wk-h"><h2>透镜里的小人</h2><span class="mono muted">ESP32-S3</span></div>
+            <p class="wk-d">圆屏上的表情被凸透镜罩放大，看起来像立在罩子里；按键换表情。</p>
+            <div class="kv col"><span class="k">要买</span><span class="v txt">ESP32-S3 开发板、1.28″ 圆屏（GC9A01）、凸透镜罩和底座</span></div>
+            <div class="kv"><span class="k">检查点</span><span class="v mono" data-cps>3 个</span></div>
+            <!-- TODO(P0-catalog)：参考价改从 web/src/catalog 的采购数据算，带核价日期 -->
+            <div class="kv"><span class="k">参考价</span><span class="v mono">¥70–110 <span class="muted">估算</span></span></div>
+            <div class="wk-act"><button type="button" class="btn" data-run="lens">看真实固件跑</button><a class="btn primary" data-go href="./app.html?work=lens#shop">做这个</a></div>
+          </div>
+        </article>
+      </section>
+      <p class="fine">参考价是零件常见电商价区间的估算，不含运费，以购买时为准；之后换成人工核价（带日期和来源）。</p>
+
+      <section class="alt" aria-label="其他入口">
+        <a class="alt-card" id="ownIdea" href="./advisor.html">
+          <span class="sec">没有想做的？</span>
+          <b>我有自己的想法 →</b>
+          <span class="muted">说出要做的东西，给出该买的芯片、开发板、配件、引脚分配和功耗估算，并标出哪些能先在模拟器里验证。</span>
+        </a>
+        <a class="alt-card" id="haveFw" href="./app.html?work=blank#bench">
+          <span class="sec">已经有固件了？</span>
+          <b>打开空白实验台 →</b>
+          <span class="muted">把 ESP-IDF / Arduino 编出来的完整 flash 镜像（.bin）拖进去，在浏览器里跑，看串口和引脚。</span>
+        </a>
+      </section>
+
+      <section class="cli" aria-label="命令行">
+        <div>
+          <span class="sec">让 AI 自己验收</span>
+          <p>网页上的每个检查点都有同一条命令行验收。过没过看退出码，运行指纹和网页上的一样。</p>
         </div>
-        <div class="stack" style="gap: 12px">
-          <div id="bench"></div>
-          <div class="note"><span>↑ 正在跑真实固件 weather.bin（ESP32-S3）：按住 BOOT、调室温试试</span><span id="benchLine">启动中…</span></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="pad sec" style="padding-bottom: 88px; margin-top: 96px; background: var(--card)">
-      <div class="wrap" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 40px">
-        <div style="display: flex; flex-direction: column; gap: 10px"><span class="mono" style="font-size: 56px; font-weight: 700; line-height: 1; color: var(--line)">01</span><span style="font-size: 26px; font-weight: 900">AI 写</span><span style="color: var(--dim)">Claude Code、Cursor 都行，本机编译出 .bin</span></div>
-        <div style="display: flex; flex-direction: column; gap: 10px"><span class="mono" style="font-size: 56px; font-weight: 700; line-height: 1; color: var(--accent)">02</span><span style="font-size: 26px; font-weight: 900">桌上跑</span><span style="color: var(--dim)">拖进实验台，按键、调温度、看屏幕</span></div>
-        <div style="display: flex; flex-direction: column; gap: 10px"><span class="mono" style="font-size: 56px; font-weight: 700; line-height: 1; color: var(--line)">03</span><span style="font-size: 26px; font-weight: 900">每次一样</span><span style="color: var(--dim)">同样的输入，同样的结果和指纹，bug 能稳定复现</span></div>
-      </div>
-    </section>
-
-    <section class="pad" style="padding-top: 96px">
-      <div class="wrap stack">
-        <div class="sec-head"><h2>自己装进壳里，还是同一份固件</h2><span class="mono">拖零件 → 合上 → 开机</span></div>
-        <div id="assembly"></div>
-        <div class="note"><span>↑ 从最底下那层开始拖。试试把 BME280 放在开发板旁边，开机后看屏幕</span><span>尺寸、线长、温漂为估算</span></div>
-      </div>
-    </section>
-
-    <section class="pad sec">
-      <div class="wrap stack">
-        <div class="sec-head"><h2>做出来是这样</h2><span class="mono">先看示意，再跑真实固件</span></div>
-        <div class="grid3">
-          <div class="stack" style="gap: 12px"><div data-show="spin"></div><span style="font-weight: 900; font-size: 20px">会转身的小黄</span><span style="font-size: 14px; color: var(--dim)">舵机转台 · 屏幕眼睛</span><button type="button" class="btn" data-run="spin" style="align-self: flex-start; min-height: 40px; font-size: 14px">跑真实固件</button></div>
-          <div class="stack" style="gap: 12px"><div data-show="lens"></div><span style="font-weight: 900; font-size: 20px">透镜里的小人</span><span style="font-size: 14px; color: var(--dim)">圆屏 + 凸透镜罩，看起来是立体的</span><button type="button" class="btn" data-run="lens" style="align-self: flex-start; min-height: 40px; font-size: 14px">跑真实固件</button></div>
-          <div class="stack" style="gap: 12px"><div data-show="weather"></div><span style="font-weight: 900; font-size: 20px">温湿度检测器</span><span style="font-size: 14px; color: var(--dim)">表盘 + 屏幕 + 状态灯</span><button type="button" class="btn" data-run="weather" style="align-self: flex-start; min-height: 40px; font-size: 14px">跑真实固件</button></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="pad sec">
-      <div class="wrap stack">
-        <div class="sec-head"><h2>不知道从哪开始？走 7 关</h2><a class="mono" href="./levels.html" style="font-weight: 700">看全部关卡 →</a></div>
-        <div id="path" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px"></div>
-        <div class="note"><span>每关一条验收：过了就是过了，网页和命令行结论一样</span></div>
-      </div>
-    </section>
-
-    <section id="examples" class="pad sec" style="padding-bottom: 96px">
-      <div class="wrap stack" style="gap: 32px">
-        <div class="sec-head"><h2>从示例开始</h2><span class="mono" id="exCount">C3 · S3</span></div>
-        <div id="exGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px"></div>
-      </div>
-    </section>
-
-    <section id="cli" class="pad" style="padding-top: 96px; padding-bottom: 96px; background: #141414; color: #F7F6F3">
-      <div class="wrap" style="display: flex; flex-wrap: wrap; gap: 48px; align-items: center">
-        <div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
-          <h2>让 Agent 自己验收</h2>
-          <p style="margin: 0; font-size: 18px; color: #C9C6BF">实验桌上能做的，命令行都能做。过没过，看退出码；指纹和网页上的一样。</p>
-        </div>
-        <pre class="code" style="flex: 1 1 520px; min-width: 0; font-size: 14px">$ tools/check.py weather.bin --level 06
-第 06 关 装壳：<span class="ok">通过</span>  指纹 dda5·e840
-  <span class="ok">✓</span> 串口出现 “UNIT F”
-  <span class="ok">✓</span> GPIO4 PWM 50 Hz，脉宽 1.680–1.680 ms
-  <span class="ok">✓</span> WS2812 GPIO48 6 帧，最后一帧 #002000（要绿色）
-  <span class="ok">✓</span> 温度 6 次读数，最大偏差 0（容差 0.02）
-  <span class="ok">✓</span> OLED 点亮 1328 像素（要 ≥ 300）
-<span class="dim">$ echo $?</span>
+        <pre class="code mono">$ tools/check.py weather.bin --level 04
+第 04 关 传感器：<span class="ok">通过</span>  指纹 1177·041d
+  <span class="ok">✓</span> 温度 9 次读数，最大偏差 0（容差 0.02）
+  <span class="ok">✓</span> 湿度 9 次读数，最大偏差 0（容差 0.1）
+  <span class="ok">✓</span> 气压 9 次读数，最大偏差 0（容差 0.02）
+<span class="muted">$ echo $?</span>
 0</pre>
-      </div>
-    </section>
+      </section>
+    </main>
 
-    <footer class="pad"><div class="wrap footer"><span>ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.</span><span>ROM 来自 esp-rom-elfs（Apache-2.0）</span></div></footer>
+    <footer class="pg-foot">
+      <span>TryBoard 试板：在浏览器里运行 ESP32 系列芯片的真实固件，compatible with Arduino。ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.</span>
+      <span><a href="./licenses.html">第三方授权</a> · ROM 来自 esp-rom-elfs（Apache-2.0）</span>
+    </footer>
     <script type="module" src="./src/home.ts"></script>
   </body>
 </html>

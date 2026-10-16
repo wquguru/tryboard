@@ -62,6 +62,8 @@ footer { padding: 6px 16px; font-size: 11px; color: #6E6A63; border-top: 1px sol
 .nav { display: flex; gap: 2px; }
 .nav a { color: var(--muted); text-decoration: none; padding: 5px 10px; border-radius: 6px; font-size: 13px; }
 .nav a.on { color: var(--text); background: #262624; }
+.nav a.new { color: #0d99ff; }
+footer a { color: inherit; }
 #controls { padding: 0 14px 8px; }
 #controls .muted { margin-top: 6px; }
 .editor summary { cursor: pointer; list-style: none; }
