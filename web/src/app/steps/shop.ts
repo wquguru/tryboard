@@ -7,6 +7,7 @@ import { PROCURE_TEMPLATES, bomTotal, getTemplate } from '../../catalog/template
 import { evaluate, type Finding } from '../../catalog/rules';
 import { initialHistory, opLabel, placement, push, replay, ruleInput, shortName, validHistory, type Bom, type BomHistory, type BomOp } from '../bom';
 import type { StepCtx, StepImpl, WorkId } from '../types';
+import { partLabel } from '../wiring';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
@@ -381,9 +382,8 @@ ${sec('去店铺搜')}<div class="btns"><a class="btn" href="${esc(part.searchUr
     const c = ctx!;
     const b = bom();
     const p = placement(b);
-    const names: Record<string, string> = { oled: 'OLED', bme280: 'BME280', servo: '舵机', gc9a01: '圆屏', led: 'LED', buzzer: '蜂鸣器', pot: '电位器' };
     const power = p.ext5v ? 'USB + 外接 5 V' : 'USB';
-    const skipped = p.skipped.length ? `；${p.skipped.map((t) => names[t] ?? t).join('、')}没有默认接线，没摆` : '';
+    const skipped = p.skipped.length ? `；${p.skipped.map(partLabel).join('、')}没有默认接线，没摆` : '';
     if (b.template !== c.work.id) {
       // 清单换了作品：固件跟着作品走，换到那个作品的工作台（整页重载，DECISIONS 2026-10-16 外壳）
       const target = b.template as WorkId;
@@ -398,7 +398,7 @@ ${sec('去店铺搜')}<div class="btns"><a class="btn" href="${esc(part.searchUr
     c.session.applyScene(scene, { ext5v: p.ext5v });
     location.hash = 'bench';
     c.store.set({ selection: { kind: 'power', id: 'usb' } });
-    c.shell.toast(`按清单摆上 ${p.parts.length} 件（${p.parts.map((x) => names[x.type] ?? x.type).join('、') || '只有开发板'}）；供电：${power}${skipped}`);
+    c.shell.toast(`按清单摆上 ${p.parts.length} 件（${p.parts.map((x) => partLabel(x.type)).join('、') || '只有开发板'}）；供电：${power}${skipped}`);
   }
 
   return {

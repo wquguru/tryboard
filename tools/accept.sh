@@ -154,13 +154,16 @@ if [ $NO_WEB = 0 ]; then
   done
   r=$(node tools/webtest/levels.mjs 2>&1 | grep '^\[levels\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q PASS || fail=1
+  # 要看到汇总行（"[levels] PASS（…"）才算过：脚本中途崩了时最后一行是某一项的 PASS，不能算
+  echo "$r" | tail -1 | grep -q '^\[levels\] PASS（' || fail=1
   r=$(node tools/webtest/replay.mjs 2>&1 | grep '^\[replay\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q PASS || fail=1
+  # 要看到汇总行（"[replay] PASS（…"）才算过：脚本中途崩了时最后一行是某一项的 PASS，不能算
+  echo "$r" | tail -1 | grep -q '^\[replay\] PASS（' || fail=1
   r=$(node tools/webtest/interact.mjs 2>&1 | grep '^\[interact\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q PASS || fail=1
+  # 要看到汇总行（"[interact] PASS（…"）才算过：脚本中途崩了时最后一行是某一项的 PASS，不能算
+  echo "$r" | tail -1 | grep -q '^\[interact\] PASS（' || fail=1
   r=$(node tools/webtest/editor.mjs 2>&1 | tail -1)
   echo "- 元件编辑器（上传固件 + 加 BME280 / LED）：$r" >> $REPORT
   echo "$r" | grep -q PASS || fail=1

@@ -65,8 +65,17 @@ for (const m of cli.matchAll(/第 ([\w-]+) 关 .*?：(\S+)\s+指纹 (\S+)/g)) na
 // ---- 1. 工作台检查点：参考固件，指纹与命令行一致
 const fpOf = (page) => page.$eval('#props .kv .v.fp', (e) => e.textContent.trim()).catch(() => '');
 async function runRef(page, id) {
-  await page.waitForSelector(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`, { timeout: 30000 });
-  await page.click(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`);
+  // 构建树在上电 / 时间线更新时会整块重画：点的那一刻节点可能刚被换掉（Node is detached），重找一次再点
+  for (let i = 0; ; i++) {
+    await page.waitForSelector(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`, { timeout: 30000 });
+    try {
+      await page.click(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`);
+      break;
+    } catch (e) {
+      if (i >= 4 || !/detached/i.test(String(e))) throw e;
+      await sleep(300);
+    }
+  }
   await page.waitForSelector('#runRef:not([disabled])', { timeout: 30000 });
   await page.click('#runRef');
   await waitFor(page, () => !!document.querySelector('#props .verdict-line') && !document.querySelector('#runRef')?.disabled && !document.querySelector('#props .drop.busy'), null, 90000);
@@ -226,8 +235,11 @@ async function openAsm(example) {
     await Promise.all([p.waitForNavigation({ waitUntil: 'load' }), p.click(`.wk[data-work="${c.work}"] [data-go]`)]);
     const u = new URL(p.url());
     const n = c.cps.match(/\d+/)?.[0];
-    const v = await waitFor(p, (n) => new RegExp(`检查点 0?\\d*/${n}`).test(document.getElementById('verdict')?.textContent ?? ''), n, 30000);
-    report(`首页「做这个」（${c.work}）→ app.html?work=${c.work}#shop，检查点数 ${n} 与工作台一致`, u.pathname.endsWith('/app.html') && u.searchParams.get('work') === c.work && u.hash === '#shop' && v, p.url().replace(base, ''));
+    // 采购页的结论按钮显示的是清单提醒，检查点数在实验台的结论按钮上：落地采购后切到实验台再比
+    const landed = u.hash === '#shop';
+    await p.evaluate(() => (location.hash = 'bench'));
+    const v = landed && (await waitFor(p, (n) => new RegExp(`检查点 0?\\d*/${n}`).test(document.getElementById('verdict')?.textContent ?? ''), n, 30000));
+    report(`首页「做这个」（${c.work}）→ app.html?work=${c.work}#shop，检查点数 ${n} 与工作台一致`, u.pathname.endsWith('/app.html') && u.searchParams.get('work') === c.work && u.hash === '#shop' && v, u.pathname + u.search + u.hash);
     await p.close();
   }
   for (const [sel, want, check] of [['#ownIdea', '/advisor.html', () => !!document.querySelector('#templates')], ['#haveFw', '/app.html', () => new URLSearchParams(location.search).get('work') === 'blank' && location.hash === '#bench' && /空白实验台/.test(document.getElementById('workName')?.textContent ?? '')]]) {

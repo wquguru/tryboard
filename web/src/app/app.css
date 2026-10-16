@@ -454,6 +454,9 @@ a.tn { text-decoration: none; }
 .p3-tags { position: absolute; inset: 0; pointer-events: none; }
 .p3-tag { position: absolute; left: 0; top: 0; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); color: var(--fg); white-space: nowrap; box-shadow: var(--shadow); }
 .p3-tag.hot { background: #ff7a1a; border-color: #ff7a1a; color: #141414; font-weight: 500; }
+.prod-preview { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: baseline; gap: 10px; padding: 8px 16px; border-radius: var(--r); background: #fff7e6; border: 1px solid #f3d29a; box-shadow: var(--shadow); white-space: nowrap; pointer-events: none; }
+.prod-preview b { color: var(--warn); font-weight: 700; font-size: 14px; }
+.prod-preview span { color: var(--fg); font-size: 12px; }
 .p3-disclaimer { position: absolute; left: calc(268px + 2 * var(--gap) + 8px); bottom: 70px; font-size: 11px; color: var(--muted); pointer-events: none; }
 .prod-svg { position: absolute; left: calc(268px + 2 * var(--gap)); right: calc(304px + 2 * var(--gap)); top: 50%; transform: translateY(-50%); }
 .prod-svg .tb-view { border-radius: var(--r); box-shadow: var(--shadow); }
@@ -465,6 +468,7 @@ a.tn { text-decoration: none; }
   .asm-shell, .prod-svg { position: static; transform: none; }
   .prod-stage { position: relative; inset: auto; height: 340px; border-radius: var(--r); }
   .p3-disclaimer { left: 8px; bottom: 8px; }
+  .prod-preview { position: static; transform: none; white-space: normal; flex-wrap: wrap; margin: 0 0 8px; }
 }
 /* 组装、成品有自己的画面：实验台的 3D 台面藏起来（仍在后台跑，不销毁） */
 body[data-step='assemble'] .stage, body[data-step='product'] .stage { visibility: hidden; }

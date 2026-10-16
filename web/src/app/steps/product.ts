@@ -3,9 +3,10 @@
 // 热源改的是"气象站周围的温度"（env），一阶滞后逼近目标，模拟壳子有热惯性；读数、表盘、灯、报警全来自固件。
 import { createProduct3D, type ProductScene } from '../product3d';
 import { createLensProduct, createSpinProduct } from '../../views/lcdproducts';
-import { TEMPLATES } from '../../views/templates';
+import { TEMPLATES, type Template } from '../../views/templates';
+import { passedCount } from './bench';
 import { emptyFrame, ledCss, servoAngle, type LiveFrame } from '../../views/common';
-import type { StepCtx, StepImpl, WorkId } from '../types';
+import type { AssemblyState, StepCtx, StepImpl, WorkId } from '../types';
 import type { TimelineStep } from '../timeline';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -84,6 +85,17 @@ const WORK_LIST: { id: WorkId; title: string }[] = [
   { id: 'lens', title: '透镜里的小人' },
 ];
 
+/** 参考装配：每个零件都装上，有装法选择的取正确的那种（成品预览用，不写进 store） */
+export function referenceAssembly(T: Template): AssemblyState {
+  const placed = T.parts.map((p) => p.id);
+  const choice: Record<string, string> = {};
+  for (const p of T.parts) {
+    const ok = p.spots?.find((x) => x.ok);
+    if (ok) choice[p.id] = ok.key;
+  }
+  return { placed, choice, total: placed.length, clean: true, effects: T.effects({ placed, choice }), retest: null };
+}
+
 export function productStep(): StepImpl {
   let ctx: StepCtx | null = null;
   let storeRef: StepCtx['store'] | null = null;
@@ -104,6 +116,9 @@ export function productStep(): StepImpl {
   let unitF = false;
   let alarm = false;
   let tail = '';
+  /** 还没装配完：用参考装配展示（"先看参考成品"），顶部标明 */
+  let preview = false;
+  let banner: HTMLElement | null = null;
 
   const sim = () => ctx?.session.sim ?? null;
   const frame = (): LiveFrame => sim()?.frame ?? emptyFrame();
@@ -148,9 +163,17 @@ export function productStep(): StepImpl {
   }
 
   // ------------------------------------------------------------ 面板
+  /** 成品用的装配：真正装完的用自己的，没装完用参考装配 */
+  function assembly(): AssemblyState | null {
+    const c = ctx;
+    if (!c) return null;
+    const T = TEMPLATES[c.work.id];
+    return preview && T ? referenceAssembly(T) : c.store.get().assembly;
+  }
+
   function renderTree() {
     const c = ctx!;
-    const a = c.store.get().assembly;
+    const a = assembly();
     const T = TEMPLATES[c.work.id];
     const works = WORK_LIST.map((w) => `<a class="tn ${w.id === c.work.id ? 'on' : ''}" href="./app.html?work=${w.id}#product" role="treeitem" aria-selected="${w.id === c.work.id}"><span class="tn-l">${esc(w.title)}</span>${w.id === c.work.id ? '<span class="tn-m">当前</span>' : ''}</a>`).join('');
     const parts = (PARTS[c.work.id] ?? []).map((p) => `<button type="button" class="tn ${sel === p.id ? 'on' : ''}" data-id="${p.id}" role="treeitem"><span class="tn-l">${esc(p.name)}</span></button>`).join('');
@@ -158,12 +181,12 @@ export function productStep(): StepImpl {
       ? T.parts.filter((p) => p.spots).map((p) => {
           const s = p.spots!.find((x) => x.key === a.choice[p.id]);
           return `<div class="tn static"><span class="tn-l">${esc(p.short)}：${esc(s?.label.replace(/^放/, '') ?? '—')}</span><span class="tn-st ${s?.ok ? 'ok' : 'warn'}">${s?.ok ? '✓' : '!'}</span></div>`;
-        }).join('') + `<div class="tn static"><span class="tn-l">开机复测</span><span class="tn-st ${a.retest === null ? 'muted' : a.retest ? 'ok' : 'bad'}">${a.retest === null ? '没测' : a.retest ? '✓' : '✗'}</span></div>`
+        }).join('') + (preview ? '' : `<div class="tn static"><span class="tn-l">开机复测</span><span class="tn-st ${a.retest === null ? 'muted' : a.retest ? 'ok' : 'bad'}">${a.retest === null ? '没测' : a.retest ? '✓' : '✗'}</span></div>`)
       : '';
     c.shell.tree.innerHTML = `<div role="tree" aria-label="成品">
 <details class="tg" open><summary><span>作品</span><span class="tn-m">换作品会重新加载</span></summary><div role="group">${works}</div></details>
 <details class="tg" open><summary><span>成品</span><span class="tn-m"></span></summary><div role="group">${parts}</div></details>
-${how ? `<details class="tg" open><summary><span>装法</span><span class="tn-m">来自组装</span></summary><div role="group">${how}</div></details>` : ''}
+${how ? `<details class="tg" open><summary><span>${preview ? '参考装法' : '装法'}</span><span class="tn-m">${preview ? '默认正确装法' : '来自组装'}</span></summary><div role="group">${how}</div></details>` : ''}
 </div>`;
     c.shell.tree.querySelectorAll<HTMLButtonElement>('button.tn[data-id]').forEach((b) => (b.onclick = () => {
       sel = sel === b.dataset.id ? '' : b.dataset.id!;
@@ -177,10 +200,10 @@ ${how ? `<details class="tg" open><summary><span>装法</span><span class="tn-m"
     const w = c.work.id;
     const weather = w === 'weather';
     const p = (PARTS[w] ?? []).find((x) => x.id === sel);
-    const off = c.store.get().assembly?.effects.sensorOffset ?? 0;
+    const off = assembly()?.effects.sensorOffset ?? 0;
     const first = (FIRST3[w] ?? []).map(([t, d]) => `<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('');
     const cannot = (CANNOT[w] ?? []).map(([t, d]) => `<div class="res na"><span class="mk">×</span><span><b>${esc(t)}</b> · ${esc(d)}</span></div>`).join('');
-    c.shell.props.innerHTML = `${p ? `${sec('选中')}<div class="ph">${esc(p.name)}</div><p class="note">${esc(p.about)}</p>` : ''}
+    c.shell.props.innerHTML = `${preview ? `${sec('参考成品')}<p class="note">${esc(previewWhy())}。这里按默认正确装法、跑实验台上现在的固件；你自己装完以后，这里换成你的装法。</p>` : ''}${p ? `${sec('选中')}<div class="ph">${esc(p.name)}</div><p class="note">${esc(p.about)}</p>` : ''}
 ${sec('成品 · 同一份固件，模拟没有重启')}
 ${row('运行', 'run')}
 ${weather ? `${row('气象站周围', 'air')}${row('BME280 读到', 'rt')}${row('OLED 单位', 'unit')}${row('表盘指针', 'needle')}${row('板载 RGB', 'rgb')}${row('蜂鸣器', 'buzz')}${row('热源', 'heat')}` : row('舵机', 'servo')}
@@ -272,8 +295,40 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     c.shell.toolbar.setActive(heat.on ? 'p-heat' : 'p-orbit');
   }
 
+  function previewWhy() {
+    const c = ctx!;
+    const n = c.work.checkpoints.length;
+    const d = passedCount(c);
+    if (d < n) return `你还没装配：实验台检查点 ${d}/${n}，全过才能组装`;
+    const a = c.store.get().assembly;
+    return `你还没装配：组装 ${a?.placed.length ?? 0}/${a?.total ?? TEMPLATES[c.work.id]?.parts.length ?? 0}`;
+  }
+
+  /** 预览时下一步引导去完成检查点 / 组装；装完了就是最后一步 */
+  function syncNext() {
+    const c = ctx!;
+    if (!preview) {
+      c.shell.setNext('下一步', null, '这是最后一步');
+      return;
+    }
+    const n = c.work.checkpoints.length;
+    if (passedCount(c) < n) {
+      c.shell.setNext('去完成检查点 →', 'bench', '', () => {
+        const s = c.store.get();
+        const first = c.work.checkpoints.find((id) => !(s.checks[id]?.ok && s.checks[id].own)) ?? c.work.checkpoints[0];
+        if (first) c.store.set({ selection: { kind: 'checkpoint', id: first } });
+        location.hash = 'bench';
+      });
+    } else c.shell.setNext('去组装 →', 'assemble');
+  }
+
   function syncVerdict() {
     const c = ctx!;
+    if (preview) {
+      c.shell.setVerdict(alarm ? '参考成品 · 报警中' : '参考成品 · 还没装配', alarm ? 'bad' : 'idle');
+      c.shell.onVerdict(() => (location.hash = passedCount(c) < c.work.checkpoints.length ? 'bench' : 'assemble'));
+      return;
+    }
     const a = c.store.get().assembly;
     const off = a?.effects.sensorOffset ?? 0;
     c.shell.setVerdict(alarm ? '报警中 ≥ 30 ℃' : off ? '读数偏高（装法）' : a?.retest ? '复测 ✓ · 成品' : '成品', alarm || off ? 'bad' : a?.retest ? 'ok' : 'idle');
@@ -336,20 +391,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     raf = requestAnimationFrame(loopSvg);
     const c = ctx;
     if (!c || !svgProduct) return;
-    svgProduct.update(frame(), c.store.get().env.temp, c.store.get().assembly?.effects ?? {});
-  }
-
-  function renderLocked(el: HTMLElement, why: string, to: 'assemble' | 'bench') {
-    const c = ctx!;
-    el.innerHTML = `<div class="pnl lockcard" role="status"><div class="sec">④ 成品 · 还没解锁</div><p class="ph-t">${esc(why)}</p><p class="muted">成品用装好的状态跑：传感器放在哪、舵盘怎么装，都会影响你在这里看到的。</p><div class="btns"><button type="button" class="btn primary" id="toPrev">${to === 'assemble' ? '去组装' : '回实验台'}</button></div></div>`;
-    el.querySelector<HTMLButtonElement>('#toPrev')!.onclick = () => (location.hash = to);
-    renderTree();
-    c.shell.props.innerHTML = `${sec('真机到手先做这三件事')}<ol class="first3">${(FIRST3[c.work.id] ?? []).map(([t, d]) => `<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('')}</ol>`;
-    c.shell.toolbar.setGroups([]);
-    c.shell.timeline.setSteps([{ id: 'lock', icon: '·', label: why }]);
-    c.shell.setVerdict('成品 · 未解锁', 'idle');
-    c.shell.onVerdict(() => (location.hash = to));
-    c.shell.setNext('下一步', null, '这是最后一步');
+    svgProduct.update(frame(), c.store.get().env.temp, assembly()?.effects ?? {});
   }
 
   return {
@@ -376,18 +418,25 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
         c.shell.timeline.setSteps([]);
         return;
       }
-      const a = c.store.get().assembly;
-      if (!a || a.placed.length < a.total) {
-        renderLocked(el, a ? `先在「组装」装完（${a.placed.length}/${a.total}）` : '先在「组装」把零件装进外壳', 'assemble');
-        return;
-      }
+      const own = c.store.get().assembly;
+      // 没装完不锁整页：先看参考成品（参考装配 + 实验台现在的固件），顶部标明，下一步引导去完成检查点 / 组装
+      preview = !own || own.placed.length < own.total;
+      const a = assembly()!;
       if (!node) build(c);
       el.appendChild(node!);
+      banner = null;
+      if (preview) {
+        banner = document.createElement('div');
+        banner.className = 'prod-preview';
+        banner.setAttribute('role', 'status');
+        banner.innerHTML = `<b>参考成品 · 你还没装配</b><span>${esc(previewWhy().replace(/^你还没装配：/, ''))} · 按默认正确装法展示</span>`;
+        el.insertBefore(banner, node);
+      }
       // 装法的温漂只在成品里生效
       c.session.setSensorOffset(a.effects.sensorOffset ?? 0);
       room = c.store.get().env.temp;
       air = room;
-      if (!events.length && c.store.get().run) event('▶', `开机 · 运行 #${c.store.get().run}${a.effects.sensorOffset ? `，传感器 +${a.effects.sensorOffset} ℃` : ''}`);
+      if (!events.length && c.store.get().run) event('▶', `${preview ? '参考成品 · ' : ''}开机 · 运行 #${c.store.get().run}${a.effects.sensorOffset ? `，传感器 +${a.effects.sensorOffset} ℃` : ''}`);
       scene3d?.start();
       if (svgProduct) loopSvg();
       timer = window.setInterval(() => {
@@ -395,14 +444,14 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
         updateLive();
         syncVerdict();
       }, 100);
-      c.shell.setNext('下一步', null, '这是最后一步');
+      syncNext();
       renderTree();
       renderProps();
       syncToolbar();
       syncVerdict();
       c.shell.timeline.setSteps(events);
       c.shell.timeline.setCurrent(events.length - 1);
-      unsubs = [c.store.subscribe(() => renderTree(), ['assembly'])];
+      unsubs = [c.store.subscribe(() => renderTree(), ['assembly']), c.store.subscribe(() => preview && (syncNext(), renderProps()), ['checks'])];
     },
     unmount() {
       unsubs.forEach((u) => u());

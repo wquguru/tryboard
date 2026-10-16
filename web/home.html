@@ -34,10 +34,9 @@
           <div class="wk-body">
             <div class="wk-h"><h2>桌面气象站</h2><span class="mono muted">ESP32-S3</span></div>
             <p class="wk-d">屏幕显示温度、湿度、气压，舵机表盘指着温度，彩灯按冷热变色。</p>
-            <div class="kv col"><span class="k">要买</span><span class="v txt">ESP32-S3 开发板、BME280 模块、0.96″ OLED、SG90 舵机、面包板和杜邦线</span></div>
+            <div class="kv col"><span class="k">要买</span><span class="v txt" data-buy>—</span></div>
             <div class="kv"><span class="k">检查点</span><span class="v mono" data-cps>6 个</span></div>
-            <!-- TODO(P0-catalog)：参考价改从 web/src/catalog 的采购数据算，带核价日期 -->
-            <div class="kv"><span class="k">参考价</span><span class="v mono">¥89–144 <span class="muted">估算</span></span></div>
+            <div class="kv"><span class="k">参考价</span><span class="v mono" data-price>—</span></div>
             <div class="wk-act"><button type="button" class="btn" data-run="weather">看真实固件跑</button><a class="btn primary" data-go href="./app.html?work=weather#shop">做这个</a></div>
           </div>
         </article>
@@ -47,10 +46,9 @@
           <div class="wk-body">
             <div class="wk-h"><h2>会转身的小黄</h2><span class="mono muted">ESP32-S3</span></div>
             <p class="wk-d">站在舵机转台上，圆屏当脸；按一下按键它转过来看你。</p>
-            <div class="kv col"><span class="k">要买</span><span class="v txt">ESP32-S3 开发板、1.28″ 圆屏（GC9A01）、SG90 舵机、转台外壳</span></div>
+            <div class="kv col"><span class="k">要买</span><span class="v txt" data-buy>—</span></div>
             <div class="kv"><span class="k">检查点</span><span class="v mono" data-cps>4 个</span></div>
-            <!-- TODO(P0-catalog)：参考价改从 web/src/catalog 的采购数据算，带核价日期 -->
-            <div class="kv"><span class="k">参考价</span><span class="v mono">¥95–150 <span class="muted">估算</span></span></div>
+            <div class="kv"><span class="k">参考价</span><span class="v mono" data-price>—</span></div>
             <div class="wk-act"><button type="button" class="btn" data-run="spin">看真实固件跑</button><a class="btn primary" data-go href="./app.html?work=spin#shop">做这个</a></div>
           </div>
         </article>
@@ -60,15 +58,14 @@
           <div class="wk-body">
             <div class="wk-h"><h2>透镜里的小人</h2><span class="mono muted">ESP32-S3</span></div>
             <p class="wk-d">圆屏上的表情被凸透镜罩放大，看起来像立在罩子里；按键换表情。</p>
-            <div class="kv col"><span class="k">要买</span><span class="v txt">ESP32-S3 开发板、1.28″ 圆屏（GC9A01）、凸透镜罩和底座</span></div>
+            <div class="kv col"><span class="k">要买</span><span class="v txt" data-buy>—</span></div>
             <div class="kv"><span class="k">检查点</span><span class="v mono" data-cps>3 个</span></div>
-            <!-- TODO(P0-catalog)：参考价改从 web/src/catalog 的采购数据算，带核价日期 -->
-            <div class="kv"><span class="k">参考价</span><span class="v mono">¥70–110 <span class="muted">估算</span></span></div>
+            <div class="kv"><span class="k">参考价</span><span class="v mono" data-price>—</span></div>
             <div class="wk-act"><button type="button" class="btn" data-run="lens">看真实固件跑</button><a class="btn primary" data-go href="./app.html?work=lens#shop">做这个</a></div>
           </div>
         </article>
       </section>
-      <p class="fine">参考价是零件常见电商价区间的估算，不含运费，以购买时为准；之后换成人工核价（带日期和来源）。</p>
+      <p class="fine" id="priceNote">参考价与采购页同一口径：模版必选件 + 默认勾选的建议件，按元件库的常见电商价区间合计（估算，未逐条人工核价），不含运费，以购买时为准。</p>
 
       <section class="alt" aria-label="其他入口">
         <a class="alt-card" id="ownIdea" href="./advisor.html">
