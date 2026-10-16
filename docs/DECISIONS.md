@@ -409,3 +409,11 @@
 - 决定：S3 Wi-Fi 帧计数进供电网络（`Machine::wifi_frames` 以前对 S3 恒为 0），发射电流用已有的 S3 参数 340 mA（数据手册 802.11b 1 Mbps 21 dBm）
 - 决定：S3 验收固件 `firmware/s3-wifi-{init,scan,connect,http,wpa2}` 直接编 C3 版的 main.c（CMake SRCS 指过去），sdkconfig 只有目标与 16MB flash，默认双核；accept 用例与 C3 版期望文本逐条相同。没做 s3-wifi-wpa2-bad（与 C3 共享同一 AP 逻辑，错口令路径已由 C3 用例覆盖）
 - CLI：`--wifi-log` 改为机器级（C3 / S3 都能打空中日志）；新增 `--unimpl N` 列前 N 个未建模寄存器（默认 12）
+## 2026-10-16 · P2-07 LVGL 基准与 S3 内核提速
+- 组件：`lvgl/lvgl` 9.2.2 + `espressif/esp_lvgl_port` 2.6.0（esp_lvgl_port 2.x 支持 LVGL 8 / 9，选 v9 稳定版）。许可证核对后写进 LICENSING（MIT / Apache-2.0，非乐鑫修改版 MIT）。替代：LVGL 8.4（API 旧、新项目少用）；自己写 LVGL 移植层（esp_lvgl_port 是乐鑫推荐的标准写法，用户固件大多就是这样）
+- 基准界面故意选"整屏都在动"的压力场景（绕圈弧线让每帧失效区几乎覆盖整屏），帧数用 `LV_EVENT_RENDER_READY` 计、按 esp_timer 的模拟时间每秒打印；CPU 保持 IDF 默认 160MHz（模拟器 CPU 时钟固定 160MHz）。替代：局部刷新的界面（帧率和速度都会好看很多，但掩盖最坏情况）
+- 真机参考量级：240×240×16 位一帧 921600 位，SPI 40MHz 纯传输 23ms → 上限约 43 FPS；LVGL 渲染与 DMA 发送重叠时整屏刷新常见 20–30 FPS（LVGL 官方 ESP32 文章的传输 / 渲染时间算法）。模拟得 33–34 FPS，同量级；模拟 CPI=1 偏快
+- 提速只做"结果逐字节不变"的改动（验收用例 stdout / stderr / 屏幕 ppm 与关卡指纹前后对拍）：CCOMPARE 下次触发时刻缓存（tick_timers 从每条指令三次取模比较变成一次比较）、窗口溢出检查先看 WOE/EXCM 和"上方 3 个四元组是否空"再算 max_quad、取指 64KB 页缓存、SRAM 读写内联、`Cpu::run_batch` 批量执行。主要收益来自前三项；数据读页缓存（flash 常量）实测 <1%，没留
+- 未做：预解码 / 指令块缓存（宿主每条模拟指令仍约 190 条指令，大头是逐条解释的固定开销；要再快 2× 需要块缓存或 JIT，工作量大、风险高，留给以后）。改 CPI 模型会改变所有时序与指纹，不在本项做
+- 结论：LVGL 能跑、动画与帧率在模拟时间里正确；整屏满负荷动画在网页上只有约 0.2–0.4× 实时（未达 0.5× 目标），在 STATUS 标"速度不够实时"；局部刷新 / 静态界面不受影响
+

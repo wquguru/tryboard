@@ -804,6 +804,28 @@
   ]
  },
  {
+  "id": "s3-lvgl",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--spi",
+   "gc9a01"
+  ],
+  "expect": [
+   "LVGL 9.2.2 up",
+   "TRYBOARD_OK s3-lvgl"
+  ],
+  "numeric": [
+   {
+    "name": "LVGL 帧率（模拟时间）",
+    "regex": "FPS (\\d+) px",
+    "value": 32,
+    "tol": 12
+   }
+  ],
+  "lcd_min_pixels": 30000
+ },
+ {
   "id": "lens",
   "chip": "esp32s3",
   "seconds": 3,

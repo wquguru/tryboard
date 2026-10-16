@@ -1,6 +1,6 @@
 # 覆盖矩阵
 
-最后更新：2026-10-16（`tools/accept.sh --no-qemu` 全部通过：固件 40/40（含 s3-brownout-usb / -ext），ngspice 对照 10/10，关卡参考固件 8/8（含 07-spin / 07-lens），网页冒烟 15 个示例 + 关卡 / 装配 / 首页 22 项）
+最后更新：2026-10-16（P2-07，`tools/accept.sh --no-qemu` 全部通过：固件 46/46（含 s3-lvgl），ngspice 对照 10/10，关卡参考固件 12 个指纹与优化前一致，网页冒烟 16 个示例（含 s3-lvgl）+ levels / replay / elec / interact / traceio 全过）
 
 ## ESP32-C3
 | 模块 | 状态 | 验收 | 备注 |
@@ -74,6 +74,7 @@
 | GP-SPI2 主机 | ✅ | lens / spin：esp_lcd + esp_lcd_gc9a01 标准写法（spi_bus_initialize SPI_DMA_CH_AUTO、轮询发命令、队列发像素），40MHz，整帧 115200 字节拆 6 次 DMA | 命令 / 地址 / 哑周期 / MOSI 各阶段、W0..W15 与 DMA 两条数据通路、TRANS_DONE 中断、按 SPI 时钟计时；不模拟逐位时序与 FIFO；MISO 恒读全 1；双 / 四 / 八线模式按单线计时；从机模式未做 |
 | GDMA（5 通道） | 🟡 | 同上：描述符链（每次传输 5 个描述符）、owner 回写、OUT_EOF | 单元测试覆盖链表遍历 / 回写 / 中断；RX 方向只有"填描述符 + SUC_EOF"，未经固件验收；不模拟突发、FIFO、优先级、内存到内存 |
 | 虚拟器件 GC9A01 圆屏 | ✅ | lens：四种表情逐一截图核对（眼睛 / 高光 / 腮红 / 心形 / ^ ^ / 困了），开心表情非黑 3208 像素；spin：小黄脸非黑 45244 像素 | 按"常黑 IPS + BGR 子像素"建模（未经真机标定）；厂商初始化命令 42 条只计数；TE、滚动、部分显示、读显存未做 |
+| LVGL 9.2（P2-07） | 🟡 | s3-lvgl：LVGL 9.2.2 + esp_lvgl_port 2.6.0，刻度盘 + 指针 + 数值标签 + 绕圈动画弧线，刷新周期 16ms、双 40 行 DMA 缓冲；几乎整屏重画（每帧约 57600 像素），**模拟时间里 33–34 FPS**（真机估计 20–30，见 Reviews/ab/P2-07.md）；accept：3 秒、FPS 20–44、非黑 ≥ 30000 像素；网页冒烟 + agent-browser 两张截图在动、无 console error | **速度不够实时**：这类 CPU 满负荷的整屏动画，原生 CLI 约 0.35–0.6×、网页 worker 约 0.2–0.4× 实时（机器负载 12–17 时测，目标 0.5× 未达），动画看上去是慢放，但帧率、串口、画面按模拟时间算都对；局部刷新 / 静态界面（如 spin、lens）CPU 有空闲，可快进，网页 > 1×。CPU 按 CPI=1 计时，真机 LX7 的 cache 未命中与流水线停顿未建模，模拟帧率偏乐观（未经真机标定） |
 | 装配成品 lens（透镜小人） | ✅ | 启动 MOOD 0 normal、每 3 秒眨眼（BLINK n）、BOOT 切 MOOD 1 happy → 2 love → 3 sleepy → 0 normal；检查点 lens-1（lens-blink）、lens-2（lens-mood）、07-lens 参考固件全过 | 场景层验收 |
 | 装配成品 spin（会转身的小黄） | ✅ | GPIO4 50Hz 占空比 0.042..0.108（脉宽 0.833–2.167ms）、SPIN ±60 交替、眼珠随转向重画（EYE R / EYE L）、BOOT 后 LOOK FRONT（1.5ms）且眼珠回正（青色重心 119.7）；检查点 spin-1（spin-face）、spin-2（spin-turn）、07-spin 参考固件全过 | 舵机机械响应不建模 |
 | Wi-Fi STA（开放 / WPA2-PSK） | ✅ | s3-wifi-init / scan / connect / http / wpa2（与 C3 版同源码、同判定，双核）：扫描 4 个 AP、关联、DHCP 192.168.4.100、mDNS / DNS、两次 HTTP GET；WPA2 四次握手（SHA / AES 加速器）+ CCMP 数据帧；网页 s3-wifi-http 跑通（webtest + agent-browser） | 与 C3 共用 MAC 模型（tryboard-soc，`WifiLayout::S3`）；S3 另需 WDEV_RND_REG（0x6003507C）与 TSENS READY；供电按 S3 发射 340 mA 计入。QEMU 的 esp32s3 没有 Wi-Fi，无法对照；未经真机标定；没做 wifi-wpa2-bad 的 S3 版 |
@@ -95,6 +96,7 @@
 |---|---|
 | wasm 内核 | ✅ 约 230KB（C3 + S3 两颗芯片），无 import；按镜像头自动选芯片（`tryboard-machine`） |
 | 1× 实时 / 加速 | ✅ blink、hello 在 Chrome 无头模式下 1.00× |
+| 内核速度（P2-07） | 🟡 S3 解释器：取指页缓存、CCOMPARE 下次触发时刻缓存、窗口溢出检查快路径、SRAM 读写内联快路径、批量执行（`Cpu::run_batch`）；LVGL 满负荷时宿主指令 / 模拟指令从约 280 降到约 190，原生 1.5–1.7×、wasm 1.4–1.7×；所有验收用例输出与关卡指纹逐字节不变。`node tools/bench_wasm.mjs <flash.bin> [秒] [--lcd]` 测 wasm 实时倍率 |
 | 3D 工作台 | ✅ 面包板 + 开发板 + LED 随 GPIO 亮灭；板载 WS2812（GPIO8）随解码颜色发光；BOOT / RST 可点 |
 | 3D 工作台 | ✅ 面包板 + 开发板 + LED 随 GPIO 亮灭；BOOT / RST 可点；示例按 `scene.parts` 声明元件与接线（LED / SSD1306 / BME280），可指定机位 |
 | ESP32-S3 固件 | ✅ wasm 按镜像芯片 ID 选 C3 / S3，按芯片下载 ROM；S3 的 BOOT 键为 GPIO0（3D 板子仍是 C3 外形） |
