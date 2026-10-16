@@ -49,8 +49,8 @@
 | P1-06 | ⌘K 命令框（搜零件 / 引脚 / 命令） | 四条示例命令可执行 | ☑ 2026-10-16（室温 N ℃、换外接 5 V 并重跑、回到第 n 次运行、量 3V3（提示 P1-04 中）；Reviews/ab/P1-06.md） |
 | P1-07 | 3D 装配：零件拖到槽位吸附（three-mesh-bvh）、炸开 / 剖面 / 尺子 | 拖拽用例 | ☐ |
 | P1-08 | 参数化外壳（Manifold wasm）+ STL / 3MF 导出 | 导出文件能被 three.js 读回 | ☐ |
-| P1-09 | 外部模型管线（Adafruit / M5Stack MIT、KiCad CC BY-SA）STEP → glTF，SOURCES.md 署名 | 授权页出现署名 | ☐ |
-| P1-10 | 透镜折射材质（标"示意"）；小黄、透镜小人 3D 成品 | 截图 | ☐ |
+| P1-09 | 外部模型管线（Adafruit / M5Stack MIT、KiCad CC BY-SA）STEP → glTF，SOURCES.md 署名 | 授权页出现署名 | ☑ 2026-10-16：tools/models（fetch + convert：occt-import-js → glTF-Transform，构建期）；3 个模型（KiCad USB-C、KiCad Φ12 蜂鸣器、Adafruit 9 g 舵机）进 assets/models，共 163 KB；实验台工具条「外部模型」可选替换，默认程序生成；licenses.html 出现署名与下载（Reviews/ab/P1-09.md）。M5Stack 未用 |
+| P1-10 | 透镜折射材质（标"示意"）；小黄、透镜小人 3D 成品 | 截图 | ☑ 2026-10-16：app/lcd3d.ts，圆屏帧缓冲作纹理、小黄随 GPIO4 转身、BOOT 回正面 / 换表情、拖动旋转；透镜 transmission / ior 折射标"示意"；SVG 留作 WebGL 兜底（Reviews/ab/P1-10.md） |
 | P1-11 | 小黄、透镜小人拆检查点（各 2–3 个）走完整条线 | 参考固件全过 | ☑ 2026-10-16：小黄 spin-1 画脸 → spin-2 转身 → 07-spin 合体；透镜 lens-1 眼睛 + 眨眼 → lens-2 按键换表情 → 07-lens 合体。新判定 lcd_colors / serial_count，参考固件 CLI 与网页全过、指纹一致；只按任务书自测 6 关 4 关一次过（Reviews/ab/P1-11.md） |
 | P1-12 | 开发板库（合宙、XIAO、M5、微雪圆屏）+ 版本差异规则 | 规则用例 | ☑ 2026-10-16：开发板 9 块（新增 AtomS3、微雪 LCD-1.28 两版），规则 R28–R32 + R24 改分级，每条正反用例；采购页换板联动（Reviews/ab/P1-12.md，待核字段列在里面） |
 | P1-13 | C3 接 SPI2 / GDMA（圆屏） | 固件验收 | ☑ 2026-10-16：c3-lcd 验收通过，CLI `--spi gc9a01` 与网页 3D 台面在 C3 板上有画面；crypto_hw 链表头改读 GDMA 模型（Reviews/ab/P1-13.md） |
