@@ -141,6 +141,9 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/levels.mjs 2>&1 | grep '^\[levels\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q PASS || fail=1
+  r=$(node tools/webtest/replay.mjs 2>&1 | grep '^\[replay\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q PASS || fail=1
   r=$(node tools/webtest/editor.mjs 2>&1 | tail -1)
   echo "- 元件编辑器（上传固件 + 加 BME280 / LED）：$r" >> $REPORT
   echo "$r" | grep -q PASS || fail=1

@@ -457,7 +457,7 @@
   "id": "weather",
   "chip": "esp32s3",
   "title": "桌面气象站：温度 + 屏幕 + 表盘",
-  "about": "ESP32-S3 装配成品。BME280 与 SSD1306 共用一条 I2C（SDA=GPIO8、SCL=GPIO9），每 500ms 读一次：OLED 大字显示温度、下面一行湿度和气压；GPIO4 的舵机当指针表盘（0–40℃ → 0.5–2.5ms）；板载 RGB（GPIO48）低于 18℃ 蓝、低于 28℃ 绿、否则红。按 BOOT 键（GPIO0）切换 ℃ / ℉。拖动环境滑块看三样一起变。",
+  "about": "ESP32-S3 装配成品。BME280 与 SSD1306 共用一条 I2C（SDA=GPIO8、SCL=GPIO9），每 500ms 读一次：OLED 大字显示温度、下面一行湿度和气压；GPIO4 的舵机当指针表盘（0–40℃ → 0.5–2.5ms）；板载 RGB（GPIO48）低于 18℃ 蓝、低于 28℃ 绿、否则红。按 BOOT 键（GPIO0）切换 ℃ / ℉。温度 ≥ 30℃ 时 GPIO5 的无源蜂鸣器报警（2.7kHz，响 200ms 停 200ms，降到 29℃ 以下停；点工具栏「声音」才出声）。拖动环境滑块看三样一起变。",
   "tags": [
    "✓ 仿真验证",
    "I2C",
@@ -468,7 +468,8 @@
    "GPIO 中断"
   ],
   "pins": {
-   "servo": 4
+   "servo": 4,
+   "buzzer": 5
   },
   "scene": {
    "parts": [
@@ -487,6 +488,10 @@
     {
      "type": "servo",
      "pin": 4
+    },
+    {
+     "type": "buzzer",
+     "pin": 5
     }
    ]
   },

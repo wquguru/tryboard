@@ -1,6 +1,7 @@
 // 首页 / 关卡页用的实时模拟：起一个 worker.ts，跑一份固件，把每帧状态交给视图。
 import { fetchBuf, imageChip, loadRom, loadWasm } from './assets';
-import type { Env, FromWorker, ToWorker } from './worker';
+import type { Env, FromWorker, PwmEvent, ToWorker } from './worker';
+import type { InputLog } from './inputlog';
 import { emptyFrame, type LiveFrame } from './views/common';
 
 export interface LiveOptions {
@@ -11,6 +12,8 @@ export interface LiveOptions {
   lcd?: boolean;
   onConsole?(text: string): void;
   onFrame?(f: LiveFrame, simSeconds: number): void;
+  /** watchPwm 引脚上的 PWM 变化（带模拟时刻），接 audio.ts 的 BuzzerAudio.push */
+  onPwm?(events: PwmEvent[] | undefined, simSeconds: number): void;
 }
 
 export class LiveSim {
@@ -34,6 +37,9 @@ export class LiveSim {
         this.frame.running = m.running;
         if (m.leds) this.frame.rgb = m.leds[0] ?? null;
         o.onFrame?.(this.frame, m.simSeconds);
+        o.onPwm?.(m.pwmEvents, m.simSeconds);
+      } else if (m.type === 'inputlog') {
+        for (const r of this.logWaiters.splice(0)) r(m.log);
       } else if (m.type === 'lcd') {
         this.frame.lcd = m.pixels;
         o.onFrame?.(this.frame, NaN);
@@ -87,5 +93,17 @@ export class LiveSim {
   }
   resume() {
     this.send({ type: 'run' });
+  }
+  private logWaiters: ((l: InputLog) => void)[] = [];
+  /** 本次上电以来的输入日志（模拟时间戳，见 inputlog.ts；toScript 导出给 CLI --inputs） */
+  inputLog(): Promise<InputLog> {
+    return new Promise((r) => {
+      this.logWaiters.push(r);
+      this.send({ type: 'getInputLog' });
+    });
+  }
+  /** 每个时间片采样这些引脚的 PWM（蜂鸣器），变化经 onPwm 回调 */
+  watchPwm(pins: number[]) {
+    this.send({ type: 'watchPwm', pins });
   }
 }

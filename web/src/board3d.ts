@@ -75,7 +75,9 @@ export type PartSpec =
   /** SG90 舵机：信号接 pin，舵盘角度按 PWM 脉宽（0.5–2.5ms → 0–180°） */
   | { type: 'servo'; pin: number; freq?: number; label?: string }
   /** 10kΩ 电位器：两端接 3V3 / GND，滑片接 pin（ADC），旋钮可拖动 */
-  | { type: 'pot'; pin: number; label?: string };
+  | { type: 'pot'; pin: number; label?: string }
+  /** 无源蜂鸣器：接 pin，LEDC 方波驱动；网页声音见 audio.ts（3D 外观另行实现，这里先不画） */
+  | { type: 'buzzer'; pin: number; label?: string };
 
 export interface SceneSpec {
   parts: PartSpec[];
@@ -104,6 +106,8 @@ export interface Bench {
   /** 板载 WS2812（C3 GPIO8 / S3 GPIO48）颜色，0–255 */
   setRgb(rgb: number[]): void;
   onButton(cb: (name: 'BOOT' | 'RST', down: boolean) => void): void;
+  /** 按键在页面上的位置（clientX/Y）：给自动化测试用真实鼠标去按 3D 里的键；看不见时 null */
+  buttonScreenPos(name: 'BOOT' | 'RST'): [number, number] | null;
   /** 原生 USB：固件枚举出设备后接上虚拟电脑（null 拔掉） */
   setUsb(v: UsbView | null): void;
   dispose(): void;
@@ -1074,6 +1078,14 @@ export function createBench(container: HTMLElement): Bench {
     },
     onButton(cb) {
       buttonCb = cb;
+    },
+    buttonScreenPos(name) {
+      const b = board.buttons.find((m) => m.name === name);
+      if (!b) return null;
+      const v = b.getWorldPosition(new THREE.Vector3()).project(camera);
+      if (Math.abs(v.x) > 1 || Math.abs(v.y) > 1) return null;
+      const r = renderer.domElement.getBoundingClientRect();
+      return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height];
     },
     setUsb(v) {
       if (!v) {

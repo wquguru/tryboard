@@ -611,6 +611,32 @@
   "oled_min_pixels": 1000
  },
  {
+  "id": "weather-alarm",
+  "fw": "weather",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c,bme280@0x76",
+   "--env",
+   "35,45,101325"
+  ],
+  "script": "2.0:env=25,45,101325",
+  "expect": [
+   "ALARM ON",
+   "LED=red PWM=2250us",
+   "ALARM OFF",
+   "LED=green",
+   "TRYBOARD_OK weather"
+  ],
+  "pwm": {
+   "pin": 5,
+   "freq": 2700,
+   "min": 0.0,
+   "max": 0.5
+  }
+ },
+ {
   "id": "s3-button",
   "chip": "esp32s3",
   "seconds": 1.5,

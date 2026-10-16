@@ -1,6 +1,8 @@
 // 装配成品：桌面气象站（ESP32-S3）。
 // I2C SDA=GPIO8 SCL=GPIO9 上挂 SSD1306@0x3C 与 BME280@0x76；舵机指针表盘在 GPIO4（LEDC 50Hz，0–40℃ → 0.5–2.5ms）；
 // 板载 WS2812 在 GPIO48（RMT）按温度显示蓝 / 绿 / 红；BOOT 键 GPIO0 切换 ℃ / ℉。
+// 无源蜂鸣器在 GPIO5（LEDC 通道 1 / 定时器 1，2700Hz 50%）：≥ 30℃ 报警，200ms 响 / 200ms 停，降到 29℃ 以下停（1℃ 回差防抖）；
+// 状态变化时串口打印 ALARM ON / ALARM OFF。
 // 串口每次读数一行（温度始终用摄氏，便于解析）：T=23.50 C H=45.0 % P=1013.25 hPa LED=green PWM=1675us
 #include <stdio.h>
 #include <inttypes.h>
@@ -20,6 +22,10 @@
 #define SERVO_GPIO 4
 #define LED_GPIO 48
 #define BTN_GPIO 0
+#define BUZZER_GPIO 5
+#define BUZZER_HZ 2700
+#define ALARM_ON_T 3000
+#define ALARM_OFF_T 2900
 #define OLED_ADDR 0x3C
 #define BME_ADDR 0x76
 #define PERIOD_MS 500
@@ -80,6 +86,41 @@ static void servo_set(uint32_t us)
 {
     ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, us * (1 << 14) / 20000);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+}
+
+// 蜂鸣器要到第一次报警才配置：不报警时与没有蜂鸣器的版本行为完全相同（第 06 关的运行指纹不变）
+static volatile int alarm_on;
+
+static void buzzer_duty(uint32_t d)
+{
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, d);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
+}
+
+static void alarm_task(void *arg)
+{
+    ledc_timer_config_t tc = {
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .duty_resolution = LEDC_TIMER_10_BIT,
+        .timer_num = LEDC_TIMER_1,
+        .freq_hz = BUZZER_HZ,
+        .clk_cfg = LEDC_AUTO_CLK,
+    };
+    ESP_ERROR_CHECK(ledc_timer_config(&tc));
+    ledc_channel_config_t ch = {
+        .gpio_num = BUZZER_GPIO,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .channel = LEDC_CHANNEL_1,
+        .timer_sel = LEDC_TIMER_1,
+        .duty = 0,
+    };
+    ESP_ERROR_CHECK(ledc_channel_config(&ch));
+    // 无源蜂鸣器要方波才响：50% 占空比最响，占空比 0 就是停
+    for (int beep = 1;; beep = !beep) {
+        buzzer_duty(alarm_on && beep ? 512 : 0);
+        if (!alarm_on) beep = 0;
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
 }
 
 // 度符号：字库里没有，画一个 3x3 小圈
@@ -209,6 +250,17 @@ void app_main(void)
                t < 0 && t > -100 ? "-" : "", t / 100, (t < 0 ? -t : t) % 100, h10 / 10, h10 % 10, p / 25600,
                (p % 25600) * 100 / 25600, name, us);
         if (n == 0) printf("TRYBOARD_OK weather\n");
+
+        int want = alarm_on ? t >= ALARM_OFF_T : t >= ALARM_ON_T;
+        if (want != alarm_on) {
+            static int started;
+            alarm_on = want;
+            printf("ALARM %s\n", want ? "ON" : "OFF");
+            if (!started) {
+                started = 1;
+                xTaskCreate(alarm_task, "alarm", 3072, NULL, 5, NULL);
+            }
+        }
 
         // 等到下一次读数，期间响应 BOOT 键（50ms 消抖）
         TickType_t until = xTaskGetTickCount() + pdMS_TO_TICKS(PERIOD_MS);

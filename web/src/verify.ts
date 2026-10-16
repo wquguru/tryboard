@@ -2,6 +2,7 @@
 import { bootOptions, evaluate, fingerprint, type CheckResult, type Level } from './checks';
 import { imageChip, loadRom, loadWasm } from './assets';
 import type { VerifyJob, VerifyMsg } from './verify-worker';
+import { toScriptInline, type InputLog } from './inputlog';
 
 export interface VerifyOutcome {
   ok: boolean;
@@ -30,4 +31,22 @@ export async function verifyLevel(l: Level, flash: ArrayBuffer, onProgress?: (si
   const results = evaluate(l, msg.stdout, msg.report);
   if (msg.error) results.push({ ok: false, text: `模拟器停止：${msg.error}` });
   return { ok: results.every((r) => r.ok), results, fingerprint: fingerprint(msg.stdout, msg.report), stdout: msg.stdout, sim: msg.sim, error: msg.error };
+}
+
+/**
+ * 按网页导出的输入日志重放（P0-19）：与 `tryboard run <fw> --inputs <日志> --seconds S [--pwm-log P] --gpio-log --ws2812-log` 相同，
+ * 始终 1ms 一片、输入在同一个时间片开头施加，所以串口输出和观察记录（指纹）与命令行逐字节相同。
+ */
+export async function replayLog(flash: ArrayBuffer, log: InputLog, seconds: number, pwmPin?: number) {
+  const [wasm, rom] = await Promise.all([loadWasm(), loadRom(imageChip(flash))]);
+  const job: VerifyJob = { wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), seconds, i2c: log.i2c, script: toScriptInline(log), pwmPin, lcd: log.lcd, fixedSlice: true };
+  const w = new Worker(new URL('./verify-worker.ts', import.meta.url), { type: 'module' });
+  const msg = await new Promise<Extract<VerifyMsg, { type: 'done' }>>((resolve) => {
+    w.onmessage = (ev: MessageEvent<VerifyMsg>) => {
+      if (ev.data.type === 'done') resolve(ev.data);
+    };
+    w.postMessage(job, [job.wasm, job.rom, job.flash]);
+  });
+  w.terminate();
+  return { stdout: msg.stdout, report: msg.report, fingerprint: fingerprint(msg.stdout, msg.report), sim: msg.sim, error: msg.error };
 }

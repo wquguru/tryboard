@@ -40,6 +40,8 @@ export interface VerifyJob {
   script?: string;
   pwmPin?: number;
   lcd?: boolean;
+  /** 始终 1ms 一片（= CLI 的 --inputs）：重放网页实时运行导出的输入日志时用 */
+  fixedSlice?: boolean;
 }
 
 export type VerifyMsg =
@@ -91,6 +93,10 @@ self.onmessage = async (ev: MessageEvent<VerifyJob>) => {
       let m: RegExpMatchArray | null;
       if ((m = act.match(/^gpio(\d+)=(.*)$/))) e.tb_gpio_drive(Number(m[1]) || 0, m[2] === 'z' ? -1 : m[2] === '1' ? 1 : 0);
       else if ((m = act.match(/^mv(\d+)=(.*)$/))) e.tb_analog_set(Number(m[1]), Number(m[2]));
+      else if (act.startsWith('env=')) {
+        const v = act.slice(4).split(',').map(Number);
+        if (v.length === 3 && v.every((x) => !Number.isNaN(x))) e.tb_env_set(v[0], v[1], v[2]);
+      }
       else if (act.startsWith('uart=')) bytesIn(e, new TextEncoder().encode(act.slice(5).replaceAll('\\n', '\n')), (p, n) => e.tb_uart_push(p, n));
       else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));
     }
@@ -102,7 +108,7 @@ self.onmessage = async (ev: MessageEvent<VerifyJob>) => {
         if (!l || Math.abs(f32(l[0] - d)) > f32(0.004) || Math.abs(f32(l[1] - f)) > f32(0.5)) trace.push([d, f, now]);
       }
     }
-    const slice = si >= script.length && j.pwmPin === undefined ? CPU_HZ / 100 : CPU_HZ / 1000;
+    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice ? CPU_HZ / 100 : CPU_HZ / 1000;
     const before = e.tb_cycles();
     const stop = e.tb_run(Math.min(slice, total - done));
     done += e.tb_cycles() - before;

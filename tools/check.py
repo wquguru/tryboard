@@ -7,9 +7,12 @@
   tools/check.py <flash.bin> --level 04      验收你的固件（第 07 关用 --level 07-spin / 07-lens）
   tools/check.py --ref --level 04            验收参考固件（firmware/build/<ref>/flash.bin）
   tools/check.py --ref --all                 所有关卡的参考固件
+  tools/check.py <flash.bin> --level 06 --inputs log.txt
+                                             用网页导出的输入日志（实验台「导出输入」，或 InputLog JSON）
+                                             代替关卡自带的输入脚本，与 `tryboard run --inputs` 同样逐周期重放
 退出码：全部通过 0，否则 1。
 """
-import json, os, re, subprocess, sys
+import json, math, os, re, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLI = os.path.join(ROOT, 'core/target/release/tryboard')
@@ -133,9 +136,39 @@ def expand(levels):
     return out
 
 
-def run(fw: str, t: dict):
+def inputs_file(path: str) -> str:
+    """--inputs 接受两种形式：CLI 脚本文本（原样用），或网页的 InputLog JSON（按 web/src/inputlog.ts 的 toScript 规则转成脚本）"""
+    text = open(path, encoding='utf-8').read()
+    if not text.lstrip().startswith('{'):
+        return path
+    log = json.loads(text)
+    esc = lambda x: x.replace('\n', '\\n')
+    # 与 JS 的数字转字符串一致：整数不带小数点
+    num = lambda v: str(int(v)) if float(v).is_integer() else repr(float(v))
+    lines = ['# 由 check.py 从 InputLog JSON 转出']
+    for e in log['events']:
+        k = e['kind']
+        act = {
+            'gpio': lambda: f"gpio{e['pin']}={'z' if e['level'] < 0 else 1 if e['level'] else 0}",
+            'env': lambda: f"env={num(e['temp'])},{num(e['humidity'])},{num(e['pressure'])}",
+            'pot': lambda: f"mv{e['pin']}={num(e['mv'])}",
+            'uart': lambda: f"uart={esc(e['text'])}",
+            'usbcdc': lambda: f"usbcdc={esc(e['text'])}",
+        }.get(k)
+        if act:
+            # 与网页相同：秒、向下取整到微秒
+            lines.append(f"{math.floor(e['tMs'] * 1000) / 1e6:.6f}:{act()}")
+    out = os.path.join(ROOT, 'Reviews', os.path.basename(path) + '.txt')
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    open(out, 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
+    return out
+
+
+def run(fw: str, t: dict, inputs: str = ''):
     cmd = [CLI, 'run', fw, '--seconds', str(t['seconds']), '--gpio-log', '--ws2812-log'] + t.get('args', [])
-    if t.get('script'):
+    if inputs:
+        cmd += ['--inputs', inputs_file(inputs)]
+    elif t.get('script'):
         cmd += ['--script', t['script']]
     if t.get('pwm'):
         cmd += ['--pwm-log', str(t['pwm']['pin'])]
@@ -163,7 +196,8 @@ def main():
         pick = [l for l in levels if l['id'] == (lv.zfill(2) if lv.isdigit() else lv)]
         if not pick:
             sys.exit(f'没有第 {lv} 关（或这一关没有命令行验收）')
-    skip = {a.index('--level') + 1} if '--level' in a else set()
+    skip = {a.index(k) + 1 for k in ('--level', '--inputs') if k in a}
+    inputs = a[a.index('--inputs') + 1] if '--inputs' in a else ''
     pos = [x for i, x in enumerate(a) if not x.startswith('--') and i not in skip]
     if not ref and not pos:
         sys.exit(__doc__)
@@ -175,7 +209,7 @@ def main():
             print(f"第 {t['id']} 关 {t['title']}：找不到 {fw}")
             bad += 1
             continue
-        res, fp = run(fw, t)
+        res, fp = run(fw, t, inputs)
         ok = all(r[0] for r in res)
         bad += not ok
         print(f"第 {t['id']} 关 {t['title']}：{'通过' if ok else '未通过'}  指纹 {fp}")
