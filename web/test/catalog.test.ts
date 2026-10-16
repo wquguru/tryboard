@@ -164,8 +164,8 @@ test('schema 校验：开发板缺来源 URL / 板载占用写错 / 屏引脚对
 });
 
 // ───────── 采购模版 ─────────
-test('模版：七个、必选件都在库里，数量为正', () => {
-  assert.deepEqual(PROCURE_TEMPLATES.map((t) => t.id), ['weather', 'spin', 'lens', 'lamp', 'ruler', 'tilt', 'blank']);
+test('模版：八个、必选件都在库里，数量为正', () => {
+  assert.deepEqual(PROCURE_TEMPLATES.map((t) => t.id), ['weather', 'spin', 'lens', 'lamp', 'ruler', 'tilt', 'usbkey', 'blank']);
   for (const t of PROCURE_TEMPLATES) {
     assert.ok(PART_BY_ID[t.board]?.kind === 'board', t.id);
     for (const l of [...t.required, ...t.suggested]) {
@@ -214,7 +214,7 @@ test('模版：去掉 BME280 出现阻断提示（P0-07 验收的规则部分）
 });
 
 test('模版：各作品默认清单 + 接线无阻断、无警告', () => {
-  for (const id of ['weather', 'spin', 'lens', 'lamp', 'ruler', 'tilt', 'blank']) assert.deepEqual(problems(templateInput(id)), [], id);
+  for (const id of ['weather', 'spin', 'lens', 'usbkey', 'lamp', 'ruler', 'tilt', 'blank']) assert.deepEqual(problems(templateInput(id)), [], id);
 });
 
 test('模版：台灯去掉外接电源 → 只靠 USB 的警告（灯条满白 480 mA）', () => {
@@ -241,7 +241,7 @@ test('模版：接线引用的针脚都在元件库里', () => {
 });
 
 test('toScene 与 firmware/examples.json 的 scene 一致', () => {
-  for (const id of ['weather', 'spin', 'lens', 'lamp', 'ruler', 'tilt']) {
+  for (const id of ['weather', 'spin', 'lens', 'usbkey', 'lamp', 'ruler', 'tilt']) {
     const ex = examples.find((e) => e.id === id)!;
     const inp = templateInput(id);
     assert.deepEqual(toScene(inp.parts, inp.wiring), ex.scene.parts, id);

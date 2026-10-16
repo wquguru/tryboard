@@ -449,3 +449,39 @@
 - 决定：CLI 接了音频器件就 1 ms 一片（功放电流按每片放出的声音算，与网页实时运行一致；网页验收 worker / npm 包的 simrun 没接音频器件参数，关卡也不用）；`tb_report` 不加音频行（保持关卡指纹不变），音频读数单独走 `tb_audio_report` / `tb_audio_stat`
 - 喇叭固件用 I2S0、麦克风固件用 I2S1（真实项目常这样分，两条路径各有一个固件验收）
 - 未做：C3 固件验收（只有单元测试）、作品库里还没有带喇叭的作品（成品页的声音开关按 `hasSound` 显示，验证时在透镜作品的台面上加了喇叭、跑 s3-i2s-tone）、成品 3D 里不画喇叭
+## 2026-10-16 · 暗色漏项（分析仪 / ⌘K / levels / advisor / index）
+- 决定：逻辑分析仪 canvas 的不透明色照旧从 CSS 变量读（`--fg / --line / --accent / --ok / --bad`…），半透明叠层（无数据段、未发生段、标签垫底、包络、气泡底）按 `currentTheme()` 选 `PAL.light / PAL.dark` 两套，数值取自 app.css 两套变量；`onTheme` 时置 dirty 重画。气泡"读到的数据"判定由比较写死的 `#14ae5c` 改为比较当前 `--ok`。`.analyzer / .ana-b / .cmdk-list` 的 `#fff`、`#b9e0ff` 换成 `--surface / --accent-line`，`.prod-preview` 的浅橙底换成 `--ch-bg / --warn-line`
+- levels.html、advisor.html、index.html 都加首帧前内联脚本；advisor 与空白实验台从写死的暗色（橙强调、Inter）改成 DESIGN §2 亮色默认 + `:root[data-theme='dark']` 暗色（与 app.css 同值），字体 Noto Sans SC / JetBrains Mono，头部加 `themeToggle()`；index 的 3D 台面调 `bench.setTheme` 并跟 `onTheme`。advisor 模板卡去掉 emoji（DESIGN §2）
+- 理由：这几处在暗色下是白块或浅底浅字；canvas 不认 `color-mix()`，半透明色只能另备一套
+- 替代：(a) canvas 叠层用 `globalAlpha` + 变量色——要改每处绘制顺序，碰到分析仪逻辑；(b) 保留 advisor / index 的旧暗色只加亮色——两套视觉不统一
+- 未改：views.css 里成品 / 装配 SVG 示意图的自带配色（绿底、橙标签）是插画本身的颜色，两种主题下都可读；USB 虚拟鼠标画布保持深色（它画的是一块屏幕）
+## 2026-10-16 · 拍照 / 录 10 秒（P2-10）
+- 决定：不用 three-gpu-pathtracer（不在 web 依赖里，按规则不新装），拍照 = 当前视角重渲一帧：输出 = 画布 CSS 尺寸 × 2（长边上限 4096），渲染再按输出放大一倍超采样（长边上限 4096 / maxTextureSize），含 bloom 等后期（EffectComposer 跟着改像素比），背景临时换成 DESIGN §2 台面渐变（亮 / 暗两套）、关掉雾，`drawImage` 缩到输出尺寸后角落写"TryBoard 试板 · 作品名 · 外观示意，非乐鑫官方模型"，PNG 用 Blob + a[download] 下载。渲染完在同一个任务里立刻拷走，不必开 preserveDrawingBuffer
+- 决定：录像 = `canvas.captureStream(30)` + MediaRecorder（优先 `video/webm;codecs=vp9,opus`，8 Mbps），10 秒自动停，可提前点停；声音开着时把蜂鸣器那条 Web Audio 链（分析器节点）再接一个 MediaStreamDestination，音频轨混进去；声音关着就是只有视频轨。下载名 `tryboard-<作品>-<时间>.webm`
+- 公共接口：`ProductScene / Lcd3D / Bench / Keypad3D` 都多了 `capture(): Capturable`（渲染器、场景、render、setPixelRatio），`BuzzerAudio.recordStream()`；`globalThis.__tbCapture` 记最近一次拍照 / 录像的文件名、字节数、尺寸，给测试核对
+- 验收：`tools/webtest/media.mjs`（进 accept.sh）在 Chrome 里点按钮、读下载目录：PNG 的 IHDR 宽高 = 画布 × 2、webm 的 EBML 头与视频轨 PixelWidth / PixelHeight = 画布像素、声音开时有 A_OPUS 轨、时长 9.5–11 s
+- 替代：(a) three-gpu-pathtracer——真路径追踪更好看，但新依赖 + 首帧要收敛几十秒；(b) `renderer.domElement.toBlob` 直接存当前帧——只有屏幕分辨率、背景跟着页面；(c) 录屏用 ffmpeg.wasm 转 mp4——包太大
+
+## 2026-10-16 · 线长影响 I2C、天线遮挡（P2-11）：确定性模型，标"估算，必须上真机"
+- 决定：不引入随机。I2C：`tryboard-elec::i2cbus` 一份公式（网页 `app/harness.ts` 同一组常数，单测对拍）：总线电容 C = 线长 × 1 pF/cm + 器件数 × 10 pF + 10 pF（开发板 + 面包板），上拉 = 每个模块 10 kΩ 并联（没有模块时内部 45 kΩ），上升时间 t_r = 0.8473·R·C（UM10204 §7.1，30% → 70%）。上限按**固件实际配置的 SCL 频率**（I2C 控制器的分频寄存器算出来）：≤ 100 kHz 1000 ns、≤ 400 kHz 300 ns、更快 120 ns。t_r 在上限内照常；超出、不到两倍：读回的字节里"前一位是 0、这一位是 1"的位读成 0（`b & ((b >> 1) | 0x80)`，写入不受影响）；超两倍：地址字节没人应答（NACK）
+  - 理由：读错用"慢上升吃掉 0→1 的位"这一条确定性规则，BME280 校准数据、原始值都会被同一规则改写，读数离谱但每次一样，指纹可复现；气象站 2 个模块在 400 kHz 下 41 cm 起读错、112 cm 起不应答；扫描时 IDF 用 100 kHz，所以 150 cm 时扫描还能看到 0x3C / 0x76、正式读才 NACK——和真机"能扫到但读不了"的现象一致
+  - 常数全是估算（线电容 0.5–1.5 pF/cm 取 1、模块上拉以常见 10 kΩ 计），未经真机标定；只作用于 I2C0（作品都在 I2C0 上）
+- 决定：天线：虚拟世界（`soc::wifi::world`）里所有 AP 的 RSSI 减去遮挡 dB（链路对称，AP 也听不清芯片）：< -92 dBm 扫描收不到；< -82 dBm 认证 / 关联 / 数据帧 AP 不回、也不 ACK（IDF 报 `reason=2` 认证超时）。网页按"金属件贴着 45 dB、锂电池 30 dB，乘 (1 − 距离 / 20 mm)，20 mm 外不算"估算遮挡（整数 dB），TryBoard-WiFi 开阔处 -42 dBm
+- 决定：线束是机器的外部世界（`Machine::harness`），跨软件复位保留；CLI `--i2c-wire <cm>`、`--antenna-loss <dB>`，脚本动作 `i2cwire=cm`（负数 = 理想总线）、`antenna=dB`；网页输入日志新增 `i2cwire / antenna` 两种事件（上电时的值记在第 0 个周期），回退 / 导出 / check.py `--inputs` 都能重放；结论文字（命令行 stderr 与 wasm `tb_harness_report` 同一段）不进指纹。没设线长时与以前完全一样（所有旧用例、指纹不变）
+- 网页：实验台每个 I2C 模块的线长默认 10 cm（不交给模拟器 = 理想总线），选中 SDA / SCL 线可拉长，接线检查新增 W6（超出警告、超两倍阻断，可信度"必须上真机"），改动进时间线并在线换模拟器的总线负载；组装：I2C 排线总长（默认 16 cm）+ 天线旁放了什么（没有 / 锂电池 / 金属件）+ 距离，存 `localStorage['tryboard-app-harness:<work>']`，不进装配时间线；线束超标算"装配有警告"，开机复测带着线束跑（读数跑偏、RSSI 连不上判不过）；成品页按装好的线束跑并显示估算与模拟器结论
+- accept：weather-i2c-long（60 cm：读数不是 23.50、stderr 上升 381 ns）、weather-i2c-nack（150 cm：NACK、参考固件 ESP_ERROR_CHECK abort）、wifi-scan-antenna（30 dB）、wifi-connect-antenna（45 dB）。accept.sh 新增 `crash_expected`：用例本来就要验"故障让固件崩"时不算失败（没崩反而算失败）
+- 替代：(a) 按概率丢字节——不可复现，指纹失效；(b) 逐位模拟 SDA/SCL 的 RC 波形——要把 I2C 模型改成逐位推进，代价大，而结论（超没超规范）一样；(c) 天线用路径损耗模型算距离——这里只关心"装壳后旁边有没有金属"，线性近似足够，且明确标估算
+
+## 2026-10-16 · 作品 USB 小键盘（P2-12）
+- 决定：新作品 `usbkey`（work 定义驱动）：首页卡片改由 `app/works.ts` 的 `card` 字段生成（home.html 只留空容器），加作品不用改页面；成品步骤的作品列表同样来自作品定义
+- 硬件：S3 DevKitC-1（原生 USB）+ 4 个 6×6 轻触按键（K1–K4 = GPIO4–7，另一端接地，内部上拉）+ 外壳键帽。实验台新增 PartSpec `key`（面包板上跨凹槽的开关 + 印字键帽，3D 里按住 = 引脚接地，`Bench.onKey`），采购模版的 `button ×4` 按接线（每根 A 脚接 GPIO）展开成 4 个 key
+- 固件：`firmware/usbkey`（在 s3-usb-keyboard 上改：只报键盘，产品名 TryBoard Macro Pad，不自动打字）：K1–K3 发 a / b / c，K4 宏键打 "Hello TryBoard\n"；10 ms 采样两次一致消抖。三个检查点共用这一份参考固件（每关条件都是它的子集）：usbkey-1 枚举（虚拟主机"已配置"）、usbkey-2 1.2 / 1.5 / 1.8 s 按 K1–K3 打出 "abc"、usbkey-3 按 K1 + K4 打出 "aHello TryBoard\n" + 装配
+- 判定：关卡新增 `usb: { state?, typed? }`，对象是虚拟主机看到的结论：观察记录（指纹的一部分）在关卡带 `--usb-log` 时追加两行 `[tryboard] USB 主机：<状态>` 与 `[tryboard] USB 键盘输入: "<Rust Debug 转义>"`（CLI 与 wasm `tb_usb_report` 同一个 `tryboard_machine::usb_report_lines`），check.py / checks.ts / npm 包按同一规则解析（JSON 解析引号串），顺序排在 LCD 之后、PWM 之前。理由：只看串口的话固件可以自己打印"已发送"，判不出电脑到底收没收到
+- 组装：参数化外壳 44×80×22 mm（底壳 + 定位板，一排 4 个 14 mm 键孔，键距 19.05 mm），开发板两种装法：USB / OTG 口朝背面开孔（对）、转 180°（USB 口顶着前墙，成品里线插不进、电脑看不到设备）；成品：three.js 小键盘 + usb3d 的笔记本，屏幕上是虚拟主机还原出的字；没有 WebGL 时用平面视图（views/keypad.ts，首页卡片也用它）
+- usb3d：只有键盘、没有鼠标的设备不画鼠标区，文本编辑器占满、字放大
+- 替代：(a) 用 BOOT 键当唯一按键——省掉新元件，但"按键若干"做不出来；(b) 每关一份参考固件——和小黄一样，但这三关条件正好层层包含，一份就够，少编两份 TinyUSB 固件（每份 ~290 KB）
+
+## 2026-10-16 · wt-media 合并 main（P2-10/11/12 × P2-01..08）
+- 决定：录 10 秒的声音轨同时接蜂鸣器与 I2S 喇叭（`PcmVoice.tap`），成品页声音开关改用 main 的 `hasSound`；I2C 排线（`i2cBuses`）把 MPU6050 / QMI8658 也算进 I2C0 总线上的器件。
+- 未做：倾角仪成品（tilt3d）没有 `capture()`，成品页对它不显示拍照 / 录像（它还不是完整作品，P2-09 作品化时补）。
+- 理由：两边功能全部保留；新器件在 main 上是 I2C0 外设，线长估算应计入它们的负载。

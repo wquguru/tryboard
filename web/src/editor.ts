@@ -52,6 +52,8 @@ export function describe(p: PartSpec): string {
       return `电位器 · 滑片 IO${p.pin}`;
     case 'buzzer':
       return `无源蜂鸣器 · IO${p.pin}`;
+    case 'key':
+      return `按键 ${p.cap ?? ''} · IO${p.pin}（按下接地）`;
     case 'encoder':
       return `编码器 · CLK IO${p.a} / DT IO${p.b}${p.sw !== undefined ? ` / SW IO${p.sw}` : ''}`;
     case 'hcsr04':

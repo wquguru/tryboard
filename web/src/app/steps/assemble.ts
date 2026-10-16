@@ -13,6 +13,7 @@ import type { TimelineStep } from '../timeline';
 import type { Assembly3D } from '../asm3d';
 import { caseFor, layoutFor, layoutKey } from '../casemesh';
 import type { CaseLayout } from '../enclosure';
+import { OBSTACLE_LABEL, antennaLossDb, i2cLoad, i2cText, loadCaseHarness, saveCaseHarness, wifiText, type CaseHarness, type Obstacle } from '../harness';
 
 type SvgAsm = ReturnType<typeof createAssembly>;
 type AsmView = SvgAsm | Assembly3D;
@@ -59,13 +60,27 @@ const lastIsTest = (list: Entry[]) => {
 };
 
 /** 不建 DOM 也能算出装配结果（成品步骤、刷新后恢复用），与 createAssembly 的 clean / effects 一致 */
-function summarize(T: Template, places: { id: string; spot?: string }[], retest: boolean | null): AssemblyState {
+/** 这个作品壳里有没有 I2C 模块（排线长度只对它们有意义） */
+export const I2C_DEVICES: Record<string, number> = { weather: 2 };
+
+/** 线束带进成品的东西（估算）：I2C 排线总长、天线遮挡 dB；以及它们会不会让成品出问题 */
+export function harnessEffects(work: string, h: CaseHarness) {
+  const n = I2C_DEVICES[work] ?? 0;
+  const i2c = n ? i2cLoad(h.i2cCm, n) : null;
+  const antennaDb = antennaLossDb(h.obstacle, h.distMm);
+  const wifi = wifiText(antennaDb);
+  return { i2c, antennaDb, wifi, ok: (!i2c || i2c.verdict === 'ok') && wifi.level !== 'fail' };
+}
+
+function summarize(T: Template, places: { id: string; spot?: string }[], retest: boolean | null, h: CaseHarness): AssemblyState {
   const placed = places.map((p) => p.id);
   const choice: Record<string, string> = {};
   for (const p of places) if (p.spot) choice[p.id] = p.spot;
   const total = T.parts.length;
-  const clean = placed.length === total && T.parts.every((p) => !p.spots || p.spots.find((s) => s.key === choice[p.id])?.ok);
-  return { placed, choice, total, clean, effects: T.effects({ placed, choice }), retest };
+  const hx = harnessEffects(T.id, h);
+  const clean = placed.length === total && hx.ok && T.parts.every((p) => !p.spots || p.spots.find((s) => s.key === choice[p.id])?.ok);
+  const effects = { ...T.effects({ placed, choice }), ...(hx.i2c ? { i2cWireCm: h.i2cCm } : {}), antennaDb: hx.antennaDb };
+  return { placed, choice, total, clean, effects, retest };
 }
 
 /** 页面启动时恢复本机存过的装配（只存装了哪些、怎么装；复测结果不存，要重新测） */
@@ -76,7 +91,7 @@ export function restoreAssembly(ctx: StepCtx) {
   const places = list.filter((e): e is Extract<Entry, { kind: 'place' }> => e.kind === 'place');
   // 存的顺序必须是模版的从下往上顺序，否则当作没装
   const okOrder = places.every((p, i) => T.parts[i]?.id === p.id);
-  if (places.length && okOrder) ctx.store.set({ assembly: summarize(T, places, lastIsTest(list)) });
+  if (places.length && okOrder) ctx.store.set({ assembly: summarize(T, places, lastIsTest(list), loadCaseHarness(ctx.work.id)) });
   else if (list.length) saveEntries(ctx.work.id, []);
 }
 
@@ -102,6 +117,10 @@ const IMPACT: Record<string, Record<string, string[]>> = {
   },
   spin: {
     servo: ['先回中位再装舵盘：固件说"正面"就是正面', `直接按上去：舵盘可能错一个齿，正面偏 ${(360 / 25).toFixed(1)}°（只改成品画面，估算）`],
+  },
+  usbkey: {
+    board: ['USB / OTG 口朝背面开孔：线插得进去，电脑认出键盘', '转了 180° 装：USB 口顶着前墙，线插不进去，成品里电脑看不到设备'],
+    plate: ['定位板用塑料：金属定位板盖住 WROOM 天线会让 Wi-Fi 信号掉几十 dB（下面"线束与天线"可以试，估算）'],
   },
   lens: {
     dome: ['高档离屏 8 mm：放大约 1.35×，像立体的', '低档贴着屏：放大约 1.08×，看着是平的（只改成品画面，估算）'],
@@ -138,6 +157,65 @@ export function assembleStep(): StepImpl {
   let testing: { at: number; progress: number } | null = null;
   let ruler = false;
   let sel = '';
+  /** 线束（P2-11）：排线长度、天线旁边有没有金属件 / 电池（估算）；不进装配时间线，单独存 */
+  let hz: CaseHarness = loadCaseHarness('weather');
+
+  /** 线束交给模拟器（台面上正在跑的那份固件马上受影响；开机复测、成品也用它） */
+  function applyHarness() {
+    const c = ctx!;
+    const hx = harnessEffects(c.work.id, hz);
+    const want = { i2cWire: hx.i2c ? hz.i2cCm : -1, antenna: hx.antennaDb };
+    const cur = c.session.harness;
+    const h: { i2cWire?: number; antenna?: number } = {};
+    if ((cur.i2cWire ?? -1) !== want.i2cWire) h.i2cWire = want.i2cWire;
+    if ((cur.antenna ?? 0) !== want.antenna) h.antenna = want.antenna;
+    if (Object.keys(h).length) c.session.setHarness(h);
+  }
+
+  function harnessHtml() {
+    const c = ctx!;
+    const hx = harnessEffects(c.work.id, hz);
+    const lv = (v: string) => (v === 'ok' ? ['ok', '✓'] : v === 'marginal' ? ['warn', '!'] : ['bad', '✗']);
+    const i2c = hx.i2c
+      ? `<div class="kv col"><span class="k">I2C 排线总长（开发板 → OLED、BME280）</span><label class="slider"><input type="range" id="hzWire" min="8" max="150" step="1" value="${hz.i2cCm}" aria-label="I2C 排线总长" /><output class="mono" id="hzWireV">${hz.i2cCm} cm</output></label></div>
+<div class="res ${lv(hx.i2c.verdict)[0]}" id="hzWireRes"><span class="mk">${lv(hx.i2c.verdict)[1]}</span><span>${esc(i2cText(hx.i2c))}</span></div>`
+      : '';
+    const obs = (['none', 'battery', 'metal'] as Obstacle[]).map((o) => `<button type="button" class="segb" data-obs="${o}" aria-pressed="${hz.obstacle === o}">${esc(o === 'metal' ? '金属件' : OBSTACLE_LABEL[o])}</button>`).join('');
+    const ant = `<div class="kv col"><span class="k">WROOM 天线旁边放了什么</span><div class="seg" role="radiogroup" aria-label="天线旁边">${obs}</div></div>
+${hz.obstacle !== 'none' ? `<div class="kv col"><span class="k">离天线区多远（${esc(OBSTACLE_LABEL[hz.obstacle])}）</span><label class="slider"><input type="range" id="hzDist" min="0" max="30" step="1" value="${hz.distMm}" aria-label="离天线多远" /><output class="mono" id="hzDistV">${hz.distMm} mm</output></label></div>` : ''}
+<div class="res ${lv(hx.wifi.level)[0]}" id="hzAntRes"><span class="mk">${lv(hx.wifi.level)[1]}</span><span>天线遮挡 ${hx.antennaDb} dB → ${esc(hx.wifi.text)}</span></div>`;
+    const sim = c.session.harnessText.trim();
+    return `${sec('线束与天线 · 估算，必须上真机')}${i2c}${ant}
+<p class="note">按确定性公式算：总线电容 = 线长 × 1 pF/cm + 每个器件 10 pF + 10 pF，上升时间 = 0.8473 × 上拉 × 电容；天线：金属件贴着衰减 45 dB、电池 30 dB，20 mm 外不算。模拟器里同一个公式真的会让读数出错、Wi-Fi 连不上。</p>
+${sim ? `<p class="note mono" data-k="hzSim">${esc(sim.replace(/\[tryboard\] /g, '模拟器：'))}</p>` : ''}`;
+  }
+
+  function bindHarness(el: HTMLElement) {
+    const c = ctx!;
+    const commit = (next: Partial<CaseHarness>) => {
+      hz = { ...hz, ...next };
+      saveCaseHarness(c.work.id, hz);
+      applyHarness();
+      publish();
+      renderAll();
+    };
+    const wire = el.querySelector<HTMLInputElement>('#hzWire');
+    if (wire) {
+      wire.oninput = () => {
+        el.querySelector('#hzWireV')!.textContent = `${wire.value} cm`;
+        const l = harnessEffects(c.work.id, { ...hz, i2cCm: Number(wire.value) }).i2c!;
+        const r = el.querySelector('#hzWireRes span:last-child');
+        if (r) r.textContent = i2cText(l);
+      };
+      wire.onchange = () => commit({ i2cCm: Number(wire.value) });
+    }
+    const dist = el.querySelector<HTMLInputElement>('#hzDist');
+    if (dist) {
+      dist.oninput = () => (el.querySelector('#hzDistV')!.textContent = `${dist.value} mm`);
+      dist.onchange = () => commit({ distMm: Number(dist.value) });
+    }
+    el.querySelectorAll<HTMLButtonElement>('[data-obs]').forEach((b) => (b.onclick = () => commit({ obstacle: b.dataset.obs as Obstacle })));
+  }
 
   const placesUpTo = (i: number) => entries.slice(0, i + 1).filter((e): e is Extract<Entry, { kind: 'place' }> => e.kind === 'place');
   const lastTest = () => (cur >= 0 && entries[cur]?.kind === 'test' ? (entries[cur] as Extract<Entry, { kind: 'test' }>) : null);
@@ -146,7 +224,7 @@ export function assembleStep(): StepImpl {
     const c = ctx!;
     const places = placesUpTo(cur);
     const t = lastTest();
-    c.store.set({ assembly: places.length ? summarize(T!, places, t ? t.ok : null) : null });
+    c.store.set({ assembly: places.length ? summarize(T!, places, t ? t.ok : null, hz) : null });
     saveEntries(c.work.id, entries.slice(0, cur + 1));
   }
 
@@ -295,7 +373,9 @@ ${choose}
 ${impact ? sec('装法会改变什么 · 估算') + impact : ''}
 ${sec('装配检查 · 几何估算，未经真机标定')}${checks}
 ${effectsLine()}
+${harnessHtml()}
 ${caseLine()}`;
+    bindHarness(el);
     el.querySelectorAll<HTMLButtonElement>('[data-spot]').forEach((b) => (b.onclick = () => asm!.place(p.id, b.dataset.spot)));
     el.querySelector<HTMLButtonElement>('#toCase')?.addEventListener('click', (e) => {
       ctx!.store.set({ selection: { kind: 'part', id: (e.currentTarget as HTMLElement).dataset.enc! } });
@@ -372,16 +452,18 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
     let entry: Extract<Entry, { kind: 'test' }>;
     try {
       // 装法改了传感器看到的东西（探头被挡、六轴装反）：复测的输入脚本跟着改
-      const fx = asm.effects();
-      const v = await verifyLevel({ ...lv, script: effectScript(lv.script, fx) }, await fw.get(), (t) => {
+      const hx = harnessEffects(c.work.id, hz);
+      const v = await verifyLevel({ ...lv, script: effectScript(lv.script, asm.effects()) }, await fw.get(), (t) => {
         if (!testing || t - testing.progress < 0.2) return;
         testing.progress = t;
         const b = ctx?.shell.props.querySelector('#retestBtn');
         if (b) b.textContent = `复测中 ${t.toFixed(1)} s`;
-      }, env);
-      const clean = asm.clean();
+      }, env, { i2cWire: hx.i2c ? hz.i2cCm : undefined, antenna: hx.antennaDb || undefined });
+      const clean = asm.clean() && hx.ok;
       const rows = v.results.map((x) => ({ ok: x.ok, text: x.text }));
-      rows.push({ ok: clean, text: clean ? `装配 ${s.total}/${s.total}，没有警告` : `装配 ${s.total}/${s.total}，有警告（看左边带 ! 的层）` });
+      if (hx.i2c) rows.push({ ok: hx.i2c.verdict === 'ok', text: `I2C 排线 ${hz.i2cCm} cm：${i2cText(hx.i2c)}（估算，必须上真机）` });
+      if (hx.antennaDb) rows.push({ ok: hx.wifi.level !== 'fail', text: `天线遮挡 ${hx.antennaDb} dB：${hx.wifi.text}（估算，必须上真机）` });
+      rows.push({ ok: clean, text: clean ? `装配 ${s.total}/${s.total}，没有警告` : `装配 ${s.total}/${s.total}，有警告（看左边带 ! 的层或线束）` });
       entry = { kind: 'test', ok: v.ok && clean, rows, fingerprint: v.fingerprint, who: fw.name, temp: env.temp };
     } catch (e) {
       entry = { kind: 'test', ok: false, rows: [{ ok: false, text: `运行失败：${e}` }], fingerprint: '—', who: fw.name, temp: env.temp };
@@ -610,6 +692,7 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
     mount(el, c) {
       ctx = c;
       T = TEMPLATES[c.work.id] ?? null;
+      hz = loadCaseHarness(c.work.id);
       if (!hooked) {
         hooked = true;
         c.shell.toolbar.onTool(onTool);
@@ -644,7 +727,14 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
       else rebuildIfStale(c);
       el.appendChild(node!);
       if (asm && is3d(asm)) asm.start();
+      applyHarness();
+      publish();
       renderAll();
+      unsubs.push(c.session.onHarness((t) => {
+        const n = c.shell.props.querySelector('[data-k="hzSim"]');
+        if (n) n.textContent = t.trim().replace(/\[tryboard\] /g, '模拟器：');
+        else if (t.trim() && sel !== 'retest') renderProps();
+      }));
     },
     unmount() {
       if (asm && is3d(asm)) asm.stop();

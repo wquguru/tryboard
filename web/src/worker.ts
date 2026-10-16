@@ -52,6 +52,9 @@ interface Exports {
   tb_elec_brownout_t(i: number): number;
   tb_servo_angle(): number;
   tb_elec_report(): number;
+  tb_i2c_wire?(cm: number): void;
+  tb_antenna_loss?(db: number): void;
+  tb_harness_report?(): number;
   tb_encoder_attach?(a: number, b: number, sw: number): void;
   tb_encoder_turn?(steps: number): void;
   tb_encoder_press?(down: number): void;
@@ -153,8 +156,12 @@ export type ToWorker =
       /** 麦克风上电时听的 WAV（缺省安静）与它的文件名（记进输入日志，重放时 --mic tools/audio/<名>） */
       micWav?: ArrayBuffer;
       micName?: string;
+      /** 线束（P2-11，估算）：I2C 排线总长（cm）、天线遮挡（dB）；上电时记进输入日志 */
+      harness?: Harness;
     }
   | ({ type: 'env' } & Env)
+  /** 在线改线束（进输入日志：i2cwire=cm / antenna=dB） */
+  | ({ type: 'harness' } & Harness)
   /** 编码器转 steps 格（正 = 顺时针）/ 按键；超声波距离（进输入日志：enc= / encsw= / dist=） */
   | { type: 'enc'; steps: number }
   | { type: 'encsw'; down: boolean }
@@ -204,6 +211,12 @@ export type ToWorker =
   | { type: 'mark'; id: number }
   /** 逻辑分析仪要观察的 GPIO（位掩码，lo = GPIO0..31，hi = GPIO32..）；之后每次上电都沿用 */
   | { type: 'ioWatch'; lo: number; hi: number };
+
+/** 线束（P2-11）：i2cWire 负数 = 理想总线 */
+export interface Harness {
+  i2cWire?: number;
+  antenna?: number;
+}
 
 /** 引脚 PWM 的一次变化（模拟时刻 t 秒；duty < 0 表示不再输出 PWM） */
 export interface PwmEvent {
@@ -267,6 +280,8 @@ export type FromWorker =
   | { type: 'lcd'; pixels: Uint8Array }
   /** 原生 USB 虚拟主机的状态（JSON，结构见 usb3d.ts 的 UsbView），有变化才发 */
   | { type: 'usb'; json: string }
+  /** 线束结论（与命令行同样的文字：I2C 上升时间、天线遮挡后的 RSSI），变了才发 */
+  | { type: 'harness'; text: string }
   | { type: 'inputlog'; log: InputLog }
   | { type: 'snapshot'; snap: Snapshot }
   | { type: 'seekProgress'; simSeconds: number }
@@ -566,6 +581,7 @@ function loop() {
   postOled(e);
   postLcd(e);
   postUsb(e);
+  postHarness(e);
   if (stop !== 0) {
     running = false;
     post({ type: 'stopped', reason: errorText(e) });
@@ -615,13 +631,23 @@ function postUsb(e: Exports) {
   post({ type: 'usb', json: decoder.decode(new Uint8Array(e.memory.buffer, e.tb_usb_json_ptr(), n)) });
 }
 
+let harnessText = '';
+function postHarness(e: Exports, force = false) {
+  if (!e.tb_harness_report) return;
+  const n = e.tb_harness_report();
+  const t = decoder.decode(new Uint8Array(e.memory.buffer, e.tb_report_ptr(), n));
+  if (t === harnessText && !force) return;
+  harnessText = t;
+  post({ type: 'harness', text: t });
+}
+
 const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5 };
 
 function postPaused(e: Exports) {
   post({ type: 'tick', console: '', leds: leds(e), strips: strips(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running, elec: elecFrame(e), brownouts: takeBrownouts(e), pins: pinDevFrame(e) });
 }
 
-type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; touchInt?: number; i2s?: string[]; micWav?: ArrayBuffer; micName?: string };
+type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; touchInt?: number; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness };
 const I2S_KIND: Record<string, number> = { max98357a: 0, inmp441: 1 };
 /** 上电：建 wasm 实例、挂器件、设环境、开一份新的输入日志 */
 async function bootWasm(m: BootMsg): Promise<Exports | null> {
@@ -660,6 +686,10 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   inputLog = { version: 1, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
   record(e, { kind: 'power', on: true });
   if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
+  // 线束在上电那一刻施加并记进日志（重放 / 回退在第 0 个周期施加，与命令行 --i2c-wire 等价）
+  if (m.harness?.i2cWire !== undefined) apply(e, { kind: 'i2cwire', cm: m.harness.i2cWire });
+  if (m.harness?.antenna !== undefined) apply(e, { kind: 'antenna', db: m.harness.antenna });
+  harnessText = '\u0000';
   // 回退重放时 cm 给 NaN：初始距离就是日志里 0 时刻那条 dist，由 seekTo 按原样施加
   if (m.sonar && Number.isFinite(m.sonar.cm)) apply(e, { kind: 'dist', cm: m.sonar.cm });
   pwmLast = new Map();
@@ -703,6 +733,12 @@ function apply(e: Exports, ev: InputAction) {
     case 'supply':
       power = ev.mode;
       e.tb_power_set?.(ev.mode === 'ext' ? 1 : 0);
+      break;
+    case 'i2cwire':
+      e.tb_i2c_wire?.(ev.cm);
+      break;
+    case 'antenna':
+      e.tb_antenna_loss?.(ev.db);
       break;
     case 'enc':
       e.tb_encoder_turn?.(ev.steps);
@@ -856,6 +892,12 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       if (!ex) return;
       apply(ex, { kind: 'supply', mode: m.mode });
       if (!running) postPaused(ex);
+      break;
+    case 'harness':
+      if (!ex) return;
+      if (m.i2cWire !== undefined) apply(ex, { kind: 'i2cwire', cm: m.i2cWire });
+      if (m.antenna !== undefined) apply(ex, { kind: 'antenna', db: m.antenna });
+      postHarness(ex);
       break;
     case 'enc':
       if (!ex) return;

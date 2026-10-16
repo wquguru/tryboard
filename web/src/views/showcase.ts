@@ -1,13 +1,15 @@
 // 成品示意：会转身的小黄、透镜里的小人、温湿度检测器。这里只是外观示意，不跑固件；首页的「跑真实固件」会换成由模拟器驱动的成品视图。
 import { dialTicks, mount } from './common';
 
-export type ShowKind = 'spin' | 'lens' | 'weather';
+export type ShowKind = 'spin' | 'lens' | 'weather' | 'usbkey';
 const SPEC: Record<ShowKind, string> = {
+  usbkey: 'USB 小键盘 · 4 键 + 宏键 · ESP32-S3 原生 USB',
   spin: '小黄 · 舵机转台 ±60° · ESP32-S3',
   lens: '透镜小人 · 1.28″ 圆屏 GC9A01 · ESP32-S3',
   weather: '温湿度检测器 · OLED + BME280 · ESP32-S3',
 };
 const ARIA: Record<ShowKind, string> = {
+  usbkey: 'USB 小键盘接在笔记本上，按键在电脑屏幕上打出字',
   spin: '可以转身的小黄桌面机器人，站在舵机转台上',
   lens: '圆屏上的表情被凸透镜罩放大，看起来像立在罩子里的小人',
   weather: '温湿度检测器，表盘指针和屏幕显示温度湿度',
@@ -15,6 +17,15 @@ const ARIA: Record<ShowKind, string> = {
 const MOODS = ['平常', '开心', '喜欢', '困了'];
 
 function art(kind: ShowKind) {
+  if (kind === 'usbkey') {
+    const keys = ['a', 'b', 'c', 'M'].map((k, i) => `<g data-k="key${i}"><rect x="${150 + i * 48}" y="318" width="40" height="40" rx="8" fill="${k === 'M' ? '#0D99FF' : '#F2EFE8'}" stroke="#141414" stroke-width="2"/><text x="${170 + i * 48}" y="345" fill="${k === 'M' ? '#FFF' : '#141414'}" class="tb-mono" font-size="18" font-weight="700" text-anchor="middle">${k}</text></g>`).join('');
+    return `<rect x="96" y="70" width="288" height="180" rx="10" fill="#B9BDC4"/><rect x="108" y="82" width="264" height="156" rx="4" fill="#0F1726"/>
+<text x="120" y="104" fill="#E8EDF5" class="tb-mono" font-size="11" font-weight="700">虚拟电脑 · USB</text>
+<text data-k="typed" x="120" y="140" fill="#E8EDF5" class="tb-mono" font-size="16"></text>
+<path d="M84 252 L396 252 L410 268 L70 268 Z" fill="#9A9FA6"/>
+<path d="M240 300 C240 286 300 290 300 270" fill="none" stroke="#1C1E22" stroke-width="5"/>
+<rect x="138" y="300" width="204" height="72" rx="12" fill="#3A3936" stroke="#141414" stroke-width="2"/>${keys}`;
+  }
   if (kind === 'spin') {
     let dial = '';
     for (let d = -60; d <= 60; d += 20) {
@@ -54,7 +65,7 @@ function art(kind: ShowKind) {
 }
 
 export function createShowcase(el: HTMLElement, kind: ShowKind) {
-  const s = { angle: -30, mood: 0, look: 0, temp: 23.5, hum: 45 };
+  const s = { angle: -30, mood: 0, look: 0, temp: 23.5, hum: 45, typed: '' };
   const q = mount(
     el,
     `<div class="tb-view sc-root">
@@ -74,6 +85,8 @@ ${art(kind)}
   const controls: [string, string, () => void][] =
     kind === 'spin'
       ? [['◀', '向左转', () => (s.angle = Math.max(-60, s.angle - 20))], ['看我', '转向正面', () => (s.angle = 0)], ['▶', '向右转', () => (s.angle = Math.min(60, s.angle + 20))]]
+      : kind === 'usbkey'
+        ? [['a', '按 K1', () => (s.typed += 'a')], ['b', '按 K2', () => (s.typed += 'b')], ['宏', '按宏键', () => (s.typed += 'Hello TryBoard ')]]
       : kind === 'lens'
         ? [['◀', '向左看', () => (s.look = Math.max(-1, s.look - 1))], ['换表情', '换表情', () => (s.mood = (s.mood + 1) % 4)], ['▶', '向右看', () => (s.look = Math.min(1, s.look + 1))]]
         : [['−', '降温', () => (s.temp = Math.max(0, s.temp - 2))], ['对它哈气', '湿度升高', () => (s.hum = Math.min(95, s.hum + 15))], ['+', '升温', () => (s.temp = Math.min(40, s.temp + 2))]];
@@ -91,7 +104,9 @@ ${art(kind)}
     return b;
   });
   function render() {
-    if (kind === 'spin') {
+    if (kind === 'usbkey') {
+      q('typed').textContent = (s.typed.slice(-24) || '按下面的键试试') + '▌';
+    } else if (kind === 'spin') {
       const a = (s.angle * Math.PI) / 180;
       q('body').setAttribute('transform', `translate(240 0) scale(${(0.72 + 0.28 * Math.cos(a)).toFixed(3)} 1)`);
       q('face').setAttribute('transform', `translate(${(34 * Math.sin(a)).toFixed(1)} 0)`);

@@ -48,7 +48,14 @@ pub struct World {
     pub net: net::Net,
     /// WPA2 AP 的认证方（按 aps 下标，首次关联时创建：PBKDF2 要算 4096 轮）
     pub wpa: Vec<Option<Authenticator>>,
+    /// 天线被金属件 / 电池挡住的衰减（dB，估算，P2-11）：双向都减，所以 AP 也听不清芯片
+    pub antenna_loss_db: i32,
 }
+
+/// 低于它扫描也收不到（管理帧 1 Mbps 的接收灵敏度量级，估算）
+pub const SCAN_MIN_DBM: i32 = -92;
+/// 低于它认证 / 关联 / 数据收发不成（估算：真机在 -80 dBm 附近开始频繁重传、掉线）
+pub const LINK_MIN_DBM: i32 = -82;
 
 impl Default for World {
     fn default() -> Self {
@@ -68,6 +75,7 @@ impl Default for World {
             aid: 1,
             net: Default::default(),
             wpa: (0..n).map(|_| None).collect(),
+            antenna_loss_db: 0,
         }
     }
 }
@@ -89,6 +97,20 @@ const RSN_IE: [u8; 20] = [
 ];
 
 impl World {
+    /// 芯片这边收到的这个 AP 的信号强度（dBm）：AP 发射的 RSSI 减去天线遮挡
+    pub fn rssi(&self, i: usize) -> i8 {
+        (self.aps[i].rssi as i32 - self.antenna_loss_db).clamp(-127, 0) as i8
+    }
+
+    /// 信号够不够完成认证 / 关联 / 数据收发（链路是对称的：芯片听不清 AP，AP 也听不清芯片）
+    fn linkable(&self, i: usize) -> bool {
+        self.rssi(i) as i32 >= LINK_MIN_DBM
+    }
+
+    fn weak(&self, i: usize, what: &str) -> String {
+        format!("{what} → {}：信号 {} dBm 低于 {LINK_MIN_DBM} dBm，AP 没听到（天线遮挡 {} dB，估算）", self.aps[i].ssid, self.rssi(i), self.antenna_loss_db)
+    }
+
     fn next_seq(&mut self) -> u16 {
         self.seq = self.seq.wrapping_add(1) & 0xfff;
         self.seq
@@ -122,7 +144,7 @@ impl World {
 
     pub fn beacon(&mut self, i: usize, tsf_us: u64) -> Air {
         let f = self.bss_frame(i, fc::BEACON, &frame::BROADCAST, tsf_us);
-        Air { delay_us: 0, frame: f, rssi: self.aps[i].rssi, channel: self.aps[i].channel }
+        Air { delay_us: 0, frame: f, rssi: self.rssi(i), channel: self.aps[i].channel }
     }
 
     /// 芯片发出一帧；返回描述（给日志）与空中的回应，以及这帧是否会被确认（单播且对方存在）
@@ -132,7 +154,7 @@ impl World {
         let body = &f[h.body.min(f.len())..];
         let unicast = h.a1[0] & 1 == 0;
         let target = self.aps.iter().position(|a| a.bssid == h.a1);
-        let acked = unicast && target.is_some();
+        let acked = unicast && target.is_some_and(|i| self.linkable(i));
         self.sta_mac = h.a2;
         let desc = match h.fc0 {
             fc::PROBE_REQ => {
@@ -145,10 +167,10 @@ impl World {
                 let ch = self.channel;
                 for i in 0..self.aps.len() {
                     let a = &self.aps[i];
-                    if a.channel != ch || (!ssid.is_empty() && ssid != a.ssid.as_bytes()) {
+                    if a.channel != ch || (!ssid.is_empty() && ssid != a.ssid.as_bytes()) || (self.rssi(i) as i32) < SCAN_MIN_DBM {
                         continue;
                     }
-                    let (rssi, channel) = (a.rssi, a.channel);
+                    let (rssi, channel) = (self.rssi(i), a.channel);
                     let resp = self.bss_frame(i, fc::PROBE_RESP, &h.a2, tsf_us);
                     out.push(Air { delay_us: 600 + 400 * i as u64, frame: resp, rssi, channel });
                 }
@@ -161,6 +183,9 @@ impl World {
             }
             fc::AUTH => {
                 let Some(i) = target else { return ("认证 → 未知 BSSID".into(), out, false) };
+                if !self.linkable(i) {
+                    return (self.weak(i, "认证"), out, false);
+                }
                 self.channel = self.aps[i].channel;
                 let alg = u16::from_le_bytes([body[0], body[1]]);
                 let seq = self.next_seq();
@@ -170,13 +195,16 @@ impl World {
                 r.extend_from_slice(&alg.to_le_bytes());
                 r.extend_from_slice(&2u16.to_le_bytes());
                 r.extend_from_slice(&0u16.to_le_bytes());
-                let (rssi, channel) = (a.rssi, a.channel);
+                let (rssi, channel) = (self.rssi(i), self.aps[i].channel);
                 out.push(Air { delay_us: 800, frame: r, rssi, channel });
                 self.sta[i] = StaState::Authed;
                 format!("认证 → {}（开放系统，成功）", self.aps[i].ssid)
             }
             fc::ASSOC_REQ => {
                 let Some(i) = target else { return ("关联 → 未知 BSSID".into(), out, false) };
+                if !self.linkable(i) {
+                    return (self.weak(i, "关联"), out, false);
+                }
                 let seq = self.next_seq();
                 let aid = self.aid;
                 let a = &self.aps[i];
@@ -190,7 +218,8 @@ impl World {
                 r.extend_from_slice(&(aid | 0xc000).to_le_bytes());
                 frame::ie(&mut r, 1, &RATES);
                 frame::ie(&mut r, 50, &EXT_RATES);
-                let (rssi, channel, wpa2) = (a.rssi, a.channel, a.auth == Auth::Wpa2Psk);
+                let (channel, wpa2) = (a.channel, a.auth == Auth::Wpa2Psk);
+                let rssi = self.rssi(i);
                 out.push(Air { delay_us: 800, frame: r, rssi, channel });
                 self.sta[i] = StaState::Assoc;
                 if wpa2 {
@@ -213,6 +242,9 @@ impl World {
             fc::NULL | fc::QOS_NULL => "空数据帧（省电状态通告）".into(),
             x if x & 0x0c == 0x08 => {
                 let Some(i) = target else { return ("数据帧 → 未知 BSSID".into(), out, false) };
+                if !self.linkable(i) {
+                    return (self.weak(i, "数据帧"), out, false);
+                }
                 if self.sta[i] != StaState::Assoc {
                     return ("数据帧（未关联，丢弃）".into(), out, acked);
                 }
@@ -236,7 +268,7 @@ impl World {
                     let Some(a) = self.wpa[i].as_mut() else { return ("EAPOL（无认证方）".into(), out, acked) };
                     let (note, reply) = a.on_eapol(&body[8..], tsf_us);
                     if let Some(r) = reply {
-                        let (rssi, channel) = (self.aps[i].rssi, self.aps[i].channel);
+                        let (rssi, channel) = (self.rssi(i), self.aps[i].channel);
                         let fr = self.eapol_frame(i, &r);
                         out.push(Air { delay_us: 1000, frame: fr, rssi, channel });
                     }
@@ -249,7 +281,7 @@ impl World {
                 let eth = Eth { dst: h.a3, src: h.a2, ethertype, payload: body[8..].to_vec() };
                 let before = self.net.log.len();
                 let replies = self.net.on_eth(&eth, tsf_us);
-                let (rssi, channel, bssid) = (self.aps[i].rssi, self.aps[i].channel, self.aps[i].bssid);
+                let (rssi, channel, bssid) = (self.rssi(i), self.aps[i].channel, self.aps[i].bssid);
                 for (k, r) in replies.into_iter().enumerate() {
                     let mut f = self.data_from_ds(&r, &bssid);
                     if let Some(a) = self.wpa[i].as_mut().filter(|a| wpa2 && a.authorized()) {
@@ -310,7 +342,7 @@ impl World {
         let (mut out, mut log) = (Vec::new(), Vec::new());
         for i in 0..self.aps.len() {
             let Some(t) = self.wpa[i].as_mut().and_then(|a| a.poll(tsf_us)) else { continue };
-            let (rssi, channel, bssid) = (self.aps[i].rssi, self.aps[i].channel, self.aps[i].bssid);
+            let (rssi, channel, bssid) = (self.rssi(i), self.aps[i].channel, self.aps[i].bssid);
             match t {
                 wpa::Timer::Resend(m) => {
                     let f = self.eapol_frame(i, &m);

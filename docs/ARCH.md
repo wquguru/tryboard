@@ -54,6 +54,8 @@ web/（Vite + TS）
 
 ## 芯片无关外壳（`core/crates/machine`）
 - `enum Machine { C3, S3 }`：按镜像头芯片 ID（5 / 9）选芯片，给 CLI 和 wasm 一套接口（运行、控制台、GPIO 读写、PWM、ADC 电压、WS2812、I2C 器件、OLED、SPI 圆屏、调试状态）。加新芯片只改这里。
+- 线束（P2-11，估算）：`Machine::harness`（I2C 排线总长、天线遮挡 dB）是外部世界，跨软件复位保留、复位后重新挂到新总线 / Wi-Fi 模型上。I2C 控制器按 `tryboard-elec::i2cbus` 的公式（总线电容 → 上升时间，和固件配置的 SCL 频率对应的规范上限比）决定读回字节是否丢 0→1 的位、地址是否不应答；虚拟世界按遮挡降低所有 AP 的 RSSI，低于门限扫描收不到 / 认证不回。CLI `--i2c-wire` / `--antenna-loss`，脚本 `i2cwire=` / `antenna=`，wasm `tb_i2c_wire` / `tb_antenna_loss` / `tb_harness_report`
+- USB 关卡观察（P2-12）：`tryboard_machine::usb_report_lines` 给出"USB 主机：状态"与"USB 键盘输入: …"两行，CLI `--usb-log` 与 wasm `tb_usb_report` 共用；关卡带 `--usb-log` 时进观察记录（指纹）
 
 ## 供电网络（`core/crates/elec`，C3 / S3 共用）
 - `mna.rs`：节点电压法 + 隐式欧拉；元件 R / C / V（理想或带内阻）/ I / Limit（带限流的源）/ Ldo / Load（恒流，低于 vknee 退成电阻）/ Motor（舵机电机：max(0,(min(v,vcmd)−emf)/r)）。分段线性元件用 Katzenelson 法解（见 DECISIONS「电气模型」），稠密 LU 部分主元。`spice.rs` 读 SPICE 子集（R/C/V/I、.op、.tran，`*tb:` 行写自定义元件），CLI `tryboard elec-net` 用它与 ngspice 对照（`tools/elec/compare.py`）

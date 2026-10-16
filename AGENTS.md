@@ -52,6 +52,7 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | 构建验收固件 | `tools/build_fw.sh [名字]` |
 | 原生跑固件 | `cd core && cargo run -p tryboard-cli --release -- run ../firmware/build/<名字>/flash.bin` |
 | 带外接器件跑 | `tryboard run <flash.bin> --i2c ssd1306@0x3c,bme280@0x76 --env 23.5,45,101325 --oled`（`--oled` 打印屏幕字符画）；S3 圆屏：`--spi gc9a01 --lcd-ppm Reviews/x.ppm`，再 `tools/ppm2png.py Reviews/x.ppm Reviews/x.png` 看图 |
+| 线束估算（P2-11） | `tryboard run <flash.bin> --i2c ssd1306@0x3c,bme280@0x76 --i2c-wire 60`（I2C 排线 cm）；`--antenna-loss 30`（天线遮挡 dB）；结论打在 stderr 末尾 |
 | 跑全部验收 | `tools/accept.sh [--no-web] [--no-qemu]`（输出 `Reviews/accept.md`；验收用例在 `firmware/accept.json`） |
 | 定位卡死 / 崩溃 | `tryboard run <flash.bin> --trace 40`（打印最近跳转目标，自动加载同目录 app.elf 符号） |
 | 逻辑分析仪事件 | `tryboard run <flash.bin> --trace-io Reviews/io.txt [--trace-pins 4,8]`（GPIO / PWM / WS2812 / I2C 事务，按周期盖戳；与网页逐条对拍：`node tools/webtest/traceio.mjs`） |
@@ -62,7 +63,7 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | 本地试网页 | `cd web && npm run dev` |
 | 网页冒烟测试 | `node tools/webtest/webtest.mjs <示例> <期望文本>`（截图到 `Reviews/web/`） |
 | 关卡验收 | `tools/check.py <flash.bin> --level 04`；`tools/check.py --ref --all` 跑全部参考固件（关卡定义在 `firmware/levels.json`） |
-| 关卡 / 装配 / 首页网页测试 | `node tools/webtest/levels.mjs`（含拖拽装配、网页与命令行指纹对拍） |
+| 关卡 / 装配 / 首页网页测试 | `node tools/webtest/levels.mjs`（含拖拽装配、网页与命令行指纹对拍）；拍照录像 `media.mjs`、线束与 USB 小键盘 `harness.mjs` |
 | 输入日志重放对拍 | `node tools/webtest/replay.mjs`（网页按 BOOT、调温度 → 导出输入 → `tryboard run --inputs` 重放，串口逐字节、指纹相同） |
 | 浏览器验收（新功能必做） | `agent-browser skills get core` 先读用法；`cd web && npx vite preview --port 5180` 起服务后 `agent-browser open <url>` → `snapshot` / `click` / `screenshot Reviews/ab/<项>.png` → `console` / `errors`；用 Read 看截图。并行子代理各用自己的端口和 `--session <名字>`，不要抢同一个浏览器 |
 

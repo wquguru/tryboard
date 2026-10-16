@@ -5,6 +5,7 @@
 // 跟随：右边缘贴着当前模拟时刻；时间线回退后模拟停在回退点、事件按重放重建，分析仪跟着停在那一刻。
 import type { PartSpec } from '../board3d';
 import type { StepCtx } from './types';
+import { currentTheme, onTheme } from '../theme';
 import { CPU_HZ, firstTxnEndingAfter, fmtTime, hex, lastLE, pwmLabel, txnNote, txnText, type I2cTxn } from './iotrace';
 
 export type Channel =
@@ -34,6 +35,11 @@ const LABEL_W = 96;
 const RULER_H = 20;
 const ROW_H = { scl: 22, sda: 22, dec: 46, pin: 34, ws: 22 } as const;
 const css = (n: string, fb: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || fb;
+// canvas 里的半透明叠层没有对应的 CSS 变量（canvas 不认 color-mix），按主题各备一套；数值取自 app.css 两套变量
+const PAL = {
+  light: { bg: '#FFFFFF', nodata: '#F4F4F4C0', future: '#FAFAFAD0', tag: '#FFFFFFE0', wsTag: '#FFFFFFD8', onAccent: '#FFFFFF', hover: '#00000022', env: '#0D99FF33', envMid: '#0D99FF99', txn: '#0D99FF40', abg: '#E5F4FF', okBg: '#E8F7EE', badBg: '#FEF2F2', bubbleFg: '#1E1E1E', wsOff: '#222222' },
+  dark: { bg: '#1E2024', nodata: '#2A2C31C0', future: '#17181BD0', tag: '#1E2024E0', wsTag: '#1E2024D8', onAccent: '#08141F', hover: '#FFFFFF33', env: '#3AA8FF33', envMid: '#3AA8FF99', txn: '#3AA8FF40', abg: '#10304A', okBg: '#163826', badBg: '#3B1E19', bubbleFg: '#E8EAED', wsOff: '#0E0F11' },
+};
 
 let single: Analyzer | null = null;
 /** 整页一个分析仪（实验台挂载时建，⌘K 也用它） */
@@ -111,6 +117,11 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
   let flash: { id: string; until: number } | null = null;
   let dirty = true;
   let raf = 0;
+  let K = PAL[currentTheme()];
+  let okCol = '#14AE5C';
+  onTheme(() => {
+    dirty = true;
+  });
   let bubbles: string[] = [];
   let txnHit: { x0: number; x1: number; y0: number; y1: number; x: I2cTxn }[] = [];
   let lastScene = session.scene;
@@ -300,7 +311,9 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, W, H);
     const C = { fg: css('--fg', '#1E1E1E'), muted: css('--muted', '#8C8C8C'), line: css('--line', '#E6E6E6'), soft: css('--line-soft', '#F0F0F0'), accent: css('--accent', '#0D99FF'), abg: css('--accent-bg', '#E5F4FF'), bad: css('--bad', '#F24822'), ok: css('--ok', '#14AE5C'), field: css('--field', '#F7F7F7') };
-    g.fillStyle = '#FFFFFF';
+    K = PAL[currentTheme()];
+    okCol = C.ok;
+    g.fillStyle = K.bg;
     g.fillRect(0, 0, W, H);
     const t0 = end - span;
     const c0 = t0 * CPU_HZ;
@@ -378,13 +391,13 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     // 没有数据的那段（上电前 / 被丢掉的）画浅灰
     const since = Math.max(session.io.since, 0);
     if (since > c0) {
-      g.fillStyle = '#F4F4F4C0';
+      g.fillStyle = K.nodata;
       g.fillRect(LABEL_W + 1, RULER_H + 1, Math.min(X(since), W) - LABEL_W - 1, H - RULER_H);
     }
     // 当前模拟时刻之后：还没发生
     if (nowC < c1) {
       const x = Math.max(LABEL_W + 1, X(nowC));
-      g.fillStyle = '#FAFAFAD0';
+      g.fillStyle = K.future;
       g.fillRect(x, RULER_H + 1, W - x, H - RULER_H);
       g.strokeStyle = C.accent;
       g.setLineDash([3, 3]);
@@ -399,7 +412,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       const right = x > W - 120;
       const lw = g.measureText(lbl).width;
       const lx = right ? x - 6 - lw : x + 4;
-      g.fillStyle = '#FFFFFF';
+      g.fillStyle = K.bg;
       g.fillRect(lx - 3, 2, lw + 6, RULER_H - 4);
       g.fillStyle = C.accent;
       g.fillText(lbl, lx, RULER_H / 2);
@@ -420,14 +433,14 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       g.stroke();
       g.fillStyle = col;
       g.fillRect(Math.round(x) - 7, 2, 14, RULER_H - 4);
-      g.fillStyle = '#fff';
+      g.fillStyle = K.onAccent;
       g.textAlign = 'center';
       g.fillText(name, Math.round(x), RULER_H / 2);
       g.textAlign = 'left';
     }
     // 悬停竖线
     if (hover && hover.x > LABEL_W) {
-      g.strokeStyle = '#00000022';
+      g.strokeStyle = K.hover;
       g.lineWidth = 1;
       g.beginPath();
       g.moveTo(Math.round(hover.x) + 0.5, RULER_H);
@@ -524,7 +537,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
           g.stroke();
         } else {
           // 缩小：一个周期不到 3 像素，画包络（高低之间填满）和平均电平线
-          g.fillStyle = '#0D99FF33';
+          g.fillStyle = K.env;
           g.fillRect(xa, hi, xb - xa, lo - hi);
           g.beginPath();
           g.moveTo(xa, hi);
@@ -533,7 +546,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
           g.lineTo(xb, lo);
           g.stroke();
           const ym = lo - sg.duty * (lo - hi);
-          g.strokeStyle = '#0D99FF99';
+          g.strokeStyle = K.envMid;
           g.setLineDash([2, 2]);
           g.beginPath();
           g.moveTo(xa, ym);
@@ -546,7 +559,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
         const tw = g.measureText(lbl).width + 8;
         if (xb - xa > tw + 4) {
           const lx = Math.max(xa, LABEL_W) + 4;
-          g.fillStyle = '#FFFFFFE0';
+          g.fillStyle = K.tag;
           g.fillRect(lx - 2, y + h / 2 - 7, tw, 14);
           g.fillStyle = C.fg;
           g.fillText(lbl, lx + 2, y + h / 2);
@@ -602,7 +615,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       const rgb = s.rgb[i];
       const [r, gg, bb] = [(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255];
       const k = 255 / Math.max(1, r, gg, bb);
-      g.fillStyle = rgb ? `rgb(${Math.round(r * k)},${Math.round(gg * k)},${Math.round(bb * k)})` : '#222';
+      g.fillStyle = rgb ? `rgb(${Math.round(r * k)},${Math.round(gg * k)},${Math.round(bb * k)})` : K.wsOff;
       g.fillRect(X(a), y + 5, Math.max(1, X(b) - X(a)), h - 10);
       g.strokeStyle = C.line;
       g.strokeRect(X(a) + 0.5, y + 5.5, Math.max(1, X(b) - X(a)) - 1, h - 11);
@@ -613,7 +626,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       }
       const lbl = `#${rgb.toString(16).padStart(6, '0')}${s.n[i] > 1 ? ` ×${s.n[i]}` : ''}`;
       if (X(b) - X(a) > g.measureText(lbl).width + 12) {
-        g.fillStyle = '#FFFFFFD8';
+        g.fillStyle = K.wsTag;
         g.fillRect(X(a) + 4, y + h / 2 - 6, g.measureText(lbl).width + 6, 12);
         g.fillStyle = C.fg;
         g.fillText(lbl, X(a) + 7, y + h / 2);
@@ -664,7 +677,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       }
       // 缩小：事务画成一块活动区
       g.stroke();
-      g.fillStyle = '#0D99FF40';
+      g.fillStyle = K.txn;
       g.fillRect(xa, sclY[0], xb - xa, sclY[1] - sclY[0]);
       g.fillRect(xa, sdaY[0], xb - xa, sdaY[1] - sdaY[0]);
       g.beginPath();
@@ -812,14 +825,14 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
 
 
   function bubble(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, text: string, col: string, bad: boolean) {
-    g.fillStyle = bad ? '#FEF2F2' : col === '#14ae5c' || col === '#14AE5C' ? '#E8F7EE' : '#E5F4FF';
+    g.fillStyle = bad ? K.badBg : col === okCol ? K.okBg : K.abg;
     g.strokeStyle = col;
     g.lineWidth = 1;
     roundRect(g, x, y, w, h, Math.min(6, h / 2));
     g.fill();
     g.stroke();
     if (text) {
-      g.fillStyle = bad ? col : '#1E1E1E';
+      g.fillStyle = bad ? col : K.bubbleFg;
       g.save();
       g.beginPath();
       g.rect(x + 2, y, w - 4, h);

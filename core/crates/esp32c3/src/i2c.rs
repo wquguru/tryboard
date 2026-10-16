@@ -7,6 +7,7 @@
 use crate::iotrace::{i2cbit, kind, IoEvent};
 use std::any::Any;
 use std::collections::VecDeque;
+use tryboard_elec::i2cbus::{self, Verdict};
 
 /// 总线上的从机器件。`start` 在地址字节之后调用，返回是否应答。
 pub trait I2cDevice: Any {
@@ -60,6 +61,11 @@ pub struct I2c {
     in_txn: bool,
     /// 事件里的控制器编号位（I2C1 = i2cbit::PORT1）
     pub port_bit: u16,
+    /// 外接线总长（cm，估算，P2-11）；None = 理想总线（不算上升时间）
+    pub wire_cm: Option<f64>,
+    /// 因上升时间超标读错的字节数 / 地址不应答次数（估算）
+    pub slow_bytes: u64,
+    pub slow_nacks: u64,
 }
 
 impl Default for I2c {
@@ -86,6 +92,9 @@ impl Default for I2c {
             events: Vec::new(),
             in_txn: false,
             port_bit: 0,
+            wire_cm: None,
+            slow_bytes: 0,
+            slow_nacks: 0,
         }
     }
 }
@@ -209,6 +218,19 @@ impl I2c {
         }
     }
 
+    /// 当前 SCL 频率（Hz）
+    pub fn scl_hz(&self) -> f64 {
+        crate::periph::CPU_HZ as f64 / self.bit_cycles() as f64
+    }
+
+    /// 总线负载（P2-11）：上升时间、这个频率下的上限、结论；理想总线返回 None
+    pub fn load(&self) -> Option<(f64, f64, Verdict)> {
+        let cm = self.wire_cm?;
+        let rise = i2cbus::rise_ns(cm, self.devices.len());
+        let limit = i2cbus::limit_ns(self.scl_hz());
+        Some((rise, limit, i2cbus::verdict(rise, limit)))
+    }
+
     fn run_commands(&mut self, now: u64) {
         self.transactions += 1;
         for d in self.devices.iter_mut() {
@@ -220,6 +242,8 @@ impl I2c {
         // 事件时刻 = 开始时刻 + 已经过去的 SCL 位数 × 每位周期（与完成中断的时刻同一套算法）
         let bc = self.bit_cycles();
         let pb = self.port_bit;
+        // 线太长：上升时间超标（估算）。Marginal 读回的字节丢 0→1 的位；Fail 地址都传不对、没人应答
+        let slow = self.load().map(|l| l.2).unwrap_or(Verdict::Ok);
         for idx in 0..8 {
             let reg = 0x58 / 4 + idx;
             let cmd = self.regs[reg];
@@ -249,7 +273,12 @@ impl I2c {
                         let acked = if self.need_addr {
                             self.need_addr = false;
                             let addr = b >> 1;
-                            self.cur = self.devices.iter().position(|d| d.address() == addr);
+                            self.cur = if slow == Verdict::Fail {
+                                self.slow_nacks += 1;
+                                None
+                            } else {
+                                self.devices.iter().position(|d| d.address() == addr)
+                            };
                             match self.cur {
                                 Some(i) => self.devices[i].start(b & 1 != 0),
                                 None => false,
@@ -277,10 +306,15 @@ impl I2c {
                 }
                 op::READ => {
                     for k in 0..n {
-                        let b = match self.cur {
+                        let mut b = match self.cur {
                             Some(i) => self.devices[i].read(),
                             None => 0xff, // 没人驱动 SDA：上拉读到全 1
                         };
+                        if slow == Verdict::Marginal && self.cur.is_some() {
+                            let c = i2cbus::corrupt_read(b);
+                            self.slow_bytes += (c != b) as u64;
+                            b = c;
+                        }
                         // 主机在每个读字节后回 ACK_VALUE（最后一个字节通常是 NACK，告诉从机不要了）
                         let _ = k;
                         let nack = if ack_val != 0 { i2cbit::NACK } else { 0 };
@@ -342,6 +376,50 @@ mod tests {
 
     fn cmd(op: u32, n: u32, ack_en: bool, ack_val: u32) -> u32 {
         op << 11 | (ack_en as u32) << 8 | ack_val << 10 | n
+    }
+
+    /// 读 BME280 芯片 ID（0xD0）：返回 (地址是否应答, 读到的字节)
+    fn read_id(b: &mut I2c) -> (bool, u8) {
+        b.rx.clear();
+        b.tx.clear();
+        b.write(0x1c, 0x76 << 1, 0);
+        b.write(0x1c, 0xd0, 0);
+        b.write(0x1c, 0x76 << 1 | 1, 0);
+        b.regs[0x58 / 4] = cmd(op::RSTART, 0, false, 0);
+        b.regs[0x58 / 4 + 1] = cmd(op::WRITE, 2, true, 0);
+        b.regs[0x58 / 4 + 2] = cmd(op::RSTART, 0, false, 0);
+        b.regs[0x58 / 4 + 3] = cmd(op::WRITE, 1, true, 0);
+        b.regs[0x58 / 4 + 4] = cmd(op::READ, 1, false, 1);
+        b.regs[0x58 / 4 + 5] = cmd(op::STOP, 0, false, 0);
+        let n0 = b.nacks;
+        b.write(0x04, 1 << 5 | 1 << 4, 0);
+        (b.nacks == n0, b.rx.pop_front().unwrap_or(0))
+    }
+
+    /// P2-11：线越长上升时间越长。400 kHz 下 2 个模块：20 cm 正常、60 cm 读错（0x60 → 0x20）、150 cm 不应答
+    #[test]
+    fn long_wire_corrupts_then_nacks() {
+        let mut b = I2c::default();
+        b.attach(Box::new(Bme280::new(0x76)));
+        b.attach(Box::new(crate::devices::ssd1306::Ssd1306::new(0x3c)));
+        // 400 kHz：40 MHz / (50 + 50)
+        b.regs[0] = 49;
+        b.regs[0x38 / 4] = 49;
+        assert!((b.scl_hz() - 400_000.0).abs() < 1.0);
+        assert_eq!(read_id(&mut b), (true, 0x60));
+        b.wire_cm = Some(20.0);
+        assert_eq!(read_id(&mut b), (true, 0x60));
+        b.wire_cm = Some(60.0);
+        assert_eq!(b.load().unwrap().2, Verdict::Marginal);
+        assert_eq!(read_id(&mut b), (true, 0x20));
+        assert_eq!(b.slow_bytes, 1);
+        b.wire_cm = Some(150.0);
+        assert!(!read_id(&mut b).0);
+        assert_eq!(b.slow_nacks, 1);
+        // 降到 100 kHz：同样 150 cm 在标准模式的 1000 ns 以内
+        b.regs[0] = 199;
+        b.regs[0x38 / 4] = 199;
+        assert_eq!(read_id(&mut b), (true, 0x60));
     }
 
     /// 读 BME280 的 0xF7 起 8 字节，分两批命令（第二批以 RSTART 开头 = 重复起始），事件序列与真机总线上一致

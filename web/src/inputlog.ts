@@ -16,6 +16,9 @@ export type InputEvent =
   | { tMs: number; kind: 'uart' | 'usbcdc'; text: string }
   /** 供电切换（P1-02）：usb = 舵机吃 USB 的 5V；ext = 舵机由外接 5 V 供电。脚本动作 power=usb|ext */
   | { tMs: number; kind: 'supply'; mode: 'usb' | 'ext' }
+  /** 线束（P2-11，估算）：I2C 排线总长（cm，负数 = 理想总线）、天线遮挡（dB）。脚本动作 i2cwire=cm / antenna=dB */
+  | { tMs: number; kind: 'i2cwire'; cm: number }
+  | { tMs: number; kind: 'antenna'; db: number }
   /** 旋转编码器转 steps 格（正 = 顺时针）；脚本动作 enc=+N / enc=-N（P2-01） */
   | { tMs: number; kind: 'enc'; steps: number }
   /** 编码器按键；脚本动作 encsw=1|0 */
@@ -81,6 +84,10 @@ export function action(e: InputEvent): string | null {
       return `usbcdc=${esc(e.text)}`;
     case 'supply':
       return `power=${e.mode}`;
+    case 'i2cwire':
+      return `i2cwire=${e.cm}`;
+    case 'antenna':
+      return `antenna=${e.db}`;
     case 'enc':
       return `enc=${e.steps >= 0 ? '+' : ''}${e.steps}`;
     case 'encsw':

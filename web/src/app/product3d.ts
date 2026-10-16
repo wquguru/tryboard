@@ -12,6 +12,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { servoAngle } from '../views/common';
 import { currentTheme, onTheme, type Theme } from '../theme';
+import { capturableOf, type Capturable } from './capture';
 
 export interface ProductFrame {
   pwm: number[];
@@ -44,6 +45,8 @@ export interface ProductScene {
   resetView(): void;
   /** 指针当前角度（°，0 = 0 ℃ 一侧） */
   needle(): number;
+  /** 拍照 / 录像（P2-10） */
+  capture(): Capturable;
 }
 
 const W = 5.0, H = 7.0, D = 3.2;
@@ -533,5 +536,6 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
       controls.update();
     },
     needle: () => theta,
+    capture: () => capturableOf(renderer, scene, composer),
   };
 }

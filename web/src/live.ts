@@ -1,6 +1,7 @@
 // 首页 / 关卡页用的实时模拟：起一个 worker.ts，跑一份固件，把每帧状态交给视图。
 import { fetchBuf, imageChip, loadRom, loadWasm } from './assets';
-import type { EncoderSpec, Env, FromWorker, PcmBlock, PowerMode, PwmEvent, Snapshot, SonarSpec, ToWorker } from './worker';
+import type { EncoderSpec, Env, FromWorker, Harness, PcmBlock, PowerMode, PwmEvent, Snapshot, SonarSpec, ToWorker } from './worker';
+import type { UsbView } from './usb3d';
 import type { InputEvent, InputLog } from './inputlog';
 
 /** IMU 姿态：欧拉角（度）+ 变化率（°/s），见 core devices/imu.rs */
@@ -22,6 +23,12 @@ export interface LiveOptions {
   servo?: number;
   /** 上电时的供电方式（默认 usb） */
   power?: PowerMode;
+  /** 上电时的线束（P2-11，估算）：I2C 排线总长、天线遮挡 */
+  harness?: Harness;
+  /** 原生 USB 虚拟主机看到的（S3 固件用了 USB 才有；null = 没有 USB 设备） */
+  onUsb?(v: UsbView | null): void;
+  /** 线束结论文字（与命令行同样的行），变了才回调 */
+  onHarness?(text: string): void;
   /** 旋转编码器 / HC-SR04（接在 GPIO 上，波形由内核按时刻排出） */
   encoder?: EncoderSpec;
   sonar?: SonarSpec;
@@ -119,6 +126,10 @@ export class LiveSim {
       } else if (m.type === 'lcd') {
         this.frame.lcd = m.pixels;
         o.onFrame?.(this.frame, NaN);
+      } else if (m.type === 'usb') {
+        o.onUsb?.(m.json ? (JSON.parse(m.json) as UsbView) : null);
+      } else if (m.type === 'harness') {
+        o.onHarness?.(m.text);
       } else if (m.type === 'oled') {
         this.frame.oled = m.pixels;
         o.onFrame?.(this.frame, NaN);
@@ -146,7 +157,7 @@ export class LiveSim {
     const [wasm, flash] = [await loadWasm(), this.flash];
     const rom = await loadRom(imageChip(flash));
     Object.assign(this.frame, emptyFrame());
-    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName });
+    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName, harness: this.o.harness });
   }
   reset() {
     return this.start();
@@ -207,8 +218,20 @@ export class LiveSim {
     this.o.power = mode;
     this.send({ type: 'power', mode });
   }
+  harness(): Harness {
+    return { ...this.o.harness };
+  }
+  /** 改线束：在线生效（进输入日志），也作为下次上电的初始值 */
+  setHarness(h: Harness) {
+    this.o.harness = { ...this.o.harness, ...h };
+    this.send({ type: 'harness', ...h });
+  }
   press(down: boolean) {
     this.send({ type: 'gpio', pin: this.bootPin, level: down ? 0 : -1 });
+  }
+  /** 外部按键：按下把引脚拉到地，松开高阻（进输入日志 gpioN=0|z） */
+  pressPin(pin: number, down: boolean) {
+    this.send({ type: 'gpio', pin, level: down ? 0 : -1 });
   }
   private sensed(): Env {
     return { ...this.env, temp: this.env.temp + this.sensorOffset };
@@ -277,6 +300,11 @@ export class LiveSim {
     const last = [...job.events].reverse().find((e) => e.kind === 'env' && Math.round(e.tMs * 160000) < Math.round(job.untilMs * 160000));
     this.env = last && last.kind === 'env' ? { temp: last.temp, humidity: last.humidity, pressure: last.pressure } : { ...job.env };
     this.sensorOffset = 0;
+    // 线束同理：回退停住以后 = 日志里最后一次设置
+    const before = (k: 'i2cwire' | 'antenna') => [...job.events].reverse().find((e) => e.kind === k && Math.round(e.tMs * 160000) < Math.round(job.untilMs * 160000));
+    const iw = before('i2cwire');
+    const an = before('antenna');
+    this.o.harness = { i2cWire: iw && iw.kind === 'i2cwire' ? iw.cm : undefined, antenna: an && an.kind === 'antenna' ? an.db : undefined };
     Object.assign(this.frame, emptyFrame());
     return new Promise((r) => {
       this.seekWaiter = r;

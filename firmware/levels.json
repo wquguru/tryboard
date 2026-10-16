@@ -415,6 +415,75 @@
   ]
  },
  {
+  "id": "usbkey-1",
+  "work": "usbkey",
+  "title": "枚举成功",
+  "goal": "插上电脑，被认成 USB 键盘",
+  "pass": "1.5 秒内串口出现 TRYBOARD_OK；虚拟电脑看到的 USB 设备状态是“已配置”",
+  "buy": "ESP32-S3 开发板（带原生 USB 口）、USB-C 数据线",
+  "learn": "原生 USB、TinyUSB、设备 / 配置 / HID 描述符",
+  "brief": "用 ESP-IDF 5.5 给 ESP32-S3 写固件，让它插上电脑后被认成一个 USB 键盘（先不用按键）：\n· ESP32-S3 原生 USB（板上标着 USB / OTG 的 Type-C 口，GPIO19 / GPIO20），用 ESP-IDF 5.5 的 espressif/esp_tinyusb 组件（TinyUSB）\n· 设备字符串：厂商 TryBoard、产品 TryBoard Macro Pad；配置描述符里一个 HID 键盘接口（启动协议键盘，报告描述符用 TUD_HID_REPORT_DESC_KEYBOARD）\n· 等电脑枚举完（tud_mounted() 为真）后串口打印 TRYBOARD_OK\n· 上电立即初始化 USB，不要先等待；什么键也不要发",
+  "ref": "usbkey",
+  "seconds": 1.5,
+  "args": [
+   "--usb-log"
+  ],
+  "expect": [
+   "TRYBOARD_OK"
+  ],
+  "usb": {
+   "state": "已配置"
+  }
+ },
+ {
+  "id": "usbkey-2",
+  "work": "usbkey",
+  "title": "按键发送字母",
+  "goal": "按 K1 / K2 / K3，电脑上打出 a / b / c",
+  "pass": "1.2 s、1.5 s、1.8 s 依次按 K1、K2、K3（各按 100 ms）：电脑上的文本编辑器里正好是 abc",
+  "buy": "轴体按键 × 4（或轻触开关）",
+  "learn": "GPIO 输入、消抖、HID 键盘报告",
+  "brief": "在上一个检查点（USB 键盘枚举）的固件上加按键，ESP32-S3：\n· USB 部分与上一个检查点完全一样（产品名 TryBoard Macro Pad，枚举完打印 TRYBOARD_OK）\n· 四个按键：K1=GPIO4、K2=GPIO5、K3=GPIO6、K4=GPIO7，另一端接地，用内部上拉（按下为低电平）\n· 软件消抖：每 10 ms 采样一次，连续两次一致才算数；一次按下最短 100 ms，消抖窗口不能比它长；按住不放只算一次\n· 每发一个字符 = 一个按下报告 + 一个全松开报告，中间各等 12 ms（电脑按 10 ms 轮询，太快会丢字）\n· K1 发 a、K2 发 b、K3 发 c（小写，不按 Shift）。K4 先不用管\n· 每按一次在串口打印一行，例如 KEY 1 a",
+  "ref": "usbkey",
+  "seconds": 2.2,
+  "args": [
+   "--usb-log"
+  ],
+  "script": "1.2:gpio4=0; 1.3:gpio4=z; 1.5:gpio5=0; 1.6:gpio5=z; 1.8:gpio6=0; 1.9:gpio6=z",
+  "expect": [
+   "TRYBOARD_OK"
+  ],
+  "usb": {
+   "state": "已配置",
+   "typed": "abc"
+  }
+ },
+ {
+  "id": "usbkey-3",
+  "work": "usbkey",
+  "title": "合体：宏键",
+  "goal": "K4 一键打出一整句，装进外壳",
+  "pass": "1.2 s 按 K1、1.5 s 按 K4（各按 100 ms）：电脑上正好打出 a 和 “Hello TryBoard” 再换行；网页上另外要求装配无警告（几何估算，命令行不判）",
+  "buy": "3D 打印外壳 + 键帽",
+  "learn": "宏：一个键发一串报告；把前两个检查点合起来",
+  "brief": "把前两个检查点合成一个 USB 小键盘，ESP32-S3：\n· USB 部分与第一个检查点一样（产品名 TryBoard Macro Pad，枚举完打印 TRYBOARD_OK）\n· 四个按键：K1=GPIO4、K2=GPIO5、K3=GPIO6、K4=GPIO7，另一端接地，用内部上拉（按下为低电平）\n· 软件消抖：每 10 ms 采样一次，连续两次一致才算数；一次按下最短 100 ms，消抖窗口不能比它长；按住不放只算一次\n· 每发一个字符 = 一个按下报告 + 一个全松开报告，中间各等 12 ms（电脑按 10 ms 轮询，太快会丢字）\n· K1 / K2 / K3 照旧发 a / b / c\n· K4 是宏键：按一下依次打出 Hello TryBoard 和一个回车（大写字母要带左 Shift；回车是 HID 键码 0x28），串口打印 MACRO Hello TryBoard\n· 宏打字时不要漏键：每个字符都要等 tud_hid_ready()",
+  "ref": "usbkey",
+  "seconds": 3,
+  "args": [
+   "--usb-log"
+  ],
+  "script": "1.2:gpio4=0; 1.3:gpio4=z; 1.5:gpio7=0; 1.6:gpio7=z",
+  "expect": [
+   "TRYBOARD_OK",
+   "MACRO Hello TryBoard"
+  ],
+  "usb": {
+   "state": "已配置",
+   "typed": "aHello TryBoard\n"
+  },
+  "assembly": true
+ },
+ {
   "id": "lamp-1",
   "work": "lamp",
   "title": "灯带点亮",

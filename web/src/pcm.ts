@@ -123,6 +123,11 @@ export class PcmVoice {
     this.gain.connect(this.analyser).connect(ctx.destination);
   }
 
+  /** 录屏（P2-10）：把喇叭这一路也接到录音节点 */
+  tap(dest: AudioNode) {
+    this.analyser.connect(dest);
+  }
+
   static async create(ctx: AudioContext): Promise<PcmVoice> {
     const v = new PcmVoice(ctx);
     try {

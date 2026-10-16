@@ -89,8 +89,8 @@ async function check(a: string[]) {
       continue;
     }
     const flash = readBin(fw);
-    const { i2c, env, lcd, servo, power, encoder, sonar, touchInt } = bootOptions(l);
-    const job: SimJob = { ...assets(flash), flash, seconds: l.seconds ?? 2, i2c, env, lcd, touchInt, servo: sup.servo ?? servo, power: sup.power ?? power, encoder, sonar, pwmPin: l.pwm?.pin, script: inputs ? inputsScript(inputs) : l.script, fixedSlice: !!inputs };
+    const { i2c, env, lcd, servo, power, encoder, sonar, touchInt, usb, i2cWire, antenna } = bootOptions(l);
+    const job: SimJob = { ...assets(flash), flash, seconds: l.seconds ?? 2, i2c, env, lcd, touchInt, servo: sup.servo ?? servo, power: sup.power ?? power, encoder, sonar, pwmPin: l.pwm?.pin, script: inputs ? inputsScript(inputs) : l.script, fixedSlice: !!inputs, usb, i2cWire, antenna };
     const r = await runSim(job);
     const res: CheckResult[] = evaluate(l, r.stdout, r.report);
     // 模拟器自己没跑起来不能算成固件的错（与 check.py 一致，放第一条）

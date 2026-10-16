@@ -19,6 +19,7 @@ export const DEFAULT_PARAMS: Record<string, CaseParams> = {
   weather: { height: 32, wall: 2, radius: 5.5 },
   spin: { height: 32, wall: 2, radius: 0 },
   lens: { height: 30, wall: 2, radius: 0 },
+  usbkey: { height: 22, wall: 2, radius: 4 },
 };
 export const PARAM_RANGE = { height: [16, 80], wall: [1.2, 4], radius: [0, 12] } as const;
 
@@ -75,7 +76,8 @@ export interface CaseLayout {
 export type Geo =
   | { t: 'weather'; W: number; D: number; H: number; w: number; r: number; bx: number; by: number; bl: number; bw: number; sx: number; sy: number; vs: V3; ox: number; oy: number; ow: number; A: V3; tl: number; tw: number }
   | { t: 'spin'; R: number; Hb: number; w: number; Rb: number; z0: number; cylH: number; domeH: number; faceZ: number; vs: V3 }
-  | { t: 'lens'; R: number; Hb: number; w: number; ledge: number; bez: number; vertical: boolean; bl: number; bw: number };
+  | { t: 'lens'; R: number; Hb: number; w: number; ledge: number; bez: number; vertical: boolean; bl: number; bw: number }
+  | { t: 'usbkey'; W: number; D: number; H: number; w: number; r: number; bx: number; by: number; bl: number; bw: number; kx: number; ky: number[]; cap: number };
 
 /** 元件库没给尺寸时用的常见规格（长 × 宽 × 高，mm；估算） */
 const FALLBACK: Record<string, V3> = {
@@ -193,6 +195,7 @@ export function caseLayout(template: string, params: CaseParams, sel: CaseSel): 
   const p = clampP(params);
   if (template === 'spin') return spinLayout(p, sel);
   if (template === 'lens') return lensLayout(p, sel);
+  if (template === 'usbkey') return usbkeyLayout(p, sel);
   return weatherLayout(p, sel);
 }
 
@@ -364,6 +367,63 @@ function lensLayout(p: CaseParams, sel: CaseSel): CaseLayout {
   };
 }
 
+// ------------------------------------------------------------------ USB 小键盘：方壳 44 × 80，定位板（顶盖）上一排 4 个键
+/** 键帽边长（mm）与键距（标准 19.05 mm 键距） */
+const KEYCAP = 14;
+const KEY_PITCH = 19.05;
+function usbkeyLayout(p: CaseParams, sel: CaseSel): CaseLayout {
+  const W = 44, D = 80, H = p.height, w = p.wall;
+  const ix = W / 2 - w, iy = D / 2 - w;
+  const sizes = [partSize(sel.board), partSize('button')];
+  const [bs, ks] = sizes.map((x) => x.size);
+  const warnings: CaseLayout['warnings'] = [];
+  const lidZ = H - w;
+  const [bl, bw] = [bs[0], bs[1]];
+  // 开发板沿长边平放、贴左墙，USB 口朝背面（-y）的开孔；装反（R）时 USB 口顶着前墙
+  const bx = -ix + 0.5 + bw / 2;
+  const by = -iy + 0.5 + bl / 2;
+  if (bl > 2 * iy - 1 || bw > 2 * ix - 1) warnings.push({ id: 'board-fit', text: `开发板 ${bl}×${bw} mm 放不进内腔 ${r1(2 * ix)}×${r1(2 * iy)} mm（壁厚 ${w} mm）` });
+  const B = boardPrims(bx, by, w + STANDOFF, bl, bw);
+  const flip = (pr: Prim[]): Prim[] => pr.map((x) => ({ ...x, at: [x.at[0], 2 * by - x.at[1], x.at[2]] as V3 }));
+  // 按键：一排 4 个，挂在定位板下面（开关本体 3.4 mm），键帽露在板上
+  const kx = ix - KEYCAP / 2 - 1.5;
+  const ky = [-1.5, -0.5, 0.5, 1.5].map((k) => k * KEY_PITCH);
+  const swH = ks[2];
+  const inner = H - 2 * w;
+  const stack = STANDOFF + PCB + MODULE_H + 1;
+  // 键在开发板旁边（x 方向错开）就只要开关本体高；叠在板子上方要加上板子的高度
+  const overBoard = kx - KEYCAP / 2 < bx + bw / 2;
+  const need = overBoard ? stack + swH : swH + 1;
+  if (inner < need) warnings.push({ id: 'key-height', text: `太矮：内腔 ${r1(inner)} mm，按键 ${swH} mm${overBoard ? ' 叠在开发板上方' : ''} 要 ${r1(need)} mm` });
+  const sw = (y: number): Prim => box([kx, y, lidZ - swH / 2], [6, 6, swH], '#1B1D21');
+  const capPrim = (y: number, i: number): Prim => box([kx, y, H + 3], [KEYCAP, KEYCAP, 6], i === 3 ? '#0D99FF' : '#F2EFE8');
+  return {
+    template: 'usbkey',
+    params: p,
+    shape: 'rect',
+    outer: [W, D, H],
+    lidSize: [W, D, w + 2],
+    slots: {
+      base: { '': pose([], 'bottom', { min: [-W / 2, -D / 2, 0], max: [W / 2, D / 2, lidZ] }) },
+      board: { U: pose(B.prims), R: pose(flip(B.prims)) },
+      keys: { '': pose(ky.map(sw)) },
+      plate: { '': pose([], 'lid', { min: [-W / 2, -D / 2, lidZ - 2], max: [W / 2, D / 2, H] }) },
+      caps: { '': pose(ky.map(capPrim)) },
+    },
+    chip: B.chip,
+    features: {
+      bottom: [`4 根开发板定位柱（高 ${STANDOFF} mm）`, 'USB-C 开孔（背面，对准开发板 USB / OTG 口）'],
+      lid: [`4 个键孔 ${KEYCAP + 0.4} × ${KEYCAP + 0.4} mm（键距 ${KEY_PITCH} mm）`, '止口（插进底壳 2 mm）'],
+    },
+    sizes,
+    warnings,
+    inner,
+    need,
+    minHeight: r1(need + 2 * w),
+    geo: { t: 'usbkey', W, D, H, w, r: Math.min(p.radius, W / 2 - 1), bx, by, bl, bw, kx, ky, cap: KEYCAP },
+  };
+}
+
 // ================================================================== 网格（Manifold）
 export interface MeshData {
   pos: Float32Array;
@@ -432,6 +492,26 @@ export function buildCaseMeshes(M: ManifoldToplevel, L: CaseLayout): CaseMeshes 
       for (const dx of [-1, 1]) for (const dy of [-1, 1]) add.push(cylZ(2, 1, [ox + dx * (ow / 2 - 2), oy + dy * (ow / 2 - 2), lidZ - 0.5], 12));
       const lidHoles = [cube([22, 11.5, w * 4], [ox, oy + 2, lidZ + w / 2]), cylZ(7, w * 4, [sx, sy, lidZ + w / 2]), cylZ(4, w * 4, [W / 2 - w - 5, -D / 2 + w + 5, lidZ + w / 2], 24)];
       lid = sub(union(add), lidHoles);
+    } else if (g.t === 'usbkey') {
+      const { W, D, H, w, r, bx, by, bl, bw, kx, ky, cap } = g;
+      const lidZ = H - w;
+      const outer = k(rrect(W, D, r).extrude(lidZ));
+      const cavity = k(k(rrect(W - 2 * w, D - 2 * w, Math.max(0.5, r - w)).extrude(lidZ)).translate([0, 0, w]));
+      const posts: Manifold[] = [];
+      const holes: Manifold[] = [];
+      for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const px = bx + dx * (bw / 2 - 2.5), py = by + dy * (bl / 2 - 2.5);
+        posts.push(cylZ(5, STANDOFF, [px, py, w + STANDOFF / 2], 24));
+        holes.push(cylZ(2, STANDOFF + 1, [px, py, w + STANDOFF / 2 + 0.5], 16));
+      }
+      // USB-C：背面墙上开孔，对准开发板 USB 口
+      holes.push(cube([11, w * 3, 6], [bx, -D / 2 + w / 2, w + STANDOFF + PCB + 1.6]));
+      bottom = sub(union([k(outer.subtract(cavity)), ...posts]), holes);
+      const plate = k(k(rrect(W, D, r).extrude(w)).translate([0, 0, lidZ]));
+      const lipO = rrect(W - 2 * w - 0.6, D - 2 * w - 0.6, Math.max(0.5, r - w - 0.3));
+      const lipI = rrect(W - 2 * w - 3, D - 2 * w - 3, Math.max(0.3, r - w - 1.5));
+      const lip = k(k(k(lipO.subtract(lipI)).extrude(2)).translate([0, 0, lidZ - 2]));
+      lid = sub(union([plate, lip]), ky.map((y) => cube([cap + 0.4, cap + 0.4, w * 4], [kx, y, lidZ + w / 2])));
     } else if (g.t === 'spin') {
       const { R, Hb, w, Rb, z0, cylH, domeH, faceZ, vs } = g;
       const outer = cylZ(2 * R, Hb, [0, 0, Hb / 2], 96);
@@ -493,7 +573,7 @@ export function printLayout(L: CaseLayout, m: CaseMeshes): { name: string; mesh:
     return { pos, idx: d.idx };
   };
   const gap = L.outer[0] / 2 + L.lidSize[0] / 2 + 10;
-  const names: Record<string, [string, string]> = { weather: ['后壳', '前面板'], spin: ['底座', '身体'], lens: ['底座', '屏幕外框'] };
+  const names: Record<string, [string, string]> = { weather: ['后壳', '前面板'], spin: ['底座', '身体'], lens: ['底座', '屏幕外框'], usbkey: ['底壳', '定位板'] };
   const [a, b] = names[L.template] ?? ['底壳', '顶盖'];
   // 小黄身体是半球顶，倒过来打会悬空：正着放（敞口贴床），只平移
   const lid = L.template === 'spin' ? shiftToBed(m.lid, gap) : flip(m.lid, gap);

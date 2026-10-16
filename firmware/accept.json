@@ -944,6 +944,115 @@
   "lcd_min_pixels": 30000
  },
  {
+  "id": "weather-i2c-long",
+  "fw": "weather",
+  "chip": "esp32s3",
+  "seconds": 2,
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c,bme280@0x76",
+   "--env",
+   "23.5,45,101325",
+   "--i2c-wire",
+   "60"
+  ],
+  "expect": [
+   "I2C scan (SDA=GPIO8, SCL=GPIO9): 0x3C 0x76"
+  ],
+  "absent": [
+   "T=23.50 C"
+  ],
+  "stderr_expect": [
+   "I2C 排线 60 cm：上升时间 381 ns，396 kHz 允许 300 ns，超出规范：读回的字节会错"
+  ]
+ },
+ {
+  "id": "weather-i2c-nack",
+  "fw": "weather",
+  "chip": "esp32s3",
+  "seconds": 1.5,
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c,bme280@0x76",
+   "--env",
+   "23.5,45,101325",
+   "--i2c-wire",
+   "150"
+  ],
+  "expect": [
+   "I2C transaction unexpected nack detected"
+  ],
+  "absent": [
+   "T=23.50 C"
+  ],
+  "stderr_expect": [
+   "I2C 排线 150 cm",
+   "超出两倍：器件不应答"
+  ],
+  "crash_expected": "参考固件 ESP_ERROR_CHECK 遇到 NACK 就 abort 重启"
+ },
+ {
+  "id": "wifi-scan-antenna",
+  "fw": "wifi-scan",
+  "seconds": 4,
+  "args": [
+   "--antenna-loss",
+   "30"
+  ],
+  "expect": [
+   "找到 2 个 AP",
+   "AP TryBoard-WiFi    ch= 6 rssi= -72 auth=OPEN",
+   "AP TryBoard-WPA2    ch= 1 rssi= -85 auth=WPA2_PSK"
+  ],
+  "absent": [
+   "Neighbor-5G-Ext"
+  ],
+  "stderr_expect": [
+   "天线遮挡 30 dB：TryBoard-WiFi -72 dBm"
+  ]
+ },
+ {
+  "id": "wifi-connect-antenna",
+  "fw": "wifi-connect",
+  "seconds": 6,
+  "args": [
+   "--antenna-loss",
+   "45"
+  ],
+  "expect": [
+   "STA 启动，连接 TryBoard-WiFi",
+   "断开 reason=2"
+  ],
+  "absent": [
+   "拿到 IP",
+   "TRYBOARD_OK"
+  ],
+  "stderr_expect": [
+   "TryBoard-WiFi -87 dBm（连不上）"
+  ]
+ },
+ {
+  "id": "usbkey",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--usb-log"
+  ],
+  "script": "1.2:gpio4=0; 1.3:gpio4=z; 1.5:gpio5=0; 1.6:gpio5=z; 1.8:gpio6=0; 1.9:gpio6=z; 2.1:gpio7=0; 2.2:gpio7=z",
+  "expect": [
+   "USB 已连接",
+   "TRYBOARD_OK usbkey",
+   "KEY 1 a",
+   "KEY 3 c",
+   "MACRO Hello TryBoard"
+  ],
+  "stderr_expect": [
+   "USB 主机：已配置",
+   "\"TryBoard Macro Pad\"",
+   "USB 键盘输入: \"abcHello TryBoard\\n\""
+  ]
+ },
+ {
   "id": "s3-encoder",
   "chip": "esp32s3",
   "seconds": 2.2,

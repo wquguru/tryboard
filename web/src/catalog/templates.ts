@@ -42,7 +42,7 @@ export interface BuyLine {
 }
 
 export interface ProcureTemplate {
-  id: 'weather' | 'spin' | 'lens' | 'lamp' | 'ruler' | 'tilt' | 'blank';
+  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'blank';
   title: string;
   /** 对应关卡（firmware/levels.json id，07 关的变体写 07:spin） */
   level: string | null;
@@ -267,6 +267,34 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
     firmware: { wifi: false },
   },
   {
+    id: 'usbkey',
+    title: 'USB 小键盘',
+    level: 'usbkey-3',
+    product: 'usbkey',
+    board: 's3-devkitc1-v10',
+    required: [
+      { partId: 's3-devkitc1-v10', qty: 1, why: '要原生 USB（板上标 USB / OTG 的口）：C3 的 USB 只能当串口，当不了键盘' },
+      { partId: 'usb-c-cable', qty: 1, why: '数据线（不是只能充电的线）：插 OTG 口' },
+      { partId: 'button', qty: 4, why: 'K1–K3 发 a / b / c，K4 宏键' },
+      { partId: 'enclosure-usbkey', qty: 1, why: '底壳 + 定位板 + 键帽' },
+    ],
+    suggested: [
+      { partId: 'breadboard-830', qty: 1, checked: true, why: '先在面包板上搭通再装壳' },
+      { partId: 'dupont-mm', qty: 1, checked: true, why: '按键接开发板' },
+    ],
+    wiring: [
+      { part: 'button', pin: 'A', net: 'GPIO4' },
+      { part: 'button', pin: 'B', net: 'GND' },
+      { part: 'button', pin: 'A', net: 'GPIO5' },
+      { part: 'button', pin: 'B', net: 'GND' },
+      { part: 'button', pin: 'A', net: 'GPIO6' },
+      { part: 'button', pin: 'B', net: 'GND' },
+      { part: 'button', pin: 'A', net: 'GPIO7' },
+      { part: 'button', pin: 'B', net: 'GND' },
+    ],
+    firmware: { wifi: false },
+  },
+  {
     id: 'blank',
     title: '空白：我自己挑',
     level: null,
@@ -342,7 +370,9 @@ export function bomTotal(picks: Pick[], board?: string): { lo: number; hi: numbe
 }
 
 /** 元件库 → 实验台场景元件类型（与 examples.json scene.parts[].type 同名） */
-const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812' };
+const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812' };
+/** 按键键帽上的字（usbkey：K1–K3 发 a / b / c，K4 宏键） */
+const KEY_CAPS = ['a', 'b', 'c', 'M'];
 
 /** 接线 → 实验台场景（"买完摆上实验台"用；格式同 firmware/examples.json 的 scene.parts） */
 export function toScene(picks: Pick[], wiring: Wire[]): { type: string; [k: string]: unknown }[] {
@@ -413,6 +443,9 @@ export function toScene(picks: Pick[], wiring: Wire[]): { type: string; [k: stri
         const pin = byLabel('DIN');
         if (pin !== undefined) out.push({ type, pin, ...(p.partId === 'ws2812-strip' ? { n: 60 } : {}) });
       }
+    } else if (type === 'key') {
+      // 一个清单行可以是好几颗按键：每根接到 GPIO 的 A 脚出一颗
+      wiring.filter((w) => w.part === key && w.pin === 'A' && /^GPIO\d+$/.test(w.net)).forEach((w, i) => out.push({ type, pin: Number(w.net.slice(4)), cap: KEY_CAPS[i] ?? String(i + 1), label: `K${i + 1} · ${w.net}` }));
     }
   }
   return out;

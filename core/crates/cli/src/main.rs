@@ -17,6 +17,8 @@ fn usage() -> ! {
                [--spi gc9a01]（S3：SCLK=12 MOSI=11 CS=10 DC=14 RST=13 背光=15；C3：SCLK=6 MOSI=7 CS=10 DC=5 RST=4 背光=3）[--lcd-ppm <最后一帧.ppm>]
                [--power usb|ext]（默认 usb；ext = 舵机由外接 5 V 2 A 供电）[--servo <GPIO>]（接一个 SG90，电流进供电网络）
                [--elec-report]（各节点最低电压、峰值电流、欠压复位次数）；脚本动作 power=usb|ext
+               [--i2c-wire <cm>]（I2C 排线总长：总线电容 → 上升时间，超过规范就读错 / 不应答，估算）
+               [--antenna-loss <dB>]（天线被金属件 / 电池挡住：虚拟 AP 的 RSSI 降低，太低连不上，估算）；脚本动作 i2cwire=cm、antenna=dB
                [--encoder A,B[,SW]]（EC11 旋转编码器；脚本动作 enc=+N / enc=-N 转 N 格、encsw=1|0 按下 / 松开）
                [--sonar TRIG,ECHO] [--dist 厘米]（HC-SR04；脚本动作 dist=厘米，负数 = 前方没有东西）
                [--i2s max98357a,inmp441]（S3：喇叭 BCLK=16 LRC=17 DIN=18，麦克风 SCK=39 WS=40 SD=41；C3：喇叭 0/1/2，麦克风 0/1/3）
@@ -191,6 +193,13 @@ fn run(args: &[String]) {
     if let Some(pin) = servo {
         m.servo_attach(pin);
     }
+    // 线束（P2-11，估算）：I2C 排线长度、天线遮挡
+    if let Some(cm) = opt(args, "--i2c-wire").and_then(|s| s.parse::<f64>().ok()) {
+        m.set_i2c_wire(Some(cm));
+    }
+    if let Some(db) = opt(args, "--antenna-loss").and_then(|s| s.parse::<i32>().ok()) {
+        m.set_antenna_loss(db);
+    }
     let pins_of = |s: &str| s.split(',').map(|x| x.trim().trim_start_matches("GPIO").parse::<u32>()).collect::<Result<Vec<_>, _>>().ok();
     // 旋转编码器：--encoder A,B[,SW]
     let encoder = opt(args, "--encoder");
@@ -329,6 +338,15 @@ fn run(args: &[String]) {
                 // 网页快捷卡片的 USB ↔ 外接 5 V
                 if let Some(mode) = PowerMode::parse(p.trim()) {
                     m.set_power(mode);
+                }
+            } else if let Some(cm) = act.strip_prefix("i2cwire=") {
+                // 网页上拉长 / 缩短 I2C 排线（负数 = 理想总线）
+                if let Ok(cm) = cm.trim().parse::<f64>() {
+                    m.set_i2c_wire(if cm < 0.0 { None } else { Some(cm) });
+                }
+            } else if let Some(db) = act.strip_prefix("antenna=") {
+                if let Ok(db) = db.trim().parse::<i32>() {
+                    m.set_antenna_loss(db);
                 }
             } else if let Some(n) = act.strip_prefix("enc=") {
                 // 网页上拖 / 滚编码器旋钮：转 N 格（+ 顺时针）
@@ -607,7 +625,10 @@ fn run(args: &[String]) {
     }
     if args.iter().any(|a| a == "--usb-log") {
         match m.usb() {
-            Some(u) => print_usb(u),
+            Some(u) => {
+                eprint!("{}", tryboard_machine::usb_report_lines(&m));
+                print_usb(u)
+            }
             None => eprintln!("[tryboard] 这颗芯片没有原生 USB OTG"),
         }
     }
@@ -624,6 +645,12 @@ fn run(args: &[String]) {
     let (tr, nack) = m.i2c_stats();
     if tr > 0 {
         eprintln!("[tryboard] I2C 事务 {tr} 次，NACK {nack} 次");
+    }
+    if let Some(l) = harness_i2c_line(&mut m) {
+        eprintln!("{l}");
+    }
+    if let Some(l) = harness_wifi_line(&m) {
+        eprintln!("{l}");
     }
     let show_oled = args.iter().any(|a| a == "--oled");
     if let Some(o) = m.oled() {
@@ -779,10 +806,18 @@ fn riscv_tests(paths: &[String]) {
     std::process::exit(if fail == 0 { 0 } else { 1 });
 }
 
+/// I2C 排线（P2-11）：上升时间与结论（网页 wasm tb_harness_report 同样的文字）
+fn harness_i2c_line(m: &mut Machine) -> Option<String> {
+    tryboard_machine::harness_i2c_line(m)
+}
+
+fn harness_wifi_line(m: &Machine) -> Option<String> {
+    tryboard_machine::harness_wifi_line(m)
+}
+
 /// 虚拟主机看到的情况：枚举日志、设备信息、键盘输入、鼠标、USB 串口
 fn print_usb(u: &tryboard_esp32s3::usb::Usb) {
     let h = &u.host;
-    eprintln!("[tryboard] USB 主机：{}", h.state_name());
     for l in &h.log {
         eprintln!("[usb] {l}");
     }
@@ -792,9 +827,6 @@ fn print_usb(u: &tryboard_esp32s3::usb::Usb) {
             "[tryboard] USB 设备 {:04x}:{:04x} \"{}\" / \"{}\" 序列号 \"{}\"",
             i.vid, i.pid, i.manufacturer, i.product, i.serial
         );
-    }
-    if !h.typed.is_empty() {
-        eprintln!("[tryboard] USB 键盘输入: {:?}", h.typed);
     }
     if h.mouse.3 > 0 {
         eprintln!(

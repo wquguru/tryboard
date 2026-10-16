@@ -9,6 +9,7 @@ import { emptyFrame } from './views/common';
 import { BuzzerAudio } from './audio';
 import { MicInput } from './micinput';
 import { toScript, type InputLog } from './inputlog';
+import { currentTheme, onTheme, themeToggle } from './theme';
 import { PoseRate, type Pose } from './imupose';
 
 interface Example {
@@ -32,6 +33,10 @@ const resetBtn = $<HTMLButtonElement>('reset');
 const exampleSel = $<HTMLSelectElement>('example');
 
 const bench = createBench($('stage'));
+// 3D 台面背景 / 灯光跟主题走（与工作台 session.ts 同一写法）
+bench.setTheme(currentTheme());
+onTheme((t) => bench.setTheme(t));
+document.querySelector('.bar .status')!.after(themeToggle());
 // 蜂鸣器声音（默认静音）：按钮放在工具栏里，点一下就是浏览器要的用户手势
 const audio = new BuzzerAudio();
 $('run').parentElement!.insertBefore(audio.button(), $('upload').parentElement);
@@ -400,6 +405,8 @@ $<HTMLInputElement>('upload').onchange = async (e) => {
   ($('editorBox') as HTMLDetailsElement).open = true;
   boot(true);
 };
+// 面包板上的轻触按键（usbkey 等示例）：按下接地
+bench.onKey((pin, down) => send({ type: 'gpio', pin, level: down ? 0 : -1 }));
 bench.onButton((name, down) => {
   if (name === 'BOOT') send({ type: 'gpio', pin: bootPin, level: down ? 0 : -1 });
   if (name === 'RST' && !down) boot(true);

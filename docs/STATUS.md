@@ -1,6 +1,6 @@
 # 覆盖矩阵
 
-最后更新：2026-10-16（合并 wt-pcnt；P2-07：`tools/accept.sh --no-qemu` 全部通过：固件 46/46（含 s3-lvgl），ngspice 对照 10/10，关卡参考固件 12 个指纹与优化前一致，网页冒烟 16 个示例（含 s3-lvgl）+ levels / replay / elec / interact / traceio 全过。P2-01 / 04 / 05 分支 wt-pcnt：`tools/accept.sh --no-qemu` 全部通过，固件 47/47（含 s3-encoder、s3-ultrasonic），网页冒烟加 s3-encoder / s3-ultrasonic，web 单测 107 个。此前：固件 40/40（含 s3-brownout-usb / -ext），ngspice 对照 10/10，关卡参考固件 8/8（含 07-spin / 07-lens），网页冒烟 15 个示例 + 关卡 / 装配 / 首页 22 项。P2-06 分支 wt-audio：`tools/accept.sh --no-qemu` 全部通过：固件 42/42（含 s3-i2s-tone / s3-i2s-mic），ngspice 对照 10/10，关卡参考固件 8/8，网页冒烟 + 关卡 / 装配 / 首页全过；npm 对拍 s3-button 一次被 SIGKILL（137，内存压力），单独重跑一致）
+最后更新：2026-10-16（wt-media 合并 main b0a0eaa：`tools/accept.sh --no-qemu` 全部通过：固件 65/65（P2-10/11/12 的 weather-i2c-long / -nack、wifi-scan-antenna、wifi-connect-antenna、usbkey 与 main 的 s3-lvgl / encoder / ultrasonic / imu / qmi8658 / touch / i2s 并存），ngspice 对照 10/10，关卡参考固件 15/15，npm 包对拍一致，网页单测 131，网页冒烟 23 个示例 + levels / replay / elec / interact / asm3d / traceio / media 8 项 / harness 7 项 / sense 12 项全过。此前分支记录：P2-10 / 11 / 12 `tools/accept.sh --no-qemu` 全部通过：固件 55/55（新增 weather-i2c-long / -nack、wifi-scan-antenna、wifi-connect-antenna、usbkey），ngspice 对照 10/10，关卡参考固件 15/15（含 usbkey-1/2/3），npm 包对拍一致，网页单测 116，网页冒烟 16 个示例 + levels 40 项 + media 8 项 + harness 7 项；main 合并 wt-pcnt；P2-07：`tools/accept.sh --no-qemu` 全部通过：固件 46/46（含 s3-lvgl），ngspice 对照 10/10，关卡参考固件 12 个指纹与优化前一致，网页冒烟 16 个示例（含 s3-lvgl）+ levels / replay / elec / interact / traceio 全过。P2-01 / 04 / 05 分支 wt-pcnt：`tools/accept.sh --no-qemu` 全部通过，固件 47/47（含 s3-encoder、s3-ultrasonic），网页冒烟加 s3-encoder / s3-ultrasonic，web 单测 107 个。此前：固件 40/40（含 s3-brownout-usb / -ext），ngspice 对照 10/10，关卡参考固件 8/8（含 07-spin / 07-lens），网页冒烟 15 个示例 + 关卡 / 装配 / 首页 22 项。P2-06 分支 wt-audio：`tools/accept.sh --no-qemu` 全部通过：固件 42/42（含 s3-i2s-tone / s3-i2s-mic），ngspice 对照 10/10，关卡参考固件 8/8，网页冒烟 + 关卡 / 装配 / 首页全过；npm 对拍 s3-button 一次被 SIGKILL（137，内存压力），单独重跑一致）
 
 ## ESP32-C3
 | 模块 | 状态 | 验收 | 备注 |
@@ -71,6 +71,7 @@
 | 虚拟器件 EC11 编码器（P2-01） | ✅ | 同 s3-encoder；网页：3D 旋钮左右拖 6 格 → PCNT 24、滚轮 3 格 → 36、按住 → SW DOWN；网页导出输入日志 → CLI `--encoder 6,7,15 --inputs` 串口逐字节相同；回退指纹一致 | 每格四个沿、沿间隔 0.5 ms，在内核里按时刻排出波形（不受 1 ms 时间片影响）；触点抖动未建模；按键按下接地、松开悬空（固件开上拉）；电流 0.66 mA 进 3V3（估算） |
 | 虚拟器件 HC-SR04（P2-04） | ✅ | 同 s3-ultrasonic；网页：拖 3D 障碍物 15 → 10.9 cm、固件读 10.9 cm，200 cm / 50 cm 快捷按钮，逻辑分析仪看到 Trig / Echo；网页输入日志 → CLI `--sonar 17,18 --inputs` 串口逐字节相同；拆掉 Echo 分压 → 接线检查 W2 | Trig ≥ 10 µs 下降沿后 250 µs 拉高 Echo，宽 2 × 距离 / 343 m/s（20 ℃ 固定）；2–400 cm，超量程 38 ms；测量中再触发不理；距离来自探头沿朝向的射线（3D 里最远摆 100 cm）；15 mA 进 5V 轨；未经真机标定 |
 | I2C0 / I2C1 | ✅ | s3-oled：扫描只应答 0x3C，1KB 帧 400kHz 约 24.0ms，点亮 1636 像素；s3-bme280：-7.25°C / 88.5% / 950.12hPa 读回误差 0 | 与 C3 同一模型（寄存器布局逐项一致），I2C1 在 0x60027000 |
+| I2C 线长（P2-11，估算） | 🟡 | `cargo test`：400 kHz 两个模块 20 cm 正常、60 cm 读回 0x60→0x20、150 cm 地址不应答、降到 100 kHz 又正常；accept weather-i2c-long（60 cm：上升 381 ns > 300 ns，读数 T=-60.92）、weather-i2c-nack（150 cm：NACK → ESP_ERROR_CHECK 重启，扫描时 100 kHz 仍应答） | 确定性模型（`elec::i2cbus`）：C = 线长 × 1 pF/cm + 器件 × 10 pF + 10 pF，模块 10 kΩ 上拉并联，t_r = 0.8473·R·C，按固件配置的 SCL 频率取规范上限（100 k / 400 k / 1 M：1000 / 300 / 120 ns）；超出 → 读回字节丢 0→1 的位，超两倍 → 地址不应答。常数是估算，未经真机标定；只作用于 I2C0；CLI `--i2c-wire`、脚本 `i2cwire=` |
 | SAR ADC 单次（SENS） | ✅ | s3-pot：0 / 1550 / 3000mV 读数正确 | S3 单次采样走 RTC 的 SENS（0x60008800），不是 APB_SARADC；衰减档量程近似 950 / 1250 / 1750 / 3100mV；ADC2 仲裁标志、连续模式未做 |
 | UART / SYSTIMER / TIMG / SPI1 flash | ✅ | 控制台、FreeRTOS 节拍、RTC 校准、flash 识别 GD 16MB | 复用 C3 模型；TIMG 的 T1 未建模 |
 | EXTMEM / eFuse / 模拟前端 | 🟡 | 启动期轮询通过；芯片版本 v0.2、PSRAM_CAP=8MB | cache 操作瞬间完成；eFuse 只读；regi2c HLE |
@@ -85,7 +86,8 @@
 | 装配成品 lens（透镜小人） | ✅ | 启动 MOOD 0 normal、每 3 秒眨眼（BLINK n）、BOOT 切 MOOD 1 happy → 2 love → 3 sleepy → 0 normal；检查点 lens-1（lens-blink）、lens-2（lens-mood）、07-lens 参考固件全过 | 场景层验收 |
 | 装配成品 spin（会转身的小黄） | ✅ | GPIO4 50Hz 占空比 0.042..0.108（脉宽 0.833–2.167ms）、SPIN ±60 交替、眼珠随转向重画（EYE R / EYE L）、BOOT 后 LOOK FRONT（1.5ms）且眼珠回正（青色重心 119.7）；检查点 spin-1（spin-face）、spin-2（spin-turn）、07-spin 参考固件全过 | 舵机机械响应不建模 |
 | Wi-Fi STA（开放 / WPA2-PSK） | ✅ | s3-wifi-init / scan / connect / http / wpa2（与 C3 版同源码、同判定，双核）：扫描 4 个 AP、关联、DHCP 192.168.4.100、mDNS / DNS、两次 HTTP GET；WPA2 四次握手（SHA / AES 加速器）+ CCMP 数据帧；网页 s3-wifi-http 跑通（webtest + agent-browser） | 与 C3 共用 MAC 模型（tryboard-soc，`WifiLayout::S3`）；S3 另需 WDEV_RND_REG（0x6003507C）与 TSENS READY；供电按 S3 发射 340 mA 计入。QEMU 的 esp32s3 没有 Wi-Fi，无法对照；未经真机标定；没做 wifi-wpa2-bad 的 S3 版 |
-| USB OTG | ✅ | 见上文「USB OTG（DWC2，设备模式）」行 | — |
+| USB OTG | ✅ | 见上文「USB OTG（DWC2，设备模式）」行；usbkey（作品 USB 小键盘，P2-12）：4 键 GPIO4–7 + 宏键，accept 用例 usbkey 打出 "abcHello TryBoard\n"，检查点 usbkey-1/2/3 按虚拟主机状态与打出的字判定（命令行 / 网页 / npm 包指纹一致） | 关卡观察记录里的 USB 两行（`USB 主机：…`、`USB 键盘输入: "…"`）只在关卡带 `--usb-log` 时进指纹 |
+| Wi-Fi 天线遮挡（P2-11，估算） | 🟡 | accept wifi-scan-antenna（遮挡 30 dB：TryBoard-WiFi -72、WPA2 -85，另两个收不到，找到 2 个 AP）、wifi-connect-antenna（45 dB：-87 dBm 扫得到但认证没回应，`断开 reason=2`，拿不到 IP） | 虚拟世界里所有 AP 的 RSSI 减去遮挡（双向）：< -92 dBm 扫描收不到，< -82 dBm 认证 / 关联 / 数据帧 AP 不回、也不 ACK。网页按金属件 45 dB、电池 30 dB × (1 − 距离 / 20 mm) 估算遮挡。未经真机标定；CLI `--antenna-loss`、脚本 `antenna=` |
 | BLE | ☐ | — | Wi-Fi 固件启动期碰到的 BT 寄存器只有 0x60011000 段 2 个字（读回写入值） |
 | I2S0 / I2S1 | ✅ | s3-i2s-tone（IDF `i2s_std`，Philips、44.1 kHz、16 位单声道、I2S0）：喇叭收到 440.0 Hz、RMS 0.345，`i2s_channel_write` 被 EOF 中断卡在播放速度（1175 ms 写 51712 帧 ≈ 44.1 kHz）；s3-i2s-mic（I2S1，16 kHz、32 位槽、左声道）：读回测试 WAV 1000.0 Hz、RMS 0.3533（WAV 0.3536，16 位量化） | 主模式 TDM / 标准格式；PDM、从模式、外部 MCLK、ETM 未做；线上逐位时序、FIFO 深度不模拟（TX 取块时刻 = 播放时刻）；I2S 自己的中断位只有 RX_DONE / TX_DONE |
 | GDMA 流式收发（I2S） | ✅ | 同上：TX 6 个描述符成环、每块 OUT_EOF；RX 描述符环、IN_SUC_EOF、IN_SUC_EOF_DES_ADDR | 通道多了"当前描述符"；不检查 owner（IDF I2S 不开 owner_check）；不模拟突发 / 优先级 / 内存到内存 |
@@ -111,7 +113,9 @@
 | 3D 工作台 | ✅ 面包板 + 开发板 + LED 随 GPIO 亮灭；板载 WS2812（GPIO8）随解码颜色发光；BOOT / RST 可点 |
 | 3D 工作台 | ✅ 面包板 + 开发板 + LED 随 GPIO 亮灭；BOOT / RST 可点；示例按 `scene.parts` 声明元件与接线（LED / SSD1306 / BME280），可指定机位 |
 | ESP32-S3 固件 | ✅ wasm 按镜像芯片 ID 选 C3 / S3，按芯片下载 ROM；S3 的 BOOT 键为 GPIO0（3D 板子仍是 C3 外形） |
-| 虚拟电脑（USB） | ✅ 侧栏面板（设备描述符、接口、枚举过程、键盘输入、鼠标轨迹、USB 串口终端可输入）；3D 笔记本经 USB 线接到板子，屏幕实时显示 |
+| 虚拟电脑（USB） | ✅ 侧栏面板（设备描述符、接口、枚举过程、键盘输入、鼠标轨迹、USB 串口终端可输入）；3D 笔记本经 USB 线接到板子，屏幕实时显示（只有键盘时不画鼠标区，字放大）；工作台（app.html）实验台也接上了 3D 笔记本 |
+| 拍照 / 录 10 秒（P2-10） | ✅ 成品页与实验台：拍照 = 当前视角 2× 输出（渲染 4096 长边超采样后缩小）+ DESIGN 台面渐变背景 + 角落"外观示意"署名，PNG 下载；录像 = MediaRecorder 录画布（VP9 webm），声音开着时混入蜂鸣器的 Web Audio（Opus 轨）。`tools/webtest/media.mjs`（进 accept.sh）：PNG 2880×1712 = 画布 ×2、webm PixelWidth/Height = 画布、含 Opus、时长 10.0 s；agent-browser 走查（Reviews/ab/P2-10.md）。没有用 three-gpu-pathtracer（不在依赖里） |
+| 线束与天线（P2-11） | 🟡 实验台：I2C 线可拉长（线长滑块，接线检查 W6：超出规范警告、超两倍阻断，标"必须上真机"），模拟器在线换总线负载；组装：I2C 排线总长滑块 + 天线旁金属件 / 电池与距离，开机复测带上线束（读数跑偏、RSSI 低于 -82 dBm 判不过），成品页显示估算与模拟器结论。`tools/webtest/harness.mjs`（进 accept.sh）。全部是估算 |
 | 3D 工作台 | ✅ 面包板 + 开发板 + LED 随 GPIO 亮灭；板载 WS2812（C3 GPIO8 / S3 GPIO48）随解码颜色发光；BOOT / RST 可点；示例按 `scene.parts` 声明元件与接线，可指定机位 |
 | 按芯片换板 | ✅ C3 板（2×15 针）/ S3 板（2×22 针、UART / USB 双口、N16R8）；元件按当前板子的引脚重新接线；网页验收 s3-blink、s3-rgb、s3-dual 1.00× 实时 |
 | OLED 实时画面 | ✅ 帧缓冲变了才传，128×64 最近邻纹理 |
@@ -123,8 +127,10 @@
 > 2026-10-15 合流：S3 对齐（双核、共享外设、S3 开发板网页）与 USB OTG、Wi-Fi、软件复位、元件编辑器同时可用；S3 软件复位尚未支持（见 DECISIONS）。2026-10-16：S3 软件复位已支持（见上表"软件复位"）。
 
 ## 网页：关卡 / 装配 / 首页
+
 | 功能 | 状态 | 验收 | 备注 |
 |---|---|---|---|
+| 作品 USB 小键盘（P2-12） | ✅ | 首页卡片由 `app/works.ts` 的作品定义生成（加作品自动出现，四张卡）；采购模版 usbkey（S3 DevKitC-1 + 数据线 + 轻触按键 ×4 + 外壳键帽，规则 0 提醒）；实验台面包板上 4 个按键（3D 可按，PartSpec `key`）；检查点 usbkey-1 枚举 / usbkey-2 a b c / usbkey-3 宏键 + 装配（参考固件 `firmware/usbkey` 三关通过，网页指纹 = check.py）；组装：参数化外壳 44×80×22 mm（底壳 + 定位板，开发板 USB 口朝背面开孔 / 装反两种装法，装反电脑看不到设备）；成品：3D 小键盘 + 虚拟电脑屏幕显示打出的字。levels.mjs / harness.mjs 覆盖首页 → 成品打字 | 键位、外壳尺寸是示意；真电脑的驱动 / 布局 / 按键抖动只能实测 |
 | 关卡验收（浏览器） | ✅ | levels.mjs：6 关参考固件网页通过，指纹与 `tools/check.py` 逐关相同 | 第 7 关无自动验收（用户自定条件） |
 | 上传自己的固件验收 | ✅ | C3 blink 过第 1 关，进度记住 | 进度在 localStorage |
 | 拖拽装配 | ✅ | 鼠标真实拖拽 6/6；顺序错被拦；BME280 贴芯片 → 第 6 关温度偏差 2.5、不通过 | 几何检查为估算，未经真机标定 |

@@ -12,6 +12,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { createUsbHost, type UsbView } from './usb3d';
 import { EXT, extModelsOn, loadExt, onExtModels, reportExt, type ExtName } from './extmodels';
 import type { PickTarget, PinInfo, ScenePickApi, ScreenPoint } from './scene-api';
+import { capturableOf, type Capturable } from './app/capture';
 import { poseToThree, threeToPose, type Pose } from './imupose';
 
 // 单位：毫米
@@ -117,6 +118,8 @@ export type PartSpec =
   | { type: 'pot'; pin: number; label?: string }
   /** 无源蜂鸣器模块（三针）：I/O 接 pin，LEDC 方波驱动；网页声音见 audio.ts，3D 里响的时候振膜起伏、冒声波 */
   | { type: 'buzzer'; pin: number; label?: string }
+  /** 轻触按键（6×6 mm，跨面包板中间凹槽）：一端接 pin，一端接 GND，固件开内部上拉；3D 里按住键帽 = 引脚拉低。cap 是键帽上的字 */
+  | { type: 'key'; pin: number; cap?: string; label?: string }
   /** EC11 旋转编码器模块（KY-040 类，P2-01）：CLK = a、DT = b、按键 sw；3V3 供电。旋钮可拖动 / 滚轮转、点按 */
   | { type: 'encoder'; a: number; b: number; sw?: number; label?: string }
   /** HC-SR04 超声波（P2-04）：5 V 供电；Echo 经 1 kΩ / 2 kΩ 分压进 GPIO（divider: false = 直接接，接线检查报 5 V 进 GPIO）。
@@ -196,10 +199,16 @@ export interface Bench extends ScenePickApi {
   /** 外接 WS2812 灯条（引脚 pin）各灯颜色，0–255 */
   setStrip(pin: number, leds: number[][]): void;
   onButton(cb: (name: 'BOOT' | 'RST', down: boolean) => void): void;
+  /** 面包板上的轻触按键（PartSpec 'key'）按下 / 松开 */
+  onKey(cb: (pin: number, down: boolean) => void): void;
+  /** 按键在页面上的位置（clientX/Y），测试用；看不见时 null */
+  keyScreenPos(pin: number): [number, number] | null;
   /** 按键在页面上的位置（clientX/Y）：给自动化测试用真实鼠标去按 3D 里的键；看不见时 null */
   buttonScreenPos(name: 'BOOT' | 'RST'): [number, number] | null;
   /** 原生 USB：固件枚举出设备后接上虚拟电脑（null 拔掉） */
   setUsb(v: UsbView | null): void;
+  /** 拍照 / 录像（P2-10） */
+  capture(): Capturable;
   /** 外部模型替换件（P1-09）开关；extModels() 列出此刻场景里实际显示的外部模型 */
   setExtModels(on: boolean): void;
   extModels(): string[];
@@ -1678,6 +1687,38 @@ function micModule() {
 }
 
 /** 旋转电位器（R16 规格）：蓝色方壳 + 金属轴 + 黑色带指示线的旋钮。原点在引脚根部。 */
+/** 6×6 mm 轻触开关 + 方键帽（键帽上可以印一个字） */
+function keySwitch(cap: string) {
+  const grp = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.BoxGeometry(6, 3.4, 6), new THREE.MeshStandardMaterial({ color: 0x1b1d21, roughness: 0.7 }));
+  base.position.y = 1.7;
+  base.castShadow = true;
+  grp.add(base);
+  for (const [x, z] of [[-2.25, -3.1], [2.25, -3.1], [-2.25, 3.1], [2.25, 3.1]]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.7, 3, 0.4), MAT.tin);
+    leg.position.set(x, -0.6, z);
+    grp.add(leg);
+  }
+  const tex = canvasTexture(128, 128, (g) => {
+    g.fillStyle = '#F2EFE8';
+    g.fillRect(0, 0, 128, 128);
+    g.fillStyle = '#1E1E1E';
+    g.font = '700 72px "JetBrains Mono", Menlo, monospace';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(cap, 64, 70);
+  });
+  const capMat = new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.55 });
+  const topMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55 });
+  // 键帽：侧面素色、顶面印字（BoxGeometry 材质顺序 +x −x +y −y +z −z）
+  const key = new THREE.Mesh(new THREE.BoxGeometry(9, 4, 9), [capMat, capMat, topMat, capMat, capMat, capMat]);
+  key.position.y = 5.4;
+  key.castShadow = true;
+  key.userData.baseY = key.position.y;
+  grp.add(key);
+  return { grp, key };
+}
+
 function potModel() {
   const grp = new THREE.Group();
   const shell = new THREE.Mesh(new THREE.BoxGeometry(9.8, 9.8, 5), new THREE.MeshStandardMaterial({ color: 0x2e63b8, roughness: 0.6 }));
@@ -2073,6 +2114,7 @@ export function createBench(container: HTMLElement): Bench {
   let servos: { pin: number; horn: THREE.Group; freq: number; angle: number; target: number; phys?: boolean }[] = [];
   let pots: { pin: number; knob: THREE.Group; hit: THREE.Mesh; v: number }[] = [];
   let buzzers: { pin: number; membrane: THREE.Mesh; waves: THREE.Group; waveMat: THREE.MeshBasicMaterial; on: boolean }[] = [];
+  let keys: { pin: number; key: THREE.Mesh }[] = [];
   let speakers: { cone: THREE.Group; waves: THREE.Group; waveMat: THREE.MeshBasicMaterial }[] = [];
   let mics: { ring: THREE.Mesh; ringMat: THREE.MeshBasicMaterial }[] = [];
   /** 喇叭此刻的音量（RMS，满量程 = 1）与麦克风输入电平：纸盆起伏、声波 / 收音圈 */
@@ -2302,6 +2344,23 @@ export function createBench(container: HTMLElement): Bench {
     label(grp, p.label ?? `电位器 · 滑片 → IO${p.pin}（ADC）· 拖动旋钮`, new THREE.Vector3(colX(col), 36, rowZ(9) + 6));
     pots.push({ pin: p.pin, knob: m.knob, hit: m.hit, v: 0.36 });
     m.knob.rotation.y = -(0.36 - 0.5) * 1.5 * Math.PI;
+  }
+
+  function buildKey(grp: THREE.Group, p: Extract<PartSpec, { type: 'key' }>, col: number) {
+    const id = `key:${p.pin}`;
+    const m = keySwitch(p.cap ?? String(keys.length + 1));
+    // 跨中间凹槽：四只脚落在 e / f 两行
+    m.grp.position.set(colX(col) + 1.27, BB_TOP, 0);
+    registerPart(id, m.grp);
+    grp.add(m.grp);
+    // 两根线都从后排进（a / b 行），不挡在键帽前面
+    jumper(grp, 'IO' + p.pin, new THREE.Vector3(colX(col), top, rowZ(1)), WIRE.sig, `${id}:IN`, 24, -4);
+    jumper(grp, 'GND', new THREE.Vector3(colX(col + 1), top, rowZ(0)), WIRE.gnd, `${id}:GND`, 16, -8);
+    addRole(apiId('IO' + p.pin), `按键 ${p.cap ?? ''}（按下接地，内部上拉）`);
+    addRole('GND', '按键地');
+    if (p.label) label(grp, p.label, new THREE.Vector3(colX(col) + 1.27, 9, rowZ(9) + 13));
+    m.key.userData.keyPin = p.pin;
+    keys.push({ pin: p.pin, key: m.key });
   }
 
   function buildBuzzer(grp: THREE.Group, p: Extract<PartSpec, { type: 'buzzer' }>) {
@@ -2640,6 +2699,7 @@ export function createBench(container: HTMLElement): Bench {
     servos = [];
     pots = [];
     buzzers = [];
+    keys = [];
     encoder = null;
     strips = [];
     sonar = null;
@@ -2657,12 +2717,15 @@ export function createBench(container: HTMLElement): Bench {
     addRole(apiId('IO' + board.spec.bootPin), 'BOOT 键');
     // 多个同类元件依次往左排，避免叠在同一列
     let ledN = 0;
+    let keyN = 0;
     let i2cCol = 21;
     for (const p of spec.parts) {
       if (p.type === 'led') buildLed(parts, { ...p, col: p.col ?? 24 - 4 * ledN++ });
       if (p.type === 'servo') buildServo(parts, p);
       if (p.type === 'pot') buildPot(parts, p);
       if (p.type === 'buzzer') buildBuzzer(parts, p);
+      // 按键排在开发板右边（板子占到第 22 列左右），每 5 列一个，键帽 9 mm 不会挤在一起
+      if (p.type === 'key') buildKey(parts, p, 26 + 5 * keyN++);
       if (p.type === 'encoder') buildEncoder(parts, p);
       if (p.type === 'ws2812') buildStrip(parts, p);
       if (p.type === 'hcsr04') buildSonar(parts, p);
@@ -2794,6 +2857,30 @@ export function createBench(container: HTMLElement): Bench {
     const t = hit && resolveHit(hit);
     return t && t.kind === 'button' ? board.buttons.find((b) => b.name === t.id) : undefined;
   };
+  // 面包板上的轻触按键：按住键帽 = 引脚接地
+  let keyCb: ((pin: number, down: boolean) => void) | null = null;
+  let keyDown: { pin: number; key: THREE.Mesh } | null = null;
+  const pickKey = (ev: PointerEvent) => {
+    if (!keys.length) return undefined;
+    ray.setFromCamera(toNdc(ev), camera);
+    const hit = ray.intersectObjects(keys.map((k) => k.key))[0];
+    return hit ? keys.find((k) => k.key === hit.object) : undefined;
+  };
+  renderer.domElement.addEventListener('pointerdown', (ev) => {
+    const k = pickKey(ev);
+    if (!k) return;
+    controls.enabled = false;
+    keyDown = k;
+    k.key.position.y = k.key.userData.baseY - 1.2;
+    keyCb?.(k.pin, true);
+  });
+  window.addEventListener('pointerup', () => {
+    if (!keyDown) return;
+    keyDown.key.position.y = keyDown.key.userData.baseY;
+    keyCb?.(keyDown.pin, false);
+    keyDown = null;
+    controls.enabled = true;
+  });
   // 电位器：按住旋钮左右拖动转动（270° 行程）
   let dragging: { pot: (typeof pots)[number]; x0: number; v0: number } | null = null;
   const pickPot = (ev: PointerEvent) => {
@@ -3496,6 +3583,18 @@ export function createBench(container: HTMLElement): Bench {
     },
     onButton(cb) {
       buttonCb = cb;
+    },
+    onKey(cb) {
+      keyCb = cb;
+    },
+    capture: () => capturableOf(renderer, scene, composer),
+    keyScreenPos(pin) {
+      const k = keys.find((x) => x.pin === pin);
+      if (!k) return null;
+      const v = k.key.getWorldPosition(new THREE.Vector3()).project(camera);
+      if (Math.abs(v.x) > 1 || Math.abs(v.y) > 1) return null;
+      const r = renderer.domElement.getBoundingClientRect();
+      return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height];
     },
     buttonScreenPos(name) {
       const b = board.buttons.find((m) => m.name === name);

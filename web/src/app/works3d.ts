@@ -13,6 +13,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { currentTheme, onTheme, type Theme } from '../theme';
 import type { Pose } from '../imupose';
+import { capturableOf, type Capturable } from './capture';
 
 export type WorkKind = 'lamp' | 'ruler' | 'tilt';
 
@@ -53,6 +54,8 @@ export interface WorkProduct3D {
   state(): { knob: number; cm: number; pose: Pose };
   setDistance(cm: number): void;
   setPose(p: Pose): void;
+  /** 拍照 / 录像（P2-10） */
+  capture(): Capturable;
 }
 
 const STRIP_PIN = 5;
@@ -691,5 +694,6 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     state: () => ({ knob: knobCount, cm, pose: { ...pose } }),
     setDistance: (d) => setDistance(d),
     setPose: (p) => setPose(p),
+    capture: () => capturableOf(renderer, scene, composer),
   };
 }

@@ -49,8 +49,10 @@ def canonical_report(err: str) -> str:
     oled = [re.sub(r'（.*$', '', l) for l in lines if l.startswith('[tryboard] OLED 点亮像素')]
     lcd = [re.sub(r'（.*$', '', l) for l in lines if l.startswith('[tryboard] LCD GC9A01 非黑像素')]
     lcd += [l for l in lines if l.startswith('[tryboard] LCD 颜色 #')]
+    # USB 虚拟主机（关卡带 --usb-log 时才有）：状态 + 键盘打出的字，与 wasm tb_usb_report 同一段文字
+    usb = [l for l in lines if l.startswith('[tryboard] USB 主机：') or l.startswith('[tryboard] USB 键盘输入: ')]
     pwm = [l for l in lines if re.match(r'\[tryboard\] PWM GPIO\d+(:| 变化)', l)]
-    return ''.join(l + '\n' for l in gpio + ws + oled + lcd + pwm)
+    return ''.join(l + '\n' for l in gpio + ws + oled + lcd + usb + pwm)
 
 
 def jsnum(v) -> str:
@@ -157,6 +159,17 @@ def evaluate(t: dict, out: str, report: str):
     for c in t.get('serial_count', []):
         n = out.count(c['text'])
         res.append((n >= c['min'], f"串口 “{c['text']}” 出现 {n} 次（要 ≥ {c['min']}）"))
+    u = t.get('usb')
+    if u:
+        m = re.search(r'USB 主机：(\S+)', report)
+        st = m.group(1) if m else '没有 USB 设备'
+        if 'state' in u:
+            res.append((st == u['state'], f"电脑看到的 USB 设备：{st}（要{u['state']}）"))
+        if 'typed' in u:
+            m = re.search(r'^\[tryboard\] USB 键盘输入: (".*")$', report, re.M)
+            got = json.loads(m.group(1)) if m else ''
+            shown = lambda x: x.replace('\n', '↵')
+            res.append((got == u['typed'], f"电脑上打出 “{shown(got)}”（要 “{shown(u['typed'])}”）"))
     if t.get('lcd_colors'):
         seen = [(k, int(n), float(x), float(y)) for k, n, x, y in re.findall(r'LCD 颜色 #([0-9a-f]{6}) (\d+) 像素，重心 ([\d.]+),([\d.]+)', report)]
         top = '、'.join(f'#{k} {n}' for k, n, _, _ in seen[:4]) or '（全黑）'
@@ -211,6 +224,8 @@ def inputs_file(path: str) -> str:
             'pot': lambda: f"mv{e['pin']}={num(e['mv'])}",
             'uart': lambda: f"uart={esc(e['text'])}",
             'usbcdc': lambda: f"usbcdc={esc(e['text'])}",
+            'i2cwire': lambda: f"i2cwire={num(e['cm'])}",
+            'antenna': lambda: f"antenna={num(e['db'])}",
             'supply': lambda: f"power={e['mode']}",
         }.get(k)
         if act:
