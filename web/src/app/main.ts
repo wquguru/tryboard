@@ -4,6 +4,8 @@ import { createShell, registerStep, startRouter } from './shell';
 import { createSession, WORKS } from './session';
 import { benchStep, passedCount, restoreChecks } from './steps/bench';
 import { placeholderStep } from './steps/placeholder';
+import { assembleStep, restoreAssembly } from './steps/assemble';
+import { productStep } from './steps/product';
 import type { AppState, StepCtx, WorkId } from './types';
 import type { TimelineStep } from './timeline';
 
@@ -29,6 +31,7 @@ const store = createStore<AppState>({
   checks: {},
   verifying: null,
   verifyProgress: 0,
+  assembly: null,
 });
 const shell = createShell();
 
@@ -43,17 +46,22 @@ function log(text: string) {
 
 registerStep('shop', placeholderStep('① 采购', 'P0-07', '模版带出必选零件、规则当场说后果、参考价与合计。'));
 registerStep('bench', benchStep());
-registerStep('assemble', placeholderStep('③ 组装', 'P0-16', '外壳剖视、按顺序装零件、装法影响读数（BME280 贴芯片读数偏高）。'));
-registerStep('product', placeholderStep('④ 成品', 'P0-17', '能转的 3D 成品，灯、屏、舵机、蜂鸣器都来自同一份固件。'));
+registerStep('assemble', assembleStep());
+registerStep('product', productStep());
 
 // 时间线：本任务只显示"放零件 / 连线 / 运行 #n / 验收"，回退由 P0-03 接 onSeek
+// 组装、成品有自己的时间线（装配步骤 / 事件），这份只在采购、实验台显示
 const history: TimelineStep[] = [];
-function pushHistory(s: TimelineStep) {
-  history.push(s);
+const ownsTimeline = () => ['shop', 'bench'].includes(store.get().step);
+function renderHistory() {
   shell.timeline.setSteps(history);
   shell.timeline.setCurrent(history.length - 1);
 }
-shell.timeline.onSeek((_i, s) => shell.toast(`回到「${s.label}」由后续任务实现（P0-03）`));
+function pushHistory(s: TimelineStep) {
+  history.push(s);
+  if (ownsTimeline()) renderHistory();
+}
+shell.timeline.onSeek((_i, s) => ownsTimeline() && shell.toast(`回到「${s.label}」由后续任务实现（P0-03）`));
 
 (async () => {
   try {
@@ -61,6 +69,7 @@ shell.timeline.onSeek((_i, s) => shell.toast(`回到「${s.label}」由后续任
     (window as unknown as { __tbApp: unknown }).__tbApp = { store, session };
     const ctx: StepCtx = { work, store, session, shell };
     restoreChecks(ctx);
+    restoreAssembly(ctx);
     for (const p of session.scene.parts) pushHistory({ id: `place:${p.type}`, icon: '+', label: `放 ${p.type === 'bme280' ? 'BME280' : p.type === 'oled' ? 'OLED' : p.type === 'servo' ? 'SG90' : p.type === 'gc9a01' ? '圆屏' : p.type}` });
     if (session.scene.parts.length) pushHistory({ id: 'wire', icon: '~', label: '连线' });
     store.subscribe((s, prev) => {
@@ -70,20 +79,23 @@ shell.timeline.onSeek((_i, s) => shell.toast(`回到「${s.label}」由后续任
       }
       for (const [id, r] of Object.entries(s.checks)) if (prev.checks[id] !== r && r.rows.length) pushHistory({ id: `check:${id}:${history.length}`, icon: '◎', label: `验收 ${id}`, status: r.ok ? 'ok' : 'bad' });
     }, ['run', 'checks']);
+    // 结论按钮：采购、实验台显示检查点进度；组装、成品挂载时自己设
     const verdict = () => {
+      if (!ownsTimeline()) return;
       const n = work.checkpoints.length;
       const d = passedCount(ctx);
       shell.setVerdict(n ? `检查点 ${d}/${n}` : '没有检查点', n && d === n ? 'ok' : 'idle');
+      shell.onVerdict(() => {
+        const s = store.get();
+        const first = work.checkpoints.find((id) => !(s.checks[id]?.ok && s.checks[id].own)) ?? work.checkpoints[0];
+        if (!first) return;
+        if (s.step !== 'bench') location.hash = 'bench';
+        store.set({ selection: { kind: 'checkpoint', id: first } });
+      });
     };
-    store.subscribe(verdict, ['checks']);
+    store.subscribe(verdict, ['checks', 'step']);
+    store.subscribe(() => ownsTimeline() && renderHistory(), ['step']);
     verdict();
-    document.getElementById('verdict')!.onclick = () => {
-      const s = store.get();
-      const first = work.checkpoints.find((id) => !(s.checks[id]?.ok && s.checks[id].own)) ?? work.checkpoints[0];
-      if (!first) return;
-      if (s.step !== 'bench') location.hash = 'bench';
-      store.set({ selection: { kind: 'checkpoint', id: first } });
-    };
     store.subscribe((s) => (document.getElementById('simtime')!.textContent = `${s.simSeconds.toFixed(2)} s`), ['simSeconds']);
     startRouter(ctx);
   } catch (e) {

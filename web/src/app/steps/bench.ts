@@ -77,6 +77,9 @@ function wiresOf(parts: PartSpec[]): Wire[] {
   return w;
 }
 
+/** 本页里用户自己验收过的固件（组装的"开机复测"用同一份固件；刷新后丢失，回落到台面上的固件） */
+export const ownFirmware: Record<string, { buf: ArrayBuffer; name: string }> = {};
+
 const PROGRESS_KEY = (work: string) => `tryboard-app-checks:${work}`;
 function loadProgress(work: string): Record<string, { fp: string; at: string }> {
   try {
@@ -345,6 +348,7 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
   async function verify(l: Level, buf: ArrayBuffer, who: string, own: boolean) {
     const c = ctx!;
     if (c.store.get().verifying) return;
+    if (own) ownFirmware[l.id] = { buf: buf.slice(0), name: who };
     c.store.set({ verifying: l.id, verifyProgress: 0 });
     let out: CheckOutcome;
     try {

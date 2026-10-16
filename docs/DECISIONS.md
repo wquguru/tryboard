@@ -243,3 +243,17 @@
 - 旧页面：levels.html 改为跳转页（#01–#06 → weather，#07 / #07-spin → spin，#07-lens → lens，带 `&cp=`），app 只加了最小的 `cp` 参数（初始 selection 选中该检查点，不属于该作品就忽略）。levels.ts / levels.css 暂不删（并行分支可能在改，免得合并冲突；P0-16 接手装配验收后删）。index.html 保留为空白实验台，页头加"新工作台 →"，去掉"关卡"
 - 测试：levels.mjs 的关卡页用例迁到 app.html（每个检查点参考固件指纹与 check.py 对拍、上传自己的固件、进度记住）；拖拽装配迁到 index.html 的装配视图（同一个 views/assembly）。原来"BME280 贴芯片 → 第 06 关验收不过"改成"开机后固件读数 T=26.00（偏 2.5 ℃）"，"舵盘装偏 → 07-spin 验收不过"改成"成品提示偏 14.4°"：工作台实验台不判装配（与命令行一致），判定由 P0-16 组装步骤补回
 - 替代：保留旧关卡页另起名字（两套检查点 UI 并存，违背 P0-21）；授权页放 public/ 内联样式（要复制一份 CSS）
+
+## 2026-10-16 · 组装与 3D 成品接进外壳（P0-16 / P0-17 / P0-18）
+- 组装沿用 `views/assembly.ts` 的 SVG 等轴测引擎和 `templates.ts` 三套模版，不另写 3D 装配：装法影响规则只有一份。外壳化的做法是"包一层"：SVG 裁掉自带的右侧小面板（viewBox 704×560），改由外壳属性面板显示；颜色用 CSS 属性选择器覆盖成白底主题，引擎代码只加了炸开（层间距 30 → 46）、`message()`、`isoPoint()` 几个接口
+- 时间线回退 = 清空后重放前 i 步（`asm.reset()` + `place()`），不存快照，和 P0-03 的"确定性重算"一致。新操作截断回退点之后的步骤。装配时间线（含复测结果）存 `localStorage['tryboard-app-asm:<work>']`，刷新后按存的顺序重放；存的顺序与模版不符就作废
+- 开机复测跑的是带装配的那个检查点（weather 06、spin 07-spin、lens 07-lens），固件优先用你在实验台验收这一关时上传的那份（本页内存，刷新后回落到台面上的固件），env 温度 = 关卡室温 + 装法温漂。结果 = 关卡判定全过 且 装配无警告；命令行 check.py 仍不判装配（几何估算）
+- 解锁：组装要求实验台检查点（只算自己的固件）全过；成品要求装完（不要求复测通过——装偏了也该能看到后果）
+- 外壳改动：`Shell.onVerdict`（结论按钮的动作由步骤自己设）；main.ts 的实验台时间线 / 结论只在采购、实验台显示，组装、成品各管自己的时间线；Session 增加 `audio`（BuzzerAudio 整页一份，接 LiveSim.onPwm）、`frame.lcd`、`fwBuf`、`setSensorOffset`、`onConsole`。组装、成品时实验台 3D 台面 `visibility:hidden`（仍在后台跑，不销毁，不改 board3d.ts）
+- 成品 3D（`app/product3d.ts`）独立于 board3d：WebGLRenderer + EffectComposer（UnrealBloom 阈值 1.25，只有导光柱的自发光超过阈值）+ RoomEnvironment；没走 WebGPU，因为 three 的 EffectComposer / UnrealBloomPass 只支持 WebGL，与 board3d 现状一致。OLED 用 DataTexture、MeshBasicMaterial（toneMapped=false），不参与 bloom，免得字糊
+- 指针：二阶弹簧阻尼（k=90、ζ=0.8）追固件 PWM 换算的角度，再限速 600°/s（SG90 约 0.1 s/60°）。示意，不是舵机模型
+- 热源改的是 env（气象站周围的温度）：目标 = 室温 + 14 ℃ × 贴近程度（离通风口 2.7–9.7 cm 线性），一阶滞后 τ=3 s 逼近。示意数值，未经真机标定；离开成品步骤时撤掉热源、温漂，回到室温
+- 事件时间线从串口整行解析 `ALARM ON/OFF`、`UNIT F/C`（weather 固件格式），加上上电、按键、热源、声音开关；只追加不回退
+- 小黄 / 透镜先挂 `lcdproducts.ts` 的 SVG 成品（标"外观示意（2D）"），3D 化留给 P1-10
+- 测试钩子：`window.__tbProduct`（buttonPos / azimuth / needle / heat / unit / alarm）
+- 替代：(a) 成品复用 board3d 的场景——那边另有代理在改，且台面和成品的相机、光照、交互都不同；(b) 每次进成品重启模拟加温漂——违背"不重启模拟"，温漂改由 `LiveSim.setOffset` 在线生效

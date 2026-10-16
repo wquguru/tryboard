@@ -188,6 +188,7 @@ body:not([data-step='bench']) .disclaimer { display: none; }
   font-size: 12px;
 }
 .verdict[data-state='ok'] { color: var(--ok); border-color: #bfe8d1; }
+.verdict[data-state='bad'] { color: var(--bad); border-color: #f8c4b6; background: var(--bad-bg); }
 .next { background: var(--accent); color: #fff; border-color: var(--accent); font-family: var(--sans); font-size: 13px; }
 .next:disabled { background: var(--field); color: var(--muted); border-color: var(--line); cursor: not-allowed; }
 .viewcube { display: grid; grid-template-columns: repeat(3, 26px); gap: 2px; padding: 3px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); }
@@ -405,3 +406,64 @@ body:not([data-step='bench']) .stage { filter: saturate(0.4) opacity(0.45); }
   .toast { bottom: 16px; }
   body:not([data-step='bench']) .stage { filter: none; }
 }
+
+/* ---------- ③ 组装（P0-16）：SVG 装配视图放在两栏之间，按白底主题重新上色 ---------- */
+.lockcard { padding: 4px 20px 16px; max-width: 420px; }
+.lockcard .ph-t { margin-top: 2px; }
+.asm-shell {
+  position: fixed;
+  left: calc(268px + 2 * var(--gap));
+  right: calc(304px + 2 * var(--gap));
+  top: calc(var(--gap) + 46px);
+  bottom: calc(var(--tl-h) + 64px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.asm-box { width: 100%; max-height: 100%; aspect-ratio: 704 / 560; max-width: calc((100vh - var(--tl-h) - 122px) * 704 / 560); }
+.asm-shell .tb-view { aspect-ratio: 704 / 560; background: #fff; color: var(--fg); border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: var(--r); }
+.asm-shell rect[fill='#2E4A3F'] { fill: #f7f8fa; }
+.asm-shell pattern path { stroke: #e9ecf0; }
+.asm-shell rect[fill='#24392F'] { fill: #fff; }
+.asm-shell rect[stroke='#3B5C4F'] { stroke: var(--line); }
+.asm-shell ellipse[fill='#1E332A'] { fill: #e4e8ee; }
+.asm-shell text[fill='#F7F6F3'] { fill: var(--fg); }
+.asm-shell text[fill='#9FBFB0'], .asm-shell text[fill='#C9D6CF'] { fill: var(--muted); }
+.asm-shell text { font-family: var(--sans); }
+.asm-shell .tb-mono { font-family: var(--mono); }
+.asm-shell .as-actions { display: none; }
+.asm-shell .as-choose { left: 77.4%; background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow); }
+.asm-shell .as-light { border: 1px solid var(--line); }
+.asm-msg { display: flex; flex-direction: column; gap: 2px; background: var(--field); border-radius: 6px; padding: 8px 10px; }
+.asm-msg span { color: var(--muted); font-size: 12px; }
+.asm-msg.bad { background: var(--bad-bg); }
+.asm-msg.bad b { color: var(--bad); }
+.btns.col { flex-direction: column; }
+.btn.warnb { border-color: #f3d29a; }
+.kv .v.warnc, .tn-st.warn { color: var(--warn); }
+.tn-st.muted { color: var(--muted); }
+.tn.static { cursor: default; }
+.tn.static:hover { background: transparent; }
+a.tn { text-decoration: none; }
+
+/* ---------- ④ 成品（P0-17）：3D 成品铺满台面区域 ---------- */
+.prod-stage { position: fixed; inset: 0 0 var(--tl-h) 0; background: #eef1f5; overflow: hidden; }
+.prod-stage canvas { display: block; width: 100% !important; height: 100% !important; cursor: grab; }
+.p3-tags { position: absolute; inset: 0; pointer-events: none; }
+.p3-tag { position: absolute; left: 0; top: 0; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); color: var(--fg); white-space: nowrap; box-shadow: var(--shadow); }
+.p3-tag.hot { background: #ff7a1a; border-color: #ff7a1a; color: #141414; font-weight: 500; }
+.p3-disclaimer { position: absolute; left: calc(268px + 2 * var(--gap) + 8px); bottom: 70px; font-size: 11px; color: var(--muted); pointer-events: none; }
+.prod-svg { position: absolute; left: calc(268px + 2 * var(--gap)); right: calc(304px + 2 * var(--gap)); top: 50%; transform: translateY(-50%); }
+.prod-svg .tb-view { border-radius: var(--r); box-shadow: var(--shadow); }
+.first3 { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.first3 li b { display: block; font-weight: 500; }
+.first3 li span { color: var(--muted); font-size: 12px; }
+.serial-tail { min-height: 60px; max-height: 120px; }
+@media (max-width: 760px) {
+  .asm-shell, .prod-svg { position: static; transform: none; }
+  .prod-stage { position: relative; inset: auto; height: 340px; border-radius: var(--r); }
+  .p3-disclaimer { left: 8px; bottom: 8px; }
+}
+/* 组装、成品有自己的画面：实验台的 3D 台面藏起来（仍在后台跑，不销毁） */
+body[data-step='assemble'] .stage, body[data-step='product'] .stage { visibility: hidden; }
+body[data-step='assemble'] .step-layer { background: radial-gradient(120% 90% at 50% 40%, #ffffff, #eceff3); bottom: var(--tl-h); }

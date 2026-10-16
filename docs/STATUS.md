@@ -110,5 +110,6 @@
 | 第三方授权页 licenses.html（P0-20） | ✅ | build_web.sh 生成；列 three、68 个构建期依赖、ROM（Apache-2.0 全文 + 第三方清单）、5 个固件组件、字体（Reviews/ab/P0-20.md） | 字体未自托管；无外部 3D 素材 |
 | 旧页面下线（P0-21） | ✅ | levels.html#04 / #07-lens / 无 hash 重定向到 app.html 并选中检查点（levels.mjs + agent-browser） | 装配验收判定待 P0-16 |
 | 工作台外壳 app.html（P0-01/02/15） | ✅ | agent-browser：weather 实验台跑起来、点 BME280 改温度读数 23.50 → 32.00、检查点 01–06 上传参考固件 6/6 通过且指纹与 check.py 逐个一致、切组装再切回模拟时间连续（运行 #1 不变）、390×844 无横向溢出、console / errors 无 error（Reviews/ab/P0-01.md） | 采购 / 组装 / 成品为占位；点台面选中待 board3d 实现 ScenePickApi；levels.mjs 已迁移到新页面（P0-21） |
+| 组装 / 3D 成品（P0-16/17/18） | ✅ | agent-browser（Reviews/ab/P0-16.md、P0-17.md）：未解锁时显示 0/6 与「回实验台」；上传参考固件 6/6 后解锁；BME280 放开发板旁 → 开机复测 ✗（温度最大偏差 2.5、PWM 1.80 ms、装配有警告）；时间线回到「装 开发板」改放通风口旁 → 复测 ✓，指纹 65e9·47d4 与实验台 06 相同；成品拖动后方位角 24° → −39°；声音开 + 热源 → 34.6 ℃ 报警，`__tbAudio` playing=true、peakHz 2695；点 3D BOOT → OLED 99.3°F；console / errors 无 error | 温漂 2.5 ℃、热源 +14 ℃ / 时间常数 3 s、指针二阶缓动都是示意数值，未经真机标定；小黄 / 透镜成品仍是 SVG（P1-10）；装配视图仍是 2.5D SVG |
 | 成品示意（小黄 / 透镜 / 检测器） | 🟡 | — | 只是外观示意；内核已有 GC9A01 圆屏（`tb_lcd_*`），lens / spin 固件已能跑，网页显示待接 |
 | 元件库 / 采购模版 / 规则引擎（数据层） | 🟡 | `cd web && npm test`：57 个用例全过（schema、核价提醒、模版对拍 examples.json、R01–R27 各正反用例） | 53 件、27 条规则；价格为代理估计未人工核价，多处字段待核（`todoList()`），规则未经人逐条复核、未经真机标定；还没有页面（P0-07） |

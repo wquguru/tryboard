@@ -36,6 +36,9 @@ export function createShell(): Shell {
       b.textContent = text;
       b.dataset.state = state;
     },
+    onVerdict(fn) {
+      $('verdict').onclick = fn;
+    },
     setNext(label, to, why) {
       const b = $<HTMLButtonElement>('next');
       b.textContent = label;

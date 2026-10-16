@@ -29,9 +29,9 @@
 | P0-13 | 尺子（量零件距离，与温漂联动）；运行历史 + 指纹对比 | 两次运行可比较差异项 | ☐ |
 | P0-14 | 蜂鸣器出声：LEDC 频率 → Web Audio（模拟时间驱动，默认静音开关），新固件 weather 加蜂鸣器报警 | 用 Web Audio 分析节点读出频率 ≈ 2.7 kHz；固件验收 | ☑ 2026-10-16：accept 用例 weather-alarm；agent-browser 读 `__tbAudio` lastFreq 2700.1、分析节点 peakHz 2695（Reviews/ab/P0-14.md）。3D 蜂鸣器外观归 P0-17 |
 | P0-15 | 检查点接进实验台（气象站 6 个，任务书 + 拖入 .bin 验收 + 结论按钮） | 现有 levels.mjs 的用例在新页面全部迁移通过 | ◐ 6 个检查点在新页面上传参考固件全过、指纹与 check.py 一致（agent-browser，见 Reviews/ab/P0-01.md）；levels.mjs 尚未改成跑 app.html，装配一条留给 P0-16 |
-| P0-16 | 组装接进外壳（沿用现有装配引擎和影响规则，先 2.5D/SVG 或现有 3D） | 验收全过才解锁；BME280 放芯片旁时复测 ✗ | ☐ |
-| P0-17 | 3D 成品（气象站）：能转，灯 bloom、屏幕纹理、舵机、蜂鸣器；拖动 / 按键 / 热源 / 缩放；事件时间线 | agent-browser 拖动后截图角度变化；热源使读数上升并报警 | ☐ |
-| P0-18 | 真机到手清单 + 不能模拟的项 | 成品页显示 | ☐ |
+| P0-16 | 组装接进外壳（沿用现有装配引擎和影响规则，先 2.5D/SVG 或现有 3D） | 验收全过才解锁；BME280 放芯片旁时复测 ✗ | ☑ 2026-10-16：`steps/assemble.ts`，沿用 SVG 装配引擎；左树装配层、右栏装法影响（估算）、时间线可回退重算、尺子 / 炸开；复测 ✗ → 回退改放 → ✓（Reviews/ab/P0-16.md） |
+| P0-17 | 3D 成品（气象站）：能转，灯 bloom、屏幕纹理、舵机、蜂鸣器；拖动 / 按键 / 热源 / 缩放；事件时间线 | agent-browser 拖动后截图角度变化；热源使读数上升并报警 | ☑ 2026-10-16：`app/product3d.ts`（three.js，独立于 board3d），拖动方位角变化、热源 → 报警且 `__tbAudio.playing`、点 3D BOOT → ℉（Reviews/ab/P0-17.md）。小黄 / 透镜先挂 SVG 成品（3D 归 P1-10） |
+| P0-18 | 真机到手清单 + 不能模拟的项 | 成品页显示 | ☑ 2026-10-16：成品右栏按作品列三件事（彩灯引脚 v1.0/v1.1、I2C 扫描与芯片 ID、温度标定 / 舵机供电 / 圆屏反色）和不能模拟的项；内容为代理整理，未经人复核 |
 | P0-19 | 输入日志带模拟时间（网页交互可重放），网页 / CLI 一致 | 重放同一日志指纹相同 | ☑ 2026-10-16：`tools/webtest/replay.mjs`（已进 accept.sh）：网页实时串口 = CLI `--inputs` 重放（逐字节），网页验收 worker 与 CLI 指纹相同（Reviews/ab/P0-19.md） |
 | P0-20 | 第三方授权页 licenses.html（从 SOURCES.md 和依赖清单生成）；页脚声明；3D "外观示意"字样 | 页面列出全部依赖 | ☑ tools/gen_licenses.mjs 构建期生成（Reviews/ab/P0-20.md）；3D "外观示意"字样外壳已有；字体仍走 Google Fonts 未自托管 |
 | P0-21 | 旧页面下线 / 重定向（levels.html → 实验台检查点；advisor → 我有自己的想法；index.html 保留为空白实验台） | 旧链接不 404 | ☑ levels.html#NN → app.html?work=…&cp=NN#bench 并选中检查点；index / advisor 保留，页头互链（Reviews/ab/P0-21.md） |
