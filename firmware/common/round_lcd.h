@@ -1,6 +1,8 @@
-// GC9A01 240×240 圆屏（SPI2）公共件：总线 / 面板初始化 + 整帧缓冲上的简单图形。lens、spin 共用。
+// GC9A01 240×240 圆屏（SPI2）公共件：总线 / 面板初始化 + 整帧缓冲上的简单图形。lens、spin 及其检查点固件、c3-lcd 共用。
 // 接线（ESP32-S3）：SCLK=GPIO12 MOSI=GPIO11 CS=GPIO10 DC=GPIO14 RST=GPIO13 背光=GPIO15（高电平亮）。
-// 这几个脚正好是 SPI2 的 IO_MUX 直连脚，驱动会走 IO_MUX 而不是 GPIO 矩阵。
+// 接线（ESP32-C3）：SCLK=GPIO6 MOSI=GPIO7 CS=GPIO10 DC=GPIO5 RST=GPIO4 背光=GPIO3（高电平亮）。
+// SCLK / MOSI / CS 正好是 SPI2 的 IO_MUX 直连脚，驱动会走 IO_MUX 而不是 GPIO 矩阵。
+// 引脚可以在 include 之前用 #define 覆盖（例如板载圆屏的开发板）。
 #pragma once
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -11,15 +13,28 @@
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_gc9a01.h"
+#include "sdkconfig.h"
 
 #define LCD_W 240
 #define LCD_H 240
+#ifndef LCD_SCLK
+#if CONFIG_IDF_TARGET_ESP32C3
+// C3 DevKitM-1：2、8、9 是 strapping 脚（8 还接着板载 RGB），DC / RST / 背光避开它们
+#define LCD_SCLK 6
+#define LCD_MOSI 7
+#define LCD_CS 10
+#define LCD_DC 5
+#define LCD_RST 4
+#define LCD_BL 3
+#else
 #define LCD_SCLK 12
 #define LCD_MOSI 11
 #define LCD_CS 10
 #define LCD_DC 14
 #define LCD_RST 13
 #define LCD_BL 15
+#endif
+#endif
 // 每次 SPI 传输最多 40 行（19200 字节）：一帧拆成 6 次 DMA，每次 5 个描述符
 #define LCD_CHUNK_LINES 40
 

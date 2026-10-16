@@ -65,8 +65,17 @@ for (const m of cli.matchAll(/第 ([\w-]+) 关 .*?：(\S+)\s+指纹 (\S+)/g)) na
 // ---- 1. 工作台检查点：参考固件，指纹与命令行一致
 const fpOf = (page) => page.$eval('#props .kv .v.fp', (e) => e.textContent.trim()).catch(() => '');
 async function runRef(page, id) {
-  await page.waitForSelector(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`, { timeout: 30000 });
-  await page.click(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`);
+  // 构建树在会话加载 / 自动选中检查点时会整块重画，点到一半节点可能被换掉：重试几次
+  for (let i = 0; ; i++) {
+    await page.waitForSelector(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`, { timeout: 30000 });
+    try {
+      await page.click(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`);
+      break;
+    } catch (e) {
+      if (i >= 4) throw e;
+      await sleep(300);
+    }
+  }
   await page.waitForSelector('#runRef:not([disabled])', { timeout: 30000 });
   await page.click('#runRef');
   await waitFor(page, () => !!document.querySelector('#props .verdict-line') && !document.querySelector('#runRef')?.disabled && !document.querySelector('#props .drop.busy'), null, 90000);
@@ -75,7 +84,7 @@ async function runRef(page, id) {
   fs.writeFileSync(path.join(outDir, `levels-${id}-web.json`), JSON.stringify(raw, null, 1));
   return { ok: /✓ 通过/.test(text), fp: await fpOf(page), text };
 }
-for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['07-spin']], ['lens', ['07-lens']]]) {
+for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']]]) {
   const page = await open(`/app.html?work=${work}#bench`);
   for (const id of cps) {
     const r = await runRef(page, id);
@@ -226,6 +235,8 @@ async function openAsm(example) {
     await Promise.all([p.waitForNavigation({ waitUntil: 'load' }), p.click(`.wk[data-work="${c.work}"] [data-go]`)]);
     const u = new URL(p.url());
     const n = c.cps.match(/\d+/)?.[0];
+    // 采购页的结论按钮显示规则提醒数（P0-07 起），检查点进度要到实验台看
+    await p.evaluate(() => (location.hash = 'bench'));
     const v = await waitFor(p, (n) => new RegExp(`检查点 0?\\d*/${n}`).test(document.getElementById('verdict')?.textContent ?? ''), n, 30000);
     report(`首页「做这个」（${c.work}）→ app.html?work=${c.work}#shop，检查点数 ${n} 与工作台一致`, u.pathname.endsWith('/app.html') && u.searchParams.get('work') === c.work && u.hash === '#shop' && v, p.url().replace(base, ''));
     await p.close();

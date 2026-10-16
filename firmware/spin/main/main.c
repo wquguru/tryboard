@@ -1,6 +1,7 @@
 // 成品："会转身的小黄"（ESP32-S3 + GC9A01 圆屏 + 舵机转台）。
 // 舵机 GPIO4（LEDC 50Hz）以 90° 为中心在 ±60° 之间来回转，2 秒一个来回（脉宽 1.5 ± 0.667ms）；
-// 圆屏画小黄的脸，眼珠朝转动方向看。按 BOOT（GPIO0）停在正面（90°）并打印 LOOK FRONT，再按一次继续转。
+// 圆屏画小黄的脸，眼珠朝转动方向看（到最右打印 EYE R、最左 EYE L）。按 BOOT（GPIO0）停在正面（90°）、
+// 眼珠回到正中并打印 LOOK FRONT，再按一次继续转。是检查点 spin-1 → spin-2 → 07-spin 的最后一步。
 // 圆屏接线见 firmware/common/round_lcd.h。
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
@@ -137,6 +138,9 @@ void app_main(void)
         if ((target - look) * (target - next) < 0) next = target;
         if (next != look) {
             look = next;
+            // 眼珠到最右 / 最左时各报一次（检查点 07-spin 用串口判"眼珠跟着转"）
+            if (look == PUPIL_MAX) printf("EYE R\n");
+            if (look == -PUPIL_MAX) printf("EYE L\n");
             draw_eyes(look);
             lcd_flush_rows(BAND_Y0, BAND_Y1);
         }

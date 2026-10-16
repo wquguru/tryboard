@@ -1,9 +1,9 @@
-// 采购 / 接线规则引擎（docs/RESEARCH_PROCURE.md §2 的 R01–R27）。
+// 采购 / 接线规则引擎（docs/RESEARCH_PROCURE.md §2 的 R01–R27，P1-12 加板子特有的 R28–R32）。
 // 全部是确定性纯函数：同样的输入永远给同样的结论，命令行和网页都能重算。
 // 分级照 ESPHome 引脚校验（MIT 的 Python 部分，只参考结构）："不能开机 / 不能用" = block，"能用但有坑" = warn。
 // 每条结论带来源；电流类数字是估算，页面要标"估算，未经真机标定"。
 import { CHIPS, type Cap } from '../advisor/data.ts';
-import { BOARDS, PART_BY_ID, getPart, type BoardInfo, type ChipId, type Part, type Pin } from './parts.ts';
+import { BOARDS, PART_BY_ID, getPart, type BoardInfo, type ChipId, type LcdPins, type OnboardKind, type Part, type Pin } from './parts.ts';
 import { TEMPLATE_BY_ID, type FirmwareUse, type Pick, type Wire } from './templates.ts';
 
 export type Level = 'block' | 'warn' | 'ok';
@@ -60,6 +60,8 @@ interface ChipFacts {
   flash: number[];
   psramOctal: number[];
   bootPin: number;
+  /** 上电采样、外部电平会改变启动方式的脚（R28）；S3 的 GPIO3 只在烧了 JTAG 选择 eFuse 后才起作用，不列 */
+  straps: number[];
   usb: number[];
   uart0: number[];
   adc1: number[];
@@ -81,6 +83,7 @@ export const CHIP_FACTS: Record<ChipId, ChipFacts> = {
     flash: adv('esp32c3').pins.flash,
     psramOctal: [],
     bootPin: 9,
+    straps: [2, 8, 9],
     usb: adv('esp32c3').pins.usb,
     uart0: [...adv('esp32c3').pins.uart0],
     adc1: adv('esp32c3').pins.adc1,
@@ -97,6 +100,7 @@ export const CHIP_FACTS: Record<ChipId, ChipFacts> = {
     flash: adv('esp32s3').pins.flash,
     psramOctal: adv('esp32s3').pins.psramOctal ?? [],
     bootPin: 0,
+    straps: [0, 45, 46],
     usb: adv('esp32s3').pins.usb,
     uart0: [...adv('esp32s3').pins.uart0],
     adc1: adv('esp32s3').pins.adc1,
@@ -145,10 +149,15 @@ export const RULES: RuleMeta[] = [
   { id: 'R21', level: 'warn', title: '3.3 V 稳压器负载过大', source: 'ESP32-C3 / S3 数据手册射频发射峰值电流；板载 LDO 额定（逐板录入，未录入按 500 mA）', confidence: '估算' },
   { id: 'R22', level: 'warn', title: 'GPIO 直接驱动大电流负载', source: 'ESP32-C3 / S3 数据手册 GPIO 驱动能力（默认驱动档）', confidence: '数据手册' },
   { id: 'R23', level: 'warn', title: '板载彩灯引脚与固件不符（DevKitC-1 v1.0 GPIO48 / v1.1 GPIO38）', source: 'ESP32-S3-DevKitC-1 用户指南 v1.1（RGB 改到 GPIO38）', confidence: '数据手册' },
-  { id: 'R24', level: 'warn', title: '引脚与板载外设重复', source: '开发板用户指南 / Seeed Wiki（逐板录入）', confidence: '数据手册' },
+  { id: 'R24', level: 'warn', title: '引脚与板载外设重复（屏 / IMU / 触摸的独占线判阻断）', source: '开发板用户指南 / Seeed Wiki / M5Stack 文档 / 微雪 wiki（逐板录入）', confidence: '数据手册' },
   { id: 'R25', level: 'block', title: '芯片不支持作品需要的能力（USB OTG / 摄像头 / 经典蓝牙）', source: 'ESP-IDF v5.5.1 soc_caps.h（SOC_USB_OTG_SUPPORTED 等）', confidence: '数据手册' },
   { id: 'R26', level: 'warn', title: '天线附近有金属 / 电池，Wi-Fi 会变差', source: '乐鑫模组硬件设计指南（天线净空区）', confidence: '必须上真机' },
   { id: 'R27', level: 'block', title: '缺必选件（模版必选、舵机电源、充电、杜邦线、数据线、配套件）', source: 'TryBoard 采购规则（docs/RESEARCH_PROCURE.md R27）', confidence: '我们的规则' },
+  { id: 'R28', level: 'warn', title: '排针上看着普通的脚其实是 strapping 脚（XIAO C3 的 D0 / D8 / D9 等）', source: 'Seeed Wiki XIAO ESP32C3 引脚表（D0 / D8 / D9 = GPIO2 / 8 / 9 为 strapping）；ESP32-C3 / S3 数据手册 Strapping 管脚表', confidence: '数据手册' },
+  { id: 'R29', level: 'warn', title: '板上已经有这个器件，又外接一份（如微雪圆屏板再买 GC9A01）', source: '微雪 wiki ESP32-S3-LCD-1.28 / Touch-LCD-1.28（板载 GC9A01）', confidence: '数据手册' },
+  { id: 'R30', level: 'block', title: '固件要 PSRAM，板子没有（XIAO C3、AtomS3 等）', source: 'ESP32-C3 数据手册（无 PSRAM 接口）；ESP32-S3 订购信息（型号带 R 才有 PSRAM）；Seeed Wiki / M5Stack 文档', confidence: '数据手册' },
+  { id: 'R31', level: 'block', title: '板子能自由用的 GPIO 不够（AtomS3 只有 8 个）', source: '开发板引脚表（M5Stack AtomS3：排针 G5–G8 / G38 / G39 + Grove G1 / G2）；板载占用逐板录入', confidence: '数据手册' },
+  { id: 'R32', level: 'warn', title: '板载屏引脚与固件不符（微雪圆屏触摸版 / 无触摸版）', source: '微雪 wiki：无触摸版屏 RST GPIO12、背光 GPIO40；触摸版 RST GPIO14、背光 GPIO2', confidence: '数据手册' },
 ];
 export const RULE_BY_ID: Record<string, RuleMeta> = Object.fromEntries(RULES.map((r) => [r.id, r]));
 
@@ -521,7 +530,15 @@ const IMPL: Record<string, RuleFn> = {
     const out: Partial<Finding>[] = [];
     for (const u of c.uses) {
       const o = c.info.onboard.find((o) => o.gpio === u.gpio && o.kind !== 'boot');
-      if (o) out.push(f('warn', `${c.board.name} 的 GPIO${u.gpio} 已经接了${o.what}，再接 ${u.inst.part.name} 会互相干扰。`, at(u)));
+      if (!o) continue;
+      if (o.share) {
+        // 总线可以挂多个器件：同一角色的针脚接上来只提醒，拿总线脚当普通 IO 会把板载器件的通信打乱
+        if (o.share === u.pin.type)
+          out.push(f('warn', `${c.board.name} 的 GPIO${u.gpio} 是${o.what}（总线），${u.inst.part.name} 的 ${u.pin.label} 可以共用，但${o.share.startsWith('spi') ? '要单独一根 CS，固件里两个设备共用同一个 SPI 主机' : 'I2C 地址不能和板载器件撞'}。`, at(u)));
+        else out.push(f('block', `${c.board.name} 的 GPIO${u.gpio} 是${o.what}，${u.inst.part.name} 的 ${u.pin.label} 接上去会打乱板载器件的通信。换个空闲引脚。`, at(u)));
+      } else if (EXCLUSIVE.includes(o.kind))
+        out.push(f('block', `${c.board.name} 的 GPIO${u.gpio} 已经接了${o.what}（板载器件独占的控制线），再接 ${u.inst.part.name} 会冲突。换个空闲引脚。`, at(u)));
+      else out.push(f('warn', `${c.board.name} 的 GPIO${u.gpio} 已经接了${o.what}，再接 ${u.inst.part.name} 会互相干扰。`, at(u)));
     }
     return out;
   },
@@ -564,6 +581,8 @@ const IMPL: Record<string, RuleFn> = {
       const t = TEMPLATE_BY_ID[c.input.template];
       for (const r of t?.required ?? []) {
         if (getPart(r.partId).kind === 'board') continue;
+        // 板上已经焊了（微雪圆屏板的 GC9A01）：模版必选也不用再买，R29 负责说
+        if (c.info.builtin?.some((b) => b.partId === r.partId)) continue;
         need(r.partId, `「${t.title}」必选：${getPart(r.partId).name}（${r.why}）。`, r.partId);
       }
     }
@@ -580,7 +599,87 @@ const IMPL: Record<string, RuleFn> = {
     need('usb-c-cable', '任何作品都要一根能传数据的 Type-C 线（很多充电线不能传数据）。', 'usb-c-cable');
     return out;
   },
+  R28: (c) => {
+    if (!c.wiring) return NO_WIRING;
+    return c.uses
+      // 已知上电电平的交给 R05–R08；I2C 线有上拉、上电为高，正好满足 strapping 要求
+      .filter((u) => c.chip.straps.includes(u.gpio) && u.pin.boot === undefined && (u.pin.dir === 'out' || u.pin.dir === 'bi') && !u.pin.type.startsWith('i2c-'))
+      .map((u) => {
+        const silk = c.board.pins?.find((p) => p.gpio === u.gpio)?.label;
+        const named = silk && silk !== `GPIO${u.gpio}` ? `${silk} 看着是普通引脚，其实` : `GPIO${u.gpio} `;
+        const why = c.info.chip === 'esp32c3' ? (u.gpio === 9 ? '上电为低会进下载模式，程序不运行' : '上电为低可能下载 / 启动失败') : u.gpio === 0 ? '上电为低会进下载模式' : '上电电平会改变 flash 电压或启动方式';
+        return f('warn', `${named}是 strapping 脚：${u.inst.part.name} 的 ${u.pin.label} 会往这根线上送电平，${why}。确认它上电时是高电平或高阻，否则换个引脚。`, at(u));
+      });
+  },
+  R29: (c) => {
+    const builtin = c.info.builtin ?? [];
+    if (!builtin.length) return `${c.board.name} 没有和元件库重复的板载器件`;
+    const lcd = c.info.lcd;
+    const pins = lcd ? `SCLK ${lcd.sclk} / MOSI ${lcd.mosi} / CS ${lcd.cs} / DC ${lcd.dc} / RST ${lcd.rst} / 背光 ${lcd.bl}` : '';
+    return c.insts
+      .filter((i) => builtin.some((b) => b.partId === i.part.id))
+      .map((i) => {
+        const b = builtin.find((b) => b.partId === i.part.id)!;
+        return f('warn', `${c.board.name} 已经有${b.what}，清单里又买了 ${i.part.name}：多花钱，外接的线还会抢板载器件的引脚。去掉外接的${pins ? `，固件改用板载屏的引脚（${pins}）` : ''}。`, i.key, { action: 'remove', partId: i.part.id });
+      });
+  },
+  R30: (c) => {
+    if (!c.input.firmware?.psram) return '固件不需要 PSRAM';
+    const fix: Fix = { action: 'swap', partId: 's3-devkitc1-v10', replaces: c.board.id };
+    if (c.info.psram === 'none' || c.info.psramMB === 0)
+      return [f('block', `固件要用 PSRAM，${c.board.name} 没有 PSRAM（${c.info.chip === 'esp32c3' ? 'ESP32-C3 没有 PSRAM 接口' : '芯片 / 模组型号不带 R'}）。换带 PSRAM 的板，如 XIAO ESP32S3 或 DevKitC-1 N16R8。`, c.board.id, fix)];
+    if (c.info.psram === null || c.info.psramMB === null) return [f('warn', `固件要用 PSRAM，${c.board.name} 的 PSRAM 配置待核：买前看清型号里的 R2 / R8 字样。`, c.board.id)];
+    return `${c.board.name} 有 ${c.info.psramMB} MB PSRAM`;
+  },
+  R31: (c) => {
+    if (!c.board.pins) return `${c.board.name} 的排针表未录入，数不了空闲引脚`;
+    // 空闲 = 排针上的 GPIO 去掉板载独占的（总线脚和 BOOT 键还能接）
+    const taken = new Set(c.info.onboard.filter((o) => o.kind !== 'boot' && !o.share).map((o) => o.gpio));
+    const free = [...new Set(c.board.pins.map((p) => p.gpio).filter((g): g is number => g !== undefined && !taken.has(g)))];
+    let need: number;
+    if (c.wiring) need = new Set(c.uses.map((u) => u.gpio)).size;
+    else {
+      // 没接线：按零件的信号脚数估，所有 I2C 件共用一对 SDA / SCL
+      need = 0;
+      let i2c = false;
+      for (const i of c.insts) {
+        if (!i.part.pins) continue;
+        if (i.part.i2cAddr) {
+          i2c = true;
+          continue;
+        }
+        need += i.qty * i.part.pins.filter((p) => !['power', 'gnd', 'nc', 'passive', 'addr'].includes(p.type)).length;
+      }
+      if (i2c) need += 2;
+    }
+    if (need <= free.length) return `要 ${need} 根信号线，${c.board.name} 空闲 GPIO ${free.length} 个`;
+    const sibling = c.info.chip === 'esp32s3' ? 's3-devkitc1-v10' : 'c3-devkitm1';
+    return [
+      f('block', `作品要 ${need} 根信号线，${c.board.name} 能自由用的 GPIO 只有 ${free.length} 个（${free.map((g) => 'GPIO' + g).join('、')}）。换引脚多的板，或用 I2C 扩展（PCF8574 / PCA9685）。`, c.board.id, sibling === c.board.id ? undefined : { action: 'swap', partId: sibling, replaces: c.board.id }),
+    ];
+  },
+  R32: (c) => {
+    const want = c.input.firmware?.lcdPins;
+    if (!want) return '固件没有声明板载屏引脚';
+    const have = c.info.lcd;
+    if (!have) return `${c.board.name} 没有板载屏，外接屏的引脚由 R04 / R24 检查`;
+    const keys = (Object.keys(want) as (keyof LcdPins)[]).filter((k) => want[k] !== have[k]);
+    if (!keys.length) return '固件里的屏引脚与板载屏一致';
+    const NAME: Record<keyof LcdPins, string> = { sclk: 'SCLK', mosi: 'MOSI', cs: 'CS', dc: 'DC', rst: 'RST', bl: '背光' };
+    const sibling = BOARDS.find((b) => b.id !== c.board.id && b.board!.family === c.info.family && b.board!.lcd && (Object.keys(want) as (keyof LcdPins)[]).every((k) => b.board!.lcd![k] === want[k]));
+    return [
+      f(
+        'warn',
+        `固件按 ${keys.map((k) => `${NAME[k]}=GPIO${want[k]}`).join('、')} 驱动板载屏，${c.board.name} 实际是 ${keys.map((k) => `${NAME[k]}=GPIO${have[k]}`).join('、')}${c.info.family === 'ws-lcd128' ? '（微雪圆屏无触摸版 RST 12 / 背光 40，触摸版 RST 14 / 背光 2）' : ''}：屏不亮或黑屏。改固件引脚${sibling ? `，或换 ${sibling.name}` : ''}。`,
+        'LCD',
+        sibling ? { action: 'swap', partId: sibling.id, replaces: c.board.id } : undefined,
+      ),
+    ];
+  },
 };
+
+/** 板载器件独占的控制线：被外接件再用判阻断（R24） */
+const EXCLUSIVE: OnboardKind[] = ['lcd', 'imu', 'touch'];
 
 const hex = (a: number) => a.toString(16).toUpperCase().padStart(2, '0');
 
@@ -600,7 +699,7 @@ function i2cBuses(c: Ctx): Map<string, Inst[]> {
   return m;
 }
 
-/** 跑全部 27 条规则：每条至少一项结论，没触发的给 level='ok' */
+/** 跑全部规则（R01–R32）：每条至少一项结论，没触发的给 level='ok' */
 export function evaluate(input: RuleInput): Finding[] {
   const c = makeCtx(input);
   const out: Finding[] = [];

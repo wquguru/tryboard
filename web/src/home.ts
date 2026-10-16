@@ -4,6 +4,7 @@ import { LiveSim } from './live';
 import { createShowcase, type ShowKind } from './views/showcase';
 import { createProductView } from './views/product';
 import { createLensProduct, createSpinProduct } from './views/lcdproducts';
+import { WORKS } from './app/works';
 
 const SERVO = 4;
 const ENV = { temp: 23.5, humidity: 45, pressure: 101325 };
@@ -21,6 +22,13 @@ interface Card {
   status: HTMLElement;
   btn: HTMLButtonElement;
   sim: LiveSim | null;
+}
+
+// 卡片上的检查点数跟着作品定义走（web/src/app/works.ts），不在 HTML 里写死
+for (const el of document.querySelectorAll<HTMLElement>('.wk')) {
+  const n = WORKS[el.dataset.work ?? '']?.checkpoints.length;
+  const v = el.querySelector<HTMLElement>('[data-cps]');
+  if (v && n) v.textContent = `${n} 个`;
 }
 
 const cards: Card[] = [...document.querySelectorAll<HTMLElement>('.wk')].map((root) => {

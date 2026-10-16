@@ -126,6 +126,42 @@ test('todoList 列出待核字段', () => {
   assert.ok(t.find((x) => x.id === 'luat-s3')!.todo.some((s) => s.startsWith('board.psram')));
 });
 
+// ───────── 开发板库（P1-12） ─────────
+test('开发板库：首批板子都在，每块有来源 URL、芯片、USB / PSRAM 结论或待核', () => {
+  for (const id of ['luat-s3', 'xiao-s3', 'xiao-c3', 'm5-atoms3', 'ws-s3-lcd128', 'ws-s3-touch-lcd128', 's3-devkitc1-v10', 's3-devkitc1-v11', 'c3-devkitm1']) {
+    const b = getPart(id);
+    assert.equal(b.kind, 'board', id);
+    assert.ok(b.board!.urls.length > 0 && b.board!.urls.every((u) => u.startsWith('https://')), `${id} 来源 URL`);
+  }
+  // 关键事实（官方资料）
+  assert.equal(getPart('s3-devkitc1-v10').board!.rgbGpio, 48);
+  assert.equal(getPart('s3-devkitc1-v11').board!.rgbGpio, 38);
+  assert.deepEqual(getPart('xiao-c3').pins!.filter((p) => [2, 8, 9].includes(p.gpio!)).map((p) => p.label), ['D0(GPIO2)', 'D8(GPIO8)', 'D9(GPIO9)']);
+  assert.equal(getPart('xiao-c3').board!.psramMB, 0);
+  assert.equal(getPart('xiao-s3').board!.psram, 'octal');
+  assert.equal(getPart('m5-atoms3').pins!.filter((p) => p.gpio !== undefined).length, 8);
+  assert.equal(getPart('m5-atoms3').board!.psram, 'none');
+  const ws = getPart('ws-s3-lcd128').board!;
+  assert.deepEqual(ws.lcd, { sclk: 10, mosi: 11, cs: 9, dc: 8, rst: 12, bl: 40 });
+  assert.equal(getPart('ws-s3-touch-lcd128').board!.lcd!.rst, 14);
+  assert.equal(ws.psram, 'quad');
+  assert.deepEqual(ws.builtin?.map((x) => x.partId), ['gc9a01']);
+});
+
+test('schema 校验：开发板缺来源 URL / 板载占用写错 / 屏引脚对不上 都会报错', () => {
+  const p = clone(getPart('ws-s3-lcd128'));
+  p.board!.urls = [];
+  p.board!.onboard[0].kind = 'nope' as never;
+  p.board!.builtin = [{ partId: 'no-such-part', what: 'x' }];
+  p.board!.lcd!.rst = 33;
+  p.board!.onboard.push({ gpio: 0, what: '重复', kind: 'other' });
+  const e = validatePart(p);
+  for (const re of [/board\.urls 至少/, /onboard kind 未知/, /builtin 指向不存在/, /board\.lcd\.rst = GPIO33/, /同一个 GPIO 写了两次：0/]) assert.ok(e.some((x) => re.test(x)), `${re}：${e.join(' | ')}`);
+  const q = clone(getPart('xiao-s3'));
+  q.board!.urls = ['http://example.com'];
+  assert.ok(validatePart(q).some((x) => /只能是 https/.test(x)));
+});
+
 // ───────── 采购模版 ─────────
 test('模版：四个、必选件都在库里，数量为正', () => {
   assert.deepEqual(PROCURE_TEMPLATES.map((t) => t.id), ['weather', 'spin', 'lens', 'blank']);

@@ -299,11 +299,15 @@ impl Machine {
         self.i2c0().device::<Ssd1306>()
     }
 
-    /// 在 SPI2 上接一块屏（目前只有 "gc9a01"，引脚见 tryboard_esp32s3::lcd_pin）。
-    /// 只有 ESP32-S3 建模了 GP-SPI2 + GDMA，C3 返回 false
+    /// 在 SPI2 上接一块屏（目前只有 "gc9a01"）。引脚按芯片不同：
+    /// S3 见 tryboard_esp32s3::lcd_pin，C3 见 tryboard_esp32c3::lcd_pin
     pub fn lcd_attach(&mut self, kind: &str) -> bool {
         match (self, kind) {
             (Machine::S3(m), "gc9a01") => {
+                m.bus.attach_lcd();
+                true
+            }
+            (Machine::C3(m), "gc9a01") => {
                 m.bus.attach_lcd();
                 true
             }
@@ -314,7 +318,7 @@ impl Machine {
     pub fn lcd(&mut self) -> Option<&mut Gc9a01> {
         match self {
             Machine::S3(m) => m.bus.lcd.as_deref_mut(),
-            Machine::C3(_) => None,
+            Machine::C3(m) => m.bus.lcd.as_deref_mut(),
         }
     }
 
@@ -322,7 +326,7 @@ impl Machine {
     pub fn spi_stats(&self) -> (u64, u64) {
         match self {
             Machine::S3(m) => (m.bus.spi2.transfers, m.bus.spi2.bytes),
-            Machine::C3(_) => (0, 0),
+            Machine::C3(m) => (m.bus.spi2.transfers, m.bus.spi2.bytes),
         }
     }
 

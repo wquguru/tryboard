@@ -127,7 +127,7 @@ echo -e "\n## 关卡（firmware/levels.json，参考固件）\n\`\`\`" >> $REPOR
 tools/check.py --ref --all >> $REPORT 2>&1 || fail=1
 echo '```' >> $REPORT
 
-# 网页单测（元件库 schema、核价提醒、规则引擎 R01–R27）：纯 Node，不需要浏览器，--no-web 也跑
+# 网页单测（元件库 schema、核价提醒、规则引擎 R01–R32）：纯 Node，不需要浏览器，--no-web 也跑
 command -v node >/dev/null || { [ -s ~/.nvm/nvm.sh ] && . ~/.nvm/nvm.sh >/dev/null; }
 echo -e "\n## 网页单测（web/test，node --test）\n\`\`\`" >> $REPORT
 (cd web && npm test --silent > ../Reviews/web-unit.log 2>&1); ut=$?
@@ -154,7 +154,8 @@ if [ $NO_WEB = 0 ]; then
   done
   r=$(node tools/webtest/levels.mjs 2>&1 | grep '^\[levels\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q PASS || fail=1
+  # 最后一行必须是汇总行；脚本中途崩溃时最后一行是某条单项的 PASS，不能算过
+  echo "$r" | tail -1 | grep -q '^\[levels\] PASS（' || { echo "- [levels] 脚本没跑完" >> $REPORT; fail=1; }
   r=$(node tools/webtest/replay.mjs 2>&1 | grep '^\[replay\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q PASS || fail=1

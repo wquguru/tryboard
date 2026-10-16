@@ -1,7 +1,10 @@
 //! GDMA（通用 DMA）：每通道一对 IN / OUT 链表 DMA，通过 PERI_SEL 接到外设（SPI2 = 0）。
-//! 寄存器见 soc/esp32s3/register/soc/gdma_reg.h，驱动写法见 hal/esp32s3/include/hal/gdma_ll.h。
+//! 寄存器见 soc/esp32s3/register/soc/gdma_reg.h、soc/esp32c3/register/soc/gdma_reg.h，
+//! 驱动写法见 hal/esp32s3/include/hal/gdma_ll.h、hal/esp32c3/include/hal/gdma_ll.h（C3 是 ahb_dma v1）。
+//! 两颗芯片的通道组排布不同：S3 每个方向自带一组中断寄存器；C3 的中断寄存器集中在 0x00 起、
+//! 每通道一组、IN / OUT 共用，通道组从 0x70 开始，组内偏移也不同。这些差异都放在 `GdmaLayout` 里。
 //!
-//! 不模拟 FIFO 与突发：外设（目前只有 SPI2）开始传输时由 SoC 调 `take_out` 一次性沿描述符链取出全部数据，
+//! 不模拟 FIFO 与突发：外设（SPI2、C3 的 AES / SHA）开始传输时由 SoC 调 `take_out` 一次性沿描述符链取出全部数据，
 //! 传输结束时调 `out_done` 置 OUT_DONE / OUT_EOF / OUT_TOTAL_EOF。
 //! 描述符（dma_descriptor_t）：字 0 = size[11:0] | length[23:12] | suc_eof[30] | owner[31]，字 1 = 缓冲区，字 2 = 下一个。
 
@@ -16,32 +19,87 @@ pub trait DmaMem {
 #[derive(Clone, Copy, Debug)]
 pub struct GdmaLayout {
     pub nch: usize,
+    /// 第 0 通道组的起点
+    pub ch_base: u32,
     /// 通道间距
     pub stride: u32,
     /// OUT 寄存器组相对通道起点的偏移
     pub out_off: u32,
+    /// 组内偏移（IN / OUT 两组相同）：LINK、PERI_SEL、EOF 描述符地址、FIFO 状态
+    pub link: u32,
+    pub peri_sel: u32,
+    pub eof_des: u32,
+    pub fifo_status: u32,
+    /// true：中断寄存器在每个方向的组内 +0x08（S3）；false：集中在 0x00 + ch×0x10、IN / OUT 共用（C3）
+    pub int_in_dir: bool,
     /// 链表地址寄存器只有低 20 位，高位固定为内部 SRAM 的 D 总线基址
     pub link_base: u32,
+    /// 复位值：OUT_CONF0（S3 的 out_eof_mode 默认 1）、IN_CONF1、IN / OUT FIFO 状态（空）
+    pub rst_out_conf0: u32,
+    pub rst_in_conf1: u32,
+    pub rst_infifo: u32,
+    pub rst_outfifo: u32,
 }
 
 impl GdmaLayout {
     /// ESP32-S3：5 个通道，间距 0xC0，OUT 在 +0x60
     pub const S3: GdmaLayout = GdmaLayout {
         nch: 5,
+        ch_base: 0,
         stride: 0xc0,
         out_off: 0x60,
+        link: 0x20,
+        peri_sel: 0x48,
+        eof_des: 0x28,
+        fifo_status: 0x18,
+        int_in_dir: true,
         link_base: 0x3fc0_0000,
+        rst_out_conf0: 0x8,
+        rst_in_conf1: 0xc,
+        rst_infifo: 0x0f00_003a,
+        rst_outfifo: 0x0780_002a,
+    };
+    /// ESP32-C3：3 个通道，通道组从 0x70 起、间距 0xC0，OUT 在 +0x60（IN_CONF0_CH0 = 0x70，OUT_CONF0_CH0 = 0xD0）
+    pub const C3: GdmaLayout = GdmaLayout {
+        nch: 3,
+        ch_base: 0x70,
+        stride: 0xc0,
+        out_off: 0x60,
+        link: 0x10,
+        peri_sel: 0x30,
+        eof_des: 0x18,
+        fifo_status: 0x08,
+        int_in_dir: false,
+        link_base: 0x3fc0_0000,
+        rst_out_conf0: 0,
+        rst_in_conf1: 0,
+        // FIFO 空、REMAIN_UNDER_1..4B 全置
+        rst_infifo: 0x0780_0002,
+        rst_outfifo: 0x0780_0002,
     };
 }
 
-// 通道内偏移（IN 组 / OUT 组相同排布）
+// 组内偏移（两颗芯片相同）
 const CONF0: u32 = 0x00;
+// S3 每个方向组内的中断寄存器
 const INT_RAW: u32 = 0x08;
 const INT_ST: u32 = 0x0c;
 const INT_ENA: u32 = 0x10;
 const INT_CLR: u32 = 0x14;
-const LINK: u32 = 0x20;
-const PERI_SEL: u32 = 0x48;
+
+/// C3 共用中断寄存器的位（gdma_reg.h GDMA_*_CH0_INT_RAW_S）与本模型按方向存的位（S3 排布）之间的映射：
+/// (方向组内位, 共用寄存器位, 是否 OUT)
+const C3_INT_MAP: [(u32, u32, bool); 9] = [
+    (0, 0, false), // IN_DONE
+    (1, 1, false), // IN_SUC_EOF
+    (2, 2, false), // IN_ERR_EOF
+    (3, 5, false), // IN_DSCR_ERR
+    (4, 7, false), // IN_DSCR_EMPTY
+    (0, 3, true),  // OUT_DONE
+    (1, 4, true),  // OUT_EOF
+    (2, 6, true),  // OUT_DSCR_ERR
+    (3, 8, true),  // OUT_TOTAL_EOF
+];
 
 pub mod out_int {
     pub const DONE: u32 = 1 << 0;
@@ -78,12 +136,16 @@ impl Gdma {
         };
         let mut regs = vec![0u32; 0x1000 / 4];
         for ch in 0..layout.nch as u32 {
-            let base = ch * layout.stride;
-            // 复位值（gdma_reg.h）：OUT_CONF0 eof_mode、IN_CONF1 / FIFO 状态"空"
-            regs[((base + layout.out_off) / 4) as usize] = 0x8;
-            regs[((base + 0x04) / 4) as usize] = 0xc;
-            regs[((base + 0x18) / 4) as usize] = 0x0f00_003a;
-            regs[((base + layout.out_off + 0x18) / 4) as usize] = 0x0780_002a;
+            let base = layout.ch_base + ch * layout.stride;
+            // 复位值（gdma_reg.h）：OUT_CONF0、IN_CONF1、FIFO 状态"空"
+            let mut set = |o: u32, v: u32| regs[(o / 4) as usize] = v;
+            set(base + layout.out_off, layout.rst_out_conf0);
+            set(base + 0x04, layout.rst_in_conf1);
+            set(base + layout.fifo_status, layout.rst_infifo);
+            set(base + layout.out_off + layout.fifo_status, layout.rst_outfifo);
+            // PERI_SEL 复位为 63（未接）
+            set(base + layout.peri_sel, 0x3f);
+            set(base + layout.out_off + layout.peri_sel, 0x3f);
         }
         Gdma {
             layout,
@@ -110,6 +172,7 @@ impl Gdma {
 
     /// 偏移 → (通道, 是否 OUT 组, 组内偏移)
     fn decode(&self, off: u32) -> Option<(usize, bool, u32)> {
+        let off = off.checked_sub(self.layout.ch_base)?;
         let ch = (off / self.layout.stride) as usize;
         if ch >= self.layout.nch {
             return None;
@@ -122,68 +185,150 @@ impl Gdma {
         })
     }
 
+    /// C3 共用中断寄存器：偏移 → (通道, 寄存器号 0 RAW / 1 ST / 2 ENA / 3 CLR)
+    fn decode_shared_int(&self, off: u32) -> Option<(usize, u32)> {
+        if self.layout.int_in_dir {
+            return None;
+        }
+        let ch = (off / 0x10) as usize;
+        (ch < self.layout.nch).then_some((ch, (off % 0x10) / 4))
+    }
+
+    /// 把两个方向的中断位拼成 C3 共用寄存器的值
+    fn shared_bits(&self, ch: usize, ena: bool) -> u32 {
+        let mut v = 0;
+        for &(dir_bit, bit, out) in &C3_INT_MAP {
+            let d = if out { &self.out[ch] } else { &self.inn[ch] };
+            let x = if ena { d.int_ena } else { d.int_raw };
+            v |= ((x >> dir_bit) & 1) << bit;
+        }
+        v
+    }
+
+    /// C3 共用寄存器的值拆回两个方向（返回 (IN 位, OUT 位)）
+    fn split_bits(v: u32) -> (u32, u32) {
+        let (mut i, mut o) = (0, 0);
+        for &(dir_bit, bit, out) in &C3_INT_MAP {
+            let b = ((v >> bit) & 1) << dir_bit;
+            if out {
+                o |= b;
+            } else {
+                i |= b;
+            }
+        }
+        (i, o)
+    }
+
     pub fn read(&self, off: u32) -> u32 {
+        if let Some((ch, r)) = self.decode_shared_int(off) {
+            return match r {
+                0 => self.shared_bits(ch, false),
+                1 => self.shared_bits(ch, false) & self.shared_bits(ch, true),
+                2 => self.shared_bits(ch, true),
+                _ => 0,
+            };
+        }
+        let l = self.layout;
         if let Some((ch, out, o)) = self.decode(off) {
             let d = if out { &self.out[ch] } else { &self.inn[ch] };
-            match o {
-                INT_RAW => return d.int_raw,
-                INT_ST => return d.int_raw & d.int_ena,
-                INT_ENA => return d.int_ena,
-                INT_CLR => return 0,
-                // 链表寄存器：start / stop / restart 自清，park=1（空闲）——取数据瞬间完成
-                LINK => {
-                    let park = if out { 1 << 23 } else { 1 << 24 };
-                    let v = self.regs[(off / 4) as usize];
-                    return (v & 0xf_ffff) | park | if out { 0 } else { v & (1 << 20) };
+            if l.int_in_dir {
+                match o {
+                    INT_RAW => return d.int_raw,
+                    INT_ST => return d.int_raw & d.int_ena,
+                    INT_ENA => return d.int_ena,
+                    INT_CLR => return 0,
+                    _ => {}
                 }
-                PERI_SEL => return d.peri_sel,
-                // OUT_EOF_DES_ADDR / IN_SUC_EOF_DES_ADDR
-                0x28 => return d.eof_desc,
-                _ => {}
+            }
+            if o == l.link {
+                // 链表寄存器：start / stop / restart 自清，park=1（空闲）——取数据瞬间完成
+                let park = if out { 1 << 23 } else { 1 << 24 };
+                let v = self.regs[(off / 4) as usize];
+                return (v & 0xf_ffff) | park | if out { 0 } else { v & (1 << 20) };
+            }
+            if o == l.peri_sel {
+                return d.peri_sel;
+            }
+            // OUT_EOF_DES_ADDR / IN_SUC_EOF_DES_ADDR
+            if o == l.eof_des {
+                return d.eof_desc;
             }
         }
         self.regs.get((off / 4) as usize).copied().unwrap_or(0)
     }
 
     pub fn write(&mut self, off: u32, v: u32) {
+        if let Some((ch, r)) = self.decode_shared_int(off) {
+            let (i, o) = Self::split_bits(v);
+            match r {
+                2 => {
+                    self.inn[ch].int_ena = i;
+                    self.out[ch].int_ena = o;
+                }
+                3 => {
+                    self.inn[ch].int_raw &= !i;
+                    self.out[ch].int_raw &= !o;
+                }
+                _ => {}
+            }
+            return;
+        }
         if let Some(r) = self.regs.get_mut((off / 4) as usize) {
             *r = v;
         }
         let Some((ch, out, o)) = self.decode(off) else {
             return;
         };
-        let base = self.layout.link_base;
+        let l = self.layout;
         let d = if out {
             &mut self.out[ch]
         } else {
             &mut self.inn[ch]
         };
-        match o {
-            CONF0 => {
-                // out_rst / in_rst：复位通道状态机
-                if v & 1 != 0 {
-                    d.started = false;
-                }
+        if l.int_in_dir {
+            match o {
+                INT_ENA => d.int_ena = v,
+                INT_CLR => d.int_raw &= !v,
+                _ => {}
             }
-            INT_ENA => d.int_ena = v,
-            INT_CLR => d.int_raw &= !v,
-            LINK => {
-                // OUT：stop 20、start 21、restart 22；IN：stop 21、start 22、restart 23
-                let (stop, start, restart) = if out { (20, 21, 22) } else { (21, 22, 23) };
-                if v & (1 << stop) != 0 {
-                    d.started = false;
-                }
-                if v & (1 << start) != 0 {
-                    d.link = base | (v & 0xf_ffff);
-                    d.started = true;
-                }
-                if v & (1 << restart) != 0 {
-                    d.started = true;
-                }
-            }
-            PERI_SEL => d.peri_sel = v & 0x3f,
-            _ => {}
         }
+        if o == CONF0 {
+            // out_rst / in_rst：复位通道状态机
+            if v & 1 != 0 {
+                d.started = false;
+            }
+        } else if o == l.peri_sel {
+            d.peri_sel = v & 0x3f;
+        } else if o == l.link {
+            // OUT：stop 20、start 21、restart 22；IN：stop 21、start 22、restart 23
+            let (stop, start, restart) = if out { (20, 21, 22) } else { (21, 22, 23) };
+            if v & (1 << stop) != 0 {
+                d.started = false;
+            }
+            if v & (1 << start) != 0 {
+                d.link = l.link_base | (v & 0xf_ffff);
+                d.started = true;
+            }
+            if v & (1 << restart) != 0 {
+                d.started = true;
+            }
+        }
+    }
+
+    /// 接到外设 `peri` 的通道当前配置的链表头（不管是否已启动）。
+    /// C3 的 AES / SHA 在置 start 之前就可能先配好链表，按 PERI_SEL 找通道即可
+    pub fn channel_for_peri(&self, peri: u32, out: bool) -> Option<usize> {
+        (0..self.layout.nch).find(|&c| {
+            let d = if out { &self.out[c] } else { &self.inn[c] };
+            d.peri_sel == peri
+        })
+    }
+
+    /// 通道 ch 的链表头（LINK 寄存器低 20 位 + SRAM 基址），用于还没置 start 的情况
+    pub fn configured_link(&self, ch: usize, out: bool) -> u32 {
+        let l = self.layout;
+        let off = l.ch_base + ch as u32 * l.stride + if out { l.out_off } else { 0 } + l.link;
+        l.link_base | (self.regs[(off / 4) as usize] & 0xf_ffff)
     }
 
     /// 接到外设 `peri`（SPI2 = 0）且已启动的发送通道
@@ -199,8 +344,10 @@ impl Gdma {
     /// 沿发送通道 ch 的描述符链取出数据（最多 max 字节）。遇 suc_eof 或空指针结束；
     /// OUT_CONF0.out_auto_wrback 置位时把描述符的 owner 交还 CPU。
     pub fn take_out(&mut self, ch: usize, max: usize, mem: &mut dyn DmaMem) -> Vec<u8> {
-        let auto_wb = self.regs
-            [((ch as u32 * self.layout.stride + self.layout.out_off) / 4) as usize]
+        let auto_wb = self.regs[((self.layout.ch_base
+            + ch as u32 * self.layout.stride
+            + self.layout.out_off)
+            / 4) as usize]
             & (1 << 2)
             != 0;
         let d = &mut self.out[ch];
@@ -318,11 +465,12 @@ mod tests {
         m.wr32(d1 + 8, 0);
         m.wr32(b0, 0x0033_2211);
         m.wr32(b1, 0x0000_5544);
-        let mut g = Gdma::new(GdmaLayout::S3);
-        let out0 = GdmaLayout::S3.out_off;
+        let l = GdmaLayout::S3;
+        let mut g = Gdma::new(l);
+        let out0 = l.out_off;
         g.write(out0, 1 << 2); // auto writeback
-        g.write(out0 + PERI_SEL, 0);
-        g.write(out0 + LINK, (1 << 21) | (d0 & 0xf_ffff));
+        g.write(out0 + l.peri_sel, 0);
+        g.write(out0 + l.link, (1 << 21) | (d0 & 0xf_ffff));
         assert_eq!(g.out_channel_for(0), Some(0));
         assert_eq!(
             g.take_out(0, 100, &mut m),
@@ -335,5 +483,38 @@ mod tests {
         assert!(g.out_irq(0));
         g.write(out0 + INT_CLR, 0xf);
         assert!(!g.out_irq(0));
+    }
+
+    #[test]
+    fn c3_layout_shared_interrupts() {
+        let mut m = Ram(vec![0; 0x1000]);
+        let (d0, b0) = (BASE, BASE + 0x100);
+        m.wr32(d0, (1 << 31) | (1 << 30) | (4 << 12) | 4);
+        m.wr32(d0 + 4, b0);
+        m.wr32(d0 + 8, 0);
+        m.wr32(b0, 0x4433_2211);
+        let l = GdmaLayout::C3;
+        let mut g = Gdma::new(l);
+        // 通道 1：OUT_PERI_SEL_CH1 = 0x1c0，OUT_LINK_CH1 = 0x1a0（gdma_reg.h）
+        assert_eq!(g.read(0x1c0), 0x3f, "复位未接外设");
+        g.write(0x1c0, 0);
+        g.write(0x1a0, (1 << 21) | (d0 & 0xf_ffff));
+        assert_eq!(g.out_channel_for(0), Some(1));
+        assert_eq!(g.take_out(1, 100, &mut m), vec![0x11, 0x22, 0x33, 0x44]);
+        assert_eq!(g.read(0x1a8), d0, "OUT_EOF_DES_ADDR_CH1");
+        // INT_ENA_CH1 = 0x18：OUT_EOF 是第 4 位；INT_RAW_CH1 = 0x10
+        g.write(0x18, 1 << 4);
+        g.out_done(1);
+        assert!(g.out_irq(1));
+        assert_eq!(g.read(0x10), (1 << 3) | (1 << 4) | (1 << 8));
+        assert_eq!(g.read(0x14), 1 << 4, "INT_ST = RAW & ENA");
+        g.write(0x1c, 1 << 4);
+        assert!(!g.out_irq(1));
+        assert_eq!(g.read(0x10), (1 << 3) | (1 << 8));
+        // IN 方向：IN_PERI_SEL_CH0 = 0xa0、IN_LINK_CH0 = 0x80
+        g.write(0xa0, 6);
+        g.write(0x80, d0 & 0xf_ffff);
+        assert_eq!(g.channel_for_peri(6, false), Some(0));
+        assert_eq!(g.configured_link(0, false), d0);
     }
 }

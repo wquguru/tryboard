@@ -4,7 +4,7 @@
 网页（web/src/checks.ts）用同一份 levels.json、同样的判定规则和指纹算法；同一个固件在两边应得到同一个指纹。
 
 用法：
-  tools/check.py <flash.bin> --level 04      验收你的固件（第 07 关用 --level 07-spin / 07-lens）
+  tools/check.py <flash.bin> --level 04      验收你的固件（第 07 关用 --level 07-spin / 07-lens；小黄、透镜的检查点用 spin-1、lens-2 这样的 id）
   tools/check.py --ref --level 04            验收参考固件（firmware/build/<ref>/flash.bin）
   tools/check.py --ref --all                 所有关卡的参考固件
   tools/check.py <flash.bin> --level 06 --inputs log.txt
@@ -45,6 +45,7 @@ def canonical_report(err: str) -> str:
                 ws.append(k)
     oled = [re.sub(r'（.*$', '', l) for l in lines if l.startswith('[tryboard] OLED 点亮像素')]
     lcd = [re.sub(r'（.*$', '', l) for l in lines if l.startswith('[tryboard] LCD GC9A01 非黑像素')]
+    lcd += [l for l in lines if l.startswith('[tryboard] LCD 颜色 #')]
     pwm = [l for l in lines if re.match(r'\[tryboard\] PWM GPIO\d+(:| 变化)', l)]
     return ''.join(l + '\n' for l in gpio + ws + oled + lcd + pwm)
 
@@ -123,6 +124,28 @@ def evaluate(t: dict, out: str, report: str):
         m = re.search(r'LCD GC9A01 非黑像素 (\d+)', report)
         n = int(m.group(1)) if m else 0
         res.append((n >= t['lcd_min_pixels'], f"圆屏点亮 {n} 像素（要 ≥ {t['lcd_min_pixels']}）"))
+    for c in t.get('serial_count', []):
+        n = out.count(c['text'])
+        res.append((n >= c['min'], f"串口 “{c['text']}” 出现 {n} 次（要 ≥ {c['min']}）"))
+    if t.get('lcd_colors'):
+        seen = [(k, int(n), float(x), float(y)) for k, n, x, y in re.findall(r'LCD 颜色 #([0-9a-f]{6}) (\d+) 像素，重心 ([\d.]+),([\d.]+)', report)]
+        top = '、'.join(f'#{k} {n}' for k, n, _, _ in seen[:4]) or '（全黑）'
+        for c in t['lcd_colors']:
+            want = int(c['rgb'][1:], 16)
+            tol = c.get('tol', 24)
+            near = lambda k: max(abs(((int(k, 16) >> s) & 255) - ((want >> s) & 255)) for s in (16, 8, 0)) <= tol
+            hit = [(n, x) for k, n, x, _ in seen if near(k)]
+            n = sum(h[0] for h in hit)
+            ok = n >= c['min'] and ('max' not in c or n <= c['max'])
+            want_n = f"≥ {c['min']}" + (f" 且 ≤ {c['max']}" if 'max' in c else '')
+            desc = f"圆屏{c['name']}（{c['rgb']} ±{tol}）{n} 像素（要 {want_n}）"
+            if 'cx' in c:
+                cx = sum(a * b for a, b in hit) / n if n else -1
+                ok = ok and c['cx'][0] <= cx <= c['cx'][1]
+                desc += f"，水平重心 {'—' if n == 0 else f'{cx:.1f}'}（要 {c['cx'][0]}–{c['cx'][1]}）"
+            if not ok:
+                desc += f"；画面主色 {top}"
+            res.append((ok, desc))
     return res
 
 

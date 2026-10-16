@@ -1,6 +1,6 @@
 // 元件编辑器：用户按自己的实物接线，往面包板上加 / 删元件。
 // 上传自己的固件时最有用：示例自带接线，自定义固件的接线只有用户知道。
-import { BOARDS, type ChipId, type PartSpec, type SceneSpec } from './board3d';
+import { BOARDS, LCD_WIRING, type ChipId, type PartSpec, type SceneSpec } from './board3d';
 
 /** 各芯片的 ADC1 引脚与引脚提示（strapping、板载占用、USB、串口、PSRAM） */
 const CHIP_PINS: Record<ChipId, { adc: number[]; hint: Record<number, string>; avoid: number[] }> = {
@@ -57,7 +57,10 @@ export function describe(p: PartSpec): string {
     case 'bme280':
       return `BME280 · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl}`;
     case 'gc9a01':
-      return 'GC9A01 圆屏 · SPI2 · SCLK IO12 / MOSI IO11 / CS IO10 / DC IO14 / RST IO13 / BL IO15';
+    {
+      const w = LCD_WIRING[chip];
+      return `GC9A01 圆屏 · SPI2 · SCLK IO${w.sclk} / MOSI IO${w.mosi} / CS IO${w.cs} / DC IO${w.dc} / RST IO${w.rst} / BL IO${w.bl}`;
+    }
   }
 }
 

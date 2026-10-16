@@ -280,3 +280,24 @@
 - 针脚实时值来自 worker 每个 tick 已有的电平 / 使能 / PWM 占空比与频率，没有新增采样；示波器按记录下来的占空比、频率合成方波（相位示意），普通 GPIO 画 tick 采样的电平，I2C 线只画示意，电源脚电压按标称写"估算"（电路求解是 P1-01）
 - 接线检查新写 W1–W5（`wirecheck.ts`）而不是直接调 `catalog/rules.ts`：采购规则吃的是元件库 id + 模版接线，实验台吃的是场景推出来的线（id 与 3D 一致）；W2 / W5 的来源、可信度沿用 R17 / R15。index.html 的元件编辑器只能改场景，造不出 5 V 接 GPIO / 没电阻 / 缺地，所以用 `?debug=1` 的 `__tbApp.injectWiring()` 造用例；改接 / 拔线不改 3D 画法（不动 board3d.ts），只标红 + 说明
 - 外壳公共接口变化：`Session` 加 `heat / setHeat / setPower / wireMods / setWireMods / restoreScene / onTick / onBoot / onRunEnd / bootCount / snapshot / mark / seek / continueRun`，`frame` 加 `pwmFreq / gpio / enable / gpioHi / enableHi`；`AppState` 加 `editRev / runNo / hist`；`StepCtx.hist`；`Card.place / onHide`；接线与零件信息从 bench.ts 挪到 `app/wiring.ts`；`saveBom` 导出。board3d.ts 未改
+
+## 2026-10-16 · 小黄 / 透镜小人拆检查点（P1-11）
+- 原则"每过一个检查点作品就多一样东西"。小黄：spin-1 画脸（圆屏 + 静态脸）→ spin-2 转身（+ 舵机 ±60° 往复）→ 07-spin 合体（+ 眼珠跟随、BOOT 回头、装配）。透镜：lens-1 眼睛 + 眨眼 → lens-2 按键换表情（normal ↔ happy）→ 07-lens 合体（四种表情循环、装配）。合体直接用第 07 关的变体，不另起 `spin-3`：毕业作品与作品最后一关是同一份条件，参考固件也是同一份（spin / lens）
+- 新检查点放 levels.json 顶层、带 `"work"` 字段，id 用 `spin-1` 这种（check.py `--level spin-1`），不嵌进 variants：CLI / 网页的展开逻辑、build_web.sh 复制参考固件都不用改。旧关卡页已重定向到工作台，顶层多几条不影响
+- 只看串口和"非黑像素"判不出"画的是不是脸、眼睛在哪"，所以观察记录加颜色统计（前 12 种颜色的像素数 + 重心），新判定 `lcd_colors`（颜色 ±24、像素数上下限、水平重心范围）和 `serial_count`。重心判"眼睛对称 / 回正"，上下限判"开心弯眼比睁眼少"，心形眼颜色判"切到了 love"。只看最后一帧，所以每个检查点的输入脚本都让结束时刻落在确定的画面上（按键后、眨眼间隙）。代价：所有带圆屏的关卡指纹变了（CLI 与网页同算，对拍不受影响）
+- 07-spin 加 EYE R / EYE L 串口约定判眼珠跟随（只有最后一帧，看不出运动过程）；07-lens 改成 6 次按键转一圈回到 normal 再到 love，`serial_count` 判 MOOD 0 normal / MOOD 2 love 各 ≥ 2 次
+- 任务书按 BRIEF_TRIALS 的经验写：坐标、尺寸、颜色值、反色 + BGR、"上电不要先等待"、开 PWM 时就是起点脉宽、消抖上限、按键最短间隔都写进去。自测：只按任务书另写了一份逐像素函数渲染的固件（不用 round_lcd.h），6 关里 4 关第一次过；07-spin 第一次挂在自测代码自己的眼珠逻辑错误；lens-1 第一次挂在"逐像素整屏重画一帧约 150 ms，一次眨眼拖到 1.2 s，4.5 s 内没出 BLINK 1"——把窗口放宽到 5.5 s，并在任务书里写明"整屏重画别超过 100 ms"，第二次过（记录在 Reviews/ab/P1-11.md，自测工程未提交）
+- 替代：(a) 用 `--lcd-ppm` 对整帧做模板比对——太严，自己写的画法略有不同就挂；(b) 在固件串口里报颜色 / 坐标——判的是固件自述，不是屏上真画了什么
+
+## 2026-10-16 · C3 接 SPI2 / GDMA 圆屏（P1-13）
+- C3 复用 S3 的 `gpspi.rs` / `gdma.rs`，差异参数化：`GdmaLayout` 加通道组起点、组内 LINK / PERI_SEL / EOF 描述符 / FIFO 状态偏移、复位值，以及"中断寄存器按方向放在组内（S3）还是集中在 0x00 起、IN / OUT 共用（C3）"；C3 共用寄存器的位与按方向存的位之间用一张映射表换算
+- C3 圆屏接线：SCLK=6、MOSI=7、CS=10 用 SPI2 的 IO_MUX 直连脚；DC=5、RST=4、背光=3 选 DevKitM-1 排针上空闲、又不是 strapping 的脚（2、8、9 是 strapping，8 还接着板载 RGB）。`firmware/common/round_lcd.h` 按 `CONFIG_IDF_TARGET_ESP32C3` 选引脚，也允许 include 前 `#define` 覆盖；board3d 的圆屏连线按芯片取 `LCD_WIRING`
+- C3 的 `spi_ll_clear_int_stat` 是直接写 `dma_int_raw.trans_done = 0`（S3 写 INT_CLR），不支持写 RAW 时 trans_done 一直是 1，第二次传输前断言 `spi_ll_get_running_cmd(hw) == 0` 失败。模型改成写 RAW 即覆盖（S3 不写 RAW，不受影响）
+- crypto_hw 的 AES / SHA DMA：链表头改从 GDMA 模型取（`channel_for_peri` + `configured_link`），不再自己按寄存器地址读 `regs`。搬数据没改用 `Gdma::take_out / put_in`：IDF 的加速器驱动先配链表再置 start、再启动加速器，时序上 start 不一定先于触发，`take_out` 只认已启动的通道；要完全改用得给 GDMA 加"按配置的链表取数据"的入口，留作以后
+
+## 2026-10-16 · 开发板库与版本差异规则（P1-12）
+- 开发板从 6 块到 9 块：新增 M5Stack AtomS3、微雪 ESP32-S3-LCD-1.28（无触摸）、微雪 ESP32-S3-Touch-LCD-1.28；合宙 ESP32-S3 核心板、XIAO ESP32S3 / C3 补齐引脚、板载外设、strapping、USB、PSRAM 与来源。每块板数据记来源 URL（`board.urls`），查不到或资料互相矛盾的字段标待核（清单见 Reviews/ab/P1-12.md）
+- schema 加 `urls`、`builtin`（板载外设及占用的脚）、`lcd`（板载屏接线）字段；`onboard.share` 表示可与外接件共用的总线（I2C 这类），屏 / IMU / 触摸的线是独占的
+- 规则 R28–R32：排针上的 strapping 脚、板上已有又外接一份、要 PSRAM 但板子没有、GPIO 不够、板载屏引脚和固件不符；R24 改为屏 / IMU / 触摸独占线被外接件占用时判阻断。每条有正反用例（web/test/rules.test.ts）
+- 换到板上已经带了的件（如微雪圆屏板 + 外接圆屏），模版的必选件降为建议件，由 R29 提示去掉，而不是硬塞两块屏
+- 替代：板子特有的坑写成每块板一条专用规则——条数随板子线性增长；现在按"板载外设占线 / strapping / 资源不够"几类通用规则读板子数据
