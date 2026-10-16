@@ -84,7 +84,7 @@ async function runRef(page, id) {
   fs.writeFileSync(path.join(outDir, `levels-${id}-web.json`), JSON.stringify(raw, null, 1));
   return { ok: /✓ 通过/.test(text), fp: await fpOf(page), text };
 }
-for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']]]) {
+for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']], ['lamp', ['lamp-1', 'lamp-2', 'lamp-3']], ['ruler', ['ruler-1', 'ruler-2', 'ruler-3']], ['tilt', ['tilt-1', 'tilt-2', 'tilt-3']]]) {
   const page = await open(`/app.html?work=${work}#bench`);
   for (const id of cps) {
     const r = await runRef(page, id);
@@ -193,11 +193,45 @@ async function openAsm(example) {
   await page.close();
 }
 
+{
+  // P2-09：超声波尺子在工作台组装，探头缩在孔里 → 开机复测里模拟器的 HC-SR04 也只能量到孔壁（读数 3 cm、蜂鸣器一直响），
+  // 判定项真的挂掉；改成"伸出前面板"再复测通过。先用自己上传的固件过三个检查点（解锁组装）
+  const page = await open('/app.html?work=ruler#bench');
+  for (const [id, ref] of [['ruler-1', 'ruler-dist'], ['ruler-2', 'ruler-oled'], ['ruler-3', 'ruler']]) {
+    await page.waitForSelector(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`, { timeout: 30000 });
+    await page.click(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`);
+    await page.waitForSelector('#props [data-drop="check"] input:not([disabled])', { timeout: 30000 });
+    const input = await page.$('#props [data-drop="check"] input');
+    await input.uploadFile(path.join(root, `firmware/build/${ref}/flash.bin`));
+    await waitFor(page, () => /✓ 通过|✗/.test(document.querySelector('#props .verdict-line')?.textContent ?? '') && !document.querySelector('#props .drop.busy'), null, 90000);
+  }
+  await page.evaluate(() => (location.hash = 'assemble'));
+  await page.waitForSelector('.asm-box [data-part]', { timeout: 30000 });
+  const build = async (pick) => {
+    for (const k of ['shell', 'board', 'sonar', 'buzzer', 'oled', 'front']) {
+      await page.click(`.asm-box [data-part="${k}"]`);
+      if (k === 'sonar') await page.click(`.asm-box [data-k="pick${pick}"]`);
+    }
+    await page.click('#toolbar [data-tool="asm-retest"]');
+    // 先等进入"复测中"，再等跑完（免得读到上一次的结果）
+    await waitFor(page, () => /复测中/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 10000);
+    await waitFor(page, () => !!document.querySelector('#props .verdict-line') && !/复测中/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 90000);
+    return page.$eval('#props', (e) => e.textContent);
+  };
+  const bad = await build('B');
+  report('组装 · ruler：探头缩在孔里 → 开机复测读不到 15 cm、节奏不对（装法进模拟器）', /✗ 未通过/.test(bad) && /✗串口出现 “DIST 15\.0 cm”/.test(bad) && /1\.8–2\.5 s 响 0 声/.test(bad), bad.match(/复测结果.{0,160}/)?.[0]);
+  await page.click('#toolbar [data-tool="asm-reset"]').catch(() => {});
+  const good = await build('A');
+  report('组装 · ruler：探头伸出前面板 → 开机复测通过', /✓ 通过/.test(good) && /装配 6\/6，没有警告/.test(good), good.match(/复测结果.{0,60}/)?.[0]);
+  await page.close();
+}
+
 // ---- 5. 作品首页
 {
   const home = await open('/home.html');
   const cards = await home.$$eval('.wk', (els) => els.map((e) => ({ work: e.dataset.work, go: e.querySelector('[data-go]')?.getAttribute('href'), cps: e.querySelector('[data-cps]')?.textContent })));
-  report('首页：三张作品卡（气象站 / 小黄 / 透镜）', cards.map((c) => c.work).join() === 'weather,spin,lens', JSON.stringify(cards.map((c) => c.work)));
+  // 前三张写在 HTML 里，P2-09 的三个新作品由 home.ts 按采购模版自动生成
+  report('首页：六张作品卡（气象站 / 小黄 / 透镜 / 旋钮台灯 / 超声波尺子 / 体感小人）', cards.map((c) => c.work).join() === 'weather,spin,lens,lamp,ruler,tilt', JSON.stringify(cards.map((c) => c.work)));
   await home.screenshot({ path: path.join(outDir, 'levels-home-0.png') });
   // 气象站卡：跑真实固件 → 状态行是串口读数、成品屏幕有 OLED 画面；按住 BOOT → 固件切 ℉，屏幕重画
   await home.click('[data-run="weather"]');
@@ -222,6 +256,13 @@ async function openAsm(example) {
   await home.click('[data-run="lens"]');
   const lens = await waitFor(home, () => !!document.querySelector('.wk[data-work="lens"] image[data-k="lcd"][href]'), null, 20000);
   report('首页：透镜卡跑真实固件 → 圆屏有画面', lens);
+  // P2-09 自动生成的卡片也能跑真实固件：尺子卡 OLED 有画面、读数随演示挡板变；台灯卡灯条亮
+  await home.click('[data-run="ruler"]');
+  const ruler = await waitFor(home, () => !!document.querySelector('.wk[data-work="ruler"] image[data-k="oled"][href]') && /DIST \d/.test(document.querySelector('.wk[data-work="ruler"] [data-status]').textContent), null, 30000);
+  report('首页：尺子卡跑真实固件 → OLED 有画面、串口有距离', ruler);
+  await home.click('[data-run="lamp"]');
+  const lamp = await waitFor(home, () => document.querySelector('.wk[data-work="lamp"] [data-k="led0"]')?.getAttribute('fill') !== '#2A2A28', null, 30000);
+  report('首页：台灯卡跑真实固件 → 灯条亮', lamp);
   await home.screenshot({ path: path.join(outDir, 'levels-home-full.png'), fullPage: true });
   await home.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
   await sleep(300);

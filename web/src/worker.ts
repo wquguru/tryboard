@@ -250,6 +250,8 @@ export type FromWorker =
       ratio: number;
       running: boolean;
       leds?: number[][];
+      /** 外接 WS2812 灯带（板载灯以外的引脚）有新帧时：引脚 → 各灯 [r,g,b] */
+      strips?: Record<number, number[][]>;
       elec?: ElecFrame;
       /** 自上一个 tick 以来的欠压复位（模拟时刻，秒） */
       brownouts?: number[];
@@ -360,6 +362,23 @@ function leds(e: Exports): number[][] | undefined {
   const b = new Uint8Array(e.memory.buffer, e.tb_ws2812_ptr(), n * 3);
   const out: number[][] = [];
   for (let i = 0; i < n; i++) out.push([b[i * 3], b[i * 3 + 1], b[i * 3 + 2]]);
+  return out;
+}
+/** 外接灯带：板载灯以外、出现过 WS2812 帧的引脚，帧数变了才取（P2-09 旋钮台灯） */
+let stripFrames = new Map<number, number>();
+function strips(e: Exports): Record<number, number[][]> | undefined {
+  let out: Record<number, number[][]> | undefined;
+  for (let p = 0; p < NPINS; p++) {
+    if (p === LED_PIN) continue;
+    const f = e.tb_ws2812_frames(p);
+    if (!f || f === stripFrames.get(p)) continue;
+    stripFrames.set(p, f);
+    const n = e.tb_ws2812_fetch(p);
+    const b = new Uint8Array(e.memory.buffer, e.tb_ws2812_ptr(), n * 3);
+    const leds: number[][] = [];
+    for (let i = 0; i < n; i++) leds.push([b[i * 3], b[i * 3 + 1], b[i * 3 + 2]]);
+    (out ??= {})[p] = leds;
+  }
   return out;
 }
 const post = (m: FromWorker) => (self as unknown as Worker).postMessage(m);
@@ -526,6 +545,7 @@ function loop() {
     type: 'tick',
     console: text,
     leds: leds(e),
+    strips: strips(e),
     gpio: e.tb_gpio_level(),
     enable: e.tb_gpio_enable(),
     gpioHi: e.tb_gpio_level_hi(),
@@ -598,7 +618,7 @@ function postUsb(e: Exports) {
 const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5 };
 
 function postPaused(e: Exports) {
-  post({ type: 'tick', console: '', leds: leds(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running, elec: elecFrame(e), brownouts: takeBrownouts(e), pins: pinDevFrame(e) });
+  post({ type: 'tick', console: '', leds: leds(e), strips: strips(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running, elec: elecFrame(e), brownouts: takeBrownouts(e), pins: pinDevFrame(e) });
 }
 
 type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; touchInt?: number; i2s?: string[]; micWav?: ArrayBuffer; micName?: string };
@@ -651,6 +671,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   LED_PIN = s3 ? 48 : 8;
   NPINS = s3 ? 49 : 22;
   lastFrames = -1;
+  stripFrames = new Map();
   oledVersion = 0;
   lcdVersion = 0;
   usbVersion = -1;

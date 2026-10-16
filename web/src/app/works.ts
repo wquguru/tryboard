@@ -9,11 +9,18 @@ export const WORKS: Record<string, WorkDef> = {
   spin: { id: 'spin', title: '会转身的小黄', example: 'spin', checkpoints: ['spin-1', 'spin-2', '07-spin'] },
   // 眼睛 + 眨眼 → 按键换表情 → 合体（四种表情循环）
   lens: { id: 'lens', title: '透镜里的小人', example: 'lens', checkpoints: ['lens-1', 'lens-2', '07-lens'] },
-  // P2-01 / P2-04 的实验台（没有检查点；作品化在 P2-09：旋钮台灯、超声波尺子）
+  // P2-09 新作品：每条线都是"零件单独跑通 → 第二样东西 → 合体（带装配）"
+  // 灯带点亮 → 旋钮读数 → 合体（旋钮调亮度 / 颜色，按下切换）
+  lamp: { id: 'lamp', title: '旋钮台灯', example: 'lamp', checkpoints: ['lamp-1', 'lamp-2', 'lamp-3'] },
+  // 测距打印 → OLED 显示 → 合体（越近蜂鸣器越急）
+  ruler: { id: 'ruler', title: '超声波尺子', example: 'ruler', checkpoints: ['ruler-1', 'ruler-2', 'ruler-3'] },
+  // 读姿态 → 圆屏画小豆 → 合体（倾斜时小豆往低处滑）
+  tilt: { id: 'tilt', title: '体感小人', example: 'tilt', checkpoints: ['tilt-1', 'tilt-2', 'tilt-3'] },
+  // P2-01 / P2-04 的外设实验台（没有检查点；对应作品是上面的旋钮台灯、超声波尺子）
   knob: { id: 'knob', title: '旋钮计数（编码器 + PCNT）', example: 's3-encoder', checkpoints: [] },
   sonar: { id: 'sonar', title: '超声波测距（HC-SR04 + RMT 接收）', example: 's3-ultrasonic', checkpoints: [] },
   blank: { id: 'blank', title: '空白实验台', example: null, checkpoints: [] },
-  // P2-03 / P2-02 的外设台面（还不是完整作品：没有检查点、组装模版；体感小人等作品见 P2-09）
+  // P2-03 / P2-02 的外设台面（不是完整作品：没有检查点、组装模版；对应作品是上面的体感小人）
   imu: { id: 'imu', title: '倾角仪（MPU6050）', example: 's3-imu', checkpoints: [] },
   touch: { id: 'touch', title: '触摸圆屏（CST816S）', example: 's3-touch', checkpoints: [] },
 };

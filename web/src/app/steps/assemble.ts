@@ -3,7 +3,7 @@
 // 左树 = 装配层（从下往上）；右栏 = 选中层说明 + "装法会改变什么"（估算）；时间线 = 每装一层一步 + 开机复测，可回退。
 // 回退不存快照：清空后按时间线重放前 i 步（确定性重算）。开机复测用装好的状态（传感器偏移进 env）跑同一份固件验收。
 import { createAssembly } from '../../views/assembly';
-import { CHIP_HEAT_OFFSET, TEMPLATES, type Template } from '../../views/templates';
+import { CHIP_HEAT_OFFSET, SONAR_BLOCK_CM, TEMPLATES, effectScript, type Template } from '../../views/templates';
 import { bootOptions, type Level } from '../../checks';
 import { verifyLevel } from '../../verify';
 import { fetchBuf } from '../../assets';
@@ -17,6 +17,8 @@ import type { CaseLayout } from '../enclosure';
 type SvgAsm = ReturnType<typeof createAssembly>;
 type AsmView = SvgAsm | Assembly3D;
 const is3d = (a: AsmView): a is Assembly3D => (a as Assembly3D).kind === '3d';
+/** 有参数化外壳布局（enclosure.ts）的模版才走 3D；P2-09 的新作品先用平面装配 */
+const HAS_3D = new Set(['weather', 'spin', 'lens']);
 /** 3D 装配要 WebGL2；?asm=svg 强制用平面视图（测试 / 兜底） */
 function want3d() {
   if (new URLSearchParams(location.search).get('asm') === 'svg') return false;
@@ -103,6 +105,17 @@ const IMPACT: Record<string, Record<string, string[]>> = {
   },
   lens: {
     dome: ['高档离屏 8 mm：放大约 1.35×，像立体的', '低档贴着屏：放大约 1.08×，看着是平的（只改成品画面，估算）'],
+  },
+  lamp: {
+    strip: ['贴在导光柱上：离灯罩 15 mm，光在乳白罩上散成均匀的一片', '贴着灯罩内壁：罩子上一排 8 个刺眼亮点（只改成品画面，估算）'],
+    knob: ['旋钮轴要露出面板 ≥ 6 mm，不然手指捏不住、按不下去'],
+  },
+  ruler: {
+    sonar: ['探头伸出前面板孔：量到的就是前方物体', `缩在孔后 6 mm：回波先从孔壁回来，读数变成约 ${SONAR_BLOCK_CM} cm，蜂鸣器一直响——开机复测里模拟器的 HC-SR04 也只看到 ${SONAR_BLOCK_CM} cm（估算）`],
+    board: ['Echo 线上的 1 kΩ / 2 kΩ 分压电阻跟着开发板一起装，别装壳时漏掉'],
+  },
+  tilt: {
+    imu: ['平贴底板、箭头朝前：往哪边歪，小豆就往哪边滑', '转了 180° 装反：俯仰、横滚都反号，小豆往高处爬——开机复测里模拟器的六轴也是反着装的'],
   },
 };
 
@@ -307,7 +320,13 @@ ${caseLine()}`;
     if (fx.sensorOffset !== undefined) rows.push(row('传感器温漂', fx.sensorOffset ? `+${fx.sensorOffset.toFixed(1)} ℃` : '0 ℃', fx.sensorOffset ? 'bad' : ''));
     if (fx.hornOffset !== undefined) rows.push(row('舵盘偏角', `${fx.hornOffset.toFixed(1)}°`, fx.hornOffset ? 'bad' : ''));
     if (fx.lensScale !== undefined) rows.push(row('透镜放大', `${fx.lensScale.toFixed(2)}×`, fx.lensScale < 1.2 ? 'bad' : ''));
-    return rows.length ? `${sec('装法带进成品 · 估算')}${rows.join('')}<p class="note">温漂会真的进模拟器（开机复测、成品里 BME280 读到的温度）；舵盘、透镜只改成品画面。</p>` : '';
+    if (fx.glare !== undefined) rows.push(row('灯罩亮点', fx.glare ? '有：8 个亮点' : '没有', fx.glare ? 'bad' : ''));
+    if (fx.sonarBlock !== undefined) rows.push(row('探头读数', fx.sonarBlock ? `被孔壁截到约 ${fx.sonarBlock} cm` : '量到前方物体', fx.sonarBlock ? 'bad' : ''));
+    if (fx.imuFlip !== undefined) rows.push(row('六轴方向', fx.imuFlip ? '反了：俯仰、横滚反号' : '正', fx.imuFlip ? 'bad' : ''));
+    const how = T!.id === 'weather' ? '温漂会真的进模拟器（开机复测、成品里 BME280 读到的温度）；舵盘、透镜只改成品画面。'
+      : T!.id === 'ruler' || T!.id === 'tilt' ? '这一项会真的进模拟器：开机复测和成品里，传感器看到的就是装好以后的样子。'
+      : '只改成品画面。';
+    return rows.length ? `${sec('装法带进成品 · 估算')}${rows.join('')}<p class="note">${how}</p>` : '';
   }
 
   function renderRetest(head: string) {
@@ -318,11 +337,11 @@ ${caseLine()}`;
     const fw = firmwareFor(lv);
     const rows = t ? t.rows.map((x) => `<div class="res ${x.ok ? 'ok' : 'bad'}"><span class="mk">${x.ok ? '✓' : '✗'}</span><span>${esc(x.text)}</span></div>`).join('') : '';
     c.shell.props.innerHTML = `${head}${sec('开机复测')}<div class="ph">装好的样子再验一次${lv ? ` <span class="mono">${esc(lv.id)}</span>` : ''}</div>
-<p class="note">用装好的状态跑同一份固件：传感器放在哪，模拟器里的 BME280 就读到哪儿的温度（室温 ${lv ? envOf(lv).temp.toFixed(1) : '—'} ℃ + 温漂 ${(asm!.effects().sensorOffset ?? 0).toFixed(1)} ℃）。按模拟时间跑完再判定。</p>
+<p class="note">${T!.id === 'weather' ? `用装好的状态跑同一份固件：传感器放在哪，模拟器里的 BME280 就读到哪儿的温度（室温 ${lv ? envOf(lv).temp.toFixed(1) : '—'} ℃ + 温漂 ${(asm!.effects().sensorOffset ?? 0).toFixed(1)} ℃）。` : T!.id === 'ruler' ? '用装好的状态跑同一份固件：探头缩在孔里时，模拟器里的 HC-SR04 只能量到孔壁。' : T!.id === 'tilt' ? '用装好的状态跑同一份固件：六轴装反时，模拟器里的 QMI8658 也是反着装的。' : '用装好的状态跑同一份固件。'}按模拟时间跑完再判定。</p>
 ${row('固件', esc(fw.name))}
 ${row('装配', `${s.placed.length}/${s.total}`, s.placed.length < s.total ? 'bad' : '')}
 <div class="btns"><button type="button" class="btn primary" id="retestBtn" ${testing || s.placed.length < s.total || !lv ? 'disabled' : ''}>${testing ? `复测中 ${testing.progress.toFixed(1)} s` : '开机复测'}</button></div>
-${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${t.ok ? '✓ 通过' : '✗ 未通过'} <span class="muted">· 传感器读到 ${t.temp.toFixed(1)} ℃</span></div>${rows}${row('运行指纹', esc(t.fingerprint), 'fp')}` : ''}`;
+${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${t.ok ? '✓ 通过' : '✗ 未通过'}${T!.id === 'weather' ? ` <span class="muted">· 传感器读到 ${t.temp.toFixed(1)} ℃</span>` : ''}</div>${rows}${row('运行指纹', esc(t.fingerprint), 'fp')}` : ''}`;
     c.shell.props.querySelector<HTMLButtonElement>('#retestBtn')?.addEventListener('click', () => void retest());
   }
 
@@ -352,7 +371,9 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
     const fw = firmwareFor(lv);
     let entry: Extract<Entry, { kind: 'test' }>;
     try {
-      const v = await verifyLevel(lv, await fw.get(), (t) => {
+      // 装法改了传感器看到的东西（探头被挡、六轴装反）：复测的输入脚本跟着改
+      const fx = asm.effects();
+      const v = await verifyLevel({ ...lv, script: effectScript(lv.script, fx) }, await fw.get(), (t) => {
         if (!testing || t - testing.progress < 0.2) return;
         testing.progress = t;
         const b = ctx?.shell.props.querySelector('#retestBtn');
@@ -523,7 +544,7 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
     a.svg.setAttribute('viewBox', '0 0 704 560');
     asm = a;
     builtKey = 'svg';
-    layout = layoutFor(T!.id, c.store.get().bom, c.store.get().caseParams);
+    layout = HAS_3D.has(T!.id) ? layoutFor(T!.id, c.store.get().bom, c.store.get().caseParams) : null;
     replayView();
   }
 
@@ -565,7 +586,7 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
     cur = -1;
     if (c.store.get().assembly) for (const e of loadEntries(c.work.id)) push(e);
     sel = T!.parts[0].id;
-    if (want3d()) build3d(c, currentKey(c));
+    if (want3d() && HAS_3D.has(T!.id)) build3d(c, currentKey(c));
     else buildSvg(c);
   }
   const currentKey = (c: StepCtx) => {

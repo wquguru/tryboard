@@ -131,7 +131,9 @@ export type PartSpec =
   /** MAX98357A I2S 功放模块 + 4Ω 小喇叭：引脚按芯片固定，见 I2S_WIRING；声音见 pcm.ts，3D 里纸盆随音量起伏 */
   | { type: 'max98357a'; label?: string }
   /** INMP441 I2S 数字麦克风模块（L/R 接地 = 左声道）：引脚按芯片固定，见 I2S_WIRING */
-  | { type: 'inmp441'; label?: string };
+  | { type: 'inmp441'; label?: string }
+  /** WS2812 8 灯灯条（P2-09 旋钮台灯）：DIN 接 pin（经 74AHCT125 升到 5 V，示意），5V 供电；平放在面包板前面的桌上，灯色来自内核解码的帧 */
+  | { type: 'ws2812'; pin: number; n?: number; label?: string };
 
 
 /** 场景里的 IMU（台面倾斜 / 拖动只在有 IMU 时生效） */
@@ -191,6 +193,8 @@ export interface Bench extends ScenePickApi {
   setPowered(on: boolean): void;
   /** 板载 WS2812（C3 GPIO8 / S3 GPIO48）颜色，0–255 */
   setRgb(rgb: number[]): void;
+  /** 外接 WS2812 灯条（引脚 pin）各灯颜色，0–255 */
+  setStrip(pin: number, leds: number[][]): void;
   onButton(cb: (name: 'BOOT' | 'RST', down: boolean) => void): void;
   /** 按键在页面上的位置（clientX/Y）：给自动化测试用真实鼠标去按 3D 里的键；看不见时 null */
   buttonScreenPos(name: 'BOOT' | 'RST'): [number, number] | null;
@@ -1311,6 +1315,61 @@ function encoderModule() {
   return { grp, knob, hit, plugAt, labels: ENC_PINS, size: [W, H] as const, knobY: knob.position.y };
 }
 
+const STICK_PINS = ['GND', 'DIN', '5V'];
+/** WS2812 8 灯灯条（常见 51 × 10 mm 黑色小板，一端三针 GND / DIN / 5V）：平放在桌上，排针在 -x 端朝上。
+ *  每颗 5050 灯珠是白框 + 半透明扩散面，扩散面的自发光颜色来自内核解码的帧。原点在板子底面中心 */
+function stickModule(n: number) {
+  const W = 6.4 * n + 6, H = 10;
+  const S = 20;
+  const tex = canvasTexture(W * S, H * S, (g) => {
+    g.fillStyle = '#16181b';
+    g.fillRect(0, 0, W * S, H * S);
+    g.fillStyle = '#d9dce0';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = `bold ${0.75 * S}px "JetBrains Mono", Menlo, monospace`;
+    STICK_PINS.forEach((t, i) => g.fillText(t, 4.2 * S, (H / 2 + (i - 1) * PITCH) * S));
+    g.font = `bold ${0.7 * S}px Helvetica, sans-serif`;
+    g.fillText(`WS2812B x${n}`, (W / 2 + 2) * S, (H - 1.2) * S);
+  });
+  const pinsAt: [number, number][] = [0, 1, 2].map((i) => [-W / 2 + 1.8, (i - 1) * PITCH]);
+  const m = flatModule(W, H, tex, 0x111214, pinsAt);
+  const frame = new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.6 });
+  const lenses: THREE.MeshStandardMaterial[] = [];
+  for (let i = 0; i < n; i++) {
+    const x = -W / 2 + 7 + i * 6.4;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(5, 1.5, 5), frame);
+    body.position.set(x, m.pcbTop + 0.75, -0.6);
+    body.castShadow = true;
+    m.grp.add(body);
+    const lm = new THREE.MeshStandardMaterial({ color: 0xdedbd2, emissive: 0x000000, emissiveIntensity: 1, roughness: 0.3 });
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 0.1, 24), lm);
+    lens.position.set(x, m.pcbTop + 1.52, -0.6);
+    m.grp.add(lens);
+    lenses.push(lm);
+  }
+  const light = new THREE.PointLight(0xffffff, 0, 90, 2);
+  light.position.set(0, m.pcbTop + 8, 0);
+  m.grp.add(light);
+  return { grp: m.grp, plugAt: m.plugAt, labels: STICK_PINS, lenses, light, size: [W, H] as const };
+}
+
+/** WS2812 灯珠颜色 → 扩散面材质。台面不做色调映射：白色底色 + 强自发光会被裁成发白的粉色，
+ *  所以亮的时候底色压暗、自发光用归一化的色相，强度随亮度走（灯条要看得出"调亮度"） */
+function ledGlow(mat: THREE.MeshStandardMaterial, rgb: number[]) {
+  const [r, g, b] = rgb.map((v) => v / 255);
+  const peak = Math.max(r, g, b);
+  if (!peak) {
+    mat.emissiveIntensity = 0;
+    mat.color.set(0xdedbd2);
+    return { peak };
+  }
+  mat.color.setRGB((r / peak) * 0.2, (g / peak) * 0.2, (b / peak) * 0.2);
+  mat.emissive.setRGB(r / peak, g / peak, b / peak);
+  mat.emissiveIntensity = 0.55 + 1.2 * peak;
+  return { peak };
+}
+
 const SONAR_PINS = ['VCC', 'Trig', 'Echo', 'GND'];
 /** HC-SR04：竖立的蓝色板，两个超声探头朝本地 +z；排针在背面底部、水平朝 -z。原点在桌面上板子底边中点 */
 function sonarModule() {
@@ -2022,6 +2081,21 @@ export function createBench(container: HTMLElement): Bench {
   let potCb: ((pin: number, v: number) => void) | null = null;
   // 编码器旋钮（显示位置 = 内核位置 + 刚拖出去还没生效的格数）、超声波探头 + 障碍物
   let encoder: { knob: THREE.Group; hit: THREE.Mesh; pos: number; pushed: boolean; y0: number } | null = null;
+  let strips: { pin: number; lenses: THREE.MeshStandardMaterial[]; light: THREE.PointLight }[] = [];
+  /** 灯条最近一帧（只在有新帧时才送来：重建场景后要按它重新点亮） */
+  const stripLast = new Map<number, number[][]>();
+  function paintStrip(st: (typeof strips)[number], leds: number[][]) {
+    let sum = [0, 0, 0];
+    let peak = 0;
+    st.lenses.forEach((mat, i) => {
+      const c = leds[i] ?? [0, 0, 0];
+      peak = Math.max(peak, ledGlow(mat, c).peak);
+      sum = sum.map((v, k) => v + c[k]);
+    });
+    const m = Math.max(...sum);
+    st.light.color.setRGB(m ? sum[0] / m : 0, m ? sum[1] / m : 0, m ? sum[2] / m : 0);
+    st.light.intensity = peak * 120;
+  }
   let encCb: ((steps: number) => void) | null = null;
   let encSwCb: ((down: boolean) => void) | null = null;
   let sonar: { origin: THREE.Vector3; dir: THREE.Vector3; face: number; obstacle: THREE.Group; panel: THREE.Mesh; waves: THREE.Group; waveMat: THREE.MeshBasicMaterial; pingT: number; cm: number } | null = null;
@@ -2324,6 +2398,34 @@ export function createBench(container: HTMLElement): Bench {
     encoder = { knob: m.knob, hit: m.hit, pos: 0, pushed: false, y0: m.knobY };
   }
 
+  function buildStrip(grp: THREE.Group, p: Extract<PartSpec, { type: 'ws2812' }>) {
+    const root = new THREE.Group();
+    registerPart('ws2812', root);
+    grp.add(root);
+    const n = p.n ?? 8;
+    const m = stickModule(n);
+    // 放在 DIN 针脚前方、编码器再往外一排的桌上（与编码器同侧时不重叠）
+    const sig = pinCands('IO' + p.pin)[0].p;
+    const side = Math.sign(sig.z || 1);
+    const bx = sig.x + 6, bz = side * (BB.D / 2 + 56);
+    m.grp.position.set(bx, 0, bz);
+    if (side < 0) m.grp.rotation.y = Math.PI;
+    root.add(m.grp);
+    const shadow = contactShadow(m.size[0], m.size[1], 0.3);
+    shadow.position.set(bx, shadow.position.y, bz);
+    grp.add(shadow);
+    flatWires(grp, 'ws2812', m, [
+      ['5V', WIRE.vcc, '5V', '灯条供电（5 V）'],
+      ['IO' + p.pin, WIRE.sig, 'DIN', '灯条数据（经 74AHCT125 升到 5 V）'],
+      ['GND', WIRE.gnd, 'GND', '灯条地'],
+    ], side);
+    label(grp, p.label ?? `WS2812 × ${n} · DIN IO${p.pin}（RMT）`, new THREE.Vector3(bx, 4, bz + side * 12));
+    const st = { pin: p.pin, lenses: m.lenses, light: m.light };
+    strips.push(st);
+    const had = stripLast.get(p.pin);
+    if (had) paintStrip(st, had);
+  }
+
   function buildSonar(grp: THREE.Group, p: Extract<PartSpec, { type: 'hcsr04' }>) {
     const root = new THREE.Group();
     registerPart('hcsr04', root);
@@ -2539,6 +2641,7 @@ export function createBench(container: HTMLElement): Bench {
     pots = [];
     buzzers = [];
     encoder = null;
+    strips = [];
     sonar = null;
     speakers = [];
     mics = [];
@@ -2561,6 +2664,7 @@ export function createBench(container: HTMLElement): Bench {
       if (p.type === 'pot') buildPot(parts, p);
       if (p.type === 'buzzer') buildBuzzer(parts, p);
       if (p.type === 'encoder') buildEncoder(parts, p);
+      if (p.type === 'ws2812') buildStrip(parts, p);
       if (p.type === 'hcsr04') buildSonar(parts, p);
       if (p.type === 'max98357a') buildAmp(parts, p);
       if (p.type === 'inmp441') buildMic(parts, p);
@@ -2591,8 +2695,10 @@ export function createBench(container: HTMLElement): Bench {
         label(parts, p.label ?? `GC9A01 圆屏 · SPI2 · SCLK IO${w.sclk} MOSI IO${w.mosi} CS IO${w.cs} DC IO${w.dc}`, new THREE.Vector3(colX(19.5), 52, rowZ(0) - 10));
       }
       if (p.type === 'mpu6050' || p.type === 'qmi8658') {
-        buildImu(parts, p, i2cCol - 4);
-        label(parts, p.label ?? `${p.type === 'mpu6050' ? 'MPU6050' : 'QMI8658'} · I2C 0x${p.addr.toString(16)} · SDA IO${p.sda} SCL IO${p.scl} · 拖它倾斜台面`, new THREE.Vector3(colX(i2cCol - 0.5), 30, rowZ(0) - 10));
+        // 和圆屏同台（体感小人）：圆屏占着 16 列往后，六轴挪到圆屏右边，不然被屏挡住、拖不到
+        const col = spec.parts.some((x) => x.type === 'gc9a01') ? 27 : i2cCol - 4;
+        buildImu(parts, p, col);
+        label(parts, p.label ?? `${p.type === 'mpu6050' ? 'MPU6050' : 'QMI8658'} · I2C 0x${p.addr.toString(16)} · SDA IO${p.sda} SCL IO${p.scl} · 拖它倾斜台面`, new THREE.Vector3(colX(col + 3.5), 30, rowZ(0) - 10));
         i2cCol -= 10;
       }
       if (p.type === 'bme280') {
@@ -3361,6 +3467,10 @@ export function createBench(container: HTMLElement): Bench {
       board.rgbMat.color.setRGB(0.87 + r * 0.13, 0.86 + g * 0.14, 0.82 + b * 0.18);
       board.rgbLight.color.setRGB(peak ? r / peak : 0, peak ? g / peak : 0, peak ? b / peak : 0);
       board.rgbLight.intensity = peak * 80 * k;
+    },
+    setStrip(pin, leds) {
+      stripLast.set(pin, leds);
+      for (const st of strips) if (st.pin === pin) paintStrip(st, leds);
     },
     setLcd(px) {
       if (!lcdTex) return;

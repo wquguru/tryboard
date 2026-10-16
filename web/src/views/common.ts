@@ -7,6 +7,8 @@ export interface LiveFrame {
   lcd: Uint8Array | null;
   pwm: number[];
   rgb: number[] | null;
+  /** 外接 WS2812 灯条：引脚 → 各灯 [r,g,b]（P2-09 旋钮台灯） */
+  strips?: Record<number, number[][]>;
   running: boolean;
 }
 

@@ -27,7 +27,7 @@ export { WORKS } from './works';
 /** 串口里 weather 固件的读数行（格式由第 06 关任务书规定） */
 const READING = /T=(-?[\d.]+) C H=([\d.]+) % P=([\d.]+) hPa/g;
 /** s3-imu / s3-qmi8658 的读数行 */
-const IMU_LINE = /IMU pitch=(-?[\d.]+) roll=(-?[\d.]+)(?:[^\n]*?gyro=\((-?[\d.]+),(-?[\d.]+),(-?[\d.]+)\))?/g;
+const IMU_LINE = /(?:IMU|POSE) pitch=(-?[\d.]+) roll=(-?[\d.]+)(?:[^\n]*?gyro=\((-?[\d.]+),(-?[\d.]+),(-?[\d.]+)\))?/g;
 
 export interface SessionHooks {
   /** 串口新文本（外壳把它追加到左栏串口） */
@@ -225,7 +225,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     fwSize: 0,
     chip,
     levels,
-    frame: { pwm: [], pwmFreq: [], gpio: 0, enable: 0, gpioHi: 0, enableHi: 0, rgb: null, oled: null, lcd: null, elec: null, pins: null },
+    frame: { pwm: [], pwmFreq: [], gpio: 0, enable: 0, gpioHi: 0, enableHi: 0, rgb: null, strips: {}, oled: null, lcd: null, elec: null, pins: null },
     distance: scene.parts.flatMap((p) => (p.type === 'hcsr04' ? [p.cm ?? 25] : []))[0] ?? 25,
     turnEncoder(steps) {
       s.sim?.turnEncoder(steps);
@@ -380,6 +380,10 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         s.frame.gpioHi = m.gpioHi;
         s.frame.enableHi = m.enableHi;
         if (m.leds) s.frame.rgb = m.leds[0] ?? null;
+        if (m.strips) {
+          s.frame.strips = { ...s.frame.strips, ...m.strips };
+          for (const [pin, leds] of Object.entries(m.strips)) bench.setStrip(Number(pin), leds);
+        }
         if (m.elec) {
           s.frame.elec = m.elec;
           // 舵机角度用二阶动力学的结果（有加速、过冲；只影响观感，固件读不到）

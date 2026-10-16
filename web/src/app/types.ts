@@ -25,7 +25,7 @@ export const STEPS: { id: StepId; label: string }[] = [
   { id: 'product', label: '成品' },
 ];
 
-export type WorkId = 'weather' | 'spin' | 'lens' | 'knob' | 'sonar' | 'blank' | 'imu' | 'touch';
+export type WorkId = 'weather' | 'spin' | 'lens' | 'lamp' | 'ruler' | 'tilt' | 'knob' | 'sonar' | 'blank' | 'imu' | 'touch';
 
 /** 选中的对象。kind 与构建树的分组一一对应；pin / wire / button 来自台面拾取 */
 export type SelKind = 'part' | 'wire' | 'power' | 'env' | 'firmware' | 'checkpoint' | 'pin' | 'button' | 'run' | 'tool';
@@ -124,7 +124,7 @@ export interface Session {
   chip: 'esp32c3' | 'esp32s3';
   levels: Level[];
   /** 最近一帧：PWM 占空比、彩灯、OLED */
-  frame: { pwm: number[]; pwmFreq: number[]; gpio: number; enable: number; gpioHi: number; enableHi: number; rgb: number[] | null; oled: Uint8Array | null; lcd: Uint8Array | null; elec: ElecFrame | null; pins: PinDevFrame | null };
+  frame: { pwm: number[]; pwmFreq: number[]; gpio: number; enable: number; gpioHi: number; enableHi: number; rgb: number[] | null; strips: Record<number, number[][]>; oled: Uint8Array | null; lcd: Uint8Array | null; elec: ElecFrame | null; pins: PinDevFrame | null };
   /** 热源靠近的零件（只是显示；读数由环境温度决定） */
   heat: string | null;
   setHeat(part: string | null): void;

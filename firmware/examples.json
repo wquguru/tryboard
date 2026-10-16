@@ -876,5 +876,119 @@
     }
    ]
   }
+ },
+ {
+  "id": "lamp",
+  "chip": "esp32s3",
+  "title": "旋钮台灯：EC11 旋钮 + WS2812 灯条",
+  "about": "ESP32-S3 成品。8 灯 WS2812 灯条 DIN 接 GPIO5（RMT 发送，经 74AHCT125 升到 5 V，灯条走外接 5 V），EC11 编码器 CLK=GPIO6、DT=GPIO7、SW=GPIO15 接 PCNT（4 倍频，一格 4 个计数）。上电逐颗点亮暖白；转旋钮调亮度（8 档），按一下改成换颜色（6 种），再按回到调亮度。拖动或滚动 3D 里的旋钮，点它就是按下。",
+  "tags": [
+   "✓ 仿真验证",
+   "RMT",
+   "WS2812",
+   "PCNT",
+   "ESP-IDF 5.5"
+  ],
+  "pins": {
+   "strip": 5,
+   "a": 6,
+   "b": 7,
+   "sw": 15
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "ws2812",
+     "pin": 5
+    },
+    {
+     "type": "encoder",
+     "a": 6,
+     "b": 7,
+     "sw": 15
+    }
+   ]
+  },
+  "assembly": "lamp"
+ },
+ {
+  "id": "ruler",
+  "chip": "esp32s3",
+  "title": "超声波尺子：HC-SR04 + OLED + 蜂鸣器",
+  "about": "ESP32-S3 成品。HC-SR04（5 V）Trig=GPIO17，Echo 经 1 kΩ / 2 kΩ 分压接 GPIO18，RMT 接收量回波宽度，每 100 ms 测一次；SSD1306（0x3C，SDA=GPIO8、SCL=GPIO9）大字显示距离和距离条；GPIO5 的无源蜂鸣器像倒车雷达：1 m 以内响 40 ms、停 距离×5 ms，10 cm 以内一直响（点「声音」才出声）。拖动 3D 里的障碍物。",
+  "tags": [
+   "✓ 仿真验证",
+   "RMT 接收",
+   "I2C",
+   "SSD1306",
+   "LEDC",
+   "5 V 器件"
+  ],
+  "pins": {
+   "trig": 17,
+   "echo": 18,
+   "buzzer": 5
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "hcsr04",
+     "trig": 17,
+     "echo": 18,
+     "cm": 15
+    },
+    {
+     "type": "oled",
+     "addr": 60,
+     "sda": 8,
+     "scl": 9
+    },
+    {
+     "type": "buzzer",
+     "pin": 5
+    }
+   ]
+  },
+  "assembly": "ruler"
+ },
+ {
+  "id": "tilt",
+  "chip": "esp32s3",
+  "title": "体感小人：QMI8658 + 圆屏",
+  "about": "ESP32-S3 成品。QMI8658 六轴（I2C 0x6B，SDA=GPIO8、SCL=GPIO9）每 20 ms 读一次姿态；圆屏 GC9A01（SPI2：SCLK=GPIO12、MOSI=GPIO11、CS=GPIO10、DC=GPIO14、RST=GPIO13、背光=GPIO15）上的小豆按倾斜方向滑，碰到圆边贴着边滑。拖倾斜滑块，或在 3D 里按住 IMU 模块拖动转整块台面。",
+  "tags": [
+   "✓ 仿真验证",
+   "I2C",
+   "QMI8658",
+   "SPI",
+   "GC9A01",
+   "ESP-IDF 5.5"
+  ],
+  "pins": {
+   "lcd_sclk": 12,
+   "lcd_mosi": 11,
+   "lcd_cs": 10,
+   "lcd_dc": 14,
+   "lcd_rst": 13,
+   "lcd_bl": 15
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "gc9a01",
+     "spi": 2
+    },
+    {
+     "type": "qmi8658",
+     "addr": 107,
+     "sda": 8,
+     "scl": 9
+    }
+   ]
+  },
+  "controls": [
+   "imu"
+  ],
+  "assembly": "tilt"
  }
 ]

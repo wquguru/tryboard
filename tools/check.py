@@ -104,6 +104,15 @@ def evaluate(t: dict, out: str, report: str):
                         i = j + 1
                 ms = lambda d: f'{d * 1000 / pw["freq"]:.1f}'
                 res.append((not miss, f"脉宽依次出现 {' → '.join(ms(d) for d in pw['steps'])} ms" + (f"：缺 {'、'.join(ms(d) for d in miss)} ms" if miss else '')))
+            for b in pw.get('beeps', []):
+                # 响了几声：时间窗里占空比从 0（或没有输出）变成 > 0 的次数（蜂鸣器节奏，"越近越急"）
+                n, prev = 0, 0.0
+                for d, at in ch:
+                    if d > 0 and prev == 0 and b['from'] <= at <= b['to']:
+                        n += 1
+                    prev = d
+                want = f"{b['min']}" if b['min'] == b['max'] else f"{b['min']}–{b['max']}"
+                res.append((b['min'] <= n <= b['max'], f"GPIO{pw['pin']} {jsnum(b['from'])}–{jsnum(b['to'])} s 响 {n} 声（要 {want}）"))
     w = t.get('ws2812')
     if w:
         sec = re.search(rf"WS2812 GPIO{w['pin']} 共 (\d+) 帧\n((?:    .*\n?)*)", report)
@@ -119,6 +128,18 @@ def evaluate(t: dict, out: str, report: str):
             k = 'rgb'.index(w['dominant'])
             ok = ok and rgb[k] > 0 and rgb[k] == max(rgb) and rgb.count(rgb[k]) == 1
             desc += f"，最后一帧 {last}（要{ {'r': '红', 'g': '绿', 'b': '蓝'}[w['dominant']] }色）"
+        if 'last' in w:
+            # 最后一帧逐颗看：灯数、亮了几颗、亮的颜色（每通道 ±tol）
+            L = w['last']
+            last = frames[-1] if frames else []
+            want, tol, lit_want = int(L['rgb'][1:], 16), L.get('tol', 0), L.get('lit', L['count'])
+            lit = [c for c in last if c != '#000000']
+            near = lambda c: max(abs(((int(c[1:], 16) >> s) & 255) - ((want >> s) & 255)) for s in (16, 8, 0)) <= tol
+            good = len(last) == L['count'] and len(lit) == lit_want and all(near(c) for c in lit)
+            ok = ok and good
+            desc += f"，最后一帧 {len(last)} 颗、亮 {len(lit)} 颗（要 {L['count']} 颗、亮 {lit_want} 颗 {L['rgb']} ±{tol}）"
+            if not good:
+                desc += f"：{' '.join(last) or '（没有帧）'}"
         res.append((ok, desc))
     for n in t.get('numeric', []):
         vals = [float(v) for v in re.findall(n['regex'], out)]
@@ -143,15 +164,19 @@ def evaluate(t: dict, out: str, report: str):
             want = int(c['rgb'][1:], 16)
             tol = c.get('tol', 24)
             near = lambda k: max(abs(((int(k, 16) >> s) & 255) - ((want >> s) & 255)) for s in (16, 8, 0)) <= tol
-            hit = [(n, x) for k, n, x, _ in seen if near(k)]
+            hit = [(n, x, y) for k, n, x, y in seen if near(k)]
             n = sum(h[0] for h in hit)
             ok = n >= c['min'] and ('max' not in c or n <= c['max'])
             want_n = f"≥ {c['min']}" + (f" 且 ≤ {c['max']}" if 'max' in c else '')
             desc = f"圆屏{c['name']}（{c['rgb']} ±{tol}）{n} 像素（要 {want_n}）"
             if 'cx' in c:
-                cx = sum(a * b for a, b in hit) / n if n else -1
+                cx = sum(a * b for a, b, _ in hit) / n if n else -1
                 ok = ok and c['cx'][0] <= cx <= c['cx'][1]
                 desc += f"，水平重心 {'—' if n == 0 else f'{cx:.1f}'}（要 {c['cx'][0]}–{c['cx'][1]}）"
+            if 'cy' in c:
+                cy = sum(a * y for a, _, y in hit) / n if n else -1
+                ok = ok and c['cy'][0] <= cy <= c['cy'][1]
+                desc += f"，竖直重心 {'—' if n == 0 else f'{cy:.1f}'}（要 {c['cy'][0]}–{c['cy'][1]}）"
             if not ok:
                 desc += f"；画面主色 {top}"
             res.append((ok, desc))

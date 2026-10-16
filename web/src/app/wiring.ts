@@ -13,7 +13,7 @@ export interface PartInfo {
 }
 
 /** 零件类型 → 中文显示名（时间线、提示条、构建树统一用这份，不让英文 type 名漏到界面上） */
-export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: '舵机', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED', encoder: '编码器', hcsr04: '超声波', mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: '触摸', max98357a: '喇叭', inmp441: '麦克风' };
+export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: '舵机', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED', encoder: '编码器', hcsr04: '超声波', mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: '触摸', max98357a: '喇叭', inmp441: '麦克风', ws2812: '灯条' };
 export const partLabel = (type: string) => PART_LABEL[type as PartSpec['type']] ?? '零件';
 
 export function partId(p: PartSpec) {
@@ -50,6 +50,8 @@ export function partInfo(p: PartSpec, ext5v = false): PartInfo {
       const w = I2S_WIRING.esp32s3.spk;
       return { name: 'MAX98357A 功放 + 喇叭', model: 'MAX98357A I2S D 类功放模块（3 W）+ Φ40 4 Ω 喇叭', iface: `I2S · BCLK ${w.bclk} · LRC ${w.lrc} · DIN ${w.din}`, power: '5V' };
     }
+    case 'ws2812':
+      return { name: `WS2812 灯条 × ${p.n ?? 8}`, model: 'WS2812B-5050 × 8 灯板（GRB，800 kHz）', iface: `DIN GPIO${p.pin}（RMT 发送，经 74AHCT125 升到 5 V）`, power: `5V（满白约 ${(p.n ?? 8) * 60} mA，估算）` };
     case 'inmp441': {
       const w = I2S_WIRING.esp32s3.mic;
       return { name: 'INMP441 麦克风', model: 'INMP441 I2S 数字 MEMS 麦克风模块（24 位，L/R 接地 = 左声道）', iface: `I2S · SCK ${w.sck} · WS ${w.ws} · SD ${w.sd}`, power: '3V3' };
@@ -153,6 +155,10 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
       // 三针模块：I/O 经模块上的三极管驱动蜂鸣器，GPIO 只推基极
       add('3V3', id, 'VCC', '供电', 'power', '红');
       add(`GPIO${p.pin}`, id, 'I/O', '方波驱动（LEDC）', 'load', '橙');
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+    } else if (p.type === 'ws2812') {
+      add(ext5v ? 'EXT5V' : '5V', id, '5V', ext5v ? '供电（外接 5 V）' : '供电（USB 5 V）', 'power', '红', {}, '5V');
+      add(`GPIO${p.pin}`, id, 'DIN', '数据（RMT，经电平转换）', 'load', '橙');
       add('GND', id, 'GND', '地', 'gnd', '黑');
     } else if (p.type === 'max98357a') {
       const s = I2S_WIRING.esp32s3.spk;
