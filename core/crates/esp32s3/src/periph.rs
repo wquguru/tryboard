@@ -3,6 +3,7 @@
 
 /// 中断源编号（soc/esp32s3/include/soc/interrupts.h，用 clang 编译头文件求得）
 pub mod src {
+    pub const WIFI_MAC: u32 = 0;
     pub const GPIO: u32 = 16;
     pub const SPI2: u32 = 21;
     pub const UART0: u32 = 27;
@@ -66,7 +67,11 @@ pub struct Intmatrix {
 impl Default for Intmatrix {
     fn default() -> Self {
         // 复位值：所有源映射到线 16（定时器线，等于不连接）
-        Intmatrix { map: [16; src::MAX], clock_gate: 1, last_edge_in: 0 }
+        Intmatrix {
+            map: [16; src::MAX],
+            clock_gate: 1,
+            last_edge_in: 0,
+        }
     }
 }
 
@@ -346,6 +351,10 @@ impl Gpio {
 /// SAR_MEAS1_CTRL2（0x0C）：数据 [15:0]、完成位 16、启动位 17、通道位图 sar1_en_pad [30:19]；
 /// SAR_MEAS2_CTRL2（0x30）同理给 ADC2；SAR_ATTEN1 / 2（0x14 / 0x38）每通道 2 位衰减。
 /// ADC1 通道 n = GPIO(n+1)，ADC2 通道 n = GPIO(n+11)。量程按数据手册衰减档近似：0dB≈950mV、2.5dB≈1250mV、6dB≈1750mV、12dB≈3100mV。
+/// SENS_SAR_TSENS_CTRL_REG 相对 SENS 基址（0x60008800）的偏移
+const TSENS_CTRL: u32 = 0x50;
+const TSENS_RAW_25C: u32 = 104;
+
 pub struct SensAdc {
     pub regs: [u32; 0x100 / 4],
     pub pin_mv: [f32; NPINS],
@@ -355,17 +364,32 @@ pub struct SensAdc {
 
 impl Default for SensAdc {
     fn default() -> Self {
-        SensAdc { regs: [0; 0x100 / 4], pin_mv: [0.0; NPINS], noise_lsb: 2, seed: 0x1234_5678 }
+        SensAdc {
+            regs: [0; 0x100 / 4],
+            pin_mv: [0.0; NPINS],
+            noise_lsb: 2,
+            seed: 0x1234_5678,
+        }
     }
 }
 
 impl SensAdc {
     pub fn read(&self, off: u32) -> Option<u32> {
-        self.regs.get((off / 4) as usize).copied()
+        let v = self.regs.get((off / 4) as usize).copied()?;
+        Some(if off == TSENS_CTRL {
+            // 片上温度传感器（SENS_SAR_TSENS_CTRL_REG）：写 DUMP_OUT（位 24）后等 READY（位 8），
+            // 读 OUT（位 7..0）。libphy 的 temperature_sensor_get_raw_value 在 Wi-Fi 校准时调用。
+            // 原始值 104 ≈ 25 ℃（tsens 换算 0.4386 × raw − 20.52，偏移档 0）
+            (v & !0x1ff) | (1 << 8) | TSENS_RAW_25C
+        } else {
+            v
+        })
     }
 
     pub fn write(&mut self, off: u32, v: u32) -> bool {
-        let Some(old) = self.regs.get((off / 4) as usize).copied() else { return false };
+        let Some(old) = self.regs.get((off / 4) as usize).copied() else {
+            return false;
+        };
         let mut v = v;
         if off == 0x0c || off == 0x30 {
             let unit = if off == 0x0c { 0 } else { 1 };
@@ -386,9 +410,18 @@ impl SensAdc {
         let atten = (atten_reg >> (ch * 2)) & 3;
         let full = [950.0, 1250.0, 1750.0, 3100.0][atten as usize];
         let pin = if unit == 0 { ch + 1 } else { ch + 11 } as usize;
-        let mv = if ch < 10 { self.pin_mv.get(pin).copied().unwrap_or(0.0) } else { 0.0 };
+        let mv = if ch < 10 {
+            self.pin_mv.get(pin).copied().unwrap_or(0.0)
+        } else {
+            0.0
+        };
         self.seed = self.seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
-        let n = if self.noise_lsb > 0 { (self.seed >> 16) % (2 * self.noise_lsb + 1) } else { 0 } as i32 - self.noise_lsb as i32;
+        let n = if self.noise_lsb > 0 {
+            (self.seed >> 16) % (2 * self.noise_lsb + 1)
+        } else {
+            0
+        } as i32
+            - self.noise_lsb as i32;
         ((mv / full * 4095.0).round() as i32 + n).clamp(0, 4095) as u32
     }
 }

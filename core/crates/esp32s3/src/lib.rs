@@ -2,7 +2,7 @@
 //! 核 1 在固件调用 ROM 的 ets_set_appcpu_boot_addr 时启动（HLE），两核按固定量子交替执行（确定性）。
 //!
 //! 与 C3 同族、寄存器布局一致的外设（UART、SYSTIMER、TIMG、SPI1 flash、LEDC、I2C、RMT、GP-SPI2、GDMA）复用 tryboard-esp32c3 的模型；
-//! S3 特有的中断矩阵、EXTMEM、49 脚 GPIO 在 periph.rs。
+//! S3 特有的中断矩阵、EXTMEM、49 脚 GPIO 在 periph.rs。Wi-Fi MAC 与虚拟世界在 tryboard-soc（与 C3 共用，按 S3 布局接上）。
 
 pub mod boot;
 pub mod hle;
@@ -12,15 +12,17 @@ pub mod usb;
 
 use periph::*;
 use std::collections::HashMap;
+use tryboard_esp32c3::crypto_hw::{self, AesHw, ShaHw};
 use tryboard_esp32c3::devices::gc9a01::Gc9a01;
 use tryboard_esp32c3::gdma::{DmaMem, Gdma, GdmaLayout};
 use tryboard_esp32c3::gpspi::GpSpi;
 use tryboard_esp32c3::i2c::I2c;
 use tryboard_esp32c3::iotrace::IoTrace;
 use tryboard_esp32c3::ledc::Ledc;
-use tryboard_esp32c3::rmt::{Rmt, RmtLayout, Ws2812};
 use tryboard_esp32c3::periph::{Systimer, Timg, Uart};
+use tryboard_esp32c3::rmt::{Rmt, RmtLayout, Ws2812};
 use tryboard_esp32c3::spiflash::SpiFlash;
+use tryboard_soc::wifi::{self, WifiLayout, WifiMac};
 use tryboard_xtensa::{sr, Bus, BusFault, Cpu, Exit};
 
 pub const CPU_HZ: u64 = tryboard_esp32c3::periph::CPU_HZ;
@@ -68,9 +70,18 @@ const RST_SYS: u32 = 1 << 31;
 const RST_PROCPU: u32 = 1 << 5;
 const RST_APPCPU: u32 = 1 << 4;
 pub const RTC_CNTL_RESET_STATE: u32 = 0x6000_8038;
+/// 硬件随机数（soc/esp32s3/include/soc/wdev_reg.h：WDEV_RND_REG）；C3 在 0x600260B0
+pub const WDEV_RND_REG: u32 = 0x6003_507C;
 /// RTC_CNTL_STORE0..7：在 RTC 域，CPU / 系统复位后保持（复位原因提示、启动时间、RTC 慢时钟校准值等）。
 /// STORE4 / STORE5（晶振 / APB 频率）由 ROM 每次启动重写，不必保留
-const RTC_STORE_KEEP: [u32; 6] = [0x6000_8050, 0x6000_8054, 0x6000_8058, 0x6000_805C, 0x6000_80C8, 0x6000_80CC];
+const RTC_STORE_KEEP: [u32; 6] = [
+    0x6000_8050,
+    0x6000_8054,
+    0x6000_8058,
+    0x6000_805C,
+    0x6000_80C8,
+    0x6000_80CC,
+];
 /// 圆屏 GC9A01 的接线约定（SPI2 的 IO_MUX 直连脚 + 三根 GPIO）
 pub mod lcd_pin {
     pub const SCLK: u32 = 12;
@@ -129,6 +140,13 @@ pub struct SocBus {
     pub lcd: Option<Box<Gc9a01>>,
     /// SAR ADC 单次采样（SENS）
     pub adc: SensAdc,
+    /// Wi-Fi MAC + 虚拟世界（Option 只为推进 / 发送时临时取出来借总线；平时恒为 Some）
+    pub wifi: Option<Box<WifiMac>>,
+    /// SHA / AES 加速器（WPA2 的 PBKDF2、MIC、密钥解封经 mbedTLS 走它们）
+    pub sha: ShaHw,
+    pub aes: AesHw,
+    /// WDEV_RND_REG 的状态（xorshift，固定种子，结果可复现）
+    pub rng: u32,
     pub efuse: [u32; 0x200 / 4],
     /// SYSTEM_CPU_INTR_FROM_CPU_0..3
     pub from_cpu: u32,
@@ -153,7 +171,10 @@ pub struct SocBus {
 impl Default for SocBus {
     fn default() -> Self {
         // GD25Q128：16MB
-        let spi1 = SpiFlash { jedec: 0x18_40_c8, ..Default::default() };
+        let spi1 = SpiFlash {
+            jedec: 0x18_40_c8,
+            ..Default::default()
+        };
         SocBus {
             sram: vec![0; SRAM_SIZE],
             rtc_slow: vec![0; (RTC_SLOW_HIGH - RTC_SLOW_LOW) as usize],
@@ -187,6 +208,10 @@ impl Default for SocBus {
             gdma: Gdma::new(GdmaLayout::S3),
             lcd: None,
             adc: SensAdc::default(),
+            wifi: Some(Box::new(WifiMac::new(WifiLayout::S3))),
+            sha: ShaHw::default(),
+            aes: AesHw::default(),
+            rng: 0x2545_f491,
             efuse: boot::default_efuse(),
             from_cpu: 0,
             usj_tx: Vec::new(),
@@ -208,8 +233,12 @@ impl Default for SocBus {
 #[inline(always)]
 fn rd(buf: &[u8], off: usize, size: u32) -> Option<u32> {
     match size {
-        4 => buf.get(off..off + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])),
-        2 => buf.get(off..off + 2).map(|b| u16::from_le_bytes([b[0], b[1]]) as u32),
+        4 => buf
+            .get(off..off + 4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])),
+        2 => buf
+            .get(off..off + 2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]) as u32),
         _ => buf.get(off).map(|b| *b as u32),
     }
 }
@@ -236,7 +265,11 @@ impl SocBus {
             return None;
         }
         let pa = (((e & 0x3fff) << 16) | (lin & 0xffff)) as usize;
-        Some(if e & MMU_PSRAM != 0 { Ext::Psram(pa) } else { Ext::Flash(pa) })
+        Some(if e & MMU_PSRAM != 0 {
+            Ext::Psram(pa)
+        } else {
+            Ext::Flash(pa)
+        })
     }
 
     /// SRAM 偏移（以 IRAM 0x40370000 为 0）
@@ -302,13 +335,17 @@ impl SocBus {
             0x6000_2000 => return self.spi1.read(off),
             0x6000_4000 => return self.gpio.read(off),
             0x6000_7000 if off < 0x200 => return self.efuse[(off / 4) as usize],
-            0x6000_9000 if (4..=0xc4).contains(&off) => return self.gpio.iomux[((off - 4) / 4) as usize],
+            0x6000_9000 if (4..=0xc4).contains(&off) => {
+                return self.gpio.iomux[((off - 4) / 4) as usize]
+            }
             0x6001_9000 => return self.ledc.read(off),
             0x6001_6000 => return self.rmt.read(off),
             0x6001_3000 => return self.i2c0.read(off),
             0x6002_7000 => return self.i2c1.read(off),
             0x6002_4000 => return self.spi2.read(off),
             0x6003_F000 => return self.gdma.read(off),
+            crypto_hw::SHA_BASE => return self.sha.read(off),
+            crypto_hw::AES_BASE => return self.aes.read(off),
             0x6000_8000 if off >= 0x800 => {
                 if let Some(v) = self.adc.read(off - 0x800) {
                     return v;
@@ -323,10 +360,16 @@ impl SocBus {
                 _ => {}
             },
             // I2C_MST_ANA_CONF0（regi2c_defs.h）：BBPLL 校准完成位（bit 24）——PLL 校准瞬间完成
-            0x6000_E000 if off == 0x40 => return self.regs.get(&a).copied().unwrap_or(0) | (1 << 24),
+            0x6000_E000 if off == 0x40 => {
+                return self.regs.get(&a).copied().unwrap_or(0) | (1 << 24)
+            }
             0x600C_2000 => {
                 let lv = self.levels();
-                let r = if off >= 0x800 { self.intm1.read(off - 0x800, &lv) } else { self.intm.read(off, &lv) };
+                let r = if off >= 0x800 {
+                    self.intm1.read(off - 0x800, &lv)
+                } else {
+                    self.intm.read(off, &lv)
+                };
                 if let Some(v) = r {
                     return v;
                 }
@@ -338,7 +381,27 @@ impl SocBus {
         if a == RTC_CNTL_RESET_STATE {
             return self.reset_reason | (self.reset_reason << 6);
         }
+        if a == WDEV_RND_REG {
+            // 每次读都给新值（esp_random、lwIP 端口 / DNS 事务号都靠它）
+            let mut x = self.rng;
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            self.rng = x;
+            return x;
+        }
+        if wifi::MAC_RANGE.contains(&a) {
+            if let Some(v) = self.wifi_mut().read(a, now) {
+                return v;
+            }
+        }
         if let Some(v) = boot::special_read(a, now) {
+            return v;
+        }
+        if let Some(v) = self
+            .wifi()
+            .rf_read(a, self.regs.get(&a).copied().unwrap_or(0))
+        {
             return v;
         }
         *self.unimpl.entry(a).or_insert(0) += 1;
@@ -366,8 +429,14 @@ impl SocBus {
             }
             0x6001_0000 => return self.uart1.write(off, v),
             // SPI1 用户命令：片选 CS1 时发给 PSRAM，否则发给 flash
-            0x6000_2000 if off == 0 && v & (1 << 18) != 0 && psram::OctalPsram::selected(&self.spi1.regs) => {
-                return self.psram_chip.user_transaction(&mut self.spi1.regs, &mut self.psram);
+            0x6000_2000
+                if off == 0
+                    && v & (1 << 18) != 0
+                    && psram::OctalPsram::selected(&self.spi1.regs) =>
+            {
+                return self
+                    .psram_chip
+                    .user_transaction(&mut self.spi1.regs, &mut self.psram);
             }
             0x6000_2000 => return self.spi1.write(off, v, &mut self.flash),
             // 复位位是脉冲（硬件自清零）：只记请求，存回去的值去掉它们，免得后续读改写再触发
@@ -377,7 +446,8 @@ impl SocBus {
                 } else if v & RST_APPCPU != 0 {
                     self.appcpu_reset = true;
                 }
-                self.regs.insert(a, v & !(RST_SYS | RST_PROCPU | RST_APPCPU));
+                self.regs
+                    .insert(a, v & !(RST_SYS | RST_PROCPU | RST_APPCPU));
                 return;
             }
             0x6000_4000 => {
@@ -399,7 +469,11 @@ impl SocBus {
             0x6001_9000 => return self.ledc.write(off, v, now),
             0x6001_6000 => return self.rmt.write(off, v, now),
             0x6001_3000 | 0x6002_7000 => {
-                let bus = if base == 0x6001_3000 { &mut self.i2c0 } else { &mut self.i2c1 };
+                let bus = if base == 0x6001_3000 {
+                    &mut self.i2c0
+                } else {
+                    &mut self.i2c1
+                };
                 bus.write(off, v, now);
                 if !bus.events.is_empty() {
                     self.iotrace.extend(&mut bus.events);
@@ -413,6 +487,20 @@ impl SocBus {
                 return;
             }
             0x6003_F000 => return self.gdma.write(off, v),
+            crypto_hw::SHA_BASE => {
+                let link = crypto_hw::sha_link(&self.gdma);
+                let mut s = std::mem::take(&mut self.sha);
+                s.write(off, v, link, self);
+                self.sha = s;
+                return;
+            }
+            crypto_hw::AES_BASE => {
+                let links = crypto_hw::aes_links(&self.gdma);
+                let mut x = std::mem::take(&mut self.aes);
+                x.write(off, v, links, self);
+                self.aes = x;
+                return;
+            }
             0x6000_8000 if off >= 0x800 => {
                 if self.adc.write(off - 0x800, v) {
                     return;
@@ -439,7 +527,11 @@ impl SocBus {
                 return;
             }
             0x600C_2000 => {
-                let done = if off >= 0x800 { self.intm1.write(off - 0x800, v) } else { self.intm.write(off, v) };
+                let done = if off >= 0x800 {
+                    self.intm1.write(off - 0x800, v)
+                } else {
+                    self.intm.write(off, v)
+                };
                 if done {
                     return;
                 }
@@ -451,8 +543,26 @@ impl SocBus {
             }
             _ => {}
         }
+        let mut v = v;
+        if wifi::MAC_RANGE.contains(&a) {
+            let mut w = self.wifi.take().expect("wifi");
+            let keep = w.write(a, v, now, self);
+            self.wifi = Some(w);
+            // None = MAC 模型已完全处理；否则照通用寄存器存（仍计入 unimpl）
+            match keep {
+                Some(x) => v = x,
+                None => return,
+            }
+        }
         *self.unimpl.entry(a).or_insert(0) += 1;
         self.regs.insert(a, v);
+    }
+
+    pub fn wifi(&self) -> &WifiMac {
+        self.wifi.as_deref().expect("wifi")
+    }
+    pub fn wifi_mut(&mut self) -> &mut WifiMac {
+        self.wifi.as_deref_mut().expect("wifi")
     }
 
     pub fn gpio_changed(&mut self, now: u64) {
@@ -486,6 +596,7 @@ impl SocBus {
         set(src::UART0, self.uart0.irq());
         set(src::UART1, self.uart1.irq());
         set(src::GPIO, self.gpio.irq());
+        set(src::WIFI_MAC, self.wifi().irq());
         set(src::LEDC, self.ledc.irq());
         set(usb::SRC_USB, self.usb.as_ref().is_some_and(|u| u.irq()));
         set(src::RMT, self.rmt.irq());
@@ -499,8 +610,14 @@ impl SocBus {
         for i in 0..3 {
             set(src::SYSTIMER_TARGET0 + i, self.systimer.irq(i as usize));
         }
-        set(src::TG0_T0, self.timg0.int_raw & self.timg0.int_ena & 1 != 0);
-        set(src::TG1_T0, self.timg1.int_raw & self.timg1.int_ena & 1 != 0);
+        set(
+            src::TG0_T0,
+            self.timg0.int_raw & self.timg0.int_ena & 1 != 0,
+        );
+        set(
+            src::TG1_T0,
+            self.timg1.int_raw & self.timg1.int_ena & 1 != 0,
+        );
         for i in 0..4 {
             set(src::FROM_CPU0 + i, self.from_cpu & (1 << i) != 0);
         }
@@ -639,6 +756,12 @@ impl SocBus {
                 self.gdma.out_done(ch);
             }
         }
+        let n10 = {
+            let mut w = self.wifi.take().expect("wifi");
+            let n = w.update(now, self);
+            self.wifi = Some(w);
+            n
+        };
         let n8 = match self.usb.take() {
             Some(mut u) => {
                 let n = u.update(now, self);
@@ -647,7 +770,16 @@ impl SocBus {
             }
             None => u64::MAX,
         };
-        self.next_event = n1.min(n2).min(n3).min(n4).min(n5).min(n6).min(n7).min(n8).min(n9);
+        self.next_event = n1
+            .min(n2)
+            .min(n3)
+            .min(n4)
+            .min(n5)
+            .min(n6)
+            .min(n7)
+            .min(n8)
+            .min(n9)
+            .min(n10);
         let lv = self.levels();
         // 边沿型线由核自己检测上升沿，这里把电平和本次上升沿一起给出
         let (l0, r0) = self.intm.lines(&lv);
@@ -672,6 +804,9 @@ impl DmaMem for SocBus {
     }
     fn rd32(&mut self, a: u32) -> u32 {
         self.mem_read(a, 4).unwrap_or(0)
+    }
+    fn wr8(&mut self, a: u32, v: u8) {
+        self.mem_write(a, 1, v as u32);
     }
     fn wr32(&mut self, a: u32, v: u32) {
         self.mem_write(a, 4, v);
@@ -758,7 +893,11 @@ impl Bus for SocBus {
 pub enum Stop {
     Budget,
     /// 进入了 ROM 的异常向量（app 还没装自己的 VECBASE，或异常发生在 app 接管之前）
-    Fault { cause: u32, epc: u32, vaddr: u32 },
+    Fault {
+        cause: u32,
+        epc: u32,
+        vaddr: u32,
+    },
     /// BREAK / BREAK.N
     Break(u32),
     /// 碰到没实现的 HLE 函数
@@ -826,7 +965,10 @@ fn run_core(
             }
             Exit::Waiti => {
                 // 空闲：快进到下一个外设事件或 CCOMPARE 定时器中断
-                let target = bus.next_event.min(cpu.next_timer_event().unwrap_or(u64::MAX)).min(idle_until);
+                let target = bus
+                    .next_event
+                    .min(cpu.next_timer_event().unwrap_or(u64::MAX))
+                    .min(idle_until);
                 if target > cpu.cycles {
                     cpu.cycles = target;
                 } else {
@@ -875,7 +1017,12 @@ impl Esp32s3 {
     }
 
     /// 调试用：单步跑，记录 PC 不连续处（跳转目标）
-    pub fn run_traced(&mut self, budget: u64, ring: &mut std::collections::VecDeque<u32>, cap: usize) -> Stop {
+    pub fn run_traced(
+        &mut self,
+        budget: u64,
+        ring: &mut std::collections::VecDeque<u32>,
+        cap: usize,
+    ) -> Stop {
         let end = self.cpu.cycles.saturating_add(budget);
         let mut last = self.cpu.pc;
         while self.cpu.cycles < end {
@@ -915,7 +1062,10 @@ mod tests {
 
     #[test]
     fn mmu_flash_and_psram() {
-        let mut b = SocBus { flash: vec![0; 1 << 20], ..Default::default() };
+        let mut b = SocBus {
+            flash: vec![0; 1 << 20],
+            ..Default::default()
+        };
         b.flash[0x2_0004] = 0xab;
         b.psram[0x1_0008] = 0xcd;
         // DROM 0x3C010000 → flash 页 2；DROM 0x3C800000（线性页 128）→ PSRAM 页 1
@@ -943,7 +1093,10 @@ mod tests {
         Bus::store(&mut b, 0x6000_8000, 4, 1 << 31).unwrap();
         assert_eq!(b.reset_request, Some(3));
         b.reset_reason = 12;
-        assert_eq!(Bus::load(&mut b, RTC_CNTL_RESET_STATE, 4).unwrap() & 0xfff, 12 | (12 << 6));
+        assert_eq!(
+            Bus::load(&mut b, RTC_CNTL_RESET_STATE, 4).unwrap() & 0xfff,
+            12 | (12 << 6)
+        );
     }
 
     #[test]
@@ -956,7 +1109,10 @@ mod tests {
         Bus::store(&mut b, 0x6000_2004, 4, 0).unwrap();
         Bus::store(&mut b, 0x6000_2028, 4, 15).unwrap();
         Bus::store(&mut b, 0x6000_2000, 4, 1 << 18).unwrap();
-        assert_eq!((Bus::load(&mut b, 0x6000_2058, 4).unwrap() >> 8) & 0xff, 0x0d);
+        assert_eq!(
+            (Bus::load(&mut b, 0x6000_2058, 4).unwrap() >> 8) & 0xff,
+            0x0d
+        );
         // 片选回 CS0：同一命令发给 flash，不碰 PSRAM
         let n = b.psram_chip.commands;
         Bus::store(&mut b, 0x6000_2034, 4, 2).unwrap();

@@ -2,13 +2,14 @@
 //!
 //! 为什么要模拟：IDF 默认打开 MBEDTLS_HARDWARE_SHA / AES，Wi-Fi 的 WPA2 四次握手（PBKDF2、
 //! HMAC-SHA1 MIC、AES Key Unwrap）全经过它们；不建模时寄存器读回 0，sha_hal 发现全零摘要直接 abort。
-//! 两者的 DMA 模式要从 GDMA 描述符取 / 写数据：通过 SoC 的 GDMA 模型（`gdma.rs`，C3 排布）按
+//! C3 与 S3 的寄存器排布相同（hwcrypto_reg.h），模型不依赖具体 SoC：寄存器写时由 SoC 先从 GDMA 取链头，再借总线（`DmaMem`）。
+//! 两者的 DMA 模式要从 GDMA 描述符取 / 写数据：通过 SoC 的 GDMA 模型（`gdma.rs`，按芯片排布）按
 //! OUT/IN_PERI_SEL 找到接到本外设的通道、取它配置的链表头。搬数据仍走本文件的 gather / scatter：
 //! IDF 的 AES / SHA 驱动先配链表、再启动加速器，GDMA 的 start 位不一定在触发之前置上，
 //! 不能用 `Gdma::take_out`（它只认已启动的通道）。
 
+use crate::gdma::{DmaMem, Gdma};
 use crate::wifi::crypto::{sha1_block, Aes};
-use crate::SocBus;
 
 pub const SHA_BASE: u32 = 0x6003_b000;
 pub const AES_BASE: u32 = 0x6003_a000;
@@ -150,106 +151,121 @@ impl ShaHw {
     }
 }
 
-impl SocBus {
-    /// 某个外设接到的 GDMA 通道的描述符链头（out = 内存 → 外设）
-    fn gdma_link(&self, peri: u32, out: bool) -> Option<u32> {
-        let ch = self.gdma.channel_for_peri(peri, out)?;
-        Some(self.gdma.configured_link(ch, out))
-    }
+/// 某个外设接到的 GDMA 通道的描述符链头（out = 内存 → 外设）
+fn gdma_link(gdma: &Gdma, peri: u32, out: bool) -> Option<u32> {
+    let ch = gdma.channel_for_peri(peri, out)?;
+    Some(gdma.configured_link(ch, out))
+}
 
-    /// 沿发送描述符链（lldesc）读出最多 n 字节
-    fn dma_gather(&mut self, mut d: u32, n: usize) -> Vec<u8> {
-        let mut out = Vec::with_capacity(n);
-        for _ in 0..256 {
-            if out.len() >= n || d < 0x3fc0_0000 {
-                break;
-            }
-            let w0 = self.mem_read(d, 4).unwrap_or(0);
-            let buf = self.mem_read(d + 4, 4).unwrap_or(0);
-            let len = (w0 >> 12) & 0xfff;
-            for i in 0..len {
-                out.push(self.mem_read(buf + i, 1).unwrap_or(0) as u8);
-            }
-            // 用完交还软件
-            self.mem_write(d, 4, w0 & !(1 << 31));
-            let next = self.mem_read(d + 8, 4).unwrap_or(0);
-            if w0 & (1 << 30) != 0 || next == 0 {
-                break;
-            }
-            d = next;
+/// SHA 的 DMA 输入链头（寄存器写之前从 GDMA 取，免得同时借用 GDMA 和总线）
+pub fn sha_link(gdma: &Gdma) -> Option<u32> {
+    gdma_link(gdma, PERI_SHA, true)
+}
+
+/// AES 的 DMA（输入, 输出）链头
+pub fn aes_links(gdma: &Gdma) -> (Option<u32>, Option<u32>) {
+    (
+        gdma_link(gdma, PERI_AES, true),
+        gdma_link(gdma, PERI_AES, false),
+    )
+}
+
+/// 沿发送描述符链（lldesc）读出最多 n 字节
+fn dma_gather(mem: &mut dyn DmaMem, mut d: u32, n: usize) -> Vec<u8> {
+    let mut out = Vec::with_capacity(n);
+    for _ in 0..256 {
+        if out.len() >= n || d < 0x3fc0_0000 {
+            break;
         }
-        out.truncate(n);
-        out
-    }
-
-    /// 沿接收描述符链写入数据，最后一个置 EOF，全部交还软件
-    fn dma_scatter(&mut self, mut d: u32, data: &[u8]) {
-        let mut off = 0usize;
-        for _ in 0..256 {
-            if d < 0x3fc0_0000 {
-                break;
-            }
-            let w0 = self.mem_read(d, 4).unwrap_or(0);
-            let buf = self.mem_read(d + 4, 4).unwrap_or(0);
-            let size = (w0 & 0xfff) as usize;
-            let k = size.min(data.len() - off);
-            for i in 0..k {
-                self.mem_write(buf + i as u32, 1, data[off + i] as u32);
-            }
-            off += k;
-            let next = self.mem_read(d + 8, 4).unwrap_or(0);
-            let last = off >= data.len() || next == 0;
-            let w0n = (w0 & 0xfff) | ((k as u32) << 12) | if last { 1 << 30 } else { 0 };
-            self.mem_write(d, 4, w0n);
-            if last {
-                break;
-            }
-            d = next;
+        let w0 = mem.rd32(d);
+        let buf = mem.rd32(d + 4);
+        let len = (w0 >> 12) & 0xfff;
+        for i in 0..len {
+            out.push(mem.rd8(buf + i));
         }
+        // 用完交还软件
+        mem.wr32(d, w0 & !(1 << 31));
+        let next = mem.rd32(d + 8);
+        if w0 & (1 << 30) != 0 || next == 0 {
+            break;
+        }
+        d = next;
     }
+    out.truncate(n);
+    out
+}
 
-    pub(crate) fn sha_read(&self, off: u32) -> u32 {
-        let s = &self.sha;
+/// 沿接收描述符链写入数据，最后一个置 EOF，全部交还软件
+fn dma_scatter(mem: &mut dyn DmaMem, mut d: u32, data: &[u8]) {
+    let mut off = 0usize;
+    for _ in 0..256 {
+        if d < 0x3fc0_0000 {
+            break;
+        }
+        let w0 = mem.rd32(d);
+        let buf = mem.rd32(d + 4);
+        let size = (w0 & 0xfff) as usize;
+        let k = size.min(data.len() - off);
+        for i in 0..k {
+            mem.wr8(buf + i as u32, data[off + i]);
+        }
+        off += k;
+        let next = mem.rd32(d + 8);
+        let last = off >= data.len() || next == 0;
+        let w0n = (w0 & 0xfff) | ((k as u32) << 12) | if last { 1 << 30 } else { 0 };
+        mem.wr32(d, w0n);
+        if last {
+            break;
+        }
+        d = next;
+    }
+}
+
+impl ShaHw {
+    pub fn read(&self, off: u32) -> u32 {
         match off {
-            0x00 => s.mode,
-            0x0c => s.block_num,
+            0x00 => self.mode,
+            0x0c => self.block_num,
             0x18 => 0, // BUSY：瞬间完成
             0x2c => 0x2007_0000,
-            0x40..=0x5f => s.h[((off - 0x40) / 4) as usize],
-            0x80..=0xbf => s.text[((off - 0x80) / 4) as usize],
+            0x40..=0x5f => self.h[((off - 0x40) / 4) as usize],
+            0x80..=0xbf => self.text[((off - 0x80) / 4) as usize],
             _ => 0,
         }
     }
 
-    pub(crate) fn sha_write(&mut self, off: u32, v: u32) {
+    /// 寄存器写；DMA 模式按 GDMA 里接到 SHA 的通道取数据
+    pub fn write(&mut self, off: u32, v: u32, link: Option<u32>, mem: &mut dyn DmaMem) {
         match off {
-            0x00 => self.sha.mode = v & 7,
-            0x0c => self.sha.block_num = v & 0x3f,
+            0x00 => self.mode = v & 7,
+            0x0c => self.block_num = v & 0x3f,
             0x10 | 0x14 => {
                 let mut b = [0u8; 64];
-                for (i, w) in self.sha.text.iter().enumerate() {
+                for (i, w) in self.text.iter().enumerate() {
                     b[4 * i..4 * i + 4].copy_from_slice(&w.to_le_bytes());
                 }
-                self.sha.process(&b, off == 0x10);
+                self.process(&b, off == 0x10);
             }
             0x1c | 0x20 => {
-                let n = self.sha.block_num as usize;
-                let data = match self.gdma_link(PERI_SHA, true) {
-                    Some(d) => self.dma_gather(d, n * 64),
+                let n = self.block_num as usize;
+                let data = match link {
+                    Some(d) => dma_gather(mem, d, n * 64),
                     None => Vec::new(),
                 };
                 for (i, blk) in data.as_chunks::<64>().0.iter().enumerate() {
-                    self.sha.process(blk, off == 0x1c && i == 0);
+                    self.process(blk, off == 0x1c && i == 0);
                 }
             }
-            0x40..=0x5f => self.sha.h[((off - 0x40) / 4) as usize] = v,
-            0x80..=0xbf => self.sha.text[((off - 0x80) / 4) as usize] = v,
+            0x40..=0x5f => self.h[((off - 0x40) / 4) as usize] = v,
+            0x80..=0xbf => self.text[((off - 0x80) / 4) as usize] = v,
             _ => {}
         }
     }
+}
 
-    pub(crate) fn aes_read(&self, off: u32) -> u32 {
-        let a = &self.aes;
+impl AesHw {
+    pub fn read(&self, off: u32) -> u32 {
+        let a = self;
         match off {
             0x00..=0x1f => a.key[(off / 4) as usize],
             0x20..=0x2f => a.text_in[((off - 0x20) / 4) as usize],
@@ -266,11 +282,17 @@ impl SocBus {
         }
     }
 
-    pub(crate) fn aes_write(&mut self, off: u32, v: u32) {
+    pub fn write(
+        &mut self,
+        off: u32,
+        v: u32,
+        links: (Option<u32>, Option<u32>),
+        mem: &mut dyn DmaMem,
+    ) {
         if off == 0x48 {
-            return self.aes_trigger();
+            return self.trigger(links, mem);
         }
-        let a = &mut self.aes;
+        let a = self;
         match off {
             0x00..=0x1f => a.key[(off / 4) as usize] = v,
             0x20..=0x2f => a.text_in[((off - 0x20) / 4) as usize] = v,
@@ -285,44 +307,43 @@ impl SocBus {
         }
     }
 
-    fn aes_cipher(&self) -> (Aes, bool) {
-        let a = &self.aes;
-        // MODE：位 2 = 解密，低 2 位 0 = 128 位、2 = 256 位（C3 没有 192）
-        let klen = if a.mode & 3 == 2 { 32 } else { 16 };
+    fn cipher(&self) -> (Aes, bool) {
+        // MODE：位 2 = 解密，低 2 位 0 = 128 位、2 = 256 位（C3 / S3 都没有 192）
+        let klen = if self.mode & 3 == 2 { 32 } else { 16 };
         let mut key = Vec::with_capacity(32);
-        for w in &a.key[..klen / 4] {
+        for w in &self.key[..klen / 4] {
             key.extend_from_slice(&w.to_le_bytes());
         }
-        (Aes::new(&key), a.mode & 4 != 0)
+        (Aes::new(&key), self.mode & 4 != 0)
     }
 
-    fn aes_trigger(&mut self) {
-        let (aes, dec) = self.aes_cipher();
-        if self.aes.dma_enable == 0 {
+    fn trigger(&mut self, links: (Option<u32>, Option<u32>), mem: &mut dyn DmaMem) {
+        let (aes, dec) = self.cipher();
+        if self.dma_enable == 0 {
             // 单块模式：TEXT_IN → TEXT_OUT，只有 ECB
-            let mut b = words_to_block(&self.aes.text_in);
+            let mut b = words_to_block(&self.text_in);
             if dec {
                 aes.decrypt(&mut b);
             } else {
                 aes.encrypt(&mut b);
             }
-            self.aes.text_out = block_to_words(&b);
-            self.aes.blocks += 1;
+            self.text_out = block_to_words(&b);
+            self.blocks += 1;
             return;
         }
-        let n = self.aes.block_num as usize * 16;
-        let input = match self.gdma_link(PERI_AES, true) {
-            Some(d) => self.dma_gather(d, n),
+        let n = self.block_num as usize * 16;
+        let input = match links.0 {
+            Some(d) => dma_gather(mem, d, n),
             None => vec![0; n],
         };
-        let mut iv = words_to_block(&self.aes.iv);
-        let out = aes_stream(&aes, dec, self.aes.block_mode, &mut iv, &input);
-        self.aes.iv = block_to_words(&iv);
-        if let Some(d) = self.gdma_link(PERI_AES, false) {
-            self.dma_scatter(d, &out);
+        let mut iv = words_to_block(&self.iv);
+        let out = aes_stream(&aes, dec, self.block_mode, &mut iv, &input);
+        self.iv = block_to_words(&iv);
+        if let Some(d) = links.1 {
+            dma_scatter(mem, d, &out);
         }
-        self.aes.blocks += self.aes.block_num as u64;
-        self.aes.state = 2;
+        self.blocks += self.block_num as u64;
+        self.state = 2;
     }
 }
 
@@ -416,6 +437,7 @@ fn xor(a: &mut [u8; 16], b: &[u8; 16]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::SocBus;
 
     fn hex(s: &str) -> Vec<u8> {
         let s: String = s.chars().filter(|c| c.is_ascii_hexdigit()).collect();

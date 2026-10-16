@@ -379,3 +379,14 @@
 - 行为：关卡都不带 `--servo`，所以 CLI、网页验收、npm 包三方指纹与合并前 main 相同（npm_parity 全一致）；只有实验台实时运行按台面接线接舵机、走供电网络。worker `boot` 同时带 `servo` / `power` 与逻辑分析仪 `ioWatch`，tick 同时带 `elec` / `brownouts`，`io` 消息照旧
 - accept.sh：levels / replay / elec / interact / traceio 一律要求最后一行是汇总行 `[x] PASS（`，否则记"脚本没跑完"
 - ⌘K "量 3V3" 的提示改为指向工具条万用表（P1-04 已有）
+
+## 2026-10-16 · S3 Wi-Fi（P2-08）：MAC 模型移到 tryboard-soc
+- 决定：Wi-Fi 整个模块（MAC 行为模型、虚拟世界、局域网 / TCP、WPA2、密码学原语）从 `tryboard-esp32c3` 移到 `tryboard-soc`（此前是空 crate），`tryboard_esp32c3::wifi` 保留为再导出。MAC 不再写成 `impl SocBus`，而是独立的 `WifiMac`，内存经 `tryboard_soc::Mem`；GDMA 的 `DmaMem` 改为它的别名（多了 `wr8`）
+  - 理由：S3 与 C3 的 Wi-Fi MAC 是同一代硬件（寄存器、描述符、接收元数据头、中断源都相同，S3 固件实跑验证），只需一份模型；放进 soc 让 S3 不必为 Wi-Fi 再借 C3 的 SocBus 内部
+  - 替代：留在 esp32c3 里按布局参数化（像 RMT / GDMA 那样）——改动更小，但 MAC 与 C3 SocBus 的字段（regs、now、mem_read）耦合，S3 用不了；新建 tryboard-wifi crate——soc 本来就是"公共件"的位置，没必要多一个
+- 决定：`WifiLayout` 目前只区分射频轮询表（`rf_polls`）；C3 / S3 两份表内容相同。S3 特有的两处放在 S3 SoC 侧而不是 Wi-Fi 模型里：WDEV_RND_REG（0x6003507C，虽然落在 MAC 地址范围）与 SENS 温度传感器 READY（libphy 校准时读温度）——它们是芯片外设，不是 MAC
+- 决定：SHA / AES 加速器（`crypto_hw.rs`）改成不依赖 SoC：寄存器写前 SoC 从自己的 GDMA 取链头，再把加速器临时取出、借总线 DMA。S3 直接复用（地址与 GDMA 外设号相同）。替代：S3 另写一份——重复
+- 决定：MAC 的密钥表（0x60033814 有效位图、0x60034400 起 32 槽）写入时在 `WifiMac` 里另存副本，同时照旧存进通用寄存器表（读回、unimpl 计数不变）。理由：模型不再能直接看 SocBus.regs
+- 决定：S3 Wi-Fi 帧计数进供电网络（`Machine::wifi_frames` 以前对 S3 恒为 0），发射电流用已有的 S3 参数 340 mA（数据手册 802.11b 1 Mbps 21 dBm）
+- 决定：S3 验收固件 `firmware/s3-wifi-{init,scan,connect,http,wpa2}` 直接编 C3 版的 main.c（CMake SRCS 指过去），sdkconfig 只有目标与 16MB flash，默认双核；accept 用例与 C3 版期望文本逐条相同。没做 s3-wifi-wpa2-bad（与 C3 共享同一 AP 逻辑，错口令路径已由 C3 用例覆盖）
+- CLI：`--wifi-log` 改为机器级（C3 / S3 都能打空中日志）；新增 `--unimpl N` 列前 N 个未建模寄存器（默认 12）

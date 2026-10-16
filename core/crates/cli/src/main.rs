@@ -9,7 +9,7 @@ fn usage() -> ! {
     eprintln!(
         "用法:
   tryboard run <flash.bin>（芯片按镜像头自动识别：ESP32-C3 / ESP32-S3）[--rom <rom.elf>] [--seconds <模拟秒数>] [--expect <文本>] [--uart-in <文本>]
-               [--script \"0.5:gpio9=0; 0.6:gpio9=z; 1.0:uart=ping\\n; 1.2:env=35,45,101325\"] [--inputs <网页导出的输入日志.txt>] [--trace N] [--gpio-log] [--pwm-log PIN] [--ws2812-log]
+               [--script \"0.5:gpio9=0; 0.6:gpio9=z; 1.0:uart=ping\\n; 1.2:env=35,45,101325\"] [--inputs <网页导出的输入日志.txt>] [--trace N] [--unimpl N] [--gpio-log] [--pwm-log PIN] [--ws2812-log]
                [--trace-io <事件.txt>] [--trace-pins all|4,8,…]（逻辑分析仪事件：GPIO / PWM / WS2812 / I2C 事务，按周期盖戳）
                [--i2c ssd1306@0x3c,bme280@0x76] [--env 温度,湿度,气压Pa] [--oled]
                [--spi gc9a01]（S3：SCLK=12 MOSI=11 CS=10 DC=14 RST=13 背光=15；C3：SCLK=6 MOSI=7 CS=10 DC=5 RST=4 背光=3）[--lcd-ppm <最后一帧.ppm>]
@@ -317,7 +317,9 @@ fn run(args: &[String]) {
     }
     let un = m.unimpl();
     eprintln!("[tryboard] 未建模寄存器 {} 个，访问最多的：", un.len());
-    for (a, n) in un.iter().take(12) {
+    // --unimpl N：列出前 N 个（默认 12）
+    let top = opt(args, "--unimpl").and_then(|s| s.parse().ok()).unwrap_or(12);
+    for (a, n) in un.iter().take(top) {
         eprintln!("    0x{:08x}  {:>8} 次", a, n);
     }
     if let Hw::C3(c) = &mut m.hw {
@@ -354,13 +356,6 @@ fn run(args: &[String]) {
                 }
             }
         }
-        if args.iter().any(|a| a == "--wifi-log") {
-            let w = &c.bus.wifi;
-            eprintln!("[tryboard] Wi-Fi 空中日志：发送 {} 帧，接收 {} 帧，丢弃 {} 帧", w.tx_frames, w.rx_frames, w.rx_dropped);
-            for l in &w.log {
-                eprintln!("    {l}");
-            }
-        }
         if args.iter().any(|a| a == "--dump-intc") {
             let ic = &c.bus.intc;
             eprintln!("[tryboard] 中断线 使能=0x{:08x} 边沿=0x{:08x} 阈值={} 当前线={}", ic.enable, ic.edge, ic.thresh, c.cpu.irq_line);
@@ -369,6 +364,13 @@ fn run(args: &[String]) {
                     eprintln!("    源 {src:>2} → 线 {line:>2}（优先级 {}）", ic.pri[*line as usize]);
                 }
             }
+        }
+    }
+    if args.iter().any(|a| a == "--wifi-log") {
+        let w = m.wifi();
+        eprintln!("[tryboard] Wi-Fi 空中日志：发送 {} 帧，接收 {} 帧，丢弃 {} 帧", w.tx_frames, w.rx_frames, w.rx_dropped);
+        for l in &w.log {
+            eprintln!("    {l}");
         }
     }
     if let Some(list) = opt(args, "--peek") {

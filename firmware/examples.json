@@ -261,7 +261,7 @@
  {
   "id": "wifi-http",
   "title": "Wi-Fi：联网发 HTTP 请求",
-  "about": "连上开放热点 TryBoard-WiFi，DHCP 拿到 192.168.4.100，再用 esp_http_client 请求 http://tryboard.local（mDNS）和 example.com（DNS）。网络是模拟器里的虚拟世界，不会访问真实互联网。WPA2 加密热点暂不支持。",
+  "about": "连上开放热点 TryBoard-WiFi，DHCP 拿到 192.168.4.100，再用 esp_http_client 请求 http://tryboard.local（mDNS）和 example.com（DNS）。网络是模拟器里的虚拟世界，不会访问真实互联网。加密热点（WPA2-PSK）见验收固件 wifi-wpa2。",
   "tags": [
    "✓ 仿真验证",
    "Wi-Fi",
@@ -607,6 +607,35 @@
      "pin": 4
     }
    ]
+  }
+ },
+ {
+  "id": "s3-wifi-scan",
+  "chip": "esp32s3",
+  "title": "Wi-Fi（S3）：扫描周围热点",
+  "about": "与 C3 版同一份源码，目标换成 ESP32-S3（双核，Wi-Fi 任务在核 0）。真实 ESP-IDF Wi-Fi 驱动扫描虚拟世界里的 4 个热点；S3 与 C3 的 Wi-Fi MAC 是同一代硬件，模拟器共用一个 MAC 模型。",
+  "tags": [
+   "✓ 仿真验证",
+   "Wi-Fi",
+   "802.11"
+  ],
+  "scene": {
+   "parts": []
+  }
+ },
+ {
+  "id": "s3-wifi-http",
+  "chip": "esp32s3",
+  "title": "Wi-Fi（S3）：联网发 HTTP 请求",
+  "about": "与 C3 版同一份源码：连上开放热点 TryBoard-WiFi，DHCP 拿到 192.168.4.100，再请求 http://tryboard.local（mDNS）和 example.com（DNS）。网络是模拟器里的虚拟世界，不会访问真实互联网；发射电流按 S3 数据手册（802.11b 21 dBm 约 340 mA）计入供电。",
+  "tags": [
+   "✓ 仿真验证",
+   "Wi-Fi",
+   "DHCP",
+   "HTTP"
+  ],
+  "scene": {
+   "parts": []
   }
  }
 ]

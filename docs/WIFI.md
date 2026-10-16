@@ -1,4 +1,4 @@
-# Wi-Fi（ESP32-C3）逆向笔记与实现
+# Wi-Fi（ESP32-C3 / ESP32-S3）逆向笔记与实现
 
 目标：用户上传的 .bin（IDF / Arduino）在模拟器里能扫描、连上虚拟 AP、拿到 IP、做 HTTP。
 信息来源：ESP-IDF v5.5.1 的预编译 Wi-Fi 库（libpp / libnet80211 / libphy，Apache-2.0 二进制）反汇编、ROM ELF 符号、IDF 头文件。不参考任何 GPL 实现。
@@ -20,6 +20,8 @@
 | 0x60033D14 | libpp `hal_init`（MAC） | 写位 1 后等位 0 |
 
 模拟前端寄存器（regi2c）已在 HLE 里存取；校准算出来的值不影响后续功能（射频不真实发射）。
+
+（模型代码现在在 `crates/soc/src/wifi/`，C3 / S3 共用，见文末「S3」一节；轮询表是 `WifiLayout::rf_polls`。）
 
 顺带修了一个 SYSTIMER 的通用 bug：单次模式比较器在计数 ≥ 目标时会反复置中断位，而真机只在装载（COMPx_LOAD / 使能）后触发一次。esp_timer 把闹钟设在过去时会导致中断风暴，Wi-Fi 启动正好触发了这个情形。
 
@@ -99,3 +101,23 @@ CPU 修正：ESP32-C3 硬件支持非对齐访存（`esf_buf_alloc_dynamic` 往�
 ### 错口令
 AP 收到 MIC 不对的 2/4 静默丢弃，按 hostapd 节奏重发 1/4（100ms、1s、1s）。IDF 收到第 4 个 1/4 后自己去认证，事件里 `reason=15`（4WAY_HANDSHAKE_TIMEOUT）；之后它把这个 BSSID 拉黑（libnet80211 `cnx_add_to_blacklist`），重连扫描不再选它，报 `reason=205`（CONNECTION_FAIL）。若终端一直不放弃，AP 在第 4 次发出 1/4 后 1s 发去认证（原因 15）。
 
+
+## S3（P2-08：s3-wifi-init / scan / connect / http / wpa2 ✅）
+
+结论：S3 与 C3 的 Wi-Fi MAC 是同一代硬件，C3 的 MAC 模型不改寄存器就能用。模型从 `crates/esp32c3/src/wifi/` 搬到 `crates/soc/src/wifi/`（tryboard-soc），
+`WifiMac::new(WifiLayout::C3 | WifiLayout::S3)`，通过 `tryboard_soc::Mem`（rd8 / rd32 / wr8 / wr32）借芯片总线读写描述符；两颗芯片的 SocBus 都在 MMIO 分发里把 0x60033000–0x60036000 交给它。
+
+逐项核对（依据：IDF 头文件 + S3 固件实跑）：
+| 项 | C3 | S3 | 来源 |
+|---|---|---|---|
+| MAC 寄存器（中断、发送队列、接收链、TSF、密钥表） | 0x60033000 起 | 相同 | 同一份 MAC 模型在 S3 上走完扫描 → 认证 → 关联 → 四次握手 → DHCP → HTTP |
+| 中断源 | ETS_WIFI_MAC_INTR_SOURCE = 0 | 相同（S3 经两核中断矩阵，Wi-Fi 任务在核 0） | soc/*/include/soc/interrupts.h |
+| 接收元数据头 wifi_pkt_rx_ctrl_t | 12 字 | 相同（头文件里 S3 与 C3 走同一分支） | esp_wifi/include/local/esp_wifi_types_native.h |
+| 描述符（lldesc）、地址高位 0x3FC00000 | — | 相同（S3 DRAM 0x3FC88000 起） | — |
+| PHY 校准轮询 | 0x6000E050 / 0x6000E04C / 0x60006174 / 0x60033D14 | 相同，**另加** SENS_SAR_TSENS_CTRL（0x60008850）：libphy `temperature_sensor_get_raw_value` 写 DUMP_OUT（位 24）后等 READY（位 8），读 OUT（位 7..0） | `--trace` 停在该函数的轮询；S3 periph.rs 的 SensAdc 给 READY 与原始值 104（≈ 25 ℃） |
+| 硬件随机数 WDEV_RND_REG | 0x600260B0 | **0x6003507C**（落在 MAC 地址范围里，先于 MAC 分发处理） | soc/*/include/soc/wdev_reg.h |
+| SHA / AES 加速器 | 0x6003B000 / 0x6003A000，GDMA 外设号 7 / 6 | 相同 | reg_base.h、hwcrypto_reg.h、gdma_channel.h；`crypto_hw.rs` 改成不依赖具体 SoC（寄存器写前由 SoC 取 GDMA 链头） |
+| 蓝牙 / 共存寄存器 | — | Wi-Fi-only 固件启动期只读写 BT 基址 0x60011000 两个字共 18 次，读回上次写入值即可，不需要专门应答 | `--unimpl 500` 全表 |
+
+没用到、没做的：S3 的 SHA-384/512 模式（WPA2 只用 SHA-1）、TSENS 随温度变化、802.11n / 省电、蓝牙。
+QEMU 对照：乐鑫 QEMU 的 esp32s3 机器没有 Wi-Fi 模型（只有 ESP32 的 open_eth 网卡），无法做 S3 Wi-Fi 对照；判定与 C3 版相同的串口输出。
