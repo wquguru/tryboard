@@ -198,3 +198,11 @@
 - 第 06 关的"装配无警告"命令行不判，check.py 明确打印一行说明
 - 装配引擎与模板分开（templates.ts）；spin / lens 两套模板的"装法影响"只改成品画面（舵盘偏角、透镜放大），标估算，不改模拟器
 - 替代：06 关保留 min = max 并在任务书里强调——仍会挂掉大量"先初始化 PWM"的正常写法，放弃
+
+## 2026-10-16 · 工作台外壳 app.html：一页四步、hash 路由、一个 store
+- 决定：新页面 `web/app.html?work=<weather|spin|lens|blank>#<shop|bench|assemble|product>`。作品放查询串（换作品 = 换固件和台面，整页重载可以接受），步骤放 hash（切步骤不重载）。实时模拟（LiveSim）和 3D 台面（createBench）在 `src/app/session.ts` 里整页只建一份，步骤切换只换面板内容，所以模拟时间连续。步骤用 `registerStep(id, { mount(el, ctx), unmount() })` 注册，后续任务覆盖占位即可
+- store：`src/app/store.ts` 自写（不引依赖），一个对象、浅合并 `set`、`subscribe(fn, keys?)` 按字段过滤通知。selection 是 `{ kind, id }`，构建树和台面拾取（ScenePickApi.onPick）写同一个字段，属性面板只读它。实时字段（读数、模拟时间）只更新面板里带 `data-live` 的节点，不重建面板，免得拖滑块时被打断
+- 与 3D 的耦合只经 `scene-api.ts`：外壳把 bench 当 `Partial<ScenePickApi>`，方法存在才调；board3d 未实现时点不到台面但不报错
+- 检查点进度：只有自己上传的固件通过才计数（与关卡页一致），存 `localStorage['tryboard-app-checks:<work>']`。第 06 关的"装配无警告"在实验台上显示为"·（在组装步骤判定）"，不计入通过与否——与命令行 check.py 一致，组装接进来（P0-16）后再补判
+- LiveSim 加了 `onTick` / `onBoot` / `setEnv`：外壳要拿引脚电平驱动 3D、要计"运行 #n"、要改湿度气压；旧页面不受影响
+- 替代：每步一个独立 HTML（切步骤必然重载模拟，违背 P0-01）；引入状态库（违反"不加依赖"）
