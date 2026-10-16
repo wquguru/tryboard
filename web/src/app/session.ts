@@ -12,6 +12,7 @@ import { expandLevels, type Level } from '../checks';
 import levelsJson from '../../../firmware/levels.json';
 import type { AppState, Env, Session, WorkDef } from './types';
 import type { Store } from './store';
+import { currentTheme, onTheme } from '../theme';
 
 interface Example {
   id: string;
@@ -45,7 +46,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const bench = createBench(stage);
   // 拾取接口由 board3d 另行实现；没实现的方法就不调（点不到台面，但不报错）
   const pick = bench as unknown as Partial<ScenePickApi>;
-  pick.setTheme?.('light');
+  // 3D 台面跟随页面主题（DESIGN §2 暗色）
+  pick.setTheme?.(currentTheme());
+  onTheme((t) => pick.setTheme?.(t));
   const levels = expandLevels(levelsJson as Level[]);
   let consoleBuf = '';
   let lastOled: Uint8Array | null = null;

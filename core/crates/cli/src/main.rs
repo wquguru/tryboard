@@ -221,7 +221,11 @@ fn run(args: &[String]) {
             // 软件复位：重新上电（flash / NVS 保留），最多 50 次，防止崩溃重启死循环跑满
             resets += 1;
             eprintln!("[tryboard] 软件复位（原因 {r}），第 {resets} 次重新上电");
-            if resets > 50 || m.reboot(r).is_err() {
+            if resets > 50 {
+                break;
+            }
+            if let Err(e) = m.reboot(r) {
+                eprintln!("[tryboard] 重新上电失败：{e}");
                 break;
             }
             stop = Stop::Budget;

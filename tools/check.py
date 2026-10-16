@@ -49,6 +49,11 @@ def canonical_report(err: str) -> str:
     return ''.join(l + '\n' for l in gpio + ws + oled + lcd + pwm)
 
 
+def jsnum(v) -> str:
+    """数字转字符串与 JS 的 String(x) 一致：整数不带小数点"""
+    return str(int(v)) if float(v).is_integer() else repr(float(v))
+
+
 def evaluate(t: dict, out: str, report: str):
     """返回 [(通过?, 说明)]；规则与 web/src/checks.ts 一致"""
     res = []
@@ -80,7 +85,8 @@ def evaluate(t: dict, out: str, report: str):
                 lo, hi = min(win), max(win)
             tol = pw.get('tol', 0.01)
             ok = abs(f - pw['freq']) <= pw['freq'] * 0.01 and abs(lo - pw['min']) <= tol and abs(hi - pw['max']) <= tol
-            when = f"，{pw['from']} s 以后" if 'from' in pw else ''
+            # 数字按 JS 的写法（1.0 写成 1），与网页 / npm 包逐字一致
+            when = f"，{jsnum(pw['from'])} s 以后" if 'from' in pw else ''
             res.append((ok, f"GPIO{pw['pin']} PWM {f:.0f} Hz{when}，占空比 {lo:.3f}–{hi:.3f}（约 {lo * 1000 / f:.2f}–{hi * 1000 / f:.2f} ms）"))
             if 'steps' in pw:
                 seq, i, miss = [d for d, _ in ch], 0, []
@@ -144,7 +150,7 @@ def inputs_file(path: str) -> str:
     log = json.loads(text)
     esc = lambda x: x.replace('\n', '\\n')
     # 与 JS 的数字转字符串一致：整数不带小数点
-    num = lambda v: str(int(v)) if float(v).is_integer() else repr(float(v))
+    num = jsnum
     lines = ['# 由 check.py 从 InputLog JSON 转出']
     for e in log['events']:
         k = e['kind']

@@ -180,7 +180,7 @@ ${how ? `<details class="tg" open><summary><span>装法</span><span class="tn-m"
     const off = c.store.get().assembly?.effects.sensorOffset ?? 0;
     const first = (FIRST3[w] ?? []).map(([t, d]) => `<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('');
     const cannot = (CANNOT[w] ?? []).map(([t, d]) => `<div class="res na"><span class="mk">×</span><span><b>${esc(t)}</b> · ${esc(d)}</span></div>`).join('');
-    c.shell.props.innerHTML = `${p ? `${sec('选中')}<div class="ph">${esc(p.name)}</div><p class="note">${esc(p.about)}</p>` : ''}
+    c.shell.props.innerHTML = `${previewing ? '<p class="note">手机只读预览：还没在电脑上装完，这里按默认装法显示成品（拖动可转）。</p>' : ''}${p ? `${sec('选中')}<div class="ph">${esc(p.name)}</div><p class="note">${esc(p.about)}</p>` : ''}
 ${sec('成品 · 同一份固件，模拟没有重启')}
 ${row('运行', 'run')}
 ${weather ? `${row('气象站周围', 'air')}${row('BME280 读到', 'rt')}${row('OLED 单位', 'unit')}${row('表盘指针', 'needle')}${row('板载 RGB', 'rgb')}${row('蜂鸣器', 'buzz')}${row('热源', 'heat')}` : row('舵机', 'servo')}
@@ -339,6 +339,8 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     svgProduct.update(frame(), c.store.get().env.temp, c.store.get().assembly?.effects ?? {});
   }
 
+  let previewing = false;
+
   function renderLocked(el: HTMLElement, why: string, to: 'assemble' | 'bench') {
     const c = ctx!;
     el.innerHTML = `<div class="pnl lockcard" role="status"><div class="sec">④ 成品 · 还没解锁</div><p class="ph-t">${esc(why)}</p><p class="muted">成品用装好的状态跑：传感器放在哪、舵盘怎么装，都会影响你在这里看到的。</p><div class="btns"><button type="button" class="btn primary" id="toPrev">${to === 'assemble' ? '去组装' : '回实验台'}</button></div></div>`;
@@ -377,17 +379,21 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
         return;
       }
       const a = c.store.get().assembly;
-      if (!a || a.placed.length < a.total) {
+      const locked = !a || a.placed.length < a.total;
+      // 手机只读（DESIGN §3）：手机上没法上传固件、装配，锁着就永远看不到成品；改成按默认装法预览，3D 照样能转
+      const preview = locked && matchMedia('(max-width: 760px)').matches;
+      previewing = preview;
+      if (locked && !preview) {
         renderLocked(el, a ? `先在「组装」装完（${a.placed.length}/${a.total}）` : '先在「组装」把零件装进外壳', 'assemble');
         return;
       }
       if (!node) build(c);
       el.appendChild(node!);
       // 装法的温漂只在成品里生效
-      c.session.setSensorOffset(a.effects.sensorOffset ?? 0);
+      c.session.setSensorOffset(a?.effects.sensorOffset ?? 0);
       room = c.store.get().env.temp;
       air = room;
-      if (!events.length && c.store.get().run) event('▶', `开机 · 运行 #${c.store.get().run}${a.effects.sensorOffset ? `，传感器 +${a.effects.sensorOffset} ℃` : ''}`);
+      if (!events.length && c.store.get().run) event('▶', `开机 · 运行 #${c.store.get().run}${a?.effects.sensorOffset ? `，传感器 +${a.effects.sensorOffset} ℃` : ''}`);
       scene3d?.start();
       if (svgProduct) loopSvg();
       timer = window.setInterval(() => {

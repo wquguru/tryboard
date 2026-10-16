@@ -280,3 +280,14 @@
 - 针脚实时值来自 worker 每个 tick 已有的电平 / 使能 / PWM 占空比与频率，没有新增采样；示波器按记录下来的占空比、频率合成方波（相位示意），普通 GPIO 画 tick 采样的电平，I2C 线只画示意，电源脚电压按标称写"估算"（电路求解是 P1-01）
 - 接线检查新写 W1–W5（`wirecheck.ts`）而不是直接调 `catalog/rules.ts`：采购规则吃的是元件库 id + 模版接线，实验台吃的是场景推出来的线（id 与 3D 一致）；W2 / W5 的来源、可信度沿用 R17 / R15。index.html 的元件编辑器只能改场景，造不出 5 V 接 GPIO / 没电阻 / 缺地，所以用 `?debug=1` 的 `__tbApp.injectWiring()` 造用例；改接 / 拔线不改 3D 画法（不动 board3d.ts），只标红 + 说明
 - 外壳公共接口变化：`Session` 加 `heat / setHeat / setPower / wireMods / setWireMods / restoreScene / onTick / onBoot / onRunEnd / bootCount / snapshot / mark / seek / continueRun`，`frame` 加 `pwmFreq / gpio / enable / gpioHi / enableHi`；`AppState` 加 `editRev / runNo / hist`；`StepCtx.hist`；`Card.place / onHide`；接线与零件信息从 bench.ts 挪到 `app/wiring.ts`；`saveBom` 导出。board3d.ts 未改
+
+## 2026-10-16 · 本地 npm 包 `tryboard`（P1-14）与暗色 / 手机只读（P1-15）
+- 打包：`packages/tryboard/`（private，不发布）。`tools/build_npm.sh` 用 web/node_modules 里已有的 esbuild（vite 自带，不新增依赖）把 `src/cli.ts` 连同网页的 `checks.ts`（判定 + 指纹）、`simrun.ts`（运行循环）、`inputlog.ts` 打成一个 `dist/cli.mjs`，再 `npm pack`。判定只有网页一份，CLI 不另写
+- 运行循环从 `verify-worker.ts` 抽到 `web/src/simrun.ts`（纯函数，无 DOM / Worker），网页验收与 npm 包共用；`imageChip` 也挪进去，assets.ts 转调
+- 对拍时发现两处与原生 CLI 的分歧并修正：(1) wasm `tb_run` 在软件复位时往控制台插一行"[试板] 软件复位，重新上电"，原生只写 stderr——simrun 把它从串口输出里去掉（网页实时串口照旧显示）；(2) 原生崩溃重启最多 50 次就停，wasm 无上限——simrun 第 51 次复位就停。两处都让网页验收与 check.py 指纹在"固件崩溃重启"时也一致。另外 check.py 的 `from` 秒数改按 JS 写法（1.0 → 1），原生 CLI 重新上电失败时打印原因
+- ROM：构建时从 `third_party/esp-rom-elfs` 拷两颗芯片的 ELF（esp32c3_rev3、esp32s3_rev0）进包，附 `LICENSE-esp-rom-elfs.txt`（Apache-2.0 全文）、`NOTICE.txt`（来源 release、README 版权行、ROM 第三方清单）；包目录的产物（dist / wasm / rom / levels.json / tgz）全部 .gitignore，仓库只有脚本（LICENSING 规则 1）
+- `--ref` 不进 npm 包（不带参考固件）；`check` 支持 `--level` / `--all` / `--inputs`（脚本文本或 InputLog JSON），`run` 支持 `--seconds --i2c --env --spi --inputs --script --pwm-log`，串口到 stdout、观察记录与指纹到 stderr
+- 网页命令提示改为 `npx tryboard check app.bin --level NN`，下面注明"本地包，尚未发布"并保留 `tools/check.py` 给仓库开发者
+- 暗色：DESIGN §2 变量在 `:root[data-theme=dark]` 反转，另加 `--surface / --stage-bg / --on-accent` 等原来写死的颜色变量。`<head>` 内联一行脚本在首帧前按 localStorage `tb-theme` 或系统设置定 data-theme（不闪白）；`web/src/theme.ts` 负责切换按钮与系统切换跟随；3D 台面调 `setTheme`，成品场景换背景 / 桌面色。暗色下主按钮文字用深色（亮蓝底白字对比度不够）；零件缩略图垫浅底
+- 手机只读：沿用已有的 ≤ 760px 堆叠断点（覆盖 ≤ 600px 的要求）；新增：组装 / 成品步骤隐藏空台面不占位、清单勾选不可改、时间线不再用 scrollIntoView（会把整页拽到底部）；成品锁着时手机上按默认装法预览 3D 成品（手机上没法上传固件，否则永远看不到成品），属性面板写明"手机只读预览"
+- 替代：(a) CLI 直接 `node --experimental-strip-types` 跑网页 TS——要求 Node 23+ 且 import 要写扩展名；(b) 暗色用 `prefers-color-scheme` 媒体查询 + 选择器两套变量——要写两遍，改用首帧前内联脚本只写一遍

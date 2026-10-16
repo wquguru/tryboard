@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 主题在首帧前定好（web/src/theme.ts 同一规则：localStorage tb-theme，否则跟随系统） -->
+    <script>try{var t=localStorage.getItem('tb-theme')}catch(e){}document.documentElement.dataset.theme=t==='dark'||t==='light'?t:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'</script>
     <title>试板 TryBoard</title>
     <meta name="description" content="挑一个作品，先在网页里把它做一遍：买什么、固件写没写对、装起来什么样。支持 ESP32 系列芯片，跑的是真实固件。" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect x=%222%22 y=%222%22 width=%2212%22 height=%2212%22 rx=%222%22 fill=%22%230D99FF%22/%3E%3C/svg%3E" />
@@ -86,9 +88,9 @@
       <section class="cli" aria-label="命令行">
         <div>
           <span class="sec">让 AI 自己验收</span>
-          <p>网页上的每个检查点都有同一条命令行验收。过没过看退出码，运行指纹和网页上的一样。</p>
+          <p>网页上的每个检查点都有同一条命令行验收。过没过看退出码，运行指纹和网页上的一样。<span class="muted">（npm 本地包，尚未发布；仓库里也可以用 tools/check.py）</span></p>
         </div>
-        <pre class="code mono">$ tools/check.py weather.bin --level 04
+        <pre class="code mono">$ npx tryboard check weather.bin --level 04
 第 04 关 传感器：<span class="ok">通过</span>  指纹 1177·041d
   <span class="ok">✓</span> 温度 9 次读数，最大偏差 0（容差 0.02）
   <span class="ok">✓</span> 湿度 9 次读数，最大偏差 0（容差 0.1）

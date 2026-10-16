@@ -54,8 +54,8 @@
 | P1-11 | 小黄、透镜小人拆检查点（各 2–3 个）走完整条线 | 参考固件全过 | ☐ |
 | P1-12 | 开发板库（合宙、XIAO、M5、微雪圆屏）+ 版本差异规则 | 规则用例 | ☐ |
 | P1-13 | C3 接 SPI2 / GDMA（圆屏） | 固件验收 | ☐ |
-| P1-14 | `npx tryboard check`（wasm 内核打包的 npm CLI，本地包，不发布） | 与 tools/check.py 指纹一致 | ☐ |
-| P1-15 | 手机只读视图；暗色模式 | agent-browser 390 宽截图 | ☐ |
+| P1-14 | `npx tryboard check`（wasm 内核打包的 npm CLI，本地包，不发布） | 与 tools/check.py 指纹一致 | ☑ packages/tryboard（tools/build_npm.sh，约 0.9 MB tgz）；8 关参考 + 3 个错配用例与 check.py 输出、指纹、退出码逐字一致（tools/npm_parity.sh，进 accept.sh） |
+| P1-15 | 手机只读视图；暗色模式 | agent-browser 390 宽截图 | ☑ 跟随系统 + 右上角切换（localStorage）；app / home / licenses 暗色，3D 台面与成品背景同步；≤ 760px 只读堆叠，成品锁着时手机上按默认装法预览（Reviews/ab/P1-15.md） |
 
 ## P2 · 更多外设和作品（约 8 周+）
 做完的标志：作品库 ≥ 8 个，覆盖"会动、会响、会感应"。

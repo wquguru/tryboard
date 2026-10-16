@@ -8,6 +8,7 @@ import { productStep } from './steps/product';
 import { loadBom, loadPlaced, shopStep } from './steps/shop';
 import type { AppState, StepCtx, WorkId } from './types';
 import { createBenchHistory } from './benchhist';
+import { initTheme, themeToggle } from '../theme';
 
 export { registerStep } from './shell';
 
@@ -38,6 +39,9 @@ const store = createStore<AppState>({
   runNo: 0,
   hist: { n: 0, cur: -1, seeked: false, busy: false, runs: 0 },
 });
+initTheme();
+// 右上角：亮 / 暗切换（跟随系统，点过就记住）
+document.querySelector('.topright')!.append(themeToggle());
 const shell = createShell();
 
 // 左栏底的串口：只留最近约 200 KB

@@ -178,6 +178,11 @@ function fmtG(x: number) {
   return s.includes('e') ? s : s.replace(/\.?0+$/, '');
 }
 
-/** 网页命令行提示：与 tools/check.py 的用法一致 */
-export const checkCommand = (l: Level) => `tools/check.py my.bin --level ${l.id}`;
+/** 给用户和 AI 的验收命令：本地 npm 包 packages/tryboard（与 tools/check.py 同规则、同指纹；本地包，尚未发布） */
+export const checkCommand = (l: Level) => `npx tryboard check app.bin --level ${l.id}`;
+/** 仓库开发者用的同一条验收（原生内核） */
+export const devCheckCommand = (l: Level) => `tools/check.py app.bin --level ${l.id}`;
+/** 命令提示下面那行说明（HTML） */
+export const checkCommandNote = (l: Level) =>
+  `<p class="note">本地包，尚未发布：在仓库里先 <span class="mono">tools/build_npm.sh</span>，再 <span class="mono">npx ./packages/tryboard/tryboard-0.1.0.tgz check …</span>。仓库开发者也可以用 <span class="mono">${devCheckCommand(l)}</span>，结论和指纹相同。</p>`;
 export { esc };

@@ -166,7 +166,7 @@ export function assembleStep(): StepImpl {
     const left = c.work.checkpoints.filter((id) => !(s.checks[id]?.ok && s.checks[id].own));
     el.innerHTML = `<div class="pnl lockcard" role="status"><div class="sec">③ 组装 · 还没解锁</div><p class="ph-t">实验台的检查点全部通过才能组装</p>
 <p class="muted">现在 <b class="mono">${d}/${n}</b>。还差：${left.map((id) => `<span class="mono">${esc(id)}</span> ${esc(c.session.levels.find((l) => l.id === id)?.title ?? '')}`).join('、')}</p>
-<p class="muted">只有你自己上传的固件通过才算（参考固件通过不算），和命令行 <span class="mono">tools/check.py</span> 同一套判定。</p>
+<p class="muted">只有你自己上传的固件通过才算（参考固件通过不算），和命令行 <span class="mono">npx tryboard check</span> / <span class="mono">tools/check.py</span> 同一套判定。</p>
 <div class="btns"><button type="button" class="btn primary" id="toBench">回实验台</button></div></div>`;
     el.querySelector<HTMLButtonElement>('#toBench')!.onclick = () => {
       c.store.set({ selection: { kind: 'checkpoint', id: left[0] ?? c.work.checkpoints[0] } });

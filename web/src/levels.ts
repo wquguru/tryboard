@@ -1,7 +1,7 @@
 // 关卡页：7 关，每关的通过条件来自 firmware/levels.json，判定规则与 tools/check.py 相同。
 // 参考固件通过只说明关卡本身能过；只有你上传的固件通过才记进度（存在本机浏览器里）。
 import levelsJson from '../../firmware/levels.json';
-import { bootOptions, checkCommand, type Level } from './checks';
+import { bootOptions, checkCommand, checkCommandNote, type Level } from './checks';
 import { verifyLevel, type VerifyOutcome } from './verify';
 import { fetchBuf } from './assets';
 import { LiveSim } from './live';
@@ -97,10 +97,10 @@ ${resultHtml(l)}
 <span class="lv-k">交给 AI 的任务书</span>
 <pre class="lv-brief">${esc(l.brief)}</pre>
 <div class="lv-btns"><button type="button" class="btn" id="copy">复制任务书</button></div>
-${canRun ? `<span class="lv-k">验收命令 · 你和 AI 用同一条</span><pre class="code">${esc(checkCommand(l))}</pre>` : ''}
+${canRun ? `<span class="lv-k">验收命令 · 你和 AI 用同一条</span><pre class="code">${esc(checkCommand(l))}</pre>${checkCommandNote(l)}` : ''}
 </div>`;
   $('copy').onclick = async () => {
-    const text = l.brief + (canRun ? `\n\n通过条件：${l.pass}\n验收：${checkCommand(l)}` : '');
+    const text = l.brief + (canRun ? `\n\n通过条件：${l.pass}\n验收：${checkCommand(l)}（退出码 0 = 通过；本地包，尚未发布）` : '');
     try {
       await navigator.clipboard.writeText(text);
       $('copy').textContent = '已复制';

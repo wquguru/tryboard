@@ -1,6 +1,9 @@
 // 作品首页（DESIGN §1、§5）：三张作品卡。卡片先放示意图；点「看真实固件跑」换成模拟器驱动的成品画面，
 // 同一时间只跑一份（每份是一个 wasm worker），看不见就暂停。
 import { LiveSim } from './live';
+import { themeToggle } from './theme';
+
+document.querySelector('.pg-head nav')!.after(themeToggle());
 import { createShowcase, type ShowKind } from './views/showcase';
 import { createProductView } from './views/product';
 import { createLensProduct, createSpinProduct } from './views/lcdproducts';

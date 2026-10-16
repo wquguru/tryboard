@@ -35,7 +35,7 @@ body.page {
 .hero h1 { margin: 0; font-size: 28px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.3; }
 .hero .lead { margin: 0; color: var(--muted); font-size: 14px; max-width: 640px; }
 .flow { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 8px 0 0; padding: 0; font-size: 11px; color: var(--muted); }
-.flow li { display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px; border: 1px solid var(--line); border-radius: 999px; background: #fff; }
+.flow li { display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
 .flow li span { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--field); color: var(--fg); font-size: 10px; }
 .flow li + li::before { content: '→'; margin: 0 4px 0 -2px; color: var(--line); order: -1; display: none; }
 
@@ -44,7 +44,7 @@ body.page {
 .wk {
   border: 1px solid var(--line);
   border-radius: var(--r);
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--shadow);
   overflow: hidden;
   display: flex;
@@ -52,7 +52,7 @@ body.page {
   min-width: 0;
 }
 .wk.live { border-color: var(--accent); }
-.wk-prev { background: radial-gradient(120% 90% at 50% 40%, #ffffff, #eceff3); }
+.wk-prev { background: var(--stage-bg); }
 .wk-status { font-size: 11px; color: var(--muted); padding: 6px 14px; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--field); }
 .wk.live .wk-status { color: var(--accent); }
 .wk-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
@@ -64,7 +64,7 @@ body.page {
 .wk-act { display: flex; gap: 6px; margin-top: auto; padding-top: 10px; }
 .wk-act .btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
 .page a.btn { color: var(--fg); }
-.page a.btn.primary { color: #fff; }
+.page a.btn.primary { color: var(--on-accent); }
 .fine { font-size: 11px; color: var(--muted); margin: 10px 0 0; }
 
 /* 预览里沿用成品示意 / 成品视图（views/），把旧的米色、墨绿底统一成台面的浅灰底。
@@ -83,8 +83,8 @@ body.page {
 /* 角上的规格小字、成品视图的环境箱在卡片里太小太挤：规格写在卡片正文，串口最后一行写在状态行 */
 .wk-prev svg > text[y='30'], .wk-prev svg > text[y='34'], .wk-prev svg > text[data-k='angle'], .wk-prev svg > text[data-k='mag'] { display: none; }
 .wk-prev svg > rect[x='60'][y='420'], .wk-prev svg > rect[x='76'][y='456'], .wk-prev svg > text[x='78'][y='446'], .wk-prev svg > text[data-k='envTemp'], .wk-prev .tb-env { display: none; }
-.wk-prev .tb-tag, .wk-prev .as-hot { background: var(--accent); color: #fff; }
-.wk-prev .tb-env button { border-color: var(--accent); color: var(--accent); background: #fff; }
+.wk-prev .tb-tag, .wk-prev .as-hot { background: var(--accent); color: var(--on-accent); }
+.wk-prev .tb-env button { border-color: var(--accent); color: var(--accent); background: var(--surface); }
 .wk-prev .as-b { font: 500 12px var(--sans); min-height: 28px; padding: 0 12px; }
 
 /* ---------- 其他入口 ---------- */
@@ -96,7 +96,7 @@ body.page {
   padding: 14px 16px 16px;
   border: 1px solid var(--line);
   border-radius: var(--r);
-  background: #fff;
+  background: var(--surface);
 }
 .alt-card:hover { border-color: var(--accent); background: var(--accent-bg); }
 .alt-card .sec { margin: 0; }
@@ -129,8 +129,8 @@ body.page {
 .lic th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11px; padding: 6px 10px; border-bottom: 1px solid var(--line); }
 .lic td { padding: 7px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: top; word-break: break-word; }
 .lic td.mono, .lic .mono { font-size: 11px; }
-.lic .tbl { border: 1px solid var(--line); border-radius: var(--r); overflow-x: auto; background: #fff; }
-.lic details { border: 1px solid var(--line); border-radius: 8px; margin: 6px 0; background: #fff; }
+.lic .tbl { border: 1px solid var(--line); border-radius: var(--r); overflow-x: auto; background: var(--surface); }
+.lic details { border: 1px solid var(--line); border-radius: 8px; margin: 6px 0; background: var(--surface); }
 .lic details summary { cursor: pointer; padding: 7px 12px; font-size: 12px; }
 .lic details pre { margin: 0; padding: 10px 12px; border-top: 1px solid var(--line-soft); background: var(--field); font: 11px/1.5 var(--mono); white-space: pre-wrap; max-height: 360px; overflow: auto; }
 .lic a, .lic .note a { color: var(--accent); }

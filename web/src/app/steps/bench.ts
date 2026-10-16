@@ -7,7 +7,7 @@ import { partId, partInfo, usedPins, wiresOf, type WireMods } from '../wiring';
 import { checkWiring, faultByWire, type WireFault } from '../wirecheck';
 import { PinTrace, bit, drawScope, pinKind, powerVolts, pwmText } from '../pinscope';
 import { diffRuns, summarize, type BenchStep } from '../history';
-import { checkCommand, type Level } from '../../checks';
+import { checkCommand, checkCommandNote, type Level } from '../../checks';
 import { verifyLevel } from '../../verify';
 import { fetchBuf } from '../../assets';
 import { servoAngle, ledCss } from '../../views/common';
@@ -476,7 +476,7 @@ ${row('运行', '', 'run')}${row('模拟时间', '', 'sim')}
       ? r.rows.map((x) => `<div class="res ${x.ok === null ? 'na' : x.ok ? 'ok' : 'bad'}"><span class="mk">${x.ok === null ? '·' : x.ok ? '✓' : '✗'}</span><span>${esc(x.text)}</span></div>`).join('')
       : '';
     const result = r
-      ? `${sec('验收结果')}<div class="verdict-line ${r.ok ? 'ok' : 'bad'}">${r.ok ? '✓ 通过' : '✗ 未通过'} <span class="muted">· ${esc(r.who)}${r.sim ? ` · 模拟 ${r.sim.toFixed(2)} s` : ''}</span></div>${rows}${row('运行指纹', esc(r.fingerprint), '', 'fp')}<p class="note">同一固件、同样输入，网页和命令行 <span class="mono">tools/check.py</span> 都是这个指纹。${r.ok && !r.own ? '参考固件通过只说明检查点本身能过，不算你的进度。' : ''}</p>`
+      ? `${sec('验收结果')}<div class="verdict-line ${r.ok ? 'ok' : 'bad'}">${r.ok ? '✓ 通过' : '✗ 未通过'} <span class="muted">· ${esc(r.who)}${r.sim ? ` · 模拟 ${r.sim.toFixed(2)} s` : ''}</span></div>${rows}${row('运行指纹', esc(r.fingerprint), '', 'fp')}<p class="note">同一固件、同样输入，网页和命令行 <span class="mono">npx tryboard check</span>（以及仓库里的 <span class="mono">tools/check.py</span>）都是这个指纹。${r.ok && !r.own ? '参考固件通过只说明检查点本身能过，不算你的进度。' : ''}</p>`
       : '';
     el.innerHTML = `${sec(`检查点 ${esc(l.id)}`)}<div class="ph">${esc(l.title)}</div><p class="goal">${esc(l.goal)}</p>
 ${sec('通过条件')}<div class="field">${esc(l.pass)}</div>
@@ -484,10 +484,10 @@ ${sec('通过条件')}<div class="field">${esc(l.pass)}</div>
 <div class="btns">${l.ref ? `<button type="button" class="btn" id="runRef" ${s.verifying ? 'disabled' : ''}>用参考固件试</button>` : ''}</div>
 ${result}
 ${sec('交给 AI 的任务书')}<pre class="brief">${esc(l.brief)}</pre><div class="btns"><button type="button" class="btn" id="copyBrief">复制任务书</button></div>
-${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCommand(l))}</pre>`;
+${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCommand(l))}</pre>${checkCommandNote(l)}`;
     el.querySelector<HTMLButtonElement>('#copyBrief')!.onclick = async (ev) => {
       const b = ev.currentTarget as HTMLButtonElement;
-      const text = `${l.brief}\n\n通过条件：${l.pass}\n验收：${checkCommand(l)}`;
+      const text = `${l.brief}\n\n通过条件：${l.pass}\n验收：${checkCommand(l)}（退出码 0 = 通过；本地包，尚未发布）`;
       try {
         await navigator.clipboard.writeText(text);
         b.textContent = '已复制';
