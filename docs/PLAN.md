@@ -70,7 +70,7 @@
 | P2-06 | I2S + GDMA 接收：MAX98357A 放音、INMP441（验收用固定 WAV，网页可接麦克风） | 固件验收；Web Audio 采样比对 | ☑ s3-i2s-tone（喇叭 440.0 Hz，网页输出端也测得 440.0 Hz）、s3-i2s-mic（I2S1，读回 WAV 1000.0 Hz / RMS 0.3533）；C3 的 I2S0 只有单元测试 |
 | P2-07 | LVGL：先测速度，够则支持动画 | 基准报告 | ◐ 能跑动画、模拟时间帧率正确；整屏重画的界面网页只有约 0.2–0.4× 实时（未达 0.5×），见 STATUS「LVGL」与 Reviews/ab/P2-07.md |
 | P2-08 | S3 Wi-Fi（复用 C3 MAC 模型） | wifi-http S3 版 | ☑ 2026-10-16：MAC 模型移到 tryboard-soc 共用；s3-wifi-init / scan / connect / http / wpa2 验收通过，网页 s3-wifi-http（Reviews/ab/P2-08.md） |
-| P2-09 | 新作品：旋钮台灯、超声波尺子、体感小人、USB 小键盘（各含检查点、参考固件、采购模版、成品） | 参考固件全过 | ☐ |
+| P2-09 | 新作品：旋钮台灯、超声波尺子、体感小人、USB 小键盘（各含检查点、参考固件、采购模版、成品） | 参考固件全过 | ☑ 2026-10-16：lamp / ruler / tilt 三条作品线（各 3 个检查点、9 份参考固件、采购模版、平面装配 + 一处装法影响、three.js 成品、首页卡片自动出现）；新判定 `ws2812.last`、`pwm.beeps`、`lcd_colors.cy`（check.py / checks.ts 同步）；check.py --ref --all 与网页指纹逐关一致（Reviews/ab/P2-09.md）。USB 小键盘由 P2-12 完成；可选的「会说话的小黄」没做；新作品组装是平面 SVG，参数化 3D 外壳没做 |
 | P2-10 | 拍照（path tracer 静帧）/ 录 10 秒 | 生成文件 | ☑ 2026-10-16：没装 three-gpu-pathtracer，改用 2× 输出 + 超采样 + 渐变背景；录像 MediaRecorder webm 含声音；media.mjs 检查文件（Reviews/ab/P2-10.md） |
 | P2-11 | 线长影响 I2C、天线遮挡（标"必须上真机"） | 用例 | ☑ 2026-10-16：确定性模型（上升时间 / RSSI），accept weather-i2c-long / -nack、wifi-scan-antenna / wifi-connect-antenna；实验台 W6、组装滑块（Reviews/ab/P2-11.md） |
 | P2-12 | USB 键盘作品展示（已有 OTG） | 成品页 | ☑ 2026-10-16：作品 usbkey（三检查点 + 采购 + 组装 + 3D 成品打字），首页卡片由作品定义生成（Reviews/ab/P2-12.md） |
