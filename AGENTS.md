@@ -57,6 +57,8 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | 构建 wasm + 网页 | `tools/build_web.sh` |
 | 本地试网页 | `cd web && npm run dev` |
 | 网页冒烟测试 | `node tools/webtest/webtest.mjs <示例> <期望文本>`（截图到 `Reviews/web/`） |
+| 关卡验收 | `tools/check.py <flash.bin> --level 04`；`tools/check.py --ref --all` 跑全部参考固件（关卡定义在 `firmware/levels.json`） |
+| 关卡 / 装配 / 首页网页测试 | `node tools/webtest/levels.mjs`（含拖拽装配、网页与命令行指纹对拍） |
 
 ## 6. 工作方式
 1. **改需求先改文档**，再写代码。自主决定写进 `docs/DECISIONS.md`（日期、决定、理由、替代）。
@@ -82,14 +84,14 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | M0 | ☑ 内核起步（ESP32-C3） | RV32IMC 核过 riscv-tests；直接启动 IDF `hello_world` 打印与 QEMU 一致；FreeRTOS 调度、`vTaskDelay` 正常 |
 | M1 | ☑ GPIO 与网页 | `blink` 在浏览器里驱动 3D 板载 LED；wasm 首包 ≤ 2MB（不含 3D 素材）；串口面板 |
 | M2 | ◐ 常用外设 | LEDC、RMT（WS2812）、I2C（SSD1306、BME280）、SPI、ADC、定时器；各有验收固件 |
-| M3 | ◐ 面包板与 3D 世界 | 拖放元件、连线、舵机 / 灯带 / 屏幕在 3D 里有反馈 |
+| M3 | ◐ 面包板与 3D 世界 | 拖放元件、连线、舵机 / 灯带 / 屏幕在 3D 里有反馈；拖拽装配成成品（SVG，已有） |
 | M4 | ◐ ESP32-S3（Xtensa LX7） | 同 M0–M2 验收在 S3 上通过 |
 | M5 | ☐ USB OTG | S3 冒充键盘 / 网卡，浏览器里的虚拟电脑 / 手机能枚举并响应 |
 | M6 | ☐ Wi-Fi | 在 netif 层替换，HTTP / MQTT 示例可达浏览器侧虚拟网络 |
 | M7 | ☐ BLE | VHCI 层虚拟控制器 + 虚拟手机 |
 | M8 | ☐ 音频 / 摄像头 | I2S 麦克风 / 喇叭接 Web Audio；摄像头读 3D 渲染画面；小智类项目可跑 |
 | M9 | ◐ 选型决策层 | 项目模板 → 芯片 / 板 / BOM / 引脚 / 功耗，带可信度标注 |
-| M10 | ☐ 发布准备 | 落地页、示例库、授权清单。**上线前必须问人** |
+| M10 | ◐ 发布准备 | 落地页（home.html）、7 关路线（levels.html）、示例库、授权清单。**上线前必须问人** |
 
 ## 9. 子代理与上下文预算
 2026-10-15 会话复盘：缓存读取共 4.95 亿 token，其中 3.74 亿来自 10 个 fork 子代理。每个 fork 启动时都继承了主会话 33–66 万的上下文，而且每次工具调用都要重读一遍。主会话本身也一路涨到 68 万才压缩。规则：

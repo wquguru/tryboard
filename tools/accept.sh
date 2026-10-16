@@ -116,6 +116,10 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
 sys.exit(1 if bad else 0)
 PY
 
+echo -e "\n## 关卡（firmware/levels.json，参考固件）\n\`\`\`" >> $REPORT
+tools/check.py --ref --all >> $REPORT 2>&1 || fail=1
+echo '```' >> $REPORT
+
 if [ $NO_WEB = 0 ]; then
   echo -e "\n## 网页（Chrome 无头 + wasm）" >> $REPORT
   tools/build_web.sh >/dev/null 2>&1 || { echo "构建失败" >> $REPORT; fail=1; }
@@ -127,6 +131,9 @@ if [ $NO_WEB = 0 ]; then
     echo "$r" | grep -q FAIL && fail=1
     echo "$r" | grep -q 页面错误 && fail=1
   done
+  r=$(node tools/webtest/levels.mjs 2>&1 | grep '^\[levels\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q PASS || fail=1
   r=$(node tools/webtest/editor.mjs 2>&1 | tail -1)
   echo "- 元件编辑器（上传固件 + 加 BME280 / LED）：$r" >> $REPORT
   echo "$r" | grep -q PASS || fail=1

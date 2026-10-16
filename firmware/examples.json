@@ -492,6 +492,7 @@
   },
   "controls": [
    "env"
-  ]
+  ],
+  "assembly": true
  }
 ]

@@ -33,6 +33,16 @@ for ex in catalog:
     out.append(ex)
 json.dump(out, open(os.path.join(root, 'web/public/fw/examples.json'), 'w'), ensure_ascii=False, indent=1)
 print('示例', len(out), '个')
+# 关卡页的参考固件（不一定在示例清单里）
+for lv in json.load(open(os.path.join(root, 'firmware/levels.json'))):
+    ref = lv.get('ref')
+    src = os.path.join(root, 'firmware/build', ref or '', 'flash.bin')
+    if not ref: continue
+    if not os.path.exists(src):
+        print('关卡参考固件未构建:', ref); continue
+    d = os.path.join(root, 'web/public/fw', ref)
+    os.makedirs(d, exist_ok=True)
+    shutil.copy(src, d)
 PY
 ls -la "$PUB/wasm/tryboard.wasm" | awk '{print "wasm", $5, "bytes"}'
 if [ "${1:-}" != "--no-vite" ]; then

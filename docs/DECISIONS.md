@@ -143,3 +143,14 @@
 - 理由：复制粘贴会分叉；头文件方式不必给每个示例加组件依赖
 - 替代：做成 IDF 组件（EXTRA_COMPONENT_DIRS），要改每个工程的顶层 CMakeLists
 - weather-hot（35°C）用例未加：accept.json 以 id 定位固件目录，不支持同一固件多用例；要加需在 accept.sh 里支持 `fw` 字段
+
+## 2026-10-16 · 装配与关卡：SVG 等轴测、两份判定实现、指纹跨网页 / 命令行一致
+- 装配用 SVG 等轴测（`web/src/views/assembly.ts`），不用 three.js：和设计稿一致、手机上可拖、零依赖；3D 装配等有外壳模型素材再做
+- 装配检查是几何估算（内腔 70×50×32 mm、排线 8 cm、贴芯片温漂 +2.5 ℃ 都是示意数值，未经真机标定），页面标"估算"；温漂会真实地改传感器看到的温度（只在"开机看成品"后生效）
+- 关卡判定写两份（Python `tools/check.py`、TS `web/src/checks.ts`），而不是在 Rust CLI 里做：CLI 不引 crate，没有 JSON / 正则；两份由 `tools/webtest/levels.mjs` 用指纹对拍
+- 新增 wasm 导出 `tb_report` / `tb_report_ptr`：输出与 CLI 相同格式的 GPIO 翻转 / WS2812 帧 / OLED 点亮像素，网页与命令行解析同一种文本
+- 指纹按串口原始字节算（含 `\r\n`）；`check.py` 因此按字节读子进程输出
+- 关卡进度存 localStorage，只记用户上传固件的通过；参考固件通过不计
+- 新页面用 Google Fonts（Noto Sans SC / JetBrains Mono，OFL），与配套文章同字体；加载失败回落到系统字体
+- 首页 home.html 暂不替换 index.html（实验台），因为验收脚本、artifact 打包都以 index.html 为实验台；公开发布前再决定入口
+- 替代：three.js 装配（成本高、手机拖拽难）；Rust 里手写 JSON + 判定（重复造轮子）

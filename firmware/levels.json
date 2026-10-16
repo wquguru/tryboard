@@ -1,0 +1,99 @@
+[
+ {
+  "id": "01",
+  "title": "点灯",
+  "goal": "外接 LED 每 0.5 秒翻转一次",
+  "pass": "2.2 秒内 GPIO5 至少翻转 4 次",
+  "buy": "ESP32-S3 开发板、LED、220Ω 电阻",
+  "learn": "GPIO 输出、FreeRTOS 延时",
+  "brief": "用 ESP-IDF 5.5 给 ESP32-S3 写固件：\nGPIO5 接一颗 LED（经 220Ω 电阻），每 500 ms 翻转一次。\n每次翻转在串口打印一行状态。",
+  "ref": "s3-blink",
+  "seconds": 2.2,
+  "gpio_toggles": { "pin": 5, "min": 4 }
+ },
+ {
+  "id": "02",
+  "title": "按键",
+  "goal": "按一下 BOOT，灯切换一次",
+  "pass": "0.5 s、1.0 s 各按一次 BOOT，GPIO5 正好翻转 2 次",
+  "buy": "不用加",
+  "learn": "GPIO 输入、中断、消抖",
+  "brief": "ESP32-S3，BOOT 键在 GPIO0（按下接地，用内部上拉）。\n每按一次，GPIO5 上的 LED 在亮和灭之间切换一次。\n要做软件消抖（≥ 30 ms），松手不能再切换。\n上电时 LED 保持熄灭，不要自己闪。",
+  "ref": "s3-button",
+  "seconds": 1.5,
+  "script": "0.5:gpio0=0; 0.6:gpio0=z; 1.0:gpio0=0; 1.1:gpio0=z",
+  "gpio_toggles": { "pin": 5, "min": 2, "max": 2 }
+ },
+ {
+  "id": "03",
+  "title": "屏幕",
+  "goal": "OLED 上画出文字",
+  "pass": "SSD1306 点亮至少 300 个像素，串口打印 TRYBOARD_OK",
+  "buy": "0.96″ OLED（SSD1306，I2C）",
+  "learn": "I2C、帧缓冲",
+  "brief": "ESP32-S3 接一块 SSD1306 OLED：I2C 地址 0x3C，SDA=GPIO8，SCL=GPIO9。\n初始化屏幕，画两行文字。\n画完后串口打印 TRYBOARD_OK。",
+  "ref": "s3-oled",
+  "seconds": 2.5,
+  "args": ["--i2c", "ssd1306@0x3c"],
+  "expect": ["TRYBOARD_OK"],
+  "oled_min_pixels": 300
+ },
+ {
+  "id": "04",
+  "title": "传感器",
+  "goal": "读出温度、湿度、气压",
+  "pass": "环境设为 −7.25 ℃ / 88.5 % / 950.12 hPa，每次读数都在容差内",
+  "buy": "BME280 模块（I2C）",
+  "learn": "传感器补偿公式、同一条 I2C 挂多个设备",
+  "brief": "ESP32-S3 接 BME280：I2C 地址 0x76，SDA=GPIO8，SCL=GPIO9。\n用数据手册里的补偿公式，每秒读一次，串口按这个格式打印：\nT=23.50 C H=45.0 % P=1013.25 hPa\n（温度两位小数，湿度一位，气压两位）",
+  "ref": "s3-bme280",
+  "seconds": 4.5,
+  "args": ["--i2c", "ssd1306@0x3c,bme280@0x76", "--env", "-7.25,88.5,95012"],
+  "numeric": [
+   { "name": "温度", "regex": "T=(-?[\\d.]+) C", "value": -7.25, "tol": 0.02 },
+   { "name": "湿度", "regex": "H=([\\d.]+) %", "value": 88.5, "tol": 0.1 },
+   { "name": "气压", "regex": "P=([\\d.]+) hPa", "value": 950.12, "tol": 0.02 }
+  ]
+ },
+ {
+  "id": "05",
+  "title": "表盘",
+  "goal": "舵机从 0° 转到 180°",
+  "pass": "GPIO4 输出 50 Hz PWM，脉宽从 0.5 ms 扫到 2.5 ms",
+  "buy": "SG90 舵机",
+  "learn": "LEDC PWM、脉宽和角度",
+  "brief": "ESP32-S3 用 LEDC 在 GPIO4 输出 50 Hz PWM 控制 SG90 舵机。\n脉宽 0.5 ms 对应 0°，2.5 ms 对应 180°。\n依次转到 0°、45°、90°、135°、180°，每个角度停 0.5 秒。",
+  "ref": "s3-servo",
+  "seconds": 2.6,
+  "pwm": { "pin": 4, "freq": 50, "min": 0.025, "max": 0.125 }
+ },
+ {
+  "id": "06",
+  "title": "装壳",
+  "goal": "组成桌面气象站，装进外壳",
+  "pass": "23.5 ℃ 时指针脉宽 1.675 ms、彩灯绿色、按 BOOT 切到 ℉；装配无警告",
+  "buy": "3D 打印外壳",
+  "learn": "把前几关组合起来；传感器为什么要远离芯片",
+  "brief": "把前面几关合成一个 ESP32-S3 桌面气象站：\n· BME280（0x76）和 OLED（0x3C）共用 I2C：SDA=GPIO8，SCL=GPIO9\n· 每 500 ms 读一次，OLED 第一行大字显示温度，第二行显示湿度和气压\n· 舵机 GPIO4，50 Hz，脉宽 = 0.5 + 温度/40×2 ms（0–40 ℃ 表盘）\n· 板载 WS2812（GPIO48）：低于 18 ℃ 蓝，低于 28 ℃ 绿，否则红\n· BOOT（GPIO0）切换 ℃/℉，切到华氏时串口打印 UNIT F\n· 每次读数打印 T=23.50 C H=45.0 % P=1013.25 hPa",
+  "ref": "weather",
+  "seconds": 3,
+  "args": ["--i2c", "ssd1306@0x3c,bme280@0x76", "--env", "23.5,45,101325"],
+  "script": "2.0:gpio0=0; 2.1:gpio0=z",
+  "expect": ["UNIT F"],
+  "numeric": [{ "name": "温度", "regex": "T=(-?[\\d.]+) C", "value": 23.5, "tol": 0.02 }],
+  "pwm": { "pin": 4, "freq": 50, "min": 0.08375, "max": 0.08375, "tol": 0.002 },
+  "ws2812": { "pin": 48, "min_frames": 1, "dominant": "g" },
+  "oled_min_pixels": 300,
+  "assembly": true
+ },
+ {
+  "id": "07",
+  "title": "毕业作品",
+  "goal": "三选一，自己写通过条件",
+  "pass": "你自己定：写得越具体，AI 越难糊弄你",
+  "buy": "看你选哪个",
+  "learn": "先定验收，再让 AI 写",
+  "brief": "挑一个成品：会转身的小黄、透镜里的小人、温湿度检测器。\n先写清楚「怎样算做好了」：哪个引脚、什么波形、屏上显示什么、串口打印什么。\n把这些条件连同需求一起交给 AI。",
+  "ref": null
+ }
+]

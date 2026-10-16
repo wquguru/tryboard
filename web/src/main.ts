@@ -3,6 +3,9 @@ import { mountEditor, needsReboot } from "./editor";
 import type { Env, FromWorker, ToWorker } from './worker';
 import { createUsbPanel } from './usbpanel';
 import type { UsbView } from './usb3d';
+import { fetchBuf, imageChip, ROM_FILE } from './assets';
+import { createAssembly } from './views/assembly';
+import { emptyFrame } from './views/common';
 
 interface Example {
   id: string;
@@ -14,6 +17,8 @@ interface Example {
   chip?: ChipId;
   /** 'env'：显示环境滑块（温度 / 湿度 / 气压）；对象：模拟输入滑块 */
   controls?: (string | AnalogControl)[];
+  /** 有装配视图（零件装进外壳、开机看成品） */
+  assembly?: boolean;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -30,28 +35,10 @@ let wasm: ArrayBuffer | null = null;
 let flash: ArrayBuffer | null = null;
 /** 各芯片的 ROM（按需下载，esp-rom-elfs，Apache-2.0） */
 const roms: Partial<Record<ChipId, ArrayBuffer>> = {};
-const ROM_FILE: Record<ChipId, string> = { esp32c3: 'esp32c3_rev3_rom.elf', esp32s3: 'esp32s3_rev0_rom.elf' };
 const CHIP_LABEL: Record<ChipId, string> = { esp32c3: 'ESP32-C3 · 160MHz', esp32s3: 'ESP32-S3 · 双核 160MHz' };
 /** 板载 BOOT 键所在引脚（启动后由模拟器告知） */
 let bootPin = 9;
 
-/** 镜像是哪颗芯片：先找分区表（0x8000）里的 app，再读 ESP 镜像头的芯片 ID（5 = C3，9 = S3） */
-function imageChip(buf: ArrayBuffer): ChipId {
-  const b = new Uint8Array(buf);
-  const u32 = (o: number) => b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24);
-  let app = 0;
-  if (b[0x8000] === 0xaa && b[0x8001] === 0x50) {
-    for (let i = 0; i < 95; i++) {
-      const o = 0x8000 + i * 32;
-      if (b[o] !== 0xaa || b[o + 1] !== 0x50) break;
-      if (b[o + 2] === 0 && (b[o + 3] === 0 || b[o + 3] === 0x10)) {
-        app = u32(o + 4) >>> 0;
-        break;
-      }
-    }
-  }
-  return b[app] === 0xe9 && (b[app + 12] | (b[app + 13] << 8)) === 9 ? 'esp32s3' : 'esp32c3';
-}
 let running = false;
 let examples: Example[] = [];
 let scene: SceneSpec = { parts: [] };
@@ -65,6 +52,10 @@ interface AnalogControl {
 /** 各引脚上的模拟电压（mV）：复位后要重新下发 */
 const analog = new Map<number, { mv: number; max: number }>();
 const env: Env = { temp: 23.5, humidity: 45, pressure: 101325 };
+/** 装配视图里传感器贴着芯片时，传感器看到的温度比室温高；只在"装进壳里开机"后生效 */
+let sensorOffset = 0;
+const sensedEnv = (): Env => ({ ...env, temp: env.temp + sensorOffset });
+const sendEnv = () => send({ type: 'env', ...sensedEnv() });
 
 /** 场景里的 I2C 器件 → 模拟总线上要挂的器件 */
 function i2cDevices() {
@@ -92,20 +83,6 @@ function setRunning(r: boolean) {
   runBtn.textContent = r ? '❚❚ 暂停' : '▶ 运行';
 }
 
-/** 发布到不托管二进制的环境时（页面带 <meta name="tryboard-pack" content="b64">），固件与 ROM 以 base64 文本存放 */
-const PACKED = document.querySelector('meta[name="tryboard-pack"]')?.getAttribute('content') === 'b64';
-
-async function fetchBuf(url: string) {
-  const packed = PACKED && /\.(bin|elf)$/.test(url);
-  const r = await fetch(packed ? url + '.b64.txt' : url);
-  if (!r.ok) throw new Error(`${url}: ${r.status}`);
-  if (!packed) return r.arrayBuffer();
-  const bin = atob((await r.text()).trim());
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out.buffer;
-}
-
 async function boot(autorun: boolean) {
   if (!wasm || !flash) return;
   const chip = imageChip(flash);
@@ -120,7 +97,7 @@ async function boot(autorun: boolean) {
   bench.setUsb(null);
   usbPanel.reset();
   pendingAutorun = autorun;
-  send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: i2cDevices(), env: { ...env } });
+  send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: i2cDevices(), env: sensedEnv() });
 }
 
 const usbPanel = createUsbPanel(document.querySelector('.panel.info')!, (text) => send({ type: 'usbcdc', text }));
@@ -146,6 +123,10 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       if (m.console) log(m.console);
       bench.setGpio(m.gpio, m.enable, m.pwm, m.gpioHi, m.enableHi);
       if (m.leds) bench.setRgb(m.leds[0] ?? [0, 0, 0]);
+      frame.pwm = m.pwm;
+      frame.running = m.running;
+      if (m.leds) frame.rgb = m.leds[0] ?? null;
+      asm?.update(frame, env.temp);
       $('simtime').textContent = `${m.simSeconds.toFixed(3)} s`;
       if (m.running) {
         const r = $('ratio');
@@ -155,6 +136,8 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       break;
     case 'oled':
       bench.setOled(m.pixels);
+      frame.oled = m.pixels;
+      asm?.update(frame, env.temp);
       break;
     case 'usb': {
       const v: UsbView | null = m.json ? JSON.parse(m.json) : null;
@@ -227,7 +210,61 @@ async function loadExample(id: string, autorun: boolean) {
   syncControls();
   editor.render();
   flash = await fetchBuf(`./fw/${id}/flash.bin`);
+  setupAssembly(!!ex.assembly);
   boot(autorun);
+}
+
+// ---------------------------------------------------------------- 装配视图（叠在 3D 舞台上）
+const frame = emptyFrame();
+let asm: ReturnType<typeof createAssembly> | null = null;
+let asmOffset = 0;
+let asmProduct = false;
+const viewTabs = $('viewTabs');
+const asmBox = $('asmBox');
+function setView(v: '3d' | 'asm') {
+  viewTabs.querySelectorAll('button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.v === v)));
+  asmBox.hidden = v !== 'asm';
+  $('hint').hidden = v === 'asm';
+}
+viewTabs.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.onclick = () => setView(b.dataset.v as '3d' | 'asm')));
+function setupAssembly(on: boolean) {
+  viewTabs.hidden = !on;
+  sensorOffset = 0;
+  asmOffset = 0;
+  asmProduct = false;
+  asm = null;
+  asmBox.innerHTML = '';
+  setView('3d');
+  if (!on) return;
+  const apply = () => {
+    sensorOffset = asmProduct ? asmOffset : 0;
+    sendEnv();
+  };
+  asm = createAssembly(
+    asmBox,
+    {
+      boot: (d) => send({ type: 'gpio', pin: bootPin, level: d ? 0 : -1 }),
+      temp: (d) => {
+        env.temp = Math.max(-20, Math.min(50, env.temp + d));
+        const r = document.querySelector<HTMLInputElement>('.env input');
+        if (r) {
+          r.value = String(env.temp);
+          r.dispatchEvent(new Event('input'));
+        } else sendEnv();
+      },
+      offset: (d) => {
+        asmOffset = d;
+        apply();
+      },
+      mode: (m) => {
+        asmProduct = m === 'product';
+        apply();
+      },
+      step: (t) => log(`[试板] 装配：${t}\n`, 'sys'),
+    },
+    { servoPin: 4 },
+  );
+  asm.update(frame, env.temp);
 }
 
 let exampleControls: (string | AnalogControl)[] = [];
@@ -284,7 +321,7 @@ function envControls() {
     input.oninput = () => {
       env[k] = Number(input.value);
       row.querySelector('output')!.textContent = fmt(env[k]);
-      send({ type: 'env', ...env });
+      sendEnv();
     };
     box.appendChild(row);
   }

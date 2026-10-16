@@ -7,11 +7,12 @@
     <meta name="description" content="在浏览器里运行真实的 ESP32 固件：买板子之前，先把项目跑一遍。" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect x=%222%22 y=%222%22 width=%2212%22 height=%2212%22 rx=%222%22 fill=%22%23f2a33a%22/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="./src/style.css" />
+    <link rel="stylesheet" href="./src/views/views.css" />
   </head>
   <body>
     <header class="bar">
       <div class="brand"><span class="logo">◧</span> TryBoard <span class="cn">试板</span></div>
-      <nav class="nav"><a class="on" href="./index.html">模拟器</a><a href="./advisor.html">选型助手</a></nav>
+      <nav class="nav"><a href="./home.html">首页</a><a class="on" href="./index.html">实验台</a><a href="./levels.html">关卡</a><a href="./advisor.html">选型助手</a></nav>
       <div class="controls">
         <label class="select">
           <span>示例</span>
@@ -33,7 +34,10 @@
       <div class="status"><span id="chip">ESP32-C3 · 160MHz</span><span id="simtime">0.000 s</span><span id="ratio">—</span></div>
     </header>
     <main>
-      <section id="stage"><div id="hint">拖动旋转 · 滚轮缩放 · 点击板上的 BOOT / RST 按键</div></section>
+      <section id="stage"><div id="hint">拖动旋转 · 滚轮缩放 · 点击板上的 BOOT / RST 按键</div>
+        <div id="viewTabs" role="tablist" aria-label="视图" hidden><button type="button" role="tab" data-v="3d" aria-selected="true">面包板 3D</button><button type="button" role="tab" data-v="asm" aria-selected="false">装配 · 成品</button></div>
+        <div id="asmBox" hidden></div>
+      </section>
       <aside>
         <div class="panel">
           <div class="panel-head">串口监视器 <span class="muted">UART0 · 115200</span><button id="clear" class="ghost">清空</button></div>

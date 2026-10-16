@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>试板 TryBoard</title>
+    <meta name="description" content="AI 写的 ESP32 固件，先在网页实验桌上跑一遍：真实固件，虚拟外设，跑通了再买板子。" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect x=%222%22 y=%222%22 width=%2212%22 height=%2212%22 rx=%222%22 fill=%22%23FF4F00%22/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" />
+    <link rel="stylesheet" href="./src/site.css" />
+    <link rel="stylesheet" href="./src/views/views.css" />
+  </head>
+  <body>
+    <header class="site-head pad wrap">
+      <a class="brand" href="./home.html"><b>试板</b><span>TRYBOARD</span></a>
+      <nav><a href="./levels.html">关卡</a><a href="#examples">示例</a><a href="#cli">命令行</a><a class="strong" href="./index.html">实验台 →</a></nav>
+    </header>
+
+    <section class="pad" style="padding-top: 56px">
+      <div class="wrap stack" style="gap: 40px">
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 24px">
+          <div style="display: flex; flex-direction: column; gap: 20px; max-width: 760px">
+            <span class="bar6"></span>
+            <h1 style="font-size: clamp(38px, 5.4vw, 72px)">AI 写的固件，先在实验桌上跑一遍</h1>
+            <p class="lead">真实固件，虚拟外设。跑通了再买板子。</p>
+          </div>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap">
+            <a class="btn dark" href="./index.html">打开实验台</a>
+            <a class="btn" href="./levels.html">从第 1 关开始</a>
+          </div>
+        </div>
+        <div class="stack" style="gap: 12px">
+          <div id="bench"></div>
+          <div class="note"><span>↑ 正在跑真实固件 weather.bin（ESP32-S3）：按住 BOOT、调室温试试</span><span id="benchLine">启动中…</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pad sec" style="padding-bottom: 88px; margin-top: 96px; background: var(--card)">
+      <div class="wrap" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 40px">
+        <div style="display: flex; flex-direction: column; gap: 10px"><span class="mono" style="font-size: 56px; font-weight: 700; line-height: 1; color: var(--line)">01</span><span style="font-size: 26px; font-weight: 900">AI 写</span><span style="color: var(--dim)">Claude Code、Cursor 都行，本机编译出 .bin</span></div>
+        <div style="display: flex; flex-direction: column; gap: 10px"><span class="mono" style="font-size: 56px; font-weight: 700; line-height: 1; color: var(--accent)">02</span><span style="font-size: 26px; font-weight: 900">桌上跑</span><span style="color: var(--dim)">拖进实验台，按键、调温度、看屏幕</span></div>
+        <div style="display: flex; flex-direction: column; gap: 10px"><span class="mono" style="font-size: 56px; font-weight: 700; line-height: 1; color: var(--line)">03</span><span style="font-size: 26px; font-weight: 900">每次一样</span><span style="color: var(--dim)">同样的输入，同样的结果和指纹，bug 能稳定复现</span></div>
+      </div>
+    </section>
+
+    <section class="pad" style="padding-top: 96px">
+      <div class="wrap stack">
+        <div class="sec-head"><h2>自己装进壳里，还是同一份固件</h2><span class="mono">拖零件 → 合上 → 开机</span></div>
+        <div id="assembly"></div>
+        <div class="note"><span>↑ 从最底下那层开始拖。试试把 BME280 放在开发板旁边，开机后看屏幕</span><span>尺寸、线长、温漂为估算</span></div>
+      </div>
+    </section>
+
+    <section class="pad sec">
+      <div class="wrap stack">
+        <div class="sec-head"><h2>做出来是这样</h2><span class="mono">成品示意</span></div>
+        <div class="grid3">
+          <div class="stack" style="gap: 12px"><div data-show="spin"></div><span style="font-weight: 900; font-size: 20px">会转身的小黄</span><span style="font-size: 14px; color: var(--dim)">舵机转台 · 屏幕眼睛</span></div>
+          <div class="stack" style="gap: 12px"><div data-show="lens"></div><span style="font-weight: 900; font-size: 20px">透镜里的小人</span><span style="font-size: 14px; color: var(--dim)">圆屏 + 凸透镜罩，看起来是立体的</span></div>
+          <div class="stack" style="gap: 12px"><div data-show="weather"></div><span style="font-weight: 900; font-size: 20px">温湿度检测器</span><span style="font-size: 14px; color: var(--dim)">表盘 + 屏幕 + 状态灯</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pad sec">
+      <div class="wrap stack">
+        <div class="sec-head"><h2>不知道从哪开始？走 7 关</h2><a class="mono" href="./levels.html" style="font-weight: 700">看全部关卡 →</a></div>
+        <div id="path" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px"></div>
+        <div class="note"><span>每关一条验收：过了就是过了，网页和命令行结论一样</span></div>
+      </div>
+    </section>
+
+    <section id="examples" class="pad sec" style="padding-bottom: 96px">
+      <div class="wrap stack" style="gap: 32px">
+        <div class="sec-head"><h2>从示例开始</h2><span class="mono" id="exCount">C3 · S3</span></div>
+        <div id="exGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px"></div>
+      </div>
+    </section>
+
+    <section id="cli" class="pad" style="padding-top: 96px; padding-bottom: 96px; background: #141414; color: #F7F6F3">
+      <div class="wrap" style="display: flex; flex-wrap: wrap; gap: 48px; align-items: center">
+        <div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+          <h2>让 Agent 自己验收</h2>
+          <p style="margin: 0; font-size: 18px; color: #C9C6BF">实验桌上能做的，命令行都能做。过没过，看退出码；指纹和网页上的一样。</p>
+        </div>
+        <pre class="code" style="flex: 1 1 520px; min-width: 0; font-size: 14px">$ tools/check.py weather.bin --level 06
+第 06 关 装壳：<span class="ok">通过</span>  指纹 dda5·e840
+  <span class="ok">✓</span> 串口出现 “UNIT F”
+  <span class="ok">✓</span> GPIO4 PWM 50 Hz，脉宽 1.680–1.680 ms
+  <span class="ok">✓</span> WS2812 GPIO48 6 帧，最后一帧 #002000（要绿色）
+  <span class="ok">✓</span> 温度 6 次读数，最大偏差 0（容差 0.02）
+  <span class="ok">✓</span> OLED 点亮 1328 像素（要 ≥ 300）
+<span class="dim">$ echo $?</span>
+0</pre>
+      </div>
+    </section>
+
+    <footer class="pad"><div class="wrap footer"><span>ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.</span><span>ROM 来自 esp-rom-elfs（Apache-2.0）</span></div></footer>
+    <script type="module" src="./src/home.ts"></script>
+  </body>
+</html>

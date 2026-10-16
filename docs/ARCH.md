@@ -44,6 +44,9 @@ web/（Vite + TS）
 - wasm 导出见 `core/crates/wasm/src/lib.rs`（`tb_*`）。没有 import，实例化时传 `{}`。主线程先读镜像头判断芯片、下载对应 ROM，再 `tb_boot`；`tb_chip` / `tb_boot_pin` 告诉前端换哪块板、BOOT 键在哪个脚；S3 的 GPIO32 以上用 `tb_gpio_level_hi` / `tb_gpio_enable_hi`。
 - 资源：`/wasm/tryboard.wasm`、`/rom/esp32c3_rev3_rom.elf`（附 Apache-2.0 LICENSE）、`/fw/<示例>/flash.bin` 与 `/fw/examples.json`。
 - 渲染：three.js WebGL2 + 后期泛光（LED 发光）。WebGPU 等 three 的 WebGPU 渲染器稳定后再切。
+- 页面：`index.html` 实验台（main.ts）、`home.html` 首页（home.ts）、`levels.html` 关卡（levels.ts）、`advisor.html` 选型。公共资源加载在 `assets.ts`；首页 / 关卡的实时运行用 `live.ts`（包一层 worker.ts）。
+- SVG 视图（`src/views/`）：`bench`（面包板）、`product`（成品）、`assembly`（拖拽装配，装完切到成品）、`showcase`（成品示意，不跑固件）。视图只画，数据来自模拟器帧（OLED 像素、各脚 PWM 占空比、板载 WS2812）；舵机角度由 50 Hz 脉宽换算。
+- 关卡验收：`firmware/levels.json` 是唯一来源，判定规则在 `tools/check.py` 和 `web/src/checks.ts` 各写一份、逐条对应。浏览器里由 `verify-worker.ts` 按**模拟时间**跑（不看墙钟），时间片 / 脚本施加 / PWM 采样照搬 CLI `run` 的循环；观察记录用 wasm 的 `tb_report`（与 CLI `--gpio-log --ws2812-log` 同格式）。运行指纹 = FNV-1a(串口原始字节 + `\n#report\n` + 规范化观察记录)，`tools/webtest/levels.mjs` 逐关核对网页与命令行指纹相同。
 
 ## Xtensa LX7 核（ESP32-S3，`core/crates/xtensa`）
 - 配置取自 ESP-IDF `components/xtensa/esp32s3/include/xtensa/config/core-isa.h`：64 个物理 AR、窗口 ABI、16 位密度指令、零开销循环、MUL16/MUL32/MULUH/MULSH/DIV32、NSA/MIN/MAX/SEXT/CLAMPS、布尔寄存器、S32C1I、硬件非对齐访存、VECBASE 复位 0x40000000。

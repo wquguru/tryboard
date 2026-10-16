@@ -11,6 +11,7 @@ thread_local! {
     static ERR: RefCell<String> = const { RefCell::new(String::new()) };
     static WS: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     static USB_JSON: RefCell<String> = const { RefCell::new(String::new()) };
+    static REPORT: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
 fn with<R>(default: R, f: impl FnOnce(&mut Machine) -> R) -> R {
@@ -325,4 +326,51 @@ pub unsafe extern "C" fn tb_usb_cdc_send(p: *const u8, len: usize) {
             u.host.cdc_tx.extend_from_slice(d);
         }
     });
+}
+
+// ---------------------------------------------------------------- 验收观察（关卡检查用）
+
+/// 生成与命令行 `--gpio-log --ws2812-log` 相同格式的观察记录（GPIO 翻转次数、WS2812 各帧颜色、OLED 点亮像素），
+/// 网页的关卡检查与 tools/accept.sh 解析同一种文本，两边结论才一致。返回长度，内容用 tb_report_ptr 读。
+#[no_mangle]
+pub extern "C" fn tb_report() -> usize {
+    use std::fmt::Write;
+    let r = with(String::new(), |m| {
+        let mut o = String::new();
+        let log = m.gpio_log();
+        for pin in 0..m.chip().npins() {
+            let mut n = 0;
+            let mut prev = m.gpio_reset_level();
+            for (_, lv) in &log {
+                if (lv ^ prev) >> pin & 1 != 0 {
+                    n += 1;
+                }
+                prev = *lv;
+            }
+            if n > 0 {
+                let _ = writeln!(o, "[tryboard] GPIO{pin} 翻转 {n} 次");
+            }
+        }
+        let mut pins: Vec<_> = m.ws2812().iter().collect();
+        pins.sort_by_key(|(p, _)| **p);
+        for (pin, d) in pins {
+            let _ = writeln!(o, "[tryboard] WS2812 GPIO{pin} 共 {} 帧", d.frames);
+            for (t, rgb) in &d.history {
+                let cols: Vec<String> = rgb.iter().map(|c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])).collect();
+                let _ = writeln!(o, "    {:.4}s {}", *t as f64 / tryboard_machine::CPU_HZ as f64, cols.join(" "));
+            }
+        }
+        if let Some(d) = m.oled() {
+            let _ = writeln!(o, "[tryboard] OLED 点亮像素 {}", d.lit_pixels());
+        }
+        o
+    });
+    let n = r.len();
+    REPORT.with(|b| *b.borrow_mut() = r);
+    n
+}
+
+#[no_mangle]
+pub extern "C" fn tb_report_ptr() -> *const u8 {
+    REPORT.with(|b| b.borrow().as_ptr())
 }
