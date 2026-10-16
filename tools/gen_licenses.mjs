@@ -185,8 +185,44 @@ ${table(['字体', '许可证', '版权', '加载方式'], [
     }
   };
   for (const d of ['web', 'assets']) walk(path.join(root, d), 0);
+  // assets/models/<名字>/：网站在 models/<名字>/ 发布 glb + SOURCES.md + LICENSE（web/vite.config.ts 的 tb-models 插件），这里给署名表和下载链接
+  const cell = (md, k) => md.match(new RegExp(`^\\| ${k} \\| (.+) \\|$`, 'm'))?.[1] ?? '—';
+  const plain = (t) => t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1').replace(/`/g, '');
+  const models = found.filter((f) => path.relative(root, f).startsWith('assets/models/')).map((f) => {
+    const md = rd(f);
+    const name = path.basename(path.dirname(f));
+    const lic = fs.readdirSync(path.dirname(f)).find((n) => /^LICENSE(\.md)?$/.test(n));
+    if (!exists(path.join(path.dirname(f), `${name}.glb`))) warn.push(`${name}：有 SOURCES.md 但没有 ${name}.glb（先跑 tools/models/convert.mjs）`);
+    if (!lic) warn.push(`${name}：素材目录缺 LICENSE`);
+    return { name, md, lic, title: md.match(/^# (.+)$/m)?.[1] ?? name };
+  });
+  const modelRows = models.map((m) => tr([
+    m.title,
+    mono(plain(cell(m.md, '许可证')).replace(/（.*$/, '')),
+    plain(cell(m.md, '作者')),
+    cell(m.md, '是否修改'),
+    { html: `<a href="./models/${esc(m.name)}/${esc(m.name)}.glb" download>${esc(m.name)}.glb</a> · <a href="./models/${esc(m.name)}/SOURCES.md">SOURCES.md</a>${m.lic ? ` · <a href="./models/${esc(m.name)}/${esc(m.lic)}">${esc(m.lic)}</a>` : ''}` },
+  ]));
+  const credits = models.map((m) => m.md.split('## 署名')[1]?.trim()).filter(Boolean);
+  const others = found.filter((f) => !path.relative(root, f).startsWith('assets/models/'));
   sections.push(`<h2>素材：3D 模型、贴图、HDRI</h2>
-${found.length ? found.map((f) => fullText(`${path.relative(root, path.dirname(f))}/SOURCES.md`, rd(f))).join('') : '<p class="note">目前没有使用外部 3D 模型、贴图或 HDRI：开发板、面包板、模块、杜邦线都按真实尺寸由代码生成。3D 视图里的器件是外观示意，非乐鑫官方模型。以后引入外部素材时，来源与署名写进素材目录的 SOURCES.md，这一节自动列出。</p>'}`);
+${models.length ? `<p class="note">实验台和成品里的器件默认按真实尺寸由代码生成；打开实验台工具条上的「外部模型」后，下面这些模型替换对应的程序生成件（懒加载）。3D 视图里的开发板是外观示意，非乐鑫官方模型。</p>
+${table(['模型', '许可证', '作者', '修改', '下载'], modelRows)}
+${credits.map((c) => `<p class="note">${esc(c).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\n\n/g, '<br>')}</p>`).join('')}
+<p class="note">转换只在本机构建期进行（tools/models/）：occt-import-js（LGPL-2.1，OpenCascade 的 WebAssembly 版）读 STEP，glTF-Transform（MIT）与 meshoptimizer（MIT）减面、量化、写 glb。这些工具不随网站分发。</p>
+${models.map((m) => fullText(`assets/models/${m.name}/SOURCES.md`, m.md)).join('')}` : ''}
+${others.length ? others.map((f) => fullText(`${path.relative(root, path.dirname(f))}/SOURCES.md`, rd(f))).join('') : ''}
+${!found.length ? '<p class="note">目前没有使用外部 3D 模型、贴图或 HDRI：开发板、面包板、模块、杜邦线都按真实尺寸由代码生成。3D 视图里的器件是外观示意，非乐鑫官方模型。以后引入外部素材时，来源与署名写进素材目录的 SOURCES.md，这一节自动列出。</p>' : ''}`);
+  // 许可证原文（每种只列一次）
+  const seen = new Set();
+  for (const m of models) {
+    if (!m.lic) continue;
+    const t = rd(path.join(root, 'assets/models', m.name, m.lic));
+    const k = t.trim().slice(0, 200);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    sections.push(fullText(`${m.lic === 'LICENSE.md' ? 'KiCad Libraries 许可（CC BY-SA 4.0 + 设计例外）' : 'Adafruit CAD Parts · MIT'} 全文`, t));
+  }
 }
 
 const html = `<!doctype html>

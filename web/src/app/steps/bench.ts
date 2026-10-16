@@ -13,6 +13,7 @@ import { fetchBuf } from '../../assets';
 import { servoAngle, ledCss } from '../../views/common';
 import type { AppState, CheckOutcome, Selection, StepCtx, StepImpl } from '../types';
 import { getAnalyzer } from '../analyzer';
+import { extModelsOn, setExtModels } from '../../extmodels';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
@@ -764,6 +765,14 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
     else if (id === 'rerun') c.session.reboot();
     else if (id === 'heat') toggleHeat();
     else if (id === 'scope') getAnalyzer(c).toggle();
+    else if (id === 'ext') {
+      // 外部模型（P1-09）：舵机 / USB-C / 蜂鸣器换成 KiCad、Adafruit 的 glb，来源见第三方授权页；默认程序生成
+      const on = !extModelsOn();
+      setExtModels(on);
+      const b = document.querySelector<HTMLButtonElement>('button[data-tool="ext"]');
+      if (b) b.textContent = on ? '外部模型：开' : '外部模型：关';
+      c.shell.toast(on ? '外部模型：舵机、USB-C 口、蜂鸣器换成 KiCad / Adafruit 的 3D 模型（署名见第三方授权页）' : '外部模型关：全部回到程序生成');
+    }
     else if (id === 'button') {
       c.session.pressBoot(true);
       setTimeout(() => c.session.pressBoot(false), 150);
@@ -835,6 +844,7 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
         { id: 'nav', tools: [{ id: 'select', label: '选择', key: 'V' }, { id: 'orbit', label: '转视角', key: 'H' }] },
         { id: 'edit', tools: [{ id: 'place', label: '放置', todo: true }, { id: 'wire', label: '连线', todo: true }] },
         { id: 'measure', tools: [{ id: 'meter', label: '万用表', todo: true }, { id: 'ruler', label: '尺子' }, { id: 'scope', label: '示波器' }] },
+        { id: 'look', tools: [{ id: 'ext', label: extModelsOn() ? '外部模型：开' : '外部模型：关' }] },
         { id: 'act', tools: [{ id: 'heat', label: '热源' }, { id: 'button', label: '按键' }] },
         { id: 'run', tools: [{ id: 'rerun', label: '再跑一次', primary: true }] },
       ]);

@@ -1,0 +1,47 @@
+[
+  {
+    "name": "kicad-usb-c-gct-usb4105",
+    "title": "USB-C 母座（GCT USB4105，16P 卧式贴片）",
+    "source": "kicad",
+    "repo": "https://gitlab.com/kicad/libraries/kicad-packages3D",
+    "commit": "8975715167d1a76f9b44be155ac02326f704cdbb",
+    "path": "Connector_USB.3dshapes/USB_C_Receptacle_GCT_USB4105-xx-A_16P_TopMnt_Horizontal.step",
+    "license": "CC-BY-SA-4.0",
+    "author": "KiCad Library Team 及贡献者",
+    "simplify": 0.5,
+    "use": "实验台开发板的 USB-C 口（可选替换，默认程序生成）"
+  },
+  {
+    "name": "kicad-buzzer-12x9.5",
+    "title": "Φ12 mm 蜂鸣器（12 × 9.5 mm，引脚距 7.6 mm）",
+    "source": "kicad",
+    "repo": "https://gitlab.com/kicad/libraries/kicad-packages3D",
+    "commit": "8975715167d1a76f9b44be155ac02326f704cdbb",
+    "path": "Buzzer_Beeper.3dshapes/Buzzer_12x9.5RM7.6.step",
+    "license": "CC-BY-SA-4.0",
+    "author": "KiCad Library Team 及贡献者",
+    "simplify": 0.5,
+    "use": "实验台蜂鸣器模块上的蜂鸣器本体（可选替换，默认程序生成）"
+  },
+  {
+    "name": "adafruit-1143-micro-servo",
+    "title": "9 g 微型舵机（Adafruit 1143，与 SG90 同外形）",
+    "source": "adafruit",
+    "repo": "https://github.com/adafruit/Adafruit_CAD_Parts",
+    "commit": "c128bceb1f96b6ea8b68f250bda986ba85da24ea",
+    "path": "1143 Micro Servo - High Torque Metal Gear/1143 Micro Servo High Torque Metal Gear.step",
+    "license": "MIT",
+    "author": "Adafruit Industries",
+    "copyright": "Copyright (c) 2016 Adafruit Industries",
+    "simplify": 0.5,
+    "use": "实验台舵机、小黄转台（可选替换，默认程序生成）",
+    "colors": {
+      "body": "#2F6FD0",
+      "spline": "#EDEDED"
+    },
+    "metal": {
+      "body": false,
+      "spline": false
+    }
+  }
+]

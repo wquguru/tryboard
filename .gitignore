@@ -18,3 +18,5 @@
 /tools/xtensa-tests/build/
 /third_party
 /web/licenses.html
+/assets/models/*/src/
+/tools/models/node_modules

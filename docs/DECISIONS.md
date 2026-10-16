@@ -311,3 +311,21 @@
 - ⌘K：顶部输入框 + 下拉；全局 ⌘K / Ctrl+K 在焦点处于别的输入框（input / textarea / select / contenteditable）时不拦截。命令里改状态的走现有通道（`hist.op` + `session.setEnv / setPower / reboot`、`hist.seek`），所以时间线照常记步、回退照常可用。量 3V3 先选中 3V3 针并提示"万用表在 P1-04 中"。最近命令存 `localStorage['tryboard-cmdk-recent']`（6 条）
 - 公共接口：wasm 新增 `tb_io_watch / tb_io_take / tb_io_ptr / tb_io_dropped`；Machine 新增 `io_watch / io_cap / io_take / io_dropped`，导出 `IoEvent`；CLI 新增 `--trace-io` / `--trace-pins`；worker 新增 `ioWatch` 入、`io` 出消息；LiveSim 加 `onIo` / `watchIo`；Session 加 `io / onIo / ioPins / watchIo`；外壳去掉 ⌘K 占位（shell.ts），由 `cmdk.ts` 接；`__tbApp.analyzer`、`__tbApp.cmdk` 测试钩子
 - 替代：(a) worker 每个时间片采样引脚（现有 PinTrace 做法）——1 ms 分辨率看不到 I2C 字节和 PWM 边沿；(b) 逐 SCL 边沿模拟 I2C——要改 I2C 模型的执行方式，且对驱动没有可见差别；(c) 事件用 JSON 传——每条几十字节，400 kHz I2C 一秒上万条
+
+## 2026-10-16 · 外部模型管线（P1-09）与小黄 / 透镜 3D 成品（P1-10）
+- 决定：STEP → glb 转换用 **occt-import-js 0.0.23**（OpenCascade 的 wasm 版，**LGPL-2.1**）+ **glTF-Transform 4.5.1**（MIT）+ **meshoptimizer 1.3.0**（MIT），全部是 `tools/models/package.json` 的构建期依赖（node_modules 在 tools/models 下、不进 git），**不进网站**，网页运行期没有新依赖（GLTFLoader 是 three 自带，按需拆成单独的 45 kB 块，只有开了外部模型才加载）
+  - 理由：本机没有 FreeCAD / cadquery；occt-import-js 装完 tools/models 共 38 MB，node 里直接跑，能读出 B-rep 面颜色。LGPL 只约束这个库本身，我们不分发它
+  - 替代：FreeCAD 命令行（> 1 GB）、cadquery / OCP（pip 包 > 500 MB）、Blender（本机有，但 4.x 不再自带 STEP / VRML 导入）、KiCad 的 WRL（顶点多、单位是 0.1 inch）
+- 决定：素材放 `assets/models/<名字>/`：`<名字>.glb`（进 git，脚本强制 ≤ 1 MB）、`SOURCES.md`（由 convert.mjs 按 models.json 生成：原始文件 URL、仓库 @ 40 位提交、作者、许可证、是否修改、改动清单、署名）、`LICENSE` / `LICENSE.md`（从同一提交下载的原文）；原始 STEP 在 `src/`（.gitignore）。`web/vite.config.ts` 的 tb-models 插件在开发时直接读、构建时把 glb + SOURCES.md + LICENSE 发布到 `models/<名字>/`，CC BY-SA 模型因此连同许可与来源都可下载。LICENSING_REVIEW 原建议的 `web/public/models/kicad/` 改成这个目录，是为了让原始文件、生成脚本和产物待在一起
+- 决定：fetch.mjs 只认 LICENSING ✅ 的三个仓库（KiCad 官方 3D 库、Adafruit CAD Parts、M5Stack M5_Hardware）、必须钉 40 位提交；KiCad 模型所在库目录里如果有单独的 LICENSE 文件就失败退出（LICENSING_REVIEW 第一节的剩余风险）
+- 首批 3 个模型：KiCad `USB_C_Receptacle_GCT_USB4105-xx-A_16P_TopMnt_Horizontal`（CC BY-SA 4.0，开发板 USB-C 口）、KiCad `Buzzer_12x9.5RM7.6`（CC BY-SA 4.0，蜂鸣器模块上的蜂鸣器本体）、Adafruit `1143 Micro Servo`（MIT，与 SG90 同外形的 9 g 舵机，实验台和小黄转台）。改动：三角化、Z 朝上转 Y 朝上（单位 mm）、减面到约 50% 顶点、同材质合并、量化（KHR_mesh_quantization）；KiCad 的金属灰（#A5A392）统一成网站的不锈钢色 #CDD1D6（实验台低环境光下原色发暗发绿）；Adafruit 舵机原文件没有颜色，按 SG90 涂蓝 / 白。三个原文件都没有 logo、商标图形或贴图（脚本仍会清掉任何贴图）。三个都算"已修改"，CC BY-SA 的两个在 SOURCES.md 写明以 CC BY-SA 4.0 提供
+  - 没做 M5Stack：M5_Hardware 的结构件都是整机外壳，当前作品用不上；Adafruit 6178 圆屏是 EYESPI + microSD 的板子，和实验台用的带排针 GC9A01 模组不同，没用
+- 决定：程序生成始终是默认兜底。外部模型开关 = URL `?models=ext|proc`（只管这一次）> `localStorage['tb-ext-models']`（实验台工具条「外部模型」按钮）；board3d 每个替换位（ExtSlot）登记"程序生成件 + 摆位函数"，开了就懒加载 glb、藏起程序生成件，关了换回来，加载失败保持程序生成。舵盘仍是程序生成的（Adafruit 模型没有舵盘），只按花键顶抬高。测试钩子 `window.__tbExt.shown()` 列出此刻场景里实际显示的外部模型
+- 授权页：gen_licenses.mjs 第 6 节改为模型表（名称、许可证、作者、是否修改、glb / SOURCES / LICENSE 下载链接）+ 每个模型的署名原文 + 转换工具说明 + 每种许可全文一次
+- 决定（P1-10）：小黄 / 透镜成品改成 three.js（`app/lcd3d.ts`，和气象站一样独立于 board3d，同一个 LiveSim、同一套 BOOT / 声音 / 拖动 / 复位视角）；`lcdproducts.ts` 的 SVG 留作 WebGL 不可用时的兜底（`webglOk()`），首页卡片和组装视图仍用 SVG
+  - 小黄的形象：黄色胶囊身体（Ø40 mm，身高约 115 mm，比装配模版写的 110 mm 估算略高）、头顶一缕向前卷一圈半的发丝（越往发梢越细）、**正面一块圆角方形的深色面罩**（只在正面，不绕到脑后，没有护目镜和带子）里嵌 GC9A01 圆屏、棕色工具腰带（侧面搭扣、两个工具袋、一把起子、一把扳手）。刻意不做：护目镜、头带、背带裤、手臂手套——避免像小黄人。圆屏网格按面罩半径弯成曲面（真屏是平的，外壳罩着；示意）
+  - 转台：SG90 立在 Ø60 mm 底座里，转轴对准中心，托盘 + 小黄随 GPIO4 的 PWM 转（二阶弹簧阻尼 + 600°/s 限速，与气象站指针同一套示意参数），装偏的舵盘（assembly effects.hornOffset）让"正面"本身歪着。开了外部模型时 SG90 换成 Adafruit 1143
+  - 透镜：Ø40 mm 平凸透镜（中心厚 9 mm），`MeshPhysicalMaterial` transmission 1 / ior 1.5 / roughness 0；放大感靠 `thickness`（three 的屏幕空间折射近似，偏移量 ∝ thickness），按装法的放大倍数设 `(k − 1) × 3`（高档 1.35× → 1.05，低档 1.08× → 0.24），三根细柱长度 = 离屏高度。标"透镜折射为示意，不是光学仿真"。底座背面 USB-C 口开了外部模型时用 KiCad 模型
+  - 色调映射：lcd3d 用 NeutralToneMapping（ACES 把小黄的黄压得发绿发灰，截图实测）；气象站不变
+  - 串口事件：`MOOD n name` → 时间线"换表情：开心"、`LOOK FRONT / AROUND` → "转回正面，停住 / 继续左右转身"；右栏加 转台角度、状态、表情、透镜档位。测试钩子 `window.__tbProduct`（buttonPos / azimuth / turn / ext / mood / look）
+  - 替代：在 board3d 里拼成品（另有代理在改 board3d，相机和交互都不同）；透镜用真实光线追踪 / 自写折射着色器（工作量大，transmission 已经够"看出放大"）
