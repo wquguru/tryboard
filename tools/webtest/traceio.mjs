@@ -100,18 +100,51 @@ const servo = wl.find((l) => /^\d+ PWM 4 \d+ 50000$/.test(l));
 const buzz = wl.find((l) => /^\d+ PWM 5 3276[78] 27\d{5}$/.test(l));
 report('PWM：GPIO4 舵机 50 Hz、GPIO5 蜂鸣器 2.7 kHz 50%', !!servo && !!buzz, `${servo} / ${buzz}`);
 
-// 时间线回退（P0-03）：回到「运行 #1」这一步（= 改室温之前那一刻），事件仓库按回退重放重建，仍与命令行前 N 条一致
+// 时间线回退（P0-03）：回到「运行 #1」这一步（= 改室温之前那一刻），事件仓库按回退重放重建，仍与命令行前 N 条一致。
+// 回退点（= ⌘K 执行那一刻）由墙钟决定。I2C 事件按位时序预先盖戳（DECISIONS P1-05）：回退点落在 SSD1306 写屏的
+// 一批命令表中间时，这一批后面的事件时刻会越过回退点最多一批 FIFO（32 B × 9 位 × 404 周期 ≈ 0.73 ms）。
+// 所以不能要求"末条时刻 ≤ 回退点 + 一点余量"（那样回退点落进写屏窗口就挂，2026-10-16 间歇失败的根因），
+// 而是：①逐条是命令行前缀；②没漏：命令行下一条的时刻 ≥ 停住的周期；③越过停住点的只能是 I2C、且不超过 1 ms。
+const seekCheck = (name, text, stopCyc, untilMs, extra) => {
+  const sl = text.split('\n').filter(Boolean);
+  const d = sl.findIndex((l, i) => l !== cli[i]);
+  const t = (l) => Number(l.split(' ')[0]);
+  const over = sl.filter((l) => t(l) > stopCyc);
+  const nextT = cli[sl.length] ? t(cli[sl.length]) : Infinity;
+  const lastT = sl.length ? t(sl.at(-1)) : 0;
+  const ok = d < 0 && sl.length > 100 && sl.length < wl.length && nextT >= stopCyc && over.every((l) => / I2C\d /.test(l)) && lastT <= stopCyc + 160000;
+  report(name, ok, `停在 ${(stopCyc / CPU_HZ).toFixed(4)} s，${sl.length} 条（网页实时 ${wl.length}），越过停住点 ${over.length} 条${over.length ? `（末条 +${lastT - stopCyc} 周期）` : ''}，命令行下一条 ${nextT === Infinity ? '无' : `+${nextT - stopCyc}`}${d < 0 ? '' : `；第 ${d + 1} 条不同：网页 ${JSON.stringify(sl[d])} / 命令行 ${JSON.stringify(cli[d])}`}；回退点 ${(untilMs / 1000).toFixed(4)} s（旧判据「末条 ≤ 回退点 + 20000 周期」${lastT <= Math.round(untilMs * 160000) + 20000 ? '也过' : '会挂'}）${extra ? '；' + extra : ''}`);
+};
 const sk = await page.evaluate(async () => {
   const a = globalThis.__tbApp;
   const i = a.hist.steps().findIndex((s) => s.op.k === 'run' && s.op.n === 1);
   const r = await a.hist.seek(i);
   await new Promise((res) => setTimeout(res, 300));
-  return { r, text: a.session.io.text(), n: a.session.io.raw.length };
+  return { r, text: a.session.io.text(), sim: a.store.get().simSeconds };
 });
-const sl = sk.text.split('\n').filter(Boolean);
-diff = sl.findIndex((l, i) => l !== cli[i]);
-const lastT = Number(sl.at(-1)?.split(' ')[0] ?? 0);
-report('回退到「运行 #1」（改室温之前）：事件按重放重建，与命令行前 N 条一致', !!sk.r && diff < 0 && sl.length > 100 && sl.length < wl.length && lastT <= sk.r.untilMs * 160000 + 20000, sk.r ? `回到 ${(sk.r.untilMs / 1000).toFixed(3)} s，${sl.length} 条${diff < 0 ? '' : `；第 ${diff + 1} 条不同`}` : '回退失败');
+if (!sk.r) report('回退到「运行 #1」（改室温之前）：事件按重放重建，与命令行前 N 条一致', false, '回退失败');
+else seekCheck('回退到「运行 #1」（改室温之前）：事件按重放重建，与命令行前 N 条一致', sk.text, Math.round(sk.sim * CPU_HZ), sk.r.untilMs);
+
+// 确定性覆盖上面那个靠运气的情形：直接回退到运行 #1 里一次 SSD1306 写屏命令表的中间（命令行事件里找 0x3C 的事务）
+const t = (l) => Number(l.split(' ')[0]);
+const envAt = Math.round((web.log.events.find((e) => e.kind === 'env' && e.tMs > 1)?.tMs ?? 0) * 160000);
+const oled = cli.map((l, i) => [l, i]).filter(([l, i]) => / I2C0 ADDR 3c W ACK$/.test(l) && t(l) < envAt - 160000 && t(l) > 160000 * 300).at(-1);
+if (!oled) report('回退到 SSD1306 写屏事务中间：事件按重放重建，与命令行前 N 条一致', false, '命令行事件里没找到运行 #1 的 0x3C 写屏');
+else {
+  const midMs = (t(oled[0]) + 60000) / 160000;
+  const mk = await page.evaluate(async (untilMs) => {
+    const a = globalThis.__tbApp;
+    const rec = a.hist.runs().find((r) => r.n === 1);
+    const log = rec.snap.log;
+    const rest = log.events.filter((e) => e.kind !== 'power');
+    const env0 = rest[0]?.kind === 'env' ? { temp: rest[0].temp, humidity: rest[0].humidity, pressure: rest[0].pressure } : a.store.get().env;
+    const events = rest[0]?.kind === 'env' ? rest.slice(1) : rest;
+    const snap = await a.session.seek({ flash: rec.fw, i2c: log.i2c, lcd: log.lcd, servo: log.servo, power: log.power, encoder: log.encoder, sonar: log.sonar, touchInt: log.touchInt, env: env0, events, untilMs });
+    await new Promise((res) => setTimeout(res, 300));
+    return { text: a.session.io.text(), sim: snap.simSeconds };
+  }, midMs);
+  seekCheck('回退到 SSD1306 写屏事务中间：事件按重放重建，与命令行前 N 条一致', mk.text, Math.round(mk.sim * CPU_HZ), midMs);
+}
 
 await browser.close();
 server.close();
