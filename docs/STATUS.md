@@ -106,5 +106,9 @@
 | 首页实时实验桌 | ✅ | 串口 T=23.50、按 BOOT 屏幕重画、390px 宽无横向滚动 | 看不见时暂停模拟 |
 | 工作台外壳 app.html（P0-01/02/15） | ✅ | agent-browser：weather 实验台跑起来、点 BME280 改温度读数 23.50 → 32.00、检查点 01–06 上传参考固件 6/6 通过且指纹与 check.py 逐个一致、切组装再切回模拟时间连续（运行 #1 不变）、390×844 无横向溢出、console / errors 无 error（Reviews/ab/P0-01.md） | 采购 / 组装 / 成品为占位；点台面选中待 board3d 实现 ScenePickApi；levels.mjs 未迁移到新页面 |
 | 真实器材 3D 台面（P0-10 / P0-11） | ✅ | agent-browser：weather / spin / C3 示例截图，针脚丝印可辨；highlight / setWireFault / measure / setHeat / setTheme 各截一张；console 无 error（Reviews/ab/P0-10.md） | 外观示意；中端机帧率未实测（基线 weather 228 calls / 11 万三角形）；属性面板实时值待外壳 |
+| 作品首页 home.html（P0-05） | ✅ | levels.mjs：三卡跑真实固件（气象站串口 T=23.50、OLED 有画面、按 BOOT 重画；小黄 / 透镜圆屏有画面）、5 个入口到达正确页面、检查点数与工作台一致、390px 无横向滚动；agent-browser 截图与 console / errors 无 error（Reviews/ab/P0-05.md） | 参考价为估算，待 catalog；选型助手仍是旧暗色样式 |
+| 第三方授权页 licenses.html（P0-20） | ✅ | build_web.sh 生成；列 three、68 个构建期依赖、ROM（Apache-2.0 全文 + 第三方清单）、5 个固件组件、字体（Reviews/ab/P0-20.md） | 字体未自托管；无外部 3D 素材 |
+| 旧页面下线（P0-21） | ✅ | levels.html#04 / #07-lens / 无 hash 重定向到 app.html 并选中检查点（levels.mjs + agent-browser） | 装配验收判定待 P0-16 |
+| 工作台外壳 app.html（P0-01/02/15） | ✅ | agent-browser：weather 实验台跑起来、点 BME280 改温度读数 23.50 → 32.00、检查点 01–06 上传参考固件 6/6 通过且指纹与 check.py 逐个一致、切组装再切回模拟时间连续（运行 #1 不变）、390×844 无横向溢出、console / errors 无 error（Reviews/ab/P0-01.md） | 采购 / 组装 / 成品为占位；点台面选中待 board3d 实现 ScenePickApi；levels.mjs 已迁移到新页面（P0-21） |
 | 成品示意（小黄 / 透镜 / 检测器） | 🟡 | — | 只是外观示意；内核已有 GC9A01 圆屏（`tb_lcd_*`），lens / spin 固件已能跑，网页显示待接 |
 | 元件库 / 采购模版 / 规则引擎（数据层） | 🟡 | `cd web && npm test`：57 个用例全过（schema、核价提醒、模版对拍 examples.json、R01–R27 各正反用例） | 53 件、27 条规则；价格为代理估计未人工核价，多处字段待核（`todoList()`），规则未经人逐条复核、未经真机标定；还没有页面（P0-07） |

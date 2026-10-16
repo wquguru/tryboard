@@ -1,121 +1,83 @@
-// 首页：实验桌和装配区跑的是同一份真实固件（weather，ESP32-S3），不是动画。
+// 作品首页（DESIGN §1、§5）：三张作品卡。卡片先放示意图；点「看真实固件跑」换成模拟器驱动的成品画面，
+// 同一时间只跑一份（每份是一个 wasm worker），看不见就暂停。
 import { LiveSim } from './live';
-import { createBenchView } from './views/bench';
-import { createAssembly } from './views/assembly';
 import { createShowcase, type ShowKind } from './views/showcase';
 import { createProductView } from './views/product';
 import { createLensProduct, createSpinProduct } from './views/lcdproducts';
-import levelsJson from '../../firmware/levels.json';
-import type { Level } from './checks';
 
-const $ = (id: string) => document.getElementById(id)!;
 const SERVO = 4;
-let productMode = false;
-let offset = 0;
-
-const sim = new LiveSim({
-  fw: './fw/weather/flash.bin',
-  i2c: [{ kind: 'ssd1306', addr: 0x3c }, { kind: 'bme280', addr: 0x76 }],
-  env: { temp: 23.5, humidity: 45, pressure: 101325 },
-  onConsole(text) {
-    const lines = text.split('\n').filter((l) => /T=/.test(l));
-    if (lines.length) $('benchLine').textContent = '串口：' + lines[lines.length - 1].trim();
-  },
-  onFrame(f) {
-    bench.update(f, sim.env.temp);
-    assembly.update(f, sim.env.temp);
-  },
-});
-const temp = (d: number) => sim.setTemp(sim.env.temp + d);
-const bench = createBenchView($('bench'), { boot: (d) => sim.press(d), reset: () => sim.reset(), temp }, { caption: 'weather.bin · ESP32-S3', servoPin: SERVO });
-// 传感器偏移只在"装进壳里开机"后生效：面包板上传感器在空气里
-const applyOffset = () => sim.setOffset(productMode ? offset : 0);
-const assembly = createAssembly(
-  $('assembly'),
-  {
-    boot: (d) => sim.press(d),
-    temp,
-    offset: (d) => {
-      offset = d;
-      applyOffset();
-    },
-    mode: (m) => {
-      productMode = m === 'product';
-      applyOffset();
-    },
-  },
-  { servoPin: SERVO },
-);
-
-// 看不见就暂停，省电
-const visible = new Set<Element>();
-const io = new IntersectionObserver((es) => {
-  for (const e of es) e.isIntersecting ? visible.add(e.target) : visible.delete(e.target);
-  if (visible.size) sim.resume();
-  else sim.pause();
-});
-io.observe($('bench'));
-io.observe($('assembly'));
-sim.start().catch((e) => ($('benchLine').textContent = `加载失败：${e}`));
-
-document.querySelectorAll<HTMLElement>('[data-show]').forEach((el) => createShowcase(el, el.dataset.show as ShowKind));
-
-// 成品卡片：点「跑真实固件」把示意换成模拟器驱动的成品视图（再点回到示意）
-const SHOW_FW: Record<ShowKind, { lcd: boolean; i2c: { kind: string; addr: number }[] }> = {
+const ENV = { temp: 23.5, humidity: 45, pressure: 101325 };
+const FW: Record<ShowKind, { lcd: boolean; i2c: { kind: string; addr: number }[] }> = {
+  weather: { lcd: false, i2c: [{ kind: 'ssd1306', addr: 0x3c }, { kind: 'bme280', addr: 0x76 }] },
   spin: { lcd: true, i2c: [] },
   lens: { lcd: true, i2c: [] },
-  weather: { lcd: false, i2c: [{ kind: 'ssd1306', addr: 0x3c }, { kind: 'bme280', addr: 0x76 }] },
 };
-document.querySelectorAll<HTMLButtonElement>('[data-run]').forEach((btn) => {
-  const kind = btn.dataset.run as ShowKind;
-  const el = document.querySelector<HTMLElement>(`[data-show="${kind}"]`)!;
-  let s: LiveSim | null = null;
-  btn.onclick = () => {
-    if (s) {
-      s.dispose();
-      s = null;
-      createShowcase(el, kind);
-      btn.textContent = '跑真实固件';
-      return;
-    }
-    const h = { boot: (d: boolean) => s?.press(d), temp: (d: number) => s?.setTemp(s.env.temp + d) };
-    const view = kind === 'spin' ? createSpinProduct(el, h, { servoPin: SERVO }) : kind === 'lens' ? createLensProduct(el, h) : null;
-    const wv = kind === 'weather' ? createProductView(el, h, { servoPin: SERVO }) : null;
-    s = new LiveSim({
-      fw: `./fw/${kind}/flash.bin`,
-      ...SHOW_FW[kind],
-      env: { temp: 23.5, humidity: 45, pressure: 101325 },
-      onFrame: (f) => (view ? view.update(f, 23.5, {}) : wv!.update(f, s!.env.temp, 0)),
-    });
-    s.start().catch(() => (btn.textContent = '加载失败'));
-    btn.textContent = '回到示意';
-  };
+const IDLE = '示意图 · 点「看真实固件跑」换成模拟器画面';
+
+interface Card {
+  kind: ShowKind;
+  root: HTMLElement;
+  prev: HTMLElement;
+  status: HTMLElement;
+  btn: HTMLButtonElement;
+  sim: LiveSim | null;
+}
+
+const cards: Card[] = [...document.querySelectorAll<HTMLElement>('.wk')].map((root) => {
+  const kind = root.dataset.work as ShowKind;
+  const prev = root.querySelector<HTMLElement>('[data-show]')!;
+  createShowcase(prev, kind);
+  return { kind, root, prev, status: root.querySelector<HTMLElement>('[data-status]')!, btn: root.querySelector<HTMLButtonElement>('[data-run]')!, sim: null };
 });
 
-const levels = levelsJson as Level[];
-$('path').innerHTML = levels
-  .map(
-    (l, i) => `<a href="./levels.html#${l.id}" style="text-decoration:none;background:var(--card);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:6px;border-top:4px solid ${i === levels.length - 1 ? 'var(--accent)' : 'var(--fg)'}">
-<span class="mono" style="font-size:22px;font-weight:700;line-height:1;color:${i === levels.length - 1 ? 'var(--accent)' : 'var(--fg)'}">${l.id}</span>
-<span style="font-weight:900;font-size:18px">${l.title}</span><span style="font-size:13px;color:var(--dim)">${l.buy.split('、')[0]}</span></a>`,
-  )
-  .join('');
+function stop(c: Card) {
+  if (!c.sim) return;
+  c.sim.dispose();
+  c.sim = null;
+  c.root.classList.remove('live');
+  createShowcase(c.prev, c.kind);
+  c.btn.textContent = '看真实固件跑';
+  c.status.textContent = IDLE;
+}
 
-interface Ex { id: string; title: string; chip?: string; tags: string[] }
-fetch('./fw/examples.json')
-  .then((r) => r.json())
-  .then((ex: Ex[]) => {
-    $('exCount').textContent = `C3 · S3 · ${ex.length} 个都能跑`;
-    const pick = ['blink', 'oled', 'bme280', 'servo', 'wifi-http', 's3-usb-keyboard', 'weather'];
-    const shown = pick.map((id) => ex.find((e) => e.id === id)).filter((e): e is Ex => !!e);
-    $('exGrid').innerHTML = shown
-      .map((e, i) => {
-        const color = ['#2B5FD9', '#1C4F86', '#6A3FA0', '#141414', '#2E2E2B', '#8A867E', '#C23A00'][i % 7];
-        const title = e.title.split('：')[0];
-        return `<a href="./index.html?example=${e.id}" style="text-decoration:none;background:var(--card);border-radius:12px;overflow:hidden;display:flex;flex-direction:column">
-<div style="height:132px;background:#2E4A3F;display:flex;align-items:center;justify-content:center"><svg width="160" height="96" viewBox="0 0 160 96" aria-hidden="true"><rect x="20" y="22" width="76" height="52" rx="4" fill="#141414"/><rect x="52" y="30" width="38" height="36" rx="2" fill="#BDB9B0"/><rect x="104" y="28" width="40" height="40" rx="4" fill="${color}"/><rect x="110" y="36" width="28" height="18" rx="1" fill="#050608"/><path d="M90 34 C100 20 110 20 118 28" fill="none" stroke="#E8C547" stroke-width="3" stroke-linecap="round"/><circle cx="36" cy="34" r="4" fill="#22C55E"/></svg></div>
-<div style="padding:16px 18px 18px;display:flex;flex-direction:column;gap:4px"><span style="font-weight:900;font-size:18px">${title}</span><span class="mono" style="font-size:12px;color:var(--dim)">${e.id} · ${e.chip === 'esp32s3' ? 'ESP32-S3' : 'ESP32-C3'}</span></div></a>`;
-      })
-      .join('');
-  })
-  .catch(() => {});
+function run(c: Card) {
+  for (const o of cards) if (o !== c) stop(o);
+  const h = { boot: (d: boolean) => c.sim?.press(d), temp: (d: number) => c.sim?.setTemp(c.sim.env.temp + d) };
+  const lcdView = c.kind === 'spin' ? createSpinProduct(c.prev, h, { servoPin: SERVO }) : c.kind === 'lens' ? createLensProduct(c.prev, h) : null;
+  const wView = c.kind === 'weather' ? createProductView(c.prev, h, { servoPin: SERVO }) : null;
+  let tail = '';
+  const sim = new LiveSim({
+    fw: `./fw/${c.kind}/flash.bin`,
+    ...FW[c.kind],
+    env: ENV,
+    onConsole(text) {
+      // 状态行显示串口最后一行（weather 是 T= H= P= 读数）
+      const lines = (tail + text).split('\n');
+      tail = lines.pop() ?? '';
+      const last = lines.map((l) => l.trim()).filter(Boolean).pop();
+      if (last) c.status.textContent = `串口：${last.slice(0, 80)}`;
+    },
+    onFrame: (f) => (lcdView ? lcdView.update(f, ENV.temp, {}) : wView!.update(f, sim.env.temp, 0)),
+  });
+  c.sim = sim;
+  c.root.classList.add('live');
+  c.btn.textContent = '回到示意图';
+  c.status.textContent = `正在启动 ${c.kind}/flash.bin（ESP32-S3）…`;
+  sim.start().catch((e) => {
+    c.status.textContent = `加载失败：${e}`;
+    c.btn.textContent = '看真实固件跑';
+  });
+}
+
+for (const c of cards) c.btn.onclick = () => (c.sim ? stop(c) : run(c));
+
+// 卡片滚出视口就暂停模拟，省电
+const io = new IntersectionObserver((es) => {
+  for (const e of es) {
+    const c = cards.find((x) => x.root === e.target);
+    if (!c?.sim) continue;
+    if (e.isIntersecting) c.sim.resume();
+    else c.sim.pause();
+  }
+});
+for (const c of cards) io.observe(c.root);

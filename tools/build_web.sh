@@ -44,6 +44,8 @@ for lv in json.load(open(os.path.join(root, 'firmware/levels.json'))):
     os.makedirs(d, exist_ok=True)
     shutil.copy(src, d)
 PY
+# 第三方授权页（LICENSING.md 规则 8）：读依赖清单、ROM、已发布固件的组件、SOURCES.md
+node "$ROOT/tools/gen_licenses.mjs"
 ls -la "$PUB/wasm/tryboard.wasm" | awk '{print "wasm", $5, "bytes"}'
 if [ "${1:-}" != "--no-vite" ]; then
   (cd "$ROOT/web" && npm run build --silent)

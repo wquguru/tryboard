@@ -9,15 +9,18 @@ import type { TimelineStep } from './timeline';
 
 export { registerStep } from './shell';
 
-const want = new URLSearchParams(location.search).get('work') as WorkId | null;
+const params = new URLSearchParams(location.search);
+const want = params.get('work') as WorkId | null;
 const work = WORKS[want ?? 'weather'] ?? WORKS.weather;
+// &cp=04：打开时选中这个检查点（旧关卡页 levels.html#04 重定向过来用）；不属于这个作品就忽略
+const cp = params.get('cp');
 document.title = `${work.title} · 试板 TryBoard`;
 document.getElementById('workName')!.textContent = work.title;
 
 const store = createStore<AppState>({
   work: work.id,
   step: 'bench',
-  selection: null,
+  selection: cp && work.checkpoints.includes(cp) ? { kind: 'checkpoint', id: cp } : null,
   env: { temp: 23.5, humidity: 45, pressure: 101325 },
   run: 0,
   simSeconds: 0,

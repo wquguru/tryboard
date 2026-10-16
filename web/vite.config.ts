@@ -1,4 +1,8 @@
 import { defineConfig } from 'vite';
+import { existsSync } from 'node:fs';
+
+// licenses.html 由 tools/gen_licenses.mjs 在构建期生成（不进仓库）；没生成时照样能 build
+const licenses = existsSync(new URL('./licenses.html', import.meta.url)) ? { licenses: 'licenses.html' } : {};
 export default defineConfig({
   base: './',
   worker: { format: 'es' },
@@ -7,6 +11,6 @@ export default defineConfig({
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 1200,
-    rollupOptions: { input: { main: 'index.html', advisor: 'advisor.html', home: 'home.html', levels: 'levels.html', app: 'app.html' } },
+    rollupOptions: { input: { main: 'index.html', advisor: 'advisor.html', home: 'home.html', levels: 'levels.html', app: 'app.html', ...licenses } },
   },
 });
