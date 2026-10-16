@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --port 5180",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --port 5180"
+    "preview": "vite preview --port 5180",
+    "test": "node --test test/*.test.ts"
   },
   "dependencies": {
     "three": "0.170.0"
