@@ -47,8 +47,8 @@
 | P1-04 | 万用表（电压，依赖 P1-01） | 量 3V3 读数与求解器一致 | ☐ |
 | P1-05 | 示波器 / 逻辑分析仪面板（引脚事件日志画波形，I2C 解码） | 解码出 0x76 读 8 字节 | ☑ 2026-10-16（内核事件缓冲 + `--trace-io`，网页 / 命令行逐条对拍；Reviews/ab/P1-05.md） |
 | P1-06 | ⌘K 命令框（搜零件 / 引脚 / 命令） | 四条示例命令可执行 | ☑ 2026-10-16（室温 N ℃、换外接 5 V 并重跑、回到第 n 次运行、量 3V3（提示 P1-04 中）；Reviews/ab/P1-06.md） |
-| P1-07 | 3D 装配：零件拖到槽位吸附（three-mesh-bvh）、炸开 / 剖面 / 尺子 | 拖拽用例 | ☐ |
-| P1-08 | 参数化外壳（Manifold wasm）+ STL / 3MF 导出 | 导出文件能被 three.js 读回 | ☐ |
+| P1-07 | 3D 装配：零件拖到槽位吸附（three-mesh-bvh）、炸开 / 剖面 / 尺子 | 拖拽用例 | ☑ app/asm3d.ts：参数化外壳剖开、零件悬在上方、拖到发亮槽位 16 mm 内吸附，规则与 SVG 共用 views/asmcore.ts；炸开 / 剖面 / 尺子（BVH 取点）；`tools/webtest/asm3d.mjs`（进 accept.sh）真实鼠标拖 BME280 到芯片旁复测 ✗、通风口旁复测 ✓；`?asm=svg` / 无 WebGL2 兜底（Reviews/ab/P1-07.md） |
+| P1-08 | 参数化外壳（Manifold wasm）+ STL / 3MF 导出 | 导出文件能被 three.js 读回 | ☑ app/enclosure.ts（布局纯函数 + Manifold 布尔）、meshio.ts（STL、自打包 3MF）；采购页外壳详情：尺寸、高度 / 壁厚 / 圆角、太矮警告、导出；npm test 在 node 跑真 Manifold（封闭流形、STLLoader 读回、3MF 解压对数），asm3d.mjs 下载文件大小与 STLLoader / 3MFLoader 读回一致（Reviews/ab/P1-08.md） |
 | P1-09 | 外部模型管线（Adafruit / M5Stack MIT、KiCad CC BY-SA）STEP → glTF，SOURCES.md 署名 | 授权页出现署名 | ☐ |
 | P1-10 | 透镜折射材质（标"示意"）；小黄、透镜小人 3D 成品 | 截图 | ☐ |
 | P1-11 | 小黄、透镜小人拆检查点（各 2–3 个）走完整条线 | 参考固件全过 | ☐ |

@@ -188,6 +188,10 @@ if [ $NO_WEB = 0 ]; then
   echo "$r" | sed 's/^/- /' >> $REPORT
   # 要看到汇总行（"[interact] PASS（…"）才算过：脚本中途崩了时最后一行是某一项的 PASS，不能算
   echo "$r" | tail -1 | grep -q '^\[interact\] PASS（' || fail=1
+  # 3D 装配（P1-07）+ 参数化外壳导出（P1-08）：真实鼠标拖拽、复测 ✗ / ✓、炸开 / 剖面 / 尺子、STL / 3MF 下载与读回、SVG 兜底
+  r=$(node tools/webtest/asm3d.mjs 2>&1 | grep '^\[asm3d\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[asm3d\] PASS（' || fail=1
   # 逻辑分析仪事件（P1-05）：网页实时事件 = 命令行 --trace-io 重放（逐条），回退后重建的也一致
   r=$(node tools/webtest/traceio.mjs 2>&1 | grep '^\[traceio\]')
   echo "$r" | sed 's/^/- /' >> $REPORT

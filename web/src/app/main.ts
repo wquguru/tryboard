@@ -12,6 +12,7 @@ import { initTheme, themeToggle } from '../theme';
 import { partLabel } from './wiring';
 import { createCmdk } from './cmdk';
 import { getAnalyzer } from './analyzer';
+import { loadCaseParams } from './casemesh';
 
 export { registerStep } from './shell';
 
@@ -36,6 +37,7 @@ const store = createStore<AppState>({
   verifying: null,
   verifyProgress: 0,
   assembly: null,
+  caseParams: loadCaseParams(work.id),
   bom: loadBom(work.id),
   sceneRev: 0,
   editRev: 0,

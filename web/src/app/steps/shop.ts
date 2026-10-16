@@ -8,6 +8,8 @@ import { evaluate, type Finding } from '../../catalog/rules';
 import { initialHistory, opLabel, placement, push, replay, ruleInput, shortName, validHistory, type Bom, type BomHistory, type BomOp } from '../bom';
 import type { StepCtx, StepImpl, WorkId } from '../types';
 import { partLabel } from '../wiring';
+import { PARAM_RANGE, type CaseParams } from '../enclosure';
+import { download, exportCase, layoutFor, loadCaseParams, saveCaseParams } from '../casemesh';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
@@ -281,7 +283,9 @@ ${part.note ? `<p class="note">${esc(part.note)}</p>` : ''}
 ${sec('去店铺搜')}<div class="btns"><a class="btn" href="${esc(part.searchUrl.taobao)}" target="_blank" rel="noopener noreferrer">淘宝搜索 ↗</a><a class="btn" href="${esc(part.searchUrl.szlcsc)}" target="_blank" rel="noopener noreferrer">立创商城搜索 ↗</a></div>
 <p class="note">搜索词：<span class="mono">${esc(part.keywords)}</span>。只是搜索页，不是推荐某家店。</p>`;
     } else detail = `${sec('零件')}<div class="tree-empty">点左边清单或中间的零件看详情</div>`;
-    c.shell.props.innerHTML = rules + detail;
+    const caseT = part && /^enclosure-(weather|spin|lens)$/.test(part.id) ? part.id.slice('enclosure-'.length) : null;
+    c.shell.props.innerHTML = rules + (caseT ? caseDetail(caseT) : '') + detail;
+    if (caseT) wireCase(caseT);
     c.shell.props.querySelectorAll<HTMLButtonElement>('[data-fix]').forEach((btn) => {
       btn.onclick = () => {
         const f = probs[Number(btn.dataset.fix)];
@@ -295,6 +299,68 @@ ${sec('去店铺搜')}<div class="btns"><a class="btn" href="${esc(part.searchUr
     // 结论：n 条提醒 / 清单没问题
     const nb = probs.filter((f) => f.level === 'block').length;
     c.shell.setVerdict(probs.length ? `${probs.length} 条提醒` : '清单没问题', nb ? 'bad' : probs.length ? 'warn' : 'ok');
+  }
+
+  // ------------------------------------------------------------ 参数化外壳（P1-08）：尺寸、可调参数、警告、导出
+  let caseOut: { text: string; ok: boolean } | null = null;
+  const caseParamsOf = (t: string): CaseParams => (t === ctx!.work.id ? ctx!.store.get().caseParams : loadCaseParams(t));
+  function caseDetail(t: string) {
+    const p = caseParamsOf(t);
+    const L = layoutFor(t, ctx!.store.get().bom, p);
+    const dims = L.shape === 'rect' ? `${L.outer[0]} × ${L.outer[1]} × ${L.outer[2]} mm` : `底座 Ø${L.outer[0]} × ${L.outer[2]} mm`;
+    const slider = (k: keyof CaseParams, label: string, step: number) => {
+      const [lo, hi] = PARAM_RANGE[k];
+      return `<label class="case-p"><span class="k">${label}</span><input type="range" min="${lo}" max="${hi}" step="${step}" value="${p[k]}" data-cp="${k}" aria-label="${label}"><input type="number" min="${lo}" max="${hi}" step="${step}" value="${p[k]}" data-cpn="${k}" class="mono" aria-label="${label}（数字）"><span class="muted">mm</span></label>`;
+    };
+    const warn = L.warnings.length
+      ? L.warnings.map((w) => `<div class="res bad"><span class="mk">!</span><span>${esc(w.text)}</span></div>`).join('')
+      : `<div class="res ok"><span class="mk">✓</span><span>零件都装得下（内腔 ${L.inner} mm，需要 ${L.need} mm）</span></div>`;
+    const sizes = L.sizes.map((x) => kv(esc(shortName(x.part)), `${x.size.map((v) => +v.toFixed(1)).join(' × ')} mm${x.est ? '（估算）' : ''}`)).join('');
+    return `${sec('参数化外壳 · 估算，未经真机标定')}<div class="ph">按清单零件尺寸生成</div>
+${kv('外形', dims)}${kv('内腔 / 需要', `${L.inner} / ${L.need} mm`, L.inner < L.need ? 'bad' : '')}${kv('最低高度', `${L.minHeight} mm`)}
+<div class="case-ps edit-only">${slider('height', L.shape === 'rect' ? '高度' : '底座高', 0.5)}${slider('wall', '壁厚', 0.1)}${L.shape === 'rect' ? slider('radius', '圆角', 0.5) : ''}</div>
+${warn}
+<details class="oks"><summary>开孔与定位（${L.features.bottom.length + L.features.lid.length} 处）</summary>${[...L.features.bottom.map((f) => `底：${f}`), ...L.features.lid.map((f) => `盖：${f}`)].map((f) => `<div class="res na"><span class="mk">·</span><span>${esc(f)}</span></div>`).join('')}</details>
+<details class="oks"><summary>用到的零件尺寸</summary>${sizes}</details>
+<div class="btns"><button type="button" class="btn primary" data-export="stl">导出 STL</button><button type="button" class="btn" data-export="3mf">导出 3MF</button></div>
+<p class="note" id="caseOut">${caseOut ? `<span class="${caseOut.ok ? 'okc' : 'bad'}">${esc(caseOut.text)}</span>` : '导出前会用 three.js 读回一遍校验。3MF 带两个零件（底壳、顶盖），已按打印朝向摆好；拿去打印服务上传询价。'}</p>`;
+  }
+  function setCase(t: string, patch: Partial<CaseParams>) {
+    const c = ctx!;
+    const p = { ...caseParamsOf(t), ...patch };
+    for (const k of Object.keys(PARAM_RANGE) as (keyof CaseParams)[]) p[k] = Math.min(PARAM_RANGE[k][1], Math.max(PARAM_RANGE[k][0], Number(p[k]) || PARAM_RANGE[k][0]));
+    saveCaseParams(t, p);
+    if (t === c.work.id) c.store.set({ caseParams: p });
+    caseOut = null;
+    renderProps();
+  }
+  function wireCase(t: string) {
+    const el = ctx!.shell.props;
+    el.querySelectorAll<HTMLInputElement>('[data-cp]').forEach((i) => {
+      i.oninput = () => {
+        const n = el.querySelector<HTMLInputElement>(`[data-cpn="${i.dataset.cp}"]`);
+        if (n) n.value = i.value;
+      };
+      i.onchange = () => setCase(t, { [i.dataset.cp!]: Number(i.value) });
+    });
+    el.querySelectorAll<HTMLInputElement>('[data-cpn]').forEach((i) => (i.onchange = () => setCase(t, { [i.dataset.cpn!]: Number(i.value) })));
+    el.querySelectorAll<HTMLButtonElement>('[data-export]').forEach((b) => {
+      b.onclick = async () => {
+        const fmt = b.dataset.export as 'stl' | '3mf';
+        const out = el.querySelector('#caseOut');
+        b.disabled = true;
+        if (out) out.textContent = `生成 ${fmt.toUpperCase()} 中（第一次要下载 Manifold，约 0.5 MB）…`;
+        try {
+          const r = await exportCase(t, ctx!.store.get().bom, caseParamsOf(t), fmt);
+          download(r.name, r.bytes, fmt === 'stl' ? 'model/stl' : 'model/3mf');
+          caseOut = { ok: r.check.ok, text: `${r.name} · ${(r.bytes.length / 1024).toFixed(0)} KB · ${r.check.text}` };
+          (window as unknown as { __tbCase: unknown }).__tbCase = { name: r.name, bytes: r.bytes.length, check: r.check };
+        } catch (e) {
+          caseOut = { ok: false, text: `导出失败：${e}` };
+        }
+        if (ctx) renderProps();
+      };
+    });
   }
 
   // ------------------------------------------------------------ 中间：零件平铺

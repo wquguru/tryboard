@@ -3,7 +3,8 @@
 // 舵盘装偏 / 透镜高度 → 成品画面变化（标明估算）。
 import { mount, type LiveFrame } from './common';
 import type { ProductHandlers } from './product';
-import { CHIP_HEAT_OFFSET, TEMPLATES, type Effects, type Part, type Picked, type Template } from './templates';
+import { CHIP_HEAT_OFFSET, TEMPLATES, type Effects, type Part, type Template } from './templates';
+import { createAsmCore } from './asmcore';
 
 export { CHIP_HEAT_OFFSET };
 
@@ -31,7 +32,9 @@ export function createAssembly(el: HTMLElement, h: AssemblyHandlers, opts: { ser
   const P = T.parts;
   const byId = Object.fromEntries(P.map((p) => [p.id, p])) as Record<string, Part>;
   const N = P.length;
-  const st: Picked & { msg: [string, string]; bad: boolean; choosing: string | null; mode: 'build' | 'product' } = { placed: [], choice: {}, msg: T.intro, bad: false, choosing: null, mode: 'build' };
+  const core = createAsmCore(T);
+  const st = core.st;
+  let mode: 'build' | 'product' = 'build';
 
   const svg: string[] = [];
   svg.push('<text x="28" y="44" fill="#F7F6F3" font-size="15" font-weight="700">零件盘</text><text x="84" y="44" fill="#9FBFB0" class="tb-mono" font-size="11">拖进壳里 · 也可以点一下</text>');
@@ -113,43 +116,25 @@ ${choosers}
   }
 
   function place(id: string, spot?: string) {
-    const next = P[st.placed.length]?.id;
-    if (id !== next) {
-      st.bad = true;
-      st.choosing = null;
-      st.msg = [`还不能装「${byId[id].short}」`, next ? `先装「${byId[next].short}」，它在更下面` : '已经装完了'];
-      h.step?.(`装${byId[id].short} ✗`);
-      return render();
+    const r = core.place(id, spot);
+    if (r.kind === 'rejected') h.step?.(`装${byId[id].short} ✗`);
+    else if (r.kind === 'placed') {
+      const s = byId[id].spots?.find((x) => x.key === spot);
+      h.step?.(`装${byId[id].short}${s ? `（${s.label}）` : ''}`);
+      if (r.offsetChanged) h.offset(fx().sensorOffset ?? 0);
     }
-    const p = byId[id];
-    if (p.spots && !spot) {
-      st.choosing = id;
-      st.bad = false;
-      st.msg = [`${p.short}怎么装？`, p.spots.map((s) => s.label).join('，还是')];
-      return render();
-    }
-    const before = fx().sensorOffset ?? 0;
-    st.placed.push(id);
-    const s = p.spots?.find((x) => x.key === spot);
-    if (s) st.choice[id] = s.key;
-    st.choosing = null;
-    st.bad = !!s && !s.ok;
-    st.msg = s ? s.msg : p.okMsg ?? ['装好了', ''];
-    h.step?.(`装${p.short}${s ? `（${s.label}）` : ''}`);
-    if ((fx().sensorOffset ?? 0) !== before) h.offset(fx().sensorOffset ?? 0);
     render();
   }
   function reset() {
-    const before = fx().sensorOffset ?? 0;
-    Object.assign(st, { placed: [], choice: {}, msg: T.intro, bad: false, choosing: null });
+    const had = core.reset();
     setMode('build');
-    if (before) h.offset(0);
+    if (had) h.offset(0);
     h.step?.('重新装');
     render();
   }
   function setMode(m: 'build' | 'product') {
-    if (st.mode === m) return;
-    st.mode = m;
+    if (mode === m) return;
+    mode = m;
     q<HTMLElement>('build').hidden = m !== 'build';
     q<HTMLElement>('product').hidden = m !== 'product';
     h.mode?.(m);
@@ -273,12 +258,12 @@ ${choosers}
   return {
     template: T.id,
     update(f: LiveFrame, roomTemp: number) {
-      if (st.mode === 'product') product.update(f, roomTemp, fx());
+      if (mode === 'product') product.update(f, roomTemp, fx());
     },
-    state: () => ({ placed: [...st.placed], choice: { ...st.choice }, mode: st.mode, total: N }),
+    state: () => ({ placed: [...st.placed], choice: { ...st.choice }, mode, total: N }),
     effects: fx,
     /** 装完且没有警告 */
-    clean: () => st.placed.length === N && P.every((p) => !p.spots || p.spots.find((s) => s.key === st.choice[p.id])?.ok),
+    clean: core.clean,
     place,
     reset,
     /** 最近一条提示（标题、说明）和它是不是警告 */
