@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+"""生成验收 / 示例用的测试声音（我们自己合成，不用外部素材）。
+用法：tools/audio/gen_wav.py [输出目录]（默认 tools/audio/）
+- sine1k.wav：1000 Hz 正弦，幅度 0.5（RMS 0.3536），48 kHz 16 位单声道，1 秒（整数个周期，循环无缝）
+- sweep.wav：200 → 2000 Hz 指数扫频，幅度 0.5，48 kHz 16 位单声道，2 秒（首尾 10 ms 淡入淡出）
+"""
+import math, os, struct, sys, wave
+
+RATE = 48000
+
+def write(path, xs):
+    with wave.open(path, 'wb') as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(RATE)
+        w.writeframes(b''.join(struct.pack('<h', max(-32768, min(32767, round(x * 32767)))) for x in xs))
+    print(path, len(xs), 'samples')
+
+def main():
+    out = sys.argv[1] if len(sys.argv) > 1 else os.path.dirname(os.path.abspath(__file__))
+    os.makedirs(out, exist_ok=True)
+    write(os.path.join(out, 'sine1k.wav'), [0.5 * math.sin(2 * math.pi * 1000 * i / RATE) for i in range(RATE)])
+    n, f0, f1 = 2 * RATE, 200.0, 2000.0
+    k = math.log(f1 / f0) / (n / RATE)
+    fade = int(0.01 * RATE)
+    xs = []
+    for i in range(n):
+        t = i / RATE
+        ph = 2 * math.pi * f0 * (math.exp(k * t) - 1) / k
+        g = min(1.0, i / fade, (n - 1 - i) / fade)
+        xs.append(0.5 * g * math.sin(ph))
+    write(os.path.join(out, 'sweep.wav'), xs)
+
+if __name__ == '__main__':
+    main()

@@ -2,17 +2,19 @@
 //! 新加芯片时在这里加一个分支，CLI / 网页不用改。
 
 use std::collections::{HashMap, VecDeque};
+use tryboard_elec::board::{Activity, Board, ChipKind, Power};
+pub use tryboard_esp32c3::devices::audio::{Analysis as AudioAnalysis, Block as AudioBlock};
+use tryboard_esp32c3::devices::audio::{Audio, MicSource};
 use tryboard_esp32c3::devices::{
     bme280::{Bme280, Env},
     gc9a01::Gc9a01,
     ssd1306::Ssd1306,
 };
-use tryboard_esp32c3::iotrace::IoTrace;
 pub use tryboard_esp32c3::iotrace::IoEvent;
+use tryboard_esp32c3::iotrace::IoTrace;
 use tryboard_esp32c3::rmt::Ws2812;
 use tryboard_esp32c3::Esp32c3;
 use tryboard_esp32s3::Esp32s3;
-use tryboard_elec::board::{Activity, Board, ChipKind, Power};
 
 pub use tryboard_esp32c3::periph::CPU_HZ;
 
@@ -94,11 +96,31 @@ impl Machine {
         match Chip::from_image(&flash) {
             Some(Chip::Esp32s3) => {
                 let (m, a) = Esp32s3::boot(rom, flash)?;
-                Ok((Machine { hw: Hw::S3(m), elec: Board::new(ChipKind::S3) }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
+                Ok((
+                    Machine {
+                        hw: Hw::S3(m),
+                        elec: Board::new(ChipKind::S3),
+                    },
+                    BootInfo {
+                        offset: a.offset,
+                        entry: a.entry,
+                        segments: a.segments.len(),
+                    },
+                ))
             }
             Some(Chip::Esp32c3) | None => {
                 let (m, a) = Esp32c3::boot(rom, flash)?;
-                Ok((Machine { hw: Hw::C3(m), elec: Board::new(ChipKind::C3) }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
+                Ok((
+                    Machine {
+                        hw: Hw::C3(m),
+                        elec: Board::new(ChipKind::C3),
+                    },
+                    BootInfo {
+                        offset: a.offset,
+                        entry: a.entry,
+                        segments: a.segments.len(),
+                    },
+                ))
             }
         }
     }
@@ -141,15 +163,30 @@ impl Machine {
         let w = self.wifi_frames();
         let tx_frames = w.0.saturating_sub(w0.0);
         let tx = tx_frames as f64 * self.elec.p.tx_airtime / (dc as f64 / CPU_HZ as f64);
-        let servo_pw_us = self.elec.servo_pin.and_then(|p| self.pin_pwm(p as usize)).and_then(|(d, f)| {
-            // 舵机只认 50 Hz 量级的脉冲；别的频率（蜂鸣器 kHz）不当舵机信号
-            if (20.0..=500.0).contains(&f) && d > 0.0 {
-                Some(d as f64 / f as f64 * 1e6)
-            } else {
-                None
-            }
-        });
-        Activity { busy, wifi_on: w.0 + w.1 > 0, tx, servo_pw_us }
+        let servo_pw_us = self
+            .elec
+            .servo_pin
+            .and_then(|p| self.pin_pwm(p as usize))
+            .and_then(|(d, f)| {
+                // 舵机只认 50 Hz 量级的脉冲；别的频率（蜂鸣器 kHz）不当舵机信号
+                if (20.0..=500.0).contains(&f) && d > 0.0 {
+                    Some(d as f64 / f as f64 * 1e6)
+                } else {
+                    None
+                }
+            });
+        let amp_i = self
+            .audio()
+            .and_then(|a| a.speaker.as_ref())
+            .map(|s| s.supply_current())
+            .unwrap_or(0.0);
+        Activity {
+            busy,
+            wifi_on: w.0 + w.1 > 0,
+            tx,
+            servo_pw_us,
+            amp_i,
+        }
     }
 
     /// Wi-Fi 收发帧计数（发, 收）；只有 C3 有 Wi-Fi 模型
@@ -423,6 +460,78 @@ impl Machine {
         }
     }
 
+    pub fn audio(&self) -> Option<&Audio> {
+        let a = match &self.hw {
+            Hw::S3(m) => &m.bus.audio,
+            Hw::C3(m) => &m.bus.audio,
+        };
+        (!a.is_empty()).then_some(a)
+    }
+
+    fn audio_mut(&mut self) -> &mut Audio {
+        match &mut self.hw {
+            Hw::S3(m) => &mut m.bus.audio,
+            Hw::C3(m) => &mut m.bus.audio,
+        }
+    }
+
+    /// 接 I2S 音频器件："max98357a"（喇叭）/ "inmp441"（麦克风）。引脚按芯片：
+    /// S3 见 tryboard_esp32s3::i2s_pin，C3 见 tryboard_esp32c3::i2s_pin
+    pub fn i2s_attach(&mut self, kind: &str) -> bool {
+        match (&mut self.hw, kind) {
+            (Hw::S3(m), "max98357a") => m.bus.attach_speaker(),
+            (Hw::C3(m), "max98357a") => m.bus.attach_speaker(),
+            (Hw::S3(m), "inmp441") => m.bus.attach_mic(),
+            (Hw::C3(m), "inmp441") => m.bus.attach_mic(),
+            _ => return false,
+        }
+        self.elec.add_module(kind);
+        true
+    }
+
+    /// 麦克风听固定 WAV（循环）；没接麦克风时先接上
+    pub fn mic_wav(&mut self, rate: f64, data: Vec<f32>) {
+        if self.audio_mut().mic.is_none() {
+            self.i2s_attach("inmp441");
+        }
+        if let Some(m) = self.audio_mut().mic.as_mut() {
+            m.source = MicSource::Wav { rate, data };
+        }
+    }
+
+    /// 麦克风听实时推入的声音（网页麦克风），rate = 推入数据的采样率
+    pub fn mic_push(&mut self, rate: f64, x: &[f32]) {
+        if let Some(m) = self.audio_mut().mic.as_mut() {
+            m.push_live(rate, x);
+        }
+    }
+
+    /// 麦克风回到安静
+    pub fn mic_silence(&mut self) {
+        if let Some(m) = self.audio_mut().mic.as_mut() {
+            m.source = MicSource::Silence;
+        }
+    }
+
+    /// 取走喇叭攒下的声音（带模拟时刻）
+    pub fn audio_take(&mut self) -> Vec<AudioBlock> {
+        self.audio_mut()
+            .speaker
+            .as_mut()
+            .map(|s| s.take())
+            .unwrap_or_default()
+    }
+
+    /// 喇叭最近 secs 秒的读数
+    pub fn audio_analyze(&self, secs: f64) -> Option<AudioAnalysis> {
+        self.audio()?.speaker.as_ref().map(|s| s.analyze(secs))
+    }
+
+    /// `[tryboard] I2S …` 观察记录（没接音频器件时为空）
+    pub fn audio_report(&self) -> String {
+        self.audio().map(|a| a.report()).unwrap_or_default()
+    }
+
     /// SPI2 传输统计（次数, MOSI 字节数）
     pub fn spi_stats(&self) -> (u64, u64) {
         match &self.hw {
@@ -434,7 +543,12 @@ impl Machine {
     /// GPIO 电平变化记录（周期, 电平）
     pub fn gpio_log(&self) -> Vec<(u64, u64)> {
         match &self.hw {
-            Hw::C3(m) => m.bus.gpio_log.iter().map(|(t, l)| (*t, *l as u64)).collect(),
+            Hw::C3(m) => m
+                .bus
+                .gpio_log
+                .iter()
+                .map(|(t, l)| (*t, *l as u64))
+                .collect(),
             Hw::S3(m) => m.bus.gpio_log.clone(),
         }
     }
@@ -544,7 +658,9 @@ fn c3_stop(m: &Esp32c3, r: tryboard_esp32c3::Stop) -> Stop {
     use tryboard_esp32c3::Stop as S;
     match r {
         S::Budget => Stop::Budget,
-        S::Fault { cause, pc, tval } => Stop::Fault(format!("CPU 异常 cause={cause} pc=0x{pc:08x} tval=0x{tval:08x}")),
+        S::Fault { cause, pc, tval } => Stop::Fault(format!(
+            "CPU 异常 cause={cause} pc=0x{pc:08x} tval=0x{tval:08x}"
+        )),
         S::Hle(pc) => Stop::Hle(format!("0x{pc:08x} {}", m.symbol_at(pc).unwrap_or(""))),
         S::Reset(r) => Stop::Reset(r),
     }
@@ -554,12 +670,14 @@ fn s3_stop(m: &Esp32s3, r: tryboard_esp32s3::Stop) -> Stop {
     use tryboard_esp32s3::Stop as S;
     match r {
         S::Budget => Stop::Budget,
-        S::Fault { cause, epc, vaddr } => Stop::Fault(format!("CPU 异常 EXCCAUSE={cause} EPC1=0x{epc:08x} EXCVADDR=0x{vaddr:08x}")),
+        S::Fault { cause, epc, vaddr } => Stop::Fault(format!(
+            "CPU 异常 EXCCAUSE={cause} EPC1=0x{epc:08x} EXCVADDR=0x{vaddr:08x}"
+        )),
         S::Break(v) => Stop::Fault(format!("BREAK 0x{v:x}")),
         S::Hle(pc) => Stop::Hle(format!("0x{pc:08x} {}", m.symbol_at(pc).unwrap_or(""))),
         S::Reset(r) => Stop::Reset(r),
     }
 }
 
-pub use tryboard_esp32c3::devices::bme280::Env as SensorEnv;
 pub use tryboard_elec::board::Power as PowerMode;
+pub use tryboard_esp32c3::devices::bme280::Env as SensorEnv;

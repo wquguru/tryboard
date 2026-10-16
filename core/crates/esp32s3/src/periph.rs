@@ -5,6 +5,8 @@
 pub mod src {
     pub const GPIO: u32 = 16;
     pub const SPI2: u32 = 21;
+    pub const I2S0: u32 = 25;
+    pub const I2S1: u32 = 26;
     pub const UART0: u32 = 27;
     pub const UART1: u32 = 28;
     pub const LEDC: u32 = 35;
@@ -66,7 +68,11 @@ pub struct Intmatrix {
 impl Default for Intmatrix {
     fn default() -> Self {
         // 复位值：所有源映射到线 16（定时器线，等于不连接）
-        Intmatrix { map: [16; src::MAX], clock_gate: 1, last_edge_in: 0 }
+        Intmatrix {
+            map: [16; src::MAX],
+            clock_gate: 1,
+            last_edge_in: 0,
+        }
     }
 }
 
@@ -355,7 +361,12 @@ pub struct SensAdc {
 
 impl Default for SensAdc {
     fn default() -> Self {
-        SensAdc { regs: [0; 0x100 / 4], pin_mv: [0.0; NPINS], noise_lsb: 2, seed: 0x1234_5678 }
+        SensAdc {
+            regs: [0; 0x100 / 4],
+            pin_mv: [0.0; NPINS],
+            noise_lsb: 2,
+            seed: 0x1234_5678,
+        }
     }
 }
 
@@ -365,7 +376,9 @@ impl SensAdc {
     }
 
     pub fn write(&mut self, off: u32, v: u32) -> bool {
-        let Some(old) = self.regs.get((off / 4) as usize).copied() else { return false };
+        let Some(old) = self.regs.get((off / 4) as usize).copied() else {
+            return false;
+        };
         let mut v = v;
         if off == 0x0c || off == 0x30 {
             let unit = if off == 0x0c { 0 } else { 1 };
@@ -386,9 +399,18 @@ impl SensAdc {
         let atten = (atten_reg >> (ch * 2)) & 3;
         let full = [950.0, 1250.0, 1750.0, 3100.0][atten as usize];
         let pin = if unit == 0 { ch + 1 } else { ch + 11 } as usize;
-        let mv = if ch < 10 { self.pin_mv.get(pin).copied().unwrap_or(0.0) } else { 0.0 };
+        let mv = if ch < 10 {
+            self.pin_mv.get(pin).copied().unwrap_or(0.0)
+        } else {
+            0.0
+        };
         self.seed = self.seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
-        let n = if self.noise_lsb > 0 { (self.seed >> 16) % (2 * self.noise_lsb + 1) } else { 0 } as i32 - self.noise_lsb as i32;
+        let n = if self.noise_lsb > 0 {
+            (self.seed >> 16) % (2 * self.noise_lsb + 1)
+        } else {
+            0
+        } as i32
+            - self.noise_lsb as i32;
         ((mv / full * 4095.0).round() as i32 + n).clamp(0, 4095) as u32
     }
 }

@@ -100,6 +100,9 @@ export const LCD_WIRING: Record<ChipId, { sclk: number; mosi: number; cs: number
   esp32c3: { sclk: 6, mosi: 7, cs: 10, dc: 5, rst: 4, bl: 3 },
 };
 
+export { I2S_WIRING } from './i2spins.ts';
+import { I2S_WIRING } from './i2spins.ts';
+
 /** 示例里声明的外接元件（examples.json 的 scene.parts）。 */
 export type PartSpec =
   | { type: 'led'; pin: number; color?: number; col?: number; label?: string }
@@ -112,7 +115,11 @@ export type PartSpec =
   /** 10kΩ 电位器：两端接 3V3 / GND，滑片接 pin（ADC），旋钮可拖动 */
   | { type: 'pot'; pin: number; label?: string }
   /** 无源蜂鸣器模块（三针）：I/O 接 pin，LEDC 方波驱动；网页声音见 audio.ts，3D 里响的时候振膜起伏、冒声波 */
-  | { type: 'buzzer'; pin: number; label?: string };
+  | { type: 'buzzer'; pin: number; label?: string }
+  /** MAX98357A I2S 功放模块 + 4Ω 小喇叭：引脚按芯片固定，见 I2S_WIRING；声音见 pcm.ts，3D 里纸盆随音量起伏 */
+  | { type: 'max98357a'; label?: string }
+  /** INMP441 I2S 数字麦克风模块（L/R 接地 = 左声道）：引脚按芯片固定，见 I2S_WIRING */
+  | { type: 'inmp441'; label?: string };
 
 export interface SceneSpec {
   parts: PartSpec[];
@@ -129,6 +136,8 @@ export interface Bench extends ScenePickApi {
   setGpio(level: number, enable: number, pwm?: number[], levelHi?: number, enableHi?: number): void;
   /** 舵机输出轴角度（度），来自内核的舵机动力学；调过以后这个舵机不再按 PWM 自己追目标 */
   setServoAngle(pin: number, deg: number): void;
+  /** I2S 音频：喇叭此刻的音量（RMS，满量程 = 1）、麦克风输入电平；驱动纸盆起伏与收音圈 */
+  setAudio(spk: number, mic: number): void;
   /** 换开发板（按固件的芯片），外接元件随之重新接线 */
   setBoard(chip: ChipId): void;
   /** OLED 画面：128×64 字节亮度 */
@@ -1074,6 +1083,229 @@ function buzzerModule() {
   return { grp, plugAt, labels: BUZZER_PINS, membrane, waves, waveMat, size: [W, H] as const, ext };
 }
 
+/** 平放在桌上的小模块的公共部分：PCB（贴图上沿 = 排针一侧 = -z）、焊点垫脚、一排直插针朝上 + 杜邦母头插点。
+ *  原点在 PCB 底面中心。pinsAt：每根针的 (x, z)，按 labels 顺序 */
+function flatModule(W: number, H: number, tex: THREE.Texture, side: number, pinsAt: [number, number][]) {
+  const grp = new THREE.Group();
+  const T = 1.2;
+  const pcb = modulePcb(W, H, T, [], tex, side);
+  const flat = new THREE.Group();
+  flat.rotation.x = -Math.PI / 2;
+  pcb.position.y = -H / 2;
+  flat.add(pcb);
+  flat.position.y = 1.2 + T / 2;
+  grp.add(flat);
+  const pcbTop = 1.2 + T;
+  const m = new THREE.Matrix4();
+  const n = pinsAt.length;
+  const feet = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.7, 0.7, 1.2, 10), MAT.tin, n);
+  const pins = new THREE.InstancedMesh(new THREE.BoxGeometry(0.64, 8.5, 0.64), MAT.gold, n);
+  const seats = new THREE.InstancedMesh(new THREE.BoxGeometry(PITCH, 2.5, 2.5), MAT.plastic, n);
+  pinsAt.forEach(([x, z], i) => {
+    feet.setMatrixAt(i, m.makeTranslation(x, 0.6, z));
+    pins.setMatrixAt(i, m.makeTranslation(x, pcbTop + 4.25, z));
+    seats.setMatrixAt(i, m.makeTranslation(x, pcbTop + 1.25, z));
+  });
+  grp.add(feet, pins, seats);
+  const plugAt = pinsAt.map(([x, z]) => new THREE.Vector3(x, pcbTop + 2.5, z));
+  return { grp, pcbTop, plugAt };
+}
+
+/** 丝印：一排引脚名 */
+function silkPins(g: CanvasRenderingContext2D, S: number, labels: string[], xs: number[], y: number, color: string, size = 0.8) {
+  g.fillStyle = color;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.font = `bold ${size * S}px "JetBrains Mono", Menlo, monospace`;
+  labels.forEach((t, i) => g.fillText(t, xs[i] * S, y * S));
+}
+
+/** MAX98357A I2S D 类功放模块：深蓝 PCB 17.8 × 19.4、一排 7 针（LRC BCLK DIN GAIN SD GND Vin）、
+ *  对边一个 2 位绿色接线端子（+ −）接喇叭，中间 QFN 芯片和几颗电容。平放在桌上，排针朝上，原点在 PCB 底面中心。 */
+const AMP_PINS = ['LRC', 'BCLK', 'DIN', 'GAIN', 'SD', 'GND', 'Vin'];
+function ampModule() {
+  const W = 17.8, H = 19.4;
+  const S = 28;
+  const xs = AMP_PINS.map((_, i) => (i - 3) * PITCH);
+  const pz = -H / 2 + 1.8;
+  const tex = canvasTexture(Math.round(W * S), Math.round(H * S), (g) => {
+    const cw = W * S, ch = H * S;
+    g.fillStyle = '#16307a';
+    g.fillRect(0, 0, cw, ch);
+    g.fillStyle = '#d9b860';
+    for (const x of xs) {
+      g.beginPath();
+      g.arc(cw / 2 + x * S, 1.8 * S, 0.8 * S, 0, Math.PI * 2);
+      g.fill();
+    }
+    silkPins(g, S, AMP_PINS, xs.map((x) => W / 2 + x), 3.9, '#eef3fb', 0.62);
+    g.fillStyle = '#eef3fb';
+    g.textAlign = 'center';
+    g.font = `bold ${0.95 * S}px Helvetica, sans-serif`;
+    g.fillText('MAX98357A', cw / 2, ch / 2 - 1.4 * S);
+    g.font = `${0.7 * S}px Helvetica, sans-serif`;
+    g.fillText('I2S 3W Class D Amp', cw / 2, ch / 2 + 3.2 * S);
+    g.font = `bold ${1.0 * S}px Helvetica, sans-serif`;
+    g.fillText('+', cw / 2 - 1.75 * S, ch - 7.2 * S);
+    g.fillText('−', cw / 2 + 1.75 * S, ch - 7.2 * S);
+    g.fillText('SPEAKER', cw / 2, ch - 0.9 * S);
+  });
+  const base = flatModule(W, H, tex, 0x10235c, xs.map((x) => [x, pz]));
+  const { grp, pcbTop } = base;
+  // QFN-16 芯片（3 × 3）与贴片电容
+  const ic = new THREE.Mesh(new THREE.BoxGeometry(3, 0.8, 3), MAT.chip);
+  ic.position.set(0, pcbTop + 0.4, 0.6);
+  grp.add(ic);
+  const caps = new THREE.InstancedMesh(new THREE.BoxGeometry(1.6, 0.8, 0.8), new THREE.MeshStandardMaterial({ color: 0xb08a5a, roughness: 0.6 }), 3);
+  const m = new THREE.Matrix4();
+  [[-4.8, -1.2], [4.8, -1.2], [4.8, 2.4]].forEach(([x, z], i) => caps.setMatrixAt(i, m.makeTranslation(x, pcbTop + 0.4, z)));
+  grp.add(caps);
+  // 3.5 mm 两位接线端子：绿色塑料座 + 两个银色螺丝，线口朝 +z
+  const tz = H / 2 - 3.6;
+  const block = new THREE.Mesh(new THREE.BoxGeometry(7.2, 7.4, 6.6), new THREE.MeshStandardMaterial({ color: 0x1f8a4c, roughness: 0.55 }));
+  block.position.set(0, pcbTop + 3.7, tz);
+  block.castShadow = true;
+  grp.add(block);
+  const screwAt: THREE.Vector3[] = [];
+  for (const dx of [-1.75, 1.75]) {
+    const sc = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.6, 20), MAT.steel);
+    sc.position.set(dx, pcbTop + 7.5, tz - 0.8);
+    grp.add(sc);
+    const slot = new THREE.Mesh(new THREE.BoxGeometry(2, 0.2, 0.3), MAT.plastic);
+    slot.position.set(dx, pcbTop + 7.82, tz - 0.8);
+    grp.add(slot);
+    // 线口：端子朝外一面的方孔
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.2, 0.2), MAT.plastic);
+    mouth.position.set(dx, pcbTop + 2.4, tz + 3.31);
+    grp.add(mouth);
+    screwAt.push(new THREE.Vector3(dx, pcbTop + 2.4, tz + 3.4));
+  }
+  return { grp, plugAt: base.plugAt, labels: AMP_PINS, screwAt, size: [W, H] as const };
+}
+
+/** Φ40 4Ω 3W 小喇叭（纸盆朝上平放）：钕磁铁底座、冲压钢盆架、黑色纸盆 + 折环 + 防尘帽，两片焊片引出红黑线。
+ *  原点在磁铁底面中心。cone 是能上下动的那部分（纸盆 + 防尘帽） */
+function speakerModel() {
+  const grp = new THREE.Group();
+  const magnet = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 4.5, 40), new THREE.MeshStandardMaterial({ color: 0x8d9096, metalness: 0.9, roughness: 0.35 }));
+  magnet.position.y = 2.25;
+  magnet.castShadow = true;
+  grp.add(magnet);
+  // 盆架：从磁铁顶到外沿的一圈钢片（截锥面）+ 顶部平法兰
+  const basket = new THREE.Mesh(new THREE.CylinderGeometry(19.5, 10, 4.5, 48, 1, true), new THREE.MeshStandardMaterial({ color: 0x2b2d31, metalness: 0.7, roughness: 0.4, side: THREE.DoubleSide }));
+  basket.position.y = 4.5 + 2.25;
+  basket.castShadow = true;
+  grp.add(basket);
+  const flange = new THREE.Mesh(new THREE.RingGeometry(18.2, 20, 48).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x2b2d31, metalness: 0.7, roughness: 0.4, side: THREE.DoubleSide }));
+  flange.position.y = 9.02;
+  grp.add(flange);
+  const cone = new THREE.Group();
+  // 纸盆：外沿 r=17 高 8.6，内沿 r=5.5 高 5.2（锥面），哑光黑
+  const prof = [new THREE.Vector2(5.5, 5.2), new THREE.Vector2(10, 6.6), new THREE.Vector2(15, 8.0), new THREE.Vector2(17, 8.6)];
+  const paper = new THREE.Mesh(new THREE.LatheGeometry(prof, 48), new THREE.MeshStandardMaterial({ color: 0x18181a, roughness: 0.9, side: THREE.DoubleSide }));
+  cone.add(paper);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(6, 32, 12, 0, Math.PI * 2, 0, Math.PI * 0.32), new THREE.MeshStandardMaterial({ color: 0x0f0f10, roughness: 0.55 }));
+  cap.position.y = 5.2 - 6 * Math.cos(Math.PI * 0.32) + 0.2;
+  cone.add(cap);
+  grp.add(cone);
+  // 折环（橡胶边）
+  const surround = new THREE.Mesh(new THREE.TorusGeometry(17.6, 0.8, 8, 48).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x101012, roughness: 0.8 }));
+  surround.position.y = 8.8;
+  grp.add(surround);
+  // 焊片（+ 红点、− 黑），朝 -z（朝功放）
+  const tabAt: THREE.Vector3[] = [];
+  for (const dx of [-4, 4]) {
+    const tab = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.3, 4), MAT.tin);
+    tab.position.set(dx, 5.2, -19.6);
+    grp.add(tab);
+    tabAt.push(new THREE.Vector3(dx, 5.4, -21));
+  }
+  const dot = new THREE.Mesh(new THREE.CircleGeometry(0.7, 12).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xd8342a }));
+  dot.position.set(-4, 9.05, -19.1);
+  grp.add(dot);
+  // 声波提示：纸盆上方两道弧
+  const waves = new THREE.Group();
+  const waveMat = new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.8, depthWrite: false });
+  for (const k of [0, 1]) {
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(10 + k * 5, 0.45, 6, 32, Math.PI * 0.5), waveMat);
+    arc.rotation.z = Math.PI * 0.25;
+    arc.raycast = () => {};
+    waves.add(arc);
+  }
+  waves.position.set(0, 20, 0);
+  waves.visible = false;
+  grp.add(waves);
+  return { grp, cone, tabAt, waves, waveMat, r: 20 };
+}
+
+/** INMP441 数字 MEMS 麦克风模块：Φ14 圆形紫色 PCB、两排各 3 针（L/R WS SCK / SD VDD GND），
+ *  底面是 LGA 麦克风、正面中央一个声孔（底部进音）。平放，排针朝上，原点在 PCB 底面中心 */
+const MIC_PINS = ['L/R', 'WS', 'SCK', 'SD', 'VDD', 'GND'];
+function micModule() {
+  const D = 14.2, T = 1.2;
+  const S = 28;
+  const pinsAt: [number, number][] = MIC_PINS.map((_, i) => [((i % 3) - 1) * PITCH, i < 3 ? -4.4 : -4.4 + PITCH]);
+  const tex = canvasTexture(Math.round(D * S), Math.round(D * S), (g) => {
+    const c = D * S;
+    g.fillStyle = '#4a2b86';
+    g.fillRect(0, 0, c, c);
+    g.fillStyle = '#d9b860';
+    for (const [x, z] of pinsAt) {
+      g.beginPath();
+      g.arc(c / 2 + x * S, c / 2 + z * S, 0.75 * S, 0, Math.PI * 2);
+      g.fill();
+    }
+    // 引脚名：第一排写在针上方，第二排写在针下方
+    silkPins(g, S, MIC_PINS.slice(0, 3), [0, 1, 2].map((i) => D / 2 + (i - 1) * PITCH), D / 2 - 6.3, '#f3ecfa', 0.55);
+    silkPins(g, S, MIC_PINS.slice(3), [0, 1, 2].map((i) => D / 2 + (i - 1) * PITCH), D / 2 - 4.4 + PITCH + 1.9, '#f3ecfa', 0.55);
+    g.strokeStyle = '#f3ecfa';
+    g.lineWidth = 0.15 * S;
+    g.beginPath();
+    g.arc(c / 2, c / 2 + 3.4 * S, 1.6 * S, 0, Math.PI * 2);
+    g.stroke();
+    g.fillStyle = '#f3ecfa';
+    g.font = `bold ${0.75 * S}px Helvetica, sans-serif`;
+    g.textAlign = 'center';
+    g.fillText('INMP441', c / 2, c / 2 + 6.0 * S);
+  });
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const grp = new THREE.Group();
+  const top = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5, metalness: 0.05 });
+  const edge = new THREE.MeshStandardMaterial({ color: 0x35206a, roughness: 0.6 });
+  const pcb = new THREE.Mesh(new THREE.CylinderGeometry(D / 2, D / 2, T, 48), [edge, top, edge]);
+  pcb.position.y = 1.2 + T / 2;
+  pcb.castShadow = pcb.receiveShadow = true;
+  grp.add(pcb);
+  const pcbTop = 1.2 + T;
+  // 声孔与底面的 LGA 麦克风（4.7 × 3.8，金属盖）
+  const port = new THREE.Mesh(new THREE.CircleGeometry(0.45, 16).rotateX(-Math.PI / 2), MAT.plastic);
+  port.position.set(0, pcbTop + 0.01, 3.4);
+  grp.add(port);
+  const mic = new THREE.Mesh(new THREE.BoxGeometry(4.7, 1, 3.8), MAT.steel);
+  mic.position.set(0, 0.7, 3.4);
+  grp.add(mic);
+  const m = new THREE.Matrix4();
+  const feet = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.7, 0.7, 1.2, 10), MAT.tin, 6);
+  const pins = new THREE.InstancedMesh(new THREE.BoxGeometry(0.64, 8.5, 0.64), MAT.gold, 6);
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(3 * PITCH, 2.5, 2 * PITCH), MAT.plastic);
+  seat.position.set(0, pcbTop + 1.25, -4.4 + PITCH / 2);
+  grp.add(seat);
+  pinsAt.forEach(([x, z], i) => {
+    feet.setMatrixAt(i, m.makeTranslation(x, 0.6, z));
+    pins.setMatrixAt(i, m.makeTranslation(x, pcbTop + 4.25, z));
+  });
+  grp.add(feet, pins);
+  const plugAt = pinsAt.map(([x, z]) => new THREE.Vector3(x, pcbTop + 2.5, z));
+  // 收音提示：声孔上方一圈，麦克风有声音进来时出现
+  const ringMat = new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.8, depthWrite: false });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.25, 6, 32).rotateX(Math.PI / 2), ringMat);
+  ring.position.set(0, pcbTop + 3, 3.4);
+  ring.visible = false;
+  ring.raycast = () => {};
+  grp.add(ring);
+  return { grp, plugAt, labels: MIC_PINS, ring, ringMat, size: [D, D] as const };
+}
+
 /** 旋转电位器（R16 规格）：蓝色方壳 + 金属轴 + 黑色带指示线的旋钮。原点在引脚根部。 */
 function potModel() {
   const grp = new THREE.Group();
@@ -1466,6 +1698,11 @@ export function createBench(container: HTMLElement): Bench {
   let servos: { pin: number; horn: THREE.Group; freq: number; angle: number; target: number; phys?: boolean }[] = [];
   let pots: { pin: number; knob: THREE.Group; hit: THREE.Mesh; v: number }[] = [];
   let buzzers: { pin: number; membrane: THREE.Mesh; waves: THREE.Group; waveMat: THREE.MeshBasicMaterial; on: boolean }[] = [];
+  let speakers: { cone: THREE.Group; waves: THREE.Group; waveMat: THREE.MeshBasicMaterial }[] = [];
+  let mics: { ring: THREE.Mesh; ringMat: THREE.MeshBasicMaterial }[] = [];
+  /** 喇叭此刻的音量（RMS，满量程 = 1）与麦克风输入电平：纸盆起伏、声波 / 收音圈 */
+  let spkLevel = 0;
+  let micLevel = 0;
   let potCb: ((pin: number, v: number) => void) | null = null;
   let parts = new THREE.Group();
   scene.add(parts);
@@ -1666,6 +1903,94 @@ export function createBench(container: HTMLElement): Bench {
     buzzers.push({ pin: p.pin, membrane: m.membrane, waves: m.waves, waveMat: m.waveMat, on: false });
   }
 
+  /** 平放在桌上的模块：三根以上杜邦线（母头插模块排针）接到开发板。ends = [开发板针, 颜色, 模块针, 用途] */
+  function flatWires(grp: THREE.Group, partId: string, m: { grp: THREE.Group; plugAt: THREE.Vector3[]; labels: string[] }, ends: [string, number, string, string][], side: number) {
+    m.grp.updateMatrixWorld(true);
+    const recs = m.labels.map((l, i) => ({ id: `${partId}:${l}`, label: l, anchor: m.plugAt[i].clone(), parent: m.grp }));
+    pinHits(m.grp, recs, m.plugAt.map((v) => v.clone().setY(v.y + 4)), [2.4, 9, 2.8], modulePins);
+    ends.forEach(([pin, color, end, role], i) => {
+      const b = m.plugAt[m.labels.indexOf(end)].clone().applyMatrix4(m.grp.matrixWorld);
+      const a = boardHole(pin, b);
+      const h = top + 12 + i * 1.5;
+      addWire(grp, [a, lift(a, h), new THREE.Vector3((a.x + b.x) / 2, h + 2, (a.z + b.z) / 2 + side * 4), lift(b, h - 2), b], color, pin, `${partId}:${end}`);
+      addRole(apiId(pin), role);
+    });
+  }
+
+  function buildAmp(grp: THREE.Group, p: Extract<PartSpec, { type: 'max98357a' }>) {
+    // 功放模块平放在面包板外侧的桌上，靠近 I2S 三根针；喇叭再往外，红黑两根线接端子
+    const w = I2S_WIRING[board.spec.chip].spk;
+    const root = new THREE.Group();
+    registerPart('max98357a', root);
+    grp.add(root);
+    const m = ampModule();
+    const sig = pinCands('IO' + w.din)[0].p;
+    const side = Math.sign(sig.z || 1);
+    const bx = sig.x - 6, bz = side * (BB.D / 2 + 16);
+    m.grp.position.set(bx, 0, bz);
+    // 排针朝开发板那一侧（模块的排针在 -z）
+    if (bz < 0) m.grp.rotation.y = Math.PI;
+    root.add(m.grp);
+    const shadow = contactShadow(m.size[0], m.size[1], 0.3);
+    shadow.position.set(bx, shadow.position.y, bz);
+    grp.add(shadow);
+    flatWires(grp, 'max98357a', m, [
+      ['5V', WIRE.vcc, 'Vin', '功放供电（5 V）'],
+      ['GND', WIRE.gnd, 'GND', '功放地'],
+      ['IO' + w.bclk, WIRE.scl, 'BCLK', 'I2S BCLK（位时钟）'],
+      ['IO' + w.lrc, WIRE.sda, 'LRC', 'I2S WS（声道时钟）'],
+      ['IO' + w.din, WIRE.sig, 'DIN', 'I2S 数据 → 喇叭'],
+    ], side);
+    // 喇叭：再往外 34 mm，焊片朝功放
+    const sp = speakerModel();
+    const sx = bx, sz = bz + side * 38;
+    sp.grp.position.set(sx, 0, sz);
+    if (side < 0) sp.grp.rotation.y = Math.PI;
+    root.add(sp.grp);
+    const sh2 = contactShadow(40, 40, 0.35);
+    sh2.position.set(sx, sh2.position.y, sz);
+    grp.add(sh2);
+    root.updateMatrixWorld(true);
+    [WIRE.vcc, WIRE.gnd].forEach((c, i) => {
+      const a = m.screwAt[i].clone().applyMatrix4(m.grp.matrixWorld);
+      const b = sp.tabAt[i].clone().applyMatrix4(sp.grp.matrixWorld);
+      const mid = new THREE.Vector3((a.x + b.x) / 2, 7, (a.z + b.z) / 2);
+      const w2 = wire([a, a.clone().add(new THREE.Vector3(0, 1, side * 3)), mid, b.clone().add(new THREE.Vector3(0, 1.5, -side * 3)), b], c, `wire:max98357a:${i ? '-' : '+'}~speaker`, [`max98357a:${i ? '-' : '+'}`, 'speaker']);
+      root.add(w2.grp);
+    });
+    label(grp, p.label ?? `MAX98357A 功放 + 4Ω 喇叭 · BCLK IO${w.bclk} LRC IO${w.lrc} DIN IO${w.din}`, new THREE.Vector3(sx + 62, 8, sz));
+    speakers.push({ cone: sp.cone, waves: sp.waves, waveMat: sp.waveMat });
+  }
+
+  function buildMic(grp: THREE.Group, p: Extract<PartSpec, { type: 'inmp441' }>) {
+    const w = I2S_WIRING[board.spec.chip].mic;
+    const root = new THREE.Group();
+    registerPart('inmp441', root);
+    grp.add(root);
+    const m = micModule();
+    const sig = pinCands('IO' + w.sd)[0].p;
+    const side = Math.sign(sig.z || 1);
+    // 与喇叭同一侧时错开，免得叠在一起
+    const shareSide = lastScene.parts.some((q) => q.type === 'max98357a') && Math.sign(pinCands('IO' + I2S_WIRING[board.spec.chip].spk.din)[0].p.z || 1) === side;
+    const bx = sig.x + (shareSide ? 30 : -4), bz = side * (BB.D / 2 + 14);
+    m.grp.position.set(bx, 0, bz);
+    if (bz < 0) m.grp.rotation.y = Math.PI;
+    root.add(m.grp);
+    const shadow = contactShadow(m.size[0], m.size[1], 0.3);
+    shadow.position.set(bx, shadow.position.y, bz);
+    grp.add(shadow);
+    flatWires(grp, 'inmp441', m, [
+      ['3V3', WIRE.vcc, 'VDD', '麦克风供电'],
+      ['GND', WIRE.gnd, 'GND', '麦克风地'],
+      ['GND', WIRE.gnd, 'L/R', 'L/R 接地 = 左声道'],
+      ['IO' + w.sck, WIRE.scl, 'SCK', 'I2S SCK（位时钟）'],
+      ['IO' + w.ws, WIRE.sda, 'WS', 'I2S WS（声道时钟）'],
+      ['IO' + w.sd, WIRE.sig, 'SD', 'I2S 数据 ← 麦克风'],
+    ], side);
+    label(grp, p.label ?? `INMP441 麦克风 · SCK IO${w.sck} WS IO${w.ws} SD IO${w.sd} · L/R 接地`, new THREE.Vector3(bx, 22, bz + side * 16));
+    mics.push({ ring: m.ring, ringMat: m.ringMat });
+  }
+
   let lastScene: SceneSpec = { parts: [] };
 
   /** 换开发板（C3 / S3）：开发板重建，外接元件按新板子的引脚重新接线 */
@@ -1704,6 +2029,8 @@ export function createBench(container: HTMLElement): Bench {
     servos = [];
     pots = [];
     buzzers = [];
+    speakers = [];
+    mics = [];
     oledTex = null;
     lcdTex = null;
     holeUse = new Map();
@@ -1722,6 +2049,8 @@ export function createBench(container: HTMLElement): Bench {
       if (p.type === 'servo') buildServo(parts, p);
       if (p.type === 'pot') buildPot(parts, p);
       if (p.type === 'buzzer') buildBuzzer(parts, p);
+      if (p.type === 'max98357a') buildAmp(parts, p);
+      if (p.type === 'inmp441') buildMic(parts, p);
       if (p.type === 'oled') {
         oledData.fill(0);
         for (let i = 3; i < oledData.length; i += 4) oledData[i] = 255;
@@ -2136,6 +2465,21 @@ export function createBench(container: HTMLElement): Bench {
       bz.membrane.userData.y0 ??= bz.membrane.position.y;
       bz.membrane.position.y = bz.membrane.userData.y0 + 0.12 * Math.sin(t0 / 25);
     }
+    // 喇叭：纸盆随音量起伏（示意：真实振幅在可闻频率下看不清），有声音时冒声波；麦克风有输入时声孔上亮一圈
+    for (const sp of speakers) {
+      const on = spkLevel > 0.005;
+      sp.waves.visible = on;
+      sp.cone.position.y = on ? Math.min(1.2, spkLevel * 2.5) * Math.sin(t0 / 22) : 0;
+      if (on) {
+        const ph = (t0 / 700) % 1;
+        sp.waves.scale.setScalar(0.85 + ph * 0.45);
+        sp.waveMat.opacity = Math.min(1, 0.4 + spkLevel * 2) * (1 - ph);
+      }
+    }
+    for (const mc of mics) {
+      mc.ring.visible = micLevel > 0.005;
+      mc.ringMat.opacity = Math.min(0.95, 0.3 + micLevel * 2) * (0.6 + 0.4 * Math.sin(t0 / 120));
+    }
     if (heat.visible) {
       const k = 1 + 0.06 * Math.sin(t0 / 260);
       heat.scale.set(heatBase * k, heatBase * k, 1);
@@ -2187,6 +2531,10 @@ export function createBench(container: HTMLElement): Bench {
         const us = (d * 1e6) / sv.freq;
         sv.target = Math.max(0, Math.min(180, ((us - 500) / 2000) * 180));
       }
+    },
+    setAudio(spk: number, mic: number) {
+      spkLevel = spk;
+      micLevel = mic;
     },
     /** 舵机输出轴角度（度，tryboard-elec 的二阶动力学；有过冲 / 堵转，可超出 0–180 一点） */
     setServoAngle(pin: number, deg: number) {

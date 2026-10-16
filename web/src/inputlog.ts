@@ -31,6 +31,9 @@ export interface InputLog {
   /** 上电时接的舵机（GPIO）与供电方式：重放时变成 --servo / --power */
   servo?: number;
   power?: 'usb' | 'ext';
+  /** 上电时接的 I2S 音频器件（max98357a / inmp441）与麦克风听的测试 WAV（tools/audio/ 下的文件名）：重放时变成 --i2s / --mic */
+  i2s?: string[];
+  mic?: string;
   events: InputEvent[];
   /** 取日志那一刻的模拟时间（毫秒）：重放跑到这里（--seconds）就与网页上看到的一致 */
   endMs?: number;
@@ -90,6 +93,8 @@ export function cliArgs(log: InputLog, fw: string, inputsFile: string, seconds?:
   if (log.i2c.length) a.push('--i2c', log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(','));
   if (log.lcd) a.push('--spi', 'gc9a01');
   if (log.servo !== undefined) a.push('--servo', String(log.servo), '--power', log.power ?? 'usb');
+  if (log.i2s?.length) a.push('--i2s', log.i2s.join(','));
+  if (log.mic) a.push('--mic', `tools/audio/${log.mic}`);
   a.push('--inputs', inputsFile);
   return a;
 }

@@ -141,6 +141,8 @@ pub struct Activity {
     pub tx: f64,
     /// 舵机脉宽（µs）；None = 没有 PWM
     pub servo_pw_us: Option<f64>,
+    /// 接在 5 V 轨上的功放（MAX98357A）此刻的电流（A），随放出的声音大小变
+    pub amp_i: f64,
 }
 
 /// 此刻的读数（电压 V、电流 A）
@@ -155,6 +157,8 @@ pub struct Readings {
     pub i_servo: f64,
     pub i_3v3: f64,
     pub i_chip: f64,
+    /// 5 V 轨上的模块（功放）电流
+    pub i_amp: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -166,6 +170,7 @@ pub struct Stats {
     pub peak_i_ext: f64,
     pub peak_i_servo: f64,
     pub peak_i_3v3: f64,
+    pub peak_i_amp: f64,
     pub resets: u32,
     /// 每次欠压复位的模拟时刻（s）与当时 3V3 的最低值
     pub brownouts: Vec<(f64, f64)>,
@@ -181,6 +186,7 @@ impl Default for Stats {
             peak_i_ext: 0.0,
             peak_i_servo: 0.0,
             peak_i_3v3: 0.0,
+            peak_i_amp: 0.0,
             resets: 0,
             brownouts: Vec::new(),
         }
@@ -197,6 +203,8 @@ pub struct Board {
     pub servo_pin: Option<u32>,
     /// 模块从 3V3 取的电流（A），由挂上的器件累加
     pub modules_3v3: f64,
+    /// 接在 5 V 轨上的模块（功放）有没有
+    pub amp: bool,
     pub now: Readings,
     pub stats: Stats,
     /// 已经积分到的模拟时刻（周期，STEP_CYCLES 的整数倍）
@@ -217,6 +225,7 @@ impl Board {
             servo: None,
             servo_pin: None,
             modules_3v3: 0.0,
+            amp: false,
             now: Readings::default(),
             stats: Stats::default(),
             t: 0,
@@ -256,11 +265,18 @@ impl Board {
             "ssd1306" => Some(0.010),
             // GC9A01 圆屏：估算，主要是背光 25 mA
             "gc9a01" => Some(0.025),
+            // INMP441 数据手册：工作电流 1.4 mA
+            "inmp441" => Some(0.0014),
             _ => None,
         }
     }
 
     pub fn add_module(&mut self, kind: &str) {
+        // MAX98357A 吃 5 V（VIN 接 5V 排针）：电流由机器每段按放音大小给出（Activity::amp_i）
+        if kind == "max98357a" {
+            self.amp = true;
+            return;
+        }
         self.modules_3v3 += Self::module_current(kind).unwrap_or(0.0);
     }
 
@@ -360,6 +376,12 @@ impl Board {
             b: 0,
             c: p.c3v3,
         });
+        // 10：5 V 轨上的功放
+        c.add(Elem::Load {
+            a: N5V,
+            i: if self.amp { act.amp_i } else { 0.0 },
+            vknee: 1.0,
+        });
         c
     }
 
@@ -387,6 +409,7 @@ impl Board {
             },
             i_3v3: i[2],
             i_chip: i[3],
+            i_amp: if self.amp { i[10] } else { 0.0 },
         };
         let st = &mut self.stats;
         let n = &self.now;
@@ -399,6 +422,7 @@ impl Board {
         st.peak_i_ext = st.peak_i_ext.max(n.i_ext);
         st.peak_i_servo = st.peak_i_servo.max(n.i_servo);
         st.peak_i_3v3 = st.peak_i_3v3.max(n.i_3v3);
+        st.peak_i_amp = st.peak_i_amp.max(n.i_amp);
     }
 
     /// 积分到模拟时刻 now（周期）。只走整步（100 µs），余下的留到下次，所以结果只取决于每次调用时给的活动，
@@ -492,6 +516,13 @@ impl Board {
             "[tryboard] 电气 峰值电流 USB={:.3} A 外接={:.3} A 舵机={:.3} A 3V3={:.3} A",
             s.peak_i_usb, s.peak_i_ext, s.peak_i_servo, s.peak_i_3v3
         );
+        if self.amp {
+            let _ = writeln!(
+                o,
+                "[tryboard] 电气 功放（5V）峰值电流 {:.3} A",
+                s.peak_i_amp
+            );
+        }
         let _ = writeln!(o, "[tryboard] 电气 欠压复位 {} 次", s.resets);
         for (t, v) in &s.brownouts {
             let _ = writeln!(o, "[tryboard] 电气 欠压复位 @{t:.4}s 3V3 最低 {v:.3} V");
@@ -545,6 +576,7 @@ mod tests {
             wifi_on: true,
             tx: 1.0,
             servo_pw_us: None,
+            amp_i: 0.0,
         };
         assert!(!b.advance(CPU_HZ / 10, &act));
         assert!(b.now.v3v3 > 3.2, "{:?}", b.now);

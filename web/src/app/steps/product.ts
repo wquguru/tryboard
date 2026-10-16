@@ -222,7 +222,7 @@ ${sec('成品 · 同一份固件，模拟没有重启')}
 ${row('运行', 'run')}
 ${weather ? `${row('气象站周围', 'air')}${row('BME280 读到', 'rt')}${row('OLED 单位', 'unit')}${row('表盘指针', 'needle')}${row('板载 RGB', 'rgb')}${row('蜂鸣器', 'buzz')}${row('热源', 'heat')}` : w === 'spin' ? `${row('舵机', 'servo')}${row('转台', 'turn')}${row('状态', 'look')}` : `${row('表情', 'mood')}${row('透镜', 'lens')}`}
 ${off ? `<p class="note bad">装法：BME280 贴着芯片，读数比周围高 ${off.toFixed(1)} ℃（估算）。回「组装」改放通风口旁。</p>` : ''}
-<div class="btns">${c.session.audio.hasBuzzer ? `<button type="button" class="btn" id="pSound" aria-pressed="false">声音：关</button>` : ''}${weather ? `<button type="button" class="btn" id="pHeat">热源：关</button>` : ''}<button type="button" class="btn" id="pBoot">按住 BOOT</button></div>
+<div class="btns">${c.session.audio.hasSound ? `<button type="button" class="btn" id="pSound" aria-pressed="false">声音：关</button>` : ''}${weather ? `<button type="button" class="btn" id="pHeat">热源：关</button>` : ''}<button type="button" class="btn" id="pBoot">按住 BOOT</button></div>
 ${sec('串口 · 最近几行')}<pre class="brief serial-tail" data-live="serial"></pre>
 ${sec('真机到手先做这三件事')}<ol class="first3">${first}</ol>
 ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
@@ -308,7 +308,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     c.shell.toolbar.setGroups([
       ...(scene3d || lcd3d ? [{ id: 'nav', tools: [{ id: 'p-orbit', label: '旋转', key: '拖动' }, { id: 'p-home', label: '复位视角' }] }] : []),
       { id: 'act', tools: [{ id: 'p-boot', label: '按键' }, ...(weather ? [{ id: 'p-heat', label: heat.on ? '热源：开' : '热源' }] : [])] },
-      ...(c.session.audio.hasBuzzer ? [{ id: 'snd', tools: [{ id: 'p-sound', label: c.session.audio.state.muted ? '声音：关' : '声音：开' }] }] : []),
+      ...(c.session.audio.hasSound ? [{ id: 'snd', tools: [{ id: 'p-sound', label: c.session.audio.state.muted ? '声音：关' : '声音：开' }] }] : []),
       { id: 'run', tools: [{ id: 'p-rerun', label: '再跑一次', primary: true }] },
     ]);
     c.shell.toolbar.setActive(heat.on ? 'p-heat' : 'p-orbit');

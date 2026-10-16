@@ -105,6 +105,17 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
         n = int(m.group(1)) if m else 0
         notes.append(f"LCD 非黑 {n} 像素（显示{m.group(2) if m else '无'}）")
         if n < t['lcd_min_pixels']: missing.append('lcd')
+    # 喇叭：'[tryboard] I2S 喇叭 … 采样率 R Hz，最近 1 秒 RMS x、峰值 y、主频 f Hz'（模拟器侧对喇叭收到的 PCM 做的分析）
+    au = t.get('audio')
+    if au:
+        m = re.search(r'I2S 喇叭 .*采样率 ([\d.]+) Hz，最近 1 秒 RMS ([\d.]+)、峰值 ([\d.]+)、主频 ([\d.]+) Hz', err)
+        if not m:
+            notes.append('喇叭没有收到声音'); missing.append('audio')
+        else:
+            rate, rms, f = float(m.group(1)), float(m.group(2)), float(m.group(4))
+            notes.append(f"喇叭 {rate:.1f} Hz 采样，主频 {f:.1f} Hz，RMS {rms:.4f}")
+            if abs(f - au['freq']) > au['tol'] or abs(rate - au['rate']) > 1 or rms < au.get('min_rms', 0):
+                missing.append('audio')
     speed = re.search(r'模拟 ([\d.]+)s / 实际 ([\d.]+)s', err)
     if speed: notes.append(f"模拟 {speed.group(1)}s 用时 {speed.group(2)}s")
     if t.get('qemu') and not no_qemu:

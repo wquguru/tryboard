@@ -1,6 +1,6 @@
 # 覆盖矩阵
 
-最后更新：2026-10-16（`tools/accept.sh --no-qemu` 全部通过：固件 40/40（含 s3-brownout-usb / -ext），ngspice 对照 10/10，关卡参考固件 8/8（含 07-spin / 07-lens），网页冒烟 15 个示例 + 关卡 / 装配 / 首页 22 项）
+最后更新：2026-10-16（`tools/accept.sh --no-qemu` 全部通过：固件 42/42（含 s3-i2s-tone / s3-i2s-mic），ngspice 对照 10/10，关卡参考固件 8/8，网页冒烟 + 关卡 / 装配 / 首页全过；npm 对拍 s3-button 一次被 SIGKILL（137，内存压力），单独重跑一致）
 
 ## ESP32-C3
 | 模块 | 状态 | 验收 | 备注 |
@@ -24,7 +24,7 @@
 | RMT 接收 | ☐ | — | 寄存器可读写，没有外部输入源，不会产生接收数据 |
 | WS2812 解码器 | ✅ | 同上 | 引脚连到 RMT 输出时自动挂上；高电平 >0.6µs 判 1，低电平 ≥40µs 提交一帧 |
 | SPI2 / GDMA | ✅ | c3-lcd：esp_lcd + esp_lcd_gc9a01 标准写法（SPI_DMA_CH_AUTO、40MHz），整帧 115200 字节拆 6 次 DMA，再每 50ms 局部刷新；CLI `--spi gc9a01` 与网页 3D 台面圆屏都有画面（四色扇区 + 白环，非黑 35409 像素） | 与 S3 共用 `gpspi.rs` / `gdma.rs`；GDMA 按 C3 排布（3 通道、通道组从 0x70 起、中断寄存器集中在 0x00 起且 IN / OUT 共用，`GdmaLayout::C3`）。C3 驱动直接写 DMA_INT_RAW 清 trans_done，模型据此支持写 RAW。圆屏接线 SCLK=6 MOSI=7 CS=10 DC=5 RST=4 背光=3（`esp32c3::lcd_pin`） |
-| I2S | ☐ | — | 未做 |
+| I2S0 | 🟡 | 单元测试：44.1 kHz 分数分频、TX 描述符环按采样率取块 / OUT_EOF 报放完的那块、RX 按 RXEOF_NUM 写块 / IN_SUC_EOF、owner 回写 | 与 S3 同一模型（0x6002D000，GDMA 外设号 3）；**没有 C3 固件验收**；喇叭 / 麦克风约定 GPIO0/1/2、0/1/3（共用 BCK / WS） |
 | I2C0 主机 | ✅ | oled：总线扫描只应答 0x3C、1KB 帧 400kHz 传输 23.8ms（理论 23.2ms）；bme280：END 分段、重复起始读 | 命令表 COMD0–7、TX/RX FIFO、NACK / END / 完成中断、按 SCL 配置算事务耗时；未做：从机模式、10 位地址、超时与仲裁丢失（不会发生）、时钟延展 |
 | 虚拟器件 SSD1306 | ✅ | 帧缓冲点亮 1636 像素、网页截图可读 | 命令解析：寻址模式 / 窗口 / 页模式、电荷泵、开关、对比度、反色、重映射；滚动不做 |
 | 虚拟器件 BME280 | ✅ | 设定 -7.25°C / 88.5% / 950.12hPa，固件按数据手册公式读回误差 0；网页滑块改温度后读数跟随 | 原始 ADC 由补偿公式二分反解；强制 / 正常模式测量时序；无噪声、无 IIR 滤波 |
@@ -72,10 +72,14 @@
 | EXTMEM / eFuse / 模拟前端 | 🟡 | 启动期轮询通过；芯片版本 v0.2、PSRAM_CAP=8MB | cache 操作瞬间完成；eFuse 只读；regi2c HLE |
 | 装配成品 weather（桌面气象站） | ✅ | 同一 I2C 挂 SSD1306 + BME280（23.5°C / 45% / 1013.25hPa 读回误差 0）、舵机 GPIO4 1675us、WS2812 GPIO48 绿 #002000、BOOT 切 ℉ 后屏幕重画（点亮 1328 像素） | 场景层验收；35°C 时 LED=red、PWM=2250us、GPIO5 蜂鸣器 2700Hz 报警：accept 用例 weather-alarm（同固件第二个用例，`fw` 字段） |
 | GP-SPI2 主机 | ✅ | lens / spin：esp_lcd + esp_lcd_gc9a01 标准写法（spi_bus_initialize SPI_DMA_CH_AUTO、轮询发命令、队列发像素），40MHz，整帧 115200 字节拆 6 次 DMA | 命令 / 地址 / 哑周期 / MOSI 各阶段、W0..W15 与 DMA 两条数据通路、TRANS_DONE 中断、按 SPI 时钟计时；不模拟逐位时序与 FIFO；MISO 恒读全 1；双 / 四 / 八线模式按单线计时；从机模式未做 |
-| GDMA（5 通道） | 🟡 | 同上：描述符链（每次传输 5 个描述符）、owner 回写、OUT_EOF | 单元测试覆盖链表遍历 / 回写 / 中断；RX 方向只有"填描述符 + SUC_EOF"，未经固件验收；不模拟突发、FIFO、优先级、内存到内存 |
+| GDMA（5 通道） | ✅ | 同上：描述符链（每次传输 5 个描述符）、owner 回写、OUT_EOF；接收方向见下方「GDMA 流式收发（I2S）」 | 单元测试覆盖链表遍历 / 回写 / 中断；SPI 的 RX（MISO 恒为全 1）仍未经固件验收；不模拟突发、FIFO、优先级、内存到内存 |
 | 虚拟器件 GC9A01 圆屏 | ✅ | lens：四种表情逐一截图核对（眼睛 / 高光 / 腮红 / 心形 / ^ ^ / 困了），开心表情非黑 3208 像素；spin：小黄脸非黑 45244 像素 | 按"常黑 IPS + BGR 子像素"建模（未经真机标定）；厂商初始化命令 42 条只计数；TE、滚动、部分显示、读显存未做 |
 | 装配成品 lens（透镜小人） | ✅ | 启动 MOOD 0 normal、每 3 秒眨眼（BLINK n）、BOOT 切 MOOD 1 happy → 2 love → 3 sleepy → 0 normal；检查点 lens-1（lens-blink）、lens-2（lens-mood）、07-lens 参考固件全过 | 场景层验收 |
 | 装配成品 spin（会转身的小黄） | ✅ | GPIO4 50Hz 占空比 0.042..0.108（脉宽 0.833–2.167ms）、SPIN ±60 交替、眼珠随转向重画（EYE R / EYE L）、BOOT 后 LOOK FRONT（1.5ms）且眼珠回正（青色重心 119.7）；检查点 spin-1（spin-face）、spin-2（spin-turn）、07-spin 参考固件全过 | 舵机机械响应不建模 |
+| I2S0 / I2S1 | ✅ | s3-i2s-tone（IDF `i2s_std`，Philips、44.1 kHz、16 位单声道、I2S0）：喇叭收到 440.0 Hz、RMS 0.345，`i2s_channel_write` 被 EOF 中断卡在播放速度（1175 ms 写 51712 帧 ≈ 44.1 kHz）；s3-i2s-mic（I2S1，16 kHz、32 位槽、左声道）：读回测试 WAV 1000.0 Hz、RMS 0.3533（WAV 0.3536，16 位量化） | 主模式 TDM / 标准格式；PDM、从模式、外部 MCLK、ETM 未做；线上逐位时序、FIFO 深度不模拟（TX 取块时刻 = 播放时刻）；I2S 自己的中断位只有 RX_DONE / TX_DONE |
+| GDMA 流式收发（I2S） | ✅ | 同上：TX 6 个描述符成环、每块 OUT_EOF；RX 描述符环、IN_SUC_EOF、IN_SUC_EOF_DES_ADDR | 通道多了"当前描述符"；不检查 owner（IDF I2S 不开 owner_check）；不模拟突发 / 优先级 / 内存到内存 |
+| 虚拟器件 MAX98357A + 喇叭 | ✅ | 同 s3-i2s-tone；网页 AudioWorklet 播放，输出端 AnalyserNode 测得 440.0 Hz、RMS 0.345（与模拟器侧一致） | (L+R)/2 混音、增益 9 dB 档；SD_MODE / GAIN 脚不建模；电流估算（2.4 mA + 输出功率 / 85%，0 dBFS ≈ 2.5 Vrms 是估算），未经真机标定 |
+| 虚拟器件 INMP441 | ✅ | 同 s3-i2s-mic；网页可换扫频 / 安静，授权后接浏览器麦克风（Chrome 假设备的 400 Hz 提示音读回 400.9 Hz，只玩不进验收），无权限时提示并换回测试 WAV | 无噪声、无高通、无灵敏度换算（WAV 满量程 = 数字满量程）；L/R 接高（右声道）可设但网页没开关 |
 | USB OTG / Wi-Fi / BLE | ☐ | — | USB OTG 在另一分支开发 |
 
 ## 电气（`core/crates/elec`，C3 / S3 共用）

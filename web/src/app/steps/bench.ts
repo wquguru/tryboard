@@ -189,8 +189,8 @@ ${c.work.checkpoints.length ? group('checkpoint', '检查点', `${passedCount(c,
   }
 
   /** 供电网络的实时读数（tryboard-elec 的节点电压 / 电流；本次上电以来的最低 / 峰值 / 复位次数） */
-  const elecRows = (ext: boolean, hasServo: boolean) =>
-    `${sec('电路求解 · 实时')}${row('5V 轨', '', 'e5')}${row('3V3', '', 'e33')}${row('3V3 最低（本次上电）', '', 'emin')}${row('USB 电流', '', 'eiu')}${row('USB 峰值电流', '', 'epu')}${ext ? row('外接 5 V', '', 'eext') : ''}${hasServo ? `${row('舵机电流', '', 'eis')}${row('舵机峰值电流', '', 'eps')}` : ''}${row('欠压复位', '', 'ers')}${row('可信度', '估算（参数来源见 DECISIONS「电气模型」）')}`;
+  const elecRows = (ext: boolean, hasServo: boolean, hasAmp = ctx!.session.scene.parts.some((p) => p.type === 'max98357a')) =>
+    `${sec('电路求解 · 实时')}${row('5V 轨', '', 'e5')}${row('3V3', '', 'e33')}${row('3V3 最低（本次上电）', '', 'emin')}${row('USB 电流', '', 'eiu')}${row('USB 峰值电流', '', 'epu')}${ext ? row('外接 5 V', '', 'eext') : ''}${hasServo ? `${row('舵机电流', '', 'eis')}${row('舵机峰值电流', '', 'eps')}` : ''}${hasAmp ? row('功放电流（5 V，随音量）', '', 'eia') : ''}${row('欠压复位', '', 'ers')}${row('可信度', '估算（参数来源见 DECISIONS「电气模型」）')}`;
   function renderPower(id: string) {
     const c = ctx!;
     const el = c.shell.props;
@@ -615,6 +615,7 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
       set('eext', V(e.vExt));
       set('eis', A(e.iServo));
       set('eps', A(e.peakServo));
+      set('eia', A(e.iAmp ?? 0));
       set('ers', `${e.resets} 次`, e.resets > 0);
       set('eic', A(e.i3v3));
       set('pv', s.selection?.kind === 'pin' ? powerVolts(s.selection.id, !!c.session.power?.ext5v, e) : '');

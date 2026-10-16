@@ -379,3 +379,15 @@
 - 行为：关卡都不带 `--servo`，所以 CLI、网页验收、npm 包三方指纹与合并前 main 相同（npm_parity 全一致）；只有实验台实时运行按台面接线接舵机、走供电网络。worker `boot` 同时带 `servo` / `power` 与逻辑分析仪 `ioWatch`，tick 同时带 `elec` / `brownouts`，`io` 消息照旧
 - accept.sh：levels / replay / elec / interact / traceio 一律要求最后一行是汇总行 `[x] PASS（`，否则记"脚本没跑完"
 - ⌘K "量 3V3" 的提示改为指向工具条万用表（P1-04 已有）
+
+## 2026-10-16 · I2S + GDMA 收发、MAX98357A / INMP441（P2-06）
+- 决定：I2S 模型放在 `tryboard-esp32c3`（`i2s.rs`），C3 / S3 共用（`i2s_reg.h` 两颗芯片布局逐项相同，只有 TX_CONF1、DATE 的复位值不同）。只做 IDF `i2s_std` / `i2s_tdm` 用到的主模式 + GDMA；PDM、从模式、外部 MCLK 不做，配到这些时该方向不出数据（不静默假装成功）。依据：TRM 的寄存器描述 + IDF `hal/i2s_ll.h`、`hal/i2s_hal.c`、`esp_driver_i2s/i2s_common.c` 的写法（Apache-2.0），没看 GPL 的 QEMU I2S
+- 决定：流式时序按"块"而不是按位：TX 每个描述符一块，**取数据时刻 = 这块第一帧的播放时刻**，放完（按帧率算出的时刻）报 OUT_EOF；RX 每块录满再写进描述符。理由：IDF 的 EOF 回调就是按块把缓冲还给 `i2s_channel_write / read`，块级时序足以让写入 / 读出被采样率卡住；逐位模拟 BCK 要每秒 1.4 M 个事件，没有收益。代价：真机 FIFO（64 字）带来的提前量（约 0.7 ms @ 44.1 kHz）不模拟。替代：每帧一个事件（44 k 事件/秒，CPU 开销可见，结果一样）
+- 决定：模型内部用 32 位"槽字"（MSB 对齐）作为 I2S 与器件之间的接口：TX 按 data_bits 左移，RX 取高 data_bits 位；这样 16 / 24 / 32 位、Philips / MSB 的差别（rx_msb_shift）都在 I2S 一侧处理，器件只管"线上一个槽从高位移出的 32 位"。INMP441 给 24 位补码左对齐（低 8 位 0）、另一槽读 0
+- 决定：喇叭 / 麦克风是否"接上"按 GPIO 矩阵判断数据线（DIN 脚的 FUNC_OUT_SEL = 该口 SD 输出；SD 输入信号的 FUNC_IN_SEL 选的是麦克风 SD 脚），时钟脚不检查。引脚按芯片固定（S3 16/17/18 + 39/40/41，避开圆屏 10–15、I2C 8/9、舵机 / LED 4/5、WS2812 48、USB 19/20、PSRAM 33–37；C3 0/1/2 + 0/1/3，共用 BCK / WS），与圆屏 `lcd_pin` 同一套做法。替代：器件自动跟着 I2S 信号走（接哪都响）——教不了"接错线没声音"
+- 决定：测试声音自己合成（`tools/audio/gen_wav.py`：1 kHz 正弦、200→2000 Hz 扫频，48 kHz 16 位，幅度 0.5），WAV 进仓库（共 288 KB，见 `tools/audio/SOURCES.md`），网页从 `/audio/` 取。麦克风按**模拟时间**取样，同一 WAV 每次运行读数一样，进验收（s3-i2s-mic：1000 Hz ±1、RMS 0.3536 ±0.002）。浏览器麦克风只玩：不进输入日志、不进验收
+- 决定：网页放音用 AudioWorklet + 按绝对帧号寻址的环形缓冲（主线程按模拟时刻算出"第几帧开始播"，重采样到 AudioContext 采样率，首尾相接），对齐策略照抄蜂鸣器（领先 0.12 s，偏出就重新对齐）；与蜂鸣器共用一个开关和 AudioContext。没有 AudioWorklet 时退回 AudioBufferSourceNode 定时播放。踩过的坑：按块四舍五入输出长度会在块边界留 1 帧 0，过零测频多数一次，网页测得 452→464 Hz 漂移；改成每块覆盖 [ceil(f0), ceil(f0+时长)) 后输出端测得 440.0 Hz。替代：MediaStream / `<audio>` 播 WAV 片段（延迟大、不能按模拟时间对齐）
+- 决定：功放电流进供电网络：Board 第 10 个元件（5V 轨上的 Load），电流 = 2.4 mA + 输出功率 / (85% × 5 V)，输出有效值按"0 dBFS ≈ 2.5 Vrms（9 dB 档、5 V 不削顶）"估算——数据手册只给增益不给满量程电压，这个数标"估算"。功放没接时该元件电流为 0，原有网络与读数不变；`--elec-report` 只在接了功放时多一行
+- 决定：CLI 接了音频器件就 1 ms 一片（功放电流按每片放出的声音算，与网页实时运行一致；网页验收 worker / npm 包的 simrun 没接音频器件参数，关卡也不用）；`tb_report` 不加音频行（保持关卡指纹不变），音频读数单独走 `tb_audio_report` / `tb_audio_stat`
+- 喇叭固件用 I2S0、麦克风固件用 I2S1（真实项目常这样分，两条路径各有一个固件验收）
+- 未做：C3 固件验收（只有单元测试）、作品库里还没有带喇叭的作品（成品页的声音开关按 `hasSound` 显示，验证时在透镜作品的台面上加了喇叭、跑 s3-i2s-tone）、成品 3D 里不画喇叭

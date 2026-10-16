@@ -1,6 +1,7 @@
 // 实验台的接线：由场景声明（examples.json / 采购清单摆上来的 scene）推出来，再叠上"改接线"（注入的错误接线）。
 // 纯函数，node --test 直接测；id 按 scene-api 约定 'wire:<板上针脚>~<零件>:<丝印>'，与 3D 台面一致。
 import type { PartSpec } from '../board3d';
+import { I2S_WIRING } from '../i2spins.ts';
 
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
 
@@ -12,7 +13,7 @@ export interface PartInfo {
 }
 
 /** 零件类型 → 中文显示名（时间线、提示条、构建树统一用这份，不让英文 type 名漏到界面上） */
-export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: '舵机', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED' };
+export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: '舵机', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED', max98357a: '喇叭', inmp441: '麦克风' };
 export const partLabel = (type: string) => PART_LABEL[type as PartSpec['type']] ?? '零件';
 
 export function partId(p: PartSpec) {
@@ -35,6 +36,14 @@ export function partInfo(p: PartSpec, ext5v = false): PartInfo {
       return { name: `LED（GPIO${p.pin}）`, model: '5 mm LED + 220 Ω 限流电阻', iface: `GPIO${p.pin}，高电平亮`, power: '经 GPIO' };
     case 'buzzer':
       return { name: '无源蜂鸣器', model: '无源蜂鸣器模块（三针，带三极管，LEDC 方波驱动）', iface: `I/O → GPIO${p.pin}`, power: '3V3' };
+    case 'max98357a': {
+      const w = I2S_WIRING.esp32s3.spk;
+      return { name: 'MAX98357A 功放 + 喇叭', model: 'MAX98357A I2S D 类功放模块（3 W）+ Φ40 4 Ω 喇叭', iface: `I2S · BCLK ${w.bclk} · LRC ${w.lrc} · DIN ${w.din}`, power: '5V' };
+    }
+    case 'inmp441': {
+      const w = I2S_WIRING.esp32s3.mic;
+      return { name: 'INMP441 麦克风', model: 'INMP441 I2S 数字 MEMS 麦克风模块（24 位，L/R 接地 = 左声道）', iface: `I2S · SCK ${w.sck} · WS ${w.ws} · SD ${w.sd}`, power: '3V3' };
+    }
   }
 }
 
@@ -107,6 +116,21 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
       add('3V3', id, 'VCC', '供电', 'power', '红');
       add(`GPIO${p.pin}`, id, 'I/O', '方波驱动（LEDC）', 'load', '橙');
       add('GND', id, 'GND', '地', 'gnd', '黑');
+    } else if (p.type === 'max98357a') {
+      const s = I2S_WIRING.esp32s3.spk;
+      add('5V', id, 'Vin', '供电（5 V）', 'power', '红');
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+      add(`GPIO${s.bclk}`, id, 'BCLK', 'I2S 位时钟', 'load', '黄');
+      add(`GPIO${s.lrc}`, id, 'LRC', 'I2S 声道时钟', 'load', '绿');
+      add(`GPIO${s.din}`, id, 'DIN', 'I2S 数据（发）', 'load', '橙');
+    } else if (p.type === 'inmp441') {
+      const s = I2S_WIRING.esp32s3.mic;
+      add('3V3', id, 'VDD', '供电', 'power', '红');
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+      add('GND', id, 'L/R', '声道选择（接地 = 左）', 'gnd', '黑');
+      add(`GPIO${s.sck}`, id, 'SCK', 'I2S 位时钟', 'load', '黄');
+      add(`GPIO${s.ws}`, id, 'WS', 'I2S 声道时钟', 'load', '绿');
+      add(`GPIO${s.sd}`, id, 'SD', 'I2S 数据（收）', 'drive', '橙');
     }
   }
   const drop = new Set(mods.drop ?? []);

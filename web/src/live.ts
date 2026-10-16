@@ -1,6 +1,6 @@
 // 首页 / 关卡页用的实时模拟：起一个 worker.ts，跑一份固件，把每帧状态交给视图。
 import { fetchBuf, imageChip, loadRom, loadWasm } from './assets';
-import type { Env, FromWorker, PowerMode, PwmEvent, Snapshot, ToWorker } from './worker';
+import type { Env, FromWorker, PcmBlock, PowerMode, PwmEvent, Snapshot, ToWorker } from './worker';
 import type { InputEvent, InputLog } from './inputlog';
 import { emptyFrame, type LiveFrame } from './views/common';
 
@@ -14,6 +14,12 @@ export interface LiveOptions {
   servo?: number;
   /** 上电时的供电方式（默认 usb） */
   power?: PowerMode;
+  /** I2S 音频器件（max98357a / inmp441）；麦克风上电时听的 WAV 与文件名 */
+  i2s?: string[];
+  micWav?: ArrayBuffer;
+  micName?: string;
+  /** 喇叭放出的声音（带模拟时刻），接 audio.ts 的 BuzzerAudio.pushPcm */
+  onPcm?(blocks: PcmBlock[]): void;
   onConsole?(text: string): void;
   onFrame?(f: LiveFrame, simSeconds: number): void;
   /** 原始 tick（引脚电平、PWM），给要驱动 3D 台面的页面用 */
@@ -37,6 +43,9 @@ export interface SeekJob {
   lcd: boolean;
   servo?: number;
   power?: PowerMode;
+  i2s?: string[];
+  micWav?: ArrayBuffer;
+  micName?: string;
   /** 上电时的环境（日志第一条 env） */
   env: Env;
   events: InputEvent[];
@@ -77,6 +86,8 @@ export class LiveSim {
         this.seekWaiter = null;
       } else if (m.type === 'io') {
         o.onIo?.(m);
+      } else if (m.type === 'pcm') {
+        o.onPcm?.(m.blocks);
       } else if (m.type === 'seekProgress') {
         o.onSeekProgress?.(m.simSeconds);
       } else if (m.type === 'mark') {
@@ -112,7 +123,7 @@ export class LiveSim {
     const [wasm, flash] = [await loadWasm(), this.flash];
     const rom = await loadRom(imageChip(flash));
     Object.assign(this.frame, emptyFrame());
-    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power });
+    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName });
   }
   reset() {
     return this.start();
@@ -124,10 +135,22 @@ export class LiveSim {
     return this.start();
   }
   /** 换外接器件（按清单重摆台面）：下次 start / reset 生效 */
-  configure(p: { i2c: LiveOptions['i2c']; lcd?: boolean; servo?: number }) {
+  configure(p: { i2c: LiveOptions['i2c']; lcd?: boolean; servo?: number; i2s?: string[] }) {
     this.o.i2c = p.i2c;
     this.o.lcd = p.lcd;
     this.o.servo = p.servo;
+    this.o.i2s = p.i2s;
+  }
+  /** 麦克风声源：WAV（同时作为下次上电的声源）/ 安静 / 实时（之后 micPush 推浏览器麦克风） */
+  setMic(source: 'wav' | 'silence' | 'live', wav?: ArrayBuffer, name?: string) {
+    if (source === 'wav') {
+      this.o.micWav = wav;
+      this.o.micName = name;
+    }
+    this.send({ type: 'mic', source, wav: wav?.slice(0) });
+  }
+  micPush(rate: number, data: Float32Array) {
+    this.send({ type: 'micPush', rate, data }, [data.buffer]);
   }
   powerMode(): PowerMode {
     return this.o.power ?? 'usb';
@@ -203,7 +226,7 @@ export class LiveSim {
     Object.assign(this.frame, emptyFrame());
     return new Promise((r) => {
       this.seekWaiter = r;
-      this.send({ type: 'seek', wasm: wasm.slice(0), rom: rom.slice(0), flash: job.flash.slice(0), i2c: job.i2c, env: job.env, lcd: job.lcd, servo: job.servo, power: job.power, events: job.events, untilMs: job.untilMs });
+      this.send({ type: 'seek', wasm: wasm.slice(0), rom: rom.slice(0), flash: job.flash.slice(0), i2c: job.i2c, env: job.env, lcd: job.lcd, servo: job.servo, power: job.power, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs });
     });
   }
   /** 回退停住以后从那一刻接着实时跑：这次运行重新算"进行中" */

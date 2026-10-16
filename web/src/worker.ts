@@ -56,6 +56,14 @@ interface Exports {
   tb_io_take?(): number;
   tb_io_ptr?(): number;
   tb_io_dropped?(): number;
+  tb_i2s_attach?(kind: number): number;
+  tb_audio_take?(): number;
+  tb_audio_ptr?(): number;
+  tb_audio_len?(): number;
+  tb_audio_stat?(which: number): number;
+  tb_mic_wav?(p: number, len: number): number;
+  tb_mic_push?(p: number, n: number, rate: number): void;
+  tb_mic_silence?(): void;
 }
 
 /** 供电方式（P1-02）：usb = 舵机也吃 USB 的 5V；ext = 舵机由外接 5 V 2 A 供电 */
@@ -71,6 +79,8 @@ export interface ElecFrame {
   iExt: number;
   iServo: number;
   i3v3: number;
+  /** 5 V 轨上的功放（MAX98357A）电流；没接为 0 */
+  iAmp: number;
   min5: number;
   min3v3: number;
   peakUsb: number;
@@ -102,8 +112,16 @@ export type ToWorker =
       /** 舵机信号接哪个 GPIO（舵机电流进供电网络） */
       servo?: number;
       power?: PowerMode;
+      /** I2S 音频器件：'max98357a'（喇叭）/ 'inmp441'（麦克风），引脚按芯片固定（board3d 的 I2S_WIRING） */
+      i2s?: string[];
+      /** 麦克风上电时听的 WAV（缺省安静）与它的文件名（记进输入日志，重放时 --mic tools/audio/<名>） */
+      micWav?: ArrayBuffer;
+      micName?: string;
     }
   | ({ type: 'env' } & Env)
+  /** 麦克风声源：WAV（循环，按模拟时间取样，可复现）/ 安静 / 实时（之后用 micPush 推浏览器麦克风的样本，不可复现、不进输入日志） */
+  | { type: 'mic'; source: 'wav' | 'silence' | 'live'; wav?: ArrayBuffer }
+  | { type: 'micPush'; rate: number; data: Float32Array }
   /** USB ↔ 外接 5 V（进输入日志：power=usb|ext） */
   | { type: 'power'; mode: PowerMode }
   | { type: 'analog'; pin: number; mv: number }
@@ -130,6 +148,9 @@ export type ToWorker =
       lcd?: boolean;
       servo?: number;
       power?: PowerMode;
+      i2s?: string[];
+      micWav?: ArrayBuffer;
+      micName?: string;
       /** 上电以后施加的输入（不含上电和上电时的环境），时间 = 原来施加时的模拟时刻 */
       events: InputEvent[];
       untilMs: number;
@@ -145,6 +166,23 @@ export interface PwmEvent {
   t: number;
   duty: number;
   freq: number;
+}
+
+/** 喇叭（MAX98357A）放出的一段声音：t = 第一个样本的模拟时刻（秒），单声道 16 位 */
+export interface PcmBlock {
+  t: number;
+  rate: number;
+  data: Int16Array;
+}
+
+/** 音频读数（模拟器侧，最近 1 秒）：喇叭收到的 PCM 的采样率、RMS、主频；麦克风送出的帧数 */
+export interface AudioFrame {
+  rate: number;
+  frames: number;
+  rms: number;
+  freq: number;
+  peak: number;
+  micFrames: number;
 }
 
 export type FromWorker =
@@ -170,7 +208,11 @@ export type FromWorker =
       elec?: ElecFrame;
       /** 自上一个 tick 以来的欠压复位（模拟时刻，秒） */
       brownouts?: number[];
+      /** 接了 I2S 音频器件时的读数 */
+      audio?: AudioFrame;
     }
+  /** 喇叭的声音（接了 MAX98357A 才有），按模拟时间排进 Web Audio */
+  | { type: 'pcm'; blocks: PcmBlock[] }
   | { type: 'oled'; pixels: Uint8Array }
   /** GC9A01：240×240 RGBA，画面变了才发 */
   | { type: 'lcd'; pixels: Uint8Array }
@@ -227,6 +269,7 @@ function elecFrame(e: Exports): ElecFrame | undefined {
     iExt: e.tb_elec_i(1),
     iServo: e.tb_elec_i(2),
     i3v3: e.tb_elec_i(3),
+    iAmp: e.tb_elec_i(5),
     min5: e.tb_elec_stat(0),
     min3v3: e.tb_elec_stat(1),
     peakUsb: e.tb_elec_stat(3),
@@ -344,6 +387,47 @@ function flushIo(e: Exports, reset = false) {
   (self as unknown as Worker).postMessage({ type: 'io', reset, data, dropped: e.tb_io_dropped?.() ?? 0 } satisfies FromWorker, [data.buffer]);
 }
 
+// ---- I2S 音频：喇叭的 PCM 每批时间片之后取走，随 tick 发；麦克风声源由主线程切换
+let hasAudio = false;
+let pcmOut: PcmBlock[] = [];
+function drainPcm(e: Exports) {
+  if (!hasAudio || !e.tb_audio_take) return;
+  const n = e.tb_audio_take();
+  if (!n) return;
+  const dv = new DataView(e.memory.buffer, e.tb_audio_ptr!(), e.tb_audio_len!());
+  let o = 0;
+  for (let i = 0; i < n; i++) {
+    const t = dv.getFloat64(o, true);
+    const rate = dv.getFloat32(o + 8, true);
+    const len = dv.getUint32(o + 12, true);
+    const data = new Int16Array(len);
+    for (let k = 0; k < len; k++) data[k] = dv.getInt16(o + 16 + 2 * k, true);
+    o += 16 + 2 * len + (len % 2) * 2;
+    pcmOut.push({ t, rate, data });
+  }
+}
+function flushPcm() {
+  if (!pcmOut.length) return;
+  const blocks = pcmOut;
+  pcmOut = [];
+  (self as unknown as Worker).postMessage({ type: 'pcm', blocks } satisfies FromWorker, blocks.map((b) => b.data.buffer));
+}
+function audioFrame(e: Exports): AudioFrame | undefined {
+  if (!hasAudio || !e.tb_audio_stat) return undefined;
+  const v = (k: number) => {
+    const x = e.tb_audio_stat!(k);
+    return Number.isNaN(x) ? 0 : x;
+  };
+  return { rate: v(0), frames: v(1), rms: v(2), freq: v(3), peak: v(4), micFrames: v(5) };
+}
+function setMic(e: Exports, source: 'wav' | 'silence' | 'live', wav?: ArrayBuffer) {
+  if (source === 'wav' && wav && e.tb_mic_wav) {
+    const p = copyIn(e, wav);
+    e.tb_mic_wav(p, wav.byteLength);
+    e.tb_free(p, wav.byteLength);
+  } else if (source !== 'live') e.tb_mic_silence?.();
+}
+
 let ratioWall = 0;
 let ratioSim = 0;
 let lastRatio = 1;
@@ -363,6 +447,7 @@ function loop() {
     stop = e.tb_run(CPU_HZ / 1000);
     if (watchPins.length) samplePwm(e);
     drainIo(e);
+    drainPcm(e);
     if (stop !== 0) break;
     behind = targetCycles - e.tb_cycles();
   }
@@ -400,7 +485,9 @@ function loop() {
     running,
     elec: elecFrame(e),
     brownouts: takeBrownouts(e),
+    audio: audioFrame(e),
   });
+  flushPcm();
   flushIo(e);
   postOled(e);
   postLcd(e);
@@ -460,7 +547,8 @@ function postPaused(e: Exports) {
   post({ type: 'tick', console: '', leds: leds(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running, elec: elecFrame(e), brownouts: takeBrownouts(e) });
 }
 
-type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode };
+type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; i2s?: string[]; micWav?: ArrayBuffer; micName?: string };
+const I2S_KIND: Record<string, number> = { max98357a: 0, inmp441: 1 };
 /** 上电：建 wasm 实例、挂器件、设环境、开一份新的输入日志 */
 async function bootWasm(m: BootMsg): Promise<Exports | null> {
   const { instance } = await WebAssembly.instantiate(m.wasm, {});
@@ -477,6 +565,10 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   for (const d of m.i2c ?? []) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
   if (m.env) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
   if (m.lcd && e.tb_lcd_attach) e.tb_lcd_attach();
+  hasAudio = false;
+  pcmOut = [];
+  for (const k of m.i2s ?? []) if (e.tb_i2s_attach && I2S_KIND[k] !== undefined && e.tb_i2s_attach(I2S_KIND[k]) === 0) hasAudio = true;
+  if (m.micWav) setMic(e, 'wav', m.micWav);
   // 供电网络：舵机接上、供电方式（上电时的状态；之后的切换走 power 消息并进输入日志）
   power = m.power ?? 'usb';
   if (e.tb_servo_attach && m.servo !== undefined) e.tb_servo_attach(m.servo);
@@ -486,7 +578,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   ioChunks = [];
   ioBytes = 0;
   flushIo(e, true);
-  inputLog = { version: 1, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), events: [] };
+  inputLog = { version: 1, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
   record(e, { kind: 'power', on: true });
   if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
   pwmLast = new Map();
@@ -565,6 +657,9 @@ function seekTo(e: Exports, events: InputEvent[], untilMs: number) {
   }
   // 停住时刻之前的串口输出已经在快照里；主线程用快照的 stdout 重建串口面板
   pwmEvents = [];
+  // 回退重放放出的声音是过去的，不播
+  if (hasAudio) e.tb_audio_take?.();
+  pcmOut = [];
   // 回退重放里的欠压复位是旧事件（时间线上已经有），不再当新事件报
   if (e.tb_elec_stat) resetsSeen = e.tb_elec_stat(7);
 }
@@ -654,5 +749,18 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       apply(ex, { kind: 'supply', mode: m.mode });
       if (!running) postPaused(ex);
       break;
+    case 'mic':
+      if (ex) setMic(ex, m.source, m.wav);
+      break;
+    case 'micPush': {
+      const e = ex;
+      if (!e?.tb_mic_push || !m.data.length) return;
+      // tb_alloc 不保证 4 字节对齐：按字节拷（内核按小端 f32 解）
+      const p = e.tb_alloc(m.data.byteLength);
+      new Uint8Array(e.memory.buffer, p, m.data.byteLength).set(new Uint8Array(m.data.buffer, m.data.byteOffset, m.data.byteLength));
+      e.tb_mic_push(p, m.data.length, m.rate);
+      e.tb_free(p, m.data.byteLength);
+      break;
+    }
   }
 };
