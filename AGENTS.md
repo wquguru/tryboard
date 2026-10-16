@@ -11,17 +11,19 @@
 3. **决策**：选型 / BOM / 引脚 / 功耗估算，每个结论标可信度（仿真验证 / 行为模拟 / 估算 / 必须上真机）。
 
 ## 2. 硬性规则
-- **授权**：见 `docs/LICENSING.md`。没写进去的外部代码 / 二进制 / 素材不得进仓库或进网站。参考 GPL 代码（如 espressif/qemu）只能"读规格、写自己的实现"，不得复制粘贴。
+- **授权**：见 `docs/LICENSING.md`（依据见 `LICENSING_REVIEW.md`）。没写进去的外部代码 / 二进制 / 素材不得进仓库或进网站。GPL / AGPL 代码（espressif/qemu、CircuitJS、SimulIDE 等）可以读来理解行为，但不复制、不逐行翻译、不照搬结构；参考了什么写进 DECISIONS，并用固件差分验证。
 - **验收优先**：每个外设模型都必须有验收（见 §6）。没有验收的功能不算完成。
-- **不要公开仓库、不要部署公网、不要发帖**：要人点头。
+- **不要公开仓库、不要部署公网、不要发帖、不要对外发邮件、不要花钱**：要人点头（自主边界见 §10）。
 - 不要为了让测试通过而削弱测试；不要删 `docs/` 内容来"简化"，过时就改。
 
 ## 3. 目录
 ```
 AGENTS.md              本文件（规则、命令、路线图）
 docs/PRODUCT.md        产品定位、用户、场景语料库
+docs/PLAN.md           P0–P2 实现清单（ID、验收、状态）——自主推进的依据
+docs/DESIGN.md         视觉与交互规范（设计画布的落盘版，代理以它为准）
 docs/ARCH.md           架构、内存映射、启动方式、外设模型约定
-docs/LICENSING.md      授权结论与规则
+docs/LICENSING.md      授权结论与规则（LICENSING_REVIEW.md 是逐条依据）
 docs/DECISIONS.md      代理自主决定，等人复核
 docs/STATUS.md         外设 × 芯片覆盖矩阵（由测试结果更新）
 core/                  Rust workspace
@@ -59,6 +61,7 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | 网页冒烟测试 | `node tools/webtest/webtest.mjs <示例> <期望文本>`（截图到 `Reviews/web/`） |
 | 关卡验收 | `tools/check.py <flash.bin> --level 04`；`tools/check.py --ref --all` 跑全部参考固件（关卡定义在 `firmware/levels.json`） |
 | 关卡 / 装配 / 首页网页测试 | `node tools/webtest/levels.mjs`（含拖拽装配、网页与命令行指纹对拍） |
+| 浏览器验收（新功能必做） | `agent-browser skills get core` 先读用法；`cd web && npx vite preview --port 5180` 起服务后 `agent-browser open <url>` → `snapshot` / `click` / `screenshot Reviews/ab/<项>.png` → `console` / `errors`；用 Read 看截图。并行子代理各用自己的端口和 `--session <名字>`，不要抢同一个浏览器 |
 
 ## 6. 工作方式
 1. **改需求先改文档**，再写代码。自主决定写进 `docs/DECISIONS.md`（日期、决定、理由、替代）。
@@ -67,9 +70,10 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
    - 驱动：ESP-IDF 示例 / test_apps 在模拟器里跑出与 QEMU（或真机日志）一致的串口输出
    - 场景：语料库项目（见 `docs/PRODUCT.md`）能启动并出现预期行为
    - 硅片：真机 HIL（暂缺硬件，结论标"未经真机标定"）
-3. **看过结果才能说完成**：网页改动要用浏览器自动化截图并用 Read 看图；测试失败、跳过都写进汇报和 `docs/STATUS.md`。
+3. **看过结果才能说完成**：网页改动必须用 `agent-browser` 走一遍该功能的主流程（打开 → 操作 → 截图并用 Read 看图 → 控制台无 error），记录写进 `Reviews/ab/<PLAN ID>.md`；涉及模拟结果的要和命令行指纹对拍。puppeteer 脚本（tools/webtest）保留做回归，不能代替 agent-browser 的人眼检查。测试失败、跳过都写进汇报和 `docs/STATUS.md`。声音类功能读 Web Audio 分析数据判断；headless 帧率不作数，只查无报错。
 4. 未实现的寄存器访问不准静默：记录到 trace（`unimpl` 计数），验收报告里列出 Top N。
-5. 代码风格：Rust 2021，`cargo fmt`、`cargo clippy` 无警告；注释中文、只写"为什么"；不引第三方 crate 除非写进 DECISIONS（当前允许：无）。
+5. 代码风格：Rust 2021，`cargo fmt`、`cargo clippy` 无警告；注释中文、只写"为什么"；不引第三方 crate 除非写进 DECISIONS（当前允许：无）。网页侧 npm 依赖同样要先写进 DECISIONS（名字、版本、许可证、体积、理由），只用 LICENSING.md 里 ✅ 的；按需懒加载，wasm 首包仍 ≤ 2MB。
+6. 页面按 `docs/DESIGN.md` 做；3D 器件优先按真实尺寸程序生成，外部模型来源和署名写进素材目录 `SOURCES.md`（授权页从它生成）。
 
 ## 7. Git
 - 本地仓库，默认分支 `main`，**暂无远端**（要建远端先问人）
@@ -77,6 +81,8 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 - 构建产物、固件 bin、IDF 生成物不提交
 
 ## 8. 路线图
+细项、验收和状态在 `docs/PLAN.md`（P0 / P1 / P2 / P3）；下表是里程碑总览，两者对应：P0 ≈ M3 + M9 + M10 主线，P1 ≈ 电气 / 测量 / 3D 装配，P2 ≈ M2 余项 + M6 S3 Wi-Fi + M8 音频 + 新作品。
+
 状态：☐ 未开始 / ◐ 进行中 / ☑ 完成
 
 | # | 里程碑 | 完成标准 |
@@ -100,3 +106,10 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 3. **结论先落盘再派工**：子代理要知道的东西写进 `docs/`（ARCH、DECISIONS、STATUS），它自己去读，比继承整段对话便宜两个数量级。
 4. **自动压缩线 20 万**：`.claude/settings.json` 里设了 `autoCompactWindow: 200000`（默认要到约 96.7 万才压缩）。每个里程碑提交、汇报完，也可以由人手动执行 `/compact`（模型自己触发不了）。
 5. **长输出不进上下文**：构建 / 验收日志重定向到 `Reviews/` 再 `tail` 或 `grep`；截图先裁到要看的区域再 Read。
+
+## 10. 自主推进边界
+人已同意（2026-10-16）：按 `docs/PLAN.md` 从 P0 推进到 P2，每批结束汇报一次，不等确认继续。
+- **可以直接做**：写代码、改文档、在本地 main 提交、开 worktree 子代理、引入 DECISIONS 里登记过且 LICENSING ✅ 的依赖、替换旧页面（旧链接要重定向）、下载 LICENSING ✅ 的素材到构建流程。
+- **必须问人**：建远端 / 推送、部署公网、对外发邮件或发帖、花钱（买零件、付费服务）、注册账号、删除用户数据、收费 / 广告 / 联盟、改授权结论里 ❌ 的项。
+- **卡住时**：某项做不成（技术或授权），标 ✗ 写原因进 PLAN 和 STATUS，继续做下一项，不硬凑、不削弱测试。
+- **每批结束**：accept.sh 全过、PLAN 状态更新、提交、写 `Reviews/batch-P<n>.md`（做了什么、截图、未完成项），再向人汇报。
