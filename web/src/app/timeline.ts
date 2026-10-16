@@ -1,0 +1,60 @@
+// 最底的时间线条：每一步是一个格子（放零件、连线、运行 #n）。本组件只负责画和点；
+// 回到某一步的确定性重算由 P0-03 接在 onSeek 上。
+
+export interface TimelineStep {
+  id: string;
+  /** 单个字符或短符号，不用 emoji */
+  icon: string;
+  label: string;
+  status?: 'ok' | 'bad' | 'run';
+}
+
+export interface Timeline {
+  setSteps(steps: TimelineStep[]): void;
+  setCurrent(i: number): void;
+  onSeek(cb: (i: number, step: TimelineStep) => void): void;
+}
+
+export function createTimeline(el: HTMLElement): Timeline {
+  let steps: TimelineStep[] = [];
+  let cur = -1;
+  const cbs: ((i: number, s: TimelineStep) => void)[] = [];
+  el.classList.add('tl');
+  el.setAttribute('role', 'list');
+  const mark = { ok: '✓', bad: '✗', run: '…' } as const;
+  function render() {
+    el.innerHTML = '';
+    steps.forEach((s, i) => {
+      if (i) {
+        const sep = document.createElement('span');
+        sep.className = 'tl-sep';
+        el.appendChild(sep);
+      }
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tl-step' + (i === cur ? ' on' : '') + (s.status ? ' ' + s.status : '');
+      b.setAttribute('role', 'listitem');
+      b.dataset.id = s.id;
+      b.innerHTML = `<span class="tl-ic"></span><span class="tl-t"></span>${s.status ? `<span class="tl-st">${mark[s.status]}</span>` : ''}`;
+      b.querySelector('.tl-ic')!.textContent = s.icon;
+      b.querySelector('.tl-t')!.textContent = s.label;
+      b.onclick = () => cbs.forEach((f) => f(i, s));
+      el.appendChild(b);
+    });
+    el.querySelector('.tl-step.on')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }
+  return {
+    setSteps(s) {
+      steps = s.slice();
+      if (cur >= steps.length) cur = steps.length - 1;
+      render();
+    },
+    setCurrent(i) {
+      cur = i;
+      render();
+    },
+    onSeek(cb) {
+      cbs.push(cb);
+    },
+  };
+}

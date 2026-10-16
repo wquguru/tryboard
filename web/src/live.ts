@@ -11,6 +11,10 @@ export interface LiveOptions {
   lcd?: boolean;
   onConsole?(text: string): void;
   onFrame?(f: LiveFrame, simSeconds: number): void;
+  /** 原始 tick（引脚电平、PWM），给要驱动 3D 台面的页面用 */
+  onTick?(m: Extract<FromWorker, { type: 'tick' }>): void;
+  /** 固件已加载、开始运行（每次 start / reset / load 一次） */
+  onBoot?(chip: 'esp32c3' | 'esp32s3'): void;
 }
 
 export class LiveSim {
@@ -28,8 +32,10 @@ export class LiveSim {
       if (m.type === 'booted') {
         this.bootPin = m.bootPin;
         this.send({ type: 'run' });
+        o.onBoot?.(m.chip);
       } else if (m.type === 'tick') {
         if (m.console) o.onConsole?.(m.console);
+        o.onTick?.(m);
         this.frame.pwm = m.pwm;
         this.frame.running = m.running;
         if (m.leds) this.frame.rgb = m.leds[0] ?? null;
@@ -73,6 +79,12 @@ export class LiveSim {
   }
   setTemp(t: number) {
     this.env.temp = Math.max(-10, Math.min(45, t));
+    this.send({ type: 'env', ...this.sensed() });
+  }
+  /** 改环境（湿度 / 气压也能改；温度同 setTemp 夹在 -10..45） */
+  setEnv(e: Partial<Env>) {
+    Object.assign(this.env, e);
+    if (e.temp !== undefined) this.env.temp = Math.max(-10, Math.min(45, e.temp));
     this.send({ type: 'env', ...this.sensed() });
   }
   setOffset(d: number) {

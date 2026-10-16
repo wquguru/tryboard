@@ -7,6 +7,6 @@ export default defineConfig({
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 1200,
-    rollupOptions: { input: { main: 'index.html', advisor: 'advisor.html', home: 'home.html', levels: 'levels.html' } },
+    rollupOptions: { input: { main: 'index.html', advisor: 'advisor.html', home: 'home.html', levels: 'levels.html', app: 'app.html' } },
   },
 });
