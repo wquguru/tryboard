@@ -16,6 +16,8 @@
 | 用户固件在模拟器里跑 | ✅ 不构成我们分发 | |
 | 我们托管的示例固件 | arduino-esp32 LGPL-2.1、xiaozhi MIT、WLED EUPL-1.2、Tasmota GPL-3.0、ESPHome GPLv3：每个 bin 旁边给出协议、精确源码提交与构建配置 | |
 | 开源 ROM 替代品 | 未找到 | |
+| `espressif/esp_lcd_gc9a01` 2.0.4（组件管理器拉取，lens / spin 固件用） | ✅ Apache-2.0，可随示例固件分发，附 LICENSE | 组件包内 license.txt；registry 元数据 license=Apache-2.0；源码 github.com/espressif/esp-bsp（components/lcd/esp_lcd_gc9a01） |
+| `espressif/cmake_utilities`（上一项的依赖，仅构建期 CMake 脚本） | ✅ Apache-2.0 | 组件包内 license.txt |
 
 ## 规则（硬性）
 1. ROM 只从 esp-rom-elfs 发布的 ELF 提取，构建时生成，随附 LICENSE、NOTICE 与第三方声明；仓库里只放提取脚本，不放 bin。

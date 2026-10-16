@@ -243,6 +243,24 @@ pub extern "C" fn tb_oled_ptr() -> *const u8 {
     with(std::ptr::null(), |m| m.oled().map(|o| o.render().as_ptr()).unwrap_or(std::ptr::null()))
 }
 
+/// 在 SPI2 上接 GC9A01 圆屏（S3：SCLK=12 MOSI=11 CS=10 DC=14 RST=13 背光=15）。返回 0 成功（C3 不支持，返回 1）
+#[no_mangle]
+pub extern "C" fn tb_lcd_attach() -> i32 {
+    with(1, |m| if m.lcd_attach("gc9a01") { 0 } else { 1 })
+}
+
+/// 圆屏画面版本号：变了才需要重新取像素。没有屏时返回 0
+#[no_mangle]
+pub extern "C" fn tb_lcd_version() -> u32 {
+    with(0, |m| m.lcd().map(|d| d.version).unwrap_or(0))
+}
+
+/// 圆屏画面：240×240×4 字节 RGBA（行优先），圆形可视区外 alpha=0；显示关 / 睡眠 / 背光灭时圆内为不透明黑。没有屏时返回空指针
+#[no_mangle]
+pub extern "C" fn tb_lcd_ptr() -> *const u8 {
+    with(std::ptr::null(), |m| m.lcd().map(|d| d.render().as_ptr()).unwrap_or(std::ptr::null()))
+}
+
 // ---------------------------------------------------------------- 原生 USB（ESP32-S3）
 
 fn json_str(s: &str) -> String {
@@ -330,7 +348,7 @@ pub unsafe extern "C" fn tb_usb_cdc_send(p: *const u8, len: usize) {
 
 // ---------------------------------------------------------------- 验收观察（关卡检查用）
 
-/// 生成与命令行 `--gpio-log --ws2812-log` 相同格式的观察记录（GPIO 翻转次数、WS2812 各帧颜色、OLED 点亮像素），
+/// 生成与命令行 `--gpio-log --ws2812-log` 相同格式的观察记录（GPIO 翻转次数、WS2812 各帧颜色、OLED 点亮像素、圆屏非黑像素），
 /// 网页的关卡检查与 tools/accept.sh 解析同一种文本，两边结论才一致。返回长度，内容用 tb_report_ptr 读。
 #[no_mangle]
 pub extern "C" fn tb_report() -> usize {
@@ -362,6 +380,9 @@ pub extern "C" fn tb_report() -> usize {
         }
         if let Some(d) = m.oled() {
             let _ = writeln!(o, "[tryboard] OLED 点亮像素 {}", d.lit_pixels());
+        }
+        if let Some(d) = m.lcd() {
+            let _ = writeln!(o, "[tryboard] LCD GC9A01 非黑像素 {}", d.lit_pixels());
         }
         o
     });

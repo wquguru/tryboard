@@ -4,6 +4,7 @@
 use std::collections::{HashMap, VecDeque};
 use tryboard_esp32c3::devices::{
     bme280::{Bme280, Env},
+    gc9a01::Gc9a01,
     ssd1306::Ssd1306,
 };
 use tryboard_esp32c3::rmt::Ws2812;
@@ -296,6 +297,33 @@ impl Machine {
 
     pub fn oled(&mut self) -> Option<&mut Ssd1306> {
         self.i2c0().device::<Ssd1306>()
+    }
+
+    /// 在 SPI2 上接一块屏（目前只有 "gc9a01"，引脚见 tryboard_esp32s3::lcd_pin）。
+    /// 只有 ESP32-S3 建模了 GP-SPI2 + GDMA，C3 返回 false
+    pub fn lcd_attach(&mut self, kind: &str) -> bool {
+        match (self, kind) {
+            (Machine::S3(m), "gc9a01") => {
+                m.bus.attach_lcd();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn lcd(&mut self) -> Option<&mut Gc9a01> {
+        match self {
+            Machine::S3(m) => m.bus.lcd.as_deref_mut(),
+            Machine::C3(_) => None,
+        }
+    }
+
+    /// SPI2 传输统计（次数, MOSI 字节数）
+    pub fn spi_stats(&self) -> (u64, u64) {
+        match self {
+            Machine::S3(m) => (m.bus.spi2.transfers, m.bus.spi2.bytes),
+            Machine::C3(_) => (0, 0),
+        }
     }
 
     /// GPIO 电平变化记录（周期, 电平）

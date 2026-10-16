@@ -154,3 +154,14 @@
 - 新页面用 Google Fonts（Noto Sans SC / JetBrains Mono，OFL），与配套文章同字体；加载失败回落到系统字体
 - 首页 home.html 暂不替换 index.html（实验台），因为验收脚本、artifact 打包都以 index.html 为实验台；公开发布前再决定入口
 - 替代：three.js 装配（成本高、手机拖拽难）；Rust 里手写 JSON + 判定（重复造轮子）
+
+## 2026-10-16 · GP-SPI2 + GDMA + GC9A01 圆屏；成品 lens / spin
+- SPI2 与 GDMA 模型放在 tryboard-esp32c3（`gpspi.rs`、`gdma.rs`），按"外设复用 C3 模型并按芯片参数化"：GP-SPI 寄存器 C3 / S3 同族；GDMA 的通道数 / 间距 / OUT 组偏移 / 链表高位基址做成 `GdmaLayout`，目前只定义了 `S3`。**只接进了 S3 的 SocBus**，C3 的 SPI2 / GDMA 仍是未建模寄存器（等有 C3 SPI 固件再接，需要补 C3 的 GdmaLayout）
+- 执行模型照 I2C：写 CMD.USR 时 SoC 立刻沿 GDMA 描述符链（或 W0..W15）取出全部 MOSI 字节交给从机，"传输中" / TRANS_DONE 与 GDMA 的 OUT_EOF 推迟到按 SPI 时钟（PLL 80MHz 或 XTAL ÷ (pre+1)(n+1)，加 2 位 CS 建立 / 保持）算出的耗时之后。不模拟 FIFO、突发、逐位时序；MISO 读回全 1（总线上没有会应答的从机），RX 方向的 GDMA 只做了"填进描述符并置 SUC_EOF"
+- D/C 取传输开始时刻 GPIO14 的电平（esp_lcd 在 pre_cb 里设好 D/C 再启动传输，与真机一致）；CS 经 IO_MUX（功能 4）或 GPIO 矩阵（信号 110）接到 SPI2 CS0 时由控制器管，否则当普通 GPIO 看。RST 只在固件把 GPIO13 驱动为低时才算复位（模组板上有上拉），背光 GPIO15 高电平亮
+- 圆屏按市售 1.28" GC9A01 模组的实际表现建模：IPS 常黑（不开 INVON 颜色是反的）、子像素 BGR（MADCTL.BGR=1 才正确）。依据是 ESP-IDF `examples/peripherals/lcd/spi_lcd_touch` 对 GC9A01 的配置（`LCD_RGB_ELEMENT_ORDER_BGR` + `esp_lcd_panel_invert_color(true)`）。**未经真机标定**；好处是"忘了开反色 / 颜色顺序配错"这类买板前想知道的坑在网页里就能看到
+- 厂商初始化命令（0xEF、0xEB、0x84..0x8F、0x62..0x74 等）只计数不建模；画面只依赖 SLPOUT / DISPON / INVON / MADCTL / COLMOD / CASET / RASET / RAMWR / RAMWRC
+- 观察输出：CLI stderr `[tryboard] LCD GC9A01 非黑像素 N（显示开/关）`，N 数的是渲染后（含显示开关、睡眠、背光、反色）圆形可视区内的非黑像素；wasm `tb_report` 追加同格式不带括号的一行。`--lcd-ppm` 导出最后一帧（圆外为黑），`tools/ppm2png.py` 只用标准库转 PNG 供人看图
+- 驱动用组件管理器拉的 `espressif/esp_lcd_gc9a01` 2.0.4（Apache-2.0，依赖 `espressif/cmake_utilities`，Apache-2.0），而不是自己发初始化序列：验收的意义就是"标准写法能跑"
+- 固件用整帧缓冲（115200 字节，内部 DMA 内存）+ `on_color_trans_done` 信号量等传完再重画；spin 每 20ms 只重画眼睛那条带（88 行），避免 40MHz 下整帧 23ms 跟不上舵机节拍
+- 替代：只建模 W 寄存器方式（esp_lcd 一定走 DMA，不够）；逐字节按 SPI 时钟推进（与"瞬间交付 + 推迟完成"相比慢且没有可观察差别）

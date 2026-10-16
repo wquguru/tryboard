@@ -1,6 +1,7 @@
 //! 挂在模拟总线上的外部器件（传感器、屏幕……）。
 
 pub mod bme280;
+pub mod gc9a01;
 pub mod ssd1306;
 
 use crate::i2c::I2cDevice;

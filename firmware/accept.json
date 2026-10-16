@@ -593,5 +593,44 @@
    "min": 0.025,
    "max": 0.125
   }
+ },
+ {
+  "id": "lens",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--spi",
+   "gc9a01"
+  ],
+  "script": "2.0:gpio0=0; 2.2:gpio0=z",
+  "expect": [
+   "MOOD 0 normal",
+   "TRYBOARD_OK lens",
+   "MOOD 1 happy"
+  ],
+  "lcd_min_pixels": 3000
+ },
+ {
+  "id": "spin",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--spi",
+   "gc9a01"
+  ],
+  "script": "2.6:gpio0=0; 2.8:gpio0=z",
+  "expect": [
+   "TRYBOARD_OK spin",
+   "SPIN -60",
+   "SPIN +60",
+   "LOOK FRONT"
+  ],
+  "pwm": {
+   "pin": 4,
+   "freq": 50,
+   "min": 0.0417,
+   "max": 0.1083
+  },
+  "lcd_min_pixels": 40000
  }
 ]

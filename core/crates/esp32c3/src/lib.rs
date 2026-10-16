@@ -2,6 +2,8 @@
 
 pub mod boot;
 pub mod devices;
+pub mod gdma;
+pub mod gpspi;
 pub mod hle;
 pub mod ledc;
 pub mod i2c;

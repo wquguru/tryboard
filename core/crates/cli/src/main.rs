@@ -11,6 +11,7 @@ fn usage() -> ! {
   tryboard run <flash.bin>（芯片按镜像头自动识别：ESP32-C3 / ESP32-S3）[--rom <rom.elf>] [--seconds <模拟秒数>] [--expect <文本>] [--uart-in <文本>]
                [--script \"0.5:gpio9=0; 0.6:gpio9=z; 1.0:uart=ping\\n\"] [--trace N] [--gpio-log] [--pwm-log PIN] [--ws2812-log]
                [--i2c ssd1306@0x3c,bme280@0x76] [--env 温度,湿度,气压Pa] [--oled]
+               [--spi gc9a01]（S3：SCLK=12 MOSI=11 CS=10 DC=14 RST=13 背光=15）[--lcd-ppm <最后一帧.ppm>]
   tryboard riscv-test <test.elf>..."
     );
     std::process::exit(2)
@@ -92,6 +93,15 @@ fn run(args: &[String]) {
             let addr = u8::from_str_radix(addr.trim_start_matches("0x"), 16).unwrap_or(0);
             if !m.i2c_attach(kind, addr) {
                 eprintln!("不认识的 I2C 器件 {kind}");
+                std::process::exit(2)
+            }
+        }
+    }
+    // SPI 外接器件：--spi gc9a01
+    if let Some(spec) = opt(args, "--spi") {
+        for kind in spec.split(',') {
+            if !m.lcd_attach(kind) {
+                eprintln!("不支持的 SPI 器件 {kind}（目前只有 ESP32-S3 上的 gc9a01）");
                 std::process::exit(2)
             }
         }
@@ -347,6 +357,27 @@ fn run(args: &[String]) {
         );
         if show_oled {
             eprint!("{}", o.ascii());
+        }
+    }
+    let (st, sb) = m.spi_stats();
+    if st > 0 {
+        eprintln!("[tryboard] SPI2 传输 {st} 次，MOSI {sb} 字节");
+    }
+    if let Some(d) = m.lcd() {
+        let n = d.lit_pixels();
+        eprintln!("[tryboard] LCD GC9A01 非黑像素 {n}（显示{}）", if d.showing() { "开" } else { "关" });
+        eprintln!(
+            "[tryboard] LCD GC9A01 命令 {} 条（厂商寄存器 {} 条），像素写入 {}，背光{}",
+            d.commands,
+            d.vendor_cmds,
+            d.pixels,
+            if d.backlight { "亮" } else { "灭" }
+        );
+        if let Some(path) = opt(args, "--lcd-ppm") {
+            match std::fs::write(&path, d.ppm()) {
+                Ok(()) => eprintln!("[tryboard] LCD 画面已存为 {path}"),
+                Err(e) => eprintln!("[tryboard] 写 {path} 失败: {e}"),
+            }
         }
     }
     if let Some(e) = expect {

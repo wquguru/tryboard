@@ -94,6 +94,12 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
         n = int(m.group(1)) if m else 0
         notes.append(f"OLED 点亮 {n} 像素")
         if n < t['oled_min_pixels']: missing.append('oled')
+    # 圆屏：'[tryboard] LCD GC9A01 非黑像素 N（显示开）'，只数圆形可视区内
+    if 'lcd_min_pixels' in t:
+        m = re.search(r'LCD GC9A01 非黑像素 (\d+)（显示(.)）', err)
+        n = int(m.group(1)) if m else 0
+        notes.append(f"LCD 非黑 {n} 像素（显示{m.group(2) if m else '无'}）")
+        if n < t['lcd_min_pixels']: missing.append('lcd')
     speed = re.search(r'模拟 ([\d.]+)s / 实际 ([\d.]+)s', err)
     if speed: notes.append(f"模拟 {speed.group(1)}s 用时 {speed.group(2)}s")
     if t.get('qemu') and not no_qemu:
