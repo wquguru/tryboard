@@ -136,3 +136,10 @@
 - 决定：并行开发改用全新的 general-purpose 子代理，任务说明按 docs/AGENT_BRIEF.md 写；主会话在每个里程碑结束后请人 `/compact`。规则写进 AGENTS.md §9
 - 理由：复盘发现 fork 子代理继承了 33–66 万上下文，产生的缓存读取占全会话的 76%，可输出只有 10 万 token；任务说明本来就写得完整，继承来的上下文几乎没用上
 - 替代：继续用 fork（省掉写任务说明的功夫，但开销约为现在的 10 倍）
+
+## 2026-10-16 · 示例共用代码放 firmware/common（头文件），weather 串口温度固定用摄氏
+- 决定：SSD1306 最小驱动 + 5x7 字库抽到 `firmware/common/ssd1306_mini.h`，BME280 校准解析 + 补偿公式抽到 `firmware/common/bme280_calc.h`（均为 static inline，只在一个 .c 里包含）；oled / bme280 / weather 共用。C3 示例的引脚改成 `#ifndef` 宏（默认值不变），s3-button / s3-bme280 / s3-servo 按 s3-oled 方式只覆盖引脚
+- weather 串口每行 `T=23.50 C H=45.0 % P=1013.25 hPa LED=green PWM=1675us`，不随 ℃/℉ 切换变化（切换只打印 `UNIT F` / `UNIT C` 并改屏幕），便于验收与网页解析
+- 理由：复制粘贴会分叉；头文件方式不必给每个示例加组件依赖
+- 替代：做成 IDF 组件（EXTRA_COMPONENT_DIRS），要改每个工程的顶层 CMakeLists
+- weather-hot（35°C）用例未加：accept.json 以 id 定位固件目录，不支持同一固件多用例；要加需在 accept.sh 里支持 `fw` 字段

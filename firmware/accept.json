@@ -460,5 +460,138 @@
    "max": 0.968
   },
   "chip": "esp32s3"
+ },
+ {
+  "id": "weather",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c,bme280@0x76",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "script": "2.0:gpio0=0; 2.2:gpio0=z",
+  "expect": [
+   "I2C scan (SDA=GPIO8, SCL=GPIO9): 0x3C 0x76",
+   "T=23.50 C H=45.0 % P=1013.25 hPa LED=green PWM=1675us",
+   "TRYBOARD_OK weather",
+   "UNIT F"
+  ],
+  "numeric": [
+   {
+    "name": "温度",
+    "regex": "T=(-?[\\d.]+) C",
+    "value": 23.5,
+    "tol": 0.02
+   },
+   {
+    "name": "湿度",
+    "regex": "H=([\\d.]+) %",
+    "value": 45.0,
+    "tol": 0.1
+   },
+   {
+    "name": "气压",
+    "regex": "P=([\\d.]+) hPa",
+    "value": 1013.25,
+    "tol": 0.02
+   },
+   {
+    "name": "舵机脉宽(us)",
+    "regex": "PWM=(\\d+)us",
+    "value": 1675,
+    "tol": 1
+   }
+  ],
+  "pwm": {
+   "pin": 4,
+   "freq": 50,
+   "min": 0.084,
+   "max": 0.084
+  },
+  "ws2812": {
+   "pin": 48,
+   "min_frames": 5,
+   "frames": [
+    [
+     "#002000"
+    ],
+    [
+     "#002000"
+    ],
+    [
+     "#002000"
+    ]
+   ]
+  },
+  "oled_min_pixels": 1000
+ },
+ {
+  "id": "s3-button",
+  "chip": "esp32s3",
+  "seconds": 1.5,
+  "script": "0.5:gpio0=0; 0.6:gpio0=z; 1.0:gpio0=0; 1.1:gpio0=z",
+  "expect": [
+   "按 BOOT 键（GPIO0）切换 LED。当前电平 1",
+   "BUTTON PRESSED 1",
+   "BUTTON PRESSED 2",
+   "TRYBOARD_OK button"
+  ],
+  "gpio_toggles": {
+   "pin": 5,
+   "min": 2
+  }
+ },
+ {
+  "id": "s3-bme280",
+  "chip": "esp32s3",
+  "seconds": 4.5,
+  "args": [
+   "--i2c",
+   "bme280@0x76",
+   "--env",
+   "-7.25,88.5,95012"
+  ],
+  "expect": [
+   "I2C scan (SDA=GPIO8, SCL=GPIO9): 0x76",
+   "chip id 0x60 OK",
+   "TRYBOARD_OK bme280"
+  ],
+  "numeric": [
+   {
+    "name": "温度",
+    "regex": "T=(-?[\\d.]+) C",
+    "value": -7.25,
+    "tol": 0.02
+   },
+   {
+    "name": "湿度",
+    "regex": "H=([\\d.]+) %",
+    "value": 88.5,
+    "tol": 0.1
+   },
+   {
+    "name": "气压",
+    "regex": "P=([\\d.]+) hPa",
+    "value": 950.12,
+    "tol": 0.02
+   }
+  ]
+ },
+ {
+  "id": "s3-servo",
+  "chip": "esp32s3",
+  "seconds": 2.6,
+  "expect": [
+   "舵机 -> 180°",
+   "TRYBOARD_OK servo"
+  ],
+  "pwm": {
+   "pin": 4,
+   "freq": 50,
+   "min": 0.025,
+   "max": 0.125
+  }
  }
 ]

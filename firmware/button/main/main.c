@@ -1,12 +1,16 @@
-// 示例：板载 BOOT 键（GPIO9，按下接地）触发下降沿中断，翻转 GPIO5 上的 LED。
+// 示例：板载 BOOT 键（默认 GPIO9，按下接地；BTN_GPIO / LED_GPIO 可覆盖）触发下降沿中断，翻转 GPIO5 上的 LED。
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "driver/gpio.h"
 #include "esp_timer.h"
 
+#ifndef BTN_GPIO
 #define BTN_GPIO 9
+#endif
+#ifndef LED_GPIO
 #define LED_GPIO 5
+#endif
 
 static QueueHandle_t q;
 
@@ -30,7 +34,7 @@ void app_main(void)
     gpio_config(&btn);
     gpio_install_isr_service(0);
     gpio_isr_handler_add(BTN_GPIO, on_press, NULL);
-    printf("按 BOOT 键（GPIO9）切换 LED。当前电平 %d\n", gpio_get_level(BTN_GPIO));
+    printf("按 BOOT 键（GPIO%d）切换 LED。当前电平 %d\n", BTN_GPIO, gpio_get_level(BTN_GPIO));
     int presses = 0, led_on = 0;
     int64_t last = -1000000;
     for (;;) {

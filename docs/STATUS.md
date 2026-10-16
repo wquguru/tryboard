@@ -1,6 +1,6 @@
 # 覆盖矩阵
 
-最后更新：2026-10-15（`tools/accept.sh` 全部通过）
+最后更新：2026-10-16（`tools/accept.sh --no-web --no-qemu` 30/30 通过）
 
 ## ESP32-C3
 | 模块 | 状态 | 验收 | 备注 |
@@ -56,13 +56,14 @@
 | 双核 | ✅ | s3-dual：两任务各钉一核、自旋锁计数 2×20000 准确、跨核队列、esp_ipc 在核 1 执行 | `ets_set_appcpu_boot_addr` HLE 启动核 1（栈 ROM .stack_app），PRID 0xABAB；每核一张中断矩阵；两核按 256 周期量子确定性交替，都空闲时一起快进；外设时间取两核中较快者（单调） |
 | 存储映射 / MMU / PSRAM | ✅ | 单元测试：flash / PSRAM 页翻译、PSRAM 可写、SRAM I/D 别名 | 8MB PSRAM 只有存储与映射，PSRAM 芯片初始化（MSPI / OPI）未模拟，CONFIG_SPIRAM 固件尚未验收 |
 | 中断矩阵（核 0 / 核 1） | ✅ | 单元测试 + s3-dual（FROM_CPU 跨核中断、两核各自 SYSTIMER 节拍） | 99 个源；核 1 表在 +0x800 |
-| GPIO（49 脚）/ IO_MUX | ✅ | s3-blink：GPIO5 翻转 | 外设信号经 GPIO 矩阵驱动引脚（RMT）；输出信号号 256 = 普通 GPIO |
-| LEDC | ✅ | s3-pot：5kHz PWM 占空比跟随 ADC | 与 C3 同一模型（扩到 8 通道），输出信号 73..80 |
+| GPIO（49 脚）/ IO_MUX | ✅ | s3-blink：GPIO5 翻转；s3-button：BOOT 键 GPIO0 下降沿中断 + 消抖，GPIO5 翻转 2 次 | 外设信号经 GPIO 矩阵驱动引脚（RMT）；输出信号号 256 = 普通 GPIO |
+| LEDC | ✅ | s3-pot：5kHz PWM 占空比跟随 ADC；s3-servo：GPIO4 50Hz 0.5–2.5ms | 与 C3 同一模型（扩到 8 通道），输出信号 73..80 |
 | RMT + WS2812 | ✅ | s3-rgb：GPIO48 解码 6 帧，前 4 帧颜色逐颗一致 | 与 C3 同一模型，按 `RmtLayout::S3`（4 发 4 收、RAM +0x800、信号 81..84）参数化 |
-| I2C0 / I2C1 | ✅ | s3-oled：扫描只应答 0x3C，1KB 帧 400kHz 约 24.0ms，点亮 1636 像素 | 与 C3 同一模型（寄存器布局逐项一致），I2C1 在 0x60027000 |
+| I2C0 / I2C1 | ✅ | s3-oled：扫描只应答 0x3C，1KB 帧 400kHz 约 24.0ms，点亮 1636 像素；s3-bme280：-7.25°C / 88.5% / 950.12hPa 读回误差 0 | 与 C3 同一模型（寄存器布局逐项一致），I2C1 在 0x60027000 |
 | SAR ADC 单次（SENS） | ✅ | s3-pot：0 / 1550 / 3000mV 读数正确 | S3 单次采样走 RTC 的 SENS（0x60008800），不是 APB_SARADC；衰减档量程近似 950 / 1250 / 1750 / 3100mV；ADC2 仲裁标志、连续模式未做 |
 | UART / SYSTIMER / TIMG / SPI1 flash | ✅ | 控制台、FreeRTOS 节拍、RTC 校准、flash 识别 GD 16MB | 复用 C3 模型；TIMG 的 T1 未建模 |
 | EXTMEM / eFuse / 模拟前端 | 🟡 | 启动期轮询通过；芯片版本 v0.2、PSRAM_CAP=8MB | cache 操作瞬间完成；eFuse 只读；regi2c HLE |
+| 装配成品 weather（桌面气象站） | ✅ | 同一 I2C 挂 SSD1306 + BME280（23.5°C / 45% / 1013.25hPa 读回误差 0）、舵机 GPIO4 1675us、WS2812 GPIO48 绿 #002000、BOOT 切 ℉ 后屏幕重画（点亮 1328 像素） | 场景层验收；35°C 时 LED=red、PWM=2250us 已手动跑过，未入 accept.json（用例 id 即固件目录，不支持同固件多用例） |
 | USB OTG / Wi-Fi / BLE | ☐ | — | USB OTG 在另一分支开发 |
 
 ## 网页

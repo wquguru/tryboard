@@ -1,23 +1,22 @@
-// 示例：BME280 温湿度气压传感器（I2C 地址 0x76），SDA=GPIO6，SCL=GPIO7，100kHz。
+// 示例：BME280 温湿度气压传感器（I2C 地址 0x76），默认 SDA=GPIO6，SCL=GPIO7（PIN_SDA / PIN_SCL 可覆盖），100kHz。
 // 不依赖外部组件：按 Bosch 数据手册的整数补偿公式自己算。
 #include <stdio.h>
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/i2c_master.h"
+#include "bme280_calc.h"
 
+#ifndef PIN_SDA
 #define PIN_SDA 6
+#endif
+#ifndef PIN_SCL
 #define PIN_SCL 7
+#endif
 #define BME_ADDR 0x76
 
 static i2c_master_bus_handle_t bus;
 static i2c_master_dev_handle_t bme;
-
-static uint16_t T1, P1;
-static int16_t T2, T3, P2, P3, P4, P5, P6, P7, P8, P9, H2, H4, H5;
-static uint8_t H1, H3;
-static int8_t H6;
-static int32_t t_fine;
 
 static esp_err_t rd(uint8_t reg, uint8_t *buf, size_t n)
 {
@@ -28,42 +27,6 @@ static esp_err_t wr(uint8_t reg, uint8_t v)
 {
     uint8_t b[2] = {reg, v};
     return i2c_master_transmit(bme, b, 2, 100);
-}
-
-static int32_t comp_t(int32_t adc)
-{
-    int32_t v1 = ((((adc >> 3) - ((int32_t)T1 << 1))) * T2) >> 11;
-    int32_t v2 = (((((adc >> 4) - (int32_t)T1) * ((adc >> 4) - (int32_t)T1)) >> 12) * T3) >> 14;
-    t_fine = v1 + v2;
-    return (t_fine * 5 + 128) >> 8;
-}
-
-static uint32_t comp_p(int32_t adc)
-{
-    int64_t v1 = (int64_t)t_fine - 128000;
-    int64_t v2 = v1 * v1 * P6;
-    v2 += (v1 * P5) << 17;
-    v2 += ((int64_t)P4) << 35;
-    v1 = ((v1 * v1 * P3) >> 8) + ((v1 * P2) << 12);
-    v1 = (((((int64_t)1) << 47) + v1)) * P1 >> 33;
-    if (v1 == 0) return 0;
-    int64_t p = 1048576 - adc;
-    p = (((p << 31) - v2) * 3125) / v1;
-    v1 = (((int64_t)P9) * (p >> 13) * (p >> 13)) >> 25;
-    v2 = (((int64_t)P8) * p) >> 19;
-    p = ((p + v1 + v2) >> 8) + (((int64_t)P7) << 4);
-    return (uint32_t)p;
-}
-
-static uint32_t comp_h(int32_t adc)
-{
-    int32_t v = t_fine - 76800;
-    v = (((((adc << 14) - (((int32_t)H4) << 20) - (((int32_t)H5) * v)) + 16384) >> 15) *
-         (((((((v * H6) >> 10) * (((v * (int32_t)H3) >> 11) + 32768)) >> 10) + 2097152) * H2 + 8192) >> 14));
-    v = v - (((((v >> 15) * (v >> 15)) >> 7) * H1) >> 4);
-    v = v < 0 ? 0 : v;
-    v = v > 419430400 ? 419430400 : v;
-    return (uint32_t)(v >> 12);
 }
 
 void app_main(void)
@@ -92,14 +55,7 @@ void app_main(void)
     uint8_t c[26], h[7];
     ESP_ERROR_CHECK(rd(0x88, c, 26));
     ESP_ERROR_CHECK(rd(0xE1, h, 7));
-    T1 = c[0] | c[1] << 8; T2 = c[2] | c[3] << 8; T3 = c[4] | c[5] << 8;
-    P1 = c[6] | c[7] << 8; P2 = c[8] | c[9] << 8; P3 = c[10] | c[11] << 8; P4 = c[12] | c[13] << 8;
-    P5 = c[14] | c[15] << 8; P6 = c[16] | c[17] << 8; P7 = c[18] | c[19] << 8; P8 = c[20] | c[21] << 8;
-    P9 = c[22] | c[23] << 8; H1 = c[25];
-    H2 = h[0] | h[1] << 8; H3 = h[2];
-    H4 = (int16_t)((int8_t)h[3] * 16) | (h[4] & 0x0F);
-    H5 = (int16_t)((int8_t)h[5] * 16) | (h[4] >> 4);
-    H6 = (int8_t)h[6];
+    bme280_parse_calib(c, h);
     printf("calib T1=%u T2=%d T3=%d P1=%u H1=%u H2=%d H4=%d H5=%d\n", T1, T2, T3, P1, H1, H2, H4, H5);
 
     // 湿度 ×1；温度 ×1、气压 ×1、正常模式；待机 125ms、关滤波
