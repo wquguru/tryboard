@@ -3,6 +3,8 @@
 // 热源改的是"气象站周围的温度"（env），一阶滞后逼近目标，模拟壳子有热惯性；读数、表盘、灯、报警全来自固件。
 import { createProduct3D, type ProductScene } from '../product3d';
 import { createLcd3D, webglOk, type Lcd3D } from '../lcd3d';
+import { createTilt3D, type Tilt3D } from '../tilt3d';
+import { gravity } from '../../imupose';
 import { createLensProduct, createSpinProduct } from '../../views/lcdproducts';
 import { TEMPLATES, type Template } from '../../views/templates';
 import { passedCount } from './bench';
@@ -130,6 +132,10 @@ export function productStep(): StepImpl {
   let keypadSvg: ReturnType<typeof createKeypadView> | null = null;
   /** 正在录的 10 秒 */
   let rec: Recording | null = null;
+  // 倾角仪（P2-03）：没有组装模版，成品就是端在手里转的盒子
+  let tilt: Tilt3D | null = null;
+  let tiltNode: HTMLElement | null = null;
+  let tiltTimer = 0;
   let svgProduct: { update(f: LiveFrame, room: number, fx: object): void } | null = null;
   let raf = 0;
   let timer = 0;
@@ -246,7 +252,7 @@ ${weather ? `${row('气象站周围', 'air')}${row('BME280 读到', 'rt')}${row(
 ${off ? `<p class="note bad">装法：BME280 贴着芯片，读数比周围高 ${off.toFixed(1)} ℃（估算）。回「组装」改放通风口旁。</p>` : ''}
 ${assembly()?.effects.usbBlocked ? `<p class="note bad">装法：开发板转了 180°，USB 口顶着前墙，线插不进去，电脑看不到设备。回「组装」把 USB 口朝背面开孔。</p>` : ''}
 ${harnessHtml()}
-<div class="btns">${c.session.audio.hasBuzzer ? `<button type="button" class="btn" id="pSound" aria-pressed="false">声音：关</button>` : ''}${weather ? `<button type="button" class="btn" id="pHeat">热源：关</button>` : ''}${w === 'usbkey' ? '' : `<button type="button" class="btn" id="pBoot">按住 BOOT</button>`}</div>
+<div class="btns">${c.session.audio.hasSound ? `<button type="button" class="btn" id="pSound" aria-pressed="false">声音：关</button>` : ''}${weather ? `<button type="button" class="btn" id="pHeat">热源：关</button>` : ''}${w === 'usbkey' ? '' : `<button type="button" class="btn" id="pBoot">按住 BOOT</button>`}</div>
 ${cur3d() ? `${sec('拍照 · 录像')}<div class="btns"><button type="button" class="btn" id="pPhoto">拍照</button><button type="button" class="btn" id="pRec">${rec ? `录制中 ${rec.elapsed().toFixed(0)} / ${RECORD_SECONDS} s` : `录 ${RECORD_SECONDS} 秒`}</button></div><p class="note">拍照：当前视角 2× 分辨率 PNG（超采样）；录像：画布 webm，声音开着时把蜂鸣器一起录进去。文件直接下载。</p>` : ''}
 ${sec('串口 · 最近几行')}<pre class="brief serial-tail" data-live="serial"></pre>
 ${sec('真机到手先做这三件事')}<ol class="first3">${first}</ol>
@@ -423,7 +429,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     c.shell.toolbar.setGroups([
       ...(scene3d || lcd3d || keypad ? [{ id: 'nav', tools: [{ id: 'p-orbit', label: '旋转', key: '拖动' }, { id: 'p-home', label: '复位视角' }] }] : []),
       ...(c.work.id === 'usbkey' ? [] : [{ id: 'act', tools: [{ id: 'p-boot', label: '按键' }, ...(weather ? [{ id: 'p-heat', label: heat.on ? '热源：开' : '热源' }] : [])] }]),
-      ...(c.session.audio.hasBuzzer ? [{ id: 'snd', tools: [{ id: 'p-sound', label: c.session.audio.state.muted ? '声音：关' : '声音：开' }] }] : []),
+      ...(c.session.audio.hasSound ? [{ id: 'snd', tools: [{ id: 'p-sound', label: c.session.audio.state.muted ? '声音：关' : '声音：开' }] }] : []),
       ...(cur3d() ? [{ id: 'media', tools: [{ id: 'p-photo', label: '拍照' }, { id: 'p-rec', label: rec ? '停止录像' : `录 ${RECORD_SECONDS} 秒` }] }] : []),
       { id: 'run', tools: [{ id: 'p-rerun', label: '再跑一次', primary: true }] },
     ]);
@@ -479,6 +485,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     else if (id === 'p-photo') void photo();
     else if (id === 'p-rec') record();
     else if (id === 'p-rerun') c.session.reboot();
+    else if (id === 'p-level') c.session.setPose({ pitch: 0, roll: 0, yaw: 0 });
     else if (id === 'p-boot') {
       pressBoot(true);
       setTimeout(() => pressBoot(false), 150);
@@ -565,6 +572,56 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     }
   }
 
+  function mountTilt(el: HTMLElement, c: StepCtx) {
+    if (!tiltNode) {
+      tiltNode = document.createElement('div');
+      tiltNode.className = 'prod-stage';
+      tilt = createTilt3D(tiltNode, { pose: () => c.store.get().pose, onPose: (p) => c.session.setPose(p) });
+      const note = document.createElement('div');
+      note.className = 'p3-disclaimer';
+      note.textContent = '外观示意 · 拖动盒子转动它';
+      tiltNode.appendChild(note);
+    }
+    const banner = document.createElement('div');
+    banner.className = 'prod-preview';
+    banner.setAttribute('role', 'status');
+    banner.innerHTML = '<b>倾角仪 · 端在手里转</b><span>没有组装模版：盒子的姿态就是实验台上那块 IMU 的姿态，固件读数实时来自同一个模拟</span>';
+    el.append(banner, tiltNode);
+    tilt!.start();
+    c.shell.tree.innerHTML = `<div class="tn on" role="treeitem" aria-selected="true"><span class="tn-l">倾角仪 · ${c.session.scene.parts.some((p) => p.type === 'qmi8658') ? 'QMI8658' : 'MPU6050'}</span></div>`;
+    c.shell.props.innerHTML = `${sec('盒子姿态 · 你转出来的')}${row('俯仰 / 横滚 / 航向', 'tp')}${row('应读到（重力分量）', 'tg')}
+${sec('固件读到 · 串口最近一行')}${row('俯仰', 'tip')}${row('横滚', 'tir')}${row('陀螺', 'tgy')}
+<p class="note">拖动时陀螺读到角速度，松手 150 ms 后回零。真机的零偏、温漂、振动噪声没建模（未经真机标定）。</p>`;
+    c.shell.toolbar.setGroups([
+      { id: 'nav', tools: [{ id: 'p-orbit', label: '转动', key: '拖动' }, { id: 'p-level', label: '放平' }] },
+      { id: 'run', tools: [{ id: 'p-rerun', label: '再跑一次', primary: true }] },
+    ]);
+    c.shell.toolbar.setActive('p-orbit');
+    c.shell.timeline.setSteps([]);
+    c.shell.setNext('下一步', null, '这是最后一步');
+    c.shell.setVerdict('倾角仪 · 成品', 'idle');
+    c.shell.onVerdict(() => (location.hash = 'bench'));
+    const set = (k: string, v: string, bad = false) => {
+      const n = c.shell.props.querySelector<HTMLElement>(`[data-live="${k}"]`);
+      if (n) {
+        n.textContent = v;
+        n.classList.toggle('bad', bad);
+      }
+    };
+    const upd = () => {
+      const s = c.store.get();
+      const p = s.pose;
+      set('tp', `${p.pitch.toFixed(1)}° / ${p.roll.toFixed(1)}° / ${p.yaw.toFixed(1)}°`);
+      set('tg', gravity(p).map((v) => v.toFixed(3)).join(' / ') + ' g');
+      set('tip', s.imu ? `${s.imu.pitch.toFixed(1)}°` : '等固件打印…');
+      set('tir', s.imu ? `${s.imu.roll.toFixed(1)}°` : '—');
+      set('tgy', s.imu?.gyro ? `${s.imu.gyro.map((v) => v.toFixed(1)).join(' / ')} °/s` : '—');
+    };
+    upd();
+    tiltTimer = window.setInterval(upd, 100);
+    (window as unknown as { __tbProduct: unknown }).__tbProduct = { center: () => tilt!.centerPos(), pose: () => c.store.get().pose, imu: () => c.store.get().imu };
+  }
+
   function loopSvg() {
     raf = requestAnimationFrame(loopSvg);
     const c = ctx;
@@ -590,8 +647,12 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
           }
         }, ['run']);
       }
+      if (c.work.id === 'imu') {
+        mountTilt(el, c);
+        return;
+      }
       if (!TEMPLATES[c.work.id]) {
-        el.innerHTML = `<div class="pnl lockcard" role="status"><div class="sec">④ 成品</div><p class="ph-t">空白实验台没有成品</p><div class="btns"><a class="btn primary" href="./app.html?work=weather#product">看气象站成品</a></div></div>`;
+        el.innerHTML = `<div class="pnl lockcard" role="status"><div class="sec">④ 成品</div><p class="ph-t">${c.work.id === 'blank' ? '空白实验台' : esc(c.work.title)}没有成品</p><div class="btns"><a class="btn primary" href="./app.html?work=weather#product">看气象站成品</a></div></div>`;
         c.shell.tree.innerHTML = '<div class="tree-empty">没有成品</div>';
         c.shell.props.innerHTML = '';
         c.shell.toolbar.setGroups([]);
@@ -654,6 +715,8 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
       unsubs.forEach((u) => u());
       unsubs = [];
       clearInterval(timer);
+      clearInterval(tiltTimer);
+      tilt?.stop();
       cancelAnimationFrame(raf);
       raf = 0;
       scene3d?.stop();

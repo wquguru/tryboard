@@ -271,7 +271,7 @@ export function bomTotal(picks: Pick[], board?: string): { lo: number; hi: numbe
 }
 
 /** 元件库 → 实验台场景元件类型（与 examples.json scene.parts[].type 同名） */
-const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', button: 'key' };
+const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key' };
 /** 按键键帽上的字（usbkey：K1–K3 发 a / b / c，K4 宏键） */
 const KEY_CAPS = ['a', 'b', 'c', 'M'];
 
@@ -303,9 +303,22 @@ export function toScene(picks: Pick[], wiring: Wire[]): { type: string; [k: stri
       out.push({ type, addr: p.addr ?? part.i2cAddr!.default, sda: gpioOf(key, 'i2c-sda'), scl: gpioOf(key, 'i2c-scl') });
     } else if (type === 'servo') {
       out.push({ type, pin: gpioOf(key, 'pwm') });
+    } else if (type === 'mpu6050' || type === 'qmi8658') {
+      const int = type === 'mpu6050' ? gpioOf(key, 'digital-out') : undefined;
+      out.push({ type, addr: p.addr ?? part.i2cAddr!.default, sda: gpioOf(key, 'i2c-sda'), scl: gpioOf(key, 'i2c-scl'), ...(int !== undefined ? { int } : {}) });
     } else if (type === 'gc9a01') {
       // 模拟器只认 SPI2 上的圆屏；引脚由固件配置
       out.push({ type, spi: 2 });
+    } else if (type === 'gc9a01-touch') {
+      // 触摸圆屏 = 圆屏 + 屏上的 CST816S（触摸那 4 针按丝印找，TP_RST 与屏的 RES 同为复位类型）
+      const byLabel = (label: string) => {
+        const w = wiring.find((x) => x.part === key && x.pin === label);
+        const m = w && /^GPIO(\d+)$/.exec(w.net);
+        return m ? Number(m[1]) : undefined;
+      };
+      out.push({ type: 'gc9a01', spi: 2 });
+      const rst = byLabel('TP_RST');
+      out.push({ type: 'cst816s', addr: p.addr ?? part.i2cAddr!.default, sda: byLabel('TP_SDA'), scl: byLabel('TP_SCL'), int: byLabel('TP_INT'), ...(rst !== undefined ? { rst } : {}) });
     } else if (type === 'buzzer') {
       const pin = gpioOf(key, 'pwm');
       if (pin !== undefined) out.push({ type, pin });

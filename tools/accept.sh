@@ -109,6 +109,17 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
         n = int(m.group(1)) if m else 0
         notes.append(f"LCD 非黑 {n} 像素（显示{m.group(2) if m else '无'}）")
         if n < t['lcd_min_pixels']: missing.append('lcd')
+    # 喇叭：'[tryboard] I2S 喇叭 … 采样率 R Hz，最近 1 秒 RMS x、峰值 y、主频 f Hz'（模拟器侧对喇叭收到的 PCM 做的分析）
+    au = t.get('audio')
+    if au:
+        m = re.search(r'I2S 喇叭 .*采样率 ([\d.]+) Hz，最近 1 秒 RMS ([\d.]+)、峰值 ([\d.]+)、主频 ([\d.]+) Hz', err)
+        if not m:
+            notes.append('喇叭没有收到声音'); missing.append('audio')
+        else:
+            rate, rms, f = float(m.group(1)), float(m.group(2)), float(m.group(4))
+            notes.append(f"喇叭 {rate:.1f} Hz 采样，主频 {f:.1f} Hz，RMS {rms:.4f}")
+            if abs(f - au['freq']) > au['tol'] or abs(rate - au['rate']) > 1 or rms < au.get('min_rms', 0):
+                missing.append('audio')
     speed = re.search(r'模拟 ([\d.]+)s / 实际 ([\d.]+)s', err)
     if speed: notes.append(f"模拟 {speed.group(1)}s 用时 {speed.group(2)}s")
     if t.get('qemu') and not no_qemu:
@@ -180,7 +191,7 @@ console.log(s.length ? '核价提醒：' + s.length + ' 件超过 120 天未核�
 if [ $NO_WEB = 0 ]; then
   echo -e "\n## 网页（Chrome 无头 + wasm）" >> $REPORT
   tools/build_web.sh >/dev/null 2>&1 || { echo "构建失败" >> $REPORT; fail=1; }
-  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接" s3-blink:TRYBOARD_OK s3-rgb:TRYBOARD_OK s3-dual:TRYBOARD_OK weather:TRYBOARD_OK lens:TRYBOARD_OK spin:TRYBOARD_OK s3-wifi-http:TRYBOARD_OK "usbkey:TRYBOARD_OK usbkey"; do
+  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接" s3-blink:TRYBOARD_OK s3-rgb:TRYBOARD_OK s3-dual:TRYBOARD_OK weather:TRYBOARD_OK lens:TRYBOARD_OK spin:TRYBOARD_OK s3-wifi-http:TRYBOARD_OK s3-lvgl:TRYBOARD_OK "s3-encoder:ENCODER ready" "s3-ultrasonic:DIST 15.0 cm" s3-imu:TRYBOARD_OK s3-qmi8658:TRYBOARD_OK s3-touch:TRYBOARD_OK "usbkey:TRYBOARD_OK usbkey"; do
     ex=${spec%%:*}; want=${spec#*:}
     r=$(node tools/webtest/webtest.mjs "$ex" "$want" 2>&1 | head -3)
     echo "$r" | sed 's/^/- /' >> $REPORT
@@ -219,6 +230,10 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/harness.mjs 2>&1 | grep '^\[harness\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[harness\] PASS（' || { echo "- [harness] 脚本没跑完" >> $REPORT; fail=1; }
+  # IMU / 触摸（P2-02 / P2-03）：真实鼠标拖 IMU、点触摸圆屏，读数与命令行 --inputs 重放逐行一致
+  r=$(node tools/webtest/sense.mjs 2>&1 | grep '^\[sense\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[sense\] PASS（' || { echo "- [sense] 脚本没跑完" >> $REPORT; fail=1; }
   r=$(node tools/webtest/editor.mjs 2>&1 | tail -1)
   echo "- 元件编辑器（上传固件 + 加 BME280 / LED）：$r" >> $REPORT
   echo "$r" | grep -q PASS || fail=1

@@ -6,6 +6,8 @@
 //!
 //! 不模拟 FIFO 与突发：外设（SPI2、C3 的 AES / SHA）开始传输时由 SoC 调 `take_out` 一次性沿描述符链取出全部数据，
 //! 传输结束时调 `out_done` 置 OUT_DONE / OUT_EOF / OUT_TOTAL_EOF。
+//! 流式外设（I2S）不同：它按采样率一个描述符一个描述符地消耗环形链表（`out_next` / `out_eof`、`in_peek` / `in_fill`），
+//! 每个描述符处理完报 DONE，带 suc_eof 的报 EOF（OUT_EOF_DES_ADDR / IN_SUC_EOF_DES_ADDR 记下这个描述符），链表走到头（next = 0）停下。
 //! 描述符（dma_descriptor_t）：字 0 = size[11:0] | length[23:12] | suc_eof[30] | owner[31]，字 1 = 缓冲区，字 2 = 下一个。
 
 /// 外设访问内存的接口（SoC 实现）；与 Wi-Fi MAC 共用 tryboard-soc 的定义
@@ -113,6 +115,8 @@ pub struct Dir {
     pub started: bool,
     pub peri_sel: u32,
     pub eof_desc: u32,
+    /// 流式外设（I2S）当前处理到的描述符（start 时 = link，处理完一个走到 next）
+    pub cur: u32,
 }
 
 pub struct Gdma {
@@ -306,6 +310,7 @@ impl Gdma {
             }
             if v & (1 << start) != 0 {
                 d.link = l.link_base | (v & 0xf_ffff);
+                d.cur = d.link;
                 d.started = true;
             }
             if v & (1 << restart) != 0 {
@@ -412,6 +417,114 @@ impl Gdma {
         d.started = false;
         // IN_DONE | IN_SUC_EOF
         d.int_raw |= 0b11;
+    }
+
+    /// 流式发送：取出通道 ch 当前描述符的数据（length 字节），走到下一个描述符。
+    /// 返回（描述符地址, 数据, 是否带 suc_eof, 是否链表最后一个）；通道没启动或已走到头返回 None
+    pub fn out_next(
+        &mut self,
+        ch: usize,
+        mem: &mut dyn DmaMem,
+    ) -> Option<(u32, Vec<u8>, bool, bool)> {
+        let conf0 =
+            self.regs[((self.layout.ch_base + ch as u32 * self.layout.stride + self.layout.out_off)
+                / 4) as usize];
+        let d = self.out.get_mut(ch)?;
+        if !d.started || d.cur == 0 {
+            return None;
+        }
+        let desc = d.cur;
+        let w0 = mem.rd32(desc);
+        let buf = mem.rd32(desc + 4);
+        let next = mem.rd32(desc + 8);
+        let len = ((w0 >> 12) & 0xfff) as usize;
+        let data: Vec<u8> = (0..len as u32).map(|i| mem.rd8(buf + i)).collect();
+        // out_auto_wrback：读完交还 owner
+        if conf0 & (1 << 2) != 0 {
+            mem.wr32(desc, w0 & !(1 << 31));
+        }
+        d.cur = next;
+        if next == 0 {
+            d.started = false;
+        }
+        self.out_bytes += len as u64;
+        Some((desc, data, w0 & (1 << 30) != 0, next == 0))
+    }
+
+    /// 流式发送：描述符 desc 的数据已经送完（I2S 放完了这一块）
+    pub fn out_eof(&mut self, ch: usize, desc: u32, eof: bool, last: bool) {
+        if let Some(d) = self.out.get_mut(ch) {
+            d.int_raw |= out_int::DONE;
+            if eof {
+                d.int_raw |= out_int::EOF;
+                d.eof_desc = desc;
+            }
+            if last {
+                d.int_raw |= out_int::TOTAL_EOF;
+            }
+        }
+    }
+
+    /// 流式接收：通道 ch 当前要写的描述符（地址, size）
+    pub fn in_peek(&self, ch: usize, mem: &mut dyn DmaMem) -> Option<(u32, usize)> {
+        let d = self.inn.get(ch)?;
+        if !d.started || d.cur == 0 {
+            return None;
+        }
+        Some((d.cur, (mem.rd32(d.cur) & 0xfff) as usize))
+    }
+
+    /// 流式接收：把一块数据写进描述符 desc（必须仍是当前描述符），length = 数据长度，
+    /// owner 交还 CPU；eof 时置 suc_eof、报 IN_SUC_EOF 并记下描述符地址。返回是否写入
+    pub fn in_fill(
+        &mut self,
+        ch: usize,
+        desc: u32,
+        data: &[u8],
+        eof: bool,
+        mem: &mut dyn DmaMem,
+    ) -> bool {
+        let Some(d) = self.inn.get_mut(ch) else {
+            return false;
+        };
+        if !d.started || d.cur != desc {
+            return false;
+        }
+        let w0 = mem.rd32(desc);
+        let buf = mem.rd32(desc + 4);
+        let next = mem.rd32(desc + 8);
+        let n = data.len().min((w0 & 0xfff) as usize);
+        let mut i = 0;
+        while i < n {
+            let a = buf + i as u32;
+            if a & 3 == 0 && i + 4 <= n {
+                mem.wr32(
+                    a,
+                    u32::from_le_bytes([data[i], data[i + 1], data[i + 2], data[i + 3]]),
+                );
+                i += 4;
+            } else {
+                let w = mem.rd32(a & !3);
+                let sh = (a & 3) * 8;
+                mem.wr32(a & !3, (w & !(0xff << sh)) | ((data[i] as u32) << sh));
+                i += 1;
+            }
+        }
+        let w0n = (w0 & 0xfff) | ((n as u32) << 12) | if eof { 1 << 30 } else { 0 };
+        mem.wr32(desc, w0n);
+        // IN_DONE；IN_SUC_EOF
+        d.int_raw |= 1;
+        if eof {
+            d.int_raw |= 2;
+            d.eof_desc = desc;
+        }
+        d.cur = next;
+        if next == 0 {
+            d.started = false;
+            // IN_DSCR_EMPTY：链表用完
+            d.int_raw |= 1 << 4;
+        }
+        true
     }
 
     /// 发送通道 ch 的数据已全部送出

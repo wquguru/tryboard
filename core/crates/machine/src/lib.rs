@@ -2,17 +2,23 @@
 //! 新加芯片时在这里加一个分支，CLI / 网页不用改。
 
 use std::collections::{HashMap, VecDeque};
+use tryboard_elec::board::{Activity, Board, ChipKind, Power};
+pub use tryboard_esp32c3::devices::audio::{Analysis as AudioAnalysis, Block as AudioBlock};
+use tryboard_esp32c3::devices::audio::{Audio, MicSource};
 use tryboard_esp32c3::devices::{
     bme280::{Bme280, Env},
+    cst816s::Cst816s,
     gc9a01::Gc9a01,
+    imu::Pose,
+    mpu6050::Mpu6050,
+    qmi8658::Qmi8658,
     ssd1306::Ssd1306,
 };
-use tryboard_esp32c3::iotrace::IoTrace;
 pub use tryboard_esp32c3::iotrace::IoEvent;
+use tryboard_esp32c3::iotrace::IoTrace;
 use tryboard_esp32c3::rmt::Ws2812;
 use tryboard_esp32c3::Esp32c3;
 use tryboard_esp32s3::Esp32s3;
-use tryboard_elec::board::{Activity, Board, ChipKind, Power};
 
 pub use tryboard_esp32c3::periph::CPU_HZ;
 
@@ -91,6 +97,8 @@ pub struct Machine {
     pub hw: Hw,
     pub elec: Board,
     harness: Harness,
+    /// 触摸控制器的 INT 脚接在哪个 GPIO（按着拉低、抬起回高）；None = 没接
+    pub touch_int: Option<u32>,
 }
 
 pub struct BootInfo {
@@ -104,11 +112,11 @@ impl Machine {
         match Chip::from_image(&flash) {
             Some(Chip::Esp32s3) => {
                 let (m, a) = Esp32s3::boot(rom, flash)?;
-                Ok((Machine { hw: Hw::S3(m), elec: Board::new(ChipKind::S3), harness: Harness::default() }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
+                Ok((Machine { hw: Hw::S3(m), elec: Board::new(ChipKind::S3), touch_int: None, harness: Harness::default() }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
             }
             Some(Chip::Esp32c3) | None => {
                 let (m, a) = Esp32c3::boot(rom, flash)?;
-                Ok((Machine { hw: Hw::C3(m), elec: Board::new(ChipKind::C3), harness: Harness::default() }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
+                Ok((Machine { hw: Hw::C3(m), elec: Board::new(ChipKind::C3), touch_int: None, harness: Harness::default() }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
             }
         }
     }
@@ -192,15 +200,30 @@ impl Machine {
         let w = self.wifi_frames();
         let tx_frames = w.0.saturating_sub(w0.0);
         let tx = tx_frames as f64 * self.elec.p.tx_airtime / (dc as f64 / CPU_HZ as f64);
-        let servo_pw_us = self.elec.servo_pin.and_then(|p| self.pin_pwm(p as usize)).and_then(|(d, f)| {
-            // 舵机只认 50 Hz 量级的脉冲；别的频率（蜂鸣器 kHz）不当舵机信号
-            if (20.0..=500.0).contains(&f) && d > 0.0 {
-                Some(d as f64 / f as f64 * 1e6)
-            } else {
-                None
-            }
-        });
-        Activity { busy, wifi_on: w.0 + w.1 > 0, tx, servo_pw_us }
+        let servo_pw_us = self
+            .elec
+            .servo_pin
+            .and_then(|p| self.pin_pwm(p as usize))
+            .and_then(|(d, f)| {
+                // 舵机只认 50 Hz 量级的脉冲；别的频率（蜂鸣器 kHz）不当舵机信号
+                if (20.0..=500.0).contains(&f) && d > 0.0 {
+                    Some(d as f64 / f as f64 * 1e6)
+                } else {
+                    None
+                }
+            });
+        let amp_i = self
+            .audio()
+            .and_then(|a| a.speaker.as_ref())
+            .map(|s| s.supply_current())
+            .unwrap_or(0.0);
+        Activity {
+            busy,
+            wifi_on: w.0 + w.1 > 0,
+            tx,
+            servo_pw_us,
+            amp_i,
+        }
     }
 
     /// Wi-Fi MAC 模型（两颗芯片共用 tryboard-soc 的实现）：空中日志、收发计数
@@ -446,8 +469,48 @@ impl Machine {
     }
 
     pub fn env_set(&mut self, env: Env) {
-        if let Some(b) = self.i2c0().device::<Bme280>() {
+        let t = env.temp_c;
+        let bus = self.i2c0();
+        if let Some(b) = bus.device::<Bme280>() {
             b.env = env;
+        }
+        // IMU 的片上温度计读的是芯片温度：取环境温度（自热不建模）
+        if let Some(d) = bus.device::<Mpu6050>() {
+            d.temp_c = t;
+        }
+        if let Some(d) = bus.device::<Qmi8658>() {
+            d.temp_c = t;
+        }
+    }
+
+    /// 姿态（作用于总线上的 MPU6050 / QMI8658）：欧拉角（度）+ 欧拉角速率（°/s），见 devices/imu.rs
+    pub fn imu_set(&mut self, pose: Pose) {
+        let bus = self.i2c0();
+        if let Some(d) = bus.device::<Mpu6050>() {
+            d.pose = pose;
+        }
+        if let Some(d) = bus.device::<Qmi8658>() {
+            d.pose = pose;
+        }
+    }
+
+    /// 触摸控制器 INT 接在哪个 GPIO：接上就先驱动成高电平（没按）
+    pub fn touch_int_attach(&mut self, pin: u32) {
+        self.touch_int = Some(pin);
+        self.gpio_drive(pin, 1);
+    }
+
+    /// 手指在触摸屏上（x, y 为屏幕像素 0..239）：down = false 表示抬起
+    pub fn touch(&mut self, x: u16, y: u16, down: bool) {
+        let now = self.cycles();
+        let Some(d) = self.i2c0().device::<Cst816s>() else { return };
+        if down {
+            d.press(x, y, now);
+        } else {
+            d.release(now);
+        }
+        if let Some(pin) = self.touch_int {
+            self.gpio_drive(pin, if down { 0 } else { 1 });
         }
     }
 
@@ -480,6 +543,78 @@ impl Machine {
         }
     }
 
+    pub fn audio(&self) -> Option<&Audio> {
+        let a = match &self.hw {
+            Hw::S3(m) => &m.bus.audio,
+            Hw::C3(m) => &m.bus.audio,
+        };
+        (!a.is_empty()).then_some(a)
+    }
+
+    fn audio_mut(&mut self) -> &mut Audio {
+        match &mut self.hw {
+            Hw::S3(m) => &mut m.bus.audio,
+            Hw::C3(m) => &mut m.bus.audio,
+        }
+    }
+
+    /// 接 I2S 音频器件："max98357a"（喇叭）/ "inmp441"（麦克风）。引脚按芯片：
+    /// S3 见 tryboard_esp32s3::i2s_pin，C3 见 tryboard_esp32c3::i2s_pin
+    pub fn i2s_attach(&mut self, kind: &str) -> bool {
+        match (&mut self.hw, kind) {
+            (Hw::S3(m), "max98357a") => m.bus.attach_speaker(),
+            (Hw::C3(m), "max98357a") => m.bus.attach_speaker(),
+            (Hw::S3(m), "inmp441") => m.bus.attach_mic(),
+            (Hw::C3(m), "inmp441") => m.bus.attach_mic(),
+            _ => return false,
+        }
+        self.elec.add_module(kind);
+        true
+    }
+
+    /// 麦克风听固定 WAV（循环）；没接麦克风时先接上
+    pub fn mic_wav(&mut self, rate: f64, data: Vec<f32>) {
+        if self.audio_mut().mic.is_none() {
+            self.i2s_attach("inmp441");
+        }
+        if let Some(m) = self.audio_mut().mic.as_mut() {
+            m.source = MicSource::Wav { rate, data };
+        }
+    }
+
+    /// 麦克风听实时推入的声音（网页麦克风），rate = 推入数据的采样率
+    pub fn mic_push(&mut self, rate: f64, x: &[f32]) {
+        if let Some(m) = self.audio_mut().mic.as_mut() {
+            m.push_live(rate, x);
+        }
+    }
+
+    /// 麦克风回到安静
+    pub fn mic_silence(&mut self) {
+        if let Some(m) = self.audio_mut().mic.as_mut() {
+            m.source = MicSource::Silence;
+        }
+    }
+
+    /// 取走喇叭攒下的声音（带模拟时刻）
+    pub fn audio_take(&mut self) -> Vec<AudioBlock> {
+        self.audio_mut()
+            .speaker
+            .as_mut()
+            .map(|s| s.take())
+            .unwrap_or_default()
+    }
+
+    /// 喇叭最近 secs 秒的读数
+    pub fn audio_analyze(&self, secs: f64) -> Option<AudioAnalysis> {
+        self.audio()?.speaker.as_ref().map(|s| s.analyze(secs))
+    }
+
+    /// `[tryboard] I2S …` 观察记录（没接音频器件时为空）
+    pub fn audio_report(&self) -> String {
+        self.audio().map(|a| a.report()).unwrap_or_default()
+    }
+
     /// SPI2 传输统计（次数, MOSI 字节数）
     pub fn spi_stats(&self) -> (u64, u64) {
         match &self.hw {
@@ -488,10 +623,95 @@ impl Machine {
         }
     }
 
+    fn pins(&mut self) -> &mut tryboard_esp32c3::devices::pins::PinDevices {
+        match &mut self.hw {
+            Hw::C3(m) => &mut m.bus.pins,
+            Hw::S3(m) => &mut m.bus.pins,
+        }
+    }
+
+    /// 让 SoC 马上重新问一次外接引脚器件（新排了波形）
+    fn pins_kick(&mut self) {
+        match &mut self.hw {
+            Hw::C3(m) => {
+                m.bus.next_event = 0;
+                m.bus.irq_dirty = true;
+            }
+            Hw::S3(m) => {
+                m.bus.next_event = 0;
+                m.bus.irq_dirty = true;
+            }
+        }
+    }
+
+    /// 接一个旋转编码器（P2-01）：A / B 两相与可选的按键脚；3V3 供电，电流进供电网络
+    pub fn encoder_attach(&mut self, a: u32, b: u32, sw: Option<u32>) {
+        let now = self.cycles();
+        self.pins().encoders.push(tryboard_esp32c3::devices::pins::Encoder::new(a, b, sw, now));
+        self.elec.add_module("encoder");
+        self.pins_kick();
+    }
+
+    /// 编码器转 steps 格（正 = 顺时针）；脚本动作 enc=+N / enc=-N
+    pub fn encoder_turn(&mut self, steps: i32) {
+        let now = self.cycles();
+        if let Some(e) = self.pins().encoders.first_mut() {
+            e.turn(now, steps);
+        }
+        self.pins_kick();
+    }
+
+    /// 编码器按键；脚本动作 encsw=1|0
+    pub fn encoder_press(&mut self, down: bool) {
+        let now = self.cycles();
+        if let Some(e) = self.pins().encoders.first_mut() {
+            e.press(now, down);
+        }
+        self.pins_kick();
+    }
+
+    /// 编码器已经转完的格数（顺时针为正）
+    pub fn encoder_position(&mut self) -> Option<i64> {
+        self.pins().encoders.first().map(|e| e.position)
+    }
+
+    /// 接一个 HC-SR04（P2-04）：Trig 由芯片驱动，Echo 由模块驱动；5 V 供电，电流进 5V 轨
+    pub fn sonar_attach(&mut self, trig: u32, echo: u32) {
+        let now = self.cycles();
+        self.pins().sonars.push(tryboard_esp32c3::devices::pins::Hcsr04::new(trig, echo, now));
+        self.elec.add_module("hcsr04");
+        self.pins_kick();
+    }
+
+    /// 探头到障碍物的距离（cm）；负数 = 前方没有东西（超量程）。脚本动作 dist=厘米
+    pub fn sonar_distance(&mut self, cm: f64) {
+        if let Some(s) = self.pins().sonars.first_mut() {
+            s.distance_cm = (cm >= 0.0).then_some(cm);
+        }
+    }
+
+    /// 超声波的统计（触发次数, 回波次数, 最近回波宽度 µs）
+    pub fn sonar_stats(&mut self) -> Option<(u64, u64, f64)> {
+        self.pins().sonars.first().map(|s| (s.pings, s.echoes, s.last_us))
+    }
+
+    /// 脉冲计数器单元 u 的当前计数（只有 S3 有 PCNT）
+    pub fn pcnt_count(&self, u: usize) -> Option<i16> {
+        match &self.hw {
+            Hw::S3(m) => Some(m.bus.pcnt.count(u)),
+            Hw::C3(_) => None,
+        }
+    }
+
     /// GPIO 电平变化记录（周期, 电平）
     pub fn gpio_log(&self) -> Vec<(u64, u64)> {
         match &self.hw {
-            Hw::C3(m) => m.bus.gpio_log.iter().map(|(t, l)| (*t, *l as u64)).collect(),
+            Hw::C3(m) => m
+                .bus
+                .gpio_log
+                .iter()
+                .map(|(t, l)| (*t, *l as u64))
+                .collect(),
             Hw::S3(m) => m.bus.gpio_log.clone(),
         }
     }
@@ -601,7 +821,9 @@ fn c3_stop(m: &Esp32c3, r: tryboard_esp32c3::Stop) -> Stop {
     use tryboard_esp32c3::Stop as S;
     match r {
         S::Budget => Stop::Budget,
-        S::Fault { cause, pc, tval } => Stop::Fault(format!("CPU 异常 cause={cause} pc=0x{pc:08x} tval=0x{tval:08x}")),
+        S::Fault { cause, pc, tval } => Stop::Fault(format!(
+            "CPU 异常 cause={cause} pc=0x{pc:08x} tval=0x{tval:08x}"
+        )),
         S::Hle(pc) => Stop::Hle(format!("0x{pc:08x} {}", m.symbol_at(pc).unwrap_or(""))),
         S::Reset(r) => Stop::Reset(r),
     }
@@ -611,7 +833,9 @@ fn s3_stop(m: &Esp32s3, r: tryboard_esp32s3::Stop) -> Stop {
     use tryboard_esp32s3::Stop as S;
     match r {
         S::Budget => Stop::Budget,
-        S::Fault { cause, epc, vaddr } => Stop::Fault(format!("CPU 异常 EXCCAUSE={cause} EPC1=0x{epc:08x} EXCVADDR=0x{vaddr:08x}")),
+        S::Fault { cause, epc, vaddr } => Stop::Fault(format!(
+            "CPU 异常 EXCCAUSE={cause} EPC1=0x{epc:08x} EXCVADDR=0x{vaddr:08x}"
+        )),
         S::Break(v) => Stop::Fault(format!("BREAK 0x{v:x}")),
         S::Hle(pc) => Stop::Hle(format!("0x{pc:08x} {}", m.symbol_at(pc).unwrap_or(""))),
         S::Reset(r) => Stop::Reset(r),
@@ -619,6 +843,24 @@ fn s3_stop(m: &Esp32s3, r: tryboard_esp32s3::Stop) -> Stop {
 }
 
 pub use tryboard_esp32c3::devices::bme280::Env as SensorEnv;
+pub use tryboard_esp32c3::devices::imu::Pose as ImuPose;
+
+/// 脚本动作 `imu=pitch,roll,yaw[,dpitch,droll,dyaw]`（度、°/s）的参数部分
+pub fn parse_imu(s: &str) -> Option<Pose> {
+    let v: Vec<f64> = s.split(',').map(|x| x.trim().parse().ok()).collect::<Option<_>>()?;
+    match v.as_slice() {
+        [p, r, y] => Some(Pose::new(*p, *r, *y)),
+        [p, r, y, dp, dr, dy] => Some(Pose { pitch: *p, roll: *r, yaw: *y, dpitch: *dp, droll: *dr, dyaw: *dy }),
+        _ => None,
+    }
+}
+
+/// 脚本动作 `touch=x,y` 的参数部分（屏幕像素）
+pub fn parse_touch(s: &str) -> Option<(u16, u16)> {
+    let (x, y) = s.split_once(',')?;
+    let f = |t: &str| t.trim().parse::<f64>().ok().map(|v| v.round().clamp(0.0, 239.0) as u16);
+    Some((f(x)?, f(y)?))
+}
 pub use tryboard_elec::board::Power as PowerMode;
 
 /// I2C 排线（P2-11）的一行结论；没设线长（理想总线）返回 None。命令行与网页共用这段文字
@@ -670,4 +912,18 @@ pub fn usb_report_lines(m: &Machine) -> String {
         o.push_str(&format!("[tryboard] USB 键盘输入: {:?}\n", h.typed));
     }
     o
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn imu_touch_actions() {
+        assert_eq!(parse_imu("30,-20,5"), Some(Pose::new(30.0, -20.0, 5.0)));
+        assert_eq!(parse_imu("1,2,3,4,5,6").map(|p| p.dyaw), Some(6.0));
+        assert_eq!(parse_imu("1,2"), None);
+        assert_eq!(parse_touch("120.4, 300"), Some((120, 239)));
+        assert_eq!(parse_touch("x,1"), None);
+    }
 }

@@ -13,12 +13,16 @@ pub mod usb;
 use periph::*;
 use std::collections::HashMap;
 use tryboard_esp32c3::crypto_hw::{self, AesHw, ShaHw};
+use tryboard_esp32c3::devices::audio::{self, Audio, PortIo};
 use tryboard_esp32c3::devices::gc9a01::Gc9a01;
 use tryboard_esp32c3::gdma::{DmaMem, Gdma, GdmaLayout};
 use tryboard_esp32c3::gpspi::GpSpi;
 use tryboard_esp32c3::i2c::I2c;
+use tryboard_esp32c3::i2s::I2s;
 use tryboard_esp32c3::iotrace::IoTrace;
+use tryboard_esp32c3::devices::pins::PinDevices;
 use tryboard_esp32c3::ledc::Ledc;
+use tryboard_esp32c3::pcnt::{self as pcnt_mod, Pcnt};
 use tryboard_esp32c3::periph::{Systimer, Timg, Uart};
 use tryboard_esp32c3::rmt::{Rmt, RmtLayout, Ws2812};
 use tryboard_esp32c3::spiflash::SpiFlash;
@@ -91,8 +95,21 @@ pub mod lcd_pin {
     pub const RST: u32 = 13;
     pub const BL: u32 = 15;
 }
-/// GDMA 的外设编号（soc/gdma_channel.h：SOC_GDMA_TRIG_PERIPH_SPI2）
+/// GDMA 的外设编号（soc/gdma_channel.h：SOC_GDMA_TRIG_PERIPH_SPI2 / _I2S0 / _I2S1）
 const GDMA_PERI_SPI2: u32 = 0;
+const GDMA_PERI_I2S: [u32; 2] = [3, 4];
+/// GPIO 矩阵信号（gpio_sig_map.h）：I2S0O_SD_OUT_IDX = I2S0I_SD_IN_IDX = 25，I2S1 为 30
+const SIG_I2S_SD: [usize; 2] = [25, 30];
+/// I2S 音频器件的接线约定：喇叭（MAX98357A）用 16/17/18，麦克风（INMP441）用 39/40/41——
+/// 避开圆屏（10..15）、I2C（8/9）、舵机 / LED（4/5）、WS2812（48）、USB（19/20）和八线 PSRAM（33..37）
+pub mod i2s_pin {
+    pub const SPK_BCLK: u32 = 16;
+    pub const SPK_LRC: u32 = 17;
+    pub const SPK_DIN: u32 = 18;
+    pub const MIC_SCK: u32 = 39;
+    pub const MIC_WS: u32 = 40;
+    pub const MIC_SD: u32 = 41;
+}
 /// GPIO 矩阵输出信号 FSPICS0_OUT_IDX（gpio_sig_map.h）与 IO_MUX 功能号 FUNC_GPIO10_FSPICS0
 const SIG_FSPICS0: u32 = 110;
 const IOMUX_FUNC_FSPICS0: u32 = 4;
@@ -107,6 +124,11 @@ pub struct SocBus {
     /// PSRAM 芯片的命令接口（模式寄存器）；存储体是 `psram`
     pub psram_chip: psram::OctalPsram,
     pub mmu: Vec<u32>,
+    /// 取指页缓存：最近一次取指所在的 64KB 页（vaddr >> 16，u32::MAX = 无效）、
+    /// 它落在哪块存储（`FetchSrc`）以及页首在那块存储里的偏移。写 MMU 时作废
+    fetch_page: u32,
+    fetch_src: FetchSrc,
+    fetch_base: usize,
     pub now: u64,
     pub uart0: Uart,
     pub uart1: Uart,
@@ -130,6 +152,10 @@ pub struct SocBus {
     /// RMT（4 发送 + 4 接收）与挂在引脚上的 WS2812 解码器
     pub rmt: Rmt,
     pub ws2812: HashMap<u32, Ws2812>,
+    /// 脉冲计数器（4 单元，P2-01）
+    pub pcnt: Pcnt,
+    /// 直接接在 GPIO 上、输出带时刻波形的外接器件（旋转编码器、HC-SR04）
+    pub pins: PinDevices,
     /// I2C0（0x60013000）/ I2C1（0x60027000），模型与 C3 相同
     pub i2c0: I2c,
     pub i2c1: I2c,
@@ -138,6 +164,9 @@ pub struct SocBus {
     pub gdma: Gdma,
     /// 挂在 SPI2 上的圆屏（CLI `--spi gc9a01` / wasm `tb_lcd_attach`）
     pub lcd: Option<Box<Gc9a01>>,
+    /// I2S0（0x6000F000）/ I2S1（0x6002D000），模型与 C3 相同；挂在上面的音频器件（引脚见 `i2s_pin`）
+    pub i2s: [I2s; 2],
+    pub audio: Audio,
     /// SAR ADC 单次采样（SENS）
     pub adc: SensAdc,
     /// Wi-Fi MAC + 虚拟世界（Option 只为推进 / 发送时临时取出来借总线；平时恒为 Some）
@@ -184,6 +213,9 @@ impl Default for SocBus {
             psram: vec![0; PSRAM_SIZE],
             psram_chip: psram::OctalPsram::default(),
             mmu: vec![MMU_INVALID; MMU_ENTRIES],
+            fetch_page: u32::MAX,
+            fetch_src: FetchSrc::Sram,
+            fetch_base: 0,
             now: 0,
             uart0: Uart::default(),
             uart1: Uart::default(),
@@ -202,11 +234,15 @@ impl Default for SocBus {
             usb: Some(Box::default()),
             rmt: Rmt::new(RmtLayout::S3),
             ws2812: HashMap::new(),
+            pcnt: Pcnt::default(),
+            pins: PinDevices::default(),
             i2c0: I2c::default(),
             i2c1: I2c::with_port(tryboard_esp32c3::iotrace::i2cbit::PORT1),
             spi2: GpSpi::default(),
             gdma: Gdma::new(GdmaLayout::S3),
             lcd: None,
+            i2s: [I2s::new(0, true), I2s::new(1, true)],
+            audio: Audio::default(),
             adc: SensAdc::default(),
             wifi: Some(Box::new(WifiMac::new(WifiLayout::S3))),
             sha: ShaHw::default(),
@@ -248,6 +284,15 @@ fn wr(buf: &mut [u8], off: usize, size: u32, v: u32) -> Option<()> {
     let b = buf.get_mut(off..off + size as usize)?;
     b.copy_from_slice(&v.to_le_bytes()[..size as usize]);
     Some(())
+}
+
+/// 取指页缓存指向的存储
+#[derive(Clone, Copy)]
+enum FetchSrc {
+    Sram,
+    Flash,
+    Psram,
+    Rom,
 }
 
 /// cache 窗口翻译结果
@@ -340,12 +385,15 @@ impl SocBus {
             }
             0x6001_9000 => return self.ledc.read(off),
             0x6001_6000 => return self.rmt.read(off),
+            0x6001_7000 => return self.pcnt.read(off),
             0x6001_3000 => return self.i2c0.read(off),
             0x6002_7000 => return self.i2c1.read(off),
             0x6002_4000 => return self.spi2.read(off),
             0x6003_F000 => return self.gdma.read(off),
             crypto_hw::SHA_BASE => return self.sha.read(off),
             crypto_hw::AES_BASE => return self.aes.read(off),
+            0x6000_F000 => return self.i2s[0].read(off),
+            0x6002_D000 => return self.i2s[1].read(off),
             0x6000_8000 if off >= 0x800 => {
                 if let Some(v) = self.adc.read(off - 0x800) {
                     return v;
@@ -468,6 +516,10 @@ impl SocBus {
             }
             0x6001_9000 => return self.ledc.write(off, v, now),
             0x6001_6000 => return self.rmt.write(off, v, now),
+            0x6001_7000 => {
+                self.pcnt.update(now);
+                return self.pcnt.write(off, v);
+            }
             0x6001_3000 | 0x6002_7000 => {
                 let bus = if base == 0x6001_3000 {
                     &mut self.i2c0
@@ -501,6 +553,8 @@ impl SocBus {
                 self.aes = x;
                 return;
             }
+            0x6000_F000 => return self.i2s[0].write(off, v, now),
+            0x6002_D000 => return self.i2s[1].write(off, v, now),
             0x6000_8000 if off >= 0x800 => {
                 if self.adc.write(off - 0x800, v) {
                     return;
@@ -539,6 +593,7 @@ impl SocBus {
             0x600C_4000 if off < 0x400 => return self.extmem.write(off, v),
             0x600C_5000 if (off as usize) < MMU_ENTRIES * 4 => {
                 self.mmu[(off / 4) as usize] = v & 0xffff;
+                self.fetch_page = u32::MAX;
                 return;
             }
             _ => {}
@@ -581,8 +636,67 @@ impl SocBus {
             if self.gpio_log.len() > 1 << 16 {
                 self.gpio_log.drain(..1 << 15);
             }
+            self.pins.on_level(now, lv);
         }
+        // 引脚电平或 GPIO 矩阵输入选择可能变了：PCNT / RMT 接收的输入按此刻重新取样
+        self.feed_inputs(now, lv);
         self.irq_dirty = true;
+    }
+
+    /// GPIO 矩阵输入信号 sig 此刻的电平（FUNCn_IN_SEL_CFG：sel[5:0]、inv[6]、经矩阵[7]；0x38 常 1、0x3C 常 0）
+    fn sig_level(&self, lv: u64, sig: u32) -> bool {
+        let f = self.gpio.func_in[sig as usize];
+        if f & (1 << 7) == 0 {
+            return false;
+        }
+        let v = match f & 0x3f {
+            0x38 => true,
+            0x3c => false,
+            p if (p as usize) < NPINS => lv >> p & 1 != 0,
+            _ => false,
+        };
+        v ^ (f & (1 << 6) != 0)
+    }
+
+    fn feed_inputs(&mut self, t: u64, lv: u64) {
+        let mut sig = [false; pcnt_mod::NSIG];
+        for (k, s) in sig.iter_mut().enumerate() {
+            *s = self.sig_level(lv, pcnt_mod::SIG0 + k as u32);
+        }
+        self.pcnt.feed(t, &sig);
+        let l = self.rmt.layout;
+        for i in 0..l.nrx {
+            let s = self.sig_level(lv, l.sig_out0 + i as u32);
+            self.rmt.rx_input(i, t, s);
+        }
+    }
+
+    /// 外接引脚器件到 now 为止的驱动按时刻施加到引脚；返回下一次要问它们的时刻
+    fn pins_update(&mut self, now: u64) -> u64 {
+        if self.pins.is_empty() {
+            return u64::MAX;
+        }
+        loop {
+            let (drives, next) = self.pins.poll(now);
+            if drives.is_empty() {
+                return next;
+            }
+            for (t, pin, lv) in drives {
+                let bit = 1u64 << pin;
+                let g = &mut self.gpio;
+                if lv < 0 {
+                    g.ext_driven &= !bit;
+                } else {
+                    g.ext_driven |= bit;
+                    if lv > 0 {
+                        g.ext_in |= bit;
+                    } else {
+                        g.ext_in &= !bit;
+                    }
+                }
+                self.gpio_changed(t);
+            }
+        }
     }
 
     /// 所有中断源的当前电平（99 个源，两个 64 位字）
@@ -600,9 +714,12 @@ impl SocBus {
         set(src::LEDC, self.ledc.irq());
         set(usb::SRC_USB, self.usb.as_ref().is_some_and(|u| u.irq()));
         set(src::RMT, self.rmt.irq());
+        set(src::PCNT, self.pcnt.irq());
         set(src::I2C_EXT0, self.i2c0.irq());
         set(src::I2C_EXT1, self.i2c1.irq());
         set(src::SPI2, self.spi2.irq());
+        set(src::I2S0, self.i2s[0].irq());
+        set(src::I2S1, self.i2s[1].irq());
         for ch in 0..self.gdma.layout.nch as u32 {
             set(src::DMA_IN_CH0 + ch, self.gdma.in_irq(ch as usize));
             set(src::DMA_OUT_CH0 + ch, self.gdma.out_irq(ch as usize));
@@ -648,6 +765,11 @@ impl SocBus {
                 self.iotrace.ws2812(now, pin, &dec.rgb);
             }
             self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
+        }
+        if !edges.is_empty() {
+            // RMT 发送驱动的引脚也可能接着 PCNT / RMT 接收（回环）
+            let lv = self.gpio.level();
+            self.feed_inputs(now, lv);
         }
         edges.clear();
         self.rmt.edges = edges;
@@ -749,6 +871,9 @@ impl SocBus {
         let n5 = self.rmt.update(now);
         let n6 = self.route_rmt(now);
         let n7 = self.i2c0.update(now).min(self.i2c1.update(now));
+        let n11 = self.pins_update(now);
+        self.pcnt.update(now);
+        let n12 = self.pcnt.next_event();
         let (n9, spi_done) = self.spi2.update(now);
         self.trace_pwm(now);
         if spi_done {
@@ -762,6 +887,7 @@ impl SocBus {
             self.wifi = Some(w);
             n
         };
+        let n13 = self.i2s_update(now, 0).min(self.i2s_update(now, 1));
         let n8 = match self.usb.take() {
             Some(mut u) => {
                 let n = u.update(now, self);
@@ -779,13 +905,72 @@ impl SocBus {
             .min(n7)
             .min(n8)
             .min(n9)
-            .min(n10);
+            .min(n10)
+            .min(n11)
+            .min(n12)
+            .min(n13);
         let lv = self.levels();
         // 边沿型线由核自己检测上升沿，这里把电平和本次上升沿一起给出
         let (l0, r0) = self.intm.lines(&lv);
         let (l1, r1) = self.intm1.lines(&lv);
         self.lines = [l0 | r0, l1 | r1];
         self.irq_dirty = false;
+    }
+}
+
+impl SocBus {
+    /// I2S 口 k 收发推进：按 GPIO 矩阵判断喇叭 DIN / 麦克风 SD 是不是接在这个口的数据线上，再借总线让 GDMA 搬数据
+    fn i2s_update(&mut self, now: u64, k: usize) -> u64 {
+        if !self.i2s[k].tx.running && !self.i2s[k].rx.running {
+            return u64::MAX;
+        }
+        let sig = SIG_I2S_SD[k];
+        let speaker = self.audio.speaker.as_ref().is_some_and(|s| {
+            self.gpio
+                .func_out
+                .get(s.pins.data as usize)
+                .is_some_and(|f| (f & 0x1ff) as usize == sig)
+        });
+        // FUNCn_IN_SEL_CFG：位 5..0 引脚、位 7 经 GPIO 矩阵
+        let f = self.gpio.func_in[sig];
+        let mic = self
+            .audio
+            .mic
+            .as_ref()
+            .is_some_and(|m| f & (1 << 7) != 0 && f & 0x3f == m.pins.data);
+        let mut g = std::mem::replace(&mut self.gdma, Gdma::placeholder());
+        let mut au = std::mem::take(&mut self.audio);
+        let mut i2s = std::mem::replace(&mut self.i2s[k], I2s::new(k as u8, true));
+        let mut io = PortIo {
+            audio: &mut au,
+            speaker,
+            mic,
+        };
+        let n = i2s.update(now, &mut g, self, GDMA_PERI_I2S[k], &mut io);
+        self.i2s[k] = i2s;
+        self.audio = au;
+        self.gdma = g;
+        n
+    }
+
+    /// 接 MAX98357A 喇叭 / INMP441 麦克风（引脚见 `i2s_pin`）
+    pub fn attach_speaker(&mut self) {
+        use i2s_pin::*;
+        let p = audio::Pins {
+            bclk: SPK_BCLK,
+            ws: SPK_LRC,
+            data: SPK_DIN,
+        };
+        self.audio.speaker = Some(Box::new(audio::Max98357a::new(p)));
+    }
+    pub fn attach_mic(&mut self) {
+        use i2s_pin::*;
+        let p = audio::Pins {
+            bclk: MIC_SCK,
+            ws: MIC_WS,
+            data: MIC_SD,
+        };
+        self.audio.mic = Some(Box::new(audio::Inmp441::new(p)));
     }
 }
 
@@ -825,6 +1010,12 @@ impl SocBus {
 impl Bus for SocBus {
     #[inline]
     fn load(&mut self, a: u32, size: u32) -> Result<u32, BusFault> {
+        // 快路径：SRAM（与 mem_read 的第一个分支相同，内联掉一次函数调用）
+        if let Some(o) = Self::sram_off(a) {
+            if let Some(v) = rd(&self.sram, o, size) {
+                return Ok(v);
+            }
+        }
         if let Some(v) = self.mem_read(a, size) {
             return Ok(v);
         }
@@ -842,6 +1033,11 @@ impl Bus for SocBus {
 
     #[inline]
     fn store(&mut self, a: u32, size: u32, v: u32) -> Result<(), BusFault> {
+        if let Some(o) = Self::sram_off(a) {
+            if wr(&mut self.sram, o, size, v).is_some() {
+                return Ok(());
+            }
+        }
         if self.mem_write(a, size, v).is_some() {
             return Ok(());
         }
@@ -878,7 +1074,66 @@ impl Bus for SocBus {
 
     #[inline]
     fn fetch(&mut self, a: u32) -> Result<u32, BusFault> {
-        // 快路径：一次读 4 字节（指令最长 3 字节）；跨区域边界时退回逐字节
+        // 最快路径：与上一条指令同一个 64KB 页，且 4 字节不跨页
+        let o = (a & 0xffff) as usize;
+        if a >> 16 == self.fetch_page && o <= 0xfffc {
+            let buf = match self.fetch_src {
+                FetchSrc::Sram => &self.sram,
+                FetchSrc::Flash => &self.flash,
+                FetchSrc::Psram => &self.psram,
+                FetchSrc::Rom => &self.rom,
+            };
+            let i = self.fetch_base + o;
+            if let Some(b) = buf.get(i..i + 4) {
+                return Ok(u32::from_le_bytes([b[0], b[1], b[2], 0]));
+            }
+        }
+        self.fetch_slow(a)
+    }
+
+    #[inline(always)]
+    fn attention(&mut self, cycles: u64) -> bool {
+        // 与 run_core 循环顶部相同：外设时间取较快的核；irq_dirty 时先不推进 now（run_core 会先按旧时间 update）
+        if self.irq_dirty {
+            return true;
+        }
+        if cycles > self.now {
+            self.now = cycles;
+        }
+        self.now >= self.next_event
+    }
+}
+
+impl SocBus {
+    /// 取指慢路径：一次读 4 字节（指令最长 3 字节）；跨区域边界时退回逐字节。顺便填取指页缓存
+    /// （只缓存整页都在同一块存储里的：IRAM、ROM、IROM 窗口经 MMU 翻译后的页）
+    #[inline(never)]
+    fn fetch_slow(&mut self, a: u32) -> Result<u32, BusFault> {
+        self.fetch_page = u32::MAX;
+        let page = a & !0xffff;
+        if (IRAM_LOW..IRAM_HIGH).contains(&page) {
+            self.fetch_page = a >> 16;
+            self.fetch_src = FetchSrc::Sram;
+            self.fetch_base = (page - IRAM_LOW) as usize;
+        } else if (ROM_LOW..ROM_HIGH).contains(&page) {
+            self.fetch_page = a >> 16;
+            self.fetch_src = FetchSrc::Rom;
+            self.fetch_base = (page - ROM_LOW) as usize;
+        } else if (IROM_LOW..IROM_HIGH).contains(&page) {
+            match self.ext_addr(page) {
+                Some(Ext::Flash(f)) => {
+                    self.fetch_page = a >> 16;
+                    self.fetch_src = FetchSrc::Flash;
+                    self.fetch_base = f;
+                }
+                Some(Ext::Psram(p)) => {
+                    self.fetch_page = a >> 16;
+                    self.fetch_src = FetchSrc::Psram;
+                    self.fetch_base = p;
+                }
+                None => {}
+            }
+        }
         if let Some(v) = self.mem_read(a, 4) {
             return Ok(v & 0xff_ffff);
         }
@@ -941,7 +1196,8 @@ fn run_core(
             bus.update();
             cpu.set_irq_lines(bus.lines[k]);
         }
-        match cpu.step(bus) {
+        // 批量执行到下一个需要 SoC 介入的点（外设事件、中断线变化、异常向量），逐条检查与原来逐步调 step 相同
+        match cpu.run_batch(bus, until, 0x4000_0300, 0x4000_0400) {
             Exit::Normal => {
                 // ROM 异常向量（0x40000300 Kernel / 0x40000340 User / 0x400003C0 Double）：
                 // app 正常运行时 VECBASE 指向 IRAM，落到这里说明出事了
@@ -1144,5 +1400,57 @@ mod tests {
         assert_eq!(m.lines(&lv), (0, 0));
         // 复位值映射到线 16（定时器线）等于不连接
         assert_eq!(Intmatrix::default().lines(&lv), (0, 0));
+    }
+
+    /// 编码器 → GPIO6/7 → GPIO 矩阵 → PCNT 单元 0（与 IDF rotary_encoder 相同的配置）；HC-SR04 → GPIO18 → RMT 接收通道 0
+    #[test]
+    fn encoder_into_pcnt_and_sonar_into_rmt_rx() {
+        let mut b = SocBus::default();
+        let w = |b: &mut SocBus, a: u32, v: u32| Bus::store(b, a, 4, v).unwrap();
+        // FUNCn_IN_SEL_CFG（0x60004154 + 4n）：信号 33..36 = A、B、B、A，经矩阵
+        for (sig, pin) in [(33, 6), (34, 7), (35, 7), (36, 6)] {
+            w(&mut b, 0x6000_4154 + 4 * sig, pin | 1 << 7);
+        }
+        let ch0 = 1 | (2 << 2) | (1 << 6);
+        let ch1 = 2 | (1 << 2) | (1 << 6);
+        w(&mut b, 0x6001_7000, (1 << 10) | 80 | (7 << 11) | (ch0 << 16) | (ch1 << 24));
+        w(&mut b, 0x6001_7060, 0);
+        let now = b.now;
+        b.pins.encoders.push(tryboard_esp32c3::devices::pins::Encoder::new(6, 7, None, now));
+        let run = |b: &mut SocBus, until: u64| {
+            while b.now < until {
+                b.update();
+                b.now = b.next_event.min(until).max(b.now + 1);
+            }
+        };
+        run(&mut b, 1000);
+        b.pins.encoders[0].turn(b.now, 3);
+        run(&mut b, CPU_HZ / 50);
+        assert_eq!(Bus::load(&mut b, 0x6001_7030, 4).unwrap(), 12);
+        b.pins.encoders[0].turn(b.now, -5);
+        run(&mut b, CPU_HZ / 20);
+        assert_eq!(Bus::load(&mut b, 0x6001_7030, 4).unwrap() as u16 as i16, -8);
+
+        // 超声波：信号 81 = GPIO18；1 MHz 分辨率、空闲 25 ms
+        w(&mut b, 0x6000_4154 + 4 * 81, 18 | 1 << 7);
+        w(&mut b, 0x6001_60c0, 0x0500_0000);
+        w(&mut b, 0x6001_6030, 80 | (25000 << 8) | (1 << 24));
+        w(&mut b, 0x6001_6034, 1 | 2 | (1 << 3));
+        let now = b.now;
+        b.pins.sonars.push(tryboard_esp32c3::devices::pins::Hcsr04::new(17, 18, now));
+        b.pins.sonars[0].distance_cm = Some(40.0);
+        // Trig：GPIO17 输出 12 µs 高脉冲
+        w(&mut b, 0x6000_4020, 1 << 17);
+        w(&mut b, 0x6000_4008, 1 << 17);
+        let t = b.now + 12 * CPU_HZ / 1_000_000;
+        run(&mut b, t);
+        w(&mut b, 0x6000_400c, 1 << 17);
+        let t = b.now + CPU_HZ / 20;
+        run(&mut b, t);
+        assert!(Bus::load(&mut b, 0x6001_6070, 4).unwrap() & (1 << 16) != 0, "RX_END");
+        let item = Bus::load(&mut b, 0x6001_6800 + 4 * 4 * 48, 4).unwrap();
+        // 40 cm → 2332.4 µs
+        assert_eq!(item & 0x7fff, 2332);
+        assert_eq!(item >> 15 & 1, 1);
     }
 }

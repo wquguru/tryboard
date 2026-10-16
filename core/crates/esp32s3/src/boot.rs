@@ -66,12 +66,16 @@ pub fn load_rom(m: &mut Esp32s3, elf_bytes: &[u8]) -> Result<(), String> {
     }
     let sym = |n: &str| elf.symbol(n).ok_or(format!("ROM 里没有符号 {n}"));
     // ets_printf 挂到 UART（ets_install_uart_printf 的效果）；ROM 打印走 UART、不走 USB-Serial-JTAG
-    m.bus.mem_write(sym("_putc1")?, 4, sym("ets_write_char_uart")?);
+    m.bus
+        .mem_write(sym("_putc1")?, 4, sym("ets_write_char_uart")?);
     m.bus.mem_write(sym("g_uart_print")?, 1, 1);
     m.bus.mem_write(sym("g_usb_print")?, 1, 0);
     for (name, kind) in crate::hle::TABLE {
         // 有的 ROM 函数在 ELF 里只有跳转表项 __call_<名字>（地址与 ROM 链接脚本里的一致）
-        let a = elf.symbol(name).or_else(|| elf.symbol(&format!("__call_{name}"))).ok_or(format!("ROM 里没有符号 {name}"))?;
+        let a = elf
+            .symbol(name)
+            .or_else(|| elf.symbol(&format!("__call_{name}")))
+            .ok_or(format!("ROM 里没有符号 {name}"))?;
         m.hle.insert(a, *kind);
     }
     let mut addrs: Vec<u32> = m.hle.keys().copied().collect();
@@ -90,7 +94,10 @@ pub fn load_rom(m: &mut Esp32s3, elf_bytes: &[u8]) -> Result<(), String> {
 /// 二级 bootloader 按镜像头填写 ROM 的 flash 芯片描述（esp_rom_spiflash_chip_t）
 fn init_flashchip(m: &mut Esp32s3, size_code: u8, jedec: u32) -> Result<(), String> {
     // rom_spiflash_legacy_data（esp32s3.rom.ld，0x3FCEFFE4）是指针，指向 ROM .data 里的结构体
-    let p = m.bus.mem_read(0x3FCE_FFE4, 4).ok_or("读不到 rom_spiflash_legacy_data")?;
+    let p = m
+        .bus
+        .mem_read(0x3FCE_FFE4, 4)
+        .ok_or("读不到 rom_spiflash_legacy_data")?;
     let size = match size_code {
         0 => 1 << 20,
         1 => 2 << 20,
@@ -101,8 +108,13 @@ fn init_flashchip(m: &mut Esp32s3, size_code: u8, jedec: u32) -> Result<(), Stri
         _ => 4 << 20,
     };
     let id = ((jedec & 0xff) << 16) | (jedec & 0xff00) | ((jedec >> 16) & 0xff);
-    for (i, v) in [id, size, 64 << 10, 4 << 10, 256, 0xffff].iter().enumerate() {
-        m.bus.mem_write(p + 4 * i as u32, 4, *v).ok_or("写 g_rom_flashchip 失败")?;
+    for (i, v) in [id, size, 64 << 10, 4 << 10, 256, 0xffff]
+        .iter()
+        .enumerate()
+    {
+        m.bus
+            .mem_write(p + 4 * i as u32, 4, *v)
+            .ok_or("写 g_rom_flashchip 失败")?;
     }
     Ok(())
 }
@@ -121,7 +133,9 @@ fn u32at(b: &[u8], o: usize) -> u32 {
 /// 镜像头的芯片 ID（偏移 12）。镜像开头不是 0xE9 时先找分区表里的 app。
 pub fn image_chip_id(flash: &[u8]) -> Option<u16> {
     let off = find_app(flash).ok()? as usize;
-    flash.get(off + 13).map(|_| u16::from_le_bytes([flash[off + 12], flash[off + 13]]))
+    flash
+        .get(off + 13)
+        .map(|_| u16::from_le_bytes([flash[off + 12], flash[off + 13]]))
 }
 
 pub fn parse_app(flash: &[u8], off: u32) -> Result<AppInfo, String> {
@@ -133,7 +147,9 @@ pub fn parse_app(flash: &[u8], off: u32) -> Result<AppInfo, String> {
     let entry = u32at(flash, o + 4);
     let chip_id = u16::from_le_bytes([flash[o + 12], flash[o + 13]]);
     if chip_id != CHIP_ID {
-        return Err(format!("镜像芯片 ID 是 {chip_id}，不是 ESP32-S3（{CHIP_ID}）"));
+        return Err(format!(
+            "镜像芯片 ID 是 {chip_id}，不是 ESP32-S3（{CHIP_ID}）"
+        ));
     }
     let mut p = o + 24;
     let mut segments = Vec::new();
@@ -143,7 +159,11 @@ pub fn parse_app(flash: &[u8], off: u32) -> Result<AppInfo, String> {
         segments.push((load, (p + 8) as u32, len));
         p += 8 + len as usize;
     }
-    Ok(AppInfo { offset: off, entry, segments })
+    Ok(AppInfo {
+        offset: off,
+        entry,
+        segments,
+    })
 }
 
 /// 板上 flash 容量：镜像头 byte3 高 4 位（0=1MB … 4=16MB），模拟 flash 至少这么大
@@ -168,7 +188,13 @@ const SPILL_APP: u32 = 0x3FCE_E380 + 64;
 /// 以后窗口溢出不会去溢出一个并不存在的调用者帧。
 /// 溢出处理程序溢出最老一帧时会读 [该帧 sp - 12] 当作"调用者的 sp"、把 a4..a11 存到它下面；
 /// 真机上那里是调用者帧溢出时写下的值，我们没有调用者，所以先执行入口的 ENTRY，再在 [sp-12] 填一个空闲区的指针。
-fn enter_windowed(c: &mut Cpu, bus: &mut SocBus, entry: u32, stack: u32, spill: u32) -> Result<(), String> {
+fn enter_windowed(
+    c: &mut Cpu,
+    bus: &mut SocBus,
+    entry: u32,
+    stack: u32,
+    spill: u32,
+) -> Result<(), String> {
     c.windowbase = 0;
     c.windowstart = 1;
     c.set_a(1, stack);
@@ -179,7 +205,8 @@ fn enter_windowed(c: &mut Cpu, bus: &mut SocBus, entry: u32, stack: u32, spill: 
     if first & 0xff == 0x36 {
         c.step(bus);
         let sp = c.a(1);
-        bus.mem_write(sp.wrapping_sub(12), 4, spill).ok_or("写入口帧保存区失败")?;
+        bus.mem_write(sp.wrapping_sub(12), 4, spill)
+            .ok_or("写入口帧保存区失败")?;
     }
     Ok(())
 }
@@ -206,7 +233,11 @@ impl Esp32s3 {
     }
 
     /// 在给定的总线上启动（复位重新上电时传入保留了 RTC 内存的总线）
-    fn boot_with(rom_elf: &[u8], flash: Vec<u8>, bus: SocBus) -> Result<(Esp32s3, AppInfo), String> {
+    fn boot_with(
+        rom_elf: &[u8],
+        flash: Vec<u8>,
+        bus: SocBus,
+    ) -> Result<(Esp32s3, AppInfo), String> {
         let mut cpu1 = Cpu::new();
         // PRID：核 0 0xCDCD、核 1 0xABAB（IDF 用位 13 区分核号）
         cpu1.prid = 0xabab;
@@ -229,10 +260,13 @@ impl Esp32s3 {
         }
         let app = parse_app(&flash, off)?;
         for &(load, data, len) in &app.segments {
-            let in_cache = (IROM_LOW..IROM_HIGH).contains(&load) || (DROM_LOW..DROM_HIGH).contains(&load);
+            let in_cache =
+                (IROM_LOW..IROM_HIGH).contains(&load) || (DROM_LOW..DROM_HIGH).contains(&load);
             if in_cache {
                 if load & 0xffff != data & 0xffff {
-                    return Err(format!("段 0x{load:08x} 与 flash 偏移 0x{data:x} 页内偏移不一致"));
+                    return Err(format!(
+                        "段 0x{load:08x} 与 flash 偏移 0x{data:x} 页内偏移不一致"
+                    ));
                 }
                 let first = ((load & 0x1ff_ffff) >> 16) as usize;
                 let last = (((load + len - 1) & 0x1ff_ffff) >> 16) as usize;
@@ -285,8 +319,11 @@ impl Esp32s3 {
         bus.gpio_log = std::mem::take(&mut old.gpio_log);
         bus.iotrace = old.iotrace.carry();
         bus.ws2812 = std::mem::take(&mut old.ws2812);
+        // 编码器、超声波是外部世界：复位后还接着（排着的波形照常发生）
+        bus.pins = std::mem::take(&mut old.pins);
         // 外接圆屏是外部世界的一部分：复位后屏还在（画面由新固件重画）
         bus.lcd = old.lcd.take();
+        bus.audio = std::mem::take(&mut old.audio);
         let flash = std::mem::take(&mut old.flash);
         let rom = std::mem::take(&mut self.rom_elf);
         let (mut m, _) = Esp32s3::boot_with(&rom, flash, bus)?;

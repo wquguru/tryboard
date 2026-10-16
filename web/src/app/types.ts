@@ -11,7 +11,7 @@ import type { Toolbar } from './toolbar';
 import type { Card } from './card';
 import type { BomHistory } from './bom';
 import type { SeekJob } from '../live';
-import type { ElecFrame, FromWorker, Harness, Snapshot } from '../worker';
+import type { ElecFrame, FromWorker, Harness, PinDevFrame, Snapshot } from '../worker';
 import type { UsbView } from '../usb3d';
 import type { WireMods } from './wiring';
 import type { BenchHistory } from './benchhist';
@@ -26,7 +26,7 @@ export const STEPS: { id: StepId; label: string }[] = [
   { id: 'product', label: '成品' },
 ];
 
-export type WorkId = 'weather' | 'spin' | 'lens' | 'usbkey' | 'blank';
+export type WorkId = 'weather' | 'spin' | 'lens' | 'usbkey' | 'knob' | 'sonar' | 'blank' | 'imu' | 'touch';
 
 /** 选中的对象。kind 与构建树的分组一一对应；pin / wire / button 来自台面拾取 */
 export type SelKind = 'part' | 'wire' | 'power' | 'env' | 'firmware' | 'checkpoint' | 'pin' | 'button' | 'run' | 'tool';
@@ -63,6 +63,12 @@ export interface AppState {
   running: boolean;
   /** 最近一次串口读数（BME280 那行 T= H= P=） */
   reading: { t: number; h: number; p: number } | null;
+  /** 台面姿态（P2-03，倾斜滑块 / 拖 IMU / 成品转动），度 */
+  pose: { pitch: number; roll: number; yaw: number };
+  /** 固件串口最近一行 IMU 读数（s3-imu / s3-qmi8658 的 `IMU pitch= roll= … gyro=(…)`） */
+  imu: { pitch: number; roll: number; gyro: [number, number, number] | null } | null;
+  /** 触摸（P2-02）：最近一次手指位置；down = 还按着 */
+  touch: { x: number; y: number; down: boolean } | null;
   /** 检查点验收：key 是关卡 id */
   checks: Record<string, CheckOutcome>;
   /** 正在验收的检查点（同一时间只跑一个） */
@@ -121,7 +127,7 @@ export interface Session {
   chip: 'esp32c3' | 'esp32s3';
   levels: Level[];
   /** 最近一帧：PWM 占空比、彩灯、OLED */
-  frame: { pwm: number[]; pwmFreq: number[]; gpio: number; enable: number; gpioHi: number; enableHi: number; rgb: number[] | null; oled: Uint8Array | null; lcd: Uint8Array | null; elec: ElecFrame | null };
+  frame: { pwm: number[]; pwmFreq: number[]; gpio: number; enable: number; gpioHi: number; enableHi: number; rgb: number[] | null; oled: Uint8Array | null; lcd: Uint8Array | null; elec: ElecFrame | null; pins: PinDevFrame | null };
   /** 热源靠近的零件（只是显示；读数由环境温度决定） */
   heat: string | null;
   setHeat(part: string | null): void;
@@ -159,7 +165,20 @@ export interface Session {
   pressBoot(down: boolean): void;
   /** 外接按键（面包板上的 key、成品小键盘）：按下接地 */
   pressPin(pin: number, down: boolean): void;
+  /** 编码器（P2-01）：转 steps 格（正 = 顺时针）、按键；都进输入日志 */
+  turnEncoder(steps: number): void;
+  pressEncoder(down: boolean): void;
+  /** 超声波（P2-04）：探头到障碍物的距离（cm，负数 = 拿走障碍物）；台面上的障碍物跟着挪 */
+  setDistance(cm: number): void;
+  /** 当前设的距离（cm） */
+  distance: number;
   setEnv(e: Partial<Env>): void;
+  /** 台面上有没有 IMU（有才显示倾斜滑块、才能拖动） */
+  hasImu(): boolean;
+  /** 改姿态（P2-03）：施加到模拟器（拖动中带角速率，停下 150 ms 后补一次速率 0）、台面跟着倾斜 */
+  setPose(p: { pitch: number; roll: number; yaw: number }): void;
+  /** 触摸圆屏（P2-02）：x, y 屏幕像素 */
+  touch(x: number, y: number, down: boolean): void;
   consoleText(): string;
   /** 逻辑分析仪事件（本次上电 / 回退重放以来），P1-05 */
   io: IoStore;

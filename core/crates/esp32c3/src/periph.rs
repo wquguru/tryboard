@@ -9,6 +9,7 @@ pub mod src {
     pub const WIFI_MAC: u32 = 0;
     pub const GPIO: u32 = 16;
     pub const SPI2: u32 = 19;
+    pub const I2S0: u32 = 20;
     pub const UART0: u32 = 21;
     pub const UART1: u32 = 22;
     pub const LEDC: u32 = 23;
@@ -721,7 +722,12 @@ pub struct Adc {
 
 impl Default for Adc {
     fn default() -> Self {
-        Adc { regs: [0; 0x400 / 4], pin_mv: [0.0; 22], noise_lsb: 2, seed: 0x1234_5678 }
+        Adc {
+            regs: [0; 0x400 / 4],
+            pin_mv: [0.0; 22],
+            noise_lsb: 2,
+            seed: 0x1234_5678,
+        }
     }
 }
 
@@ -757,10 +763,19 @@ impl Adc {
         let atten = (cfg >> 23) & 3;
         let pin = if unit == 0 { ch as usize } else { 5 };
         let full = [750.0, 1050.0, 1300.0, 2500.0][atten as usize];
-        let mv = if (unit == 0 && ch <= 4) || (unit == 1 && ch == 0) { self.pin_mv[pin] } else { 0.0 };
+        let mv = if (unit == 0 && ch <= 4) || (unit == 1 && ch == 0) {
+            self.pin_mv[pin]
+        } else {
+            0.0
+        };
         // 线性同余噪声，保证可复现
         self.seed = self.seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
-        let n = if self.noise_lsb > 0 { (self.seed >> 16) % (2 * self.noise_lsb + 1) } else { 0 } as i32 - self.noise_lsb as i32;
+        let n = if self.noise_lsb > 0 {
+            (self.seed >> 16) % (2 * self.noise_lsb + 1)
+        } else {
+            0
+        } as i32
+            - self.noise_lsb as i32;
         let raw = ((mv / full * 4095.0).round() as i32 + n).clamp(0, 4095) as u32;
         if unit == 0 {
             self.regs[0x2c / 4] = raw;

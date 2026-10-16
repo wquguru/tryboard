@@ -11,7 +11,13 @@ export const WORKS: Record<string, WorkDef> = {
   lens: { id: 'lens', title: '透镜里的小人', example: 'lens', checkpoints: ['lens-1', 'lens-2', '07-lens'], card: { chip: 'ESP32-S3', blurb: '圆屏上的表情被凸透镜罩放大，看起来像立在罩子里；按键换表情。' } },
   // 枚举成功 → 按键发字母 → 合体（宏键 + 装壳）。P2-12
   usbkey: { id: 'usbkey', title: 'USB 小键盘', example: 'usbkey', checkpoints: ['usbkey-1', 'usbkey-2', 'usbkey-3'], card: { chip: 'ESP32-S3', blurb: '四个键插上电脑就能打字：三个键发 a / b / c，第四个是宏键，一下打出一整句。' } },
+  // P2-01 / P2-04 的实验台（没有检查点；作品化在 P2-09：旋钮台灯、超声波尺子）
+  knob: { id: 'knob', title: '旋钮计数（编码器 + PCNT）', example: 's3-encoder', checkpoints: [] },
+  sonar: { id: 'sonar', title: '超声波测距（HC-SR04 + RMT 接收）', example: 's3-ultrasonic', checkpoints: [] },
   blank: { id: 'blank', title: '空白实验台', example: null, checkpoints: [] },
+  // P2-03 / P2-02 的外设台面（还不是完整作品：没有检查点、组装模版；体感小人等作品见 P2-09）
+  imu: { id: 'imu', title: '倾角仪（MPU6050）', example: 's3-imu', checkpoints: [] },
+  touch: { id: 'touch', title: '触摸圆屏（CST816S）', example: 's3-touch', checkpoints: [] },
 };
 
 /** 首页上的作品（有卡片的），按定义顺序 */

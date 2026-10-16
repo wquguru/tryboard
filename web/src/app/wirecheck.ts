@@ -54,7 +54,8 @@ export function checkWiring(parts: PartSpec[], wires: BenchWire[]): WireFault[] 
   for (const pid of new Set(live.map((w) => w.part))) {
     const own = live.filter((w) => w.part === pid);
     const vcc = own.find((w) => w.pinRole === 'power');
-    const sig = own.filter((w) => (w.pinRole === 'bus' || w.pinRole === 'drive') && /^GPIO\d+$/.test(w.a));
+    // 经分压电阻降到 3.3 V 的输出不算（HC-SR04 Echo 的 1 kΩ / 2 kΩ）
+    const sig = own.filter((w) => (w.pinRole === 'bus' || w.pinRole === 'drive') && /^GPIO\d+$/.test(w.a) && w.divider !== true);
     const v = netVolt(vcc?.a ?? null);
     if (vcc && v !== null && v > 3.6 && sig.length) push('W2', 'block', [vcc.id, ...sig.map((w) => w.id)], '5 V 进 GPIO', `${name(pid)} 的 ${vcc.pin} 接在 ${vcc.a}（${v} V），它的 ${sig.map((w) => w.pin).join(' / ')} 上拉 / 输出也是 ${v} V，直接进 ${sig.map((w) => w.a).join('、')}；ESP32 引脚不耐 5 V。改接 3V3，或加电平转换。`);
   }
@@ -79,7 +80,7 @@ export function checkWiring(parts: PartSpec[], wires: BenchWire[]): WireFault[] 
 
   // W5：同一条 I2C 总线上两个器件地址相同
   const buses = new Map<string, { pid: string; addr: number }[]>();
-  for (const p of parts) if (p.type === 'oled' || p.type === 'bme280') {
+  for (const p of parts) if (p.type === 'oled' || p.type === 'bme280' || p.type === 'mpu6050' || p.type === 'qmi8658' || p.type === 'cst816s') {
     const k = `${p.sda}/${p.scl}`;
     buses.set(k, [...(buses.get(k) ?? []), { pid: partId(p), addr: p.addr }]);
   }
@@ -89,7 +90,7 @@ export function checkWiring(parts: PartSpec[], wires: BenchWire[]): WireFault[] 
     for (const [addr, who] of by) {
       if (who.length < 2) continue;
       const ws = live.filter((w) => who.includes(w.part) && w.pinRole === 'bus' && w.pin === 'SDA').map((w) => w.id);
-      push('W5', 'block', ws, `地址 ${hex(addr)} 冲突`, `${who.map(name).join(' 和 ')} 都是 ${hex(addr)}，在同一条 SDA / SCL 上：两个器件同时应答，读数错乱。改其中一个的地址跳线（BME280 0x76 / 0x77，SSD1306 0x3C / 0x3D）。`);
+      push('W5', 'block', ws, `地址 ${hex(addr)} 冲突`, `${who.map(name).join(' 和 ')} 都是 ${hex(addr)}，在同一条 SDA / SCL 上：两个器件同时应答，读数错乱。改其中一个的地址跳线（BME280 0x76 / 0x77，SSD1306 0x3C / 0x3D，MPU6050 AD0 0x68 / 0x69，QMI8658 SA0 0x6B / 0x6A）。`);
     }
   }
   // W6：线太长，总线电容大，上升时间超过 I2C 规范（P2-11，估算；内核里同一个公式让读数出错 / 器件不应答）

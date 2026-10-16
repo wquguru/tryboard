@@ -804,6 +804,28 @@
   ]
  },
  {
+  "id": "s3-lvgl",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--spi",
+   "gc9a01"
+  ],
+  "expect": [
+   "LVGL 9.2.2 up",
+   "TRYBOARD_OK s3-lvgl"
+  ],
+  "numeric": [
+   {
+    "name": "LVGL 帧率（模拟时间）",
+    "regex": "FPS (\\d+) px",
+    "value": 32,
+    "tol": 12
+   }
+  ],
+  "lcd_min_pixels": 30000
+ },
+ {
   "id": "lens",
   "chip": "esp32s3",
   "seconds": 3,
@@ -1028,6 +1050,270 @@
    "USB 主机：已配置",
    "\"TryBoard Macro Pad\"",
    "USB 键盘输入: \"abcHello TryBoard\\n\""
+  ]
+ },
+ {
+  "id": "s3-encoder",
+  "chip": "esp32s3",
+  "seconds": 2.2,
+  "args": [
+   "--encoder",
+   "6,7,15"
+  ],
+  "script": "0.5:enc=+5; 1.0:enc=-2; 1.3:encsw=1; 1.4:encsw=0; 1.6:enc=+30",
+  "expect": [
+   "ENCODER ready A=GPIO6 B=GPIO7 SW=GPIO15",
+   "ENC count=20 detents=5",
+   "ENC count=12 detents=3",
+   "SW DOWN 1 (count=12)",
+   "SW UP",
+   "ENC count=132 detents=33",
+   "TRYBOARD_OK encoder"
+  ],
+  "stderr_expect": [
+   "编码器 转了 33 格"
+  ],
+  "gpio_toggles": {
+   "pin": 6,
+   "min": 74
+  }
+ },
+ {
+  "id": "s3-ultrasonic",
+  "chip": "esp32s3",
+  "seconds": 2,
+  "args": [
+   "--sonar",
+   "17,18"
+  ],
+  "script": "0:dist=25; 0.5:dist=100; 1.0:dist=300; 1.5:dist=-1",
+  "expect": [
+   "ULTRASONIC ready TRIG=GPIO17 ECHO=GPIO18",
+   "DIST 25.0 cm (echo 1457 us)",
+   "DIST 100.0 cm (echo 5830 us)",
+   "DIST 300.0 cm (echo 17492 us)",
+   "DIST out of range",
+   "TRYBOARD_OK ultrasonic"
+  ],
+  "stderr_expect": [
+   "超声波 触发 16 次，回波 16 次"
+  ],
+  "gpio_toggles": {
+   "pin": 18,
+   "min": 30
+  }
+ },
+ {
+  "id": "s3-imu",
+  "chip": "esp32s3",
+  "seconds": 1.5,
+  "args": [
+   "--i2c",
+   "mpu6050@0x68"
+  ],
+  "script": "0:imu=30,-20,0",
+  "expect": [
+   "I2C scan (SDA=GPIO8, SCL=GPIO9): 0x68",
+   "MPU6050 WHO_AM_I 0x68 OK",
+   "TRYBOARD_OK s3-imu"
+  ],
+  "numeric": [
+   {
+    "name": "俯仰(°)",
+    "regex": "pitch=(-?[\\d.]+)",
+    "value": 30.0,
+    "tol": 0.5
+   },
+   {
+    "name": "横滚(°)",
+    "regex": "roll=(-?[\\d.]+)",
+    "value": -20.0,
+    "tol": 0.5
+   },
+   {
+    "name": "温度(°C)",
+    "regex": "T=(-?[\\d.]+)C",
+    "value": 23.5,
+    "tol": 0.1
+   }
+  ]
+ },
+ {
+  "id": "s3-imu-turn",
+  "fw": "s3-imu",
+  "chip": "esp32s3",
+  "seconds": 1.5,
+  "args": [
+   "--i2c",
+   "mpu6050@0x68",
+   "--env",
+   "31,45,101325"
+  ],
+  "script": "0:imu=-45,10,0,0,0,90",
+  "expect": [
+   "TRYBOARD_OK s3-imu"
+  ],
+  "numeric": [
+   {
+    "name": "俯仰(°)",
+    "regex": "pitch=(-?[\\d.]+)",
+    "value": -45.0,
+    "tol": 0.5
+   },
+   {
+    "name": "横滚(°)",
+    "regex": "roll=(-?[\\d.]+)",
+    "value": 10.0,
+    "tol": 0.5
+   },
+   {
+    "name": "陀螺 X(°/s)",
+    "regex": "gyro=\\((-?[\\d.]+),",
+    "value": 63.64,
+    "tol": 0.3
+   },
+   {
+    "name": "陀螺 Z(°/s)",
+    "regex": "gyro=\\(-?[\\d.]+,-?[\\d.]+,(-?[\\d.]+)\\)",
+    "value": 62.68,
+    "tol": 0.3
+   },
+   {
+    "name": "温度(°C)",
+    "regex": "T=(-?[\\d.]+)C",
+    "value": 31.0,
+    "tol": 0.1
+   }
+  ]
+ },
+ {
+  "id": "s3-qmi8658",
+  "chip": "esp32s3",
+  "seconds": 1.5,
+  "args": [
+   "--i2c",
+   "qmi8658@0x6b"
+  ],
+  "script": "0:imu=-12.5,33,0,0,20,0",
+  "expect": [
+   "I2C scan (SDA=GPIO8, SCL=GPIO9): 0x6B",
+   "QMI8658 WHO_AM_I 0x05 OK",
+   "TRYBOARD_OK s3-qmi8658"
+  ],
+  "numeric": [
+   {
+    "name": "俯仰(°)",
+    "regex": "pitch=(-?[\\d.]+)",
+    "value": -12.5,
+    "tol": 0.5
+   },
+   {
+    "name": "横滚(°)",
+    "regex": "roll=(-?[\\d.]+)",
+    "value": 33.0,
+    "tol": 0.5
+   },
+   {
+    "name": "陀螺 X(°/s)",
+    "regex": "gyro=\\((-?[\\d.]+),",
+    "value": 20.0,
+    "tol": 0.3
+   }
+  ]
+ },
+ {
+  "id": "s3-touch",
+  "chip": "esp32s3",
+  "seconds": 2.5,
+  "args": [
+   "--i2c",
+   "cst816s@0x15",
+   "--touch-int",
+   "5",
+   "--spi",
+   "gc9a01"
+  ],
+  "script": "1.0:touch=60,120; 1.1:touch=70,125; 1.3:release; 1.5:touch=180,60; 1.55:touch=110,62; 1.7:release; 1.9:touch=120,200; 2.0:release",
+  "expect": [
+   "CST816S chip id 0xB5 OK",
+   "TRYBOARD_OK s3-touch",
+   "TOUCH DOWN x=60 y=120",
+   "TOUCH MOVE x=70 y=125",
+   "GESTURE click",
+   "TOUCH DOWN x=180 y=60",
+   "GESTURE left",
+   "TOUCH DOWN x=120 y=200"
+  ],
+  "stderr_expect": [
+   "LCD 颜色 #7bff6b 113 像素，重心 120.0,200.0",
+   "LCD 颜色 #39d3ff 224 像素，重心 65.0,122.5"
+  ],
+  "lcd_min_pixels": 40000
+ },
+ {
+  "id": "s3-touch-noint",
+  "fw": "s3-touch",
+  "chip": "esp32s3",
+  "seconds": 1.6,
+  "args": [
+   "--i2c",
+   "cst816s@0x15",
+   "--spi",
+   "gc9a01"
+  ],
+  "script": "1.0:touch=60,120; 1.3:release",
+  "expect": [
+   "TRYBOARD_OK s3-touch"
+  ],
+  "absent": [
+   "TOUCH DOWN"
+  ],
+  "lcd_min_pixels": 40000
+ },
+ {
+  "id": "s3-i2s-tone",
+  "chip": "esp32s3",
+  "seconds": 1.5,
+  "args": [
+   "--i2s",
+   "max98357a"
+  ],
+  "expect": [
+   "TONE 440 Hz @ 44100 Hz",
+   "TRYBOARD_OK s3-i2s-tone"
+  ],
+  "audio": {
+   "freq": 440,
+   "tol": 1,
+   "rate": 44100,
+   "min_rms": 0.3
+  }
+ },
+ {
+  "id": "s3-i2s-mic",
+  "chip": "esp32s3",
+  "seconds": 1.2,
+  "args": [
+   "--mic",
+   "tools/audio/sine1k.wav"
+  ],
+  "expect": [
+   "MIC INMP441 on I2S1 @ 16000 Hz",
+   "TRYBOARD_OK s3-i2s-mic"
+  ],
+  "numeric": [
+   {
+    "name": "过零频率(Hz)",
+    "regex": "MIC rms=[\\d.]+ freq=([\\d.]+) Hz",
+    "value": 1000,
+    "tol": 1
+   },
+   {
+    "name": "RMS",
+    "regex": "MIC rms=([\\d.]+)",
+    "value": 0.3536,
+    "tol": 0.002
+   }
   ]
  }
 ]

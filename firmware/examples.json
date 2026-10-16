@@ -471,6 +471,121 @@
   ]
  },
  {
+  "id": "s3-imu",
+  "chip": "esp32s3",
+  "title": "倾角仪：MPU6050 六轴（I2C）",
+  "about": "GY-521（MPU6050，I2C 0x68）平插在面包板上：SDA=GPIO8、SCL=GPIO9，VCC 接 3.3V。固件用 ESP-IDF 的 i2c_master 驱动读寄存器（WHO_AM_I、复位、退出睡眠、100 Hz 采样、±2 g / ±250 °/s），每 200ms 打印一次加速度、陀螺、温度，并按重力分量算出俯仰和横滚：roll = atan2(ay, az)、pitch = atan2(−ax, √(ay²+az²))。拖下面的倾斜滑块，或在 3D 里按住模块拖动转整块台面，读数跟着变；转动时陀螺读到角速度。",
+  "tags": [
+   "✓ 仿真验证",
+   "I2C",
+   "MPU6050",
+   "IMU",
+   "ESP-IDF 5.5"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "mpu6050",
+     "addr": 104,
+     "sda": 8,
+     "scl": 9
+    }
+   ],
+   "view": {
+    "position": [
+     -30,
+     160,
+     92
+    ],
+    "target": [
+     -5,
+     8,
+     -2
+    ]
+   }
+  },
+  "controls": [
+   "imu"
+  ]
+ },
+ {
+  "id": "s3-qmi8658",
+  "chip": "esp32s3",
+  "title": "倾角仪：QMI8658 六轴（I2C）",
+  "about": "QMI8658（I2C 0x6B，微雪圆屏板上的那颗）：SDA=GPIO8、SCL=GPIO9。和 MPU6050 版同一份源码，换成 QMI8658 的寄存器：软复位、CTRL1 打开地址自增（不开的话突发读一直读同一个寄存器，真机常见的坑）、±4 g / ±512 °/s、CTRL7 打开加速度计和陀螺；数据小端。拖倾斜滑块看俯仰、横滚和陀螺读数。",
+  "tags": [
+   "✓ 仿真验证",
+   "I2C",
+   "QMI8658",
+   "IMU",
+   "ESP-IDF 5.5"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "qmi8658",
+     "addr": 107,
+     "sda": 8,
+     "scl": 9
+    }
+   ],
+   "view": {
+    "position": [
+     -30,
+     160,
+     92
+    ],
+    "target": [
+     -5,
+     8,
+     -2
+    ]
+   }
+  },
+  "controls": [
+   "imu"
+  ]
+ },
+ {
+  "id": "s3-touch",
+  "chip": "esp32s3",
+  "title": "触摸圆屏：GC9A01 + CST816S，点哪画哪",
+  "about": "1.28 英寸触摸圆屏（微雪 1.28inch Touch LCD 这一类：GC9A01 屏 + CST816S 电容触摸）。屏走 SPI2（SCLK=GPIO12、MOSI=GPIO11、CS=GPIO10、DC=GPIO14、RST=GPIO13、背光=GPIO15）；触摸走 I2C 0x15：TP_SDA=GPIO6、TP_SCL=GPIO7、TP_INT=GPIO5（按着拉低）、TP_RST=GPIO16。INT 下降沿中断唤醒任务，按着期间每 20ms 读一次坐标画点，抬起后读手势（单击 / 滑动 / 长按 1 秒清屏）。在 3D 里直接点、拖圆屏表面。",
+  "tags": [
+   "✓ 仿真验证",
+   "I2C",
+   "SPI",
+   "GC9A01",
+   "CST816S",
+   "GPIO 中断",
+   "ESP-IDF 5.5"
+  ],
+  "pins": {
+   "lcd_sclk": 12,
+   "lcd_mosi": 11,
+   "lcd_cs": 10,
+   "lcd_dc": 14,
+   "lcd_rst": 13,
+   "lcd_bl": 15
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "gc9a01",
+     "spi": 2
+    },
+    {
+     "type": "cst816s",
+     "addr": 21,
+     "sda": 6,
+     "scl": 7,
+     "int": 5,
+     "rst": 16
+    }
+   ]
+  }
+ },
+ {
   "id": "weather",
   "chip": "esp32s3",
   "title": "桌面气象站：温度 + 屏幕 + 表盘",
@@ -516,6 +631,37 @@
    "env"
   ],
   "assembly": true
+ },
+ {
+  "id": "s3-lvgl",
+  "chip": "esp32s3",
+  "title": "LVGL 表盘：圆屏动画与帧率",
+  "about": "ESP32-S3 + GC9A01 圆屏（240×240，SPI2 40MHz + GDMA；SCLK=GPIO12、MOSI=GPIO11、CS=GPIO10、DC=GPIO14、RST=GPIO13、背光=GPIO15）。固件用 LVGL 9.2 + esp_lvgl_port：刻度盘、指针、数值标签和一条绕圈的动画弧线，刷新周期 16ms（目标 60 FPS），双 40 行 DMA 缓冲。弧线每帧都在动，几乎整屏重画，CPU 满负荷——是圆屏界面的压力测试。串口每秒打印一次 FPS（模拟时间里的帧数，约 33；真机 160MHz 估计 20–30）。网页右上角的倍率是模拟速度：这个示例在浏览器里跑不满实时（约 0.3–0.4×），动画会显得慢，但帧率按模拟时间算，不受影响。",
+  "tags": [
+   "✓ 仿真验证",
+   "LVGL",
+   "SPI",
+   "GDMA",
+   "GC9A01",
+   "esp_lvgl_port",
+   "性能基准"
+  ],
+  "pins": {
+   "lcd_sclk": 12,
+   "lcd_mosi": 11,
+   "lcd_cs": 10,
+   "lcd_dc": 14,
+   "lcd_rst": 13,
+   "lcd_bl": 15
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "gc9a01",
+     "spi": 2
+    }
+   ]
+  }
  },
  {
   "id": "lens",
@@ -697,5 +843,98 @@
    }
   },
   "assembly": "usbkey"
+ },
+ {
+  "id": "s3-encoder",
+  "chip": "esp32s3",
+  "title": "旋转编码器：PCNT 正交计数",
+  "about": "EC11 旋转编码器（KY-040 模块）CLK 接 GPIO6、DT 接 GPIO7、按键接 GPIO15。S3 的 PCNT 两个通道互为边沿 / 电平做 4 倍频正交计数（一格 4 个计数），±100 设为上下限、超出由驱动累加。拖动或滚动 3D 里的旋钮，串口打印计数；按住旋钮打印 SW DOWN。",
+  "tags": [
+   "✓ 仿真验证",
+   "PCNT",
+   "GPIO 矩阵",
+   "ESP-IDF 5.5"
+  ],
+  "pins": {
+   "a": 6,
+   "b": 7,
+   "sw": 15
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "encoder",
+     "a": 6,
+     "b": 7,
+     "sw": 15
+    }
+   ]
+  }
+ },
+ {
+  "id": "s3-ultrasonic",
+  "chip": "esp32s3",
+  "title": "超声波测距：HC-SR04 + RMT 接收",
+  "about": "HC-SR04 由 5 V 供电，Trig 接 GPIO17（GPIO 发 10 µs 脉冲），Echo 经 1 kΩ / 2 kΩ 分压接 GPIO18，由 RMT 接收通道以 1 MHz 分辨率记下高电平宽度，换算成距离（343 m/s）。拖动 3D 里探头前面的障碍物，串口里的距离跟着变。",
+  "tags": [
+   "✓ 仿真验证",
+   "RMT 接收",
+   "5 V 器件",
+   "ESP-IDF 5.5"
+  ],
+  "pins": {
+   "trig": 17,
+   "echo": 18
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "hcsr04",
+     "trig": 17,
+     "echo": 18,
+     "cm": 15
+    }
+   ]
+  }
+ },
+ {
+  "id": "s3-i2s-tone",
+  "title": "I2S 放音：MAX98357A 喇叭放 440 Hz",
+  "about": "ESP32-S3 的 I2S0 以标准 Philips 格式（44.1 kHz、16 位、单声道复制到左右声道）经 GDMA 把 440 Hz 正弦送给 MAX98357A 功放（BCLK=GPIO16、LRC=GPIO17、DIN=GPIO18），驱动 4Ω 小喇叭。i2s_channel_write 被 DMA 的 EOF 中断按播放速度卡住，所以串口里写入速度正好是采样率。点工具栏「声音」听；面板上同时显示模拟器收到的 PCM 读数和网页输出端测到的主频。",
+  "tags": [
+   "✓ 仿真验证",
+   "I2S",
+   "GDMA",
+   "Web Audio",
+   "ESP-IDF 5.5"
+  ],
+  "chip": "esp32s3",
+  "scene": {
+   "parts": [
+    {
+     "type": "max98357a"
+    }
+   ]
+  }
+ },
+ {
+  "id": "s3-i2s-mic",
+  "title": "I2S 录音：INMP441 麦克风读 RMS 与频率",
+  "about": "ESP32-S3 的 I2S1 以 16 kHz、32 位槽、左声道读 INMP441 数字麦克风（SCK=GPIO39、WS=GPIO40、SD=GPIO41，L/R 接地），每 1024 个样本算一次 RMS 和过零频率打印出来。麦克风默认听一段 1 kHz 测试 WAV（我们自己合成的，按模拟时间取样，每次结果一样）；面板里可换成扫频、安静，或授权后接浏览器麦克风（只玩，不进验收）。",
+  "tags": [
+   "✓ 仿真验证",
+   "I2S",
+   "GDMA",
+   "INMP441",
+   "ESP-IDF 5.5"
+  ],
+  "chip": "esp32s3",
+  "scene": {
+   "parts": [
+    {
+     "type": "inmp441"
+    }
+   ]
+  }
  }
 ]

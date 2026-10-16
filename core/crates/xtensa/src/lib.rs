@@ -33,6 +33,12 @@ pub trait Bus {
     }
     /// WER：写外部寄存器
     fn wer(&mut self, _addr: u32, _val: u32) {}
+    /// `Cpu::run_batch` 每条指令之后问一次：SoC 是否要先处理事情（外设事件到点、中断线要重算）。
+    /// `cycles` 是这个核当前的周期数。返回 true 时批量执行停下，交回 SoC
+    #[inline(always)]
+    fn attention(&mut self, _cycles: u64) -> bool {
+        false
+    }
 }
 
 /// op0 为 8..=13 的是 16 位密度指令
@@ -171,6 +177,8 @@ pub struct Cpu {
     irq_latched: u32,
     /// 上次检查 CCOMPARE 时的周期数
     last_cc: u64,
+    /// 最早可能触发 CCOMPARE 的周期（绝对值）；cycles 没到它时 tick_timers 什么都不用做。写 CCOMPARE / CCOUNT 时清 0 强制重算
+    cc_next: u64,
     /// CCOUNT = cycles + ccount_off（取低 32 位）。固件写 CCOUNT（如 IDF 换 CPU 频率时按比例改写）
     /// 只改这个偏移，不动 `cycles`：`cycles` 是整机的模拟时间，跳变会让外设时间和另一个核错乱
     ccount_off: u32,
@@ -208,6 +216,7 @@ impl Cpu {
             irq_ext: 0,
             irq_latched: 0,
             last_cc: 0,
+            cc_next: 0,
             ccount_off: 0,
             // 复位属性 2（可读写执行、旁路），与 QEMU 对照
             itlb_attr: [2; 8],
@@ -281,6 +290,7 @@ impl Cpu {
                 // 先按旧计数结算定时器，写入本身不触发 CCOMPARE
                 self.tick_timers();
                 self.ccount_off = v.wrapping_sub(self.cycles as u32);
+                self.cc_next = 0;
             }
             sr::PRID => {}
             sr::SAR => self.sr[n as usize] = v & 0x3f,
@@ -291,6 +301,7 @@ impl Cpu {
                 self.tick_timers();
                 self.sr[n as usize] = v;
                 self.irq_latched &= !(1 << irq::TIMER_LINE[(n - sr::CCOMPARE0) as usize]);
+                self.cc_next = 0;
             }
             _ => self.sr[n as usize & 0xff] = v,
         }
@@ -335,12 +346,19 @@ impl Cpu {
 
     /// 检查 CCOUNT 自上次以来是否越过了某个 CCOMPARE，越过则挂起对应定时器中断。
     /// SoC 直接改 `cycles`（WAITI 快进）也没关系：下次 step 会补检。
+    #[inline(always)]
     fn tick_timers(&mut self) {
-        let (last, now) = (self.last_cc, self.cycles);
-        if now == last {
+        // 快路径：每条指令都会调到，绝大多数时候离最近的 CCOMPARE 还远
+        if self.cycles < self.cc_next {
             return;
         }
+        self.tick_timers_slow();
+    }
+
+    fn tick_timers_slow(&mut self) {
+        let (last, now) = (self.last_cc, self.cycles);
         let span = now.wrapping_sub(last);
+        let mut next = u64::MAX;
         for i in 0..3 {
             let c = self.sr[(sr::CCOMPARE0 + i as u32) as usize];
             // 从 last 往后第一次 CCOUNT == c 的距离（1..=2^32）
@@ -351,8 +369,15 @@ impl Cpu {
             if d <= span {
                 self.irq_latched |= 1 << irq::TIMER_LINE[i];
             }
+            // 从 now 往后的下一次（与下次调用时按 last = now 重算的结果相同）
+            let dn = match c.wrapping_sub((now as u32).wrapping_add(self.ccount_off)) {
+                0 => 1u64 << 32,
+                d => d as u64,
+            };
+            next = next.min(now + dn);
         }
         self.last_cc = now;
+        self.cc_next = next;
     }
 
     /// 下一个能唤醒 CPU 的定时器事件（绝对周期数），供 SoC 在 WAITI 时快进
@@ -438,12 +463,22 @@ impl Cpu {
     /// 窗口溢出检查：指令要用到当前窗口的第 max_quad 个四元组（0..=3）。
     /// 若中间某个四元组属于别的活帧（WINDOWSTART 位为 1），先把其中最老的帧溢出到栈上。
     /// 返回 true 表示已进入溢出处理程序（本条指令稍后重新执行）。
-    fn window_check(&mut self, max_quad: u32) -> bool {
+    #[inline(always)]
+    fn window_check(&mut self, insn: u32, narrow: bool) -> bool {
         let ps = self.ps();
-        if max_quad == 0 || ps & PS_WOE == 0 || ps & PS_EXCM != 0 {
+        if ps & PS_WOE == 0 || ps & PS_EXCM != 0 {
             return false;
         }
         let wb = self.windowbase;
+        // 快路径：当前窗口往上 3 个四元组都不属于别的活帧时，不论指令用到哪个都不会溢出
+        let ws = self.windowstart | (self.windowstart << 16);
+        if (ws >> (wb + 1)) & 7 == 0 {
+            return false;
+        }
+        let max_quad = max_quad(insn, narrow, ps);
+        if max_quad == 0 {
+            return false;
+        }
         let Some(k) = (1..=max_quad).find(|k| self.ws_bit(wb + k)) else {
             return false;
         };
@@ -462,6 +497,7 @@ impl Cpu {
     }
 
     // ------------------------------------------------------------ 执行
+    #[inline(always)]
     pub fn step<B: Bus>(&mut self, bus: &mut B) -> Exit {
         self.tick_timers();
         let level = self.irq_to_take();
@@ -487,7 +523,7 @@ impl Cpu {
         self.cycles += 1;
         let narrow = is_narrow(insn);
         let len = if narrow { 2 } else { 3 };
-        if self.window_check(max_quad(insn, narrow, self.ps())) {
+        if self.window_check(insn, narrow) {
             return Exit::Normal;
         }
         let flow = if narrow {
@@ -517,6 +553,23 @@ impl Cpu {
             }
             Ok(Flow::Done) => Exit::Normal,
             Err(e) => e,
+        }
+    }
+
+    /// 连续执行指令，直到：cycles 到 `until`、指令返回 Normal 以外的结果、PC 落进 [`vec_lo`, `vec_hi`)
+    /// （SoC 要检查的异常向量区）、或 `bus.attention()` 为 true。至少执行一步。
+    /// 与逐条调 `step` 并在每步之间做同样检查的结果完全相同，只是省掉每条指令的调用和返回开销
+    #[inline(never)]
+    pub fn run_batch<B: Bus>(&mut self, bus: &mut B, until: u64, vec_lo: u32, vec_hi: u32) -> Exit {
+        loop {
+            let e = self.step(bus);
+            if !matches!(e, Exit::Normal) {
+                return e;
+            }
+            let in_vec = self.pc.wrapping_sub(vec_lo) < vec_hi.wrapping_sub(vec_lo);
+            if in_vec || self.cycles >= until || bus.attention(self.cycles) {
+                return Exit::Normal;
+            }
         }
     }
 

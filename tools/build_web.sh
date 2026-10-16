@@ -17,6 +17,10 @@ licensed under the Apache License 2.0 (see LICENSE-esp-rom-elfs.txt). Copyright 
 The ROM contains third-party components (Newlib BSD, miniz, TJpgDec and others); see
 https://docs.espressif.com/projects/esp-idf/en/latest/esp32/COPYRIGHT.html
 TXT
+# 麦克风测试声音（tools/audio/gen_wav.py 合成，我们自己的，见 tools/audio/SOURCES.md）
+mkdir -p "$PUB/audio"
+[ -f "$ROOT/tools/audio/sine1k.wav" ] || python3 "$ROOT/tools/audio/gen_wav.py" >/dev/null
+cp "$ROOT/tools/audio/sine1k.wav" "$ROOT/tools/audio/sweep.wav" "$PUB/audio/"
 # 示例清单：只发布已构建的
 python3 - "$ROOT" <<'PY'
 import json, os, shutil, sys

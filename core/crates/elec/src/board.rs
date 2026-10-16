@@ -141,6 +141,8 @@ pub struct Activity {
     pub tx: f64,
     /// 舵机脉宽（µs）；None = 没有 PWM
     pub servo_pw_us: Option<f64>,
+    /// 接在 5 V 轨上的功放（MAX98357A）此刻的电流（A），随放出的声音大小变
+    pub amp_i: f64,
 }
 
 /// 此刻的读数（电压 V、电流 A）
@@ -155,6 +157,8 @@ pub struct Readings {
     pub i_servo: f64,
     pub i_3v3: f64,
     pub i_chip: f64,
+    /// 5 V 轨上的模块（功放）电流
+    pub i_amp: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -166,6 +170,7 @@ pub struct Stats {
     pub peak_i_ext: f64,
     pub peak_i_servo: f64,
     pub peak_i_3v3: f64,
+    pub peak_i_amp: f64,
     pub resets: u32,
     /// 每次欠压复位的模拟时刻（s）与当时 3V3 的最低值
     pub brownouts: Vec<(f64, f64)>,
@@ -181,6 +186,7 @@ impl Default for Stats {
             peak_i_ext: 0.0,
             peak_i_servo: 0.0,
             peak_i_3v3: 0.0,
+            peak_i_amp: 0.0,
             resets: 0,
             brownouts: Vec::new(),
         }
@@ -197,6 +203,10 @@ pub struct Board {
     pub servo_pin: Option<u32>,
     /// 模块从 3V3 取的电流（A），由挂上的器件累加
     pub modules_3v3: f64,
+    /// 模块从 5V 轨取的电流（A），如 HC-SR04（5 V 器件）
+    pub modules_5v: f64,
+    /// 接在 5 V 轨上的模块（功放）有没有
+    pub amp: bool,
     pub now: Readings,
     pub stats: Stats,
     /// 已经积分到的模拟时刻（周期，STEP_CYCLES 的整数倍）
@@ -217,6 +227,8 @@ impl Board {
             servo: None,
             servo_pin: None,
             modules_3v3: 0.0,
+            modules_5v: 0.0,
+            amp: false,
             now: Readings::default(),
             stats: Stats::default(),
             t: 0,
@@ -256,12 +268,37 @@ impl Board {
             "ssd1306" => Some(0.010),
             // GC9A01 圆屏：估算，主要是背光 25 mA
             "gc9a01" => Some(0.025),
+            // MPU6050：估算，数据手册陀螺 3.6 mA + 加速度计 0.5 mA
+            "mpu6050" => Some(0.0039),
+            // QMI8658：估算，数据手册六轴高性能模式约 1.7 mA 量级（待逐字核对）
+            "qmi8658" => Some(0.0017),
+            // CST816S：估算，扫描工作电流 mA 量级（触摸圆屏的背光已算在 gc9a01 里）
+            "cst816s" => Some(0.0025),
+            // EC11 编码器模块：估算，两颗 10 kΩ 上拉在 3.3 V 下（触点闭合时）
+            "encoder" => Some(0.000_66),
+            // INMP441 数据手册：工作电流 1.4 mA
+            "inmp441" => Some(0.0014),
+            _ => None,
+        }
+    }
+
+    /// 从 5V 轨取电的器件（A），同样取自 parts.ts 的 currentMa.typ
+    pub fn module_current_5v(kind: &str) -> Option<f64> {
+        match kind {
+            // HC-SR04 模块规格书：工作电流 15 mA
+            "hcsr04" => Some(0.015),
             _ => None,
         }
     }
 
     pub fn add_module(&mut self, kind: &str) {
+        // MAX98357A 吃 5 V（VIN 接 5V 排针）：电流由机器每段按放音大小给出（Activity::amp_i）
+        if kind == "max98357a" {
+            self.amp = true;
+            return;
+        }
         self.modules_3v3 += Self::module_current(kind).unwrap_or(0.0);
+        self.modules_5v += Self::module_current_5v(kind).unwrap_or(0.0);
     }
 
     pub fn set_power(&mut self, p: Power) {
@@ -360,6 +397,20 @@ impl Board {
             b: 0,
             c: p.c3v3,
         });
+        // 10：5 V 轨上的功放
+        c.add(Elem::Load {
+            a: N5V,
+            i: if self.amp { act.amp_i } else { 0.0 },
+            vknee: 1.0,
+        });
+        // 5V 轨上的模块：只在接了时才加元件（不接时网络与以前逐位相同）
+        if self.modules_5v > 0.0 {
+            c.add(Elem::Load {
+                a: N5V,
+                i: self.modules_5v,
+                vknee: 1.0,
+            });
+        }
         c
     }
 
@@ -387,6 +438,7 @@ impl Board {
             },
             i_3v3: i[2],
             i_chip: i[3],
+            i_amp: if self.amp { i[10] } else { 0.0 },
         };
         let st = &mut self.stats;
         let n = &self.now;
@@ -399,6 +451,7 @@ impl Board {
         st.peak_i_ext = st.peak_i_ext.max(n.i_ext);
         st.peak_i_servo = st.peak_i_servo.max(n.i_servo);
         st.peak_i_3v3 = st.peak_i_3v3.max(n.i_3v3);
+        st.peak_i_amp = st.peak_i_amp.max(n.i_amp);
     }
 
     /// 积分到模拟时刻 now（周期）。只走整步（100 µs），余下的留到下次，所以结果只取决于每次调用时给的活动，
@@ -492,6 +545,13 @@ impl Board {
             "[tryboard] 电气 峰值电流 USB={:.3} A 外接={:.3} A 舵机={:.3} A 3V3={:.3} A",
             s.peak_i_usb, s.peak_i_ext, s.peak_i_servo, s.peak_i_3v3
         );
+        if self.amp {
+            let _ = writeln!(
+                o,
+                "[tryboard] 电气 功放（5V）峰值电流 {:.3} A",
+                s.peak_i_amp
+            );
+        }
         let _ = writeln!(o, "[tryboard] 电气 欠压复位 {} 次", s.resets);
         for (t, v) in &s.brownouts {
             let _ = writeln!(o, "[tryboard] 电气 欠压复位 @{t:.4}s 3V3 最低 {v:.3} V");
@@ -545,6 +605,7 @@ mod tests {
             wifi_on: true,
             tx: 1.0,
             servo_pw_us: None,
+            amp_i: 0.0,
         };
         assert!(!b.advance(CPU_HZ / 10, &act));
         assert!(b.now.v3v3 > 3.2, "{:?}", b.now);
@@ -588,6 +649,21 @@ mod tests {
         assert!(r.is_empty(), "{r:?} {:?}", b.stats);
         assert!(b.stats.min_v3v3 > 3.25, "{:?}", b.stats);
         assert!(b.stats.peak_i_usb < 0.1, "{:?}", b.stats);
+    }
+
+    /// 5 V 器件（HC-SR04）从 5V 轨取电：USB 电流多 15 mA，3V3 支路不变
+    #[test]
+    fn hcsr04_draws_from_5v() {
+        let act = Activity { busy: 1.0, ..Default::default() };
+        let mut a = Board::new(ChipKind::S3);
+        let mut b = Board::new(ChipKind::S3);
+        b.add_module("hcsr04");
+        b.add_module("encoder");
+        a.advance(CPU_HZ / 100, &act);
+        b.advance(CPU_HZ / 100, &act);
+        let d = b.now.i_usb - a.now.i_usb;
+        assert!((d - 0.015 - 0.000_66).abs() < 0.001, "多出 {d} A");
+        assert!((b.now.i_3v3 - a.now.i_3v3 - 0.000_66).abs() < 0.0001);
     }
 }
 

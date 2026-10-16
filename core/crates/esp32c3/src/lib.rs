@@ -7,14 +7,18 @@ pub mod gdma;
 pub mod gpspi;
 pub mod hle;
 pub mod i2c;
+pub mod i2s;
 pub mod iotrace;
 pub mod ledc;
 pub mod periph;
+pub mod pcnt;
 pub mod rmt;
+pub mod sigin;
 pub mod spiflash;
 /// Wi-Fi 模型在 tryboard-soc（C3 / S3 共用），这里按 C3 布局接上
 pub use tryboard_soc::wifi;
 
+use devices::audio::{Audio, PortIo};
 use devices::gc9a01::Gc9a01;
 use gdma::{Gdma, GdmaLayout};
 use periph::*;
@@ -59,8 +63,21 @@ pub mod lcd_pin {
     pub const RST: u32 = 4;
     pub const BL: u32 = 3;
 }
-/// GDMA 外设编号（soc/gdma_channel.h：SOC_GDMA_TRIG_PERIPH_SPI2）
+/// GDMA 外设编号（soc/gdma_channel.h：SOC_GDMA_TRIG_PERIPH_SPI2 / _I2S0）
 const GDMA_PERI_SPI2: u32 = 0;
+const GDMA_PERI_I2S0: u32 = 3;
+/// I2S 音频器件在 C3 上的接线约定。C3 只有一个 I2S，喇叭和麦克风同时用时共用 BCK / WS（全双工），
+/// 所以两者的时钟脚相同；数据脚避开 strapping（2、8、9）以外的空闲脚——GPIO2 是 strapping 但启动后可当输出用
+pub mod i2s_pin {
+    pub const SPK_BCLK: u32 = 0;
+    pub const SPK_LRC: u32 = 1;
+    pub const SPK_DIN: u32 = 2;
+    pub const MIC_SCK: u32 = 0;
+    pub const MIC_WS: u32 = 1;
+    pub const MIC_SD: u32 = 3;
+}
+/// GPIO 矩阵信号（gpio_sig_map.h）：I2SO_SD_OUT_IDX / I2SI_SD_IN_IDX 都是 15
+const SIG_I2S_SD: usize = 15;
 /// GPIO 矩阵输出信号 FSPICS0_OUT_IDX（gpio_sig_map.h）与 IO_MUX 功能号 FUNC_GPIO10_FSPICS0（io_mux_reg.h）
 const SIG_FSPICS0: u32 = 68;
 const IOMUX_FUNC_FSPICS0: u32 = 2;
@@ -93,6 +110,8 @@ pub struct SocBus {
     pub rmt: rmt::Rmt,
     /// 挂在各引脚上的 WS2812 解码器（引脚被 GPIO 矩阵连到 RMT 输出时自动创建）
     pub ws2812: HashMap<u32, rmt::Ws2812>,
+    /// 直接接在 GPIO 上、输出带时刻波形的外接器件（HC-SR04 等；C3 没有 PCNT，编码器只能靠 GPIO 中断读）
+    pub pins: devices::pins::PinDevices,
     pub efuse: [u32; 0x200 / 4],
     /// SYSTEM_CPU_INTR_FROM_CPU_0..3
     pub from_cpu: u32,
@@ -117,6 +136,9 @@ pub struct SocBus {
     pub gdma: Gdma,
     /// 挂在 SPI2 上的圆屏（CLI `--spi gc9a01` / wasm `tb_lcd_attach`），引脚见 `lcd_pin`
     pub lcd: Option<Box<Gc9a01>>,
+    /// I2S0（0x6002D000）与挂在上面的音频器件（引脚见 `i2s_pin`）
+    pub i2s0: i2s::I2s,
+    pub audio: Audio,
     /// 硬件随机数发生器（WDEV_RND_REG）状态：xorshift，固定种子保证可复现
     pub rng: u32,
     /// 调试：监视某个 MMIO 地址，记录访问时的 PC（watch_pc 由运行循环填写）
@@ -157,6 +179,7 @@ impl Default for SocBus {
             adc: Adc::default(),
             rmt: rmt::Rmt::default(),
             ws2812: HashMap::new(),
+            pins: Default::default(),
             efuse: boot::default_efuse(),
             from_cpu: 0,
             usj_tx: Vec::new(),
@@ -172,6 +195,8 @@ impl Default for SocBus {
             spi2: Default::default(),
             gdma: Gdma::new(GdmaLayout::C3),
             lcd: None,
+            i2s0: i2s::I2s::new(0, false),
+            audio: Audio::default(),
             rng: 0x2545_f491,
             watch: None,
             watch_pc: 0,
@@ -304,6 +329,7 @@ impl SocBus {
             0x6001_3000 => return self.i2c0.read(off),
             0x6002_4000 => return self.spi2.read(off),
             0x6003_F000 => return self.gdma.read(off),
+            0x6002_D000 => return self.i2s0.read(off),
             0x600C_4000 if off < 0x100 => return self.extmem.read(off),
             0x6001_F000 => return self.timg0.read(off, now),
             0x6002_0000 => return self.timg1.read(off, now),
@@ -401,6 +427,7 @@ impl SocBus {
                 return;
             }
             0x6003_F000 => return self.gdma.write(off, v),
+            0x6002_D000 => return self.i2s0.write(off, v, now),
             0x600C_4000 if off < 0x100 => return self.extmem.write(off, v),
             0x6000_4000 => {
                 self.gpio.write(off, v);
@@ -480,8 +507,53 @@ impl SocBus {
             if self.gpio_log.len() > 1 << 16 {
                 self.gpio_log.drain(..1 << 15);
             }
+            self.pins.on_level(now, lv as u64);
         }
+        self.feed_rx(now, lv);
         self.irq_dirty = true;
+    }
+
+    /// RMT 接收通道的输入（GPIO 矩阵 FUNCn_IN_SEL_CFG：sel[4:0]、inv[5]、经矩阵[6]；0x1E 常 1、0x1F 常 0）
+    fn feed_rx(&mut self, t: u64, lv: u32) {
+        for i in 0..self.rmt.layout.nrx {
+            let f = self.gpio.func_in[(rmt::SIG_OUT0 + i as u32) as usize];
+            let v = f & (1 << 6) != 0
+                && (match f & 0x1f {
+                    0x1e => true,
+                    0x1f => false,
+                    p if p < 22 => lv >> p & 1 != 0,
+                    _ => false,
+                }) != (f & (1 << 5) != 0);
+            self.rmt.rx_input(i, t, v);
+        }
+    }
+
+    /// 外接引脚器件到 now 为止的驱动按时刻施加到引脚；返回下一次要问它们的时刻
+    fn pins_update(&mut self, now: u64) -> u64 {
+        if self.pins.is_empty() {
+            return u64::MAX;
+        }
+        loop {
+            let (drives, next) = self.pins.poll(now);
+            if drives.is_empty() {
+                return next;
+            }
+            for (t, pin, lv) in drives {
+                let bit = 1u32 << pin;
+                let g = &mut self.gpio;
+                if lv < 0 {
+                    g.ext_driven &= !bit;
+                } else {
+                    g.ext_driven |= bit;
+                    if lv > 0 {
+                        g.ext_in |= bit;
+                    } else {
+                        g.ext_in &= !bit;
+                    }
+                }
+                self.gpio_changed(t);
+            }
+        }
     }
 
     /// 引脚上的 PWM：经 GPIO 矩阵路由到该引脚的 LEDC 通道输出（占空比, 频率）
@@ -524,6 +596,7 @@ impl SocBus {
         set(src::RMT, self.rmt.irq());
         set(src::I2C_EXT0, self.i2c0.irq());
         set(src::SPI2, self.spi2.irq());
+        set(src::I2S0, self.i2s0.irq());
         for ch in 0..self.gdma.layout.nch as u32 {
             set(
                 src::DMA_CH0 + ch,
@@ -571,6 +644,10 @@ impl SocBus {
             }
             self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
         }
+        if !edges.is_empty() {
+            let lv = self.gpio.level();
+            self.feed_rx(now, lv);
+        }
         edges.clear();
         self.rmt.edges = edges;
         next
@@ -592,6 +669,7 @@ impl SocBus {
             self.wifi = Some(w);
             n
         };
+        let n10 = self.pins_update(now);
         self.trace_pwm(now);
         let (n9, spi_done) = self.spi2.update(now);
         if spi_done {
@@ -599,6 +677,7 @@ impl SocBus {
                 self.gdma.out_done(ch);
             }
         }
+        let n11 = self.i2s_update(now);
         self.next_event = n1
             .min(n2)
             .min(n3)
@@ -607,7 +686,9 @@ impl SocBus {
             .min(n6)
             .min(n7)
             .min(n8)
-            .min(n9);
+            .min(n9)
+            .min(n10)
+            .min(n11);
         let lv = self.levels();
         let pending = self.intc.pending(lv);
         cpu.irq_line = self.intc.select(pending);
@@ -616,6 +697,59 @@ impl SocBus {
 }
 
 impl SocBus {
+    /// I2S0 收发推进：按 GPIO 矩阵判断喇叭 DIN / 麦克风 SD 是不是接在 I2S 的数据线上，再借总线让 GDMA 搬数据
+    fn i2s_update(&mut self, now: u64) -> u64 {
+        if !self.i2s0.tx.running && !self.i2s0.rx.running {
+            return u64::MAX;
+        }
+        let speaker = self.audio.speaker.as_ref().is_some_and(|s| {
+            self.gpio
+                .func_out
+                .get(s.pins.data as usize)
+                .is_some_and(|f| (f & 0xff) as usize == SIG_I2S_SD)
+        });
+        // FUNCn_IN_SEL_CFG：位 4..0 引脚、位 6 经 GPIO 矩阵
+        let f = self.gpio.func_in[SIG_I2S_SD];
+        let mic = self
+            .audio
+            .mic
+            .as_ref()
+            .is_some_and(|m| f & (1 << 6) != 0 && f & 0x1f == m.pins.data);
+        let mut g = std::mem::replace(&mut self.gdma, Gdma::placeholder());
+        let mut audio = std::mem::take(&mut self.audio);
+        let mut i2s = std::mem::replace(&mut self.i2s0, i2s::I2s::new(0, false));
+        let mut io = PortIo {
+            audio: &mut audio,
+            speaker,
+            mic,
+        };
+        let n = i2s.update(now, &mut g, self, GDMA_PERI_I2S0, &mut io);
+        self.i2s0 = i2s;
+        self.audio = audio;
+        self.gdma = g;
+        n
+    }
+
+    /// 接 MAX98357A 喇叭 / INMP441 麦克风（引脚见 `i2s_pin`）
+    pub fn attach_speaker(&mut self) {
+        use i2s_pin::*;
+        let p = devices::audio::Pins {
+            bclk: SPK_BCLK,
+            ws: SPK_LRC,
+            data: SPK_DIN,
+        };
+        self.audio.speaker = Some(Box::new(devices::audio::Max98357a::new(p)));
+    }
+    pub fn attach_mic(&mut self) {
+        use i2s_pin::*;
+        let p = devices::audio::Pins {
+            bclk: MIC_SCK,
+            ws: MIC_WS,
+            data: MIC_SD,
+        };
+        self.audio.mic = Some(Box::new(devices::audio::Inmp441::new(p)));
+    }
+
     /// 在 SPI2 上接一块 GC9A01 圆屏（引脚见 `lcd_pin`）
     pub fn attach_lcd(&mut self) {
         self.lcd = Some(Box::default());
@@ -908,10 +1042,12 @@ impl Esp32c3 {
         // 外接器件、引脚记录、灯带解码是外部世界的一部分，复位后还在（与 S3 的 reboot 一致）
         m.bus.i2c0.devices = std::mem::take(&mut self.bus.i2c0.devices);
         m.bus.ws2812 = std::mem::take(&mut self.bus.ws2812);
+        m.bus.pins = std::mem::take(&mut self.bus.pins);
         m.bus.gpio_log = std::mem::take(&mut self.bus.gpio_log);
         m.bus.iotrace = self.bus.iotrace.carry();
         // 外接屏不随芯片复位消失（它的复位脚由固件重新驱动）
         m.bus.lcd = self.bus.lcd.take();
+        m.bus.audio = std::mem::take(&mut self.bus.audio);
         let t = self.cpu.cycles;
         m.cpu.cycles = t;
         m.bus.now = t;

@@ -2,6 +2,7 @@
 // 纯函数，node --test 直接测；id 按 scene-api 约定 'wire:<板上针脚>~<零件>:<丝印>'，与 3D 台面一致。
 import type { PartSpec } from '../board3d';
 import { BENCH_WIRE_CM } from './harness.ts';
+import { I2S_WIRING } from '../i2spins.ts';
 
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
 
@@ -13,7 +14,7 @@ export interface PartInfo {
 }
 
 /** 零件类型 → 中文显示名（时间线、提示条、构建树统一用这份，不让英文 type 名漏到界面上） */
-export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: '舵机', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED', key: '按键' };
+export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: '舵机', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED', encoder: '编码器', hcsr04: '超声波', mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: '触摸', max98357a: '喇叭', inmp441: '麦克风', key: '按键' };
 export const partLabel = (type: string) => PART_LABEL[type as PartSpec['type']] ?? '零件';
 
 export function partId(p: PartSpec) {
@@ -38,6 +39,24 @@ export function partInfo(p: PartSpec, ext5v = false): PartInfo {
       return { name: `按键 ${p.cap ?? ''}（GPIO${p.pin}）`, model: '6×6 mm 轻触开关 + 键帽', iface: `GPIO${p.pin}，按下接地（内部上拉）`, power: '不用供电' };
     case 'buzzer':
       return { name: '无源蜂鸣器', model: '无源蜂鸣器模块（三针，带三极管，LEDC 方波驱动）', iface: `I/O → GPIO${p.pin}`, power: '3V3' };
+    case 'encoder':
+      return { name: 'EC11 旋转编码器', model: 'EC11 编码器模块（KY-040 类，每圈 20 格，A/B 正交 + 按键，板上 10 kΩ 上拉）', iface: `CLK GPIO${p.a} · DT GPIO${p.b}${p.sw !== undefined ? ` · SW GPIO${p.sw}` : ''}（S3 用 PCNT 计数）`, power: '3V3' };
+    case 'hcsr04':
+      return { name: 'HC-SR04 超声波', model: 'HC-SR04 超声波测距（2–400 cm，40 kHz，Echo 5 V 输出）', iface: `Trig GPIO${p.trig} · Echo GPIO${p.echo}${p.divider === false ? '（直连，5 V 进 GPIO！）' : '（经 1 kΩ / 2 kΩ 分压到约 3.3 V）'}`, power: '5V（USB 5V 轨，约 15 mA）' };
+    case 'mpu6050':
+      return { name: 'MPU6050 六轴', model: 'GY-521 模块（InvenSense MPU-6050：三轴加速度 + 三轴陀螺）', iface: `I2C ${hex(p.addr)} · SDA GPIO${p.sda} · SCL GPIO${p.scl}${p.int !== undefined ? ` · INT GPIO${p.int}` : ''}`, power: '3V3' };
+    case 'qmi8658':
+      return { name: 'QMI8658 六轴', model: 'QST QMI8658 六轴 IMU 小板', iface: `I2C ${hex(p.addr)} · SDA GPIO${p.sda} · SCL GPIO${p.scl}`, power: '3V3' };
+    case 'cst816s':
+      return { name: 'CST816S 触摸', model: '圆屏上的电容触摸层（海栎创 CST816S，单点 + 手势）', iface: `I2C ${hex(p.addr)} · SDA GPIO${p.sda} · SCL GPIO${p.scl} · INT GPIO${p.int}${p.rst !== undefined ? ` · RST GPIO${p.rst}` : ''}`, power: '3V3（与圆屏共用）' };
+    case 'max98357a': {
+      const w = I2S_WIRING.esp32s3.spk;
+      return { name: 'MAX98357A 功放 + 喇叭', model: 'MAX98357A I2S D 类功放模块（3 W）+ Φ40 4 Ω 喇叭', iface: `I2S · BCLK ${w.bclk} · LRC ${w.lrc} · DIN ${w.din}`, power: '5V' };
+    }
+    case 'inmp441': {
+      const w = I2S_WIRING.esp32s3.mic;
+      return { name: 'INMP441 麦克风', model: 'INMP441 I2S 数字 MEMS 麦克风模块（24 位，L/R 接地 = 左声道）', iface: `I2S · SCK ${w.sck} · WS ${w.ws} · SD ${w.sd}`, power: '3V3' };
+    }
   }
 }
 
@@ -64,6 +83,8 @@ export interface BenchWire {
   from?: string;
   /** 线长（cm，估算；P2-11 I2C 上升时间用） */
   lenCm: number;
+  /** 5 V 输出经分压电阻降到 3.3 V 再进 GPIO（HC-SR04 Echo）；false = 直接接 */
+  divider?: boolean;
 }
 
 /** 改接线：给规则检查造错误接线用（debug 钩子 / 以后的连线工具），按 3D 里已有导线的 id 改 */
@@ -76,6 +97,8 @@ export interface WireMods {
   noResistor?: string[];
   /** 拉长 / 缩短某个零件的那几根线（零件 id → cm，P2-11）；没写的按 BENCH_WIRE_CM */
   lenCm?: Record<string, number>;
+  /** 去掉 Echo 分压电阻的超声波（零件 id）：5 V 直接进 GPIO */
+  noDivider?: string[];
 }
 
 export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): BenchWire[] {
@@ -113,15 +136,55 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
       // 按键只在按下时把引脚拉到地：它不推高电平，和 GPIO 输出不算"输出接输出"
       add(`GPIO${p.pin}`, id, 'IN', '按键（按下接地）', 'load', '橙');
       add('GND', id, 'GND', '地', 'gnd', '黑');
+    } else if (p.type === 'encoder') {
+      // KY-040：CLK / DT 板上上拉到 "+"，触点闭合接地 → 这两根是模块往外推电平的线
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+      add('3V3', id, '+', '供电（上拉）', 'power', '红');
+      if (p.sw !== undefined) add(`GPIO${p.sw}`, id, 'SW', '按键（按下接地）', 'drive', '紫');
+      add(`GPIO${p.b}`, id, 'DT', 'B 相（DT）', 'drive', '绿');
+      add(`GPIO${p.a}`, id, 'CLK', 'A 相（CLK）', 'drive', '黄');
+    } else if (p.type === 'hcsr04') {
+      add('5V', id, 'VCC', '供电（5 V）', 'power', '红');
+      add(`GPIO${p.trig}`, id, 'Trig', '触发（GPIO 输出 10 µs 高脉冲）', 'load', '橙');
+      add(`GPIO${p.echo}`, id, 'Echo', p.divider === false ? '回波（5 V，直连）' : '回波（经 1k/2k 分压）', 'drive', '蓝', { divider: p.divider !== false });
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+    } else if (p.type === 'mpu6050' || p.type === 'qmi8658') {
+      add('3V3', id, p.type === 'mpu6050' ? 'VCC' : 'VIN', '供电', 'power', '红');
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+      add(`GPIO${p.scl}`, id, 'SCL', 'I2C 时钟', 'bus', '黄');
+      add(`GPIO${p.sda}`, id, 'SDA', 'I2C 数据', 'bus', '绿');
+      if (p.type === 'mpu6050' && p.int !== undefined) add(`GPIO${p.int}`, id, 'INT', '数据就绪中断（模块输出）', 'drive', '青');
+    } else if (p.type === 'cst816s') {
+      // 触摸层的线在圆屏模组上（同一排针的后 4 针），供电与圆屏共用
+      add(`GPIO${p.sda}`, id, 'TP_SDA', '触摸 I2C 数据', 'bus', '绿');
+      add(`GPIO${p.scl}`, id, 'TP_SCL', '触摸 I2C 时钟', 'bus', '黄');
+      add(`GPIO${p.int}`, id, 'TP_INT', '触摸中断（按着拉低）', 'drive', '青');
+      add(p.rst !== undefined ? `GPIO${p.rst}` : '3V3', id, 'TP_RST', '触摸复位', p.rst !== undefined ? 'load' : 'power', '灰');
     } else if (p.type === 'buzzer') {
       // 三针模块：I/O 经模块上的三极管驱动蜂鸣器，GPIO 只推基极
       add('3V3', id, 'VCC', '供电', 'power', '红');
       add(`GPIO${p.pin}`, id, 'I/O', '方波驱动（LEDC）', 'load', '橙');
       add('GND', id, 'GND', '地', 'gnd', '黑');
+    } else if (p.type === 'max98357a') {
+      const s = I2S_WIRING.esp32s3.spk;
+      add('5V', id, 'Vin', '供电（5 V）', 'power', '红');
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+      add(`GPIO${s.bclk}`, id, 'BCLK', 'I2S 位时钟', 'load', '黄');
+      add(`GPIO${s.lrc}`, id, 'LRC', 'I2S 声道时钟', 'load', '绿');
+      add(`GPIO${s.din}`, id, 'DIN', 'I2S 数据（发）', 'load', '橙');
+    } else if (p.type === 'inmp441') {
+      const s = I2S_WIRING.esp32s3.mic;
+      add('3V3', id, 'VDD', '供电', 'power', '红');
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+      add('GND', id, 'L/R', '声道选择（接地 = 左）', 'gnd', '黑');
+      add(`GPIO${s.sck}`, id, 'SCK', 'I2S 位时钟', 'load', '黄');
+      add(`GPIO${s.ws}`, id, 'WS', 'I2S 声道时钟', 'load', '绿');
+      add(`GPIO${s.sd}`, id, 'SD', 'I2S 数据（收）', 'drive', '橙');
     }
   }
   const drop = new Set(mods.drop ?? []);
   const nores = new Set(mods.noResistor ?? []);
+  const nodiv = new Set(mods.noDivider ?? []);
   for (const x of w) {
     if (drop.has(x.id)) x.missing = true;
     const to = mods.retarget?.[x.id];
@@ -130,6 +193,7 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
       x.a = to;
     }
     if (x.ohm !== undefined && nores.has(x.part)) x.ohm = 0;
+    if (x.divider !== undefined && nodiv.has(x.part)) x.divider = false;
   }
   return w;
 }
@@ -141,13 +205,13 @@ export function usedPins(wires: BenchWire[]): string[] {
   return [...seen];
 }
 
-export const emptyMods = (m: WireMods | null | undefined) => !m || (!m.drop?.length && !m.noResistor?.length && !Object.keys(m.retarget ?? {}).length && !Object.keys(m.lenCm ?? {}).length);
+export const emptyMods = (m: WireMods | null | undefined) => !m || (!m.drop?.length && !m.noResistor?.length && !m.noDivider?.length && !Object.keys(m.retarget ?? {}).length && !Object.keys(m.lenCm ?? {}).length);
 
 /** I2C 总线：同一对 SDA / SCL 上的模块和 SDA 线总长（cm）。线长按 SDA 那根算（SCL 同长） */
 export function i2cBuses(parts: PartSpec[], wires: BenchWire[]): { key: string; parts: string[]; wireCm: number; wires: string[] }[] {
   const out = new Map<string, { key: string; parts: string[]; wireCm: number; wires: string[] }>();
   for (const p of parts) {
-    if (p.type !== 'oled' && p.type !== 'bme280') continue;
+    if (p.type !== 'oled' && p.type !== 'bme280' && p.type !== 'mpu6050' && p.type !== 'qmi8658') continue;
     const key = `GPIO${p.sda}/GPIO${p.scl}`;
     const b = out.get(key) ?? { key, parts: [], wireCm: 0, wires: [] };
     const id = partId(p);

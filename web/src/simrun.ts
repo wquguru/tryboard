@@ -36,6 +36,14 @@ export interface Ex {
   tb_usb_report?(): number;
   tb_i2c_wire?(cm: number): void;
   tb_antenna_loss?(db: number): void;
+  tb_encoder_attach?(a: number, b: number, sw: number): void;
+  tb_encoder_turn?(steps: number): void;
+  tb_encoder_press?(down: number): void;
+  tb_sonar_attach?(trig: number, echo: number): void;
+  tb_sonar_distance?(cm: number): void;
+  tb_imu_set?(pitch: number, roll: number, yaw: number, dp: number, dr: number, dy: number): void;
+  tb_touch?(x: number, y: number, down: number): void;
+  tb_touch_int?(pin: number): void;
 }
 
 export interface SimJob {
@@ -51,6 +59,8 @@ export interface SimJob {
   /** 舵机信号脚与供电（= CLI --servo / --power）；接了舵机时与 CLI 一样始终 1ms 一片 */
   servo?: number;
   power?: 'usb' | 'ext';
+  /** 触摸 INT 脚（= CLI --touch-int） */
+  touchInt?: number;
   /** 始终 1ms 一片（= CLI 的 --inputs）：重放网页实时运行导出的输入日志时用 */
   fixedSlice?: boolean;
   /** = CLI --usb-log：观察记录里带上 USB 虚拟主机的状态与键盘输入（P2-12） */
@@ -58,6 +68,9 @@ export interface SimJob {
   /** = CLI --i2c-wire / --antenna-loss（P2-11，估算） */
   i2cWire?: number;
   antenna?: number;
+  /** 旋转编码器 / HC-SR04（= CLI --encoder A,B[,SW] / --sonar TRIG,ECHO --dist 厘米）；接了也始终 1ms 一片 */
+  encoder?: { a: number; b: number; sw?: number };
+  sonar?: { trig: number; echo: number; cm?: number };
 }
 
 export interface SimResult {
@@ -78,7 +91,7 @@ export interface SimHooks {
   onReset?: (n: number, stopped: boolean) => void;
 }
 
-const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2 };
+const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5 };
 
 /** 镜像是哪颗芯片：先找分区表（0x8000）里的 app，再读 ESP 镜像头的芯片 ID（5 = C3，9 = S3） */
 export function imageChip(buf: ArrayBuffer | Uint8Array): 'esp32c3' | 'esp32s3' {
@@ -128,6 +141,12 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
   if (j.power) e.tb_power_set?.(j.power === 'ext' ? 1 : 0);
   if (j.i2cWire !== undefined) e.tb_i2c_wire?.(j.i2cWire);
   if (j.antenna !== undefined) e.tb_antenna_loss?.(j.antenna);
+  if (j.encoder) e.tb_encoder_attach?.(j.encoder.a, j.encoder.b, j.encoder.sw ?? -1);
+  if (j.sonar) {
+    e.tb_sonar_attach?.(j.sonar.trig, j.sonar.echo);
+    if (j.sonar.cm !== undefined) e.tb_sonar_distance?.(j.sonar.cm);
+  }
+  if (j.touchInt !== undefined) e.tb_touch_int?.(j.touchInt);
 
   const script = parseScript(j.script);
   let si = 0;
@@ -153,7 +172,20 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
       else if (act.startsWith('power=')) e.tb_power_set?.(act.slice(6).trim() === 'ext' ? 1 : 0);
       else if (act.startsWith('i2cwire=')) e.tb_i2c_wire?.(Number(act.slice(8)));
       else if (act.startsWith('antenna=')) e.tb_antenna_loss?.(Number(act.slice(8)) | 0);
-      else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));
+      else if ((m = act.match(/^enc=\+?(-?\d+)$/))) e.tb_encoder_turn?.(Number(m[1]));
+      else if (act.startsWith('encsw=')) e.tb_encoder_press?.(act.slice(6).trim() === '1' ? 1 : 0);
+      else if (act.startsWith('dist=')) {
+        const d = Number(act.slice(5));
+        if (!Number.isNaN(d)) e.tb_sonar_distance?.(d);
+      } else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));
+      else if (act.startsWith('imu=')) {
+        // 与 CLI parse_imu 相同：3 个数（姿态）或 6 个数（再加变化率）
+        const v = act.slice(4).split(',').map(Number);
+        if ((v.length === 3 || v.length === 6) && v.every((x) => !Number.isNaN(x))) e.tb_imu_set?.(v[0], v[1], v[2], v[3] ?? 0, v[4] ?? 0, v[5] ?? 0);
+      } else if (act.startsWith('touch=')) {
+        const v = act.slice(6).split(',').map(Number);
+        if (v.length === 2 && v.every((x) => !Number.isNaN(x))) e.tb_touch?.(v[0], v[1], 1);
+      } else if (act === 'release') e.tb_touch?.(0, 0, 0);
     }
     if (j.pwmPin !== undefined) {
       const d = e.tb_pin_pwm(j.pwmPin);
@@ -163,7 +195,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         if (!l || Math.abs(f32(l[0] - d)) > f32(0.004) || Math.abs(f32(l[1] - f)) > f32(0.5)) trace.push([d, f, now]);
       }
     }
-    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice && j.servo === undefined ? CPU_HZ / 100 : CPU_HZ / 1000;
+    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice && j.servo === undefined && !j.encoder && !j.sonar ? CPU_HZ / 100 : CPU_HZ / 1000;
     const before = e.tb_cycles();
     const stop = e.tb_run(Math.min(slice, total - done));
     done += e.tb_cycles() - before;
