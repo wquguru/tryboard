@@ -107,7 +107,7 @@ export function createCmdk(ctx: StepCtx): Cmdk {
     );
     const ana = getAnalyzer(ctx);
     out.push(
-      { id: 'meter3v3', group: '命令', label: '量 3V3', meta: '万用表', keys: '万用表 电压 3.3 3v3 multimeter liang', run: () => { select('pin', '3V3'); shell.toast('万用表在 P1-04 中（要先有电路求解 P1-01）：先给你看 3V3 针脚，电压是按板子标称的估算'); } },
+      { id: 'meter3v3', group: '命令', label: '量 3V3', meta: '万用表', keys: '万用表 电压 3.3 3v3 multimeter liang', run: () => { select('pin', '3V3'); shell.toast('先给你看 3V3 针脚；要读电路求解出的电压，按工具条「万用表」再点 3V3 针'); } },
       { id: 'power:ext', group: '命令', label: '换外接 5 V 并重跑', meta: '供电', keys: '外接 5v 电源 power ext 重跑 舵机', run: () => powerRerun(true) },
       { id: 'power:usb', group: '命令', label: '换回 USB 供电并重跑', meta: '供电', keys: 'usb 电脑 power 重跑', run: () => powerRerun(false) },
       { id: 'rerun', group: '命令', label: '再跑一次（重新上电）', meta: '运行', keys: 'rerun reboot 重新上电 复位 reset', run: () => { goBench(); session.reboot(); } },

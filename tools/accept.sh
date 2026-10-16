@@ -41,6 +41,10 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
     missing = [e for e in t['expect'] if e not in out]
     notes = []
     if missing: notes.append('缺少输出: ' + ', '.join(missing))
+    # absent：不该出现的输出（如外接 5 V 时不能有欠压复位）
+    present = [e for e in t.get('absent', []) if e in out]
+    if present:
+        notes.append('不该出现: ' + ', '.join(present)); missing += ['absent:' + e for e in present]
     # stderr_expect：模拟器侧观察到的结果（如虚拟 USB 主机解码出的键盘输入），不是固件自己打印的
     for e in t.get('stderr_expect', []):
         if e not in err:
@@ -123,6 +127,10 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
 sys.exit(1 if bad else 0)
 PY
 
+# 电路求解器与 ngspice 对照（P1-01）：tools/elec/*.cir；本机没有 ngspice 时跳过并写明原因
+echo -e "\n## 电路求解器 vs ngspice（tools/elec）" >> $REPORT
+python3 tools/elec/compare.py --md >> $REPORT 2>&1 || fail=1
+
 echo -e "\n## 关卡（firmware/levels.json，参考固件）\n\`\`\`" >> $REPORT
 tools/check.py --ref --all >> $REPORT 2>&1 || fail=1
 echo '```' >> $REPORT
@@ -183,15 +191,18 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/replay.mjs 2>&1 | grep '^\[replay\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   # 要看到汇总行（"[replay] PASS（…"）才算过：脚本中途崩了时最后一行是某一项的 PASS，不能算
-  echo "$r" | tail -1 | grep -q '^\[replay\] PASS（' || fail=1
+  echo "$r" | tail -1 | grep -q '^\[replay\] PASS（' || { echo "- [replay] 脚本没跑完" >> $REPORT; fail=1; }
+  r=$(node tools/webtest/elec.mjs 2>&1 | grep '^\[elec\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[elec\] PASS（' || { echo "- [elec] 脚本没跑完" >> $REPORT; fail=1; }
   r=$(node tools/webtest/interact.mjs 2>&1 | grep '^\[interact\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   # 要看到汇总行（"[interact] PASS（…"）才算过：脚本中途崩了时最后一行是某一项的 PASS，不能算
-  echo "$r" | tail -1 | grep -q '^\[interact\] PASS（' || fail=1
+  echo "$r" | tail -1 | grep -q '^\[interact\] PASS（' || { echo "- [interact] 脚本没跑完" >> $REPORT; fail=1; }
   # 逻辑分析仪事件（P1-05）：网页实时事件 = 命令行 --trace-io 重放（逐条），回退后重建的也一致
   r=$(node tools/webtest/traceio.mjs 2>&1 | grep '^\[traceio\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q PASS || fail=1
+  echo "$r" | tail -1 | grep -q '^\[traceio\] PASS（' || { echo "- [traceio] 脚本没跑完" >> $REPORT; fail=1; }
   r=$(node tools/webtest/editor.mjs 2>&1 | tail -1)
   echo "- 元件编辑器（上传固件 + 加 BME280 / LED）：$r" >> $REPORT
   echo "$r" | grep -q PASS || fail=1

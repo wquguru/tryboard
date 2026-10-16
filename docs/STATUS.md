@@ -1,6 +1,6 @@
 # 覆盖矩阵
 
-最后更新：2026-10-16（`tools/accept.sh --no-qemu` 全部通过：固件 37/37，关卡参考固件 8/8（含 07-spin / 07-lens），网页冒烟 15 个示例 + 关卡 / 装配 / 首页 22 项）
+最后更新：2026-10-16（`tools/accept.sh --no-qemu` 全部通过：固件 40/40（含 s3-brownout-usb / -ext），ngspice 对照 10/10，关卡参考固件 8/8（含 07-spin / 07-lens），网页冒烟 15 个示例 + 关卡 / 装配 / 首页 22 项）
 
 ## ESP32-C3
 | 模块 | 状态 | 验收 | 备注 |
@@ -77,6 +77,16 @@
 | 装配成品 lens（透镜小人） | ✅ | 启动 MOOD 0 normal、每 3 秒眨眼（BLINK n）、BOOT 切 MOOD 1 happy → 2 love → 3 sleepy → 0 normal；检查点 lens-1（lens-blink）、lens-2（lens-mood）、07-lens 参考固件全过 | 场景层验收 |
 | 装配成品 spin（会转身的小黄） | ✅ | GPIO4 50Hz 占空比 0.042..0.108（脉宽 0.833–2.167ms）、SPIN ±60 交替、眼珠随转向重画（EYE R / EYE L）、BOOT 后 LOOK FRONT（1.5ms）且眼珠回正（青色重心 119.7）；检查点 spin-1（spin-face）、spin-2（spin-turn）、07-spin 参考固件全过 | 舵机机械响应不建模 |
 | USB OTG / Wi-Fi / BLE | ☐ | — | USB OTG 在另一分支开发 |
+
+## 电气（`core/crates/elec`，C3 / S3 共用）
+| 模块 | 状态 | 验收 | 备注 |
+|---|---|---|---|
+| 直流 / 瞬态求解器（MNA + 隐式欧拉 + PWL Katzenelson） | ✅ | `tools/elec` 10 个网表与 ngspice-47 对照最大误差 0.039%；网页 / 命令行重放逐字节一致（webtest/elec.mjs） | 估算模型；没有 ngspice 时 accept.sh 跳过该节 |
+| 开发板供电网络（USB 0.5 A 限流、外接 5 V 2 A、SGM2212 LDO、去耦、芯片 / 模块 / 舵机负载） | 🟡 | 单测 + CLI `--elec-report` | 全部参数估算，未经真机标定（DECISIONS「电气模型」）；C3-DevKitM-1 的 LDO 按 S3 同款，待核 |
+| 欠压复位（原因 15，ROM 头 rst:0xf） | ✅ | s3-brownout-usb 复位、s3-brownout-ext 不复位；网页时间线「欠压复位」 | 半路反向扫动才复位；第 05 关、气象站默认 USB 下不复位；spin 来回转身 USB 下开机复位 1 次。跳过 ROM 引导，复位间隔比真机密；< 1.8 V 应为上电复位，未区分 |
+| SG90 二阶动力学 | ✅ | 单测（速度、过冲、起步尖峰、堵转） | 只影响电流与 3D；参数估算 |
+| 万用表（电压） | ✅ | agent-browser 量 3V3 = 求解器；PWM 读平均 | 只有电压档、黑表笔固定 GND |
+| 接线错误（短路 / 对打 / LED 无电阻）走网络求解 | ☐ | — | 仍是 W1–W5 规则估算 |
 
 ## 网页
 | 项 | 状态 |

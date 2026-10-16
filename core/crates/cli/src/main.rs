@@ -2,7 +2,7 @@
 
 use std::io::Write;
 use std::time::Instant;
-use tryboard_machine::{Chip, Machine, SensorEnv, Stop, CPU_HZ};
+use tryboard_machine::{Chip, Hw, Machine, PowerMode, SensorEnv, Stop, BROWNOUT_RESET, CPU_HZ};
 use tryboard_rv32::{elf::Elf, Bus, BusFault, Cpu, Exit};
 
 fn usage() -> ! {
@@ -13,6 +13,9 @@ fn usage() -> ! {
                [--trace-io <事件.txt>] [--trace-pins all|4,8,…]（逻辑分析仪事件：GPIO / PWM / WS2812 / I2C 事务，按周期盖戳）
                [--i2c ssd1306@0x3c,bme280@0x76] [--env 温度,湿度,气压Pa] [--oled]
                [--spi gc9a01]（S3：SCLK=12 MOSI=11 CS=10 DC=14 RST=13 背光=15；C3：SCLK=6 MOSI=7 CS=10 DC=5 RST=4 背光=3）[--lcd-ppm <最后一帧.ppm>]
+               [--power usb|ext]（默认 usb；ext = 舵机由外接 5 V 2 A 供电）[--servo <GPIO>]（接一个 SG90，电流进供电网络）
+               [--elec-report]（各节点最低电压、峰值电流、欠压复位次数）；脚本动作 power=usb|ext
+  tryboard elec-net <网表.cir> [--at 秒,秒...]（直流 / 瞬态求解，与 ngspice 对照用，见 tools/elec）
   tryboard riscv-test <test.elf>..."
     );
     std::process::exit(2)
@@ -28,6 +31,7 @@ fn main() {
     match args.first().map(|s| s.as_str()) {
         Some("run") => run(&args[1..]),
         Some("riscv-test") => riscv_tests(&args[1..]),
+        Some("elec-net") => elec_net(&args[1..]),
         _ => usage(),
     }
 }
@@ -129,6 +133,20 @@ fn run(args: &[String]) {
             m.env_set(SensorEnv { temp_c: *t, humidity: *h, pressure_pa: *p });
         }
     }
+    // 供电：--power usb|ext、--servo GPIO（舵机电流从哪路电取，见 tryboard-elec）
+    if let Some(p) = opt(args, "--power") {
+        match PowerMode::parse(&p) {
+            Some(mode) => m.set_power(mode),
+            None => {
+                eprintln!("--power 只认 usb / ext");
+                std::process::exit(2)
+            }
+        }
+    }
+    let servo: Option<u32> = opt(args, "--servo").and_then(|s| s.parse().ok());
+    if let Some(pin) = servo {
+        m.servo_attach(pin);
+    }
     let total = (seconds * CPU_HZ as f64) as u64;
     let t0 = Instant::now();
     let mut out = Vec::new();
@@ -154,7 +172,7 @@ fn run(args: &[String]) {
         Some((a, b)) => Some((hex(a)?, hex(b)?)),
         None => hex(&s).map(|a| (a, a + 4)),
     });
-    if let Machine::C3(c) = &mut m {
+    if let Hw::C3(c) = &mut m.hw {
         c.bus.watch = watch;
     }
     // 逻辑分析仪事件：每个时间片取走一次写进文件（格式与网页 iotrace.ts 的 eventLine 逐字相同）
@@ -200,6 +218,11 @@ fn run(args: &[String]) {
                 if let [t, h, p] = v.as_slice() {
                     m.env_set(SensorEnv { temp_c: *t, humidity: *h, pressure_pa: *p });
                 }
+            } else if let Some(p) = act.strip_prefix("power=") {
+                // 网页快捷卡片的 USB ↔ 外接 5 V
+                if let Some(mode) = PowerMode::parse(p.trim()) {
+                    m.set_power(mode);
+                }
             } else if let Some(t) = act.strip_prefix("uart=") {
                 m.uart_push(t.replace("\\n", "\n").as_bytes());
             } else if let Some(t) = act.strip_prefix("usbcdc=") {
@@ -218,8 +241,9 @@ fn run(args: &[String]) {
             }
         }
         // 有 --inputs 时始终 1ms 一片：与网页实时运行（worker.ts）的时间片完全相同，S3 双核的交替点才一致，重放逐周期复现
+        // 接了舵机也 1ms 一片：供电网络按每片的芯片活动 / PWM 推进，片长与网页相同结果才相同
         // --trace-io 也是 1ms 一片：网页 worker 就这样切，事件序列才能与网页逐条对拍
-        let slice = if si >= script.len() && pwm_pin.is_none() && inputs.is_none() && trace_io.is_none() { CPU_HZ / 100 } else { CPU_HZ / 1000 };
+        let slice = if si >= script.len() && pwm_pin.is_none() && inputs.is_none() && servo.is_none() && trace_io.is_none() { CPU_HZ / 100 } else { CPU_HZ / 1000 };
         let before = m.cycles();
         stop = if trace > 0 {
             m.run_traced(slice.min(total - done), &mut ring, trace)
@@ -243,7 +267,11 @@ fn run(args: &[String]) {
         if let Stop::Reset(r) = stop {
             // 软件复位：重新上电（flash / NVS 保留），最多 50 次，防止崩溃重启死循环跑满
             resets += 1;
-            eprintln!("[tryboard] 软件复位（原因 {r}），第 {resets} 次重新上电");
+            if r == BROWNOUT_RESET {
+                eprintln!("[tryboard] {now_s:.3}s 欠压复位（3V3 低于门限，原因 15），第 {resets} 次重新上电");
+            } else {
+                eprintln!("[tryboard] 软件复位（原因 {r}），第 {resets} 次重新上电");
+            }
             if resets > 50 {
                 break;
             }
@@ -292,7 +320,7 @@ fn run(args: &[String]) {
     for (a, n) in un.iter().take(12) {
         eprintln!("    0x{:08x}  {:>8} 次", a, n);
     }
-    if let Machine::C3(c) = &mut m {
+    if let Hw::C3(c) = &mut m.hw {
         if !c.bus.watch_hits.is_empty() {
             // 顺序日志写文件，终端只给按（地址, 读写, PC）汇总
             if let Some(path) = opt(args, "--watch-log") {
@@ -406,6 +434,9 @@ fn run(args: &[String]) {
             None => eprintln!("[tryboard] 这颗芯片没有原生 USB OTG"),
         }
     }
+    if args.iter().any(|a| a == "--elec-report") {
+        eprint!("{}", m.elec.report());
+    }
     let (tr, nack) = m.i2c_stats();
     if tr > 0 {
         eprintln!("[tryboard] I2C 事务 {tr} 次，NACK {nack} 次");
@@ -448,6 +479,25 @@ fn run(args: &[String]) {
         let ok = String::from_utf8_lossy(&out).contains(e.as_str());
         eprintln!("[tryboard] 期望输出 {:?}: {}", e, if ok { "PASS" } else { "FAIL" });
         std::process::exit(if ok { 0 } else { 1 });
+    }
+}
+
+/// 解一个 SPICE 子集网表，打印节点电压：`v(节点)@时刻 = 值`（.op 时刻写 0）
+fn elec_net(args: &[String]) {
+    let Some(path) = args.first() else { usage() };
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("读网表 {path}: {e}"));
+    let nl = match tryboard_elec::spice::Netlist::parse(&text) {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(2)
+        }
+    };
+    let at: Vec<f64> = opt(args, "--at").map(|s| s.split(',').filter_map(tryboard_elec::spice::value).collect()).unwrap_or_default();
+    for (t, v) in nl.run(&at) {
+        for (k, name) in nl.names.iter().enumerate().skip(1) {
+            println!("v({name})@{t:e} = {:.9e}", v[k]);
+        }
     }
 }
 

@@ -127,6 +127,8 @@ export interface Bench extends ScenePickApi {
   setScene(spec: SceneSpec): void;
   /** 引脚电平 / 输出使能：低 32 位与高位分开传（JS 位运算只有 32 位，S3 有 49 个引脚） */
   setGpio(level: number, enable: number, pwm?: number[], levelHi?: number, enableHi?: number): void;
+  /** 舵机输出轴角度（度），来自内核的舵机动力学；调过以后这个舵机不再按 PWM 自己追目标 */
+  setServoAngle(pin: number, deg: number): void;
   /** 换开发板（按固件的芯片），外接元件随之重新接线 */
   setBoard(chip: ChipId): void;
   /** OLED 画面：128×64 字节亮度 */
@@ -1461,7 +1463,7 @@ export function createBench(container: HTMLElement): Bench {
     target: number;
   }
   let leds: LedState[] = [];
-  let servos: { pin: number; horn: THREE.Group; freq: number; angle: number; target: number }[] = [];
+  let servos: { pin: number; horn: THREE.Group; freq: number; angle: number; target: number; phys?: boolean }[] = [];
   let pots: { pin: number; knob: THREE.Group; hit: THREE.Mesh; v: number }[] = [];
   let buzzers: { pin: number; membrane: THREE.Mesh; waves: THREE.Group; waveMat: THREE.MeshBasicMaterial; on: boolean }[] = [];
   let potCb: ((pin: number, v: number) => void) | null = null;
@@ -2116,7 +2118,8 @@ export function createBench(container: HTMLElement): Bench {
     }
     // 舵机有转速上限（SG90 约 0.1s / 60°），舵盘追目标角度
     for (const sv of servos) {
-      const step = 600 / 60;
+      // 有动力学角度（setServoAngle）就直接用；否则按转速上限追 PWM 目标
+      const step = sv.phys ? 360 : 600 / 60;
       sv.angle += Math.max(-step, Math.min(step, sv.target - sv.angle));
       sv.horn.rotation.y = ((sv.angle - 90) * Math.PI) / 180;
     }
@@ -2180,10 +2183,18 @@ export function createBench(container: HTMLElement): Bench {
       }
       for (const sv of servos) {
         const d = pwm?.[sv.pin] ?? -1;
-        if (d <= 0) continue;
+        if (d <= 0 || sv.phys) continue;
         const us = (d * 1e6) / sv.freq;
         sv.target = Math.max(0, Math.min(180, ((us - 500) / 2000) * 180));
       }
+    },
+    /** 舵机输出轴角度（度，tryboard-elec 的二阶动力学；有过冲 / 堵转，可超出 0–180 一点） */
+    setServoAngle(pin: number, deg: number) {
+      for (const sv of servos)
+        if (sv.pin === pin) {
+          sv.phys = true;
+          sv.target = deg;
+        }
     },
     setPot(pin, v) {
       const pot = pots.find((p) => p.pin === pin);

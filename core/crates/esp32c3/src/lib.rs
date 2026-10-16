@@ -837,6 +837,10 @@ impl Esp32c3 {
         m.bus.gpio.ext_in = self.bus.gpio.ext_in;
         m.bus.gpio.ext_driven = self.bus.gpio.ext_driven;
         m.bus.adc.pin_mv = self.bus.adc.pin_mv;
+        // 外接器件、引脚记录、灯带解码是外部世界的一部分，复位后还在（与 S3 的 reboot 一致）
+        m.bus.i2c0.devices = std::mem::take(&mut self.bus.i2c0.devices);
+        m.bus.ws2812 = std::mem::take(&mut self.bus.ws2812);
+        m.bus.gpio_log = std::mem::take(&mut self.bus.gpio_log);
         m.bus.iotrace = self.bus.iotrace.carry();
         // 外接屏不随芯片复位消失（它的复位脚由固件重新驱动）
         m.bus.lcd = self.bus.lcd.take();

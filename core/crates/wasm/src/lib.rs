@@ -3,7 +3,7 @@
 //! JS 先用 tb_image_chip 看镜像是哪颗芯片、取对应的 ROM，再 tb_boot。
 
 use std::cell::RefCell;
-use tryboard_machine::{Chip, Machine, SensorEnv, Stop};
+use tryboard_machine::{Chip, Machine, PowerMode, SensorEnv, Stop};
 
 thread_local! {
     static M: RefCell<Option<Machine>> = const { RefCell::new(None) };
@@ -13,6 +13,8 @@ thread_local! {
     static USB_JSON: RefCell<String> = const { RefCell::new(String::new()) };
     static REPORT: RefCell<String> = const { RefCell::new(String::new()) };
     static IO: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    // 本次上电以来 tb_run 里做过几次复位重新上电；上限（u32::MAX = 不限）给离线验收对齐 CLI 的"最多 50 次"
+    static RESETS: std::cell::Cell<(u32, u32)> = const { std::cell::Cell::new((0, u32::MAX)) };
 }
 
 fn with<R>(default: R, f: impl FnOnce(&mut Machine) -> R) -> R {
@@ -61,6 +63,7 @@ pub unsafe extern "C" fn tb_boot(rom: *const u8, rom_len: usize, flash: *const u
     match Machine::boot(rom, flash) {
         Ok((m, _)) => {
             M.with(|c| *c.borrow_mut() = Some(m));
+            RESETS.with(|r| r.set((0, u32::MAX)));
             0
         }
         Err(e) => {
@@ -91,7 +94,19 @@ pub extern "C" fn tb_error_len() -> usize {
     ERR.with(|c| c.borrow().len())
 }
 
-/// 跑 cycles 个 CPU 周期。返回 0=跑满，1=异常，2=未实现 HLE，-1=没有机器。
+/// 复位次数上限：超过后 tb_run 不再重新上电、返回 3（与 CLI 的"最多 50 次"一致）。tb_boot 时恢复成不限
+#[no_mangle]
+pub extern "C" fn tb_reset_limit(n: u32) {
+    RESETS.with(|r| r.set((r.get().0, n)));
+}
+
+/// 本次上电以来 tb_run 里复位重新上电的次数（软件复位 + 欠压复位）
+#[no_mangle]
+pub extern "C" fn tb_reset_count() -> u32 {
+    RESETS.with(|r| r.get().0)
+}
+
+/// 跑 cycles 个 CPU 周期。返回 0=跑满，1=异常，2=未实现 HLE，3=复位次数超过上限（停在复位前），-1=没有机器。
 #[no_mangle]
 pub extern "C" fn tb_run(cycles: f64) -> i32 {
     with(-1, |m| {
@@ -101,8 +116,13 @@ pub extern "C" fn tb_run(cycles: f64) -> i32 {
         match r {
             Stop::Budget => 0,
             Stop::Reset(reason) => {
-                // 软件复位：在内核里直接重新上电（flash / NVS 保留），页面感知不到中断
-                OUT.with(|o| o.borrow_mut().extend_from_slice("\n[试板] 软件复位，重新上电\n".as_bytes()));
+                // 软件复位 / 欠压复位：在内核里直接重新上电（flash / NVS 保留），页面感知不到中断。
+                // ROM 的复位头（rst:0x..）由 Machine::reboot 写进串口，与命令行逐字节相同
+                let (n, lim) = RESETS.with(|r| r.get());
+                RESETS.with(|r| r.set((n + 1, lim)));
+                if n + 1 > lim {
+                    return 3;
+                }
                 match m.reboot(reason) {
                     Ok(()) => 0,
                     Err(e) => {
@@ -260,6 +280,83 @@ pub extern "C" fn tb_lcd_version() -> u32 {
 #[no_mangle]
 pub extern "C" fn tb_lcd_ptr() -> *const u8 {
     with(std::ptr::null(), |m| m.lcd().map(|d| d.render().as_ptr()).unwrap_or(std::ptr::null()))
+}
+
+// ---------------------------------------------------------------- 供电网络（tryboard-elec，P1-01 / P1-02）
+
+/// 供电方式：0 = 只有 USB（舵机也吃 USB 的 5V），1 = 舵机由外接 5 V 2 A 供电
+#[no_mangle]
+pub extern "C" fn tb_power_set(mode: u32) {
+    with((), |m| m.set_power(if mode == 1 { PowerMode::Ext } else { PowerMode::Usb }))
+}
+
+/// 在 GPIO pin 上接一个 SG90（舵机电流进供电网络，角度由二阶动力学给出）
+#[no_mangle]
+pub extern "C" fn tb_servo_attach(pin: u32) {
+    with((), |m| m.servo_attach(pin))
+}
+
+/// 节点电压（V）：1 = 5V 轨，2 = 3V3，3 = 舵机红线，4 = 外接 5 V
+#[no_mangle]
+pub extern "C" fn tb_elec_v(node: u32) -> f64 {
+    with(0.0, |m| m.elec.node_v(node as usize))
+}
+
+/// 电流（A）：0 = USB 口，1 = 外接电源，2 = 舵机，3 = LDO 输出（3V3 总电流），4 = 芯片
+#[no_mangle]
+pub extern "C" fn tb_elec_i(which: u32) -> f64 {
+    with(0.0, |m| {
+        let n = &m.elec.now;
+        match which {
+            0 => n.i_usb,
+            1 => n.i_ext,
+            2 => n.i_servo,
+            3 => n.i_3v3,
+            _ => n.i_chip,
+        }
+    })
+}
+
+/// 上电以来的统计：0 = 5V 最低，1 = 3V3 最低，2 = 舵机端最低，3 = USB 峰值电流，4 = 外接峰值，5 = 舵机峰值，
+/// 6 = 3V3 峰值，7 = 欠压复位次数，8 = 芯片是否被欠压复位按住（1/0）
+#[no_mangle]
+pub extern "C" fn tb_elec_stat(which: u32) -> f64 {
+    with(0.0, |m| {
+        let s = &m.elec.stats;
+        let v = |x: f64| if x == f64::MAX { f64::NAN } else { x };
+        match which {
+            0 => v(s.min_v5),
+            1 => v(s.min_v3v3),
+            2 => v(s.min_v_servo),
+            3 => s.peak_i_usb,
+            4 => s.peak_i_ext,
+            5 => s.peak_i_servo,
+            6 => s.peak_i_3v3,
+            7 => s.resets as f64,
+            _ => m.elec.held as u32 as f64,
+        }
+    })
+}
+
+/// 第 i 次欠压复位的模拟时刻（秒）；没有返回 -1
+#[no_mangle]
+pub extern "C" fn tb_elec_brownout_t(i: u32) -> f64 {
+    with(-1.0, |m| m.elec.stats.brownouts.get(i as usize).map(|b| b.0).unwrap_or(-1.0))
+}
+
+/// 舵机输出轴角度（度）；没接舵机返回 NaN
+#[no_mangle]
+pub extern "C" fn tb_servo_angle() -> f64 {
+    with(f64::NAN, |m| m.elec.servo.as_ref().map(|s| s.angle_deg()).unwrap_or(f64::NAN))
+}
+
+/// 与命令行 `--elec-report` 相同的文字，返回长度；内容用 tb_report_ptr 读（与 tb_report 共用缓冲）
+#[no_mangle]
+pub extern "C" fn tb_elec_report() -> usize {
+    let r = with(String::new(), |m| m.elec.report());
+    let n = r.len();
+    REPORT.with(|b| *b.borrow_mut() = r);
+    n
 }
 
 // ---------------------------------------------------------------- 原生 USB（ESP32-S3）

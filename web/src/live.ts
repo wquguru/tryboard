@@ -1,6 +1,6 @@
 // 首页 / 关卡页用的实时模拟：起一个 worker.ts，跑一份固件，把每帧状态交给视图。
 import { fetchBuf, imageChip, loadRom, loadWasm } from './assets';
-import type { Env, FromWorker, PwmEvent, Snapshot, ToWorker } from './worker';
+import type { Env, FromWorker, PowerMode, PwmEvent, Snapshot, ToWorker } from './worker';
 import type { InputEvent, InputLog } from './inputlog';
 import { emptyFrame, type LiveFrame } from './views/common';
 
@@ -10,6 +10,10 @@ export interface LiveOptions {
   i2c: { kind: string; addr: number }[];
   env: Env;
   lcd?: boolean;
+  /** 舵机信号脚（接上才有舵机电流、欠压复位） */
+  servo?: number;
+  /** 上电时的供电方式（默认 usb） */
+  power?: PowerMode;
   onConsole?(text: string): void;
   onFrame?(f: LiveFrame, simSeconds: number): void;
   /** 原始 tick（引脚电平、PWM），给要驱动 3D 台面的页面用 */
@@ -31,6 +35,8 @@ export interface SeekJob {
   flash: ArrayBuffer;
   i2c: { kind: string; addr: number }[];
   lcd: boolean;
+  servo?: number;
+  power?: PowerMode;
   /** 上电时的环境（日志第一条 env） */
   env: Env;
   events: InputEvent[];
@@ -106,7 +112,7 @@ export class LiveSim {
     const [wasm, flash] = [await loadWasm(), this.flash];
     const rom = await loadRom(imageChip(flash));
     Object.assign(this.frame, emptyFrame());
-    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd });
+    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power });
   }
   reset() {
     return this.start();
@@ -118,9 +124,18 @@ export class LiveSim {
     return this.start();
   }
   /** 换外接器件（按清单重摆台面）：下次 start / reset 生效 */
-  configure(p: { i2c: LiveOptions['i2c']; lcd?: boolean }) {
+  configure(p: { i2c: LiveOptions['i2c']; lcd?: boolean; servo?: number }) {
     this.o.i2c = p.i2c;
     this.o.lcd = p.lcd;
+    this.o.servo = p.servo;
+  }
+  powerMode(): PowerMode {
+    return this.o.power ?? 'usb';
+  }
+  /** USB ↔ 外接 5 V：在线生效（进输入日志），也作为下次上电的初始供电 */
+  setPower(mode: PowerMode) {
+    this.o.power = mode;
+    this.send({ type: 'power', mode });
   }
   press(down: boolean) {
     this.send({ type: 'gpio', pin: this.bootPin, level: down ? 0 : -1 });
@@ -178,13 +193,17 @@ export class LiveSim {
     this.o.fw = job.flash;
     this.o.i2c = job.i2c;
     this.o.lcd = job.lcd;
+    this.o.servo = job.servo;
+    // 回退停住以后的供电 = 日志里最后一次切换（没有就是上电时的）
+    const sup = [...job.events].reverse().find((e) => e.kind === 'supply' && Math.round(e.tMs * 160000) < Math.round(job.untilMs * 160000));
+    this.o.power = sup && sup.kind === 'supply' ? sup.mode : job.power;
     const last = [...job.events].reverse().find((e) => e.kind === 'env' && Math.round(e.tMs * 160000) < Math.round(job.untilMs * 160000));
     this.env = last && last.kind === 'env' ? { temp: last.temp, humidity: last.humidity, pressure: last.pressure } : { ...job.env };
     this.sensorOffset = 0;
     Object.assign(this.frame, emptyFrame());
     return new Promise((r) => {
       this.seekWaiter = r;
-      this.send({ type: 'seek', wasm: wasm.slice(0), rom: rom.slice(0), flash: job.flash.slice(0), i2c: job.i2c, env: job.env, lcd: job.lcd, events: job.events, untilMs: job.untilMs });
+      this.send({ type: 'seek', wasm: wasm.slice(0), rom: rom.slice(0), flash: job.flash.slice(0), i2c: job.i2c, env: job.env, lcd: job.lcd, servo: job.servo, power: job.power, events: job.events, untilMs: job.untilMs });
     });
   }
   /** 回退停住以后从那一刻接着实时跑：这次运行重新算"进行中" */

@@ -1,0 +1,9 @@
+* 02 惠斯通电桥，中间跨 4.7 k 负载
+V1 top 0 DC 3.3
+R1 top a 1k
+R2 a 0 2k
+R3 top b 1.5k
+R4 b 0 1k
+R5 a b 4.7k
+.op
+.end

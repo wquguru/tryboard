@@ -704,6 +704,56 @@
   }
  },
  {
+  "id": "s3-brownout-usb",
+  "fw": "s3-brownout",
+  "chip": "esp32s3",
+  "seconds": 1.5,
+  "args": [
+   "--servo",
+   "4",
+   "--power",
+   "usb",
+   "--elec-report"
+  ],
+  "expect": [
+   "BOOT 1 reason=POWERON",
+   "SWEEP 1 -> 0",
+   "rst:0xf (BROWNOUT_RST)",
+   "BOOT 2 reason=BROWNOUT"
+  ],
+  "absent": [
+   "TRYBOARD_OK"
+  ],
+  "stderr_expect": [
+   "欠压复位（3V3 低于门限"
+  ]
+ },
+ {
+  "id": "s3-brownout-ext",
+  "fw": "s3-brownout",
+  "chip": "esp32s3",
+  "seconds": 2.5,
+  "args": [
+   "--servo",
+   "4",
+   "--power",
+   "ext",
+   "--elec-report"
+  ],
+  "expect": [
+   "BOOT 1 reason=POWERON",
+   "SWEEP 11 -> 0",
+   "TRYBOARD_OK s3-brownout (boot 1)"
+  ],
+  "absent": [
+   "BROWNOUT",
+   "rst:0x"
+  ],
+  "stderr_expect": [
+   "电气 欠压复位 0 次"
+  ]
+ },
+ {
   "id": "lens",
   "chip": "esp32s3",
   "seconds": 3,

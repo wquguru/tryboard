@@ -281,6 +281,27 @@
 - 接线检查新写 W1–W5（`wirecheck.ts`）而不是直接调 `catalog/rules.ts`：采购规则吃的是元件库 id + 模版接线，实验台吃的是场景推出来的线（id 与 3D 一致）；W2 / W5 的来源、可信度沿用 R17 / R15。index.html 的元件编辑器只能改场景，造不出 5 V 接 GPIO / 没电阻 / 缺地，所以用 `?debug=1` 的 `__tbApp.injectWiring()` 造用例；改接 / 拔线不改 3D 画法（不动 board3d.ts），只标红 + 说明
 - 外壳公共接口变化：`Session` 加 `heat / setHeat / setPower / wireMods / setWireMods / restoreScene / onTick / onBoot / onRunEnd / bootCount / snapshot / mark / seek / continueRun`，`frame` 加 `pwmFreq / gpio / enable / gpioHi / enableHi`；`AppState` 加 `editRev / runNo / hist`；`StepCtx.hist`；`Card.place / onHide`；接线与零件信息从 bench.ts 挪到 `app/wiring.ts`；`saveBom` 导出。board3d.ts 未改
 
+## 2026-10-16 · 电气模型（P1-01 直流求解器、P1-02 欠压复位、P1-03 舵机动力学、P1-04 万用表）
+- 决定：新 crate `core/crates/elec`（无依赖）。`mna.rs` 通用求解器：节点电压法 + 隐式欧拉（电容伴随模型），非线性元件全部写成分段线性（USB 限流源、LDO、恒流负载、舵机电机），用 **Katzenelson 法**求解：在当前段线性化 → 稠密 LU（部分主元）→ 解若落在同一组段里即精确解，否则沿"当前点 → 线性解"走到第一个段边界（二分）换段再解。不用导数、不调步长，结果只取决于输入
+- 理由：节点只有 4 个，稠密 LU 足够；先试了"普通 PWL 牛顿 + 残差线搜索"，在 LDO 稳压段（100 S 斜率的窄谷）和浮空节点上来回跳、发散（从 0 V 起算时 3V3 跑到 1e11 V），Katzenelson 每轮只跨一个边界，不会被浮空节点的超大线性解带跑
+- 替代：(a) 光滑化（softplus 代替 max）+ 牛顿——要调光滑系数，误差与 ngspice 的 min/max 对不上；(b) 引 nalgebra / 现成 SPICE——违反"不加 crate"，也不需要
+- 对照：`tools/elec/*.cir` 10 个网表（分压、电桥、两源并联、电流源 T 网、RC 充电、两级 RC、USB 板静态、USB + 舵机堵转、LDO 压差、欠压瞬态）。自定义元件在网表里写两遍：`*tb:` 注释行给我们读、等价 B 源给 ngspice 读；`.op` 加 `.nodeset`（ngspice 对 min/max 的 B 源从 0 V 起不收敛）。`tools/elec/compare.py` 比全部节点电压（瞬态比终止时刻的 1/4、1/2、1），本机 ngspice-47（brew）实测最大误差 0.039%（RC 充电 5 ms 处，隐式欧拉 vs ngspice 梯形法）
+- 推进：板子模型 `board.rs` 固定 100 µs 一步，只走整步（余数留到下次），由 `Machine::run` 每次跑完一段后用这段的芯片活动推进。网页 worker 与 CLI 都是 1 ms 一片（CLI 接了 `--servo` 时也强制 1 ms 一片，同 `--inputs`），所以两边逐位相同（tools/webtest/elec.mjs：带 15 次欠压复位、中途切外接 5 V 的一次运行，命令行 `--inputs` 重放串口 21292 字节逐字节相同）
+- 板子网络：节点 5V 轨 / 3V3 / 舵机红线 / 外接 5 V。参数与来源（未注明的都是**估算**，未经真机标定）：
+  - USB 口：5.0 V，内阻 0.5 Ω（口内 0.1 + 1 m 线两根 28AWG 约 0.43 + 插头），限流 0.5 A（USB 2.0 规范值；真机口多数能给更多），超过限流后按 20 Ω 斜率掉压（限流开关恒流区的 PWL 近似）
+  - 外接 5 V 2 A：5.0 V，内阻 0.15 Ω（适配器 + DC 母座 + 面包板电源轨），限流 2 A；舵机经杜邦线 0.15 Ω 接到它，地共用
+  - 板载 LDO：SGM2212-3.3（ESP32-S3-DevKitC-1，乐鑫论坛工程师答复；C3-DevKitM-1 按同款，待核原理图）。数据手册：800 mA、压差 420 mV @ 800 mA → 调整管全开等效 0.525 Ω；限流值手册没给，取 1.2 A；输出电阻 0.01 Ω、静态 0.1 mA
+  - 去耦：5V 轨 10 µF、3V3 轨 22 µF（开发板输入 / 输出电容 + 模组内电容）
+  - 芯片电流（3V3）：S3 空闲 20 mA + 每个忙的核 12 mA，Wi-Fi 打开 +75 mA、发射 340 mA；C3 14 / 10 / 65 / 335 mA；复位按住 5 mA。量级取自 S3 / C3 数据手册功耗表（modem-sleep 数十 mA、802.11b 21 dBm 发射约 340 / 335 mA），"忙"= 执行指令数 / 周期数（WAITI / WFI 时为 0）；Wi-Fi 发射按每帧 0.6 ms 计（只有 C3 有 Wi-Fi 模型）
+  - 板上其它 3V3：电源灯 2 mA + CP2102N 8 mA + 板载 WS2812 静态 1 mA；模块取 catalog 的 `currentMa.typ`（BME280 3.6 µA 数据手册值、SSD1306 10 mA 估算、GC9A01 25 mA 估算），CLI `--i2c` / `--spi` 挂上就加
+  - 欠压：门限 S3 2.44 V、C3 2.51 V（IDF 5.5 `Kconfig.power` 默认档 ESP_BROWNOUT_DET_LVL_SEL_7，乐鑫标注"估计值"）。IDF 5.5 默认 `ESP_BROWNOUT_USE_INTR=n` → `brownout_hal_config` 开硬件复位（`rst_ena=1`、`rst_wait=0x3ff`），所以复位原因是 RTCWDT_BROWN_OUT_RESET（15）、ROM 打印 `rst:0xf (BROWNOUT_RST)`、`esp_reset_reason()` = ESP_RST_BROWNOUT（9），不经过 "Brownout detector was triggered" 的中断路径。去抖：0x3ff 个周期，计数时钟没在公开资料里查到，按约 8.75 MHz 估 0.12 ms。复位后芯片按住到 3V3 回到门限 + 0.05 V 才放开（这期间不执行指令、时间照走、引脚高阻、PWM 停）
+- 舵机（`servo.rs`，SG90，全部估算）：比例控制器（误差 ≥ 10° 满电压，死区 0.9° ≈ 规格书 10 µs）+ 有刷电机 + 减速箱，折算到输出轴。R = 4.8 V / 0.7 A（catalog 堵转电流估算）= 6.86 Ω；k 由规格书 0.1 s/60° @ 4.8 V 与空载电流 0.15 A（catalog typ）反推 0.360 V·s/rad；η = 0.7 使堵转扭矩与规格书 1.8 kgf·cm 一致；J 按"起步约 25 ms 到全速"反推；机械限位 −8° / 188°；静态 6 mA；上电时角度按 90°。从电源取的电流 = 静态 + max(0, sign(vm)·i)（H 桥：回馈电流记 0）。单测：5 V 下 180° 约 0.3 s、过冲 0.2–6°、起步尖峰 ≈ 堵转电流、5° 小动作峰值 < 0.45 A、外力卡住时 = 堵转电流。舵机只影响电流和 3D 观感（`setServoAngle`），固件读到的东西一个不变
+- 复现结论（P1-02，`board.rs` 场景单测 + CLI）：USB 0.5 A 限流下，舵机**从静止起步**（哪怕 0→180° 跳变、第 05 关的 0/45/90/135/180°、气象站开机 90→105.75°）起步电流约 0.6–0.7 A 超过限流，5V 轨只掉到约 3.05–3.6 V，LDO 进压差但 3V3 仍在 3.0–3.3 V，**不复位**（第 05 关参考固件 `check.py --servo 4 --power usb` 实测 5V 最低 3.462 V、3V3 最低 3.299 V、0 次复位）。只有**没到位就反向**（反接制动，电流 ≈ (V + 反电动势)/R，约 1.2 A）才把 5V 轨拉垮、3V3 掉到 1.5–2.1 V → 欠压复位。所以验收固件 `s3-brownout` 用 0↔180° 每 150 ms 换向；外接 5 V 时同一固件不复位（外接峰值 1.25 A，5V 轨 4.97 V）。气象站默认场景（23.5 ℃、舵机小幅）USB 下不复位，与"按物理估算"一致，如实记录
+- 决定：CLI 默认 `--power usb`，但**不接舵机就没有舵机负载**（`--servo GPIO` 显式接），所以现有用例结果一字不变；关卡（levels.json）没有加 `--servo`，指纹不变（第 05 关带 `--servo 4` 跑出的指纹也相同，因为不复位）。理由：默认 ext 会让"只靠 USB"的坑在命令行里看不到；默认自动把 50 Hz 的脚当舵机又太魔法
+- 决定：复位后补打 ROM 头三行（`ESP-ROM:esp32s3-20210327` / `Build:Mar 27 2021` / `rst:0x.. (名字),boot:0x8 (SPI_FAST_FLASH_BOOT)`，C3 用 20210207 / boot:0xc），所有复位（软件复位 0x3 / 0xc、欠压 0xf）都打，第一次上电不打（现有用例的串口不变）。网页 wasm 原来自己插的"[试板] 软件复位，重新上电"去掉，改由 `Machine::reboot` 统一写，网页与命令行串口逐字节相同
+- 决定：`Machine` 从 enum 改成 `struct { hw: Hw, elec: Board }`（`Hw::C3 / Hw::S3`）：供电网络是外部世界，跨复位保留。顺带修了 C3 `reboot` 丢外接 I2C 器件 / WS2812 解码 / GPIO 记录的问题（与 S3 一致）
+- 网页：worker tick 带 `elec`（5V / 3V3 / 舵机 / 外接节点电压、各路电流、3V3 最低、峰值电流、复位次数、是否按住、舵机角度、供电）和 `brownouts`（新出现的复位时刻）；供电快捷卡片 / 属性面板的 USB ↔ 外接 5 V 真正在线切换（worker `power` 消息 → 输入日志 `supply` 事件 → 脚本 `power=usb|ext`，回退时按原时刻重放）；时间线把欠压复位记成一步（0.5 s 内连着的合并、记次数）；万用表点针读电压（电源脚 = 节点电压；信号脚按逻辑电平 × 当时的 3V3；PWM 脚读平均值）。InputLog 加 `servo` / `power`（上电时的），`cliArgs` 拼出 `--servo N --power X`
+- 不做 / 遗留：USB 口二极管、地线压降、LDO 动态响应、电机电感（τ ≈ 0.15 ms，比步长还短）、芯片在 1.8–2.4 V 之间的异常行为（flash 读错等）、低于约 1.8 V 应是上电复位而不是欠压复位；复位后我们跳过 ROM / 二级引导（真机约 0.3 s），所以 USB 下复位间隔只有约 11 ms，比真机密；去抖时钟、USB 限流斜率、舵机全部参数都要真机标定（P1 的"买零件做真机标定"）
 ## 2026-10-16 · 本地 npm 包 `tryboard`（P1-14）与暗色 / 手机只读（P1-15）
 - 打包：`packages/tryboard/`（private，不发布）。`tools/build_npm.sh` 用 web/node_modules 里已有的 esbuild（vite 自带，不新增依赖）把 `src/cli.ts` 连同网页的 `checks.ts`（判定 + 指纹）、`simrun.ts`（运行循环）、`inputlog.ts` 打成一个 `dist/cli.mjs`，再 `npm pack`。判定只有网页一份，CLI 不另写
 - 运行循环从 `verify-worker.ts` 抽到 `web/src/simrun.ts`（纯函数，无 DOM / Worker），网页验收与 npm 包共用；`imageChip` 也挪进去，assets.ts 转调
@@ -349,3 +370,12 @@
   - 色调映射：lcd3d 用 NeutralToneMapping（ACES 把小黄的黄压得发绿发灰，截图实测）；气象站不变
   - 串口事件：`MOOD n name` → 时间线"换表情：开心"、`LOOK FRONT / AROUND` → "转回正面，停住 / 继续左右转身"；右栏加 转台角度、状态、表情、透镜档位。测试钩子 `window.__tbProduct`（buttonPos / azimuth / turn / ext / mood / look）
   - 替代：在 board3d 里拼成品（另有代理在改 board3d，相机和交互都不同）；透镜用真实光线追踪 / 自写折射着色器（工作量大，transmission 已经够"看出放大"）
+
+## 2026-10-16 · 合并 main（P1-05 / P1-11–15）进电气分支（P1-01–04）
+- `Machine` 已是 `{hw, elec}`：main 的 `io_*`、C3 `lcd()` / `spi_stats()` 改成按 `self.hw` 匹配；C3 接圆屏也把 GC9A01 电流记进供电网络（与 S3 一致）。C3 `reboot` 同时保留外接 I2C / WS2812 / GPIO 记录（电气分支）、`iotrace.carry()` 与 `lcd.take()`（main）
+- CLI：`--trace-io` / `--trace-pins` 与 `--power` / `--servo` / `--elec-report` 并存；接了舵机或带 `--trace-io` 都 1 ms 一片；欠压复位与软件复位分开提示，重新上电失败打印原因
+- 复位计数：电气分支已去掉 wasm 往串口插的"[试板] 软件复位，重新上电"（改为 `Machine::reboot` 补打 ROM 头 `rst:0x..`，CLI 与网页逐字节相同），main 的 simrun 靠这行数复位、做"最多 50 次"。改为 wasm 新增 `tb_reset_limit(n)` / `tb_reset_count()`：simrun 设 50，第 51 次复位 `tb_run` 返回 3、停在复位前不再上电（与 CLI `resets > 50 → break` 同一周期、同一串口）；网页实时页不设上限，行为不变。替代：在 simrun 里数 `rst:0x` 行——固件自己也可能打印这串，不可靠
+- simrun（网页验收 + npm 包共用）加 `servo` / `power` 与脚本动作 `power=`；npm 包 `check` / `run` 加 `--servo` / `--power`（与 check.py 一样叠加在关卡参数上；InputLog 里的 servo 字段两边都不读，只转事件）
+- 行为：关卡都不带 `--servo`，所以 CLI、网页验收、npm 包三方指纹与合并前 main 相同（npm_parity 全一致）；只有实验台实时运行按台面接线接舵机、走供电网络。worker `boot` 同时带 `servo` / `power` 与逻辑分析仪 `ioWatch`，tick 同时带 `elec` / `brownouts`，`io` 消息照旧
+- accept.sh：levels / replay / elec / interact / traceio 一律要求最后一行是汇总行 `[x] PASS（`，否则记"脚本没跑完"
+- ⌘K "量 3V3" 的提示改为指向工具条万用表（P1-04 已有）

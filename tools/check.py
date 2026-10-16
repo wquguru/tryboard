@@ -10,6 +10,9 @@
   tools/check.py <flash.bin> --level 06 --inputs log.txt
                                              用网页导出的输入日志（实验台「导出输入」，或 InputLog JSON）
                                              代替关卡自带的输入脚本，与 `tryboard run --inputs` 同样逐周期重放
+  tools/check.py --ref --level 05 --servo 4 --power usb --elec-report
+                                             接一个 SG90 到 GPIO4、只用 USB 供电（ext = 外接 5 V），打印各节点最低电压 /
+                                             峰值电流 / 欠压复位次数（电气不进指纹）
 退出码：全部通过 0，否则 1。
 """
 import json, math, os, re, subprocess, sys
@@ -183,6 +186,7 @@ def inputs_file(path: str) -> str:
             'pot': lambda: f"mv{e['pin']}={num(e['mv'])}",
             'uart': lambda: f"uart={esc(e['text'])}",
             'usbcdc': lambda: f"usbcdc={esc(e['text'])}",
+            'supply': lambda: f"power={e['mode']}",
         }.get(k)
         if act:
             # 与网页相同：秒、向下取整到微秒
@@ -193,8 +197,8 @@ def inputs_file(path: str) -> str:
     return out
 
 
-def run(fw: str, t: dict, inputs: str = ''):
-    cmd = [CLI, 'run', fw, '--seconds', str(t['seconds']), '--gpio-log', '--ws2812-log'] + t.get('args', [])
+def run(fw: str, t: dict, inputs: str = '', extra=()):
+    cmd = [CLI, 'run', fw, '--seconds', str(t['seconds']), '--gpio-log', '--ws2812-log'] + t.get('args', []) + list(extra)
     if inputs:
         cmd += ['--inputs', inputs_file(inputs)]
     elif t.get('script'):
@@ -211,7 +215,8 @@ def run(fw: str, t: dict, inputs: str = ''):
         lines = [l for l in err.splitlines() if l.strip()]
         tail = [l for l in lines if 'panicked' in l or '启动失败' in l][:1] or lines[-1:] or ['（无输出）']
         res.insert(0, (False, f'模拟器没跑起来：{tail[0][:120]}'))
-    return res, fingerprint(out, report)
+    elec = [l for l in err.splitlines() if l.startswith('[tryboard] 电气') or '欠压复位（' in l]
+    return res, fingerprint(out, report), elec
 
 
 def main():
@@ -225,7 +230,15 @@ def main():
         pick = [l for l in levels if l['id'] == (lv.zfill(2) if lv.isdigit() else lv)]
         if not pick:
             sys.exit(f'没有第 {lv} 关（或这一关没有命令行验收）')
-    skip = {a.index(k) + 1 for k in ('--level', '--inputs') if k in a}
+    skip = {a.index(k) + 1 for k in ('--level', '--inputs', '--power', '--servo') if k in a}
+    # 供电（P1-02）：原样交给 tryboard run
+    extra = []
+    for k in ('--power', '--servo'):
+        if k in a:
+            extra += [k, a[a.index(k) + 1]]
+    show_elec = '--elec-report' in a
+    if show_elec:
+        extra.append('--elec-report')
     inputs = a[a.index('--inputs') + 1] if '--inputs' in a else ''
     pos = [x for i, x in enumerate(a) if not x.startswith('--') and i not in skip]
     if not ref and not pos:
@@ -238,12 +251,15 @@ def main():
             print(f"第 {t['id']} 关 {t['title']}：找不到 {fw}")
             bad += 1
             continue
-        res, fp = run(fw, t, inputs)
+        res, fp, elec = run(fw, t, inputs, extra)
         ok = all(r[0] for r in res)
         bad += not ok
         print(f"第 {t['id']} 关 {t['title']}：{'通过' if ok else '未通过'}  指纹 {fp}")
         for r, d in res:
             print(f"  {'✓' if r else '✗'} {d}")
+        if show_elec:
+            for l in elec:
+                print('  ' + l.replace('[tryboard] ', ''))
         if t.get('assembly'):
             print('  · 装配检查（几何估算）只在网页的装配区里判定，命令行不判')
     sys.exit(1 if bad else 0)

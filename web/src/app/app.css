@@ -673,6 +673,12 @@ canvas.scope { display: block; width: 100%; height: 96px; border: 1px solid var(
 .kv[hidden] { display: none; }
 .qcard .seg { margin-top: 6px; }
 .drow.hd { background: transparent; color: var(--muted); font-size: 11px; padding-top: 0; padding-bottom: 0; }
+
+/* 万用表读数（P1-04）：七段屏的感觉，但仍用等宽字体 */
+.meter { margin: 6px 0 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--field); text-align: right; }
+.meter .mono { font-size: 26px; font-weight: 500; letter-spacing: 0.02em; }
+.meter.sm { margin: 4px 0; padding: 6px 8px; }
+.meter.sm .mono { font-size: 18px; }
 /* 暗色下零件缩略图（黑色线材、电源头）在深色卡片上看不清：垫一块浅底，像商品图 */
 :root[data-theme='dark'] .pc-g { background: #c9ced6; border-radius: 6px; }
 :root[data-theme='dark'] .pc.off .pc-g { opacity: 0.35; }

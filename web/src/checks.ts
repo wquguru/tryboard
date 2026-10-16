@@ -42,7 +42,7 @@ export interface CheckResult {
   text: string;
 }
 
-/** 从 args 里取出 --i2c / --env（网页没有命令行，参数要翻译成启动选项） */
+/** 从 args 里取出 --i2c / --env / --spi / --servo / --power（网页没有命令行，参数要翻译成启动选项） */
 export function bootOptions(l: Level) {
   const a = l.args ?? [];
   const val = (k: string) => {
@@ -59,7 +59,10 @@ export function bootOptions(l: Level) {
   const e = val('--env')?.split(',').map(Number);
   const env = e ? { temp: e[0], humidity: e[1], pressure: e[2] } : undefined;
   const lcd = (val('--spi') ?? '').split(',').includes('gc9a01');
-  return { i2c, env, lcd };
+  const sv = val('--servo');
+  const servo = sv === undefined ? undefined : Number(sv);
+  const power = val('--power') === 'ext' ? ('ext' as const) : ('usb' as const);
+  return { i2c, env, lcd, servo, power };
 }
 
 /** 与命令行一致的定时输入脚本：时间（模拟秒）:动作，`;` 或换行分隔，`#` 开头是注释（CLI 的 parse_script） */

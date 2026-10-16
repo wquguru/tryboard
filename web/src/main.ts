@@ -113,7 +113,9 @@ async function boot(autorun: boolean) {
   usbPanel.reset();
   pendingAutorun = autorun;
   audio.reset();
-  send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: i2cDevices(), env: sensedEnv(), lcd: scene.parts.some((p) => p.type === 'gc9a01') });
+  // 舵机接进供电网络（只有 USB：app.html 的实验台才有 USB ↔ 外接 5 V 切换）
+  const servo = scene.parts.find((p) => p.type === 'servo');
+  send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: i2cDevices(), env: sensedEnv(), lcd: scene.parts.some((p) => p.type === 'gc9a01'), servo: servo && 'pin' in servo ? servo.pin : undefined, power: 'usb' });
 }
 
 const usbPanel = createUsbPanel(document.querySelector('.panel.info')!, (text) => send({ type: 'usbcdc', text }));

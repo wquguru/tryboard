@@ -20,8 +20,10 @@ const USAGE = `tryboard（试板）本地命令行 · 本地包，尚未发布
   tryboard check <flash.bin> --all                   对所有关卡验收同一个固件
   tryboard check <flash.bin> --level 06 --inputs log.txt
                                                      用网页导出的输入日志（脚本文本或 InputLog JSON）代替关卡自带输入
+  tryboard check <flash.bin> --level 05 --servo 4 --power usb
+                                                     接一个 SG90 进供电网络（同 check.py；ext = 外接 5 V 2 A）
   tryboard run <flash.bin> [--seconds 5] [--i2c ssd1306@0x3c,bme280@0x76] [--env 23.5,45,101325]
-               [--spi gc9a01] [--inputs log.txt] [--script "0.5:gpio0=0"] [--pwm-log 4]
+               [--spi gc9a01] [--inputs log.txt] [--script "0.5:gpio0=0"] [--pwm-log 4] [--servo 4] [--power usb|ext]
                                                      跑固件，串口打印到 stdout，观察记录打印到 stderr
 退出码：check 全部通过 0，否则 1；run 模拟器停止（启动失败 / CPU 异常）时 1。
 与仓库里 tools/check.py 同一套规则、同样的输出与指纹。`;
@@ -56,6 +58,13 @@ function assets(flash: Uint8Array) {
 
 const readBin = (p: string) => new Uint8Array(readFileSync(p));
 
+/** --servo / --power（P1-02）：与 check.py 一样原样叠加在关卡参数之上 */
+function supply(a: string[]) {
+  const sv = opt(a, '--servo');
+  const pw = opt(a, '--power');
+  return { servo: sv === undefined ? undefined : Number(sv), power: pw === undefined ? undefined : pw === 'ext' ? ('ext' as const) : ('usb' as const) };
+}
+
 async function check(a: string[]) {
   const levels = expandLevels(JSON.parse(readFileSync(join(PKG, 'levels.json'), 'utf8')) as Level[]).filter((l) => l.ref);
   if (a.includes('--ref')) die('npm 包不带参考固件：--ref 请在仓库里用 tools/check.py --ref');
@@ -69,7 +78,8 @@ async function check(a: string[]) {
     if (!pick.length) die(`没有第 ${lv} 关（或这一关没有命令行验收）`);
   }
   const inputs = opt(a, '--inputs');
-  const fw = positional(a, ['--level', '--inputs'])[0];
+  const fw = positional(a, ['--level', '--inputs', '--servo', '--power'])[0];
+  const sup = supply(a);
   if (!fw) die(USAGE);
   let bad = 0;
   for (const l of pick) {
@@ -79,8 +89,8 @@ async function check(a: string[]) {
       continue;
     }
     const flash = readBin(fw);
-    const { i2c, env, lcd } = bootOptions(l);
-    const job: SimJob = { ...assets(flash), flash, seconds: l.seconds ?? 2, i2c, env, lcd, pwmPin: l.pwm?.pin, script: inputs ? inputsScript(inputs) : l.script, fixedSlice: !!inputs };
+    const { i2c, env, lcd, servo, power } = bootOptions(l);
+    const job: SimJob = { ...assets(flash), flash, seconds: l.seconds ?? 2, i2c, env, lcd, servo: sup.servo ?? servo, power: sup.power ?? power, pwmPin: l.pwm?.pin, script: inputs ? inputsScript(inputs) : l.script, fixedSlice: !!inputs };
     const r = await runSim(job);
     const res: CheckResult[] = evaluate(l, r.stdout, r.report);
     // 模拟器自己没跑起来不能算成固件的错（与 check.py 一致，放第一条）
@@ -96,7 +106,7 @@ async function check(a: string[]) {
 }
 
 async function run(a: string[]) {
-  const valued = ['--seconds', '--i2c', '--env', '--spi', '--inputs', '--script', '--pwm-log'];
+  const valued = ['--seconds', '--i2c', '--env', '--spi', '--inputs', '--script', '--pwm-log', '--servo', '--power'];
   const fw = positional(a, valued)[0];
   if (!fw) die(USAGE);
   if (!existsSync(fw)) die(`找不到 ${fw}`);
@@ -106,8 +116,8 @@ async function run(a: string[]) {
   const pwm = opt(a, '--pwm-log');
   const flash = readBin(fw);
   const r = await runSim(
-    { ...assets(flash), flash, seconds: Number(opt(a, '--seconds') ?? 5), i2c, env, lcd, pwmPin: pwm === undefined ? undefined : Number(pwm), script: inputs ? inputsScript(inputs) : opt(a, '--script'), fixedSlice: !!inputs },
-    { onConsole: (t) => process.stdout.write(t), onReset: (n, stopped) => process.stderr.write(stopped ? `[tryboard] 软件复位，已 ${n} 次，不再重新上电\n` : `[tryboard] 软件复位，第 ${n} 次重新上电\n`) },
+    { ...assets(flash), flash, seconds: Number(opt(a, '--seconds') ?? 5), i2c, env, lcd, ...supply(a), pwmPin: pwm === undefined ? undefined : Number(pwm), script: inputs ? inputsScript(inputs) : opt(a, '--script'), fixedSlice: !!inputs },
+    { onConsole: (t) => process.stdout.write(t), onReset: (n, stopped) => process.stderr.write(stopped ? `[tryboard] 软件复位，已 ${n} 次，不再重新上电\n` : `[tryboard] 复位，第 ${n} 次重新上电\n`) },
   );
   if (r.bootError) die(`[tryboard] 启动失败：${r.bootError}`);
   process.stderr.write(r.report);

@@ -29,6 +29,10 @@ export interface Ex {
   tb_report(): number;
   tb_report_ptr(): number;
   tb_lcd_attach?(): number;
+  tb_reset_limit?(n: number): void;
+  tb_reset_count?(): number;
+  tb_power_set?(mode: number): void;
+  tb_servo_attach?(pin: number): void;
 }
 
 export interface SimJob {
@@ -41,6 +45,9 @@ export interface SimJob {
   script?: string;
   pwmPin?: number;
   lcd?: boolean;
+  /** 舵机信号脚与供电（= CLI --servo / --power）；接了舵机时与 CLI 一样始终 1ms 一片 */
+  servo?: number;
+  power?: 'usb' | 'ext';
   /** 始终 1ms 一片（= CLI 的 --inputs）：重放网页实时运行导出的输入日志时用 */
   fixedSlice?: boolean;
 }
@@ -62,9 +69,6 @@ export interface SimHooks {
   /** 软件复位：第 n 次；stopped = 超过 50 次、不再重新上电 */
   onReset?: (n: number, stopped: boolean) => void;
 }
-
-/** wasm tb_run 在软件复位、重新上电时插进控制台的提示（core/crates/wasm 的 tb_run） */
-const RESET_MARK = '\n[试板] 软件复位，重新上电\n';
 
 const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2 };
 
@@ -110,6 +114,10 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
   for (const d of j.i2c) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
   if (j.env) e.tb_env_set(j.env.temp, j.env.humidity, j.env.pressure);
   if (j.lcd) e.tb_lcd_attach?.();
+  // 与原生 CLI 相同：崩溃重启 / 欠压复位最多 50 次，第 51 次复位就停在复位前（防止重启死循环把时间跑满，也让两边停在同一周期）
+  e.tb_reset_limit?.(50);
+  if (j.servo !== undefined) e.tb_servo_attach?.(j.servo);
+  if (j.power) e.tb_power_set?.(j.power === 'ext' ? 1 : 0);
 
   const script = parseScript(j.script);
   let si = 0;
@@ -132,6 +140,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         const v = act.slice(4).split(',').map(Number);
         if (v.length === 3 && v.every((x) => !Number.isNaN(x))) e.tb_env_set(v[0], v[1], v[2]);
       } else if (act.startsWith('uart=')) bytesIn(e, new TextEncoder().encode(act.slice(5).replaceAll('\\n', '\n')), (p, n) => e.tb_uart_push(p, n));
+      else if (act.startsWith('power=')) e.tb_power_set?.(act.slice(6).trim() === 'ext' ? 1 : 0);
       else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));
     }
     if (j.pwmPin !== undefined) {
@@ -142,33 +151,31 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         if (!l || Math.abs(f32(l[0] - d)) > f32(0.004) || Math.abs(f32(l[1] - f)) > f32(0.5)) trace.push([d, f, now]);
       }
     }
-    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice ? CPU_HZ / 100 : CPU_HZ / 1000;
+    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice && j.servo === undefined ? CPU_HZ / 100 : CPU_HZ / 1000;
     const before = e.tb_cycles();
     const stop = e.tb_run(Math.min(slice, total - done));
     done += e.tb_cycles() - before;
     const n = e.tb_console_len();
-    let resetNow = false;
     if (n) {
-      let t = dec.decode(new Uint8Array(e.memory.buffer, e.tb_console_ptr(), n), { stream: true });
-      // 内核在软件复位时往控制台插一行提示（给实时页面看）；原生 CLI 把它写到 stderr，不进串口输出，这里也拿掉，指纹才一致
-      if (t.includes(RESET_MARK)) {
-        resetNow = true;
-        t = t.replaceAll(RESET_MARK, '');
-      }
+      const t = dec.decode(new Uint8Array(e.memory.buffer, e.tb_console_ptr(), n), { stream: true });
       out += t;
       if (t) hooks.onConsole?.(t);
     }
     e.tb_console_clear();
+    if (stop === 3) {
+      hooks.onReset?.(resets + 1, true);
+      break;
+    }
     if (stop !== 0) {
       error = errText();
       break;
     }
-    // 与原生 CLI 相同：崩溃重启最多 50 次，第 51 次复位就停（防止重启死循环把时间跑满，也让两边停在同一周期）
-    if (resetNow && ++resets > 50) {
-      hooks.onReset?.(resets, true);
-      break;
+    const rc = e.tb_reset_count?.() ?? 0;
+    // 注意：不能写成 hooks.onReset?.(++resets)——没有回调时可选调用连参数都不求值，计数不涨就死循环
+    while (resets < rc) {
+      resets++;
+      hooks.onReset?.(resets, false);
     }
-    if (resetNow) hooks.onReset?.(resets, false);
     if (done - lastPost > CPU_HZ / 10) {
       lastPost = done;
       hooks.onProgress?.(e.tb_cycles() / CPU_HZ);

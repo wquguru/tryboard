@@ -44,10 +44,43 @@ interface Exports {
   tb_usb_cdc_send(p: number, len: number): void;
   tb_report(): number;
   tb_report_ptr(): number;
+  tb_power_set(mode: number): void;
+  tb_servo_attach(pin: number): void;
+  tb_elec_v(node: number): number;
+  tb_elec_i(which: number): number;
+  tb_elec_stat(which: number): number;
+  tb_elec_brownout_t(i: number): number;
+  tb_servo_angle(): number;
+  tb_elec_report(): number;
   tb_io_watch?(lo: number, hi: number): void;
   tb_io_take?(): number;
   tb_io_ptr?(): number;
   tb_io_dropped?(): number;
+}
+
+/** 供电方式（P1-02）：usb = 舵机也吃 USB 的 5V；ext = 舵机由外接 5 V 2 A 供电 */
+export type PowerMode = 'usb' | 'ext';
+
+/** 供电网络此刻的读数（tryboard-elec，电压 V、电流 A）；min / peak / resets 是本次上电以来的统计 */
+export interface ElecFrame {
+  v5: number;
+  v3v3: number;
+  vServo: number;
+  vExt: number;
+  iUsb: number;
+  iExt: number;
+  iServo: number;
+  i3v3: number;
+  min5: number;
+  min3v3: number;
+  peakUsb: number;
+  peakServo: number;
+  resets: number;
+  /** 芯片正被欠压复位按住（电压回升前不运行） */
+  held: boolean;
+  /** 舵机二阶动力学给出的角度（度）；没接舵机为 null */
+  servoAngle: number | null;
+  power: PowerMode;
 }
 
 export interface Env {
@@ -66,8 +99,13 @@ export type ToWorker =
       env?: Env;
       /** 挂 GC9A01 圆屏（SPI2） */
       lcd?: boolean;
+      /** 舵机信号接哪个 GPIO（舵机电流进供电网络） */
+      servo?: number;
+      power?: PowerMode;
     }
   | ({ type: 'env' } & Env)
+  /** USB ↔ 外接 5 V（进输入日志：power=usb|ext） */
+  | { type: 'power'; mode: PowerMode }
   | { type: 'analog'; pin: number; mv: number }
   | { type: 'run' }
   | { type: 'pause' }
@@ -90,6 +128,8 @@ export type ToWorker =
       i2c?: { kind: string; addr: number }[];
       env?: Env;
       lcd?: boolean;
+      servo?: number;
+      power?: PowerMode;
       /** 上电以后施加的输入（不含上电和上电时的环境），时间 = 原来施加时的模拟时刻 */
       events: InputEvent[];
       untilMs: number;
@@ -127,6 +167,9 @@ export type FromWorker =
       ratio: number;
       running: boolean;
       leds?: number[][];
+      elec?: ElecFrame;
+      /** 自上一个 tick 以来的欠压复位（模拟时刻，秒） */
+      brownouts?: number[];
     }
   | { type: 'oled'; pixels: Uint8Array }
   /** GC9A01：240×240 RGBA，画面变了才发 */
@@ -169,6 +212,41 @@ function snapshot(e: Exports): Snapshot {
 }
 let running = false;
 let speed = 1;
+let power: PowerMode = 'usb';
+let resetsSeen = 0;
+
+function elecFrame(e: Exports): ElecFrame | undefined {
+  if (!e.tb_elec_v) return undefined;
+  const a = e.tb_servo_angle();
+  return {
+    v5: e.tb_elec_v(1),
+    v3v3: e.tb_elec_v(2),
+    vServo: e.tb_elec_v(3),
+    vExt: e.tb_elec_v(4),
+    iUsb: e.tb_elec_i(0),
+    iExt: e.tb_elec_i(1),
+    iServo: e.tb_elec_i(2),
+    i3v3: e.tb_elec_i(3),
+    min5: e.tb_elec_stat(0),
+    min3v3: e.tb_elec_stat(1),
+    peakUsb: e.tb_elec_stat(3),
+    peakServo: e.tb_elec_stat(5),
+    resets: e.tb_elec_stat(7),
+    held: e.tb_elec_stat(8) === 1,
+    servoAngle: Number.isNaN(a) ? null : a,
+    power,
+  };
+}
+/** 新出现的欠压复位时刻 */
+function takeBrownouts(e: Exports): number[] | undefined {
+  if (!e.tb_elec_stat) return undefined;
+  const n = e.tb_elec_stat(7);
+  if (n <= resetsSeen) return undefined;
+  const out: number[] = [];
+  for (let i = resetsSeen; i < n; i++) out.push(e.tb_elec_brownout_t(i));
+  resetsSeen = n;
+  return out;
+}
 let simAnchor = 0; // 开始计时时的模拟周期
 let wallAnchor = 0;
 const decoder = new TextDecoder();
@@ -320,6 +398,8 @@ function loop() {
     simSeconds: e.tb_cycles() / CPU_HZ,
     ratio: lastRatio,
     running,
+    elec: elecFrame(e),
+    brownouts: takeBrownouts(e),
   });
   flushIo(e);
   postOled(e);
@@ -377,10 +457,10 @@ function postUsb(e: Exports) {
 const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2 };
 
 function postPaused(e: Exports) {
-  post({ type: 'tick', console: '', leds: leds(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running });
+  post({ type: 'tick', console: '', leds: leds(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running, elec: elecFrame(e), brownouts: takeBrownouts(e) });
 }
 
-type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean };
+type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode };
 /** 上电：建 wasm 实例、挂器件、设环境、开一份新的输入日志 */
 async function bootWasm(m: BootMsg): Promise<Exports | null> {
   const { instance } = await WebAssembly.instantiate(m.wasm, {});
@@ -397,11 +477,16 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   for (const d of m.i2c ?? []) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
   if (m.env) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
   if (m.lcd && e.tb_lcd_attach) e.tb_lcd_attach();
+  // 供电网络：舵机接上、供电方式（上电时的状态；之后的切换走 power 消息并进输入日志）
+  power = m.power ?? 'usb';
+  if (e.tb_servo_attach && m.servo !== undefined) e.tb_servo_attach(m.servo);
+  e.tb_power_set?.(power === 'ext' ? 1 : 0);
+  resetsSeen = 0;
   e.tb_io_watch?.(ioLo, ioHi);
   ioChunks = [];
   ioBytes = 0;
   flushIo(e, true);
-  inputLog = { version: 1, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, events: [] };
+  inputLog = { version: 1, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), events: [] };
   record(e, { kind: 'power', on: true });
   if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
   pwmLast = new Map();
@@ -441,6 +526,10 @@ function apply(e: Exports, ev: InputAction) {
       e.tb_free(p, b.length);
       break;
     }
+    case 'supply':
+      power = ev.mode;
+      e.tb_power_set?.(ev.mode === 'ext' ? 1 : 0);
+      break;
     case 'power':
       return;
   }
@@ -476,6 +565,8 @@ function seekTo(e: Exports, events: InputEvent[], untilMs: number) {
   }
   // 停住时刻之前的串口输出已经在快照里；主线程用快照的 stdout 重建串口面板
   pwmEvents = [];
+  // 回退重放里的欠压复位是旧事件（时间线上已经有），不再当新事件报
+  if (e.tb_elec_stat) resetsSeen = e.tb_elec_stat(7);
 }
 
 self.onmessage = async (ev: MessageEvent<ToWorker>) => {
@@ -557,6 +648,11 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
     case 'uart':
       if (!ex) return;
       apply(ex, { kind: m.type, text: m.text });
+      break;
+    case 'power':
+      if (!ex) return;
+      apply(ex, { kind: 'supply', mode: m.mode });
+      if (!running) postPaused(ex);
       break;
   }
 };

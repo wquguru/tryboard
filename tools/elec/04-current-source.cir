@@ -1,0 +1,7 @@
+* 04 电流源进 T 形网络（模拟 GPIO 拉 10 mA 经限流电阻到 LED 近似电阻）
+I1 0 a DC 10m
+R1 a b 220
+R2 b 0 150
+R3 a 0 1k
+.op
+.end
