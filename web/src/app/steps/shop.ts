@@ -26,7 +26,7 @@ export function loadBom(work: string): BomHistory {
   }
   return initialHistory(PROCURE_TEMPLATES.some((t) => t.id === work) ? work : 'blank');
 }
-function saveBom(work: string, h: BomHistory) {
+export function saveBom(work: string, h: BomHistory) {
   try {
     localStorage.setItem(BOM_KEY(work), JSON.stringify(h));
   } catch {

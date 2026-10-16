@@ -10,6 +10,10 @@ import type { Timeline } from './timeline';
 import type { Toolbar } from './toolbar';
 import type { Card } from './card';
 import type { BomHistory } from './bom';
+import type { SeekJob } from '../live';
+import type { FromWorker, Snapshot } from '../worker';
+import type { WireMods } from './wiring';
+import type { BenchHistory } from './benchhist';
 
 export type StepId = 'shop' | 'bench' | 'assemble' | 'product';
 export const STEPS: { id: StepId; label: string }[] = [
@@ -22,7 +26,7 @@ export const STEPS: { id: StepId; label: string }[] = [
 export type WorkId = 'weather' | 'spin' | 'lens' | 'blank';
 
 /** 选中的对象。kind 与构建树的分组一一对应；pin / wire / button 来自台面拾取 */
-export type SelKind = 'part' | 'wire' | 'power' | 'env' | 'firmware' | 'checkpoint' | 'pin' | 'button';
+export type SelKind = 'part' | 'wire' | 'power' | 'env' | 'firmware' | 'checkpoint' | 'pin' | 'button' | 'run' | 'tool';
 export interface Selection {
   kind: SelKind;
   id: string;
@@ -65,6 +69,12 @@ export interface AppState {
   bom: BomHistory;
   /** 实验台场景换过几次（"摆上实验台"每次 +1，时间线据此记一步） */
   sceneRev: number;
+  /** 实验台编辑状态（供电、热源、改接线、回退恢复的场景）变了就 +1，面板据此重画 */
+  editRev: number;
+  /** 时间线上的运行编号（回退后再跑会复用编号；run 是整页上电次数，只增不减） */
+  runNo: number;
+  /** 时间线：步数、当前停在第几步、是否停在回退点、正在回退 */
+  hist: { n: number; cur: number; seeked: boolean; busy: boolean; runs: number };
   /** 组装步骤的结果（成品步骤读它）：null = 还没开始装 */
   assembly: AssemblyState | null;
 }
@@ -104,7 +114,26 @@ export interface Session {
   chip: 'esp32c3' | 'esp32s3';
   levels: Level[];
   /** 最近一帧：PWM 占空比、彩灯、OLED */
-  frame: { pwm: number[]; rgb: number[] | null; oled: Uint8Array | null; lcd: Uint8Array | null };
+  frame: { pwm: number[]; pwmFreq: number[]; gpio: number; enable: number; gpioHi: number; enableHi: number; rgb: number[] | null; oled: Uint8Array | null; lcd: Uint8Array | null };
+  /** 热源靠近的零件（只是显示；读数由环境温度决定） */
+  heat: string | null;
+  setHeat(part: string | null): void;
+  /** USB ↔ 外接 5 V（只改清单和供电显示） */
+  setPower(ext5v: boolean): void;
+  /** 改接线（给接线规则检查造错误接线） */
+  wireMods: WireMods;
+  setWireMods(m: WireMods): void;
+  /** 回退用：直接换场景显示，不重新上电（模拟器状态由 seek 负责） */
+  restoreScene(scene: SceneSpec, power: { ext5v: boolean } | null): void;
+  onTick(cb: (m: Extract<FromWorker, { type: 'tick' }>) => void): () => void;
+  onBoot(cb: () => void): () => void;
+  onRunEnd(cb: (snap: Snapshot) => void): () => void;
+  /** 整页上电过几次 */
+  bootCount: number;
+  snapshot(): Promise<Snapshot | null>;
+  mark(): Promise<number>;
+  seek(job: SeekJob): Promise<Snapshot>;
+  continueRun(): void;
   /** 台面上正在跑的固件镜像（参考固件或用户拖进来的） */
   fwBuf: ArrayBuffer | null;
   /** 蜂鸣器出声（默认静音），接在实时模拟的 PWM 事件上 */
@@ -146,6 +175,8 @@ export interface StepCtx {
   store: Store<AppState>;
   session: Session;
   shell: Shell;
+  /** 实验台时间线（P0-03）；只有实验台用 */
+  hist?: BenchHistory;
 }
 
 export interface StepImpl {

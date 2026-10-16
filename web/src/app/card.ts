@@ -4,7 +4,11 @@ import type { ScreenPoint } from '../scene-api';
 
 export interface Card {
   show(anchor: ScreenPoint, content: HTMLElement): void;
+  /** 只挪位置（台面转动时跟着目标走），不换内容 */
+  place(anchor: ScreenPoint): void;
   hide(): void;
+  /** 卡片关掉时（Esc、点空白、换步骤）通知一次 */
+  onHide(cb: () => void): void;
   readonly open: boolean;
 }
 
@@ -17,6 +21,7 @@ export function createCard(container: HTMLElement): Card {
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') card.hide();
   };
+  const hideCbs: (() => void)[] = [];
   const card: Card = {
     get open() {
       return !el.hidden;
@@ -24,6 +29,11 @@ export function createCard(container: HTMLElement): Card {
     show(anchor, content) {
       el.replaceChildren(content);
       el.hidden = false;
+      card.place(anchor);
+      document.addEventListener('keydown', onKey);
+    },
+    place(anchor) {
+      if (el.hidden) return;
       // 默认放在锚点右下 12px；放不下就翻到左 / 上，保证整张卡在容器里
       const W = container.clientWidth, H = container.clientHeight;
       const w = el.offsetWidth, h = el.offsetHeight;
@@ -32,12 +42,16 @@ export function createCard(container: HTMLElement): Card {
       if (y + h > H - 12) y = anchor.y - 12 - h;
       el.style.left = `${Math.max(12, Math.min(x, W - w - 12))}px`;
       el.style.top = `${Math.max(12, Math.min(y, H - h - 12))}px`;
-      document.addEventListener('keydown', onKey);
     },
     hide() {
+      const was = !el.hidden;
       el.hidden = true;
       el.replaceChildren();
       document.removeEventListener('keydown', onKey);
+      if (was) hideCbs.forEach((f) => f());
+    },
+    onHide(cb) {
+      hideCbs.push(cb);
     },
   };
   return card;

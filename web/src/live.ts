@@ -1,7 +1,7 @@
 // 首页 / 关卡页用的实时模拟：起一个 worker.ts，跑一份固件，把每帧状态交给视图。
 import { fetchBuf, imageChip, loadRom, loadWasm } from './assets';
-import type { Env, FromWorker, PwmEvent, ToWorker } from './worker';
-import type { InputLog } from './inputlog';
+import type { Env, FromWorker, PwmEvent, Snapshot, ToWorker } from './worker';
+import type { InputEvent, InputLog } from './inputlog';
 import { emptyFrame, type LiveFrame } from './views/common';
 
 export interface LiveOptions {
@@ -18,6 +18,21 @@ export interface LiveOptions {
   onBoot?(chip: 'esp32c3' | 'esp32s3'): void;
   /** watchPwm 引脚上的 PWM 变化（带模拟时刻），接 audio.ts 的 BuzzerAudio.push */
   onPwm?(events: PwmEvent[] | undefined, simSeconds: number): void;
+  /** 上一次上电就要结束（重新上电 / 换固件 / 回退之前）：这次运行从上电到此刻的完整记录 */
+  onRunEnd?(snap: Snapshot): void;
+  /** 回退快进的进度（模拟秒） */
+  onSeekProgress?(simSeconds: number): void;
+}
+
+/** 回退到某次运行的某个时刻（P0-03）：用那次运行的固件、器件、环境和输入日志 */
+export interface SeekJob {
+  flash: ArrayBuffer;
+  i2c: { kind: string; addr: number }[];
+  lcd: boolean;
+  /** 上电时的环境（日志第一条 env） */
+  env: Env;
+  events: InputEvent[];
+  untilMs: number;
 }
 
 export class LiveSim {
@@ -46,6 +61,17 @@ export class LiveSim {
         o.onPwm?.(m.pwmEvents, m.simSeconds);
       } else if (m.type === 'inputlog') {
         for (const r of this.logWaiters.splice(0)) r(m.log);
+      } else if (m.type === 'snapshot') {
+        for (const r of this.snapWaiters.splice(0)) r(m.snap);
+      } else if (m.type === 'seeked') {
+        this.bootPin = m.bootPin;
+        this.seekWaiter?.(m.snap);
+        this.seekWaiter = null;
+      } else if (m.type === 'seekProgress') {
+        o.onSeekProgress?.(m.simSeconds);
+      } else if (m.type === 'mark') {
+        this.markWaiters.get(m.id)?.(m.tMs);
+        this.markWaiters.delete(m.id);
       } else if (m.type === 'lcd') {
         this.frame.lcd = m.pixels;
         o.onFrame?.(this.frame, NaN);
@@ -60,7 +86,17 @@ export class LiveSim {
   private send(m: ToWorker, t: Transferable[] = []) {
     this.w.postMessage(m, t);
   }
+  /** 有一次上电正在进行（start 过、还没被回退停住）：再上电之前先把它收尾 */
+  private live = false;
+  private async closeRun() {
+    if (!this.live) return;
+    this.live = false;
+    const snap = await this.snapshot();
+    this.o.onRunEnd?.(snap);
+  }
   async start() {
+    await this.closeRun();
+    this.live = true;
     const fw = this.o.fw;
     this.flash ??= typeof fw === 'string' ? await fetchBuf(fw) : fw;
     const [wasm, flash] = [await loadWasm(), this.flash];
@@ -110,6 +146,47 @@ export class LiveSim {
   }
   resume() {
     this.send({ type: 'run' });
+  }
+  private snapWaiters: ((s: Snapshot) => void)[] = [];
+  private seekWaiter: ((s: Snapshot) => void) | null = null;
+  private markWaiters = new Map<number, (tMs: number) => void>();
+  private markId = 0;
+  /** 本次上电以来的输入日志 + 串口全文 + 观察记录（不打断运行） */
+  snapshot(): Promise<Snapshot> {
+    return new Promise((r) => {
+      this.snapWaiters.push(r);
+      this.send({ type: 'snapshot' });
+    });
+  }
+  /** 此刻的模拟时间（毫秒）；在它之前发出的输入都已施加 */
+  mark(): Promise<number> {
+    const id = ++this.markId;
+    return new Promise((r) => {
+      this.markWaiters.set(id, r);
+      this.send({ type: 'mark', id });
+    });
+  }
+  /** 回退：收尾当前运行，按 job 重新上电并快进到 untilMs 停住（暂停）。之后 resume() 从那一刻接着实时跑 */
+  async seek(job: SeekJob): Promise<Snapshot> {
+    await this.closeRun();
+    const [wasm, rom] = [await loadWasm(), await loadRom(imageChip(job.flash))];
+    this.flash = job.flash;
+    this.o.fw = job.flash;
+    this.o.i2c = job.i2c;
+    this.o.lcd = job.lcd;
+    const last = [...job.events].reverse().find((e) => e.kind === 'env' && Math.round(e.tMs * 160000) < Math.round(job.untilMs * 160000));
+    this.env = last && last.kind === 'env' ? { temp: last.temp, humidity: last.humidity, pressure: last.pressure } : { ...job.env };
+    this.sensorOffset = 0;
+    Object.assign(this.frame, emptyFrame());
+    return new Promise((r) => {
+      this.seekWaiter = r;
+      this.send({ type: 'seek', wasm: wasm.slice(0), rom: rom.slice(0), flash: job.flash.slice(0), i2c: job.i2c, env: job.env, lcd: job.lcd, events: job.events, untilMs: job.untilMs });
+    });
+  }
+  /** 回退停住以后从那一刻接着实时跑：这次运行重新算"进行中" */
+  continueRun() {
+    this.live = true;
+    this.resume();
   }
   private logWaiters: ((l: InputLog) => void)[] = [];
   /** 本次上电以来的输入日志（模拟时间戳，见 inputlog.ts；toScript 导出给 CLI --inputs） */
