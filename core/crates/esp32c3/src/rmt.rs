@@ -6,9 +6,14 @@
 //! 条目格式：bit[14:0] 持续时间 0、bit15 电平 0、bit[30:16] 持续时间 1、bit31 电平 1；持续时间为 0 表示结束。
 //! 发送按时间惰性推进：`update(now)` 把已经"发生"的半条目依次消费掉，记录输出电平跳变（`edges`），
 //! 并在阈值 / 结束 / 出错时置中断。下一次需要推进的时刻由 `update` 返回。
-//! 未建模：载波调制（不影响 WS2812 这类用法）、接收通道采样（RX 没有外部输入源）、APB FIFO 模式。
+//! 接收（P2-05）：输入信号经 GPIO 矩阵进来（RMT_SIG_IN0_IDX 与输出同号），由 SoC 在引脚电平变化时按时刻喂给
+//! `rx_input`。rx_en 之后等第一个跳变开始记，每段电平的时长（tick）写成半个条目；电平保持超过 idle_thres
+//! 个 tick 就结束：把当前电平写成时长 0 的半条目补齐最后一个条目，置 RX_END。滤波（rx_filter_thres 个
+//! RMT 源时钟）见 `sigin`。阈值中断（rx_lim 个条目）+ 回绕给 IDF 的乒乓接收用。
+//! 未建模：载波调制 / 解调、APB FIFO 模式、DMA 接收（S3 通道 7）、内存所有者错误。
 
 use crate::periph::CPU_HZ;
+use crate::sigin::Deglitch;
 
 pub const BLOCK_WORDS: usize = 48;
 /// C3 的 RMT 输出信号在 GPIO 矩阵里的编号（soc/gpio_sig_map.h：RMT_SIG_OUT0_IDX = 51）
@@ -24,11 +29,22 @@ pub struct RmtLayout {
     /// RMT_SIG_OUT0_IDX
     pub sig_out0: u32,
     pub int_mask: u32,
+    /// 接收通道 CONF0 里 mem_size 的位置：C3 [25:23]、S3 [27:24]
+    pub rx_mem_shift: u32,
+    pub rx_mem_mask: u32,
+    /// 接收中断位的起点（第 i 个接收通道 = 起点 + i）：结束、出错、阈值
+    pub rx_end_bit: u32,
+    pub rx_err_bit: u32,
+    pub rx_thr_bit: u32,
 }
 
 impl RmtLayout {
-    pub const C3: RmtLayout = RmtLayout { ntx: 2, nrx: 2, ram_off: 0x400, sig_out0: 51, int_mask: 0x3fff };
-    pub const S3: RmtLayout = RmtLayout { ntx: 4, nrx: 4, ram_off: 0x800, sig_out0: 81, int_mask: 0x3fff_ffff };
+    pub const C3: RmtLayout = RmtLayout { ntx: 2, nrx: 2, ram_off: 0x400, sig_out0: 51, int_mask: 0x3fff, rx_mem_shift: 23, rx_mem_mask: 7, rx_end_bit: 2, rx_err_bit: 6, rx_thr_bit: 10 };
+    pub const S3: RmtLayout = RmtLayout { ntx: 4, nrx: 4, ram_off: 0x800, sig_out0: 81, int_mask: 0x3fff_ffff, rx_mem_shift: 24, rx_mem_mask: 15, rx_end_bit: 16, rx_err_bit: 20, rx_thr_bit: 24 };
+    /// 第 i 个接收通道的 CONF0（CONF1 在 +4）
+    pub fn rx_conf0(&self, i: usize) -> u32 {
+        self.conf0() + 4 * self.ntx as u32 + 8 * i as u32
+    }
     fn n(&self) -> usize {
         self.ntx + self.nrx
     }
@@ -62,12 +78,30 @@ struct Tx {
     loops: u32,
 }
 
+/// 接收通道状态
+#[derive(Default, Clone, Copy)]
+struct Rx {
+    /// 已经看到第一个跳变、正在记
+    started: bool,
+    /// 当前这段电平开始的周期
+    seg_t: u64,
+    /// 下一个要写的条目（相对通道起始块）与半条目
+    wr: usize,
+    half: u8,
+    /// 本次接收写完的条目数（阈值中断计数）
+    items: u32,
+    filt: Deglitch,
+    /// 收完的帧数（统计）
+    pub frames: u64,
+}
+
 pub struct Rmt {
     pub layout: RmtLayout,
     /// 0x00..0x100 的寄存器镜像
     pub regs: [u32; 0x100 / 4],
     pub ram: Vec<u32>,
     tx: Vec<Tx>,
+    rx: Vec<Rx>,
     pub int_raw: u32,
     pub int_ena: u32,
     /// 发送通道当前输出电平
@@ -90,6 +124,13 @@ impl Rmt {
             regs[(layout.conf0() / 4) as usize + ch] = 0x0071_0200;
             regs[(layout.tx_lim() / 4) as usize + ch] = 0x80;
         }
+        // 接收通道 CONF0：div=2、idle_thres=0x7fff、mem_size=1、载波使能 / 电平；CONF1：mem_owner=1、filter_thres=15；RX_LIM 0x80
+        for i in 0..layout.nrx {
+            let c0 = (layout.rx_conf0(i) / 4) as usize;
+            regs[c0] = 2 | (0x7fff << 8) | (1 << layout.rx_mem_shift) | (3 << 28);
+            regs[c0 + 1] = (1 << 3) | (15 << 5);
+            regs[(layout.tx_lim() / 4) as usize + layout.ntx + i] = 0x80;
+        }
         regs[(layout.sys_conf() / 4) as usize] = 0x0500_0010;
         regs[0xcc / 4] = 0x2006231;
         let n = layout.ntx + layout.nrx;
@@ -98,6 +139,7 @@ impl Rmt {
             regs,
             ram: vec![0; BLOCK_WORDS * n],
             tx: vec![Tx::default(); layout.ntx],
+            rx: vec![Rx::default(); layout.nrx],
             int_raw: 0,
             int_ena: 0,
             level: vec![false; layout.ntx],
@@ -114,20 +156,25 @@ impl Rmt {
         (blocks * BLOCK_WORDS).min(BLOCK_WORDS * (self.layout.ntx + self.layout.nrx - ch))
     }
 
-    /// 一个 RMT tick 等于多少 CPU 周期（定点：×256，保留分数分频的精度）
-    fn tick_cycles_x256(&self, ch: usize) -> u64 {
-        let sys = self.regs[(self.layout.sys_conf() / 4) as usize];
-        let src_hz: u64 = match (sys >> 24) & 3 {
+    /// RMT 源时钟（SYS_CONF.sclk_sel）
+    fn src_hz(&self) -> u64 {
+        match (self.regs[(self.layout.sys_conf() / 4) as usize] >> 24) & 3 {
             2 => 17_500_000,
             3 => 40_000_000,
             _ => 80_000_000,
-        };
+        }
+    }
+
+    /// 通道分频 div（0 = 256）时一个 tick 等于多少 CPU 周期（定点：×256，保留分数分频的精度）
+    fn cycles_x256(&self, div: u32) -> u64 {
+        let sys = self.regs[(self.layout.sys_conf() / 4) as usize];
         let div_num = ((sys >> 4) & 0xff) as u64 + 1;
-        let div = match (self.conf0(ch) >> 8) & 0xff {
-            0 => 256,
-            d => d as u64,
-        };
-        CPU_HZ * 256 * div * div_num / src_hz
+        let div = if div == 0 { 256 } else { div as u64 };
+        CPU_HZ * 256 * div * div_num / self.src_hz()
+    }
+
+    fn tick_cycles_x256(&self, ch: usize) -> u64 {
+        self.cycles_x256((self.conf0(ch) >> 8) & 0xff)
     }
 
     fn tx_lim(&self, ch: usize) -> u32 {
@@ -154,6 +201,13 @@ impl Rmt {
             let ch = ((off - st) / 4) as usize;
             let t = &self.tx[ch];
             return (t.rd as u32 + (ch * BLOCK_WORDS) as u32) | if t.active { 1 << 9 } else { 0 };
+        }
+        // 接收通道 STATUS：mem_waddr_ex（绝对条目号，IDF 减去通道起点得到已写条目数）、apb_mem_raddr、state[24:22]
+        if off >= st + 4 * l.ntx as u32 && off < st + 4 * l.n() as u32 {
+            let i = ((off - st) / 4) as usize - l.ntx;
+            let base = ((l.ntx + i) * BLOCK_WORDS) as u32;
+            let r = &self.rx[i];
+            return (base + r.wr as u32) | (base << 11) | if r.started { 1 << 22 } else { 0 };
         }
         match off {
             _ if off == ir => self.int_raw,
@@ -188,6 +242,32 @@ impl Rmt {
             }
             if !self.tx[ch].active {
                 self.set_idle(ch, now);
+            }
+            return;
+        }
+        let rc = l.rx_conf0(0);
+        if off >= rc && off < rc + 8 * l.nrx as u32 {
+            let i = ((off - rc) / 8) as usize;
+            if (off - rc).is_multiple_of(8) {
+                self.regs[off as usize / 4] = v;
+                return;
+            }
+            // CONF1 自清位：mem_wr_rst、apb_mem_rst、afifo_rst、conf_update
+            let was = self.regs[off as usize / 4] & 1 != 0;
+            self.regs[off as usize / 4] = v & !(2 | 4 | 1 << 14 | 1 << 15);
+            if v & 2 != 0 {
+                self.rx[i].wr = 0;
+                self.rx[i].half = 0;
+            }
+            let en = v & 1 != 0;
+            if en && !was {
+                // 开始接收：等第一个跳变（之前的空闲电平不记）
+                let r = &mut self.rx[i];
+                r.started = false;
+                r.items = 0;
+                r.half = 0;
+            } else if !en {
+                self.rx[i].started = false;
             }
             return;
         }
@@ -307,9 +387,152 @@ impl Rmt {
         self.begin_half(ch, t);
     }
 
+    // ------------------------------------------------------------ 接收
+
+    fn rx_conf(&self, i: usize) -> (u32, u32) {
+        let c = (self.layout.rx_conf0(i) / 4) as usize;
+        (self.regs[c], self.regs[c + 1])
+    }
+
+    fn rx_enabled(&self, i: usize) -> bool {
+        self.rx_conf(i).1 & 1 != 0
+    }
+
+    /// 接收通道 i 的滤波门限（CPU 周期）：rx_filter_thres 个 RMT 源时钟
+    fn rx_filter(&self, i: usize) -> u64 {
+        let c1 = self.rx_conf(i).1;
+        if c1 & (1 << 4) == 0 {
+            return 0;
+        }
+        ((c1 >> 5) & 0xff) as u64 * CPU_HZ / self.src_hz()
+    }
+
+    fn rx_tick_x256(&self, i: usize) -> u64 {
+        self.cycles_x256(self.rx_conf(i).0 & 0xff)
+    }
+
+    /// 电平保持多久算结束（CPU 周期）
+    fn rx_idle(&self, i: usize) -> u64 {
+        let th = ((self.rx_conf(i).0 >> 8) & 0x7fff) as u64;
+        (th * self.rx_tick_x256(i)).div_ceil(256)
+    }
+
+    fn rx_mem_words(&self, i: usize) -> usize {
+        let l = self.layout;
+        let blocks = ((self.rx_conf(i).0 >> l.rx_mem_shift) & l.rx_mem_mask).max(1) as usize;
+        let ch = l.ntx + i;
+        (blocks * BLOCK_WORDS).min(BLOCK_WORDS * (l.n() - ch))
+    }
+
+    /// 写半个条目（时长 tick、电平）；凑满一个条目就前进写指针，处理阈值中断 / 回绕 / 溢出
+    fn rx_put(&mut self, i: usize, ticks: u64, lv: bool) {
+        let l = self.layout;
+        let base = (l.ntx + i) * BLOCK_WORDS;
+        let r = self.rx[i];
+        let idx = (base + r.wr) % self.ram.len();
+        let half = (ticks.min(0x7fff) as u32) | (lv as u32) << 15;
+        if r.half == 0 {
+            self.ram[idx] = half;
+            self.rx[i].half = 1;
+            return;
+        }
+        self.ram[idx] = (self.ram[idx] & 0xffff) | half << 16;
+        self.rx[i].half = 0;
+        self.rx[i].wr += 1;
+        self.rx[i].items += 1;
+        let wrap = self.rx_conf(i).1 & (1 << 13) != 0;
+        let lim = self.regs[(l.tx_lim() / 4) as usize + l.ntx + i] & 0x1ff;
+        if wrap && lim > 0 && self.rx[i].items.is_multiple_of(lim) {
+            self.int_raw |= 1 << (l.rx_thr_bit + i as u32);
+        }
+        if self.rx[i].wr >= self.rx_mem_words(i) {
+            if wrap {
+                self.rx[i].wr = 0;
+            } else {
+                // 通道内存写满：出错并停止本次接收
+                self.int_raw |= 1 << (l.rx_err_bit + i as u32);
+                self.rx[i].started = false;
+            }
+        }
+    }
+
+    /// 滤波后的电平在 t 跳变到 lv
+    fn rx_edge(&mut self, i: usize, t: u64, lv: bool) {
+        if !self.rx_enabled(i) {
+            return;
+        }
+        if !self.rx[i].started {
+            self.rx[i].started = true;
+            self.rx[i].seg_t = t;
+            return;
+        }
+        let ticks = (t - self.rx[i].seg_t) * 256 / self.rx_tick_x256(i).max(1);
+        self.rx_put(i, ticks, !lv);
+        if self.rx[i].started {
+            self.rx[i].seg_t = t;
+        }
+    }
+
+    /// 推进接收通道 i 到 now：到期的滤波跳变生效、电平保持超过 idle_thres 就结束本帧
+    fn rx_advance(&mut self, i: usize, now: u64) {
+        let th = self.rx_filter(i);
+        loop {
+            let due = self.rx[i].filt.due(th).filter(|d| *d <= now);
+            let idle_at = self.rx[i].started.then(|| self.rx[i].seg_t + self.rx_idle(i)).filter(|e| *e <= now);
+            match (due, idle_at) {
+                (Some(d), e) if e.is_none_or(|e| d < e) => {
+                    if let Some((t, lv)) = self.rx[i].filt.flush(now, th) {
+                        self.rx_edge(i, t, lv);
+                    }
+                }
+                (_, Some(_)) => {
+                    // 结束：当前电平写成时长 0 的半条目，补齐最后一个条目
+                    let lv = self.rx[i].filt.level;
+                    self.rx_put(i, 0, lv);
+                    if self.rx[i].half == 1 {
+                        self.rx_put(i, 0, false);
+                    }
+                    self.rx[i].started = false;
+                    self.rx[i].frames += 1;
+                    self.int_raw |= 1 << (self.layout.rx_end_bit + i as u32);
+                }
+                _ => break,
+            }
+        }
+    }
+
+    /// 接收通道 i 的输入信号在 t 时刻的原始电平（SoC 在引脚电平可能变化时调用，电平没变也可以调）
+    pub fn rx_input(&mut self, i: usize, t: u64, raw: bool) {
+        if i >= self.layout.nrx {
+            return;
+        }
+        self.rx_advance(i, t);
+        let th = self.rx_filter(i);
+        if let Some((t, lv)) = self.rx[i].filt.input(t, raw, th) {
+            self.rx_edge(i, t, lv);
+        }
+    }
+
+    /// 接收通道 i 收完的帧数
+    pub fn rx_frames(&self, i: usize) -> u64 {
+        self.rx.get(i).map(|r| r.frames).unwrap_or(0)
+    }
+
+    fn rx_next(&self, i: usize) -> u64 {
+        let mut n = self.rx[i].filt.due(self.rx_filter(i)).unwrap_or(u64::MAX);
+        if self.rx[i].started {
+            n = n.min(self.rx[i].seg_t + self.rx_idle(i));
+        }
+        n
+    }
+
     /// 推进到 now；返回下一次需要推进的周期（无发送时 u64::MAX）。
     pub fn update(&mut self, now: u64) -> u64 {
         let mut next = u64::MAX;
+        for i in 0..self.layout.nrx {
+            self.rx_advance(i, now);
+            next = next.min(self.rx_next(i));
+        }
         for ch in 0..self.layout.ntx {
             // 防止配置错误（持续时间极短）时卡死在这里：单次最多消费 100k 个半条目
             let mut guard = 100_000;
@@ -460,5 +683,63 @@ mod tests {
         r.update(10_000);
         assert!(r.irq());
         assert_eq!(r.read(0x74), 1 << 2);
+    }
+
+    /// S3 接收通道 0（硬件通道 4）：1 MHz 分辨率、空闲 12 ms 结束；一个 1000 µs 高脉冲 → 一个条目 {1000, 1, 0, 0}
+    #[test]
+    fn rx_pulse_s3() {
+        let l = RmtLayout::S3;
+        let mut r = Rmt::new(l);
+        r.regs[(l.sys_conf() / 4) as usize] = 0x0500_0000; // APB 80MHz，组分频 1
+        let c0 = l.rx_conf0(0);
+        assert_eq!(c0, 0x30);
+        r.write(c0, 80 | (12000 << 8) | (1 << 24), 0);
+        r.write(0x78, 1 << 16, 0); // RX_END ch4 中断使能
+        r.rx_input(0, 0, false);
+        r.write(c0 + 4, 1 | 2 | (1 << 3), 100); // 复位写指针 + 使能
+        let us = CPU_HZ / 1_000_000;
+        r.rx_input(0, 1000 * us, true);
+        r.rx_input(0, 2000 * us, false);
+        assert!(!r.irq());
+        let n = r.update(5000 * us);
+        assert_eq!(n, 2000 * us + 12000 * us);
+        r.update(n);
+        assert!(r.irq(), "RX_END");
+        assert_eq!(r.read(0x60) & 0x3ff, 4 * 48 + 1, "写了一个条目");
+        assert_eq!(r.ram[4 * BLOCK_WORDS], 1000 | 1 << 15);
+        assert_eq!(r.rx_frames(0), 1);
+    }
+
+    /// C3 接收通道 1（硬件通道 3）：多段电平 + 滤波（短于门限的毛刺被吞掉）
+    #[test]
+    fn rx_items_and_filter_c3() {
+        let l = RmtLayout::C3;
+        let mut r = Rmt::new(l);
+        r.regs[(l.sys_conf() / 4) as usize] = 0x0500_0000;
+        let c0 = l.rx_conf0(1);
+        assert_eq!(c0, 0x20);
+        // 10 MHz 分辨率（div 8）、空闲 1000 tick = 100 µs；滤波 40 个 80MHz 时钟 = 0.5 µs
+        r.write(c0, 8 | (1000 << 8) | (1 << 23), 0);
+        r.write(c0 + 4, 1 | (1 << 4) | (40 << 5), 0);
+        let us = CPU_HZ / 1_000_000;
+        let mut t = 10 * us;
+        let mut lv = true;
+        for w in [9u64, 4, 3, 7] {
+            r.rx_input(1, t, lv);
+            t += w * us;
+            lv = !lv;
+        }
+        r.rx_input(1, t, lv);
+        r.rx_input(1, t + 2 * us, false);
+        // 低电平期间一个 0.2 µs 的毛刺：被滤掉，不打断这段低电平
+        r.rx_input(1, t + 10 * us, true);
+        r.rx_input(1, t + 10 * us + us / 5, false);
+        r.update(t + 500 * us);
+        assert!(r.int_raw & (1 << 3) != 0, "C3 接收通道 1 的 RX_END 在位 3");
+        let base = 3 * BLOCK_WORDS;
+        assert_eq!(r.ram[base], 90 | 1 << 15 | 40 << 16);
+        assert_eq!(r.ram[base + 1], 30 | 1 << 15 | 70 << 16);
+        assert_eq!(r.ram[base + 2], 20 | 1 << 15, "最后一段高电平 + 结束（低电平时长 0）");
+        assert_eq!(r.read(0x34) & 0x1ff, 3 * 48 + 3, "CH3STATUS（rmt_reg.h 0x34）");
     }
 }

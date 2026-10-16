@@ -52,6 +52,14 @@ interface Exports {
   tb_elec_brownout_t(i: number): number;
   tb_servo_angle(): number;
   tb_elec_report(): number;
+  tb_encoder_attach?(a: number, b: number, sw: number): void;
+  tb_encoder_turn?(steps: number): void;
+  tb_encoder_press?(down: number): void;
+  tb_encoder_pos?(): number;
+  tb_pcnt_count?(u: number): number;
+  tb_sonar_attach?(trig: number, echo: number): void;
+  tb_sonar_distance?(cm: number): void;
+  tb_sonar_stat?(which: number): number;
   tb_io_watch?(lo: number, hi: number): void;
   tb_io_take?(): number;
   tb_io_ptr?(): number;
@@ -89,6 +97,27 @@ export interface Env {
   pressure: number;
 }
 
+/** 旋转编码器（P2-01）：A / B 两相与可选的按键脚 */
+export interface EncoderSpec {
+  a: number;
+  b: number;
+  sw?: number;
+}
+/** HC-SR04（P2-04）：Trig / Echo 两个 GPIO；cm = 上电时探头到障碍物的距离（负数 = 前方没有东西） */
+export interface SonarSpec {
+  trig: number;
+  echo: number;
+  cm: number;
+}
+
+/** 引脚器件此刻的状态（随 tick 发）：编码器转了几格、PCNT 单元 0 计数；超声波触发次数、最近 Echo 宽度 */
+export interface PinDevFrame {
+  encPos: number | null;
+  pcnt: number | null;
+  pings: number | null;
+  echoUs: number | null;
+}
+
 export type ToWorker =
   | {
       type: 'boot';
@@ -102,8 +131,14 @@ export type ToWorker =
       /** 舵机信号接哪个 GPIO（舵机电流进供电网络） */
       servo?: number;
       power?: PowerMode;
+      encoder?: EncoderSpec;
+      sonar?: SonarSpec;
     }
   | ({ type: 'env' } & Env)
+  /** 编码器转 steps 格（正 = 顺时针）/ 按键；超声波距离（进输入日志：enc= / encsw= / dist=） */
+  | { type: 'enc'; steps: number }
+  | { type: 'encsw'; down: boolean }
+  | { type: 'dist'; cm: number }
   /** USB ↔ 外接 5 V（进输入日志：power=usb|ext） */
   | { type: 'power'; mode: PowerMode }
   | { type: 'analog'; pin: number; mv: number }
@@ -130,6 +165,8 @@ export type ToWorker =
       lcd?: boolean;
       servo?: number;
       power?: PowerMode;
+      encoder?: EncoderSpec;
+      sonar?: SonarSpec;
       /** 上电以后施加的输入（不含上电和上电时的环境），时间 = 原来施加时的模拟时刻 */
       events: InputEvent[];
       untilMs: number;
@@ -170,6 +207,8 @@ export type FromWorker =
       elec?: ElecFrame;
       /** 自上一个 tick 以来的欠压复位（模拟时刻，秒） */
       brownouts?: number[];
+      /** 编码器 / 超声波（接了才有） */
+      pins?: PinDevFrame;
     }
   | { type: 'oled'; pixels: Uint8Array }
   /** GC9A01：240×240 RGBA，画面变了才发 */
@@ -246,6 +285,12 @@ function takeBrownouts(e: Exports): number[] | undefined {
   for (let i = resetsSeen; i < n; i++) out.push(e.tb_elec_brownout_t(i));
   resetsSeen = n;
   return out;
+}
+let hasPinDevs = false;
+function pinDevFrame(e: Exports): PinDevFrame | undefined {
+  if (!hasPinDevs) return undefined;
+  const n = (x: number | undefined) => (x === undefined || Number.isNaN(x) ? null : x);
+  return { encPos: n(e.tb_encoder_pos?.()), pcnt: n(e.tb_pcnt_count?.(0)), pings: n(e.tb_sonar_stat?.(0)), echoUs: n(e.tb_sonar_stat?.(2)) };
 }
 let simAnchor = 0; // 开始计时时的模拟周期
 let wallAnchor = 0;
@@ -400,6 +445,7 @@ function loop() {
     running,
     elec: elecFrame(e),
     brownouts: takeBrownouts(e),
+    pins: pinDevFrame(e),
   });
   flushIo(e);
   postOled(e);
@@ -457,10 +503,10 @@ function postUsb(e: Exports) {
 const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2 };
 
 function postPaused(e: Exports) {
-  post({ type: 'tick', console: '', leds: leds(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running, elec: elecFrame(e), brownouts: takeBrownouts(e) });
+  post({ type: 'tick', console: '', leds: leds(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running, elec: elecFrame(e), brownouts: takeBrownouts(e), pins: pinDevFrame(e) });
 }
 
-type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode };
+type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec };
 /** 上电：建 wasm 实例、挂器件、设环境、开一份新的输入日志 */
 async function bootWasm(m: BootMsg): Promise<Exports | null> {
   const { instance } = await WebAssembly.instantiate(m.wasm, {});
@@ -482,13 +528,19 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   if (e.tb_servo_attach && m.servo !== undefined) e.tb_servo_attach(m.servo);
   e.tb_power_set?.(power === 'ext' ? 1 : 0);
   resetsSeen = 0;
+  // 引脚器件（编码器 / 超声波）：上电时接好；超声波的初始距离作为一条 dist 输入记进日志
+  if (m.encoder && e.tb_encoder_attach) e.tb_encoder_attach(m.encoder.a, m.encoder.b, m.encoder.sw ?? -1);
+  if (m.sonar && e.tb_sonar_attach) e.tb_sonar_attach(m.sonar.trig, m.sonar.echo);
+  hasPinDevs = !!(m.encoder || m.sonar);
   e.tb_io_watch?.(ioLo, ioHi);
   ioChunks = [];
   ioBytes = 0;
   flushIo(e, true);
-  inputLog = { version: 1, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), events: [] };
+  inputLog = { version: 1, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), events: [] };
   record(e, { kind: 'power', on: true });
   if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
+  // 回退重放时 cm 给 NaN：初始距离就是日志里 0 时刻那条 dist，由 seekTo 按原样施加
+  if (m.sonar && Number.isFinite(m.sonar.cm)) apply(e, { kind: 'dist', cm: m.sonar.cm });
   pwmLast = new Map();
   pwmEvents = [];
   bootStdout = '';
@@ -529,6 +581,17 @@ function apply(e: Exports, ev: InputAction) {
     case 'supply':
       power = ev.mode;
       e.tb_power_set?.(ev.mode === 'ext' ? 1 : 0);
+      break;
+    case 'enc':
+      e.tb_encoder_turn?.(ev.steps);
+      break;
+    case 'encsw':
+      e.tb_encoder_press?.(ev.down ? 1 : 0);
+      break;
+    case 'dist':
+      // 导出脚本只写两位小数：施加的值先取整到 0.01 cm，重放才逐周期一致
+      ev = { kind: 'dist', cm: Math.round(ev.cm * 100) / 100 };
+      e.tb_sonar_distance?.(ev.cm);
       break;
     case 'power':
       return;
@@ -652,6 +715,19 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
     case 'power':
       if (!ex) return;
       apply(ex, { kind: 'supply', mode: m.mode });
+      if (!running) postPaused(ex);
+      break;
+    case 'enc':
+      if (!ex) return;
+      apply(ex, { kind: 'enc', steps: m.steps });
+      break;
+    case 'encsw':
+      if (!ex) return;
+      apply(ex, { kind: 'encsw', down: m.down });
+      break;
+    case 'dist':
+      if (!ex) return;
+      apply(ex, { kind: 'dist', cm: m.cm });
       if (!running) postPaused(ex);
       break;
   }

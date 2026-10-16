@@ -112,7 +112,12 @@ export type PartSpec =
   /** 10kΩ 电位器：两端接 3V3 / GND，滑片接 pin（ADC），旋钮可拖动 */
   | { type: 'pot'; pin: number; label?: string }
   /** 无源蜂鸣器模块（三针）：I/O 接 pin，LEDC 方波驱动；网页声音见 audio.ts，3D 里响的时候振膜起伏、冒声波 */
-  | { type: 'buzzer'; pin: number; label?: string };
+  | { type: 'buzzer'; pin: number; label?: string }
+  /** EC11 旋转编码器模块（KY-040 类，P2-01）：CLK = a、DT = b、按键 sw；3V3 供电。旋钮可拖动 / 滚轮转、点按 */
+  | { type: 'encoder'; a: number; b: number; sw?: number; label?: string }
+  /** HC-SR04 超声波（P2-04）：5 V 供电；Echo 经 1 kΩ / 2 kΩ 分压进 GPIO（divider: false = 直接接，接线检查报 5 V 进 GPIO）。
+   *  cm = 初始距离；前方一块可拖动的障碍物，距离由射线量出 */
+  | { type: 'hcsr04'; trig: number; echo: number; divider?: boolean; cm?: number; label?: string };
 
 export interface SceneSpec {
   parts: PartSpec[];
@@ -139,6 +144,20 @@ export interface Bench extends ScenePickApi {
   setPot(pin: number, v: number): void;
   /** 用户在 3D 里拖动电位器旋钮 */
   onPot(cb: (pin: number, v: number) => void): void;
+  /** 编码器：用户拖 / 滚旋钮转了 steps 格（正 = 顺时针）、按下 / 松开旋钮 */
+  onEncoder(cb: (steps: number) => void): void;
+  onEncoderPress(cb: (down: boolean) => void): void;
+  /** 编码器旋钮显示的位置（格；来自内核，回退后同步） */
+  setEncoder(pos: number): void;
+  /** 超声波：拖障碍物后射线量出的距离（cm；前方没东西为 -1） */
+  onDistance(cb: (cm: number) => void): void;
+  /** 把障碍物放到 cm 处（面板 / 卡片改了距离；负数 = 拿走）；返回射线实际量到的距离 */
+  setDistance(cm: number): number;
+  /** 超声波发出一次测量（声波动画） */
+  pingSonar(): void;
+  /** 编码器旋钮 / 障碍物在页面上的位置（clientX/Y，给自动化测试用真实鼠标拖）；看不见时 null */
+  encoderScreenPos(): [number, number] | null;
+  obstacleScreenPos(): [number, number] | null;
   setPowered(on: boolean): void;
   /** 板载 WS2812（C3 GPIO8 / S3 GPIO48）颜色，0–255 */
   setRgb(rgb: number[]): void;
@@ -1074,6 +1093,161 @@ function buzzerModule() {
   return { grp, plugAt, labels: BUZZER_PINS, membrane, waves, waveMat, size: [W, H] as const, ext };
 }
 
+const ENC_PINS = ['GND', '+', 'SW', 'DT', 'CLK'];
+/** EC11 旋转编码器模块（KY-040 类）：平放在桌上，排针在 -z 一侧；旋钮可拖动转、点按。原点在板子底面中心 */
+function encoderModule() {
+  const grp = new THREE.Group();
+  const W = 19, H = 26, T = 1.2;
+  const S = 24;
+  const tex = canvasTexture(W * S, H * S, (g) => {
+    const cw = W * S;
+    g.fillStyle = '#1f55b0';
+    g.fillRect(0, 0, cw, H * S);
+    g.fillStyle = '#eef3fb';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = `bold ${0.9 * S}px "JetBrains Mono", Menlo, monospace`;
+    ENC_PINS.forEach((t, i) => g.fillText(t, cw / 2 + (i - 2) * PITCH * S, 4.6 * S));
+    g.font = `bold ${0.9 * S}px Helvetica, sans-serif`;
+    g.fillText('R1  R2', cw / 2, H * S - 2.2 * S);
+  });
+  const pcb = modulePcb(W, H, T, [], tex, 0x18458f);
+  const flat = new THREE.Group();
+  flat.rotation.x = -Math.PI / 2;
+  pcb.position.y = -H / 2;
+  flat.add(pcb);
+  flat.position.y = 1.2 + T / 2;
+  grp.add(flat);
+  const pcbTop = 1.2 + T;
+  // 编码器本体：12 mm 见方的铁壳 + 黑色底座
+  const base = new THREE.Mesh(new THREE.BoxGeometry(12.4, 2.2, 13.2), MAT.plastic);
+  base.position.set(0, pcbTop + 1.1, 2);
+  grp.add(base);
+  const can = new THREE.Mesh(new THREE.BoxGeometry(12, 4.2, 12.4), MAT.steel);
+  can.position.set(0, pcbTop + 4.3, 2);
+  can.castShadow = true;
+  grp.add(can);
+  const bush = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 3.5, 5, 24), MAT.steel);
+  bush.position.set(0, pcbTop + 8.9, 2);
+  grp.add(bush);
+  // 旋钮：滚花黑色铝帽 + 白色指示线；整组绕 y 转（每格 18°）
+  const knob = new THREE.Group();
+  const kmat = new THREE.MeshStandardMaterial({ color: 0x1b1d21, roughness: 0.45, metalness: 0.3 });
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(7, 7.4, 12, 30), kmat);
+  cap.position.y = 6;
+  knob.add(cap);
+  const ridges = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 9, 0.7), kmat, 30);
+  const m = new THREE.Matrix4();
+  for (let i = 0; i < 30; i++) {
+    const a = (i / 30) * Math.PI * 2;
+    ridges.setMatrixAt(i, m.makeRotationY(-a).premultiply(new THREE.Matrix4().makeTranslation(Math.cos(a) * 7.25, 5.5, Math.sin(a) * 7.25)));
+  }
+  knob.add(ridges);
+  const mark = new THREE.Mesh(new THREE.BoxGeometry(1, 0.3, 5), new THREE.MeshBasicMaterial({ color: 0xf2f2f2 }));
+  mark.position.set(0, 12.1, -3.6);
+  knob.add(mark);
+  knob.position.set(0, pcbTop + 10.4, 2);
+  knob.traverse((o) => (o.castShadow = true));
+  grp.add(knob);
+  // 拾取盒：整个旋钮（拖动、点按都打它）
+  const hit = new THREE.Mesh(new THREE.CylinderGeometry(8.5, 8.5, 14, 16), MAT.hit);
+  hit.position.set(0, pcbTop + 17, 2);
+  grp.add(hit);
+  // 排针与杜邦母头
+  const plastic = new THREE.Mesh(new THREE.BoxGeometry(5 * PITCH, 2.5, 2.5), MAT.plastic);
+  plastic.position.set(0, pcbTop + 1.25, -H / 2 + 2);
+  grp.add(plastic);
+  const pins = new THREE.InstancedMesh(new THREE.BoxGeometry(0.64, 8.5, 0.64), MAT.gold, 5);
+  for (let i = 0; i < 5; i++) pins.setMatrixAt(i, m.makeTranslation((i - 2) * PITCH, pcbTop + 4.25, -H / 2 + 2));
+  grp.add(pins);
+  const plugAt = [0, 1, 2, 3, 4].map((i) => new THREE.Vector3((i - 2) * PITCH, pcbTop + 2.5, -H / 2 + 2));
+  return { grp, knob, hit, plugAt, labels: ENC_PINS, size: [W, H] as const, knobY: knob.position.y };
+}
+
+const SONAR_PINS = ['VCC', 'Trig', 'Echo', 'GND'];
+/** HC-SR04：竖立的蓝色板，两个超声探头朝本地 +z；排针在背面底部、水平朝 -z。原点在桌面上板子底边中点 */
+function sonarModule() {
+  const grp = new THREE.Group();
+  const W = 45, H = 20, T = 1.6, Y0 = 6;
+  const S = 20;
+  const tex = canvasTexture(W * S, H * S, (g) => {
+    const cw = W * S, ch = H * S;
+    g.fillStyle = '#1f55b0';
+    g.fillRect(0, 0, cw, ch);
+    g.fillStyle = '#eef3fb';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = `bold ${1.6 * S}px Helvetica, sans-serif`;
+    g.fillText('HC-SR04', cw / 2, 2.4 * S);
+    g.font = `bold ${1.05 * S}px "JetBrains Mono", Menlo, monospace`;
+    SONAR_PINS.forEach((t, i) => g.fillText(t, cw / 2 + (i - 1.5) * PITCH * 1.6 * S, ch - 1.8 * S));
+    g.font = `bold ${1.2 * S}px Helvetica, sans-serif`;
+    g.fillText('T', cw / 2 - 13 * S, ch / 2 + 7.6 * S);
+    g.fillText('R', cw / 2 + 13 * S, ch / 2 + 7.6 * S);
+  });
+  const pcb = modulePcb(W, H, T, [], tex, 0x18458f);
+  pcb.position.y = Y0;
+  grp.add(pcb);
+  // 3D 打印的小支架把板子立在桌上
+  const stand = new THREE.Mesh(new THREE.BoxGeometry(W - 6, Y0, 14), new THREE.MeshStandardMaterial({ color: 0xd8dade, roughness: 0.7 }));
+  stand.position.set(0, Y0 / 2, -3);
+  stand.castShadow = stand.receiveShadow = true;
+  grp.add(stand);
+  // 两个探头：银色铝壳 + 黑色防尘网
+  const shell = new THREE.MeshStandardMaterial({ color: 0xc9ccd1, metalness: 0.9, roughness: 0.32 });
+  const mesh = new THREE.MeshStandardMaterial({ color: 0x18191b, roughness: 0.85 });
+  const heads: THREE.Vector3[] = [];
+  for (const x of [-13, 13]) {
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 12, 40, 1, true).rotateX(Math.PI / 2), shell);
+    c.position.set(x, Y0 + H / 2, T / 2 + 6);
+    c.castShadow = true;
+    grp.add(c);
+    const net = new THREE.Mesh(new THREE.CircleGeometry(7.6, 40), mesh);
+    net.position.set(x, Y0 + H / 2, T / 2 + 11.8);
+    grp.add(net);
+    heads.push(new THREE.Vector3(x, Y0 + H / 2, T / 2 + 12));
+  }
+  // 中间的晶振
+  const xtal = new THREE.Mesh(new THREE.BoxGeometry(8, 3.4, 2), MAT.steel);
+  xtal.position.set(0, Y0 + H / 2 + 3, T / 2 + 1);
+  grp.add(xtal);
+  // 排针：背面底部，水平朝 -z（弯针）
+  const m = new THREE.Matrix4();
+  const plastic = new THREE.Mesh(new THREE.BoxGeometry(4 * PITCH, 2.5, 2.5), MAT.plastic);
+  plastic.position.set(0, Y0 + 2.2, -T / 2 - 1.25);
+  grp.add(plastic);
+  const pins = new THREE.InstancedMesh(new THREE.BoxGeometry(0.64, 0.64, 8), MAT.gold, 4);
+  for (let i = 0; i < 4; i++) pins.setMatrixAt(i, m.makeTranslation((i - 1.5) * PITCH, Y0 + 2.2, -T / 2 - 4));
+  grp.add(pins);
+  const plugAt = [0, 1, 2, 3].map((i) => new THREE.Vector3((i - 1.5) * PITCH, Y0 + 2.2, -T / 2 - 8));
+  // 声波：从发射头向前扩的弧（每次测量闪一下）
+  const waves = new THREE.Group();
+  const waveMat = new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0, depthWrite: false });
+  for (const k of [0, 1, 2]) {
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(6 + k * 5, 0.35, 6, 32, Math.PI * 0.5), waveMat);
+    arc.rotation.set(0, 0, Math.PI * 0.75);
+    arc.raycast = () => {};
+    waves.add(arc);
+  }
+  waves.position.set(0, Y0 + H / 2, T / 2 + 14);
+  grp.add(waves);
+  return { grp, plugAt, labels: SONAR_PINS, heads, face: T / 2 + 12, waves, waveMat, size: [W, 16] as const, y: Y0 + H / 2 };
+}
+
+/** 障碍物：一块竖立的浅色板（拖动它改距离）。原点在桌面上板子底边中点，正面朝本地 -x */
+function obstacleModel() {
+  const grp = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0xe9d9bd, roughness: 0.8 });
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(4, 50, 70), mat);
+  panel.position.y = 25;
+  panel.castShadow = panel.receiveShadow = true;
+  grp.add(panel);
+  const foot = new THREE.Mesh(new THREE.BoxGeometry(24, 3, 40), new THREE.MeshStandardMaterial({ color: 0xbfae90, roughness: 0.8 }));
+  foot.position.y = 1.5;
+  grp.add(foot);
+  return { grp, panel };
+}
+
 /** 旋转电位器（R16 规格）：蓝色方壳 + 金属轴 + 黑色带指示线的旋钮。原点在引脚根部。 */
 function potModel() {
   const grp = new THREE.Group();
@@ -1467,6 +1641,12 @@ export function createBench(container: HTMLElement): Bench {
   let pots: { pin: number; knob: THREE.Group; hit: THREE.Mesh; v: number }[] = [];
   let buzzers: { pin: number; membrane: THREE.Mesh; waves: THREE.Group; waveMat: THREE.MeshBasicMaterial; on: boolean }[] = [];
   let potCb: ((pin: number, v: number) => void) | null = null;
+  // 编码器旋钮（显示位置 = 内核位置 + 刚拖出去还没生效的格数）、超声波探头 + 障碍物
+  let encoder: { knob: THREE.Group; hit: THREE.Mesh; pos: number; pushed: boolean; y0: number } | null = null;
+  let encCb: ((steps: number) => void) | null = null;
+  let encSwCb: ((down: boolean) => void) | null = null;
+  let sonar: { origin: THREE.Vector3; dir: THREE.Vector3; face: number; obstacle: THREE.Group; panel: THREE.Mesh; waves: THREE.Group; waveMat: THREE.MeshBasicMaterial; pingT: number; cm: number } | null = null;
+  let distCb: ((cm: number) => void) | null = null;
   let parts = new THREE.Group();
   scene.add(parts);
   const oledData = new Uint8Array(128 * 64 * 4);
@@ -1666,6 +1846,116 @@ export function createBench(container: HTMLElement): Bench {
     buzzers.push({ pin: p.pin, membrane: m.membrane, waves: m.waves, waveMat: m.waveMat, on: false });
   }
 
+  /** 平放在面包板前面桌上的模块（蜂鸣器 / 编码器）：杜邦线从开发板针拉到模块排针上的母头 */
+  function tableWires(grp: THREE.Group, mgrp: THREE.Group, plugAt: THREE.Vector3[], labels: string[], partId: string, ends: [string, number, string, string][], bz: number) {
+    mgrp.updateMatrixWorld(true);
+    const local = plugAt.map((v) => v.clone());
+    const recs = labels.map((l, i) => ({ id: `${partId}:${l}`, label: l, anchor: local[i].clone(), parent: mgrp }));
+    pinHits(mgrp, recs, local.map((v) => v.clone().setY(v.y + 4)), [2.4, 9, 2.8], modulePins);
+    ends.forEach(([pin, color, end, role], i) => {
+      const b = local[labels.indexOf(end)].clone().applyMatrix4(mgrp.matrixWorld);
+      const a = boardHole(pin, b);
+      const h = top + 12 + i * 1.5;
+      addWire(grp, [a, lift(a, h), new THREE.Vector3((a.x + b.x) / 2, h + 2, (a.z + b.z) / 2 + Math.sign(bz) * 4), lift(b, h - 2), b], color, pin, `${partId}:${end}`);
+      addRole(apiId(pin), role);
+    });
+  }
+
+  function buildEncoder(grp: THREE.Group, p: Extract<PartSpec, { type: 'encoder' }>) {
+    const root = new THREE.Group();
+    registerPart('encoder', root);
+    grp.add(root);
+    const m = encoderModule();
+    // 放在 A 相针脚前方的桌上（离开发板 BOOT 键远一点）
+    const sig = pinCands('IO' + p.a)[0].p;
+    const bx = sig.x + 6, bz = Math.sign(sig.z || 1) * (BB.D / 2 + 22);
+    m.grp.position.set(bx, 0, bz);
+    if (bz < 0) m.grp.rotation.y = Math.PI;
+    root.add(m.grp);
+    const shadow = contactShadow(m.size[0], m.size[1], 0.3);
+    shadow.position.set(bx, shadow.position.y, bz);
+    grp.add(shadow);
+    const ends: [string, number, string, string][] = [
+      ['GND', WIRE.gnd, 'GND', '编码器地'],
+      ['3V3', WIRE.vcc, '+', '编码器供电（上拉到 3V3）'],
+      ...(p.sw !== undefined ? [['IO' + p.sw, 0x8a5cf6, 'SW', '编码器按键（按下接地）'] as [string, number, string, string]] : []),
+      ['IO' + p.b, WIRE.sda, 'DT', '编码器 B 相（DT）'],
+      ['IO' + p.a, WIRE.scl, 'CLK', '编码器 A 相（CLK）'],
+    ];
+    tableWires(grp, m.grp, m.plugAt, m.labels, 'encoder', ends, bz);
+    // 标注放在模块外侧、低一点，不挡旋钮
+    label(grp, p.label ?? `EC11 编码器 · CLK IO${p.a} DT IO${p.b}${p.sw !== undefined ? ` SW IO${p.sw}` : ''} · 拖 / 滚旋钮`, new THREE.Vector3(bx + 46, 4, bz + Math.sign(bz) * 6));
+    encoder = { knob: m.knob, hit: m.hit, pos: 0, pushed: false, y0: m.knobY };
+  }
+
+  function buildSonar(grp: THREE.Group, p: Extract<PartSpec, { type: 'hcsr04' }>) {
+    const root = new THREE.Group();
+    registerPart('hcsr04', root);
+    grp.add(root);
+    const m = sonarModule();
+    // 立在面包板前面偏右的桌上，探头朝 +x：障碍物在它右边，默认机位里板子、探头、障碍物都看得见
+    const sx = 40, sz = BB.D / 2 + 34;
+    m.grp.position.set(sx, 0, sz);
+    m.grp.rotation.y = Math.PI / 2;
+    root.add(m.grp);
+    const shadow = contactShadow(18, 48, 0.3);
+    shadow.position.set(sx - 3, shadow.position.y, sz);
+    grp.add(shadow);
+    m.grp.updateMatrixWorld(true);
+    const local = m.plugAt.map((v) => v.clone());
+    const recs = m.labels.map((l, i) => ({ id: `hcsr04:${l}`, label: l, anchor: local[i].clone(), parent: m.grp }));
+    pinHits(m.grp, recs, local.map((v) => v.clone()), [2.4, 3, 6], modulePins);
+    const div = p.divider !== false;
+    const ends: [string, number, string, string][] = [
+      ['5V', WIRE.vcc, 'VCC', 'HC-SR04 供电（5 V）'],
+      ['IO' + p.trig, WIRE.sig, 'Trig', 'HC-SR04 Trig（≥10 µs 高脉冲）'],
+      ['IO' + p.echo, 0x2f8fd8, 'Echo', div ? 'HC-SR04 Echo（经 1k/2k 分压）' : 'HC-SR04 Echo（5 V，没分压！）'],
+      ['GND', WIRE.gnd, 'GND', 'HC-SR04 地'],
+    ];
+    ends.forEach(([pin, color, end, role], i) => {
+      const b = local[m.labels.indexOf(end)].clone().applyMatrix4(m.grp.matrixWorld);
+      const a = boardHole(pin, b);
+      const h = top + 14 + i * 1.8;
+      addWire(grp, [a, lift(a, h), new THREE.Vector3((a.x + b.x) / 2, h + 3, (a.z + b.z) / 2 + 6), lift(b, h - 4), b], color, pin, `hcsr04:${end}`);
+      addRole(apiId(pin), role);
+    });
+    // Echo 分压：在 Echo 线落点旁边画两颗小电阻（示意）
+    if (div) {
+      const e = local[m.labels.indexOf('Echo')].clone().applyMatrix4(m.grp.matrixWorld);
+      for (const k of [0, 1]) {
+        const r = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 3.4, 12).rotateZ(Math.PI / 2), new THREE.MeshStandardMaterial({ color: k ? 0xd8b26a : 0x6fa8dc, roughness: 0.5 }));
+        r.position.set(e.x - 12 - k * 5, 1, e.z + 4);
+        r.raycast = () => {};
+        root.add(r);
+      }
+    }
+    label(grp, p.label ?? `HC-SR04 · Trig IO${p.trig} · Echo IO${p.echo}${div ? '（1k/2k 分压）' : '（5 V 直连！）'} · 拖障碍物`, new THREE.Vector3(sx, 4, sz + 34));
+    const ob = obstacleModel();
+    registerPart('obstacle', ob.grp);
+    grp.add(ob.grp);
+    const origin = new THREE.Vector3(sx + m.face, m.y, sz);
+    sonar = { origin, dir: new THREE.Vector3(1, 0, 0), face: m.face, obstacle: ob.grp, panel: ob.panel, waves: m.waves, waveMat: m.waveMat, pingT: -1e9, cm: p.cm ?? 25 };
+    placeObstacle(p.cm ?? 25);
+  }
+
+  /** 障碍物放在离探头正面 cm 处（3D 里最远摆到 100 cm，更远的距离只在读数里）；负数 = 拿走 */
+  function placeObstacle(cm: number) {
+    if (!sonar) return;
+    sonar.cm = cm;
+    const vis = cm >= 0;
+    sonar.obstacle.visible = vis;
+    const mm = Math.min(Math.max(cm, 2), 100) * 10;
+    sonar.obstacle.position.set(sonar.origin.x + mm + 2, 0, sonar.origin.z);
+    sonar.obstacle.updateMatrixWorld(true);
+  }
+  /** 从发射头沿探头朝向打一条射线，量到障碍物的距离（cm，没打到 -1） */
+  function rayDistance(): number {
+    if (!sonar || !sonar.obstacle.visible) return -1;
+    const rc = new THREE.Raycaster(sonar.origin, sonar.dir, 0, 4000);
+    const hit = rc.intersectObject(sonar.panel)[0];
+    return hit ? Math.round(hit.distance) / 10 : -1;
+  }
+
   let lastScene: SceneSpec = { parts: [] };
 
   /** 换开发板（C3 / S3）：开发板重建，外接元件按新板子的引脚重新接线 */
@@ -1704,6 +1994,8 @@ export function createBench(container: HTMLElement): Bench {
     servos = [];
     pots = [];
     buzzers = [];
+    encoder = null;
+    sonar = null;
     oledTex = null;
     lcdTex = null;
     holeUse = new Map();
@@ -1722,6 +2014,8 @@ export function createBench(container: HTMLElement): Bench {
       if (p.type === 'servo') buildServo(parts, p);
       if (p.type === 'pot') buildPot(parts, p);
       if (p.type === 'buzzer') buildBuzzer(parts, p);
+      if (p.type === 'encoder') buildEncoder(parts, p);
+      if (p.type === 'hcsr04') buildSonar(parts, p);
       if (p.type === 'oled') {
         oledData.fill(0);
         for (let i = 3; i < oledData.length; i += 4) oledData[i] = 255;
@@ -1872,6 +2166,111 @@ export function createBench(container: HTMLElement): Bench {
       controls.enabled = true;
     }
   });
+  // 编码器旋钮：左右拖动转（每 14 px 一格，EC11 一圈 20 格）、滚轮一下一格；按住不动 150 ms = 按下按键，快速点一下 = 按一下
+  const ENC_PX = 14;
+  let encDrag: { x0: number; sent: number; moved: boolean; timer: number; held: boolean } | null = null;
+  const hitEncoder = (ev: { clientX: number; clientY: number }) => {
+    if (!encoder) return false;
+    ray.setFromCamera(toNdc(ev), camera);
+    return ray.intersectObject(encoder.hit).length > 0;
+  };
+  const showKnob = () => {
+    if (!encoder) return;
+    encoder.knob.rotation.y = -(encoder.pos * Math.PI) / 10;
+    encoder.knob.position.y = encoder.y0 - (encoder.pushed ? 1.2 : 0);
+  };
+  const turnEncoder = (steps: number) => {
+    if (!encoder || !steps) return;
+    encoder.pos += steps;
+    showKnob();
+    encCb?.(steps);
+  };
+  const pushEncoder = (down: boolean) => {
+    if (!encoder) return;
+    encoder.pushed = down;
+    showKnob();
+    encSwCb?.(down);
+  };
+  renderer.domElement.addEventListener('pointerdown', (ev) => {
+    if (!hitEncoder(ev)) return;
+    controls.enabled = false;
+    const d = { x0: ev.clientX, sent: 0, moved: false, held: false, timer: 0 };
+    d.timer = window.setTimeout(() => {
+      if (encDrag === d && !d.moved) {
+        d.held = true;
+        pushEncoder(true);
+      }
+    }, 150);
+    encDrag = d;
+  });
+  window.addEventListener('pointermove', (ev) => {
+    if (!encDrag) return;
+    const dx = ev.clientX - encDrag.x0;
+    if (Math.abs(dx) > 4) encDrag.moved = true;
+    const want = Math.trunc(dx / ENC_PX);
+    if (want !== encDrag.sent) {
+      turnEncoder(want - encDrag.sent);
+      encDrag.sent = want;
+    }
+  });
+  window.addEventListener('pointerup', () => {
+    const d = encDrag;
+    if (!d) return;
+    encDrag = null;
+    clearTimeout(d.timer);
+    controls.enabled = true;
+    if (d.held) pushEncoder(false);
+    else if (!d.moved) {
+      pushEncoder(true);
+      setTimeout(() => pushEncoder(false), 120);
+    }
+  });
+  // 滚轮在旋钮上：转编码器，不缩放视角（捕获阶段先于 OrbitControls）
+  renderer.domElement.addEventListener(
+    'wheel',
+    (ev) => {
+      if (!hitEncoder(ev)) return;
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      turnEncoder(ev.deltaY < 0 ? 1 : -1);
+    },
+    { capture: true, passive: false },
+  );
+  // 障碍物：按住沿探头朝向拖（投影到探头那条水平线上）
+  let obDrag: { last: number } | null = null;
+  const hitObstacle = (ev: { clientX: number; clientY: number }) => {
+    if (!sonar || !sonar.obstacle.visible) return false;
+    ray.setFromCamera(toNdc(ev), camera);
+    return ray.intersectObject(sonar.obstacle, true).length > 0;
+  };
+  const groundAt = (ev: { clientX: number; clientY: number }, y: number) => {
+    ray.setFromCamera(toNdc(ev), camera);
+    return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), new THREE.Vector3());
+  };
+  renderer.domElement.addEventListener('pointerdown', (ev) => {
+    if (encDrag || !hitObstacle(ev)) return;
+    controls.enabled = false;
+    obDrag = { last: performance.now() };
+  });
+  window.addEventListener('pointermove', (ev) => {
+    if (!obDrag || !sonar) return;
+    const p = groundAt(ev, sonar.origin.y);
+    if (!p) return;
+    const cm = Math.round(Math.min(100, Math.max(2, (p.x - sonar.origin.x) / 10)) * 10) / 10;
+    placeObstacle(cm);
+    const now = performance.now();
+    // 拖动中每 60 ms 最多报一次（输入日志不被拖动刷屏），松手时再报最后的值
+    if (now - obDrag.last > 60) {
+      obDrag.last = now;
+      distCb?.(rayDistance());
+    }
+  });
+  window.addEventListener('pointerup', () => {
+    if (!obDrag) return;
+    obDrag = null;
+    controls.enabled = true;
+    distCb?.(rayDistance());
+  });
   renderer.domElement.addEventListener('pointerdown', (ev) => {
     const b = pick(ev);
     if (!b) return;
@@ -1900,7 +2299,7 @@ export function createBench(container: HTMLElement): Bench {
     const now = performance.now();
     if (now - hoverT < 50) return;
     hoverT = now;
-    const c = pick(ev) ? 'pointer' : pickPot(ev) || dragging ? 'ew-resize' : pickCb && pickAt(ev) ? 'pointer' : '';
+    const c = pick(ev) ? 'pointer' : pickPot(ev) || dragging || hitEncoder(ev) ? 'ew-resize' : hitObstacle(ev) ? 'grab' : pickCb && pickAt(ev) ? 'pointer' : '';
     renderer.domElement.style.cursor = c;
   });
 
@@ -2136,6 +2535,15 @@ export function createBench(container: HTMLElement): Bench {
       bz.membrane.userData.y0 ??= bz.membrane.position.y;
       bz.membrane.position.y = bz.membrane.userData.y0 + 0.12 * Math.sin(t0 / 25);
     }
+    // 超声波：每次测量从发射头扩出三道弧，0.4 s 淡出（示意）
+    if (sonar) {
+      const ph = (t0 - sonar.pingT) / 400;
+      sonar.waves.visible = ph >= 0 && ph < 1;
+      if (sonar.waves.visible) {
+        sonar.waves.scale.setScalar(0.6 + ph * 1.2);
+        sonar.waveMat.opacity = 0.8 * (1 - ph);
+      }
+    }
     if (heat.visible) {
       const k = 1 + 0.06 * Math.sin(t0 / 260);
       heat.scale.set(heatBase * k, heatBase * k, 1);
@@ -2166,6 +2574,13 @@ export function createBench(container: HTMLElement): Bench {
   };
   tick();
 
+  /** 世界坐标 → 页面坐标（clientX/Y）；不在视野里 null */
+  const screenOf = (p: THREE.Vector3): [number, number] | null => {
+    const v = p.clone().project(camera);
+    if (Math.abs(v.x) > 1 || Math.abs(v.y) > 1) return null;
+    const r = renderer.domElement.getBoundingClientRect();
+    return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height];
+  };
   const bench: Bench & { _debug: unknown } = {
     setScene,
     setBoard,
@@ -2202,6 +2617,36 @@ export function createBench(container: HTMLElement): Bench {
     },
     onPot(cb) {
       potCb = cb;
+    },
+    onEncoder(cb) {
+      encCb = cb;
+    },
+    onEncoderPress(cb) {
+      encSwCb = cb;
+    },
+    setEncoder(pos) {
+      // 拖动中以手上的为准；松手后内核位置追上来
+      if (!encoder || encDrag) return;
+      encoder.pos = pos;
+      showKnob();
+    },
+    onDistance(cb) {
+      distCb = cb;
+    },
+    setDistance(cm) {
+      placeObstacle(cm);
+      return rayDistance();
+    },
+    pingSonar() {
+      if (sonar) sonar.pingT = performance.now();
+    },
+    encoderScreenPos() {
+      if (!encoder) return null;
+      return screenOf(encoder.knob.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 8, 0)));
+    },
+    obstacleScreenPos() {
+      if (!sonar || !sonar.obstacle.visible) return null;
+      return screenOf(sonar.panel.getWorldPosition(new THREE.Vector3()));
     },
     setRgb(rgb) {
       const [r, g, b] = rgb.map((v) => v / 255);
@@ -2245,10 +2690,7 @@ export function createBench(container: HTMLElement): Bench {
     buttonScreenPos(name) {
       const b = board.buttons.find((m) => m.name === name);
       if (!b) return null;
-      const v = b.getWorldPosition(new THREE.Vector3()).project(camera);
-      if (Math.abs(v.x) > 1 || Math.abs(v.y) > 1) return null;
-      const r = renderer.domElement.getBoundingClientRect();
-      return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height];
+      return screenOf(b.getWorldPosition(new THREE.Vector3()));
     },
     setUsb(v) {
       if (!v) {

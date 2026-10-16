@@ -194,7 +194,7 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
     session.fwName = rec.fwName;
     let snap: Snapshot;
     try {
-      snap = await session.seek({ flash: rec.fw, i2c: rec.snap.log.i2c, lcd: rec.snap.log.lcd, servo: rec.snap.log.servo, power: rec.snap.log.power, env: inputs.env0 ?? f.env ?? baseEnv, events: inputs.events, untilMs: tgt.untilMs });
+      snap = await session.seek({ flash: rec.fw, i2c: rec.snap.log.i2c, lcd: rec.snap.log.lcd, servo: rec.snap.log.servo, power: rec.snap.log.power, encoder: rec.snap.log.encoder, sonar: rec.snap.log.sonar, env: inputs.env0 ?? f.env ?? baseEnv, events: inputs.events, untilMs: tgt.untilMs });
     } finally {
       busy = false;
     }

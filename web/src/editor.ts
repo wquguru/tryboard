@@ -52,6 +52,10 @@ export function describe(p: PartSpec): string {
       return `电位器 · 滑片 IO${p.pin}`;
     case 'buzzer':
       return `无源蜂鸣器 · IO${p.pin}`;
+    case 'encoder':
+      return `编码器 · CLK IO${p.a} / DT IO${p.b}${p.sw !== undefined ? ` / SW IO${p.sw}` : ''}`;
+    case 'hcsr04':
+      return `HC-SR04 · Trig IO${p.trig} / Echo IO${p.echo}`;
     case 'oled':
       return `OLED · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl}`;
     case 'bme280':
@@ -64,10 +68,10 @@ export function describe(p: PartSpec): string {
   }
 }
 
-/** I2C 器件变了要重新上电（器件在上电时挂到总线上） */
+/** I2C 器件 / 编码器 / 超声波变了要重新上电（器件在上电时挂上） */
 export const needsReboot = (a: SceneSpec, b: SceneSpec) => {
   const i2c = (s: SceneSpec) =>
-    JSON.stringify(s.parts.filter((p) => p.type === 'oled' || p.type === 'bme280' || p.type === 'gc9a01'));
+    JSON.stringify(s.parts.filter((p) => p.type === 'oled' || p.type === 'bme280' || p.type === 'gc9a01' || p.type === 'encoder' || p.type === 'hcsr04').map((p) => (p.type === 'hcsr04' ? { ...p, cm: undefined } : p)));
   return i2c(a) !== i2c(b);
 };
 
@@ -86,6 +90,11 @@ export function conflicts(s: SceneSpec): string[] {
       claim(p.scl, 'I2C SCL', true);
     } else if (p.type === 'gc9a01') {
       for (const pin of [12, 11, 10, 14, 13, 15]) claim(pin, 'GC9A01 圆屏');
+    } else if (p.type === 'encoder') {
+      for (const pin of [p.a, p.b, ...(p.sw !== undefined ? [p.sw] : [])]) claim(pin, describe(p));
+    } else if (p.type === 'hcsr04') {
+      claim(p.trig, describe(p));
+      claim(p.echo, describe(p));
     } else claim(p.pin, describe(p));
   }
   const addrs = s.parts.flatMap((p) => ('addr' in p ? [p.addr] : []));

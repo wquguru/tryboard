@@ -15,6 +15,8 @@ fn usage() -> ! {
                [--spi gc9a01]（S3：SCLK=12 MOSI=11 CS=10 DC=14 RST=13 背光=15；C3：SCLK=6 MOSI=7 CS=10 DC=5 RST=4 背光=3）[--lcd-ppm <最后一帧.ppm>]
                [--power usb|ext]（默认 usb；ext = 舵机由外接 5 V 2 A 供电）[--servo <GPIO>]（接一个 SG90，电流进供电网络）
                [--elec-report]（各节点最低电压、峰值电流、欠压复位次数）；脚本动作 power=usb|ext
+               [--encoder A,B[,SW]]（EC11 旋转编码器；脚本动作 enc=+N / enc=-N 转 N 格、encsw=1|0 按下 / 松开）
+               [--sonar TRIG,ECHO] [--dist 厘米]（HC-SR04；脚本动作 dist=厘米，负数 = 前方没有东西）
   tryboard elec-net <网表.cir> [--at 秒,秒...]（直流 / 瞬态求解，与 ngspice 对照用，见 tools/elec）
   tryboard riscv-test <test.elf>..."
     );
@@ -147,6 +149,33 @@ fn run(args: &[String]) {
     if let Some(pin) = servo {
         m.servo_attach(pin);
     }
+    let pins_of = |s: &str| s.split(',').map(|x| x.trim().trim_start_matches("GPIO").parse::<u32>()).collect::<Result<Vec<_>, _>>().ok();
+    // 旋转编码器：--encoder A,B[,SW]
+    let encoder = opt(args, "--encoder");
+    if let Some(spec) = &encoder {
+        match pins_of(spec).as_deref() {
+            Some([a, b]) => m.encoder_attach(*a, *b, None),
+            Some([a, b, sw]) => m.encoder_attach(*a, *b, Some(*sw)),
+            _ => {
+                eprintln!("--encoder 要 A,B 或 A,B,SW（GPIO 号）");
+                std::process::exit(2)
+            }
+        }
+    }
+    // HC-SR04：--sonar TRIG,ECHO，--dist 初始距离（cm）
+    let sonar = opt(args, "--sonar");
+    if let Some(spec) = &sonar {
+        match pins_of(spec).as_deref() {
+            Some([t, e]) => m.sonar_attach(*t, *e),
+            _ => {
+                eprintln!("--sonar 要 TRIG,ECHO（GPIO 号）");
+                std::process::exit(2)
+            }
+        }
+        if let Some(d) = opt(args, "--dist").and_then(|s| s.parse::<f64>().ok()) {
+            m.sonar_distance(d);
+        }
+    }
     let total = (seconds * CPU_HZ as f64) as u64;
     let t0 = Instant::now();
     let mut out = Vec::new();
@@ -223,6 +252,18 @@ fn run(args: &[String]) {
                 if let Some(mode) = PowerMode::parse(p.trim()) {
                     m.set_power(mode);
                 }
+            } else if let Some(n) = act.strip_prefix("enc=") {
+                // 网页上拖 / 滚编码器旋钮：转 N 格（+ 顺时针）
+                if let Ok(n) = n.trim().trim_start_matches('+').parse::<i32>() {
+                    m.encoder_turn(n);
+                }
+            } else if let Some(v) = act.strip_prefix("encsw=") {
+                m.encoder_press(v.trim() == "1");
+            } else if let Some(v) = act.strip_prefix("dist=") {
+                // 网页上拖障碍物 / 改距离
+                if let Ok(d) = v.trim().parse::<f64>() {
+                    m.sonar_distance(d);
+                }
             } else if let Some(t) = act.strip_prefix("uart=") {
                 m.uart_push(t.replace("\\n", "\n").as_bytes());
             } else if let Some(t) = act.strip_prefix("usbcdc=") {
@@ -243,7 +284,7 @@ fn run(args: &[String]) {
         // 有 --inputs 时始终 1ms 一片：与网页实时运行（worker.ts）的时间片完全相同，S3 双核的交替点才一致，重放逐周期复现
         // 接了舵机也 1ms 一片：供电网络按每片的芯片活动 / PWM 推进，片长与网页相同结果才相同
         // --trace-io 也是 1ms 一片：网页 worker 就这样切，事件序列才能与网页逐条对拍
-        let slice = if si >= script.len() && pwm_pin.is_none() && inputs.is_none() && servo.is_none() && trace_io.is_none() { CPU_HZ / 100 } else { CPU_HZ / 1000 };
+        let slice = if si >= script.len() && pwm_pin.is_none() && inputs.is_none() && servo.is_none() && trace_io.is_none() && encoder.is_none() && sonar.is_none() { CPU_HZ / 100 } else { CPU_HZ / 1000 };
         let before = m.cycles();
         stop = if trace > 0 {
             m.run_traced(slice.min(total - done), &mut ring, trace)
@@ -438,6 +479,13 @@ fn run(args: &[String]) {
     }
     if args.iter().any(|a| a == "--elec-report") {
         eprint!("{}", m.elec.report());
+    }
+    if let Some(p) = m.encoder_position() {
+        let c = m.pcnt_count(0).map(|c| format!("，PCNT 单元 0 计数 {c}")).unwrap_or_default();
+        eprintln!("[tryboard] 编码器 转了 {p} 格（顺时针为正）{c}");
+    }
+    if let Some((pings, echoes, us)) = m.sonar_stats() {
+        eprintln!("[tryboard] 超声波 触发 {pings} 次，回波 {echoes} 次，最近一次 Echo {us:.1} µs");
     }
     let (tr, nack) = m.i2c_stats();
     if tr > 0 {

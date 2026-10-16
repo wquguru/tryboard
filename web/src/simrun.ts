@@ -33,6 +33,11 @@ export interface Ex {
   tb_reset_count?(): number;
   tb_power_set?(mode: number): void;
   tb_servo_attach?(pin: number): void;
+  tb_encoder_attach?(a: number, b: number, sw: number): void;
+  tb_encoder_turn?(steps: number): void;
+  tb_encoder_press?(down: number): void;
+  tb_sonar_attach?(trig: number, echo: number): void;
+  tb_sonar_distance?(cm: number): void;
 }
 
 export interface SimJob {
@@ -50,6 +55,9 @@ export interface SimJob {
   power?: 'usb' | 'ext';
   /** 始终 1ms 一片（= CLI 的 --inputs）：重放网页实时运行导出的输入日志时用 */
   fixedSlice?: boolean;
+  /** 旋转编码器 / HC-SR04（= CLI --encoder A,B[,SW] / --sonar TRIG,ECHO --dist 厘米）；接了也始终 1ms 一片 */
+  encoder?: { a: number; b: number; sw?: number };
+  sonar?: { trig: number; echo: number; cm?: number };
 }
 
 export interface SimResult {
@@ -118,6 +126,11 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
   e.tb_reset_limit?.(50);
   if (j.servo !== undefined) e.tb_servo_attach?.(j.servo);
   if (j.power) e.tb_power_set?.(j.power === 'ext' ? 1 : 0);
+  if (j.encoder) e.tb_encoder_attach?.(j.encoder.a, j.encoder.b, j.encoder.sw ?? -1);
+  if (j.sonar) {
+    e.tb_sonar_attach?.(j.sonar.trig, j.sonar.echo);
+    if (j.sonar.cm !== undefined) e.tb_sonar_distance?.(j.sonar.cm);
+  }
 
   const script = parseScript(j.script);
   let si = 0;
@@ -141,7 +154,12 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         if (v.length === 3 && v.every((x) => !Number.isNaN(x))) e.tb_env_set(v[0], v[1], v[2]);
       } else if (act.startsWith('uart=')) bytesIn(e, new TextEncoder().encode(act.slice(5).replaceAll('\\n', '\n')), (p, n) => e.tb_uart_push(p, n));
       else if (act.startsWith('power=')) e.tb_power_set?.(act.slice(6).trim() === 'ext' ? 1 : 0);
-      else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));
+      else if ((m = act.match(/^enc=\+?(-?\d+)$/))) e.tb_encoder_turn?.(Number(m[1]));
+      else if (act.startsWith('encsw=')) e.tb_encoder_press?.(act.slice(6).trim() === '1' ? 1 : 0);
+      else if (act.startsWith('dist=')) {
+        const d = Number(act.slice(5));
+        if (!Number.isNaN(d)) e.tb_sonar_distance?.(d);
+      } else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));
     }
     if (j.pwmPin !== undefined) {
       const d = e.tb_pin_pwm(j.pwmPin);
@@ -151,7 +169,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         if (!l || Math.abs(f32(l[0] - d)) > f32(0.004) || Math.abs(f32(l[1] - f)) > f32(0.5)) trace.push([d, f, now]);
       }
     }
-    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice && j.servo === undefined ? CPU_HZ / 100 : CPU_HZ / 1000;
+    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice && j.servo === undefined && !j.encoder && !j.sonar ? CPU_HZ / 100 : CPU_HZ / 1000;
     const before = e.tb_cycles();
     const stop = e.tb_run(Math.min(slice, total - done));
     done += e.tb_cycles() - before;

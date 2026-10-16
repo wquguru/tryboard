@@ -437,6 +437,86 @@ impl Machine {
         }
     }
 
+    fn pins(&mut self) -> &mut tryboard_esp32c3::devices::pins::PinDevices {
+        match &mut self.hw {
+            Hw::C3(m) => &mut m.bus.pins,
+            Hw::S3(m) => &mut m.bus.pins,
+        }
+    }
+
+    /// 让 SoC 马上重新问一次外接引脚器件（新排了波形）
+    fn pins_kick(&mut self) {
+        match &mut self.hw {
+            Hw::C3(m) => {
+                m.bus.next_event = 0;
+                m.bus.irq_dirty = true;
+            }
+            Hw::S3(m) => {
+                m.bus.next_event = 0;
+                m.bus.irq_dirty = true;
+            }
+        }
+    }
+
+    /// 接一个旋转编码器（P2-01）：A / B 两相与可选的按键脚；3V3 供电，电流进供电网络
+    pub fn encoder_attach(&mut self, a: u32, b: u32, sw: Option<u32>) {
+        let now = self.cycles();
+        self.pins().encoders.push(tryboard_esp32c3::devices::pins::Encoder::new(a, b, sw, now));
+        self.elec.add_module("encoder");
+        self.pins_kick();
+    }
+
+    /// 编码器转 steps 格（正 = 顺时针）；脚本动作 enc=+N / enc=-N
+    pub fn encoder_turn(&mut self, steps: i32) {
+        let now = self.cycles();
+        if let Some(e) = self.pins().encoders.first_mut() {
+            e.turn(now, steps);
+        }
+        self.pins_kick();
+    }
+
+    /// 编码器按键；脚本动作 encsw=1|0
+    pub fn encoder_press(&mut self, down: bool) {
+        let now = self.cycles();
+        if let Some(e) = self.pins().encoders.first_mut() {
+            e.press(now, down);
+        }
+        self.pins_kick();
+    }
+
+    /// 编码器已经转完的格数（顺时针为正）
+    pub fn encoder_position(&mut self) -> Option<i64> {
+        self.pins().encoders.first().map(|e| e.position)
+    }
+
+    /// 接一个 HC-SR04（P2-04）：Trig 由芯片驱动，Echo 由模块驱动；5 V 供电，电流进 5V 轨
+    pub fn sonar_attach(&mut self, trig: u32, echo: u32) {
+        let now = self.cycles();
+        self.pins().sonars.push(tryboard_esp32c3::devices::pins::Hcsr04::new(trig, echo, now));
+        self.elec.add_module("hcsr04");
+        self.pins_kick();
+    }
+
+    /// 探头到障碍物的距离（cm）；负数 = 前方没有东西（超量程）。脚本动作 dist=厘米
+    pub fn sonar_distance(&mut self, cm: f64) {
+        if let Some(s) = self.pins().sonars.first_mut() {
+            s.distance_cm = (cm >= 0.0).then_some(cm);
+        }
+    }
+
+    /// 超声波的统计（触发次数, 回波次数, 最近回波宽度 µs）
+    pub fn sonar_stats(&mut self) -> Option<(u64, u64, f64)> {
+        self.pins().sonars.first().map(|s| (s.pings, s.echoes, s.last_us))
+    }
+
+    /// 脉冲计数器单元 u 的当前计数（只有 S3 有 PCNT）
+    pub fn pcnt_count(&self, u: usize) -> Option<i16> {
+        match &self.hw {
+            Hw::S3(m) => Some(m.bus.pcnt.count(u)),
+            Hw::C3(_) => None,
+        }
+    }
+
     /// GPIO 电平变化记录（周期, 电平）
     pub fn gpio_log(&self) -> Vec<(u64, u64)> {
         match &self.hw {

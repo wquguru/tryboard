@@ -11,7 +11,7 @@ import type { Toolbar } from './toolbar';
 import type { Card } from './card';
 import type { BomHistory } from './bom';
 import type { SeekJob } from '../live';
-import type { ElecFrame, FromWorker, Snapshot } from '../worker';
+import type { ElecFrame, FromWorker, PinDevFrame, Snapshot } from '../worker';
 import type { WireMods } from './wiring';
 import type { BenchHistory } from './benchhist';
 import type { IoStore } from './iotrace';
@@ -25,7 +25,7 @@ export const STEPS: { id: StepId; label: string }[] = [
   { id: 'product', label: '成品' },
 ];
 
-export type WorkId = 'weather' | 'spin' | 'lens' | 'blank';
+export type WorkId = 'weather' | 'spin' | 'lens' | 'knob' | 'sonar' | 'blank';
 
 /** 选中的对象。kind 与构建树的分组一一对应；pin / wire / button 来自台面拾取 */
 export type SelKind = 'part' | 'wire' | 'power' | 'env' | 'firmware' | 'checkpoint' | 'pin' | 'button' | 'run' | 'tool';
@@ -118,7 +118,7 @@ export interface Session {
   chip: 'esp32c3' | 'esp32s3';
   levels: Level[];
   /** 最近一帧：PWM 占空比、彩灯、OLED */
-  frame: { pwm: number[]; pwmFreq: number[]; gpio: number; enable: number; gpioHi: number; enableHi: number; rgb: number[] | null; oled: Uint8Array | null; lcd: Uint8Array | null; elec: ElecFrame | null };
+  frame: { pwm: number[]; pwmFreq: number[]; gpio: number; enable: number; gpioHi: number; enableHi: number; rgb: number[] | null; oled: Uint8Array | null; lcd: Uint8Array | null; elec: ElecFrame | null; pins: PinDevFrame | null };
   /** 热源靠近的零件（只是显示；读数由环境温度决定） */
   heat: string | null;
   setHeat(part: string | null): void;
@@ -154,6 +154,13 @@ export interface Session {
   /** 换固件在台面上跑（用户拖进来的 .bin） */
   loadFirmware(buf: ArrayBuffer, name: string): void;
   pressBoot(down: boolean): void;
+  /** 编码器（P2-01）：转 steps 格（正 = 顺时针）、按键；都进输入日志 */
+  turnEncoder(steps: number): void;
+  pressEncoder(down: boolean): void;
+  /** 超声波（P2-04）：探头到障碍物的距离（cm，负数 = 拿走障碍物）；台面上的障碍物跟着挪 */
+  setDistance(cm: number): void;
+  /** 当前设的距离（cm） */
+  distance: number;
   setEnv(e: Partial<Env>): void;
   consoleText(): string;
   /** 逻辑分析仪事件（本次上电 / 回退重放以来），P1-05 */

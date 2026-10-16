@@ -197,6 +197,8 @@ pub struct Board {
     pub servo_pin: Option<u32>,
     /// 模块从 3V3 取的电流（A），由挂上的器件累加
     pub modules_3v3: f64,
+    /// 模块从 5V 轨取的电流（A），如 HC-SR04（5 V 器件）
+    pub modules_5v: f64,
     pub now: Readings,
     pub stats: Stats,
     /// 已经积分到的模拟时刻（周期，STEP_CYCLES 的整数倍）
@@ -217,6 +219,7 @@ impl Board {
             servo: None,
             servo_pin: None,
             modules_3v3: 0.0,
+            modules_5v: 0.0,
             now: Readings::default(),
             stats: Stats::default(),
             t: 0,
@@ -256,12 +259,24 @@ impl Board {
             "ssd1306" => Some(0.010),
             // GC9A01 圆屏：估算，主要是背光 25 mA
             "gc9a01" => Some(0.025),
+            // EC11 编码器模块：估算，两颗 10 kΩ 上拉在 3.3 V 下（触点闭合时）
+            "encoder" => Some(0.000_66),
+            _ => None,
+        }
+    }
+
+    /// 从 5V 轨取电的器件（A），同样取自 parts.ts 的 currentMa.typ
+    pub fn module_current_5v(kind: &str) -> Option<f64> {
+        match kind {
+            // HC-SR04 模块规格书：工作电流 15 mA
+            "hcsr04" => Some(0.015),
             _ => None,
         }
     }
 
     pub fn add_module(&mut self, kind: &str) {
         self.modules_3v3 += Self::module_current(kind).unwrap_or(0.0);
+        self.modules_5v += Self::module_current_5v(kind).unwrap_or(0.0);
     }
 
     pub fn set_power(&mut self, p: Power) {
@@ -360,6 +375,14 @@ impl Board {
             b: 0,
             c: p.c3v3,
         });
+        // 5V 轨上的模块：只在接了时才加元件（不接时网络与以前逐位相同）
+        if self.modules_5v > 0.0 {
+            c.add(Elem::Load {
+                a: N5V,
+                i: self.modules_5v,
+                vknee: 1.0,
+            });
+        }
         c
     }
 
@@ -588,6 +611,21 @@ mod tests {
         assert!(r.is_empty(), "{r:?} {:?}", b.stats);
         assert!(b.stats.min_v3v3 > 3.25, "{:?}", b.stats);
         assert!(b.stats.peak_i_usb < 0.1, "{:?}", b.stats);
+    }
+
+    /// 5 V 器件（HC-SR04）从 5V 轨取电：USB 电流多 15 mA，3V3 支路不变
+    #[test]
+    fn hcsr04_draws_from_5v() {
+        let act = Activity { busy: 1.0, ..Default::default() };
+        let mut a = Board::new(ChipKind::S3);
+        let mut b = Board::new(ChipKind::S3);
+        b.add_module("hcsr04");
+        b.add_module("encoder");
+        a.advance(CPU_HZ / 100, &act);
+        b.advance(CPU_HZ / 100, &act);
+        let d = b.now.i_usb - a.now.i_usb;
+        assert!((d - 0.015 - 0.000_66).abs() < 0.001, "多出 {d} A");
+        assert!((b.now.i_3v3 - a.now.i_3v3 - 0.000_66).abs() < 0.0001);
     }
 }
 

@@ -71,6 +71,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     return parts.flatMap((p) => ('addr' in p && kind[p.type] ? [{ kind: kind[p.type], addr: p.addr }] : []));
   };
 
+  /** 编码器 / 超声波（台面上第一个）：上电时接到内核里 */
+  const encoderOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'encoder' ? [{ a: p.a, b: p.b, ...(p.sw !== undefined ? { sw: p.sw } : {}) }] : []))[0];
+  const sonarOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'hcsr04' ? [{ trig: p.trig, echo: p.echo, cm: s.distance }] : []))[0];
   /** 舵机信号脚（台面上第一个舵机）：供电网络里的舵机负载接在它上 */
   const servoOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'servo' ? [p.pin] : []))[0];
   const powerMode = () => (s.power?.ext5v ? 'ext' : 'usb') as 'usb' | 'ext';
@@ -86,6 +89,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     const pins = new Set<number>([c === 'esp32s3' ? 0 : 9]);
     for (const p of sc.parts) {
       if ('pin' in p && p.type !== 'pot') pins.add(p.pin);
+      // 逻辑分析仪默认看编码器 A / B / 按键、超声波 Trig / Echo
+      if (p.type === 'encoder') [p.a, p.b, ...(p.sw !== undefined ? [p.sw] : [])].forEach((x) => pins.add(x));
+      if (p.type === 'hcsr04') [p.trig, p.echo].forEach((x) => pins.add(x));
       if ('sda' in p) {
         pins.add(p.sda);
         pins.add(p.scl);
@@ -138,7 +144,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       if (JSON.stringify(next) !== JSON.stringify(s.scene)) bench.setScene(next);
       s.scene = next;
       s.power = power;
-      s.sim?.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts) });
+      s.sim?.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts) });
       audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
       bumpEdit();
     },
@@ -180,7 +186,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       s.sim?.continueRun();
     },
     applyScene(next, power) {
-      const devs = (sc: SceneSpec) => JSON.stringify([i2cOf(sc.parts), sc.parts.some((p) => p.type === 'gc9a01'), servoOf(sc.parts) ?? null]);
+      const devs = (sc: SceneSpec) => JSON.stringify([i2cOf(sc.parts), sc.parts.some((p) => p.type === 'gc9a01'), servoOf(sc.parts) ?? null, encoderOf(sc.parts) ?? null, sonarOf(sc.parts)?.trig ?? null, sonarOf(sc.parts)?.echo ?? null]);
       const rebootNeeded = devs(next) !== devs(s.scene);
       const same = JSON.stringify(next) === JSON.stringify(s.scene);
       const extBefore = !!s.power?.ext5v;
@@ -189,7 +195,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       if (!same) bench.setScene(next);
       const hadExt = extBefore;
       if (s.sim && rebootNeeded) {
-        s.sim.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts) });
+        s.sim.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts) });
         s.sim.setPower(powerMode());
         s.reboot();
       } else if (s.sim && hadExt !== !!power?.ext5v) s.sim.setPower(powerMode());
@@ -199,7 +205,21 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     fwSize: 0,
     chip,
     levels,
-    frame: { pwm: [], pwmFreq: [], gpio: 0, enable: 0, gpioHi: 0, enableHi: 0, rgb: null, oled: null, lcd: null, elec: null },
+    frame: { pwm: [], pwmFreq: [], gpio: 0, enable: 0, gpioHi: 0, enableHi: 0, rgb: null, oled: null, lcd: null, elec: null, pins: null },
+    distance: scene.parts.flatMap((p) => (p.type === 'hcsr04' ? [p.cm ?? 25] : []))[0] ?? 25,
+    turnEncoder(steps) {
+      s.sim?.turnEncoder(steps);
+    },
+    pressEncoder(down) {
+      s.sim?.pressEncoder(down);
+    },
+    setDistance(cm) {
+      const c = cm < 0 ? -1 : Math.round(cm * 10) / 10;
+      if (c === s.distance) return;
+      s.distance = c;
+      bench.setDistance(c);
+      s.sim?.setDistance(c);
+    },
     fwBuf: null,
     audio,
     sensorOffset: 0,
@@ -262,6 +282,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       i2c: i2cOf(s.scene.parts),
       lcd: s.scene.parts.some((p) => p.type === 'gc9a01'),
       servo: servoOf(s.scene.parts),
+      encoder: encoderOf(s.scene.parts),
+      sonar: sonarOf(s.scene.parts),
       power: powerMode(),
       env: store.get().env,
       onConsole(text) {
@@ -314,6 +336,12 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
           if (sp !== undefined && m.elec.servoAngle !== null) bench.setServoAngle(sp, m.elec.servoAngle);
         }
         for (const t of m.brownouts ?? []) for (const cb of [...brownSubs]) cb(t);
+        if (m.pins) {
+          const prev = s.frame.pins;
+          s.frame.pins = m.pins;
+          if (m.pins.encPos !== null) bench.setEncoder(m.pins.encPos);
+          if (m.pins.pings !== null && m.pins.pings !== (prev?.pings ?? 0)) bench.pingSonar();
+        }
         for (const cb of [...tickSubs]) cb(m);
         const st = store.get();
         if (Math.abs(st.simSeconds - m.simSeconds) >= 0.05 || st.running !== m.running) store.set({ simSeconds: m.simSeconds, running: m.running });
@@ -337,6 +365,14 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     return sim;
   }
 
+  // 3D 台面上拖 / 滚编码器、拖障碍物：进模拟（输入日志）
+  bench.onEncoder((steps) => s.turnEncoder(steps));
+  bench.onEncoderPress((down) => s.pressEncoder(down));
+  bench.onDistance((cm) => {
+    if (cm === s.distance) return;
+    s.distance = cm;
+    s.sim?.setDistance(cm);
+  });
   bench.onButton((name, down) => {
     if (name === 'BOOT') s.pressBoot(down);
     if (name === 'RST' && !down) s.reboot();

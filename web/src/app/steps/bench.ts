@@ -108,7 +108,7 @@ export function benchStep(): StepImpl {
     const group = (key: string, title: string, count: string, body: string) =>
       `<details class="tg" data-g="${key}" ${openGroups[key] ? 'open' : ''}><summary><span>${title}</span><span class="tn-m">${count}</span></summary><div role="group">${body}</div></details>`;
     const board = ses.chip === 'esp32s3' ? 'ESP32-S3-DevKitC-1' : 'ESP32-C3-DevKitM-1';
-    const partItems = [item({ kind: 'part', id: 'board' }, board, ses.chip === 'esp32s3' ? 'S3' : 'C3'), ...parts.map((p) => item({ kind: 'part', id: partId(p) }, esc(partInfo(p).name), p.type === 'bme280' || p.type === 'oled' ? hex(p.addr) : 'pin' in p ? `GPIO${p.pin}` : ''))].join('');
+    const partItems = [item({ kind: 'part', id: 'board' }, board, ses.chip === 'esp32s3' ? 'S3' : 'C3'), ...parts.map((p) => item({ kind: 'part', id: partId(p) }, esc(partInfo(p).name), p.type === 'bme280' || p.type === 'oled' ? hex(p.addr) : 'pin' in p ? `GPIO${p.pin}` : p.type === 'encoder' ? `GPIO${p.a}/${p.b}` : p.type === 'hcsr04' ? `GPIO${p.trig}/${p.echo}` : ''))].join('');
     // 引脚：只列用到的针（接了线的 + 板上自带用途的，如 BOOT、板载彩灯）
     const pinInfo = ses.pick.listPins?.() ?? [];
     const used = new Set(usedPins(wires));
@@ -389,6 +389,57 @@ ${row('起点', r?.a ? esc(pickName(r.a)) : '点第一个目标')}${row('终点'
     return mm;
   }
 
+  // ------------------------------------------------------------ 编码器 / 超声波（P2-01 / P2-04）
+  const encRows = () => `${row('旋钮位置', '', 'encpos')}${row('PCNT 计数（单元 0）', '', 'pcnt')}${row('固件读到', '', 'encfw')}`;
+  const encButtons = () => `<div class="btns"><button type="button" class="btn" data-enc="-1">逆时针 1 格</button><button type="button" class="btn" data-enc="1">顺时针 1 格</button><button type="button" class="btn" data-enc="5">顺时针 5 格</button><button type="button" class="btn" data-encsw="hold">按住旋钮</button></div>`;
+  const sonarRows = () => `${row('设定距离', '', 'dist')}${row('最近一次 Echo', '', 'echo')}${row('触发次数', '', 'pings')}${row('固件读到', '', 'sonfw')}`;
+  const sonarControls = () => {
+    const d = ctx!.session.distance;
+    return `<label class="slider"><input type="range" min="2" max="400" step="0.5" value="${d < 0 ? 400 : d}" data-dist aria-label="障碍物距离" /><output class="mono">${d < 0 ? '没有障碍物' : `${d.toFixed(1)} cm`}</output></label><div class="btns"><button type="button" class="btn" data-distset="10">10 cm</button><button type="button" class="btn" data-distset="50">50 cm</button><button type="button" class="btn" data-distset="200">200 cm</button><button type="button" class="btn" data-distset="-1">拿走障碍物</button></div>`;
+  };
+  function bindPinDevs(root: HTMLElement) {
+    const c = ctx!;
+    root.querySelectorAll<HTMLButtonElement>('[data-enc]').forEach((b) => (b.onclick = () => {
+      const n = Number(b.dataset.enc);
+      c.session.turnEncoder(n);
+      c.session.bench.setEncoder((c.session.frame.pins?.encPos ?? 0) + n);
+    }));
+    root.querySelectorAll<HTMLButtonElement>('[data-encsw]').forEach((b) => {
+      b.onpointerdown = () => {
+        c.session.pressEncoder(true);
+        b.setAttribute('aria-pressed', 'true');
+      };
+      b.onpointerup = b.onpointerleave = () => {
+        if (b.getAttribute('aria-pressed') !== 'true') return;
+        c.session.pressEncoder(false);
+        b.setAttribute('aria-pressed', 'false');
+      };
+    });
+    root.querySelectorAll<HTMLInputElement>('input[data-dist]').forEach((inp) => (inp.oninput = () => {
+      const v = Number(inp.value);
+      inp.parentElement!.querySelector('output')!.textContent = `${v.toFixed(1)} cm`;
+      c.session.setDistance(v);
+    }));
+    root.querySelectorAll<HTMLButtonElement>('[data-distset]').forEach((b) => (b.onclick = () => {
+      c.session.setDistance(Number(b.dataset.distset));
+      updateLive();
+    }));
+    root.querySelectorAll<HTMLButtonElement>('[data-div]').forEach((b) => (b.onclick = () => {
+      const off = (c.session.wireMods.noDivider ?? []).includes('hcsr04');
+      const mods = { ...c.session.wireMods, noDivider: off ? [] : ['hcsr04'] };
+      c.hist?.op({ k: 'wiring', mods, scene: c.session.scene, label: off ? '装回 Echo 分压电阻' : '拆掉 Echo 分压电阻' });
+      c.session.setWireMods(mods);
+      c.shell.toast(off ? 'Echo 经 1k/2k 分压：3.3 V 进 GPIO' : 'Echo 5 V 直接进 GPIO：接线检查报 W2（5 V 进 GPIO）');
+    }));
+  }
+  /** 串口最近的读数行（固件打印格式见 firmware/s3-encoder、s3-ultrasonic） */
+  const lastLine = (re: RegExp) => {
+    const t = ctx!.session.consoleText().slice(-3000);
+    let m: RegExpExecArray | null = null;
+    for (const x of t.matchAll(re)) m = x;
+    return m;
+  };
+
   function renderPart(id: string) {
     const c = ctx!;
     const el = c.shell.props;
@@ -406,12 +457,13 @@ ${sec('实时')}${row('运行', '', 'run')}${row('模拟时间', '', 'sim')}${ro
       updateLive();
       return;
     }
-    const p = ses.scene.parts.find((x) => partId(x) === id);
+    const p = ses.scene.parts.find((x) => partId(x) === (id === 'obstacle' ? 'hcsr04' : id));
     if (!p) {
       el.innerHTML = `${sec('零件')}<div class="ph mono">${esc(id)}</div><div class="tree-empty">这个零件不在当前台面上</div>`;
       return;
     }
-    const info = partInfo(p, !!ses.power?.ext5v);
+    // 拆掉了 Echo 分压（改接线）：接口说明跟着改
+    const info = partInfo(p.type === 'hcsr04' && (ses.wireMods.noDivider ?? []).includes('hcsr04') ? { ...p, divider: false } : p, !!ses.power?.ext5v);
     let live = '';
     if (p.type === 'bme280') {
       const t = c.store.get().env.temp;
@@ -423,9 +475,17 @@ ${sec('环境温度 · 改的是虚拟世界')}<label class="slider"><input type
       live = `${sec('实时画面')}<canvas class="oled" width="128" height="64" data-live="oledc"></canvas>${row('点亮像素', '', 'oledn')}`;
     } else if (p.type === 'servo') {
       live = `${sec('实时')}${row('脉宽', '', 'pw')}${row('角度', '', 'ang')}`;
+    } else if (p.type === 'encoder') {
+      live = `${sec('实时')}${encRows()}${sec('转一转 · 进输入日志')}${encButtons()}
+<p class="note">台面上：左右拖旋钮转（每 14 px 一格）、鼠标滚轮一下一格、按住不动 = 按下按键。每格 4 个沿（A 先于 B = 顺时针），沿间隔 0.5 ms，内核按时刻排出波形；S3 用 PCNT 正交 4 倍频计数。可信度：模拟器验证过（与命令行一致）；触点抖动未建模。</p>`;
+    } else if (p.type === 'hcsr04') {
+      live = `${sec('实时')}${sonarRows()}${sec('障碍物距离 · 改的是虚拟世界')}${sonarControls()}
+<p class="note">台面上：按住障碍物沿探头方向拖（3D 里最远摆到 100 cm，更远用滑块）。Trig 收到 ≥ 10 µs 高电平后 250 µs，Echo 拉高 2 × 距离 / 343 m/s；距离来自探头到障碍物的射线。声速按 20 ℃ 固定，未经真机标定。</p>
+${sec('电平')}${rowT('Echo', p.divider === false || (c.session.wireMods.noDivider ?? []).includes('hcsr04') ? '<span class="bad">5 V 直接进 GPIO：S3 的 GPIO 不耐 5 V（规则 R17 / 接线检查 W2）</span>' : 'Echo 输出 5 V，经 1 kΩ / 2 kΩ 分压到约 3.3 V 再进 GPIO')}<div class="btns"><button type="button" class="btn" data-div aria-pressed="${!(c.session.wireMods.noDivider ?? []).includes('hcsr04')}">${(c.session.wireMods.noDivider ?? []).includes('hcsr04') ? '装回分压电阻' : '拆掉分压电阻（看规则报警）'}</button></div>`;
     }
     el.innerHTML = `${sec('零件')}<div class="ph">${esc(info.name)}</div>${rowT('型号', esc(info.model))}${rowT('接口', esc(info.iface))}${row('供电', esc(info.power))}${live}${p.type === 'servo' ? renderPowerInline() : ''}`;
     bindEnvInputs();
+    bindPinDevs(el);
     bindPartActs(el);
     bindPowerToggle(el);
     updateLive();
@@ -619,6 +679,26 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
       set('eic', A(e.i3v3));
       set('pv', s.selection?.kind === 'pin' ? powerVolts(s.selection.id, !!c.session.power?.ext5v, e) : '');
     }
+    const pd = c.session.frame.pins;
+    if (pd) {
+      set('encpos', pd.encPos === null ? '—' : `${pd.encPos} 格（顺时针为正）`);
+      set('pcnt', pd.pcnt === null ? '—' : String(pd.pcnt));
+      set('pings', pd.pings === null ? '—' : `${pd.pings} 次`);
+      set('echo', pd.echoUs === null || !pd.pings ? '—' : `${pd.echoUs.toFixed(1)} µs`);
+    }
+    const em = lastLine(/ENC count=(-?\d+) detents=(-?\d+)/g);
+    set('encfw', em ? `count=${em[1]}（${em[2]} 格）` : '等固件打印…');
+    const sm = lastLine(/DIST (?:([\d.]+) cm|out of range|no echo)/g);
+    set('sonfw', sm ? (sm[1] ? `${sm[1]} cm` : sm[0].slice(5)) : '等固件打印…');
+    const dist = c.session.distance;
+    set('dist', dist < 0 ? '没有障碍物（超量程）' : `${dist.toFixed(1)} cm`);
+    for (const root of card ? [el, card] : [el])
+      root.querySelectorAll<HTMLInputElement>('input[data-dist]').forEach((inp) => {
+        if (inp === document.activeElement || dist < 0 || Number(inp.value) === dist) return;
+        inp.value = String(dist);
+        const o = inp.parentElement?.querySelector('output');
+        if (o) o.textContent = `${dist.toFixed(1)} cm`;
+      });
     const mr = meterReading();
     if (mr) {
       set('mv', mr.v === null ? '—' : `${mr.v.toFixed(3)} V`);
@@ -753,6 +833,16 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
       bindPowerToggle(box);
       return box;
     }
+    if (t.kind === 'part' && t.id === 'encoder') {
+      box.innerHTML = `<div class="sec">EC11 编码器 · 拖 / 滚旋钮</div>${encRows()}${encButtons()}`;
+      bindPinDevs(box);
+      return box;
+    }
+    if (t.kind === 'part' && (t.id === 'hcsr04' || t.id === 'obstacle')) {
+      box.innerHTML = `<div class="sec">HC-SR04 · 拖障碍物或滑块</div>${sonarRows()}${sonarControls()}`;
+      bindPinDevs(box);
+      return box;
+    }
     if (t.kind === 'button' && t.id === 'BOOT') {
       box.innerHTML = `<div class="sec">BOOT 键 · GPIO${c.session.chip === 'esp32s3' ? 0 : 9}</div><div class="btns"><button type="button" class="btn" data-boot="down">按下</button><button type="button" class="btn" data-boot="up">松开</button></div><p class="note">weather 固件：按一下切换 ℃ / ℉。</p>`;
       bindBoot(box);
@@ -870,7 +960,7 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
   }
 
   // ------------------------------------------------------------ 造错误接线（验收用的 debug 钩子，?debug=1 才挂出）
-  function injectWiring(kind: 'drive' | '5v' | 'nores' | 'nognd' | 'addr' | 'clear'): string[] {
+  function injectWiring(kind: 'drive' | '5v' | 'nores' | 'nognd' | 'addr' | 'nodiv' | 'clear'): string[] {
     const c = ctx!;
     const ses = c.session;
     let scene = ses.scene;
@@ -892,6 +982,9 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
     } else if (kind === 'nognd') {
       mods = { drop: ['wire:GND~bme280:GND'] };
       label = '拔掉 BME280 地线';
+    } else if (kind === 'nodiv') {
+      mods = { noDivider: ['hcsr04'] };
+      label = '拆掉 Echo 分压电阻';
     } else if (kind === 'addr') {
       scene = { ...scene, parts: scene.parts.map((p) => (p.type === 'oled' ? { ...p, addr: 0x76 } : p)) };
       label = 'OLED 地址改成 0x76';
@@ -938,7 +1031,8 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
         { id: 'run', tools: [{ id: 'rerun', label: '再跑一次', primary: true }] },
       ]);
       c.shell.toolbar.setActive(ruler ? 'ruler' : meter ? 'meter' : 'select');
-      if (!c.store.get().selection) c.store.set({ selection: c.work.checkpoints.length ? { kind: 'part', id: 'bme280' } : { kind: 'firmware', id: 'main' } });
+      const pinDev = c.session.scene.parts.find((p) => p.type === 'encoder' || p.type === 'hcsr04');
+      if (!c.store.get().selection) c.store.set({ selection: c.work.checkpoints.length ? { kind: 'part', id: 'bme280' } : pinDev ? { kind: 'part', id: pinDev.type } : { kind: 'firmware', id: 'main' } });
       if (!c.session.scene.parts.some((p) => partId(p) === 'bme280') && c.store.get().selection?.id === 'bme280') c.store.set({ selection: { kind: 'part', id: 'board' } });
       recheckWiring();
       renderTree();

@@ -668,5 +668,58 @@
   "scene": {
    "parts": []
   }
+ },
+ {
+  "id": "s3-encoder",
+  "chip": "esp32s3",
+  "title": "旋转编码器：PCNT 正交计数",
+  "about": "EC11 旋转编码器（KY-040 模块）CLK 接 GPIO6、DT 接 GPIO7、按键接 GPIO15。S3 的 PCNT 两个通道互为边沿 / 电平做 4 倍频正交计数（一格 4 个计数），±100 设为上下限、超出由驱动累加。拖动或滚动 3D 里的旋钮，串口打印计数；按住旋钮打印 SW DOWN。",
+  "tags": [
+   "✓ 仿真验证",
+   "PCNT",
+   "GPIO 矩阵",
+   "ESP-IDF 5.5"
+  ],
+  "pins": {
+   "a": 6,
+   "b": 7,
+   "sw": 15
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "encoder",
+     "a": 6,
+     "b": 7,
+     "sw": 15
+    }
+   ]
+  }
+ },
+ {
+  "id": "s3-ultrasonic",
+  "chip": "esp32s3",
+  "title": "超声波测距：HC-SR04 + RMT 接收",
+  "about": "HC-SR04 由 5 V 供电，Trig 接 GPIO17（GPIO 发 10 µs 脉冲），Echo 经 1 kΩ / 2 kΩ 分压接 GPIO18，由 RMT 接收通道以 1 MHz 分辨率记下高电平宽度，换算成距离（343 m/s）。拖动 3D 里探头前面的障碍物，串口里的距离跟着变。",
+  "tags": [
+   "✓ 仿真验证",
+   "RMT 接收",
+   "5 V 器件",
+   "ESP-IDF 5.5"
+  ],
+  "pins": {
+   "trig": 17,
+   "echo": 18
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "hcsr04",
+     "trig": 17,
+     "echo": 18,
+     "cm": 15
+    }
+   ]
+  }
  }
 ]

@@ -10,6 +10,7 @@ pub mod src {
     pub const UART1: u32 = 28;
     pub const LEDC: u32 = 35;
     pub const RMT: u32 = 40;
+    pub const PCNT: u32 = 41;
     pub const I2C_EXT0: u32 = 42;
     pub const I2C_EXT1: u32 = 43;
     pub const TG0_T0: u32 = 50;

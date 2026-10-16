@@ -57,7 +57,7 @@ web/（Vite + TS）
 
 ## 供电网络（`core/crates/elec`，C3 / S3 共用）
 - `mna.rs`：节点电压法 + 隐式欧拉；元件 R / C / V（理想或带内阻）/ I / Limit（带限流的源）/ Ldo / Load（恒流，低于 vknee 退成电阻）/ Motor（舵机电机：max(0,(min(v,vcmd)−emf)/r)）。分段线性元件用 Katzenelson 法解（见 DECISIONS「电气模型」），稠密 LU 部分主元。`spice.rs` 读 SPICE 子集（R/C/V/I、.op、.tran，`*tb:` 行写自定义元件），CLI `tryboard elec-net` 用它与 ngspice 对照（`tools/elec/compare.py`）
-- `board.rs`：开发板网络（5V 轨、3V3、舵机红线、外接 5 V 四个节点；USB 口 0.5 A 限流、外接 5 V 2 A、SGM2212 LDO、去耦电容、芯片 / 模块 / 舵机负载）。固定 100 µs 一步、只走整步。3V3 < 门限（S3 2.44 V / C3 2.51 V）持续 0.12 ms → 欠压复位，按住到电压回升
+- `board.rs`：开发板网络（5V 轨、3V3、舵机红线、外接 5 V 四个节点；USB 口 0.5 A 限流、外接 5 V 2 A、SGM2212 LDO、去耦电容、芯片 / 模块 / 舵机负载；5 V 模块（HC-SR04）接了才在 5V 轨上加恒流负载）。固定 100 µs 一步、只走整步。3V3 < 门限（S3 2.44 V / C3 2.51 V）持续 0.12 ms → 欠压复位，按住到电压回升
 - `servo.rs`：SG90 二阶动力学（比例控制 + 电机 + 减速箱），给电流和角度，不影响固件读数
 - 接法：`Machine { hw: Hw::C3|S3, elec: Board }`。`Machine::run` 跑完一段后按这段的活动（忙的核数 = 指令数 / 周期数、Wi-Fi 收发帧、舵机脚 PWM 脉宽）推进 `elec`；触发欠压就以 `Stop::Reset(15)` 结束，调用方 `reboot(15)`；按住期间 `run` 不执行指令、只走时间。`reboot` 往串口补 ROM 头三行（`rst:0x..`），第一次上电不补
 - CLI：`--power usb|ext`（默认 usb）、`--servo GPIO`（接了就 1 ms 一片）、`--elec-report`（`[tryboard] 电气 …` 各节点最低电压、峰值电流、复位次数与时刻）、脚本动作 `power=usb|ext`；`tryboard elec-net 网表 [--at 秒,…]`
@@ -81,6 +81,17 @@ web/（Vite + TS）
 - ⌘K（P1-06，`app/cmdk.ts` + 纯函数 `app/cmdmatch.ts`）：候选 = 命令（含按输入生成的"把室温设为 N ℃""回到第 n 次运行"）+ 零件 + 引脚（listPins）+ 检查点 + 运行；执行走 store / session / 时间线现有接口
 - 关卡验收：`firmware/levels.json` 是唯一来源，判定规则在 `tools/check.py` 和 `web/src/checks.ts` 各写一份、逐条对应。浏览器里由 `verify-worker.ts` 按**模拟时间**跑（不看墙钟），时间片 / 脚本施加 / PWM 采样照搬 CLI `run` 的循环；观察记录用 wasm 的 `tb_report`（与 CLI `--gpio-log --ws2812-log` 同格式）。运行指纹 = FNV-1a(串口原始字节 + `\n#report\n` + 规范化观察记录)，`tools/webtest/levels.mjs` 逐关核对网页与命令行指纹相同。
 
+## 引脚器件、PCNT、RMT 接收（P2-01 / P2-04 / P2-05）
+- 引脚器件（`crates/esp32c3/src/devices/pins.rs`，C3 / S3 的 SocBus 都挂 `pins: PinDevices`）：输出带精确时刻波形的外接器件放在 SoC 里，不在 1 ms 时间片之间施加。`poll(now)` 给出到 now 为止的驱动 `(周期, 引脚, 电平)`，SoC 的 `pins_update` 按时刻写 `gpio.ext_in / ext_driven` 并调 `gpio_changed(t)`（照常触发 GPIO 中断、iotrace、PCNT / RMT 接收）；下一次要问的时刻进 `next_event`（WAITI 快进也会停在这里）。`gpio_changed` 在电平变化时调 `pins.on_level(t, 电平)`，让器件看到芯片输出（HC-SR04 的 Trig）
+  - EC11 编码器：A/B 正交，一格四个沿、沿间隔 0.5 ms（`ENC_EDGE_CYCLES`），顺时针 A 先落；`turn(steps)` 排队，`press(down)` 按下接地 / 松开悬空。上电驱动 A=B=1（模块上拉）
+  - HC-SR04：Trig 高 ≥ 10 µs 的下降沿后 250 µs 拉高 Echo，宽 2 × 距离 / 343 m/s；2–400 cm，`None` / 超量程 38 ms；回波没结束时的触发不理。距离由外部（脚本 `dist=`、网页射线）设
+- 外设输入取样：S3 `feed_inputs(t, 电平)`、C3 `feed_rx` 在每次 `gpio_changed` 与 RMT 发送改了引脚之后，按 GPIO 矩阵（FUNCn_IN_SEL_CFG：S3 sel[5:0] / inv[6] / 经矩阵[7]，常量 0x38 / 0x3C；C3 sel[4:0] / inv[5] / 经矩阵[6]，常量 0x1E / 0x1F）算出 PCNT 16 路输入（信号 33..48）与 RMT 接收输入（信号 = RMT_SIG_IN0 + i，与输出同号）的电平，带时刻喂进去。电平没变也可以喂（内部只认跳变）
+- 毛刺滤波（`sigin.rs` 的 `Deglitch`，PCNT 与 RMT 接收共用）：跳变先挂起，稳定满门限才生效，所以两个沿都推迟门限时长、脉宽不变；短于门限的脉冲被吞掉。挂起的跳变到期时刻进 `next_event`
+- PCNT（`pcnt.rs`，0x60017000，中断源 41，只有 S3）：4 单元 × 2 通道，寄存器按 pcnt_reg.h；脉冲输入的沿按 pos / neg 动作（1 加 2 减）、按同通道控制输入的电平用 hctrl / lctrl 改写（1 反向、2/3 禁止）；CTRL 的 rst 位置 1 期间计数清零、pause 位暂停。每步后比较：到 h_lim（>0）/ l_lim（<0）触发事件并清零，否则 thres0 / thres1 / 0；有事件就锁存 STATUS[6:2]（替换上一次）、置 INT_RAW 单元位；zero_mode 按变化方向更新。IDF `pulse_cnt` 的 accum_count 靠"到限清零 + 中断里读 STATUS 累加"
+- RMT 接收（`rmt.rs`，S3 通道 4–7 / C3 通道 2–3，按 `RmtLayout` 的 `rx_conf0`、`rx_mem_shift`、`rx_end/err/thr_bit` 参数化）：CONF1.rx_en 上升后等第一个跳变；每段电平按通道分频的 tick 写半个条目（时长上限 0x7FFF）；电平保持 ≥ idle_thres tick 结束：当前电平写成时长 0 的半条目、补齐最后一个条目，置 RX_END；STATUS 的 mem_waddr_ex = 通道起始条目号 + 已写条目（IDF 减去起点得到条目数）。rx_lim + 回绕时每 lim 个条目置阈值中断（乒乓），不回绕写满置出错并停止。mem_wr_rst 复位写指针
+- 对外：CLI `--encoder A,B[,SW]`、`--sonar TRIG,ECHO`、`--dist 厘米`，脚本动作 `enc=+N|-N`、`encsw=1|0`、`dist=厘米`（负数 = 没有障碍物），结尾打印 `[tryboard] 编码器 转了 N 格…PCNT 单元 0 计数 C` / `[tryboard] 超声波 触发 N 次，回波 M 次，最近一次 Echo W µs`；接了这两种器件时 CLI 与 simrun 都 1 ms 一片。wasm `tb_encoder_attach(a,b,sw|-1)`、`tb_encoder_turn`、`tb_encoder_press`、`tb_encoder_pos`、`tb_pcnt_count(u)`、`tb_sonar_attach`、`tb_sonar_distance`、`tb_sonar_stat(0 触发 / 1 回波 / 2 宽度µs)`
+- 网页：`PartSpec` 加 `encoder {a,b,sw?}`、`hcsr04 {trig,echo,divider?,cm?}`；worker `boot` / `seek` 带 `encoder` / `sonar`（seek 时 cm 给 NaN，初始距离就是日志 0 时刻那条 `dist`），消息 `enc` / `encsw` / `dist` 进输入日志（`dist` 施加前取整到 0.01 cm，导出脚本两位小数才逐周期重放），tick 带 `pins`（`PinDevFrame`）。InputLog 加 `encoder` / `sonar`，`cliArgs` 拼 `--encoder` / `--sonar`。3D：编码器旋钮左右拖（14 px 一格）、滚轮一格、按住 150 ms = 按下；HC-SR04 立在面包板前、探头朝 +x，前方障碍物可沿探头方向拖，距离 = 从发射头沿朝向打到障碍物的射线（3D 里最远摆 100 cm，更远只用滑块）；接线检查 W2 认 Echo 的 1k/2k 分压（`BenchWire.divider`，改接线 `noDivider` 拆掉）。供电：编码器 0.66 mA 进 3V3，HC-SR04 15 mA 进 5V 轨（`Board::module_current_5v`，接了才加元件，没接时网络与以前逐位相同）
+
 ## Xtensa LX7 核（ESP32-S3，`core/crates/xtensa`）
 - 配置取自 ESP-IDF `components/xtensa/esp32s3/include/xtensa/config/core-isa.h`：64 个物理 AR、窗口 ABI、16 位密度指令、零开销循环、MUL16/MUL32/MULUH/MULSH/DIV32、NSA/MIN/MAX/SEXT/CLAMPS、布尔寄存器、S32C1I、硬件非对齐访存、VECBASE 复位 0x40000000。
 - 取指按首字节 op0 判长度（8..=13 为 2 字节，否则 3 字节）；`Bus::fetch` 默认逐字节读，SoC 可重写成快路径。
@@ -100,7 +111,7 @@ web/（Vite + TS）
 - HLE：rom_i2c_* 在 ROM 函数入口（ENTRY 之前）拦截，此时窗口仍是调用者的：参数在 a(4·CALLINC+2..)，返回地址在 a(4·CALLINC)（高 2 位为 CALLINC），返回值写回 a(4·CALLINC+2)，PC 直接回到调用点之后。
 - 软件复位：`mmio_write` 看 RTC_CNTL_OPTIONS0 的复位位（脉冲，存回的值去掉它们）。SW_PROCPU_RST / SW_SYS_RST 记 `reset_request`，写它的那个核在下一条指令前停下，`run` 返回 `Stop::Reset(12 / 3)`；SW_APPCPU_RST（esp_restart 先复位并停住另一个核）直接把核 1 停掉。`Esp32s3::reboot` 用一条新总线重新直接启动：先放进旧的 RTC 慢 / 快速内存和 RTC_CNTL_STORE0–3/6/7，再装镜像段（.rtc.data 被重新装载，与 bootloader 在非深睡唤醒时的做法一致；RTC_NOINIT 不在镜像里所以保留）；RTC_CNTL_RESET_STATE 读回复位原因（两核同值），`esp_reset_reason()` 结合 STORE6 里的提示得到 ESP_RST_SW。外部世界（引脚外部驱动、ADC 电压、I2C 器件、GPIO 记录、WS2812 解码）搬到新机器；模拟时间继续。
 - 八线 PSRAM（`psram.rs`）：不 HLE，ROM 的 `esp_rom_opiflash_exec_cmd` 照常配 SPI1 寄存器；写 CMD 的 USR 位时若 SPI_MEM_MISC 选的是 CS1（CS0_DIS=1、CS1_DIS=0）就交给 `OctalPsram`：0x4040 / 0xC0C0 读写模式寄存器（MR1 厂商 0x0D AP、MR2 density 3 = 8MB / 第 3 代 / good-die，MR3 VCC=3V；写只落 MR0/4/8），0x0000 / 0x8080 同步读写存储体（与 cache 共用 `SocBus::psram`）。dummy、DTR 采样相位、驱动强度只存不用。
-- 外设：与 C3 同族的模型直接复用 tryboard-esp32c3（UART、SYSTIMER、TIMG、SPI1、LEDC、I2C + 器件、RMT + WS2812、GP-SPI2、GDMA + GC9A01、SHA / AES），Wi-Fi MAC 复用 tryboard-soc（`WifiLayout::S3`，中断源 0；WDEV_RND_REG 在 0x6003507C；SENS 温度传感器给 READY），按芯片参数化的是 RMT（`RmtLayout`：通道数、寄存器块起点、RAM 偏移、GPIO 矩阵信号号）与 GDMA（`GdmaLayout`）；S3 独有的是中断矩阵、EXTMEM、49 脚 GPIO、SENS 单次 ADC（periph.rs）。
+- 外设：与 C3 同族的模型直接复用 tryboard-esp32c3（UART、SYSTIMER、TIMG、SPI1、LEDC、I2C + 器件、RMT + WS2812 + 接收、PCNT、GP-SPI2、GDMA + GC9A01、SHA / AES、引脚器件），Wi-Fi MAC 复用 tryboard-soc（`WifiLayout::S3`，中断源 0；WDEV_RND_REG 在 0x6003507C；SENS 温度传感器给 READY），按芯片参数化的是 RMT（`RmtLayout`：通道数、寄存器块起点、RAM 偏移、GPIO 矩阵信号号）与 GDMA（`GdmaLayout`）；S3 独有的是中断矩阵、EXTMEM、49 脚 GPIO、SENS 单次 ADC（periph.rs）。
 - 入口帧溢出保存区：核 0 / 核 1 分别借用 ROM 的 level 5 / level 4 中断栈（app 装了自己的向量表后 ROM 不再用）。
 - 崩溃检测：落进 ROM 异常向量（VECBASE 仍为 0x40000000 时）停机报 EXCCAUSE / EPC1；app 装了自己的 VECBASE 后，崩溃由固件自己的 panic 处理程序打印（Guru Meditation），CLI 照常转发。
 - 中断：32 条线，级别 / 类型按 core-isa.h（外部电平、外部边沿 10/22/28/30、NMI 14、软件 7/29、定时器 6/15/16、性能计数 11）。`INTERRUPT` = 锁存位（边沿 / NMI / 软件 / 定时器）| 外部电平线。可响应条件：挂起 & INTENABLE 的最高级别 > max(PS.INTLEVEL, EXCM ? 3 : 0)。level 1 走 User/Kernel 向量（EXCCAUSE=4），level n≥2 存 EPC_n / EPS_n、置 INTLEVEL=n 与 EXCM，跳 VECBASE+0x180/0x1C0/0x200/0x240/0x280/0x2C0。

@@ -2,6 +2,7 @@
 
 pub mod bme280;
 pub mod gc9a01;
+pub mod pins;
 pub mod ssd1306;
 
 use crate::i2c::I2cDevice;

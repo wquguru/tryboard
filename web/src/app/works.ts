@@ -9,5 +9,8 @@ export const WORKS: Record<string, WorkDef> = {
   spin: { id: 'spin', title: '会转身的小黄', example: 'spin', checkpoints: ['spin-1', 'spin-2', '07-spin'] },
   // 眼睛 + 眨眼 → 按键换表情 → 合体（四种表情循环）
   lens: { id: 'lens', title: '透镜里的小人', example: 'lens', checkpoints: ['lens-1', 'lens-2', '07-lens'] },
+  // P2-01 / P2-04 的实验台（没有检查点；作品化在 P2-09：旋钮台灯、超声波尺子）
+  knob: { id: 'knob', title: '旋钮计数（编码器 + PCNT）', example: 's3-encoder', checkpoints: [] },
+  sonar: { id: 'sonar', title: '超声波测距（HC-SR04 + RMT 接收）', example: 's3-ultrasonic', checkpoints: [] },
   blank: { id: 'blank', title: '空白实验台', example: null, checkpoints: [] },
 };
