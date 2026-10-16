@@ -7,6 +7,7 @@
 pub mod boot;
 pub mod hle;
 pub mod periph;
+pub mod psram;
 pub mod usb;
 
 use periph::*;
@@ -58,6 +59,15 @@ pub const MMU_PSRAM: u32 = 1 << 15;
 /// N16R8：16MB flash + 8MB 八线 PSRAM（最常见的 S3 开发板配置）
 pub const PSRAM_SIZE: usize = 8 << 20;
 
+/// RTC_CNTL_OPTIONS0 的软件复位位（rtc_cntl_reg.h）：系统复位、核 0 复位、核 1 复位
+const RST_SYS: u32 = 1 << 31;
+const RST_PROCPU: u32 = 1 << 5;
+const RST_APPCPU: u32 = 1 << 4;
+pub const RTC_CNTL_RESET_STATE: u32 = 0x6000_8038;
+/// RTC_CNTL_STORE0..7：在 RTC 域，CPU / 系统复位后保持（复位原因提示、启动时间、RTC 慢时钟校准值等）。
+/// STORE4 / STORE5（晶振 / APB 频率）由 ROM 每次启动重写，不必保留
+const RTC_STORE_KEEP: [u32; 6] = [0x6000_8050, 0x6000_8054, 0x6000_8058, 0x6000_805C, 0x6000_80C8, 0x6000_80CC];
+
 pub struct SocBus {
     pub sram: Vec<u8>,
     pub rtc_slow: Vec<u8>,
@@ -65,6 +75,8 @@ pub struct SocBus {
     pub rom: Vec<u8>,
     pub flash: Vec<u8>,
     pub psram: Vec<u8>,
+    /// PSRAM 芯片的命令接口（模式寄存器）；存储体是 `psram`
+    pub psram_chip: psram::OctalPsram,
     pub mmu: Vec<u32>,
     pub now: u64,
     pub uart0: Uart,
@@ -105,6 +117,12 @@ pub struct SocBus {
     pub next_event: u64,
     pub gpio_log: Vec<(u64, u64)>,
     last_gpio: u64,
+    /// 固件请求复位（RTC_CNTL_OPTIONS0 的 SW_SYS_RST / SW_PROCPU_RST），值为下次上电的复位原因
+    pub reset_request: Option<u32>,
+    /// 固件单独复位了核 1（SW_APPCPU_RST）：esp_restart 先复位并停住另一个核
+    pub appcpu_reset: bool,
+    /// 本次上电的复位原因（RTC_CNTL_RESET_STATE 每核 6 位）：1 上电、3 软件系统复位、12 软件 CPU 复位
+    pub reset_reason: u32,
 }
 
 impl Default for SocBus {
@@ -118,6 +136,7 @@ impl Default for SocBus {
             rom: vec![0; (ROM_HIGH - ROM_LOW) as usize],
             flash: Vec::new(),
             psram: vec![0; PSRAM_SIZE],
+            psram_chip: psram::OctalPsram::default(),
             mmu: vec![MMU_INVALID; MMU_ENTRIES],
             now: 0,
             uart0: Uart::default(),
@@ -150,6 +169,9 @@ impl Default for SocBus {
             next_event: 0,
             gpio_log: Vec::new(),
             last_gpio: 1,
+            reset_request: None,
+            appcpu_reset: false,
+            reset_reason: 1,
         }
     }
 }
@@ -282,6 +304,9 @@ impl SocBus {
             0x600C_5000 if (off as usize) < MMU_ENTRIES * 4 => return self.mmu[(off / 4) as usize],
             _ => {}
         }
+        if a == RTC_CNTL_RESET_STATE {
+            return self.reset_reason | (self.reset_reason << 6);
+        }
         if let Some(v) = boot::special_read(a, now) {
             return v;
         }
@@ -309,7 +334,21 @@ impl SocBus {
                 return;
             }
             0x6001_0000 => return self.uart1.write(off, v),
+            // SPI1 用户命令：片选 CS1 时发给 PSRAM，否则发给 flash
+            0x6000_2000 if off == 0 && v & (1 << 18) != 0 && psram::OctalPsram::selected(&self.spi1.regs) => {
+                return self.psram_chip.user_transaction(&mut self.spi1.regs, &mut self.psram);
+            }
             0x6000_2000 => return self.spi1.write(off, v, &mut self.flash),
+            // 复位位是脉冲（硬件自清零）：只记请求，存回去的值去掉它们，免得后续读改写再触发
+            0x6000_8000 if off == 0 => {
+                if v & (RST_SYS | RST_PROCPU) != 0 {
+                    self.reset_request = Some(if v & RST_SYS != 0 { 3 } else { 12 });
+                } else if v & RST_APPCPU != 0 {
+                    self.appcpu_reset = true;
+                }
+                self.regs.insert(a, v & !(RST_SYS | RST_PROCPU | RST_APPCPU));
+                return;
+            }
             0x6000_4000 => {
                 self.gpio.write(off, v);
                 self.gpio_changed(now);
@@ -560,6 +599,8 @@ pub enum Stop {
     Break(u32),
     /// 碰到没实现的 HLE 函数
     Hle(u32),
+    /// 固件请求复位（esp_restart、panic 后重启）；调用 reboot() 重新上电
+    Reset(u32),
 }
 
 pub struct Esp32s3 {
@@ -571,6 +612,8 @@ pub struct Esp32s3 {
     pub bus: SocBus,
     pub rom_symbols: HashMap<u32, String>,
     pub hle: HashMap<u32, hle::Hle>,
+    /// 留一份 ROM，复位重新上电时用
+    pub rom_elf: Vec<u8>,
 }
 
 /// 两核交替执行的量子（周期）：小到让核间中断、自旋锁及时生效，大到切换开销可忽略
@@ -608,6 +651,10 @@ fn run_core(
                     });
                 }
                 if bus.irq_dirty {
+                    // 写了 RTC_CNTL 复位位：本核到此为止，由外层重新上电
+                    if let Some(r) = bus.reset_request.take() {
+                        return Some(Stop::Reset(r));
+                    }
                     // 本核写了外设（可能清掉 / 触发了中断）：马上重算
                     bus.update();
                     cpu.set_irq_lines(bus.lines[k]);
@@ -644,6 +691,10 @@ impl Esp32s3 {
             let idle0 = if both_idle { end } else { q_end };
             if let Some(s) = run_core(0, &mut self.cpu, &mut self.bus, &self.hle, q_end, idle0) {
                 return s;
+            }
+            if std::mem::take(&mut self.bus.appcpu_reset) {
+                // 核 1 被复位：真机上它回到 ROM 等新的启动地址（随后还会被 stall），这里直接停掉
+                self.cpu1_on = false;
             }
             if self.cpu1_on {
                 // 核 1 追到核 0 的时间，不超过它
@@ -713,6 +764,40 @@ mod tests {
         assert!(b.mem_write(0x3C01_0000, 4, 1).is_none());
         // 无效页
         assert_eq!(b.mem_read(0x3C02_0000, 4), None);
+    }
+
+    #[test]
+    fn software_reset_bits() {
+        let mut b = SocBus::default();
+        // 核 1 复位：只记标志，存回的值不带复位位（读改写不会再触发）
+        Bus::store(&mut b, 0x6000_8000, 4, 0x10 | 0x4).unwrap();
+        assert!(b.appcpu_reset && b.reset_request.is_none());
+        assert_eq!(Bus::load(&mut b, 0x6000_8000, 4).unwrap(), 0x4);
+        // 核 0 复位 = 整机重新上电，原因 12（RTC_SW_CPU_RST）；系统复位原因 3
+        Bus::store(&mut b, 0x6000_8000, 4, 0x20).unwrap();
+        assert_eq!(b.reset_request, Some(12));
+        Bus::store(&mut b, 0x6000_8000, 4, 1 << 31).unwrap();
+        assert_eq!(b.reset_request, Some(3));
+        b.reset_reason = 12;
+        assert_eq!(Bus::load(&mut b, RTC_CNTL_RESET_STATE, 4).unwrap() & 0xfff, 12 | (12 << 6));
+    }
+
+    #[test]
+    fn psram_via_spi1_cs1() {
+        let mut b = SocBus::default();
+        // MISC：CS0 关、CS1 开；读 MR1（厂商 ID）
+        Bus::store(&mut b, 0x6000_2034, 4, 1).unwrap();
+        Bus::store(&mut b, 0x6000_2018, 4, (1 << 31) | (1 << 30) | (1 << 28)).unwrap();
+        Bus::store(&mut b, 0x6000_2020, 4, (15 << 28) | 0x4040).unwrap();
+        Bus::store(&mut b, 0x6000_2004, 4, 0).unwrap();
+        Bus::store(&mut b, 0x6000_2028, 4, 15).unwrap();
+        Bus::store(&mut b, 0x6000_2000, 4, 1 << 18).unwrap();
+        assert_eq!((Bus::load(&mut b, 0x6000_2058, 4).unwrap() >> 8) & 0xff, 0x0d);
+        // 片选回 CS0：同一命令发给 flash，不碰 PSRAM
+        let n = b.psram_chip.commands;
+        Bus::store(&mut b, 0x6000_2034, 4, 2).unwrap();
+        Bus::store(&mut b, 0x6000_2000, 4, 1 << 18).unwrap();
+        assert_eq!(b.psram_chip.commands, n);
     }
 
     #[test]

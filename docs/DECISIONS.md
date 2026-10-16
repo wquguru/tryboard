@@ -128,7 +128,7 @@
 
 ## 2026-10-15 · S3 对齐分支与 USB / 复位 / Wi-Fi 合流
 - 决定：CLI 与 wasm 只经 `tryboard-machine` 的 `Machine` 访问芯片；USB OTG 走 `Machine::usb()/usb_mut()`（C3 返回 None），软件复位走 `Machine::reboot()`。C3 专用的调试参数（--watch / --dump / --wifi-log / --dump-intc）在 CLI 里按 `Machine::C3` 分支处理
-- S3 软件复位暂不支持：`Machine::reboot` 对 S3 返回错误，固件会停在 esp_restart；以后在 S3 SoC 里按 RTC_CNTL 软件复位位实现
+- S3 软件复位暂不支持：`Machine::reboot` 对 S3 返回错误，固件会停在 esp_restart；以后在 S3 SoC 里按 RTC_CNTL 软件复位位实现（2026-10-16 已实现，见下文"S3 软件复位与八线 PSRAM"）
 - 网页元件编辑器的引脚列表取自当前开发板排针（S3 去掉 GPIO35–37，因为 N16R8 的八线 PSRAM 占用）
 - `.gitignore` 里 node_modules / firmware/build 改成不带尾斜杠，免得 worktree 里的软链接被当成文件提交
 
@@ -154,3 +154,12 @@
 - 新页面用 Google Fonts（Noto Sans SC / JetBrains Mono，OFL），与配套文章同字体；加载失败回落到系统字体
 - 首页 home.html 暂不替换 index.html（实验台），因为验收脚本、artifact 打包都以 index.html 为实验台；公开发布前再决定入口
 - 替代：three.js 装配（成本高、手机拖拽难）；Rust 里手写 JSON + 判定（重复造轮子）
+
+## 2026-10-16 · S3 软件复位与八线 PSRAM
+- 软件复位按寄存器语义实现（RTC_CNTL_OPTIONS0 复位位），不 HLE `esp_restart`：panic 后重启、ROM 里的 software_reset_cpu 都走同一条路。核 0 / 系统复位 = 整机用新总线重新直接启动；只复位核 1 = 停掉核 1（真机上它回 ROM 等启动地址并被 stall，效果相同）
+- 复位后保留 RTC 慢 / 快速内存、RTC_CNTL_STORE0–3/6/7；SRAM 清零而不是保留——ROM 的 .bss 等我们跳过的初始化依赖零值，保留旧 SRAM 风险更大。代价：真机上 `__NOINIT_ATTR`（SRAM）变量通常跨软件复位保留，这里不保留，记在 STATUS
+- Xtensa CCOUNT 改成"模拟时间 + 偏移"：IDF 的 esp_clk_init 按新旧 CPU 频率比例改写 CCOUNT，旧实现直接改了整机时间；首次上电时 cycles 很小看不出来，复位后启动时时间被放大约 4 倍、核 1 要空追上亿周期（s3-restart 3 秒用了 57 秒墙钟）。替代：在 CPU 里模拟可变频率（要动所有时间换算，留到 CPI / 频率标定时做）
+- PSRAM 走寄存器级：ROM `esp_rom_opiflash_exec_cmd` 照常执行，SPI1 用户命令按 MISC 片选分给 flash 或 PSRAM 芯片模型。替代是 HLE 这个 ROM 函数（13 个参数、一半在栈上，且绕不开 IDF 时序调优里同样的寄存器路径），没选
+- 时序调优不模拟采样窗口：所有候选点都能读对，IDF 因"连续通过点 ≥ 6"打印一条 tuning fail 警告并回落到默认点（index 5）。要消掉警告得按 IDF 的候选表硬编一个通过窗口，与芯片行为无关，不做
+- 验收固件 s3-restart 没有共用 firmware/nvs 的源码：要测核 1 发起的复位和 RTC_NOINIT / RTC_DATA，期望输出也不同（nvs 的中文输出是 C3 用例的期望），共用要在 nvs/main.c 里加大段条件编译
+- s3-psram 选 80MHz（Arduino "OPI PSRAM" 默认档、多数 N16R8 教程用法），会走时序调优；40MHz 不调优

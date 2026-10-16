@@ -35,8 +35,6 @@ pub fn special_read(a: u32, now: u64) -> Option<u32> {
         // RTC 慢时钟计数（RC 慢时钟约 136kHz）
         0x6000_8010 => (now * 136_000 / CPU_HZ) as u32,
         0x6000_8014 => ((now * 136_000 / CPU_HZ) >> 32) as u32,
-        // RTC_CNTL_RESET_STATE：两核都是上电复位（1）
-        0x6000_8038 => 1 | (1 << 6),
         _ => return None,
     })
 }
@@ -204,10 +202,23 @@ impl Esp32s3 {
 
     /// 新建一台机器：装 ROM、装 flash、做 bootloader 该做的事，PC 停在 app 入口（call_start_cpu0）
     pub fn boot(rom_elf: &[u8], flash: Vec<u8>) -> Result<(Esp32s3, AppInfo), String> {
+        Self::boot_with(rom_elf, flash, SocBus::default())
+    }
+
+    /// 在给定的总线上启动（复位重新上电时传入保留了 RTC 内存的总线）
+    fn boot_with(rom_elf: &[u8], flash: Vec<u8>, bus: SocBus) -> Result<(Esp32s3, AppInfo), String> {
         let mut cpu1 = Cpu::new();
         // PRID：核 0 0xCDCD、核 1 0xABAB（IDF 用位 13 区分核号）
         cpu1.prid = 0xabab;
-        let mut m = Esp32s3 { cpu: Cpu::new(), cpu1, cpu1_on: false, bus: SocBus::default(), rom_symbols: HashMap::new(), hle: HashMap::new() };
+        let mut m = Esp32s3 {
+            cpu: Cpu::new(),
+            cpu1,
+            cpu1_on: false,
+            bus,
+            rom_symbols: HashMap::new(),
+            hle: HashMap::new(),
+            rom_elf: rom_elf.to_vec(),
+        };
         load_rom(&mut m, rom_elf)?;
         let mut flash = flash;
         let off = find_app(&flash)?;
@@ -245,5 +256,42 @@ impl Esp32s3 {
         let entry = app.entry;
         enter_windowed(&mut m.cpu, &mut m.bus, entry, 0x3FCE_B710, SPILL_PRO)?;
         Ok((m, app))
+    }
+}
+
+impl Esp32s3 {
+    /// 软件复位后重新上电（真机：ROM → 二级 bootloader → app，这里直接启动）。
+    /// 保留：flash（含 NVS）、RTC 慢速 / 快速内存（RTC_NOINIT 不变；.rtc.data 段按 bootloader 语义重新装载，
+    /// .rtc.bss 由 app 启动代码清零）、RTC_CNTL 存储寄存器（复位原因提示）、外部世界（引脚驱动、模拟电压、I2C 器件）。
+    /// 清零：SRAM、PSRAM、其它外设、两个核；核 1 由新 app 经 ets_set_appcpu_boot_addr 再次启动。模拟时间继续累计。
+    pub fn reboot(&mut self, reason: u32) -> Result<(), String> {
+        let old = &mut self.bus;
+        let mut bus = SocBus {
+            rtc_slow: std::mem::take(&mut old.rtc_slow),
+            rtc_fast: std::mem::take(&mut old.rtc_fast),
+            reset_reason: reason,
+            ..SocBus::default()
+        };
+        for a in RTC_STORE_KEEP {
+            if let Some(v) = old.regs.get(&a) {
+                bus.regs.insert(a, *v);
+            }
+        }
+        bus.gpio.ext_in = old.gpio.ext_in;
+        bus.gpio.ext_driven = old.gpio.ext_driven;
+        bus.adc.pin_mv = old.adc.pin_mv;
+        bus.i2c0.devices = std::mem::take(&mut old.i2c0.devices);
+        bus.i2c1.devices = std::mem::take(&mut old.i2c1.devices);
+        bus.gpio_log = std::mem::take(&mut old.gpio_log);
+        bus.ws2812 = std::mem::take(&mut old.ws2812);
+        let flash = std::mem::take(&mut old.flash);
+        let rom = std::mem::take(&mut self.rom_elf);
+        let (mut m, _) = Esp32s3::boot_with(&rom, flash, bus)?;
+        let t = self.cpu.cycles;
+        m.cpu.cycles = t;
+        m.bus.now = t;
+        m.bus.next_event = 0;
+        *self = m;
+        Ok(())
     }
 }

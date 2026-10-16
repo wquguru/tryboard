@@ -144,3 +144,21 @@ fn excm_masks_up_to_level3() {
     c.step(&mut ram);
     assert_eq!(c.pc, 0x100 + vec::LEVEL[5]);
 }
+
+#[test]
+fn ccount_write_keeps_time() {
+    let (mut c, mut ram) = irq_cpu();
+    c.cycles = 1_000_000;
+    // IDF 换频时按比例改写 CCOUNT：只改计数器，不改模拟时间
+    c.write_sr(sr::CCOUNT, 0x10);
+    assert_eq!(c.cycles, 1_000_000);
+    assert_eq!(c.read_sr(sr::CCOUNT), 0x10);
+    // CCOMPARE 按 CCOUNT 的值比较
+    c.write_sr(sr::CCOMPARE0, 0x40);
+    assert_eq!(c.next_timer_event(), None);
+    c.write_sr(sr::INTENABLE, 1 << irq::TIMER_LINE[0]);
+    assert_eq!(c.next_timer_event(), Some(1_000_000 + 0x30));
+    c.cycles += 0x40;
+    c.step(&mut ram);
+    assert_ne!(c.read_sr(sr::INTERRUPT) & (1 << irq::TIMER_LINE[0]), 0);
+}

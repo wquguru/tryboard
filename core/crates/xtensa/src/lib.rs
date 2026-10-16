@@ -171,6 +171,9 @@ pub struct Cpu {
     irq_latched: u32,
     /// 上次检查 CCOMPARE 时的周期数
     last_cc: u64,
+    /// CCOUNT = cycles + ccount_off（取低 32 位）。固件写 CCOUNT（如 IDF 换 CPU 频率时按比例改写）
+    /// 只改这个偏移，不动 `cycles`：`cycles` 是整机的模拟时间，跳变会让外设时间和另一个核错乱
+    ccount_off: u32,
     /// 区域保护（ESP32-S3 无 MMU）：8 个 512MB 区域的指令 / 数据属性，WITLB / WDTLB 写、RITLB1 / RDTLB1 读
     pub itlb_attr: [u32; 8],
     pub dtlb_attr: [u32; 8],
@@ -205,6 +208,7 @@ impl Cpu {
             irq_ext: 0,
             irq_latched: 0,
             last_cc: 0,
+            ccount_off: 0,
             // 复位属性 2（可读写执行、旁路），与 QEMU 对照
             itlb_attr: [2; 8],
             dtlb_attr: [2; 8],
@@ -258,7 +262,7 @@ impl Cpu {
         match n {
             sr::WINDOWBASE => self.windowbase,
             sr::WINDOWSTART => self.windowstart,
-            sr::CCOUNT => self.cycles as u32,
+            sr::CCOUNT => self.ccount(),
             sr::PRID => self.prid,
             sr::SAR => self.sar(),
             sr::LITBASE => self.sr[n as usize] & 0xffff_f001,
@@ -274,8 +278,9 @@ impl Cpu {
             sr::WINDOWBASE => self.windowbase = v & 15,
             sr::WINDOWSTART => self.windowstart = v & 0xffff,
             sr::CCOUNT => {
-                self.cycles = (self.cycles & !0xffff_ffff) | v as u64;
-                self.last_cc = self.cycles;
+                // 先按旧计数结算定时器，写入本身不触发 CCOMPARE
+                self.tick_timers();
+                self.ccount_off = v.wrapping_sub(self.cycles as u32);
             }
             sr::PRID => {}
             sr::SAR => self.sr[n as usize] = v & 0x3f,
@@ -322,6 +327,12 @@ impl Cpu {
         self.irq_latched | (self.irq_ext & irq::EXT_LEVEL)
     }
 
+    /// CCOUNT 寄存器的当前值
+    #[inline]
+    pub fn ccount(&self) -> u32 {
+        (self.cycles as u32).wrapping_add(self.ccount_off)
+    }
+
     /// 检查 CCOUNT 自上次以来是否越过了某个 CCOMPARE，越过则挂起对应定时器中断。
     /// SoC 直接改 `cycles`（WAITI 快进）也没关系：下次 step 会补检。
     fn tick_timers(&mut self) {
@@ -333,7 +344,7 @@ impl Cpu {
         for i in 0..3 {
             let c = self.sr[(sr::CCOMPARE0 + i as u32) as usize];
             // 从 last 往后第一次 CCOUNT == c 的距离（1..=2^32）
-            let d = match c.wrapping_sub(last as u32) {
+            let d = match c.wrapping_sub((last as u32).wrapping_add(self.ccount_off)) {
                 0 => 1u64 << 32,
                 d => d as u64,
             };
@@ -351,7 +362,7 @@ impl Cpu {
             .filter(|&i| en & (1 << irq::TIMER_LINE[i]) != 0)
             .map(|i| {
                 let c = self.sr[(sr::CCOMPARE0 + i as u32) as usize];
-                let d = match c.wrapping_sub(self.cycles as u32) {
+                let d = match c.wrapping_sub(self.ccount()) {
                     0 => 1u64 << 32,
                     d => d as u64,
                 };

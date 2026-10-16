@@ -36,7 +36,7 @@
 | CPU Xtensa LX7 基础 ISA + 窗口 | 🟡 | `tools/xtensa-tests` 8/8；深递归覆盖六种窗口溢出 / 下溢 | 缺中断、FPU、MAC16、PIE；未与 QEMU 差分；缺 SALT/SALTU、TLB 族、RER/WER（S3 crate 里有临时垫片）；**MOVSP 的 Alloca 条件反了**（应为 WINDOWSTART[WB-1..WB-3] 全 0 才报，现为任一为 1 就报；垫片撤回多报，少报的情况救不回来） |
 | 启动（直接启动 + ROM） | ✅ | s3-hello 单核：从 call_start_cpu0 跑到 app_main，打印芯片信息 / 16MB flash / Free heap 402804，与 QEMU 逐行一致 | CALLINC=0 进入口、入口帧 [sp-12] 填指向 ROM .stack_app 的指针；核 1 不启动（UNICORE） |
 | **当前止步点** | ⚠️ | `tryboard run firmware/build/s3-hello/flash.bin` | `vTaskDelay(500ms)` 约 2µs 就返回、app_main 返回后 vTaskDelete 不切换任务 → `abort()` → 进 `esp_restart_noos+0x104` 空转。原因：核不响应中断（SYSTIMER 节拍、任务切换都依赖 level-1 中断）。SoC 侧已把外部中断线写进 INTERRUPT SR，等核实现中断裁决 |
-| 存储映射 / MMU / PSRAM | ✅ | 单元测试：flash / PSRAM 页翻译、PSRAM 可写、SRAM I/D 别名 | 512 项 MMU（位 15 选 PSRAM）；8MB PSRAM 只有存储与映射，PSRAM 芯片初始化流程（MSPI / OPI 命令）未模拟，CONFIG_SPIRAM 固件尚未验收 |
+| 存储映射 / MMU / PSRAM | ✅ | 单元测试：flash / PSRAM 页翻译、PSRAM 可写、SRAM I/D 别名 | 512 项 MMU（位 15 选 PSRAM）；PSRAM 芯片初始化见下方新行（2026-10-16 已补） |
 | 中断矩阵（核 0） | 🟡 | 单元测试：电平线、边沿线上升沿、复位映射到线 16 = 不连接 | 99 个源；INTR_STATUS 可读；核 1 矩阵未做 |
 | UART / SYSTIMER / TIMG / SPI1 flash / LEDC | 🟡 | s3-hello 启动期使用（控制台、RTC 校准、flash 识别 GD 16MB） | 复用 C3 模型（寄存器布局同族）；TIMG 的 T1、LEDC 的通道 6/7 未建模 |
 | EXTMEM（I/D cache 分开） | ✅ | 启动期 freeze / sync / autoload 轮询通过 | cache 操作瞬间完成 |
@@ -54,7 +54,9 @@
 | CPU Xtensa LX7 | ✅ | `tools/xtensa-tests` 11/11 自检；与 QEMU 逐字差分 14215 字、0 不一致；深递归覆盖六种窗口溢出 / 下溢 | 含中断、CCOMPARE、FPU、MAC16、SALT/SALTU、TLB 族、RER/WER；PIE（EE.*）未做 |
 | 启动（直接启动 + ROM） | ✅ | s3-hello（单核）与 QEMU 逐行一致；FreeRTOS 延时 499.9ms | 入口帧溢出保存区借用 ROM level 4/5 中断栈 |
 | 双核 | ✅ | s3-dual：两任务各钉一核、自旋锁计数 2×20000 准确、跨核队列、esp_ipc 在核 1 执行 | `ets_set_appcpu_boot_addr` HLE 启动核 1（栈 ROM .stack_app），PRID 0xABAB；每核一张中断矩阵；两核按 256 周期量子确定性交替，都空闲时一起快进；外设时间取两核中较快者（单调） |
-| 存储映射 / MMU / PSRAM | ✅ | 单元测试：flash / PSRAM 页翻译、PSRAM 可写、SRAM I/D 别名 | 8MB PSRAM 只有存储与映射，PSRAM 芯片初始化（MSPI / OPI）未模拟，CONFIG_SPIRAM 固件尚未验收 |
+| 存储映射 / MMU / PSRAM | ✅ | 单元测试：flash / PSRAM 页翻译、PSRAM 可写、SRAM I/D 别名、SPI1 经 CS1 读 PSRAM 模式寄存器 | 512 项 MMU（位 15 选 PSRAM） |
+| 八线 PSRAM（N16R8，8MB OPI） | ✅ | s3-psram（CONFIG_SPIRAM=y、OCT、80MHz、双核）：IDF 识别 AP 8MB 第 3 代 3V，启动内存测试 8MB 通过，SPIRAM 堆 8386156 字节；分配 4MB 写伪随机模式读回 0 错（模拟时间写 79ms / 校验 85ms） | ROM 的 `esp_rom_opiflash_exec_cmd` 照常执行，SPI1 用户命令在 MISC 选 CS1 时交给 PSRAM 芯片模型（`psram.rs`：读 / 写模式寄存器 MR0/1/2/3/4/8、同步读 / 写）；之后 cache 经 MMU 直接访问存储体。不模拟 dummy / DTR 采样相位，所以时序调优 14 个候选点全读对，IDF 判"连续通过点过多"打印 `W MSPI Timing: tuning fail, best point is fallen back to index 5` 并用默认点——真机上会是 tuning success；ECC、四线 PSRAM、16MB/2MB 型号未做；访问耗时不计 cache 未命中（与真机速度不同，未经真机标定） |
+| 软件复位 | ✅ | s3-restart（双核）：第 1 次核 0 调 esp_restart、第 2 次核 1 调 esp_restart，第 3 次 `BOOT COUNT 3 reason=SW`；NVS 计数跨复位；RTC_NOINIT 计数 1→2→3、RTC_DATA 每次复位回到镜像初值 7；三次启动核 1 都重新跑起来；s3-psram 初始化失败的 abort → 重启循环也走这条路 | RTC_CNTL_OPTIONS0：SW_PROCPU_RST（bit5）/ SW_SYS_RST（bit31）→ 整机重新上电（复位原因 12 / 3，RTC_CNTL_RESET_STATE 两核同值），SW_APPCPU_RST（bit4）→ 停掉核 1；保留 flash、RTC 慢 / 快速内存、RTC_CNTL_STORE0–3/6/7（复位原因提示）、引脚外部驱动、ADC 电压、I2C 器件；SRAM 清零（真机上 `__NOINIT_ATTR` 的 SRAM 变量一般能保留，这里不保留）；RTC 看门狗未建模（esp_restart 里设的 1 秒 RWDT 不会触发）；USB 设备重新枚举 |
 | 中断矩阵（核 0 / 核 1） | ✅ | 单元测试 + s3-dual（FROM_CPU 跨核中断、两核各自 SYSTIMER 节拍） | 99 个源；核 1 表在 +0x800 |
 | GPIO（49 脚）/ IO_MUX | ✅ | s3-blink：GPIO5 翻转；s3-button：BOOT 键 GPIO0 下降沿中断 + 消抖，GPIO5 翻转 2 次 | 外设信号经 GPIO 矩阵驱动引脚（RMT）；输出信号号 256 = 普通 GPIO |
 | LEDC | ✅ | s3-pot：5kHz PWM 占空比跟随 ADC；s3-servo：GPIO4 50Hz 0.5–2.5ms | 与 C3 同一模型（扩到 8 通道），输出信号 73..80 |
@@ -81,7 +83,7 @@
 | 环境滑块 | ✅ 温度 / 湿度 / 气压 → `tb_env_set`，webtest 验证读数跟随 |
 | 串口输入 | 🟡 已接线，缺验收固件 |
 
-> 2026-10-15 合流：S3 对齐（双核、共享外设、S3 开发板网页）与 USB OTG、Wi-Fi、软件复位、元件编辑器同时可用；S3 软件复位尚未支持（见 DECISIONS）。
+> 2026-10-15 合流：S3 对齐（双核、共享外设、S3 开发板网页）与 USB OTG、Wi-Fi、软件复位、元件编辑器同时可用；S3 软件复位尚未支持（见 DECISIONS）。2026-10-16：S3 软件复位已支持（见上表"软件复位"）。
 
 ## 网页：关卡 / 装配 / 首页
 | 功能 | 状态 | 验收 | 备注 |

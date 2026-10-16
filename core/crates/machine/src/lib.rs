@@ -94,11 +94,11 @@ impl Machine {
     }
 
     /// 软件复位后重新上电：flash（含 NVS）保留，模拟时间继续。
-    /// 目前只有 C3 支持；S3 的软件复位还没建模（固件会停在 esp_restart 里），返回错误
+    /// S3 另外保留 RTC 内存与 RTC_CNTL 存储寄存器（RTC_NOINIT、复位原因提示），见 Esp32s3::reboot
     pub fn reboot(&mut self, reason: u32) -> Result<(), String> {
         match self {
             Machine::C3(m) => m.reboot(reason),
-            Machine::S3(_) => Err("ESP32-S3 软件复位尚未支持".into()),
+            Machine::S3(m) => m.reboot(reason),
         }
     }
 
@@ -379,6 +379,7 @@ fn s3_stop(m: &Esp32s3, r: tryboard_esp32s3::Stop) -> Stop {
         S::Fault { cause, epc, vaddr } => Stop::Fault(format!("CPU 异常 EXCCAUSE={cause} EPC1=0x{epc:08x} EXCVADDR=0x{vaddr:08x}")),
         S::Break(v) => Stop::Fault(format!("BREAK 0x{v:x}")),
         S::Hle(pc) => Stop::Hle(format!("0x{pc:08x} {}", m.symbol_at(pc).unwrap_or(""))),
+        S::Reset(r) => Stop::Reset(r),
     }
 }
 
