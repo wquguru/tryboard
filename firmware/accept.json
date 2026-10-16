@@ -380,6 +380,30 @@
   ]
  },
  {
+  "id": "s3-restart",
+  "chip": "esp32s3",
+  "seconds": 2,
+  "expect": [
+   "BOOT COUNT 1 reason=POWERON",
+   "restart from core 0",
+   "BOOT COUNT 2 reason=SW",
+   "restart from core 1",
+   "BOOT COUNT 3 reason=SW",
+   "RTC noinit=3 data=7",
+   "core1 task on core 1 (boot 3)",
+   "TRYBOARD_OK s3-restart"
+  ]
+ },
+ {
+  "id": "s3-psram",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "expect": [
+   "PSRAM 8 MB, test 4 MB OK",
+   "TRYBOARD_OK s3-psram"
+  ]
+ },
+ {
   "id": "s3-blink",
   "seconds": 2.2,
   "expect": [
