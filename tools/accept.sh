@@ -127,6 +127,17 @@ echo -e "\n## 关卡（firmware/levels.json，参考固件）\n\`\`\`" >> $REPOR
 tools/check.py --ref --all >> $REPORT 2>&1 || fail=1
 echo '```' >> $REPORT
 
+# npm 本地包（packages/tryboard，P1-14）：打包后用 `npx ./tryboard-*.tgz check` 逐关与 check.py 对拍结论、整段输出（含指纹）、退出码
+command -v node >/dev/null || { [ -s ~/.nvm/nvm.sh ] && . ~/.nvm/nvm.sh >/dev/null; }
+echo -e "\n## npm 本地包对拍（npx tryboard check vs tools/check.py）" >> $REPORT
+if tools/build_npm.sh > Reviews/npm-build.log 2>&1; then
+  tail -1 Reviews/npm-build.log >> $REPORT
+  echo >> $REPORT
+  tools/npm_parity.sh >> $REPORT 2>&1 || fail=1
+else
+  echo "打包失败（见 Reviews/npm-build.log）" >> $REPORT; fail=1
+fi
+
 # 网页单测（元件库 schema、核价提醒、规则引擎 R01–R27）：纯 Node，不需要浏览器，--no-web 也跑
 command -v node >/dev/null || { [ -s ~/.nvm/nvm.sh ] && . ~/.nvm/nvm.sh >/dev/null; }
 echo -e "\n## 网页单测（web/test，node --test）\n\`\`\`" >> $REPORT
