@@ -96,6 +96,11 @@ pub struct SocBus {
     /// PSRAM 芯片的命令接口（模式寄存器）；存储体是 `psram`
     pub psram_chip: psram::OctalPsram,
     pub mmu: Vec<u32>,
+    /// 取指页缓存：最近一次取指所在的 64KB 页（vaddr >> 16，u32::MAX = 无效）、
+    /// 它落在哪块存储（`FetchSrc`）以及页首在那块存储里的偏移。写 MMU 时作废
+    fetch_page: u32,
+    fetch_src: FetchSrc,
+    fetch_base: usize,
     pub now: u64,
     pub uart0: Uart,
     pub uart1: Uart,
@@ -163,6 +168,9 @@ impl Default for SocBus {
             psram: vec![0; PSRAM_SIZE],
             psram_chip: psram::OctalPsram::default(),
             mmu: vec![MMU_INVALID; MMU_ENTRIES],
+            fetch_page: u32::MAX,
+            fetch_src: FetchSrc::Sram,
+            fetch_base: 0,
             now: 0,
             uart0: Uart::default(),
             uart1: Uart::default(),
@@ -219,6 +227,15 @@ fn wr(buf: &mut [u8], off: usize, size: u32, v: u32) -> Option<()> {
     let b = buf.get_mut(off..off + size as usize)?;
     b.copy_from_slice(&v.to_le_bytes()[..size as usize]);
     Some(())
+}
+
+/// 取指页缓存指向的存储
+#[derive(Clone, Copy)]
+enum FetchSrc {
+    Sram,
+    Flash,
+    Psram,
+    Rom,
 }
 
 /// cache 窗口翻译结果
@@ -447,6 +464,7 @@ impl SocBus {
             0x600C_4000 if off < 0x400 => return self.extmem.write(off, v),
             0x600C_5000 if (off as usize) < MMU_ENTRIES * 4 => {
                 self.mmu[(off / 4) as usize] = v & 0xffff;
+                self.fetch_page = u32::MAX;
                 return;
             }
             _ => {}
@@ -690,6 +708,12 @@ impl SocBus {
 impl Bus for SocBus {
     #[inline]
     fn load(&mut self, a: u32, size: u32) -> Result<u32, BusFault> {
+        // 快路径：SRAM（与 mem_read 的第一个分支相同，内联掉一次函数调用）
+        if let Some(o) = Self::sram_off(a) {
+            if let Some(v) = rd(&self.sram, o, size) {
+                return Ok(v);
+            }
+        }
         if let Some(v) = self.mem_read(a, size) {
             return Ok(v);
         }
@@ -707,6 +731,11 @@ impl Bus for SocBus {
 
     #[inline]
     fn store(&mut self, a: u32, size: u32, v: u32) -> Result<(), BusFault> {
+        if let Some(o) = Self::sram_off(a) {
+            if wr(&mut self.sram, o, size, v).is_some() {
+                return Ok(());
+            }
+        }
         if self.mem_write(a, size, v).is_some() {
             return Ok(());
         }
@@ -743,7 +772,66 @@ impl Bus for SocBus {
 
     #[inline]
     fn fetch(&mut self, a: u32) -> Result<u32, BusFault> {
-        // 快路径：一次读 4 字节（指令最长 3 字节）；跨区域边界时退回逐字节
+        // 最快路径：与上一条指令同一个 64KB 页，且 4 字节不跨页
+        let o = (a & 0xffff) as usize;
+        if a >> 16 == self.fetch_page && o <= 0xfffc {
+            let buf = match self.fetch_src {
+                FetchSrc::Sram => &self.sram,
+                FetchSrc::Flash => &self.flash,
+                FetchSrc::Psram => &self.psram,
+                FetchSrc::Rom => &self.rom,
+            };
+            let i = self.fetch_base + o;
+            if let Some(b) = buf.get(i..i + 4) {
+                return Ok(u32::from_le_bytes([b[0], b[1], b[2], 0]));
+            }
+        }
+        self.fetch_slow(a)
+    }
+
+    #[inline(always)]
+    fn attention(&mut self, cycles: u64) -> bool {
+        // 与 run_core 循环顶部相同：外设时间取较快的核；irq_dirty 时先不推进 now（run_core 会先按旧时间 update）
+        if self.irq_dirty {
+            return true;
+        }
+        if cycles > self.now {
+            self.now = cycles;
+        }
+        self.now >= self.next_event
+    }
+}
+
+impl SocBus {
+    /// 取指慢路径：一次读 4 字节（指令最长 3 字节）；跨区域边界时退回逐字节。顺便填取指页缓存
+    /// （只缓存整页都在同一块存储里的：IRAM、ROM、IROM 窗口经 MMU 翻译后的页）
+    #[inline(never)]
+    fn fetch_slow(&mut self, a: u32) -> Result<u32, BusFault> {
+        self.fetch_page = u32::MAX;
+        let page = a & !0xffff;
+        if (IRAM_LOW..IRAM_HIGH).contains(&page) {
+            self.fetch_page = a >> 16;
+            self.fetch_src = FetchSrc::Sram;
+            self.fetch_base = (page - IRAM_LOW) as usize;
+        } else if (ROM_LOW..ROM_HIGH).contains(&page) {
+            self.fetch_page = a >> 16;
+            self.fetch_src = FetchSrc::Rom;
+            self.fetch_base = (page - ROM_LOW) as usize;
+        } else if (IROM_LOW..IROM_HIGH).contains(&page) {
+            match self.ext_addr(page) {
+                Some(Ext::Flash(f)) => {
+                    self.fetch_page = a >> 16;
+                    self.fetch_src = FetchSrc::Flash;
+                    self.fetch_base = f;
+                }
+                Some(Ext::Psram(p)) => {
+                    self.fetch_page = a >> 16;
+                    self.fetch_src = FetchSrc::Psram;
+                    self.fetch_base = p;
+                }
+                None => {}
+            }
+        }
         if let Some(v) = self.mem_read(a, 4) {
             return Ok(v & 0xff_ffff);
         }
@@ -802,7 +890,8 @@ fn run_core(
             bus.update();
             cpu.set_irq_lines(bus.lines[k]);
         }
-        match cpu.step(bus) {
+        // 批量执行到下一个需要 SoC 介入的点（外设事件、中断线变化、异常向量），逐条检查与原来逐步调 step 相同
+        match cpu.run_batch(bus, until, 0x4000_0300, 0x4000_0400) {
             Exit::Normal => {
                 // ROM 异常向量（0x40000300 Kernel / 0x40000340 User / 0x400003C0 Double）：
                 // app 正常运行时 VECBASE 指向 IRAM，落到这里说明出事了

@@ -379,3 +379,12 @@
 - 行为：关卡都不带 `--servo`，所以 CLI、网页验收、npm 包三方指纹与合并前 main 相同（npm_parity 全一致）；只有实验台实时运行按台面接线接舵机、走供电网络。worker `boot` 同时带 `servo` / `power` 与逻辑分析仪 `ioWatch`，tick 同时带 `elec` / `brownouts`，`io` 消息照旧
 - accept.sh：levels / replay / elec / interact / traceio 一律要求最后一行是汇总行 `[x] PASS（`，否则记"脚本没跑完"
 - ⌘K "量 3V3" 的提示改为指向工具条万用表（P1-04 已有）
+
+## 2026-10-16 · P2-07 LVGL 基准与 S3 内核提速
+- 组件：`lvgl/lvgl` 9.2.2 + `espressif/esp_lvgl_port` 2.6.0（esp_lvgl_port 2.x 支持 LVGL 8 / 9，选 v9 稳定版）。许可证核对后写进 LICENSING（MIT / Apache-2.0，非乐鑫修改版 MIT）。替代：LVGL 8.4（API 旧、新项目少用）；自己写 LVGL 移植层（esp_lvgl_port 是乐鑫推荐的标准写法，用户固件大多就是这样）
+- 基准界面故意选"整屏都在动"的压力场景（绕圈弧线让每帧失效区几乎覆盖整屏），帧数用 `LV_EVENT_RENDER_READY` 计、按 esp_timer 的模拟时间每秒打印；CPU 保持 IDF 默认 160MHz（模拟器 CPU 时钟固定 160MHz）。替代：局部刷新的界面（帧率和速度都会好看很多，但掩盖最坏情况）
+- 真机参考量级：240×240×16 位一帧 921600 位，SPI 40MHz 纯传输 23ms → 上限约 43 FPS；LVGL 渲染与 DMA 发送重叠时整屏刷新常见 20–30 FPS（LVGL 官方 ESP32 文章的传输 / 渲染时间算法）。模拟得 33–34 FPS，同量级；模拟 CPI=1 偏快
+- 提速只做"结果逐字节不变"的改动（验收用例 stdout / stderr / 屏幕 ppm 与关卡指纹前后对拍）：CCOMPARE 下次触发时刻缓存（tick_timers 从每条指令三次取模比较变成一次比较）、窗口溢出检查先看 WOE/EXCM 和"上方 3 个四元组是否空"再算 max_quad、取指 64KB 页缓存、SRAM 读写内联、`Cpu::run_batch` 批量执行。主要收益来自前三项；数据读页缓存（flash 常量）实测 <1%，没留
+- 未做：预解码 / 指令块缓存（宿主每条模拟指令仍约 190 条指令，大头是逐条解释的固定开销；要再快 2× 需要块缓存或 JIT，工作量大、风险高，留给以后）。改 CPI 模型会改变所有时序与指纹，不在本项做
+- 结论：LVGL 能跑、动画与帧率在模拟时间里正确；整屏满负荷动画在网页上只有约 0.2–0.4× 实时（未达 0.5× 目标），在 STATUS 标"速度不够实时"；局部刷新 / 静态界面不受影响
+
