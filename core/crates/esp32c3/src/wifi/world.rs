@@ -3,6 +3,7 @@
 
 use super::frame::{self, fc, Mac};
 use super::net::{self, Eth};
+use super::wpa::{self, Authenticator};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Auth {
@@ -45,6 +46,8 @@ pub struct World {
     pub sta_mac: Mac,
     pub aid: u16,
     pub net: net::Net,
+    /// WPA2 AP 的认证方（按 aps 下标，首次关联时创建：PBKDF2 要算 4096 轮）
+    pub wpa: Vec<Option<Authenticator>>,
 }
 
 impl Default for World {
@@ -56,7 +59,16 @@ impl Default for World {
             ap("CoffeeShop", [0x02, 0x54, 0x42, 0xa0, 0x00, 0x04], 6, -70, Auth::Open, ""),
         ];
         let n = aps.len();
-        World { aps, seq: 0, channel: 1, sta: vec![StaState::Idle; n], sta_mac: [0; 6], aid: 1, net: Default::default() }
+        World {
+            aps,
+            seq: 0,
+            channel: 1,
+            sta: vec![StaState::Idle; n],
+            sta_mac: [0; 6],
+            aid: 1,
+            net: Default::default(),
+            wpa: (0..n).map(|_| None).collect(),
+        }
     }
 }
 
@@ -67,6 +79,9 @@ fn ap(ssid: &str, bssid: Mac, channel: u8, rssi: i8, auth: Auth, pw: &str) -> Ap
 /// 802.11b/g 支持速率（1/2/5.5/11 为基本速率）与扩展速率
 const RATES: [u8; 8] = [0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24];
 const EXT_RATES: [u8; 4] = [0x30, 0x48, 0x60, 0x6c];
+/// 四次握手消息 1 在关联响应之后多久发出（微秒）
+const EAPOL_DELAY_US: u64 = 3000;
+
 /// RSN：版本 1、组 / 成对加密 CCMP、AKM PSK、能力 0x000c
 const RSN_IE: [u8; 20] = [
     0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x02, 0x0c,
@@ -175,14 +190,23 @@ impl World {
                 r.extend_from_slice(&(aid | 0xc000).to_le_bytes());
                 frame::ie(&mut r, 1, &RATES);
                 frame::ie(&mut r, 50, &EXT_RATES);
-                let (rssi, channel) = (a.rssi, a.channel);
+                let (rssi, channel, wpa2) = (a.rssi, a.channel, a.auth == Auth::Wpa2Psk);
                 out.push(Air { delay_us: 800, frame: r, rssi, channel });
                 self.sta[i] = StaState::Assoc;
-                format!("关联 → {}（AID {}）", self.aps[i].ssid, aid)
+                if wpa2 {
+                    // 关联成功即由 AP 发起四次握手（消息 1）
+                    let m1 = self.auth(i).start(h.a2, tsf_us + EAPOL_DELAY_US);
+                    let f = self.eapol_frame(i, &m1);
+                    out.push(Air { delay_us: EAPOL_DELAY_US, frame: f, rssi, channel });
+                }
+                format!("关联 → {}（AID {}）{}", self.aps[i].ssid, aid, if wpa2 { "，发起四次握手 1/4" } else { "" })
             }
             fc::DEAUTH | fc::DISASSOC => {
                 if let Some(i) = target {
                     self.sta[i] = StaState::Idle;
+                    if let Some(a) = self.wpa[i].as_mut() {
+                        a.state = wpa::Hs::Idle;
+                    }
                 }
                 "去认证 / 去关联".into()
             }
@@ -192,24 +216,45 @@ impl World {
                 if self.sta[i] != StaState::Assoc {
                     return ("数据帧（未关联，丢弃）".into(), out, acked);
                 }
+                let wpa2 = self.aps[i].auth == Auth::Wpa2Psk;
+                let mut plain = f.to_vec();
                 if h.fc1 & 0x40 != 0 {
-                    // 受保护（加密）帧：WPA2 数据通路尚未实现
-                    return ("加密数据帧（暂不支持）".into(), out, acked);
+                    let Some(a) = self.wpa[i].as_mut().filter(|a| a.authorized()) else {
+                        return ("加密数据帧（还没有密钥，丢弃）".into(), out, acked);
+                    };
+                    match a.decrypt(f) {
+                        Ok(p) => plain = p,
+                        Err(e) => return (format!("加密数据帧：{e}，丢弃"), out, acked),
+                    }
                 }
+                let body = &plain[h.body.min(plain.len())..];
                 if body.len() < 8 || body[..6] != [0xaa, 0xaa, 0x03, 0, 0, 0] {
                     return ("数据帧（非 LLC/SNAP）".into(), out, acked);
                 }
-                let eth = Eth {
-                    dst: h.a3,
-                    src: h.a2,
-                    ethertype: u16::from_be_bytes([body[6], body[7]]),
-                    payload: body[8..].to_vec(),
-                };
+                let ethertype = u16::from_be_bytes([body[6], body[7]]);
+                if wpa2 && ethertype == wpa::ETH_EAPOL {
+                    let Some(a) = self.wpa[i].as_mut() else { return ("EAPOL（无认证方）".into(), out, acked) };
+                    let (note, reply) = a.on_eapol(&body[8..], tsf_us);
+                    if let Some(r) = reply {
+                        let (rssi, channel) = (self.aps[i].rssi, self.aps[i].channel);
+                        let fr = self.eapol_frame(i, &r);
+                        out.push(Air { delay_us: 1000, frame: fr, rssi, channel });
+                    }
+                    return (note, out, acked);
+                }
+                if wpa2 && (h.fc1 & 0x40 == 0 || !self.wpa[i].as_ref().is_some_and(|a| a.authorized())) {
+                    // 端口没放行（或明文混进加密网络）：真 AP 同样丢弃
+                    return (format!("数据帧 0x{ethertype:04x}（WPA2 端口未放行 / 未加密，丢弃）"), out, acked);
+                }
+                let eth = Eth { dst: h.a3, src: h.a2, ethertype, payload: body[8..].to_vec() };
                 let before = self.net.log.len();
                 let replies = self.net.on_eth(&eth, tsf_us);
                 let (rssi, channel, bssid) = (self.aps[i].rssi, self.aps[i].channel, self.aps[i].bssid);
                 for (k, r) in replies.into_iter().enumerate() {
-                    let f = self.data_from_ds(&r, &bssid);
+                    let mut f = self.data_from_ds(&r, &bssid);
+                    if let Some(a) = self.wpa[i].as_mut().filter(|a| wpa2 && a.authorized()) {
+                        f = a.encrypt(&f);
+                    }
                     out.push(Air { delay_us: 300 + 200 * k as u64, frame: f, rssi, channel });
                 }
                 let notes: Vec<String> = self.net.log[before..].to_vec();
@@ -238,6 +283,52 @@ impl World {
         f.extend_from_slice(&e.ethertype.to_be_bytes());
         f.extend_from_slice(&e.payload);
         f
+    }
+
+    fn auth(&mut self, i: usize) -> &mut Authenticator {
+        let a = &self.aps[i];
+        let mut rsn = vec![48, RSN_IE.len() as u8];
+        rsn.extend_from_slice(&RSN_IE);
+        let (pw, ssid, bssid) = (a.passphrase.clone(), a.ssid.clone(), a.bssid);
+        self.wpa[i].get_or_insert_with(|| Authenticator::new(&pw, ssid.as_bytes(), bssid, &rsn))
+    }
+
+    /// AP → 终端的 EAPOL 数据帧（明文，LLC/SNAP 以太类型 0x888E）
+    fn eapol_frame(&mut self, i: usize, eapol: &[u8]) -> Vec<u8> {
+        let bssid = self.aps[i].bssid;
+        let e = Eth { dst: self.sta_mac, src: bssid, ethertype: wpa::ETH_EAPOL, payload: eapol.to_vec() };
+        self.data_from_ds(&e, &bssid)
+    }
+
+    /// 认证方的重传 / 超时定时器（TSF 微秒）
+    pub fn next_timer(&self) -> Option<u64> {
+        self.wpa.iter().flatten().filter_map(|a| a.next_timer()).min()
+    }
+
+    /// 推进定时器：重发 EAPOL 消息，或重试用完时发去认证（原因 15 = 四次握手超时）
+    pub fn poll(&mut self, tsf_us: u64) -> (Vec<Air>, Vec<String>) {
+        let (mut out, mut log) = (Vec::new(), Vec::new());
+        for i in 0..self.aps.len() {
+            let Some(t) = self.wpa[i].as_mut().and_then(|a| a.poll(tsf_us)) else { continue };
+            let (rssi, channel, bssid) = (self.aps[i].rssi, self.aps[i].channel, self.aps[i].bssid);
+            match t {
+                wpa::Timer::Resend(m) => {
+                    let f = self.eapol_frame(i, &m);
+                    out.push(Air { delay_us: 0, frame: f, rssi, channel });
+                    log.push(format!("{}：四次握手没等到回应，重发", self.aps[i].ssid));
+                }
+                wpa::Timer::Timeout => {
+                    let seq = self.next_seq();
+                    let sta = self.sta_mac;
+                    let mut f = frame::mgmt_hdr(fc::DEAUTH, &sta, &bssid, &bssid, seq);
+                    f.extend_from_slice(&15u16.to_le_bytes());
+                    out.push(Air { delay_us: 0, frame: f, rssi, channel });
+                    self.sta[i] = StaState::Idle;
+                    log.push(format!("{}：四次握手超时，发去认证（原因 15）", self.aps[i].ssid));
+                }
+            }
+        }
+        (out, log)
     }
 
     /// 已关联的 AP（信标要持续发，否则芯片会判定信标丢失而断线）

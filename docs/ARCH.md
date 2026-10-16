@@ -37,6 +37,19 @@ web/（Vite + TS）
 - 中断：外设给出电平 → 中断矩阵（源 → CPU 线）→ 使能 / 优先级 / 阈值裁决 → `cpu.irq_line`。边沿型线锁存，写 CPU_INT_CLEAR 清除。
 - 时间：CPU 恒定 160MHz、每条指令 1 周期（CPI 模型以后按真机标定）。SYSTIMER 16MHz、APB 80MHz、XTAL 40MHz、RC 慢时钟 136kHz。WFI 时直接快进到下一个定时器事件。
 
+## Wi-Fi（ESP32-C3，`crates/esp32c3/src/wifi/`，细节见 docs/WIFI.md）
+- 分层：闭源驱动（libpp / libnet80211 / wpa_supplicant）照常跑；模拟器在 MAC 寄存器 + DMA 描述符层扮演硬件（`mod.rs`），空中帧交给虚拟世界（`world.rs` 的 4 个 AP → `net.rs` 局域网 → `tcp.rs` 虚拟互联网）。
+- WPA2-PSK（`wpa.rs` + `crypto.rs`）：虚拟 AP 是认证方，关联后发起四次握手（PMK = PBKDF2-HMAC-SHA1、PTK = PRF-384、MIC = HMAC-SHA1-128、GTK 用 AES Key Wrap），握手完成后空中数据帧一律 CCMP；消息 1 / 3 按 hostapd 节奏重传（100ms、1s、1s），4 次没回应发去认证（原因 15）。
+- 加解密分两处，与真机一致：
+  - **四次握手在固件里**（IDF wpa_supplicant），它用 mbedTLS → 硬件 SHA / AES 加速器（`crypto_hw.rs`，块模式 + DMA 模式）。
+  - **数据帧 CCMP 在 MAC 硬件里**：驱动把 PTK / GTK 写进密钥表（0x60034400 起每项 40 字节，有效位图 0x60033814，字 1 位 30 = 组密钥），发送时帧里已有 CCMP 头（PN）和 8 字节 MIC 空位，MAC 模型按 a1 查成对密钥加密后上"空中"；接收时按 a2 查成对 / 组密钥解密，CCMP 头与 MIC 位置保留（驱动的 `ccmp_decap` 校验 PN 后剥掉）。
+- 密码学原语全部自己实现（`wifi/crypto.rs`：SHA-1、HMAC、PBKDF2、PRF、AES-128/192/256、Key Wrap、CCM、CCMP），按 FIPS 180 / RFC 2202 / RFC 6070 / IEEE 802.11 附录 / FIPS 197 / RFC 3394 / RFC 3610 / NIST SP 800-38A 测试向量做单元测试。
+
+## SHA / AES 加速器（ESP32-C3，`crates/esp32c3/src/crypto_hw.rs`）
+- SHA（0x6003B000）：SHA-1 / 224 / 256，START / CONTINUE 处理 TEXT 寄存器里的一块，DMA_START / DMA_CONTINUE 从 GDMA 取 BLOCK_NUM 块；H 寄存器按"摘要字节小端装载"存（`sha_hal_read_digest` 直接 memcpy 成摘要）。BUSY 恒为 0。
+- AES（0x6003A000）：128 / 256 位，单块模式（TEXT_IN → TEXT_OUT）与 DMA 模式（ECB / CBC / OFB / CTR / CFB8 / CFB128，IV 寄存器随运算更新），DMA 完成 STATE = 2、写 DMA_EXIT 回 0。
+- GDMA 不在这里建模：按 OUT/IN_PERI_SEL（AES = 6、SHA = 7）找到接到本外设的通道，读 OUTLINK / INLINK 描述符地址，沿 lldesc 链读写、清 owner 位。GDMA 模型落地后改成走它的接口（见 DECISIONS）。
+
 ## 芯片无关外壳（`core/crates/machine`）
 - `enum Machine { C3, S3 }`：按镜像头芯片 ID（5 / 9）选芯片，给 CLI 和 wasm 一套接口（运行、控制台、GPIO 读写、PWM、ADC 电压、WS2812、I2C 器件、OLED、调试状态）。加新芯片只改这里。
 
