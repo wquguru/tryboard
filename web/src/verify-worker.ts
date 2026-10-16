@@ -28,6 +28,8 @@ interface Ex {
   tb_report(): number;
   tb_report_ptr(): number;
   tb_lcd_attach?(): number;
+  tb_power_set?(mode: number): void;
+  tb_servo_attach?(pin: number): void;
 }
 
 export interface VerifyJob {
@@ -40,6 +42,9 @@ export interface VerifyJob {
   script?: string;
   pwmPin?: number;
   lcd?: boolean;
+  /** 舵机信号脚与供电（= CLI --servo / --power）；接了舵机时与 CLI 一样始终 1ms 一片 */
+  servo?: number;
+  power?: 'usb' | 'ext';
   /** 始终 1ms 一片（= CLI 的 --inputs）：重放网页实时运行导出的输入日志时用 */
   fixedSlice?: boolean;
 }
@@ -76,6 +81,8 @@ self.onmessage = async (ev: MessageEvent<VerifyJob>) => {
   for (const d of j.i2c) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
   if (j.env) e.tb_env_set(j.env.temp, j.env.humidity, j.env.pressure);
   if (j.lcd) e.tb_lcd_attach?.();
+  if (j.servo !== undefined) e.tb_servo_attach?.(j.servo);
+  if (j.power) e.tb_power_set?.(j.power === 'ext' ? 1 : 0);
 
   const script = parseScript(j.script);
   let si = 0;
@@ -98,6 +105,7 @@ self.onmessage = async (ev: MessageEvent<VerifyJob>) => {
         if (v.length === 3 && v.every((x) => !Number.isNaN(x))) e.tb_env_set(v[0], v[1], v[2]);
       }
       else if (act.startsWith('uart=')) bytesIn(e, new TextEncoder().encode(act.slice(5).replaceAll('\\n', '\n')), (p, n) => e.tb_uart_push(p, n));
+      else if (act.startsWith('power=')) e.tb_power_set?.(act.slice(6).trim() === 'ext' ? 1 : 0);
       else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));
     }
     if (j.pwmPin !== undefined) {
@@ -108,7 +116,7 @@ self.onmessage = async (ev: MessageEvent<VerifyJob>) => {
         if (!l || Math.abs(f32(l[0] - d)) > f32(0.004) || Math.abs(f32(l[1] - f)) > f32(0.5)) trace.push([d, f, now]);
       }
     }
-    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice ? CPU_HZ / 100 : CPU_HZ / 1000;
+    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice && j.servo === undefined ? CPU_HZ / 100 : CPU_HZ / 1000;
     const before = e.tb_cycles();
     const stop = e.tb_run(Math.min(slice, total - done));
     done += e.tb_cycles() - before;

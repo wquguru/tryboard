@@ -567,5 +567,29 @@
    ]
   },
   "assembly": "spin"
+ },
+ {
+  "id": "s3-brownout",
+  "chip": "esp32s3",
+  "title": "舵机一转就复位：USB 供电的欠压演示",
+  "about": "ESP32-S3，GPIO4 接 SG90，0° ↔ 180° 每 150 ms 换一次方向（总在半路反向，电流最大）。只靠电脑 USB 供电时（限流约 0.5 A），舵机把 5V 轨拉垮、3V3 掉到 2.44 V 以下 → 欠压复位，串口出现 rst:0xf (BROWNOUT_RST)、BOOT n reason=BROWNOUT；在供电里切到外接 5 V 2 A 就不再复位，扫满 12 次打印 TRYBOARD_OK。",
+  "tags": [
+   "行为模拟",
+   "欠压复位",
+   "电路求解",
+   "LEDC",
+   "舵机"
+  ],
+  "pins": {
+   "servo": 4
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "servo",
+     "pin": 4
+    }
+   ]
+  }
  }
 ]

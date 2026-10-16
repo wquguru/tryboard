@@ -18,7 +18,9 @@ export type BenchOp =
   | { k: 'heat'; part: string | null; env: Env }
   | { k: 'power'; ext5v: boolean }
   | { k: 'wiring'; mods: WireMods; scene?: SceneSpec; label: string }
-  | { k: 'check'; id: string; outcome: CheckOutcome };
+  | { k: 'check'; id: string; outcome: CheckOutcome }
+  /** 欠压复位（P1-02）：模拟器报告的事件，不是用户操作；回退到它 = 回到复位那一刻 */
+  | { k: 'brownout'; tSec: number; v3v3: number | null; count?: number };
 
 export interface BenchStep {
   op: BenchOp;

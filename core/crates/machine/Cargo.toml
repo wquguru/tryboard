@@ -9,3 +9,4 @@ tryboard-rv32 = { path = "../rv32" }
 tryboard-xtensa = { path = "../xtensa" }
 tryboard-esp32c3 = { path = "../esp32c3" }
 tryboard-esp32s3 = { path = "../esp32s3" }
+tryboard-elec = { path = "../elec" }

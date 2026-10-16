@@ -1,0 +1,11 @@
+* 09 LDO 压差区：输入 3.45 V（内阻 0.2 Ω），负载 0.4 A
+V1 s 0 DC 3.45
+R1 s vin 0.2
+*tb: LDO vin vout 3.3 0.01 0.525 1.2 0
+*tb: LOAD vout 0.4 1
+B2 0 vout I=max(0, min(min((3.3-v(vout))/0.01, (v(vin)-v(vout))/0.525), 1.2))
+B3 vin 0 I=max(0, min(min((3.3-v(vout))/0.01, (v(vin)-v(vout))/0.525), 1.2))
+B4 vout 0 I=max(0, min(0.4, v(vout)*0.4/1))
+.nodeset v(v5)=5 v(v33)=3.3 v(vin)=3.4 v(vout)=3.3 v(sv)=5
+.op
+.end

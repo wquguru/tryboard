@@ -1,0 +1,9 @@
+* 06 两级 RC：USB 线阻 + 板上电容 + 负载
+V1 in 0 DC 5
+R1 in a 0.5
+C1 a 0 10u
+R2 a b 2
+C2 b 0 22u
+R3 b 0 20
+.tran 2u 2m
+.end

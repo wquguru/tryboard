@@ -72,6 +72,10 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     return parts.flatMap((p) => ('addr' in p && kind[p.type] ? [{ kind: kind[p.type], addr: p.addr }] : []));
   };
 
+  /** 舵机信号脚（台面上第一个舵机）：供电网络里的舵机负载接在它上 */
+  const servoOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'servo' ? [p.pin] : []))[0];
+  const powerMode = () => (s.power?.ext5v ? 'ext' : 'usb') as 'usb' | 'ext';
+  const brownSubs = new Set<(tSec: number) => void>();
   const tickSubs = new Set<(m: Extract<FromWorker, { type: 'tick' }>) => void>();
   const bootSubs = new Set<() => void>();
   const endSubs = new Set<(snap: Snapshot) => void>();
@@ -99,7 +103,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     setPower(ext5v) {
       const had = !!s.power?.ext5v;
       s.power = { ext5v };
-      // 清单跟着改：外接 5 V = 加电源适配器 + DC 母座；切回 USB = 去掉（只改清单和显示，欠压模拟属于 P1）
+      // 供电网络在线切换（进输入日志 power=usb|ext，回退时按原来的时刻重放）
+      if (had !== ext5v) s.sim?.setPower(ext5v ? 'ext' : 'usb');
+      // 清单跟着改：外接 5 V = 加电源适配器 + DC 母座；切回 USB = 去掉
       if (had !== ext5v) {
         let h = store.get().bom;
         for (const partId of ['psu-5v2a', 'dc-jack']) h = pushBom(h, ext5v ? { t: 'add', partId } : { t: 'remove', partId });
@@ -118,6 +124,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       if (JSON.stringify(next) !== JSON.stringify(s.scene)) bench.setScene(next);
       s.scene = next;
       s.power = power;
+      s.sim?.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts) });
       audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
       bumpEdit();
     },
@@ -133,6 +140,10 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       endSubs.add(cb);
       return () => endSubs.delete(cb);
     },
+    onBrownout(cb) {
+      brownSubs.add(cb);
+      return () => brownSubs.delete(cb);
+    },
     snapshot: () => s.sim?.snapshot() ?? Promise.resolve(null),
     mark: () => s.sim?.mark() ?? Promise.resolve(0),
     async seek(job: SeekJob) {
@@ -147,29 +158,34 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       audio.reset();
       bench.setPowered(true);
       store.set({ running: false, reading: lastReading(snap.stdout), simSeconds: snap.simSeconds, env: { ...sim.env } });
+      // 回退停住那一刻的供电（日志里最后一次切换）
+      s.power = { ext5v: sim.powerMode() === 'ext' };
       return snap;
     },
     continueRun() {
       s.sim?.continueRun();
     },
     applyScene(next, power) {
-      const devs = (sc: SceneSpec) => JSON.stringify([i2cOf(sc.parts), sc.parts.some((p) => p.type === 'gc9a01')]);
+      const devs = (sc: SceneSpec) => JSON.stringify([i2cOf(sc.parts), sc.parts.some((p) => p.type === 'gc9a01'), servoOf(sc.parts) ?? null]);
       const rebootNeeded = devs(next) !== devs(s.scene);
       const same = JSON.stringify(next) === JSON.stringify(s.scene);
+      const extBefore = !!s.power?.ext5v;
       s.scene = next;
       s.power = power;
       if (!same) bench.setScene(next);
+      const hadExt = extBefore;
       if (s.sim && rebootNeeded) {
-        s.sim.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01') });
+        s.sim.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts) });
+        s.sim.setPower(powerMode());
         s.reboot();
-      }
+      } else if (s.sim && hadExt !== !!power?.ext5v) s.sim.setPower(powerMode());
       store.set((st) => ({ sceneRev: st.sceneRev + 1 }));
     },
     fwName: ex ? `${ex.id}/flash.bin` : '',
     fwSize: 0,
     chip,
     levels,
-    frame: { pwm: [], pwmFreq: [], gpio: 0, enable: 0, gpioHi: 0, enableHi: 0, rgb: null, oled: null, lcd: null },
+    frame: { pwm: [], pwmFreq: [], gpio: 0, enable: 0, gpioHi: 0, enableHi: 0, rgb: null, oled: null, lcd: null, elec: null },
     fwBuf: null,
     audio,
     sensorOffset: 0,
@@ -214,6 +230,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       fw,
       i2c: i2cOf(s.scene.parts),
       lcd: s.scene.parts.some((p) => p.type === 'gc9a01'),
+      servo: servoOf(s.scene.parts),
+      power: powerMode(),
       env: store.get().env,
       onConsole(text) {
         consoleBuf += text;
@@ -252,6 +270,13 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         s.frame.gpioHi = m.gpioHi;
         s.frame.enableHi = m.enableHi;
         if (m.leds) s.frame.rgb = m.leds[0] ?? null;
+        if (m.elec) {
+          s.frame.elec = m.elec;
+          // 舵机角度用二阶动力学的结果（有加速、过冲；只影响观感，固件读不到）
+          const sp = servoOf(s.scene.parts);
+          if (sp !== undefined && m.elec.servoAngle !== null) bench.setServoAngle(sp, m.elec.servoAngle);
+        }
+        for (const t of m.brownouts ?? []) for (const cb of [...brownSubs]) cb(t);
         for (const cb of [...tickSubs]) cb(m);
         const st = store.get();
         if (Math.abs(st.simSeconds - m.simSeconds) >= 0.05 || st.running !== m.running) store.set({ simSeconds: m.simSeconds, running: m.running });

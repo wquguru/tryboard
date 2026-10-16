@@ -70,6 +70,11 @@ const ownsTimeline = () => store.get().step === 'bench';
     ctx.hist = createBenchHistory(ctx, { placeLabels: session.scene.parts.map((p) => names[p.type] ?? p.type), placed: !!placed });
     (window as unknown as { __tbApp: Record<string, unknown> }).__tbApp.hist = ctx.hist;
     store.subscribe(() => ctx.hist!.op({ k: 'scene', scene: session.scene, power: session.power, count: session.scene.parts.length }), ['sceneRev']);
+    // 欠压复位（P1-02）进实验台时间线：一步，回到它 = 回到复位那一刻
+    session.onBrownout((t) => {
+      ctx.hist!.event({ k: 'brownout', tSec: t, v3v3: session.frame.elec?.min3v3 ?? null }, t * 1000);
+      shell.toast(`欠压复位：3V3 掉到门限以下（${t.toFixed(2)} s）`);
+    });
     // 结论按钮：实验台显示检查点进度；采购、组装、成品挂载时自己设
     const verdict = () => {
       if (store.get().step === 'shop') {

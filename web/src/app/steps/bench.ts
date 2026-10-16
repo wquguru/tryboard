@@ -5,7 +5,7 @@ import type { PickTarget, ScreenPoint } from '../../scene-api';
 import { CHIP_HEAT_OFFSET } from '../../views/templates';
 import { partId, partInfo, usedPins, wiresOf, type WireMods } from '../wiring';
 import { checkWiring, faultByWire, type WireFault } from '../wirecheck';
-import { PinTrace, bit, drawScope, pinKind, powerVolts, pwmText } from '../pinscope';
+import { PinTrace, bit, drawScope, meterVolts, pinKind, powerVolts, pwmText } from '../pinscope';
 import { diffRuns, summarize, type BenchStep } from '../history';
 import { checkCommand, type Level } from '../../checks';
 import { verifyLevel } from '../../verify';
@@ -61,6 +61,8 @@ export function benchStep(): StepImpl {
   const trace = new PinTrace();
   /** 尺子：工具条"尺子"按下后，台面上点两个目标 */
   let ruler: { a: PickTarget | null; b: PickTarget | null; mm: number | null } | null = null;
+  /** 万用表（P1-04）：工具条"万用表"按下后，台面上点一根针量对地电压 */
+  let meter: { target: string | null } | null = null;
   /** 运行历史里点的第二条（和选中的那条对比） */
   let cmpRun: number | null = null;
   /** 快捷卡片跟着的目标 */
@@ -177,26 +179,30 @@ ${c.work.checkpoints.length ? group('checkpoint', '检查点', `${passedCount(c,
     else if (sel.kind === 'pin') renderPin(sel.id);
     else if (sel.kind === 'button') renderButton(sel.id);
     else if (sel.kind === 'run') renderRuns(Number(sel.id));
-    else if (sel.kind === 'tool') renderRuler();
+    else if (sel.kind === 'tool') (sel.id === 'meter' ? renderMeter() : renderRuler());
     else renderPart(sel.id);
     const banner = seekBanner();
     if (banner && !el.querySelector('.seekbar')) el.insertAdjacentHTML('afterbegin', banner);
     bindSeekBanner();
   }
 
+  /** 供电网络的实时读数（tryboard-elec 的节点电压 / 电流；本次上电以来的最低 / 峰值 / 复位次数） */
+  const elecRows = (ext: boolean, hasServo: boolean) =>
+    `${sec('电路求解 · 实时')}${row('5V 轨', '', 'e5')}${row('3V3', '', 'e33')}${row('3V3 最低（本次上电）', '', 'emin')}${row('USB 电流', '', 'eiu')}${row('USB 峰值电流', '', 'epu')}${ext ? row('外接 5 V', '', 'eext') : ''}${hasServo ? `${row('舵机电流', '', 'eis')}${row('舵机峰值电流', '', 'eps')}` : ''}${row('欠压复位', '', 'ers')}${row('可信度', '估算（参数来源见 DECISIONS「电气模型」）')}`;
   function renderPower(id: string) {
     const c = ctx!;
     const el = c.shell.props;
     const ext = !!c.session.power?.ext5v;
     const hasServo = c.session.scene.parts.some((p) => p.type === 'servo');
     const toggle = hasServo
-      ? `${sec('舵机从哪取电')}<div class="seg" role="radiogroup" aria-label="舵机供电"><button type="button" class="segb" data-power="usb" aria-pressed="${!ext}">USB 5 V</button><button type="button" class="segb" data-power="ext" aria-pressed="${ext}">外接 5 V 2 A</button></div><p class="note">只改清单和供电显示：外接 = 清单里加 5 V 2 A 电源 + DC 母座。舵机一转 USB 掉压复位的模拟属于 P1 电气，这里不算。</p>`
+      ? `${sec('舵机从哪取电')}<div class="seg" role="radiogroup" aria-label="舵机供电"><button type="button" class="segb" data-power="usb" aria-pressed="${!ext}">USB 5 V</button><button type="button" class="segb" data-power="ext" aria-pressed="${ext}">外接 5 V 2 A</button></div><p class="note">在线切换（进输入日志，回退时按原时刻重放）；外接 = 清单里加 5 V 2 A 电源 + DC 母座。</p>`
       : '';
     el.innerHTML =
       id === 'ext5v'
-        ? `${sec('供电')}<div class="ph">外接 5 V 2 A</div>${ext ? `${rowT('来源', '5 V 2 A 电源适配器 → DC 母座 → 面包板电源轨')}${rowT('给谁', '舵机；地线和开发板 GND 接在一起')}` : '<p class="note">还没接外接电源：舵机从 USB 5V 取电。</p>'}${row('电压', ext ? '≈ 5.0 V' : '—')}${row('可信度', '估算')}${toggle}`
-        : `${sec('供电')}<div class="ph">USB 5 V（电脑）</div>${rowT('来源', 'USB-C 接电脑，5 V，最多约 500 mA')}${rowT('3V3', '板载 LDO 稳压，给 BME280 / OLED')}${rowT('5V 轨', ext ? '只给开发板；舵机走外接 5 V' : hasServo ? '直通 USB，舵机也从这里取电' : '直通 USB')}${row('可信度', '估算')}${!ext && hasServo ? '<p class="note bad">舵机只靠 USB：一转板子可能复位。欠压演示由 P1 电气接上，现在只显示。</p>' : ''}${toggle}`;
+        ? `${sec('供电')}<div class="ph">外接 5 V 2 A</div>${ext ? `${rowT('来源', '5 V 2 A 电源适配器 → DC 母座 → 面包板电源轨（内阻约 0.15 Ω，估算）')}${rowT('给谁', '舵机；地线和开发板 GND 接在一起')}` : '<p class="note">还没接外接电源：舵机从 USB 5V 取电。</p>'}${row('电压', ext ? '' : '—', ext ? 'eext' : '')}${elecRows(ext, hasServo)}${toggle}`
+        : `${sec('供电')}<div class="ph">USB 5 V（电脑）</div>${rowT('来源', 'USB-C 接电脑，5 V，限流约 0.5 A（USB 2.0 规范值）；口内阻 + 1 m 线阻约 0.5 Ω（估算）')}${rowT('3V3', '板载 LDO SGM2212（压差 420 mV @ 800 mA），给芯片、BME280 / OLED；低于 2.44 V 欠压复位（IDF 默认档）')}${rowT('5V 轨', ext ? '只给开发板；舵机走外接 5 V' : hasServo ? '直通 USB，舵机也从这里取电' : '直通 USB')}${elecRows(ext, hasServo)}${!ext && hasServo ? '<p class="note bad">舵机只靠 USB：起步电流约 0.7 A 超过 0.5 A 限流，5V 轨掉到约 3.5 V（3V3 还稳得住）；大幅来回扫动、没转到位就反向时（反接制动），5V 轨被拉垮 → 3V3 低于 2.44 V → 欠压复位，串口出现 rst:0xf。</p>' : ''}${toggle}`;
     bindPowerToggle(el);
+    updateLive();
   }
   function bindPowerToggle(root: HTMLElement) {
     root.querySelectorAll<HTMLButtonElement>('[data-power]').forEach((b) => (b.onclick = () => setPower(b.dataset.power === 'ext')));
@@ -206,7 +212,7 @@ ${c.work.checkpoints.length ? group('checkpoint', '检查点', `${passedCount(c,
     if (!!c.session.power?.ext5v === ext) return;
     c.hist?.op({ k: 'power', ext5v: ext });
     c.session.setPower(ext);
-    c.shell.toast(ext ? '舵机改由外接 5 V 2 A 供电：清单里有电源适配器和 DC 母座' : '舵机改回 USB 5 V 供电：清单去掉了外接电源');
+    c.shell.toast(ext ? '舵机改由外接 5 V 2 A 供电（在线生效）：清单里有电源适配器和 DC 母座' : '舵机改回 USB 5 V 供电（在线生效）：清单去掉了外接电源');
   }
 
   function renderWire(id: string) {
@@ -242,7 +248,7 @@ ${power ? renderPowerInline() : ''}`;
     const to = wires.map((w) => `${partName(w.part)} · ${w.pin}`).join('；');
     const fs = faults.filter((f) => f.wires.some((x) => wires.some((w) => w.id === x)));
     el.innerHTML = `${sec('针脚')}<div class="ph mono">${esc(id)}</div>${row('丝印', esc(pin?.label ?? id))}${row('角色', esc(pin?.role ?? (wires[0]?.role || '没接东西')))}${to ? rowT('接到', esc(to)) : ''}
-${sec('实时值')}${kind === 'gpio' ? `${row('方向', '', 'pdir')}${row('电平', '', 'plv')}${row('PWM 频率', '', 'pf')}${row('脉宽', '', 'pw2')}${row('占空比', '', 'pd')}` : kind === 'i2c' ? `${row('I2C 角色', esc(wires.map((w) => `${w.pin === 'SDA' ? 'SDA 数据' : 'SCL 时钟'} → ${partName(w.part)}`).join('；')))}${row('电平', '', 'plv')}${row('总线', '开漏，模块上拉到 3V3')}` : `${row('电压', esc(powerVolts(id, !!c.session.power?.ext5v)))}${row('可信度', '估算')}`}
+${sec('实时值')}${kind === 'gpio' ? `${row('方向', '', 'pdir')}${row('电平', '', 'plv')}${row('PWM 频率', '', 'pf')}${row('脉宽', '', 'pw2')}${row('占空比', '', 'pd')}` : kind === 'i2c' ? `${row('I2C 角色', esc(wires.map((w) => `${w.pin === 'SDA' ? 'SDA 数据' : 'SCL 时钟'} → ${partName(w.part)}`).join('；')))}${row('电平', '', 'plv')}${row('总线', '开漏，模块上拉到 3V3')}` : `${row('电压', esc(powerVolts(id, !!c.session.power?.ext5v, c.session.frame.elec)), 'pv')}${id === '3V3' ? row('最低（本次上电）', '', 'emin') : ''}${row('可信度', '估算（电路求解）')}`}
 ${sec('示波器')}<canvas class="scope" data-live="scope" width="280" height="96" aria-label="${esc(id)} 波形"></canvas><p class="note" data-live="scopeNote"></p>
 ${fs.length ? sec('接线检查') + fs.map(faultHtml).join('') : ''}`;
     updateLive();
@@ -314,6 +320,45 @@ ${sec('全部运行 · 点一条和 A 对比')}<div class="runs">${list}</div>`;
     el.querySelector<HTMLButtonElement>('#gotoRun')?.addEventListener('click', () => step >= 0 && c.hist?.seek(step));
   }
 
+  // ------------------------------------------------------------ 万用表（P1-04）
+  function renderMeter() {
+    const m = meter;
+    const el = ctx!.shell.props;
+    el.innerHTML = `${sec('万用表 · 直流电压')}<div class="ph">${m?.target ? `<span class="mono">${esc(m.target)}</span> 对 GND` : '点台面上的一根针'}</div>
+<div class="meter"><span class="mono" data-live="mv">—</span></div><p class="note" data-live="mnote">黑表笔接 GND；红表笔点电源脚（3V3 / 5V / 外接 5 V）或信号脚。电源脚是电路求解的节点电压，信号脚按逻辑电平换算。</p>
+${row('3V3 最低（本次上电）', '', 'emin')}${row('欠压复位', '', 'ers')}
+<div class="btns"><button type="button" class="btn" data-mpin="3V3">量 3V3</button><button type="button" class="btn" data-mpin="5V">量 5V</button>${ctx!.session.scene.parts.some((p) => p.type === 'servo') ? '<button type="button" class="btn" data-mpin="servo:VCC">量舵机红线</button>' : ''}</div>`;
+    el.querySelectorAll<HTMLButtonElement>('[data-mpin]').forEach((b) => (b.onclick = () => {
+      meter = { target: b.dataset.mpin! };
+      renderMeter();
+    }));
+    updateLive();
+  }
+  function setMeter(on: boolean) {
+    const c = ctx!;
+    if (on && ruler) setRuler(false);
+    meter = on ? { target: meter?.target ?? null } : null;
+    c.shell.toolbar.setActive(on ? 'meter' : 'select');
+    closeCard();
+    if (on) select({ kind: 'tool', id: 'meter' });
+    else if (c.store.get().selection?.kind === 'tool') select(null);
+  }
+  /** 拾取到的东西 → 万用表点在哪根针（导线按它在开发板上的那一端；舵机红线单独一个节点） */
+  function meterTarget(t: PickTarget): string | null {
+    if (t.kind === 'pin') return t.id;
+    if (t.kind === 'wire') {
+      if (/servo:VCC/.test(t.id)) return 'servo:VCC';
+      return benchWires().find((w) => w.id === t.id)?.a ?? null;
+    }
+    return null;
+  }
+  function meterReading() {
+    const c = ctx!;
+    const id = meter?.target;
+    if (!id) return null;
+    return meterVolts(id, c.session.frame.elec, c.session.frame, !!c.session.power?.ext5v);
+  }
+
   // ------------------------------------------------------------ 尺子（P0-13）
   const pickName = (t: PickTarget) => (t.kind === 'part' ? (t.id === 'board' ? '开发板芯片' : partName(t.id)) : t.id);
   function renderRuler() {
@@ -347,7 +392,7 @@ ${row('起点', r?.a ? esc(pickName(r.a)) : '点第一个目标')}${row('终点'
     if (id === 'board') {
       const s3 = ses.chip === 'esp32s3';
       el.innerHTML = `${sec('开发板')}<div class="ph">${s3 ? 'ESP32-S3-DevKitC-1' : 'ESP32-C3-DevKitM-1'}</div>
-${row('芯片', s3 ? 'ESP32-S3 · 双核 160 MHz' : 'ESP32-C3 · 160 MHz')}${row('供电', 'USB 5 V → 3V3')}
+${row('芯片', s3 ? 'ESP32-S3 · 双核 160 MHz' : 'ESP32-C3 · 160 MHz')}${row('供电', 'USB 5 V → LDO → 3V3')}${row('3V3', '', 'e33')}${row('3V3 总电流（估算）', '', 'eic')}${row('欠压复位', '', 'ers')}
 ${sec('实时')}${row('运行', '', 'run')}${row('模拟时间', '', 'sim')}${row(`板载 RGB（GPIO${s3 ? 48 : 8}）`, '', 'rgb')}
 <div class="btns"><button type="button" class="btn" id="bootBtn">按住 BOOT（GPIO0）</button><button type="button" class="btn" id="rstBtn">RST 重新上电</button></div>`;
       const boot = el.querySelector<HTMLButtonElement>('#bootBtn')!;
@@ -554,6 +599,27 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
     set('rh', rd ? `${rd.h.toFixed(1)} %` : '—');
     set('rp', rd ? `${rd.p.toFixed(2)} hPa` : '—');
     set('vp', `${s.verifyProgress.toFixed(1)} s`);
+    const e = c.session.frame.elec;
+    if (e) {
+      const V = (x: number) => (Number.isFinite(x) ? `${x.toFixed(3)} V` : '—');
+      const A = (x: number) => `${(x * 1000).toFixed(0)} mA`;
+      set('e5', V(e.v5), e.v5 < 4.0);
+      set('e33', `${V(e.v3v3)}${e.held ? ' · 复位按住' : ''}`, e.v3v3 < 3.0);
+      set('emin', V(e.min3v3), e.min3v3 < 2.44);
+      set('eiu', A(e.iUsb), e.iUsb > 0.5);
+      set('epu', A(e.peakUsb), e.peakUsb > 0.5);
+      set('eext', V(e.vExt));
+      set('eis', A(e.iServo));
+      set('eps', A(e.peakServo));
+      set('ers', `${e.resets} 次`, e.resets > 0);
+      set('eic', A(e.i3v3));
+      set('pv', s.selection?.kind === 'pin' ? powerVolts(s.selection.id, !!c.session.power?.ext5v, e) : '');
+    }
+    const mr = meterReading();
+    if (mr) {
+      set('mv', mr.v === null ? '—' : `${mr.v.toFixed(3)} V`);
+      set('mnote', mr.note);
+    }
     // 别处改了环境（卡片 / 热源 / 回退），没在拖的滑块跟上
     const fmtEnv: Record<string, (v: number) => string> = { temp: (v) => `${v.toFixed(1)} °C`, humidity: (v) => `${v.toFixed(0)} %`, pressure: (v) => `${(v / 100).toFixed(1)} hPa` };
     for (const root of card ? [el, card] : [el])
@@ -576,7 +642,9 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
       const d = f.pwm[servo.pin];
       set('pw', d !== undefined && d >= 0 ? `${(d * 20).toFixed(3)} ms` : '没有 PWM');
       const a = servoAngle(f.pwm, servo.pin);
-      set('ang', a === null ? '—' : `${a.toFixed(1)}°`);
+      // 舵盘实际角度来自内核的二阶动力学（有加速、过冲）；括号里是 PWM 换算的目标角
+      const phys = f.elec?.servoAngle;
+      set('ang', phys != null ? `${phys.toFixed(1)}°${a === null ? '' : `（目标 ${a.toFixed(1)}°）`}` : a === null ? '—' : `${a.toFixed(1)}°`);
     }
     // 针脚实时值 + 示波器
     const sel = s.selection;
@@ -677,7 +745,7 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
     }
     const isServoPower = (t.kind === 'wire' && /servo:VCC/.test(t.id)) || (t.kind === 'pin' && t.id === '5V' && c.session.scene.parts.some((p) => p.type === 'servo'));
     if (isServoPower) {
-      box.innerHTML = `<div class="sec">舵机供电 · 现在${c.session.power?.ext5v ? '外接 5 V' : ' USB 5 V'}</div><div class="seg" role="radiogroup" aria-label="舵机供电"><button type="button" class="segb" data-power="usb" aria-pressed="${!c.session.power?.ext5v}">USB 5 V</button><button type="button" class="segb" data-power="ext" aria-pressed="${!!c.session.power?.ext5v}">外接 5 V 2 A</button></div><p class="note">只改清单和供电显示；舵机一转 USB 掉压复位属于 P1 电气。</p>`;
+      box.innerHTML = `<div class="sec">舵机供电 · 现在${c.session.power?.ext5v ? '外接 5 V' : ' USB 5 V'}</div><div class="seg" role="radiogroup" aria-label="舵机供电"><button type="button" class="segb" data-power="usb" aria-pressed="${!c.session.power?.ext5v}">USB 5 V</button><button type="button" class="segb" data-power="ext" aria-pressed="${!!c.session.power?.ext5v}">外接 5 V 2 A</button></div>${row('5V 轨', '', 'e5')}${row('3V3', '', 'e33')}${row('欠压复位', '', 'ers')}<p class="note">在线切换：只靠 USB 时舵机大幅扫动会把 3V3 拉到欠压门限以下、板子复位。</p>`;
       bindPowerToggle(box);
       return box;
     }
@@ -722,6 +790,23 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
 
   function onPick(t: PickTarget | null, screen: ScreenPoint) {
     if (!ctx || ctx.store.get().step !== 'bench') return;
+    if (meter) {
+      if (!t) return;
+      const id = meterTarget(t);
+      if (!id) {
+        ctx.shell.toast('万用表：点一根针（电源脚或 GPIO），或一根导线');
+        return;
+      }
+      meter = { target: id };
+      if (ctx.store.get().selection?.kind !== 'tool') select({ kind: 'tool', id: 'meter' });
+      renderMeter();
+      const box = document.createElement('div');
+      box.innerHTML = `<div class="sec">万用表 · <span class="mono">${esc(id)}</span></div><div class="meter sm"><span class="mono" data-live="mv">—</span></div><p class="note" data-live="mnote"></p>`;
+      cardFor = t;
+      ctx.shell.card.show(ctx.session.pick.project?.(t) ?? screen, box);
+      updateLive();
+      return;
+    }
     if (ruler) {
       if (!t) return;
       if (!ruler.a || ruler.b) ruler = { a: t, b: null, mm: null };
@@ -756,8 +841,12 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
     const c = ctx;
     if (id === 'select' || id === 'orbit') {
       if (ruler) setRuler(false);
+      if (meter) setMeter(false);
       c.shell.toolbar.setActive(id);
-    } else if (id === 'ruler') setRuler(!ruler);
+    } else if (id === 'ruler') {
+      if (meter) setMeter(false);
+      setRuler(!ruler);
+    } else if (id === 'meter') setMeter(!meter);
     else if (id === 'rerun') c.session.reboot();
     else if (id === 'heat') toggleHeat();
     else if (id === 'scope') {
@@ -768,7 +857,7 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
       c.session.pressBoot(true);
       setTimeout(() => c.session.pressBoot(false), 150);
       c.shell.toast('按了一下 BOOT（GPIO0）');
-    } else c.shell.toast(id === 'meter' ? '万用表要电路求解（P1-01 / P1-04），现在针脚面板里的电压是估算' : '这个工具由后续任务实现');
+    } else c.shell.toast('这个工具由后续任务实现');
   }
 
   // ------------------------------------------------------------ 造错误接线（验收用的 debug 钩子，?debug=1 才挂出）
@@ -834,11 +923,11 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
       c.shell.toolbar.setGroups([
         { id: 'nav', tools: [{ id: 'select', label: '选择', key: 'V' }, { id: 'orbit', label: '转视角', key: 'H' }] },
         { id: 'edit', tools: [{ id: 'place', label: '放置', todo: true }, { id: 'wire', label: '连线', todo: true }] },
-        { id: 'measure', tools: [{ id: 'meter', label: '万用表', todo: true }, { id: 'ruler', label: '尺子' }, { id: 'scope', label: '示波器' }] },
+        { id: 'measure', tools: [{ id: 'meter', label: '万用表' }, { id: 'ruler', label: '尺子' }, { id: 'scope', label: '示波器' }] },
         { id: 'act', tools: [{ id: 'heat', label: '热源' }, { id: 'button', label: '按键' }] },
         { id: 'run', tools: [{ id: 'rerun', label: '再跑一次', primary: true }] },
       ]);
-      c.shell.toolbar.setActive(ruler ? 'ruler' : 'select');
+      c.shell.toolbar.setActive(ruler ? 'ruler' : meter ? 'meter' : 'select');
       if (!c.store.get().selection) c.store.set({ selection: c.work.checkpoints.length ? { kind: 'part', id: 'bme280' } : { kind: 'firmware', id: 'main' } });
       if (!c.session.scene.parts.some((p) => partId(p) === 'bme280') && c.store.get().selection?.id === 'bme280') c.store.set({ selection: { kind: 'part', id: 'board' } });
       recheckWiring();
@@ -876,6 +965,7 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
         ruler = null;
         ctx?.session.pick.measure?.(null);
       }
+      meter = null;
       ctx?.session.pick.highlight?.(null);
       ctx = null;
     },

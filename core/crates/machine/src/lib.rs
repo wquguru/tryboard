@@ -10,6 +10,7 @@ use tryboard_esp32c3::devices::{
 use tryboard_esp32c3::rmt::Ws2812;
 use tryboard_esp32c3::Esp32c3;
 use tryboard_esp32s3::Esp32s3;
+use tryboard_elec::board::{Activity, Board, ChipKind, Power};
 
 pub use tryboard_esp32c3::periph::CPU_HZ;
 
@@ -69,9 +70,15 @@ pub enum Stop {
 }
 
 #[allow(clippy::large_enum_variant)]
-pub enum Machine {
+pub enum Hw {
     C3(Esp32c3),
     S3(Esp32s3),
+}
+
+/// 一台机器 = 芯片 + 开发板供电网络（tryboard-elec）。供电网络跨复位保留（它是外部世界）
+pub struct Machine {
+    pub hw: Hw,
+    pub elec: Board,
 }
 
 pub struct BootInfo {
@@ -85,11 +92,11 @@ impl Machine {
         match Chip::from_image(&flash) {
             Some(Chip::Esp32s3) => {
                 let (m, a) = Esp32s3::boot(rom, flash)?;
-                Ok((Machine::S3(m), BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
+                Ok((Machine { hw: Hw::S3(m), elec: Board::new(ChipKind::S3) }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
             }
             Some(Chip::Esp32c3) | None => {
                 let (m, a) = Esp32c3::boot(rom, flash)?;
-                Ok((Machine::C3(m), BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
+                Ok((Machine { hw: Hw::C3(m), elec: Board::new(ChipKind::C3) }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
             }
         }
     }
@@ -97,100 +104,189 @@ impl Machine {
     /// 软件复位后重新上电：flash（含 NVS）保留，模拟时间继续。
     /// S3 另外保留 RTC 内存与 RTC_CNTL 存储寄存器（RTC_NOINIT、复位原因提示），见 Esp32s3::reboot
     pub fn reboot(&mut self, reason: u32) -> Result<(), String> {
-        match self {
-            Machine::C3(m) => m.reboot(reason),
-            Machine::S3(m) => m.reboot(reason),
+        match &mut self.hw {
+            Hw::C3(m) => m.reboot(reason)?,
+            Hw::S3(m) => m.reboot(reason)?,
         }
+        // 我们不跑 ROM 引导，ROM 每次复位都会打印的头三行由这里补上（复位原因与 ROM 的写法一致），
+        // 网页和命令行串口里都能看到 rst:0x..（上电那一次不补：现有用例的串口输出保持不变）
+        let banner = rom_banner(self.chip(), reason);
+        self.console_push(banner.as_bytes());
+        Ok(())
+    }
+
+    fn console_push(&mut self, b: &[u8]) {
+        match &mut self.hw {
+            Hw::C3(m) => m.bus.console.extend_from_slice(b),
+            Hw::S3(m) => m.bus.console.extend_from_slice(b),
+        }
+    }
+
+    /// 舵机信号接在哪个 GPIO（接上才有舵机电流；不接则供电网络只有芯片和模块）
+    pub fn servo_attach(&mut self, pin: u32) {
+        self.elec.attach_servo(pin);
+    }
+
+    /// 供电方式：USB（舵机也吃 USB 的 5V）或外接 5 V（舵机单独供电，共地）
+    pub fn set_power(&mut self, p: Power) {
+        self.elec.set_power(p);
+    }
+
+    /// 这一段运行里芯片在干什么，喂给供电网络
+    fn activity(&self, c0: u64, i0: u64, w0: (u64, u64)) -> Activity {
+        let dc = self.cycles().saturating_sub(c0).max(1);
+        let busy = (self.instret().saturating_sub(i0)) as f64 / dc as f64;
+        let w = self.wifi_frames();
+        let tx_frames = w.0.saturating_sub(w0.0);
+        let tx = tx_frames as f64 * self.elec.p.tx_airtime / (dc as f64 / CPU_HZ as f64);
+        let servo_pw_us = self.elec.servo_pin.and_then(|p| self.pin_pwm(p as usize)).and_then(|(d, f)| {
+            // 舵机只认 50 Hz 量级的脉冲；别的频率（蜂鸣器 kHz）不当舵机信号
+            if (20.0..=500.0).contains(&f) && d > 0.0 {
+                Some(d as f64 / f as f64 * 1e6)
+            } else {
+                None
+            }
+        });
+        Activity { busy, wifi_on: w.0 + w.1 > 0, tx, servo_pw_us }
+    }
+
+    /// Wi-Fi 收发帧计数（发, 收）；只有 C3 有 Wi-Fi 模型
+    fn wifi_frames(&self) -> (u64, u64) {
+        match &self.hw {
+            Hw::C3(m) => (m.bus.wifi.tx_frames, m.bus.wifi.rx_frames),
+            Hw::S3(_) => (0, 0),
+        }
+    }
+
+    /// 欠压复位按住期间：芯片不执行，时间照走（外设时间随 CPU 周期一起推进）
+    fn hold(&mut self, cycles: u64) {
+        match &mut self.hw {
+            Hw::C3(m) => {
+                m.cpu.cycles += cycles;
+                m.bus.now = m.cpu.cycles;
+            }
+            Hw::S3(m) => {
+                m.cpu.cycles += cycles;
+                m.bus.now = m.cpu.cycles;
+                if m.cpu1_on {
+                    m.cpu1.cycles = m.cpu.cycles;
+                }
+            }
+        }
+    }
+
+    /// 跑完一段之后推进供电网络；触发欠压就让这一段以"复位（原因 15 = RTCWDT_BROWN_OUT_RESET）"结束
+    fn after_run(&mut self, c0: u64, i0: u64, w0: (u64, u64), r: Stop) -> Stop {
+        let act = self.activity(c0, i0, w0);
+        let now = self.cycles();
+        if self.elec.advance(now, &act) && matches!(r, Stop::Budget | Stop::Reset(_)) {
+            return Stop::Reset(BROWNOUT_RESET);
+        }
+        r
     }
 
     /// 原生 USB（只有 S3 有）
     pub fn usb(&self) -> Option<&tryboard_esp32s3::usb::Usb> {
-        match self {
-            Machine::S3(m) => m.bus.usb.as_deref(),
-            Machine::C3(_) => None,
+        match &self.hw {
+            Hw::S3(m) => m.bus.usb.as_deref(),
+            Hw::C3(_) => None,
         }
     }
 
     pub fn usb_mut(&mut self) -> Option<&mut tryboard_esp32s3::usb::Usb> {
-        match self {
-            Machine::S3(m) => m.bus.usb.as_deref_mut(),
-            Machine::C3(_) => None,
+        match &mut self.hw {
+            Hw::S3(m) => m.bus.usb.as_deref_mut(),
+            Hw::C3(_) => None,
         }
     }
 
     pub fn chip(&self) -> Chip {
-        match self {
-            Machine::C3(_) => Chip::Esp32c3,
-            Machine::S3(_) => Chip::Esp32s3,
+        match &self.hw {
+            Hw::C3(_) => Chip::Esp32c3,
+            Hw::S3(_) => Chip::Esp32s3,
         }
     }
 
+    /// 跑 cycles 个周期，然后按这段时间的芯片活动推进供电网络。
+    /// 欠压复位按住期间不执行指令（时间照走），电压回升后由下一次 run 接着从复位后的状态跑
     pub fn run(&mut self, cycles: u64) -> Stop {
-        match self {
-            Machine::C3(m) => {
+        let (c0, i0, w0) = (self.cycles(), self.instret(), self.wifi_frames());
+        if self.elec.held {
+            self.hold(cycles);
+            return self.after_run(c0, i0, w0, Stop::Budget);
+        }
+        let r = match &mut self.hw {
+            Hw::C3(m) => {
                 let r = m.run(cycles);
                 c3_stop(m, r)
             }
-            Machine::S3(m) => {
+            Hw::S3(m) => {
                 let r = m.run(cycles);
                 s3_stop(m, r)
             }
-        }
+        };
+        self.after_run(c0, i0, w0, r)
     }
 
     pub fn run_traced(&mut self, cycles: u64, ring: &mut VecDeque<u32>, cap: usize) -> Stop {
-        match self {
-            Machine::C3(m) => {
+        let (c0, i0, w0) = (self.cycles(), self.instret(), self.wifi_frames());
+        if self.elec.held {
+            self.hold(cycles);
+            return self.after_run(c0, i0, w0, Stop::Budget);
+        }
+        let r = match &mut self.hw {
+            Hw::C3(m) => {
                 let r = m.run_traced(cycles, ring, cap);
                 c3_stop(m, r)
             }
-            Machine::S3(m) => {
+            Hw::S3(m) => {
                 let r = m.run_traced(cycles, ring, cap);
                 s3_stop(m, r)
             }
-        }
+        };
+        self.after_run(c0, i0, w0, r)
     }
 
     /// 核 0 的周期数（模拟时间）
     pub fn cycles(&self) -> u64 {
-        match self {
-            Machine::C3(m) => m.cpu.cycles,
-            Machine::S3(m) => m.cpu.cycles,
+        match &self.hw {
+            Hw::C3(m) => m.cpu.cycles,
+            Hw::S3(m) => m.cpu.cycles,
         }
     }
 
     pub fn instret(&self) -> u64 {
-        match self {
-            Machine::C3(m) => m.cpu.instret,
-            Machine::S3(m) => m.cpu.instret + if m.cpu1_on { m.cpu1.instret } else { 0 },
+        match &self.hw {
+            Hw::C3(m) => m.cpu.instret,
+            Hw::S3(m) => m.cpu.instret + if m.cpu1_on { m.cpu1.instret } else { 0 },
         }
     }
 
     pub fn pc(&self) -> u32 {
-        match self {
-            Machine::C3(m) => m.cpu.pc,
-            Machine::S3(m) => m.cpu.pc,
+        match &self.hw {
+            Hw::C3(m) => m.cpu.pc,
+            Hw::S3(m) => m.cpu.pc,
         }
     }
 
     pub fn console_take(&mut self) -> Vec<u8> {
-        match self {
-            Machine::C3(m) => m.console_take(),
-            Machine::S3(m) => m.console_take(),
+        match &mut self.hw {
+            Hw::C3(m) => m.console_take(),
+            Hw::S3(m) => m.console_take(),
         }
     }
 
     pub fn gpio_level(&self) -> u64 {
-        match self {
-            Machine::C3(m) => m.bus.gpio.level() as u64,
-            Machine::S3(m) => m.bus.gpio.level(),
+        match &self.hw {
+            Hw::C3(m) => m.bus.gpio.level() as u64,
+            Hw::S3(m) => m.bus.gpio.level(),
         }
     }
 
     pub fn gpio_enable(&self) -> u64 {
-        match self {
-            Machine::C3(m) => m.bus.gpio.enable as u64,
-            Machine::S3(m) => m.bus.gpio.enable,
+        match &self.hw {
+            Hw::C3(m) => m.bus.gpio.enable as u64,
+            Hw::S3(m) => m.bus.gpio.enable,
         }
     }
 
@@ -214,27 +310,27 @@ impl Machine {
                 $m.bus.gpio_changed(now);
             }};
         }
-        match self {
-            Machine::C3(m) => drive!(m, 1u32),
-            Machine::S3(m) => drive!(m, 1u64),
+        match &mut self.hw {
+            Hw::C3(m) => drive!(m, 1u32),
+            Hw::S3(m) => drive!(m, 1u64),
         }
     }
 
     /// 板载 BOOT 键所在引脚（C3：GPIO9，S3：GPIO0）
     pub fn boot_pin(&self) -> u32 {
-        match self {
-            Machine::C3(_) => 9,
-            Machine::S3(_) => 0,
+        match &self.hw {
+            Hw::C3(_) => 9,
+            Hw::S3(_) => 0,
         }
     }
 
     pub fn uart_push(&mut self, data: &[u8]) {
-        match self {
-            Machine::C3(m) => {
+        match &mut self.hw {
+            Hw::C3(m) => {
                 m.bus.uart0.push_rx(data);
                 m.bus.irq_dirty = true;
             }
-            Machine::S3(m) => {
+            Hw::S3(m) => {
                 m.bus.uart0.push_rx(data);
                 m.bus.irq_dirty = true;
             }
@@ -242,17 +338,17 @@ impl Machine {
     }
 
     pub fn pin_pwm(&self, pin: usize) -> Option<(f32, f32)> {
-        match self {
-            Machine::C3(m) => m.bus.pin_pwm(pin),
-            Machine::S3(m) => m.bus.pin_pwm(pin),
+        match &self.hw {
+            Hw::C3(m) => m.bus.pin_pwm(pin),
+            Hw::S3(m) => m.bus.pin_pwm(pin),
         }
     }
 
     /// 引脚上的模拟电压（毫伏），给 ADC 读
     pub fn analog_set(&mut self, pin: usize, mv: f32) {
-        let slot = match self {
-            Machine::C3(m) => m.bus.adc.pin_mv.get_mut(pin),
-            Machine::S3(m) => m.bus.adc.pin_mv.get_mut(pin),
+        let slot = match &mut self.hw {
+            Hw::C3(m) => m.bus.adc.pin_mv.get_mut(pin),
+            Hw::S3(m) => m.bus.adc.pin_mv.get_mut(pin),
         };
         if let Some(p) = slot {
             *p = mv;
@@ -260,16 +356,16 @@ impl Machine {
     }
 
     pub fn ws2812(&self) -> &HashMap<u32, Ws2812> {
-        match self {
-            Machine::C3(m) => &m.bus.ws2812,
-            Machine::S3(m) => &m.bus.ws2812,
+        match &self.hw {
+            Hw::C3(m) => &m.bus.ws2812,
+            Hw::S3(m) => &m.bus.ws2812,
         }
     }
 
     fn i2c0(&mut self) -> &mut tryboard_esp32c3::i2c::I2c {
-        match self {
-            Machine::C3(m) => &mut m.bus.i2c0,
-            Machine::S3(m) => &mut m.bus.i2c0,
+        match &mut self.hw {
+            Hw::C3(m) => &mut m.bus.i2c0,
+            Hw::S3(m) => &mut m.bus.i2c0,
         }
     }
 
@@ -278,6 +374,7 @@ impl Machine {
         match tryboard_esp32c3::devices::make_i2c(kind, addr) {
             Some(d) => {
                 self.i2c0().attach(d);
+                self.elec.add_module(kind);
                 true
             }
             None => false,
@@ -302,9 +399,10 @@ impl Machine {
     /// 在 SPI2 上接一块屏（目前只有 "gc9a01"，引脚见 tryboard_esp32s3::lcd_pin）。
     /// 只有 ESP32-S3 建模了 GP-SPI2 + GDMA，C3 返回 false
     pub fn lcd_attach(&mut self, kind: &str) -> bool {
-        match (self, kind) {
-            (Machine::S3(m), "gc9a01") => {
+        match (&mut self.hw, kind) {
+            (Hw::S3(m), "gc9a01") => {
                 m.bus.attach_lcd();
+                self.elec.add_module("gc9a01");
                 true
             }
             _ => false,
@@ -312,40 +410,40 @@ impl Machine {
     }
 
     pub fn lcd(&mut self) -> Option<&mut Gc9a01> {
-        match self {
-            Machine::S3(m) => m.bus.lcd.as_deref_mut(),
-            Machine::C3(_) => None,
+        match &mut self.hw {
+            Hw::S3(m) => m.bus.lcd.as_deref_mut(),
+            Hw::C3(_) => None,
         }
     }
 
     /// SPI2 传输统计（次数, MOSI 字节数）
     pub fn spi_stats(&self) -> (u64, u64) {
-        match self {
-            Machine::S3(m) => (m.bus.spi2.transfers, m.bus.spi2.bytes),
-            Machine::C3(_) => (0, 0),
+        match &self.hw {
+            Hw::S3(m) => (m.bus.spi2.transfers, m.bus.spi2.bytes),
+            Hw::C3(_) => (0, 0),
         }
     }
 
     /// GPIO 电平变化记录（周期, 电平）
     pub fn gpio_log(&self) -> Vec<(u64, u64)> {
-        match self {
-            Machine::C3(m) => m.bus.gpio_log.iter().map(|(t, l)| (*t, *l as u64)).collect(),
-            Machine::S3(m) => m.bus.gpio_log.clone(),
+        match &self.hw {
+            Hw::C3(m) => m.bus.gpio_log.iter().map(|(t, l)| (*t, *l as u64)).collect(),
+            Hw::S3(m) => m.bus.gpio_log.clone(),
         }
     }
 
     /// 上电时的引脚电平（gpio_log 的起点）
     pub fn gpio_reset_level(&self) -> u64 {
-        match self {
-            Machine::C3(_) => 0,
-            Machine::S3(_) => 1,
+        match &self.hw {
+            Hw::C3(_) => 0,
+            Hw::S3(_) => 1,
         }
     }
 
     pub fn unimpl(&self) -> Vec<(u32, u64)> {
-        let m = match self {
-            Machine::C3(m) => &m.bus.unimpl,
-            Machine::S3(m) => &m.bus.unimpl,
+        let m = match &self.hw {
+            Hw::C3(m) => &m.bus.unimpl,
+            Hw::S3(m) => &m.bus.unimpl,
         };
         let mut v: Vec<_> = m.iter().map(|(a, n)| (*a, *n)).collect();
         v.sort_by_key(|x| std::cmp::Reverse(x.1));
@@ -354,17 +452,17 @@ impl Machine {
 
     /// 读一个 32 位字（调试用，会触发 MMIO 读副作用）
     pub fn peek(&mut self, a: u32) -> Option<u32> {
-        match self {
-            Machine::C3(m) => tryboard_rv32::Bus::load(&mut m.bus, a, 4).ok(),
-            Machine::S3(m) => tryboard_xtensa::Bus::load(&mut m.bus, a, 4).ok(),
+        match &mut self.hw {
+            Hw::C3(m) => tryboard_rv32::Bus::load(&mut m.bus, a, 4).ok(),
+            Hw::S3(m) => tryboard_xtensa::Bus::load(&mut m.bus, a, 4).ok(),
         }
     }
 
     /// 停机时的 CPU 状态说明（调试用），sym 把地址翻成符号
     pub fn debug_state(&self, sym: &dyn Fn(u32) -> String) -> String {
-        match self {
-            Machine::C3(m) => format!("pc {}  ra {}", sym(m.cpu.pc), sym(m.cpu.x[1])),
-            Machine::S3(m) => {
+        match &self.hw {
+            Hw::C3(m) => format!("pc {}  ra {}", sym(m.cpu.pc), sym(m.cpu.x[1])),
+            Hw::S3(m) => {
                 use tryboard_xtensa::sr;
                 let core = |c: &tryboard_xtensa::Cpu, k: usize| {
                     format!(
@@ -390,6 +488,24 @@ impl Machine {
     }
 }
 
+/// RTCWDT_BROWN_OUT_RESET（esp_rom rtc.h，S3 / C3 相同）：esp_reset_reason() 读到 ESP_RST_BROWNOUT
+pub const BROWNOUT_RESET: u32 = 15;
+
+/// ROM 复位后打印的头三行（ESP32-S3 rev0 ROM 20210327、ESP32-C3 ROM 20210207 的格式）
+pub fn rom_banner(chip: Chip, reason: u32) -> String {
+    let name = match reason {
+        1 => "POWERON",
+        3 => "RTC_SW_SYS_RST",
+        12 => "RTC_SW_CPU_RST",
+        15 => "BROWNOUT_RST",
+        _ => "UNKNOWN",
+    };
+    match chip {
+        Chip::Esp32s3 => format!("ESP-ROM:esp32s3-20210327\nBuild:Mar 27 2021\nrst:0x{reason:x} ({name}),boot:0x8 (SPI_FAST_FLASH_BOOT)\n"),
+        Chip::Esp32c3 => format!("ESP-ROM:esp32c3-api1-20210207\nBuild:Feb  7 2021\nrst:0x{reason:x} ({name}),boot:0xc (SPI_FAST_FLASH_BOOT)\n"),
+    }
+}
+
 fn c3_stop(m: &Esp32c3, r: tryboard_esp32c3::Stop) -> Stop {
     use tryboard_esp32c3::Stop as S;
     match r {
@@ -412,3 +528,4 @@ fn s3_stop(m: &Esp32s3, r: tryboard_esp32s3::Stop) -> Stop {
 }
 
 pub use tryboard_esp32c3::devices::bme280::Env as SensorEnv;
+pub use tryboard_elec::board::Power as PowerMode;

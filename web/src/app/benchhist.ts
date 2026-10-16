@@ -28,6 +28,8 @@ export interface BenchHistory {
   lastSeek(): SeekResult | null;
   /** 时间线条重画 */
   render(): void;
+  /** 模拟器报告的事件（欠压复位）：记一步，时刻由 worker 给，停在回退点时不记 */
+  event(op: BenchOp, tMs: number): void;
 }
 
 const label = (op: BenchOp, runs: RunRec[]): TimelineStep => {
@@ -52,6 +54,8 @@ const label = (op: BenchOp, runs: RunRec[]): TimelineStep => {
       return { id: '', icon: '~', label: op.label };
     case 'check':
       return { id: '', icon: '◎', label: `验收 ${op.id}`, status: op.outcome.ok ? 'ok' : 'bad' };
+    case 'brownout':
+      return { id: '', icon: '↯', label: `欠压复位 ${op.tSec.toFixed(2)} s${op.count && op.count > 1 ? ` ×${op.count}` : ''}`, status: 'bad' };
   }
 };
 
@@ -127,6 +131,19 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
     return st;
   }
 
+  function event(o: BenchOp, tMs: number) {
+    if (seeked || busy) return;
+    // 一串连续复位（掉压后反复复位）相隔不到 0.5 s 的并成一步，记次数；回到这一步 = 回到第一次复位
+    const prev = steps[steps.length - 1];
+    if (o.k === 'brownout' && prev?.op.k === 'brownout' && prev.run === currentRun() && prev.tMs !== null && tMs - prev.tMs < 500 + (prev.op.count ?? 1) * 50) {
+      prev.op = { ...prev.op, count: (prev.op.count ?? 1) + 1 };
+      sync();
+      return;
+    }
+    steps.push({ op: o, run: currentRun(), tMs });
+    sync();
+  }
+
   session.onBoot(() => {
     branch();
     seeked = null;
@@ -177,7 +194,7 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
     session.fwName = rec.fwName;
     let snap: Snapshot;
     try {
-      snap = await session.seek({ flash: rec.fw, i2c: rec.snap.log.i2c, lcd: rec.snap.log.lcd, env: inputs.env0 ?? f.env ?? baseEnv, events: inputs.events, untilMs: tgt.untilMs });
+      snap = await session.seek({ flash: rec.fw, i2c: rec.snap.log.i2c, lcd: rec.snap.log.lcd, servo: rec.snap.log.servo, power: rec.snap.log.power, env: inputs.env0 ?? f.env ?? baseEnv, events: inputs.events, untilMs: tgt.untilMs });
     } finally {
       busy = false;
     }
@@ -238,6 +255,7 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
     resume,
     lastSeek: () => last,
     render,
+    event,
   };
 }
 

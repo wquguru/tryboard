@@ -53,6 +53,14 @@ web/（Vite + TS）
 ## 芯片无关外壳（`core/crates/machine`）
 - `enum Machine { C3, S3 }`：按镜像头芯片 ID（5 / 9）选芯片，给 CLI 和 wasm 一套接口（运行、控制台、GPIO 读写、PWM、ADC 电压、WS2812、I2C 器件、OLED、SPI 圆屏、调试状态）。加新芯片只改这里。
 
+## 供电网络（`core/crates/elec`，C3 / S3 共用）
+- `mna.rs`：节点电压法 + 隐式欧拉；元件 R / C / V（理想或带内阻）/ I / Limit（带限流的源）/ Ldo / Load（恒流，低于 vknee 退成电阻）/ Motor（舵机电机：max(0,(min(v,vcmd)−emf)/r)）。分段线性元件用 Katzenelson 法解（见 DECISIONS「电气模型」），稠密 LU 部分主元。`spice.rs` 读 SPICE 子集（R/C/V/I、.op、.tran，`*tb:` 行写自定义元件），CLI `tryboard elec-net` 用它与 ngspice 对照（`tools/elec/compare.py`）
+- `board.rs`：开发板网络（5V 轨、3V3、舵机红线、外接 5 V 四个节点；USB 口 0.5 A 限流、外接 5 V 2 A、SGM2212 LDO、去耦电容、芯片 / 模块 / 舵机负载）。固定 100 µs 一步、只走整步。3V3 < 门限（S3 2.44 V / C3 2.51 V）持续 0.12 ms → 欠压复位，按住到电压回升
+- `servo.rs`：SG90 二阶动力学（比例控制 + 电机 + 减速箱），给电流和角度，不影响固件读数
+- 接法：`Machine { hw: Hw::C3|S3, elec: Board }`。`Machine::run` 跑完一段后按这段的活动（忙的核数 = 指令数 / 周期数、Wi-Fi 收发帧、舵机脚 PWM 脉宽）推进 `elec`；触发欠压就以 `Stop::Reset(15)` 结束，调用方 `reboot(15)`；按住期间 `run` 不执行指令、只走时间。`reboot` 往串口补 ROM 头三行（`rst:0x..`），第一次上电不补
+- CLI：`--power usb|ext`（默认 usb）、`--servo GPIO`（接了就 1 ms 一片）、`--elec-report`（`[tryboard] 电气 …` 各节点最低电压、峰值电流、复位次数与时刻）、脚本动作 `power=usb|ext`；`tryboard elec-net 网表 [--at 秒,…]`
+- wasm：`tb_power_set(0 usb|1 ext)`、`tb_servo_attach(pin)`、`tb_elec_v(1 5V|2 3V3|3 舵机|4 外接)`、`tb_elec_i(0 USB|1 外接|2 舵机|3 3V3|4 芯片)`、`tb_elec_stat(0..8)`（最低电压、峰值电流、复位次数、是否按住）、`tb_elec_brownout_t(i)`、`tb_servo_angle()`、`tb_elec_report()`（文字同 CLI，读 `tb_report_ptr`）
+
 ## 浏览器
 - wasm 导出见 `core/crates/wasm/src/lib.rs`（`tb_*`）。没有 import，实例化时传 `{}`。主线程先读镜像头判断芯片、下载对应 ROM，再 `tb_boot`；`tb_chip` / `tb_boot_pin` 告诉前端换哪块板、BOOT 键在哪个脚；S3 的 GPIO32 以上用 `tb_gpio_level_hi` / `tb_gpio_enable_hi`。
 - 资源：`/wasm/tryboard.wasm`、`/rom/esp32c3_rev3_rom.elf`（附 Apache-2.0 LICENSE）、`/fw/<示例>/flash.bin` 与 `/fw/examples.json`。
@@ -62,6 +70,7 @@ web/（Vite + TS）
 - SVG 视图补充：`templates.ts` 是装配模板（零件、装法、检查、影响、成品工厂），`assembly.ts` 只是通用引擎；`lcdproducts.ts` 是圆屏成品（spin / lens），画面来自 worker 的 `lcd` 消息（GC9A01 240×240 RGBA，变化才发、≤ 30 帧/秒）。3D 实验台里圆屏是一块圆形贴图（board3d.ts `roundLcdModule`）。
 - PWM 观察：CLI 与网页在汇总行之后都输出 `[tryboard] PWM GPIOn 变化 占空比@时刻 …`（三位小数相同的相邻记录合并），关卡用它判"脉宽依次出现的台阶"（`pwm.steps`）和"稳定以后的值"（`pwm.from` 秒）。
 - 第 07 关这类"多个成品可选"的关用 `variants`，CLI 和网页都展开成 `07-spin` 这样的子关（`expand` / `expandLevels`）。
+- 供电（P1-02 / P1-04）：worker 的 `boot` / `seek` 带 `servo`、`power`；`power` 消息在线切换（记进输入日志 `supply` 事件，导出 `power=usb|ext`）；tick 带 `elec`（`ElecFrame`：节点电压、电流、3V3 最低、峰值、复位次数、按住、舵机角度）和 `brownouts`（新复位的模拟时刻）。实验台：供电属性面板 / 快捷卡片显示实时值并切换供电，时间线记"欠压复位"，工具条"万用表"点针读电压（`pinscope.meterVolts`），3D 舵盘用动力学角度（`Bench.setServoAngle`）。验收 worker（verify-worker.ts）认 `--servo / --power` 参数与 `power=` 脚本，接了舵机也 1 ms 一片
 - 实时运行（worker.ts）时间片固定 1ms（`tb_run(160000)`），外部输入只在时间片之间施加，并按施加那一刻的 CPU 周期记进输入日志（`inputlog.ts`）。CLI `--inputs` 同样全程 1ms 一片、在时间片开头施加 `t ≤ 当前模拟时间` 的输入，所以网页上的一串操作导出后能逐周期重放（S3 双核交替点也一致）。格式见 DECISIONS 2026-10-16「输入日志」。
 - 蜂鸣器（audio.ts）：worker 对 `watchPwm` 的引脚每片采样占空比与频率（`tb_pin_pwm_freq`），变化带模拟时刻放进 tick 的 `pwmEvents`；主线程把模拟时刻映射到 AudioContext 时间轴（领先 60ms，偏离超过 0.4s 重新对齐），方波振荡器 + 增益开关。测试读 `window.__tbAudio`。
 - 关卡验收：`firmware/levels.json` 是唯一来源，判定规则在 `tools/check.py` 和 `web/src/checks.ts` 各写一份、逐条对应。浏览器里由 `verify-worker.ts` 按**模拟时间**跑（不看墙钟），时间片 / 脚本施加 / PWM 采样照搬 CLI `run` 的循环；观察记录用 wasm 的 `tb_report`（与 CLI `--gpio-log --ws2812-log` 同格式）。运行指纹 = FNV-1a(串口原始字节 + `\n#report\n` + 规范化观察记录)，`tools/webtest/levels.mjs` 逐关核对网页与命令行指纹相同。

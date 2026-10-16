@@ -13,7 +13,9 @@ export type InputEvent =
   /** 上电：每份日志从一次上电开始（复位 = 新的一份日志），重放时不需要额外动作 */
   | { tMs: number; kind: 'power'; on: boolean }
   /** 串口 / USB 虚拟串口输入 */
-  | { tMs: number; kind: 'uart' | 'usbcdc'; text: string };
+  | { tMs: number; kind: 'uart' | 'usbcdc'; text: string }
+  /** 供电切换（P1-02）：usb = 舵机吃 USB 的 5V；ext = 舵机由外接 5 V 供电。脚本动作 power=usb|ext */
+  | { tMs: number; kind: 'supply'; mode: 'usb' | 'ext' };
 
 /** 还没盖时间戳的事件（worker 施加时补上 tMs） */
 export type InputAction = InputEvent extends infer E ? (E extends unknown ? Omit<E, 'tMs'> : never) : never;
@@ -26,6 +28,9 @@ export interface InputLog {
   /** 上电时挂的器件：重放时变成 --i2c / --spi */
   i2c: { kind: string; addr: number }[];
   lcd: boolean;
+  /** 上电时接的舵机（GPIO）与供电方式：重放时变成 --servo / --power */
+  servo?: number;
+  power?: 'usb' | 'ext';
   events: InputEvent[];
   /** 取日志那一刻的模拟时间（毫秒）：重放跑到这里（--seconds）就与网页上看到的一致 */
   endMs?: number;
@@ -56,6 +61,8 @@ export function action(e: InputEvent): string | null {
       return `uart=${esc(e.text)}`;
     case 'usbcdc':
       return `usbcdc=${esc(e.text)}`;
+    case 'supply':
+      return `power=${e.mode}`;
     case 'power':
       return null;
   }
@@ -82,6 +89,7 @@ export function cliArgs(log: InputLog, fw: string, inputsFile: string, seconds?:
   if (seconds !== undefined) a.push('--seconds', String(seconds));
   if (log.i2c.length) a.push('--i2c', log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(','));
   if (log.lcd) a.push('--spi', 'gc9a01');
+  if (log.servo !== undefined) a.push('--servo', String(log.servo), '--power', log.power ?? 'usb');
   a.push('--inputs', inputsFile);
   return a;
 }

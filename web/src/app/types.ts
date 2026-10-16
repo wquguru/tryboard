@@ -11,7 +11,7 @@ import type { Toolbar } from './toolbar';
 import type { Card } from './card';
 import type { BomHistory } from './bom';
 import type { SeekJob } from '../live';
-import type { FromWorker, Snapshot } from '../worker';
+import type { ElecFrame, FromWorker, Snapshot } from '../worker';
 import type { WireMods } from './wiring';
 import type { BenchHistory } from './benchhist';
 
@@ -114,12 +114,14 @@ export interface Session {
   chip: 'esp32c3' | 'esp32s3';
   levels: Level[];
   /** 最近一帧：PWM 占空比、彩灯、OLED */
-  frame: { pwm: number[]; pwmFreq: number[]; gpio: number; enable: number; gpioHi: number; enableHi: number; rgb: number[] | null; oled: Uint8Array | null; lcd: Uint8Array | null };
+  frame: { pwm: number[]; pwmFreq: number[]; gpio: number; enable: number; gpioHi: number; enableHi: number; rgb: number[] | null; oled: Uint8Array | null; lcd: Uint8Array | null; elec: ElecFrame | null };
   /** 热源靠近的零件（只是显示；读数由环境温度决定） */
   heat: string | null;
   setHeat(part: string | null): void;
-  /** USB ↔ 外接 5 V（只改清单和供电显示） */
+  /** USB ↔ 外接 5 V：改清单、供电显示，并在线切换供电网络（进输入日志） */
   setPower(ext5v: boolean): void;
+  /** 欠压复位（模拟时刻，秒） */
+  onBrownout(cb: (tSec: number) => void): () => void;
   /** 改接线（给接线规则检查造错误接线） */
   wireMods: WireMods;
   setWireMods(m: WireMods): void;
