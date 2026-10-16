@@ -15,7 +15,11 @@ export type InputEvent =
   /** 串口 / USB 虚拟串口输入 */
   | { tMs: number; kind: 'uart' | 'usbcdc'; text: string }
   /** 供电切换（P1-02）：usb = 舵机吃 USB 的 5V；ext = 舵机由外接 5 V 供电。脚本动作 power=usb|ext */
-  | { tMs: number; kind: 'supply'; mode: 'usb' | 'ext' };
+  | { tMs: number; kind: 'supply'; mode: 'usb' | 'ext' }
+  /** IMU 姿态（P2-03）：欧拉角（度，ZYX：yaw → pitch → roll）+ 变化率（°/s，拖动时由速度算出）。脚本动作 imu=p,r,y[,dp,dr,dy] */
+  | { tMs: number; kind: 'imu'; pitch: number; roll: number; yaw: number; rates?: [number, number, number] }
+  /** 触摸屏（P2-02）：按下 / 移动到 (x, y)（屏幕像素 0..239）或抬起。脚本动作 touch=x,y / release */
+  | { tMs: number; kind: 'touch'; down: boolean; x: number; y: number };
 
 /** 还没盖时间戳的事件（worker 施加时补上 tMs） */
 export type InputAction = InputEvent extends infer E ? (E extends unknown ? Omit<E, 'tMs'> : never) : never;
@@ -31,6 +35,8 @@ export interface InputLog {
   /** 上电时接的舵机（GPIO）与供电方式：重放时变成 --servo / --power */
   servo?: number;
   power?: 'usb' | 'ext';
+  /** 触摸控制器 INT 接的 GPIO：重放时变成 --touch-int */
+  touchInt?: number;
   events: InputEvent[];
   /** 取日志那一刻的模拟时间（毫秒）：重放跑到这里（--seconds）就与网页上看到的一致 */
   endMs?: number;
@@ -63,9 +69,22 @@ export function action(e: InputEvent): string | null {
       return `usbcdc=${esc(e.text)}`;
     case 'supply':
       return `power=${e.mode}`;
+    case 'imu': {
+      const r = (v: number) => String(Math.round(v * 100) / 100);
+      const base = [e.pitch, e.roll, e.yaw].map(r).join(',');
+      return e.rates && e.rates.some((v) => v !== 0) ? `imu=${base},${e.rates.map(r).join(',')}` : `imu=${base}`;
+    }
+    case 'touch':
+      return e.down ? `touch=${Math.round(e.x)},${Math.round(e.y)}` : 'release';
     case 'power':
       return null;
   }
+}
+
+/** imu 事件写进日志前统一取到 0.01°（脚本也是这个精度），网页施加的值与重放读到的值逐位相同 */
+export function roundImu<T extends { pitch: number; roll: number; yaw: number; rates?: [number, number, number] }>(e: T): T {
+  const r = (v: number) => Math.round(v * 100) / 100;
+  return { ...e, pitch: r(e.pitch), roll: r(e.roll), yaw: r(e.yaw), ...(e.rates ? { rates: e.rates.map(r) as [number, number, number] } : {}) };
 }
 
 /** 导出成 `--inputs` 文件：一行一条 `秒:动作`，# 开头是注释（含建议的命令行） */
@@ -90,6 +109,7 @@ export function cliArgs(log: InputLog, fw: string, inputsFile: string, seconds?:
   if (log.i2c.length) a.push('--i2c', log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(','));
   if (log.lcd) a.push('--spi', 'gc9a01');
   if (log.servo !== undefined) a.push('--servo', String(log.servo), '--power', log.power ?? 'usb');
+  if (log.touchInt !== undefined) a.push('--touch-int', String(log.touchInt));
   a.push('--inputs', inputsFile);
   return a;
 }

@@ -42,7 +42,7 @@ export interface CheckResult {
   text: string;
 }
 
-/** 从 args 里取出 --i2c / --env / --spi / --servo / --power（网页没有命令行，参数要翻译成启动选项） */
+/** 从 args 里取出 --i2c / --env / --spi / --servo / --power / --touch-int（网页没有命令行，参数要翻译成启动选项） */
 export function bootOptions(l: Level) {
   const a = l.args ?? [];
   const val = (k: string) => {
@@ -62,7 +62,9 @@ export function bootOptions(l: Level) {
   const sv = val('--servo');
   const servo = sv === undefined ? undefined : Number(sv);
   const power = val('--power') === 'ext' ? ('ext' as const) : ('usb' as const);
-  return { i2c, env, lcd, servo, power };
+  const ti = val('--touch-int');
+  const touchInt = ti === undefined ? undefined : Number(ti);
+  return { i2c, env, lcd, servo, power, touchInt };
 }
 
 /** 与命令行一致的定时输入脚本：时间（模拟秒）:动作，`;` 或换行分隔，`#` 开头是注释（CLI 的 parse_script） */

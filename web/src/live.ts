@@ -2,6 +2,14 @@
 import { fetchBuf, imageChip, loadRom, loadWasm } from './assets';
 import type { Env, FromWorker, PowerMode, PwmEvent, Snapshot, ToWorker } from './worker';
 import type { InputEvent, InputLog } from './inputlog';
+
+/** IMU 姿态：欧拉角（度）+ 变化率（°/s），见 core devices/imu.rs */
+export interface ImuPose {
+  pitch: number;
+  roll: number;
+  yaw: number;
+  rates?: [number, number, number];
+}
 import { emptyFrame, type LiveFrame } from './views/common';
 
 export interface LiveOptions {
@@ -14,6 +22,8 @@ export interface LiveOptions {
   servo?: number;
   /** 上电时的供电方式（默认 usb） */
   power?: PowerMode;
+  /** 触摸控制器 INT 接的 GPIO（P2-02） */
+  touchInt?: number;
   onConsole?(text: string): void;
   onFrame?(f: LiveFrame, simSeconds: number): void;
   /** 原始 tick（引脚电平、PWM），给要驱动 3D 台面的页面用 */
@@ -37,6 +47,7 @@ export interface SeekJob {
   lcd: boolean;
   servo?: number;
   power?: PowerMode;
+  touchInt?: number;
   /** 上电时的环境（日志第一条 env） */
   env: Env;
   events: InputEvent[];
@@ -49,6 +60,8 @@ export class LiveSim {
   readonly frame: LiveFrame = emptyFrame();
   bootPin = 0;
   env: Env;
+  /** 当前姿态（台面倾斜 / 成品转动）：重新上电后照样施加，像板子还歪着 */
+  pose: ImuPose = { pitch: 0, roll: 0, yaw: 0 };
   /** 传感器读数相对室温的偏移（装配时传感器贴着芯片会偏高） */
   sensorOffset = 0;
   constructor(private o: LiveOptions) {
@@ -57,6 +70,9 @@ export class LiveSim {
       const m = ev.data;
       if (m.type === 'booted') {
         this.bootPin = m.bootPin;
+        // 姿态不是上电参数：作为第一个输入施加（记进日志，重放一致）；平放就不发
+        const p = this.pose;
+        if (p.pitch || p.roll || p.yaw) this.send({ type: 'input', act: { kind: 'imu', pitch: p.pitch, roll: p.roll, yaw: p.yaw } });
         this.send({ type: 'run' });
         o.onBoot?.(m.chip);
       } else if (m.type === 'tick') {
@@ -112,7 +128,7 @@ export class LiveSim {
     const [wasm, flash] = [await loadWasm(), this.flash];
     const rom = await loadRom(imageChip(flash));
     Object.assign(this.frame, emptyFrame());
-    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power });
+    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power, touchInt: this.o.touchInt });
   }
   reset() {
     return this.start();
@@ -124,10 +140,20 @@ export class LiveSim {
     return this.start();
   }
   /** 换外接器件（按清单重摆台面）：下次 start / reset 生效 */
-  configure(p: { i2c: LiveOptions['i2c']; lcd?: boolean; servo?: number }) {
+  configure(p: { i2c: LiveOptions['i2c']; lcd?: boolean; servo?: number; touchInt?: number }) {
     this.o.i2c = p.i2c;
     this.o.lcd = p.lcd;
     this.o.servo = p.servo;
+    this.o.touchInt = p.touchInt;
+  }
+  /** 姿态（P2-03）：倾斜滑块、拖动台面 / 成品；rates 是拖动时的角速率（°/s），停下时给 0 */
+  setImu(p: ImuPose) {
+    this.pose = { pitch: p.pitch, roll: p.roll, yaw: p.yaw };
+    this.send({ type: 'input', act: { kind: 'imu', pitch: p.pitch, roll: p.roll, yaw: p.yaw, ...(p.rates ? { rates: p.rates } : {}) } });
+  }
+  /** 触摸（P2-02）：按下 / 移动到 (x, y)，down=false 抬起 */
+  touch(x: number, y: number, down: boolean) {
+    this.send({ type: 'input', act: { kind: 'touch', x, y, down } });
   }
   powerMode(): PowerMode {
     return this.o.power ?? 'usb';
@@ -194,6 +220,9 @@ export class LiveSim {
     this.o.i2c = job.i2c;
     this.o.lcd = job.lcd;
     this.o.servo = job.servo;
+    this.o.touchInt = job.touchInt;
+    const imu = [...job.events].reverse().find((e) => e.kind === 'imu' && Math.round(e.tMs * 160000) < Math.round(job.untilMs * 160000));
+    this.pose = imu && imu.kind === 'imu' ? { pitch: imu.pitch, roll: imu.roll, yaw: imu.yaw } : { pitch: 0, roll: 0, yaw: 0 };
     // 回退停住以后的供电 = 日志里最后一次切换（没有就是上电时的）
     const sup = [...job.events].reverse().find((e) => e.kind === 'supply' && Math.round(e.tMs * 160000) < Math.round(job.untilMs * 160000));
     this.o.power = sup && sup.kind === 'supply' ? sup.mode : job.power;
@@ -203,7 +232,7 @@ export class LiveSim {
     Object.assign(this.frame, emptyFrame());
     return new Promise((r) => {
       this.seekWaiter = r;
-      this.send({ type: 'seek', wasm: wasm.slice(0), rom: rom.slice(0), flash: job.flash.slice(0), i2c: job.i2c, env: job.env, lcd: job.lcd, servo: job.servo, power: job.power, events: job.events, untilMs: job.untilMs });
+      this.send({ type: 'seek', wasm: wasm.slice(0), rom: rom.slice(0), flash: job.flash.slice(0), i2c: job.i2c, env: job.env, lcd: job.lcd, servo: job.servo, power: job.power, touchInt: job.touchInt, events: job.events, untilMs: job.untilMs });
     });
   }
   /** 回退停住以后从那一刻接着实时跑：这次运行重新算"进行中" */

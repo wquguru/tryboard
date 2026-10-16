@@ -89,8 +89,8 @@ async function check(a: string[]) {
       continue;
     }
     const flash = readBin(fw);
-    const { i2c, env, lcd, servo, power } = bootOptions(l);
-    const job: SimJob = { ...assets(flash), flash, seconds: l.seconds ?? 2, i2c, env, lcd, servo: sup.servo ?? servo, power: sup.power ?? power, pwmPin: l.pwm?.pin, script: inputs ? inputsScript(inputs) : l.script, fixedSlice: !!inputs };
+    const { i2c, env, lcd, servo, power, touchInt } = bootOptions(l);
+    const job: SimJob = { ...assets(flash), flash, seconds: l.seconds ?? 2, i2c, env, lcd, touchInt, servo: sup.servo ?? servo, power: sup.power ?? power, pwmPin: l.pwm?.pin, script: inputs ? inputsScript(inputs) : l.script, fixedSlice: !!inputs };
     const r = await runSim(job);
     const res: CheckResult[] = evaluate(l, r.stdout, r.report);
     // 模拟器自己没跑起来不能算成固件的错（与 check.py 一致，放第一条）
@@ -106,17 +106,17 @@ async function check(a: string[]) {
 }
 
 async function run(a: string[]) {
-  const valued = ['--seconds', '--i2c', '--env', '--spi', '--inputs', '--script', '--pwm-log', '--servo', '--power'];
+  const valued = ['--seconds', '--i2c', '--env', '--spi', '--inputs', '--script', '--pwm-log', '--servo', '--power', '--touch-int'];
   const fw = positional(a, valued)[0];
   if (!fw) die(USAGE);
   if (!existsSync(fw)) die(`找不到 ${fw}`);
-  const args = ['--i2c', '--env', '--spi'].flatMap((k) => (opt(a, k) ? [k, opt(a, k)!] : []));
-  const { i2c, env, lcd } = bootOptions({ args } as Level);
+  const args = ['--i2c', '--env', '--spi', '--touch-int'].flatMap((k) => (opt(a, k) ? [k, opt(a, k)!] : []));
+  const { i2c, env, lcd, touchInt } = bootOptions({ args } as Level);
   const inputs = opt(a, '--inputs');
   const pwm = opt(a, '--pwm-log');
   const flash = readBin(fw);
   const r = await runSim(
-    { ...assets(flash), flash, seconds: Number(opt(a, '--seconds') ?? 5), i2c, env, lcd, ...supply(a), pwmPin: pwm === undefined ? undefined : Number(pwm), script: inputs ? inputsScript(inputs) : opt(a, '--script'), fixedSlice: !!inputs },
+    { ...assets(flash), flash, seconds: Number(opt(a, '--seconds') ?? 5), i2c, env, lcd, touchInt, ...supply(a), pwmPin: pwm === undefined ? undefined : Number(pwm), script: inputs ? inputsScript(inputs) : opt(a, '--script'), fixedSlice: !!inputs },
     { onConsole: (t) => process.stdout.write(t), onReset: (n, stopped) => process.stderr.write(stopped ? `[tryboard] 软件复位，已 ${n} 次，不再重新上电\n` : `[tryboard] 复位，第 ${n} 次重新上电\n`) },
   );
   if (r.bootError) die(`[tryboard] 启动失败：${r.bootError}`);

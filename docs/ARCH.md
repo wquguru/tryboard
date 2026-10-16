@@ -79,6 +79,15 @@ web/（Vite + TS）
 - ⌘K（P1-06，`app/cmdk.ts` + 纯函数 `app/cmdmatch.ts`）：候选 = 命令（含按输入生成的"把室温设为 N ℃""回到第 n 次运行"）+ 零件 + 引脚（listPins）+ 检查点 + 运行；执行走 store / session / 时间线现有接口
 - 关卡验收：`firmware/levels.json` 是唯一来源，判定规则在 `tools/check.py` 和 `web/src/checks.ts` 各写一份、逐条对应。浏览器里由 `verify-worker.ts` 按**模拟时间**跑（不看墙钟），时间片 / 脚本施加 / PWM 采样照搬 CLI `run` 的循环；观察记录用 wasm 的 `tb_report`（与 CLI `--gpio-log --ws2812-log` 同格式）。运行指纹 = FNV-1a(串口原始字节 + `\n#report\n` + 规范化观察记录)，`tools/webtest/levels.mjs` 逐关核对网页与命令行指纹相同。
 
+## IMU 与触摸（P2-02 / P2-03，`crates/esp32c3/src/devices/{imu,mpu6050,qmi8658,cst816s}.rs`，C3 / S3 共用）
+- 和 SSD1306 / BME280 一样是 `I2cDevice`，挂 I2C0：`make_i2c("mpu6050" | "qmi8658" | "cst816s", addr)`。读写都自动递增（QMI8658 只在 CTRL1.ADDR_AI=1 时），读事务开始（`start(read)`）时锁存全部输出寄存器，突发读拿到的是同一个样本。
+- 姿态 `Pose { pitch, roll, yaw, dpitch, droll, dyaw }`（度、°/s）：传感器 X 沿模块长边、Y 沿短边、Z 垂直芯片朝上；R = Rz(yaw)·Ry(pitch)·Rx(roll)（右手，正 pitch = X 端朝下、正 roll = Y 端朝上）。加速度计读 Rᵀ·(0,0,1) g，陀螺读欧拉角速率换算的机体角速度；量程 / 灵敏度按数据手册，叠确定性噪声（样本序号哈希）。样本序号按 CPU 周期 / 输出率算，只用于 DATA_RDY / STATUS0 与噪声；姿态在两次输入之间保持（不外推）。片上温度 = 环境温度（`env_set` 一起改）。
+- 触摸：`Machine::touch(x, y, down)` 调 `Cst816s::press / release`（记按下时刻判长按），并在 `touch_int` 配了引脚时驱动 INT：按着 0、抬起 1（`touch_int_attach` 先驱动成 1）。
+- 对外：CLI `--i2c mpu6050@0x68,qmi8658@0x6b,cst816s@0x15`、`--touch-int GPIO`，脚本动作 `imu=p,r,y[,dp,dr,dy]`、`touch=x,y`、`release`（`machine::parse_imu / parse_touch`）；wasm `tb_i2c_attach(3|4|5, addr)`、`tb_imu_set(p, r, y, dp, dr, dy)`、`tb_touch_int(pin)`、`tb_touch(x, y, down)`；simrun（网页验收 + npm 包）认同样的脚本动作与 `--touch-int`。
+- 网页：输入日志事件 `imu`（施加前取到 0.01°，与脚本精度一致）/ `touch`，InputLog 顶层 `touchInt`；worker 收 `{type:'input', act}`。姿态源三个：实验台倾斜滑块（属性面板 + 快捷卡片）、3D 里按住 IMU 模块拖（`Bench.onPose`，轨迹球改台面 rig 的四元数）、成品页倾角仪盒子（`app/tilt3d.ts`）；都经 `session.setPose`：`PoseRate` 按墙钟算欧拉角速率一起施加，停 150 ms 补一次速率 0。`imupose.ts` 是纯函数（three 坐标 Q = M·R·Mᵀ，M 把传感器轴换成 three 的 Y 朝上坐标）。
+- board3d：有 IMU 时整块台面（rig：面包板 + 开发板 + 外接件）绕 IMU 模块按姿态转；建模前 rig 复位成单位变换（零件按世界坐标挂进来）。IMU 模块平插（GY-521 8 针 / QMI8658 6 针，针在 f 行、跳线落 j 行）。触摸圆屏：场景里同时有 `gc9a01` 和 `cst816s` 时圆屏画 12 针触摸版，射线命中屏面网格的 UV → (u·240, (1−v)·240) → `Bench.onTouch`；测试接口 `lcdPoint(x, y)`、`imuScreenPos()`。ScenePickApi 新 id：`mpu6050`、`qmi8658`、`cst816s`（针 `cst816s:TP_SDA` 等）。
+- 供电网络：`module_current` 加 mpu6050 3.9 mA、qmi8658 1.7 mA、cst816s 2.5 mA（估算，与 parts.ts 同源）。
+
 ## Xtensa LX7 核（ESP32-S3，`core/crates/xtensa`）
 - 配置取自 ESP-IDF `components/xtensa/esp32s3/include/xtensa/config/core-isa.h`：64 个物理 AR、窗口 ABI、16 位密度指令、零开销循环、MUL16/MUL32/MULUH/MULSH/DIV32、NSA/MIN/MAX/SEXT/CLAMPS、布尔寄存器、S32C1I、硬件非对齐访存、VECBASE 复位 0x40000000。
 - 取指按首字节 op0 判长度（8..=13 为 2 字节，否则 3 字节）；`Bus::fetch` 默认逐字节读，SoC 可重写成快路径。

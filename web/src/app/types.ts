@@ -24,7 +24,7 @@ export const STEPS: { id: StepId; label: string }[] = [
   { id: 'product', label: '成品' },
 ];
 
-export type WorkId = 'weather' | 'spin' | 'lens' | 'blank';
+export type WorkId = 'weather' | 'spin' | 'lens' | 'blank' | 'imu' | 'touch';
 
 /** 选中的对象。kind 与构建树的分组一一对应；pin / wire / button 来自台面拾取 */
 export type SelKind = 'part' | 'wire' | 'power' | 'env' | 'firmware' | 'checkpoint' | 'pin' | 'button' | 'run' | 'tool';
@@ -61,6 +61,12 @@ export interface AppState {
   running: boolean;
   /** 最近一次串口读数（BME280 那行 T= H= P=） */
   reading: { t: number; h: number; p: number } | null;
+  /** 台面姿态（P2-03，倾斜滑块 / 拖 IMU / 成品转动），度 */
+  pose: { pitch: number; roll: number; yaw: number };
+  /** 固件串口最近一行 IMU 读数（s3-imu / s3-qmi8658 的 `IMU pitch= roll= … gyro=(…)`） */
+  imu: { pitch: number; roll: number; gyro: [number, number, number] | null } | null;
+  /** 触摸（P2-02）：最近一次手指位置；down = 还按着 */
+  touch: { x: number; y: number; down: boolean } | null;
   /** 检查点验收：key 是关卡 id */
   checks: Record<string, CheckOutcome>;
   /** 正在验收的检查点（同一时间只跑一个） */
@@ -152,6 +158,12 @@ export interface Session {
   loadFirmware(buf: ArrayBuffer, name: string): void;
   pressBoot(down: boolean): void;
   setEnv(e: Partial<Env>): void;
+  /** 台面上有没有 IMU（有才显示倾斜滑块、才能拖动） */
+  hasImu(): boolean;
+  /** 改姿态（P2-03）：施加到模拟器（拖动中带角速率，停下 150 ms 后补一次速率 0）、台面跟着倾斜 */
+  setPose(p: { pitch: number; roll: number; yaw: number }): void;
+  /** 触摸圆屏（P2-02）：x, y 屏幕像素 */
+  touch(x: number, y: number, down: boolean): void;
   consoleText(): string;
   /** 逻辑分析仪事件（本次上电 / 回退重放以来），P1-05 */
   io: IoStore;

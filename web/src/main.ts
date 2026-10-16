@@ -8,6 +8,7 @@ import { createAssembly } from './views/assembly';
 import { emptyFrame } from './views/common';
 import { BuzzerAudio } from './audio';
 import { toScript, type InputLog } from './inputlog';
+import { PoseRate, type Pose } from './imupose';
 
 interface Example {
   id: string;
@@ -74,9 +75,37 @@ const sendEnv = () => send({ type: 'env', ...sensedEnv() });
 
 /** 场景里的 I2C 器件 → 模拟总线上要挂的器件 */
 function i2cDevices() {
-  const kind: Record<string, string> = { oled: 'ssd1306', bme280: 'bme280' };
+  const kind: Record<string, string> = { oled: 'ssd1306', bme280: 'bme280', mpu6050: 'mpu6050', qmi8658: 'qmi8658', cst816s: 'cst816s' };
   return scene.parts.flatMap((p) => ('addr' in p && kind[p.type] ? [{ kind: kind[p.type], addr: p.addr }] : []));
 }
+
+// ---------------------------------------------------------------- 姿态（P2-03）与触摸（P2-02）
+let pose: Pose = { pitch: 0, roll: 0, yaw: 0 };
+const poseRate = new PoseRate();
+let poseIdle = 0;
+const hasImu = () => scene.parts.some((p) => p.type === 'mpu6050' || p.type === 'qmi8658');
+/** 改姿态：带拖动速率施加，停下 150 ms 补一次速率 0；台面跟着倾斜 */
+function setPose(p: Pose, from3d = false) {
+  pose = { pitch: p.pitch, roll: p.roll, yaw: p.yaw };
+  const rates = poseRate.push(pose, performance.now());
+  send({ type: 'input', act: { kind: 'imu', ...pose, rates } });
+  if (!from3d) bench.setPose(pose);
+  document.querySelectorAll<HTMLInputElement>('input[data-pose]').forEach((inp) => {
+    if (inp === document.activeElement) return;
+    const k = inp.dataset.pose as keyof Pose;
+    inp.value = String(Math.round(pose[k]));
+    inp.parentElement!.querySelector('output')!.textContent = `${Math.round(pose[k])}°`;
+  });
+  clearTimeout(poseIdle);
+  if (rates.some((v) => v !== 0))
+    poseIdle = window.setTimeout(() => {
+      poseRate.reset();
+      send({ type: 'input', act: { kind: 'imu', ...pose, rates: [0, 0, 0] } });
+    }, 150);
+}
+bench.onPose((p) => setPose(p, true));
+bench.onTouch((x, y, down) => send({ type: 'input', act: { kind: 'touch', x, y, down } }));
+const touchInt = () => scene.parts.flatMap((p) => (p.type === 'cst816s' ? [p.int] : []))[0];
 
 function log(text: string, cls?: string) {
   const atBottom = consoleEl.scrollTop + consoleEl.clientHeight >= consoleEl.scrollHeight - 8;
@@ -115,7 +144,7 @@ async function boot(autorun: boolean) {
   audio.reset();
   // 舵机接进供电网络（只有 USB：app.html 的实验台才有 USB ↔ 外接 5 V 切换）
   const servo = scene.parts.find((p) => p.type === 'servo');
-  send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: i2cDevices(), env: sensedEnv(), lcd: scene.parts.some((p) => p.type === 'gc9a01'), servo: servo && 'pin' in servo ? servo.pin : undefined, power: 'usb' });
+  send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: i2cDevices(), env: sensedEnv(), lcd: scene.parts.some((p) => p.type === 'gc9a01'), servo: servo && 'pin' in servo ? servo.pin : undefined, power: 'usb', touchInt: touchInt() });
 }
 
 const usbPanel = createUsbPanel(document.querySelector('.panel.info')!, (text) => send({ type: 'usbcdc', text }));
@@ -128,6 +157,8 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       bootPin = m.bootPin;
       syncBuzzers();
       for (const [pin, a] of analog) send({ type: 'analog', pin, mv: a.mv });
+      // 姿态不是上电参数：作为第一个输入施加（板子还歪着）
+      if (hasImu() && (pose.pitch || pose.roll || pose.yaw)) send({ type: 'input', act: { kind: 'imu', ...pose } });
       runBtn.disabled = resetBtn.disabled = false;
       if (pendingAutorun) {
         send({ type: 'run' });
@@ -337,6 +368,11 @@ function syncControls() {
   $('controls').innerHTML = '';
   analog.clear();
   if (scene.parts.some((p) => p.type === 'bme280')) envControls();
+  if (hasImu()) imuControls();
+  else {
+    pose = { pitch: 0, roll: 0, yaw: 0 };
+    bench.setPose(null);
+  }
   for (const p of scene.parts) {
     if (p.type !== 'pot') continue;
     const preset = exampleControls.find((c): c is AnalogControl => typeof c === 'object' && c.type === 'analog' && c.pin === p.pin);
@@ -386,6 +422,27 @@ function envControls() {
       env[k] = Number(input.value);
       row.querySelector('output')!.textContent = fmt(env[k]);
       sendEnv();
+    };
+    box.appendChild(row);
+  }
+  $('controls').appendChild(box);
+}
+
+/** 倾斜滑块：改的是台面姿态（整块面包板倾斜），IMU 读到的重力分量随之变化；也可以在 3D 里拖模块 */
+function imuControls() {
+  const box = document.createElement('div');
+  box.className = 'env';
+  const hint = document.createElement('div');
+  hint.className = 'muted';
+  hint.textContent = '倾斜台面：拖滑块，或在 3D 里按住 IMU 模块拖动';
+  box.appendChild(hint);
+  for (const [k, name, lim] of [['pitch', '俯仰', 90], ['roll', '横滚', 180], ['yaw', '航向', 180]] as [keyof Pose, string, number][]) {
+    const row = document.createElement('label');
+    row.innerHTML = `<span>${name}</span><input type="range" min="${-lim}" max="${lim}" step="1" value="${Math.round(pose[k])}" data-pose="${k}" /><output>${Math.round(pose[k])}°</output>`;
+    const input = row.querySelector('input')!;
+    input.oninput = () => {
+      row.querySelector('output')!.textContent = `${input.value}°`;
+      setPose({ ...pose, [k]: Number(input.value) });
     };
     box.appendChild(row);
   }

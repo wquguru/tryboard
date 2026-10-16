@@ -33,6 +33,9 @@ export interface Ex {
   tb_reset_count?(): number;
   tb_power_set?(mode: number): void;
   tb_servo_attach?(pin: number): void;
+  tb_imu_set?(pitch: number, roll: number, yaw: number, dp: number, dr: number, dy: number): void;
+  tb_touch?(x: number, y: number, down: number): void;
+  tb_touch_int?(pin: number): void;
 }
 
 export interface SimJob {
@@ -48,6 +51,8 @@ export interface SimJob {
   /** 舵机信号脚与供电（= CLI --servo / --power）；接了舵机时与 CLI 一样始终 1ms 一片 */
   servo?: number;
   power?: 'usb' | 'ext';
+  /** 触摸 INT 脚（= CLI --touch-int） */
+  touchInt?: number;
   /** 始终 1ms 一片（= CLI 的 --inputs）：重放网页实时运行导出的输入日志时用 */
   fixedSlice?: boolean;
 }
@@ -70,7 +75,7 @@ export interface SimHooks {
   onReset?: (n: number, stopped: boolean) => void;
 }
 
-const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2 };
+const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5 };
 
 /** 镜像是哪颗芯片：先找分区表（0x8000）里的 app，再读 ESP 镜像头的芯片 ID（5 = C3，9 = S3） */
 export function imageChip(buf: ArrayBuffer | Uint8Array): 'esp32c3' | 'esp32s3' {
@@ -118,6 +123,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
   e.tb_reset_limit?.(50);
   if (j.servo !== undefined) e.tb_servo_attach?.(j.servo);
   if (j.power) e.tb_power_set?.(j.power === 'ext' ? 1 : 0);
+  if (j.touchInt !== undefined) e.tb_touch_int?.(j.touchInt);
 
   const script = parseScript(j.script);
   let si = 0;
@@ -142,6 +148,14 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
       } else if (act.startsWith('uart=')) bytesIn(e, new TextEncoder().encode(act.slice(5).replaceAll('\\n', '\n')), (p, n) => e.tb_uart_push(p, n));
       else if (act.startsWith('power=')) e.tb_power_set?.(act.slice(6).trim() === 'ext' ? 1 : 0);
       else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));
+      else if (act.startsWith('imu=')) {
+        // 与 CLI parse_imu 相同：3 个数（姿态）或 6 个数（再加变化率）
+        const v = act.slice(4).split(',').map(Number);
+        if ((v.length === 3 || v.length === 6) && v.every((x) => !Number.isNaN(x))) e.tb_imu_set?.(v[0], v[1], v[2], v[3] ?? 0, v[4] ?? 0, v[5] ?? 0);
+      } else if (act.startsWith('touch=')) {
+        const v = act.slice(6).split(',').map(Number);
+        if (v.length === 2 && v.every((x) => !Number.isNaN(x))) e.tb_touch?.(v[0], v[1], 1);
+      } else if (act === 'release') e.tb_touch?.(0, 0, 0);
     }
     if (j.pwmPin !== undefined) {
       const d = e.tb_pin_pwm(j.pwmPin);

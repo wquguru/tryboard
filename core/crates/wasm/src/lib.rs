@@ -3,7 +3,7 @@
 //! JS 先用 tb_image_chip 看镜像是哪颗芯片、取对应的 ROM，再 tb_boot。
 
 use std::cell::RefCell;
-use tryboard_machine::{Chip, Machine, PowerMode, SensorEnv, Stop};
+use tryboard_machine::{Chip, ImuPose, Machine, PowerMode, SensorEnv, Stop};
 
 thread_local! {
     static M: RefCell<Option<Machine>> = const { RefCell::new(None) };
@@ -235,12 +235,15 @@ pub extern "C" fn tb_analog_set(pin: u32, mv: f32) {
     with((), |m| m.analog_set(pin as usize, mv))
 }
 
-/// 在 I2C 总线上接一个器件。kind：1 = SSD1306，2 = BME280。返回 0 成功。
+/// 在 I2C 总线上接一个器件。kind：1 = SSD1306，2 = BME280，3 = MPU6050，4 = QMI8658，5 = CST816S。返回 0 成功。
 #[no_mangle]
 pub extern "C" fn tb_i2c_attach(kind: u32, addr: u32) -> i32 {
     let name = match kind {
         1 => "ssd1306",
         2 => "bme280",
+        3 => "mpu6050",
+        4 => "qmi8658",
+        5 => "cst816s",
         _ => return 1,
     };
     with(1, |m| if m.i2c_attach(name, addr as u8) { 0 } else { 1 })
@@ -250,6 +253,25 @@ pub extern "C" fn tb_i2c_attach(kind: u32, addr: u32) -> i32 {
 #[no_mangle]
 pub extern "C" fn tb_env_set(temp_c: f64, humidity: f64, pressure_pa: f64) {
     with((), |m| m.env_set(SensorEnv { temp_c, humidity, pressure_pa }))
+}
+
+/// 姿态（MPU6050 / QMI8658）：欧拉角（度）+ 欧拉角变化率（°/s），同脚本动作 imu=
+#[no_mangle]
+pub extern "C" fn tb_imu_set(pitch: f64, roll: f64, yaw: f64, dpitch: f64, droll: f64, dyaw: f64) {
+    with((), |m| m.imu_set(ImuPose { pitch, roll, yaw, dpitch, droll, dyaw }))
+}
+
+/// 触摸 INT 脚接在哪个 GPIO（按着拉低、抬起回高）
+#[no_mangle]
+pub extern "C" fn tb_touch_int(pin: u32) {
+    with((), |m| m.touch_int_attach(pin))
+}
+
+/// 触摸：down = 1 按下 / 移动到 (x, y)（屏幕像素 0..239），0 = 抬起
+#[no_mangle]
+pub extern "C" fn tb_touch(x: f64, y: f64, down: u32) {
+    let c = |v: f64| v.round().clamp(0.0, 239.0) as u16;
+    with((), |m| m.touch(c(x), c(y), down != 0))
 }
 
 /// OLED 画面版本号：变了才需要重新取像素。没有 OLED 时返回 0。

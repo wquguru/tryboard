@@ -176,7 +176,7 @@ console.log(s.length ? '核价提醒：' + s.length + ' 件超过 120 天未核�
 if [ $NO_WEB = 0 ]; then
   echo -e "\n## 网页（Chrome 无头 + wasm）" >> $REPORT
   tools/build_web.sh >/dev/null 2>&1 || { echo "构建失败" >> $REPORT; fail=1; }
-  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接" s3-blink:TRYBOARD_OK s3-rgb:TRYBOARD_OK s3-dual:TRYBOARD_OK weather:TRYBOARD_OK lens:TRYBOARD_OK spin:TRYBOARD_OK; do
+  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接" s3-blink:TRYBOARD_OK s3-rgb:TRYBOARD_OK s3-dual:TRYBOARD_OK weather:TRYBOARD_OK lens:TRYBOARD_OK spin:TRYBOARD_OK s3-imu:TRYBOARD_OK s3-qmi8658:TRYBOARD_OK s3-touch:TRYBOARD_OK; do
     ex=${spec%%:*}; want=${spec#*:}
     r=$(node tools/webtest/webtest.mjs "$ex" "$want" 2>&1 | head -3)
     echo "$r" | sed 's/^/- /' >> $REPORT
@@ -203,6 +203,10 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/traceio.mjs 2>&1 | grep '^\[traceio\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[traceio\] PASS（' || { echo "- [traceio] 脚本没跑完" >> $REPORT; fail=1; }
+  # IMU / 触摸（P2-02 / P2-03）：真实鼠标拖 IMU、点触摸圆屏，读数与命令行 --inputs 重放逐行一致
+  r=$(node tools/webtest/sense.mjs 2>&1 | grep '^\[sense\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[sense\] PASS（' || { echo "- [sense] 脚本没跑完" >> $REPORT; fail=1; }
   r=$(node tools/webtest/editor.mjs 2>&1 | tail -1)
   echo "- 元件编辑器（上传固件 + 加 BME280 / LED）：$r" >> $REPORT
   echo "$r" | grep -q PASS || fail=1

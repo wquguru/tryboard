@@ -10,4 +10,7 @@ export const WORKS: Record<string, WorkDef> = {
   // 眼睛 + 眨眼 → 按键换表情 → 合体（四种表情循环）
   lens: { id: 'lens', title: '透镜里的小人', example: 'lens', checkpoints: ['lens-1', 'lens-2', '07-lens'] },
   blank: { id: 'blank', title: '空白实验台', example: null, checkpoints: [] },
+  // P2-03 / P2-02 的外设台面（还不是完整作品：没有检查点、组装模版；体感小人等作品见 P2-09）
+  imu: { id: 'imu', title: '倾角仪（MPU6050）', example: 's3-imu', checkpoints: [] },
+  touch: { id: 'touch', title: '触摸圆屏（CST816S）', example: 's3-touch', checkpoints: [] },
 };

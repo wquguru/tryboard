@@ -12,6 +12,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { createUsbHost, type UsbView } from './usb3d';
 import { EXT, extModelsOn, loadExt, onExtModels, reportExt, type ExtName } from './extmodels';
 import type { PickTarget, PinInfo, ScenePickApi, ScreenPoint } from './scene-api';
+import { poseToThree, threeToPose, type Pose } from './imupose';
 
 // 单位：毫米
 const PITCH = 2.54;
@@ -112,7 +113,16 @@ export type PartSpec =
   /** 10kΩ 电位器：两端接 3V3 / GND，滑片接 pin（ADC），旋钮可拖动 */
   | { type: 'pot'; pin: number; label?: string }
   /** 无源蜂鸣器模块（三针）：I/O 接 pin，LEDC 方波驱动；网页声音见 audio.ts，3D 里响的时候振膜起伏、冒声波 */
-  | { type: 'buzzer'; pin: number; label?: string };
+  | { type: 'buzzer'; pin: number; label?: string }
+  /** MPU6050 六轴模块（GY-521，8 针，平插）：I2C；INT 可不接（P2-03） */
+  | { type: 'mpu6050'; addr: number; sda: number; scl: number; int?: number; label?: string }
+  /** QMI8658 六轴模块（6 针，平插）：I2C（P2-03） */
+  | { type: 'qmi8658'; addr: number; sda: number; scl: number; label?: string }
+  /** 圆屏上的 CST816S 触摸层（P2-02）：和 gc9a01 一起出现时，圆屏画成 12 针的触摸版，点屏幕 = 触摸 */
+  | { type: 'cst816s'; addr: number; sda: number; scl: number; int: number; rst?: number; label?: string };
+
+/** 场景里的 IMU（台面倾斜 / 拖动只在有 IMU 时生效） */
+export const imuPart = (s: SceneSpec) => s.parts.find((p): p is Extract<PartSpec, { type: 'mpu6050' | 'qmi8658' }> => p.type === 'mpu6050' || p.type === 'qmi8658');
 
 export interface SceneSpec {
   parts: PartSpec[];
@@ -135,6 +145,16 @@ export interface Bench extends ScenePickApi {
   setOled(pixels: Uint8Array): void;
   /** GC9A01 画面：240×240 RGBA */
   setLcd(rgba: Uint8Array): void;
+  /** 台面姿态（P2-03）：整块面包板连同开发板、模组一起倾斜；null = 放平 */
+  setPose(p: Pose | null): void;
+  /** 用户拖动 IMU 模块转动台面：move = 拖动中（≈30 Hz），end = 松手 */
+  onPose(cb: (p: Pose, phase: 'move' | 'end') => void): void;
+  /** 用户点 / 拖触摸圆屏（P2-02）：x, y 为屏幕像素 0..239 */
+  onTouch(cb: (x: number, y: number, down: boolean) => void): void;
+  /** 圆屏上 (x, y) 像素在页面上的位置（clientX/Y），给测试用真实鼠标去点；没有屏或看不见时 null */
+  lcdPoint(x: number, y: number): [number, number] | null;
+  /** IMU 模块在页面上的位置（clientX/Y），给测试用真实鼠标去拖 */
+  imuScreenPos(): [number, number] | null;
   /** 电位器位置 0..1（面板滑块改了以后同步 3D 旋钮） */
   setPot(pin: number, v: number): void;
   /** 用户在 3D 里拖动电位器旋钮 */
@@ -749,23 +769,33 @@ function moduleHeader(grp: THREE.Group, count: number) {
 
 /** 1.28″ GC9A01 圆屏模组：圆形 PCB 竖插在面包板上，8 针。原点在排针根部。 */
 const LCD_PINS = ['GND', 'VCC', 'SCL', 'SDA', 'RES', 'DC', 'CS', 'BLK'];
-function roundLcdModule(tex: THREE.Texture) {
+/** 触摸版多出来的 4 针（CST816S）：丝印印不下全称，贴图上写短名 */
+const TP_PINS = ['TP_SDA', 'TP_SCL', 'TP_INT', 'TP_RST'];
+function roundLcdModule(tex: THREE.Texture, touch = false) {
   const grp = new THREE.Group();
   const R = 19, T = 1.2;
+  const labels = touch ? [...LCD_PINS, ...TP_PINS] : LCD_PINS;
+  const n = labels.length;
   const pcbTex = canvasTexture(512, 512, (g) => {
     g.fillStyle = '#17181b';
     g.fillRect(0, 0, 512, 512);
     g.fillStyle = '#eef0f3';
-    g.font = 'bold 15px "JetBrains Mono", Menlo, monospace';
     g.textAlign = 'center';
     // 贴图按 mm 映射：x ∈ [-R, R] → 0..512；针脚标注在底部条上
-    LCD_PINS.forEach((t, i) => g.fillText(t, 256 + ((i - 3.5) * PITCH * 512) / (2 * R), 512 - (2.2 * 512) / (2 * R + 6)));
+    labels.forEach((t, i) => {
+      g.font = `bold ${i < 8 ? 15 : 11}px "JetBrains Mono", Menlo, monospace`;
+      g.fillText(i < 8 ? t : 'T' + t.slice(3), 256 + ((i - (n - 1) / 2) * PITCH * 512) / (2 * R), 512 - (2.2 * 512) / (2 * R + 6));
+    });
+    if (touch) {
+      g.font = 'bold 13px Helvetica, sans-serif';
+      g.fillText('TOUCH · CST816S', 256, 512 - (5.6 * 512) / (2 * R + 6));
+    }
   });
   const shape = new THREE.Shape();
   shape.absarc(0, R + 3, R, 0, Math.PI * 2, false);
   const pcbGeo = mergeGeometries([
     new THREE.ExtrudeGeometry(shape, { depth: T, bevelEnabled: false, curveSegments: 64 }),
-    new THREE.ExtrudeGeometry(roundRect(22, 8, 0.6), { depth: T, bevelEnabled: false }).translate(0, 4.5, 0),
+    new THREE.ExtrudeGeometry(roundRect(n * PITCH + 1.7, 8, 0.6), { depth: T, bevelEnabled: false }).translate(0, 4.5, 0),
   ]);
   pcbGeo.translate(0, 0, -T / 2);
   pcbTex.repeat.set(1 / (2 * R), 1 / (2 * R + 6));
@@ -774,15 +804,122 @@ function roundLcdModule(tex: THREE.Texture) {
   pcb.position.y = 0.5;
   pcb.castShadow = true;
   grp.add(pcb);
-  const glass = new THREE.Mesh(new THREE.CylinderGeometry(17.2, 17.2, 1.4, 64), new THREE.MeshPhysicalMaterial({ color: 0x07080a, roughness: 0.05, metalness: 0.2, clearcoat: 1 }));
+  // 触摸版：盖板玻璃更厚、带一圈银色边框（触摸 sensor 贴在盖板下），屏边多一颗 CST816S
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(17.2, 17.2, touch ? 1.9 : 1.4, 64), new THREE.MeshPhysicalMaterial({ color: 0x07080a, roughness: 0.05, metalness: 0.2, clearcoat: 1 }));
   glass.rotation.x = Math.PI / 2;
-  glass.position.set(0, 0.5 + R + 3, T / 2 + 0.7);
+  glass.position.set(0, 0.5 + R + 3, T / 2 + (touch ? 0.95 : 0.7));
   grp.add(glass);
   const screen = new THREE.Mesh(new THREE.CircleGeometry(16.25, 64), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
-  screen.position.set(0, glass.position.y, glass.position.z + 0.71);
+  screen.position.set(0, glass.position.y, glass.position.z + (touch ? 0.96 : 0.71));
   grp.add(screen);
-  const pins = moduleHeader(grp, 8);
-  return { grp, pins, labels: LCD_PINS };
+  let tp: THREE.Mesh | null = null;
+  if (touch) {
+    const bezel = new THREE.Mesh(new THREE.TorusGeometry(17.25, 0.35, 8, 96), new THREE.MeshStandardMaterial({ color: 0xb9bec6, metalness: 1, roughness: 0.3 }));
+    bezel.position.set(0, glass.position.y, glass.position.z + 0.7);
+    grp.add(bezel);
+    tp = new THREE.Mesh(new THREE.BoxGeometry(3, 3, 0.8), MAT.chip);
+    tp.position.set(9.5, 5.6, T / 2 + 0.4);
+    tp.castShadow = true;
+    grp.add(tp);
+  }
+  const pins = moduleHeader(grp, n);
+  return { grp, pins, labels, screen, tp };
+}
+
+/** 平插的 IMU 小板（排针朝下穿过 PCB，板面朝上）：GY-521（MPU6050，蓝色 21.2 × 16.4，8 针）或 QMI8658（黑色 17 × 13，6 针）。
+ *  原点在排针根部（面包板表面），针沿 x 排成一行，PCB 向 −z（朝里）伸出，丝印 X / Y 箭头与传感器坐标一致：X = +x，Y = −z。 */
+function imuModule(kind: 'mpu6050' | 'qmi8658') {
+  const grp = new THREE.Group();
+  const gy = kind === 'mpu6050';
+  const labels = gy ? ['VCC', 'GND', 'SCL', 'SDA', 'XDA', 'XCL', 'AD0', 'INT'] : ['VIN', 'GND', 'SCL', 'SDA', 'SA0', 'INT'];
+  const n = labels.length;
+  const W = gy ? 21.2 : 17, H = gy ? 16.4 : 13, T = 1.6, S = 28;
+  const color = gy ? '#1d4fa8' : '#1b1d22';
+  const tex = canvasTexture(Math.round(W * S), Math.round(H * S), (g) => {
+    const cw = W * S, ch = H * S;
+    g.fillStyle = color;
+    g.fillRect(0, 0, cw, ch);
+    // 针脚焊盘在贴图下沿（= 靠近观察者那条边）
+    g.fillStyle = '#d9b860';
+    for (let i = 0; i < n; i++) {
+      g.beginPath();
+      g.arc(cw / 2 + (i - (n - 1) / 2) * PITCH * S, ch - 1.3 * S, 0.8 * S, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.fillStyle = '#eef3fb';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = `bold ${0.78 * S}px "JetBrains Mono", Menlo, monospace`;
+    labels.forEach((t, i) => g.fillText(t, cw / 2 + (i - (n - 1) / 2) * PITCH * S, ch - 3.1 * S));
+    g.font = `bold ${1.15 * S}px Helvetica, sans-serif`;
+    g.textAlign = 'left';
+    g.fillText(gy ? 'GY-521' : 'QMI8658', 1.2 * S, 1.6 * S);
+    // 坐标轴丝印：X 向右、Y 向上（= 朝里），Z 垂直板面朝外（⊙）
+    const ox = cw - 4.2 * S, oy = 5.4 * S;
+    g.strokeStyle = g.fillStyle = '#eef3fb';
+    g.lineWidth = 0.18 * S;
+    const arrow = (dx: number, dy: number, t: string) => {
+      g.beginPath();
+      g.moveTo(ox, oy);
+      g.lineTo(ox + dx * 2.6 * S, oy + dy * 2.6 * S);
+      g.stroke();
+      g.beginPath();
+      g.moveTo(ox + dx * 3 * S, oy + dy * 3 * S);
+      g.lineTo(ox + dx * 2.3 * S - dy * 0.4 * S, oy + dy * 2.3 * S + dx * 0.4 * S);
+      g.lineTo(ox + dx * 2.3 * S + dy * 0.4 * S, oy + dy * 2.3 * S - dx * 0.4 * S);
+      g.fill();
+      g.font = `bold ${0.8 * S}px Helvetica, sans-serif`;
+      g.textAlign = 'center';
+      g.fillText(t, ox + dx * 3.6 * S, oy + dy * 3.6 * S);
+    };
+    arrow(1, 0, 'X');
+    arrow(0, -1, 'Y');
+    g.beginPath();
+    g.arc(ox, oy, 0.35 * S, 0, Math.PI * 2);
+    g.stroke();
+  });
+  const holes: [number, number, number][] = gy ? [[-W / 2 + 1.8, H / 2 - 1.8, 1.5], [W / 2 - 1.8, H / 2 - 1.8, 1.5]] : [[-W / 2 + 1.6, H / 2 - 1.6, 1.1]];
+  const pcb = modulePcb(W, H, T, holes, tex, gy ? 0x163f88 : 0x111215);
+  // 竖立的 PCB 放倒：局部 +y（贴图上方）→ −z（朝里），正面朝上
+  pcb.rotation.x = -Math.PI / 2;
+  pcb.position.set(0, 2.5 + T / 2, 1.3);
+  grp.add(pcb);
+  const top = 2.5 + T;
+  // 传感器芯片（MPU6050 4×4 QFN / QMI8658 2.5×3 LGA）+ 稳压器、阻容、电源灯
+  const chip = new THREE.Mesh(new THREE.BoxGeometry(gy ? 4 : 2.5, 0.9, gy ? 4 : 3), MAT.chip);
+  chip.position.set(gy ? -1 : -1.5, top + 0.45, 1.3 - H / 2 - 0.5);
+  chip.castShadow = true;
+  grp.add(chip);
+  const dot = new THREE.Mesh(new THREE.CircleGeometry(0.3, 12), new THREE.MeshBasicMaterial({ color: 0x8a8d92 }));
+  dot.rotation.x = -Math.PI / 2;
+  dot.position.set(chip.position.x - (gy ? 1.4 : 0.8), top + 0.91, chip.position.z - (gy ? 1.4 : 1));
+  grp.add(dot);
+  const smd = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), MAT.chip, 4);
+  const m4 = new THREE.Matrix4();
+  [[-W / 2 + 3.5, -H + 6, 2.9, 1.6], [W / 2 - 4, -5.5, 1.6, 0.8], [W / 2 - 4, -7.5, 1.6, 0.8], [-W / 2 + 3.5, -4, 1.6, 0.8]].forEach(([x, z, w, d], i) =>
+    smd.setMatrixAt(i, m4.compose(new THREE.Vector3(x * (gy ? 1 : 0.8), top + 0.3, z * (gy ? 1 : 0.8)), new THREE.Quaternion(), new THREE.Vector3(w, 0.6, d))),
+  );
+  grp.add(smd);
+  const led = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 0.8), new THREE.MeshStandardMaterial({ color: 0xffe2e2, emissive: 0xff2a1a, emissiveIntensity: 1.2 }));
+  led.position.set(W / 2 - 6, top + 0.25, 1.3 - H + 2.4);
+  grp.add(led);
+  // 排针：黑色塑料垫块在面包板上，针穿过 PCB、顶上有焊点
+  const plastic = new THREE.Mesh(new THREE.BoxGeometry(n * PITCH, 2.5, 2.5), MAT.plastic);
+  plastic.position.y = 1.25;
+  grp.add(plastic);
+  const pinMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.64, 6.2, 0.64), MAT.gold, n);
+  const solder = new THREE.InstancedMesh(new THREE.SphereGeometry(0.75, 10, 6), MAT.tin, n);
+  for (let i = 0; i < n; i++) {
+    const x = (i - (n - 1) / 2) * PITCH;
+    pinMesh.setMatrixAt(i, m4.makeTranslation(x, top - 3.1 + 1.2, 0));
+    solder.setMatrixAt(i, m4.makeTranslation(x, top + 0.15, 0));
+  }
+  grp.add(pinMesh, solder);
+  const shadow = contactShadow(W, H, 0.22);
+  shadow.position.z = 1.3 - H / 2;
+  grp.add(shadow);
+  const pins = Array.from({ length: n }, (_, i) => new THREE.Vector3((i - (n - 1) / 2) * PITCH, 0, 0));
+  return { grp, pins, labels };
 }
 
 /** 0.96″ SSD1306 模组：蓝色 PCB 27.3 × 27.8、4 个 Φ2 安装孔、玻璃 + 排线，竖插，屏幕朝观察者。原点在排针根部。 */
@@ -1312,7 +1449,11 @@ export function createBench(container: HTMLElement): Bench {
 
   // 面包板与开发板随芯片切换（setBoard），外接元件按 partOffset 整体平移
   const BB_TOP = BB.H;
-  scene.add(breadboard());
+  // 台面整体（面包板 + 开发板 + 外接件）挂在 rig 下：有 IMU 时整块倾斜（P2-03）。
+  // 建模时 rig 必须是单位变换——零件位置都按世界坐标算好再挂进来
+  const rig = new THREE.Group();
+  scene.add(rig);
+  rig.add(breadboard());
   // 外部模型（P1-09）：默认程序生成；开了就懒加载 glb 换掉替换位里的程序生成件，关掉换回来
   let extOn = extModelsOn();
   let slots: ExtSlot[] = [];
@@ -1359,7 +1500,7 @@ export function createBench(container: HTMLElement): Bench {
     // 板子长边沿 x：旋转 -90°，USB 朝左；排针座落在面包板表面
     board.grp.rotation.y = -Math.PI / 2;
     board.grp.position.set((board.spec.boardCol - (board.spec.cols - 1) / 2) * PITCH, BB_TOP + 2.5 + board.T / 2, 0);
-    scene.add(board.grp);
+    rig.add(board.grp);
     board.grp.updateMatrixWorld();
     board.extSlots.forEach(useSlot);
   };
@@ -1468,7 +1609,9 @@ export function createBench(container: HTMLElement): Bench {
   let buzzers: { pin: number; membrane: THREE.Mesh; waves: THREE.Group; waveMat: THREE.MeshBasicMaterial; on: boolean }[] = [];
   let potCb: ((pin: number, v: number) => void) | null = null;
   let parts = new THREE.Group();
-  scene.add(parts);
+  rig.add(parts);
+  /** 触摸圆屏的屏幕网格（射线命中它 = 手指按在屏上） */
+  let touchScreen: THREE.Mesh | null = null;
   const oledData = new Uint8Array(128 * 64 * 4);
   let oledTex: THREE.DataTexture | null = null;
   const lcdData = new Uint8Array(240 * 240 * 4);
@@ -1508,11 +1651,11 @@ export function createBench(container: HTMLElement): Bench {
   };
 
   /** 圆屏：8 根线（GND VCC SCL SDA RES DC CS BLK），SCL/SDA 在这里是 SPI 的 SCLK/MOSI */
-  function buildSpiLcd(grp: THREE.Group, m: ReturnType<typeof roundLcdModule>, firstCol: number) {
-    m.grp.position.set(colX(firstCol + 3.5), BB_TOP, rowZ(4));
+  function buildSpiLcd(grp: THREE.Group, m: ReturnType<typeof roundLcdModule>, firstCol: number, tp?: Extract<PartSpec, { type: 'cst816s' }>) {
+    m.grp.position.set(colX(firstCol + (m.labels.length - 1) / 2), BB_TOP, rowZ(4));
     m.grp.rotation.x = -0.12;
     registerPart('gc9a01', m.grp);
-    registerModulePins('gc9a01', m.grp, m.pins, m.labels);
+    registerModulePins('gc9a01', m.grp, m.pins.slice(0, 8), m.labels.slice(0, 8));
     grp.add(m.grp);
     // 引脚与内核的接线约定一致：S3 见 esp32s3::lcd_pin，C3 见 esp32c3::lcd_pin（firmware/common/round_lcd.h 同）
     const p = LCD_WIRING[board.spec.chip];
@@ -1529,6 +1672,47 @@ export function createBench(container: HTMLElement): Bench {
     order.forEach(([pinName, color, role], i) => {
       moduleWire(grp, pinName, new THREE.Vector3(colX(firstCol + i), top, rowZ(0)), color, `gc9a01:${m.labels[i]}`, 50 + i * 1.4, i);
       addRole(apiId(pinName), role);
+    });
+    if (!tp || !m.tp) return;
+    // 触摸层的 4 针：CST816S 走 I2C，INT 按着拉低，RST 由固件拉
+    registerPart('cst816s', m.tp);
+    registerModulePins('cst816s', m.grp, m.pins.slice(8), TP_PINS);
+    const tpw: [string, number, string][] = [
+      [`IO${tp.sda}`, WIRE.sda, '触摸 I2C SDA'],
+      [`IO${tp.scl}`, WIRE.scl, '触摸 I2C SCL'],
+      [`IO${tp.int}`, 0x2fb8a8, '触摸 INT'],
+      [tp.rst !== undefined ? `IO${tp.rst}` : '3V3', tp.rst !== undefined ? 0xa0a4aa : WIRE.vcc, tp.rst !== undefined ? '触摸 RST' : '触摸 RST（接 3V3）'],
+    ];
+    tpw.forEach(([pinName, color, role], k) => {
+      const i = 8 + k;
+      moduleWire(grp, pinName, new THREE.Vector3(colX(firstCol + i), top, rowZ(0)), color, `cst816s:${TP_PINS[k]}`, 50 + i * 1.4, i);
+      addRole(apiId(pinName), role);
+    });
+  }
+
+  /** 平插 IMU：针在 f 行（靠外那半边），跳线从板上的针拱过来落在同一列的 j 行 */
+  function buildImu(grp: THREE.Group, p: Extract<PartSpec, { type: 'mpu6050' | 'qmi8658' }>, firstCol: number) {
+    const m = imuModule(p.type);
+    const n = m.labels.length;
+    m.grp.position.set(colX(firstCol + (n - 1) / 2), BB_TOP, rowZ(5));
+    registerPart(p.type, m.grp);
+    registerModulePins(p.type, m.grp, m.pins, m.labels);
+    grp.add(m.grp);
+    const name = p.type === 'mpu6050' ? 'MPU6050' : 'QMI8658';
+    const int = 'int' in p ? p.int : undefined;
+    const map: Record<string, [string, number, string] | undefined> = {
+      VCC: ['3V3', WIRE.vcc, `${name} 供电`],
+      VIN: ['3V3', WIRE.vcc, `${name} 供电`],
+      GND: ['GND', WIRE.gnd, `${name} 地`],
+      SCL: ['IO' + p.scl, WIRE.scl, 'I2C SCL'],
+      SDA: ['IO' + p.sda, WIRE.sda, 'I2C SDA'],
+      INT: int !== undefined ? ['IO' + int, 0x2fb8a8, `${name} INT`] : undefined,
+    };
+    m.labels.forEach((fn, i) => {
+      const w = map[fn];
+      if (!w) return;
+      jumper(grp, w[0], new THREE.Vector3(colX(firstCol + i), top, rowZ(9)), w[1], `${p.type}:${fn}`, 20 + i * 1.5, 4 + i);
+      addRole(apiId(w[0]), w[2]);
     });
   }
 
@@ -1668,10 +1852,42 @@ export function createBench(container: HTMLElement): Bench {
 
   let lastScene: SceneSpec = { parts: [] };
 
+  // ---------------------------------------------------------------- 台面姿态（P2-03）
+  let pose: Pose = { pitch: 0, roll: 0, yaw: 0 };
+  /** 旋转中心：IMU 模块所在处（拖它转时它自己不跑开）；没有 IMU 时是面包板中心 */
+  const pivot = new THREE.Vector3(0, BB_TOP, 0);
+  /** 建模前把台面摆平（零件按世界坐标算位置） */
+  function levelRig() {
+    rig.position.set(0, 0, 0);
+    rig.quaternion.identity();
+    rig.updateMatrixWorld(true);
+  }
+  const m4 = new THREE.Matrix4();
+  /** 按 pose 转动台面：绕 pivot（IMU 模块）转，像端着面包板倾斜 */
+  function applyPose() {
+    levelRig();
+    const imu = partsById.get('mpu6050') ?? partsById.get('qmi8658');
+    if (imu) imu.getWorldPosition(pivot);
+    else pivot.set(0, BB_TOP, 0);
+    const flat = !pose.pitch && !pose.roll && !pose.yaw;
+    if (!flat) {
+      const r = poseToThree(pose);
+      m4.set(r[0], r[1], r[2], 0, r[3], r[4], r[5], 0, r[6], r[7], r[8], 0, 0, 0, 0, 1);
+      rig.quaternion.setFromRotationMatrix(m4);
+      // 不抬高：地面只是接阴影的透明面，台面一角沉到桌面以下也看得见；IMU 留在原处，拖它时不跑出视野
+      rig.position.copy(pivot).sub(pivot.clone().applyQuaternion(rig.quaternion));
+      rig.updateMatrixWorld(true);
+    }
+    highlight(hl);
+    setHeat(heatId);
+    if (measured) measure(measured[0], measured[1]);
+  }
+
   /** 换开发板（C3 / S3）：开发板重建，外接元件按新板子的引脚重新接线 */
   function setBoard(chip: ChipId) {
     if (board.spec.chip === chip) return;
-    scene.remove(board.grp);
+    levelRig();
+    rig.remove(board.grp);
     disposeTree(board.grp);
     board = devboard(BOARDS[chip]);
     placeBoard();
@@ -1696,10 +1912,12 @@ export function createBench(container: HTMLElement): Bench {
 
   function setScene(spec: SceneSpec) {
     lastScene = spec;
-    scene.remove(parts);
+    levelRig();
+    rig.remove(parts);
     disposeTree(parts);
     parts = new THREE.Group();
-    scene.add(parts);
+    rig.add(parts);
+    touchScreen = null;
     leds = [];
     servos = [];
     pots = [];
@@ -1741,9 +1959,17 @@ export function createBench(container: HTMLElement): Bench {
         lcdTex.flipY = true;
         lcdTex.colorSpace = THREE.SRGBColorSpace;
         lcdTex.needsUpdate = true;
-        buildSpiLcd(parts, roundLcdModule(lcdTex), 16);
+        const tp = spec.parts.find((x): x is Extract<PartSpec, { type: 'cst816s' }> => x.type === 'cst816s');
+        const lm = roundLcdModule(lcdTex, !!tp);
+        if (tp) touchScreen = lm.screen;
+        buildSpiLcd(parts, lm, 16, tp);
         const w = LCD_WIRING[board.spec.chip];
         label(parts, p.label ?? `GC9A01 圆屏 · SPI2 · SCLK IO${w.sclk} MOSI IO${w.mosi} CS IO${w.cs} DC IO${w.dc}`, new THREE.Vector3(colX(19.5), 52, rowZ(0) - 10));
+      }
+      if (p.type === 'mpu6050' || p.type === 'qmi8658') {
+        buildImu(parts, p, i2cCol - 4);
+        label(parts, p.label ?? `${p.type === 'mpu6050' ? 'MPU6050' : 'QMI8658'} · I2C 0x${p.addr.toString(16)} · SDA IO${p.sda} SCL IO${p.scl} · 拖它倾斜台面`, new THREE.Vector3(colX(i2cCol - 0.5), 30, rowZ(0) - 10));
+        i2cCol -= 10;
       }
       if (p.type === 'bme280') {
         buildI2c(parts, 'bme280', 'BME280', bmeModule(), i2cCol, p.sda, p.scl, 22);
@@ -1766,9 +1992,7 @@ export function createBench(container: HTMLElement): Bench {
     // 重建后恢复外壳设下的标注（目标还在就保留）
     for (const [id, msg] of faults) if (wires.some((w) => w.id === id)) applyFault(id, msg);
     else setTag('fault:' + id, null, '', () => null);
-    highlight(hl);
-    setHeat(heatId);
-    if (measured) measure(measured[0], measured[1]);
+    applyPose();
   }
 
   const composer = new EffectComposer(renderer);
@@ -1889,7 +2113,7 @@ export function createBench(container: HTMLElement): Bench {
   });
   // 点击（按下到松开移动不到 5px，不是拖动转视角）→ onPick
   renderer.domElement.addEventListener('pointerup', (ev) => {
-    if (!pickCb || !downAt || Math.hypot(ev.clientX - downAt.x, ev.clientY - downAt.y) > 5) return;
+    if (!pickCb || !downAt || consumed || Math.hypot(ev.clientX - downAt.x, ev.clientY - downAt.y) > 5) return;
     const rect = renderer.domElement.getBoundingClientRect();
     pickCb(pickAt(ev), { x: ev.clientX - rect.left, y: ev.clientY - rect.top });
   });
@@ -1900,8 +2124,106 @@ export function createBench(container: HTMLElement): Bench {
     const now = performance.now();
     if (now - hoverT < 50) return;
     hoverT = now;
-    const c = pick(ev) ? 'pointer' : pickPot(ev) || dragging ? 'ew-resize' : pickCb && pickAt(ev) ? 'pointer' : '';
+    const imu = imuRoot();
+    const overImu = () => {
+      if (!imu) return false;
+      ray.setFromCamera(toNdc(ev), camera);
+      return ray.intersectObject(imu, true).length > 0;
+    };
+    const c = pick(ev) ? 'pointer' : pickPot(ev) || dragging ? 'ew-resize' : touchScreen && touchAt(ev) ? 'crosshair' : overImu() ? 'grab' : pickCb && pickAt(ev) ? 'pointer' : '';
     renderer.domElement.style.cursor = c;
+  });
+
+  // ---------------------------------------------------------------- 触摸圆屏（P2-02）与拖动 IMU 转台面（P2-03）
+  let touchCb: ((x: number, y: number, down: boolean) => void) | null = null;
+  let poseCb: ((p: Pose, phase: 'move' | 'end') => void) | null = null;
+  /** 这一次按下被触摸 / 拖 IMU 用掉了：松手时不当成点选 */
+  let consumed = false;
+  let touching: { x: number; y: number; t: number } | null = null;
+  const finger = new THREE.Mesh(new THREE.RingGeometry(1.6, 2.4, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthTest: false }));
+  finger.renderOrder = 22;
+  finger.visible = false;
+  finger.raycast = () => {};
+  scene.add(finger);
+  const touchAt = (ev: { clientX: number; clientY: number }) => {
+    if (!touchScreen) return null;
+    ray.setFromCamera(toNdc(ev), camera);
+    const h = ray.intersectObject(touchScreen, false)[0];
+    if (!h?.uv) return null;
+    finger.position.copy(h.point);
+    finger.quaternion.copy(touchScreen.getWorldQuaternion(new THREE.Quaternion()));
+    // CircleGeometry 的 UV：u = 0.5 + x/2r，v = 0.5 + y/2r；贴图 flipY，第 0 行在上
+    return { x: Math.min(239, Math.max(0, h.uv.x * 240)), y: Math.min(239, Math.max(0, (1 - h.uv.y) * 240)) };
+  };
+  let rotating: { x: number; y: number; moved: boolean; t: number } | null = null;
+  const imuRoot = () => partsById.get('mpu6050') ?? partsById.get('qmi8658');
+  renderer.domElement.addEventListener('pointerdown', (ev) => {
+    consumed = false;
+    const tp = touchAt(ev);
+    if (tp) {
+      controls.enabled = false;
+      consumed = true;
+      touching = { ...tp, t: performance.now() };
+      finger.visible = true;
+      touchCb?.(tp.x, tp.y, true);
+      return;
+    }
+    const imu = imuRoot();
+    if (imu && !pickPot(ev) && !pick(ev)) {
+      ray.setFromCamera(toNdc(ev), camera);
+      if (ray.intersectObject(imu, true).length) {
+        controls.enabled = false;
+        rotating = { x: ev.clientX, y: ev.clientY, moved: false, t: 0 };
+      }
+    }
+  });
+  const qd = new THREE.Quaternion();
+  const axis = new THREE.Vector3();
+  window.addEventListener('pointermove', (ev) => {
+    if (touching) {
+      const tp = touchAt(ev);
+      const now = performance.now();
+      // 移动按 ~30 Hz 报（真芯片扫描约 100 Hz，网页事件太密只会撑大输入日志）
+      if (tp && now - touching.t > 33 && (Math.abs(tp.x - touching.x) >= 1 || Math.abs(tp.y - touching.y) >= 1)) {
+        touching = { ...tp, t: now };
+        touchCb?.(tp.x, tp.y, true);
+      }
+      return;
+    }
+    if (!rotating) return;
+    const dx = ev.clientX - rotating.x, dy = ev.clientY - rotating.y;
+    if (!rotating.moved && Math.hypot(dx, dy) < 4) return;
+    rotating.moved = true;
+    consumed = true;
+    rotating.x = ev.clientX;
+    rotating.y = ev.clientY;
+    // 轨迹球：横向拖 = 绕相机竖直轴转，纵向拖 = 绕相机水平轴转（0.5°/像素）
+    const q = rig.quaternion.clone();
+    axis.set(0, 1, 0).applyQuaternion(camera.quaternion);
+    q.premultiply(qd.setFromAxisAngle(axis, dx * 0.5 * (Math.PI / 180)));
+    axis.set(1, 0, 0).applyQuaternion(camera.quaternion);
+    q.premultiply(qd.setFromAxisAngle(axis, dy * 0.5 * (Math.PI / 180)));
+    const e = new THREE.Matrix4().makeRotationFromQuaternion(q).elements;
+    pose = threeToPose([e[0], e[4], e[8], e[1], e[5], e[9], e[2], e[6], e[10]]);
+    applyPose();
+    const now = performance.now();
+    if (now - rotating.t > 33) {
+      rotating.t = now;
+      poseCb?.({ ...pose }, 'move');
+    }
+  });
+  window.addEventListener('pointerup', () => {
+    if (touching) {
+      touchCb?.(touching.x, touching.y, false);
+      touching = null;
+      finger.visible = false;
+      controls.enabled = true;
+    }
+    if (rotating) {
+      if (rotating.moved) poseCb?.({ ...pose }, 'end');
+      rotating = null;
+      controls.enabled = true;
+    }
   });
 
   // ---------------------------------------------------------------- 高亮 / 故障 / 热晕 / 尺子
@@ -2195,6 +2517,35 @@ export function createBench(container: HTMLElement): Bench {
           sv.phys = true;
           sv.target = deg;
         }
+    },
+    setPose(p) {
+      pose = p ? { pitch: p.pitch, roll: p.roll, yaw: p.yaw } : { pitch: 0, roll: 0, yaw: 0 };
+      if (!rotating) applyPose();
+    },
+    onPose(cb) {
+      poseCb = cb;
+    },
+    onTouch(cb) {
+      touchCb = cb;
+    },
+    lcdPoint(x, y) {
+      if (!touchScreen) return null;
+      // 屏幕像素 → 圆屏网格局部坐标（半径 16.25 mm，y 向上）→ 页面坐标
+      const r = 16.25;
+      const v = new THREE.Vector3(((x + 0.5) / 240 - 0.5) * 2 * r, (0.5 - (y + 0.5) / 240) * 2 * r, 0).applyMatrix4(touchScreen.matrixWorld).project(camera);
+      if (Math.abs(v.x) > 1 || Math.abs(v.y) > 1) return null;
+      const rc = renderer.domElement.getBoundingClientRect();
+      return [rc.left + ((v.x + 1) / 2) * rc.width, rc.top + ((1 - v.y) / 2) * rc.height];
+    },
+    imuScreenPos() {
+      const o = imuRoot();
+      if (!o) return null;
+      const p = targetPos({ kind: 'part', id: o.userData.pick.id });
+      if (!p) return null;
+      const v = p.project(camera);
+      if (Math.abs(v.x) > 1 || Math.abs(v.y) > 1) return null;
+      const rc = renderer.domElement.getBoundingClientRect();
+      return [rc.left + ((v.x + 1) / 2) * rc.width, rc.top + ((1 - v.y) / 2) * rc.height];
     },
     setPot(pin, v) {
       const pot = pots.find((p) => p.pin === pin);

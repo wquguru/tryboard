@@ -56,6 +56,11 @@ export function describe(p: PartSpec): string {
       return `OLED · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl}`;
     case 'bme280':
       return `BME280 · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl}`;
+    case 'mpu6050':
+    case 'qmi8658':
+      return `${p.type === 'mpu6050' ? 'MPU6050' : 'QMI8658'} · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl}`;
+    case 'cst816s':
+      return `CST816S 触摸 · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl} / INT IO${p.int}`;
     case 'gc9a01':
     {
       const w = LCD_WIRING[chip];
@@ -67,7 +72,7 @@ export function describe(p: PartSpec): string {
 /** I2C 器件变了要重新上电（器件在上电时挂到总线上） */
 export const needsReboot = (a: SceneSpec, b: SceneSpec) => {
   const i2c = (s: SceneSpec) =>
-    JSON.stringify(s.parts.filter((p) => p.type === 'oled' || p.type === 'bme280' || p.type === 'gc9a01'));
+    JSON.stringify(s.parts.filter((p) => p.type === 'oled' || p.type === 'bme280' || p.type === 'gc9a01' || p.type === 'mpu6050' || p.type === 'qmi8658' || p.type === 'cst816s'));
   return i2c(a) !== i2c(b);
 };
 
@@ -81,9 +86,10 @@ export function conflicts(s: SceneSpec): string[] {
     else used.set(pin, who);
   };
   for (const p of s.parts) {
-    if (p.type === 'oled' || p.type === 'bme280') {
+    if (p.type === 'oled' || p.type === 'bme280' || p.type === 'mpu6050' || p.type === 'qmi8658' || p.type === 'cst816s') {
       claim(p.sda, 'I2C SDA', true);
       claim(p.scl, 'I2C SCL', true);
+      if (p.type === 'cst816s') claim(p.int, '触摸 INT');
     } else if (p.type === 'gc9a01') {
       for (const pin of [12, 11, 10, 14, 13, 15]) claim(pin, 'GC9A01 圆屏');
     } else claim(p.pin, describe(p));

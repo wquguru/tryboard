@@ -2,7 +2,7 @@
 
 use std::io::Write;
 use std::time::Instant;
-use tryboard_machine::{Chip, Hw, Machine, PowerMode, SensorEnv, Stop, BROWNOUT_RESET, CPU_HZ};
+use tryboard_machine::{parse_imu, parse_touch, Chip, Hw, Machine, PowerMode, SensorEnv, Stop, BROWNOUT_RESET, CPU_HZ};
 use tryboard_rv32::{elf::Elf, Bus, BusFault, Cpu, Exit};
 
 fn usage() -> ! {
@@ -12,6 +12,8 @@ fn usage() -> ! {
                [--script \"0.5:gpio9=0; 0.6:gpio9=z; 1.0:uart=ping\\n; 1.2:env=35,45,101325\"] [--inputs <网页导出的输入日志.txt>] [--trace N] [--gpio-log] [--pwm-log PIN] [--ws2812-log]
                [--trace-io <事件.txt>] [--trace-pins all|4,8,…]（逻辑分析仪事件：GPIO / PWM / WS2812 / I2C 事务，按周期盖戳）
                [--i2c ssd1306@0x3c,bme280@0x76] [--env 温度,湿度,气压Pa] [--oled]
+               （I2C 器件还有 mpu6050@0x68、qmi8658@0x6b、cst816s@0x15）[--touch-int <GPIO>]（触摸 INT 脚：按着拉低）
+               脚本动作 imu=俯仰,横滚,航向[,三者的变化率 °/s]、touch=x,y（屏幕像素，按下 / 移动）、release（抬起）
                [--spi gc9a01]（S3：SCLK=12 MOSI=11 CS=10 DC=14 RST=13 背光=15；C3：SCLK=6 MOSI=7 CS=10 DC=5 RST=4 背光=3）[--lcd-ppm <最后一帧.ppm>]
                [--power usb|ext]（默认 usb；ext = 舵机由外接 5 V 2 A 供电）[--servo <GPIO>]（接一个 SG90，电流进供电网络）
                [--elec-report]（各节点最低电压、峰值电流、欠压复位次数）；脚本动作 power=usb|ext
@@ -117,6 +119,10 @@ fn run(args: &[String]) {
             }
         }
     }
+    // 触摸 INT 脚：--touch-int GPIO
+    if let Some(pin) = opt(args, "--touch-int").and_then(|s| s.parse().ok()) {
+        m.touch_int_attach(pin);
+    }
     // SPI 外接器件：--spi gc9a01
     if let Some(spec) = opt(args, "--spi") {
         for kind in spec.split(',') {
@@ -218,6 +224,18 @@ fn run(args: &[String]) {
                 if let [t, h, p] = v.as_slice() {
                     m.env_set(SensorEnv { temp_c: *t, humidity: *h, pressure_pa: *p });
                 }
+            } else if let Some(v) = act.strip_prefix("imu=") {
+                // imu=pitch,roll,yaw[,速率]：网页上拖倾斜滑块 / 转动成品
+                match parse_imu(v) {
+                    Some(p) => m.imu_set(p),
+                    None => eprintln!("[tryboard] 看不懂的 imu 动作: {act}"),
+                }
+            } else if let Some(v) = act.strip_prefix("touch=") {
+                if let Some((x, y)) = parse_touch(v) {
+                    m.touch(x, y, true);
+                }
+            } else if act == "release" {
+                m.touch(0, 0, false);
             } else if let Some(p) = act.strip_prefix("power=") {
                 // 网页快捷卡片的 USB ↔ 外接 5 V
                 if let Some(mode) = PowerMode::parse(p.trim()) {
