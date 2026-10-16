@@ -7,6 +7,8 @@ use tryboard_esp32c3::devices::{
     gc9a01::Gc9a01,
     ssd1306::Ssd1306,
 };
+use tryboard_esp32c3::iotrace::IoTrace;
+pub use tryboard_esp32c3::iotrace::IoEvent;
 use tryboard_esp32c3::rmt::Ws2812;
 use tryboard_esp32c3::Esp32c3;
 use tryboard_esp32s3::Esp32s3;
@@ -332,6 +334,33 @@ impl Machine {
             Machine::C3(m) => m.bus.gpio_log.iter().map(|(t, l)| (*t, *l as u64)).collect(),
             Machine::S3(m) => m.bus.gpio_log.clone(),
         }
+    }
+
+    fn iotrace(&mut self) -> &mut IoTrace {
+        match self {
+            Machine::C3(m) => &mut m.bus.iotrace,
+            Machine::S3(m) => &mut m.bus.iotrace,
+        }
+    }
+
+    /// 逻辑分析仪要观察的 GPIO（位 = 引脚号）。PWM / WS2812 / I2C 事件总是记
+    pub fn io_watch(&mut self, mask: u64) {
+        self.iotrace().watch = mask;
+    }
+
+    /// 事件缓冲上限（条）；0 = 不记
+    pub fn io_cap(&mut self, cap: usize) {
+        self.iotrace().cap = cap;
+    }
+
+    /// 取走事件缓冲里的全部事件（按记录先后）
+    pub fn io_take(&mut self) -> Vec<IoEvent> {
+        self.iotrace().take()
+    }
+
+    /// 缓冲满了丢掉的条数
+    pub fn io_dropped(&mut self) -> u64 {
+        self.iotrace().dropped
     }
 
     /// 上电时的引脚电平（gpio_log 的起点）

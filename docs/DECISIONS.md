@@ -280,3 +280,15 @@
 - 针脚实时值来自 worker 每个 tick 已有的电平 / 使能 / PWM 占空比与频率，没有新增采样；示波器按记录下来的占空比、频率合成方波（相位示意），普通 GPIO 画 tick 采样的电平，I2C 线只画示意，电源脚电压按标称写"估算"（电路求解是 P1-01）
 - 接线检查新写 W1–W5（`wirecheck.ts`）而不是直接调 `catalog/rules.ts`：采购规则吃的是元件库 id + 模版接线，实验台吃的是场景推出来的线（id 与 3D 一致）；W2 / W5 的来源、可信度沿用 R17 / R15。index.html 的元件编辑器只能改场景，造不出 5 V 接 GPIO / 没电阻 / 缺地，所以用 `?debug=1` 的 `__tbApp.injectWiring()` 造用例；改接 / 拔线不改 3D 画法（不动 board3d.ts），只标红 + 说明
 - 外壳公共接口变化：`Session` 加 `heat / setHeat / setPower / wireMods / setWireMods / restoreScene / onTick / onBoot / onRunEnd / bootCount / snapshot / mark / seek / continueRun`，`frame` 加 `pwmFreq / gpio / enable / gpioHi / enableHi`；`AppState` 加 `editRev / runNo / hist`；`StepCtx.hist`；`Card.place / onHide`；接线与零件信息从 bench.ts 挪到 `app/wiring.ts`；`saveBom` 导出。board3d.ts 未改
+
+## 2026-10-16 · 逻辑分析仪事件缓冲（P1-05）与 ⌘K 命令框（P1-06）
+- 决定：内核里加一个有上限的事件环形缓冲（`core/crates/esp32c3/src/iotrace.rs`，C3 / S3 的 SocBus 各一份，软件复位时搬到新总线）。每条 16 字节小端：`t u64（CPU 周期）| kind u8 | a u8 | b u16 | v u32`。kind：1 GPIO（a 引脚，b 电平）、2 PWM（a 引脚，b 占空比 × 65535，v 频率毫赫，0 = 不再输出）、3 WS2812 帧（a 引脚，b 灯珠数，v 第一颗 0xRRGGBB）、10 I2C 起始（b 位 2 = 重复起始，v = 一个 SCL 位的周期数）、11 地址（a 7 位地址，b 位 0 读 / 位 1 NACK）、12 数据字节（同上，位 0 = 方向）、13 停止；b 位 15 = I2C1
+- 上限：内核 65536 条（1 MB），满了丢最老的并计数（`tb_io_dropped`）；网页 worker 每批时间片（≤ 20 ms）取走一次，正常用不满。网页主线程仓库 40 万条，满了丢最老的一半、按剩下的重建通道（分析仪把丢掉的那段画灰）
+- 只有 GPIO 受"观察"掩码限制（`tb_io_watch` / `--trace-pins`）：固件逐位翻转的脚每秒可达百万次变化，全记会塞满缓冲；PWM、WS2812、I2C 变化本来就少，总是记。网页默认观察台面上接了东西的脚 + BOOT，掩码在上电前发给 worker，所以从第 0 个周期起就按它记
+- I2C 事件来自主机模型的事务层（执行命令表时），时刻 = 事务开始 + 已过的 SCL 位数 × 每位周期（与完成中断同一套算法），不逐 SCL 边沿；所以 I2C 事件会比记录它的那一刻"晚"（预先盖戳），对拍按记录先后比前 N 条。PWM 在 SocBus::update 里按"LEDC 修改计数 / GPIO 使能与矩阵改过"重新扫各引脚，没变不记
+- 所有字段都是整数（占空比 1/65535、频率毫赫），文本格式（`IoEvent::line` / `iotrace.ts eventLine`）两边逐字相同，没有浮点格式化差异。CLI `--trace-io` 强制 1 ms 一片（与网页 worker 相同），网页事件 = CLI 重放的前 N 条（traceio.mjs）
+- 性能（CLI，模拟 60 s 墙钟，三次）：weather 主干 0.90 s / 本分支只记不导出 0.88 s / 导出全部 0.91 s；fade（LEDC 硬件渐变，约 5000 条 PWM 事件 / 秒）0.07–0.12 s / 0.09 s / 0.17 s——只记不导出看不出差别，导出成文本约 0.3 µs / 条；网页 weather 实时倍速分析仪开 / 关都是 1.00×
+- 分析仪画法：canvas 2D，只画可视窗口（各通道二分查找起点）；I2C 的 SCL / SDA 按事务和位时序重建（位宽 ≥ 1.2 px 画位级波形 + 每字节泡泡 + 整句，缩小时事务画成活动块，挨得近的并成"n 个事务 · 0x76 ×1 · 0x3C ×2"）；PWM 一个周期 ≥ 3 px 画方波（相位从占空比生效时刻起算，示意），否则画包络 + 平均电平虚线 + "50 Hz · 1.675 ms"；占空比 0 / 100% 画直线。寄存器注释只做 BME280（0x76/0x77）和 SSD1306（0x3C/0x3D）
+- ⌘K：顶部输入框 + 下拉；全局 ⌘K / Ctrl+K 在焦点处于别的输入框（input / textarea / select / contenteditable）时不拦截。命令里改状态的走现有通道（`hist.op` + `session.setEnv / setPower / reboot`、`hist.seek`），所以时间线照常记步、回退照常可用。量 3V3 先选中 3V3 针并提示"万用表在 P1-04 中"。最近命令存 `localStorage['tryboard-cmdk-recent']`（6 条）
+- 公共接口：wasm 新增 `tb_io_watch / tb_io_take / tb_io_ptr / tb_io_dropped`；Machine 新增 `io_watch / io_cap / io_take / io_dropped`，导出 `IoEvent`；CLI 新增 `--trace-io` / `--trace-pins`；worker 新增 `ioWatch` 入、`io` 出消息；LiveSim 加 `onIo` / `watchIo`；Session 加 `io / onIo / ioPins / watchIo`；外壳去掉 ⌘K 占位（shell.ts），由 `cmdk.ts` 接；`__tbApp.analyzer`、`__tbApp.cmdk` 测试钩子
+- 替代：(a) worker 每个时间片采样引脚（现有 PinTrace 做法）——1 ms 分辨率看不到 I2C 字节和 PWM 边沿；(b) 逐 SCL 边沿模拟 I2C——要改 I2C 模型的执行方式，且对驱动没有可见差别；(c) 事件用 JSON 传——每条几十字节，400 kHz I2C 一秒上万条

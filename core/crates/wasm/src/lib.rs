@@ -12,6 +12,7 @@ thread_local! {
     static WS: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     static USB_JSON: RefCell<String> = const { RefCell::new(String::new()) };
     static REPORT: RefCell<String> = const { RefCell::new(String::new()) };
+    static IO: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
 
 fn with<R>(default: R, f: impl FnOnce(&mut Machine) -> R) -> R {
@@ -394,4 +395,39 @@ pub extern "C" fn tb_report() -> usize {
 #[no_mangle]
 pub extern "C" fn tb_report_ptr() -> *const u8 {
     REPORT.with(|b| b.borrow().as_ptr())
+}
+
+// ---------------------------------------------------------------- 逻辑分析仪事件（P1-05）
+
+/// 要观察的 GPIO（lo = GPIO0..31，hi = GPIO32..）。PWM / WS2812 / I2C 事件总是记。上电后设，重新上电要再设
+#[no_mangle]
+pub extern "C" fn tb_io_watch(lo: u32, hi: u32) {
+    with((), |m| m.io_watch(lo as u64 | (hi as u64) << 32))
+}
+
+/// 取走内核事件缓冲：每条 16 字节（t u64 | kind u8 | a u8 | b u16 | v u32，小端，含义见 tryboard_esp32c3::iotrace），
+/// 拷进内部缓冲，返回条数；之后用 tb_io_ptr 读 条数 × 16 字节
+#[no_mangle]
+pub extern "C" fn tb_io_take() -> usize {
+    let ev = with(Vec::new(), |m| m.io_take());
+    IO.with(|b| {
+        let mut b = b.borrow_mut();
+        b.clear();
+        b.reserve(ev.len() * 16);
+        for e in &ev {
+            b.extend_from_slice(&e.to_bytes());
+        }
+    });
+    ev.len()
+}
+
+#[no_mangle]
+pub extern "C" fn tb_io_ptr() -> *const u8 {
+    IO.with(|b| b.borrow().as_ptr())
+}
+
+/// 内核缓冲满了丢掉的条数（自上电起累计）
+#[no_mangle]
+pub extern "C" fn tb_io_dropped() -> f64 {
+    with(0.0, |m| m.io_dropped() as f64)
 }

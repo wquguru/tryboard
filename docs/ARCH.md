@@ -64,6 +64,8 @@ web/（Vite + TS）
 - 第 07 关这类"多个成品可选"的关用 `variants`，CLI 和网页都展开成 `07-spin` 这样的子关（`expand` / `expandLevels`）。
 - 实时运行（worker.ts）时间片固定 1ms（`tb_run(160000)`），外部输入只在时间片之间施加，并按施加那一刻的 CPU 周期记进输入日志（`inputlog.ts`）。CLI `--inputs` 同样全程 1ms 一片、在时间片开头施加 `t ≤ 当前模拟时间` 的输入，所以网页上的一串操作导出后能逐周期重放（S3 双核交替点也一致）。格式见 DECISIONS 2026-10-16「输入日志」。
 - 蜂鸣器（audio.ts）：worker 对 `watchPwm` 的引脚每片采样占空比与频率（`tb_pin_pwm_freq`），变化带模拟时刻放进 tick 的 `pwmEvents`；主线程把模拟时刻映射到 AudioContext 时间轴（领先 60ms，偏离超过 0.4s 重新对齐），方波振荡器 + 增益开关。测试读 `window.__tbAudio`。
+- 逻辑分析仪事件（P1-05，`crates/esp32c3/src/iotrace.rs`）：SocBus 里一个有上限的环形缓冲，按 CPU 周期盖戳记 GPIO（只记 watch 掩码里的脚，在 `gpio_changed` 里比较）、PWM（`update` 里 LEDC 修改计数或 GPIO 使能 / 矩阵变了才扫各脚 `pin_pwm`）、WS2812 帧（`route_rmt` 里解码器帧数变了）、I2C 事务（`I2c::run_commands` 按命令表产生 START / ADDR / DATA / STOP，时刻按 SCL 位推算，SocBus 写完寄存器后搬进缓冲）。CLI `--trace-io` 每片取走写文本；wasm `tb_io_take` 拷成 16 字节记录，worker 攒着随 tick 发 `io` 消息（上电 / 回退先发 reset），主线程 `app/iotrace.ts` 的 IoStore 按通道整理、解 I2C 事务，`app/analyzer.ts` 画。格式与上限见 DECISIONS「逻辑分析仪事件缓冲」
+- ⌘K（P1-06，`app/cmdk.ts` + 纯函数 `app/cmdmatch.ts`）：候选 = 命令（含按输入生成的"把室温设为 N ℃""回到第 n 次运行"）+ 零件 + 引脚（listPins）+ 检查点 + 运行；执行走 store / session / 时间线现有接口
 - 关卡验收：`firmware/levels.json` 是唯一来源，判定规则在 `tools/check.py` 和 `web/src/checks.ts` 各写一份、逐条对应。浏览器里由 `verify-worker.ts` 按**模拟时间**跑（不看墙钟），时间片 / 脚本施加 / PWM 采样照搬 CLI `run` 的循环；观察记录用 wasm 的 `tb_report`（与 CLI `--gpio-log --ws2812-log` 同格式）。运行指纹 = FNV-1a(串口原始字节 + `\n#report\n` + 规范化观察记录)，`tools/webtest/levels.mjs` 逐关核对网页与命令行指纹相同。
 
 ## Xtensa LX7 核（ESP32-S3，`core/crates/xtensa`）

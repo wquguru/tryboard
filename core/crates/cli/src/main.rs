@@ -10,6 +10,7 @@ fn usage() -> ! {
         "用法:
   tryboard run <flash.bin>（芯片按镜像头自动识别：ESP32-C3 / ESP32-S3）[--rom <rom.elf>] [--seconds <模拟秒数>] [--expect <文本>] [--uart-in <文本>]
                [--script \"0.5:gpio9=0; 0.6:gpio9=z; 1.0:uart=ping\\n; 1.2:env=35,45,101325\"] [--inputs <网页导出的输入日志.txt>] [--trace N] [--gpio-log] [--pwm-log PIN] [--ws2812-log]
+               [--trace-io <事件.txt>] [--trace-pins all|4,8,…]（逻辑分析仪事件：GPIO / PWM / WS2812 / I2C 事务，按周期盖戳）
                [--i2c ssd1306@0x3c,bme280@0x76] [--env 温度,湿度,气压Pa] [--oled]
                [--spi gc9a01]（S3：SCLK=12 MOSI=11 CS=10 DC=14 RST=13 背光=15）[--lcd-ppm <最后一帧.ppm>]
   tryboard riscv-test <test.elf>..."
@@ -156,6 +157,21 @@ fn run(args: &[String]) {
     if let Machine::C3(c) = &mut m {
         c.bus.watch = watch;
     }
+    // 逻辑分析仪事件：每个时间片取走一次写进文件（格式与网页 iotrace.ts 的 eventLine 逐字相同）
+    let trace_io = opt(args, "--trace-io").map(|p| {
+        let f = std::fs::File::create(&p).unwrap_or_else(|e| panic!("写 {p}: {e}"));
+        std::io::BufWriter::new(f)
+    });
+    let mut trace_io = trace_io;
+    let mut io_count = 0u64;
+    if let Some(w) = trace_io.as_mut() {
+        let mask = match opt(args, "--trace-pins").as_deref() {
+            None | Some("all") => u64::MAX,
+            Some(list) => list.split(',').filter_map(|x| x.trim().trim_start_matches("GPIO").parse::<u32>().ok()).filter(|p| *p < 64).fold(0u64, |a, p| a | 1 << p),
+        };
+        m.io_watch(mask);
+        writeln!(w, "# tryboard trace-io v1 · {} · 观察 GPIO 掩码 0x{mask:x}", chip.name()).ok();
+    }
     let trace: usize = opt(args, "--trace").and_then(|s| s.parse().ok()).unwrap_or(0);
     let mut ring = std::collections::VecDeque::new();
     let app_elf = std::path::Path::new(path).with_file_name("app.elf").to_string_lossy().into_owned();
@@ -202,7 +218,8 @@ fn run(args: &[String]) {
             }
         }
         // 有 --inputs 时始终 1ms 一片：与网页实时运行（worker.ts）的时间片完全相同，S3 双核的交替点才一致，重放逐周期复现
-        let slice = if si >= script.len() && pwm_pin.is_none() && inputs.is_none() { CPU_HZ / 100 } else { CPU_HZ / 1000 };
+        // --trace-io 也是 1ms 一片：网页 worker 就这样切，事件序列才能与网页逐条对拍
+        let slice = if si >= script.len() && pwm_pin.is_none() && inputs.is_none() && trace_io.is_none() { CPU_HZ / 100 } else { CPU_HZ / 1000 };
         let before = m.cycles();
         stop = if trace > 0 {
             m.run_traced(slice.min(total - done), &mut ring, trace)
@@ -210,6 +227,12 @@ fn run(args: &[String]) {
             m.run(slice.min(total - done))
         };
         done += m.cycles() - before;
+        if let Some(w) = trace_io.as_mut() {
+            for e in m.io_take() {
+                writeln!(w, "{}", e.line()).ok();
+                io_count += 1;
+            }
+        }
         let c = m.console_take();
         if !c.is_empty() {
             let mut lock = stdout.lock();
@@ -235,6 +258,10 @@ fn run(args: &[String]) {
                 break;
             }
         }
+    }
+    if let Some(mut w) = trace_io.take() {
+        w.flush().ok();
+        eprintln!("[tryboard] 逻辑分析仪事件 {io_count} 条（缓冲溢出丢弃 {}）", m.io_dropped());
     }
     let wall = t0.elapsed().as_secs_f64();
     let sim = m.cycles() as f64 / CPU_HZ as f64;

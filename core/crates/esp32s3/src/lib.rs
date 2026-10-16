@@ -16,6 +16,7 @@ use tryboard_esp32c3::devices::gc9a01::Gc9a01;
 use tryboard_esp32c3::gdma::{DmaMem, Gdma, GdmaLayout};
 use tryboard_esp32c3::gpspi::GpSpi;
 use tryboard_esp32c3::i2c::I2c;
+use tryboard_esp32c3::iotrace::IoTrace;
 use tryboard_esp32c3::ledc::Ledc;
 use tryboard_esp32c3::rmt::{Rmt, RmtLayout, Ws2812};
 use tryboard_esp32c3::periph::{Systimer, Timg, Uart};
@@ -139,6 +140,8 @@ pub struct SocBus {
     pub next_event: u64,
     pub gpio_log: Vec<(u64, u64)>,
     last_gpio: u64,
+    /// 逻辑分析仪事件（P1-05，模型与格式见 tryboard_esp32c3::iotrace）
+    pub iotrace: IoTrace,
     /// 固件请求复位（RTC_CNTL_OPTIONS0 的 SW_SYS_RST / SW_PROCPU_RST），值为下次上电的复位原因
     pub reset_request: Option<u32>,
     /// 固件单独复位了核 1（SW_APPCPU_RST）：esp_restart 先复位并停住另一个核
@@ -179,7 +182,7 @@ impl Default for SocBus {
             rmt: Rmt::new(RmtLayout::S3),
             ws2812: HashMap::new(),
             i2c0: I2c::default(),
-            i2c1: I2c::default(),
+            i2c1: I2c::with_port(tryboard_esp32c3::iotrace::i2cbit::PORT1),
             spi2: GpSpi::default(),
             gdma: Gdma::new(GdmaLayout::S3),
             lcd: None,
@@ -194,6 +197,7 @@ impl Default for SocBus {
             next_event: 0,
             gpio_log: Vec::new(),
             last_gpio: 1,
+            iotrace: IoTrace::new(1),
             reset_request: None,
             appcpu_reset: false,
             reset_reason: 1,
@@ -378,6 +382,10 @@ impl SocBus {
             }
             0x6000_4000 => {
                 self.gpio.write(off, v);
+                // 使能（0x20..0x38，含 GPIO32 以上）和输出信号选择（FUNC_OUT_SEL 0x554 起）决定哪个引脚上有 PWM
+                if (0x20..0x38).contains(&off) || off >= 0x554 {
+                    self.iotrace.pwm_dirty = true;
+                }
                 self.gpio_changed(now);
                 return;
             }
@@ -390,8 +398,14 @@ impl SocBus {
             }
             0x6001_9000 => return self.ledc.write(off, v, now),
             0x6001_6000 => return self.rmt.write(off, v, now),
-            0x6001_3000 => return self.i2c0.write(off, v, now),
-            0x6002_7000 => return self.i2c1.write(off, v, now),
+            0x6001_3000 | 0x6002_7000 => {
+                let bus = if base == 0x6001_3000 { &mut self.i2c0 } else { &mut self.i2c1 };
+                bus.write(off, v, now);
+                if !bus.events.is_empty() {
+                    self.iotrace.extend(&mut bus.events);
+                }
+                return;
+            }
             0x6002_4000 => {
                 if self.spi2.write(off, v) {
                     self.spi2_transfer(now);
@@ -452,6 +466,7 @@ impl SocBus {
         }
         if lv != self.last_gpio {
             self.last_gpio = lv;
+            self.iotrace.gpio(now, lv);
             self.gpio_log.push((now, lv));
             if self.gpio_log.len() > 1 << 16 {
                 self.gpio_log.drain(..1 << 15);
@@ -505,12 +520,16 @@ impl SocBus {
             }
             let ch = (sel - l.sig_out0) as u8;
             let dec = self.ws2812.entry(pin).or_default();
+            let frames = dec.frames;
             for &(t, c, lv) in &edges {
                 if c == ch {
                     dec.feed(t, lv);
                 }
             }
             next = next.min(dec.finalize(now));
+            if dec.frames != frames {
+                self.iotrace.ws2812(now, pin, &dec.rgb);
+            }
             self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
         }
         edges.clear();
@@ -577,6 +596,19 @@ impl SocBus {
         self.spi2.begin(now, &p, out_ch);
     }
 
+    /// LEDC 或 GPIO 矩阵改过：把各引脚此刻的 PWM 交给事件记录（没变的引脚不记）
+    fn trace_pwm(&mut self, now: u64) {
+        if !self.iotrace.pwm_scan_needed(self.ledc.rev) {
+            return;
+        }
+        self.iotrace.pwm_dirty = false;
+        self.iotrace.ledc_rev = self.ledc.rev;
+        for pin in 0..NPINS {
+            let p = self.pin_pwm(pin);
+            self.iotrace.pwm(now, pin, p);
+        }
+    }
+
     /// 引脚上的 PWM：经 GPIO 矩阵路由到该引脚的 LEDC 通道输出（占空比, 频率）。
     /// S3 的 LEDC 输出信号是 73..=80（LEDC_LS_SIG_OUT0..7_IDX）
     pub fn pin_pwm(&self, pin: usize) -> Option<(f32, f32)> {
@@ -601,6 +633,7 @@ impl SocBus {
         let n6 = self.route_rmt(now);
         let n7 = self.i2c0.update(now).min(self.i2c1.update(now));
         let (n9, spi_done) = self.spi2.update(now);
+        self.trace_pwm(now);
         if spi_done {
             if let Some(ch) = self.spi2.dma_out_ch.take() {
                 self.gdma.out_done(ch);
