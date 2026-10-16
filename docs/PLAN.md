@@ -69,7 +69,7 @@
 | P2-05 | RMT 接收 | 固件验收 | ☐ |
 | P2-06 | I2S + GDMA 接收：MAX98357A 放音、INMP441（验收用固定 WAV，网页可接麦克风） | 固件验收；Web Audio 采样比对 | ☐ |
 | P2-07 | LVGL：先测速度，够则支持动画 | 基准报告 | ☐ |
-| P2-08 | S3 Wi-Fi（复用 C3 MAC 模型） | wifi-http S3 版 | ☐ |
+| P2-08 | S3 Wi-Fi（复用 C3 MAC 模型） | wifi-http S3 版 | ☑ 2026-10-16：MAC 模型移到 tryboard-soc 共用；s3-wifi-init / scan / connect / http / wpa2 验收通过，网页 s3-wifi-http（Reviews/ab/P2-08.md） |
 | P2-09 | 新作品：旋钮台灯、超声波尺子、体感小人、USB 小键盘（各含检查点、参考固件、采购模版、成品） | 参考固件全过 | ☐ |
 | P2-10 | 拍照（path tracer 静帧）/ 录 10 秒 | 生成文件 | ☐ |
 | P2-11 | 线长影响 I2C、天线遮挡（标"必须上真机"） | 用例 | ☐ |

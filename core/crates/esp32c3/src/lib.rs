@@ -6,16 +6,17 @@ pub mod devices;
 pub mod gdma;
 pub mod gpspi;
 pub mod hle;
-pub mod ledc;
 pub mod i2c;
 pub mod iotrace;
+pub mod ledc;
 pub mod periph;
 pub mod rmt;
 pub mod spiflash;
-pub mod wifi;
+/// Wi-Fi 模型在 tryboard-soc（C3 / S3 共用），这里按 C3 布局接上
+pub use tryboard_soc::wifi;
 
 use devices::gc9a01::Gc9a01;
-use gdma::{DmaMem, Gdma, GdmaLayout};
+use gdma::{Gdma, GdmaLayout};
 use periph::*;
 use std::collections::HashMap;
 use tryboard_rv32::{Bus, BusFault, Cpu, Exit};
@@ -107,7 +108,8 @@ pub struct SocBus {
     pub reset_request: Option<u32>,
     /// 本次上电的复位原因（RTC_CNTL_RESET_STATE 低 6 位）：1 上电、3 软件系统复位、12 软件 CPU 复位
     pub reset_reason: u32,
-    pub wifi: wifi::WifiMac,
+    /// Option 只为推进 / 发送时临时取出来，让 MAC 借总线读写描述符；平时恒为 Some
+    pub wifi: Option<Box<wifi::WifiMac>>,
     pub sha: crypto_hw::ShaHw,
     pub aes: crypto_hw::AesHw,
     /// GP-SPI2 主机 + GDMA（3 通道）。GDMA 也给 AES / SHA 的 DMA 模式用
@@ -164,7 +166,7 @@ impl Default for SocBus {
             irq_dirty: true,
             reset_request: None,
             reset_reason: 1,
-            wifi: Default::default(),
+            wifi: Some(Box::new(wifi::WifiMac::new(wifi::WifiLayout::C3))),
             sha: Default::default(),
             aes: Default::default(),
             spi2: Default::default(),
@@ -200,7 +202,9 @@ fn rd(buf: &[u8], off: usize, size: u32) -> Option<u32> {
 fn wr(buf: &mut [u8], off: usize, size: u32, v: u32) -> Option<()> {
     match size {
         4 => buf.get_mut(off..off + 4)?.copy_from_slice(&v.to_le_bytes()),
-        2 => buf.get_mut(off..off + 2)?.copy_from_slice(&(v as u16).to_le_bytes()),
+        2 => buf
+            .get_mut(off..off + 2)?
+            .copy_from_slice(&(v as u16).to_le_bytes()),
         _ => *buf.get_mut(off)? = v as u8,
     }
     Some(())
@@ -294,7 +298,9 @@ impl SocBus {
             crypto_hw::SHA_BASE => return self.sha_read(off),
             crypto_hw::AES_BASE => return self.aes_read(off),
             0x6004_0000 => return self.adc.read(off),
-            0x6000_9000 if (4..=0x58).contains(&off) => return self.gpio.iomux[((off - 4) / 4) as usize],
+            0x6000_9000 if (4..=0x58).contains(&off) => {
+                return self.gpio.iomux[((off - 4) / 4) as usize]
+            }
             0x6001_3000 => return self.i2c0.read(off),
             0x6002_4000 => return self.spi2.read(off),
             0x6003_F000 => return self.gdma.read(off),
@@ -327,8 +333,8 @@ impl SocBus {
             },
             _ => {}
         }
-        if (0x6003_3000..0x6003_6000).contains(&a) {
-            if let Some(v) = self.wifi_read(a) {
+        if wifi::MAC_RANGE.contains(&a) {
+            if let Some(v) = self.wifi_mut().read(a, now) {
                 return v;
             }
         }
@@ -338,7 +344,10 @@ impl SocBus {
         if let Some(v) = boot::special_read(a, now) {
             return v;
         }
-        if let Some(v) = wifi::rf_read(a, self.regs.get(&a).copied().unwrap_or(0)) {
+        if let Some(v) = self
+            .wifi()
+            .rf_read(a, self.regs.get(&a).copied().unwrap_or(0))
+        {
             return v;
         }
         *self.unimpl.entry(a).or_insert(0) += 1;
@@ -437,8 +446,16 @@ impl SocBus {
             }
             _ => {}
         }
-        if (0x6003_3000..0x6003_6000).contains(&a) && self.wifi_write(a, v) {
-            return;
+        let mut v = v;
+        if wifi::MAC_RANGE.contains(&a) {
+            let mut w = self.wifi.take().expect("wifi");
+            let keep = w.write(a, v, now, self);
+            self.wifi = Some(w);
+            // None = MAC 模型已完全处理；否则照通用寄存器存（仍计入 unimpl，便于看驱动还碰了哪些位）
+            match keep {
+                Some(x) => v = x,
+                None => return,
+            }
         }
         if !boot::special_write(a, v) {
             *self.unimpl.entry(a).or_insert(0) += 1;
@@ -499,7 +516,7 @@ impl SocBus {
                 l |= 1 << s;
             }
         };
-        set(src::WIFI_MAC, self.wifi.irq());
+        set(src::WIFI_MAC, self.wifi().irq());
         set(src::UART0, self.uart0.irq());
         set(src::UART1, self.uart1.irq());
         set(src::GPIO, self.gpio.irq());
@@ -508,7 +525,10 @@ impl SocBus {
         set(src::I2C_EXT0, self.i2c0.irq());
         set(src::SPI2, self.spi2.irq());
         for ch in 0..self.gdma.layout.nch as u32 {
-            set(src::DMA_CH0 + ch, self.gdma.in_irq(ch as usize) || self.gdma.out_irq(ch as usize));
+            set(
+                src::DMA_CH0 + ch,
+                self.gdma.in_irq(ch as usize) || self.gdma.out_irq(ch as usize),
+            );
         }
         set(src::SYSTIMER_TARGET0, self.systimer.irq(0));
         set(src::SYSTIMER_TARGET0 + 1, self.systimer.irq(1));
@@ -566,7 +586,12 @@ impl SocBus {
         let n5 = self.rmt.update(now);
         let n6 = self.route_rmt(now);
         let n7 = self.i2c0.update(now);
-        let n8 = self.wifi_update(now);
+        let n8 = {
+            let mut w = self.wifi.take().expect("wifi");
+            let n = w.update(now, self);
+            self.wifi = Some(w);
+            n
+        };
         self.trace_pwm(now);
         let (n9, spi_done) = self.spi2.update(now);
         if spi_done {
@@ -574,7 +599,15 @@ impl SocBus {
                 self.gdma.out_done(ch);
             }
         }
-        self.next_event = n1.min(n2).min(n3).min(n4).min(n5).min(n6).min(n7).min(n8).min(n9);
+        self.next_event = n1
+            .min(n2)
+            .min(n3)
+            .min(n4)
+            .min(n5)
+            .min(n6)
+            .min(n7)
+            .min(n8)
+            .min(n9);
         let lv = self.levels();
         let pending = self.intc.pending(lv);
         cpu.irq_line = self.intc.select(pending);
@@ -651,12 +684,43 @@ impl SocBus {
     }
 }
 
-impl DmaMem for SocBus {
+impl SocBus {
+    pub fn sha_read(&self, off: u32) -> u32 {
+        self.sha.read(off)
+    }
+    pub fn aes_read(&self, off: u32) -> u32 {
+        self.aes.read(off)
+    }
+    /// SHA / AES 寄存器写：先取链头，再把加速器临时取出、借总线给 DMA
+    pub fn sha_write(&mut self, off: u32, v: u32) {
+        let link = crypto_hw::sha_link(&self.gdma);
+        let mut s = std::mem::take(&mut self.sha);
+        s.write(off, v, link, self);
+        self.sha = s;
+    }
+    pub fn aes_write(&mut self, off: u32, v: u32) {
+        let links = crypto_hw::aes_links(&self.gdma);
+        let mut a = std::mem::take(&mut self.aes);
+        a.write(off, v, links, self);
+        self.aes = a;
+    }
+    pub fn wifi(&self) -> &wifi::WifiMac {
+        self.wifi.as_deref().expect("wifi")
+    }
+    pub fn wifi_mut(&mut self) -> &mut wifi::WifiMac {
+        self.wifi.as_deref_mut().expect("wifi")
+    }
+}
+
+impl tryboard_soc::Mem for SocBus {
     fn rd8(&mut self, a: u32) -> u8 {
         self.mem_read(a, 1).unwrap_or(0) as u8
     }
     fn rd32(&mut self, a: u32) -> u32 {
         self.mem_read(a, 4).unwrap_or(0)
+    }
+    fn wr8(&mut self, a: u32, v: u8) {
+        self.mem_write(a, 1, v as u32);
     }
     fn wr32(&mut self, a: u32, v: u32) {
         self.mem_write(a, 4, v);
@@ -672,7 +736,11 @@ impl Bus for SocBus {
             return Ok((e.1, e.2));
         }
         let lo = self.mem_read(addr, 2).ok_or(BusFault)?;
-        let raw = if lo & 3 != 3 { lo } else { lo | (self.mem_read(addr + 2, 2).ok_or(BusFault)? << 16) };
+        let raw = if lo & 3 != 3 {
+            lo
+        } else {
+            lo | (self.mem_read(addr + 2, 2).ok_or(BusFault)? << 16)
+        };
         let (insn, len) = tryboard_rv32::decode_raw(raw);
         self.icache[idx] = (addr, insn, len);
         Ok((insn, len))

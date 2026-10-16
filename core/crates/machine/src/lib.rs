@@ -152,12 +152,18 @@ impl Machine {
         Activity { busy, wifi_on: w.0 + w.1 > 0, tx, servo_pw_us }
     }
 
-    /// Wi-Fi 收发帧计数（发, 收）；只有 C3 有 Wi-Fi 模型
-    fn wifi_frames(&self) -> (u64, u64) {
+    /// Wi-Fi MAC 模型（两颗芯片共用 tryboard-soc 的实现）：空中日志、收发计数
+    pub fn wifi(&self) -> &tryboard_esp32c3::wifi::WifiMac {
         match &self.hw {
-            Hw::C3(m) => (m.bus.wifi.tx_frames, m.bus.wifi.rx_frames),
-            Hw::S3(_) => (0, 0),
+            Hw::C3(m) => m.bus.wifi(),
+            Hw::S3(m) => m.bus.wifi(),
         }
+    }
+
+    /// Wi-Fi 收发帧计数（发, 收）
+    fn wifi_frames(&self) -> (u64, u64) {
+        let w = self.wifi();
+        (w.tx_frames, w.rx_frames)
     }
 
     /// 欠压复位按住期间：芯片不执行，时间照走（外设时间随 CPU 周期一起推进）

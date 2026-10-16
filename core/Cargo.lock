@@ -33,6 +33,7 @@ version = "0.1.0"
 dependencies = [
  "tryboard-esp32c3",
  "tryboard-rv32",
+ "tryboard-soc",
  "tryboard-xtensa",
 ]
 
@@ -54,9 +55,6 @@ version = "0.1.0"
 [[package]]
 name = "tryboard-soc"
 version = "0.1.0"
-dependencies = [
- "tryboard-rv32",
-]
 
 [[package]]
 name = "tryboard-wasm"

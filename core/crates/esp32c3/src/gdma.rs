@@ -8,12 +8,8 @@
 //! 传输结束时调 `out_done` 置 OUT_DONE / OUT_EOF / OUT_TOTAL_EOF。
 //! 描述符（dma_descriptor_t）：字 0 = size[11:0] | length[23:12] | suc_eof[30] | owner[31]，字 1 = 缓冲区，字 2 = 下一个。
 
-/// 外设访问内存的接口（SoC 实现）
-pub trait DmaMem {
-    fn rd8(&mut self, a: u32) -> u8;
-    fn rd32(&mut self, a: u32) -> u32;
-    fn wr32(&mut self, a: u32, v: u32);
-}
+/// 外设访问内存的接口（SoC 实现）；与 Wi-Fi MAC 共用 tryboard-soc 的定义
+pub use tryboard_soc::Mem as DmaMem;
 
 /// 寄存器排布（按芯片参数化）
 #[derive(Clone, Copy, Debug)]
@@ -142,7 +138,10 @@ impl Gdma {
             set(base + layout.out_off, layout.rst_out_conf0);
             set(base + 0x04, layout.rst_in_conf1);
             set(base + layout.fifo_status, layout.rst_infifo);
-            set(base + layout.out_off + layout.fifo_status, layout.rst_outfifo);
+            set(
+                base + layout.out_off + layout.fifo_status,
+                layout.rst_outfifo,
+            );
             // PERI_SEL 复位为 63（未接）
             set(base + layout.peri_sel, 0x3f);
             set(base + layout.out_off + layout.peri_sel, 0x3f);
@@ -344,12 +343,11 @@ impl Gdma {
     /// 沿发送通道 ch 的描述符链取出数据（最多 max 字节）。遇 suc_eof 或空指针结束；
     /// OUT_CONF0.out_auto_wrback 置位时把描述符的 owner 交还 CPU。
     pub fn take_out(&mut self, ch: usize, max: usize, mem: &mut dyn DmaMem) -> Vec<u8> {
-        let auto_wb = self.regs[((self.layout.ch_base
-            + ch as u32 * self.layout.stride
-            + self.layout.out_off)
-            / 4) as usize]
-            & (1 << 2)
-            != 0;
+        let auto_wb =
+            self.regs[((self.layout.ch_base + ch as u32 * self.layout.stride + self.layout.out_off)
+                / 4) as usize]
+                & (1 << 2)
+                != 0;
         let d = &mut self.out[ch];
         let mut data = Vec::with_capacity(max.min(1 << 16));
         let mut desc = d.link;
@@ -445,6 +443,9 @@ mod tests {
         fn rd32(&mut self, a: u32) -> u32 {
             let o = (a - BASE) as usize;
             u32::from_le_bytes(self.0[o..o + 4].try_into().unwrap())
+        }
+        fn wr8(&mut self, a: u32, v: u8) {
+            self.0[(a - BASE) as usize] = v;
         }
         fn wr32(&mut self, a: u32, v: u32) {
             let o = (a - BASE) as usize;

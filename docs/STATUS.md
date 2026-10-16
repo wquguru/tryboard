@@ -29,7 +29,7 @@
 | 虚拟器件 SSD1306 | ✅ | 帧缓冲点亮 1636 像素、网页截图可读 | 命令解析：寻址模式 / 窗口 / 页模式、电荷泵、开关、对比度、反色、重映射；滚动不做 |
 | 虚拟器件 BME280 | ✅ | 设定 -7.25°C / 88.5% / 950.12hPa，固件按数据手册公式读回误差 0；网页滑块改温度后读数跟随 | 原始 ADC 由补偿公式二分反解；强制 / 正常模式测量时序；无噪声、无 IIR 滤波 |
 | LEDC / RMT / SPI2 / ADC / I2S | ☐ | — | M2 |
-| Wi-Fi STA（开放网络） | ✅ | wifi-init / wifi-scan / wifi-connect / wifi-http：扫描 4 个 AP、关联、DHCP、DNS / mDNS、HTTP GET | MAC 寄存器 + DMA 描述符层；只有 STA，没有 SoftAP / 省电 / 802.11n 聚合 |
+| Wi-Fi STA（开放网络） | ✅ | wifi-init / wifi-scan / wifi-connect / wifi-http：扫描 4 个 AP、关联、DHCP、DNS / mDNS、HTTP GET | MAC 寄存器 + DMA 描述符层（模型在 tryboard-soc，与 S3 共用）；只有 STA，没有 SoftAP / 省电 / 802.11n 聚合 |
 | Wi-Fi WPA2-PSK | ✅ | wifi-wpa2：四次握手完成、拿到 IP、两次 HTTP GET 成功（数据帧全程 CCMP，DHCP 广播走 GTK）；wifi-wpa2-bad：错口令时 AP 判 MIC 失败、IDF 自己报 `reason=15`（4WAY_HANDSHAKE_TIMEOUT），重连时 AP 已被 IDF 拉黑报 `reason=205`，不崩溃 | 只做 PSK + CCMP（不做 TKIP、WPA3-SAE、PMF/802.11w、GTK 轮换）；密钥表字 1 高位只解了"组密钥"位；未经真机标定 |
 | SHA / AES 加速器 | ✅ | 单元测试（FIPS 180 / FIPS 197 / SP 800-38A 向量经寄存器接口）；WPA2 握手（PBKDF2 4096 轮走块模式、HMAC 走 DMA 模式、Key Unwrap 走 AES DMA） | SHA-384/512、AES-GCM 硬件 GHASH、中断模式未做；链表头改从 GDMA 模型（`channel_for_peri` / `configured_link`）取；搬数据仍用本模块的 gather / scatter（驱动先配链表、后置 start，`take_out` 只认已启动的通道），GDMA 通道的完成中断不置 |
 | BLE | ☐ | — | M7 |
@@ -76,7 +76,9 @@
 | 虚拟器件 GC9A01 圆屏 | ✅ | lens：四种表情逐一截图核对（眼睛 / 高光 / 腮红 / 心形 / ^ ^ / 困了），开心表情非黑 3208 像素；spin：小黄脸非黑 45244 像素 | 按"常黑 IPS + BGR 子像素"建模（未经真机标定）；厂商初始化命令 42 条只计数；TE、滚动、部分显示、读显存未做 |
 | 装配成品 lens（透镜小人） | ✅ | 启动 MOOD 0 normal、每 3 秒眨眼（BLINK n）、BOOT 切 MOOD 1 happy → 2 love → 3 sleepy → 0 normal；检查点 lens-1（lens-blink）、lens-2（lens-mood）、07-lens 参考固件全过 | 场景层验收 |
 | 装配成品 spin（会转身的小黄） | ✅ | GPIO4 50Hz 占空比 0.042..0.108（脉宽 0.833–2.167ms）、SPIN ±60 交替、眼珠随转向重画（EYE R / EYE L）、BOOT 后 LOOK FRONT（1.5ms）且眼珠回正（青色重心 119.7）；检查点 spin-1（spin-face）、spin-2（spin-turn）、07-spin 参考固件全过 | 舵机机械响应不建模 |
-| USB OTG / Wi-Fi / BLE | ☐ | — | USB OTG 在另一分支开发 |
+| Wi-Fi STA（开放 / WPA2-PSK） | ✅ | s3-wifi-init / scan / connect / http / wpa2（与 C3 版同源码、同判定，双核）：扫描 4 个 AP、关联、DHCP 192.168.4.100、mDNS / DNS、两次 HTTP GET；WPA2 四次握手（SHA / AES 加速器）+ CCMP 数据帧；网页 s3-wifi-http 跑通（webtest + agent-browser） | 与 C3 共用 MAC 模型（tryboard-soc，`WifiLayout::S3`）；S3 另需 WDEV_RND_REG（0x6003507C）与 TSENS READY；供电按 S3 发射 340 mA 计入。QEMU 的 esp32s3 没有 Wi-Fi，无法对照；未经真机标定；没做 wifi-wpa2-bad 的 S3 版 |
+| USB OTG | ✅ | 见上文「USB OTG（DWC2，设备模式）」行 | — |
+| BLE | ☐ | — | Wi-Fi 固件启动期碰到的 BT 寄存器只有 0x60011000 段 2 个字（读回写入值） |
 
 ## 电气（`core/crates/elec`，C3 / S3 共用）
 | 模块 | 状态 | 验收 | 备注 |
