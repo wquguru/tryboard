@@ -61,6 +61,7 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | 网页冒烟测试 | `node tools/webtest/webtest.mjs <示例> <期望文本>`（截图到 `Reviews/web/`） |
 | 关卡验收 | `tools/check.py <flash.bin> --level 04`；`tools/check.py --ref --all` 跑全部参考固件（关卡定义在 `firmware/levels.json`） |
 | 关卡 / 装配 / 首页网页测试 | `node tools/webtest/levels.mjs`（含拖拽装配、网页与命令行指纹对拍） |
+| 输入日志重放对拍 | `node tools/webtest/replay.mjs`（网页按 BOOT、调温度 → 导出输入 → `tryboard run --inputs` 重放，串口逐字节、指纹相同） |
 | 浏览器验收（新功能必做） | `agent-browser skills get core` 先读用法；`cd web && npx vite preview --port 5180` 起服务后 `agent-browser open <url>` → `snapshot` / `click` / `screenshot Reviews/ab/<项>.png` → `console` / `errors`；用 Read 看截图。并行子代理各用自己的端口和 `--session <名字>`，不要抢同一个浏览器 |
 
 ## 6. 工作方式

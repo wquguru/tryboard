@@ -62,6 +62,8 @@ web/（Vite + TS）
 - SVG 视图补充：`templates.ts` 是装配模板（零件、装法、检查、影响、成品工厂），`assembly.ts` 只是通用引擎；`lcdproducts.ts` 是圆屏成品（spin / lens），画面来自 worker 的 `lcd` 消息（GC9A01 240×240 RGBA，变化才发、≤ 30 帧/秒）。3D 实验台里圆屏是一块圆形贴图（board3d.ts `roundLcdModule`）。
 - PWM 观察：CLI 与网页在汇总行之后都输出 `[tryboard] PWM GPIOn 变化 占空比@时刻 …`（三位小数相同的相邻记录合并），关卡用它判"脉宽依次出现的台阶"（`pwm.steps`）和"稳定以后的值"（`pwm.from` 秒）。
 - 第 07 关这类"多个成品可选"的关用 `variants`，CLI 和网页都展开成 `07-spin` 这样的子关（`expand` / `expandLevels`）。
+- 实时运行（worker.ts）时间片固定 1ms（`tb_run(160000)`），外部输入只在时间片之间施加，并按施加那一刻的 CPU 周期记进输入日志（`inputlog.ts`）。CLI `--inputs` 同样全程 1ms 一片、在时间片开头施加 `t ≤ 当前模拟时间` 的输入，所以网页上的一串操作导出后能逐周期重放（S3 双核交替点也一致）。格式见 DECISIONS 2026-10-16「输入日志」。
+- 蜂鸣器（audio.ts）：worker 对 `watchPwm` 的引脚每片采样占空比与频率（`tb_pin_pwm_freq`），变化带模拟时刻放进 tick 的 `pwmEvents`；主线程把模拟时刻映射到 AudioContext 时间轴（领先 60ms，偏离超过 0.4s 重新对齐），方波振荡器 + 增益开关。测试读 `window.__tbAudio`。
 - 关卡验收：`firmware/levels.json` 是唯一来源，判定规则在 `tools/check.py` 和 `web/src/checks.ts` 各写一份、逐条对应。浏览器里由 `verify-worker.ts` 按**模拟时间**跑（不看墙钟），时间片 / 脚本施加 / PWM 采样照搬 CLI `run` 的循环；观察记录用 wasm 的 `tb_report`（与 CLI `--gpio-log --ws2812-log` 同格式）。运行指纹 = FNV-1a(串口原始字节 + `\n#report\n` + 规范化观察记录)，`tools/webtest/levels.mjs` 逐关核对网页与命令行指纹相同。
 
 ## Xtensa LX7 核（ESP32-S3，`core/crates/xtensa`）

@@ -50,6 +50,8 @@ export function describe(p: PartSpec): string {
       return `舵机 · 信号 IO${p.pin}`;
     case 'pot':
       return `电位器 · 滑片 IO${p.pin}`;
+    case 'buzzer':
+      return `无源蜂鸣器 · IO${p.pin}`;
     case 'oled':
       return `OLED · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl}`;
     case 'bme280':

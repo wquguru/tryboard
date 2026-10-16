@@ -34,6 +34,8 @@ function partInfo(p: PartSpec): PartInfo {
       return { name: '电位器', model: '10 kΩ 旋钮电位器', iface: `滑片 GPIO${p.pin}（ADC）`, power: '3V3' };
     case 'led':
       return { name: `LED（GPIO${p.pin}）`, model: '5 mm LED + 220 Ω 限流电阻', iface: `GPIO${p.pin}，高电平亮`, power: '经 GPIO' };
+    case 'buzzer':
+      return { name: '无源蜂鸣器', model: '无源蜂鸣器（LEDC 方波驱动）', iface: `GPIO${p.pin}`, power: '经 GPIO' };
   }
 }
 

@@ -69,7 +69,7 @@
 | SAR ADC 单次（SENS） | ✅ | s3-pot：0 / 1550 / 3000mV 读数正确 | S3 单次采样走 RTC 的 SENS（0x60008800），不是 APB_SARADC；衰减档量程近似 950 / 1250 / 1750 / 3100mV；ADC2 仲裁标志、连续模式未做 |
 | UART / SYSTIMER / TIMG / SPI1 flash | ✅ | 控制台、FreeRTOS 节拍、RTC 校准、flash 识别 GD 16MB | 复用 C3 模型；TIMG 的 T1 未建模 |
 | EXTMEM / eFuse / 模拟前端 | 🟡 | 启动期轮询通过；芯片版本 v0.2、PSRAM_CAP=8MB | cache 操作瞬间完成；eFuse 只读；regi2c HLE |
-| 装配成品 weather（桌面气象站） | ✅ | 同一 I2C 挂 SSD1306 + BME280（23.5°C / 45% / 1013.25hPa 读回误差 0）、舵机 GPIO4 1675us、WS2812 GPIO48 绿 #002000、BOOT 切 ℉ 后屏幕重画（点亮 1328 像素） | 场景层验收；35°C 时 LED=red、PWM=2250us 已手动跑过，未入 accept.json（用例 id 即固件目录，不支持同固件多用例） |
+| 装配成品 weather（桌面气象站） | ✅ | 同一 I2C 挂 SSD1306 + BME280（23.5°C / 45% / 1013.25hPa 读回误差 0）、舵机 GPIO4 1675us、WS2812 GPIO48 绿 #002000、BOOT 切 ℉ 后屏幕重画（点亮 1328 像素） | 场景层验收；35°C 时 LED=red、PWM=2250us、GPIO5 蜂鸣器 2700Hz 报警：accept 用例 weather-alarm（同固件第二个用例，`fw` 字段） |
 | GP-SPI2 主机 | ✅ | lens / spin：esp_lcd + esp_lcd_gc9a01 标准写法（spi_bus_initialize SPI_DMA_CH_AUTO、轮询发命令、队列发像素），40MHz，整帧 115200 字节拆 6 次 DMA | 命令 / 地址 / 哑周期 / MOSI 各阶段、W0..W15 与 DMA 两条数据通路、TRANS_DONE 中断、按 SPI 时钟计时；不模拟逐位时序与 FIFO；MISO 恒读全 1；双 / 四 / 八线模式按单线计时；从机模式未做 |
 | GDMA（5 通道） | 🟡 | 同上：描述符链（每次传输 5 个描述符）、owner 回写、OUT_EOF | 单元测试覆盖链表遍历 / 回写 / 中断；RX 方向只有"填描述符 + SUC_EOF"，未经固件验收；不模拟突发、FIFO、优先级、内存到内存 |
 | 虚拟器件 GC9A01 圆屏 | ✅ | lens：四种表情逐一截图核对（眼睛 / 高光 / 腮红 / 心形 / ^ ^ / 困了），开心表情非黑 3208 像素；spin：小黄脸非黑 45244 像素 | 按"常黑 IPS + BGR 子像素"建模（未经真机标定）；厂商初始化命令 42 条只计数；TE、滚动、部分显示、读显存未做 |
@@ -91,6 +91,8 @@
 | OLED 实时画面 | ✅ 帧缓冲变了才传，128×64 最近邻纹理 |
 | 环境滑块 | ✅ 温度 / 湿度 / 气压 → `tb_env_set`，webtest 验证读数跟随 |
 | 串口输入 | 🟡 已接线，缺验收固件 |
+| 蜂鸣器出声（P0-14） | ✅ weather GPIO5 无源蜂鸣器：worker 每 1ms 采样 `tb_pin_pwm` / `tb_pin_pwm_freq`，按模拟时刻排进 Web Audio（方波，默认静音，点「声音」开）；agent-browser：35℃ 时 lastFreq 2700.1 Hz、分析节点 2695 Hz，降到 25℃ 停。3D 里还没画蜂鸣器（P0-17）；只出一个声道（多个蜂鸣器取第一个在响的） |
+| 输入日志 / 重放（P0-19） | ✅ worker 按模拟时间记下按键 / 环境 / 电位器 / 串口输入，「导出输入」给出 `tryboard run --inputs` 文本；replay.mjs：鼠标按 3D BOOT + 温度 35 → 网页串口与 CLI 重放逐字节相同（1502 字节），网页重放与 CLI 指纹相同。限制：日志从上电开始，复位即新日志；装配视图 / 元件编辑器改接线不记（会重新上电） |
 
 > 2026-10-15 合流：S3 对齐（双核、共享外设、S3 开发板网页）与 USB OTG、Wi-Fi、软件复位、元件编辑器同时可用；S3 软件复位尚未支持（见 DECISIONS）。2026-10-16：S3 软件复位已支持（见上表"软件复位"）。
 

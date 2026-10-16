@@ -6,6 +6,8 @@ import type { UsbView } from './usb3d';
 import { fetchBuf, imageChip, ROM_FILE } from './assets';
 import { createAssembly } from './views/assembly';
 import { emptyFrame } from './views/common';
+import { BuzzerAudio } from './audio';
+import { toScript, type InputLog } from './inputlog';
 
 interface Example {
   id: string;
@@ -28,6 +30,15 @@ const resetBtn = $<HTMLButtonElement>('reset');
 const exampleSel = $<HTMLSelectElement>('example');
 
 const bench = createBench($('stage'));
+// 蜂鸣器声音（默认静音）：按钮放在工具栏里，点一下就是浏览器要的用户手势
+const audio = new BuzzerAudio();
+$('run').parentElement!.insertBefore(audio.button(), $('upload').parentElement);
+/** 场景里接了蜂鸣器的引脚 → 让 worker 每个时间片采样这些脚的 PWM */
+function syncBuzzers() {
+  const pins = scene.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : []));
+  audio.setPins(pins);
+  send({ type: 'watchPwm', pins });
+}
 const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
 const send = (m: ToWorker, transfer: Transferable[] = []) => worker.postMessage(m, transfer);
 
@@ -97,6 +108,7 @@ async function boot(autorun: boolean) {
   bench.setUsb(null);
   usbPanel.reset();
   pendingAutorun = autorun;
+  audio.reset();
   send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: i2cDevices(), env: sensedEnv(), lcd: scene.parts.some((p) => p.type === 'gc9a01') });
 }
 
@@ -108,6 +120,7 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
   switch (m.type) {
     case 'booted':
       bootPin = m.bootPin;
+      syncBuzzers();
       for (const [pin, a] of analog) send({ type: 'analog', pin, mv: a.mv });
       runBtn.disabled = resetBtn.disabled = false;
       if (pendingAutorun) {
@@ -127,6 +140,7 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       frame.running = m.running;
       if (m.leds) frame.rgb = m.leds[0] ?? null;
       asm?.update(frame, env.temp);
+      audio.push(m.pwmEvents, m.simSeconds);
       $('simtime').textContent = `${m.simSeconds.toFixed(3)} s`;
       if (m.running) {
         const r = $('ratio');
@@ -150,12 +164,47 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       bench.setUsb(v);
       break;
     }
+    case 'inputlog':
+      for (const r of logWaiters.splice(0)) r({ ...m.log, firmware: currentFirmware });
+      break;
     case 'stopped':
       setRunning(false);
       log(`\n[试板] 停止：${m.reason}\n`, 'err');
       break;
   }
 };
+
+// ---------------------------------------------------------------- 输入日志（P0-19）
+// worker 按模拟时间记下本次上电以来的每次输入；导出成 `tryboard run --inputs` 能吃的脚本，命令行逐周期重放
+const logWaiters: ((l: InputLog) => void)[] = [];
+let currentFirmware = '';
+function inputLog(): Promise<InputLog> {
+  return new Promise((r) => {
+    logWaiters.push(r);
+    send({ type: 'getInputLog' });
+  });
+}
+const exportBtn = document.createElement('button');
+exportBtn.type = 'button';
+exportBtn.textContent = '导出输入';
+exportBtn.title = '下载本次上电以来的输入日志（模拟时间），用 tryboard run <固件> --inputs <文件> 重放';
+exportBtn.onclick = async () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([toScript(await inputLog())], { type: 'text/plain' }));
+  a.download = `${currentFirmware || 'tryboard'}-inputs.txt`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$('run').parentElement!.insertBefore(exportBtn, $('upload').parentElement);
+// 给自动化测试（tools/webtest/replay.mjs）：取日志；在网页的验收 worker 里按同一份日志重放
+Object.assign(globalThis, {
+  __tbInputLog: inputLog,
+  __tbButtonPos: (name: 'BOOT' | 'RST') => bench.buttonScreenPos(name),
+  __tbReplay: async (log: InputLog, seconds: number, pwmPin?: number) => {
+    const { replayLog } = await import('./verify');
+    return replayLog(flash!, log, seconds, pwmPin);
+  },
+});
 
 runBtn.onclick = () => {
   if (running) {
@@ -179,6 +228,7 @@ $<HTMLInputElement>('upload').onchange = async (e) => {
   const f = (e.target as HTMLInputElement).files?.[0];
   if (!f) return;
   flash = await f.arrayBuffer();
+  currentFirmware = f.name.replace(/\.bin$/, '');
   $('about').innerHTML = `<p>自定义固件：${f.name}（${(f.size / 1024).toFixed(0)} KB）</p><p class="muted">支持 ESP-IDF / Arduino 构建出的完整 flash 镜像（含分区表），或单独的 app .bin。在下面「面包板元件」里按你的实物接线加元件。</p>`;
   customFirmware = true;
   exampleControls = [];
@@ -215,6 +265,7 @@ async function loadExample(id: string, autorun: boolean) {
   syncControls();
   editor.render();
   flash = await fetchBuf(`./fw/${id}/flash.bin`);
+  currentFirmware = id;
   setupAssembly(ex.assembly ? (typeof ex.assembly === 'string' ? ex.assembly : 'weather') : null);
   boot(autorun);
 }
@@ -296,6 +347,7 @@ const editor = mountEditor(
     scene = next;
     bench.setScene(scene);
     syncControls();
+    syncBuzzers();
     if (customFirmware) {
       try {
         localStorage.setItem(CUSTOM_KEY, JSON.stringify(scene));

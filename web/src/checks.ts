@@ -56,12 +56,12 @@ export function bootOptions(l: Level) {
   return { i2c, env, lcd };
 }
 
-/** 与命令行一致的定时输入脚本：时间（模拟秒）:动作 */
+/** 与命令行一致的定时输入脚本：时间（模拟秒）:动作，`;` 或换行分隔，`#` 开头是注释（CLI 的 parse_script） */
 export function parseScript(s: string | undefined) {
   return (s ?? '')
-    .split(';')
+    .split(/[;\n]/)
     .map((e) => e.trim())
-    .filter((e) => e.includes(':'))
+    .filter((e) => !e.startsWith('#') && e.includes(':'))
     .map((e) => {
       const i = e.indexOf(':');
       return { t: Number(e.slice(0, i).trim()), act: e.slice(i + 1).trim() };

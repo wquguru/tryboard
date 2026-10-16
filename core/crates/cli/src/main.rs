@@ -9,7 +9,7 @@ fn usage() -> ! {
     eprintln!(
         "用法:
   tryboard run <flash.bin>（芯片按镜像头自动识别：ESP32-C3 / ESP32-S3）[--rom <rom.elf>] [--seconds <模拟秒数>] [--expect <文本>] [--uart-in <文本>]
-               [--script \"0.5:gpio9=0; 0.6:gpio9=z; 1.0:uart=ping\\n\"] [--trace N] [--gpio-log] [--pwm-log PIN] [--ws2812-log]
+               [--script \"0.5:gpio9=0; 0.6:gpio9=z; 1.0:uart=ping\\n; 1.2:env=35,45,101325\"] [--inputs <网页导出的输入日志.txt>] [--trace N] [--gpio-log] [--pwm-log PIN] [--ws2812-log]
                [--i2c ssd1306@0x3c,bme280@0x76] [--env 温度,湿度,气压Pa] [--oled]
                [--spi gc9a01]（S3：SCLK=12 MOSI=11 CS=10 DC=14 RST=13 背光=15）[--lcd-ppm <最后一帧.ppm>]
   tryboard riscv-test <test.elf>..."
@@ -67,6 +67,21 @@ fn opt(args: &[String], name: &str) -> Option<String> {
         .and_then(|i| args.get(i + 1).cloned())
 }
 
+/// 定时输入脚本：`时间（模拟秒）:动作`，用 `;` 或换行分隔，`#` 开头的是注释。
+/// 动作：gpioN=0|1|z、mvN=毫伏、env=温度,湿度,气压Pa、uart=文本、usbcdc=文本（\\n 为换行）
+fn parse_script(s: &str) -> Vec<(f64, String)> {
+    s.split([';', '\n'])
+        .filter_map(|e| {
+            let e = e.trim();
+            if e.starts_with('#') {
+                return None;
+            }
+            let (t, a) = e.split_once(':')?;
+            Some((t.trim().parse().ok()?, a.trim().to_string()))
+        })
+        .collect()
+}
+
 fn run(args: &[String]) {
     let Some(path) = args.first() else { usage() };
     let flash = std::fs::read(path).unwrap_or_else(|e| panic!("读固件 {path}: {e}"));
@@ -120,18 +135,16 @@ fn run(args: &[String]) {
     let mut done = 0u64;
     let stdout = std::io::stdout();
     let mut resets = 0;
-    // 定时输入脚本：时间（模拟秒）:动作；动作 gpioN=0|1|z、mvN=毫伏、uart=文本、usbcdc=文本（\\n 为换行）
-    let mut script: Vec<(f64, String)> = opt(args, "--script")
-        .map(|s| {
-            s.split(';')
-                .filter_map(|e| {
-                    let (t, a) = e.trim().split_once(':')?;
-                    Some((t.trim().parse().ok()?, a.trim().to_string()))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    script.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+    // 定时输入：--script 与 --inputs 文件（网页导出的输入日志）合在一起，按时间先后施加
+    let mut script = opt(args, "--script").map(|s| parse_script(&s)).unwrap_or_default();
+    let inputs = opt(args, "--inputs");
+    if let Some(p) = &inputs {
+        let text = std::fs::read_to_string(p).unwrap_or_else(|e| panic!("读输入日志 {p}: {e}"));
+        script.extend(parse_script(&text));
+    }
+    // 稳定排序：同一时刻的多条输入保持写下的先后（网页同一时间片里先按下后松开，重放也要先按后松）
+    script.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    let mut si = 0;
     let pwm_pin: Option<usize> = opt(args, "--pwm-log").and_then(|s| s.parse().ok());
     let mut pwm_trace: Vec<(f64, f32, f32)> = Vec::new();
     // --watch A 或 A-B（十六进制）：记录这段 MMIO 的访问
@@ -149,8 +162,9 @@ fn run(args: &[String]) {
     let syms = Syms::load(&[rom_path.clone(), app_elf]);
     while done < total {
         let now_s = m.cycles() as f64 / CPU_HZ as f64;
-        while script.last().is_some_and(|e| e.0 <= now_s) {
-            let (_, act) = script.pop().unwrap();
+        while script.get(si).is_some_and(|e| e.0 <= now_s) {
+            let act = script[si].1.clone();
+            si += 1;
             if let Some((pin, lv)) = act.strip_prefix("gpio").and_then(|r| r.split_once('=')) {
                 let pin: u32 = pin.parse().unwrap_or(0);
                 let level = match lv {
@@ -163,6 +177,12 @@ fn run(args: &[String]) {
                 // mvN=电压：引脚 N 上的模拟电压（毫伏）
                 if let (Ok(p), Ok(v)) = (pin.parse::<usize>(), mv.parse::<f32>()) {
                     m.analog_set(p, v);
+                }
+            } else if let Some(e) = act.strip_prefix("env=") {
+                // env=温度,湿度,气压(Pa)：网页上拖环境滑块
+                let v: Vec<f64> = e.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+                if let [t, h, p] = v.as_slice() {
+                    m.env_set(SensorEnv { temp_c: *t, humidity: *h, pressure_pa: *p });
                 }
             } else if let Some(t) = act.strip_prefix("uart=") {
                 m.uart_push(t.replace("\\n", "\n").as_bytes());
@@ -181,7 +201,8 @@ fn run(args: &[String]) {
                 }
             }
         }
-        let slice = if script.is_empty() && pwm_pin.is_none() { CPU_HZ / 100 } else { CPU_HZ / 1000 };
+        // 有 --inputs 时始终 1ms 一片：与网页实时运行（worker.ts）的时间片完全相同，S3 双核的交替点才一致，重放逐周期复现
+        let slice = if si >= script.len() && pwm_pin.is_none() && inputs.is_none() { CPU_HZ / 100 } else { CPU_HZ / 1000 };
         let before = m.cycles();
         stop = if trace > 0 {
             m.run_traced(slice.min(total - done), &mut ring, trace)
@@ -491,5 +512,20 @@ fn print_usb(u: &tryboard_esp32s3::usb::Usb) {
     }
     if !h.cdc_rx.is_empty() {
         eprintln!("[tryboard] USB 串口收到: {:?}", String::from_utf8_lossy(&h.cdc_rx));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_script;
+
+    #[test]
+    fn script_old_and_file_syntax() {
+        let v = parse_script("0.5:gpio9=0; 0.6:gpio9=z");
+        assert_eq!(v, vec![(0.5, "gpio9=0".into()), (0.6, "gpio9=z".into())]);
+        let f = parse_script("# 试板输入日志\n0.000000:env=23.5,45,101325\n1.25:env=35,45,101325\n2:gpio0=0;2:gpio0=z\n");
+        assert_eq!(f.len(), 4);
+        assert_eq!(f[1], (1.25, "env=35,45,101325".into()));
+        assert_eq!(f[3], (2.0, "gpio0=z".into()));
     }
 }

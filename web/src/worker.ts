@@ -1,4 +1,7 @@
 // 模拟器跑在 Worker 里：按真实时间节奏推进，定期把控制台输出与 GPIO 状态发给主线程。
+// 时间片固定 1ms（与 CLI `--inputs` 重放相同），外部输入只在时间片之间施加并按模拟时间记进输入日志（inputlog.ts），
+// 所以网页上的一串操作导出后，命令行能逐周期重放。
+import { cyclesToMs, type InputAction, type InputEvent, type InputLog } from './inputlog';
 
 const CPU_HZ = 160_000_000;
 
@@ -23,6 +26,7 @@ interface Exports {
   tb_gpio_drive(pin: number, level: number): void;
   tb_uart_push(p: number, len: number): void;
   tb_pin_pwm(pin: number): number;
+  tb_pin_pwm_freq(pin: number): number;
   tb_analog_set(pin: number, mv: number): void;
   tb_ws2812_fetch(pin: number): number;
   tb_ws2812_ptr(): number;
@@ -65,7 +69,19 @@ export type ToWorker =
   | { type: 'speed'; factor: number }
   | { type: 'gpio'; pin: number; level: number }
   | { type: 'uart'; text: string }
-  | { type: 'usbcdc'; text: string };
+  | { type: 'usbcdc'; text: string }
+  /** 每个时间片采样这些引脚的 PWM，有变化就带模拟时刻放进 tick 的 pwmEvents（蜂鸣器出声用） */
+  | { type: 'watchPwm'; pins: number[] }
+  /** 要本次上电以来的输入日志，回 inputlog 消息 */
+  | { type: 'getInputLog' };
+
+/** 引脚 PWM 的一次变化（模拟时刻 t 秒；duty < 0 表示不再输出 PWM） */
+export interface PwmEvent {
+  pin: number;
+  t: number;
+  duty: number;
+  freq: number;
+}
 
 export type FromWorker =
   | { type: 'booted'; chip: 'esp32c3' | 'esp32s3'; bootPin: number }
@@ -79,6 +95,10 @@ export type FromWorker =
       gpioHi: number;
       enableHi: number;
       pwm: number[];
+      /** 各引脚 PWM 频率（Hz，没有 PWM 为 0） */
+      pwmFreq: number[];
+      /** watchPwm 引脚上自上一个 tick 以来的变化（按时间先后） */
+      pwmEvents?: PwmEvent[];
       simSeconds: number;
       ratio: number;
       running: boolean;
@@ -89,6 +109,7 @@ export type FromWorker =
   | { type: 'lcd'; pixels: Uint8Array }
   /** 原生 USB 虚拟主机的状态（JSON，结构见 usb3d.ts 的 UsbView），有变化才发 */
   | { type: 'usb'; json: string }
+  | { type: 'inputlog'; log: InputLog }
   | { type: 'stopped'; reason: string };
 
 let ex: Exports | null = null;
@@ -131,6 +152,38 @@ function pwmAll(e: Exports) {
   for (let p = 0; p < NPINS; p++) out.push(e.tb_pin_pwm(p));
   return out;
 }
+function pwmFreqAll(e: Exports) {
+  const out: number[] = [];
+  for (let p = 0; p < NPINS; p++) out.push(e.tb_pin_pwm_freq(p));
+  return out;
+}
+
+// ---- 输入日志：本次上电以来施加过的外部输入，时间戳 = 施加时的模拟时间
+let inputLog: InputLog = { version: 1, i2c: [], lcd: false, events: [] };
+function record(e: Exports, ev: InputAction) {
+  inputLog.events.push({ tMs: cyclesToMs(e.tb_cycles()), ...ev } as InputEvent);
+}
+
+// ---- PWM 变化采样（蜂鸣器）：每个时间片之间看一次，1ms 分辨率
+let watchPins: number[] = [];
+let pwmLast = new Map<number, [number, number]>();
+let pwmEvents: PwmEvent[] = [];
+function samplePwm(e: Exports) {
+  for (const pin of watchPins) {
+    const d = e.tb_pin_pwm(pin);
+    const f = d >= 0 ? e.tb_pin_pwm_freq(pin) : 0;
+    const l = pwmLast.get(pin);
+    if (l && l[0] === d && l[1] === f) continue;
+    pwmLast.set(pin, [d, f]);
+    pwmEvents.push({ pin, t: e.tb_cycles() / CPU_HZ, duty: d, freq: f });
+  }
+}
+function takePwmEvents() {
+  if (!pwmEvents.length) return undefined;
+  const v = pwmEvents;
+  pwmEvents = [];
+  return v;
+}
 
 let ratioWall = 0;
 let ratioSim = 0;
@@ -147,7 +200,9 @@ function loop() {
   const startCycles = e.tb_cycles();
   let stop = 0;
   while (behind > 0 && performance.now() - t0 < 20) {
-    stop = e.tb_run(Math.min(behind, CPU_HZ / 200));
+    // 固定 1ms 一片（不按"还差多少"切）：S3 双核的交替点取决于每片的起点，和 CLI 一样切才能逐周期重放
+    stop = e.tb_run(CPU_HZ / 1000);
+    if (watchPins.length) samplePwm(e);
     if (stop !== 0) break;
     behind = targetCycles - e.tb_cycles();
   }
@@ -177,6 +232,8 @@ function loop() {
     gpioHi: e.tb_gpio_level_hi(),
     enableHi: e.tb_gpio_enable_hi(),
     pwm: pwmAll(e),
+    pwmFreq: pwmFreqAll(e),
+    pwmEvents: takePwmEvents(),
     simSeconds: e.tb_cycles() / CPU_HZ,
     ratio: lastRatio,
     running,
@@ -254,6 +311,11 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       for (const d of m.i2c ?? []) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
       if (m.env) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
       if (m.lcd && e.tb_lcd_attach) e.tb_lcd_attach();
+      inputLog = { version: 1, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, events: [] };
+      record(e, { kind: 'power', on: true });
+      if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
+      pwmLast = new Map();
+      pwmEvents = [];
       ex = e;
       const s3 = e.tb_chip() === 9;
       LED_PIN = s3 ? 48 : 8;
@@ -266,10 +328,21 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       break;
     }
     case 'env':
-      ex?.tb_env_set(m.temp, m.humidity, m.pressure);
+      if (!ex) return;
+      ex.tb_env_set(m.temp, m.humidity, m.pressure);
+      record(ex, { kind: 'env', temp: m.temp, humidity: m.humidity, pressure: m.pressure });
       break;
     case 'analog':
-      ex?.tb_analog_set(m.pin, m.mv);
+      if (!ex) return;
+      ex.tb_analog_set(m.pin, m.mv);
+      record(ex, { kind: 'pot', pin: m.pin, mv: m.mv });
+      break;
+    case 'watchPwm':
+      watchPins = [...m.pins];
+      pwmLast = new Map();
+      break;
+    case 'getInputLog':
+      post({ type: 'inputlog', log: { ...structuredClone(inputLog), endMs: ex ? cyclesToMs(ex.tb_cycles()) : 0 } });
       break;
     case 'run':
       if (!ex || running) return;
@@ -281,7 +354,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       break;
     case 'pause':
       running = false;
-      if (ex) post({ type: 'tick', console: '', gpio: ex.tb_gpio_level(), enable: ex.tb_gpio_enable(), gpioHi: ex.tb_gpio_level_hi(), enableHi: ex.tb_gpio_enable_hi(), pwm: pwmAll(ex), simSeconds: ex.tb_cycles() / CPU_HZ, ratio: 0, running });
+      if (ex) post({ type: 'tick', console: '', gpio: ex.tb_gpio_level(), enable: ex.tb_gpio_enable(), gpioHi: ex.tb_gpio_level_hi(), enableHi: ex.tb_gpio_enable_hi(), pwm: pwmAll(ex), pwmFreq: pwmFreqAll(ex), pwmEvents: takePwmEvents(), simSeconds: ex.tb_cycles() / CPU_HZ, ratio: 0, running });
       break;
     case 'speed':
       speed = m.factor;
@@ -291,7 +364,9 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       }
       break;
     case 'gpio':
-      ex?.tb_gpio_drive(m.pin, m.level);
+      if (!ex) return;
+      ex.tb_gpio_drive(m.pin, m.level);
+      record(ex, { kind: 'gpio', pin: m.pin, level: m.level });
       break;
     case 'usbcdc': {
       if (!ex) return;
@@ -300,6 +375,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       new Uint8Array(ex.memory.buffer, p, b.length).set(b);
       ex.tb_usb_cdc_send(p, b.length);
       ex.tb_free(p, b.length);
+      record(ex, { kind: 'usbcdc', text: m.text });
       break;
     }
     case 'uart': {
@@ -309,6 +385,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       new Uint8Array(ex.memory.buffer, p, b.length).set(b);
       ex.tb_uart_push(p, b.length);
       ex.tb_free(p, b.length);
+      record(ex, { kind: 'uart', text: m.text });
       break;
     }
   }
