@@ -12,7 +12,7 @@ export interface PartInfo {
 }
 
 /** 零件类型 → 中文显示名（时间线、提示条、构建树统一用这份，不让英文 type 名漏到界面上） */
-export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: '舵机', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED', encoder: '编码器', hcsr04: '超声波' };
+export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: '舵机', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED', encoder: '编码器', hcsr04: '超声波', mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: '触摸' };
 export const partLabel = (type: string) => PART_LABEL[type as PartSpec['type']] ?? '零件';
 
 export function partId(p: PartSpec) {
@@ -39,6 +39,12 @@ export function partInfo(p: PartSpec, ext5v = false): PartInfo {
       return { name: 'EC11 旋转编码器', model: 'EC11 编码器模块（KY-040 类，每圈 20 格，A/B 正交 + 按键，板上 10 kΩ 上拉）', iface: `CLK GPIO${p.a} · DT GPIO${p.b}${p.sw !== undefined ? ` · SW GPIO${p.sw}` : ''}（S3 用 PCNT 计数）`, power: '3V3' };
     case 'hcsr04':
       return { name: 'HC-SR04 超声波', model: 'HC-SR04 超声波测距（2–400 cm，40 kHz，Echo 5 V 输出）', iface: `Trig GPIO${p.trig} · Echo GPIO${p.echo}${p.divider === false ? '（直连，5 V 进 GPIO！）' : '（经 1 kΩ / 2 kΩ 分压到约 3.3 V）'}`, power: '5V（USB 5V 轨，约 15 mA）' };
+    case 'mpu6050':
+      return { name: 'MPU6050 六轴', model: 'GY-521 模块（InvenSense MPU-6050：三轴加速度 + 三轴陀螺）', iface: `I2C ${hex(p.addr)} · SDA GPIO${p.sda} · SCL GPIO${p.scl}${p.int !== undefined ? ` · INT GPIO${p.int}` : ''}`, power: '3V3' };
+    case 'qmi8658':
+      return { name: 'QMI8658 六轴', model: 'QST QMI8658 六轴 IMU 小板', iface: `I2C ${hex(p.addr)} · SDA GPIO${p.sda} · SCL GPIO${p.scl}`, power: '3V3' };
+    case 'cst816s':
+      return { name: 'CST816S 触摸', model: '圆屏上的电容触摸层（海栎创 CST816S，单点 + 手势）', iface: `I2C ${hex(p.addr)} · SDA GPIO${p.sda} · SCL GPIO${p.scl} · INT GPIO${p.int}${p.rst !== undefined ? ` · RST GPIO${p.rst}` : ''}`, power: '3V3（与圆屏共用）' };
   }
 }
 
@@ -122,6 +128,18 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
       add(`GPIO${p.trig}`, id, 'Trig', '触发（GPIO 输出 10 µs 高脉冲）', 'load', '橙');
       add(`GPIO${p.echo}`, id, 'Echo', p.divider === false ? '回波（5 V，直连）' : '回波（经 1k/2k 分压）', 'drive', '蓝', { divider: p.divider !== false });
       add('GND', id, 'GND', '地', 'gnd', '黑');
+    } else if (p.type === 'mpu6050' || p.type === 'qmi8658') {
+      add('3V3', id, p.type === 'mpu6050' ? 'VCC' : 'VIN', '供电', 'power', '红');
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+      add(`GPIO${p.scl}`, id, 'SCL', 'I2C 时钟', 'bus', '黄');
+      add(`GPIO${p.sda}`, id, 'SDA', 'I2C 数据', 'bus', '绿');
+      if (p.type === 'mpu6050' && p.int !== undefined) add(`GPIO${p.int}`, id, 'INT', '数据就绪中断（模块输出）', 'drive', '青');
+    } else if (p.type === 'cst816s') {
+      // 触摸层的线在圆屏模组上（同一排针的后 4 针），供电与圆屏共用
+      add(`GPIO${p.sda}`, id, 'TP_SDA', '触摸 I2C 数据', 'bus', '绿');
+      add(`GPIO${p.scl}`, id, 'TP_SCL', '触摸 I2C 时钟', 'bus', '黄');
+      add(`GPIO${p.int}`, id, 'TP_INT', '触摸中断（按着拉低）', 'drive', '青');
+      add(p.rst !== undefined ? `GPIO${p.rst}` : '3V3', id, 'TP_RST', '触摸复位', p.rst !== undefined ? 'load' : 'power', '灰');
     } else if (p.type === 'buzzer') {
       // 三针模块：I/O 经模块上的三极管驱动蜂鸣器，GPIO 只推基极
       add('3V3', id, 'VCC', '供电', 'power', '红');

@@ -13,4 +13,7 @@ export const WORKS: Record<string, WorkDef> = {
   knob: { id: 'knob', title: '旋钮计数（编码器 + PCNT）', example: 's3-encoder', checkpoints: [] },
   sonar: { id: 'sonar', title: '超声波测距（HC-SR04 + RMT 接收）', example: 's3-ultrasonic', checkpoints: [] },
   blank: { id: 'blank', title: '空白实验台', example: null, checkpoints: [] },
+  // P2-03 / P2-02 的外设台面（还不是完整作品：没有检查点、组装模版；体感小人等作品见 P2-09）
+  imu: { id: 'imu', title: '倾角仪（MPU6050）', example: 's3-imu', checkpoints: [] },
+  touch: { id: 'touch', title: '触摸圆屏（CST816S）', example: 's3-touch', checkpoints: [] },
 };

@@ -3,6 +3,7 @@
 
 /** 可被点中的东西。id 约定：
  *  零件：'board' | 'oled' | 'bme280' | 'servo' | 'gc9a01' | 'pot' | 'led:<pin>' | 'power'（舵机外接电源模块）
+ *        | 'mpu6050' | 'qmi8658'（平插 IMU，P2-03）| 'cst816s'（触摸圆屏上的触摸层，针脚 'cst816s:TP_SDA' 等，P2-02）
  *  针脚：开发板丝印名，如 'GPIO4' | 'GPIO48' | '3V3' | '5V' | 'GND'；模块针脚用 '<零件>:<丝印>'，如 'bme280:SDA'
  *  导线：'wire:<一端针脚>~<另一端针脚>'，如 'wire:GPIO8~bme280:SDA'
  *  按键：'BOOT' | 'RST' */

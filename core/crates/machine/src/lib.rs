@@ -4,7 +4,11 @@
 use std::collections::{HashMap, VecDeque};
 use tryboard_esp32c3::devices::{
     bme280::{Bme280, Env},
+    cst816s::Cst816s,
     gc9a01::Gc9a01,
+    imu::Pose,
+    mpu6050::Mpu6050,
+    qmi8658::Qmi8658,
     ssd1306::Ssd1306,
 };
 use tryboard_esp32c3::iotrace::IoTrace;
@@ -81,6 +85,8 @@ pub enum Hw {
 pub struct Machine {
     pub hw: Hw,
     pub elec: Board,
+    /// 触摸控制器的 INT 脚接在哪个 GPIO（按着拉低、抬起回高）；None = 没接
+    pub touch_int: Option<u32>,
 }
 
 pub struct BootInfo {
@@ -94,11 +100,11 @@ impl Machine {
         match Chip::from_image(&flash) {
             Some(Chip::Esp32s3) => {
                 let (m, a) = Esp32s3::boot(rom, flash)?;
-                Ok((Machine { hw: Hw::S3(m), elec: Board::new(ChipKind::S3) }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
+                Ok((Machine { hw: Hw::S3(m), elec: Board::new(ChipKind::S3), touch_int: None }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
             }
             Some(Chip::Esp32c3) | None => {
                 let (m, a) = Esp32c3::boot(rom, flash)?;
-                Ok((Machine { hw: Hw::C3(m), elec: Board::new(ChipKind::C3) }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
+                Ok((Machine { hw: Hw::C3(m), elec: Board::new(ChipKind::C3), touch_int: None }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
             }
         }
     }
@@ -395,8 +401,48 @@ impl Machine {
     }
 
     pub fn env_set(&mut self, env: Env) {
-        if let Some(b) = self.i2c0().device::<Bme280>() {
+        let t = env.temp_c;
+        let bus = self.i2c0();
+        if let Some(b) = bus.device::<Bme280>() {
             b.env = env;
+        }
+        // IMU 的片上温度计读的是芯片温度：取环境温度（自热不建模）
+        if let Some(d) = bus.device::<Mpu6050>() {
+            d.temp_c = t;
+        }
+        if let Some(d) = bus.device::<Qmi8658>() {
+            d.temp_c = t;
+        }
+    }
+
+    /// 姿态（作用于总线上的 MPU6050 / QMI8658）：欧拉角（度）+ 欧拉角速率（°/s），见 devices/imu.rs
+    pub fn imu_set(&mut self, pose: Pose) {
+        let bus = self.i2c0();
+        if let Some(d) = bus.device::<Mpu6050>() {
+            d.pose = pose;
+        }
+        if let Some(d) = bus.device::<Qmi8658>() {
+            d.pose = pose;
+        }
+    }
+
+    /// 触摸控制器 INT 接在哪个 GPIO：接上就先驱动成高电平（没按）
+    pub fn touch_int_attach(&mut self, pin: u32) {
+        self.touch_int = Some(pin);
+        self.gpio_drive(pin, 1);
+    }
+
+    /// 手指在触摸屏上（x, y 为屏幕像素 0..239）：down = false 表示抬起
+    pub fn touch(&mut self, x: u16, y: u16, down: bool) {
+        let now = self.cycles();
+        let Some(d) = self.i2c0().device::<Cst816s>() else { return };
+        if down {
+            d.press(x, y, now);
+        } else {
+            d.release(now);
+        }
+        if let Some(pin) = self.touch_int {
+            self.gpio_drive(pin, if down { 0 } else { 1 });
         }
     }
 
@@ -648,4 +694,36 @@ fn s3_stop(m: &Esp32s3, r: tryboard_esp32s3::Stop) -> Stop {
 }
 
 pub use tryboard_esp32c3::devices::bme280::Env as SensorEnv;
+pub use tryboard_esp32c3::devices::imu::Pose as ImuPose;
+
+/// 脚本动作 `imu=pitch,roll,yaw[,dpitch,droll,dyaw]`（度、°/s）的参数部分
+pub fn parse_imu(s: &str) -> Option<Pose> {
+    let v: Vec<f64> = s.split(',').map(|x| x.trim().parse().ok()).collect::<Option<_>>()?;
+    match v.as_slice() {
+        [p, r, y] => Some(Pose::new(*p, *r, *y)),
+        [p, r, y, dp, dr, dy] => Some(Pose { pitch: *p, roll: *r, yaw: *y, dpitch: *dp, droll: *dr, dyaw: *dy }),
+        _ => None,
+    }
+}
+
+/// 脚本动作 `touch=x,y` 的参数部分（屏幕像素）
+pub fn parse_touch(s: &str) -> Option<(u16, u16)> {
+    let (x, y) = s.split_once(',')?;
+    let f = |t: &str| t.trim().parse::<f64>().ok().map(|v| v.round().clamp(0.0, 239.0) as u16);
+    Some((f(x)?, f(y)?))
+}
 pub use tryboard_elec::board::Power as PowerMode;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn imu_touch_actions() {
+        assert_eq!(parse_imu("30,-20,5"), Some(Pose::new(30.0, -20.0, 5.0)));
+        assert_eq!(parse_imu("1,2,3,4,5,6").map(|p| p.dyaw), Some(6.0));
+        assert_eq!(parse_imu("1,2"), None);
+        assert_eq!(parse_touch("120.4, 300"), Some((120, 239)));
+        assert_eq!(parse_touch("x,1"), None);
+    }
+}

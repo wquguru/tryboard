@@ -78,7 +78,7 @@ export function checkWiring(parts: PartSpec[], wires: BenchWire[]): WireFault[] 
 
   // W5：同一条 I2C 总线上两个器件地址相同
   const buses = new Map<string, { pid: string; addr: number }[]>();
-  for (const p of parts) if (p.type === 'oled' || p.type === 'bme280') {
+  for (const p of parts) if (p.type === 'oled' || p.type === 'bme280' || p.type === 'mpu6050' || p.type === 'qmi8658' || p.type === 'cst816s') {
     const k = `${p.sda}/${p.scl}`;
     buses.set(k, [...(buses.get(k) ?? []), { pid: partId(p), addr: p.addr }]);
   }
@@ -88,7 +88,7 @@ export function checkWiring(parts: PartSpec[], wires: BenchWire[]): WireFault[] 
     for (const [addr, who] of by) {
       if (who.length < 2) continue;
       const ws = live.filter((w) => who.includes(w.part) && w.pinRole === 'bus' && w.pin === 'SDA').map((w) => w.id);
-      push('W5', 'block', ws, `地址 ${hex(addr)} 冲突`, `${who.map(name).join(' 和 ')} 都是 ${hex(addr)}，在同一条 SDA / SCL 上：两个器件同时应答，读数错乱。改其中一个的地址跳线（BME280 0x76 / 0x77，SSD1306 0x3C / 0x3D）。`);
+      push('W5', 'block', ws, `地址 ${hex(addr)} 冲突`, `${who.map(name).join(' 和 ')} 都是 ${hex(addr)}，在同一条 SDA / SCL 上：两个器件同时应答，读数错乱。改其中一个的地址跳线（BME280 0x76 / 0x77，SSD1306 0x3C / 0x3D，MPU6050 AD0 0x68 / 0x69，QMI8658 SA0 0x6B / 0x6A）。`);
     }
   }
   return out;

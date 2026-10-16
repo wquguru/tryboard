@@ -14,6 +14,7 @@ import { servoAngle, ledCss } from '../../views/common';
 import type { AppState, CheckOutcome, Selection, StepCtx, StepImpl } from '../types';
 import { getAnalyzer } from '../analyzer';
 import { extModelsOn, setExtModels } from '../../extmodels';
+import { angDiff, gravity } from '../../imupose';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
@@ -482,13 +483,45 @@ ${sec('环境温度 · 改的是虚拟世界')}<label class="slider"><input type
       live = `${sec('实时')}${sonarRows()}${sec('障碍物距离 · 改的是虚拟世界')}${sonarControls()}
 <p class="note">台面上：按住障碍物沿探头方向拖（3D 里最远摆到 100 cm，更远用滑块）。Trig 收到 ≥ 10 µs 高电平后 250 µs，Echo 拉高 2 × 距离 / 343 m/s；距离来自探头到障碍物的射线。声速按 20 ℃ 固定，未经真机标定。</p>
 ${sec('电平')}${rowT('Echo', p.divider === false || (c.session.wireMods.noDivider ?? []).includes('hcsr04') ? '<span class="bad">5 V 直接进 GPIO：S3 的 GPIO 不耐 5 V（规则 R17 / 接线检查 W2）</span>' : 'Echo 输出 5 V，经 1 kΩ / 2 kΩ 分压到约 3.3 V 再进 GPIO')}<div class="btns"><button type="button" class="btn" data-div aria-pressed="${!(c.session.wireMods.noDivider ?? []).includes('hcsr04')}">${(c.session.wireMods.noDivider ?? []).includes('hcsr04') ? '装回分压电阻' : '拆掉分压电阻（看规则报警）'}</button></div>`;
+    } else if (p.type === 'mpu6050' || p.type === 'qmi8658') {
+      live = `${sec('姿态 · 端起面包板（改的是虚拟世界）')}${poseSliders()}
+<div class="btns"><button type="button" class="btn" data-act="level">放平</button></div>
+${sec('传感器应读到 · 重力分量')}${row('ax / ay / az', '', 'gacc')}
+${sec('实时读数 · 固件串口最近一行')}${row('俯仰 pitch', '', 'ipitch')}${row('横滚 roll', '', 'iroll')}${row('陀螺', '', 'igyro')}
+<p class="note">也可以在 3D 里按住这块模块拖动，整块台面跟着转；拖动时陀螺读到角速度，松手 150 ms 后回零。只靠加速度计算不出航向（yaw），它只影响陀螺。可信度：寄存器按数据手册建模、读数按姿态算出，噪声与零偏未经真机标定。</p>`;
+    } else if (p.type === 'cst816s' || (p.type === 'gc9a01' && ses.scene.parts.some((x) => x.type === 'cst816s'))) {
+      live = `${sec('触摸 · 在 3D 里点 / 拖圆屏')}${row('手指', '', 'tch')}${row('INT 电平', '', 'tint')}
+<p class="note">点屏幕 = 手指按下（INT 拉低），拖动 = 移动，松开 = 抬起；芯片自己判手势（单击 / 滑动 / 长按 1 秒）。真机的自动睡眠、扫描噪声没建模，只能上真机确认。</p>`;
     }
     el.innerHTML = `${sec('零件')}<div class="ph">${esc(info.name)}</div>${rowT('型号', esc(info.model))}${rowT('接口', esc(info.iface))}${row('供电', esc(info.power))}${live}${p.type === 'servo' ? renderPowerInline() : ''}`;
     bindEnvInputs();
     bindPinDevs(el);
+    bindPoseInputs(el);
     bindPartActs(el);
     bindPowerToggle(el);
     updateLive();
+  }
+
+  // ------------------------------------------------------------ 姿态（P2-03）
+  const POSE_AXES: [('pitch' | 'roll' | 'yaw'), string, number][] = [
+    ['pitch', '俯仰', 90],
+    ['roll', '横滚', 180],
+    ['yaw', '航向', 180],
+  ];
+  function poseSliders(axes = POSE_AXES) {
+    const pz = ctx!.store.get().pose;
+    return axes.map(([k, n, lim]) => `<div class="kv col"><span class="k">${n}</span><label class="slider"><input type="range" min="${-lim}" max="${lim}" step="1" value="${pz[k]}" data-pose="${k}" aria-label="${n}" /><output class="mono">${pz[k].toFixed(0)}°</output></label></div>`).join('');
+  }
+  function bindPoseInputs(root: HTMLElement) {
+    const c = ctx!;
+    root.querySelectorAll<HTMLInputElement>('input[data-pose]').forEach((inp) => {
+      inp.oninput = () => {
+        const k = inp.dataset.pose as 'pitch' | 'roll' | 'yaw';
+        const v = Number(inp.value);
+        inp.parentElement!.querySelector('output')!.textContent = `${v.toFixed(0)}°`;
+        c.session.setPose({ ...c.store.get().pose, [k]: v });
+      };
+    });
   }
 
   function renderEnv() {
@@ -699,6 +732,32 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
         const o = inp.parentElement?.querySelector('output');
         if (o) o.textContent = `${dist.toFixed(1)} cm`;
       });
+    // 姿态与 IMU 读数（P2-03）
+    const pz = s.pose;
+    const [gx, gy, gz] = gravity(pz);
+    set('gacc', `${gx.toFixed(3)} / ${gy.toFixed(3)} / ${gz.toFixed(3)} g`);
+    const im = s.imu;
+    set('ipitch', im ? `${im.pitch.toFixed(1)}°` : '等固件打印…', !!im && Math.abs(im.pitch - pz.pitch) > 1.5 && Math.abs(pz.pitch) < 85);
+    set('iroll', im ? `${im.roll.toFixed(1)}°` : '—', !!im && Math.abs(angDiff(im.roll, pz.roll)) > 1.5 && Math.abs(pz.pitch) < 85);
+    set('igyro', im?.gyro ? `${im.gyro.map((v) => v.toFixed(1)).join(' / ')} °/s` : '—');
+    set('ipr', im ? `俯仰 ${im.pitch.toFixed(1)}° · 横滚 ${im.roll.toFixed(1)}°` : '等固件打印…');
+    for (const root of card ? [el, card] : [el])
+      root.querySelectorAll<HTMLInputElement>('input[data-pose]').forEach((inp) => {
+        if (inp === document.activeElement) return;
+        const k = inp.dataset.pose as 'pitch' | 'roll' | 'yaw';
+        const v = Math.round(pz[k]);
+        if (Number(inp.value) === v) return;
+        inp.value = String(v);
+        const o = inp.parentElement?.querySelector('output');
+        if (o) o.textContent = `${v}°`;
+      });
+    const tpart = c.session.scene.parts.find((x) => x.type === 'cst816s');
+    if (tpart && tpart.type === 'cst816s') {
+      set('tch', s.touch ? `${s.touch.down ? '按着' : '抬起'} · x ${s.touch.x} y ${s.touch.y}` : '还没点过');
+      const fr = c.session.frame;
+      const lv = tpart.int < 32 ? (fr.gpio >>> tpart.int) & 1 : (fr.gpioHi >>> (tpart.int - 32)) & 1;
+      set('tint', `GPIO${tpart.int} ${lv ? '高（没按）' : '低（按着）'}`);
+    }
     const mr = meterReading();
     if (mr) {
       set('mv', mr.v === null ? '—' : `${mr.v.toFixed(3)} V`);
@@ -781,6 +840,8 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
     const c = ctx!;
     const n = c.work.checkpoints.length;
     const done = passedCount(c);
+    // 倾角仪没有检查点和组装模版：成品（端在手里转的盒子）随时能看
+    if (c.work.id === 'imu') return c.shell.setNext('看成品 →', 'product');
     c.shell.setNext('去组装 →', n && done === n ? 'assemble' : null, `检查点全部通过（${done}/${n}）才能组装`);
   }
 
@@ -803,6 +864,7 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
   function bindPartActs(root: HTMLElement) {
     root.querySelectorAll<HTMLButtonElement>('[data-act]').forEach((b) => (b.onclick = () => {
       if (b.dataset.act === 'heat') toggleHeat();
+      if (b.dataset.act === 'level') ctx!.session.setPose({ pitch: 0, roll: 0, yaw: 0 });
       if (b.dataset.act === 'chip') {
         const mm = measureChip();
         const out = root.querySelector<HTMLElement>('[data-live="chipmm"]');
@@ -825,6 +887,17 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
 <div class="btns"><button type="button" class="btn" data-act="heat" aria-pressed="${!!c.session.heat}">${c.session.heat ? '把手拿开' : '把手放上去'}</button><button type="button" class="btn" data-act="chip">量到芯片</button></div><div class="kv col" data-live="chipmm" hidden></div>`;
       bindEnvInputs(box);
       bindPartActs(box);
+      return box;
+    }
+    if (t.kind === 'part' && (t.id === 'mpu6050' || t.id === 'qmi8658')) {
+      box.innerHTML = `<div class="sec">${t.id === 'mpu6050' ? 'MPU6050' : 'QMI8658'} · 倾斜台面</div>${poseSliders(POSE_AXES.slice(0, 2))}${row('固件读到', '', 'ipr')}
+<div class="btns"><button type="button" class="btn" data-act="level">放平</button></div><p class="note">按住模块拖动也能转。</p>`;
+      bindPoseInputs(box);
+      bindPartActs(box);
+      return box;
+    }
+    if (t.kind === 'part' && (t.id === 'cst816s' || (t.id === 'gc9a01' && c.session.scene.parts.some((x) => x.type === 'cst816s')))) {
+      box.innerHTML = `<div class="sec">触摸圆屏 · CST816S</div>${row('手指', '', 'tch')}${row('INT 电平', '', 'tint')}<p class="note">直接在 3D 屏幕上点 / 拖。</p>`;
       return box;
     }
     const isServoPower = (t.kind === 'wire' && /servo:VCC/.test(t.id)) || (t.kind === 'pin' && t.id === '5V' && c.session.scene.parts.some((p) => p.type === 'servo'));
@@ -1057,7 +1130,7 @@ ${sec('验收命令 · 你和 AI 用同一条')}<pre class="code">${esc(checkCom
           if (s.editRev !== prev.editRev || s.sceneRev !== prev.sceneRev || h.seeked !== p.seeked || h.busy !== p.busy || h.runs !== p.runs || (h.seeked && h.cur !== p.cur) || s.selection?.kind === 'run') renderProps();
         }, ['editRev', 'sceneRev', 'hist']),
         c.store.subscribe(() => renderTree(), ['env', 'run', 'runNo']),
-        c.store.subscribe(() => updateLive(), ['simSeconds', 'reading', 'running', 'run', 'verifyProgress', 'env']),
+        c.store.subscribe(() => updateLive(), ['simSeconds', 'reading', 'running', 'run', 'verifyProgress', 'env', 'pose', 'imu', 'touch']),
       ];
       c.session.pick.highlight?.(toPick(c.store.get().selection));
     },

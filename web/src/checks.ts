@@ -42,7 +42,7 @@ export interface CheckResult {
   text: string;
 }
 
-/** 从 args 里取出 --i2c / --env / --spi / --servo / --power / --encoder / --sonar（网页没有命令行，参数要翻译成启动选项） */
+/** 从 args 里取出 --i2c / --env / --spi / --servo / --power / --encoder / --sonar / --touch-int（网页没有命令行，参数要翻译成启动选项） */
 export function bootOptions(l: Level) {
   const a = l.args ?? [];
   const val = (k: string) => {
@@ -68,7 +68,9 @@ export function bootOptions(l: Level) {
   const so = val('--sonar')?.split(',').map(Number);
   const dist = val('--dist');
   const sonar = so && so.length === 2 ? { trig: so[0], echo: so[1], ...(dist !== undefined ? { cm: Number(dist) } : {}) } : undefined;
-  return { i2c, env, lcd, servo, power, encoder, sonar };
+  const ti = val('--touch-int');
+  const touchInt = ti === undefined ? undefined : Number(ti);
+  return { i2c, env, lcd, servo, power, encoder, sonar, touchInt };
 }
 
 /** 与命令行一致的定时输入脚本：时间（模拟秒）:动作，`;` 或换行分隔，`#` 开头是注释（CLI 的 parse_script） */

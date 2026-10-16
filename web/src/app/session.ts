@@ -14,6 +14,7 @@ import type { AppState, Env, Session, WorkDef } from './types';
 import type { Store } from './store';
 import { currentTheme, onTheme } from '../theme';
 import { IoStore, decodeEvents } from './iotrace';
+import { PoseRate } from '../imupose';
 
 interface Example {
   id: string;
@@ -25,6 +26,8 @@ export { WORKS } from './works';
 
 /** 串口里 weather 固件的读数行（格式由第 06 关任务书规定） */
 const READING = /T=(-?[\d.]+) C H=([\d.]+) % P=([\d.]+) hPa/g;
+/** s3-imu / s3-qmi8658 的读数行 */
+const IMU_LINE = /IMU pitch=(-?[\d.]+) roll=(-?[\d.]+)(?:[^\n]*?gyro=\((-?[\d.]+),(-?[\d.]+),(-?[\d.]+)\))?/g;
 
 export interface SessionHooks {
   /** 串口新文本（外壳把它追加到左栏串口） */
@@ -67,9 +70,13 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   audio.setPins(buzzerPins);
 
   const i2cOf = (parts: PartSpec[]) => {
-    const kind: Record<string, string> = { oled: 'ssd1306', bme280: 'bme280' };
+    const kind: Record<string, string> = { oled: 'ssd1306', bme280: 'bme280', mpu6050: 'mpu6050', qmi8658: 'qmi8658', cst816s: 'cst816s' };
     return parts.flatMap((p) => ('addr' in p && kind[p.type] ? [{ kind: kind[p.type], addr: p.addr }] : []));
   };
+  /** 触摸 INT 接的 GPIO（台面上的 CST816S） */
+  const touchIntOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'cst816s' ? [p.int] : []))[0];
+  const poseRate = new PoseRate();
+  let poseIdle = 0;
 
   /** 编码器 / 超声波（台面上第一个）：上电时接到内核里 */
   const encoderOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'encoder' ? [{ a: p.a, b: p.b, ...(p.sw !== undefined ? { sw: p.sw } : {}) }] : []))[0];
@@ -100,6 +107,12 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     return [...pins].sort((a, b) => a - b);
   };
   const bumpEdit = () => store.set((st) => ({ editRev: st.editRev + 1 }));
+  const lastImu = (text: string) => {
+    let m: RegExpExecArray | null = null;
+    for (const x of text.matchAll(IMU_LINE)) m = x;
+    return m ? { pitch: Number(m[1]), roll: Number(m[2]), gyro: m[3] !== undefined ? ([Number(m[3]), Number(m[4]), Number(m[5])] as [number, number, number]) : null } : null;
+  };
+  let imuTail = '';
   const lastReading = (text: string) => {
     let m: RegExpExecArray | null = null;
     for (const x of text.matchAll(READING)) m = x;
@@ -144,7 +157,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       if (JSON.stringify(next) !== JSON.stringify(s.scene)) bench.setScene(next);
       s.scene = next;
       s.power = power;
-      s.sim?.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts) });
+      s.sim?.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts), touchInt: touchIntOf(next.parts) });
       audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
       bumpEdit();
     },
@@ -177,7 +190,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       s.chip = snap.log.chip ?? s.chip;
       audio.reset();
       bench.setPowered(true);
-      store.set({ running: false, reading: lastReading(snap.stdout), simSeconds: snap.simSeconds, env: { ...sim.env } });
+      store.set({ running: false, reading: lastReading(snap.stdout), imu: lastImu(snap.stdout), simSeconds: snap.simSeconds, env: { ...sim.env }, pose: { ...sim.pose }, touch: null });
+      bench.setPose(s.hasImu() ? sim.pose : null);
       // 回退停住那一刻的供电（日志里最后一次切换）
       s.power = { ext5v: sim.powerMode() === 'ext' };
       return snap;
@@ -186,16 +200,17 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       s.sim?.continueRun();
     },
     applyScene(next, power) {
-      const devs = (sc: SceneSpec) => JSON.stringify([i2cOf(sc.parts), sc.parts.some((p) => p.type === 'gc9a01'), servoOf(sc.parts) ?? null, encoderOf(sc.parts) ?? null, sonarOf(sc.parts)?.trig ?? null, sonarOf(sc.parts)?.echo ?? null]);
+      const devs = (sc: SceneSpec) => JSON.stringify([i2cOf(sc.parts), sc.parts.some((p) => p.type === 'gc9a01'), servoOf(sc.parts) ?? null, encoderOf(sc.parts) ?? null, sonarOf(sc.parts)?.trig ?? null, sonarOf(sc.parts)?.echo ?? null, touchIntOf(sc.parts) ?? null]);
       const rebootNeeded = devs(next) !== devs(s.scene);
       const same = JSON.stringify(next) === JSON.stringify(s.scene);
       const extBefore = !!s.power?.ext5v;
       s.scene = next;
       s.power = power;
       if (!same) bench.setScene(next);
+      if (!s.hasImu()) bench.setPose(null);
       const hadExt = extBefore;
       if (s.sim && rebootNeeded) {
-        s.sim.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts) });
+        s.sim.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts), touchInt: touchIntOf(next.parts) });
         s.sim.setPower(powerMode());
         s.reboot();
       } else if (s.sim && hadExt !== !!power?.ext5v) s.sim.setPower(powerMode());
@@ -248,6 +263,25 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       s.sim?.setEnv(e);
       store.set((st) => ({ env: { ...st.env, ...e, ...(s.sim ? { temp: s.sim.env.temp } : {}) } }));
     },
+    hasImu: () => s.scene.parts.some((p) => p.type === 'mpu6050' || p.type === 'qmi8658'),
+    setPose(p) {
+      const pose = { pitch: p.pitch, roll: p.roll, yaw: p.yaw };
+      // 拖动 / 滑块的速度 → 陀螺读到的角速率；停下 150 ms 补一次速率 0（陀螺回零），记进输入日志
+      const rates = poseRate.push(pose, performance.now());
+      s.sim?.setImu({ ...pose, rates });
+      bench.setPose(pose);
+      store.set({ pose });
+      clearTimeout(poseIdle);
+      if (rates.some((v) => v !== 0))
+        poseIdle = window.setTimeout(() => {
+          poseRate.reset();
+          s.sim?.setImu({ ...pose, rates: [0, 0, 0] });
+        }, 150);
+    },
+    touch(x, y, down) {
+      s.sim?.touch(x, y, down);
+      store.set({ touch: { x: Math.round(x), y: Math.round(y), down } });
+    },
     setSensorOffset(d) {
       s.sensorOffset = d;
       s.sim?.setOffset(d);
@@ -284,6 +318,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       servo: servoOf(s.scene.parts),
       encoder: encoderOf(s.scene.parts),
       sonar: sonarOf(s.scene.parts),
+      touchInt: touchIntOf(s.scene.parts),
       power: powerMode(),
       env: store.get().env,
       onConsole(text) {
@@ -297,6 +332,14 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         for (const x of buf.matchAll(READING)) m = x;
         tail = buf.slice(-80);
         if (m) store.set({ reading: { t: Number(m[1]), h: Number(m[2]), p: Number(m[3]) } });
+        // IMU 读数行同样可能跨 tick：只在出现完整一行（有换行）时更新
+        const ib = imuTail + text;
+        const nl = ib.lastIndexOf('\n');
+        if (nl >= 0) {
+          const r = lastImu(ib.slice(0, nl));
+          if (r) store.set({ imu: r });
+        }
+        imuTail = ib.slice(nl + 1).slice(-200);
       },
       onBoot(c) {
         s.chip = c;
@@ -304,7 +347,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         audio.reset();
         if (buzzerPins.length) sim.watchPwm(buzzerPins);
         s.bootCount++;
-        store.set((st) => ({ run: st.run + 1, running: true, reading: null }));
+        imuTail = '';
+        store.set((st) => ({ run: st.run + 1, running: true, reading: null, imu: null, touch: null }));
         for (const cb of [...bootSubs]) cb();
       },
       onRunEnd(snap) {
@@ -373,6 +417,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     s.distance = cm;
     s.sim?.setDistance(cm);
   });
+  // 拖台面上的 IMU 模块 = 端起面包板转（P2-03）；点触摸圆屏 = 手指（P2-02）
+  bench.onPose((p) => s.setPose(p));
+  bench.onTouch((x, y, down) => s.touch(x, y, down));
   bench.onButton((name, down) => {
     if (name === 'BOOT') s.pressBoot(down);
     if (name === 'RST' && !down) s.reboot();

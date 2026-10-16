@@ -1,7 +1,7 @@
 // 模拟器跑在 Worker 里：按真实时间节奏推进，定期把控制台输出与 GPIO 状态发给主线程。
 // 时间片固定 1ms（与 CLI `--inputs` 重放相同），外部输入只在时间片之间施加并按模拟时间记进输入日志（inputlog.ts），
 // 所以网页上的一串操作导出后，命令行能逐周期重放。
-import { cyclesToMs, type InputAction, type InputEvent, type InputLog } from './inputlog';
+import { cyclesToMs, roundImu, type InputAction, type InputEvent, type InputLog } from './inputlog';
 
 const CPU_HZ = 160_000_000;
 
@@ -60,6 +60,9 @@ interface Exports {
   tb_sonar_attach?(trig: number, echo: number): void;
   tb_sonar_distance?(cm: number): void;
   tb_sonar_stat?(which: number): number;
+  tb_imu_set?(pitch: number, roll: number, yaw: number, dp: number, dr: number, dy: number): void;
+  tb_touch?(x: number, y: number, down: number): void;
+  tb_touch_int?(pin: number): void;
   tb_io_watch?(lo: number, hi: number): void;
   tb_io_take?(): number;
   tb_io_ptr?(): number;
@@ -133,12 +136,16 @@ export type ToWorker =
       power?: PowerMode;
       encoder?: EncoderSpec;
       sonar?: SonarSpec;
+      /** 触摸控制器 INT 接的 GPIO（按着拉低） */
+      touchInt?: number;
     }
   | ({ type: 'env' } & Env)
   /** 编码器转 steps 格（正 = 顺时针）/ 按键；超声波距离（进输入日志：enc= / encsw= / dist=） */
   | { type: 'enc'; steps: number }
   | { type: 'encsw'; down: boolean }
   | { type: 'dist'; cm: number }
+  /** 姿态（imu）、触摸（touch）等不需要专门消息的输入：照原样施加并记进输入日志 */
+  | { type: 'input'; act: Extract<InputAction, { kind: 'imu' | 'touch' }> }
   /** USB ↔ 外接 5 V（进输入日志：power=usb|ext） */
   | { type: 'power'; mode: PowerMode }
   | { type: 'analog'; pin: number; mv: number }
@@ -167,6 +174,7 @@ export type ToWorker =
       power?: PowerMode;
       encoder?: EncoderSpec;
       sonar?: SonarSpec;
+      touchInt?: number;
       /** 上电以后施加的输入（不含上电和上电时的环境），时间 = 原来施加时的模拟时刻 */
       events: InputEvent[];
       untilMs: number;
@@ -500,13 +508,13 @@ function postUsb(e: Exports) {
   post({ type: 'usb', json: decoder.decode(new Uint8Array(e.memory.buffer, e.tb_usb_json_ptr(), n)) });
 }
 
-const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2 };
+const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5 };
 
 function postPaused(e: Exports) {
   post({ type: 'tick', console: '', leds: leds(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running, elec: elecFrame(e), brownouts: takeBrownouts(e), pins: pinDevFrame(e) });
 }
 
-type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec };
+type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; touchInt?: number };
 /** 上电：建 wasm 实例、挂器件、设环境、开一份新的输入日志 */
 async function bootWasm(m: BootMsg): Promise<Exports | null> {
   const { instance } = await WebAssembly.instantiate(m.wasm, {});
@@ -523,6 +531,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   for (const d of m.i2c ?? []) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
   if (m.env) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
   if (m.lcd && e.tb_lcd_attach) e.tb_lcd_attach();
+  if (m.touchInt !== undefined) e.tb_touch_int?.(m.touchInt);
   // 供电网络：舵机接上、供电方式（上电时的状态；之后的切换走 power 消息并进输入日志）
   power = m.power ?? 'usb';
   if (e.tb_servo_attach && m.servo !== undefined) e.tb_servo_attach(m.servo);
@@ -536,7 +545,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   ioChunks = [];
   ioBytes = 0;
   flushIo(e, true);
-  inputLog = { version: 1, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), events: [] };
+  inputLog = { version: 1, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), events: [] };
   record(e, { kind: 'power', on: true });
   if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
   // 回退重放时 cm 给 NaN：初始距离就是日志里 0 时刻那条 dist，由 seekTo 按原样施加
@@ -593,6 +602,21 @@ function apply(e: Exports, ev: InputAction) {
       ev = { kind: 'dist', cm: Math.round(ev.cm * 100) / 100 };
       e.tb_sonar_distance?.(ev.cm);
       break;
+    case 'imu': {
+      // 先取到脚本精度再施加：网页读到的和命令行重放读到的逐位相同
+      const r = roundImu(ev);
+      const [dp, dr, dy] = r.rates ?? [0, 0, 0];
+      e.tb_imu_set?.(r.pitch, r.roll, r.yaw, dp, dr, dy);
+      record(e, r);
+      return;
+    }
+    case 'touch': {
+      const x = Math.round(Math.min(239, Math.max(0, ev.x)));
+      const y = Math.round(Math.min(239, Math.max(0, ev.y)));
+      e.tb_touch?.(x, y, ev.down ? 1 : 0);
+      record(e, { ...ev, x, y });
+      return;
+    }
     case 'power':
       return;
   }
@@ -729,6 +753,10 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       if (!ex) return;
       apply(ex, { kind: 'dist', cm: m.cm });
       if (!running) postPaused(ex);
+      break;
+    case 'input':
+      if (!ex) return;
+      apply(ex, m.act);
       break;
   }
 };
