@@ -4,6 +4,7 @@ import { createShell, registerStep, startRouter } from './shell';
 import { createSession, WORKS } from './session';
 import { benchStep, passedCount, restoreChecks } from './steps/bench';
 import { placeholderStep } from './steps/placeholder';
+import { loadBom, loadPlaced, shopStep } from './steps/shop';
 import type { AppState, StepCtx, WorkId } from './types';
 import type { TimelineStep } from './timeline';
 
@@ -26,6 +27,8 @@ const store = createStore<AppState>({
   checks: {},
   verifying: null,
   verifyProgress: 0,
+  bom: loadBom(work.id),
+  sceneRev: 0,
 });
 const shell = createShell();
 
@@ -38,28 +41,36 @@ function log(text: string) {
   if (atBottom) con.scrollTop = con.scrollHeight;
 }
 
-registerStep('shop', placeholderStep('① 采购', 'P0-07', '模版带出必选零件、规则当场说后果、参考价与合计。'));
+registerStep('shop', shopStep());
 registerStep('bench', benchStep());
 registerStep('assemble', placeholderStep('③ 组装', 'P0-16', '外壳剖视、按顺序装零件、装法影响读数（BME280 贴芯片读数偏高）。'));
 registerStep('product', placeholderStep('④ 成品', 'P0-17', '能转的 3D 成品，灯、屏、舵机、蜂鸣器都来自同一份固件。'));
 
-// 时间线：本任务只显示"放零件 / 连线 / 运行 #n / 验收"，回退由 P0-03 接 onSeek
+// 时间线：实验台显示"放零件 / 连线 / 运行 #n / 验收"，回退由 P0-03 接 onSeek。
+// 采购步骤自己管时间线（清单变更），在采购页时这里只记不画，离开采购页再画回来
 const history: TimelineStep[] = [];
-function pushHistory(s: TimelineStep) {
-  history.push(s);
+const onShop = () => store.get().step === 'shop';
+function drawHistory() {
   shell.timeline.setSteps(history);
   shell.timeline.setCurrent(history.length - 1);
 }
-shell.timeline.onSeek((_i, s) => shell.toast(`回到「${s.label}」由后续任务实现（P0-03）`));
+function pushHistory(s: TimelineStep) {
+  history.push(s);
+  if (!onShop()) drawHistory();
+}
+store.subscribe((s) => s.step !== 'shop' && drawHistory(), ['step']);
+shell.timeline.onSeek((_i, s) => !onShop() && shell.toast(`回到「${s.label}」由后续任务实现（P0-03）`));
 
 (async () => {
   try {
-    const session = await createSession(shell.stage, work, store, { onConsole: log });
+    const placed = loadPlaced(work.id);
+    const session = await createSession(shell.stage, work, store, { onConsole: log }, { placed });
     (window as unknown as { __tbApp: unknown }).__tbApp = { store, session };
     const ctx: StepCtx = { work, store, session, shell };
     restoreChecks(ctx);
     for (const p of session.scene.parts) pushHistory({ id: `place:${p.type}`, icon: '+', label: `放 ${p.type === 'bme280' ? 'BME280' : p.type === 'oled' ? 'OLED' : p.type === 'servo' ? 'SG90' : p.type === 'gc9a01' ? '圆屏' : p.type}` });
     if (session.scene.parts.length) pushHistory({ id: 'wire', icon: '~', label: '连线' });
+    if (placed) pushHistory({ id: 'scene:placed', icon: '⇢', label: `按清单摆上 ${session.scene.parts.length} 件` });
     store.subscribe((s, prev) => {
       if (s.run > prev.run) {
         for (const h of history) if (h.id.startsWith('run:')) h.status = undefined;
@@ -67,15 +78,22 @@ shell.timeline.onSeek((_i, s) => shell.toast(`回到「${s.label}」由后续任
       }
       for (const [id, r] of Object.entries(s.checks)) if (prev.checks[id] !== r && r.rows.length) pushHistory({ id: `check:${id}:${history.length}`, icon: '◎', label: `验收 ${id}`, status: r.ok ? 'ok' : 'bad' });
     }, ['run', 'checks']);
+    store.subscribe((s) => pushHistory({ id: `scene:${s.sceneRev}`, icon: '⇢', label: `按清单摆上 ${session.scene.parts.length} 件` }), ['sceneRev']);
+    // 采购页的结论按钮由采购步骤自己写（n 条提醒 / 清单没问题）
     const verdict = () => {
+      if (onShop()) return;
       const n = work.checkpoints.length;
       const d = passedCount(ctx);
       shell.setVerdict(n ? `检查点 ${d}/${n}` : '没有检查点', n && d === n ? 'ok' : 'idle');
     };
-    store.subscribe(verdict, ['checks']);
+    store.subscribe(verdict, ['checks', 'step']);
     verdict();
     document.getElementById('verdict')!.onclick = () => {
       const s = store.get();
+      if (s.step === 'shop') {
+        document.getElementById('props')!.scrollTop = 0;
+        return;
+      }
       const first = work.checkpoints.find((id) => !(s.checks[id]?.ok && s.checks[id].own)) ?? work.checkpoints[0];
       if (!first) return;
       if (s.step !== 'bench') location.hash = 'bench';
