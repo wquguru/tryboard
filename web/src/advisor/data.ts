@@ -51,7 +51,7 @@ export const CHIPS: Chip[] = [
     gpio: 22,
     pins: { flash: [12, 13, 14, 15, 16, 17], strapping: [2, 8, 9], usb: [18, 19], uart0: [21, 20], adc1: [0, 1, 2, 3, 4] },
     power: { txPeak: 335, rx: 82, modemSleep: 20, lightSleepUA: 130, deepSleepUA: 5 },
-    notes: ['USB 口只能当串口 / JTAG 调试，不能模拟键盘、U 盘', 'ADC2（GPIO5）在 Wi-Fi 工作时不可用，模拟量尽量放 GPIO0–4', '没有经典蓝牙，不能做蓝牙音箱'],
+    notes: ['USB 口只能当串口 / JTAG 调试，不能模拟键盘、U 盘', 'ADC2（GPIO5）因硬件勘误已不再被 ESP-IDF 支持（与 Wi-Fi 无关），模拟量只放 ADC1（GPIO0–4）', '没有经典蓝牙，不能做蓝牙音箱'],
     simulated: 'full',
   },
   {
@@ -71,7 +71,7 @@ export const CHIPS: Chip[] = [
       psramOctal: [33, 34, 35, 36, 37],
     },
     power: { txPeak: 340, rx: 95, modemSleep: 30, lightSleepUA: 240, deepSleepUA: 8 },
-    notes: ['N16R8 这类带 8MB 八线 PSRAM 的模组，GPIO33–37 被 PSRAM 占用', '原生 USB OTG：可以模拟键盘、网卡、U 盘，也能当主机读 U 盘', '向量指令加速 AI 推理，跑离线唤醒词、小模型'],
+    notes: ['N16R8 这类带 8MB 八线 PSRAM 的模组，GPIO33–37 被 PSRAM 占用', 'ADC2（GPIO11–20）与 Wi-Fi 共用，开 Wi-Fi 时读数可能超时失败；模拟量优先放 ADC1（GPIO1–10）', '原生 USB OTG：可以模拟键盘、网卡、U 盘，也能当主机读 U 盘', '向量指令加速 AI 推理，跑离线唤醒词、小模型'],
     simulated: 'partial',
   },
   {

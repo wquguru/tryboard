@@ -8,7 +8,9 @@
     "noUnusedLocals": true,
     "skipLibCheck": true,
     "types": [],
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   },
   "include": ["src"]
 }

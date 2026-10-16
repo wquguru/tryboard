@@ -127,6 +127,20 @@ echo -e "\n## 关卡（firmware/levels.json，参考固件）\n\`\`\`" >> $REPOR
 tools/check.py --ref --all >> $REPORT 2>&1 || fail=1
 echo '```' >> $REPORT
 
+# 网页单测（元件库 schema、核价提醒、规则引擎 R01–R27）：纯 Node，不需要浏览器，--no-web 也跑
+command -v node >/dev/null || { [ -s ~/.nvm/nvm.sh ] && . ~/.nvm/nvm.sh >/dev/null; }
+echo -e "\n## 网页单测（web/test，node --test）\n\`\`\`" >> $REPORT
+(cd web && npm test --silent > ../Reviews/web-unit.log 2>&1); ut=$?
+grep -E '^ℹ (tests|pass|fail)|^✖' Reviews/web-unit.log >> $REPORT
+echo '```' >> $REPORT
+[ $ut = 0 ] || fail=1
+# 核价提醒：超过 120 天没核的件列出来（只提醒，不判失败；人工按季度核价）
+node --input-type=module -e "
+import { stalePrices } from './web/src/catalog/schema.ts';
+const s = stalePrices(new Date().toISOString().slice(0, 10));
+console.log(s.length ? '核价提醒：' + s.length + ' 件超过 120 天未核价：' + s.map((x) => x.id).join('、') : '核价提醒：无（全部在 120 天内）');
+" >> $REPORT 2>&1 || echo "核价提醒：脚本出错" >> $REPORT
+
 if [ $NO_WEB = 0 ]; then
   echo -e "\n## 网页（Chrome 无头 + wasm）" >> $REPORT
   tools/build_web.sh >/dev/null 2>&1 || { echo "构建失败" >> $REPORT; fail=1; }

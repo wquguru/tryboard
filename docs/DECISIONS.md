@@ -198,3 +198,13 @@
 - 第 06 关的"装配无警告"命令行不判，check.py 明确打印一行说明
 - 装配引擎与模板分开（templates.ts）；spin / lens 两套模板的"装法影响"只改成品画面（舵盘偏角、透镜放大），标估算，不改模拟器
 - 替代：06 关保留 min = max 并在任务书里强调——仍会挂掉大量"先初始化 PWM"的正常写法，放弃
+
+## 2026-10-16 · 元件库 / 采购模版 / 规则引擎：TS 纯数据 + 纯函数，node --test 直接跑 .ts
+- 决定：元件库、模版、规则都放 `web/src/catalog/`（`parts.ts` 53 件、`templates.ts` 四个模版、`rules.ts` R01–R27、`schema.ts` 校验与核价提醒），是 TS 常量和纯函数，不是 RESEARCH_PROCURE 草稿里的 `parts.json` / `rules.json`。规则元数据（id、级别、来源、可信度）在 `RULES` 表里，实现按 id 查 `IMPL`
+- 数据约定：查不到来源的数值写 `null`，字段名必须写进该件的 `todo`；没有意义的字段（线材没有供电电压）写进 `na`；估算电流 `currentMa.est = true` 且 source 写"估算：依据"；`sources` 为空的件不许给供电范围，除非列入 todo。价格全部 `verified: false`、来源写"代理按淘宝常见在售区间估计"，`checkedAt` 为 YYYY-MM（只记年月时按当月 1 日算，宁可早提醒）。这些约定由 `validateCatalog()` 强制，测试与 accept.sh 跑它
+- 外链只用淘宝 / 立创商城搜索页，schema 拒绝商品页和带推广参数的链接（docs/LICENSING.md）
+- C3 ADC2：改正 `advisor/data.ts` 的说法——C3 的 ADC2 因勘误已不被 ESP-IDF 支持（与 Wi-Fi 无关）；S3 才是 ADC2 与 Wi-Fi 共用（R11 / R12 分开处理）
+- 测试：Node 24 自带 `node --test` 直接跑 `web/test/*.test.ts`（类型擦除，无需 flag），不加任何 npm 依赖；catalog 内部用带 `.ts` 扩展名的 import（Node ESM 不补扩展名），`tsconfig.json` 开 `allowImportingTsExtensions` + `noEmit`（vite 照常打包）。现有页面代码仍用无扩展名 import，不受影响。测试文件不进 tsc（没有 @types/node）
+- `toScene` 的输出顺序按接线里第一次出现的先后，与 `firmware/examples.json` 的 scene 逐项 deepEqual；模版接线与 examples.json 的 `pins` 对拍
+- `level-bss138` 归为 passive：它的 5 V 侧 HV 脚本来就不接 GPIO，归 module 会让 R17 在没接线时误报
+- 替代：(a) JSON + 单独校验脚本——要么丢掉类型，要么 TS 再写一遍类型，且 JSON 里不能写注释交代来源；(b) vitest——要加 npm 依赖，Node 24 自带的够用
