@@ -27,7 +27,12 @@
 | I2C0 主机 | ✅ | oled：总线扫描只应答 0x3C、1KB 帧 400kHz 传输 23.8ms（理论 23.2ms）；bme280：END 分段、重复起始读 | 命令表 COMD0–7、TX/RX FIFO、NACK / END / 完成中断、按 SCL 配置算事务耗时；未做：从机模式、10 位地址、超时与仲裁丢失（不会发生）、时钟延展 |
 | 虚拟器件 SSD1306 | ✅ | 帧缓冲点亮 1636 像素、网页截图可读 | 命令解析：寻址模式 / 窗口 / 页模式、电荷泵、开关、对比度、反色、重映射；滚动不做 |
 | 虚拟器件 BME280 | ✅ | 设定 -7.25°C / 88.5% / 950.12hPa，固件按数据手册公式读回误差 0；网页滑块改温度后读数跟随 | 原始 ADC 由补偿公式二分反解；强制 / 正常模式测量时序；无噪声、无 IIR 滤波 |
-| Wi-Fi / BLE | ☐ | — | M6 / M7 |
+| LEDC / RMT / SPI2 / ADC / I2S | ☐ | — | M2 |
+| Wi-Fi STA（开放网络） | ✅ | wifi-init / wifi-scan / wifi-connect / wifi-http：扫描 4 个 AP、关联、DHCP、DNS / mDNS、HTTP GET | MAC 寄存器 + DMA 描述符层；只有 STA，没有 SoftAP / 省电 / 802.11n 聚合 |
+| Wi-Fi WPA2-PSK | ✅ | wifi-wpa2：四次握手完成、拿到 IP、两次 HTTP GET 成功（数据帧全程 CCMP，DHCP 广播走 GTK）；wifi-wpa2-bad：错口令时 AP 判 MIC 失败、IDF 自己报 `reason=15`（4WAY_HANDSHAKE_TIMEOUT），重连时 AP 已被 IDF 拉黑报 `reason=205`，不崩溃 | 只做 PSK + CCMP（不做 TKIP、WPA3-SAE、PMF/802.11w、GTK 轮换）；密钥表字 1 高位只解了"组密钥"位；未经真机标定 |
+| SHA / AES 加速器 | ✅ | 单元测试（FIPS 180 / FIPS 197 / SP 800-38A 向量经寄存器接口）；WPA2 握手（PBKDF2 4096 轮走块模式、HMAC 走 DMA 模式、Key Unwrap 走 AES DMA） | SHA-384/512、AES-GCM 硬件 GHASH、中断模式未做；GDMA 只读 PERI_SEL / LINK 寄存器，没有完整通道模型 |
+| BLE | ☐ | — | M7 |
+| BLE | ☐ | — | M7 |
 
 ## ESP32-S3
 | 模块 | 状态 | 验收 | 备注 |

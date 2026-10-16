@@ -308,6 +308,25 @@
   ]
  },
  {
+  "id": "wifi-wpa2",
+  "seconds": 4,
+  "expect": [
+   "拿到 IP 192.168.4.100",
+   "GET http://tryboard.local/hello.txt → 200，17 字节",
+   "正文：TRYBOARD_HTTP_OK",
+   "GET http://example.com/api/time → 200",
+   "TRYBOARD_OK wifi-wpa2"
+  ]
+ },
+ {
+  "id": "wifi-wpa2-bad",
+  "seconds": 6,
+  "expect": [
+   "断开 reason=15",
+   "TRYBOARD_OK wifi-wpa2-bad"
+  ]
+ },
+ {
   "id": "nvs",
   "seconds": 3,
   "expect": [

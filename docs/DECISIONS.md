@@ -173,3 +173,20 @@
 - 驱动用组件管理器拉的 `espressif/esp_lcd_gc9a01` 2.0.4（Apache-2.0，依赖 `espressif/cmake_utilities`，Apache-2.0），而不是自己发初始化序列：验收的意义就是"标准写法能跑"
 - 固件用整帧缓冲（115200 字节，内部 DMA 内存）+ `on_color_trans_done` 信号量等传完再重画；spin 每 20ms 只重画眼睛那条带（88 行），避免 40MHz 下整帧 23ms 跟不上舵机节拍
 - 替代：只建模 W 寄存器方式（esp_lcd 一定走 DMA，不够）；逐字节按 SPI 时钟推进（与"瞬间交付 + 推迟完成"相比慢且没有可观察差别）
+
+## 2026-10-16 · WPA2：四次握手留给固件，数据帧 CCMP 在 MAC 硬件模型里做
+- 决定：虚拟 AP（`wifi/wpa.rs`）当认证方跑完整四次握手；固件侧的 PBKDF2 / PRF / MIC / Key Unwrap 由 IDF 的 wpa_supplicant 自己算（经硬件 SHA / AES 加速器模型）；数据帧的 CCMP 加解密放在 MAC 模型（`wifi/mod.rs::hw_ccmp`），用驱动写进硬件密钥表的 PTK / GTK。"空中"的帧是真正的 CCMP 密文，AP 用自己推出来的 TK 解
+- 理由：真机就是这样分工的——ESP32-C3 的 802.11 加解密由 MAC 硬件做（驱动发出的受保护帧里只有 CCMP 头和 MIC 空位，`ccmp_decap` 只剥头尾、不解密），握手则全在软件里。照这个分工，固件推导错了密钥就真的连不上，模拟器不会替它"补对"；密钥表读的是驱动实际写入的值，不是从 AP 那边抄
+- 替代：(a) 让空中帧保持明文、MAC 模型忽略受保护位——实现最省，但验证不了固件的密钥安装；(b) MAC 模型直接用 AP 推出来的 TK——口令错时握手早就失败，看似等价，但会掩盖驱动装错密钥槽这类问题
+- 密钥表格式靠反汇编 `hal_crypto_set_key_entry` / `hal_crypto_get_key_entry` 得到，字 1 高位只用到位 30（组密钥）；实测 IDF 把 GTK 装在槽 0、PTK 装在槽 4，对端 MAC 都是 BSSID
+
+## 2026-10-16 · SHA / AES 加速器建模，DMA 模式暂时直接读 GDMA 寄存器
+- 决定：新增 `crypto_hw.rs` 模拟 SHA（块 + DMA）与 AES（块 + DMA，6 种分组模式）。DMA 模式不经 GDMA 模型，而是按 GDMA 的 OUT/IN_PERI_SEL 找到接到 SHA(7) / AES(6) 的通道，直接读 OUTLINK / INLINK 描述符地址、沿 lldesc 链搬数据并清 owner 位
+- 理由：IDF 默认 MBEDTLS_HARDWARE_SHA / AES，WPA2 绕不开；不建模时寄存器读回 0，`sha_hal_read_digest` 见全零摘要直接 abort。C3 上 mbedTLS 的 SHA / AES 只走 DMA 模式（fast_psk 走块模式）。GDMA 通道模型另有代理在做，这里只读不写 GDMA 寄存器，避免冲突
+- 替代：在验收固件的 sdkconfig 里关掉硬件加速——用户拿来的默认配置固件照样会崩，不选。GDMA 模型合入后，`gdma_link` 改成调用它的接口（通道状态、EOF 中断由它负责）
+
+## 2026-10-16 · 错口令用例：断开两次即判通过，原因码以 IDF 实际行为为准
+- 决定：wifi-wpa2-bad 期望第一次断开 `reason=15`（WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT），第二次断开后打印 TRYBOARD_OK；不检查第二次的原因码
+- 理由：实测 IDF 5.5 收到第 4 个消息 1（AP 已重传 3 次）后自己去认证并报 15，早于虚拟 AP 的超时；随后它把这个 BSSID 拉黑，重连扫描时跳过它，报 205（CONNECTION_FAIL）。这两步都是 IDF 自己的策略，不是模拟器造的
+- 替代：只断开一次就结束——覆盖不到"失败后重连不崩溃"
+

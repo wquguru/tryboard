@@ -9,11 +9,21 @@
 #include "esp_http_client.h"
 #include "nvs_flash.h"
 
+// wifi-wpa2 / wifi-wpa2-bad 共用本文件，在 CMakeLists 里覆盖这几个宏
 #ifndef WIFI_SSID
 #define WIFI_SSID "TryBoard-WiFi"
 #define WIFI_PASS ""
 #define TAG_OK "wifi-http"
 #endif
+#ifndef WIFI_AUTH_MIN
+#define WIFI_AUTH_MIN WIFI_AUTH_OPEN
+#endif
+// 期望连接失败的用例：断开这么多次后判定通过（密码错时 IDF 会自动重试）
+#ifndef WIFI_EXPECT_FAIL
+#define WIFI_EXPECT_FAIL 0
+#endif
+
+static int s_disconnects;
 
 static EventGroupHandle_t eg;
 
@@ -22,7 +32,15 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
-        printf("断开，重连\n");
+        wifi_event_sta_disconnected_t *d = data;
+        s_disconnects++;
+        printf("断开 reason=%d\n", d->reason);
+        if (WIFI_EXPECT_FAIL && s_disconnects >= WIFI_EXPECT_FAIL) {
+            printf("连接失败 %d 次，不再重连\n", s_disconnects);
+            printf("TRYBOARD_OK " TAG_OK "\n");
+            return;
+        }
+        printf("重连\n");
         esp_wifi_connect();
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *e = data;
@@ -62,6 +80,7 @@ void app_main(void)
     wifi_config_t wc = {0};
     strcpy((char *)wc.sta.ssid, WIFI_SSID);
     strcpy((char *)wc.sta.password, WIFI_PASS);
+    wc.sta.threshold.authmode = WIFI_AUTH_MIN;
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
     ESP_ERROR_CHECK(esp_wifi_start());

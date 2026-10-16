@@ -3,10 +3,12 @@
 //! 层次：芯片里的闭源驱动（libpp / libnet80211）照常运行，模拟器在寄存器 + DMA 描述符层面扮演 MAC，
 //! 发出的 802.11 帧交给 [`world::World`]（虚拟 AP），世界的回应写进接收描述符并触发 MAC 中断。
 
+pub mod crypto;
 pub mod frame;
 pub mod net;
 pub mod tcp;
 pub mod world;
+pub mod wpa;
 
 use crate::periph::CPU_HZ;
 use crate::SocBus;
@@ -44,6 +46,14 @@ const TXQ_RESULT0: u32 = 0x6003_4320;
 const EV_TX_DONE: u32 = 1 << 7;
 const EV_RX: u32 = 1 << 14;
 
+/// 硬件密钥表（hal_crypto_set_key_entry）：有效位图 + 每项 40 字节
+/// 字 0 = 对端 MAC 字节 0..3，字 1 低 16 位 = MAC 字节 4..5、位 30 = 组密钥，字 2.. = 密钥（按内存字节装载）。
+/// 字 1 高位其余字段（算法、槽位类别）没有用到：实测 IDF 把 GTK 装在槽 0、PTK 装在槽 4，对端都是 BSSID
+const KEY_VALID: u32 = 0x6003_3814;
+const KEY_GROUP: u32 = 1 << 30;
+const KEY_TABLE: u32 = 0x6003_4400;
+const KEY_ENTRY: u32 = 40;
+
 /// 接收描述符里硬件写的元数据头（wifi_pkt_rx_ctrl_t，C3 为 12 个字）
 const RX_HDR: u32 = 48;
 
@@ -80,6 +90,11 @@ impl WifiMac {
     fn schedule(&mut self, at: u64, ev: Ev) {
         self.events.push((at, ev));
     }
+}
+
+/// 置了受保护位的数据帧
+fn is_protected_data(f: &[u8]) -> bool {
+    f.len() >= 24 && f[0] & 0x0c == 0x08 && f[1] & 0x40 != 0
 }
 
 fn us_to_cycles(us: u64) -> u64 {
@@ -159,6 +174,13 @@ impl SocBus {
         }
         // 描述符里的长度含 4 字节 FCS（由硬件生成），帧内容不含
         f.truncate(f.len().saturating_sub(4));
+        if is_protected_data(&f) {
+            // 驱动已填好 CCMP 头（含 PN）并在末尾留 8 字节 MIC 位置，加密由硬件做
+            match self.hw_ccmp(&f, true) {
+                Some(e) => f = e,
+                None => self.wifi_log("    （受保护帧找不到密钥，原样发出）".into()),
+            }
+        }
         let tsf = self.tsf_us();
         let (desc, replies, acked) = self.wifi.world.on_tx(&f, tsf);
         let unicast = f.len() >= 10 && f[4] & 1 == 0;
@@ -204,7 +226,19 @@ impl SocBus {
         }
         let size = w0 & 0xfff;
         let mut f = air.frame.clone();
-        f.extend_from_slice(&frame::crc32(&air.frame).to_le_bytes());
+        if is_protected_data(&f) {
+            // 硬件按密钥表解密：CCMP 头、MIC 位置保留，受保护位不清（ccmp_decap 去掉头尾）
+            match self.hw_ccmp(&f, false) {
+                Some(p) => f = p,
+                None => {
+                    self.wifi.rx_dropped += 1;
+                    self.wifi_log("    （受保护帧解密失败，丢弃）".into());
+                    return;
+                }
+            }
+        }
+        let fcs = frame::crc32(&f);
+        f.extend_from_slice(&fcs.to_le_bytes());
         let total = RX_HDR + f.len() as u32;
         if total > size {
             self.wifi.rx_dropped += 1;
@@ -246,6 +280,54 @@ impl SocBus {
         self.wifi_log(line);
     }
 
+    /// 在硬件密钥表里找对端 MAC 的成对（group = false）或组密钥
+    fn hw_key(&self, peer: &frame::Mac, group: bool) -> Option<[u8; 16]> {
+        let reg = |a: u32| self.regs.get(&a).copied().unwrap_or(0);
+        let valid = reg(KEY_VALID);
+        (0..32).filter(|i| valid & (1 << i) != 0).find_map(|i| {
+            let e = KEY_TABLE + KEY_ENTRY * i;
+            let (w0, w1) = (reg(e), reg(e + 4));
+            let mut mac = [0u8; 6];
+            mac[..4].copy_from_slice(&w0.to_le_bytes());
+            mac[4..].copy_from_slice(&(w1 as u16).to_le_bytes());
+            if mac != *peer || (w1 & KEY_GROUP != 0) != group {
+                return None;
+            }
+            let mut key = [0u8; 16];
+            for j in 0..4 {
+                key[4 * j as usize..4 * j as usize + 4].copy_from_slice(&reg(e + 8 + 4 * j).to_le_bytes());
+            }
+            Some(key)
+        })
+    }
+
+    /// 硬件 CCMP：enc = 发送方向（明文 + 预留 MIC → 密文），否则接收方向（密文 → 明文，保留头尾）
+    fn hw_ccmp(&self, f: &[u8], enc: bool) -> Option<Vec<u8>> {
+        let hl = frame::parse(f)?.body;
+        if f.len() < hl + 16 {
+            return None;
+        }
+        let key_id = f[hl + 3] >> 6;
+        let unicast = f[4] & 1 == 0;
+        // 单播：发送找接收方（a1）的成对密钥、接收找发送方（a2）的；组播只能是组密钥
+        let peer: frame::Mac = if enc { f[4..10].try_into().unwrap() } else { f[10..16].try_into().unwrap() };
+        let tk = self.hw_key(&peer, !unicast)?;
+        let h = &f[hl..hl + 8];
+        let pn = u64::from_le_bytes([h[0], h[1], h[4], h[5], h[6], h[7], 0, 0]);
+        if enc {
+            let mut plain = f[..hl].to_vec();
+            plain[1] &= !0x40;
+            plain.extend_from_slice(&f[hl + 8..f.len() - 8]);
+            Some(crypto::ccmp_encrypt(&tk, &plain, pn, key_id))
+        } else {
+            let (p, _) = crypto::ccmp_decrypt(&tk, f)?;
+            let mut out = f[..hl + 8].to_vec();
+            out.extend_from_slice(&p[hl..]);
+            out.extend_from_slice(&f[f.len() - 8..]);
+            Some(out)
+        }
+    }
+
     /// 推进 Wi-Fi 事件；返回下一个事件时刻
     pub(crate) fn wifi_update(&mut self, now: u64) -> u64 {
         // 已关联：所连 AP 每 102.4ms 发一次信标
@@ -263,8 +345,22 @@ impl SocBus {
         } else {
             self.wifi.next_beacon = 0;
         }
+        // 虚拟 AP 自己的定时器（WPA2 四次握手重传 / 超时）
+        let tsf = self.tsf_us();
+        if self.wifi.world.next_timer().is_some_and(|t| t <= tsf) {
+            let (airs, notes) = self.wifi.world.poll(tsf);
+            for a in airs {
+                let at = now + us_to_cycles(a.delay_us);
+                self.wifi.schedule(at, Ev::Rx(a));
+            }
+            for n in notes {
+                let line = format!("{:>9.3}ms AP {}", now as f64 / (CPU_HZ / 1000) as f64, n);
+                self.wifi_log(line);
+            }
+        }
+        let timer = self.wifi.world.next_timer().map_or(u64::MAX, us_to_cycles);
         if self.wifi.events.is_empty() {
-            return if self.wifi.next_beacon != 0 { self.wifi.next_beacon } else { u64::MAX };
+            return if self.wifi.next_beacon != 0 { self.wifi.next_beacon.min(timer) } else { timer };
         }
         let mut due = Vec::new();
         let mut i = 0;
@@ -291,7 +387,7 @@ impl SocBus {
         if self.wifi.next_beacon != 0 {
             next = next.min(self.wifi.next_beacon);
         }
-        next
+        next.min(timer)
     }
 }
 

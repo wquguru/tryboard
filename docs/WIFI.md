@@ -78,3 +78,24 @@ CPU 修正：ESP32-C3 硬件支持非对齐访存（`esf_buf_alloc_dynamic` 往�
 `esp_http_client` 依次 GET `http://tryboard.local/hello.txt`（`.local` 走 mDNS：查询发往 224.0.0.251:5353，虚拟网关按"传统单播"回给查询方端口）和 `http://example.com/api/time`（普通 DNS → 网关）。空中流程：DNS → ARP 网关 → TCP 三次握手 → HTTP 请求 → 响应 + FIN → ACK / FIN。
 
 顺带补了硬件随机数寄存器 WDEV_RND_REG（0x600260B0）：之前读回常数，lwIP 选端口 / DNS 事务号时会一直等"新随机数"。现在是固定种子的 xorshift，结果可复现。
+
+## 阶段 4b：WPA2-PSK（wifi-wpa2 ✅、wifi-wpa2-bad ✅）
+
+空中流程（`--wifi-log`）：探测 → 认证 → 关联（关联请求带 RSN IE）→ AP 3ms 后发 EAPOL 1/4 → 终端回 2/4（AP 用 PTK 的 KCK 验 MIC）→ AP 发 3/4（安装、Secure、加密密钥数据 = RSN IE + GTK KDE，KEK 做 AES Key Wrap）→ 终端回 4/4 → 端口放行，之后的数据帧全部 CCMP。
+
+前置：硬件 SHA / AES 加速器（`crypto_hw.rs`）。`esp_fast_psk` 用 SHA 块模式算 PBKDF2（4096 × 2 × 2 块），mbedTLS 的 HMAC-SHA1 走 SHA DMA 模式，GTK 解封走 AES DMA（ECB）。没建模时 `sha_hal_read_digest` 读到全零直接 abort。
+
+### MAC 硬件加密
+| 地址 | 含义 | 来源 |
+|---|---|---|
+| 0x60033814 | 密钥表有效位图（位 i = 槽 i） | hal_crypto_set_key_entry / clr_key_entry |
+| 0x60034400 + 40i | 槽 i：字 0 = 对端 MAC 字节 0..3；字 1 低 16 位 = MAC 字节 4..5，位 30 = 组密钥（其余高位是算法 / 槽类别，未用）；字 2..9 = 密钥（内存字节按小端装载） | 同上，get_key_entry 反向解码 |
+| 0x60033800 / 0x60033804 / 0x60033840 | 加密引擎初始化（hal_crypto_init 写 0x30000、或上 0x19） | hal_crypto_init，未建模 |
+
+- 发送：驱动交给硬件的受保护数据帧 = 802.11 头 + 8 字节 CCMP 头（PN 已填，ExtIV 位、密钥号）+ 明文 + 8 字节 MIC 空位。MAC 模型按 a1 找成对密钥，加密后替换整帧。
+- 接收：硬件按 a2 找密钥（a1 组播 → 组密钥）解密，写进接收缓冲的是 头（受保护位保留）+ CCMP 头 + 明文 + 原 MIC；驱动 `ieee80211_crypto_decap → ccmp_decap` 校验 PN 递增后按 cipher 的头 8 / 尾 8 字节剥掉。解密失败的帧丢弃（计入 rx_dropped）。
+- 实测槽位：GTK 槽 0（字 1 = 0x48CC0200），PTK 槽 4（字 1 = 0x086C0200），对端都是 BSSID。
+
+### 错口令
+AP 收到 MIC 不对的 2/4 静默丢弃，按 hostapd 节奏重发 1/4（100ms、1s、1s）。IDF 收到第 4 个 1/4 后自己去认证，事件里 `reason=15`（4WAY_HANDSHAKE_TIMEOUT）；之后它把这个 BSSID 拉黑（libnet80211 `cnx_add_to_blacklist`），重连扫描不再选它，报 `reason=205`（CONNECTION_FAIL）。若终端一直不放弃，AP 在第 4 次发出 1/4 后 1s 发去认证（原因 15）。
+

@@ -1,6 +1,7 @@
 //! ESP32-C3 SoC：存储映射、外设分发、直接启动（替代二级 bootloader）、运行循环。
 
 pub mod boot;
+pub mod crypto_hw;
 pub mod devices;
 pub mod gdma;
 pub mod gpspi;
@@ -88,6 +89,8 @@ pub struct SocBus {
     /// 本次上电的复位原因（RTC_CNTL_RESET_STATE 低 6 位）：1 上电、3 软件系统复位、12 软件 CPU 复位
     pub reset_reason: u32,
     pub wifi: wifi::WifiMac,
+    pub sha: crypto_hw::ShaHw,
+    pub aes: crypto_hw::AesHw,
     /// 硬件随机数发生器（WDEV_RND_REG）状态：xorshift，固定种子保证可复现
     pub rng: u32,
     /// 调试：监视某个 MMIO 地址，记录访问时的 PC（watch_pc 由运行循环填写）
@@ -136,6 +139,8 @@ impl Default for SocBus {
             reset_request: None,
             reset_reason: 1,
             wifi: Default::default(),
+            sha: Default::default(),
+            aes: Default::default(),
             rng: 0x2545_f491,
             watch: None,
             watch_pc: 0,
@@ -256,6 +261,8 @@ impl SocBus {
                 return x;
             }
             0x6001_9000 => return self.ledc.read(off),
+            crypto_hw::SHA_BASE => return self.sha_read(off),
+            crypto_hw::AES_BASE => return self.aes_read(off),
             0x6004_0000 => return self.adc.read(off),
             0x6000_9000 if (4..=0x58).contains(&off) => return self.gpio.iomux[((off - 4) / 4) as usize],
             0x6001_3000 => return self.i2c0.read(off),
@@ -331,6 +338,8 @@ impl SocBus {
                 return;
             }
             0x6001_9000 => return self.ledc.write(off, v, now),
+            crypto_hw::SHA_BASE => return self.sha_write(off, v),
+            crypto_hw::AES_BASE => return self.aes_write(off, v),
             0x6004_0000 => return self.adc.write(off, v),
             0x6000_9000 if (4..=0x58).contains(&off) => {
                 self.gpio.iomux[((off - 4) / 4) as usize] = v;
