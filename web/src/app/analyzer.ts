@@ -53,6 +53,16 @@ function defaultChannels(parts: PartSpec[], chip: string): Channel[] {
     if (p.type === 'servo') ch.push({ id: `GPIO${p.pin}`, kind: 'pin', pin: p.pin, label: `GPIO${p.pin}`, role: '舵机' });
     if (p.type === 'buzzer') ch.push({ id: `GPIO${p.pin}`, kind: 'pin', pin: p.pin, label: `GPIO${p.pin}`, role: '蜂鸣器' });
     if (p.type === 'led') ch.push({ id: `GPIO${p.pin}`, kind: 'pin', pin: p.pin, label: `GPIO${p.pin}`, role: 'LED' });
+    // 编码器 A / B 相与按键（P2-01）、超声波 Trig / Echo（P2-04）
+    if (p.type === 'encoder') {
+      ch.push({ id: `GPIO${p.a}`, kind: 'pin', pin: p.a, label: `GPIO${p.a}`, role: '编码器 A' });
+      ch.push({ id: `GPIO${p.b}`, kind: 'pin', pin: p.b, label: `GPIO${p.b}`, role: '编码器 B' });
+      if (p.sw !== undefined) ch.push({ id: `GPIO${p.sw}`, kind: 'pin', pin: p.sw, label: `GPIO${p.sw}`, role: '编码器按键' });
+    }
+    if (p.type === 'hcsr04') {
+      ch.push({ id: `GPIO${p.trig}`, kind: 'pin', pin: p.trig, label: `GPIO${p.trig}`, role: 'Trig' });
+      ch.push({ id: `GPIO${p.echo}`, kind: 'pin', pin: p.echo, label: `GPIO${p.echo}`, role: 'Echo' });
+    }
   }
   const boot = chip === 'esp32s3' ? 0 : 9;
   ch.push({ id: `GPIO${boot}`, kind: 'pin', pin: boot, label: `GPIO${boot}`, role: 'BOOT 键' });

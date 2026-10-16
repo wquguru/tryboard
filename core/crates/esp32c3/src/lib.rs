@@ -10,7 +10,9 @@ pub mod ledc;
 pub mod i2c;
 pub mod iotrace;
 pub mod periph;
+pub mod pcnt;
 pub mod rmt;
+pub mod sigin;
 pub mod spiflash;
 pub mod wifi;
 
@@ -92,6 +94,8 @@ pub struct SocBus {
     pub rmt: rmt::Rmt,
     /// 挂在各引脚上的 WS2812 解码器（引脚被 GPIO 矩阵连到 RMT 输出时自动创建）
     pub ws2812: HashMap<u32, rmt::Ws2812>,
+    /// 直接接在 GPIO 上、输出带时刻波形的外接器件（HC-SR04 等；C3 没有 PCNT，编码器只能靠 GPIO 中断读）
+    pub pins: devices::pins::PinDevices,
     pub efuse: [u32; 0x200 / 4],
     /// SYSTEM_CPU_INTR_FROM_CPU_0..3
     pub from_cpu: u32,
@@ -155,6 +159,7 @@ impl Default for SocBus {
             adc: Adc::default(),
             rmt: rmt::Rmt::default(),
             ws2812: HashMap::new(),
+            pins: Default::default(),
             efuse: boot::default_efuse(),
             from_cpu: 0,
             usj_tx: Vec::new(),
@@ -463,8 +468,53 @@ impl SocBus {
             if self.gpio_log.len() > 1 << 16 {
                 self.gpio_log.drain(..1 << 15);
             }
+            self.pins.on_level(now, lv as u64);
         }
+        self.feed_rx(now, lv);
         self.irq_dirty = true;
+    }
+
+    /// RMT 接收通道的输入（GPIO 矩阵 FUNCn_IN_SEL_CFG：sel[4:0]、inv[5]、经矩阵[6]；0x1E 常 1、0x1F 常 0）
+    fn feed_rx(&mut self, t: u64, lv: u32) {
+        for i in 0..self.rmt.layout.nrx {
+            let f = self.gpio.func_in[(rmt::SIG_OUT0 + i as u32) as usize];
+            let v = f & (1 << 6) != 0
+                && (match f & 0x1f {
+                    0x1e => true,
+                    0x1f => false,
+                    p if p < 22 => lv >> p & 1 != 0,
+                    _ => false,
+                }) != (f & (1 << 5) != 0);
+            self.rmt.rx_input(i, t, v);
+        }
+    }
+
+    /// 外接引脚器件到 now 为止的驱动按时刻施加到引脚；返回下一次要问它们的时刻
+    fn pins_update(&mut self, now: u64) -> u64 {
+        if self.pins.is_empty() {
+            return u64::MAX;
+        }
+        loop {
+            let (drives, next) = self.pins.poll(now);
+            if drives.is_empty() {
+                return next;
+            }
+            for (t, pin, lv) in drives {
+                let bit = 1u32 << pin;
+                let g = &mut self.gpio;
+                if lv < 0 {
+                    g.ext_driven &= !bit;
+                } else {
+                    g.ext_driven |= bit;
+                    if lv > 0 {
+                        g.ext_in |= bit;
+                    } else {
+                        g.ext_in &= !bit;
+                    }
+                }
+                self.gpio_changed(t);
+            }
+        }
     }
 
     /// 引脚上的 PWM：经 GPIO 矩阵路由到该引脚的 LEDC 通道输出（占空比, 频率）
@@ -551,6 +601,10 @@ impl SocBus {
             }
             self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
         }
+        if !edges.is_empty() {
+            let lv = self.gpio.level();
+            self.feed_rx(now, lv);
+        }
         edges.clear();
         self.rmt.edges = edges;
         next
@@ -567,6 +621,7 @@ impl SocBus {
         let n6 = self.route_rmt(now);
         let n7 = self.i2c0.update(now);
         let n8 = self.wifi_update(now);
+        let n10 = self.pins_update(now);
         self.trace_pwm(now);
         let (n9, spi_done) = self.spi2.update(now);
         if spi_done {
@@ -574,7 +629,7 @@ impl SocBus {
                 self.gdma.out_done(ch);
             }
         }
-        self.next_event = n1.min(n2).min(n3).min(n4).min(n5).min(n6).min(n7).min(n8).min(n9);
+        self.next_event = n1.min(n2).min(n3).min(n4).min(n5).min(n6).min(n7).min(n8).min(n9).min(n10);
         let lv = self.levels();
         let pending = self.intc.pending(lv);
         cpu.irq_line = self.intc.select(pending);
@@ -840,6 +895,7 @@ impl Esp32c3 {
         // 外接器件、引脚记录、灯带解码是外部世界的一部分，复位后还在（与 S3 的 reboot 一致）
         m.bus.i2c0.devices = std::mem::take(&mut self.bus.i2c0.devices);
         m.bus.ws2812 = std::mem::take(&mut self.bus.ws2812);
+        m.bus.pins = std::mem::take(&mut self.bus.pins);
         m.bus.gpio_log = std::mem::take(&mut self.bus.gpio_log);
         m.bus.iotrace = self.bus.iotrace.carry();
         // 外接屏不随芯片复位消失（它的复位脚由固件重新驱动）

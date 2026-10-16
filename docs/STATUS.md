@@ -1,6 +1,6 @@
 # 覆盖矩阵
 
-最后更新：2026-10-16（`tools/accept.sh --no-qemu` 全部通过：固件 40/40（含 s3-brownout-usb / -ext），ngspice 对照 10/10，关卡参考固件 8/8（含 07-spin / 07-lens），网页冒烟 15 个示例 + 关卡 / 装配 / 首页 22 项）
+最后更新：2026-10-16（P2-01 / 04 / 05 分支 wt-pcnt：`tools/accept.sh --no-qemu` 全部通过，固件 47/47（含 s3-encoder、s3-ultrasonic），网页冒烟加 s3-encoder / s3-ultrasonic，web 单测 107 个。此前：固件 40/40（含 s3-brownout-usb / -ext），ngspice 对照 10/10，关卡参考固件 8/8（含 07-spin / 07-lens），网页冒烟 15 个示例 + 关卡 / 装配 / 首页 22 项）
 
 ## ESP32-C3
 | 模块 | 状态 | 验收 | 备注 |
@@ -21,7 +21,7 @@
 | LEDC | ✅ | fade：5kHz 13 位硬件渐变时序与 IDF 计算一致；servo：50Hz 脉宽 | 不逐周期出波形，按占空比给出引脚 PWM |
 | ADC（APB_SARADC 单次） | ✅ | pot：0 / 1250 / 2400mV 读数误差 < 1LSB+噪声 | 衰减档线性近似、±2LSB 噪声；连续模式（DMA）未做；eFuse 校准数据未提供（adc_cali 不可用） |
 | RMT 发送 | ✅ | rgb：1 颗 WS2812 四色逐帧一致；strip：16 颗 × 3 帧逐颗一致（384 条目，靠阈值中断乒乓填充 + 回绕） | 时钟源 / 组分频 / 通道分频、mem_size 借块、回绕、连续（循环）模式与循环计数中断、结束 / 阈值 / 出错中断；未做载波、APB FIFO 模式 |
-| RMT 接收 | ☐ | — | 寄存器可读写，没有外部输入源，不会产生接收数据 |
+| RMT 接收 | 🟡 | 单元测试（C3 布局：通道 2/3、mem_size [25:23]、RX_END 位 2+i、多段电平 + 滤波、结束条目、CH3STATUS 写指针） | 与 S3 共用 `rmt.rs` 接收模型（`RmtLayout::C3`），输入经 GPIO 矩阵（sel[4:0]、inv[5]、经矩阵[6]）；HC-SR04 等引脚器件 C3 也能挂；缺 C3 固件验收（P2-05 的验收固件在 S3 上） |
 | WS2812 解码器 | ✅ | 同上 | 引脚连到 RMT 输出时自动挂上；高电平 >0.6µs 判 1，低电平 ≥40µs 提交一帧 |
 | SPI2 / GDMA | ✅ | c3-lcd：esp_lcd + esp_lcd_gc9a01 标准写法（SPI_DMA_CH_AUTO、40MHz），整帧 115200 字节拆 6 次 DMA，再每 50ms 局部刷新；CLI `--spi gc9a01` 与网页 3D 台面圆屏都有画面（四色扇区 + 白环，非黑 35409 像素） | 与 S3 共用 `gpspi.rs` / `gdma.rs`；GDMA 按 C3 排布（3 通道、通道组从 0x70 起、中断寄存器集中在 0x00 起且 IN / OUT 共用，`GdmaLayout::C3`）。C3 驱动直接写 DMA_INT_RAW 清 trans_done，模型据此支持写 RAW。圆屏接线 SCLK=6 MOSI=7 CS=10 DC=5 RST=4 背光=3（`esp32c3::lcd_pin`） |
 | I2S | ☐ | — | 未做 |
@@ -66,6 +66,10 @@
 | GPIO（49 脚）/ IO_MUX | ✅ | s3-blink：GPIO5 翻转；s3-button：BOOT 键 GPIO0 下降沿中断 + 消抖，GPIO5 翻转 2 次 | 外设信号经 GPIO 矩阵驱动引脚（RMT）；输出信号号 256 = 普通 GPIO |
 | LEDC | ✅ | s3-pot：5kHz PWM 占空比跟随 ADC；s3-servo：GPIO4 50Hz 0.5–2.5ms | 与 C3 同一模型（扩到 8 通道），输出信号 73..80 |
 | RMT + WS2812 | ✅ | s3-rgb：GPIO48 解码 6 帧，前 4 帧颜色逐颗一致 | 与 C3 同一模型，按 `RmtLayout::S3`（4 发 4 收、RAM +0x800、信号 81..84）参数化 |
+| PCNT（4 单元 × 2 通道，P2-01） | ✅ | s3-encoder（IDF `pulse_cnt`，与 rotary_encoder 示例同配置：双通道互为边沿 / 电平、4 倍频、±100 上下限 + accum_count、1 µs 毛刺滤波）：顺 5 格 → 20、逆 2 格 → 12、再顺 30 格 → 132（越过上限两次由驱动在中断里累加）；单元测试（正交 4 倍频、过零 / h_lim 事件与锁存、zero_mode、暂停、滤波）；S3 SocBus 集成测试（编码器 → GPIO 矩阵 → PCNT） | 寄存器按 pcnt_reg.h；h_lim / l_lim 到达即清零（不再同时触发过零），thres0 / thres1 / zero 事件；滤波按"稳定满门限才认"惰性实现（沿整体推迟门限时长）；STEP / 清零信号（S3 没有）不做；QEMU 无 S3 PCNT 模型（只对照启动行） |
+| RMT 接收（P2-05） | ✅ | s3-ultrasonic（IDF `rmt_rx`，1 MHz、25 ms 空闲、1 µs 滤波）：25 / 100 / 300 cm → Echo 1457 / 5830 / 17492 µs、超量程 → out of range；单元测试（S3 / C3 两种布局、滤波、结束条目、写指针） | rx_en 后等第一个跳变开始，每段电平写半个条目，空闲超过 idle_thres 写时长 0 的半条目补齐并置 RX_END；阈值中断 + 回绕（IDF 乒乓）、内存写满出错；载波解调、DMA 接收、所有者错误未做；QEMU 能跑驱动初始化（无回波源，打印 no echo） |
+| 虚拟器件 EC11 编码器（P2-01） | ✅ | 同 s3-encoder；网页：3D 旋钮左右拖 6 格 → PCNT 24、滚轮 3 格 → 36、按住 → SW DOWN；网页导出输入日志 → CLI `--encoder 6,7,15 --inputs` 串口逐字节相同；回退指纹一致 | 每格四个沿、沿间隔 0.5 ms，在内核里按时刻排出波形（不受 1 ms 时间片影响）；触点抖动未建模；按键按下接地、松开悬空（固件开上拉）；电流 0.66 mA 进 3V3（估算） |
+| 虚拟器件 HC-SR04（P2-04） | ✅ | 同 s3-ultrasonic；网页：拖 3D 障碍物 15 → 10.9 cm、固件读 10.9 cm，200 cm / 50 cm 快捷按钮，逻辑分析仪看到 Trig / Echo；网页输入日志 → CLI `--sonar 17,18 --inputs` 串口逐字节相同；拆掉 Echo 分压 → 接线检查 W2 | Trig ≥ 10 µs 下降沿后 250 µs 拉高 Echo，宽 2 × 距离 / 343 m/s（20 ℃ 固定）；2–400 cm，超量程 38 ms；测量中再触发不理；距离来自探头沿朝向的射线（3D 里最远摆 100 cm）；15 mA 进 5V 轨；未经真机标定 |
 | I2C0 / I2C1 | ✅ | s3-oled：扫描只应答 0x3C，1KB 帧 400kHz 约 24.0ms，点亮 1636 像素；s3-bme280：-7.25°C / 88.5% / 950.12hPa 读回误差 0 | 与 C3 同一模型（寄存器布局逐项一致），I2C1 在 0x60027000 |
 | SAR ADC 单次（SENS） | ✅ | s3-pot：0 / 1550 / 3000mV 读数正确 | S3 单次采样走 RTC 的 SENS（0x60008800），不是 APB_SARADC；衰减档量程近似 950 / 1250 / 1750 / 3100mV；ADC2 仲裁标志、连续模式未做 |
 | UART / SYSTIMER / TIMG / SPI1 flash | ✅ | 控制台、FreeRTOS 节拍、RTC 校准、flash 识别 GD 16MB | 复用 C3 模型；TIMG 的 T1 未建模 |

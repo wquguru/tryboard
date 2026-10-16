@@ -282,6 +282,61 @@ pub extern "C" fn tb_lcd_ptr() -> *const u8 {
     with(std::ptr::null(), |m| m.lcd().map(|d| d.render().as_ptr()).unwrap_or(std::ptr::null()))
 }
 
+// ---------------------------------------------------------------- 引脚上的外接器件（P2-01 编码器、P2-04 超声波）
+
+/// 接一个旋转编码器：A / B 两相，sw < 0 表示没有按键
+#[no_mangle]
+pub extern "C" fn tb_encoder_attach(a: u32, b: u32, sw: i32) {
+    with((), |m| m.encoder_attach(a, b, (sw >= 0).then_some(sw as u32)))
+}
+
+/// 转 steps 格（正 = 顺时针）；波形由内核按 0.5 ms 一个沿排出来
+#[no_mangle]
+pub extern "C" fn tb_encoder_turn(steps: i32) {
+    with((), |m| m.encoder_turn(steps))
+}
+
+/// 编码器按键：1 按下，0 松开
+#[no_mangle]
+pub extern "C" fn tb_encoder_press(down: u32) {
+    with((), |m| m.encoder_press(down != 0))
+}
+
+/// 编码器已经转完的格数（没接为 NaN）
+#[no_mangle]
+pub extern "C" fn tb_encoder_pos() -> f64 {
+    with(f64::NAN, |m| m.encoder_position().map(|p| p as f64).unwrap_or(f64::NAN))
+}
+
+/// PCNT 单元 u 的当前计数（只有 S3 有；没有为 NaN）
+#[no_mangle]
+pub extern "C" fn tb_pcnt_count(u: u32) -> f64 {
+    with(f64::NAN, |m| m.pcnt_count(u as usize).map(|c| c as f64).unwrap_or(f64::NAN))
+}
+
+/// 接一个 HC-SR04：Trig 由芯片驱动，Echo 由模块驱动（5 V 供电，电流进 5V 轨）
+#[no_mangle]
+pub extern "C" fn tb_sonar_attach(trig: u32, echo: u32) {
+    with((), |m| m.sonar_attach(trig, echo))
+}
+
+/// 探头到障碍物的距离（cm）；负数 = 前方没有东西
+#[no_mangle]
+pub extern "C" fn tb_sonar_distance(cm: f64) {
+    with((), |m| m.sonar_distance(cm))
+}
+
+/// 超声波统计：0 = 触发次数，1 = 回波次数，2 = 最近一次 Echo 宽度（µs）；没接为 NaN
+#[no_mangle]
+pub extern "C" fn tb_sonar_stat(which: u32) -> f64 {
+    with(f64::NAN, |m| match (m.sonar_stats(), which) {
+        (Some(s), 0) => s.0 as f64,
+        (Some(s), 1) => s.1 as f64,
+        (Some(s), 2) => s.2,
+        _ => f64::NAN,
+    })
+}
+
 // ---------------------------------------------------------------- 供电网络（tryboard-elec，P1-01 / P1-02）
 
 /// 供电方式：0 = 只有 USB（舵机也吃 USB 的 5V），1 = 舵机由外接 5 V 2 A 供电

@@ -115,8 +115,22 @@ async function boot(autorun: boolean) {
   audio.reset();
   // 舵机接进供电网络（只有 USB：app.html 的实验台才有 USB ↔ 外接 5 V 切换）
   const servo = scene.parts.find((p) => p.type === 'servo');
-  send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: i2cDevices(), env: sensedEnv(), lcd: scene.parts.some((p) => p.type === 'gc9a01'), servo: servo && 'pin' in servo ? servo.pin : undefined, power: 'usb' });
+  // 编码器 / 超声波（P2-01 / P2-04）：上电时接上；超声波初始距离取场景里的
+  const enc = scene.parts.find((p) => p.type === 'encoder');
+  const son = scene.parts.find((p) => p.type === 'hcsr04');
+  if (son && son.type === 'hcsr04') distance = son.cm ?? 25;
+  send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: i2cDevices(), env: sensedEnv(), lcd: scene.parts.some((p) => p.type === 'gc9a01'), servo: servo && 'pin' in servo ? servo.pin : undefined, power: 'usb', encoder: enc && enc.type === 'encoder' ? { a: enc.a, b: enc.b, sw: enc.sw } : undefined, sonar: son && son.type === 'hcsr04' ? { trig: son.trig, echo: son.echo, cm: distance } : undefined });
 }
+
+// 3D 里拖 / 滚编码器、拖障碍物
+let distance = 25;
+let lastPings = 0;
+bench.onEncoder((steps) => send({ type: 'enc', steps }));
+bench.onEncoderPress((down) => send({ type: 'encsw', down }));
+bench.onDistance((cm) => {
+  distance = cm;
+  send({ type: 'dist', cm });
+});
 
 const usbPanel = createUsbPanel(document.querySelector('.panel.info')!, (text) => send({ type: 'usbcdc', text }));
 let pendingAutorun = false;
@@ -147,6 +161,11 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       if (m.leds) frame.rgb = m.leds[0] ?? null;
       asm?.update(frame, env.temp);
       audio.push(m.pwmEvents, m.simSeconds);
+      if (m.pins?.encPos != null) bench.setEncoder(m.pins.encPos);
+      if (m.pins?.pings != null && m.pins.pings !== lastPings) {
+        lastPings = m.pins.pings;
+        bench.pingSonar();
+      }
       $('simtime').textContent = `${m.simSeconds.toFixed(3)} s`;
       if (m.running) {
         const r = $('ratio');

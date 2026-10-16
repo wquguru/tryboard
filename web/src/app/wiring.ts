@@ -12,7 +12,7 @@ export interface PartInfo {
 }
 
 /** 零件类型 → 中文显示名（时间线、提示条、构建树统一用这份，不让英文 type 名漏到界面上） */
-export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: '舵机', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED' };
+export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: '舵机', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED', encoder: '编码器', hcsr04: '超声波' };
 export const partLabel = (type: string) => PART_LABEL[type as PartSpec['type']] ?? '零件';
 
 export function partId(p: PartSpec) {
@@ -35,6 +35,10 @@ export function partInfo(p: PartSpec, ext5v = false): PartInfo {
       return { name: `LED（GPIO${p.pin}）`, model: '5 mm LED + 220 Ω 限流电阻', iface: `GPIO${p.pin}，高电平亮`, power: '经 GPIO' };
     case 'buzzer':
       return { name: '无源蜂鸣器', model: '无源蜂鸣器模块（三针，带三极管，LEDC 方波驱动）', iface: `I/O → GPIO${p.pin}`, power: '3V3' };
+    case 'encoder':
+      return { name: 'EC11 旋转编码器', model: 'EC11 编码器模块（KY-040 类，每圈 20 格，A/B 正交 + 按键，板上 10 kΩ 上拉）', iface: `CLK GPIO${p.a} · DT GPIO${p.b}${p.sw !== undefined ? ` · SW GPIO${p.sw}` : ''}（S3 用 PCNT 计数）`, power: '3V3' };
+    case 'hcsr04':
+      return { name: 'HC-SR04 超声波', model: 'HC-SR04 超声波测距（2–400 cm，40 kHz，Echo 5 V 输出）', iface: `Trig GPIO${p.trig} · Echo GPIO${p.echo}${p.divider === false ? '（直连，5 V 进 GPIO！）' : '（经 1 kΩ / 2 kΩ 分压到约 3.3 V）'}`, power: '5V（USB 5V 轨，约 15 mA）' };
   }
 }
 
@@ -59,6 +63,8 @@ export interface BenchWire {
   missing?: boolean;
   /** 被改接过（原来接在哪） */
   from?: string;
+  /** 5 V 输出经分压电阻降到 3.3 V 再进 GPIO（HC-SR04 Echo）；false = 直接接 */
+  divider?: boolean;
 }
 
 /** 改接线：给规则检查造错误接线用（debug 钩子 / 以后的连线工具），按 3D 里已有导线的 id 改 */
@@ -69,6 +75,8 @@ export interface WireMods {
   retarget?: Record<string, string>;
   /** 去掉限流电阻的 LED（零件 id） */
   noResistor?: string[];
+  /** 去掉 Echo 分压电阻的超声波（零件 id）：5 V 直接进 GPIO */
+  noDivider?: string[];
 }
 
 export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): BenchWire[] {
@@ -102,6 +110,18 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
     } else if (p.type === 'led') {
       add(`GPIO${p.pin}`, id, 'IN', '输出（经 220 Ω）', 'load', '橙', { ohm: 220 });
       add('GND', id, 'GND', '地', 'gnd', '黑');
+    } else if (p.type === 'encoder') {
+      // KY-040：CLK / DT 板上上拉到 "+"，触点闭合接地 → 这两根是模块往外推电平的线
+      add('GND', id, 'GND', '地', 'gnd', '黑');
+      add('3V3', id, '+', '供电（上拉）', 'power', '红');
+      if (p.sw !== undefined) add(`GPIO${p.sw}`, id, 'SW', '按键（按下接地）', 'drive', '紫');
+      add(`GPIO${p.b}`, id, 'DT', 'B 相（DT）', 'drive', '绿');
+      add(`GPIO${p.a}`, id, 'CLK', 'A 相（CLK）', 'drive', '黄');
+    } else if (p.type === 'hcsr04') {
+      add('5V', id, 'VCC', '供电（5 V）', 'power', '红');
+      add(`GPIO${p.trig}`, id, 'Trig', '触发（GPIO 输出 10 µs 高脉冲）', 'load', '橙');
+      add(`GPIO${p.echo}`, id, 'Echo', p.divider === false ? '回波（5 V，直连）' : '回波（经 1k/2k 分压）', 'drive', '蓝', { divider: p.divider !== false });
+      add('GND', id, 'GND', '地', 'gnd', '黑');
     } else if (p.type === 'buzzer') {
       // 三针模块：I/O 经模块上的三极管驱动蜂鸣器，GPIO 只推基极
       add('3V3', id, 'VCC', '供电', 'power', '红');
@@ -111,6 +131,7 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
   }
   const drop = new Set(mods.drop ?? []);
   const nores = new Set(mods.noResistor ?? []);
+  const nodiv = new Set(mods.noDivider ?? []);
   for (const x of w) {
     if (drop.has(x.id)) x.missing = true;
     const to = mods.retarget?.[x.id];
@@ -119,6 +140,7 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
       x.a = to;
     }
     if (x.ohm !== undefined && nores.has(x.part)) x.ohm = 0;
+    if (x.divider !== undefined && nodiv.has(x.part)) x.divider = false;
   }
   return w;
 }
@@ -130,4 +152,4 @@ export function usedPins(wires: BenchWire[]): string[] {
   return [...seen];
 }
 
-export const emptyMods = (m: WireMods | null | undefined) => !m || (!m.drop?.length && !m.noResistor?.length && !Object.keys(m.retarget ?? {}).length);
+export const emptyMods = (m: WireMods | null | undefined) => !m || (!m.drop?.length && !m.noResistor?.length && !m.noDivider?.length && !Object.keys(m.retarget ?? {}).length);

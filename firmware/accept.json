@@ -870,5 +870,56 @@
    "TRYBOARD_OK c3-lcd"
   ],
   "lcd_min_pixels": 30000
+ },
+ {
+  "id": "s3-encoder",
+  "chip": "esp32s3",
+  "seconds": 2.2,
+  "args": [
+   "--encoder",
+   "6,7,15"
+  ],
+  "script": "0.5:enc=+5; 1.0:enc=-2; 1.3:encsw=1; 1.4:encsw=0; 1.6:enc=+30",
+  "expect": [
+   "ENCODER ready A=GPIO6 B=GPIO7 SW=GPIO15",
+   "ENC count=20 detents=5",
+   "ENC count=12 detents=3",
+   "SW DOWN 1 (count=12)",
+   "SW UP",
+   "ENC count=132 detents=33",
+   "TRYBOARD_OK encoder"
+  ],
+  "stderr_expect": [
+   "编码器 转了 33 格"
+  ],
+  "gpio_toggles": {
+   "pin": 6,
+   "min": 74
+  }
+ },
+ {
+  "id": "s3-ultrasonic",
+  "chip": "esp32s3",
+  "seconds": 2,
+  "args": [
+   "--sonar",
+   "17,18"
+  ],
+  "script": "0:dist=25; 0.5:dist=100; 1.0:dist=300; 1.5:dist=-1",
+  "expect": [
+   "ULTRASONIC ready TRIG=GPIO17 ECHO=GPIO18",
+   "DIST 25.0 cm (echo 1457 us)",
+   "DIST 100.0 cm (echo 5830 us)",
+   "DIST 300.0 cm (echo 17492 us)",
+   "DIST out of range",
+   "TRYBOARD_OK ultrasonic"
+  ],
+  "stderr_expect": [
+   "超声波 触发 16 次，回波 16 次"
+  ],
+  "gpio_toggles": {
+   "pin": 18,
+   "min": 30
+  }
  }
 ]

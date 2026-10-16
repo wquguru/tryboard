@@ -15,7 +15,13 @@ export type InputEvent =
   /** 串口 / USB 虚拟串口输入 */
   | { tMs: number; kind: 'uart' | 'usbcdc'; text: string }
   /** 供电切换（P1-02）：usb = 舵机吃 USB 的 5V；ext = 舵机由外接 5 V 供电。脚本动作 power=usb|ext */
-  | { tMs: number; kind: 'supply'; mode: 'usb' | 'ext' };
+  | { tMs: number; kind: 'supply'; mode: 'usb' | 'ext' }
+  /** 旋转编码器转 steps 格（正 = 顺时针）；脚本动作 enc=+N / enc=-N（P2-01） */
+  | { tMs: number; kind: 'enc'; steps: number }
+  /** 编码器按键；脚本动作 encsw=1|0 */
+  | { tMs: number; kind: 'encsw'; down: boolean }
+  /** 超声波探头到障碍物的距离（cm，负数 = 前方没有东西）；脚本动作 dist=厘米（P2-04） */
+  | { tMs: number; kind: 'dist'; cm: number };
 
 /** 还没盖时间戳的事件（worker 施加时补上 tMs） */
 export type InputAction = InputEvent extends infer E ? (E extends unknown ? Omit<E, 'tMs'> : never) : never;
@@ -31,6 +37,9 @@ export interface InputLog {
   /** 上电时接的舵机（GPIO）与供电方式：重放时变成 --servo / --power */
   servo?: number;
   power?: 'usb' | 'ext';
+  /** 上电时接的编码器 / 超声波：重放时变成 --encoder A,B[,SW] / --sonar TRIG,ECHO */
+  encoder?: { a: number; b: number; sw?: number };
+  sonar?: { trig: number; echo: number };
   events: InputEvent[];
   /** 取日志那一刻的模拟时间（毫秒）：重放跑到这里（--seconds）就与网页上看到的一致 */
   endMs?: number;
@@ -63,6 +72,12 @@ export function action(e: InputEvent): string | null {
       return `usbcdc=${esc(e.text)}`;
     case 'supply':
       return `power=${e.mode}`;
+    case 'enc':
+      return `enc=${e.steps >= 0 ? '+' : ''}${e.steps}`;
+    case 'encsw':
+      return `encsw=${e.down ? 1 : 0}`;
+    case 'dist':
+      return `dist=${Math.round(e.cm * 100) / 100}`;
     case 'power':
       return null;
   }
@@ -90,6 +105,8 @@ export function cliArgs(log: InputLog, fw: string, inputsFile: string, seconds?:
   if (log.i2c.length) a.push('--i2c', log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(','));
   if (log.lcd) a.push('--spi', 'gc9a01');
   if (log.servo !== undefined) a.push('--servo', String(log.servo), '--power', log.power ?? 'usb');
+  if (log.encoder) a.push('--encoder', [log.encoder.a, log.encoder.b, ...(log.encoder.sw !== undefined ? [log.encoder.sw] : [])].join(','));
+  if (log.sonar) a.push('--sonar', `${log.sonar.trig},${log.sonar.echo}`);
   a.push('--inputs', inputsFile);
   return a;
 }

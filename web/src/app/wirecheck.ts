@@ -52,7 +52,8 @@ export function checkWiring(parts: PartSpec[], wires: BenchWire[]): WireFault[] 
   for (const pid of new Set(live.map((w) => w.part))) {
     const own = live.filter((w) => w.part === pid);
     const vcc = own.find((w) => w.pinRole === 'power');
-    const sig = own.filter((w) => (w.pinRole === 'bus' || w.pinRole === 'drive') && /^GPIO\d+$/.test(w.a));
+    // 经分压电阻降到 3.3 V 的输出不算（HC-SR04 Echo 的 1 kΩ / 2 kΩ）
+    const sig = own.filter((w) => (w.pinRole === 'bus' || w.pinRole === 'drive') && /^GPIO\d+$/.test(w.a) && w.divider !== true);
     const v = netVolt(vcc?.a ?? null);
     if (vcc && v !== null && v > 3.6 && sig.length) push('W2', 'block', [vcc.id, ...sig.map((w) => w.id)], '5 V 进 GPIO', `${name(pid)} 的 ${vcc.pin} 接在 ${vcc.a}（${v} V），它的 ${sig.map((w) => w.pin).join(' / ')} 上拉 / 输出也是 ${v} V，直接进 ${sig.map((w) => w.a).join('、')}；ESP32 引脚不耐 5 V。改接 3V3，或加电平转换。`);
   }
