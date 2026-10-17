@@ -48,8 +48,9 @@ function spdxCopyright(dir) {
   return [...got].slice(0, 2);
 }
 const fullText = (title, text) => `<details><summary>${esc(title)}</summary><pre>${esc(text.trim())}</pre></details>`;
-const table = (head, rows) => `<div class="tbl"><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
-const tr = (cells) => `<tr>${cells.map((c) => `<td${c?.mono ? ' class="mono"' : ''}>${c?.html ?? esc(c)}</td>`).join('')}</tr>`;
+// 手机（< 768px）上每一行变成一张卡（DESIGN_V2 §5「每个来源一张卡，不用横向滚表格」）：首格是卡片标题，其余格用 data-label 显示列名
+const table = (head, rows) => `<div class="tbl"><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => r(head)).join('')}</tbody></table></div>`;
+const tr = (cells) => (head) => `<tr>${cells.map((c, i) => `<td data-label="${esc(head[i] ?? '')}"${c?.mono ? ' class="mono"' : ''}>${c?.html ?? esc(c)}</td>`).join('')}</tr>`;
 const mono = (s) => ({ mono: true, html: esc(s) });
 const link = (href, text) => ({ html: `<a href="${esc(href)}">${esc(text ?? href)}</a>` });
 
@@ -226,7 +227,16 @@ ${!found.length ? '<p class="note">目前没有使用外部 3D 模型、贴图�
 }
 
 // 页头导航链接的类名：与 web/src/ui/site.tsx 的 navLink 相同（licenses.css 用 @source 扫这个文件生成这些类）
-const NAV_LINK = 'rounded-md px-2.5 py-[5px] text-muted hover:bg-field hover:text-fg max-sm:px-1.5 max-sm:py-1 max-sm:text-[12px]';
+const NAV_LINK = 'rounded-md px-2.5 py-[5px] text-muted hover:bg-field hover:text-fg';
+const NAV = [
+  ['./home.html', '作品'],
+  ['./advisor.html', '选型助手'],
+  ['./app.html?work=blank#bench', '空白实验台'],
+];
+const LOGO = (s) => `<svg width="${s}" height="${s}" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="4" width="56" height="56" rx="14" class="fill-[#0B76C8] dark:fill-[#3AA8FF]"/><g class="fill-white dark:fill-[#17181B]"><circle cx="20" cy="20" r="5"/><circle cx="32" cy="20" r="5"/><circle cx="20" cy="32" r="5"/><circle cx="32" cy="32" r="5"/><circle cx="44" cy="32" r="5"/><circle cx="20" cy="44" r="5"/><circle cx="32" cy="44" r="5"/><circle cx="44" cy="44" r="5"/></g><circle cx="44" cy="20" r="6" fill="#FFB020"/></svg>`;
+const BRAND = `<a class="inline-flex flex-none items-center gap-1.5 max-md:min-h-11 max-md:gap-2" href="./home.html" aria-label="试板 TryBoard 首页">${LOGO(22).replace('<svg ', '<svg class="max-md:size-[26px]" ')}<b class="text-[14px] max-md:text-[17px]">试板</b><span class="font-mono text-[10px] tracking-[0.08em] text-muted max-md:hidden">TRYBOARD</span><span class="ml-0.5 hidden text-[13px] text-muted max-md:inline">· 授权与致谢</span></a>`;
+const ICON = (d, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+const SEG = 'min-h-[38px] cursor-pointer rounded-lg px-3 text-muted max-md:min-h-11 aria-checked:bg-surface aria-checked:font-medium aria-checked:text-fg aria-checked:shadow-[0_1px_3px_#0000001a] aria-checked:ring-1 aria-checked:ring-line';
 
 const html = `<!doctype html>
 <html lang="zh-CN">
@@ -235,7 +245,7 @@ const html = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- 主题在首帧前定好（web/src/theme.ts 同一规则：localStorage tb-theme，否则跟随系统） -->
     <script>try{var t=localStorage.getItem('tb-theme')}catch(e){}document.documentElement.dataset.theme=t==='dark'||t==='light'?t:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'</script>
-    <title>第三方授权 · 试板 TryBoard</title>
+    <title>授权与致谢 · 试板 TryBoard</title>
     <meta name="description" content="试板 TryBoard 使用的第三方代码、芯片 ROM、固件组件、字体与素材的来源、许可证与署名。" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -246,30 +256,36 @@ const html = `<!doctype html>
   <!-- 由 tools/gen_licenses.mjs 生成，不要手改 -->
   <body>
    <div class="flex min-h-screen flex-col text-[13px] leading-[1.6]">
-    <header class="pg-head sticky top-0 z-[5] flex items-center justify-between gap-4 border-b border-line bg-head-bg px-6 py-3.5 max-sm:px-4 max-sm:py-2.5">
-      <a class="inline-flex flex-none items-center gap-1.5" href="./home.html"><svg width="22" height="22" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="4" width="56" height="56" rx="14" class="fill-[#0B76C8] dark:fill-[#3AA8FF]"/><g class="fill-white dark:fill-[#17181B]"><circle cx="20" cy="20" r="5"/><circle cx="32" cy="20" r="5"/><circle cx="20" cy="32" r="5"/><circle cx="32" cy="32" r="5"/><circle cx="44" cy="32" r="5"/><circle cx="20" cy="44" r="5"/><circle cx="32" cy="44" r="5"/><circle cx="44" cy="44" r="5"/></g><circle cx="44" cy="20" r="6" fill="#FFB020"/></svg><b class="text-[14px]">试板</b><span class="font-mono text-[10px] tracking-[0.08em] text-muted">TRYBOARD</span></a>
-      <nav aria-label="站点" class="flex flex-wrap justify-end gap-0.5">${[
-        ['./home.html', '作品'],
-        ['./advisor.html', '选型助手'],
-        ['./app.html?work=blank#bench', '空白实验台'],
-        ['./licenses.html', '第三方授权'],
-      ]
-        .map(([href, text]) => {
-          const on = href === './licenses.html';
-          return `<a href="${href}" class="${NAV_LINK}${on ? ' bg-field text-fg' : ''}"${on ? ' aria-current="page"' : ''}>${text}</a>`;
-        })
-        .join('')}</nav>
-      <button type="button" id="themeBtn" class="theme-btn ml-1.5 inline-flex h-[30px] flex-none cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-surface px-2.5 text-xs text-fg transition-colors hover:border-hover-line"></button>
+    <header class="pg-head sticky top-0 z-[5] flex items-center gap-6 border-b border-line bg-head-bg px-6 py-3.5 backdrop-blur max-md:h-[52px] max-md:gap-2 max-md:py-0 max-md:pr-2 max-md:pl-4">
+      ${BRAND}
+      <nav aria-label="站点" class="flex flex-wrap gap-0.5 max-md:hidden">${NAV.map(([href, text]) => `<a href="${href}" class="${NAV_LINK}">${text}</a>`).join('')}</nav>
+      <button type="button" id="themeBtn" class="theme-btn ml-auto inline-flex h-[30px] flex-none cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-surface px-2.5 text-xs text-fg transition-colors hover:border-hover-line max-md:hidden"></button>
+      <button type="button" id="siteMenu" aria-label="菜单" aria-haspopup="dialog" aria-expanded="false" aria-controls="siteDrawer" class="ml-auto hidden size-11 flex-none cursor-pointer items-center justify-center rounded-[10px] text-fg hover:bg-field max-md:inline-flex">${ICON('M4 7h16M4 12h16M4 17h16')}</button>
     </header>
+    <!-- 手机菜单抽屉：与 web/src/ui/site.tsx 的 MobileMenu 同一结构（这里没有 Radix，下面的小脚本管开关、Esc 和焦点） -->
+    <div id="siteDrawer" role="dialog" aria-modal="true" aria-label="站点菜单" hidden class="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-bg text-fg animate-[tb-drop_.18s_ease-out] [&[hidden]]:hidden">
+      <div class="flex h-[52px] flex-none items-center gap-2 border-b border-line-soft pr-2 pl-4">
+        <a class="inline-flex flex-none items-center gap-2" href="./home.html" aria-label="试板 TryBoard 首页">${LOGO(26)}<b class="text-[17px]">试板</b><span class="font-mono text-[10px] tracking-[0.08em] text-muted">TRYBOARD</span></a>
+        <button type="button" id="siteClose" aria-label="关闭菜单" class="ml-auto inline-flex size-11 cursor-pointer items-center justify-center rounded-[10px] hover:bg-field">${ICON('M6 6l12 12M18 6L6 18')}</button>
+      </div>
+      <nav aria-label="站点" class="flex flex-col px-4 py-2">${NAV.map(([href, text]) => `<a href="${href}" class="flex h-16 items-center justify-between border-b border-line-soft text-[20px] font-bold text-fg">${text}<span class="text-muted">${ICON('M9 6l6 6-6 6', 18)}</span></a>`).join('')}</nav>
+      <p class="mx-4 my-3 rounded-xl bg-field p-3.5 text-[13px] leading-[1.6] text-muted"><b class="text-fg">在手机上</b>：能看、能调参数、能按按键。连线和拖固件用电脑更顺手。</p>
+      <div class="mt-auto flex flex-col gap-1 border-t border-line-soft px-4 pt-4 pb-10">
+        <div class="flex min-h-12 items-center justify-between text-[15px]">深色模式
+          <div role="radiogroup" aria-label="深色模式" class="flex rounded-[10px] bg-field p-[3px] text-[13px]"><button type="button" role="radio" data-theme-pref="system" class="${SEG}">跟随系统</button><button type="button" role="radio" data-theme-pref="light" class="${SEG}">浅</button><button type="button" role="radio" data-theme-pref="dark" class="${SEG}">深</button></div>
+        </div>
+        <a href="./licenses.html" aria-current="page" class="flex h-11 items-center justify-between text-[15px] text-accent-ink">授权与致谢<span class="text-[12px] font-medium">当前页</span></a>
+      </div>
+    </div>
     <main class="lic mx-auto w-full max-w-[1200px] flex-1 px-6 pb-16 max-sm:px-4 max-sm:pb-12">
-      <h1>第三方授权</h1>
+      <h1>授权与致谢</h1>
       <p>网站里用到的别人的代码、芯片 ROM、固件组件、字体和素材，以及各自的许可证与署名。构建时从依赖清单和素材目录自动生成。</p>
       ${sections.join('\n')}
       <p class="gen mono">生成于 ${new Date().toISOString().slice(0, 10)} · tools/gen_licenses.mjs</p>
     </main>
-    <footer class="pg-foot flex flex-wrap gap-x-[18px] gap-y-1.5 border-t border-line px-6 py-3.5 text-[11px] text-muted max-sm:px-4 max-sm:py-3">
+    <footer class="pg-foot flex flex-wrap items-center gap-x-[18px] gap-y-1.5 border-t border-line px-6 py-3.5 text-[11px] text-muted max-sm:px-4 max-sm:py-3">
       <span>TryBoard 试板：在浏览器里运行 ESP32 系列芯片的真实固件，compatible with Arduino。ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.</span>
-      <span><a class="text-fg hover:text-accent-ink" href="./licenses.html">第三方授权</a></span>
+      <span><a class="text-fg hover:text-accent-ink max-md:inline-flex max-md:min-h-11 max-md:items-center" href="./licenses.html">授权与致谢</a></span>
     </footer>
    </div>
     <script>
@@ -279,6 +295,17 @@ const html = `<!doctype html>
         function sync() { var d = r.dataset.theme === 'dark'; b.textContent = d ? '☾ 暗' : '☀ 亮'; b.title = d ? '切到亮色' : '切到暗色'; b.setAttribute('aria-pressed', String(d)); }
         b.onclick = function () { var t = r.dataset.theme === 'dark' ? 'light' : 'dark'; r.dataset.theme = t; try { localStorage.setItem('tb-theme', t); } catch (e) {} sync(); };
         sync();
+        // 手机菜单：开 / 关、Esc 关、焦点进出；三段主题（跟随系统 = 删掉存储键）
+        var d = document.getElementById('siteDrawer'), m = document.getElementById('siteMenu'), x = document.getElementById('siteClose');
+        var segs = d.querySelectorAll('[data-theme-pref]');
+        function pref() { var t; try { t = localStorage.getItem('tb-theme'); } catch (e) {} return t === 'dark' || t === 'light' ? t : 'system'; }
+        function syncSeg() { var p = pref(); segs.forEach(function (s) { s.setAttribute('aria-checked', String(s.dataset.themePref === p)); }); }
+        segs.forEach(function (s) { s.onclick = function () { var p = s.dataset.themePref; try { p === 'system' ? localStorage.removeItem('tb-theme') : localStorage.setItem('tb-theme', p); } catch (e) {} r.dataset.theme = p === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : p; syncSeg(); sync(); }; });
+        function open(on) { d.hidden = !on; m.setAttribute('aria-expanded', String(on)); document.body.style.overflow = on ? 'hidden' : ''; (on ? x : m).focus(); }
+        m.onclick = function () { syncSeg(); open(true); };
+        x.onclick = function () { open(false); };
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !d.hidden) open(false); });
+        syncSeg();
       })();
     </script>
   </body>

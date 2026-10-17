@@ -1,26 +1,40 @@
-/* 第三方授权页（tools/gen_licenses.mjs 生成的静态 HTML，不走 React）：与 React 页面同一套 Tailwind 主题。
-   页头 / 页脚直接写 Tailwind 类（与 ui/site.tsx 同一串），所以要扫生成脚本；正文表格由脚本拼出，用下面几条组件样式。 */
+/* 授权与致谢页（tools/gen_licenses.mjs 生成的静态 HTML，不走 React）：与 React 页面同一套 Tailwind 主题。
+   页头 / 页脚 / 手机菜单直接写 Tailwind 类（与 ui/site.tsx 同一串），所以要扫生成脚本；正文表格由脚本拼出，用下面几条组件样式。 */
 @import '../ui/tailwind.css';
 @source '../../../tools/gen_licenses.mjs';
 
 @layer components {
-  .lic h1 { @apply mt-8 mb-1 text-[22px] font-medium; }
+  .lic h1 { @apply mt-8 mb-1 text-[22px] font-medium max-md:mt-5; }
   .lic > p { @apply mb-2 max-w-[760px] text-muted; }
   .lic h2 { @apply mt-8 mb-2 text-[14px] font-medium; }
   .lic .note { @apply my-2 text-[12px] text-muted; }
   .lic .tbl { @apply overflow-x-auto rounded-xl border border-line bg-surface; }
-  /* 手机宽度下表格在框内横向滚动，不把版本号拆成一字一行 */
-  .lic table { @apply w-full min-w-[640px] border-collapse text-[12px]; }
+  .lic table { @apply w-full border-collapse text-[12px]; }
   .lic th { @apply border-b border-line px-2.5 py-1.5 text-left text-[11px] font-medium text-muted; }
   .lic td { @apply border-b border-line-soft px-2.5 py-[7px] align-top [word-break:break-word]; }
   .lic .mono { @apply font-mono text-[11px]; }
   .lic td:nth-child(2), .lic td:nth-child(3) { @apply whitespace-nowrap; }
   .lic code { @apply font-mono; }
   .lic details { @apply my-1.5 rounded-lg border border-line bg-surface; }
-  .lic details summary { @apply cursor-pointer px-3 py-[7px] text-[12px]; }
+  .lic details summary { @apply cursor-pointer px-3 py-[7px] text-[12px] max-md:flex max-md:min-h-11 max-md:items-center; }
   .lic details pre { @apply m-0 max-h-[360px] overflow-auto border-t border-line-soft bg-field px-3 py-2.5 font-mono text-[11px] leading-normal whitespace-pre-wrap; }
   .lic a { @apply text-accent-ink hover:underline; }
   /* 段落里的链接只靠颜色区分不过 axe link-in-text-block，常显下划线；表格里的独占一格，不需要 */
   .lic > p a, .lic .note a { @apply underline underline-offset-2; }
   .lic .gen { @apply mt-6 text-[11px] text-muted; }
+
+  /* 手机（< 768px，DESIGN_V2 §5）：每个来源一张卡，不横向滚表格。首格当卡片标题，其余格前面用 data-label 写列名 */
+  @media (width < 48rem) {
+    .lic .tbl { @apply overflow-visible border-0 bg-transparent; }
+    .lic table, .lic tbody, .lic tr, .lic td { @apply block; }
+    .lic thead { @apply sr-only; }
+    .lic tr { @apply mb-2 rounded-xl border border-line bg-surface px-3.5 py-3; }
+    .lic td { @apply flex gap-3 border-0 p-0 py-0.5 text-[12px] whitespace-normal!; }
+    .lic td::before { content: attr(data-label); @apply w-[52px] flex-none text-[11px] text-muted; }
+    .lic td:empty, .lic td:empty::before { @apply hidden; }
+    .lic td:first-child { @apply pb-1.5 text-[14px] font-bold; }
+    .lic td:first-child::before { @apply hidden; }
+    .lic td:first-child.mono { @apply font-mono text-[13px]; }
+    .lic td a { @apply inline-flex min-h-8 items-center break-all; }
+  }
 }

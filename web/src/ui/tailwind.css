@@ -62,3 +62,7 @@
 /* 台面 / 示意图底（渐变，不是颜色 token；与 app.css --stage-bg 同值）：首页作品卡预览用 [background:var(--stage-bg)] */
 :root { --stage-bg: radial-gradient(120% 90% at 50% 40%, #ffffff, #eceff3); }
 :root[data-theme='dark'] { --stage-bg: radial-gradient(120% 90% at 50% 40%, #2b2e33, #16171a); }
+
+/* 手机菜单抽屉从顶部落下（DESIGN_V2 §5）；系统要求少动画时不动 */
+@keyframes tb-drop { from { transform: translateY(-8px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #siteDrawer { animation: none !important; } }
