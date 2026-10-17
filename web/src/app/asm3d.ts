@@ -10,6 +10,7 @@ import { createAsmCore } from '../views/asmcore';
 import type { Template } from '../views/templates';
 import type { CaseLayout, CaseMeshes, MeshData, Pose, Prim, V3 } from './enclosure';
 import { currentTheme, onTheme, type Theme } from '../theme';
+import { btnClass } from '../ui/panel';
 
 export interface Asm3DOptions {
   template: Template;
@@ -329,8 +330,21 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
     chooser.hidden = !st.choosing;
     if (st.choosing) {
       const p = core.byId[st.choosing];
-      chooser.innerHTML = `<b>${p.short}怎么装？</b>${p.spots!.map((s) => `<button type="button" class="btn ${s.ok ? '' : 'warnb'}" data-k="pick${s.key}">${s.label}</button>`).join('')}`;
-      chooser.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.onclick = () => place(st.choosing!, b.dataset.k!.slice(4))));
+      const title = document.createElement('b');
+      title.textContent = `${p.short}怎么装？`;
+      const at = st.choosing;
+      chooser.replaceChildren(
+        title,
+        ...p.spots!.map((s) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = btnClass(false, s.ok ? '' : 'warnb');
+          b.dataset.k = `pick${s.key}`;
+          b.textContent = s.label;
+          b.onclick = () => place(at, s.key);
+          return b;
+        }),
+      );
     }
   }
 

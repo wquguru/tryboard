@@ -35,7 +35,7 @@ const LABEL_W = 96;
 const RULER_H = 20;
 const ROW_H = { scl: 22, sda: 22, dec: 46, pin: 34, ws: 22 } as const;
 const css = (n: string, fb: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || fb;
-// canvas 里的半透明叠层没有对应的 CSS 变量（canvas 不认 color-mix），按主题各备一套；数值取自 app.css 两套变量
+// canvas 里的半透明叠层没有对应的 CSS 变量（canvas 不认 color-mix），按主题各备一套；数值取自 lab.css 两套变量
 const PAL = {
   light: { bg: '#FFFFFF', nodata: '#F4F4F4C0', future: '#FAFAFAD0', tag: '#FFFFFFE0', wsTag: '#FFFFFFD8', onAccent: '#FFFFFF', hover: '#00000022', env: '#0D99FF33', envMid: '#0D99FF99', txn: '#0D99FF40', abg: '#E5F4FF', okBg: '#E8F7EE', badBg: '#FEF2F2', bubbleFg: '#1E1E1E', wsOff: '#222222' },
   dark: { bg: '#1E2024', nodata: '#2A2C31C0', future: '#17181BD0', tag: '#1E2024E0', wsTag: '#1E2024D8', onAccent: '#08141F', hover: '#FFFFFF33', env: '#3AA8FF33', envMid: '#3AA8FF99', txn: '#3AA8FF40', abg: '#10304A', okBg: '#163826', badBg: '#3B1E19', bubbleFg: '#E8EAED', wsOff: '#0E0F11' },
@@ -79,6 +79,14 @@ function defaultChannels(parts: PartSpec[], chip: string): Channel[] {
   return ch;
 }
 
+/** 建一个元素：属性 + 子节点（文字或元素） */
+function h(tag: string, attrs: Record<string, string>, ...kids: (Node | string)[]) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  e.append(...kids);
+  return e;
+}
+
 const rowsOf = (c: Channel) => (c.kind === 'i2c' ? ROW_H.scl + ROW_H.sda + ROW_H.dec : c.kind === 'pin' ? ROW_H.pin : ROW_H.ws);
 
 export function createAnalyzer(ctx: StepCtx): Analyzer {
@@ -88,19 +96,28 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
   el.id = 'analyzer';
   el.hidden = true;
   el.setAttribute('aria-label', '逻辑分析仪');
-  el.innerHTML = `<header class="ana-h">
-<span class="ana-t">逻辑分析仪</span>
-<span class="ana-src mono muted" data-a="src"></span>
-<span class="ana-read mono" data-a="read"></span>
-<span class="ana-sp"></span>
-<button type="button" class="ana-b" data-act="prev" title="上一个 I2C 事务">◂ I2C</button><button type="button" class="ana-b" data-act="next" title="下一个 I2C 事务">I2C ▸</button>
-<span class="ana-sep"></span>
-<button type="button" class="ana-b" data-act="out" title="缩小（滚轮）">−</button><span class="ana-span mono" data-a="span"></span><button type="button" class="ana-b" data-act="in" title="放大（滚轮）">+</button>
-<button type="button" class="ana-b" data-act="follow" aria-pressed="true" title="跟随最新时刻">跟随</button>
-<button type="button" class="ana-b" data-act="close" title="关闭" aria-label="关闭逻辑分析仪">×</button>
-</header>
-<div class="ana-body"><canvas class="ana-cv" aria-label="逻辑分析仪波形"></canvas></div>
-<footer class="ana-f"><span class="mono" data-a="cur"></span><span class="muted" data-a="hint">点击放光标 A，Shift+点击放 B；滚轮缩放，拖动平移</span></footer>`;
+  // 静态骨架：命令式组件（每帧重画画布），用 DOM 接口建，不拼 HTML
+  const btn = (act: string, title: string, text: string, extra: Record<string, string> = {}) => h('button', { type: 'button', class: 'ana-b', 'data-act': act, title, ...extra }, text);
+  el.append(
+    h(
+      'header',
+      { class: 'ana-h' },
+      h('span', { class: 'ana-t' }, '逻辑分析仪'),
+      h('span', { class: 'ana-src mono muted', 'data-a': 'src' }),
+      h('span', { class: 'ana-read mono', 'data-a': 'read' }),
+      h('span', { class: 'ana-sp' }),
+      btn('prev', '上一个 I2C 事务', '◂ I2C'),
+      btn('next', '下一个 I2C 事务', 'I2C ▸'),
+      h('span', { class: 'ana-sep' }),
+      btn('out', '缩小（滚轮）', '−'),
+      h('span', { class: 'ana-span mono', 'data-a': 'span' }),
+      btn('in', '放大（滚轮）', '+'),
+      btn('follow', '跟随最新时刻', '跟随', { 'aria-pressed': 'true' }),
+      btn('close', '关闭', '×', { 'aria-label': '关闭逻辑分析仪' }),
+    ),
+    h('div', { class: 'ana-body' }, h('canvas', { class: 'ana-cv', 'aria-label': '逻辑分析仪波形' })),
+    h('footer', { class: 'ana-f' }, h('span', { class: 'mono', 'data-a': 'cur' }), h('span', { class: 'muted', 'data-a': 'hint' }, '点击放光标 A，Shift+点击放 B；滚轮缩放，拖动平移')),
+  );
   document.body.appendChild(el);
   const cv = el.querySelector<HTMLCanvasElement>('canvas')!;
   const $ = (k: string) => el.querySelector<HTMLElement>(`[data-a="${k}"]`)!;

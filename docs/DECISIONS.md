@@ -519,3 +519,11 @@
 - 主题：Tailwind 的 `@theme` 直接映射 DESIGN §2 的 CSS 变量，`dark:` 变体绑 `[data-theme=dark]`（与 theme.ts 同一个开关），不另起一套色板。Tailwind preflight 只在迁过的页面加载，旧页面样式不受影响。
 - 理由：现有 2D 界面靠 `innerHTML` 拼串（94 处）+ 手动重画，状态和 DOM 容易不同步、每处都得记得转义；对话框 / 菜单 / 命令框的焦点与键盘要自己写。React 声明式渲染 + JSX 默认转义 + Radix 的可访问性原语直接解决这几类问题。
 - 替代：(a) 保持原生 DOM、只抽小组件函数——便宜，但解决不了状态同步；(b) Next.js——见上，收益几乎为零；(c) Preact——更小，但 Radix / shadcn 生态要 compat 层，出问题难查。
+
+## 2026-10-17 · 实验台 app.html 外壳与四步面板迁到 React + Tailwind
+- 决定：外壳（左栏头 / 步骤导航、构建树、属性面板、命令框、右上检查点 / 下一步 / 主题、工具条、时间线外框、提示）和四步面板（采购、实验台、组装、成品）改成 React 组件 + Tailwind 类；three.js 台面、组装 / 成品 3D、session / worker / verify-worker、逻辑分析仪、示波器 canvas、串口流保持命令式，经 `Host`（ref 挂已有节点）或 `useEffect` 挂上去。Shell 接口不变形：`shell.tree / props / layer` 是 `Panel { render(node), el }`，每次 render 整块重挂（key 自增），步骤代码只换成 JSX，不改"选中变了整块重画、实时值按 data-live 直接改文字"的分工
+- 保真做法：测试会"设 value + 派发不冒泡的 input/change"，React 的 onChange 收不到 → 输入框统一用 `ui/native.tsx` 的 NInput / NSelect（原生监听）；每帧更新的字段（Live / Txt）只在挂载时写一次初始值，之后由原有代码改 textContent，不经 React 状态；`render` 用 flushSync 提交，`store.set` 之后下一个任务前 DOM 已更新（测试会紧接着点新节点）
+- 对拍：298 个状态（weather / spin / imu / touch / usbkey / ruler / blank × 四步 × 逐个选中树条目 / 零件，另含四个作品装完后的组装 / 成品）导出各容器文字和 id / data-* 签名，与旧版逐条一致（Reviews/ab/react/app.md）
+- 可访问性顺手修（axe 0 违规）：每个树分组一棵 `role=tree`（summary 是原生开关，不能做 tree 的子节点）；步骤画面是 `<main>`、作品名是 `<h1>`；串口 `role=log`（aria-live=off，免得读屏逐行念）可键盘滚动；选中条目的灰字改成强调色（对比度）；app.css 里 `--muted` 不再覆盖成 #8c8c8c，统一用 tailwind.css 的 #6f6f6f
+- 样式文件：实验台还用得上的规则搬到新文件 `src/app/lab.css`（约 250 行：Tailwind 里没有的变量、命令式节点——分析仪、SVG / 3D 装配、3D 成品——和采购 / 组装 / 成品专用类），app.html 不再引 `app/app.css`。app.css 原样保留，因为 home.html / licenses.html 还 link 着它且大量依赖（.brand、变量、按钮基础样式；删规则会让首页手机宽度横向溢出）；那两处 link 去掉后 app.css 可整体删除。lab.css 不在 @layer 里、会盖过同名工具类，所以不写通用元素选择器
+- 替代：(a) 只迁外壳、步骤仍用 innerHTML 填进 React 留的空 div——两套渲染混在同一容器里，测试点击时机难保证；(b) 用 React 状态驱动实时读数——60 Hz 重渲整块属性面板，违背"高频数据不经 React"

@@ -17,6 +17,7 @@ import type { WireMods } from './wiring';
 import type { BenchHistory } from './benchhist';
 import type { IoStore } from './iotrace';
 import type { CaseParams } from './enclosure';
+import type { ReactNode } from 'react';
 
 export type StepId = 'shop' | 'bench' | 'assemble' | 'product';
 export const STEPS: { id: StepId; label: string }[] = [
@@ -199,9 +200,18 @@ export interface Session {
   onUsb(cb: (v: UsbView | null) => void): () => void;
 }
 
+/** 外壳里一块由步骤整块换内容的区域（构建树、属性面板、步骤层）。render 每次都重建（同原来整段 innerHTML 重画）；
+ *  el 是容器节点，给命令式的 querySelector / 滚动用 */
+export interface Panel {
+  render(node: ReactNode): void;
+  readonly el: HTMLElement;
+}
+
 export interface Shell {
-  tree: HTMLElement;
-  props: HTMLElement;
+  tree: Panel;
+  props: Panel;
+  /** 叠在台面上的步骤层（占位卡、采购平铺、组装 / 成品画面） */
+  layer: Panel;
   toolbar: Toolbar;
   timeline: Timeline;
   card: Card;
@@ -227,8 +237,8 @@ export interface StepCtx {
 }
 
 export interface StepImpl {
-  /** el 是叠在台面上的步骤层（占位面板放这里）；构建树 / 属性面板通过 ctx.shell 拿 */
-  mount(el: HTMLElement, ctx: StepCtx): void;
+  /** 构建树 / 属性面板 / 步骤层都通过 ctx.shell 拿 */
+  mount(ctx: StepCtx): void;
   unmount(): void;
 }
 
