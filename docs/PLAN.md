@@ -75,6 +75,16 @@
 | P2-11 | 线长影响 I2C、天线遮挡（标"必须上真机"） | 用例 | ☑ 2026-10-16：确定性模型（上升时间 / RSSI），accept weather-i2c-long / -nack、wifi-scan-antenna / wifi-connect-antenna；实验台 W6、组装滑块（Reviews/ab/P2-11.md） |
 | P2-12 | USB 键盘作品展示（已有 OTG） | 成品页 | ☑ 2026-10-16：作品 usbkey（三检查点 + 采购 + 组装 + 3D 成品打字），首页卡片由作品定义生成（Reviews/ab/P2-12.md） |
 
+## UI v2 · 设计 v2 落地（2026-10-17，规范见 DESIGN_V2.md）
+| ID | 内容 | 验收 | 状态 |
+|---|---|---|---|
+| U-01 | 推荐 logo + favicon，全站页头统一 | agent-browser 各页截图 | ☐ |
+| U-02 | 新版选型助手（桌面 + 手机） | agent-browser 走输入 → 结果 → 跑一遍 | ☐ |
+| U-03 | 实验台左上角面包屑 + 切换作品菜单 | agent-browser 点"作品"回首页 | ☐ |
+| U-04 | 实验台 v2（顶栏 / 左栏 / 台面 / 右栏 / 底部坞 / 关键状态） | agent-browser + tools/webtest 回归全过 | ☐ |
+| U-05 | 手机：实验台与四步 | 390×844 截图，无横向滚动、控制台无 error | ☐ |
+| U-06 | 手机：首页 / 选型助手 / 关卡 / 授权 | 同上 | ☐ |
+
 ## P3 · 以后再说
 蓝牙（M7）、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
 

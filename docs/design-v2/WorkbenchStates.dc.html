@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>实验台关键状态</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.mono{font-family:'JetBrains Mono',monospace}
+.cell{display:flex;flex-direction:column;gap:8px}
+.cell h3{margin:0;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
+.cell h3 span{font-family:'JetBrains Mono',monospace;font-size:11px;color:#6F6F6F;font-weight:500}
+.cell p{margin:0;font-size:12.5px;line-height:1.6;color:#555;height:40px}
+.mock{position:relative;height:250px;border-radius:12px;overflow:hidden;border:1px solid #E6E6E6;background:linear-gradient(180deg,#E9ECF0,#DDE2E8)}
+.desk{position:absolute;left:0;right:0;bottom:0;height:120px;background:linear-gradient(180deg,#D7C3A5,#C2A988)}
+.btn{height:30px;padding:0 12px;border-radius:8px;border:1px solid #E6E6E6;background:#FFFFFF;font:inherit;font-size:12.5px;color:#1E1E1E;display:inline-flex;align-items:center;gap:6px}
+.btn.pri{background:#0B76C8;border-color:#0B76C8;color:#FFFFFF;font-weight:700}
+.card{background:#FFFFFF;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.16)}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1180px; box-sizing: border-box; padding: 40px 48px; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; display: flex; flex-direction: column; gap: 24px">
+<div>
+<h1 style="margin: 0; font-size: 28px; font-weight: 700">实验台 · 关键状态与交互</h1>
+<p style="margin: 6px 0 0; font-size: 14px; color: #6F6F6F">只画一张"一切正常"的图不够：下面是第一次打开、出错、通过时用户会看到的样子。</p>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, 432px); gap: 24px">
+
+<!-- 1 空白实验台 -->
+<div class="cell">
+<h3>空白实验台：第一次打开<span>01</span></h3>
+<p>不让人对着空台面发呆：三条路摆在中间，固件可以直接拖进来。</p>
+<div class="mock" style="display: flex; align-items: center; justify-content: center">
+<div class="desk"></div>
+<div class="card" style="position: relative; width: 340px; padding: 18px; text-align: center">
+<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#0B76C8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
+<div style="font-size: 14px; font-weight: 700; margin-top: 6px">把 flash.bin 拖到这里</div>
+<div style="font-size: 12px; color: #6F6F6F; margin-top: 2px">ESP-IDF / Arduino 编译出的产物都行，文件不会上传</div>
+<div style="display: flex; gap: 8px; justify-content: center; margin-top: 14px">
+<button class="btn pri">选择文件</button><button class="btn">跑个示例</button><button class="btn">挑一个作品</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- 2 加载中 -->
+<div class="cell">
+<h3>加载模拟器内核<span>02</span></h3>
+<p>wasm 和 3D 场景加载时给出真实进度和正在做什么，失败时告诉人怎么办。</p>
+<div class="mock" style="background: #F4F5F7">
+<div style="position: absolute; inset: 0; display: grid; grid-template-columns: 90px 1fr 100px; gap: 8px; padding: 10px">
+<div style="background: #FFFFFF; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px"><div style="height: 10px; border-radius: 4px; background: #EEEEEE"></div><div style="height: 10px; width: 70%; border-radius: 4px; background: #EEEEEE"></div><div style="height: 10px; width: 80%; border-radius: 4px; background: #EEEEEE"></div></div>
+<div style="background: linear-gradient(180deg,#E9ECF0,#DDE2E8); border-radius: 8px; display: flex; align-items: center; justify-content: center">
+<div style="width: 220px">
+<div style="display: flex; justify-content: space-between; font-size: 12px"><b>正在加载模拟器内核</b><span class="mono">1.3 / 1.9 MB</span></div>
+<div style="height: 6px; border-radius: 3px; background: #FFFFFF; margin-top: 8px; overflow: hidden"><div style="width: 68%; height: 100%; background: #0D99FF"></div></div>
+<div style="font-size: 11px; color: #555; margin-top: 8px; line-height: 1.7">✓ 页面 · ✓ 3D 场景<br>… ESP32-S3 内核<br><span style="color: #6F6F6F">下一步：上电，从 0x0 启动</span></div>
+</div>
+</div>
+<div style="background: #FFFFFF; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px"><div style="height: 10px; border-radius: 4px; background: #EEEEEE"></div><div style="height: 40px; border-radius: 6px; background: #F4F4F4"></div></div>
+</div>
+</div>
+</div>
+
+<!-- 3 拖入固件 -->
+<div class="cell">
+<h3>拖入固件：先检查再烧<span>03</span></h3>
+<p>拖进来时整块台面变成接收区；认出芯片型号，和台面上的板子不符就当场说。</p>
+<div class="mock">
+<div class="desk"></div>
+<div style="position: absolute; inset: 10px; border: 2px dashed #0D99FF; border-radius: 10px; background: rgba(13,153,255,.08)"></div>
+<div class="card" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 320px; padding: 14px">
+<div style="display: flex; align-items: center; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1E1E1E" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h8l5 5v15H6z"/><path d="M14 2v5h5"/></svg>
+<div><div class="mono" style="font-size: 13px; font-weight: 500">weather.bin · 1.18 MB</div><div style="font-size: 11px; color: #6F6F6F">ESP-IDF v5.5 · 2 分钟前编译</div></div>
+</div>
+<div style="margin-top: 10px; font-size: 12px; line-height: 1.8">
+<div><span style="color: #14794A">✓</span> 芯片 ESP32-S3，和台面上的板子一致</div>
+<div><span style="color: #14794A">✓</span> 分区表、引导程序都在</div>
+<div><span style="color: #7A4E0B">!</span> 用到 GPIO4 PWM，台面上还没接</div>
+</div>
+<div style="display: flex; gap: 8px; margin-top: 10px"><button class="btn pri">烧录并运行</button><button class="btn">取消</button></div>
+</div>
+</div>
+</div>
+
+<!-- 4 连线中 -->
+<div class="cell">
+<h3>连线：能接的引脚亮起来<span>04</span></h3>
+<p>点起点后，能接的引脚发蓝、不能接的变灰；悬停说明这个脚能做什么。</p>
+<div class="mock">
+<div class="desk"></div>
+<svg style="position: absolute; inset: 0" width="432" height="250" viewBox="0 0 432 250" aria-hidden="true">
+<rect x="70" y="120" width="250" height="70" rx="6" fill="#1B2430"/>
+<g fill="#D9B44A"><rect x="80" y="182" width="230" height="4"/></g>
+<g><circle cx="110" cy="184" r="5" fill="#C9C9C9"/><circle cx="140" cy="184" r="5" fill="none" stroke="#0D99FF" stroke-width="2"/><circle cx="170" cy="184" r="6" fill="#0D99FF"/><circle cx="170" cy="184" r="12" fill="#0D99FF" opacity=".25"/><circle cx="200" cy="184" r="5" fill="none" stroke="#0D99FF" stroke-width="2"/><circle cx="230" cy="184" r="5" fill="#C9C9C9"/><circle cx="260" cy="184" r="5" fill="#C9C9C9"/></g>
+<rect x="340" y="190" width="60" height="34" rx="4" fill="#2F6FD6"/>
+<path d="M340 208C290 230 210 230 170 190" fill="none" stroke="#F2994A" stroke-width="4" stroke-dasharray="8 6" stroke-linecap="round"/>
+</svg>
+<div style="position: absolute; left: 112px; top: 46px; background: #1E1E1E; color: #FFFFFF; border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.5">
+<b class="mono">GPIO4</b> · 空闲<br><span style="color: #C9C9C9">PWM · ADC1_CH3 · 触摸</span></div>
+<div style="position: absolute; right: 10px; top: 10px; font-size: 11px; color: #555; background: rgba(255,255,255,.85); padding: 3px 8px; border-radius: 6px">灰色：Strapping / 已占用</div>
+</div>
+</div>
+
+<!-- 5 接错线 -->
+<div class="cell">
+<h3>接错线：当场拦下，给出一键撤销<span>05</span></h3>
+<p>线变红并闪一下；说明后果（伤引脚）和改法，不用去翻"接线检查"。</p>
+<div class="mock">
+<div class="desk"></div>
+<svg style="position: absolute; inset: 0" width="432" height="250" viewBox="0 0 432 250" aria-hidden="true">
+<rect x="50" y="140" width="220" height="60" rx="6" fill="#1B2430"/>
+<rect x="300" y="150" width="90" height="40" rx="4" fill="#B91C1C" opacity=".85"/>
+<text x="345" y="175" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#FFFFFF">5 V 电源</text>
+<path d="M300 170C260 120 200 120 160 196" fill="none" stroke="#F24822" stroke-width="4" stroke-linecap="round"/>
+<circle cx="160" cy="196" r="10" fill="#F24822" opacity=".3"/>
+</svg>
+<div class="card" style="position: absolute; left: 12px; top: 12px; width: 300px; padding: 12px; border-left: 4px solid #F24822">
+<div style="font-size: 13px; font-weight: 700; color: #B8321A">5 V 直接进了 GPIO7</div>
+<div style="font-size: 12px; line-height: 1.6; color: #444; margin-top: 4px">S3 的 GPIO 不耐 5 V，真机上会伤引脚。模拟器已断开这根线。</div>
+<div style="display: flex; gap: 8px; margin-top: 8px"><button class="btn pri" style="height: 26px; font-size: 12px">撤销这根线</button><button class="btn" style="height: 26px; font-size: 12px">改接 3V3</button><button class="btn" style="height: 26px; font-size: 12px; border: 0">我知道，保留</button></div>
+</div>
+</div>
+</div>
+
+<!-- 6 欠压复位 -->
+<div class="cell">
+<h3>板子复位了：翻译成人话<span>06</span></h3>
+<p>串口出现 rst:0xf 时，台面和串口同时标出原因，给出能直接点的修法。</p>
+<div class="mock" style="background: #FFFFFF; display: flex; flex-direction: column">
+<div style="padding: 10px 12px; background: #FFF4F1; border-bottom: 1px solid #F7D2C8; display: flex; gap: 10px; align-items: flex-start">
+<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style="flex: none; margin-top: 1px"><circle cx="12" cy="12" r="10" fill="#F24822"/><path d="M13 6l-5 7h4l-1 5 5-7h-4z" fill="#FFFFFF"/></svg>
+<div style="font-size: 12.5px; line-height: 1.6"><b>欠压复位</b>：舵机起步拉了约 0.7 A，USB 只给 0.5 A，3V3 跌到 2.41 V。<div style="display: flex; gap: 6px; margin-top: 6px"><button class="btn pri" style="height: 26px; font-size: 12px">换外接 5 V 并重跑</button><button class="btn" style="height: 26px; font-size: 12px">看电压曲线</button></div></div>
+</div>
+<div class="mono" style="padding: 10px 12px; font-size: 11.5px; line-height: 1.75; color: #444; background: #FBFBFB; flex: 1">
+<div><span style="color: #9A9A9A">00:03.40</span>  T=23.50 C ... PWM=2400us</div>
+<div style="background: #FDECE8; margin: 0 -12px; padding: 0 12px"><span style="color: #9A9A9A">00:03.41</span>  <span style="color: #B8321A">Brownout detector was triggered</span></div>
+<div style="background: #FDECE8; margin: 0 -12px; padding: 0 12px"><span style="color: #9A9A9A">00:03.41</span>  <span style="color: #B8321A">rst:0xf (BROWNOUT_RST),boot:0x8</span></div>
+<div><span style="color: #9A9A9A">00:03.52</span>  ESP-ROM:esp32s3-20210327</div>
+</div>
+</div>
+</div>
+
+<!-- 7 命令框 -->
+<div class="cell">
+<h3>命令框 ⌘K：会用的人更快<span>07</span></h3>
+<p>零件、引脚、动作、作品都能搜；也是快捷键的说明书。</p>
+<div class="mock" style="background: rgba(30,30,30,.35); display: flex; justify-content: center; padding-top: 18px">
+<div class="card" style="width: 380px; overflow: hidden; align-self: flex-start">
+<div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #F0F0F0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6F6F6F" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><span style="font-size: 13px">室温<span style="display: inline-block; width: 1.5px; height: 14px; background: #0D99FF; vertical-align: -2px; margin-left: 1px"></span></span></div>
+<div style="padding: 6px; font-size: 13px">
+<div style="font-size: 11px; color: #6F6F6F; padding: 4px 8px">动作</div>
+<div style="display: flex; justify-content: space-between; padding: 7px 8px; border-radius: 6px; background: #E8F4FF; color: #0A6FBD"><span>把室温设为 … ℃</span><span class="mono" style="font-size: 11px">↵</span></div>
+<div style="display: flex; justify-content: space-between; padding: 7px 8px"><span>热源：对着 BME280 吹热风</span><span class="mono" style="font-size: 11px; color: #9A9A9A">H</span></div>
+<div style="font-size: 11px; color: #6F6F6F; padding: 4px 8px">零件</div>
+<div style="display: flex; justify-content: space-between; padding: 7px 8px"><span>BME280 · 温度 / 湿度 / 气压</span><span class="mono" style="font-size: 11px; color: #9A9A9A">0x76</span></div>
+</div>
+<div style="display: flex; gap: 14px; padding: 6px 12px; border-top: 1px solid #F0F0F0; font-size: 11px; color: #6F6F6F"><span>↑↓ 选择</span><span>↵ 执行</span><span>Esc 关闭</span></div>
+</div>
+</div>
+</div>
+
+<!-- 8 检查点通过 -->
+<div class="cell">
+<h3>检查点通过：给反馈，指下一步<span>08</span></h3>
+<p>右上角弹出、几秒后收起；最后一个通过时，"组装"的锁打开并轻轻跳一下。</p>
+<div class="mock">
+<div class="desk"></div>
+<div style="position: absolute; top: 0; left: 0; right: 0; height: 40px; background: #FFFFFF; border-bottom: 1px solid #E6E6E6; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px">
+<span style="color: #14794A">✓ 采购</span><span style="width: 18px; height: 2px; background: #14AE5C"></span><span style="color: #14794A; font-weight: 700">✓ 实验台 6/6</span><span style="width: 18px; height: 2px; background: #0D99FF"></span>
+<span style="padding: 3px 10px; border-radius: 999px; background: #0B76C8; color: #FFFFFF; font-weight: 700; box-shadow: 0 0 0 4px #CDE8FF">组装 · 已解锁</span>
+</div>
+<div class="card" style="position: absolute; right: 12px; top: 54px; width: 260px; padding: 12px; display: flex; gap: 10px">
+<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true" style="flex: none"><circle cx="12" cy="12" r="11" fill="#14AE5C"/><path d="M7 12.5l3 3 7-7" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<div><div style="font-size: 13px; font-weight: 700">检查点 6 通过</div><div style="font-size: 12px; color: #555; line-height: 1.5; margin-top: 2px">按 BOOT 能在 ℃ 和 ℉ 之间切换。实验台全部通过。</div><button class="btn pri" style="height: 26px; font-size: 12px; margin-top: 8px">去组装 →</button></div>
+</div>
+</div>
+</div>
+
+<!-- 9 深色 -->
+<div class="cell">
+<h3>深色模式<span>09</span></h3>
+<p>面板跟系统走；台面的灯光不跟着变暗，免得 LED 和屏幕看不清。</p>
+<div class="mock" style="background: #17181B; border-color: #2A2C31">
+<div style="position: absolute; top: 0; left: 0; right: 0; height: 36px; background: #1F2024; border-bottom: 1px solid #2E3035; display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 12px; color: #E8EAED">
+<svg width="18" height="18" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="4" width="56" height="56" rx="14" fill="#3AA8FF"/><g fill="#17181B"><circle cx="20" cy="20" r="5"/><circle cx="32" cy="32" r="5"/><circle cx="20" cy="44" r="5"/><circle cx="44" cy="44" r="5"/></g><circle cx="44" cy="20" r="6" fill="#FFB020"/></svg>
+<span style="padding: 2px 8px; border: 1px solid #3A3D43; border-radius: 6px">‹ 作品</span><b>桌面气象站</b>
+<span style="margin-left: auto; padding: 2px 10px; border-radius: 999px; background: #10324F; color: #8FD3FF; font-weight: 700">2 实验台</span>
+</div>
+<div style="position: absolute; top: 36px; bottom: 60px; left: 0; width: 100px; background: #1F2024; border-right: 1px solid #2E3035; padding: 8px; font-size: 11px; color: #C9CDD3; line-height: 2">ESP32-S3<br>SSD1306<br><span style="color: #8FD3FF">BME280</span><br>SG90</div>
+<div style="position: absolute; top: 36px; bottom: 60px; left: 100px; right: 0; background: linear-gradient(180deg,#2A2E35,#22252B)"><div style="position: absolute; left: 0; right: 0; bottom: 0; height: 70px; background: linear-gradient(180deg,#6B5A45,#5A4A38)"></div><div style="position: absolute; left: 130px; top: 50px; width: 100px; height: 64px; background: #05070A; border: 6px solid #1D3D6B; border-radius: 4px; color: #8FD3FF; font-size: 10px; padding: 6px; box-sizing: border-box" class="mono">T 23.50 C</div></div>
+<div class="mono" style="position: absolute; bottom: 0; left: 0; right: 0; height: 60px; background: #1A1B1E; border-top: 1px solid #2E3035; padding: 8px 10px; font-size: 11px; color: #C9CDD3; box-sizing: border-box; line-height: 1.7">I (322) bme280: chip id 0x60<br>T=23.50 C H=45.0 % P=1013.25</div>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

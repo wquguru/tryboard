@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>实验台整体效果 v2</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.mono{font-family:'JetBrains Mono',monospace}
+.ib{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:0;background:none;color:#1E1E1E;padding:0}
+.ib[disabled]{color:#B5B5B5}
+.row{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;font-size:13px}
+.tag{font-family:'JetBrains Mono',monospace;font-size:11px;color:#6F6F6F;margin-left:auto}
+.sec{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:#6F6F6F;letter-spacing:.04em;margin:12px 8px 4px}
+.dot{width:8px;height:8px;border-radius:2px;flex:none}
+.tool{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;width:52px;padding:6px 0;border-radius:8px;font-size:11px;color:#444;border:0;background:none;font-family:inherit}
+.tool.on{background:#E8F4FF;color:#0A6FBD;font-weight:700}
+.tool kbd{position:absolute;top:2px;right:4px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#9A9A9A}
+.kv{display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid #F0F0F0}
+.kv span:first-child{color:#6F6F6F}
+.ptab{height:36px;padding:0 10px;border:0;background:none;font:inherit;font-size:13px;color:#6F6F6F}
+.ptab.on{color:#0A6FBD;font-weight:700;box-shadow:inset 0 -2px 0 #0D99FF}
+.dtab{height:38px;padding:0 12px;border:0;background:none;font:inherit;font-size:13px;color:#6F6F6F;display:inline-flex;align-items:center;gap:6px}
+.dtab.on{font-weight:700;color:#0A6FBD;box-shadow:inset 0 -2px 0 #0D99FF}
+.pill{font-size:11px;padding:1px 6px;border-radius:999px;background:#F0F0F0;color:#444}
+.badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #F4F5F7; color: #1E1E1E; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; display: grid; grid-template-rows: 56px 1fr 200px; overflow: hidden">
+
+<!-- 顶栏 -->
+<header style="display: flex; align-items: center; gap: 10px; padding: 0 12px; background: #FFFFFF; border-bottom: 1px solid #E6E6E6">
+<svg width="26" height="26" viewBox="0 0 64 64" aria-label="试板"><rect x="4" y="4" width="56" height="56" rx="14" fill="#0B76C8"/><g fill="#FFFFFF"><circle cx="20" cy="20" r="5"/><circle cx="32" cy="20" r="5"/><circle cx="20" cy="32" r="5"/><circle cx="32" cy="32" r="5"/><circle cx="44" cy="32" r="5"/><circle cx="20" cy="44" r="5"/><circle cx="32" cy="44" r="5"/><circle cx="44" cy="44" r="5"/></g><circle cx="44" cy="20" r="6" fill="#FFB020"/></svg>
+<a href="#" style="display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 10px 0 6px; border: 1px solid #E6E6E6; border-radius: 8px; font-size: 13px; color: #1E1E1E; text-decoration: none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>作品</a>
+<div style="display: flex; flex-direction: column; line-height: 1.2">
+<button style="display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; font: inherit; font-size: 14px; font-weight: 700; padding: 0">桌面气象站<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6F6F6F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+<span style="font-size: 11px; color: #6F6F6F">已存在本机 · 刚刚</span>
+</div>
+<span style="width: 1px; height: 20px; background: #E6E6E6; margin: 0 2px"></span>
+<button class="ib" aria-label="撤销 ⌘Z"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button>
+<button class="ib" aria-label="重做" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg></button>
+
+<nav aria-label="四个步骤" style="margin: 0 auto; display: flex; align-items: center; gap: 4px; font-size: 13px">
+<a href="#" style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; color: #14794A; text-decoration: none"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#14AE5C"/><path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>采购</a>
+<span style="width: 24px; height: 2px; background: #14AE5C; border-radius: 2px"></span>
+<a href="#" aria-current="step" style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: #E8F4FF; color: #0A6FBD; font-weight: 700; text-decoration: none"><span style="width: 18px; height: 18px; border-radius: 50%; background: #0B76C8; color: #FFFFFF; font-size: 11px; display: inline-flex; align-items: center; justify-content: center">2</span>实验台<span class="mono" style="font-size: 11px; font-weight: 500">2/6</span></a>
+<span style="width: 24px; height: 2px; background: #E6E6E6; border-radius: 2px"></span>
+<a href="#" aria-disabled="true" title="实验台 6 个检查点全部通过后解锁" style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; color: #6F6F6F; text-decoration: none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>组装</a>
+<span style="width: 24px; height: 2px; background: #E6E6E6; border-radius: 2px"></span>
+<a href="#" aria-disabled="true" style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; color: #6F6F6F; text-decoration: none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>成品</a>
+</nav>
+
+<button style="display: inline-flex; align-items: center; gap: 8px; width: 200px; height: 32px; padding: 0 8px 0 10px; border-radius: 8px; border: 1px solid #E6E6E6; background: #F7F7F7; font: inherit; font-size: 13px; color: #6F6F6F"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>搜命令、零件、引脚<span class="mono" style="margin-left: auto; font-size: 11px; padding: 1px 5px; border: 1px solid #E0E0E0; border-radius: 4px; background: #FFFFFF">⌘K</span></button>
+<div style="display: flex; align-items: center; height: 32px; border: 1px solid #E6E6E6; border-radius: 8px; overflow: hidden">
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 12px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #14AE5C; box-shadow: 0 0 0 3px #D4F2E1"></span>运行中</span>
+<button style="height: 32px; padding: 0 8px; border: 0; border-left: 1px solid #E6E6E6; background: none; font: inherit; font-size: 12px; display: inline-flex; align-items: center; gap: 2px" class="mono" aria-label="速度">1×<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6F6F6F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+<button class="ib" style="border-left: 1px solid #E6E6E6; border-radius: 0" aria-label="暂停 空格"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+<button class="ib" style="border-left: 1px solid #E6E6E6; border-radius: 0" aria-label="再跑一次（重新上电）"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
+</div>
+<button style="height: 32px; padding: 0 12px; border-radius: 8px; border: 0; background: #0B76C8; color: #FFFFFF; font: inherit; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></svg>换固件</button>
+<button class="ib" aria-label="更多：分享、导出输入日志、交给 AI 的任务书"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+</header>
+
+<!-- 中间三栏 -->
+<div style="display: grid; grid-template-columns: 264px 1fr 312px; min-height: 0">
+
+<aside style="background: #FFFFFF; border-right: 1px solid #E6E6E6; display: flex; flex-direction: column; min-height: 0">
+<div role="tablist" style="display: flex; padding: 0 8px; border-bottom: 1px solid #F0F0F0">
+<button class="ptab on" role="tab" aria-selected="true">构建树</button>
+<button class="ptab" role="tab">元件库</button>
+<button class="ptab" role="tab">接线表</button>
+</div>
+<div style="padding: 8px; display: flex; flex-direction: column; flex: 1; overflow: hidden">
+<div class="sec">供电与环境</div>
+<div class="row"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6F6F6F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>USB 5 V（电脑）<span class="tag" style="color: #7A4E0B">限流 0.5 A</span></div>
+<div class="row"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6F6F6F" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14 14.8V4a2 2 0 0 0-4 0v10.8a4 4 0 1 0 4 0z"/></svg>环境<span class="tag">23.5 °C · 45 %</span></div>
+<div class="sec">主控</div>
+<div class="row"><span class="dot" style="background: #0D99FF"></span>ESP32-S3-DevKitC-1<span class="tag">S3</span></div>
+<div class="sec">I2C 总线 · GPIO8 / 9<span style="margin-left: auto; font-weight: 500" class="mono">2 个</span></div>
+<div class="row" style="padding-left: 18px"><span class="dot" style="background: #6F6F6F"></span>SSD1306 OLED<span class="tag">0x3C</span></div>
+<div class="row" style="padding-left: 18px; background: #E8F4FF; box-shadow: inset 2px 0 0 #0D99FF"><span class="dot" style="background: #9B51E0"></span><b>BME280</b><span class="tag" style="color: #0A6FBD">0x76</span></div>
+<div class="sec">GPIO</div>
+<div class="row"><span class="dot" style="background: #F2994A"></span>SG90 舵机<svg style="margin-left: auto" width="15" height="15" viewBox="0 0 24 24" aria-label="有问题"><path d="M12 3L2 20h20z" fill="#F2B233"/><path d="M12 10v4M12 17v.5" stroke="#1E1E1E" stroke-width="2" stroke-linecap="round"/></svg><span class="mono" style="font-size: 11px; color: #6F6F6F">GPIO4</span></div>
+<div class="row"><span class="dot" style="background: #1E1E1E"></span>无源蜂鸣器<span class="tag">GPIO5</span></div>
+<div class="row"><span class="dot" style="background: #14AE5C"></span>板载按键 BOOT<span class="tag">GPIO0</span></div>
+<button style="margin: 8px 0 0; height: 34px; border-radius: 8px; border: 1px dashed #C9C9C9; background: none; font: inherit; font-size: 13px; color: #444; display: inline-flex; align-items: center; justify-content: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>加零件<span class="mono" style="font-size: 11px; color: #9A9A9A">A</span></button>
+<div style="margin-top: auto; padding: 12px; border-radius: 10px; background: #FFF7E6; font-size: 12px; line-height: 1.6; color: #6B4A10">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px"><b>检查点 3 · 舵机转到 90°</b><span class="mono">2/6</span></div>
+舵机信号线还没接。选「连线」，从舵机橙线点到 GPIO4。
+<div style="display: flex; gap: 6px; margin-top: 8px"><button style="height: 26px; padding: 0 10px; border-radius: 6px; border: 0; background: #1E1E1E; color: #FFFFFF; font: inherit; font-size: 12px">带我去接</button><button style="height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid #E5C78C; background: none; font: inherit; font-size: 12px; color: #6B4A10">看全部检查点</button></div>
+</div>
+</div>
+</aside>
+
+<main style="position: relative; overflow: hidden; background: linear-gradient(180deg,#E9ECF0 0%,#DDE2E8 100%)">
+<svg width="100%" height="100%" viewBox="0 0 864 644" preserveAspectRatio="xMidYMid slice" aria-label="3D 台面">
+<defs>
+<linearGradient id="desk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D7C3A5"/><stop offset="1" stop-color="#C2A988"/></linearGradient>
+<filter id="sh" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#000" flood-opacity=".22"/></filter>
+<pattern id="holes" width="12" height="12" patternUnits="userSpaceOnUse"><circle cx="6" cy="6" r="1.6" fill="#BFC4CA"/></pattern>
+</defs>
+<path d="M0 220H864V644H0Z" fill="url(#desk)"/>
+<path d="M0 220H864" stroke="#B49B7A" stroke-width="2"/>
+<g filter="url(#sh)">
+<rect x="170" y="290" width="520" height="210" rx="10" fill="#F4F4F2"/>
+<rect x="186" y="306" width="488" height="72" fill="url(#holes)"/>
+<rect x="186" y="410" width="488" height="72" fill="url(#holes)"/>
+<rect x="186" y="388" width="488" height="12" fill="#E3E3E0"/>
+</g>
+<g filter="url(#sh)">
+<rect x="226" y="320" width="210" height="76" rx="6" fill="#1B2430"/>
+<rect x="240" y="332" width="62" height="52" rx="4" fill="#C9CED6"/>
+<rect x="248" y="340" width="46" height="36" rx="2" fill="#AEB4BD"/>
+<text x="271" y="362" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#3A3F46">ESP32-S3</text>
+<rect x="410" y="342" width="30" height="32" rx="3" fill="#9AA1AA"/>
+<circle cx="330" cy="346" r="5" fill="#14AE5C"/><circle cx="330" cy="346" r="11" fill="#14AE5C" opacity=".25"/>
+<rect x="350" y="364" width="16" height="10" rx="2" fill="#2E3846"/><rect x="374" y="364" width="16" height="10" rx="2" fill="#2E3846"/>
+<g fill="#D9B44A"><rect x="234" y="323" width="194" height="3"/><rect x="234" y="390" width="194" height="3"/></g>
+</g>
+<!-- 可接的引脚：高亮 -->
+<g><circle cx="262" cy="391.5" r="5" fill="none" stroke="#0D99FF" stroke-width="2"/><circle cx="286" cy="391.5" r="5" fill="#0D99FF"/><circle cx="286" cy="391.5" r="10" fill="#0D99FF" opacity=".25"/><circle cx="310" cy="391.5" r="5" fill="none" stroke="#0D99FF" stroke-width="2"/></g>
+<g filter="url(#sh)">
+<rect x="490" y="240" width="150" height="110" rx="6" fill="#1D3D6B"/>
+<rect x="502" y="258" width="126" height="70" rx="2" fill="#05070A"/>
+<text x="510" y="278" font-family="JetBrains Mono" font-size="11" fill="#8FD3FF">T 23.50 C</text>
+<text x="510" y="296" font-family="JetBrains Mono" font-size="11" fill="#8FD3FF">H 45.0 %</text>
+<text x="510" y="314" font-family="JetBrains Mono" font-size="11" fill="#8FD3FF">P 1013.2</text>
+</g>
+<g filter="url(#sh)">
+<rect x="510" y="410" width="64" height="52" rx="4" fill="#5B2A86"/>
+<rect x="534" y="426" width="16" height="16" rx="2" fill="#C9CED6"/>
+</g>
+<rect x="502" y="402" width="80" height="68" rx="8" fill="none" stroke="#0D99FF" stroke-width="2" stroke-dasharray="5 4"/>
+<g filter="url(#sh)">
+<rect x="70" y="410" width="70" height="40" rx="4" fill="#2F6FD6"/>
+<circle cx="90" cy="430" r="10" fill="#FFFFFF"/><rect x="86" y="404" width="44" height="8" rx="4" fill="#FFFFFF" transform="rotate(-18 90 430)"/>
+<rect x="140" y="424" width="16" height="4" rx="2" fill="#F2994A"/>
+</g>
+<g fill="none" stroke-width="4" stroke-linecap="round">
+<path d="M420 396C440 430 470 420 510 430" stroke="#14AE5C"/>
+<path d="M424 396C460 370 470 330 490 320" stroke="#0D99FF"/>
+<!-- 正在拉的线：跟着鼠标 -->
+<path d="M156 426C200 440 250 420 286 396" stroke="#F2994A" stroke-dasharray="8 6"/>
+</g>
+</svg>
+
+<!-- 引脚悬停提示 -->
+<div style="position: absolute; left: 238px; top: 338px; background: #1E1E1E; color: #FFFFFF; border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.5; box-shadow: 0 4px 14px rgba(0,0,0,.2)">
+<div><b class="mono">GPIO4</b> · 空闲</div>
+<div style="color: #C9C9C9">可做 PWM（LEDC）· ADC1_CH3 · 触摸 T4</div>
+<div style="color: #8FD3FF">点一下把舵机信号接到这里</div>
+</div>
+
+<!-- 万用表读数常驻 -->
+<div style="position: absolute; left: 14px; top: 14px; display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,.92); color: #444; align-self: flex-start">桌面 · 室温 23.5 °C</span>
+<div style="background: #FFFFFF; border-radius: 10px; padding: 10px 12px; box-shadow: 0 2px 10px rgba(0,0,0,.1); width: 168px">
+<div style="display: flex; justify-content: space-between; font-size: 11px; color: #6F6F6F"><span>万用表 · 3V3 对 GND</span><button class="ib" style="width: 18px; height: 18px" aria-label="关掉万用表"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+<div class="mono" style="font-size: 22px; font-weight: 500">3.29 <span style="font-size: 13px">V</span></div>
+<svg width="144" height="22" viewBox="0 0 144 22" aria-hidden="true"><path d="M0 8H40L44 9H80L84 16L88 9H144" fill="none" stroke="#0D99FF" stroke-width="1.5"/></svg>
+<div style="font-size: 11px; color: #6F6F6F">舵机启动时跌到 3.02 V</div>
+</div>
+</div>
+
+<!-- 视角小工具 -->
+<div style="position: absolute; top: 14px; right: 14px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end">
+<div style="display: flex; gap: 2px; background: rgba(255,255,255,.94); border-radius: 10px; padding: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.08)">
+<button class="ib" aria-label="俯视"><span class="mono" style="font-size: 11px">顶</span></button>
+<button class="ib" aria-label="正视"><span class="mono" style="font-size: 11px">前</span></button>
+<button class="ib" aria-label="放大"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+<button class="ib" aria-label="缩小"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+<button class="ib" aria-label="对准选中零件 F"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+<button class="ib" aria-label="全屏台面"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+</div>
+</div>
+
+<!-- 操作提示条 -->
+<div style="position: absolute; left: 50%; top: 14px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: #0B76C8; color: #FFFFFF; border-radius: 999px; padding: 6px 8px 6px 14px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(11,118,200,.3)">
+连线中：已选舵机信号（橙），再点目标引脚
+<span class="mono" style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,.2)">Esc 取消</span>
+</div>
+
+<!-- 浮动工具条 -->
+<div role="toolbar" aria-label="工具" style="position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 6px; background: #FFFFFF; border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.14)">
+<button class="tool"><kbd>V</kbd><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M5 3l14 8-6 2-2 6z"/></svg>选择</button>
+<button class="tool"><kbd>R</kbd><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>转视角</button>
+<button class="tool"><kbd>P</kbd><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg>放置</button>
+<button class="tool on" aria-pressed="true"><kbd>W</kbd><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="18" r="2"/><circle cx="19" cy="6" r="2"/><path d="M6.5 16.5C10 10 14 14 17.5 7.5"/></svg>连线</button>
+<span style="width: 1px; height: 30px; background: #E6E6E6; margin: 0 4px"></span>
+<button class="tool"><kbd>M</kbd><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="3"/><rect x="8" y="5" width="8" height="5" rx="1"/><circle cx="12" cy="16" r="2.5"/></svg>万用表</button>
+<button class="tool"><kbd>O</kbd><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 12h3l3-7 4 14 3-7h5"/></svg>示波器</button>
+<button class="tool"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 17L17 3l4 4L7 21H3z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/></svg>尺子</button>
+<button class="tool"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3c2 3 5 5 5 9a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 1-8z"/></svg>热源</button>
+<span style="width: 1px; height: 30px; background: #E6E6E6; margin: 0 4px"></span>
+<button class="tool"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>拍照</button>
+<button class="tool"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="#F24822"/></svg>录像</button>
+<button class="tool"><kbd>B</kbd><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="8" width="16" height="8" rx="4"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>按 BOOT</button>
+</div>
+
+<div style="position: absolute; left: 14px; bottom: 18px; font-size: 11px; color: #555; background: rgba(255,255,255,.75); padding: 3px 8px; border-radius: 6px">左键选择 · 右键拖动转视角 · 滚轮缩放 · ? 看全部快捷键</div>
+</main>
+
+<aside style="background: #FFFFFF; border-left: 1px solid #E6E6E6; display: flex; flex-direction: column; min-height: 0">
+<div style="padding: 14px 16px 0">
+<div style="display: flex; align-items: center; gap: 8px"><span style="width: 10px; height: 10px; border-radius: 3px; background: #9B51E0"></span><b style="font-size: 16px">BME280</b>
+<span style="margin-left: auto; background: #E8F4FF; color: #0A6FBD" class="badge" title="寄存器按数据手册，读数来自场景温度" >行为模拟</span></div>
+<p style="margin: 2px 0 0; font-size: 12px; color: #6F6F6F">Bosch BME280 温湿度气压模块 · <a href="#" style="color: #0A6FBD">数据手册 ↗</a></p>
+</div>
+<div role="tablist" style="display: flex; padding: 0 8px; border-bottom: 1px solid #F0F0F0; margin-top: 8px">
+<button class="ptab on" role="tab" aria-selected="true">实时值</button>
+<button class="ptab" role="tab">引脚</button>
+<button class="ptab" role="tab">属性</button>
+<button class="ptab" role="tab">可信度</button>
+</div>
+<div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; overflow: hidden; flex: 1">
+<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px">
+<div style="background: #F7F7F7; border-radius: 10px; padding: 10px"><div style="font-size: 11px; color: #6F6F6F">温度</div><div class="mono" style="font-size: 17px; font-weight: 500">23.50</div><div style="font-size: 11px; color: #6F6F6F">°C</div></div>
+<div style="background: #F7F7F7; border-radius: 10px; padding: 10px"><div style="font-size: 11px; color: #6F6F6F">湿度</div><div class="mono" style="font-size: 17px; font-weight: 500">45.0</div><div style="font-size: 11px; color: #6F6F6F">%</div></div>
+<div style="background: #F7F7F7; border-radius: 10px; padding: 10px"><div style="font-size: 11px; color: #6F6F6F">气压</div><div class="mono" style="font-size: 17px; font-weight: 500">1013.25</div><div style="font-size: 11px; color: #6F6F6F">hPa</div></div>
+</div>
+<div>
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: #6F6F6F; margin-bottom: 4px"><span>固件读到的温度 · 最近 60 s</span><span class="mono">23.5</span></div>
+<svg width="280" height="48" viewBox="0 0 280 48" aria-hidden="true"><path d="M0 40H280" stroke="#F0F0F0"/><path d="M0 34L40 34L60 30L100 30L120 22L180 22L200 18L280 18" fill="none" stroke="#0D99FF" stroke-width="2"/><circle cx="280" cy="18" r="3" fill="#0D99FF"/></svg>
+</div>
+<div>
+<div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 10px"><label for="t">环境温度</label><span style="display: inline-flex; align-items: center; gap: 4px"><input id="t" value="23.5" class="mono" style="width: 52px; height: 26px; border: 1px solid #E6E6E6; border-radius: 6px; text-align: right; padding: 0 6px; font-size: 12px; box-sizing: border-box"><span style="font-size: 12px; color: #6F6F6F">°C</span></span></div>
+<div style="position: relative; height: 6px; border-radius: 3px; background: #E6E6E6"><div style="position: absolute; left: 0; top: 0; bottom: 0; width: 56%; border-radius: 3px; background: #0D99FF"></div><div style="position: absolute; left: calc(56% - 9px); top: -6px; width: 18px; height: 18px; border-radius: 50%; background: #FFFFFF; border: 2px solid #0D99FF; box-sizing: border-box"></div></div>
+<div style="display: flex; gap: 6px; margin-top: 12px"><button style="height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid #E6E6E6; background: none; font: inherit; font-size: 12px">冬天室内 18</button><button style="height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid #E6E6E6; background: none; font: inherit; font-size: 12px">夏天 32</button><button style="height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid #E6E6E6; background: none; font: inherit; font-size: 12px">冰箱 4</button></div>
+</div>
+<div style="font-size: 12px; line-height: 1.6; color: #6F6F6F; padding: 10px 12px; border-radius: 8px; background: #F7F7F7">改这里，传感器读数、串口和 OLED 都会跟着变。湿度、气压在「属性」里调。</div>
+<div style="margin-top: auto; display: flex; gap: 8px">
+<button style="flex: 1; height: 34px; border-radius: 8px; border: 1px solid #E6E6E6; background: #FFFFFF; font: inherit; font-size: 13px">换成别的传感器…</button>
+<button style="height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid #F6C2B5; background: #FFFFFF; color: #C2361A; font: inherit; font-size: 13px">移除</button>
+</div>
+</div>
+</aside>
+</div>
+
+<!-- 底部坞：可拖高、可收起 -->
+<section style="position: relative; background: #FFFFFF; border-top: 1px solid #E6E6E6; display: grid; grid-template-rows: 38px 1fr 40px; min-height: 0">
+<div aria-label="拖动改变高度" style="position: absolute; top: -4px; left: 50%; transform: translateX(-50%); width: 40px; height: 4px; border-radius: 2px; background: #C9C9C9"></div>
+<div style="display: flex; align-items: center; padding: 0 8px; border-bottom: 1px solid #F0F0F0">
+<button class="dtab on">串口</button>
+<button class="dtab">代码</button>
+<button class="dtab">逻辑分析仪</button>
+<button class="dtab">运行记录<span class="pill">3</span></button>
+<button class="dtab">检查点<span class="pill">2/6</span></button>
+<button class="dtab">问题<span class="pill" style="background: #FFF1D6; color: #7A4E0B">1</span></button>
+<span style="margin-left: auto; display: flex; align-items: center; gap: 4px">
+<span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border: 1px solid #E6E6E6; border-radius: 6px; font-size: 12px; color: #6F6F6F; width: 160px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>过滤</span>
+<button style="height: 28px; padding: 0 8px; border-radius: 6px; border: 1px solid #E6E6E6; background: none; font: inherit; font-size: 12px; display: inline-flex; align-items: center; gap: 4px">时间戳 <span style="color: #14794A">开</span></button>
+<button style="height: 28px; padding: 0 8px; border-radius: 6px; border: 1px solid #E6E6E6; background: none; font: inherit; font-size: 12px">跟随最新</button>
+<span class="mono" style="font-size: 12px; color: #6F6F6F; margin: 0 6px">115200</span>
+<button class="ib" aria-label="复制全部"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6F6F6F" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></button>
+<button class="ib" aria-label="清空"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6F6F6F" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+<button class="ib" aria-label="收起底栏"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6F6F6F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+</span>
+</div>
+<div class="mono" style="padding: 8px 16px; font-size: 12.5px; line-height: 1.7; color: #444; background: #FBFBFB; overflow: hidden">
+<div><span style="color: #9A9A9A">00:00.12</span>  <span style="color: #14794A">I</span> (312) main_task: Calling app_main()</div>
+<div><span style="color: #9A9A9A">00:00.18</span>  <span style="color: #14794A">I</span> (318) i2c: bus 0 SDA=8 SCL=9 400kHz</div>
+<div><span style="color: #9A9A9A">00:00.21</span>  <span style="color: #14794A">I</span> (322) bme280: chip id 0x60 at 0x76</div>
+<div><span style="color: #9A9A9A">00:00.24</span>  <span style="color: #7A4E0B">W</span> (330) servo: GPIO4 没有接到任何器件</div>
+<div><span style="color: #9A9A9A">00:01.20</span>  <span style="color: #1E1E1E">T=23.50 C H=45.0 % P=1013.25 hPa LED=green PWM=1675us</span><span style="display: inline-block; width: 7px; height: 14px; background: #0D99FF; vertical-align: -2px; margin-left: 4px"></span></div>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 0 12px; border-top: 1px solid #F0F0F0">
+<span class="mono" style="color: #0A6FBD; font-size: 13px">›</span>
+<input aria-label="发给串口" placeholder="发给串口，回车发送" style="flex: 1; height: 28px; border: 0; outline: none; font: inherit; font-size: 13px; background: none">
+<button style="height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid #E6E6E6; background: none; font: inherit; font-size: 12px" class="mono">\r\n ▾</button>
+</div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

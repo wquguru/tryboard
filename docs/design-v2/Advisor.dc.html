@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>选型助手</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.mono{font-family:'JetBrains Mono',monospace}
+.wrap{max-width:1120px;margin:0 auto;padding:0 32px;box-sizing:border-box}
+.tpl{display:flex;align-items:center;gap:14px;padding:16px 18px;border:1px solid #E6E6E6;border-radius:12px;background:#FFFFFF;text-align:left;font:inherit;color:#1E1E1E;width:100%;box-sizing:border-box}
+.tpl.on{border:2px solid #0D99FF;padding:15px 17px;background:#F3F9FF}
+.tpl small{display:block;font-size:12px;color:#6F6F6F;margin-top:2px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px;border-radius:999px;border:1px solid #E6E6E6;background:#FFFFFF;font:inherit;font-size:13px;color:#1E1E1E}
+.chip.on{background:#1E1E1E;border-color:#1E1E1E;color:#FFFFFF}
+.h2{font-size:22px;font-weight:700;margin:0}
+.lbl{font-size:12px;font-weight:700;letter-spacing:.06em;color:#6F6F6F;margin:0 0 12px}
+.badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
+.ok{background:#E7F6EE;color:#14794A}
+.sim{background:#E8F4FF;color:#0A6FBD}
+.est{background:#FFF4DE;color:#7A4E0B}
+.real{background:#FDECE8;color:#B8321A}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{padding:12px 0;border-bottom:1px solid #F0F0F0;text-align:left}
+th{font-size:12px;color:#6F6F6F;font-weight:500}
+@media (max-width: 760px){
+.wrap{padding:0 16px}
+.grid2{grid-template-columns:1fr !important}
+.grid3{grid-template-columns:1fr !important}
+.hero h1{font-size:34px !important}
+.nav-links{display:none !important}
+}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 100%; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif">
+
+<!-- 共享页头 -->
+<header style="border-bottom: 1px solid #E6E6E6">
+<div class="wrap" style="display: flex; align-items: center; height: 60px; gap: 28px">
+<a href="#" style="display: flex; align-items: center; gap: 8px; color: #1E1E1E; text-decoration: none">
+<svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="4" width="56" height="56" rx="14" fill="#0B76C8"/><g fill="#FFFFFF"><circle cx="20" cy="20" r="5"/><circle cx="32" cy="20" r="5"/><circle cx="20" cy="32" r="5"/><circle cx="32" cy="32" r="5"/><circle cx="44" cy="32" r="5"/><circle cx="20" cy="44" r="5"/><circle cx="32" cy="44" r="5"/><circle cx="44" cy="44" r="5"/></g><circle cx="44" cy="20" r="6" fill="#FFB020"/></svg>
+<b style="font-size: 17px">试板</b><span class="mono" style="font-size: 10px; letter-spacing: .08em; color: #6F6F6F">TRYBOARD</span></a>
+<nav class="nav-links" style="display: flex; gap: 24px; font-size: 14px">
+<a href="#" style="color: #6F6F6F; text-decoration: none">作品</a>
+<a href="#" aria-current="page" style="color: #1E1E1E; font-weight: 700; text-decoration: none; box-shadow: 0 2px 0 #0D99FF; padding-bottom: 2px">选型助手</a>
+<a href="#" style="color: #6F6F6F; text-decoration: none">空白实验台</a>
+</nav>
+<a href="#" style="margin-left: auto; height: 36px; padding: 0 16px; border-radius: 8px; background: #1E1E1E; color: #FFFFFF; font-size: 14px; display: inline-flex; align-items: center; text-decoration: none">开始做</a>
+</div>
+</header>
+
+<!-- 标题 -->
+<section class="hero wrap" style="padding-top: 72px; padding-bottom: 48px">
+<p class="mono" style="margin: 0 0 16px; font-size: 12px; letter-spacing: .1em; color: #0A6FBD">选型助手</p>
+<h1 style="margin: 0; font-size: 48px; line-height: 1.15; font-weight: 700; letter-spacing: -.01em">先选项目，<br>再看买哪块板</h1>
+<p style="margin: 18px 0 0; max-width: 560px; font-size: 17px; line-height: 1.7; color: #444">告诉我们你想做什么、有哪些硬要求，试板会给出芯片、开发板、零件清单和接线，并标出哪些结论已经在模拟器里跑过。</p>
+<ol style="list-style: none; padding: 0; margin: 32px 0 0; display: flex; gap: 32px; flex-wrap: wrap; font-size: 14px; color: #444">
+<li style="display: flex; align-items: center; gap: 10px"><span class="mono" style="width: 26px; height: 26px; border-radius: 50%; background: #1E1E1E; color: #FFFFFF; font-size: 12px; display: inline-flex; align-items: center; justify-content: center">1</span>选一个项目</li>
+<li style="display: flex; align-items: center; gap: 10px"><span class="mono" style="width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid #1E1E1E; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box">2</span>勾上硬要求</li>
+<li style="display: flex; align-items: center; gap: 10px"><span class="mono" style="width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid #1E1E1E; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box">3</span>看结果，去实验台跑一遍</li>
+</ol>
+</section>
+
+<!-- 1 项目 -->
+<section class="wrap" style="padding-bottom: 48px">
+<p class="lbl">1 · 你想做什么</p>
+<div class="grid2" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<button class="tpl"><span class="mono" style="font-size: 12px; color: #6F6F6F; width: 22px">01</span><span>第一次玩：点灯、按键、串口<small>LED · 按键 · 电位器</small></span></button>
+<button class="tpl on" aria-pressed="true"><span class="mono" style="font-size: 12px; color: #0A6FBD; width: 22px">02</span><span><b>电池供电的温湿度计</b><small>BME280 · OLED · 锂电池</small></span><svg style="margin-left: auto" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#0D99FF"/><path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+<button class="tpl"><span class="mono" style="font-size: 12px; color: #6F6F6F; width: 22px">03</span><span>氛围灯、灯带控制器<small>WS2812B · 按键</small></span></button>
+<button class="tpl"><span class="mono" style="font-size: 12px; color: #6F6F6F; width: 22px">04</span><span>Matter / Home Assistant 智能家居<small>继电器 · 人体红外</small></span></button>
+<button class="tpl"><span class="mono" style="font-size: 12px; color: #6F6F6F; width: 22px">05</span><span>USB 宏键盘、插手机的小设备<small>按键 · USB OTG</small></span></button>
+<button class="tpl"><span class="mono" style="font-size: 12px; color: #6F6F6F; width: 22px">06</span><span>AI 语音助手（小智类）<small>麦克风 · 功放 · 彩屏</small></span></button>
+<button class="tpl"><span class="mono" style="font-size: 12px; color: #6F6F6F; width: 22px">07</span><span>摄像头监控、看宠物<small>OV2640 · PSRAM</small></span></button>
+<button class="tpl"><span class="mono" style="font-size: 12px; color: #6F6F6F; width: 22px">08</span><span>蓝牙音箱、经典蓝牙串口<small>经典蓝牙 · 功放</small></span></button>
+</div>
+</section>
+
+<!-- 2 要求 -->
+<section class="wrap" style="padding-bottom: 56px">
+<p class="lbl">2 · 有什么硬要求（可多选）</p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button class="chip on" aria-pressed="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>电池供电</button>
+<button class="chip on" aria-pressed="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>越小越好</button>
+<button class="chip">越便宜越好</button>
+<button class="chip">要 Wi-Fi</button>
+<button class="chip">要蓝牙</button>
+<button class="chip">要 USB 设备</button>
+<button class="chip">新手友好（排针、教程多）</button>
+</div>
+</section>
+
+<!-- 3 结果 -->
+<section style="background: #F7F7F7; padding: 56px 0 72px">
+<div class="wrap">
+<p class="lbl">3 · 推荐</p>
+
+<article style="background: #FFFFFF; border-radius: 16px; border: 1px solid #E6E6E6; overflow: hidden">
+<div class="grid2" style="display: grid; grid-template-columns: 1.15fr 1fr">
+<div style="padding: 32px; border-right: 1px solid #F0F0F0">
+<span class="badge" style="background: #1E1E1E; color: #FFFFFF">最合适</span>
+<h2 style="margin: 12px 0 4px; font-size: 30px; font-weight: 700">Seeed XIAO ESP32C3</h2>
+<p style="margin: 0; font-size: 14px; color: #6F6F6F">Seeed Studio · 整套 <b style="color: #1E1E1E">¥66–120</b></p>
+<p class="mono" style="margin: 16px 0 0; font-size: 12.5px; color: #444; line-height: 1.7">ESP32-C3 · 单核 RISC-V 160MHz · 400KB SRAM · 4MB flash · 21 × 17.8mm</p>
+
+<div style="margin-top: 24px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.6">
+<div style="display: flex; gap: 10px"><svg style="flex: none; margin-top: 3px" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14AE5C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>板载锂电池充电，整板深睡约 45µA</div>
+<div style="display: flex; gap: 10px"><svg style="flex: none; margin-top: 3px" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14AE5C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>芯片能在试板里完整仿真，买之前可以先跑</div>
+<div style="display: flex; gap: 10px"><svg style="flex: none; margin-top: 3px" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B7791F" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9.5"/></svg>只引出 11 个 GPIO，以后再加外设要算好</div>
+<div style="display: flex; gap: 10px"><svg style="flex: none; margin-top: 3px" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B7791F" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9.5"/></svg>ADC2 有勘误，开 Wi-Fi 时别用来读模拟量</div>
+</div>
+
+<div style="margin-top: 28px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+<a href="#" style="height: 44px; padding: 0 20px; border-radius: 10px; background: #0B76C8; color: #FFFFFF; font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; text-decoration: none"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15L19.5 12z"/></svg>在试板里跑「bme280」示例</a>
+<a href="#" style="font-size: 14px; color: #0A6FBD; text-decoration: none">复制零件清单</a>
+</div>
+</div>
+
+<div style="padding: 32px; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; align-items: baseline; gap: 12px">
+<span style="font-size: 13px; color: #6F6F6F">电池续航</span>
+<span style="font-size: 40px; font-weight: 700; letter-spacing: -.02em">49<span style="font-size: 18px; font-weight: 500; margin-left: 4px">天</span></span>
+<span class="badge est">估算</span>
+</div>
+<p style="margin: -16px 0 0; font-size: 12px; color: #6F6F6F">1000mAh，每 10 分钟醒来测一次、刷新屏幕</p>
+<div>
+<p class="lbl" style="margin-bottom: 6px">接线</p>
+<table>
+<tr><td>BME280 · SDA</td><td class="mono" style="text-align: right">D4 · GPIO6</td></tr>
+<tr><td>BME280 · SCL</td><td class="mono" style="text-align: right">D5 · GPIO7</td></tr>
+<tr><td>OLED · SDA / SCL</td><td class="mono" style="text-align: right">与 BME280 共用</td></tr>
+</table>
+</div>
+</div>
+</div>
+
+<div class="grid2" style="display: grid; grid-template-columns: 1.15fr 1fr; border-top: 1px solid #F0F0F0">
+<div style="padding: 28px 32px; border-right: 1px solid #F0F0F0">
+<p class="lbl" style="margin-bottom: 6px">零件清单</p>
+<table>
+<tr><td>Seeed XIAO ESP32C3</td><td class="mono" style="text-align: right">¥28–45</td></tr>
+<tr><td>BME280 温湿度气压模块</td><td class="mono" style="text-align: right">¥10–25</td></tr>
+<tr><td>0.96 寸 OLED（SSD1306，I2C）</td><td class="mono" style="text-align: right">¥8–15</td></tr>
+<tr><td>3.7V 锂电池 1000mAh</td><td class="mono" style="text-align: right">¥10–20</td></tr>
+<tr><td>面包板和杜邦线</td><td class="mono" style="text-align: right">¥8–15</td></tr>
+<tr><td style="border: 0">能传数据的 Type-C 线</td><td class="mono" style="text-align: right; border: 0">¥5–15</td></tr>
+</table>
+</div>
+<div style="padding: 28px 32px">
+<p class="lbl" style="margin-bottom: 6px">每条结论有多可信</p>
+<table>
+<tr><td>BME280 读数、OLED 显示</td><td style="text-align: right"><span class="badge sim">行为模拟</span></td></tr>
+<tr><td>I2C 时序、GPIO</td><td style="text-align: right"><span class="badge ok">仿真验证</span></td></tr>
+<tr><td>续航天数</td><td style="text-align: right"><span class="badge est">估算</span></td></tr>
+<tr><td style="border: 0">锂电池充电、天线</td><td style="text-align: right; border: 0"><span class="badge real">必须上真机</span></td></tr>
+</table>
+</div>
+</div>
+</article>
+
+<p class="lbl" style="margin-top: 40px">也可以考虑</p>
+<div class="grid3" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<a href="#" style="display: block; background: #FFFFFF; border: 1px solid #E6E6E6; border-radius: 12px; padding: 20px; color: #1E1E1E; text-decoration: none">
+<b style="font-size: 16px">Seeed XIAO ESP32C6</b>
+<p style="margin: 6px 0 14px; font-size: 13px; color: #6F6F6F">多了 Zigbee / Thread，以后接智能家居</p>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span class="mono">¥40–55</span><span>约 51 天</span></div>
+</a>
+<a href="#" style="display: block; background: #FFFFFF; border: 1px solid #E6E6E6; border-radius: 12px; padding: 20px; color: #1E1E1E; text-decoration: none">
+<b style="font-size: 16px">Seeed XIAO ESP32S3 Sense</b>
+<p style="margin: 6px 0 14px; font-size: 13px; color: #6F6F6F">带摄像头和麦克风，算力更足，偏贵</p>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span class="mono">¥100–140</span><span>约 44 天</span></div>
+</a>
+<a href="#" style="display: block; background: #FFFFFF; border: 1px solid #E6E6E6; border-radius: 12px; padding: 20px; color: #1E1E1E; text-decoration: none">
+<b style="font-size: 16px">ESP32-C3 SuperMini</b>
+<p style="margin: 6px 0 14px; font-size: 13px; color: #6F6F6F">最便宜，没有充电芯片，要另配</p>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span class="mono">¥10–18</span><span>约 36 天</span></div>
+</a>
+</div>
+</div>
+</section>
+
+<footer style="border-top: 1px solid #E6E6E6">
+<div class="wrap" style="display: flex; justify-content: space-between; align-items: center; height: 64px; font-size: 13px; color: #6F6F6F; flex-wrap: wrap; gap: 8px">
+<span>试板 · 在浏览器里先把项目跑一遍</span>
+<a href="#" style="color: #6F6F6F">授权与致谢</a>
+</div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2400}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
