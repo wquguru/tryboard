@@ -225,6 +225,9 @@ ${!found.length ? '<p class="note">目前没有使用外部 3D 模型、贴图�
   }
 }
 
+// 页头导航链接的类名：与 web/src/ui/site.tsx 的 navLink 相同（licenses.css 用 @source 扫这个文件生成这些类）
+const NAV_LINK = 'rounded-md px-2.5 py-[5px] text-muted hover:bg-field hover:text-fg max-sm:px-1.5 max-sm:py-1 max-sm:text-[12px]';
+
 const html = `<!doctype html>
 <html lang="zh-CN">
   <head>
@@ -237,26 +240,38 @@ const html = `<!doctype html>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect x=%222%22 y=%222%22 width=%2212%22 height=%2212%22 rx=%222%22 fill=%22%230D99FF%22/%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
-    <link rel="stylesheet" href="./src/app/app.css" />
-    <link rel="stylesheet" href="./src/page.css" />
+    <!-- 样式：src/licenses/licenses.css（Tailwind，与 React 页面同一套主题；页头 / 页脚类名与 src/ui/site.tsx 相同） -->
+    <link rel="stylesheet" href="./src/licenses/licenses.css" />
   </head>
   <!-- 由 tools/gen_licenses.mjs 生成，不要手改 -->
-  <body class="page">
-    <header class="pg-head">
-      <a class="brand" href="./home.html"><b>试板</b><span class="mono">TRYBOARD</span></a>
-      <nav aria-label="站点"><a href="./home.html">作品</a><a href="./advisor.html">选型助手</a><a href="./app.html?work=blank#bench">空白实验台</a><a class="on" href="./licenses.html">第三方授权</a></nav>
-      <button type="button" class="theme-btn" id="themeBtn"></button>
+  <body>
+   <div class="flex min-h-screen flex-col text-[13px] leading-[1.6]">
+    <header class="pg-head sticky top-0 z-[5] flex items-center justify-between gap-4 border-b border-line bg-head-bg px-6 py-3.5 max-sm:px-4 max-sm:py-2.5">
+      <a class="inline-flex flex-none items-baseline gap-1.5" href="./home.html"><b class="text-[14px]">试板</b><span class="font-mono text-[10px] tracking-[0.08em] text-muted">TRYBOARD</span></a>
+      <nav aria-label="站点" class="flex flex-wrap justify-end gap-0.5">${[
+        ['./home.html', '作品'],
+        ['./advisor.html', '选型助手'],
+        ['./app.html?work=blank#bench', '空白实验台'],
+        ['./licenses.html', '第三方授权'],
+      ]
+        .map(([href, text]) => {
+          const on = href === './licenses.html';
+          return `<a href="${href}" class="${NAV_LINK}${on ? ' bg-field text-fg' : ''}"${on ? ' aria-current="page"' : ''}>${text}</a>`;
+        })
+        .join('')}</nav>
+      <button type="button" id="themeBtn" class="theme-btn ml-1.5 inline-flex h-[30px] flex-none cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-surface px-2.5 text-xs text-fg transition-colors hover:border-hover-line"></button>
     </header>
-    <main class="pg-main lic">
+    <main class="lic mx-auto w-full max-w-[1200px] flex-1 px-6 pb-16 max-sm:px-4 max-sm:pb-12">
       <h1>第三方授权</h1>
       <p>网站里用到的别人的代码、芯片 ROM、固件组件、字体和素材，以及各自的许可证与署名。构建时从依赖清单和素材目录自动生成。</p>
       ${sections.join('\n')}
       <p class="gen mono">生成于 ${new Date().toISOString().slice(0, 10)} · tools/gen_licenses.mjs</p>
     </main>
-    <footer class="pg-foot">
+    <footer class="pg-foot flex flex-wrap gap-x-[18px] gap-y-1.5 border-t border-line px-6 py-3.5 text-[11px] text-muted max-sm:px-4 max-sm:py-3">
       <span>TryBoard 试板：在浏览器里运行 ESP32 系列芯片的真实固件，compatible with Arduino。ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.</span>
-      <span><a href="./licenses.html">第三方授权</a></span>
+      <span><a class="text-fg hover:text-accent-ink" href="./licenses.html">第三方授权</a></span>
     </footer>
+   </div>
     <script>
       // 亮 / 暗切换（与 web/src/theme.ts 相同的存储键；这一页是生成的静态页，不走打包）
       (function () {
