@@ -15,11 +15,11 @@ import { WORKS } from './works';
 /** 32×32 图标按钮 */
 const ib =
   'ib inline-flex size-8 flex-none cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-fg hover:bg-field disabled:cursor-not-allowed disabled:text-muted disabled:opacity-50 disabled:hover:bg-transparent';
-const menuPanel = 'absolute z-30 mt-1 min-w-[220px] rounded-(--r) border border-line bg-surface p-1 text-[13px] text-fg shadow-panel';
-const menuItem = 'flex w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2.5 py-1.5 text-left text-fg hover:bg-field disabled:cursor-not-allowed disabled:text-muted disabled:hover:bg-transparent';
+export const menuPanel = 'absolute z-30 mt-1 min-w-[220px] rounded-(--r) border border-line bg-surface p-1 text-[13px] text-fg shadow-panel';
+export const menuItem = 'flex w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2.5 py-1.5 text-left text-fg hover:bg-field disabled:cursor-not-allowed disabled:text-muted disabled:hover:bg-transparent';
 
 /** 点外面 / Esc 关掉的下拉 */
-function usePop() {
+export function usePop() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -36,7 +36,8 @@ function usePop() {
   return { open, setOpen, ref };
 }
 
-function WorkMenu({ name }: { name: string }) {
+/** phone：手机顶栏居中的作品名（≥ 44 高，菜单铺满宽度） */
+export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
   const { open, setOpen, ref } = usePop();
   const cur = new URLSearchParams(location.search).get('work') ?? 'weather';
   return (
@@ -49,7 +50,7 @@ function WorkMenu({ name }: { name: string }) {
           aria-expanded={open}
           title="切换作品"
           onClick={() => setOpen(!open)}
-          className="inline-flex min-h-8 max-w-[220px] cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1 text-fg hover:bg-field"
+          className={cn('inline-flex min-h-8 max-w-[220px] cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1 text-fg hover:bg-field', phone && 'min-h-11 max-w-full px-2 text-[15px]')}
         >
           <span id="workName" className="work truncate font-bold">
             {name}
@@ -58,7 +59,7 @@ function WorkMenu({ name }: { name: string }) {
         </button>
       </h1>
       {open && (
-        <div role="menu" aria-label="切换作品" id="workMenu" className={cn(menuPanel, 'left-0 max-h-[70vh] overflow-auto')}>
+        <div role="menu" aria-label="切换作品" id="workMenu" className={cn(menuPanel, 'left-0 max-h-[70vh] overflow-auto', phone && 'fixed top-12 right-2 left-2 [&_a]:min-h-11')}>
           {Object.values(WORKS).map((w) => (
             <a
               key={w.id}
@@ -104,7 +105,7 @@ function Breadcrumb({ name }: { name: string }) {
         <span className="text-muted">/</span>
         <WorkMenu name={name} />
       </div>
-      <span id="savedState" className="-mt-1 pl-[34px] text-[11px] leading-none text-muted max-[760px]:hidden">
+      <span id="savedState" className="-mt-1 pl-[34px] text-[11px] leading-none text-muted">
         {savedText(saved)}
       </span>
     </div>
@@ -152,7 +153,7 @@ function StepBar({ step }: { step: StepId }) {
   );
 }
 
-const RUN_TEXT: Record<string, [string, string]> = {
+export const RUN_TEXT: Record<string, [string, string]> = {
   loading: ['加载中', 'bg-muted'],
   run: ['运行中', 'bg-ok'],
   pause: ['已暂停', 'bg-warn'],
@@ -161,7 +162,7 @@ const RUN_TEXT: Record<string, [string, string]> = {
   idle: ['没在跑', 'bg-muted'],
   nofw: ['没有固件', 'bg-muted'],
 };
-const SPEEDS = [1, 2, 0.5];
+export const SPEEDS = [1, 2, 0.5];
 
 function RunGroup({ bench }: { bench: boolean }) {
   const { run, speed } = useStore(bc);
@@ -203,19 +204,43 @@ function RunGroup({ bench }: { bench: boolean }) {
   );
 }
 
-function MoreMenu({ toast }: { toast: (t: string) => void }) {
+/** phone：手机顶栏右边的 ⋯（44 的按钮、铺开的菜单，另加主题和换固件——手机顶栏放不下它们） */
+export function MoreMenu({ toast, phone }: { toast: (t: string) => void; phone?: boolean }) {
   const { open, setOpen, ref } = usePop();
+  const file = useRef<HTMLInputElement>(null);
+  const [dark, setDark] = useState(currentTheme() === 'dark');
+  useEffect(() => {
+    if (!phone) return;
+    const off = onTheme((t) => setDark(t === 'dark'));
+    return () => void off();
+  }, [phone]);
   const go = (fn: () => void) => () => {
     setOpen(false);
     fn();
   };
   return (
     <div ref={ref} className="relative flex-none">
-      <button type="button" id="moreBtn" className={ib} aria-haspopup="menu" aria-expanded={open} aria-label="更多：分享、导出输入日志、交给 AI 的任务书" title="更多" onClick={() => setOpen(!open)}>
+      {/* 换固件的文件框一直挂着：菜单关了 change 照样到 */}
+      {phone && (
+        <input
+          ref={file}
+          type="file"
+          accept=".bin"
+          hidden
+          id="fwPick"
+          onChange={(e) => {
+            const f = e.currentTarget.files?.[0];
+            e.currentTarget.value = '';
+            setOpen(false);
+            if (f) actions.pickFirmware?.(f);
+          }}
+        />
+      )}
+      <button type="button" id="moreBtn" className={cn(ib, phone && 'size-11')} aria-haspopup="menu" aria-expanded={open} aria-label="更多：分享、导出输入日志、交给 AI 的任务书" title="更多" onClick={() => setOpen(!open)}>
         <Icon n="more" />
       </button>
       {open && (
-        <div role="menu" id="moreMenu" className={cn(menuPanel, 'right-0 w-[280px]')}>
+        <div role="menu" id="moreMenu" className={cn(menuPanel, 'right-0 w-[280px]', phone && 'fixed top-12 right-2 w-[min(300px,calc(100vw-16px))] [&_button]:min-h-11')}>
           <button
             type="button"
             role="menuitem"
@@ -248,6 +273,21 @@ function MoreMenu({ toast }: { toast: (t: string) => void }) {
               <span className="block text-[11px] text-muted">当前检查点的目标、接线和验收命令</span>
             </span>
           </button>
+          {phone && (
+            <>
+              <button type="button" role="menuitem" id="swapFw" data-more="fw" className={menuItem} disabled={!actions.pickFirmware} onClick={() => file.current?.click()}>
+                <Icon n="upload" size={15} />
+                <span className="flex-1">
+                  换固件
+                  <span className="block text-[11px] text-muted">换一个 flash.bin 在台面上跑（文件不会上传）</span>
+                </span>
+              </button>
+              <button type="button" role="menuitem" data-more="theme" className={cn(menuItem, 'theme-btn')} aria-pressed={dark} onClick={go(() => setTheme(dark ? 'light' : 'dark'))}>
+                <Icon n={dark ? 'moon' : 'sun'} size={15} />
+                <span className="flex-1">{dark ? '切到亮色' : '切到暗色'}</span>
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -279,12 +319,11 @@ export function TopBar(p: { step: StepId; workName: string; right: ReactNode; to
       id="topbar"
       className={cn(
         'topbar fixed inset-x-0 top-0 z-4 flex h-(--top-h) items-center gap-2.5 border-b border-line bg-surface px-3',
-        'max-[760px]:static max-[760px]:order-1 max-[760px]:h-auto max-[760px]:flex-wrap max-[760px]:gap-2 max-[760px]:rounded-(--r) max-[760px]:border max-[760px]:p-3',
       )}
     >
       <Breadcrumb name={p.workName} />
-      <span aria-hidden="true" className="h-6 w-px flex-none bg-line max-[760px]:hidden" />
-      <div className="flex flex-none items-center max-[760px]:hidden">
+      <span aria-hidden="true" className="h-6 w-px flex-none bg-line" />
+      <div className="flex flex-none items-center">
         <button type="button" id="undoBtn" className={ib} disabled={!bench || !undo} title={bench ? `撤销（${mac ? '⌘Z' : 'Ctrl Z'}）：回到时间线上一步` : '只有实验台能撤销'} aria-label="撤销" onClick={() => actions.undo?.()}>
           <Icon n="undo" />
         </button>
@@ -292,7 +331,7 @@ export function TopBar(p: { step: StepId; workName: string; right: ReactNode; to
           <Icon n="redo" />
         </button>
       </div>
-      <div className="flex min-w-0 flex-1 justify-center max-[760px]:order-3 max-[760px]:w-full max-[760px]:flex-none max-[760px]:justify-start max-[760px]:overflow-x-auto">
+      <div className="flex min-w-0 flex-1 justify-center">
         <StepBar step={p.step} />
       </div>
       <CmdkBox />

@@ -55,8 +55,29 @@
   --asm-shade: #2c2f34;
   color-scheme: dark;
 }
-@media (min-width: 761px) {
+@media (min-width: 768px) {
   html, body.app { height: 100%; }
+}
+/* 坞高度：chrome.ts 把拖出来的高度写成 body 上的 --dock-desk；--dock-h 由这里推出来，手机断点才能整块换掉（内联变量会盖过媒体查询） */
+body.app { --dock-h: var(--dock-desk, 200px); }
+/* 手机（U-05，DESIGN_V2 §5）：顶栏 49 + 四步条 50（按钮 44 + 下边距）；没有左右栏；实验台底下是工具条 64 + 串口窥视条，别的步骤底下是一颗吸底主按钮 */
+@media (max-width: 767px) {
+  :root { --top-h: 99px; --left-w: 0px; --right-w: 0px; --m-tb: calc(64px + env(safe-area-inset-bottom)); --m-peek: 68px; }
+  body.app { --dock-h: calc(var(--m-tb) + var(--m-peek)); }
+  body.app:not([data-step='bench']) { --dock-h: calc(72px + env(safe-area-inset-bottom)); }
+  /* 属性抽屉里的滑块：轨道 8、拇指 28（手指按得住） */
+  #props input[type='range'] { -webkit-appearance: none; appearance: none; height: 32px; background: transparent; }
+  #props input[type='range']::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: var(--line); }
+  #props input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; margin-top: -10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); box-shadow: var(--shadow); }
+  #props input[type='range']::-moz-range-track { height: 8px; border-radius: 4px; background: var(--line); }
+  #props input[type='range']::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
+  /* 手机上的按钮、输入框、树行一律 ≥ 44 高（DESIGN_V2 §0） */
+  body.app #props button, body.app #props select, body.app #props input[type='number'], body.app #props a.btn,
+  body.app #tree button, body.app #tree a, body.app #tree summary, body.app #tree select,
+  body.app .bn-l, body.app #stepLayer button, body.app #dock [data-cp], body.app #dock [data-issue], body.app #partLib a,
+  body.app #stage [data-overlay] button:not([data-ring]), body.app .qcard button { min-height: 44px; }
+  body.app #props input[type='number'] { font-size: 16px; }
+  .bn input { width: 20px; height: 20px; }
 }
 /* 命令式代码（分析仪、SVG 视图）和实时字段（classList.toggle('bad')）用的钩子类 */
 .mono { font-family: var(--mono); }
@@ -124,12 +145,12 @@
 .first3 li b { display: block; font-weight: 500; }
 .first3 li span { color: var(--muted); font-size: 12px; }
 .serial-tail { min-height: 60px; max-height: 120px; }
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .asm-shell, .prod-svg { position: static; transform: none; }
   .prod-stage, .asm3d-stage { position: relative; inset: auto; height: 340px; border-radius: var(--r); }
   .p3-disclaimer { left: 8px; bottom: 8px; }
-  /* 只读：清单勾选、加零件不能改 */
-  .bn input { pointer-events: none; }
+  .prod-stage { height: 56dvh; min-height: 300px; }
+  .asm3d-stage { height: 46dvh; min-height: 290px; }
   .prod-preview { position: static; transform: none; white-space: normal; flex-wrap: wrap; margin: 0 0 8px; }
 }
 
@@ -215,11 +236,11 @@
   .shop-stage { left: calc(var(--left-w) + var(--gap)); right: calc(var(--right-w) + var(--gap)); }
   .ss-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
 }
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .shop-stage { position: static; overflow: visible; padding: 0; }
   .ss-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   .pc-g svg { height: 40px; }
-  .addpart { display: none; }
+  .addpart select { min-height: 44px; font-size: 16px; }
 }
 
 /* ---------- 逻辑分析仪（P1-05）：v2 起是底部坞的一个页签，盖在坞的正文区（坞页签条 38px 以下） ---------- */
@@ -256,7 +277,7 @@ body.dock-collapsed .analyzer { display: none; }
 .ana-cv { display: block; width: 100%; height: var(--ana-cv-h, 200px); cursor: crosshair; touch-action: none; }
 .ana-f { display: flex; gap: 16px; justify-content: space-between; padding: 4px 12px 6px; border-top: 1px solid var(--line-soft); font-size: 11px; min-height: 24px; }
 .ana-f .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .analyzer { display: none !important; }
 }
 

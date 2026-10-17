@@ -4,6 +4,7 @@ import { Fragment } from 'react';
 import { cn } from '../ui/cn';
 import { commit, useStore } from './react';
 import { createStore } from './store';
+import { PhoneToolbar, usePhone } from './mobile';
 
 export interface Tool {
   id: string;
@@ -30,12 +31,23 @@ export interface Toolbar {
 
 type TbState = { groups: ToolGroup[]; active: string | null; labels: Record<string, string> };
 
-export function createToolbar(): Toolbar & { View: () => React.JSX.Element } {
+export function createToolbar(): Toolbar & { View: (p: { step: string }) => React.JSX.Element | null } {
   const cbs: ((id: string) => void)[] = [];
   const st = createStore<TbState>({ groups: [], active: null, labels: {} });
   const set = (p: Partial<TbState>) => commit(() => st.set(p));
-  function View() {
+  function View({ step }: { step: string }) {
     const { groups, active, labels } = useStore(st);
+    const phone = usePhone();
+    // 手机：实验台是吸底的五键工具条 + 「更多」，别的步骤是 3D 下面的按键网格（mobile.tsx）
+    if (phone)
+      return (
+        <PhoneToolbar
+          step={step}
+          tools={groups.flatMap((g) => g.tools).map((t) => ({ ...t, label: labels[t.id] ?? t.label }))}
+          active={active}
+          fire={(id) => cbs.forEach((f) => f(id))}
+        />
+      );
     return (
       <div
         id="toolbar"
@@ -43,7 +55,7 @@ export function createToolbar(): Toolbar & { View: () => React.JSX.Element } {
         className={cn(
           'pnl toolbar tb fixed bottom-[calc(var(--dock-h)+12px)] left-[calc((100vw+var(--left-w)-var(--right-w))/2)] z-2 flex -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-(--r) border border-line bg-(--panel) p-1.5 shadow-panel',
           'max-w-[calc(100vw-var(--left-w)-var(--right-w)-24px)]',
-          'empty:hidden max-[760px]:hidden!',
+          'empty:hidden',
         )}
       >
         {groups.map((g, gi) => (

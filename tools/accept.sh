@@ -241,6 +241,10 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/wiremode.mjs 2>&1 | grep '^\[wiremode\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[wiremode\] PASS（' || { echo "- [wiremode] 脚本没跑完" >> $REPORT; fail=1; }
+  # 手机布局（U-05）：390×844 四步无横向滚动、主控件够大且点得到、抽屉开合、改接放大镜、成品按键
+  r=$(node tools/webtest/mobile.mjs 2>&1 | grep '^\[mobile\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[mobile\] PASS（' || { echo "- [mobile] 脚本没跑完" >> $REPORT; fail=1; }
 fi
 echo -e "\n结论：$([ $fail = 0 ] && echo '全部通过' || echo '有失败项')" >> $REPORT
 cat $REPORT
