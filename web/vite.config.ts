@@ -2,6 +2,8 @@ import { defineConfig, type Plugin } from 'vite';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
 // licenses.html 由 tools/gen_licenses.mjs 在构建期生成（不进仓库）；没生成时照样能 build
 const licenses = existsSync(new URL('./licenses.html', import.meta.url)) ? { licenses: 'licenses.html' } : {};
@@ -37,7 +39,7 @@ function models(): Plugin {
 export default defineConfig({
   base: './',
   worker: { format: 'es' },
-  plugins: [models()],
+  plugins: [react(), tailwindcss(), models()],
   // 关卡定义 firmware/levels.json 在 web/ 外面，开发服务器要放行上一级目录
   server: { fs: { allow: ['..'] } },
   build: {

@@ -29,6 +29,7 @@
 | `lvgl/lvgl` 9.2.2（组件注册表）、`espressif/esp_lvgl_port` 2.6.0 | ✅ LVGL 为标准 MIT（"Copyright (c) 2021 LVGL Kft"），esp_lvgl_port 为 Apache-2.0（源文件 SPDX 均为 Apache-2.0，示例为 CC0-1.0）；2026-10-16 核对组件包内 LICENCE.txt / license.txt，两者都**不是**乐鑫修改版 MIT，可随示例固件分发，附许可证。LVGL 源码里另带的第三方库（FreeType、ThorVG、lodepng 等）只在对应 Kconfig 打开时编译，s3-lvgl 没开 | 组件包 LICENCE.txt / license.txt |
 | ngspice | 本机 tools/ 对照用 ✅；网页版：排除 `xspice/icm/table`（GPL）、`--disable-klu`、不 `--with-tcl`；numparam（LGPL）排除不掉，编成独立 wasm，附源码与构建脚本 | 各模块许可证 |
 | three.js、three-mesh-bvh、three-gpu-pathtracer、glTF-Transform（MIT）；Manifold、Rapier（Apache-2.0）；Poly Haven HDRI（CC0） | ✅ 可用（引入前仍要写进 DECISIONS） | 各 LICENSE |
+| React / React DOM、Radix UI（`radix-ui`）、Tailwind CSS、tailwind-merge、clsx（MIT）；class-variance-authority（Apache-2.0）；shadcn/ui 组件写法（MIT，只参考结构自己写，不整段复制） | ✅ 可用（2026-10-17 核对 npm 包 LICENSE；引入前写进 DECISIONS）。随网站分发的运行时进授权页 | 各 LICENSE |
 | 字体：Noto Sans SC、JetBrains Mono（OFL-1.1） | ✅ 可自托管、转 WOFF2、子集化；附 OFL.txt；子集文件名不带保留名 "Source" | OFL |
 | 参考价与店铺外链 | ✅ 人工核价 + 日期 + 来源；不写"最低价 / 最佳"；不用平台 logo。联盟链接（以后）要显著标"广告"，推荐逻辑与佣金脱钩，申请前读各联盟现行规范 | 《互联网广告管理办法》第九条第三款 |
 | 开源 ROM 替代品 | 未找到 | |

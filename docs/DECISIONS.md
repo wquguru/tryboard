@@ -508,3 +508,14 @@
 - 决定：人看了三版设计稿（流程条横排 / 居中大字 + 四列画廊 / 左右分屏 + 两列横卡）后选了左右分屏。首页只剩三段：首屏主张和竖向四步流程、作品两列横卡、一行页脚（DESIGN §5）
 - 砍掉：卡片简介、"要买"清单、检查点数、示意图状态行（只在跑固件时出现，显示串口最后一行）、"我有自己的想法 / 已有固件"两张入口卡（导航和首屏按钮已有）、命令行验收介绍、参考价说明小字。参考价保留"估算"标注（DESIGN §6）
 - 替代：保留入口卡放在作品下面——人明确要求砍多余说明，入口已在导航里，不重复
+
+## 2026-10-17 · 2D 界面改用 React + Tailwind + shadcn 风格组件（先试点选型助手）
+- 决定：网页 2D 外壳（导航、面板、表单、表格、对话框、命令框）逐页迁到 React 19 + Tailwind v4 + shadcn 风格组件（底层 Radix）；构建仍是 Vite，**不用 Next.js**（站点纯静态、没有后端，SSR / 服务端组件 / API 路由都用不上，反而让 wasm、Worker 打包更难控）。3D 场景（three.js）、Worker、wasm 绑定、高频刷新的 canvas 面板（逻辑分析仪、时间线波形、示波器）保持命令式，由 React 组件挂载，不进 React 渲染。
+- 先试点选型助手（advisor.html：纯 2D 表单 + 表格、与模拟器无关）；通过标准：功能与旧页一致（同样的模板 / 需求 / 推荐结果）、亮暗色与手机宽度 agent-browser 走查无 error、`levels.mjs` 首页入口回归通过、首包增量可接受。通过后再迁首页、检查点页、实验台外壳。
+- 依赖（精确版本，均发布于 2026-09-15 之前；许可证见 LICENSING.md）：
+  - 运行时：react 19.3.0、react-dom 19.3.0（MIT，gzip 约 60 KB）、radix-ui 1.6.7（MIT，按组件 tree-shake）、class-variance-authority 0.7.1（Apache-2.0，<1 KB）、clsx 2.1.1（MIT，<1 KB）、tailwind-merge 3.7.0（MIT，约 7 KB）
+  - 构建：tailwindcss 4.3.3、@tailwindcss/vite 4.3.3、@vitejs/plugin-react 4.7.0（Vite 6 能用的最后一个大版本）、@types/react 19.3.0、@types/react-dom 19.3.0（MIT，不随网站分发）
+  - 不引 lucide 等图标库：DESIGN 用 ✓ ✗ ! 文字符号表达状态
+- 主题：Tailwind 的 `@theme` 直接映射 DESIGN §2 的 CSS 变量，`dark:` 变体绑 `[data-theme=dark]`（与 theme.ts 同一个开关），不另起一套色板。Tailwind preflight 只在迁过的页面加载，旧页面样式不受影响。
+- 理由：现有 2D 界面靠 `innerHTML` 拼串（94 处）+ 手动重画，状态和 DOM 容易不同步、每处都得记得转义；对话框 / 菜单 / 命令框的焦点与键盘要自己写。React 声明式渲染 + JSX 默认转义 + Radix 的可访问性原语直接解决这几类问题。
+- 替代：(a) 保持原生 DOM、只抽小组件函数——便宜，但解决不了状态同步；(b) Next.js——见上，收益几乎为零；(c) Preact——更小，但 Radix / shadcn 生态要 compat 层，出问题难查。

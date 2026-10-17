@@ -69,7 +69,7 @@ web/（Vite + TS）
 - wasm 导出见 `core/crates/wasm/src/lib.rs`（`tb_*`）。没有 import，实例化时传 `{}`。主线程先读镜像头判断芯片、下载对应 ROM，再 `tb_boot`；`tb_chip` / `tb_boot_pin` 告诉前端换哪块板、BOOT 键在哪个脚；S3 的 GPIO32 以上用 `tb_gpio_level_hi` / `tb_gpio_enable_hi`。
 - 资源：`/wasm/tryboard.wasm`、`/rom/esp32c3_rev3_rom.elf`（附 Apache-2.0 LICENSE）、`/fw/<示例>/flash.bin` 与 `/fw/examples.json`。
 - 渲染：three.js WebGL2 + 后期泛光（LED 发光）。WebGPU 等 three 的 WebGPU 渲染器稳定后再切。
-- 页面：`index.html` 实验台（main.ts）、`home.html` 首页（home.ts）、`levels.html` 关卡（levels.ts）、`advisor.html` 选型。公共资源加载在 `assets.ts`；首页 / 关卡的实时运行用 `live.ts`（包一层 worker.ts）。
+- 页面：`index.html` 实验台（main.ts）、`home.html` 首页（home.ts）、`levels.html` 关卡（levels.ts）、`advisor.html` 选型（React，`src/advisor/App.tsx`，见下节）。公共资源加载在 `assets.ts`；首页 / 关卡的实时运行用 `live.ts`（包一层 worker.ts）。
 - SVG 视图（`src/views/`）：`bench`（面包板）、`product`（成品）、`assembly`（拖拽装配，装完切到成品）、`showcase`（成品示意，不跑固件）。视图只画，数据来自模拟器帧（OLED 像素、各脚 PWM 占空比、板载 WS2812）；舵机角度由 50 Hz 脉宽换算。
 - SVG 视图补充：`templates.ts` 是装配模板（零件、装法、检查、影响、成品工厂），`assembly.ts` 只是通用引擎；`lcdproducts.ts` 是圆屏成品（spin / lens），画面来自 worker 的 `lcd` 消息（GC9A01 240×240 RGBA，变化才发、≤ 30 帧/秒）。3D 实验台里圆屏是一块圆形贴图（board3d.ts `roundLcdModule`）。
 - PWM 观察：CLI 与网页在汇总行之后都输出 `[tryboard] PWM GPIOn 变化 占空比@时刻 …`（三位小数相同的相邻记录合并），关卡用它判"脉宽依次出现的台阶"（`pwm.steps`）和"稳定以后的值"（`pwm.from` 秒）。
@@ -82,6 +82,14 @@ web/（Vite + TS）
 - 逻辑分析仪事件（P1-05，`crates/esp32c3/src/iotrace.rs`）：SocBus 里一个有上限的环形缓冲，按 CPU 周期盖戳记 GPIO（只记 watch 掩码里的脚，在 `gpio_changed` 里比较）、PWM（`update` 里 LEDC 修改计数或 GPIO 使能 / 矩阵变了才扫各脚 `pin_pwm`）、WS2812 帧（`route_rmt` 里解码器帧数变了）、I2C 事务（`I2c::run_commands` 按命令表产生 START / ADDR / DATA / STOP，时刻按 SCL 位推算，SocBus 写完寄存器后搬进缓冲）。CLI `--trace-io` 每片取走写文本；wasm `tb_io_take` 拷成 16 字节记录，worker 攒着随 tick 发 `io` 消息（上电 / 回退先发 reset），主线程 `app/iotrace.ts` 的 IoStore 按通道整理、解 I2C 事务，`app/analyzer.ts` 画。格式与上限见 DECISIONS「逻辑分析仪事件缓冲」
 - ⌘K（P1-06，`app/cmdk.ts` + 纯函数 `app/cmdmatch.ts`）：候选 = 命令（含按输入生成的"把室温设为 N ℃""回到第 n 次运行"）+ 零件 + 引脚（listPins）+ 检查点 + 运行；执行走 store / session / 时间线现有接口
 - 关卡验收：`firmware/levels.json` 是唯一来源，判定规则在 `tools/check.py` 和 `web/src/checks.ts` 各写一份、逐条对应。浏览器里由 `verify-worker.ts` 按**模拟时间**跑（不看墙钟），时间片 / 脚本施加 / PWM 采样照搬 CLI `run` 的循环；观察记录用 wasm 的 `tb_report`（与 CLI `--gpio-log --ws2812-log` 同格式）。运行指纹 = FNV-1a(串口原始字节 + `\n#report\n` + 规范化观察记录)，`tools/webtest/levels.mjs` 逐关核对网页与命令行指纹相同。
+
+## 网页 2D 界面（React，2026-10-17 起，见 DECISIONS 同日）
+- 栈：React 19 + Tailwind v4（`@tailwindcss/vite`）+ shadcn 风格组件（Radix 原语），仍是 Vite 多页面构建，不用 Next.js。公共件在 `web/src/ui/`：`tailwind.css`（唯一的颜色变量定义 + `@theme` 映射，亮暗两套）、`cn.ts`、`components.tsx`（Button / Badge / Card / Chip / Checkbox / Collapsible / StatusList / Table / ThemeToggle）。新组件先加到这里，页面里不重复写一套。
+- 页面入口：`<页面>.html` 里只放 `<div id="root">` 和 `src/<页面>/main.tsx`；`<head>` 的主题内联脚本保留（首帧前定 data-theme）。Tailwind preflight 只在引了 `ui/tailwind.css` 的页面生效，没迁的页面不受影响。
+- 颜色：只用 token 类（`bg-surface`、`text-muted`、`border-line`…），不写十六进制。浅底上的文字用 `*-ink`（`text-accent-ink`、`text-ok-ink`…，WCAG AA 4.5:1），白字蓝底用 `bg-accent-strong`；原色（`accent` / `ok` / `warn` / `bad`）只用于边框、圆点、图形。暗色下 ink 与原色相同。首页 / 检查点页的暖灰橙色板（原 site.css）同样在 `ui/` 里映射成这套语义名，页面不各自定义变量。
+- 命令式模块（three.js 场景、worker、wasm、canvas 逻辑分析仪 / 波形 / 示波器）不进 React 渲染：组件里 `useRef` 拿容器、`useEffect` 里创建并在清理函数里销毁。每秒十次以上的数据（模拟时间、串口流、tick 帧）不放进 React state：直接写 DOM ref 或 canvas，或经外部 store + `useSyncExternalStore` 且节流到 ≤ 10 Hz。
+- 不用 `innerHTML` / `dangerouslySetInnerHTML`（JSX 默认转义）；确有必要（如授权页的生成 HTML）写明来源可信的理由。
+- 测试契约：`tools/webtest/*.mjs` 依赖的 id / class / `data-*` / 文案保持不变；确要改，同一提交里改测试脚本，判据不放宽。每迁一页要做：新旧页面状态逐条文字对比（脚本放 `Reviews/ab/react/`）、agent-browser 亮色 / 暗色 / 390px 宽走查截图、`agent-browser a11y` 零违规、console 无 error、`tools/accept.sh --no-qemu` 全过。
 
 ## 引脚器件、PCNT、RMT 接收（P2-01 / P2-04 / P2-05）
 - 引脚器件（`crates/esp32c3/src/devices/pins.rs`，C3 / S3 的 SocBus 都挂 `pins: PinDevices`）：输出带精确时刻波形的外接器件放在 SoC 里，不在 1 ms 时间片之间施加。`poll(now)` 给出到 now 为止的驱动 `(周期, 引脚, 电平)`，SoC 的 `pins_update` 按时刻写 `gpio.ext_in / ext_driven` 并调 `gpio_changed(t)`（照常触发 GPIO 中断、iotrace、PCNT / RMT 接收）；下一次要问的时刻进 `next_event`（WAITI 快进也会停在这里）。`gpio_changed` 在电平变化时调 `pins.on_level(t, 电平)`，让器件看到芯片输出（HC-SR04 的 Trig）

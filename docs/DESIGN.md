@@ -15,9 +15,10 @@
 ## 2. 视觉（A 版：白底极简工程软件）
 - 颜色（CSS 变量名建议）：
   - `--bg #FFFFFF`；台面背景 `radial-gradient(120% 90% at 50% 40%, #FFFFFF, #ECEFF3)`
-  - `--fg #1E1E1E`，`--muted #8C8C8C`，`--line #E6E6E6`，`--line-soft #F0F0F0`，`--field #F7F7F7`
+  - `--fg #1E1E1E`，`--muted #6F6F6F`（2026-10-17 由 #8C8C8C 加深，白底对比 3.4 → 5.0），`--line #E6E6E6`，`--line-soft #F0F0F0`，`--field #F7F7F7`
   - `--accent #0D99FF`（选中、主按钮），`--accent-bg #E5F4FF`
   - `--ok #14AE5C`，`--warn #B7791F`（文字）/ `#E8A317`（点），`--bad #F24822`（也是测量标注红），`--bad-bg #FEF2F2`
+  - 对比度（2026-10-17）：正文和小字至少 WCAG AA 4.5:1。浅色底上的状态文字用深一档的 ink：`--accent-ink #0A6FBD`、`--ok-ink #0E7A41`、`--warn-ink #8A5A12`、`--bad-ink #C4361A`；白字蓝底（主按钮、首选徽章、勾选框）用 `--accent-strong #0B76C8`。原色只用于边框、圆点、图形和大字。暗色模式原色已达标，ink 等于原色。
 - 字体：Noto Sans SC（正文 13px，面板标题 11px/500 灰）、JetBrains Mono（数值、引脚、指纹、时间）。不用 Inter / Roboto / Arial，不用 emoji。
 - 面板：浮动，白 95% 不透明，`border 1px var(--line)`，圆角 12，阴影 `0 2px 10px #0000000F`，离屏幕边 12px。
 - 状态靠文字 + 颜色同时表达（✓ / ✗ / !），不只靠颜色。

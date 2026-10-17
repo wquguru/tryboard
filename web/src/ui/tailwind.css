@@ -1,0 +1,60 @@
+/* React 页面的样式入口（DECISIONS 2026-10-17）。颜色只在这里定义一次：亮色是 DESIGN §2 的值，
+   暗色按同一套变量反转（与 app.css 的 :root[data-theme='dark'] 同值）。data-theme 由各页 <head> 的内联脚本在首帧前设好。
+   Tailwind 的颜色类（bg-surface、text-muted…）都指向这些变量，所以切主题不用 dark: 前缀。 */
+@import 'tailwindcss';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+:root {
+  --bg: #ffffff; --fg: #1e1e1e; --muted: #6f6f6f; --line: #e6e6e6; --line-soft: #f0f0f0; --field: #f7f7f7;
+  --accent: #0d99ff; --accent-bg: #e5f4ff; --accent-line: #b9e0ff; --on-accent: #ffffff;
+  --ok: #14ae5c; --ok-bg: #e8f7ee; --warn: #b7791f; --warn-bg: #fffaf0; --bad: #f24822; --bad-bg: #fef2f2;
+  --surface: #ffffff; --hover-line: #cccccc; --head-bg: rgba(255, 255, 255, 0.92);
+  /* 文字用的深一档（WCAG AA 4.5:1，DESIGN §2 对比度）：浅底上的状态字、蓝字、白字蓝底都用它，点和边框仍用原色 */
+  --accent-ink: #0a6fbd; --accent-strong: #0b76c8; --ok-ink: #0e7a41; --warn-ink: #8a5a12; --bad-ink: #c4361a;
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  --bg: #17181b; --fg: #e8eaed; --muted: #9ba0a7; --line: #34373c; --line-soft: #2a2c31; --field: #24262a;
+  --accent: #3aa8ff; --accent-bg: #10304a; --accent-line: #1d4f7a; --on-accent: #08141f;
+  --ok: #3ccf82; --ok-bg: #163826; --warn: #e3ab4f; --warn-bg: #2d2617; --bad: #ff6f52; --bad-bg: #3b1e19;
+  --surface: #1e2024; --hover-line: #4c5057; --head-bg: rgba(23, 24, 27, 0.92);
+  --accent-ink: var(--accent); --accent-strong: var(--accent); --ok-ink: var(--ok); --warn-ink: var(--warn); --bad-ink: var(--bad);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-field: var(--field);
+  --color-accent: var(--accent);
+  --color-accent-bg: var(--accent-bg);
+  --color-accent-line: var(--accent-line);
+  --color-on-accent: var(--on-accent);
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-bad: var(--bad);
+  --color-bad-bg: var(--bad-bg);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-strong: var(--accent-strong);
+  --color-ok-ink: var(--ok-ink);
+  --color-warn-ink: var(--warn-ink);
+  --color-bad-ink: var(--bad-ink);
+  --color-surface: var(--surface);
+  --color-hover-line: var(--hover-line);
+  --color-head-bg: var(--head-bg);
+  --font-sans: 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --shadow-panel: 0 2px 10px #0000000f;
+}
+
+@layer base {
+  html { background: var(--bg); }
+  body { @apply bg-bg text-fg font-sans text-sm leading-relaxed antialiased; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+}
