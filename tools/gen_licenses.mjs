@@ -237,7 +237,7 @@ const html = `<!doctype html>
     <script>try{var t=localStorage.getItem('tb-theme')}catch(e){}document.documentElement.dataset.theme=t==='dark'||t==='light'?t:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'</script>
     <title>第三方授权 · 试板 TryBoard</title>
     <meta name="description" content="试板 TryBoard 使用的第三方代码、芯片 ROM、固件组件、字体与素材的来源、许可证与署名。" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect x=%222%22 y=%222%22 width=%2212%22 height=%2212%22 rx=%222%22 fill=%22%230D99FF%22/%3E%3C/svg%3E" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
     <!-- 样式：src/licenses/licenses.css（Tailwind，与 React 页面同一套主题；页头 / 页脚类名与 src/ui/site.tsx 相同） -->
@@ -247,7 +247,7 @@ const html = `<!doctype html>
   <body>
    <div class="flex min-h-screen flex-col text-[13px] leading-[1.6]">
     <header class="pg-head sticky top-0 z-[5] flex items-center justify-between gap-4 border-b border-line bg-head-bg px-6 py-3.5 max-sm:px-4 max-sm:py-2.5">
-      <a class="inline-flex flex-none items-baseline gap-1.5" href="./home.html"><b class="text-[14px]">试板</b><span class="font-mono text-[10px] tracking-[0.08em] text-muted">TRYBOARD</span></a>
+      <a class="inline-flex flex-none items-center gap-1.5" href="./home.html"><svg width="22" height="22" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="4" width="56" height="56" rx="14" class="fill-[#0B76C8] dark:fill-[#3AA8FF]"/><g class="fill-white dark:fill-[#17181B]"><circle cx="20" cy="20" r="5"/><circle cx="32" cy="20" r="5"/><circle cx="20" cy="32" r="5"/><circle cx="32" cy="32" r="5"/><circle cx="44" cy="32" r="5"/><circle cx="20" cy="44" r="5"/><circle cx="32" cy="44" r="5"/><circle cx="44" cy="44" r="5"/></g><circle cx="44" cy="20" r="6" fill="#FFB020"/></svg><b class="text-[14px]">试板</b><span class="font-mono text-[10px] tracking-[0.08em] text-muted">TRYBOARD</span></a>
       <nav aria-label="站点" class="flex flex-wrap justify-end gap-0.5">${[
         ['./home.html', '作品'],
         ['./advisor.html', '选型助手'],

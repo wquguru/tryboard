@@ -78,7 +78,7 @@
 ## UI v2 · 设计 v2 落地（2026-10-17，规范见 DESIGN_V2.md）
 | ID | 内容 | 验收 | 状态 |
 |---|---|---|---|
-| U-01 | 推荐 logo + favicon，全站页头统一 | agent-browser 各页截图 | ☐ |
+| U-01 | 推荐 logo + favicon，全站页头统一 | agent-browser 各页截图 | ☑ 2026-10-17：src/ui/logo.tsx、public/favicon.svg（16px 简化版，跟随系统暗色），站点页头 / 实验台 / 旧实验台 / 授权页（gen_licenses.mjs）统一（Reviews/ab/u2/U-01-*.png） |
 | U-02 | 新版选型助手（桌面 + 手机） | agent-browser 走输入 → 结果 → 跑一遍 | ☐ |
 | U-03 | 实验台左上角面包屑 + 切换作品菜单 | agent-browser 点"作品"回首页 | ☐ |
 | U-04 | 实验台 v2（顶栏 / 左栏 / 台面 / 右栏 / 底部坞 / 关键状态） | agent-browser + tools/webtest 回归全过 | ☐ |

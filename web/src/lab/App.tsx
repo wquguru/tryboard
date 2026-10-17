@@ -8,6 +8,7 @@ import { CHIP_LABEL, createLab, type Lab } from './lab';
 import { Controls } from './Controls';
 import { Editor } from './Editor';
 import { UsbPanel } from './UsbPanel';
+import { Logo } from '../ui/logo';
 
 const tool = cn(buttonVariants({ variant: 'outline' }), 'h-auto px-3 py-1.5 text-[13px]');
 const selectCls = 'cursor-pointer rounded-md border border-line bg-surface px-2 py-[5px] text-[13px] text-fg';
@@ -194,6 +195,7 @@ export function App() {
       <header className="bar flex flex-wrap items-center gap-5 border-b border-line bg-head-bg px-4 py-2.5">
         <h1 className="sr-only">空白实验台</h1>
         <a className="brand flex items-center gap-1.5 text-base font-bold tracking-[0.2px] text-inherit no-underline" href="./home.html">
+          <Logo size={22} />
           <b className="text-lg font-black">试板</b> <span className="en font-mono text-[11px] font-bold tracking-[0.08em] text-accent-ink">TRYBOARD</span>
         </a>
         <nav className="nav flex gap-0.5" aria-label="站点">

@@ -12,6 +12,7 @@ import { createCard } from './card';
 import { commit, useStore } from './react';
 import { createStore } from './store';
 import { CmdkBox, CmdkList } from './cmdk';
+import { Logo } from '../ui/logo';
 
 const registry = new Map<StepId, StepImpl>();
 
@@ -148,7 +149,8 @@ function App() {
       <aside aria-label="构建树" className={cn('pnl left fixed top-3 bottom-[calc(var(--tl-h)+var(--gap))] left-3 z-2 flex w-[268px] flex-col overflow-hidden', pnl, 'max-[760px]:contents')}>
         <header className={cn('left-head border-b border-line-soft px-3 pt-3 pb-2 max-[760px]:order-1', mCard)}>
           <div className="brand-row flex min-w-0 items-baseline gap-2">
-            <a className="brand inline-flex flex-none items-baseline gap-1.5 text-fg no-underline" href="./home.html">
+            <a className="brand inline-flex flex-none items-center gap-1.5 text-fg no-underline" href="./home.html">
+              <Logo size={20} />
               <b className="text-sm">试板</b>
               <span className="font-mono text-[10px] tracking-[0.08em] text-muted">TRYBOARD</span>
             </a>
