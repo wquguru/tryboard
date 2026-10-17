@@ -22,6 +22,8 @@ AGENTS.md              本文件（规则、命令、路线图）
 docs/PRODUCT.md        产品定位、用户、场景语料库
 docs/PLAN.md           P0–P2 实现清单（ID、验收、状态）——自主推进的依据
 docs/DESIGN.md         视觉与交互规范（设计画布的落盘版，代理以它为准）
+docs/DESIGN_V2.md      设计 v2：logo、选型助手、实验台 v2、全站手机布局（与 DESIGN.md 冲突时以它为准）
+docs/design-v2/        设计 v2 稿的源文件（内联样式静态 HTML，读源码取尺寸 / 颜色 / 文案）
 docs/ARCH.md           架构、内存映射、启动方式、外设模型约定
 docs/LICENSING.md      授权结论与规则（LICENSING_REVIEW.md 是逐条依据）
 docs/DECISIONS.md      代理自主决定，等人复核
@@ -64,6 +66,7 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | 网页冒烟测试 | `node tools/webtest/webtest.mjs <示例> <期望文本>`（截图到 `Reviews/web/`） |
 | 关卡验收 | `tools/check.py <flash.bin> --level 04`；`tools/check.py --ref --all` 跑全部参考固件（关卡定义在 `firmware/levels.json`） |
 | 关卡 / 装配 / 首页网页测试 | `node tools/webtest/levels.mjs`（含拖拽装配、网页与命令行指纹对拍）；拍照录像 `media.mjs`、线束与 USB 小键盘 `harness.mjs` |
+| 实验台交互 / 手机布局回归 | `node tools/webtest/wiremode.mjs`（连线模式、改接、撤销重做）；`node tools/webtest/mobile.mjs`（390×844 各页无横向滚动、抽屉开合、主按钮可点） |
 | 输入日志重放对拍 | `node tools/webtest/replay.mjs`（网页按 BOOT、调温度 → 导出输入 → `tryboard run --inputs` 重放，串口逐字节、指纹相同） |
 | 浏览器验收（新功能必做） | `agent-browser skills get core` 先读用法；`cd web && npx vite preview --port 5180` 起服务后 `agent-browser open <url>` → `snapshot` / `click` / `screenshot Reviews/ab/<项>.png` → `console` / `errors`；用 Read 看截图。并行子代理各用自己的端口和 `--session <名字>`，不要抢同一个浏览器 |
 
@@ -77,7 +80,7 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 3. **看过结果才能说完成**：网页改动必须用 `agent-browser` 走一遍该功能的主流程（打开 → 操作 → 截图并用 Read 看图 → 控制台无 error），记录写进 `Reviews/ab/<PLAN ID>.md`；涉及模拟结果的要和命令行指纹对拍。puppeteer 脚本（tools/webtest）保留做回归，不能代替 agent-browser 的人眼检查。测试失败、跳过都写进汇报和 `docs/STATUS.md`。声音类功能读 Web Audio 分析数据判断；headless 帧率不作数，只查无报错。
 4. 未实现的寄存器访问不准静默：记录到 trace（`unimpl` 计数），验收报告里列出 Top N。
 5. 代码风格：Rust 2021，`cargo fmt`、`cargo clippy` 无警告；注释中文、只写"为什么"；不引第三方 crate 除非写进 DECISIONS（当前允许：无）。网页侧 npm 依赖同样要先写进 DECISIONS（名字、版本、许可证、体积、理由），只用 LICENSING.md 里 ✅ 的；按需懒加载，wasm 首包仍 ≤ 2MB。
-6. 页面按 `docs/DESIGN.md` 做；3D 器件优先按真实尺寸程序生成，外部模型来源和署名写进素材目录 `SOURCES.md`（授权页从它生成）。
+6. 页面按 `docs/DESIGN.md` + `docs/DESIGN_V2.md` 做；断点 `md`（< 768px 为手机，不再用 max-[760px]），手机触控目标 ≥ 44px、390×844 下无横向滚动；logo 用 `web/src/ui/logo.tsx`，不要另画；3D 器件优先按真实尺寸程序生成，外部模型来源和署名写进素材目录 `SOURCES.md`（授权页从它生成）。
 
 ## 7. Git
 - 本地仓库，默认分支 `main`，**暂无远端**（要建远端先问人）
@@ -101,7 +104,7 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | M7 | ☐ BLE | VHCI 层虚拟控制器 + 虚拟手机 |
 | M8 | ☐ 音频 / 摄像头 | I2S 麦克风 / 喇叭接 Web Audio；摄像头读 3D 渲染画面；小智类项目可跑 |
 | M9 | ◐ 选型决策层 | 项目模板 → 芯片 / 板 / BOM / 引脚 / 功耗，带可信度标注 |
-| M10 | ◐ 发布准备 | 落地页（home.html）、7 关路线（levels.html）、示例库、授权清单。**上线前必须问人** |
+| M10 | ◐ 发布准备 | 落地页（home.html）、7 关路线（levels.html）、示例库、授权清单；UI v2（PLAN U-01–U-06：logo、选型助手、实验台 v2、全站手机）已完成。**上线前必须问人** |
 
 ## 9. 子代理与上下文预算
 2026-10-15 会话复盘：缓存读取共 4.95 亿 token，其中 3.74 亿来自 10 个 fork 子代理。每个 fork 启动时都继承了主会话 33–66 万的上下文，而且每次工具调用都要重读一遍。主会话本身也一路涨到 68 万才压缩。规则：

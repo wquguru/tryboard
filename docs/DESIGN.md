@@ -1,6 +1,6 @@
 # 设计规范（DESIGN）
 
-2026-10-16 定稿。设计画布（只有人能打开，代理以本文件为准）：https://claude.ai/artifact/ChjyoAi84r7ZaNuDTe4u6W ，页"推荐方案"（FinShop / FinReal / FinAssemble / FinProduct）与"实现规划"。
+2026-10-16 定稿。**2026-10-17 设计 v2 见 `DESIGN_V2.md`（logo、选型助手、实验台面包屑与 v2、手机布局），冲突处以它为准；§3 外壳的手机版也在那里。**设计画布（只有人能打开，代理以本文件为准）：https://claude.ai/artifact/ChjyoAi84r7ZaNuDTe4u6W ，页"推荐方案"（FinShop / FinReal / FinAssemble / FinProduct）与"实现规划"。
 
 ## 1. 定位与用户故事
 用户心里的五个问题，页面按这个顺序走：
