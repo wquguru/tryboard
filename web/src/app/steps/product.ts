@@ -333,7 +333,7 @@ ${how ? `<details class="tg" open><summary><span>${preview ? '参考装法' : '�
     const off = assembly()?.effects.sensorOffset ?? 0;
     const first = (FIRST3[w] ?? []).map(([t, d]) => `<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('');
     const cannot = (CANNOT[w] ?? []).map(([t, d]) => `<div class="res na"><span class="mk">×</span><span><b>${esc(t)}</b> · ${esc(d)}</span></div>`).join('');
-    c.shell.props.innerHTML = `${preview ? `${sec('参考成品')}<p class="note">${esc(previewWhy())}。你装完后，这里会换成你的装法。</p>` : ''}${p ? `${sec('选中')}<div class="ph">${esc(p.name)}</div><p class="note">${esc(p.about)}</p>` : ''}
+    c.shell.props.innerHTML = `${p ? `${sec('选中')}<div class="ph">${esc(p.name)}</div><p class="note">${esc(p.about)}</p>` : ''}
 ${sec('成品 · 和实验台同一份固件')}
 ${row('运行', 'run')}
 ${weather ? `${row('气象站周围', 'air')}${row('BME280 读到', 'rt')}${row('OLED 单位', 'unit')}${row('表盘指针', 'needle')}${row('板载 RGB', 'rgb')}${row('蜂鸣器', 'buzz')}${row('热源', 'heat')}` : w === 'spin' ? `${row('舵机', 'servo')}${row('转台', 'turn')}${row('状态', 'look')}` : w === 'usbkey' ? `${row('电脑看到', 'usbstate')}${row('打出的字', 'typed')}` : w === 'lens' ? `${row('表情', 'mood')}${row('透镜', 'lens')}` : w === 'lamp' ? `${row('灯带', 'strip')}${row('亮度 / 颜色', 'lampst')}${row('旋钮模式', 'lampmode')}${row('旋钮', 'knob')}` : w === 'ruler' ? `${row('挡板距离', 'cm')}${row('探头量到', 'cmfx')}${row('固件读到', 'rdist')}${row('蜂鸣器', 'buzz')}` : `${row('圆盘姿态', 'tpose')}${row('六轴读到', 'tfx')}${row('小豆', 'bean')}`}
@@ -600,9 +600,9 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     const c = ctx!;
     const n = c.work.checkpoints.length;
     const d = passedCount(c);
-    if (d < n) return `你还没装配：实验台检查点 ${d}/${n}，全过才能组装`;
+    if (d < n) return `检查点 ${d}/${n}`;
     const a = c.store.get().assembly;
-    return `你还没装配：组装 ${a?.placed.length ?? 0}/${a?.total ?? TEMPLATES[c.work.id]?.parts.length ?? 0}`;
+    return `组装 ${a?.placed.length ?? 0}/${a?.total ?? TEMPLATES[c.work.id]?.parts.length ?? 0}`;
   }
 
   /** 预览时下一步引导去完成检查点 / 组装；装完了就是最后一步 */
@@ -626,7 +626,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
   function syncVerdict() {
     const c = ctx!;
     if (preview) {
-      c.shell.setVerdict(alarm ? '参考成品 · 报警中' : '参考成品 · 还没装配', alarm ? 'bad' : 'idle');
+      c.shell.setVerdict(alarm ? '报警中' : previewWhy(), alarm ? 'bad' : 'idle');
       c.shell.onVerdict(() => (location.hash = passedCount(c) < c.work.checkpoints.length ? 'bench' : 'assemble'));
       return;
     }
@@ -872,7 +872,7 @@ ${sec('固件读到 · 串口最近一行')}${row('俯仰', 'tip')}${row('横滚
         banner = document.createElement('div');
         banner.className = 'prod-preview';
         banner.setAttribute('role', 'status');
-        banner.innerHTML = `<b>参考成品 · 还没装配</b><span>${esc(previewWhy().replace(/^你还没装配：/, ''))} · 按默认正确装法展示</span>`;
+        banner.innerHTML = '<b>参考成品</b><span>按默认正确装法展示，你装完后换成你的装法</span>';
         el.insertBefore(banner, node);
       }
       // 装法的温漂只在成品里生效
