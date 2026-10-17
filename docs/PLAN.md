@@ -79,11 +79,11 @@
 | ID | 内容 | 验收 | 状态 |
 |---|---|---|---|
 | U-01 | 推荐 logo + favicon，全站页头统一 | agent-browser 各页截图 | ☑ 2026-10-17：src/ui/logo.tsx、public/favicon.svg（16px 简化版，跟随系统暗色），站点页头 / 实验台 / 旧实验台 / 授权页（gen_licenses.mjs）统一（Reviews/ab/u2/U-01-*.png） |
-| U-02 | 新版选型助手（桌面 + 手机） | agent-browser 走输入 → 结果 → 跑一遍 | ☐ |
+| U-02 | 新版选型助手（桌面 + 手机） | agent-browser 走输入 → 结果 → 跑一遍 | ☑ 2026-10-17：按 Advisor.dc.html 重做，逻辑仍在 engine / data；"跑一遍"按推荐芯片挑 examples.json 里真实示例打开 index.html?example=，另链完整作品（Reviews/ab/U-02.md） |
 | U-03 | 实验台左上角面包屑 + 切换作品菜单 | agent-browser 点"作品"回首页 | ☐ |
 | U-04 | 实验台 v2（顶栏 / 左栏 / 台面 / 右栏 / 底部坞 / 关键状态） | agent-browser + tools/webtest 回归全过 | ☐ |
 | U-05 | 手机：实验台与四步 | 390×844 截图，无横向滚动、控制台无 error | ☐ |
-| U-06 | 手机：首页 / 选型助手 / 关卡 / 授权 | 同上 | ☐ |
+| U-06 | 手机：首页 / 选型助手 / 关卡 / 授权 | 同上 | ☑ 2026-10-17：汉堡抽屉（三段主题）、首页单列卡、选型折叠分区 + 底部吸附按钮、授权页每源一卡（gen_licenses.mjs）；390×844 无横向滚动、触控 ≥ 44px（Reviews/ab/U-06.md） |
 
 ## P3 · 以后再说
 蓝牙（M7）、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。

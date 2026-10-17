@@ -284,6 +284,8 @@ export const BOARDS: Board[] = [
 export interface Part {
   id: string;
   name: string;
+  /** 卡片 / 按钮上的短名（选型助手 v2 的模板卡副标题） */
+  short: string;
   priceCNY: [number, number];
   /** 需要的接口：引脚需求 */
   needs: { kind: 'gpio' | 'adc' | 'pwm' | 'i2c' | 'spi' | 'i2s' | 'rmt' | 'uart' | 'usb' | 'camera'; count?: number; label: string }[];
@@ -294,25 +296,27 @@ export interface Part {
 }
 
 export const PARTS: Record<string, Part> = {
-  led: { id: 'led', name: '5mm LED 和 220Ω 电阻', priceCNY: [0.1, 0.5], needs: [{ kind: 'pwm', label: 'LED' }], simulated: 'full' },
-  button: { id: 'button', name: '轻触按键', priceCNY: [0.1, 0.5], needs: [{ kind: 'gpio', label: '按键' }], simulated: 'full' },
-  pot: { id: 'pot', name: '10kΩ 电位器', priceCNY: [0.5, 2], needs: [{ kind: 'adc', label: '电位器' }], simulated: 'full' },
-  servo: { id: 'servo', name: 'SG90 舵机', priceCNY: [4, 10], needs: [{ kind: 'pwm', label: '舵机信号' }], activeMA: 150, simulated: 'full' },
-  ws2812: { id: 'ws2812', name: 'WS2812B 灯带（每米 60 灯）', priceCNY: [12, 30], needs: [{ kind: 'rmt', label: '灯带数据' }], activeMA: 1200, simulated: 'full' },
-  oled: { id: 'oled', name: '0.96 寸 OLED（SSD1306，I2C）', priceCNY: [8, 15], needs: [{ kind: 'i2c', label: 'OLED' }], activeMA: 15, simulated: 'partial' },
-  bme280: { id: 'bme280', name: 'BME280 温湿度气压模块', priceCNY: [10, 25], needs: [{ kind: 'i2c', label: 'BME280' }], activeMA: 1, simulated: 'partial' },
-  tft: { id: 'tft', name: '1.69–2.4 寸 SPI 彩屏（ST7789 / ILI9341）', priceCNY: [15, 40], needs: [{ kind: 'spi', label: '屏幕' }, { kind: 'gpio', count: 3, label: '屏幕 DC / RST / 背光' }], activeMA: 40, caps: ['display_spi'], simulated: 'none' },
-  mic: { id: 'mic', name: 'INMP441 数字麦克风（I2S）', priceCNY: [8, 15], needs: [{ kind: 'i2s', label: '麦克风' }], caps: ['audio_in'], simulated: 'none' },
-  amp: { id: 'amp', name: 'MAX98357A 功放和 3W 小喇叭', priceCNY: [10, 20], needs: [{ kind: 'i2s', label: '功放' }], activeMA: 300, caps: ['audio_out'], simulated: 'none' },
-  relay: { id: 'relay', name: '5V 继电器模块（光耦隔离）', priceCNY: [3, 8], needs: [{ kind: 'gpio', label: '继电器' }], activeMA: 70, simulated: 'full' },
-  pir: { id: 'pir', name: 'HC-SR501 人体红外', priceCNY: [3, 8], needs: [{ kind: 'gpio', label: '人体感应' }], simulated: 'full' },
-  battery: { id: 'battery', name: '3.7V 锂电池 1000mAh', priceCNY: [10, 20], needs: [], simulated: 'none' },
-  camera: { id: 'camera', name: 'OV2640 摄像头', priceCNY: [15, 30], needs: [{ kind: 'camera', label: '摄像头 DVP' }], caps: ['camera', 'psram'], activeMA: 120, simulated: 'none' },
+  led: { id: 'led', short: 'LED', name: '5mm LED 和 220Ω 电阻', priceCNY: [0.1, 0.5], needs: [{ kind: 'pwm', label: 'LED' }], simulated: 'full' },
+  button: { id: 'button', short: '按键', name: '轻触按键', priceCNY: [0.1, 0.5], needs: [{ kind: 'gpio', label: '按键' }], simulated: 'full' },
+  pot: { id: 'pot', short: '电位器', name: '10kΩ 电位器', priceCNY: [0.5, 2], needs: [{ kind: 'adc', label: '电位器' }], simulated: 'full' },
+  servo: { id: 'servo', short: '舵机', name: 'SG90 舵机', priceCNY: [4, 10], needs: [{ kind: 'pwm', label: '舵机信号' }], activeMA: 150, simulated: 'full' },
+  ws2812: { id: 'ws2812', short: 'WS2812B', name: 'WS2812B 灯带（每米 60 灯）', priceCNY: [12, 30], needs: [{ kind: 'rmt', label: '灯带数据' }], activeMA: 1200, simulated: 'full' },
+  oled: { id: 'oled', short: 'OLED', name: '0.96 寸 OLED（SSD1306，I2C）', priceCNY: [8, 15], needs: [{ kind: 'i2c', label: 'OLED' }], activeMA: 15, simulated: 'partial' },
+  bme280: { id: 'bme280', short: 'BME280', name: 'BME280 温湿度气压模块', priceCNY: [10, 25], needs: [{ kind: 'i2c', label: 'BME280' }], activeMA: 1, simulated: 'partial' },
+  tft: { id: 'tft', short: '彩屏', name: '1.69–2.4 寸 SPI 彩屏（ST7789 / ILI9341）', priceCNY: [15, 40], needs: [{ kind: 'spi', label: '屏幕' }, { kind: 'gpio', count: 3, label: '屏幕 DC / RST / 背光' }], activeMA: 40, caps: ['display_spi'], simulated: 'none' },
+  mic: { id: 'mic', short: '麦克风', name: 'INMP441 数字麦克风（I2S）', priceCNY: [8, 15], needs: [{ kind: 'i2s', label: '麦克风' }], caps: ['audio_in'], simulated: 'none' },
+  amp: { id: 'amp', short: '功放', name: 'MAX98357A 功放和 3W 小喇叭', priceCNY: [10, 20], needs: [{ kind: 'i2s', label: '功放' }], activeMA: 300, caps: ['audio_out'], simulated: 'none' },
+  relay: { id: 'relay', short: '继电器', name: '5V 继电器模块（光耦隔离）', priceCNY: [3, 8], needs: [{ kind: 'gpio', label: '继电器' }], activeMA: 70, simulated: 'full' },
+  pir: { id: 'pir', short: '人体红外', name: 'HC-SR501 人体红外', priceCNY: [3, 8], needs: [{ kind: 'gpio', label: '人体感应' }], simulated: 'full' },
+  battery: { id: 'battery', short: '锂电池', name: '3.7V 锂电池 1000mAh', priceCNY: [10, 20], needs: [], simulated: 'none' },
+  camera: { id: 'camera', short: 'OV2640', name: 'OV2640 摄像头', priceCNY: [15, 30], needs: [{ kind: 'camera', label: '摄像头 DVP' }], caps: ['camera', 'psram'], activeMA: 120, simulated: 'none' },
 };
 
 export interface Template {
   id: string;
   title: string;
+  /** 手机底部按钮上的短名（"看推荐 · 温湿度计 + 2 个要求"） */
+  short: string;
   emoji: string;
   blurb: string;
   needCaps: Cap[];
@@ -320,76 +324,89 @@ export interface Template {
   parts: string[];
   /** 工作模式，用于功耗估算：每小时唤醒次数、每次工作秒数、是否联网 */
   duty?: { wakePerHour: number; activeSec: number; wifi: boolean };
+  /** 能在试板里跑的示例固件（web/public/fw/examples.json 的 id，C3 和 S3 的都列；界面按推荐芯片挑） */
   examples: string[];
+  /** 对应的完整作品（app/works.ts 的 id）：从选型结果直接进它的采购页 */
+  work?: string;
   risks: string[];
 }
 
 export const TEMPLATES: Template[] = [
   {
     id: 'blink',
+    short: '点灯入门',
     title: '第一次玩：点灯、按键、串口',
     emoji: '💡',
     blurb: '学单片机的起点，几乎任何板子都行，挑便宜、教程多的。',
     needCaps: [],
     parts: ['led', 'button', 'pot'],
-    examples: ['blink', 'button', 'fade', 'pot'],
+    examples: ['blink', 'button', 'fade', 'pot', 's3-blink', 's3-pot'],
     risks: [],
   },
   {
     id: 'weather',
+    short: '温湿度计',
     title: '电池供电的温湿度计',
     emoji: '🌡️',
     blurb: '每 10 分钟醒来测一次、上报一次，其余时间深睡。关键是整板深睡电流。',
     needCaps: ['wifi', 'low_power'],
     parts: ['bme280', 'oled', 'battery'],
     duty: { wakePerHour: 6, activeSec: 3, wifi: true },
-    examples: ['bme280', 'oled'],
+    examples: ['bme280', 'oled', 'weather', 's3-oled'],
+    work: 'weather',
     risks: ['开发板的电源灯、LDO、USB 转串口芯片会吃掉大部分电量。选专为电池设计的小板，或自己画板', 'Wi-Fi 连接耗时决定功耗：用静态 IP、记住信道能把每次唤醒从 3 秒压到 1 秒内'],
   },
   {
     id: 'lights',
+    short: '氛围灯',
     title: '氛围灯、灯带控制器',
     emoji: '🌈',
     blurb: 'WS2812 灯带，用手机网页控制，WLED 一类固件直接能用。',
     needCaps: ['wifi'],
     parts: ['ws2812', 'button'],
-    examples: ['rgb', 'strip'],
+    examples: ['rgb', 's3-rgb', 'lamp'],
+    work: 'lamp',
     risks: ['60 灯 / 米全白约 3.6A / 米，电源要单独供，不能靠开发板的 USB', '3.3V 数据线驱动 5V 灯带偶尔不稳，必要时加电平转换'],
   },
   {
     id: 'smarthome',
+    short: '智能家居',
     title: 'Matter / Home Assistant 智能家居',
     emoji: '🏠',
     blurb: '接入米家以外的生态（Apple Home / Google / HA）。要 Thread 或 Zigbee 就只能选 C6 / H2。',
     needCaps: ['wifi'],
     niceCaps: ['thread', 'zigbee', 'wifi6'],
     parts: ['relay', 'pir', 'button'],
-    examples: ['button'],
+    examples: ['button', 'wifi-http', 's3-wifi-http'],
     risks: ['继电器控制 220V 要用带光耦隔离的模块，断电后再接线；强电部分模拟器验证不了'],
   },
   {
     id: 'usbkey',
+    short: 'USB 宏键盘',
     title: 'USB 宏键盘、插手机的小设备',
     emoji: '⌨️',
     blurb: '让板子冒充键盘、鼠标或网卡。只有带原生 USB OTG 的型号能做。',
     needCaps: ['usb_otg'],
     parts: ['button'],
-    examples: [],
+    examples: ['usbkey', 's3-usb-keyboard'],
+    work: 'usbkey',
     risks: ['确认插的是芯片原生 USB 口，而不是 USB 转串口那个口', 'iPhone 等设备对 USB 设备供电有限，复杂外设需要外部供电'],
   },
   {
     id: 'voice',
+    short: '语音助手',
     title: 'AI 语音助手（小智类）',
     emoji: '🗣️',
     blurb: '麦克风收音、联网调大模型、喇叭播放，带个圆屏当表情。主流方案都是 S3 + 8MB PSRAM。',
     needCaps: ['wifi', 'audio_in', 'audio_out', 'psram'],
     niceCaps: ['display_spi', 'ai_accel'],
     parts: ['mic', 'amp', 'tft', 'battery'],
-    examples: [],
+    examples: ['s3-i2s-mic', 's3-i2s-tone'],
     risks: ['大模型 API 要联网和账号；离线唤醒词才在板上跑', '功放和 Wi-Fi 同时工作时峰值电流大，锂电池要能放 1A 以上'],
   },
   {
     id: 'camera',
+    short: '摄像头',
     title: '摄像头监控、看宠物',
     emoji: '📷',
     blurb: 'OV2640 拍照或推流，需要 PSRAM 存帧。XIAO S3 Sense 开箱即用。',
@@ -400,6 +417,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: 'btaudio',
+    short: '蓝牙音箱',
     title: '蓝牙音箱、经典蓝牙串口',
     emoji: '🔊',
     blurb: 'A2DP 音频要经典蓝牙，只有经典款 ESP32 有。',

@@ -223,6 +223,8 @@ export function recommend(need: Need): { plans: Plan[]; rejected: Rejected[] } {
     const bom = [
       { name: b.name, qty: 1, price: b.priceCNY },
       ...need.parts.map((id) => ({ name: PARTS[id].name, qty: 1, price: PARTS[id].priceCNY })),
+      // 电池供电时锂电池也要买（模板里的 battery 不进引脚分配，所以 needOf 把它从 parts 拿掉了，这里补回清单）
+      ...(need.battery && !need.parts.includes('battery') ? [{ name: PARTS.battery.name, qty: 1, price: PARTS.battery.priceCNY }] : []),
       { name: '面包板和杜邦线', qty: 1, price: [8, 15] as [number, number] },
       { name: '能传数据的 Type-C 线', qty: 1, price: [5, 15] as [number, number] },
     ];

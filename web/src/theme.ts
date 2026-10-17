@@ -41,6 +41,23 @@ export function setTheme(t: Theme) {
   apply(t);
 }
 
+export type ThemePref = Theme | 'system';
+
+/** 当前偏好：用户手动选过的亮 / 暗，没选过就是跟随系统（手机菜单里的三段切换用） */
+export const themePref = (): ThemePref => stored() ?? 'system';
+
+/** 三段切换：'system' 清掉存储、回到跟随系统 */
+export function setThemePref(p: ThemePref) {
+  if (p !== 'system') return setTheme(p);
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    // 存不了也没关系：本页照样按系统走
+  }
+  apply(media?.matches ? 'dark' : 'light');
+  for (const f of subs) f(currentTheme());
+}
+
 let inited = false;
 /** 每页调一次：按存的 / 系统的设好主题，并在系统切换时跟随（用户没手动选过时） */
 export function initTheme() {
