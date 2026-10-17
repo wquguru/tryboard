@@ -519,3 +519,21 @@
 - 主题：Tailwind 的 `@theme` 直接映射 DESIGN §2 的 CSS 变量，`dark:` 变体绑 `[data-theme=dark]`（与 theme.ts 同一个开关），不另起一套色板。Tailwind preflight 只在迁过的页面加载，旧页面样式不受影响。
 - 理由：现有 2D 界面靠 `innerHTML` 拼串（94 处）+ 手动重画，状态和 DOM 容易不同步、每处都得记得转义；对话框 / 菜单 / 命令框的焦点与键盘要自己写。React 声明式渲染 + JSX 默认转义 + Radix 的可访问性原语直接解决这几类问题。
 - 替代：(a) 保持原生 DOM、只抽小组件函数——便宜，但解决不了状态同步；(b) Next.js——见上，收益几乎为零；(c) Preact——更小，但 Radix / shadcn 生态要 compat 层，出问题难查。
+
+## 2026-10-17 · 首页、关卡页迁 React；授权页改用 Tailwind 编译的样式
+- 决定：`home.html` → `src/home/{main,App}.tsx`。页头和页脚抽成 `ui/site.tsx`（SiteHeader / SiteFooter），后面的页面共用。作品卡的示意图和真实固件运行仍然命令式（`src/home/cards.ts`），由 `useEffect` 挂载，清理函数里销毁 LiveSim 和 IntersectionObserver。串口状态行直接写 DOM ref，不进 state。"同一时间只跑一张卡"由 App 的一个 `live` state 管。`levels.html` 本来就是跳转页（P0-21），跳转仍在 `<head>` 里做（首帧前），`src/levels/App.tsx` 只显示一行提示。
+- 授权页（`tools/gen_licenses.mjs` 生成的静态 HTML，不 React 化）：不再引 app.css / page.css，改引 `src/licenses/licenses.css`。它是 `@import ui/tailwind.css` 再加 `@source` 生成脚本，页头和页脚直接写与 site.tsx 同一串 Tailwind 类，正文表格用 `.lic` 下的几条 `@apply` 规则。
+  - 理由：颜色、字体、亮暗主题和 React 页面同一个来源，不再维护第二份。
+  - 代价：CSS 里带上 tailwind.css 扫到的所有工具类，约 28.6 KB，gzip 6.45 KB。比原来的 app.css + page.css（gzip 8.13 KB）还小。
+  - 替代：手写一份小静态 CSS 体积更小，但颜色变量要再抄一份，主题改了就会漂。
+- 删除：`src/home.ts`、`src/levels.ts`（已无入口）、`src/levels.css`、`src/site.css`、`src/page.css`（只被这几页引用）。`.wk-prev` 里改写 showcase SVG 的规则搬到 `src/home/home.css`。app.css 和 views.css 没动，只是不再被这几页引用。
+- 加了 token：`ui/tailwind.css` 末尾加 `--stage-bg`（台面渐变，亮暗两套，与 app.css 同值）。
+- 颜色有意变化（AA，按 DESIGN §2）：
+  - 次要文字：#8c8c8c → `muted` #6f6f6f；
+  - 白字主按钮：#0d99ff → `accent-strong`；
+  - 步骤序号、串口状态行、链接：改用 `accent-ink`；
+  - 授权页段落里的链接常显下划线（axe link-in-text-block）。
+  - 其余与旧页像素对比在 1.5% 以内，暗色基本为 0。
+- **没做：暖灰橙色板（site.css）的 `[data-palette='site']` 映射。**
+  - 原因：site.css 只被 levels.ts 引用，而 levels.ts 自 P0-21 起已经没有入口，是死代码。现在的首页用的是 app.css 的白底蓝色（DESIGN §2 A 版），任务又要求"视觉必须与改前一致"，两条冲突。我按视觉一致处理，色板直接删掉，不映射。
+  - 要恢复：从 git 历史里取 site.css 的取值，在 tailwind.css 里加作用域主题，页面根加属性。**待人决定**是否要暖色版首页。

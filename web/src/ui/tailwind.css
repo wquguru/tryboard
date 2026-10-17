@@ -58,3 +58,7 @@
   body { @apply bg-bg text-fg font-sans text-sm leading-relaxed antialiased; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 }
+
+/* 台面 / 示意图底（渐变，不是颜色 token；与 app.css --stage-bg 同值）：首页作品卡预览用 [background:var(--stage-bg)] */
+:root { --stage-bg: radial-gradient(120% 90% at 50% 40%, #ffffff, #eceff3); }
+:root[data-theme='dark'] { --stage-bg: radial-gradient(120% 90% at 50% 40%, #2b2e33, #16171a); }
