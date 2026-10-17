@@ -214,6 +214,8 @@ export interface Bench extends ScenePickApi {
   extModels(): string[];
   /** 性能基线：上一帧的绘制调用、三角形数与平均帧间隔 */
   stats(): { calls: number; triangles: number; frameMs: number; cpuMs: number; geometries: number; textures: number };
+  /** 视角按钮（U-04）：俯视 / 正视 / 拉近 / 拉远 / 对准选中（没选中就整体取景） */
+  view(k: 'top' | 'front' | 'in' | 'out' | 'fit', sel?: { kind: string; id: string } | null): void;
   dispose(): void;
 }
 
@@ -1928,6 +1930,7 @@ export function createBench(container: HTMLElement): Bench {
   overlay.className = 'tb-overlay';
   overlay.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1;font:12px "Noto Sans SC",sans-serif';
   const note = document.createElement('div');
+  note.className = 'tb-note';
   note.textContent = '外观示意，非乐鑫官方模型';
   note.style.cssText = 'position:absolute;right:12px;bottom:10px;font-size:11px;color:var(--muted, #6f6f6f);letter-spacing:.02em';
   overlay.appendChild(note);
@@ -2042,6 +2045,8 @@ export function createBench(container: HTMLElement): Bench {
   const partsById = new Map<string, THREE.Object3D>();
   let modulePins: PinRec[] = [];
   let wires: WireRec[] = [];
+  /** 改接过的线：id → 原来那根（rewire 改回时换回去） */
+  let rewired = new Map<string, WireRec>();
   let roles = new Map<string, string[]>();
   const addRole = (pinId: string, role: string) => {
     const r = roles.get(pinId) ?? [];
@@ -2712,6 +2717,7 @@ export function createBench(container: HTMLElement): Bench {
     partsById.set('board', board.grp);
     modulePins = [];
     wires = [];
+    rewired = new Map();
     roles = new Map();
     addRole(apiId('IO' + board.spec.rgbPin), 'WS2812 板载灯');
     addRole(apiId('IO' + board.spec.bootPin), 'BOOT 键');
@@ -3244,6 +3250,47 @@ export function createBench(container: HTMLElement): Bench {
     w.mat.emissiveIntensity = 0.25;
     setTag('fault:' + id, '✗ ' + msg, 'bad', () => w.curve.getPoint(0.5), -20);
   };
+  /** 改接（U-04 连线工具）：把一根线开发板那一端挪到另一根针。原来的线记下来，改回时换回去；setScene 重建时清空 */
+  function rewire(id: string, to: string | null) {
+    const cur = wires.find((w) => w.id === id);
+    if (!cur) return;
+    const orig = rewired.get(id) ?? cur;
+    // 每次重检接线都会同步一遍：目标没变就别重建管子
+    const want = to && to !== orig.ends[0] ? to : null;
+    if (want ? cur !== orig && cur.ends[0] === want : cur === orig) return;
+    let next = orig;
+    if (to && to !== orig.ends[0]) {
+      const pts = orig.curve.points;
+      const b = pts[pts.length - 1];
+      let a: THREE.Vector3;
+      try {
+        a = boardHole(to.replace(/^GPIO/, 'IO'), b);
+      } catch {
+        return;
+      }
+      const h = top + 30;
+      next = wire([a, lift(a, h - 4), new THREE.Vector3((a.x + b.x) / 2, h, (a.z + b.z) / 2 + 6), lift(b, h - 6), b], orig.color, id, [to, orig.ends[1]]);
+    }
+    if (next === cur) return;
+    const parent = cur.grp.parent;
+    parent?.remove(cur.grp);
+    parent?.add(next.grp);
+    if (cur !== orig) {
+      cur.thin.dispose();
+      cur.thick?.dispose();
+      cur.mat.dispose();
+    }
+    if (next === orig) rewired.delete(id);
+    else rewired.set(id, orig);
+    wires[wires.indexOf(cur)] = next;
+    const f = faults.get(id);
+    if (f) applyFault(id, f);
+    else {
+      next.mat.color.set(next.color);
+      next.mat.emissive.set(0);
+    }
+    if (hl) highlight(hl);
+  }
   function setWireFault(id: string, msg: string | null) {
     if (msg) {
       faults.set(id, msg);
@@ -3635,11 +3682,50 @@ export function createBench(container: HTMLElement): Bench {
       return out;
     },
     setWireFault,
+    rewire,
     setHeat,
     measure,
     setTheme: applyTheme,
     setExtModels: setExt,
     extModels: extList,
+    view(k, sel) {
+      const off = camera.position.clone().sub(controls.target);
+      const dist = off.length();
+      const clampD = (d: number) => Math.min(controls.maxDistance, Math.max(controls.minDistance, d));
+      if (k === 'in' || k === 'out') {
+        camera.position.copy(controls.target).addScaledVector(off.normalize(), clampD(dist * (k === 'in' ? 0.8 : 1.25)));
+      } else if (k === 'top' || k === 'front') {
+        // 正上方会碰到 OrbitControls 的极点奇异：留一丝倾角；正视不能低于 maxPolarAngle
+        const dir = k === 'top' ? new THREE.Vector3(0, 1, 0.02) : new THREE.Vector3(0, Math.cos(controls.maxPolarAngle - 0.02), Math.sin(controls.maxPolarAngle - 0.02));
+        camera.position.copy(controls.target).addScaledVector(dir.normalize(), dist);
+      } else {
+        let at: THREE.Vector3 | null = null;
+        let r = 0;
+        if (sel?.kind === 'part') {
+          const o = sel.id === 'board' ? board.grp : partsById.get(sel.id);
+          if (o) {
+            const b = new THREE.Box3().setFromObject(o);
+            at = b.getCenter(new THREE.Vector3());
+            r = b.getSize(new THREE.Vector3()).length() / 2;
+          }
+        } else if (sel?.kind === 'pin') {
+          const rec = pinsById(sel.id)[0];
+          if (rec) at = pinWorldPos(rec);
+          r = 12;
+        } else if (sel?.kind === 'wire') {
+          const w = wires.find((x) => x.id === sel.id);
+          if (w) at = w.curve.getPoint(0.5);
+          r = 20;
+        }
+        if (!at) fitView({ position: camera.position.toArray() as [number, number, number], target: controls.target.toArray() as [number, number, number] });
+        else {
+          const d = clampD(Math.max(r, 8) / Math.sin((camera.fov * Math.PI) / 360) * 0.9);
+          controls.target.copy(at);
+          camera.position.copy(at).addScaledVector(off.normalize(), d);
+        }
+      }
+      controls.update();
+    },
     stats() {
       return { ...lastInfo, frameMs: Math.round(frameMs * 10) / 10, cpuMs: Math.round(cpuMs * 100) / 100, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures };
     },

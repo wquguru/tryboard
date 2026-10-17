@@ -80,8 +80,8 @@
 |---|---|---|---|
 | U-01 | 推荐 logo + favicon，全站页头统一 | agent-browser 各页截图 | ☑ 2026-10-17：src/ui/logo.tsx、public/favicon.svg（16px 简化版，跟随系统暗色），站点页头 / 实验台 / 旧实验台 / 授权页（gen_licenses.mjs）统一（Reviews/ab/u2/U-01-*.png） |
 | U-02 | 新版选型助手（桌面 + 手机） | agent-browser 走输入 → 结果 → 跑一遍 | ☑ 2026-10-17：按 Advisor.dc.html 重做，逻辑仍在 engine / data；"跑一遍"按推荐芯片挑 examples.json 里真实示例打开 index.html?example=，另链完整作品（Reviews/ab/U-02.md） |
-| U-03 | 实验台左上角面包屑 + 切换作品菜单 | agent-browser 点"作品"回首页 | ☐ |
-| U-04 | 实验台 v2（顶栏 / 左栏 / 台面 / 右栏 / 底部坞 / 关键状态） | agent-browser + tools/webtest 回归全过 | ☐ |
+| U-03 | 实验台左上角面包屑 + 切换作品菜单 | agent-browser 点"作品"回首页 | ☑ 2026-10-17：logo + 「作品」链接回 home.html（悬停下划线、≥ 32px、提示未保存连线留本机）、作品名 ▾ 切换菜单勾当前作品（Reviews/ab/u4/b2-workmenu.png）；未做：手机布局（U-05） |
+| U-04 | 实验台 v2（顶栏 / 左栏 / 台面 / 右栏 / 底部坞 / 关键状态） | agent-browser + tools/webtest 回归全过 | ☑ 2026-10-17：顶栏运行态 / 撤销重做 / 保存时间 / 分享 / 导出输入，左栏页签（零件 / 接线表 / 检查点），台面浮层（改接线模式 + 引脚圈、接错线卡片、万用表、检查点卡、空台面、欠压），底部坞（串口 / 分析仪 / 时间线，可拖可收）；新增回归 wiremode.mjs 16 项（Reviews/ab/U-04.md）；未做：代码页签、台面直接放零件、分享改动（无后端，灰显并写 DECISIONS） |
 | U-05 | 手机：实验台与四步 | 390×844 截图，无横向滚动、控制台无 error | ☐ |
 | U-06 | 手机：首页 / 选型助手 / 关卡 / 授权 | 同上 | ☑ 2026-10-17：汉堡抽屉（三段主题）、首页单列卡、选型折叠分区 + 底部吸附按钮、授权页每源一卡（gen_licenses.mjs）；390×844 无横向滚动、触控 ≥ 44px（Reviews/ab/U-06.md） |
 

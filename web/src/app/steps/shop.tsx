@@ -14,6 +14,7 @@ import { Fragment, type ReactNode } from 'react';
 import { cn } from '../../ui/cn';
 import { NInput, NSelect } from '../../ui/native';
 import { Btn, Btns, Field, Kv, KvT, LinkBtn, Mono, Muted, Note, Ph, Res, Sec, TnL, TnM, TreeEmpty, TreeGroup, VerdictLine, tnClass } from '../../ui/panel';
+import { noteSaved } from '../saved';
 
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
 const yuan = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
@@ -35,6 +36,7 @@ export function loadBom(work: string): BomHistory {
 export function saveBom(work: string, h: BomHistory) {
   try {
     localStorage.setItem(BOM_KEY(work), JSON.stringify(h));
+    noteSaved();
   } catch {
     /* 隐私模式存不了：清单只在本页有效 */
   }
@@ -51,6 +53,7 @@ export function loadPlaced(work: string): { scene: SceneSpec; ext5v: boolean } |
 function savePlaced(work: string, scene: SceneSpec, ext5v: boolean) {
   try {
     localStorage.setItem(PLACED_KEY(work), JSON.stringify({ scene, ext5v }));
+    noteSaved();
   } catch {
     /* 同上 */
   }

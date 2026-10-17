@@ -237,6 +237,10 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/editor.mjs 2>&1 | tail -1)
   echo "- 元件编辑器（上传固件 + 加 BME280 / LED）：$r" >> $REPORT
   echo "$r" | grep -q PASS || fail=1
+  # 实验台改接线（U-04）：引脚圈、接错线卡片、撤销重做，改接不打断模拟
+  r=$(node tools/webtest/wiremode.mjs 2>&1 | grep '^\[wiremode\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[wiremode\] PASS（' || { echo "- [wiremode] 脚本没跑完" >> $REPORT; fail=1; }
 fi
 echo -e "\n结论：$([ $fail = 0 ] && echo '全部通过' || echo '有失败项')" >> $REPORT
 cat $REPORT

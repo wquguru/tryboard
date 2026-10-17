@@ -31,6 +31,8 @@ export interface ScenePickApi {
   listPins(): PinInfo[];
   /** 接线规则检查结果：把导线标红并带一句说明；msg 为 null 取消 */
   setWireFault(wireId: string, msg: string | null): void;
+  /** 改接：线的开发板那一端挪到 to 这根针（'GPIO5'、'5V'…）；null 改回原位 */
+  rewire?(wireId: string, to: string | null): void;
   /** 热源靠近某个零件（只影响画面上的热晕，读数由环境值决定） */
   setHeat(partId: string | null): void;
   /** 两个目标之间画尺子标注（毫米）；null 取消 */

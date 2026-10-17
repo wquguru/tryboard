@@ -41,8 +41,8 @@ export function createToolbar(): Toolbar & { View: () => React.JSX.Element } {
         id="toolbar"
         role="toolbar"
         className={cn(
-          'pnl toolbar tb fixed bottom-[calc(var(--tl-h)+var(--gap))] left-1/2 z-2 flex -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-(--r) border border-line bg-(--panel) p-1.5 shadow-panel',
-          'max-w-[calc(100vw-2*304px-4*var(--gap)-16px)] max-[1100px]:left-[calc(268px+2*var(--gap))] max-[1100px]:max-w-[calc(100vw-268px-304px-4*var(--gap))] max-[1100px]:translate-x-0',
+          'pnl toolbar tb fixed bottom-[calc(var(--dock-h)+12px)] left-[calc((100vw+var(--left-w)-var(--right-w))/2)] z-2 flex -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-(--r) border border-line bg-(--panel) p-1.5 shadow-panel',
+          'max-w-[calc(100vw-var(--left-w)-var(--right-w)-24px)]',
           'empty:hidden max-[760px]:hidden!',
         )}
       >
@@ -55,12 +55,15 @@ export function createToolbar(): Toolbar & { View: () => React.JSX.Element } {
                   key={t.id}
                   type="button"
                   data-tool={t.id}
+                  data-key={t.key}
                   aria-pressed={t.id === active}
                   title={t.label + (t.key ? `（${t.key}）` : '') + (t.todo ? ' · 暂未开放' : '')}
                   onClick={() => cbs.forEach((f) => f(t.id))}
                   className={cn(
-                    'tb-btn cursor-pointer rounded-md border-0 bg-transparent px-[7px] py-[5px] whitespace-nowrap text-fg hover:bg-field aria-pressed:bg-accent-bg aria-pressed:text-accent-ink',
+                    'tb-btn relative cursor-pointer rounded-md border-0 bg-transparent px-[7px] py-[5px] whitespace-nowrap text-fg hover:bg-field aria-pressed:bg-accent-bg aria-pressed:text-accent-ink',
                     t.todo && 'todo text-muted',
+                    // 角标字母走 CSS 伪元素：按钮文字保持原样（回归脚本按文字找「万用表」）
+                    t.key && !t.primary && 'pr-3 after:absolute after:right-[3px] after:bottom-[2px] after:font-mono after:text-[9px] after:leading-none after:text-muted after:content-[attr(data-key)]',
                     t.primary && 'primary bg-accent-strong px-3.5 font-medium text-on-accent hover:bg-accent-strong',
                   )}
                 >

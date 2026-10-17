@@ -35,6 +35,8 @@ export function loadCaseParams(work: string): CaseParams {
 export function saveCaseParams(work: string, p: CaseParams) {
   try {
     localStorage.setItem(KEY(work), JSON.stringify(p));
+    // 顶栏「已存在本机」：这个文件也给 node 测试用，不直接引外壳，发个事件
+    globalThis.dispatchEvent?.(new Event('tb-saved'));
   } catch {
     /* 隐私模式：只在本页有效 */
   }

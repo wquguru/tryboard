@@ -171,7 +171,8 @@ await page.click(`.runrow[data-run="${nRun2 - 1}"]`);
 const diff = await page.$$eval('.drow.ch .k', (e) => e.map((x) => x.textContent.replace('≠ ', '')));
 report('运行历史：两次运行对比差异项', diff.includes('指纹') && diff.length >= 2, diff.join('、'));
 await page.screenshot({ path: path.join(outDir, 'interact-runs.png') });
-// 时间线点回运行 #2
+// 时间线点回运行 #2（v2：时间线在底部坞的「运行记录」页签里，先切过去）
+await page.click('[data-dock="runs"]');
 const steps = await page.$$eval('.tl-step', (b) => b.map((x) => x.textContent));
 const idx = steps.findIndex((t) => t.includes(`运行 #${nRun2}`));
 const btns = await page.$$('.tl-step');

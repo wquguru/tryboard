@@ -22,6 +22,10 @@ import { angDiff, gravity } from '../../imupose';
 import { cn } from '../../ui/cn';
 import { Live, useInitText } from '../../ui/native';
 import { Bad, Brief, Btn, Btns, Code, Drop, Field, Kv, KvBox, KvT, Meter, Mono, Muted, Note, Ok, Ph, Res, Sec, Seg, SegB, Slider, TnSt, TreeEmpty, TreeGroup, TreeNode, VerdictLine } from '../../ui/panel';
+import { noteSaved } from '../saved';
+import { bc, overlay, setBc, setDock, type Issue } from '../chrome';
+import { setLeft } from '../leftcol';
+import { AllPassedCard, CheckpointCard, ConfBadge, EmptyBench, MeterCard, PART_CONF, PartLib, PinRings, WireBanner, WireTable, WrongWireCard, type RingPin } from '../benchv2';
 
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
 
@@ -41,6 +45,7 @@ function saveProgress(work: string, id: string, fp: string) {
     const p = loadProgress(work);
     p[id] = { fp, at: new Date().toLocaleString('zh-CN', { hour12: false }) };
     localStorage.setItem(PROGRESS_KEY(work), JSON.stringify(p));
+    noteSaved();
   } catch {
     /* 隐私模式存不了，进度只在本页有效 */
   }
@@ -94,6 +99,10 @@ export function benchStep(): StepImpl {
   let heatRoom: number | null = null;
   let faults: WireFault[] = [];
   let shownFaults = new Set<string>();
+  /** 连线工具（U-04）：先点一根线，再点开发板上的新针；wire 是选中的那根 */
+  let wiring: { wire: string | null } | null = null;
+  /** 台面上画成改接过的线（和 wireMods.retarget 对齐） */
+  let shownRewire = new Set<string>();
 
   function select(sel: Selection | null) {
     // 从台面点中的东西，在构建树里展开它所在的分组
@@ -113,7 +122,147 @@ export function benchStep(): StepImpl {
     for (const id of shownFaults) if (!by.has(id)) c.session.pick.setWireFault?.(id, null);
     for (const [id, f] of by) c.session.pick.setWireFault?.(id, f.short);
     shownFaults = new Set(by.keys());
+    // 改接过的线在 3D 里挪到新针上；改回或被 setScene 重建的由 rewire 自己判断
+    const moved = benchWires().filter((w) => w.from);
+    const now = new Set(moved.map((w) => w.id));
+    for (const id of shownRewire) if (!now.has(id)) c.session.pick.rewire?.(id, null);
+    for (const w of moved) c.session.pick.rewire?.(w.id, w.a);
+    shownRewire = now;
+    // 问题页签：接线检查的结论（wire: 前缀；欠压那几条由 main.tsx 写）
+    const issues: Issue[] = faults.map((f, i) => ({ id: `wire:${f.rule}:${i}`, level: f.level, title: f.title, detail: f.short, go: () => select({ kind: 'wire', id: f.wires[0] }) }));
+    const keep = bc.get().issues.filter((x) => !x.id.startsWith('wire:'));
+    if (JSON.stringify(issues.map((x) => [x.id, x.detail])) !== JSON.stringify(bc.get().issues.filter((x) => x.id.startsWith('wire:')).map((x) => [x.id, x.detail]))) setBc({ issues: [...keep, ...issues] });
   }
+
+  // ------------------------------------------------------------ 左栏：元件库、接线表、检查点卡（U-04）
+  /** 检查点"带我去接"对准的东西：关卡判的那根针，没有针就是 I2C 器件 */
+  function cpTarget(l: Level | undefined): Selection | null {
+    if (!l) return null;
+    const pin = l.pwm?.pin ?? l.gpio_toggles?.pin ?? l.ws2812?.pin;
+    if (pin !== undefined) return { kind: 'pin', id: `GPIO${pin}` };
+    const parts = ctx!.session.scene.parts;
+    if ((l.oled_min_pixels || l.expect?.length) && parts.some((p) => p.type === 'oled')) return { kind: 'part', id: 'oled' };
+    if (l.numeric?.length && parts.some((p) => p.type === 'bme280')) return { kind: 'part', id: 'bme280' };
+    return null;
+  }
+  function renderLeft() {
+    const c = ctx!;
+    const s = c.store.get();
+    const wires = benchWires();
+    const bad = new Map<string, string>();
+    for (const f of faults) for (const w of f.wires) if (!bad.has(w)) bad.set(w, f.short);
+    const n = c.work.checkpoints.length;
+    const d = passedCount(c, s);
+    let card: ReactNode = null;
+    if (n && d === n) card = <AllPassedCard total={n} onNext={() => (location.hash = 'assemble')} />;
+    else if (n) {
+      const id = c.work.checkpoints.find((x) => !(s.checks[x]?.ok && s.checks[x].own)) ?? c.work.checkpoints[0];
+      const l = c.session.levels.find((x) => x.id === id);
+      const t = cpTarget(l);
+      card = (
+        <CheckpointCard
+          id={id}
+          title={l?.title ?? ''}
+          pass={l?.pass ?? ''}
+          done={d}
+          total={n}
+          go={t ? (t.kind === 'pin' ? t.id : partName(t.id)) : null}
+          onGo={() => {
+            select(t ?? { kind: 'checkpoint', id });
+            if (t) requestAnimationFrame(() => ctx?.session.bench.view?.('fit', t));
+          }}
+          onAll={() => setDock({ tab: 'checks', collapsed: false })}
+        />
+      );
+    }
+    const sel = s.selection?.kind === 'wire' ? s.selection.id : null;
+    setLeft({
+      lib: <PartLib chip={c.session.chip === 'esp32s3' ? 'esp32s3' : 'esp32c3'} />,
+      wires: <WireTable wires={wires} bad={bad} sel={sel} onSel={(id) => select({ kind: 'wire', id })} />,
+      wireCount: wires.length,
+      card,
+    });
+  }
+
+  // ------------------------------------------------------------ 连线工具（U-04）：改接一根线的开发板那一端
+  function wireUi() {
+    const c = ctx!;
+    if (!wiring) {
+      overlay('wire', null);
+      overlay('rings', null);
+      return;
+    }
+    const w = wiring.wire ? benchWires().find((x) => x.id === wiring!.wire) : null;
+    overlay('wire', <WireBanner wire={w ? `${w.b}（现在 ${w.a}）` : null} onCancel={() => setWiring(false)} />);
+    if (!w) return overlay('rings', null);
+    const wires = benchWires().filter((x) => !x.missing);
+    const pins: RingPin[] = (c.session.pick.listPins?.() ?? []).map((p) => ({ ...p, used: wires.filter((x) => x.a === p.id && x.id !== w.id).map((x) => x.b) }));
+    overlay('rings', <PinRings pins={pins} cur={w.a} project={ringProject} onPin={(id) => retarget(w.id, id)} />);
+  }
+  const ringProject = (id: string) => ctx?.session.pick.project?.({ kind: 'pin', id }) ?? null;
+  function setWiring(on: boolean, wire: string | null = null) {
+    const c = ctx!;
+    if (on) {
+      if (ruler) setRuler(false);
+      if (meter) setMeter(false);
+      closeCard();
+    }
+    wiring = on ? { wire } : null;
+    c.shell.toolbar.setActive(on ? 'wire' : 'select');
+    if (on && wire) c.session.pick.highlight?.({ kind: 'wire', id: wire });
+    else if (!on) c.session.pick.highlight?.(toPick(c.store.get().selection));
+    wireUi();
+  }
+  /** 写一步改接线进时间线（不重新上电：模拟器里的器件仍按场景接法，改的是台面和接线检查） */
+  function applyMods(mods: WireMods, label: string) {
+    const c = ctx!;
+    c.hist?.op({ k: 'wiring', mods, scene: c.session.scene, label });
+    c.session.setWireMods(mods);
+    recheckWiring();
+  }
+  function retarget(wireId: string, to: string) {
+    const c = ctx!;
+    const prev = c.session.wireMods;
+    const w = benchWires().find((x) => x.id === wireId);
+    if (!w) return;
+    const orig = w.from ?? w.a;
+    if (to === w.a) {
+      c.shell.toast(`${w.b} 本来就接在 ${to}`);
+      return;
+    }
+    const rt = { ...prev.retarget };
+    if (to === orig) delete rt[wireId];
+    else rt[wireId] = to;
+    applyMods({ ...prev, retarget: rt }, `${w.b} 改接 ${to}`);
+    setWiring(false);
+    select({ kind: 'wire', id: wireId });
+    const fs = faults.filter((f) => f.wires.includes(wireId));
+    if (!fs.length) {
+      c.shell.toast(to === orig ? `${w.b} 改回 ${to}，接线检查没发现问题` : `${w.b} 改接到 ${to}，接线检查没发现问题（模拟器里仍按原接法跑）`);
+      return;
+    }
+    const f = fs[0];
+    overlay(
+      'wrongWire',
+      <WrongWireCard
+        title={f.title}
+        detail={f.detail}
+        wire={`${w.b}：${w.a} → ${to}`}
+        sim={`可信度：${f.confidence}。模拟器里的器件仍按原来的接法跑，这里只做接线检查。`}
+        onUndo={() => {
+          overlay('wrongWire', null);
+          applyMods(prev, `撤销 ${w.b} 改接`);
+        }}
+        onRetry={() => {
+          overlay('wrongWire', null);
+          applyMods(prev, `撤销 ${w.b} 改接`);
+          setWiring(true, wireId);
+        }}
+        onKeep={() => overlay('wrongWire', null)}
+      />,
+    );
+  }
+
 
   // ------------------------------------------------------------ 构建树
   function renderTree() {
@@ -182,6 +331,9 @@ export function benchStep(): StepImpl {
         {c.work.checkpoints.length ? group('checkpoint', '检查点', `${passedCount(c, s)}/${c.work.checkpoints.length}`, cps) : null}
       </div>,
     );
+    renderLeft();
+    // 空台面引导：只有开发板、没摆零件（空白实验台刚打开）
+    overlay('empty', parts.length ? null : <EmptyBench hasFw={!!ses.fwName} onFirmware={() => document.getElementById('fwPick')?.click()} />);
   }
 
   // ------------------------------------------------------------ 属性面板
@@ -670,6 +822,7 @@ export function benchStep(): StepImpl {
     const pickPin = (t: string) => {
       meter = { target: t };
       renderMeter();
+      meterCard();
     };
     show(
       <>
@@ -706,11 +859,18 @@ export function benchStep(): StepImpl {
   function setMeter(on: boolean) {
     const c = ctx!;
     if (on && ruler) setRuler(false);
+    if (on && wiring) setWiring(false);
     meter = on ? { target: meter?.target ?? null } : null;
+    meterCard();
     c.shell.toolbar.setActive(on ? 'meter' : 'select');
     closeCard();
     if (on) select({ kind: 'tool', id: 'meter' });
     else if (c.store.get().selection?.kind === 'tool') select(null);
+  }
+  /** 万用表常驻读数卡（台面右下）：读数由 updateLive 填 */
+  function meterCard() {
+    overlay('meter', meter ? <MeterCard target={meter.target} onClose={() => setMeter(false)} /> : null);
+    if (meter) updateLive();
   }
   /** 拾取到的东西 → 万用表点在哪根针（导线按它在开发板上的那一端；舵机红线单独一个节点） */
   function meterTarget(t: PickTarget): string | null {
@@ -939,6 +1099,44 @@ export function benchStep(): StepImpl {
     </Btns>
   );
 
+  /** 直接设一个温度（数字框、预设）：一下就是时间线上一步 */
+  function setTempNow(v: number) {
+    const c = ctx!;
+    const t = Math.min(45, Math.max(-10, Math.round(v * 10) / 10));
+    if (!Number.isFinite(t) || t === c.store.get().env.temp) return;
+    c.hist?.op({ k: 'env', env: { ...c.store.get().env, temp: t } });
+    c.session.setEnv({ temp: t });
+    c.hist?.render();
+  }
+  function TempExact() {
+    const v = ctx!.store.get().env.temp;
+    return (
+      <div className="mt-1.5 mb-1 flex items-center gap-1.5">
+        <label className="flex items-center gap-1 text-xs text-muted">
+          <input
+            type="number"
+            data-envnum="temp"
+            aria-label="环境温度（°C）"
+            min={-10}
+            max={45}
+            step={0.1}
+            defaultValue={v}
+            onKeyDown={(e) => e.key === 'Enter' && setTempNow(Number(e.currentTarget.value))}
+            onBlur={(e) => setTempNow(Number(e.currentTarget.value))}
+            className="h-8 w-[72px] rounded-md border border-line bg-field px-2 font-mono text-xs text-fg outline-none focus:border-accent"
+          />
+          °C
+        </label>
+        <span className="flex-1" />
+        {[18, 32, 4].map((t) => (
+          <button key={t} type="button" data-preset={t} onClick={() => setTempNow(t)} className="h-8 cursor-pointer rounded-md border border-line bg-surface px-2 font-mono text-xs text-fg hover:bg-field">
+            {t}°
+          </button>
+        ))}
+      </div>
+    );
+  }
+
   function renderPart(id: string) {
     const c = ctx!;
     const ses = c.session;
@@ -947,7 +1145,7 @@ export function benchStep(): StepImpl {
       show(
         <>
           <Sec>开发板</Sec>
-          <Ph>{s3 ? 'ESP32-S3-DevKitC-1' : 'ESP32-C3-DevKitM-1'}</Ph>
+          <PartHead name={s3 ? 'ESP32-S3-DevKitC-1' : 'ESP32-C3-DevKitM-1'} type="board" />
           <Kv k="芯片" v={s3 ? 'ESP32-S3 · 双核 160 MHz' : 'ESP32-C3 · 160 MHz'} />
           <Kv k="供电" v="USB 5 V 经 LDO 降到 3V3" />
           <Kv k="3V3" live="e33" />
@@ -994,6 +1192,7 @@ export function benchStep(): StepImpl {
           <Kv k="气压" live="rp" />
           <Sec>环境温度</Sec>
           {envSlider('temp', '环境温度', -10, 45, 0.5)}
+          <TempExact />
           <HeatActs />
           <Note>湿度、气压在构建树「环境」里调。可信度：仿真验证。</Note>
         </>
@@ -1069,7 +1268,7 @@ export function benchStep(): StepImpl {
     show(
       <>
         <Sec>零件</Sec>
-        <Ph>{info.name}</Ph>
+        <PartHead name={info.name} type={p.type} />
         <KvT k="型号">{info.model}</KvT>
         <KvT k="接口">{info.iface}</KvT>
         <Kv k="供电" v={info.power} />
@@ -1296,8 +1495,10 @@ export function benchStep(): StepImpl {
     const el = c.shell.props.el;
     // 快捷卡片里的读数和属性面板用同一套 data-live
     const card = c.shell.stage.querySelector<HTMLElement>('.qcard:not([hidden])');
+    // 台面浮层里的常驻卡（万用表）也按 data-live 填
+    const extra = [...c.shell.stage.querySelectorAll<HTMLElement>('[data-live-root]')];
     const set = (k: string, v: string, bad = false) => {
-      for (const root of card ? [el, card] : [el]) {
+      for (const root of card ? [el, card, ...extra] : [el, ...extra]) {
         const n = root.querySelector<HTMLElement>(`[data-live="${k}"]`);
         if (n) {
           n.textContent = v;
@@ -1381,6 +1582,10 @@ export function benchStep(): StepImpl {
       set('mv', mr.v === null ? '—' : `${mr.v.toFixed(3)} V`);
       set('mnote', mr.note);
     }
+    for (const root of [el, ...(card ? [card] : [])])
+      root.querySelectorAll<HTMLInputElement>('input[data-envnum]').forEach((inp) => {
+        if (inp !== document.activeElement && Number(inp.value) !== s.env.temp) inp.value = String(s.env.temp);
+      });
     // 别处改了环境（卡片 / 热源 / 回退），没在拖的滑块跟上
     for (const root of card ? [el, card] : [el])
       root.querySelectorAll<HTMLInputElement>('input[data-env]').forEach((inp) => {
@@ -1593,6 +1798,17 @@ export function benchStep(): StepImpl {
 
   function onPick(t: PickTarget | null, screen: ScreenPoint) {
     if (!ctx || ctx.store.get().step !== 'bench') return;
+    if (wiring) {
+      if (!t) return;
+      if (t.kind === 'wire') {
+        if (!benchWires().some((w) => w.id === t.id)) return ctx.shell.toast('这根线两头都在零件上，改不了开发板那一端');
+        wiring.wire = t.id;
+        ctx.session.pick.highlight?.(t);
+        wireUi();
+      } else if (t.kind === 'pin' && wiring.wire) retarget(wiring.wire, t.id);
+      else ctx.shell.toast(wiring.wire ? '点开发板上的一根针（蓝圈）' : '先点一根要改接的线');
+      return;
+    }
     if (meter) {
       if (!t) return;
       const id = meterTarget(t);
@@ -1603,6 +1819,7 @@ export function benchStep(): StepImpl {
       meter = { target: id };
       if (ctx.store.get().selection?.kind !== 'tool') select({ kind: 'tool', id: 'meter' });
       renderMeter();
+      meterCard();
       cardFor = t;
       ctx.shell.card.show(
         ctx.session.pick.project?.(t) ?? screen,
@@ -1652,9 +1869,14 @@ export function benchStep(): StepImpl {
     if (id === 'select' || id === 'orbit') {
       if (ruler) setRuler(false);
       if (meter) setMeter(false);
+      if (wiring) setWiring(false);
       c.shell.toolbar.setActive(id);
+    } else if (id === 'wire') {
+      const sel = c.store.get().selection;
+      setWiring(!wiring, sel?.kind === 'wire' && benchWires().some((w) => w.id === sel.id) ? sel.id : null);
     } else if (id === 'ruler') {
       if (meter) setMeter(false);
+      if (wiring) setWiring(false);
       setRuler(!ruler);
     } else if (id === 'meter') setMeter(!meter);
     else if (id === 'rerun') c.session.reboot();
@@ -1758,6 +1980,21 @@ export function benchStep(): StepImpl {
           const p = trace.pin;
           trace.push({ t: m.simSeconds, duty: m.pwm[p] ?? -1, freq: m.pwmFreq[p] ?? 0, level: bit(m.gpio, m.gpioHi, p), out: !!bit(m.enable, m.enableHi, p) });
         });
+        // 工具快捷键（工具条角标）：输入框里不拦；Esc 先退出当前工具
+        window.addEventListener('keydown', (e) => {
+          if (!ctx || ctx.store.get().step !== 'bench' || e.metaKey || e.ctrlKey || e.altKey) return;
+          if ((e.target as HTMLElement).closest('input,textarea,select,[contenteditable]')) return;
+          const k = e.key.toLowerCase();
+          if (k === 'escape') {
+            if (bc.get().overlays.wrongWire) overlay('wrongWire', null);
+            else if (wiring) setWiring(false);
+            else if (ruler) setRuler(false);
+            else if (meter) setMeter(false);
+            return;
+          }
+          const tool = ({ v: 'select', h: 'orbit', w: 'wire', m: 'meter', r: 'ruler' } as Record<string, string>)[k];
+          if (tool) onTool(tool);
+        });
         if (new URLSearchParams(location.search).has('debug')) {
           const w = window as unknown as { __tbApp?: Record<string, unknown> };
           w.__tbApp ??= {};
@@ -1768,19 +2005,20 @@ export function benchStep(): StepImpl {
       }
       c.shell.toolbar.setGroups([
         { id: 'nav', tools: [{ id: 'select', label: '选择', key: 'V' }, { id: 'orbit', label: '转视角', key: 'H' }] },
-        { id: 'edit', tools: [{ id: 'place', label: '放置', todo: true }, { id: 'wire', label: '连线', todo: true }] },
-        { id: 'measure', tools: [{ id: 'meter', label: '万用表' }, { id: 'ruler', label: '尺子' }, { id: 'scope', label: '示波器' }] },
+        { id: 'edit', tools: [{ id: 'place', label: '放置', todo: true }, { id: 'wire', label: '连线', key: 'W' }] },
+        { id: 'measure', tools: [{ id: 'meter', label: '万用表', key: 'M' }, { id: 'ruler', label: '尺子', key: 'R' }, { id: 'scope', label: '示波器' }] },
         { id: 'look', tools: [{ id: 'ext', label: extModelsOn() ? '外部模型：开' : '外部模型：关' }] },
         { id: 'media', tools: [{ id: 'photo', label: '拍照' }, { id: 'rec', label: benchRec ? '停止录像' : '录像' }] },
         { id: 'act', tools: [{ id: 'heat', label: '热源' }, { id: 'button', label: '按 BOOT' }] },
         { id: 'run', tools: [{ id: 'rerun', label: '再跑一次', primary: true }] },
       ]);
-      c.shell.toolbar.setActive(ruler ? 'ruler' : meter ? 'meter' : 'select');
+      c.shell.toolbar.setActive(ruler ? 'ruler' : meter ? 'meter' : wiring ? 'wire' : 'select');
       const pinDev = c.session.scene.parts.find((p) => p.type === 'encoder' || p.type === 'hcsr04');
       if (!c.store.get().selection) c.store.set({ selection: c.work.checkpoints.length ? { kind: 'part', id: 'bme280' } : pinDev ? { kind: 'part', id: pinDev.type } : { kind: 'firmware', id: 'main' } });
       if (!c.session.scene.parts.some((p) => partId(p) === 'bme280') && c.store.get().selection?.id === 'bme280') c.store.set({ selection: { kind: 'part', id: 'board' } });
       recheckWiring();
       applyBenchHarness();
+      meterCard();
       renderTree();
       renderProps();
       syncChrome();
@@ -1817,6 +2055,9 @@ export function benchStep(): StepImpl {
         ctx?.session.pick.measure?.(null);
       }
       meter = null;
+      wiring = null;
+      for (const k of ['wire', 'rings', 'wrongWire', 'meter', 'empty']) overlay(k, null);
+      setLeft({ lib: null, wires: null, wireCount: 0, card: null });
       ctx?.session.pick.highlight?.(null);
       ctx = null;
     },
@@ -1835,4 +2076,15 @@ function swatch(bg: string) {
 function NoteLive({ id, init }: { id: string; init: string }) {
   const ref = useInitText<HTMLParagraphElement>(init);
   return <p ref={ref} id={id} className="note my-2 text-xs text-muted" />;
+}
+
+/** 属性面板的零件标题：名字 + 可信度徽章（依据见 benchv2 PART_CONF） */
+function PartHead({ name, type }: { name: string; type: string }) {
+  const conf = PART_CONF[type];
+  return (
+    <div className="mb-2 flex items-center gap-2">
+      <Ph className="mb-0 min-w-0">{name}</Ph>
+      {conf && <ConfBadge c={conf} />}
+    </div>
+  );
 }
