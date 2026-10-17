@@ -537,3 +537,11 @@
 - **没做：暖灰橙色板（site.css）的 `[data-palette='site']` 映射。**
   - 原因：site.css 只被 levels.ts 引用，而 levels.ts 自 P0-21 起已经没有入口，是死代码。现在的首页用的是 app.css 的白底蓝色（DESIGN §2 A 版），任务又要求"视觉必须与改前一致"，两条冲突。我按视觉一致处理，色板直接删掉，不映射。
   - 要恢复：从 git 历史里取 site.css 的取值，在 tailwind.css 里加作用域主题，页面根加属性。**待人决定**是否要暖色版首页。
+
+## 2026-10-17 · 实验台（index.html）外壳迁到 React
+- 决定：工具栏、示例选择、串口 / USB / 这个示例 / 面包板元件面板改成 React（`web/src/lab/`）；3D 台面、worker、串口流、模拟时间、装配视图仍是命令式（`lab/lab.ts`，原 main.ts 原样搬过来），由 React ref 挂载、`useEffect` 清理。删掉 `src/style.css`、`src/main.ts`、`src/usbpanel.ts`；`src/editor.ts` 只留数据部分（引脚表、描述、冲突检查）
+- 保留 `views/views.css`：app.html、home.html 和 app/ 下的代码也用 views/*，换成 Tailwind 要同时动别的页面，不在本次范围
+- 滑块非受控 + `onInput`：验收脚本（sense / replay 等）用"改 value + 派发 input 事件"，React 受控输入的值追踪会把这种事件吞掉；3D 拖旋钮 / 装配视图调温度也直接改滑块 DOM
+- 入口不包 StrictMode：开发模式下的双挂载会建两个 worker 和两个 WebGL 上下文；清理函数照样写全（`lab.dispose()`）
+- 窄屏（≤ 900px）修了旧页的重叠：旧页 body 固定 100% 高、main 设了 min-height:0，内容超出一屏时页脚和侧栏叠在 3D 舞台上；现在窄屏下根容器高度随内容
+- 替代：(a) 把 main.ts 整个拆成 hooks——改动面大、与验收对拍的时序风险高，收益只是代码风格；(b) 串口区也用 React 渲染——高频流进 state 会卡，违反 ARCH「每秒十次以上不进 React」

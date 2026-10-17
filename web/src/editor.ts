@@ -1,4 +1,4 @@
-// 元件编辑器：用户按自己的实物接线，往面包板上加 / 删元件。
+// 元件编辑器的数据部分（界面在 lab/Editor.tsx）：引脚表、元件描述、冲突检查。
 // 上传自己的固件时最有用：示例自带接线，自定义固件的接线只有用户知道。
 import { BOARDS, I2S_WIRING, LCD_WIRING, type ChipId, type PartSpec, type SceneSpec } from './board3d';
 
@@ -16,9 +16,8 @@ const CHIP_PINS: Record<ChipId, { adc: number[]; hint: Record<number, string>; a
     avoid: [35, 36, 37],
   },
 };
-let chip: ChipId = 'esp32c3';
 /** 当前开发板排针上引出的 GPIO（按丝印顺序，去掉不能用的） */
-const PINS_OF = (c: ChipId) => {
+export const pinsOf = (c: ChipId) => {
   const b = BOARDS[c];
   return [...b.left, ...b.right]
     .filter((n) => /^IO\d+$/.test(n))
@@ -26,12 +25,12 @@ const PINS_OF = (c: ChipId) => {
     .filter((p) => !CHIP_PINS[c].avoid.includes(p))
     .sort((a, b) => a - b);
 };
-let PINS = PINS_OF(chip);
-let ADC_PINS = CHIP_PINS[chip].adc;
-let PIN_HINT = CHIP_PINS[chip].hint;
+export const adcPins = (c: ChipId) => CHIP_PINS[c].adc;
+/** 引脚下拉项的文字：IO 号 + 用途提示 */
+export const pinLabel = (c: ChipId, p: number) => `IO${p}${CHIP_PINS[c].hint[p] ? `（${CHIP_PINS[c].hint[p]}）` : ''}`;
 
-type Kind = PartSpec['type'];
-const KINDS: { kind: Kind; name: string; desc: string }[] = [
+export type Kind = PartSpec['type'];
+export const KINDS: { kind: Kind; name: string; desc: string }[] = [
   { kind: 'led', name: 'LED + 220Ω', desc: '数字输出 / PWM 调光' },
   { kind: 'servo', name: 'SG90 舵机', desc: '50Hz PWM，0.5–2.5ms' },
   { kind: 'pot', name: '电位器', desc: '模拟输入（ADC1）' },
@@ -39,10 +38,7 @@ const KINDS: { kind: Kind; name: string; desc: string }[] = [
   { kind: 'bme280', name: 'BME280 温湿度气压', desc: 'I2C 环境传感器' },
 ];
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-const pinOpt = (p: number, sel: number): string => `<option value="${p}" ${p === sel ? 'selected' : ''}>IO${p}${PIN_HINT[p] ? `（${PIN_HINT[p]}）` : ''}</option>`;
-
-export function describe(p: PartSpec): string {
+export function describe(p: PartSpec, chip: ChipId = 'esp32c3'): string {
   switch (p.type) {
     case 'led':
       return `LED · IO${p.pin}`;
@@ -93,7 +89,7 @@ export const needsReboot = (a: SceneSpec, b: SceneSpec) => {
 };
 
 /** 检查引脚冲突：同一引脚被两个非 I2C 元件占用，或 I2C 线与普通元件撞脚 */
-export function conflicts(s: SceneSpec): string[] {
+export function conflicts(s: SceneSpec, chip: ChipId = 'esp32c3'): string[] {
   const used = new Map<number, string>();
   const out: string[] = [];
   const claim = (pin: number, who: string, shareable = false) => {
@@ -109,10 +105,10 @@ export function conflicts(s: SceneSpec): string[] {
     } else if (p.type === 'gc9a01') {
       for (const pin of [12, 11, 10, 14, 13, 15]) claim(pin, 'GC9A01 圆屏');
     } else if (p.type === 'encoder') {
-      for (const pin of [p.a, p.b, ...(p.sw !== undefined ? [p.sw] : [])]) claim(pin, describe(p));
+      for (const pin of [p.a, p.b, ...(p.sw !== undefined ? [p.sw] : [])]) claim(pin, describe(p, chip));
     } else if (p.type === 'hcsr04') {
-      claim(p.trig, describe(p));
-      claim(p.echo, describe(p));
+      claim(p.trig, describe(p, chip));
+      claim(p.echo, describe(p, chip));
     } else if (p.type === 'max98357a') {
       const w = I2S_WIRING[chip].spk;
       for (const pin of [w.bclk, w.lrc, w.din]) claim(pin, 'MAX98357A 喇叭');
@@ -121,73 +117,9 @@ export function conflicts(s: SceneSpec): string[] {
       const w = I2S_WIRING[chip].mic;
       const spk = I2S_WIRING[chip].spk;
       for (const pin of [w.sck, w.ws, w.sd]) if (!(s.parts.some((q) => q.type === 'max98357a') && (pin === spk.bclk || pin === spk.lrc))) claim(pin, 'INMP441 麦克风');
-    } else claim(p.pin, describe(p));
+    } else claim(p.pin, describe(p, chip));
   }
   const addrs = s.parts.flatMap((p) => ('addr' in p ? [p.addr] : []));
   if (new Set(addrs).size !== addrs.length) out.push('两个 I2C 器件地址相同，总线上会冲突');
   return out;
-}
-
-export function mountEditor(root: HTMLElement, get: () => SceneSpec, set: (s: SceneSpec) => void) {
-  let adding: Kind = 'led';
-  const render = () => {
-    const s = get();
-    const bad = conflicts(s);
-    const fields = (() => {
-      switch (adding) {
-        case 'led':
-        case 'servo':
-          return `<label>引脚<select name="pin">${PINS.map((p) => pinOpt(p, adding === 'led' ? 5 : 6)).join('')}</select></label>`;
-        case 'pot':
-          return `<label>滑片<select name="pin">${ADC_PINS.map((p) => pinOpt(p, 2)).join('')}</select></label>`;
-        default:
-          return `<label>SDA<select name="sda">${PINS.map((p) => pinOpt(p, 6)).join('')}</select></label>
-            <label>SCL<select name="scl">${PINS.map((p) => pinOpt(p, 7)).join('')}</select></label>
-            <label>地址<select name="addr">${(adding === 'oled' ? [0x3c, 0x3d] : [0x76, 0x77]).map((a) => `<option value="${a}">0x${a.toString(16)}</option>`).join('')}</select></label>`;
-      }
-    })();
-    root.innerHTML = `
-      <ul class="parts">${s.parts.map((p, i) => `<li><span>${esc(describe(p))}</span><button class="ghost" data-del="${i}">移除</button></li>`).join('') || '<li class="muted">面包板上还没有元件</li>'}</ul>
-      ${bad.length ? `<div class="warn">${bad.map(esc).join('<br/>')}</div>` : ''}
-      <form class="add">
-        <select name="kind">${KINDS.map((k) => `<option value="${k.kind}" ${k.kind === adding ? 'selected' : ''}>${k.name} — ${k.desc}</option>`).join('')}</select>
-        <div class="fields">${fields}</div>
-        <button type="submit">＋ 加到面包板</button>
-      </form>`;
-    (root.querySelector('select[name=kind]') as HTMLSelectElement).onchange = (e) => {
-      adding = (e.target as HTMLSelectElement).value as Kind;
-      render();
-    };
-    root.querySelectorAll<HTMLButtonElement>('[data-del]').forEach((b) => {
-      b.onclick = () => {
-        const n = get();
-        set({ ...n, parts: n.parts.filter((_, i) => i !== Number(b.dataset.del)) });
-        render();
-      };
-    });
-    (root.querySelector('form') as HTMLFormElement).onsubmit = (e) => {
-      e.preventDefault();
-      const f = new FormData(e.target as HTMLFormElement);
-      const num = (k: string) => Number(f.get(k));
-      let part: PartSpec;
-      if (adding === 'oled' || adding === 'bme280') part = { type: adding, sda: num('sda'), scl: num('scl'), addr: num('addr') };
-      else part = { type: adding, pin: num('pin') } as PartSpec;
-      const n = get();
-      set({ ...n, parts: [...n.parts, part] });
-      render();
-    };
-  };
-  render();
-  return {
-    render,
-    /** 切换芯片后引脚列表跟着当前开发板变 */
-    setChip(c: ChipId) {
-      if (c === chip) return;
-      chip = c;
-      PINS = PINS_OF(c);
-      ADC_PINS = CHIP_PINS[c].adc;
-      PIN_HINT = CHIP_PINS[c].hint;
-      render();
-    },
-  };
 }
