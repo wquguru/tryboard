@@ -262,7 +262,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
   overlay.className = 'a3-tags';
   const corner = document.createElement('div');
   corner.className = 'p3-disclaimer a3-disc';
-  corner.textContent = `外观示意，尺寸估算 · 外壳 ${OW}×${OD}×${OH} mm（参数化）`;
+  corner.textContent = `外观示意，尺寸估算 · 外壳 ${OW}×${OD}×${OH} mm`;
   container.append(overlay, corner);
   const tags = new Map<string, HTMLElement>();
   const tag = (k: string, text: string, cls = '') => {

@@ -43,7 +43,7 @@ export class MicInput {
       return this.fail(`没有拿到麦克风权限（${(e as Error).name || e}）`);
     }
     const AC = globalThis.AudioContext ?? (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AC) return this.fail('浏览器不支持 Web Audio');
+    if (!AC) return this.fail('浏览器不支持音频处理，换个新版浏览器试试');
     const ctx = (this.ctx = new AC());
     await ctx.resume().catch(() => {});
     const src = ctx.createMediaStreamSource(this.stream);

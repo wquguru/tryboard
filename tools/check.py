@@ -4,12 +4,12 @@
 网页（web/src/checks.ts）用同一份 levels.json、同样的判定规则和指纹算法；同一个固件在两边应得到同一个指纹。
 
 用法：
-  tools/check.py <flash.bin> --level 04      验收你的固件（第 07 关用 --level 07-spin / 07-lens；小黄、透镜的检查点用 spin-1、lens-2 这样的 id）
+  tools/check.py <flash.bin> --level 04      验收你的固件（检查点 07 用 --level 07-spin / 07-lens；小黄、透镜的检查点用 spin-1、lens-2 这样的 id）
   tools/check.py --ref --level 04            验收参考固件（firmware/build/<ref>/flash.bin）
-  tools/check.py --ref --all                 所有关卡的参考固件
+  tools/check.py --ref --all                 所有检查点的参考固件
   tools/check.py <flash.bin> --level 06 --inputs log.txt
                                              用网页导出的输入日志（实验台「导出输入」，或 InputLog JSON）
-                                             代替关卡自带的输入脚本，与 `tryboard run --inputs` 同样逐周期重放
+                                             代替检查点自带的输入脚本，与 `tryboard run --inputs` 同样逐周期重放
   tools/check.py --ref --level 05 --servo 4 --power usb --elec-report
                                              接一个 SG90 到 GPIO4、只用 USB 供电（ext = 外接 5 V），打印各节点最低电压 /
                                              峰值电流 / 欠压复位次数（电气不进指纹）
@@ -269,7 +269,7 @@ def main():
         lv = a[a.index('--level') + 1]
         pick = [l for l in levels if l['id'] == (lv.zfill(2) if lv.isdigit() else lv)]
         if not pick:
-            sys.exit(f'没有第 {lv} 关（或这一关没有命令行验收）')
+            sys.exit(f'没有检查点 {lv}（或它没有命令行验收）')
     skip = {a.index(k) + 1 for k in ('--level', '--inputs', '--power', '--servo') if k in a}
     # 供电（P1-02）：原样交给 tryboard run
     extra = []
@@ -288,20 +288,20 @@ def main():
     for t in pick:
         fw = os.path.join(ROOT, 'firmware/build', t['ref'], 'flash.bin') if ref else user_fw
         if not os.path.exists(fw):
-            print(f"第 {t['id']} 关 {t['title']}：找不到 {fw}")
+            print(f"检查点 {t['id']} {t['title']}：找不到 {fw}")
             bad += 1
             continue
         res, fp, elec = run(fw, t, inputs, extra)
         ok = all(r[0] for r in res)
         bad += not ok
-        print(f"第 {t['id']} 关 {t['title']}：{'通过' if ok else '未通过'}  指纹 {fp}")
+        print(f"检查点 {t['id']} {t['title']}：{'通过' if ok else '未通过'}  指纹 {fp}")
         for r, d in res:
             print(f"  {'✓' if r else '✗'} {d}")
         if show_elec:
             for l in elec:
                 print('  ' + l.replace('[tryboard] ', ''))
         if t.get('assembly'):
-            print('  · 装配检查（几何估算）只在网页的装配区里判定，命令行不判')
+            print('  · 装配检查（几何估算）只在网页上检查')
     sys.exit(1 if bad else 0)
 
 

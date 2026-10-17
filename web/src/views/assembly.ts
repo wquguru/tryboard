@@ -43,7 +43,7 @@ export function createAssembly(el: HTMLElement, h: AssemblyHandlers, opts: { ser
     const cx = 28 + (i % 2) * 156, cy = 62 + Math.floor(i / 2) * 120;
     svg.push(`<g data-k="card_${k}" data-part="${k}" class="as-card" transform="translate(${cx} ${cy})" tabindex="0" role="button" aria-label="${p.name}"><rect data-k="cs_${k}" width="144" height="108" rx="10" fill="#24392F" stroke="#3B5C4F" stroke-width="1.5"/><g transform="translate(22 12)">${p.mini}</g><text x="72" y="96" fill="#F7F6F3" font-size="12" font-weight="700" text-anchor="middle">${p.name}</text><text data-k="ok_${k}" x="132" y="20" fill="#22C55E" class="tb-mono" font-size="14" font-weight="700" text-anchor="end" opacity="0">✓</text></g>`);
   });
-  svg.push('<text x="28" y="446" fill="#9FBFB0" class="tb-mono" font-size="11">装错顺序会被拦下：上一层压着下一层</text>');
+  svg.push('<text x="28" y="446" fill="#9FBFB0" class="tb-mono" font-size="11">顺序不对装不上：上层会压住下层</text>');
   svg.push(`<text x="356" y="44" fill="#C9D6CF" class="tb-mono" font-size="12" font-weight="700">${T.caption}</text>`);
   svg.push('<ellipse cx="545" cy="470" rx="170" ry="22" fill="#1E332A"/>');
   const labels: string[] = [];
@@ -77,7 +77,7 @@ export function createAssembly(el: HTMLElement, h: AssemblyHandlers, opts: { ser
   });
   svg.push('<rect x="716" y="330" width="248" height="78" rx="8" fill="#0E0E0D"/>');
   svg.push('<text data-k="ma" x="732" y="362" fill="#F7F6F3" font-size="14" font-weight="700"></text><text data-k="mb" x="732" y="390" fill="#C9C6BF" font-size="12"></text>');
-  svg.push('<text x="724" y="522" fill="#6E6A63" class="tb-mono" font-size="10">尺寸、线长、温漂、角度均为估算</text>');
+  svg.push('<text x="724" y="522" fill="#6E6A63" class="tb-mono" font-size="10">尺寸、线长、受热偏高、角度都是估算</text>');
   svg.push('<g data-k="float" style="pointer-events:none" opacity="0"><rect x="-8" y="-8" width="116" height="76" rx="10" fill="#FF7A1A" fill-opacity="0.18"/>');
   for (const p of P) svg.push(`<g data-k="f_${p.id}" opacity="0">${p.mini}</g>`);
   svg.push('</g>');

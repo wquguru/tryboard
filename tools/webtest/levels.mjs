@@ -79,7 +79,7 @@ async function waitFor(page, fn, arg, ms = 30000) {
 // 原生内核的结论与指纹
 const native = {};
 const cli = (() => { try { return execFileSync(path.join(root, 'tools/check.py'), ['--ref', '--all'], { encoding: 'utf8' }); } catch (e) { return e.stdout; } })();
-for (const m of cli.matchAll(/第 ([\w-]+) 关 .*：(通过|未通过)\s+指纹 (\S+)/g)) native[m[1]] = { ok: m[2] === '通过', fp: m[3] };
+for (const m of cli.matchAll(/检查点 ([\w-]+) .*：(通过|未通过)\s+指纹 (\S+)/g)) native[m[1]] = { ok: m[2] === '通过', fp: m[3] };
 
 // ---- 1. 工作台检查点：参考固件，指纹与命令行一致
 const fpOf = (page) => page.$eval('#props .kv .v.fp', (e) => e.textContent.trim()).catch(() => '');
@@ -296,7 +296,7 @@ async function openAsm(example) {
   report('首页：尺子卡跑真实固件 → OLED 有画面、串口有距离', ruler);
   await home.click('[data-run="lamp"]');
   const lamp = await waitFor(home, () => document.querySelector('.wk[data-work="lamp"] [data-k="led0"]')?.getAttribute('fill') !== '#2A2A28', null, 30000);
-  report('首页：台灯卡跑真实固件 → 灯条亮', lamp);
+  report('首页：台灯卡跑真实固件 → 灯带亮', lamp);
   // USB 小键盘卡：跑真实固件 → 虚拟电脑枚举出 TryBoard Macro Pad；点 K1 键帽 → 屏幕上打出 a
   await home.click('[data-run="usbkey"]');
   const enumd = await waitFor(home, () => /TryBoard Macro Pad/.test(document.querySelector('.wk[data-work="usbkey"] [data-k="dev"]')?.textContent ?? ''), null, 20000);

@@ -64,7 +64,7 @@ function planCard(p: Plan, best: boolean) {
     <div class="head"><span class="badge best">首选</span><h3>${esc(p.board.name)}</h3><span class="badge">${esc(p.board.maker)}</span><span class="price">整套 ${yuan(p.total)}</span></div>
     <div class="meta">${esc(p.chip.name)} · ${esc(p.chip.core)} ${p.chip.mhz}MHz · ${p.chip.sramKB}KB SRAM · ${p.board.flashMB}MB flash${p.board.psramMB ? ` · ${p.board.psramMB}MB PSRAM` : ''} · ${esc(p.board.size)}</div>
     <div class="grid2">
-      <div><h4>为什么选它</h4><ul class="list ok">${p.reasons.map((r) => `<li>${esc(r)}</li>`).join('') || '<li>满足全部需求，价格合适</li>'}</ul>
+      <div><h4>为什么选它</h4><ul class="list ok">${p.reasons.map((r) => `<li>${esc(r)}</li>`).join('') || '<li>满足全部需求</li>'}</ul>
         ${p.warnings.length ? `<h4>要注意</h4><ul class="list warn">${p.warnings.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
         ${current.risks.length ? `<h4>这类项目常见的坑</h4><ul class="list warn">${current.risks.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
         ${p.pinProblems.length ? `<h4>接线问题</h4><ul class="list err">${p.pinProblems.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
@@ -87,7 +87,7 @@ function renderResult() {
     planCard(best, true) +
     (rest.length ? `<h2 style="font-size:15px;margin:22px 0 10px">其他可选</h2><div class="alt">${rest.slice(0, 3).map((p) => planCard(p, false)).join('')}</div>` : '') +
     (rejected.length
-      ? `<details><summary>不合适的 ${rejected.length} 块板子，以及原因</summary><ul class="list err">${rejected.map((r) => `<li><b>${esc(r.board.name)}</b>：${esc(r.why)}</li>`).join('')}</ul></details>`
+      ? `<details><summary>另外 ${rejected.length} 块为什么不合适</summary><ul class="list err">${rejected.map((r) => `<li><b>${esc(r.board.name)}</b>：${esc(r.why)}</li>`).join('')}</ul></details>`
       : '');
 }
 

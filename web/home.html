@@ -31,28 +31,28 @@
 
       <!-- 作品卡由 src/home.ts 按 src/app/works.ts 的作品定义生成：加作品不用改这里 -->
       <section id="works" class="works" aria-label="作品"></section>
-      <p class="fine" id="priceNote">参考价与采购页同一口径：模版必选件 + 默认勾选的建议件，按元件库的常见电商价区间合计（估算，未逐条人工核价），不含运费，以购买时为准。</p>
+      <p class="fine" id="priceNote">参考价是必选件加默认建议件，按常见网店价估算，未逐条核价，不含运费，以购买时为准。</p>
 
       <section class="alt" aria-label="其他入口">
         <a class="alt-card" id="ownIdea" href="./advisor.html">
           <span class="sec">没有想做的？</span>
           <b>我有自己的想法 →</b>
-          <span class="muted">说出要做的东西，给出该买的芯片、开发板、配件、引脚分配和功耗估算，并标出哪些能先在模拟器里验证。</span>
+          <span class="muted">选一个想做的项目，看该买哪颗芯片、哪块板、哪些配件，引脚怎么分、功耗多少（估算），还有哪些能先在模拟器里验证。</span>
         </a>
         <a class="alt-card" id="haveFw" href="./app.html?work=blank#bench">
           <span class="sec">已经有固件了？</span>
           <b>打开空白实验台 →</b>
-          <span class="muted">把 ESP-IDF / Arduino 编出来的完整 flash 镜像（.bin）拖进去，在浏览器里跑，看串口和引脚。</span>
+          <span class="muted">把 ESP-IDF 或 Arduino 编出来的完整 flash 镜像（.bin）拖进去，在浏览器里跑，看串口和引脚。</span>
         </a>
       </section>
 
       <section class="cli" aria-label="命令行">
         <div>
           <span class="sec">让 AI 自己验收</span>
-          <p>网页上的每个检查点都有同一条命令行验收。过没过看退出码，运行指纹和网页上的一样。<span class="muted">（npm 本地包，尚未发布；仓库里也可以用 tools/check.py）</span></p>
+          <p>网页上的每个检查点都有同一条命令行验收。过没过看退出码，运行指纹和网页上的一样。</p>
         </div>
         <pre class="code mono">$ npx tryboard check weather.bin --level 04
-第 04 关 传感器：<span class="ok">通过</span>  指纹 1177·041d
+检查点 04 传感器：<span class="ok">通过</span>  指纹 1177·041d
   <span class="ok">✓</span> 温度 9 次读数，最大偏差 0（容差 0.02）
   <span class="ok">✓</span> 湿度 9 次读数，最大偏差 0（容差 0.1）
   <span class="ok">✓</span> 气压 9 次读数，最大偏差 0（容差 0.02）
@@ -62,7 +62,8 @@
     </main>
 
     <footer class="pg-foot">
-      <span>TryBoard 试板：在浏览器里运行 ESP32 系列芯片的真实固件，compatible with Arduino。ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.</span>
+      <span>试板 TryBoard：在浏览器里运行 ESP32 系列芯片的真实固件。</span>
+      <span lang="en">TryBoard is compatible with Arduino. ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.</span>
       <span><a href="./licenses.html">第三方授权</a> · ROM 来自 esp-rom-elfs（Apache-2.0）</span>
     </footer>
     <script type="module" src="./src/home.ts"></script>

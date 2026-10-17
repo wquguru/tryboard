@@ -16,10 +16,10 @@ const ROM_FILE = { esp32c3: 'esp32c3_rev3_rom.elf', esp32s3: 'esp32s3_rev0_rom.e
 const USAGE = `tryboard（试板）本地命令行 · 本地包，尚未发布
 
 用法：
-  tryboard check <app.bin|flash.bin> --level <id>   按 levels.json 这一关的条件验收（第 07 关用 07-spin / 07-lens）
-  tryboard check <flash.bin> --all                   对所有关卡验收同一个固件
+  tryboard check <app.bin|flash.bin> --level <id>   按 levels.json 这个检查点的条件验收（检查点 07 用 07-spin / 07-lens）
+  tryboard check <flash.bin> --all                   对所有检查点验收同一个固件
   tryboard check <flash.bin> --level 06 --inputs log.txt
-                                                     用网页导出的输入日志（脚本文本或 InputLog JSON）代替关卡自带输入
+                                                     用网页导出的输入日志（脚本文本或 InputLog JSON）代替检查点自带输入
   tryboard check <flash.bin> --level 05 --servo 4 --power usb
                                                      接一个 SG90 进供电网络（同 check.py；ext = 外接 5 V 2 A）
   tryboard run <flash.bin> [--seconds 5] [--i2c ssd1306@0x3c,bme280@0x76] [--env 23.5,45,101325]
@@ -75,7 +75,7 @@ async function check(a: string[]) {
     if (!lv) die(USAGE);
     const id = /^\d+$/.test(lv!) ? lv!.padStart(2, '0') : lv!;
     pick = levels.filter((l) => l.id === id);
-    if (!pick.length) die(`没有第 ${lv} 关（或这一关没有命令行验收）`);
+    if (!pick.length) die(`没有检查点 ${lv}（或它没有命令行验收）`);
   }
   const inputs = opt(a, '--inputs');
   const fw = positional(a, ['--level', '--inputs', '--servo', '--power'])[0];
@@ -84,7 +84,7 @@ async function check(a: string[]) {
   let bad = 0;
   for (const l of pick) {
     if (!existsSync(fw)) {
-      console.log(`第 ${l.id} 关 ${l.title}：找不到 ${fw}`);
+      console.log(`检查点 ${l.id} ${l.title}：找不到 ${fw}`);
       bad++;
       continue;
     }
@@ -98,9 +98,9 @@ async function check(a: string[]) {
     else if (r.error) res.push({ ok: false, text: `模拟器停止：${r.error}` });
     const ok = res.every((x) => x.ok);
     bad += ok ? 0 : 1;
-    console.log(`第 ${l.id} 关 ${l.title}：${ok ? '通过' : '未通过'}  指纹 ${fingerprint(r.stdout, r.report)}`);
+    console.log(`检查点 ${l.id} ${l.title}：${ok ? '通过' : '未通过'}  指纹 ${fingerprint(r.stdout, r.report)}`);
     for (const x of res) console.log(`  ${x.ok ? '✓' : '✗'} ${x.text}`);
-    if (l.assembly) console.log('  · 装配检查（几何估算）只在网页的装配区里判定，命令行不判');
+    if (l.assembly) console.log('  · 装配检查（几何估算）只在网页上检查');
   }
   process.exit(bad ? 1 : 0);
 }

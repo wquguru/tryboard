@@ -1,4 +1,4 @@
-// 成品示意：会转身的小黄、透镜里的小人、温湿度检测器。这里只是外观示意，不跑固件；首页的「跑真实固件」会换成由模拟器驱动的成品视图。
+// 成品示意：会转身的小黄、透镜里的小人、桌面气象站。这里只是外观示意，不跑固件；首页的「跑真实固件」会换成由模拟器驱动的成品视图。
 import { dialTicks, mount } from './common';
 
 export type ShowKind = 'spin' | 'lens' | 'weather' | 'usbkey';
@@ -6,13 +6,13 @@ const SPEC: Record<ShowKind, string> = {
   usbkey: 'USB 小键盘 · 4 键 + 宏键 · ESP32-S3 原生 USB',
   spin: '小黄 · 舵机转台 ±60° · ESP32-S3',
   lens: '透镜小人 · 1.28″ 圆屏 GC9A01 · ESP32-S3',
-  weather: '温湿度检测器 · OLED + BME280 · ESP32-S3',
+  weather: '桌面气象站 · OLED + BME280 · ESP32-S3',
 };
 const ARIA: Record<ShowKind, string> = {
   usbkey: 'USB 小键盘接在笔记本上，按键在电脑屏幕上打出字',
   spin: '可以转身的小黄桌面机器人，站在舵机转台上',
   lens: '圆屏上的表情被凸透镜罩放大，看起来像立在罩子里的小人',
-  weather: '温湿度检测器，表盘指针和屏幕显示温度湿度',
+  weather: '桌面气象站，表盘指针和屏幕显示温度湿度',
 };
 const MOODS = ['平常', '开心', '喜欢', '困了'];
 

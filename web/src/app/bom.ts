@@ -1,4 +1,4 @@
-// 采购清单的状态：只存操作日志（套用模版 / 加 / 去 / 换板 / 一键修），清单由日志重放得到。
+// 采购清单的状态：只存操作日志（套用模板 / 加 / 去 / 换板 / 一键修），清单由日志重放得到。
 // 时间线点回某一步 = 重放到那一步，不存快照（DESIGN §3）。纯函数，node --test 直接测。
 import { getTemplate, removePick, templatePicks, toScene, type Pick } from '../catalog/templates.ts';
 import { applyFix, type Fix, type RuleInput } from '../catalog/rules.ts';
@@ -15,7 +15,7 @@ export interface Bom {
   template: string;
   board: string;
   picks: Pick[];
-  /** 不在模版里的件是怎么来的（"规则 R27 补的" / "从元件库加的"） */
+  /** 不在模板里的件是怎么来的（"规则 R27 补的" / "从元件库加的"） */
   extra: Record<string, string>;
 }
 
@@ -30,7 +30,7 @@ export const initialHistory = (template: string): BomHistory => ({ ops: [{ t: 't
 function fromTemplate(id: string): Bom {
   const t = getTemplate(id);
   const picks = templatePicks(id);
-  // 开发板总在清单里（空白模版的板子是建议件，这里也补上；采购页上开发板一行不能取消）
+  // 开发板总在清单里（空白模板的板子是建议件，这里也补上；采购页上开发板一行不能取消）
   if (!picks.some((p) => p.partId === t.board)) picks.unshift({ partId: t.board, qty: 1 });
   return { template: id, board: t.board, picks, extra: {} };
 }
@@ -62,7 +62,7 @@ function step(b: Bom, op: BomOp): Bom {
     case 'fix': {
       const n = applyFix(ruleInput(b), op.fix);
       const extra = { ...b.extra };
-      if (op.fix.action !== 'remove' && !inTemplate(b.template, op.fix.partId)) extra[op.fix.partId] = `规则 ${op.rule} 补的`;
+      if (op.fix.action !== 'remove' && !inTemplate(b.template, op.fix.partId)) extra[op.fix.partId] = '规则检查提示后补上的';
       return { ...b, board: n.board, picks: n.parts, extra };
     }
   }
@@ -73,7 +73,7 @@ export function inTemplate(template: string, partId: string) {
   return [...t.required, ...t.suggested].some((l) => l.partId === partId);
 }
 
-/** 重放到第 upto 步（含）。日志里有元件库已删掉的件时整份作废，回到模版默认 */
+/** 重放到第 upto 步（含）。日志里有元件库已删掉的件时整份作废，回到模板默认 */
 export function replay(h: BomHistory, upto = h.cur): Bom {
   const first = h.ops[0];
   let b = fromTemplate(first?.t === 'template' ? first.id : 'blank');
@@ -110,7 +110,7 @@ export function validHistory(x: unknown): x is BomHistory {
   }
 }
 
-/** 规则引擎的输入：清单 + 模版的默认接线和固件用法 */
+/** 规则引擎的输入：清单 + 模板的默认接线和固件用法 */
 export function ruleInput(b: Bom): RuleInput {
   const t = getTemplate(b.template);
   return { template: b.template, board: b.board, parts: b.picks.map((p) => ({ ...p })), wiring: t.wiring.map((w) => ({ ...w })), firmware: { ...t.firmware } };
@@ -130,7 +130,7 @@ export function opLabel(op: BomOp): { icon: string; label: string } {
     case 'board':
       return { icon: '⇄', label: `换 ${short(op.partId)}` };
     case 'fix':
-      return { icon: '✓', label: `${op.fix.action === 'add' ? '补' : op.fix.action === 'remove' ? '去' : '换'} ${short(op.fix.partId)}（${op.rule}）` };
+      return { icon: '✓', label: `${op.fix.action === 'add' ? '补' : op.fix.action === 'remove' ? '去' : '换'} ${short(op.fix.partId)}` };
   }
 }
 
@@ -143,7 +143,7 @@ export interface Placement {
   skipped: string[];
 }
 
-/** 买完摆上实验台（P0-09）：按模版接线生成场景；缺接线的件不摆，列出来 */
+/** 买完摆上实验台（P0-09）：按模板接线生成场景；缺接线的件不摆，列出来 */
 export function placement(b: Bom): Placement {
   const t = getTemplate(b.template);
   const raw = toScene(b.picks, t.wiring);

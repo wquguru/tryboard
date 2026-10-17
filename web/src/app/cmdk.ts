@@ -72,7 +72,7 @@ export function createCmdk(ctx: StepCtx): Cmdk {
     const env = { ...store.get().env, temp: v };
     ctx.hist?.op({ k: 'env', env });
     session.setEnv({ temp: v });
-    shell.toast(`室温设为 ${v.toFixed(1)} ℃${v !== t ? `（范围 -10–45 ℃，${t} 夹到 ${v}）` : ''}：BME280 读到的、固件打印的、OLED 显示的跟着变`);
+    shell.toast(`室温设为 ${v.toFixed(1)} ℃${v !== t ? `（超出 -10–45 ℃，按 ${v} ℃ 算）` : ''}，传感器读数、串口和 OLED 都会跟着变`);
   }
   function powerRerun(ext: boolean) {
     goBench();
@@ -93,7 +93,7 @@ export function createCmdk(ctx: StepCtx): Cmdk {
     }
     goBench();
     const r = await h.seek(i);
-    if (r) shell.toast(`回到运行 #${r.run} 的 ${(r.untilMs / 1000).toFixed(2)} s${r.same === null ? '' : r.same ? ' · 指纹与当时一致 ✓' : ' · 指纹和当时不一样 ✗'}`);
+    if (r) shell.toast(`回到运行 #${r.run} 的 ${(r.untilMs / 1000).toFixed(2)} s${r.same === null ? '' : r.same ? ' · ✓ 指纹一致' : ' · ✗ 指纹不同'}`);
   }
 
   /** 按输入算出全部候选（参数命令随输入生成） */
@@ -107,7 +107,7 @@ export function createCmdk(ctx: StepCtx): Cmdk {
     );
     const ana = getAnalyzer(ctx);
     out.push(
-      { id: 'meter3v3', group: '命令', label: '量 3V3', meta: '万用表', keys: '万用表 电压 3.3 3v3 multimeter liang', run: () => { select('pin', '3V3'); shell.toast('先给你看 3V3 针脚；要读电路求解出的电压，按工具条「万用表」再点 3V3 针'); } },
+      { id: 'meter3v3', group: '命令', label: '量 3V3', meta: '万用表', keys: '万用表 电压 3.3 3v3 multimeter liang', run: () => { select('pin', '3V3'); shell.toast('先选中 3V3 引脚；要读电压，按工具条「万用表」再点 3V3'); } },
       { id: 'power:ext', group: '命令', label: '换外接 5 V 并重跑', meta: '供电', keys: '外接 5v 电源 power ext 重跑 舵机', run: () => powerRerun(true) },
       { id: 'power:usb', group: '命令', label: '换回 USB 供电并重跑', meta: '供电', keys: 'usb 电脑 power 重跑', run: () => powerRerun(false) },
       { id: 'rerun', group: '命令', label: '再跑一次（重新上电）', meta: '运行', keys: 'rerun reboot 重新上电 复位 reset', run: () => { goBench(); session.reboot(); } },
@@ -120,7 +120,7 @@ export function createCmdk(ctx: StepCtx): Cmdk {
       if (rn !== null && r.n !== rn) continue;
       out.push({ id: `run:${r.n}`, group: '运行', label: `回到第 ${r.n} 次运行`, meta: r.snap ? `${r.snap.simSeconds.toFixed(1)} s` : '运行中', keys: `回到 运行 run #${r.n} 回退 时间线`, run: () => backToRun(r.n) });
     }
-    if (rn !== null && !runs.some((r) => r.n === rn)) out.push({ id: `run:${rn}`, group: '运行', label: `回到第 ${rn} 次运行`, meta: '没有这次', keys: '回到 运行 run', run: () => backToRun(rn) });
+    if (rn !== null && !runs.some((r) => r.n === rn)) out.push({ id: `run:${rn}`, group: '运行', label: `回到第 ${rn} 次运行`, meta: '不存在', keys: '回到 运行 run', run: () => backToRun(rn) });
     const board = session.chip === 'esp32s3' ? 'ESP32-S3-DevKitC-1' : 'ESP32-C3-DevKitM-1';
     out.push({ id: 'part:board', group: '零件', label: board, meta: '开发板', keys: 'board 开发板 esp32', run: () => select('part', 'board') });
     for (const p of session.scene.parts) {

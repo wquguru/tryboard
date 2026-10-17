@@ -1,6 +1,6 @@
 // ① 采购（P0-07）+ 买完摆上实验台（P0-09）。
 // 左树：清单分组（必选 / 建议 / 外壳），合计参考价；中间：零件平铺（未选的建议件虚线）；
-// 右栏：规则检查 + 选中零件详情；工具条：切模版、换开发板；时间线：清单变更，点回去 = 重放。
+// 右栏：规则检查 + 选中零件详情；工具条：切模板、换开发板；时间线：清单变更，点回去 = 重放。
 import type { SceneSpec } from '../../board3d';
 import { BOARDS, CHECKED_AT, PARTS, PART_BY_ID, getPart, type Kind, type Part } from '../../catalog/parts';
 import { PROCURE_TEMPLATES, bomTotal, getTemplate } from '../../catalog/templates';
@@ -25,7 +25,7 @@ export function loadBom(work: string): BomHistory {
     const h = JSON.parse(localStorage.getItem(BOM_KEY(work)) ?? 'null');
     if (validHistory(h)) return h;
   } catch {
-    /* 存的东西坏了：回到模版默认 */
+    /* 存的东西坏了：回到模板默认 */
   }
   return initialHistory(PROCURE_TEMPLATES.some((t) => t.id === work) ? work : 'blank');
 }
@@ -63,15 +63,15 @@ const KIND: Record<Kind, string> = {
   audio: '声音',
   power: '电源',
   cable: '线材',
-  passive: '阻容 / 小件',
+  passive: '阻容小件',
   module: '模块',
-  proto: '面包板 / 原型',
+  proto: '面包板和原型',
   enclosure: '外壳',
 };
 const SIM: Record<Part['sim']['level'], string> = {
-  verified: '模拟器验证过：有验收固件跑过这个模型',
-  estimated: '行为近似：只进估算，读数不一定准',
-  none: '模拟器里没有它：只算进清单和规则',
+  verified: '仿真验证：有验收固件跑过这个模型',
+  estimated: '行为模拟：模型是近似的，读数不一定准',
+  none: '必须上真机：模拟器里没有它，只算进清单和规则',
 };
 const TPL_SHORT: Record<string, string> = { weather: '气象站', spin: '小黄', lens: '透镜小人', usbkey: '小键盘', lamp: '旋钮台灯', ruler: '超声波尺子', tilt: '体感小人', blank: '空白' };
 
@@ -138,10 +138,10 @@ function linesOf(b: Bom): Line[] {
     const group = part.kind === 'enclosure' ? 'case' : required ? 'req' : 'sug';
     out.push({ partId, part, qty: p?.qty ?? qty, why, group, required, checked: !!p });
   };
-  // 开发板一行永远在最上面：模版里的板子换过就显示换后的
+  // 开发板一行永远在最上面：模板里的板子换过就显示换后的
   const boardLine = [...t.required, ...t.suggested].find((l) => getPart(l.partId).kind === 'board');
-  add(b.board, 1, b.board === t.board ? (boardLine?.why ?? '跑固件') : `换过的开发板（模版是 ${shortName(t.board)}）`, true);
-  // 换成自带同款器件的板（微雪圆屏板自带 GC9A01）：模版的必选件降为可去掉的建议件，R29 说为什么
+  add(b.board, 1, b.board === t.board ? (boardLine?.why ?? '跑固件') : `换过的开发板（模板里是 ${shortName(t.board)}）`, true);
+  // 换成自带同款器件的板（微雪圆屏板自带 GC9A01）：模板的必选件降为可去掉的建议件，R29 说为什么
   const builtin = getPart(b.board).board?.builtin ?? [];
   for (const l of t.required) {
     if (getPart(l.partId).kind === 'board') continue;
@@ -187,7 +187,7 @@ export function shopStep(): StepImpl {
       else select(l.partId);
       return;
     }
-    // 模版必选、但新板子上已经焊了的件：日志里的普通 remove 会被"必选不能去"拦下，按 R29 的一键去掉记
+    // 模板必选、但新板子上已经焊了的件：日志里的普通 remove 会被"必选不能去"拦下，按 R29 的一键去掉记
     const builtin = !!getPart(bom().board).board?.builtin?.some((x) => x.partId === l.partId);
     if (l.checked && builtin) commit({ t: 'fix', fix: { action: 'remove', partId: l.partId }, rule: 'R29' });
     else commit(l.checked ? { t: 'remove', partId: l.partId } : { t: 'add', partId: l.partId });
@@ -258,11 +258,11 @@ ${group('case', '外壳')}
   /** 开发板的规格与板载占用（P1-12）：换板时一眼看出差在哪 */
   function boardSpec(part: Part) {
     const b = part.board!;
-    const USB = { native: '芯片原生 USB', uart: 'USB 转串口芯片', both: '原生 USB + USB 转串口（两个口）' } as const;
+    const USB = { native: '芯片原生 USB', uart: 'USB 转串口芯片', both: '原生 USB 和 USB 转串口（两个口）' } as const;
     const psram = b.psram === 'none' || b.psramMB === 0 ? '无' : b.psramMB === null || b.psram === null ? '待核' : `${b.psramMB} MB（${b.psram === 'octal' ? '八线，占 GPIO33–37' : '四线'}）`;
     const gpios = (part.pins ?? []).filter((p) => p.gpio !== undefined).length;
     const occ = b.onboard.map((o) => `GPIO${o.gpio} ${esc(o.what)}`).join('<br>');
-    const todo = part.todo.filter((t) => t.startsWith('board') || t.startsWith('pins')).map((t) => esc(t)).join('<br>');
+    const todo = part.todo.filter((t) => t.startsWith('board') || t.startsWith('pins')).map((t) => esc(t.replace(/^[\w.]+：/, ''))).join('<br>');
     return `${sec('板子')}${b.version ? kv('版本', esc(b.version)) : ''}${kv('flash', b.flashMB === null ? '待核' : `${b.flashMB} MB`)}${kv('PSRAM', psram)}${kv('USB', b.usb ? USB[b.usb] : '待核')}${kv('引出 GPIO', part.pins ? String(gpios) : '待核')}
 ${occ ? kvT('板载占用', occ) : ''}${todo ? kvT('待核', todo) : ''}
 <div class="btns">${b.urls.map((u, i) => `<a class="btn" href="${esc(u)}" target="_blank" rel="noopener noreferrer">资料 ${i + 1} ↗</a>`).join('')}</div>`;
@@ -279,13 +279,13 @@ ${occ ? kvT('板载占用', occ) : ''}${todo ? kvT('待核', todo) : ''}
     const all = evaluate(ruleInput(b));
     const probs = all.filter((f) => f.level !== 'ok').sort((x, y) => (x.level === y.level ? 0 : x.level === 'block' ? -1 : 1));
     const oks = all.filter((f) => f.level === 'ok');
-    const finding = (f: Finding, i: number) => `<div class="rf ${f.level}"><div class="rf-h"><span class="mk">${f.level === 'block' ? '✗' : '!'}</span><span class="rf-t">${f.level === 'block' ? '阻断' : '提醒'} · ${esc(f.title)}</span><span class="mono muted">${f.id}</span></div>
+    const finding = (f: Finding, i: number) => `<div class="rf ${f.level}"><div class="rf-h"><span class="mk">${f.level === 'block' ? '✗' : '!'}</span><span class="rf-t">${f.level === 'block' ? '跑不起来' : '提醒'} · ${esc(f.title)}</span><span class="mono muted">${f.id}</span></div>
 <div class="rf-d">${esc(f.detail)}</div><div class="rf-s">可信度：${esc(f.confidence)} · ${esc(f.source)}</div>${f.fix && PART_BY_ID[f.fix.partId] ? `<button type="button" class="btn primary edit-only" data-fix="${i}">${esc(fixLabel(f))}</button>` : ''}</div>`;
     const rules = `${sec('规则检查')}${
       probs.length
         ? `<div class="verdict-line ${probs.some((f) => f.level === 'block') ? 'bad' : 'warn'}">${probs.length} 条提醒${probs.some((f) => f.level === 'block') ? `，其中 ${probs.filter((f) => f.level === 'block').length} 条会让作品跑不起来` : ''}</div>${probs.map(finding).join('')}`
         : `<div class="verdict-line ok">✓ 清单没问题</div>`
-    }<details class="oks" ${openGroups.ok ? 'open' : ''}><summary>${oks.length} 条规则通过</summary>${oks.map((f) => `<div class="res ok"><span class="mk">✓</span><span><span class="mono">${f.id}</span> ${esc(f.title)}</span></div>`).join('')}</details>`;
+    }<details class="oks" ${openGroups.ok ? 'open' : ''}><summary>${oks.length} 条规则通过</summary>${oks.map((f) => `<div class="res ok"><span class="mk">✓</span><span>${esc(f.title)} <span class="mono muted">${f.id}</span></span></div>`).join('')}</details>`;
 
     const id = selected();
     const part = id ? PART_BY_ID[id] : undefined;
@@ -304,8 +304,8 @@ ${part.i2cAddr ? kv('I2C 地址', `${hex(part.i2cAddr.default)}${part.i2cAddr.al
 ${part.sizeMm ? kv('尺寸', `${part.sizeMm[0]} × ${part.sizeMm[1]}${part.sizeMm[2] !== null ? ' × ' + part.sizeMm[2] : ''} mm`) : ''}
 ${part.board ? boardSpec(part) : ''}
 ${sec('参考价')}${kv(`参考价${qty > 1 ? ` ×${qty}` : ''}`, range(pr.lo * qty, pr.hi * qty))}${kv('核价日期', esc(pr.checkedAt))}
-<p class="note">参考价，${esc(pr.source)}${pr.verified ? '' : '。'}以店铺实际为准。</p>
-${sec('模拟程度')}<div class="field sim-${part.sim.level}">${SIM[part.sim.level]}${part.sim.model ? `<div class="muted">${esc(part.sim.model)}</div>` : ''}</div>
+<p class="note">参考价：${esc(pr.source)}。以店铺实际为准。</p>
+${sec('模拟程度')}<div class="field sim-${part.sim.level}">${SIM[part.sim.level]}</div>
 ${sec('为什么需要')}<p class="why">${esc(l?.why ?? '不在当前清单里')}${l ? (l.required ? ' <span class="tag">必选</span>' : l.checked ? '' : ' <span class="tag off">未选</span>') : ''}</p>
 ${part.note ? `<p class="note">${esc(part.note)}</p>` : ''}
 ${sec('去店铺搜')}<div class="btns"><a class="btn" href="${esc(part.searchUrl.taobao)}" target="_blank" rel="noopener noreferrer">淘宝搜索 ↗</a><a class="btn" href="${esc(part.searchUrl.szlcsc)}" target="_blank" rel="noopener noreferrer">立创商城搜索 ↗</a></div>
@@ -318,7 +318,7 @@ ${sec('去店铺搜')}<div class="btns"><a class="btn" href="${esc(part.searchUr
       btn.onclick = () => {
         const f = probs[Number(btn.dataset.fix)];
         if (commit({ t: 'fix', fix: f.fix!, rule: f.id })) {
-          c.shell.toast(`${fixLabel(f).replace('一键', '已')}（${f.id}）`);
+          c.shell.toast(`${fixLabel(f).replace('一键', '已')}：${f.title}`);
           select(f.fix!.partId);
         }
       };
@@ -351,7 +351,7 @@ ${warn}
 <details class="oks"><summary>开孔与定位（${L.features.bottom.length + L.features.lid.length} 处）</summary>${[...L.features.bottom.map((f) => `底：${f}`), ...L.features.lid.map((f) => `盖：${f}`)].map((f) => `<div class="res na"><span class="mk">·</span><span>${esc(f)}</span></div>`).join('')}</details>
 <details class="oks"><summary>用到的零件尺寸</summary>${sizes}</details>
 <div class="btns"><button type="button" class="btn primary" data-export="stl">导出 STL</button><button type="button" class="btn" data-export="3mf">导出 3MF</button></div>
-<p class="note" id="caseOut">${caseOut ? `<span class="${caseOut.ok ? 'okc' : 'bad'}">${esc(caseOut.text)}</span>` : '导出前会用 three.js 读回一遍校验。3MF 带两个零件（底壳、顶盖），已按打印朝向摆好；拿去打印服务上传询价。'}</p>`;
+<p class="note" id="caseOut">${caseOut ? `<span class="${caseOut.ok ? 'okc' : 'bad'}">${esc(caseOut.text)}</span>` : '3MF 含底壳、顶盖，已按打印朝向摆好，可直接上传打印服务询价。'}</p>`;
   }
   function setCase(t: string, patch: Partial<CaseParams>) {
     const c = ctx!;
@@ -377,7 +377,7 @@ ${warn}
         const fmt = b.dataset.export as 'stl' | '3mf';
         const out = el.querySelector('#caseOut');
         b.disabled = true;
-        if (out) out.textContent = `生成 ${fmt.toUpperCase()} 中（第一次要下载 Manifold，约 0.5 MB）…`;
+        if (out) out.textContent = `正在生成外壳 ${fmt.toUpperCase()}…`;
         try {
           const r = await exportCase(t, ctx!.store.get().bom, caseParamsOf(t), fmt);
           download(r.name, r.bytes, fmt === 'stl' ? 'model/stl' : 'model/3mf');
@@ -427,7 +427,7 @@ ${warn}
     const b = bom();
     const box = document.createElement('div');
     box.className = 'board-pick';
-    box.innerHTML = `<div class="sec">换开发板</div>${BOARDS.map((p) => `<button type="button" class="tn ${p.id === b.board ? 'on' : ''}" data-id="${p.id}"><span class="tn-l">${esc(p.name)}</span><span class="tn-m">${range(p.price.lo, p.price.hi)}</span></button>`).join('')}<p class="note">换板不改接线：引脚冲突由规则检查当场说。</p>`;
+    box.innerHTML = `<div class="sec">换开发板</div>${BOARDS.map((p) => `<button type="button" class="tn ${p.id === b.board ? 'on' : ''}" data-id="${p.id}"><span class="tn-l">${esc(p.name)}</span><span class="tn-m">${range(p.price.lo, p.price.hi)}</span></button>`).join('')}<p class="note">换板不改接线：有引脚冲突会在规则检查里列出。</p>`;
     box.querySelectorAll<HTMLButtonElement>('button[data-id]').forEach(
       (el) =>
         (el.onclick = () => {
@@ -479,8 +479,8 @@ ${warn}
     const c = ctx!;
     const b = bom();
     const p = placement(b);
-    const power = p.ext5v ? 'USB + 外接 5 V' : 'USB';
-    const skipped = p.skipped.length ? `；${p.skipped.map(partLabel).join('、')}没有默认接线，没摆` : '';
+    const power = p.ext5v ? 'USB 和外接 5 V' : 'USB';
+    const skipped = p.skipped.length ? `；${p.skipped.map(partLabel).join('、')}没有默认接线，没摆上台` : '';
     if (b.template !== c.work.id) {
       // 清单换了作品：固件跟着作品走，换到那个作品的工作台（整页重载，DECISIONS 2026-10-16 外壳）
       const target = b.template as WorkId;

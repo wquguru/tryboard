@@ -36,10 +36,10 @@ ${lab.join('')}
 <path d="M420 420 L420 452 M432 420 L432 452 M444 420 L444 452 M676 420 L676 452 M688 420 L688 452 M700 420 L700 452" stroke="#C9C6BF" stroke-width="4" stroke-linecap="round"/>
 <circle cx="656" cy="86" r="22" fill="none" stroke="#FF7A1A" stroke-width="1.5" stroke-dasharray="3 4"/>
 ${envBoxSvg}
-<text data-k="caption" x="24" y="34" fill="#C9D6CF" class="tb-mono" font-size="12" font-weight="700">weather · 成品 · 同一份固件</text>
+<text data-k="caption" x="24" y="34" fill="#C9D6CF" class="tb-mono" font-size="12" font-weight="700">气象站 · 成品 · 和实验台同一份固件</text>
 </svg>
-<button type="button" class="tb-hit" data-k="boot" aria-label="按住顶部按键（BOOT）" style="left:65.6%;top:15.4%;width:6%;height:9%"></button>
-<div class="tb-tag" style="left:65.6%;top:7%">按键换单位</div>
+<button type="button" class="tb-hit" data-k="boot" aria-label="按 BOOT（顶部按键）" style="left:65.6%;top:15.4%;width:6%;height:9%"></button>
+<div class="tb-tag" style="left:65.6%;top:7%">按 BOOT 换单位</div>
 ${envButtons}
 </div>`,
   );
@@ -57,8 +57,8 @@ ${envButtons}
     update(f: LiveFrame, roomTemp: number, sensorOffset: number) {
       q('envTemp').textContent = roomTemp.toFixed(1);
       q('caption').textContent = sensorOffset
-        ? `weather · 成品 · 传感器贴着芯片，读到 ${(roomTemp + sensorOffset).toFixed(1)} ℃（室温 ${roomTemp.toFixed(1)}）`
-        : 'weather · 成品 · 同一份固件';
+        ? `气象站 · 成品 · 传感器贴着芯片，读到 ${(roomTemp + sensorOffset).toFixed(1)} ℃（室温 ${roomTemp.toFixed(1)}）`
+        : '气象站 · 成品 · 和实验台同一份固件';
       q('caption').setAttribute('fill', sensorOffset ? '#FFB27A' : '#C9D6CF');
       const a = servoAngle(f.pwm, opts.servoPin);
       q('needle').setAttribute('transform', `rotate(${a === null ? -90 : a - 180} 560 236)`);

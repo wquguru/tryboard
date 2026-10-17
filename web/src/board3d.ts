@@ -2341,7 +2341,7 @@ export function createBench(container: HTMLElement): Bench {
       jumper(grp, pin, new THREE.Vector3(colX(c), top, rowZ(9)), color, `pot:${end}`, 20 + (c - col) * 2, 6);
       addRole(apiId(pin), role);
     }
-    label(grp, p.label ?? `电位器 · 滑片 → IO${p.pin}（ADC）· 拖动旋钮`, new THREE.Vector3(colX(col), 36, rowZ(9) + 6));
+    label(grp, p.label ?? `电位器 · 滑片接 IO${p.pin}（ADC）· 拖动旋钮`, new THREE.Vector3(colX(col), 36, rowZ(9) + 6));
     pots.push({ pin: p.pin, knob: m.knob, hit: m.hit, v: 0.36 });
     m.knob.rotation.y = -(0.36 - 0.5) * 1.5 * Math.PI;
   }
@@ -2397,7 +2397,7 @@ export function createBench(container: HTMLElement): Bench {
       addWire(grp, [a, lift(a, h), new THREE.Vector3((a.x + b.x) / 2, h + 2, (a.z + b.z) / 2 + Math.sign(bz) * 4), lift(b, h - 2), b], color, pin, `buzzer:${end}`);
       addRole(apiId(pin), role);
     });
-    label(grp, p.label ?? `无源蜂鸣器 · I/O → IO${p.pin}`, new THREE.Vector3(bx, 6, bz + Math.sign(bz) * 20));
+    label(grp, p.label ?? `无源蜂鸣器 · I/O 接 IO${p.pin}`, new THREE.Vector3(bx, 6, bz + Math.sign(bz) * 20));
     buzzers.push({ pin: p.pin, membrane: m.membrane, waves: m.waves, waveMat: m.waveMat, on: false });
   }
 
@@ -2453,7 +2453,7 @@ export function createBench(container: HTMLElement): Bench {
     ];
     tableWires(grp, m.grp, m.plugAt, m.labels, 'encoder', ends, bz);
     // 标注放在模块外侧、低一点，不挡旋钮
-    label(grp, p.label ?? `EC11 编码器 · CLK IO${p.a} DT IO${p.b}${p.sw !== undefined ? ` SW IO${p.sw}` : ''} · 拖 / 滚旋钮`, new THREE.Vector3(bx + 46, 4, bz + Math.sign(bz) * 6));
+    label(grp, p.label ?? `EC11 编码器 · CLK IO${p.a} DT IO${p.b}${p.sw !== undefined ? ` SW IO${p.sw}` : ''} · 拖动或滚轮转旋钮`, new THREE.Vector3(bx + 46, 4, bz + Math.sign(bz) * 6));
     encoder = { knob: m.knob, hit: m.hit, pos: 0, pushed: false, y0: m.knobY };
   }
 
@@ -2474,9 +2474,9 @@ export function createBench(container: HTMLElement): Bench {
     shadow.position.set(bx, shadow.position.y, bz);
     grp.add(shadow);
     flatWires(grp, 'ws2812', m, [
-      ['5V', WIRE.vcc, '5V', '灯条供电（5 V）'],
-      ['IO' + p.pin, WIRE.sig, 'DIN', '灯条数据（经 74AHCT125 升到 5 V）'],
-      ['GND', WIRE.gnd, 'GND', '灯条地'],
+      ['5V', WIRE.vcc, '5V', '灯带供电（5 V）'],
+      ['IO' + p.pin, WIRE.sig, 'DIN', '灯带数据（经 74AHCT125 升到 5 V）'],
+      ['GND', WIRE.gnd, 'GND', '灯带地'],
     ], side);
     label(grp, p.label ?? `WS2812 × ${n} · DIN IO${p.pin}（RMT）`, new THREE.Vector3(bx, 4, bz + side * 12));
     const st = { pin: p.pin, lenses: m.lenses, light: m.light };
@@ -2506,7 +2506,7 @@ export function createBench(container: HTMLElement): Bench {
     const ends: [string, number, string, string][] = [
       ['5V', WIRE.vcc, 'VCC', 'HC-SR04 供电（5 V）'],
       ['IO' + p.trig, WIRE.sig, 'Trig', 'HC-SR04 Trig（≥10 µs 高脉冲）'],
-      ['IO' + p.echo, 0x2f8fd8, 'Echo', div ? 'HC-SR04 Echo（经 1k/2k 分压）' : 'HC-SR04 Echo（5 V，没分压！）'],
+      ['IO' + p.echo, 0x2f8fd8, 'Echo', div ? 'HC-SR04 Echo（经 1k/2k 分压）' : 'HC-SR04 Echo（5 V 直连，会伤 GPIO）'],
       ['GND', WIRE.gnd, 'GND', 'HC-SR04 地'],
     ];
     ends.forEach(([pin, color, end, role], i) => {
@@ -2526,7 +2526,7 @@ export function createBench(container: HTMLElement): Bench {
         root.add(r);
       }
     }
-    label(grp, p.label ?? `HC-SR04 · Trig IO${p.trig} · Echo IO${p.echo}${div ? '（1k/2k 分压）' : '（5 V 直连！）'} · 拖障碍物`, new THREE.Vector3(sx, 4, sz + 34));
+    label(grp, p.label ?? `HC-SR04 · Trig IO${p.trig} · Echo IO${p.echo}${div ? '（1k/2k 分压）' : '（5 V 直连，会伤 GPIO）'} · 拖障碍物`, new THREE.Vector3(sx, 4, sz + 34));
     const ob = obstacleModel();
     registerPart('obstacle', ob.grp);
     grp.add(ob.grp);
@@ -2575,7 +2575,7 @@ export function createBench(container: HTMLElement): Bench {
       ['GND', WIRE.gnd, 'GND', '功放地'],
       ['IO' + w.bclk, WIRE.scl, 'BCLK', 'I2S BCLK（位时钟）'],
       ['IO' + w.lrc, WIRE.sda, 'LRC', 'I2S WS（声道时钟）'],
-      ['IO' + w.din, WIRE.sig, 'DIN', 'I2S 数据 → 喇叭'],
+      ['IO' + w.din, WIRE.sig, 'DIN', 'I2S 数据（送喇叭）'],
     ], side);
     // 喇叭：再往外 34 mm，焊片朝功放
     const sp = speakerModel();
@@ -2594,7 +2594,7 @@ export function createBench(container: HTMLElement): Bench {
       const w2 = wire([a, a.clone().add(new THREE.Vector3(0, 1, side * 3)), mid, b.clone().add(new THREE.Vector3(0, 1.5, -side * 3)), b], c, `wire:max98357a:${i ? '-' : '+'}~speaker`, [`max98357a:${i ? '-' : '+'}`, 'speaker']);
       root.add(w2.grp);
     });
-    label(grp, p.label ?? `MAX98357A 功放 + 4Ω 喇叭 · BCLK IO${w.bclk} LRC IO${w.lrc} DIN IO${w.din}`, new THREE.Vector3(sx + 62, 8, sz));
+    label(grp, p.label ?? `MAX98357A 功放和 4Ω 喇叭 · BCLK IO${w.bclk} LRC IO${w.lrc} DIN IO${w.din}`, new THREE.Vector3(sx + 62, 8, sz));
     speakers.push({ cone: sp.cone, waves: sp.waves, waveMat: sp.waveMat });
   }
 
@@ -2618,10 +2618,10 @@ export function createBench(container: HTMLElement): Bench {
     flatWires(grp, 'inmp441', m, [
       ['3V3', WIRE.vcc, 'VDD', '麦克风供电'],
       ['GND', WIRE.gnd, 'GND', '麦克风地'],
-      ['GND', WIRE.gnd, 'L/R', 'L/R 接地 = 左声道'],
+      ['GND', WIRE.gnd, 'L/R', 'L/R 接地就是左声道'],
       ['IO' + w.sck, WIRE.scl, 'SCK', 'I2S SCK（位时钟）'],
       ['IO' + w.ws, WIRE.sda, 'WS', 'I2S WS（声道时钟）'],
-      ['IO' + w.sd, WIRE.sig, 'SD', 'I2S 数据 ← 麦克风'],
+      ['IO' + w.sd, WIRE.sig, 'SD', 'I2S 数据（来自麦克风）'],
     ], side);
     label(grp, p.label ?? `INMP441 麦克风 · SCK IO${w.sck} WS IO${w.ws} SD IO${w.sd} · L/R 接地`, new THREE.Vector3(bx, 22, bz + side * 16));
     mics.push({ ring: m.ring, ringMat: m.ringMat });
@@ -2761,7 +2761,7 @@ export function createBench(container: HTMLElement): Bench {
         // 和圆屏同台（体感小人）：圆屏占着 16 列往后，六轴挪到圆屏右边，不然被屏挡住、拖不到
         const col = spec.parts.some((x) => x.type === 'gc9a01') ? 27 : i2cCol - 4;
         buildImu(parts, p, col);
-        label(parts, p.label ?? `${p.type === 'mpu6050' ? 'MPU6050' : 'QMI8658'} · I2C 0x${p.addr.toString(16)} · SDA IO${p.sda} SCL IO${p.scl} · 拖它倾斜台面`, new THREE.Vector3(colX(col + 3.5), 30, rowZ(0) - 10));
+        label(parts, p.label ?? `${p.type === 'mpu6050' ? 'MPU6050' : 'QMI8658'} · I2C 0x${p.addr.toString(16)} · SDA IO${p.sda} SCL IO${p.scl} · 拖动：倾斜台面`, new THREE.Vector3(colX(col + 3.5), 30, rowZ(0) - 10));
         i2cCol -= 10;
       }
       if (p.type === 'bme280') {

@@ -1,5 +1,5 @@
 // ③ 组装：3D 视图（app/asm3d.ts，参数化外壳 + 拖到槽位吸附，P1-07）；WebGL 不可用或 ?asm=svg 时用
-// views/assembly.ts 的 SVG 等轴测兜底。两种视图共用 views/asmcore.ts 的规则和 templates.ts 的模版：
+// views/assembly.ts 的 SVG 等轴测兜底。两种视图共用 views/asmcore.ts 的规则和 templates.ts 的模板：
 // 左树 = 装配层（从下往上）；右栏 = 选中层说明 + "装法会改变什么"（估算）；时间线 = 每装一层一步 + 开机复测，可回退。
 // 回退不存快照：清空后按时间线重放前 i 步（确定性重算）。开机复测用装好的状态（传感器偏移进 env）跑同一份固件验收。
 import { createAssembly } from '../../views/assembly';
@@ -18,7 +18,7 @@ import { OBSTACLE_LABEL, antennaLossDb, i2cLoad, i2cText, loadCaseHarness, saveC
 type SvgAsm = ReturnType<typeof createAssembly>;
 type AsmView = SvgAsm | Assembly3D;
 const is3d = (a: AsmView): a is Assembly3D => (a as Assembly3D).kind === '3d';
-/** 有参数化外壳布局（enclosure.ts）的模版才走 3D；P2-09 的新作品先用平面装配 */
+/** 有参数化外壳布局（enclosure.ts）的模板才走 3D；P2-09 的新作品先用平面装配 */
 const HAS_3D = new Set(['weather', 'spin', 'lens']);
 /** 3D 装配要 WebGL2；?asm=svg 强制用平面视图（测试 / 兜底） */
 function want3d() {
@@ -89,7 +89,7 @@ export function restoreAssembly(ctx: StepCtx) {
   if (!T) return;
   const list = loadEntries(ctx.work.id);
   const places = list.filter((e): e is Extract<Entry, { kind: 'place' }> => e.kind === 'place');
-  // 存的顺序必须是模版的从下往上顺序，否则当作没装
+  // 存的顺序必须是模板的从下往上顺序，否则当作没装
   const okOrder = places.every((p, i) => T.parts[i]?.id === p.id);
   if (places.length && okOrder) ctx.store.set({ assembly: summarize(T, places, lastIsTest(list), loadCaseHarness(ctx.work.id)) });
   else if (list.length) saveEntries(ctx.work.id, []);
@@ -105,36 +105,36 @@ export function unlocked(ctx: StepCtx) {
   return n > 0 && passedCount(ctx) === n;
 }
 
-/** 装法会改变什么（估算）：按模版、按零件说清后果 */
+/** 装法会改变什么（估算）：按模板、按零件说清后果 */
 const IMPACT: Record<string, Record<string, string[]>> = {
   weather: {
     shell: ['USB-C 开孔朝后：线从背后出，不挡表盘'],
     board: ['开发板卡扣位置决定了芯片在哪：芯片满载时是壳里最热的地方'],
-    bme: [`放通风口旁：读到的就是室温，表盘、彩灯、报警都按真实温度`, `放开发板旁：贴着芯片，读数偏高约 ${CHIP_HEAT_OFFSET} ℃ → 指针偏右、28 ℃ 以上就变红、27.5 ℃ 室温就会报警；验收 06 的温度项（±0.02 ℃）过不了`],
+    bme: [`放通风口旁：读到的就是室温，表盘、彩灯、报警都按真实温度`, `放开发板旁：贴着芯片，读数偏高约 ${CHIP_HEAT_OFFSET} ℃，室温 27.5 ℃ 就会报警，检查点 06 的温度项过不了`],
     servo: ['舵机轴要对准表盘中心，否则指针扫不到刻度两端'],
     oled: ['排线 8 cm，需要 ≥ 6 cm 才够得到前面板'],
     front: ['前面板合上后内腔用了 27 / 32 mm'],
   },
   spin: {
-    servo: ['先回中位再装舵盘：固件说"正面"就是正面', `直接按上去：舵盘可能错一个齿，正面偏 ${(360 / 25).toFixed(1)}°（只改成品画面，估算）`],
+    servo: ['先回中位再装舵盘：固件说「正面」就是正面', `直接按上去：舵盘可能错一个齿，正面偏 ${(360 / 25).toFixed(1)}°`],
   },
   usbkey: {
-    board: ['USB / OTG 口朝背面开孔：线插得进去，电脑认出键盘', '转了 180° 装：USB 口顶着前墙，线插不进去，成品里电脑看不到设备'],
-    plate: ['定位板用塑料：金属定位板盖住 WROOM 天线会让 Wi-Fi 信号掉几十 dB（下面"线束与天线"可以试，估算）'],
+    board: ['USB / OTG 口朝背面开孔：线插得进去，电脑认出键盘', '装反 180°：USB 口顶着前墙，线插不进去，成品里电脑看不到设备'],
+    plate: ['定位板用塑料：金属定位板盖住 WROOM 天线，Wi-Fi 信号会掉几十 dB（估算），可以在下面「线束与天线」里试'],
   },
   lens: {
-    dome: ['高档离屏 8 mm：放大约 1.35×，像立体的', '低档贴着屏：放大约 1.08×，看着是平的（只改成品画面，估算）'],
+    dome: ['高档离屏 8 mm：放大约 1.35×，看着更立体', '低档贴着屏：放大约 1.08×，看着是平的'],
   },
   lamp: {
-    strip: ['贴在导光柱上：离灯罩 15 mm，光在乳白罩上散成均匀的一片', '贴着灯罩内壁：罩子上一排 8 个刺眼亮点（只改成品画面，估算）'],
+    strip: ['贴在导光柱上：离灯罩 15 mm，光在乳白罩上散成均匀的一片', '贴着灯罩内壁：罩子上一排 8 个刺眼亮点'],
     knob: ['旋钮轴要露出面板 ≥ 6 mm，不然手指捏不住、按不下去'],
   },
   ruler: {
-    sonar: ['探头伸出前面板孔：量到的就是前方物体', `缩在孔后 6 mm：回波先从孔壁回来，读数变成约 ${SONAR_BLOCK_CM} cm，蜂鸣器一直响——开机复测里模拟器的 HC-SR04 也只看到 ${SONAR_BLOCK_CM} cm（估算）`],
+    sonar: ['探头伸出前面板孔：量到的就是前方物体', `缩在孔后 6 mm：回波先从孔壁回来，读数约 ${SONAR_BLOCK_CM} cm，蜂鸣器一直响，复测也一样（估算）`],
     board: ['Echo 线上的 1 kΩ / 2 kΩ 分压电阻跟着开发板一起装，别装壳时漏掉'],
   },
   tilt: {
-    imu: ['平贴底板、箭头朝前：往哪边歪，小豆就往哪边滑', '转了 180° 装反：俯仰、横滚都反号，小豆往高处爬——开机复测里模拟器的六轴也是反着装的'],
+    imu: ['平贴底板、箭头朝前：往哪边歪，小豆就往哪边滑', '装反 180°：俯仰、横滚方向全反，小豆往高处爬，复测里也一样'],
   },
 };
 
@@ -177,16 +177,16 @@ export function assembleStep(): StepImpl {
     const hx = harnessEffects(c.work.id, hz);
     const lv = (v: string) => (v === 'ok' ? ['ok', '✓'] : v === 'marginal' ? ['warn', '!'] : ['bad', '✗']);
     const i2c = hx.i2c
-      ? `<div class="kv col"><span class="k">I2C 排线总长（开发板 → OLED、BME280）</span><label class="slider"><input type="range" id="hzWire" min="8" max="150" step="1" value="${hz.i2cCm}" aria-label="I2C 排线总长" /><output class="mono" id="hzWireV">${hz.i2cCm} cm</output></label></div>
+      ? `<div class="kv col"><span class="k">I2C 排线总长（开发板到 OLED、BME280）</span><label class="slider"><input type="range" id="hzWire" min="8" max="150" step="1" value="${hz.i2cCm}" aria-label="I2C 排线总长" /><output class="mono" id="hzWireV">${hz.i2cCm} cm</output></label></div>
 <div class="res ${lv(hx.i2c.verdict)[0]}" id="hzWireRes"><span class="mk">${lv(hx.i2c.verdict)[1]}</span><span>${esc(i2cText(hx.i2c))}</span></div>`
       : '';
     const obs = (['none', 'battery', 'metal'] as Obstacle[]).map((o) => `<button type="button" class="segb" data-obs="${o}" aria-pressed="${hz.obstacle === o}">${esc(o === 'metal' ? '金属件' : OBSTACLE_LABEL[o])}</button>`).join('');
     const ant = `<div class="kv col"><span class="k">WROOM 天线旁边放了什么</span><div class="seg" role="radiogroup" aria-label="天线旁边">${obs}</div></div>
 ${hz.obstacle !== 'none' ? `<div class="kv col"><span class="k">离天线区多远（${esc(OBSTACLE_LABEL[hz.obstacle])}）</span><label class="slider"><input type="range" id="hzDist" min="0" max="30" step="1" value="${hz.distMm}" aria-label="离天线多远" /><output class="mono" id="hzDistV">${hz.distMm} mm</output></label></div>` : ''}
-<div class="res ${lv(hx.wifi.level)[0]}" id="hzAntRes"><span class="mk">${lv(hx.wifi.level)[1]}</span><span>天线遮挡 ${hx.antennaDb} dB → ${esc(hx.wifi.text)}</span></div>`;
+<div class="res ${lv(hx.wifi.level)[0]}" id="hzAntRes"><span class="mk">${lv(hx.wifi.level)[1]}</span><span>天线遮挡 ${hx.antennaDb} dB，${esc(hx.wifi.text)}</span></div>`;
     const sim = c.session.harnessText.trim();
     return `${sec('线束与天线 · 估算，必须上真机')}${i2c}${ant}
-<p class="note">按确定性公式算：总线电容 = 线长 × 1 pF/cm + 每个器件 10 pF + 10 pF，上升时间 = 0.8473 × 上拉 × 电容；天线：金属件贴着衰减 45 dB、电池 30 dB，20 mm 外不算。模拟器里同一个公式真的会让读数出错、Wi-Fi 连不上。</p>
+<p class="note">按固定公式估算：总线电容 = 线长 × 1 pF/cm + 每个器件 10 pF + 10 pF，上升时间 = 0.8473 × 上拉 × 电容；天线：金属件贴着衰减 45 dB、电池 30 dB，20 mm 外不算。模拟器也用这个公式，读数会真的出错，Wi-Fi 会真的连不上。</p>
 ${sim ? `<p class="note mono" data-k="hzSim">${esc(sim.replace(/\[tryboard\] /g, '模拟器：'))}</p>` : ''}`;
   }
 
@@ -279,7 +279,7 @@ ${sim ? `<p class="note mono" data-k="hzSim">${esc(sim.replace(/\[tryboard\] /g,
     const left = c.work.checkpoints.filter((id) => !(s.checks[id]?.ok && s.checks[id].own));
     el.innerHTML = `<div class="pnl lockcard" role="status"><div class="sec">③ 组装 · 还没解锁</div><p class="ph-t">实验台的检查点全部通过才能组装</p>
 <p class="muted">现在 <b class="mono">${d}/${n}</b>。还差：${left.map((id) => `<span class="mono">${esc(id)}</span> ${esc(c.session.levels.find((l) => l.id === id)?.title ?? '')}`).join('、')}</p>
-<p class="muted">只有你自己上传的固件通过才算（参考固件通过不算），和命令行 <span class="mono">npx tryboard check</span> / <span class="mono">tools/check.py</span> 同一套判定。</p>
+<p class="muted">只有你自己上传的固件通过才算，参考固件通过不算。判定和命令行 <span class="mono">npx tryboard check</span> 相同。</p>
 <div class="btns"><button type="button" class="btn primary" id="toBench">回实验台</button></div></div>`;
     el.querySelector<HTMLButtonElement>('#toBench')!.onclick = () => {
       c.store.set({ selection: { kind: 'checkpoint', id: left[0] ?? c.work.checkpoints[0] } });
@@ -292,7 +292,7 @@ ${sim ? `<p class="note mono" data-k="hzSim">${esc(sim.replace(/\[tryboard\] /g,
         return `<div class="tn static"><span class="tn-l"><span class="mono">${esc(id)}</span> ${esc(c.session.levels.find((l) => l.id === id)?.title ?? '')}</span><span class="tn-st ${ok ? 'ok' : 'muted'}">${ok ? '✓' : '—'}</span></div>`;
       })
       .join('')}</div></details></div>`;
-    c.shell.props.innerHTML = `${sec('为什么锁着')}<p class="note">组装会把传感器、屏幕、舵机装进外壳，装法会影响读数。先确认固件在台面上每一项都对，装壳后出问题才分得清是固件还是装法。</p>${sec('解锁条件')}${row('检查点', `${d}/${n}`, d === n ? '' : 'bad')}`;
+    c.shell.props.innerHTML = `${sec('为什么锁着')}<p class="note">装法会影响读数。先在台面上确认固件没问题，装壳后出错才分得清是固件还是装法。</p>${sec('解锁条件')}${row('检查点', `${d}/${n}`, d === n ? '' : 'bad')}`;
     c.shell.toolbar.setGroups([]);
     c.shell.timeline.setSteps([{ id: 'lock', icon: '·', label: `检查点 ${d}/${n}，未解锁` }]);
     c.shell.setVerdict(`组装 · 未解锁`, 'idle');
@@ -397,15 +397,15 @@ ${caseLine()}`;
   function effectsLine() {
     const fx = asm!.effects();
     const rows: string[] = [];
-    if (fx.sensorOffset !== undefined) rows.push(row('传感器温漂', fx.sensorOffset ? `+${fx.sensorOffset.toFixed(1)} ℃` : '0 ℃', fx.sensorOffset ? 'bad' : ''));
+    if (fx.sensorOffset !== undefined) rows.push(row('传感器受热偏高', fx.sensorOffset ? `+${fx.sensorOffset.toFixed(1)} ℃` : '0 ℃', fx.sensorOffset ? 'bad' : ''));
     if (fx.hornOffset !== undefined) rows.push(row('舵盘偏角', `${fx.hornOffset.toFixed(1)}°`, fx.hornOffset ? 'bad' : ''));
     if (fx.lensScale !== undefined) rows.push(row('透镜放大', `${fx.lensScale.toFixed(2)}×`, fx.lensScale < 1.2 ? 'bad' : ''));
     if (fx.glare !== undefined) rows.push(row('灯罩亮点', fx.glare ? '有：8 个亮点' : '没有', fx.glare ? 'bad' : ''));
     if (fx.sonarBlock !== undefined) rows.push(row('探头读数', fx.sonarBlock ? `被孔壁截到约 ${fx.sonarBlock} cm` : '量到前方物体', fx.sonarBlock ? 'bad' : ''));
-    if (fx.imuFlip !== undefined) rows.push(row('六轴方向', fx.imuFlip ? '反了：俯仰、横滚反号' : '正', fx.imuFlip ? 'bad' : ''));
-    const how = T!.id === 'weather' ? '温漂会真的进模拟器（开机复测、成品里 BME280 读到的温度）；舵盘、透镜只改成品画面。'
-      : T!.id === 'ruler' || T!.id === 'tilt' ? '这一项会真的进模拟器：开机复测和成品里，传感器看到的就是装好以后的样子。'
-      : '只改成品画面。';
+    if (fx.imuFlip !== undefined) rows.push(row('六轴方向', fx.imuFlip ? '反了：俯仰、横滚方向全反' : '正', fx.imuFlip ? 'bad' : ''));
+    const how = T!.id === 'weather' ? '受热偏高会影响模拟结果：开机复测和成品里，BME280 读到的就是偏高后的温度。'
+      : T!.id === 'ruler' || T!.id === 'tilt' ? '这一项会影响模拟结果：开机复测和成品里，传感器看到的就是装好以后的样子。'
+      : '只改成品画面，不影响模拟结果。';
     return rows.length ? `${sec('装法带进成品 · 估算')}${rows.join('')}<p class="note">${how}</p>` : '';
   }
 
@@ -417,7 +417,7 @@ ${caseLine()}`;
     const fw = firmwareFor(lv);
     const rows = t ? t.rows.map((x) => `<div class="res ${x.ok ? 'ok' : 'bad'}"><span class="mk">${x.ok ? '✓' : '✗'}</span><span>${esc(x.text)}</span></div>`).join('') : '';
     c.shell.props.innerHTML = `${head}${sec('开机复测')}<div class="ph">装好的样子再验一次${lv ? ` <span class="mono">${esc(lv.id)}</span>` : ''}</div>
-<p class="note">${T!.id === 'weather' ? `用装好的状态跑同一份固件：传感器放在哪，模拟器里的 BME280 就读到哪儿的温度（室温 ${lv ? envOf(lv).temp.toFixed(1) : '—'} ℃ + 温漂 ${(asm!.effects().sensorOffset ?? 0).toFixed(1)} ℃）。` : T!.id === 'ruler' ? '用装好的状态跑同一份固件：探头缩在孔里时，模拟器里的 HC-SR04 只能量到孔壁。' : T!.id === 'tilt' ? '用装好的状态跑同一份固件：六轴装反时，模拟器里的 QMI8658 也是反着装的。' : '用装好的状态跑同一份固件。'}按模拟时间跑完再判定。</p>
+<p class="note">${T!.id === 'weather' ? `传感器放在哪，BME280 就读到哪儿的温度：室温 ${lv ? envOf(lv).temp.toFixed(1) : '—'} ℃，受热偏高 ${(asm!.effects().sensorOffset ?? 0).toFixed(1)} ℃。` : T!.id === 'ruler' ? '探头缩在孔里时，HC-SR04 只能量到孔壁。' : T!.id === 'tilt' ? '六轴装反时，读到的俯仰、横滚也是反的。' : '装好后再跑一次同一份固件。'}</p>
 ${row('固件', esc(fw.name))}
 ${row('装配', `${s.placed.length}/${s.total}`, s.placed.length < s.total ? 'bad' : '')}
 <div class="btns"><button type="button" class="btn primary" id="retestBtn" ${testing || s.placed.length < s.total || !lv ? 'disabled' : ''}>${testing ? `复测中 ${testing.progress.toFixed(1)} s` : '开机复测'}</button></div>
@@ -428,7 +428,7 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
   const envOf = (lv: Level) => bootOptions(lv).env ?? { temp: 23.5, humidity: 45, pressure: 101325 };
   function firmwareFor(lv: Level | undefined): { name: string; get: () => Promise<ArrayBuffer> } {
     const own = lv ? ownFirmware[lv.id] : undefined;
-    if (own) return { name: `${own.name}（你验收 ${lv!.id} 用的）`, get: async () => own.buf.slice(0) };
+    if (own) return { name: `${own.name}（你通过「${lv!.title}」时用的）`, get: async () => own.buf.slice(0) };
     const ses = ctx!.session;
     if (ses.fwBuf) return { name: `${ses.fwName}（台面上的固件）`, get: async () => ses.fwBuf!.slice(0) };
     return { name: `参考固件 ${lv?.ref}`, get: () => fetchBuf(`./fw/${lv?.ref}/flash.bin`) };
@@ -463,7 +463,7 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
       const rows = v.results.map((x) => ({ ok: x.ok, text: x.text }));
       if (hx.i2c) rows.push({ ok: hx.i2c.verdict === 'ok', text: `I2C 排线 ${hz.i2cCm} cm：${i2cText(hx.i2c)}（估算，必须上真机）` });
       if (hx.antennaDb) rows.push({ ok: hx.wifi.level !== 'fail', text: `天线遮挡 ${hx.antennaDb} dB：${hx.wifi.text}（估算，必须上真机）` });
-      rows.push({ ok: clean, text: clean ? `装配 ${s.total}/${s.total}，没有警告` : `装配 ${s.total}/${s.total}，有警告（看左边带 ! 的层或线束）` });
+      rows.push({ ok: clean, text: clean ? `装配 ${s.total}/${s.total}，没有警告` : `装配 ${s.total}/${s.total}，有警告` });
       entry = { kind: 'test', ok: v.ok && clean, rows, fingerprint: v.fingerprint, who: fw.name, temp: env.temp };
     } catch (e) {
       entry = { kind: 'test', ok: false, rows: [{ ok: false, text: `运行失败：${e}` }], fingerprint: '—', who: fw.name, temp: env.temp };
@@ -561,7 +561,7 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
     if (!ctx) return;
     if (!asm) {
       if (loading) {
-        ctx.shell.props.innerHTML = `${sec('组装')}<div class="tree-empty">正在生成参数化外壳（Manifold）和 3D 场景…</div>`;
+        ctx.shell.props.innerHTML = `${sec('组装')}<div class="tree-empty">正在生成外壳和 3D 场景…</div>`;
         ctx.shell.setVerdict('组装 · 加载中', 'idle');
       }
       return;
@@ -702,12 +702,12 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
         });
       }
       if (!T) {
-        el.innerHTML = `<div class="pnl lockcard" role="status"><div class="sec">③ 组装</div><p class="ph-t">这个作品没有组装模版</p><p class="muted">空白实验台只跑固件，不装壳。挑一个作品（气象站、小黄、透镜小人）才有组装和成品。</p><div class="btns"><a class="btn primary" href="./app.html?work=weather#assemble">去气象站</a></div></div>`;
+        el.innerHTML = `<div class="pnl lockcard" role="status"><div class="sec">③ 组装</div><p class="ph-t">这个作品没有组装模板</p><p class="muted">空白实验台只跑固件，不装壳。挑一个作品，才有组装和成品。</p><div class="btns"><a class="btn primary" href="./app.html?work=weather#assemble">去气象站</a></div></div>`;
         c.shell.tree.innerHTML = '<div class="tree-empty">没有装配层</div>';
         c.shell.props.innerHTML = `${sec('属性')}<div class="tree-empty">没有可选中的对象</div>`;
         c.shell.toolbar.setGroups([]);
         c.shell.timeline.setSteps([]);
-        c.shell.setNext('开机看成品 →', null, '没有组装模版');
+        c.shell.setNext('开机看成品 →', null, '没有组装模板');
         return;
       }
       if (!unlocked(c)) {

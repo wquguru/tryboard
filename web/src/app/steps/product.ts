@@ -31,7 +31,7 @@ const TAU = 3;
 const FIRST3: Record<string, [string, string][]> = {
   weather: [
     ['认板子和彩灯引脚', 'ESP32-S3-DevKitC-1 的板载 RGB 在 v1.0 是 GPIO48、v1.1 改到 GPIO38；先烧 blink 看灯亮不亮，不亮就改固件里的引脚。'],
-    ['I2C 扫描 + 芯片 ID', '串口 "I2C scan" 一行应有 0x3C 和 0x76。BME280 的 SDO 接高是 0x77；芯片 ID 应为 0x60，0x58 是 BMP280（没有湿度）。'],
+    ['I2C 扫描 + 芯片 ID', '串口「I2C scan」一行应有 0x3C 和 0x76。BME280 的 SDO 接高是 0x77；芯片 ID 应为 0x60，0x58 是 BMP280（没有湿度）。'],
     ['装壳前后各标定一次温度', '旁边放一支温度计，各等 10 分钟对比；差值写进固件当偏移。舵机先单独转到 1.5 ms 中位，再装指针。'],
   ],
   spin: [
@@ -50,8 +50,8 @@ const FIRST3: Record<string, [string, string][]> = {
     ['实测透镜高度', '透镜离屏 8 mm 左右放大约 1.35×（估算）；真透镜焦距不同，拿尺子量一下再定卡槽。'],
   ],
   lamp: [
-    ['先只接灯条、不接旋钮', '烧 lamp-1 的固件，8 颗都亮成暖白再往下走；颜色对调（红绿互换）是 GRB 顺序写错了。'],
-    ['灯条单独供电、共地', '灯条 5 V 接外接电源，地一定要和开发板连在一起；不共地时数据线没有参考，灯会乱闪。'],
+    ['先只接灯带、不接旋钮', '先烧检查点「灯带点亮」的固件，8 颗都亮成暖白再往下走；颜色对调（红绿互换）是 GRB 顺序写错了。'],
+    ['灯带单独供电、共地', '灯带 5 V 接外接电源，地一定要和开发板连在一起；不共地时数据线没有参考，灯会乱闪。'],
     ['旋钮方向和手感', '顺时针变亮才顺手；反了就把 CLK / DT 两根线对调。真 EC11 有机械抖动，PCNT 的 glitch 滤波别关。'],
   ],
   ruler: [
@@ -60,7 +60,7 @@ const FIRST3: Record<string, [string, string][]> = {
     ['探头要露出外壳', '探头缩在孔里时读数会变成几厘米、蜂鸣器一直响；装壳后再对着远处的墙试一次。'],
   ],
   tilt: [
-    ['先读姿态再画', '烧 tilt-1 的固件，平放时俯仰、横滚都接近 0；WHO_AM_I 不是 0x05 先查地址（SA0 接地是 0x6A）。'],
+    ['先读姿态再画', '先烧检查点「读姿态」的固件，平放时俯仰、横滚都接近 0；WHO_AM_I 不是 0x05 先查地址（SA0 接地是 0x6A）。'],
     ['认方向', '把右边放低，横滚应该变正；不对就是模块转了方向，要么转回来，要么在固件里给符号取反。'],
     ['看圆屏颜色对不对', '颜色反了是没开反色（INVON），红蓝对调是 RGB / BGR 顺序配错。'],
   ],
@@ -69,15 +69,15 @@ const FIRST3: Record<string, [string, string][]> = {
 /** 不能模拟的项：网页给不出、只能上真机看 */
 const CANNOT: Record<string, [string, string][]> = {
   weather: [
-    ['OLED 亮度、可视角度', '这里只知道哪些像素亮，不知道多亮'],
+    ['OLED 亮度、可视角度', '这里只算哪些像素亮，不算亮度和视角'],
     ['蜂鸣器音色和音量', '这里是方波示意，真蜂鸣器有谐振峰，音量取决于驱动方式'],
-    ['舵机力矩、抖动和噪声', '指针的惯性是示意（二阶缓动），真 SG90 会抖、有回差'],
-    ['壳内真实温升', `"贴着芯片 +2.5 ℃" 是估算，要拿温度计实测`],
-    ['RGB 实际亮度和导光效果', '固件写的是 0x20 这类低亮度，画面上按最大通道放大到可见'],
+    ['舵机力矩、抖动和噪声', '指针的惯性是示意，真 SG90 会抖、有回差'],
+    ['壳内真实温升', `「贴着芯片偏高 2.5 ℃」是估算，要拿温度计实测`],
+    ['RGB 实际亮度和导光效果', '画面亮度做了放大，真灯会暗得多'],
   ],
   spin: [
     ['舵机力矩带不带得动', '身体重心、舵盘螺丝松紧都影响，网页里不算力'],
-    ['圆屏亮度、可视角度', '这里只有帧缓冲颜色'],
+    ['圆屏亮度、可视角度', '这里只算像素颜色，不算亮度和视角'],
     ['转台噪声和抖动', 'SG90 停住时会微抖，真机才听得到'],
   ],
   usbkey: [
@@ -87,66 +87,66 @@ const CANNOT: Record<string, [string, string][]> = {
   ],
   lens: [
     ['透镜实际放大与畸变', '放大倍数是按卡槽高度估算的'],
-    ['圆屏亮度、可视角度', '这里只有帧缓冲颜色'],
+    ['圆屏亮度、可视角度', '这里只算像素颜色，不算亮度和视角'],
   ],
   lamp: [
     ['灯的真实亮度和色温', '这里按固件写的 0–255 画发光强度，不是光度学计算；灯罩的散光效果是示意'],
     ['EC11 的手感与抖动', '模拟器里旋钮是干净的正交波形，真机触点会抖'],
-    ['电源压降', '满白 480 mA 是估算，长灯条的线损和压降没算'],
+    ['电源压降', '满白 480 mA 是估算，长灯带的线损和压降没算'],
   ],
   ruler: [
-    ['斜面、软物体、窄物体的回波', '这里障碍物是正对探头的平面，真机遇到斜面 / 布料可能测不到'],
+    ['斜面、软物体、窄物体的回波', '这里障碍物是正对探头的平面，真机遇到斜面或布料可能测不到'],
     ['温度对声速的影响', '固件按 343 m/s 算，模拟器也按 343 m/s 出回波'],
     ['蜂鸣器音色和音量', '这里是方波示意'],
   ],
   tilt: [
     ['六轴的零偏、噪声和温漂', '模拟器的读数就是设定的姿态，没有噪声'],
     ['手持时的晃动', '这里的姿态是你拖出来的，真机手一抖小豆也会跟着动'],
-    ['圆屏亮度、可视角度', '这里只有帧缓冲颜色'],
+    ['圆屏亮度、可视角度', '这里只算像素颜色，不算亮度和视角'],
   ],
 };
 
 const PARTS: Record<string, { id: string; name: string; about: string }[]> = {
   weather: [
     { id: 'shell', name: '外壳 70×50×32 mm', about: '3D 打印外壳（估算尺寸）。前面板最后合上；右侧是通风口，BME280 应该装在它旁边。' },
-    { id: 'dial', name: '表盘指针 · SG90', about: 'GPIO4，50 Hz，脉宽 0.5–2.5 ms → 0–40 ℃。指针角度直接来自固件输出的 PWM，惯性是示意。' },
-    { id: 'oled', name: 'OLED 0.96″', about: 'SSD1306（I2C 0x3C）。画面就是模拟器里的帧缓冲：大字温度 + 湿度气压。' },
+    { id: 'dial', name: '表盘指针 · SG90', about: 'GPIO4，50 Hz，脉宽 0.5–2.5 ms 对应 0–40 ℃。指针角度直接来自固件输出的 PWM，惯性是示意。' },
+    { id: 'oled', name: 'OLED 0.96″', about: 'SSD1306（I2C 0x3C）。画面就是固件画出来的：大字温度，下面是湿度和气压。' },
     { id: 'rgb', name: '板载 RGB · 导光柱', about: 'WS2812（GPIO48）：低于 18 ℃ 蓝，低于 28 ℃ 绿，否则红。' },
     { id: 'buzzer', name: '无源蜂鸣器', about: 'GPIO5，≥ 30 ℃ 报警 2.7 kHz，响 200 ms 停 200 ms；降到 29 ℃ 以下停。默认静音。' },
     { id: 'boot', name: 'BOOT 键', about: 'GPIO0，按下接地：切换 OLED 上的 ℃/℉（串口和表盘始终是摄氏度）。' },
     { id: 'bme', name: 'BME280', about: '温度 / 湿度 / 气压，I2C 0x76。装在哪决定它读到的是不是室温。' },
   ],
   spin: [
-    { id: 'body', name: '小黄身体', about: '原创形象：黄色胶囊身体、头顶一缕卷发、正面一块深色屏幕眼罩（圆屏就在里面）、工具腰带。站在 SG90 转台上。' },
+    { id: 'body', name: '小黄身体', about: '黄色胶囊身体、头顶一缕卷发、正面一块深色屏幕眼罩（圆屏就在里面）、工具腰带。站在 SG90 转台上。' },
     { id: 'servo', name: 'SG90 转台', about: 'GPIO4 PWM，±60° 来回转身。' },
-    { id: 'lcd', name: '圆屏 GC9A01', about: 'SPI2，画面来自模拟器里的帧缓冲。' },
-    { id: 'boot', name: 'BOOT 键', about: '按住转回正面。' },
+    { id: 'lcd', name: '圆屏 GC9A01', about: 'SPI2，画面就是固件画出来的。' },
+    { id: 'boot', name: 'BOOT 键', about: '按一下转回正面，再按一下接着转。' },
   ],
   usbkey: [
     { id: 'pad', name: 'USB 小键盘', about: '外壳 80×44×22 mm（估算），一排四个键：K1–K3 发 a / b / c，K4 宏键打出 Hello TryBoard 再换行。' },
-    { id: 'keys', name: '按键 K1–K4', about: 'GPIO4 / 5 / 6 / 7，另一端接地，内部上拉。点 3D 里的键帽 = 按下（引脚拉低）。' },
+    { id: 'keys', name: '按键 K1–K4', about: 'GPIO4 / 5 / 6 / 7，另一端接地，内部上拉。点 3D 里的键帽就是按下，引脚拉低。' },
     { id: 'pc', name: '虚拟电脑', about: 'USB 虚拟主机：真的按 USB 规范枚举（取描述符、设地址、读报告描述符），屏幕上是它收到的 HID 报告还原出的字。' },
   ],
   lens: [
-    { id: 'lcd', name: '圆屏 GC9A01', about: 'SPI2，画面来自模拟器里的帧缓冲。' },
-    { id: 'dome', name: '凸透镜罩', about: 'Ø40 mm 平凸透镜，离屏高度决定放大倍数（估算）。3D 里的折射是示意（transmission / ior 1.5），不是光学仿真。' },
+    { id: 'lcd', name: '圆屏 GC9A01', about: 'SPI2，画面就是固件画出来的。' },
+    { id: 'dome', name: '凸透镜罩', about: 'Ø40 mm 平凸透镜，离屏高度决定放大倍数（估算）。3D 里的折射是示意，不是光学仿真。' },
     { id: 'boot', name: 'BOOT 键', about: '换表情。' },
   ],
   lamp: [
     { id: 'strip', name: 'WS2812 × 8 · 导光柱', about: 'DIN 接 GPIO5（RMT）。每颗灯的颜色就是模拟器从引脚波形里解码出来的那一帧。' },
-    { id: 'knob', name: 'EC11 旋钮', about: 'CLK GPIO6 · DT GPIO7 · SW GPIO15，PCNT 4 倍频。拖动或滚轮转，点一下 = 按下（切换亮度 / 颜色模式）。' },
-    { id: 'shade', name: '乳白灯罩', about: '3D 打印乳白 PLA。灯条贴着灯罩壁时罩上会有一排亮点（装法影响，估算）。' },
+    { id: 'knob', name: 'EC11 旋钮', about: 'CLK GPIO6 · DT GPIO7 · SW GPIO15，PCNT 4 倍频。拖动或滚轮转，点一下就是按下，在调亮度和调颜色之间切换。' },
+    { id: 'shade', name: '乳白灯罩', about: '3D 打印乳白 PLA。灯带贴着灯罩壁时罩上会有一排亮点（装法影响，估算）。' },
   ],
   ruler: [
     { id: 'sonar', name: 'HC-SR04 探头', about: 'Trig GPIO17 · Echo 经分压接 GPIO18。模拟器按挡板距离出回波宽度（343 m/s）。' },
-    { id: 'oled', name: 'OLED 0.96″', about: 'SSD1306（0x3C）：大字距离 + 距离条，画面就是模拟器里的帧缓冲。' },
-    { id: 'buzzer', name: '无源蜂鸣器', about: 'GPIO5，2.7 kHz：1 m 以内响 40 ms、停 距离 × 5 ms，10 cm 以内一直响。默认静音。' },
+    { id: 'oled', name: 'OLED 0.96″', about: 'SSD1306（0x3C）：大字显示距离，下面一条距离条。' },
+    { id: 'buzzer', name: '无源蜂鸣器', about: 'GPIO5，2.7 kHz：1 m 以内每次响 40 ms，间隔是距离（cm）× 5 ms；10 cm 以内一直响。默认静音。' },
     { id: 'board', name: '木挡板', about: '拖着它在桌上前后挪：距离从探头正面量起，桌上的卷尺 0 刻度对准探头。' },
   ],
   tilt: [
     { id: 'disc', name: '圆盘外壳', about: '拖动它倾斜：往右拖右边放低（横滚 +），往下拖前边放低（俯仰 +）。' },
-    { id: 'imu', name: 'QMI8658 六轴', about: 'I2C 0x6B。模拟器按圆盘姿态算重力分量；装反时俯仰、横滚都反号（装法影响）。' },
-    { id: 'lcd', name: '圆屏 GC9A01', about: 'SPI2，小豆就画在这块屏上，画面来自模拟器里的帧缓冲。' },
+    { id: 'imu', name: 'QMI8658 六轴', about: 'I2C 0x6B。模拟器按圆盘姿态算重力分量；装反时俯仰、横滚方向全反（装法影响）。' },
+    { id: 'lcd', name: '圆屏 GC9A01', about: 'SPI2，小豆就画在这块屏上，画面就是固件画出来的。' },
   ],
 };
 
@@ -183,7 +183,7 @@ export function productStep(): StepImpl {
   let keypadSvg: ReturnType<typeof createKeypadView> | null = null;
   /** 正在录的 10 秒 */
   let rec: Recording | null = null;
-  // 倾角仪（P2-03）：没有组装模版，成品就是端在手里转的盒子
+  // 倾角仪（P2-03）：没有组装模板，成品就是端在手里转的盒子
   let tilt: Tilt3D | null = null;
   let tiltNode: HTMLElement | null = null;
   let tiltTimer = 0;
@@ -261,7 +261,7 @@ export function productStep(): StepImpl {
         lamp.level = Number(l.slice(6));
       } else if (l === 'MODE color' || l === 'MODE level') {
         lamp.mode = l.slice(5);
-        event('◎', lamp.mode === 'color' ? '旋钮改成换颜色' : '旋钮改成调亮度');
+        event('◎', lamp.mode === 'color' ? '旋钮切到调颜色' : '旋钮切到调亮度');
       } else if (/^COLOR \d+ \w+$/.test(l)) {
         lamp.color = l.split(' ')[2];
       } else if (/^DIST /.test(l)) {
@@ -333,15 +333,15 @@ ${how ? `<details class="tg" open><summary><span>${preview ? '参考装法' : '�
     const off = assembly()?.effects.sensorOffset ?? 0;
     const first = (FIRST3[w] ?? []).map(([t, d]) => `<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('');
     const cannot = (CANNOT[w] ?? []).map(([t, d]) => `<div class="res na"><span class="mk">×</span><span><b>${esc(t)}</b> · ${esc(d)}</span></div>`).join('');
-    c.shell.props.innerHTML = `${preview ? `${sec('参考成品')}<p class="note">${esc(previewWhy())}。这里按默认正确装法、跑实验台上现在的固件；你自己装完以后，这里换成你的装法。</p>` : ''}${p ? `${sec('选中')}<div class="ph">${esc(p.name)}</div><p class="note">${esc(p.about)}</p>` : ''}
-${sec('成品 · 同一份固件，模拟没有重启')}
+    c.shell.props.innerHTML = `${preview ? `${sec('参考成品')}<p class="note">${esc(previewWhy())}。你装完后，这里会换成你的装法。</p>` : ''}${p ? `${sec('选中')}<div class="ph">${esc(p.name)}</div><p class="note">${esc(p.about)}</p>` : ''}
+${sec('成品 · 和实验台同一份固件')}
 ${row('运行', 'run')}
-${weather ? `${row('气象站周围', 'air')}${row('BME280 读到', 'rt')}${row('OLED 单位', 'unit')}${row('表盘指针', 'needle')}${row('板载 RGB', 'rgb')}${row('蜂鸣器', 'buzz')}${row('热源', 'heat')}` : w === 'spin' ? `${row('舵机', 'servo')}${row('转台', 'turn')}${row('状态', 'look')}` : w === 'usbkey' ? `${row('电脑看到', 'usbstate')}${row('打出的字', 'typed')}` : w === 'lens' ? `${row('表情', 'mood')}${row('透镜', 'lens')}` : w === 'lamp' ? `${row('灯条', 'strip')}${row('亮度 / 颜色', 'lampst')}${row('旋钮模式', 'lampmode')}${row('旋钮', 'knob')}` : w === 'ruler' ? `${row('挡板距离', 'cm')}${row('探头量到', 'cmfx')}${row('固件读到', 'rdist')}${row('蜂鸣器', 'buzz')}` : `${row('圆盘姿态', 'tpose')}${row('六轴读到', 'tfx')}${row('小豆', 'bean')}`}
+${weather ? `${row('气象站周围', 'air')}${row('BME280 读到', 'rt')}${row('OLED 单位', 'unit')}${row('表盘指针', 'needle')}${row('板载 RGB', 'rgb')}${row('蜂鸣器', 'buzz')}${row('热源', 'heat')}` : w === 'spin' ? `${row('舵机', 'servo')}${row('转台', 'turn')}${row('状态', 'look')}` : w === 'usbkey' ? `${row('电脑看到', 'usbstate')}${row('打出的字', 'typed')}` : w === 'lens' ? `${row('表情', 'mood')}${row('透镜', 'lens')}` : w === 'lamp' ? `${row('灯带', 'strip')}${row('亮度 / 颜色', 'lampst')}${row('旋钮模式', 'lampmode')}${row('旋钮', 'knob')}` : w === 'ruler' ? `${row('挡板距离', 'cm')}${row('探头量到', 'cmfx')}${row('固件读到', 'rdist')}${row('蜂鸣器', 'buzz')}` : `${row('圆盘姿态', 'tpose')}${row('六轴读到', 'tfx')}${row('小豆', 'bean')}`}
 ${off ? `<p class="note bad">装法：BME280 贴着芯片，读数比周围高 ${off.toFixed(1)} ℃（估算）。回「组装」改放通风口旁。</p>` : ''}${fxNote()}
 ${assembly()?.effects.usbBlocked ? `<p class="note bad">装法：开发板转了 180°，USB 口顶着前墙，线插不进去，电脑看不到设备。回「组装」把 USB 口朝背面开孔。</p>` : ''}
 ${harnessHtml()}
-<div class="btns">${c.session.audio.hasSound ? `<button type="button" class="btn" id="pSound" aria-pressed="false">声音：关</button>` : ''}${weather ? `<button type="button" class="btn" id="pHeat">热源：关</button>` : ''}${w === 'lamp' ? '<button type="button" class="btn" id="pKnobL">旋钮 −1</button><button type="button" class="btn" id="pKnobR">旋钮 +1</button><button type="button" class="btn" id="pKnobP">按旋钮</button>' : w === 'ruler' ? '<button type="button" class="btn" id="pNear">挡板近 10 cm</button><button type="button" class="btn" id="pFar">挡板远 10 cm</button>' : w === 'tilt' ? '<button type="button" class="btn" id="pTiltR">右边放低</button><button type="button" class="btn" id="pTiltL">左下放低</button><button type="button" class="btn" id="pLevel">放平</button>' : w === 'usbkey' ? '' : '<button type="button" class="btn" id="pBoot">按住 BOOT</button>'}</div>
-${cur3d() ? `${sec('拍照 · 录像')}<div class="btns"><button type="button" class="btn" id="pPhoto">拍照</button><button type="button" class="btn" id="pRec">${rec ? `录制中 ${rec.elapsed().toFixed(0)} / ${RECORD_SECONDS} s` : `录 ${RECORD_SECONDS} 秒`}</button></div><p class="note">拍照：当前视角 2× 分辨率 PNG（超采样）；录像：画布 webm，声音开着时把蜂鸣器一起录进去。文件直接下载。</p>` : ''}
+<div class="btns">${c.session.audio.hasSound ? `<button type="button" class="btn" id="pSound" aria-pressed="false">声音：关</button>` : ''}${weather ? `<button type="button" class="btn" id="pHeat">热源：关</button>` : ''}${w === 'lamp' ? '<button type="button" class="btn" id="pKnobL">旋钮 −1</button><button type="button" class="btn" id="pKnobR">旋钮 +1</button><button type="button" class="btn" id="pKnobP">按旋钮</button>' : w === 'ruler' ? '<button type="button" class="btn" id="pNear">挡板近 10 cm</button><button type="button" class="btn" id="pFar">挡板远 10 cm</button>' : w === 'tilt' ? '<button type="button" class="btn" id="pTiltR">右边放低</button><button type="button" class="btn" id="pTiltL">左前放低</button><button type="button" class="btn" id="pLevel">放平</button>' : w === 'usbkey' ? '' : '<button type="button" class="btn" id="pBoot">按 BOOT</button>'}</div>
+${cur3d() ? `${sec('拍照 · 录像')}<div class="btns"><button type="button" class="btn" id="pPhoto">拍照</button><button type="button" class="btn" id="pRec">${rec ? `录制中 ${rec.elapsed().toFixed(0)} / ${RECORD_SECONDS} s` : `录 ${RECORD_SECONDS} 秒`}</button></div><p class="note">照片是 2 倍分辨率 PNG；录像是 webm，开着声音会录进蜂鸣器。文件直接下载。</p>` : ''}
 ${sec('串口 · 最近几行')}<pre class="brief serial-tail" data-live="serial"></pre>
 ${sec('真机到手先做这三件事')}<ol class="first3">${first}</ol>
 ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
@@ -376,9 +376,9 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
   /** 装法带来的提示（台灯亮点 / 探头被挡 / 六轴装反） */
   function fxNote() {
     const fx = assembly()?.effects ?? {};
-    if (fx.glare) return '<p class="note bad">装法：灯条贴着灯罩，罩上一排刺眼亮点（估算）。回「组装」把灯条贴到导光柱上。</p>';
+    if (fx.glare) return '<p class="note bad">装法：灯带贴着灯罩，罩上一排刺眼亮点（估算）。回「组装」把灯带贴到导光柱上。</p>';
     if (fx.sonarBlock) return `<p class="note bad">装法：探头缩在外壳孔里，模拟器里的 HC-SR04 只能量到孔壁（约 ${fx.sonarBlock} cm），蜂鸣器一直响。回「组装」让探头伸出前面板。</p>`;
-    if (fx.imuFlip) return '<p class="note bad">装法：六轴装反了，模拟器里读到的俯仰、横滚都反号，小豆往高处爬。回「组装」把箭头朝前装。</p>';
+    if (fx.imuFlip) return '<p class="note bad">装法：六轴装反了，读到的俯仰、横滚方向全反，小豆往高处爬。回「组装」把箭头朝前装。</p>';
     return '';
   }
   function turnKnob(steps: number) {
@@ -422,7 +422,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
       rows.push(`<div class="res ${l.verdict === 'ok' ? 'ok' : 'bad'}"><span class="mk">${l.verdict === 'ok' ? '✓' : l.verdict === 'marginal' ? '!' : '✗'}</span><span>I2C 排线 ${fx.i2cWireCm} cm：${esc(i2cText(l))}</span></div>`);
     }
     const wf = wifiText(fx.antennaDb ?? 0);
-    rows.push(`<div class="res ${wf.level === 'ok' ? 'ok' : wf.level === 'marginal' ? 'warn' : 'bad'}"><span class="mk">${wf.level === 'ok' ? '✓' : wf.level === 'marginal' ? '!' : '✗'}</span><span>Wi-Fi：天线遮挡 ${fx.antennaDb ?? 0} dB → ${esc(wf.text)}（这个作品的固件没开 Wi-Fi，以后加 Wi-Fi 才受影响）</span></div>`);
+    rows.push(`<div class="res ${wf.level === 'ok' ? 'ok' : wf.level === 'marginal' ? 'warn' : 'bad'}"><span class="mk">${wf.level === 'ok' ? '✓' : wf.level === 'marginal' ? '!' : '✗'}</span><span>Wi-Fi：天线遮挡 ${fx.antennaDb ?? 0} dB，${esc(wf.text)}（本固件没用 Wi-Fi，暂不受影响）</span></div>`);
     const sim = c.session.harnessText.trim();
     return `${sec('线束与天线 · 估算，必须上真机')}${rows.join('')}${sim ? `<p class="note mono" data-live="hz">${esc(sim.replace(/\[tryboard\] /g, '模拟器：'))}</p>` : ''}`;
   }
@@ -536,9 +536,9 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     set('buzz', `${au.sounding ? `响 ${au.lastFreq} Hz` : alarm ? '报警中（间歇）' : '不响'} · ${au.muted ? '静音' : '出声'}`, alarm);
     set('heat', heat.on ? `开 · 离通风口 ${(heat.prox * 100).toFixed(0)}%` : '关');
     set('servo', a === null ? '没有 PWM' : `${a.toFixed(1)}°`);
-    if (lcd3d) set('turn', `${lcd3d.turn() >= 0 ? '+' : ''}${lcd3d.turn().toFixed(0)}°（0 = 正面）`);
-    set('look', look === 'front' ? '停在正面（BOOT 继续）' : look === 'around' ? '左右转身' : '左右转身');
-    set('mood', mood ? `${MOOD_LABEL[mood] ?? mood}（BOOT 换下一个）` : '等固件打印…');
+    if (lcd3d) set('turn', `${lcd3d.turn() >= 0 ? '+' : ''}${lcd3d.turn().toFixed(0)}°（0° 是正面）`);
+    set('look', look === 'front' ? '停在正面（按 BOOT 继续）' : look === 'around' ? '左右转身' : '左右转身');
+    set('mood', mood ? `${MOOD_LABEL[mood] ?? mood}（按 BOOT 换下一个）` : '等固件打印…');
     const uv = c.session.usb;
     const blocked = !!assembly()?.effects.usbBlocked;
     set('usbstate', blocked ? '没有设备（线插不进去）' : uv ? `${uv.state}${uv.product ? ` · ${uv.product}` : ''}` : '等待设备', blocked || !uv?.configured);
@@ -560,7 +560,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
       if (st) st.innerHTML = strip.length ? strip.map((x) => `<i class="sw" style="background:${ledCss(x) ?? '#222'}"></i>`).join('') + ` #${(strip[0] ?? [0, 0, 0]).map((x) => x.toString(16).padStart(2, '0')).join('')}` : '灭';
       // 固件上电是亮度 4、暖白，只在变了的时候才打印 LEVEL / COLOR
       set('lampst', lamp.level || lamp.color || strip.some((x) => Math.max(...x) > 0) ? `亮度 ${lamp.level || 4}/8 · ${COLOR_LABEL[lamp.color] ?? (lamp.color || '暖白')}${lamp.level || lamp.color ? '' : '（上电默认）'}` : '等固件打印…');
-      set('lampmode', lamp.mode === 'color' ? '换颜色（再按一下回到调亮度）' : '调亮度（按一下改成换颜色）');
+      set('lampmode', lamp.mode === 'color' ? '调颜色（再按一下回到调亮度）' : '调亮度（按一下切到调颜色）');
       set('knob', `${knobPos >= 0 ? '+' : ''}${knobPos} 格（从进成品算起）`);
     } else if (c.work.id === 'ruler') {
       const b = assembly()?.effects.sonarBlock ?? 0;
@@ -585,7 +585,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     const c = ctx!;
     const weather = c.work.id === 'weather';
     const w = c.work.id;
-    const act = w === 'lamp' ? [{ id: 'p-knob', label: '按旋钮' }] : w === 'ruler' ? [{ id: 'p-near', label: '挡板近' }, { id: 'p-far', label: '挡板远' }] : w === 'tilt' ? [{ id: 'p-level', label: '放平' }] : [{ id: 'p-boot', label: '按键' }, ...(weather ? [{ id: 'p-heat', label: heat.on ? '热源：开' : '热源' }] : [])];
+    const act = w === 'lamp' ? [{ id: 'p-knob', label: '按旋钮' }] : w === 'ruler' ? [{ id: 'p-near', label: '挡板近' }, { id: 'p-far', label: '挡板远' }] : w === 'tilt' ? [{ id: 'p-level', label: '放平' }] : [{ id: 'p-boot', label: '按 BOOT' }, ...(weather ? [{ id: 'p-heat', label: heat.on ? '热源：开' : '热源' }] : [])];
     c.shell.toolbar.setGroups([
       ...(scene3d || lcd3d || keypad || work3d ? [{ id: 'nav', tools: [{ id: 'p-orbit', label: '旋转', key: '拖动' }, { id: 'p-home', label: '复位视角' }] }] : []),
       ...(c.work.id === 'usbkey' ? [] : [{ id: 'act', tools: act }]),
@@ -774,19 +774,19 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
       tilt = createTilt3D(tiltNode, { pose: () => c.store.get().pose, onPose: (p) => c.session.setPose(p) });
       const note = document.createElement('div');
       note.className = 'p3-disclaimer';
-      note.textContent = '外观示意 · 拖动盒子转动它';
+      note.textContent = '外观示意 · 拖动可转动盒子';
       tiltNode.appendChild(note);
     }
     const banner = document.createElement('div');
     banner.className = 'prod-preview';
     banner.setAttribute('role', 'status');
-    banner.innerHTML = '<b>倾角仪 · 端在手里转</b><span>没有组装模版：盒子的姿态就是实验台上那块 IMU 的姿态，固件读数实时来自同一个模拟</span>';
+    banner.innerHTML = '<b>倾角仪 · 端在手里转</b><span>这个作品不装壳。转动盒子就是在转实验台上的 IMU，读数实时跟着变</span>';
     el.append(banner, tiltNode);
     tilt!.start();
     c.shell.tree.innerHTML = `<div class="tn on" role="treeitem" aria-selected="true"><span class="tn-l">倾角仪 · ${c.session.scene.parts.some((p) => p.type === 'qmi8658') ? 'QMI8658' : 'MPU6050'}</span></div>`;
     c.shell.props.innerHTML = `${sec('盒子姿态 · 你转出来的')}${row('俯仰 / 横滚 / 航向', 'tp')}${row('应读到（重力分量）', 'tg')}
 ${sec('固件读到 · 串口最近一行')}${row('俯仰', 'tip')}${row('横滚', 'tir')}${row('陀螺', 'tgy')}
-<p class="note">拖动时陀螺读到角速度，松手 150 ms 后回零。真机的零偏、温漂、振动噪声没建模（未经真机标定）。</p>`;
+<p class="note">拖动时陀螺读到角速度，松手 150 ms 后回零。真机的零偏、温漂和振动噪声没有算进去（未经真机标定）。</p>`;
     c.shell.toolbar.setGroups([
       { id: 'nav', tools: [{ id: 'p-orbit', label: '转动', key: '拖动' }, { id: 'p-level', label: '放平' }] },
       { id: 'run', tools: [{ id: 'p-rerun', label: '再跑一次', primary: true }] },
@@ -872,14 +872,14 @@ ${sec('固件读到 · 串口最近一行')}${row('俯仰', 'tip')}${row('横滚
         banner = document.createElement('div');
         banner.className = 'prod-preview';
         banner.setAttribute('role', 'status');
-        banner.innerHTML = `<b>参考成品 · 你还没装配</b><span>${esc(previewWhy().replace(/^你还没装配：/, ''))} · 按默认正确装法展示</span>`;
+        banner.innerHTML = `<b>参考成品 · 还没装配</b><span>${esc(previewWhy().replace(/^你还没装配：/, ''))} · 按默认正确装法展示</span>`;
         el.insertBefore(banner, node);
       }
       // 装法的温漂只在成品里生效
       c.session.setSensorOffset(a?.effects.sensorOffset ?? 0);
       room = c.store.get().env.temp;
       air = room;
-      if (!events.length && c.store.get().run) event('▶', `${preview ? '参考成品 · ' : ''}开机 · 运行 #${c.store.get().run}${a.effects.sensorOffset ? `，传感器 +${a.effects.sensorOffset} ℃` : ''}`);
+      if (!events.length && c.store.get().run) event('▶', `${preview ? '参考成品 · ' : ''}开机 · 运行 #${c.store.get().run}${a.effects.sensorOffset ? `，传感器受热偏高 ${a.effects.sensorOffset} ℃` : ''}`);
       scene3d?.start();
       lcd3d?.start();
       work3d?.start();

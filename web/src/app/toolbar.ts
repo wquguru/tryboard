@@ -43,7 +43,7 @@ export function createToolbar(el: HTMLElement): Toolbar {
           b.dataset.tool = t.id;
           b.className = 'tb-btn' + (t.primary ? ' primary' : '') + (t.todo ? ' todo' : '');
           b.textContent = t.label;
-          b.title = t.label + (t.key ? `（${t.key}）` : '') + (t.todo ? ' · 后续任务实现' : '');
+          b.title = t.label + (t.key ? `（${t.key}）` : '') + (t.todo ? ' · 暂未开放' : '');
           b.onclick = () => cbs.forEach((f) => f(t.id));
           box.appendChild(b);
         }

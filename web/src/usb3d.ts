@@ -126,7 +126,7 @@ export function createUsbHost(scene: THREE.Scene, port: THREE.Vector3) {
     g.fillRect(24, 156, mouse ? 560 : SW - 48, SH - 180);
     g.fillStyle = '#5f6f86';
     g.font = '20px Inter, "PingFang SC", sans-serif';
-    g.fillText(isCdc ? '串口终端（/dev/ttyACM0）' : '文本编辑器', 40, 186);
+    g.fillText(isCdc ? '串口终端 · 电脑上多出的串口' : '文本编辑器', 40, 186);
     g.fillStyle = '#e8edf5';
     g.font = '28px Menlo, monospace';
     const text = (isCdc ? v.cdc : v.typed).replace(/\r/g, '');

@@ -20,7 +20,7 @@ export function createUsbPanel(before: HTMLElement, sendCdc: (text: string) => v
         <canvas id="usbMouse" width="360" height="120"></canvas>
       </div>
       <div id="usbCdc" class="usb-sec" hidden>
-        <div class="usb-cap">USB 串口终端（电脑上出现的新 COM 口）</div>
+        <div class="usb-cap">USB 串口终端（电脑上多出一个串口）</div>
         <pre id="usbCdcOut" class="usb-typed"></pre>
         <form id="usbCdcForm"><input id="usbCdcIn" placeholder="发到 USB 串口（回车）" autocomplete="off" /></form>
       </div>

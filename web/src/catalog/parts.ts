@@ -55,7 +55,7 @@ export interface Pin {
   type: PinType;
   /** 这根线上的电平（V）：数字 = 固定；'vcc' = 跟随模块供电；null = 不适用或由外部决定 */
   v: number | 'vcc' | null;
-  /** 开发板针脚对应的 GPIO */
+  /** 开发板引脚对应的 GPIO */
   gpio?: number;
   /** 从模块角度看的方向：out = 模块往外输出（会把电平送进 GPIO） */
   dir?: 'in' | 'out' | 'bi';
@@ -73,7 +73,7 @@ export interface Onboard {
   gpio: number;
   what: string;
   kind: OnboardKind;
-  /** 这根线是可以共用的总线（外接件同一角色的针脚接上来只算提醒；其它用法判阻断） */
+  /** 这根线是可以共用的总线（外接件同一角色的引脚接上来只算提醒；其它用法判阻断） */
   share?: BusRole;
 }
 
@@ -166,7 +166,7 @@ export interface Part {
 }
 
 export const CHECKED_AT = '2026-10';
-const PRICE_SRC = '代理按淘宝常见在售区间估计（未逐条人工核价，不含运费）';
+const PRICE_SRC = '按淘宝常见售价估计，未逐条核价，不含运费';
 
 export const searchUrls = (kw: string) => ({
   taobao: 'https://s.taobao.com/search?q=' + encodeURIComponent(kw),
@@ -233,7 +233,7 @@ const xiaoPins = (gpios: number[]) => [
   pin('3V3', 'power', 3.3),
 ];
 
-const BOARD_CURRENT_NOTE = '整板电流按芯片数据手册 + 估算在规则里算，这里不单列';
+const BOARD_CURRENT_NOTE = '整板电流在规则里按芯片数据手册估算，这里不单列';
 
 export const PARTS: Part[] = [
   // ───────── 开发板 ─────────
@@ -284,7 +284,7 @@ export const PARTS: Part[] = [
     },
     sources: ['乐鑫 ESP32-S3-DevKitC-1 用户指南 v1.1（彩灯改为 GPIO38）'],
     todo: ['sizeMm：同 v1.0', 'board.ldo：稳压器型号与额定电流按原理图录入', 'currentMa：整板静态电流未测'],
-    note: '与 v1.0 只差彩灯引脚：v1.1 在 GPIO38。模拟器的 3D 板与验收固件按 v1.0（GPIO48），所以这里标 estimated。',
+    note: '与 v1.0 只差彩灯引脚：v1.1 在 GPIO38。模拟器的 3D 板和验收固件按 v1.0（GPIO48），所以这块板只算行为模拟。',
   }),
   P({
     id: 'luat-s3',
@@ -322,8 +322,8 @@ export const PARTS: Part[] = [
       'pins：排针表未录入（合宙 wiki 本次打不开，Zephyr 只有引脚图片）',
       'board.flashMB：Zephyr 写 8 MB，Zephyr 页面另一版本与卖家常见 16 MB 说法不一致，以丝印为准',
       'board.psramMB：Zephyr 页面称 8 MB PSRAM，未见合宙原文',
-      'board.psram：是否八线 PSRAM 待核（R03 按"待核"给提醒）',
-      'board.onboard：Zephyr 文档另提到"可寻址彩灯 GPIO38"，与 dtsi 只有两颗普通 LED 矛盾，待原理图核',
+      'board.psram：是否八线 PSRAM 待核（规则检查按「待核」给提醒）',
+      'board.onboard：Zephyr 文档另提到「可寻址彩灯 GPIO38」，与 dtsi 只有两颗普通 LED 矛盾，待原理图核',
       'board.usb：USB 口类型（原生 / CH343 转串口）未核',
       'board.ldo',
       'sizeMm',
@@ -335,7 +335,7 @@ export const PARTS: Part[] = [
     id: 'xiao-s3',
     name: 'Seeed XIAO ESP32S3',
     kind: 'board',
-    model: 'XIAO ESP32S3（8 MB flash + 8 MB 八线 PSRAM）',
+    model: 'XIAO ESP32S3（8 MB flash，8 MB 八线 PSRAM）',
     chips: ['esp32s3'],
     pins: xiaoPins([1, 2, 3, 4, 5, 6, 43, 44, 7, 8, 9]),
     voltage: { supply: [5, 5], logic: 3.3 },
@@ -353,7 +353,7 @@ export const PARTS: Part[] = [
     },
     sources: ['Seeed Wiki XIAO ESP32S3 引脚表（只录事实，Wiki 源码 GPL-3.0 不搬）', 'PlatformIO seeed_xiao_esp32s3.json：memory_type qio_opi（八线 PSRAM）'],
     todo: ['board.ldo：稳压器额定电流未核', 'currentMa', 'sizeMm[2]：板厚（含元件）未核', 'board.psram：Seeed Wiki 只写 8 MB，八线来自 PlatformIO qio_opi'],
-    note: '只引出 11 个 GPIO（D0–D10 = GPIO1–9、43、44）；GPIO21 接了板载用户 LED；D2 = GPIO3 是 strapping 脚（JTAG 来源，默认 eFuse 下不影响启动）；D6 / D7 是 UART0；背面有锂电焊盘和充电电路。',
+    note: '只引出 11 个 GPIO，D0–D10 对应 GPIO1–9、43、44；GPIO21 接了板载用户 LED；D2（GPIO3）是 strapping 脚，默认 eFuse 下不影响启动；D6 / D7 是 UART0；背面有锂电焊盘和充电电路。',
   }),
   P({
     id: 'c3-devkitm1',
@@ -401,7 +401,7 @@ export const PARTS: Part[] = [
     },
     sources: ['Seeed Wiki XIAO ESP32C3 引脚表（D0 / D8 / D9 = GPIO2 / 8 / 9 标为 strapping；无 LED_BUILTIN）', 'arduino-esp32 variants/XIAO_ESP32C3（读来核对，不复制）'],
     todo: ['board.ldo：Seeed Wiki 电源脚一节写 3V3 可取 700 mA、规格表写 500 mA，互相矛盾', 'currentMa', 'sizeMm[2]：板厚（含元件）未核'],
-    note: 'D0 / D8 / D9 = GPIO2 / 8 / 9，全是 strapping 脚——典型坑；D9 同时是 BOOT 键。D6 / D7 是 UART0。没有 PSRAM、没有用户 LED。',
+    note: 'D0、D8、D9 对应 GPIO2、8、9，全是 strapping 脚，是典型的坑；D9 同时是 BOOT 键。D6 / D7 是 UART0。没有 PSRAM、没有用户 LED。',
   }),
   P({
     id: 'm5-atoms3',
@@ -438,7 +438,7 @@ export const PARTS: Part[] = [
     sources: ['M5Stack 文档 AtomS3（屏 GC9107 引脚、IMU MPU6886 0x68 on G38/G39、排针 G5–G8 / G38 / G39、Grove G1 / G2）', 'M5Unified（MIT）：按键 GPIO41 低电平按下', 'ESP32-S3 数据手册订购信息：S3FN8 = 8 MB 片内 flash、无 PSRAM'],
     todo: [
       'board.onboard：红外发射 GPIO4 来自 AtomS3 Lite 资料，完整版 AtomS3 原理图待核',
-      'board.usb：M5 文档只写"Type-C 供电与下载"，未写是否原生 USB（Arduino 配置 USB_CDC_ON_BOOT=1 倾向原生），待原理图核',
+      'board.usb：M5 文档只写「Type-C 供电与下载」，未写是否原生 USB（Arduino 配置 USB_CDC_ON_BOOT=1 倾向原生），待原理图核',
       'board.ldo',
       'currentMa',
       'sizeMm：M5 官网 24×24×13 mm，未逐项核实',
@@ -491,13 +491,13 @@ export const PARTS: Part[] = [
       'sizeMm',
       'currentMa',
     ],
-    note: '"一板到位"：圆屏、IMU、锂电充电都在板上，不用再买 GC9A01。屏已占 GPIO8–12 与 GPIO40（触摸版屏复位改 GPIO14、背光改 GPIO2，两版固件不通用）。USB 是 CH343P 转串口。',
+    note: '「一板到位」：圆屏、IMU、锂电充电都在板上，不用再买 GC9A01。屏已占 GPIO8–12 与 GPIO40（触摸版屏复位改 GPIO14、背光改 GPIO2，两版固件不通用）。USB 是 CH343P 转串口。',
   }),
   P({
     id: 'ws-s3-touch-lcd128',
     name: '微雪 ESP32-S3-Touch-LCD-1.28 圆屏板（触摸）',
     kind: 'board',
-    model: 'Waveshare ESP32-S3-Touch-LCD-1.28（ESP32-S3R2；GC9A01 圆屏 + CST816S 触摸 + QMI8658 IMU）',
+    model: 'Waveshare ESP32-S3-Touch-LCD-1.28（ESP32-S3R2；GC9A01 圆屏、CST816S 触摸、QMI8658 IMU）',
     chips: ['esp32s3'],
     // 只有一个 SH1.0 接口 P2 引出 GPIO15–18 / 21 / 33
     pins: header(['VSYS', 'G', 'RST', 0, 15, 16, 17, 18, 21, 33]),
@@ -581,7 +581,7 @@ export const PARTS: Part[] = [
     supplyNet: '3V3',
     sources: ['Aosong AHT20 数据手册'],
     todo: ['currentMa：测量电流待核对原文，typ（平均）未列', 'voltage.logic：上拉接 VCC，电平随供电', 'i2cPullupK', 'sizeMm'],
-    note: '地址固定 0x38 不能改。模块上拉接 VCC：接 5 V 供电时 SDA / SCL 是 5 V，要接 3V3。常见 AHT20 + BMP280 二合一板。',
+    note: '地址固定 0x38 不能改。模块上拉接 VCC：接 5 V 供电时 SDA / SCL 是 5 V，要接 3V3。常见 AHT20 和 BMP280 的二合一板。',
   }),
   P({
     id: 'dht22',
@@ -650,7 +650,7 @@ export const PARTS: Part[] = [
     supplyNet: '3V3',
     sources: ['MPU-6000/MPU-6050 Product Specification'],
     todo: ['voltage.logic：上拉接板载 3.3 V 稳压输出（GY-521 常见做法），待按原理图核', 'i2cPullupK', 'sizeMm'],
-    note: '芯片已停产，市面多为兼容片。0x68 和 DS3231 撞地址。模拟器：寄存器、量程、采样率、DATA_RDY 按数据手册，读数由台面姿态算出；FIFO / DMP 没做。',
+    note: '芯片已停产，市面多为兼容片。0x68 和 DS3231 撞地址。模拟器：寄存器、量程、采样率、DATA_RDY 按数据手册，读数由台面姿态算出；FIFO 和 DMP 暂未模拟。',
   }),
   P({
     id: 'qmi8658',
@@ -669,7 +669,7 @@ export const PARTS: Part[] = [
     supplyNet: '3V3',
     sources: ['QST QMI8658C Datasheet（寄存器表、量程、I2C 地址）'],
     todo: ['i2cPullupK', 'sizeMm：小板外形随卖家'],
-    note: '微雪 ESP32-S3 圆屏板上板载的就是它。CTRL1 不开地址自增时突发读会一直读同一个寄存器；模拟器照样复现。数据小端（CTRL1.BE 在 I2C 下按常见驱动的实际表现处理，未经真机标定）。',
+    note: '微雪 ESP32-S3 圆屏板上板载的就是它。CTRL1 不开地址自增时，连续读会一直读同一个寄存器，模拟器也是这样。数据按小端处理（未经真机标定）。',
   }),
   P({
     id: 'ds3231',
@@ -687,7 +687,7 @@ export const PARTS: Part[] = [
     supplyNet: '3V3',
     sources: ['DS3231 数据手册'],
     todo: ['voltage.logic：上拉接 VCC，电平随供电', 'sizeMm'],
-    note: 'ZS-042 板上有给电池的充电电路，装不可充的 CR2032 时常见做法是拆掉那颗二极管 / 电阻（未经真机标定）。',
+    note: 'ZS-042 板上有给电池的充电电路，装不可充的 CR2032 时常见做法是拆掉那颗二极管或电阻（未经真机标定）。',
   }),
   P({
     id: 'ina219',
@@ -721,7 +721,7 @@ export const PARTS: Part[] = [
     supplyNet: '3V3',
     sources: ['INMP441 数据手册'],
     todo: ['sizeMm'],
-    note: '只能 3.3 V 供电。模拟器暂无 I2S 模型（M8）。',
+    note: '只能 3.3 V 供电。模拟器暂不支持 I2S 麦克风。',
   }),
 
   // ───────── 输入 ─────────
@@ -762,7 +762,7 @@ export const PARTS: Part[] = [
     id: 'encoder',
     name: 'EC11 旋转编码器模块（KY-040 类）',
     kind: 'input',
-    model: 'EC11 编码器 + 上拉电阻',
+    model: 'EC11 编码器和上拉电阻',
     pins: [pin('CLK', 'digital-out', 'vcc', { dir: 'out', boot: 'pull-up' }), pin('DT', 'digital-out', 'vcc', { dir: 'out', boot: 'pull-up' }), pin('SW', 'digital-out', null, { dir: 'out' }), pin('+', 'power', 'vcc'), GND()],
     voltage: { supply: [3.3, 5], logic: null },
     currentMa: { typ: 0.66, peak: 0.66, est: true, source: '估算：两颗 10 kΩ 上拉在 3.3 V 下' },
@@ -773,7 +773,7 @@ export const PARTS: Part[] = [
     supplyNet: '3V3',
     sources: [],
     todo: ['voltage.logic：上拉接 +，电平随供电', 'sizeMm', 'voltage.supply：卖家常见标称 3.3–5 V，未见数据手册'],
-    note: 'CLK / DT 上拉到 "+"：+ 接 5 V 时信号是 5 V。机械触点要软件消抖或用 PCNT。',
+    note: 'CLK、DT 上拉到「+」：「+」接 5 V 时信号就是 5 V。机械触点要软件消抖或用 PCNT。',
   }),
 
   // ───────── 显示 ─────────
@@ -794,7 +794,7 @@ export const PARTS: Part[] = [
     supplyNet: '3V3',
     sources: ['Solomon Systech SSD1306 数据手册（命令集、地址）'],
     todo: ['pins[SCL/SDA].v：板载上拉接 VCC 还是稳压后 3.3 V 随批次', 'i2cPullupK', 'sizeMm'],
-    note: '有的批次针脚顺序是 VCC / GND 对调，按丝印接，别按图接。',
+    note: '有的批次 VCC 和 GND 的引脚顺序是对调的，按丝印接，别按图接。',
   }),
   P({
     id: 'sh1106',
@@ -812,7 +812,7 @@ export const PARTS: Part[] = [
     supplyNet: '3V3',
     sources: ['Sino Wealth SH1106 数据手册（132×64 显存）'],
     todo: ['pins[SCL/SDA].v', 'i2cPullupK', 'sizeMm'],
-    note: '外观和 SSD1306 很像但驱动不同：显存 132 列、没有水平寻址模式，用 SSD1306 驱动会花屏 / 偏 2 列。模拟器还没有这块屏的模型。',
+    note: '外观和 SSD1306 很像但驱动不同：显存 132 列、没有水平寻址模式，用 SSD1306 驱动会花屏或偏 2 列。模拟器还没有这块屏的模型。',
   }),
   P({
     id: 'gc9a01',
@@ -829,13 +829,13 @@ export const PARTS: Part[] = [
     supplyNet: '3V3',
     sources: ['GalaxyCore GC9A01 数据手册（命令集）'],
     todo: ['voltage.supply：部分模块带稳压可接 5 V，按卖家', 'currentMa', 'sizeMm'],
-    note: '"SDA / SCL" 丝印其实是 SPI 的 MOSI / SCLK，不是 I2C。只写不读，没有 MISO。',
+    note: '丝印「SDA / SCL」其实是 SPI 的 MOSI / SCLK，不是 I2C。只写不读，没有 MISO。',
   }),
   P({
     id: 'gc9a01-touch',
     name: '1.28″ 触摸圆屏（GC9A01 + CST816S）',
     kind: 'display',
-    model: '1.28″ 圆形 IPS LCD + CST816S 电容触摸（微雪 1.28inch Touch LCD 一类，12 针）',
+    model: '1.28″ 圆形 IPS LCD 和 CST816S 电容触摸（微雪 1.28inch Touch LCD 一类，12 针）',
     pins: [
       VCC(), GND(), pin('SCL', 'spi-sclk', 3.3, { dir: 'in' }), pin('SDA', 'spi-mosi', 3.3, { dir: 'in' }), pin('RES', 'rst', 3.3, { dir: 'in' }), pin('DC', 'spi-dc', 3.3, { dir: 'in' }), pin('CS', 'spi-cs', 3.3, { dir: 'in' }), pin('BLK', 'backlight', 3.3, { dir: 'in' }),
       pin('TP_SDA', 'i2c-sda', 3.3, { dir: 'bi' }), pin('TP_SCL', 'i2c-scl', 3.3, { dir: 'bi' }), pin('TP_INT', 'digital-out', 3.3, { dir: 'out', note: '按着拉低' }), pin('TP_RST', 'rst', 3.3, { dir: 'in' }),
@@ -851,7 +851,7 @@ export const PARTS: Part[] = [
     supplyNet: '3V3',
     sources: ['GalaxyCore GC9A01 数据手册（命令集）', '海栎创 CST816S 寄存器说明（0x01 手势、0x02 手指数、0x03–0x06 坐标、0xA7 芯片 ID 0xB5）'],
     todo: ['voltage.supply：部分模块带稳压可接 5 V，按卖家', 'i2cPullupK', 'sizeMm', 'pins：各家排针顺序不同，按卖家丝印'],
-    note: '触摸芯片无触摸几秒后自动睡眠、I2C 不应答，驱动要么先拉 TP_RST、要么等 INT 再读；模拟器没做自动睡眠，这一点只能上真机确认。',
+    note: '触摸芯片无触摸几秒后自动睡眠、I2C 不应答，驱动要么先拉 TP_RST，要么等 INT 再读；模拟器没有模拟自动睡眠，这一点必须上真机确认。',
   }),
   P({
     id: 'st7789',
@@ -922,11 +922,11 @@ export const PARTS: Part[] = [
     sources: ['WS2812B 数据手册（VDD 3.5–5.3 V、VIH 0.7 VDD）'],
     todo: ['currentMa.typ：随亮度与颜色', 'sizeMm[2]：厚度随卖家（带防水套更厚）'],
     na: ['voltage.logic：数据门限随供电（VIH = 0.7 × VDD），不是固定值'],
-    note: '满白 3.6 A，5 V 2 A 电源只够约一半亮度——固件里限亮度。电源端并一颗 1000 µF 电容。',
+    note: '满白 3.6 A，5 V 2 A 电源只够约一半亮度，要在固件里限亮度。电源端并一颗 1000 µF 电容。',
   }),
   P({
     id: 'ws2812-stick8',
-    name: 'WS2812 8 灯灯条',
+    name: 'WS2812 8 灯灯带',
     kind: 'actuator',
     model: 'WS2812B-5050 × 8 灯板',
     pins: [pin('5V', 'power', 'vcc'), pin('DIN', 'ws2812-din', null, { dir: 'in' }), GND(), pin('DOUT', 'ws2812-dout', null, { dir: 'out' })],
@@ -980,7 +980,7 @@ export const PARTS: Part[] = [
     id: 'buzzer-module',
     name: '无源蜂鸣器模块（三针，带三极管）',
     kind: 'actuator',
-    model: '无源蜂鸣器 + S8050 驱动模块',
+    model: '无源蜂鸣器和 S8050 驱动模块',
     pins: [VCC(), pin('I/O', 'pwm', null, { dir: 'in', note: '模块上三极管基极，经电阻' }), GND()],
     voltage: { supply: [3.3, 5], logic: null },
     currentMa: { typ: 30, peak: 60, est: true, source: '估算：随驱动电压与占空比' },
@@ -990,7 +990,7 @@ export const PARTS: Part[] = [
     supplyNet: '3V3',
     sources: [],
     todo: ['currentMa', 'sizeMm', 'voltage.logic：有的模块低电平响', 'voltage.supply：卖家常见标称 3.3–5 V，未见数据手册'],
-    note: '气象站报警（P0-14）用这个。I/O 直接接 GPIO 即可。',
+    note: '气象站的报警用这个。I/O 直接接 GPIO 即可。',
   }),
   P({
     id: 'max98357a',
@@ -1042,13 +1042,13 @@ export const PARTS: Part[] = [
     sources: [],
     todo: ['currentMa：电源件不消耗电流', 'sizeMm', 'voltage.supply：AC 100–240 V 为常见标称，以所买型号铭牌为准'],
     na: ['voltage.logic：电源件'],
-    note: '给舵机 / 灯带单独供电，地线要和开发板 GND 接在一起。买 3C 认证的。',
+    note: '给舵机或灯带单独供电，地线要和开发板 GND 接在一起。买 3C 认证的。',
   }),
   P({
     id: 'dc-jack',
     name: 'DC 5.5×2.1 母座转接线端子',
     kind: 'power',
-    model: 'DC-005 母座 / 螺丝端子转接头',
+    model: 'DC-005 母座转螺丝端子',
     pins: [pin('+', 'power', 'vcc'), GND('-')],
     voltage: { supply: [0, 24], logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: '无源接插件' },
@@ -1075,7 +1075,7 @@ export const PARTS: Part[] = [
     sources: ['AMS1117 数据手册（压差约 1.1–1.3 V，最大输入 15 V，输出 1 A 级）'],
     todo: ['provides.maxMa：按 800 mA 保守值，受散热限制', 'sizeMm', 'voltage.supply：上限 12 V 为保守取值（数据手册最大输入 15 V），下限 = 3.3 V + 压差'],
     na: ['voltage.logic：电源件'],
-    note: '5 V → 3.3 V，压差约 1.1 V；电流越大发热越多（(5−3.3)×I）。',
+    note: '把 5 V 降到 3.3 V，压差约 1.1 V；电流越大发热越多，发热功率约等于 1.7 V 乘以电流。',
   }),
   P({
     id: 'usb-c-cable',
@@ -1090,7 +1090,7 @@ export const PARTS: Part[] = [
     keywords: 'Type-C 数据线 USB2.0 可传数据',
     sources: [],
     todo: ['sizeMm'],
-    na: ['pins：线材 / 结构件，没有电气针脚', 'voltage：不适用'],
+    na: ['pins：线材 / 结构件，没有电气引脚', 'voltage：不适用'],
     note: '很多充电线只有电源没有数据线芯，插上电脑认不到板子。',
   }),
   P({
@@ -1145,7 +1145,7 @@ export const PARTS: Part[] = [
     requires: [{ partId: 'dupont-mm', why: '面包板上要用公对公杜邦线连接' }],
     sources: ['卖家常见标注 16.5×5.5 cm'],
     todo: ['sizeMm[2]：厚度'],
-    na: ['pins：线材 / 结构件，没有电气针脚', 'voltage：不适用'],
+    na: ['pins：线材 / 结构件，没有电气引脚', 'voltage：不适用'],
     note: 'DevKitC-1 宽 25 mm 左右，插上 830 孔面包板只剩一侧一排孔可用；两块并排是常见做法。',
   }),
   P({
@@ -1162,7 +1162,7 @@ export const PARTS: Part[] = [
     requires: [{ partId: 'dupont-mm', why: '面包板上要用公对公杜邦线连接' }],
     sources: ['卖家常见标注 8.3×5.5 cm'],
     todo: ['sizeMm[2]：厚度'],
-    na: ['pins：线材 / 结构件，没有电气针脚', 'voltage：不适用'],
+    na: ['pins：线材 / 结构件，没有电气引脚', 'voltage：不适用'],
     note: '放模块用；开发板太宽，插不下两侧都留孔。',
   }),
   P({
@@ -1178,8 +1178,8 @@ export const PARTS: Part[] = [
     keywords: '杜邦线 公对公 20cm 40P',
     sources: [],
     todo: ['sizeMm：线材只标长度 20 cm'],
-    na: ['pins：线材 / 结构件，没有电气针脚', 'voltage：不适用'],
-    note: '细线承载舵机 / 灯带大电流会掉压，电源线尽量短。',
+    na: ['pins：线材 / 结构件，没有电气引脚', 'voltage：不适用'],
+    note: '细线承载舵机或灯带的大电流会掉压，电源线尽量短。',
   }),
   P({
     id: 'dupont-mf',
@@ -1194,8 +1194,8 @@ export const PARTS: Part[] = [
     keywords: '杜邦线 公对母 20cm 40P',
     sources: [],
     todo: ['sizeMm：线材只标长度 20 cm'],
-    na: ['pins：线材 / 结构件，没有电气针脚', 'voltage：不适用'],
-    note: '模块排针（公）→ 面包板孔。',
+    na: ['pins：线材 / 结构件，没有电气引脚', 'voltage：不适用'],
+    note: '模块排针（公头）插进面包板孔。',
   }),
   P({
     id: 'dupont-ff',
@@ -1210,7 +1210,7 @@ export const PARTS: Part[] = [
     keywords: '杜邦线 母对母 20cm 40P',
     sources: [],
     todo: ['sizeMm：线材只标长度 20 cm'],
-    na: ['pins：线材 / 结构件，没有电气针脚', 'voltage：不适用'],
+    na: ['pins：线材 / 结构件，没有电气引脚', 'voltage：不适用'],
     note: '开发板排针直接连模块排针，不经面包板（装进外壳时用）。',
   }),
   P({
@@ -1260,7 +1260,7 @@ export const PARTS: Part[] = [
     keywords: '74AHCT125 DIP14',
     sources: ['TI SN74AHCT125 数据手册（VIH 2.0 V，5 V 供电）'],
     todo: ['sizeMm'],
-    note: '3.3 V 数据 → 5 V 数据，给 WS2812 灯带用（单向）。OE 接地使能。',
+    note: '把 3.3 V 数据升到 5 V，给 WS2812 灯带用，单向。OE 接地使能。',
   }),
   P({
     id: 'level-bss138',
@@ -1291,7 +1291,7 @@ export const PARTS: Part[] = [
     sources: [],
     todo: ['Ic：额定随厂家（500 mA–1.5 A 不等），按具体数据手册', 'sizeMm'],
     na: ['voltage：分立三极管，看 Vceo / Ic 额定（见 todo Ic）'],
-    note: '低边开关：GPIO → 1 kΩ → B，E 接地，负载接在 C 和 5 V 之间；感性负载（继电器、电机）加续流二极管。',
+    note: '低边开关：GPIO 经 1 kΩ 接 B，E 接地，负载接在 C 和 5 V 之间；感性负载（继电器、电机）加续流二极管。',
   }),
   P({
     id: 'cap-1000uf',
@@ -1307,7 +1307,7 @@ export const PARTS: Part[] = [
     sources: ['元件标称耐压 10 V（型号即规格）'],
     todo: ['sizeMm'],
     na: ['voltage.logic：无源件'],
-    note: '并在灯带 / 舵机电源两端，吸收启动尖峰。',
+    note: '并在灯带或舵机电源两端，吸收启动尖峰。',
   }),
   P({
     id: 'header-pins',
@@ -1322,7 +1322,7 @@ export const PARTS: Part[] = [
     keywords: '2.54mm 单排排针 40P',
     sources: [],
     todo: ['sizeMm'],
-    na: ['pins：线材 / 结构件，没有电气针脚', 'voltage：不适用'],
+    na: ['pins：线材 / 结构件，没有电气引脚', 'voltage：不适用'],
     note: '很多模块排针没焊、要自己焊——看卖家图有没有焊好。',
   }),
 
@@ -1331,7 +1331,7 @@ export const PARTS: Part[] = [
     id: 'enclosure-weather',
     name: '气象站外壳（3D 打印 PLA）',
     kind: 'enclosure',
-    model: 'TryBoard weather 外壳（参数化，前面板 + 后壳）',
+    model: '试板气象站外壳（参数化，前面板和后壳）',
     pins: null,
     voltage: { supply: null, logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: '结构件' },
@@ -1341,14 +1341,14 @@ export const PARTS: Part[] = [
     keywords: '3D打印 PLA 定制',
     sources: ['web/src/views/templates.ts（外壳 70×50×32 mm，估算）'],
     todo: ['price：打印服务按体积报价'],
-    na: ['pins：线材 / 结构件，没有电气针脚', 'voltage：不适用'],
+    na: ['pins：线材 / 结构件，没有电气引脚', 'voltage：不适用'],
     note: '下载 STL 去打印服务上传询价（外链）；装配位置会改变 BME280 读数。',
   }),
   P({
     id: 'enclosure-spin',
-    name: '小黄身体 + 转台底座（3D 打印）',
+    name: '小黄身体和转台底座（3D 打印）',
     kind: 'enclosure',
-    model: 'TryBoard spin 外壳（底座 Ø60、身高 110 mm）',
+    model: '试板小黄外壳（底座 Ø60、身高 110 mm）',
     pins: null,
     voltage: { supply: null, logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: '结构件' },
@@ -1358,14 +1358,14 @@ export const PARTS: Part[] = [
     keywords: '3D打印 PLA 定制',
     sources: ['web/src/views/templates.ts（底座 Ø60 mm，身高 110 mm，估算）'],
     todo: ['price：打印服务按体积报价'],
-    na: ['pins：线材 / 结构件，没有电气针脚', 'voltage：不适用'],
+    na: ['pins：线材 / 结构件，没有电气引脚', 'voltage：不适用'],
     note: '舵机仓在底座里，圆屏排线穿转轴中心孔。',
   }),
   P({
     id: 'enclosure-lens',
-    name: '透镜小人底座 + 屏幕外框（3D 打印）',
+    name: '透镜小人底座和屏幕外框（3D 打印）',
     kind: 'enclosure',
-    model: 'TryBoard lens 外壳（底座 Ø50 mm，外框两档卡槽）',
+    model: '试板透镜小人外壳（底座 Ø50 mm，外框两档卡槽）',
     pins: null,
     voltage: { supply: null, logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: '结构件' },
@@ -1375,14 +1375,14 @@ export const PARTS: Part[] = [
     keywords: '3D打印 PLA 定制',
     sources: ['web/src/views/templates.ts（底座 Ø50 mm，总高 62 mm，估算）'],
     todo: ['price：打印服务按体积报价'],
-    na: ['pins：线材 / 结构件，没有电气针脚', 'voltage：不适用'],
+    na: ['pins：线材 / 结构件，没有电气引脚', 'voltage：不适用'],
     note: '外框高档离屏 8 mm 时透镜放大约 1.35×（估算）。',
   }),
   P({
     id: 'enclosure-lamp',
-    name: '旋钮台灯灯座 + 灯罩（3D 打印）',
+    name: '旋钮台灯灯座和灯罩（3D 打印）',
     kind: 'enclosure',
-    model: 'TryBoard lamp 外壳（灯座 80×60×36 mm，乳白灯罩 Ø70 mm）',
+    model: '试板旋钮台灯外壳（灯座 80×60×36 mm，乳白灯罩 Ø70 mm）',
     pins: null,
     voltage: { supply: null, logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: '结构件' },
@@ -1392,14 +1392,14 @@ export const PARTS: Part[] = [
     keywords: '3D打印 PLA 定制 乳白 灯罩',
     sources: ['web/src/views/templates.ts（灯座 80×60×36 mm，灯罩 Ø70 mm，估算）'],
     todo: ['price：打印服务按体积报价'],
-    na: ['pins：线材 / 结构件，没有电气针脚', 'voltage：不适用'],
-    note: '灯罩用乳白 PLA 打印才能把灯珠的光打散；灯条贴在导光柱上，离灯罩壁远一点才不会有亮点。',
+    na: ['pins：线材 / 结构件，没有电气引脚', 'voltage：不适用'],
+    note: '灯罩用乳白 PLA 打印才能把灯珠的光打散；灯带贴在导光柱上，离灯罩壁远一点才不会有亮点。',
   }),
   P({
     id: 'enclosure-ruler',
     name: '超声波尺子外壳（3D 打印）',
     kind: 'enclosure',
-    model: 'TryBoard ruler 外壳（手持 90×48×30 mm，前面两个探头孔）',
+    model: '试板超声波尺子外壳（手持 90×48×30 mm，前面两个探头孔）',
     pins: null,
     voltage: { supply: null, logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: '结构件' },
@@ -1409,14 +1409,14 @@ export const PARTS: Part[] = [
     keywords: '3D打印 PLA 定制',
     sources: ['web/src/views/templates.ts（外壳 90×48×30 mm，探头孔 Ø17 mm，估算）'],
     todo: ['price：打印服务按体积报价'],
-    na: ['pins：线材 / 结构件，没有电气针脚', 'voltage：不适用'],
+    na: ['pins：线材 / 结构件，没有电气引脚', 'voltage：不适用'],
     note: '两个探头要从前面板的孔里探出来；缩在孔后面，声波先打到孔壁，读数会变成几厘米。',
   }),
   P({
     id: 'enclosure-tilt',
     name: '体感小人圆盘外壳（3D 打印）',
     kind: 'enclosure',
-    model: 'TryBoard tilt 外壳（圆盘 Ø56 × 26 mm，圆屏在顶面）',
+    model: '试板体感小人外壳（圆盘 Ø56 × 26 mm，圆屏在顶面）',
     pins: null,
     voltage: { supply: null, logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: '结构件' },
@@ -1426,14 +1426,14 @@ export const PARTS: Part[] = [
     keywords: '3D打印 PLA 定制',
     sources: ['web/src/views/templates.ts（圆盘 Ø56 × 26 mm，估算）'],
     todo: ['price：打印服务按体积报价'],
-    na: ['pins：线材 / 结构件，没有电气针脚', 'voltage：不适用'],
+    na: ['pins：线材 / 结构件，没有电气引脚', 'voltage：不适用'],
     note: '六轴模块要平贴底板、箭头朝前；装反了小人会往高处爬。',
   }),
   P({
     id: 'enclosure-usbkey',
-    name: 'USB 小键盘外壳 + 键帽（3D 打印）',
+    name: 'USB 小键盘外壳和键帽（3D 打印）',
     kind: 'enclosure',
-    model: 'TryBoard usbkey 外壳（底壳 + 定位板，4 个键帽）',
+    model: '试板 USB 小键盘外壳（底壳、定位板和 4 个键帽）',
     pins: null,
     voltage: { supply: null, logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: '结构件' },
@@ -1443,8 +1443,8 @@ export const PARTS: Part[] = [
     keywords: '3D打印 PLA 定制 键帽',
     sources: ['web/src/app/enclosure.ts（底壳 80×40 mm，估算）'],
     todo: ['price：打印服务按体积报价'],
-    na: ['pins：线材 / 结构件，没有电气针脚', 'voltage：不适用'],
-    note: '开发板的 USB / OTG 口要对准背面开孔；定位板别用金属的盖住 WROOM 天线（估算会掉 Wi-Fi 信号）。',
+    na: ['pins：线材 / 结构件，没有电气引脚', 'voltage：不适用'],
+    note: '开发板的原生 USB 口要对准背面开孔；别用金属定位板盖住 WROOM 天线，否则 Wi-Fi 信号会变差（估算）。',
   }),
   P({
     id: 'lens-dome',
@@ -1461,7 +1461,7 @@ export const PARTS: Part[] = [
     sources: [],
     todo: ['sizeMm[2]：厚度与焦距随卖家（焦距决定放大倍数）'],
     na: ['pins：光学件', 'voltage：不适用'],
-    note: '焦距要和外框高度配：模版按离屏 8 mm 放大约 1.35× 估算。',
+    note: '焦距要和外框高度配：按离屏 8 mm 算，放大约 1.35×（估算）。',
   }),
 ];
 

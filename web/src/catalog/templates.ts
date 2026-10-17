@@ -1,4 +1,4 @@
-// 采购模版：每个作品要买什么（必选不可去 / 建议可增减）、买完怎么摆上实验台（默认接线）。
+// 采购模板：每个作品要买什么（必选不可去 / 建议可增减）、买完怎么摆上实验台（默认接线）。
 // 接线与 firmware/examples.json 里同名示例的 scene 一致（catalog.test.ts 对拍），
 // 引脚与 firmware/levels.json 第 06 关 / 第 07 关 spin、lens 的任务书一致。
 import { getPart, type LcdPins, type Part } from './parts.ts';
@@ -13,7 +13,7 @@ export interface Pick {
 }
 
 /**
- * 一根线：零件的某个针脚接到哪个网络。
+ * 一根线：零件的某个引脚接到哪个网络。
  * 网络名：'GPIOn'（开发板引脚）、'3V3'、'5V'（板上 5V / VBUS）、'GND'、'EXT5V'（外接 5 V 电源轨）、'EXT3V3'。
  * via：中间经过的器件（分压、电平转换、三极管），规则据此放行。
  */
@@ -73,7 +73,7 @@ const SERVO_EXT_WIRING: Wire[] = [
   { part: 'dc-jack', pin: '+', net: 'EXT5V' },
   { part: 'dc-jack', pin: '-', net: 'GND' },
 ];
-const SERVO: BuyLine = { partId: 'sg90', qty: 1, why: '表盘 / 转身用的舵机' };
+const SERVO: BuyLine = { partId: 'sg90', qty: 1, why: '表盘指针或转身用的舵机' };
 // 舵机电源放建议件（默认勾选）：去掉后由 R27 / R20 当场说后果（只靠 USB 会掉压复位），
 // 实验台也照"只有 USB"摆，给欠压演示留口子（docs/DECISIONS.md 2026-10-16 采购页）
 const SERVO_SUPPLY: (BuyLine & { checked: boolean })[] = [
@@ -91,12 +91,12 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
     board: 's3-devkitc1-v10',
     required: [
       { partId: 's3-devkitc1-v10', qty: 1, why: '固件和 3D 板都按 v1.0（彩灯 GPIO48）' },
-      { partId: 'bme280', qty: 1, why: '温度 / 湿度 / 气压' },
+      { partId: 'bme280', qty: 1, why: '测温度、湿度、气压' },
       { partId: 'ssd1306', qty: 1, why: '显示读数' },
       SERVO,
       CABLE,
       { partId: 'dupont-mf', qty: 1, why: '模块排针接面包板' },
-      { partId: 'enclosure-weather', qty: 1, why: '装壳关（第 06 关）' },
+      { partId: 'enclosure-weather', qty: 1, why: '组装时装壳用' },
     ],
     suggested: [
       ...SERVO_SUPPLY,
@@ -104,7 +104,7 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
       { partId: 'dupont-mm', qty: 1, checked: true, why: '面包板上跳线' },
       { partId: 'buzzer-module', qty: 1, checked: true, why: '温度超限蜂鸣报警（固件 GPIO5，成品页能听到）' },
       { partId: 'dupont-ff', qty: 1, checked: false, why: '装进外壳时直接连排针' },
-      { partId: 'cap-1000uf', qty: 1, checked: false, why: '舵机电源两端稳压' },
+      { partId: 'cap-1000uf', qty: 1, checked: false, why: '并在舵机电源上，压住转动时的电压跌落' },
     ],
     wiring: [
       { part: 'ssd1306', pin: 'GND', net: 'GND' },
@@ -134,13 +134,13 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
       SERVO,
       CABLE,
       { partId: 'dupont-ff', qty: 1, why: '圆屏排针直接连开发板' },
-      { partId: 'enclosure-spin', qty: 1, why: '身体 + 转台底座' },
+      { partId: 'enclosure-spin', qty: 1, why: '身体和转台底座' },
     ],
     suggested: [
       ...SERVO_SUPPLY,
       { partId: 'breadboard-830', qty: 1, checked: true, why: '先搭通再装壳' },
       { partId: 'dupont-mm', qty: 1, checked: true, why: '面包板上跳线' },
-      { partId: 'cap-1000uf', qty: 1, checked: false, why: '舵机电源两端稳压' },
+      { partId: 'cap-1000uf', qty: 1, checked: false, why: '并在舵机电源上，压住转动时的电压跌落' },
       { partId: 'mg90s', qty: 1, checked: false, why: '想更耐用可以换金属齿' },
     ],
     wiring: [...GC9A01_WIRING, ...SERVO_EXT_WIRING],
@@ -157,8 +157,8 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
       { partId: 'gc9a01', qty: 1, why: '圆屏眼睛' },
       CABLE,
       { partId: 'dupont-ff', qty: 1, why: '圆屏排针直接连开发板' },
-      { partId: 'enclosure-lens', qty: 1, why: '底座 + 屏幕外框' },
-      { partId: 'lens-dome', qty: 1, why: '放大成立体感' },
+      { partId: 'enclosure-lens', qty: 1, why: '底座和屏幕外框' },
+      { partId: 'lens-dome', qty: 1, why: '把表情放大，看着更立体' },
     ],
     suggested: [
       { partId: 'breadboard-830', qty: 1, checked: false, why: '想先在面包板上试' },
@@ -176,18 +176,18 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
     required: [
       { partId: 's3-devkitc1-v10', qty: 1, why: '验收固件按 S3' },
       { partId: 'ws2812-stick8', qty: 1, why: '灯：8 颗 WS2812，DIN 接 GPIO5' },
-      { partId: 'encoder', qty: 1, why: '旋钮：转调亮度 / 颜色，按下切换' },
+      { partId: 'encoder', qty: 1, why: '旋钮：转动调亮度或颜色，按下切换' },
       CABLE,
       { partId: 'dupont-ff', qty: 1, why: '模块排针直接连开发板' },
-      { partId: 'enclosure-lamp', qty: 1, why: '灯座 + 乳白灯罩' },
+      { partId: 'enclosure-lamp', qty: 1, why: '灯座和乳白灯罩' },
     ],
     suggested: [
-      { partId: 'psu-5v2a', qty: 1, checked: true, why: '灯条单独供电：8 颗满白约 480 mA，加上板子超过电脑 USB 的 500 mA' },
+      { partId: 'psu-5v2a', qty: 1, checked: true, why: '灯带单独供电：8 颗满白约 480 mA，加上板子就超过电脑 USB 的 500 mA' },
       { partId: 'dc-jack', qty: 1, checked: true, why: '电源插头转面包板' },
-      { partId: 'level-ahct125', qty: 1, checked: true, why: '5 V 灯条要 ≥ 3.5 V 的数据电平，3.3 V 直推偶尔会乱色' },
+      { partId: 'level-ahct125', qty: 1, checked: true, why: '5 V 灯带要 3.5 V 以上的数据电平，3.3 V 直推偶尔会乱色' },
       { partId: 'breadboard-830', qty: 1, checked: true, why: '先搭通再装壳' },
       { partId: 'dupont-mm', qty: 1, checked: true, why: '面包板上跳线' },
-      { partId: 'cap-1000uf', qty: 1, checked: false, why: '灯条电源两端稳压，长灯条必加' },
+      { partId: 'cap-1000uf', qty: 1, checked: false, why: '并在灯带电源上，压住电压跌落，长灯带必加' },
     ],
     wiring: [
       { part: 'ws2812-stick8', pin: '5V', net: 'EXT5V' },
@@ -273,10 +273,10 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
     product: 'usbkey',
     board: 's3-devkitc1-v10',
     required: [
-      { partId: 's3-devkitc1-v10', qty: 1, why: '要原生 USB（板上标 USB / OTG 的口）：C3 的 USB 只能当串口，当不了键盘' },
+      { partId: 's3-devkitc1-v10', qty: 1, why: '要原生 USB（板上标 USB 或 OTG 的口）：C3 的 USB 只能当串口，当不了键盘' },
       { partId: 'usb-c-cable', qty: 1, why: '数据线（不是只能充电的线）：插 OTG 口' },
-      { partId: 'button', qty: 4, why: 'K1–K3 发 a / b / c，K4 宏键' },
-      { partId: 'enclosure-usbkey', qty: 1, why: '底壳 + 定位板 + 键帽' },
+      { partId: 'button', qty: 4, why: 'K1–K3 发 a、b、c，K4 是宏键' },
+      { partId: 'enclosure-usbkey', qty: 1, why: '底壳、定位板和键帽' },
     ],
     suggested: [
       { partId: 'breadboard-830', qty: 1, checked: true, why: '先在面包板上搭通再装壳' },
@@ -319,11 +319,11 @@ export const TEMPLATE_BY_ID: Record<string, ProcureTemplate> = Object.fromEntrie
 
 export function getTemplate(id: string): ProcureTemplate {
   const t = TEMPLATE_BY_ID[id];
-  if (!t) throw new Error(`没有采购模版 ${id}`);
+  if (!t) throw new Error(`没有采购模板 ${id}`);
   return t;
 }
 
-/** 模版必选件：采购页上灰勾、不能去掉（去掉时 R27 给阻断） */
+/** 模板必选件：采购页上灰勾、不能去掉（去掉时 R27 给阻断） */
 export function isRequired(templateId: string, partId: string): boolean {
   return getTemplate(templateId).required.some((l) => l.partId === partId);
 }
@@ -337,7 +337,7 @@ export function removePick(templateId: string, picks: Pick[], partId: string): {
   return { picks: picks.filter((p) => p.partId !== partId && p.key !== partId) };
 }
 
-/** 模版 → 默认选中清单（必选 + 默认勾选的建议项；includeAll 时建议项全带上） */
+/** 模板 → 默认选中清单（必选 + 默认勾选的建议项；includeAll 时建议项全带上） */
 export function templatePicks(id: string, opts: { includeAll?: boolean } = {}): Pick[] {
   const t = getTemplate(id);
   const lines = [...t.required, ...t.suggested.filter((s) => opts.includeAll || s.checked)];

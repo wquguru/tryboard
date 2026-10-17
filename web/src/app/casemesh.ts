@@ -102,7 +102,7 @@ export async function exportCase(template: string, bom: BomHistory, p: CaseParam
   return {
     name: `tryboard-${template}-case-h${p.height}.${fmt}`,
     bytes,
-    check: { ok, tris: got, size, text: ok ? `读回 ✓ ${got} 个三角形，${size[0]} × ${size[1]} × ${size[2]} mm` : `读回不一致：写了 ${tris} 个三角形，读回 ${got} 个` },
+    check: { ok, tris: got, size, text: ok ? `外壳 ${fmt.toUpperCase()} 已生成（${got} 个三角形，${size[0]} × ${size[1]} × ${size[2]} mm）` : `${fmt.toUpperCase()} 生成出错，请重试` },
   };
 }
 

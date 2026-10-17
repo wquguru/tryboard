@@ -35,7 +35,7 @@ ${floor}
 <g data-k="face"><circle cx="0" cy="210" r="62" fill="#141414"/><image data-k="lcd" x="-56" y="154" width="112" height="112" clip-path="url(#lp-face)"/>
 <circle cx="0" cy="210" r="62" fill="none" stroke="#3A3936" stroke-width="3"/></g>
 </g>
-<text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">spin · 成品 · SG90 转台 + 1.28″ 圆屏 GC9A01</text>
+<text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">小黄 · 成品 · SG90 转台 + 1.28″ 圆屏 GC9A01</text>
 <text data-k="note" x="24" y="56" fill="#C23A00" class="tb-mono" font-size="12" font-weight="700"></text>
 <text data-k="angle" x="976" y="96" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700" text-anchor="end"></text>
 </svg>
@@ -59,7 +59,7 @@ ${bootBtn('按 BOOT：看正面')}
       q('body').setAttribute('transform', `translate(500 30) scale(${(0.72 + 0.28 * Math.cos(r)).toFixed(3)} 1)`);
       q('face').setAttribute('transform', `translate(${(44 * Math.sin(r)).toFixed(1)} 0)`);
       q('angle').textContent = a === null ? '舵机未输出' : `转台 ${turn >= 0 ? '+' : ''}${turn.toFixed(0)}°`;
-      q('note').textContent = fx.hornOffset ? `舵盘装偏 ${fx.hornOffset.toFixed(1)}°：固件说"正面"，它其实歪着` : '';
+      q('note').textContent = fx.hornOffset ? `舵盘装偏 ${fx.hornOffset.toFixed(1)}°：固件说「正面」，它其实歪着` : '';
       if (f.lcd !== last) {
         last = f.lcd;
         if (f.lcd) q('lcd').setAttribute('href', lcdImage(f.lcd));
@@ -81,7 +81,7 @@ ${floor}
 <circle cx="500" cy="236" r="150" fill="url(#lp-dome)"/>
 <path d="M395 172 A130 130 0 0 1 478 104" fill="none" stroke="#FFF" opacity="0.75" stroke-width="8" stroke-linecap="round"/>
 <circle cx="500" cy="236" r="150" fill="none" stroke="#8A9BAD" stroke-width="2"/>
-<text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">lens · 成品 · 1.28″ 圆屏 GC9A01 + 凸透镜罩</text>
+<text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">透镜小人 · 成品 · 1.28″ 圆屏 GC9A01 + 凸透镜罩</text>
 <text data-k="note" x="24" y="56" fill="#C23A00" class="tb-mono" font-size="12" font-weight="700"></text>
 <text data-k="mag" x="976" y="96" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700" text-anchor="end"></text>
 </svg>

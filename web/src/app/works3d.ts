@@ -276,7 +276,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     const cable = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-2, 1, -3), new THREE.Vector3(-2, 0.8, -4.2), new THREE.Vector3(-1.4, 0.12, -6), new THREE.Vector3(1, 0.12, -12)]), 40, 0.14, 10), new THREE.MeshStandardMaterial({ color: '#1E1E1E', roughness: 0.6 }));
     cable.castShadow = true;
     scene.add(cable);
-    tagList.push({ el: tag('EC11 旋钮 · 拖 / 滚转，点一下切换模式', 'hot'), at: () => new THREE.Vector3(2.3, 0.2, KNOB_Z + 0.4), dy: 16 });
+    tagList.push({ el: tag('EC11 旋钮 · 拖动或滚轮转，点一下切换模式', 'hot'), at: () => new THREE.Vector3(2.3, 0.2, KNOB_Z + 0.4), dy: 16 });
     tagList.push({ el: tag('WS2812 × 8 · 乳白灯罩'), at: () => new THREE.Vector3(-3.6, 9.5, 0), dx: -50 });
 
     let angle = 0;

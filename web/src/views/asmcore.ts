@@ -1,5 +1,5 @@
 // 装配的状态与规则（SVG 视图 assembly.ts 和 3D 视图 app/asm3d.ts 共用一份）：
-// 必须从下往上装；有装法选择的零件不给装法就进入"选择中"；装法影响由模版的 checks / effects 算。
+// 必须从下往上装；有装法选择的零件不给装法就进入"选择中"；装法影响由模板的 checks / effects 算。
 import type { Effects, Part, Picked, Template } from './templates';
 
 export interface AsmCoreState extends Picked {

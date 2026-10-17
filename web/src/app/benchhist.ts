@@ -53,7 +53,7 @@ const label = (op: BenchOp, runs: RunRec[]): TimelineStep => {
     case 'wiring':
       return { id: '', icon: '~', label: op.label };
     case 'check':
-      return { id: '', icon: '◎', label: `验收 ${op.id}`, status: op.outcome.ok ? 'ok' : 'bad' };
+      return { id: '', icon: '◎', label: `检查点 ${op.id}`, status: op.outcome.ok ? 'ok' : 'bad' };
     case 'brownout':
       return { id: '', icon: '↯', label: `欠压复位 ${op.tSec.toFixed(2)} s${op.count && op.count > 1 ? ` ×${op.count}` : ''}`, status: 'bad' };
   }
@@ -235,7 +235,7 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
       if (!r) return;
       const s = steps[i];
       const what = label(s.op, runs).label;
-      shell.toast(`回到「${what}」· 运行 #${r.run} 的 ${(r.untilMs / 1000).toFixed(2)} s${r.same === null ? '' : r.same ? ' · 指纹与当时一致 ✓' : ' · 指纹和当时不一样 ✗'}`);
+      shell.toast(`回到「${what}」· 运行 #${r.run} 的 ${(r.untilMs / 1000).toFixed(2)} s${r.same === null ? '' : r.same ? ' · ✓ 指纹一致' : ' · ✗ 指纹不同'}`);
     });
   });
   store.subscribe(() => ownsTimeline() && render(), ['step']);

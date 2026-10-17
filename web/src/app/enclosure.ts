@@ -1,4 +1,4 @@
-// 参数化外壳（P1-08）：按作品模版 + 清单里零件的尺寸算出外壳布局（零件槽位、开孔、定位柱）和警告，
+// 参数化外壳（P1-08）：按作品模板 + 清单里零件的尺寸算出外壳布局（零件槽位、开孔、定位柱）和警告，
 // 再用 Manifold（wasm，懒加载）做布尔运算出底壳 / 顶盖网格。布局是纯函数（node --test 直接测），
 // 网格函数吃一个 Manifold 模块实例（浏览器懒加载、node 测试直接 import），本文件不 import wasm。
 // 坐标：毫米，z 朝上（打印朝向：底壳的外底面贴打印床）。尺寸、间隙都是估算，未经真机标定。
@@ -117,7 +117,7 @@ export interface CaseSel {
   sensor?: string;
   lcd?: string;
 }
-/** 从清单的件里挑出外壳要用的几个（找不到就用模版默认） */
+/** 从清单的件里挑出外壳要用的几个（找不到就用模板默认） */
 export function caseSel(board: string, picks: string[]): CaseSel {
   const first = (ids: string[], d: string) => ids.find((x) => picks.includes(x)) ?? d;
   return {

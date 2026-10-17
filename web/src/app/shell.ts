@@ -55,7 +55,7 @@ export function createShell(): Shell {
     },
   };
   // ⌘K 命令框要用到 session / 时间线，由 main.ts 在它们建好之后接上（cmdk.ts）
-  document.querySelectorAll<HTMLButtonElement>('.viewcube button').forEach((b) => (b.onclick = () => shell.toast(`视角「${b.title}」由 3D 台面后续接上，现在可以直接拖动旋转`)));
+  document.querySelectorAll<HTMLButtonElement>('.viewcube button').forEach((b) => (b.onclick = () => shell.toast(`「${b.title}」视角暂未开放，可以直接拖动旋转`)));
   return shell;
 }
 

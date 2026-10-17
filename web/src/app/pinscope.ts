@@ -73,20 +73,20 @@ export function powerVolts(id: string, ext5v: boolean, e: ElecFrame | null = nul
 export function meterVolts(id: string, e: ElecFrame | null, f: { pwm: number[]; gpio: number; enable: number; gpioHi: number; enableHi: number }, ext5v: boolean): { v: number | null; note: string } {
   const v33 = e?.v3v3 ?? 3.3;
   if (id === 'GND' || id === 'G') return { v: 0, note: '地' };
-  if (id === '3V3') return { v: v33, note: '3V3 节点（LDO 输出）· 电路求解' };
-  if (id === '5V') return { v: e?.v5 ?? 5, note: '5V 轨（USB VBUS）· 电路求解' };
-  if (id === 'EXT5V') return ext5v ? { v: e?.vExt ?? 5, note: '外接 5 V · 电路求解' } : { v: null, note: '没接外接电源' };
-  if (id === 'servo:VCC') return { v: e?.vServo ?? null, note: '舵机红线（经杜邦线）· 电路求解' };
-  if (id === 'RST' || id === 'EN') return { v: e?.held ? 0 : v33, note: e?.held ? '欠压复位按住中' : 'EN 上拉到 3V3' };
+  if (id === '3V3') return { v: v33, note: '3V3（LDO 输出）· 估算' };
+  if (id === '5V') return { v: e?.v5 ?? 5, note: '5V 轨（USB VBUS）· 估算' };
+  if (id === 'EXT5V') return ext5v ? { v: e?.vExt ?? 5, note: '外接 5 V · 估算' } : { v: null, note: '没接外接电源' };
+  if (id === 'servo:VCC') return { v: e?.vServo ?? null, note: '舵机红线（经杜邦线）· 估算' };
+  if (id === 'RST' || id === 'EN') return { v: e?.held ? 0 : v33, note: e?.held ? '欠压复位中' : 'EN 上拉到 3V3' };
   const g = /^GPIO(\d+)$/.exec(id);
-  if (!g) return { v: null, note: '这根针没有电压读数' };
+  if (!g) return { v: null, note: '这个引脚没有电压读数' };
   const pin = Number(g[1]);
-  if (e?.held) return { v: 0, note: '芯片被欠压复位按住，引脚高阻' };
+  if (e?.held) return { v: 0, note: '欠压复位中，引脚高阻' };
   const duty = f.pwm[pin] ?? -1;
-  if (duty >= 0) return { v: duty * v33, note: `PWM：直流档读平均值（占空比 ${(duty * 100).toFixed(1)} % × ${v33.toFixed(2)} V）` };
+  if (duty >= 0) return { v: duty * v33, note: `PWM：直流档读的是平均值，占空比 ${(duty * 100).toFixed(1)} % 乘以 ${v33.toFixed(2)} V` };
   const lv = bit(f.gpio, f.gpioHi, pin);
   const out = !!bit(f.enable, f.enableHi, pin);
-  return { v: lv ? v33 : 0, note: `${out ? '输出' : '输入'}${lv ? '高' : '低'}电平（逻辑电平换算，未算驱动内阻）` };
+  return { v: lv ? v33 : 0, note: `${out ? '输出' : '输入'}${lv ? '高' : '低'}电平（按逻辑电平换算，没算驱动内阻）` };
 }
 
 export function pwmText(duty: number, freq: number) {
@@ -138,7 +138,7 @@ export function drawScope(cv: HTMLCanvasElement, kind: PinKind, trace: PinTrace,
     g.lineTo(W, y(v));
     g.stroke();
     g.fillText(`${volts.toFixed(2)} V`, 6, 11);
-    return '直流：电路求解的节点电压（估算模型，见 DECISIONS「电气模型」）';
+    return '直流电压（估算）';
   }
   if (kind === 'i2c') {
     // 示意：起始位 + 8 位地址 + 应答，开漏、空闲为高
@@ -151,7 +151,7 @@ export function drawScope(cv: HTMLCanvasElement, kind: PinKind, trace: PinTrace,
     });
     g.stroke();
     g.fillText('示意 · 不是实测波形', 6, 11);
-    return 'I2C 示意（逻辑分析仪解码见 P1-05）';
+    return 'I2C 示意，实际解码看逻辑分析仪';
   }
   const last = trace.latest();
   const pwm = last && last.duty >= 0 && last.freq > 0;
@@ -178,5 +178,5 @@ export function drawScope(cv: HTMLCanvasElement, kind: PinKind, trace: PinTrace,
   span = pwm ? (win >= 0.001 ? `${(win * 1000).toFixed(1)} ms` : `${(win * 1e6).toFixed(0)} µs`) : '2 s';
   g.fillText(`3.3 V`, 6, 11);
   g.fillText(span, W - 6 - g.measureText(span).width, H - 3);
-  return pwm ? `最近 ${span}：按占空比与频率合成，相位示意` : `最近 ${span}：每个 tick 采一次电平`;
+  return pwm ? `最近 ${span}：按占空比和频率画出，相位是示意` : `最近 ${span}：采样较粗`;
 }

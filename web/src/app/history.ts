@@ -131,7 +131,7 @@ export function summarize(r: RunRec): RunSummary {
     fw: r.fwName,
     env0: ev ? envText(ev.env0) : '（运行中）',
     envChanges: ev ? ev.events.filter((e) => e.kind === 'env').length : 0,
-    power: r.ext5v ? 'USB + 外接 5 V' : '只有 USB 5 V',
+    power: r.ext5v ? 'USB 和外接 5 V' : '只有 USB 5 V',
     heat: r.heat ? `热源靠近 ${r.heat === 'bme280' ? 'BME280' : r.heat}` : '无',
     seconds: r.snap ? `${r.snap.simSeconds.toFixed(2)} s` : '运行中',
     fingerprint: r.fingerprint ?? '（运行中，收尾后算）',

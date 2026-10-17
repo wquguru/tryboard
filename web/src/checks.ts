@@ -273,6 +273,5 @@ export const checkCommand = (l: Level) => `npx tryboard check app.bin --level ${
 /** 仓库开发者用的同一条验收（原生内核） */
 export const devCheckCommand = (l: Level) => `tools/check.py app.bin --level ${l.id}`;
 /** 命令提示下面那行说明（HTML） */
-export const checkCommandNote = (l: Level) =>
-  `<p class="note">本地包，尚未发布：在仓库里先 <span class="mono">tools/build_npm.sh</span>，再 <span class="mono">npx ./packages/tryboard/tryboard-0.1.0.tgz check …</span>。仓库开发者也可以用 <span class="mono">${devCheckCommand(l)}</span>，结论和指纹相同。</p>`;
+export const checkCommandNote = (_l: Level) => `<p class="note">命令行验收的结论和指纹与网页相同；退出码 0 表示通过。</p>`;
 export { esc };

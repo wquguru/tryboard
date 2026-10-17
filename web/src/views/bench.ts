@@ -74,7 +74,7 @@ ${labels.join('')}
 ${envBoxSvg}
 <text x="24" y="34" fill="#C9D6CF" class="tb-mono" font-size="12" font-weight="700">${opts.caption}</text>
 </svg>
-<button type="button" class="tb-hit" data-k="boot" aria-label="按住 BOOT 键" style="left:37.7%;top:47.1%;width:6%;height:10.5%"></button>
+<button type="button" class="tb-hit" data-k="boot" aria-label="按 BOOT" style="left:37.7%;top:47.1%;width:6%;height:10.5%"></button>
 <button type="button" class="tb-hit" data-k="rst" aria-label="按 RST 复位" style="left:37.7%;top:58.9%;width:4%;height:7%"></button>
 <div class="tb-tag" style="left:24.5%;top:36.5%">按 BOOT 换单位</div>
 ${envButtons}

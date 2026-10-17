@@ -114,7 +114,7 @@ test('R10 UART0', () => {
 });
 
 test('R11 C3 模拟量只能放 ADC1', () => {
-  fires(one(C3, 'pot', '2', 'GPIO5'), 'R11', 'block', /勘误.*与 Wi-Fi 无关/);
+  fires(one(C3, 'pot', '2', 'GPIO5'), 'R11', 'block', /勘误.*和 Wi-Fi 无关/);
   fires(one(C3, 'pot', '2', 'GPIO6'), 'R11', 'block', /不是模拟输入/);
   quiet(one(C3, 'pot', '2', 'GPIO3'), 'R11');
   quiet(one(S3, 'pot', '2', 'GPIO5'), 'R11');
@@ -390,7 +390,7 @@ test('R31 可用 GPIO 不够（AtomS3 只有 8 个）', () => {
 
 test('R32 板载屏引脚与固件不符（微雪圆屏触摸版 / 无触摸版）', () => {
   const NT = { sclk: 10, mosi: 11, cs: 9, dc: 8, rst: 12, bl: 40 };
-  const f = fires({ board: 'ws-s3-touch-lcd128', parts: [CABLE], firmware: { lcdPins: NT } }, 'R32', 'warn', /RST=GPIO12、背光=GPIO40.*RST=GPIO14、背光=GPIO2/);
+  const f = fires({ board: 'ws-s3-touch-lcd128', parts: [CABLE], firmware: { lcdPins: NT } }, 'R32', 'warn', /RST GPIO12、背光 GPIO40.*RST GPIO14、背光 GPIO2/);
   assert.deepEqual(f.fix, { action: 'swap', partId: 'ws-s3-lcd128', replaces: 'ws-s3-touch-lcd128' });
   quiet({ board: 'ws-s3-lcd128', parts: [CABLE], firmware: { lcdPins: NT } }, 'R32');
   quiet({ board: 'ws-s3-touch-lcd128', parts: [CABLE] }, 'R32');

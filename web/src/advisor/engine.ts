@@ -75,8 +75,8 @@ export function planPins(b: Board, c: Chip, parts: string[], needUsb: boolean) {
   c.pins.flash.forEach((p) => reserved.set(p, '接 flash'));
   if (b.psramMB > 0) c.pins.psramOctal?.forEach((p) => reserved.set(p, '接八线 PSRAM'));
   if (needUsb) c.pins.usb.forEach((p) => reserved.set(p, 'USB D-/D+'));
-  reserved.set(c.pins.uart0[0], '串口 TX（下载 / 日志）');
-  reserved.set(c.pins.uart0[1], '串口 RX（下载 / 日志）');
+  reserved.set(c.pins.uart0[0], '串口 TX（下载和日志用）');
+  reserved.set(c.pins.uart0[1], '串口 RX（下载和日志用）');
   for (const [p, why] of Object.entries(b.usedPins)) reserved.set(Number(p), why);
 
   // S3 编号 0–21、26–48；经典款没有 20、24、28–31
@@ -154,7 +154,7 @@ export function planPins(b: Board, c: Chip, parts: string[], needUsb: boolean) {
         out.push({
           label: n.label,
           pins: got,
-          note: got.some((p) => strap.has(p)) ? '用到了 strapping 脚：上电时不能被外部电路拉到错误电平' : undefined,
+          note: got.some((p) => strap.has(p)) ? '用到了 strapping 脚：上电时外部电路把它拉错电平，板子就进不了正常启动' : undefined,
         });
     }
   }
@@ -173,7 +173,7 @@ function estimatePower(b: Board, c: Chip, parts: string[], duty: NonNullable<Tem
   return {
     avgMA: avg,
     days,
-    breakdown: `工作 ${(activeFrac * 100).toFixed(2)}% 时间 × ${activeMA.toFixed(0)}mA + 深睡 × ${b.boardSleepUA}µA（整板）`,
+    breakdown: `${(activeFrac * 100).toFixed(2)}% 时间工作，约 ${activeMA.toFixed(0)}mA；其余时间深睡，整板约 ${b.boardSleepUA}µA`,
     confidence: '估算' as Confidence,
   };
 }
@@ -216,14 +216,14 @@ export function recommend(need: Need): { plans: Plan[]; rejected: Rejected[] } {
     } else if (c.simulated === 'partial') {
       score += 3;
     }
-    if (required.includes('usb_otg')) reasons.push('原生 USB OTG：可以装成键盘、网卡、U 盘');
-    if (required.includes('psram')) reasons.push(`${b.psramMB}MB PSRAM，放得下音频 / 图像缓冲`);
+    if (required.includes('usb_otg')) reasons.push('原生 USB OTG：可以冒充键盘、网卡、U 盘');
+    if (required.includes('psram')) reasons.push(`${b.psramMB}MB PSRAM，放得下音频和图像缓冲`);
     const { pins, problems } = planPins(b, c, need.parts, required.includes('usb_otg'));
     if (problems.length) score -= 25;
     const bom = [
       { name: b.name, qty: 1, price: b.priceCNY },
       ...need.parts.map((id) => ({ name: PARTS[id].name, qty: 1, price: PARTS[id].priceCNY })),
-      { name: '面包板 + 杜邦线', qty: 1, price: [8, 15] as [number, number] },
+      { name: '面包板和杜邦线', qty: 1, price: [8, 15] as [number, number] },
       { name: '能传数据的 Type-C 线', qty: 1, price: [5, 15] as [number, number] },
     ];
     const total: [number, number] = [bom.reduce((s, x) => s + x.price[0], 0), bom.reduce((s, x) => s + x.price[1], 0)];

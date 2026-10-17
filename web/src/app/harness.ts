@@ -39,7 +39,7 @@ export function i2cLoad(wireCm: number, devices: number, sclHz = ASSUME_SCL_HZ):
 export function i2cText(l: I2cLoad): string {
   const base = `上升时间 ${l.rise.toFixed(0)} ns，${(ASSUME_SCL_HZ / 1000).toFixed(0)} kHz 允许 ${l.limit} ns`;
   if (l.verdict === 'ok') return `${base}，在规范内（这个接法最长约 ${l.maxCm.toFixed(0)} cm）`;
-  if (l.verdict === 'marginal') return `${base}：超出规范，读回的字节会错（读数离谱、校准数据乱）。缩短到 ${l.maxCm.toFixed(0)} cm 以内，或换 4.7 kΩ 上拉、降到 100 kHz`;
+  if (l.verdict === 'marginal') return `${base}：超出规范，读到的数据会错，读数离谱、校准数据乱。缩短到 ${l.maxCm.toFixed(0)} cm 以内，或换 4.7 kΩ 上拉、降到 100 kHz`;
   return `${base}：超过两倍，器件不应答（NACK），固件初始化就失败。缩短到 ${l.maxCm.toFixed(0)} cm 以内，或降到 100 kHz`;
 }
 
@@ -64,7 +64,7 @@ export function antennaLossDb(o: Obstacle, distMm: number): number {
 export const rssiAfter = (lossDb: number) => Math.max(-127, AP_RSSI - lossDb);
 export function wifiText(lossDb: number): { rssi: number; level: Verdict; text: string } {
   const r = rssiAfter(lossDb);
-  if (r < SCAN_MIN_DBM) return { rssi: r, level: 'fail', text: `TryBoard-WiFi ${r} dBm：扫描都收不到` };
+  if (r < SCAN_MIN_DBM) return { rssi: r, level: 'fail', text: `TryBoard-WiFi ${r} dBm：扫描不到` };
   if (r < LINK_MIN_DBM) return { rssi: r, level: 'fail', text: `TryBoard-WiFi ${r} dBm：扫得到但连不上（低于 ${LINK_MIN_DBM} dBm）` };
   if (lossDb >= 15) return { rssi: r, level: 'marginal', text: `TryBoard-WiFi ${r} dBm：能连，信号弱，远一点就会掉线` };
   return { rssi: r, level: 'ok', text: `TryBoard-WiFi ${r} dBm` };

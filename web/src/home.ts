@@ -161,7 +161,7 @@ function run(c: Card) {
   c.sim = sim;
   c.root.classList.add('live');
   c.btn.textContent = '回到示意图';
-  c.status.textContent = `正在启动 ${c.kind}/flash.bin（ESP32-S3）…`;
+  c.status.textContent = '正在启动固件（ESP32-S3）…';
   sim.start().catch((e) => {
     c.status.textContent = `加载失败：${e}`;
     c.btn.textContent = '看真实固件跑';

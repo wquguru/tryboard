@@ -21,9 +21,9 @@ export interface WireFault {
 
 export const WIRE_RULES: Record<WireFault['rule'], { title: string; source: string; confidence: Confidence }> = {
   W1: { title: '输出接输出', source: 'ESP32-C3 / S3 数据手册 GPIO 驱动能力；两个推挽输出对接会短路', confidence: '数据手册' },
-  W2: { title: '5 V 进了 GPIO', source: RULE_BY_ID.R17.source, confidence: RULE_BY_ID.R17.confidence },
+  W2: { title: '5 V 进 GPIO', source: RULE_BY_ID.R17.source, confidence: RULE_BY_ID.R17.confidence },
   W3: { title: 'LED 没有限流电阻', source: '5 mm LED 规格书（20 mA 额定）；ESP32 数据手册 GPIO 驱动电流', confidence: '数据手册' },
-  W4: { title: '缺地', source: '电路常识：器件和开发板不共地，信号没有参考电平', confidence: '我们的规则' },
+  W4: { title: '地线没接', source: '电路常识：器件和开发板不共地，信号没有参考电平', confidence: '经验规则' },
   W5: { title: 'I2C 地址冲突', source: RULE_BY_ID.R15.source, confidence: RULE_BY_ID.R15.confidence },
   W6: { title: 'I2C 线太长', source: 'I2C 规范 UM10204 §7.1：t_r = 0.8473·R·C，400 kHz 上限 300 ns；线电容 1 pF/cm、模块 10 kΩ 上拉为估算', confidence: '必须上真机' },
 };
@@ -47,7 +47,7 @@ export function checkWiring(parts: PartSpec[], wires: BenchWire[]): WireFault[] 
     const drivers = ws.filter((w) => w.pinRole === 'drive');
     const loads = ws.filter((w) => w.pinRole === 'load');
     if (drivers.length >= 2 || (drivers.length && loads.length))
-      push('W1', 'block', [...drivers, ...loads].map((w) => w.id), `${net} 两边都在输出`, `${net} 上 ${drivers.map((w) => name(w.part)).join('、')} 在往外推电平，${loads.length ? `固件又要用 ${net} 驱动 ${loads.map((w) => name(w.part)).join('、')}` : '两个输出对接'}：一个拉高一个拉低时等于短路，GPIO 可能烧掉。分开到两个 GPIO。`);
+      push('W1', 'block', [...drivers, ...loads].map((w) => w.id), `${net} 两边都在输出`, `${net} 上 ${drivers.map((w) => name(w.part)).join('、')} 都在输出电平，${loads.length ? `固件又要用 ${net} 驱动 ${loads.map((w) => name(w.part)).join('、')}` : '两个输出对接'}：一个拉高一个拉低时等于短路，GPIO 可能烧掉。分开到两个 GPIO。`);
   }
 
   // W2：模块供电接到 5 V，它的上拉 / 输出也跟着到 5 V，再进 GPIO
@@ -57,7 +57,7 @@ export function checkWiring(parts: PartSpec[], wires: BenchWire[]): WireFault[] 
     // 经分压电阻降到 3.3 V 的输出不算（HC-SR04 Echo 的 1 kΩ / 2 kΩ）
     const sig = own.filter((w) => (w.pinRole === 'bus' || w.pinRole === 'drive') && /^GPIO\d+$/.test(w.a) && w.divider !== true);
     const v = netVolt(vcc?.a ?? null);
-    if (vcc && v !== null && v > 3.6 && sig.length) push('W2', 'block', [vcc.id, ...sig.map((w) => w.id)], '5 V 进 GPIO', `${name(pid)} 的 ${vcc.pin} 接在 ${vcc.a}（${v} V），它的 ${sig.map((w) => w.pin).join(' / ')} 上拉 / 输出也是 ${v} V，直接进 ${sig.map((w) => w.a).join('、')}；ESP32 引脚不耐 5 V。改接 3V3，或加电平转换。`);
+    if (vcc && v !== null && v > 3.6 && sig.length) push('W2', 'block', [vcc.id, ...sig.map((w) => w.id)], '5 V 进 GPIO', `${name(pid)} 的 ${vcc.pin} 接在 ${vcc.a}（${v} V），它的 ${sig.map((w) => w.pin).join('、')} 上拉或输出也是 ${v} V，直接进 ${sig.map((w) => w.a).join('、')}；ESP32 引脚不耐 5 V。改接 3V3，或加电平转换。`);
   }
   // 信号线直接插在 5 V 上（GPIO 一端改接到了 5V）
   for (const w of live) {
@@ -67,7 +67,7 @@ export function checkWiring(parts: PartSpec[], wires: BenchWire[]): WireFault[] 
   }
 
   // W3：LED 直接接 GPIO，没有串电阻
-  for (const w of live) if (w.ohm === 0) push('W3', 'block', [w.id], '没有限流电阻', `${name(w.part)} 直接接在 ${w.a} 上：3.3 V 减去 LED 压降约 1.2 V 全落在 GPIO 内阻上，电流远超 20 mA（估算），LED 和引脚都可能坏。串一个 220 Ω–1 kΩ 电阻。`);
+  for (const w of live) if (w.ohm === 0) push('W3', 'block', [w.id], 'LED 没有限流电阻', `${name(w.part)} 直接接在 ${w.a} 上：3.3 V 减去 LED 压降，剩下约 1.2 V 全压在 GPIO 内阻上，电流远超 20 mA（估算），LED 和引脚都可能坏。串一个 220 Ω–1 kΩ 电阻。`);
 
   // W4：零件没有接地（地线被拔了）
   for (const pid of new Set(wires.map((w) => w.part))) {

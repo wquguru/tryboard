@@ -96,7 +96,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
 <button type="button" class="ana-b" data-act="prev" title="上一个 I2C 事务">◂ I2C</button><button type="button" class="ana-b" data-act="next" title="下一个 I2C 事务">I2C ▸</button>
 <span class="ana-sep"></span>
 <button type="button" class="ana-b" data-act="out" title="缩小（滚轮）">−</button><span class="ana-span mono" data-a="span"></span><button type="button" class="ana-b" data-act="in" title="放大（滚轮）">+</button>
-<button type="button" class="ana-b" data-act="follow" aria-pressed="true" title="右边缘跟着当前模拟时刻">跟随</button>
+<button type="button" class="ana-b" data-act="follow" aria-pressed="true" title="跟随最新时刻">跟随</button>
 <button type="button" class="ana-b" data-act="close" title="关闭" aria-label="关闭逻辑分析仪">×</button>
 </header>
 <div class="ana-body"><canvas class="ana-cv" aria-label="逻辑分析仪波形"></canvas></div>
@@ -455,7 +455,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     const s = store.get();
     const io = session.io;
     const drop = io.dropped + io.coreDropped;
-    $('src').textContent = `运行 #${s.runNo || s.run}${s.hist.seeked ? ' · 回退' : ''} · ${io.raw.length} 个事件${drop ? ` · 丢 ${drop}` : ''}`;
+    $('src').textContent = `运行 #${s.runNo || s.run}${s.hist.seeked ? ' · 回退' : ''} · ${io.raw.length} 个事件${drop ? ` · 丢了 ${drop} 个` : ''}`;
     let read = '';
     if (hover) {
       const h = txnHit.find((r) => hover!.x >= r.x0 && hover!.x <= r.x1 && hover!.y >= r.y0 && hover!.y <= r.y1);
@@ -852,7 +852,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
         const i2c = chans.find((c) => c.kind === 'i2c' && (`GPIO${c.sda}` === focus || `GPIO${c.scl}` === focus));
         if (i2c) id = i2c.id;
         const m = /^GPIO(\d+)$/.exec(id);
-        if (!chans.some((c) => c.id === id) && m) chans.push({ id, kind: 'pin', pin: Number(m[1]), label: id, role: '手动加的' });
+        if (!chans.some((c) => c.id === id) && m) chans.push({ id, kind: 'pin', pin: Number(m[1]), label: id, role: '手动添加' });
         flash = { id, until: performance.now() + 1200 };
       }
       setOpen(true);

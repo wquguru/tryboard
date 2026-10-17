@@ -3,7 +3,7 @@
 import { lcdImage, mount, oledImage, type LiveFrame } from './common';
 
 export interface WorkEffects {
-  /** 灯条贴着灯罩壁：罩子上一排亮点（只改画面，估算） */
+  /** 灯带贴着灯罩壁：罩子上一排亮点（只改画面，估算） */
   glare?: boolean;
   /** 探头缩在外壳孔后面：声波先打到孔壁，读数被截到这么多厘米（进模拟器） */
   sonarBlock?: number;
@@ -44,7 +44,7 @@ ${BG}
 <rect x="490" y="232" width="20" height="150" fill="#E8E5DE"/>${leds}
 <path data-k="shade" d="M410 380 C390 300 400 170 500 150 C600 170 610 300 590 380 Z" fill="#F4F1EA" fill-opacity="0.82" stroke="#BDB9B0" stroke-width="2"/>
 <g data-k="spots" opacity="0">${Array.from({ length: 8 }, (_, i) => `<circle data-k="spot${i}" cx="${424 + i * 22}" cy="300" r="9" fill="#FFF"/>`).join('')}</g>
-<text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">lamp · 成品 · WS2812 × 8 + EC11 旋钮</text>
+<text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">旋钮台灯 · 成品 · WS2812 × 8 + EC11 旋钮</text>
 <text data-k="note" x="24" y="56" fill="#C23A00" class="tb-mono" font-size="12" font-weight="700"></text>
 </svg></div>`,
   );
@@ -62,7 +62,7 @@ ${BG}
       const halo = q('halo');
       halo.setAttribute('opacity', String(Math.min(0.9, peak / 140)));
       q('spots').setAttribute('opacity', fx.glare && peak ? '1' : '0');
-      q('note').textContent = fx.glare ? '灯条贴着灯罩：罩子上一排刺眼亮点（估算）' : '';
+      q('note').textContent = fx.glare ? '灯带贴着灯罩：罩子上一排刺眼亮点（估算）' : '';
     },
   };
 }
@@ -79,7 +79,7 @@ ${BG}
 <circle cx="600" cy="350" r="16" fill="#1B1D21"/><circle cx="600" cy="350" r="6" fill="#3A3936"/>
 <g data-k="probes"><rect x="660" y="290" width="26" height="120" rx="6" fill="#C9C6BF"/><circle cx="700" cy="315" r="22" fill="#B8BCC2" stroke="#8A8E94" stroke-width="3"/><circle cx="700" cy="385" r="22" fill="#B8BCC2" stroke="#8A8E94" stroke-width="3"/></g>
 <rect data-k="wall" x="840" y="200" width="18" height="250" fill="#8A867E"/>
-<text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">ruler · 成品 · HC-SR04 + SSD1306 + 无源蜂鸣器</text>
+<text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">超声波尺子 · 成品 · HC-SR04 + SSD1306 + 无源蜂鸣器</text>
 <text data-k="note" x="24" y="56" fill="#C23A00" class="tb-mono" font-size="12" font-weight="700"></text>
 </svg></div>`,
   );
@@ -107,7 +107,7 @@ ${BG}
 <g data-k="ph"><circle cx="500" cy="236" r="118" fill="#10213A"/><circle cx="500" cy="236" r="108" fill="none" stroke="#3A5A80" stroke-width="4"/>
 <g transform="translate(556 262)"><circle r="27" fill="#FFC933"/><rect x="-19" y="-20" width="38" height="17" rx="8.5" fill="#141414"/><rect x="-12" y="-17" width="7" height="11" rx="3.5" fill="#7CF5FF"/><rect x="5" y="-17" width="7" height="11" rx="3.5" fill="#7CF5FF"/><path d="M-7 8 A8 8 0 0 0 7 8" fill="none" stroke="#141414" stroke-width="3"/></g></g>
 <image data-k="lcd" x="382" y="118" width="236" height="236" clip-path="url(#wp-round)"/></g>
-<text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">tilt · 成品 · QMI8658 + 1.28″ 圆屏 GC9A01</text>
+<text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">体感小人 · 成品 · QMI8658 + 1.28″ 圆屏 GC9A01</text>
 <text data-k="note" x="24" y="56" fill="#C23A00" class="tb-mono" font-size="12" font-weight="700"></text>
 </svg></div>`,
   );
@@ -119,7 +119,7 @@ ${BG}
         q('lcd').setAttribute('href', lcdImage(f.lcd));
         q('ph').setAttribute('display', 'none');
       }
-      q('note').textContent = fx.imuFlip ? '六轴模块装反了：俯仰、横滚都反号，小豆往高处爬' : '';
+      q('note').textContent = fx.imuFlip ? '六轴模块装反了：俯仰、横滚方向全反，小豆往高处爬' : '';
     },
   };
 }

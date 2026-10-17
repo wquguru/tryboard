@@ -126,7 +126,7 @@ const t30 = await waitFor(page, () => globalThis.__tbApp.store.get().reading?.t 
 report('卡片拖温度到 30 ℃ → 读数 30.00', t30);
 await page.click('.qcard [data-act="heat"]');
 const t38 = await waitFor(page, () => globalThis.__tbApp.store.get().reading?.t === 38 && globalThis.__tbApp.session.heat === 'bme280', null, 10000);
-report('把手放上去 → 读数 38.00、热晕', t38);
+report('放上热源 → 读数 38.00、热晕', t38);
 await page.click('.qcard [data-act="chip"]');
 const mm = await page.$eval('.qcard [data-live="chipmm"]', (e) => e.textContent);
 report('量到芯片 → 毫米', /\d+\.\d mm/.test(mm), mm.slice(0, 60));
@@ -178,7 +178,7 @@ const btns = await page.$$('.tl-step');
 await btns[idx].click();
 await waitFor(page, () => globalThis.__tbApp.store.get().hist.seeked && !globalThis.__tbApp.store.get().hist.busy, null, 60000);
 const seek = await page.evaluate(() => globalThis.__tbApp.hist.lastSeek());
-report(`时间线回到运行 #${nRun2} → 指纹与当时一致`, !!rec2?.fp && seek?.fingerprint === rec2.fp && seek.same === true, `当时 ${rec2?.fp} · 回退 ${seek?.fingerprint} · ${(seek?.untilMs / 1000).toFixed(3)} s`);
+report(`时间线回到运行 #${nRun2} → ✓ 指纹一致`, !!rec2?.fp && seek?.fingerprint === rec2.fp && seek.same === true, `当时 ${rec2?.fp} · 回退 ${seek?.fingerprint} · ${(seek?.untilMs / 1000).toFixed(3)} s`);
 await page.screenshot({ path: path.join(outDir, 'interact-seek.png') });
 
 // 命令行按运行 #2 的输入日志重放到同一时刻：check.py 的指纹一致（网页回退 = 命令行重放）

@@ -114,7 +114,7 @@ export function roundImu<T extends { pitch: number; roll: number; yaw: number; r
 
 /** 导出成 `--inputs` 文件：一行一条 `秒:动作`，# 开头是注释（含建议的命令行） */
 export function toScript(log: InputLog): string {
-  const lines = [`# 试板输入日志 v${log.version}${log.firmware ? ' · ' + log.firmware : ''}（时间 = 模拟秒）`, `# 重放：${cliArgs(log, '<flash.bin>', '<本文件>', log.endMs === undefined ? undefined : Math.floor(log.endMs) / 1000).join(' ')}`];
+  const lines = [`# 试板输入日志 v${log.version}${log.firmware ? ' · ' + log.firmware : ''}（模拟时钟，单位秒）`, `# 重放：${cliArgs(log, '<flash.bin>', '<本文件>', log.endMs === undefined ? undefined : Math.floor(log.endMs) / 1000).join(' ')}`];
   for (const e of log.events) {
     const a = action(e);
     if (a !== null) lines.push(`${sec(e.tMs)}:${a}`);

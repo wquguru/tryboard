@@ -14,7 +14,7 @@ export interface PartInfo {
 }
 
 /** 零件类型 → 中文显示名（时间线、提示条、构建树统一用这份，不让英文 type 名漏到界面上） */
-export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: '舵机', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED', encoder: '编码器', hcsr04: '超声波', mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: '触摸', max98357a: '喇叭', inmp441: '麦克风', key: '按键', ws2812: '灯条' };
+export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: '舵机', gc9a01: '圆屏', buzzer: '蜂鸣器', pot: '电位器', led: 'LED', encoder: '编码器', hcsr04: '超声波', mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: '触摸', max98357a: '喇叭', inmp441: '麦克风', key: '按键', ws2812: '灯带' };
 export const partLabel = (type: string) => PART_LABEL[type as PartSpec['type']] ?? '零件';
 
 export function partId(p: PartSpec) {
@@ -28,36 +28,36 @@ export function partInfo(p: PartSpec, ext5v = false): PartInfo {
     case 'oled':
       return { name: 'SSD1306 OLED', model: '0.96″ 128×64 单色 OLED（SSD1306）', iface: `I2C ${hex(p.addr)} · SDA GPIO${p.sda} · SCL GPIO${p.scl}`, power: '3V3' };
     case 'servo':
-      return { name: 'SG90 舵机', model: 'SG90 9 g 微型舵机，50 Hz PWM，0.5–2.5 ms → 0–180°', iface: `信号 GPIO${p.pin}`, power: ext5v ? '5V（外接 5 V 2 A）' : '5V（USB 直供）' };
+      return { name: 'SG90 舵机', model: 'SG90 9 g 微型舵机，50 Hz PWM，脉宽 0.5–2.5 ms 对应 0–180°', iface: `信号 GPIO${p.pin}`, power: ext5v ? '5V（外接 5 V 2 A）' : '5V（USB 直供）' };
     case 'gc9a01':
       return { name: 'GC9A01 圆屏', model: '1.28″ 240×240 RGB 圆屏（GC9A01）', iface: 'SPI2 · SCLK 12 · MOSI 11 · CS 10 · DC 14 · RST 13 · BL 15', power: '3V3' };
     case 'pot':
       return { name: `电位器（GPIO${p.pin}）`, model: '10 kΩ 旋钮电位器', iface: `滑片 GPIO${p.pin}（ADC）`, power: '3V3' };
     case 'led':
-      return { name: `LED（GPIO${p.pin}）`, model: '5 mm LED + 220 Ω 限流电阻', iface: `GPIO${p.pin}，高电平亮`, power: '经 GPIO' };
+      return { name: `LED（GPIO${p.pin}）`, model: '5 mm LED，串 220 Ω 限流电阻', iface: `GPIO${p.pin}，高电平亮`, power: '经 GPIO' };
     case 'key':
-      return { name: `按键 ${p.cap ?? ''}（GPIO${p.pin}）`, model: '6×6 mm 轻触开关 + 键帽', iface: `GPIO${p.pin}，按下接地（内部上拉）`, power: '不用供电' };
+      return { name: `按键 ${p.cap ?? ''}（GPIO${p.pin}）`, model: '6×6 mm 轻触开关和键帽', iface: `GPIO${p.pin}，按下接地（内部上拉）`, power: '不用供电' };
     case 'buzzer':
-      return { name: '无源蜂鸣器', model: '无源蜂鸣器模块（三针，带三极管，LEDC 方波驱动）', iface: `I/O → GPIO${p.pin}`, power: '3V3' };
+      return { name: '无源蜂鸣器', model: '无源蜂鸣器模块（三针，带三极管，LEDC 方波驱动）', iface: `I/O 接 GPIO${p.pin}`, power: '3V3' };
     case 'encoder':
-      return { name: 'EC11 旋转编码器', model: 'EC11 编码器模块（KY-040 类，每圈 20 格，A/B 正交 + 按键，板上 10 kΩ 上拉）', iface: `CLK GPIO${p.a} · DT GPIO${p.b}${p.sw !== undefined ? ` · SW GPIO${p.sw}` : ''}（S3 用 PCNT 计数）`, power: '3V3' };
+      return { name: 'EC11 旋转编码器', model: 'EC11 编码器模块（KY-040 类，每圈 20 格，A、B 正交输出加按键，板上 10 kΩ 上拉）', iface: `CLK GPIO${p.a} · DT GPIO${p.b}${p.sw !== undefined ? ` · SW GPIO${p.sw}` : ''}（S3 用 PCNT 计数）`, power: '3V3' };
     case 'hcsr04':
-      return { name: 'HC-SR04 超声波', model: 'HC-SR04 超声波测距（2–400 cm，40 kHz，Echo 5 V 输出）', iface: `Trig GPIO${p.trig} · Echo GPIO${p.echo}${p.divider === false ? '（直连，5 V 进 GPIO！）' : '（经 1 kΩ / 2 kΩ 分压到约 3.3 V）'}`, power: '5V（USB 5V 轨，约 15 mA）' };
+      return { name: 'HC-SR04 超声波', model: 'HC-SR04 超声波测距（2–400 cm，40 kHz，Echo 5 V 输出）', iface: `Trig GPIO${p.trig} · Echo GPIO${p.echo}${p.divider === false ? '（直连，5 V 进 GPIO，会伤引脚）' : '（经 1 kΩ / 2 kΩ 分压到约 3.3 V）'}`, power: '5V（USB 5V 轨，约 15 mA）' };
     case 'mpu6050':
-      return { name: 'MPU6050 六轴', model: 'GY-521 模块（InvenSense MPU-6050：三轴加速度 + 三轴陀螺）', iface: `I2C ${hex(p.addr)} · SDA GPIO${p.sda} · SCL GPIO${p.scl}${p.int !== undefined ? ` · INT GPIO${p.int}` : ''}`, power: '3V3' };
+      return { name: 'MPU6050 六轴', model: 'GY-521 模块（InvenSense MPU-6050，三轴加速度和三轴陀螺）', iface: `I2C ${hex(p.addr)} · SDA GPIO${p.sda} · SCL GPIO${p.scl}${p.int !== undefined ? ` · INT GPIO${p.int}` : ''}`, power: '3V3' };
     case 'qmi8658':
       return { name: 'QMI8658 六轴', model: 'QST QMI8658 六轴 IMU 小板', iface: `I2C ${hex(p.addr)} · SDA GPIO${p.sda} · SCL GPIO${p.scl}`, power: '3V3' };
     case 'cst816s':
-      return { name: 'CST816S 触摸', model: '圆屏上的电容触摸层（海栎创 CST816S，单点 + 手势）', iface: `I2C ${hex(p.addr)} · SDA GPIO${p.sda} · SCL GPIO${p.scl} · INT GPIO${p.int}${p.rst !== undefined ? ` · RST GPIO${p.rst}` : ''}`, power: '3V3（与圆屏共用）' };
+      return { name: 'CST816S 触摸', model: '圆屏上的电容触摸层（海栎创 CST816S，单点触摸和手势）', iface: `I2C ${hex(p.addr)} · SDA GPIO${p.sda} · SCL GPIO${p.scl} · INT GPIO${p.int}${p.rst !== undefined ? ` · RST GPIO${p.rst}` : ''}`, power: '3V3（与圆屏共用）' };
     case 'max98357a': {
       const w = I2S_WIRING.esp32s3.spk;
-      return { name: 'MAX98357A 功放 + 喇叭', model: 'MAX98357A I2S D 类功放模块（3 W）+ Φ40 4 Ω 喇叭', iface: `I2S · BCLK ${w.bclk} · LRC ${w.lrc} · DIN ${w.din}`, power: '5V' };
+      return { name: 'MAX98357A 功放和喇叭', model: 'MAX98357A I2S D 类功放模块（3 W），配 Φ40 4 Ω 喇叭', iface: `I2S · BCLK ${w.bclk} · LRC ${w.lrc} · DIN ${w.din}`, power: '5V' };
     }
     case 'ws2812':
-      return { name: `WS2812 灯条 × ${p.n ?? 8}`, model: 'WS2812B-5050 × 8 灯板（GRB，800 kHz）', iface: `DIN GPIO${p.pin}（RMT 发送，经 74AHCT125 升到 5 V）`, power: `5V（满白约 ${(p.n ?? 8) * 60} mA，估算）` };
+      return { name: `WS2812 灯带 × ${p.n ?? 8}`, model: 'WS2812B-5050 × 8 灯板（GRB，800 kHz）', iface: `DIN GPIO${p.pin}（RMT 发送，经 74AHCT125 升到 5 V）`, power: `5V（满白约 ${(p.n ?? 8) * 60} mA，估算）` };
     case 'inmp441': {
       const w = I2S_WIRING.esp32s3.mic;
-      return { name: 'INMP441 麦克风', model: 'INMP441 I2S 数字 MEMS 麦克风模块（24 位，L/R 接地 = 左声道）', iface: `I2S · SCK ${w.sck} · WS ${w.ws} · SD ${w.sd}`, power: '3V3' };
+      return { name: 'INMP441 麦克风', model: 'INMP441 I2S 数字 MEMS 麦克风模块（24 位，L/R 接地就是左声道）', iface: `I2S · SCK ${w.sck} · WS ${w.ws} · SD ${w.sd}`, power: '3V3' };
     }
   }
 }
@@ -182,7 +182,7 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
       const s = I2S_WIRING.esp32s3.mic;
       add('3V3', id, 'VDD', '供电', 'power', '红');
       add('GND', id, 'GND', '地', 'gnd', '黑');
-      add('GND', id, 'L/R', '声道选择（接地 = 左）', 'gnd', '黑');
+      add('GND', id, 'L/R', '声道选择（接地为左声道）', 'gnd', '黑');
       add(`GPIO${s.sck}`, id, 'SCK', 'I2S 位时钟', 'load', '黄');
       add(`GPIO${s.ws}`, id, 'WS', 'I2S 声道时钟', 'load', '绿');
       add(`GPIO${s.sd}`, id, 'SD', 'I2S 数据（收）', 'drive', '橙');

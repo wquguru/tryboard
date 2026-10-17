@@ -166,7 +166,7 @@ export function txnNote(x: I2cTxn): string {
       if (reg === 0xf7 && r.length >= 6) return '读气压、温度原始值';
       const hit = BME_REG.find(([lo, hi]) => reg >= lo && reg <= hi);
       if (!hit) return `读寄存器 ${hex(reg)}`;
-      return hit[2].startsWith('设') ? `读回${hit[2].slice(1)}` : hit[2];
+      return hit[2].startsWith('设') ? `读${hit[2].slice(1)}` : hit[2];
     }
     const hit = BME_REG.find(([lo, hi]) => reg >= lo && reg <= hi);
     if (reg === 0xe0 && w[1]?.byte === 0xb6) return '软复位';

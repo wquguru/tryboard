@@ -7,7 +7,7 @@ export interface LiveFrame {
   lcd: Uint8Array | null;
   pwm: number[];
   rgb: number[] | null;
-  /** 外接 WS2812 灯条：引脚 → 各灯 [r,g,b]（P2-09 旋钮台灯） */
+  /** 外接 WS2812 灯带：引脚 → 各灯 [r,g,b]（P2-09 旋钮台灯） */
   strips?: Record<number, number[][]>;
   running: boolean;
 }
@@ -110,7 +110,7 @@ export function holdButton(el: Element, onDown: () => void, onUp: () => void) {
 /** 环境箱（ENV · TEMP）的 SVG，两种视图共用 */
 export const envBoxSvg = `
 <rect x="60" y="420" width="230" height="108" rx="8" fill="#1A1A19" stroke="#3A3936" stroke-width="1.5"/>
-<text x="78" y="446" fill="#8A867E" class="tb-mono" font-size="10" font-weight="700">ENV · 室温</text>
+<text x="78" y="446" fill="#8A867E" class="tb-mono" font-size="10" font-weight="700">室温</text>
 <rect x="76" y="456" width="120" height="56" rx="4" fill="#0E0E0D"/>
 <text data-k="envTemp" x="186" y="498" fill="#FF7A1A" class="tb-mono" font-size="34" font-weight="700" text-anchor="end">23.5</text>`;
 

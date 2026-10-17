@@ -99,14 +99,14 @@ const LCD_ISO = '<circle cx="90" cy="50" r="36" fill="#1A1A19"/><circle cx="90" 
 
 export const WEATHER: Template = {
   id: 'weather',
-  caption: 'weather · 外壳 70×50×32 mm（估算）',
+  caption: '气象站 · 外壳 70×50×32 mm（估算）',
   intro: ['把零件拖进壳里', '从最底下那层开始'],
   tray: ['servo', 'shell', 'oled', 'bme', 'front', 'board'],
   parts: [
     { id: 'shell', name: '后壳', short: '后壳', ghost: [0, 0, 180, 100], okMsg: ['后壳就位', 'USB-C 开孔朝后'],
       mini: '<rect width="100" height="60" rx="8" fill="#E9E5DC" stroke="#8A867E" stroke-width="1.5"/><rect x="6" y="6" width="88" height="48" rx="5" fill="#D6D1C6"/><path d="M86 18 L92 18 M86 26 L92 26 M86 34 L92 34 M86 42 L92 42" stroke="#8A867E" stroke-width="2"/><rect y="24" width="6" height="12" fill="#3A3936"/>',
       iso: SHELL_ISO + '<path d="M160 30 L172 30 M160 40 L172 40 M160 50 L172 50 M160 60 L172 60 M160 70 L172 70" stroke="#8A867E" stroke-width="2.5"/>' },
-    { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [20, 20, 120, 60], okMsg: ['开发板卡进卡扣', 'GPIO4→舵机 · SDA/SCL→屏和传感器'], mini: BOARD_MINI, iso: BOARD_ISO },
+    { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [20, 20, 120, 60], okMsg: ['开发板卡好了', 'GPIO4 接舵机 · SDA/SCL 接屏和传感器'], mini: BOARD_MINI, iso: BOARD_ISO },
     { id: 'bme', name: 'BME280', short: 'BME280', spotSize: [36, 30],
       mini: '<rect x="32" y="12" width="36" height="34" rx="3" fill="#6A3FA0"/><rect x="44" y="22" width="12" height="12" fill="#C9C6BF"/><path d="M38 46 L38 54 M46 46 L46 54 M54 46 L54 54 M62 46 L62 54" stroke="#E8C547" stroke-width="2"/>',
       iso: '<rect width="36" height="30" rx="2" fill="#6A3FA0"/><rect x="12" y="9" width="12" height="12" fill="#C9C6BF"/>',
@@ -138,7 +138,7 @@ export const WEATHER: Template = {
 
 export const SPIN: Template = {
   id: 'spin',
-  caption: 'spin · 底座 Ø60 mm，身高 110 mm（估算）',
+  caption: '小黄 · 底座 Ø60 mm，身高 110 mm（估算）',
   intro: ['把小黄装起来', '从底座开始'],
   tray: ['lcd', 'base', 'hair', 'servo', 'body', 'board'],
   parts: [
@@ -151,7 +151,7 @@ export const SPIN: Template = {
         { key: 'C', label: '先回中位再装舵盘', ok: true, msg: ['舵机先转到 90°', '再装舵盘：正面就是正面'] },
         { key: 'X', label: '直接把舵盘按上去', ok: false, msg: ['舵盘错了一个齿', `正面会偏 ${SPLINE_TOOTH.toFixed(1)}°`] },
       ] },
-    { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [20, 20, 120, 60], okMsg: ['开发板装进身体', 'GPIO4→舵机 · SPI→圆屏'], mini: BOARD_MINI, iso: BOARD_ISO },
+    { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [20, 20, 120, 60], okMsg: ['开发板装进身体', 'GPIO4 接舵机 · SPI 接圆屏'], mini: BOARD_MINI, iso: BOARD_ISO },
     { id: 'lcd', name: '圆屏 GC9A01', short: '圆屏', ghost: [54, 14, 72, 72], okMsg: ['圆屏装在脸的位置', '排线穿过转轴中心孔'], mini: LCD_MINI, iso: LCD_ISO },
     { id: 'body', name: '身体外壳', short: '身体', ghost: [0, 0, 180, 100], okMsg: ['身体扣上了', '腰带盖住螺丝'],
       mini: '<rect x="22" y="2" width="56" height="56" rx="26" fill="#FFC933" stroke="#141414" stroke-width="2"/><rect x="22" y="40" width="56" height="6" fill="#2F2A57"/><circle cx="50" cy="22" r="11" fill="#141414"/>',
@@ -172,7 +172,7 @@ export const SPIN: Template = {
 
 export const LENS: Template = {
   id: 'lens',
-  caption: 'lens · 底座 Ø50 mm，透镜 Ø40 mm（估算）',
+  caption: '透镜小人 · 底座 Ø50 mm，透镜 Ø40 mm（估算）',
   intro: ['把透镜小人装起来', '从底座开始'],
   tray: ['dome', 'board', 'bezel', 'base', 'lcd'],
   parts: [
@@ -188,7 +188,7 @@ export const LENS: Template = {
       mini: '<circle cx="50" cy="30" r="26" fill="#BFD3E6" fill-opacity="0.5" stroke="#8A9BAD" stroke-width="2"/><path d="M34 20 A20 20 0 0 1 48 10" fill="none" stroke="#FFF" stroke-width="3"/>',
       iso: '<circle cx="90" cy="50" r="40" fill="#BFD3E6" fill-opacity="0.45" stroke="#8A9BAD" stroke-width="2"/>',
       spots: [
-        { key: 'H', label: '卡在高档（离屏 8 mm）', ok: true, msg: ['透镜离屏幕 8 mm', '放大约 1.35×，像立体的'] },
+        { key: 'H', label: '卡在高档（离屏 8 mm）', ok: true, msg: ['透镜离屏幕 8 mm', '放大约 1.35×，看着更立体'] },
         { key: 'N', label: '卡在低档（贴着屏）', ok: false, msg: ['透镜贴着屏幕', '几乎不放大，看着是平的'] },
       ] },
   ],
@@ -208,20 +208,20 @@ const OLED_MINI = '<rect x="12" y="4" width="76" height="52" rx="3" fill="#1C4F8
 
 export const LAMP: Template = {
   id: 'lamp',
-  caption: 'lamp · 灯座 80×60×36 mm，灯罩 Ø70 mm（估算）',
+  caption: '旋钮台灯 · 灯座 80×60×36 mm，灯罩 Ø70 mm（估算）',
   intro: ['把台灯装起来', '从灯座开始'],
   tray: ['shade', 'knob', 'base', 'strip', 'board'],
   parts: [
     { id: 'base', name: '灯座', short: '灯座', ghost: [0, 0, 180, 100], okMsg: ['灯座就位', 'DC 插座和 USB-C 在背面'],
       mini: '<rect x="4" y="14" width="92" height="36" rx="8" fill="#3A3936"/><rect x="40" y="6" width="20" height="10" fill="#E8E5DE"/>',
       iso: '<rect width="180" height="100" rx="16" fill="#3A3936" stroke="#141414" stroke-width="1.5"/><rect x="80" y="34" width="20" height="32" rx="3" fill="#E8E5DE"/>' },
-    { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [20, 20, 120, 60], okMsg: ['开发板卡进灯座', 'GPIO5→灯条 · GPIO6/7/15→旋钮'], mini: BOARD_MINI, iso: BOARD_ISO },
+    { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [20, 20, 120, 60], okMsg: ['开发板卡进灯座', 'GPIO5 接灯带 · GPIO6/7/15 接旋钮'], mini: BOARD_MINI, iso: BOARD_ISO },
     { id: 'knob', name: 'EC11 旋钮', short: '旋钮', ghost: [132, 56, 40, 36], okMsg: ['旋钮轴穿过前面板', '露出 7 mm，按得到'], mini: KNOB_MINI,
       iso: '<rect x="132" y="56" width="40" height="36" rx="3" fill="#1f55b0"/><circle cx="152" cy="74" r="12" fill="#1B1D21"/>' },
-    { id: 'strip', name: 'WS2812 灯条', short: '灯条', spotSize: [96, 18], mini: STRIP_MINI,
+    { id: 'strip', name: 'WS2812 灯带', short: '灯带', spotSize: [96, 18], mini: STRIP_MINI,
       iso: '<rect width="96" height="18" rx="2" fill="#16181b"/>' + Array.from({ length: 8 }, (_, i) => `<circle cx="${8 + i * 11.4}" cy="9" r="3.4" fill="#FFB060"/>`).join(''),
       spots: [
-        { key: 'A', label: '贴在导光柱上（离灯罩 15 mm）', at: [42, 41], ok: true, msg: ['灯条贴在导光柱上', '光打在灯罩上是均匀的一片'] },
+        { key: 'A', label: '贴在导光柱上（离灯罩 15 mm）', at: [42, 41], ok: true, msg: ['灯带贴在导光柱上', '光打在灯罩上是均匀的一片'] },
         { key: 'B', label: '贴着灯罩内壁', at: [42, 4], ok: false, msg: ['灯珠贴着灯罩', '罩子上 8 个刺眼亮点，光不匀（估算）'] },
       ] },
     { id: 'shade', name: '乳白灯罩', short: '灯罩', ghost: [0, 0, 180, 100], okMsg: ['灯罩扣上了', '点「开机看成品」'],
@@ -229,9 +229,9 @@ export const LAMP: Template = {
       iso: '<rect width="180" height="100" rx="40" fill="#F4F1EA" stroke="#BDB9B0" stroke-width="1.5" opacity="0.7"/>' },
   ],
   checks: (s) => [
-    row('灯条位置', has(s, 'strip'), s.choice.strip === 'A', '导光柱上，离灯罩 15 mm，光均匀', '贴着灯罩，罩上一排亮点'),
+    row('灯带位置', has(s, 'strip'), s.choice.strip === 'A', '导光柱上，离灯罩 15 mm，光均匀', '贴着灯罩，罩上一排亮点'),
     row('旋钮', has(s, 'knob'), true, '轴露出面板 7 mm，按得到'),
-    row('电源', has(s, 'base'), true, '灯条走外接 5 V，DC 插座在背面'),
+    row('电源', has(s, 'base'), true, '灯带走外接 5 V，DC 插座在背面'),
     row('总高', has(s, 'shade'), true, '110 mm'),
   ],
   effects: (s) => ({ glare: s.choice.strip === 'B' }),
@@ -240,28 +240,28 @@ export const LAMP: Template = {
 
 export const RULER: Template = {
   id: 'ruler',
-  caption: 'ruler · 外壳 90×48×30 mm，探头孔 Ø17 mm（估算）',
+  caption: '超声波尺子 · 外壳 90×48×30 mm，探头孔 Ø17 mm（估算）',
   intro: ['把尺子装起来', '从后壳开始'],
   tray: ['front', 'oled', 'sonar', 'buzzer', 'shell', 'board'],
   parts: [
     { id: 'shell', name: '后壳', short: '后壳', ghost: [0, 0, 180, 100], okMsg: ['后壳就位', 'USB-C 开孔在尾部'],
       mini: '<rect width="100" height="60" rx="8" fill="#2B5FD9" stroke="#1E4BB5" stroke-width="1.5"/><rect x="6" y="6" width="88" height="48" rx="5" fill="#244FB8"/>',
       iso: '<rect width="180" height="100" rx="12" fill="#2B5FD9" stroke="#1E4BB5" stroke-width="1.5"/><rect x="8" y="8" width="164" height="84" rx="8" fill="#244FB8"/><rect x="172" y="30" width="8" height="40" fill="#141414"/>' },
-    { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [14, 20, 120, 60], okMsg: ['开发板卡进卡扣', 'GPIO17/18→探头 · SDA/SCL→屏 · GPIO5→蜂鸣器'], mini: BOARD_MINI,
+    { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [14, 20, 120, 60], okMsg: ['开发板卡好了', 'GPIO17/18 接探头 · SDA/SCL 接屏 · GPIO5 接蜂鸣器'], mini: BOARD_MINI,
       iso: '<rect x="14" y="20" width="120" height="60" rx="3" fill="#141414"/><rect x="68" y="28" width="56" height="44" rx="2" fill="#BDB9B0"/>' },
     { id: 'sonar', name: 'HC-SR04 探头', short: '探头', spotSize: [26, 72],
       mini: '<rect x="8" y="16" width="84" height="28" rx="3" fill="#2F7FC8"/><circle cx="30" cy="30" r="11" fill="#B8BCC2"/><circle cx="70" cy="30" r="11" fill="#B8BCC2"/>',
       iso: '<rect width="26" height="72" rx="3" fill="#2F7FC8"/><circle cx="13" cy="18" r="10" fill="#B8BCC2"/><circle cx="13" cy="54" r="10" fill="#B8BCC2"/>',
       spots: [
         { key: 'A', label: '探头伸出前面板孔', at: [150, 14], ok: true, msg: ['两个探头从孔里探出 1 mm', '声波直接打到前方物体'] },
-        { key: 'B', label: '探头缩在孔后 6 mm', at: [140, 14], ok: false, msg: ['探头缩在孔里', `回波先从孔壁回来：读数变成约 ${SONAR_BLOCK_CM} cm，蜂鸣器一直响`] },
+        { key: 'B', label: '探头缩在孔后 6 mm', at: [140, 14], ok: false, msg: ['探头缩在孔里', `回波先从孔壁回来，读数约 ${SONAR_BLOCK_CM} cm，蜂鸣器一直响`] },
       ] },
     { id: 'buzzer', name: '无源蜂鸣器模块', short: '蜂鸣器', ghost: [108, 72, 28, 24], okMsg: ['蜂鸣器对准出声孔', '声音从侧面出来'],
       mini: '<rect x="30" y="10" width="40" height="40" rx="3" fill="#1f55b0"/><circle cx="50" cy="30" r="14" fill="#141416"/>',
       iso: '<rect x="108" y="72" width="28" height="24" rx="2" fill="#1f55b0"/><circle cx="122" cy="84" r="9" fill="#141416"/>' },
     { id: 'oled', name: 'OLED 0.96″', short: 'OLED', ghost: [30, 30, 80, 40], okMsg: ['屏幕对准顶面窗口', '排线 8 cm'], mini: OLED_MINI,
       iso: '<rect x="30" y="30" width="80" height="40" rx="3" fill="#1C4F86"/><rect x="36" y="36" width="68" height="28" fill="#050608"/>' },
-    { id: 'front', name: '顶盖 + 前面板', short: '顶盖', ghost: [0, 0, 180, 100], okMsg: ['合上了', '点「开机看成品」'],
+    { id: 'front', name: '顶盖和前面板', short: '顶盖', ghost: [0, 0, 180, 100], okMsg: ['合上了', '点「开机看成品」'],
       mini: '<rect width="100" height="60" rx="8" fill="#3A6DE0" stroke="#1E4BB5" stroke-width="1.5"/><rect x="18" y="16" width="44" height="26" rx="2" fill="none" stroke="#F2F2F2" stroke-width="2"/>',
       iso: '<rect width="180" height="100" rx="12" fill="#3A6DE0" stroke="#1E4BB5" stroke-width="1.5" opacity="0.7"/><rect x="36" y="36" width="68" height="28" rx="2" fill="none" stroke="#F2F2F2" stroke-width="2"/>' },
   ],
@@ -277,7 +277,7 @@ export const RULER: Template = {
 
 export const TILT: Template = {
   id: 'tilt',
-  caption: 'tilt · 圆盘 Ø56 × 26 mm（估算）',
+  caption: '体感小人 · 圆盘 Ø56 × 26 mm（估算）',
   intro: ['把体感小人装起来', '从底壳开始'],
   tray: ['lcd', 'imu', 'lid', 'base', 'board'],
   parts: [
@@ -289,9 +289,9 @@ export const TILT: Template = {
       iso: '<rect x="128" y="37" width="34" height="26" rx="2" fill="#1C6B4A"/><rect x="139" y="44" width="12" height="12" fill="#141414"/>',
       spots: [
         { key: 'A', label: '平贴底板、箭头朝前', ok: true, msg: ['六轴平贴底板，X 轴朝前', '往哪边歪，小豆就往哪边滑'] },
-        { key: 'B', label: '转了 180° 装反', ok: false, msg: ['六轴装反了', '俯仰、横滚都反号：小豆往高处爬'] },
+        { key: 'B', label: '转了 180° 装反', ok: false, msg: ['六轴装反了', '俯仰、横滚方向全反，小豆往高处爬'] },
       ] },
-    { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [10, 20, 110, 60], okMsg: ['开发板放进底壳', 'SPI→圆屏 · I2C→六轴'], mini: BOARD_MINI,
+    { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [10, 20, 110, 60], okMsg: ['开发板放进底壳', 'SPI 接圆屏 · I2C 接六轴'], mini: BOARD_MINI,
       iso: '<rect x="10" y="20" width="110" height="60" rx="3" fill="#141414"/><rect x="62" y="28" width="52" height="44" rx="2" fill="#BDB9B0"/>' },
     { id: 'lcd', name: '圆屏 GC9A01', short: '圆屏', ghost: [54, 14, 72, 72], okMsg: ['圆屏卡进顶面', '屏幕朝上'], mini: LCD_MINI, iso: LCD_ISO },
     { id: 'lid', name: '顶盖', short: '顶盖', ghost: [0, 0, 180, 100], okMsg: ['顶盖压住圆屏', '点「开机看成品」'],
@@ -300,7 +300,7 @@ export const TILT: Template = {
   ],
   checks: (s) => [
     row('六轴方向', has(s, 'imu'), s.choice.imu === 'A', '平贴、箭头朝前，方向对', '装反了，小豆往高处爬'),
-    row('六轴位置', has(s, 'imu'), true, '在圆盘中心附近，转动时不额外甩'),
+    row('六轴位置', has(s, 'imu'), true, '在圆盘中心附近，转动不影响读数（估算）'),
     row('圆屏排线', has(s, 'lcd'), true, '8 cm，够到开发板'),
     row('总高', has(s, 'lid'), true, '26 mm'),
   ],
@@ -313,7 +313,7 @@ const CAPS_ISO = [0, 1, 2, 3].map((i) => `<rect x="${32 + i * 30}" y="34" width=
 
 export const USBKEY: Template = {
   id: 'usbkey',
-  caption: 'usbkey · 外壳 80×44×22 mm（估算）',
+  caption: 'USB 小键盘 · 外壳 80×44×22 mm（估算）',
   intro: ['把小键盘装起来', '从底壳开始'],
   tray: ['caps', 'board', 'plate', 'base', 'keys'],
   parts: [
@@ -323,9 +323,9 @@ export const USBKEY: Template = {
     { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [20, 20, 120, 60], mini: BOARD_MINI, iso: BOARD_ISO,
       spots: [
         { key: 'U', label: 'USB / OTG 口朝背面开孔', ok: true, msg: ['USB 口对准开孔', '线插得进去，电脑认得到键盘'] },
-        { key: 'R', label: '转了 180° 装（USB 口朝前）', ok: false, msg: ['USB 口顶着前墙', '线插不进去，电脑看不到设备'] },
+        { key: 'R', label: '装反 180°，USB 口朝前', ok: false, msg: ['USB 口顶着前墙', '线插不进去，电脑看不到设备'] },
       ] },
-    { id: 'keys', name: '轻触按键 × 4', short: '按键', ghost: [30, 32, 120, 32], okMsg: ['按键卡进定位板下面', 'K1–K4 = GPIO4–7，另一端接地'],
+    { id: 'keys', name: '轻触按键 × 4', short: '按键', ghost: [30, 32, 120, 32], okMsg: ['按键卡进定位板下面', 'K1–K4 接 GPIO4–7，另一端接地'],
       mini: '<rect x="4" y="18" width="92" height="24" rx="3" fill="#2A2A28"/>' + [0, 1, 2, 3].map((i) => `<rect x="${10 + i * 22}" y="22" width="16" height="16" rx="2" fill="#1B1D21" stroke="#555"/>`).join(''),
       iso: KEYS_ISO },
     { id: 'plate', name: '定位板', short: '定位板', ghost: [0, 0, 180, 100], okMsg: ['定位板盖上', '4 个键孔对准按键'],
@@ -338,7 +338,7 @@ export const USBKEY: Template = {
   checks: (s) => [
     row('USB 口朝向', has(s, 'board'), s.choice.board === 'U', '对准背面开孔', '朝前，线插不进去'),
     row('按键行程', has(s, 'caps'), true, '键帽离定位板 1.5 mm，按得到底'),
-    row('内腔高度', has(s, 'plate'), true, '按键 + 开发板用了 14 / 18 mm'),
+    row('内腔高度', has(s, 'plate'), true, '按键和开发板用了 14 / 18 mm'),
   ],
   effects: (s) => ({ usbBlocked: s.choice.board === 'R' }),
   product: (el, h) => {
