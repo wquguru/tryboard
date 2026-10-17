@@ -521,7 +521,7 @@
 - 替代：(a) 保持原生 DOM、只抽小组件函数——便宜，但解决不了状态同步；(b) Next.js——见上，收益几乎为零；(c) Preact——更小，但 Radix / shadcn 生态要 compat 层，出问题难查。
 
 ## 2026-10-17 · 首页、关卡页迁 React；授权页改用 Tailwind 编译的样式
-- 决定：`home.html` → `src/home/{main,App}.tsx`。页头和页脚抽成 `ui/site.tsx`（SiteHeader / SiteFooter），后面的页面共用。作品卡的示意图和真实固件运行仍然命令式（`src/home/cards.ts`），由 `useEffect` 挂载，清理函数里销毁 LiveSim 和 IntersectionObserver。串口状态行直接写 DOM ref，不进 state。"同一时间只跑一张卡"由 App 的一个 `live` state 管。`levels.html` 本来就是跳转页（P0-21），跳转仍在 `<head>` 里做（首帧前），`src/levels/App.tsx` 只显示一行提示。
+- 决定：`home.html` → `src/home/{main,App}.tsx`。页头和页脚抽成 `ui/site.tsx`（SiteHeader / SiteFooter），后面的页面共用。作品卡的示意图和真实固件运行仍然命令式（`src/home/cards.ts`），由 `useEffect` 挂载，清理函数里销毁 LiveSim 和 IntersectionObserver。串口状态行直接写 DOM ref，不进 state。"同一时间只跑一张卡"由 App 的一个 `live` state 管。`levels.html` 本来就是跳转页（P0-21），跳转在 `<head>` 里做（首帧前）。主会话合并时决定：跳转页保持纯 html、不 React 化，因为它只显示一行字，React 化只会让每个旧链接多下载约 68KB。
 - 授权页（`tools/gen_licenses.mjs` 生成的静态 HTML，不 React 化）：不再引 app.css / page.css，改引 `src/licenses/licenses.css`。它是 `@import ui/tailwind.css` 再加 `@source` 生成脚本，页头和页脚直接写与 site.tsx 同一串 Tailwind 类，正文表格用 `.lic` 下的几条 `@apply` 规则。
   - 理由：颜色、字体、亮暗主题和 React 页面同一个来源，不再维护第二份。
   - 代价：CSS 里带上 tailwind.css 扫到的所有工具类，约 28.6 KB，gzip 6.45 KB。比原来的 app.css + page.css（gzip 8.13 KB）还小。

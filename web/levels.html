@@ -19,10 +19,15 @@
       })();
     </script>
     <noscript><meta http-equiv="refresh" content="0; url=./app.html?work=weather#bench" /></noscript>
+    <style>
+      /* DESIGN §2 亮 / 暗两套（与 app.css 同值）；data-theme 由上面的内联脚本设 */
+      :root { --bg: #ffffff; --fg: #1e1e1e; --accent: #0d99ff; color-scheme: light; }
+      :root[data-theme='dark'] { --bg: #17181b; --fg: #e8eaed; --accent: #3aa8ff; color-scheme: dark; }
+      body { margin: 0; font: 13px/1.5 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif; color: var(--fg); background: var(--bg); display: grid; place-items: center; min-height: 100vh; }
+      a { color: var(--accent); }
+    </style>
   </head>
   <body>
-    <!-- 上面的脚本已经在跳转；这里只渲染一行提示（src/levels/App.tsx） -->
-    <div id="root"></div>
-    <script type="module" src="./src/levels/main.tsx"></script>
+    <p>关卡已并入工作台的检查点。正在跳转到 <a href="./app.html?work=weather#bench">实验台</a>…</p>
   </body>
 </html>
