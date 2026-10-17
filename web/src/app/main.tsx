@@ -1,6 +1,12 @@
 // 工作台入口：app.html?work=weather#bench。外壳、实时模拟、3D 台面各一份；四个步骤注册到路由上。
+// 外壳先由 React 同步画出来（#stage 等节点要在 createSession 之前就在），之后的逻辑与原来相同。
+import '../ui/tailwind.css';
+import '../views/views.css';
+import './lab.css';
+import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
 import { createStore } from './store';
-import { createShell, registerStep, startRouter } from './shell';
+import { createShell, registerStep, ShellView, startRouter } from './shell';
 import { createSession, WORKS } from './session';
 import { benchStep, passedCount, restoreChecks } from './steps/bench';
 import { assembleStep, restoreAssembly } from './steps/assemble';
@@ -8,7 +14,7 @@ import { productStep } from './steps/product';
 import { loadBom, loadPlaced, shopStep } from './steps/shop';
 import type { AppState, StepCtx, WorkId } from './types';
 import { createBenchHistory } from './benchhist';
-import { initTheme, themeToggle } from '../theme';
+import { initTheme } from '../theme';
 import { partLabel } from './wiring';
 import { createCmdk } from './cmdk';
 import { getAnalyzer } from './analyzer';
@@ -22,7 +28,9 @@ const work = WORKS[want ?? 'weather'] ?? WORKS.weather;
 // &cp=04：打开时选中这个检查点（旧关卡页 levels.html#04 重定向过来用）；不属于这个作品就忽略
 const cp = params.get('cp');
 document.title = `${work.title} · 试板 TryBoard`;
-document.getElementById('workName')!.textContent = work.title;
+initTheme();
+const root = createRoot(document.getElementById('root')!);
+flushSync(() => root.render(<ShellView />));
 
 const store = createStore<AppState>({
   work: work.id,
@@ -47,10 +55,8 @@ const store = createStore<AppState>({
   runNo: 0,
   hist: { n: 0, cur: -1, seeked: false, busy: false, runs: 0 },
 });
-initTheme();
-// 右上角：亮 / 暗切换（跟随系统，点过就记住）
-document.querySelector('.topright')!.append(themeToggle());
-const shell = createShell();
+const shell = createShell(work.title);
+document.getElementById('simtime')!.textContent = '0.00 s';
 
 // 左栏底的串口：只留最近约 200 KB
 const con = document.getElementById('console') as HTMLPreElement;
@@ -92,7 +98,7 @@ const ownsTimeline = () => store.get().step === 'bench';
     // 结论按钮：实验台显示检查点进度；采购、组装、成品挂载时自己设
     const verdict = () => {
       if (store.get().step === 'shop') {
-        shell.onVerdict(() => (document.getElementById('props')!.scrollTop = 0));
+        shell.onVerdict(() => (shell.props.el.scrollTop = 0));
         return;
       }
       if (!ownsTimeline()) return;

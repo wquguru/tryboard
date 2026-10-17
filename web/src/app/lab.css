@@ -1,0 +1,259 @@
+/* 实验台 app.html 余下的样式（原 app/app.css 里实验台还用得上的部分；app.css 原样留给 home / licenses，去掉那两处 link 后可整体删除）。外壳和通用面板件（kv / res / btn / tn / 时间线 / 工具条…）已经搬进
+   React 组件的 Tailwind 类（src/app/*.tsx、src/ui/panel.tsx），这里只留三类：
+   1. tailwind.css 里没有的变量（面板底、台面底、各种浅色描边），组件用 bg-(--x) 引用；
+   2. 命令式节点的样式：逻辑分析仪、SVG / 3D 装配、3D 成品（每帧由代码改，不经 React）；
+   3. 采购 / 组装 / 成品各步专用的类（bn、pc、rf、asm-msg、first3…）。
+   这里的规则不在 @layer 里，会盖过同名 Tailwind 工具类：不要再写通用元素选择器。 */
+:root {
+  --panel: rgba(255, 255, 255, 0.95);
+  --shadow: 0 2px 10px #0000000f;
+  --warn-dot: #e8a317;
+  --seg-on: #ffffff;
+  --stage-bg: radial-gradient(120% 90% at 50% 40%, #ffffff, #eceff3);
+  --prod-bg: #eef1f5;
+  --toast-fg: #ffffff;
+  --ok-line: #bfe8d1;
+  --warn-line: #f1dcae;
+  --bad-line: #f8c4b6;
+  --ch-bg: #fff7e6;
+  --drop-line: #c9d6e2;
+  --drop-bg: #fbfdff;
+  --scope-bg: #fbfbfb;
+  --oled-bg: #080e18;
+  --asm-bg: #f7f8fa;
+  --asm-grid: #e9ecf0;
+  --asm-shade: #e4e8ee;
+  --r: 12px;
+  --gap: 12px;
+  --tl-h: 44px;
+  --sans: 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  color-scheme: light;
+}
+/* 暗色（DESIGN §2：同一套变量反转）。data-theme 由页面 <head> 的内联脚本在首帧前设好 */
+:root[data-theme='dark'] {
+  --panel: rgba(30, 32, 36, 0.95);
+  --shadow: 0 2px 10px #00000066;
+  --seg-on: #34373d;
+  --stage-bg: radial-gradient(120% 90% at 50% 40%, #2b2e33, #16171a);
+  --prod-bg: #1d2024;
+  --toast-fg: #17181b;
+  --ok-line: #24603f;
+  --warn-line: #5e4a22;
+  --bad-line: #6e2e22;
+  --ch-bg: #2d2617;
+  --drop-line: #3d4854;
+  --drop-bg: #1c1f23;
+  --scope-bg: #1c1e21;
+  --asm-bg: #1e2125;
+  --asm-grid: #2a2d32;
+  --asm-shade: #2c2f34;
+  color-scheme: dark;
+}
+@media (min-width: 761px) {
+  html, body.app { height: 100%; }
+}
+/* 命令式代码（分析仪、SVG 视图）和实时字段（classList.toggle('bad')）用的钩子类 */
+.mono { font-family: var(--mono); }
+.muted { color: var(--muted); }
+.bad { color: var(--bad-ink); }
+
+/* ---------- ③ 组装（P0-16）：SVG 装配视图放在两栏之间，按白底主题重新上色 ---------- */
+.asm-shell {
+  position: fixed;
+  left: calc(268px + 2 * var(--gap));
+  right: calc(304px + 2 * var(--gap));
+  top: calc(var(--gap) + 46px);
+  bottom: calc(var(--tl-h) + 64px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.asm-box { width: 100%; max-height: 100%; aspect-ratio: 704 / 560; max-width: calc((100vh - var(--tl-h) - 122px) * 704 / 560); }
+.asm-shell .tb-view { aspect-ratio: 704 / 560; background: var(--surface); color: var(--fg); border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: var(--r); }
+.asm-shell rect[fill='#2E4A3F'] { fill: var(--asm-bg); }
+.asm-shell pattern path { stroke: var(--asm-grid); }
+.asm-shell rect[fill='#24392F'] { fill: var(--surface); }
+.asm-shell rect[stroke='#3B5C4F'] { stroke: var(--line); }
+.asm-shell ellipse[fill='#1E332A'] { fill: var(--asm-shade); }
+.asm-shell text[fill='#F7F6F3'] { fill: var(--fg); }
+.asm-shell text[fill='#9FBFB0'], .asm-shell text[fill='#C9D6CF'] { fill: var(--muted); }
+.asm-shell text { font-family: var(--sans); }
+.asm-shell .tb-mono { font-family: var(--mono); }
+.asm-shell .as-actions { display: none; }
+.asm-shell .as-choose { left: 77.4%; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.asm-shell .as-light { border: 1px solid var(--line); }
+/* 3D 装配（P1-07）：和成品一样铺满台面区域，面板浮在上面 */
+.asm3d-stage { position: fixed; inset: 0 0 var(--tl-h) 0; background: var(--prod-bg); overflow: hidden; }
+.asm3d-stage canvas { display: block; width: 100% !important; height: 100% !important; }
+.a3-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; }
+.a3-tags { position: absolute; inset: 0; pointer-events: none; }
+.a3-tag.slot { background: #fff4ea; border-color: #ff7a1a; color: #b44a00; font-weight: 500; }
+.a3-tag.ruler { background: var(--panel); border-color: #f24822; color: #f24822; font-family: var(--mono); font-weight: 600; }
+.a3-choose { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; gap: 6px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); z-index: 2; }
+.a3-choose b { font-size: 12px; }
+.a3-disc { bottom: 76px; }
+.case-ps { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.case-p { display: grid; grid-template-columns: 48px 1fr 58px 22px; align-items: center; gap: 6px; font-size: 12px; }
+.case-p .k { color: var(--muted); }
+.case-p input[type='number'] { width: 58px; font-size: 12px; padding: 2px 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--field); color: var(--fg); }
+.asm-msg { display: flex; flex-direction: column; gap: 2px; background: var(--field); border-radius: 6px; padding: 8px 10px; }
+.asm-msg span { color: var(--muted); font-size: 12px; }
+.asm-msg.bad { background: var(--bad-bg); color: inherit; }
+.asm-msg.bad b { color: var(--bad-ink); }
+
+/* ---------- ④ 成品（P0-17）：3D 成品铺满台面区域 ---------- */
+.prod-stage { position: fixed; inset: 0 0 var(--tl-h) 0; background: var(--prod-bg); overflow: hidden; }
+.prod-stage canvas { display: block; width: 100% !important; height: 100% !important; cursor: grab; }
+.p3-tags { position: absolute; inset: 0; pointer-events: none; }
+.p3-tag { position: absolute; left: 0; top: 0; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); color: var(--fg); white-space: nowrap; box-shadow: var(--shadow); }
+.p3-tag.hot { background: #ff7a1a; border-color: #ff7a1a; color: #141414; font-weight: 500; }
+.p3-tag.bad { background: var(--bad-bg); border-color: var(--bad-line); color: var(--bad); font-weight: 500; transform: translate(-50%, -100%); pointer-events: none; }
+.prod-preview { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: baseline; gap: 10px; padding: 8px 16px; border-radius: var(--r); background: var(--ch-bg); border: 1px solid var(--warn-line); box-shadow: var(--shadow); white-space: nowrap; pointer-events: none; }
+.prod-preview b { color: var(--warn-ink); font-weight: 700; font-size: 14px; }
+.prod-preview span { color: var(--fg); font-size: 12px; }
+.p3-disclaimer { position: absolute; left: calc(268px + 2 * var(--gap) + 8px); bottom: 70px; font-size: 11px; color: var(--muted); pointer-events: none; }
+.prod-svg { position: absolute; left: calc(268px + 2 * var(--gap)); right: calc(304px + 2 * var(--gap)); top: 50%; transform: translateY(-50%); }
+.prod-svg .tb-view { border-radius: var(--r); box-shadow: var(--shadow); }
+.first3 { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; list-style: decimal; }
+.first3 li b { display: block; font-weight: 500; }
+.first3 li span { color: var(--muted); font-size: 12px; }
+.serial-tail { min-height: 60px; max-height: 120px; }
+@media (max-width: 760px) {
+  .asm-shell, .prod-svg { position: static; transform: none; }
+  .prod-stage, .asm3d-stage { position: relative; inset: auto; height: 340px; border-radius: var(--r); }
+  .p3-disclaimer { left: 8px; bottom: 8px; }
+  /* 只读：清单勾选、加零件不能改 */
+  .bn input { pointer-events: none; }
+  .prod-preview { position: static; transform: none; white-space: normal; flex-wrap: wrap; margin: 0 0 8px; }
+}
+
+/* ---------- ① 采购（P0-07）：清单树、零件平铺、规则检查 ---------- */
+.bn { display: flex; align-items: center; gap: 6px; padding: 3px 6px 3px 8px; border-radius: 6px; }
+.bn:hover { background: var(--field); }
+.bn.on { background: var(--accent-bg); }
+.bn.on .tn-m { color: var(--accent-ink); }
+.bn input { margin: 0; accent-color: var(--accent); flex: none; cursor: pointer; }
+.bn input.locked { accent-color: #9aa0a6; cursor: not-allowed; }
+.bn-l { flex: 1; min-width: 0; text-align: left; border: 0; background: transparent; padding: 3px 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bn.off .bn-l { color: var(--muted); }
+.bn.off .tn-m { text-decoration: line-through; opacity: 0.6; }
+.addpart { display: flex; flex-direction: column; gap: 4px; padding: 6px 12px; font-size: 11px; }
+.addpart select { font: inherit; font-size: 12px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: inherit; min-width: 0; }
+.bom-total { border-top: 1px solid var(--line-soft); padding: 8px 12px 10px; font-size: 11px; }
+.bt-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; }
+.bt-row b { font-size: 15px; font-weight: 500; }
+
+.shop-stage {
+  position: fixed;
+  left: calc(268px + 3 * var(--gap));
+  right: calc(304px + 3 * var(--gap));
+  top: 64px;
+  bottom: calc(var(--tl-h) + var(--gap) + 58px);
+  overflow: auto;
+  padding: 4px 4px 12px;
+}
+.ss-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0 2px 6px; }
+.ss-title b { font-size: 16px; font-weight: 500; }
+.ss-title .muted { font-size: 12px; }
+.ss-g { margin-top: 10px; }
+.ss-h { font-size: 11px; font-weight: 500; color: var(--muted); margin: 0 2px 6px; }
+.ss-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.pc {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 8px 8px 7px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+.pc:hover { border-color: var(--hover-line); }
+.pc.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+.pc.off { background: transparent; border-style: dashed; border-color: var(--hover-line); box-shadow: none; }
+.pc.off .pc-g, .pc.off .pc-n { opacity: 0.45; }
+.pc.off.on { border-color: var(--accent); }
+.pc-g svg { display: block; width: 100%; height: 52px; }
+.pc-n { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-m { font-size: 11px; color: var(--muted); }
+.pc-b { position: absolute; top: 6px; right: 6px; font-size: 10px; color: var(--muted); background: var(--field); border-radius: 4px; padding: 0 4px; }
+/* 暗色下零件缩略图（黑色线材、电源头）在深色卡片上看不清：垫一块浅底，像商品图 */
+:root[data-theme='dark'] .pc-g { background: #c9ced6; border-radius: 6px; }
+:root[data-theme='dark'] .pc.off .pc-g { opacity: 0.35; }
+
+.rf { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; background: var(--surface); }
+.rf.block { background: var(--bad-bg); border-color: var(--bad-line); }
+.rf.warn { background: var(--warn-bg); border-color: var(--warn-line); }
+.rf-h { display: flex; gap: 6px; align-items: baseline; font-weight: 500; }
+.rf-h .mk { font-family: var(--mono); flex: none; }
+.rf.block .mk { color: var(--bad-ink); }
+.rf.warn .mk { color: var(--warn-dot); }
+.rf-t { flex: 1; min-width: 0; }
+.rf-h .mono { font-size: 11px; font-weight: 400; }
+.rf-d { margin: 4px 0 2px; font-size: 12px; }
+.rf-s { font-size: 11px; color: var(--muted); }
+.rf .btn { margin-top: 6px; }
+.oks summary { cursor: pointer; color: var(--muted); font-size: 12px; margin: 6px 0; }
+.oks .res { font-size: 11px; padding: 3px 8px; }
+.field .muted { font-size: 11px; margin-top: 2px; }
+.tag { font-size: 10px; color: var(--muted); background: var(--field); border-radius: 4px; padding: 1px 5px; vertical-align: 1px; }
+.tag.off { color: var(--warn-ink); }
+.board-pick { width: 280px; }
+
+@media (max-width: 1100px) {
+  .shop-stage { left: calc(268px + 2 * var(--gap)); right: calc(304px + 2 * var(--gap)); }
+  .ss-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+}
+@media (max-width: 760px) {
+  .shop-stage { position: static; overflow: visible; padding: 0; }
+  .ss-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .pc-g svg { height: 40px; }
+  .addpart { display: none; }
+}
+
+/* ---------- 逻辑分析仪（P1-05）：实验台底部，夹在两栏之间；打开时工具条让到它上面 ---------- */
+.analyzer {
+  position: fixed;
+  left: calc(268px + 2 * var(--gap));
+  right: calc(304px + 2 * var(--gap));
+  bottom: calc(var(--tl-h) + var(--gap));
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+}
+.analyzer[hidden] { display: none; }
+body:not([data-step='bench']) .analyzer { display: none; }
+/* 工具条 / 免责说明 / 提示的 bottom 由 Tailwind 类给；分析仪打开时这里盖过去 */
+body.ana-open[data-step='bench'] .toolbar { bottom: calc(var(--tl-h) + var(--gap) + var(--ana-h, 260px) + 8px); }
+body.ana-open[data-step='bench'] .disclaimer { bottom: calc(var(--tl-h) + var(--ana-h, 260px) + 72px); }
+body.ana-open[data-step='bench'] .toast { bottom: calc(var(--tl-h) + var(--ana-h, 260px) + 72px); }
+.ana-h { display: flex; align-items: center; gap: 6px; padding: 5px 8px 5px 12px; border-bottom: 1px solid var(--line-soft); min-width: 0; }
+.ana-t { font-size: 11px; font-weight: 500; color: var(--muted); flex: none; }
+.ana-src { font-size: 11px; flex: none; }
+.ana-read { font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
+.ana-sp { flex: 0 0 4px; }
+.ana-sep { width: 1px; align-self: stretch; background: var(--line); margin: 2px 2px; flex: none; }
+.ana-b { border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 6px; padding: 2px 8px; cursor: pointer; font: inherit; font-size: 12px; flex: none; white-space: nowrap; }
+.ana-b:hover { background: var(--field); }
+.ana-b[aria-pressed='true'] { background: var(--accent-bg); color: var(--accent-ink); border-color: var(--accent-line); }
+.ana-span { font-size: 11px; min-width: 62px; text-align: center; flex: none; }
+.ana-body { position: relative; height: var(--ana-cv-h, 200px); }
+.ana-cv { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+.ana-f { display: flex; gap: 16px; justify-content: space-between; padding: 4px 12px 6px; border-top: 1px solid var(--line-soft); font-size: 11px; min-height: 24px; }
+.ana-f .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) {
+  .analyzer { display: none !important; }
+}

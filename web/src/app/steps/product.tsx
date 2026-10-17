@@ -19,9 +19,25 @@ import { RECORD_SECONDS, recordCanvas, takePhoto, type Capturable, type Recordin
 import { i2cLoad, i2cText, wifiText } from '../harness';
 import { I2C_DEVICES } from './assemble';
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-const sec = (t: string) => `<div class="sec">${t}</div>`;
-const row = (k: string, live: string) => `<div class="kv"><span class="k">${k}</span><span class="v mono" data-live="${live}">—</span></div>`;
+import { Host, Txt } from '../../ui/native';
+import { Brief, Btn, Btns, Kv, LinkBtn, LockCard, Note, Ph, PhT, Res, Sec, TnL, TnM, TnSt, TreeEmpty, TreeGroup, TreeNode, TreeRow, btnClass, tnClass, type ResKind } from '../../ui/panel';
+
+/** 一行实时字段：初值"—"，之后由 updateLive 按 data-live 改 */
+const row = (k: string, live: string) => <Kv key={live} k={k} live={live} v="—" />;
+/** 成品顶部的说明条（参考成品 / 倾角仪） */
+const Banner = ({ t, s }: { t: string; s: string }) => (
+  <div className="prod-preview" role="status">
+    <b>{t}</b>
+    <span>{s}</span>
+  </div>
+);
+/** 彩灯色块（实时字段里由命令式代码拼） */
+function swatch(bg: string) {
+  const i = document.createElement('i');
+  i.className = 'sw mr-1.5 inline-block size-2.5 rounded-[3px] border border-[#0002] align-[-1px]';
+  i.style.background = bg;
+  return i;
+}
 
 /** 热源最多把通风口附近加热多少（℃）和壳子的热时间常数（s）：示意数值，未经真机标定 */
 const HEAT_MAX = 14;
@@ -213,7 +229,6 @@ export function productStep(): StepImpl {
   let tail = '';
   /** 还没装配完：用参考装配展示（"先看参考成品"），顶部标明 */
   let preview = false;
-  let banner: HTMLElement | null = null;
 
   const sim = () => ctx?.session.sim ?? null;
   const frame = (): LiveFrame => sim()?.frame ?? emptyFrame();
@@ -305,24 +320,41 @@ export function productStep(): StepImpl {
     const c = ctx!;
     const a = assembly();
     const T = TEMPLATES[c.work.id];
-    const works = WORK_LIST.map((w) => `<a class="tn ${w.id === c.work.id ? 'on' : ''}" href="./app.html?work=${w.id}#product" role="treeitem" aria-selected="${w.id === c.work.id}"><span class="tn-l">${esc(w.title)}</span>${w.id === c.work.id ? '<span class="tn-m">当前</span>' : ''}</a>`).join('');
-    const parts = (PARTS[c.work.id] ?? []).map((p) => `<button type="button" class="tn ${sel === p.id ? 'on' : ''}" data-id="${p.id}" role="treeitem"><span class="tn-l">${esc(p.name)}</span></button>`).join('');
-    const how = T && a
-      ? T.parts.filter((p) => p.spots).map((p) => {
-          const s = p.spots!.find((x) => x.key === a.choice[p.id]);
-          return `<div class="tn static"><span class="tn-l">${esc(p.short)}：${esc(s?.label.replace(/^放/, '') ?? '—')}</span><span class="tn-st ${s?.ok ? 'ok' : 'warn'}">${s?.ok ? '✓' : '!'}</span></div>`;
-        }).join('') + (preview ? '' : `<div class="tn static"><span class="tn-l">开机复测</span><span class="tn-st ${a.retest === null ? 'muted' : a.retest ? 'ok' : 'bad'}">${a.retest === null ? '没测' : a.retest ? '✓' : '✗'}</span></div>`)
-      : '';
-    c.shell.tree.innerHTML = `<div role="tree" aria-label="成品">
-<details class="tg" open><summary><span>作品</span><span class="tn-m">换作品会重新加载</span></summary><div role="group">${works}</div></details>
-<details class="tg" open><summary><span>成品</span><span class="tn-m"></span></summary><div role="group">${parts}</div></details>
-${how ? `<details class="tg" open><summary><span>${preview ? '参考装法' : '装法'}</span><span class="tn-m">${preview ? '默认正确装法' : '来自组装'}</span></summary><div role="group">${how}</div></details>` : ''}
-</div>`;
-    c.shell.tree.querySelectorAll<HTMLButtonElement>('button.tn[data-id]').forEach((b) => (b.onclick = () => {
-      sel = sel === b.dataset.id ? '' : b.dataset.id!;
+    const pickPart = (id: string) => {
+      sel = sel === id ? '' : id;
       renderTree();
       renderProps();
-    }));
+    };
+    const how =
+      T && a ? (
+        <TreeGroup title={preview ? '参考装法' : '装法'} count={preview ? '默认正确装法' : '来自组装'} open>
+          {T.parts
+            .filter((p) => p.spots)
+            .map((p) => {
+              const s = p.spots!.find((x) => x.key === a.choice[p.id]);
+              return <TreeRow key={p.id} label={`${p.short}：${s?.label.replace(/^放/, '') ?? '—'}`} st={<TnSt kind={s?.ok ? 'ok' : 'warn'}>{s?.ok ? '✓' : '!'}</TnSt>} />;
+            })}
+          {!preview && <TreeRow label="开机复测" st={<TnSt kind={a.retest === null ? 'muted' : a.retest ? 'ok' : 'bad'}>{a.retest === null ? '没测' : a.retest ? '✓' : '✗'}</TnSt>} />}
+        </TreeGroup>
+      ) : null;
+    c.shell.tree.render(
+      <div role="group" aria-label="成品">
+        <TreeGroup title="作品" count="换作品会重新加载" open>
+          {WORK_LIST.map((w) => (
+            <a key={w.id} className={tnClass(w.id === c.work.id)} href={`./app.html?work=${w.id}#product`} role="treeitem" aria-selected={w.id === c.work.id}>
+              <TnL>{w.title}</TnL>
+              {w.id === c.work.id && <TnM>当前</TnM>}
+            </a>
+          ))}
+        </TreeGroup>
+        <TreeGroup title="成品" count="" open>
+          {(PARTS[c.work.id] ?? []).map((p) => (
+            <TreeNode key={p.id} on={sel === p.id} data-id={p.id} label={p.name} onClick={() => pickPart(p.id)} />
+          ))}
+        </TreeGroup>
+        {how}
+      </div>,
+    );
   }
 
   function renderProps() {
@@ -331,55 +363,100 @@ ${how ? `<details class="tg" open><summary><span>${preview ? '参考装法' : '�
     const weather = w === 'weather';
     const p = (PARTS[w] ?? []).find((x) => x.id === sel);
     const off = assembly()?.effects.sensorOffset ?? 0;
-    const first = (FIRST3[w] ?? []).map(([t, d]) => `<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('');
-    const cannot = (CANNOT[w] ?? []).map(([t, d]) => `<div class="res na"><span class="mk">×</span><span><b>${esc(t)}</b> · ${esc(d)}</span></div>`).join('');
-    c.shell.props.innerHTML = `${p ? `${sec('选中')}<div class="ph">${esc(p.name)}</div><p class="note">${esc(p.about)}</p>` : ''}
-${sec('成品 · 和实验台同一份固件')}
-${row('运行', 'run')}
-${weather ? `${row('气象站周围', 'air')}${row('BME280 读到', 'rt')}${row('OLED 单位', 'unit')}${row('表盘指针', 'needle')}${row('板载 RGB', 'rgb')}${row('蜂鸣器', 'buzz')}${row('热源', 'heat')}` : w === 'spin' ? `${row('舵机', 'servo')}${row('转台', 'turn')}${row('状态', 'look')}` : w === 'usbkey' ? `${row('电脑看到', 'usbstate')}${row('打出的字', 'typed')}` : w === 'lens' ? `${row('表情', 'mood')}${row('透镜', 'lens')}` : w === 'lamp' ? `${row('灯带', 'strip')}${row('亮度 / 颜色', 'lampst')}${row('旋钮模式', 'lampmode')}${row('旋钮', 'knob')}` : w === 'ruler' ? `${row('挡板距离', 'cm')}${row('探头量到', 'cmfx')}${row('固件读到', 'rdist')}${row('蜂鸣器', 'buzz')}` : `${row('圆盘姿态', 'tpose')}${row('六轴读到', 'tfx')}${row('小豆', 'bean')}`}
-${off ? `<p class="note bad">装法：BME280 贴着芯片，读数比周围高 ${off.toFixed(1)} ℃（估算）。回「组装」改放通风口旁。</p>` : ''}${fxNote()}
-${assembly()?.effects.usbBlocked ? `<p class="note bad">装法：开发板转了 180°，USB 口顶着前墙，线插不进去，电脑看不到设备。回「组装」把 USB 口朝背面开孔。</p>` : ''}
-${harnessHtml()}
-<div class="btns">${c.session.audio.hasSound ? `<button type="button" class="btn" id="pSound" aria-pressed="false">声音：关</button>` : ''}${weather ? `<button type="button" class="btn" id="pHeat">热源：关</button>` : ''}${w === 'lamp' ? '<button type="button" class="btn" id="pKnobL">旋钮 −1</button><button type="button" class="btn" id="pKnobR">旋钮 +1</button><button type="button" class="btn" id="pKnobP">按旋钮</button>' : w === 'ruler' ? '<button type="button" class="btn" id="pNear">挡板近 10 cm</button><button type="button" class="btn" id="pFar">挡板远 10 cm</button>' : w === 'tilt' ? '<button type="button" class="btn" id="pTiltR">右边放低</button><button type="button" class="btn" id="pTiltL">左前放低</button><button type="button" class="btn" id="pLevel">放平</button>' : w === 'usbkey' ? '' : '<button type="button" class="btn" id="pBoot">按 BOOT</button>'}</div>
-${cur3d() ? `${sec('拍照 · 录像')}<div class="btns"><button type="button" class="btn" id="pPhoto">拍照</button><button type="button" class="btn" id="pRec">${rec ? `录制中 ${rec.elapsed().toFixed(0)} / ${RECORD_SECONDS} s` : `录 ${RECORD_SECONDS} 秒`}</button></div><p class="note">照片是 2 倍分辨率 PNG；录像是 webm，开着声音会录进蜂鸣器。文件直接下载。</p>` : ''}
-${sec('串口 · 最近几行')}<pre class="brief serial-tail" data-live="serial"></pre>
-${sec('真机到手先做这三件事')}<ol class="first3">${first}</ol>
-${sec('不能模拟的项 · 必须上真机')}${cannot}`;
-    const snd = c.shell.props.querySelector<HTMLButtonElement>('#pSound');
-    if (snd) snd.onclick = () => toggleSound();
-    const ht = c.shell.props.querySelector<HTMLButtonElement>('#pHeat');
-    if (ht) ht.onclick = () => toggleHeat();
-    const boot = c.shell.props.querySelector<HTMLButtonElement>('#pBoot');
-    if (boot) {
-      boot.onpointerdown = () => pressBoot(true);
-      boot.onpointerup = boot.onpointerleave = () => pressBoot(false);
-    }
-    const on = (id: string, f: () => void) => {
-      const b = c.shell.props.querySelector<HTMLButtonElement>(id);
-      if (b) b.onclick = f;
-    };
-    on('#pKnobL', () => turnKnob(-1));
-    on('#pKnobR', () => turnKnob(1));
-    on('#pKnobP', () => onTool('p-knob'));
-    on('#pNear', () => moveBoard(-10));
-    on('#pFar', () => moveBoard(10));
-    on('#pTiltR', () => tiltTo({ pitch: 0, roll: 25, yaw: 0 }));
-    on('#pTiltL', () => tiltTo({ pitch: 20, roll: -25, yaw: 0 }));
-    on('#pLevel', () => tiltTo({ pitch: 0, roll: 0, yaw: 0 }));
-    const ph = c.shell.props.querySelector<HTMLButtonElement>('#pPhoto');
-    if (ph) ph.onclick = () => void photo();
-    const rb = c.shell.props.querySelector<HTMLButtonElement>('#pRec');
-    if (rb) rb.onclick = () => record();
+    const rows = weather
+      ? [row('气象站周围', 'air'), row('BME280 读到', 'rt'), row('OLED 单位', 'unit'), row('表盘指针', 'needle'), row('板载 RGB', 'rgb'), row('蜂鸣器', 'buzz'), row('热源', 'heat')]
+      : w === 'spin'
+        ? [row('舵机', 'servo'), row('转台', 'turn'), row('状态', 'look')]
+        : w === 'usbkey'
+          ? [row('电脑看到', 'usbstate'), row('打出的字', 'typed')]
+          : w === 'lens'
+            ? [row('表情', 'mood'), row('透镜', 'lens')]
+            : w === 'lamp'
+              ? [row('灯带', 'strip'), row('亮度 / 颜色', 'lampst'), row('旋钮模式', 'lampmode'), row('旋钮', 'knob')]
+              : w === 'ruler'
+                ? [row('挡板距离', 'cm'), row('探头量到', 'cmfx'), row('固件读到', 'rdist'), row('蜂鸣器', 'buzz')]
+                : [row('圆盘姿态', 'tpose'), row('六轴读到', 'tfx'), row('小豆', 'bean')];
+    const b = (id: string, label: string, f: () => void) => (
+      <Btn key={id} id={id} onClick={f}>
+        {label}
+      </Btn>
+    );
+    const acts =
+      w === 'lamp'
+        ? [b('pKnobL', '旋钮 −1', () => turnKnob(-1)), b('pKnobR', '旋钮 +1', () => turnKnob(1)), b('pKnobP', '按旋钮', () => onTool('p-knob'))]
+        : w === 'ruler'
+          ? [b('pNear', '挡板近 10 cm', () => moveBoard(-10)), b('pFar', '挡板远 10 cm', () => moveBoard(10))]
+          : w === 'tilt'
+            ? [b('pTiltR', '右边放低', () => tiltTo({ pitch: 0, roll: 25, yaw: 0 })), b('pTiltL', '左前放低', () => tiltTo({ pitch: 20, roll: -25, yaw: 0 })), b('pLevel', '放平', () => tiltTo({ pitch: 0, roll: 0, yaw: 0 }))]
+            : w === 'usbkey'
+              ? []
+              : [
+                  <Btn key="pBoot" id="pBoot" onPointerDown={() => pressBoot(true)} onPointerUp={() => pressBoot(false)} onPointerLeave={() => pressBoot(false)}>
+                    按 BOOT
+                  </Btn>,
+                ];
+    c.shell.props.render(
+      <>
+        {p && (
+          <>
+            <Sec>选中</Sec>
+            <Ph>{p.name}</Ph>
+            <Note>{p.about}</Note>
+          </>
+        )}
+        <Sec>成品 · 和实验台同一份固件</Sec>
+        {row('运行', 'run')}
+        {rows}
+        {off ? <Note bad>装法：BME280 贴着芯片，读数比周围高 {off.toFixed(1)} ℃（估算）。回「组装」改放通风口旁。</Note> : null}
+        {fxNote()}
+        {assembly()?.effects.usbBlocked && <Note bad>装法：开发板转了 180°，USB 口顶着前墙，线插不进去，电脑看不到设备。回「组装」把 USB 口朝背面开孔。</Note>}
+        {harnessPanel()}
+        <Btns>
+          {c.session.audio.hasSound && <Txt as="button" type="button" className={btnClass()} id="pSound" aria-pressed="false" onClick={() => toggleSound()} text="声音：关" />}
+          {weather && <Txt as="button" type="button" className={btnClass()} id="pHeat" onClick={() => toggleHeat()} text="热源：关" />}
+          {acts}
+        </Btns>
+        {cur3d() && (
+          <>
+            <Sec>拍照 · 录像</Sec>
+            <Btns>
+              <Btn id="pPhoto" onClick={() => void photo()}>
+                拍照
+              </Btn>
+              <Txt as="button" type="button" className={btnClass()} id="pRec" onClick={() => record()} text={rec ? `录制中 ${rec.elapsed().toFixed(0)} / ${RECORD_SECONDS} s` : `录 ${RECORD_SECONDS} 秒`} />
+            </Btns>
+            <Note>照片是 2 倍分辨率 PNG；录像是 webm，开着声音会录进蜂鸣器。文件直接下载。</Note>
+          </>
+        )}
+        <Sec>串口 · 最近几行</Sec>
+        <Brief className="serial-tail" data-live="serial" />
+        <Sec>真机到手先做这三件事</Sec>
+        <ol className="first3">
+          {(FIRST3[w] ?? []).map(([t, d]) => (
+            <li key={t}>
+              <b>{t}</b>
+              <span>{d}</span>
+            </li>
+          ))}
+        </ol>
+        <Sec>不能模拟的项 · 必须上真机</Sec>
+        {(CANNOT[w] ?? []).map(([t, d]) => (
+          <Res key={t} kind="na" mk="×">
+            <b>{t}</b> · {d}
+          </Res>
+        ))}
+      </>,
+    );
     updateLive();
   }
 
   /** 装法带来的提示（台灯亮点 / 探头被挡 / 六轴装反） */
   function fxNote() {
     const fx = assembly()?.effects ?? {};
-    if (fx.glare) return '<p class="note bad">装法：灯带贴着灯罩，罩上一排刺眼亮点（估算）。回「组装」把灯带贴到导光柱上。</p>';
-    if (fx.sonarBlock) return `<p class="note bad">装法：探头缩在外壳孔里，模拟器里的 HC-SR04 只能量到孔壁（约 ${fx.sonarBlock} cm），蜂鸣器一直响。回「组装」让探头伸出前面板。</p>`;
-    if (fx.imuFlip) return '<p class="note bad">装法：六轴装反了，读到的俯仰、横滚方向全反，小豆往高处爬。回「组装」把箭头朝前装。</p>';
-    return '';
+    if (fx.glare) return <Note bad>装法：灯带贴着灯罩，罩上一排刺眼亮点（估算）。回「组装」把灯带贴到导光柱上。</Note>;
+    if (fx.sonarBlock) return <Note bad>装法：探头缩在外壳孔里，模拟器里的 HC-SR04 只能量到孔壁（约 {fx.sonarBlock} cm），蜂鸣器一直响。回「组装」让探头伸出前面板。</Note>;
+    if (fx.imuFlip) return <Note bad>装法：六轴装反了，读到的俯仰、横滚方向全反，小豆往高处爬。回「组装」把箭头朝前装。</Note>;
+    return null;
   }
   function turnKnob(steps: number) {
     if (!ctx) return;
@@ -412,19 +489,29 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
   }
 
   // ------------------------------------------------------------ 线束（P2-11，估算）
-  function harnessHtml() {
+  function harnessPanel() {
     const c = ctx!;
     const fx = assembly()?.effects ?? {};
     const n = I2C_DEVICES[c.work.id] ?? 0;
-    const rows: string[] = [];
-    if (n && fx.i2cWireCm !== undefined) {
-      const l = i2cLoad(fx.i2cWireCm, n);
-      rows.push(`<div class="res ${l.verdict === 'ok' ? 'ok' : 'bad'}"><span class="mk">${l.verdict === 'ok' ? '✓' : l.verdict === 'marginal' ? '!' : '✗'}</span><span>I2C 排线 ${fx.i2cWireCm} cm：${esc(i2cText(l))}</span></div>`);
-    }
+    const mk = (v: string) => (v === 'ok' ? '✓' : v === 'marginal' ? '!' : '✗');
+    const l = n && fx.i2cWireCm !== undefined ? i2cLoad(fx.i2cWireCm, n) : null;
     const wf = wifiText(fx.antennaDb ?? 0);
-    rows.push(`<div class="res ${wf.level === 'ok' ? 'ok' : wf.level === 'marginal' ? 'warn' : 'bad'}"><span class="mk">${wf.level === 'ok' ? '✓' : wf.level === 'marginal' ? '!' : '✗'}</span><span>Wi-Fi：天线遮挡 ${fx.antennaDb ?? 0} dB，${esc(wf.text)}（本固件没用 Wi-Fi，暂不受影响）</span></div>`);
+    const wk: ResKind = wf.level === 'ok' ? 'ok' : wf.level === 'marginal' ? 'warn' : 'bad';
     const sim = c.session.harnessText.trim();
-    return `${sec('线束与天线 · 估算，必须上真机')}${rows.join('')}${sim ? `<p class="note mono" data-live="hz">${esc(sim.replace(/\[tryboard\] /g, '模拟器：'))}</p>` : ''}`;
+    return (
+      <>
+        <Sec>线束与天线 · 估算，必须上真机</Sec>
+        {l && (
+          <Res kind={l.verdict === 'ok' ? 'ok' : 'bad'} mk={mk(l.verdict)}>
+            I2C 排线 {fx.i2cWireCm} cm：{i2cText(l)}
+          </Res>
+        )}
+        <Res kind={wk} mk={mk(wf.level)}>
+          Wi-Fi：天线遮挡 {fx.antennaDb ?? 0} dB，{wf.text}（本固件没用 Wi-Fi，暂不受影响）
+        </Res>
+        {sim && <Txt as="p" className="note my-2 font-mono text-xs text-muted" data-live="hz" text={sim.replace(/\[tryboard\] /g, '模拟器：')} />}
+      </>
+    );
   }
 
   /** 成品用装好的线束（预览按参考装法：理想总线、天线无遮挡） */
@@ -513,7 +600,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
   function updateLive() {
     const c = ctx;
     if (!c) return;
-    const el = c.shell.props;
+    const el = c.shell.props.el;
     const set = (k: string, v: string, bad = false) => {
       const n = el.querySelector<HTMLElement>(`[data-live="${k}"]`);
       if (n) {
@@ -531,7 +618,10 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     set('needle', a === null ? '没有 PWM' : `${a.toFixed(1)}° ≈ ${((a / 180) * 40).toFixed(1)} ℃`);
     const css = ledCss(f.running ? f.rgb : null);
     const rgb = el.querySelector<HTMLElement>('[data-live="rgb"]');
-    if (rgb) rgb.innerHTML = css && f.rgb ? `<i class="sw" style="background:${css}"></i>#${f.rgb.map((x) => x.toString(16).padStart(2, '0')).join('')}` : '灭';
+    if (rgb) {
+      if (css && f.rgb) rgb.replaceChildren(swatch(css), `#${f.rgb.map((x) => x.toString(16).padStart(2, '0')).join('')}`);
+      else rgb.textContent = '灭';
+    }
     const au = c.session.audio.state;
     set('buzz', `${au.sounding ? `响 ${au.lastFreq} Hz` : alarm ? '报警中（间歇）' : '不响'} · ${au.muted ? '静音' : '出声'}`, alarm);
     set('heat', heat.on ? `开 · 离通风口 ${(heat.prox * 100).toFixed(0)}%` : '关');
@@ -557,7 +647,10 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     if (c.work.id === 'lamp') {
       const strip = f.strips?.[5] ?? [];
       const st = el.querySelector<HTMLElement>('[data-live="strip"]');
-      if (st) st.innerHTML = strip.length ? strip.map((x) => `<i class="sw" style="background:${ledCss(x) ?? '#222'}"></i>`).join('') + ` #${(strip[0] ?? [0, 0, 0]).map((x) => x.toString(16).padStart(2, '0')).join('')}` : '灭';
+      if (st) {
+        if (strip.length) st.replaceChildren(...strip.map((x) => swatch(ledCss(x) ?? '#222')), ` #${(strip[0] ?? [0, 0, 0]).map((x) => x.toString(16).padStart(2, '0')).join('')}`);
+        else st.textContent = '灭';
+      }
       // 固件上电是亮度 4、暖白，只在变了的时候才打印 LEVEL / COLOR
       set('lampst', lamp.level || lamp.color || strip.some((x) => Math.max(...x) > 0) ? `亮度 ${lamp.level || 4}/8 · ${COLOR_LABEL[lamp.color] ?? (lamp.color || '暖白')}${lamp.level || lamp.color ? '' : '（上电默认）'}` : '等固件打印…');
       set('lampmode', lamp.mode === 'color' ? '调颜色（再按一下回到调亮度）' : '调亮度（按一下切到调颜色）');
@@ -767,7 +860,7 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
     }
   }
 
-  function mountTilt(el: HTMLElement, c: StepCtx) {
+  function mountTilt(c: StepCtx) {
     if (!tiltNode) {
       tiltNode = document.createElement('div');
       tiltNode.className = 'prod-stage';
@@ -777,16 +870,26 @@ ${sec('不能模拟的项 · 必须上真机')}${cannot}`;
       note.textContent = '外观示意 · 拖动可转动盒子';
       tiltNode.appendChild(note);
     }
-    const banner = document.createElement('div');
-    banner.className = 'prod-preview';
-    banner.setAttribute('role', 'status');
-    banner.innerHTML = '<b>倾角仪 · 端在手里转</b><span>这个作品不装壳。转动盒子就是在转实验台上的 IMU，读数实时跟着变</span>';
-    el.append(banner, tiltNode);
+    c.shell.layer.render(
+      <>
+        <Banner t="倾角仪 · 端在手里转" s="这个作品不装壳。转动盒子就是在转实验台上的 IMU，读数实时跟着变" />
+        <Host node={tiltNode} />
+      </>,
+    );
     tilt!.start();
-    c.shell.tree.innerHTML = `<div class="tn on" role="treeitem" aria-selected="true"><span class="tn-l">倾角仪 · ${c.session.scene.parts.some((p) => p.type === 'qmi8658') ? 'QMI8658' : 'MPU6050'}</span></div>`;
-    c.shell.props.innerHTML = `${sec('盒子姿态 · 你转出来的')}${row('俯仰 / 横滚 / 航向', 'tp')}${row('应读到（重力分量）', 'tg')}
-${sec('固件读到 · 串口最近一行')}${row('俯仰', 'tip')}${row('横滚', 'tir')}${row('陀螺', 'tgy')}
-<p class="note">拖动时陀螺读到角速度，松手 150 ms 后回零。真机的零偏、温漂和振动噪声没有算进去（未经真机标定）。</p>`;
+    c.shell.tree.render(<TreeRow on label={`倾角仪 · ${c.session.scene.parts.some((p) => p.type === 'qmi8658') ? 'QMI8658' : 'MPU6050'}`} />);
+    c.shell.props.render(
+      <>
+        <Sec>盒子姿态 · 你转出来的</Sec>
+        {row('俯仰 / 横滚 / 航向', 'tp')}
+        {row('应读到（重力分量）', 'tg')}
+        <Sec>固件读到 · 串口最近一行</Sec>
+        {row('俯仰', 'tip')}
+        {row('横滚', 'tir')}
+        {row('陀螺', 'tgy')}
+        <Note>拖动时陀螺读到角速度，松手 150 ms 后回零。真机的零偏、温漂和振动噪声没有算进去（未经真机标定）。</Note>
+      </>,
+    );
     c.shell.toolbar.setGroups([
       { id: 'nav', tools: [{ id: 'p-orbit', label: '转动', key: '拖动' }, { id: 'p-level', label: '放平' }] },
       { id: 'run', tools: [{ id: 'p-rerun', label: '再跑一次', primary: true }] },
@@ -797,7 +900,7 @@ ${sec('固件读到 · 串口最近一行')}${row('俯仰', 'tip')}${row('横滚
     c.shell.setVerdict('倾角仪 · 成品', 'idle');
     c.shell.onVerdict(() => (location.hash = 'bench'));
     const set = (k: string, v: string, bad = false) => {
-      const n = c.shell.props.querySelector<HTMLElement>(`[data-live="${k}"]`);
+      const n = c.shell.props.el.querySelector<HTMLElement>(`[data-live="${k}"]`);
       if (n) {
         n.textContent = v;
         n.classList.toggle('bad', bad);
@@ -825,7 +928,7 @@ ${sec('固件读到 · 串口最近一行')}${row('俯仰', 'tip')}${row('横滚
   }
 
   return {
-    mount(el, c) {
+    mount(c) {
       ctx = c;
       if (!hooked) {
         hooked = true;
@@ -850,13 +953,23 @@ ${sec('固件读到 · 串口最近一行')}${row('俯仰', 'tip')}${row('横滚
         }, ['run']);
       }
       if (c.work.id === 'imu') {
-        mountTilt(el, c);
+        mountTilt(c);
         return;
       }
       if (!TEMPLATES[c.work.id]) {
-        el.innerHTML = `<div class="pnl lockcard" role="status"><div class="sec">④ 成品</div><p class="ph-t">${c.work.id === 'blank' ? '空白实验台' : esc(c.work.title)}没有成品</p><div class="btns"><a class="btn primary" href="./app.html?work=weather#product">看气象站成品</a></div></div>`;
-        c.shell.tree.innerHTML = '<div class="tree-empty">没有成品</div>';
-        c.shell.props.innerHTML = '';
+        c.shell.layer.render(
+          <LockCard role="status">
+            <Sec>④ 成品</Sec>
+            <PhT>{c.work.id === 'blank' ? '空白实验台' : c.work.title}没有成品</PhT>
+            <Btns>
+              <LinkBtn primary href="./app.html?work=weather#product">
+                看气象站成品
+              </LinkBtn>
+            </Btns>
+          </LockCard>,
+        );
+        c.shell.tree.render(<TreeEmpty>没有成品</TreeEmpty>);
+        c.shell.props.render(null);
         c.shell.toolbar.setGroups([]);
         c.shell.timeline.setSteps([]);
         return;
@@ -866,15 +979,12 @@ ${sec('固件读到 · 串口最近一行')}${row('俯仰', 'tip')}${row('横滚
       preview = !own || own.placed.length < own.total;
       const a = assembly()!;
       if (!node) build(c);
-      el.appendChild(node!);
-      banner = null;
-      if (preview) {
-        banner = document.createElement('div');
-        banner.className = 'prod-preview';
-        banner.setAttribute('role', 'status');
-        banner.innerHTML = '<b>参考成品</b><span>按默认正确装法展示，你装完后换成你的装法</span>';
-        el.insertBefore(banner, node);
-      }
+      c.shell.layer.render(
+        <>
+          {preview && <Banner t="参考成品" s="按默认正确装法展示，你装完后换成你的装法" />}
+          <Host node={node} />
+        </>,
+      );
       // 装法的温漂只在成品里生效
       c.session.setSensorOffset(a?.effects.sensorOffset ?? 0);
       room = c.store.get().env.temp;
@@ -918,7 +1028,7 @@ ${sec('固件读到 · 串口最近一行')}${row('俯仰', 'tip')}${row('横滚
         c.store.subscribe(() => renderTree(), ['assembly']),
         c.store.subscribe(() => preview && (syncNext(), renderProps()), ['checks']),
         c.session.onHarness((t) => {
-          const n = c.shell.props.querySelector('[data-live="hz"]');
+          const n = c.shell.props.el.querySelector('[data-live="hz"]');
           if (n) n.textContent = t.trim().replace(/\[tryboard\] /g, '模拟器：');
           else if (t.trim()) renderProps();
         }),

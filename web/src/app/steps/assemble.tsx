@@ -30,10 +30,10 @@ function want3d() {
   }
 }
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-const sec = (t: string) => `<div class="sec">${t}</div>`;
-const row = (k: string, v: string, cls = '') => `<div class="kv"><span class="k">${k}</span><span class="v mono ${cls}">${v}</span></div>`;
-const rowT = (k: string, v: string) => `<div class="kv col"><span class="k">${k}</span><span class="v txt">${v}</span></div>`;
+import { Fragment, type ReactNode } from 'react';
+import { cn } from '../../ui/cn';
+import { Host, Txt } from '../../ui/native';
+import { Btn, Btns, Kv, KvBox, KvT, LinkBtn, LockCard, Mono, Muted, Note, Ph, PhT, Res, Sec, Seg, SegB, Slider, TnL, TnM, TnSt, TreeEmpty, TreeGroup, TreeRow, VerdictLine, btnClass, tnClass } from '../../ui/panel';
 
 type Entry = { kind: 'place'; id: string; spot?: string } | { kind: 'test'; ok: boolean; rows: { ok: boolean; text: string }[]; fingerprint: string; who: string; temp: number };
 
@@ -160,6 +160,9 @@ export function assembleStep(): StepImpl {
   /** 线束（P2-11）：排线长度、天线旁边有没有金属件 / 电池（估算）；不进装配时间线，单独存 */
   let hz: CaseHarness = loadCaseHarness('weather');
 
+  /** 装配视图（命令式节点）挂进步骤层 */
+  const showNode = () => ctx?.shell.layer.render(<Host node={node} />);
+
   /** 线束交给模拟器（台面上正在跑的那份固件马上受影响；开机复测、成品也用它） */
   function applyHarness() {
     const c = ctx!;
@@ -172,26 +175,11 @@ export function assembleStep(): StepImpl {
     if (Object.keys(h).length) c.session.setHarness(h);
   }
 
-  function harnessHtml() {
+  function harnessPanel() {
     const c = ctx!;
+    const el = c.shell.props.el;
     const hx = harnessEffects(c.work.id, hz);
-    const lv = (v: string) => (v === 'ok' ? ['ok', '✓'] : v === 'marginal' ? ['warn', '!'] : ['bad', '✗']);
-    const i2c = hx.i2c
-      ? `<div class="kv col"><span class="k">I2C 排线总长（开发板到 OLED、BME280）</span><label class="slider"><input type="range" id="hzWire" min="8" max="150" step="1" value="${hz.i2cCm}" aria-label="I2C 排线总长" /><output class="mono" id="hzWireV">${hz.i2cCm} cm</output></label></div>
-<div class="res ${lv(hx.i2c.verdict)[0]}" id="hzWireRes"><span class="mk">${lv(hx.i2c.verdict)[1]}</span><span>${esc(i2cText(hx.i2c))}</span></div>`
-      : '';
-    const obs = (['none', 'battery', 'metal'] as Obstacle[]).map((o) => `<button type="button" class="segb" data-obs="${o}" aria-pressed="${hz.obstacle === o}">${esc(o === 'metal' ? '金属件' : OBSTACLE_LABEL[o])}</button>`).join('');
-    const ant = `<div class="kv col"><span class="k">WROOM 天线旁边放了什么</span><div class="seg" role="radiogroup" aria-label="天线旁边">${obs}</div></div>
-${hz.obstacle !== 'none' ? `<div class="kv col"><span class="k">离天线区多远（${esc(OBSTACLE_LABEL[hz.obstacle])}）</span><label class="slider"><input type="range" id="hzDist" min="0" max="30" step="1" value="${hz.distMm}" aria-label="离天线多远" /><output class="mono" id="hzDistV">${hz.distMm} mm</output></label></div>` : ''}
-<div class="res ${lv(hx.wifi.level)[0]}" id="hzAntRes"><span class="mk">${lv(hx.wifi.level)[1]}</span><span>天线遮挡 ${hx.antennaDb} dB，${esc(hx.wifi.text)}</span></div>`;
-    const sim = c.session.harnessText.trim();
-    return `${sec('线束与天线 · 估算，必须上真机')}${i2c}${ant}
-<p class="note">按固定公式估算：总线电容 = 线长 × 1 pF/cm + 每个器件 10 pF + 10 pF，上升时间 = 0.8473 × 上拉 × 电容；天线：金属件贴着衰减 45 dB、电池 30 dB，20 mm 外不算。模拟器也用这个公式，读数会真的出错，Wi-Fi 会真的连不上。</p>
-${sim ? `<p class="note mono" data-k="hzSim">${esc(sim.replace(/\[tryboard\] /g, '模拟器：'))}</p>` : ''}`;
-  }
-
-  function bindHarness(el: HTMLElement) {
-    const c = ctx!;
+    const lv = (v: string) => (v === 'ok' ? (['ok', '✓'] as const) : v === 'marginal' ? (['warn', '!'] as const) : (['bad', '✗'] as const));
     const commit = (next: Partial<CaseHarness>) => {
       hz = { ...hz, ...next };
       saveCaseHarness(c.work.id, hz);
@@ -199,22 +187,77 @@ ${sim ? `<p class="note mono" data-k="hzSim">${esc(sim.replace(/\[tryboard\] /g,
       publish();
       renderAll();
     };
-    const wire = el.querySelector<HTMLInputElement>('#hzWire');
-    if (wire) {
-      wire.oninput = () => {
-        el.querySelector('#hzWireV')!.textContent = `${wire.value} cm`;
-        const l = harnessEffects(c.work.id, { ...hz, i2cCm: Number(wire.value) }).i2c!;
-        const r = el.querySelector('#hzWireRes span:last-child');
-        if (r) r.textContent = i2cText(l);
-      };
-      wire.onchange = () => commit({ i2cCm: Number(wire.value) });
-    }
-    const dist = el.querySelector<HTMLInputElement>('#hzDist');
-    if (dist) {
-      dist.oninput = () => (el.querySelector('#hzDistV')!.textContent = `${dist.value} mm`);
-      dist.onchange = () => commit({ distMm: Number(dist.value) });
-    }
-    el.querySelectorAll<HTMLButtonElement>('[data-obs]').forEach((b) => (b.onclick = () => commit({ obstacle: b.dataset.obs as Obstacle })));
+    const i2c = hx.i2c ? (
+      <>
+        <KvBox>
+          <span className="k">I2C 排线总长（开发板到 OLED、BME280）</span>
+          <Slider
+            id="hzWire"
+            outId="hzWireV"
+            min={8}
+            max={150}
+            step={1}
+            defaultValue={hz.i2cCm}
+            aria-label="I2C 排线总长"
+            out={`${hz.i2cCm} cm`}
+            on={{
+              input: (e) => {
+                const v = e.currentTarget.value;
+                el.querySelector('#hzWireV')!.textContent = `${v} cm`;
+                const l = harnessEffects(c.work.id, { ...hz, i2cCm: Number(v) }).i2c!;
+                const r = el.querySelector('#hzWireRes span:last-child');
+                if (r) r.textContent = i2cText(l);
+              },
+              change: (e) => commit({ i2cCm: Number(e.currentTarget.value) }),
+            }}
+          />
+        </KvBox>
+        <Res id="hzWireRes" kind={lv(hx.i2c.verdict)[0]} mk={lv(hx.i2c.verdict)[1]}>
+          {i2cText(hx.i2c)}
+        </Res>
+      </>
+    ) : null;
+    const sim = c.session.harnessText.trim();
+    return (
+      <>
+        <Sec>线束与天线 · 估算，必须上真机</Sec>
+        {i2c}
+        <KvBox>
+          <span className="k">WROOM 天线旁边放了什么</span>
+          <Seg aria-label="天线旁边">
+            {(['none', 'battery', 'metal'] as Obstacle[]).map((o) => (
+              <SegB key={o} data-obs={o} on={hz.obstacle === o} onClick={() => commit({ obstacle: o })}>
+                {o === 'metal' ? '金属件' : OBSTACLE_LABEL[o]}
+              </SegB>
+            ))}
+          </Seg>
+        </KvBox>
+        {hz.obstacle !== 'none' && (
+          <KvBox>
+            <span className="k">离天线区多远（{OBSTACLE_LABEL[hz.obstacle]}）</span>
+            <Slider
+              id="hzDist"
+              outId="hzDistV"
+              min={0}
+              max={30}
+              step={1}
+              defaultValue={hz.distMm}
+              aria-label="离天线多远"
+              out={`${hz.distMm} mm`}
+              on={{
+                input: (e) => void (el.querySelector('#hzDistV')!.textContent = `${e.currentTarget.value} mm`),
+                change: (e) => commit({ distMm: Number(e.currentTarget.value) }),
+              }}
+            />
+          </KvBox>
+        )}
+        <Res id="hzAntRes" kind={lv(hx.wifi.level)[0]} mk={lv(hx.wifi.level)[1]}>
+          天线遮挡 {hx.antennaDb} dB，{hx.wifi.text}
+        </Res>
+        <Note>按固定公式估算：总线电容 = 线长 × 1 pF/cm + 每个器件 10 pF + 10 pF，上升时间 = 0.8473 × 上拉 × 电容；天线：金属件贴着衰减 45 dB、电池 30 dB，20 mm 外不算。模拟器也用这个公式，读数会真的出错，Wi-Fi 会真的连不上。</Note>
+        {sim && <Txt as="p" className="note my-2 font-mono text-xs text-muted" data-k="hzSim" text={sim.replace(/\[tryboard\] /g, '模拟器：')} />}
+      </>
+    );
   }
 
   const placesUpTo = (i: number) => entries.slice(0, i + 1).filter((e): e is Extract<Entry, { kind: 'place' }> => e.kind === 'place');
@@ -270,29 +313,74 @@ ${sim ? `<p class="note mono" data-k="hzSim">${esc(sim.replace(/\[tryboard\] /g,
     renderAll();
   }
 
+  const lvTitle = (id: string) => ctx!.session.levels.find((l) => l.id === id)?.title ?? '';
+
   // ------------------------------------------------------------ 锁住时
-  function renderLocked(el: HTMLElement) {
+  function renderLocked() {
     const c = ctx!;
     const s = c.store.get();
     const n = c.work.checkpoints.length;
     const d = passedCount(c);
     const left = c.work.checkpoints.filter((id) => !(s.checks[id]?.ok && s.checks[id].own));
-    el.innerHTML = `<div class="pnl lockcard" role="status"><div class="sec">③ 组装 · 还没解锁</div><p class="ph-t">实验台的检查点全部通过才能组装</p>
-<p class="muted">现在 <b class="mono">${d}/${n}</b>。还差：${left.map((id) => `<span class="mono">${esc(id)}</span> ${esc(c.session.levels.find((l) => l.id === id)?.title ?? '')}`).join('、')}</p>
-<p class="muted">只有你自己上传的固件通过才算，参考固件通过不算。判定和命令行 <span class="mono">npx tryboard check</span> 相同。</p>
-<div class="btns"><button type="button" class="btn primary" id="toBench">回实验台</button></div></div>`;
-    el.querySelector<HTMLButtonElement>('#toBench')!.onclick = () => {
-      c.store.set({ selection: { kind: 'checkpoint', id: left[0] ?? c.work.checkpoints[0] } });
-      location.hash = 'bench';
-    };
-    c.shell.tree.innerHTML = `<div role="tree" aria-label="构建树"><details class="tg" open><summary><span>检查点</span><span class="tn-m">${d}/${n}</span></summary><div role="group">${c.work.checkpoints
-      .map((id) => {
-        const r = s.checks[id];
-        const ok = r?.ok && r.own;
-        return `<div class="tn static"><span class="tn-l"><span class="mono">${esc(id)}</span> ${esc(c.session.levels.find((l) => l.id === id)?.title ?? '')}</span><span class="tn-st ${ok ? 'ok' : 'muted'}">${ok ? '✓' : '—'}</span></div>`;
-      })
-      .join('')}</div></details></div>`;
-    c.shell.props.innerHTML = `${sec('为什么锁着')}<p class="note">装法会影响读数。先在台面上确认固件没问题，装壳后出错才分得清是固件还是装法。</p>${sec('解锁条件')}${row('检查点', `${d}/${n}`, d === n ? '' : 'bad')}`;
+    c.shell.layer.render(
+      <LockCard role="status">
+        <Sec>③ 组装 · 还没解锁</Sec>
+        <PhT>实验台的检查点全部通过才能组装</PhT>
+        <p className="my-3 text-muted">
+          现在 <b className="font-mono">{`${d}/${n}`}</b>。还差：
+          {left.map((id, i) => (
+            <Fragment key={id}>
+              {i > 0 && '、'}
+              <Mono>{id}</Mono> {lvTitle(id)}
+            </Fragment>
+          ))}
+        </p>
+        <p className="my-3 text-muted">
+          只有你自己上传的固件通过才算，参考固件通过不算。判定和命令行 <Mono>npx tryboard check</Mono> 相同。
+        </p>
+        <Btns>
+          <Btn
+            primary
+            id="toBench"
+            onClick={() => {
+              c.store.set({ selection: { kind: 'checkpoint', id: left[0] ?? c.work.checkpoints[0] } });
+              location.hash = 'bench';
+            }}
+          >
+            回实验台
+          </Btn>
+        </Btns>
+      </LockCard>,
+    );
+    c.shell.tree.render(
+      <div role="group" aria-label="构建树">
+        <TreeGroup title="检查点" count={`${d}/${n}`} open>
+          {c.work.checkpoints.map((id) => {
+            const r = s.checks[id];
+            const ok = r?.ok && r.own;
+            return (
+              <TreeRow
+                key={id}
+                label={
+                  <>
+                    <Mono>{id}</Mono> {lvTitle(id)}
+                  </>
+                }
+                st={<TnSt kind={ok ? 'ok' : 'muted'}>{ok ? '✓' : '—'}</TnSt>}
+              />
+            );
+          })}
+        </TreeGroup>
+      </div>,
+    );
+    c.shell.props.render(
+      <>
+        <Sec>为什么锁着</Sec>
+        <Note>装法会影响读数。先在台面上确认固件没问题，装壳后出错才分得清是固件还是装法。</Note>
+        <Sec>解锁条件</Sec>
+        <Kv k="检查点" v={`${d}/${n}`} cls={d === n ? '' : 'bad'} />
+      </>,
+    );
     c.shell.toolbar.setGroups([]);
     c.shell.timeline.setSteps([{ id: 'lock', icon: '·', label: `检查点 ${d}/${n}，未解锁` }]);
     c.shell.setVerdict(`组装 · 未解锁`, 'idle');
@@ -312,117 +400,245 @@ ${sim ? `<p class="note mono" data-k="hzSim">${esc(sim.replace(/\[tryboard\] /g,
   }
   const STATUS = { done: ['✓', '已装', 'ok'], warn: ['!', '有警告', 'warn'], next: ['→', '下一件', 'run'], todo: ['·', '待装', 'muted'] } as const;
 
+  function pick(id: string) {
+    sel = id;
+    renderTree();
+    renderProps();
+  }
+
   function renderTree() {
     const c = ctx!;
     const s = asm!.state();
     const items = T!.parts
       .map((p, i) => {
         const st = STATUS[layerStatus(i)];
-        return `<button type="button" class="tn ${sel === p.id ? 'on' : ''}" data-id="${p.id}" role="treeitem" aria-selected="${sel === p.id}"><span class="tn-m">${i + 1}</span><span class="tn-l">${esc(p.name)}</span><span class="tn-st ${st[2]}">${st[0]} ${st[1]}</span></button>`;
+        return (
+          <button key={p.id} type="button" className={tnClass(sel === p.id)} data-id={p.id} role="treeitem" aria-selected={sel === p.id} onClick={() => pick(p.id)}>
+            <TnM>{i + 1}</TnM>
+            <TnL>{p.name}</TnL>
+            <TnSt kind={st[2]}>{`${st[0]} ${st[1]}`}</TnSt>
+          </button>
+        );
       })
-      .reverse()
-      .join('');
+      .reverse();
     const t = lastTest();
     const lv = assemblyLevel(c);
-    const testItem = `<button type="button" class="tn ${sel === 'retest' ? 'on' : ''}" data-id="retest" role="treeitem"><span class="tn-l">开机复测${lv ? ` · 检查点 <span class="mono">${esc(lv.id)}</span>` : ''}</span><span class="tn-st ${testing ? 'run' : t ? (t.ok ? 'ok' : 'bad') : 'muted'}">${testing ? '…' : t ? (t.ok ? '✓' : '✗') : '—'}</span></button>`;
-    c.shell.tree.innerHTML = `<div role="tree" aria-label="装配层">
-<details class="tg" open><summary><span>装配层 · 从下往上</span><span class="tn-m">${s.placed.length}/${s.total}</span></summary><div role="group">${items}</div></details>
-<details class="tg" open><summary><span>复测</span><span class="tn-m"></span></summary><div role="group">${testItem}</div></details>
-</div>`;
-    c.shell.tree.querySelectorAll<HTMLButtonElement>('.tn[data-id]').forEach((b) => (b.onclick = () => {
-      sel = b.dataset.id!;
-      renderTree();
-      renderProps();
-    }));
+    c.shell.tree.render(
+      <div role="group" aria-label="装配层">
+        <TreeGroup title="装配层 · 从下往上" count={`${s.placed.length}/${s.total}`} open>
+          {items}
+        </TreeGroup>
+        <TreeGroup title="复测" count="" open>
+          <button type="button" className={tnClass(sel === 'retest')} data-id="retest" role="treeitem" aria-selected={sel === 'retest'} onClick={() => pick('retest')}>
+            <TnL>
+              开机复测
+              {lv && (
+                <>
+                  {' · 检查点 '}
+                  <Mono>{lv.id}</Mono>
+                </>
+              )}
+            </TnL>
+            <TnSt kind={testing ? 'run' : t ? (t.ok ? 'ok' : 'bad') : 'muted'}>{testing ? '…' : t ? (t.ok ? '✓' : '✗') : '—'}</TnSt>
+          </button>
+        </TreeGroup>
+      </div>,
+    );
   }
 
   // ------------------------------------------------------------ 属性面板
   function renderProps() {
     const c = ctx!;
-    const el = c.shell.props;
     const s = asm!.state();
     const m = asm!.message();
-    const head = `${sec('当前')}<div class="asm-msg ${m.bad ? 'bad' : ''}"><b>${esc(m.title)}</b><span>${esc(m.text)}</span></div>`;
+    const head = (
+      <>
+        <Sec>当前</Sec>
+        <div className={cn('asm-msg', m.bad && 'bad')}>
+          <b>{m.title}</b>
+          <span>{m.text}</span>
+        </div>
+      </>
+    );
     if (sel === 'retest') return renderRetest(head);
     const i = T!.parts.findIndex((p) => p.id === sel);
     const p = T!.parts[i];
     if (!p) {
-      el.innerHTML = head;
+      c.shell.props.render(head);
       return;
     }
     const st = layerStatus(i);
     const chosen = p.spots?.find((x) => x.key === s.choice[p.id]);
     const isNext = st === 'next';
-    const choose = p.spots && isNext
-      ? `${sec('怎么装')}<div class="btns col">${p.spots.map((x) => `<button type="button" class="btn ${x.ok ? '' : 'warnb'}" data-spot="${x.key}">${esc(x.label)}</button>`).join('')}</div><p class="note">也可以把左边台面上的零件卡片拖到发亮的位置。</p>`
-      : isNext
-        ? `<div class="btns"><button type="button" class="btn primary" data-place="1">装上「${esc(p.short)}」</button></div>`
-        : '';
+    const choose =
+      p.spots && isNext ? (
+        <>
+          <Sec>怎么装</Sec>
+          <Btns col>
+            {p.spots.map((x) => (
+              <Btn key={x.key} className={x.ok ? '' : 'warnb'} data-spot={x.key} onClick={() => asm!.place(p.id, x.key)}>
+                {x.label}
+              </Btn>
+            ))}
+          </Btns>
+          <Note>也可以把左边台面上的零件卡片拖到发亮的位置。</Note>
+        </>
+      ) : isNext ? (
+        <Btns>
+          <Btn primary data-place="1" onClick={() => asm!.place(p.id)}>
+            装上「{p.short}」
+          </Btn>
+        </Btns>
+      ) : null;
     const impact = (IMPACT[T!.id]?.[p.id] ?? []).map((t, k) => {
       const mark = p.spots ? (p.spots[k]?.key === chosen?.key ? '●' : '○') : '·';
-      return `<div class="res ${p.spots && p.spots[k] && !p.spots[k].ok ? 'bad' : 'na'}"><span class="mk">${mark}</span><span>${esc(t)}</span></div>`;
-    }).join('');
-    const checks = T!.checks(s)
-      .map((r) => `<div class="res ${r.ok === null ? 'na' : r.ok ? 'ok' : 'bad'}"><span class="mk">${r.ok === null ? '·' : r.ok ? '✓' : '!'}</span><span>${esc(r.label)}：${esc(r.text.replace(/^[✓!] /, ''))}</span></div>`)
-      .join('');
-    el.innerHTML = `${head}${sec(`第 ${i + 1} 层 / 共 ${T!.parts.length} 层`)}<div class="ph">${esc(p.name)}</div>
-${row('状态', `${STATUS[st][0]} ${STATUS[st][1]}`, st === 'warn' ? 'warnc' : '')}
-${chosen ? rowT('装法', esc(chosen.label) + (chosen.ok ? '' : ' · 有警告')) : ''}
-${!p.spots && p.okMsg ? rowT('说明', esc(p.okMsg.join('，'))) : ''}
-${choose}
-${impact ? sec('装法会改变什么 · 估算') + impact : ''}
-${sec('装配检查 · 几何估算，未经真机标定')}${checks}
-${effectsLine()}
-${harnessHtml()}
-${caseLine()}`;
-    bindHarness(el);
-    el.querySelectorAll<HTMLButtonElement>('[data-spot]').forEach((b) => (b.onclick = () => asm!.place(p.id, b.dataset.spot)));
-    el.querySelector<HTMLButtonElement>('#toCase')?.addEventListener('click', (e) => {
-      ctx!.store.set({ selection: { kind: 'part', id: (e.currentTarget as HTMLElement).dataset.enc! } });
-      location.hash = 'shop';
+      return (
+        <Res key={k} kind={p.spots && p.spots[k] && !p.spots[k].ok ? 'bad' : 'na'} mk={mark}>
+          {t}
+        </Res>
+      );
     });
-    el.querySelector<HTMLButtonElement>('[data-place]')?.addEventListener('click', () => asm!.place(p.id));
+    const checks = T!.checks(s).map((r, k) => (
+      <Res key={k} kind={r.ok === null ? 'na' : r.ok ? 'ok' : 'bad'} mk={r.ok === null ? '·' : r.ok ? '✓' : '!'}>
+        {r.label}：{r.text.replace(/^[✓!] /, '')}
+      </Res>
+    ));
+    c.shell.props.render(
+      <>
+        {head}
+        <Sec>{`第 ${i + 1} 层 / 共 ${T!.parts.length} 层`}</Sec>
+        <Ph>{p.name}</Ph>
+        <Kv k="状态" v={`${STATUS[st][0]} ${STATUS[st][1]}`} cls={st === 'warn' ? 'warnc' : ''} />
+        {chosen && <KvT k="装法">{chosen.label + (chosen.ok ? '' : ' · 有警告')}</KvT>}
+        {!p.spots && p.okMsg && <KvT k="说明">{p.okMsg.join('，')}</KvT>}
+        {choose}
+        {impact.length > 0 && (
+          <>
+            <Sec>装法会改变什么 · 估算</Sec>
+            {impact}
+          </>
+        )}
+        <Sec>装配检查 · 几何估算，未经真机标定</Sec>
+        {checks}
+        {effectsLine()}
+        {harnessPanel()}
+        {caseLine()}
+      </>,
+    );
   }
 
   /** 参数化外壳的尺寸与警告（与采购页外壳详情同一份布局） */
   function caseLine() {
-    if (!layout) return '';
+    if (!layout) return null;
     const L = layout;
     const enc = `enclosure-${T!.id}`;
-    const warn = L.warnings.map((w) => `<div class="res bad"><span class="mk">!</span><span>${esc(w.text)}</span></div>`).join('');
-    return `${sec('外壳 · 参数化，估算')}${row(L.shape === 'rect' ? '外形' : '底座', L.shape === 'rect' ? `${L.outer[0]} × ${L.outer[1]} × ${L.outer[2]} mm` : `Ø${L.outer[0]} × ${L.outer[2]} mm`)}${row('内腔 / 需要', `${L.inner} / ${L.need} mm`, L.inner < L.need ? 'bad' : '')}${row('壁厚 · 圆角', `${L.params.wall} · ${L.params.radius} mm`)}${warn}
-<div class="btns"><button type="button" class="btn" id="toCase" data-enc="${enc}">改高度 · 导出 STL / 3MF</button></div>`;
+    return (
+      <>
+        <Sec>外壳 · 参数化，估算</Sec>
+        <Kv k={L.shape === 'rect' ? '外形' : '底座'} v={L.shape === 'rect' ? `${L.outer[0]} × ${L.outer[1]} × ${L.outer[2]} mm` : `Ø${L.outer[0]} × ${L.outer[2]} mm`} />
+        <Kv k="内腔 / 需要" v={`${L.inner} / ${L.need} mm`} cls={L.inner < L.need ? 'bad' : ''} />
+        <Kv k="壁厚 · 圆角" v={`${L.params.wall} · ${L.params.radius} mm`} />
+        {L.warnings.map((w, i) => (
+          <Res key={i} kind="bad" mk="!">
+            {w.text}
+          </Res>
+        ))}
+        <Btns>
+          <Btn
+            id="toCase"
+            data-enc={enc}
+            onClick={() => {
+              ctx!.store.set({ selection: { kind: 'part', id: enc } });
+              location.hash = 'shop';
+            }}
+          >
+            改高度 · 导出 STL / 3MF
+          </Btn>
+        </Btns>
+      </>
+    );
   }
 
   function effectsLine() {
     const fx = asm!.effects();
-    const rows: string[] = [];
-    if (fx.sensorOffset !== undefined) rows.push(row('传感器受热偏高', fx.sensorOffset ? `+${fx.sensorOffset.toFixed(1)} ℃` : '0 ℃', fx.sensorOffset ? 'bad' : ''));
-    if (fx.hornOffset !== undefined) rows.push(row('舵盘偏角', `${fx.hornOffset.toFixed(1)}°`, fx.hornOffset ? 'bad' : ''));
-    if (fx.lensScale !== undefined) rows.push(row('透镜放大', `${fx.lensScale.toFixed(2)}×`, fx.lensScale < 1.2 ? 'bad' : ''));
-    if (fx.glare !== undefined) rows.push(row('灯罩亮点', fx.glare ? '有：8 个亮点' : '没有', fx.glare ? 'bad' : ''));
-    if (fx.sonarBlock !== undefined) rows.push(row('探头读数', fx.sonarBlock ? `被孔壁截到约 ${fx.sonarBlock} cm` : '量到前方物体', fx.sonarBlock ? 'bad' : ''));
-    if (fx.imuFlip !== undefined) rows.push(row('六轴方向', fx.imuFlip ? '反了：俯仰、横滚方向全反' : '正', fx.imuFlip ? 'bad' : ''));
-    const how = T!.id === 'weather' ? '受热偏高会影响模拟结果：开机复测和成品里，BME280 读到的就是偏高后的温度。'
-      : T!.id === 'ruler' || T!.id === 'tilt' ? '这一项会影响模拟结果：开机复测和成品里，传感器看到的就是装好以后的样子。'
-      : '只改成品画面，不影响模拟结果。';
-    return rows.length ? `${sec('装法带进成品 · 估算')}${rows.join('')}<p class="note">${how}</p>` : '';
+    const rows: ReactNode[] = [];
+    const row = (k: string, v: string, bad: boolean) => rows.push(<Kv key={k} k={k} v={v} cls={bad ? 'bad' : ''} />);
+    if (fx.sensorOffset !== undefined) row('传感器受热偏高', fx.sensorOffset ? `+${fx.sensorOffset.toFixed(1)} ℃` : '0 ℃', !!fx.sensorOffset);
+    if (fx.hornOffset !== undefined) row('舵盘偏角', `${fx.hornOffset.toFixed(1)}°`, !!fx.hornOffset);
+    if (fx.lensScale !== undefined) row('透镜放大', `${fx.lensScale.toFixed(2)}×`, fx.lensScale < 1.2);
+    if (fx.glare !== undefined) row('灯罩亮点', fx.glare ? '有：8 个亮点' : '没有', !!fx.glare);
+    if (fx.sonarBlock !== undefined) row('探头读数', fx.sonarBlock ? `被孔壁截到约 ${fx.sonarBlock} cm` : '量到前方物体', !!fx.sonarBlock);
+    if (fx.imuFlip !== undefined) row('六轴方向', fx.imuFlip ? '反了：俯仰、横滚方向全反' : '正', !!fx.imuFlip);
+    const how =
+      T!.id === 'weather'
+        ? '受热偏高会影响模拟结果：开机复测和成品里，BME280 读到的就是偏高后的温度。'
+        : T!.id === 'ruler' || T!.id === 'tilt'
+          ? '这一项会影响模拟结果：开机复测和成品里，传感器看到的就是装好以后的样子。'
+          : '只改成品画面，不影响模拟结果。';
+    return rows.length ? (
+      <>
+        <Sec>装法带进成品 · 估算</Sec>
+        {rows}
+        <Note>{how}</Note>
+      </>
+    ) : null;
   }
 
-  function renderRetest(head: string) {
+  function renderRetest(head: ReactNode) {
     const c = ctx!;
     const lv = assemblyLevel(c);
     const t = lastTest();
     const s = asm!.state();
     const fw = firmwareFor(lv);
-    const rows = t ? t.rows.map((x) => `<div class="res ${x.ok ? 'ok' : 'bad'}"><span class="mk">${x.ok ? '✓' : '✗'}</span><span>${esc(x.text)}</span></div>`).join('') : '';
-    c.shell.props.innerHTML = `${head}${sec('开机复测')}<div class="ph">装好的样子再验一次${lv ? ` <span class="mono">${esc(lv.id)}</span>` : ''}</div>
-<p class="note">${T!.id === 'weather' ? `传感器放在哪，BME280 就读到哪儿的温度：室温 ${lv ? envOf(lv).temp.toFixed(1) : '—'} ℃，受热偏高 ${(asm!.effects().sensorOffset ?? 0).toFixed(1)} ℃。` : T!.id === 'ruler' ? '探头缩在孔里时，HC-SR04 只能量到孔壁。' : T!.id === 'tilt' ? '六轴装反时，读到的俯仰、横滚也是反的。' : '装好后再跑一次同一份固件。'}</p>
-${row('固件', esc(fw.name))}
-${row('装配', `${s.placed.length}/${s.total}`, s.placed.length < s.total ? 'bad' : '')}
-<div class="btns"><button type="button" class="btn primary" id="retestBtn" ${testing || s.placed.length < s.total || !lv ? 'disabled' : ''}>${testing ? `复测中 ${testing.progress.toFixed(1)} s` : '开机复测'}</button></div>
-${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${t.ok ? '✓ 通过' : '✗ 未通过'}${T!.id === 'weather' ? ` <span class="muted">· 传感器读到 ${t.temp.toFixed(1)} ℃</span>` : ''}</div>${rows}${row('运行指纹', esc(t.fingerprint), 'fp')}` : ''}`;
-    c.shell.props.querySelector<HTMLButtonElement>('#retestBtn')?.addEventListener('click', () => void retest());
+    const why =
+      T!.id === 'weather'
+        ? `传感器放在哪，BME280 就读到哪儿的温度：室温 ${lv ? envOf(lv).temp.toFixed(1) : '—'} ℃，受热偏高 ${(asm!.effects().sensorOffset ?? 0).toFixed(1)} ℃。`
+        : T!.id === 'ruler'
+          ? '探头缩在孔里时，HC-SR04 只能量到孔壁。'
+          : T!.id === 'tilt'
+            ? '六轴装反时，读到的俯仰、横滚也是反的。'
+            : '装好后再跑一次同一份固件。';
+    c.shell.props.render(
+      <>
+        {head}
+        <Sec>开机复测</Sec>
+        <Ph>
+          装好的样子再验一次
+          {lv && (
+            <>
+              {' '}
+              <Mono>{lv.id}</Mono>
+            </>
+          )}
+        </Ph>
+        <Note>{why}</Note>
+        <Kv k="固件" v={fw.name} />
+        <Kv k="装配" v={`${s.placed.length}/${s.total}`} cls={s.placed.length < s.total ? 'bad' : ''} />
+        <Btns>
+          <Txt as="button" type="button" className={btnClass(true)} id="retestBtn" disabled={!!testing || s.placed.length < s.total || !lv} onClick={() => void retest()} text={testing ? `复测中 ${testing.progress.toFixed(1)} s` : '开机复测'} />
+        </Btns>
+        {t && (
+          <>
+            <Sec>复测结果</Sec>
+            <VerdictLine kind={t.ok ? 'ok' : 'bad'}>
+              {t.ok ? '✓ 通过' : '✗ 未通过'}
+              {T!.id === 'weather' && (
+                <>
+                  {' '}
+                  <Muted className="font-normal">· 传感器读到 {t.temp.toFixed(1)} ℃</Muted>
+                </>
+              )}
+            </VerdictLine>
+            {t.rows.map((x, i) => (
+              <Res key={i} kind={x.ok ? 'ok' : 'bad'}>
+                {x.text}
+              </Res>
+            ))}
+            <Kv k="运行指纹" v={t.fingerprint} cls="fp" />
+          </>
+        )}
+      </>,
+    );
   }
 
   const envOf = (lv: Level) => bootOptions(lv).env ?? { temp: 23.5, humidity: 45, pressure: 101325 };
@@ -453,12 +669,18 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
     try {
       // 装法改了传感器看到的东西（探头被挡、六轴装反）：复测的输入脚本跟着改
       const hx = harnessEffects(c.work.id, hz);
-      const v = await verifyLevel({ ...lv, script: effectScript(lv.script, asm.effects()) }, await fw.get(), (t) => {
-        if (!testing || t - testing.progress < 0.2) return;
-        testing.progress = t;
-        const b = ctx?.shell.props.querySelector('#retestBtn');
-        if (b) b.textContent = `复测中 ${t.toFixed(1)} s`;
-      }, env, { i2cWire: hx.i2c ? hz.i2cCm : undefined, antenna: hx.antennaDb || undefined });
+      const v = await verifyLevel(
+        { ...lv, script: effectScript(lv.script, asm.effects()) },
+        await fw.get(),
+        (t) => {
+          if (!testing || t - testing.progress < 0.2) return;
+          testing.progress = t;
+          const b = ctx?.shell.props.el.querySelector('#retestBtn');
+          if (b) b.textContent = `复测中 ${t.toFixed(1)} s`;
+        },
+        env,
+        { i2cWire: hx.i2c ? hz.i2cCm : undefined, antenna: hx.antennaDb || undefined },
+      );
       const clean = asm.clean() && hx.ok;
       const rows = v.results.map((x) => ({ ok: x.ok, text: x.text }));
       if (hx.i2c) rows.push({ ok: hx.i2c.verdict === 'ok', text: `I2C 排线 ${hz.i2cCm} cm：${i2cText(hx.i2c)}（估算，必须上真机）` });
@@ -511,14 +733,12 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
     const L = T!.parts.findIndex((p) => p.id === 'bme');
     const bme = T!.parts[L];
     const spot = bme.spots!.find((x) => x.key === s.choice.bme);
-    const NS = 'http://www.w3.org/2000/svg';
-    const g = document.createElementNS(NS, 'g');
-    g.setAttribute('data-k', 'ruler');
-    g.setAttribute('pointer-events', 'none');
+    const g = svgEl('g', { 'data-k': 'ruler', 'pointer-events': 'none' });
     // 芯片 = 开发板上的屏蔽罩中心（板层局部坐标 102,50）；外壳 180 单位 = 70 mm
     const chip = asm!.isoPoint(1, 102, 50);
+    const label = { fill: '#F24822', 'font-size': 12, 'font-weight': 700, 'text-anchor': 'middle' };
     if (!spot) {
-      g.innerHTML = `<text x="${chip[0]}" y="${chip[1] - 16}" fill="#F24822" font-size="12" font-weight="700" text-anchor="middle">BME280 还没装，装上后量它到芯片的距离</text>`;
+      g.append(svgEl('text', { x: chip[0], y: chip[1] - 16, ...label }, 'BME280 还没装，装上后量它到芯片的距离'));
       svg.appendChild(g);
       return;
     }
@@ -526,8 +746,13 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
     const b = asm!.isoPoint(L, cx, cy);
     const mm = Math.hypot(cx - 102, cy - 50) * (70 / 180);
     const mid = [(chip[0] + b[0]) / 2, (chip[1] + b[1]) / 2];
-    g.innerHTML = `<line x1="${chip[0]}" y1="${chip[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#F24822" stroke-width="2" stroke-dasharray="5 3"/><circle cx="${chip[0]}" cy="${chip[1]}" r="4" fill="#F24822"/><circle cx="${b[0]}" cy="${b[1]}" r="4" fill="#F24822"/>
-<rect x="${mid[0] - 78}" y="${mid[1] - 34}" width="156" height="22" rx="4" fill="#FFFFFF" stroke="#F24822"/><text x="${mid[0]}" y="${mid[1] - 18}" fill="#F24822" font-size="12" font-weight="700" text-anchor="middle" class="tb-mono">到芯片 ≈ ${mm.toFixed(0)} mm（估算）</text>`;
+    g.append(
+      svgEl('line', { x1: chip[0], y1: chip[1], x2: b[0], y2: b[1], stroke: '#F24822', 'stroke-width': 2, 'stroke-dasharray': '5 3' }),
+      svgEl('circle', { cx: chip[0], cy: chip[1], r: 4, fill: '#F24822' }),
+      svgEl('circle', { cx: b[0], cy: b[1], r: 4, fill: '#F24822' }),
+      svgEl('rect', { x: mid[0] - 78, y: mid[1] - 34, width: 156, height: 22, rx: 4, fill: '#FFFFFF', stroke: '#F24822' }),
+      svgEl('text', { x: mid[0], y: mid[1] - 18, ...label, class: 'tb-mono' }, `到芯片 ≈ ${mm.toFixed(0)} mm（估算）`),
+    );
     svg.appendChild(g);
   }
 
@@ -537,11 +762,7 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
     const t = lastTest();
     const done = s.placed.length === s.total;
     c.shell.setVerdict(testing ? '复测中…' : t ? (t.ok ? '复测 ✓' : '复测 ✗') : `装配 ${s.placed.length}/${s.total}`, t ? (t.ok ? 'ok' : 'bad') : 'idle');
-    c.shell.onVerdict(() => {
-      sel = 'retest';
-      renderTree();
-      renderProps();
-    });
+    c.shell.onVerdict(() => pick('retest'));
     c.shell.setNext('开机看成品 →', done ? 'product' : null, `装完才能开机（${s.placed.length}/${s.total}）`);
     c.shell.toolbar.setGroups([
       { id: 'nav', tools: [{ id: 'asm-select', label: '选择', key: 'V' }] },
@@ -561,7 +782,12 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
     if (!ctx) return;
     if (!asm) {
       if (loading) {
-        ctx.shell.props.innerHTML = `${sec('组装')}<div class="tree-empty">正在生成外壳和 3D 场景…</div>`;
+        ctx.shell.props.render(
+          <>
+            <Sec>组装</Sec>
+            <TreeEmpty>正在生成外壳和 3D 场景…</TreeEmpty>
+          </>,
+        );
         ctx.shell.setVerdict('组装 · 加载中', 'idle');
       }
       return;
@@ -609,8 +835,9 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
   function buildSvg(c: StepCtx) {
     node = document.createElement('div');
     node.className = 'asm-shell';
-    node.innerHTML = '<div class="asm-box"></div>';
-    const box = node.querySelector<HTMLElement>('.asm-box')!;
+    const box = document.createElement('div');
+    box.className = 'asm-box';
+    node.append(box);
     const a = createAssembly(
       box,
       {
@@ -633,7 +860,10 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
   function build3d(c: StepCtx, key: string) {
     node = document.createElement('div');
     node.className = 'asm3d-stage';
-    node.innerHTML = '<div class="a3-loading">正在生成外壳…</div>';
+    const wait = document.createElement('div');
+    wait.className = 'a3-loading';
+    wait.textContent = '正在生成外壳…';
+    node.append(wait);
     const host = node;
     builtKey = key;
     loading = true;
@@ -652,9 +882,8 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
       } catch (e) {
         if (node !== host) return;
         c.shell.toast(`3D 外壳加载失败，改用平面装配：${e}`);
-        const parent = host.parentElement;
         buildSvg(c);
-        if (parent) parent.replaceChild(node!, host);
+        if (ctx && ctx.store.get().step === 'assemble') showNode();
       } finally {
         if (node === host || builtKey === 'svg') loading = false;
         renderAll();
@@ -688,8 +917,8 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
     build3d(c, key);
   }
 
-  return {
-    mount(el, c) {
+  const step: StepImpl = {
+    mount(c) {
       ctx = c;
       T = TEMPLATES[c.work.id] ?? null;
       hz = loadCaseHarness(c.work.id);
@@ -702,39 +931,59 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
         });
       }
       if (!T) {
-        el.innerHTML = `<div class="pnl lockcard" role="status"><div class="sec">③ 组装</div><p class="ph-t">这个作品没有组装模板</p><p class="muted">空白实验台只跑固件，不装壳。挑一个作品，才有组装和成品。</p><div class="btns"><a class="btn primary" href="./app.html?work=weather#assemble">去气象站</a></div></div>`;
-        c.shell.tree.innerHTML = '<div class="tree-empty">没有装配层</div>';
-        c.shell.props.innerHTML = `${sec('属性')}<div class="tree-empty">没有可选中的对象</div>`;
+        c.shell.layer.render(
+          <LockCard role="status">
+            <Sec>③ 组装</Sec>
+            <PhT>这个作品没有组装模板</PhT>
+            <p className="my-3 text-muted">空白实验台只跑固件，不装壳。挑一个作品，才有组装和成品。</p>
+            <Btns>
+              <LinkBtn primary href="./app.html?work=weather#assemble">
+                去气象站
+              </LinkBtn>
+            </Btns>
+          </LockCard>,
+        );
+        c.shell.tree.render(<TreeEmpty>没有装配层</TreeEmpty>);
+        c.shell.props.render(
+          <>
+            <Sec>属性</Sec>
+            <TreeEmpty>没有可选中的对象</TreeEmpty>
+          </>,
+        );
         c.shell.toolbar.setGroups([]);
         c.shell.timeline.setSteps([]);
         c.shell.setNext('开机看成品 →', null, '没有组装模板');
         return;
       }
       if (!unlocked(c)) {
-        renderLocked(el);
-        unsubs = [c.store.subscribe(() => {
-          if (unlocked(c)) {
-            // 解锁了（比如另一个标签页里验收通过）：重新挂载
-            unsubs.forEach((u) => u());
-            unsubs = [];
-            el.replaceChildren();
-            this.mount(el, c);
-          } else renderLocked(el);
-        }, ['checks'])];
+        renderLocked();
+        unsubs = [
+          c.store.subscribe(() => {
+            if (unlocked(c)) {
+              // 解锁了（比如另一个标签页里验收通过）：重新挂载
+              unsubs.forEach((u) => u());
+              unsubs = [];
+              c.shell.layer.render(null);
+              step.mount(c);
+            } else renderLocked();
+          }, ['checks']),
+        ];
         return;
       }
       if (!node) build(c);
       else rebuildIfStale(c);
-      el.appendChild(node!);
+      showNode();
       if (asm && is3d(asm)) asm.start();
       applyHarness();
       publish();
       renderAll();
-      unsubs.push(c.session.onHarness((t) => {
-        const n = c.shell.props.querySelector('[data-k="hzSim"]');
-        if (n) n.textContent = t.trim().replace(/\[tryboard\] /g, '模拟器：');
-        else if (t.trim() && sel !== 'retest') renderProps();
-      }));
+      unsubs.push(
+        c.session.onHarness((t) => {
+          const n = c.shell.props.el.querySelector('[data-k="hzSim"]');
+          if (n) n.textContent = t.trim().replace(/\[tryboard\] /g, '模拟器：');
+          else if (t.trim() && sel !== 'retest') renderProps();
+        }),
+      );
     },
     unmount() {
       if (asm && is3d(asm)) asm.stop();
@@ -743,4 +992,13 @@ ${t ? `${sec('复测结果')}<div class="verdict-line ${t.ok ? 'ok' : 'bad'}">${
       ctx = null;
     },
   };
+  return step;
+}
+
+/** 尺子标注用的 SVG 元素（命令式加进装配视图的 SVG） */
+function svgEl(tag: string, attrs: Record<string, string | number>, text?: string) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+  if (text !== undefined) el.textContent = text;
+  return el;
 }

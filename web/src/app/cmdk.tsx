@@ -1,10 +1,14 @@
 // ⌘K 命令框（P1-06）：顶部正中的输入框 + 下拉列表。搜零件（选中并在台面上高亮）、引脚（GPIO4）、检查点，
 // 执行命令：量 3V3、把室温设为 N ℃、换外接 5 V / USB 并重跑、回到第 n 次运行、打开逻辑分析仪、切到四个步骤。
 // ⌘K / Ctrl+K 打开；焦点在别的输入框里时不抢这个键（用户可能在输入框里用它）。上下键选、回车执行、Esc 关；记最近用过的。
+// 输入框和下拉列表由 React 画（外壳里的 <CmdkBox/> <CmdkList/>）；按键、焦点逻辑仍是这里的原生监听（输入框非受控）。
+import { Fragment, type ReactNode } from 'react';
 import type { StepCtx, StepId, SelKind } from './types';
-import { fuzzy, highlight, parseRun, parseTemp, pushRecent } from './cmdmatch';
+import { fuzzy, parseRun, parseTemp, pushRecent } from './cmdmatch';
 import { partId, partInfo } from './wiring';
 import { getAnalyzer } from './analyzer';
+import { commit, useStore } from './react';
+import { createStore } from './store';
 
 interface Item {
   id: string;
@@ -37,16 +41,7 @@ export interface Cmdk {
 export function createCmdk(ctx: StepCtx): Cmdk {
   const { session, store, shell, work } = ctx;
   const input = document.getElementById('cmdk') as HTMLInputElement;
-  const box = input.closest('.cmdk') as HTMLElement;
-  const list = document.createElement('div');
-  list.className = 'pnl cmdk-list';
-  list.id = 'cmdkList';
-  list.setAttribute('role', 'listbox');
-  list.hidden = true;
-  document.body.appendChild(list);
-  input.setAttribute('role', 'combobox');
-  input.setAttribute('aria-controls', 'cmdkList');
-  input.setAttribute('aria-expanded', 'false');
+  const list = { get hidden() { return !view.get().open; } };
   input.placeholder = '搜零件、引脚、命令（如：室温 35）';
 
   let shown: Item[] = [];
@@ -161,28 +156,54 @@ export function createCmdk(ctx: StepCtx): Cmdk {
     hitMap = new Map();
     shown = compute(q);
     if (sel >= shown.length) sel = Math.max(0, shown.length - 1);
-    let html = '';
+    const rows: ReactNode[] = [];
     let g = '';
     shown.forEach((it, i) => {
       if (it.group !== g) {
         g = it.group;
-        html += `<div class="ck-g">${g}</div>`;
+        rows.push(
+          <div key={`g${i}`} className="ck-g px-2.5 pt-2 pb-1 text-[11px] font-medium text-muted">
+            {g}
+          </div>,
+        );
       }
       const hits = q.trim() ? (hitMap.get(it.id) ?? []) : [];
-      html += `<button type="button" class="ck-i" role="option" id="ck-${i}" data-i="${i}" aria-selected="${i === sel}"><span class="ck-l">${highlight(it.label, hits)}</span>${it.meta ? `<span class="ck-m">${escHtml(it.meta)}</span>` : ''}</button>`;
+      rows.push(
+        <button
+          key={i}
+          type="button"
+          className="ck-i flex w-full cursor-pointer items-baseline gap-2 rounded-md border-0 bg-transparent px-2.5 py-1.5 text-left text-fg aria-selected:bg-accent-bg"
+          role="option"
+          id={`ck-${i}`}
+          data-i={i}
+          aria-selected={i === sel}
+          onMouseDown={(e) => {
+            // mousedown 里执行：click 之前输入框会先失焦关框
+            e.preventDefault();
+            void run(i);
+          }}
+        >
+          <span className="ck-l min-w-0 flex-1 truncate">{hlParts(it.label, hits)}</span>
+          {it.meta ? <span className="ck-m flex-none font-mono text-[11px] text-muted">{it.meta}</span> : null}
+        </button>,
+      );
     });
-    if (!shown.length) html = `<div class="ck-empty">没有匹配「${escHtml(q)}」的零件、引脚或命令</div>`;
-    html += '<div class="ck-foot"><span>↑↓ 选择</span><span>回车 执行</span><span>Esc 关闭</span></div>';
-    list.innerHTML = html;
-    input.setAttribute('aria-activedescendant', shown.length ? `ck-${sel}` : '');
-    list.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
-    list.querySelectorAll<HTMLButtonElement>('.ck-i').forEach((b) =>
-      b.addEventListener('mousedown', (e) => {
-        // mousedown 里执行：click 之前输入框会先失焦关框
-        e.preventDefault();
-        void run(Number(b.dataset.i));
+    commit(() =>
+      view.set({
+        node: (
+          <>
+            {shown.length ? rows : <div className="ck-empty p-2.5 text-xs text-muted">没有匹配「{q}」的零件、引脚或命令</div>}
+            <div className="ck-foot mt-1 flex gap-3 border-t border-line-soft px-2.5 pt-1.5 pb-1 text-[11px] text-muted">
+              <span>↑↓ 选择</span>
+              <span>回车 执行</span>
+              <span>Esc 关闭</span>
+            </div>
+          </>
+        ),
       }),
     );
+    input.setAttribute('aria-activedescendant', shown.length ? `ck-${sel}` : '');
+    document.getElementById('cmdkList')?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }
 
   async function run(i: number) {
@@ -207,13 +228,11 @@ export function createCmdk(ctx: StepCtx): Cmdk {
     if (q !== undefined) input.value = q;
     if (document.activeElement !== input) input.focus();
     sel = 0;
-    list.hidden = false;
-    input.setAttribute('aria-expanded', 'true');
+    commit(() => view.set({ open: true }));
     render();
   }
   function close() {
-    list.hidden = true;
-    input.setAttribute('aria-expanded', 'false');
+    commit(() => view.set({ open: false }));
   }
 
   document.addEventListener('keydown', (e) => {
@@ -250,7 +269,6 @@ export function createCmdk(ctx: StepCtx): Cmdk {
       input.blur();
     }
   });
-  box.querySelector('kbd')!.textContent = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K';
 
   return {
     open,
@@ -268,6 +286,55 @@ export function createCmdk(ctx: StepCtx): Cmdk {
   };
 }
 
-function escHtml(s: string) {
-  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+/** label 按命中下标包上 <mark>（与 cmdmatch.highlight 同一规则，这里出 JSX） */
+function hlParts(label: string, hits: number[]): ReactNode[] {
+  const set = new Set(hits);
+  const out: ReactNode[] = [];
+  let i = 0;
+  while (i < label.length) {
+    const h = set.has(i);
+    let j = i;
+    while (j < label.length && set.has(j) === h) j++;
+    const t = label.slice(i, j);
+    out.push(h ? <mark key={i} className="bg-transparent font-medium text-accent-ink">{t}</mark> : <Fragment key={i}>{t}</Fragment>);
+    i = j;
+  }
+  return out;
+}
+
+const view = createStore<{ open: boolean; node: ReactNode }>({ open: false, node: null });
+
+/** 顶部正中的输入框（非受控；监听在 createCmdk 里挂） */
+export function CmdkBox() {
+  const { open } = useStore(view);
+  return (
+    <div role="search" className="cmdk fixed top-3 left-1/2 z-3 flex w-[min(360px,calc(100vw-2*268px-4*var(--gap)-300px))] min-w-[200px] -translate-x-1/2 items-center rounded-[10px] border border-line bg-(--panel) shadow-panel focus-within:border-accent max-[1100px]:hidden">
+      <input
+        id="cmdk"
+        type="search"
+        placeholder="搜零件、引脚、命令"
+        aria-label="命令框"
+        autoComplete="off"
+        role="combobox"
+        aria-controls="cmdkList"
+        aria-expanded={open}
+        className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2 text-inherit outline-none"
+      />
+      <kbd className="mono px-2.5 font-mono text-[11px] text-muted">{/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'}</kbd>
+    </div>
+  );
+}
+
+export function CmdkList() {
+  const { open, node } = useStore(view);
+  return (
+    <div
+      id="cmdkList"
+      role="listbox"
+      hidden={!open}
+      className="pnl cmdk-list max-[760px]:hidden! fixed top-[calc(var(--gap)+42px)] left-1/2 z-5 max-h-[min(420px,60vh)] w-[min(460px,calc(100vw-2*268px-4*var(--gap)))] min-w-[300px] -translate-x-1/2 overflow-auto rounded-(--r) border border-line bg-surface p-1 text-fg shadow-panel"
+    >
+      {node}
+    </div>
+  );
 }
