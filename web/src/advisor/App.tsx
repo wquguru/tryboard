@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { PARTS, TEMPLATES, type Cap, type Template } from './data';
 import { capName, recommend, type Confidence, type Need, type Plan } from './engine';
-import { Badge, Button, Card, Checkbox, Chip, Collapsible, StatusList, Table, ThemeToggle } from '../ui/components';
+import { Badge, Button, Card, Checkbox, Chip, Collapsible, StatusList, Table } from '../ui/components';
+import { SiteHeader } from '../ui/site';
 import { cn } from '../ui/cn';
 import { RadioGroup } from 'radix-ui';
 
@@ -265,29 +266,14 @@ export function App() {
 
   return (
     <>
-      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-line bg-head-bg px-5 py-3 backdrop-blur-sm max-sm:gap-x-3 max-sm:px-4 max-sm:py-2">
-        <a className="flex items-center gap-1.5 whitespace-nowrap font-bold no-underline" href="./home.html">
-          <span className="text-accent" aria-hidden>◧</span> 试板 <span className="font-medium text-muted">TryBoard</span>
-        </a>
-        <nav className="flex gap-1 overflow-x-auto max-sm:order-last max-sm:-mx-2 max-sm:w-[calc(100%+16px)]" aria-label="站点导航">
-          {[
-            ['./home.html', '首页'],
-            ['./app.html?work=weather#bench', '实验台'],
-            ['./app.html?work=blank#bench', '空白实验台'],
-            ['./advisor.html', '选型助手'],
-          ].map(([href, label]) => (
-            <a
-              key={href}
-              href={href}
-              aria-current={href === './advisor.html' ? 'page' : undefined}
-              className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-muted no-underline hover:bg-field hover:text-fg aria-[current=page]:bg-field aria-[current=page]:text-fg max-sm:px-2"
-            >
-              {label}
-            </a>
-          ))}
-        </nav>
-        <ThemeToggle className="ml-auto" />
-      </header>
+      <SiteHeader
+        current="./advisor.html"
+        links={[
+          ['./home.html', '作品'],
+          ['./advisor.html', '选型助手'],
+          ['./app.html?work=blank#bench', '空白实验台'],
+        ]}
+      />
       <main className="mx-auto max-w-[1120px] px-5 pt-6 pb-[60px] max-sm:px-4">
         <section>
           <h1 className="mt-3 mb-2 text-[30px] font-bold tracking-[-0.3px] max-md:text-2xl">先选项目，再看买哪块板</h1>

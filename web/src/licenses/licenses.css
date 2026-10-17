@@ -9,10 +9,12 @@
   .lic h2 { @apply mt-8 mb-2 text-[14px] font-medium; }
   .lic .note { @apply my-2 text-[12px] text-muted; }
   .lic .tbl { @apply overflow-x-auto rounded-xl border border-line bg-surface; }
-  .lic table { @apply w-full border-collapse text-[12px]; }
+  /* 手机宽度下表格在框内横向滚动，不把版本号拆成一字一行 */
+  .lic table { @apply w-full min-w-[640px] border-collapse text-[12px]; }
   .lic th { @apply border-b border-line px-2.5 py-1.5 text-left text-[11px] font-medium text-muted; }
   .lic td { @apply border-b border-line-soft px-2.5 py-[7px] align-top [word-break:break-word]; }
   .lic .mono { @apply font-mono text-[11px]; }
+  .lic td:nth-child(2), .lic td:nth-child(3) { @apply whitespace-nowrap; }
   .lic code { @apply font-mono; }
   .lic details { @apply my-1.5 rounded-lg border border-line bg-surface; }
   .lic details summary { @apply cursor-pointer px-3 py-[7px] text-[12px]; }

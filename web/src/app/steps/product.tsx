@@ -429,7 +429,8 @@ export function productStep(): StepImpl {
           </>
         )}
         <Sec>串口 · 最近几行</Sec>
-        <Brief className="serial-tail" data-live="serial" />
+        {/* 串口行多了会出滚动条：可聚焦才能用键盘滚（axe scrollable-region-focusable） */}
+        <Brief className="serial-tail" data-live="serial" tabIndex={0} aria-label="串口最近几行" />
         <Sec>真机到手先做这三件事</Sec>
         <ol className="first3">
           {(FIRST3[w] ?? []).map(([t, d]) => (
