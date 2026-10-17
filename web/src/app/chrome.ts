@@ -7,7 +7,7 @@ import { createStore } from './store';
 import type { StepId } from './types';
 
 export type DockTab = 'serial' | 'code' | 'analyzer' | 'runs' | 'checks' | 'issues';
-export type RunState = 'loading' | 'run' | 'pause' | 'seek' | 'busy' | 'idle';
+export type RunState = 'loading' | 'run' | 'pause' | 'seek' | 'busy' | 'idle' | 'nofw';
 
 export interface Issue {
   id: string;

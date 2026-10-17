@@ -27,6 +27,7 @@ const P: Record<string, string> = {
   sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
   moon: 'M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z',
   bolt: 'M13 2 4 14h7l-1 8 9-12h-7z',
+  wire: 'M5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM19 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM6.5 15.5C9 9 13 15 17.5 8.5',
 };
 
 export function Icon({ n, size = 16, className }: { n: keyof typeof P | string; size?: number; className?: string }) {

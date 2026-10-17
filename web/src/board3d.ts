@@ -2045,6 +2045,8 @@ export function createBench(container: HTMLElement): Bench {
   const partsById = new Map<string, THREE.Object3D>();
   let modulePins: PinRec[] = [];
   let wires: WireRec[] = [];
+  /** 改接过的线：id → 原来那根（rewire 改回时换回去） */
+  let rewired = new Map<string, WireRec>();
   let roles = new Map<string, string[]>();
   const addRole = (pinId: string, role: string) => {
     const r = roles.get(pinId) ?? [];
@@ -2715,6 +2717,7 @@ export function createBench(container: HTMLElement): Bench {
     partsById.set('board', board.grp);
     modulePins = [];
     wires = [];
+    rewired = new Map();
     roles = new Map();
     addRole(apiId('IO' + board.spec.rgbPin), 'WS2812 板载灯');
     addRole(apiId('IO' + board.spec.bootPin), 'BOOT 键');
@@ -3247,6 +3250,47 @@ export function createBench(container: HTMLElement): Bench {
     w.mat.emissiveIntensity = 0.25;
     setTag('fault:' + id, '✗ ' + msg, 'bad', () => w.curve.getPoint(0.5), -20);
   };
+  /** 改接（U-04 连线工具）：把一根线开发板那一端挪到另一根针。原来的线记下来，改回时换回去；setScene 重建时清空 */
+  function rewire(id: string, to: string | null) {
+    const cur = wires.find((w) => w.id === id);
+    if (!cur) return;
+    const orig = rewired.get(id) ?? cur;
+    // 每次重检接线都会同步一遍：目标没变就别重建管子
+    const want = to && to !== orig.ends[0] ? to : null;
+    if (want ? cur !== orig && cur.ends[0] === want : cur === orig) return;
+    let next = orig;
+    if (to && to !== orig.ends[0]) {
+      const pts = orig.curve.points;
+      const b = pts[pts.length - 1];
+      let a: THREE.Vector3;
+      try {
+        a = boardHole(to.replace(/^GPIO/, 'IO'), b);
+      } catch {
+        return;
+      }
+      const h = top + 30;
+      next = wire([a, lift(a, h - 4), new THREE.Vector3((a.x + b.x) / 2, h, (a.z + b.z) / 2 + 6), lift(b, h - 6), b], orig.color, id, [to, orig.ends[1]]);
+    }
+    if (next === cur) return;
+    const parent = cur.grp.parent;
+    parent?.remove(cur.grp);
+    parent?.add(next.grp);
+    if (cur !== orig) {
+      cur.thin.dispose();
+      cur.thick?.dispose();
+      cur.mat.dispose();
+    }
+    if (next === orig) rewired.delete(id);
+    else rewired.set(id, orig);
+    wires[wires.indexOf(cur)] = next;
+    const f = faults.get(id);
+    if (f) applyFault(id, f);
+    else {
+      next.mat.color.set(next.color);
+      next.mat.emissive.set(0);
+    }
+    if (hl) highlight(hl);
+  }
   function setWireFault(id: string, msg: string | null) {
     if (msg) {
       faults.set(id, msg);
@@ -3638,6 +3682,7 @@ export function createBench(container: HTMLElement): Bench {
       return out;
     },
     setWireFault,
+    rewire,
     setHeat,
     measure,
     setTheme: applyTheme,

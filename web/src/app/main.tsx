@@ -21,6 +21,7 @@ import { getAnalyzer } from './analyzer';
 import { loadCaseParams } from './casemesh';
 import { actions, bc, overlay, setBc, setDock, syncDockVar, type CpRow, type Issue } from './chrome';
 import { FwCheckCard, fwCheck } from './fwcheck';
+import { BrownoutBanner } from './benchv2';
 import { initSaved } from './saved';
 import { serial } from './dock';
 import { toScript } from '../inputlog';
@@ -146,7 +147,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   let paused = false;
   const runState = () => {
     const s = store.get();
-    const run = s.hist.busy ? 'busy' : s.hist.seeked ? 'seek' : paused ? 'pause' : s.running ? 'run' : session.sim ? 'idle' : 'loading';
+    const run = s.hist.busy ? 'busy' : s.hist.seeked ? 'seek' : paused ? 'pause' : s.running ? 'run' : session.sim ? 'idle' : session.fwName ? 'loading' : 'nofw';
     setBc({ run, undo: !s.hist.busy && s.hist.cur > 0, redo: !s.hist.busy && s.hist.cur < s.hist.n - 1, runs: s.hist.runs, room: s.env.temp });
   };
   store.subscribe(runState, ['running', 'hist', 'env']);
@@ -280,5 +281,35 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   session.onBrownout((t) => {
     brown.push({ id: `brown:${brown.length}`, level: 'block', title: '欠压复位', detail: `${t.toFixed(2)} s 时 3V3 掉到门限以下，芯片复位`, go: () => setDock({ tab: 'runs' }) });
     setBc({ issues: [...bc.get().issues.filter((x) => !x.id.startsWith('brown:')), ...brown.slice(-5)] });
+    // 掉电复位解释（关键状态）：只在实验台上弹，同一次上电只弹一次（舵机抖动会连着复位好几次）
+    if (store.get().step !== 'bench' || bc.get().overlays.brown) return;
+    const servo = session.scene.parts.some((p) => p.type === 'servo');
+    overlay(
+      'brown',
+      <BrownoutBanner
+        t={t}
+        v={session.frame.elec?.min3v3 ?? null}
+        servo={servo}
+        onPower={() => {
+          overlay('brown', null);
+          store.set({ selection: { kind: 'power', id: 'usb' } });
+        }}
+        onClose={() => overlay('brown', null)}
+      />,
+    );
   });
+  store.subscribe((s, prev) => s.step !== prev.step && s.step !== 'bench' && overlay('brown', null), ['step']);
+
+  // 检查点通过提示：自己的固件新通过一个检查点时（恢复进度、参考固件不算）
+  store.subscribe((s, prev) => {
+    const n = work.checkpoints.length;
+    for (const id of work.checkpoints) {
+      const r = s.checks[id];
+      const was = prev.checks[id];
+      if (!(r?.ok && r.own) || (was?.ok && was.own)) continue;
+      const d = passedCount(ctx, s);
+      const l = session.levels.find((x) => x.id === id);
+      ctx.shell.toast(d === n ? `检查点 ${id}「${l?.title ?? ''}」通过，${n} 个全部通过：组装解锁了` : `检查点 ${id}「${l?.title ?? ''}」通过（${d}/${n}）`);
+    }
+  }, ['checks']);
 }

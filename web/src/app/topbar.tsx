@@ -159,6 +159,7 @@ const RUN_TEXT: Record<string, [string, string]> = {
   seek: ['回退停住', 'bg-accent'],
   busy: ['回退中…', 'bg-accent'],
   idle: ['没在跑', 'bg-muted'],
+  nofw: ['没有固件', 'bg-muted'],
 };
 const SPEEDS = [1, 2, 0.5];
 
