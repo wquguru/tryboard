@@ -220,6 +220,6 @@ export function Meter({ sm }: { sm?: boolean }) {
 
 /** 叠在台面上的说明卡（锁着、占位、没有模板） */
 export const LockCard = ({ className, ...p }: ComponentProps<'div'>) => (
-  <div className={cn('pnl lockcard max-w-[420px] rounded-(--r) border border-line bg-(--panel) px-5 pt-1 pb-4 shadow-panel max-[760px]:max-w-none [&_.ph-t]:mt-0.5', className)} {...p} />
+  <div className={cn('pnl lockcard max-w-[420px] rounded-(--r) border border-line bg-(--panel) px-5 pt-1 pb-4 shadow-panel max-md:max-w-none [&_.ph-t]:mt-0.5', className)} {...p} />
 );
 export const PhT = ({ className, ...p }: ComponentProps<'p'>) => <p className={cn('ph-t my-1 text-[15px] font-medium', className)} {...p} />;

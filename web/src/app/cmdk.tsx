@@ -333,7 +333,7 @@ export function CmdkList() {
       id="cmdkList"
       role="listbox"
       hidden={!open}
-      className="pnl cmdk-list max-[760px]:hidden! fixed top-[calc(var(--top-h)+4px)] left-[calc((100vw+var(--left-w)-var(--right-w))/2)] z-5 max-h-[min(420px,60vh)] w-[min(460px,calc(100vw-var(--left-w)-var(--right-w)-32px))] min-w-[300px] -translate-x-1/2 overflow-auto rounded-(--r) border border-line bg-surface p-1 text-fg shadow-panel"
+      className="pnl cmdk-list max-md:hidden! fixed top-[calc(var(--top-h)+4px)] left-[calc((100vw+var(--left-w)-var(--right-w))/2)] z-5 max-h-[min(420px,60vh)] w-[min(460px,calc(100vw-var(--left-w)-var(--right-w)-32px))] min-w-[300px] -translate-x-1/2 overflow-auto rounded-(--r) border border-line bg-surface p-1 text-fg shadow-panel"
     >
       {node}
     </div>

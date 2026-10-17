@@ -88,7 +88,7 @@ export function setDock(p: Partial<BenchChrome['dock']>) {
 }
 export function syncDockVar() {
   const d = bc.get().dock;
-  document.body.style.setProperty('--dock-h', `${d.collapsed ? 38 : d.h}px`);
+  document.body.style.setProperty('--dock-desk', `${d.collapsed ? 38 : d.h}px`);
   // 分析仪是命令式节点、不在坞的 React 树里，靠这个类跟着藏
   document.body.classList.toggle('dock-collapsed', d.collapsed);
 }

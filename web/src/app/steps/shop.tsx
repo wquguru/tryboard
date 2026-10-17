@@ -518,7 +518,7 @@ export function shopStep(): StepImpl {
         {f.fix && PART_BY_ID[f.fix.partId] && (
           <Btn
             primary
-            className="edit-only max-[760px]:hidden"
+            className="edit-only"
             data-fix={i}
             onClick={() => {
               if (commit({ t: 'fix', fix: f.fix!, rule: f.id })) {
@@ -674,7 +674,7 @@ export function shopStep(): StepImpl {
         <Kv k="外形" v={dims} />
         <Kv k="内腔 / 需要" v={`${L.inner} / ${L.need} mm`} cls={L.inner < L.need ? 'bad' : ''} />
         <Kv k="最低高度" v={`${L.minHeight} mm`} />
-        <div className="case-ps edit-only max-[760px]:hidden">
+        <div className="case-ps edit-only">
           {slider('height', L.shape === 'rect' ? '高度' : '底座高', 0.5)}
           {slider('wall', '壁厚', 0.1)}
           {L.shape === 'rect' && slider('radius', '圆角', 0.5)}
