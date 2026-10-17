@@ -263,7 +263,7 @@ async function openAsm(example) {
 // ---- 5. 作品首页
 {
   const home = await open('/home.html');
-  const cards = await home.$$eval('.wk', (els) => els.map((e) => ({ work: e.dataset.work, go: e.querySelector('[data-go]')?.getAttribute('href'), cps: e.querySelector('[data-cps]')?.textContent })));
+  const cards = await home.$$eval('.wk', (els) => els.map((e) => ({ work: e.dataset.work, go: e.querySelector('[data-go]')?.getAttribute('href'), cps: e.dataset.cps })));
   // 卡片由作品定义（web/src/app/works.ts）生成：P2-12 加了 USB 小键盘，P2-09 加了旋钮台灯、超声波尺子、体感小人
   report('首页：七张作品卡（气象站 / 小黄 / 透镜 / USB 小键盘 / 旋钮台灯 / 超声波尺子 / 体感小人）', cards.map((c) => c.work).join() === 'weather,spin,lens,usbkey,lamp,ruler,tilt', JSON.stringify(cards.map((c) => c.work)));
   await home.screenshot({ path: path.join(outDir, 'levels-home-0.png') });
@@ -314,7 +314,7 @@ async function openAsm(example) {
   report('首页：手机宽度无横向滚动', !overflow);
   await home.screenshot({ path: path.join(outDir, 'levels-home-phone.png') });
   await home.close();
-  // 入口：每张卡的"做这个"进采购（检查点数与工作台一致），"我有自己的想法"进选型助手，"已经有固件了"进空白实验台
+  // 入口：每张卡的"做这个"进采购（卡上 data-cps 的检查点数与工作台一致），"用选型助手"进选型助手，"我有固件了"进空白实验台
   for (const c of cards) {
     const p = await open('/home.html');
     await Promise.all([p.waitForNavigation({ waitUntil: 'load' }), p.click(`.wk[data-work="${c.work}"] [data-go]`)]);

@@ -30,42 +30,53 @@ body.page {
 
 .pg-main { width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 24px 64px; flex: 1; }
 
-/* ---------- 首屏 ---------- */
-.hero { padding: 48px 0 28px; display: flex; flex-direction: column; gap: 10px; }
-.hero h1 { margin: 0; font-size: 28px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.3; }
-.hero .lead { margin: 0; color: var(--muted); font-size: 14px; max-width: 640px; }
-.flow { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 8px 0 0; padding: 0; font-size: 11px; color: var(--muted); }
-.flow li { display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
-.flow li span { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--field); color: var(--fg); font-size: 10px; }
-.flow li + li::before { content: '→'; margin: 0 4px 0 -2px; color: var(--line); order: -1; display: none; }
+/* ---------- 首屏：左主张，右四步流程 ---------- */
+.hero { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 48px; padding: 72px 0 56px; align-items: center; }
+.claim { display: flex; flex-direction: column; gap: 16px; }
+.hero h1 { margin: 0; font-size: 40px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; text-wrap: balance; }
+.hero .lead { margin: 0; color: var(--muted); font-size: 15px; }
+.cta { display: flex; gap: 8px; flex-wrap: wrap; }
+.cta .btn { display: inline-flex; align-items: center; font-size: 13px; padding: 0 18px; min-height: 36px; }
+.steps4 { list-style: none; margin: 0; padding: 0; display: grid; border-left: 1px solid var(--line); }
+.steps4 li { display: grid; grid-template-columns: 56px minmax(0, 1fr); padding: 12px 0; position: relative; }
+.steps4 li::before { content: ''; position: absolute; left: -4px; top: 19px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.steps4 .n { grid-row: span 2; padding: 4px 0 0 20px; font: 500 11px var(--mono); color: var(--accent); }
+.steps4 b { font-size: 15px; font-weight: 500; }
+.steps4 span:last-child { color: var(--muted); font-size: 12px; }
 
-/* ---------- 作品卡 ---------- */
-.works { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+/* ---------- 作品：两列横卡，左图右字 ---------- */
+.sec-t { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-top: 1px solid var(--line); padding-top: 16px; margin-bottom: 14px; }
+.sec-t b { font-size: 15px; font-weight: 500; }
+.sec-t a { font-size: 12px; color: var(--muted); }
+.sec-t a:hover { color: var(--accent); }
+.works { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .wk {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: var(--r);
   background: var(--surface);
-  box-shadow: var(--shadow);
   overflow: hidden;
   display: flex;
-  flex-direction: column;
   min-width: 0;
 }
-.wk.live { border-color: var(--accent); }
-.wk-prev { background: var(--stage-bg); }
-.wk-status { font-size: 11px; color: var(--muted); padding: 6px 14px; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--field); }
-.wk.live .wk-status { color: var(--accent); }
-.wk-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
-.wk-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.wk-h h2 { margin: 0; font-size: 15px; font-weight: 500; }
+.wk.live { border-color: var(--accent); flex-wrap: wrap; }
+.wk-prev { background: var(--stage-bg); width: 52%; flex: none; display: flex; align-items: center; }
+.wk-prev > * { width: 100%; }
+/* 跑起来才有状态行（串口最后一行），横排在卡片底部 */
+.wk-status { display: none; order: 3; width: 100%; font-size: 11px; color: var(--accent); padding: 6px 14px; border-top: 1px solid var(--line-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--field); }
+.wk.live .wk-status { display: block; }
+.wk-body { padding: 14px 16px; display: flex; flex-direction: column; justify-content: center; gap: 8px; flex: 1; min-width: 0; }
+.wk-h h2 { margin: 0; font-size: 16px; font-weight: 500; }
 .wk-h .mono { font-size: 11px; }
-.wk-d { margin: 0 0 6px; color: var(--muted); }
-.wk-body .kv .v.txt { font-size: 12px; }
-.wk-act { display: flex; gap: 6px; margin-top: auto; padding-top: 10px; }
-.wk-act .btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
+.wk-price { font-size: 12px; }
+.wk-act { margin-top: 4px; }
+.wk-act .btn { display: inline-flex; align-items: center; font-size: 13px; }
+/* 「看真实固件跑」是预览左上角的小标签 */
+.wk-run { position: absolute; top: 10px; left: 10px; z-index: 2; font-size: 11px; min-height: 24px; padding: 0 10px; border-radius: 999px; background: var(--panel); border-color: var(--line); }
+.wk-run::before { content: '▶ '; color: var(--accent); }
+.wk.live .wk-run::before { content: '■ '; }
 .page a.btn { color: var(--fg); }
 .page a.btn.primary { color: var(--on-accent); }
-.fine { font-size: 11px; color: var(--muted); margin: 10px 0 0; }
 
 /* 预览里沿用成品示意 / 成品视图（views/），把旧的米色、墨绿底统一成台面的浅灰底。
    CSS 的 fill 能盖过 SVG 的 fill 属性，所以不用改视图代码。 */
@@ -87,37 +98,17 @@ body.page {
 .wk-prev .tb-env button { border-color: var(--accent); color: var(--accent); background: var(--surface); }
 .wk-prev .as-b { font: 500 12px var(--sans); min-height: 28px; padding: 0 12px; }
 
-/* ---------- 其他入口 ---------- */
-.alt { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 32px; }
-.alt-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 14px 16px 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--surface);
-}
-.alt-card:hover { border-color: var(--accent); background: var(--accent-bg); }
-.alt-card .sec { margin: 0; }
-.alt-card b { font-weight: 500; font-size: 15px; }
-
-/* ---------- 命令行 ---------- */
-.cli { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 24px; margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--line); align-items: start; }
-.cli p { margin: 4px 0 0; color: var(--muted); }
-.cli .code { margin: 0; color: var(--fg); overflow-x: auto; }
-
 /* ---------- 页脚 ---------- */
 .pg-foot {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 8px 24px;
+  gap: 6px 18px;
   padding: 14px 24px;
   border-top: 1px solid var(--line);
   font-size: 11px;
   color: var(--muted);
 }
+.pg-foot .grow { flex: 1; }
 .pg-foot a { color: var(--fg); }
 .pg-foot a:hover { color: var(--accent); }
 
@@ -137,13 +128,17 @@ body.page {
 .lic a:hover { text-decoration: underline; }
 .lic .gen { font-size: 11px; color: var(--muted); margin-top: 24px; }
 
+@media (max-width: 900px) {
+  .hero { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .works { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 640px) {
   .pg-head { padding: 10px 16px; }
   .pg-head nav a { padding: 4px 6px; font-size: 12px; }
   .pg-main { padding: 0 16px 48px; }
-  .hero { padding: 28px 0 20px; }
-  .hero h1 { font-size: 22px; }
-  .works, .alt { grid-template-columns: minmax(0, 1fr); }
-  .cli { grid-template-columns: minmax(0, 1fr); }
+  .hero { padding: 32px 0 28px; }
+  .hero h1 { font-size: 28px; }
+  .wk { flex-direction: column; }
+  .wk-prev { width: 100%; }
   .pg-foot { padding: 12px 16px; }
 }
