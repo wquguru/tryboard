@@ -1929,7 +1929,7 @@ export function createBench(container: HTMLElement): Bench {
   overlay.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1;font:12px "Noto Sans SC",sans-serif';
   const note = document.createElement('div');
   note.textContent = '外观示意，非乐鑫官方模型';
-  note.style.cssText = 'position:absolute;right:12px;bottom:10px;font-size:11px;color:#8C8C8C;letter-spacing:.02em';
+  note.style.cssText = 'position:absolute;right:12px;bottom:10px;font-size:11px;color:var(--muted, #6f6f6f);letter-spacing:.02em';
   overlay.appendChild(note);
   const style = document.createElement('style');
   style.textContent = `.tb-tag{position:absolute;left:0;top:0;white-space:nowrap;padding:3px 8px;border-radius:8px;background:rgba(255,255,255,.95);border:1px solid #E6E6E6;box-shadow:0 2px 10px #0000000F;color:#1E1E1E;font:500 12px "JetBrains Mono",Menlo,monospace;will-change:transform}

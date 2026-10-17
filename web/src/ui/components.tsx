@@ -22,6 +22,9 @@ const button = cva(
   },
 );
 
+/** 给命令式模块造的按钮（如 audio.ts 的声音键）套同一套样式 */
+export const buttonVariants = button;
+
 export function Button({ className, variant, size, asChild, ...p }: ComponentProps<'button'> & VariantProps<typeof button> & { asChild?: boolean }) {
   const C = asChild ? Slot.Root : 'button';
   return <C className={cn(button({ variant, size }), className)} {...p} />;

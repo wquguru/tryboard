@@ -519,3 +519,11 @@
 - 主题：Tailwind 的 `@theme` 直接映射 DESIGN §2 的 CSS 变量，`dark:` 变体绑 `[data-theme=dark]`（与 theme.ts 同一个开关），不另起一套色板。Tailwind preflight 只在迁过的页面加载，旧页面样式不受影响。
 - 理由：现有 2D 界面靠 `innerHTML` 拼串（94 处）+ 手动重画，状态和 DOM 容易不同步、每处都得记得转义；对话框 / 菜单 / 命令框的焦点与键盘要自己写。React 声明式渲染 + JSX 默认转义 + Radix 的可访问性原语直接解决这几类问题。
 - 替代：(a) 保持原生 DOM、只抽小组件函数——便宜，但解决不了状态同步；(b) Next.js——见上，收益几乎为零；(c) Preact——更小，但 Radix / shadcn 生态要 compat 层，出问题难查。
+
+## 2026-10-17 · 实验台（index.html）外壳迁到 React
+- 决定：工具栏、示例选择、串口 / USB / 这个示例 / 面包板元件面板改成 React（`web/src/lab/`）；3D 台面、worker、串口流、模拟时间、装配视图仍是命令式（`lab/lab.ts`，原 main.ts 原样搬过来），由 React ref 挂载、`useEffect` 清理。删掉 `src/style.css`、`src/main.ts`、`src/usbpanel.ts`；`src/editor.ts` 只留数据部分（引脚表、描述、冲突检查）
+- 保留 `views/views.css`：app.html、home.html 和 app/ 下的代码也用 views/*，换成 Tailwind 要同时动别的页面，不在本次范围
+- 滑块非受控 + `onInput`：验收脚本（sense / replay 等）用"改 value + 派发 input 事件"，React 受控输入的值追踪会把这种事件吞掉；3D 拖旋钮 / 装配视图调温度也直接改滑块 DOM
+- 入口不包 StrictMode：开发模式下的双挂载会建两个 worker 和两个 WebGL 上下文；清理函数照样写全（`lab.dispose()`）
+- 窄屏（≤ 900px）修了旧页的重叠：旧页 body 固定 100% 高、main 设了 min-height:0，内容超出一屏时页脚和侧栏叠在 3D 舞台上；现在窄屏下根容器高度随内容
+- 替代：(a) 把 main.ts 整个拆成 hooks——改动面大、与验收对拍的时序风险高，收益只是代码风格；(b) 串口区也用 React 渲染——高频流进 state 会卡，违反 ARCH「每秒十次以上不进 React」
