@@ -259,6 +259,14 @@ export class LiveSim {
   resume() {
     this.send({ type: 'run' });
   }
+  /** 墙钟倍速（只改模拟跑得多快，不改模拟时间里的结果） */
+  speed(factor: number) {
+    this.send({ type: 'speed', factor });
+  }
+  /** 往 UART0 RX 打字（进输入日志，可重放） */
+  uart(text: string) {
+    this.send({ type: 'uart', text });
+  }
   private snapWaiters: ((s: Snapshot) => void)[] = [];
   private seekWaiter: ((s: Snapshot) => void) | null = null;
   private markWaiters = new Map<number, (tMs: number) => void>();

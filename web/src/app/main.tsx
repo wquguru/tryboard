@@ -19,6 +19,11 @@ import { partLabel } from './wiring';
 import { createCmdk } from './cmdk';
 import { getAnalyzer } from './analyzer';
 import { loadCaseParams } from './casemesh';
+import { actions, bc, overlay, setBc, setDock, syncDockVar, type CpRow, type Issue } from './chrome';
+import { FwCheckCard, fwCheck } from './fwcheck';
+import { initSaved } from './saved';
+import { serial } from './dock';
+import { toScript } from '../inputlog';
 
 export { registerStep } from './shell';
 
@@ -29,6 +34,8 @@ const work = WORKS[want ?? 'weather'] ?? WORKS.weather;
 const cp = params.get('cp');
 document.title = `${work.title} · 试板 TryBoard`;
 initTheme();
+initSaved(work.id);
+syncDockVar();
 const root = createRoot(document.getElementById('root')!);
 flushSync(() => root.render(<ShellView />));
 
@@ -58,13 +65,12 @@ const store = createStore<AppState>({
 const shell = createShell(work.title);
 document.getElementById('simtime')!.textContent = '0.00 s';
 
-// 左栏底的串口：只留最近约 200 KB
+// 串口原文（#console，回归脚本和重放对拍读它）只留最近约 200 KB；看得见的是底部坞的行视图（按到达时的模拟时刻盖戳）
 const con = document.getElementById('console') as HTMLPreElement;
 function log(text: string) {
-  const atBottom = con.scrollTop + con.clientHeight >= con.scrollHeight - 8;
   con.appendChild(document.createTextNode(text));
   if (con.textContent!.length > 200_000) con.textContent = con.textContent!.slice(-150_000);
-  if (atBottom) con.scrollTop = con.scrollHeight;
+  serial.push(text, store.get().simSeconds);
 }
 
 registerStep('shop', shopStep());
@@ -79,7 +85,13 @@ const ownsTimeline = () => store.get().step === 'bench';
 (async () => {
   try {
     const placed = loadPlaced(work.id);
-    const session = await createSession(shell.stage, work, store, { onConsole: log, onConsoleReset: (t) => (con.textContent = t) }, { placed });
+    const session = await createSession(shell.stage, work, store, {
+        onConsole: log,
+        onConsoleReset: (t) => {
+          con.textContent = t;
+          serial.reset(t, store.get().simSeconds);
+        },
+      }, { placed });
     (window as unknown as { __tbApp: unknown }).__tbApp = { store, session };
     const ctx: StepCtx = { work, store, session, shell };
     restoreChecks(ctx);
@@ -116,9 +128,157 @@ const ownsTimeline = () => store.get().step === 'bench';
     store.subscribe(verdict, ['checks', 'step']);
     verdict();
     store.subscribe((s) => (document.getElementById('simtime')!.textContent = `${s.simSeconds.toFixed(2)} s`), ['simSeconds']);
+    wireChrome(ctx, session);
     startRouter(ctx);
   } catch (e) {
     log(`[试板] 资源加载失败：${e}\n`);
+    setBc({ run: 'idle', boot: { text: `资源加载失败：${e}`, steps: [], loaded: 0, total: 0 } });
     shell.toast(`资源加载失败：${e}`);
   }
 })();
+
+/** 顶栏 / 底部坞 / 台面浮层的数据和动作（U-04）：外壳只认 chrome.ts，这里把会话和时间线接上去 */
+function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSession>>) {
+  const hist = ctx.hist!;
+  const benchOnly = <A extends unknown[]>(f: (...a: A) => void) => (...a: A) => {
+    if (store.get().step === 'bench') f(...a);
+  };
+  let paused = false;
+  const runState = () => {
+    const s = store.get();
+    const run = s.hist.busy ? 'busy' : s.hist.seeked ? 'seek' : paused ? 'pause' : s.running ? 'run' : session.sim ? 'idle' : 'loading';
+    setBc({ run, undo: !s.hist.busy && s.hist.cur > 0, redo: !s.hist.busy && s.hist.cur < s.hist.n - 1, runs: s.hist.runs, room: s.env.temp });
+  };
+  store.subscribe(runState, ['running', 'hist', 'env']);
+  session.onBoot(() => {
+    paused = false;
+    // 每次上电是新的 worker：倍速重新下发
+    if (bc.get().speed !== 1) session.sim?.speed(bc.get().speed);
+    setBc({ boot: null });
+    runState();
+  });
+  if (session.sim) setBc({ boot: null });
+  runState();
+
+  actions.undo = benchOnly(() => {
+    const h = store.get().hist;
+    if (!h.busy && h.cur > 0) void hist.seek(h.cur - 1);
+  });
+  actions.redo = benchOnly(() => {
+    const h = store.get().hist;
+    if (!h.busy && h.cur < h.n - 1) void hist.seek(h.cur + 1);
+  });
+  actions.pause = () => {
+    session.sim?.pause();
+    paused = true;
+    runState();
+  };
+  actions.resume = () => {
+    if (store.get().hist.seeked) hist.resume();
+    else session.sim?.resume();
+    paused = false;
+    runState();
+  };
+  actions.reboot = () => {
+    paused = false;
+    session.reboot();
+  };
+  actions.speed = (f) => {
+    session.sim?.speed(f);
+    setBc({ speed: f });
+  };
+  actions.uart = (text) => session.sim?.uart(text);
+  // 换固件：先看镜像头（魔数 0xE9、芯片 id），对不上就不上电，挂一张校验卡说清楚
+  actions.pickFirmware = async (f) => {
+    const buf = await f.arrayBuffer();
+    const r = fwCheck(buf, session.chip);
+    if (!r.ok) {
+      overlay('fwcheck', <FwCheckCard name={f.name} res={r} onClose={() => overlay('fwcheck', null)} />);
+      return;
+    }
+    overlay('fwcheck', null);
+    if (store.get().step !== 'bench') location.hash = 'bench';
+    session.loadFirmware(buf, f.name);
+    shell.toast(`已换成 ${f.name}（${(buf.byteLength / 1024).toFixed(0)} KB），重新上电`);
+  };
+  actions.exportInputs = async () => {
+    if (!session.sim) return shell.toast('模拟器还没跑起来，没有输入日志');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([toScript(await session.sim.inputLog())], { type: 'text/plain' }));
+    a.download = `${session.fwName || 'tryboard'}-inputs.txt`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    shell.toast('已导出输入日志：tryboard run --inputs 可逐字节重放');
+  };
+  const curLevel = () => {
+    const s = store.get();
+    const sel = s.selection?.kind === 'checkpoint' ? s.selection.id : null;
+    const id = sel ?? work.checkpoints.find((x) => !(s.checks[x]?.ok && s.checks[x].own)) ?? work.checkpoints[0];
+    return session.levels.find((l) => l.id === id) ?? null;
+  };
+  actions.brief = work.checkpoints.length
+    ? async () => {
+        const l = curLevel();
+        if (!l) return;
+        try {
+          await navigator.clipboard.writeText(l.brief);
+          shell.toast(`已复制检查点 ${l.id} 的任务书`);
+        } catch {
+          store.set({ selection: { kind: 'checkpoint', id: l.id } });
+          shell.toast('浏览器不让写剪贴板：任务书在右栏，手动复制');
+        }
+      }
+    : undefined;
+  actions.selectCheckpoint = (id) => {
+    if (store.get().step !== 'bench') location.hash = 'bench';
+    store.set({ selection: { kind: 'checkpoint', id } });
+  };
+  const ana = getAnalyzer(ctx);
+  actions.analyzer = (open) => (open ? ana.open() : ana.close());
+  // 分析仪也能从工具条、⌘K 打开：开了就把坞切到它的页签，关了切回串口
+  new MutationObserver(() => {
+    const open = document.body.classList.contains('ana-open');
+    const d = bc.get().dock;
+    if (open && d.tab !== 'analyzer') setDock({ tab: 'analyzer', collapsed: false });
+    else if (!open && d.tab === 'analyzer') setDock({ tab: 'serial' });
+  }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  actions.view = (k) => session.bench.view?.(k, store.get().selection);
+
+  window.addEventListener('keydown', (e) => {
+    if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return;
+    const t = e.target as HTMLElement;
+    if (t.closest('input,textarea,select,[contenteditable]')) return;
+    e.preventDefault();
+    if (e.shiftKey) actions.redo?.();
+    else actions.undo?.();
+  });
+
+  // 步骤锁和完成标记：锁只是提示（各步骤自己会说明为什么还不能做），点了照样能进去看
+  const progress = () => {
+    const s = store.get();
+    const n = work.checkpoints.length;
+    const d = passedCount(ctx);
+    const allOk = !n || d === n;
+    const lockAsm = n && !allOk ? `实验台 ${n} 个检查点全部通过后解锁（${d}/${n}）` : undefined;
+    const asmDone = !!s.assembly && s.assembly.placed.length >= s.assembly.total && s.assembly.total > 0;
+    setBc({
+      locks: { assemble: lockAsm, product: lockAsm ?? (n && !asmDone ? '组装装完后解锁' : undefined) },
+      done: { shop: s.sceneRev > 0, bench: n > 0 && allOk, assemble: asmDone, product: !!s.assembly?.retest },
+      checkpoints: work.checkpoints.map((id): CpRow => {
+        const l = session.levels.find((x) => x.id === id);
+        const r = s.checks[id];
+        const state = s.verifying === id ? 'run' : r?.ok && r.own ? 'ok' : r && !r.ok ? 'bad' : 'todo';
+        return { id, title: l?.title ?? id, state, note: r ? r.who : (l?.pass ?? '') };
+      }),
+    });
+  };
+  store.subscribe(progress, ['checks', 'verifying', 'assembly', 'sceneRev']);
+  progress();
+
+  // 问题页：欠压复位（模拟器报的）；接线规则检查的问题由实验台写进 issues 的 wire: 前缀项
+  const brown: Issue[] = [];
+  session.onBrownout((t) => {
+    brown.push({ id: `brown:${brown.length}`, level: 'block', title: '欠压复位', detail: `${t.toFixed(2)} s 时 3V3 掉到门限以下，芯片复位`, go: () => setDock({ tab: 'runs' }) });
+    setBc({ issues: [...bc.get().issues.filter((x) => !x.id.startsWith('brown:')), ...brown.slice(-5)] });
+  });
+}

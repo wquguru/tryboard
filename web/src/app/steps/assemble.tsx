@@ -14,6 +14,7 @@ import type { Assembly3D } from '../asm3d';
 import { caseFor, layoutFor, layoutKey } from '../casemesh';
 import type { CaseLayout } from '../enclosure';
 import { OBSTACLE_LABEL, antennaLossDb, i2cLoad, i2cText, loadCaseHarness, saveCaseHarness, wifiText, type CaseHarness, type Obstacle } from '../harness';
+import { noteSaved } from '../saved';
 
 type SvgAsm = ReturnType<typeof createAssembly>;
 type AsmView = SvgAsm | Assembly3D;
@@ -50,6 +51,7 @@ function loadEntries(work: string): Entry[] {
 function saveEntries(work: string, list: Entry[]) {
   try {
     localStorage.setItem(KEY(work), JSON.stringify(list));
+    noteSaved();
   } catch {
     /* 隐私模式：只在本页有效 */
   }

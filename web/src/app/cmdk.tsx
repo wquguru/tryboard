@@ -42,7 +42,8 @@ export function createCmdk(ctx: StepCtx): Cmdk {
   const { session, store, shell, work } = ctx;
   const input = document.getElementById('cmdk') as HTMLInputElement;
   const list = { get hidden() { return !view.get().open; } };
-  input.placeholder = '搜零件、引脚、命令（如：室温 35）';
+  input.placeholder = '搜命令、零件、引脚';
+  input.title = '如：室温 35、GPIO8、再跑一次';
 
   let shown: Item[] = [];
   let sel = 0;
@@ -195,7 +196,7 @@ export function createCmdk(ctx: StepCtx): Cmdk {
             {shown.length ? rows : <div className="ck-empty p-2.5 text-xs text-muted">没有匹配「{q}」的零件、引脚或命令</div>}
             <div className="ck-foot mt-1 flex gap-3 border-t border-line-soft px-2.5 pt-1.5 pb-1 text-[11px] text-muted">
               <span>↑↓ 选择</span>
-              <span>回车 执行</span>
+              <span>↵ 执行</span>
               <span>Esc 关闭</span>
             </div>
           </>
@@ -308,19 +309,19 @@ const view = createStore<{ open: boolean; node: ReactNode }>({ open: false, node
 export function CmdkBox() {
   const { open } = useStore(view);
   return (
-    <div role="search" className="cmdk fixed top-3 left-1/2 z-3 flex w-[min(360px,calc(100vw-2*268px-4*var(--gap)-300px))] min-w-[200px] -translate-x-1/2 items-center rounded-[10px] border border-line bg-(--panel) shadow-panel focus-within:border-accent max-[1100px]:hidden">
+    <div role="search" className="cmdk flex h-8 w-[200px] flex-none items-center rounded-lg border border-line bg-field focus-within:border-accent focus-within:bg-surface max-[1100px]:hidden">
       <input
         id="cmdk"
         type="search"
-        placeholder="搜零件、引脚、命令"
+        placeholder="搜命令、零件、引脚"
         aria-label="命令框"
         autoComplete="off"
         role="combobox"
         aria-controls="cmdkList"
         aria-expanded={open}
-        className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2 text-inherit outline-none"
+        className="min-w-0 flex-1 border-0 bg-transparent px-2.5 py-1 text-[13px] text-inherit outline-none"
       />
-      <kbd className="mono px-2.5 font-mono text-[11px] text-muted">{/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'}</kbd>
+      <kbd className="mono px-2 font-mono text-[11px] text-muted">{/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'}</kbd>
     </div>
   );
 }
@@ -332,7 +333,7 @@ export function CmdkList() {
       id="cmdkList"
       role="listbox"
       hidden={!open}
-      className="pnl cmdk-list max-[760px]:hidden! fixed top-[calc(var(--gap)+42px)] left-1/2 z-5 max-h-[min(420px,60vh)] w-[min(460px,calc(100vw-2*268px-4*var(--gap)))] min-w-[300px] -translate-x-1/2 overflow-auto rounded-(--r) border border-line bg-surface p-1 text-fg shadow-panel"
+      className="pnl cmdk-list max-[760px]:hidden! fixed top-[calc(var(--top-h)+4px)] left-[calc((100vw+var(--left-w)-var(--right-w))/2)] z-5 max-h-[min(420px,60vh)] w-[min(460px,calc(100vw-var(--left-w)-var(--right-w)-32px))] min-w-[300px] -translate-x-1/2 overflow-auto rounded-(--r) border border-line bg-surface p-1 text-fg shadow-panel"
     >
       {node}
     </div>

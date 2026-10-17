@@ -214,6 +214,8 @@ export interface Bench extends ScenePickApi {
   extModels(): string[];
   /** 性能基线：上一帧的绘制调用、三角形数与平均帧间隔 */
   stats(): { calls: number; triangles: number; frameMs: number; cpuMs: number; geometries: number; textures: number };
+  /** 视角按钮（U-04）：俯视 / 正视 / 拉近 / 拉远 / 对准选中（没选中就整体取景） */
+  view(k: 'top' | 'front' | 'in' | 'out' | 'fit', sel?: { kind: string; id: string } | null): void;
   dispose(): void;
 }
 
@@ -1928,6 +1930,7 @@ export function createBench(container: HTMLElement): Bench {
   overlay.className = 'tb-overlay';
   overlay.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1;font:12px "Noto Sans SC",sans-serif';
   const note = document.createElement('div');
+  note.className = 'tb-note';
   note.textContent = '外观示意，非乐鑫官方模型';
   note.style.cssText = 'position:absolute;right:12px;bottom:10px;font-size:11px;color:var(--muted, #6f6f6f);letter-spacing:.02em';
   overlay.appendChild(note);
@@ -3640,6 +3643,44 @@ export function createBench(container: HTMLElement): Bench {
     setTheme: applyTheme,
     setExtModels: setExt,
     extModels: extList,
+    view(k, sel) {
+      const off = camera.position.clone().sub(controls.target);
+      const dist = off.length();
+      const clampD = (d: number) => Math.min(controls.maxDistance, Math.max(controls.minDistance, d));
+      if (k === 'in' || k === 'out') {
+        camera.position.copy(controls.target).addScaledVector(off.normalize(), clampD(dist * (k === 'in' ? 0.8 : 1.25)));
+      } else if (k === 'top' || k === 'front') {
+        // 正上方会碰到 OrbitControls 的极点奇异：留一丝倾角；正视不能低于 maxPolarAngle
+        const dir = k === 'top' ? new THREE.Vector3(0, 1, 0.02) : new THREE.Vector3(0, Math.cos(controls.maxPolarAngle - 0.02), Math.sin(controls.maxPolarAngle - 0.02));
+        camera.position.copy(controls.target).addScaledVector(dir.normalize(), dist);
+      } else {
+        let at: THREE.Vector3 | null = null;
+        let r = 0;
+        if (sel?.kind === 'part') {
+          const o = sel.id === 'board' ? board.grp : partsById.get(sel.id);
+          if (o) {
+            const b = new THREE.Box3().setFromObject(o);
+            at = b.getCenter(new THREE.Vector3());
+            r = b.getSize(new THREE.Vector3()).length() / 2;
+          }
+        } else if (sel?.kind === 'pin') {
+          const rec = pinsById(sel.id)[0];
+          if (rec) at = pinWorldPos(rec);
+          r = 12;
+        } else if (sel?.kind === 'wire') {
+          const w = wires.find((x) => x.id === sel.id);
+          if (w) at = w.curve.getPoint(0.5);
+          r = 20;
+        }
+        if (!at) fitView({ position: camera.position.toArray() as [number, number, number], target: controls.target.toArray() as [number, number, number] });
+        else {
+          const d = clampD(Math.max(r, 8) / Math.sin((camera.fov * Math.PI) / 360) * 0.9);
+          controls.target.copy(at);
+          camera.position.copy(at).addScaledVector(off.normalize(), d);
+        }
+      }
+      controls.update();
+    },
     stats() {
       return { ...lastInfo, frameMs: Math.round(frameMs * 10) / 10, cpuMs: Math.round(cpuMs * 100) / 100, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures };
     },

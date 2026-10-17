@@ -22,6 +22,7 @@ import { angDiff, gravity } from '../../imupose';
 import { cn } from '../../ui/cn';
 import { Live, useInitText } from '../../ui/native';
 import { Bad, Brief, Btn, Btns, Code, Drop, Field, Kv, KvBox, KvT, Meter, Mono, Muted, Note, Ok, Ph, Res, Sec, Seg, SegB, Slider, TnSt, TreeEmpty, TreeGroup, TreeNode, VerdictLine } from '../../ui/panel';
+import { noteSaved } from '../saved';
 
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
 
@@ -41,6 +42,7 @@ function saveProgress(work: string, id: string, fp: string) {
     const p = loadProgress(work);
     p[id] = { fp, at: new Date().toLocaleString('zh-CN', { hour12: false }) };
     localStorage.setItem(PROGRESS_KEY(work), JSON.stringify(p));
+    noteSaved();
   } catch {
     /* 隐私模式存不了，进度只在本页有效 */
   }

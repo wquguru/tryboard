@@ -26,6 +26,11 @@
   --r: 12px;
   --gap: 12px;
   --tl-h: 44px;
+  /* 实验台 v2（DESIGN_V2 §4）：顶栏 56 / 左栏 264 / 右栏 312 / 底部坞（高度由 chrome.ts 写在 body 上，可拖动、可收起） */
+  --top-h: 56px;
+  --left-w: 264px;
+  --right-w: 312px;
+  --dock-h: 200px;
   --sans: 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   color-scheme: light;
@@ -61,15 +66,15 @@
 /* ---------- ③ 组装（P0-16）：SVG 装配视图放在两栏之间，按白底主题重新上色 ---------- */
 .asm-shell {
   position: fixed;
-  left: calc(268px + 2 * var(--gap));
-  right: calc(304px + 2 * var(--gap));
-  top: calc(var(--gap) + 46px);
-  bottom: calc(var(--tl-h) + 64px);
+  left: calc(var(--left-w) + var(--gap));
+  right: calc(var(--right-w) + var(--gap));
+  top: calc(var(--top-h) + var(--gap));
+  bottom: calc(var(--dock-h) + 64px);
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.asm-box { width: 100%; max-height: 100%; aspect-ratio: 704 / 560; max-width: calc((100vh - var(--tl-h) - 122px) * 704 / 560); }
+.asm-box { width: 100%; max-height: 100%; aspect-ratio: 704 / 560; max-width: calc((100vh - var(--top-h) - var(--dock-h) - 88px) * 704 / 560); }
 .asm-shell .tb-view { aspect-ratio: 704 / 560; background: var(--surface); color: var(--fg); border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: var(--r); }
 .asm-shell rect[fill='#2E4A3F'] { fill: var(--asm-bg); }
 .asm-shell pattern path { stroke: var(--asm-grid); }
@@ -84,7 +89,7 @@
 .asm-shell .as-choose { left: 77.4%; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
 .asm-shell .as-light { border: 1px solid var(--line); }
 /* 3D 装配（P1-07）：和成品一样铺满台面区域，面板浮在上面 */
-.asm3d-stage { position: fixed; inset: 0 0 var(--tl-h) 0; background: var(--prod-bg); overflow: hidden; }
+.asm3d-stage { position: fixed; inset: var(--top-h) var(--right-w) var(--dock-h) var(--left-w); background: var(--prod-bg); overflow: hidden; }
 .asm3d-stage canvas { display: block; width: 100% !important; height: 100% !important; }
 .a3-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; }
 .a3-tags { position: absolute; inset: 0; pointer-events: none; }
@@ -103,17 +108,17 @@
 .asm-msg.bad b { color: var(--bad-ink); }
 
 /* ---------- ④ 成品（P0-17）：3D 成品铺满台面区域 ---------- */
-.prod-stage { position: fixed; inset: 0 0 var(--tl-h) 0; background: var(--prod-bg); overflow: hidden; }
+.prod-stage { position: fixed; inset: var(--top-h) var(--right-w) var(--dock-h) var(--left-w); background: var(--prod-bg); overflow: hidden; }
 .prod-stage canvas { display: block; width: 100% !important; height: 100% !important; cursor: grab; }
 .p3-tags { position: absolute; inset: 0; pointer-events: none; }
 .p3-tag { position: absolute; left: 0; top: 0; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); color: var(--fg); white-space: nowrap; box-shadow: var(--shadow); }
 .p3-tag.hot { background: #ff7a1a; border-color: #ff7a1a; color: #141414; font-weight: 500; }
 .p3-tag.bad { background: var(--bad-bg); border-color: var(--bad-line); color: var(--bad); font-weight: 500; transform: translate(-50%, -100%); pointer-events: none; }
-.prod-preview { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: baseline; gap: 10px; padding: 8px 16px; border-radius: var(--r); background: var(--ch-bg); border: 1px solid var(--warn-line); box-shadow: var(--shadow); white-space: nowrap; pointer-events: none; }
+.prod-preview { position: fixed; top: calc(var(--top-h) + 12px); left: calc((100vw + var(--left-w) - var(--right-w)) / 2); transform: translateX(-50%); z-index: 3; display: flex; align-items: baseline; gap: 10px; padding: 8px 16px; border-radius: var(--r); background: var(--ch-bg); border: 1px solid var(--warn-line); box-shadow: var(--shadow); white-space: nowrap; pointer-events: none; }
 .prod-preview b { color: var(--warn-ink); font-weight: 700; font-size: 14px; }
 .prod-preview span { color: var(--fg); font-size: 12px; }
-.p3-disclaimer { position: absolute; left: calc(268px + 2 * var(--gap) + 8px); bottom: 70px; font-size: 11px; color: var(--muted); pointer-events: none; }
-.prod-svg { position: absolute; left: calc(268px + 2 * var(--gap)); right: calc(304px + 2 * var(--gap)); top: 50%; transform: translateY(-50%); }
+.p3-disclaimer { position: absolute; left: 12px; bottom: 70px; font-size: 11px; color: var(--muted); pointer-events: none; }
+.prod-svg { position: absolute; left: var(--gap); right: var(--gap); top: 50%; transform: translateY(-50%); }
 .prod-svg .tb-view { border-radius: var(--r); box-shadow: var(--shadow); }
 .first3 { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; list-style: decimal; }
 .first3 li b { display: block; font-weight: 500; }
@@ -146,10 +151,10 @@
 
 .shop-stage {
   position: fixed;
-  left: calc(268px + 3 * var(--gap));
-  right: calc(304px + 3 * var(--gap));
-  top: 64px;
-  bottom: calc(var(--tl-h) + var(--gap) + 58px);
+  left: calc(var(--left-w) + 2 * var(--gap));
+  right: calc(var(--right-w) + 2 * var(--gap));
+  top: calc(var(--top-h) + var(--gap));
+  bottom: calc(var(--dock-h) + var(--gap) + 58px);
   overflow: auto;
   padding: 4px 4px 12px;
 }
@@ -207,7 +212,7 @@
 .board-pick { width: 280px; }
 
 @media (max-width: 1100px) {
-  .shop-stage { left: calc(268px + 2 * var(--gap)); right: calc(304px + 2 * var(--gap)); }
+  .shop-stage { left: calc(var(--left-w) + var(--gap)); right: calc(var(--right-w) + var(--gap)); }
   .ss-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
 }
 @media (max-width: 760px) {
@@ -217,29 +222,26 @@
   .addpart { display: none; }
 }
 
-/* ---------- 逻辑分析仪（P1-05）：实验台底部，夹在两栏之间；打开时工具条让到它上面 ---------- */
+/* ---------- 逻辑分析仪（P1-05）：v2 起是底部坞的一个页签，盖在坞的正文区（坞页签条 38px 以下） ---------- */
 .analyzer {
   position: fixed;
-  left: calc(268px + 2 * var(--gap));
-  right: calc(304px + 2 * var(--gap));
-  bottom: calc(var(--tl-h) + var(--gap));
-  z-index: 2;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--dock-h) - 38px);
+  z-index: 4;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   background: var(--surface);
   color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  box-shadow: var(--shadow);
+  border-top: 1px solid var(--line-soft);
   font-size: 13px;
 }
 .analyzer[hidden] { display: none; }
 body:not([data-step='bench']) .analyzer { display: none; }
-/* 工具条 / 免责说明 / 提示的 bottom 由 Tailwind 类给；分析仪打开时这里盖过去 */
-body.ana-open[data-step='bench'] .toolbar { bottom: calc(var(--tl-h) + var(--gap) + var(--ana-h, 260px) + 8px); }
-body.ana-open[data-step='bench'] .disclaimer { bottom: calc(var(--tl-h) + var(--ana-h, 260px) + 72px); }
-body.ana-open[data-step='bench'] .toast { bottom: calc(var(--tl-h) + var(--ana-h, 260px) + 72px); }
+/* 坞收起时分析仪跟着藏（页签条还在，点开再看） */
+body.dock-collapsed .analyzer { display: none; }
 .ana-h { display: flex; align-items: center; gap: 6px; padding: 5px 8px 5px 12px; border-bottom: 1px solid var(--line-soft); min-width: 0; }
 .ana-t { font-size: 11px; font-weight: 500; color: var(--muted); flex: none; }
 .ana-src { font-size: 11px; flex: none; }
@@ -250,10 +252,13 @@ body.ana-open[data-step='bench'] .toast { bottom: calc(var(--tl-h) + var(--ana-h
 .ana-b:hover { background: var(--field); }
 .ana-b[aria-pressed='true'] { background: var(--accent-bg); color: var(--accent-ink); border-color: var(--accent-line); }
 .ana-span { font-size: 11px; min-width: 62px; text-align: center; flex: none; }
-.ana-body { position: relative; height: var(--ana-cv-h, 200px); }
-.ana-cv { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+.ana-body { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.ana-cv { display: block; width: 100%; height: var(--ana-cv-h, 200px); cursor: crosshair; touch-action: none; }
 .ana-f { display: flex; gap: 16px; justify-content: space-between; padding: 4px 12px 6px; border-top: 1px solid var(--line-soft); font-size: 11px; min-height: 24px; }
 .ana-f .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) {
   .analyzer { display: none !important; }
 }
+
+/* 实验台 v2：台面右下是工具条的位置，3D 自带的免责说明挪到左上那一列（overlays.tsx） */
+#stage .tb-note { display: none; }
