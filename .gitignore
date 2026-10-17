@@ -21,3 +21,7 @@
 /assets/models/*/src/
 /tools/models/node_modules
 /web/public/audio/
+
+# 本地运行时状态：会话锁、worktree 备份
+.claude/scheduled_tasks.lock
+.worktree-backups/
