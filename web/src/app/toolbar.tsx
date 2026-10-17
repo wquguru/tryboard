@@ -1,4 +1,5 @@
 // 底部浮动的分组工具条：组之间画竖线；primary 的工具画成蓝色按钮（"再跑一次"）。
+// 窄桌面（1280 宽、两侧面板都开）放不下一行时折成两行，不横向滚动——滚动条藏起来后用户看不到后面的工具。
 // 状态在一个小 store 里，步骤调 setGroups / setActive / setLabel，组件订阅着画（同步提交，调用返回时 DOM 已是新的）。
 import { Fragment } from 'react';
 import { cn } from '../ui/cn';
@@ -53,7 +54,7 @@ export function createToolbar(): Toolbar & { View: (p: { step: string }) => Reac
         id="toolbar"
         role="toolbar"
         className={cn(
-          'pnl toolbar tb fixed bottom-[calc(var(--dock-h)+12px)] left-[calc((100vw+var(--left-w)-var(--right-w))/2)] z-2 flex -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-(--r) border border-line bg-(--panel) p-1.5 shadow-panel',
+          'pnl toolbar tb fixed bottom-[calc(var(--dock-h)+12px)] left-[calc((100vw+var(--left-w)-var(--right-w))/2)] z-2 flex -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-(--r) border border-line bg-(--panel) p-1.5 shadow-panel',
           'max-w-[calc(100vw-var(--left-w)-var(--right-w)-24px)]',
           'empty:hidden',
         )}
