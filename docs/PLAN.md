@@ -81,7 +81,7 @@
 | ID | 项 | 验收 | 状态 |
 |---|---|---|---|
 | P2-13 | 验收缺口：C3 RMT 接收固件（c3-ultrasonic）、C3 I2S 固件（c3-i2s-tone）、TIMG 通用定时器独立验收（gptimer 告警 / 自动重载，C3 + S3）、网页串口输入（echo 示例在网页里发送 → 回显）；清理 STATUS 里过时 / 重复的行（NVS、C3「M2 ☐」行、重复的 CPU / 中断矩阵 / 3D 工作台行） | 新用例进 accept.json 全过；串口输入 webtest 进 accept.sh；STATUS 对应行改 ✅ | ☐ |
-| P2-14 | 接线错误走网络求解：W1 输出对打、W3 LED 无限流电阻、短路（3V3 / 5V 接 GND）由 elec MNA 算出电流，属性面板 / 接错线卡片显示估算电流与后果 | elec 单测（三种错接的电流）；网页用例经 `__tbApp.injectWiring`；agent-browser 截图 | ☐ |
+| P2-14 | 接线错误走网络求解：W1 输出对打、W3 LED 无限流电阻、短路（3V3 / 5V 接 GND）由 elec MNA 算出电流，属性面板 / 接错线卡片显示估算电流与后果 | elec 单测（三种错接的电流）；网页用例经 `__tbApp.injectWiring`；agent-browser 截图 | ☑ elec `fault.rs`（对打 97 mA、LED 34.9 mA、3V3 短路 0.72 A / 5V 短路 0.73 A、Echo 5 V 钳位 18 mA）；7 个网表对 ngspice 误差 0.0000%；wasm `tb_fault` 主线程求解，面板与接错线卡片显示 mA + 后果 +「估算」；新增 W7 电源短路（跳线）；webtest/elec.mjs 5 种错接与命令行对拍；截图 Reviews/ab/P2-14-*.png |
 | P2-15 | 底部坞「代码」页签：参考固件 / 示例的源码只读显示（构建期从 firmware/<名>/main 打包），多文件切换、复制、行号；上传的 .bin 没有源码时说明原因 | webtest：打开 weather 看到 app_main；上传 bin 显示"没有源码"；agent-browser 截图 | ☐ |
 | P2-16 | 台面直接放零件：元件库拖到台面放下，进入"接线"提示（按零件引脚逐根接，复用改接线模式），接完参与接线检查与模拟 | webtest：拖一个 LED 到台面、接两根线、跑 blink 亮；agent-browser 截图 | ☐ |
 | P2-17 | 手机成品全屏 3D：3D 占满、底部串口一行 + 按键网格（BOOT / 热源 / 等作品按键），按 DESIGN_V2 §5 | mobile.mjs 增用例；390×844 agent-browser 截图无横向滚动、console 无 error | ☐ |

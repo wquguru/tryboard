@@ -1,0 +1,7 @@
+* 11 W1 输出对打（最坏一组）：电位器滑片转到 GND 头（接触 1 Ω）对上 GPIO 输出高（默认驱动档内阻 33 Ω）
+V1 vd 0 DC 0
+R1 vd pin 1
+R2 pin vg 33
+V2 vg 0 DC 3.3
+.op
+.end

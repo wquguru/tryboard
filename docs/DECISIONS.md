@@ -598,3 +598,19 @@
 - 顶栏四步条做成 50px（按钮 44 + 下边距），手机 `--top-h` 99px。
 - 成品步骤的「按键网格」用属性卡里已有的按键（按 BOOT / 热源 / 声音 / 拍照 / 录像），3D 放最上面但不是全屏——全屏 3D 会盖住读数和按键，单列卡更好用。
 - 新增回归 `tools/webtest/mobile.mjs`（接进 accept.sh 网页段）：组装解锁用 localStorage 预置检查点，和 asm3d.mjs 一样；"自己的固件通过才算"仍由 levels.mjs 测。
+
+## 2026-10-17 · P2-14 接线错误走网络求解
+- elec 加一个元件 `Diode`（PWL 两段：截止 / 导通 vf + rd），网表用 `*tb: DIODE 阳极 阴极 vf rd`，ngspice 侧用等价的 B 源。红色 LED 1.8 V / 10 Ω，引脚钳位二极管 0.6 V / 10 Ω（估算）。
+  - 理由：MNA 已经是 Katzenelson 折线迭代，加一段折线不改求解器；与 LDO、限流源同一套写法。
+  - 替代：指数二极管（Shockley）+ 牛顿迭代——更准，但要改求解器、和 ngspice 的对照也要换模型参数。注意：tools/elec 2% 对照验的是「同一个折线模型」解得对不对，不是二极管物理。
+- GPIO 输出内阻由 ESP32-C3 数据手册 v2.4 表 5-4 推：最强档 I_OH 40 mA @ VOH ≥ 0.8 VDD、I_OL 28 mA @ VOL 0.495 V → 16.5 / 17.7 Ω；IDF 默认驱动档 GPIO_DRIVE_CAP_2 约一半强度，取 33 Ω（推高）/ 35.36 Ω（拉低）。S3 同量级，共用。
+- W1 按最坏情况：电位器滑片转到头（接触 1 Ω）、编码器触点闭合（1 Ω，推高靠 10 kΩ 上拉）、HC-SR04 Echo 5 V 推挽约 50 Ω（有分压时 667 Ω）、其它 CMOS 输出同 GPIO 内阻；每种组合都解一遍取电流最大的，卡片上写出是哪一种。
+- W2「5 V 进 GPIO」：5 V 经模块 10 kΩ 上拉（I2C）或推挽输出内阻进引脚钳位二极管灌进 3V3 轨；后果门限：VIH 上限 VDD + 0.3 V（表 5-4）、注入 > 1 mA 视为有害——乐鑫没给注入电流上限，1 mA 是经验值，标「估算」。
+- 新增 W7「电源短路」：实验台原来没法把电源轨接地（改接只改零件那根线的开发板端）。`WireMods.jumpers` 加「开发板针到开发板针」的跳线（零件名 `jumper`），3D 用 `pick.bridge` 画一根红线；目前只有 `?debug=1` 的 `injectWiring('short3v3' | 'short5v')` 能造，没做手动连跳线的工具。W4 / W5 / W6 规则本身没动。
+  - 替代：把零件的 VCC 改接到 GND——那是「零件反接」，不是电源短路，电流也不同。
+- 求解在主线程：`faultsolve.ts` 用 `loadWasm()`（同一个 tryboard.wasm，已缓存）单独实例化一份，只调无状态的 `tb_fault` / `tb_fault_out`，结果按（芯片、规则、线、参数）缓存。
+  - 理由：模拟器 worker 没启动（没固件、换固件中）也能算；同一二进制同一参数，结果与命令行 `tryboard elec-net` 解同一网表一致（webtest/elec.mjs 对拍，差 ≤ 0.05 mA，即网页显示精度）。
+  - 替代：走 worker 消息——要改协议，且接线检查是纯函数、不该依赖机器状态；在 TS 里重写折线求解——两份实现会漂。
+- `tryboard-wasm` 依赖 `tryboard-elec`（仓库内 crate，不是第三方），wasm 增大约 7 KB（645 KB，仍 ≤ 2 MB）。
+- 实验台网表跟芯片走：S3 板芯片 + 板上负载 43 mA、C3 35 mA，所以短路另有 16 / 17 两份 S3 网表给网页对拍（实验台上的作品多是 S3）。
+- `?debug=1&wiring=<种类>`：打开就造一种错接并弹出接错线卡片（agent-browser 不能跑页面脚本时的人眼验收入口），与 `__tbApp.injectWiring` 同一入口；`__tbApp.faults()` 多给 `mA` / `est`，`__tbApp.showWrongWire(线 id)` 打开卡片。

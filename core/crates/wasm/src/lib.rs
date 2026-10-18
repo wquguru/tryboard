@@ -15,6 +15,7 @@ thread_local! {
     static IO: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     static AUDIO: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     // 本次上电以来 tb_run 里做过几次复位重新上电；上限（u32::MAX = 不限）给离线验收对齐 CLI 的"最多 50 次"
+    static FAULT: RefCell<[f64; 4]> = const { RefCell::new([0.0; 4]) };
     static RESETS: std::cell::Cell<(u32, u32)> = const { std::cell::Cell::new((0, u32::MAX)) };
 }
 
@@ -484,6 +485,43 @@ pub extern "C" fn tb_elec_report() -> usize {
     let n = r.len();
     REPORT.with(|b| *b.borrow_mut() = r);
     n
+}
+
+// ---------------------------------------------------------------- 接错线求解（P2-14，估算）
+
+/// 给实验台接线检查算错接的电流（不碰模拟器里的机器，同样的参数永远同样的结果，命令行 tools/elec 是同一电路）。
+/// kind：1 = 零件输出（a V 经 b Ω）对上 GPIO 相反电平；2 = 两个零件对打（a V 经 b Ω 对 c V 经 d Ω）；
+/// 3 = GPIO 高电平点 LED（串 a Ω，0 = 没电阻）；4 = 电源轨接地（a：0 = 3V3，1 = 5V，2 = 外接 5 V）；
+/// 5 = 5 V 经 a Ω 进 GPIO（钳位二极管）。s3 = 1 用 S3 的芯片电流。返回支路电流（A），其它结果看 tb_fault_out
+#[no_mangle]
+pub extern "C" fn tb_fault(kind: u32, s3: u32, a: f64, b: f64, c: f64, d: f64) -> f64 {
+    use tryboard_elec::board::ChipKind;
+    use tryboard_elec::fault::{self, Rail};
+    let chip = if s3 == 1 { ChipKind::S3 } else { ChipKind::C3 };
+    let o = match kind {
+        1 => fault::fight_gpio(a, b),
+        2 => fault::fight(a, b, c, d),
+        3 => fault::led(a),
+        4 => fault::short(
+            match a as u32 {
+                1 => Rail::V5,
+                2 => Rail::Ext5v,
+                _ => Rail::V3v3,
+            },
+            chip,
+        ),
+        5 => fault::clamp(a, chip),
+        _ => return f64::NAN,
+    };
+    FAULT.with(|f| *f.borrow_mut() = [o.v_pin, o.v5, o.v33, o.limiter as u32 as f64]);
+    o.i
+}
+
+/// 上一次 tb_fault 的其它结果：0 = 关键节点电压（引脚 / 被短路的轨），1 = 5V 轨，2 = 3V3 轨，
+/// 3 = 谁限住了电流（0 = 只有内阻，1 = USB 口限流，2 = 外接电源限流，3 = LDO 限流，4 = LDO 进压差区）
+#[no_mangle]
+pub extern "C" fn tb_fault_out(k: u32) -> f64 {
+    FAULT.with(|f| f.borrow().get(k as usize).copied().unwrap_or(f64::NAN))
 }
 
 // ---------------------------------------------------------------- 线束（P2-11，估算）
