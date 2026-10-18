@@ -12,7 +12,11 @@ import { benchStep, passedCount, restoreChecks } from './steps/bench';
 import { assembleStep, restoreAssembly } from './steps/assemble';
 import { productStep } from './steps/product';
 import { loadBom, loadPlaced, shopStep } from './steps/shop';
-import type { AppState, StepCtx, WorkId } from './types';
+import type { AppState, StepCtx, WorkDef, WorkId } from './types';
+import { wkey } from './works';
+import { loadExamples } from './examples';
+import { pushRecent } from './fwmenu';
+import { fetchBuf } from '../assets';
 import { createBenchHistory } from './benchhist';
 import { initTheme } from '../theme';
 import { partLabel } from './wiring';
@@ -24,18 +28,23 @@ import { FwCheckCard, fwCheck } from './fwcheck';
 import { BrownoutBanner } from './benchv2';
 import { initSaved } from './saved';
 import { serial } from './dock';
-import { toScript } from '../inputlog';
+import { usbFeed } from './usbpane';
+import { toScript, type InputLog } from '../inputlog';
 
 export { registerStep } from './shell';
 
 const params = new URLSearchParams(location.search);
 const want = params.get('work') as WorkId | null;
-const work = WORKS[want ?? 'weather'] ?? WORKS.weather;
+// &example=<id>：示例 = 空白作品 + 示例的固件、台面、芯片（DESIGN_V2 §6.1；旧 index.html?example= 跳到这里）
+const exId = params.get('example');
+const ex = exId ? (await loadExamples()).find((e) => e.id === exId) : undefined;
+const work: WorkDef = ex ? { ...WORKS.blank, example: ex.id, title: ex.title, key: `blank:${ex.id}` } : (WORKS[want ?? 'weather'] ?? WORKS.weather);
 // &cp=04：打开时选中这个检查点（旧关卡页 levels.html#04 重定向过来用）；不属于这个作品就忽略
 const cp = params.get('cp');
-document.title = `${work.title} · 试板 TryBoard`;
+if (ex) pushRecent({ kind: 'example', id: ex.id, title: ex.title, at: Date.now() });
+document.title = ex ? `${ex.title} · 示例 · 试板 TryBoard` : `${work.title} · 试板 TryBoard`;
 initTheme();
-initSaved(work.id);
+initSaved(wkey(work));
 syncDockVar();
 const root = createRoot(document.getElementById('root')!);
 flushSync(() => root.render(<ShellView />));
@@ -57,7 +66,7 @@ const store = createStore<AppState>({
   verifyProgress: 0,
   assembly: null,
   caseParams: loadCaseParams(work.id),
-  bom: loadBom(work.id),
+  bom: loadBom(wkey(work)),
   sceneRev: 0,
   editRev: 0,
   runNo: 0,
@@ -85,7 +94,7 @@ const ownsTimeline = () => store.get().step === 'bench';
 
 (async () => {
   try {
-    const placed = loadPlaced(work.id);
+    const placed = loadPlaced(wkey(work));
     const session = await createSession(shell.stage, work, store, {
         onConsole: log,
         onConsoleReset: (t) => {
@@ -100,6 +109,15 @@ const ownsTimeline = () => store.get().step === 'bench';
     ctx.hist = createBenchHistory(ctx, { placeLabels: session.scene.parts.map((p) => partLabel(p.type)), placed: !!placed });
     (window as unknown as { __tbApp: Record<string, unknown> }).__tbApp.hist = ctx.hist;
     const app = (window as unknown as { __tbApp: Record<string, unknown> }).__tbApp;
+    // 给自动化测试（tools/webtest/replay.mjs）：取输入日志、3D 板上按钮的屏幕坐标；在验收 worker 里按同一份日志重放
+    Object.assign(globalThis, {
+      __tbInputLog: () => session.sim?.inputLog(),
+      __tbButtonPos: (name: 'BOOT' | 'RST') => session.bench.buttonScreenPos(name),
+      __tbReplay: async (l: InputLog, seconds: number, pwmPin?: number) => {
+        const { replayLog } = await import('../verify');
+        return replayLog(session.fwBuf!, l, seconds, pwmPin);
+      },
+    });
     app.cmdk = createCmdk(ctx);
     app.analyzer = getAnalyzer(ctx);
     store.subscribe(() => ctx.hist!.op({ k: 'scene', scene: session.scene, power: session.power, count: session.scene.parts.length, ...(session.sceneLabel ? { label: session.sceneLabel } : {}) }), ['sceneRev']);
@@ -129,6 +147,12 @@ const ownsTimeline = () => store.get().step === 'bench';
     store.subscribe(verdict, ['checks', 'step']);
     verdict();
     store.subscribe((s) => (document.getElementById('simtime')!.textContent = `${s.simSeconds.toFixed(2)} s`), ['simSeconds']);
+    const ratioEl = document.getElementById('ratio')!;
+    session.onTick((m) => {
+      if (!m.running) return;
+      ratioEl.textContent = `${m.ratio.toFixed(2)}× 实时`;
+      ratioEl.classList.toggle('slow', m.ratio < 0.9);
+    });
     wireChrome(ctx, session);
     startRouter(ctx);
   } catch (e) {
@@ -148,7 +172,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   const runState = () => {
     const s = store.get();
     const run = s.hist.busy ? 'busy' : s.hist.seeked ? 'seek' : paused ? 'pause' : s.running ? 'run' : session.sim ? 'idle' : session.fwName ? 'loading' : 'nofw';
-    setBc({ run, undo: !s.hist.busy && s.hist.cur > 0, redo: !s.hist.busy && s.hist.cur < s.hist.n - 1, runs: s.hist.runs, room: s.env.temp, fw: session.fwName });
+    setBc({ run, undo: !s.hist.busy && s.hist.cur > 0, redo: !s.hist.busy && s.hist.cur < s.hist.n - 1, runs: s.hist.runs, room: s.env.temp, fw: session.fwName, chip: session.chip });
   };
   store.subscribe(runState, ['running', 'hist', 'env']);
   session.onBoot(() => {
@@ -188,7 +212,21 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     session.sim?.speed(f);
     setBc({ speed: f });
   };
+  // 声音（默认静音）：点击就是用户手势，AudioContext 在这一刻创建 / 恢复
+  const syncSound = () => setBc({ sound: { has: session.audio.hasSound, on: !session.audio.state.muted } });
+  actions.sound = () => void session.audio.setMuted(!session.audio.state.muted).then(syncSound);
+  store.subscribe(syncSound, ['sceneRev']);
+  syncSound();
   actions.uart = (text) => session.sim?.uart(text);
+  actions.usbCdc = (text) => session.sim?.usbCdc(text);
+  // 设备第一次枚举出来时把坞切到「USB」页签：键盘打的字、CDC 回显就在眼前
+  session.onUsb((v) => {
+    usbFeed.update(v);
+    if (!!v === bc.get().usb) return;
+    setBc({ usb: !!v });
+    if (v) setDock({ tab: 'usb', collapsed: false });
+    else if (bc.get().dock.tab === 'usb') setDock({ tab: 'serial' });
+  });
   // 换固件：先看镜像头（魔数 0xE9、芯片 id），对不上就不上电，挂一张校验卡说清楚
   actions.pickFirmware = async (f) => {
     const buf = await f.arrayBuffer();
@@ -200,8 +238,17 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     overlay('fwcheck', null);
     if (store.get().step !== 'bench') location.hash = 'bench';
     session.loadFirmware(buf, f.name);
+    pushRecent({ kind: 'file', name: f.name, at: Date.now() });
     shell.toast(`已换成 ${f.name}（${(buf.byteLength / 1024).toFixed(0)} KB），重新上电`);
   };
+  // 换回作品自带的参考固件（上传过自己的 .bin 之后回到起点）；空白作品没有参考固件
+  if (work.example && !ex)
+    actions.loadRef = async () => {
+      const buf = await fetchBuf(`./fw/${work.example}/flash.bin`);
+      if (store.get().step !== 'bench') location.hash = 'bench';
+      session.loadFirmware(buf, `${work.example}/flash.bin`);
+      shell.toast('已换回参考固件，重新上电');
+    };
   actions.exportInputs = async () => {
     if (!session.sim) return shell.toast('模拟器还没跑起来，没有输入日志');
     const a = document.createElement('a');

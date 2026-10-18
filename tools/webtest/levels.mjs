@@ -2,10 +2,10 @@
 //  1. 工作台每个作品的检查点跑参考固件，必须"通过"，且运行指纹与 tools/check.py（原生内核）完全一致
 //  2. 旧链接 levels.html#04 / #07-lens 重定向到 app.html 并选中对应检查点
 //  3. 上传自己的固件验收，进度记住（刷新后结论按钮仍是 1/6）
-//  4. 装配（views/assembly，实验台 index.html 的"装配 · 成品"视图）：鼠标拖拽、顺序错被拦、
-//     BME280 贴芯片开机后固件读数偏高 2.5 ℃、spin 舵盘装偏提示、lens 开机圆屏有画面
+//  4. 装配（工作台组装步骤 ?asm=svg，views/assembly）：鼠标拖拽、顺序错被拦、
+//     BME280 贴芯片开机复测读数偏高 2.5 ℃、spin 舵盘装偏提示、lens 成品圆屏有画面
 //  5. 作品首页：三张卡片跑真实固件（串口读数、OLED / 圆屏有画面、按 BOOT 屏幕重画），三个入口到达正确页面，手机宽度不溢出
-//  6. 实验台 weather 示例的装配视图：点选装配 → 开机 → 成品屏幕有画面
+//  6. 示例卡「做成成品」到作品；点选装配 → 成品屏幕有画面
 // 用法：node tools/webtest/levels.mjs（先 tools/build_web.sh）。截图在 Reviews/web/levels-*.png
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
@@ -147,20 +147,42 @@ for (const [hash, work, cp] of [['04', 'weather', '04'], ['07-lens', 'lens', '07
   await page.close();
 }
 
-// ---- 4. 装配：实验台的"装配 · 成品"视图（与组装步骤 P0-16 接手前共用 views/assembly）
-async function openAsm(example) {
-  const p = await open(`/index.html?example=${example}`);
-  await p.waitForSelector('#viewTabs:not([hidden])', { timeout: 30000 });
-  await p.click('#viewTabs [data-v="asm"]');
-  await p.waitForSelector('#asmBox [data-part]');
+// ---- 4. 装配：工作台组装步骤的平面视图（?asm=svg，与旧实验台共用 views/assembly）→ 开机复测 → 成品
+//  旧实验台的"装配 · 成品"视图并入工作台（U-08）：开机看读数改成「开机复测」（装法进模拟器），成品画面在成品步骤
+const CPS = { weather: ['01', '02', '03', '04', '05', '06'], spin: ['spin-1', 'spin-2', '07-spin'], lens: ['lens-1', 'lens-2', '07-lens'] };
+async function openAsm(work) {
+  const p = await open(`/app.html?work=${work}#bench`);
+  // 预置检查点全过（解锁组装），清掉上次的装配；与 asm3d.mjs 同一做法
+  await p.evaluate(([w, ids]) => {
+    const c = {};
+    for (const id of ids) c[id] = { fp: 'test', at: '预置' };
+    localStorage.setItem(`tryboard-app-checks:${w}`, JSON.stringify(c));
+    localStorage.removeItem(`tryboard-app-asm:${w}`);
+    localStorage.removeItem(`tryboard-app-case:${w}`);
+  }, [work, CPS[work]]);
+  await p.goto(`${base}/app.html?work=${work}&asm=svg#assemble`, { waitUntil: 'load' });
+  await p.reload({ waitUntil: 'load' });
+  await p.waitForSelector('.asm-box [data-part]', { timeout: 30000 });
   return p;
+}
+/** 点「开机复测」，等跑完，返回属性面板文字 */
+async function retest(page) {
+  await clickEl(page, '#toolbar [data-tool="asm-retest"]');
+  await waitFor(page, () => /复测中/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 10000);
+  await waitFor(page, () => !!document.querySelector('#props .verdict-line') && !/复测中/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 120000);
+  return page.$eval('#props', (e) => e.textContent);
+}
+/** 去成品步骤，等屏幕收到画面 */
+async function toProduct(page) {
+  await page.evaluate(() => (location.hash = 'product'));
+  return waitFor(page, () => location.hash === '#product' && !!globalThis.__tbProduct?.screen?.(), null, 30000);
 }
 {
   const page = await openAsm('weather');
   // 鼠标拖拽：零件卡片 → 舞台上该层的位置（SVG 坐标换成屏幕坐标）
   const drag = async (part, sx, sy) => {
-    const from = await page.$eval(`#asmBox [data-part="${part}"]`, (g) => { const r = g.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
-    const to = await page.$eval('#asmBox svg', (s, [x, y]) => { const p = new DOMPoint(x, y).matrixTransform(s.getScreenCTM()); return [p.x, p.y]; }, [sx, sy]);
+    const from = await page.$eval(`.asm-box [data-part="${part}"]`, (g) => { const r = g.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
+    const to = await page.$eval('.asm-box svg', (s, [x, y]) => { const p = new DOMPoint(x, y).matrixTransform(s.getScreenCTM()); return [p.x, p.y]; }, [sx, sy]);
     await page.mouse.move(from[0], from[1]);
     await page.mouse.down();
     for (let i = 1; i <= 8; i++) await page.mouse.move(from[0] + ((to[0] - from[0]) * i) / 8, from[1] + ((to[1] - from[1]) * i) / 8);
@@ -173,46 +195,49 @@ async function openAsm(example) {
       const [x, y] = k === 'bme' ? (spot === 'A' ? iso(2, 146, 55) : iso(2, 92, 43)) : iso(L, 90, 50);
       await drag(k, x, y);
     }
-    return page.$eval('#asmBox', (e) => e.textContent.includes('6/6'));
+    return page.$eval('.asm-box', (e) => e.textContent.includes('6/6'));
   };
   await drag('front', ...iso(0, 90, 50));
-  report('装配：顺序错被拦下', await page.$eval('#asmBox', (e) => e.textContent.includes('还不能装「前面板」')));
+  report('装配：顺序错被拦下', await page.$eval('.asm-box', (e) => e.textContent.includes('还不能装「前面板」')));
   report('装配：鼠标拖拽 6/6（传感器贴芯片）', await assemble('B'));
-  await page.click('#asmBox [data-k="power"]');
-  // 室温 23.5，传感器贴着芯片：固件读到的温度偏高 2.5 ℃（第 06 关原来的"装法改变读数"用例）
-  const hot = await waitFor(page, () => /T=26\.00 C/.test(document.getElementById('console')?.textContent ?? ''), null, 20000);
-  report('装配：BME280 贴芯片 → 开机后固件读数 T=26.00（室温 23.5 + 2.5）', hot);
+  // 室温 23.5，传感器贴着芯片：开机复测里固件读到的温度偏高 2.5 ℃（第 06 关原来的"装法改变读数"用例）
+  const hot = await retest(page);
+  report('装配：BME280 贴芯片 → 开机复测读数 26.0 ℃（室温 23.5 + 2.5）、复测不过', /✗ 未通过/.test(hot) && /26\.0 ℃/.test(hot), hot.match(/复测结果.{0,120}/)?.[0]);
   await page.screenshot({ path: path.join(outDir, 'levels-asm-bad.png') });
-  await page.click('#asmBox [data-k="reopen"]');
-  await page.click('#asmBox [data-k="reset"]');
+  await clickEl(page, '#toolbar [data-tool="asm-reset"]');
   report('装配：鼠标拖拽 6/6（通风口旁）', await assemble('A'));
-  await page.$eval('#console', (e) => (e.textContent = ''));
-  await page.click('#asmBox [data-k="power"]');
-  const lit = await waitFor(page, () => !!document.querySelector('#asmBox [data-k="product"]:not([hidden]) image[href]') && /T=23\.50 C/.test(document.getElementById('console')?.textContent ?? ''), null, 20000);
-  report('装配：通风口旁 → 开机后读数 T=23.50、成品屏幕有画面', lit);
+  const good = await retest(page);
+  report('装配：通风口旁 → 开机复测通过', /✓ 通过/.test(good), good.match(/复测结果.{0,60}/)?.[0]);
+  // 时间线记下装配和复测（旧实验台写进串口的"装配：开机"）
+  const tl = await page.$eval('#timeline', (e) => e.textContent).catch(() => '');
+  report('装配：操作记进时间线', /复测/.test(tl), tl.slice(0, 120));
+  const lit = await toProduct(page);
+  const reading = await waitFor(page, () => /T=23\.50 C/.test(document.getElementById('console')?.textContent ?? ''), null, 20000);
+  report('装配：成品步骤开机 → 读数 T=23.50、成品屏幕有画面', lit && reading);
+  await sleep(800);
   await page.screenshot({ path: path.join(outDir, 'levels-asm-product.png') });
   await page.close();
 }
 {
-  // spin：舵盘直接按上（错一个齿）→ 开机后成品上提示偏角，圆屏有画面
+  // spin：舵盘直接按上（错一个齿）→ 成品提示偏角，圆屏有画面
   const page = await openAsm('spin');
-  await page.click('#asmBox [data-part="base"]');
-  await page.click('#asmBox [data-part="servo"]');
-  await page.click('#asmBox [data-k="pickX"]');
-  for (const k of ['board', 'lcd', 'body', 'hair']) await page.click(`#asmBox [data-part="${k}"]`);
-  await page.click('#asmBox [data-k="power"]');
-  const ok = await waitFor(page, () => !!document.querySelector('#asmBox [data-k="product"]:not([hidden]) image[href]') && /装偏 14\.4°/.test(document.querySelector('#asmBox [data-k="note"]')?.textContent ?? ''), null, 20000);
-  report('装配 · spin：舵盘装偏 → 成品提示偏 14.4°，圆屏有画面', ok);
+  await clickEl(page, '.asm-box [data-part="base"]');
+  await clickEl(page, '.asm-box [data-part="servo"]');
+  await clickEl(page, '.asm-box [data-k="pickX"]');
+  for (const k of ['board', 'lcd', 'body', 'hair']) await clickEl(page, `.asm-box [data-part="${k}"]`);
+  const full = await page.$eval('.asm-box', (e) => e.textContent.includes('6/6'));
+  const lit = await toProduct(page);
+  const note = await waitFor(page, () => /装偏 14\.4°/.test(document.getElementById('props')?.textContent ?? ''), null, 10000);
+  report('装配 · spin：舵盘装偏 → 成品提示偏 14.4°，圆屏有画面', full && lit && note);
   await page.screenshot({ path: path.join(outDir, 'levels-asm-spin.png') });
   await page.close();
 }
 {
   const page = await openAsm('lens');
-  for (const k of ['base', 'board', 'lcd', 'bezel', 'dome']) await page.click(`#asmBox [data-part="${k}"]`);
-  await page.click('#asmBox [data-k="pickH"]');
-  await page.click('#asmBox [data-k="power"]');
-  const ok = await waitFor(page, () => !!document.querySelector('#asmBox [data-k="product"]:not([hidden]) image[href]'), null, 20000);
-  report('装配 · lens → 开机后圆屏有画面', ok);
+  for (const k of ['base', 'board', 'lcd', 'bezel', 'dome']) await clickEl(page, `.asm-box [data-part="${k}"]`);
+  await clickEl(page, '.asm-box [data-k="pickH"]');
+  const lit = await toProduct(page);
+  report('装配 · lens → 成品步骤圆屏有画面', lit);
   await page.screenshot({ path: path.join(outDir, 'levels-asm-lens.png') });
   await page.close();
 }
@@ -331,7 +356,7 @@ async function openAsm(example) {
     report(`首页「做这个」（${c.work}）→ app.html?work=${c.work}#shop，检查点数 ${n} 与工作台一致`, u.pathname.endsWith('/app.html') && u.searchParams.get('work') === c.work && u.hash === '#shop' && v, p.url().replace(base, ''));
     await p.close();
   }
-  for (const [sel, want, check] of [['#ownIdea', '/advisor.html', () => !!document.querySelector('#templates')], ['#haveFw', '/app.html', () => new URLSearchParams(location.search).get('work') === 'blank' && location.hash === '#bench' && /空白实验台/.test(document.getElementById('workName')?.textContent ?? '')]]) {
+  for (const [sel, want, check] of [['#ownIdea', '/advisor.html', () => !!document.querySelector('#templates')], ['#haveFw', '/app.html', () => new URLSearchParams(location.search).get('work') === 'blank' && location.hash === '#bench' && /^空白$/.test(document.getElementById('workName')?.textContent ?? '')]]) {
     const p = await open('/home.html');
     await Promise.all([p.waitForNavigation({ waitUntil: 'load' }), p.click(sel)]);
     const ok = await waitFor(p, check, null, 15000);
@@ -340,20 +365,25 @@ async function openAsm(example) {
   }
 }
 
-// ---- 6. 实验台 weather 示例的装配视图（键盘 / 点选方式装配）
-const lab = await open('/index.html?example=weather');
-await lab.waitForSelector('#viewTabs:not([hidden])', { timeout: 20000 });
-await lab.click('#viewTabs [data-v="asm"]');
-for (const k of ['shell', 'board', 'bme']) await lab.click(`#asmBox [data-part="${k}"]`);
-await lab.click('#asmBox [data-k="pickA"]');
-for (const k of ['servo', 'oled', 'front']) await lab.click(`#asmBox [data-part="${k}"]`);
-await lab.click('#asmBox [data-k="power"]');
-const labLit = await waitFor(lab, () => !!document.querySelector('#asmBox [data-k="product"]:not([hidden]) image[href]'), null, 20000);
-const logged = await lab.$eval('#console', (e) => e.textContent.includes('装配：开机'));
-report('实验台：点选装配 → 开机 → 成品有画面，操作记进串口', labLit && logged);
-await sleep(800);
-await lab.screenshot({ path: path.join(outDir, 'levels-lab-product.png') });
-await lab.close();
+// ---- 6. 示例（空白实验台）也能走到装配：示例卡「做成成品」→ 作品采购页；点选装配 → 成品有画面
+{
+  const ex = await open('/app.html?work=blank&example=weather#bench');
+  await ex.waitForSelector('#props [data-ex-work="weather"]', { timeout: 30000 });
+  await Promise.all([ex.waitForNavigation({ waitUntil: 'load' }), clickEl(ex, '#props [data-ex-work="weather"]')]);
+  const u = new URL(ex.url());
+  report('示例卡「做成成品」→ app.html?work=weather#shop', u.searchParams.get('work') === 'weather' && u.hash === '#shop', ex.url().replace(base, ''));
+  await ex.close();
+  const page = await openAsm('weather');
+  for (const k of ['shell', 'board', 'bme']) await clickEl(page, `.asm-box [data-part="${k}"]`);
+  await clickEl(page, '.asm-box [data-k="pickA"]');
+  for (const k of ['servo', 'oled', 'front']) await clickEl(page, `.asm-box [data-part="${k}"]`);
+  const full = await page.$eval('.asm-box', (e) => e.textContent.includes('6/6'));
+  const lit = await toProduct(page);
+  report('工作台：点选装配 → 成品有画面', full && lit);
+  await sleep(800);
+  await page.screenshot({ path: path.join(outDir, 'levels-lab-product.png') });
+  await page.close();
+}
 
 await browser.close();
 server.close();

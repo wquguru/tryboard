@@ -31,10 +31,10 @@ function want3d() {
   }
 }
 
-import { Fragment, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { cn } from '../../ui/cn';
 import { Host, Txt } from '../../ui/native';
-import { Btn, Btns, Kv, KvBox, KvT, LinkBtn, LockCard, Mono, Muted, Note, Ph, PhT, Res, Sec, Seg, SegB, Slider, TnL, TnM, TnSt, TreeEmpty, TreeGroup, TreeRow, VerdictLine, btnClass, tnClass } from '../../ui/panel';
+import { Btn, Btns, Kv, KvBox, KvT, LinkBtn, LockCard, Mono, Muted, Note, Ph, PhT, Res, Sec, Seg, SegB, Slider, TnL, TnM, TnSt, TreeEmpty, TreeGroup, VerdictLine, btnClass, tnClass } from '../../ui/panel';
 
 type Entry = { kind: 'place'; id: string; spot?: string } | { kind: 'test'; ok: boolean; rows: { ok: boolean; text: string }[]; fingerprint: string; who: string; temp: number };
 
@@ -324,70 +324,46 @@ export function assembleStep(): StepImpl {
     const n = c.work.checkpoints.length;
     const d = passedCount(c);
     const left = c.work.checkpoints.filter((id) => !(s.checks[id]?.ok && s.checks[id].own));
+    const first = left[0] ?? c.work.checkpoints[0];
+    // 锁着只给一张卡（设计稿 unify/Steps）：差哪几个检查点一眼看全，左右两栏和运行组收起，不铺空壳
+    c.shell.setBare(true);
     c.shell.layer.render(
       <LockCard role="status">
         <Sec>③ 组装 · 还没解锁</Sec>
-        <PhT>实验台的检查点全部通过才能组装</PhT>
-        <p className="my-3 text-muted">
-          现在 <b className="font-mono">{`${d}/${n}`}</b>。还差：
-          {left.map((id, i) => (
-            <Fragment key={id}>
-              {i > 0 && '、'}
-              <Mono>{id}</Mono> {lvTitle(id)}
-            </Fragment>
-          ))}
-        </p>
-        <p className="my-3 text-muted">
-          只有你自己上传的固件通过才算，参考固件通过不算。判定和命令行 <Mono>npx tryboard check</Mono> 相同。
+        <PhT>{`实验台的 ${n} 个检查点过了才能装壳`}</PhT>
+        <ul id="lockList" className="my-3 grid list-none gap-1 p-0 text-[13px]">
+          {c.work.checkpoints.map((id) => {
+            const ok = s.checks[id]?.ok && s.checks[id].own;
+            return (
+              <li key={id} data-cp={id} data-ok={ok ? '' : undefined} className={ok ? 'text-ok-ink' : 'text-fg'}>
+                <span className="inline-block w-5 font-mono">{ok ? '✓' : '○'}</span>
+                <Mono>{id}</Mono> {lvTitle(id)}
+              </li>
+            );
+          })}
+        </ul>
+        <p className="my-3 text-xs text-muted">
+          {`现在 ${d}/${n}。`}只有你自己上传的固件通过才算，参考固件不算；判定和命令行 <Mono>npx tryboard check</Mono> 相同。
         </p>
         <Btns>
           <Btn
             primary
             id="toBench"
             onClick={() => {
-              c.store.set({ selection: { kind: 'checkpoint', id: left[0] ?? c.work.checkpoints[0] } });
+              c.store.set({ selection: { kind: 'checkpoint', id: first } });
               location.hash = 'bench';
             }}
           >
-            回实验台
+            {`回实验台，从 ${first} ${lvTitle(first)}开始`}
           </Btn>
         </Btns>
       </LockCard>,
-    );
-    c.shell.tree.render(
-      <div role="group" aria-label="构建树">
-        <TreeGroup title="检查点" count={`${d}/${n}`} open>
-          {c.work.checkpoints.map((id) => {
-            const r = s.checks[id];
-            const ok = r?.ok && r.own;
-            return (
-              <TreeRow
-                key={id}
-                label={
-                  <>
-                    <Mono>{id}</Mono> {lvTitle(id)}
-                  </>
-                }
-                st={<TnSt kind={ok ? 'ok' : 'muted'}>{ok ? '✓' : '—'}</TnSt>}
-              />
-            );
-          })}
-        </TreeGroup>
-      </div>,
-    );
-    c.shell.props.render(
-      <>
-        <Sec>为什么锁着</Sec>
-        <Note>装法会影响读数。先在台面上确认固件没问题，装壳后出错才分得清是固件还是装法。</Note>
-        <Sec>解锁条件</Sec>
-        <Kv k="检查点" v={`${d}/${n}`} cls={d === n ? '' : 'bad'} />
-      </>,
     );
     c.shell.toolbar.setGroups([]);
     c.shell.timeline.setSteps([{ id: 'lock', icon: '·', label: `检查点 ${d}/${n}，未解锁` }]);
     c.shell.setVerdict(`组装 · 未解锁`, 'idle');
     c.shell.onVerdict(() => (location.hash = 'bench'));
-    c.shell.setNext('开机看成品 →', null, '先解锁并装完');
+    c.shell.setNext('成品 · 先过完检查点再装壳', null, '先解锁并装完');
   }
 
   // ------------------------------------------------------------ 构建树：装配层
@@ -599,7 +575,7 @@ export function assembleStep(): StepImpl {
           ? '探头缩在孔里时，HC-SR04 只能量到孔壁。'
           : T!.id === 'tilt'
             ? '六轴装反时，读到的俯仰、横滚也是反的。'
-            : '装好后再跑一次同一份固件。';
+            : '装好后重启，跑的还是同一份固件。';
     c.shell.props.render(
       <>
         {head}
@@ -765,7 +741,8 @@ export function assembleStep(): StepImpl {
     const done = s.placed.length === s.total;
     c.shell.setVerdict(testing ? '复测中…' : t ? (t.ok ? '复测 ✓' : '复测 ✗') : `装配 ${s.placed.length}/${s.total}`, t ? (t.ok ? 'ok' : 'bad') : 'idle');
     c.shell.onVerdict(() => pick('retest'));
-    c.shell.setNext('开机看成品 →', done ? 'product' : null, `装完才能开机（${s.placed.length}/${s.total}）`);
+    if (done) c.shell.setNext('下一步：成品 →', 'product', '', undefined, 'hot');
+    else c.shell.setNext(`成品 · 还差 ${s.total - s.placed.length} 层没装`, null, `装完才能开机（${s.placed.length}/${s.total}）`);
     c.shell.toolbar.setGroups([
       { id: 'nav', tools: [{ id: 'asm-select', label: '选择', key: 'V' }] },
       {
@@ -954,7 +931,7 @@ export function assembleStep(): StepImpl {
         );
         c.shell.toolbar.setGroups([]);
         c.shell.timeline.setSteps([]);
-        c.shell.setNext('开机看成品 →', null, '没有组装模板');
+        c.shell.setNext('成品 · 这个作品没有组装模板', null, '没有组装模板');
         return;
       }
       if (!unlocked(c)) {
@@ -966,6 +943,7 @@ export function assembleStep(): StepImpl {
               unsubs.forEach((u) => u());
               unsubs = [];
               c.shell.layer.render(null);
+              c.shell.setBare(false);
               step.mount(c);
             } else renderLocked();
           }, ['checks']),

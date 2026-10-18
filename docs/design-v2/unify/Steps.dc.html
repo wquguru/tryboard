@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>步骤条与下一步按钮</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0a6fbd;text-decoration:none}a:hover{color:#0b76c8}
+</style>
+</helmet>
+<div style="width: 1440px; min-height: 980px; box-sizing: border-box; padding: 48px 64px 56px; background: #ffffff; color: #1e1e1e; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; font-size: 13px; display: flex; flex-direction: column; gap: 36px">
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <h1 style="margin: 0; font-size: 32px; font-weight: 700">步骤条只显示走得通的路</h1>
+    <p style="margin: 0; font-size: 15px; color: #6f6f6f">下一步按钮一种样式三种状态；空白不显示组装 / 成品；锁住的步骤不铺空壳。</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px">
+    <div style="display: flex; flex-direction: column; gap: 14px; padding: 24px; border: 1px solid #e6e6e6; border-radius: 12px">
+      <div style="font-size: 15px; font-weight: 700">下一步按钮</div>
+      <div style="display: grid; grid-template-columns: 64px 1fr; row-gap: 14px; align-items: center">
+        <span style="color: #6f6f6f">现在</span>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap">
+          <span style="height: 32px; padding: 0 12px; border: 1px solid #0b76c8; border-radius: 8px; color: #0a6fbd; display: flex; align-items: center">摆上实验台 →</span>
+          <span style="height: 32px; padding: 0 12px; border: 1px solid #e6e6e6; border-radius: 8px; background: #f7f7f7; display: flex; align-items: center">去组装 →</span>
+          <span style="height: 32px; padding: 0 12px; border: 1px solid #e6e6e6; border-radius: 8px; background: #f7f7f7; display: flex; align-items: center">开机看成品 →</span>
+        </div>
+        <span style="color: #6f6f6f">可去</span>
+        <div style="display: flex; gap: 10px; align-items: center"><a href="#" style="height: 32px; padding: 0 12px; border: 1px solid #b9e0ff; border-radius: 8px; color: #0a6fbd; display: flex; align-items: center">下一步：实验台 →</a><span style="color: #6f6f6f">随时能去的步骤</span></div>
+        <span style="color: #6f6f6f">刚解锁</span>
+        <div style="display: flex; gap: 10px; align-items: center"><a href="#" style="height: 32px; padding: 0 12px; border-radius: 8px; background: #0b76c8; color: #fff; display: flex; align-items: center">下一步：组装 →</a><span style="color: #6f6f6f">检查点 6/6 那一刻变实心，提示该往前走了</span></div>
+        <span style="color: #6f6f6f">锁着</span>
+        <div style="display: flex; gap: 10px; align-items: center"><button type="button" aria-disabled="true" style="height: 32px; padding: 0 12px; border: 1px solid #e6e6e6; border-radius: 8px; background: #f7f7f7; color: #9ba0a7; font: inherit; display: flex; align-items: center; gap: 6px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>组装 · 还差 6 个检查点</button><span style="color: #6f6f6f">直接写出差什么，不让人点进去才知道</span></div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px; padding: 24px; border: 1px solid #e6e6e6; border-radius: 12px">
+      <div style="font-size: 15px; font-weight: 700">步骤条：作品 vs 空白</div>
+      <div style="display: grid; grid-template-columns: 64px 1fr; row-gap: 18px; align-items: center">
+        <span style="color: #6f6f6f">作品</span>
+        <div style="display: flex; align-items: center; gap: 6px; white-space: nowrap">
+          <span style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; color: #6f6f6f"><span style="width: 18px; height: 18px; border-radius: 9px; border: 1px solid #cccccc; display: grid; place-items: center; font-size: 11px">1</span>采购</span>
+          <span style="width: 10px; height: 1px; background: #cccccc"></span>
+          <span style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 16px; background: #e5f4ff; color: #0a6fbd; font-weight: 500"><span style="width: 18px; height: 18px; border-radius: 9px; background: #0b76c8; color: #fff; display: grid; place-items: center; font-size: 11px">2</span>实验台 <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px">0/6</span></span>
+          <span style="width: 10px; height: 1px; background: #cccccc"></span>
+          <span style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; color: #9ba0a7"><span style="width: 18px; height: 18px; border-radius: 9px; border: 1px solid #e6e6e6; display: grid; place-items: center; font-size: 11px">3</span>组装<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+          <span style="width: 10px; height: 1px; background: #cccccc"></span>
+          <span style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; color: #9ba0a7"><span style="width: 18px; height: 18px; border-radius: 9px; border: 1px solid #e6e6e6; display: grid; place-items: center; font-size: 11px">4</span>成品<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+        </div>
+        <span style="color: #6f6f6f">空白</span>
+        <div style="display: flex; align-items: center; gap: 6px; white-space: nowrap">
+          <span style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; color: #6f6f6f"><span style="width: 18px; height: 18px; border-radius: 9px; border: 1px solid #cccccc; display: grid; place-items: center; font-size: 11px">1</span>采购</span>
+          <span style="width: 10px; height: 1px; background: #cccccc"></span>
+          <span style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 16px; background: #e5f4ff; color: #0a6fbd; font-weight: 500"><span style="width: 18px; height: 18px; border-radius: 9px; background: #0b76c8; color: #fff; display: grid; place-items: center; font-size: 11px">2</span>实验台</span>
+          <a href="#" style="margin-left: 10px; font-size: 12px">想装壳？挑个作品 →</a>
+        </div>
+        <span style="color: #6f6f6f"></span>
+        <div style="color: #6f6f6f; line-height: 1.7">空白的组装 / 成品页现在只是一句"空白实验台只跑固件"（assemble.tsx:940、product.tsx:1013），不如直接不显示。旧链接 #assemble 落到实验台。</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px">
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <div style="font-size: 15px; font-weight: 700">锁住的组装：一张卡说清差什么</div>
+      <div style="height: 420px; border: 1px solid #e6e6e6; border-radius: 12px; background: #f7f7f7; display: grid; place-items: center">
+        <div style="width: 420px; padding: 24px; background: #fff; border: 1px solid #e6e6e6; border-radius: 12px; box-shadow: 0 2px 10px #0000000f; display: flex; flex-direction: column; gap: 12px">
+          <div style="font-size: 12px; color: #6f6f6f">3 组装 · 还没解锁</div>
+          <div style="font-size: 17px; font-weight: 700">实验台的 6 个检查点过了才能装壳</div>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; font-size: 12px">
+            <span style="padding: 6px 10px; border-radius: 6px; background: #f7f7f7">○ 01 点灯</span>
+            <span style="padding: 6px 10px; border-radius: 6px; background: #f7f7f7">○ 02 按键</span>
+            <span style="padding: 6px 10px; border-radius: 6px; background: #f7f7f7">○ 03 屏幕</span>
+            <span style="padding: 6px 10px; border-radius: 6px; background: #f7f7f7">○ 04 传感器</span>
+            <span style="padding: 6px 10px; border-radius: 6px; background: #f7f7f7">○ 05 表盘</span>
+            <span style="padding: 6px 10px; border-radius: 6px; background: #f7f7f7">○ 06 装壳</span>
+          </div>
+          <div style="color: #6f6f6f; line-height: 1.7">只有你自己上传的固件通过才算，参考固件不算。</div>
+          <a href="#" style="align-self: flex-start; height: 36px; padding: 0 14px; border-radius: 8px; background: #0b76c8; color: #fff; display: flex; align-items: center">回实验台，从 01 点灯开始</a>
+        </div>
+      </div>
+      <div style="color: #6f6f6f">去掉锁住时的左右两栏和「运行中」；串口抽屉收起。</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <div style="font-size: 15px; font-weight: 700">没有固件：一个主按钮</div>
+      <div style="height: 420px; border: 1px solid #e6e6e6; border-radius: 12px; background: #f3f3f3; display: grid; place-items: center; position: relative">
+        <div style="position: absolute; top: 12px; right: 12px; height: 30px; padding: 0 10px; border: 1px solid #e6e6e6; border-radius: 8px; background: #fff; display: flex; align-items: center; gap: 6px; color: #6f6f6f"><span style="width: 7px; height: 7px; border-radius: 4px; background: #9ba0a7"></span>没有固件</div>
+        <div style="width: 380px; padding: 22px; background: #fff; border: 1px solid #e6e6e6; border-radius: 12px; box-shadow: 0 2px 10px #0000000f; display: flex; flex-direction: column; gap: 10px">
+          <div style="font-size: 16px; font-weight: 700">台面上只有一块开发板</div>
+          <div style="color: #6f6f6f; line-height: 1.7">拖一个 ESP-IDF / Arduino 导出的 .bin 进来，或者先跑个示例。</div>
+          <div style="display: flex; gap: 8px">
+            <button type="button" style="height: 36px; padding: 0 14px; border: 0; border-radius: 8px; background: #0b76c8; color: #fff; font: inherit">换固件…</button>
+            <a href="#" style="height: 36px; padding: 0 14px; border: 1px solid #e6e6e6; border-radius: 8px; color: #1e1e1e; display: flex; align-items: center">去采购挑零件</a>
+          </div>
+        </div>
+        <div style="position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); padding: 6px 10px; background: #fff; border: 1px solid #e6e6e6; border-radius: 10px; color: #6f6f6f; white-space: nowrap">选择 · 转视角 · 放置 · 连线 · 万用表 · 示波器</div>
+      </div>
+      <div style="color: #6f6f6f">工具条和右栏不再各放一个「再跑一次」；有固件后它在运行组里叫「重启」。</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":980}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

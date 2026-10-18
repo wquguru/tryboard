@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>手机：示例在工作台里</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1e1e1e;text-decoration:none}a:hover{color:#0a6fbd}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; overflow: hidden; background: #ffffff; color: #1e1e1e; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; font-size: 14px; display: flex; flex-direction: column">
+  <div style="height: 52px; flex: none; padding: 0 6px; display: flex; align-items: center; justify-content: space-between">
+    <a href="#" style="min-width: 44px; height: 44px; padding: 0 8px; display: flex; align-items: center; gap: 2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>实验台</a>
+    <button type="button" style="height: 44px; border: 0; background: transparent; font: inherit; font-weight: 700; display: flex; align-items: center; gap: 2px">BME280 示例<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+    <button type="button" aria-label="更多" style="width: 44px; height: 44px; border: 0; background: transparent; color: #6f6f6f; display: grid; place-items: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+  </div>
+  <div style="height: 44px; flex: none; padding: 0 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; border-bottom: 1px solid #e6e6e6; font-size: 13px">
+    <a href="#" style="display: grid; place-items: center; color: #6f6f6f">1 采购</a>
+    <a href="#" aria-current="step" style="display: grid; place-items: center; margin: 4px 0; border-radius: 8px; background: #e5f4ff; color: #0a6fbd; font-weight: 500">2 实验台</a>
+  </div>
+
+  <div style="position: relative; flex: 1; min-height: 0; overflow: hidden; background: #f3f3f3">
+    <img src="/_blob/944f01e99a6245279d61e3c036c04c47" alt="3D 台面：ESP32-C3 与 BME280" style="position: absolute; left: -10px; top: -250px; width: 410px; display: block">
+    <div style="position: absolute; left: 0; right: 0; top: 0; height: 64px; padding: 10px 12px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; background: #f3f3f3">
+      <div style="height: 40px; padding: 0 14px; background: #fff; border: 1px solid #e6e6e6; border-radius: 20px; display: flex; align-items: center; gap: 8px; font-size: 13px"><span style="width: 7px; height: 7px; border-radius: 4px; background: #14ae5c"></span>运行中<span style="color: #9ba0a7">·</span><span style="font-family: 'JetBrains Mono', monospace">1×</span><span style="color: #9ba0a7">·</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6f6f6f">C3</span></div>
+      <div style="display: flex; gap: 8px">
+        <button type="button" aria-label="暂停" style="width: 44px; height: 44px; border: 1px solid #e6e6e6; border-radius: 22px; background: #fff; display: grid; place-items: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg></button>
+        <button type="button" aria-label="换固件" style="height: 44px; padding: 0 14px; border: 0; border-radius: 22px; background: #0b76c8; color: #fff; font: inherit; font-size: 13px; font-weight: 500">换固件</button>
+      </div>
+    </div>
+    <div style="position: absolute; left: 12px; right: 12px; bottom: 12px; padding: 12px 14px; background: #ffffff; border: 1px solid #e6e6e6; border-radius: 14px; box-shadow: 0 2px 10px #0000000f; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: center">
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #6f6f6f">这个示例 · ✓ 仿真验证</span><span style="font-weight: 700">温湿度气压：BME280</span></div>
+        <button type="button" aria-label="展开说明" style="width: 44px; height: 44px; border: 0; background: transparent; display: grid; place-items: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg></button>
+      </div>
+      <label style="display: grid; grid-template-columns: 36px 1fr 64px; align-items: center; gap: 8px; font-size: 13px"><span>温度</span><span style="height: 4px; border-radius: 2px; background: linear-gradient(90deg, #0d99ff 62%, #e6e6e6 62%)"></span><span style="text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 12px">23.5 °C</span></label>
+    </div>
+  </div>
+
+  <div style="height: 76px; flex: none; padding: 8px 16px 0; box-sizing: border-box; border-top: 1px solid #e6e6e6; border-radius: 14px 14px 0 0; box-shadow: 0 -2px 10px #0000000f; display: flex; flex-direction: column; gap: 4px">
+    <div style="align-self: center; width: 36px; height: 4px; border-radius: 2px; background: #e6e6e6"></div>
+    <div style="display: flex; justify-content: space-between; font-size: 13px"><b>串口</b><span style="color: #6f6f6f">上拉看全部</span></div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #3a3a3a; white-space: nowrap; overflow: hidden">T=23.50 C  H=45.00 %  P=1013.25 hPa</div>
+  </div>
+  <nav style="height: 64px; flex: none; padding: 4px 4px 8px; box-sizing: border-box; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid #f0f0f0; font-size: 11px">
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 10px; background: #e5f4ff; color: #0a6fbd"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m5 3 14 8-6 2-2 6z"/></svg>选择</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="5" cy="17" r="2"/><circle cx="19" cy="7" r="2"/><path d="M7 16c4-1 6-4 10-8"/></svg>连线</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>加零件</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M9 7h6v4H9z"/></svg>测量</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>更多</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

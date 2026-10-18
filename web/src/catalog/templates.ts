@@ -296,7 +296,7 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
   },
   {
     id: 'blank',
-    title: '空白：我自己挑',
+    title: '空白',
     level: null,
     product: null,
     board: 's3-devkitc1-v11',

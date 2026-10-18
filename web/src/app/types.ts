@@ -20,6 +20,8 @@ import type { CaseParams } from './enclosure';
 import type { ReactNode } from 'react';
 
 export type StepId = 'shop' | 'bench' | 'assemble' | 'product';
+export type NextState = 'go' | 'hot' | 'lock' | 'end';
+
 export const STEPS: { id: StepId; label: string }[] = [
   { id: 'shop', label: '采购' },
   { id: 'bench', label: '实验台' },
@@ -111,6 +113,8 @@ export interface WorkDef {
   checkpoints: string[];
   /** 首页作品卡（没有就不上首页，比如空白实验台） */
   card?: { chip: string; blurb: string };
+  /** 本机存档键（缺省 = id）；空白里开示例时是 blank:<示例>，不同示例的清单 / 台面互不覆盖 */
+  key?: string;
 }
 
 /** 实时模拟与 3D 台面：整页只有一份，切步骤不重建 */
@@ -161,7 +165,7 @@ export interface Session {
   setSensorOffset(d: number): void;
   /** 订阅串口新文本，返回取消函数 */
   onConsole(cb: (text: string) => void): () => void;
-  /** 重新上电（"再跑一次"） */
+  /** 重新上电（顶栏运行组的「重启」） */
   reboot(): void;
   /** 换固件在台面上跑（用户拖进来的 .bin） */
   loadFirmware(buf: ArrayBuffer, name: string): void;
@@ -176,6 +180,12 @@ export interface Session {
   /** 当前设的距离（cm） */
   distance: number;
   setEnv(e: Partial<Env>): void;
+  /** 麦克风（INMP441）声源：测试 WAV 文件名 / 'silence' / 'live'（浏览器麦克风）；返回提示（失败时说明换回了什么） */
+  micSource: string;
+  setMicSource(src: string): Promise<string>;
+  /** 电位器（示例的模拟输入滑块）：pin → mV；每次上电后重新施加 */
+  analog: Map<number, number>;
+  setAnalog(pin: number, mv: number): void;
   /** 台面上有没有 IMU（有才显示倾斜滑块、才能拖动） */
   hasImu(): boolean;
   /** 改姿态（P2-03）：施加到模拟器（拖动中带角速率，停下 150 ms 后补一次速率 0）、台面跟着倾斜 */
@@ -221,8 +231,11 @@ export interface Shell {
   setVerdict(text: string, state: 'ok' | 'bad' | 'warn' | 'idle'): void;
   /** 点结论按钮做什么（每个步骤挂载时自己设） */
   onVerdict(fn: (() => void) | null): void;
-  /** 右上"下一步"按钮：to 为 null 时置灰；给了 onGo 就由它负责跳转 */
-  setNext(label: string, to: StepId | null, why?: string, onGo?: () => void): void;
+  /** 右上"下一步"按钮：to 为 null 时置灰（锁着）；给了 onGo 就由它负责跳转。
+   *  state：go = 随时能去（描边）、hot = 刚解锁该往前走了（实心）、lock = 锁着（灰 + 锁，label 写差什么）、end = 最后一步。缺省按 to 定 go / lock */
+  setNext(label: string, to: StepId | null, why?: string, onGo?: () => void, state?: NextState): void;
+  /** 只留台面中间的卡（左右两栏、运行组收起）；换步骤时自动复位 */
+  setBare(on: boolean): void;
   /** 底部一行提示（几秒后消失） */
   toast(text: string): void;
   /** 台面容器（快捷卡片坐标相对它） */

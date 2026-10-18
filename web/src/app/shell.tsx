@@ -6,6 +6,7 @@ import { Fragment, type ReactNode } from "react";
 import { cn } from "../ui/cn";
 import {
   STEPS,
+  type NextState,
   type Panel,
   type Shell,
   type StepCtx,
@@ -29,6 +30,8 @@ import {
   usePhone,
 } from "./mobile";
 import { LeftColumn } from "./leftcol";
+import { Icon } from "./icons";
+import { shownSteps } from "./chrome";
 import { StageOverlays } from "./overlays";
 
 const registry = new Map<StepId, StepImpl>();
@@ -46,6 +49,11 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
 
 export function stepFromHash(): StepId {
   const h = location.hash.slice(1) as StepId;
+  // 空白作品没有组装 / 成品：旧链接 #assemble、#product 落到实验台（地址栏也改掉，免得刷新又落空）
+  if (STEPS.some((s) => s.id === h) && !shownSteps().includes(h)) {
+    history.replaceState(null, "", "#bench");
+    return "bench";
+  }
   return STEPS.some((s) => s.id === h) ? h : "bench";
 }
 
@@ -56,16 +64,19 @@ interface Chrome {
   routed: boolean;
   workName: string;
   verdict: { text: string; state: Verdict };
-  next: { label: string; to: StepId | null; why: string; onGo?: () => void };
+  next: { label: string; to: StepId | null; why: string; onGo?: () => void; state: NextState };
   toast: { text: string; shown: boolean };
+  /** 只留中间一张卡：左右两栏、运行组都收起（锁住的组装，设计稿 unify/Steps）；换步骤时复位 */
+  bare: boolean;
 }
 const chrome = createStore<Chrome>({
   step: stepFromHash(),
   routed: false,
   workName: "",
   verdict: { text: "检查点 0/0", state: "idle" },
-  next: { label: "下一步", to: null, why: "" },
+  next: { label: "下一步", to: null, why: "", state: "lock" },
   toast: { text: "", shown: false },
+  bare: false,
 });
 const setChrome = (p: Partial<Chrome>) => commit(() => chrome.set(p));
 let verdictFn: (() => void) | null = null;
@@ -182,18 +193,24 @@ function App() {
       >
         {c.verdict.text}
       </button>
+      {/* 下一步一种样式三种状态（DESIGN_V2 §6.3、设计稿 unify/Steps）：可去描边、刚解锁实心、锁着灰掉并写出差什么 */}
       <button
         id="next"
         type="button"
+        data-state={c.next.state}
         disabled={!c.next.to}
         title={c.next.to ? "" : c.next.why}
         onClick={goNext}
         className={cn(
-          "next text-[13px]",
+          "next inline-flex items-center gap-1.5 text-[13px]",
           topBtn,
-          "border-accent-strong text-accent-ink hover:bg-accent-bg disabled:cursor-not-allowed disabled:border-line disabled:bg-field disabled:text-muted",
+          c.next.state === "hot"
+            ? "border-accent-strong bg-accent-strong text-on-accent hover:opacity-90"
+            : "border-accent-line text-accent-ink hover:bg-accent-bg",
+          "disabled:cursor-not-allowed disabled:border-line disabled:bg-field disabled:font-normal disabled:text-muted disabled:hover:bg-field",
         )}
       >
+        {c.next.state === "lock" && <Icon n="lock" size={13} />}
         {c.next.label}
       </button>
     </>
@@ -215,7 +232,7 @@ function App() {
     : pp
       ? "step-layer absolute inset-0"
       : "step-layer pointer-events-none fixed inset-0 z-1 flex items-center justify-center [&>*]:pointer-events-auto";
-  const leftCls = pp
+  const leftCls = pp || c.bare
     ? "hidden"
     : pb
       ? cn(
@@ -225,8 +242,9 @@ function App() {
       : pf
         ? cn("pnl left flex flex-col", mCard, mo.tree)
         : "pnl left fixed top-(--top-h) bottom-(--dock-h) left-0 z-2 flex w-(--left-w) flex-col overflow-hidden border-r border-line bg-surface";
-  const propsCls =
-    pb || pp
+  const propsCls = c.bare
+    ? "hidden"
+    : pb || pp
       ? cn(
           "pnl right inset-x-0 bottom-0 z-30 max-h-[min(540px,72dvh)] overflow-auto rounded-t-2xl border-t border-line bg-surface px-4 pt-0 pb-[calc(16px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_#00000026]",
           m.props ? "fixed block" : "hidden",
@@ -251,6 +269,7 @@ function App() {
         <TopBar
           step={step}
           workName={c.workName}
+          bare={c.bare}
           right={right}
           toast={(t) => shell.toast(t)}
         />
@@ -365,11 +384,19 @@ function App() {
         toast={(t) => shell.toast(t)}
         timeline={<timeline.View />}
         simtime={
-          <span
-            id="simtime"
-            className="mono simtime flex-none font-mono text-xs text-muted"
-            title="模拟时间"
-          />
+          <>
+            <span
+              id="simtime"
+              className="mono simtime flex-none font-mono text-xs text-muted"
+              title="模拟时间"
+            />
+            {/* 跑得比真机慢多少：慢于 0.9× 变红（定时相关的现象要打折看） */}
+            <span
+              id="ratio"
+              className="mono flex-none font-mono text-xs text-muted [&.slow]:text-bad-ink"
+              title="模拟速度 / 真机速度"
+            />
+          </>
         }
       />
       {pf && (
@@ -398,8 +425,11 @@ function App() {
             onClick={goNext}
             className="next flex h-12 min-w-0 flex-1 cursor-pointer flex-col items-center justify-center rounded-xl border-0 bg-accent-strong px-3 text-[15px] font-medium text-on-accent disabled:cursor-not-allowed disabled:bg-field disabled:text-muted"
           >
-            <span className="max-w-full truncate">{c.next.label}</span>
-            {!c.next.to && c.next.why && (
+            <span className="inline-flex max-w-full items-center gap-1 truncate">
+              {c.next.state === "lock" && <Icon n="lock" size={14} className="flex-none" />}
+              {c.next.label}
+            </span>
+            {!c.next.to && c.next.why && c.next.state !== "lock" && (
               <span className="max-w-full truncate text-[11px] font-normal">
                 {c.next.why}
               </span>
@@ -443,8 +473,11 @@ const shell: Shell = {
   onVerdict(fn) {
     verdictFn = fn;
   },
-  setNext(label, to, why, onGo) {
-    setChrome({ next: { label, to, why: why ?? "", onGo } });
+  setBare(on) {
+    setChrome({ bare: on });
+  },
+  setNext(label, to, why, onGo, state) {
+    setChrome({ next: { label, to, why: why ?? "", onGo, state: state ?? (to ? "go" : "lock") } });
   },
   toast(text) {
     setChrome({ toast: { text, shown: true } });
@@ -472,7 +505,7 @@ function remount(id: StepId) {
   ctx.shell.card.hide();
   resetPhoneUi();
   document.body.dataset.step = id;
-  setChrome({ step: id });
+  setChrome({ step: id, bare: false });
   ctx.store.set({ step: id });
   if (!impl) {
     active = null;

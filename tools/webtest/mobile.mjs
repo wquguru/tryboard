@@ -288,6 +288,28 @@ if (half) await page.click('#sheetGrab');
 report('成品：串口抽屉收起后串口条回来', await waitFor(page, () => !document.querySelector('#dock[data-sheet="half"]') && !!document.querySelector('#mSerialOpen'), null, 3000));
 report('成品：收起后串口条可点', (await tappable('#mSerialOpen')) === 'ok', await tappable('#mSerialOpen'));
 
+// ---- 示例页（U-07/U-10）：空白作品 + 示例固件，只有采购 / 实验台两步；换固件抽屉要盖在串口抽屉、底栏之上
+await page.goto(`${base}/app.html?work=blank&example=bme280#bench`, { waitUntil: 'load' });
+await waitFor(page, () => globalThis.__tbApp?.store.get().step === 'bench' && globalThis.__tbApp.store.get().simSeconds > 0.5, null, 30000);
+await stepCheck('示例页');
+report('示例页：只有两步', (await page.$$eval('#steps [data-step]', (b) => b.map((x) => x.dataset.step).join())) === 'shop,bench');
+await page.click('#moreBtn');
+await waitFor(page, () => !!document.querySelector('#moreMenu #swapFw'));
+await page.click('#moreMenu #swapFw');
+report('示例页：换固件抽屉打开', await waitFor(page, () => !!document.querySelector('#fwMenu [data-fw="upload"]')));
+await stepCheck('换固件抽屉');
+{
+  const bad = [];
+  for (const s of ['[data-chip="esp32c3"]', '[data-chip="esp32s3"]', '[data-ex="bme280"]', '[data-fw="all"]', '[data-fw="upload"]']) {
+    const r = await tappable(`#fwMenu ${s}`);
+    if (r !== 'ok') bad.push(`${s}:${r}`);
+  }
+  report('换固件抽屉：芯片、示例、全部、上传都 ≥ 44px 且没被盖住', bad.length === 0, bad.join(' '));
+}
+await page.screenshot({ path: path.join(outDir, 'mobile-fwsheet.png') });
+await page.keyboard.press('Escape');
+report('换固件抽屉：Esc 能关', await waitFor(page, () => !document.querySelector('#fwMenu')));
+
 // ---- 每个成品（预览模式 ?work=X#product）：全屏、无横向滚动、按键格每个键都够大且点得到，按动作键不报错
 const WORKS = { weather: 'p-boot', spin: 'p-boot', lens: 'p-boot', usbkey: 'p-key-4', lamp: 'p-knob-r', ruler: 'p-near', tilt: 'p-tilt-r', imu: 'p-level' };
 for (const [w, key] of Object.entries(WORKS)) {

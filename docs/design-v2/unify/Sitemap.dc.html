@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>页面地图</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0a6fbd}a:hover{color:#0b76c8}
+</style>
+</helmet>
+<div style="width: 1440px; height: 960px; box-sizing: border-box; padding: 56px 64px; background: #ffffff; color: #1e1e1e; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; display: flex; flex-direction: column; gap: 32px">
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <h1 style="margin: 0; font-size: 32px; font-weight: 700">每个入口落在哪</h1>
+    <p style="margin: 0; font-size: 15px; color: #6f6f6f">实验台实现 2 → 1，页头 3 种 → 2 种（站点页 + 工作台）。旧地址全部保留为重定向。</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px">
+    <div style="display: flex; flex-direction: column; gap: 10px; padding: 24px; border: 1px solid #e6e6e6; border-radius: 12px; background: #f7f7f7">
+      <div style="font-size: 13px; font-weight: 700; color: #6f6f6f; letter-spacing: 0.06em">现在</div>
+      <div style="display: grid; grid-template-columns: 220px 40px 1fr; row-gap: 10px; align-items: center; font-size: 13px">
+        <div style="padding: 8px 12px; background: #fff; border: 1px solid #e6e6e6; border-radius: 8px">首页「做这个」</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#9ba0a7" stroke-width="1.5"/></svg><div style="padding: 8px 12px; background: #e5f4ff; border: 1px solid #b9e0ff; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px">app.html?work=X#shop</div>
+        <div style="padding: 8px 12px; background: #fff; border: 1px solid #e6e6e6; border-radius: 8px">首页「我有固件了」</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#9ba0a7" stroke-width="1.5"/></svg><div style="padding: 8px 12px; background: #e5f4ff; border: 1px solid #b9e0ff; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px">app.html?work=blank#bench</div>
+        <div style="padding: 8px 12px; background: #fff; border: 1px solid #e6e6e6; border-radius: 8px">站点页头「空白实验台」</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#9ba0a7" stroke-width="1.5"/></svg><div style="padding: 8px 12px; background: #e5f4ff; border: 1px solid #b9e0ff; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px">app.html?work=blank#bench</div>
+        <div style="padding: 8px 12px; background: #fff; border: 1px solid #e6e6e6; border-radius: 8px">选型助手「做这个作品」</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#9ba0a7" stroke-width="1.5"/></svg><div style="padding: 8px 12px; background: #e5f4ff; border: 1px solid #b9e0ff; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px">app.html?work=X#shop</div>
+        <div style="padding: 8px 12px; background: #fff; border: 1px solid #f24822; border-radius: 8px">选型助手「在试板里跑一遍」</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#f24822" stroke-width="1.5"/></svg><div style="padding: 8px 12px; background: #fef2f2; border: 1px solid #f24822; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #c4361a">index.html?example=X　旧实验台</div>
+        <div style="padding: 8px 12px; background: #fff; border: 1px solid #f24822; border-radius: 8px">旧台页头「空白实验台」</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#f24822" stroke-width="1.5"/></svg><div style="padding: 8px 12px; background: #fef2f2; border: 1px solid #f24822; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #c4361a">index.html　同名，另一页</div>
+        <div style="padding: 8px 12px; background: #fff; border: 1px solid #f24822; border-radius: 8px">旧台页头「新工作台 →」</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#f24822" stroke-width="1.5"/></svg><div style="padding: 8px 12px; background: #fef2f2; border: 1px solid #f24822; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #c4361a">app.html?work=weather#bench</div>
+        <div style="padding: 8px 12px; background: #fff; border: 1px dashed #cccccc; border-radius: 8px; color: #6f6f6f">levels.html#NN</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#9ba0a7" stroke-width="1.5" stroke-dasharray="3 3"/></svg><div style="padding: 8px 12px; background: #fff; border: 1px dashed #cccccc; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6f6f6f">重定向 → app.html…&amp;cp=NN#bench</div>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; padding-top: 8px; font-size: 12px; color: #6f6f6f">
+        <span style="padding: 2px 8px; border-radius: 10px; background: #fef2f2; color: #c4361a">红：落到旧实验台或名字对不上</span>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px; padding: 24px; border: 1px solid #b9e0ff; border-radius: 12px; background: #ffffff">
+      <div style="font-size: 13px; font-weight: 700; color: #0a6fbd; letter-spacing: 0.06em">统一后</div>
+      <div style="display: grid; grid-template-columns: 220px 40px 1fr; row-gap: 10px; align-items: center; font-size: 13px">
+        <div style="padding: 8px 12px; background: #fff; border: 1px solid #e6e6e6; border-radius: 8px">首页「做这个」</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#0b76c8" stroke-width="1.5"/></svg><div style="padding: 8px 12px; background: #e5f4ff; border: 1px solid #b9e0ff; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px">app.html?work=X#shop</div>
+        <div style="padding: 8px 12px; background: #fff; border: 1px solid #e6e6e6; border-radius: 8px">页头「实验台」/「我有固件了」</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#0b76c8" stroke-width="1.5"/></svg><div style="padding: 8px 12px; background: #e5f4ff; border: 1px solid #b9e0ff; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px">app.html?work=blank#bench</div>
+        <div style="padding: 8px 12px; background: #fff; border: 1px solid #e6e6e6; border-radius: 8px">选型助手「在试板里跑一遍」</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#0b76c8" stroke-width="1.5"/></svg><div style="padding: 8px 12px; background: #e5f4ff; border: 1px solid #b9e0ff; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px">app.html?work=blank&amp;example=X#bench</div>
+        <div style="padding: 8px 12px; background: #fff; border: 1px solid #e6e6e6; border-radius: 8px">选型助手「做这个作品」</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#0b76c8" stroke-width="1.5"/></svg><div style="padding: 8px 12px; background: #e5f4ff; border: 1px solid #b9e0ff; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px">app.html?work=X#shop</div>
+        <div style="padding: 8px 12px; background: #fff; border: 1px solid #e6e6e6; border-radius: 8px">工作台「换固件 › 示例」</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#0b76c8" stroke-width="1.5"/></svg><div style="padding: 8px 12px; background: #e5f4ff; border: 1px solid #b9e0ff; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px">同页切换，地址改为 &amp;example=Y</div>
+        <div style="padding: 8px 12px; background: #fff; border: 1px dashed #cccccc; border-radius: 8px; color: #6f6f6f">index.html?example=X</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#9ba0a7" stroke-width="1.5" stroke-dasharray="3 3"/></svg><div style="padding: 8px 12px; background: #fff; border: 1px dashed #cccccc; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6f6f6f">重定向 → app.html?work=blank&amp;example=X#bench</div>
+        <div style="padding: 8px 12px; background: #fff; border: 1px dashed #cccccc; border-radius: 8px; color: #6f6f6f">index.html</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#9ba0a7" stroke-width="1.5" stroke-dasharray="3 3"/></svg><div style="padding: 8px 12px; background: #fff; border: 1px dashed #cccccc; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6f6f6f">重定向 → app.html?work=blank#bench</div>
+        <div style="padding: 8px 12px; background: #fff; border: 1px dashed #cccccc; border-radius: 8px; color: #6f6f6f">levels.html#NN</div><svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h32m-5-4 5 4-5 4" fill="none" stroke="#9ba0a7" stroke-width="1.5" stroke-dasharray="3 3"/></svg><div style="padding: 8px 12px; background: #fff; border: 1px dashed #cccccc; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6f6f6f">不变</div>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; padding-top: 8px; font-size: 12px; color: #6f6f6f">
+        <span style="padding: 2px 8px; border-radius: 10px; background: #e5f4ff; color: #0a6fbd">蓝：工作台 app.html</span>
+        <span style="padding: 2px 8px; border-radius: 10px; border: 1px dashed #cccccc">虚线：旧地址重定向</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; font-size: 13px; line-height: 1.7">
+    <div style="padding: 16px 20px; border: 1px solid #e6e6e6; border-radius: 10px"><div style="font-weight: 700; margin-bottom: 4px">示例 = 空白作品 + 一份固件</div><div style="color: #6f6f6f">示例带着芯片、场景（examples.json 的 scene）和说明卡；载入后台面换成对应开发板（C3 / S3）。</div></div>
+    <div style="padding: 16px 20px; border: 1px solid #e6e6e6; border-radius: 10px"><div style="font-weight: 700; margin-bottom: 4px">旧实验台的独有功能先迁再删</div><div style="color: #6f6f6f">示例说明卡 + 环境滑块 → 右栏「这个示例」；导出输入 → 「⋯」菜单；声音开关 → 运行组的速度菜单里。</div></div>
+    <div style="padding: 16px 20px; border: 1px solid #e6e6e6; border-radius: 10px"><div style="font-weight: 700; margin-bottom: 4px">「存为我的作品」</div><div style="color: #6f6f6f">示例里改过接线或固件，可以存一份，出现在面包屑下拉里；不存就只是试跑。</div></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":960}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

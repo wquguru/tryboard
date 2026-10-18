@@ -6,7 +6,7 @@ import { commit } from './react';
 import { createStore } from './store';
 import type { StepId } from './types';
 
-export type DockTab = 'serial' | 'code' | 'analyzer' | 'runs' | 'checks' | 'issues';
+export type DockTab = 'serial' | 'code' | 'analyzer' | 'runs' | 'checks' | 'issues' | 'usb';
 export type RunState = 'loading' | 'run' | 'pause' | 'seek' | 'busy' | 'idle' | 'nofw';
 
 export interface Issue {
@@ -46,6 +46,14 @@ export interface BenchChrome {
   fw: string;
   /** 台面左上的「桌面 · 室温」标签（实验台场景的环境温度）；null = 不显示 */
   room: number | null;
+  /** 声音键：has = 台面上有蜂鸣器或喇叭（没有就不显示），on = 已出声（默认静音） */
+  sound: { has: boolean; on: boolean };
+  /** 固件枚举出了原生 USB 设备：坞里多一个「USB」页签（虚拟电脑） */
+  usb: boolean;
+  /** 台面上的芯片（换固件菜单默认列这颗芯片的示例） */
+  chip: 'esp32c3' | 'esp32s3';
+  /** 换固件菜单开着（顶栏按钮、空台面卡、手机 ⋯ 都能打开它） */
+  fwMenu: boolean;
 }
 
 const DOCK_KEY = 'tryboard-app-dock';
@@ -74,7 +82,11 @@ export const bc = createStore<BenchChrome>({
   boot: { text: '正在加载模拟器内核', steps: [], loaded: 0, total: 0 },
   overlays: {},
   fw: '',
+  chip: 'esp32c3',
+  fwMenu: false,
   room: null,
+  sound: { has: false, on: false },
+  usb: false,
 });
 export const setBc = (p: Partial<BenchChrome>) => commit(() => bc.set(p));
 
@@ -112,7 +124,12 @@ export const actions: {
   resume?: () => void;
   reboot?: () => void;
   speed?: (f: number) => void;
+  sound?: () => void;
+  /** 往 USB 串口（CDC-ACM）发字（进输入日志） */
+  usbCdc?: (text: string) => void;
   pickFirmware?: (f: File) => void;
+  /** 换回作品自带的参考固件（空白作品没有） */
+  loadRef?: () => void;
   exportInputs?: () => void;
   brief?: () => void;
   uart?: (text: string) => void;
@@ -121,3 +138,10 @@ export const actions: {
   /** 台面视角：顶 / 前 / 拉近 / 拉远 / 对准选中 */
   view?: (k: 'top' | 'front' | 'in' | 'out' | 'fit') => void;
 } = {};
+
+// 这一页开的是哪种台面（DESIGN_V2 §6.1–6.2）：空白作品只有「采购 / 实验台」两步，组装 / 成品不显示；
+// 示例 = 空白作品 + 示例固件，面包屑写「实验台 / 示例 · X」
+const PAGE_Q = new URLSearchParams(location.search);
+export const BLANK = PAGE_Q.get('work') === 'blank';
+export const EXAMPLE_ID = BLANK ? PAGE_Q.get('example') : null;
+export const shownSteps = (): StepId[] => (BLANK ? ['shop', 'bench'] : ['shop', 'bench', 'assemble', 'product']);

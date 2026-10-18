@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '../ui/cn';
 import { Logo } from '../ui/logo';
 import { currentTheme, onTheme, setTheme } from '../theme';
-import { actions, bc } from './chrome';
+import { actions, bc, BLANK, EXAMPLE_ID, shownSteps } from './chrome';
+import { FwMenu, openFwMenu } from './fwmenu';
 import { CmdkBox } from './cmdk';
 import { Icon } from './icons';
 import { useStore } from './react';
@@ -50,7 +51,7 @@ export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
           aria-expanded={open}
           title="切换作品"
           onClick={() => setOpen(!open)}
-          className={cn('inline-flex min-h-8 max-w-[220px] cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1 text-fg hover:bg-field', phone && 'min-h-11 max-w-full px-2 text-[15px]')}
+          className={cn('inline-flex min-h-8 max-w-[300px] cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1 text-fg hover:bg-field', phone && 'min-h-11 max-w-full px-2 text-[15px]')}
         >
           <span id="workName" className="work truncate font-bold">
             {name}
@@ -80,8 +81,11 @@ export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
   );
 }
 
+/** 面包屑首段：作品 → 作品列表；空白 / 示例 → 实验台（DESIGN_V2 §6.2 词表：入口统一叫「实验台」） */
+export const CRUMB = BLANK ? { href: './app.html?work=blank#bench', label: '实验台', title: '回到空白实验台' } : { href: './home.html', label: '作品', title: '回到作品列表（未保存的连线会留在本机）' };
+
 function Breadcrumb({ name }: { name: string }) {
-  const { saved } = useStore(bc);
+  const { saved, chip } = useStore(bc);
   // 每 30 s 刷新「刚刚 / n 分钟前」
   const [, tick] = useState(0);
   useEffect(() => {
@@ -91,19 +95,25 @@ function Breadcrumb({ name }: { name: string }) {
   return (
     <div className="crumb flex min-w-0 flex-none flex-col justify-center">
       <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
-        <a href="./home.html" aria-label="试板首页" className="brand flex-none leading-none">
+        <a href="./home.html" aria-label="试板首页" className="brand inline-flex flex-none items-center gap-1.5 leading-none text-fg no-underline">
           <Logo size={22} />
+          <b className="text-[14px] max-[1500px]:hidden">试板</b>
         </a>
         <a
           id="crumbHome"
-          href="./home.html"
-          title="回到作品列表（未保存的连线会留在本机）"
+          href={CRUMB.href}
+          title={CRUMB.title}
           className="inline-flex min-h-8 flex-none items-center px-0.5 text-accent-ink no-underline underline-offset-3 hover:underline"
         >
-          作品
+          {CRUMB.label}
         </a>
         <span className="text-muted">/</span>
-        <WorkMenu name={name} />
+        <WorkMenu name={EXAMPLE_ID ? `示例 · ${name}` : name} />
+        {EXAMPLE_ID && (
+          <span id="chipBadge" className="flex-none rounded-md border border-line px-1.5 py-px font-mono text-[11px] text-muted max-[1500px]:hidden">
+            {chip === 'esp32s3' ? 'ESP32-S3' : 'ESP32-C3'}
+          </span>
+        )}
       </div>
       <span id="savedState" className="-mt-1 pl-[34px] text-[11px] leading-none text-muted">
         {savedText(saved)}
@@ -116,8 +126,8 @@ function StepBar({ step }: { step: StepId }) {
   const { locks, done, checkpoints } = useStore(bc);
   const ok = checkpoints.filter((c) => c.state === 'ok').length;
   return (
-    <nav id="steps" role="tablist" aria-label="四个步骤" className="steps flex min-w-0 items-center justify-center">
-      {STEPS.map((s, i) => {
+    <nav id="steps" role="tablist" aria-label={BLANK ? '两个步骤' : '四个步骤'} className="steps flex min-w-0 items-center justify-center">
+      {STEPS.filter((s) => shownSteps().includes(s.id)).map((s, i) => {
         const on = s.id === step;
         const lock = locks[s.id];
         return (
@@ -165,7 +175,7 @@ export const RUN_TEXT: Record<string, [string, string]> = {
 export const SPEEDS = [1, 2, 0.5];
 
 function RunGroup({ bench }: { bench: boolean }) {
-  const { run, speed } = useStore(bc);
+  const { run, speed, sound } = useStore(bc);
   const [t, dot] = RUN_TEXT[run];
   const live = bench && (run === 'run' || run === 'pause' || run === 'seek');
   return (
@@ -197,9 +207,14 @@ function RunGroup({ bench }: { bench: boolean }) {
       >
         <Icon n={run === 'run' ? 'pause' : 'play'} size={15} />
       </button>
-      <button type="button" id="runRestart" className={ib} disabled={!bench || !actions.reboot || run === 'loading'} title="重启（重新上电，同「再跑一次」）" aria-label="重启" onClick={() => actions.reboot?.()}>
+      <button type="button" id="runRestart" className={ib} disabled={!bench || !actions.reboot || run === 'loading' || run === 'nofw'} title="重启（重新上电）" aria-label="重启" onClick={() => actions.reboot?.()}>
         <Icon n="restart" size={15} />
       </button>
+      {bench && sound.has && (
+        <button type="button" id="sound" className={ib} aria-pressed={sound.on} title={sound.on ? '声音：开（点一下静音）' : '声音：关（默认静音，点一下出声）'} aria-label={sound.on ? '声音：开' : '声音：关'} onClick={() => actions.sound?.()}>
+          <Icon n={sound.on ? 'sound' : 'mute'} size={15} />
+        </button>
+      )}
     </div>
   );
 }
@@ -207,7 +222,6 @@ function RunGroup({ bench }: { bench: boolean }) {
 /** phone：手机顶栏右边的 ⋯（44 的按钮、铺开的菜单，另加主题和换固件——手机顶栏放不下它们） */
 export function MoreMenu({ toast, phone }: { toast: (t: string) => void; phone?: boolean }) {
   const { open, setOpen, ref } = usePop();
-  const file = useRef<HTMLInputElement>(null);
   const [dark, setDark] = useState(currentTheme() === 'dark');
   useEffect(() => {
     if (!phone) return;
@@ -220,22 +234,6 @@ export function MoreMenu({ toast, phone }: { toast: (t: string) => void; phone?:
   };
   return (
     <div ref={ref} className="relative flex-none">
-      {/* 换固件的文件框一直挂着：菜单关了 change 照样到 */}
-      {phone && (
-        <input
-          ref={file}
-          type="file"
-          accept=".bin"
-          hidden
-          id="fwPick"
-          onChange={(e) => {
-            const f = e.currentTarget.files?.[0];
-            e.currentTarget.value = '';
-            setOpen(false);
-            if (f) actions.pickFirmware?.(f);
-          }}
-        />
-      )}
       <button type="button" id="moreBtn" className={cn(ib, phone && 'size-11')} aria-haspopup="menu" aria-expanded={open} aria-label="更多：分享、导出输入日志、交给 AI 的任务书" title="更多" onClick={() => setOpen(!open)}>
         <Icon n="more" />
       </button>
@@ -275,11 +273,11 @@ export function MoreMenu({ toast, phone }: { toast: (t: string) => void; phone?:
           </button>
           {phone && (
             <>
-              <button type="button" role="menuitem" id="swapFw" data-more="fw" className={menuItem} disabled={!actions.pickFirmware} onClick={() => file.current?.click()}>
+              <button type="button" role="menuitem" id="swapFw" data-more="fw" data-fw-open="" className={menuItem} disabled={!actions.pickFirmware} onClick={go(openFwMenu)}>
                 <Icon n="upload" size={15} />
                 <span className="flex-1">
                   换固件
-                  <span className="block text-[11px] text-muted">换一个 flash.bin 在台面上跑（文件不会上传）</span>
+                  <span className="block text-[11px] text-muted">示例、参考固件或你自己的 .bin</span>
                 </span>
               </button>
               <button type="button" role="menuitem" data-more="theme" className={cn(menuItem, 'theme-btn')} aria-pressed={dark} onClick={go(() => setTheme(dark ? 'light' : 'dark'))}>
@@ -288,6 +286,17 @@ export function MoreMenu({ toast, phone }: { toast: (t: string) => void; phone?:
               </button>
             </>
           )}
+          <div className="my-1 h-px bg-line" />
+          <a role="menuitem" data-more="licenses" href="./licenses.html" className={cn(menuItem, 'no-underline')}>
+            <Icon n="doc" size={15} />
+            <span className="flex-1">
+              授权与致谢
+              <span className="block text-[11px] text-muted">第三方组件、固件、字体、3D 模型的许可证</span>
+            </span>
+          </a>
+          <p lang="en" className="m-0 px-2.5 pt-1 pb-1.5 text-[10.5px] leading-snug text-muted">
+            ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.
+          </p>
         </div>
       )}
     </div>
@@ -309,10 +318,9 @@ function ThemeBtn() {
   );
 }
 
-export function TopBar(p: { step: StepId; workName: string; right: ReactNode; toast: (t: string) => void }) {
+export function TopBar(p: { step: StepId; workName: string; bare?: boolean; right: ReactNode; toast: (t: string) => void }) {
   const { undo, redo } = useStore(bc);
   const bench = p.step === 'bench';
-  const file = useRef<HTMLInputElement>(null);
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
   return (
     <header
@@ -335,29 +343,8 @@ export function TopBar(p: { step: StepId; workName: string; right: ReactNode; to
         <StepBar step={p.step} />
       </div>
       <CmdkBox />
-      <RunGroup bench={bench} />
-      <input
-        ref={file}
-        type="file"
-        accept=".bin"
-        hidden
-        id="fwPick"
-        onChange={(e) => {
-          const f = e.currentTarget.files?.[0];
-          e.currentTarget.value = '';
-          if (f) actions.pickFirmware?.(f);
-        }}
-      />
-      <button
-        type="button"
-        id="swapFw"
-        disabled={!actions.pickFirmware}
-        title="换一个 flash.bin 在台面上跑（文件不会上传）"
-        onClick={() => file.current?.click()}
-        className="h-8 flex-none cursor-pointer rounded-lg border-0 bg-accent-strong px-3 text-[13px] font-medium whitespace-nowrap text-on-accent hover:opacity-90 disabled:cursor-not-allowed disabled:bg-field disabled:text-muted max-[1100px]:hidden"
-      >
-        换固件
-      </button>
+      {!p.bare && <RunGroup bench={bench} />}
+      <FwMenu />
       {p.right}
       <MoreMenu toast={p.toast} />
       <ThemeBtn />

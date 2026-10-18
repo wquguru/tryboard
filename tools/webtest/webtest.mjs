@@ -35,7 +35,7 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 const t0 = Date.now();
-await page.goto(`http://localhost:${port}/?example=${example}`, { waitUntil: 'load' });
+await page.goto(`http://localhost:${port}/app.html?work=blank&example=${example}#bench`, { waitUntil: 'load' });
 let ok = false;
 for (let i = 0; i < 120; i++) {
   const text = await page.$eval('#console', (e) => e.textContent);
@@ -60,6 +60,8 @@ if (ok && example === 'bme280' && (await page.$('.env input'))) {
 }
 // 旋钮：滑块拖到 2400mV，ADC 读数要跟着变（UI → worker → ADC → 固件）
 if (ok && example === 'pot') {
+  // 右栏示例卡在示例清单取回后才渲染，固件可能先打出第一行
+  await page.waitForSelector('.env input', { timeout: 5000 });
   await page.$eval('.env input', (el) => {
     el.value = '2400';
     el.dispatchEvent(new Event('input'));
@@ -93,16 +95,16 @@ if (ok && example === 's3-usb-cdc') {
   console.log(`[webtest] USB 串口终端 ping → ECHO: PING: ${seen ? 'PASS' : 'FAIL'}`);
   ok = ok && seen;
 }
-// 串口输入（P2-13）：在示例页右侧串口框（#uartIn）打字回车，固件逐字节收到后回显（网页 → worker → UART RX FIFO → 固件）
+// 串口输入（P2-13）：在示例页右侧串口抽屉（#serialIn）打字回车，固件逐字节收到后回显（网页 → worker → UART RX FIFO → 固件）
 if (ok && example === 'echo') {
-  await page.type('#uartIn', 'hello tryboard');
+  await page.type('#serialIn', 'hello tryboard');
   await page.keyboard.press('Enter');
   let seen = false;
   for (let i = 0; i < 40 && !seen; i++) {
     await new Promise((r) => setTimeout(r, 250));
     seen = (await page.$eval('#console', (e) => e.textContent)).includes('ECHO: hello tryboard');
   }
-  const cleared = await page.$eval('#uartIn', (e) => e.value === '');
+  const cleared = await page.$eval('#serialIn', (e) => e.value === '');
   console.log(`[webtest] 串口输入 hello tryboard → ECHO: hello tryboard: ${seen && cleared ? 'PASS' : 'FAIL'}`);
   ok = ok && seen && cleared;
 }

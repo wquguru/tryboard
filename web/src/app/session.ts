@@ -16,17 +16,15 @@ import { currentTheme, onTheme } from '../theme';
 import { IoStore, decodeEvents } from './iotrace';
 import type { UsbView } from '../usb3d';
 import { PoseRate } from '../imupose';
-
-interface Example {
-  id: string;
-  chip?: 'esp32c3' | 'esp32s3';
-  scene?: SceneSpec;
-}
+import { MicInput } from '../micinput';
+import { chipOf, loadExamples } from './examples';
 
 export { WORKS } from './works';
+import { wkey } from './works';
 
 /** 串口里 weather 固件的读数行（格式由第 06 关任务书规定） */
-const READING = /T=(-?[\d.]+) C H=([\d.]+) % P=([\d.]+) hPa/g;
+// 气象站固件单空格、bme280 示例两个空格分隔，都要认
+const READING = /T=(-?[\d.]+) C\s+H=([\d.]+) %\s+P=([\d.]+) hPa/g;
 /** s3-imu / s3-qmi8658 的读数行 */
 const IMU_LINE = /(?:IMU|POSE) pitch=(-?[\d.]+) roll=(-?[\d.]+)(?:[^\n]*?gyro=\((-?[\d.]+),(-?[\d.]+),(-?[\d.]+)\))?/g;
 
@@ -58,13 +56,12 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   // 蜂鸣器声音整页一份（默认静音）：实验台、成品共用，声音开关在成品页
   const audio = new BuzzerAudio();
 
-  const examples: Example[] = await fetch('./fw/examples.json')
-    .then((r) => r.json())
-    .catch(() => []);
+  const examples = await loadExamples();
   const ex = work.example ? examples.find((e) => e.id === work.example) : undefined;
   // 摆过清单就用清单的零件，机位仍用作品默认
   const scene: SceneSpec = opts.placed ? { ...ex?.scene, ...opts.placed.scene } : (ex?.scene ?? { parts: [] });
-  const chip = ex?.chip ?? 'esp32s3';
+  // 示例清单里缺省芯片是 C3；没有示例（真正的空白）摆 S3 开发板
+  const chip = ex ? chipOf(ex) : 'esp32s3';
   bench.setBoard(chip);
   bench.setScene(scene);
   const buzzerPins = scene.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : []));
@@ -96,6 +93,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const io = new IoStore();
   const ioSubs = new Set<() => void>();
   const harnessSubs = new Set<(text: string) => void>();
+  const mic = new MicInput();
   const usbSubs = new Set<(v: UsbView | null) => void>();
   let ioMask = [0, 0];
   const defaultIoPins = (sc: SceneSpec, c: string) => {
@@ -149,7 +147,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         let h = store.get().bom;
         for (const partId of ['psu-5v2a', 'dc-jack']) h = pushBom(h, ext5v ? { t: 'add', partId } : { t: 'remove', partId });
         if (h !== store.get().bom) {
-          saveBom(work.id, h);
+          saveBom(wkey(work), h);
           store.set({ bom: h });
         }
       }
@@ -273,6 +271,30 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     pressPin(pin, down) {
       s.sim?.pressPin(pin, down);
     },
+    // 示例预设的旋钮位置（examples.json controls 里的 analog.value）
+    micSource: 'sine1k.wav',
+    async setMicSource(src) {
+      s.micSource = src;
+      mic.stop();
+      if (src === 'live') {
+        const err = await mic.start((rate, data) => s.sim?.micPush(rate, data));
+        if (!err) {
+          s.sim?.setMic('live');
+          return '';
+        }
+        // 没有权限 / 设备：换回测试声音
+        await s.setMicSource('sine1k.wav');
+        return `${err}，已换回 1 kHz 测试声音`;
+      }
+      if (src === 'silence') s.sim?.setMic('silence');
+      else s.sim?.setMic('wav', await fetchBuf(`./audio/${src}`), src);
+      return '';
+    },
+    analog: new Map((ex?.controls ?? []).flatMap((c) => (typeof c === 'object' && c.type === 'analog' ? [[c.pin, c.value] as [number, number]] : []))),
+    setAnalog(pin, mv) {
+      s.analog.set(pin, mv);
+      s.sim?.analog(pin, mv);
+    },
     setEnv(e: Partial<Env>) {
       s.sim?.setEnv(e);
       store.set((st) => ({ env: { ...st.env, ...e, ...(s.sim ? { temp: s.sim.env.temp } : {}) } }));
@@ -388,6 +410,10 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         tail = '';
         audio.reset();
         if (buzzerPins.length) sim.watchPwm(buzzerPins);
+        // 浏览器麦克风不跨上电：上电后重新接上
+        if (s.micSource === 'live' && s.scene.parts.some((p) => p.type === 'inmp441')) void s.setMicSource('live');
+        // 电位器位置不是上电参数：上电后作为第一个输入施加（旋钮还停在原处）
+        for (const [pin, mv] of s.analog) sim.analog(pin, mv);
         s.bootCount++;
         imuTail = '';
         store.set((st) => ({ run: st.run + 1, running: true, reading: null, imu: null, touch: null }));
@@ -456,10 +482,13 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     });
     // 观察设置在上电之前发出（worker 按顺序处理）：从第 0 个周期就按这份掩码记，命令行 --trace-pins 同一份就能对拍
     sim.watchIo(ioMask[0], ioMask[1]);
-    if (s.scene.parts.some((p) => p.type === 'inmp441'))
-      void fetchBuf('./audio/sine1k.wav')
-        .then((b) => sim.setMic('wav', b, 'sine1k.wav'))
+    if (s.scene.parts.some((p) => p.type === 'inmp441')) {
+      // 上电前先把测试声音挂上（浏览器麦克风要等上电后再接，见 onBoot）
+      const wav = s.micSource.endsWith('.wav') ? s.micSource : 'sine1k.wav';
+      void fetchBuf(`./audio/${wav}`)
+        .then((b) => (s.micSource === 'silence' ? sim.setMic('silence') : sim.setMic('wav', b, wav)))
         .catch(() => {});
+    }
     return sim;
   }
 

@@ -20,6 +20,7 @@ import { HOME_WORKS } from '../works';
 import { RECORD_SECONDS, recordCanvas, takePhoto, type Capturable, type Recording } from '../capture';
 import { i2cLoad, i2cText, wifiText } from '../harness';
 import { I2C_DEVICES } from './assemble';
+import { setBc } from '../chrome';
 
 import { Host, Txt } from '../../ui/native';
 import { Brief, Btn, Btns, Kv, LinkBtn, LockCard, Note, Ph, PhT, Res, Sec, TnL, TnM, TnSt, TreeEmpty, TreeGroup, TreeNode, TreeRow, btnClass, tnClass, type ResKind } from '../../ui/panel';
@@ -234,6 +235,12 @@ export function productStep(): StepImpl {
 
   const sim = () => ctx?.session.sim ?? null;
   const frame = (): LiveFrame => sim()?.frame ?? emptyFrame();
+  /** 屏幕（OLED / 圆屏）收到过不全黑的一帧：回归脚本用它判断"成品屏幕有画面" */
+  const lit = () => {
+    const f = frame();
+    const px = f.oled ?? f.lcd;
+    return !!px && px.some((v: number) => v !== 0);
+  };
 
   let event = (icon: string, label: string, status?: TimelineStep['status']) => {
     const t = storeRef?.get().simSeconds ?? 0;
@@ -458,6 +465,7 @@ export function productStep(): StepImpl {
     const fx = assembly()?.effects ?? {};
     if (fx.glare) return <Note bad>装法：灯带贴着灯罩，罩上一排刺眼亮点（估算）。回「组装」把灯带贴到导光柱上。</Note>;
     if (fx.sonarBlock) return <Note bad>装法：探头缩在外壳孔里，模拟器里的 HC-SR04 只能量到孔壁（约 {fx.sonarBlock} cm），蜂鸣器一直响。回「组装」让探头伸出前面板。</Note>;
+    if (fx.hornOffset) return <Note bad>装法：舵盘装偏 {fx.hornOffset.toFixed(1)}°，固件说「正面」，它其实歪着（与旧实验台同一估算）。回「组装」先把舵机转到中位再按舵盘。</Note>;
     if (fx.imuFlip) return <Note bad>装法：六轴装反了，读到的俯仰、横滚方向全反，小豆往高处爬。回「组装」把箭头朝前装。</Note>;
     return null;
   }
@@ -591,6 +599,8 @@ export function productStep(): StepImpl {
     // 点击就是用户手势：AudioContext 在这一刻创建 / 恢复
     void a.setMuted(!a.state.muted).then(() => {
       event('♪', a.state.muted ? '声音关' : '声音开');
+      // 运行组里的声音键读同一份状态
+      setBc({ sound: { has: a.hasSound, on: !a.state.muted } });
       syncToolbar();
       updateLive();
     });
@@ -696,7 +706,7 @@ export function productStep(): StepImpl {
       { id: 'act', tools: act },
       ...(c.session.audio.hasSound ? [{ id: 'snd', tools: [{ id: 'p-sound', label: c.session.audio.state.muted ? '声音：关' : '声音：开' }] }] : []),
       ...(cur3d() ? [{ id: 'media', tools: [{ id: 'p-photo', label: '拍照' }, { id: 'p-rec', label: rec ? '停止录像' : `录 ${RECORD_SECONDS} 秒` }, { id: 'p-home', label: '复位视角' }] }] : []),
-      { id: 'run', tools: [{ id: 'p-info', label: '详情' }, { id: 'p-rerun', label: '再跑一次', primary: true }] },
+      { id: 'run', tools: [{ id: 'p-info', label: '详情' }, { id: 'p-rerun', label: '重启', primary: true }] },
     ];
   }
 
@@ -715,7 +725,7 @@ export function productStep(): StepImpl {
       ...(c.work.id === 'usbkey' ? [] : [{ id: 'act', tools: act }]),
       ...(c.session.audio.hasSound ? [{ id: 'snd', tools: [{ id: 'p-sound', label: c.session.audio.state.muted ? '声音：关' : '声音：开' }] }] : []),
       ...(cur3d() ? [{ id: 'media', tools: [{ id: 'p-photo', label: '拍照' }, { id: 'p-rec', label: rec ? '停止录像' : `录 ${RECORD_SECONDS} 秒` }] }] : []),
-      { id: 'run', tools: [{ id: 'p-rerun', label: '再跑一次', primary: true }] },
+      { id: 'run', tools: [{ id: 'p-rerun', label: '重启', primary: true }] },
     ]);
     c.shell.toolbar.setActive(rec ? 'p-rec' : heat.on ? 'p-heat' : 'p-orbit');
   }
@@ -733,18 +743,18 @@ export function productStep(): StepImpl {
   function syncNext() {
     const c = ctx!;
     if (!preview) {
-      c.shell.setNext('下一步', null, '这是最后一步');
+      c.shell.setNext('已是最后一步', null, '这是最后一步', undefined, 'end');
       return;
     }
     const n = c.work.checkpoints.length;
     if (passedCount(c) < n) {
-      c.shell.setNext('去完成检查点 →', 'bench', '', () => {
+      c.shell.setNext(`回实验台 · 还差 ${n - passedCount(c)} 个检查点`, 'bench', '', () => {
         const s = c.store.get();
         const first = c.work.checkpoints.find((id) => !(s.checks[id]?.ok && s.checks[id].own)) ?? c.work.checkpoints[0];
         if (first) c.store.set({ selection: { kind: 'checkpoint', id: first } });
         location.hash = 'bench';
       });
-    } else c.shell.setNext('去组装 →', 'assemble');
+    } else c.shell.setNext('下一步：组装 →', 'assemble');
   }
 
   function syncVerdict() {
@@ -822,6 +832,7 @@ export function productStep(): StepImpl {
         heat: () => ({ ...heat, air }),
         unit: () => (unitF ? 'F' : 'C'),
         alarm: () => alarm,
+        screen: () => lit(),
       };
     } else if (WORK3D.has(c.work.id) && webglOk()) {
       work3d = createWork3D(node, {
@@ -888,6 +899,7 @@ export function productStep(): StepImpl {
         ext: () => lcd3d!.ext(),
         mood: () => mood,
         look: () => look,
+        screen: () => lit(),
       };
     } else {
       const box = document.createElement('div');
@@ -935,10 +947,10 @@ export function productStep(): StepImpl {
     const tiltBar = () => {
       c.shell.toolbar.setGroups(
         isPhone()
-          ? [{ id: 'run', tools: [{ id: 'p-level', label: '放平' }, { id: 'p-info', label: '详情' }, { id: 'p-rerun', label: '再跑一次', primary: true }] }]
+          ? [{ id: 'run', tools: [{ id: 'p-level', label: '放平' }, { id: 'p-info', label: '详情' }, { id: 'p-rerun', label: '重启', primary: true }] }]
           : [
               { id: 'nav', tools: [{ id: 'p-orbit', label: '转动', key: '拖动' }, { id: 'p-level', label: '放平' }] },
-              { id: 'run', tools: [{ id: 'p-rerun', label: '再跑一次', primary: true }] },
+              { id: 'run', tools: [{ id: 'p-rerun', label: '重启', primary: true }] },
             ],
       );
       c.shell.toolbar.setActive(isPhone() ? null : 'p-orbit');
@@ -946,7 +958,7 @@ export function productStep(): StepImpl {
     tiltBar();
     unsubs.push(onPhoneChange(tiltBar));
     c.shell.timeline.setSteps([]);
-    c.shell.setNext('下一步', null, '这是最后一步');
+    c.shell.setNext('已是最后一步', null, '这是最后一步', undefined, 'end');
     c.shell.setVerdict('倾角仪 · 成品', 'idle');
     c.shell.onVerdict(() => (location.hash = 'bench'));
     const set = (k: string, v: string, bad = false) => {
@@ -1010,7 +1022,7 @@ export function productStep(): StepImpl {
         c.shell.layer.render(
           <LockCard role="status">
             <Sec>④ 成品</Sec>
-            <PhT>{c.work.id === 'blank' ? '空白实验台' : c.work.title}没有成品</PhT>
+            <PhT>{c.work.id === 'blank' ? '空白作品' : c.work.title}没有成品</PhT>
             <Btns>
               <LinkBtn primary href="./app.html?work=weather#product">
                 看气象站成品

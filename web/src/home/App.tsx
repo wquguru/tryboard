@@ -29,7 +29,7 @@ export function App() {
         links={[
           ['#works', '作品'],
           ['./advisor.html', '选型助手'],
-          ['./app.html?work=blank#bench', '空白实验台'],
+          ['./app.html?work=blank#bench', '实验台'],
         ]}
       />
       <main className="mx-auto w-full max-w-[1200px] flex-1 px-6 pb-16 max-sm:px-4 max-sm:pb-12">

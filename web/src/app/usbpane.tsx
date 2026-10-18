@@ -1,7 +1,52 @@
-// 侧栏"虚拟电脑 · USB"面板：固件用原生 USB 枚举出设备后出现（id 与旧 usbpanel.ts 相同，验收脚本按 id 读）。
-// 数据经 usbFeed 节流到 ≤ 10 Hz；鼠标轨迹画在 canvas 上，不进 React 状态。
+// 底部坞「USB」页签：虚拟电脑（DESIGN_V2 §6.1，从旧实验台的侧栏面板迁来；id 不变，验收脚本按 id 读）。
+// 固件用原生 USB 枚举出设备后才出现；数据节流到 ≤ 10 Hz，鼠标轨迹画在 canvas 上，不进 React 状态。
 import { useEffect, useRef, useSyncExternalStore, type FormEvent } from 'react';
-import type { UsbFeed } from './store';
+import type { UsbView } from '../usb3d';
+
+/** USB 虚拟电脑面板的数据：设备状态节流到 ≤ 10 Hz 再通知 React；鼠标轨迹每个报告都记（画在 canvas 上） */
+function createUsbFeed() {
+  let view: UsbView | null = null;
+  const trail: [number, number][] = [];
+  let lastReports = -1;
+  let timer = 0;
+  let last = 0;
+  const subs = new Set<() => void>();
+  const notify = () => {
+    timer = 0;
+    last = performance.now();
+    for (const f of subs) f();
+  };
+  return {
+    get: () => view,
+    trail,
+    update(v: UsbView | null) {
+      view = v;
+      if (v && v.mouse.reports !== lastReports) {
+        lastReports = v.mouse.reports;
+        trail.push([v.mouse.x, v.mouse.y]);
+        if (trail.length > 300) trail.shift();
+      }
+      if (timer) return;
+      const wait = 100 - (performance.now() - last);
+      if (wait <= 0) notify();
+      else timer = window.setTimeout(notify, wait);
+    },
+    reset() {
+      clearTimeout(timer);
+      view = null;
+      trail.length = 0;
+      lastReports = -1;
+      notify();
+    },
+    subscribe(f: () => void) {
+      subs.add(f);
+      return () => void subs.delete(f);
+    },
+  };
+}
+export type UsbFeed = ReturnType<typeof createUsbFeed>;
+/** 整页一份：session 推、坞里的页签读 */
+export const usbFeed = createUsbFeed();
 
 const hex4 = (n: number) => n.toString(16).padStart(4, '0').toUpperCase();
 const cap = 'usb-cap mt-1.5 mb-1 text-xs text-muted';
@@ -45,7 +90,8 @@ function MouseCanvas({ feed }: { feed: UsbFeed }) {
   return <canvas id="usbMouse" ref={ref} width={360} height={120} aria-label="鼠标轨迹" style={{ background: SCREEN }} className="h-[90px] w-full rounded-md border border-line" />;
 }
 
-export function UsbPanel({ feed, sendCdc }: { feed: UsbFeed; sendCdc: (text: string) => void }) {
+export function UsbPane({ sendCdc }: { sendCdc: (text: string) => void }) {
+  const feed = usbFeed;
   const v = useSyncExternalStore(feed.subscribe, feed.get);
   const cdcOut = useRef<HTMLPreElement>(null);
   const hid = !!v?.interfaces.some((i) => i.includes('HID'));
@@ -60,14 +106,14 @@ export function UsbPanel({ feed, sendCdc }: { feed: UsbFeed; sendCdc: (text: str
     inp.value = '';
   };
   return (
-    <div className="panel usb flex max-h-[46vh] min-h-0 flex-col overflow-auto border-t border-line" hidden={!v}>
-      <div className="panel-head flex items-baseline gap-2 border-b border-line px-3.5 py-2.5 font-semibold">
-        虚拟电脑 · USB{' '}
-        <span className="muted text-xs font-normal text-muted" id="usbState">
+    <div className="usb min-h-0 flex-1 overflow-auto px-3.5 pt-2 pb-3 text-[13px] text-fg">
+      <div className="flex items-baseline gap-2 font-semibold">
+        虚拟电脑{' '}
+        <span className="text-xs font-normal text-muted" id="usbState">
           {v?.state}
         </span>
       </div>
-      <div className="px-3.5 pt-2.5 pb-3 text-[13px] text-fg">
+      <div className="grid gap-x-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <div id="usbDev">
           {v?.vid ? (
             <>
@@ -107,7 +153,7 @@ export function UsbPanel({ feed, sendCdc }: { feed: UsbFeed; sendCdc: (text: str
             <input id="usbCdcIn" name="usbCdcIn" placeholder="发到 USB 串口（回车）" aria-label="发到 USB 串口" autoComplete="off" className="mt-1.5 w-full rounded-md border border-line bg-field px-2.5 py-1.5 font-mono text-xs text-fg outline-none" />
           </form>
         </div>
-        <details className="usb-log mt-2.5 text-muted">
+        <details className="usb-log mt-2.5 text-muted md:col-span-2">
           <summary className="cursor-pointer">枚举过程</summary>
           <ol id="usbLog" className="mt-1.5 mb-0 list-decimal pl-5 text-xs">
             {v?.log.map((l, k) => (

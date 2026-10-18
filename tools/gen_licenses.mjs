@@ -239,7 +239,7 @@ const NAV_LINK = 'rounded-md px-2.5 py-[5px] text-muted hover:bg-field hover:tex
 const NAV = [
   ['./home.html', '作品'],
   ['./advisor.html', '选型助手'],
-  ['./app.html?work=blank#bench', '空白实验台'],
+  ['./app.html?work=blank#bench', '实验台'],
 ];
 const LOGO = (s) => `<svg width="${s}" height="${s}" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="4" width="56" height="56" rx="14" class="fill-[#0B76C8] dark:fill-[#3AA8FF]"/><g class="fill-white dark:fill-[#17181B]"><circle cx="20" cy="20" r="5"/><circle cx="32" cy="20" r="5"/><circle cx="20" cy="32" r="5"/><circle cx="32" cy="32" r="5"/><circle cx="44" cy="32" r="5"/><circle cx="20" cy="44" r="5"/><circle cx="32" cy="44" r="5"/><circle cx="44" cy="44" r="5"/></g><circle cx="44" cy="20" r="6" fill="#FFB020"/></svg>`;
 const BRAND = `<a class="inline-flex flex-none items-center gap-1.5 max-md:min-h-11 max-md:gap-2" href="./home.html" aria-label="试板 TryBoard 首页">${LOGO(22).replace('<svg ', '<svg class="max-md:size-[26px]" ')}<b class="text-[14px] max-md:text-[17px]">试板</b><span class="font-mono text-[10px] tracking-[0.08em] text-muted max-md:hidden">TRYBOARD</span><span class="ml-0.5 hidden text-[13px] text-muted max-md:inline">· 授权与致谢</span></a>`;
@@ -267,7 +267,7 @@ const html = `<!doctype html>
     <header class="pg-head sticky top-0 z-[5] flex items-center gap-6 border-b border-line bg-head-bg px-6 py-3.5 backdrop-blur max-md:h-[52px] max-md:gap-2 max-md:py-0 max-md:pr-2 max-md:pl-4">
       ${BRAND}
       <nav aria-label="站点" class="flex flex-wrap gap-0.5 max-md:hidden">${NAV.map(([href, text]) => `<a href="${href}" class="${NAV_LINK}">${text}</a>`).join('')}</nav>
-      <button type="button" id="themeBtn" class="theme-btn ml-auto inline-flex h-[30px] flex-none cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-surface px-2.5 text-xs text-fg transition-colors hover:border-hover-line max-md:hidden"></button>
+      <button type="button" id="themeBtn" class="theme-btn ml-auto inline-flex size-8 flex-none cursor-pointer items-center justify-center rounded-md border border-line bg-surface text-fg transition-colors hover:border-hover-line max-md:hidden"></button>
       <button type="button" id="siteMenu" aria-label="菜单" aria-haspopup="dialog" aria-expanded="false" aria-controls="siteDrawer" class="ml-auto hidden size-11 flex-none cursor-pointer items-center justify-center rounded-[10px] text-fg hover:bg-field max-md:inline-flex">${ICON('M4 7h16M4 12h16M4 17h16')}</button>
     </header>
     <!-- 手机菜单抽屉：与 web/src/ui/site.tsx 的 MobileMenu 同一结构（这里没有 Radix，下面的小脚本管开关、Esc 和焦点） -->
@@ -299,8 +299,10 @@ const html = `<!doctype html>
     <script>
       // 亮 / 暗切换（与 web/src/theme.ts 相同的存储键；这一页是生成的静态页，不走打包）
       (function () {
+        // 图标与 web/src/app/icons.tsx 的 sun / moon 相同（全站主题键只放图标，DESIGN_V2 §6.3）
+        var SUN = ${JSON.stringify(ICON('M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4', 16))}, MOON = ${JSON.stringify(ICON('M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z', 16))};
         var b = document.getElementById('themeBtn'), r = document.documentElement;
-        function sync() { var d = r.dataset.theme === 'dark'; b.textContent = d ? '☾ 暗' : '☀ 亮'; b.title = d ? '切到亮色' : '切到暗色'; b.setAttribute('aria-pressed', String(d)); }
+        function sync() { var d = r.dataset.theme === 'dark'; b.innerHTML = d ? MOON : SUN; b.title = d ? '切到亮色' : '切到暗色'; b.setAttribute('aria-label', b.title); b.setAttribute('aria-pressed', String(d)); }
         b.onclick = function () { var t = r.dataset.theme === 'dark' ? 'light' : 'dark'; r.dataset.theme = t; try { localStorage.setItem('tb-theme', t); } catch (e) {} sync(); };
         sync();
         // 手机菜单：开 / 关、Esc 关、焦点进出；三段主题（跟随系统 = 删掉存储键）

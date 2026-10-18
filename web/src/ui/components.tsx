@@ -4,6 +4,7 @@ import { useEffect, useState, type ComponentProps } from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { Checkbox as RCheckbox, Collapsible as RCollapsible, Slot, Toggle } from 'radix-ui';
 import { cn } from './cn';
+import { Icon } from '../app/icons';
 import { currentTheme, initTheme, onTheme, setTheme } from '../theme';
 
 const button = cva(
@@ -107,8 +108,9 @@ export function ThemeToggle({ className }: { className?: string }) {
   }, []);
   const title = dark ? '切到亮色' : '切到暗色';
   return (
-    <Button size="sm" className={cn('theme-btn flex-none', className)} title={title} aria-label={title} aria-pressed={dark} onClick={() => setTheme(dark ? 'light' : 'dark')}>
-      {dark ? '☾ 暗' : '☀ 亮'}
+    <Button size="sm" className={cn('theme-btn size-8 flex-none px-0', className)} title={title} aria-label={title} aria-pressed={dark} onClick={() => setTheme(dark ? 'light' : 'dark')}>
+      {/* 与工作台顶栏同一个图标按钮（DESIGN_V2 §6.3：全站一套主题开关） */}
+      <Icon n={dark ? 'moon' : 'sun'} />
     </Button>
   );
 }

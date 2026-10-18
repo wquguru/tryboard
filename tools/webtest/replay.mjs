@@ -71,7 +71,7 @@ print(check.fingerprint(out, check.canonical_report(err)))`, out, err], { encodi
 const page = await browser.newPage();
 page.on('pageerror', (e) => errors.push(`${e}`));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-await page.goto(base + '/index.html?example=weather', { waitUntil: 'load' });
+await page.goto(base + '/app.html?work=blank&example=weather#bench', { waitUntil: 'load' });
 const booted = await waitFor(page, () => /T=23\.50 C/.test(document.getElementById('console').textContent), null, 30000);
 report('实验台 weather 实时运行（串口 T=23.50）', booted);
 await waitFor(page, () => parseFloat(document.getElementById('simtime').textContent) > 1.0, null, 30000);
@@ -86,15 +86,16 @@ if (pos) {
 }
 const unitF = await waitFor(page, () => document.getElementById('console').textContent.includes('UNIT F'), null, 15000);
 report('鼠标按 3D 板上的 BOOT → 串口 UNIT F', !!pos && unitF, pos ? `@${pos.map(Math.round).join(',')}` : '找不到 BOOT');
-// 温度滑块拖到 35 ℃（与 agent-browser fill 同效：改值 + input 事件）
+// 温度滑块拖到 35 ℃（与 agent-browser fill 同效：改值 + input 事件）；右栏「这个示例」卡在示例清单取回后才渲染
+await page.waitForSelector('.env input', { timeout: 10000 }).catch(() => {});
 await page.$eval('.env input', (r) => { r.value = '35'; r.dispatchEvent(new Event('input')); });
 const alarm = await waitFor(page, () => document.getElementById('console').textContent.includes('ALARM ON'), null, 15000);
 report('温度拖到 35 ℃ → 串口 ALARM ON', alarm);
 const tAlarm = await simNow(page);
 await waitFor(page, (t) => parseFloat(document.getElementById('simtime').textContent) > t + 0.6, tAlarm, 15000);
 // 暂停后再取：日志的 endMs 就是网页停下的那个模拟时刻
-await page.click('#run');
-await waitFor(page, () => /运行/.test(document.getElementById('run').textContent), null, 5000);
+await page.click('#runPause');
+await waitFor(page, () => /已暂停/.test(document.getElementById('runState').textContent), null, 5000);
 await sleep(300);
 const log = await page.evaluate(() => globalThis.__tbInputLog());
 const live = await fwConsole(page);
@@ -112,7 +113,10 @@ const text = await page.evaluate(async () => {
   URL.createObjectURL = (b) => { blobText = b; return orig.call(URL, b); };
   const click = HTMLAnchorElement.prototype.click;
   HTMLAnchorElement.prototype.click = function () {};
-  [...document.querySelectorAll('button')].find((b) => b.textContent === '导出输入').click();
+  // 顶栏 ⋯ 菜单里的「导出输入日志」
+  document.getElementById('moreBtn').click();
+  for (let i = 0; i < 20 && !document.querySelector('[data-more="inputs"]'); i++) await new Promise((r) => setTimeout(r, 50));
+  document.querySelector('[data-more="inputs"]').click();
   for (let i = 0; i < 50 && !blobText; i++) await new Promise((r) => setTimeout(r, 50));
   URL.createObjectURL = orig;
   HTMLAnchorElement.prototype.click = click;

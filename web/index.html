@@ -1,19 +1,32 @@
 <!doctype html>
-<html lang="zh-CN" class="h-full">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- 主题在首帧前定好（web/src/theme.ts 同一规则：localStorage tb-theme，否则跟随系统） -->
     <script>try{var t=localStorage.getItem('tb-theme')}catch(e){}document.documentElement.dataset.theme=t==='dark'||t==='light'?t:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'</script>
-    <title>实验台 · 试板 TryBoard</title>
-    <meta name="description" content="在浏览器里运行真实的 ESP32 固件：买板子之前，先把项目跑一遍。" />
+    <title>实验台已并入工作台 · 试板 TryBoard</title>
+    <meta name="robots" content="noindex" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <!-- 自托管字体（P2-19，tools/fonts/subset.py 生成，OFL-1.1） -->
-    <link rel="stylesheet" href="/fonts/fonts.css" />
+    <!-- 旧实验台（U-08 下线）：示例 = 空白作品 + 示例固件（DESIGN_V2 §6.1）。?example=X → app.html?work=blank&example=X#bench；其余 → 空白实验台 -->
+    <script>
+      (function () {
+        var q = new URLSearchParams(location.search);
+        var ex = q.get('example');
+        var debug = q.get('debug') === '1' ? '&debug=1' : '';
+        location.replace('./app.html?work=blank' + (ex ? '&example=' + encodeURIComponent(ex) : '') + debug + '#bench');
+      })();
+    </script>
+    <noscript><meta http-equiv="refresh" content="0; url=./app.html?work=blank#bench" /></noscript>
+    <style>
+      /* DESIGN §2 亮 / 暗两套（与 app.css 同值）；data-theme 由上面的内联脚本设 */
+      :root { --bg: #ffffff; --fg: #1e1e1e; --accent: #0d99ff; color-scheme: light; }
+      :root[data-theme='dark'] { --bg: #17181b; --fg: #e8eaed; --accent: #3aa8ff; color-scheme: dark; }
+      body { margin: 0; font: 13px/1.5 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif; color: var(--fg); background: var(--bg); display: grid; place-items: center; min-height: 100vh; }
+      a { color: var(--accent); }
+    </style>
   </head>
-  <body class="h-full">
-    <!-- 界面在 src/lab/（React）；3D 台面、worker、串口流由 src/lab/lab.ts 命令式挂载 -->
-    <div id="root" class="h-full"></div>
-    <script type="module" src="./src/lab/main.tsx"></script>
+  <body>
+    <p>实验台已并入工作台。正在跳转到 <a href="./app.html?work=blank#bench">实验台</a>…</p>
   </body>
 </html>

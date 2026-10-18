@@ -142,7 +142,7 @@ export function LeftColumn({ step, tree }: { step: string; tree: ReactNode }) {
           <a
             id="addPart"
             href="#shop"
-            title="整套零件从采购清单来：在采购里勾上，再「摆上实验台」；单个零件可以从上面的元件库拖到台面（或点「放」）再逐根接线"
+            title="整套零件从采购清单来：在采购里勾上，再点「下一步：实验台」；单个零件可以从上面的元件库拖到台面（或点「放」）再逐根接线"
             className="flex h-8 items-center justify-center gap-1.5 rounded-lg border border-dashed border-hover-line text-xs text-muted no-underline hover:border-accent hover:text-accent-ink"
           >
             <Icon n="plus" size={14} />

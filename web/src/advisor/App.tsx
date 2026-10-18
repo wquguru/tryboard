@@ -1,6 +1,6 @@
 // 选型助手 v2（DESIGN_V2 §2，设计稿 docs/design-v2/Advisor.dc.html；手机见 MobileSite 第 3、4 屏）。
 // 逻辑全在 engine.ts / data.ts（纯函数），这里只管界面：输入（模板 / 硬要求 / 配件 / 预算）→ 结果（三个关键数、理由、接线、清单、可信度、备选）。
-// "在试板里跑一遍"按推荐芯片从模板的示例里挑 examples.json 里真实存在、芯片对得上的那个，打开实验台（index.html?example=）。
+// "在试板里跑一遍"按推荐芯片从模板的示例里挑 examples.json 里真实存在、芯片对得上的那个，打开实验台（app.html?work=blank&example=）。
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { RadioGroup, Toggle } from 'radix-ui';
 import { PARTS, TEMPLATES, type Cap, type Template } from './data';
@@ -9,6 +9,7 @@ import { Badge, Button, Collapsible, Table } from '../ui/components';
 import { SiteFooter, SiteHeader } from '../ui/site';
 import { cn } from '../ui/cn';
 import { WORKS } from '../app/works';
+import { exampleHref } from '../app/examples';
 
 const SELECTABLE_CAPS: Cap[] = ['wifi', 'ble', 'bt_classic', 'thread', 'zigbee', 'usb_otg', 'camera', 'audio_in', 'audio_out', 'psram', 'display_rgb', 'touch', 'dac'];
 const SELECTABLE_PARTS = Object.values(PARTS).filter((p) => p.id !== 'battery');
@@ -84,7 +85,7 @@ function tryPlan(tpl: Template, p: Plan | undefined, ex: Map<string, Example> | 
   const w = tpl.work ? WORKS[tpl.work] : undefined;
   return { runs, other: runs.length ? [] : all, work: w?.card ? { id: w.id, title: w.title, chip: w.card.chip } : undefined };
 }
-const runHref = (e: Example) => `./index.html?example=${e.id}`;
+const runHref = (e: Example) => exampleHref(e.id);
 
 // ---------------------------------------------------------------- 小件
 const Lbl = ({ children, className, id }: { children: ReactNode; className?: string; id?: string }) => (
@@ -462,7 +463,7 @@ export function App() {
         links={[
           ['./home.html', '作品'],
           ['./advisor.html', '选型助手'],
-          ['./app.html?work=blank#bench', '空白实验台'],
+          ['./app.html?work=blank#bench', '实验台'],
         ]}
       />
       <main className="flex-1">

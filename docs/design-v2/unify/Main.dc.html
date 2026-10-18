@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>现状审计</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0a6fbd}a:hover{color:#0b76c8}
+</style>
+</helmet>
+<div style="width: 1440px; min-height: 1640px; box-sizing: border-box; padding: 56px 64px 64px; background: #ffffff; color: #1e1e1e; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; display: flex; flex-direction: column; gap: 40px">
+
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6f6f6f; letter-spacing: 0.04em">现状审计 · 2026-10-17 · localhost:5181</div>
+    <h1 style="margin: 0; font-size: 36px; font-weight: 700; line-height: 1.25">同一个「实验台」，两套页面、三种页头</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 1.7; color: #6f6f6f; max-width: 880px">index.html（旧实验台，C3 示例）和 app.html（工作台，作品四步）都自称实验台。用户从首页、选型助手、页头进来，落到哪一套取决于点的是哪个按钮。</p>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 14px">
+    <h2 style="margin: 0; font-size: 18px; font-weight: 700">A · 三种页头</h2>
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; gap: 10px; align-items: baseline; font-size: 13px"><span style="font-family: 'JetBrains Mono', monospace; color: #0a6fbd">home / advisor / licenses</span><span style="color: #6f6f6f">站点页头：logo + 字标；作品 · 选型助手 · 空白实验台；「☀ 亮」文字按钮</span></div>
+        <div style="width: 1312px; height: 55px; overflow: hidden; border: 1px solid #e6e6e6; border-radius: 8px"><img src="/_blob/ba93596f4dd6f52734063f2120324c36" alt="首页页头截图" style="width: 1312px; display: block"></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; gap: 10px; align-items: baseline; font-size: 13px"><span style="font-family: 'JetBrains Mono', monospace; color: #0a6fbd">index.html?example=bme280</span><span style="color: #6f6f6f">旧实验台：首页 · 空白实验台（高亮）· 选型助手 · 新工作台 →；运行工具条挤进页头，折成两行</span></div>
+        <div style="width: 1312px; height: 95px; overflow: hidden; border: 1px solid #e6e6e6; border-radius: 8px"><img src="/_blob/8c684c1924f2485e78cccb1ba96ea18d" alt="旧实验台页头截图" style="width: 1312px; display: block"></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; gap: 10px; align-items: baseline; font-size: 13px"><span style="font-family: 'JetBrains Mono', monospace; color: #0a6fbd">app.html?work=blank#bench</span><span style="color: #6f6f6f">工作台：只有图标没有字标；面包屑 + 四步；主题只有图标</span></div>
+        <div style="width: 1312px; height: 51px; overflow: hidden; border: 1px solid #e6e6e6; border-radius: 8px"><img src="/_blob/e426f70ce58bd48c1af08bb58c0cf83b" alt="工作台页头截图" style="width: 1312px; display: block"></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 14px">
+    <h2 style="margin: 0; font-size: 18px; font-weight: 700">B · 两个「空白实验台」并排</h2>
+    <div style="display: flex; gap: 32px">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div style="font-size: 13px"><b>index.html</b><span style="color: #6f6f6f">（页头里叫「空白实验台」，选型助手「跑一遍」也到这）</span></div>
+        <div style="position: relative; width: 640px; height: 400px; border: 1px solid #e6e6e6; border-radius: 8px; overflow: hidden">
+          <img src="/_blob/8c684c1924f2485e78cccb1ba96ea18d" alt="旧实验台截图" style="width: 640px; display: block">
+          <div style="position: absolute; left: 114px; top: 12px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #f24822; color: #fff; font: 700 12px/22px 'JetBrains Mono', monospace; text-align: center">1</div>
+          <div style="position: absolute; left: 577px; top: 12px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #f24822; color: #fff; font: 700 12px/22px 'JetBrains Mono', monospace; text-align: center">3</div>
+          <div style="position: absolute; left: 600px; top: 56px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #f24822; color: #fff; font: 700 12px/22px 'JetBrains Mono', monospace; text-align: center">4</div>
+          <div style="position: absolute; left: 495px; top: 35px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #f24822; color: #fff; font: 700 12px/22px 'JetBrains Mono', monospace; text-align: center">5</div>
+          <div style="position: absolute; left: 140px; top: 390px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #f24822; color: #fff; font: 700 12px/22px 'JetBrains Mono', monospace; text-align: center">12</div>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div style="font-size: 13px"><b>app.html?work=blank#bench</b><span style="color: #6f6f6f">（首页、选型助手、授权页页头的「空白实验台」到这）</span></div>
+        <div style="position: relative; width: 640px; height: 400px; border: 1px solid #e6e6e6; border-radius: 8px; overflow: hidden">
+          <img src="/_blob/e426f70ce58bd48c1af08bb58c0cf83b" alt="工作台空白截图" style="width: 640px; display: block">
+          <div style="position: absolute; left: 49px; top: 11px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #f24822; color: #fff; font: 700 12px/22px 'JetBrains Mono', monospace; text-align: center">1</div>
+          <div style="position: absolute; left: 531px; top: 12px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #f24822; color: #fff; font: 700 12px/22px 'JetBrains Mono', monospace; text-align: center">3</div>
+          <div style="position: absolute; left: 20px; top: 320px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #f24822; color: #fff; font: 700 12px/22px 'JetBrains Mono', monospace; text-align: center">4</div>
+          <div style="position: absolute; left: 80px; top: 67px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #f24822; color: #fff; font: 700 12px/22px 'JetBrains Mono', monospace; text-align: center">5</div>
+          <div style="position: absolute; left: 271px; top: 12px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #f24822; color: #fff; font: 700 12px/22px 'JetBrains Mono', monospace; text-align: center">6</div>
+          <div style="position: absolute; left: 309px; top: 296px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #f24822; color: #fff; font: 700 12px/22px 'JetBrains Mono', monospace; text-align: center">8</div>
+          <div style="position: absolute; left: 525px; top: 138px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #f24822; color: #fff; font: 700 12px/22px 'JetBrains Mono', monospace; text-align: center">8</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 32px; align-items: flex-start">
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 18px; font-weight: 700">C · 手机</h2>
+      <div style="display: flex; gap: 20px">
+        <div style="display: flex; flex-direction: column; gap: 8px; width: 220px">
+          <div style="position: relative; width: 220px; height: 476px; border: 1px solid #e6e6e6; border-radius: 16px; overflow: hidden"><img src="/_blob/944f01e99a6245279d61e3c036c04c47" alt="旧实验台手机截图" style="width: 220px; display: block">
+            <div style="position: absolute; left: 196px; top: 68px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #f24822; color: #fff; font: 700 12px/22px 'JetBrains Mono', monospace; text-align: center">13</div>
+          </div>
+          <div style="font-size: 12px; color: #6f6f6f; line-height: 1.6">index.html：桌面工具条折成 3 行，挤在 3D 上方</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; width: 220px">
+          <div style="width: 220px; height: 476px; border: 1px solid #e6e6e6; border-radius: 16px; overflow: hidden"><img src="/_blob/dfc00622b806d8c937153180dcdc97c9" alt="工作台手机截图" style="width: 220px; display: block"></div>
+          <div style="font-size: 12px; color: #6f6f6f; line-height: 1.6">app.html：专门的手机布局，底部工具栏 + 串口抽屉</div>
+        </div>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 18px; font-weight: 700">D · 锁住的组装步骤</h2>
+      <div style="position: relative; width: 640px; height: 400px; border: 1px solid #e6e6e6; border-radius: 8px; overflow: hidden">
+        <img src="/_blob/2d43d2a135eb17aa247241054d4facd4" alt="组装步骤锁定截图" style="width: 640px; display: block">
+        <div style="position: absolute; left: 470px; top: 12px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #f24822; color: #fff; font: 700 12px/22px 'JetBrains Mono', monospace; text-align: center">9</div>
+        <div style="position: absolute; left: 600px; top: 60px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #f24822; color: #fff; font: 700 12px/22px 'JetBrains Mono', monospace; text-align: center">10</div>
+      </div>
+      <div style="font-size: 12px; color: #6f6f6f; line-height: 1.6; max-width: 640px">锁着还显示「运行中」、左右两栏空壳和可点的「开机看成品 →」</div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 14px">
+    <h2 style="margin: 0; font-size: 18px; font-weight: 700">E · 问题清单</h2>
+    <div style="display: grid; grid-template-columns: 48px 1fr 1fr 56px; border: 1px solid #e6e6e6; border-radius: 8px; overflow: hidden; font-size: 13px; line-height: 1.6">
+      <div style="padding: 8px 12px; background: #f7f7f7; color: #6f6f6f">#</div><div style="padding: 8px 12px; background: #f7f7f7; color: #6f6f6f">问题</div><div style="padding: 8px 12px; background: #f7f7f7; color: #6f6f6f">证据</div><div style="padding: 8px 12px; background: #f7f7f7; color: #6f6f6f">级别</div>
+      <div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; font-family: 'JetBrains Mono', monospace">1</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0">「空白实验台」指两个不同页面</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f">lab/App.tsx:205 高亮自己；home/advisor 页头链 app.html?work=blank</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #c4361a; font-weight: 700">P0</div>
+      <div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; font-family: 'JetBrains Mono', monospace">2</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0">入口分流：同一件事，不同按钮落到不同界面</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f">选型助手「跑一遍」→ index.html?example=；「做这个作品」、首页「我有固件了」→ app.html</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #c4361a; font-weight: 700">P0</div>
+      <div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; font-family: 'JetBrains Mono', monospace">3</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0">同一动作两种叫法</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f">上传固件 / 换固件；复位 / ↻；暂停 / ⏸；首页 / 作品；新工作台 / 实验台</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #8a5a12; font-weight: 700">P1</div>
+      <div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; font-family: 'JetBrains Mono', monospace">4</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0">串口一边在右栏顶部、一边在底部抽屉</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f">截图 B 的 4</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #8a5a12; font-weight: 700">P1</div>
+      <div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; font-family: 'JetBrains Mono', monospace">5</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0">芯片随页面走：示例只有 C3 台，空白工作台只给 S3</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f">works.ts blank 无示例；bench.tsx 已能画 C3-DevKitM-1</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #8a5a12; font-weight: 700">P1</div>
+      <div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; font-family: 'JetBrains Mono', monospace">6</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0">空白作品显示组装 / 成品和「去组装 →」，点进去才说没有</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f">assemble.tsx:940、product.tsx:1013</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #8a5a12; font-weight: 700">P1</div>
+      <div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; font-family: 'JetBrains Mono', monospace">7</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0">空白的名字有三个</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f">面包屑「空白实验台」、采购标题「空白：我自己挑」、切换条「空白」</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f; font-weight: 700">P2</div>
+      <div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; font-family: 'JetBrains Mono', monospace">8</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0">没有固件时「再跑一次」出现两次且是主按钮</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f">工具条底部 + 右栏</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f; font-weight: 700">P2</div>
+      <div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; font-family: 'JetBrains Mono', monospace">9</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0">下一步按钮三种样子</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f">「摆上实验台 →」蓝描边；「去组装 →」「开机看成品 →」灰，锁住也能点</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #8a5a12; font-weight: 700">P1</div>
+      <div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; font-family: 'JetBrains Mono', monospace">10</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0">锁住的步骤仍铺满三栏、显示运行状态</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f">截图 D</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f; font-weight: 700">P2</div>
+      <div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; font-family: 'JetBrains Mono', monospace">11</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0">主题切换：文字按钮「☀ 亮」与图标按钮混用</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f">截图 A</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f; font-weight: 700">P2</div>
+      <div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; font-family: 'JetBrains Mono', monospace">12</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0">商标 / ROM 来源声明只在旧实验台底部</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f">工作台没有入口</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #8a5a12; font-weight: 700">P1</div>
+      <div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; font-family: 'JetBrains Mono', monospace">13</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0">手机：旧实验台是桌面工具条折行</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f">截图 C</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #8a5a12; font-weight: 700">P1</div>
+      <div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; font-family: 'JetBrains Mono', monospace">14</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0">切换作品有两处：面包屑下拉 + 采购页底部浮条</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f">采购步骤</div><div style="padding: 8px 12px; border-top: 1px solid #f0f0f0; color: #6f6f6f; font-weight: 700">P2</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1640}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

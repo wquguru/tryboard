@@ -3067,7 +3067,7 @@ export function createBench(container: HTMLElement): Bench {
   // ---------------------------------------------------------------- 触摸圆屏（P2-02）与拖动 IMU 转台面（P2-03）
   let touchCb: ((x: number, y: number, down: boolean) => void) | null = null;
   let poseCb: ((p: Pose, phase: 'move' | 'end') => void) | null = null;
-  /** 这一次按下被触摸 / 拖 IMU 用掉了：松手时不当成点选 */
+  /** 这一次按下被按键 / 触摸 / 拖 IMU 用掉了：松手时不当成点选 */
   let consumed = false;
   let touching: { x: number; y: number; t: number } | null = null;
   const finger = new THREE.Mesh(new THREE.RingGeometry(1.6, 2.4, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthTest: false }));
@@ -3088,7 +3088,8 @@ export function createBench(container: HTMLElement): Bench {
   let rotating: { x: number; y: number; moved: boolean; t: number } | null = null;
   const imuRoot = () => partsById.get('mpu6050') ?? partsById.get('qmi8658');
   renderer.domElement.addEventListener('pointerdown', (ev) => {
-    consumed = false;
+    // 按 BOOT / RST 是操作不是点选：不换选中（右栏的示例卡、环境滑块留在原处）；pressed 由前面那个监听设好
+    consumed = !!pressed;
     const tp = touchAt(ev);
     if (tp) {
       controls.enabled = false;

@@ -246,6 +246,14 @@ export class LiveSim {
     if (e.temp !== undefined) this.env.temp = Math.max(-10, Math.min(45, e.temp));
     this.send({ type: 'env', ...this.sensed() });
   }
+  /** 虚拟电脑往 USB 串口（CDC-ACM）打字 */
+  usbCdc(text: string) {
+    this.send({ type: 'usbcdc', text });
+  }
+  /** 电位器滑片电压（mV）进 ADC 脚（进输入日志） */
+  analog(pin: number, mv: number) {
+    this.send({ type: 'analog', pin, mv });
+  }
   setOffset(d: number) {
     this.sensorOffset = d;
     this.send({ type: 'env', ...this.sensed() });

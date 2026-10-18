@@ -3,12 +3,13 @@
 // bc / 工具条 / 面板数据，只换摆法——实验台铺满台面，串口和属性面板变成底部抽屉，元件库变成整页。
 import { useRef, useSyncExternalStore, type ReactNode } from "react";
 import { cn } from "../ui/cn";
-import { actions, bc } from "./chrome";
+import { actions, bc, BLANK, EXAMPLE_ID, shownSteps } from "./chrome";
 import { Icon } from "./icons";
 import { commit, useStore } from "./react";
 import { createStore } from "./store";
 import { CmdkBox } from "./cmdk";
-import { MoreMenu, RUN_TEXT, SPEEDS, WorkMenu } from "./topbar";
+import { CRUMB, MoreMenu, RUN_TEXT, SPEEDS, WorkMenu } from "./topbar";
+import { FwMenu } from "./fwmenu";
 import { STEPS, type StepId } from "./types";
 
 const MQ = "(max-width: 767px)";
@@ -74,17 +75,18 @@ export function MobileTop({
       <div className="flex h-12 flex-none items-center gap-1 px-2.5">
         <a
           id="crumbHome"
-          href="./home.html"
-          title="回到作品列表（未保存的连线会留在本机）"
+          href={CRUMB.href}
+          title={CRUMB.title}
           className={backCls}
         >
           <Icon n="left" size={18} />
-          作品
+          {CRUMB.label}
         </a>
         <div className="flex min-w-0 flex-1 justify-center">
-          <WorkMenu name={workName} phone />
+          <WorkMenu name={EXAMPLE_ID ? `示例 · ${workName}` : workName} phone />
         </div>
         <MoreMenu toast={toast} phone />
+        <FwMenu phone />
         {/* 命令框窄屏本来就藏着（max-[1100px]:hidden），但 cmdk.ts 启动时要找到 #cmdk */}
         <CmdkBox />
       </div>
@@ -100,10 +102,10 @@ function MobileSteps({ step }: { step: StepId }) {
     <nav
       id="steps"
       role="tablist"
-      aria-label="四个步骤"
-      className="steps grid h-[50px] flex-none grid-cols-4 gap-1 px-2.5 pb-1.5"
+      aria-label={BLANK ? "两个步骤" : "四个步骤"}
+      className={cn("steps grid h-[50px] flex-none gap-1 px-2.5 pb-1.5", BLANK ? "grid-cols-2" : "grid-cols-4")}
     >
-      {STEPS.map((s, i) => {
+      {STEPS.filter((s) => shownSteps().includes(s.id)).map((s, i) => {
         const on = s.id === step;
         const lock = locks[s.id];
         return (
@@ -243,7 +245,7 @@ export function MobileStageBar({ wiring }: { wiring: boolean }) {
             }}
             className="min-h-11 flex-none cursor-pointer rounded-lg border-0 bg-fg px-3 text-[13px] font-medium text-surface"
           >
-            {cp ? "带我去" : "去组装"}
+            {cp ? "带我去" : "下一步：组装"}
           </button>
         </div>
       )}

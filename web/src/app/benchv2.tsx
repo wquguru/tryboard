@@ -709,7 +709,7 @@ export function AllPassedCard({
       <b className="block text-[13px]">{total} 个检查点全部通过</b>
       <p className="mt-1 mb-2">组装已经解锁：把台面上的东西装进外壳。</p>
       <button type="button" className={btnPri} onClick={onNext}>
-        去组装
+        下一步：组装 →
       </button>
     </div>
   );
@@ -988,18 +988,33 @@ export function EmptyBench({
       id="emptyBench"
       className="absolute top-1/2 left-1/2 z-3 w-[340px] max-w-[calc(100%-24px)] -translate-x-1/2 -translate-y-1/2 rounded-(--r) border border-line bg-surface p-4 text-fg shadow-panel"
     >
+      {/* 没固件时只有一个主按钮「换固件…」（设计稿 unify/Steps）；有固件了主按钮让给采购 */}
+      {!hasFw && <span className="block text-[11px] font-medium text-muted">没有固件</span>}
       <b className="block text-sm">台面上只有一块开发板</b>
       <p className="mt-1 mb-3 text-xs text-muted">
-        先在采购里挑零件摆上来，或者直接拖一个 ESP-IDF / Arduino 编出的 .bin
-        进来跑。
+        {hasFw
+          ? "去采购挑零件摆上来，或者从元件库拖单个零件接线。"
+          : "拖一个 ESP-IDF / Arduino 导出的 .bin 进来，或者先跑个示例。"}
       </p>
       <div className="flex flex-wrap gap-1.5">
-        <a href="#shop" className={cn(btnPri, "no-underline")}>
-          去采购挑零件
-        </a>
-        <button type="button" className={btn} onClick={onFirmware}>
-          {hasFw ? "换一个固件" : "选一个固件"}
-        </button>
+        {hasFw ? (
+          <a href="#shop" className={cn(btnPri, "no-underline")}>
+            去采购挑零件
+          </a>
+        ) : (
+          <button type="button" id="emptyFw" data-fw-open="" className={btnPri} onClick={onFirmware}>
+            换固件…
+          </button>
+        )}
+        {hasFw ? (
+          <button type="button" data-fw-open="" className={btn} onClick={onFirmware}>
+            换固件…
+          </button>
+        ) : (
+          <a href="#shop" className={cn(btn, "no-underline")}>
+            去采购挑零件
+          </a>
+        )}
       </div>
     </div>
   );

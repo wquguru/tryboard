@@ -1,4 +1,4 @@
-// 元件编辑器的数据部分（界面在 lab/Editor.tsx）：引脚表、元件描述、冲突检查。
+// 元件编辑器的数据部分（界面在 app/steps/bench.tsx）：引脚表、元件描述、冲突检查。
 // 上传自己的固件时最有用：示例自带接线，自定义固件的接线只有用户知道。
 import { BOARDS, I2S_WIRING, LCD_WIRING, type ChipId, type PartSpec, type SceneSpec } from './board3d';
 

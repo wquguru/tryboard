@@ -5,6 +5,7 @@ import type { SceneSpec } from '../../board3d';
 import { BOARDS, CHECKED_AT, PARTS, PART_BY_ID, getPart, type Kind, type Part } from '../../catalog/parts';
 import { PROCURE_TEMPLATES, bomTotal, getTemplate } from '../../catalog/templates';
 import { evaluate, type Finding } from '../../catalog/rules';
+import { wkey } from '../works';
 import { initialHistory, opLabel, placement, push, replay, ruleInput, shortName, validHistory, type Bom, type BomHistory, type BomOp } from '../bom';
 import type { StepCtx, StepImpl, WorkId } from '../types';
 import { partLabel } from '../wiring';
@@ -339,7 +340,7 @@ export function shopStep(): StepImpl {
     const h = push(hist(), op);
     if (h === hist()) return false;
     c.store.set({ bom: h });
-    saveBom(c.work.id, h);
+    saveBom(wkey(c.work), h);
     return true;
   }
 
@@ -759,7 +760,7 @@ export function shopStep(): StepImpl {
         <div className="ss-title">
           <b>{getTemplate(b.template).title}</b>
           <Muted>
-            {shortName(b.board)} · 点零件看详情，虚线是没选的建议件{b.template !== c.work.id ? ` · 摆上实验台会换到这个作品（固件跟着换）` : ''}
+            {shortName(b.board)} · 点零件看详情，虚线是没选的建议件{b.template !== c.work.id ? ` · 去实验台时会换到这个作品（固件跟着换）` : ''}
           </Muted>
         </div>
         {grp('req', '必选')}
@@ -825,7 +826,7 @@ export function shopStep(): StepImpl {
       if (t === bom().template) return c.shell.toast(`已经是「${getTemplate(t).title}」的清单`);
       commit({ t: 'template', id: t });
       const ls = linesOf(bom());
-      c.shell.toast(`套用「${getTemplate(t).title}」：必选 ${ls.filter((l) => l.required).length} 件，建议件按默认勾选${t !== c.work.id ? '；摆上实验台时会换成这个作品的固件' : ''}`);
+      c.shell.toast(`套用「${getTemplate(t).title}」：必选 ${ls.filter((l) => l.required).length} 件，建议件按默认勾选${t !== c.work.id ? '；去实验台时会换成这个作品的固件' : ''}`);
     } else if (id === 'board') boardPicker();
   }
 
@@ -834,7 +835,7 @@ export function shopStep(): StepImpl {
     if (!c || c.store.get().step !== 'shop') return;
     const h = { ...hist(), cur: i };
     c.store.set({ bom: h });
-    saveBom(c.work.id, h);
+    saveBom(wkey(c.work), h);
   }
 
   function defaultSelection() {
@@ -865,7 +866,7 @@ export function shopStep(): StepImpl {
       return;
     }
     const scene: SceneSpec = { ...c.session.scene, parts: p.parts as SceneSpec['parts'] };
-    savePlaced(c.work.id, scene, p.ext5v);
+    savePlaced(wkey(c.work), scene, p.ext5v);
     c.session.applyScene(scene, { ext5v: p.ext5v });
     location.hash = 'bench';
     c.store.set({ selection: { kind: 'power', id: 'usb' } });
@@ -888,7 +889,7 @@ export function shopStep(): StepImpl {
       if (c.store.get().selection?.kind !== 'part') c.store.set({ selection: null });
       defaultSelection();
       render();
-      c.shell.setNext('摆上实验台 →', 'bench', '', place);
+      c.shell.setNext('下一步：实验台 →', 'bench', '', place);
       unsubs = [
         c.store.subscribe(() => render(), ['selection']),
         // 清单变了（含时间线点回去）：选中的件不在新清单里就换成默认选中，再画

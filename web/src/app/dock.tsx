@@ -5,6 +5,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "../ui/cn";
 import { actions, bc, setDock, type DockTab } from "./chrome";
+import { UsbPane } from "./usbpane";
 import { Icon } from "./icons";
 import { useStore } from "./react";
 import { createStore } from "./store";
@@ -500,6 +501,7 @@ function PhoneDock({
     },
     { id: "issues", label: nIssue ? `问题 ${nIssue}` : "问题" },
     { id: "runs", label: `运行记录 ${c.runs}` },
+    ...(c.usb ? [{ id: "usb" as const, label: "USB" }] : []),
   ];
   return (
     <section
@@ -630,6 +632,11 @@ function PhoneDock({
           {cur === "issues" && (
             <div className="min-h-0 flex-1 overflow-auto border-t border-line-soft">
               <IssueList />
+            </div>
+          )}
+          {cur === "usb" && c.usb && (
+            <div className="flex min-h-0 flex-1 flex-col border-t border-line-soft">
+              <UsbPane sendCdc={(t) => actions.usbCdc?.(t)} />
             </div>
           )}
         </>
@@ -763,6 +770,15 @@ function DeskDock({
         <span className={pill(true)}>{c.issues.length}</span>
       ) : undefined,
     },
+    ...(c.usb
+      ? [
+          {
+            id: "usb" as const,
+            label: "USB",
+            title: "虚拟电脑：固件枚举出的 USB 设备、键盘打的字、USB 串口",
+          },
+        ]
+      : []),
   ];
   return (
     <section
@@ -854,6 +870,14 @@ function DeskDock({
           <SerialInput />
         </div>
         {cur === "code" && <CodePane toast={toast} />}
+        {c.usb && (
+          <div
+            hidden={cur !== "usb"}
+            className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden"
+          >
+            <UsbPane sendCdc={(t) => actions.usbCdc?.(t)} />
+          </div>
+        )}
         <div
           hidden={cur !== "runs"}
           className="flex min-h-0 flex-1 items-start overflow-auto px-3 py-2 [&[hidden]]:hidden"

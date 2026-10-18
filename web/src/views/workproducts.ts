@@ -1,5 +1,5 @@
 // P2-09 三个新作品的 2D 成品（SVG）：旋钮台灯、超声波尺子、体感小人。
-// 用在没有 WebGL 的设备上（成品步骤兜底）和旧实验台 index.html 的装配区"开机看成品"。灯色、屏幕画面全部来自模拟器。
+// 用在没有 WebGL 的设备上（成品步骤兜底）。灯色、屏幕画面全部来自模拟器。
 import { lcdImage, mount, oledImage, type LiveFrame } from './common';
 
 export interface WorkEffects {

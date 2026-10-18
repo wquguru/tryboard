@@ -2,7 +2,7 @@
 //  1. 三个作品默认接线没有问题；注入五种错误接线各标红（W1–W5），构建树"连线"显示问题数
 //  2. 点 GPIO4（真实鼠标点 3D 针脚）→ 属性面板 50 Hz + 脉宽，示波器有波形
 //  3. 点 BME280 → 快捷卡片：拖温度、热源（+8 ℃ 读数跟着变）、量到芯片（毫米）；供电切外接 5 V
-//  4. 再跑一次 → 改湿度 → 再跑（这次不编辑）→ 再跑并改温度 → 时间线点回不编辑的那次：指纹与它收尾时的一致；
+//  4. 重启（顶栏运行组）→ 改湿度 → 再跑（这次不编辑）→ 再跑并改温度 → 时间线点回不编辑的那次：指纹与它收尾时的一致；
 //     再用命令行按那次的输入日志重放到同一时刻，check.py 的指纹也一致；尺子、运行历史对比、回退后再跑丢掉后面的分支
 // 用法：node tools/webtest/interact.mjs（先 tools/build_web.sh、cargo build --release -p tryboard-cli）。截图在 Reviews/web/interact-*
 import puppeteer from 'puppeteer-core';
@@ -153,11 +153,11 @@ await waitSim(page, 1.5);
 await page.evaluate(() => globalThis.__tbApp.store.set({ selection: { kind: 'env', id: 'room' } }));
 await page.$eval('#props input[data-env="humidity"]', (r) => { r.value = '60'; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); });
 await waitSim(page, 0.8);
-await page.click('.tb-btn[data-tool="rerun"]');
+await page.click('#runRestart');
 await waitFor(page, (n) => globalThis.__tbApp.hist.runs().length > n, r1, 10000);
 await waitSim(page, 2.2);
 // 运行 #(r1+1) 期间不做编辑：时间线上"运行"这一步 = 整次运行，回退后应与收尾时的指纹一致
-await page.click('.tb-btn[data-tool="rerun"]');
+await page.click('#runRestart');
 await waitFor(page, (n) => globalThis.__tbApp.hist.runs().length > n + 1, r1, 10000);
 await waitSim(page, 0.8);
 await page.$eval('#props input[data-env="temp"]', (r) => { r.value = '12'; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); });
@@ -207,7 +207,7 @@ print(check.fingerprint(out, check.canonical_report(err)))`, out, err], { encodi
 // 从回退点改环境 = 新分支：运行 #3 被丢掉
 await page.evaluate(() => globalThis.__tbApp.hist.resume());
 await waitSim(page, 0.3);
-await page.click('.tb-btn[data-tool="rerun"]');
+await page.click('#runRestart');
 await waitFor(page, (n) => globalThis.__tbApp.hist.runs().length === n, nRun2 + 1, 10000);
 const after = await page.evaluate(() => globalThis.__tbApp.hist.runs().map((r) => r.n).join(','));
 report('回退后再跑：后面的运行丢掉、编号接着回退点', after === Array.from({ length: nRun2 + 1 }, (_, i) => i + 1).join(','), `运行 ${after}`);

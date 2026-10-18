@@ -235,7 +235,7 @@ if [ $NO_WEB = 0 ]; then
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[sense\] PASS（' || { echo "- [sense] 脚本没跑完" >> $REPORT; fail=1; }
   r=$(node tools/webtest/editor.mjs 2>&1 | tail -1)
-  echo "- 元件编辑器（上传固件 + 加 BME280 / LED）：$r" >> $REPORT
+  echo "- 元件编辑器（blink 示例上传 bme280 固件 + 元件库放 BME280）：$r" >> $REPORT
   echo "$r" | grep -q PASS || fail=1
   # 实验台改接线（U-04）：引脚圈、接错线卡片、撤销重做，改接不打断模拟
   r=$(node tools/webtest/wiremode.mjs 2>&1 | grep '^\[wiremode\]')

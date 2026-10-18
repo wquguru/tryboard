@@ -31,6 +31,8 @@ const P: Record<string, string> = {
   cursor: 'M5 3l14 7-6 2-2 6z',
   meter: 'M6 3h12v18H6zM9 7h6v4H9zM10 16h.01M14 16h.01',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
+  sound: 'M4 9h4l5-4v14l-5-4H4zM16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12',
+  mute: 'M4 9h4l5-4v14l-5-4H4zM17 9l5 6M22 9l-5 6',
   wire: 'M5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM19 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM6.5 15.5C9 9 13 15 17.5 8.5',
 };
 

@@ -68,22 +68,3 @@ export function initTheme() {
     if (!stored()) apply(e.matches ? 'dark' : 'light');
   });
 }
-
-/** 一个切换按钮：文字 + 图形一起表达当前状态（不只靠颜色） */
-export function themeToggle(cls = 'theme-btn') {
-  initTheme();
-  const b = document.createElement('button');
-  b.type = 'button';
-  b.className = cls;
-  const sync = () => {
-    const dark = currentTheme() === 'dark';
-    b.textContent = dark ? '☾ 暗' : '☀ 亮';
-    b.title = dark ? '切到亮色' : '切到暗色';
-    b.setAttribute('aria-label', b.title);
-    b.setAttribute('aria-pressed', String(dark));
-  };
-  sync();
-  onTheme(sync);
-  b.onclick = () => setTheme(currentTheme() === 'dark' ? 'light' : 'dark');
-  return b;
-}

@@ -43,7 +43,7 @@ export function createCmdk(ctx: StepCtx): Cmdk {
   const input = document.getElementById('cmdk') as HTMLInputElement;
   const list = { get hidden() { return !view.get().open; } };
   input.placeholder = '搜命令、零件、引脚';
-  input.title = '如：室温 35、GPIO8、再跑一次';
+  input.title = '如：室温 35、GPIO8、重启';
 
   let shown: Item[] = [];
   let sel = 0;
@@ -106,7 +106,7 @@ export function createCmdk(ctx: StepCtx): Cmdk {
       { id: 'meter3v3', group: '命令', label: '量 3V3', meta: '万用表', keys: '万用表 电压 3.3 3v3 multimeter liang', run: () => { select('pin', '3V3'); shell.toast('先选中 3V3 引脚；要读电压，按工具条「万用表」再点 3V3'); } },
       { id: 'power:ext', group: '命令', label: '换外接 5 V 并重跑', meta: '供电', keys: '外接 5v 电源 power ext 重跑 舵机', run: () => powerRerun(true) },
       { id: 'power:usb', group: '命令', label: '换回 USB 供电并重跑', meta: '供电', keys: 'usb 电脑 power 重跑', run: () => powerRerun(false) },
-      { id: 'rerun', group: '命令', label: '再跑一次（重新上电）', meta: '运行', keys: 'rerun reboot 重新上电 复位 reset', run: () => { goBench(); session.reboot(); } },
+      { id: 'rerun', group: '命令', label: '重启（重新上电）', meta: '运行', keys: 'rerun reboot 重新上电 复位 reset', run: () => { goBench(); session.reboot(); } },
       { id: 'analyzer', group: '命令', label: ana.isOpen ? '关闭逻辑分析仪' : '打开逻辑分析仪', meta: '示波器', keys: '逻辑分析仪 示波器 波形 scope analyzer i2c pwm luoji', run: () => { goBench(); ana.toggle(); } },
     );
     for (const [id, name, keys] of STEP_NAMES) out.push({ id: `step:${id}`, group: '命令', label: `切到${name}`, meta: '步骤', keys: `${keys} 切到 去`, run: () => { location.hash = id; } });

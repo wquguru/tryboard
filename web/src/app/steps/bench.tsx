@@ -2,6 +2,7 @@
 // + 快捷卡片（P0-04）+ 针脚实时值与示波器（P0-11）+ 接线规则检查（P0-12）+ 尺子与运行历史（P0-13）。
 // 点树和点台面（ScenePickApi.onPick）改的是同一个 selection；属性面板只跟着 selection 走。
 // 面板由 React 画（选中变了整块重画）；实时读数（每帧）仍按 data-live 直接改文字，不经 React 状态。
+import { openFwMenu } from "../fwmenu";
 import { useState, type ReactNode } from "react";
 import type { PickTarget, ScreenPoint } from "../../scene-api";
 import { CHIP_HEAT_OFFSET } from "../../views/templates";
@@ -37,6 +38,7 @@ import type {
   Selection,
   StepCtx,
   StepImpl,
+  WorkDef,
 } from "../types";
 import { getAnalyzer } from "../analyzer";
 import { extModelsOn, setExtModels } from "../../extmodels";
@@ -78,6 +80,8 @@ import {
   VerdictLine,
 } from "../../ui/panel";
 import { noteSaved } from "../saved";
+import { CHIP_NAME, chipOf, loadExamples, type AnalogControl, type Example } from "../examples";
+import { HOME_WORKS } from "../works";
 import { actions, bc, overlay, setBc, setDock, type Issue } from "../chrome";
 import { replay } from "../bom";
 import { isPhone, phoneProps, setMui } from "../mobile";
@@ -213,6 +217,8 @@ export function benchStep(): StepImpl {
   };
   /** 选中的那根针的采样（示波器小窗） */
   const trace = new PinTrace();
+  /** 空白实验台跑示例时（?example=）：右栏没选中东西就显示「这个示例」说明卡（DESIGN_V2 §6.1） */
+  let exInfo: { ex: Example; work: WorkDef | null } | null = null;
   /** 尺子：工具条"尺子"按下后，台面上点两个目标 */
   let ruler: {
     a: PickTarget | null;
@@ -918,7 +924,7 @@ export function benchStep(): StepImpl {
       parts.length || placing ? null : (
         <EmptyBench
           hasFw={!!ses.fwName}
-          onFirmware={() => document.getElementById("fwPick")?.click()}
+          onFirmware={openFwMenu}
         />
       ),
     );
@@ -984,7 +990,8 @@ export function benchStep(): StepImpl {
     const c = ctx!;
     const s = c.store.get();
     const sel = s.selection;
-    if (!sel)
+    if (!sel && exInfo) renderExample();
+    else if (!sel)
       show(
         <>
           <Sec>属性</Sec>
@@ -2210,6 +2217,128 @@ export function benchStep(): StepImpl {
     );
   }
 
+  /** 「这个示例」：说明、标签、模拟输入滑块（.env 里的滑块是回归脚本拖的那几个），再指一个用同类器件的作品 */
+  /** 麦克风声源（与旧实验台同一组：测试 WAV 进验收，浏览器麦克风只玩） */
+  const MIC_SOURCES: [string, string][] = [
+    ["sine1k.wav", "1 kHz 正弦（测试 WAV）"],
+    ["sweep.wav", "扫频 200→2000 Hz（测试 WAV）"],
+    ["silence", "安静"],
+    ["live", "浏览器麦克风（要授权，只玩不进验收）"],
+  ];
+
+  function renderExample() {
+    const c = ctx!;
+    const { ex, work } = exInfo!;
+    const ctl = ex.controls ?? [];
+    const analogs = ctl.filter((k): k is AnalogControl => typeof k === "object" && k.type === "analog");
+    show(
+      <>
+        <Sec>这个示例</Sec>
+        <Ph>{ex.title}</Ph>
+        <Note>{ex.about}</Note>
+        <div className="mb-1 flex flex-wrap gap-1.5" data-ex-tags>
+          {[CHIP_NAME[chipOf(ex)], ...ex.tags].map((t) => (
+            <span
+              key={t}
+              className={cn(
+                "rounded-md px-2 py-0.5 text-[11px]",
+                t.startsWith("✓") ? "bg-ok-bg text-ok-ink" : "bg-field text-muted",
+              )}
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+        {(ctl.includes("env") || analogs.length > 0 || (ctl.includes("imu") && c.session.hasImu())) && (
+          <div className="env">
+            {ctl.includes("env") && (
+              <>
+                <Sec>环境 · 拖动看读数跟着变</Sec>
+                {ENV_ROWS.map(([k, n, min, max, step]) => (
+                  <KvBox key={k}>
+                    <span className="k">{n}</span>
+                    {envSlider(k, n, min, max, step)}
+                  </KvBox>
+                ))}
+                <Kv k="固件读到" live="rt" />
+              </>
+            )}
+            {analogs.map((a) => {
+              const mv = c.session.analog.get(a.pin) ?? a.value;
+              return (
+                <KvBox key={a.pin}>
+                  <span className="k">{a.label}</span>
+                  <Slider
+                    min={0}
+                    max={a.max_mv}
+                    step={10}
+                    defaultValue={mv}
+                    data-analog={a.pin}
+                    aria-label={a.label}
+                    out={`${mv} mV`}
+                    on={{
+                      input: (e) => {
+                        const v = Number(e.currentTarget.value);
+                        outOf(e.currentTarget)!.textContent = `${v} mV`;
+                        c.session.setAnalog(a.pin, v);
+                      },
+                    }}
+                  />
+                </KvBox>
+              );
+            })}
+            {ctl.includes("imu") && c.session.hasImu() && (
+              <>
+                <Sec>倾斜台面</Sec>
+                {poseSliders()}
+                <Kv k="固件读到" live="ipr" />
+              </>
+            )}
+          </div>
+        )}
+        {c.session.scene.parts.some((p) => p.type === "inmp441") && (
+          <>
+            <Sec>麦克风声源</Sec>
+            <select
+              id="micSource"
+              aria-label="麦克风声源"
+              defaultValue={c.session.micSource}
+              className="h-9 w-full cursor-pointer rounded-md border border-line bg-surface px-2 text-[13px] text-fg max-md:h-11"
+              onChange={(e) => {
+                const st = document.getElementById("micStatus");
+                if (st) st.textContent = "";
+                void c.session.setMicSource(e.currentTarget.value).then((msg) => {
+                  if (st) st.textContent = msg;
+                  if (msg) e.currentTarget.value = c.session.micSource;
+                });
+              }}
+            >
+              {MIC_SOURCES.map(([v, t]) => (
+                <option key={v} value={v}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <div id="micStatus" className="mt-1 text-xs text-muted" />
+          </>
+        )}
+        {work && (
+          <>
+            <Sec>做成成品</Sec>
+            <a
+              className="text-accent-ink hover:underline"
+              href={`./app.html?work=${work.id}#shop`}
+              data-ex-work={work.id}
+            >
+              {work.title} · {work.card?.chip ?? ""} →
+            </a>
+          </>
+        )}
+        <Note>点左边的构建树或台面上的零件看它的属性。</Note>
+      </>,
+    );
+  }
+
   /** 文件读不出来（被移走、没权限）时给提示，不抛到页面上 */
   const safeFile = (handle: (f: File) => Promise<void>) => (f: File) =>
     void handle(f).catch((e) =>
@@ -2243,11 +2372,6 @@ export function benchStep(): StepImpl {
             renderFirmware();
           })}
         />
-        <Btns>
-          <Btn primary id="rerun" onClick={() => ses.reboot()}>
-            再跑一次
-          </Btn>
-        </Btns>
       </>,
     );
   }
@@ -2689,11 +2813,18 @@ export function benchStep(): StepImpl {
     const c = ctx!;
     const n = c.work.checkpoints.length;
     const done = passedCount(c);
+    // 空白作品没有组装 / 成品（步骤条只有两步）：右上换成去挑一个作品
+    if (c.work.id === "blank")
+      return c.shell.setNext("想装壳？挑个作品 →", "bench", "", () =>
+        location.assign("./home.html#works"),
+      );
     // 倾角仪没有检查点和组装模版：成品（端在手里转的盒子）随时能看
-    if (c.work.id === "imu") return c.shell.setNext("看成品 →", "product");
+    if (c.work.id === "imu") return c.shell.setNext("下一步：成品 →", "product");
+    if (n && done === n)
+      return c.shell.setNext("下一步：组装 →", "assemble", "", undefined, "hot");
     c.shell.setNext(
-      "去组装 →",
-      n && done === n ? "assemble" : null,
+      `组装 · 还差 ${n - done} 个检查点`,
+      null,
       `检查点全部通过（${done}/${n}）才能组装`,
     );
   }
@@ -2969,7 +3100,6 @@ export function benchStep(): StepImpl {
       if (wiring) setWiring(false);
       setRuler(!ruler);
     } else if (id === "meter") setMeter(!meter);
-    else if (id === "rerun") c.session.reboot();
     else if (id === "heat") toggleHeat();
     else if (id === "scope") getAnalyzer(c).toggle();
     else if (id === "ext") {
@@ -3139,6 +3269,13 @@ export function benchStep(): StepImpl {
       toolbarRef = c.shell.toolbar;
       if (!hooked) {
         hooked = true;
+        if (c.work.id === "blank" && c.work.example)
+          void loadExamples().then((list) => {
+            const ex = list.find((e) => e.id === c.work.example);
+            if (!ex) return;
+            exInfo = { ex, work: relatedWork(ex, list) };
+            if (ctx && ctx.store.get().step === "bench" && !ctx.store.get().selection) renderProps();
+          });
         c.session.pick.onPick?.(onPick);
         c.shell.toolbar.onTool(onTool);
         c.shell.card.onHide(() => {
@@ -3285,10 +3422,7 @@ export function benchStep(): StepImpl {
             { id: "button", label: "按 BOOT" },
           ],
         },
-        {
-          id: "run",
-          tools: [{ id: "rerun", label: "再跑一次", primary: true }],
-        },
+        // 重跑在顶栏运行组（重启），工具条不再重复放（DESIGN_V2 §6.3）
       ]);
       c.shell.toolbar.setActive(
         ruler ? "ruler" : meter ? "meter" : wiring ? "wire" : "select",
@@ -3296,7 +3430,8 @@ export function benchStep(): StepImpl {
       const pinDev = c.session.scene.parts.find(
         (p) => p.type === "encoder" || p.type === "hcsr04",
       );
-      if (!c.store.get().selection)
+      // 跑示例时右栏默认是「这个示例」卡（说明 + 滑块），不抢先选中固件；编码器 / 超声波的调节在零件属性里，照旧选中
+      if (!c.store.get().selection && !(c.work.example && !pinDev))
         c.store.set({
           selection: c.work.checkpoints.length
             ? { kind: "part", id: "bme280" }
@@ -3432,5 +3567,20 @@ function PartHead({ name, type }: { name: string; type: string }) {
       <Ph className="mb-0 min-w-0">{name}</Ph>
       {conf && <ConfBadge c={conf} />}
     </div>
+  );
+}
+
+/** 用到同一类主要器件的作品（灯、按键这类常见件不算），没有就不指 */
+function relatedWork(ex: Example, list: Example[]): WorkDef | null {
+  const common = new Set(["led", "button", "key", "buzzer"]);
+  const types = new Set((ex.scene?.parts ?? []).map((p) => p.type).filter((t) => !common.has(t)));
+  if (!types.size) return null;
+  return (
+    HOME_WORKS.find((w) => {
+      if (!w.checkpoints.length || !w.example) return false;
+      if (w.example === ex.id) return true;
+      const we = list.find((e) => e.id === w.example);
+      return (we?.scene?.parts ?? []).some((p) => types.has(p.type));
+    }) ?? null
   );
 }

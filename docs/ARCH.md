@@ -69,7 +69,7 @@ web/（Vite + TS）
 - wasm 导出见 `core/crates/wasm/src/lib.rs`（`tb_*`）。没有 import，实例化时传 `{}`。主线程先读镜像头判断芯片、下载对应 ROM，再 `tb_boot`；`tb_chip` / `tb_boot_pin` 告诉前端换哪块板、BOOT 键在哪个脚；S3 的 GPIO32 以上用 `tb_gpio_level_hi` / `tb_gpio_enable_hi`。
 - 资源：`/wasm/tryboard.wasm`、`/rom/esp32c3_rev3_rom.elf`（附 Apache-2.0 LICENSE）、`/fw/<示例>/flash.bin` 与 `/fw/examples.json`。
 - 渲染：three.js WebGL2 + 后期泛光（LED 发光）。WebGPU 等 three 的 WebGPU 渲染器稳定后再切。
-- 页面：`index.html` 实验台（React 外壳 `src/lab/App.tsx` + 命令式控制器 `src/lab/lab.ts`，见下节）、`home.html` 首页（React，`src/home/App.tsx`；作品卡的示意图 / 真实固件运行在 `src/home/cards.ts`）、`levels.html` 旧关卡链接跳转页（纯 html，`<head>` 里跳到实验台检查点）、`advisor.html` 选型（React，`src/advisor/App.tsx`，见下节）。公共资源加载在 `assets.ts`；首页的实时运行用 `live.ts`（包一层 worker.ts）。
+- 页面：`app.html` 工作台（采购 / 实验台 / 组装 / 成品四步，`src/app/`；示例 = `?work=blank&example=<id>#bench`）、`index.html` 旧实验台链接跳转页（纯 html，`?example=` 转到工作台示例）、`home.html` 首页（React，`src/home/App.tsx`；作品卡的示意图 / 真实固件运行在 `src/home/cards.ts`）、`levels.html` 旧关卡链接跳转页（纯 html，`<head>` 里跳到实验台检查点）、`advisor.html` 选型（React，`src/advisor/App.tsx`，见下节）。公共资源加载在 `assets.ts`；首页的实时运行用 `live.ts`（包一层 worker.ts）。
 - SVG 视图（`src/views/`）：`bench`（面包板）、`product`（成品）、`assembly`（拖拽装配，装完切到成品）、`showcase`（成品示意，不跑固件）。视图只画，数据来自模拟器帧（OLED 像素、各脚 PWM 占空比、板载 WS2812）；舵机角度由 50 Hz 脉宽换算。
 - SVG 视图补充：`templates.ts` 是装配模板（零件、装法、检查、影响、成品工厂），`assembly.ts` 只是通用引擎；`lcdproducts.ts` 是圆屏成品（spin / lens），画面来自 worker 的 `lcd` 消息（GC9A01 240×240 RGBA，变化才发、≤ 30 帧/秒）。3D 实验台里圆屏是一块圆形贴图（board3d.ts `roundLcdModule`）。
 - PWM 观察：CLI 与网页在汇总行之后都输出 `[tryboard] PWM GPIOn 变化 占空比@时刻 …`（三位小数相同的相邻记录合并），关卡用它判"脉宽依次出现的台阶"（`pwm.steps`）和"稳定以后的值"（`pwm.from` 秒）。
@@ -88,7 +88,7 @@ web/（Vite + TS）
 - 页面入口：`<页面>.html` 里只放 `<div id="root">` 和 `src/<页面>/main.tsx`；`<head>` 的主题内联脚本保留（首帧前定 data-theme）。Tailwind preflight 只在引了 `ui/tailwind.css` 的页面生效，没迁的页面不受影响。
 - 颜色：只用 token 类（`bg-surface`、`text-muted`、`border-line`…），不写十六进制。浅底上的文字用 `*-ink`（`text-accent-ink`、`text-ok-ink`…，WCAG AA 4.5:1），白字蓝底用 `bg-accent-strong`；原色（`accent` / `ok` / `warn` / `bad`）只用于边框、圆点、图形。暗色下 ink 与原色相同。页面不各自定义变量。首页沿用 DESIGN §2 的白底蓝色（A 版）；原 site.css 的暖灰橙色板没有页面在用，已删除，没有映射进 `ui/`（DECISIONS 2026-10-17「首页、关卡页迁 React」）。台面渐变 `--stage-bg` 也在 tailwind.css 里（不是颜色 token，用 `[background:var(--stage-bg)]`）。
 - 命令式模块（three.js 场景、worker、wasm、canvas 逻辑分析仪 / 波形 / 示波器）不进 React 渲染：组件里 `useRef` 拿容器、`useEffect` 里创建并在清理函数里销毁。每秒十次以上的数据（模拟时间、串口流、tick 帧）不放进 React state：直接写 DOM ref 或 canvas，或经外部 store + `useSyncExternalStore` 且节流到 ≤ 10 Hz。
-- 实验台（index.html）：`src/lab/lab.ts` 是原 main.ts 搬过来的命令式控制器（3D 台面、worker、音频、装配视图、输入日志），接 React 给的容器 ref（舞台、串口 `<pre>`、模拟时间、实时比、装配框、滑块框），低频界面状态写进 `lab/store.ts` 的外部 store（选中示例、上电就绪、运行中、场景、滑块组、视图），React 用 `useSyncExternalStore` 读；USB 面板的数据节流到 ≤ 10 Hz（`createUsbFeed`），鼠标轨迹画在 canvas。滑块是非受控的、监听原生 `input`（`onInput`）：验收脚本"改 value + 派发 input"和 3D 拖旋钮都直接改 DOM，受控输入会被 React 的值追踪吞掉事件。入口不包 StrictMode（开发时双挂载会建两个 worker / WebGL 上下文）。元件编辑器的数据与冲突检查仍在 `src/editor.ts`，界面是 `lab/Editor.tsx`。`views/views.css`（装配视图）由 app.html / home.html 共用，实验台在 main.tsx 里 import 它。
+- 旧实验台（index.html，`src/lab/`）已在 U-07（2026-10-17）删除：功能全部并入 app.html 的实验台步骤（`src/app/steps/bench.tsx` + `src/app/session.ts`），示例卡、麦克风声源、换固件、元件库、输入日志导出都在那里。元件编辑器的数据与冲突检查仍在 `src/editor.ts`。`views/views.css`（装配视图）由 app.html / home.html 共用。
 - 不用 `innerHTML` / `dangerouslySetInnerHTML`（JSX 默认转义）；确有必要（如授权页的生成 HTML）写明来源可信的理由。
 - 测试契约：`tools/webtest/*.mjs` 依赖的 id / class / `data-*` / 文案保持不变；确要改，同一提交里改测试脚本，判据不放宽。每迁一页要做：新旧页面状态逐条文字对比（脚本放 `Reviews/ab/react/`）、agent-browser 亮色 / 暗色 / 390px 宽走查截图、`agent-browser a11y` 零违规、console 无 error、`tools/accept.sh --no-qemu` 全过。
 
