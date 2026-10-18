@@ -271,15 +271,25 @@ export function MoreMenu({ toast, phone }: { toast: (t: string) => void; phone?:
               <span className="block text-[11px] text-muted">当前检查点的目标、接线和验收命令</span>
             </span>
           </button>
+          {/* 换固件：手机顶栏没地方放；窄桌面（≤ 1100px）顶栏的「换固件 ▾」也收起了，都从 ⋯ 进 */}
+          <button
+            type="button"
+            role="menuitem"
+            id={phone ? 'swapFw' : undefined}
+            data-more="fw"
+            data-fw-open=""
+            className={cn(menuItem, !phone && 'min-[1101px]:hidden')}
+            disabled={!actions.pickFirmware}
+            onClick={go(openFwMenu)}
+          >
+            <Icon n="upload" size={15} />
+            <span className="flex-1">
+              换固件
+              <span className="block text-[11px] text-muted">示例、参考固件或你自己的 .bin</span>
+            </span>
+          </button>
           {phone && (
             <>
-              <button type="button" role="menuitem" id="swapFw" data-more="fw" data-fw-open="" className={menuItem} disabled={!actions.pickFirmware} onClick={go(openFwMenu)}>
-                <Icon n="upload" size={15} />
-                <span className="flex-1">
-                  换固件
-                  <span className="block text-[11px] text-muted">示例、参考固件或你自己的 .bin</span>
-                </span>
-              </button>
               <button type="button" role="menuitem" data-more="theme" className={cn(menuItem, 'theme-btn')} aria-pressed={dark} onClick={go(() => setTheme(dark ? 'light' : 'dark'))}>
                 <Icon n={dark ? 'moon' : 'sun'} size={15} />
                 <span className="flex-1">{dark ? '切到亮色' : '切到暗色'}</span>
