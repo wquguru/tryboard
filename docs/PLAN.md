@@ -68,7 +68,7 @@
 | P2-04 | HC-SR04（RMT 接收 / 定时，3D 射线测距） | 固件验收 | ☑ 2026-10-16：HC-SR04 引脚器件（Trig → Echo 宽 = 2 × 距离 / 343 m/s）；s3-ultrasonic accept 覆盖 25 / 100 / 300 cm + 超量程；3D 障碍物拖动（射线测距）、滑块 / 快捷按钮；Echo 5 V 风险进接线检查 W2（复用 R17）；15 mA 进 5V 轨（Reviews/ab/P2-04.md） |
 | P2-05 | RMT 接收 | 固件验收 | ☑ 2026-10-16：RMT 接收通道（S3 / C3 布局）+ 滤波 + 空闲结束 + 乒乓阈值；s3-ultrasonic 用 IDF rmt_rx 测 Echo 宽度；C3 只有单元测试（Reviews/ab/P2-05.md） |
 | P2-06 | I2S + GDMA 接收：MAX98357A 放音、INMP441（验收用固定 WAV，网页可接麦克风） | 固件验收；Web Audio 采样比对 | ☑ s3-i2s-tone（喇叭 440.0 Hz，网页输出端也测得 440.0 Hz）、s3-i2s-mic（I2S1，读回 WAV 1000.0 Hz / RMS 0.3533）；C3 的 I2S0 只有单元测试 |
-| P2-07 | LVGL：先测速度，够则支持动画 | 基准报告 | ◐ 能跑动画、模拟时间帧率正确；整屏重画的界面网页只有约 0.2–0.4× 实时（未达 0.5×），见 STATUS「LVGL」与 Reviews/ab/P2-07.md |
+| P2-07 | LVGL：先测速度，够则支持动画 | 基准报告 | ☑ 能跑动画、模拟时间帧率正确；整屏重画的界面网页 0.51–0.53× 实时（2026-10-17 预解码缓存 + worker 调度后，负载 < 4 时测），见 STATUS「LVGL」与 Reviews/ab/P2-07.md |
 | P2-08 | S3 Wi-Fi（复用 C3 MAC 模型） | wifi-http S3 版 | ☑ 2026-10-16：MAC 模型移到 tryboard-soc 共用；s3-wifi-init / scan / connect / http / wpa2 验收通过，网页 s3-wifi-http（Reviews/ab/P2-08.md） |
 | P2-09 | 新作品：旋钮台灯、超声波尺子、体感小人、USB 小键盘（各含检查点、参考固件、采购模版、成品） | 参考固件全过 | ☑ 2026-10-16：lamp / ruler / tilt 三条作品线（各 3 个检查点、9 份参考固件、采购模版、平面装配 + 一处装法影响、three.js 成品、首页卡片自动出现）；新判定 `ws2812.last`、`pwm.beeps`、`lcd_colors.cy`（check.py / checks.ts 同步）；check.py --ref --all 与网页指纹逐关一致（Reviews/ab/P2-09.md）。USB 小键盘由 P2-12 完成；可选的「会说话的小黄」没做；新作品组装是平面 SVG，参数化 3D 外壳没做 |
 | P2-10 | 拍照（path tracer 静帧）/ 录 10 秒 | 生成文件 | ☑ 2026-10-16：没装 three-gpu-pathtracer，改用 2× 输出 + 超采样 + 渐变背景；录像 MediaRecorder webm 含声音；media.mjs 检查文件（Reviews/ab/P2-10.md） |
@@ -87,7 +87,7 @@
 | P2-17 | 手机成品全屏 3D：3D 占满、底部串口一行 + 按键网格（BOOT / 热源 / 等作品按键），按 DESIGN_V2 §5 | mobile.mjs 增用例；390×844 agent-browser 截图无横向滚动、console 无 error | ☑ 3D 占满顶栏到底部面板，可拖转、双指缩放（OrbitControls 默认）；底部一行串口（点开即实验台同一串口抽屉半屏）+ 4 列按键格，键取自各作品真实交互（weather BOOT/热源、spin/lens BOOT、lamp 旋钮 ±1/按、ruler 挡板近/远、tilt/imu 放低/放平、usbkey K1–K4）+ 声音/拍照/录像/复位视角/详情/再跑一次；mobile.mjs 增 8 个成品用例全过（Reviews/ab/P2-17.md）。未做：真机触屏、双指缩放无自动化用例；手机成品页不再显示零件 / 装法树 |
 | P2-18 | 触摸屏 FT6236（P2-02 尾巴）：I2C 0x38 模型 + 验收固件 | 固件验收进 accept.json | ☑ 2026-10-17：`devices/ft6236.rs`（按 FT6x36 数据手册：CIPHER 0x36、TD_STATUS、P1 事件 / 12 位坐标、G_MODE），CLI `--i2c ft6236@0x38` + 与 CST816S 相同的 touch 脚本；固件 s3-ft6236（裸 i2c_master，INT 下降沿 + 轮询），accept s3-ft6236 / -poll / -absent；网页未挂（可选项，未做） |
 | P2-19 | 字体自托管（P0-20 尾巴）：Noto Sans SC、JetBrains Mono 子集化 WOFF2，附 OFL.txt，去掉 Google Fonts 外链，授权页列出 | 构建产物无 fonts.googleapis 引用；授权页有字体条目；agent-browser 截图字形正常 | ☑ tools/fonts/fetch.sh 从 google/fonts 固定提交下载 + sha256；subset.py（tools/fonts/.venv 里的 fonttools）子集化：用到的字 ∪ GB2312 一级字 → tb-sans-sc.woff2 ≈1.05 MB、tb-mono.woff2 66 KB；dist 无 googleapis / gstatic，授权页有字体条目 + OFL 全文，Network 只有本站字体（Reviews/ab/P2-19.md）。未做：按页面拆分子集 / unicode-range 分片 |
-| P2-07 | （续）LVGL 网页实时倍率 ≥ 0.5× | 空闲机器上 `tools/bench_wasm.mjs` 与网页右上角倍率；45 个验收输出与关卡指纹逐字节不变 | 见上表 |
+| P2-07 | （续）LVGL 网页实时倍率 ≥ 0.5× | 空闲机器上 `tools/bench_wasm.mjs` 与网页右上角倍率；45 个验收输出与关卡指纹逐字节不变 | ☑ Node 0.43→0.50–0.51×、网页 0.34→0.51–0.53×、CLI 0.645→0.78×；81 个 accept 用例 stdout、24 个关卡指纹、LCD ppm、trace-io 前后逐字节相同 |
 
 ## UI v2 · 设计 v2 落地（2026-10-17，规范见 DESIGN_V2.md）
 | ID | 内容 | 验收 | 状态 |

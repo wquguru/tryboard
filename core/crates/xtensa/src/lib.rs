@@ -6,6 +6,7 @@
 //! 定时器中断来自 CCOMPARE0..2（线 6 / 15 / 16）。FPU（单精度，CP0，受 CPENABLE 门控）与 MAC16 见 fpu.rs / mac16.rs。
 //! 未实现：PIE（EE.*）指令，按非法指令（EXCCAUSE 0）进异常。
 
+mod fast;
 mod fpu;
 mod mac16;
 pub mod sr;
@@ -176,6 +177,8 @@ pub struct Cpu {
     irq_ext: u32,
     /// 锁存的挂起位：边沿、NMI、软件、定时器
     irq_latched: u32,
+    /// 见 refresh_irq
+    irq_maybe: bool,
     /// 上次检查 CCOMPARE 时的周期数
     last_cc: u64,
     /// 最早可能触发 CCOMPARE 的周期（绝对值）；cycles 没到它时 tick_timers 什么都不用做。写 CCOMPARE / CCOUNT 时清 0 强制重算
@@ -190,6 +193,8 @@ pub struct Cpu {
     pub fr: [u32; 16],
     pub fcr: u32,
     pub fsr: u32,
+    /// 预解码指令缓存（见 fast.rs）。命中要求 PC 与原始字节都相同，所以改代码不用通知它
+    dcache: Box<[fast::Dec; fast::DCACHE_SIZE]>,
 }
 
 impl Default for Cpu {
@@ -216,6 +221,7 @@ impl Cpu {
             prid: 0xcdcd,
             irq_ext: 0,
             irq_latched: 0,
+            irq_maybe: false,
             last_cc: 0,
             cc_next: 0,
             ccount_off: 0,
@@ -225,6 +231,7 @@ impl Cpu {
             fr: [0; 16],
             fcr: 0,
             fsr: 0,
+            dcache: fast::new_cache(),
         };
         // 复位：PS.INTLEVEL=15、EXCM=1；VECBASE 复位值
         c.sr[sr::PS as usize] = 0x1f;
@@ -306,6 +313,7 @@ impl Cpu {
             }
             _ => self.sr[n as usize & 0xff] = v,
         }
+        self.refresh_irq();
     }
 
     pub fn read_ur(&self, n: u32) -> u32 {
@@ -332,6 +340,7 @@ impl Cpu {
         let rising = mask & !self.irq_ext;
         self.irq_latched |= rising & (irq::EXT_EDGE | irq::NMI);
         self.irq_ext = mask;
+        self.refresh_irq();
     }
 
     /// INTERRUPT 寄存器：挂起的中断
@@ -379,6 +388,7 @@ impl Cpu {
         }
         self.last_cc = now;
         self.cc_next = next;
+        self.refresh_irq();
     }
 
     /// 下一个能唤醒 CPU 的定时器事件（绝对周期数），供 SoC 在 WAITI 时快进
@@ -466,22 +476,12 @@ impl Cpu {
         self.waiting = false;
     }
 
-    /// 窗口溢出检查：指令要用到当前窗口的第 max_quad 个四元组（0..=3）。
+    /// 窗口溢出：指令要用到当前窗口的第 max_quad 个四元组（0..=3）。
     /// 若中间某个四元组属于别的活帧（WINDOWSTART 位为 1），先把其中最老的帧溢出到栈上。
-    /// 返回 true 表示已进入溢出处理程序（本条指令稍后重新执行）。
-    #[inline(always)]
-    fn window_check(&mut self, insn: u32, narrow: bool) -> bool {
-        let ps = self.ps();
-        if ps & PS_WOE == 0 || ps & PS_EXCM != 0 {
-            return false;
-        }
+    /// 返回 true 表示已进入溢出处理程序（本条指令稍后重新执行）。快路径在 fast.rs 的 window_check_dec
+    #[inline(never)]
+    fn window_spill(&mut self, max_quad: u32, ps: u32) -> bool {
         let wb = self.windowbase;
-        // 快路径：当前窗口往上 3 个四元组都不属于别的活帧时，不论指令用到哪个都不会溢出
-        let ws = self.windowstart | (self.windowstart << 16);
-        if (ws >> (wb + 1)) & 7 == 0 {
-            return false;
-        }
-        let max_quad = max_quad(insn, narrow, ps);
         if max_quad == 0 {
             return false;
         }
@@ -503,39 +503,72 @@ impl Cpu {
     }
 
     // ------------------------------------------------------------ 执行
-    #[inline(always)]
+    /// 单步执行一条指令（或进中断、或等中断）
     pub fn step<B: Bus>(&mut self, bus: &mut B) -> Exit {
-        self.tick_timers();
-        let level = self.irq_to_take();
-        if level != 0 {
-            self.take_interrupt(level);
-            return Exit::Normal;
+        // 外部可能直接改过 pub 字段（sr、周期数），先按当前状态重算中断标志
+        self.refresh_irq();
+        let mut cycles = self.cycles;
+        let mut retired = 0;
+        let e = self.step_inner(bus, &mut cycles, &mut retired);
+        self.cycles = cycles;
+        self.instret += retired;
+        e
+    }
+
+    /// `self.irq_maybe` = 有挂起且已使能的中断（不看 PS 级别，所以是 irq_to_take≠0 的超集）。
+    /// 挂起位 / INTENABLE 变化的地方都要调它
+    #[inline(always)]
+    fn refresh_irq(&mut self) {
+        self.irq_maybe = (self.irq_latched | self.irq_ext) & self.sr[sr::INTENABLE as usize] != 0;
+    }
+
+    /// step 的本体。周期数与退休指令数放在调用者的局部变量里（批量执行时在寄存器里，不用每条指令读写内存）；
+    /// 会读 `self.cycles` 的路径（定时器结算、走通用解码的特殊指令）前后同步
+    #[inline(always)]
+    fn step_inner<B: Bus>(&mut self, bus: &mut B, cycles: &mut u64, retired: &mut u64) -> Exit {
+        if *cycles >= self.cc_next {
+            self.cycles = *cycles;
+            self.tick_timers_slow();
+        }
+        if self.irq_maybe {
+            let level = self.irq_to_take();
+            if level != 0 {
+                self.take_interrupt(level);
+                return Exit::Normal;
+            }
         }
         if self.waiting {
-            self.cycles += 1;
+            *cycles += 1;
             return Exit::Waiti;
         }
         let pc = self.pc;
         if pc >= self.hle_lo && pc < self.hle_hi && self.hle_addrs.binary_search(&pc).is_ok() {
             return Exit::Hle(pc);
         }
-        let insn = match bus.fetch(pc) {
-            Ok(v) => v,
+        let d = match self.fetch_dec(bus, pc) {
+            Ok(d) => d,
             Err(_) => {
                 self.exception(cause::INSN_FETCH_ERROR, pc);
                 return Exit::Normal;
             }
         };
-        self.cycles += 1;
-        let narrow = is_narrow(insn);
-        let len = if narrow { 2 } else { 3 };
-        if self.window_check(insn, narrow) {
+        *cycles += 1;
+        let len = d.len as u32;
+        if self.window_check_dec(&d) {
             return Exit::Normal;
         }
-        let flow = if narrow {
-            self.exec_narrow(bus, insn)
+        let flow = if d.op == fast::Op::Generic {
+            // 特殊寄存器读写（CCOUNT、CCOMPARE…）要看到准确的周期数
+            self.cycles = *cycles;
+            let f = if d.len == 2 {
+                self.exec_narrow(bus, d.raw)
+            } else {
+                self.exec(bus, d.raw)
+            };
+            *cycles = self.cycles;
+            f
         } else {
-            self.exec(bus, insn)
+            self.exec_dec(bus, &d)
         };
         match flow {
             Ok(Flow::Next) => {
@@ -549,12 +582,12 @@ impl Cpu {
                     next = self.sr[sr::LBEG as usize];
                 }
                 self.pc = next;
-                self.instret += 1;
+                *retired += 1;
                 Exit::Normal
             }
             Ok(Flow::Jump(t)) => {
                 self.pc = t;
-                self.instret += 1;
+                *retired += 1;
                 Exit::Normal
             }
             Ok(Flow::Done) => Exit::Normal,
@@ -567,16 +600,22 @@ impl Cpu {
     /// 与逐条调 `step` 并在每步之间做同样检查的结果完全相同，只是省掉每条指令的调用和返回开销
     #[inline(never)]
     pub fn run_batch<B: Bus>(&mut self, bus: &mut B, until: u64, vec_lo: u32, vec_hi: u32) -> Exit {
-        loop {
-            let e = self.step(bus);
+        self.refresh_irq();
+        let mut cycles = self.cycles;
+        let mut retired = 0;
+        let e = loop {
+            let e = self.step_inner(bus, &mut cycles, &mut retired);
             if !matches!(e, Exit::Normal) {
-                return e;
+                break e;
             }
             let in_vec = self.pc.wrapping_sub(vec_lo) < vec_hi.wrapping_sub(vec_lo);
-            if in_vec || self.cycles >= until || bus.attention(self.cycles) {
-                return Exit::Normal;
+            if in_vec || cycles >= until || bus.attention(cycles) {
+                break Exit::Normal;
             }
-        }
+        };
+        self.cycles = cycles;
+        self.instret += retired;
+        e
     }
 
     fn illegal(&mut self) -> Result<Flow, Exit> {
@@ -584,22 +623,31 @@ impl Cpu {
         Ok(Flow::Done)
     }
 
+    // 访存每 4 条指令就有一条：内联掉调用，出错路径单独放（冷）
+    #[inline(always)]
     fn load<B: Bus>(&mut self, bus: &mut B, addr: u32, size: u32) -> Option<u32> {
         match bus.load(addr, size) {
             Ok(v) => Some(v),
             Err(_) => {
-                self.exception(cause::LOAD_STORE_ERROR, addr);
+                self.access_fault(addr);
                 None
             }
         }
     }
 
+    #[inline(always)]
     fn store<B: Bus>(&mut self, bus: &mut B, addr: u32, size: u32, v: u32) -> bool {
         if bus.store(addr, size, v).is_err() {
-            self.exception(cause::LOAD_STORE_ERROR, addr);
+            self.access_fault(addr);
             return false;
         }
         true
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn access_fault(&mut self, addr: u32) {
+        self.exception(cause::LOAD_STORE_ERROR, addr);
     }
 
     fn exec_narrow<B: Bus>(&mut self, bus: &mut B, insn: u32) -> Result<Flow, Exit> {
