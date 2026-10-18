@@ -95,8 +95,7 @@ async function runRef(page, id) {
       await sleep(300);
     }
   }
-  await page.waitForSelector('#runRef:not([disabled])', { timeout: 30000 });
-  await page.click('#runRef');
+  await clickEl(page, '#runRef:not([disabled])');
   await waitFor(page, () => !!document.querySelector('#props .verdict-line') && !document.querySelector('#runRef')?.disabled && !document.querySelector('#props .drop.busy'), null, 90000);
   const text = await page.$eval('#props', (e) => e.textContent).catch(() => '');
   const raw = await page.evaluate(() => globalThis.__tbLastVerify);
@@ -129,9 +128,15 @@ for (const [hash, work, cp] of [['04', 'weather', '04'], ['07-lens', 'lens', '07
 // ---- 3. 上传自己的固件（C3 版点灯也满足检查点 01 的条件），进度记住
 {
   const page = await open('/app.html?work=weather&cp=01#bench');
-  await page.waitForSelector('#props [data-drop="check"] input', { timeout: 30000 });
-  const input = await page.$('#props [data-drop="check"] input');
-  await input.uploadFile(path.join(root, 'firmware/build/blink/flash.bin'));
+  // 面板加载后会重画、换掉输入框：拿到的旧节点已脱离文档，上传落空。现找现传，直到看到「模拟中」或结论再停
+  for (let i = 0; i < 5; i++) {
+    await page.waitForSelector('#props [data-drop="check"] input', { timeout: 30000 });
+    const input = await page.$('#props [data-drop="check"] input');
+    // 两步之间也可能被重画：拿到空或已脱离的节点就下一轮重找
+    await input?.uploadFile(path.join(root, 'firmware/build/blink/flash.bin')).catch(() => {});
+    const started = await waitFor(page, () => !!document.querySelector('#props [data-drop="check"].busy, #props .verdict-line'), null, 3000);
+    if (started) break;
+  }
   await waitFor(page, () => /✓ 通过/.test(document.querySelector('#props .verdict-line')?.textContent ?? ''), null, 90000);
   const who = await page.$eval('#props .verdict-line', (e) => e.textContent).catch(() => '');
   const tree = await page.$eval('#tree .tn[data-kind="checkpoint"][data-id="01"] .tn-st', (e) => e.className).catch(() => '');

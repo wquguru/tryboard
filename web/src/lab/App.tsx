@@ -251,7 +251,8 @@ export function App() {
             </form>
           </div>
           {lab && <UsbPanel feed={lab.usbFeed} sendCdc={lab.usbCdc} />}
-          <div className="panel info flex min-h-0 flex-col border-t border-line">
+          {/* 矮屏（< 约 650px 高）下说明卡不封顶会把串口挤到 0 高：桌面布局封顶 40vh、自己滚动 */}
+          <div className="panel info flex min-h-0 flex-col border-t border-line min-[901px]:max-h-[40vh] min-[901px]:overflow-y-auto">
             <div className={head}>这个示例</div>
             <div id="about" className="px-3.5 pt-2.5 pb-3.5 text-[13px] text-fg [&_p]:m-0 [&_p]:mb-1.5">
               {lab && <AboutBox lab={lab} />}
