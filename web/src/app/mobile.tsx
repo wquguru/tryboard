@@ -19,6 +19,9 @@ function subPhone(cb: () => void) {
   m.addEventListener("change", cb);
   return () => m.removeEventListener("change", cb);
 }
+/** 跨过手机断点时通知（命令式代码用：成品步骤要换一套工具） */
+export const onPhoneChange = (cb: () => void) =>
+  typeof matchMedia === "function" ? subPhone(cb) : () => {};
 export const usePhone = () =>
   useSyncExternalStore(subPhone, isPhone, () => false);
 
@@ -279,12 +282,18 @@ export function PhoneToolbar({
   const ui = useStore(mui);
   if (step !== "bench") {
     if (!tools.length) return null;
-    // 别的步骤：工具排成 44 高的按键网格，放在 3D 下面
+    // 别的步骤：工具排成 44 高的按键网格，放在 3D 下面；成品的网格在底部面板里（P2-17），不再套一层卡片
     return (
       <div
         id="toolbar"
         role="toolbar"
-        className="pnl toolbar grid grid-cols-4 gap-1.5 rounded-(--r) border border-line bg-(--panel) p-2 shadow-panel max-[360px]:grid-cols-3"
+        aria-label={step === "product" ? "成品按键" : undefined}
+        className={cn(
+          "toolbar grid grid-cols-4 gap-1.5 max-[360px]:grid-cols-3",
+          step === "product"
+            ? "mt-2"
+            : "pnl rounded-(--r) border border-line bg-(--panel) p-2 shadow-panel",
+        )}
       >
         {tools.map((t) => (
           <button

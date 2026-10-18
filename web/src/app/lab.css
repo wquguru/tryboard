@@ -65,6 +65,8 @@ body.app { --dock-h: var(--dock-desk, 200px); }
   :root { --top-h: 99px; --left-w: 0px; --right-w: 0px; --m-tb: calc(64px + env(safe-area-inset-bottom)); --m-peek: 68px; }
   body.app { --dock-h: calc(var(--m-tb) + var(--m-peek)); }
   body.app:not([data-step='bench']) { --dock-h: calc(72px + env(safe-area-inset-bottom)); }
+  /* 成品（P2-17）：没有吸底主按钮和实验台工具条；底部面板约 200 高（toast 摆在它上面），借来的串口抽屉贴底 */
+  body.app[data-step='product'] { --dock-h: 200px; --m-tb: 0px; }
   /* 属性抽屉里的滑块：轨道 8、拇指 28（手指按得住） */
   #props input[type='range'] { -webkit-appearance: none; appearance: none; height: 32px; background: transparent; }
   #props input[type='range']::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: var(--line); }
@@ -152,6 +154,11 @@ body.app { --dock-h: var(--dock-desk, 200px); }
   .prod-stage { height: 56dvh; min-height: 300px; }
   .asm3d-stage { height: 46dvh; min-height: 290px; }
   .prod-preview { position: static; transform: none; white-space: normal; flex-wrap: wrap; margin: 0 0 8px; }
+  /* 成品全屏：3D 铺满顶栏和底部面板之间（#mProduct 是 flex 列，step-layer 绝对定位铺满上半） */
+  body.app[data-step='product'] .prod-stage { position: absolute; inset: 0; height: auto; min-height: 0; border-radius: 0; }
+  body.app[data-step='product'] .prod-preview { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 3; margin: 0; padding: 6px 12px; }
+  body.app[data-step='product'] .prod-svg { position: absolute; left: 12px; right: 12px; top: 50%; transform: translateY(-50%); }
+  body.app[data-step='product'] .p3-disclaimer { bottom: 14px; }
 }
 
 /* ---------- ① 采购（P0-07）：清单树、零件平铺、规则检查 ---------- */

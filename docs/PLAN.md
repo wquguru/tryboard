@@ -33,7 +33,7 @@
 | P0-17 | 3D 成品（气象站）：能转，灯 bloom、屏幕纹理、舵机、蜂鸣器；拖动 / 按键 / 热源 / 缩放；事件时间线 | agent-browser 拖动后截图角度变化；热源使读数上升并报警 | ☑ 2026-10-16：`app/product3d.ts`（three.js，独立于 board3d），拖动方位角变化、热源 → 报警且 `__tbAudio.playing`、点 3D BOOT → ℉（Reviews/ab/P0-17.md）。小黄 / 透镜先挂 SVG 成品（3D 归 P1-10） |
 | P0-18 | 真机到手清单 + 不能模拟的项 | 成品页显示 | ☑ 2026-10-16：成品右栏按作品列三件事（彩灯引脚 v1.0/v1.1、I2C 扫描与芯片 ID、温度标定 / 舵机供电 / 圆屏反色）和不能模拟的项；内容为代理整理，未经人复核 |
 | P0-19 | 输入日志带模拟时间（网页交互可重放），网页 / CLI 一致 | 重放同一日志指纹相同 | ☑ 2026-10-16：`tools/webtest/replay.mjs`（已进 accept.sh）：网页实时串口 = CLI `--inputs` 重放（逐字节），网页验收 worker 与 CLI 指纹相同（Reviews/ab/P0-19.md） |
-| P0-20 | 第三方授权页 licenses.html（从 SOURCES.md 和依赖清单生成）；页脚声明；3D "外观示意"字样 | 页面列出全部依赖 | ☑ tools/gen_licenses.mjs 构建期生成（Reviews/ab/P0-20.md）；3D "外观示意"字样外壳已有；字体仍走 Google Fonts 未自托管 |
+| P0-20 | 第三方授权页 licenses.html（从 SOURCES.md 和依赖清单生成）；页脚声明；3D "外观示意"字样 | 页面列出全部依赖 | ☑ tools/gen_licenses.mjs 构建期生成（Reviews/ab/P0-20.md）；3D "外观示意"字样外壳已有；字体已自托管（P2-19） |
 | P0-21 | 旧页面下线 / 重定向（levels.html → 实验台检查点；advisor → 我有自己的想法；index.html 保留为空白实验台） | 旧链接不 404 | ☑ levels.html#NN → app.html?work=…&cp=NN#bench 并选中检查点；index / advisor 保留，页头互链（Reviews/ab/P0-21.md） |
 
 ## P1 · 像真的：电气、测量、装配（约 6–8 周）
@@ -84,9 +84,9 @@
 | P2-14 | 接线错误走网络求解：W1 输出对打、W3 LED 无限流电阻、短路（3V3 / 5V 接 GND）由 elec MNA 算出电流，属性面板 / 接错线卡片显示估算电流与后果 | elec 单测（三种错接的电流）；网页用例经 `__tbApp.injectWiring`；agent-browser 截图 | ☐ |
 | P2-15 | 底部坞「代码」页签：参考固件 / 示例的源码只读显示（构建期从 firmware/<名>/main 打包），多文件切换、复制、行号；上传的 .bin 没有源码时说明原因 | webtest：打开 weather 看到 app_main；上传 bin 显示"没有源码"；agent-browser 截图 | ☐ |
 | P2-16 | 台面直接放零件：元件库拖到台面放下，进入"接线"提示（按零件引脚逐根接，复用改接线模式），接完参与接线检查与模拟 | webtest：拖一个 LED 到台面、接两根线、跑 blink 亮；agent-browser 截图 | ☐ |
-| P2-17 | 手机成品全屏 3D：3D 占满、底部串口一行 + 按键网格（BOOT / 热源 / 等作品按键），按 DESIGN_V2 §5 | mobile.mjs 增用例；390×844 agent-browser 截图无横向滚动、console 无 error | ☐ |
+| P2-17 | 手机成品全屏 3D：3D 占满、底部串口一行 + 按键网格（BOOT / 热源 / 等作品按键），按 DESIGN_V2 §5 | mobile.mjs 增用例；390×844 agent-browser 截图无横向滚动、console 无 error | ☑ 3D 占满顶栏到底部面板，可拖转、双指缩放（OrbitControls 默认）；底部一行串口（点开即实验台同一串口抽屉半屏）+ 4 列按键格，键取自各作品真实交互（weather BOOT/热源、spin/lens BOOT、lamp 旋钮 ±1/按、ruler 挡板近/远、tilt/imu 放低/放平、usbkey K1–K4）+ 声音/拍照/录像/复位视角/详情/再跑一次；mobile.mjs 增 8 个成品用例全过（Reviews/ab/P2-17.md）。未做：真机触屏、双指缩放无自动化用例；手机成品页不再显示零件 / 装法树 |
 | P2-18 | 触摸屏 FT6236（P2-02 尾巴）：I2C 0x38 模型 + 验收固件 | 固件验收进 accept.json | ☐ |
-| P2-19 | 字体自托管（P0-20 尾巴）：Noto Sans SC、JetBrains Mono 子集化 WOFF2，附 OFL.txt，去掉 Google Fonts 外链，授权页列出 | 构建产物无 fonts.googleapis 引用；授权页有字体条目；agent-browser 截图字形正常 | ☐ |
+| P2-19 | 字体自托管（P0-20 尾巴）：Noto Sans SC、JetBrains Mono 子集化 WOFF2，附 OFL.txt，去掉 Google Fonts 外链，授权页列出 | 构建产物无 fonts.googleapis 引用；授权页有字体条目；agent-browser 截图字形正常 | ☑ tools/fonts/fetch.sh 从 google/fonts 固定提交下载 + sha256；subset.py（tools/fonts/.venv 里的 fonttools）子集化：用到的字 ∪ GB2312 一级字 → tb-sans-sc.woff2 ≈1.05 MB、tb-mono.woff2 66 KB；dist 无 googleapis / gstatic，授权页有字体条目 + OFL 全文，Network 只有本站字体（Reviews/ab/P2-19.md）。未做：按页面拆分子集 / unicode-range 分片 |
 | P2-07 | （续）LVGL 网页实时倍率 ≥ 0.5× | 空闲机器上 `tools/bench_wasm.mjs` 与网页右上角倍率；45 个验收输出与关卡指纹逐字节不变 | 见上表 |
 
 ## UI v2 · 设计 v2 落地（2026-10-17，规范见 DESIGN_V2.md）

@@ -4,7 +4,9 @@
 //  - 实验台：五个底部工具；串口抽屉 peek → 半屏 → 全屏 → 收起，输入框发送后清空；
 //    构建树点 BME280 → 属性抽屉，预设 32° 让固件读数变成 32；零件库全屏页、分类筛选、关闭；
 //    连线：横幅里选线 → 按住引脚有放大镜 → 松手接到 5V → 接错线卡片 → 撤销
-//  - 组装：锁定页有「回实验台」；预置检查点后解锁，装完六层 → 成品；成品按 BOOT 串口出 UNIT F
+//  - 组装：锁定页有「回实验台」；预置检查点后解锁，装完六层 → 成品
+//  - 成品（P2-17）：3D 全屏、底部按键格按 BOOT 串口出 UNIT F、点串口条开半屏抽屉再收起；8 个成品逐个看全屏、无横向滚动、键够大
+//  - 全程不请求外部域名（P2-19 自托管字体）
 //  - 全程页面无报错
 // 用法：node tools/webtest/mobile.mjs [dist 目录，默认 web/dist]。截图在 Reviews/web/mobile-*
 import puppeteer from 'puppeteer-core';
@@ -18,7 +20,7 @@ const dist = path.resolve(process.argv[2] ?? path.join(root, 'web/dist'));
 const outDir = path.join(root, 'Reviews/web');
 fs.mkdirSync(outDir, { recursive: true });
 
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.svg': 'image/svg+xml' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.txt': 'text/plain' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   const f = path.join(dist, u === '/' ? 'index.html' : u);
@@ -54,6 +56,12 @@ async function waitFor(page, fn, arg, ms = 15000) {
 const errors = [];
 const page = await browser.newPage();
 page.on('pageerror', (e) => errors.push(String(e)));
+// 自托管字体后整站不该再连外部域名（fonts.googleapis / gstatic 之类）
+const external = [];
+page.on('request', (r) => {
+  const u = r.url();
+  if (/^https?:/.test(u) && !u.startsWith(base)) external.push(u);
+});
 page.on('console', (m) => {
   if (m.type() === 'error') errors.push(m.text());
 });
@@ -252,14 +260,59 @@ await waitFor(page, () => globalThis.__tbApp.store.get().step === 'product' && !
 await waitFor(page, () => /T=/.test(document.querySelector('#mSerial')?.textContent ?? ''), null, 20000);
 await stepCheck('成品');
 report('成品：一行串口条', (await visible('#mSerial')) && /T=/.test(await page.$eval('#mSerial', (e) => e.textContent)));
-// BOOT 键看按下 / 松开（pointerdown / up），要真实点击，不能只派 click 事件
-const boot = await page.evaluateHandle(() => [...document.querySelectorAll('#props button')].find((b) => b.textContent.trim().startsWith('按 BOOT')));
-report('成品：按 BOOT 可点', !!(await boot.asElement()) && (await boot.evaluate((b) => b.getBoundingClientRect().height >= 44)));
-await boot.asElement()?.click();
+// 成品全屏（P2-17）：3D 占满顶栏以下、底部面板之上；底部面板贴底
+const full = () =>
+  page.evaluate(() => {
+    const m = document.querySelector('#mProduct')?.getBoundingClientRect();
+    const sh = document.querySelector('#mProductSheet')?.getBoundingClientRect();
+    const top = document.querySelector('#steps')?.getBoundingClientRect();
+    const cv = [...document.querySelectorAll('#mProduct canvas, #mProduct svg.prod-svg')].map((e) => e.getBoundingClientRect()).sort((a, b) => b.width * b.height - a.width * a.height)[0];
+    if (!m || !sh || !top || !cv) return `missing m=${!!m} sheet=${!!sh} view=${!!cv}`;
+    const ok = Math.abs(m.bottom - innerHeight) < 1 && Math.abs(sh.bottom - innerHeight) < 1 && m.top <= top.bottom + 1 && cv.width >= innerWidth - 1 && cv.height >= innerHeight * 0.45;
+    return ok ? 'ok' : `m=${m.top}..${m.bottom} sheet=${sh.top}..${sh.bottom} view=${cv.width}x${cv.height}`;
+  });
+report('成品：3D 全屏', (await full()) === 'ok', await full());
+// BOOT 在底部按键格里；看按下 / 松开（pointerdown / up），要真实点击，不能只派 click 事件
+report('成品：按 BOOT 可点', (await tappable('#toolbar [data-tool="p-boot"]')) === 'ok', await tappable('#toolbar [data-tool="p-boot"]'));
+await page.click('#toolbar [data-tool="p-boot"]');
 const unitF = await waitFor(page, () => /UNIT F/.test(document.querySelector('#console')?.textContent ?? ''), null, 15000);
-report('成品：按 BOOT 后串口出 UNIT F', unitF, unitF ? '' : await page.evaluate(() => `console=${(document.querySelector('#console')?.textContent ?? '').slice(-120)} | props=${(document.querySelector('#props')?.textContent ?? '').match(/最近几行.{0,160}/)?.[0]}`));
+report('成品：按 BOOT 后串口出 UNIT F', unitF, unitF ? '' : await page.evaluate(() => `console=${(document.querySelector('#console')?.textContent ?? '').slice(-120)}`));
 await page.screenshot({ path: path.join(outDir, 'mobile-product.png') });
+// 点串口条 → 实验台同一个串口抽屉（半屏），收起回到全屏
+report('成品：串口条可点', (await tappable('#mSerialOpen')) === 'ok', await tappable('#mSerialOpen'));
+await page.click('#mSerialOpen');
+const half = await waitFor(page, () => document.querySelector('#dock')?.dataset.sheet === 'half' && document.querySelector('#dock')?.getBoundingClientRect().height > innerHeight * 0.4, null, 3000);
+report('成品：点串口条开半屏串口抽屉', half, half ? '' : `sheet=${await page.evaluate(() => document.querySelector('#dock')?.dataset.sheet)}`);
+await page.screenshot({ path: path.join(outDir, 'mobile-product-serial.png') });
+if (half) await page.click('#sheetGrab');
+report('成品：串口抽屉收起后串口条回来', await waitFor(page, () => !document.querySelector('#dock[data-sheet="half"]') && !!document.querySelector('#mSerialOpen'), null, 3000));
+report('成品：收起后串口条可点', (await tappable('#mSerialOpen')) === 'ok', await tappable('#mSerialOpen'));
 
+// ---- 每个成品（预览模式 ?work=X#product）：全屏、无横向滚动、按键格每个键都够大且点得到，按动作键不报错
+const WORKS = { weather: 'p-boot', spin: 'p-boot', lens: 'p-boot', usbkey: 'p-key-4', lamp: 'p-knob-r', ruler: 'p-near', tilt: 'p-tilt-r', imu: 'p-level' };
+for (const [w, key] of Object.entries(WORKS)) {
+  await page.goto(`${base}/app.html?work=${w}#product`, { waitUntil: 'load' });
+  const up = await waitFor(page, (k) => globalThis.__tbApp?.store.get().step === 'product' && !!document.querySelector(`#toolbar [data-tool="${k}"]`), key, 30000);
+  if (!up) {
+    report(`成品 ${w}：按键格出来`, false);
+    continue;
+  }
+  await sleep(1500);
+  await stepCheck(`成品 ${w}`);
+  report(`成品 ${w}：3D 全屏`, (await full()) === 'ok', await full());
+  const tools = await page.$$eval('#toolbar [data-tool]', (b) => b.map((x) => x.dataset.tool));
+  const bad = [];
+  for (const t of tools) {
+    const r = await tappable(`#toolbar [data-tool="${t}"]`);
+    if (r !== 'ok') bad.push(`${t}:${r}`);
+  }
+  report(`成品 ${w}：按键格 ${tools.length} 键都 ≥ 44px 且点得到`, tools.length >= 3 && bad.length === 0, bad.join(' '));
+  await page.click(`#toolbar [data-tool="${key}"]`);
+  await sleep(800);
+  await page.screenshot({ path: path.join(outDir, `mobile-product-${w}.png`) });
+}
+
+report('不请求外部域名', external.length === 0, external.slice(0, 3).join(' | '));
 report('页面无报错', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(`[mobile] ${fails ? 'FAIL' : 'PASS'}（${fails} 项失败）`);
 await browser.close();
