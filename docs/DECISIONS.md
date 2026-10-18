@@ -612,3 +612,19 @@
 - s3-ft6236 用裸 `i2c_master` 驱动（不用 esp_lcd_touch_ft5x06 组件）：不新增组件依赖，也能直接验证寄存器层；不挂器件时打印 "no ACK" 并停住而不是 abort，给出"接线 / 地址"提示（s3-ft6236-absent 反例）。
 - 网页串口输入回归放进 `webtest.mjs` 的 echo 分支（示例页 `#uartIn`），而不是新脚本：一个示例一个分支，跟 s3-usb-cdc 的终端输入同一写法；accept.sh 网页冒烟列表加 `echo:串口回显`。
 
+## 2026-10-17 手机成品全屏 3D（P2-17）
+- 决定：手机成品页（< 768px）3D 占满顶栏以下到底部面板之上（`#mProduct`，flex 列），底部面板 = 一行串口 + 4 列按键格 + 预览时的主按钮；推翻 U-05 时「全屏 3D 会盖住读数和按键」的单列卡做法——按键格和串口固定在 3D 下面，不叠在画面上，所以不盖。
+- 按键只放作品真有的交互：weather 按 BOOT / 热源，spin / lens 按 BOOT，lamp 旋钮 −1 / +1 / 按旋钮，ruler 挡板近 / 远 10 cm，tilt 右边放低 / 左前放低 / 放平，imu 放平，usbkey K1–K4（与 3D 键帽同一组引脚和键帽字）；再加声音（有蜂鸣器才有）、拍照 / 录像 / 复位视角（有 3D 才有）、详情（打开原属性卡抽屉）、再跑一次。桌面工具条不变。
+- 串口条点开就是实验台那个串口抽屉（半屏）：shell 在抽屉打开时给 Dock 传 step="bench" 复用 PhoneDock，不改 dock.tsx；收起回 peek 时 Dock 不渲染，回到全屏。
+- 双指缩放用 OrbitControls 默认（enableZoom，canvas touch-action none），不另写手势。
+- 代价：手机成品页不再显示零件 / 装法树（左栏隐藏），换作品走顶栏 ▾。
+- 替代：3D 上叠浮动按键（设计稿另一案）——遮挡 3D 且难保证 44px 不重叠；保留单列卡——不满足 DESIGN_V2 §5。
+
+## 2026-10-17 字体自托管（P2-19）
+- 决定：Noto Sans SC、JetBrains Mono 改为自托管 WOFF2，删掉全部 fonts.googleapis / gstatic 外链，各页 `<link rel="stylesheet" href="/fonts/fonts.css">`（@font-face，font-display: swap，family 名沿用原名，页面字体栈不改）。
+- 来源：github.com/google/fonts 固定提交 47d54ca1ebb14fd864695f1d39dc734f39017c33 的 ofl/notosanssc、ofl/jetbrainsmono 可变字重 TTF 与 OFL.txt（OFL-1.1，LICENSING ✅），`tools/fonts/fetch.sh` 下载到 third_party/fonts 并做 sha256 校验。
+- 子集：`tools/fonts/subset.py` 扫描 web/src、各 html（含生成的授权页）、示例 / 关卡 / 验收清单里实际用到的字，并上 GB2312 一级字（3755 个常用字，由 Python 自带 gb2312 编解码器推出，不另下字表）和 ASCII / 中文标点，共约 3970 个码位；等宽字留整套 cmap（只含西文）。体积：原件 Noto Sans SC 可变 TTF ≈ 17 MB → tb-sans-sc.woff2 ≈ 1.05 MB；JetBrains Mono ≈ 190 KB → tb-mono.woff2 66 KB。产物 web/public/fonts/ 被 git 忽略，build_web.sh 每次构建生成（字集没变就跳过，戳记放 third_party/fonts）。
+- 工具：fonttools 4.60.1 + brotli 1.1.0（MIT），装在 tools/fonts/.venv（brew 的 python3.12 建，git 忽略），不碰系统 python；build_web.sh 缺 venv 时自动建。
+- OFL：子集是"修改版"，文件名不用原名（Noto 的保留名是 "Source"，两个都改成 tb-*），OFL.txt 原样放在字体同目录并在授权页附全文与来源提交链接。
+- 失败兜底：没网 / 没 venv 时 subset.py 写一份只有注释的 fonts.css，页面退回系统字体，构建不失败。
+- 替代：Google Fonts 外链（外部请求、国内不稳定）；unicode-range 分片（首屏更小，但要维护分片表，后续再说）；系统字体（各平台字形不一，和设计稿差距大）。

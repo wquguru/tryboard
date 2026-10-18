@@ -13,7 +13,9 @@ import { emptyFrame, ledCss, servoAngle, type LiveFrame } from '../../views/comm
 import type { AssemblyState, StepCtx, StepImpl } from '../types';
 import type { TimelineStep } from '../timeline';
 import { createKeypad3D, type Keypad3D } from '../keypad3d';
-import { createKeypadView } from '../../views/keypad';
+import { createKeypadView, KEYPAD_CAPS, KEYPAD_PINS } from '../../views/keypad';
+import { isPhone, onPhoneChange, setMui } from '../mobile';
+import type { Tool, ToolGroup } from '../toolbar';
 import { HOME_WORKS } from '../works';
 import { RECORD_SECONDS, recordCanvas, takePhoto, type Capturable, type Recording } from '../capture';
 import { i2cLoad, i2cText, wifiText } from '../harness';
@@ -675,10 +677,38 @@ export function productStep(): StepImpl {
     }
   }
 
+  /** 手机成品（P2-17）：3D 占满，按键网格就是工具条。拖动本来就转视角，不要「旋转」；属性卡里的按键（旋钮 ±1、
+   *  倾斜、K1–K4）都搬进网格——都是桌面上已有的同一个动作，只是换个地方点；「详情」打开属性抽屉看读数和真机提醒 */
+  function phoneGroups(): ToolGroup[] {
+    const c = ctx!;
+    const w = c.work.id;
+    const act: Tool[] =
+      w === 'lamp'
+        ? [{ id: 'p-knob-l', label: '旋钮 −1' }, { id: 'p-knob-r', label: '旋钮 +1' }, { id: 'p-knob', label: '按旋钮' }]
+        : w === 'ruler'
+          ? [{ id: 'p-near', label: '挡板近 10 cm' }, { id: 'p-far', label: '挡板远 10 cm' }]
+          : w === 'tilt'
+            ? [{ id: 'p-tilt-r', label: '右边放低' }, { id: 'p-tilt-l', label: '左前放低' }, { id: 'p-level', label: '放平' }]
+            : w === 'usbkey'
+              ? KEYPAD_PINS.map((pin, i) => ({ id: `p-key-${pin}`, label: `K${i + 1} · ${KEYPAD_CAPS[i]}` }))
+              : [{ id: 'p-boot', label: '按 BOOT' }, ...(w === 'weather' ? [{ id: 'p-heat', label: heat.on ? '热源：开' : '热源：关' }] : [])];
+    return [
+      { id: 'act', tools: act },
+      ...(c.session.audio.hasSound ? [{ id: 'snd', tools: [{ id: 'p-sound', label: c.session.audio.state.muted ? '声音：关' : '声音：开' }] }] : []),
+      ...(cur3d() ? [{ id: 'media', tools: [{ id: 'p-photo', label: '拍照' }, { id: 'p-rec', label: rec ? '停止录像' : `录 ${RECORD_SECONDS} 秒` }, { id: 'p-home', label: '复位视角' }] }] : []),
+      { id: 'run', tools: [{ id: 'p-info', label: '详情' }, { id: 'p-rerun', label: '再跑一次', primary: true }] },
+    ];
+  }
+
   function syncToolbar() {
     const c = ctx!;
     const weather = c.work.id === 'weather';
     const w = c.work.id;
+    if (isPhone()) {
+      c.shell.toolbar.setGroups(phoneGroups());
+      c.shell.toolbar.setActive(rec ? 'p-rec' : heat.on ? 'p-heat' : null);
+      return;
+    }
     const act = w === 'lamp' ? [{ id: 'p-knob', label: '按旋钮' }] : w === 'ruler' ? [{ id: 'p-near', label: '挡板近' }, { id: 'p-far', label: '挡板远' }] : w === 'tilt' ? [{ id: 'p-level', label: '放平' }] : [{ id: 'p-boot', label: '按 BOOT' }, ...(weather ? [{ id: 'p-heat', label: heat.on ? '热源：开' : '热源' }] : [])];
     c.shell.toolbar.setGroups([
       ...(scene3d || lcd3d || keypad || work3d ? [{ id: 'nav', tools: [{ id: 'p-orbit', label: '旋转', key: '拖动' }, { id: 'p-home', label: '复位视角' }] }] : []),
@@ -748,6 +778,17 @@ export function productStep(): StepImpl {
       c.session.pressEncoder(true);
       setTimeout(() => ctx?.session.pressEncoder(false), 150);
       event('●', '按旋钮');
+    } else if (id === 'p-knob-l') turnKnob(-1);
+    else if (id === 'p-knob-r') turnKnob(1);
+    else if (id === 'p-tilt-r') tiltTo({ pitch: 0, roll: 25, yaw: 0 });
+    else if (id === 'p-tilt-l') tiltTo({ pitch: 20, roll: -25, yaw: 0 });
+    else if (id === 'p-info') setMui({ props: true, sheet: 'peek' });
+    else if (id.startsWith('p-key-')) {
+      // USB 小键盘：和 3D 里按键帽同一个动作（按下 150 ms 再松开）
+      const pin = Number(id.slice(6));
+      c.session.pressPin(pin, true);
+      event('⌨', `按 K${KEYPAD_PINS.indexOf(pin) + 1}`);
+      setTimeout(() => ctx?.session.pressPin(pin, false), 150);
     } else if (id === 'p-near') moveBoard(-10);
     else if (id === 'p-far') moveBoard(10);
     else if (id === 'p-boot') {
@@ -891,11 +932,19 @@ export function productStep(): StepImpl {
         <Note>拖动时陀螺读到角速度，松手 150 ms 后回零。真机的零偏、温漂和振动噪声没有算进去（未经真机标定）。</Note>
       </>,
     );
-    c.shell.toolbar.setGroups([
-      { id: 'nav', tools: [{ id: 'p-orbit', label: '转动', key: '拖动' }, { id: 'p-level', label: '放平' }] },
-      { id: 'run', tools: [{ id: 'p-rerun', label: '再跑一次', primary: true }] },
-    ]);
-    c.shell.toolbar.setActive('p-orbit');
+    const tiltBar = () => {
+      c.shell.toolbar.setGroups(
+        isPhone()
+          ? [{ id: 'run', tools: [{ id: 'p-level', label: '放平' }, { id: 'p-info', label: '详情' }, { id: 'p-rerun', label: '再跑一次', primary: true }] }]
+          : [
+              { id: 'nav', tools: [{ id: 'p-orbit', label: '转动', key: '拖动' }, { id: 'p-level', label: '放平' }] },
+              { id: 'run', tools: [{ id: 'p-rerun', label: '再跑一次', primary: true }] },
+            ],
+      );
+      c.shell.toolbar.setActive(isPhone() ? null : 'p-orbit');
+    };
+    tiltBar();
+    unsubs.push(onPhoneChange(tiltBar));
     c.shell.timeline.setSteps([]);
     c.shell.setNext('下一步', null, '这是最后一步');
     c.shell.setVerdict('倾角仪 · 成品', 'idle');
@@ -1026,6 +1075,7 @@ export function productStep(): StepImpl {
       c.shell.timeline.setSteps(events);
       c.shell.timeline.setCurrent(events.length - 1);
       unsubs = [
+        onPhoneChange(() => syncToolbar()),
         c.store.subscribe(() => renderTree(), ['assembly']),
         c.store.subscribe(() => preview && (syncNext(), renderProps()), ['checks']),
         c.session.onHarness((t) => {

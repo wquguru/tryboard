@@ -166,13 +166,21 @@ ${list.length ? table(['组件', '版本', '许可证', '版权', '用在'], lis
 ${list.filter((c) => c.text).map((c) => fullText(`${c.name} ${c.ver} · ${c.spdx} 全文`, c.text)).join('')}`);
 }
 
-// ---------------------------------------------------------------- 5. 字体
-sections.push(`<h2>字体</h2>
-${table(['字体', '许可证', '版权', '加载方式'], [
-  tr(['Noto Sans SC', mono('OFL-1.1'), 'Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name "Source"', link('https://fonts.google.com/noto/specimen/Noto+Sans+SC', 'Google Fonts')]),
-  tr(['JetBrains Mono', mono('OFL-1.1'), 'Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)', link('https://fonts.google.com/specimen/JetBrains+Mono', 'Google Fonts')]),
-])}
-<p class="note">目前从 Google Fonts 加载，没有自托管。以后自托管 / 子集化时附 OFL.txt，子集文件名不带保留名 "Source"。许可证全文：<a href="https://openfontlicense.org/open-font-license-official-text/">SIL Open Font License 1.1</a>。</p>`);
+// ---------------------------------------------------------------- 5. 字体（P2-19：自托管子集，tools/fonts/）
+{
+  const fd = path.join(root, 'third_party/fonts');
+  const rev = exists(path.join(fd, 'REVISION')) ? rd(path.join(fd, 'REVISION')).trim() : '';
+  if (!rev) warn.push('third_party/fonts 不存在（先跑 tools/fonts/fetch.sh）：字体许可全文没附上');
+  const fonts = [
+    { name: 'Noto Sans SC', dir: 'notosanssc', file: 'tb-sans-sc.woff2', ofl: 'OFL-NotoSansSC.txt', copy: 'Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name "Source"', use: '正文、界面（中文）' },
+    { name: 'JetBrains Mono', dir: 'jetbrainsmono', file: 'tb-mono.woff2', ofl: 'OFL-JetBrainsMono.txt', copy: 'Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)', use: '串口、代码、数字' },
+  ];
+  const src = (f) => (rev ? link(`https://github.com/google/fonts/tree/${rev}/ofl/${f.dir}`, `google/fonts@${rev.slice(0, 7)}`) : '—');
+  sections.push(`<h2>字体（自托管，随网站分发）</h2>
+${table(['字体', '许可证', '版权', '来源', '发布文件', '许可全文'], fonts.map((f) => tr([f.name, mono('OFL-1.1'), f.copy, src(f), { html: `<span><code>fonts/${esc(f.file)}</code>（${esc(f.use)}）</span>` }, link(`./fonts/${f.ofl}`, 'OFL.txt')])))}
+<p class="note">从 google/fonts 仓库固定提交下载可变字重 TTF，构建时用 fonttools 子集化成 WOFF2（页面实际用到的字 + GB2312 一级字 3755 个；等宽字留整套西文），改过的文件名不含保留名 "Source"，OFL.txt 和字体放在同一目录。许可证说明：<a href="https://openfontlicense.org/open-font-license-official-text/">SIL Open Font License 1.1</a>。</p>
+${fonts.filter((f) => exists(path.join(fd, f.ofl))).map((f) => fullText(`${f.name} · OFL-1.1 全文`, rd(path.join(fd, f.ofl)))).join('')}`);
+}
 
 // ---------------------------------------------------------------- 6. 素材（3D 模型、贴图、HDRI）：各目录的 SOURCES.md
 {
@@ -248,8 +256,8 @@ const html = `<!doctype html>
     <title>授权与致谢 · 试板 TryBoard</title>
     <meta name="description" content="试板 TryBoard 使用的第三方代码、芯片 ROM、固件组件、字体与素材的来源、许可证与署名。" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
+    <!-- 自托管字体（P2-19，tools/fonts/subset.py 生成，OFL-1.1） -->
+    <link rel="stylesheet" href="/fonts/fonts.css" />
     <!-- 样式：src/licenses/licenses.css（Tailwind，与 React 页面同一套主题；页头 / 页脚类名与 src/ui/site.tsx 相同） -->
     <link rel="stylesheet" href="./src/licenses/licenses.css" />
   </head>

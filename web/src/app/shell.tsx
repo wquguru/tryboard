@@ -153,7 +153,9 @@ function App() {
   const own = step === "assemble" || step === "product";
   /** 手机实验台：台面铺满，属性 / 元件库 / 串口是抽屉；别的步骤：各块竖排滚动，底部吸一条主按钮 */
   const pb = phone && bench;
-  const pf = phone && !bench;
+  /** 手机成品（P2-17，DESIGN_V2 §5）：3D 占满顶栏以下，底部一块面板放一行串口 + 按键网格；详情（读数、真机提醒）是抽屉 */
+  const pp = phone && step === "product";
+  const pf = phone && !bench && !pp;
   const mo = M_ORDER[step] ?? M_ORDER.shop;
   const goNext = () => {
     const n = chrome.get().next;
@@ -210,23 +212,28 @@ function App() {
       );
   const layerCls = pf
     ? cn("step-layer block empty:hidden", mo.layer)
-    : "step-layer pointer-events-none fixed inset-0 z-1 flex items-center justify-center [&>*]:pointer-events-auto";
-  const leftCls = pb
-    ? cn(
-        "pnl left inset-0 z-40 flex-col overflow-hidden bg-surface",
-        m.lib ? "fixed flex" : "hidden",
-      )
-    : pf
-      ? cn("pnl left flex flex-col", mCard, mo.tree)
-      : "pnl left fixed top-(--top-h) bottom-(--dock-h) left-0 z-2 flex w-(--left-w) flex-col overflow-hidden border-r border-line bg-surface";
-  const propsCls = pb
-    ? cn(
-        "pnl right inset-x-0 bottom-0 z-30 max-h-[min(540px,72dvh)] overflow-auto rounded-t-2xl border-t border-line bg-surface px-4 pt-0 pb-[calc(16px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_#00000026]",
-        m.props ? "fixed block" : "hidden",
-      )
-    : pf
-      ? cn("pnl right px-4 pt-1 pb-4", mCard, mo.props)
-      : "pnl right fixed top-(--top-h) right-0 bottom-(--dock-h) z-2 w-(--right-w) overflow-auto border-l border-line bg-surface px-4 pt-1 pb-4";
+    : pp
+      ? "step-layer absolute inset-0"
+      : "step-layer pointer-events-none fixed inset-0 z-1 flex items-center justify-center [&>*]:pointer-events-auto";
+  const leftCls = pp
+    ? "hidden"
+    : pb
+      ? cn(
+          "pnl left inset-0 z-40 flex-col overflow-hidden bg-surface",
+          m.lib ? "fixed flex" : "hidden",
+        )
+      : pf
+        ? cn("pnl left flex flex-col", mCard, mo.tree)
+        : "pnl left fixed top-(--top-h) bottom-(--dock-h) left-0 z-2 flex w-(--left-w) flex-col overflow-hidden border-r border-line bg-surface";
+  const propsCls =
+    pb || pp
+      ? cn(
+          "pnl right inset-x-0 bottom-0 z-30 max-h-[min(540px,72dvh)] overflow-auto rounded-t-2xl border-t border-line bg-surface px-4 pt-0 pb-[calc(16px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_#00000026]",
+          m.props ? "fixed block" : "hidden",
+        )
+      : pf
+        ? cn("pnl right px-4 pt-1 pb-4", mCard, mo.props)
+        : "pnl right fixed top-(--top-h) right-0 bottom-(--dock-h) z-2 w-(--right-w) overflow-auto border-l border-line bg-surface px-4 pt-1 pb-4";
   return (
     <div
       className={cn(
@@ -252,17 +259,63 @@ function App() {
         <card.View />
         <StageOverlays bench={bench} />
       </section>
-      <layer.View tag="main" label="当前步骤" className={layerCls} />
+      {pp ? (
+        <div
+          id="mProduct"
+          className="fixed inset-x-0 top-(--top-h) bottom-0 z-1 flex flex-col"
+        >
+          <div className="relative min-h-0 flex-1">
+            <layer.View tag="main" label="当前步骤" className={layerCls} />
+            <button
+              id="verdict"
+              type="button"
+              data-state={c.verdict.state}
+              onClick={() => verdictFn?.()}
+              className={cn(
+                verdictCls,
+                "absolute right-2 bottom-2 z-3 h-11 max-w-[60%] cursor-pointer truncate rounded-full border border-line bg-(--panel) px-3 shadow-panel",
+              )}
+            >
+              {c.verdict.text}
+            </button>
+          </div>
+          <div
+            id="mProductSheet"
+            className="flex-none rounded-t-[18px] border-t border-line bg-surface px-4 pt-2.5 pb-[calc(12px+env(safe-area-inset-bottom))] shadow-[0_-6px_20px_#0000001a]"
+          >
+            {/* 一行串口：点开是实验台同一个串口抽屉（半屏），收起回到这里 */}
+            <button
+              type="button"
+              id="mSerialOpen"
+              aria-label="打开串口抽屉"
+              onClick={() =>
+                setMui({ sheet: "half", props: false, more: false, lib: null })
+              }
+              className="block w-full cursor-pointer border-0 bg-transparent p-0 text-left"
+            >
+              <SerialStrip />
+            </button>
+            <toolbar.View step={step} />
+            {c.next.to && (
+              <button
+                id="next"
+                type="button"
+                onClick={goNext}
+                className="next mt-2 flex h-12 w-full cursor-pointer items-center justify-center rounded-xl border-0 bg-accent-strong px-3 text-[15px] font-medium text-on-accent"
+              >
+                <span className="max-w-full truncate">{c.next.label}</span>
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <layer.View tag="main" label="当前步骤" className={layerCls} />
+      )}
       {!phone && step === "assemble" && (
         <div
           aria-hidden="true"
           className="fixed top-(--top-h) right-(--right-w) bottom-(--dock-h) left-(--left-w) bg-(image:--stage-bg)"
         />
-      )}
-      {pf && step === "product" && (
-        <div className="order-2">
-          <SerialStrip />
-        </div>
       )}
 
       <aside aria-label="构建树" className={leftCls}>
@@ -288,9 +341,9 @@ function App() {
         live
         className={propsCls}
         head={
-          pb ? (
+          pb || pp ? (
             <SheetHead
-              title="属性"
+              title={pp ? "详情" : "属性"}
               id="propsClose"
               onClose={() => setMui({ props: false })}
             />
@@ -298,7 +351,7 @@ function App() {
         }
       />
 
-      {pf ? (
+      {pp ? null : pf ? (
         <div className={mo.tools}>
           <toolbar.View step={step} />
         </div>
@@ -307,7 +360,8 @@ function App() {
       )}
 
       <Dock
-        step={step}
+        // 手机成品点开串口条时借用实验台的串口抽屉（收起后回到一行串口条）
+        step={pp && m.sheet !== "peek" ? "bench" : step}
         toast={(t) => shell.toast(t)}
         timeline={<timeline.View />}
         simtime={

@@ -48,8 +48,18 @@ for lv in json.load(open(os.path.join(root, 'firmware/levels.json'))):
     os.makedirs(d, exist_ok=True)
     shutil.copy(src, d)
 PY
+# 字体原件（P2-19）先下好：授权页要附它们的 OFL 全文
+"$ROOT/tools/fonts/fetch.sh" || echo "字体原件下载失败，跳过（页面用系统字体）" >&2
 # 第三方授权页（LICENSING.md 规则 8）：读依赖清单、ROM、已发布固件的组件、SOURCES.md
 node "$ROOT/tools/gen_licenses.mjs"
+# 自托管字体（P2-19）：下载原件（third_party/fonts）→ venv 里的 fonttools 子集化成 WOFF2（web/public/fonts）。
+# 下载或装 venv 失败不挡构建：subset.py 会写空的 fonts.css，页面退回系统字体
+VENV="$ROOT/tools/fonts/.venv"
+if [ ! -x "$VENV/bin/python" ]; then
+  PY312="$(command -v python3.12 || echo /opt/homebrew/bin/python3.12)"
+  "$PY312" -m venv "$VENV" && "$VENV/bin/pip" install -q fonttools==4.60.1 brotli==1.1.0 || echo "字体子集化工具装不上，跳过" >&2
+fi
+if [ -x "$VENV/bin/python" ]; then "$VENV/bin/python" -I "$ROOT/tools/fonts/subset.py" "$ROOT"; else python3 -I "$ROOT/tools/fonts/subset.py" "$ROOT"; fi
 ls -la "$PUB/wasm/tryboard.wasm" | awk '{print "wasm", $5, "bytes"}'
 if [ "${1:-}" != "--no-vite" ]; then
   (cd "$ROOT/web" && npm run build --silent)
