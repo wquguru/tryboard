@@ -212,6 +212,8 @@ export interface Bench extends ScenePickApi {
   /** 外部模型替换件（P1-09）开关；extModels() 列出此刻场景里实际显示的外部模型 */
   setExtModels(on: boolean): void;
   extModels(): string[];
+  /** 外接 LED 此刻该有的亮度（0–1，来自 GPIO / PWM 帧）：测试用，看放上台面的灯是不是真跟着引脚走 */
+  ledLevels(): { pin: number; target: number }[];
   /** 性能基线：上一帧的绘制调用、三角形数与平均帧间隔 */
   stats(): { calls: number; triangles: number; frameMs: number; cpuMs: number; geometries: number; textures: number };
   /** 视角按钮（U-04）：俯视 / 正视 / 拉近 / 拉远 / 对准选中（没选中就整体取景） */
@@ -3726,6 +3728,7 @@ export function createBench(container: HTMLElement): Bench {
       }
       controls.update();
     },
+    ledLevels: () => leds.map((l) => ({ pin: l.pin, target: l.target })),
     stats() {
       return { ...lastInfo, frameMs: Math.round(frameMs * 10) / 10, cpuMs: Math.round(cpuMs * 100) / 100, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures };
     },

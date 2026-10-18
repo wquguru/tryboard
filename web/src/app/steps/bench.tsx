@@ -82,14 +82,24 @@ import { replay } from "../bom";
 import { isPhone, phoneProps, setMui } from "../mobile";
 import { setLeft } from "../leftcol";
 import {
+  buildPlaced,
+  mergeMods,
+  pinOk,
+  placeConflict,
+  placeDef,
+  type PlaceDef,
+} from "../place";
+import {
   AllPassedCard,
   CheckpointCard,
   ConfBadge,
   EmptyBench,
+  LIB_DRAG,
   MeterCard,
   PART_CONF,
   PartLib,
   PinRings,
+  PlaceBanner,
   WireBanner,
   WireTable,
   WrongWireCard,
@@ -223,6 +233,13 @@ export function benchStep(): StepImpl {
   let wiring: { wire: string | null } | null = null;
   /** 台面上画成改接过的线（和 wireMods.retarget 对齐） */
   let shownRewire = new Set<string>();
+  /** 台面直接放零件（P2-16）：放下后逐根接线；接完才进场景（没接完的件不进模拟，也就不画） */
+  let placing: {
+    def: PlaceDef;
+    cur: number;
+    got: Record<string, string>;
+    skipped: Set<string>;
+  } | null = null;
 
   function select(sel: Selection | null) {
     // 从台面点中的东西，在构建树里展开它所在的分组
@@ -336,6 +353,7 @@ export function benchStep(): StepImpl {
         <PartLib
           chip={c.session.chip === "esp32s3" ? "esp32s3" : "esp32c3"}
           inBom={new Set(replay(s.bom).picks.map((p) => p.partId))}
+          onPlace={startPlace}
         />
       ),
       wires: (
@@ -460,6 +478,169 @@ export function benchStep(): StepImpl {
         }}
         onKeep={() => overlay("wrongWire", null)}
       />,
+    );
+  }
+
+  // ------------------------------------------------------------ 台面直接放零件（P2-16）
+  function startPlace(id: string) {
+    const c = ctx;
+    if (!c || c.store.get().step !== "bench") return;
+    const d = placeDef(id);
+    if ("why" in d) return c.shell.toast(d.why);
+    const clash = placeConflict(d, c.session.scene);
+    if (clash) return c.shell.toast(clash);
+    if (wiring) setWiring(false);
+    if (ruler) setRuler(false);
+    if (meter) setMeter(false);
+    closeCard();
+    overlay("wrongWire", null);
+    placing = { def: d, cur: 0, got: {}, skipped: new Set() };
+    overlay("empty", null);
+    c.shell.toolbar.setActive("place");
+    placeUi();
+  }
+  function endPlace() {
+    placing = null;
+    overlay("place", null);
+    overlay("rings", null);
+    if (ctx) renderTree();
+    ctx?.shell.toolbar.setActive("select");
+  }
+  function placeUi() {
+    const c = ctx!;
+    const p = placing;
+    if (!p) return endPlace();
+    const step = p.def.steps[p.cur];
+    overlay(
+      "place",
+      <PlaceBanner
+        name={p.def.name}
+        steps={p.def.steps}
+        cur={p.cur}
+        got={p.got}
+        onStep={(i) => {
+          if (!placing) return;
+          placing.cur = i;
+          placing.skipped.delete(placing.def.steps[i].pin);
+          placeUi();
+        }}
+        onSkip={
+          step.optional
+            ? () => {
+                if (!placing) return;
+                placing.skipped.add(step.pin);
+                delete placing.got[step.pin];
+                placeNext();
+              }
+            : null
+        }
+        onBack={
+          p.cur > 0
+            ? () => {
+                if (!placing) return;
+                placing.cur--;
+                placeUi();
+              }
+            : null
+        }
+        onCancel={() => {
+          endPlace();
+          c.shell.toast(`没放 ${p.def.name}`);
+        }}
+      />,
+    );
+    const wires = benchWires().filter((x) => !x.missing);
+    const pins: RingPin[] = (c.session.pick.listPins?.() ?? [])
+      .filter((x) => pinOk(step.want, x.id))
+      .map((x) => ({
+        ...x,
+        used: [
+          ...wires.filter((w) => w.a === x.id).map((w) => w.b),
+          ...Object.entries(p.got)
+            .filter(([k, v]) => v === x.id && k !== step.pin)
+            .map(([k]) => `${p.def.name} ${k}`),
+        ],
+      }));
+    overlay(
+      "rings",
+      <PinRings
+        pins={pins}
+        cur={p.got[step.pin] ?? null}
+        project={ringProject}
+        onPin={placePin}
+      />,
+    );
+  }
+  function placePin(id: string) {
+    const c = ctx!;
+    const p = placing;
+    if (!p) return;
+    const step = p.def.steps[p.cur];
+    if (!pinOk(step.want, id))
+      return c.shell.toast(
+        step.want === "gnd"
+          ? `${step.label} 要接 GND`
+          : step.want === "power"
+            ? `${step.label} 要接 3V3 或 5V`
+            : `${step.label} 要接一根 GPIO`,
+      );
+    // 同一个零件的两根信号线接到同一根 GPIO（SDA、SCL 接一起）没有意义：直接拦
+    const dup = Object.entries(p.got).find(([k, v]) => v === id && k !== step.pin);
+    if (step.want === "gpio" && dup)
+      return c.shell.toast(`${id} 已经接了 ${p.def.name} 的 ${dup[0]}`);
+    p.got[step.pin] = id;
+    placeNext();
+  }
+  function placeNext() {
+    const p = placing;
+    if (!p) return;
+    const next = p.def.steps.findIndex(
+      (s) => !p.got[s.pin] && !p.skipped.has(s.pin),
+    );
+    if (next >= 0) {
+      p.cur = next;
+      return placeUi();
+    }
+    finishPlace();
+  }
+  function finishPlace() {
+    const c = ctx!;
+    const p = placing!;
+    const ext5v = !!c.session.power?.ext5v;
+    const { spec, retarget } = buildPlaced(p.def, p.got, ext5v);
+    const pid = partId(spec);
+    if (c.session.scene.parts.some((x) => partId(x) === pid)) {
+      // LED / 按键按引脚区分：同一根 GPIO 上已经有一颗了
+      const i = p.def.steps.findIndex((s) => s.want === "gpio");
+      c.shell.toast(`${p.got[p.def.steps[i].pin]} 上已经有一个${p.def.name}了：换一根 GPIO`);
+      delete p.got[p.def.steps[i].pin];
+      p.cur = i;
+      return placeUi();
+    }
+    const sum = p.def.steps
+      .filter((s) => p.got[s.pin] && s.want === "gpio")
+      .map((s) => `${s.pin}→${p.got[s.pin]}`)
+      .join(" ");
+    endPlace();
+    c.session.applyScene(
+      { ...c.session.scene, parts: [...c.session.scene.parts, spec] },
+      c.session.power ?? { ext5v: false },
+      `放 ${p.def.name}${sum ? `（${sum}）` : ""}`,
+    );
+    const rt = Object.entries(retarget);
+    if (rt.length)
+      applyMods(
+        mergeMods(c.session.wireMods, retarget),
+        `${p.def.name} 电源接 ${rt.map(([, v]) => v).join("、")}`,
+      );
+    recheckWiring();
+    renderLeft();
+    select({ kind: "part", id: pid });
+    const fs = faults.filter((f) => f.wires.some((w) => w.includes(`~${pid}:`)));
+    c.shell.toast(
+      fs.length
+        ? `已放 ${p.def.name}：接线检查发现「${fs[0].title}」，看问题页签`
+        : `已放 ${p.def.name}，接线检查没发现问题`,
     );
   }
 
@@ -670,7 +851,8 @@ export function benchStep(): StepImpl {
     // 空台面引导：只有开发板、没摆零件（空白实验台刚打开）
     overlay(
       "empty",
-      parts.length ? null : (
+      // 放零件接线时让开（引导卡片会盖住开发板上的针）
+      parts.length || placing ? null : (
         <EmptyBench
           hasFw={!!ses.fwName}
           onFirmware={() => document.getElementById("fwPick")?.click()}
@@ -2594,6 +2776,12 @@ export function benchStep(): StepImpl {
 
   function onPick(t: PickTarget | null, screen: ScreenPoint) {
     if (!ctx || ctx.store.get().step !== "bench") return;
+    if (placing) {
+      if (!t) return;
+      if (t.kind === "pin") placePin(t.id);
+      else ctx.shell.toast("点开发板上发蓝的针");
+      return;
+    }
     if (wiring) {
       if (!t) return;
       if (t.kind === "wire") {
@@ -2675,6 +2863,21 @@ export function benchStep(): StepImpl {
     // 手机：连线 / 测量要看台面，先收起属性抽屉
     if ((id === "wire" || id === "meter" || id === "ruler") && isPhone())
       setMui({ props: false, more: false });
+    if (placing && id !== "place" && /^(select|orbit|wire|meter|ruler)$/.test(id))
+      endPlace();
+    if (id === "place") {
+      if (placing) {
+        endPlace();
+        return;
+      }
+      c.shell.toolbar.setActive("select");
+      c.shell.toast("从左栏元件库把零件拖到台面上，或点它后面的「放」");
+      (document.querySelector('[data-left="lib"]') as HTMLElement | null)?.click();
+      requestAnimationFrame(() =>
+        (document.querySelector("#partLib input") as HTMLInputElement | null)?.focus(),
+      );
+      return;
+    }
     if (id === "select" || id === "orbit") {
       if (ruler) setRuler(false);
       if (meter) setMeter(false);
@@ -2868,7 +3071,11 @@ export function benchStep(): StepImpl {
             return;
           const k = e.key.toLowerCase();
           if (k === "escape") {
-            if (bc.get().overlays.wrongWire) overlay("wrongWire", null);
+            if (placing) {
+              const n = placing.def.name;
+              endPlace();
+              ctx.shell.toast(`没放 ${n}`);
+            } else if (bc.get().overlays.wrongWire) overlay("wrongWire", null);
             else if (wiring) setWiring(false);
             else if (ruler) setRuler(false);
             else if (meter) setMeter(false);
@@ -2884,6 +3091,20 @@ export function benchStep(): StepImpl {
             } as Record<string, string>
           )[k];
           if (tool) onTool(tool);
+        });
+        // 元件库拖到台面（P2-16）：只认元件库的拖动类型，拖 .bin 文件不归这里管
+        const stage = document.getElementById("stage");
+        stage?.addEventListener("dragover", (e) => {
+          if (!ctx || ctx.store.get().step !== "bench") return;
+          if (!e.dataTransfer?.types.includes(LIB_DRAG)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        });
+        stage?.addEventListener("drop", (e) => {
+          const id = e.dataTransfer?.getData(LIB_DRAG);
+          if (!id || !ctx || ctx.store.get().step !== "bench") return;
+          e.preventDefault();
+          startPlace(id);
         });
         if (new URLSearchParams(location.search).has("debug")) {
           const w = window as unknown as { __tbApp?: Record<string, unknown> };
@@ -2911,7 +3132,7 @@ export function benchStep(): StepImpl {
         {
           id: "edit",
           tools: [
-            { id: "place", label: "放置", todo: true },
+            { id: "place", label: "放置" },
             { id: "wire", label: "连线", key: "W" },
           ],
         },
@@ -3040,7 +3261,8 @@ export function benchStep(): StepImpl {
       }
       meter = null;
       wiring = null;
-      for (const k of ["wire", "rings", "wrongWire", "meter", "empty"])
+      placing = null;
+      for (const k of ["wire", "rings", "wrongWire", "meter", "empty", "place"])
         overlay(k, null);
       setLeft({ lib: null, wires: null, wireCount: 0, card: null });
       ctx?.session.pick.highlight?.(null);

@@ -39,7 +39,7 @@ const label = (op: BenchOp, runs: RunRec[]): TimelineStep => {
     case 'wire':
       return { id: '', icon: '~', label: '连线' };
     case 'scene':
-      return { id: '', icon: '⇢', label: `按清单摆上 ${op.count} 件` };
+      return { id: '', icon: '⇢', label: op.label ?? `按清单摆上 ${op.count} 件` };
     case 'run': {
       const r = runs.find((x) => x.n === op.n);
       return { id: '', icon: '▶', label: `运行 #${op.n}`, status: r?.snap ? undefined : 'run' };

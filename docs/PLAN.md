@@ -82,8 +82,8 @@
 |---|---|---|---|
 | P2-13 | 验收缺口：C3 RMT 接收固件（c3-ultrasonic）、C3 I2S 固件（c3-i2s-tone）、TIMG 通用定时器独立验收（gptimer 告警 / 自动重载，C3 + S3）、网页串口输入（echo 示例在网页里发送 → 回显）；清理 STATUS 里过时 / 重复的行（NVS、C3「M2 ☐」行、重复的 CPU / 中断矩阵 / 3D 工作台行） | 新用例进 accept.json 全过；串口输入 webtest 进 accept.sh；STATUS 对应行改 ✅ | ☐ |
 | P2-14 | 接线错误走网络求解：W1 输出对打、W3 LED 无限流电阻、短路（3V3 / 5V 接 GND）由 elec MNA 算出电流，属性面板 / 接错线卡片显示估算电流与后果 | elec 单测（三种错接的电流）；网页用例经 `__tbApp.injectWiring`；agent-browser 截图 | ☐ |
-| P2-15 | 底部坞「代码」页签：参考固件 / 示例的源码只读显示（构建期从 firmware/<名>/main 打包），多文件切换、复制、行号；上传的 .bin 没有源码时说明原因 | webtest：打开 weather 看到 app_main；上传 bin 显示"没有源码"；agent-browser 截图 | ☐ |
-| P2-16 | 台面直接放零件：元件库拖到台面放下，进入"接线"提示（按零件引脚逐根接，复用改接线模式），接完参与接线检查与模拟 | webtest：拖一个 LED 到台面、接两根线、跑 blink 亮；agent-browser 截图 | ☐ |
+| P2-15 | 底部坞「代码」页签：参考固件 / 示例的源码只读显示（构建期从 firmware/<名>/main 打包），多文件切换、复制、行号；上传的 .bin 没有源码时说明原因 | webtest：打开 weather 看到 app_main；上传 bin 显示"没有源码"；agent-browser 截图 | ☑ 2026-10-17 构建期 gen_fw_src.py 打包 src.json（按需取），自写 C 高亮，文件切换 / 行号 / 复制，上传 bin 说明原因；code.mjs 7 项（Reviews/ab/P2-15.md） |
+| P2-16 | 台面直接放零件：元件库拖到台面放下，进入"接线"提示（按零件引脚逐根接，复用改接线模式），接完参与接线检查与模拟 | webtest：拖一个 LED 到台面、接两根线、跑 blink 亮；agent-browser 截图 | ◐ 2026-10-17 桌面：14 件有引脚模型的可拖 / 点「放」→逐根接线→进场景（LED 跟 GPIO 亮灭、BME280 被扫到），其余灰掉写原因；place.mjs 15 项（Reviews/ab/P2-16.md）。余：手机元件库放置；I2C 模拟不看 SDA/SCL 针 |
 | P2-17 | 手机成品全屏 3D：3D 占满、底部串口一行 + 按键网格（BOOT / 热源 / 等作品按键），按 DESIGN_V2 §5 | mobile.mjs 增用例；390×844 agent-browser 截图无横向滚动、console 无 error | ☐ |
 | P2-18 | 触摸屏 FT6236（P2-02 尾巴）：I2C 0x38 模型 + 验收固件 | 固件验收进 accept.json | ☐ |
 | P2-19 | 字体自托管（P0-20 尾巴）：Noto Sans SC、JetBrains Mono 子集化 WOFF2，附 OFL.txt，去掉 Google Fonts 外链，授权页列出 | 构建产物无 fonts.googleapis 引用；授权页有字体条目；agent-browser 截图字形正常 | ☐ |

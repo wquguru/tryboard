@@ -9,6 +9,7 @@ import { Live } from "../ui/native";
 import { Icon } from "./icons";
 import { isPhone, setMui, usePhone } from "./mobile";
 import type { BenchWire } from "./wiring";
+import { placeDef } from "./place";
 
 const btn =
   "inline-flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md border border-line bg-surface px-2.5 text-xs text-fg hover:bg-field";
@@ -164,6 +165,112 @@ export function WireBanner({
       >
         Esc 取消
       </button>
+    </div>
+  );
+}
+
+/** 放零件后的逐根接线引导（P2-16）：零件这头的针一根根列出来，当前那根高亮；点开发板上发蓝的圈接上 */
+export function PlaceBanner({
+  name,
+  steps,
+  cur,
+  got,
+  onStep,
+  onSkip,
+  onBack,
+  onCancel,
+}: {
+  name: string;
+  steps: { pin: string; label: string; want: string; optional?: boolean }[];
+  cur: number;
+  got: Record<string, string>;
+  onStep: (i: number) => void;
+  onSkip: (() => void) | null;
+  onBack: (() => void) | null;
+  onCancel: () => void;
+}) {
+  const phone = usePhone();
+  const s = steps[cur];
+  const what =
+    s.want === "gnd" ? "GND" : s.want === "power" ? "3V3 或 5V" : "一根 GPIO";
+  return (
+    <div
+      id="placeBanner"
+      role="status"
+      data-step={s.pin}
+      className={cn(
+        "absolute z-5 rounded-xl bg-accent-strong text-on-accent shadow-panel",
+        phone
+          ? "top-2 right-2 left-2 p-2 pl-3 text-[13px]"
+          : "top-14 left-1/2 w-[min(560px,calc(100%-24px))] -translate-x-1/2 px-3.5 py-2 text-xs",
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <Icon n="wire" size={14} className="flex-none" />
+        <span className="min-w-0 flex-1 leading-snug">
+          接 <b>{name}</b> 的 <b className="font-mono">{s.label}</b>
+          {s.optional ? "（可不接）" : ""}：点开发板上{what}（蓝圈）
+        </span>
+        <button
+          type="button"
+          onClick={onCancel}
+          className={cn(
+            "flex-none cursor-pointer rounded-full border-0 bg-[#ffffff2e] px-2.5 text-on-accent hover:bg-[#ffffff47]",
+            phone ? "min-h-11 text-[13px]" : "h-6 text-xs",
+          )}
+        >
+          {phone ? "不放了" : "Esc 不放了"}
+        </button>
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1">
+        {steps.map((x, i) => (
+          <button
+            key={x.pin}
+            type="button"
+            data-pstep={x.pin}
+            aria-current={i === cur ? "step" : undefined}
+            onClick={() => onStep(i)}
+            className={cn(
+              "cursor-pointer rounded-md border-0 px-2 font-mono text-[11px] whitespace-nowrap",
+              phone ? "min-h-11" : "h-6",
+              i === cur
+                ? "bg-surface text-fg"
+                : got[x.pin]
+                  ? "bg-[#ffffff2e] text-on-accent"
+                  : "bg-transparent text-on-accent opacity-75 outline outline-1 outline-[#ffffff47]",
+            )}
+          >
+            {x.label}
+            {got[x.pin] ? ` → ${got[x.pin]}` : ""}
+          </button>
+        ))}
+        <span className="flex-1" />
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className={cn(
+              "cursor-pointer rounded-md border-0 bg-[#ffffff2e] px-2 text-on-accent",
+              phone ? "min-h-11 text-[13px]" : "h-6 text-[11px]",
+            )}
+          >
+            上一根
+          </button>
+        )}
+        {onSkip && (
+          <button
+            type="button"
+            data-pskip=""
+            onClick={onSkip}
+            className={cn(
+              "cursor-pointer rounded-md border-0 bg-[#ffffff2e] px-2 text-on-accent",
+              phone ? "min-h-11 text-[13px]" : "h-6 text-[11px]",
+            )}
+          >
+            这根不接
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -665,7 +772,10 @@ const KIND_NAMES: Partial<Record<Kind, string>> = {
   audio: "音频",
   module: "模块",
   power: "电源",
+  passive: "分立元件",
 };
+/** 元件库拖到台面时 dataTransfer 里的类型（台面 drop 只认它，不和拖 .bin 混） */
+export const LIB_DRAG = "application/x-tryboard-part";
 const SIM_NAMES = {
   verified: "仿真验证",
   estimated: "估算",
@@ -675,9 +785,12 @@ const SIM_NAMES = {
 export function PartLib({
   chip,
   inBom,
+  onPlace,
 }: {
   chip: "esp32c3" | "esp32s3";
   inBom?: ReadonlySet<string>;
+  /** 桌面：点「放到台面」或拖到台面上（P2-16）；没给就只能去采购加 */
+  onPlace?: (id: string) => void;
 }) {
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<Kind | null>(null);
@@ -774,7 +887,9 @@ export function PartLib({
         className="mb-2 h-8 w-full rounded-md border border-line bg-field px-2 text-xs text-fg outline-none focus:border-accent"
       />
       <p className="mt-0 mb-2 text-[11px] text-muted">
-        零件从采购清单摆上台面：点一个去采购里勾上它。
+        {onPlace
+          ? "拖到台面上，或点「放」，再一根根接到开发板；灰的放不了，悬停看原因。整套零件仍可从采购清单摆。"
+          : "零件从采购清单摆上台面：点一个去采购里勾上它。"}
       </p>
       {kinds.map((k) => (
         <section key={k} className="mb-2">
@@ -783,24 +898,58 @@ export function PartLib({
           </h4>
           {list
             .filter((p) => p.kind === k)
-            .map((p) => (
-              <a
-                key={p.id}
-                href="#shop"
-                data-lib={p.id}
-                className="flex items-center gap-2 rounded-md px-1.5 py-1 text-fg no-underline hover:bg-field"
-              >
-                <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                <span
+            .map((p) => {
+              const d = onPlace ? placeDef(p.id) : null;
+              const why = d && "why" in d ? d.why : null;
+              return (
+                <div
+                  key={p.id}
+                  data-lib={p.id}
+                  data-placeable={d ? String(!why) : undefined}
+                  draggable={!!d && !why}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(LIB_DRAG, p.id);
+                    e.dataTransfer.effectAllowed = "copy";
+                  }}
+                  title={why ?? (d ? "拖到台面上，或点「放」" : undefined)}
                   className={cn(
-                    "flex-none text-[10px]",
-                    p.sim.level === "verified" ? "text-ok-ink" : "text-muted",
+                    "flex items-center gap-2 rounded-md px-1.5 py-0.5 hover:bg-field",
+                    d && !why && "cursor-grab",
                   )}
                 >
-                  {SIM_NAMES[p.sim.level]}
-                </span>
-              </a>
-            ))}
+                  <a
+                    href="#shop"
+                    title="去采购里看它"
+                    className={cn(
+                      "min-w-0 flex-1 truncate no-underline",
+                      why ? "text-muted" : "text-fg",
+                    )}
+                  >
+                    {p.name}
+                  </a>
+                  <span
+                    className={cn(
+                      "flex-none text-[10px]",
+                      p.sim.level === "verified" ? "text-ok-ink" : "text-muted",
+                    )}
+                  >
+                    {SIM_NAMES[p.sim.level]}
+                  </span>
+                  {d && (
+                    <button
+                      type="button"
+                      data-place={p.id}
+                      disabled={!!why}
+                      aria-label={why ? `${p.name} 放不了：${why}` : `把 ${p.name} 放到台面`}
+                      onClick={() => onPlace?.(p.id)}
+                      className="h-6 flex-none cursor-pointer rounded-md border border-line bg-surface px-2 text-[11px] text-fg hover:border-accent hover:text-accent-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-fg"
+                    >
+                      放
+                    </button>
+                  )}
+                </div>
+              );
+            })}
         </section>
       ))}
       {!list.length && <p className="text-muted">没有匹配的零件</p>}
