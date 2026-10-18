@@ -367,6 +367,8 @@ pub struct Timg {
     pub t0_latch: u64,
     pub t0_alarm: u64,
     pub t0_load: u64,
+    /// 告警装上时计数已经不小于告警值（真机立刻触发）：这种情况重载后从 load 起数，不补"超出的计数"
+    t0_alarm_late: bool,
     pub wdt_cfg: [u32; 6],
     pub wdt_wprotect: u32,
     pub rtccali: [u32; 3],
@@ -383,6 +385,7 @@ impl Default for Timg {
             t0_latch: 0,
             t0_alarm: 0,
             t0_load: 0,
+            t0_alarm_late: false,
             wdt_cfg: [
                 0x0004_c000,
                 0xffff,
@@ -455,7 +458,14 @@ impl Timg {
         }
     }
 
+    /// 告警（重新）装上时记下是不是已经过点
+    fn arm(&mut self, now: u64) {
+        self.t0_alarm_late = self.count(now) >= self.t0_alarm;
+    }
+
     pub fn write(&mut self, off: u32, v: u32, now: u64) {
+        // 先结算已经过点的告警：自动重载要在读数 / 改配置之前生效，否则会读到 ≥ 告警值的计数
+        self.update(now);
         match off {
             0x00 => {
                 // 先冻结当前计数，再换配置，保证计数连续
@@ -466,10 +476,17 @@ impl Timg {
                 } else {
                     self.t0_offset = c as i64;
                 }
+                self.arm(now);
             }
             0x0c => self.t0_latch = self.count(now),
-            0x10 => self.t0_alarm = (self.t0_alarm & !0xffff_ffff) | v as u64,
-            0x14 => self.t0_alarm = (self.t0_alarm & 0xffff_ffff) | ((v as u64 & 0x3f_ffff) << 32),
+            0x10 => {
+                self.t0_alarm = (self.t0_alarm & !0xffff_ffff) | v as u64;
+                self.arm(now);
+            }
+            0x14 => {
+                self.t0_alarm = (self.t0_alarm & 0xffff_ffff) | ((v as u64 & 0x3f_ffff) << 32);
+                self.arm(now);
+            }
             0x18 => self.t0_load = (self.t0_load & !0xffff_ffff) | v as u64,
             0x1c => self.t0_load = (self.t0_load & 0xffff_ffff) | ((v as u64 & 0x3f_ffff) << 32),
             0x20 => {
@@ -479,6 +496,7 @@ impl Timg {
                 } else {
                     self.t0_offset = self.t0_load as i64;
                 }
+                self.arm(now);
             }
             0x48..=0x5c => {
                 if self.wdt_wprotect == 0x50d8_3aa1 {
@@ -511,9 +529,13 @@ impl Timg {
                 self.int_raw |= 1;
                 self.t0config &= !(1 << 10);
                 if self.t0config & (1 << 29) != 0 {
+                    // 真机在计数到告警值那一拍就重载、接着往上数：结算晚了的话把多数的那几拍补上，
+                    // 周期才不会随结算时刻漂
+                    let late = if self.t0_alarm_late { 0 } else { c - self.t0_alarm };
                     self.t0_offset =
-                        self.t0_load as i64 - (self.src_ticks(now) / self.divider()) as i64;
+                        (self.t0_load + late) as i64 - (self.src_ticks(now) / self.divider()) as i64;
                 }
+                self.t0_alarm_late = false;
             } else {
                 let ticks = (self.t0_alarm - c) * self.divider();
                 let per = if self.t0config & (1 << 9) != 0 { 4 } else { 2 };
@@ -784,5 +806,39 @@ impl Adc {
             self.regs[0x30 / 4] = raw;
             self.regs[0x44 / 4] |= 1 << 30;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// gptimer 的写法：APB 80 MHz ÷ 80 = 1 MHz，告警 10000、自动重载到 0
+    fn periodic() -> Timg {
+        let mut t = Timg::default();
+        t.write(0x10, 10_000, 0);
+        t.write(0x00, (1 << 31) | (1 << 30) | (1 << 29) | (80 << 13) | (1 << 10), 0);
+        t
+    }
+
+    #[test]
+    fn timg_autoreload_keeps_phase() {
+        // 1 µs = 160 个 CPU 周期。告警到点后晚了 300 µs 才结算：重载后应当是 300，不是 0
+        let mut t = periodic();
+        t.update(10_300 * 160);
+        assert_eq!(t.int_raw & 1, 1);
+        assert_eq!(t.count(10_300 * 160), 300);
+        // 没结算就先锁存读数（写 UPDATE）：不能读到 ≥ 告警值
+        let mut t = periodic();
+        t.write(0x0c, 1, 10_050 * 160);
+        assert_eq!(t.t0_latch, 50);
+        // 装告警时已经过点：立刻触发，从 load 起数
+        let mut t = Timg::default();
+        t.write(0x00, (1 << 31) | (1 << 30) | (1 << 29) | (80 << 13), 0);
+        t.write(0x10, 100, 500 * 160);
+        t.write(0x00, t.t0config | (1 << 10), 500 * 160);
+        t.update(500 * 160);
+        assert_eq!(t.int_raw & 1, 1);
+        assert_eq!(t.count(500 * 160), 0);
     }
 }

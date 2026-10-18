@@ -3,6 +3,7 @@
 pub mod audio;
 pub mod bme280;
 pub mod cst816s;
+pub mod ft6236;
 pub mod gc9a01;
 pub mod imu;
 pub mod mpu6050;
@@ -20,6 +21,7 @@ pub fn make_i2c(kind: &str, addr: u8) -> Option<Box<dyn I2cDevice>> {
         "mpu6050" => Box::new(mpu6050::Mpu6050::new(addr)),
         "qmi8658" => Box::new(qmi8658::Qmi8658::new(addr)),
         "cst816s" => Box::new(cst816s::Cst816s::new(addr)),
+        "ft6236" => Box::new(ft6236::Ft6236::new(addr)),
         _ => return None,
     })
 }
