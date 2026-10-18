@@ -1525,5 +1525,200 @@
    "EDGE x=202 y=120"
   ],
   "lcd_min_pixels": 40000
+ },
+ {
+  "id": "c3-ultrasonic",
+  "seconds": 2,
+  "args": [
+   "--sonar",
+   "4,5"
+  ],
+  "script": "0:dist=25; 0.5:dist=100; 1.0:dist=300; 1.5:dist=-1",
+  "expect": [
+   "ULTRASONIC ready TRIG=GPIO4 ECHO=GPIO5",
+   "DIST 25.0 cm (echo 1457 us)",
+   "DIST 100.0 cm (echo 5830 us)",
+   "DIST 300.0 cm (echo 17492 us)",
+   "DIST out of range",
+   "TRYBOARD_OK ultrasonic"
+  ],
+  "stderr_expect": [
+   "超声波 触发 16 次，回波 16 次"
+  ],
+  "gpio_toggles": {
+   "pin": 5,
+   "min": 30
+  }
+ },
+ {
+  "id": "c3-i2s-tone",
+  "seconds": 1.5,
+  "args": [
+   "--i2s",
+   "max98357a"
+  ],
+  "expect": [
+   "TONE 440 Hz @ 44100 Hz",
+   "BCLK=GPIO0 LRC=GPIO1 DIN=GPIO2",
+   "TRYBOARD_OK c3-i2s-tone"
+  ],
+  "audio": {
+   "freq": 440,
+   "tol": 1,
+   "rate": 44100,
+   "min_rms": 0.3
+  }
+ },
+ {
+  "id": "c3-gptimer",
+  "seconds": 1.5,
+  "expect": [
+   "GPTIMER ready 1 MHz",
+   "GPTIMER stopped frozen",
+   "GPTIMER set 123456 read 123456",
+   "GPTIMER reload in range",
+   "GPTIMER oneshot alarms=1",
+   "count past alarm",
+   "TRYBOARD_OK gptimer"
+  ],
+  "absent": [
+   "RUNNING",
+   "OUT OF RANGE",
+   "STUCK"
+  ],
+  "numeric": [
+   {
+    "name": "100 ms 后计数",
+    "regex": "GPTIMER count (\\d+) elapsed",
+    "value": 100000,
+    "tol": 400
+   },
+   {
+    "name": "同期 esp_timer(us)",
+    "regex": "GPTIMER count \\d+ elapsed (\\d+) us",
+    "value": 100000,
+    "tol": 400
+   },
+   {
+    "name": "首次告警(us)",
+    "regex": "periodic first after (\\d+) us",
+    "value": 10000,
+    "tol": 10
+   },
+   {
+    "name": "50 个周期(us)",
+    "regex": "50 periods in (\\d+) us",
+    "value": 500000,
+    "tol": 5
+   },
+   {
+    "name": "单次告警(us)",
+    "regex": "oneshot alarms=1 after (\\d+) us",
+    "value": 5000,
+    "tol": 10
+   }
+  ]
+ },
+ {
+  "id": "s3-gptimer",
+  "chip": "esp32s3",
+  "seconds": 1.5,
+  "expect": [
+   "GPTIMER ready 1 MHz",
+   "GPTIMER stopped frozen",
+   "GPTIMER set 123456 read 123456",
+   "GPTIMER reload in range",
+   "GPTIMER oneshot alarms=1",
+   "count past alarm",
+   "TRYBOARD_OK gptimer"
+  ],
+  "absent": [
+   "RUNNING",
+   "OUT OF RANGE",
+   "STUCK"
+  ],
+  "numeric": [
+   {
+    "name": "100 ms 后计数",
+    "regex": "GPTIMER count (\\d+) elapsed",
+    "value": 100000,
+    "tol": 400
+   },
+   {
+    "name": "同期 esp_timer(us)",
+    "regex": "GPTIMER count \\d+ elapsed (\\d+) us",
+    "value": 100000,
+    "tol": 400
+   },
+   {
+    "name": "首次告警(us)",
+    "regex": "periodic first after (\\d+) us",
+    "value": 10000,
+    "tol": 10
+   },
+   {
+    "name": "50 个周期(us)",
+    "regex": "50 periods in (\\d+) us",
+    "value": 500000,
+    "tol": 5
+   },
+   {
+    "name": "单次告警(us)",
+    "regex": "oneshot alarms=1 after (\\d+) us",
+    "value": 5000,
+    "tol": 10
+   }
+  ]
+ },
+ {
+  "id": "s3-ft6236",
+  "chip": "esp32s3",
+  "seconds": 1.6,
+  "args": [
+   "--i2c",
+   "ft6236@0x38",
+   "--touch-int",
+   "5"
+  ],
+  "script": "0.6:touch=300,450; 0.7:touch=310,440; 0.9:release; 1.1:touch=20,470; 1.3:release",
+  "expect": [
+   "FT6236 chip id 0x36 OK, vendor 0x11",
+   "TRYBOARD_OK s3-ft6236",
+   "TOUCH DOWN x=300 y=450 ev=down",
+   "TOUCH MOVE x=310 y=440 ev=contact",
+   "TOUCH UP x=310 y=440 ev=up",
+   "TOUCH DOWN x=20 y=470 ev=down",
+   "TOUCH UP x=20 y=470 ev=up"
+  ]
+ },
+ {
+  "id": "s3-ft6236-poll",
+  "fw": "s3-ft6236",
+  "chip": "esp32s3",
+  "seconds": 1.6,
+  "args": [
+   "--i2c",
+   "ft6236@0x38"
+  ],
+  "script": "0.6:touch=300,450; 0.7:touch=310,440; 0.9:release",
+  "expect": [
+   "TRYBOARD_OK s3-ft6236",
+   "TOUCH DOWN x=300 y=450",
+   "TOUCH MOVE x=310 y=440",
+   "TOUCH UP x=310 y=440 ev=up"
+  ]
+ },
+ {
+  "id": "s3-ft6236-absent",
+  "fw": "s3-ft6236",
+  "chip": "esp32s3",
+  "seconds": 0.8,
+  "expect": [
+   "FT6236 no ACK at 0x38"
+  ],
+  "absent": [
+   "TRYBOARD_OK s3-ft6236",
+   "abort()"
+  ]
  }
 ]

@@ -93,6 +93,19 @@ if (ok && example === 's3-usb-cdc') {
   console.log(`[webtest] USB 串口终端 ping → ECHO: PING: ${seen ? 'PASS' : 'FAIL'}`);
   ok = ok && seen;
 }
+// 串口输入（P2-13）：在示例页右侧串口框（#uartIn）打字回车，固件逐字节收到后回显（网页 → worker → UART RX FIFO → 固件）
+if (ok && example === 'echo') {
+  await page.type('#uartIn', 'hello tryboard');
+  await page.keyboard.press('Enter');
+  let seen = false;
+  for (let i = 0; i < 40 && !seen; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    seen = (await page.$eval('#console', (e) => e.textContent)).includes('ECHO: hello tryboard');
+  }
+  const cleared = await page.$eval('#uartIn', (e) => e.value === '');
+  console.log(`[webtest] 串口输入 hello tryboard → ECHO: hello tryboard: ${seen && cleared ? 'PASS' : 'FAIL'}`);
+  ok = ok && seen && cleared;
+}
 // 多拍几张，抓到 LED 亮和灭两种状态
 for (let i = 0; i < 3; i++) {
   await page.screenshot({ path: path.join(outDir, `${example}-${i}.png`) });

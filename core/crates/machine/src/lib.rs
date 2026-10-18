@@ -8,6 +8,7 @@ use tryboard_esp32c3::devices::audio::{Audio, MicSource};
 use tryboard_esp32c3::devices::{
     bme280::{Bme280, Env},
     cst816s::Cst816s,
+    ft6236::Ft6236,
     gc9a01::Gc9a01,
     imu::Pose,
     mpu6050::Mpu6050,
@@ -500,14 +501,24 @@ impl Machine {
         self.gpio_drive(pin, 1);
     }
 
-    /// 手指在触摸屏上（x, y 为屏幕像素 0..239）：down = false 表示抬起
+    /// 手指在触摸屏上（x, y 为屏幕像素；CST816S 截到 0..239，FT6236 是 12 位）：down = false 表示抬起
     pub fn touch(&mut self, x: u16, y: u16, down: bool) {
         let now = self.cycles();
-        let Some(d) = self.i2c0().device::<Cst816s>() else { return };
-        if down {
-            d.press(x, y, now);
+        let bus = self.i2c0();
+        if let Some(d) = bus.device::<Cst816s>() {
+            if down {
+                d.press(x, y, now);
+            } else {
+                d.release(now);
+            }
+        } else if let Some(d) = bus.device::<Ft6236>() {
+            if down {
+                d.press(x, y);
+            } else {
+                d.release();
+            }
         } else {
-            d.release(now);
+            return;
         }
         if let Some(pin) = self.touch_int {
             self.gpio_drive(pin, if down { 0 } else { 1 });
@@ -855,10 +866,11 @@ pub fn parse_imu(s: &str) -> Option<Pose> {
     }
 }
 
-/// 脚本动作 `touch=x,y` 的参数部分（屏幕像素）
+/// 脚本动作 `touch=x,y` 的参数部分（屏幕像素）。按触摸芯片的 12 位坐标上限截断，
+/// 具体屏多大由器件模型自己截（CST816S 的圆屏 240×240）
 pub fn parse_touch(s: &str) -> Option<(u16, u16)> {
     let (x, y) = s.split_once(',')?;
-    let f = |t: &str| t.trim().parse::<f64>().ok().map(|v| v.round().clamp(0.0, 239.0) as u16);
+    let f = |t: &str| t.trim().parse::<f64>().ok().map(|v| v.round().clamp(0.0, 4095.0) as u16);
     Some((f(x)?, f(y)?))
 }
 pub use tryboard_elec::board::Power as PowerMode;
@@ -923,7 +935,8 @@ mod tests {
         assert_eq!(parse_imu("30,-20,5"), Some(Pose::new(30.0, -20.0, 5.0)));
         assert_eq!(parse_imu("1,2,3,4,5,6").map(|p| p.dyaw), Some(6.0));
         assert_eq!(parse_imu("1,2"), None);
-        assert_eq!(parse_touch("120.4, 300"), Some((120, 239)));
+        assert_eq!(parse_touch("120.4, 300"), Some((120, 300)));
+        assert_eq!(parse_touch("-3, 9000"), Some((0, 4095)));
         assert_eq!(parse_touch("x,1"), None);
     }
 }

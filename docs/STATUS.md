@@ -1,19 +1,18 @@
 # 覆盖矩阵
 
-最后更新：2026-10-17（U-02 新版选型助手、U-06 手机站点页：levels.mjs 57/0、harness.mjs 7/0、网页单测 133；agent-browser 桌面 + 390×844 走完首页 → 菜单 → 选型 → 跑一遍、授权页、levels 跳转，无横向滚动、console 无 error，见 Reviews/ab/U-02.md、U-06.md。此前：网页 2D 界面全部迁到 React + Tailwind（home / advisor / app / index；levels 跳转页与授权页保持静态）：`tools/accept.sh --no-qemu` 全过、cargo test 99/0、网页单测 133；各页 axe 亮 / 暗 0 违规、390px 无横向溢出、console 无 error，记录见 Reviews/ab/react/final.md。levels.mjs「上传自己的固件 → 刷新后进度还在」在一次全量验收中超时失败，单独重跑 3/3、再跑全量通过，按偶发记录、未放宽。此前 2026-10-16（wt-works P2-09 合并 main bfade2b：`check.py --ref --all` 24/24、网页单测 133、cargo test 通过、levels.mjs 全过（含 9 个新检查点指纹对拍、ruler 装法进复测）；`tools/accept.sh --no-qemu` 结果见 Reviews/ab/P2-09.md 末尾。此前：wt-media 合并 main b0a0eaa：`tools/accept.sh --no-qemu` 全部通过：固件 65/65（P2-10/11/12 的 weather-i2c-long / -nack、wifi-scan-antenna、wifi-connect-antenna、usbkey 与 main 的 s3-lvgl / encoder / ultrasonic / imu / qmi8658 / touch / i2s 并存），ngspice 对照 10/10，关卡参考固件 15/15，npm 包对拍一致，网页单测 131，网页冒烟 23 个示例 + levels / replay / elec / interact / asm3d / traceio / media 8 项 / harness 7 项 / sense 12 项全过。此前分支记录：P2-10 / 11 / 12 `tools/accept.sh --no-qemu` 全部通过：固件 55/55（新增 weather-i2c-long / -nack、wifi-scan-antenna、wifi-connect-antenna、usbkey），ngspice 对照 10/10，关卡参考固件 15/15（含 usbkey-1/2/3），npm 包对拍一致，网页单测 116，网页冒烟 16 个示例 + levels 40 项 + media 8 项 + harness 7 项；main 合并 wt-pcnt；P2-07：`tools/accept.sh --no-qemu` 全部通过：固件 46/46（含 s3-lvgl），ngspice 对照 10/10，关卡参考固件 12 个指纹与优化前一致，网页冒烟 16 个示例（含 s3-lvgl）+ levels / replay / elec / interact / traceio 全过。P2-01 / 04 / 05 分支 wt-pcnt：`tools/accept.sh --no-qemu` 全部通过，固件 47/47（含 s3-encoder、s3-ultrasonic），网页冒烟加 s3-encoder / s3-ultrasonic，web 单测 107 个。此前：固件 40/40（含 s3-brownout-usb / -ext），ngspice 对照 10/10，关卡参考固件 8/8（含 07-spin / 07-lens），网页冒烟 15 个示例 + 关卡 / 装配 / 首页 22 项。P2-06 分支 wt-audio：`tools/accept.sh --no-qemu` 全部通过：固件 42/42（含 s3-i2s-tone / s3-i2s-mic），ngspice 对照 10/10，关卡参考固件 8/8，网页冒烟 + 关卡 / 装配 / 首页全过；npm 对拍 s3-button 一次被 SIGKILL（137，内存压力），单独重跑一致）
+最后更新：2026-10-17（P2-13 / P2-18：新增 c3-ultrasonic、c3-i2s-tone、c3-gptimer、s3-gptimer、s3-ft6236（-poll / -absent）7 个 accept 用例全过；TIMG 自动重载相位修正后已有 74 个用例输出逐字节不变；webtest echo 串口输入 PASS；清理重复 / 过时行（C3 中断矩阵、M2 占位、S3 CPU / 中断矩阵 / 启动 / 存储映射 / 双核 / GPIO / UART 等、3D 工作台）。此前：U-02 新版选型助手、U-06 手机站点页：levels.mjs 57/0、harness.mjs 7/0、网页单测 133；agent-browser 桌面 + 390×844 走完首页 → 菜单 → 选型 → 跑一遍、授权页、levels 跳转，无横向滚动、console 无 error，见 Reviews/ab/U-02.md、U-06.md。此前：网页 2D 界面全部迁到 React + Tailwind（home / advisor / app / index；levels 跳转页与授权页保持静态）：`tools/accept.sh --no-qemu` 全过、cargo test 99/0、网页单测 133；各页 axe 亮 / 暗 0 违规、390px 无横向溢出、console 无 error，记录见 Reviews/ab/react/final.md。levels.mjs「上传自己的固件 → 刷新后进度还在」在一次全量验收中超时失败，单独重跑 3/3、再跑全量通过，按偶发记录、未放宽。此前 2026-10-16（wt-works P2-09 合并 main bfade2b：`check.py --ref --all` 24/24、网页单测 133、cargo test 通过、levels.mjs 全过（含 9 个新检查点指纹对拍、ruler 装法进复测）；`tools/accept.sh --no-qemu` 结果见 Reviews/ab/P2-09.md 末尾。此前：wt-media 合并 main b0a0eaa：`tools/accept.sh --no-qemu` 全部通过：固件 65/65（P2-10/11/12 的 weather-i2c-long / -nack、wifi-scan-antenna、wifi-connect-antenna、usbkey 与 main 的 s3-lvgl / encoder / ultrasonic / imu / qmi8658 / touch / i2s 并存），ngspice 对照 10/10，关卡参考固件 15/15，npm 包对拍一致，网页单测 131，网页冒烟 23 个示例 + levels / replay / elec / interact / asm3d / traceio / media 8 项 / harness 7 项 / sense 12 项全过。此前分支记录：P2-10 / 11 / 12 `tools/accept.sh --no-qemu` 全部通过：固件 55/55（新增 weather-i2c-long / -nack、wifi-scan-antenna、wifi-connect-antenna、usbkey），ngspice 对照 10/10，关卡参考固件 15/15（含 usbkey-1/2/3），npm 包对拍一致，网页单测 116，网页冒烟 16 个示例 + levels 40 项 + media 8 项 + harness 7 项；main 合并 wt-pcnt；P2-07：`tools/accept.sh --no-qemu` 全部通过：固件 46/46（含 s3-lvgl），ngspice 对照 10/10，关卡参考固件 12 个指纹与优化前一致，网页冒烟 16 个示例（含 s3-lvgl）+ levels / replay / elec / interact / traceio 全过。P2-01 / 04 / 05 分支 wt-pcnt：`tools/accept.sh --no-qemu` 全部通过，固件 47/47（含 s3-encoder、s3-ultrasonic），网页冒烟加 s3-encoder / s3-ultrasonic，web 单测 107 个。此前：固件 40/40（含 s3-brownout-usb / -ext），ngspice 对照 10/10，关卡参考固件 8/8（含 07-spin / 07-lens），网页冒烟 15 个示例 + 关卡 / 装配 / 首页 22 项。P2-06 分支 wt-audio：`tools/accept.sh --no-qemu` 全部通过：固件 42/42（含 s3-i2s-tone / s3-i2s-mic），ngspice 对照 10/10，关卡参考固件 8/8，网页冒烟 + 关卡 / 装配 / 首页全过；npm 对拍 s3-button 一次被 SIGKILL（137，内存压力），单独重跑一致）
 
 ## ESP32-C3
 | 模块 | 状态 | 验收 | 备注 |
 |---|---|---|---|
 | CPU RV32IMC + Zicsr | ✅ | riscv-tests rv32ui/um/uc 50/50 | M 模式；A 扩展已实现（给以后的芯片） |
-| 中断矩阵 + CPU 中断控制器 | ✅ | FreeRTOS 调度、vTaskDelay 计时与 QEMU 一致；I2C 中断线 7 | 电平 / 边沿、优先级、阈值。2026-10-15 修正：CPU_INT_PRI_n 下标错一位（PRI_0 在 0x114），之前 SYSTIMER 能用是碰巧 |
+| 中断矩阵 + CPU 中断控制器 | ✅ | FreeRTOS 调度、vTaskDelay 计时与 QEMU 一致；GPIO / LEDC / UART / RMT / I2C（线 7）/ TIMG 中断 | 电平 / 边沿、优先级、阈值。2026-10-15 修正：CPU_INT_PRI_n 下标错一位（PRI_0 在 0x114），之前 SYSTIMER 能用是碰巧 |
 | SYSTIMER | ✅ | esp_timer 测 500ms 延时误差 < 0.1% | 16MHz，比较器单次 / 周期 |
-| TIMG0/1 | 🟡 | 启动期 RTC 校准 | T0 计数 / 告警 / 自动重载已写，缺独立验收；看门狗不触发复位 |
+| TIMG0/1 | ✅ | 启动期 RTC 校准；c3-gptimer（P2-13，IDF `gptimer` 1 MHz）：跑 100 ms 读回计数 99669 / esp_timer 99671 µs、停止后计数冻结、设计数 123456 读回一致、自动重载告警周期 10 ms × 50 = 499999 µs（首次 10004 µs）且读数始终 < 告警值、单次告警 5003 µs 只触发 1 次；accept 数值容差 count / elapsed ±400、50 周期 ±5 µs | T0 计数 / 告警 / 自动重载 / 计数锁存 / 装载；2026-10-17 修正：自动重载按"到点那拍"重载并补上结算晚了的计数（之前重载相位随结算时刻漂、可读到 ≥ 告警值的计数），写寄存器前先结算到点的告警；已有 accept 用例输出逐字节不变（74/74）；看门狗不触发复位 |
 | UART0/1 | ✅ | echo：驱动收行回显 | TX 瞬间完成；RX 阈值 + 超时中断 |
 | GPIO 输入 / 中断 | ✅ | button：下降沿中断 + 消抖 | IO_MUX 上下拉；板载 GPIO9 上拉；边沿 / 电平中断 |
-| 中断矩阵 + CPU 中断控制器 | ✅ | FreeRTOS 调度、vTaskDelay 计时与 QEMU 一致；GPIO / LEDC / UART / RMT 中断 | 电平 / 边沿、优先级、阈值（2026-10-15 修正 CPU_INT_PRI_n 下标错位：PRI_0 在 0x114） |
 | GPIO 输出 | ✅ | blink：GPIO5 翻转次数 | GPIO 矩阵：RMT 输出信号（51/52）已路由到引脚，其它外设信号未做 |
-| SPI1 flash 控制器 | ✅ | 识别 GD 4MB 芯片 | 读 / 写 / 擦除命令已写，缺 NVS 验收 |
+| SPI1 flash 控制器 | ✅ | 识别 GD 4MB 芯片；nvs：NVS 开机计数 1 → 2 →（esp_restart，复位原因 3）→ 3，读 / 写 / 擦除经 NVS 分区往返 | 读 / 写 / 擦除命令；擦写耗时不模拟 |
 | EXTMEM / MMU | ✅ | 直接启动映射 + 运行时读写 MMU 表 | cache 操作瞬间完成 |
 | eFuse | 🟡 | 芯片版本 v0.4、MAC | 只读 |
 | 模拟前端（regi2c） | 🟡 | HLE，ocode 校准通过 | 不建模模拟电路本身 |
@@ -21,48 +20,38 @@
 | LEDC | ✅ | fade：5kHz 13 位硬件渐变时序与 IDF 计算一致；servo：50Hz 脉宽 | 不逐周期出波形，按占空比给出引脚 PWM |
 | ADC（APB_SARADC 单次） | ✅ | pot：0 / 1250 / 2400mV 读数误差 < 1LSB+噪声 | 衰减档线性近似、±2LSB 噪声；连续模式（DMA）未做；eFuse 校准数据未提供（adc_cali 不可用） |
 | RMT 发送 | ✅ | rgb：1 颗 WS2812 四色逐帧一致；strip：16 颗 × 3 帧逐颗一致（384 条目，靠阈值中断乒乓填充 + 回绕） | 时钟源 / 组分频 / 通道分频、mem_size 借块、回绕、连续（循环）模式与循环计数中断、结束 / 阈值 / 出错中断；未做载波、APB FIFO 模式 |
-| RMT 接收 | 🟡 | 单元测试（C3 布局：通道 2/3、mem_size [25:23]、RX_END 位 2+i、多段电平 + 滤波、结束条目、CH3STATUS 写指针） | 与 S3 共用 `rmt.rs` 接收模型（`RmtLayout::C3`），输入经 GPIO 矩阵（sel[4:0]、inv[5]、经矩阵[6]）；HC-SR04 等引脚器件 C3 也能挂；缺 C3 固件验收（P2-05 的验收固件在 S3 上） |
+| RMT 接收 | ✅ | c3-ultrasonic（P2-13，与 s3-ultrasonic 同一份源码，Trig=GPIO4 / Echo=GPIO5，`--sonar 4,5`）：25 / 100 / 300 cm → Echo 1457 / 5830 / 17492 µs、超量程 → out of range，16 次触发 16 次回波；单元测试（C3 布局：通道 2/3、mem_size [25:23]、RX_END 位 2+i、多段电平 + 滤波、结束条目、CH3STATUS 写指针） | 与 S3 共用 `rmt.rs` 接收模型（`RmtLayout::C3`），输入经 GPIO 矩阵（sel[4:0]、inv[5]、经矩阵[6]）；未经真机标定 |
 | WS2812 解码器 | ✅ | 同上 | 引脚连到 RMT 输出时自动挂上；高电平 >0.6µs 判 1，低电平 ≥40µs 提交一帧 |
 | SPI2 / GDMA | ✅ | c3-lcd：esp_lcd + esp_lcd_gc9a01 标准写法（SPI_DMA_CH_AUTO、40MHz），整帧 115200 字节拆 6 次 DMA，再每 50ms 局部刷新；CLI `--spi gc9a01` 与网页 3D 台面圆屏都有画面（四色扇区 + 白环，非黑 35409 像素） | 与 S3 共用 `gpspi.rs` / `gdma.rs`；GDMA 按 C3 排布（3 通道、通道组从 0x70 起、中断寄存器集中在 0x00 起且 IN / OUT 共用，`GdmaLayout::C3`）。C3 驱动直接写 DMA_INT_RAW 清 trans_done，模型据此支持写 RAW。圆屏接线 SCLK=6 MOSI=7 CS=10 DC=5 RST=4 背光=3（`esp32c3::lcd_pin`） |
-| I2S0 | 🟡 | 单元测试：44.1 kHz 分数分频、TX 描述符环按采样率取块 / OUT_EOF 报放完的那块、RX 按 RXEOF_NUM 写块 / IN_SUC_EOF、owner 回写 | 与 S3 同一模型（0x6002D000，GDMA 外设号 3）；**没有 C3 固件验收**；喇叭 / 麦克风约定 GPIO0/1/2、0/1/3（共用 BCK / WS） |
+| I2S0 | ✅ | c3-i2s-tone（P2-13，与 s3-i2s-tone 同写法：IDF `i2s_std`、Philips、44.1 kHz、16 位单声道）：喇叭 MAX98357A（BCLK=0 LRC=1 DIN=2）收到 440.0 Hz、RMS 0.345，1175 ms 写 51712 帧 ≈ 44.1 kHz；单元测试：分数分频、TX 描述符环 / OUT_EOF、RX RXEOF_NUM / IN_SUC_EOF、owner 回写 | 与 S3 同一模型（0x6002D000，GDMA 外设号 3）；喇叭 / 麦克风约定 GPIO0/1/2、0/1/3（共用 BCK / WS）；C3 麦克风无固件验收 |
 | I2C0 主机 | ✅ | oled：总线扫描只应答 0x3C、1KB 帧 400kHz 传输 23.8ms（理论 23.2ms）；bme280：END 分段、重复起始读 | 命令表 COMD0–7、TX/RX FIFO、NACK / END / 完成中断、按 SCL 配置算事务耗时；未做：从机模式、10 位地址、超时与仲裁丢失（不会发生）、时钟延展 |
 | 虚拟器件 SSD1306 | ✅ | 帧缓冲点亮 1636 像素、网页截图可读 | 命令解析：寻址模式 / 窗口 / 页模式、电荷泵、开关、对比度、反色、重映射；滚动不做 |
 | 虚拟器件 BME280 | ✅ | 设定 -7.25°C / 88.5% / 950.12hPa，固件按数据手册公式读回误差 0；网页滑块改温度后读数跟随 | 原始 ADC 由补偿公式二分反解；强制 / 正常模式测量时序；无噪声、无 IIR 滤波 |
-| LEDC / RMT / SPI2 / ADC / I2S | ☐ | — | M2 |
 | Wi-Fi STA（开放网络） | ✅ | wifi-init / wifi-scan / wifi-connect / wifi-http：扫描 4 个 AP、关联、DHCP、DNS / mDNS、HTTP GET | MAC 寄存器 + DMA 描述符层（模型在 tryboard-soc，与 S3 共用）；只有 STA，没有 SoftAP / 省电 / 802.11n 聚合 |
 | Wi-Fi WPA2-PSK | ✅ | wifi-wpa2：四次握手完成、拿到 IP、两次 HTTP GET 成功（数据帧全程 CCMP，DHCP 广播走 GTK）；wifi-wpa2-bad：错口令时 AP 判 MIC 失败、IDF 自己报 `reason=15`（4WAY_HANDSHAKE_TIMEOUT），重连时 AP 已被 IDF 拉黑报 `reason=205`，不崩溃 | 只做 PSK + CCMP（不做 TKIP、WPA3-SAE、PMF/802.11w、GTK 轮换）；密钥表字 1 高位只解了"组密钥"位；未经真机标定 |
 | SHA / AES 加速器 | ✅ | 单元测试（FIPS 180 / FIPS 197 / SP 800-38A 向量经寄存器接口）；WPA2 握手（PBKDF2 4096 轮走块模式、HMAC 走 DMA 模式、Key Unwrap 走 AES DMA） | SHA-384/512、AES-GCM 硬件 GHASH、中断模式未做；链表头改从 GDMA 模型（`channel_for_peri` / `configured_link`）取；搬数据仍用本模块的 gather / scatter（驱动先配链表、后置 start，`take_out` 只认已启动的通道），GDMA 通道的完成中断不置 |
-| BLE | ☐ | — | M7 |
 | BLE | ☐ | — | M7 |
 
 ## ESP32-S3
 | 模块 | 状态 | 验收 | 备注 |
 |---|---|---|---|
-| CPU Xtensa LX7 基础 ISA + 窗口 | 🟡 | `tools/xtensa-tests` 8/8；深递归覆盖六种窗口溢出 / 下溢 | 缺中断、FPU、MAC16、PIE；未与 QEMU 差分；缺 SALT/SALTU、TLB 族、RER/WER（S3 crate 里有临时垫片）；**MOVSP 的 Alloca 条件反了**（应为 WINDOWSTART[WB-1..WB-3] 全 0 才报，现为任一为 1 就报；垫片撤回多报，少报的情况救不回来） |
-| 启动（直接启动 + ROM） | ✅ | s3-hello 单核：从 call_start_cpu0 跑到 app_main，打印芯片信息 / 16MB flash / Free heap 402804，与 QEMU 逐行一致 | CALLINC=0 进入口、入口帧 [sp-12] 填指向 ROM .stack_app 的指针；核 1 不启动（UNICORE） |
-| **当前止步点** | ⚠️ | `tryboard run firmware/build/s3-hello/flash.bin` | `vTaskDelay(500ms)` 约 2µs 就返回、app_main 返回后 vTaskDelete 不切换任务 → `abort()` → 进 `esp_restart_noos+0x104` 空转。原因：核不响应中断（SYSTIMER 节拍、任务切换都依赖 level-1 中断）。SoC 侧已把外部中断线写进 INTERRUPT SR，等核实现中断裁决 |
-| 存储映射 / MMU / PSRAM | ✅ | 单元测试：flash / PSRAM 页翻译、PSRAM 可写、SRAM I/D 别名 | 512 项 MMU（位 15 选 PSRAM）；PSRAM 芯片初始化见下方新行（2026-10-16 已补） |
-| 中断矩阵（核 0） | 🟡 | 单元测试：电平线、边沿线上升沿、复位映射到线 16 = 不连接 | 99 个源；INTR_STATUS 可读；核 1 矩阵未做 |
-| UART / SYSTIMER / TIMG / SPI1 flash / LEDC | 🟡 | s3-hello 启动期使用（控制台、RTC 校准、flash 识别 GD 16MB） | 复用 C3 模型（寄存器布局同族）；TIMG 的 T1、LEDC 的通道 6/7 未建模 |
+| CPU Xtensa LX7（基础 ISA + 窗口） | ✅ | `tools/xtensa-tests` 11/11 自检；与 QEMU（sim 机器 + esp32s3 核配置）逐字差分 14215 字、0 不一致；深递归覆盖六种窗口溢出 / 下溢 | 差分发现并修正 MOVSP 的 Alloca 条件方向（曾为"任一为 1 就报"，应为 WINDOWSTART[WB-1..WB-3] 全 0 才报）；中断、FPU、MAC16、SALT/SALTU、TLB 族、RER/WER 见下面各行；PIE（EE.*）未做 |
+| 启动（直接启动 + ROM） | ✅ | s3-hello：从 call_start_cpu0 跑到 app_main，打印芯片信息 / 16MB flash / Free heap 402804，与 QEMU 逐行一致；FreeRTOS 延时 499.9ms | CALLINC=0 进入口、入口帧 [sp-12] 填指向 ROM .stack_app 的指针；入口帧溢出保存区借用 ROM level 4/5 中断栈；双核启动见「双核」行 |
+| 存储映射 / MMU / PSRAM | ✅ | 单元测试：flash / PSRAM 页翻译、PSRAM 可写、SRAM I/D 别名、SPI1 经 CS1 读 PSRAM 模式寄存器 | 512 项 MMU（位 15 选 PSRAM）；PSRAM 芯片初始化见「八线 PSRAM」行 |
+| 中断矩阵（核 0 / 核 1） | ✅ | 单元测试（电平线、边沿线上升沿、复位映射到线 16 = 不连接）+ s3-dual（FROM_CPU 跨核中断、两核各自 SYSTIMER 节拍） | 99 个源；INTR_STATUS 可读；核 1 表在 +0x800 |
+| UART / SYSTIMER / TIMG / SPI1 flash | ✅ | 控制台、FreeRTOS 节拍、RTC 校准、flash 识别 GD 16MB；s3-gptimer（P2-13，与 c3-gptimer 同一份源码、同判定）：100 ms 计数 99758 / 99760 µs、停止冻结、设计数读回、自动重载 50 周期 500002 µs 且读数 < 告警值、单次告警 5003 µs | 复用 C3 模型（寄存器布局同族）；TIMG 的 T1 未建模（gptimer 先分到 T0）；LEDC 见下方「LEDC」行 |
 | EXTMEM（I/D cache 分开） | ✅ | 启动期 freeze / sync / autoload 轮询通过 | cache 操作瞬间完成 |
-| GPIO（49 脚）/ IO_MUX | 🟡 | — | 输出 / 输入 / 上下拉 / 中断状态已写，未有 S3 示例验收 |
 | eFuse | 🟡 | 芯片版本 v0.2、MAC、PSRAM_CAP=8MB | 只读 |
 | 模拟前端（regi2c） | 🟡 | HLE（窗口 ABI 返回），ocode 校准通过；BBPLL 校准完成位（I2C_MST_ANA_CONF0 bit24） | 不建模模拟电路 |
 | USB OTG（DWC2，设备模式） | ✅ | s3-usb-keyboard（esp_tinyusb 默认 Buffer DMA）：虚拟主机完成枚举（描述符 / SET_ADDRESS / 字符串 / SET_CONFIGURATION / HID 报告描述符），解码出键盘输入 "Hello from TryBoard!\n"、鼠标 80 次报告画正方形回原点；s3-usb-cdc（Slave / FIFO 方式）：SET_LINE_CODING、DTR，双向收发 ECHO；网页面板与 3D 笔记本同步显示 | 控制 / 中断 / 批量端点；GRXSTSP 接收队列、各 IN 端点发送 FIFO、DIEPEMPMSK / TXFE；SNAK/EPDIS/SGONAK 等握手位瞬间生效；不模拟线上比特、数据翻转位、ISO 端点、主机模式、挂起 / 远程唤醒；USB_WRAP / PHY 选择寄存器只读回 |
 | 虚拟 USB 主机 | ✅ | 同上 | 0.25ms 一拍、1ms 帧发 SOF；类驱动：HID（按报告描述符识别键盘 / 鼠标报告 ID，美式布局还原文字）、CDC-ACM；CDC-NCM 网卡、MSC、音频只识别接口类型，不驱动 |
-| 双核 | ☐ | — | 后续：核 1 由 SYSTEM_CORE_1_CONTROL 放行 + ets_set_appcpu_boot_addr，需第二个 Cpu 实例与跨核中断 |
-| CPU Xtensa LX7 基础 ISA + 窗口 | ✅ | `tools/xtensa-tests` 11/11 自检；与 QEMU（sim 机器 + esp32s3 核配置）逐字差分 14215 字、0 不一致；深递归覆盖六种窗口溢出 / 下溢 | 差分发现并修正 MOVSP 的 Alloca 条件方向；PIE（EE.*）未做 |
 | 中断（核内） | ✅ | irq 测试与 QEMU 一致：软件中断 level 1/3、INTLEVEL / EXCM 屏蔽、CCOMPARE0/1/2、WAITI 唤醒、INTSET/INTCLEAR；单元测试：外部电平 / 边沿线、NMI | 外部线由 SoC 调 `cpu.set_irq_lines(mask)`；WAITI 时用 `next_timer_event()` 快进 |
 | FPU（单精度） | ✅ | fp 测试 18 个特殊值两两组合 × 4 种舍入：加减乘、乘加 / 减、转换、比较、条件传送、装载存储、FSR 标志、__divsf3 与 sqrtf 序列，全部与 QEMU 一致 | 除法 / 开方分步指令按 QEMU 的模型（序列结果正确，分步中间值不保证同真机）；RECIP0/RSQRT0 有意偏离 QEMU（给出正确结果） |
 | MAC16 | 🟡 | 乘 / 乘累加 / 乘减四种来源、40 位 ACC、LDINC/LDDEC 与 QEMU 一致 | 并行装载形式 QEMU 读到旧 m 值，未对照，按"用当前值"实现并单元测试；newlib / IDF 不生成 MAC16 |
 | S3 专用杂项 | ✅ | SALT/SALTU、区域保护 TLB 指令（W/R/P/I × I/D）与 QEMU 一致 | RER/WER 走 `Bus::rer/wer`（默认读 0） |
-| CPU Xtensa LX7 | ✅ | `tools/xtensa-tests` 11/11 自检；与 QEMU 逐字差分 14215 字、0 不一致；深递归覆盖六种窗口溢出 / 下溢 | 含中断、CCOMPARE、FPU、MAC16、SALT/SALTU、TLB 族、RER/WER；PIE（EE.*）未做 |
-| 启动（直接启动 + ROM） | ✅ | s3-hello（单核）与 QEMU 逐行一致；FreeRTOS 延时 499.9ms | 入口帧溢出保存区借用 ROM level 4/5 中断栈 |
 | 双核 | ✅ | s3-dual：两任务各钉一核、自旋锁计数 2×20000 准确、跨核队列、esp_ipc 在核 1 执行 | `ets_set_appcpu_boot_addr` HLE 启动核 1（栈 ROM .stack_app），PRID 0xABAB；每核一张中断矩阵；两核按 256 周期量子确定性交替，都空闲时一起快进；外设时间取两核中较快者（单调） |
-| 存储映射 / MMU / PSRAM | ✅ | 单元测试：flash / PSRAM 页翻译、PSRAM 可写、SRAM I/D 别名、SPI1 经 CS1 读 PSRAM 模式寄存器 | 512 项 MMU（位 15 选 PSRAM） |
 | 八线 PSRAM（N16R8，8MB OPI） | ✅ | s3-psram（CONFIG_SPIRAM=y、OCT、80MHz、双核）：IDF 识别 AP 8MB 第 3 代 3V，启动内存测试 8MB 通过，SPIRAM 堆 8386156 字节；分配 4MB 写伪随机模式读回 0 错（模拟时间写 79ms / 校验 85ms） | ROM 的 `esp_rom_opiflash_exec_cmd` 照常执行，SPI1 用户命令在 MISC 选 CS1 时交给 PSRAM 芯片模型（`psram.rs`：读 / 写模式寄存器 MR0/1/2/3/4/8、同步读 / 写）；之后 cache 经 MMU 直接访问存储体。不模拟 dummy / DTR 采样相位，所以时序调优 14 个候选点全读对，IDF 判"连续通过点过多"打印 `W MSPI Timing: tuning fail, best point is fallen back to index 5` 并用默认点——真机上会是 tuning success；ECC、四线 PSRAM、16MB/2MB 型号未做；访问耗时不计 cache 未命中（与真机速度不同，未经真机标定） |
 | 软件复位 | ✅ | s3-restart（双核）：第 1 次核 0 调 esp_restart、第 2 次核 1 调 esp_restart，第 3 次 `BOOT COUNT 3 reason=SW`；NVS 计数跨复位；RTC_NOINIT 计数 1→2→3、RTC_DATA 每次复位回到镜像初值 7；三次启动核 1 都重新跑起来；s3-psram 初始化失败的 abort → 重启循环也走这条路 | RTC_CNTL_OPTIONS0：SW_PROCPU_RST（bit5）/ SW_SYS_RST（bit31）→ 整机重新上电（复位原因 12 / 3，RTC_CNTL_RESET_STATE 两核同值），SW_APPCPU_RST（bit4）→ 停掉核 1；保留 flash、RTC 慢 / 快速内存、RTC_CNTL_STORE0–3/6/7（复位原因提示）、引脚外部驱动、ADC 电压、I2C 器件；SRAM 清零（真机上 `__NOINIT_ATTR` 的 SRAM 变量一般能保留，这里不保留）；RTC 看门狗未建模（esp_restart 里设的 1 秒 RWDT 不会触发）；USB 设备重新枚举 |
-| 中断矩阵（核 0 / 核 1） | ✅ | 单元测试 + s3-dual（FROM_CPU 跨核中断、两核各自 SYSTIMER 节拍） | 99 个源；核 1 表在 +0x800 |
 | GPIO（49 脚）/ IO_MUX | ✅ | s3-blink：GPIO5 翻转；s3-button：BOOT 键 GPIO0 下降沿中断 + 消抖，GPIO5 翻转 2 次 | 外设信号经 GPIO 矩阵驱动引脚（RMT）；输出信号号 256 = 普通 GPIO |
 | LEDC | ✅ | s3-pot：5kHz PWM 占空比跟随 ADC；s3-servo：GPIO4 50Hz 0.5–2.5ms | 与 C3 同一模型（扩到 8 通道），输出信号 73..80 |
 | RMT + WS2812 | ✅ | s3-rgb：GPIO48 解码 6 帧，前 4 帧颜色逐颗一致 | 与 C3 同一模型，按 `RmtLayout::S3`（4 发 4 收、RAM +0x800、信号 81..84）参数化 |
@@ -73,8 +62,6 @@
 | I2C0 / I2C1 | ✅ | s3-oled：扫描只应答 0x3C，1KB 帧 400kHz 约 24.0ms，点亮 1636 像素；s3-bme280：-7.25°C / 88.5% / 950.12hPa 读回误差 0 | 与 C3 同一模型（寄存器布局逐项一致），I2C1 在 0x60027000 |
 | I2C 线长（P2-11，估算） | 🟡 | `cargo test`：400 kHz 两个模块 20 cm 正常、60 cm 读回 0x60→0x20、150 cm 地址不应答、降到 100 kHz 又正常；accept weather-i2c-long（60 cm：上升 381 ns > 300 ns，读数 T=-60.92）、weather-i2c-nack（150 cm：NACK → ESP_ERROR_CHECK 重启，扫描时 100 kHz 仍应答） | 确定性模型（`elec::i2cbus`）：C = 线长 × 1 pF/cm + 器件 × 10 pF + 10 pF，模块 10 kΩ 上拉并联，t_r = 0.8473·R·C，按固件配置的 SCL 频率取规范上限（100 k / 400 k / 1 M：1000 / 300 / 120 ns）；超出 → 读回字节丢 0→1 的位，超两倍 → 地址不应答。常数是估算，未经真机标定；只作用于 I2C0；CLI `--i2c-wire`、脚本 `i2cwire=` |
 | SAR ADC 单次（SENS） | ✅ | s3-pot：0 / 1550 / 3000mV 读数正确 | S3 单次采样走 RTC 的 SENS（0x60008800），不是 APB_SARADC；衰减档量程近似 950 / 1250 / 1750 / 3100mV；ADC2 仲裁标志、连续模式未做 |
-| UART / SYSTIMER / TIMG / SPI1 flash | ✅ | 控制台、FreeRTOS 节拍、RTC 校准、flash 识别 GD 16MB | 复用 C3 模型；TIMG 的 T1 未建模 |
-| EXTMEM / eFuse / 模拟前端 | 🟡 | 启动期轮询通过；芯片版本 v0.2、PSRAM_CAP=8MB | cache 操作瞬间完成；eFuse 只读；regi2c HLE |
 | 装配成品 weather（桌面气象站） | ✅ | 同一 I2C 挂 SSD1306 + BME280（23.5°C / 45% / 1013.25hPa 读回误差 0）、舵机 GPIO4 1675us、WS2812 GPIO48 绿 #002000、BOOT 切 ℉ 后屏幕重画（点亮 1328 像素） | 场景层验收；35°C 时 LED=red、PWM=2250us、GPIO5 蜂鸣器 2700Hz 报警：accept 用例 weather-alarm（同固件第二个用例，`fw` 字段） |
 | GP-SPI2 主机 | ✅ | lens / spin：esp_lcd + esp_lcd_gc9a01 标准写法（spi_bus_initialize SPI_DMA_CH_AUTO、轮询发命令、队列发像素），40MHz，整帧 115200 字节拆 6 次 DMA | 命令 / 地址 / 哑周期 / MOSI 各阶段、W0..W15 与 DMA 两条数据通路、TRANS_DONE 中断、按 SPI 时钟计时；不模拟逐位时序与 FIFO；MISO 恒读全 1；双 / 四 / 八线模式按单线计时；从机模式未做 |
 | GDMA（5 通道） | ✅ | 同上：描述符链（每次传输 5 个描述符）、owner 回写、OUT_EOF；接收方向见下方「GDMA 流式收发（I2S）」 | 单元测试覆盖链表遍历 / 回写 / 中断；SPI 的 RX（MISO 恒为全 1）仍未经固件验收；不模拟突发、FIFO、优先级、内存到内存 |
@@ -82,7 +69,8 @@
 | LVGL 9.2（P2-07） | 🟡 | s3-lvgl：LVGL 9.2.2 + esp_lvgl_port 2.6.0，刻度盘 + 指针 + 数值标签 + 绕圈动画弧线，刷新周期 16ms、双 40 行 DMA 缓冲；几乎整屏重画（每帧约 57600 像素），**模拟时间里 33–34 FPS**（真机估计 20–30，见 Reviews/ab/P2-07.md）；accept：3 秒、FPS 20–44、非黑 ≥ 30000 像素；网页冒烟 + agent-browser 两张截图在动、无 console error | **速度不够实时**：这类 CPU 满负荷的整屏动画，原生 CLI 约 0.35–0.6×、网页 worker 约 0.2–0.4× 实时（机器负载 12–17 时测，目标 0.5× 未达），动画看上去是慢放，但帧率、串口、画面按模拟时间算都对；局部刷新 / 静态界面（如 spin、lens）CPU 有空闲，可快进，网页 > 1×。CPU 按 CPI=1 计时，真机 LX7 的 cache 未命中与流水线停顿未建模，模拟帧率偏乐观（未经真机标定） |
 | 虚拟器件 MPU6050（P2-03） | ✅ | s3-imu：WHO_AM_I 0x68、复位 / 退出睡眠、100 Hz、±2 g / ±250 °/s；设定 30° / −20° 读回误差 ≤ 0.2°；s3-imu-turn：−45° / 10° 加航向速率 90 °/s → 陀螺 X 63.6、Z 62.7 °/s（误差 ≤ 0.08），温度跟环境 31 ℃ | 姿态 → 重力分量 / 机体角速度按 ZYX 欧拉角（devices/imu.rs）；确定性噪声加速度 ±3 mg、陀螺 ±0.05 °/s（估算，未经真机标定）；姿态在两次输入之间不外推；FIFO / DMP / 自检 / 辅助 I2C / INT 引脚未做；零偏、温漂、振动未建模 |
 | 虚拟器件 QMI8658（P2-03） | ✅ | s3-qmi8658：WHO_AM_I 0x05、软复位、CTRL1 地址自增、±4 g / ±512 °/s；−12.5° / 33° 读回误差 ≤ 0.2°，横滚速率 20 °/s → 陀螺 X 20.0 | 小端（CTRL1.BE 在 I2C 下按常见驱动的实际表现忽略，未经真机标定）；ADDR_AI=0 时突发读停在同一寄存器（复现真机坑）；FIFO / AttitudeEngine / 运动检测 / INT 引脚未做 |
-| 虚拟器件 CST816S 触摸（P2-02） | ✅ | s3-touch：芯片 ID 0xB5；TP_INT=GPIO5 下降沿中断 + 按着 20 ms 轮询；脚本 touch / release → TOUCH DOWN / MOVE / UP 坐标逐一对上、单击 / 向左滑动手势，圆屏上三种颜色的点重心 (65.0,122.5) / (120.0,200.0) 与触点一致；s3-touch-noint：不接 INT 就收不到触摸（反例） | 手势在芯片侧判（位移 > 30 像素 = 滑动，按住 1 秒 = 长按）；INT 按电平建模（按着拉低），真机是按扫描周期发低脉冲；自动睡眠、双击、TP_RST、扫描噪声未建模（只能上真机确认）；FT6236 未做 |
+| 虚拟器件 CST816S 触摸（P2-02） | ✅ | s3-touch：芯片 ID 0xB5；TP_INT=GPIO5 下降沿中断 + 按着 20 ms 轮询；脚本 touch / release → TOUCH DOWN / MOVE / UP 坐标逐一对上、单击 / 向左滑动手势，圆屏上三种颜色的点重心 (65.0,122.5) / (120.0,200.0) 与触点一致；s3-touch-noint：不接 INT 就收不到触摸（反例） | 手势在芯片侧判（位移 > 30 像素 = 滑动，按住 1 秒 = 长按）；INT 按电平建模（按着拉低），真机是按扫描周期发低脉冲；自动睡眠、双击、TP_RST、扫描噪声未建模（只能上真机确认）；FT6236 见下一行 |
+| 虚拟器件 FT6236 触摸（P2-18） | ✅ | s3-ft6236（裸 `i2c_master` 驱动，SDA=6 SCL=7 INT=5 RST=16）：CIPHER 0x36、FOCALTECH_ID 0x11、FIRMID 0x10；脚本 touch / release → TOUCH DOWN（事件"按下"）/ MOVE（"接触"）/ UP（"抬起"）坐标逐一对上（12 位，含超过 255 的高 4 位）；s3-ft6236-poll：不接 INT 靠轮询 TD_STATUS 也能读到；s3-ft6236-absent：不挂器件 → 打印 no ACK 提示后停住、不 abort | 寄存器按 FocalTech FT6x36 数据手册 / 应用笔记；只有一个触点（第二触点恒"无事件"）；GEST_ID 恒 0（多数模组不报手势）；G_MODE 默认 0（轮询，按着期间 INT 拉低），真机触发模式的低脉冲不模拟；休眠 / 唤醒、TH_GROUP 灵敏度、按压权重 / 面积不建模；CLI `--i2c ft6236@0x38`，脚本与 CST816S 相同；网页未挂；未经真机标定 |
 | 装配成品 lens（透镜小人） | ✅ | 启动 MOOD 0 normal、每 3 秒眨眼（BLINK n）、BOOT 切 MOOD 1 happy → 2 love → 3 sleepy → 0 normal；检查点 lens-1（lens-blink）、lens-2（lens-mood）、07-lens 参考固件全过 | 场景层验收 |
 | 装配成品 spin（会转身的小黄） | ✅ | GPIO4 50Hz 占空比 0.042..0.108（脉宽 0.833–2.167ms）、SPIN ±60 交替、眼珠随转向重画（EYE R / EYE L）、BOOT 后 LOOK FRONT（1.5ms）且眼珠回正（青色重心 119.7）；检查点 spin-1（spin-face）、spin-2（spin-turn）、07-spin 参考固件全过 | 舵机机械响应不建模 |
 | Wi-Fi STA（开放 / WPA2-PSK） | ✅ | s3-wifi-init / scan / connect / http / wpa2（与 C3 版同源码、同判定，双核）：扫描 4 个 AP、关联、DHCP 192.168.4.100、mDNS / DNS、两次 HTTP GET；WPA2 四次握手（SHA / AES 加速器）+ CCMP 数据帧；网页 s3-wifi-http 跑通（webtest + agent-browser） | 与 C3 共用 MAC 模型（tryboard-soc，`WifiLayout::S3`）；S3 另需 WDEV_RND_REG（0x6003507C）与 TSENS READY；供电按 S3 发射 340 mA 计入。QEMU 的 esp32s3 没有 Wi-Fi，无法对照；未经真机标定；没做 wifi-wpa2-bad 的 S3 版 |
@@ -110,17 +98,15 @@
 | wasm 内核 | ✅ 约 230KB（C3 + S3 两颗芯片），无 import；按镜像头自动选芯片（`tryboard-machine`） |
 | 1× 实时 / 加速 | ✅ blink、hello 在 Chrome 无头模式下 1.00× |
 | 内核速度（P2-07） | 🟡 S3 解释器：取指页缓存、CCOMPARE 下次触发时刻缓存、窗口溢出检查快路径、SRAM 读写内联快路径、批量执行（`Cpu::run_batch`）；LVGL 满负荷时宿主指令 / 模拟指令从约 280 降到约 190，原生 1.5–1.7×、wasm 1.4–1.7×；所有验收用例输出与关卡指纹逐字节不变。`node tools/bench_wasm.mjs <flash.bin> [秒] [--lcd]` 测 wasm 实时倍率 |
-| 3D 工作台 | ✅ 面包板 + 开发板 + LED 随 GPIO 亮灭；板载 WS2812（GPIO8）随解码颜色发光；BOOT / RST 可点 |
-| 3D 工作台 | ✅ 面包板 + 开发板 + LED 随 GPIO 亮灭；BOOT / RST 可点；示例按 `scene.parts` 声明元件与接线（LED / SSD1306 / BME280），可指定机位 |
+| 3D 工作台 | ✅ 面包板 + 开发板 + LED 随 GPIO 亮灭；板载 WS2812（C3 GPIO8 / S3 GPIO48）随解码颜色发光；BOOT / RST 可点；示例按 `scene.parts` 声明元件与接线（LED / SSD1306 / BME280 等），可指定机位 |
 | ESP32-S3 固件 | ✅ wasm 按镜像芯片 ID 选 C3 / S3，按芯片下载 ROM；S3 的 BOOT 键为 GPIO0（3D 板子仍是 C3 外形） |
 | 虚拟电脑（USB） | ✅ 侧栏面板（设备描述符、接口、枚举过程、键盘输入、鼠标轨迹、USB 串口终端可输入）；3D 笔记本经 USB 线接到板子，屏幕实时显示（只有键盘时不画鼠标区，字放大）；工作台（app.html）实验台也接上了 3D 笔记本 |
 | 拍照 / 录 10 秒（P2-10） | ✅ 成品页与实验台：拍照 = 当前视角 2× 输出（渲染 4096 长边超采样后缩小）+ DESIGN 台面渐变背景 + 角落"外观示意"署名，PNG 下载；录像 = MediaRecorder 录画布（VP9 webm），声音开着时混入蜂鸣器的 Web Audio（Opus 轨）。`tools/webtest/media.mjs`（进 accept.sh）：PNG 2880×1712 = 画布 ×2、webm PixelWidth/Height = 画布、含 Opus、时长 10.0 s；agent-browser 走查（Reviews/ab/P2-10.md）。没有用 three-gpu-pathtracer（不在依赖里） |
 | 线束与天线（P2-11） | 🟡 实验台：I2C 线可拉长（线长滑块，接线检查 W6：超出规范警告、超两倍阻断，标"必须上真机"），模拟器在线换总线负载；组装：I2C 排线总长滑块 + 天线旁金属件 / 电池与距离，开机复测带上线束（读数跑偏、RSSI 低于 -82 dBm 判不过），成品页显示估算与模拟器结论。`tools/webtest/harness.mjs`（进 accept.sh）。全部是估算 |
-| 3D 工作台 | ✅ 面包板 + 开发板 + LED 随 GPIO 亮灭；板载 WS2812（C3 GPIO8 / S3 GPIO48）随解码颜色发光；BOOT / RST 可点；示例按 `scene.parts` 声明元件与接线，可指定机位 |
 | 按芯片换板 | ✅ C3 板（2×15 针）/ S3 板（2×22 针、UART / USB 双口、N16R8）；元件按当前板子的引脚重新接线；网页验收 s3-blink、s3-rgb、s3-dual 1.00× 实时 |
 | OLED 实时画面 | ✅ 帧缓冲变了才传，128×64 最近邻纹理 |
 | 环境滑块 | ✅ 温度 / 湿度 / 气压 → `tb_env_set`，webtest 验证读数跟随 |
-| 串口输入 | 🟡 已接线，缺验收固件 |
+| 串口输入 | ✅ 示例页右侧串口框回车发送（可选行尾），worker 写进 UART RX FIFO；`webtest.mjs echo`（进 accept.sh）：发 "hello tryboard" → 固件回 "ECHO: hello tryboard"、输入框清空；agent-browser 走查另发 ping → pong（Reviews/ab/P2-13.md）。工作台（app.html）串口抽屉走同一条通路，mobile.mjs 只查发送后清空 |
 | 蜂鸣器出声（P0-14） | ✅ weather GPIO5 无源蜂鸣器：worker 每 1ms 采样 `tb_pin_pwm` / `tb_pin_pwm_freq`，按模拟时刻排进 Web Audio（方波，默认静音，点「声音」开）；agent-browser：35℃ 时 lastFreq 2700.1 Hz、分析节点 2695 Hz，降到 25℃ 停。3D 蜂鸣器模块已画（响时有声波示意）；只出一个声道（多个蜂鸣器取第一个在响的） |
 | 输入日志 / 重放（P0-19） | ✅ worker 按模拟时间记下按键 / 环境 / 电位器 / 串口输入，「导出输入」给出 `tryboard run --inputs` 文本；replay.mjs：鼠标按 3D BOOT + 温度 35 → 网页串口与 CLI 重放逐字节相同（1502 字节），网页重放与 CLI 指纹相同。限制：日志从上电开始，复位即新日志；装配视图 / 元件编辑器改接线不记（会重新上电） |
 
