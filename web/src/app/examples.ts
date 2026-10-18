@@ -1,6 +1,7 @@
 // 示例清单（web/public/fw/examples.json，由 tools/build_web.sh 从 firmware/examples.json 拷来）：整页只取一次。
 // 工作台用它：?work=blank&example=<id> 的台面 / 芯片（session.ts）、「换固件」菜单、右栏「这个示例」说明卡（DESIGN_V2 §6.1）。
 import type { SceneSpec } from '../board3d';
+import { lab } from '../ui/links';
 
 export type Chip = 'esp32c3' | 'esp32s3';
 
@@ -38,4 +39,4 @@ export const chipOf = (e: Example): Chip => e.chip ?? 'esp32c3';
 export const CHIP_NAME: Record<Chip, string> = { esp32c3: 'ESP32-C3', esp32s3: 'ESP32-S3' };
 
 /** 示例在工作台里的地址 */
-export const exampleHref = (id: string) => `./app.html?work=blank&example=${encodeURIComponent(id)}#bench`;
+export const exampleHref = (id: string) => lab('blank', 'bench', { example: id });

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>授权与致谢 C</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#fff}
+a{color:#0A66B0}
+.ack{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:760px){.ack,.dl{grid-template-columns:minmax(0,1fr)}}
+</style>
+</helmet>
+<div style="font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; color: #1E1E1E; background: #FFFFFF; min-height: 100vh">
+  <header style="display: flex; align-items: center; gap: 24px; padding: 14px 24px; border-bottom: 1px solid #E5E7EB; font-size: 13px">
+    <b style="font-size: 14px">试板</b>
+    <a href="#" style="color: #5B6068; text-decoration: none">作品</a><a href="#" style="color: #5B6068; text-decoration: none">选板</a><a href="#" style="color: #5B6068; text-decoration: none">实验台</a>
+  </header>
+  <main style="max-width: 760px; margin: 0 auto; padding: 56px 24px 64px">
+    <h1 style="margin: 0; font-size: 28px; font-weight: 700">授权与致谢</h1>
+    <p style="margin: 6px 0 0; font-size: 12px; color: #8A8F97">更新于 2026-10-18</p>
+
+    <h2 style="margin: 36px 0 8px; font-size: 16px; font-weight: 700">试板本身</h2>
+    <p style="margin: 0; font-size: 14px; line-height: 1.8; color: #3D4148">模拟器内核、网页和验收固件由试板团队编写，不含第三方 Rust 依赖。</p>
+
+    <h2 style="margin: 28px 0 8px; font-size: 16px; font-weight: 700">第三方组件</h2>
+    <p style="margin: 0; font-size: 14px; line-height: 1.8; color: #3D4148">网站随附 21 个第三方组件，使用 MIT、Apache-2.0、SIL OFL 1.1 和 CC BY-SA 4.0 四种许可证。完整的名称、版本、版权声明和许可证全文见下方文件。</p>
+
+    <h2 style="margin: 28px 0 12px; font-size: 16px; font-weight: 700">特别感谢</h2>
+    <div class="ack">
+      <sc-for list="{{acks}}" as="a" hint-placeholder-count="6">
+        <div style="border: 1px solid #E5E7EB; border-radius: 10px; padding: 12px 14px; min-width: 0">
+          <b style="font-size: 13px">{{a.name}}</b>
+          <div style="font-size: 12px; line-height: 1.6; color: #5B6068; margin-top: 2px">{{a.what}}</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #8A8F97; margin-top: 6px">{{a.lic}}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <h2 style="margin: 28px 0 12px; font-size: 16px; font-weight: 700">完整清单</h2>
+    <div class="dl">
+      <a href="#" style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 0 16px; border: 1px solid #D5D8DD; border-radius: 10px; text-decoration: none; color: #1E1E1E">
+        <span style="flex: 1; min-width: 0"><b style="font-size: 13px; display: block">第三方声明</b><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #5B6068">THIRD_PARTY_NOTICES.txt · 86 KB</span></span><span style="color: #0A66B0">↓</span>
+      </a>
+      <a href="#" style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 0 16px; border: 1px solid #D5D8DD; border-radius: 10px; text-decoration: none; color: #1E1E1E">
+        <span style="flex: 1; min-width: 0"><b style="font-size: 13px; display: block">软件物料清单</b><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #5B6068">tryboard.spdx.json · 含构建工具</span></span><span style="color: #0A66B0">↓</span>
+      </a>
+    </div>
+    <p style="margin: 12px 0 0; font-size: 12px; line-height: 1.7; color: #5B6068">两份文件在每次构建时从依赖清单和素材目录自动生成。修改过的 3D 模型按 CC BY-SA 4.0 提供源文件下载。</p>
+
+    <h2 style="margin: 28px 0 8px; font-size: 16px; font-weight: 700">商标</h2>
+    <p lang="en" style="margin: 0; font-size: 13px; line-height: 1.8; color: #3D4148">ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.</p>
+    <p style="margin: 28px 0 0; font-size: 13px; color: #5B6068">发现遗漏或署名有误？<a href="#" style="text-decoration: none">告诉我们</a></p>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1060}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const a = (name, what, lic) => ({ name, what, lic });
+    return {
+      acks: [
+        a('Espressif', '芯片 ROM 与 ESP-IDF 组件', 'Apache-2.0'),
+        a('three.js', '3D 场景渲染', 'MIT'),
+        a('React', '网页界面', 'MIT'),
+        a('TinyUSB', 'USB 键盘与串口', 'MIT'),
+        a('Google Fonts', 'Noto Sans SC、JetBrains Mono', 'OFL-1.1'),
+        a('KiCad 与 Adafruit', '蜂鸣器、USB-C、舵机 3D 模型', 'CC BY-SA 4.0 · MIT'),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

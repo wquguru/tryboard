@@ -23,7 +23,9 @@ const CLI = path.join(root, 'core/target/release/tryboard');
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const f = path.join(dist, u === '/' ? 'index.html' : u);
+  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  const f0 = path.join(dist, u === '/' ? 'index.html' : u);
+  const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'application/octet-stream' });
   fs.createReadStream(f).pipe(res);
@@ -87,14 +89,14 @@ const screenOf = (page, t) => page.evaluate((t) => {
 
 // ---- 1. 默认接线无问题（三个作品）
 for (const work of ['weather', 'spin', 'lens']) {
-  const page = await open(`/app.html?work=${work}&debug=1#bench`);
+  const page = await open(`/app?work=${work}&debug=1#bench`);
   const f = await page.evaluate(() => globalThis.__tbApp.faults());
   const tree = await page.$eval('details.tg[data-g="wire"] summary', (e) => e.textContent);
   report(`${work} 默认接线没有问题`, f.length === 0 && /✓/.test(tree), `连线 ${tree.replace('连线', '').trim()}${f.length ? ' ' + JSON.stringify(f) : ''}`);
   await page.close();
 }
 
-const page = await open('/app.html?work=weather&debug=1#bench');
+const page = await open('/app?work=weather&debug=1#bench');
 
 // ---- 2. 点 GPIO4 针脚
 await page.evaluate(() => globalThis.__tbApp.session.bench._debug.controls && 0);

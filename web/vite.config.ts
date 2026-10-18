@@ -45,6 +45,8 @@ export default defineConfig({
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 1200,
-    rollupOptions: { input: { main: 'index.html', advisor: 'advisor.html', home: 'home.html', levels: 'levels.html', app: 'app.html', ...licenses } },
+    // 页面文件带 .html，站内链接不带后缀（/app → app.html 由 Vite 开发 / 预览服务器和静态托管映射，DESIGN_V2 §7.2）。
+    // index.html 是首页；home / advisor / levels 是旧地址跳转页
+    rollupOptions: { input: { main: 'index.html', select: 'select.html', app: 'app.html', home: 'home.html', advisor: 'advisor.html', levels: 'levels.html', ...licenses } },
   },
 });

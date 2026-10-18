@@ -21,7 +21,9 @@ fs.mkdirSync(outDir, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const f = path.join(dist, u === '/' ? 'index.html' : u);
+  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  const f0 = path.join(dist, u === '/' ? 'index.html' : u);
+  const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'application/octet-stream' });
   fs.createReadStream(f).pipe(res);
@@ -103,7 +105,7 @@ async function runRef(page, id) {
   return { ok: /✓ 通过/.test(text), fp: await fpOf(page), text };
 }
 for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']], ['usbkey', ['usbkey-1', 'usbkey-2', 'usbkey-3']], ['lamp', ['lamp-1', 'lamp-2', 'lamp-3']], ['ruler', ['ruler-1', 'ruler-2', 'ruler-3']], ['tilt', ['tilt-1', 'tilt-2', 'tilt-3']]]) {
-  const page = await open(`/app.html?work=${work}#bench`);
+  const page = await open(`/app?work=${work}#bench`);
   for (const id of cps) {
     const r = await runRef(page, id);
     const n = native[id];
@@ -117,17 +119,17 @@ for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['
 // ---- 2. 旧关卡页重定向
 for (const [hash, work, cp] of [['04', 'weather', '04'], ['07-lens', 'lens', '07-lens'], ['', 'weather', null]]) {
   const page = await open(`/levels.html${hash ? '#' + hash : ''}`);
-  await waitFor(page, () => location.pathname.endsWith('/app.html'), null, 10000);
+  await waitFor(page, () => location.pathname.endsWith('/app'), null, 10000);
   const sel = cp ? await waitFor(page, (cp) => document.querySelector(`#tree .tn[data-kind="checkpoint"][data-id="${cp}"]`)?.getAttribute('aria-selected') === 'true' && document.querySelector('#props')?.textContent.includes(`检查点 ${cp}`), cp, 30000) : true;
   const u = new URL(page.url());
-  report(`旧链接 levels.html#${hash} → app.html?work=${work}${cp ? '&cp=' + cp : ''}#bench${cp ? '，选中检查点 ' + cp : ''}`, u.pathname.endsWith('/app.html') && u.searchParams.get('work') === work && u.searchParams.get('cp') === cp && u.hash === '#bench' && sel, page.url().replace(base, ''));
+  report(`旧链接 levels.html#${hash} → app.html?work=${work}${cp ? '&cp=' + cp : ''}#bench${cp ? '，选中检查点 ' + cp : ''}`, u.pathname.endsWith('/app') && u.searchParams.get('work') === work && u.searchParams.get('cp') === cp && u.hash === '#bench' && sel, page.url().replace(base, ''));
   if (hash === '04') await page.screenshot({ path: path.join(outDir, 'levels-redirect-04.png') });
   await page.close();
 }
 
 // ---- 3. 上传自己的固件（C3 版点灯也满足检查点 01 的条件），进度记住
 {
-  const page = await open('/app.html?work=weather&cp=01#bench');
+  const page = await open('/app?work=weather&cp=01#bench');
   // 面板加载后会重画、换掉输入框：拿到的旧节点已脱离文档，上传落空。现找现传，直到看到「模拟中」或结论再停
   for (let i = 0; i < 5; i++) {
     await page.waitForSelector('#props [data-drop="check"] input', { timeout: 30000 });
@@ -151,7 +153,7 @@ for (const [hash, work, cp] of [['04', 'weather', '04'], ['07-lens', 'lens', '07
 //  旧实验台的"装配 · 成品"视图并入工作台（U-08）：开机看读数改成「开机复测」（装法进模拟器），成品画面在成品步骤
 const CPS = { weather: ['01', '02', '03', '04', '05', '06'], spin: ['spin-1', 'spin-2', '07-spin'], lens: ['lens-1', 'lens-2', '07-lens'] };
 async function openAsm(work) {
-  const p = await open(`/app.html?work=${work}#bench`);
+  const p = await open(`/app?work=${work}#bench`);
   // 预置检查点全过（解锁组装），清掉上次的装配；与 asm3d.mjs 同一做法
   await p.evaluate(([w, ids]) => {
     const c = {};
@@ -160,7 +162,7 @@ async function openAsm(work) {
     localStorage.removeItem(`tryboard-app-asm:${w}`);
     localStorage.removeItem(`tryboard-app-case:${w}`);
   }, [work, CPS[work]]);
-  await p.goto(`${base}/app.html?work=${work}&asm=svg#assemble`, { waitUntil: 'load' });
+  await p.goto(`${base}/app?work=${work}&asm=svg#assemble`, { waitUntil: 'load' });
   await p.reload({ waitUntil: 'load' });
   await p.waitForSelector('.asm-box [data-part]', { timeout: 30000 });
   return p;
@@ -245,7 +247,7 @@ async function toProduct(page) {
 {
   // P2-09：超声波尺子在工作台组装，探头缩在孔里 → 开机复测里模拟器的 HC-SR04 也只能量到孔壁（读数 3 cm、蜂鸣器一直响），
   // 判定项真的挂掉；改成"伸出前面板"再复测通过。先用自己上传的固件过三个检查点（解锁组装）
-  const page = await open('/app.html?work=ruler#bench');
+  const page = await open('/app?work=ruler#bench');
   try {
     for (const [id, ref] of [['ruler-1', 'ruler-dist'], ['ruler-2', 'ruler-oled'], ['ruler-3', 'ruler']]) {
       await page.waitForSelector(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`, { timeout: 30000 });
@@ -292,7 +294,7 @@ async function toProduct(page) {
 
 // ---- 5. 作品首页
 {
-  const home = await open('/home.html');
+  const home = await open('/');
   const cards = await home.$$eval('.wk', (els) => els.map((e) => ({ work: e.dataset.work, go: e.querySelector('[data-go]')?.getAttribute('href'), cps: e.dataset.cps })));
   // 卡片由作品定义（web/src/app/works.ts）生成：P2-12 加了 USB 小键盘，P2-09 加了旋钮台灯、超声波尺子、体感小人
   report('首页：七张作品卡（气象站 / 小黄 / 透镜 / USB 小键盘 / 旋钮台灯 / 超声波尺子 / 体感小人）', cards.map((c) => c.work).join() === 'weather,spin,lens,usbkey,lamp,ruler,tilt', JSON.stringify(cards.map((c) => c.work)));
@@ -310,7 +312,7 @@ async function toProduct(page) {
   await home.mouse.up();
   const changed = await waitFor(home, (h) => document.querySelector('.wk[data-work="weather"] image[data-k="oled"]').getAttribute('href') !== h, before, 5000);
   report('首页：按 BOOT 后屏幕重画（切 ℉）', changed);
-  // 小黄卡：跑真实固件 → 圆屏有画面；同一时间只跑一张（气象站回到示意图）
+  // 小黄卡：运行固件 → 圆屏有画面；同一时间只跑一张（气象站停止、回到示意图）
   await home.click('[data-run="spin"]');
   const spin = await waitFor(home, () => !!document.querySelector('.wk[data-work="spin"] image[data-k="lcd"][href]'), null, 20000);
   const single = await home.$$eval('.wk.live', (e) => e.map((x) => x.dataset.work).join());
@@ -344,20 +346,21 @@ async function toProduct(page) {
   report('首页：手机宽度无横向滚动', !overflow);
   await home.screenshot({ path: path.join(outDir, 'levels-home-phone.png') });
   await home.close();
-  // 入口：每张卡的"做这个"进采购（卡上 data-cps 的检查点数与工作台一致），"用选型助手"进选型助手，"我有固件了"进空白实验台
+  // 入口：每张卡的"开始做"进采购（卡上 data-cps 的检查点数与工作台一致），"去选板"进选板（首屏的 #pickBoard 只在手机上显示），"运行我的固件"进空白实验台
   for (const c of cards) {
-    const p = await open('/home.html');
+    const p = await open('/');
     await Promise.all([p.waitForNavigation({ waitUntil: 'load' }), p.click(`.wk[data-work="${c.work}"] [data-go]`)]);
     const u = new URL(p.url());
     const n = c.cps.match(/\d+/)?.[0];
     // 采购页的结论按钮显示规则提醒数（P0-07 起），检查点进度要到实验台看
     await p.evaluate(() => (location.hash = 'bench'));
     const v = await waitFor(p, (n) => new RegExp(`检查点 0?\\d*/${n}`).test(document.getElementById('verdict')?.textContent ?? ''), n, 30000);
-    report(`首页「做这个」（${c.work}）→ app.html?work=${c.work}#shop，检查点数 ${n} 与工作台一致`, u.pathname.endsWith('/app.html') && u.searchParams.get('work') === c.work && u.hash === '#shop' && v, p.url().replace(base, ''));
+    report(`首页「开始做」（${c.work}）→ /app?work=${c.work}#shop，检查点数 ${n} 与工作台一致`, u.pathname.endsWith('/app') && u.searchParams.get('work') === c.work && u.hash === '#shop' && v, p.url().replace(base, ''));
     await p.close();
   }
-  for (const [sel, want, check] of [['#ownIdea', '/advisor.html', () => !!document.querySelector('#templates')], ['#haveFw', '/app.html', () => new URLSearchParams(location.search).get('work') === 'blank' && location.hash === '#bench' && /^空白$/.test(document.getElementById('workName')?.textContent ?? '')]]) {
-    const p = await open('/home.html');
+  const isSelect = () => !!document.querySelector('#templates');
+  for (const [sel, want, check] of [['#ownIdea', '/select', isSelect], ['#haveFw', '/app', () => new URLSearchParams(location.search).get('work') === 'blank' && location.hash === '#bench' && /^空白$/.test(document.getElementById('workName')?.textContent ?? '')]]) {
+    const p = await open('/');
     await Promise.all([p.waitForNavigation({ waitUntil: 'load' }), p.click(sel)]);
     const ok = await waitFor(p, check, null, 15000);
     report(`首页入口 ${sel} → ${want}`, new URL(p.url()).pathname.endsWith(want) && ok, p.url().replace(base, ''));
@@ -365,13 +368,31 @@ async function toProduct(page) {
   }
 }
 
+// ---- 5b. 旧地址（带 .html）→ 新地址（DESIGN_V2 §7.2）：旧链接、书签不能断，查询和 hash 带过去
+{
+  for (const [from, want, check] of [
+    ['/home.html#works', (u) => u.pathname.endsWith('/') && u.hash === '#works', () => !!document.querySelector('.wk')],
+    ['/advisor.html?t=weather', (u) => u.pathname.endsWith('/select') && u.searchParams.get('t') === 'weather', () => !!document.querySelector('#templates')],
+    ['/index.html?example=blink', (u) => u.pathname.endsWith('/app') && u.searchParams.get('work') === 'blank' && u.searchParams.get('example') === 'blink' && u.hash === '#bench', () => !!document.getElementById('workName')],
+    ['/levels.html#04', (u) => u.pathname.endsWith('/app') && !!u.searchParams.get('work') && u.hash === '#bench', () => !!document.getElementById('workName')],
+    ['/licenses.html', (u) => u.pathname.endsWith('/licenses.html'), () => /授权与致谢/.test(document.querySelector('h1')?.textContent ?? '')],
+    ['/licenses', (u) => u.pathname.endsWith('/licenses'), () => !!document.querySelector('a[href="./THIRD_PARTY_NOTICES.txt"]') && !!document.querySelector('a[href="./tryboard.spdx.json"]')],
+  ]) {
+    const p = await open(from);
+    const ok = await waitFor(p, check, null, 15000);
+    const u = new URL(p.url());
+    report(`旧地址 ${from} → ${u.pathname.replace(/^.*\//, '/')}${u.search}${u.hash}`, want(u) && ok, p.url().replace(base, ''));
+    await p.close();
+  }
+}
+
 // ---- 6. 示例（空白实验台）也能走到装配：示例卡「做成成品」→ 作品采购页；点选装配 → 成品有画面
 {
-  const ex = await open('/app.html?work=blank&example=weather#bench');
+  const ex = await open('/app?work=blank&example=weather#bench');
   await ex.waitForSelector('#props [data-ex-work="weather"]', { timeout: 30000 });
   await Promise.all([ex.waitForNavigation({ waitUntil: 'load' }), clickEl(ex, '#props [data-ex-work="weather"]')]);
   const u = new URL(ex.url());
-  report('示例卡「做成成品」→ app.html?work=weather#shop', u.searchParams.get('work') === 'weather' && u.hash === '#shop', ex.url().replace(base, ''));
+  report('示例卡「做成成品」→ /app?work=weather#shop', u.searchParams.get('work') === 'weather' && u.hash === '#shop', ex.url().replace(base, ''));
   await ex.close();
   const page = await openAsm('weather');
   for (const k of ['shell', 'board', 'bme']) await clickEl(page, `.asm-box [data-part="${k}"]`);

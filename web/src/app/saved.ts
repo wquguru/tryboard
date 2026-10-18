@@ -32,7 +32,7 @@ export function noteSaved() {
 
 /** 「刚刚 / 3 分钟前 / 昨天 14:05」 */
 export function savedText(t: number | null, now = Date.now()): string {
-  if (t == null) return '还没有改动';
+  if (t == null) return '未修改';
   const s = Math.max(0, Math.round((now - t) / 1000));
   if (s < 45) return '已存在本机 · 刚刚';
   if (s < 3600) return `已存在本机 · ${Math.round(s / 60)} 分钟前`;

@@ -23,7 +23,9 @@ fs.mkdirSync(outDir, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.txt': 'text/plain' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const f = path.join(dist, u === '/' ? 'index.html' : u);
+  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  const f0 = path.join(dist, u === '/' ? 'index.html' : u);
+  const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) {
     res.writeHead(404);
     return res.end();
@@ -104,13 +106,13 @@ async function stepCheck(name) {
 
 // ---- 采购
 // debug=1 才挂 __tbApp.faults()（接线检查结果），与 wiremode.mjs 相同
-await page.goto(base + '/app.html?work=weather&debug=1#shop', { waitUntil: 'load' });
+await page.goto(base + '/app?work=weather&debug=1#shop', { waitUntil: 'load' });
 await page.evaluate(() => localStorage.clear());
 await page.reload({ waitUntil: 'load' });
 await waitFor(page, () => globalThis.__tbApp?.store.get().step === 'shop' && !!document.querySelector('#mNext #next'), null, 30000);
 await stepCheck('采购');
 for (const s of ['#crumbHome', '#workMenuBtn', '#moreBtn', '#steps [data-step="bench"]', '#mNext #next']) report(`采购：${s} 可点`, (await tappable(s)) === 'ok', await tappable(s));
-report('采购：「‹ 作品」回首页', await page.$eval('#crumbHome', (e) => e.getAttribute('href')?.includes('home.html')));
+report('采购：「‹ 作品」回首页', await page.$eval('#crumbHome', (e) => e.getAttribute('href') === './'));
 report('采购：组装、成品带锁', await page.evaluate(() => ['assemble', 'product'].every((s) => !!document.querySelector(`#steps [data-step="${s}"] svg`))));
 await clickText('#toolbar button', '换开发板');
 await waitFor(page, () => !document.querySelector('.qcard')?.hidden);
@@ -289,7 +291,7 @@ report('成品：串口抽屉收起后串口条回来', await waitFor(page, () =
 report('成品：收起后串口条可点', (await tappable('#mSerialOpen')) === 'ok', await tappable('#mSerialOpen'));
 
 // ---- 示例页（U-07/U-10）：空白作品 + 示例固件，只有采购 / 实验台两步；换固件抽屉要盖在串口抽屉、底栏之上
-await page.goto(`${base}/app.html?work=blank&example=bme280#bench`, { waitUntil: 'load' });
+await page.goto(`${base}/app?work=blank&example=bme280#bench`, { waitUntil: 'load' });
 await waitFor(page, () => globalThis.__tbApp?.store.get().step === 'bench' && globalThis.__tbApp.store.get().simSeconds > 0.5, null, 30000);
 await stepCheck('示例页');
 report('示例页：只有两步', (await page.$$eval('#steps [data-step]', (b) => b.map((x) => x.dataset.step).join())) === 'shop,bench');
@@ -313,7 +315,7 @@ report('换固件抽屉：Esc 能关', await waitFor(page, () => !document.query
 // ---- 每个成品（预览模式 ?work=X#product）：全屏、无横向滚动、按键格每个键都够大且点得到，按动作键不报错
 const WORKS = { weather: 'p-boot', spin: 'p-boot', lens: 'p-boot', usbkey: 'p-key-4', lamp: 'p-knob-r', ruler: 'p-near', tilt: 'p-tilt-r', imu: 'p-level' };
 for (const [w, key] of Object.entries(WORKS)) {
-  await page.goto(`${base}/app.html?work=${w}#product`, { waitUntil: 'load' });
+  await page.goto(`${base}/app?work=${w}#product`, { waitUntil: 'load' });
   const up = await waitFor(page, (k) => globalThis.__tbApp?.store.get().step === 'product' && !!document.querySelector(`#toolbar [data-tool="${k}"]`), key, 30000);
   if (!up) {
     report(`成品 ${w}：按键格出来`, false);

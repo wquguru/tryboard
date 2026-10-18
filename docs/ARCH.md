@@ -69,7 +69,7 @@ web/（Vite + TS）
 - wasm 导出见 `core/crates/wasm/src/lib.rs`（`tb_*`）。没有 import，实例化时传 `{}`。主线程先读镜像头判断芯片、下载对应 ROM，再 `tb_boot`；`tb_chip` / `tb_boot_pin` 告诉前端换哪块板、BOOT 键在哪个脚；S3 的 GPIO32 以上用 `tb_gpio_level_hi` / `tb_gpio_enable_hi`。
 - 资源：`/wasm/tryboard.wasm`、`/rom/esp32c3_rev3_rom.elf`（附 Apache-2.0 LICENSE）、`/fw/<示例>/flash.bin` 与 `/fw/examples.json`。
 - 渲染：three.js WebGL2 + 后期泛光（LED 发光）。WebGPU 等 three 的 WebGPU 渲染器稳定后再切。
-- 页面：`app.html` 工作台（采购 / 实验台 / 组装 / 成品四步，`src/app/`；示例 = `?work=blank&example=<id>#bench`）、`index.html` 旧实验台链接跳转页（纯 html，`?example=` 转到工作台示例）、`home.html` 首页（React，`src/home/App.tsx`；作品卡的示意图 / 真实固件运行在 `src/home/cards.ts`）、`levels.html` 旧关卡链接跳转页（纯 html，`<head>` 里跳到实验台检查点）、`advisor.html` 选型（React，`src/advisor/App.tsx`，见下节）。公共资源加载在 `assets.ts`；首页的实时运行用 `live.ts`（包一层 worker.ts）。
+- 页面（站内链接不带 .html 后缀，统一由 `src/ui/links.ts` 生成；DESIGN_V2 §7.2）：`app.html` 工作台（采购 / 实验台 / 组装 / 成品四步，`src/app/`；示例 = `?work=blank&example=<id>#bench`）、`index.html` 首页 `/`（React，`src/home/App.tsx`；带 `?example=` 时先跳到工作台示例；作品卡的示意图 / 真实固件运行在 `src/home/cards.ts`）、`home.html` / `advisor.html` / `levels.html` 旧地址跳转页（纯 html，`<head>` 里跳，保留 query 和 hash）、`select.html` 选板 `/select`（React，`src/advisor/App.tsx`，见下节）。公共资源加载在 `assets.ts`；首页的实时运行用 `live.ts`（包一层 worker.ts）。
 - SVG 视图（`src/views/`）：`bench`（面包板）、`product`（成品）、`assembly`（拖拽装配，装完切到成品）、`showcase`（成品示意，不跑固件）。视图只画，数据来自模拟器帧（OLED 像素、各脚 PWM 占空比、板载 WS2812）；舵机角度由 50 Hz 脉宽换算。
 - SVG 视图补充：`templates.ts` 是装配模板（零件、装法、检查、影响、成品工厂），`assembly.ts` 只是通用引擎；`lcdproducts.ts` 是圆屏成品（spin / lens），画面来自 worker 的 `lcd` 消息（GC9A01 240×240 RGBA，变化才发、≤ 30 帧/秒）。3D 实验台里圆屏是一块圆形贴图（board3d.ts `roundLcdModule`）。
 - PWM 观察：CLI 与网页在汇总行之后都输出 `[tryboard] PWM GPIOn 变化 占空比@时刻 …`（三位小数相同的相邻记录合并），关卡用它判"脉宽依次出现的台阶"（`pwm.steps`）和"稳定以后的值"（`pwm.from` 秒）。

@@ -102,6 +102,9 @@
 | U-08 | 页头 / 用词统一：站点导航「作品 / 选型助手 / 实验台」；工作台面包屑「实验台 / 示例 · X ▾」+ 芯片标；「换固件 ▾」菜单（C3/S3、示例、上传、最近用过）取代示例下拉 + 上传；主题全站图标键；授权与商标进 ⋯ 菜单 | agent-browser 各页页头截图；用词表（DESIGN_V2 §6.3）里的旧词在界面上搜不到 | ☑ Reviews/ab/U-08.md |
 | U-09 | 步骤条只显示走得通的路：空白只有「采购 / 实验台」；下一步按钮一种样式三态（可去 / 刚解锁 / 锁着写差几个）；锁住的组装 / 成品只显示一张检查点卡；没固件时一个主按钮；去掉重复的「再跑一次」 | agent-browser 截图 + levels.mjs / wiremode.mjs 回归 | ☑ Reviews/ab/U-09.md |
 | U-10 | 手机：示例走工作台手机布局；换固件改底部抽屉 | mobile.mjs：390×844 示例页无横向滚动、换固件抽屉触控 ≥ 44px | ☑ Reviews/ab/U-10.md |
+| U-11 | 新主张与文案：首页「试板：完全免费的线上 AI 智能硬件实验台」；作品简介、选板页、实验台、页脚等口语化表达按 DESIGN_V2 §7 改；「选型助手」改名「选板」 | DESIGN_V2 §7 表里「现在」一列在界面上搜不到；agent-browser 首页 / 选板 / 实验台截图 | ☑ Reviews/ab/U-11.md |
+| U-12 | 去掉 .html 后缀（第一步）：站内链接不带后缀，首页 `/`，选板 `/select`；旧地址（home / advisor / levels / index?example=）跳转 | levels.mjs「旧地址 → 新地址」全过；vite preview 下 `/app?work=weather#shop`、`/select`、`/licenses` 直接可开 | ☑ Reviews/ab/U-12.md |
+| U-13 | 授权页 C 版：一页声明 + THIRD_PARTY_NOTICES.txt + tryboard.spdx.json（gen_licenses.mjs 一次生成） | 页面无逐包全文；NOTICES 覆盖原页面全部组件；SPDX 是合法 JSON；390×844 无横向滚动 | ☑ Reviews/ab/U-13.md |
 
 ## P3 · 以后再说
 蓝牙（M7）、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。

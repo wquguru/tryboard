@@ -288,7 +288,7 @@ export const TILT: Template = {
       mini: '<rect x="30" y="14" width="40" height="32" rx="3" fill="#1C6B4A"/><rect x="44" y="24" width="12" height="12" fill="#141414"/><path d="M50 18 L50 10 M46 14 L50 10 L54 14" stroke="#F2F2F2" stroke-width="2" fill="none"/>',
       iso: '<rect x="128" y="37" width="34" height="26" rx="2" fill="#1C6B4A"/><rect x="139" y="44" width="12" height="12" fill="#141414"/>',
       spots: [
-        { key: 'A', label: '平贴底板、箭头朝前', ok: true, msg: ['六轴平贴底板，X 轴朝前', '往哪边歪，小豆就往哪边滑'] },
+        { key: 'A', label: '平贴底板、箭头朝前', ok: true, msg: ['六轴平贴底板，X 轴朝前', '小豆跟着歪斜方向运动'] },
         { key: 'B', label: '转了 180° 装反', ok: false, msg: ['六轴装反了', '俯仰、横滚方向全反，小豆往高处爬'] },
       ] },
     { id: 'board', name: 'ESP32-S3 开发板', short: '开发板', ghost: [10, 20, 110, 60], okMsg: ['开发板放进底壳', 'SPI 接圆屏 · I2C 接六轴'], mini: BOARD_MINI,

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>新旧地址对照</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#fff}
+.u{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) minmax(0,1.3fr) minmax(0,1.6fr);gap:16px;padding:12px 0;border-top:1px solid #EEF0F2;align-items:start}
+.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+@media (max-width:760px){.u,.steps{grid-template-columns:minmax(0,1fr)}.uh{display:none !important}}
+</style>
+</helmet>
+<div style="font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; color: #1E1E1E; background: #FFFFFF; min-height: 100vh">
+  <main style="max-width: 1152px; margin: 0 auto; padding: 48px 24px 64px">
+    <h1 style="margin: 0 0 8px; font-size: 28px; font-weight: 700">去掉 .html 后缀</h1>
+    <p style="margin: 0 0 28px; font-size: 14px; line-height: 1.7; color: #5B6068; max-width: 780px">地址分两步改。第一步只去后缀，页面代码不用动；第二步把作品和步骤放进路径，地址更短，也方便分享。旧地址一律永久跳转到新地址，已经分享出去的链接不会失效。</p>
+    <div class="u uh" style="font-size: 11px; color: #8A8F97; border-top: 0; padding-bottom: 4px"><span>页面</span><span>现在</span><span>第一步：只去后缀</span><span>第二步：路径化（推荐）</span></div>
+    <sc-for list="{{rows}}" as="r" hint-placeholder-count="8">
+      <div class="u">
+        <span style="font-size: 13px; font-weight: 500">{{r.name}}</span>
+        <code style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #8A4B3C; word-break: break-all">{{r.now}}</code>
+        <code style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #3D4148; word-break: break-all">{{r.a}}</code>
+        <code style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #0A4F87; background: #E8F2FB; padding: 1px 6px; border-radius: 4px; justify-self: start; word-break: break-all">{{r.b}}</code>
+      </div>
+    </sc-for>
+    <h2 style="margin: 40px 0 16px; font-size: 16px; font-weight: 700">要动哪些地方</h2>
+    <div class="steps">
+      <div style="border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px">
+        <b style="font-size: 14px">本地开发和预览</b>
+        <p style="margin: 6px 0 0; font-size: 13px; line-height: 1.7; color: #3D4148">在 Vite 配置里加一个小插件，把 <code style="font-family: 'JetBrains Mono', monospace; font-size: 12px">/works/*</code>、<code style="font-family: 'JetBrains Mono', monospace; font-size: 12px">/lab*</code> 等地址改写到对应的入口页，dev 和 preview 用同一张表。</p>
+      </div>
+      <div style="border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px">
+        <b style="font-size: 14px">上线后的服务器</b>
+        <p style="margin: 6px 0 0; font-size: 13px; line-height: 1.7; color: #3D4148">托管平台需要配改写规则和旧地址的 301 跳转。具体写法取决于用哪家托管，上线前再定。</p>
+      </div>
+      <div style="border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px">
+        <b style="font-size: 14px">站内链接和测试</b>
+        <p style="margin: 6px 0 0; font-size: 13px; line-height: 1.7; color: #3D4148">站内链接统一由一个地址函数生成，不再手写 <code style="font-family: 'JetBrains Mono', monospace; font-size: 12px">./app.html?…</code>；回归脚本改用新地址，另加一条「旧地址都能跳到新地址」的测试。</p>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      rows: [
+        { name: '首页 · 作品', now: '/home.html', a: '/', b: '/' },
+        { name: '选板', now: '/advisor.html', a: '/advisor', b: '/select' },
+        { name: '作品 · 某一步', now: '/app.html?work=weather#shop', a: '/app?work=weather#shop', b: '/works/weather/shop' },
+        { name: '作品 · 检查点', now: '/app.html?work=weather&cp=03#bench', a: '/app?work=weather&cp=03#bench', b: '/works/weather/bench?cp=03' },
+        { name: '空白实验台', now: '/app.html?work=blank#bench', a: '/app?work=blank#bench', b: '/lab' },
+        { name: '示例', now: '/index.html?example=bme280', a: '/app?work=blank&example=bme280#bench', b: '/lab/bme280' },
+        { name: '授权与致谢', now: '/licenses.html', a: '/licenses', b: '/licenses' },
+        { name: '旧关卡链接', now: '/levels.html#04', a: '跳转到作品检查点', b: '/works/weather/bench?cp=04' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

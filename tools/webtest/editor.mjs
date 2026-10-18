@@ -5,14 +5,16 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dist = root + '/web/dist';
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
-const server = http.createServer((req, res) => { const u = decodeURIComponent(new URL(req.url, 'http://x').pathname); const f = path.join(dist, u === '/' ? 'index.html' : u); if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(res); });
+const server = http.createServer((req, res) => { const u = decodeURIComponent(new URL(req.url, 'http://x').pathname); // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  const f0 = path.join(dist, u === '/' ? 'index.html' : u);
+  const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0; if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(res); });
 await new Promise((r) => server.listen(0, r));
 const browser = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', defaultViewport: { width: 1440, height: 900 } });
 const page = await browser.newPage();
 const errs = []; page.on('pageerror', (e) => errs.push(String(e)));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 await page.evaluateOnNewDocument(() => localStorage.clear());
-await page.goto(`http://localhost:${server.address().port}/app.html?work=blank&example=blink#bench`, { waitUntil: 'load' });
+await page.goto(`http://localhost:${server.address().port}/app?work=blank&example=blink#bench`, { waitUntil: 'load' });
 await page.waitForFunction(() => !!globalThis.__tbApp?.hist, { timeout: 30000 });
 await sleep(1000);
 const input = await page.$('#fwPick');
@@ -21,13 +23,21 @@ await sleep(1500);
 // 元件库「放」BME280，按引脚圈逐根接：VCC 3V3、GND、SCL GPIO7、SDA GPIO6
 async function clickRing(id) {
   await page.waitForFunction((i) => { const e = document.querySelector(`#pinRings [data-ring="${i}"]`); return e && !e.hidden && e.getBoundingClientRect().width > 0; }, { timeout: 10000 }, id);
-  const b = await page.$eval(`#pinRings [data-ring="${id}"]`, (e) => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
+  // 相邻脚（5V / GND）的圈在默认视角下叠一半：瞄圈里露出来、确实点得到它的那块（与 wiremode.mjs 同法）
+  const b = await page.$eval(`#pinRings [data-ring="${id}"]`, (e) => {
+    const r = e.getBoundingClientRect(), cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+    for (const k of [0, 0.25, 0.4]) for (const [dx, dy] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+      const x = cx + dx * k * r.width, y = cy + dy * k * r.height;
+      if (document.elementFromPoint(x, y)?.closest('[data-ring]') === e) return [x, y];
+    }
+    return [cx, cy];
+  });
   await page.mouse.click(b[0], b[1]);
 }
 await page.click('[data-left="lib"]');
 await page.waitForSelector('#partLib [data-place="bme280"]');
 await page.click('#partLib [data-place="bme280"]');
-for (const ring of ['3V3', 'GND', 'GPIO7', 'GPIO6']) await clickRing(ring);
+for (const ring of ['3V3', 'GND', 'GPIO7', 'GPIO6']) { try { await clickRing(ring); } catch (e) { console.log('DBG stuck at', ring, await page.evaluate(() => JSON.stringify({ banner: document.querySelector('#placeBanner')?.textContent, rings: [...document.querySelectorAll('#pinRings [data-ring]')].map((e) => e.dataset.ring + (e.hidden ? '(h)' : '') + Math.round(e.getBoundingClientRect().width)).join(' '), toast: document.querySelector('#toast')?.textContent, parts: globalThis.__tbApp.session.scene.parts.map((p) => p.type) }))); await page.screenshot({ path: root + '/Reviews/web/editor-stuck.png' }); throw e; } }
 await page.waitForFunction(() => !document.querySelector('#placeBanner'), { timeout: 10000 });
 let ok = false;
 for (let i = 0; i < 40 && !ok; i++) { await sleep(250); ok = (await page.$eval('#console', (e) => e.textContent)).includes('TRYBOARD_OK bme280'); }

@@ -16,7 +16,9 @@ const expect = process.argv[3] || 'TRYBOARD_OK';
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
   let f = path.join(dist, u === '/' ? 'index.html' : u);
+  if (!path.extname(f) && fs.existsSync(f + '.html')) f += '.html';
   if (!f.startsWith(dist) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'application/octet-stream' });
   fs.createReadStream(f).pipe(res);
@@ -35,7 +37,7 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 const t0 = Date.now();
-await page.goto(`http://localhost:${port}/app.html?work=blank&example=${example}#bench`, { waitUntil: 'load' });
+await page.goto(`http://localhost:${port}/app?work=blank&example=${example}#bench`, { waitUntil: 'load' });
 let ok = false;
 for (let i = 0; i < 120; i++) {
   const text = await page.$eval('#console', (e) => e.textContent);

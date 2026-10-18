@@ -1,12 +1,13 @@
-// 选型助手 v2（DESIGN_V2 §2，设计稿 docs/design-v2/Advisor.dc.html；手机见 MobileSite 第 3、4 屏）。
-// 逻辑全在 engine.ts / data.ts（纯函数），这里只管界面：输入（模板 / 硬要求 / 配件 / 预算）→ 结果（三个关键数、理由、接线、清单、可信度、备选）。
-// "在试板里跑一遍"按推荐芯片从模板的示例里挑 examples.json 里真实存在、芯片对得上的那个，打开实验台（app.html?work=blank&example=）。
+// 选板（原选型助手 v2，DESIGN_V2 §2、§7，设计稿 docs/design-v2/Advisor.dc.html；手机见 MobileSite 第 3、4 屏）。
+// 逻辑全在 engine.ts / data.ts（纯函数），这里只管界面：输入（模板 / 需求 / 配件 / 预算）→ 结果（三个关键数、理由、接线、清单、可信度、备选）。
+// "在实验台运行"按推荐芯片从模板的示例里挑 examples.json 里真实存在、芯片对得上的那个，打开实验台（./app?work=blank&example=）。
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { RadioGroup, Toggle } from 'radix-ui';
 import { PARTS, TEMPLATES, type Cap, type Template } from './data';
 import { capName, recommend, type Confidence, type Need, type Plan } from './engine';
 import { Badge, Button, Collapsible, Table } from '../ui/components';
 import { SiteFooter, SiteHeader } from '../ui/site';
+import { SELECT, SITE_NAV, lab } from '../ui/links';
 import { cn } from '../ui/cn';
 import { WORKS } from '../app/works';
 import { exampleHref } from '../app/examples';
@@ -206,13 +207,13 @@ function TryButtons({ t, plan }: { t: TryPlan; plan: Plan }) {
           <Button asChild variant="default" className="try h-11 rounded-[10px] px-5 text-[15px] font-bold max-md:hidden">
             <a href={runHref(first)} data-example={first.id}>
               <Play />
-              在试板里跑「{exName(first)}」
+              在实验台运行「{exName(first)}」
             </a>
           </Button>
         ) : (
-          <Button variant="outline" disabled className="h-11 rounded-[10px] px-5 text-[14px] max-md:hidden" title="这颗芯片还不能在试板里仿真">
+          <Button variant="outline" disabled className="h-11 rounded-[10px] px-5 text-[14px] max-md:hidden" title="这颗芯片暂不支持仿真">
             <Play />
-            {plan.chip.name} 还不能在试板里跑
+            {plan.chip.name} 暂不支持在试板仿真
           </Button>
         )}
         <button type="button" onClick={copy} className="inline-flex min-h-11 cursor-pointer items-center text-[14px] text-accent-ink hover:underline" aria-live="polite">
@@ -234,7 +235,7 @@ function TryButtons({ t, plan }: { t: TryPlan; plan: Plan }) {
       )}
       {!first && t.other.length > 0 && (
         <p className="text-[13px] text-muted">
-          同类项目可以先用 {t.other[0].chip === 'esp32s3' ? 'ESP32-S3' : 'ESP32-C3'} 跑一遍：
+          同类项目可以先用 {t.other[0].chip === 'esp32s3' ? 'ESP32-S3' : 'ESP32-C3'} 运行：
           {t.other.slice(0, 3).map((e, i) => (
             <span key={e.id}>
               {i > 0 && ' · '}
@@ -246,7 +247,7 @@ function TryButtons({ t, plan }: { t: TryPlan; plan: Plan }) {
         </p>
       )}
       {t.work && (
-        <a className="inline-flex min-h-11 items-center text-[13px] text-accent-ink hover:underline md:min-h-0" href={`./app.html?work=${t.work.id}#shop`} data-work={t.work.id}>
+        <a className="inline-flex min-h-11 items-center text-[13px] text-accent-ink hover:underline md:min-h-0" href={lab(t.work.id, 'shop')} data-work={t.work.id}>
           做完整作品「{t.work.title}」（{t.work.chip}）：采购 → 实验台 → 组装 → 成品 →
         </a>
       )}
@@ -423,7 +424,7 @@ export function App() {
     }
   }, [tpl]);
   useEffect(() => setFocus(null), [need]);
-  // 手机底部吸附按钮：结果区进入视野前是"看推荐"，进入后是"在试板里跑一遍"
+  // 手机底部吸附按钮：结果区进入视野前是"看推荐"，进入后是"在实验台运行"
   useEffect(() => {
     const el = resultRef.current;
     if (!el || typeof IntersectionObserver !== 'function') return;
@@ -458,27 +459,23 @@ export function App() {
   return (
     <div className="flex min-h-screen flex-col max-md:pb-[76px]">
       <SiteHeader
-        current="./advisor.html"
-        subtitle="选型助手"
-        links={[
-          ['./home.html', '作品'],
-          ['./advisor.html', '选型助手'],
-          ['./app.html?work=blank#bench', '实验台'],
-        ]}
+        current={SELECT}
+        subtitle="选板"
+        links={SITE_NAV}
       />
       <main className="flex-1">
         <section className="mx-auto max-w-[1120px] px-8 pt-[72px] pb-12 max-md:px-4 max-md:pt-5 max-md:pb-2">
-          <p className="mb-4 font-mono text-[12px] tracking-[.1em] text-accent-ink max-md:hidden">选型助手</p>
+          <p className="mb-4 font-mono text-[12px] tracking-[.1em] text-accent-ink max-md:hidden">选板</p>
           <h1 className="text-[48px] leading-[1.15] font-bold tracking-[-0.01em] max-md:text-[26px] max-md:leading-[1.25]">
-            先选项目，
+            选板：
             <br className="max-md:hidden" />
-            再看买哪块板
+            基于项目选择配件
           </h1>
           <p className="mt-[18px] max-w-[560px] text-[17px] leading-[1.7] text-muted max-md:mt-2 max-md:text-[14px]">
-            告诉我们你想做什么、有哪些硬要求，试板会给出芯片、开发板、零件清单和接线，并标出哪些结论已经在模拟器里跑过、哪些必须上真机。
+            选好项目和需求，得到芯片、开发板、零件清单和接线；每条结论都标明是仿真验证还是需要真机确认。
           </p>
           <ol className="mt-8 flex flex-wrap gap-8 text-[14px] text-muted max-md:hidden">
-            {['选一个项目', '勾上硬要求', '看结果，去实验台跑一遍'].map((s, i) => (
+            {['选项目', '选需求', '看推荐并在实验台运行'].map((s, i) => (
               <li key={s} className="flex items-center gap-2.5">
                 <span className={cn('inline-flex size-[26px] items-center justify-center rounded-full font-mono text-[12px]', i === 0 ? 'bg-fg text-bg' : 'border-[1.5px] border-fg text-fg')}>{i + 1}</span>
                 {s}
@@ -532,7 +529,7 @@ export function App() {
         </section>
 
         <section className="mx-auto max-w-[1120px] px-8 pb-14 max-md:px-4 max-md:pb-6">
-          <Lbl id="caps-label">2 · 有什么硬要求（可多选）</Lbl>
+          <Lbl id="caps-label">2 · 必须满足的需求（可多选）</Lbl>
           <div id="caps" role="group" aria-labelledby="caps-label" className="flex flex-wrap gap-2">
             <ReqChip id="battery" data-cap="battery" on={need.battery} flip={() => setBattery(!need.battery)}>
               电池供电，要省电
@@ -655,12 +652,12 @@ export function App() {
           <Button asChild variant="default" className="h-12 w-full rounded-xl text-[15px] font-bold">
             <a href={runHref(t.runs[0])} data-example={t.runs[0].id}>
               <Play />
-              在试板里跑一遍
+              在实验台运行
             </a>
           </Button>
         ) : (
           <Button variant="outline" disabled className="h-12 w-full rounded-xl text-[14px]">
-            {shown.chip.name} 还不能在试板里跑
+            {shown.chip.name} 暂不支持在试板仿真
           </Button>
         )}
       </div>

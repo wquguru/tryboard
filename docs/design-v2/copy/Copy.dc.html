@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>文案对照</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#fff}
+.row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,2fr) 24px minmax(0,2fr);gap:16px;align-items:start;padding:12px 0;border-top:1px solid #EEF0F2}
+@media (max-width:760px){.row{grid-template-columns:minmax(0,1fr)}.arrow{display:none}}
+</style>
+</helmet>
+<div style="font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; color: #1E1E1E; background: #FFFFFF; min-height: 100vh">
+  <main style="max-width: 1152px; margin: 0 auto; padding: 48px 24px 64px">
+    <h1 style="margin: 0 0 8px; font-size: 28px; font-weight: 700">文案对照：改成短句、说清做什么</h1>
+    <p style="margin: 0 0 8px; font-size: 14px; line-height: 1.7; color: #5B6068; max-width: 760px">改写的原则有三条：句子说的是能做什么，不和别的东西比；能用一个动词就不用口语短句；内部用词（工作台、硬要求、跑一遍）不出现在界面上。</p>
+    <div style="display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 32px; font-size: 12px">
+      <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: #E8F2FB; color: #0A4F87">你指定的</span>
+      <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: #F4F5F7; color: #3D4148">同类问题，建议一起改</span>
+    </div>
+    <sc-for list="{{groups}}" as="g" hint-placeholder-count="5">
+      <section style="margin-bottom: 32px">
+        <h2 style="margin: 0 0 4px; font-size: 16px; font-weight: 700">{{g.name}}</h2>
+        <div class="row" style="font-size: 11px; color: #8A8F97; border-top: 0; padding-bottom: 4px"><span>位置</span><span>现在</span><span class="arrow"></span><span>改成</span></div>
+        <sc-for list="{{g.items}}" as="it" hint-placeholder-count="4">
+          <div class="row">
+            <span style="font-size: 12px; color: #5B6068; line-height: 1.6">{{it.where}}</span>
+            <span style="font-size: 14px; line-height: 1.6; color: #8A4B3C; text-decoration: line-through; text-decoration-color: #D9A89C">{{it.from}}</span>
+            <span class="arrow" aria-hidden="true" style="color: #8A8F97; font-size: 14px; line-height: 1.6">→</span>
+            <span style="font-size: 14px; line-height: 1.6; font-weight: 500; padding: 0 6px; border-radius: 4px; background: {{it.bg}}; justify-self: start">{{it.to}}</span>
+          </div>
+        </sc-for>
+      </section>
+    </sc-for>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1880}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const U = '#E8F2FB', M = '#F4F5F7';
+    const r = (where, from, to, mine) => ({ where, from, to, bg: mine ? M : U });
+    return {
+      groups: [
+        { name: '首页', items: [
+          r('主标题', '买零件之前，先在网页上把它做出来', '试板：完全免费的线上 AI 智能硬件实验台'),
+          r('副标题', '跑的是你编译出来的真实固件，不是动画。', '高仿真 3D 动画，可直接运行真实固件'),
+          r('作品卡按钮', '看真实固件跑', '运行固件'),
+          r('作品卡按钮（运行中）', '回到示意图', '停止'),
+          r('次按钮', '我有固件了', '运行我的固件', 1),
+          r('主按钮', '挑一个作品', '选一个作品', 1),
+          r('作品卡主按钮', '做这个', '开始做', 1),
+          r('作品区右上', '都不是想做的？用选型助手 →', '没有想做的？去选板 →', 1),
+          r('四步 · 采购', '挑零件，看参考价', '选零件，看参考价', 1),
+          r('四步 · 实验台', '跑固件，逐条验收', '运行固件，逐项检查', 1),
+          r('四步 · 组装', '装进外壳，看读数变没变', '装进外壳，复测读数', 1),
+          r('四步 · 成品', '拿在手里什么样', '预览成品效果', 1),
+          r('页面描述 meta', '买零件之前，先在网页上把它做出来：采购、实验台、组装、成品。…', '试板是完全免费的线上 AI 智能硬件实验台：选零件、运行真实固件、装进外壳、预览成品。', 1),
+        ] },
+        { name: '作品简介', items: [
+          r('体感小人', '圆盘往哪边歪，屏上的小豆就往哪边滑；碰到圆边贴着边滑。', '小豆跟着屏幕歪斜方向运动'),
+          r('超声波尺子', '对着墙一指，屏上显示距离；越近蜂鸣器响得越急，像倒车雷达。', '超声波测距，屏幕展示结果，蜂鸣器跟着一起强弱变化'),
+          r('桌面气象站', '屏幕显示温度、湿度、气压，舵机表盘指着温度，彩灯按冷热变色。', '屏幕显示温湿度和气压，舵机表盘指示温度，彩灯随冷热变色', 1),
+          r('会转身的小黄', '站在舵机转台上，圆屏当脸；按一下按键它转过来看你。', '舵机转台加圆屏表情，按下按键后转身面向你', 1),
+          r('透镜里的小人', '圆屏上的表情被凸透镜罩放大，看起来像立在罩子里；按键换表情。', '凸透镜放大圆屏表情，按键切换表情', 1),
+          r('USB 小键盘', '四个键插上电脑就能打字：三个键发 a、b、c，第四个是宏键，一下打出一整句。', '四键 USB 键盘：三个字母键加一个宏键，一键输入整句', 1),
+          r('旋钮台灯', '转旋钮调亮度，按一下切到调颜色；8 颗 WS2812 藏在乳白灯罩里。', '旋钮调亮度，按下切换调色；8 颗 WS2812 灯珠', 1),
+        ] },
+        { name: '选型助手', items: [
+          r('主标题', '先选项目，再看买哪块板', '选板：基于项目选择配件'),
+          r('导航、页面名', '选型助手', '选板', 1),
+          r('副标题', '告诉我们你想做什么、有哪些硬要求，试板会给出芯片、开发板、零件清单和接线，并标出哪些结论已经在模拟器里跑过、哪些必须上真机。', '选好项目和需求，得到芯片、开发板、零件清单和接线；每条结论都标明是仿真验证还是需要真机确认。', 1),
+          r('三步', '选一个项目 · 勾上硬要求 · 看结果，去实验台跑一遍', '选项目 · 选需求 · 看推荐并在实验台运行', 1),
+          r('第 2 步标题', '2 · 有什么硬要求（可多选）', '2 · 必须满足的需求（可多选）', 1),
+          r('芯片说明', '这颗芯片可以在试板里完整仿真，买之前先跑一遍', '这颗芯片支持完整仿真，购买前可在线运行', 1),
+        ] },
+        { name: '实验台', items: [
+          r('作品名下方', '还没有改动', '未修改', 1),
+          r('空白作品的下一步', '想装壳？挑个作品 →', '需要外壳？选一个作品 →', 1),
+          r('示例卡读数', '固件读到', '固件读数', 1),
+          r('手机菜单提示', '在手机上：能看、能调参数、能按按键。连线和拖固件用电脑更顺手。', '手机上可查看、调参数和按按键；连线和换固件建议用电脑。', 1),
+        ] },
+        { name: '全站', items: [
+          r('页脚', 'TryBoard 试板：在浏览器里运行 ESP32 系列芯片的真实固件，compatible with Arduino。', '试板 TryBoard · 在浏览器中运行 ESP32 固件，兼容 Arduino', 1),
+          r('旧地址跳转页标题', '实验台已并入工作台 / 关卡已并入工作台', '页面已移动，正在跳转…', 1),
+          r('授权页导语', '网站里用到的别人的代码、芯片 ROM、固件组件、字体和素材，以及各自的许可证与署名。构建时从依赖清单和素材目录自动生成。', '试板使用的开源软件、芯片 ROM、固件组件、字体和 3D 素材及其许可证。', 1),
+        ] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

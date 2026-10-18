@@ -24,7 +24,9 @@ const CLI = path.join(root, 'core/target/release/tryboard');
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const f = path.join(dist, u === '/' ? 'index.html' : u);
+  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  const f0 = path.join(dist, u === '/' ? 'index.html' : u);
+  const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'application/octet-stream' });
   fs.createReadStream(f).pipe(res);
@@ -56,7 +58,7 @@ async function waitFor(page, fn, arg, ms = 30000) {
 const page = await browser.newPage();
 page.on('pageerror', (e) => errors.push(`${e}`));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-await page.goto(base + '/app.html?work=weather#bench', { waitUntil: 'load' });
+await page.goto(base + '/app?work=weather#bench', { waitUntil: 'load' });
 await waitFor(page, () => !!globalThis.__tbApp?.session?.sim, null, 30000);
 // 换固件（与把 .bin 拖进台面同一个入口）
 await page.evaluate(async () => {
@@ -115,7 +117,7 @@ report('命令行按同一日志重放：串口逐字节相同、复位次数相
 const p2 = await browser.newPage();
 p2.on('pageerror', (e) => errors.push(`${e}`));
 p2.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-await p2.goto(base + '/app.html?work=weather&debug=1#bench', { waitUntil: 'load' });
+await p2.goto(base + '/app?work=weather&debug=1#bench', { waitUntil: 'load' });
 await waitFor(p2, () => !!globalThis.__tbApp?.injectWiring && !!globalThis.__tbApp?.session?.sim, null, 30000);
 const net = (cir) => {
   const r = spawnSync(CLI, ['elec-net', path.join(root, 'tools/elec', cir)]);

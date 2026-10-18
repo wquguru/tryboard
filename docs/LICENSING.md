@@ -42,6 +42,6 @@
 5. 托管示例固件：自己的 Apache/MIT 固件附许可证清单；LGPL / GPL / EUPL 固件三件套；含乐鑫 MIT 组件的不托管。
 6. 产品名中性（当前代号 TryBoard / 试板），描述里写"支持 ESP32 系列芯片""compatible with Arduino"，页脚非关联声明；3D 视图写"外观示意，非乐鑫官方模型"。
 7. 上线前发出邮件 A、B（草稿见 `LICENSING_REVIEW.md` 第四节，要人点头才能发）；收费、广告或联盟上线前要有回复。
-8. 网站有第三方授权页（`licenses.html`），由构建脚本从各素材目录的 `SOURCES.md` 和 npm / cargo 依赖清单自动生成，列出代码库、ROM、固件组件、3D 模型、字体、HDRI 的来源、许可证与署名。
+8. 网站有第三方授权页（`licenses.html`，地址 `/licenses`）和同时生成的 `THIRD_PARTY_NOTICES.txt`、`tryboard.spdx.json`，由构建脚本从各素材目录的 `SOURCES.md` 和 npm / cargo 依赖清单自动生成。页面是一页声明 + 下载入口；代码库、ROM、固件组件、3D 模型、字体、HDRI 的来源、版权行、许可证全文与修改说明在 NOTICES 文件里（2026-10-18 起，见 DECISIONS）。
 
 来源见 `LICENSING_REVIEW.md` 末尾。

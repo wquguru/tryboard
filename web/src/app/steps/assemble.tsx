@@ -35,6 +35,7 @@ import { type ReactNode } from 'react';
 import { cn } from '../../ui/cn';
 import { Host, Txt } from '../../ui/native';
 import { Btn, Btns, Kv, KvBox, KvT, LinkBtn, LockCard, Mono, Muted, Note, Ph, PhT, Res, Sec, Seg, SegB, Slider, TnL, TnM, TnSt, TreeEmpty, TreeGroup, VerdictLine, btnClass, tnClass } from '../../ui/panel';
+import { lab } from '../../ui/links';
 
 type Entry = { kind: 'place'; id: string; spot?: string } | { kind: 'test'; ok: boolean; rows: { ok: boolean; text: string }[]; fingerprint: string; who: string; temp: number };
 
@@ -136,7 +137,7 @@ const IMPACT: Record<string, Record<string, string[]>> = {
     board: ['Echo 线上的 1 kΩ / 2 kΩ 分压电阻跟着开发板一起装，别装壳时漏掉'],
   },
   tilt: {
-    imu: ['平贴底板、箭头朝前：往哪边歪，小豆就往哪边滑', '装反 180°：俯仰、横滚方向全反，小豆往高处爬，复测里也一样'],
+    imu: ['平贴底板、箭头朝前：小豆跟着歪斜方向运动', '装反 180°：俯仰、横滚方向全反，小豆往高处爬，复测里也一样'],
   },
 };
 
@@ -914,9 +915,9 @@ export function assembleStep(): StepImpl {
           <LockCard role="status">
             <Sec>③ 组装</Sec>
             <PhT>这个作品没有组装模板</PhT>
-            <p className="my-3 text-muted">空白实验台只跑固件，不装壳。挑一个作品，才有组装和成品。</p>
+            <p className="my-3 text-muted">空白实验台只跑固件，不装壳。选一个作品，才有组装和成品。</p>
             <Btns>
-              <LinkBtn primary href="./app.html?work=weather#assemble">
+              <LinkBtn primary href={lab('weather', 'assemble')}>
                 去气象站
               </LinkBtn>
             </Btns>

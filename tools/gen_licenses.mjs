@@ -1,30 +1,36 @@
 #!/usr/bin/env node
-// 生成第三方授权页 web/licenses.html（LICENSING.md 规则 8）。构建期由 tools/build_web.sh 调用，产物不进仓库。
+// 生成授权与致谢（LICENSING.md 规则 8，DESIGN_V2 §7.3 C 版）。构建期由 tools/build_web.sh 调用，产物不进仓库：
+//   web/licenses.html                    一页声明：试板本身、组件数与许可证种类、特别感谢、两个下载卡、商标
+//   web/public/THIRD_PARTY_NOTICES.txt   完整声明：每个组件的版权行，每种许可证全文只附一次
+//   web/public/tryboard.spdx.json        SPDX 2.3 软件物料清单（含不随网站分发的构建工具）
 // 读：web/package.json + package-lock.json + node_modules（npm）、core/Cargo.lock（cargo）、third_party/esp-rom-elfs（ROM）、
 //     web/public/fw 里实际发布的示例固件用到的 managed_components、各素材目录的 SOURCES.md、字体清单。
 // 发布的固件里出现乐鑫修改版 MIT（"ESPRESSIF MIT" / LicenseRef-Espressif-Modified-MIT）就失败退出（规则 5）。
-// 用法：node tools/gen_licenses.mjs [--out web/licenses.html]
+// 用法：node tools/gen_licenses.mjs [--out web/licenses.html] [--pub web/public]
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const outArg = process.argv.indexOf('--out');
-const out = path.resolve(root, outArg > 0 ? process.argv[outArg + 1] : 'web/licenses.html');
+const arg = (k, d) => (process.argv.indexOf(k) > 0 ? process.argv[process.argv.indexOf(k) + 1] : d);
+const out = path.resolve(root, arg('--out', 'web/licenses.html'));
+const pub = path.resolve(root, arg('--pub', 'web/public'));
 const web = path.join(root, 'web');
 const rd = (p) => fs.readFileSync(p, 'utf8');
 const exists = (p) => fs.existsSync(p);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const warn = [];
+const today = new Date().toISOString().slice(0, 10);
 
-/** 从 LICENSE 正文猜 SPDX（只认我们会遇到的几种；认不出就标"见全文"，不瞎填） */
+/** 从 LICENSE 正文猜 SPDX（只认我们会遇到的几种；认不出就是 NOASSERTION，不瞎填） */
 function guessSpdx(text) {
   if (/ESPRESSIF MIT|LicenseRef-Espressif-Modified-MIT/i.test(text)) return 'LicenseRef-Espressif-Modified-MIT';
   if (/Apache License[\s\S]{0,40}Version 2\.0/i.test(text)) return 'Apache-2.0';
   if (/Permission is hereby granted, free of charge/i.test(text)) return 'MIT';
   if (/Redistribution and use in source and binary forms/i.test(text)) return /Neither the name/i.test(text) ? 'BSD-3-Clause' : 'BSD-2-Clause';
   if (/Permission to use, copy, modify, and\/or distribute/i.test(text)) return 'ISC';
-  return '见全文';
+  return 'NOASSERTION';
 }
 const licenseFile = (dir) => {
   if (!exists(dir)) return null;
@@ -47,61 +53,47 @@ function spdxCopyright(dir) {
   for (const f of files) for (const m of rd(f).slice(0, 2000).matchAll(/SPDX-FileCopyrightText:\s*(.+)/g)) got.add('Copyright ' + m[1].replace(/\s*\*\/\s*$/, '').trim());
   return [...got].slice(0, 2);
 }
-const fullText = (title, text) => `<details><summary>${esc(title)}</summary><pre>${esc(text.trim())}</pre></details>`;
-// 手机（< 768px）上每一行变成一张卡（DESIGN_V2 §5「每个来源一张卡，不用横向滚表格」）：首格是卡片标题，其余格用 data-label 显示列名
-const table = (head, rows) => `<div class="tbl"><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => r(head)).join('')}</tbody></table></div>`;
-const tr = (cells) => (head) => `<tr>${cells.map((c, i) => `<td data-label="${esc(head[i] ?? '')}"${c?.mono ? ' class="mono"' : ''}>${c?.html ?? esc(c)}</td>`).join('')}</tr>`;
-const mono = (s) => ({ mono: true, html: esc(s) });
-const link = (href, text) => ({ html: `<a href="${esc(href)}">${esc(text ?? href)}</a>` });
 
-const sections = [];
+// 一次收集，三处输出。每项：
+//   cat 分类、name、version、license（SPDX 表达式或 NOASSERTION）、copyright[]、url、shipped（是否随网站分发）、
+//   modified（改动说明，空 = 未修改）、text（许可证全文，NOTICES 去重后附）、note（NOTICES 里的补充说明）
+const items = [];
+const add = (it) => items.push({ copyright: [], url: '', shipped: true, modified: '', text: '', note: '', version: '', ...it });
 
 // ---------------------------------------------------------------- 1. 网页代码库（npm）
+const devTools = [];
 {
   const pkg = JSON.parse(rd(path.join(web, 'package.json')));
   const lock = exists(path.join(web, 'package-lock.json')) ? JSON.parse(rd(path.join(web, 'package-lock.json'))) : { packages: {} };
-  const runtime = Object.keys(pkg.dependencies ?? {});
-  const rows = [];
-  const texts = [];
-  for (const name of runtime) {
+  for (const name of Object.keys(pkg.dependencies ?? {})) {
     const dir = path.join(web, 'node_modules', name);
     const p = exists(path.join(dir, 'package.json')) ? JSON.parse(rd(path.join(dir, 'package.json'))) : {};
     const lf = licenseFile(dir);
     const text = lf ? rd(lf) : '';
     if (!lf) warn.push(`npm ${name}：node_modules 里没有 LICENSE 文件`);
-    rows.push(tr([mono(name), mono(p.version ?? pkg.dependencies[name]), mono(p.license ?? guessSpdx(text)), copyrightLines(text).join('；') || '—', p.homepage ? link(p.homepage) : '—']));
-    if (text) texts.push(fullText(`${name} ${p.version ?? ''} · ${p.license ?? ''} 全文`, text));
+    add({ cat: '网页代码（npm，打包进网页 JS）', name, version: p.version ?? pkg.dependencies[name], license: p.license ?? guessSpdx(text), copyright: copyrightLines(text), url: p.homepage ?? `https://www.npmjs.com/package/${name}`, text });
   }
-  // 构建工具：不随网站分发（Vite 会往产物里注入少量运行时辅助代码，Vite 本身 MIT）
-  const devRows = [];
+  // 构建工具：不随网站分发（Vite 会往产物里注入少量运行时辅助代码，Vite 本身 MIT），只进 SPDX 和 NOTICES 末尾的清单
   for (const [k, v] of Object.entries(lock.packages ?? {})) {
     if (!k || !v.dev) continue;
-    const name = k.replace(/^.*node_modules\//, '');
-    const installed = exists(path.join(web, k));
-    devRows.push(tr([mono(name), mono(v.version), mono(v.license ?? '—'), installed ? '' : '其他平台的可选二进制，本机未安装']));
+    devTools.push({ name: k.replace(/^.*node_modules\//, ''), version: v.version ?? '', license: v.license ?? 'NOASSERTION', installed: exists(path.join(web, k)) });
   }
-  sections.push(`<h2>网页运行时代码（npm，随网站分发）</h2>
-${table(['包', '版本', '许可证', '版权', '主页'], rows)}
-${texts.join('')}
-<h2>网页构建工具（npm devDependencies，${devRows.length} 个，不随网站分发）</h2>
-<p class="note">只在本机构建时使用。Vite（MIT）会往产物里注入少量模块预加载辅助代码。</p>
-<details><summary>展开 ${devRows.length} 个构建期依赖</summary>${table(['包', '版本', '许可证', '备注'], devRows)}</details>`);
 }
 
 // ---------------------------------------------------------------- 2. 模拟器内核（cargo）
+const crates = [];
 {
   const lockPath = path.join(root, 'core/Cargo.lock');
-  const third = [];
   if (exists(lockPath)) {
     for (const block of rd(lockPath).split('[[package]]').slice(1)) {
       const name = block.match(/name = "([^"]+)"/)?.[1];
       const ver = block.match(/version = "([^"]+)"/)?.[1];
       const src = block.match(/source = "([^"]+)"/)?.[1];
-      if (src) third.push({ name, ver, src });
+      if (src) crates.push({ name, ver, src });
     }
   } else warn.push('core/Cargo.lock 不存在');
-  sections.push(`<h2>模拟器内核（Rust → WebAssembly）</h2>
-${third.length ? table(['crate', '版本', '来源'], third.map((c) => tr([mono(c.name), mono(c.ver), mono(c.src)]))) : '<p class="note">内核全部是本项目自己的代码，当前没有任何第三方 crate（以 core/Cargo.lock 为准，构建时自动检查）。</p>'}`);
+  // 现在一个第三方 crate 都没有（AGENTS.md §6）；真引入了就列出来，并让页面上「不含第三方 Rust 依赖」那句改口
+  for (const c of crates) add({ cat: '模拟器内核（Rust crate，编译进 wasm）', name: c.name, version: c.ver, license: 'NOASSERTION', url: c.src, note: '许可证见 crate 源码' });
 }
 
 // ---------------------------------------------------------------- 3. 芯片 ROM（esp-rom-elfs）
@@ -113,23 +105,39 @@ ${third.length ? table(['crate', '版本', '来源'], third.map((c) => tr([mono(
   const copy = readme.match(/The ROMs of ESP32 series of chips are (Copyright[^\n]+)/)?.[1] ?? 'Copyright (c) 2015-2022 Espressif Systems (Shanghai) Co. Ltd.';
   const rel = exists(dir) ? (fs.readdirSync(dir).find((n) => /^esp-rom-elfs-\d+\.tar\.gz$/.test(n)) ?? '').match(/\d+/)?.[0] : '';
   const shipped = exists(path.join(web, 'public/rom')) ? fs.readdirSync(path.join(web, 'public/rom')).filter((n) => n.endsWith('.elf')) : ['esp32c3_rev3_rom.elf', 'esp32s3_rev0_rom.elf'];
+  add({
+    cat: '芯片 ROM',
+    name: 'esp-rom-elfs',
+    version: rel ?? '',
+    license: 'Apache-2.0',
+    copyright: [copy],
+    url: 'https://github.com/espressif/esp-rom-elfs',
+    text: lic,
+    note: `网站发布的文件：${shipped.join('、')}。ROM 内含的第三方组件见下一节。`,
+  });
+  // ROM 里的第三方组件（ESP-IDF COPYRIGHT · ROM Source Code Copyrights）：在 ROM 文件里，不另算组件数
   const romThird = [
-    ['Newlib', 'BSD'],
-    ['Xtensa libhal', 'MIT'],
-    ['TinyBasic Plus', 'MIT'],
-    ['miniz', '公有领域（Public Domain）'],
-    ['TJpgDec', 'TJpgDec 许可（BSD 风格）'],
-    ['Zephyr USB 协议栈', 'Apache-2.0 / BSD-3-Clause'],
+    ['Newlib', 'NOASSERTION', 'BSD 系列许可'],
+    ['Xtensa libhal', 'MIT', ''],
+    ['TinyBasic Plus', 'MIT', ''],
+    ['miniz', 'NOASSERTION', '公有领域（Public Domain）'],
+    ['TJpgDec', 'NOASSERTION', 'TJpgDec 许可（BSD 风格）'],
+    ['Zephyr USB 协议栈', 'Apache-2.0 AND BSD-3-Clause', ''],
   ];
-  sections.push(`<h2>芯片 ROM（随网站分发）</h2>
-${table(['文件', '来源', '许可证', '版权'], shipped.map((f) => tr([mono(f), link('https://github.com/espressif/esp-rom-elfs', `espressif/esp-rom-elfs${rel ? ` · release ${rel}` : ''}`), mono('Apache-2.0'), copy])))}
-<p class="note">ROM 里包含以下第三方组件（清单见 <a href="https://docs.espressif.com/projects/esp-idf/en/latest/esp32/COPYRIGHT.html#rom-source-code-copyrights">ESP-IDF COPYRIGHT · ROM Source Code Copyrights</a>）：</p>
-${table(['组件', '许可证'], romThird.map(([a, b]) => tr([a, mono(b)])))}
-${lic ? fullText('esp-rom-elfs · Apache License 2.0 全文', lic) : ''}`);
+  for (const [name, license, note] of romThird) add({ cat: '芯片 ROM 内含的组件', name, license, note, inRom: true, url: 'https://docs.espressif.com/projects/esp-idf/en/latest/esp32/COPYRIGHT.html#rom-source-code-copyrights' });
 }
 
-// ---------------------------------------------------------------- 4. 示例固件里的组件
+// ---------------------------------------------------------------- 4. 示例固件：ESP-IDF 与组件管理器拉进来的组件
 {
+  add({
+    cat: '示例固件（ESP-IDF 工程，编译后随网站分发）',
+    name: 'ESP-IDF',
+    version: 'v5.5.1',
+    license: 'Apache-2.0',
+    copyright: ['Copyright 2015-2025 Espressif Systems (Shanghai) CO LTD'],
+    url: 'https://github.com/espressif/esp-idf',
+    note: 'soc 寄存器头为 Apache-2.0 OR MIT；FreeRTOS 为 MIT；newlib、lwIP 等第三方部分的版权与许可见 https://docs.espressif.com/projects/esp-idf/en/v5.5.1/esp32s3/COPYRIGHT.html 。Wi-Fi / PHY / 蓝牙 / 共存闭源库（esp32-wifi-lib、esp-phy-lib、esp32-bt-lib、esp-coex-lib）为 Apache-2.0。',
+  });
   const fwDir = path.join(web, 'public/fw');
   const published = exists(fwDir) ? fs.readdirSync(fwDir).filter((n) => exists(path.join(fwDir, n, 'flash.bin'))) : [];
   if (!published.length) warn.push('web/public/fw 里没有已发布的固件（先跑 tools/build_web.sh 的复制步骤）；组件清单按 firmware/ 全部示例列');
@@ -150,7 +158,7 @@ ${lic ? fullText('esp-rom-elfs · Apache License 2.0 全文', lic) : ''}`);
       // Apache 正文里没有版权行：退到源码头上的 SPDX-FileCopyrightText
       let copy = copyrightLines(text);
       if (!copy.length) copy = spdxCopyright(dir);
-      if (!comps.has(key)) comps.set(key, { name: c.replace('__', '/'), ver, url, spdx, text, copy, used: [] });
+      if (!comps.has(key)) comps.set(key, { name: c.replace('__', '/'), ver, url: url.replace(/^git:/, 'https:').replace(/\.git$/, ''), spdx, text, copy, used: [] });
       comps.get(key).used.push(ex);
     }
   }
@@ -159,11 +167,10 @@ ${lic ? fullText('esp-rom-elfs · Apache License 2.0 全文', lic) : ''}`);
     console.error(`[licenses] 发布的固件含乐鑫修改版 MIT 组件，按 LICENSING.md 规则 5 不能托管：${bad.map((c) => `${c.name}（${c.used.join('、')}）`).join('；')}`);
     process.exit(2);
   }
-  const list = [...comps.values()].sort((a, b) => a.name.localeCompare(b.name));
-  sections.push(`<h2>示例固件里的组件（固件随网站分发）</h2>
-<p class="note">示例固件用 ESP-IDF v5.5.1 编译。ESP-IDF 本身是 Apache-2.0（其中 soc 寄存器头为 Apache-2.0 OR MIT；FreeRTOS 为 MIT，newlib、lwIP 等见 <a href="https://docs.espressif.com/projects/esp-idf/en/v5.5.1/esp32s3/COPYRIGHT.html">ESP-IDF COPYRIGHT</a>）；Wi-Fi / PHY / 蓝牙 / 共存闭源库（esp32-wifi-lib、esp-phy-lib、esp32-bt-lib、esp-coex-lib）为 Apache-2.0。下面是组件管理器拉进来的组件：</p>
-${list.length ? table(['组件', '版本', '许可证', '版权', '用在'], list.map((c) => tr([c.url ? link(c.url.replace(/^git:/, 'https:').replace(/\.git$/, ''), c.name) : mono(c.name), mono(c.ver), mono(c.spdx), c.copy.join('；') || '—', mono(c.used.join(' '))]))) : '<p class="note">没有找到组件管理器组件（firmware/*/managed_components 还没生成）。</p>'}
-${list.filter((c) => c.text).map((c) => fullText(`${c.name} ${c.ver} · ${c.spdx} 全文`, c.text)).join('')}`);
+  if (!comps.size) warn.push('没有找到组件管理器组件（firmware/*/managed_components 还没生成）');
+  for (const c of [...comps.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+    add({ cat: '示例固件（ESP-IDF 工程，编译后随网站分发）', name: c.name, version: c.ver, license: c.spdx, copyright: c.copy, url: c.url, text: c.text, note: `用在：${c.used.join(' ')}` });
+  }
 }
 
 // ---------------------------------------------------------------- 5. 字体（P2-19：自托管子集，tools/fonts/）
@@ -172,17 +179,26 @@ ${list.filter((c) => c.text).map((c) => fullText(`${c.name} ${c.ver} · ${c.spdx
   const rev = exists(path.join(fd, 'REVISION')) ? rd(path.join(fd, 'REVISION')).trim() : '';
   if (!rev) warn.push('third_party/fonts 不存在（先跑 tools/fonts/fetch.sh）：字体许可全文没附上');
   const fonts = [
-    { name: 'Noto Sans SC', dir: 'notosanssc', file: 'tb-sans-sc.woff2', ofl: 'OFL-NotoSansSC.txt', copy: 'Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name "Source"', use: '正文、界面（中文）' },
-    { name: 'JetBrains Mono', dir: 'jetbrainsmono', file: 'tb-mono.woff2', ofl: 'OFL-JetBrainsMono.txt', copy: 'Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)', use: '串口、代码、数字' },
+    { name: 'Noto Sans SC', dir: 'notosanssc', file: 'tb-sans-sc.woff2', ofl: 'OFL-NotoSansSC.txt', copy: 'Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name "Source"' },
+    { name: 'JetBrains Mono', dir: 'jetbrainsmono', file: 'tb-mono.woff2', ofl: 'OFL-JetBrainsMono.txt', copy: 'Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)' },
   ];
-  const src = (f) => (rev ? link(`https://github.com/google/fonts/tree/${rev}/ofl/${f.dir}`, `google/fonts@${rev.slice(0, 7)}`) : '—');
-  sections.push(`<h2>字体（自托管，随网站分发）</h2>
-${table(['字体', '许可证', '版权', '来源', '发布文件', '许可全文'], fonts.map((f) => tr([f.name, mono('OFL-1.1'), f.copy, src(f), { html: `<span><code>fonts/${esc(f.file)}</code>（${esc(f.use)}）</span>` }, link(`./fonts/${f.ofl}`, 'OFL.txt')])))}
-<p class="note">从 google/fonts 仓库固定提交下载可变字重 TTF，构建时用 fonttools 子集化成 WOFF2（页面实际用到的字 + GB2312 一级字 3755 个；等宽字留整套西文），改过的文件名不含保留名 "Source"，OFL.txt 和字体放在同一目录。许可证说明：<a href="https://openfontlicense.org/open-font-license-official-text/">SIL Open Font License 1.1</a>。</p>
-${fonts.filter((f) => exists(path.join(fd, f.ofl))).map((f) => fullText(`${f.name} · OFL-1.1 全文`, rd(path.join(fd, f.ofl)))).join('')}`);
+  for (const f of fonts) {
+    add({
+      cat: '字体（自托管，子集化）',
+      name: f.name,
+      version: rev ? `google/fonts@${rev.slice(0, 7)}` : '',
+      license: 'OFL-1.1',
+      copyright: [f.copy],
+      url: rev ? `https://github.com/google/fonts/tree/${rev}/ofl/${f.dir}` : 'https://github.com/google/fonts',
+      text: exists(path.join(fd, f.ofl)) ? rd(path.join(fd, f.ofl)) : '',
+      modified: '用 fonttools 子集化成 WOFF2（页面实际用到的字 + GB2312 一级字 3755 个；等宽字留整套西文）；改过的文件名不含保留名 "Source"',
+      note: `网站发布的文件：fonts/${f.file}，同目录附 ${f.ofl}`,
+    });
+  }
 }
 
 // ---------------------------------------------------------------- 6. 素材（3D 模型、贴图、HDRI）：各目录的 SOURCES.md
+const models = [];
 {
   const found = [];
   const skip = new Set(['node_modules', 'dist', '.git', 'target', 'build', 'managed_components', 'third_party', 'Reviews']);
@@ -194,57 +210,165 @@ ${fonts.filter((f) => exists(path.join(fd, f.ofl))).map((f) => fullText(`${f.nam
     }
   };
   for (const d of ['web', 'assets']) walk(path.join(root, d), 0);
-  // assets/models/<名字>/：网站在 models/<名字>/ 发布 glb + SOURCES.md + LICENSE（web/vite.config.ts 的 tb-models 插件），这里给署名表和下载链接
-  const cell = (md, k) => md.match(new RegExp(`^\\| ${k} \\| (.+) \\|$`, 'm'))?.[1] ?? '—';
-  const plain = (t) => t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1').replace(/`/g, '');
-  const models = found.filter((f) => path.relative(root, f).startsWith('assets/models/')).map((f) => {
+  const cell = (md, k) => md.match(new RegExp(`^\\| ${k} \\| (.+) \\|$`, 'm'))?.[1] ?? '';
+  const plain = (t) => t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1').replace(/`/g, '').replace(/\*\*/g, '');
+  // SOURCES.md 里写的是人看的名字，这里换成 SPDX 标识
+  const toSpdx = (t) => (/CC BY-SA 4\.0/.test(t) ? 'CC-BY-SA-4.0' : /^MIT/.test(t) ? 'MIT' : 'NOASSERTION');
+  for (const f of found) {
+    const rel = path.relative(root, f);
+    if (!rel.startsWith('assets/models/')) {
+      // 目前只有 assets/models 一处；别处冒出 SOURCES.md 也不能漏，整份附进 NOTICES
+      add({ cat: '其他素材', name: path.dirname(rel), license: 'NOASSERTION', text: rd(f), note: `来源与署名见 ${rel}（全文附后）` });
+      continue;
+    }
     const md = rd(f);
     const name = path.basename(path.dirname(f));
     const lic = fs.readdirSync(path.dirname(f)).find((n) => /^LICENSE(\.md)?$/.test(n));
     if (!exists(path.join(path.dirname(f), `${name}.glb`))) warn.push(`${name}：有 SOURCES.md 但没有 ${name}.glb（先跑 tools/models/convert.mjs）`);
     if (!lic) warn.push(`${name}：素材目录缺 LICENSE`);
-    return { name, md, lic, title: md.match(/^# (.+)$/m)?.[1] ?? name };
-  });
-  const modelRows = models.map((m) => tr([
-    m.title,
-    mono(plain(cell(m.md, '许可证')).replace(/（.*$/, '')),
-    plain(cell(m.md, '作者')),
-    cell(m.md, '是否修改'),
-    { html: `<a href="./models/${esc(m.name)}/${esc(m.name)}.glb" download>${esc(m.name)}.glb</a> · <a href="./models/${esc(m.name)}/SOURCES.md">SOURCES.md</a>${m.lic ? ` · <a href="./models/${esc(m.name)}/${esc(m.lic)}">${esc(m.lic)}</a>` : ''}` },
-  ]));
-  const credits = models.map((m) => m.md.split('## 署名')[1]?.trim()).filter(Boolean);
-  const others = found.filter((f) => !path.relative(root, f).startsWith('assets/models/'));
-  sections.push(`<h2>素材：3D 模型、贴图、HDRI</h2>
-${models.length ? `<p class="note">实验台和成品里的器件默认按真实尺寸由代码生成；打开实验台工具条上的「外部模型」后，下面这些模型替换对应的程序生成件（懒加载）。3D 视图里的开发板是外观示意，非乐鑫官方模型。</p>
-${table(['模型', '许可证', '作者', '修改', '下载'], modelRows)}
-${credits.map((c) => `<p class="note">${esc(c).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\n\n/g, '<br>')}</p>`).join('')}
-<p class="note">转换只在本机构建期进行（tools/models/）：occt-import-js（LGPL-2.1，OpenCascade 的 WebAssembly 版）读 STEP，glTF-Transform（MIT）与 meshoptimizer（MIT）减面、量化、写 glb。这些工具不随网站分发。</p>
-${models.map((m) => fullText(`assets/models/${m.name}/SOURCES.md`, m.md)).join('')}` : ''}
-${others.length ? others.map((f) => fullText(`${path.relative(root, path.dirname(f))}/SOURCES.md`, rd(f))).join('') : ''}
-${!found.length ? '<p class="note">目前没有使用外部 3D 模型、贴图或 HDRI：开发板、面包板、模块、杜邦线都按真实尺寸由代码生成。3D 视图里的器件是外观示意，非乐鑫官方模型。以后引入外部素材时，来源与署名写进素材目录的 SOURCES.md，这一节自动列出。</p>' : ''}`);
-  // 许可证原文（每种只列一次）
-  const seen = new Set();
-  for (const m of models) {
-    if (!m.lic) continue;
-    const t = rd(path.join(root, 'assets/models', m.name, m.lic));
-    const k = t.trim().slice(0, 200);
-    if (seen.has(k)) continue;
-    seen.add(k);
-    sections.push(fullText(`${m.lic === 'LICENSE.md' ? 'KiCad Libraries 许可（CC BY-SA 4.0 + 设计例外）' : 'Adafruit CAD Parts · MIT'} 全文`, t));
+    const changes = md.split('## 改动说明')[1]?.split('\n## ')[0]?.trim() ?? '';
+    const credit = md.split('## 署名')[1]?.trim() ?? '';
+    const license = toSpdx(plain(cell(md, '许可证')));
+    const m = { name, title: md.match(/^# (.+)$/m)?.[1] ?? name, lic, license, modified: /已修改/.test(cell(md, '是否修改')) };
+    models.push(m);
+    add({
+      cat: '3D 模型（打开「外部模型」时懒加载）',
+      name: m.title,
+      version: plain(cell(md, '仓库 / 提交')).split('@')[1]?.trim().slice(0, 12) ?? '',
+      license,
+      copyright: [plain(cell(md, '作者'))],
+      url: plain(cell(md, '原始文件')),
+      text: lic ? rd(path.join(path.dirname(f), lic)) : '',
+      modified: m.modified ? plain(changes) : '',
+      note: plain(credit) + `\n网站发布的文件：models/${name}/${name}.glb，同目录附 SOURCES.md${lic ? ` 与 ${lic}` : ''}`,
+    });
   }
 }
 
+// ---------------------------------------------------------------- 输出 1：THIRD_PARTY_NOTICES.txt
+const shipped = items.filter((it) => it.shipped && !it.inRom);
+const hr = (c = '=') => c.repeat(78);
+const texts = new Map(); // 许可证全文去重：同一份正文（忽略空白差异）只附一次，组件处写 [L1] 引用
+const textRef = (it) => {
+  if (!it.text) return '';
+  const k = it.text.replace(/\s+/g, ' ').trim();
+  if (!texts.has(k)) texts.set(k, { id: `L${texts.size + 1}`, text: it.text.trim(), license: it.license, users: [] });
+  const t = texts.get(k);
+  t.users.push(it.name);
+  return t.id;
+};
+const notice = [];
+notice.push(`TryBoard 试板 · THIRD-PARTY NOTICES / 第三方声明
+生成于 ${today}（tools/gen_licenses.mjs，按依赖清单与素材目录自动生成）
+
+试板的模拟器内核、网页和验收固件由试板团队编写。下面是网站随附的第三方组件：
+名称、版本、许可证、版权声明、来源，以及改动说明。各许可证全文附在文末，同一份正文只附一次，
+组件条目里的 [L1]、[L2] … 指向文末对应全文。
+
+ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.
+3D 视图里的开发板是外观示意，不是乐鑫官方模型。
+`);
+let cat = '';
+for (const it of items) {
+  if (it.cat !== cat) {
+    cat = it.cat;
+    notice.push(`\n${hr()}\n${cat}\n${hr()}\n`);
+  }
+  const ref = textRef(it);
+  const lines = [`${it.name}${it.version ? ` ${it.version}` : ''}`];
+  lines.push(`  许可证：${it.license}${ref ? ` [${ref}]` : ''}`);
+  for (const c of it.copyright.filter(Boolean)) lines.push(`  ${c}`);
+  if (it.url) lines.push(`  来源：${it.url}`);
+  if (it.modified) lines.push(`  已修改：\n${it.modified.split('\n').map((l) => `    ${l.replace(/^- /, '· ')}`).join('\n')}`);
+  if (it.note) lines.push(...it.note.split('\n').filter(Boolean).map((l) => `  ${l}`));
+  notice.push(lines.join('\n') + '\n');
+}
+if (!crates.length) notice.push(`\n${hr()}\n模拟器内核（Rust → WebAssembly）\n${hr()}\n\n没有第三方 crate（以 core/Cargo.lock 为准，构建时自动检查）。\n`);
+notice.push(`\n${hr()}\n构建工具（npm devDependencies，${devTools.length} 个，不随网站分发）\n${hr()}\n
+只在本机构建时使用。Vite（MIT）会往产物里注入少量模块预加载辅助代码。
+3D 模型转换（tools/models/，构建期）：occt-import-js（LGPL-2.1）、glTF-Transform（MIT）、meshoptimizer（MIT）。
+
+${devTools.map((d) => `${d.name} ${d.version} · ${d.license}${d.installed ? '' : ' · 其他平台的可选二进制，本机未安装'}`).join('\n')}
+`);
+notice.push(`\n${hr()}\n许可证全文\n${hr()}\n`);
+for (const t of texts.values()) notice.push(`\n${hr('-')}\n[${t.id}] ${t.license} · 适用于：${t.users.join('、')}\n${hr('-')}\n\n${t.text}\n`);
+const noticeTxt = notice.join('\n').replace(/\n{3,}/g, '\n\n');
+
+// ---------------------------------------------------------------- 输出 2：tryboard.spdx.json（SPDX 2.3）
+// licenseConcluded 只能放合法 SPDX 表达式；ROM 里那几项写不成标识的，用 NOASSERTION + comment 交代
+const spdxOk = (s) => (/^[A-Za-z0-9.+\-]+( (AND|OR|WITH) [A-Za-z0-9.+\-]+)*$/.test(s ?? '') ? s : /^\(.+\)$/.test(s ?? '') ? s : 'NOASSERTION');
+const sid = (s, i) => `SPDXRef-Package-${i}-${String(s).replace(/[^A-Za-z0-9.\-]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'x'}`;
+const pkgs = [];
+const rels = [{ spdxElementId: 'SPDXRef-DOCUMENT', relationshipType: 'DESCRIBES', relatedSpdxElement: 'SPDXRef-TryBoard' }];
+pkgs.push({ SPDXID: 'SPDXRef-TryBoard', name: 'TryBoard', versionInfo: today, supplier: 'Organization: TryBoard', downloadLocation: 'NOASSERTION', filesAnalyzed: false, licenseConcluded: 'NOASSERTION', licenseDeclared: 'NOASSERTION', copyrightText: 'NOASSERTION', comment: '试板：在浏览器中运行 ESP32 固件的模拟器（网页、wasm 内核、示例固件）' });
+const romId = {};
+items.forEach((it, i) => {
+  const id = sid(it.name, i);
+  if (it.name === 'esp-rom-elfs') romId.v = id;
+  const lic = spdxOk(it.license);
+  const comment = [it.cat, it.license !== lic ? `许可：${it.note || it.license}` : '', it.modified ? '已修改，见 THIRD_PARTY_NOTICES.txt' : ''].filter(Boolean).join('；');
+  pkgs.push({ SPDXID: id, name: it.name, versionInfo: it.version || 'NOASSERTION', downloadLocation: /^https?:/.test(it.url) ? it.url : 'NOASSERTION', filesAnalyzed: false, licenseConcluded: lic, licenseDeclared: lic, copyrightText: it.copyright.filter(Boolean).join('\n') || 'NOASSERTION', comment });
+  rels.push(it.inRom ? { spdxElementId: romId.v, relationshipType: 'CONTAINS', relatedSpdxElement: id } : { spdxElementId: 'SPDXRef-TryBoard', relationshipType: 'CONTAINS', relatedSpdxElement: id });
+});
+devTools.forEach((d, i) => {
+  const id = sid(`dev-${d.name}`, items.length + i);
+  pkgs.push({ SPDXID: id, name: d.name, versionInfo: d.version || 'NOASSERTION', downloadLocation: `https://registry.npmjs.org/${d.name}/-/${d.name.split('/').pop()}-${d.version}.tgz`, filesAnalyzed: false, licenseConcluded: spdxOk(d.license), licenseDeclared: spdxOk(d.license), copyrightText: 'NOASSERTION', comment: '构建工具，不随网站分发' });
+  rels.push({ spdxElementId: id, relationshipType: 'DEV_DEPENDENCY_OF', relatedSpdxElement: 'SPDXRef-TryBoard' });
+});
+const spdx = {
+  spdxVersion: 'SPDX-2.3',
+  dataLicense: 'CC0-1.0',
+  SPDXID: 'SPDXRef-DOCUMENT',
+  name: `TryBoard-${today}`,
+  documentNamespace: `https://spdx.org/spdxdocs/tryboard-${today}-${crypto.randomUUID()}`,
+  creationInfo: { created: new Date().toISOString().replace(/\.\d+Z$/, 'Z'), creators: ['Tool: tryboard-gen_licenses.mjs', 'Organization: TryBoard'] },
+  packages: pkgs,
+  relationships: rels,
+};
+const spdxJson = JSON.stringify(spdx, null, 2) + '\n';
+
+fs.mkdirSync(pub, { recursive: true });
+// 加 BOM：静态托管给 .txt 常常不带 charset，浏览器直接打开时靠它认出 UTF-8，中文不乱码
+fs.writeFileSync(path.join(pub, 'THIRD_PARTY_NOTICES.txt'), '\uFEFF' + noticeTxt);
+fs.writeFileSync(path.join(pub, 'tryboard.spdx.json'), spdxJson);
+
+// ---------------------------------------------------------------- 输出 3：licenses.html（一页声明）
+const kb = (s) => `${Math.max(1, Math.round(Buffer.byteLength(s) / 1024))} KB`;
+const LIC_NAME = { 'OFL-1.1': 'SIL OFL 1.1', 'CC-BY-SA-4.0': 'CC BY-SA 4.0' };
+const licIds = [...new Set(shipped.flatMap((it) => it.license.replace(/[()]/g, '').split(/ (?:AND|OR|WITH) /)))].filter((l) => l !== 'NOASSERTION');
+// 按用到的组件数排，多的在前
+const licCount = (l) => shipped.filter((it) => it.license.includes(l)).length;
+licIds.sort((a, b) => licCount(b) - licCount(a));
+const ZH = ['零', '一', '两', '三', '四', '五', '六', '七', '八', '九', '十'];
+const licList = licIds.map((l) => LIC_NAME[l] ?? l);
+const licSentence = licList.length > 1 ? `${licList.slice(0, -1).join('、')} 和 ${licList.at(-1)} ${ZH[licList.length] ?? licList.length} 种许可证` : `${licList[0]} 许可证`;
+if (shipped.some((it) => it.license === 'NOASSERTION')) warn.push(`有随网站分发但许可证认不出的组件：${shipped.filter((it) => it.license === 'NOASSERTION').map((it) => it.name).join('、')}`);
+const has = (re) => items.some((it) => re.test(it.name));
+// 特别感谢：只列真的在用的；许可证从收集到的数据里取，不手写
+const licOf = (re) => [...new Set(items.filter((it) => re.test(it.name)).map((it) => LIC_NAME[it.license] ?? it.license))].join(' · ');
+const ACKS = [
+  { name: 'Espressif', what: '芯片 ROM 与 ESP-IDF 组件', re: /^(esp-rom-elfs|ESP-IDF)$/ },
+  { name: 'three.js', what: '3D 场景渲染', re: /^three$/ },
+  { name: 'React', what: '网页界面', re: /^react$/ },
+  { name: 'TinyUSB', what: 'USB 键盘与串口', re: /^espressif\/tinyusb$/ },
+  { name: 'Google Fonts', what: 'Noto Sans SC、JetBrains Mono', re: /^(Noto Sans SC|JetBrains Mono)$/ },
+  { name: 'KiCad 与 Adafruit', what: '蜂鸣器、USB-C、舵机 3D 模型', re: /蜂鸣器|USB-C|舵机/ },
+].filter((a) => has(a.re) || (warn.push(`特别感谢「${a.name}」对应的组件不在清单里，没列`), false));
+const modified = models.filter((m) => m.modified);
+
 // 页头导航链接的类名：与 web/src/ui/site.tsx 的 navLink 相同（licenses.css 用 @source 扫这个文件生成这些类）
 const NAV_LINK = 'rounded-md px-2.5 py-[5px] text-muted hover:bg-field hover:text-fg';
+// 与 web/src/ui/links.ts 的 SITE_NAV 相同（不带 .html 后缀，DESIGN_V2 §7.2）
 const NAV = [
-  ['./home.html', '作品'],
-  ['./advisor.html', '选型助手'],
-  ['./app.html?work=blank#bench', '实验台'],
+  ['./', '作品'],
+  ['./select', '选板'],
+  ['./app?work=blank#bench', '实验台'],
 ];
 const LOGO = (s) => `<svg width="${s}" height="${s}" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="4" width="56" height="56" rx="14" class="fill-[#0B76C8] dark:fill-[#3AA8FF]"/><g class="fill-white dark:fill-[#17181B]"><circle cx="20" cy="20" r="5"/><circle cx="32" cy="20" r="5"/><circle cx="20" cy="32" r="5"/><circle cx="32" cy="32" r="5"/><circle cx="44" cy="32" r="5"/><circle cx="20" cy="44" r="5"/><circle cx="32" cy="44" r="5"/><circle cx="44" cy="44" r="5"/></g><circle cx="44" cy="20" r="6" fill="#FFB020"/></svg>`;
-const BRAND = `<a class="inline-flex flex-none items-center gap-1.5 max-md:min-h-11 max-md:gap-2" href="./home.html" aria-label="试板 TryBoard 首页">${LOGO(22).replace('<svg ', '<svg class="max-md:size-[26px]" ')}<b class="text-[14px] max-md:text-[17px]">试板</b><span class="font-mono text-[10px] tracking-[0.08em] text-muted max-md:hidden">TRYBOARD</span><span class="ml-0.5 hidden text-[13px] text-muted max-md:inline">· 授权与致谢</span></a>`;
+const BRAND = `<a class="inline-flex flex-none items-center gap-1.5 max-md:min-h-11 max-md:gap-2" href="./" aria-label="试板 TryBoard 首页">${LOGO(22).replace('<svg ', '<svg class="max-md:size-[26px]" ')}<b class="text-[14px] max-md:text-[17px]">试板</b><span class="font-mono text-[10px] tracking-[0.08em] text-muted max-md:hidden">TRYBOARD</span><span class="ml-0.5 hidden text-[13px] text-muted max-md:inline">· 授权与致谢</span></a>`;
 const ICON = (d, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
 const SEG = 'min-h-[38px] cursor-pointer rounded-lg px-3 text-muted max-md:min-h-11 aria-checked:bg-surface aria-checked:font-medium aria-checked:text-fg aria-checked:shadow-[0_1px_3px_#0000001a] aria-checked:ring-1 aria-checked:ring-line';
+const DL = (href, title, sub) => `<a href="${href}" download class="flex min-h-16 items-center gap-3 rounded-[10px] border border-line px-4 text-fg no-underline! transition-colors hover:border-hover-line hover:bg-field"><span class="min-w-0 flex-1"><b class="block text-[13px]">${esc(title)}</b><span class="font-mono text-[11px] text-muted">${esc(sub)}</span></span><span class="text-accent-ink">${ICON('M12 4v12M6 10l6 6 6-6M5 20h14', 18)}</span></a>`;
 
 const html = `<!doctype html>
 <html lang="zh-CN">
@@ -254,7 +378,7 @@ const html = `<!doctype html>
     <!-- 主题在首帧前定好（web/src/theme.ts 同一规则：localStorage tb-theme，否则跟随系统） -->
     <script>try{var t=localStorage.getItem('tb-theme')}catch(e){}document.documentElement.dataset.theme=t==='dark'||t==='light'?t:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'</script>
     <title>授权与致谢 · 试板 TryBoard</title>
-    <meta name="description" content="试板 TryBoard 使用的第三方代码、芯片 ROM、固件组件、字体与素材的来源、许可证与署名。" />
+    <meta name="description" content="试板 TryBoard 使用的开源软件、芯片 ROM、固件组件、字体和 3D 素材及其许可证；可下载完整第三方声明与 SPDX 物料清单。" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <!-- 自托管字体（P2-19，tools/fonts/subset.py 生成，OFL-1.1） -->
     <link rel="stylesheet" href="/fonts/fonts.css" />
@@ -273,27 +397,47 @@ const html = `<!doctype html>
     <!-- 手机菜单抽屉：与 web/src/ui/site.tsx 的 MobileMenu 同一结构（这里没有 Radix，下面的小脚本管开关、Esc 和焦点） -->
     <div id="siteDrawer" role="dialog" aria-modal="true" aria-label="站点菜单" hidden class="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-bg text-fg animate-[tb-drop_.18s_ease-out] [&[hidden]]:hidden">
       <div class="flex h-[52px] flex-none items-center gap-2 border-b border-line-soft pr-2 pl-4">
-        <a class="inline-flex flex-none items-center gap-2" href="./home.html" aria-label="试板 TryBoard 首页">${LOGO(26)}<b class="text-[17px]">试板</b><span class="font-mono text-[10px] tracking-[0.08em] text-muted">TRYBOARD</span></a>
+        <a class="inline-flex flex-none items-center gap-2" href="./" aria-label="试板 TryBoard 首页">${LOGO(26)}<b class="text-[17px]">试板</b><span class="font-mono text-[10px] tracking-[0.08em] text-muted">TRYBOARD</span></a>
         <button type="button" id="siteClose" aria-label="关闭菜单" class="ml-auto inline-flex size-11 cursor-pointer items-center justify-center rounded-[10px] hover:bg-field">${ICON('M6 6l12 12M18 6L6 18')}</button>
       </div>
       <nav aria-label="站点" class="flex flex-col px-4 py-2">${NAV.map(([href, text]) => `<a href="${href}" class="flex h-16 items-center justify-between border-b border-line-soft text-[20px] font-bold text-fg">${text}<span class="text-muted">${ICON('M9 6l6 6-6 6', 18)}</span></a>`).join('')}</nav>
-      <p class="mx-4 my-3 rounded-xl bg-field p-3.5 text-[13px] leading-[1.6] text-muted"><b class="text-fg">在手机上</b>：能看、能调参数、能按按键。连线和拖固件用电脑更顺手。</p>
+      <p class="mx-4 my-3 rounded-xl bg-field p-3.5 text-[13px] leading-[1.6] text-muted">手机上可查看、调参数和按按键；连线和换固件建议用电脑。</p>
       <div class="mt-auto flex flex-col gap-1 border-t border-line-soft px-4 pt-4 pb-10">
         <div class="flex min-h-12 items-center justify-between text-[15px]">深色模式
           <div role="radiogroup" aria-label="深色模式" class="flex rounded-[10px] bg-field p-[3px] text-[13px]"><button type="button" role="radio" data-theme-pref="system" class="${SEG}">跟随系统</button><button type="button" role="radio" data-theme-pref="light" class="${SEG}">浅</button><button type="button" role="radio" data-theme-pref="dark" class="${SEG}">深</button></div>
         </div>
-        <a href="./licenses.html" aria-current="page" class="flex h-11 items-center justify-between text-[15px] text-accent-ink">授权与致谢<span class="text-[12px] font-medium">当前页</span></a>
+        <a href="./licenses" aria-current="page" class="flex h-11 items-center justify-between text-[15px] text-accent-ink">授权与致谢<span class="text-[12px] font-medium">当前页</span></a>
       </div>
     </div>
-    <main class="lic mx-auto w-full max-w-[1200px] flex-1 px-6 pb-16 max-sm:px-4 max-sm:pb-12">
+    <main class="lic mx-auto w-full max-w-[808px] flex-1 px-6 pt-14 pb-16 max-md:px-4 max-md:pt-8 max-md:pb-12">
       <h1>授权与致谢</h1>
-      <p>网站里用到的别人的代码、芯片 ROM、固件组件、字体和素材，以及各自的许可证与署名。构建时从依赖清单和素材目录自动生成。</p>
-      ${sections.join('\n')}
-      <p class="gen mono">生成于 ${new Date().toISOString().slice(0, 10)} · tools/gen_licenses.mjs</p>
+      <p class="mt-1.5 text-[12px] text-muted">更新于 ${today}</p>
+
+      <h2>试板本身</h2>
+      <p>模拟器内核、网页和验收固件由试板团队编写，${crates.length ? `内核用到 ${crates.length} 个第三方 Rust crate，列在完整清单里。` : '不含第三方 Rust 依赖。'}</p>
+
+      <h2>第三方组件</h2>
+      <p>网站随附 <b id="licCount">${shipped.length}</b> 个第三方组件，使用 ${esc(licSentence)}。完整的名称、版本、版权声明和许可证全文见下方文件。</p>
+
+      <h2>特别感谢</h2>
+      <div class="grid grid-cols-3 gap-3 max-md:grid-cols-1">
+        ${ACKS.map((a) => `<div class="min-w-0 rounded-[10px] border border-line px-3.5 py-3"><b class="text-[13px]">${esc(a.name)}</b><div class="mt-0.5 text-[12px] leading-[1.6] text-muted">${esc(a.what)}</div><div class="mt-1.5 font-mono text-[10.5px] text-muted">${esc(licOf(a.re))}</div></div>`).join('\n        ')}
+      </div>
+
+      <h2>完整清单</h2>
+      <div class="grid grid-cols-2 gap-3 max-md:grid-cols-1">
+        ${DL('./THIRD_PARTY_NOTICES.txt', '第三方声明', `THIRD_PARTY_NOTICES.txt · ${kb(noticeTxt)}`)}
+        ${DL('./tryboard.spdx.json', '软件物料清单', `tryboard.spdx.json · ${kb(spdxJson)} · 含构建工具`)}
+      </div>
+      <p class="note">两份文件在每次构建时从依赖清单和素材目录自动生成。${modified.length ? `修改过的 3D 模型按原许可证提供下载：${modified.map((m) => `<a href="./models/${esc(m.name)}/${esc(m.name)}.glb" download>${esc(m.title.replace(/（.*$/, ''))}</a>（${esc(LIC_NAME[m.license] ?? m.license)}，<a href="./models/${esc(m.name)}/SOURCES.md">来源与改动</a>）`).join('、')}。` : ''}</p>
+
+      <h2>商标</h2>
+      <p lang="en">ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.</p>
+      <p class="note">3D 视图里的开发板是外观示意，不是乐鑫官方模型。</p>
     </main>
     <footer class="pg-foot flex flex-wrap items-center gap-x-[18px] gap-y-1.5 border-t border-line px-6 py-3.5 text-[11px] text-muted max-sm:px-4 max-sm:py-3">
-      <span>TryBoard 试板：在浏览器里运行 ESP32 系列芯片的真实固件，compatible with Arduino。ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.</span>
-      <span><a class="text-fg hover:text-accent-ink max-md:inline-flex max-md:min-h-11 max-md:items-center" href="./licenses.html">授权与致谢</a></span>
+      <span>试板 TryBoard · 在浏览器中运行 ESP32 固件，兼容 Arduino。<span lang="en">ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.</span></span>
+      <span><a class="text-fg hover:text-accent-ink max-md:inline-flex max-md:min-h-11 max-md:items-center" href="./licenses">授权与致谢</a></span>
     </footer>
    </div>
     <script>
@@ -323,4 +467,4 @@ const html = `<!doctype html>
 `;
 fs.writeFileSync(out, html);
 for (const w of warn) console.warn(`[licenses] 注意：${w}`);
-console.log(`[licenses] 写入 ${path.relative(root, out)}（${(html.length / 1024).toFixed(0)} KB）`);
+console.log(`[licenses] 写入 ${path.relative(root, out)}（${(html.length / 1024).toFixed(0)} KB）、THIRD_PARTY_NOTICES.txt（${kb(noticeTxt)}）、tryboard.spdx.json（${kb(spdxJson)}，${pkgs.length} 个包）：随网站分发 ${shipped.length} 个组件，许可证 ${licIds.join(' / ')}`);

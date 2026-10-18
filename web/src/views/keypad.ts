@@ -1,4 +1,4 @@
-// USB 小键盘的平面成品视图（首页卡片"看真实固件跑"、成品页没有 WebGL 时）：四个键帽 + 虚拟电脑屏幕。
+// USB 小键盘的平面成品视图（首页卡片"运行固件"、成品页没有 WebGL 时）：四个键帽 + 虚拟电脑屏幕。
 // 键帽按住 = 对应 GPIO 接地（K1..K4 = GPIO4..7）；屏幕上的字来自 USB 虚拟主机（固件真的发出的 HID 报告还原成的文字）。
 import { mount } from './common';
 import type { UsbView } from '../usb3d';

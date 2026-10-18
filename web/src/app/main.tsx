@@ -1,4 +1,4 @@
-// 工作台入口：app.html?work=weather#bench。外壳、实时模拟、3D 台面各一份；四个步骤注册到路由上。
+// 工作台入口：./app?work=weather#bench（文件是 app.html，链接不带后缀）。外壳、实时模拟、3D 台面各一份；四个步骤注册到路由上。
 // 外壳先由 React 同步画出来（#stage 等节点要在 createSession 之前就在），之后的逻辑与原来相同。
 import '../ui/tailwind.css';
 import '../views/views.css';

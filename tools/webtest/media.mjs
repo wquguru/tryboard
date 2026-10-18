@@ -18,7 +18,9 @@ fs.mkdirSync(dlDir, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const f = path.join(dist, u === '/' ? 'index.html' : u);
+  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  const f0 = path.join(dist, u === '/' ? 'index.html' : u);
+  const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'application/octet-stream' });
   fs.createReadStream(f).pipe(res);
@@ -122,7 +124,7 @@ async function record(page, label, canvasSel, withSound) {
 
 // ---- 1. 气象站成品：拍照 + 开声音录 10 秒
 {
-  const page = await open('/app.html?work=weather#product');
+  const page = await open('/app?work=weather#product');
   const ok = await waitFor(page, () => !!document.querySelector('.prod-stage canvas') && /T=/.test(document.querySelector('#props')?.textContent ?? ''), null, 40000);
   report('气象站成品页打开（3D + 串口读数）', ok);
   await sleep(1500);
@@ -137,7 +139,7 @@ async function record(page, label, canvasSel, withSound) {
 
 // ---- 2. 实验台：拍照 + 录 10 秒（声音关：只有视频轨）
 {
-  const page = await open('/app.html?work=weather#bench');
+  const page = await open('/app?work=weather#bench');
   const ok = await waitFor(page, () => !!document.querySelector('.stage canvas, #stage canvas, canvas') && !!document.querySelector('button[data-tool="photo"]'), null, 40000);
   report('实验台打开', ok);
   await sleep(1500);
@@ -153,7 +155,7 @@ async function record(page, label, canvasSel, withSound) {
 
 // ---- 3. USB 小键盘成品（P2-12）拍照
 {
-  const page = await open('/app.html?work=usbkey#product');
+  const page = await open('/app?work=usbkey#product');
   const ok = await waitFor(page, () => !!document.querySelector('.prod-stage canvas') && /已配置/.test(document.querySelector('#props')?.textContent ?? ''), null, 40000);
   report('USB 小键盘成品页：虚拟电脑看到"已配置"', ok);
   await sleep(1000);

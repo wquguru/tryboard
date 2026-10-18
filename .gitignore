@@ -18,6 +18,8 @@
 /tools/xtensa-tests/build/
 /third_party
 /web/licenses.html
+/web/public/THIRD_PARTY_NOTICES.txt
+/web/public/tryboard.spdx.json
 /assets/models/*/src/
 /tools/models/node_modules
 /web/public/audio/

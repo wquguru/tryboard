@@ -212,7 +212,7 @@ export function recommend(need: Need): { plans: Plan[]; rejected: Rejected[] } {
     score -= midPrice / 6;
     if (c.simulated === 'full') {
       score += 6;
-      reasons.push('这颗芯片可以在试板里完整仿真，买之前先跑一遍');
+      reasons.push('这颗芯片支持完整仿真，购买前可在线运行');
     } else if (c.simulated === 'partial') {
       score += 3;
     }

@@ -16,6 +16,7 @@ import { cn } from '../../ui/cn';
 import { NInput, NSelect } from '../../ui/native';
 import { Btn, Btns, Field, Kv, KvT, LinkBtn, Mono, Muted, Note, Ph, Res, Sec, TnL, TnM, TreeEmpty, TreeGroup, VerdictLine, tnClass } from '../../ui/panel';
 import { noteSaved } from '../saved';
+import { lab } from '../../ui/links';
 
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
 const yuan = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
@@ -862,7 +863,7 @@ export function shopStep(): StepImpl {
       const h = hist();
       saveBom(target, { ops: h.ops.slice(0, h.cur + 1), cur: h.cur });
       savePlaced(target, { parts: p.parts as SceneSpec['parts'] }, p.ext5v);
-      location.href = `./app.html?work=${target}#bench`;
+      location.href = lab(target);
       return;
     }
     const scene: SceneSpec = { ...c.session.scene, parts: p.parts as SceneSpec['parts'] };

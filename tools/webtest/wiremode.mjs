@@ -19,7 +19,9 @@ fs.mkdirSync(outDir, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.svg': 'image/svg+xml' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const f = path.join(dist, u === '/' ? 'index.html' : u);
+  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  const f0 = path.join(dist, u === '/' ? 'index.html' : u);
+  const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) {
     res.writeHead(404);
     return res.end();
@@ -56,19 +58,43 @@ page.on('console', (m) => {
   if (m.type() === 'error') errors.push(m.text());
 });
 await page.evaluateOnNewDocument(() => localStorage.clear());
-await page.goto(base + '/app.html?work=weather&debug=1#bench', { waitUntil: 'load' });
+await page.goto(base + '/app?work=weather&debug=1#bench', { waitUntil: 'load' });
 await waitFor(page, () => globalThis.__tbApp?.hist && globalThis.__tbApp.store.get().simSeconds > 0.5, null, 30000);
 
 const W = 'wire:3V3~bme280:VIN';
 const row = () => page.$eval(`#wireTable [data-wire="${W}"]`, (e) => e.textContent);
 const has = (sel) => page.$(sel).then(Boolean);
 const toast = () => page.$eval('#toast', (e) => e.textContent).catch(() => '');
-/** 真实鼠标点引脚圈：圈跟着相机投影走，取当前位置再点 */
+/** 真实鼠标点引脚圈：圈跟着相机投影走，相机还在动（进改接时对焦、布局变化后重算投影）时取到的是旧位置，
+ *  5V 和 GND 相邻，点偏一格就接到别的脚上；所以等位置连续两次读数不变再点 */
 async function clickRing(id, hoverOnly = false) {
-  const b = await page.$eval(`#pinRings [data-ring="${id}"]`, (e) => {
-    const r = e.getBoundingClientRect();
-    return [r.x + r.width / 2, r.y + r.height / 2];
-  });
+  const at = () =>
+    page.$eval(`#pinRings [data-ring="${id}"]`, (e) => {
+      const r = e.getBoundingClientRect();
+      return [r.x + r.width / 2, r.y + r.height / 2];
+    });
+  let b = await at();
+  for (let i = 0; i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    const c = await at();
+    const still = Math.abs(c[0] - b[0]) < 0.5 && Math.abs(c[1] - b[1]) < 0.5;
+    b = c;
+    if (still) break;
+  }
+  // 相邻脚（5V / GND）的圈在某些视角下会叠一半：像人一样瞄圈里露出来、确实点得到它的那块，而不是死点圆心
+  b = await page.$eval(
+    `#pinRings [data-ring="${id}"]`,
+    (e, c) => {
+      const r = e.getBoundingClientRect();
+      for (const k of [0, 0.25, 0.4])
+        for (const [dx, dy] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+          const x = c[0] + dx * k * r.width, y = c[1] + dy * k * r.height;
+          if (document.elementFromPoint(x, y)?.closest('[data-ring]') === e) return [x, y];
+        }
+      return c;
+    },
+    b,
+  );
   await page.mouse.move(b[0], b[1]);
   if (!hoverOnly) await page.mouse.click(b[0], b[1]);
 }

@@ -24,6 +24,7 @@ import { setBc } from '../chrome';
 
 import { Host, Txt } from '../../ui/native';
 import { Brief, Btn, Btns, Kv, LinkBtn, LockCard, Note, Ph, PhT, Res, Sec, TnL, TnM, TnSt, TreeEmpty, TreeGroup, TreeNode, TreeRow, btnClass, tnClass, type ResKind } from '../../ui/panel';
+import { lab } from '../../ui/links';
 
 /** 一行实时字段：初值"—"，之后由 updateLive 按 data-live 改 */
 const row = (k: string, live: string) => <Kv key={live} k={k} live={live} v="—" />;
@@ -350,7 +351,7 @@ export function productStep(): StepImpl {
       <div role="group" aria-label="成品">
         <TreeGroup title="作品" count="换作品会重新加载" open>
           {WORK_LIST.map((w) => (
-            <a key={w.id} className={tnClass(w.id === c.work.id)} href={`./app.html?work=${w.id}#product`} role="treeitem" aria-selected={w.id === c.work.id}>
+            <a key={w.id} className={tnClass(w.id === c.work.id)} href={lab(w.id, 'product')} role="treeitem" aria-selected={w.id === c.work.id}>
               <TnL>{w.title}</TnL>
               {w.id === c.work.id && <TnM>当前</TnM>}
             </a>
@@ -383,7 +384,7 @@ export function productStep(): StepImpl {
             : w === 'lamp'
               ? [row('灯带', 'strip'), row('亮度 / 颜色', 'lampst'), row('旋钮模式', 'lampmode'), row('旋钮', 'knob')]
               : w === 'ruler'
-                ? [row('挡板距离', 'cm'), row('探头量到', 'cmfx'), row('固件读到', 'rdist'), row('蜂鸣器', 'buzz')]
+                ? [row('挡板距离', 'cm'), row('探头量到', 'cmfx'), row('固件读数', 'rdist'), row('蜂鸣器', 'buzz')]
                 : [row('圆盘姿态', 'tpose'), row('六轴读到', 'tfx'), row('小豆', 'bean')];
     const b = (id: string, label: string, f: () => void) => (
       <Btn key={id} id={id} onClick={f}>
@@ -937,7 +938,7 @@ export function productStep(): StepImpl {
         <Sec>盒子姿态 · 你转出来的</Sec>
         {row('俯仰 / 横滚 / 航向', 'tp')}
         {row('应读到（重力分量）', 'tg')}
-        <Sec>固件读到 · 串口最近一行</Sec>
+        <Sec>固件读数 · 串口最近一行</Sec>
         {row('俯仰', 'tip')}
         {row('横滚', 'tir')}
         {row('陀螺', 'tgy')}
@@ -1024,7 +1025,7 @@ export function productStep(): StepImpl {
             <Sec>④ 成品</Sec>
             <PhT>{c.work.id === 'blank' ? '空白作品' : c.work.title}没有成品</PhT>
             <Btns>
-              <LinkBtn primary href="./app.html?work=weather#product">
+              <LinkBtn primary href={lab('weather', 'product')}>
                 看气象站成品
               </LinkBtn>
             </Btns>

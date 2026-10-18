@@ -21,7 +21,9 @@ const CLI = path.join(root, 'core/target/release/tryboard');
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const f = path.join(dist, u === '/' ? 'index.html' : u);
+  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  const f0 = path.join(dist, u === '/' ? 'index.html' : u);
+  const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) {
     res.writeHead(404);
     return res.end();
@@ -75,7 +77,7 @@ async function replay(page, fw, re) {
 
 // ---------------------------------------------------------------- 1. IMU 实验台
 {
-  const page = await open('/app.html?work=imu#bench');
+  const page = await open('/app?work=imu#bench');
   report('IMU 台面上电', await page.evaluate(() => globalThis.__tbApp.session.consoleText().includes('MPU6050 WHO_AM_I 0x68 OK')));
   await page.evaluate(() => globalThis.__tbApp.store.set({ selection: { kind: 'part', id: 'mpu6050' } }));
   await sleep(300);
@@ -142,7 +144,7 @@ async function replay(page, fw, re) {
 
 // ---------------------------------------------------------------- 2. 触摸圆屏
 {
-  const page = await open('/app.html?work=touch#bench');
+  const page = await open('/app?work=touch#bench');
   report('触摸台面上电', await page.evaluate(() => globalThis.__tbApp.session.consoleText().includes('CST816S chip id 0xB5 OK')));
   const pt = (x, y) => page.evaluate((a, b) => globalThis.__tbApp.session.bench.lcdPoint(a, b), x, y);
   const out = () => page.evaluate(() => globalThis.__tbApp.session.consoleText());

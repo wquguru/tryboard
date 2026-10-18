@@ -12,6 +12,7 @@ import { useStore } from './react';
 import { savedText } from './saved';
 import { STEPS, type StepId } from './types';
 import { WORKS } from './works';
+import { BLANK_LAB, HOME, LICENSES, lab } from '../ui/links';
 
 /** 32×32 图标按钮 */
 const ib =
@@ -67,7 +68,7 @@ export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
               role="menuitemradio"
               aria-checked={w.id === cur}
               data-work={w.id}
-              href={`./app.html?work=${w.id}${location.hash || '#bench'}`}
+              href={lab(w.id, (location.hash.slice(1) || 'bench') as StepId)}
               className={cn(menuItem, 'no-underline', w.id === cur && 'font-medium')}
             >
               <span className="inline-flex w-4 flex-none justify-center text-accent-ink">{w.id === cur && <Icon n="check" size={14} />}</span>
@@ -82,7 +83,7 @@ export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
 }
 
 /** 面包屑首段：作品 → 作品列表；空白 / 示例 → 实验台（DESIGN_V2 §6.2 词表：入口统一叫「实验台」） */
-export const CRUMB = BLANK ? { href: './app.html?work=blank#bench', label: '实验台', title: '回到空白实验台' } : { href: './home.html', label: '作品', title: '回到作品列表（未保存的连线会留在本机）' };
+export const CRUMB = BLANK ? { href: BLANK_LAB, label: '实验台', title: '回到空白实验台' } : { href: HOME, label: '作品', title: '回到作品列表（未保存的连线会留在本机）' };
 
 function Breadcrumb({ name }: { name: string }) {
   const { saved, chip } = useStore(bc);
@@ -95,7 +96,7 @@ function Breadcrumb({ name }: { name: string }) {
   return (
     <div className="crumb flex min-w-0 flex-none flex-col justify-center">
       <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
-        <a href="./home.html" aria-label="试板首页" className="brand inline-flex flex-none items-center gap-1.5 leading-none text-fg no-underline">
+        <a href={HOME} aria-label="试板首页" className="brand inline-flex flex-none items-center gap-1.5 leading-none text-fg no-underline">
           <Logo size={22} />
           <b className="text-[14px] max-[1500px]:hidden">试板</b>
         </a>
@@ -297,7 +298,7 @@ export function MoreMenu({ toast, phone }: { toast: (t: string) => void; phone?:
             </>
           )}
           <div className="my-1 h-px bg-line" />
-          <a role="menuitem" data-more="licenses" href="./licenses.html" className={cn(menuItem, 'no-underline')}>
+          <a role="menuitem" data-more="licenses" href={LICENSES} className={cn(menuItem, 'no-underline')}>
             <Icon n="doc" size={15} />
             <span className="flex-1">
               授权与致谢

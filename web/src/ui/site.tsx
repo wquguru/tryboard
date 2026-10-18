@@ -1,4 +1,4 @@
-// 文档型页面（首页、选型助手）的页头 / 页脚。授权页是 tools/gen_licenses.mjs 生成的静态页，用同一串类名和 logo（改这里要同步改那边）。
+// 文档型页面（首页、选板）的页头 / 页脚。授权页是 tools/gen_licenses.mjs 生成的静态页，用同一串类名和 logo（改这里要同步改那边）。
 // 手机（< 768px，DESIGN_V2 §0）：导航收进汉堡菜单，菜单是全屏抽屉（Radix Dialog 管焦点和 Esc），见 DESIGN_V2 §5 / MobileSite 第 2 屏。
 import { useEffect, useState } from 'react';
 import { Dialog } from 'radix-ui';
@@ -6,6 +6,7 @@ import { cn } from './cn';
 import { ThemeToggle } from './components';
 import { Logo } from './logo';
 import { initTheme, onTheme, setThemePref, themePref, type ThemePref } from '../theme';
+import { HOME, LICENSES } from './links';
 
 const navLink = 'rounded-md px-2.5 py-[5px] text-muted hover:bg-field hover:text-fg';
 const navOn = 'text-fg font-medium shadow-[inset_0_-2px_0_var(--accent)] rounded-none hover:bg-transparent';
@@ -18,7 +19,7 @@ const Icon = ({ d, size = 22 }: { d: string; size?: number }) => (
 
 function Brand({ subtitle }: { subtitle?: string }) {
   return (
-    <a className="inline-flex flex-none items-center gap-1.5 max-md:min-h-11 max-md:gap-2" href="./home.html" aria-label="试板 TryBoard 首页">
+    <a className="inline-flex flex-none items-center gap-1.5 max-md:min-h-11 max-md:gap-2" href={HOME} aria-label="试板 TryBoard 首页">
       <Logo size={22} className="max-md:size-[26px]" />
       <b className="text-[14px] max-md:text-[17px]">试板</b>
       <span className={cn('font-mono text-[10px] tracking-[0.08em] text-muted', subtitle && 'max-md:hidden')}>TRYBOARD</span>
@@ -103,14 +104,14 @@ function MobileMenu({ links, current }: { links: [string, string][]; current?: s
             })}
           </nav>
           <p className="mx-4 my-3 rounded-xl bg-field p-3.5 text-[13px] leading-[1.6] text-muted">
-            <b className="text-fg">在手机上</b>：能看、能调参数、能按按键。连线和拖固件用电脑更顺手。
+            手机上可查看、调参数和按按键；连线和换固件建议用电脑。
           </p>
           <div className="mt-auto flex flex-col gap-1 border-t border-line-soft px-4 pt-4 pb-10">
             <div className="flex min-h-12 items-center justify-between text-[15px]">
               深色模式
               <ThemeSegment />
             </div>
-            <a href="./licenses.html" className="flex h-11 items-center text-[15px] text-muted hover:text-fg">
+            <a href={LICENSES} className="flex h-11 items-center text-[15px] text-muted hover:text-fg">
               授权与致谢
             </a>
           </div>
@@ -143,7 +144,7 @@ export function SiteFooter() {
       <span>
         <b>试板</b> TryBoard
       </span>
-      <a className="text-fg hover:text-accent-ink max-md:inline-flex max-md:min-h-11 max-md:items-center" href="./licenses.html">
+      <a className="text-fg hover:text-accent-ink max-md:inline-flex max-md:min-h-11 max-md:items-center" href={LICENSES}>
         授权与致谢
       </a>
       <span className="flex-1" />

@@ -17,7 +17,9 @@ fs.mkdirSync(outDir, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.svg': 'image/svg+xml' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const f = path.join(dist, u === '/' ? 'index.html' : u);
+  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  const f0 = path.join(dist, u === '/' ? 'index.html' : u);
+  const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) {
     res.writeHead(404);
     return res.end();
@@ -64,7 +66,7 @@ const state = (page) => page.$eval('#codeView', (e) => [e.dataset.state, e.datas
 
 // 1. 桌面：weather 打开代码页签 → main.c 里有 app_main；切到头文件；行号从 1 起
 {
-  const page = await open('/app.html?work=weather&debug=1#bench');
+  const page = await open('/app?work=weather&debug=1#bench');
   const lazyBefore = await page.evaluate(() => performance.getEntriesByType('resource').some((r) => /src\.json/.test(r.name)));
   await page.click('[data-dock="code"]');
   const ok = await waitFor(page, () => document.querySelector('#codeView')?.dataset.state === 'ok');
@@ -93,7 +95,7 @@ const state = (page) => page.$eval('#codeView', (e) => [e.dataset.state, e.datas
 }
 // 3. 手机：底部坞切到代码页签也能看（无横向滚动）
 {
-  const page = await open('/app.html?work=weather&debug=1#bench', { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await open('/app?work=weather&debug=1#bench', { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await page.click('#sheetPeek');
   await waitFor(page, () => document.querySelector('#dock')?.dataset.sheet === 'half');
   await page.click('#dock button[aria-label="全屏"]');

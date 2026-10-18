@@ -3,17 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- 主题在首帧前定好（web/src/theme.ts 同一规则：localStorage tb-theme，否则跟随系统） -->
     <script>try{var t=localStorage.getItem('tb-theme')}catch(e){}document.documentElement.dataset.theme=t==='dark'||t==='light'?t:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'</script>
-    <title>试板 TryBoard</title>
-    <meta name="description" content="买零件之前，先在网页上把它做出来：采购、实验台、组装、成品。在浏览器里运行 ESP32 系列芯片的真实固件。" />
+    <title>页面已移动，正在跳转… · 试板 TryBoard</title>
+    <meta name="robots" content="noindex" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <!-- 自托管字体（P2-19，tools/fonts/subset.py 生成，OFL-1.1） -->
-    <link rel="stylesheet" href="/fonts/fonts.css" />
+    <!-- 旧首页地址（2026-10-18 起首页是 /，DESIGN_V2 §7.2）：保留 hash（#works） -->
+    <script>
+      location.replace('./' + location.search + location.hash);
+    </script>
+    <noscript><meta http-equiv="refresh" content="0; url=./" /></noscript>
+    <style>
+      /* DESIGN §2 亮 / 暗两套（与 app.css 同值）；data-theme 由上面的内联脚本设 */
+      :root { --bg: #ffffff; --fg: #1e1e1e; --accent: #0d99ff; color-scheme: light; }
+      :root[data-theme='dark'] { --bg: #17181b; --fg: #e8eaed; --accent: #3aa8ff; color-scheme: dark; }
+      body { margin: 0; font: 13px/1.5 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif; color: var(--fg); background: var(--bg); display: grid; place-items: center; min-height: 100vh; }
+      a { color: var(--accent); }
+    </style>
   </head>
   <body>
-    <!-- 页面由 src/home/App.tsx 渲染；作品卡按 src/app/works.ts 的作品定义生成：加作品不用改这里 -->
-    <div id="root"></div>
-    <script type="module" src="./src/home/main.tsx"></script>
+    <p>页面已移动，正在跳转到 <a href="./">首页</a>…</p>
   </body>
 </html>

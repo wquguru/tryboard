@@ -3,16 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- 主题在首帧前定好（web/src/theme.ts 同一规则：localStorage tb-theme，否则跟随系统） -->
     <script>try{var t=localStorage.getItem('tb-theme')}catch(e){}document.documentElement.dataset.theme=t==='dark'||t==='light'?t:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'</script>
-    <title>选型助手 · TryBoard 试板</title>
-    <meta name="description" content="选一个想做的项目，看该买哪颗芯片、哪块板、哪些配件，引脚怎么分、功耗多少，还有哪些能先在模拟器里验证。" />
+    <title>页面已移动，正在跳转… · 试板 TryBoard</title>
+    <meta name="robots" content="noindex" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <!-- 自托管字体（P2-19，tools/fonts/subset.py 生成，OFL-1.1） -->
-    <link rel="stylesheet" href="/fonts/fonts.css" />
+    <!-- 旧选型助手地址（2026-10-18 改名选板，地址 /select）：保留 ?t= 和 hash -->
+    <script>
+      location.replace('./select' + location.search + location.hash);
+    </script>
+    <noscript><meta http-equiv="refresh" content="0; url=./select" /></noscript>
+    <style>
+      /* DESIGN §2 亮 / 暗两套（与 app.css 同值）；data-theme 由上面的内联脚本设 */
+      :root { --bg: #ffffff; --fg: #1e1e1e; --accent: #0d99ff; color-scheme: light; }
+      :root[data-theme='dark'] { --bg: #17181b; --fg: #e8eaed; --accent: #3aa8ff; color-scheme: dark; }
+      body { margin: 0; font: 13px/1.5 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif; color: var(--fg); background: var(--bg); display: grid; place-items: center; min-height: 100vh; }
+      a { color: var(--accent); }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="./src/advisor/main.tsx"></script>
+    <p>页面已移动，正在跳转到 <a href="./select">选板</a>…</p>
   </body>
 </html>

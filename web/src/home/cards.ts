@@ -1,5 +1,5 @@
 // 作品卡里的命令式部分（不进 React 渲染，ARCH「网页 2D 界面」）：示意图、真实固件运行（wasm worker）、串口状态行。
-// 卡片先放示意图；点「看真实固件跑」换成模拟器驱动的成品画面，看不见就暂停（每份是一个 wasm worker）。
+// 卡片先放示意图；点「运行固件」换成模拟器驱动的成品画面，看不见就暂停（每份是一个 wasm worker）。
 import { LiveSim, type LiveOptions } from '../live';
 import { createShowcase, type ShowKind } from '../views/showcase';
 import { createProductView } from '../views/product';
@@ -8,7 +8,7 @@ import { createKeypadView } from '../views/keypad';
 import { TEMPLATES } from '../views/templates';
 import { emptyFrame, type LiveFrame } from '../views/common';
 
-// P2-09 新作品的卡片：示意图用成品的 2D 视图喂一帧演示数据；「看真实固件跑」时的器件配置和演示输入（按模拟时间）。
+// P2-09 新作品的卡片：示意图用成品的 2D 视图喂一帧演示数据；「运行固件」时的器件配置和演示输入（按模拟时间）。
 type LiveCfg = Pick<LiveOptions, 'i2c' | 'lcd' | 'encoder' | 'sonar'>;
 const EXTRA: Record<string, { live: LiveCfg; demo: Partial<LiveFrame>; script?: (sim: LiveSim, t: number) => void }> = {
   lamp: {

@@ -22,7 +22,9 @@ fs.mkdirSync(dlDir, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const f = path.join(dist, u === '/' ? 'index.html' : u);
+  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  const f0 = path.join(dist, u === '/' ? 'index.html' : u);
+  const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'application/octet-stream' });
   fs.createReadStream(f).pipe(res);
@@ -57,7 +59,7 @@ page.on('pageerror', (e) => errors.push(`${e}`));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 const cdp = await page.createCDPSession();
 await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dlDir });
-await page.goto(`${base}/app.html?work=weather#bench`, { waitUntil: 'load' });
+await page.goto(`${base}/app?work=weather#bench`, { waitUntil: 'load' });
 await page.evaluate(() => {
   const p = {};
   for (const id of ['01', '02', '03', '04', '05', '06']) p[id] = { fp: 'test', at: '预置' };
@@ -65,7 +67,7 @@ await page.evaluate(() => {
   localStorage.removeItem('tryboard-app-asm:weather');
   localStorage.removeItem('tryboard-app-case:weather');
 });
-await page.goto(`${base}/app.html?work=weather#assemble`, { waitUntil: 'load' });
+await page.goto(`${base}/app?work=weather#assemble`, { waitUntil: 'load' });
 await page.reload({ waitUntil: 'load' });
 const ready = await waitFor(page, () => !!globalThis.__tbAsm3d && !!document.querySelector('.asm3d-stage canvas'), null, 40000);
 report('组装步骤是 3D 视图（参数化外壳 + three.js）', ready);
@@ -200,7 +202,7 @@ await shot(page, 'rebuilt');
 // SVG 兜底
 const p2 = await browser.newPage();
 p2.on('pageerror', (e) => errors.push(`svg: ${e}`));
-await p2.goto(`${base}/app.html?work=weather&asm=svg#assemble`, { waitUntil: 'load' });
+await p2.goto(`${base}/app?work=weather&asm=svg#assemble`, { waitUntil: 'load' });
 const svgOk = await waitFor(p2, () => !!document.querySelector('.asm-shell svg [data-part="shell"]'), null, 30000);
 await p2.click('.asm-shell [data-part="shell"]');
 await sleep(200);

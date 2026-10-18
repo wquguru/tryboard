@@ -110,6 +110,7 @@ import {
   WrongWireCard,
   type RingPin,
 } from "../benchv2";
+import { HOME, lab } from "../../ui/links";
 
 const hex = (n: number) => "0x" + n.toString(16).toUpperCase().padStart(2, "0");
 
@@ -1724,7 +1725,7 @@ export function benchStep(): StepImpl {
     <>
       <Kv k="旋钮位置" live="encpos" />
       <Kv k="PCNT 计数（单元 0）" live="pcnt" />
-      <Kv k="固件读到" live="encfw" />
+      <Kv k="固件读数" live="encfw" />
     </>
   );
   const turn = (n: number) => {
@@ -1766,7 +1767,7 @@ export function benchStep(): StepImpl {
       <Kv k="设定距离" live="dist" />
       <Kv k="最近一次 Echo" live="echo" />
       <Kv k="触发次数" live="pings" />
-      <Kv k="固件读到" live="sonfw" />
+      <Kv k="固件读数" live="sonfw" />
     </>
   );
   const sonarControls = () => {
@@ -2260,7 +2261,7 @@ export function benchStep(): StepImpl {
                     {envSlider(k, n, min, max, step)}
                   </KvBox>
                 ))}
-                <Kv k="固件读到" live="rt" />
+                <Kv k="固件读数" live="rt" />
               </>
             )}
             {analogs.map((a) => {
@@ -2291,7 +2292,7 @@ export function benchStep(): StepImpl {
               <>
                 <Sec>倾斜台面</Sec>
                 {poseSliders()}
-                <Kv k="固件读到" live="ipr" />
+                <Kv k="固件读数" live="ipr" />
               </>
             )}
           </div>
@@ -2327,7 +2328,7 @@ export function benchStep(): StepImpl {
             <Sec>做成成品</Sec>
             <a
               className="text-accent-ink hover:underline"
-              href={`./app.html?work=${work.id}#shop`}
+              href={lab(work.id, 'shop')}
               data-ex-work={work.id}
             >
               {work.title} · {work.card?.chip ?? ""} →
@@ -2815,8 +2816,8 @@ export function benchStep(): StepImpl {
     const done = passedCount(c);
     // 空白作品没有组装 / 成品（步骤条只有两步）：右上换成去挑一个作品
     if (c.work.id === "blank")
-      return c.shell.setNext("想装壳？挑个作品 →", "bench", "", () =>
-        location.assign("./home.html#works"),
+      return c.shell.setNext("需要外壳？选一个作品 →", "bench", "", () =>
+        location.assign(`${HOME}#works`),
       );
     // 倾角仪没有检查点和组装模版：成品（端在手里转的盒子）随时能看
     if (c.work.id === "imu") return c.shell.setNext("下一步：成品 →", "product");
@@ -2872,7 +2873,7 @@ export function benchStep(): StepImpl {
         <div>
           <Sec>{t.id === "mpu6050" ? "MPU6050" : "QMI8658"} · 倾斜台面</Sec>
           {poseSliders(POSE_AXES.slice(0, 2))}
-          <Kv k="固件读到" live="ipr" />
+          <Kv k="固件读数" live="ipr" />
           {levelBtn()}
           <Note>按住模块拖动也能转。</Note>
         </div>

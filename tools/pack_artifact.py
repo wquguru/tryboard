@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""把 web/dist 打包成 Artifact 可发布的目录：工作台 app.html 当主页（旧 index.html 只是跳转页）、去掉文档骨架、加侧边安全区、二进制转 base64 文本。
+"""把 web/dist 打包成 Artifact 可发布的目录：工作台 app.html 当主页（index.html 是作品首页，打包里被它替换）、去掉文档骨架、加侧边安全区、二进制转 base64 文本。
 用法：python3 tools/pack_artifact.py <输出目录>；打印 files 映射 JSON（发布时传给 Artifact 工具）。"""
 import base64, json, os, re, shutil, sys
 

@@ -16,7 +16,7 @@ export function createProductView(el: HTMLElement, h: ProductHandlers, opts: { s
   const q = mount(
     el,
     `<div class="tb-view">
-<svg viewBox="0 0 1000 560" role="img" aria-label="成品：桌面气象站，表盘指针和屏幕显示固件读到的温度">
+<svg viewBox="0 0 1000 560" role="img" aria-label="成品：桌面气象站，表盘指针和屏幕显示温度读数">
 <defs><pattern id="pd-grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 L0 40" fill="none" stroke="#3B5C4F"/></pattern></defs>
 <rect width="1000" height="560" fill="#2E4A3F"/><rect width="1000" height="560" fill="url(#pd-grid)"/>
 <ellipse cx="560" cy="486" rx="200" ry="16" fill="#1E332A"/>

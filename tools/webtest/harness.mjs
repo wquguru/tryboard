@@ -1,7 +1,7 @@
 // 线束（P2-11）与 USB 小键盘（P2-12）的网页验收：
 //  1. 实验台：拉长 BME280 的线到 50 cm（总线 60 cm）→ 接线检查出 W6 警告，模拟器里固件读数跑偏（T 不再是 23.50）；150 cm → 阻断 + 器件不应答
 //  2. 组装（检查点预置为已过）：排线拉到 60 cm → "超出规范"，复测不过；金属件贴着天线 → RSSI −87 dBm 连不上
-//  3. USB 小键盘：首页 → 做这个 → 成品，点 3D 键帽 K1 和宏键 K4，虚拟电脑屏幕上出现 "aHello TryBoard"
+//  3. USB 小键盘：首页 → 开始做 → 成品，点 3D 键帽 K1 和宏键 K4，虚拟电脑屏幕上出现 "aHello TryBoard"
 // 用法：node tools/webtest/harness.mjs（先 tools/build_web.sh）。截图 Reviews/web/harness-*.png
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
@@ -16,7 +16,9 @@ fs.mkdirSync(outDir, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const f = path.join(dist, u === '/' ? 'index.html' : u);
+  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  const f0 = path.join(dist, u === '/' ? 'index.html' : u);
+  const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'application/octet-stream' });
   fs.createReadStream(f).pipe(res);
@@ -59,7 +61,7 @@ const lastT = () => {
 
 // ---- 1. 实验台：线长
 {
-  const page = await open('/app.html?work=weather&debug=1#bench');
+  const page = await open('/app?work=weather&debug=1#bench');
   await waitFor(page, () => /T=23\.50 C/.test(document.getElementById('console')?.textContent ?? '') && !!globalThis.__tbApp?.setWireLen, null, 40000);
   await page.evaluate(() => globalThis.__tbApp.setWireLen('bme280', 50));
   const w6 = await waitFor(page, () => globalThis.__tbApp.faults().some((f) => f.rule === 'W6'), null, 5000);
@@ -87,14 +89,14 @@ const lastT = () => {
 
 // ---- 2. 组装：排线 + 天线
 {
-  const page = await open('/app.html?work=weather#bench');
+  const page = await open('/app?work=weather#bench');
   await page.evaluate(() => {
     const p = {};
     for (const id of ['01', '02', '03', '04', '05', '06']) p[id] = { fp: 'test', at: '预置' };
     localStorage.setItem('tryboard-app-checks:weather', JSON.stringify(p));
     localStorage.removeItem('tryboard-app-harness:weather');
   });
-  await page.goto(`${base}/app.html?work=weather#assemble`, { waitUntil: 'load' });
+  await page.goto(`${base}/app?work=weather#assemble`, { waitUntil: 'load' });
   await page.reload({ waitUntil: 'load' });
   const ready = await waitFor(page, () => !!document.querySelector('#hzWire'), null, 40000);
   await waitFor(page, () => /T=23\.50 C/.test(document.getElementById('console')?.textContent ?? ''), null, 30000);
@@ -124,13 +126,13 @@ const lastT = () => {
 
 // ---- 3. USB 小键盘：首页 → 成品，点键帽打字
 {
-  const page = await open('/home.html');
+  const page = await open('/');
   await waitFor(page, () => !!document.querySelector('.wk[data-work="usbkey"] [data-go]'), null, 10000);
   await Promise.all([page.waitForNavigation({ waitUntil: 'load' }), page.click('.wk[data-work="usbkey"] [data-go]')]);
   const shop = /work=usbkey/.test(page.url()) && page.url().endsWith('#shop');
   await page.evaluate(() => (location.hash = 'product'));
   const up = await waitFor(page, () => !!document.querySelector('.prod-stage canvas') && globalThis.__tbProduct?.usbState?.() === '已配置', null, 40000);
-  report('USB 小键盘：首页「做这个」→ 成品页，虚拟电脑枚举成功', shop && up, page.url().replace(base, ''));
+  report('USB 小键盘：首页「开始做」→ 成品页，虚拟电脑枚举成功', shop && up, page.url().replace(base, ''));
   const press = async (i) => {
     const p = await page.evaluate((k) => globalThis.__tbProduct.keyPos(k), i);
     await page.mouse.move(p[0], p[1]);

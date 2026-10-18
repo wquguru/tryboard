@@ -1,6 +1,6 @@
 # 选型助手（M9）
 
-页面：`web/advisor.html`，数据 `web/src/advisor/data.ts`，引擎 `engine.ts`（纯函数），界面 `main.ts`。
+页面：`web/select.html`（界面名「选板」，地址 `/select`；旧 `advisor.html` 跳转过来），数据 `web/src/advisor/data.ts`，引擎 `engine.ts`（纯函数），界面 `main.ts`。
 
 ## 规则
 - 硬需求（模板的 needCaps + 配件隐含的能力）不满足的板子直接淘汰，并给出原因

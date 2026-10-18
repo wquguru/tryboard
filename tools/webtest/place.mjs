@@ -20,7 +20,9 @@ fs.mkdirSync(outDir, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.svg': 'image/svg+xml' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const f = path.join(dist, u === '/' ? 'index.html' : u);
+  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  const f0 = path.join(dist, u === '/' ? 'index.html' : u);
+  const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) {
     res.writeHead(404);
     return res.end();
@@ -59,7 +61,7 @@ page.on('console', (m) => {
   if (m.type() === 'error') errors.push(m.text());
 });
 await page.evaluateOnNewDocument(() => localStorage.clear());
-await page.goto(base + '/app.html?work=blank&debug=1#bench', { waitUntil: 'load' });
+await page.goto(base + '/app?work=blank&debug=1#bench', { waitUntil: 'load' });
 await waitFor(page, () => !!globalThis.__tbApp?.hist, null, 30000);
 await page.evaluate(async () => {
   const buf = await (await fetch('./fw/s3-blink/flash.bin')).arrayBuffer();

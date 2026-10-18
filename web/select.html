@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 主题在首帧前定好（web/src/theme.ts 同一规则：localStorage tb-theme，否则跟随系统） -->
+    <script>try{var t=localStorage.getItem('tb-theme')}catch(e){}document.documentElement.dataset.theme=t==='dark'||t==='light'?t:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'</script>
+    <title>选板 · 试板 TryBoard</title>
+    <meta name="description" content="选板：基于项目选择配件。选好项目和需求，得到芯片、开发板、零件清单、接线和功耗估算，每条结论标明是仿真验证还是需要真机确认。" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <!-- 自托管字体（P2-19，tools/fonts/subset.py 生成，OFL-1.1） -->
+    <link rel="stylesheet" href="/fonts/fonts.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./src/advisor/main.tsx"></script>
+  </body>
+</html>

@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/components';
 import { SiteFooter, SiteHeader } from '../ui/site';
+import { BLANK_LAB, HOME, SELECT, SITE_NAV, lab } from '../ui/links';
 import { cn } from '../ui/cn';
 import { bomTotal, getTemplate, templatePicks } from '../catalog/templates';
 import { HOME_WORKS } from '../app/works';
@@ -11,10 +12,10 @@ import type { WorkDef } from '../app/types';
 import { showcase, startLive } from './cards';
 
 const STEPS: [string, string][] = [
-  ['采购', '挑零件，看参考价'],
-  ['实验台', '跑固件，逐条验收'],
-  ['组装', '装进外壳，看读数变没变'],
-  ['成品', '拿在手里什么样'],
+  ['采购', '选零件，看参考价'],
+  ['实验台', '运行固件，逐项检查'],
+  ['组装', '装进外壳，复测读数'],
+  ['成品', '预览成品效果'],
 ];
 
 // 参考价从元件库算，和采购页默认清单同一口径（必选 + 默认勾选的建议件，bomTotal），不写死
@@ -26,30 +27,31 @@ export function App() {
     <div className="flex min-h-screen flex-col text-[13px] leading-[1.6]">
       <SiteHeader
         current="#works"
-        links={[
-          ['#works', '作品'],
-          ['./advisor.html', '选型助手'],
-          ['./app.html?work=blank#bench', '实验台'],
-        ]}
+        links={SITE_NAV.map(([href, text]): [string, string] => (href === HOME ? ['#works', text] : [href, text]))}
       />
       <main className="mx-auto w-full max-w-[1200px] flex-1 px-6 pb-16 max-sm:px-4 max-sm:pb-12">
         <section className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] items-center gap-12 pt-[72px] pb-14 max-[900px]:grid-cols-1 max-[900px]:gap-8 max-sm:pt-6 max-sm:pb-6">
           <div className="flex flex-col gap-4">
-            <h1 className="text-[40px] font-semibold leading-[1.2] tracking-[-0.01em] text-balance max-sm:text-[28px]">买零件之前，先在网页上把它做出来</h1>
-            <p className="text-[15px] text-muted">跑的是你编译出来的真实固件，不是动画。</p>
-            {/* 手机上拖固件不顺手（DESIGN_V2 §5），第二个按钮换成选型助手 */}
+            <h1 className="text-[40px] font-semibold leading-[1.2] tracking-[-0.01em] text-balance max-sm:text-[28px]">
+              {/* 中文按字断行会把「线上」拆开：按词组成块，只在块之间换行 */}
+              <span className="inline-block">试板：</span>
+              <span className="inline-block">完全免费的线上</span>
+              <span className="inline-block">AI 智能硬件实验台</span>
+            </h1>
+            <p className="text-[15px] text-muted">高仿真 3D 动画，可直接运行真实固件</p>
+            {/* 手机上拖固件不顺手（DESIGN_V2 §5），第二个按钮换成选板 */}
             <div className="flex flex-wrap gap-2 max-md:grid max-md:grid-cols-2">
               <Button asChild variant="default" className="px-[18px] text-[13px] max-md:h-12 max-md:rounded-xl max-md:text-[14px] max-md:font-bold">
-                <a href="#works">挑一个作品</a>
+                <a href="#works">选一个作品</a>
               </Button>
               <Button asChild className="px-[18px] text-[13px] max-md:hidden">
-                <a id="haveFw" href="./app.html?work=blank#bench">
-                  我有固件了
+                <a id="haveFw" href={BLANK_LAB}>
+                  运行我的固件
                 </a>
               </Button>
               <Button asChild className="hidden h-12 rounded-xl text-[14px] max-md:inline-flex">
-                <a id="pickBoard" href="./advisor.html">
-                  帮我选板子
+                <a id="pickBoard" href={SELECT}>
+                  去选板
                 </a>
               </Button>
             </div>
@@ -69,8 +71,8 @@ export function App() {
           <b className="text-[15px] font-medium">
             作品 <span className="ml-1 text-[12px] font-normal text-muted">{HOME_WORKS.length} 个</span>
           </b>
-          <a id="ownIdea" className="text-[12px] text-muted hover:text-accent-ink" href="./advisor.html">
-            都不是想做的？用选型助手 →
+          <a id="ownIdea" className="text-[12px] text-muted hover:text-accent-ink" href={SELECT}>
+            没有想做的？去选板 →
           </a>
         </div>
         <section id="works" aria-label="作品" className="grid grid-cols-2 gap-4 max-[900px]:grid-cols-1 max-md:gap-2.5">
@@ -140,8 +142,8 @@ function WorkCard({ w, live, onToggle }: { w: WorkDef; live: boolean; onToggle: 
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <Button asChild size="sm" variant="default" className="px-3 text-[13px] max-md:h-11 max-md:px-4">
-            <a data-go href={`./app.html?work=${w.id}#shop`}>
-              做这个
+            <a data-go href={lab(w.id, 'shop')}>
+              开始做
             </a>
           </Button>
           <Button
@@ -157,7 +159,7 @@ function WorkCard({ w, live, onToggle }: { w: WorkDef; live: boolean; onToggle: 
               onToggle();
             }}
           >
-            {live && !failed ? '回到示意图' : '看真实固件跑'}
+            {live && !failed ? '停止' : '运行固件'}
           </Button>
         </div>
       </div>
