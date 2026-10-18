@@ -5,6 +5,7 @@
 //!   *tb: LDO 输入 输出 vset rout rdo ilim iq
 //!   *tb: LOAD 节点 电流 vknee
 //!   *tb: MOTOR 节点 vcmd emf r
+//!   *tb: DIODE 阳极 阴极 vf rd
 //! B 源行在这里被忽略。节点名任意，0 / gnd 是地。
 
 use crate::mna::{Circuit, Elem};
@@ -111,6 +112,12 @@ impl Netlist {
                         vcmd: num(2)?,
                         emf: num(3)?,
                         r: num(4)?,
+                    },
+                    Some("DIODE") => Elem::Diode {
+                        a: nl.node(f[1]),
+                        b: nl.node(f[2]),
+                        vf: num(3)?,
+                        rd: num(4)?,
                     },
                     _ => return Err(bad("不认识的 *tb: 元件")),
                 };

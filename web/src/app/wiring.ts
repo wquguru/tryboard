@@ -101,6 +101,8 @@ export interface WireMods {
   lenCm?: Record<string, number>;
   /** 去掉 Echo 分压电阻的超声波（零件 id）：5 V 直接进 GPIO */
   noDivider?: string[];
+  /** 开发板针到开发板针的跳线（P2-14：如 ['3V3', 'GND'] 把电源轨短路到地）；零件名记作 'jumper' */
+  jumpers?: [string, string][];
 }
 
 export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): BenchWire[] {
@@ -201,6 +203,7 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
     if (x.ohm !== undefined && nores.has(x.part)) x.ohm = 0;
     if (x.divider !== undefined && nodiv.has(x.part)) x.divider = false;
   }
+  for (const [a, b] of mods.jumpers ?? []) w.push({ id: `wire:${a}~${b}`, a, b, part: 'jumper', pin: b, role: `跳线（${a} → ${b}）`, pinRole: 'power', color: '红', lenCm: BENCH_WIRE_CM });
   return w;
 }
 
@@ -211,7 +214,7 @@ export function usedPins(wires: BenchWire[]): string[] {
   return [...seen];
 }
 
-export const emptyMods = (m: WireMods | null | undefined) => !m || (!m.drop?.length && !m.noResistor?.length && !m.noDivider?.length && !Object.keys(m.retarget ?? {}).length && !Object.keys(m.lenCm ?? {}).length);
+export const emptyMods = (m: WireMods | null | undefined) => !m || (!m.drop?.length && !m.noResistor?.length && !m.noDivider?.length && !m.jumpers?.length && !Object.keys(m.retarget ?? {}).length && !Object.keys(m.lenCm ?? {}).length);
 
 /** I2C 总线：同一对 SDA / SCL 上的模块和 SDA 线总长（cm）。线长按 SDA 那根算（SCL 同长） */
 export function i2cBuses(parts: PartSpec[], wires: BenchWire[]): { key: string; parts: string[]; wireCm: number; wires: string[] }[] {

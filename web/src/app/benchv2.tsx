@@ -422,6 +422,7 @@ export function WrongWireCard({
   detail,
   wire,
   sim,
+  estimate,
   onUndo,
   onRetry,
   onKeep,
@@ -430,6 +431,8 @@ export function WrongWireCard({
   detail: string;
   wire: string;
   sim: string;
+  /** 网络求解出的电流和后果（P2-14，估算；算出来之前不显示） */
+  estimate?: { mA: number; text: string; what: string };
   onUndo: () => void;
   onRetry: () => void;
   onKeep: () => void;
@@ -449,6 +452,21 @@ export function WrongWireCard({
         </div>
       </div>
       <p className="mt-2 mb-0 text-xs">{detail}</p>
+      {estimate && (
+        <div
+          data-ww="estimate"
+          className="mt-2 rounded-(--r) border border-(--bad-line) bg-bad-bg px-2.5 py-2 text-xs"
+        >
+          <div className="flex items-center gap-2">
+            <b className="font-mono text-sm text-bad-ink">≈ {estimate.mA} mA</b>
+            <ConfBadge c="估算" />
+          </div>
+          <p className="mt-1 mb-0">{estimate.text}</p>
+          <p className="mt-0.5 mb-0 text-[11px] text-muted">
+            按最坏情况：{estimate.what}
+          </p>
+        </div>
+      )}
       <p className="mt-1.5 mb-0 text-[11px] text-muted">{sim}</p>
       <div className="mt-3 flex flex-wrap gap-1.5">
         <button

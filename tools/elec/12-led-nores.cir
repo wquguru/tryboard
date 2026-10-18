@@ -1,0 +1,8 @@
+* 12 W3 LED 不串电阻：GPIO 输出高（内阻 33 Ω）→ 红色 LED（1.8 V 起导 + 10 Ω 折线）→ GND
+V1 vg 0 DC 3.3
+R1 vg pin 33
+R2 pin an 1m
+*tb: DIODE an 0 1.8 10
+B1 an 0 I=max(0, (v(an)-1.8)/10)
+.op
+.end

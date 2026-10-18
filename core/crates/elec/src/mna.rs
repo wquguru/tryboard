@@ -47,6 +47,9 @@ pub enum Elem {
         emf: f64,
         r: f64,
     },
+    /// 二极管（LED、引脚钳位二极管），a 是阳极：电流 = max(0, (v(a) − v(b) − vf)/rd)。
+    /// 一段折线代替指数曲线：只在工作电流附近（mA–几十 mA）准，够算"接错线会流多大电流"
+    Diode { a: Node, b: Node, vf: f64, rd: f64 },
 }
 
 /// 一条 PWL 段：I = g·(v_a) + c（只依赖一个节点电压时）
@@ -217,6 +220,13 @@ impl Circuit {
                     }
                 }
                 Elem::I { a: p, b: q, i } => inject(&mut z, p, q, i),
+                Elem::Diode { a: p, b: q, vf, rd } => {
+                    // 导通段：I = (v(p) − v(q))/rd − vf/rd，常数项当作从 p 流到 q 的电流源
+                    if s == 1 {
+                        stamp_g(&mut a, p, q, 1.0 / rd);
+                        inject(&mut z, p, q, -vf / rd);
+                    }
+                }
                 Elem::Limit { a: p, .. } | Elem::Load { a: p, .. } | Elem::Motor { a: p, .. } => {
                     // 单节点 PWL：电流从 p 流到地 = g·v(p) + c（Limit 是电源，pwl 里已经取了负号）
                     let sg = seg1(e, s);
@@ -292,7 +302,7 @@ impl Circuit {
                     let (_, i) = pwl(e, v);
                     i
                 }
-                Elem::Ldo { .. } => pwl(e, v).1,
+                Elem::Ldo { .. } | Elem::Diode { .. } => pwl(e, v).1,
             })
             .collect()
     }
@@ -365,6 +375,14 @@ fn pwl(e: &Elem, v: &[f64]) -> (u8, f64) {
                 (1, i_sat)
             } else {
                 (2, i_lin)
+            }
+        }
+        Elem::Diode { a, b, vf, rd } => {
+            let x = at(a) - at(b) - vf;
+            if x <= 0.0 {
+                (0, 0.0)
+            } else {
+                (1, x / rd)
             }
         }
         _ => (0, 0.0),

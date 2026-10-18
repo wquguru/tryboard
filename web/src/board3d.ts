@@ -3291,6 +3291,33 @@ export function createBench(container: HTMLElement): Bench {
     }
     if (hl) highlight(hl);
   }
+  /** 开发板针到开发板针的跳线（P2-14 造短路用）：b 为 null 拔掉；setScene 重建时随 parts 一起清空，重检接线时再补 */
+  function bridge(id: string, a: string, b: string | null) {
+    const cur = wires.find((w) => w.id === id);
+    if (!b) {
+      if (!cur) return;
+      cur.grp.parent?.remove(cur.grp);
+      cur.thin.dispose();
+      cur.thick?.dispose();
+      cur.mat.dispose();
+      wires.splice(wires.indexOf(cur), 1);
+      return;
+    }
+    if (cur) return;
+    let p: THREE.Vector3, q: THREE.Vector3;
+    try {
+      p = boardHole(a.replace(/^GPIO/, 'IO'));
+      q = boardHole(b.replace(/^GPIO/, 'IO'), p);
+    } catch {
+      return;
+    }
+    const h = top + 34;
+    const w = wire([p, lift(p, h - 4), new THREE.Vector3((p.x + q.x) / 2, h, (p.z + q.z) / 2 + 8), lift(q, h - 4), q], 0xd23b2e, id, [a, b]);
+    parts.add(w.grp);
+    wires.push(w);
+    const f = faults.get(id);
+    if (f) applyFault(id, f);
+  }
   function setWireFault(id: string, msg: string | null) {
     if (msg) {
       faults.set(id, msg);
@@ -3683,6 +3710,7 @@ export function createBench(container: HTMLElement): Bench {
     },
     setWireFault,
     rewire,
+    bridge,
     setHeat,
     measure,
     setTheme: applyTheme,

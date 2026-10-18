@@ -111,6 +111,48 @@ const cliResets = Number((p.stderr.toString().match(/电气 欠压复位 (\d+) �
 report('命令行按同一日志重放：串口逐字节相同、复位次数相同', cli === snap.stdout && cliResets === e2.resets,
   cli === snap.stdout ? `${cli.length} 字节，复位 网页 ${e2.resets} / 命令行 ${cliResets}` : `第 ${diffAt} 字节起不同：${JSON.stringify(cli.slice(diffAt, diffAt + 50))} vs ${JSON.stringify(snap.stdout.slice(diffAt, diffAt + 50))}`);
 
+// ---- 接线错误走网络求解（P2-14）：每种错接注入一次，面板 / 接错线卡片显示求解电流（估算），与命令行解同一网表对拍
+const p2 = await browser.newPage();
+p2.on('pageerror', (e) => errors.push(`${e}`));
+p2.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+await p2.goto(base + '/app.html?work=weather&debug=1#bench', { waitUntil: 'load' });
+await waitFor(p2, () => !!globalThis.__tbApp?.injectWiring && !!globalThis.__tbApp?.session?.sim, null, 30000);
+const net = (cir) => {
+  const r = spawnSync(CLI, ['elec-net', path.join(root, 'tools/elec', cir)]);
+  return Object.fromEntries([...r.stdout.toString().matchAll(/^v\((\w+)\)@\S+ = (\S+)$/gm)].map((m) => [m[1], Number(m[2])]));
+};
+// 命令行那一侧的支路电流：从节点电压和网表里的电阻算（与 .cir 注释同一电路）
+const s3 = await p2.evaluate(() => globalThis.__tbApp.session.chip === 'esp32s3');
+const FAULTS = [
+  ['drive', 'W1', '11-gpio-fight.cir', (v) => (v.pin - v.vd) / 1],
+  ['nores', 'W3', '12-led-nores.cir', (v) => (v.an - 1.8) / 10],
+  ['short3v3', 'W7', s3 ? '16-short-3v3-s3.cir' : '13-short-3v3.cir', (v) => v.v33 / 0.05],
+  ['short5v', 'W7', s3 ? '17-short-5v-s3.cir' : '14-short-5v.cir', (v) => v.v5 / 0.05],
+  ['clamp', 'W2', '15-clamp-5v.cir', (v) => (v.v5 - v.pin) / 50],
+];
+for (const [k, rule, cir, cur] of FAULTS) {
+  await p2.evaluate(() => globalThis.__tbApp.injectWiring('clear'));
+  await p2.evaluate((k) => globalThis.__tbApp.injectWiring(k), k);
+  const got = await waitFor(p2, (r) => globalThis.__tbApp.faults().some((f) => f.rule === r && f.mA !== null), rule, 10000);
+  const f = await p2.evaluate((r) => globalThis.__tbApp.faults().find((x) => x.rule === r), rule);
+  const cliMA = cur(net(cir)) * 1000;
+  // 网页显示到 0.1 mA：差 ≤ 0.05 mA 才算同一个解
+  const same = got && f && Math.abs(f.mA - cliMA) <= 0.05 + 1e-9;
+  await p2.evaluate((id) => globalThis.__tbApp.store.set({ selection: { kind: 'wire', id } }), f?.wires[0]);
+  await sleep(300);
+  const panel = await p2.$$eval('[data-est]', (els) => els.map((e) => e.textContent)).catch(() => []);
+  const badge = await p2.$$eval('[data-est] [data-conf="估算"]', (els) => els.length).catch(() => 0);
+  await p2.evaluate((id) => globalThis.__tbApp.showWrongWire(id), f?.wires[0]);
+  await sleep(300);
+  const card = await p2.$eval('#wrongWire [data-ww="estimate"]', (e) => e.textContent).catch(() => '');
+  await p2.screenshot({ path: path.join(outDir, `elec-fault-${k}.png`) });
+  await p2.evaluate(() => document.querySelector('#wrongWire [data-ww="keep"]')?.click());
+  report(`错接 ${k} → ${rule}：网页求解 = 命令行 ${cir}`, same && panel.some((t) => t.includes(`${f.mA} mA`)) && badge > 0 && card.includes(`${f.mA} mA`) && !!f.est,
+    f ? `网页 ${f.mA} mA / 命令行 ${cliMA.toFixed(3)} mA；${f.est}` : '没出这条问题');
+}
+await p2.evaluate(() => globalThis.__tbApp.injectWiring('clear'));
+report('接线复原 → 无问题', (await p2.evaluate(() => globalThis.__tbApp.faults().length)) === 0);
+
 await browser.close();
 server.close();
 if (errors.length) console.log('[elec] 页面错误:\n  ' + errors.join('\n  '));

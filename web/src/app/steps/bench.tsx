@@ -16,6 +16,7 @@ import {
 } from "../wiring";
 import { i2cLoad, i2cText } from "../harness";
 import { checkWiring, faultByWire, type WireFault } from "../wirecheck";
+import { applyCached, enrichFaults } from "../faultsolve";
 import {
   PinTrace,
   bit,
@@ -219,6 +220,14 @@ export function benchStep(): StepImpl {
   let heatRoom: number | null = null;
   let faults: WireFault[] = [];
   let shownFaults = new Set<string>();
+  /** 接线检查第几次（网络求解是异步的，回来时还是这一次才用） */
+  let faultGen = 0;
+  /** 开着的接错线卡片：估算到了重画它 */
+  let wwShow: ((f: WireFault) => void) | null = null;
+  /** 台面上画着的板针到板针跳线（P2-14） */
+  let shownBridge = new Set<string>();
+  /** ?debug=1&wiring= 只造一次 */
+  let injected = false;
   /** 连线工具（U-04）：先点一根线，再点开发板上的新针；wire 是选中的那根 */
   let wiring: { wire: string | null } | null = null;
   /** 台面上画成改接过的线（和 wireMods.retarget 对齐） */
@@ -243,7 +252,23 @@ export function benchStep(): StepImpl {
   // ------------------------------------------------------------ 接线规则检查（P0-12）
   function recheckWiring() {
     const c = ctx!;
-    faults = checkWiring(c.session.scene.parts, benchWires());
+    const s3 = c.session.chip === "esp32s3";
+    const fresh = checkWiring(c.session.scene.parts, benchWires());
+    const cached = applyCached(fresh, s3);
+    faults = cached.faults;
+    const gen = ++faultGen;
+    // 错接电流走 wasm 里的 elec 求解（P2-14）：第一次要实例化 wasm，算完补到面板和接错线卡片上
+    if (!cached.done)
+      void enrichFaults(fresh, s3)
+        .then((fs) => {
+          if (gen !== faultGen || !ctx) return;
+          faults = fs;
+          renderTree();
+          renderProps();
+          const f = wwShow && bc.get().overlays.wrongWire ? wwShow : null;
+          if (f) f(faults[0]);
+        })
+        .catch((e) => console.warn("接线错误求解失败", e));
     const by = faultByWire(faults);
     for (const id of shownFaults)
       if (!by.has(id)) c.session.pick.setWireFault?.(id, null);
@@ -256,6 +281,12 @@ export function benchStep(): StepImpl {
       if (!now.has(id)) c.session.pick.rewire?.(id, null);
     for (const w of moved) c.session.pick.rewire?.(w.id, w.a);
     shownRewire = now;
+    const jumps = benchWires().filter((w) => w.part === "jumper");
+    const nowJ = new Set(jumps.map((w) => w.id));
+    for (const id of shownBridge)
+      if (!nowJ.has(id)) c.session.pick.bridge?.(id, "", null);
+    for (const w of jumps) c.session.pick.bridge?.(w.id, w.a, w.b);
+    shownBridge = nowJ;
     // 问题页签：接线检查的结论（wire: 前缀；欠压那几条由 main.tsx 写）
     const issues: Issue[] = faults.map((f, i) => ({
       id: `wire:${f.rule}:${i}`,
@@ -441,26 +472,58 @@ export function benchStep(): StepImpl {
       );
       return;
     }
-    const f = fs[0];
-    overlay(
-      "wrongWire",
-      <WrongWireCard
-        title={f.title}
-        detail={f.detail}
-        wire={`${w.b}：${w.a} → ${to}`}
-        sim={`可信度：${f.confidence}。模拟器里的器件仍按原来的接法跑，这里只做接线检查。`}
-        onUndo={() => {
-          overlay("wrongWire", null);
-          applyMods(prev, `撤销 ${w.b} 改接`);
-        }}
-        onRetry={() => {
-          overlay("wrongWire", null);
-          applyMods(prev, `撤销 ${w.b} 改接`);
-          setWiring(true, wireId);
-        }}
-        onKeep={() => overlay("wrongWire", null)}
-      />,
+    showWrongWire(
+      fs[0],
+      wireId,
+      `${w.b}：${w.a} → ${to}`,
+      () => {
+        applyMods(prev, `撤销 ${w.b} 改接`);
+      },
+      () => {
+        applyMods(prev, `撤销 ${w.b} 改接`);
+        setWiring(true, wireId);
+      },
     );
+  }
+  /** 接错线卡片（U-04）；网络求解的估算异步到了会用同一根线的新结论重画（P2-14） */
+  function showWrongWire(
+    first: WireFault,
+    wireId: string,
+    label: string,
+    undo: () => void,
+    retry: () => void,
+  ) {
+    const close = () => {
+      wwShow = null;
+      overlay("wrongWire", null);
+    };
+    const show = (f: WireFault) =>
+      overlay(
+        "wrongWire",
+        <WrongWireCard
+          title={f.title}
+          detail={f.detail}
+          wire={label}
+          estimate={f.estimate}
+          sim={`可信度：${f.confidence}。模拟器里的器件仍按原来的接法跑，这里只做接线检查。`}
+          onUndo={() => {
+            close();
+            undo();
+          }}
+          onRetry={() => {
+            close();
+            retry();
+          }}
+          onKeep={close}
+        />,
+      );
+    wwShow = () => {
+      const f = faults.find(
+        (x) => x.wires.includes(wireId) && x.rule === first.rule,
+      );
+      if (f) show(f);
+    };
+    show(first);
   }
 
   // ------------------------------------------------------------ 构建树
@@ -989,6 +1052,16 @@ export function benchStep(): StepImpl {
   const faultEl = (f: WireFault, i: number) => (
     <Res key={i} kind="bad">
       <b>{f.title}</b> · {f.detail}
+      {f.estimate && (
+        <span
+          data-est={f.rule}
+          className="mt-1 flex flex-wrap items-center gap-1.5"
+        >
+          <b className="font-mono">≈ {f.estimate.mA} mA</b>
+          <ConfBadge c="估算" />
+          <span>{f.estimate.text}</span>
+        </span>
+      )}
       <br />
       <Muted>
         {f.confidence} · {f.source}
@@ -2764,7 +2837,17 @@ export function benchStep(): StepImpl {
 
   // ------------------------------------------------------------ 造错误接线（验收用的 debug 钩子，?debug=1 才挂出）
   function injectWiring(
-    kind: "drive" | "5v" | "nores" | "nognd" | "addr" | "nodiv" | "clear",
+    kind:
+      | "drive"
+      | "5v"
+      | "nores"
+      | "nognd"
+      | "addr"
+      | "nodiv"
+      | "short3v3"
+      | "short5v"
+      | "clamp"
+      | "clear",
   ): string[] {
     const c = ctx!;
     const ses = c.session;
@@ -2802,6 +2885,21 @@ export function benchStep(): StepImpl {
     } else if (kind === "nodiv") {
       mods = { noDivider: ["hcsr04"] };
       label = "拆掉 Echo 分压电阻";
+    } else if (kind === "clamp") {
+      // 加一个 HC-SR04（Trig GPIO2、Echo GPIO3）并拆掉 Echo 分压：5 V 直接进 GPIO3 的钳位二极管
+      scene = {
+        ...scene,
+        parts: [
+          ...scene.parts.filter((p) => !(p.type === "hcsr04" && p.trig === 2)),
+          { type: "hcsr04", trig: 2, echo: 3 },
+        ],
+      };
+      mods = { noDivider: ["hcsr04"] };
+      label = "超声波 Echo 不分压直连";
+    } else if (kind === "short3v3" || kind === "short5v") {
+      const r = kind === "short3v3" ? "3V3" : "5V";
+      mods = { jumpers: [[r, "GND"]] };
+      label = `跳线把 ${r} 接到 GND`;
     } else if (kind === "addr") {
       scene = {
         ...scene,
@@ -2817,7 +2915,12 @@ export function benchStep(): StepImpl {
       scene = {
         ...scene,
         parts: scene.parts
-          .filter((p) => p.type !== "pot" && !(p.type === "led" && p.pin === 6))
+          .filter(
+            (p) =>
+              p.type !== "pot" &&
+              !(p.type === "led" && p.pin === 6) &&
+              !(p.type === "hcsr04" && p.trig === 2),
+          )
           .map((p) => (p.type === "oled" ? { ...p, addr: 0x3c } : p)),
       };
     c.hist?.op({ k: "wiring", mods, scene, label });
@@ -2895,7 +2998,22 @@ export function benchStep(): StepImpl {
               rule: f.rule,
               wires: f.wires,
               short: f.short,
+              mA: f.estimate?.mA ?? null,
+              est: f.estimate?.text ?? null,
             }));
+          // 打开某根线的接错线卡片（验收截图用；和改接后弹出的是同一张）
+          w.__tbApp.showWrongWire = (wireId: string) => {
+            const f = faults.find((x) => x.wires.includes(wireId));
+            if (!ctx || !f) return false;
+            showWrongWire(
+              f,
+              wireId,
+              `${wireId.replace(/^wire:/, "")}`,
+              () => {},
+              () => {},
+            );
+            return true;
+          };
           w.__tbApp.setWireLen = (part: string, cm: number) =>
             ctx && setWireLen(part, cm);
         }
@@ -2972,6 +3090,26 @@ export function benchStep(): StepImpl {
         c.store.set({ selection: { kind: "part", id: "board" } });
       recheckWiring();
       applyBenchHarness();
+      // ?debug=1&wiring=<种类>：打开就造一种错接，再弹出它的接错线卡片（人眼验收用，和 __tbApp.injectWiring 同一入口）
+      const q = new URLSearchParams(location.search);
+      const inj = q.has("debug") ? q.get("wiring") : null;
+      if (inj) {
+        // 只造一次；台面重新挂载（切步骤回来）时只把卡片和选中再开出来
+        if (!injected) injectWiring(inj as Parameters<typeof injectWiring>[0]);
+        injected = true;
+        recheckWiring();
+        const f = faults.find((x) => x.net) ?? faults[0];
+        if (f) {
+          c.store.set({ selection: { kind: "wire", id: f.wires[0] } });
+          showWrongWire(
+            f,
+            f.wires[0],
+            f.wires[0].replace(/^wire:/, ""),
+            () => {},
+            () => {},
+          );
+        }
+      }
       meterCard();
       renderTree();
       renderProps();
