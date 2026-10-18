@@ -245,6 +245,14 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/mobile.mjs 2>&1 | grep '^\[mobile\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[mobile\] PASS（' || { echo "- [mobile] 脚本没跑完" >> $REPORT; fail=1; }
+  # 底部坞代码页签（P2-15）：示例显示源码（app_main），上传的 .bin 说明没有源码，手机也能看
+  r=$(node tools/webtest/code.mjs 2>&1 | grep '^\[code\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[code\] PASS（' || { echo "- [code] 脚本没跑完" >> $REPORT; fail=1; }
+  # 台面直接放零件（P2-16）：元件库放 LED → 逐根接线 → 跑 blink 灯真的跟着 GPIO 亮灭，与命令行对拍
+  r=$(node tools/webtest/place.mjs 2>&1 | grep '^\[place\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[place\] PASS（' || { echo "- [place] 脚本没跑完" >> $REPORT; fail=1; }
 fi
 echo -e "\n结论：$([ $fail = 0 ] && echo '全部通过' || echo '有失败项')" >> $REPORT
 cat $REPORT

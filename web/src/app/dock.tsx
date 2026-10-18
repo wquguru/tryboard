@@ -2,13 +2,24 @@
 // 串口原文仍追加进隐藏的 #console（文本节点原样，回归脚本和重放对拍读它）；看得见的是这里按行切开的视图：
 // 过滤、时间戳（收到这段文字时的模拟时刻）、按 ESP-IDF 级别着色、跟随最新。行视图命令式维护，不经 React——
 // 串口一秒能来几百行，整块重画太贵。
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "../ui/cn";
 import { actions, bc, setDock, type DockTab } from "./chrome";
 import { Icon } from "./icons";
 import { useStore } from "./react";
 import { createStore } from "./store";
 import { Grab, mui, phoneProps, setMui, usePhone } from "./mobile";
+
+// 代码页签（P2-15）：切到它才下载这块和源码，不进首包
+const CodeView = lazy(() => import("./code"));
+function CodePane({ phone, toast }: { phone?: boolean; toast: (t: string) => void }) {
+  const { fw } = useStore(bc);
+  return (
+    <Suspense fallback={<p className="m-0 p-3 text-xs text-muted">正在加载代码页…</p>}>
+      <CodeView fw={fw} phone={phone} toast={toast} />
+    </Suspense>
+  );
+}
 
 interface Line {
   t: number;
@@ -479,8 +490,7 @@ function PhoneDock({
     {
       id: "code",
       label: "代码",
-      disabled: true,
-      title: "暂未开放：实验台只有编译好的 flash.bin，没有源码",
+      title: "台面上这个固件的源码（只读）",
     },
     {
       id: "checks",
@@ -607,6 +617,11 @@ function PhoneDock({
               <SerialInput phone />
             </div>
           )}
+          {cur === "code" && (
+            <div className="flex min-h-0 flex-1 flex-col border-t border-line-soft">
+              <CodePane phone toast={toast} />
+            </div>
+          )}
           {cur === "checks" && (
             <div className="min-h-0 flex-1 overflow-auto border-t border-line-soft">
               <CheckList />
@@ -721,8 +736,7 @@ function DeskDock({
     {
       id: "code",
       label: "代码",
-      disabled: true,
-      title: "暂未开放：实验台只有编译好的 flash.bin，没有源码",
+      title: "台面上这个固件的源码（只读）",
     },
     {
       id: "analyzer",
@@ -839,6 +853,7 @@ function DeskDock({
           <SerialView />
           <SerialInput />
         </div>
+        {cur === "code" && <CodePane toast={toast} />}
         <div
           hidden={cur !== "runs"}
           className="flex min-h-0 flex-1 items-start overflow-auto px-3 py-2 [&[hidden]]:hidden"

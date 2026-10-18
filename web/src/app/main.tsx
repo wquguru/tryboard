@@ -102,7 +102,7 @@ const ownsTimeline = () => store.get().step === 'bench';
     const app = (window as unknown as { __tbApp: Record<string, unknown> }).__tbApp;
     app.cmdk = createCmdk(ctx);
     app.analyzer = getAnalyzer(ctx);
-    store.subscribe(() => ctx.hist!.op({ k: 'scene', scene: session.scene, power: session.power, count: session.scene.parts.length }), ['sceneRev']);
+    store.subscribe(() => ctx.hist!.op({ k: 'scene', scene: session.scene, power: session.power, count: session.scene.parts.length, ...(session.sceneLabel ? { label: session.sceneLabel } : {}) }), ['sceneRev']);
     // 欠压复位（P1-02）进实验台时间线：一步，回到它 = 回到复位那一刻
     session.onBrownout((t) => {
       ctx.hist!.event({ k: 'brownout', tSec: t, v3v3: session.frame.elec?.min3v3 ?? null }, t * 1000);
@@ -148,7 +148,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   const runState = () => {
     const s = store.get();
     const run = s.hist.busy ? 'busy' : s.hist.seeked ? 'seek' : paused ? 'pause' : s.running ? 'run' : session.sim ? 'idle' : session.fwName ? 'loading' : 'nofw';
-    setBc({ run, undo: !s.hist.busy && s.hist.cur > 0, redo: !s.hist.busy && s.hist.cur < s.hist.n - 1, runs: s.hist.runs, room: s.env.temp });
+    setBc({ run, undo: !s.hist.busy && s.hist.cur > 0, redo: !s.hist.busy && s.hist.cur < s.hist.n - 1, runs: s.hist.runs, room: s.env.temp, fw: session.fwName });
   };
   store.subscribe(runState, ['running', 'hist', 'env']);
   session.onBoot(() => {

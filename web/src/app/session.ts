@@ -207,7 +207,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     continueRun() {
       s.sim?.continueRun();
     },
-    applyScene(next, power) {
+    applyScene(next, power, label) {
+      s.sceneLabel = label;
       const devs = (sc: SceneSpec) => JSON.stringify([i2cOf(sc.parts), sc.parts.some((p) => p.type === 'gc9a01'), servoOf(sc.parts) ?? null, encoderOf(sc.parts) ?? null, sonarOf(sc.parts)?.trig ?? null, sonarOf(sc.parts)?.echo ?? null, touchIntOf(sc.parts) ?? null, i2sOf(sc.parts)]);
       const rebootNeeded = devs(next) !== devs(s.scene);
       const same = JSON.stringify(next) === JSON.stringify(s.scene);
@@ -216,6 +217,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       s.power = power;
       if (!same) bench.setScene(next);
       if (!s.hasImu()) bench.setPose(null);
+      audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
       const hadExt = extBefore;
       if (s.sim && rebootNeeded) {
         s.sim.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts), touchInt: touchIntOf(next.parts), i2s: i2sOf(next.parts) });

@@ -122,7 +122,9 @@ export interface Session {
   /** 供电：null = 作品默认台面（只显示 USB 5 V）；从清单摆上来时记下有没有外接 5 V */
   power: { ext5v: boolean } | null;
   /** 按清单换台面（P0-09）：重建外接元件；I2C / 圆屏变了就带着当前固件重新上电 */
-  applyScene(scene: SceneSpec, power: { ext5v: boolean }): void;
+  applyScene(scene: SceneSpec, power: { ext5v: boolean }, label?: string): void;
+  /** 最近一次 applyScene 带的时间线说明（台面直接放零件时是「放 LED，接 GPIO5」；按清单摆时为空） */
+  sceneLabel?: string;
   fwName: string;
   fwSize: number;
   chip: 'esp32c3' | 'esp32s3';

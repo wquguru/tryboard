@@ -42,6 +42,8 @@ export interface BenchChrome {
   boot: { text: string; steps: { label: string; done: boolean }[]; loaded: number; total: number } | null;
   /** 台面上的浮层（连线横幅、万用表卡、校验卡、接错线卡、欠压横幅、检查点通过提示…） */
   overlays: Record<string, ReactNode>;
+  /** 台面上正在跑的固件名（session.fwName：示例是 "<id>/flash.bin"，上传的是文件原名）；代码页签按它找源码 */
+  fw: string;
   /** 台面左上的「桌面 · 室温」标签（实验台场景的环境温度）；null = 不显示 */
   room: number | null;
 }
@@ -71,6 +73,7 @@ export const bc = createStore<BenchChrome>({
   issues: [],
   boot: { text: '正在加载模拟器内核', steps: [], loaded: 0, total: 0 },
   overlays: {},
+  fw: '',
   room: null,
 });
 export const setBc = (p: Partial<BenchChrome>) => commit(() => bc.set(p));

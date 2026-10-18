@@ -12,7 +12,7 @@ import type { WireMods } from './wiring.ts';
 export type BenchOp =
   | { k: 'place'; label: string }
   | { k: 'wire' }
-  | { k: 'scene'; scene: SceneSpec; power: { ext5v: boolean } | null; count: number }
+  | { k: 'scene'; scene: SceneSpec; power: { ext5v: boolean } | null; count: number; label?: string }
   | { k: 'run'; n: number }
   | { k: 'env'; env: Env }
   | { k: 'heat'; part: string | null; env: Env }

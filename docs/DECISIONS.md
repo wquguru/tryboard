@@ -643,3 +643,18 @@
 - `tryboard-wasm` 依赖 `tryboard-elec`（仓库内 crate，不是第三方），wasm 增大约 7 KB（645 KB，仍 ≤ 2 MB）。
 - 实验台网表跟芯片走：S3 板芯片 + 板上负载 43 mA、C3 35 mA，所以短路另有 16 / 17 两份 S3 网表给网页对拍（实验台上的作品多是 S3）。
 - `?debug=1&wiring=<种类>`：打开就造一种错接并弹出接错线卡片（agent-browser 不能跑页面脚本时的人眼验收入口），与 `__tbApp.injectWiring` 同一入口；`__tbApp.faults()` 多给 `mA` / `est`，`__tbApp.showWrongWire(线 id)` 打开卡片。
+## 2026-10-17 · P2-15 代码页签 / P2-16 台面直接放零件
+- 源码打包：`tools/gen_fw_src.py` 在 `tools/build_web.sh` 里随 `web/public/fw/<名>/flash.bin` 一起生成 `src.json`（main/*.c *.h、被 include 的 firmware/common 头、CMakeLists.txt、sdkconfig.defaults），代码页签打开时才 fetch，不进首包。
+  - 替代：vite 插件 / import.meta.glob——会把源码打进 JS 包或要另配插件；与 fw 目录同一个生成脚本最简单。
+- C 高亮用自写的小 tokenizer（`web/src/app/ctoken.ts`：注释 / 字符串 / 预处理 / 关键字 / 类型 / 数字 / 函数调用），不引 highlight.js / prism：只读显示用不着完整语法，零依赖。
+- 上传的 .bin、没有 src.json 的示例：代码页签显示原因（flash 镜像里没有源码），不猜、不反汇编。
+- 台面放零件是「先放、再逐根接线、接完才进场景」：拖到台面（或点「放」）只开横幅和引脚圈，每一步只亮该类引脚（GPIO / GND / 3V3·5V），全部接完才 `applyScene` 加进场景；中途 Esc 取消场景不变。
+  - 理由：场景里的零件必须有确定的引脚才能进模拟器，半接的零件没法模拟也没法做接线检查；不摆「没接线的摆设」。
+  - 替代：先在 3D 里摆一个未接线的件——要给场景加"未接线"状态，接线检查 / 指纹都要跟着改，收益小。
+- 只开放台面已有引脚器件模型的 14 件（LED、按键、蜂鸣器模块、SG90/MG90S、电位器、BME280、SSD1306、MPU6050、QMI8658、编码器、HC-SR04、WS2812 灯条 / 灯棒），其余在元件库里灰掉并写原因（无模拟模型 / 引脚由固件固定在 SPI2·I2S / 只有三针蜂鸣器模块模型）。表在 `web/src/app/place.ts`。
+- I2C 器件按地址挂在模拟器总线上，模拟器本身不按 SDA/SCL 引脚判断能否扫到；接错 I2C 引脚只由接线检查报。STATUS 里写明。
+- 电源针接了不是本来的那一路（如 BME280 VCC 接 5V）：场景照常加，并把这根线记成 `WireMods.retarget`，由接线检查报 W2——和改接线模式同一套，不另造规则。
+- 放置记成一条 hist `scene` 操作，带 label「放 X（针→GPIO…）」：`applyScene(scene, power, label)` 新增可选 label，session 记 `sceneLabel`；时间线显示它而不是「按清单摆上 N 件」。
+- 顺手修：`applyScene` 换零件后没刷新蜂鸣器引脚（`audio.setPins`），台面上新放的蜂鸣器不响。
+- 同类模块（除 LED / 按键）一次只能放一个、I2C 地址冲突直接拦：场景模型按类型单例。
+- 手机上的元件库暂不支持放零件（仍链到采购）：手机放置要配合放大镜逐根选针，留作后续。
