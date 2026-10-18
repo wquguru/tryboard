@@ -200,7 +200,10 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
       x.from = x.a;
       x.a = to;
     }
-    if (x.ohm !== undefined && nores.has(x.part)) x.ohm = 0;
+    if (x.ohm !== undefined && nores.has(x.part)) {
+      x.ohm = 0;
+      x.role = x.role.replace(/（经 \d+ Ω）/, '（直接接，没有电阻）');
+    }
     if (x.divider !== undefined && nodiv.has(x.part)) x.divider = false;
   }
   for (const [a, b] of mods.jumpers ?? []) w.push({ id: `wire:${a}~${b}`, a, b, part: 'jumper', pin: b, role: `跳线（${a} → ${b}）`, pinRole: 'power', color: '红', lenCm: BENCH_WIRE_CM });
