@@ -144,7 +144,11 @@ impl Dwc2 {
 
     /// 发送 FIFO 深度（字）：EP0 用 DIEPTXF0，其余用 DIEPTXFn（0x104 起）
     fn txfifo_depth(&self, ep: usize) -> u32 {
-        let r = if ep == 0 { self.r(DIEPTXF0) } else { self.r(0x100 + 4 * ep as u32) };
+        let r = if ep == 0 {
+            self.r(DIEPTXF0)
+        } else {
+            self.r(0x100 + 4 * ep as u32)
+        };
         (r >> 16).max(16)
     }
 
@@ -307,7 +311,12 @@ impl Dwc2 {
         if v & EPCTL_CNAK != 0 {
             ep.nak = false;
         }
-        let mut ctl = v & !(EPCTL_CNAK | EPCTL_SNAK | EPCTL_SD0PID | EPCTL_SD1PID | EPCTL_EPDIS | EPCTL_NAKSTS);
+        let mut ctl = v & !(EPCTL_CNAK
+            | EPCTL_SNAK
+            | EPCTL_SD0PID
+            | EPCTL_SD1PID
+            | EPCTL_EPDIS
+            | EPCTL_NAKSTS);
         if v & EPCTL_EPDIS != 0 {
             if ep.ctl & EPCTL_EPENA != 0 {
                 ep.int |= EPINT_EPDISD;
@@ -441,8 +450,14 @@ impl Dwc2 {
             let _ = DOEPINT_STPKTRX;
             return;
         }
-        self.rxq.push_back(RxEntry { status: Self::status_word(0, 8, PKT_SETUP_DATA), data: pkt.to_vec() });
-        self.rxq.push_back(RxEntry { status: Self::status_word(0, 0, PKT_SETUP_DONE), data: Vec::new() });
+        self.rxq.push_back(RxEntry {
+            status: Self::status_word(0, 8, PKT_SETUP_DATA),
+            data: pkt.to_vec(),
+        });
+        self.rxq.push_back(RxEntry {
+            status: Self::status_word(0, 0, PKT_SETUP_DONE),
+            data: Vec::new(),
+        });
     }
 
     /// IN 令牌
@@ -458,14 +473,20 @@ impl Dwc2 {
             return Handshake::Nak;
         }
         let mps = self.in_mps(ep);
-        let (size_mask, cnt_mask) = if ep == 0 { (0x7f, 0x3) } else { (0x7_ffff, 0x3ff) };
+        let (size_mask, cnt_mask) = if ep == 0 {
+            (0x7f, 0x3)
+        } else {
+            (0x7_ffff, 0x3ff)
+        };
         let tsiz = self.epin[ep].tsiz;
         let remain = (tsiz & size_mask) as usize;
         let pkts = (tsiz >> 19) & cnt_mask;
         let len = remain.min(mps);
         let data: Vec<u8> = if self.dma() {
             let a = self.epin[ep].dma;
-            let d = (0..len).map(|i| mem.rd8(a.wrapping_add(i as u32))).collect();
+            let d = (0..len)
+                .map(|i| mem.rd8(a.wrapping_add(i as u32)))
+                .collect();
             self.epin[ep].dma = a.wrapping_add(len as u32);
             d
         } else {
@@ -483,7 +504,9 @@ impl Dwc2 {
         };
         let left = pkts.saturating_sub(1);
         let e = &mut self.epin[ep];
-        e.tsiz = (tsiz & !(size_mask | (cnt_mask << 19))) | ((remain - len) as u32 & size_mask) | (left << 19);
+        e.tsiz = (tsiz & !(size_mask | (cnt_mask << 19)))
+            | ((remain - len) as u32 & size_mask)
+            | (left << 19);
         if left == 0 {
             e.ctl &= !EPCTL_EPENA;
             e.int |= EPINT_XFRC;
@@ -504,14 +527,20 @@ impl Dwc2 {
             return Handshake::Nak;
         }
         let mps = self.out_mps(ep);
-        let (size_mask, cnt_mask) = if ep == 0 { (0x7f, 0x3) } else { (0x7_ffff, 0x3ff) };
+        let (size_mask, cnt_mask) = if ep == 0 {
+            (0x7f, 0x3)
+        } else {
+            (0x7_ffff, 0x3ff)
+        };
         let tsiz = e.tsiz;
         let remain = (tsiz & size_mask) as usize;
         let pkts = (tsiz >> 19) & cnt_mask;
         let left = pkts.saturating_sub(1);
         let dma = self.dma();
         let e = &mut self.epout[ep];
-        e.tsiz = (tsiz & !(size_mask | (cnt_mask << 19))) | (remain.saturating_sub(data.len()) as u32 & size_mask) | (left << 19);
+        e.tsiz = (tsiz & !(size_mask | (cnt_mask << 19)))
+            | (remain.saturating_sub(data.len()) as u32 & size_mask)
+            | (left << 19);
         let done = left == 0 || data.len() < mps;
         if dma {
             for (i, b) in data.iter().enumerate() {
@@ -519,13 +548,19 @@ impl Dwc2 {
             }
             e.dma = e.dma.wrapping_add(data.len() as u32);
         } else {
-            self.rxq.push_back(RxEntry { status: Self::status_word(ep, data.len(), PKT_OUT_DATA), data: data.to_vec() });
+            self.rxq.push_back(RxEntry {
+                status: Self::status_word(ep, data.len(), PKT_OUT_DATA),
+                data: data.to_vec(),
+            });
         }
         if done {
             self.epout[ep].ctl &= !EPCTL_EPENA;
             self.epout[ep].int |= EPINT_XFRC;
             if !dma {
-                self.rxq.push_back(RxEntry { status: Self::status_word(ep, 0, PKT_OUT_DONE), data: Vec::new() });
+                self.rxq.push_back(RxEntry {
+                    status: Self::status_word(ep, 0, PKT_OUT_DONE),
+                    data: Vec::new(),
+                });
             }
         }
         Handshake::Ack(Vec::new())

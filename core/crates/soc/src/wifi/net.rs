@@ -29,7 +29,11 @@ pub struct Net {
 pub fn checksum(data: &[u8], init: u32) -> u16 {
     let mut s = init;
     for c in data.chunks(2) {
-        let w = if c.len() == 2 { u16::from_be_bytes([c[0], c[1]]) } else { (c[0] as u16) << 8 };
+        let w = if c.len() == 2 {
+            u16::from_be_bytes([c[0], c[1]])
+        } else {
+            (c[0] as u16) << 8
+        };
         s += w as u32;
     }
     while s >> 16 != 0 {
@@ -41,7 +45,20 @@ pub fn checksum(data: &[u8], init: u32) -> u16 {
 /// 构造 IPv4 包（TTL 64，无选项）
 pub fn ipv4(src: [u8; 4], dst: [u8; 4], proto: u8, payload: &[u8], id: u16) -> Vec<u8> {
     let len = 20 + payload.len();
-    let mut p = vec![0x45, 0, (len >> 8) as u8, len as u8, (id >> 8) as u8, id as u8, 0x40, 0, 64, proto, 0, 0];
+    let mut p = vec![
+        0x45,
+        0,
+        (len >> 8) as u8,
+        len as u8,
+        (id >> 8) as u8,
+        id as u8,
+        0x40,
+        0,
+        64,
+        proto,
+        0,
+        0,
+    ];
     p.extend_from_slice(&src);
     p.extend_from_slice(&dst);
     let c = checksum(&p, 0);
@@ -63,7 +80,16 @@ pub fn l4_checksum(src: [u8; 4], dst: [u8; 4], proto: u8, seg: &[u8]) -> u16 {
 
 pub fn udp(src: [u8; 4], dst: [u8; 4], sport: u16, dport: u16, data: &[u8]) -> Vec<u8> {
     let len = 8 + data.len();
-    let mut u = vec![(sport >> 8) as u8, sport as u8, (dport >> 8) as u8, dport as u8, (len >> 8) as u8, len as u8, 0, 0];
+    let mut u = vec![
+        (sport >> 8) as u8,
+        sport as u8,
+        (dport >> 8) as u8,
+        dport as u8,
+        (len >> 8) as u8,
+        len as u8,
+        0,
+        0,
+    ];
     u.extend_from_slice(data);
     let c = l4_checksum(src, dst, 17, &u);
     let c = if c == 0 { 0xffff } else { c };
@@ -81,9 +107,21 @@ fn ip_str(ip: &[u8; 4]) -> String {
 }
 
 impl Net {
-    fn reply_ip(&mut self, to: &Mac, dst_ip: [u8; 4], src_ip: [u8; 4], proto: u8, payload: &[u8]) -> Eth {
+    fn reply_ip(
+        &mut self,
+        to: &Mac,
+        dst_ip: [u8; 4],
+        src_ip: [u8; 4],
+        proto: u8,
+        payload: &[u8],
+    ) -> Eth {
         let id = self.tcp.next_ip_id();
-        Eth { dst: *to, src: GW_MAC, ethertype: ETH_IP, payload: ipv4(src_ip, dst_ip, proto, payload, id) }
+        Eth {
+            dst: *to,
+            src: GW_MAC,
+            ethertype: ETH_IP,
+            payload: ipv4(src_ip, dst_ip, proto, payload, id),
+        }
     }
 
     pub fn on_eth(&mut self, e: &Eth, now_us: u64) -> Vec<Eth> {
@@ -110,7 +148,12 @@ impl Net {
         r.extend_from_slice(&p[8..14]);
         r.extend_from_slice(&p[14..18]);
         self.log.push(format!("ARP {} 是 网关", ip_str(&target)));
-        vec![Eth { dst: e.src, src: GW_MAC, ethertype: ETH_ARP, payload: r }]
+        vec![Eth {
+            dst: e.src,
+            src: GW_MAC,
+            ethertype: ETH_ARP,
+            payload: r,
+        }]
     }
 
     fn ip(&mut self, e: &Eth, now_us: u64) -> Vec<Eth> {
@@ -124,7 +167,10 @@ impl Net {
         let body = &p[ihl..total];
         match proto {
             17 if body.len() >= 8 => {
-                let (sport, dport) = (u16::from_be_bytes([body[0], body[1]]), u16::from_be_bytes([body[2], body[3]]));
+                let (sport, dport) = (
+                    u16::from_be_bytes([body[0], body[1]]),
+                    u16::from_be_bytes([body[2], body[3]]),
+                );
                 let data = &body[8..];
                 if dport == 67 {
                     return self.dhcp(data);
@@ -229,6 +275,11 @@ impl Net {
         let bc = [255u8; 4];
         let u = udp(GW_IP, bc, 67, 68, &r);
         let id = self.tcp.next_ip_id();
-        vec![Eth { dst: [0xff; 6], src: GW_MAC, ethertype: ETH_IP, payload: ipv4(GW_IP, bc, 17, &u, id) }]
+        vec![Eth {
+            dst: [0xff; 6],
+            src: GW_MAC,
+            ethertype: ETH_IP,
+            payload: ipv4(GW_IP, bc, 17, &u, id),
+        }]
     }
 }

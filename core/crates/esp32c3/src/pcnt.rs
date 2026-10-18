@@ -169,9 +169,17 @@ impl Pcnt {
         }
         let c = self.conf[u][0];
         let sh = 16 + 8 * k as u32;
-        let act = if lv { (c >> (sh + 2)) & 3 } else { (c >> sh) & 3 };
+        let act = if lv {
+            (c >> (sh + 2)) & 3
+        } else {
+            (c >> sh) & 3
+        };
         let ctrl_high = self.inp[u][k + 2].level;
-        let lmode = if ctrl_high { (c >> (sh + 4)) & 3 } else { (c >> (sh + 6)) & 3 };
+        let lmode = if ctrl_high {
+            (c >> (sh + 4)) & 3
+        } else {
+            (c >> (sh + 6)) & 3
+        };
         let mut d: i32 = match act {
             1 => 1,
             2 => -1,
@@ -193,8 +201,14 @@ impl Pcnt {
         let old = self.cnt[u];
         let v = old.wrapping_add(d as i16);
         let c = self.conf[u][0];
-        let (h_lim, l_lim) = (self.conf[u][2] as u16 as i16, (self.conf[u][2] >> 16) as u16 as i16);
-        let (th0, th1) = (self.conf[u][1] as u16 as i16, (self.conf[u][1] >> 16) as u16 as i16);
+        let (h_lim, l_lim) = (
+            self.conf[u][2] as u16 as i16,
+            (self.conf[u][2] >> 16) as u16 as i16,
+        );
+        let (th0, th1) = (
+            self.conf[u][1] as u16 as i16,
+            (self.conf[u][1] >> 16) as u16 as i16,
+        );
         let mut ev = 0;
         let mut now = v;
         if c & (1 << 12) != 0 && h_lim > 0 && v == h_lim {
@@ -240,14 +254,19 @@ mod tests {
         // ch1：沿 = B，电平 = A；pos 加、neg 减；高电平保持、低电平反向
         let ch0 = 1 | (2 << 2) | (1 << 6); // hctrl = 0（保持）
         let ch1 = 2 | (1 << 2) | (1 << 6);
-        p.conf[0][0] = (1 << 10) | 100 | (1 << 11) | (1 << 12) | (1 << 13) | (ch0 << 16) | (ch1 << 24);
+        p.conf[0][0] =
+            (1 << 10) | 100 | (1 << 11) | (1 << 12) | (1 << 13) | (ch0 << 16) | (ch1 << 24);
         p.conf[0][2] = (h as u16 as u32) | ((l as u16 as u32) << 16);
         p.write(0x60, 0);
     }
 
     /// 顺时针一格：A 先落、B 再落、A 起、B 起
     fn turn(p: &mut Pcnt, t0: &mut u64, cw: bool) {
-        let seq: [(bool, bool); 4] = if cw { [(false, true), (false, false), (true, false), (true, true)] } else { [(true, false), (false, false), (false, true), (true, true)] };
+        let seq: [(bool, bool); 4] = if cw {
+            [(false, true), (false, false), (true, false), (true, true)]
+        } else {
+            [(true, false), (false, false), (false, true), (true, true)]
+        };
         for (a, b) in seq {
             *t0 += 10_000;
             let mut lv = [false; NSIG];
@@ -265,7 +284,13 @@ mod tests {
         let mut p = Pcnt::default();
         let mut t = 0;
         // 静止时 A、B 都是高（上拉）
-        p.feed(0, &[true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false]);
+        p.feed(
+            0,
+            &[
+                true, true, true, true, false, false, false, false, false, false, false, false,
+                false, false, false, false,
+            ],
+        );
         p.update(1000);
         quad(&mut p, 8, -8);
         turn(&mut p, &mut t, true);

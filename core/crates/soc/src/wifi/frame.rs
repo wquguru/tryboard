@@ -32,7 +32,10 @@ pub fn crc32(data: &[u8]) -> u32 {
 }
 
 pub fn mac_str(m: &Mac) -> String {
-    m.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(":")
+    m.iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<Vec<_>>()
+        .join(":")
 }
 
 /// 解析出来的帧头
@@ -60,7 +63,15 @@ pub fn parse(f: &[u8]) -> Option<Hdr> {
     let fc0 = f[0];
     let ctrl = fc0 & 0x0c == 0x04;
     if ctrl {
-        return Some(Hdr { fc0, fc1: f[1], a1: mac_at(f, 4), a2: [0; 6], a3: [0; 6], seq: 0, body: f.len() });
+        return Some(Hdr {
+            fc0,
+            fc1: f[1],
+            a1: mac_at(f, 4),
+            a2: [0; 6],
+            a3: [0; 6],
+            seq: 0,
+            body: f.len(),
+        });
     }
     if f.len() < 24 {
         return None;

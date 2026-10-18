@@ -75,7 +75,7 @@ fn level_interrupt_follows_line() {
     assert_eq!(c.pc, 0x100 + vec::LEVEL[2]);
     assert_eq!(c.read_sr(sr::EPC2), 0x800);
     assert_eq!(c.ps() & 0x1f, 0x12); // INTLEVEL=2、EXCM=1
-    // 电平型：线撤掉挂起位就没了，INTCLEAR 清不掉
+                                     // 电平型：线撤掉挂起位就没了，INTCLEAR 清不掉
     c.write_sr(sr::INTCLEAR, 1 << 19);
     assert_eq!(c.read_sr(sr::INTERRUPT), 1 << 19);
     c.set_irq_lines(0);
@@ -127,7 +127,7 @@ fn waiti_fast_forward_to_ccompare() {
     assert_eq!(c.step(&mut ram), Exit::Normal);
     assert_eq!(c.pc, 0x100 + vec::KERNEL);
     assert_eq!(c.read_sr(sr::EPC1), 0x803); // 返回到 WAITI 之后
-    // 写 CCOMPARE0 清定时器挂起位
+                                            // 写 CCOMPARE0 清定时器挂起位
     c.write_sr(sr::CCOMPARE0, 5);
     assert_eq!(c.read_sr(sr::INTERRUPT) & (1 << 6), 0);
 }

@@ -656,7 +656,10 @@ mod tests {
     /// 5 V 器件（HC-SR04）从 5V 轨取电：USB 电流多 15 mA，3V3 支路不变
     #[test]
     fn hcsr04_draws_from_5v() {
-        let act = Activity { busy: 1.0, ..Default::default() };
+        let act = Activity {
+            busy: 1.0,
+            ..Default::default()
+        };
         let mut a = Board::new(ChipKind::S3);
         let mut b = Board::new(ChipKind::S3);
         b.add_module("hcsr04");

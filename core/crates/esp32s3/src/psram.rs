@@ -116,7 +116,10 @@ mod tests {
     use super::*;
 
     fn cmd(regs: &mut [u32], c: u32, addr: u32, mosi_bits: u32, miso_bits: u32) {
-        regs[USER] = (1 << 31) | (1 << 30) | if mosi_bits > 0 { 1 << 27 } else { 0 } | if miso_bits > 0 { 1 << 28 } else { 0 };
+        regs[USER] = (1 << 31)
+            | (1 << 30)
+            | if mosi_bits > 0 { 1 << 27 } else { 0 }
+            | if miso_bits > 0 { 1 << 28 } else { 0 };
         regs[USER2] = (15 << 28) | c;
         regs[ADDR] = addr;
         regs[MOSI_DLEN] = mosi_bits.saturating_sub(1);

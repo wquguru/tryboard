@@ -39,8 +39,30 @@ pub struct RmtLayout {
 }
 
 impl RmtLayout {
-    pub const C3: RmtLayout = RmtLayout { ntx: 2, nrx: 2, ram_off: 0x400, sig_out0: 51, int_mask: 0x3fff, rx_mem_shift: 23, rx_mem_mask: 7, rx_end_bit: 2, rx_err_bit: 6, rx_thr_bit: 10 };
-    pub const S3: RmtLayout = RmtLayout { ntx: 4, nrx: 4, ram_off: 0x800, sig_out0: 81, int_mask: 0x3fff_ffff, rx_mem_shift: 24, rx_mem_mask: 15, rx_end_bit: 16, rx_err_bit: 20, rx_thr_bit: 24 };
+    pub const C3: RmtLayout = RmtLayout {
+        ntx: 2,
+        nrx: 2,
+        ram_off: 0x400,
+        sig_out0: 51,
+        int_mask: 0x3fff,
+        rx_mem_shift: 23,
+        rx_mem_mask: 7,
+        rx_end_bit: 2,
+        rx_err_bit: 6,
+        rx_thr_bit: 10,
+    };
+    pub const S3: RmtLayout = RmtLayout {
+        ntx: 4,
+        nrx: 4,
+        ram_off: 0x800,
+        sig_out0: 81,
+        int_mask: 0x3fff_ffff,
+        rx_mem_shift: 24,
+        rx_mem_mask: 15,
+        rx_end_bit: 16,
+        rx_err_bit: 20,
+        rx_thr_bit: 24,
+    };
     /// 第 i 个接收通道的 CONF0（CONF1 在 +4）
     pub fn rx_conf0(&self, i: usize) -> u32 {
         self.conf0() + 4 * self.ntx as u32 + 8 * i as u32
@@ -192,7 +214,11 @@ impl Rmt {
     pub fn read(&self, off: u32) -> u32 {
         let l = self.layout;
         if off >= l.ram_off {
-            return self.ram.get(((off - l.ram_off) / 4) as usize).copied().unwrap_or(0);
+            return self
+                .ram
+                .get(((off - l.ram_off) / 4) as usize)
+                .copied()
+                .unwrap_or(0);
         }
         let st = l.status();
         let ir = l.int_raw();
@@ -332,7 +358,9 @@ impl Rmt {
             };
             if dur != 0 {
                 self.emit(ch, t, lv);
-                let cyc = (dur as u64 * self.tick_cycles_x256(ch)).div_ceil(256).max(1);
+                let cyc = (dur as u64 * self.tick_cycles_x256(ch))
+                    .div_ceil(256)
+                    .max(1);
                 self.tx[ch].half_end = t + cyc;
                 return;
             }
@@ -478,7 +506,10 @@ impl Rmt {
         let th = self.rx_filter(i);
         loop {
             let due = self.rx[i].filt.due(th).filter(|d| *d <= now);
-            let idle_at = self.rx[i].started.then(|| self.rx[i].seg_t + self.rx_idle(i)).filter(|e| *e <= now);
+            let idle_at = self.rx[i]
+                .started
+                .then(|| self.rx[i].seg_t + self.rx_idle(i))
+                .filter(|e| *e <= now);
             match (due, idle_at) {
                 (Some(d), e) if e.is_none_or(|e| d < e) => {
                     if let Some((t, lv)) = self.rx[i].filt.flush(now, th) {
@@ -599,7 +630,11 @@ impl Ws2812 {
     fn commit(&mut self) {
         let mut rgb = Vec::with_capacity(self.bits.len() / 24);
         for px in self.bits.as_chunks::<24>().0 {
-            let byte = |i: usize| px[i * 8..i * 8 + 8].iter().fold(0u8, |a, b| (a << 1) | *b as u8);
+            let byte = |i: usize| {
+                px[i * 8..i * 8 + 8]
+                    .iter()
+                    .fold(0u8, |a, b| (a << 1) | *b as u8)
+            };
             rgb.push([byte(1), byte(0), byte(2)]);
         }
         self.bits.clear();
@@ -628,7 +663,11 @@ mod tests {
         let mut i = 0;
         for byte in color {
             for b in (0..8).rev() {
-                r.ram[i] = if byte >> b & 1 != 0 { item(8, 4) } else { item(4, 8) };
+                r.ram[i] = if byte >> b & 1 != 0 {
+                    item(8, 4)
+                } else {
+                    item(4, 8)
+                };
                 i += 1;
             }
         }
@@ -670,9 +709,15 @@ mod tests {
     fn s3_layout_offsets_and_tx() {
         // 与 soc/esp32s3/register/soc/rmt_reg.h 一致
         let l = RmtLayout::S3;
-        assert_eq!((l.conf0(), l.status(), l.int_raw(), l.tx_lim(), l.sys_conf()), (0x20, 0x50, 0x70, 0xa0, 0xc0));
+        assert_eq!(
+            (l.conf0(), l.status(), l.int_raw(), l.tx_lim(), l.sys_conf()),
+            (0x20, 0x50, 0x70, 0xa0, 0xc0)
+        );
         let c = RmtLayout::C3;
-        assert_eq!((c.conf0(), c.status(), c.int_raw(), c.tx_lim(), c.sys_conf()), (0x10, 0x28, 0x38, 0x58, 0x68));
+        assert_eq!(
+            (c.conf0(), c.status(), c.int_raw(), c.tx_lim(), c.sys_conf()),
+            (0x10, 0x28, 0x38, 0x58, 0x68)
+        );
         // S3 通道 2：RAM 第 3 块
         let mut r = Rmt::new(l);
         r.ram[2 * BLOCK_WORDS] = item(10, 10);
@@ -739,7 +784,15 @@ mod tests {
         let base = 3 * BLOCK_WORDS;
         assert_eq!(r.ram[base], 90 | 1 << 15 | 40 << 16);
         assert_eq!(r.ram[base + 1], 30 | 1 << 15 | 70 << 16);
-        assert_eq!(r.ram[base + 2], 20 | 1 << 15, "最后一段高电平 + 结束（低电平时长 0）");
-        assert_eq!(r.read(0x34) & 0x1ff, 3 * 48 + 3, "CH3STATUS（rmt_reg.h 0x34）");
+        assert_eq!(
+            r.ram[base + 2],
+            20 | 1 << 15,
+            "最后一段高电平 + 结束（低电平时长 0）"
+        );
+        assert_eq!(
+            r.read(0x34) & 0x1ff,
+            3 * 48 + 3,
+            "CH3STATUS（rmt_reg.h 0x34）"
+        );
     }
 }

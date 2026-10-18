@@ -113,11 +113,35 @@ impl Machine {
         match Chip::from_image(&flash) {
             Some(Chip::Esp32s3) => {
                 let (m, a) = Esp32s3::boot(rom, flash)?;
-                Ok((Machine { hw: Hw::S3(m), elec: Board::new(ChipKind::S3), touch_int: None, harness: Harness::default() }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
+                Ok((
+                    Machine {
+                        hw: Hw::S3(m),
+                        elec: Board::new(ChipKind::S3),
+                        touch_int: None,
+                        harness: Harness::default(),
+                    },
+                    BootInfo {
+                        offset: a.offset,
+                        entry: a.entry,
+                        segments: a.segments.len(),
+                    },
+                ))
             }
             Some(Chip::Esp32c3) | None => {
                 let (m, a) = Esp32c3::boot(rom, flash)?;
-                Ok((Machine { hw: Hw::C3(m), elec: Board::new(ChipKind::C3), touch_int: None, harness: Harness::default() }, BootInfo { offset: a.offset, entry: a.entry, segments: a.segments.len() }))
+                Ok((
+                    Machine {
+                        hw: Hw::C3(m),
+                        elec: Board::new(ChipKind::C3),
+                        touch_int: None,
+                        harness: Harness::default(),
+                    },
+                    BootInfo {
+                        offset: a.offset,
+                        entry: a.entry,
+                        segments: a.segments.len(),
+                    },
+                ))
             }
         }
     }
@@ -658,7 +682,9 @@ impl Machine {
     /// 接一个旋转编码器（P2-01）：A / B 两相与可选的按键脚；3V3 供电，电流进供电网络
     pub fn encoder_attach(&mut self, a: u32, b: u32, sw: Option<u32>) {
         let now = self.cycles();
-        self.pins().encoders.push(tryboard_esp32c3::devices::pins::Encoder::new(a, b, sw, now));
+        self.pins()
+            .encoders
+            .push(tryboard_esp32c3::devices::pins::Encoder::new(a, b, sw, now));
         self.elec.add_module("encoder");
         self.pins_kick();
     }
@@ -689,7 +715,11 @@ impl Machine {
     /// 接一个 HC-SR04（P2-04）：Trig 由芯片驱动，Echo 由模块驱动；5 V 供电，电流进 5V 轨
     pub fn sonar_attach(&mut self, trig: u32, echo: u32) {
         let now = self.cycles();
-        self.pins().sonars.push(tryboard_esp32c3::devices::pins::Hcsr04::new(trig, echo, now));
+        self.pins()
+            .sonars
+            .push(tryboard_esp32c3::devices::pins::Hcsr04::new(
+                trig, echo, now,
+            ));
         self.elec.add_module("hcsr04");
         self.pins_kick();
     }
@@ -703,7 +733,10 @@ impl Machine {
 
     /// 超声波的统计（触发次数, 回波次数, 最近回波宽度 µs）
     pub fn sonar_stats(&mut self) -> Option<(u64, u64, f64)> {
-        self.pins().sonars.first().map(|s| (s.pings, s.echoes, s.last_us))
+        self.pins()
+            .sonars
+            .first()
+            .map(|s| (s.pings, s.echoes, s.last_us))
     }
 
     /// 脉冲计数器单元 u 的当前计数（只有 S3 有 PCNT）
@@ -858,10 +891,20 @@ pub use tryboard_esp32c3::devices::imu::Pose as ImuPose;
 
 /// 脚本动作 `imu=pitch,roll,yaw[,dpitch,droll,dyaw]`（度、°/s）的参数部分
 pub fn parse_imu(s: &str) -> Option<Pose> {
-    let v: Vec<f64> = s.split(',').map(|x| x.trim().parse().ok()).collect::<Option<_>>()?;
+    let v: Vec<f64> = s
+        .split(',')
+        .map(|x| x.trim().parse().ok())
+        .collect::<Option<_>>()?;
     match v.as_slice() {
         [p, r, y] => Some(Pose::new(*p, *r, *y)),
-        [p, r, y, dp, dr, dy] => Some(Pose { pitch: *p, roll: *r, yaw: *y, dpitch: *dp, droll: *dr, dyaw: *dy }),
+        [p, r, y, dp, dr, dy] => Some(Pose {
+            pitch: *p,
+            roll: *r,
+            yaw: *y,
+            dpitch: *dp,
+            droll: *dr,
+            dyaw: *dy,
+        }),
         _ => None,
     }
 }
@@ -870,7 +913,12 @@ pub fn parse_imu(s: &str) -> Option<Pose> {
 /// 具体屏多大由器件模型自己截（CST816S 的圆屏 240×240）
 pub fn parse_touch(s: &str) -> Option<(u16, u16)> {
     let (x, y) = s.split_once(',')?;
-    let f = |t: &str| t.trim().parse::<f64>().ok().map(|v| v.round().clamp(0.0, 4095.0) as u16);
+    let f = |t: &str| {
+        t.trim()
+            .parse::<f64>()
+            .ok()
+            .map(|v| v.round().clamp(0.0, 4095.0) as u16)
+    };
     Some((f(x)?, f(y)?))
 }
 pub use tryboard_elec::board::Power as PowerMode;
@@ -911,13 +959,18 @@ pub fn harness_wifi_line(m: &Machine) -> Option<String> {
             format!("{} {r} dBm{note}", w.aps[i].ssid)
         })
         .collect();
-    Some(format!("[tryboard] 天线遮挡 {db} dB：{}（估算，必须上真机）", aps.join("、")))
+    Some(format!(
+        "[tryboard] 天线遮挡 {db} dB：{}（估算，必须上真机）",
+        aps.join("、")
+    ))
 }
 
 /// 关卡验收要看的 USB 虚拟主机结论（P2-12）：主机状态 + 键盘打出的字。
 /// 命令行 `--usb-log` 打印的就是这两行（另有枚举日志等），网页 wasm tb_usb_report 同一段文字，指纹两边一致
 pub fn usb_report_lines(m: &Machine) -> String {
-    let Some(u) = m.usb() else { return String::new() };
+    let Some(u) = m.usb() else {
+        return String::new();
+    };
     let h = &u.host;
     let mut o = format!("[tryboard] USB 主机：{}\n", h.state_name());
     if !h.typed.is_empty() {

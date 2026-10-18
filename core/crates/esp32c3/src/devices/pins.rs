@@ -43,7 +43,18 @@ impl Encoder {
         if let Some(s) = sw {
             out.push((now, s, -1));
         }
-        Encoder { a, b, sw, position: 0, pressed: false, queue: VecDeque::new(), dir: 0, phase: 0, next_t: now, out }
+        Encoder {
+            a,
+            b,
+            sw,
+            position: 0,
+            pressed: false,
+            queue: VecDeque::new(),
+            dir: 0,
+            phase: 0,
+            next_t: now,
+            out,
+        }
     }
 
     /// 转 steps 格（正 = 顺时针），排在已经排着的后面
@@ -91,7 +102,11 @@ impl Encoder {
                 return self.next_t;
             }
             let t = self.next_t;
-            let (pa, pb) = if self.phase == 0 { (true, true) } else { Self::levels(self.dir, self.phase - 1) };
+            let (pa, pb) = if self.phase == 0 {
+                (true, true)
+            } else {
+                Self::levels(self.dir, self.phase - 1)
+            };
             let (a, b) = Self::levels(self.dir, self.phase);
             if a != pa {
                 out.push((t, self.a, a as i8));
@@ -140,13 +155,26 @@ pub struct Hcsr04 {
 
 impl Hcsr04 {
     pub fn new(trig: u32, echo: u32, now: u64) -> Hcsr04 {
-        Hcsr04 { trig, echo, distance_cm: Some(100.0), trig_high: None, pulse: None, echo_high: false, pings: 0, echoes: 0, last_us: 0.0, out: vec![(now, echo, 0)] }
+        Hcsr04 {
+            trig,
+            echo,
+            distance_cm: Some(100.0),
+            trig_high: None,
+            pulse: None,
+            echo_high: false,
+            pings: 0,
+            echoes: 0,
+            last_us: 0.0,
+            out: vec![(now, echo, 0)],
+        }
     }
 
     /// 这个距离对应的 Echo 高电平宽度（µs）
     pub fn echo_us(d: Option<f64>) -> f64 {
         match d {
-            Some(cm) if (RANGE_CM.0..=RANGE_CM.1).contains(&cm) => 2.0 * cm / 100.0 / SOUND_MPS * 1e6,
+            Some(cm) if (RANGE_CM.0..=RANGE_CM.1).contains(&cm) => {
+                2.0 * cm / 100.0 / SOUND_MPS * 1e6
+            }
             Some(cm) if cm < RANGE_CM.0 => 2.0 * RANGE_CM.0 / 100.0 / SOUND_MPS * 1e6,
             _ => ECHO_TIMEOUT_US,
         }
@@ -175,7 +203,9 @@ impl Hcsr04 {
 
     pub fn poll(&mut self, now: u64, out: &mut Vec<Drive>) -> u64 {
         out.append(&mut self.out);
-        let Some((rise, fall)) = self.pulse else { return u64::MAX };
+        let Some((rise, fall)) = self.pulse else {
+            return u64::MAX;
+        };
         if !self.echo_high {
             if rise > now {
                 return rise;
@@ -245,7 +275,19 @@ mod tests {
         }
         // 顺时针：A 落、B 落、A 起、B 起；逆时针：B 落、A 落、B 起、A 起
         let seq: Vec<(u32, i8)> = out.iter().map(|d| (d.1, d.2)).collect();
-        assert_eq!(seq, vec![(6, 0), (7, 0), (6, 1), (7, 1), (7, 0), (6, 0), (7, 1), (6, 1)]);
+        assert_eq!(
+            seq,
+            vec![
+                (6, 0),
+                (7, 0),
+                (6, 1),
+                (7, 1),
+                (7, 0),
+                (6, 0),
+                (7, 1),
+                (6, 1)
+            ]
+        );
         assert_eq!(out[1].0 - out[0].0, ENC_EDGE_CYCLES);
         assert_eq!(e.position, 0);
     }

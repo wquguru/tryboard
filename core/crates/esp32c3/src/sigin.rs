@@ -15,7 +15,11 @@ pub struct Deglitch {
 
 impl Deglitch {
     pub fn new(level: bool) -> Deglitch {
-        Deglitch { level, raw: level, raw_t: 0 }
+        Deglitch {
+            level,
+            raw: level,
+            raw_t: 0,
+        }
     }
 
     /// 挂起的跳变何时生效（没有挂起的为 None）

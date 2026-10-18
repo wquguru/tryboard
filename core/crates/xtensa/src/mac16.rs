@@ -19,7 +19,15 @@ impl Cpu {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn exec_mac16<B: Bus>(&mut self, bus: &mut B, t: u32, s: u32, r: u32, op1: u32, op2: u32) -> Result<Flow, Exit> {
+    pub(crate) fn exec_mac16<B: Bus>(
+        &mut self,
+        bus: &mut B,
+        t: u32,
+        s: u32,
+        r: u32,
+        op1: u32,
+        op2: u32,
+    ) -> Result<Flow, Exit> {
         let m = |c: &Cpu, i: u32| c.sr[(sr::M0 + i) as usize];
         // 操作数：x 来自 as 或 m0/m1（r 的位 2），y 来自 at 或 m2/m3（t 的位 2）
         let (x, y, load) = match op2 {
@@ -28,7 +36,11 @@ impl Cpu {
             6 => (m(self, (r >> 2) & 1), self.a(t), None),
             2 => (m(self, (r >> 2) & 1), m(self, 2 + ((t >> 2) & 1)), None),
             // 乘累加 + 并行装载：0/1 = DD 的 LDINC/LDDEC，4/5 = DA 的 LDINC/LDDEC
-            0 | 1 => (m(self, (r >> 2) & 1), m(self, 2 + ((t >> 2) & 1)), Some(op2 & 1 != 0)),
+            0 | 1 => (
+                m(self, (r >> 2) & 1),
+                m(self, 2 + ((t >> 2) & 1)),
+                Some(op2 & 1 != 0),
+            ),
             4 | 5 => (m(self, (r >> 2) & 1), self.a(t), Some(op2 & 1 != 0)),
             8 | 9 => {
                 // LDINC / LDDEC mw, as
@@ -68,7 +80,11 @@ impl Cpu {
     }
 
     fn mac16_load<B: Bus>(&mut self, bus: &mut B, w: u32, s: u32, dec: bool) -> Result<Flow, Exit> {
-        let a = if dec { self.a(s).wrapping_sub(4) } else { self.a(s).wrapping_add(4) };
+        let a = if dec {
+            self.a(s).wrapping_sub(4)
+        } else {
+            self.a(s).wrapping_add(4)
+        };
         let Some(v) = self.load(bus, a, 4) else {
             return Ok(Flow::Done);
         };
@@ -87,7 +103,9 @@ mod tests {
         fn load(&mut self, a: u32, s: u32) -> Result<u32, BusFault> {
             let o = a as usize;
             let b = self.0.get(o..o + s as usize).ok_or(BusFault)?;
-            Ok(b.iter().enumerate().fold(0, |v, (i, x)| v | (*x as u32) << (8 * i)))
+            Ok(b.iter()
+                .enumerate()
+                .fold(0, |v, (i, x)| v | (*x as u32) << (8 * i)))
         }
         fn store(&mut self, _: u32, _: u32, _: u32) -> Result<(), BusFault> {
             Ok(())

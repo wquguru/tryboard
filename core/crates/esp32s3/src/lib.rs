@@ -15,12 +15,12 @@ use std::collections::HashMap;
 use tryboard_esp32c3::crypto_hw::{self, AesHw, ShaHw};
 use tryboard_esp32c3::devices::audio::{self, Audio, PortIo};
 use tryboard_esp32c3::devices::gc9a01::Gc9a01;
+use tryboard_esp32c3::devices::pins::PinDevices;
 use tryboard_esp32c3::gdma::{DmaMem, Gdma, GdmaLayout};
 use tryboard_esp32c3::gpspi::GpSpi;
 use tryboard_esp32c3::i2c::I2c;
 use tryboard_esp32c3::i2s::I2s;
 use tryboard_esp32c3::iotrace::IoTrace;
-use tryboard_esp32c3::devices::pins::PinDevices;
 use tryboard_esp32c3::ledc::Ledc;
 use tryboard_esp32c3::pcnt::{self as pcnt_mod, Pcnt};
 use tryboard_esp32c3::periph::{Systimer, Timg, Uart};
@@ -1413,10 +1413,18 @@ mod tests {
         }
         let ch0 = 1 | (2 << 2) | (1 << 6);
         let ch1 = 2 | (1 << 2) | (1 << 6);
-        w(&mut b, 0x6001_7000, (1 << 10) | 80 | (7 << 11) | (ch0 << 16) | (ch1 << 24));
+        w(
+            &mut b,
+            0x6001_7000,
+            (1 << 10) | 80 | (7 << 11) | (ch0 << 16) | (ch1 << 24),
+        );
         w(&mut b, 0x6001_7060, 0);
         let now = b.now;
-        b.pins.encoders.push(tryboard_esp32c3::devices::pins::Encoder::new(6, 7, None, now));
+        b.pins
+            .encoders
+            .push(tryboard_esp32c3::devices::pins::Encoder::new(
+                6, 7, None, now,
+            ));
         let run = |b: &mut SocBus, until: u64| {
             while b.now < until {
                 b.update();
@@ -1437,7 +1445,9 @@ mod tests {
         w(&mut b, 0x6001_6030, 80 | (25000 << 8) | (1 << 24));
         w(&mut b, 0x6001_6034, 1 | 2 | (1 << 3));
         let now = b.now;
-        b.pins.sonars.push(tryboard_esp32c3::devices::pins::Hcsr04::new(17, 18, now));
+        b.pins
+            .sonars
+            .push(tryboard_esp32c3::devices::pins::Hcsr04::new(17, 18, now));
         b.pins.sonars[0].distance_cm = Some(40.0);
         // Trig：GPIO17 输出 12 µs 高脉冲
         w(&mut b, 0x6000_4020, 1 << 17);
@@ -1447,7 +1457,10 @@ mod tests {
         w(&mut b, 0x6000_400c, 1 << 17);
         let t = b.now + CPU_HZ / 20;
         run(&mut b, t);
-        assert!(Bus::load(&mut b, 0x6001_6070, 4).unwrap() & (1 << 16) != 0, "RX_END");
+        assert!(
+            Bus::load(&mut b, 0x6001_6070, 4).unwrap() & (1 << 16) != 0,
+            "RX_END"
+        );
         let item = Bus::load(&mut b, 0x6001_6800 + 4 * 4 * 48, 4).unwrap();
         // 40 cm → 2332.4 µs
         assert_eq!(item & 0x7fff, 2332);

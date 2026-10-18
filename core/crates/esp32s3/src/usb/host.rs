@@ -159,7 +159,12 @@ fn utf16(d: &[u8]) -> String {
         return String::new();
     }
     let n = (d[0] as usize).min(d.len());
-    let w: Vec<u16> = d[2..n].as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c)).collect();
+    let w: Vec<u16> = d[2..n]
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
+        .collect();
     String::from_utf16_lossy(&w)
 }
 
@@ -178,17 +183,83 @@ fn keycode_char(k: u8, shift: bool) -> Option<char> {
         0x28 => '\n',
         0x2b => '\t',
         0x2c => ' ',
-        0x2d => if shift { '_' } else { '-' },
-        0x2e => if shift { '+' } else { '=' },
-        0x2f => if shift { '{' } else { '[' },
-        0x30 => if shift { '}' } else { ']' },
-        0x31 => if shift { '|' } else { '\\' },
-        0x33 => if shift { ':' } else { ';' },
-        0x34 => if shift { '"' } else { '\'' },
-        0x35 => if shift { '~' } else { '`' },
-        0x36 => if shift { '<' } else { ',' },
-        0x37 => if shift { '>' } else { '.' },
-        0x38 => if shift { '?' } else { '/' },
+        0x2d => {
+            if shift {
+                '_'
+            } else {
+                '-'
+            }
+        }
+        0x2e => {
+            if shift {
+                '+'
+            } else {
+                '='
+            }
+        }
+        0x2f => {
+            if shift {
+                '{'
+            } else {
+                '['
+            }
+        }
+        0x30 => {
+            if shift {
+                '}'
+            } else {
+                ']'
+            }
+        }
+        0x31 => {
+            if shift {
+                '|'
+            } else {
+                '\\'
+            }
+        }
+        0x33 => {
+            if shift {
+                ':'
+            } else {
+                ';'
+            }
+        }
+        0x34 => {
+            if shift {
+                '"'
+            } else {
+                '\''
+            }
+        }
+        0x35 => {
+            if shift {
+                '~'
+            } else {
+                '`'
+            }
+        }
+        0x36 => {
+            if shift {
+                '<'
+            } else {
+                ','
+            }
+        }
+        0x37 => {
+            if shift {
+                '>'
+            } else {
+                '.'
+            }
+        }
+        0x38 => {
+            if shift {
+                '?'
+            } else {
+                '/'
+            }
+        }
         _ => return None,
     };
     Some(c)
@@ -227,7 +298,7 @@ fn parse_report_desc(d: &[u8]) -> Vec<(u8, HidKind)> {
                 }
                 depth += 1;
             }
-            0xc0 => depth -= 1, // End Collection
+            0xc0 => depth -= 1,               // End Collection
             0x84 => out.push((v as u8, app)), // Report ID
             _ => {}
         }
@@ -265,7 +336,10 @@ impl Host {
         if !dev.connected() {
             if self.state != State::Detached {
                 self.say("设备断开".into());
-                *self = Host { log: std::mem::take(&mut self.log), ..Default::default() };
+                *self = Host {
+                    log: std::mem::take(&mut self.log),
+                    ..Default::default()
+                };
             }
             return now_us + 1000;
         }
@@ -318,13 +392,34 @@ impl Host {
             Req::Str(i) => (setup_pkt(0x80, 6, 0x0300 | i as u16, 0x0409, 255), vec![]),
             Req::SetConfig => (setup_pkt(0x00, 9, 1, 0, 0), vec![]),
             Req::HidIdle(k) => (setup_pkt(0x21, 0x0a, 0, self.hid[k].itf as u16, 0), vec![]),
-            Req::HidReport(k) => (setup_pkt(0x81, 6, 0x2200, self.hid[k].itf as u16, self.hid[k].report_len), vec![]),
+            Req::HidReport(k) => (
+                setup_pkt(
+                    0x81,
+                    6,
+                    0x2200,
+                    self.hid[k].itf as u16,
+                    self.hid[k].report_len,
+                ),
+                vec![],
+            ),
             // 115200 8N1
-            Req::CdcLine(k) => (setup_pkt(0x21, 0x20, 0, self.cdc[k].comm_itf as u16, 7), vec![0x00, 0xc2, 0x01, 0x00, 0, 0, 8]),
+            Req::CdcLine(k) => (
+                setup_pkt(0x21, 0x20, 0, self.cdc[k].comm_itf as u16, 7),
+                vec![0x00, 0xc2, 0x01, 0x00, 0, 0, 8],
+            ),
             // DTR | RTS：终端程序打开了串口
-            Req::CdcCtrl(k) => (setup_pkt(0x21, 0x22, 3, self.cdc[k].comm_itf as u16, 0), vec![]),
+            Req::CdcCtrl(k) => (
+                setup_pkt(0x21, 0x22, 3, self.cdc[k].comm_itf as u16, 0),
+                vec![],
+            ),
         };
-        self.ctrl = Some(Ctrl { setup, out, got: Vec::new(), stage: Stage::Setup, what });
+        self.ctrl = Some(Ctrl {
+            setup,
+            out,
+            got: Vec::new(),
+            stage: Stage::Setup,
+            what,
+        });
         self.naks = 0;
     }
 
@@ -370,7 +465,13 @@ impl Host {
                     let end = (off + 64).min(c.out.len());
                     let chunk = c.out[off..end].to_vec();
                     match dev.token_out(0, &chunk, mem) {
-                        Handshake::Ack(_) => c.stage = if end >= c.out.len() { Stage::StatusIn } else { Stage::DataOut(end) },
+                        Handshake::Ack(_) => {
+                            c.stage = if end >= c.out.len() {
+                                Stage::StatusIn
+                            } else {
+                                Stage::DataOut(end)
+                            }
+                        }
                         Handshake::Nak => return self.nak(),
                         Handshake::Stall => return self.stalled(),
                     }
@@ -415,7 +516,11 @@ impl Host {
         match c.what {
             Req::DevDesc8 => {
                 self.info.ep0_mps = *d.get(7).unwrap_or(&64);
-                self.say(format!("GET_DESCRIPTOR(设备) 前 {} 字节：EP0 最大包长 {}", d.len(), self.info.ep0_mps));
+                self.say(format!(
+                    "GET_DESCRIPTOR(设备) 前 {} 字节：EP0 最大包长 {}",
+                    d.len(),
+                    self.info.ep0_mps
+                ));
                 self.queue.push(Req::SetAddress);
             }
             Req::SetAddress => {
@@ -500,18 +605,37 @@ impl Host {
                             HidKind::Mouse => "鼠标",
                             HidKind::Other => "其他",
                         };
-                        if *id == 0 { n.to_string() } else { format!("报告 {id}={n}") }
+                        if *id == 0 {
+                            n.to_string()
+                        } else {
+                            format!("报告 {id}={n}")
+                        }
                     })
                     .collect();
-                self.say(format!("HID 报告描述符 {} 字节：{}", d.len(), desc.join("，")));
+                self.say(format!(
+                    "HID 报告描述符 {} 字节：{}",
+                    d.len(),
+                    desc.join("，")
+                ));
                 let h = &mut self.hid[k];
                 h.ids = ids;
                 if h.ids.is_empty() {
-                    h.ids.push((0, if h.protocol == 1 { HidKind::Keyboard } else if h.protocol == 2 { HidKind::Mouse } else { HidKind::Other }));
+                    h.ids.push((
+                        0,
+                        if h.protocol == 1 {
+                            HidKind::Keyboard
+                        } else if h.protocol == 2 {
+                            HidKind::Mouse
+                        } else {
+                            HidKind::Other
+                        },
+                    ));
                 }
             }
             Req::CdcLine(_) => self.say("CDC SET_LINE_CODING 115200 8N1".into()),
-            Req::CdcCtrl(_) => self.say("CDC SET_CONTROL_LINE_STATE DTR=1 RTS=1（终端已打开）".into()),
+            Req::CdcCtrl(_) => {
+                self.say("CDC SET_CONTROL_LINE_STATE DTR=1 RTS=1（终端已打开）".into())
+            }
         }
     }
 
@@ -551,7 +675,15 @@ impl Host {
                     };
                     self.info.interfaces.push(format!("接口 {itf_num}：{name}"));
                     if itf_class == 3 {
-                        pending_hid = Some(HidItf { itf: itf_num, ep_in: 0, interval: 10, report_len: 0, protocol: itf_proto, ids: Vec::new(), next_poll: 0 });
+                        pending_hid = Some(HidItf {
+                            itf: itf_num,
+                            ep_in: 0,
+                            interval: 10,
+                            report_len: 0,
+                            protocol: itf_proto,
+                            ids: Vec::new(),
+                            next_poll: 0,
+                        });
                     }
                 }
                 0x21 if itf_class == 3 && x.len() >= 9 => {
@@ -586,11 +718,19 @@ impl Host {
         }
         if let Some(comm) = cdc_comm {
             if cdc_eps.0 != 0 && cdc_eps.1 != 0 {
-                self.cdc.push(CdcItf { comm_itf: comm, ep_in: cdc_eps.0, ep_out: cdc_eps.1, mps_out: cdc_eps.2.max(8) });
+                self.cdc.push(CdcItf {
+                    comm_itf: comm,
+                    ep_in: cdc_eps.0,
+                    ep_out: cdc_eps.1,
+                    mps_out: cdc_eps.2.max(8),
+                });
             }
         }
         let total = d.len();
-        self.say(format!("配置描述符 {total} 字节，{} 个接口", self.info.interfaces.len()));
+        self.say(format!(
+            "配置描述符 {total} 字节，{} 个接口",
+            self.info.interfaces.len()
+        ));
         for s in self.info.interfaces.clone() {
             self.say(format!("  {s}"));
         }
@@ -631,7 +771,11 @@ impl Host {
             (ids[0].1, d)
         } else {
             let Some(&id) = d.first() else { return };
-            let kind = ids.iter().find(|x| x.0 == id).map(|x| x.1).unwrap_or(HidKind::Other);
+            let kind = ids
+                .iter()
+                .find(|x| x.0 == id)
+                .map(|x| x.1)
+                .unwrap_or(HidKind::Other);
             (kind, &d[1..])
         };
         match kind {
@@ -669,10 +813,15 @@ mod tests {
     #[test]
     fn report_ids_by_application() {
         let d = [
-            0x05, 0x01, 0x09, 0x06, 0xa1, 0x01, 0x85, 0x01, 0x05, 0x07, 0xc0, // 键盘，报告 1
-            0x05, 0x01, 0x09, 0x02, 0xa1, 0x01, 0x85, 0x02, 0x09, 0x01, 0xa1, 0x00, 0xc0, 0xc0, // 鼠标，报告 2
+            0x05, 0x01, 0x09, 0x06, 0xa1, 0x01, 0x85, 0x01, 0x05, 0x07,
+            0xc0, // 键盘，报告 1
+            0x05, 0x01, 0x09, 0x02, 0xa1, 0x01, 0x85, 0x02, 0x09, 0x01, 0xa1, 0x00, 0xc0,
+            0xc0, // 鼠标，报告 2
         ];
-        assert_eq!(parse_report_desc(&d), vec![(1, HidKind::Keyboard), (2, HidKind::Mouse)]);
+        assert_eq!(
+            parse_report_desc(&d),
+            vec![(1, HidKind::Keyboard), (2, HidKind::Mouse)]
+        );
     }
 
     #[test]
@@ -690,4 +839,3 @@ mod tests {
         assert_eq!(utf16(&d), "TryB");
     }
 }
-

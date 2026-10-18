@@ -280,7 +280,16 @@ pub extern "C" fn tb_env_set(temp_c: f64, humidity: f64, pressure_pa: f64) {
 /// 姿态（MPU6050 / QMI8658）：欧拉角（度）+ 欧拉角变化率（°/s），同脚本动作 imu=
 #[no_mangle]
 pub extern "C" fn tb_imu_set(pitch: f64, roll: f64, yaw: f64, dpitch: f64, droll: f64, dyaw: f64) {
-    with((), |m| m.imu_set(ImuPose { pitch, roll, yaw, dpitch, droll, dyaw }))
+    with((), |m| {
+        m.imu_set(ImuPose {
+            pitch,
+            roll,
+            yaw,
+            dpitch,
+            droll,
+            dyaw,
+        })
+    })
 }
 
 /// 触摸 INT 脚接在哪个 GPIO（按着拉低、抬起回高）
@@ -339,7 +348,9 @@ pub extern "C" fn tb_lcd_ptr() -> *const u8 {
 /// 接一个旋转编码器：A / B 两相，sw < 0 表示没有按键
 #[no_mangle]
 pub extern "C" fn tb_encoder_attach(a: u32, b: u32, sw: i32) {
-    with((), |m| m.encoder_attach(a, b, (sw >= 0).then_some(sw as u32)))
+    with((), |m| {
+        m.encoder_attach(a, b, (sw >= 0).then_some(sw as u32))
+    })
 }
 
 /// 转 steps 格（正 = 顺时针）；波形由内核按 0.5 ms 一个沿排出来
@@ -357,13 +368,19 @@ pub extern "C" fn tb_encoder_press(down: u32) {
 /// 编码器已经转完的格数（没接为 NaN）
 #[no_mangle]
 pub extern "C" fn tb_encoder_pos() -> f64 {
-    with(f64::NAN, |m| m.encoder_position().map(|p| p as f64).unwrap_or(f64::NAN))
+    with(f64::NAN, |m| {
+        m.encoder_position().map(|p| p as f64).unwrap_or(f64::NAN)
+    })
 }
 
 /// PCNT 单元 u 的当前计数（只有 S3 有；没有为 NaN）
 #[no_mangle]
 pub extern "C" fn tb_pcnt_count(u: u32) -> f64 {
-    with(f64::NAN, |m| m.pcnt_count(u as usize).map(|c| c as f64).unwrap_or(f64::NAN))
+    with(f64::NAN, |m| {
+        m.pcnt_count(u as usize)
+            .map(|c| c as f64)
+            .unwrap_or(f64::NAN)
+    })
 }
 
 /// 接一个 HC-SR04：Trig 由芯片驱动，Echo 由模块驱动（5 V 供电，电流进 5V 轨）

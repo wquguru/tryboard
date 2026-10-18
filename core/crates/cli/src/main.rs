@@ -2,7 +2,9 @@
 
 use std::io::Write;
 use std::time::Instant;
-use tryboard_machine::{parse_imu, parse_touch, Chip, Hw, Machine, PowerMode, SensorEnv, Stop, BROWNOUT_RESET, CPU_HZ};
+use tryboard_machine::{
+    parse_imu, parse_touch, Chip, Hw, Machine, PowerMode, SensorEnv, Stop, BROWNOUT_RESET, CPU_HZ,
+};
 use tryboard_rv32::{elf::Elf, Bus, BusFault, Cpu, Exit};
 
 fn usage() -> ! {
@@ -200,7 +202,12 @@ fn run(args: &[String]) {
     if let Some(db) = opt(args, "--antenna-loss").and_then(|s| s.parse::<i32>().ok()) {
         m.set_antenna_loss(db);
     }
-    let pins_of = |s: &str| s.split(',').map(|x| x.trim().trim_start_matches("GPIO").parse::<u32>()).collect::<Result<Vec<_>, _>>().ok();
+    let pins_of = |s: &str| {
+        s.split(',')
+            .map(|x| x.trim().trim_start_matches("GPIO").parse::<u32>())
+            .collect::<Result<Vec<_>, _>>()
+            .ok()
+    };
     // 旋转编码器：--encoder A,B[,SW]
     let encoder = opt(args, "--encoder");
     if let Some(spec) = &encoder {
@@ -484,7 +491,9 @@ fn run(args: &[String]) {
     let un = m.unimpl();
     eprintln!("[tryboard] 未建模寄存器 {} 个，访问最多的：", un.len());
     // --unimpl N：列出前 N 个（默认 12）
-    let top = opt(args, "--unimpl").and_then(|s| s.parse().ok()).unwrap_or(12);
+    let top = opt(args, "--unimpl")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(12);
     for (a, n) in un.iter().take(top) {
         eprintln!("    0x{:08x}  {:>8} 次", a, n);
     }
@@ -550,7 +559,10 @@ fn run(args: &[String]) {
     }
     if args.iter().any(|a| a == "--wifi-log") {
         let w = m.wifi();
-        eprintln!("[tryboard] Wi-Fi 空中日志：发送 {} 帧，接收 {} 帧，丢弃 {} 帧", w.tx_frames, w.rx_frames, w.rx_dropped);
+        eprintln!(
+            "[tryboard] Wi-Fi 空中日志：发送 {} 帧，接收 {} 帧，丢弃 {} 帧",
+            w.tx_frames, w.rx_frames, w.rx_dropped
+        );
         for l in &w.log {
             eprintln!("    {l}");
         }
@@ -636,7 +648,10 @@ fn run(args: &[String]) {
         eprint!("{}", m.elec.report());
     }
     if let Some(p) = m.encoder_position() {
-        let c = m.pcnt_count(0).map(|c| format!("，PCNT 单元 0 计数 {c}")).unwrap_or_default();
+        let c = m
+            .pcnt_count(0)
+            .map(|c| format!("，PCNT 单元 0 计数 {c}"))
+            .unwrap_or_default();
         eprintln!("[tryboard] 编码器 转了 {p} 格（顺时针为正）{c}");
     }
     if let Some((pings, echoes, us)) = m.sonar_stats() {

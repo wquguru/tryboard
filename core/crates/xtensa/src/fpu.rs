@@ -137,7 +137,7 @@ pub fn round_exact(hi: f64, lo: f64, rm: Rm, fl: &mut u32) -> f32 {
         };
     }
     let d = r0 as f64 - hi; // 精确
-    // 精确值相对 r0 的方向：>0 表示精确值比 r0 大
+                            // 精确值相对 r0 的方向：>0 表示精确值比 r0 大
     let dir = if d != 0.0 {
         if d < 0.0 {
             1
@@ -164,7 +164,11 @@ pub fn round_exact(hi: f64, lo: f64, rm: Rm, fl: &mut u32) -> f32 {
             if d != 0.0 && lo != 0.0 {
                 let other = if d > 0.0 { next_down(r0) } else { next_up(r0) };
                 if other as f64 - hi == -d {
-                    return if (lo > 0.0) == (other > r0) { other } else { r0 };
+                    return if (lo > 0.0) == (other > r0) {
+                        other
+                    } else {
+                        r0
+                    };
                 }
             }
             r0
@@ -290,7 +294,11 @@ pub fn div(a: f32, b: f32, rm: Rm, fl: &mut u32) -> f32 {
     // 余数 r = x − q·y（f64 的 fma 精确），其符号给出真值相对 q 的方向；f64 商离 f32 网格远，
     // 用一个远小于 q 的 f64 半 ulp 的数代表这个方向即可
     let r = (-q).mul_add(y, x);
-    let lo = if r == 0.0 { 0.0 } else { (r / y).signum() * q.abs() * f64::EPSILON * f64::EPSILON };
+    let lo = if r == 0.0 {
+        0.0
+    } else {
+        (r / y).signum() * q.abs() * f64::EPSILON * f64::EPSILON
+    };
     round_exact(q, lo, rm, fl)
 }
 
@@ -311,7 +319,11 @@ pub fn sqrt(a: f32, rm: Rm, fl: &mut u32) -> f32 {
     let x = a as f64;
     let s = x.sqrt();
     let r = (-s).mul_add(s, x);
-    let lo = if r == 0.0 { 0.0 } else { r.signum() * s * f64::EPSILON * f64::EPSILON };
+    let lo = if r == 0.0 {
+        0.0
+    } else {
+        r.signum() * s * f64::EPSILON * f64::EPSILON
+    };
     round_exact(s, lo, rm, fl)
 }
 
@@ -422,7 +434,14 @@ impl Cpu {
     }
 
     /// op0=3：LSI / SSI / LSIP / SSIP（P：先用 as 访存，再 as += imm）
-    pub(crate) fn exec_lsci<B: Bus>(&mut self, bus: &mut B, t: u32, s: u32, r: u32, imm8: u32) -> Result<Flow, Exit> {
+    pub(crate) fn exec_lsci<B: Bus>(
+        &mut self,
+        bus: &mut B,
+        t: u32,
+        s: u32,
+        r: u32,
+        imm8: u32,
+    ) -> Result<Flow, Exit> {
         if !self.cp0_enabled() {
             return self.cp0_disabled();
         }
@@ -454,7 +473,14 @@ impl Cpu {
     }
 
     /// op0=0 op1=8：LSX / LSXP / SSX / SSXP
-    pub(crate) fn exec_lscx<B: Bus>(&mut self, bus: &mut B, t: u32, s: u32, r: u32, op2: u32) -> Result<Flow, Exit> {
+    pub(crate) fn exec_lscx<B: Bus>(
+        &mut self,
+        bus: &mut B,
+        t: u32,
+        s: u32,
+        r: u32,
+        op2: u32,
+    ) -> Result<Flow, Exit> {
         if !self.cp0_enabled() {
             return self.cp0_disabled();
         }
@@ -622,7 +648,13 @@ mod tests {
     #[test]
     fn division_and_sqrt_correctly_rounded() {
         let mut fl = 0;
-        for &(a, b) in &[(1.0f32, 3.0f32), (2.0, 7.0), (1e-40, 3.0), (3.4e38, 0.1), (-5.0, 9.0)] {
+        for &(a, b) in &[
+            (1.0f32, 3.0f32),
+            (2.0, 7.0),
+            (1e-40, 3.0),
+            (3.4e38, 0.1),
+            (-5.0, 9.0),
+        ] {
             assert_eq!(div(a, b, Rm::Nearest, &mut fl), a / b, "{a}/{b}");
         }
         // 1/3 的就近结果 0x3EAAAAAB 比真值大：向上不变，向下 / 向零少一个 ulp
@@ -651,9 +683,18 @@ mod tests {
         let mut fl = 0;
         let q = f(0x7fc0_0000);
         let s = f(0x7f80_0001);
-        assert_eq!(add(q, s, false, Rm::Nearest, &mut fl).to_bits(), 0x7fc0_0001);
-        assert_eq!(add(s, q, false, Rm::Nearest, &mut fl).to_bits(), 0x7fc0_0000);
-        assert_eq!(add(1.0, q, true, Rm::Nearest, &mut fl).to_bits(), 0x7fc0_0000);
+        assert_eq!(
+            add(q, s, false, Rm::Nearest, &mut fl).to_bits(),
+            0x7fc0_0001
+        );
+        assert_eq!(
+            add(s, q, false, Rm::Nearest, &mut fl).to_bits(),
+            0x7fc0_0000
+        );
+        assert_eq!(
+            add(1.0, q, true, Rm::Nearest, &mut fl).to_bits(),
+            0x7fc0_0000
+        );
         assert_eq!(fl & FL_INVALID, FL_INVALID);
     }
 }

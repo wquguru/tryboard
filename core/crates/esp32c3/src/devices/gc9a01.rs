@@ -311,7 +311,12 @@ impl Gc9a01 {
         v.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then(a.0.cmp(&b.0)));
         let mut o = String::new();
         for (c, (n, sx, sy)) in v.into_iter().take(12) {
-            let _ = writeln!(o, "[tryboard] LCD 颜色 #{c:06x} {n} 像素，重心 {:.1},{:.1}", sx as f64 / n as f64, sy as f64 / n as f64);
+            let _ = writeln!(
+                o,
+                "[tryboard] LCD 颜色 #{c:06x} {n} 像素，重心 {:.1},{:.1}",
+                sx as f64 / n as f64,
+                sy as f64 / n as f64
+            );
         }
         o
     }

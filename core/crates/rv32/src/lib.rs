@@ -306,7 +306,10 @@ impl Cpu {
                         return self.trap(cause::STORE_MISALIGNED, addr, false);
                     }
                     for i in 0..size {
-                        if bus.store(addr.wrapping_add(i), 1, (b >> (8 * i)) & 0xff).is_err() {
+                        if bus
+                            .store(addr.wrapping_add(i), 1, (b >> (8 * i)) & 0xff)
+                            .is_err()
+                        {
                             return self.trap(cause::STORE_FAULT, addr, false);
                         }
                     }

@@ -79,7 +79,12 @@ fn run_one(path: &Path) -> Result<Run, String> {
                 // SYS_exit
                 1 => {
                     let r = ram.load(result, 4).unwrap();
-                    return Ok(Run { instret: cpu.instret, result: r, hits, out });
+                    return Ok(Run {
+                        instret: cpu.instret,
+                        result: r,
+                        hits,
+                        out,
+                    });
                 }
                 n => return Err(format!("不支持的半主机调用 {n}")),
             },
@@ -102,7 +107,11 @@ fn qemu_bin() -> Option<PathBuf> {
         return None;
     }
     let root = PathBuf::from(std::env::var("HOME").ok()?).join(".espressif/tools/qemu-xtensa");
-    let mut v: Vec<_> = std::fs::read_dir(root).ok()?.filter_map(|e| e.ok()).map(|e| e.path()).collect();
+    let mut v: Vec<_> = std::fs::read_dir(root)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .collect();
     v.sort();
     let p = v.last()?.join("qemu/bin/qemu-system-xtensa");
     p.exists().then_some(p)
@@ -111,7 +120,15 @@ fn qemu_bin() -> Option<PathBuf> {
 /// 在 QEMU sim 机器（esp32s3 核配置）上跑同一个 ELF，取半主机输出
 fn run_qemu(qemu: &Path, elf: &Path) -> Result<Vec<u8>, String> {
     let mut child = Command::new(qemu)
-        .args(["-M", "sim", "-cpu", "esp32s3", "-nographic", "-monitor", "none"])
+        .args([
+            "-M",
+            "sim",
+            "-cpu",
+            "esp32s3",
+            "-nographic",
+            "-monitor",
+            "none",
+        ])
         // icount：定时器按指令数确定性触发（否则 CCOMPARE 中断由宿主计时器异步送达，时刻不确定）
         .args(["-icount", "shift=0,sleep=off"])
         .args(["-semihosting-config", "enable=on,target=native"])
@@ -134,12 +151,23 @@ fn run_qemu(qemu: &Path, elf: &Path) -> Result<Vec<u8>, String> {
         std::thread::sleep(Duration::from_millis(5));
     }
     let mut out = Vec::new();
-    child.stdout.take().unwrap().read_to_end(&mut out).map_err(|e| e.to_string())?;
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_end(&mut out)
+        .map_err(|e| e.to_string())?;
     Ok(out)
 }
 
 fn words(b: &[u8]) -> Vec<u32> {
-    b.chunks(4).map(|c| c.iter().enumerate().fold(0, |v, (i, x)| v | (*x as u32) << (8 * i))).collect()
+    b.chunks(4)
+        .map(|c| {
+            c.iter()
+                .enumerate()
+                .fold(0, |v, (i, x)| v | (*x as u32) << (8 * i))
+        })
+        .collect()
 }
 
 /// 两边输出逐字比较，返回不一致的字数（并打印前几处）
@@ -168,7 +196,10 @@ fn diff(name: &str, ours: &[u8], qemu: &[u8]) -> usize {
 fn xtensa_selfcheck() {
     let dir = test_dir();
     let build = dir.join("build");
-    let ok = Command::new(dir.join("build.sh")).status().map(|s| s.success()).unwrap_or(false);
+    let ok = Command::new(dir.join("build.sh"))
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
     if !ok && !build.exists() {
         eprintln!("跳过：没有 Xtensa 工具链，无法构建 {}", build.display());
         return;
@@ -179,7 +210,10 @@ fn xtensa_selfcheck() {
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .filter(|p| p.extension().is_some_and(|x| x == "elf"))
-        .filter(|p| only.as_ref().is_none_or(|o| p.file_stem().unwrap().to_string_lossy() == *o))
+        .filter(|p| {
+            only.as_ref()
+                .is_none_or(|o| p.file_stem().unwrap().to_string_lossy() == *o)
+        })
         .collect();
     elfs.sort();
     assert!(!elfs.is_empty(), "build 目录里没有测试");
@@ -209,7 +243,8 @@ fn xtensa_selfcheck() {
                         Ok(qo) => {
                             // XT_SAVE=1：两边的原始输出存到 build/<名字>.{ours,qemu}.bin，便于离线分析
                             if std::env::var("XT_SAVE").is_ok() {
-                                let _ = std::fs::write(build.join(format!("{name}.ours.bin")), &r.out);
+                                let _ =
+                                    std::fs::write(build.join(format!("{name}.ours.bin")), &r.out);
                                 let _ = std::fs::write(build.join(format!("{name}.qemu.bin")), &qo);
                             }
                             compared_words += r.out.len().max(qo.len()) / 4;

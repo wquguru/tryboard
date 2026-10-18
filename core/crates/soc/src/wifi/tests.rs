@@ -28,7 +28,12 @@ fn dhcp_offer_then_ack() {
     let mut n = Net::default();
     let mac = [2, 0x54, 0x42, 0, 0, 1];
     for (kind, want) in [(1u8, 2u8), (3, 5)] {
-        let e = Eth { dst: [0xff; 6], src: mac, ethertype: net::ETH_IP, payload: dhcp_msg(kind) };
+        let e = Eth {
+            dst: [0xff; 6],
+            src: mac,
+            ethertype: net::ETH_IP,
+            payload: dhcp_msg(kind),
+        };
         let r = n.on_eth(&e, 0);
         assert_eq!(r.len(), 1);
         let ip = &r[0].payload;
@@ -60,7 +65,9 @@ fn http_over_tcp() {
     let mut n = Net::default();
     let (c, s) = (net::STA_IP, net::GW_IP);
     let syn = {
-        let mut t = vec![0x30, 0x39, 0, 80, 0, 0, 0, 100, 0, 0, 0, 0, 0x50, 0x02, 0x20, 0, 0, 0, 0, 0];
+        let mut t = vec![
+            0x30, 0x39, 0, 80, 0, 0, 0, 100, 0, 0, 0, 0, 0x50, 0x02, 0x20, 0, 0, 0, 0, 0,
+        ];
         let ck = net::l4_checksum(c, s, 6, &t);
         t[16..18].copy_from_slice(&ck.to_be_bytes());
         t

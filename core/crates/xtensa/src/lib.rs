@@ -64,7 +64,8 @@ pub mod cause {
 pub mod irq {
     /// XCHAL_INTn_LEVEL
     pub const LEVEL: [u8; 32] = [
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 7, 3, 5, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 3, 4, 3, 4, 5,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 7, 3, 5, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 3, 4, 3,
+        4, 5,
     ];
     /// 外部电平型
     pub const EXT_LEVEL: u32 = !(EXT_EDGE | NMI | SOFTWARE | TIMER | PROFILING);
@@ -428,7 +429,12 @@ impl Cpu {
             self.sr[sr::EXCCAUSE as usize] = cause::LEVEL1_INTERRUPT;
             self.sr[sr::EPC1 as usize] = self.pc;
             self.set_ps(ps | PS_EXCM);
-            self.pc = self.vecbase() + if ps & PS_UM != 0 { vec::USER } else { vec::KERNEL };
+            self.pc = self.vecbase()
+                + if ps & PS_UM != 0 {
+                    vec::USER
+                } else {
+                    vec::KERNEL
+                };
         } else {
             self.sr[(sr::EPC1 + level - 1) as usize] = self.pc;
             self.sr[(sr::EPS2 + level - 2) as usize] = ps;

@@ -60,10 +60,38 @@ pub const LINK_MIN_DBM: i32 = -82;
 impl Default for World {
     fn default() -> Self {
         let aps = vec![
-            ap("TryBoard-WiFi", [0x02, 0x54, 0x42, 0xa0, 0x00, 0x01], 6, -42, Auth::Open, ""),
-            ap("TryBoard-WPA2", [0x02, 0x54, 0x42, 0xa0, 0x00, 0x02], 1, -55, Auth::Wpa2Psk, "tryboard123"),
-            ap("Neighbor-5G-Ext", [0x02, 0x54, 0x42, 0xa0, 0x00, 0x03], 11, -78, Auth::Wpa2Psk, "x"),
-            ap("CoffeeShop", [0x02, 0x54, 0x42, 0xa0, 0x00, 0x04], 6, -70, Auth::Open, ""),
+            ap(
+                "TryBoard-WiFi",
+                [0x02, 0x54, 0x42, 0xa0, 0x00, 0x01],
+                6,
+                -42,
+                Auth::Open,
+                "",
+            ),
+            ap(
+                "TryBoard-WPA2",
+                [0x02, 0x54, 0x42, 0xa0, 0x00, 0x02],
+                1,
+                -55,
+                Auth::Wpa2Psk,
+                "tryboard123",
+            ),
+            ap(
+                "Neighbor-5G-Ext",
+                [0x02, 0x54, 0x42, 0xa0, 0x00, 0x03],
+                11,
+                -78,
+                Auth::Wpa2Psk,
+                "x",
+            ),
+            ap(
+                "CoffeeShop",
+                [0x02, 0x54, 0x42, 0xa0, 0x00, 0x04],
+                6,
+                -70,
+                Auth::Open,
+                "",
+            ),
         ];
         let n = aps.len();
         World {
@@ -81,7 +109,14 @@ impl Default for World {
 }
 
 fn ap(ssid: &str, bssid: Mac, channel: u8, rssi: i8, auth: Auth, pw: &str) -> Ap {
-    Ap { ssid: ssid.into(), bssid, channel, rssi, auth, passphrase: pw.into() }
+    Ap {
+        ssid: ssid.into(),
+        bssid,
+        channel,
+        rssi,
+        auth,
+        passphrase: pw.into(),
+    }
 }
 
 /// 802.11b/g 支持速率（1/2/5.5/11 为基本速率）与扩展速率
@@ -92,8 +127,8 @@ const EAPOL_DELAY_US: u64 = 3000;
 
 /// RSN：版本 1、组 / 成对加密 CCMP、AKM PSK、能力 0x000c
 const RSN_IE: [u8; 20] = [
-    0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x02, 0x0c,
-    0x00,
+    0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00, 0x00, 0x0f,
+    0xac, 0x02, 0x0c, 0x00,
 ];
 
 impl World {
@@ -108,7 +143,12 @@ impl World {
     }
 
     fn weak(&self, i: usize, what: &str) -> String {
-        format!("{what} → {}：信号 {} dBm 低于 {LINK_MIN_DBM} dBm，AP 没听到（天线遮挡 {} dB，估算）", self.aps[i].ssid, self.rssi(i), self.antenna_loss_db)
+        format!(
+            "{what} → {}：信号 {} dBm 低于 {LINK_MIN_DBM} dBm，AP 没听到（天线遮挡 {} dB，估算）",
+            self.aps[i].ssid,
+            self.rssi(i),
+            self.antenna_loss_db
+        )
     }
 
     fn next_seq(&mut self) -> u16 {
@@ -144,12 +184,19 @@ impl World {
 
     pub fn beacon(&mut self, i: usize, tsf_us: u64) -> Air {
         let f = self.bss_frame(i, fc::BEACON, &frame::BROADCAST, tsf_us);
-        Air { delay_us: 0, frame: f, rssi: self.rssi(i), channel: self.aps[i].channel }
+        Air {
+            delay_us: 0,
+            frame: f,
+            rssi: self.rssi(i),
+            channel: self.aps[i].channel,
+        }
     }
 
     /// 芯片发出一帧；返回描述（给日志）与空中的回应，以及这帧是否会被确认（单播且对方存在）
     pub fn on_tx(&mut self, f: &[u8], tsf_us: u64) -> (String, Vec<Air>, bool) {
-        let Some(h) = frame::parse(f) else { return ("短帧".into(), vec![], false) };
+        let Some(h) = frame::parse(f) else {
+            return ("短帧".into(), vec![], false);
+        };
         let mut out = Vec::new();
         let body = &f[h.body.min(f.len())..];
         let unicast = h.a1[0] & 1 == 0;
@@ -167,12 +214,20 @@ impl World {
                 let ch = self.channel;
                 for i in 0..self.aps.len() {
                     let a = &self.aps[i];
-                    if a.channel != ch || (!ssid.is_empty() && ssid != a.ssid.as_bytes()) || (self.rssi(i) as i32) < SCAN_MIN_DBM {
+                    if a.channel != ch
+                        || (!ssid.is_empty() && ssid != a.ssid.as_bytes())
+                        || (self.rssi(i) as i32) < SCAN_MIN_DBM
+                    {
                         continue;
                     }
                     let (rssi, channel) = (self.rssi(i), a.channel);
                     let resp = self.bss_frame(i, fc::PROBE_RESP, &h.a2, tsf_us);
-                    out.push(Air { delay_us: 600 + 400 * i as u64, frame: resp, rssi, channel });
+                    out.push(Air {
+                        delay_us: 600 + 400 * i as u64,
+                        frame: resp,
+                        rssi,
+                        channel,
+                    });
                 }
                 format!(
                     "探测请求 ch{} ssid={:?} → {} 个响应",
@@ -182,7 +237,9 @@ impl World {
                 )
             }
             fc::AUTH => {
-                let Some(i) = target else { return ("认证 → 未知 BSSID".into(), out, false) };
+                let Some(i) = target else {
+                    return ("认证 → 未知 BSSID".into(), out, false);
+                };
                 if !self.linkable(i) {
                     return (self.weak(i, "认证"), out, false);
                 }
@@ -196,12 +253,19 @@ impl World {
                 r.extend_from_slice(&2u16.to_le_bytes());
                 r.extend_from_slice(&0u16.to_le_bytes());
                 let (rssi, channel) = (self.rssi(i), self.aps[i].channel);
-                out.push(Air { delay_us: 800, frame: r, rssi, channel });
+                out.push(Air {
+                    delay_us: 800,
+                    frame: r,
+                    rssi,
+                    channel,
+                });
                 self.sta[i] = StaState::Authed;
                 format!("认证 → {}（开放系统，成功）", self.aps[i].ssid)
             }
             fc::ASSOC_REQ => {
-                let Some(i) = target else { return ("关联 → 未知 BSSID".into(), out, false) };
+                let Some(i) = target else {
+                    return ("关联 → 未知 BSSID".into(), out, false);
+                };
                 if !self.linkable(i) {
                     return (self.weak(i, "关联"), out, false);
                 }
@@ -220,15 +284,34 @@ impl World {
                 frame::ie(&mut r, 50, &EXT_RATES);
                 let (channel, wpa2) = (a.channel, a.auth == Auth::Wpa2Psk);
                 let rssi = self.rssi(i);
-                out.push(Air { delay_us: 800, frame: r, rssi, channel });
+                out.push(Air {
+                    delay_us: 800,
+                    frame: r,
+                    rssi,
+                    channel,
+                });
                 self.sta[i] = StaState::Assoc;
                 if wpa2 {
                     // 关联成功即由 AP 发起四次握手（消息 1）
                     let m1 = self.auth(i).start(h.a2, tsf_us + EAPOL_DELAY_US);
                     let f = self.eapol_frame(i, &m1);
-                    out.push(Air { delay_us: EAPOL_DELAY_US, frame: f, rssi, channel });
+                    out.push(Air {
+                        delay_us: EAPOL_DELAY_US,
+                        frame: f,
+                        rssi,
+                        channel,
+                    });
                 }
-                format!("关联 → {}（AID {}）{}", self.aps[i].ssid, aid, if wpa2 { "，发起四次握手 1/4" } else { "" })
+                format!(
+                    "关联 → {}（AID {}）{}",
+                    self.aps[i].ssid,
+                    aid,
+                    if wpa2 {
+                        "，发起四次握手 1/4"
+                    } else {
+                        ""
+                    }
+                )
             }
             fc::DEAUTH | fc::DISASSOC => {
                 if let Some(i) = target {
@@ -241,7 +324,9 @@ impl World {
             }
             fc::NULL | fc::QOS_NULL => "空数据帧（省电状态通告）".into(),
             x if x & 0x0c == 0x08 => {
-                let Some(i) = target else { return ("数据帧 → 未知 BSSID".into(), out, false) };
+                let Some(i) = target else {
+                    return ("数据帧 → 未知 BSSID".into(), out, false);
+                };
                 if !self.linkable(i) {
                     return (self.weak(i, "数据帧"), out, false);
                 }
@@ -265,20 +350,38 @@ impl World {
                 }
                 let ethertype = u16::from_be_bytes([body[6], body[7]]);
                 if wpa2 && ethertype == wpa::ETH_EAPOL {
-                    let Some(a) = self.wpa[i].as_mut() else { return ("EAPOL（无认证方）".into(), out, acked) };
+                    let Some(a) = self.wpa[i].as_mut() else {
+                        return ("EAPOL（无认证方）".into(), out, acked);
+                    };
                     let (note, reply) = a.on_eapol(&body[8..], tsf_us);
                     if let Some(r) = reply {
                         let (rssi, channel) = (self.rssi(i), self.aps[i].channel);
                         let fr = self.eapol_frame(i, &r);
-                        out.push(Air { delay_us: 1000, frame: fr, rssi, channel });
+                        out.push(Air {
+                            delay_us: 1000,
+                            frame: fr,
+                            rssi,
+                            channel,
+                        });
                     }
                     return (note, out, acked);
                 }
-                if wpa2 && (h.fc1 & 0x40 == 0 || !self.wpa[i].as_ref().is_some_and(|a| a.authorized())) {
+                if wpa2
+                    && (h.fc1 & 0x40 == 0 || !self.wpa[i].as_ref().is_some_and(|a| a.authorized()))
+                {
                     // 端口没放行（或明文混进加密网络）：真 AP 同样丢弃
-                    return (format!("数据帧 0x{ethertype:04x}（WPA2 端口未放行 / 未加密，丢弃）"), out, acked);
+                    return (
+                        format!("数据帧 0x{ethertype:04x}（WPA2 端口未放行 / 未加密，丢弃）"),
+                        out,
+                        acked,
+                    );
                 }
-                let eth = Eth { dst: h.a3, src: h.a2, ethertype, payload: body[8..].to_vec() };
+                let eth = Eth {
+                    dst: h.a3,
+                    src: h.a2,
+                    ethertype,
+                    payload: body[8..].to_vec(),
+                };
                 let before = self.net.log.len();
                 let replies = self.net.on_eth(&eth, tsf_us);
                 let (rssi, channel, bssid) = (self.rssi(i), self.aps[i].channel, self.aps[i].bssid);
@@ -287,7 +390,12 @@ impl World {
                     if let Some(a) = self.wpa[i].as_mut().filter(|a| wpa2 && a.authorized()) {
                         f = a.encrypt(&f);
                     }
-                    out.push(Air { delay_us: 300 + 200 * k as u64, frame: f, rssi, channel });
+                    out.push(Air {
+                        delay_us: 300 + 200 * k as u64,
+                        frame: f,
+                        rssi,
+                        channel,
+                    });
                 }
                 let notes: Vec<String> = self.net.log[before..].to_vec();
                 format!(
@@ -295,7 +403,11 @@ impl World {
                     frame::mac_str(&eth.dst),
                     eth.ethertype,
                     eth.payload.len(),
-                    if notes.is_empty() { String::new() } else { format!("：{}", notes.join("；")) }
+                    if notes.is_empty() {
+                        String::new()
+                    } else {
+                        format!("：{}", notes.join("；"))
+                    }
                 )
             }
             x => format!("帧 FC=0x{x:02x}"),
@@ -328,25 +440,41 @@ impl World {
     /// AP → 终端的 EAPOL 数据帧（明文，LLC/SNAP 以太类型 0x888E）
     fn eapol_frame(&mut self, i: usize, eapol: &[u8]) -> Vec<u8> {
         let bssid = self.aps[i].bssid;
-        let e = Eth { dst: self.sta_mac, src: bssid, ethertype: wpa::ETH_EAPOL, payload: eapol.to_vec() };
+        let e = Eth {
+            dst: self.sta_mac,
+            src: bssid,
+            ethertype: wpa::ETH_EAPOL,
+            payload: eapol.to_vec(),
+        };
         self.data_from_ds(&e, &bssid)
     }
 
     /// 认证方的重传 / 超时定时器（TSF 微秒）
     pub fn next_timer(&self) -> Option<u64> {
-        self.wpa.iter().flatten().filter_map(|a| a.next_timer()).min()
+        self.wpa
+            .iter()
+            .flatten()
+            .filter_map(|a| a.next_timer())
+            .min()
     }
 
     /// 推进定时器：重发 EAPOL 消息，或重试用完时发去认证（原因 15 = 四次握手超时）
     pub fn poll(&mut self, tsf_us: u64) -> (Vec<Air>, Vec<String>) {
         let (mut out, mut log) = (Vec::new(), Vec::new());
         for i in 0..self.aps.len() {
-            let Some(t) = self.wpa[i].as_mut().and_then(|a| a.poll(tsf_us)) else { continue };
+            let Some(t) = self.wpa[i].as_mut().and_then(|a| a.poll(tsf_us)) else {
+                continue;
+            };
             let (rssi, channel, bssid) = (self.rssi(i), self.aps[i].channel, self.aps[i].bssid);
             match t {
                 wpa::Timer::Resend(m) => {
                     let f = self.eapol_frame(i, &m);
-                    out.push(Air { delay_us: 0, frame: f, rssi, channel });
+                    out.push(Air {
+                        delay_us: 0,
+                        frame: f,
+                        rssi,
+                        channel,
+                    });
                     log.push(format!("{}：四次握手没等到回应，重发", self.aps[i].ssid));
                 }
                 wpa::Timer::Timeout => {
@@ -354,9 +482,17 @@ impl World {
                     let sta = self.sta_mac;
                     let mut f = frame::mgmt_hdr(fc::DEAUTH, &sta, &bssid, &bssid, seq);
                     f.extend_from_slice(&15u16.to_le_bytes());
-                    out.push(Air { delay_us: 0, frame: f, rssi, channel });
+                    out.push(Air {
+                        delay_us: 0,
+                        frame: f,
+                        rssi,
+                        channel,
+                    });
                     self.sta[i] = StaState::Idle;
-                    log.push(format!("{}：四次握手超时，发去认证（原因 15）", self.aps[i].ssid));
+                    log.push(format!(
+                        "{}：四次握手超时，发去认证（原因 15）",
+                        self.aps[i].ssid
+                    ));
                 }
             }
         }

@@ -102,7 +102,10 @@ impl Default for I2c {
 impl I2c {
     /// 第二个控制器（S3 的 I2C1）：事件里带 PORT1 位
     pub fn with_port(port_bit: u16) -> Self {
-        I2c { port_bit, ..I2c::default() }
+        I2c {
+            port_bit,
+            ..I2c::default()
+        }
     }
 
     pub fn attach(&mut self, dev: Box<dyn I2cDevice>) {
@@ -259,7 +262,13 @@ impl I2c {
             match opc {
                 op::RSTART => {
                     let b = pb | if self.in_txn { i2cbit::RESTART } else { 0 };
-                    self.events.push(IoEvent { t: now + bits * bc, kind: kind::I2C_START, a: 0, b, v: bc.min(u32::MAX as u64) as u32 });
+                    self.events.push(IoEvent {
+                        t: now + bits * bc,
+                        kind: kind::I2C_START,
+                        a: 0,
+                        b,
+                        v: bc.min(u32::MAX as u64) as u32,
+                    });
                     self.in_txn = true;
                     self.need_addr = true;
                     bits += 1;
@@ -291,9 +300,21 @@ impl I2c {
                         };
                         let nack = if acked { 0 } else { i2cbit::NACK };
                         self.events.push(if is_addr {
-                            IoEvent { t, kind: kind::I2C_ADDR, a: b >> 1, b: pb | (b & 1) as u16 | nack, v: 0 }
+                            IoEvent {
+                                t,
+                                kind: kind::I2C_ADDR,
+                                a: b >> 1,
+                                b: pb | (b & 1) as u16 | nack,
+                                v: 0,
+                            }
                         } else {
-                            IoEvent { t, kind: kind::I2C_DATA, a: b, b: pb | nack, v: 0 }
+                            IoEvent {
+                                t,
+                                kind: kind::I2C_DATA,
+                                a: b,
+                                b: pb | nack,
+                                v: 0,
+                            }
                         });
                         let level = if acked { 0 } else { 1 };
                         if ack_en && level != ack_exp {
@@ -318,7 +339,13 @@ impl I2c {
                         // 主机在每个读字节后回 ACK_VALUE（最后一个字节通常是 NACK，告诉从机不要了）
                         let _ = k;
                         let nack = if ack_val != 0 { i2cbit::NACK } else { 0 };
-                        self.events.push(IoEvent { t: now + bits * bc, kind: kind::I2C_DATA, a: b, b: pb | i2cbit::READ | nack, v: 0 });
+                        self.events.push(IoEvent {
+                            t: now + bits * bc,
+                            kind: kind::I2C_DATA,
+                            a: b,
+                            b: pb | i2cbit::READ | nack,
+                            v: 0,
+                        });
                         if self.rx.len() < FIFO_LEN {
                             self.rx.push_back(b);
                         } else {
@@ -328,7 +355,13 @@ impl I2c {
                     }
                 }
                 op::STOP => {
-                    self.events.push(IoEvent { t: now + bits * bc, kind: kind::I2C_STOP, a: 0, b: pb, v: 0 });
+                    self.events.push(IoEvent {
+                        t: now + bits * bc,
+                        kind: kind::I2C_STOP,
+                        a: 0,
+                        b: pb,
+                        v: 0,
+                    });
                     self.in_txn = false;
                     if let Some(i) = self.cur.take() {
                         self.devices[i].stop();
@@ -442,10 +475,22 @@ mod tests {
         b.regs[0x58 / 4 + 3] = cmd(op::READ, 1, false, 1);
         b.regs[0x58 / 4 + 4] = cmd(op::STOP, 0, false, 0);
         b.write(0x04, 1 << 5 | 1 << 4, 100_000);
-        let kinds: Vec<String> = b.events.iter().map(|e| e.line().split_once(' ').unwrap().1.to_string()).collect();
+        let kinds: Vec<String> = b
+            .events
+            .iter()
+            .map(|e| e.line().split_once(' ').unwrap().1.to_string())
+            .collect();
         let bc = b.events[0].v as u64;
         let (st, rst) = (format!("I2C0 START {bc}"), format!("I2C0 RESTART {bc}"));
-        assert_eq!(&kinds[..4], [st.as_str(), "I2C0 ADDR 76 W ACK", "I2C0 DATA f7 W ACK", rst.as_str()]);
+        assert_eq!(
+            &kinds[..4],
+            [
+                st.as_str(),
+                "I2C0 ADDR 76 W ACK",
+                "I2C0 DATA f7 W ACK",
+                rst.as_str()
+            ]
+        );
         assert_eq!(kinds[4], "I2C0 ADDR 76 R ACK");
         assert_eq!(kinds.iter().filter(|k| k.contains(" R ")).count(), 9);
         assert!(kinds[12].ends_with("R NACK"));

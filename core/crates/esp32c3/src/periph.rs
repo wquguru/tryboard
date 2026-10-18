@@ -531,9 +531,13 @@ impl Timg {
                 if self.t0config & (1 << 29) != 0 {
                     // 真机在计数到告警值那一拍就重载、接着往上数：结算晚了的话把多数的那几拍补上，
                     // 周期才不会随结算时刻漂
-                    let late = if self.t0_alarm_late { 0 } else { c - self.t0_alarm };
-                    self.t0_offset =
-                        (self.t0_load + late) as i64 - (self.src_ticks(now) / self.divider()) as i64;
+                    let late = if self.t0_alarm_late {
+                        0
+                    } else {
+                        c - self.t0_alarm
+                    };
+                    self.t0_offset = (self.t0_load + late) as i64
+                        - (self.src_ticks(now) / self.divider()) as i64;
                 }
                 self.t0_alarm_late = false;
             } else {
@@ -817,7 +821,11 @@ mod tests {
     fn periodic() -> Timg {
         let mut t = Timg::default();
         t.write(0x10, 10_000, 0);
-        t.write(0x00, (1 << 31) | (1 << 30) | (1 << 29) | (80 << 13) | (1 << 10), 0);
+        t.write(
+            0x00,
+            (1 << 31) | (1 << 30) | (1 << 29) | (80 << 13) | (1 << 10),
+            0,
+        );
         t
     }
 

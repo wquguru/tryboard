@@ -46,7 +46,16 @@ struct Seg<'a> {
 }
 
 fn seg(p: Seg, data: &[u8]) -> Vec<u8> {
-    let Seg { sport, dport, seq, ack, flags, opts, src, dst } = p;
+    let Seg {
+        sport,
+        dport,
+        seq,
+        ack,
+        flags,
+        opts,
+        src,
+        dst,
+    } = p;
     let hl = 20 + opts.len();
     let mut s = Vec::with_capacity(hl + data.len());
     s.extend_from_slice(&sport.to_be_bytes());
@@ -114,12 +123,17 @@ impl Tcp {
         let (method, path) = (parts.next().unwrap_or(""), parts.next().unwrap_or("/"));
         let host = text
             .lines()
-            .find_map(|l| l.strip_prefix("Host: ").or_else(|| l.strip_prefix("host: ")))
+            .find_map(|l| {
+                l.strip_prefix("Host: ")
+                    .or_else(|| l.strip_prefix("host: "))
+            })
             .unwrap_or("")
             .trim()
             .to_string();
         self.requests += 1;
-        let (status, ctype, body): (&str, String, Vec<u8>) = if let Some((t, b)) = self.pages.get(path) {
+        let (status, ctype, body): (&str, String, Vec<u8>) = if let Some((t, b)) =
+            self.pages.get(path)
+        {
             ("200 OK", t.clone(), b.clone())
         } else {
             match path {
@@ -146,11 +160,23 @@ impl Tcp {
         )
         .into_bytes();
         r.extend_from_slice(&body);
-        (r, format!("HTTP {method} {host}{path} → {status}（{} 字节）", body.len()))
+        (
+            r,
+            format!(
+                "HTTP {method} {host}{path} → {status}（{} 字节）",
+                body.len()
+            ),
+        )
     }
 
     /// 收到芯片发来的 TCP 段；返回要回的段（和可选日志）
-    pub fn on_segment(&mut self, src: [u8; 4], dst: [u8; 4], s: &[u8], _now_us: u64) -> Vec<(Vec<u8>, Option<String>)> {
+    pub fn on_segment(
+        &mut self,
+        src: [u8; 4],
+        dst: [u8; 4],
+        s: &[u8],
+        _now_us: u64,
+    ) -> Vec<(Vec<u8>, Option<String>)> {
         if s.len() < 20 {
             return vec![];
         }
@@ -163,7 +189,19 @@ impl Tcp {
         let key = (src, sport, dst, dport);
         let mut out = Vec::new();
         let mk = |c: &Conn, fl: u8, opts: &[u8], d: &[u8]| {
-            seg(Seg { sport: dport, dport: sport, seq: c.snd_nxt, ack: c.rcv_nxt, flags: fl, opts, src: dst, dst: src }, d)
+            seg(
+                Seg {
+                    sport: dport,
+                    dport: sport,
+                    seq: c.snd_nxt,
+                    ack: c.rcv_nxt,
+                    flags: fl,
+                    opts,
+                    src: dst,
+                    dst: src,
+                },
+                d,
+            )
         };
 
         if flags & RST != 0 {
@@ -173,13 +211,27 @@ impl Tcp {
         if flags & SYN != 0 {
             if dport != 80 {
                 // 只有 80 端口在听：其它端口回 RST
-                let c = Conn { snd_nxt: 0, rcv_nxt: seq.wrapping_add(1), ..Default::default() };
-                out.push((mk(&c, RST | ACK, &[], &[]), Some(format!("TCP :{dport} 拒绝连接"))));
+                let c = Conn {
+                    snd_nxt: 0,
+                    rcv_nxt: seq.wrapping_add(1),
+                    ..Default::default()
+                };
+                out.push((
+                    mk(&c, RST | ACK, &[], &[]),
+                    Some(format!("TCP :{dport} 拒绝连接")),
+                ));
                 return out;
             }
             self.isn = self.isn.wrapping_add(0x0101_0101);
-            let mut c = Conn { snd_nxt: self.isn, rcv_nxt: seq.wrapping_add(1), ..Default::default() };
-            out.push((mk(&c, SYN | ACK, &[2, 4, (MSS >> 8) as u8, MSS as u8], &[]), Some(format!("TCP 连接 :{dport}"))));
+            let mut c = Conn {
+                snd_nxt: self.isn,
+                rcv_nxt: seq.wrapping_add(1),
+                ..Default::default()
+            };
+            out.push((
+                mk(&c, SYN | ACK, &[2, 4, (MSS >> 8) as u8, MSS as u8], &[]),
+                Some(format!("TCP 连接 :{dport}")),
+            ));
             c.snd_nxt = c.snd_nxt.wrapping_add(1);
             self.conns.insert(key, c);
             return out;
@@ -205,8 +257,13 @@ impl Tcp {
             for (i, ch) in chunks.iter().enumerate() {
                 let last = i + 1 == chunks.len();
                 let fl = ACK | PSH | if last { FIN } else { 0 };
-                out.push((mk(&c, fl, &[], ch), if i == 0 { Some(line.clone()) } else { None }));
-                c.snd_nxt = c.snd_nxt.wrapping_add(ch.len() as u32 + if last { 1 } else { 0 });
+                out.push((
+                    mk(&c, fl, &[], ch),
+                    if i == 0 { Some(line.clone()) } else { None },
+                ));
+                c.snd_nxt = c
+                    .snd_nxt
+                    .wrapping_add(ch.len() as u32 + if last { 1 } else { 0 });
             }
             c.fin_sent = true;
             need_ack = false;
