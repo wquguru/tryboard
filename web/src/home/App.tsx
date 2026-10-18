@@ -12,7 +12,7 @@ import type { WorkDef } from '../app/types';
 import { showcase, startLive } from './cards';
 
 const STEPS: [string, string][] = [
-  ['采购', '选零件，看参考价'],
+  ['采购', '列清单、看参考价，先不用真买'],
   ['实验台', '运行固件，逐项检查'],
   ['组装', '装进外壳，复测读数'],
   ['成品', '预览成品效果'],
@@ -122,7 +122,8 @@ function WorkCard({ w, live, onToggle }: { w: WorkDef; live: boolean; onToggle: 
       <div
         ref={status}
         data-status
-        className={cn('order-3 w-full truncate border-t border-line-soft bg-field px-3.5 py-1.5 font-mono text-[11px] text-accent-ink', !live && 'hidden')}
+        // 桌面：状态行压在预览底边上，不另起一行，跑起来卡片不变高、同一排的邻卡不跟着跳；手机单列，照旧排在最下面
+        className={cn('order-3 w-full truncate border-t border-line-soft bg-field px-3.5 py-1.5 font-mono text-[11px] text-accent-ink md:absolute md:bottom-0 md:left-0 md:z-[1] md:w-[52%] md:bg-field/90', !live && 'hidden')}
       />
       <div className={cn('flex min-w-0 flex-1 flex-col justify-center gap-2 px-4 py-3.5', !live && 'max-md:gap-1.5 max-md:p-0')}>
         <div>

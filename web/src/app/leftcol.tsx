@@ -138,7 +138,8 @@ export function LeftColumn({ step, tree }: { step: string; tree: ReactNode }) {
         <div className="min-h-0 flex-1 overflow-auto px-2 py-2">{d.wires}</div>
       )}
       {bench && (
-        <div className="flex-none px-2 pb-2">
+        // 固定底栏：上边线把列表截断处标清楚，构建树滚到底时最后一行（固件）完整露出、不被按钮压住
+        <div className="flex-none border-t border-line-soft px-2 pt-2 pb-2">
           <a
             id="addPart"
             href="#shop"

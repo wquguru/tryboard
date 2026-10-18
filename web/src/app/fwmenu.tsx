@@ -131,7 +131,7 @@ export function FwMenu({ phone }: { phone?: boolean }) {
             <Icon n="restart" size={15} />
             <span className="min-w-0 flex-1">
               换回参考固件
-              <span className="block text-[11px] text-muted">作品自带的固件；检查点只认你自己上传的</span>
+              <span className="block text-[11px] text-muted">作品自带的固件，只看效果，不算检查点</span>
             </span>
           </button>
         </>
@@ -145,7 +145,7 @@ export function FwMenu({ phone }: { phone?: boolean }) {
             <span className="flex-none font-mono text-[11px] text-muted">{hhmm(r.at)}</span>
           </a>
         ) : (
-          <button key={`f:${r.name}`} type="button" role="menuitem" data-recent-file={r.name} title="浏览器不保存文件内容：点它重新选这个文件" className={item} onClick={() => file.current?.click()}>
+          <button key={`f:${r.name}`} type="button" role="menuitem" data-recent-file={r.name} title="浏览器不保存文件内容：点它重新选这个文件" className={item} onClick={() => (open(false), file.current?.click())}>
             <Icon n="doc" size={15} />
             <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{r.name}</span>
             <span className="flex-none font-mono text-[11px] text-muted">{hhmm(r.at)}</span>
@@ -153,11 +153,11 @@ export function FwMenu({ phone }: { phone?: boolean }) {
         ),
       )}
       <div className="my-1 h-px bg-line" />
-      <button type="button" role="menuitem" data-fw="upload" className={item} disabled={!actions.pickFirmware} onClick={() => file.current?.click()}>
+      <button type="button" role="menuitem" data-fw="upload" className={item} disabled={!actions.pickFirmware} onClick={() => (open(false), file.current?.click())}>
         <Icon n="upload" size={15} />
         <span className="min-w-0 flex-1">
           上传自己的 .bin…
-          <span className="block text-[11px] text-muted">ESP-IDF / Arduino 导出的完整 flash 镜像，芯片按文件头识别；拖到台面上也行（文件不会上传）</span>
+          <span className="block text-[11px] text-muted">在台面上运行，并验收当前检查点；ESP-IDF / Arduino 导出的完整 flash 镜像，拖到台面上也行（文件不会离开浏览器）</span>
         </span>
       </button>
     </div>

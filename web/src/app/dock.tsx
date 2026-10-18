@@ -97,8 +97,14 @@ function createSerialModel() {
     d.append(l.text || " ");
     return d;
   }
+  // 串口刷屏时每段都同步读 scrollHeight 会强制整页重排、拖死主线程：合并到下一帧只滚一次
+  let stickRaf = 0;
   function stick() {
-    if (host && ui.get().follow) host.scrollTop = host.scrollHeight;
+    if (stickRaf) return;
+    stickRaf = requestAnimationFrame(() => {
+      stickRaf = 0;
+      if (host && ui.get().follow) host.scrollTop = host.scrollHeight;
+    });
   }
   function renderAll() {
     if (!host) return;

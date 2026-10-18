@@ -29,7 +29,7 @@ import {
 } from "../pinscope";
 import { diffRuns, summarize, type BenchStep } from "../history";
 import { checkCommand, type Level } from "../../checks";
-import { verifyLevel } from "../../verify";
+import { VerifyStalled, verifyLevel } from "../../verify";
 import { fetchBuf } from "../../assets";
 import { servoAngle, ledCss } from "../../views/common";
 import type {
@@ -113,6 +113,12 @@ import {
 import { HOME, lab } from "../../ui/links";
 
 const hex = (n: number) => "0x" + n.toString(16).toUpperCase().padStart(2, "0");
+
+/** 验收没跑完的关（Worker 出错 / 卡住）：不记成"未通过"，留着固件给「重试」 */
+const stalled: Record<
+  string,
+  { why: string; buf: ArrayBuffer; who: string; own: boolean }
+> = {};
 
 /** 本页里用户自己验收过的固件（组装的"开机复测"用同一份固件；刷新后丢失，回落到台面上的固件） */
 export const ownFirmware: Record<string, { buf: ArrayBuffer; name: string }> =
@@ -360,7 +366,7 @@ export function benchStep(): StepImpl {
     let card: ReactNode = null;
     if (n && d === n)
       card = (
-        <AllPassedCard total={n} onNext={() => (location.hash = "assemble")} />
+        <AllPassedCard total={n} retest={s.assembly?.retest} onNext={() => (location.hash = "assemble")} />
       );
     else if (n) {
       const id =
@@ -2394,6 +2400,26 @@ export function benchStep(): StepImpl {
     const r = s.checks[id];
     const busy = s.verifying === id;
     const other = !!s.verifying && !busy;
+    const st = busy ? undefined : stalled[id];
+    const stall = st ? (
+      <>
+        <Sec>验收结果</Sec>
+        <VerdictLine kind="bad">✗ 没跑完：{st.why}</VerdictLine>
+        <Note>
+          这次不算未通过{r ? "，上一次的结果保留在下面" : ""}。固件{" "}
+          <Mono>{st.who}</Mono> 已留着，可以直接重试。
+        </Note>
+        <Btns>
+          <Btn
+            id="retryCheck"
+            disabled={other}
+            onClick={() => verify(l, st.buf, st.who, st.own)}
+          >
+            重试
+          </Btn>
+        </Btns>
+      </>
+    ) : null;
     const result = r ? (
       <>
         <Sec>验收结果</Sec>
@@ -2483,6 +2509,7 @@ export function benchStep(): StepImpl {
             </Btn>
           )}
         </Btns>
+        {stall}
         {result}
         <Sec>交给 AI 的任务书</Sec>
         <Brief>{l.brief}</Brief>
@@ -2491,7 +2518,7 @@ export function benchStep(): StepImpl {
         </Btns>
         <Sec>验收命令</Sec>
         <Code>{checkCommand(l)}</Code>
-        <Note>命令行验收的结论和指纹与网页相同；退出码 0 表示通过。</Note>
+        <Note>命令行验收的结论和指纹与网页相同；退出码 0 表示通过。tryboard 命令行包还没发布到 npm，现在要从仓库的 packages/tryboard 本地安装。</Note>
       </>,
     );
   }
@@ -2500,7 +2527,9 @@ export function benchStep(): StepImpl {
     const c = ctx!;
     if (c.store.get().verifying) return;
     if (own) ownFirmware[l.id] = { buf: buf.slice(0), name: who };
-    c.store.set({ verifying: l.id, verifyProgress: 0 });
+    delete stalled[l.id];
+    // -1：还在加载模拟器（wasm / ROM），Worker 还没开始跑
+    c.store.set({ verifying: l.id, verifyProgress: -1 });
     let out: CheckOutcome;
     try {
       const v = await verifyLevel(l, buf, (t) => {
@@ -2526,6 +2555,12 @@ export function benchStep(): StepImpl {
         sim: v.sim,
       };
     } catch (e) {
+      if (e instanceof VerifyStalled) {
+        stalled[l.id] = { why: e.message, buf: buf.slice(0), who, own };
+        c.store.set({ verifying: null });
+        c.shell.toast(`检查点 ${l.id} 没跑完：${e.message}`);
+        return;
+      }
       out = {
         ok: false,
         who,
@@ -2588,7 +2623,10 @@ export function benchStep(): StepImpl {
     );
     set("rh", rd ? `${rd.h.toFixed(1)} %` : "—");
     set("rp", rd ? `${rd.p.toFixed(2)} hPa` : "—");
-    set("vp", `${s.verifyProgress.toFixed(1)} s`);
+    set(
+      "vp",
+      s.verifyProgress < 0 ? "· 加载模拟器…" : `${s.verifyProgress.toFixed(1)} s`,
+    );
     const e = c.session.frame.elec;
     if (e) {
       const V = (x: number) => (Number.isFinite(x) ? `${x.toFixed(3)} V` : "—");
@@ -3268,6 +3306,20 @@ export function benchStep(): StepImpl {
     mount(c) {
       ctx = c;
       toolbarRef = c.shell.toolbar;
+      // 「换固件 → 上传」也算你自己的固件：和拖到检查框一样验收（2026-10-18 走查：菜单写着"检查点只认你自己上传的"，以前却不验收）
+      actions.checkUpload = (buf, name) => {
+        const s = c.store.get();
+        if (s.verifying) return null;
+        const sel = s.selection?.kind === "checkpoint" ? s.selection.id : null;
+        const id =
+          sel ??
+          c.work.checkpoints.find((x) => !(s.checks[x]?.ok && s.checks[x].own));
+        const l = id && c.session.levels.find((x) => x.id === id);
+        if (!l) return null;
+        c.store.set({ selection: { kind: "checkpoint", id: l.id } });
+        void verify(l, buf, name, true);
+        return l.id;
+      };
       if (!hooked) {
         hooked = true;
         if (c.work.id === "blank" && c.work.example)
@@ -3540,6 +3592,7 @@ export function benchStep(): StepImpl {
         overlay(k, null);
       setLeft({ lib: null, wires: null, wireCount: 0, card: null });
       ctx?.session.pick.highlight?.(null);
+      actions.checkUpload = undefined;
       ctx = null;
     },
   };

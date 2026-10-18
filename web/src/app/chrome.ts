@@ -37,6 +37,8 @@ export interface BenchChrome {
   dock: { tab: DockTab; h: number; collapsed: boolean };
   runs: number;
   checkpoints: CpRow[];
+  /** 组装后开机复测：null = 还没测；false = 没过（检查点卡不能还说"全部通过"） */
+  retest: boolean | null;
   issues: Issue[];
   /** 加载内核时的进度（state 2）；null = 已就绪 */
   boot: { text: string; steps: { label: string; done: boolean }[]; loaded: number; total: number } | null;
@@ -78,6 +80,7 @@ export const bc = createStore<BenchChrome>({
   dock: loadDock(),
   runs: 0,
   checkpoints: [],
+  retest: null,
   issues: [],
   boot: { text: '正在加载模拟器内核', steps: [], loaded: 0, total: 0 },
   overlays: {},
@@ -119,6 +122,8 @@ export function overlay(key: string, node: ReactNode | null) {
 /** 外壳上的按钮做什么：由 main.tsx / 实验台注册，没注册的按钮灰掉 */
 export const actions: {
   undo?: () => void;
+  /** 采购步骤自己的撤销 / 重做（清单历史，与实验台时间线分开）：d = -1 撤销，+1 重做 */
+  shopUndo?: (d: -1 | 1) => void;
   redo?: () => void;
   pause?: () => void;
   resume?: () => void;
@@ -128,6 +133,8 @@ export const actions: {
   /** 往 USB 串口（CDC-ACM）发字（进输入日志） */
   usbCdc?: (text: string) => void;
   pickFirmware?: (f: File) => void;
+  /** 实验台在时：拿刚上传的固件验收当前检查点（选中的，或第一个没过的），返回关号；全过了 / 不在实验台返回 null */
+  checkUpload?: (buf: ArrayBuffer, name: string) => string | null;
   /** 换回作品自带的参考固件（空白作品没有） */
   loadRef?: () => void;
   exportInputs?: () => void;

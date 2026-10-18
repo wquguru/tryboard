@@ -183,7 +183,8 @@ function RunGroup({ bench }: { bench: boolean }) {
     <div role="group" aria-label="运行状态" id="runGroup" data-run={run} className="flex h-8 flex-none items-center gap-0.5 rounded-lg border border-line pr-0.5 pl-2.5 max-[1280px]:hidden">
       <span className="inline-flex items-center gap-1.5 pr-1 text-xs whitespace-nowrap">
         <span className={cn('size-2 rounded-full', dot, run === 'run' && 'animate-pulse')} />
-        <span id="runState">{t}</span>
+        {/* 别的步骤里运行按钮是灰的：写明是实验台那边在跑，不然"运行中"配灰按钮像坏了 */}
+        <span id="runState" title={bench ? undefined : '运行控制在实验台；这一步只显示状态'}>{bench ? t : `实验台${t}`}</span>
       </span>
       {actions.speed && (
         <button
@@ -331,7 +332,9 @@ function ThemeBtn() {
 
 export function TopBar(p: { step: StepId; workName: string; bare?: boolean; right: ReactNode; toast: (t: string) => void }) {
   const { undo, redo } = useStore(bc);
+  // 采购也有自己的清单历史（U-14）：撤销 / 重做在这两步可用
   const bench = p.step === 'bench';
+  const undoable = bench || p.step === 'shop';
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
   return (
     <header
@@ -343,10 +346,10 @@ export function TopBar(p: { step: StepId; workName: string; bare?: boolean; righ
       <Breadcrumb name={p.workName} />
       <span aria-hidden="true" className="h-6 w-px flex-none bg-line" />
       <div className="flex flex-none items-center">
-        <button type="button" id="undoBtn" className={ib} disabled={!bench || !undo} title={bench ? `撤销（${mac ? '⌘Z' : 'Ctrl Z'}）：回到时间线上一步` : '只有实验台能撤销'} aria-label="撤销" onClick={() => actions.undo?.()}>
+        <button type="button" id="undoBtn" className={ib} disabled={!undoable || !undo} title={undoable ? `撤销（${mac ? '⌘Z' : 'Ctrl Z'}）：回到时间线上一步` : '只有采购、实验台能撤销'} aria-label="撤销" onClick={() => actions.undo?.()}>
           <Icon n="undo" />
         </button>
-        <button type="button" id="redoBtn" className={ib} disabled={!bench || !redo} title={bench ? `重做（${mac ? '⇧⌘Z' : 'Ctrl Shift Z'}）` : '只有实验台能重做'} aria-label="重做" onClick={() => actions.redo?.()}>
+        <button type="button" id="redoBtn" className={ib} disabled={!undoable || !redo} title={undoable ? `重做（${mac ? '⇧⌘Z' : 'Ctrl Shift Z'}）` : '只有采购、实验台能重做'} aria-label="重做" onClick={() => actions.redo?.()}>
           <Icon n="redo" />
         </button>
       </div>

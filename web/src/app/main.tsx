@@ -172,9 +172,13 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   const runState = () => {
     const s = store.get();
     const run = s.hist.busy ? 'busy' : s.hist.seeked ? 'seek' : paused ? 'pause' : s.running ? 'run' : session.sim ? 'idle' : session.fwName ? 'loading' : 'nofw';
-    setBc({ run, undo: !s.hist.busy && s.hist.cur > 0, redo: !s.hist.busy && s.hist.cur < s.hist.n - 1, runs: s.hist.runs, room: s.env.temp, fw: session.fwName, chip: session.chip });
+    // 采购步骤撤销的是清单历史（时间线上那几格），其他步骤是实验台时间线
+    const shop = s.step === 'shop';
+    const undo = shop ? s.bom.cur > 0 : !s.hist.busy && s.hist.cur > 0;
+    const redo = shop ? s.bom.cur < s.bom.ops.length - 1 : !s.hist.busy && s.hist.cur < s.hist.n - 1;
+    setBc({ run, undo, redo, runs: s.hist.runs, room: s.env.temp, fw: session.fwName, chip: session.chip });
   };
-  store.subscribe(runState, ['running', 'hist', 'env']);
+  store.subscribe(runState, ['running', 'hist', 'env', 'bom', 'step']);
   session.onBoot(() => {
     paused = false;
     // 每次上电是新的 worker：倍速重新下发
@@ -185,14 +189,16 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   if (session.sim) setBc({ boot: null });
   runState();
 
-  actions.undo = benchOnly(() => {
+  const benchUndo = benchOnly(() => {
     const h = store.get().hist;
     if (!h.busy && h.cur > 0) void hist.seek(h.cur - 1);
   });
-  actions.redo = benchOnly(() => {
+  const benchRedo = benchOnly(() => {
     const h = store.get().hist;
     if (!h.busy && h.cur < h.n - 1) void hist.seek(h.cur + 1);
   });
+  actions.undo = () => (store.get().step === 'shop' ? actions.shopUndo?.(-1) : benchUndo());
+  actions.redo = () => (store.get().step === 'shop' ? actions.shopUndo?.(1) : benchRedo());
   actions.pause = () => {
     session.sim?.pause();
     paused = true;
@@ -236,10 +242,22 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
       return;
     }
     overlay('fwcheck', null);
-    if (store.get().step !== 'bench') location.hash = 'bench';
+    const onBench = store.get().step === 'bench';
+    if (!onBench) location.hash = 'bench';
+    // 提示等新的一次运行真的起来再弹，免得"重新上电"跑在时间线「运行 #n」前面
+    let done = false;
+    const fire = () => {
+      if (done) return;
+      done = true;
+      off();
+      const id = onBench ? actions.checkUpload?.(buf, f.name) : null;
+      shell.toast(`已换成 ${f.name}（${(buf.byteLength / 1024).toFixed(0)} KB），重新上电${id ? `；同时验收检查点 ${id}` : ''}`);
+    };
+    const off = session.onBoot(fire);
+    // 万一这次没上电成功，别让监听留到下一次上电
+    setTimeout(fire, 3000);
     session.loadFirmware(buf, f.name);
     pushRecent({ kind: 'file', name: f.name, at: Date.now() });
-    shell.toast(`已换成 ${f.name}（${(buf.byteLength / 1024).toFixed(0)} KB），重新上电`);
   };
   // 换回作品自带的参考固件（上传过自己的 .bin 之后回到起点）；空白作品没有参考固件
   if (work.example && !ex)
@@ -302,6 +320,8 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   });
 
   // 步骤锁和完成标记：锁只是提示（各步骤自己会说明为什么还不能做），点了照样能进去看
+  // 采购完成 = 至少按过一次「下一步：实验台」（清单摆上台面存进本机）；只看 sceneRev 的话刷新后 ✓ 就丢了
+  const shopPlaced = !!loadPlaced(wkey(work));
   const progress = () => {
     const s = store.get();
     const n = work.checkpoints.length;
@@ -311,7 +331,8 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     const asmDone = !!s.assembly && s.assembly.placed.length >= s.assembly.total && s.assembly.total > 0;
     setBc({
       locks: { assemble: lockAsm, product: lockAsm ?? (n && !asmDone ? '组装装完后解锁' : undefined) },
-      done: { shop: s.sceneRev > 0, bench: n > 0 && allOk, assemble: asmDone, product: !!s.assembly?.retest },
+      done: { shop: s.sceneRev > 0 || shopPlaced, bench: n > 0 && allOk, assemble: asmDone, product: !!s.assembly?.retest },
+      retest: s.assembly?.retest ?? null,
       checkpoints: work.checkpoints.map((id): CpRow => {
         const l = session.levels.find((x) => x.id === id);
         const r = s.checks[id];

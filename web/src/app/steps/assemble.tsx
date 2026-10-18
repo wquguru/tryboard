@@ -5,7 +5,7 @@
 import { createAssembly } from '../../views/assembly';
 import { CHIP_HEAT_OFFSET, SONAR_BLOCK_CM, TEMPLATES, effectScript, type Template } from '../../views/templates';
 import { bootOptions, type Level } from '../../checks';
-import { verifyLevel } from '../../verify';
+import { VerifyStalled, verifyLevel } from '../../verify';
 import { fetchBuf } from '../../assets';
 import { ownFirmware, passedCount } from './bench';
 import type { AssemblyState, StepCtx, StepImpl } from '../types';
@@ -667,6 +667,13 @@ export function assembleStep(): StepImpl {
       rows.push({ ok: clean, text: clean ? `装配 ${s.total}/${s.total}，没有警告` : `装配 ${s.total}/${s.total}，有警告` });
       entry = { kind: 'test', ok: v.ok && clean, rows, fingerprint: v.fingerprint, who: fw.name, temp: env.temp };
     } catch (e) {
+      // 没跑完（Worker 出错 / 卡住）不记成"复测没过"：按钮恢复，直接再点一次
+      if (e instanceof VerifyStalled) {
+        testing = null;
+        ctx?.shell.toast(`开机复测没跑完：${e.message}，可以再点一次`);
+        if (ctx) renderAll();
+        return;
+      }
       entry = { kind: 'test', ok: false, rows: [{ ok: false, text: `运行失败：${e}` }], fingerprint: '—', who: fw.name, temp: env.temp };
     }
     testing = null;

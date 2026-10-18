@@ -6,6 +6,7 @@ import { BOARDS, CHECKED_AT, PARTS, PART_BY_ID, getPart, type Kind, type Part } 
 import { PROCURE_TEMPLATES, bomTotal, getTemplate } from '../../catalog/templates';
 import { evaluate, type Finding } from '../../catalog/rules';
 import { wkey } from '../works';
+import { actions } from '../chrome';
 import { initialHistory, opLabel, placement, push, replay, ruleInput, shortName, validHistory, type Bom, type BomHistory, type BomOp } from '../bom';
 import type { StepCtx, StepImpl, WorkId } from '../types';
 import { partLabel } from '../wiring';
@@ -282,8 +283,12 @@ function linesOf(b: Bom): Line[] {
   const picked = (id: string) => b.picks.find((p) => p.partId === id);
   const out: Line[] = [];
   const seen = new Set<string>();
+  // R27：清单里有走外接 5 V 的执行器、又没有别的 EXT5V 电源时，5 V 适配器是必选（分组和规则同一个口径，不然"建议"能删、删完又被阻断）
+  const ext5vNeeded = b.picks.some((p) => { const q = getPart(p.partId); return q.kind === 'actuator' && q.supplyNet === 'EXT5V'; })
+    && !b.picks.some((p) => p.partId !== 'psu-5v2a' && getPart(p.partId).provides?.net === 'EXT5V');
   const add = (partId: string, qty: number, why: string, required: boolean) => {
     if (seen.has(partId)) return;
+    if (ext5vNeeded && partId === 'psu-5v2a') required = true;
     seen.add(partId);
     const part = getPart(partId);
     const p = picked(partId);
@@ -347,7 +352,7 @@ export function shopStep(): StepImpl {
 
   function toggle(l: Line) {
     const c = ctx!;
-    if (l.required) {
+    if (l.required && l.checked) {
       // 必选不能去：勾选框保持勾上，并说清楚为什么
       c.shell.toast(l.partId === bom().board ? '开发板不能去掉，只能换：用底部的「换开发板」' : `必选件不能去掉：${shortName(l.partId)}（${l.why}）`);
       if (selected() === l.partId) render();
@@ -891,6 +896,15 @@ export function shopStep(): StepImpl {
       defaultSelection();
       render();
       c.shell.setNext('下一步：实验台 →', 'bench', '', place);
+      // 顶栏撤销 / ⌘Z 在采购这一步走清单历史（2026-10-18 走查：以前时间线记了，撤销却是灰的）
+      actions.shopUndo = (d) => {
+        const h = hist();
+        const i = h.cur + d;
+        if (i < 0 || i >= h.ops.length) return;
+        const op = h.ops[d < 0 ? h.cur : i];
+        onSeek(i);
+        c.shell.toast(`${d < 0 ? '已撤销' : '已重做'}：${opLabel(op).label}`);
+      };
       unsubs = [
         c.store.subscribe(() => render(), ['selection']),
         // 清单变了（含时间线点回去）：选中的件不在新清单里就换成默认选中，再画
@@ -906,6 +920,7 @@ export function shopStep(): StepImpl {
       unsubs = [];
       // 采购页的选中（清单里的零件 id）对实验台没有意义
       if (ctx?.store.get().selection?.kind === 'part') ctx.store.set({ selection: null });
+      actions.shopUndo = undefined;
       ctx = null;
     },
   };

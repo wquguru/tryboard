@@ -142,7 +142,12 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
       const tol = pw.tol ?? 0.01;
       const ok = Math.abs(f - pw.freq) <= pw.freq * 0.01 && Math.abs(lo - pw.min) <= tol && Math.abs(hi - pw.max) <= tol;
       const when = pw.from !== undefined ? `，${pw.from} s 以后` : '';
-      res.push({ ok, text: `GPIO${pw.pin} PWM ${f.toFixed(0)} Hz${when}，占空比 ${lo.toFixed(3)}–${hi.toFixed(3)}（约 ${((lo * 1000) / f).toFixed(2)}–${((hi * 1000) / f).toFixed(2)} ms）` });
+      // 先写脉宽（舵机看这个），没过时直接写出要多少，不让人自己拿占空比去算差了多少
+      const span = (a: string, b: string) => (a === b ? a : `${a}–${b}`);
+      const ms = (d: number, hz: number) => ((d * 1000) / hz).toFixed(2);
+      const fBad = Math.abs(f - pw.freq) > pw.freq * 0.01;
+      const want = ok ? '' : `；要 ${span(ms(pw.min, pw.freq), ms(pw.max, pw.freq))} ms${fBad ? `、${pw.freq} Hz` : ''}`;
+      res.push({ ok, text: `GPIO${pw.pin} PWM ${f.toFixed(0)} Hz${when}，脉宽 ${span(ms(lo, f), ms(hi, f))} ms（占空比 ${span(lo.toFixed(3), hi.toFixed(3))}）${want}` });
       if (pw.steps) {
         const seq = ch.map(([d]) => d);
         let i = 0;

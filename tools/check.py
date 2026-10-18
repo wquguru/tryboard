@@ -93,7 +93,12 @@ def evaluate(t: dict, out: str, report: str):
             ok = abs(f - pw['freq']) <= pw['freq'] * 0.01 and abs(lo - pw['min']) <= tol and abs(hi - pw['max']) <= tol
             # 数字按 JS 的写法（1.0 写成 1），与网页 / npm 包逐字一致
             when = f"，{jsnum(pw['from'])} s 以后" if 'from' in pw else ''
-            res.append((ok, f"GPIO{pw['pin']} PWM {f:.0f} Hz{when}，占空比 {lo:.3f}–{hi:.3f}（约 {lo * 1000 / f:.2f}–{hi * 1000 / f:.2f} ms）"))
+            # 先写脉宽（舵机看这个），没过时直接写出要多少
+            span = lambda a, b: a if a == b else f"{a}–{b}"
+            ms = lambda d, hz: f"{d * 1000 / hz:.2f}"
+            f_bad = abs(f - pw['freq']) > pw['freq'] * 0.01
+            want = '' if ok else f"；要 {span(ms(pw['min'], pw['freq']), ms(pw['max'], pw['freq']))} ms" + (f"、{jsnum(pw['freq'])} Hz" if f_bad else '')
+            res.append((ok, f"GPIO{pw['pin']} PWM {f:.0f} Hz{when}，脉宽 {span(ms(lo, f), ms(hi, f))} ms（占空比 {span(f'{lo:.3f}', f'{hi:.3f}')}）{want}"))
             if 'steps' in pw:
                 seq, i, miss = [d for d, _ in ch], 0, []
                 for want in pw['steps']:

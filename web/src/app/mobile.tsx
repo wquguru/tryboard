@@ -146,7 +146,7 @@ const stBtn =
   "inline-flex size-11 flex-none cursor-pointer items-center justify-center rounded-full border border-line bg-(--panel) p-0 text-fg shadow-panel disabled:cursor-not-allowed disabled:text-muted";
 
 export function MobileStageBar({ wiring }: { wiring: boolean }) {
-  const { run, speed, checkpoints } = useStore(bc);
+  const { run, speed, checkpoints, retest } = useStore(bc);
   const [t, dot] = RUN_TEXT[run];
   const live = run === "run" || run === "pause" || run === "seek";
   const i = checkpoints.findIndex((c) => c.state !== "ok");
@@ -219,7 +219,9 @@ export function MobileStageBar({ wiring }: { wiring: boolean }) {
             "absolute top-[60px] right-2 left-2 z-3 flex items-center gap-2 rounded-xl border px-3 py-1.5 shadow-panel",
             cp
               ? "border-(--warn-line) bg-(--ch-bg) text-fg"
-              : "border-(--ok-line) bg-ok-bg text-ok-ink",
+              : retest === false
+                ? "border-(--warn-line) bg-warn-bg text-warn-ink"
+                : "border-(--ok-line) bg-ok-bg text-ok-ink",
           )}
         >
           <span className="min-w-0 flex-1 text-[13px] leading-snug">
@@ -231,7 +233,9 @@ export function MobileStageBar({ wiring }: { wiring: boolean }) {
               </>
             ) : (
               <b className="font-medium">
-                {checkpoints.length} 个检查点全部通过
+                {retest === false
+                  ? `检查点 ${checkpoints.length}/${checkpoints.length} 通过 · 开机复测 ✗`
+                  : `${checkpoints.length} 个检查点全部通过`}
               </b>
             )}
           </span>

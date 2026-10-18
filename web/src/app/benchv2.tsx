@@ -696,11 +696,29 @@ export function CheckpointCard({
 }
 export function AllPassedCard({
   total,
+  retest,
   onNext,
 }: {
   total: number;
+  /** 组装后开机复测：false = 没过（台面上通过不代表装进外壳也行，不能还写"全部通过"） */
+  retest?: boolean | null;
   onNext: () => void;
 }) {
+  if (retest === false)
+    return (
+      <div
+        id="cpCard"
+        className="rounded-lg border border-(--warn-line) bg-warn-bg p-2.5 text-xs text-warn-ink"
+      >
+        <b className="block text-[13px]">
+          检查点 {total}/{total} 通过 · 开机复测 ✗
+        </b>
+        <p className="mt-1 mb-2">台面上没问题，装进外壳后复测没过：回组装看哪里要改。</p>
+        <button type="button" className={btnPri} onClick={onNext}>
+          回组装 →
+        </button>
+      </div>
+    );
   return (
     <div
       id="cpCard"
