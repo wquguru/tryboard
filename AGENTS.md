@@ -99,7 +99,7 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | M2 | ◐ 常用外设 | LEDC、RMT（WS2812）、I2C（SSD1306、BME280）、SPI、ADC、定时器；各有验收固件 |
 | M3 | ◐ 面包板与 3D 世界 | 拖放元件、连线、舵机 / 灯带 / 屏幕在 3D 里有反馈；拖拽装配成成品（SVG，已有） |
 | M4 | ◐ ESP32-S3（Xtensa LX7） | 同 M0–M2 验收在 S3 上通过 |
-| M5 | ☐ USB OTG | S3 冒充键盘 / 网卡，浏览器里的虚拟电脑 / 手机能枚举并响应 |
+| M5 | ◐ USB OTG | S3 冒充键盘 / 网卡，浏览器里的虚拟电脑 / 手机能枚举并响应（键盘 HID、CDC 串口已通：s3-usb-keyboard / s3-usb-cdc、作品 usbkey；网卡未做） |
 | M6 | ◐ Wi-Fi | 在 netif 层替换，HTTP / MQTT 示例可达浏览器侧虚拟网络（C3：开放网络与 WPA2-PSK 已通） |
 | M7 | ☐ BLE | VHCI 层虚拟控制器 + 虚拟手机 |
 | M8 | ☐ 音频 / 摄像头 | I2S 麦克风 / 喇叭接 Web Audio；摄像头读 3D 渲染画面；小智类项目可跑 |
