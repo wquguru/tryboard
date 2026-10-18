@@ -519,8 +519,8 @@ let ratioWall = 0;
 let ratioSim = 0;
 let lastRatio = 1;
 
-function loop() {
-  if (!ex || !running) return;
+function loop(gen = loopGen) {
+  if (!ex || !running || gen !== loopGen) return;
   const e = ex;
   const now = performance.now();
   // 目标：模拟时间追上（墙钟 × 速度）；每轮最多算 20ms 墙钟，避免卡住消息处理
@@ -587,8 +587,17 @@ function loop() {
     post({ type: 'stopped', reason: errorText(e) });
     return;
   }
-  setTimeout(loop, 4);
+  // 跟不上时马上接着算：setTimeout 在 worker 里也被钳到 ≥4ms，每 20ms 白等 4ms 加上发帧，整屏动画这类满负荷固件
+  // 实测只剩内核速度的约 80%。MessageChannel 的消息不受钳制，主线程发来的输入消息仍排在它前后，照常在时间片之间施加
+  if (behind > 0) yieldPort.postMessage(loopGen);
+  else setTimeout(loop, 4, loopGen);
 }
+
+/** 递增后旧的排程（暂停前排下的 setTimeout / 消息）作废，暂停后马上再运行也不会跑出两条循环 */
+let loopGen = 0;
+const yieldChannel = new MessageChannel();
+const yieldPort = yieldChannel.port2;
+yieldChannel.port1.onmessage = (ev: MessageEvent<number>) => loop(ev.data);
 
 let oledVersion = 0;
 /** OLED 画面变了才传（128×64 字节，转移所有权不拷贝两次） */
@@ -858,7 +867,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       ratioWall = 0;
       simAnchor = ex.tb_cycles();
       wallAnchor = performance.now();
-      loop();
+      loop(++loopGen);
       break;
     case 'pause':
       running = false;
