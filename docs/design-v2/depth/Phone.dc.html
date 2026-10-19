@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>手机 · 网络状况</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0a6fbd}a:hover{color:#0b76c8}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; background: #ffffff; color: #1e1e1e; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; font-size: 13px; overflow: hidden">
+  <div style="height: 52px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid #e6e6e6">
+    <div style="font-weight: 700; font-size: 15px">TryBoard</div>
+    <div style="color: #5e5e5e; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">联网天气站</div>
+    <span style="display: inline-flex; align-items: center; height: 26px; padding: 0 8px; border-radius: 13px; background: #fffaf0; color: #8a5a12; font-size: 12px; font-weight: 500">网络：不稳定</span>
+  </div>
+  <div style="height: 150px; flex: none; background: #f3f4f6; display: flex; align-items: center; justify-content: center; color: #5e5e5e; font-size: 12px">3D 台面</div>
+  <div style="height: 44px; flex: none; display: flex; border-bottom: 1px solid #e6e6e6; padding: 0 8px">
+    <button type="button" style="flex: 1; border: 0; background: transparent; color: #5e5e5e; font-size: 13px">串口</button>
+    <button type="button" aria-current="page" style="flex: 1; border: 0; border-bottom: 2px solid #0b76c8; background: transparent; font-size: 13px; font-weight: 600">网络</button>
+    <button type="button" style="flex: 1; border: 0; background: transparent; color: #5e5e5e; font-size: 13px">任务</button>
+    <button type="button" style="flex: 1; border: 0; background: transparent; color: #5e5e5e; font-size: 13px">波形</button>
+  </div>
+  <div style="flex: 1; min-height: 0; overflow: hidden; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
+    <div style="font-weight: 600">网络状况</div>
+    <div role="radiogroup" aria-label="网络状况" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+      <button type="button" role="radio" aria-checked="false" style="height: 48px; border-radius: 8px; border: 1px solid #e6e6e6; background: #ffffff; font-size: 14px">正常</button>
+      <button type="button" role="radio" aria-checked="false" style="height: 48px; border-radius: 8px; border: 1px solid #e6e6e6; background: #ffffff; font-size: 14px">信号弱</button>
+      <button type="button" role="radio" aria-checked="true" style="height: 48px; border-radius: 8px; border: 2px solid #0b76c8; background: #e5f4ff; color: #0a6fbd; font-size: 14px; font-weight: 600">不稳定</button>
+      <button type="button" role="radio" aria-checked="false" style="height: 48px; border-radius: 8px; border: 1px solid #e6e6e6; background: #ffffff; font-size: 14px">断网</button>
+    </div>
+    <div style="font-size: 12px; color: #5e5e5e; line-height: 18px">延迟 300 ± 200 ms，丢包 5%，每 40–90 s 随机断一次。</div>
+    <button type="button" style="height: 44px; border-radius: 8px; border: 1px solid #e6e6e6; background: #ffffff; font-size: 14px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px">
+      <span>安排一次故障</span>
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4" fill="none" stroke="#5e5e5e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </button>
+    <span style="display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 4px 10px; border-radius: 8px; background: #e8f7ee; color: #0e7a41; font-size: 12px; font-weight: 500; line-height: 18px">
+      <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" style="flex: none"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      断线 2 次 · 都在 12 s 内连回 · 请求 9/11 成功
+    </span>
+    <div style="display: flex; flex-direction: column; font-size: 12.5px">
+      <div style="display: flex; gap: 8px; align-items: center; min-height: 34px; border-bottom: 1px solid #f0f0f0"><span style="width: 56px; font-family: 'JetBrains Mono', monospace; color: #5e5e5e; font-size: 11.5px">41.2 s</span><span style="flex: 1">GET /now</span><span style="color: #5e5e5e">200 · 512 ms</span></div>
+      <div style="display: flex; gap: 8px; align-items: center; min-height: 34px; background: #fef2f2; padding: 0 4px; border-radius: 4px"><span style="width: 52px; font-family: 'JetBrains Mono', monospace; color: #5e5e5e; font-size: 11.5px">47.8 s</span><span style="flex: 1">GET /now</span><span style="color: #c4361a">超时 5 s</span></div>
+      <div style="display: flex; gap: 8px; align-items: center; min-height: 34px; border-bottom: 1px solid #f0f0f0"><span style="width: 56px; font-family: 'JetBrains Mono', monospace; color: #5e5e5e; font-size: 11.5px">52.9 s</span><span style="flex: 1">GET /now（重试）</span><span style="color: #5e5e5e">200 · 284 ms</span></div>
+    </div>
+  </div>
+  <div style="height: 72px; flex: none; border-top: 1px solid #e6e6e6; display: flex; align-items: center; gap: 10px; padding: 0 16px">
+    <div style="flex: 1; min-width: 0">
+      <div style="font-size: 12px; color: #5e5e5e">检查点 05</div>
+      <div style="font-size: 13px; font-weight: 600">断网也不崩</div>
+    </div>
+    <button type="button" style="height: 48px; padding: 0 22px; border-radius: 8px; border: 0; background: #0b76c8; color: #ffffff; font-size: 15px; font-weight: 500">验收</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

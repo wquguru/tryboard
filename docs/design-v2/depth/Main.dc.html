@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>网络页签 · 故障注入</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0a6fbd}a:hover{color:#0b76c8}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 760px; box-sizing: border-box; display: flex; flex-direction: column; background: #ffffff; color: #1e1e1e; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; font-size: 13px">
+  <!-- 顶栏 -->
+  <div style="height: 48px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid #e6e6e6">
+    <div style="font-weight: 700; font-size: 15px">TryBoard</div>
+    <div style="color: #5e5e5e">实验台 · 联网天气站（ESP32-S3）</div>
+    <div style="flex: 1"></div>
+    <div style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 14px; background: #fffaf0; color: #8a5a12; font-size: 12px; font-weight: 500">
+      <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5l6 11H2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path><path d="M8 6.8v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>
+      网络：{{presetName}}
+    </div>
+    <button type="button" style="height: 32px; padding: 0 14px; border-radius: 6px; border: 1px solid #e6e6e6; background: #ffffff; font-size: 13px">开机复测</button>
+    <button type="button" style="height: 32px; padding: 0 14px; border-radius: 6px; border: 0; background: #0b76c8; color: #ffffff; font-size: 13px; font-weight: 500">下一步：成品</button>
+  </div>
+  <!-- 台面 + 右栏 -->
+  <div style="flex: 1; display: flex; min-height: 0">
+    <div style="flex: 1; background: #f3f4f6; display: flex; align-items: center; justify-content: center; color: #5e5e5e; position: relative">
+      <div style="width: 420px; height: 210px; border-radius: 10px; border: 1px dashed #c9ccd1; display: flex; align-items: center; justify-content: center; font-size: 13px">3D 台面（不变）</div>
+      <div style="position: absolute; left: 16px; top: 14px; display: flex; align-items: center; gap: 8px; font-size: 12px">
+        <span style="display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 12px; background: #ffffff; border: 1px solid #e6e6e6">
+          <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6a9 9 0 0 1 12 0M4.5 8.6a5.5 5.5 0 0 1 7 0M7 11.2a2 2 0 0 1 2 0" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round"></path></svg>
+          {{rssi}}
+        </span>
+        <span style="color: #5e5e5e">已模拟 24.6 s</span>
+      </div>
+    </div>
+    <div style="width: 340px; flex: none; border-left: 1px solid #e6e6e6; padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">
+      <div style="font-size: 12px; color: #5e5e5e">检查点 05 · 断网也不崩</div>
+      <div style="font-size: 15px; font-weight: 600; line-height: 22px">路由器重启后，天气站要在 30 秒内自己连回去，并继续刷新数据。</div>
+      <div style="font-size: 12px; color: #5e5e5e; line-height: 18px">在下面的「网络」页签里点「路由器重启」，或直接点「验收」，会自动注入一次。</div>
+      <div style="display: flex; gap: 8px; margin-top: 4px">
+        <button type="button" style="height: 36px; padding: 0 16px; border-radius: 6px; border: 0; background: #0b76c8; color: #ffffff; font-size: 14px; font-weight: 500">验收</button>
+        <button type="button" style="height: 36px; padding: 0 16px; border-radius: 6px; border: 1px solid #e6e6e6; background: #ffffff; font-size: 14px">看提示</button>
+      </div>
+    </div>
+  </div>
+  <!-- 底部坞：网络页签 -->
+  <div style="height: 330px; flex: none; border-top: 1px solid #e6e6e6; display: flex; flex-direction: column; background: #ffffff">
+    <div style="height: 40px; flex: none; display: flex; align-items: flex-end; gap: 4px; padding: 0 12px; border-bottom: 1px solid #e6e6e6">
+      <button type="button" style="height: 40px; padding: 0 12px; border: 0; background: transparent; color: #5e5e5e; font-size: 13px">串口</button>
+      <button type="button" aria-current="page" style="height: 40px; padding: 0 12px; border: 0; border-bottom: 2px solid #0b76c8; background: transparent; color: #1e1e1e; font-size: 13px; font-weight: 600">网络</button>
+      <button type="button" style="height: 40px; padding: 0 12px; border: 0; background: transparent; color: #5e5e5e; font-size: 13px">蓝牙</button>
+      <button type="button" style="height: 40px; padding: 0 12px; border: 0; background: transparent; color: #5e5e5e; font-size: 13px">任务</button>
+      <button type="button" style="height: 40px; padding: 0 12px; border: 0; background: transparent; color: #5e5e5e; font-size: 13px">逻辑分析仪</button>
+    </div>
+    <div style="flex: 1; display: flex; min-height: 0">
+      <!-- 左：网络状况 -->
+      <div style="width: 420px; flex: none; padding: 14px 16px; box-sizing: border-box; border-right: 1px solid #e6e6e6; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: baseline; gap: 8px">
+          <div style="font-weight: 600">网络状况</div>
+          <div style="font-size: 12px; color: #5e5e5e">新增 · 对所有请求生效</div>
+        </div>
+        <div role="radiogroup" aria-label="网络状况" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border: 1px solid #e6e6e6; border-radius: 8px; padding: 3px; background: #f7f7f7">
+          <sc-for list="{{presets}}" as="p" hint-placeholder-count="4">
+            <button type="button" role="radio" aria-checked="{{p.on}}" onClick="{{p.pick}}" style="{{p.style}}">{{p.name}}</button>
+          </sc-for>
+        </div>
+        <div style="font-size: 12px; color: #5e5e5e; line-height: 18px; min-height: 36px">{{presetHint}}</div>
+        <div style="font-weight: 600; margin-top: 2px">安排一次故障</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px">
+          <button type="button" style="height: 32px; padding: 0 12px; border-radius: 6px; border: 1px solid #e6e6e6; background: #ffffff; font-size: 13px">路由器重启（断 8 s）</button>
+          <button type="button" style="height: 32px; padding: 0 12px; border-radius: 6px; border: 1px solid #e6e6e6; background: #ffffff; font-size: 13px">DNS 失败</button>
+          <button type="button" style="height: 32px; padding: 0 12px; border-radius: 6px; border: 1px solid #e6e6e6; background: #ffffff; font-size: 13px">服务器不回应</button>
+        </div>
+        <div style="margin-top: auto; font-size: 11px; color: #5e5e5e; font-family: 'JetBrains Mono', monospace">种子 7 · 进输入日志，命令行 --inputs 可重放</div>
+      </div>
+      <!-- 右：时间线 -->
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+        <div style="height: 44px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid #f0f0f0">
+          <span style="display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 13px; background: #e8f7ee; color: #0e7a41; font-size: 12px; font-weight: 500">
+            <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            断线 1 次 · 9.6 s 后连回 · 之后请求都成功
+          </span>
+          <span style="flex: 1"></span>
+          <span style="font-size: 12px; color: #5e5e5e">请求 6 · 失败 1 · 平均 148 ms</span>
+        </div>
+        <div style="flex: 1; overflow: hidden; padding: 4px 16px; font-size: 12.5px">
+          <sc-for list="{{rows}}" as="r" hint-placeholder-count="8">
+            <div style="{{r.style}}">
+              <span style="width: 64px; flex: none; font-family: 'JetBrains Mono', monospace; color: #5e5e5e; font-size: 12px">{{r.t}}</span>
+              <span style="width: 18px; flex: none; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; color: {{r.markColor}}">{{r.mark}}</span>
+              <span style="flex: 1; min-width: 0">{{r.what}}</span>
+              <span style="flex: none; color: #5e5e5e; font-size: 12px">{{r.note}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":760}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { preset: 'normal' }; }
+  renderVals() {
+    var P = [
+      { id: 'normal', name: '正常', rssi: '-48 dBm', hint: '信号 -48 dBm，不丢包，延迟 20–40 ms。' },
+      { id: 'weak', name: '信号弱', rssi: '-82 dBm', hint: '信号 -82 dBm，丢包 10%，偶尔要重传；适合测超时和重试。' },
+      { id: 'flaky', name: '不稳定', rssi: '-70 dBm', hint: '延迟 300 ± 200 ms，丢包 5%，每 40–90 s 随机断一次。' },
+      { id: 'down', name: '断网', rssi: '无信号', hint: '路由器消失：扫描不到 MyHome。看固件会不会一直卡在连接里。' }
+    ];
+    var cur = this.state.preset;
+    var self = this;
+    var presets = P.map(function (p) {
+      var on = p.id === cur;
+      return {
+        name: p.name, on: on ? 'true' : 'false',
+        pick: function () { self.setState({ preset: p.id }); },
+        style: 'height: 32px; border: 0; border-radius: 6px; font-size: 13px; cursor: pointer; ' + (on ? 'background: #ffffff; color: #1e1e1e; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12)' : 'background: transparent; color: #5e5e5e')
+      };
+    });
+    var cp = P.filter(function (p) { return p.id === cur; })[0];
+    var base = 'display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 4px; ';
+    var rows = [
+      { t: '0.84 s', mark: '✓', what: '关联 MyHome（WPA2）', note: '握手 4 帧' },
+      { t: '1.92 s', mark: '✓', what: 'DHCP 拿到 192.168.4.23', note: '' },
+      { t: '2.10 s', mark: '✓', what: 'GET api.weather.example/now', note: '200 · 132 ms' },
+      { t: '12.40 s', mark: '!', what: '注入：路由器重启（断 8 s）', note: '你点的', warn: true },
+      { t: '13.42 s', mark: '×', what: 'Wi-Fi 断开 reason=200 BEACON_TIMEOUT', note: '固件收到事件', bad: true },
+      { t: '20.40 s', mark: '·', what: '路由器恢复', note: '' },
+      { t: '22.01 s', mark: '✓', what: '重新关联、拿到 IP', note: '断线后 9.6 s' },
+      { t: '22.30 s', mark: '✓', what: 'GET api.weather.example/now', note: '200 · 164 ms' }
+    ].map(function (r) {
+      return {
+        t: r.t, mark: r.mark, what: r.what, note: r.note,
+        markColor: r.warn ? '#8a5a12' : r.bad ? '#c4361a' : r.mark === '·' ? '#5e5e5e' : '#0e7a41',
+        style: base + (r.warn ? 'background: #fffaf0' : r.bad ? 'background: #fef2f2' : 'border-bottom: 1px solid #f0f0f0')
+      };
+    });
+    return { presets: presets, presetHint: cp.hint, presetName: cp.name, rssi: cp.rssi, rows: rows };
+  }
+}
+</script>
+</body>
+</html>

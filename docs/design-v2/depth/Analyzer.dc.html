@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>逻辑分析仪 · 精细采样</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0a6fbd}a:hover{color:#0b76c8}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1320px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #ffffff; color: #1e1e1e; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; font-size: 13px; border: 1px solid #e6e6e6">
+  <!-- 工具条 -->
+  <div style="height: 48px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid #e6e6e6">
+    <div style="font-weight: 600">逻辑分析仪</div>
+    <span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 14px; background: #e5f4ff; color: #0a6fbd; font-size: 12px; font-weight: 500">
+      <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M1 11h3V5h3v6h3V5h3v6h2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>
+      精细采样：GPIO5 · 20 ms 窗口 · 逐周期
+    </span>
+    <button type="button" style="height: 32px; padding: 0 12px; border-radius: 6px; border: 1px solid #e6e6e6; background: #ffffff; font-size: 13px">改窗口</button>
+    <div style="flex: 1"></div>
+    <span style="font-size: 12px; color: #5e5e5e; font-family: 'JetBrains Mono', monospace">18.402 ms – 19.042 ms</span>
+    <button type="button" aria-label="缩小" style="width: 32px; height: 32px; border-radius: 6px; border: 1px solid #e6e6e6; background: #ffffff; font-size: 16px">−</button>
+    <button type="button" aria-label="放大" style="width: 32px; height: 32px; border-radius: 6px; border: 1px solid #e6e6e6; background: #ffffff; font-size: 16px">+</button>
+    <button type="button" style="height: 32px; padding: 0 14px; border-radius: 6px; border: 0; background: #0b76c8; color: #ffffff; font-size: 13px; font-weight: 500">导出 VCD</button>
+  </div>
+
+  <div style="flex: 1; display: flex; flex-direction: column; min-height: 0">
+    <!-- GPIO5 精细 -->
+    <div style="display: flex; border-bottom: 1px solid #f0f0f0; height: 150px">
+      <div style="width: 200px; flex: none; padding: 14px 16px; box-sizing: border-box; border-right: 1px solid #f0f0f0">
+        <div style="font-weight: 600">GPIO5 <span style="font-weight: 400; color: #5e5e5e">DHT11 数据</span></div>
+        <div style="margin-top: 6px; display: inline-flex; font-size: 11px; color: #0a6fbd; background: #e5f4ff; border-radius: 4px; padding: 1px 6px">精细 · 每个沿</div>
+        <div style="margin-top: 8px; font-size: 12px; color: #5e5e5e; line-height: 18px">解码：0 1 1 0 1 0</div>
+      </div>
+      <div style="flex: 1; position: relative; padding: 0 20px">
+        <div style="position: absolute; left: 20px; right: 20px; top: 14px; height: 20px">
+          <sc-for list="{{bits}}" as="b" hint-placeholder-count="6">
+            <span style="{{b.style}}">{{b.v}}</span>
+          </sc-for>
+        </div>
+        <svg width="1000" height="60" viewBox="0 0 1000 60" aria-hidden="true" style="position: absolute; left: 20px; top: 44px">
+          <path d="{{wave}}" fill="none" stroke="#0b76c8" stroke-width="2" stroke-linejoin="round"></path>
+        </svg>
+        <!-- 测量光标 -->
+        <div style="{{c1}}"></div>
+        <div style="{{c2}}"></div>
+        <div style="{{cTag}}">高 70.1 µs → 1</div>
+      </div>
+    </div>
+    <!-- I2C 事件重建 -->
+    <div style="display: flex; border-bottom: 1px solid #f0f0f0; height: 64px">
+      <div style="width: 200px; flex: none; padding: 12px 16px; box-sizing: border-box; border-right: 1px solid #f0f0f0">
+        <div style="font-weight: 600">I2C <span style="font-weight: 400; color: #5e5e5e">GPIO8 / 9</span></div>
+        <div style="font-size: 11px; color: #5e5e5e; margin-top: 2px">按事务重建（不变）</div>
+      </div>
+      <div style="flex: 1; display: flex; align-items: center; gap: 6px; padding: 0 20px; color: #5e5e5e; font-size: 12px">
+        <span style="flex: 0 0 300px"></span>
+        <span style="display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 4px; background: #f7f7f7; border: 1px solid #e6e6e6; font-family: 'JetBrains Mono', monospace; color: #1e1e1e">0x3C W · 40 00 FF … ACK</span>
+        <span style="display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 4px; background: #f7f7f7; border: 1px solid #e6e6e6; font-family: 'JetBrains Mono', monospace; color: #1e1e1e">0x3C W · 40 1F 1F … ACK</span>
+      </div>
+    </div>
+    <!-- 时间轴 -->
+    <div style="display: flex; height: 28px; border-bottom: 1px solid #e6e6e6">
+      <div style="width: 200px; flex: none; border-right: 1px solid #f0f0f0"></div>
+      <div style="flex: 1; display: flex; justify-content: space-between; padding: 0 20px; align-items: center; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #5e5e5e">
+        <span>0 µs</span><span>128</span><span>256</span><span>384</span><span>512</span><span>640 µs</span>
+      </div>
+    </div>
+    <!-- 时序提示 -->
+    <div style="margin: 14px 16px 0; display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 8px; background: #f7f7f7; line-height: 20px">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="flex: none; margin-top: 2px"><circle cx="8" cy="8" r="6" fill="none" stroke="#1e1e1e" stroke-width="1.6"></circle><path d="M8 5v3.4l2 1.4" fill="none" stroke="#1e1e1e" stroke-width="1.6" stroke-linecap="round"></path></svg>
+      <div style="flex: 1">
+        <div style="font-weight: 600">这几个脉冲是传感器发的，脉宽准；但固件是靠忙等循环去量它的</div>
+        <div style="color: #5e5e5e; font-size: 12px">模拟器里一条指令算 1 个周期，真机有缓存和闪存等待，量出来的数可能偏几微秒。逻辑跑通了，余量要上真机看。</div>
+      </div>
+      <span style="flex: none; font-size: 11px; border: 1px solid #1e1e1e; border-radius: 4px; padding: 0 6px; margin-top: 2px">需真机确认</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":520}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var k = 1000 / 640, hi = 8, lo = 52;
+    var bitsV = [0, 1, 1, 0, 1, 0];
+    var x = 0, d = 'M0 ' + hi + ' H' + (20 * k).toFixed(1);
+    x = 20;
+    var bits = [], c = null;
+    for (var i = 0; i < bitsV.length; i++) {
+      var hw = bitsV[i] ? 70 : 26;
+      d += ' V' + lo + ' H' + ((x + 50) * k).toFixed(1) + ' V' + hi + ' H' + ((x + 50 + hw) * k).toFixed(1);
+      var mid = (x + 50 + hw / 2) * k;
+      bits.push({ v: String(bitsV[i]), style: 'position: absolute; left: ' + (mid - 10).toFixed(1) + 'px; width: 20px; text-align: center; font-family: \'JetBrains Mono\', monospace; font-size: 12px; font-weight: 600; color: #0a6fbd' });
+      if (i === 1) c = { a: (x + 50) * k, b: (x + 50 + hw) * k };
+      x += 50 + hw;
+    }
+    d += ' V' + lo + ' H1000';
+    var line = function (px) { return 'position: absolute; top: 40px; bottom: 8px; left: ' + (20 + px).toFixed(1) + 'px; width: 0; border-left: 1px dashed #c4361a'; };
+    return {
+      wave: d, bits: bits, c1: line(c.a), c2: line(c.b),
+      cTag: 'position: absolute; top: 112px; left: ' + (20 + c.a).toFixed(1) + 'px; padding: 2px 6px; border-radius: 4px; background: #fef2f2; color: #c4361a; font-size: 11px; font-family: \'JetBrains Mono\', monospace; white-space: nowrap'
+    };
+  }
+}
+</script>
+</body>
+</html>

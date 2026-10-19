@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>结果卡 · 可信度分项</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0a6fbd}a:hover{color:#0b76c8}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 920px; height: 760px; box-sizing: border-box; padding: 32px 30px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; align-items: start; background: #f7f7f7; color: #1e1e1e; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif">
+
+  <!-- 卡 A：通过，但分项可信度不同 -->
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="font-size: 12px; color: #5e5e5e">检查点 05 通过 · 带可信度分项</div>
+    <div style="border: 1px solid #e6e6e6; border-radius: 10px; background: #ffffff; padding: 16px">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span style="display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 12px; background: #e8f7ee; color: #0e7a41; font-size: 12px; font-weight: 500">
+          <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>通过
+        </span>
+        <span style="font-size: 12px; color: #5e5e5e">我的固件 · 模拟 30 s</span>
+      </div>
+      <div style="margin-top: 8px; font-size: 16px; font-weight: 600; line-height: 22px">路由器重启后 9.6 秒连回，天气数据继续刷新</div>
+      <div style="margin-top: 12px">
+        <div style="display: flex; align-items: center; gap: 8px; height: 28px; border-bottom: 1px solid #e6e6e6; font-size: 12px; font-weight: 600">Wi-Fi</div>
+        <div style="display: flex; align-items: center; gap: 8px; min-height: 36px; border-bottom: 1px solid #f0f0f0; font-size: 13px">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="color: #0e7a41; flex: none"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          <span style="flex: 1">断线后自动重连，30 s 内恢复</span>
+          <span style="font-size: 11px; color: #0a6fbd; background: #e5f4ff; border-radius: 4px; padding: 1px 6px">行为模拟</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; min-height: 36px; border-bottom: 1px solid #f0f0f0; font-size: 13px">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="color: #0e7a41; flex: none"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          <span style="flex: 1">恢复后 HTTP 请求成功</span>
+          <span style="font-size: 11px; color: #0e7a41; background: #e8f7ee; border-radius: 4px; padding: 1px 6px">仿真验证</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; height: 28px; border-bottom: 1px solid #e6e6e6; font-size: 12px; font-weight: 600; margin-top: 8px">
+          温湿度 DHT11 <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; color: #5e5e5e; background: #f7f7f7; border-radius: 4px; padding: 1px 6px">GPIO5</span>
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; line-height: 20px">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="color: #5e5e5e; flex: none; margin-top: 2px"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M8 5v3.4l2 1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>
+          <span style="flex: 1">读数正常，但读法靠忙等计时
+            <span style="display: block; font-size: 12px; line-height: 18px; color: #5e5e5e">dht_read() 用 esp_rom_delay_us() 量脉宽。模拟器的 CPU 速度不等于真机，这条只说明逻辑对。</span>
+          </span>
+          <span style="flex: none; font-size: 11px; color: #1e1e1e; border: 1px solid #1e1e1e; border-radius: 4px; padding: 0 6px; margin-top: 2px">需真机确认</span>
+        </div>
+      </div>
+      <div style="margin-top: 12px; display: flex; gap: 8px">
+        <button type="button" style="height: 36px; padding: 0 16px; border-radius: 6px; border: 0; background: #0b76c8; color: #ffffff; font-size: 14px; font-weight: 500">下一个检查点：低功耗</button>
+      </div>
+      <div style="margin-top: 12px; border-top: 1px solid #e6e6e6; height: 44px; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="transform: rotate(-90deg)"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        原始数据 <span style="font-size: 12px; font-weight: 400; color: #5e5e5e">4 条结论 + 运行编号</span>
+      </div>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: #5e5e5e; padding: 0 2px">
+      <span><b style="color: #0e7a41; font-weight: 500">仿真验证</b> 和真机一致</span>
+      <span><b style="color: #0a6fbd; font-weight: 500">行为模拟</b> 流程对，数值近似</span>
+      <span><b style="color: #8a5a12; font-weight: 500">估算</b> 按典型器件</span>
+      <span><b style="color: #1e1e1e; font-weight: 500">需真机确认</b> 模拟器替你验证不了</span>
+    </div>
+  </div>
+
+  <!-- 卡 B：ADC2 与 Wi-Fi 冲突 -->
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="font-size: 12px; color: #5e5e5e">真机常见坑 · ADC2 遇上 Wi-Fi</div>
+    <div style="border: 1px solid #f6b9a8; border-radius: 10px; background: #ffffff; padding: 16px">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span style="display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 12px; background: #fef2f2; color: #c4361a; font-size: 12px; font-weight: 500">
+          <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>没通过
+        </span>
+        <span style="font-size: 12px; color: #5e5e5e">我的固件 · 模拟 20 s</span>
+      </div>
+      <div style="margin-top: 8px; font-size: 16px; font-weight: 600; line-height: 22px">连上 Wi-Fi 以后，土壤湿度读不到了</div>
+      <p style="margin: 4px 0 0; font-size: 13px; line-height: 20px; color: #5e5e5e">GPIO14 属于 ADC2。ESP32-S3 开着 Wi-Fi 时 ADC2 归射频用，读会超时。改接到 GPIO1–10（ADC1）任意一脚。</p>
+      <div style="margin-top: 12px">
+        <div style="display: flex; align-items: center; gap: 8px; height: 28px; border-bottom: 1px solid #e6e6e6; font-size: 12px; font-weight: 600">
+          土壤湿度 <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; color: #5e5e5e; background: #f7f7f7; border-radius: 4px; padding: 1px 6px">GPIO14 · ADC2_CH3</span>
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; line-height: 20px">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="color: #c4361a; flex: none; margin-top: 2px"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
+          <span style="flex: 1">Wi-Fi 连上后每次读都失败
+            <span style="display: block; font-size: 12px; line-height: 18px; color: #5e5e5e; font-family: 'JetBrains Mono', monospace">adc_oneshot_read → ESP_ERR_TIMEOUT × 12（2.1 s 起）</span>
+          </span>
+          <span style="flex: none; font-size: 11px; color: #0e7a41; background: #e8f7ee; border-radius: 4px; padding: 1px 6px; margin-top: 2px">仿真验证</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; min-height: 36px; border-bottom: 1px solid #f0f0f0; font-size: 13px; color: #5e5e5e">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="color: #0e7a41; flex: none"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          Wi-Fi 连上之前读数正常（1 873 ± 6）
+        </div>
+      </div>
+      <div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px">
+        <button type="button" style="height: 36px; padding: 0 16px; border-radius: 6px; border: 0; background: #0b76c8; color: #ffffff; font-size: 14px; font-weight: 500">改接到 GPIO4</button>
+        <button type="button" style="height: 36px; padding: 0 16px; border-radius: 6px; border: 1px solid #e6e6e6; background: #ffffff; font-size: 14px">复制给 AI 修</button>
+      </div>
+      <div style="margin-top: 12px; border-top: 1px solid #e6e6e6; height: 44px; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="transform: rotate(-90deg)"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        原始数据 <span style="font-size: 12px; font-weight: 400; color: #5e5e5e">2 条结论 + 运行编号</span>
+      </div>
+    </div>
+    <div style="font-size: 12px; line-height: 18px; color: #5e5e5e; padding: 0 2px">选板页的引脚表也提前标出：GPIO11–20「ADC2 · 开 Wi-Fi 不能用」。</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":920,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>上真机检查清单</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0a6fbd}a:hover{color:#0b76c8}
+button{font-family:inherit}
+input[type=checkbox]{width:20px;height:20px;margin:0;accent-color:#0b76c8}
+</style>
+</helmet>
+<div style="width: 760px; height: 760px; box-sizing: border-box; padding: 28px; background: #f7f7f7; color: #1e1e1e; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; font-size: 13px">
+  <div style="border: 1px solid #e6e6e6; border-radius: 12px; background: #ffffff; padding: 24px; box-shadow: 0 2px 10px rgba(0,0,0,.06)">
+    <div style="font-size: 12px; color: #5e5e5e">成品 · 联网天气站 · 跑通之后</div>
+    <div style="margin-top: 6px; font-size: 20px; font-weight: 600; line-height: 28px">板子到手，先测这 4 件事</div>
+    <p style="margin: 6px 0 0; color: #5e5e5e; line-height: 20px">下面这些模拟器替你验证不了。按顺序测，每件 5–10 分钟，测完心里就有底了。</p>
+
+    <div style="margin-top: 18px; display: flex; flex-direction: column">
+      <sc-for list="{{items}}" as="it" hint-placeholder-count="4">
+        <div style="display: flex; gap: 14px; padding: 14px 0; border-top: 1px solid #f0f0f0">
+          <input type="checkbox" id="{{it.id}}" style="margin-top: 2px">
+          <div style="flex: 1; min-width: 0">
+            <label for="{{it.id}}" style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; line-height: 22px">
+              <span style="font-family: 'JetBrains Mono', monospace; color: #5e5e5e; font-weight: 500">{{it.n}}</span>{{it.title}}
+            </label>
+            <div style="margin-top: 4px; line-height: 20px">{{it.how}}</div>
+            <div style="margin-top: 4px; font-size: 12px; line-height: 18px; color: #5e5e5e">为什么模拟不了：{{it.why}}</div>
+          </div>
+          <span style="flex: none; align-self: flex-start; font-size: 11px; color: #5e5e5e; margin-top: 4px">{{it.time}}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="margin-top: 8px; padding-top: 16px; border-top: 1px solid #e6e6e6; display: flex; align-items: center; gap: 8px">
+      <button type="button" style="height: 36px; padding: 0 16px; border-radius: 6px; border: 0; background: #0b76c8; color: #ffffff; font-size: 14px; font-weight: 500">复制清单</button>
+      <button type="button" style="height: 36px; padding: 0 16px; border-radius: 6px; border: 1px solid #e6e6e6; background: #ffffff; font-size: 14px">打印</button>
+      <span style="flex: 1"></span>
+      <span style="font-size: 12px; color: #5e5e5e">按项目里的器件和结果卡自动生成</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":760,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      items: [
+        { id: 'c1', n: '1', title: 'Wi-Fi 信号够不够', how: '把板子放到真正要装的位置，串口看 RSSI，高于 -75 dBm 才稳。', why: '模拟器里的信号强度是你设的数。', time: '5 分钟' },
+        { id: 'c2', n: '2', title: 'DHT11 读数稳不稳', how: '连续读 100 次，数校验失败的次数，低于 2 次算合格。', why: '读法靠忙等计时，真机 CPU 的快慢和模拟器不同。', time: '5 分钟' },
+        { id: 'c3', n: '3', title: '土壤传感器标定', how: '插进干土读一次、浇透水再读一次，把两个数填进代码的 DRY / WET。', why: 'ADC 只按典型器件模拟，每颗芯片、每个传感器都不一样。', time: '10 分钟' },
+        { id: 'c4', n: '4', title: '电池能撑几天', how: '串一个 USB 电流表，看 10 分钟平均电流，用电池容量除一下。', why: '功耗是按数据手册估的，误差约 ±30%。', time: '10 分钟' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

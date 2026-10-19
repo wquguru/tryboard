@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>器件面板 · 真实 ADC</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0a6fbd}a:hover{color:#0b76c8}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 880px; height: 640px; box-sizing: border-box; padding: 28px; display: flex; gap: 28px; background: #f7f7f7; color: #1e1e1e; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; font-size: 13px">
+
+  <!-- 属性面板 -->
+  <div style="width: 380px; flex: none; border: 1px solid #e6e6e6; border-radius: 10px; background: #ffffff; padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <div style="font-size: 15px; font-weight: 600">土壤湿度传感器</div>
+      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #5e5e5e; background: #f7f7f7; border-radius: 4px; padding: 1px 6px">GPIO4 · ADC1_CH3</span>
+    </div>
+    <div>
+      <label for="v" style="display: flex; justify-content: space-between; font-size: 12px; color: #5e5e5e"><span>输出电压</span><span style="font-family: 'JetBrains Mono', monospace; color: #1e1e1e">1.65 V</span></label>
+      <input id="v" type="range" min="0" max="3.3" step="0.01" value="1.65" style="width: 100%; margin-top: 6px; accent-color: #0b76c8">
+    </div>
+    <div>
+      <div style="font-size: 12px; color: #5e5e5e; margin-bottom: 6px">ADC 模型</div>
+      <div role="radiogroup" aria-label="ADC 模型" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid #e6e6e6; border-radius: 8px; padding: 3px; background: #f7f7f7">
+        <button type="button" role="radio" aria-checked="{{idealOn}}" onClick="{{pickIdeal}}" style="{{idealStyle}}">理想</button>
+        <button type="button" role="radio" aria-checked="{{realOn}}" onClick="{{pickReal}}" style="{{realStyle}}">真实（默认）</button>
+      </div>
+    </div>
+    <div style="border-top: 1px solid #f0f0f0; padding-top: 12px">
+      <div style="font-size: 12px; color: #5e5e5e">固件最近读到</div>
+      <div style="display: flex; align-items: baseline; gap: 10px; margin-top: 4px">
+        <span style="font-size: 28px; font-weight: 600; font-family: 'JetBrains Mono', monospace">{{raw}}</span>
+        <span style="font-size: 14px; color: #5e5e5e; font-family: 'JetBrains Mono', monospace">{{band}}</span>
+      </div>
+      <div style="display: flex; align-items: flex-end; gap: 2px; height: 56px; margin-top: 10px; border-bottom: 1px solid #e6e6e6">
+        <sc-for list="{{bars}}" as="b" hint-placeholder-count="48">
+          <span style="{{b.style}}"></span>
+        </sc-for>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 11px; color: #5e5e5e; margin-top: 4px"><span>最近 48 次</span><span>{{spread}}</span></div>
+    </div>
+    <div style="margin-top: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #5e5e5e">
+      <span style="font-size: 11px; color: #8a5a12; background: #fffaf0; border-radius: 4px; padding: 1px 6px">估算</span>
+      按乐鑫校准曲线的典型器件，你手上那颗会不一样
+    </div>
+  </div>
+
+  <!-- 右：真实 ADC 会做的事 + 选脚 -->
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+    <div style="border: 1px solid #e6e6e6; border-radius: 10px; background: #ffffff; padding: 16px">
+      <div style="font-weight: 600; font-size: 14px">「真实」打开后，固件会遇到</div>
+      <div style="margin-top: 10px; display: flex; flex-direction: column">
+        <div style="display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f0f0f0; line-height: 20px"><span style="width: 84px; flex: none; color: #5e5e5e">抖动</span><span>每次读数差几个字，要取平均或滤波</span></div>
+        <div style="display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f0f0f0; line-height: 20px"><span style="width: 84px; flex: none; color: #5e5e5e">两头不准</span><span>0.1 V 以下、2.9 V 以上读数弯曲</span></div>
+        <div style="display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f0f0f0; line-height: 20px"><span style="width: 84px; flex: none; color: #5e5e5e">要校准</span><span>不调 <code style="font-family: 'JetBrains Mono', monospace; font-size: 12px">adc_cali</code> 偏差几个百分点，调了接近 1%</span></div>
+        <div style="display: flex; gap: 10px; padding: 8px 0; line-height: 20px"><span style="width: 84px; flex: none; color: #5e5e5e">ADC2</span><span>开着 Wi-Fi 时读不了（见结果卡 ②）</span></div>
+      </div>
+    </div>
+    <div style="border: 1px solid #e6e6e6; border-radius: 10px; background: #ffffff; padding: 16px">
+      <div style="font-weight: 600; font-size: 14px">接线时选脚（S3）</div>
+      <div style="margin-top: 10px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px">
+        <sc-for list="{{pins}}" as="p" hint-placeholder-count="10">
+          <button type="button" style="{{p.style}}" aria-label="{{p.aria}}">{{p.n}}</button>
+        </sc-for>
+      </div>
+      <div style="display: flex; gap: 14px; margin-top: 10px; font-size: 11px; color: #5e5e5e">
+        <span style="display: inline-flex; align-items: center; gap: 4px"><span style="width: 10px; height: 10px; border-radius: 2px; border: 1px solid #b9e0ff; background: #e5f4ff"></span>ADC1，随便用</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px"><span style="width: 10px; height: 10px; border-radius: 2px; border: 1px dashed #b7791f; background: #fffaf0"></span>ADC2，开 Wi-Fi 不能用</span>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":880,"height":640}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { real: true }; }
+  renderVals() {
+    var real = this.state.real, self = this;
+    var seg = function (on) { return 'height: 30px; border: 0; border-radius: 6px; font-size: 13px; cursor: pointer; ' + (on ? 'background: #ffffff; font-weight: 600; color: #1e1e1e; box-shadow: 0 1px 2px rgba(0,0,0,.12)' : 'background: transparent; color: #5e5e5e'); };
+    var bars = [];
+    var s = 7;
+    for (var i = 0; i < 48; i++) {
+      s = (s * 1103515245 + 12345) % 2147483648;
+      var d = real ? ((s / 2147483648) * 2 - 1) * 6 : 0;
+      var h = 34 + d * 2.2;
+      bars.push({ style: 'flex: 1; height: ' + h.toFixed(1) + 'px; border-radius: 1px; background: ' + (real ? '#0b76c8' : '#b9e0ff') });
+    }
+    var pins = [];
+    for (var n = 1; n <= 20; n++) {
+      var adc2 = n >= 11;
+      var sel = n === 4, cur = n === 14;
+      var st = 'height: 36px; border-radius: 6px; font-family: \'JetBrains Mono\', monospace; font-size: 12px; cursor: pointer; ';
+      if (sel) st += 'border: 2px solid #0b76c8; background: #e5f4ff; color: #0a6fbd; font-weight: 600';
+      else if (adc2) st += 'border: 1px dashed #b7791f; background: #fffaf0; color: #8a5a12' + (cur ? '; text-decoration: line-through' : '');
+      else st += 'border: 1px solid #b9e0ff; background: #e5f4ff; color: #1e1e1e';
+      pins.push({ n: 'IO' + n, style: st, aria: 'GPIO' + n + (adc2 ? '，ADC2，开 Wi-Fi 不能用' : '，ADC1') });
+    }
+    return {
+      idealOn: real ? 'false' : 'true', realOn: real ? 'true' : 'false',
+      idealStyle: seg(!real), realStyle: seg(real),
+      pickIdeal: function () { self.setState({ real: false }); },
+      pickReal: function () { self.setState({ real: true }); },
+      raw: real ? '1 873' : '2 048', band: real ? '± 6  ≈ 1 648 mV' : '± 0  = 1 650 mV',
+      spread: real ? '最小 1 866 · 最大 1 880' : '每次都一样（真机不会这样）',
+      bars: bars, pins: pins
+    };
+  }
+}
+</script>
+</body>
+</html>
