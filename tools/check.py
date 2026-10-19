@@ -7,6 +7,8 @@
   tools/check.py <flash.bin> --level 04      验收你的固件（检查点 07 用 --level 07-spin / 07-lens；小黄、透镜的检查点用 spin-1、lens-2 这样的 id）
   tools/check.py --ref --level 04            验收参考固件（firmware/build/<ref>/flash.bin）
   tools/check.py --ref --all                 所有检查点的参考固件
+  tools/check.py <flash.bin> --level-json cp.json
+                                             按网页「导出检查点」下载的 JSON 验收（选板生成的检查点；manual 条目只列不判）
   tools/check.py <flash.bin> --level 06 --inputs log.txt
                                              用网页导出的输入日志（实验台「导出输入」，或 InputLog JSON）
                                              代替检查点自带的输入脚本，与 `tryboard run --inputs` 同样逐周期重放
@@ -35,7 +37,7 @@ def fingerprint(stdout: str, report: str) -> str:
 
 
 def canonical_report(err: str) -> str:
-    """从命令行 stderr 里取出与 wasm tb_report 同格式的部分，按 GPIO → WS2812 → OLED → LCD → PWM 排好"""
+    """从命令行 stderr 里取出与 wasm tb_report 同格式的部分，按 GPIO → WS2812 → OLED → LCD → USB → I2C 应答 → PWM 排好"""
     lines = err.splitlines()
     gpio = [l for l in lines if re.match(r'\[tryboard\] GPIO\d+ 翻转 \d+ 次$', l)]
     ws = []
@@ -51,8 +53,10 @@ def canonical_report(err: str) -> str:
     lcd += [l for l in lines if l.startswith('[tryboard] LCD 颜色 #')]
     # USB 虚拟主机（关卡带 --usb-log 时才有）：状态 + 键盘打出的字，与 wasm tb_usb_report 同一段文字
     usb = [l for l in lines if l.startswith('[tryboard] USB 主机：') or l.startswith('[tryboard] USB 键盘输入: ')]
+    # 每个地址的应答次数（关卡带 --i2c-log 时才有，U-17），与 wasm tb_i2c_report 同一段文字
+    ack = [l for l in lines if re.match(r'\[tryboard\] I2C 0x[0-9a-f]{2} 应答 \d+ 次$', l)]
     pwm = [l for l in lines if re.match(r'\[tryboard\] PWM GPIO\d+(:| 变化)', l)]
-    return ''.join(l + '\n' for l in gpio + ws + oled + lcd + usb + pwm)
+    return ''.join(l + '\n' for l in gpio + ws + oled + lcd + usb + ack + pwm)
 
 
 def jsnum(v) -> str:
@@ -67,6 +71,16 @@ def evaluate(t: dict, out: str, report: str):
         res.append((e in out, f'串口出现 “{e}”'))
     if re.search(r'Guru Meditation|abort\(\)|panic', out):
         res.append((False, '固件崩溃'))
+    if t.get('boots'):
+        # 非空行：去掉空格、制表、回车后还剩东西（与 checks.ts 同一判法）
+        n = len([x for x in out.split('\n') if x.strip(' \t\r')])
+        crashed = re.search(r'Guru Meditation|abort\(\)|panic', out) is not None
+        res.append((n >= 1 and not crashed, f"开机 {jsnum(t.get('seconds', 2))} s 内串口输出 {n} 行"))
+    for c in t.get('i2c_ack', []):
+        a = '%02x' % c['addr']
+        m = re.search(rf'I2C 0x{a} 应答 (\d+) 次', report)
+        n = int(m.group(1)) if m else 0
+        res.append((n >= c['min'], f"I2C 0x{a} 应答 {n} 次（要 ≥ {c['min']}）"))
     g = t.get('gpio_toggles')
     if g:
         m = re.search(rf"GPIO{g['pin']} 翻转 (\d+) 次", report)
@@ -243,7 +257,7 @@ def inputs_file(path: str) -> str:
 
 
 def run(fw: str, t: dict, inputs: str = '', extra=()):
-    cmd = [CLI, 'run', fw, '--seconds', str(t['seconds']), '--gpio-log', '--ws2812-log'] + t.get('args', []) + list(extra)
+    cmd = [CLI, 'run', fw, '--seconds', str(t.get('seconds', 2)), '--gpio-log', '--ws2812-log'] + t.get('args', []) + list(extra)
     if inputs:
         cmd += ['--inputs', inputs_file(inputs)]
     elif t.get('script'):
@@ -266,16 +280,21 @@ def run(fw: str, t: dict, inputs: str = '', extra=()):
 
 def main():
     a = sys.argv[1:]
-    levels = [l for l in expand(json.load(open(os.path.join(ROOT, 'firmware/levels.json')))) if l.get('ref')]
     ref = '--ref' in a
-    if '--all' in a:
+    # --level-json：网页「导出检查点」下载的 Level JSON（数组或单个；选板生成的 custom-<n> 检查点，U-17）
+    custom = None
+    if '--level-json' in a:
+        d = json.load(open(a[a.index('--level-json') + 1], encoding='utf-8'))
+        custom = d if isinstance(d, list) else [d]
+    levels = custom if custom is not None else [l for l in expand(json.load(open(os.path.join(ROOT, 'firmware/levels.json')))) if l.get('ref')]
+    if '--all' in a or (custom is not None and '--level' not in a):
         pick = levels
     else:
         lv = a[a.index('--level') + 1]
         pick = [l for l in levels if l['id'] == (lv.zfill(2) if lv.isdigit() else lv)]
         if not pick:
             sys.exit(f'没有检查点 {lv}（或它没有命令行验收）')
-    skip = {a.index(k) + 1 for k in ('--level', '--inputs', '--power', '--servo') if k in a}
+    skip = {a.index(k) + 1 for k in ('--level', '--level-json', '--inputs', '--power', '--servo') if k in a}
     # 供电（P1-02）：原样交给 tryboard run
     extra = []
     for k in ('--power', '--servo'):
@@ -291,6 +310,13 @@ def main():
     user_fw = pos[0] if pos else ''
     bad = 0
     for t in pick:
+        if t.get('manual'):
+            print(f"检查点 {t['id']} {t['title']}：必须上真机，不判")
+            continue
+        if ref and not t.get('ref'):
+            print(f"检查点 {t['id']} {t['title']}：没有参考固件")
+            bad += 1
+            continue
         fw = os.path.join(ROOT, 'firmware/build', t['ref'], 'flash.bin') if ref else user_fw
         if not os.path.exists(fw):
             print(f"检查点 {t['id']} {t['title']}：找不到 {fw}")

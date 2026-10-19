@@ -6,7 +6,7 @@
 
 use crate::iotrace::{i2cbit, kind, IoEvent};
 use std::any::Any;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use tryboard_elec::i2cbus::{self, Verdict};
 
 /// 总线上的从机器件。`start` 在地址字节之后调用，返回是否应答。
@@ -66,6 +66,8 @@ pub struct I2c {
     /// 因上升时间超标读错的字节数 / 地址不应答次数（估算）
     pub slow_bytes: u64,
     pub slow_nacks: u64,
+    /// 每个 7 位地址：发过几次地址字节、其中几次有人应答（生成检查点按器件判"接上了没有"）
+    pub addr_acks: BTreeMap<u8, (u64, u64)>,
 }
 
 impl Default for I2c {
@@ -95,6 +97,7 @@ impl Default for I2c {
             wire_cm: None,
             slow_bytes: 0,
             slow_nacks: 0,
+            addr_acks: BTreeMap::new(),
         }
     }
 }
@@ -288,10 +291,14 @@ impl I2c {
                             } else {
                                 self.devices.iter().position(|d| d.address() == addr)
                             };
-                            match self.cur {
+                            let ok = match self.cur {
                                 Some(i) => self.devices[i].start(b & 1 != 0),
                                 None => false,
-                            }
+                            };
+                            let e = self.addr_acks.entry(addr).or_insert((0, 0));
+                            e.0 += 1;
+                            e.1 += ok as u64;
+                            ok
                         } else {
                             match self.cur {
                                 Some(i) => self.devices[i].write(b),

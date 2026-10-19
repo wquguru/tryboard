@@ -30,6 +30,12 @@ import { initSaved } from './saved';
 import { serial } from './dock';
 import { usbFeed } from './usbpane';
 import { toScript, type InputLog } from '../inputlog';
+import { customPlan } from './custom';
+import { genLevels } from './genlevels';
+import { registerTemplate } from '../catalog/templates';
+import { initialHistory, placement, replay } from './bom';
+import { briefMarkdown } from '../advisor/brief';
+import type { PartSpec } from '../board3d';
 
 export { registerStep } from './shell';
 
@@ -38,7 +44,23 @@ const want = params.get('work') as WorkId | null;
 // &example=<id>：示例 = 空白作品 + 示例的固件、台面、芯片（DESIGN_V2 §6.1；旧 index.html?example= 跳到这里）
 const exId = params.get('example');
 const ex = exId ? (await loadExamples()).find((e) => e.id === exId) : undefined;
-const work: WorkDef = ex ? { ...WORKS.blank, example: ex.id, title: ex.title, key: `blank:${ex.id}` } : (WORKS[want ?? 'weather'] ?? WORKS.weather);
+// work=custom：选板结果 → 采购模板 + 按零件生成的检查点（U-17）。地址参数变了 = 新作品（存档键带参数哈希）
+const plan = !ex && want === 'custom' ? customPlan(location.search) : null;
+if (plan) registerTemplate(plan.template);
+// 没按过「摆上实验台」也按选板引脚表摆好（不存档）；摆过就以摆过的为准（采购页可能加减过零件）
+const customPlaced = plan
+  ? (loadPlaced(plan.wkey) ??
+    (() => {
+      const pl = placement(replay(initialHistory('custom')));
+      return { scene: { parts: pl.parts as unknown as PartSpec[] }, ext5v: pl.ext5v };
+    })())
+  : null;
+const customLevels = plan ? genLevels({ boardName: plan.boardName, chip: plan.chip, parts: customPlaced!.scene.parts, deepSleep: plan.deepSleep }) : [];
+const work: WorkDef = ex
+  ? { ...WORKS.blank, example: ex.id, title: ex.title, key: `blank:${ex.id}` }
+  : plan
+    ? { ...WORKS.custom, title: plan.title, key: plan.wkey, checkpoints: customLevels.filter((l) => !l.manual).map((l) => l.id) }
+    : (WORKS[want ?? 'weather'] ?? WORKS.weather);
 // &cp=04：打开时选中这个检查点（旧关卡页 levels.html#04 重定向过来用）；不属于这个作品就忽略
 const cp = params.get('cp');
 if (ex) pushRecent({ kind: 'example', id: ex.id, title: ex.title, at: Date.now() });
@@ -94,16 +116,17 @@ const ownsTimeline = () => store.get().step === 'bench';
 
 (async () => {
   try {
-    const placed = loadPlaced(wkey(work));
+    const placed = customPlaced ?? loadPlaced(wkey(work));
     const session = await createSession(shell.stage, work, store, {
         onConsole: log,
         onConsoleReset: (t) => {
           con.textContent = t;
           serial.reset(t, store.get().simSeconds);
         },
-      }, { placed });
+      }, { placed, ...(plan ? { chip: plan.chip, levels: customLevels } : {}) });
     (window as unknown as { __tbApp: unknown }).__tbApp = { store, session };
-    const ctx: StepCtx = { work, store, session, shell };
+    const ctx: StepCtx = { work, store, session, shell, ...(plan ? { custom: { plan, levels: customLevels } } : {}) };
+    if (plan) Object.assign(globalThis, { __tbCustomLevels: customLevels });
     restoreChecks(ctx);
     restoreAssembly(ctx);
     ctx.hist = createBenchHistory(ctx, { placeLabels: session.scene.parts.map((p) => partLabel(p.type)), placed: !!placed });
@@ -282,7 +305,18 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     const id = sel ?? work.checkpoints.find((x) => !(s.checks[x]?.ok && s.checks[x].own)) ?? work.checkpoints[0];
     return session.levels.find((l) => l.id === id) ?? null;
   };
-  actions.brief = work.checkpoints.length
+  // 选板作品：任务书 = 选板给 AI 的任务书 + 生成的检查点（逐条带判定）
+  const customBrief = plan ? () => [briefMarkdown(plan.state), '', '## 检查点（网页按这些判）', ...customLevels.map((l) => `- ${l.id} ${l.title}：${l.manual ? '必须上真机，网页不判' : l.pass}`)].join('\n') : null;
+  actions.brief = customBrief
+    ? async () => {
+        try {
+          await navigator.clipboard.writeText(customBrief());
+          shell.toast('已复制给 AI 的任务书');
+        } catch {
+          shell.toast('浏览器不让写剪贴板：任务书在检查点右栏，手动复制');
+        }
+      }
+    : work.checkpoints.length
     ? async () => {
         const l = curLevel();
         if (!l) return;
@@ -377,7 +411,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
       if (!(r?.ok && r.own) || (was?.ok && was.own)) continue;
       const d = passedCount(ctx, s);
       const l = session.levels.find((x) => x.id === id);
-      ctx.shell.toast(d === n ? `检查点 ${id}「${l?.title ?? ''}」通过，${n} 个全部通过：组装解锁了` : `检查点 ${id}「${l?.title ?? ''}」通过（${d}/${n}）`);
+      ctx.shell.toast(d === n ? `检查点 ${id}「${l?.title ?? ''}」通过，${n} 个全部通过：${plan ? '下一步做成真的' : '组装解锁了'}` : `检查点 ${id}「${l?.title ?? ''}」通过（${d}/${n}）`);
     }
   }, ['checks']);
 }

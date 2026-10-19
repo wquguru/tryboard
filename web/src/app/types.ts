@@ -1,4 +1,5 @@
 // 工作台外壳的公共类型。四个步骤（采购 / 实验台 / 组装 / 成品）共用一个 selection、一个 store。
+import type { CustomPlan } from './custom';
 import type { Bench, SceneSpec } from '../board3d';
 import type { ScenePickApi, ScreenPoint } from '../scene-api';
 import type { LiveSim } from '../live';
@@ -249,6 +250,8 @@ export interface StepCtx {
   shell: Shell;
   /** 实验台时间线（P0-03）；只有实验台用 */
   hist?: BenchHistory;
+  /** work=custom：选板结果和按零件生成的检查点（含 manual 条目，U-17） */
+  custom?: { plan: CustomPlan; levels: Level[] };
 }
 
 export interface StepImpl {

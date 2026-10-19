@@ -269,6 +269,30 @@
   ]
  },
  {
+  "id": "c3-thermo",
+  "seconds": 3,
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c,bme280@0x76",
+   "--env",
+   "23.5,45,101325",
+   "--i2c-log"
+  ],
+  "expect": [
+   "c3-thermo: BME280 + SSD1306 on SDA=GPIO6 SCL=GPIO7",
+   "T=23.50 C  H=45.00 %  P=1013.25 hPa",
+   "TRYBOARD_OK c3-thermo"
+  ],
+  "absent": [
+   "no answer"
+  ],
+  "stderr_expect": [
+   "I2C 0x3c 应答",
+   "I2C 0x76 应答",
+   "OLED 点亮像素"
+  ]
+ },
+ {
   "id": "wifi-init",
   "seconds": 3,
   "expect": [

@@ -34,6 +34,7 @@ export interface Ex {
   tb_power_set?(mode: number): void;
   tb_servo_attach?(pin: number): void;
   tb_usb_report?(): number;
+  tb_i2c_report?(): number;
   tb_i2c_wire?(cm: number): void;
   tb_antenna_loss?(db: number): void;
   tb_encoder_attach?(a: number, b: number, sw: number): void;
@@ -65,6 +66,8 @@ export interface SimJob {
   fixedSlice?: boolean;
   /** = CLI --usb-log：观察记录里带上 USB 虚拟主机的状态与键盘输入（P2-12） */
   usb?: boolean;
+  /** = CLI --i2c-log：观察记录里带上每个 I2C 地址的应答次数（生成检查点 i2c_ack，U-17） */
+  i2cLog?: boolean;
   /** = CLI --i2c-wire / --antenna-loss（P2-11，估算） */
   i2cWire?: number;
   antenna?: number;
@@ -230,10 +233,14 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
   if (tail) hooks.onConsole?.(tail);
   const rn = e.tb_report();
   let report = dec.decode(new Uint8Array(e.memory.buffer, e.tb_report_ptr(), rn));
-  // 顺序与 tools/check.py 的 canonical_report 一致：GPIO → WS2812 → OLED → LCD → USB → PWM
+  // 顺序与 tools/check.py 的 canonical_report 一致：GPIO → WS2812 → OLED → LCD → USB → I2C 应答 → PWM
   if (j.usb && e.tb_usb_report) {
     const un = e.tb_usb_report();
     report += dec.decode(new Uint8Array(e.memory.buffer, e.tb_report_ptr(), un));
+  }
+  if (j.i2cLog && e.tb_i2c_report) {
+    const n = e.tb_i2c_report();
+    report += dec.decode(new Uint8Array(e.memory.buffer, e.tb_report_ptr(), n));
   }
   if (j.pwmPin !== undefined) {
     let mn = 1, mx = 0;

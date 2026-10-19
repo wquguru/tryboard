@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '../ui/cn';
 import { Logo } from '../ui/logo';
 import { currentTheme, onTheme, setTheme } from '../theme';
-import { actions, bc, BLANK, EXAMPLE_ID, shownSteps } from './chrome';
+import { actions, bc, BLANK, CUSTOM, EXAMPLE_ID, TWO_STEPS, shownSteps } from './chrome';
+import { decode, encode } from '../advisor/state';
 import { FwMenu, openFwMenu } from './fwmenu';
 import { CmdkBox } from './cmdk';
 import { Icon } from './icons';
@@ -12,7 +13,7 @@ import { useStore } from './react';
 import { savedText } from './saved';
 import { STEPS, type StepId } from './types';
 import { WORKS } from './works';
-import { BLANK_LAB, HOME, LICENSES, lab } from '../ui/links';
+import { BLANK_LAB, HOME, LICENSES, lab, selectLink } from '../ui/links';
 
 /** 32×32 图标按钮 */
 const ib =
@@ -83,7 +84,11 @@ export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
 }
 
 /** 面包屑首段：作品 → 作品列表；空白 / 示例 → 实验台（DESIGN_V2 §6.2 词表：入口统一叫「实验台」） */
-export const CRUMB = BLANK ? { href: BLANK_LAB, label: '实验台', title: '回到空白实验台' } : { href: HOME, label: '作品', title: '回到作品列表（未保存的连线会留在本机）' };
+export const CRUMB = BLANK
+  ? { href: BLANK_LAB, label: '实验台', title: '回到空白实验台' }
+  : CUSTOM
+    ? { href: selectLink(encode(decode(location.search))), label: '选板', title: '回到选板改零件（这里的清单和台面留在本机）' }
+    : { href: HOME, label: '作品', title: '回到作品列表（未保存的连线会留在本机）' };
 
 function Breadcrumb({ name }: { name: string }) {
   const { saved, chip } = useStore(bc);
@@ -127,7 +132,7 @@ function StepBar({ step }: { step: StepId }) {
   const { locks, done, checkpoints } = useStore(bc);
   const ok = checkpoints.filter((c) => c.state === 'ok').length;
   return (
-    <nav id="steps" role="tablist" aria-label={BLANK ? '两个步骤' : '四个步骤'} className="steps flex min-w-0 items-center justify-center">
+    <nav id="steps" role="tablist" aria-label={TWO_STEPS ? '两个步骤' : '四个步骤'} className="steps flex min-w-0 items-center justify-center">
       {STEPS.filter((s) => shownSteps().includes(s.id)).map((s, i) => {
         const on = s.id === step;
         const lock = locks[s.id];

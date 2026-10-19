@@ -151,4 +151,7 @@ export const actions: {
 const PAGE_Q = new URLSearchParams(location.search);
 export const BLANK = PAGE_Q.get('work') === 'blank';
 export const EXAMPLE_ID = BLANK ? PAGE_Q.get('example') : null;
-export const shownSteps = (): StepId[] => (BLANK ? ['shop', 'bench'] : ['shop', 'bench', 'assemble', 'product']);
+/** 选板作品（work=custom，U-17）也只有「采购 / 实验台」两步：检查点全过后是真买卡，不进组装 */
+export const CUSTOM = PAGE_Q.get('work') === 'custom' && !PAGE_Q.get('example');
+export const TWO_STEPS = BLANK || CUSTOM;
+export const shownSteps = (): StepId[] => (TWO_STEPS ? ['shop', 'bench'] : ['shop', 'bench', 'assemble', 'product']);

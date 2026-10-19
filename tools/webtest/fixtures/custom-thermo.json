@@ -1,0 +1,112 @@
+[
+  {
+    "id": "custom-1",
+    "title": "开机不崩溃，串口有输出",
+    "goal": "上电后正常启动、往串口打印东西",
+    "pass": "3 s 内没有 panic / abort，串口至少输出 1 行",
+    "boots": true,
+    "buy": "",
+    "learn": "",
+    "brief": "用 ESP-IDF 5.x 给 Seeed XIAO ESP32C3（ESP32-C3）写固件。\n目标：上电后正常启动、往串口打印东西\n接线：\n- OLED（I2C 地址 0x3c）：SDA=GPIO6、SCL=GPIO7\n- BME280（I2C 地址 0x76）：SDA=GPIO6、SCL=GPIO7\n通过条件：3 s 内没有 panic / abort，串口至少输出 1 行\n只交 flash.bin（合并镜像，从 0x0 开始）。",
+    "ref": null,
+    "work": "custom",
+    "seconds": 3,
+    "args": [
+      "--i2c",
+      "ssd1306@0x3c,bme280@0x76",
+      "--i2c-log",
+      "--env",
+      "23.5,45,101325"
+    ]
+  },
+  {
+    "id": "custom-2",
+    "title": "I2C 0x3c 有回应（OLED）",
+    "goal": "用 I2C 访问 OLED",
+    "pass": "OLED（0x3c）对地址字节应答至少 1 次",
+    "i2c_ack": [
+      {
+        "addr": 60,
+        "min": 1
+      }
+    ],
+    "buy": "",
+    "learn": "",
+    "brief": "用 ESP-IDF 5.x 给 Seeed XIAO ESP32C3（ESP32-C3）写固件。\n目标：用 I2C 访问 OLED\n接线：\n- OLED（I2C 地址 0x3c）：SDA=GPIO6、SCL=GPIO7\n- BME280（I2C 地址 0x76）：SDA=GPIO6、SCL=GPIO7\n通过条件：OLED（0x3c）对地址字节应答至少 1 次\n只交 flash.bin（合并镜像，从 0x0 开始）。",
+    "ref": null,
+    "work": "custom",
+    "seconds": 3,
+    "args": [
+      "--i2c",
+      "ssd1306@0x3c,bme280@0x76",
+      "--i2c-log",
+      "--env",
+      "23.5,45,101325"
+    ]
+  },
+  {
+    "id": "custom-3",
+    "title": "I2C 0x76 有回应（BME280）",
+    "goal": "用 I2C 访问 BME280",
+    "pass": "BME280（0x76）对地址字节应答至少 1 次",
+    "i2c_ack": [
+      {
+        "addr": 118,
+        "min": 1
+      }
+    ],
+    "buy": "",
+    "learn": "",
+    "brief": "用 ESP-IDF 5.x 给 Seeed XIAO ESP32C3（ESP32-C3）写固件。\n目标：用 I2C 访问 BME280\n接线：\n- OLED（I2C 地址 0x3c）：SDA=GPIO6、SCL=GPIO7\n- BME280（I2C 地址 0x76）：SDA=GPIO6、SCL=GPIO7\n通过条件：BME280（0x76）对地址字节应答至少 1 次\n只交 flash.bin（合并镜像，从 0x0 开始）。",
+    "ref": null,
+    "work": "custom",
+    "seconds": 3,
+    "args": [
+      "--i2c",
+      "ssd1306@0x3c,bme280@0x76",
+      "--i2c-log",
+      "--env",
+      "23.5,45,101325"
+    ]
+  },
+  {
+    "id": "custom-4",
+    "title": "OLED 收到画面",
+    "goal": "在 OLED 上画点东西（文字、读数都行）",
+    "pass": "OLED 最后一帧点亮至少 50 个像素",
+    "oled_min_pixels": 50,
+    "buy": "",
+    "learn": "",
+    "brief": "用 ESP-IDF 5.x 给 Seeed XIAO ESP32C3（ESP32-C3）写固件。\n目标：在 OLED 上画点东西（文字、读数都行）\n接线：\n- OLED（I2C 地址 0x3c）：SDA=GPIO6、SCL=GPIO7\n- BME280（I2C 地址 0x76）：SDA=GPIO6、SCL=GPIO7\n通过条件：OLED 最后一帧点亮至少 50 个像素\n只交 flash.bin（合并镜像，从 0x0 开始）。",
+    "ref": null,
+    "work": "custom",
+    "seconds": 3,
+    "args": [
+      "--i2c",
+      "ssd1306@0x3c,bme280@0x76",
+      "--i2c-log",
+      "--env",
+      "23.5,45,101325"
+    ]
+  },
+  {
+    "id": "custom-5",
+    "title": "深睡后能再唤醒",
+    "goal": "测完进深睡，定时唤醒再测",
+    "pass": "网页判不了：深睡电流和唤醒要上真机量",
+    "manual": true,
+    "buy": "",
+    "learn": "",
+    "brief": "用 ESP-IDF 5.x 给 Seeed XIAO ESP32C3（ESP32-C3）写固件。\n目标：测完进深睡，定时唤醒再测\n接线：\n- OLED（I2C 地址 0x3c）：SDA=GPIO6、SCL=GPIO7\n- BME280（I2C 地址 0x76）：SDA=GPIO6、SCL=GPIO7\n通过条件：网页判不了：深睡电流和唤醒要上真机量\n只交 flash.bin（合并镜像，从 0x0 开始）。",
+    "ref": null,
+    "work": "custom",
+    "seconds": 3,
+    "args": [
+      "--i2c",
+      "ssd1306@0x3c,bme280@0x76",
+      "--i2c-log",
+      "--env",
+      "23.5,45,101325"
+    ]
+  }
+]

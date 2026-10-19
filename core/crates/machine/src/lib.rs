@@ -979,6 +979,28 @@ pub fn usb_report_lines(m: &Machine) -> String {
     o
 }
 
+/// 生成检查点的 I2C 判据（U-17）：每个被寻址过的 7 位地址应答了几次，按地址升序。
+/// 命令行 `--i2c-log` 打印的就是这几行，网页 wasm tb_i2c_report 同一段文字，指纹两边一致。
+/// S3 两个控制器合在一起：用户接在哪个控制器上都算接上了
+pub fn i2c_ack_lines(m: &Machine) -> String {
+    let mut acks: std::collections::BTreeMap<u8, u64> = std::collections::BTreeMap::new();
+    let mut add = |b: &tryboard_esp32c3::i2c::I2c| {
+        for (a, (_, ok)) in &b.addr_acks {
+            *acks.entry(*a).or_insert(0) += ok;
+        }
+    };
+    match &m.hw {
+        Hw::C3(c) => add(&c.bus.i2c0),
+        Hw::S3(s) => {
+            add(&s.bus.i2c0);
+            add(&s.bus.i2c1);
+        }
+    }
+    acks.iter()
+        .map(|(a, n)| format!("[tryboard] I2C 0x{a:02x} 应答 {n} 次\n"))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
