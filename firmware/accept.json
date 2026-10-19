@@ -225,7 +225,7 @@
   ],
   "numeric": [
    {
-    "name": "1KB 帧传输耗时(us)",
+    "name": "1 KB frame transfer time (us)",
     "regex": "flushed in (\\d+) us",
     "value": 23500,
     "tol": 2500
@@ -249,19 +249,19 @@
   ],
   "numeric": [
    {
-    "name": "温度",
+    "name": "temperature",
     "regex": "T=(-?[\\d.]+) C",
     "value": -7.25,
     "tol": 0.02
    },
    {
-    "name": "湿度",
+    "name": "humidity",
     "regex": "H=([\\d.]+) %",
     "value": 88.5,
     "tol": 0.1
    },
    {
-    "name": "气压",
+    "name": "pressure",
     "regex": "P=([\\d.]+) hPa",
     "value": 950.12,
     "tol": 0.02
@@ -289,7 +289,7 @@
   "stderr_expect": [
    "I2C 0x3c 应答",
    "I2C 0x76 应答",
-   "OLED 点亮像素"
+   "OLED lit pixels"
   ]
  },
  {
@@ -440,7 +440,7 @@
    "\"TryBoard Keyboard\"",
    "报告 1=键盘，报告 2=鼠标",
    "USB 键盘输入: \"Hello from TryBoard!\\n\"",
-   "USB 鼠标报告 80 次，位置 (0, 0)"
+   "USB mouse reports 80, position (0, 0)"
   ]
  },
  {
@@ -459,7 +459,7 @@
   "stderr_expect": [
    "CDC-ACM 控制接口",
    "SET_CONTROL_LINE_STATE DTR=1",
-   "USB 串口收到: \"Hi from TryBoard CDC\\r\\nECHO: HELLO\\r\\nECHO: PING\\r\\n\""
+   "USB serial received: \"Hi from TryBoard CDC\\r\\nECHO: HELLO\\r\\nECHO: PING\\r\\n\""
   ]
  },
  {
@@ -485,12 +485,12 @@
    "TRYBOARD_OK s3-dual"
   ],
   "stderr_expect": [
-   "任务 核0 w0 ",
-   "任务 核1 w1 ",
-   "任务 核0 IDLE0 ",
-   "任务 核1 IDLE1 ",
-   "任务 核0 main ",
-   "次等队列 / 信号量（丢弃 0）"
+   "task core0 w0 ",
+   "task core1 w1 ",
+   "task core0 IDLE0 ",
+   "task core1 IDLE1 ",
+   "task core0 main ",
+   "queue / semaphore waits (dropped 0)"
   ]
  },
  {
@@ -505,9 +505,9 @@
    "TRYBOARD_OK hello"
   ],
   "stderr_expect": [
-   "任务 核0 main ",
-   "任务 核0 IDLE ",
-   "任务时间线：8 次切换，2 个任务"
+   "task core0 main ",
+   "task core0 IDLE ",
+   "task timeline: 8 switches, 2 tasks"
   ]
  },
  {
@@ -591,7 +591,7 @@
   ],
   "numeric": [
    {
-    "name": "1KB 帧传输耗时(us)",
+    "name": "1 KB frame transfer time (us)",
     "regex": "flushed in (\\d+) us",
     "value": 23500,
     "tol": 2500
@@ -635,25 +635,25 @@
   ],
   "numeric": [
    {
-    "name": "温度",
+    "name": "temperature",
     "regex": "T=(-?[\\d.]+) C",
     "value": 23.5,
     "tol": 0.02
    },
    {
-    "name": "湿度",
+    "name": "humidity",
     "regex": "H=([\\d.]+) %",
     "value": 45.0,
     "tol": 0.1
    },
    {
-    "name": "气压",
+    "name": "pressure",
     "regex": "P=([\\d.]+) hPa",
     "value": 1013.25,
     "tol": 0.02
    },
    {
-    "name": "舵机脉宽(us)",
+    "name": "servo pulse width (us)",
     "regex": "PWM=(\\d+)us",
     "value": 1675,
     "tol": 1
@@ -699,7 +699,7 @@
   ],
   "numeric": [
    {
-    "name": "温度",
+    "name": "temperature",
     "regex": "T=(-?[\\d.]+) C",
     "value": 35.0,
     "tol": 0.02
@@ -781,19 +781,19 @@
   ],
   "numeric": [
    {
-    "name": "温度",
+    "name": "temperature",
     "regex": "T=(-?[\\d.]+) C",
     "value": -7.25,
     "tol": 0.02
    },
    {
-    "name": "湿度",
+    "name": "humidity",
     "regex": "H=([\\d.]+) %",
     "value": 88.5,
     "tol": 0.1
    },
    {
-    "name": "气压",
+    "name": "pressure",
     "regex": "P=([\\d.]+) hPa",
     "value": 950.12,
     "tol": 0.02
@@ -837,7 +837,7 @@
    "TRYBOARD_OK"
   ],
   "stderr_expect": [
-   "欠压复位（3V3 低于门限"
+   "brownout reset (3V3 below threshold"
   ]
  },
  {
@@ -879,7 +879,7 @@
   ],
   "numeric": [
    {
-    "name": "LVGL 帧率（模拟时间）",
+    "name": "LVGL frame rate (simulated time)",
     "regex": "FPS (\\d+) px",
     "value": 32,
     "tol": 12
@@ -1051,7 +1051,7 @@
    "I2C 排线 150 cm",
    "超出两倍：器件不应答"
   ],
-  "crash_expected": "参考固件 ESP_ERROR_CHECK 遇到 NACK 就 abort 重启"
+  "crash_expected": "the reference firmware's ESP_ERROR_CHECK aborts and reboots on NACK"
  },
  {
   "id": "wifi-scan-antenna",
@@ -1133,7 +1133,7 @@
    "TRYBOARD_OK encoder"
   ],
   "stderr_expect": [
-   "编码器 转了 33 格"
+   "encoder turned 33 detents"
   ],
   "gpio_toggles": {
    "pin": 6,
@@ -1158,7 +1158,7 @@
    "TRYBOARD_OK ultrasonic"
   ],
   "stderr_expect": [
-   "超声波 触发 16 次，回波 16 次"
+   "ultrasonic triggers 16, echoes 16"
   ],
   "gpio_toggles": {
    "pin": 18,
@@ -1181,19 +1181,19 @@
   ],
   "numeric": [
    {
-    "name": "俯仰(°)",
+    "name": "pitch (°)",
     "regex": "pitch=(-?[\\d.]+)",
     "value": 30.0,
     "tol": 0.5
    },
    {
-    "name": "横滚(°)",
+    "name": "roll (°)",
     "regex": "roll=(-?[\\d.]+)",
     "value": -20.0,
     "tol": 0.5
    },
    {
-    "name": "温度(°C)",
+    "name": "temperature (°C)",
     "regex": "T=(-?[\\d.]+)C",
     "value": 23.5,
     "tol": 0.1
@@ -1217,31 +1217,31 @@
   ],
   "numeric": [
    {
-    "name": "俯仰(°)",
+    "name": "pitch (°)",
     "regex": "pitch=(-?[\\d.]+)",
     "value": -45.0,
     "tol": 0.5
    },
    {
-    "name": "横滚(°)",
+    "name": "roll (°)",
     "regex": "roll=(-?[\\d.]+)",
     "value": 10.0,
     "tol": 0.5
    },
    {
-    "name": "陀螺 X(°/s)",
+    "name": "gyro X (°/s)",
     "regex": "gyro=\\((-?[\\d.]+),",
     "value": 63.64,
     "tol": 0.3
    },
    {
-    "name": "陀螺 Z(°/s)",
+    "name": "gyro Z (°/s)",
     "regex": "gyro=\\(-?[\\d.]+,-?[\\d.]+,(-?[\\d.]+)\\)",
     "value": 62.68,
     "tol": 0.3
    },
    {
-    "name": "温度(°C)",
+    "name": "temperature (°C)",
     "regex": "T=(-?[\\d.]+)C",
     "value": 31.0,
     "tol": 0.1
@@ -1264,19 +1264,19 @@
   ],
   "numeric": [
    {
-    "name": "俯仰(°)",
+    "name": "pitch (°)",
     "regex": "pitch=(-?[\\d.]+)",
     "value": -12.5,
     "tol": 0.5
    },
    {
-    "name": "横滚(°)",
+    "name": "roll (°)",
     "regex": "roll=(-?[\\d.]+)",
     "value": 33.0,
     "tol": 0.5
    },
    {
-    "name": "陀螺 X(°/s)",
+    "name": "gyro X (°/s)",
     "regex": "gyro=\\((-?[\\d.]+),",
     "value": 20.0,
     "tol": 0.3
@@ -1365,7 +1365,7 @@
   ],
   "numeric": [
    {
-    "name": "过零频率(Hz)",
+    "name": "zero-crossing frequency (Hz)",
     "regex": "MIC rms=[\\d.]+ freq=([\\d.]+) Hz",
     "value": 1000,
     "tol": 1
@@ -1478,7 +1478,7 @@
   ],
   "numeric": [
    {
-    "name": "距离(cm)",
+    "name": "distance (cm)",
     "regex": "DIST (\\d+\\.\\d) cm",
     "value": 42.0,
     "tol": 0.1
@@ -1540,13 +1540,13 @@
   ],
   "numeric": [
    {
-    "name": "俯仰(°)",
+    "name": "pitch (°)",
     "regex": "POSE pitch=(-?[\\d.]+)",
     "value": -12.5,
     "tol": 0.5
    },
    {
-    "name": "横滚(°)",
+    "name": "roll (°)",
     "regex": "roll=(-?[\\d.]+)",
     "value": 33.0,
     "tol": 0.5
@@ -1605,7 +1605,7 @@
    "TRYBOARD_OK ultrasonic"
   ],
   "stderr_expect": [
-   "超声波 触发 16 次，回波 16 次"
+   "ultrasonic triggers 16, echoes 16"
   ],
   "gpio_toggles": {
    "pin": 5,
@@ -1650,31 +1650,31 @@
   ],
   "numeric": [
    {
-    "name": "100 ms 后计数",
+    "name": "count after 100 ms",
     "regex": "GPTIMER count (\\d+) elapsed",
     "value": 100000,
     "tol": 400
    },
    {
-    "name": "同期 esp_timer(us)",
+    "name": "esp_timer over the same span (us)",
     "regex": "GPTIMER count \\d+ elapsed (\\d+) us",
     "value": 100000,
     "tol": 400
    },
    {
-    "name": "首次告警(us)",
+    "name": "first alarm (us)",
     "regex": "periodic first after (\\d+) us",
     "value": 10000,
     "tol": 10
    },
    {
-    "name": "50 个周期(us)",
+    "name": "50 periods (us)",
     "regex": "50 periods in (\\d+) us",
     "value": 500000,
     "tol": 5
    },
    {
-    "name": "单次告警(us)",
+    "name": "one-shot alarm (us)",
     "regex": "oneshot alarms=1 after (\\d+) us",
     "value": 5000,
     "tol": 10
@@ -1701,31 +1701,31 @@
   ],
   "numeric": [
    {
-    "name": "100 ms 后计数",
+    "name": "count after 100 ms",
     "regex": "GPTIMER count (\\d+) elapsed",
     "value": 100000,
     "tol": 400
    },
    {
-    "name": "同期 esp_timer(us)",
+    "name": "esp_timer over the same span (us)",
     "regex": "GPTIMER count \\d+ elapsed (\\d+) us",
     "value": 100000,
     "tol": 400
    },
    {
-    "name": "首次告警(us)",
+    "name": "first alarm (us)",
     "regex": "periodic first after (\\d+) us",
     "value": 10000,
     "tol": 10
    },
    {
-    "name": "50 个周期(us)",
+    "name": "50 periods (us)",
     "regex": "50 periods in (\\d+) us",
     "value": 500000,
     "tol": 5
    },
    {
-    "name": "单次告警(us)",
+    "name": "one-shot alarm (us)",
     "regex": "oneshot alarms=1 after (\\d+) us",
     "value": 5000,
     "tol": 10
@@ -1890,19 +1890,19 @@
   ],
   "numeric": [
    {
-    "name": "温度",
+    "name": "temperature",
     "regex": "T=(-?[\\d.]+) C",
     "value": 23.5,
     "tol": 0.02
    },
    {
-    "name": "湿度",
+    "name": "humidity",
     "regex": "H=([\\d.]+) %",
     "value": 45.0,
     "tol": 0.1
    },
    {
-    "name": "气压",
+    "name": "pressure",
     "regex": "P=([\\d.]+) hPa",
     "value": 1013.25,
     "tol": 0.02

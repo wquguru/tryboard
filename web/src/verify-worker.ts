@@ -1,5 +1,5 @@
-// 关卡验收：在独立 Worker 里按模拟时间跑完规定秒数。运行规则在 simrun.ts（与 npm 命令行共用），
-// 时间片、脚本施加、PWM 采样照搬命令行 `tryboard run`，所以结论和指纹与 tools/check.py 一致。
+// Level check: a dedicated Worker runs the set seconds of simulated time. Run rules live in simrun.ts (shared with the npm CLI);
+// slicing, script application and PWM sampling copy `tryboard run`, so verdicts and fingerprints match tools/check.py.
 
 import { runSim, type SimJob } from './simrun';
 

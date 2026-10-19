@@ -1,6 +1,5 @@
-// 按模拟时间（不看墙钟）把固件跑完规定秒数、在精确的模拟时刻施加输入脚本、按 CLI 的规则采样 PWM。
-// 网页验收（verify-worker.ts）和 npm 命令行（packages/tryboard）共用这一份，不碰 DOM / Worker，
-// 所以两边与原生 `tryboard run` / tools/check.py 得到同一份串口输出、观察记录和指纹。
+// Runs firmware for N simulated seconds (no wall clock), applies inputs at exact simulated times, samples PWM like the CLI.
+// Shared by web checks (verify-worker.ts) and the npm CLI without DOM / Worker, so both match native `tryboard run` / check.py.
 
 import { parseScript } from './checks';
 
@@ -58,21 +57,21 @@ export interface SimJob {
   script?: string;
   pwmPin?: number;
   lcd?: boolean;
-  /** 舵机信号脚与供电（= CLI --servo / --power）；接了舵机时与 CLI 一样始终 1ms 一片 */
+  /** Servo signal pin and supply (= CLI --servo / --power); with a servo, always 1 ms slices like the CLI */
   servo?: number;
   power?: 'usb' | 'ext';
-  /** 触摸 INT 脚（= CLI --touch-int） */
+  /** Touch INT pin (= CLI --touch-int) */
   touchInt?: number;
-  /** 始终 1ms 一片（= CLI 的 --inputs）：重放网页实时运行导出的输入日志时用 */
+  /** Always 1 ms slices (= CLI --inputs): used when replaying an input log exported from a live web run */
   fixedSlice?: boolean;
-  /** = CLI --usb-log：观察记录里带上 USB 虚拟主机的状态与键盘输入（P2-12） */
+  /** = CLI --usb-log: the report includes the USB virtual host state and typed keys (P2-12) */
   usb?: boolean;
-  /** = CLI --i2c-log：观察记录里带上每个 I2C 地址的应答次数（生成检查点 i2c_ack，U-17） */
+  /** = CLI --i2c-log: the report includes acks per I2C address (generated checkpoint i2c_ack, U-17) */
   i2cLog?: boolean;
-  /** = CLI --i2c-wire / --antenna-loss（P2-11，估算） */
+  /** = CLI --i2c-wire / --antenna-loss (P2-11, estimate) */
   i2cWire?: number;
   antenna?: number;
-  /** 旋转编码器 / HC-SR04（= CLI --encoder A,B[,SW] / --sonar TRIG,ECHO --dist 厘米）；接了也始终 1ms 一片 */
+  /** Rotary encoder / HC-SR04 (= CLI --encoder A,B[,SW] / --sonar TRIG,ECHO --dist cm); attached means 1 ms slices too */
   encoder?: { a: number; b: number; sw?: number };
   sonar?: { trig: number; echo: number; cm?: number };
 }
@@ -81,23 +80,23 @@ export interface SimResult {
   stdout: string;
   report: string;
   sim: number;
-  /** 运行中停下（CPU 异常等） */
+  /** Stopped mid-run (CPU exception etc.) */
   error?: string;
-  /** 根本没启动起来（镜像坏了、缺 ROM） */
+  /** Never started (broken image, missing ROM) */
   bootError?: string;
 }
 
 export interface SimHooks {
   onProgress?: (sim: number) => void;
-  /** 每个时间片新到的串口文本（`tryboard run` 边跑边打印用） */
+  /** Serial text new in each slice (lets `tryboard run` print as it goes) */
   onConsole?: (text: string) => void;
-  /** 软件复位：第 n 次；stopped = 超过 50 次、不再重新上电 */
+  /** Software reset number n; stopped = past 50, no more power-ups */
   onReset?: (n: number, stopped: boolean) => void;
 }
 
 const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5 };
 
-/** 镜像是哪颗芯片：先找分区表（0x8000）里的 app，再读 ESP 镜像头的芯片 ID（0 = ESP32，5 = C3，9 = S3；认不出按 C3） */
+/** Which chip an image targets: find the app in the partition table (0x8000), read the ESP header chip ID (0 = ESP32, 5 = C3, 9 = S3; else C3) */
 export function imageChip(buf: ArrayBuffer | Uint8Array): 'esp32' | 'esp32c3' | 'esp32s3' {
   const b = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
   const u32 = (o: number) => b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24);
@@ -140,7 +139,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
   for (const d of j.i2c) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
   if (j.env) e.tb_env_set(j.env.temp, j.env.humidity, j.env.pressure);
   if (j.lcd) e.tb_lcd_attach?.();
-  // 与原生 CLI 相同：崩溃重启 / 欠压复位最多 50 次，第 51 次复位就停在复位前（防止重启死循环把时间跑满，也让两边停在同一周期）
+  // Like the native CLI: at most 50 crash / brownout resets, the 51st stops before resetting (no reboot loop; both sides stop on the same cycle)
   e.tb_reset_limit?.(50);
   if (j.servo !== undefined) e.tb_servo_attach?.(j.servo);
   if (j.power) e.tb_power_set?.(j.power === 'ext' ? 1 : 0);
@@ -184,7 +183,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         if (!Number.isNaN(d)) e.tb_sonar_distance?.(d);
       } else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));
       else if (act.startsWith('imu=')) {
-        // 与 CLI parse_imu 相同：3 个数（姿态）或 6 个数（再加变化率）
+        // Same as CLI parse_imu: 3 numbers (attitude) or 6 (plus rates)
         const v = act.slice(4).split(',').map(Number);
         if ((v.length === 3 || v.length === 6) && v.every((x) => !Number.isNaN(x))) e.tb_imu_set?.(v[0], v[1], v[2], v[3] ?? 0, v[4] ?? 0, v[5] ?? 0);
       } else if (act.startsWith('touch=')) {
@@ -224,7 +223,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
       break;
     }
     const rc = e.tb_reset_count?.() ?? 0;
-    // 注意：不能写成 hooks.onReset?.(++resets)——没有回调时可选调用连参数都不求值，计数不涨就死循环
+    // Not hooks.onReset?.(++resets): without a callback the optional call skips evaluating its argument and this loops forever
     while (resets < rc) {
       resets++;
       hooks.onReset?.(resets, false);
@@ -239,7 +238,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
   if (tail) hooks.onConsole?.(tail);
   const rn = e.tb_report();
   let report = dec.decode(new Uint8Array(e.memory.buffer, e.tb_report_ptr(), rn));
-  // 顺序与 tools/check.py 的 canonical_report 一致：GPIO → WS2812 → OLED → LCD → USB → I2C 应答 → PWM
+  // Same order as canonical_report in tools/check.py: GPIO -> WS2812 -> OLED -> LCD -> USB -> I2C acks -> PWM
   if (j.usb && e.tb_usb_report) {
     const un = e.tb_usb_report();
     report += dec.decode(new Uint8Array(e.memory.buffer, e.tb_report_ptr(), un));
@@ -255,7 +254,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
       mx = Math.max(mx, d);
     }
     const freq = trace.length ? trace[trace.length - 1][1] : 0;
-    report += `[tryboard] PWM GPIO${j.pwmPin}: ${trace.length} 次变化，占空比 ${mn.toFixed(3)}..${mx.toFixed(3)}，频率 ${freq.toFixed(1)}Hz\n`;
+    report += `[tryboard] PWM GPIO${j.pwmPin}: ${trace.length} changes, duty ${mn.toFixed(3)}..${mx.toFixed(3)}, freq ${freq.toFixed(1)}Hz\n`;
     const steps: string[] = [];
     let last = '';
     for (const [d, , t] of trace) {
@@ -263,7 +262,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
       if (k !== last) steps.push(`${k}@${t.toFixed(3)}`);
       last = k;
     }
-    report += `[tryboard] PWM GPIO${j.pwmPin} 变化 ${steps.join(' ')}\n`;
+    report += `[tryboard] PWM GPIO${j.pwmPin} steps ${steps.join(' ')}\n`;
   }
   return { stdout: out, report, sim: e.tb_cycles() / CPU_HZ, error };
 }

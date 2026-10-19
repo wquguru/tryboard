@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""把 web/dist 打包成 Artifact 可发布的目录：工作台 app.html 当主页（index.html 是作品首页，打包里被它替换）、去掉文档骨架、加侧边安全区、二进制转 base64 文本。
-用法：python3 tools/pack_artifact.py <输出目录>；打印 files 映射 JSON（发布时传给 Artifact 工具）。"""
+"""Pack web/dist into a directory publishable as an Artifact: the lab app.html becomes the home page (replacing the landing index.html), the document skeleton is stripped, side safe areas added, binaries turned into base64 text.
+Usage: python3 tools/pack_artifact.py <output dir>; prints the files-mapping JSON (pass it to the Artifact tool when publishing)."""
 import base64, json, os, re, shutil, sys
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -25,7 +25,7 @@ extra = '''<style>
     box-sizing: border-box;
   }
 </style>'''
-# 发布时 body 标签会被重写，工作台靠 body 的 class / data-step 排版，所以用脚本补回去
+# Publishing rewrites the body tag, and the lab lays out by body class / data-step, so a script restores them
 attrs = dict(re.findall(r'([\w-]+)="([^"]*)"', battrs))
 fix = '<script>' + ''.join(f'document.body.setAttribute({json.dumps(k)},{json.dumps(v)});' for k, v in attrs.items()) + '</script>'
 open(os.path.join(out, 'index.html'), 'w').write(head.strip() + '\n' + extra + '\n' + fix + '\n' + body.strip() + '\n')
@@ -40,7 +40,7 @@ for dp, _, fns in os.walk(out):
         if fn.endswith(('.bin', '.elf')):
             data = open(full, 'rb').read()
             if fn.endswith('.bin'):
-                # 合并镜像常被补齐到整片 flash 大小，尾部全是 0xFF；模拟器加载时会自动补齐
+                # Merged images are often padded to full flash size with 0xFF; the simulator pads again on load
                 data = data.rstrip(b'\xff')
             os.remove(full)
             full += '.b64.txt'

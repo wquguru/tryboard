@@ -1,8 +1,9 @@
-// 在浏览器里验收一关：起一个独立 Worker 按模拟时间跑完，判定并算指纹。
+// Check a level in the browser: a separate Worker runs it on simulated time, then we judge and fingerprint here.
 import { bootOptions, evaluate, fingerprint, type CheckResult, type Level } from './checks';
 import { imageChip, loadRom, loadWasm } from './assets';
 import type { VerifyJob, VerifyMsg } from './verify-worker';
 import { toScriptInline, type InputLog } from './inputlog';
+import { t } from './i18n/index.ts';
 
 export interface VerifyOutcome {
   ok: boolean;
@@ -13,17 +14,14 @@ export interface VerifyOutcome {
   error?: string;
 }
 
-/** 验收没跑完（Worker 出错、或太久没有进度）：与"跑完但不通过"区分开，界面提示重试 */
+/** The check did not finish (Worker error or no progress for too long): distinct from "ran but failed", the UI offers a retry */
 export class VerifyStalled extends Error {}
 
-/** 多久没有进度算卡住：最慢的关（06，6 s 模拟）每 0.1 s 模拟回报一次，实测间隔远小于 1 s；调试时可用 __tbVerifyStall 改小 */
+/** No progress for this long counts as stuck: the slowest level (06, 6 s simulated) reports every 0.1 s simulated, far under 1 s wall */
 const stallMs = () => (globalThis as { __tbVerifyStall?: number }).__tbVerifyStall ?? 20_000;
 
-/**
- * 起 Worker 跑一份 job，等 done。Worker 崩溃（onerror / onmessageerror）或连续 stallMs 没有任何消息就 reject，
- * 否则调用方的 verifying 状态会永远停在这一关（2026-10-18 走查实测卡过一次）。看门狗从 postMessage 起算，
- * 加载 wasm / ROM 的时间不算在内。
- */
+// Run one job in a Worker; reject on a crash or stallMs of silence, else the caller hangs in verifying (seen 2026-10-18).
+// The watchdog starts at postMessage, so loading wasm / ROM does not count.
 function runJob(job: VerifyJob, onProgress?: (sim: number) => void) {
   const w = new Worker(new URL('./verify-worker.ts', import.meta.url), { type: 'module' });
   return new Promise<Extract<VerifyMsg, { type: 'done' }>>((resolve, reject) => {
@@ -35,7 +33,8 @@ function runJob(job: VerifyJob, onProgress?: (sim: number) => void) {
     };
     const arm = () => {
       clearTimeout(timer);
-      timer = setTimeout(() => fail(`模拟器 ${stallMs() >= 1000 ? `${Math.round(stallMs() / 1000)} 秒` : `${stallMs()} ms`}没有进度，已停止`), stallMs()) as unknown as number;
+      const time = stallMs() >= 1000 ? t('{n} s', { n: Math.round(stallMs() / 1000) }) : `${stallMs()} ms`;
+      timer = setTimeout(() => fail(t('Simulator made no progress for {time}, stopped', { time })), stallMs()) as unknown as number;
     };
     w.onmessage = (ev: MessageEvent<VerifyMsg>) => {
       if (ev.data.type === 'progress') {
@@ -49,9 +48,9 @@ function runJob(job: VerifyJob, onProgress?: (sim: number) => void) {
     };
     w.onerror = (ev) => {
       ev.preventDefault();
-      fail(`模拟器出错：${ev.message || '后台线程崩溃'}`);
+      fail(t('Simulator error: {e}', { e: ev.message || t('background thread crashed') }));
     };
-    w.onmessageerror = () => fail('模拟器消息无法解析');
+    w.onmessageerror = () => fail(t('Simulator message could not be parsed'));
     arm();
     w.postMessage(job, [job.wasm, job.rom, job.flash]);
     onProgress?.(0);
@@ -63,17 +62,15 @@ export async function verifyLevel(l: Level, flash: ArrayBuffer, onProgress?: (si
   const { i2c, env, lcd, servo, power, encoder, sonar, touchInt, usb, i2cLog, i2cWire, antenna } = bootOptions(l);
   const job: VerifyJob = { wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), seconds: l.seconds ?? 2, i2c, env: envOverride ?? env, script: l.script, pwmPin: l.pwm?.pin, lcd, servo, power, encoder, sonar, touchInt, usb, i2cLog, i2cWire: harness?.i2cWire ?? i2cWire, antenna: harness?.antenna ?? antenna };
   const msg = await runJob(job, onProgress);
-  // 给自动化测试对照命令行用：最近一次验收的原始输出
+  // For automated tests comparing against the CLI: raw output of the latest check
   (globalThis as { __tbLastVerify?: unknown }).__tbLastVerify = { stdout: msg.stdout, report: msg.report };
   const results = evaluate(l, msg.stdout, msg.report);
-  if (msg.error) results.push({ ok: false, text: `模拟器停止：${msg.error}` });
+  if (msg.error) results.push({ ok: false, text: `simulator stopped: ${msg.error}`, say: t('Simulator stopped: {e}', { e: msg.error }) });
   return { ok: results.every((r) => r.ok), results, fingerprint: fingerprint(msg.stdout, msg.report), stdout: msg.stdout, sim: msg.sim, error: msg.error };
 }
 
-/**
- * 按网页导出的输入日志重放（P0-19）：与 `tryboard run <fw> --inputs <日志> --seconds S [--pwm-log P] --gpio-log --ws2812-log` 相同，
- * 始终 1ms 一片、输入在同一个时间片开头施加，所以串口输出和观察记录（指纹）与命令行逐字节相同。
- */
+// Replay a web input log (P0-19) like `tryboard run <fw> --inputs <log> --seconds S [--pwm-log P] --gpio-log --ws2812-log`:
+// 1 ms slices, inputs at slice start, so serial output and report (fingerprint) match the CLI byte for byte.
 export async function replayLog(flash: ArrayBuffer, log: InputLog, seconds: number, pwmPin?: number) {
   const [wasm, rom] = await Promise.all([loadWasm(), loadRom(imageChip(flash))]);
   const job: VerifyJob = { wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), seconds, i2c: log.i2c, script: toScriptInline(log), pwmPin, lcd: log.lcd, servo: log.servo, power: log.power, encoder: log.encoder, sonar: log.sonar, touchInt: log.touchInt, fixedSlice: true };

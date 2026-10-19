@@ -1,6 +1,5 @@
-//! 浏览器绑定：裸 extern "C" 导出，JS 侧通过线性内存读写缓冲区。
-//! 一个 wasm 实例只跑一台机器（多块板子就开多个实例 / Worker）。芯片按镜像头自动识别（ESP32-C3 / ESP32-S3），
-//! JS 先用 tb_image_chip 看镜像是哪颗芯片、取对应的 ROM，再 tb_boot。
+//! Browser bindings: bare extern "C" exports, JS reads / writes buffers via linear memory. One instance = one machine
+//! (more boards = more instances / Workers); JS calls tb_image_chip to pick the matching ROM, then tb_boot.
 
 use std::cell::RefCell;
 use tryboard_machine::{Chip, ImuPose, Machine, PowerMode, SensorEnv, Stop};
@@ -17,7 +16,7 @@ thread_local! {
     static TASKS: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     static TASKS_JSON: RefCell<String> = const { RefCell::new(String::new()) };
     static AUDIO: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
-    // 本次上电以来 tb_run 里做过几次复位重新上电；上限（u32::MAX = 不限）给离线验收对齐 CLI 的"最多 50 次"
+    // Resets re-powered inside tb_run since boot; the limit (u32::MAX = none) lets offline checks match the CLI's "at most 50"
     static FAULT: RefCell<[f64; 4]> = const { RefCell::new([0.0; 4]) };
     static RESETS: std::cell::Cell<(u32, u32)> = const { std::cell::Cell::new((0, u32::MAX)) };
 }
@@ -35,32 +34,30 @@ pub extern "C" fn tb_alloc(len: usize) -> *mut u8 {
 }
 
 /// # Safety
-/// p 必须来自 tb_alloc(len)
+/// p must come from tb_alloc(len)
 #[no_mangle]
 pub unsafe extern "C" fn tb_free(p: *mut u8, len: usize) {
     drop(Vec::from_raw_parts(p, 0, len));
 }
 
-/// 镜像是哪颗芯片：0 = ESP32，5 = ESP32-C3，9 = ESP32-S3，u32::MAX = 认不出（0 已被 ESP32 占用）
 /// # Safety
-/// 指针必须指向长度正确的缓冲区
+/// `flash` must point to `flash_len` readable bytes.
 #[no_mangle]
 pub unsafe extern "C" fn tb_image_chip(flash: *const u8, flash_len: usize) -> u32 {
+    // Image chip: 0 = ESP32, 5 = ESP32-C3, 9 = ESP32-S3, u32::MAX = unknown (0 is taken by ESP32)
     let flash = std::slice::from_raw_parts(flash, flash_len);
     Chip::from_image(flash).map(|c| c.id()).unwrap_or(u32::MAX)
 }
 
-/// 旧名字（USB 分支的网页用过），同 tb_image_chip
 /// # Safety
-/// 指针必须指向长度正确的缓冲区
+/// Same as tb_image_chip (old name used by the USB branch's page).
 #[no_mangle]
 pub unsafe extern "C" fn tb_flash_chip(flash: *const u8, flash_len: usize) -> u32 {
     tb_image_chip(flash, flash_len)
 }
 
-/// 返回 0 成功；非 0 时用 tb_error_ptr/len 取错误信息。
 /// # Safety
-/// 指针必须指向 tb_alloc 分配、长度正确的缓冲区
+/// Both pointers must be tb_alloc buffers of the given lengths. Returns 0 on success, else read tb_error_ptr/len.
 #[no_mangle]
 pub unsafe extern "C" fn tb_boot(
     rom: *const u8,
@@ -83,13 +80,13 @@ pub unsafe extern "C" fn tb_boot(
     }
 }
 
-/// 当前机器的芯片：5 = ESP32-C3，9 = ESP32-S3，0 = 没有机器
+/// Current machine's chip: 5 = ESP32-C3, 9 = ESP32-S3, 0 = no machine
 #[no_mangle]
 pub extern "C" fn tb_chip() -> u32 {
     with(0, |m| m.chip().id())
 }
 
-/// 板载 BOOT 键所在引脚（C3：9，S3：0）
+/// Pin of the on-board BOOT button (C3: 9, S3: 0)
 #[no_mangle]
 pub extern "C" fn tb_boot_pin() -> u32 {
     with(9, |m| m.boot_pin())
@@ -104,19 +101,19 @@ pub extern "C" fn tb_error_len() -> usize {
     ERR.with(|c| c.borrow().len())
 }
 
-/// 复位次数上限：超过后 tb_run 不再重新上电、返回 3（与 CLI 的"最多 50 次"一致）。tb_boot 时恢复成不限
+/// Reset limit: beyond it tb_run stops re-powering and returns 3 (matches the CLI's "at most 50"). tb_boot clears it
 #[no_mangle]
 pub extern "C" fn tb_reset_limit(n: u32) {
     RESETS.with(|r| r.set((r.get().0, n)));
 }
 
-/// 本次上电以来 tb_run 里复位重新上电的次数（软件复位 + 欠压复位）
+/// Resets re-powered inside tb_run since boot (software + brownout resets)
 #[no_mangle]
 pub extern "C" fn tb_reset_count() -> u32 {
     RESETS.with(|r| r.get().0)
 }
 
-/// 跑 cycles 个 CPU 周期。返回 0=跑满，1=异常，2=未实现 HLE，3=复位次数超过上限（停在复位前），-1=没有机器。
+/// Run `cycles` CPU cycles. 0 = budget used, 1 = fault, 2 = unimplemented HLE, 3 = reset limit hit (stopped before reset), -1 = no machine.
 #[no_mangle]
 pub extern "C" fn tb_run(cycles: f64) -> i32 {
     with(-1, |m| {
@@ -126,8 +123,8 @@ pub extern "C" fn tb_run(cycles: f64) -> i32 {
         match r {
             Stop::Budget => 0,
             Stop::Reset(reason) => {
-                // 软件复位 / 欠压复位：在内核里直接重新上电（flash / NVS 保留），页面感知不到中断。
-                // ROM 的复位头（rst:0x..）由 Machine::reboot 写进串口，与命令行逐字节相同
+                // Software / brownout reset: re-power inside the core (flash / NVS kept) so the page sees no break.
+                // Machine::reboot writes the ROM reset banner (rst:0x..) to serial, byte-identical to the CLI
                 let (n, lim) = RESETS.with(|r| r.get());
                 RESETS.with(|r| r.set((n + 1, lim)));
                 if n + 1 > lim {
@@ -146,14 +143,14 @@ pub extern "C" fn tb_run(cycles: f64) -> i32 {
                 1
             }
             Stop::Hle(s) => {
-                ERR.with(|e| *e.borrow_mut() = format!("未实现的 ROM 函数 {s}"));
+                ERR.with(|e| *e.borrow_mut() = format!("unimplemented ROM function {s}"));
                 2
             }
         }
     })
 }
 
-/// 控制台输出：先取指针 / 长度读走，再 tb_console_clear。
+/// Console output: read via pointer / length, then tb_console_clear.
 #[no_mangle]
 pub extern "C" fn tb_console_ptr() -> *const u8 {
     OUT.with(|o| o.borrow().as_ptr())
@@ -172,12 +169,12 @@ pub extern "C" fn tb_cycles() -> f64 {
     with(0.0, |m| m.cycles() as f64)
 }
 
-/// 引脚电平低 32 位（GPIO0..31）
+/// Pin levels, low 32 bits (GPIO0..31)
 #[no_mangle]
 pub extern "C" fn tb_gpio_level() -> u32 {
     with(0, |m| m.gpio_level() as u32)
 }
-/// 引脚电平高位（GPIO32..，S3 有 49 个引脚）
+/// Pin levels, high bits (GPIO32.., the S3 has 49 pins)
 #[no_mangle]
 pub extern "C" fn tb_gpio_level_hi() -> u32 {
     with(0, |m| (m.gpio_level() >> 32) as u32)
@@ -192,13 +189,13 @@ pub extern "C" fn tb_gpio_enable_hi() -> u32 {
     with(0, |m| (m.gpio_enable() >> 32) as u32)
 }
 
-/// 外部驱动一个引脚（按键等）。level<0 表示松开（不驱动）。
+/// Drive a pin externally (buttons etc.). level < 0 releases it (not driven).
 #[no_mangle]
 pub extern "C" fn tb_gpio_drive(pin: u32, level: i32) {
     with((), |m| m.gpio_drive(pin, level))
 }
 
-/// 引脚 PWM 占空比（0..1）；没有 PWM 时返回 -1
+/// Pin PWM duty (0..1); -1 without PWM
 #[no_mangle]
 pub extern "C" fn tb_pin_pwm(pin: u32) -> f32 {
     with(-1.0, |m| {
@@ -206,14 +203,14 @@ pub extern "C" fn tb_pin_pwm(pin: u32) -> f32 {
     })
 }
 
-/// 引脚 PWM 频率（Hz）
+/// Pin PWM frequency (Hz)
 #[no_mangle]
 pub extern "C" fn tb_pin_pwm_freq(pin: u32) -> f32 {
     with(0.0, |m| m.pin_pwm(pin as usize).map(|p| p.1).unwrap_or(0.0))
 }
 
-/// 引脚 pin 上 WS2812 灯带最近一帧：拷进内部缓冲（每颗 r,g,b 三字节），返回灯珠数。
-/// 之后用 tb_ws2812_ptr 读取。没有灯带返回 0。
+/// Copy the latest WS2812 frame on `pin` into an internal buffer (r,g,b per LED) and return the LED count
+/// (0 = no strip); then read it with tb_ws2812_ptr.
 #[no_mangle]
 pub extern "C" fn tb_ws2812_fetch(pin: u32) -> usize {
     let rgb: Vec<u8> = with(Vec::new(), |m| {
@@ -232,7 +229,7 @@ pub extern "C" fn tb_ws2812_ptr() -> *const u8 {
     WS.with(|w| w.borrow().as_ptr())
 }
 
-/// 引脚 pin 上已解码的帧数（前端据此判断颜色是否更新）
+/// Frames decoded on `pin` (the page uses it to tell whether colours changed)
 #[no_mangle]
 pub extern "C" fn tb_ws2812_frames(pin: u32) -> f64 {
     with(0.0, |m| {
@@ -241,20 +238,20 @@ pub extern "C" fn tb_ws2812_frames(pin: u32) -> f64 {
 }
 
 /// # Safety
-/// p/len 指向有效缓冲区
+/// p/len must describe a valid buffer
 #[no_mangle]
 pub unsafe extern "C" fn tb_uart_push(p: *const u8, len: usize) {
     let d = std::slice::from_raw_parts(p, len);
     with((), |m| m.uart_push(d))
 }
 
-/// 设置引脚上的模拟电压（毫伏），给 ADC 读
+/// Set a pin's analog voltage (mV) for the ADC
 #[no_mangle]
 pub extern "C" fn tb_analog_set(pin: u32, mv: f32) {
     with((), |m| m.analog_set(pin as usize, mv))
 }
 
-/// 在 I2C 总线上接一个器件。kind：1 = SSD1306，2 = BME280，3 = MPU6050，4 = QMI8658，5 = CST816S。返回 0 成功。
+/// Attach an I2C device. kind: 1 = SSD1306, 2 = BME280, 3 = MPU6050, 4 = QMI8658, 5 = CST816S. Returns 0 on success.
 #[no_mangle]
 pub extern "C" fn tb_i2c_attach(kind: u32, addr: u32) -> i32 {
     let name = match kind {
@@ -268,7 +265,7 @@ pub extern "C" fn tb_i2c_attach(kind: u32, addr: u32) -> i32 {
     with(1, |m| if m.i2c_attach(name, addr as u8) { 0 } else { 1 })
 }
 
-/// 设置环境（作用于 BME280 等环境传感器）
+/// Set the environment (read by BME280 and other environment sensors)
 #[no_mangle]
 pub extern "C" fn tb_env_set(temp_c: f64, humidity: f64, pressure_pa: f64) {
     with((), |m| {
@@ -280,7 +277,7 @@ pub extern "C" fn tb_env_set(temp_c: f64, humidity: f64, pressure_pa: f64) {
     })
 }
 
-/// 姿态（MPU6050 / QMI8658）：欧拉角（度）+ 欧拉角变化率（°/s），同脚本动作 imu=
+/// Pose (MPU6050 / QMI8658): Euler angles (deg) + their rates (°/s), same as the script action imu=
 #[no_mangle]
 pub extern "C" fn tb_imu_set(pitch: f64, roll: f64, yaw: f64, dpitch: f64, droll: f64, dyaw: f64) {
     with((), |m| {
@@ -295,26 +292,26 @@ pub extern "C" fn tb_imu_set(pitch: f64, roll: f64, yaw: f64, dpitch: f64, droll
     })
 }
 
-/// 触摸 INT 脚接在哪个 GPIO（按着拉低、抬起回高）
+/// GPIO wired to the touch INT pin (low while touched, high on release)
 #[no_mangle]
 pub extern "C" fn tb_touch_int(pin: u32) {
     with((), |m| m.touch_int_attach(pin))
 }
 
-/// 触摸：down = 1 按下 / 移动到 (x, y)（屏幕像素 0..239），0 = 抬起
+/// Touch: down = 1 presses / moves to (x, y) (screen pixels 0..239), 0 = release
 #[no_mangle]
 pub extern "C" fn tb_touch(x: f64, y: f64, down: u32) {
     let c = |v: f64| v.round().clamp(0.0, 239.0) as u16;
     with((), |m| m.touch(c(x), c(y), down != 0))
 }
 
-/// OLED 画面版本号：变了才需要重新取像素。没有 OLED 时返回 0。
+/// OLED frame version: refetch pixels only when it changes. 0 = no OLED.
 #[no_mangle]
 pub extern "C" fn tb_oled_version() -> u32 {
     with(0, |m| m.oled().map(|o| o.version).unwrap_or(0))
 }
 
-/// OLED 画面：128×64 字节，每像素 0..255 亮度（含开关、对比度）。没有 OLED 时返回空指针。
+/// OLED frame: 128×64 bytes, brightness 0..255 per pixel (display on/off and contrast applied). Null = no OLED.
 #[no_mangle]
 pub extern "C" fn tb_oled_ptr() -> *const u8 {
     with(std::ptr::null(), |m| {
@@ -324,19 +321,20 @@ pub extern "C" fn tb_oled_ptr() -> *const u8 {
     })
 }
 
-/// 在 SPI2 上接 GC9A01 圆屏（S3：SCLK=12 MOSI=11 CS=10 DC=14 RST=13 背光=15）。返回 0 成功（C3 不支持，返回 1）
+/// Attach a GC9A01 round LCD on SPI2 (S3: SCLK=12 MOSI=11 CS=10 DC=14 RST=13 BL=15). 0 = ok (C3 unsupported: 1)
 #[no_mangle]
 pub extern "C" fn tb_lcd_attach() -> i32 {
     with(1, |m| if m.lcd_attach("gc9a01") { 0 } else { 1 })
 }
 
-/// 圆屏画面版本号：变了才需要重新取像素。没有屏时返回 0
+/// Round LCD frame version: refetch pixels only when it changes. 0 = no LCD
 #[no_mangle]
 pub extern "C" fn tb_lcd_version() -> u32 {
     with(0, |m| m.lcd().map(|d| d.version).unwrap_or(0))
 }
 
-/// 圆屏画面：240×240×4 字节 RGBA（行优先），圆形可视区外 alpha=0；显示关 / 睡眠 / 背光灭时圆内为不透明黑。没有屏时返回空指针
+/// Round LCD frame: 240×240×4 RGBA (row-major), alpha=0 outside the circle; opaque black inside when off / asleep / backlight off.
+/// Null = no LCD
 #[no_mangle]
 pub extern "C" fn tb_lcd_ptr() -> *const u8 {
     with(std::ptr::null(), |m| {
@@ -346,9 +344,9 @@ pub extern "C" fn tb_lcd_ptr() -> *const u8 {
     })
 }
 
-// ---------------------------------------------------------------- 引脚上的外接器件（P2-01 编码器、P2-04 超声波）
+// ---------------------------------------------------------------- Pin-level external parts (P2-01 encoder, P2-04 ultrasonic)
 
-/// 接一个旋转编码器：A / B 两相，sw < 0 表示没有按键
+/// Attach a rotary encoder: phases A / B, sw < 0 = no push button
 #[no_mangle]
 pub extern "C" fn tb_encoder_attach(a: u32, b: u32, sw: i32) {
     with((), |m| {
@@ -356,19 +354,19 @@ pub extern "C" fn tb_encoder_attach(a: u32, b: u32, sw: i32) {
     })
 }
 
-/// 转 steps 格（正 = 顺时针）；波形由内核按 0.5 ms 一个沿排出来
+/// Turn `steps` detents (positive = clockwise); the core schedules one edge per 0.5 ms
 #[no_mangle]
 pub extern "C" fn tb_encoder_turn(steps: i32) {
     with((), |m| m.encoder_turn(steps))
 }
 
-/// 编码器按键：1 按下，0 松开
+/// Encoder button: 1 = pressed, 0 = released
 #[no_mangle]
 pub extern "C" fn tb_encoder_press(down: u32) {
     with((), |m| m.encoder_press(down != 0))
 }
 
-/// 编码器已经转完的格数（没接为 NaN）
+/// Detents the encoder has finished turning (NaN = not attached)
 #[no_mangle]
 pub extern "C" fn tb_encoder_pos() -> f64 {
     with(f64::NAN, |m| {
@@ -376,7 +374,7 @@ pub extern "C" fn tb_encoder_pos() -> f64 {
     })
 }
 
-/// PCNT 单元 u 的当前计数（只有 S3 有；没有为 NaN）
+/// Current count of PCNT unit u (S3 only; NaN otherwise)
 #[no_mangle]
 pub extern "C" fn tb_pcnt_count(u: u32) -> f64 {
     with(f64::NAN, |m| {
@@ -386,19 +384,19 @@ pub extern "C" fn tb_pcnt_count(u: u32) -> f64 {
     })
 }
 
-/// 接一个 HC-SR04：Trig 由芯片驱动，Echo 由模块驱动（5 V 供电，电流进 5V 轨）
+/// Attach an HC-SR04: chip drives Trig, module drives Echo (5 V powered, current drawn from the 5V rail)
 #[no_mangle]
 pub extern "C" fn tb_sonar_attach(trig: u32, echo: u32) {
     with((), |m| m.sonar_attach(trig, echo))
 }
 
-/// 探头到障碍物的距离（cm）；负数 = 前方没有东西
+/// Distance from the sensor to the obstacle (cm); negative = nothing ahead
 #[no_mangle]
 pub extern "C" fn tb_sonar_distance(cm: f64) {
     with((), |m| m.sonar_distance(cm))
 }
 
-/// 超声波统计：0 = 触发次数，1 = 回波次数，2 = 最近一次 Echo 宽度（µs）；没接为 NaN
+/// Ultrasonic stats: 0 = triggers, 1 = echoes, 2 = last Echo width (µs); NaN = not attached
 #[no_mangle]
 pub extern "C" fn tb_sonar_stat(which: u32) -> f64 {
     with(f64::NAN, |m| match (m.sonar_stats(), which) {
@@ -409,9 +407,9 @@ pub extern "C" fn tb_sonar_stat(which: u32) -> f64 {
     })
 }
 
-// ---------------------------------------------------------------- 供电网络（tryboard-elec，P1-01 / P1-02）
+// ---------------------------------------------------------------- Power network (tryboard-elec, P1-01 / P1-02)
 
-/// 供电方式：0 = 只有 USB（舵机也吃 USB 的 5V），1 = 舵机由外接 5 V 2 A 供电
+/// Power mode: 0 = USB only (servo also on USB 5V), 1 = servo on an external 5 V 2 A supply
 #[no_mangle]
 pub extern "C" fn tb_power_set(mode: u32) {
     with((), |m| {
@@ -423,19 +421,19 @@ pub extern "C" fn tb_power_set(mode: u32) {
     })
 }
 
-/// 在 GPIO pin 上接一个 SG90（舵机电流进供电网络，角度由二阶动力学给出）
+/// Attach an SG90 on GPIO `pin` (its current enters the power network, angle from second-order dynamics)
 #[no_mangle]
 pub extern "C" fn tb_servo_attach(pin: u32) {
     with((), |m| m.servo_attach(pin))
 }
 
-/// 节点电压（V）：1 = 5V 轨，2 = 3V3，3 = 舵机红线，4 = 外接 5 V
+/// Node voltage (V): 1 = 5V rail, 2 = 3V3, 3 = servo red wire, 4 = external 5 V
 #[no_mangle]
 pub extern "C" fn tb_elec_v(node: u32) -> f64 {
     with(0.0, |m| m.elec.node_v(node as usize))
 }
 
-/// 电流（A）：0 = USB 口，1 = 外接电源，2 = 舵机，3 = LDO 输出（3V3 总电流），4 = 芯片，5 = 5 V 轨上的功放
+/// Current (A): 0 = USB port, 1 = external supply, 2 = servo, 3 = LDO output (total 3V3), 4 = chip, 5 = amplifier on the 5 V rail
 #[no_mangle]
 pub extern "C" fn tb_elec_i(which: u32) -> f64 {
     with(0.0, |m| {
@@ -451,8 +449,8 @@ pub extern "C" fn tb_elec_i(which: u32) -> f64 {
     })
 }
 
-/// 上电以来的统计：0 = 5V 最低，1 = 3V3 最低，2 = 舵机端最低，3 = USB 峰值电流，4 = 外接峰值，5 = 舵机峰值，
-/// 6 = 3V3 峰值，7 = 欠压复位次数，8 = 芯片是否被欠压复位按住（1/0），9 = 功放峰值电流
+/// Stats since power-on: 0 = min 5V, 1 = min 3V3, 2 = min at servo, 3 = peak USB current, 4 = peak external, 5 = peak servo,
+/// 6 = peak 3V3, 7 = brownout resets, 8 = chip held in brownout reset (1/0), 9 = peak amplifier current
 #[no_mangle]
 pub extern "C" fn tb_elec_stat(which: u32) -> f64 {
     with(0.0, |m| {
@@ -473,7 +471,7 @@ pub extern "C" fn tb_elec_stat(which: u32) -> f64 {
     })
 }
 
-/// 第 i 次欠压复位的模拟时刻（秒）；没有返回 -1
+/// Simulated time (s) of the i-th brownout reset; -1 if none
 #[no_mangle]
 pub extern "C" fn tb_elec_brownout_t(i: u32) -> f64 {
     with(-1.0, |m| {
@@ -486,7 +484,7 @@ pub extern "C" fn tb_elec_brownout_t(i: u32) -> f64 {
     })
 }
 
-/// 舵机输出轴角度（度）；没接舵机返回 NaN
+/// Servo output shaft angle (deg); NaN = no servo
 #[no_mangle]
 pub extern "C" fn tb_servo_angle() -> f64 {
     with(f64::NAN, |m| {
@@ -498,7 +496,7 @@ pub extern "C" fn tb_servo_angle() -> f64 {
     })
 }
 
-/// 与命令行 `--elec-report` 相同的文字，返回长度；内容用 tb_report_ptr 读（与 tb_report 共用缓冲）
+/// Same text as the CLI's `--elec-report`; returns its length, read via tb_report_ptr (buffer shared with tb_report)
 #[no_mangle]
 pub extern "C" fn tb_elec_report() -> usize {
     let r = with(String::new(), |m| m.elec.report());
@@ -507,14 +505,14 @@ pub extern "C" fn tb_elec_report() -> usize {
     n
 }
 
-// ---------------------------------------------------------------- 接错线求解（P2-14，估算）
+// ---------------------------------------------------------------- Miswiring solver (P2-14, estimate)
 
-/// 给实验台接线检查算错接的电流（不碰模拟器里的机器，同样的参数永远同样的结果，命令行 tools/elec 是同一电路）。
-/// kind：1 = 零件输出（a V 经 b Ω）对上 GPIO 相反电平；2 = 两个零件对打（a V 经 b Ω 对 c V 经 d Ω）；
-/// 3 = GPIO 高电平点 LED（串 a Ω，0 = 没电阻）；4 = 电源轨接地（a：0 = 3V3，1 = 5V，2 = 外接 5 V）；
-/// 5 = 5 V 经 a Ω 进 GPIO（钳位二极管）。s3 = 1 用 S3 的芯片电流。返回支路电流（A），其它结果看 tb_fault_out
+/// Branch current (A) of a miswiring for the lab wiring check; pure (machine untouched), same circuit as CLI tools/elec.
+/// s3 = 1 uses S3 chip currents; other results via tb_fault_out.
 #[no_mangle]
 pub extern "C" fn tb_fault(kind: u32, s3: u32, a: f64, b: f64, c: f64, d: f64) -> f64 {
+    // kind 1: part output (a V via b Ω) vs opposite GPIO level; 2: two parts fight (a V via b Ω vs c V via d Ω)
+    // 3: GPIO high into LED (a Ω series, 0 = none); 4: rail to GND (a: 0 = 3V3, 1 = 5V, 2 = ext 5 V); 5: 5 V via a Ω into GPIO clamp
     use tryboard_elec::board::ChipKind;
     use tryboard_elec::fault::{self, Rail};
     let chip = if s3 == 1 { ChipKind::S3 } else { ChipKind::C3 };
@@ -537,16 +535,16 @@ pub extern "C" fn tb_fault(kind: u32, s3: u32, a: f64, b: f64, c: f64, d: f64) -
     o.i
 }
 
-/// 上一次 tb_fault 的其它结果：0 = 关键节点电压（引脚 / 被短路的轨），1 = 5V 轨，2 = 3V3 轨，
-/// 3 = 谁限住了电流（0 = 只有内阻，1 = USB 口限流，2 = 外接电源限流，3 = LDO 限流，4 = LDO 进压差区）
+/// Other results of the last tb_fault: 0 = key node voltage (pin / shorted rail), 1 = 5V rail, 2 = 3V3 rail, 3 = current limiter
+/// (0 = internal resistance only, 1 = USB port limit, 2 = external supply limit, 3 = LDO limit, 4 = LDO in dropout)
 #[no_mangle]
 pub extern "C" fn tb_fault_out(k: u32) -> f64 {
     FAULT.with(|f| f.borrow().get(k as usize).copied().unwrap_or(f64::NAN))
 }
 
-// ---------------------------------------------------------------- 线束（P2-11，估算）
+// ---------------------------------------------------------------- Wiring harness (P2-11, estimate)
 
-/// I2C 排线总长（cm）；负数 = 理想总线（不算上升时间）
+/// Total I2C cable length (cm); negative = ideal bus (no rise time)
 #[no_mangle]
 pub extern "C" fn tb_i2c_wire(cm: f64) {
     with((), |m| {
@@ -554,13 +552,13 @@ pub extern "C" fn tb_i2c_wire(cm: f64) {
     })
 }
 
-/// 天线被金属件 / 电池挡住的衰减（dB）
+/// Attenuation (dB) from metal parts / battery blocking the antenna
 #[no_mangle]
 pub extern "C" fn tb_antenna_loss(db: i32) {
     with((), |m| m.set_antenna_loss(db))
 }
 
-/// 线束结论（与命令行同样的文字，没设就是空），返回长度；内容用 tb_report_ptr 读
+/// Harness conclusion (same text as the CLI, empty if unset); returns its length, read via tb_report_ptr
 #[no_mangle]
 pub extern "C" fn tb_harness_report() -> usize {
     let r = with(String::new(), |m| {
@@ -582,9 +580,9 @@ pub extern "C" fn tb_harness_report() -> usize {
     n
 }
 
-// ---------------------------------------------------------------- 原生 USB（ESP32-S3）
+// ---------------------------------------------------------------- Native USB (ESP32-S3)
 
-/// 关卡验收的 USB 结论（= 命令行 --usb-log 的"USB 主机：…"与"USB 键盘输入: …"两行），返回长度；内容用 tb_report_ptr 读
+/// USB conclusion for level checks (the USB host and keyboard-input lines of the CLI's --usb-log); length, read via tb_report_ptr
 #[no_mangle]
 pub extern "C" fn tb_usb_report() -> usize {
     let r = with(String::new(), |m| tryboard_machine::usb_report_lines(m));
@@ -593,7 +591,7 @@ pub extern "C" fn tb_usb_report() -> usize {
     n
 }
 
-/// 生成检查点的 I2C 应答次数（U-17），与命令行 `--i2c-log` 同一段文字；读法同 tb_report
+/// I2C ack counts for generated checkpoints (U-17), same text as the CLI's `--i2c-log`; read like tb_report
 #[no_mangle]
 pub extern "C" fn tb_i2c_report() -> usize {
     let r = with(String::new(), |m| tryboard_machine::i2c_ack_lines(m));
@@ -620,7 +618,7 @@ fn json_str(s: &str) -> String {
     o
 }
 
-/// USB 状态的变化计数：变了再取 JSON。0 表示没有 USB 设备（C3 或固件没用 USB）
+/// USB state change counter: fetch JSON only when it changes. 0 = no USB device (C3, or firmware without USB)
 #[no_mangle]
 pub extern "C" fn tb_usb_version() -> f64 {
     M.with(|c| {
@@ -636,7 +634,7 @@ pub extern "C" fn tb_usb_version() -> f64 {
     })
 }
 
-/// 把虚拟主机看到的情况序列化成 JSON，返回长度；内容用 tb_usb_json_ptr 读
+/// Serialize what the virtual host sees as JSON; returns its length, read via tb_usb_json_ptr
 #[no_mangle]
 pub extern "C" fn tb_usb_json() -> usize {
     let j = M.with(|c| {
@@ -674,9 +672,8 @@ pub extern "C" fn tb_usb_json_ptr() -> *const u8 {
     USB_JSON.with(|b| b.borrow().as_ptr())
 }
 
-/// 虚拟电脑往 USB 虚拟串口（CDC-ACM）里写
 /// # Safety
-/// p/len 指向有效缓冲区
+/// p/len must describe a valid buffer (bytes the virtual PC writes to the CDC-ACM port)
 #[no_mangle]
 pub unsafe extern "C" fn tb_usb_cdc_send(p: *const u8, len: usize) {
     let d = std::slice::from_raw_parts(p, len);
@@ -689,7 +686,7 @@ pub unsafe extern "C" fn tb_usb_cdc_send(p: *const u8, len: usize) {
 
 // ---------------------------------------------------------------- BLE（C-01）
 
-/// 0 = 固件没用 BLE；1 = 认出了 VHCI 边界、虚拟控制器在跑；2 = 用了 BLE 但没认出来（tb_ble_json 里是原因）
+/// 0 = firmware uses no BLE; 1 = VHCI boundary found, virtual controller running; 2 = BLE used but not recognised (reason in tb_ble_json)
 #[no_mangle]
 pub extern "C" fn tb_ble_state() -> u32 {
     with(0, |m| {
@@ -703,14 +700,14 @@ pub extern "C" fn tb_ble_state() -> u32 {
     })
 }
 
-/// 空中日志总条数：变了再取
+/// Total air-log entries: fetch only when it changes
 #[no_mangle]
 pub extern "C" fn tb_ble_seq() -> f64 {
     with(0.0, |m| m.ble().map_or(0.0, |b| b.log_seq as f64))
 }
 
-/// 广播 / 连接 / 虚拟手机视图 + 序号 ≥ from 的空中日志，序列化成 JSON，返回长度；内容用 tb_ble_json_ptr 读。
-/// 没认出 VHCI 边界时是 {"error": 原因}
+/// Advertising / connection / virtual phone view + air log from seq `from`, as JSON; length, read via tb_ble_json_ptr.
+/// {"error": reason} when the VHCI boundary was not found
 #[no_mangle]
 pub extern "C" fn tb_ble_json(from: f64) -> usize {
     let j = with(String::new(), |m| {
@@ -736,13 +733,12 @@ pub extern "C" fn tb_ble_json_ptr() -> *const u8 {
     BLE_JSON.with(|b| b.borrow().as_ptr())
 }
 
-/// 虚拟手机操作（与命令行 `ble=` 脚本动作同一种文本）。0 = 接受；否则错误文字放进 tb_error_ptr
 /// # Safety
-/// p/len 指向有效缓冲区
+/// p/len must describe a valid buffer. Virtual phone command (same text as CLI `ble=`); 0 = accepted, else see tb_error_ptr
 #[no_mangle]
 pub unsafe extern "C" fn tb_ble_cmd(p: *const u8, len: usize) -> i32 {
     let cmd = String::from_utf8_lossy(std::slice::from_raw_parts(p, len)).into_owned();
-    match with(Err("没有上电".into()), |m| m.ble_phone(&cmd)) {
+    match with(Err("not powered on".into()), |m| m.ble_phone(&cmd)) {
         Ok(()) => 0,
         Err(e) => {
             ERR.with(|b| *b.borrow_mut() = e);
@@ -751,10 +747,10 @@ pub unsafe extern "C" fn tb_ble_cmd(p: *const u8, len: usize) -> i32 {
     }
 }
 
-// ---------------------------------------------------------------- 验收观察（关卡检查用）
+// ---------------------------------------------------------------- Acceptance observations (for level checks)
 
-/// 生成与命令行 `--gpio-log --ws2812-log` 相同格式的观察记录（GPIO 翻转次数、WS2812 各帧颜色、OLED 点亮像素、圆屏非黑像素），
-/// 网页的关卡检查与 tools/accept.sh 解析同一种文本，两边结论才一致。返回长度，内容用 tb_report_ptr 读。
+/// Observations in the CLI `--gpio-log --ws2812-log` format (GPIO toggles, WS2812 frames, OLED / LCD lit pixels); web checks and
+/// tools/accept.sh parse the same text so their verdicts agree. Returns the length, read via tb_report_ptr.
 #[no_mangle]
 pub extern "C" fn tb_report() -> usize {
     use std::fmt::Write;
@@ -771,13 +767,13 @@ pub extern "C" fn tb_report() -> usize {
                 prev = *lv;
             }
             if n > 0 {
-                let _ = writeln!(o, "[tryboard] GPIO{pin} 翻转 {n} 次");
+                let _ = writeln!(o, "[tryboard] GPIO{pin} toggled {n} times");
             }
         }
         let mut pins: Vec<_> = m.ws2812().iter().collect();
         pins.sort_by_key(|(p, _)| **p);
         for (pin, d) in pins {
-            let _ = writeln!(o, "[tryboard] WS2812 GPIO{pin} 共 {} 帧", d.frames);
+            let _ = writeln!(o, "[tryboard] WS2812 GPIO{pin} {} frames", d.frames);
             for (t, rgb) in &d.history {
                 let cols: Vec<String> = rgb
                     .iter()
@@ -792,10 +788,14 @@ pub extern "C" fn tb_report() -> usize {
             }
         }
         if let Some(d) = m.oled() {
-            let _ = writeln!(o, "[tryboard] OLED 点亮像素 {}", d.lit_pixels());
+            let _ = writeln!(o, "[tryboard] OLED lit pixels {}", d.lit_pixels());
         }
         if let Some(d) = m.lcd() {
-            let _ = writeln!(o, "[tryboard] LCD GC9A01 非黑像素 {}", d.lit_pixels());
+            let _ = writeln!(
+                o,
+                "[tryboard] LCD GC9A01 non-black pixels {}",
+                d.lit_pixels()
+            );
             o.push_str(&d.color_report());
         }
         o
@@ -810,16 +810,16 @@ pub extern "C" fn tb_report_ptr() -> *const u8 {
     REPORT.with(|b| b.borrow().as_ptr())
 }
 
-// ---------------------------------------------------------------- 逻辑分析仪事件（P1-05）
+// ---------------------------------------------------------------- Logic-analyzer events (P1-05)
 
-/// 要观察的 GPIO（lo = GPIO0..31，hi = GPIO32..）。PWM / WS2812 / I2C 事件总是记。上电后设，重新上电要再设
+/// GPIOs to watch (lo = GPIO0..31, hi = GPIO32..); PWM / WS2812 / I2C are always logged. Set after boot, again after re-boot
 #[no_mangle]
 pub extern "C" fn tb_io_watch(lo: u32, hi: u32) {
     with((), |m| m.io_watch(lo as u64 | (hi as u64) << 32))
 }
 
-/// 取走内核事件缓冲：每条 16 字节（t u64 | kind u8 | a u8 | b u16 | v u32，小端，含义见 tryboard_esp32c3::iotrace），
-/// 拷进内部缓冲，返回条数；之后用 tb_io_ptr 读 条数 × 16 字节
+/// Take the core's event buffer: 16 bytes each (t u64 | kind u8 | a u8 | b u16 | v u32, LE, see tryboard_esp32c3::iotrace),
+/// copied internally; returns the count, then read count × 16 bytes via tb_io_ptr
 #[no_mangle]
 pub extern "C" fn tb_io_take() -> usize {
     let ev = with(Vec::new(), |m| m.io_take());
@@ -839,22 +839,22 @@ pub extern "C" fn tb_io_ptr() -> *const u8 {
     IO.with(|b| b.borrow().as_ptr())
 }
 
-/// 内核缓冲满了丢掉的条数（自上电起累计）
+/// Events dropped because the core buffer was full (cumulative since boot)
 #[no_mangle]
 pub extern "C" fn tb_io_dropped() -> f64 {
     with(0.0, |m| m.io_dropped() as f64)
 }
 
-// ---------------------------------------------------------------- FreeRTOS 任务时间线（C-04）
+// ---------------------------------------------------------------- FreeRTOS task timeline (C-04)
 
-/// 开始记任务切换（cap = 内核缓冲条数，0 = 关）。上电后设，重新上电要再设
+/// Start recording task switches (cap = core buffer entries, 0 = off). Set after boot, again after re-boot
 #[no_mangle]
 pub extern "C" fn tb_tasks_enable(cap: u32) {
     with((), |m| m.tasks_enable(cap as usize))
 }
 
-/// 取走任务切换事件：每条 16 字节（t u64 | core u8 | prev u8 | task u16 | pc u32，小端，
-/// 含义见 tryboard_esp32c3::tasktrace），拷进内部缓冲，返回条数；之后用 tb_tasks_ptr 读
+/// Take task-switch events: 16 bytes each (t u64 | core u8 | prev u8 | task u16 | pc u32, LE, see
+/// tryboard_esp32c3::tasktrace), copied internally; returns the count, then read via tb_tasks_ptr
 #[no_mangle]
 pub extern "C" fn tb_tasks_take() -> usize {
     let ev = with(Vec::new(), |m| m.tasks_take());
@@ -874,8 +874,8 @@ pub extern "C" fn tb_tasks_ptr() -> *const u8 {
     TASKS.with(|b| b.borrow().as_ptr())
 }
 
-/// 任务表 JSON（事件里的 task 是下标）：{"cores":N,"dropped":N,"tasks":[{"name","prio","core","tcb"}]}，
-/// 返回长度；内容用 tb_tasks_json_ptr 读
+/// Task table JSON (event `task` is an index): {"cores":N,"dropped":N,"tasks":[{"name","prio","core","tcb"}]};
+/// returns its length, read via tb_tasks_json_ptr
 #[no_mangle]
 pub extern "C" fn tb_tasks_json() -> usize {
     let j = with(String::new(), |m| {
@@ -907,9 +907,9 @@ pub extern "C" fn tb_tasks_json_ptr() -> *const u8 {
     TASKS_JSON.with(|b| b.borrow().as_ptr())
 }
 
-// ---------------------------------------------------------------- I2S 音频（P2-06）
+// ---------------------------------------------------------------- I2S audio (P2-06)
 
-/// 接 I2S 音频器件：0 = MAX98357A 喇叭，1 = INMP441 麦克风。引脚见 ARCH「I2S」。返回 0 成功
+/// Attach an I2S audio part: 0 = MAX98357A speaker, 1 = INMP441 microphone (pins: ARCH "I2S"). Returns 0 on success
 #[no_mangle]
 pub extern "C" fn tb_i2s_attach(kind: u32) -> i32 {
     let k = match kind {
@@ -920,8 +920,8 @@ pub extern "C" fn tb_i2s_attach(kind: u32) -> i32 {
     with(1, |m| if m.i2s_attach(k) { 0 } else { 1 })
 }
 
-/// 取走喇叭攒下的声音，拷进内部缓冲，返回块数。每块：t f64（第一个样本的模拟时刻，秒）| rate f32 | n u32 |
-/// n 个 i16 样本（单声道），按 4 字节补齐；用 tb_audio_ptr / tb_audio_len 读
+/// Take buffered speaker audio, returns the block count. Block: t f64 (sim time of first sample, s) | rate f32 | n u32 |
+/// n mono i16 samples, padded to 4 bytes; read via tb_audio_ptr / tb_audio_len
 #[no_mangle]
 pub extern "C" fn tb_audio_take() -> u32 {
     let blocks = with(Vec::new(), |m| m.audio_take());
@@ -953,8 +953,8 @@ pub extern "C" fn tb_audio_len() -> usize {
     AUDIO.with(|b| b.borrow().len())
 }
 
-/// 喇叭读数（最近 1 秒）：0 = 采样率，1 = 累计帧数，2 = RMS，3 = 主频（Hz），4 = 峰值；5 = 麦克风送出的帧数。
-/// 没接对应器件返回 NaN
+/// Speaker readings (last 1 s): 0 = sample rate, 1 = total frames, 2 = RMS, 3 = dominant freq (Hz), 4 = peak;
+/// 5 = frames sent by the microphone. NaN if that part is not attached
 #[no_mangle]
 pub extern "C" fn tb_audio_stat(which: u32) -> f64 {
     with(f64::NAN, |m| {
@@ -981,10 +981,8 @@ pub extern "C" fn tb_audio_stat(which: u32) -> f64 {
     })
 }
 
-/// 麦克风听固定 WAV（JS 用 tb_alloc 放进线性内存）。返回 0 成功，1 不是可读的 WAV
-///
 /// # Safety
-/// ptr..ptr+len 必须是 tb_alloc 分配并已写好的内存
+/// ptr..ptr+len must be filled tb_alloc memory. Feeds the microphone a fixed WAV; 0 = ok, 1 = unreadable WAV
 #[no_mangle]
 pub unsafe extern "C" fn tb_mic_wav(ptr: *const u8, len: usize) -> i32 {
     let b = std::slice::from_raw_parts(ptr, len);
@@ -997,10 +995,8 @@ pub unsafe extern "C" fn tb_mic_wav(ptr: *const u8, len: usize) -> i32 {
     }
 }
 
-/// 麦克风听实时声音（浏览器麦克风）：n 个 f32 小端（-1..1），rate = 它们的采样率
-///
 /// # Safety
-/// ptr..ptr+4n 必须是 tb_alloc 分配并已写好的内存（不要求对齐）
+/// ptr..ptr+4n must be filled tb_alloc memory (no alignment needed): n LE f32 (-1..1) live mic samples at `rate`
 #[no_mangle]
 pub unsafe extern "C" fn tb_mic_push(ptr: *const u8, n: usize, rate: f64) {
     let b = std::slice::from_raw_parts(ptr, n * 4);
@@ -1013,13 +1009,13 @@ pub unsafe extern "C" fn tb_mic_push(ptr: *const u8, n: usize, rate: f64) {
     with((), |m| m.mic_push(rate, &x))
 }
 
-/// 麦克风回到安静
+/// Return the microphone to silence
 #[no_mangle]
 pub extern "C" fn tb_mic_silence() {
     with((), |m| m.mic_silence())
 }
 
-/// 与命令行结束时相同的 `[tryboard] I2S …` 文字，返回长度；内容用 tb_report_ptr 读
+/// Same `[tryboard] I2S …` text the CLI prints at exit; returns its length, read via tb_report_ptr
 #[no_mangle]
 pub extern "C" fn tb_audio_report() -> usize {
     let r = with(String::new(), |m| m.audio_report());

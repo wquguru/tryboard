@@ -1,47 +1,51 @@
-// 结果文案的人话层（DESIGN_V2 §9）：状态词、器件名、标题汇总。纯函数，命令行包也能引。
-// 第一层只写人话；与命令行逐字一致的结论行（CheckResult.text）收进「原始数据」。
+// Plain-language layer of results (DESIGN_V2 §9): verdict words, device names, headline summaries. Pure, so the CLI package can import it.
+// The first layer is plain language only; the CLI-identical lines (CheckResult.text) go under "Raw data".
+import { t } from '../i18n/index.ts';
 
-/** 状态只用四个词；颜色见 DESIGN_V2 §9.2 */
-export const VERDICT = { ok: '通过', bad: '没通过', stall: '没跑完', shifted: '装壳后变了' } as const;
+/** Only four verdict words; colors in DESIGN_V2 §9.2 */
+export const VERDICT = { ok: t('Pass'), bad: t('Fail'), stall: t('Did not finish'), shifted: t('Changed in the case') } as const;
 export type Verdict = keyof typeof VERDICT;
 
-/** 常见 I2C 地址 → 芯片名（查不到就说「I2C 器件」） */
-const CHIP_AT: Record<number, string> = { 0x76: 'BME280', 0x77: 'BME280', 0x3c: 'SSD1306 屏幕', 0x3d: 'SSD1306 屏幕', 0x68: 'MPU6050', 0x69: 'MPU6050' };
-export const chipAt = (addr: number) => CHIP_AT[addr] ?? 'I2C 器件';
+/** Common I2C address -> chip name (unknown ones are "I2C device") */
+const CHIP_AT: Record<number, string> = { 0x76: 'BME280', 0x77: 'BME280', 0x3c: 'SSD1306 screen', 0x3d: 'SSD1306 screen', 0x68: 'MPU6050', 0x69: 'MPU6050' };
+export const chipAt = (addr: number) => t(CHIP_AT[addr] ?? 'I2C device');
 
-/** PWM 引脚上接的是什么：舵机 50 Hz，蜂鸣器在人耳频段 */
+/** What sits on a PWM pin: servos run at 50 Hz, buzzers in the audible band */
 export function pwmDevice(freq: number, beeps: boolean): 'servo' | 'buzzer' | 'other' {
   if (Math.abs(freq - 50) <= 1) return 'servo';
   if (beeps || (freq >= 100 && freq <= 20000)) return 'buzzer';
   return 'other';
 }
 
-/** 舵机脉宽差折成角度：0.5–2.5 ms 对 180°（SG90 一类） */
+/** Servo pulse-width error as an angle: 0.5–2.5 ms spans 180° (SG90 class) */
 export const servoDeg = (dms: number) => Math.round(Math.abs(dms) * 90);
 
-/** 要求的次数说成人话：2 次 / 至少 4 次 / 2–5 次 */
+/** A required count in plain words: 2 / at least 4 / 2–5 */
 export function want(min: number, max?: number) {
-  if (max === undefined) return `至少 ${min}`;
+  if (max === undefined) return t('at least {n}', { n: min });
   return min === max ? `${min}` : `${min}–${max}`;
 }
 
 type Row = { ok: boolean | null; say?: string; text: string; tag?: string; dev?: string };
 
-/** 一个器件一组（DESIGN_V2 §9.5）：组头写一次器件名和引脚；时间窗、数值留给原始数据 */
+/** One group per device (DESIGN_V2 §9.5): device name and pin written once; time windows and numbers stay in raw data */
 export interface RowGroup<R extends Row = Row> {
   dev: string;
-  /** 引脚 / 地址小标签；和器件名同义（串口、USB、圆屏）时不显示 */
+  /** Pin / address chip; hidden when it means the same as the device name (serial, USB, round LCD) */
   pin?: string;
   rows: R[];
   bad: R[];
-  /** 两条以上没过时合成的一句；一条没过就用那条的 say */
+  /** One sentence when two or more rows failed; a single failure uses its own say */
   sum?: string;
 }
+
+// Matched on the language-independent raw text, so the summary works in every UI language
+const SILENT = /^GPIO\d+ (?:\S+ s beeped 0 times|has no PWM output)/;
 
 export function groupRows<R extends Row>(rows: R[]): RowGroup<R>[] {
   const by = new Map<string, RowGroup<R>>();
   for (const r of rows) {
-    const dev = r.dev ?? r.tag ?? '其他';
+    const dev = r.dev ?? r.tag ?? t('Other');
     const key = `${dev}|${r.tag ?? ''}`;
     let g = by.get(key);
     if (!g) {
@@ -54,19 +58,19 @@ export function groupRows<R extends Row>(rows: R[]): RowGroup<R>[] {
   const out = [...by.values()];
   for (const g of out) {
     if (g.bad.length < 2) continue;
-    // 每条都是「没响 / 没输出」就说一直没响，否则只报数，细节在下面小字
-    const silent = g.bad.every((r) => /没响|没有收到|没亮|没闪|没打印/.test(r.say ?? ''));
-    g.sum = silent && g.dev === '蜂鸣器' ? '蜂鸣器一直没响' : `${g.dev}${/[\x21-\x7e]$/.test(g.dev) ? ' ' : ''}有 ${g.bad.length} 处不对`;
+    // A buzzer whose every failure is "no sound / no signal" never beeped; otherwise just count, details below
+    const silent = g.bad.every((r) => SILENT.test(r.text));
+    g.sum = silent && g.dev === t('Buzzer') ? t('Buzzer never beeped') : t('{dev}: {n} problems', { dev: g.dev, n: g.bad.length });
   }
-  // 没过的组排前面，组内顺序不动
+  // Failed groups first, order inside a group unchanged
   return out.sort((a, b) => Number(!a.bad.length) - Number(!b.bad.length));
 }
 
-/** 一组结果的标题（手机上不超过一行半）：全过说全过；只错一个器件就说那个器件的事；错几个器件只报数，逐条在下面 */
+/** Headline for a set of results (≤ 1.5 lines on a phone): all passed, or the one failing device's story, or a device count */
 export function headline(rows: Row[]) {
   const judged = rows.filter((r) => r.ok !== null);
-  if (!judged.some((r) => r.ok === false)) return judged.length > 1 ? `${judged.length} 项都通过了` : '通过了';
+  if (!judged.some((r) => r.ok === false)) return judged.length > 1 ? t('All {n} checks passed', { n: judged.length }) : t('All passed');
   const bad = groupRows(rows).filter((g) => g.bad.length);
-  if (bad.length > 1) return `有 ${bad.length} 个器件不对`;
+  if (bad.length > 1) return t('{n} devices have problems', { n: bad.length });
   return bad[0].sum ?? bad[0].bad[0].say ?? bad[0].bad[0].text;
 }

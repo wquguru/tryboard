@@ -1,6 +1,6 @@
 #!/bin/bash
-# 用乐鑫 QEMU（独立进程，仅本机对照，不分发）跑同一份固件，输出串口日志到 Reviews/qemu/<名字>.log
-# 用法：tools/oracle_qemu.sh <名字> [秒数=5] [芯片=按 sdkconfig.defaults 的 CONFIG_IDF_TARGET，缺省 esp32c3]
+# Run the same firmware in Espressif QEMU (separate process, local comparison only, not shipped); serial log to Reviews/qemu/<name>.log
+# Usage: tools/oracle_qemu.sh <name> [seconds=5] [chip=CONFIG_IDF_TARGET from sdkconfig.defaults, default esp32c3]
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 n="$1"; secs="${2:-5}"
@@ -10,11 +10,11 @@ case "$chip" in
   esp32c3) Q=$(ls -d ~/.espressif/tools/qemu-riscv32/*/qemu/bin | tail -1); exe=qemu-system-riscv32; size=$((4<<20)) ;;
   esp32) Q=$(ls -d ~/.espressif/tools/qemu-xtensa/*/qemu/bin | tail -1); exe=qemu-system-xtensa; size=$((4<<20)) ;;
   esp32s3) Q=$(ls -d ~/.espressif/tools/qemu-xtensa/*/qemu/bin | tail -1); exe=qemu-system-xtensa; size=$((16<<20)) ;;
-  *) echo "不支持的芯片 $chip"; exit 2 ;;
+  *) echo "unsupported chip $chip"; exit 2 ;;
 esac
 mkdir -p "$ROOT/Reviews/qemu"
 img="$ROOT/Reviews/qemu/$n.flash.bin"
-# QEMU 要求镜像正好是 flash 大小（C3 / ESP32 示例 4MB，S3 示例 16MB）
+# QEMU needs the image to be exactly the flash size (C3 / ESP32 examples 4MB, S3 examples 16MB)
 python3 -c "import sys;d=open(sys.argv[1],'rb').read();n=int(sys.argv[3]);open(sys.argv[2],'wb').write(d+b'\xff'*(n-len(d)))" "$ROOT/firmware/build/$n/flash.bin" "$img" "$size"
 "$Q/$exe" -nographic -machine "$chip" -drive "file=$img,if=mtd,format=raw" -serial file:"$ROOT/Reviews/qemu/$n.log" -monitor none &
 pid=$!
