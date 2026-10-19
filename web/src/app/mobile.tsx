@@ -10,6 +10,7 @@ import { createStore } from "./store";
 import { CmdkBox } from "./cmdk";
 import { CRUMB, MoreMenu, RUN_TEXT, SPEEDS, WorkMenu } from "./topbar";
 import { FwMenu } from "./fwmenu";
+import { NetCondChip } from "./netcond";
 import { STEPS, type StepId } from "./types";
 
 const MQ = "(max-width: 767px)";
@@ -85,6 +86,7 @@ export function MobileTop({
         <div className="flex min-w-0 flex-1 justify-center">
           <WorkMenu name={EXAMPLE_ID ? t('Example · {name}', { name: workName }) : workName} phone />
         </div>
+        <NetCondChip phone />
         <MoreMenu toast={toast} phone />
         <FwMenu phone />
         {/* The palette is hidden on narrow screens (max-[1100px]:hidden), but cmdk.ts needs #cmdk at startup */}

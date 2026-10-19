@@ -938,3 +938,13 @@
 - **flashboot 不建模**：芯片从 flash 启动时硬件自动开 MWDT0 / RWDT，由二级引导 `bootloader_init.c` 关掉；我们直接启动跳过二级引导，等效于"已被关掉"的状态，所以 bit 14 只存不用。RTC 看门狗（RWDT）同理未建模。
 - **依据**：ESP-IDF v5.5.1 `hal/*/mwdt_ll.h`、`soc/*/register/soc/timer_group_reg.h`、`esp_system/task_wdt/task_wdt_impl_timergroup.c`、`hal/wdt_hal_iram.c`（Apache-2.0）。没有看 espressif/qemu。
 - **验收**：c3-wdt / s3-wdt 5 s 打印任务看门狗；IDF 在空闲钩子里喂狗、IWDT 在节拍里喂狗，已有 101 个 accept 用例 stdout / stderr 与改前逐字节相同（排除墙钟和未建模寄存器同次数排序）。
+
+## 2026-10-19 网络故障注入（D-01）
+- **全在内核按模拟周期执行**：`soc/src/wifi/netcond.rs` 存预设、故障表、随机流（种子 `seed ^ 0x4E455400`，缺省种子 7）和统计；`world` 每步 `advance_cond` 推进，定时器进同一事件队列。缺省（normal、无故障）不碰随机流、不加行，已有用例输出与指纹逐字节不变。
+- **路由器重启**：AP 停发信标且不应答，同时忘掉站点。IDF 怎么报断开由它自己决定：短断（8 s）时它先发数据帧，AP 回 deauth reason 7（CLASS3_FRAME_FROM_NONASSOC_STA），所以串口是 `reason=7`；断得久（如 `reboot@10,20`）先信标超时 `reason=200`，重连扫不到再 `201`。PLAN 原写「reason=200」，按实跑现象改为两种都接受，不伪造事件。
+- **DNS 失败** = 虚拟 DNS 回 SERVFAIL；**服务器不回应** = 丢掉发往虚拟服务器的 SYN 和数据。lwip 有 DNS 缓存，固件 c3-wifi-resilient 每次请求前清缓存，否则故障期内仍命中缓存、看不到失败。
+- **信号弱 / 不稳定**：丢包只丢芯片发出的帧（考的是固件 / lwip 的重传与超时；下行也丢要给虚拟服务器加重传，暂不做）；延迟按包抽样但保持先后顺序，避免 TCP 乱序重传把结果变得难懂。断网 = AP 从扫描结果里消失。
+- **网络页签行**：注入事件写成 dest「Injected」、method NET / FAULT / Wi-Fi 的行，状态用英文记号（Applied / Injected / Recovered / Disconnected / Reconnected / No reply），网页按记号翻译；`tb_net_json` 多 `cond` 摘要，命令行结束时 stderr 打 `[tryboard] network …` 一行（不进指纹）。
+- **网页**：预设存在主线程（换固件 / 重新上电保留，像真实网络开关），上电时非 normal 记 `net=` 于时刻 0；回退时若当前预设与日志里最后一条不同则补记。故障按钮发 `netfault=kind`，在当前时刻开始。所有动作走输入日志，CLI `--inputs` 重放一致。
+- **文案**：normal 预设显示用 key「Stable」（「Normal」在 steps.ts 已译成「平常」，语义不同）。
+- 替代：在 JS 里丢包 / 计时——网页与命令行会分叉，否决；用真实时间触发随机断线——不可重放，否决。

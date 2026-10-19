@@ -35,6 +35,8 @@ export interface LiveOptions {
   onNet?(m: { used: boolean; phone?: string; rows?: string; replies?: number; replyBytes?: number }): void;
   /** Current "real network" toggle (C-03), sent to the worker on boot / rewind */
   realnet?(): boolean;
+  /** Current network preset (D-01), sent on boot / rewind */
+  netPreset?(): string;
   /** Harness verdict text (same lines as the CLI), called on change. */
   onHarness?(text: string): void;
   /** Rotary encoder / HC-SR04 (on GPIOs; the core times the waveforms). */
@@ -173,7 +175,7 @@ export class LiveSim {
     const [wasm, flash] = [await loadWasm(), this.flash];
     const rom = await loadRom(imageChip(flash));
     Object.assign(this.frame, emptyFrame());
-    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName, harness: this.o.harness, realnet: this.o.realnet?.() ?? false, locale });
+    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName, harness: this.o.harness, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.(), locale });
   }
   reset() {
     return this.start();
@@ -278,6 +280,14 @@ export class LiveSim {
   realnet(on: boolean) {
     this.send({ type: 'realnet', on });
   }
+  /** Network preset (D-01, logged as net=…) */
+  netPreset(preset: string) {
+    this.send({ type: 'netPreset', preset });
+  }
+  /** One network fault from now (D-01, logged as netfault=kind[,s]) */
+  netFault(fault: string, dur?: number) {
+    this.send({ type: 'netFault', fault, dur });
+  }
   /** Potentiometer wiper voltage (mV) into an ADC pin (logged). */
   analog(pin: number, mv: number) {
     this.send({ type: 'analog', pin, mv });
@@ -352,7 +362,7 @@ export class LiveSim {
     Object.assign(this.frame, emptyFrame());
     return new Promise((r) => {
       this.seekWaiter = r;
-      this.send({ type: 'seek', wasm: wasm.slice(0), rom: rom.slice(0), flash: job.flash.slice(0), i2c: job.i2c, env: job.env, lcd: job.lcd, servo: job.servo, power: job.power, encoder: job.encoder, sonar: job.sonar ? { ...job.sonar, cm: NaN } : undefined, touchInt: job.touchInt, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs, realnet: this.o.realnet?.() ?? false });
+      this.send({ type: 'seek', wasm: wasm.slice(0), rom: rom.slice(0), flash: job.flash.slice(0), i2c: job.i2c, env: job.env, lcd: job.lcd, servo: job.servo, power: job.power, encoder: job.encoder, sonar: job.sonar ? { ...job.sonar, cm: NaN } : undefined, touchInt: job.touchInt, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.() });
     });
   }
   /** Continue live after a rewind stop: this run counts as in progress again. */

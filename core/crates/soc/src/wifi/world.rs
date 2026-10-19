@@ -3,7 +3,9 @@
 
 use super::frame::{self, fc, Mac};
 use super::net::{self, Eth};
+use super::netcond::{Change, FaultKind, NetCond, Preset};
 use super::phone::Phone;
+use super::tcp::NetRow;
 use super::wpa::{self, Authenticator};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -57,6 +59,46 @@ pub struct World {
     pub phone: Option<Phone>,
     /// MAC of the firmware hotspot (learned from chip beacons): frames with this a2 go to the phone, not the STA interface
     pub ap_mac: Option<Mac>,
+    /// Network conditions and scheduled faults (D-01); the default touches nothing
+    pub cond: NetCond,
+    /// AP a router reboot took down (None = all, when the chip was not associated)
+    reboot_ap: Option<usize>,
+}
+
+/// Network summary (D-01): what the CLI prints and the web chip shows
+#[derive(Clone, Debug)]
+pub struct NetSummary {
+    pub preset: Preset,
+    pub seed: u32,
+    pub faults: usize,
+    pub disconnects: u32,
+    /// Latest reconnect duration (us)
+    pub reconnect_us: Option<u64>,
+    /// Still off the network at the end
+    pub lost: bool,
+    pub ok: u32,
+    pub failed: u32,
+    pub lost_frames: u64,
+}
+
+impl NetSummary {
+    pub fn line(&self) -> String {
+        let rc = match (self.lost, self.reconnect_us) {
+            (true, _) => ", not reconnected".to_string(),
+            (false, Some(d)) => format!(", reconnected after {:.1} s", d as f64 / 1e6),
+            _ => String::new(),
+        };
+        format!(
+            "[tryboard] network: preset {} (seed {}), faults {}, disconnects {}{rc}, requests ok {} / failed {}, frames lost {}",
+            self.preset.name(),
+            self.seed,
+            self.faults,
+            self.disconnects,
+            self.ok,
+            self.failed,
+            self.lost_frames
+        )
+    }
 }
 
 /// Virtual home router (the provisioning target): appears only with the phone, fixed passphrase
@@ -121,6 +163,8 @@ impl Default for World {
             antenna_loss_db: 0,
             phone: None,
             ap_mac: None,
+            cond: NetCond::default(),
+            reboot_ap: None,
         }
     }
 }
@@ -174,7 +218,132 @@ impl World {
 
     /// Signal of this AP as seen by the chip (dBm): AP RSSI minus antenna blockage
     pub fn rssi(&self, i: usize) -> i8 {
-        (self.aps[i].rssi as i32 - self.antenna_loss_db).clamp(-127, 0) as i8
+        let r = self.aps[i].rssi;
+        let r = self.cond.rssi_cap().map_or(r, |c| r.min(c));
+        (r as i32 - self.antenna_loss_db).clamp(-127, 0) as i8
+    }
+
+    /// AP switched off by the offline preset or a router reboot (D-01)
+    fn ap_down(&self, i: usize) -> bool {
+        self.cond.preset == Preset::Offline
+            || (self.cond.down() && self.reboot_ap.is_none_or(|a| a == i))
+    }
+
+    fn row(
+        &mut self,
+        t_us: u64,
+        method: &str,
+        url: &str,
+        status: &str,
+        dur: Option<u64>,
+        note: &str,
+    ) {
+        self.net.tcp.rows.push(NetRow {
+            t_us,
+            method: method.into(),
+            dest: "Injected",
+            url: url.into(),
+            status: status.into(),
+            dur_us: dur,
+            note: note.into(),
+        });
+    }
+
+    /// The AP forgets the station (router reboot / offline): beacons stop, so the chip's own beacon timeout fires
+    fn forget(&mut self, i: usize, now_us: u64) {
+        if self.sta[i] == StaState::Assoc && self.cond.lose(now_us) {
+            let ssid = self.aps[i].ssid.clone();
+            self.row(now_us, "Wi-Fi", &ssid, "Disconnected", None, "");
+        }
+        self.sta[i] = StaState::Idle;
+        if let Some(a) = self.wpa[i].as_mut() {
+            a.state = wpa::Hs::Idle;
+        }
+    }
+
+    /// Network preset (D-01, action net=)
+    pub fn set_preset(&mut self, p: Preset, now_us: u64) {
+        self.advance_cond(now_us);
+        self.cond.set_preset(p, now_us);
+        self.row(now_us, "NET", p.label(), "Applied", None, "");
+        if p == Preset::Offline {
+            for i in 0..self.aps.len() {
+                self.forget(i, now_us);
+            }
+        }
+    }
+
+    /// Schedule a fault (D-01, action netfault= / --net-fault)
+    pub fn add_fault(&mut self, k: FaultKind, start_us: u64, dur_us: u64) {
+        self.cond.add_fault(k, start_us, dur_us);
+    }
+
+    /// Cross fault boundaries up to now (AP state changes and timeline rows)
+    fn advance_cond(&mut self, now_us: u64) {
+        if self.cond.next_boundary().is_none_or(|t| t > now_us) {
+            return;
+        }
+        for c in self.cond.advance(now_us) {
+            match c {
+                Change::Start(f) => {
+                    let note = if f.auto {
+                        "Random drop (flaky preset)"
+                    } else {
+                        ""
+                    };
+                    let d = f.end_us - f.start_us;
+                    self.row(
+                        f.start_us,
+                        "FAULT",
+                        f.kind.label(),
+                        "Injected",
+                        Some(d),
+                        note,
+                    );
+                    if f.kind == FaultKind::Reboot {
+                        self.reboot_ap = self.associated();
+                        for i in 0..self.aps.len() {
+                            if self.reboot_ap.is_none_or(|a| a == i) {
+                                self.forget(i, f.start_us);
+                            }
+                        }
+                    }
+                }
+                Change::End(f) => {
+                    self.row(f.end_us, "FAULT", f.kind.label(), "Recovered", None, "");
+                    if f.kind == FaultKind::Reboot && !self.cond.down() {
+                        self.reboot_ap = None;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Summary of conditions and their effect; None while untouched (normal, no faults)
+    pub fn net_summary(&self) -> Option<NetSummary> {
+        if !self.cond.active() {
+            return None;
+        }
+        let (mut ok, mut failed) = (0, 0);
+        for r in &self.net.tcp.rows {
+            match (r.status.parse::<u16>(), r.status.as_str()) {
+                (Ok(c), _) if c < 400 => ok += 1,
+                (Ok(_), _) | (_, "Failed" | "No reply" | "Timed out") => failed += 1,
+                _ => {}
+            }
+        }
+        let st = &self.cond.stats;
+        Some(NetSummary {
+            preset: self.cond.preset,
+            seed: self.cond.seed,
+            faults: self.cond.faults.len(),
+            disconnects: st.disconnects,
+            reconnect_us: st.reconnects.last().copied(),
+            lost: st.lost_at.is_some(),
+            ok,
+            failed,
+            lost_frames: st.lost_frames,
+        })
     }
 
     /// Whether the signal suffices for auth / association / data (the link is symmetric)
@@ -238,6 +407,7 @@ impl World {
         let Some(h) = frame::parse(f) else {
             return ("short frame".into(), vec![], false);
         };
+        self.advance_cond(tsf_us);
         // Frames from the firmware hotspot (AP interface): beacons teach the MAC, the rest go to the phone; STA state untouched
         if h.fc0 == fc::BEACON && self.ap_mac != Some(h.a2) && self.phone.is_some() {
             self.ap_mac = Some(h.a2);
@@ -255,8 +425,42 @@ impl World {
         let body = &f[h.body.min(f.len())..];
         let unicast = h.a1[0] & 1 == 0;
         let target = self.aps.iter().position(|a| a.bssid == h.a1);
-        let acked = unicast && target.is_some_and(|i| self.linkable(i));
         self.sta_mac = h.a2;
+        if self.cond.active() {
+            if target.is_some_and(|i| self.ap_down(i)) {
+                return ("frame → AP is off (injected fault)".into(), out, false);
+            }
+            // The preset's loss: the AP did not hear this frame (no ACK, no reply; the chip retries)
+            if (target.is_some() || h.fc0 == fc::PROBE_REQ) && self.cond.uplink_lost() {
+                return ("frame lost (network preset)".into(), out, false);
+            }
+        }
+        let acked = unicast && target.is_some_and(|i| self.linkable(i));
+        // A rebooted AP gets data from a station it no longer knows: like a real AP it answers
+        // deauth reason 7 (class 3 frame from a non-associated station). Only under D-01 conditions
+        if let Some(i) = target.filter(|i| {
+            self.cond.active()
+                && h.fc0 & 0x0c == 0x08
+                && self.sta[*i] != StaState::Assoc
+                && self.linkable(*i)
+        }) {
+            let seq = self.next_seq();
+            let (sta, bssid) = (h.a2, self.aps[i].bssid);
+            let mut d = frame::mgmt_hdr(fc::DEAUTH, &sta, &bssid, &bssid, seq);
+            d.extend_from_slice(&7u16.to_le_bytes());
+            out.push(Air {
+                delay_us: 500,
+                frame: d,
+                rssi: self.rssi(i),
+                channel: self.aps[i].channel,
+                ap_if: false,
+            });
+            return (
+                "data frame from a station the AP does not know → deauth (reason 7)".into(),
+                out,
+                acked,
+            );
+        }
         let desc = match h.fc0 {
             fc::PROBE_REQ => {
                 let ssid = frame::find_ie(body, 0).unwrap_or(&[]).to_vec();
@@ -271,6 +475,7 @@ impl World {
                     if a.channel != ch
                         || (!ssid.is_empty() && ssid != a.ssid.as_bytes())
                         || (self.rssi(i) as i32) < SCAN_MIN_DBM
+                        || self.ap_down(i)
                     {
                         continue;
                     }
@@ -373,6 +578,13 @@ impl World {
             }
             fc::DEAUTH | fc::DISASSOC => {
                 if let Some(i) = target {
+                    if self.sta[i] == StaState::Assoc
+                        && self.cond.active()
+                        && self.cond.lose(tsf_us)
+                    {
+                        let ssid = self.aps[i].ssid.clone();
+                        self.row(tsf_us, "Wi-Fi", &ssid, "Disconnected", None, "");
+                    }
                     self.sta[i] = StaState::Idle;
                     if let Some(a) = self.wpa[i].as_mut() {
                         a.state = wpa::Hs::Idle;
@@ -448,15 +660,29 @@ impl World {
                     payload: body[8..].to_vec(),
                 };
                 let before = self.net.log.len();
+                let acks = self.net.acks;
+                self.net.tcp.dns_fail = self.cond.dns_fail();
+                self.net.tcp.silent = self.cond.silent();
                 let replies = self.net.on_eth(&eth, tsf_us);
+                if self.net.acks != acks {
+                    if let Some(d) = self.cond.regained(tsf_us) {
+                        let ssid = self.aps[i].ssid.clone();
+                        self.row(tsf_us, "Wi-Fi", &ssid, "Reconnected", Some(d), "");
+                    }
+                }
                 let (rssi, channel, bssid) = (self.rssi(i), self.aps[i].channel, self.aps[i].bssid);
+                let extra = if replies.is_empty() {
+                    0
+                } else {
+                    self.cond.latency_us(tsf_us, 300)
+                };
                 for (k, r) in replies.into_iter().enumerate() {
                     let mut f = self.data_from_ds(&r, &bssid);
                     if let Some(a) = self.wpa[i].as_mut().filter(|a| wpa2 && a.authorized()) {
                         f = a.encrypt(&f);
                     }
                     out.push(Air {
-                        delay_us: 300 + 200 * k as u64,
+                        delay_us: extra + 300 + 200 * k as u64,
                         frame: f,
                         rssi,
                         channel,
@@ -529,6 +755,10 @@ impl World {
         } else {
             Some(0)
         };
+        let ap = match (ap, self.cond.next_boundary()) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
         match self.phone.as_ref().and_then(|p| p.next_timer()) {
             Some(t) => Some(ap.map_or(t, |a| a.min(t))),
             None => ap,
@@ -547,6 +777,7 @@ impl World {
     /// Advance timers: resend EAPOL messages, or deauth once retries run out (reason 15 = 4-way handshake timeout)
     pub fn poll(&mut self, tsf_us: u64) -> (Vec<Air>, Vec<String>) {
         let (mut out, mut log) = (Vec::new(), Vec::new());
+        self.advance_cond(tsf_us);
         let loss = self.antenna_loss_db;
         // Real-network reply (C-03): to the chip via the associated AP (encrypted once WPA2 is up); dropped when not associated
         if !self.net.pending.is_empty() {

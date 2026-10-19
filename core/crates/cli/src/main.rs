@@ -26,6 +26,8 @@ fn usage() -> ! {
                [--ap-post 'ssid=MyHome&pass=12345678'] (auto-submits the login form); with the phone a virtual router MyHome / 12345678 (192.168.5.0/24) appears
                script actions phone=join,ssid[,pass], phone=open, phone=get,URL, phone=post,URL,form, phone=leave
                script actions realnet=1|0 (the web \"real network\" toggle), netreply=id,status,ms,content type|reason,base64 body (real replies recorded on the web; the CLI never goes online)
+               [--seed N] (run seed, default 7: picks which frames a weak / flaky network loses) [--net normal|weak|flaky|offline]
+               [--net-fault reboot|dns|silent@<start s>[,<duration s>]] (repeatable, duration default 8); script actions seed=N, net=preset, netfault=kind[,s] (starts at the action time)
                [--encoder A,B[,SW]] (EC11 rotary encoder; script actions enc=+N / enc=-N turn N detents, encsw=1|0 press / release)
                [--sonar TRIG,ECHO] [--dist cm] (HC-SR04; script action dist=cm, negative = nothing in front)
                [--i2s max98357a,inmp441] (S3: speaker BCLK=16 LRC=17 DIN=18, mic SCK=39 WS=40 SD=41; C3: speaker 0/1/2, mic 0/1/3)
@@ -270,6 +272,33 @@ fn run(args: &[String]) {
     if let Some(db) = opt(args, "--antenna-loss").and_then(|s| s.parse::<i32>().ok()) {
         m.set_antenna_loss(db);
     }
+    // Network conditions (D-01): seed first, since the flaky preset draws its first drop when set
+    if let Some(v) = opt(args, "--seed") {
+        match v.parse::<u32>() {
+            Ok(s) => m.set_seed(s),
+            Err(_) => usage(),
+        }
+    }
+    if let Some(v) = opt(args, "--net") {
+        if !m.net_preset(&v) {
+            usage();
+        }
+    }
+    for (i, a) in args.iter().enumerate() {
+        if a != "--net-fault" {
+            continue;
+        }
+        let v = args.get(i + 1).cloned().unwrap_or_default();
+        let ok = v.split_once('@').is_some_and(|(k, t)| {
+            let (st, d) = t.split_once(',').unwrap_or((t, ""));
+            let dur = if d.is_empty() { None } else { d.parse().ok() };
+            st.parse::<f64>()
+                .is_ok_and(|st| (d.is_empty() || dur.is_some()) && m.net_fault(k, Some(st), dur))
+        });
+        if !ok {
+            usage();
+        }
+    }
     // Virtual phone (C-02): --ap-phone joins the hotspot at 0 s, --ap-post submits once a form shows up
     let ap_post = opt(args, "--ap-post");
     if let Some(i) = args.iter().position(|a| a == "--ap-phone") {
@@ -488,6 +517,11 @@ fn run(args: &[String]) {
             } else if let Some(v) = act.strip_prefix("netreply=") {
                 if !m.net_reply(v) {
                     eprintln!("[tryboard] unknown netreply action");
+                }
+            } else if let Some(ok) = m.net_action(&act) {
+                // Network conditions (D-01): seed=, net=, netfault= (faults start at the action time)
+                if !ok {
+                    eprintln!("[tryboard] unknown network action: {act}");
                 }
             } else if let Some(t) = act.strip_prefix("uart=") {
                 m.uart_push(t.replace("\\n", "\n").as_bytes());
@@ -845,6 +879,9 @@ fn run(args: &[String]) {
     }
     if let Some(l) = harness_wifi_line(&m) {
         eprintln!("{l}");
+    }
+    if let Some(n) = m.net_summary() {
+        eprintln!("{}", n.line());
     }
     if let Some(p) = m.phone() {
         eprintln!(
