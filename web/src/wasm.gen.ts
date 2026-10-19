@@ -177,14 +177,14 @@ export interface WasmExports {
   tb_report_ptr(): number;
   /** GPIOs to watch (lo = GPIO0..31, hi = GPIO32..); PWM / WS2812 / I2C are always logged. Set after boot, again after re-boot */
   tb_io_watch(lo: number, hi: number): void;
-  /** Take the core's event buffer: 16 bytes each (t u64 | kind u8 | a u8 | b u16 | v u32, LE, see tryboard_esp32c3::iotrace), copied internally; returns the count, then read count × 16 bytes via tb_io_ptr */
+  /** Take the core's event buffer: 16 bytes each (t u64 | kind u8 | a u8 | b u16 | v u32, LE, see tryboard_soc::iotrace), copied internally; returns the count, then read count × 16 bytes via tb_io_ptr */
   tb_io_take(): number;
   tb_io_ptr(): number;
   /** Events dropped because the core buffer was full (cumulative since boot) */
   tb_io_dropped(): number;
   /** Start recording task switches (cap = core buffer entries, 0 = off). Set after boot, again after re-boot */
   tb_tasks_enable(cap: number): void;
-  /** Take task-switch events: 16 bytes each (t u64 | core u8 | prev u8 | task u16 | pc u32, LE, see tryboard_esp32c3::tasktrace), copied internally; returns the count, then read via tb_tasks_ptr */
+  /** Take task-switch events: 16 bytes each (t u64 | core u8 | prev u8 | task u16 | pc u32, LE, see tryboard_soc::tasktrace), copied internally; returns the count, then read via tb_tasks_ptr */
   tb_tasks_take(): number;
   tb_tasks_ptr(): number;
   /** Task table JSON (event `task` is an index): {"cores":N,"dropped":N,"tasks":[{"name","prio","core","tcb"}]}; returns its length, read via tb_tasks_json_ptr */

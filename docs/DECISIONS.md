@@ -979,3 +979,8 @@
 - **不用 `compileAsync`**：材质在等待期间被 dispose 时它会抛错（切换示例时常见）；自己轮询更可控。
 - **留下的问题**：Chrome 程序二进制缓存命中时 `isReady()` 早报完成，GPU 进程仍有约 500 ms 积压，首个同步 GL 调用阻塞。试过 fence sync（信号更早，更糟）、逐帧触碰程序（同一积压只是挪位置）、随机源码 canary 程序（无稳定收益），都已撤回。手机长任务主要是建场景 CPU 时间，另立 R-16。
 - 替代：OffscreenCanvas + worker 渲染 —— 要改全部 7 个视图的事件与资源流，代价远大于收益；降低材质种类 —— 影响画面，违背「画面一致」。
+
+## 2026-10-19 内核分层搬移的两处偏离（R-05）
+- **sigin 一起进 soc**：原计划把 `sigin`（GPIO 输入信号路由）当 C3 专有留下，但 rmt / pcnt 依赖它，只能一起搬；行为不变（金标准 112/112 一致）。
+- **machine 里仍有 `tryboard_esp32c3::`**：剩下的是 `Hw::C3` 构造 C3 SoC 本体用的（`Esp32c3`、`MMIO_LOW/HIGH`、`Stop`），不是共用件；归零放到 R-06（machine 只调 `trait Chip`，按芯片 match 只剩构造处）。不用别名绕过 grep。
+- esp32c3 的 `pub use tryboard_soc::{…}` 转发保留到 R-06 结束，再按引用情况删除。
