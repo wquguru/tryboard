@@ -3,6 +3,7 @@
 
 import { t } from './i18n/index.ts';
 import { chipAt, pwmDevice, servoDeg, want as wantN } from './ui/say.ts';
+import type { ConfLevel } from './ui/conf.tsx';
 
 export interface Level {
   id: string;
@@ -60,6 +61,10 @@ export interface CheckResult {
   dev?: string;
   /** Small print: pin / address / serial */
   tag?: string;
+  /** Trust level of this one row (D-05); UI only, never part of the raw line or the fingerprint */
+  conf?: ConfLevel;
+  /** Why the row needs real hardware (timing-sensitive code, D-03) */
+  note?: string;
 }
 
 /** Turn --i2c / --env / --spi / --servo / --power / --encoder / --sonar / --touch-int args into boot options (the web has no command line) */
@@ -361,6 +366,42 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
               : t('Too much {name} on the round LCD', { name })
             : t('The {name} on the round LCD is in the wrong place', { name });
       res.push({ ok, text, say, tag: lcd, dev: lcd });
+    }
+  }
+  return withConf(res, out, report);
+}
+
+/** Pins the core flagged as timing-sensitive: `[tryboard] timing-sensitive: GPIO5 busy-wait esp_rom_delay_us ×N, ...` */
+export function timingPins(report: string): { pins: number[]; line: string } | null {
+  const m = report.match(/\[tryboard\] timing-sensitive: (.*)/);
+  if (!m) return null;
+  const pins = [...new Set([...m[1].matchAll(/GPIO(\d+)/g)].map((x) => Number(x[1])))];
+  return { pins, line: m[1].trim() };
+}
+
+/** Per-row trust level (D-05): instruction-level CPU and bus models are "simulated"; virtual sensors, screens, the USB host
+ *  and the virtual network are behaviour models; rows on timing-sensitive pins need real hardware. */
+function withConf(res: CheckResult[], out: string, report: string): CheckResult[] {
+  const SIM: ConfLevel = '仿真验证'; // lint: allow-cjk
+  const BEH: ConfLevel = '行为模拟'; // lint: allow-cjk
+  const HW: ConfLevel = '必须上真机'; // lint: allow-cjk
+  const net = /\bwifi:/.test(out);
+  for (const r of res) {
+    const x = r.text;
+    if (/ readings, max deviation|OLED lit|round LCD |USB device|typed on the PC/.test(x)) r.conf = BEH;
+    else if (/^serial |^boot:|^firmware crashed/.test(x)) r.conf = net ? BEH : SIM;
+    else r.conf = SIM;
+  }
+  const timing = timingPins(report);
+  if (timing) {
+    const note = t('The firmware times this pin with busy-wait loops; the simulated CPU speed is not the real one, so this only shows the logic is right.');
+    let hit = res.filter((r) => timing.pins.some((p) => r.tag === `GPIO${p}`));
+    // A single-wire sensor's result is usually a serial reading, not a pin row: flag the readings instead
+    if (!hit.length) hit = res.filter((r) => / readings, max deviation/.test(r.text));
+    if (!hit.length) hit = res.filter((r) => r.ok && /^serial /.test(r.text)).slice(-1);
+    for (const r of hit) {
+      r.conf = HW;
+      r.note = note;
     }
   }
   return res;

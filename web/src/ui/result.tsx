@@ -5,8 +5,9 @@ import { cn } from './cn';
 import { Kv, Res } from './panel';
 import { VERDICT, groupRows, type Verdict } from './say';
 import { t } from '../i18n';
+import { CONF_LEVELS, ConfIcon, confLabel, type ConfLevel } from './conf';
 
-export type ResultRow = { ok: boolean | null; text: string; say?: string; tag?: string; dev?: string };
+export type ResultRow = { ok: boolean | null; text: string; say?: string; tag?: string; dev?: string; conf?: ConfLevel; note?: string };
 
 type Mark = 'ok' | 'bad' | 'warn' | 'na';
 
@@ -101,18 +102,19 @@ export function ResultCard({ verdict, title, why, meta, rows, runId, rawNote, ch
                     </span>
                   </div>
                 ) : (
-                  g.bad.map((r, i) => <Row key={i} mark={badMark} text={r.say ?? r.text} ok="bad" />)
+                  g.bad.map((r, i) => <Row key={i} mark={badMark} text={r.say ?? r.text} ok="bad" conf={r.conf} note={r.note} />)
                 )}
                 {g.bad.length > 0 && good.length > 0 ? (
                   <Row mark="ok" text={good.length > 1 ? t('The other {n} items are fine', { n: good.length }) : (good[0].say ?? good[0].text)} ok="ok" dim />
                 ) : (
-                  good.map((r, i) => <Row key={i} mark={r.ok === null ? 'na' : 'ok'} text={r.say ?? r.text} ok={r.ok === null ? 'na' : 'ok'} dim={r.ok === null} />)
+                  good.map((r, i) => <Row key={i} mark={r.ok === null ? 'na' : 'ok'} text={r.say ?? r.text} ok={r.ok === null ? 'na' : 'ok'} dim={r.ok === null} conf={r.conf} note={r.note} />)
                 )}
               </div>
             );
           })}
         </div>
       )}
+      {!echo && <ConfLegend rows={rows} />}
       {children && <div className="result-acts mt-3 flex flex-wrap gap-2">{children}</div>}
       {(rows.length > 0 || runId || rawNote) && (
         <details className="raw group mt-3 border-t border-line">
@@ -142,11 +144,44 @@ export function ResultCard({ verdict, title, why, meta, rows, runId, rawNote, ch
   );
 }
 
-function Row({ mark, text, ok, dim }: { mark: Mark; text: ReactNode; ok: 'ok' | 'bad' | 'na'; dim?: boolean }) {
+function Row({ mark, text, ok, dim, conf, note }: { mark: Mark; text: ReactNode; ok: 'ok' | 'bad' | 'na'; dim?: boolean; conf?: ConfLevel; note?: string }) {
   return (
-    <div className={cn('flex min-h-9 items-center gap-2 border-b border-line-soft py-1.5 text-[13px] leading-5', dim && 'text-muted')} data-ok={ok}>
-      <Mark k={mark} />
-      <span className="min-w-0 flex-1">{text}</span>
+    <div className={cn('flex min-h-9 gap-2 border-b border-line-soft py-1.5 text-[13px] leading-5', note ? 'items-start' : 'items-center', dim && 'text-muted')} data-ok={ok} data-conf={conf}>
+      <Mark k={mark} className={note ? 'mt-0.5' : undefined} />
+      <span className="min-w-0 flex-1">
+        {text}
+        {note && <span className="row-note mt-0.5 block text-xs leading-[18px] text-muted">{note}</span>}
+      </span>
+      {conf && (
+        <span className="row-conf inline-flex flex-none items-center gap-1 text-[11px] text-muted" title={confLabel(conf)}>
+          <ConfIcon c={conf} size={12} />
+          <span className="max-md:sr-only">{confLabel(conf)}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+const confHint = (c: ConfLevel) =>
+  ({
+    仿真验证: t('same as real hardware'), // lint: allow-cjk
+    行为模拟: t('right flow, approximate values'), // lint: allow-cjk
+    估算: t('typical part'), // lint: allow-cjk
+    必须上真机: t('the simulator cannot prove this'), // lint: allow-cjk
+  })[c];
+
+/** Legend under the rows (D-05): only the levels that appear, so a plain card stays plain. */
+function ConfLegend({ rows }: { rows: ResultRow[] }) {
+  const used = CONF_LEVELS.filter((c) => rows.some((r) => r.conf === c));
+  if (!used.length) return null;
+  return (
+    <div className="conf-legend mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
+      {used.map((c) => (
+        <span key={c} className="inline-flex items-center gap-1">
+          <ConfIcon c={c} size={12} />
+          <b className="font-medium text-fg">{confLabel(c)}</b> {confHint(c)}
+        </span>
+      ))}
     </div>
   );
 }

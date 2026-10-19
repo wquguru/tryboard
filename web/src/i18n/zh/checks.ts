@@ -102,5 +102,10 @@ const d: Dict = {
   "background thread crashed": "后台线程崩溃",
   "Simulator message could not be parsed": "模拟器消息无法解析",
   "Simulator stopped: {e}": "模拟器停止：{e}",
+  "The firmware times this pin with busy-wait loops; the simulated CPU speed is not the real one, so this only shows the logic is right.": "固件靠忙等循环给这个脚计时；模拟器的 CPU 速度不等于真机，这条只说明逻辑对。",
+  "same as real hardware": "和真机一致",
+  "right flow, approximate values": "流程对，数值近似",
+  "typical part": "按典型器件",
+  "the simulator cannot prove this": "模拟器替你验证不了",
 };
 export default d;
