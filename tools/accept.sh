@@ -220,6 +220,10 @@ if [ $NO_WEB = 0 ]; then
   echo "$r" | sed 's/^/- /' >> $REPORT
   # 要看到汇总行（"[replay] PASS（…"）才算过：脚本中途崩了时最后一行是某一项的 PASS，不能算
   echo "$r" | tail -1 | grep -q '^\[replay\] PASS（' || { echo "- [replay] 脚本没跑完" >> $REPORT; fail=1; }
+  # 真实网络开关（C-03）：本机代理顶替外网，回复进输入日志、命令行 --inputs 逐字节重放、回退不再联网
+  r=$(node tools/webtest/realnet.mjs 2>&1 | grep '^\[realnet\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[realnet\] PASS（' || { echo "- [realnet] 脚本没跑完" >> $REPORT; fail=1; }
   r=$(node tools/webtest/elec.mjs 2>&1 | grep '^\[elec\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[elec\] PASS（' || { echo "- [elec] 脚本没跑完" >> $REPORT; fail=1; }

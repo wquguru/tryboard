@@ -18,12 +18,33 @@ pub struct Eth {
     pub payload: Vec<u8>,
 }
 
-#[derive(Default)]
 pub struct Net {
     /// 已分配给芯片的地址（DHCP ACK 之后）
     pub leased: bool,
     pub log: Vec<String>,
     pub tcp: super::tcp::Tcp,
+    /// 网关（兼 DHCP / DNS）与分给芯片的地址：缺省 192.168.4.1 / .100；
+    /// 有虚拟手机配网时路由器换到 192.168.5.x，避开固件热点自己的 192.168.4.x（见 DECISIONS C-02）
+    pub gw: [u8; 4],
+    pub sta_ip: [u8; 4],
+    /// 最近一个 TCP 段的来源 MAC（芯片）：真实网络的回复晚到，要知道发给谁
+    peer_mac: Mac,
+    /// 不是对某一帧的即时回应、要主动发给芯片的帧（真实网络的回复，C-03）；World::poll 取走
+    pub pending: Vec<Eth>,
+}
+
+impl Default for Net {
+    fn default() -> Self {
+        Net {
+            leased: false,
+            log: Vec::new(),
+            tcp: Default::default(),
+            gw: GW_IP,
+            sta_ip: STA_IP,
+            peer_mac: [0; 6],
+            pending: Vec::new(),
+        }
+    }
 }
 
 pub fn checksum(data: &[u8], init: u32) -> u16 {
@@ -124,7 +145,21 @@ impl Net {
         }
     }
 
+    /// 网页送来真实网络的回复（脚本动作 netreply=）：回复段排进 pending，下一次 World::poll 发给芯片
+    pub fn real_reply(&mut self, id: u32, status: u16, info: &str, body: &[u8], now_us: u64) {
+        let segs = self.tcp.real_reply(id, status, info, body, now_us);
+        let to = self.peer_mac;
+        for ((chip, _, server, _), seg, line) in segs {
+            if let Some(l) = line {
+                self.log.push(l);
+            }
+            let e = self.reply_ip(&to, chip, server, 6, &seg);
+            self.pending.push(e);
+        }
+    }
+
     pub fn on_eth(&mut self, e: &Eth, now_us: u64) -> Vec<Eth> {
+        self.tcp.now_us = now_us;
         match e.ethertype {
             ETH_ARP => self.arp(e),
             ETH_IP => self.ip(e, now_us),
@@ -139,7 +174,7 @@ impl Net {
         }
         let target = ip4(&p[24..28]);
         // 网关回应所有局域网内、非芯片自己的地址（芯片做 DHCP 冲突检测时问自己的地址，不能答）
-        if target == STA_IP || target == ip4(&p[14..18]) || target[..3] != GW_IP[..3] {
+        if target == self.sta_ip || target == ip4(&p[14..18]) || target[..3] != self.gw[..3] {
             return vec![];
         }
         let mut r = vec![0, 1, 8, 0, 6, 4, 0, 2];
@@ -178,9 +213,9 @@ impl Net {
                 // 普通 DNS（发给网关 53 端口），以及 .local 名字的 mDNS 查询（224.0.0.251:5353，
                 // 按 RFC 6762 §6.7 "传统单播"方式直接回给查询方的端口，ID 与问题原样带回）
                 if dport == 53 || dport == 5353 {
-                    if let Some(ans) = self.tcp.dns(data) {
+                    if let Some(ans) = self.tcp.dns(data, self.gw) {
                         self.log.push(ans.1);
-                        let from = if dport == 53 { dst } else { GW_IP };
+                        let from = if dport == 53 { dst } else { self.gw };
                         let u = udp(from, src, dport, sport, &ans.0);
                         return vec![self.reply_ip(&e.src, src, from, 17, &u)];
                     }
@@ -200,6 +235,7 @@ impl Net {
                 vec![self.reply_ip(&e.src, src, dst, 1, &r)]
             }
             6 => {
+                self.peer_mac = e.src;
                 let segs = self.tcp.on_segment(src, dst, body, now_us);
                 let mut out = Vec::new();
                 for (seg, line) in segs {
@@ -243,18 +279,19 @@ impl Net {
         r[2] = 6;
         r[4..8].copy_from_slice(&d[4..8]); // xid
         r[10..12].copy_from_slice(&d[10..12]); // flags
-        r[16..20].copy_from_slice(&STA_IP); // yiaddr
-        r[20..24].copy_from_slice(&GW_IP); // siaddr
+        let (gw, sta) = (self.gw, self.sta_ip);
+        r[16..20].copy_from_slice(&sta); // yiaddr
+        r[20..24].copy_from_slice(&gw); // siaddr
         r[28..44].copy_from_slice(&d[28..44]); // chaddr
         r[236..240].copy_from_slice(&[0x63, 0x82, 0x53, 0x63]);
         let opts: [(u8, Vec<u8>); 8] = [
             (53, vec![reply]),
-            (54, GW_IP.to_vec()),
+            (54, gw.to_vec()),
             (51, 86_400u32.to_be_bytes().to_vec()),
             (58, 43_200u32.to_be_bytes().to_vec()),
             (1, MASK.to_vec()),
-            (3, GW_IP.to_vec()),
-            (6, GW_IP.to_vec()),
+            (3, gw.to_vec()),
+            (6, gw.to_vec()),
             (15, b"tryboard.local".to_vec()),
         ];
         for (k, v) in opts {
@@ -270,16 +307,16 @@ impl Net {
             "DHCP {} → {} {}",
             if kind == 1 { "DISCOVER" } else { "REQUEST" },
             if reply == 2 { "OFFER" } else { "ACK" },
-            ip_str(&STA_IP)
+            ip_str(&sta)
         ));
         let bc = [255u8; 4];
-        let u = udp(GW_IP, bc, 67, 68, &r);
+        let u = udp(gw, bc, 67, 68, &r);
         let id = self.tcp.next_ip_id();
         vec![Eth {
             dst: [0xff; 6],
             src: GW_MAC,
             ethertype: ETH_IP,
-            payload: ipv4(GW_IP, bc, 17, &u, id),
+            payload: ipv4(gw, bc, 17, &u, id),
         }]
     }
 }

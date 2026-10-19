@@ -3,6 +3,7 @@
 // 所以两边与原生 `tryboard run` / tools/check.py 得到同一份串口输出、观察记录和指纹。
 
 import { parseScript } from './checks';
+import { realFetch, type RealReq } from './realfetch';
 
 export const CPU_HZ = 160_000_000;
 
@@ -23,6 +24,13 @@ export interface Ex {
   tb_uart_push(p: number, n: number): void;
   tb_usb_cdc_send(p: number, n: number): void;
   tb_ble_cmd?(p: number, n: number): number;
+  /** 虚拟手机（C-02），老内核没有 */
+  tb_phone_cmd?(p: number, n: number): number;
+  /** 真实网络（C-03），老内核没有 */
+  tb_realnet_set?(on: number): void;
+  tb_net_outbox?(): number;
+  tb_net_reply?(p: number, n: number): number;
+  tb_phone_json_ptr?(): number;
   tb_pin_pwm(pin: number): number;
   tb_pin_pwm_freq(pin: number): number;
   tb_i2c_attach(kind: number, addr: number): number;
@@ -75,6 +83,8 @@ export interface SimJob {
   /** 旋转编码器 / HC-SR04（= CLI --encoder A,B[,SW] / --sonar TRIG,ECHO --dist 厘米）；接了也始终 1ms 一片 */
   encoder?: { a: number; b: number; sw?: number };
   sonar?: { trig: number; echo: number; cm?: number };
+  /** 开着「真实网络」跑（C-03，检查点用）：芯片发往外网的 HTTP 当场 fetch，回复施加后记在结果里；结论依赖外网，不记运行编号 */
+  realnet?: boolean;
 }
 
 export interface SimResult {
@@ -85,6 +95,8 @@ export interface SimResult {
   error?: string;
   /** 根本没启动起来（镜像坏了、缺 ROM） */
   bootError?: string;
+  /** realnet 模式下拿到的回复（netreply= 后面的部分，按施加顺序） */
+  replies?: string[];
 }
 
 export interface SimHooks {
@@ -152,6 +164,8 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
     if (j.sonar.cm !== undefined) e.tb_sonar_distance?.(j.sonar.cm);
   }
   if (j.touchInt !== undefined) e.tb_touch_int?.(j.touchInt);
+  const replies: string[] = [];
+  if (j.realnet) e.tb_realnet_set?.(1);
 
   const script = parseScript(j.script);
   let si = 0;
@@ -182,7 +196,10 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
       else if (act.startsWith('dist=')) {
         const d = Number(act.slice(5));
         if (!Number.isNaN(d)) e.tb_sonar_distance?.(d);
-      } else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));
+      } else if (act.startsWith('realnet=')) e.tb_realnet_set?.(act.slice(8).trim() === '1' ? 1 : 0);
+      else if (act.startsWith('netreply=')) bytesIn(e, new TextEncoder().encode(act.slice(9).trim()), (p, n) => void e.tb_net_reply?.(p, n));
+      else if (act.startsWith('phone=')) bytesIn(e, new TextEncoder().encode(act.slice(6).replaceAll('\\n', '\n')), (p, n) => void e.tb_phone_cmd?.(p, n));
+      else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));
       else if (act.startsWith('imu=')) {
         // 与 CLI parse_imu 相同：3 个数（姿态）或 6 个数（再加变化率）
         const v = act.slice(4).split(',').map(Number);
@@ -204,7 +221,19 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         if (!l || Math.abs(f32(l[0] - d)) > f32(0.004) || Math.abs(f32(l[1] - f)) > f32(0.5)) trace.push([d, f, now]);
       }
     }
-    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice && j.servo === undefined && !j.encoder && !j.sonar ? CPU_HZ / 100 : CPU_HZ / 1000;
+    // 真实网络：上一片里芯片发出的请求当场 fetch（模拟时间停在这一片的边界等回复），回复施加后才往下跑
+    if (j.realnet && e.tb_net_outbox && e.tb_phone_json_ptr) {
+      const n = e.tb_net_outbox();
+      if (n) {
+        const reqs = JSON.parse(new TextDecoder().decode(new Uint8Array(e.memory.buffer, e.tb_phone_json_ptr(), n))) as RealReq[];
+        for (const r of reqs) {
+          const reply = (await realFetch(r)).action.slice('netreply='.length);
+          bytesIn(e, new TextEncoder().encode(reply), (p, m) => void e.tb_net_reply?.(p, m));
+          replies.push(reply);
+        }
+      }
+    }
+    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice && !j.realnet && j.servo === undefined && !j.encoder && !j.sonar ? CPU_HZ / 100 : CPU_HZ / 1000;
     const before = e.tb_cycles();
     const stop = e.tb_run(Math.min(slice, total - done));
     done += e.tb_cycles() - before;
@@ -265,5 +294,5 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
     }
     report += `[tryboard] PWM GPIO${j.pwmPin} 变化 ${steps.join(' ')}\n`;
   }
-  return { stdout: out, report, sim: e.tb_cycles() / CPU_HZ, error };
+  return { stdout: out, report, sim: e.tb_cycles() / CPU_HZ, error, ...(j.realnet ? { replies } : {}) };
 }

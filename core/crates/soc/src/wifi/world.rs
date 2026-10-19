@@ -3,6 +3,7 @@
 
 use super::frame::{self, fc, Mac};
 use super::net::{self, Eth};
+use super::phone::Phone;
 use super::wpa::{self, Authenticator};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -27,6 +28,8 @@ pub struct Air {
     pub frame: Vec<u8>,
     pub rssi: i8,
     pub channel: u8,
+    /// 发给芯片的哪个接口：false = STA（接口 0），true = 固件自建热点（接口 1，C-02 虚拟手机发来的帧）
+    pub ap_if: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -50,7 +53,18 @@ pub struct World {
     pub wpa: Vec<Option<Authenticator>>,
     /// 天线被金属件 / 电池挡住的衰减（dB，估算，P2-11）：双向都减，所以 AP 也听不清芯片
     pub antenna_loss_db: i32,
+    /// 虚拟手机（C-02）：只有配了手机（--ap-phone / 网页手机面板）才有；没有时世界与以前逐字节相同
+    pub phone: Option<Phone>,
+    /// 固件自建热点的 MAC（从芯片发出的信标学来）：a2 是它的帧走手机，不当作 STA 接口的帧
+    pub ap_mac: Option<Mac>,
 }
+
+/// 虚拟家用路由器（配网的目标）：手机启用时才出现，口令固定
+pub const ROUTER_SSID: &str = "MyHome";
+pub const ROUTER_PASS: &str = "12345678";
+/// 手机启用时虚拟路由器网段改为 192.168.5.0/24：固件热点默认占着 192.168.4.0/24（APSTA 时两边不能重叠）
+pub const ROUTER_GW: [u8; 4] = [192, 168, 5, 1];
+pub const ROUTER_STA_IP: [u8; 4] = [192, 168, 5, 100];
 
 /// 低于它扫描也收不到（管理帧 1 Mbps 的接收灵敏度量级，估算）
 pub const SCAN_MIN_DBM: i32 = -92;
@@ -104,6 +118,8 @@ impl Default for World {
             net: Default::default(),
             wpa: (0..n).map(|_| None).collect(),
             antenna_loss_db: 0,
+            phone: None,
+            ap_mac: None,
         }
     }
 }
@@ -133,6 +149,28 @@ const RSN_IE: [u8; 20] = [
 
 impl World {
     /// 芯片这边收到的这个 AP 的信号强度（dBm）：AP 发射的 RSSI 减去天线遮挡
+    /// 启用虚拟手机：加上虚拟路由器 MyHome（WPA2），虚拟网络换到 192.168.5.0/24。幂等
+    pub fn enable_phone(&mut self, phone: Phone) {
+        if !self.aps.iter().any(|a| a.ssid == ROUTER_SSID) {
+            self.aps.push(ap(
+                ROUTER_SSID,
+                [0x02, 0x54, 0x42, 0xa0, 0x00, 0x05],
+                6,
+                -50,
+                Auth::Wpa2Psk,
+                ROUTER_PASS,
+            ));
+            self.sta.push(StaState::Idle);
+            self.wpa.push(None);
+        }
+        // 芯片已经从缺省路由器拿到地址（STA 示例中途打开手机）：不搬网段，免得芯片手里的地址失效
+        if !self.net.leased {
+            self.net.gw = ROUTER_GW;
+            self.net.sta_ip = ROUTER_STA_IP;
+        }
+        self.phone = Some(phone);
+    }
+
     pub fn rssi(&self, i: usize) -> i8 {
         (self.aps[i].rssi as i32 - self.antenna_loss_db).clamp(-127, 0) as i8
     }
@@ -189,6 +227,7 @@ impl World {
             frame: f,
             rssi: self.rssi(i),
             channel: self.aps[i].channel,
+            ap_if: false,
         }
     }
 
@@ -197,6 +236,19 @@ impl World {
         let Some(h) = frame::parse(f) else {
             return ("短帧".into(), vec![], false);
         };
+        // 固件热点（AP 接口）发的帧：信标学 MAC，其余给手机；不碰 STA 接口的状态
+        if h.fc0 == fc::BEACON && self.ap_mac != Some(h.a2) && self.phone.is_some() {
+            self.ap_mac = Some(h.a2);
+        }
+        if self.ap_mac == Some(h.a2) {
+            let loss = self.antenna_loss_db;
+            let Some(p) = self.phone.as_mut() else {
+                return ("固件热点的帧（没有手机）".into(), vec![], false);
+            };
+            let (d, acked) = p.on_frame(f, tsf_us);
+            let out = Self::phone_air(p, loss);
+            return (d, out, acked);
+        }
         let mut out = Vec::new();
         let body = &f[h.body.min(f.len())..];
         let unicast = h.a1[0] & 1 == 0;
@@ -227,6 +279,7 @@ impl World {
                         frame: resp,
                         rssi,
                         channel,
+                        ap_if: false,
                     });
                 }
                 format!(
@@ -258,6 +311,7 @@ impl World {
                     frame: r,
                     rssi,
                     channel,
+                    ap_if: false,
                 });
                 self.sta[i] = StaState::Authed;
                 format!("认证 → {}（开放系统，成功）", self.aps[i].ssid)
@@ -289,6 +343,7 @@ impl World {
                     frame: r,
                     rssi,
                     channel,
+                    ap_if: false,
                 });
                 self.sta[i] = StaState::Assoc;
                 if wpa2 {
@@ -300,6 +355,7 @@ impl World {
                         frame: f,
                         rssi,
                         channel,
+                        ap_if: false,
                     });
                 }
                 format!(
@@ -362,6 +418,7 @@ impl World {
                             frame: fr,
                             rssi,
                             channel,
+                            ap_if: false,
                         });
                     }
                     return (note, out, acked);
@@ -395,6 +452,7 @@ impl World {
                         frame: f,
                         rssi,
                         channel,
+                        ap_if: false,
                     });
                 }
                 let notes: Vec<String> = self.net.log[before..].to_vec();
@@ -451,16 +509,65 @@ impl World {
 
     /// 认证方的重传 / 超时定时器（TSF 微秒）
     pub fn next_timer(&self) -> Option<u64> {
-        self.wpa
+        let ap = self
+            .wpa
             .iter()
             .flatten()
             .filter_map(|a| a.next_timer())
-            .min()
+            .min();
+        // 有排队要主动发的帧（真实网络的回复）：马上到期
+        let ap = if self.net.pending.is_empty() {
+            ap
+        } else {
+            Some(0)
+        };
+        match self.phone.as_ref().and_then(|p| p.next_timer()) {
+            Some(t) => Some(ap.map_or(t, |a| a.min(t))),
+            None => ap,
+        }
+    }
+
+    /// 手机要发的帧：信号按天线遮挡衰减（链路对称）
+    fn phone_air(p: &mut Phone, loss: i32) -> Vec<Air> {
+        let mut v = p.take_out();
+        for a in &mut v {
+            a.rssi = (a.rssi as i32 - loss).clamp(-127, 0) as i8;
+        }
+        v
     }
 
     /// 推进定时器：重发 EAPOL 消息，或重试用完时发去认证（原因 15 = 四次握手超时）
     pub fn poll(&mut self, tsf_us: u64) -> (Vec<Air>, Vec<String>) {
         let (mut out, mut log) = (Vec::new(), Vec::new());
+        let loss = self.antenna_loss_db;
+        // 真实网络的回复（C-03）：经已关联的 AP 发给芯片（WPA2 已放行就加密）；没关联就丢掉
+        if !self.net.pending.is_empty() {
+            let pend = std::mem::take(&mut self.net.pending);
+            let notes: Vec<String> = std::mem::take(&mut self.net.log);
+            log.extend(notes);
+            if let Some(i) = self.associated() {
+                let (rssi, channel, bssid) = (self.rssi(i), self.aps[i].channel, self.aps[i].bssid);
+                for (k, e) in pend.iter().enumerate() {
+                    let mut f = self.data_from_ds(e, &bssid);
+                    if let Some(a) = self.wpa[i].as_mut().filter(|a| a.authorized()) {
+                        f = a.encrypt(&f);
+                    }
+                    out.push(Air {
+                        delay_us: 200 * k as u64,
+                        frame: f,
+                        rssi,
+                        channel,
+                        ap_if: false,
+                    });
+                }
+            }
+        }
+        if let Some(p) = self.phone.as_mut() {
+            if p.next_timer().is_some_and(|t| t <= tsf_us) {
+                p.poll(tsf_us);
+                out.extend(Self::phone_air(p, loss));
+            }
+        }
         for i in 0..self.aps.len() {
             let Some(t) = self.wpa[i].as_mut().and_then(|a| a.poll(tsf_us)) else {
                 continue;
@@ -474,6 +581,7 @@ impl World {
                         frame: f,
                         rssi,
                         channel,
+                        ap_if: false,
                     });
                     log.push(format!("{}：四次握手没等到回应，重发", self.aps[i].ssid));
                 }
@@ -487,6 +595,7 @@ impl World {
                         frame: f,
                         rssi,
                         channel,
+                        ap_if: false,
                     });
                     self.sta[i] = StaState::Idle;
                     log.push(format!(

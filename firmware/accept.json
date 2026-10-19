@@ -1919,5 +1919,158 @@
    "start ok",
    "TRYBOARD_OK wifi-init"
   ]
+ },
+ {
+  "id": "softap-prov",
+  "fw": "c3-softap-prov",
+  "seconds": 3,
+  "args": [
+   "--ap-phone",
+   "--ap-post",
+   "ssid=MyHome&pass=12345678"
+  ],
+  "expect": [
+   "热点已启动",
+   "给手机分配 IP 192.168.4.2",
+   "DNS 劫持 connectivitycheck.gstatic.com → 192.168.4.1",
+   "HTTP GET /",
+   "收到 SSID=MyHome（密码 8 位）",
+   "关掉热点，去连 MyHome",
+   "已连接 MyHome ch=6",
+   "拿到 IP 192.168.5.100 网关 192.168.5.1"
+  ],
+  "stderr_expect": [
+   "手机 分到 192.168.4.2（网关 192.168.4.1",
+   "需要登录此网络（探测得到 302，不是 204）",
+   "GET http://192.168.4.1/ → 200「设备配网」 表单 POST /save 字段 ssid, pass",
+   "POST http://192.168.4.1/save → 200「已保存」"
+  ]
+ },
+ {
+  "id": "softap-prov-reboot",
+  "fw": "c3-softap-prov",
+  "seconds": 6,
+  "args": [
+   "--ap-phone",
+   "--ap-post",
+   "ssid=MyHome&pass=12345678"
+  ],
+  "expect": [
+   "配网完成，重启验证 NVS 里的记忆",
+   "NVS 里记着 Wi-Fi：MyHome，直接连接",
+   "TRYBOARD_OK c3-softap-prov 重启后记住了 MyHome"
+  ]
+ },
+ {
+  "id": "softap-prov-badpass",
+  "fw": "c3-softap-prov",
+  "seconds": 10,
+  "args": [
+   "--ap-phone",
+   "--ap-post",
+   "ssid=MyHome&pass=wrongpass"
+  ],
+  "expect": [
+   "收到 SSID=MyHome（密码 9 位）",
+   "断开 reason=15",
+   "连不上 MyHome，清掉记住的 Wi-Fi，重新打开热点"
+  ],
+  "absent": [
+   "拿到 IP",
+   "TRYBOARD_OK"
+  ],
+  "stderr_expect": [
+   "记着这个热点，它再出现就自动重连"
+  ]
+ },
+ {
+  "id": "softap-prov-script",
+  "fw": "c3-softap-prov",
+  "seconds": 4,
+  "args": [
+   "--script",
+   "0:phone=join,TryBoard-Setup; 0.5:phone=open; 1.0:phone=post,,ssid=MyHome&pass=12345678"
+  ],
+  "expect": [
+   "给手机分配 IP 192.168.4.2",
+   "收到 SSID=MyHome（密码 8 位）",
+   "拿到 IP 192.168.5.100 网关 192.168.5.1"
+  ],
+  "stderr_expect": [
+   "0.522s 手机 GET http://192.168.4.1/ → 200「设备配网」",
+   "1.022s 手机 POST http://192.168.4.1/save → 200"
+  ]
+ },
+ {
+  "id": "c3-softap-wpa2",
+  "seconds": 6,
+  "args": [
+   "--ap-phone",
+   "TryBoard-Setup,tryboard123",
+   "--ap-post",
+   "ssid=MyHome&pass=12345678"
+  ],
+  "expect": [
+   "打开热点 TryBoard-Setup（WPA2）",
+   "给手机分配 IP 192.168.4.2",
+   "收到 SSID=MyHome（密码 8 位）",
+   "TRYBOARD_OK c3-softap-wpa2 重启后记住了 MyHome"
+  ],
+  "stderr_expect": [
+   "手机 分到 192.168.4.2"
+  ]
+ },
+ {
+  "id": "s3-softap-prov",
+  "seconds": 6,
+  "args": [
+   "--ap-phone",
+   "--ap-post",
+   "ssid=MyHome&pass=12345678"
+  ],
+  "expect": [
+   "给手机分配 IP 192.168.4.2",
+   "收到 SSID=MyHome（密码 8 位）",
+   "TRYBOARD_OK s3-softap-prov 重启后记住了 MyHome"
+  ],
+  "stderr_expect": [
+   "需要登录此网络"
+  ]
+ },
+ {
+  "id": "http-real-virtual",
+  "fw": "c3-http-real",
+  "seconds": 5,
+  "expect": [
+   "GET http://tryboard.local/hello.txt → 200，17 字节",
+   "example.com：虚拟服务器回答（没开真实网络）",
+   "httpbin.org：虚拟服务器回 404（没开真实网络）",
+   "TRYBOARD_OK c3-http-real"
+  ],
+  "absent": [
+   "真实回复",
+   "浏览器没放行"
+  ]
+ },
+ {
+  "id": "http-real-replay",
+  "fw": "c3-http-real",
+  "seconds": 5,
+  "args": [
+   "--script",
+   "0.0:realnet=1; 2.0:netreply=1,0,231,cors,; 2.5:netreply=2,200,412,application/json,ewogICJhcmdzIjoge30sIAogICJ1cmwiOiAiaHR0cDovL2h0dHBiaW4ub3JnL2dldCIKfQo="
+  ],
+  "expect": [
+   "GET http://tryboard.local/hello.txt → 200，17 字节",
+   "GET http://example.com/ → 502，28 字节",
+   "example.com：浏览器没放行，原因 cors",
+   "GET http://httpbin.org/get → 200，53 字节",
+   "httpbin.org：真实回复，url=http://httpbin.org/get",
+   "TRYBOARD_OK c3-http-real"
+  ],
+  "stderr_expect": [
+   "真实网络请求 #1 GET http://example.com/",
+   "真实网络请求 #2 GET http://httpbin.org/get"
+  ]
  }
 ]

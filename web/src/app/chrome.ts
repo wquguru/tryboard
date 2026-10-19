@@ -6,7 +6,7 @@ import { commit } from './react';
 import { createStore } from './store';
 import type { StepId } from './types';
 
-export type DockTab = 'serial' | 'code' | 'analyzer' | 'runs' | 'checks' | 'issues' | 'usb' | 'tasks' | 'ble';
+export type DockTab = 'serial' | 'code' | 'analyzer' | 'runs' | 'checks' | 'issues' | 'usb' | 'tasks' | 'ble' | 'net';
 export type RunState = 'loading' | 'run' | 'pause' | 'seek' | 'busy' | 'idle' | 'nofw';
 
 export interface Issue {
@@ -55,6 +55,8 @@ export interface BenchChrome {
   usb: boolean;
   /** 固件用了 BLE（认出了或没认出 VHCI 边界）：坞里多一个「蓝牙」页签，构建树多一组「无线」（C-01） */
   ble: boolean;
+  /** 固件用了 Wi-Fi：坞里多一个「网络」页签（虚拟手机配网、请求记录，C-02 / C-03） */
+  net: boolean;
   /** 台面上的芯片（换固件菜单默认列这颗芯片的示例） */
   chip: 'esp32' | 'esp32c3' | 'esp32s3';
   /** 换固件菜单开着（顶栏按钮、空台面卡、手机 ⋯ 都能打开它） */
@@ -94,6 +96,7 @@ export const bc = createStore<BenchChrome>({
   sound: { has: false, on: false },
   usb: false,
   ble: false,
+  net: false,
 });
 export const setBc = (p: Partial<BenchChrome>) => commit(() => bc.set(p));
 
@@ -138,12 +141,15 @@ export const actions: {
   usbCdc?: (text: string) => void;
   /** 虚拟手机操作（ble=<命令>，进输入日志） */
   ble?: (cmd: string) => void;
+  /** 虚拟手机上的一步（phone= 动作，进输入日志） */
+  phone?: (cmd: string) => void;
   pickFirmware?: (f: File) => void;
   /** 实验台在时：拿刚上传的固件验收当前检查点（选中的，或第一个没过的），返回关号；全过了 / 不在实验台返回 null */
   checkUpload?: (buf: ArrayBuffer, name: string) => string | null;
   /** 换回作品自带的参考固件（空白作品没有） */
   loadRef?: () => void;
-  exportInputs?: () => void;
+  /** realnet：网络页签的「保存回复，离线重放」（同一份输入日志，文件名带 -realnet，C-03） */
+  exportInputs?: (kind?: 'realnet') => void;
   brief?: () => void;
   uart?: (text: string) => void;
   selectCheckpoint?: (id: string) => void;

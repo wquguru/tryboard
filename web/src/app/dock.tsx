@@ -8,6 +8,7 @@ import { actions, bc, setDock, type DockTab } from "./chrome";
 import { UsbPane } from "./usbpane";
 import { TasksPane } from "./tasks";
 import { BlePane } from "./blepane";
+import { NetPane } from "./netpane";
 import { Icon } from "./icons";
 import { useStore } from "./react";
 import { createStore } from "./store";
@@ -521,6 +522,7 @@ function PhoneDock({
     { id: "tasks", label: "任务", title: "FreeRTOS 任务时间线：每核谁在跑、谁在等" },
     ...(c.usb ? [{ id: "usb" as const, label: "USB" }] : []),
     ...(c.ble ? [{ id: "ble" as const, label: "蓝牙" }] : []),
+    ...(c.net ? [{ id: "net" as const, label: "网络" }] : []),
   ];
   return (
     <section
@@ -666,6 +668,11 @@ function PhoneDock({
           {cur === "ble" && c.ble && (
             <div className="flex min-h-0 flex-1 flex-col border-t border-line-soft">
               <BlePane />
+            </div>
+          )}
+          {cur === "net" && c.net && (
+            <div className="flex min-h-0 flex-1 flex-col border-t border-line-soft">
+              <NetPane mobile />
             </div>
           )}
         </>
@@ -831,6 +838,9 @@ function DeskDock({
           },
         ]
       : []),
+    ...(c.net
+      ? [{ id: "net" as const, label: "网络", title: "虚拟手机配网、芯片发出的请求" }]
+      : []),
   ];
   return (
     <section
@@ -939,6 +949,7 @@ function DeskDock({
             <BlePane />
           </div>
         )}
+        {c.net && cur === "net" && <NetPane />}
         <div
           hidden={cur !== "runs"}
           className="flex min-h-0 flex-1 items-start overflow-auto px-3 py-2 [&[hidden]]:hidden"

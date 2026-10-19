@@ -6,6 +6,7 @@
 pub mod crypto;
 pub mod frame;
 pub mod net;
+pub mod phone;
 pub mod tcp;
 pub mod world;
 pub mod wpa;
@@ -345,7 +346,9 @@ impl WifiMac {
         }
         let buf = mem.rd32(d + 4);
         let mut hdr = [0u32; 12];
-        hdr[0] = (air.rssi as u8 as u32) | (1 << 28); // RSSI、命中接口 0（STA）
+        // RSSI、命中的接口：位 28 = 接口 0（STA），位 29 = 接口 1（固件自建热点）
+        let iface = if air.ap_if { 1 << 29 } else { 1 << 28 };
+        hdr[0] = (air.rssi as u8 as u32) | iface;
         hdr[2] = (air.channel as u32 & 0xf) << 16;
         hdr[3] = self.tsf_us(now) as u32;
         hdr[5] = (-96i8) as u8 as u32; // 噪声底
@@ -381,6 +384,11 @@ impl WifiMac {
 
     /// 在硬件密钥表里找对端 MAC 的成对（group = false）或组密钥
     fn hw_key(&self, peer: &frame::Mac, group: bool) -> Option<[u8; 16]> {
+        self.hw_key_exact(Some(peer), group)
+    }
+
+    /// peer = None：任意一个组密钥槽（固件当 AP 时 GTK 槽的对端 MAC 未必是帧里的地址）
+    fn hw_key_exact(&self, peer: Option<&frame::Mac>, group: bool) -> Option<[u8; 16]> {
         let reg = |a: u32| self.keys.get(&a).copied().unwrap_or(0);
         let valid = reg(KEY_VALID);
         (0..KEY_SLOTS)
@@ -391,7 +399,7 @@ impl WifiMac {
                 let mut mac = [0u8; 6];
                 mac[..4].copy_from_slice(&w0.to_le_bytes());
                 mac[4..].copy_from_slice(&(w1 as u16).to_le_bytes());
-                if mac != *peer || (w1 & KEY_GROUP != 0) != group {
+                if peer.is_some_and(|p| mac != *p) || (w1 & KEY_GROUP != 0) != group {
                     return None;
                 }
                 let mut key = [0u8; 16];
@@ -417,7 +425,15 @@ impl WifiMac {
         } else {
             f[10..16].try_into().unwrap()
         };
-        let tk = self.hw_key(&peer, !unicast)?;
+        let tk = if unicast {
+            self.hw_key(&peer, false)?
+        } else {
+            // 组播：先按对端找（STA 时是 BSSID），再按发送方，最后任意组密钥槽
+            let a2: frame::Mac = f[10..16].try_into().unwrap();
+            self.hw_key(&peer, true)
+                .or_else(|| self.hw_key(&a2, true))
+                .or_else(|| self.hw_key_exact(None, true))?
+        };
         let h = &f[hl..hl + 8];
         let pn = u64::from_le_bytes([h[0], h[1], h[4], h[5], h[6], h[7], 0, 0]);
         if enc {

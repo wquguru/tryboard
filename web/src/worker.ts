@@ -2,6 +2,7 @@
 // 时间片固定 1ms（与 CLI `--inputs` 重放相同），外部输入只在时间片之间施加并按模拟时间记进输入日志（inputlog.ts），
 // 所以网页上的一串操作导出后，命令行能逐周期重放。
 import { cyclesToMs, roundImu, type InputAction, type InputEvent, type InputLog } from './inputlog';
+import { realFetch, type RealReq } from './realfetch';
 
 const CPU_HZ = 160_000_000;
 
@@ -59,6 +60,18 @@ interface Exports {
   tb_elec_report(): number;
   tb_i2c_wire?(cm: number): void;
   tb_antenna_loss?(db: number): void;
+  /** 虚拟手机 / 网络页签（C-02）：老内核没有这几个导出 */
+  tb_wifi_used?(): number;
+  tb_phone_cmd?(p: number, len: number): number;
+  tb_phone_version?(): number;
+  tb_phone_json?(): number;
+  tb_phone_json_ptr?(): number;
+  tb_net_version?(): number;
+  tb_net_json?(): number;
+  /** 真实网络（C-03） */
+  tb_realnet_set?(on: number): void;
+  tb_net_outbox?(): number;
+  tb_net_reply?(p: number, len: number): number;
   tb_harness_report?(): number;
   tb_encoder_attach?(a: number, b: number, sw: number): void;
   tb_encoder_turn?(steps: number): void;
@@ -168,6 +181,8 @@ export type ToWorker =
       micName?: string;
       /** 线束（P2-11，估算）：I2C 排线总长（cm）、天线遮挡（dB）；上电时记进输入日志 */
       harness?: Harness;
+      /** 「真实网络」开关（C-03）：开着上电就在 0 时刻记一条 realnet=1 */
+      realnet?: boolean;
     }
   | ({ type: 'env' } & Env)
   /** 在线改线束（进输入日志：i2cwire=cm / antenna=dB） */
@@ -192,6 +207,10 @@ export type ToWorker =
   | { type: 'usbcdc'; text: string }
   /** 虚拟手机操作（C-01，进输入日志：ble=<命令>） */
   | { type: 'ble'; cmd: string }
+  /** 虚拟手机上的一步（C-02，进输入日志 phone=…）：on / join,ssid[,pass] / leave / open / get,url / post,url,body */
+  | { type: 'phone'; cmd: string }
+  /** 「真实网络」开关（C-03）：开着时芯片发往外网的 HTTP 由浏览器 fetch 代发，回复进输入日志 netreply=… */
+  | { type: 'realnet'; on: boolean }
   /** 每个时间片采样这些引脚的 PWM，有变化就带模拟时刻放进 tick 的 pwmEvents（蜂鸣器出声用） */
   | { type: 'watchPwm'; pins: number[] }
   /** 要本次上电以来的输入日志，回 inputlog 消息 */
@@ -218,6 +237,7 @@ export type ToWorker =
       /** 上电以后施加的输入（不含上电和上电时的环境），时间 = 原来施加时的模拟时刻 */
       events: InputEvent[];
       untilMs: number;
+      realnet?: boolean;
     }
   /** 记一个时间点：回 mark 消息（时间线上"这一步发生在模拟第几毫秒"） */
   | { type: 'mark'; id: number }
@@ -299,6 +319,8 @@ export type FromWorker =
   | { type: 'ble'; state: number; json: string; reset?: boolean; cmdError?: string }
   /** 线束结论（与命令行同样的文字：I2C 上升时间、天线遮挡后的 RSSI），变了才发 */
   | { type: 'harness'; text: string }
+  /** 网络页签（C-02）：固件用没用 Wi-Fi、虚拟手机看到的（JSON，结构见 app/netfeed.ts）、芯片发出的请求记录；变了才发 */
+  | { type: 'net'; used: boolean; phone?: string; rows?: string; replies?: number; replyBytes?: number }
   | { type: 'inputlog'; log: InputLog }
   | { type: 'snapshot'; snap: Snapshot }
   | { type: 'seekProgress'; simSeconds: number }
@@ -630,6 +652,8 @@ function loop(gen = loopGen) {
   postLcd(e);
   postUsb(e);
   postBle(e);
+  postNet(e);
+  pumpNet(e);
   postHarness(e);
   if (stop !== 0) {
     running = false;
@@ -712,6 +736,73 @@ function postBle(e: Exports, force = false) {
   bleFrom = seq;
 }
 
+// 网络页签：固件发过 Wi-Fi 帧才显示；手机 / 请求记录各自按版本号变了才取
+// null：新上电后还没发过，第一次一定发（换成不用 Wi-Fi 的固件时网页要把页签收起）
+let netUsed: boolean | null = null;
+let phoneVersion = 0;
+let netVersion = 0;
+function postNet(e: Exports) {
+  if (!e.tb_wifi_used) return;
+  const used = e.tb_wifi_used() !== 0;
+  const pv = e.tb_phone_version?.() ?? 0;
+  const nv = e.tb_net_version?.() ?? 0;
+  if (used === netUsed && pv === phoneVersion && nv === netVersion) return;
+  const m: Extract<FromWorker, { type: 'net' }> = { type: 'net', used };
+  if (pv !== phoneVersion && e.tb_phone_json && e.tb_phone_json_ptr) {
+    const n = e.tb_phone_json();
+    m.phone = decoder.decode(new Uint8Array(e.memory.buffer, e.tb_phone_json_ptr(), n));
+  }
+  if (nv !== netVersion && e.tb_net_json && e.tb_phone_json_ptr) {
+    const n = e.tb_net_json();
+    m.rows = decoder.decode(new Uint8Array(e.memory.buffer, e.tb_phone_json_ptr(), n));
+    // 本次上电记下的真实网络回复（「保存回复，离线重放」旁边的计数）
+    let replies = 0;
+    let replyBytes = 0;
+    for (const x of inputLog.events)
+      if (x.kind === 'netreply') {
+        replies++;
+        replyBytes += x.reply.length;
+      }
+    m.replies = replies;
+    m.replyBytes = replyBytes;
+  }
+  netUsed = used;
+  phoneVersion = pv;
+  netVersion = nv;
+  post(m);
+}
+
+// ---- 真实网络（C-03）：开关在主线程，跨上电保留；每次上电换一代，迟到的 fetch 结果不施加到新的一次上电上
+let realnetOn = false;
+let bootGen = 0;
+/** 回退重放时原日志里的回复（按请求号）：重放中途没赶上的请求优先用记录的回复，不再联网 */
+let replyCache = new Map<number, string>();
+function replyId(reply: string) {
+  return Number(reply.slice(0, reply.indexOf(',')));
+}
+/** 取走内核发件箱：有记录的回复直接施加；开着真实网络的才真的 fetch。done 里的请求号已经回过（回退重放），跳过 */
+function pumpNet(e: Exports, done?: Set<number>) {
+  if (!e.tb_net_outbox || !e.tb_phone_json_ptr) return;
+  const n = e.tb_net_outbox();
+  if (!n) return;
+  const reqs = JSON.parse(decoder.decode(new Uint8Array(e.memory.buffer, e.tb_phone_json_ptr(), n))) as RealReq[];
+  for (const r of reqs) {
+    if (done?.has(r.id)) continue;
+    const cached = replyCache.get(r.id);
+    if (cached !== undefined) {
+      apply(e, { kind: 'netreply', reply: cached });
+      continue;
+    }
+    if (!realnetOn) continue;
+    const gen = bootGen;
+    void realFetch(r).then((res) => {
+      if (gen !== bootGen || !ex) return;
+      apply(ex, { kind: 'netreply', reply: res.action.slice('netreply='.length) });
+      postNet(ex);
+    });
+  }
+}
+
 let harnessText = '';
 function postHarness(e: Exports, force = false) {
   if (!e.tb_harness_report) return;
@@ -728,7 +819,7 @@ function postPaused(e: Exports) {
   post({ type: 'tick', console: '', leds: leds(e), strips: strips(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running, elec: elecFrame(e), brownouts: takeBrownouts(e), pins: pinDevFrame(e) });
 }
 
-type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; touchInt?: number; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness };
+type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; touchInt?: number; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean };
 const I2S_KIND: Record<string, number> = { max98357a: 0, inmp441: 1 };
 /** 上电：建 wasm 实例、挂器件、设环境、开一份新的输入日志 */
 async function bootWasm(m: BootMsg): Promise<Exports | null> {
@@ -794,6 +885,12 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   bleSeq = -1;
   bleFrom = 0;
   bleReset = true;
+  // 新上电：手机 / 请求记录从空开始（发一条空的，网页清掉上一次的）
+  netUsed = null;
+  phoneVersion = -1;
+  netVersion = -1;
+  bootGen++;
+  replyCache = new Map();
   return e;
 }
 
@@ -843,6 +940,31 @@ function apply(e: Exports, ev: InputAction) {
     case 'antenna':
       e.tb_antenna_loss?.(ev.db);
       break;
+    case 'realnet':
+      if (!e.tb_realnet_set) return;
+      e.tb_realnet_set(ev.on ? 1 : 0);
+      break;
+    case 'netreply': {
+      if (!e.tb_net_reply) return;
+      const b = new TextEncoder().encode(ev.reply);
+      const p = e.tb_alloc(b.length);
+      new Uint8Array(e.memory.buffer, p, b.length).set(b);
+      const bad = e.tb_net_reply(p, b.length);
+      e.tb_free(p, b.length);
+      if (bad) return;
+      break;
+    }
+    case 'phone': {
+      if (!e.tb_phone_cmd) return;
+      const b = new TextEncoder().encode(ev.cmd);
+      const p = e.tb_alloc(b.length);
+      new Uint8Array(e.memory.buffer, p, b.length).set(b);
+      const bad = e.tb_phone_cmd(p, b.length);
+      e.tb_free(p, b.length);
+      // 认不出的动作不进日志（重放时 CLI 也不认）
+      if (bad) return;
+      break;
+    }
     case 'enc':
       e.tb_encoder_turn?.(ev.steps);
       break;
@@ -916,8 +1038,11 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
   switch (m.type) {
     case 'boot': {
       running = false;
+      if (m.realnet !== undefined) realnetOn = m.realnet;
       const e = await bootWasm(m);
       if (!e) return;
+      // 开着真实网络上电：开关作为 0 时刻的输入进日志（重放脚本第一行 realnet=1）
+      if (realnetOn) apply(e, { kind: 'realnet', on: true });
       post({ type: 'booted', chip: CHIP_OF[e.tb_chip()] ?? 'esp32c3', bootPin: e.tb_boot_pin() });
       break;
     }
@@ -925,13 +1050,25 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       running = false;
       const e = await bootWasm(m);
       if (!e) return;
+      if (m.realnet !== undefined) realnetOn = m.realnet;
+      for (const x of m.events) if (x.kind === 'netreply') replyCache.set(replyId(x.reply), x.reply);
       seekTo(e, m.events, m.untilMs);
+      // 重放里已经回过的请求不再回；开关状态以现在的为准（与日志里最后一次不同就补一条）
+      const answered = new Set<number>();
+      let wasOn = false;
+      for (const x of inputLog.events) {
+        if (x.kind === 'netreply') answered.add(replyId(x.reply));
+        if (x.kind === 'realnet') wasOn = x.on;
+      }
+      if (wasOn !== realnetOn) apply(e, { kind: 'realnet', on: realnetOn });
+      pumpNet(e, answered);
       flushIo(e);
       post({ type: 'seeked', snap: snapshot(e), bootPin: e.tb_boot_pin() });
       postPaused(e);
       postOled(e);
       postLcd(e, true);
       postBle(e, true);
+      postNet(e);
       break;
     }
     case 'snapshot':
@@ -996,6 +1133,17 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       if (!ex) return;
       apply(ex, { kind: 'ble', cmd: m.cmd });
       postBle(ex, true);
+      break;
+    case 'phone':
+      if (!ex) return;
+      apply(ex, { kind: 'phone', cmd: m.cmd });
+      postNet(ex);
+      break;
+    case 'realnet':
+      realnetOn = m.on;
+      if (!ex) return;
+      apply(ex, { kind: 'realnet', on: m.on });
+      postNet(ex);
       break;
     case 'power':
       if (!ex) return;

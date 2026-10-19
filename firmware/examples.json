@@ -1138,5 +1138,36 @@
     }
    ]
   }
+ },
+ {
+  "id": "c3-softap-prov",
+  "title": "Wi-Fi 配网：板子开热点，手机填密码",
+  "about": "板子先开开放热点 TryBoard-Setup，并把所有网址都指向自己（DNS 劫持），手机连上就弹出「需要登录」的配网页。在底部「网络」页签里用虚拟手机连热点、打开登录页、填家里 Wi-Fi（虚拟路由器 MyHome / 12345678）并提交：板子存进 NVS、关热点去连路由器，之后自己重启一次，从 NVS 读出配置直接连上。手机弹不弹登录页因机型而异，要上真机确认。",
+  "tags": [
+   "◐ 行为模拟",
+   "Wi-Fi",
+   "SoftAP",
+   "配网",
+   "NVS"
+  ],
+  "scene": {
+   "parts": []
+  },
+  "chip": "esp32c3"
+ },
+ {
+  "id": "c3-http-real",
+  "title": "Wi-Fi：真实网络开关（HTTP）",
+  "about": "先请求虚拟服务器 tryboard.local，再请求 example.com 和 httpbin.org/get。默认只连虚拟网络（结果可复现）；打开顶栏「真实网络」后，这两个请求经浏览器真的发出去：example.com 不给跨域头，会显示「浏览器没放行，原因 cors」；httpbin.org 允许跨域，拿到真实回复。只放行 HTTP，回复进输入日志，可离线重放。",
+  "tags": [
+   "◐ 行为模拟",
+   "Wi-Fi",
+   "HTTP",
+   "真实网络"
+  ],
+  "scene": {
+   "parts": []
+  },
+  "chip": "esp32c3"
  }
 ]

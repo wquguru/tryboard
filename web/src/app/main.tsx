@@ -30,6 +30,7 @@ import { initSaved } from './saved';
 import { serial } from './dock';
 import { usbFeed } from './usbpane';
 import { bleFeed } from './blepane';
+import { netFeed } from './netfeed';
 import { toScript, type InputLog } from '../inputlog';
 import { customPlan } from './custom';
 import { genLevels } from './genlevels';
@@ -266,6 +267,14 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     if (has) setDock({ tab: 'ble', collapsed: false });
     else if (bc.get().dock.tab === 'ble') setDock({ tab: 'serial' });
   });
+  // 网络页签（C-02）：固件发出第一帧 Wi-Fi 才出现；手机动作进输入日志
+  actions.phone = (cmd) => session.sim?.phone(cmd);
+  netFeed.subscribe(() => {
+    const used = netFeed.get().used;
+    if (used === bc.get().net) return;
+    setBc({ net: used });
+    if (!used && bc.get().dock.tab === 'net') setDock({ tab: 'serial' });
+  });
   // 换固件：先看镜像头（魔数 0xE9、芯片 id），对不上就不上电，挂一张校验卡说清楚
   actions.pickFirmware = async (f) => {
     const buf = await f.arrayBuffer();
@@ -300,14 +309,14 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
       session.loadFirmware(buf, `${work.example}/flash.bin`);
       shell.toast('已换回参考固件，重新上电');
     };
-  actions.exportInputs = async () => {
+  actions.exportInputs = async (kind) => {
     if (!session.sim) return shell.toast('模拟器还没跑起来，没有输入日志');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([toScript(await session.sim.inputLog())], { type: 'text/plain' }));
-    a.download = `${session.fwName || 'tryboard'}-inputs.txt`;
+    a.download = `${(session.fwName || 'tryboard').replace(/\/flash\.bin$|\.bin$/, '').replaceAll('/', '-')}-${kind ?? 'inputs'}.txt`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    shell.toast('已导出输入日志：tryboard run --inputs 可逐字节重放');
+    shell.toast(kind === 'realnet' ? '已保存回复：tryboard run --inputs 离线重放，不再联网' : '已导出输入日志：tryboard run --inputs 可逐字节重放');
   };
   const curLevel = () => {
     const s = store.get();

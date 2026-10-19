@@ -30,7 +30,13 @@ export type InputEvent =
   /** 触摸屏（P2-02）：按下 / 移动到 (x, y)（屏幕像素 0..239）或抬起。脚本动作 touch=x,y / release */
   | { tMs: number; kind: 'touch'; down: boolean; x: number; y: number }
   /** 虚拟手机（C-01）：扫描 / 连接 / 读 / 写 / 订阅……，命令原样进日志。脚本动作 ble=<命令>（语法见 ARCH.md BLE 节） */
-  | { tMs: number; kind: 'ble'; cmd: string };
+  | { tMs: number; kind: 'ble'; cmd: string }
+  /** 虚拟手机上的一步（C-02）：on / join,ssid[,pass] / leave / open / get,url / post,url,body。脚本动作 phone=… */
+  | { tMs: number; kind: 'phone'; cmd: string }
+  /** 「真实网络」开关（C-03）。脚本动作 realnet=1/0 */
+  | { tMs: number; kind: 'realnet'; on: boolean }
+  /** 真实网络的一条回复（C-03）：id,状态,毫秒,内容类型或原因代号,base64 正文。脚本动作 netreply=… */
+  | { tMs: number; kind: 'netreply'; reply: string };
 
 /** 还没盖时间戳的事件（worker 施加时补上 tMs） */
 export type InputAction = InputEvent extends infer E ? (E extends unknown ? Omit<E, 'tMs'> : never) : never;
@@ -105,6 +111,12 @@ export function action(e: InputEvent): string | null {
       return e.down ? `touch=${Math.round(e.x)},${Math.round(e.y)}` : 'release';
     case 'ble':
       return `ble=${e.cmd}`;
+    case 'phone':
+      return `phone=${esc(e.cmd)}`;
+    case 'realnet':
+      return `realnet=${e.on ? 1 : 0}`;
+    case 'netreply':
+      return `netreply=${e.reply}`;
     case 'power':
       return null;
   }
