@@ -1,6 +1,5 @@
-// 选型数据：芯片、开发板、外设模块、项目模板。
-// 事实来源：乐鑫各芯片数据手册 / 技术参考手册、开发板厂商的公开资料。价格是 2026 年常见电商区间，仅供参考。
-// 发布前需要人工逐条核对（见 docs/ADVISOR.md）。
+// Advisor data from Espressif datasheets / TRMs and board makers' public docs; prices are common 2026 shop ranges.
+// Every entry needs a manual check before release (docs/ADVISOR.md). Display strings are English keys rendered via t().
 
 export type Cap =
   | 'wifi'
@@ -32,9 +31,9 @@ export interface Chip {
   sramKB: number;
   caps: Cap[];
   gpio: number;
-  /** 不建议用的引脚：flash / PSRAM 占用、USB、strapping */
+  /** Pins to avoid: flash / PSRAM, USB, strapping */
   pins: { flash: number[]; strapping: number[]; usb: number[]; uart0: [number, number]; adc1: number[]; inputOnly?: number[]; psramOctal?: number[] };
-  /** 典型电流（mA），数据手册典型值，3.3V，室温 */
+  /** Typical current (mA), datasheet typical values at 3.3 V, room temperature */
   power: { txPeak: number; rx: number; modemSleep: number; lightSleepUA: number; deepSleepUA: number };
   notes: string[];
   simulated: 'full' | 'partial' | 'none';
@@ -44,20 +43,20 @@ export const CHIPS: Chip[] = [
   {
     id: 'esp32c3',
     name: 'ESP32-C3',
-    core: '单核 RISC-V',
+    core: 'Single-core RISC-V',
     mhz: 160,
     sramKB: 400,
     caps: ['wifi', 'ble', 'usb_serial', 'display_spi', 'low_power'],
     gpio: 22,
     pins: { flash: [12, 13, 14, 15, 16, 17], strapping: [2, 8, 9], usb: [18, 19], uart0: [21, 20], adc1: [0, 1, 2, 3, 4] },
     power: { txPeak: 335, rx: 82, modemSleep: 20, lightSleepUA: 130, deepSleepUA: 5 },
-    notes: ['USB 口只能当串口或 JTAG 调试，不能冒充键盘、U 盘', 'C3 的 ADC2（GPIO5）有硬件勘误，ESP-IDF 已经不支持，和 Wi-Fi 无关。模拟量改用 ADC1（GPIO0–4）', '没有经典蓝牙，不能做蓝牙音箱'],
+    notes: ['The USB port works only as a serial port or JTAG debugger; it cannot pose as a keyboard or flash drive', 'C3 ADC2 (GPIO5) has a hardware erratum and ESP-IDF no longer supports it, nothing to do with Wi-Fi. Use ADC1 (GPIO0–4) for analog', 'No Classic Bluetooth, so no Bluetooth speaker'],
     simulated: 'full',
   },
   {
     id: 'esp32s3',
     name: 'ESP32-S3',
-    core: '双核 Xtensa LX7',
+    core: 'Dual-core Xtensa LX7',
     mhz: 240,
     sramKB: 512,
     caps: ['wifi', 'ble', 'usb_otg', 'usb_serial', 'camera', 'audio_in', 'audio_out', 'display_spi', 'display_rgb', 'psram', 'ai_accel', 'touch', 'many_gpio', 'low_power'],
@@ -71,26 +70,26 @@ export const CHIPS: Chip[] = [
       psramOctal: [33, 34, 35, 36, 37],
     },
     power: { txPeak: 340, rx: 95, modemSleep: 30, lightSleepUA: 240, deepSleepUA: 8 },
-    notes: ['N16R8 这类带 8MB 八线 PSRAM 的模组，GPIO33–37 被 PSRAM 占用', 'ADC2（GPIO11–20）与 Wi-Fi 共用，开 Wi-Fi 时读数可能超时失败；模拟量优先放 ADC1（GPIO1–10）', '原生 USB OTG：可以冒充键盘、网卡、U 盘，也能当主机读 U 盘', '向量指令加速 AI 推理，跑离线唤醒词、小模型'],
+    notes: ['On modules with 8 MB octal PSRAM such as N16R8, GPIO33–37 are taken by the PSRAM', 'ADC2 (GPIO11–20) is shared with Wi-Fi, so reads may time out with Wi-Fi on; put analog inputs on ADC1 (GPIO1–10) first', 'Has native USB OTG: can pose as a keyboard, network adapter or flash drive, and can also host a flash drive', 'Vector instructions speed up inference for offline wake words and small models'],
     simulated: 'partial',
   },
   {
     id: 'esp32c6',
     name: 'ESP32-C6',
-    core: '单核 RISC-V，另带低功耗核',
+    core: 'Single-core RISC-V plus an LP core',
     mhz: 160,
     sramKB: 512,
     caps: ['wifi', 'wifi6', 'ble', 'thread', 'zigbee', 'usb_serial', 'display_spi', 'low_power'],
     gpio: 31,
     pins: { flash: [24, 25, 26, 27, 28, 29, 30], strapping: [8, 9, 15], usb: [12, 13], uart0: [16, 17], adc1: [0, 1, 2, 3, 4, 5, 6] },
     power: { txPeak: 354, rx: 78, modemSleep: 25, lightSleepUA: 180, deepSleepUA: 7 },
-    notes: ['Wi-Fi 6 和 Thread / Zigbee 都有，做 Matter 智能家居设备首选', 'USB 口和 C3 一样，只能当串口或 JTAG 调试'],
+    notes: ['Has both Wi-Fi 6 and Thread / Zigbee: the first pick for Matter smart home devices', 'Like the C3, the USB port works only as a serial port or JTAG debugger'],
     simulated: 'none',
   },
   {
     id: 'esp32',
-    name: 'ESP32（经典款）',
-    core: '双核 Xtensa LX6',
+    name: 'ESP32 (classic)',
+    core: 'Dual-core Xtensa LX6',
     mhz: 240,
     sramKB: 520,
     caps: ['wifi', 'ble', 'bt_classic', 'dac', 'touch', 'ethernet', 'display_spi', 'audio_in', 'audio_out', 'many_gpio', 'camera', 'psram'],
@@ -104,21 +103,21 @@ export const CHIPS: Chip[] = [
       inputOnly: [34, 35, 36, 39],
     },
     power: { txPeak: 240, rx: 100, modemSleep: 30, lightSleepUA: 800, deepSleepUA: 10 },
-    notes: ['唯一支持经典蓝牙（A2DP 音箱、SPP 串口）的型号', '没有原生 USB，板上靠 CH340 / CP2102 转串口', '教程最多，但新项目一般优先 S3 / C3 / C6'],
-    // C-05：GPIO、LEDC、I2C、Wi-Fi（连热点、WPA2、HTTP）能跑；RMT、SPI、ADC、I2S、蓝牙等没模型
+    notes: ['The only model with Classic Bluetooth (A2DP speakers, SPP serial)', 'No native USB; the board relies on a CH340 / CP2102 USB-serial chip', 'The most tutorials, but new projects usually prefer S3 / C3 / C6'],
+    // C-05: GPIO, LEDC, I2C and Wi-Fi (join AP, WPA2, HTTP) run; RMT, SPI, ADC, I2S, Bluetooth etc. have no model
     simulated: 'partial',
   },
   {
     id: 'esp32p4',
     name: 'ESP32-P4',
-    core: '双核 RISC-V',
+    core: 'Dual-core RISC-V',
     mhz: 400,
     sramKB: 768,
     caps: ['usb_otg', 'camera', 'display_rgb', 'audio_in', 'audio_out', 'psram', 'ai_accel', 'ethernet', 'many_gpio'],
     gpio: 55,
     pins: { flash: [], strapping: [34, 35, 36, 37, 38], usb: [24, 25], uart0: [37, 38], adc1: [16, 17, 18, 19, 20, 21, 22, 23] },
     power: { txPeak: 0, rx: 0, modemSleep: 80, lightSleepUA: 0, deepSleepUA: 0 },
-    notes: ['没有 Wi-Fi 和蓝牙，开发板一般搭一颗 C6 负责无线', '有 MIPI 摄像头和屏幕接口、H.264 编码，适合带屏的多媒体设备'],
+    notes: ['No Wi-Fi or Bluetooth; dev boards usually add a C6 for wireless', 'MIPI camera and display ports plus H.264 encoding suit multimedia devices with a screen'],
     simulated: 'none',
   },
 ];
@@ -133,15 +132,15 @@ export interface Board {
   psramMB: number;
   size: string;
   extras: string[];
-  /** 板上占用的引脚：说明 */
+  /** Pins taken on the board: reason */
   usedPins: Record<number, string>;
-  /** 小板只引出部分引脚（按板上丝印 D0、D1… 的顺序）；不写表示芯片可用引脚基本都引出 */
+  /** Small boards break out only some pins (in silkscreen D0, D1… order); absent means nearly all are broken out */
   exposed?: number[];
-  /** 板子丝印上标注的默认 I2C 引脚 [SDA, SCL]（教程和扩展板都按这个接） */
+  /** Default I2C pins on the silkscreen [SDA, SCL] (tutorials and expansion boards follow them) */
   i2cPins?: [number, number];
-  /** 丝印名，如 { 6: 'D4' } */
+  /** Silkscreen names, e.g. { 6: 'D4' } */
   labels?: Record<number, string>;
-  /** 深睡时整板电流（µA）：LDO 静态电流、电源灯、USB 转串口芯片都会让它远大于芯片本身 */
+  /** Whole-board deep-sleep current (µA): LDO quiescent current, power LED and USB-UART chip dwarf the chip itself */
   boardSleepUA: number;
   battery: boolean;
   caveats: string[];
@@ -153,33 +152,33 @@ export const BOARDS: Board[] = [
     id: 'c3-devkitm',
     name: 'ESP32-C3-DevKitM-1',
     chip: 'esp32c3',
-    maker: '乐鑫官方',
+    maker: 'Espressif',
     priceCNY: [40, 60],
     flashMB: 4,
     psramMB: 0,
     size: '25 × 49mm',
-    extras: ['WS2812 RGB 灯（GPIO8）', 'BOOT / RST 键', 'USB-UART 芯片'],
-    usedPins: { 8: '板载 RGB 灯', 9: 'BOOT 键' },
+    extras: ['WS2812 RGB LED (GPIO8)', 'BOOT / RST buttons', 'USB-UART chip'],
+    usedPins: { 8: 'On-board RGB LED', 9: 'BOOT button' },
     boardSleepUA: 1000,
     battery: false,
-    caveats: ['电源灯和 USB 转串口芯片常亮，深睡时整板仍有约 1mA，不适合电池供电'],
+    caveats: ['The power LED and USB-serial chip stay on, so the board still draws about 1 mA in deep sleep: not for battery use'],
     simExample: 'rgb',
   },
   {
     id: 'c3-supermini',
     name: 'ESP32-C3 SuperMini',
     chip: 'esp32c3',
-    maker: '多家第三方',
+    maker: 'Various third parties',
     priceCNY: [10, 18],
     flashMB: 4,
     psramMB: 0,
     size: '18 × 23mm',
-    extras: ['板载蓝色 LED（GPIO8，低电平亮）', 'Type-C 直连芯片 USB'],
+    extras: ['On-board blue LED (GPIO8, active low)', 'Type-C wired to the chip USB'],
     exposed: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 21],
-    usedPins: { 8: '板载 LED（低电平点亮）', 9: 'BOOT 键' },
+    usedPins: { 8: 'On-board LED (active low)', 9: 'BOOT button' },
     boardSleepUA: 300,
     battery: false,
-    caveats: ['陶瓷小天线，信号比 PCB 天线弱，隔墙要留余量', '做工差异大，个别批次 Wi-Fi 发射功率需要调低才稳定'],
+    caveats: ['Small ceramic antenna, weaker than a PCB antenna; leave margin through walls', 'Build quality varies; some batches need lower Wi-Fi TX power to be stable'],
   },
   {
     id: 'xiao-c3',
@@ -190,29 +189,29 @@ export const BOARDS: Board[] = [
     flashMB: 4,
     psramMB: 0,
     size: '21 × 17.8mm',
-    extras: ['锂电池充电管理', '外接天线座'],
+    extras: ['Li-ion charging', 'External antenna connector'],
     i2cPins: [6, 7],
     exposed: [2, 3, 4, 5, 6, 7, 21, 20, 8, 9, 10],
     labels: { 2: 'D0', 3: 'D1', 4: 'D2', 5: 'D3', 6: 'D4', 7: 'D5', 21: 'D6', 20: 'D7', 8: 'D8', 9: 'D9', 10: 'D10' },
     usedPins: {},
     boardSleepUA: 45,
     battery: true,
-    caveats: ['只引出 11 个 GPIO'],
+    caveats: ['Only 11 GPIOs broken out'],
   },
   {
     id: 's3-devkitc-n16r8',
-    name: 'ESP32-S3-DevKitC-1（N16R8）',
+    name: 'ESP32-S3-DevKitC-1 (N16R8)',
     chip: 'esp32s3',
-    maker: '乐鑫官方 / 兼容板',
+    maker: 'Espressif / compatibles',
     priceCNY: [35, 70],
     flashMB: 16,
     psramMB: 8,
     size: '26 × 63mm',
-    extras: ['WS2812 RGB 灯（GPIO48，兼容板常见 GPIO38）', '两个 Type-C：一个接 USB-UART，一个接原生 USB'],
-    usedPins: { 0: 'BOOT 键', 48: '板载 RGB 灯（v1.0 为 GPIO48，v1.1 为 GPIO38）' },
+    extras: ['WS2812 RGB LED (GPIO48, GPIO38 on many compatibles)', 'Two Type-C ports: one to the USB-UART, one to native USB'],
+    usedPins: { 0: 'BOOT button', 48: 'On-board RGB LED (GPIO48 on v1.0, GPIO38 on v1.1)' },
     boardSleepUA: 1000,
     battery: false,
-    caveats: ['GPIO33–37 被八线 PSRAM 占用，排针上有但不能用', '买的时候确认板上有标「USB」或「OTG」的原生 USB 口：插手机、冒充键盘要用它'],
+    caveats: ['GPIO33–37 are taken by the octal PSRAM: on the header but unusable', 'When buying, check the board has a native USB port labeled "USB" or "OTG": phones and keyboard emulation need it'],
   },
   {
     id: 'xiao-s3-sense',
@@ -223,29 +222,29 @@ export const BOARDS: Board[] = [
     flashMB: 8,
     psramMB: 8,
     size: '21 × 17.8 × 15mm',
-    extras: ['OV2640 / OV3660 摄像头（可拆）', 'PDM 数字麦克风', 'microSD 卡槽', '锂电池充电'],
+    extras: ['OV2640 / OV3660 camera (removable)', 'PDM digital microphone', 'microSD slot', 'Li-ion charging'],
     i2cPins: [5, 6],
     exposed: [1, 2, 3, 4, 5, 6, 43, 44, 7, 8, 9],
     labels: { 1: 'D0', 2: 'D1', 3: 'D2', 4: 'D3', 5: 'D4', 6: 'D5', 43: 'D6', 44: 'D7', 7: 'D8', 8: 'D9', 9: 'D10' },
-    usedPins: { 42: '麦克风 PDM 时钟', 41: '麦克风 PDM 数据', 21: 'SD 卡片选' },
+    usedPins: { 42: 'Microphone PDM clock', 41: 'Microphone PDM data', 21: 'SD card chip select' },
     boardSleepUA: 60,
     battery: true,
-    caveats: ['摄像头长时间工作发热明显，需要散热', '扩展板占用多数引脚，剩余 GPIO 很少'],
+    caveats: ['The camera gets noticeably hot over long runs and needs cooling', 'The expansion board takes most pins, leaving few GPIOs'],
   },
   {
     id: 'c6-devkitc',
     name: 'ESP32-C6-DevKitC-1',
     chip: 'esp32c6',
-    maker: '乐鑫官方',
+    maker: 'Espressif',
     priceCNY: [45, 70],
     flashMB: 8,
     psramMB: 0,
     size: '26 × 51mm',
-    extras: ['WS2812 RGB 灯（GPIO8）'],
-    usedPins: { 8: '板载 RGB 灯', 9: 'BOOT 键' },
+    extras: ['WS2812 RGB LED (GPIO8)'],
+    usedPins: { 8: 'On-board RGB LED', 9: 'BOOT button' },
     boardSleepUA: 1000,
     battery: false,
-    caveats: ['开发板供电电路没做低功耗，量功耗请用模组或 XIAO 类小板'],
+    caveats: ['The dev board power circuit is not low power; measure consumption on a module or a XIAO-style board'],
   },
   {
     id: 'xiao-c6',
@@ -256,7 +255,7 @@ export const BOARDS: Board[] = [
     flashMB: 4,
     psramMB: 0,
     size: '21 × 17.8mm',
-    extras: ['锂电池充电管理', '板载和外接天线可切换'],
+    extras: ['Li-ion charging', 'Switchable on-board / external antenna'],
     i2cPins: [22, 23],
     exposed: [0, 1, 2, 21, 22, 23, 16, 17, 19, 20, 18],
     labels: { 0: 'D0', 1: 'D1', 2: 'D2', 21: 'D3', 22: 'D4', 23: 'D5', 16: 'D6', 17: 'D7', 19: 'D8', 20: 'D9', 18: 'D10' },
@@ -267,70 +266,70 @@ export const BOARDS: Board[] = [
   },
   {
     id: 'esp32-devkitc',
-    name: 'ESP32-DevKitC（WROOM-32）',
+    name: 'ESP32-DevKitC (WROOM-32)',
     chip: 'esp32',
-    maker: '乐鑫官方 / 兼容板',
+    maker: 'Espressif / compatibles',
     priceCNY: [20, 45],
     flashMB: 4,
     psramMB: 0,
     size: '28 × 55mm',
-    extras: ['USB-UART（CP2102 / CH340）'],
-    usedPins: { 0: 'BOOT 键' },
+    extras: ['USB-UART (CP2102 / CH340)'],
+    usedPins: { 0: 'BOOT button' },
     boardSleepUA: 6000,
     battery: false,
-    caveats: ['micro-USB 口的老款板子很多，买 Type-C 版本', '深睡整板电流可达数毫安'],
+    caveats: ['Many old boards have micro-USB; buy the Type-C version', 'Whole-board deep-sleep current can reach several mA'],
   },
 ];
 
 export interface Part {
   id: string;
   name: string;
-  /** 卡片 / 按钮上的短名（选板页的项目卡副标题） */
+  /** Short name on cards / buttons (project card subtitle on the advisor page) */
   short: string;
   priceCNY: [number, number];
-  /** 需要的接口：引脚需求 */
+  /** Interfaces needed: pin requirements */
   needs: { kind: 'gpio' | 'adc' | 'pwm' | 'i2c' | 'spi' | 'i2s' | 'rmt' | 'uart' | 'usb' | 'camera'; count?: number; label: string }[];
   caps?: Cap[];
-  /** 额外功耗（mA），工作时 */
+  /** Extra current while active (mA) */
   activeMA?: number;
   simulated: 'full' | 'partial' | 'none';
 }
 
 export const PARTS: Record<string, Part> = {
-  led: { id: 'led', short: 'LED', name: '5mm LED 和 220Ω 电阻', priceCNY: [0.1, 0.5], needs: [{ kind: 'pwm', label: 'LED' }], simulated: 'full' },
-  button: { id: 'button', short: '按键', name: '轻触按键', priceCNY: [0.1, 0.5], needs: [{ kind: 'gpio', label: '按键' }], simulated: 'full' },
-  pot: { id: 'pot', short: '电位器', name: '10kΩ 电位器', priceCNY: [0.5, 2], needs: [{ kind: 'adc', label: '电位器' }], simulated: 'full' },
-  servo: { id: 'servo', short: '舵机', name: 'SG90 舵机', priceCNY: [4, 10], needs: [{ kind: 'pwm', label: '舵机信号' }], activeMA: 150, simulated: 'full' },
-  ws2812: { id: 'ws2812', short: 'WS2812B', name: 'WS2812B 灯带（每米 60 灯）', priceCNY: [12, 30], needs: [{ kind: 'rmt', label: '灯带数据' }], activeMA: 1200, simulated: 'full' },
-  oled: { id: 'oled', short: 'OLED', name: '0.96 寸 OLED（SSD1306，I2C）', priceCNY: [8, 15], needs: [{ kind: 'i2c', label: 'OLED' }], activeMA: 15, simulated: 'partial' },
-  bme280: { id: 'bme280', short: 'BME280', name: 'BME280 温湿度气压模块', priceCNY: [10, 25], needs: [{ kind: 'i2c', label: 'BME280' }], activeMA: 1, simulated: 'partial' },
-  tft: { id: 'tft', short: '彩屏', name: '1.69–2.4 寸 SPI 彩屏（ST7789 / ILI9341）', priceCNY: [15, 40], needs: [{ kind: 'spi', label: '屏幕' }, { kind: 'gpio', count: 3, label: '屏幕 DC / RST / 背光' }], activeMA: 40, caps: ['display_spi'], simulated: 'none' },
-  mic: { id: 'mic', short: '麦克风', name: 'INMP441 数字麦克风（I2S）', priceCNY: [8, 15], needs: [{ kind: 'i2s', label: '麦克风' }], caps: ['audio_in'], simulated: 'none' },
-  amp: { id: 'amp', short: '功放', name: 'MAX98357A 功放和 3W 小喇叭', priceCNY: [10, 20], needs: [{ kind: 'i2s', label: '功放' }], activeMA: 300, caps: ['audio_out'], simulated: 'none' },
-  buzzer: { id: 'buzzer', short: '蜂鸣器', name: '无源蜂鸣器模块（三针，带三极管）', priceCNY: [1, 4], needs: [{ kind: 'pwm', label: '蜂鸣器' }], activeMA: 30, simulated: 'full' },
-  relay: { id: 'relay', short: '继电器', name: '5V 继电器模块（光耦隔离）', priceCNY: [3, 8], needs: [{ kind: 'gpio', label: '继电器' }], activeMA: 70, simulated: 'full' },
-  pir: { id: 'pir', short: '人体红外', name: 'HC-SR501 人体红外', priceCNY: [3, 8], needs: [{ kind: 'gpio', label: '人体感应' }], simulated: 'full' },
-  battery: { id: 'battery', short: '锂电池', name: '3.7V 锂电池 1000mAh', priceCNY: [10, 20], needs: [], simulated: 'none' },
-  camera: { id: 'camera', short: 'OV2640', name: 'OV2640 摄像头', priceCNY: [15, 30], needs: [{ kind: 'camera', label: '摄像头 DVP' }], caps: ['camera', 'psram'], activeMA: 120, simulated: 'none' },
+  led: { id: 'led', short: 'LED', name: '5 mm LED and 220 Ω resistor', priceCNY: [0.1, 0.5], needs: [{ kind: 'pwm', label: 'LED' }], simulated: 'full' },
+  button: { id: 'button', short: 'Button', name: 'Tactile button', priceCNY: [0.1, 0.5], needs: [{ kind: 'gpio', label: 'Button' }], simulated: 'full' },
+  pot: { id: 'pot', short: 'Potentiometer', name: '10 kΩ potentiometer', priceCNY: [0.5, 2], needs: [{ kind: 'adc', label: 'Potentiometer' }], simulated: 'full' },
+  servo: { id: 'servo', short: 'Servo', name: 'SG90 servo', priceCNY: [4, 10], needs: [{ kind: 'pwm', label: 'Servo signal' }], activeMA: 150, simulated: 'full' },
+  ws2812: { id: 'ws2812', short: 'WS2812B', name: 'WS2812B strip (60 LEDs per meter)', priceCNY: [12, 30], needs: [{ kind: 'rmt', label: 'Strip data' }], activeMA: 1200, simulated: 'full' },
+  oled: { id: 'oled', short: 'OLED', name: '0.96" OLED (SSD1306, I2C)', priceCNY: [8, 15], needs: [{ kind: 'i2c', label: 'OLED' }], activeMA: 15, simulated: 'partial' },
+  bme280: { id: 'bme280', short: 'BME280', name: 'BME280 temperature / humidity / pressure module', priceCNY: [10, 25], needs: [{ kind: 'i2c', label: 'BME280' }], activeMA: 1, simulated: 'partial' },
+  tft: { id: 'tft', short: 'Color display', name: '1.69–2.4" SPI color display (ST7789 / ILI9341)', priceCNY: [15, 40], needs: [{ kind: 'spi', label: 'Display' }, { kind: 'gpio', count: 3, label: 'Display DC / RST / backlight' }], activeMA: 40, caps: ['display_spi'], simulated: 'none' },
+  mic: { id: 'mic', short: 'Microphone', name: 'INMP441 digital microphone (I2S)', priceCNY: [8, 15], needs: [{ kind: 'i2s', label: 'Microphone' }], caps: ['audio_in'], simulated: 'none' },
+  amp: { id: 'amp', short: 'Amplifier', name: 'MAX98357A amplifier and 3 W speaker', priceCNY: [10, 20], needs: [{ kind: 'i2s', label: 'Amplifier' }], activeMA: 300, caps: ['audio_out'], simulated: 'none' },
+  buzzer: { id: 'buzzer', short: 'Buzzer', name: 'Passive buzzer module (3-pin, with transistor)', priceCNY: [1, 4], needs: [{ kind: 'pwm', label: 'Buzzer' }], activeMA: 30, simulated: 'full' },
+  relay: { id: 'relay', short: 'Relay', name: '5 V relay module (optocoupler isolated)', priceCNY: [3, 8], needs: [{ kind: 'gpio', label: 'Relay' }], activeMA: 70, simulated: 'full' },
+  pir: { id: 'pir', short: 'PIR sensor', name: 'HC-SR501 PIR sensor', priceCNY: [3, 8], needs: [{ kind: 'gpio', label: 'Motion sensing' }], simulated: 'full' },
+  battery: { id: 'battery', short: 'Li-ion battery', name: '3.7 V Li-ion battery 1000 mAh', priceCNY: [10, 20], needs: [], simulated: 'none' },
+  camera: { id: 'camera', short: 'OV2640', name: 'OV2640 camera', priceCNY: [15, 30], needs: [{ kind: 'camera', label: 'Camera DVP' }], caps: ['camera', 'psram'], activeMA: 120, simulated: 'none' },
 };
 
 export interface Template {
   id: string;
   title: string;
-  /** 手机底部按钮上的短名（"看推荐 · 温湿度计 + 2 个要求"） */
+  /** Short name on the mobile bottom button */
   short: string;
   emoji: string;
   blurb: string;
   needCaps: Cap[];
   niceCaps?: Cap[];
   parts: string[];
-  /** 选板 v3「建议」里默认没勾的零件（虚线框）：做这个项目常加的，勾上即进清单 */
+  /** Advisor v3 suggestions, unticked by default (dashed): common add-ons, ticking puts them in the list */
   suggest?: string[];
-  /** 工作模式，用于功耗估算：每小时唤醒次数、每次工作秒数、是否联网 */
+  /** Duty cycle for the power estimate: wakes per hour, active seconds per wake, networking */
   duty?: { wakePerHour: number; activeSec: number; wifi: boolean };
-  /** 能在试板里跑的示例固件（web/public/fw/examples.json 的 id，C3 和 S3 的都列；界面按推荐芯片挑） */
+  /** Example firmware runnable in TryBoard (examples.json ids, C3 and S3 both listed; the UI picks by chip) */
   examples: string[];
-  /** 对应的完整作品（app/works.ts 的 id）：从选型结果直接进它的采购页 */
+  /** Matching full project (app/works.ts id): the result links straight to its shop page */
   work?: string;
   risks: string[];
 }
@@ -338,10 +337,10 @@ export interface Template {
 export const TEMPLATES: Template[] = [
   {
     id: 'blink',
-    short: '点灯入门',
-    title: '第一次玩：点灯、按键、串口',
+    short: 'Blink basics',
+    title: 'First steps: LED, button, serial',
     emoji: '💡',
-    blurb: '学单片机的起点，几乎任何板子都行，挑便宜、教程多的。',
+    blurb: 'Where microcontrollers start. Almost any board works; pick a cheap one with lots of tutorials.',
     needCaps: [],
     parts: ['led', 'button', 'pot'],
     suggest: ['buzzer'],
@@ -350,88 +349,88 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: 'weather',
-    short: '温湿度计',
-    title: '电池供电的温湿度计',
+    short: 'Thermo-hygrometer',
+    title: 'Battery-powered thermo-hygrometer',
     emoji: '🌡️',
-    blurb: '每 10 分钟醒来测一次、上报一次，其余时间深睡。关键是整板深睡电流。',
+    blurb: 'Wakes every 10 minutes to measure and report, deep sleeps the rest. Whole-board sleep current is what matters.',
     needCaps: ['wifi', 'low_power'],
     parts: ['bme280', 'oled', 'battery'],
     suggest: ['buzzer', 'button'],
     duty: { wakePerHour: 6, activeSec: 3, wifi: true },
     examples: ['bme280', 'oled', 'weather', 's3-oled'],
     work: 'weather',
-    risks: ['开发板的电源灯、LDO、USB 转串口芯片会吃掉大部分电量。选专为电池设计的小板，或自己画板', 'Wi-Fi 连接耗时决定功耗：用静态 IP、记住信道能把每次唤醒从 3 秒压到 1 秒内'],
+    risks: ['A dev board\'s power LED, LDO and USB-serial chip eat most of the battery. Pick a small board designed for batteries, or design your own', 'Wi-Fi connect time drives consumption: a static IP and a remembered channel cut each wake from 3 s to under 1 s'],
   },
   {
     id: 'lights',
-    short: '氛围灯',
-    title: '氛围灯、灯带控制器',
+    short: 'Mood light',
+    title: 'Mood light / LED strip controller',
     emoji: '🌈',
-    blurb: 'WS2812 灯带，用手机网页控制，WLED 一类固件直接能用。',
+    blurb: 'A WS2812 strip controlled from a phone web page; firmware like WLED works out of the box.',
     needCaps: ['wifi'],
     parts: ['ws2812', 'button'],
     suggest: ['pot'],
     examples: ['rgb', 's3-rgb', 'lamp'],
     work: 'lamp',
-    risks: ['60 灯 / 米全白约 3.6A / 米，电源要单独供，不能靠开发板的 USB', '3.3V 数据线驱动 5V 灯带偶尔不稳，必要时加电平转换'],
+    risks: ['60 LEDs / m at full white draw about 3.6 A / m: give it its own supply, not the dev board\'s USB', 'A 3.3 V data line driving a 5 V strip is sometimes flaky; add a level shifter if needed'],
   },
   {
     id: 'smarthome',
-    short: '智能家居',
-    title: 'Matter / Home Assistant 智能家居',
+    short: 'Smart home',
+    title: 'Matter / Home Assistant smart home',
     emoji: '🏠',
-    blurb: '接入米家以外的生态（Apple Home / Google / HA）。要 Thread 或 Zigbee 就只能选 C6 / H2。',
+    blurb: 'Join ecosystems such as Apple Home / Google / HA. Thread or Zigbee means C6 / H2 only.',
     needCaps: ['wifi'],
     niceCaps: ['thread', 'zigbee', 'wifi6'],
     parts: ['relay', 'pir', 'button'],
     suggest: ['oled'],
     examples: ['button', 'wifi-http', 's3-wifi-http'],
-    risks: ['继电器控制 220V 要用带光耦隔离的模块，断电后再接线；强电部分模拟器验证不了'],
+    risks: ['Switching mains with a relay needs an optocoupler-isolated module; wire it unpowered. The simulator cannot verify the mains side'],
   },
   {
     id: 'usbkey',
-    short: 'USB 宏键盘',
-    title: 'USB 宏键盘、插手机的小设备',
+    short: 'USB macro keypad',
+    title: 'USB macro keypad / phone gadget',
     emoji: '⌨️',
-    blurb: '让板子冒充键盘、鼠标或网卡。只有带原生 USB OTG 的型号能做。',
+    blurb: 'Make the board pose as a keyboard, mouse or network adapter. Only models with native USB OTG can.',
     needCaps: ['usb_otg'],
     parts: ['button'],
     suggest: ['led'],
     examples: ['usbkey', 's3-usb-keyboard'],
     work: 'usbkey',
-    risks: ['确认插的是芯片原生 USB 口，而不是 USB 转串口那个口', 'iPhone 等设备对 USB 设备供电有限，复杂外设需要外部供电'],
+    risks: ['Make sure you plug into the chip\'s native USB port, not the USB-serial one', 'iPhones and similar devices supply little USB power; complex peripherals need external power'],
   },
   {
     id: 'voice',
-    short: '语音助手',
-    title: 'AI 语音助手（小智类）',
+    short: 'Voice assistant',
+    title: 'AI voice assistant (Xiaozhi-style)',
     emoji: '🗣️',
-    blurb: '麦克风收音、联网调大模型、喇叭播放，带个圆屏当表情。主流方案都是 S3 + 8MB PSRAM。',
+    blurb: 'Microphone in, a cloud LLM, speaker out, with a round display for a face. Mainstream designs use S3 + 8 MB PSRAM.',
     needCaps: ['wifi', 'audio_in', 'audio_out', 'psram'],
     niceCaps: ['display_spi', 'ai_accel'],
     parts: ['mic', 'amp', 'tft', 'battery'],
     suggest: ['button'],
     examples: ['s3-i2s-mic', 's3-i2s-tone'],
-    risks: ['大模型 API 要联网和账号；离线唤醒词才在板上跑', '功放和 Wi-Fi 同时工作时峰值电流大，锂电池要能放 1A 以上'],
+    risks: ['The LLM API needs a network and an account; only the offline wake word runs on the board', 'Amplifier and Wi-Fi together draw big peaks; the battery must deliver over 1 A'],
   },
   {
     id: 'camera',
-    short: '摄像头',
-    title: '摄像头监控、看宠物',
+    short: 'Camera',
+    title: 'Camera monitor / pet cam',
     emoji: '📷',
-    blurb: 'OV2640 拍照或推流，需要 PSRAM 存帧。XIAO S3 Sense 开箱即用。',
+    blurb: 'OV2640 stills or streaming, with PSRAM for frames. XIAO S3 Sense works out of the box.',
     needCaps: ['wifi', 'camera', 'psram'],
     parts: ['camera'],
     suggest: ['button'],
     examples: [],
-    risks: ['持续推流发热和耗电都大，不适合电池长期供电', '画质只到 200 万像素，别期待监控摄像头的效果'],
+    risks: ['Continuous streaming runs hot and power hungry: not for long battery use', 'Image quality tops out at 2 MP; do not expect a security camera'],
   },
   {
     id: 'btaudio',
-    short: '蓝牙音箱',
-    title: '蓝牙音箱、经典蓝牙串口',
+    short: 'Bluetooth speaker',
+    title: 'Bluetooth speaker / Classic Bluetooth serial',
     emoji: '🔊',
-    blurb: 'A2DP 音频要经典蓝牙，只有经典款 ESP32 有。',
+    blurb: 'A2DP audio needs Classic Bluetooth, which only the classic ESP32 has.',
     needCaps: ['bt_classic', 'audio_out'],
     parts: ['amp'],
     suggest: ['button'],

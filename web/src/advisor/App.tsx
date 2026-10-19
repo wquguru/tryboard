@@ -1,6 +1,5 @@
-// 选板 v3（DESIGN_V2 §8.2，设计稿 docs/design-v2/select-v3：Rec 桌面、SelectCMobile 手机、FrA 术语、FrC 0 块板、UtilB 任务书）。
-// 页面只管界面；结论全由 derive.ts（地址状态 → 推荐）和 brief.ts（任务书）算，同一个地址在页面、分享、采购、实验台算出同一个结果。
-// 状态只走 state.ts 的 decode / encode：每次改动 replaceState 写回地址（不带「我已有」），所以复制地址栏就是分享。
+// Advisor v3 (DESIGN_V2 §8.2, docs/design-v2/select-v3). The page is UI only: derive.ts and brief.ts compute every answer,
+// so one URL gives the same result everywhere. State goes through state.ts and is written back with replaceState, so the address bar is the share link.
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Collapsible, Dialog, Popover, RadioGroup } from 'radix-ui';
 import { PARTS, TEMPLATES, type Template } from './data.ts';
@@ -19,6 +18,7 @@ import {
   exposedCount,
   kindName,
   lasts,
+  lastsN,
   partName,
   partRows,
   pinFull,
@@ -42,8 +42,21 @@ import { Conf, ConfBar, ConfIcon } from '../ui/conf';
 import { SiteFooter, SiteHeader } from '../ui/site';
 import { SELECT, SITE_NAV, customLab, lab, selectLink } from '../ui/links';
 import { cn } from '../ui/cn';
+import { t } from '../i18n/index.ts';
 
-/** < 768px 用手机布局（DESIGN_V2 §0）。只渲染一套，免得 id 重复、术语「首次出现」算错 */
+/** Translate a sentence whose {term} slot holds a JSX term button */
+const tj = (en: string, term: ReactNode, vars?: Record<string, string | number>) => {
+  const [a, b = ''] = t(en, { ...vars, term: '\u0000' }).split('\u0000');
+  return (
+    <>
+      {a}
+      {term}
+      {b}
+    </>
+  );
+};
+
+/** < 768px uses the mobile layout (DESIGN_V2 §0). Only one layout renders, so ids stay unique and first-use terms stay right */
 function useMobile() {
   const q = '(max-width: 767px)';
   const [m, setM] = useState(() => typeof matchMedia === 'function' && matchMedia(q).matches);
@@ -56,7 +69,7 @@ function useMobile() {
   return m;
 }
 
-// ---------------------------------------------------------------- 项目线稿（DesA：120×96、描边 4、圆头；不用 emoji）
+// ---------------------------------------------------------------- project line art (DesA: 120×96, stroke 4, round caps; no emoji)
 const TONE: Record<string, [string, string]> = {
   weather: ['#0B76C8', '#E5F4FF'],
   lights: ['#7A4BC9', '#F7F2FF'],
@@ -139,60 +152,65 @@ const CHECK = 'M5 12.5l4.5 4.5L19 7';
 const CHEV = 'M6 9l6 6 6-6';
 const SHARE = 'M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1';
 
-// ---------------------------------------------------------------- 术语（FrA）：只标页面上第一次出现的；两句话：是什么 + 对你的项目
-type TermKey = 'GPIO' | 'I2C' | 'SPI' | 'PSRAM' | '深睡' | 'ADC' | 'PWM' | '原生 USB';
+// ---------------------------------------------------------------- terms (FrA): only the first use on the page; what it is + what it means for you
+// Keys are data-term attribute values that tests select on, so the two CJK ones stay; TERM_LABEL is what shows
+type TermKey = 'GPIO' | 'I2C' | 'SPI' | 'PSRAM' | '深睡' | 'ADC' | 'PWM' | '原生 USB'; // lint: allow-cjk
+const TERM_LABEL: Partial<Record<TermKey, string>> = { 深睡: 'Deep sleep', '原生 USB': 'Native USB' }; // lint: allow-cjk
+const termLabel = (k: TermKey) => t(TERM_LABEL[k] ?? k);
 const TERM_WHAT: Record<TermKey, string> = {
-  GPIO: '能自己定义用途的引脚。',
-  I2C: '两根线挂多个传感器（SDA 数据、SCL 时钟，靠地址区分）。',
-  SPI: '更快的四线接口，屏幕常用。',
-  PSRAM: '外挂内存，摄像头 / 语音要。',
-  深睡: '几乎断电，只留定时唤醒。',
-  ADC: '把电压读成数字。',
-  PWM: '快速开关，调亮度 / 舵机。',
-  '原生 USB': '板子能当键盘 / U 盘。',
+  GPIO: 'A pin whose use you define yourself.',
+  I2C: 'Two wires for many sensors (SDA data, SCL clock, told apart by address).',
+  SPI: 'A faster four-wire bus, common for displays.',
+  PSRAM: 'Add-on memory that cameras / voice need.',
+  深睡: 'Almost powered off, only a wake timer runs.', // lint: allow-cjk
+  ADC: 'Reads a voltage as a number.',
+  PWM: 'Fast switching to dim LEDs / drive servos.',
+  '原生 USB': 'The board can act as a keyboard / flash drive.', // lint: allow-cjk
 };
+/** Display text of a confidence value; same keys as ui/conf.tsx confLabel */
+const CONF_TEXT: Record<Confidence, string> = { 仿真验证: 'Verified in sim', 行为模拟: 'Behaviour model', 估算: 'Estimate', 必须上真机: 'Real board only' }; // lint: allow-cjk
+const confText = (c: Confidence) => t(CONF_TEXT[c] ?? c);
 
 function termYou(k: TermKey, r: Result): string {
   const p = r.plan;
   if (!p) return '';
   const b = p.board;
   const byKind = (kind: string) => p.pins.filter((a) => pinKind(a.label, r.need.parts) === kind);
-  const names = (kind: string) => r.need.parts.filter((id) => PARTS[id].needs.some((n) => n.kind === kind)).map(partName);
+  const names = (kind: string) => r.need.parts.filter((id) => PARTS[id].needs.some((n) => n.kind === kind)).map(partName).join(t(', '));
   const pinsOf = (kind: string) => Array.from(new Set(byKind(kind).flatMap((a) => a.pins))).map((x) => pinName(b, x));
   switch (k) {
     case 'GPIO':
-      return `${boardShort(b)} 能用的 GPIO 有 ${exposedCount(p)} 个，你的项目占 ${usedPins(p).length} 个。`;
+      return t('{board} has {n} usable GPIOs; your project uses {used}.', { board: boardShort(b), n: exposedCount(p), used: usedPins(p).length });
     case 'I2C': {
       const n = names('i2c');
-      return n.length ? `${n.join('、')} 共用 ${pinsOf('i2c').join(' / ')} 两根线，地址不同所以不打架。` : '你的项目现在没用 I2C 器件。';
+      return n ? t('{parts} share the two wires {pins}; different addresses keep them apart.', { parts: n, pins: pinsOf('i2c').join(' / ') }) : t('Your project uses no I2C devices right now.');
     }
     case 'SPI':
-      return names('spi').length ? `${names('spi').join('、')}走 SPI，接 ${pinsOf('spi').join(' / ')}。` : '你的项目现在没用 SPI。';
+      return names('spi') ? t('{parts} use SPI on {pins}.', { parts: names('spi'), pins: pinsOf('spi').join(' / ') }) : t('Your project uses no SPI right now.');
     case 'PSRAM':
-      return b.psramMB ? `${boardShort(b)} 带 ${b.psramMB}MB PSRAM${r.need.caps.includes('psram') ? '，你的项目要靠它放音频 / 图像。' : '，你的项目暂时用不上。'}` : `${boardShort(b)} 没有 PSRAM，你的项目也不需要。`;
-    case '深睡':
-      return answers(r.s).bat && p.power ? `${boardShort(b)} 整板深睡约 ${sleepCurrent(b.boardSleepUA)}，决定了电池能撑${lasts(p.power.days)}。` : '你没选「用电池」，深睡电流不影响你。';
+      if (!b.psramMB) return t('{board} has no PSRAM, and your project does not need it.', { board: boardShort(b) });
+      return r.need.caps.includes('psram') ? t('{board} has {mb} MB PSRAM; your project needs it for audio / images.', { board: boardShort(b), mb: b.psramMB }) : t('{board} has {mb} MB PSRAM; your project does not need it yet.', { board: boardShort(b), mb: b.psramMB });
+    case '深睡': // lint: allow-cjk
+      return answers(r.s).bat && p.power ? t('{board} sleeps at about {current} for the whole board, which is why the battery lasts {span}.', { board: boardShort(b), current: sleepCurrent(b.boardSleepUA), span: lasts(p.power.days) }) : t('You did not pick "Battery powered", so sleep current does not affect you.');
     case 'ADC':
-      return names('adc').length ? `${names('adc').join('、')}接 ${pinsOf('adc').join(' / ')}（ADC1，连 Wi-Fi 时也能读）。` : '你的项目现在没用 ADC。';
+      return names('adc') ? t('{parts} on {pins} (ADC1, readable with Wi-Fi on).', { parts: names('adc'), pins: pinsOf('adc').join(' / ') }) : t('Your project uses no ADC right now.');
     case 'PWM':
-      return names('pwm').length ? `${names('pwm').join('、')}用 PWM，接 ${pinsOf('pwm').join(' / ')}。` : '你的项目现在没用 PWM。';
-    case '原生 USB':
-      return p.chip.caps.includes('usb_otg') ? `${p.chip.name} 有原生 USB，插电脑就能当键盘。` : `${p.chip.name} 没有原生 USB，只能当串口，做不了键盘。`;
+      return names('pwm') ? t('{parts} use PWM on {pins}.', { parts: names('pwm'), pins: pinsOf('pwm').join(' / ') }) : t('Your project uses no PWM right now.');
+    case '原生 USB': // lint: allow-cjk
+      return p.chip.caps.includes('usb_otg') ? t('{chip} has native USB: plug it into a computer and it is a keyboard.', { chip: t(p.chip.name) }) : t('{chip} has no native USB: serial only, no keyboard.', { chip: t(p.chip.name) });
   }
 }
 
 function Term({ k, you, mobile }: { k: TermKey; you: string; mobile: boolean }) {
   const trigger = (
     <button type="button" data-term={k} className="cursor-help border-0 border-b border-dashed border-current bg-transparent p-0 font-[inherit] text-[inherit] leading-[inherit] text-accent-ink">
-      {k}
+      {termLabel(k)}
     </button>
   );
   const body = (
     <>
-      <p className="font-bold">
-        {k}：{TERM_WHAT[k]}
-      </p>
-      <p className="mt-1.5">对你的项目：{you}</p>
+      <p className="font-bold">{t('{term}: {what}', { term: termLabel(k), what: t(TERM_WHAT[k]) })}</p>
+      <p className="mt-1.5">{t('For your project: {you}', { you })}</p>
     </>
   );
   if (mobile)
@@ -202,9 +220,9 @@ function Term({ k, you, mobile }: { k: TermKey; you: string; mobile: boolean }) 
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40" />
           <Dialog.Content data-term-pop={k} aria-describedby={undefined} className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t border-line bg-surface px-5 pt-5 pb-[max(20px,env(safe-area-inset-bottom))] text-[15px] leading-[1.7] text-fg">
-            <Dialog.Title className="sr-only">{k}</Dialog.Title>
+            <Dialog.Title className="sr-only">{termLabel(k)}</Dialog.Title>
             {body}
-            <Dialog.Close className="mt-4 h-12 w-full cursor-pointer rounded-xl border border-line bg-surface text-[15px]">知道了</Dialog.Close>
+            <Dialog.Close className="mt-4 h-12 w-full cursor-pointer rounded-xl border border-line bg-surface text-[15px]">{t('Got it')}</Dialog.Close>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
@@ -222,7 +240,7 @@ function Term({ k, you, mobile }: { k: TermKey; you: string; mobile: boolean }) 
   );
 }
 
-// ---------------------------------------------------------------- 小件
+// ---------------------------------------------------------------- small pieces
 const Lbl = ({ children, className, id }: { children: ReactNode; className?: string; id?: string }) => (
   <p id={id} className={cn('mb-2.5 text-[12px] font-bold tracking-[.06em] text-muted', className)}>
     {children}
@@ -240,9 +258,9 @@ function Switch({ on, flip, q, label }: { on: boolean; flip: () => void; q: stri
   );
 }
 
-const simText = (p: Plan) => (p.chip.simulated === 'full' ? '能跑' : p.chip.simulated === 'partial' ? '部分能跑' : `暂不能 · 用 C3 代替运行`);
+const simText = (p: Plan) => (p.chip.simulated === 'full' ? t('Can run') : p.chip.simulated === 'partial' ? t('Partly runs') : t('Not yet · runs on a C3 instead'));
 
-// ---------------------------------------------------------------- 页面
+// ---------------------------------------------------------------- page
 interface Step {
   prev: SelectState;
   text: string;
@@ -263,26 +281,26 @@ export function App() {
   const share = selectLink(encode({ ...r.s, have: [] }, false));
   const go = p ? customLab(encode({ ...r.s, board: p.board.id, have: s.have }, true)) : '';
 
-  // 地址就是分享链接：每次改动写回（不带「我已有」）。旧链接 ?t=weather 解出来再写回同样的串
+  // The URL is the share link: write it back on every change (without "I have it"); old ?t=weather round-trips
   useEffect(() => {
     const q = encode({ ...r.s, have: [] }, false);
     try {
       history.replaceState(null, '', q ? `?${q}` : location.pathname);
     } catch {
-      /* 预览环境可能不允许改地址 */
+      /* Preview hosts may forbid changing the URL */
     }
   }, [r.s]);
-  // 给测试读：剪贴板在无头浏览器里不可靠，任务书和状态从这里取
+  // For tests: the clipboard is unreliable headless, so the brief and state are exposed here
   useEffect(() => {
     (globalThis as unknown as { __tbSelect?: unknown }).__tbSelect = { state: r.s, have: s.have, brief: md, go, share };
   });
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(''), 2500);
-    return () => clearTimeout(t);
+    const id = setTimeout(() => setToast(''), 2500);
+    return () => clearTimeout(id);
   }, [toast]);
 
-  /** 改一步：记下「刚才」那句话（推荐变没变、多占哪些引脚、价差），能连续撤销。「我已有」不进撤销栈 */
+  /** One step: record the "Just now" line (recommendation, pins, price change) for repeated undo; "I have it" stays out of the stack */
   const change = (label: string, f: (x: SelectState) => SelectState) => {
     const next = sanitize(f(r.s));
     if (encode(next) === encode(r.s)) return;
@@ -304,85 +322,85 @@ export function App() {
   const copy = (text: string, done: string) => {
     const ok = () => setToast(done);
     try {
-      navigator.clipboard.writeText(text).then(ok, () => setToast('浏览器不让复制，请手动选中'));
+      navigator.clipboard.writeText(text).then(ok, () => setToast(t('The browser blocked copying; select the text by hand')));
     } catch {
-      setToast('浏览器不让复制，请手动选中');
+      setToast(t('The browser blocked copying; select the text by hand'));
     }
   };
-  const copyShare = () => copy(new URL(share, location.href).href, '分享链接已复制');
-  const copyBrief = () => copy(md, '任务书已复制');
+  const copyShare = () => copy(new URL(share, location.href).href, t('Share link copied'));
+  const copyBrief = () => copy(md, t('Brief copied'));
 
   const pickTpl = (id: string) => {
-    const t = TEMPLATES.find((x) => x.id === id)!;
-    change(`换成「${t.short}」`, (x) => ({ ...EMPTY, t: id, budget: x.budget }));
+    const tp = TEMPLATES.find((x) => x.id === id)!;
+    change(t('Switched to "{project}"', { project: t(tp.short) }), (x) => ({ ...EMPTY, t: id, budget: x.budget }));
   };
   const flipRow = (row: PartRow) => {
     if (row.fixed) return;
     const n = partName(row.key);
-    if (row.key === 'battery') return change(a.bat ? '不用电池' : '用电池', (x) => ({ ...x, bat: !a.bat }));
-    if (r.tpl.parts.includes(row.key)) return change(row.on ? `去掉${n}` : `加回${n}`, (x) => ({ ...x, rm: row.on ? [...x.rm, row.key] : x.rm.filter((y) => y !== row.key) }));
-    change(row.on ? `去掉${n}` : `加了${n}`, (x) => ({ ...x, add: row.on ? x.add.filter((y) => y !== row.key) : [...x.add, row.key] }));
+    if (row.key === 'battery') return change(a.bat ? t('No battery') : t('Battery powered'), (x) => ({ ...x, bat: !a.bat }));
+    if (r.tpl.parts.includes(row.key)) return change(row.on ? t('Removed {part}', { part: n }) : t('Put back {part}', { part: n }), (x) => ({ ...x, rm: row.on ? [...x.rm, row.key] : x.rm.filter((y) => y !== row.key) }));
+    change(row.on ? t('Removed {part}', { part: n }) : t('Added {part}', { part: n }), (x) => ({ ...x, add: row.on ? x.add.filter((y) => y !== row.key) : [...x.add, row.key] }));
   };
   const addPart = (id: string) => {
     setAdding(false);
-    change(`加了${partName(id)}`, (x) => ({ ...x, add: [...x.add, id] }));
+    change(t('Added {part}', { part: partName(id) }), (x) => ({ ...x, add: [...x.add, id] }));
   };
   const pickBoard = (id: string) => {
     if (!p || id === p.board.id) return;
     const b = r.plans.find((x) => x.board.id === id)!;
-    change(`看 ${boardShort(b.board)}`, (x) => ({ ...x, board: id === r.plans[0].board.id ? '' : id }));
+    change(t('Viewing {board}', { board: boardShort(b.board) }), (x) => ({ ...x, board: id === r.plans[0].board.id ? '' : id }));
   };
 
-  // 术语：每次渲染重新算，按 JSX 求值顺序 = 页面顺序，只给第一次出现的加下划线
+  // Terms are recomputed each render; JSX evaluation order is page order, so only the first use is underlined
   const seen = new Set<TermKey>();
   const T = (k: TermKey): ReactNode => {
-    if (seen.has(k)) return k;
+    if (seen.has(k)) return termLabel(k);
     seen.add(k);
     return <Term key={`term-${k}`} k={k} you={termYou(k, r)} mobile={mobile} />;
   };
 
-  // ------------------------------------------------ 输入：项目
-  const ordered = TEMPLATE_ORDER.map((id) => TEMPLATES.find((t) => t.id === id)!).filter(Boolean);
+  // ------------------------------------------------ input: project
+  const ordered = TEMPLATE_ORDER.map((id) => TEMPLATES.find((x) => x.id === id)!).filter(Boolean);
   const big = ordered.slice(0, 3);
   const rest = ordered.slice(3);
-  const tplItem = (t: Template, kind: 'big' | 'small' | 'pill') => {
-    const on = t.id === r.tpl.id;
+  const tplItem = (tp: Template, kind: 'big' | 'small' | 'pill') => {
+    const on = tp.id === r.tpl.id;
     if (kind === 'pill')
       return (
         <RadioGroup.Item
-          key={t.id}
-          value={t.id}
-          data-t={t.id}
+          key={tp.id}
+          value={tp.id}
+          data-t={tp.id}
           className="tpl h-11 flex-none cursor-pointer rounded-full border border-line bg-surface px-4 text-[14px] whitespace-nowrap data-[state=checked]:border-fg data-[state=checked]:bg-fg data-[state=checked]:text-bg"
         >
-          {t.short}
+          {t(tp.short)}
         </RadioGroup.Item>
       );
     return (
       <RadioGroup.Item
-        key={t.id}
-        value={t.id}
-        data-t={t.id}
+        key={tp.id}
+        value={tp.id}
+        data-t={tp.id}
         className={cn(
           'tpl flex cursor-pointer rounded-xl border border-line bg-surface text-left transition hover:border-hover-line',
           'data-[state=checked]:border-2 data-[state=checked]:border-accent data-[state=checked]:bg-accent-bg',
           kind === 'big' ? 'flex-col items-start gap-2 p-3 data-[state=checked]:p-[11px]' : 'min-h-11 items-center gap-2 px-3 py-1.5 data-[state=checked]:px-[11px] data-[state=checked]:py-[5px]',
         )}
       >
-        {kind === 'big' && <Art id={t.id} className="h-[42px] w-[54px]" />}
-        <span className={cn('text-[14px]', on && 'font-bold')}>{t.short}</span>
-        {kind === 'big' && <small className="text-[11px] leading-[1.4] text-muted">{t.parts.map(partName).join(' · ')}</small>}
+        {kind === 'big' && <Art id={tp.id} className="h-[42px] w-[54px]" />}
+        <span className={cn('text-[14px]', on && 'font-bold')}>{t(tp.short)}</span>
+        {kind === 'big' && <small className="text-[11px] leading-[1.4] text-muted">{tp.parts.map(partName).join(' · ')}</small>}
       </RadioGroup.Item>
     );
   };
   const projects = mobile ? (
-    <RadioGroup.Root id="templates" aria-label="你想做什么" value={r.tpl.id} onValueChange={pickTpl} orientation="horizontal" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
-      {ordered.map((t) => tplItem(t, 'pill'))}
+    <RadioGroup.Root id="templates" aria-label={t('What do you want to build')} value={r.tpl.id} onValueChange={pickTpl} orientation="horizontal" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+      {ordered.map((x) => tplItem(x, 'pill'))}
     </RadioGroup.Root>
   ) : (
     <RadioGroup.Root id="templates" aria-labelledby="tpl-label" value={r.tpl.id} onValueChange={pickTpl}>
       <div className="grid grid-cols-4 gap-2">
-        {big.map((t) => tplItem(t, 'big'))}
+        {big.map((x) => tplItem(x, 'big'))}
         <button
           type="button"
           id="moreTpl"
@@ -391,15 +409,15 @@ export function App() {
           className="flex cursor-pointer flex-col items-start gap-2 rounded-xl border border-dashed border-hover-line bg-surface p-3 text-left text-[14px] text-muted hover:border-fg"
         >
           <Art id="more" className="h-[42px] w-[54px]" />
-          更多 {rest.length} 个
-          <small className="text-[11px]">{moreTpl ? '收起' : rest.map((t) => t.short).slice(0, 3).join(' · ') + '…'}</small>
+          {t('{n} more projects', { n: rest.length })}
+          <small className="text-[11px]">{moreTpl ? t('Collapse') : rest.map((x) => t(x.short)).slice(0, 3).join(' · ') + '…'}</small>
         </button>
       </div>
-      {moreTpl && <div className="mt-2 flex flex-wrap gap-2">{rest.map((t) => tplItem(t, 'small'))}</div>}
+      {moreTpl && <div className="mt-2 flex flex-wrap gap-2">{rest.map((x) => tplItem(x, 'small'))}</div>}
     </RadioGroup.Root>
   );
 
-  // ------------------------------------------------ 输入：零件即清单
+  // ------------------------------------------------ input: the parts are the list
   const rows = partRows(r);
   const rowEl = (row: PartRow) => {
     const have = row.haveIds.every((id) => s.have.includes(id));
@@ -428,7 +446,7 @@ export function App() {
           <span className={cn('block text-[13px] leading-[1.35]', !row.on && 'text-muted', have && 'line-through decoration-muted')}>{row.name}</span>
           <small className="block text-[11px] text-muted">
             {row.src}
-            {PART_MAP[row.key] === null && ' · 试板里没有模型'}
+            {PART_MAP[row.key] === null && t(' · no model in TryBoard')}
           </small>
         </span>
         <span className="flex-none font-mono text-[11px] text-muted">{yuan(row.price)}</span>
@@ -440,7 +458,7 @@ export function App() {
             onClick={() => toggleHave(row.haveIds)}
             className={cn('h-7 flex-none cursor-pointer rounded-full px-2.5 text-[11px] max-md:h-11 max-md:px-3 max-md:text-[12px]', have ? 'bg-line-soft text-fg' : 'border border-line text-muted')}
           >
-            {have ? '我已有' : '我已有？'}
+            {have ? t('I have it') : t('Have it?')}
           </button>
         )}
       </li>
@@ -448,21 +466,22 @@ export function App() {
   };
   const partsBox = (
     <div id="parts" className="overflow-hidden rounded-xl border border-line bg-surface">
-      <p className="bg-field px-3 py-1.5 text-[12px] font-bold text-muted">必选 · {r.tpl.short}要用</p>
+      <p className="bg-field px-3 py-1.5 text-[12px] font-bold text-muted">{t('Needed · for {project}', { project: t(r.tpl.short) })}</p>
       <ul>{rows.filter((x) => x.group === 'need').map(rowEl)}</ul>
-      <p className="bg-field px-3 py-1.5 text-[12px] font-bold text-muted">建议</p>
+      <p className="bg-field px-3 py-1.5 text-[12px] font-bold text-muted">{t('Suggested')}</p>
       <ul>{rows.filter((x) => x.group === 'suggest').map(rowEl)}</ul>
       <div className="border-t border-line-soft">
         <button type="button" id="addPart" aria-expanded={adding} onClick={() => setAdding(!adding)} className="flex min-h-11 w-full cursor-pointer items-center gap-2 px-3 text-[13px] text-accent-ink">
-          + 加零件
+          {t('+ Add part')}
         </button>
         {adding && (
           <ul id="partTable" className="border-t border-line-soft">
             {addable(r.s).map((id) => (
               <li key={id}>
                 <button type="button" data-add={id} onClick={() => addPart(id)} className="flex min-h-11 w-full cursor-pointer items-center gap-2 px-3 text-left text-[13px] hover:bg-field">
-                  <span className="flex-1">{PARTS[id].name}</span>
-                  {PART_MAP[id] === null && <Conf c="必须上真机" size={12} className="text-[11px] text-muted" />}
+                  <span className="flex-1">{t(PARTS[id].name)}</span>
+                  {PART_MAP[id] === null && <Conf c="必须上真机" size={12} // lint: allow-cjk
+                   className="text-[11px] text-muted" />}
                   <span className="font-mono text-[11px] text-muted">{yuan(PARTS[id].priceCNY)}</span>
                 </button>
               </li>
@@ -473,14 +492,14 @@ export function App() {
     </div>
   );
 
-  // ------------------------------------------------ 输入：三个白话问题 + 预算 + 更多需求
+  // ------------------------------------------------ input: three plain questions + budget + more needs
   const questions = (
     <div id="questions">
-      <Switch q="bat" label="用电池供电？" on={a.bat} flip={() => change(a.bat ? '不用电池' : '用电池', (x) => ({ ...x, bat: !a.bat }))} />
-      <Switch q="net" label="要连网（Wi-Fi / 蓝牙）？" on={a.net} flip={() => change(a.net ? '不连网' : '要连网', (x) => ({ ...x, net: !a.net }))} />
-      <Switch q="sim" label="要在试板里先跑通？" on={a.sim} flip={() => change(a.sim ? '不要求先在试板里跑通' : '要在试板里先跑通', (x) => ({ ...x, sim: !a.sim }))} />
+      <Switch q="bat" label={t('Battery powered?')} on={a.bat} flip={() => change(a.bat ? t('No battery') : t('Battery powered'), (x) => ({ ...x, bat: !a.bat }))} />
+      <Switch q="net" label={t('Needs a network (Wi-Fi / Bluetooth)?')} on={a.net} flip={() => change(a.net ? t('No network') : t('Needs a network'), (x) => ({ ...x, net: !a.net }))} />
+      <Switch q="sim" label={t('Run it in TryBoard first?')} on={a.sim} flip={() => change(a.sim ? t('No need to run in TryBoard first') : t('Run in TryBoard first'), (x) => ({ ...x, sim: !a.sim }))} />
       <p id="budget-label" className="mt-3 mb-1.5 text-[14px]">
-        预算
+        {t('Budget')}
       </p>
       <div id="budget" role="radiogroup" aria-labelledby="budget-label" className="grid grid-cols-4 gap-0.5 rounded-[10px] bg-field p-[3px] text-[13px]">
         {BUDGETS.map((b) => (
@@ -490,16 +509,16 @@ export function App() {
             role="radio"
             aria-checked={r.s.budget === b}
             data-budget={b}
-            onClick={() => change(b ? `预算 ¥${b}` : '预算不限', (x) => ({ ...x, budget: b as Budget }))}
+            onClick={() => change(b ? t('Budget ¥{budget}', { budget: b }) : t('No budget limit'), (x) => ({ ...x, budget: b as Budget }))}
             className={cn('h-9 cursor-pointer rounded-lg max-md:h-11', r.s.budget === b ? 'bg-fg font-bold text-bg' : 'text-fg')}
           >
-            {b ? `¥${b}` : '不限'}
+            {b ? `¥${b}` : t('Any')}
           </button>
         ))}
       </div>
       <Collapsible.Root defaultOpen={r.s.req.length > 0} className="mt-3">
         <Collapsible.Trigger id="moreReq" className="group flex min-h-11 w-full cursor-pointer items-center justify-between text-left text-[13px] text-muted">
-          更多需求（Thread、经典蓝牙、PSRAM、原生 USB…）
+          {t('More needs (Thread, Classic Bluetooth, PSRAM, native USB…)')}
           <span className="flex items-center gap-1">
             {r.s.req.length > 0 && <b className="text-accent-ink">{r.s.req.length}</b>}
             <Ico d={CHEV} className="transition-transform group-data-[state=open]:rotate-180" />
@@ -514,7 +533,7 @@ export function App() {
                 type="button"
                 aria-pressed={on}
                 data-cap={c}
-                onClick={() => change(on ? `不要${capName(c)}` : `要${capName(c)}`, (x) => ({ ...x, req: on ? x.req.filter((y) => y !== c) : [...x.req, c] }))}
+                onClick={() => change(on ? t('No {cap}', { cap: capName(c) }) : t('Needs {cap}', { cap: capName(c) }), (x) => ({ ...x, req: on ? x.req.filter((y) => y !== c) : [...x.req, c] }))}
                 className={cn('inline-flex h-8 cursor-pointer items-center gap-1 rounded-full border px-3 text-[12px] max-md:h-11', on ? 'border-fg bg-fg text-bg' : 'border-line bg-surface')}
               >
                 {on && <Ico d={CHECK} size={12} />}
@@ -527,34 +546,34 @@ export function App() {
     </div>
   );
 
-  // ------------------------------------------------ 结果：刚才
+  // ------------------------------------------------ result: just now
   const top = hist[hist.length - 1];
   const recent = top && (
     <div id="recent" role="status" className="flex items-center gap-3 rounded-[10px] bg-accent-bg px-3.5 py-2.5 text-[13px] text-accent-ink">
       <span className="min-w-0 flex-1">
-        <b>刚才：</b>
+        <b>{t('Just now: ')}</b>
         <span id="recentText">{top.text}</span>
       </span>
       <button type="button" id="undo" onClick={undo} className="h-8 flex-none cursor-pointer rounded-lg border border-accent-line bg-surface px-3 text-[13px] text-accent-ink max-md:h-11">
-        撤销{hist.length > 1 ? `（${hist.length}）` : ''}
+        {hist.length > 1 ? t('Undo ({n})', { n: hist.length }) : t('Undo')}
       </button>
     </div>
   );
 
-  // ------------------------------------------------ 结果：0 块板（FrC）
+  // ------------------------------------------------ result: zero boards (FrC)
   const none = !p && (
     <section id="none" className="rounded-[14px] border-2 border-line bg-surface p-5">
-      <h2 className="text-[18px] font-bold">没有板子同时满足这 {r.need.caps.length + (r.s.budget ? 1 : 0) + (a.bat ? 1 : 0)} 个条件</h2>
+      <h2 className="text-[18px] font-bold">{t('No board meets all {n} conditions', { n: r.need.caps.length + (r.s.budget ? 1 : 0) + (a.bat ? 1 : 0) })}</h2>
       {(() => {
         const opts = relaxOptions(r);
         return opts.length ? (
           <>
-            <p className="mt-2 text-[14px] text-muted">去掉其中一个就有：</p>
+            <p className="mt-2 text-[14px] text-muted">{t('Drop one of them and there are boards:')}</p>
             <ul className="mt-2 flex flex-col gap-1.5">
               {opts.map((o) => (
                 <li key={o.label}>
                   <button type="button" data-relax={o.label} onClick={() => change(o.label, () => o.next)} className="flex min-h-11 w-full cursor-pointer items-center justify-between rounded-lg border border-line px-3.5 text-left text-[14px] hover:border-accent">
-                    {o.label} → {o.n} 块
+                    {t('{label} → {n} boards', { label: o.label, n: o.n })}
                     <Ico d="M9 6l6 6-6 6" className="text-muted" />
                   </button>
                 </li>
@@ -562,32 +581,32 @@ export function App() {
             </ul>
           </>
         ) : (
-          <p className="mt-2 text-[14px] text-muted">这些需求放在一起没有乐鑫芯片能做，换个项目试试。</p>
+          <p className="mt-2 text-[14px] text-muted">{t('No Espressif chip can do all of these together; try another project.')}</p>
         );
       })()}
     </section>
   );
 
-  // ------------------------------------------------ 结果：答案先行
+  // ------------------------------------------------ result: answer first
   const sub = p ? boardFor(p.board.id).sub : undefined;
   const reason = (pl: Plan): ReactNode => {
-    if (r.s.board && r.plans[0] !== pl) return <>你在对比里选了它；系统首推的是 {r.plans[0].board.name}。</>;
+    if (r.s.board && r.plans[0] !== pl) return <>{t('You picked it in the comparison; the top recommendation is {board}.', { board: r.plans[0].board.name })}</>;
     const cheapest = [...r.plans].sort((x, y) => x.total[0] - y.total[0])[0] === pl;
     if (a.bat && pl.power)
       return (
-        <>
-          电池供电选它：{T('深睡')}时整板电流小{pl.board.battery ? '，还自带锂电池充电' : ''}。
-        </>
+        tj(pl.board.battery ? 'Picked for battery power: low whole-board current in {term}, with on-board Li-ion charging.' : 'Picked for battery power: low whole-board current in {term}.', T('深睡')) // lint: allow-cjk
       );
-    if (r.need.caps.includes('usb_otg')) return <>芯片带{T('原生 USB')}，插电脑就是键盘{cheapest ? '，也是能做的板里最便宜的' : ''}。</>;
-    return <>满足你的全部条件{cheapest ? '，是其中最便宜的' : ''}{pl.chip.simulated !== 'none' ? '，买之前能在试板里先跑你的固件' : ''}。</>;
+    if (r.need.caps.includes('usb_otg'))
+      return tj(cheapest ? 'The chip has {term}: plug it into a computer and it is a keyboard; also the cheapest board that can.' : 'The chip has {term}: plug it into a computer and it is a keyboard.', T('原生 USB')); // lint: allow-cjk
+    const tail = [cheapest ? t('the cheapest of them') : '', pl.chip.simulated !== 'none' ? t('you can run your firmware in TryBoard before buying') : ''].filter(Boolean);
+    return <>{tail.length ? t('Meets all your conditions; {more}.', { more: tail.join(t('; ')) }) : t('Meets all your conditions.')}</>;
   };
   const stat = (k: string, v: ReactNode, c: Confidence, id: string) => (
     <div data-stat={id}>
       <p className="text-[12px] text-muted">{k}</p>
       <p className="mt-0.5 flex items-center gap-1.5 text-[24px] leading-tight font-bold max-md:text-[20px]">
         {v}
-        <span title={c} className="text-fg">
+        <span title={confText(c)} className="text-fg">
           <ConfIcon c={c} size={14} />
         </span>
       </p>
@@ -595,29 +614,28 @@ export function App() {
   );
   const answer = p && (
     <section id="answer" className="rounded-[14px] border-2 border-accent bg-surface p-5 max-md:p-4">
-      <p className="text-[12px] font-bold tracking-[.06em] text-accent-ink">买这块</p>
+      <p className="text-[12px] font-bold tracking-[.06em] text-accent-ink">{t('Buy this')}</p>
       <h2 id="boardName" className="mt-1 text-[30px] leading-tight font-bold max-md:text-[24px]">
         {p.board.name}
       </h2>
       <p className="mt-0.5 text-[13px] text-muted">
-        {p.chip.name} · {p.board.maker}
-        {r.s.board && ' · 你在对比里选的'}
+        {t(p.chip.name)} · {t(p.board.maker)}
+        {r.s.board && t(' · your pick from the comparison')}
       </p>
       <div className="mt-4 grid grid-cols-3 gap-4 max-md:gap-2">
-        {stat('整套参考价', yuan(p.total), '估算', 'price')}
-        {p.power ? stat('续航', lasts(p.power.days).replace('约 ', ''), p.power.confidence, 'life') : stat('续航', '插电用', '估算', 'life')}
-        {stat('能跑固件', p.chip.simulated === 'none' ? '暂不能' : p.chip.simulated === 'full' ? '能' : '部分', simConf(p), 'sim')}
+        {stat(t('Kit reference price'), yuan(p.total), '估算', 'price')}{/* lint: allow-cjk */}
+        {p.power ? stat(t('Battery life'), lastsN(p.power.days), p.power.confidence, 'life') : stat(t('Battery life'), t('Mains powered'), '估算', 'life')}{/* lint: allow-cjk */}
+        {stat(t('Runs firmware'), p.chip.simulated === 'none' ? t('Not yet') : p.chip.simulated === 'full' ? t('Yes') : t('Partly'), simConf(p), 'sim')}
       </div>
       <p id="reason" className="mt-4 text-[14px] leading-[1.7]">
         {reason(p)}
-        {sub && <span className="text-muted">（{sub}）</span>}
+        {sub && <span className="text-muted">{t(' ({note})', { note: sub })}</span>}
       </p>
     </section>
   );
 
-  // ------------------------------------------------ 结果：为什么是它
-  // 每条理由一个数字 + 一句话 + 一行小字（DESIGN_V2 §9 / §9.5）：左列只放数字和单位，「有 / 不够 / 能跑」这类是非用小标签；
-  // 续航总数只在答案卡说，这里只说比最便宜的多几天；差价不带「+」，正负由句子说
+  // ------------------------------------------------ result: why this one (DESIGN_V2 §9)
+  // Number + sentence + small line; yes / no uses a tag, price gap has no sign, total battery life stays on the answer card.
   type Why = { big?: ReactNode; chip?: string; t: ReactNode; d?: ReactNode; c: Confidence; tone?: 'warn' | 'ok' };
   const num = (v: ReactNode, unit?: string) => (
     <>
@@ -632,45 +650,50 @@ export function App() {
     const used = usedPins(pl).length;
     const cheap = [...r.plans].sort((x, y) => x.total[0] - y.total[0])[0];
     const more = a.bat && pl.power && cheap.power && cheap !== pl ? Math.round(pl.power.days - cheap.power.days) : 0;
-    if (pl.pinProblems.length) out.push({ chip: '不够', tone: 'warn', t: '引脚不够', d: pl.pinProblems.join('；'), c: '估算' });
+    if (pl.pinProblems.length) out.push({ chip: t('Short'), tone: 'warn', t: t('Not enough pins'), d: pl.pinProblems.join(t('; ')), c: '估算' }); // lint: allow-cjk
     else {
       const how = [
-        kinds.has('i2c') && <>传感器和屏幕共用 {T('I2C')} 两根线</>,
-        kinds.has('spi') && <>彩屏走 {T('SPI')}</>,
-        kinds.has('pwm') && <>{T('PWM')} 引脚够用</>,
-        kinds.has('adc') && <>电位器接 {T('ADC')}</>,
+        kinds.has('i2c') && tj('sensors and display share the two {term} wires', T('I2C')),
+        kinds.has('spi') && tj('color display on {term}', T('SPI')),
+        kinds.has('pwm') && tj('enough {term} pins', T('PWM')),
+        kinds.has('adc') && tj('potentiometer on {term}', T('ADC')),
       ].filter(Boolean);
       out.push({
-        big: num(exposedCount(pl) - used, '个'),
-        t: '引脚够用，还剩这么多',
+        big: num(exposedCount(pl) - used, t('left')),
+        t: t('Enough pins, with this many to spare'),
         d: (
           <>
-            {n} 个零件占 {used} 个 {T('GPIO')}
-            {how.map((x, i) => <span key={i}>，{x}</span>)}
+            {tj('{n} parts use {used} {term}', T('GPIO'), { n, used })}
+            {how.map((x, i) => (
+              <span key={i}>
+                {t('; ')}
+                {x}
+              </span>
+            ))}
           </>
         ),
-        c: '估算',
+        c: '估算', // lint: allow-cjk
       });
     }
     if (a.bat && pl.power) {
       const sleep = sleepCurrent(pl.board.boardSleepUA).split(' ');
       out.push(
         more >= 1
-          ? { big: num(`+${more}`, '天'), t: `比最便宜的方案多撑 ${more} 天`, d: <>{T('深睡')}时整板约 {sleepCurrent(pl.board.boardSleepUA)}，平均 {avgCurrent(pl.power.avgMA)}</>, c: pl.power.confidence }
-          : { big: num(sleep[0], sleep[1]), t: <>{T('深睡')}时整板电流</>, d: <>平均 {avgCurrent(pl.power.avgMA)}；能撑多久看上面的续航</>, c: pl.power.confidence },
+          ? { big: num(`+${more}`, t('days')), t: t('Lasts {n} days longer than the cheapest option', { n: more }), d: tj('{term}: board about {current}, average {avg}', T('深睡'), { current: sleepCurrent(pl.board.boardSleepUA), avg: avgCurrent(pl.power.avgMA) }), c: pl.power.confidence } // lint: allow-cjk
+          : { big: num(sleep[0], sleep[1]), t: tj('{term}: whole-board current', T('深睡')), d: <>{t('Average {avg}; battery life is on the card above', { avg: avgCurrent(pl.power.avgMA) })}</>, c: pl.power.confidence }, // lint: allow-cjk
       );
     }
-    if (r.need.caps.includes('usb_otg')) out.push({ chip: '有', tone: 'ok', t: '插电脑就能当键盘、U 盘', d: <>芯片带{T('原生 USB')}</>, c: simConf(pl) });
-    if (r.need.caps.includes('psram')) out.push({ big: num(pl.board.psramMB, 'MB'), t: '放得下音频和图像', d: <>板上带 {T('PSRAM')}</>, c: '估算' });
+    if (r.need.caps.includes('usb_otg')) out.push({ chip: t('Yes'), tone: 'ok', t: t('Plug into a computer and it is a keyboard or flash drive'), d: tj('The chip has {term}', T('原生 USB')), c: simConf(pl) }); // lint: allow-cjk
+    if (r.need.caps.includes('psram')) out.push({ big: num(pl.board.psramMB, 'MB'), t: t('Room for audio and images'), d: tj('On-board {term}', T('PSRAM')), c: '估算' }); // lint: allow-cjk
     const noModel = r.need.parts.filter((id) => PART_MAP[id] === null).map(partName);
-    if (pl.chip.simulated === 'none') out.push({ chip: '代替', tone: 'warn', t: '试板里先用 ESP32-C3 代替运行', d: `${pl.chip.name} 还不能仿真，结果只作参考`, c: '必须上真机' });
-    else out.push({ chip: '能跑', tone: 'ok', t: '买之前，先在试板里跑你的固件', d: `${pl.chip.name}${pl.chip.simulated === 'partial' ? '，部分外设是行为模拟' : '，网页和真机跑同一份固件'}`, c: simConf(pl) });
-    if (noModel.length) out.push({ chip: '真机', tone: 'warn', t: '这部分要上真机', d: `${noModel.join('、')}试板里没有模型`, c: '必须上真机' });
-    if (cheap === pl) out.push({ chip: '最便宜', tone: 'ok', t: `满足条件的 ${r.plans.length} 块板里最便宜`, c: '估算' });
+    if (pl.chip.simulated === 'none') out.push({ chip: t('Stand-in'), tone: 'warn', t: t('Runs on an ESP32-C3 in TryBoard for now'), d: t('{chip} cannot be simulated yet; treat results as a reference', { chip: t(pl.chip.name) }), c: '必须上真机' }); // lint: allow-cjk
+    else out.push({ chip: t('Can run'), tone: 'ok', t: t('Run your firmware in TryBoard before you buy'), d: pl.chip.simulated === 'partial' ? t('{chip}: some peripherals are behaviour models', { chip: t(pl.chip.name) }) : t('{chip}: the web page and the real board run the same firmware', { chip: t(pl.chip.name) }), c: simConf(pl) });
+    if (noModel.length) out.push({ chip: t('Real board'), tone: 'warn', t: t('This part needs a real board'), d: t('No model in TryBoard for {parts}', { parts: noModel.join(t(', ')) }), c: '必须上真机' }); // lint: allow-cjk
+    if (cheap === pl) out.push({ chip: t('Cheapest'), tone: 'ok', t: t('Cheapest of the {n} boards that qualify', { n: r.plans.length }), c: '估算' }); // lint: allow-cjk
     else {
-      // 贵就说换来什么：续航多几天，否则说贵在哪个能力上
-      const gain = more >= 1 ? `换来上面多出的 ${more} 天续航` : pl.board.battery && !cheap.board.battery ? '换来板载锂电池充电' : '换来更稳的接法和更多余量';
-      out.push({ big: `¥${Math.round(pl.total[0] - cheap.total[0])}`, t: '比最便宜的方案贵', d: `${gain}；对比 ${boardShort(cheap.board)}`, c: '估算' });
+      // When it costs more, say what that buys: extra days, else which capability
+      const gain = more >= 1 ? t('buys the {n} extra days of battery above', { n: more }) : pl.board.battery && !cheap.board.battery ? t('buys on-board Li-ion charging') : t('buys steadier wiring and more headroom');
+      out.push({ big: `¥${Math.round(pl.total[0] - cheap.total[0])}`, t: t('More than the cheapest option'), d: t('{gain}; compared with {board}', { gain, board: boardShort(cheap.board) }), c: '估算' }); // lint: allow-cjk
     }
     return out.slice(0, 4);
   };
@@ -678,7 +701,7 @@ export function App() {
   const why = p && (
     <section id="why" className="rounded-[14px] border border-line bg-surface p-5 max-md:p-4">
       <div className="flex items-center justify-between gap-4 max-md:flex-col max-md:items-start">
-        <h3 className="text-[16px] font-bold">为什么是它</h3>
+        <h3 className="text-[16px] font-bold">{t('Why this one')}</h3>
         <ConfBar counts={confCounts(trust)} className="w-[200px] text-fg" />
       </div>
       <ul className="mt-2 border-t border-line-soft">
@@ -698,46 +721,46 @@ export function App() {
         ))}
       </ul>
       <p className="mt-3 mb-0 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-[10px] bg-field px-3 py-2 text-xs text-muted">
-        <span className="font-medium">可信度</span>
-        {(['仿真验证', '行为模拟', '估算', '必须上真机'] as Confidence[]).map((c) => (
+        <span className="font-medium">{t('Confidence')}</span>
+        {(['仿真验证', '行为模拟', '估算', '必须上真机'] as Confidence[]).map((c) => ( // lint: allow-cjk
           <Conf key={c} c={c} size={12} className="text-fg" />
         ))}
       </p>
     </section>
   );
 
-  // ------------------------------------------------ 结果：全部细节
+  // ------------------------------------------------ result: all details
   const details = p && (
     <Collapsible.Root className="rounded-[14px] border border-line bg-surface">
       <Collapsible.Trigger id="detailsBtn" className="group flex min-h-12 w-full gap-3 cursor-pointer items-center justify-between px-5 text-left text-[14px] max-md:px-4">
         <span>
-          <b>全部细节</b>
-          <span className="text-muted">（引脚表、功耗分解、必须上真机、计算依据）</span>
+          <b>{t('All details')}</b>
+          <span className="text-muted">{t(' (pin table, power breakdown, real board only, basis)')}</span>
         </span>
         <span className="flex flex-none items-center gap-1 whitespace-nowrap text-[13px] text-muted">
-          <span className="group-data-[state=open]:hidden">展开</span>
-          <span className="hidden group-data-[state=open]:inline">收起</span>
+          <span className="group-data-[state=open]:hidden">{t('Expand')}</span>
+          <span className="hidden group-data-[state=open]:inline">{t('Collapse')}</span>
           <Ico d={CHEV} className="transition-transform group-data-[state=open]:rotate-180" />
         </span>
       </Collapsible.Trigger>
       <Collapsible.Content id="details" className="border-t border-line-soft px-5 pt-4 pb-5 text-[13px] max-md:px-4">
-        <h4 className="mb-2 font-bold">引脚表</h4>
+        <h4 className="mb-2 font-bold">{t('Pin table')}</h4>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-[13px]">
             <thead className="text-[12px] text-muted">
               <tr>
-                <th className="py-1 pr-3 font-normal">用途</th>
-                <th className="py-1 pr-3 font-normal">接口</th>
-                <th className="py-1 pr-3 font-normal">引脚</th>
+                <th className="py-1 pr-3 font-normal">{t('Use')}</th>
+                <th className="py-1 pr-3 font-normal">{t('Interface')}</th>
+                <th className="py-1 pr-3 font-normal">{t('Pins')}</th>
               </tr>
             </thead>
             <tbody>
               {p.pins.map((x) => {
                 const k = pinKind(x.label, r.need.parts);
-                const term = (['I2C', 'SPI', 'PWM', 'ADC', 'GPIO'] as string[]).includes(kindName(k)) ? T(kindName(k) as TermKey) : kindName(k);
+                const term = (['I2C', 'SPI', 'PWM', 'ADC', 'GPIO'] as string[]).includes(kindName(k)) ? T(kindName(k) as TermKey) : t(kindName(k));
                 return (
                   <tr key={x.label} className="border-t border-line-soft">
-                    <td className="py-1.5 pr-3">{x.label.split('（')[0]}</td>
+                    <td className="py-1.5 pr-3">{t(x.label.split(' (')[0])}</td>
                     <td className="py-1.5 pr-3">{term}</td>
                     <td className="py-1.5 pr-3 font-mono text-[12px]">{x.pins.map((n) => pinFull(p.board, n)).join(' / ') || x.note}</td>
                   </tr>
@@ -746,62 +769,64 @@ export function App() {
             </tbody>
           </table>
         </div>
-        {p.pinProblems.length > 0 && <p className="mt-2 text-bad-ink">{p.pinProblems.join('；')}</p>}
+        {p.pinProblems.length > 0 && <p className="mt-2 text-bad-ink">{p.pinProblems.join(t('; '))}</p>}
         {p.power && (
           <>
             <h4 className="mt-4 mb-2 flex items-center gap-2 font-bold">
-              功耗分解 <Conf c={p.power.confidence} size={12} className="text-[11px] font-normal text-muted" />
+              {t('Power breakdown')} <Conf c={p.power.confidence} size={12} className="text-[11px] font-normal text-muted" />
             </h4>
             <p className="leading-[1.7] text-muted">
-              平均 {avgCurrent(p.power.avgMA)}，1000mAh 电池{lasts(p.power.days)}。{p.power.breakdown}
+              {t('Average {avg}; a 1000 mAh battery lasts {span}. ', { avg: avgCurrent(p.power.avgMA), span: lasts(p.power.days) })}
+              {p.power.breakdown}
             </p>
           </>
         )}
-        <h4 className="mt-4 mb-2 font-bold">必须上真机</h4>
+        <h4 className="mt-4 mb-2 font-bold">{t('Real board only')}</h4>
         <ul className="flex flex-col gap-1.5">
           {trust
-            .filter(([, c]) => c === '必须上真机')
-            .map(([t]) => (
-              <li key={t} className="flex gap-2">
-                <ConfIcon c="必须上真机" size={13} className="mt-[3px]" />
-                {t}
+            .filter(([, c]) => c === '必须上真机') // lint: allow-cjk
+            .map(([x]) => (
+              <li key={x} className="flex gap-2">
+                <ConfIcon c="必须上真机" size={13} className="mt-[3px]" /> {/* lint: allow-cjk */}
+                {x}
               </li>
             ))}
-          {[...r.tpl.risks, ...p.warnings].map((t) => (
-            <li key={t} className="flex gap-2 text-muted">
+          {[...r.tpl.risks.map((x) => t(x)), ...p.warnings].map((x) => (
+            <li key={x} className="flex gap-2 text-muted">
               <span className="mt-[9px] size-1 flex-none rounded-full bg-muted" />
-              {t}
+              {x}
             </li>
           ))}
         </ul>
-        <h4 className="mt-4 mb-2 font-bold">计算依据</h4>
+        <h4 className="mt-4 mb-2 font-bold">{t('Basis')}</h4>
         <ul className="flex flex-col gap-1">
-          {trust.map(([t, c]) => (
-            <li key={t} className="flex items-center justify-between gap-3 border-t border-line-soft py-1 first:border-t-0">
-              <span>{t}</span>
+          {trust.map(([x, c]) => (
+            <li key={x} className="flex items-center justify-between gap-3 border-t border-line-soft py-1 first:border-t-0">
+              <span>{x}</span>
               <Conf c={c} size={12} className="flex-none text-[12px] text-muted" />
             </li>
           ))}
         </ul>
         <p className="mt-3 text-[12px] leading-[1.7] text-muted">
-          数据来自乐鑫芯片数据手册与开发板厂商公开资料，价格为常见网店价区间，以购买时为准。功耗按数据手册典型值估算，实测会因板子做工、信号强度、固件写法而变化。
-          试板按零件生成的检查点：{checkpointsOf(r).map((c) => c.name).join('、')}。
+          {t('Data comes from Espressif datasheets and board makers\' public docs; prices are common shop ranges, check when buying. Power uses datasheet typical values; real numbers vary with board build, signal strength and firmware.')}{' '}
+          {t('Checkpoints TryBoard generates from the parts: {list}.', { list: checkpointsOf(r).map((c) => c.name).join(t(', ')) })}
         </p>
       </Collapsible.Content>
     </Collapsible.Root>
   );
 
-  // ------------------------------------------------ 结果：三板对比
-  const trio = p && !r.trio.some((x) => x.p === p) ? [...r.trio.slice(0, 2), { p, tag: '你选的' }] : r.trio;
+  // ------------------------------------------------ result: three-board comparison
+  const trio = p && !r.trio.some((x) => x.p === p) ? [...r.trio.slice(0, 2), { p, tag: t('Your pick') }] : r.trio;
+  // The last row (in TryBoard) is greyed out for unsimulated chips, matched by index
   const cmpRows: [string, (x: Plan) => ReactNode][] = [
-    ['参考价', (x) => yuan(x.total)],
-    ['续航（估算）', (x) => (x.power ? lasts(x.power.days) : '插电用')],
-    ['深睡', (x) => sleepCurrent(x.board.boardSleepUA)],
-    ['在试板里', (x) => simText(x)],
+    [t('Reference price'), (x) => yuan(x.total)],
+    [t('Battery life (estimate)'), (x) => (x.power ? lasts(x.power.days) : t('Mains powered'))],
+    [t('Deep sleep'), (x) => sleepCurrent(x.board.boardSleepUA)],
+    [t('In TryBoard'), (x) => simText(x)],
   ];
   const compare = p && trio.length > 1 && (
     <section id="compare">
-      <h3 className="mb-2.5 text-[16px] font-bold">{mobile ? '三块板对比 · 左右滑' : '三块板对比'}</h3>
+      <h3 className="mb-2.5 text-[16px] font-bold">{mobile ? t('Three-board comparison · swipe') : t('Three-board comparison')}</h3>
       <div className={cn(mobile ? '-mx-4 flex snap-x scroll-px-4 gap-3 overflow-x-auto px-4 pb-1' : 'grid grid-cols-3 gap-3')}>
         {trio.map(({ p: x, tag }) => {
           const on = x === p;
@@ -821,10 +846,10 @@ export function App() {
               <span className="text-[11px] font-bold tracking-[.06em] text-muted">{tag}</span>
               <span className="mt-0.5 text-[15px] font-bold">{boardShort(x.board)}</span>
               <dl className="mt-2.5 grid w-full grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
-                {cmpRows.map(([k, f]) => (
+                {cmpRows.map(([k, f], i) => (
                   <div key={k} className="contents">
                     <dt className="text-muted">{k}</dt>
-                    <dd className={cn('text-right', k === '在试板里' && x.chip.simulated === 'none' && 'text-muted')}>{f(x)}</dd>
+                    <dd className={cn('text-right', i === cmpRows.length - 1 && x.chip.simulated === 'none' && 'text-muted')}>{f(x)}</dd>
                   </div>
                 ))}
               </dl>
@@ -835,45 +860,45 @@ export function App() {
     </section>
   );
 
-  // ------------------------------------------------ 结果：任务书
+  // ------------------------------------------------ result: brief
   const brief = p && (
     <section id="briefBox" className="rounded-[14px] border border-line bg-surface p-5 max-md:p-4">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-[16px] font-bold">任务书</h3>
+        <h3 className="text-[16px] font-bold">{t('Brief')}</h3>
         <button type="button" id="copyBrief" onClick={copyBrief} className="h-9 cursor-pointer rounded-lg border border-line px-3 text-[13px] max-md:h-11">
-          复制任务书
+          {t('Copy the brief')}
         </button>
       </div>
-      <p className="mt-1 text-[12px] text-muted">贴给写代码的 AI 或自己照着做；验收一节就是试板会判的检查点。</p>
+      <p className="mt-1 text-[12px] text-muted">{t('Paste it into a coding AI or follow it yourself; the acceptance section is what TryBoard checks.')}</p>
       <pre id="briefText" className="mt-3 max-h-[320px] overflow-auto rounded-lg bg-field p-3 font-mono text-[12px] leading-[1.6] whitespace-pre-wrap">
         {md}
       </pre>
     </section>
   );
 
-  // ------------------------------------------------ 下一步
+  // ------------------------------------------------ next step
   const goBtn = (cls: string) =>
     p && (
       <a id="go" href={go} className={cn('flex flex-col items-center justify-center rounded-xl bg-accent-strong text-on-accent hover:opacity-90', cls)}>
-        <span className="text-[16px] font-bold">按这套开始做 →</span>
-        <span className="text-[12px] opacity-90">进采购，清单已填好</span>
+        <span className="text-[16px] font-bold">{t('Start building with this →')}</span>
+        <span className="text-[12px] opacity-90">{t('Go to shopping, list filled in')}</span>
       </a>
     );
   const next = p && (
     <aside className="flex w-[300px] flex-none flex-col gap-2">
       {goBtn('h-14')}
       <button type="button" id="share" onClick={copyShare} className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border border-line bg-surface text-[14px]">
-        <Ico d={SHARE} /> 复制分享链接
+        <Ico d={SHARE} /> {t('Copy share link')}
       </button>
       <button type="button" onClick={copyBrief} className="h-10 cursor-pointer rounded-lg border border-line bg-surface text-[14px]">
-        复制任务书
+        {t('Copy the brief')}
       </button>
       {r.tpl.work && (
         <a href={lab(r.tpl.work, 'shop')} className="mt-1 text-center text-[13px] text-accent-ink hover:underline">
-          看现成的「{r.tpl.short}」作品
+          {t('See the ready-made "{project}" project', { project: t(r.tpl.short) })}
         </a>
       )}
-      <p className="mt-1 text-[12px] leading-[1.6] text-muted">「我已有」的零件进采购时会标出来，不重复买。</p>
+      <p className="mt-1 text-[12px] leading-[1.6] text-muted">{t('Parts marked "I have it" are flagged in shopping so you do not buy them twice.')}</p>
     </aside>
   );
 
@@ -883,21 +908,21 @@ export function App() {
     </p>
   );
 
-  // ------------------------------------------------ 手机（SelectCMobile）
+  // ------------------------------------------------ mobile (SelectCMobile)
   if (mobile) {
-    const summaryParts = [...r.need.parts.map(partName), ...(a.bat ? ['锂电池'] : []), '线'].join(' · ');
-    const summaryQs = [a.bat ? '用电池' : '插电', a.net ? '连 Wi-Fi' : '不连网', r.s.budget ? `预算 ¥${r.s.budget}` : '预算不限'].join(' · ');
+    const summaryParts = [...r.need.parts.map(partName), ...(a.bat ? [t('Li-ion battery')] : []), t('Cables')].join(' · ');
+    const summaryQs = [a.bat ? t('Battery') : t('Mains'), a.net ? t('Wi-Fi on') : t('No network'), r.s.budget ? t('Budget ¥{budget}', { budget: r.s.budget }) : t('No budget limit')].join(' · ');
     const sumRow = (k: 'parts' | 'qs', text: string) => (
       <button type="button" data-edit={k} aria-expanded={edit === k} onClick={() => setEdit(edit === k ? '' : k)} className="flex min-h-12 w-full cursor-pointer items-center gap-3 border-t border-line-soft px-4 text-left text-[14px] first:border-t-0">
         <span className="min-w-0 flex-1 truncate">{text}</span>
-        <span className="text-accent-ink">{edit === k ? '收起' : '改'}</span>
+        <span className="text-accent-ink">{edit === k ? t('Collapse') : t('Edit')}</span>
       </button>
     );
     return (
       <div className="flex min-h-screen flex-col pb-[84px]">
-        <SiteHeader current={SELECT} subtitle="选板" links={SITE_NAV} />
+        <SiteHeader current={SELECT} subtitle={t('Board advisor')} links={SITE_NAV} />
         <main className="flex flex-1 flex-col gap-3 px-4 pt-4 pb-6">
-          <h1 className="text-[22px] font-bold">选板</h1>
+          <h1 className="text-[22px] font-bold">{t('Board advisor')}</h1>
           {projects}
           <div className="overflow-hidden rounded-xl border border-line bg-surface">
             {sumRow('parts', summaryParts)}
@@ -914,7 +939,7 @@ export function App() {
           {brief}
           {r.tpl.work && (
             <a href={lab(r.tpl.work, 'shop')} className="flex min-h-11 items-center text-[14px] text-accent-ink">
-              看现成的「{r.tpl.short}」作品
+              {t('See the ready-made "{project}" project', { project: t(r.tpl.short) })}
             </a>
           )}
         </main>
@@ -922,7 +947,7 @@ export function App() {
         {p && (
           <div id="mobileBar" className="fixed inset-x-0 bottom-0 z-[6] flex gap-2 border-t border-line-soft bg-bg px-4 pt-2.5 pb-[max(12px,env(safe-area-inset-bottom))]">
             {goBtn('h-12 flex-1')}
-            <button type="button" id="share" aria-label="复制分享链接" onClick={copyShare} className="flex size-12 flex-none cursor-pointer items-center justify-center rounded-xl border border-line bg-surface">
+            <button type="button" id="share" aria-label={t('Copy share link')} onClick={copyShare} className="flex size-12 flex-none cursor-pointer items-center justify-center rounded-xl border border-line bg-surface">
               <Ico d={SHARE} size={20} />
             </button>
           </div>
@@ -932,22 +957,22 @@ export function App() {
     );
   }
 
-  // ------------------------------------------------ 桌面（Rec）
+  // ------------------------------------------------ desktop (Rec)
   return (
     <div className="flex min-h-screen flex-col">
-      <SiteHeader current={SELECT} subtitle="选板" links={SITE_NAV} />
+      <SiteHeader current={SELECT} subtitle={t('Board advisor')} links={SITE_NAV} />
       <main className="grid flex-1 grid-cols-[500px_1fr] max-lg:grid-cols-[420px_1fr]">
-        <section aria-label="你的项目" className="border-r border-line-soft bg-field/40 px-[26px] py-6">
-          <h1 className="text-[22px] font-bold">选板</h1>
-          <p className="mt-1 mb-5 text-[13px] text-muted">选项目、勾零件、答三个问题，右边直接告诉你买哪块。</p>
-          <Lbl id="tpl-label">你想做什么</Lbl>
+        <section aria-label={t('Your project')} className="border-r border-line-soft bg-field/40 px-[26px] py-6">
+          <h1 className="text-[22px] font-bold">{t('Board advisor')}</h1>
+          <p className="mt-1 mb-5 text-[13px] text-muted">{t('Pick a project, tick parts, answer three questions; the right side tells you which board to buy.')}</p>
+          <Lbl id="tpl-label">{t('What do you want to build')}</Lbl>
           {projects}
-          <Lbl className="mt-6">零件（就是清单）</Lbl>
+          <Lbl className="mt-6">{t('Parts (this is the list)')}</Lbl>
           {partsBox}
-          <Lbl className="mt-6">三个问题</Lbl>
+          <Lbl className="mt-6">{t('Three questions')}</Lbl>
           {questions}
         </section>
-        <section aria-label="推荐" aria-live="polite" className="flex min-w-0 flex-col gap-4 px-8 py-6 max-lg:px-5">
+        <section aria-label={t('Recommendation')} aria-live="polite" className="flex min-w-0 flex-col gap-4 px-8 py-6 max-lg:px-5">
           {recent}
           {none}
           {p && (

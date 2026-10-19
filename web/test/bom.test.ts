@@ -1,4 +1,4 @@
-// 采购清单的日志重放与"摆上实验台"（P0-07、P0-09）
+// Shopping list log replay and "place it on the bench" (P0-07, P0-09)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -8,7 +8,7 @@ import { bomTotal, getTemplate, templatePicks } from '../src/catalog/templates.t
 
 const examples = JSON.parse(readFileSync(new URL('../../firmware/examples.json', import.meta.url), 'utf8')) as { id: string; scene?: { parts: unknown[] } }[];
 
-test('气象站：默认清单没问题，场景与 examples.json 一致、有外接 5 V', () => {
+test('weather station: default list is clean, scene matches examples.json, external 5 V present', () => {
   const b = replay(initialHistory('weather'));
   assert.equal(b.board, 's3-devkitc1-v10');
   assert.deepEqual(problems(ruleInput(b)), []);
@@ -18,25 +18,25 @@ test('气象站：默认清单没问题，场景与 examples.json 一致、有�
   assert.deepEqual(p.skipped, []);
 });
 
-test('去掉 5 V 电源：只靠 USB 的提醒 + 一键补回；实验台供电只剩 USB', () => {
+test('removing the 5 V supply: USB-only warning + one-click restore; bench power falls back to USB', () => {
   let h = push(initialHistory('weather'), { t: 'remove', partId: 'psu-5v2a' });
   const b = replay(h);
   assert.ok(!b.picks.some((p) => p.partId === 'psu-5v2a'));
   assert.equal(placement(b).ext5v, false);
   const f = problems(ruleInput(b)).find((x) => x.id === 'R27' && x.fix?.partId === 'psu-5v2a');
-  assert.ok(f && /只靠电脑 USB/.test(f.detail), '提醒说后果');
+  assert.ok(f && /on computer USB alone/.test(f.detail), 'the warning states the consequence');
   h = push(h, { t: 'fix', fix: f.fix!, rule: f.id });
   assert.deepEqual(problems(ruleInput(replay(h))), []);
   assert.equal(h.ops.length, 3);
 });
 
-test('必选件去不掉，不记进日志', () => {
+test('required parts cannot be removed and are not logged', () => {
   const h0 = initialHistory('weather');
   assert.equal(push(h0, { t: 'remove', partId: 'bme280' }), h0);
-  assert.equal(push(h0, { t: 'remove', partId: 's3-devkitc1-v10' }), h0, '开发板只能换不能去');
+  assert.equal(push(h0, { t: 'remove', partId: 's3-devkitc1-v10' }), h0, 'the board can be swapped but not removed');
 });
 
-test('时间线：回到第一步重放出模版默认；从中间再改会丢掉后面的分支', () => {
+test('timeline: back to step one replays the template default; editing mid-way drops the later branch', () => {
   let h = initialHistory('weather');
   h = push(h, { t: 'remove', partId: 'buzzer-module' });
   h = push(h, { t: 'template', id: 'spin' });
@@ -50,7 +50,7 @@ test('时间线：回到第一步重放出模版默认；从中间再改会丢�
   assert.deepEqual(placement(replay({ ...h, cur: 2 })).parts, examples.find((e) => e.id === 'spin')!.scene!.parts);
 });
 
-test('换开发板：清单里的板子跟着换，接线不变（C3 的 GPIO9 是 BOOT 脚，规则会说）', () => {
+test('board swap: the board line follows, wiring stays (C3 GPIO9 is the BOOT pin, the rules say so)', () => {
   const h = push(initialHistory('weather'), { t: 'board', partId: 'c3-devkitm1' });
   const b = replay(h);
   assert.equal(b.board, 'c3-devkitm1');
@@ -58,7 +58,7 @@ test('换开发板：清单里的板子跟着换，接线不变（C3 的 GPIO9 �
   assert.ok(problems(ruleInput(b)).length > 0);
 });
 
-test('换开发板（P1-12）：小黄换 XIAO S3 → 板子一行变了，R04 出现；换微雪圆屏板 → R29 一键去掉外接圆屏', () => {
+test('board swap (P1-12): Xiaohuang to XIAO S3 changes the board line and raises R04; Waveshare round display board -> R29 removes the external display in one click', () => {
   const h0 = initialHistory('spin');
   const before = new Set(problems(ruleInput(replay(h0))).map((f) => f.id));
   const h1 = push(h0, { t: 'board', partId: 'xiao-s3' });
@@ -66,7 +66,7 @@ test('换开发板（P1-12）：小黄换 XIAO S3 → 板子一行变了，R04 �
   assert.equal(b1.board, 'xiao-s3');
   assert.ok(b1.picks.some((p) => p.partId === 'xiao-s3') && !b1.picks.some((p) => p.partId === 's3-devkitc1-v10'));
   const after = new Set(problems(ruleInput(b1)).map((f) => f.id));
-  assert.ok(!before.has('R04') && after.has('R04'), 'XIAO S3 没引出 GPIO10–15');
+  assert.ok(!before.has('R04') && after.has('R04'), 'XIAO S3 does not break out GPIO10–15');
   const h2 = push(h0, { t: 'board', partId: 'ws-s3-lcd128' });
   const r29 = problems(ruleInput(replay(h2))).find((f) => f.id === 'R29')!;
   assert.ok(r29);
@@ -77,16 +77,16 @@ test('换开发板（P1-12）：小黄换 XIAO S3 → 板子一行变了，R04 �
   assert.ok(!left.some((f) => f.id === 'R29' || f.id === 'R27'), JSON.stringify(left.map((f) => f.id)));
 });
 
-test('从元件库加的件：没有默认接线的不摆上台，列为 skipped', () => {
+test('parts added from the library: without default wiring they are not placed and are listed as skipped', () => {
   const h = push(initialHistory('blank'), { t: 'add', partId: 'ssd1306' });
   const b = replay(h);
   assert.equal(b.extra.ssd1306, 'Added from the parts library');
   const p = placement(b);
   assert.deepEqual(p.parts, []);
-  assert.deepEqual(p.skipped, ['oled', 'led'], '空白模版默认带 LED 套装，也没有接线');
+  assert.deepEqual(p.skipped, ['oled', 'led'], 'the blank template includes the LED kit by default, also unwired');
 });
 
-test('日志校验：坏数据不重放', () => {
+test('log validation: bad data is not replayed', () => {
   assert.ok(validHistory(initialHistory('lens')));
   assert.ok(!validHistory({ ops: [{ t: 'template', id: 'nope' }], cur: 0 }));
   assert.ok(!validHistory({ ops: [{ t: 'template', id: 'weather' }, { t: 'add', partId: 'gone' }], cur: 1 }));
@@ -94,7 +94,7 @@ test('日志校验：坏数据不重放', () => {
   assert.ok(!validHistory(null));
 });
 
-test('首页参考价与采购页合计同一口径（templatePicks 默认勾选 + bomTotal）', () => {
+test('home page reference price and shop total use the same basis (templatePicks defaults + bomTotal)', () => {
   for (const id of ['weather', 'spin', 'lens']) {
     const shop = replay(initialHistory(id));
     const a = bomTotal(shop.picks, shop.board);

@@ -1,10 +1,10 @@
 [
  {
   "id": "blink",
-  "title": "点灯：GPIO5 驱动 LED",
-  "about": "最经典的第一个程序。GPIO5 经 220Ω 电阻接一颗红色 LED，FreeRTOS 任务每 500ms 翻转一次电平，串口同步打印状态。",
+  "title": "Blink: GPIO5 drives an LED",
+  "about": "The classic first program. GPIO5 drives a red LED through a 220Ω resistor; a FreeRTOS task toggles the level every 500ms and prints the state over serial.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "GPIO",
    "FreeRTOS",
    "ESP-IDF 5.5"
@@ -21,12 +21,12 @@
  },
  {
   "id": "button",
-  "title": "按键：中断切换 LED",
-  "about": "板载 BOOT 键接在 GPIO9（按下接地）。下降沿触发 GPIO 中断，ISR 把时间戳送进队列，任务里做 50ms 消抖后翻转 GPIO5 的 LED。点 3D 板子上的 BOOT 键试试。",
+  "title": "Button: toggle an LED with an interrupt",
+  "about": "The on-board BOOT button is on GPIO9 (pulls to ground when pressed). A falling edge triggers a GPIO interrupt; the ISR sends a timestamp into a queue, and a task debounces it for 50ms before toggling the LED on GPIO5. Try pressing the BOOT button on the 3D board.",
   "tags": [
-   "✓ 仿真验证",
-   "GPIO 中断",
-   "FreeRTOS 队列"
+   "✓ Verified in sim",
+   "GPIO interrupt",
+   "FreeRTOS queue"
   ],
   "pins": {
    "led": 5
@@ -43,13 +43,13 @@
  },
  {
   "id": "fade",
-  "title": "呼吸灯：LEDC 硬件渐变",
-  "about": "LEDC 输出 5kHz、13 位 PWM，用硬件渐变让 LED 渐亮渐灭。注意：代码写的是 1000ms，但 IDF 把每步增量向下取整（8191÷5000→1），真机上一次渐变实际约 1.64 秒——模拟器如实复现了这个细节。",
+  "title": "Breathing LED: LEDC hardware fade",
+  "about": "LEDC outputs 5kHz, 13-bit PWM and uses the hardware fade to brighten and dim the LED. Note: the code says 1000ms, but IDF rounds the per-step increment down (8191÷5000→1), so on real hardware one fade actually takes about 1.64 seconds; the simulator reproduces this detail faithfully.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "LEDC",
    "PWM",
-   "中断"
+   "Interrupts"
   ],
   "pins": {
    "led": 5
@@ -66,10 +66,10 @@
  },
  {
   "id": "servo",
-  "title": "舵机：50Hz PWM 控制角度",
-  "about": "SG90 类舵机用 50Hz PWM 控制，脉宽 0.5–2.5ms 对应 0–180°。GPIO6 依次转到 0/45/90/135/180°。",
+  "title": "Servo: angle control with 50Hz PWM",
+  "about": "SG90-style servos are driven by 50Hz PWM, where a 0.5–2.5ms pulse maps to 0–180°. GPIO6 steps through 0/45/90/135/180°.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "LEDC",
    "PWM"
   ],
@@ -88,21 +88,21 @@
  },
  {
   "id": "echo",
-  "title": "串口回显：UART 收发",
-  "about": "安装 UART 驱动后逐字节读取串口，每收到一行就回显；输入 ping 回复 pong。在右侧串口框输入文字后回车。",
+  "title": "Serial echo: UART send and receive",
+  "about": "Installs the UART driver and reads the serial port byte by byte, echoing back each line it receives; type ping and it replies pong. Type in the serial box on the right and press Enter.",
   "tags": [
-   "✓ 仿真验证",
-   "UART 接收",
-   "中断"
+   "✓ Verified in sim",
+   "UART receive",
+   "Interrupts"
   ],
   "chip": "esp32c3"
  },
  {
   "id": "hello",
-  "title": "Hello World：芯片信息与计时",
-  "about": "ESP-IDF 的入门程序：打印芯片型号、版本、flash 大小、剩余堆内存，并用 esp_timer 测量 vTaskDelay(500ms) 实际耗时。",
+  "title": "Hello World: chip info and timing",
+  "about": "The ESP-IDF starter program: prints the chip model, revision, flash size and free heap, and uses esp_timer to measure how long vTaskDelay(500ms) actually takes.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "UART",
    "SYSTIMER",
    "ESP-IDF 5.5"
@@ -111,10 +111,10 @@
  },
  {
   "id": "pot",
-  "title": "电位器：ADC 调亮度",
-  "about": "电位器滑片接 GPIO2（ADC1 通道 2，12dB 衰减，量程约 0–2.5V），读数直接当作 GPIO5 上 LED 的 PWM 占空比。拖动旋钮看读数和亮度一起变。ADC 读数带 ±2 LSB 噪声，和真机一样会轻微跳动。",
+  "title": "Potentiometer: ADC sets brightness",
+  "about": "The potentiometer wiper goes to GPIO2 (ADC1 channel 2, 12dB attenuation, range about 0–2.5V), and the reading is used directly as the PWM duty cycle of the LED on GPIO5. Drag the knob and watch the reading and brightness change together. ADC readings have ±2 LSB of noise, so they jitter slightly just like on real hardware.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "ADC",
    "LEDC"
   ],
@@ -125,7 +125,7 @@
    {
     "type": "analog",
     "pin": 2,
-    "label": "电位器（GPIO2）",
+    "label": "Potentiometer (GPIO2)",
     "max_mv": 3300,
     "value": 1200
    }
@@ -146,10 +146,10 @@
  },
  {
   "id": "rgb",
-  "title": "彩灯：板载 WS2812（RMT）",
-  "about": "板载可寻址 RGB 灯珠接在 GPIO8。ESP-IDF 的 led_strip 组件用 RMT 外设按 WS2812 时序（高电平 0.4µs 表示 0、0.8µs 表示 1）发出 24 位颜色，红、绿、蓝、白每 400ms 轮换。模拟器在引脚上把波形解码回颜色。",
+  "title": "RGB LED: on-board WS2812 (RMT)",
+  "about": "The on-board addressable RGB LED is on GPIO8. ESP-IDF's led_strip component uses the RMT peripheral to send 24-bit colours with WS2812 timing (0.4µs high for 0, 0.8µs high for 1), cycling red, green, blue and white every 400ms. The simulator decodes the waveform on the pin back into colours.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "RMT",
    "WS2812",
    "led_strip 3.0"
@@ -158,10 +158,10 @@
  },
  {
   "id": "oled",
-  "title": "OLED 屏：SSD1306 显示文字和图形",
-  "about": "0.96 英寸 128×64 OLED 走 I2C（地址 0x3C，SDA=GPIO6、SCL=GPIO7，400kHz）。程序先扫描总线，再初始化屏幕，每秒刷新一帧：标题、两行说明、走动的进度条。串口会打印每帧 1KB 显存经 I2C 传输的耗时（约 24ms，与真机一致）。",
+  "title": "OLED: text and graphics on an SSD1306",
+  "about": "A 0.96-inch 128×64 OLED on I2C (address 0x3C, SDA=GPIO6, SCL=GPIO7, 400kHz). The program scans the bus, initialises the screen, then refreshes one frame per second: a title, two lines of text and a moving progress bar. Serial prints how long each frame's 1KB of display memory takes over I2C (about 24ms, matching real hardware).",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "I2C",
    "SSD1306",
    "ESP-IDF 5.5"
@@ -192,10 +192,10 @@
  },
  {
   "id": "bme280",
-  "title": "温湿度气压：BME280 传感器",
-  "about": "BME280 走 I2C（地址 0x76，SDA=GPIO6、SCL=GPIO7）。程序读芯片 ID 和出厂校准参数，按数据手册公式换算温度、湿度、气压，每秒打印一次。拖动下面的滑块改变虚拟环境，读数会跟着变。",
+  "title": "Temperature, humidity and pressure: BME280 sensor",
+  "about": "BME280 on I2C (address 0x76, SDA=GPIO6, SCL=GPIO7). The program reads the chip ID and factory calibration data, converts temperature, humidity and pressure using the datasheet formulas, and prints them once a second. Drag the sliders below to change the virtual environment and the readings follow.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "I2C",
    "BME280",
    "ESP-IDF 5.5"
@@ -217,10 +217,10 @@
  },
  {
   "id": "c3-thermo",
-  "title": "温湿度计：BME280 + OLED（ESP32-C3）",
-  "about": "选板助手「温湿度计」的演示固件。BME280（0x76）和 SSD1306 OLED（0x3C）挂在同一条 I2C 上：SDA=GPIO6、SCL=GPIO7（XIAO ESP32C3 的 D4 / D5）。每秒读一次温度、湿度、气压，串口打印一行，OLED 显示同样三行。拖动滑块改变虚拟环境，读数跟着变。",
+  "title": "Thermo-hygrometer: BME280 + OLED (ESP32-C3)",
+  "about": "Demo firmware for the board advisor's \"thermo-hygrometer\" project. A BME280 (0x76) and an SSD1306 OLED (0x3C) share one I2C bus: SDA=GPIO6, SCL=GPIO7 (D4 / D5 on the XIAO ESP32C3). Once a second it reads temperature, humidity and pressure, prints one line to serial and shows the same three lines on the OLED. Drag the sliders to change the virtual environment and the readings follow.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "I2C",
    "BME280",
    "SSD1306",
@@ -249,10 +249,10 @@
  },
  {
   "id": "c3-lcd",
-  "title": "圆屏：ESP32-C3 + GC9A01（SPI2 + GDMA）",
-  "about": "1.28 英寸 240×240 圆屏 GC9A01 走 C3 的 SPI2（40MHz，GDMA 搬数据）：SCLK=GPIO6、MOSI=GPIO7、CS=GPIO10（这三根是 SPI2 的 IO_MUX 直连脚），DC=GPIO5、RST=GPIO4、背光=GPIO3（高电平亮），VCC 接 3.3V。固件先整屏画四色扇区 + 白环测试图，再让一个白球沿圆周走，每 50ms 局部刷新一次。C3 的 400KB SRAM 放得下一整帧（115KB）缓冲。",
+  "title": "Round LCD: ESP32-C3 + GC9A01 (SPI2 + GDMA)",
+  "about": "A 1.28-inch 240×240 GC9A01 round LCD on the C3's SPI2 (40MHz, data moved by GDMA): SCLK=GPIO6, MOSI=GPIO7, CS=GPIO10 (these three are SPI2's direct IO_MUX pins), DC=GPIO5, RST=GPIO4, backlight=GPIO3 (active high), VCC to 3.3V. The firmware first draws a full-screen test pattern of four coloured sectors plus a white ring, then moves a white ball around the circle with a partial refresh every 50ms. The C3's 400KB of SRAM can hold a full frame buffer (115KB).",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "SPI",
    "GDMA",
    "GC9A01",
@@ -278,10 +278,10 @@
  },
  {
   "id": "wifi-scan",
-  "title": "Wi-Fi：扫描周围热点",
-  "about": "Wi-Fi 站点模式扫描，列出虚拟世界里的 4 个热点：SSID、信道、信号强度、加密方式。用的是真实 ESP-IDF Wi-Fi 驱动，模拟器在 MAC 寄存器和 DMA 层注入 802.11 Beacon。",
+  "title": "Wi-Fi: scan nearby access points",
+  "about": "A Wi-Fi station-mode scan that lists the 4 access points in the virtual world: SSID, channel, signal strength and security type. It uses the real ESP-IDF Wi-Fi driver; the simulator injects 802.11 beacons at the MAC register and DMA level.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "Wi-Fi",
    "802.11"
   ],
@@ -292,10 +292,10 @@
  },
  {
   "id": "wifi-http",
-  "title": "Wi-Fi：联网发 HTTP 请求",
-  "about": "连上开放热点 TryBoard-WiFi，DHCP 拿到 192.168.4.100，再用 esp_http_client 请求 http://tryboard.local（mDNS）和 example.com（DNS）。网络是模拟器里的虚拟世界，不会访问真实互联网。加密热点（WPA2-PSK）见验收固件 wifi-wpa2。",
+  "title": "Wi-Fi: connect and make HTTP requests",
+  "about": "Joins the open access point TryBoard-WiFi, gets 192.168.4.100 from DHCP, then uses esp_http_client to request http://tryboard.local (mDNS) and example.com (DNS). The network is a virtual world inside the simulator and never touches the real internet. For an encrypted access point (WPA2-PSK), see the acceptance firmware wifi-wpa2.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "Wi-Fi",
    "DHCP",
    "HTTP"
@@ -307,13 +307,13 @@
  },
  {
   "id": "nvs",
-  "title": "NVS：断电也记得的开机次数",
-  "about": "开机计数存进 flash 里的 NVS 分区，每次 esp_restart 后加一，第三次停下。模拟器的 flash 会真实地被擦写，复位后内容保留——和真板子一样。",
+  "title": "NVS: a boot counter that survives power loss",
+  "about": "The boot count is stored in the NVS partition in flash, incremented after every esp_restart, and stops at the third boot. The simulator's flash is really erased and written, and its contents survive a reset, just like a real board.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "NVS",
-   "flash 擦写",
-   "软件复位"
+   "Flash erase/write",
+   "Software reset"
   ],
   "scene": {
    "parts": []
@@ -323,9 +323,9 @@
  {
   "id": "arduino-blink",
   "title": "Arduino：Blink",
-  "about": "用 Arduino IDE / arduino-cli（esp32 核心 3.x）编译的 Blink，导出的 merged.bin 直接上传就能跑。GPIO5 接 LED。",
+  "about": "Blink built with the Arduino IDE / arduino-cli (esp32 core 3.x); upload the exported merged.bin directly and it runs. LED on GPIO5.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "Arduino",
    "GPIO"
   ],
@@ -341,10 +341,10 @@
  },
  {
   "id": "s3-usb-keyboard",
-  "title": "S3 原生 USB：变身键盘 + 鼠标",
-  "about": "ESP32-S3 用芯片自带的 USB OTG（TinyUSB）把自己报成 HID 键盘 + 鼠标：插上电脑 1 秒后自动打出一行字、让鼠标画个正方形，之后每按一次 BOOT 键再来一遍。左边的虚拟电脑会完整走一遍枚举（取描述符、设地址、读报告描述符），再把收到的按键还原成文字。C3 / C6 的 USB 口只能当串口，做不了这个。",
+  "title": "S3 native USB: become a keyboard + mouse",
+  "about": "The ESP32-S3 uses its built-in USB OTG (TinyUSB) to present itself as a HID keyboard + mouse: 1 second after being plugged into a computer it types a line of text and draws a square with the mouse, then repeats each time you press BOOT. The virtual computer on the left goes through full enumeration (get descriptors, set address, read the report descriptor) and turns the received keystrokes back into text. The USB port on the C3 / C6 can only act as a serial port, so they can't do this.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "USB OTG",
    "HID",
    "TinyUSB"
@@ -368,10 +368,10 @@
  },
  {
   "id": "s3-usb-cdc",
-  "title": "S3 原生 USB：虚拟串口（CDC-ACM）",
-  "about": "ESP32-S3 用原生 USB 做一个 CDC-ACM 虚拟串口：电脑上会多出一个 COM 口 / ttyACM，不经过 USB 转串口芯片。在下面的「USB 串口终端」里输入一行，板子把它转成大写回给你。",
+  "title": "S3 native USB: virtual serial port (CDC-ACM)",
+  "about": "The ESP32-S3 uses native USB to provide a CDC-ACM virtual serial port: a new COM port / ttyACM appears on the computer, with no USB-to-serial chip in between. Type a line in the \"USB serial terminal\" below and the board sends it back in upper case.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "USB OTG",
    "CDC-ACM",
    "TinyUSB"
@@ -396,12 +396,12 @@
  {
   "id": "s3-blink",
   "chip": "esp32s3",
-  "title": "点灯（S3）：GPIO5 驱动 LED",
-  "about": "和 C3 版同一份源码，换成 ESP32-S3 开发板（N16R8：16MB flash + 8MB PSRAM，双核）。GPIO5 经 220Ω 接 LED，每 500ms 翻转。",
+  "title": "Blink (S3): GPIO5 drives an LED",
+  "about": "The same source as the C3 version, on an ESP32-S3 dev board instead (N16R8: 16MB flash + 8MB PSRAM, dual core). GPIO5 drives an LED through 220Ω and toggles every 500ms.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "GPIO",
-   "双核 FreeRTOS",
+   "Dual-core FreeRTOS",
    "ESP-IDF 5.5"
   ],
   "scene": {
@@ -416,10 +416,10 @@
  {
   "id": "s3-rgb",
   "chip": "esp32s3",
-  "title": "板载 RGB（S3）：GPIO48 的 WS2812",
-  "about": "S3 开发板的板载 RGB 灯在 GPIO48（部分新版板子改到 GPIO38）。RMT 外设按 WS2812 时序发数据，红 → 绿 → 蓝 → 白循环。",
+  "title": "On-board RGB (S3): WS2812 on GPIO48",
+  "about": "The S3 dev board's on-board RGB LED is on GPIO48 (some newer boards moved it to GPIO38). The RMT peripheral sends data with WS2812 timing, cycling red → green → blue → white.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "RMT",
    "WS2812",
    "led_strip"
@@ -428,10 +428,10 @@
  {
   "id": "s3-oled",
   "chip": "esp32s3",
-  "title": "OLED 屏（S3）：SSD1306",
-  "about": "0.96 英寸 128×64 OLED 走 I2C（地址 0x3C，SDA=GPIO8、SCL=GPIO9，400kHz）。与 C3 版同一份源码，只改了引脚。",
+  "title": "OLED (S3): SSD1306",
+  "about": "A 0.96-inch 128×64 OLED on I2C (address 0x3C, SDA=GPIO8, SCL=GPIO9, 400kHz). Same source as the C3 version, only the pins changed.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "I2C",
    "SSD1306"
   ],
@@ -461,10 +461,10 @@
  {
   "id": "s3-pot",
   "chip": "esp32s3",
-  "title": "电位器（S3）：ADC 调亮度",
-  "about": "电位器滑片接 GPIO4（ADC1 通道 3，12dB 衰减，量程约 0–3.1V），读数当作 GPIO5 上 LED 的 PWM 占空比。S3 的单次采样走 RTC 的 SENS 控制器，与 C3 不同，固件代码不用改。",
+  "title": "Potentiometer (S3): ADC sets brightness",
+  "about": "The potentiometer wiper goes to GPIO4 (ADC1 channel 3, 12dB attenuation, range about 0–3.1V), and the reading is used as the PWM duty cycle of the LED on GPIO5. Unlike the C3, single-shot sampling on the S3 goes through the RTC SENS controller, but the firmware code needs no changes.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "ADC",
    "LEDC"
   ],
@@ -484,7 +484,7 @@
    {
     "type": "analog",
     "pin": 4,
-    "label": "电位器（GPIO4）",
+    "label": "Potentiometer (GPIO4)",
     "max_mv": 3300,
     "value": 1200
    }
@@ -493,11 +493,11 @@
  {
   "id": "s3-dual",
   "chip": "esp32s3",
-  "title": "双核（S3）：任务钉在两个核上",
-  "about": "两个任务分别固定在核 0 / 核 1，用自旋锁保护的计数器各加 2 万次、经队列跨核传消息，再用 esp_ipc 让核 1 执行一个函数。计数正确说明两核交替执行与原子操作都对。",
+  "title": "Dual core (S3): tasks pinned to both cores",
+  "about": "Two tasks are pinned to core 0 / core 1; each adds 20,000 to a spinlock-protected counter, they pass messages across cores through a queue, and then esp_ipc makes core 1 run a function. A correct count shows that interleaved execution on both cores and the atomic operations all work.",
   "tags": [
-   "✓ 仿真验证",
-   "双核",
+   "✓ Verified in sim",
+   "Dual core",
    "FreeRTOS SMP",
    "esp_ipc"
   ]
@@ -505,10 +505,10 @@
  {
   "id": "s3-imu",
   "chip": "esp32s3",
-  "title": "倾角仪：MPU6050 六轴（I2C）",
-  "about": "GY-521（MPU6050，I2C 0x68）平插在面包板上：SDA=GPIO8、SCL=GPIO9，VCC 接 3.3V。固件用 ESP-IDF 的 i2c_master 驱动读寄存器（WHO_AM_I、复位、退出睡眠、100 Hz 采样、±2 g / ±250 °/s），每 200ms 打印一次加速度、陀螺、温度，并按重力分量算出俯仰和横滚：roll = atan2(ay, az)、pitch = atan2(−ax, √(ay²+az²))。拖下面的倾斜滑块，或在 3D 里按住模块拖动转整块台面，读数跟着变；转动时陀螺读到角速度。",
+  "title": "Inclinometer: MPU6050 6-axis (I2C)",
+  "about": "A GY-521 (MPU6050, I2C 0x68) lies flat on the breadboard: SDA=GPIO8, SCL=GPIO9, VCC to 3.3V. The firmware uses ESP-IDF's i2c_master driver to access registers (WHO_AM_I, reset, wake from sleep, 100 Hz sampling, ±2 g / ±250 °/s), prints acceleration, gyro and temperature every 200ms, and computes pitch and roll from the gravity components: roll = atan2(ay, az), pitch = atan2(−ax, √(ay²+az²)). Drag the tilt sliders below, or press and drag the module in 3D to rotate the whole table, and the readings follow; while rotating, the gyro reads angular velocity.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "I2C",
    "MPU6050",
    "IMU",
@@ -543,10 +543,10 @@
  {
   "id": "s3-qmi8658",
   "chip": "esp32s3",
-  "title": "倾角仪：QMI8658 六轴（I2C）",
-  "about": "QMI8658（I2C 0x6B，微雪圆屏板上的那颗）：SDA=GPIO8、SCL=GPIO9。和 MPU6050 版同一份源码，换成 QMI8658 的寄存器：软复位、CTRL1 打开地址自增（不开的话突发读一直读同一个寄存器，真机常见的坑）、±4 g / ±512 °/s、CTRL7 打开加速度计和陀螺；数据小端。拖倾斜滑块看俯仰、横滚和陀螺读数。",
+  "title": "Inclinometer: QMI8658 6-axis (I2C)",
+  "about": "QMI8658 (I2C 0x6B, the one on the Waveshare round-display board): SDA=GPIO8, SCL=GPIO9. Same source as the MPU6050 version, switched to the QMI8658 registers: soft reset, CTRL1 enables address auto-increment (without it a burst read keeps reading the same register, a common trap on real hardware), ±4 g / ±512 °/s, CTRL7 enables the accelerometer and gyro; data is little-endian. Drag the tilt sliders to see pitch, roll and gyro readings.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "I2C",
    "QMI8658",
    "IMU",
@@ -581,15 +581,15 @@
  {
   "id": "s3-touch",
   "chip": "esp32s3",
-  "title": "触摸圆屏：GC9A01 + CST816S，点哪画哪",
-  "about": "1.28 英寸触摸圆屏（微雪 1.28inch Touch LCD 这一类：GC9A01 屏 + CST816S 电容触摸）。屏走 SPI2（SCLK=GPIO12、MOSI=GPIO11、CS=GPIO10、DC=GPIO14、RST=GPIO13、背光=GPIO15）；触摸走 I2C 0x15：TP_SDA=GPIO6、TP_SCL=GPIO7、TP_INT=GPIO5（按着拉低）、TP_RST=GPIO16。INT 下降沿中断唤醒任务，按着期间每 20ms 读一次坐标画点，抬起后读手势（单击 / 滑动 / 长按 1 秒清屏）。在 3D 里直接点、拖圆屏表面。",
+  "title": "Touch round LCD: GC9A01 + CST816S, draw where you tap",
+  "about": "A 1.28-inch touch round LCD (like the Waveshare 1.28inch Touch LCD: GC9A01 display + CST816S capacitive touch). The display uses SPI2 (SCLK=GPIO12, MOSI=GPIO11, CS=GPIO10, DC=GPIO14, RST=GPIO13, backlight=GPIO15); touch uses I2C 0x15: TP_SDA=GPIO6, TP_SCL=GPIO7, TP_INT=GPIO5 (pulled low while touched), TP_RST=GPIO16. A falling-edge interrupt on INT wakes a task, which reads coordinates and draws a dot every 20ms while touched, then reads the gesture on release (tap / swipe / long press for 1 second clears the screen). Tap and drag directly on the round screen in 3D.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "I2C",
    "SPI",
    "GC9A01",
    "CST816S",
-   "GPIO 中断",
+   "GPIO interrupt",
    "ESP-IDF 5.5"
   ],
   "pins": {
@@ -620,16 +620,16 @@
  {
   "id": "weather",
   "chip": "esp32s3",
-  "title": "桌面气象站：温度 + 屏幕 + 表盘",
-  "about": "ESP32-S3 装配成品。BME280 与 SSD1306 共用一条 I2C（SDA=GPIO8、SCL=GPIO9），每 500ms 读一次：OLED 大字显示温度、下面一行湿度和气压；GPIO4 的舵机当指针表盘（0–40℃ → 0.5–2.5ms）；板载 RGB（GPIO48）低于 18℃ 蓝、低于 28℃ 绿、否则红。按 BOOT 键（GPIO0）切换 ℃ / ℉。温度 ≥ 30℃ 时 GPIO5 的无源蜂鸣器报警（2.7kHz，响 200ms 停 200ms，降到 29℃ 以下停；点工具栏「声音」才出声）。GPIO5 上还并着一颗 LED（经 220Ω）给检查点 01 / 02 点灯用。拖动环境滑块看三样一起变。",
+  "title": "Desk weather station: temperature + screen + dial",
+  "about": "An assembled ESP32-S3 build. A BME280 and an SSD1306 share one I2C bus (SDA=GPIO8, SCL=GPIO9) and are read every 500ms: the OLED shows the temperature in large digits with humidity and pressure on the line below; a servo on GPIO4 acts as a needle dial (0–40℃ → 0.5–2.5ms); the on-board RGB (GPIO48) is blue below 18℃, green below 28℃ and red otherwise. Press BOOT (GPIO0) to switch between ℃ / ℉. At ≥ 30℃ the passive buzzer on GPIO5 sounds an alarm (2.7kHz, 200ms on, 200ms off, stopping once below 29℃; sound only plays after you click \"Sound\" in the toolbar). An LED (through 220Ω) is also wired in parallel on GPIO5 for checkpoints 01 / 02. Drag the environment sliders and watch all three change together.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "I2C",
    "BME280",
    "SSD1306",
    "LEDC",
    "RMT",
-   "GPIO 中断"
+   "GPIO interrupt"
   ],
   "pins": {
    "servo": 4,
@@ -671,16 +671,16 @@
  {
   "id": "s3-lvgl",
   "chip": "esp32s3",
-  "title": "LVGL 表盘：圆屏动画与帧率",
-  "about": "ESP32-S3 + GC9A01 圆屏（240×240，SPI2 40MHz + GDMA；SCLK=GPIO12、MOSI=GPIO11、CS=GPIO10、DC=GPIO14、RST=GPIO13、背光=GPIO15）。固件用 LVGL 9.2 + esp_lvgl_port：刻度盘、指针、数值标签和一条绕圈的动画弧线，刷新周期 16ms（目标 60 FPS），双 40 行 DMA 缓冲。弧线每帧都在动，几乎整屏重画，CPU 满负荷——是圆屏界面的压力测试。串口每秒打印一次 FPS（模拟时间里的帧数，约 33；真机 160MHz 估计 20–30）。网页右上角的倍率是模拟速度：这个示例在浏览器里跑不满实时（桌面浏览器约 0.5×，视机器而定），动画会显得慢，但帧率按模拟时间算，不受影响。",
+  "title": "LVGL dial: round-screen animation and frame rate",
+  "about": "ESP32-S3 + GC9A01 round LCD (240×240, SPI2 40MHz + GDMA; SCLK=GPIO12, MOSI=GPIO11, CS=GPIO10, DC=GPIO14, RST=GPIO13, backlight=GPIO15). The firmware uses LVGL 9.2 + esp_lvgl_port: a scale, a needle, a value label and an animated arc going round, with a 16ms refresh period (target 60 FPS) and two 40-line DMA buffers. The arc moves every frame, so almost the whole screen is redrawn and the CPU runs flat out: a stress test for round-screen UIs. Serial prints the FPS once a second (frames per second of simulated time, about 33; estimated 20–30 on real hardware at 160MHz). The multiplier at the top right of the page is the simulation speed: this example can't run in real time in the browser (about 0.5× in desktop browsers, depending on the machine), so the animation looks slow, but the frame rate is counted in simulated time and is unaffected.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "LVGL",
    "SPI",
    "GDMA",
    "GC9A01",
    "esp_lvgl_port",
-   "性能基准"
+   "Benchmark"
   ],
   "pins": {
    "lcd_sclk": 12,
@@ -702,15 +702,15 @@
  {
   "id": "lens",
   "chip": "esp32s3",
-  "title": "透镜小人：圆屏上的一对眼睛",
-  "about": "ESP32-S3 成品。圆屏 GC9A01（240×240，SPI2）：SCLK=GPIO12、MOSI=GPIO11、CS=GPIO10、DC=GPIO14、RST=GPIO13、背光=GPIO15（高电平亮），VCC 接 3.3V。固件用 ESP-IDF 的 esp_lcd + espressif/esp_lcd_gc9a01 驱动（SPI 40MHz、GDMA 传输），画一对青色圆角矩形眼睛、白色高光和粉色腮红，每 3 秒眨一次眼。按 BOOT 键（GPIO0）切换表情：平常 → 开心 → 喜欢 → 困了，串口打印 MOOD 1 happy 这类。",
+  "title": "Lens buddy: a pair of eyes on a round screen",
+  "about": "An assembled ESP32-S3 build. GC9A01 round LCD (240×240, SPI2): SCLK=GPIO12, MOSI=GPIO11, CS=GPIO10, DC=GPIO14, RST=GPIO13, backlight=GPIO15 (active high), VCC to 3.3V. The firmware uses ESP-IDF's esp_lcd + the espressif/esp_lcd_gc9a01 driver (SPI 40MHz, GDMA transfers) to draw a pair of cyan rounded-rectangle eyes with white highlights and pink blush, blinking every 3 seconds. Press BOOT (GPIO0) to switch moods: normal → happy → love → sleepy, and serial prints lines like MOOD 1 happy.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "SPI",
    "GDMA",
    "GC9A01",
    "esp_lcd",
-   "GPIO 中断"
+   "GPIO interrupt"
   ],
   "pins": {
    "lcd_sclk": 12,
@@ -733,16 +733,16 @@
  {
   "id": "spin",
   "chip": "esp32s3",
-  "title": "会转身的小黄：舵机转台 + 圆屏脸",
-  "about": "ESP32-S3 成品。舵机信号接 GPIO4（LEDC 50Hz），以 90° 为中心在 ±60° 之间来回转，2 秒一个来回（脉宽 1.5 ± 0.667ms）；圆屏 GC9A01（240×240，SPI2）：SCLK=GPIO12、MOSI=GPIO11、CS=GPIO10、DC=GPIO14、RST=GPIO13、背光=GPIO15（高电平亮），VCC 接 3.3V。屏上是小黄的脸，眼珠朝转动方向看。按 BOOT 键（GPIO0）让它停在正面（90°）并打印 LOOK FRONT，再按一次接着转。",
+  "title": "Little Yellow who turns around: servo turntable + round-screen face",
+  "about": "An assembled ESP32-S3 build. The servo signal is on GPIO4 (LEDC 50Hz) and swings ±60° around 90°, one round trip every 2 seconds (pulse width 1.5 ± 0.667ms). GC9A01 round LCD (240×240, SPI2): SCLK=GPIO12, MOSI=GPIO11, CS=GPIO10, DC=GPIO14, RST=GPIO13, backlight=GPIO15 (active high), VCC to 3.3V. The screen shows Little Little Yellow's face, with its eyes looking in the direction of rotation. Press BOOT (GPIO0) to stop it facing front (90°) and print LOOK FRONT; press again to resume turning.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "SPI",
    "GDMA",
    "GC9A01",
    "LEDC",
-   "舵机",
-   "GPIO 中断"
+   "Servo",
+   "GPIO interrupt"
   ],
   "pins": {
    "servo": 4,
@@ -770,14 +770,14 @@
  {
   "id": "s3-brownout",
   "chip": "esp32s3",
-  "title": "舵机一转就复位：USB 供电的欠压演示",
-  "about": "ESP32-S3，GPIO4 接 SG90，0° ↔ 180° 每 150 ms 换一次方向（总在半路反向，电流最大）。只靠电脑 USB 供电时（限流约 0.5 A），舵机把 5V 轨拉垮、3V3 掉到 2.44 V 以下 → 欠压复位，串口出现 rst:0xf (BROWNOUT_RST)、BOOT n reason=BROWNOUT；在供电里切到外接 5 V 2 A 就不再复位，扫满 12 次打印 TRYBOARD_OK。",
+  "title": "Servo moves, board resets: a USB-power brownout demo",
+  "about": "ESP32-S3 with an SG90 on GPIO4, reversing between 0° ↔ 180° every 150 ms (it always reverses mid-travel, where current peaks). Powered only from the computer's USB (current-limited to about 0.5 A), the servo drags down the 5V rail and 3V3 falls below 2.44 V → brownout reset, and serial shows rst:0xf (BROWNOUT_RST) and BOOT n reason=BROWNOUT. Switch the power supply to an external 5 V 2 A and it no longer resets; after 12 full sweeps it prints TRYBOARD_OK.",
   "tags": [
-   "行为模拟",
-   "欠压复位",
-   "电路求解",
+   "Behaviour model",
+   "Brownout reset",
+   "Circuit solver",
    "LEDC",
-   "舵机"
+   "Servo"
   ],
   "pins": {
    "servo": 4
@@ -794,10 +794,10 @@
  {
   "id": "s3-wifi-scan",
   "chip": "esp32s3",
-  "title": "Wi-Fi（S3）：扫描周围热点",
-  "about": "与 C3 版同一份源码，目标换成 ESP32-S3（双核，Wi-Fi 任务在核 0）。真实 ESP-IDF Wi-Fi 驱动扫描虚拟世界里的 4 个热点；S3 与 C3 的 Wi-Fi MAC 是同一代硬件，模拟器共用一个 MAC 模型。",
+  "title": "Wi-Fi (S3): scan nearby access points",
+  "about": "Same source as the C3 version, targeting the ESP32-S3 instead (dual core, Wi-Fi task on core 0). The real ESP-IDF Wi-Fi driver scans the 4 access points in the virtual world; the S3 and C3 Wi-Fi MACs are the same hardware generation, so the simulator shares one MAC model.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "Wi-Fi",
    "802.11"
   ],
@@ -808,10 +808,10 @@
  {
   "id": "s3-wifi-http",
   "chip": "esp32s3",
-  "title": "Wi-Fi（S3）：联网发 HTTP 请求",
-  "about": "与 C3 版同一份源码：连上开放热点 TryBoard-WiFi，DHCP 拿到 192.168.4.100，再请求 http://tryboard.local（mDNS）和 example.com（DNS）。网络是模拟器里的虚拟世界，不会访问真实互联网；发射电流按 S3 数据手册（802.11b 21 dBm 约 340 mA）计入供电。",
+  "title": "Wi-Fi (S3): connect and make HTTP requests",
+  "about": "Same source as the C3 version: joins the open access point TryBoard-WiFi, gets 192.168.4.100 from DHCP, then requests http://tryboard.local (mDNS) and example.com (DNS). The network is a virtual world inside the simulator and never touches the real internet; transmit current from the S3 datasheet (802.11b 21 dBm, about 340 mA) is counted in the power budget.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "Wi-Fi",
    "DHCP",
    "HTTP"
@@ -823,10 +823,10 @@
  {
   "id": "usbkey",
   "chip": "esp32s3",
-  "title": "USB 小键盘：4 个键 + 宏键",
-  "about": "ESP32-S3 用原生 USB（TinyUSB）把自己报成 HID 键盘，产品名 TryBoard Macro Pad。面包板上四个轻触按键接 GPIO4 / 5 / 6 / 7（另一端接地，内部上拉）：K1–K3 发 a / b / c，K4 是宏键，一下打出 Hello TryBoard 再换行。左边的虚拟电脑会走一遍枚举，再把收到的按键还原成文字。点 3D 里的键帽试试。",
+  "title": "USB keypad: 4 keys + a macro key",
+  "about": "The ESP32-S3 uses native USB (TinyUSB) to present itself as a HID keyboard named TryBoard Macro Pad. Four tactile buttons on the breadboard go to GPIO4 / 5 / 6 / 7 (other side to ground, internal pull-ups): K1–K3 send a / b / c, and K4 is a macro key that types Hello TryBoard followed by a newline. The virtual computer on the left goes through enumeration and turns the received keystrokes back into text. Click the keycaps in 3D to try it.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "USB OTG",
    "HID",
    "TinyUSB",
@@ -883,12 +883,12 @@
  {
   "id": "s3-encoder",
   "chip": "esp32s3",
-  "title": "旋转编码器：PCNT 正交计数",
-  "about": "EC11 旋转编码器（KY-040 模块）CLK 接 GPIO6、DT 接 GPIO7、按键接 GPIO15。S3 的 PCNT 两个通道互为边沿 / 电平做 4 倍频正交计数（一格 4 个计数），±100 设为上下限、超出由驱动累加。拖动或滚动 3D 里的旋钮，串口打印计数；按住旋钮打印 SW DOWN。",
+  "title": "Rotary encoder: PCNT quadrature counting",
+  "about": "An EC11 rotary encoder (KY-040 module) with CLK on GPIO6, DT on GPIO7 and the push button on GPIO15. The S3's PCNT uses two channels with each other's signal as edge / level for 4x quadrature counting (4 counts per detent); limits are set to ±100, and overflow is accumulated by the driver. Drag or scroll the knob in 3D and serial prints the count; press and hold the knob to print SW DOWN.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "PCNT",
-   "GPIO 矩阵",
+   "GPIO matrix",
    "ESP-IDF 5.5"
   ],
   "pins": {
@@ -910,12 +910,12 @@
  {
   "id": "s3-ultrasonic",
   "chip": "esp32s3",
-  "title": "超声波测距：HC-SR04 + RMT 接收",
-  "about": "HC-SR04 由 5 V 供电，Trig 接 GPIO17（GPIO 发 10 µs 脉冲），Echo 经 1 kΩ / 2 kΩ 分压接 GPIO18，由 RMT 接收通道以 1 MHz 分辨率记下高电平宽度，换算成距离（343 m/s）。拖动 3D 里探头前面的障碍物，串口里的距离跟着变。",
+  "title": "Ultrasonic ranging: HC-SR04 + RMT receive",
+  "about": "The HC-SR04 runs on 5 V, with Trig on GPIO17 (GPIO sends a 10 µs pulse) and Echo through a 1 kΩ / 2 kΩ divider to GPIO18, where an RMT receive channel records the high-pulse width at 1 MHz resolution and converts it to distance (343 m/s). Drag the obstacle in front of the sensor in 3D and the distance on serial follows.",
   "tags": [
-   "✓ 仿真验证",
-   "RMT 接收",
-   "5 V 器件",
+   "✓ Verified in sim",
+   "RMT receive",
+   "5 V part",
    "ESP-IDF 5.5"
   ],
   "pins": {
@@ -935,10 +935,10 @@
  },
  {
   "id": "s3-i2s-tone",
-  "title": "I2S 放音：MAX98357A 喇叭放 440 Hz",
-  "about": "ESP32-S3 的 I2S0 以标准 Philips 格式（44.1 kHz、16 位、单声道复制到左右声道）经 GDMA 把 440 Hz 正弦送给 MAX98357A 功放（BCLK=GPIO16、LRC=GPIO17、DIN=GPIO18），驱动 4Ω 小喇叭。i2s_channel_write 被 DMA 的 EOF 中断按播放速度卡住，所以串口里写入速度正好是采样率。点工具栏「声音」听；面板上同时显示模拟器收到的 PCM 读数和网页输出端测到的主频。",
+  "title": "I2S playback: 440 Hz on a MAX98357A speaker",
+  "about": "The ESP32-S3's I2S0 uses standard Philips format (44.1 kHz, 16-bit, mono duplicated to left and right) and GDMA to send a 440 Hz sine wave to a MAX98357A amplifier (BCLK=GPIO16, LRC=GPIO17, DIN=GPIO18) driving a small 4Ω speaker. i2s_channel_write is throttled at playback speed by the DMA EOF interrupt, so the write rate on serial matches the sample rate exactly. Click \"Sound\" in the toolbar to listen; the panel also shows the PCM readings received by the simulator and the dominant frequency measured at the web page's output.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "I2S",
    "GDMA",
    "Web Audio",
@@ -955,10 +955,10 @@
  },
  {
   "id": "s3-i2s-mic",
-  "title": "I2S 录音：INMP441 麦克风读 RMS 与频率",
-  "about": "ESP32-S3 的 I2S1 以 16 kHz、32 位槽、左声道读 INMP441 数字麦克风（SCK=GPIO39、WS=GPIO40、SD=GPIO41，L/R 接地），每 1024 个样本算一次 RMS 和过零频率打印出来。麦克风默认听一段 1 kHz 测试 WAV（我们自己合成的，按模拟时间取样，每次结果一样）；面板里可换成扫频、安静，或授权后接浏览器麦克风（只玩，不进验收）。",
+  "title": "I2S recording: RMS and frequency from an INMP441 mic",
+  "about": "The ESP32-S3's I2S1 reads an INMP441 digital microphone at 16 kHz with 32-bit slots on the left channel (SCK=GPIO39, WS=GPIO40, SD=GPIO41, L/R to ground), computing and printing RMS and zero-crossing frequency every 1024 samples. By default the mic hears a 1 kHz test WAV (synthesised by us, sampled in simulated time, so results are identical every run); in the panel you can switch to a sweep, silence, or, after granting permission, the browser microphone (for fun only, not part of acceptance).",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "I2S",
    "GDMA",
    "INMP441",
@@ -976,10 +976,10 @@
  {
   "id": "lamp",
   "chip": "esp32s3",
-  "title": "旋钮台灯：EC11 旋钮 + WS2812 灯条",
-  "about": "ESP32-S3 成品。8 灯 WS2812 灯条 DIN 接 GPIO5（RMT 发送，经 74AHCT125 升到 5 V，灯条走外接 5 V），EC11 编码器 CLK=GPIO6、DT=GPIO7、SW=GPIO15 接 PCNT（4 倍频，一格 4 个计数）。上电逐颗点亮暖白；转旋钮调亮度（8 档），按一下改成换颜色（6 种），再按回到调亮度。拖动或滚动 3D 里的旋钮，点它就是按下。",
+  "title": "Knob lamp: EC11 knob + WS2812 strip",
+  "about": "An assembled ESP32-S3 build. An 8-LED WS2812 strip with DIN on GPIO5 (RMT transmit, level-shifted to 5 V by a 74AHCT125, strip powered from an external 5 V), and an EC11 encoder with CLK=GPIO6, DT=GPIO7, SW=GPIO15 on PCNT (4x, 4 counts per detent). On power-up it lights the LEDs warm white one by one; turn the knob to adjust brightness (8 levels), press once to switch to changing colour (6 colours), press again to go back to brightness. Drag or scroll the knob in 3D; clicking it presses it.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "RMT",
    "WS2812",
    "PCNT",
@@ -1010,15 +1010,15 @@
  {
   "id": "ruler",
   "chip": "esp32s3",
-  "title": "超声波尺子：HC-SR04 + OLED + 蜂鸣器",
-  "about": "ESP32-S3 成品。HC-SR04（5 V）Trig=GPIO17，Echo 经 1 kΩ / 2 kΩ 分压接 GPIO18，RMT 接收量回波宽度，每 100 ms 测一次；SSD1306（0x3C，SDA=GPIO8、SCL=GPIO9）大字显示距离和距离条；GPIO5 的无源蜂鸣器像倒车雷达：1 m 以内响 40 ms、停 距离×5 ms，10 cm 以内一直响（点「声音」才出声）。拖动 3D 里的障碍物。",
+  "title": "Ultrasonic ruler: HC-SR04 + OLED + buzzer",
+  "about": "An assembled ESP32-S3 build. HC-SR04 (5 V) with Trig=GPIO17 and Echo through a 1 kΩ / 2 kΩ divider to GPIO18; RMT receive measures the echo width once every 100 ms. An SSD1306 (0x3C, SDA=GPIO8, SCL=GPIO9) shows the distance in large digits plus a distance bar; the passive buzzer on GPIO5 works like a parking sensor: within 1 m it beeps for 40 ms and pauses distance×5 ms, and within 10 cm it sounds continuously (sound only plays after you click \"Sound\"). Drag the obstacle in 3D.",
   "tags": [
-   "✓ 仿真验证",
-   "RMT 接收",
+   "✓ Verified in sim",
+   "RMT receive",
    "I2C",
    "SSD1306",
    "LEDC",
-   "5 V 器件"
+   "5 V part"
   ],
   "pins": {
    "trig": 17,
@@ -1050,10 +1050,10 @@
  {
   "id": "tilt",
   "chip": "esp32s3",
-  "title": "体感小人：QMI8658 + 圆屏",
-  "about": "ESP32-S3 成品。QMI8658 六轴（I2C 0x6B，SDA=GPIO8、SCL=GPIO9）每 20 ms 读一次姿态；圆屏 GC9A01（SPI2：SCLK=GPIO12、MOSI=GPIO11、CS=GPIO10、DC=GPIO14、RST=GPIO13、背光=GPIO15）上的小豆按倾斜方向滑，碰到圆边贴着边滑。拖倾斜滑块，或在 3D 里按住 IMU 模块拖动转整块台面。",
+  "title": "Tilt buddy: QMI8658 + round screen",
+  "about": "An assembled ESP32-S3 build. A QMI8658 6-axis IMU (I2C 0x6B, SDA=GPIO8, SCL=GPIO9) reads the orientation every 20 ms; on the GC9A01 round LCD (SPI2: SCLK=GPIO12, MOSI=GPIO11, CS=GPIO10, DC=GPIO14, RST=GPIO13, backlight=GPIO15) a little bean slides in the direction of tilt and slides along the edge when it hits the rim. Drag the tilt sliders, or press and drag the IMU module in 3D to rotate the whole table.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "I2C",
    "QMI8658",
    "SPI",
@@ -1089,10 +1089,10 @@
  },
  {
   "id": "c3-ble-hr",
-  "title": "蓝牙心率带：NimBLE 外设 + 虚拟手机",
-  "about": "NimBLE 外设：广播 TryBoard-HR，提供心率（订阅后每秒一次通知）、电量（87%）和一个 LED 开关特征（写 01 点亮 GPIO5 的 LED）。选「虚拟手机」扫描、连接、读、订阅、写；底部坞「蓝牙」页签按模拟时间列出空中的每一包。协议是行为模拟；信号距离、穿墙、手机系统差异必须上真机。",
+  "title": "Bluetooth heart-rate strap: NimBLE peripheral + virtual phone",
+  "about": "A NimBLE peripheral: advertises TryBoard-HR and provides heart rate (one notification per second once subscribed), battery level (87%) and an LED switch characteristic (write 01 to light the LED on GPIO5). Choose \"Virtual phone\" to scan, connect, read, subscribe and write; the \"Bluetooth\" tab in the bottom dock lists every packet in the air in simulated time. The protocol is a behaviour model; signal range, walls and differences between phone OSes must be checked on real hardware.",
   "tags": [
-   "◐ 行为模拟",
+   "◐ Behaviour model",
    "BLE",
    "NimBLE",
    "ESP-IDF 5.5"
@@ -1110,24 +1110,24 @@
  {
   "id": "esp32-hello",
   "chip": "esp32",
-  "title": "Hello World（经典 ESP32）",
-  "about": "同一份 hello_world 换成经典 ESP32（双核 Xtensa LX6，ESP32-DevKitC V4）：打印芯片型号、核数、flash 大小、剩余堆内存。",
+  "title": "Hello World (classic ESP32)",
+  "about": "The same hello_world on the classic ESP32 (dual-core Xtensa LX6, ESP32-DevKitC V4): prints the chip model, core count, flash size and free heap.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "UART",
-   "双核 FreeRTOS",
+   "Dual-core FreeRTOS",
    "ESP-IDF 5.5"
   ]
  },
  {
   "id": "esp32-blink",
   "chip": "esp32",
-  "title": "点灯（经典 ESP32）：GPIO2 驱动 LED",
-  "about": "和 C3 版同一份源码。ESP32-DevKitC V4 板上只有电源灯、没有用户灯，所以在 GPIO2 外接一颗 LED（经 220Ω），每 500ms 翻转。",
+  "title": "Blink (classic ESP32): GPIO2 drives an LED",
+  "about": "Same source as the C3 version. The ESP32-DevKitC V4 only has a power LED and no user LED, so an external LED is wired to GPIO2 (through 220Ω) and toggles every 500ms.",
   "tags": [
-   "✓ 仿真验证",
+   "✓ Verified in sim",
    "GPIO",
-   "双核 FreeRTOS",
+   "Dual-core FreeRTOS",
    "ESP-IDF 5.5"
   ],
   "scene": {
