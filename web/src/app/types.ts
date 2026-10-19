@@ -29,7 +29,7 @@ export const STEPS: { id: StepId; label: string }[] = [
   { id: 'product', label: '成品' },
 ];
 
-export type WorkId = 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'knob' | 'sonar' | 'blank' | 'imu' | 'touch';
+export type WorkId = 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'knob' | 'sonar' | 'blank' | 'imu' | 'touch' | 'custom';
 
 /** 选中的对象。kind 与构建树的分组一一对应；pin / wire / button 来自台面拾取 */
 export type SelKind = 'part' | 'wire' | 'power' | 'env' | 'firmware' | 'checkpoint' | 'pin' | 'button' | 'run' | 'tool';

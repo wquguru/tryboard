@@ -22,6 +22,8 @@ export const WORKS: Record<string, WorkDef> = {
   knob: { id: 'knob', title: '旋钮计数（编码器和 PCNT）', example: 's3-encoder', checkpoints: [] },
   sonar: { id: 'sonar', title: '超声波测距（HC-SR04，RMT 接收）', example: 's3-ultrasonic', checkpoints: [] },
   blank: { id: 'blank', title: '空白', example: null, checkpoints: [] },
+  // 选板结果（DESIGN_V2 §8.3）：清单、摆台、检查点都按地址参数生成（genlevels.ts），标题换成项目名；只有 采购 → 实验台 两步
+  custom: { id: 'custom', title: '我的项目', example: null, checkpoints: [] },
   // P2-03 / P2-02 的外设台面（不是完整作品：没有检查点、组装模板；对应作品是上面的体感小人）
   imu: { id: 'imu', title: '倾角仪（MPU6050）', example: 's3-imu', checkpoints: [] },
   touch: { id: 'touch', title: '触摸圆屏（CST816S）', example: 's3-touch', checkpoints: [] },

@@ -18,6 +18,12 @@ export function lab(work: string, step: StepId = 'bench', opt: { cp?: string; ex
 
 export const BLANK_LAB = lab('blank');
 
+/** 选板结果进采购（work=custom）：参数串由 advisor/state.ts encode(s, true) 给出 */
+export const customLab = (params: string, step: StepId = 'shop') => `./app?work=custom${params ? `&${params}` : ''}#${step}`;
+
+/** 选板结果的分享地址（不带「我已有」） */
+export const selectLink = (params: string) => `${SELECT}${params ? `?${params}` : ''}`;
+
 /** 文档型页面（首页、选板）的站点导航 */
 export const SITE_NAV: [string, string][] = [
   [HOME, '作品'],
