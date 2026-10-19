@@ -125,7 +125,7 @@ fn task_report(
     chip: Chip,
     syms: &Syms,
 ) {
-    use tryboard_esp32c3::tasktrace::{report, state};
+    use tryboard_soc::tasktrace::{report, state};
     let end = m.cycles();
     let cores = m.cores();
     let dropped = m.tasks_dropped();
@@ -139,7 +139,7 @@ fn task_report(
     }
     let switches = ev
         .iter()
-        .filter(|e| e.task != tryboard_esp32c3::tasktrace::NO_TASK)
+        .filter(|e| e.task != tryboard_soc::tasktrace::NO_TASK)
         .count();
     let waits = sl.iter().filter(|s| s.end == state::WAIT).count();
     eprintln!(
@@ -252,7 +252,7 @@ fn run(args: &[String]) {
     }
     if let Some(path) = opt(args, "--mic") {
         let b = std::fs::read(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
-        match tryboard_esp32c3::devices::audio::parse_wav(&b) {
+        match tryboard_soc::devices::audio::parse_wav(&b) {
             Ok((rate, x)) => m.mic_wav(rate as f64, x),
             Err(e) => {
                 eprintln!("--mic {path}: {e}");
@@ -435,7 +435,7 @@ fn run(args: &[String]) {
             }
             None => (0.0, seconds),
         };
-        let c = tryboard_esp32c3::vcd::VcdCapture::cycles_of;
+        let c = tryboard_soc::vcd::VcdCapture::cycles_of;
         m.vcd_start(mask, c(a), c(b));
     }
     // Logic analyzer events: drained once per slice into the file (format identical to web iotrace.ts eventLine)
@@ -466,7 +466,7 @@ fn run(args: &[String]) {
     let trace_tasks = opt(args, "--trace-tasks");
     let mut task_ev: Vec<tryboard_machine::TaskEvent> = Vec::new();
     if trace_tasks.is_some() {
-        m.tasks_enable(tryboard_esp32c3::tasktrace::DEFAULT_CAP);
+        m.tasks_enable(tryboard_soc::tasktrace::DEFAULT_CAP);
     }
     let trace: usize = opt(args, "--trace")
         .and_then(|s| s.parse().ok())

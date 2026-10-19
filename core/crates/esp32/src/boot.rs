@@ -5,7 +5,7 @@ use crate::*;
 use tryboard_rv32::elf::Elf;
 use tryboard_xtensa::{Variant, PS_UM, PS_WOE};
 
-pub use tryboard_esp32c3::boot::find_app;
+pub use tryboard_soc::boot::find_app;
 
 /// Chip ID in the image header (esp_app_format.h: ESP_CHIP_ID_ESP32)
 pub const CHIP_ID: u16 = 0;

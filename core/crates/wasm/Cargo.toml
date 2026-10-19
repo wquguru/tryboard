@@ -10,7 +10,6 @@ crate-type = ["cdylib"]
 [dependencies]
 tryboard-rv32 = { path = "../rv32" }
 tryboard-soc = { path = "../soc" }
-tryboard-esp32c3 = { path = "../esp32c3" }
 tryboard-esp32s3 = { path = "../esp32s3" }
 tryboard-xtensa = { path = "../xtensa" }
 tryboard-machine = { path = "../machine" }

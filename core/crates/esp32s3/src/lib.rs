@@ -1,7 +1,7 @@
 //! ESP32-S3 SoC: memory map (incl. PSRAM), peripheral dispatch, direct boot, dual-core run loop.
 //! Core 1 starts when firmware calls ROM's ets_set_appcpu_boot_addr (HLE); the cores alternate in fixed quanta (deterministic).
 //! Peripherals shared with C3 with identical layout (UART, SYSTIMER, TIMG, SPI1 flash, LEDC, I2C, RMT, GP-SPI2, GDMA)
-//! reuse tryboard-esp32c3 models; S3-only interrupt matrix, EXTMEM and 49-pin GPIO live in periph.rs. Wi-Fi MAC and
+//! reuse tryboard-soc models; S3-only interrupt matrix, EXTMEM and 49-pin GPIO live in periph.rs. Wi-Fi MAC and
 //! the virtual world are in tryboard-soc (shared with C3, wired up with the S3 layout). lint: allow-long-comment
 
 pub mod boot;
@@ -12,25 +12,25 @@ pub mod usb;
 
 use periph::*;
 use std::collections::HashMap;
-use tryboard_esp32c3::crypto_hw::{self, AesHw, ShaHw};
-use tryboard_esp32c3::devices::audio::{self, Audio, PortIo};
-use tryboard_esp32c3::devices::gc9a01::Gc9a01;
-use tryboard_esp32c3::devices::pins::PinDevices;
-use tryboard_esp32c3::gdma::{DmaMem, Gdma, GdmaLayout};
-use tryboard_esp32c3::gpspi::GpSpi;
-use tryboard_esp32c3::i2c::I2c;
-use tryboard_esp32c3::i2s::I2s;
-use tryboard_esp32c3::iotrace::IoTrace;
-use tryboard_esp32c3::ledc::Ledc;
-use tryboard_esp32c3::pcnt::{self as pcnt_mod, Pcnt};
-use tryboard_esp32c3::periph::{Systimer, Timg, Uart};
-use tryboard_esp32c3::rmt::{Rmt, RmtLayout, Ws2812};
-use tryboard_esp32c3::spiflash::SpiFlash;
-use tryboard_esp32c3::tasktrace::TaskTrace;
+use tryboard_soc::crypto_hw::{self, AesHw, ShaHw};
+use tryboard_soc::devices::audio::{self, Audio, PortIo};
+use tryboard_soc::devices::gc9a01::Gc9a01;
+use tryboard_soc::devices::pins::PinDevices;
+use tryboard_soc::gdma::{DmaMem, Gdma, GdmaLayout};
+use tryboard_soc::gpspi::GpSpi;
+use tryboard_soc::i2c::I2c;
+use tryboard_soc::i2s::I2s;
+use tryboard_soc::iotrace::IoTrace;
+use tryboard_soc::ledc::Ledc;
+use tryboard_soc::pcnt::{self as pcnt_mod, Pcnt};
+use tryboard_soc::periph::{Systimer, Timg, Uart};
+use tryboard_soc::rmt::{Rmt, RmtLayout, Ws2812};
+use tryboard_soc::spiflash::SpiFlash;
+use tryboard_soc::tasktrace::TaskTrace;
 use tryboard_soc::wifi::{self, WifiLayout, WifiMac};
 use tryboard_xtensa::{sr, Bus, BusFault, Cpu, Exit};
 
-pub const CPU_HZ: u64 = tryboard_esp32c3::periph::CPU_HZ;
+pub const CPU_HZ: u64 = tryboard_soc::periph::CPU_HZ;
 
 // Memory map (soc/esp32s3/include/soc/soc.h)
 /// SRAM0 (32KB, I bus only) + SRAM1 (416KB, mapped on both I and D)
@@ -188,9 +188,9 @@ pub struct SocBus {
     pub next_event: u64,
     pub gpio_log: Vec<(u64, u64)>,
     last_gpio: u64,
-    /// Logic analyzer events (P1-05; model and format in tryboard_esp32c3::iotrace)
+    /// Logic analyzer events (P1-05; model and format in tryboard_soc::iotrace)
     pub iotrace: IoTrace,
-    /// FreeRTOS task switches (C-04; model in tryboard_esp32c3::tasktrace)
+    /// FreeRTOS task switches (C-04; model in tryboard_soc::tasktrace)
     pub tasks: TaskTrace,
     /// Firmware requested a reset (RTC_CNTL_OPTIONS0 SW_SYS_RST / SW_PROCPU_RST); value is the next boot's reset reason
     pub reset_request: Option<u32>,
@@ -240,7 +240,7 @@ impl Default for SocBus {
             pcnt: Pcnt::default(),
             pins: PinDevices::default(),
             i2c0: I2c::default(),
-            i2c1: I2c::with_port(tryboard_esp32c3::iotrace::i2cbit::PORT1),
+            i2c1: I2c::with_port(tryboard_soc::iotrace::i2cbit::PORT1),
             spi2: GpSpi::default(),
             gdma: Gdma::new(GdmaLayout::S3),
             lcd: None,
@@ -1457,9 +1457,7 @@ mod tests {
         let now = b.now;
         b.pins
             .encoders
-            .push(tryboard_esp32c3::devices::pins::Encoder::new(
-                6, 7, None, now,
-            ));
+            .push(tryboard_soc::devices::pins::Encoder::new(6, 7, None, now));
         let run = |b: &mut SocBus, until: u64| {
             while b.now < until {
                 b.update();
@@ -1482,7 +1480,7 @@ mod tests {
         let now = b.now;
         b.pins
             .sonars
-            .push(tryboard_esp32c3::devices::pins::Hcsr04::new(17, 18, now));
+            .push(tryboard_soc::devices::pins::Hcsr04::new(17, 18, now));
         b.pins.sonars[0].distance_cm = Some(40.0);
         // Trig: GPIO17 outputs a 12 us high pulse
         w(&mut b, 0x6000_4020, 1 << 17);

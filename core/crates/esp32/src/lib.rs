@@ -8,18 +8,18 @@ pub mod periph;
 
 use periph::*;
 use std::collections::HashMap;
-use tryboard_esp32c3::devices::audio::Audio;
-use tryboard_esp32c3::devices::pins::PinDevices;
-use tryboard_esp32c3::i2c::{I2c, I2cLayout};
-use tryboard_esp32c3::iotrace::IoTrace;
-use tryboard_esp32c3::periph::Uart;
-use tryboard_esp32c3::rmt::Ws2812;
-use tryboard_esp32c3::tasktrace::TaskTrace;
+use tryboard_soc::devices::audio::Audio;
+use tryboard_soc::devices::pins::PinDevices;
+use tryboard_soc::i2c::{I2c, I2cLayout};
+use tryboard_soc::iotrace::IoTrace;
+use tryboard_soc::periph::Uart;
+use tryboard_soc::rmt::Ws2812;
+use tryboard_soc::tasktrace::TaskTrace;
 use tryboard_soc::wifi::{MacRegs, WifiLayout, WifiMac};
 use tryboard_soc::Mem as DmaMem;
 use tryboard_xtensa::{sr, Bus, BusFault, Cpu, Exit};
 
-pub const CPU_HZ: u64 = tryboard_esp32c3::periph::CPU_HZ;
+pub const CPU_HZ: u64 = tryboard_soc::periph::CPU_HZ;
 
 // Memory map (soc/esp32/include/soc/soc.h, TRM chapter 1)
 /// D-bus view of SRAM2 + SRAM1 (0x3FFAE000..0x40000000, 328KB)
@@ -189,7 +189,7 @@ impl Default for SocBus {
             ws2812: HashMap::new(),
             pins: PinDevices::default(),
             i2c0: I2c::with_layout(I2cLayout::ESP32, 0),
-            i2c1: I2c::with_layout(I2cLayout::ESP32, tryboard_esp32c3::iotrace::i2cbit::PORT1),
+            i2c1: I2c::with_layout(I2cLayout::ESP32, tryboard_soc::iotrace::i2cbit::PORT1),
             adc: Adc::default(),
             audio: Audio::default(),
             wifi: Some(Box::new(WifiMac::new(WifiLayout::ESP32))),

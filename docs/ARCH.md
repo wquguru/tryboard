@@ -13,6 +13,11 @@ web/（Vite + TS）
   主线程：three.js 3D 工作台、串口监视器、控制条
 ```
 
+## crate 分层（R-05，2026-10-19）
+- `tryboard-soc`（`crates/soc`）：所有芯片共用的部件，芯片差异用 `*Layout` 参数化。外设模型 `periph`（CPU_HZ、Uart、Systimer、Timg）、`i2c`、`spiflash`、`rmt`、`ledc`、`pcnt`、`i2s`、`gpspi`、`gdma`、`crypto_hw`、`sigin`（输入去毛刺）、`adc`；外接器件 `devices/`（引脚器件、音频、GC9A01、SSD1306、BME280、IMU、触摸）；记录 `iotrace`、`vcd`、`tasktrace`；`boot::find_app`（分区表找 app）；Wi-Fi `wifi/`、BLE 内核 `ble/`。依赖只有 `tryboard-elec`（I2C 线长负载公式）。
+- `tryboard-esp32c3`：只剩 C3 本体——`Esp32c3` / `SocBus` / `Stop`、存储映射常量、`lcd_pin` / `i2s_pin` 接线、`periph`（中断矩阵 Intc、`src` 中断源号、GPIO、EXTMEM、SARADC）、`boot`（ROM 装载、eFuse、`parse_app`（芯片 ID 5）、BLE 挂钩）、`hle`、`timing`、`ble`（RISC-V 侧 VHCI HLE）、`crypto_hw_tests`（经 C3 总线驱动 SHA / AES 寄存器）。为兼容 crate 内路径，lib.rs 仍 `pub use tryboard_soc::{devices, i2c, …}`。
+- `esp32s3` / `esp32` 只依赖 `tryboard-soc`，不再依赖 `tryboard-esp32c3`；`machine` 仅为 `Hw::C3` 分支引用 C3 本体（`Esp32c3`、`Stop`、`MMIO_LOW/HIGH`）；`cli` / `wasm` 直接引 `tryboard_soc::`。
+
 ## 启动方式（ESP32-C3）
 1. ROM：从 esp-rom-elfs 的 `esp32c3_rev3_rom.elf` 装 `.text`（0x40000000）、`.rodata`（DROM 掩膜窗口 0x3FF00000 → ROM 物理 0x40040000）、各 `.data*` 初值（DRAM 顶部 0x3FCDE710 以上）。
 2. 解析 flash：分区表 0x8000 → factory / ota_0 → ESP 镜像头（0xE9）→ 段。
@@ -48,7 +53,7 @@ web/（Vite + TS）
 - 真实网络（C-03，`tcp.rs` 发件箱 + `web/src/realfetch.ts`）：开关开着时，Host 不是 tryboard.local 的 HTTP 请求交给浏览器 fetch，回复写成脚本动作 `netreply=` 进输入日志再施加给内核，实时 / 验收 / 回退 / CLI 重放只认这条动作；HTTPS 与非 HTTP 端口不放行。wasm `tb_realnet_set / tb_net_outbox / tb_net_reply`。细节见 WIFI.md 阶段 6。
 - 密码学原语全部自己实现（`wifi/crypto.rs`：SHA-1、HMAC、PBKDF2、PRF、AES-128/192/256、Key Wrap、CCM、CCMP），按 FIPS 180 / RFC 2202 / RFC 6070 / IEEE 802.11 附录 / FIPS 197 / RFC 3394 / RFC 3610 / NIST SP 800-38A 测试向量做单元测试。
 
-## SHA / AES 加速器（ESP32-C3 / S3，`crates/esp32c3/src/crypto_hw.rs`）
+## SHA / AES 加速器（ESP32-C3 / S3，`crates/soc/src/crypto_hw.rs`）
 - 两颗芯片寄存器排布相同；`ShaHw::write(off, v, 链头, mem)` / `AesHw::write(off, v, (输入链头, 输出链头), mem)` 不依赖 SoC，链头由 SoC 先从自己的 GDMA（`sha_link` / `aes_links`）取。
 - SHA（0x6003B000）：SHA-1 / 224 / 256，START / CONTINUE 处理 TEXT 寄存器里的一块，DMA_START / DMA_CONTINUE 从 GDMA 取 BLOCK_NUM 块；H 寄存器按"摘要字节小端装载"存（`sha_hal_read_digest` 直接 memcpy 成摘要）。BUSY 恒为 0。
 - AES（0x6003A000）：128 / 256 位，单块模式（TEXT_IN → TEXT_OUT）与 DMA 模式（ECB / CBC / OFB / CTR / CFB8 / CFB128，IV 寄存器随运算更新），DMA 完成 STATE = 2、写 DMA_EXIT 回 0。
@@ -59,7 +64,7 @@ web/（Vite + TS）
 - 线束（P2-11，估算）：`Machine::harness`（I2C 排线总长、天线遮挡 dB）是外部世界，跨软件复位保留、复位后重新挂到新总线 / Wi-Fi 模型上。I2C 控制器按 `tryboard-elec::i2cbus` 的公式（总线电容 → 上升时间，和固件配置的 SCL 频率对应的规范上限比）决定读回字节是否丢 0→1 的位、地址是否不应答；虚拟世界按遮挡降低所有 AP 的 RSSI，低于门限扫描收不到 / 认证不回。CLI `--i2c-wire` / `--antenna-loss`，脚本 `i2cwire=` / `antenna=`，wasm `tb_i2c_wire` / `tb_antenna_loss` / `tb_harness_report`
 - USB 关卡观察（P2-12）：`tryboard_machine::usb_report_lines` 给出"USB 主机：状态"与"USB 键盘输入: …"两行，CLI `--usb-log` 与 wasm `tb_usb_report` 共用；关卡带 `--usb-log` 时进观察记录（指纹）
 
-## FreeRTOS 任务时间线（C-04，`crates/esp32c3/src/tasktrace.rs`，C3 / S3 共用）
+## FreeRTOS 任务时间线（C-04，`crates/soc/src/tasktrace.rs`，C3 / S3 共用）
 - 只靠 .bin：FreeRTOS 换任务的最后一步都是"栈指针 ← 新任务 TCB 第 0 字（pxTopOfStack）"。CPU 核在 `lw sp,0(rs1)`（RISC-V）/ `l32i(.n) a1,aN,0`（Xtensa，fast 路径里是 Op::Generic）执行后调总线钩子 `Bus::sp_loaded(core, base)`，核号取 PRID。
 - 判 TCB（IDF v5.5 布局）：`mem[T+16]==T`（xStateListItem.pvOwner）、`mem[T+36]==T`（xEventListItem.pvOwner）、T+52 起是可打印任务名；优先级 T+44、绑核 T+68。签名不对的 SP 装载忽略（中断栈、协程切换等）。
 - 被切出任务的状态：状态链表仍是就绪表 → ready；事件链表非空 → wait（等队列 / 信号量）；否则 blocked（延时 / 挂起）；签名坏了 → gone（删除）。恢复 PC 从新栈帧读（RISC-V 偏移 0、Xtensa 4）。
@@ -90,7 +95,7 @@ web/（Vite + TS）
 - 圆屏判定：观察记录在"非黑像素"行之后追加颜色统计 `[tryboard] LCD 颜色 #rrggbb N 像素，重心 x,y`（圆内各非黑颜色，前 12 种、≥ 50 像素，`Gc9a01::color_report`，CLI 与 wasm 共用）；levels.json 的 `lcd_colors` 按颜色容差求和、可限水平重心，`serial_count` 数串口某段文字出现的次数。
 - 实时运行（worker.ts）时间片固定 1ms（`tb_run(160000)`），外部输入只在时间片之间施加，并按施加那一刻的 CPU 周期记进输入日志（`inputlog.ts`）。CLI `--inputs` 同样全程 1ms 一片、在时间片开头施加 `t ≤ 当前模拟时间` 的输入，所以网页上的一串操作导出后能逐周期重放（S3 双核交替点也一致）。格式见 DECISIONS 2026-10-16「输入日志」。
 - 蜂鸣器（audio.ts）：worker 对 `watchPwm` 的引脚每片采样占空比与频率（`tb_pin_pwm_freq`），变化带模拟时刻放进 tick 的 `pwmEvents`；主线程把模拟时刻映射到 AudioContext 时间轴（领先 60ms，偏离超过 0.4s 重新对齐），方波振荡器 + 增益开关。测试读 `window.__tbAudio`。
-- 逻辑分析仪事件（P1-05，`crates/esp32c3/src/iotrace.rs`）：SocBus 里一个有上限的环形缓冲，按 CPU 周期盖戳记 GPIO（只记 watch 掩码里的脚，在 `gpio_changed` 里比较）、PWM（`update` 里 LEDC 修改计数或 GPIO 使能 / 矩阵变了才扫各脚 `pin_pwm`）、WS2812 帧（`route_rmt` 里解码器帧数变了）、I2C 事务（`I2c::run_commands` 按命令表产生 START / ADDR / DATA / STOP，时刻按 SCL 位推算，SocBus 写完寄存器后搬进缓冲）。CLI `--trace-io` 每片取走写文本；wasm `tb_io_take` 拷成 16 字节记录，worker 攒着随 tick 发 `io` 消息（上电 / 回退先发 reset），主线程 `app/iotrace.ts` 的 IoStore 按通道整理、解 I2C 事务，`app/analyzer.ts` 画。格式与上限见 DECISIONS「逻辑分析仪事件缓冲」
+- 逻辑分析仪事件（P1-05，`crates/soc/src/iotrace.rs`）：SocBus 里一个有上限的环形缓冲，按 CPU 周期盖戳记 GPIO（只记 watch 掩码里的脚，在 `gpio_changed` 里比较）、PWM（`update` 里 LEDC 修改计数或 GPIO 使能 / 矩阵变了才扫各脚 `pin_pwm`）、WS2812 帧（`route_rmt` 里解码器帧数变了）、I2C 事务（`I2c::run_commands` 按命令表产生 START / ADDR / DATA / STOP，时刻按 SCL 位推算，SocBus 写完寄存器后搬进缓冲）。CLI `--trace-io` 每片取走写文本；wasm `tb_io_take` 拷成 16 字节记录，worker 攒着随 tick 发 `io` 消息（上电 / 回退先发 reset），主线程 `app/iotrace.ts` 的 IoStore 按通道整理、解 I2C 事务，`app/analyzer.ts` 画。格式与上限见 DECISIONS「逻辑分析仪事件缓冲」
 - ⌘K（P1-06，`app/cmdk.ts` + 纯函数 `app/cmdmatch.ts`）：候选 = 命令（含按输入生成的"把室温设为 N ℃""回到第 n 次运行"）+ 零件 + 引脚（listPins）+ 检查点 + 运行；执行走 store / session / 时间线现有接口
 - 关卡验收：`firmware/levels.json` 是唯一来源，判定规则在 `tools/check.py` 和 `web/src/checks.ts` 各写一份、逐条对应。浏览器里由 `verify-worker.ts` 按**模拟时间**跑（不看墙钟），时间片 / 脚本施加 / PWM 采样照搬 CLI `run` 的循环；观察记录用 wasm 的 `tb_report`（与 CLI `--gpio-log --ws2812-log` 同格式）。运行指纹 = FNV-1a(串口原始字节 + `\n#report\n` + 规范化观察记录)，`tools/webtest/levels.mjs` 逐关核对网页与命令行指纹相同。
 
@@ -104,7 +109,7 @@ web/（Vite + TS）
 - 测试契约：`tools/webtest/*.mjs` 依赖的 id / class / `data-*` / 文案保持不变；确要改，同一提交里改测试脚本，判据不放宽。每迁一页要做：新旧页面状态逐条文字对比（脚本放 `Reviews/ab/react/`）、agent-browser 亮色 / 暗色 / 390px 宽走查截图、`agent-browser a11y` 零违规、console 无 error、`tools/accept.sh --no-qemu` 全过。
 
 ## 引脚器件、PCNT、RMT 接收（P2-01 / P2-04 / P2-05）
-- 引脚器件（`crates/esp32c3/src/devices/pins.rs`，C3 / S3 的 SocBus 都挂 `pins: PinDevices`）：输出带精确时刻波形的外接器件放在 SoC 里，不在 1 ms 时间片之间施加。`poll(now)` 给出到 now 为止的驱动 `(周期, 引脚, 电平)`，SoC 的 `pins_update` 按时刻写 `gpio.ext_in / ext_driven` 并调 `gpio_changed(t)`（照常触发 GPIO 中断、iotrace、PCNT / RMT 接收）；下一次要问的时刻进 `next_event`（WAITI 快进也会停在这里）。`gpio_changed` 在电平变化时调 `pins.on_level(t, 电平)`，让器件看到芯片输出（HC-SR04 的 Trig）
+- 引脚器件（`crates/soc/src/devices/pins.rs`，C3 / S3 的 SocBus 都挂 `pins: PinDevices`）：输出带精确时刻波形的外接器件放在 SoC 里，不在 1 ms 时间片之间施加。`poll(now)` 给出到 now 为止的驱动 `(周期, 引脚, 电平)`，SoC 的 `pins_update` 按时刻写 `gpio.ext_in / ext_driven` 并调 `gpio_changed(t)`（照常触发 GPIO 中断、iotrace、PCNT / RMT 接收）；下一次要问的时刻进 `next_event`（WAITI 快进也会停在这里）。`gpio_changed` 在电平变化时调 `pins.on_level(t, 电平)`，让器件看到芯片输出（HC-SR04 的 Trig）
   - EC11 编码器：A/B 正交，一格四个沿、沿间隔 0.5 ms（`ENC_EDGE_CYCLES`），顺时针 A 先落；`turn(steps)` 排队，`press(down)` 按下接地 / 松开悬空。上电驱动 A=B=1（模块上拉）
   - HC-SR04：Trig 高 ≥ 10 µs 的下降沿后 250 µs 拉高 Echo，宽 2 × 距离 / 343 m/s；2–400 cm，`None` / 超量程 38 ms；回波没结束时的触发不理。距离由外部（脚本 `dist=`、网页射线）设
 - 外设输入取样：S3 `feed_inputs(t, 电平)`、C3 `feed_rx` 在每次 `gpio_changed` 与 RMT 发送改了引脚之后，按 GPIO 矩阵（FUNCn_IN_SEL_CFG：S3 sel[5:0] / inv[6] / 经矩阵[7]，常量 0x38 / 0x3C；C3 sel[4:0] / inv[5] / 经矩阵[6]，常量 0x1E / 0x1F）算出 PCNT 16 路输入（信号 33..48）与 RMT 接收输入（信号 = RMT_SIG_IN0 + i，与输出同号）的电平，带时刻喂进去。电平没变也可以喂（内部只认跳变）
@@ -113,7 +118,7 @@ web/（Vite + TS）
 - RMT 接收（`rmt.rs`，S3 通道 4–7 / C3 通道 2–3，按 `RmtLayout` 的 `rx_conf0`、`rx_mem_shift`、`rx_end/err/thr_bit` 参数化）：CONF1.rx_en 上升后等第一个跳变；每段电平按通道分频的 tick 写半个条目（时长上限 0x7FFF）；电平保持 ≥ idle_thres tick 结束：当前电平写成时长 0 的半条目、补齐最后一个条目，置 RX_END；STATUS 的 mem_waddr_ex = 通道起始条目号 + 已写条目（IDF 减去起点得到条目数）。rx_lim + 回绕时每 lim 个条目置阈值中断（乒乓），不回绕写满置出错并停止。mem_wr_rst 复位写指针
 - 对外：CLI `--encoder A,B[,SW]`、`--sonar TRIG,ECHO`、`--dist 厘米`，脚本动作 `enc=+N|-N`、`encsw=1|0`、`dist=厘米`（负数 = 没有障碍物），结尾打印 `[tryboard] 编码器 转了 N 格…PCNT 单元 0 计数 C` / `[tryboard] 超声波 触发 N 次，回波 M 次，最近一次 Echo W µs`；接了这两种器件时 CLI 与 simrun 都 1 ms 一片。wasm `tb_encoder_attach(a,b,sw|-1)`、`tb_encoder_turn`、`tb_encoder_press`、`tb_encoder_pos`、`tb_pcnt_count(u)`、`tb_sonar_attach`、`tb_sonar_distance`、`tb_sonar_stat(0 触发 / 1 回波 / 2 宽度µs)`
 - 网页：`PartSpec` 加 `encoder {a,b,sw?}`、`hcsr04 {trig,echo,divider?,cm?}`；worker `boot` / `seek` 带 `encoder` / `sonar`（seek 时 cm 给 NaN，初始距离就是日志 0 时刻那条 `dist`），消息 `enc` / `encsw` / `dist` 进输入日志（`dist` 施加前取整到 0.01 cm，导出脚本两位小数才逐周期重放），tick 带 `pins`（`PinDevFrame`）。InputLog 加 `encoder` / `sonar`，`cliArgs` 拼 `--encoder` / `--sonar`。3D：编码器旋钮左右拖（14 px 一格）、滚轮一格、按住 150 ms = 按下；HC-SR04 立在面包板前、探头朝 +x，前方障碍物可沿探头方向拖，距离 = 从发射头沿朝向打到障碍物的射线（3D 里最远摆 100 cm，更远只用滑块）；接线检查 W2 认 Echo 的 1k/2k 分压（`BenchWire.divider`，改接线 `noDivider` 拆掉）。供电：编码器 0.66 mA 进 3V3，HC-SR04 15 mA 进 5V 轨（`Board::module_current_5v`，接了才加元件，没接时网络与以前逐位相同）
-## IMU 与触摸（P2-02 / P2-03，`crates/esp32c3/src/devices/{imu,mpu6050,qmi8658,cst816s}.rs`，C3 / S3 共用）
+## IMU 与触摸（P2-02 / P2-03，`crates/soc/src/devices/{imu,mpu6050,qmi8658,cst816s}.rs`，C3 / S3 共用）
 - 和 SSD1306 / BME280 一样是 `I2cDevice`，挂 I2C0：`make_i2c("mpu6050" | "qmi8658" | "cst816s", addr)`。读写都自动递增（QMI8658 只在 CTRL1.ADDR_AI=1 时），读事务开始（`start(read)`）时锁存全部输出寄存器，突发读拿到的是同一个样本。
 - 姿态 `Pose { pitch, roll, yaw, dpitch, droll, dyaw }`（度、°/s）：传感器 X 沿模块长边、Y 沿短边、Z 垂直芯片朝上；R = Rz(yaw)·Ry(pitch)·Rx(roll)（右手，正 pitch = X 端朝下、正 roll = Y 端朝上）。加速度计读 Rᵀ·(0,0,1) g，陀螺读欧拉角速率换算的机体角速度；量程 / 灵敏度按数据手册，叠确定性噪声（样本序号哈希）。样本序号按 CPU 周期 / 输出率算，只用于 DATA_RDY / STATUS0 与噪声；姿态在两次输入之间保持（不外推）。片上温度 = 环境温度（`env_set` 一起改）。
 - 触摸：`Machine::touch(x, y, down)` 先找 I2C0 上的 `Cst816s`（`press / release`，记按下时刻判长按），没有再找 `Ft6236`（P2-18，`make_i2c("ft6236", 0x38)`，12 位坐标、单触点、事件位按下 / 接触 / 抬起），并在 `touch_int` 配了引脚时驱动 INT：按着 0、抬起 1（`touch_int_attach` 先驱动成 1）。
@@ -141,7 +146,7 @@ web/（Vite + TS）
 - HLE：rom_i2c_* 在 ROM 函数入口（ENTRY 之前）拦截，此时窗口仍是调用者的：参数在 a(4·CALLINC+2..)，返回地址在 a(4·CALLINC)（高 2 位为 CALLINC），返回值写回 a(4·CALLINC+2)，PC 直接回到调用点之后。
 - 软件复位：`mmio_write` 看 RTC_CNTL_OPTIONS0 的复位位（脉冲，存回的值去掉它们）。SW_PROCPU_RST / SW_SYS_RST 记 `reset_request`，写它的那个核在下一条指令前停下，`run` 返回 `Stop::Reset(12 / 3)`；SW_APPCPU_RST（esp_restart 先复位并停住另一个核）直接把核 1 停掉。`Esp32s3::reboot` 用一条新总线重新直接启动：先放进旧的 RTC 慢 / 快速内存和 RTC_CNTL_STORE0–3/6/7，再装镜像段（.rtc.data 被重新装载，与 bootloader 在非深睡唤醒时的做法一致；RTC_NOINIT 不在镜像里所以保留）；RTC_CNTL_RESET_STATE 读回复位原因（两核同值），`esp_reset_reason()` 结合 STORE6 里的提示得到 ESP_RST_SW。外部世界（引脚外部驱动、ADC 电压、I2C 器件、GPIO 记录、WS2812 解码）搬到新机器；模拟时间继续。
 - 八线 PSRAM（`psram.rs`）：不 HLE，ROM 的 `esp_rom_opiflash_exec_cmd` 照常配 SPI1 寄存器；写 CMD 的 USR 位时若 SPI_MEM_MISC 选的是 CS1（CS0_DIS=1、CS1_DIS=0）就交给 `OctalPsram`：0x4040 / 0xC0C0 读写模式寄存器（MR1 厂商 0x0D AP、MR2 density 3 = 8MB / 第 3 代 / good-die，MR3 VCC=3V；写只落 MR0/4/8），0x0000 / 0x8080 同步读写存储体（与 cache 共用 `SocBus::psram`）。dummy、DTR 采样相位、驱动强度只存不用。
-- 外设：与 C3 同族的模型直接复用 tryboard-esp32c3（UART、SYSTIMER、TIMG、SPI1、LEDC、I2C + 器件、RMT + WS2812 + 接收、PCNT、GP-SPI2、GDMA + GC9A01、SHA / AES、引脚器件），Wi-Fi MAC 复用 tryboard-soc（`WifiLayout::S3`，中断源 0；WDEV_RND_REG 在 0x6003507C；SENS 温度传感器给 READY），按芯片参数化的是 RMT（`RmtLayout`：通道数、寄存器块起点、RAM 偏移、GPIO 矩阵信号号）与 GDMA（`GdmaLayout`）；S3 独有的是中断矩阵、EXTMEM、49 脚 GPIO、SENS 单次 ADC（periph.rs）。
+- 外设：与 C3 同族的模型直接复用 tryboard-soc（UART、SYSTIMER、TIMG、SPI1、LEDC、I2C + 器件、RMT + WS2812 + 接收、PCNT、GP-SPI2、GDMA + GC9A01、SHA / AES、引脚器件），Wi-Fi MAC 复用 tryboard-soc（`WifiLayout::S3`，中断源 0；WDEV_RND_REG 在 0x6003507C；SENS 温度传感器给 READY），按芯片参数化的是 RMT（`RmtLayout`：通道数、寄存器块起点、RAM 偏移、GPIO 矩阵信号号）与 GDMA（`GdmaLayout`）；S3 独有的是中断矩阵、EXTMEM、49 脚 GPIO、SENS 单次 ADC（periph.rs）。
 - 入口帧溢出保存区：核 0 / 核 1 分别借用 ROM 的 level 5 / level 4 中断栈（app 装了自己的向量表后 ROM 不再用）。
 - 崩溃检测：落进 ROM 异常向量（VECBASE 仍为 0x40000000 时）停机报 EXCCAUSE / EPC1；app 装了自己的 VECBASE 后，崩溃由固件自己的 panic 处理程序打印（Guru Meditation），CLI 照常转发。
 - 中断：32 条线，级别 / 类型按 core-isa.h（外部电平、外部边沿 10/22/28/30、NMI 14、软件 7/29、定时器 6/15/16、性能计数 11）。`INTERRUPT` = 锁存位（边沿 / NMI / 软件 / 定时器）| 外部电平线。可响应条件：挂起 & INTENABLE 的最高级别 > max(PS.INTLEVEL, EXCM ? 3 : 0)。level 1 走 User/Kernel 向量（EXCCAUSE=4），level n≥2 存 EPC_n / EPS_n、置 INTLEVEL=n 与 EXCM，跳 VECBASE+0x180/0x1C0/0x200/0x240/0x280/0x2C0。
@@ -156,7 +161,7 @@ web/（Vite + TS）
 - 核：与 S3 同一个 `tryboard-xtensa`，`Cpu::with_variant(Variant::Lx6Esp32)`。两颗芯片的 core-isa.h 在本核实现的选项上一致（中断线类型 / 级别、窗口、循环、MUL/DIV、FPU、MAC16、向量偏移），只差硬件版本号 / CONFIGID（SR 176 / 208）；LX6 没有 PIE（本来就没实现）。
 - 存储映射（soc/esp32/include/soc/soc.h）：SRAM 520KB 一块缓冲，D 视图 0x3FFAE000..0x40000000（SRAM2 + SRAM1，328KB）在前、SRAM0（I 0x40070000，192KB）在后；SRAM1 的 I 视图 0x400A0000..0x400C0000 与 D 0x3FFE0000.. 同一块但**按字倒序**（SOC_DIRAM_INVERTED），只给不跨字的访问，取指页缓存不缓存它。ROM0 0x40000000、ROM1 只读数据 0x3FF90000（64KB）；RTC 快速内存 D 0x3FF80000 = I 0x400C0000，慢速内存 0x50000000。
 - cache：DROM0 0x3F400000、IROM0 0x400D0000 起，MMU 256 项 64KB 页（DPORT_PRO_FLASH_MMU_TABLE 0x3FF10000，0x100 = 无效；项 0..63 给 DROM，64.. 给 IROM），核 1 的表（0x3FF12000）IDF 总写成一样，取指只看核 0 的。默认板 DevKitC V4（WROOM-32E，4MB flash）。
-- 外设：MMIO 0x3FF00000..0x3FF80000，0x60000000 + x 是 0x3FF40000 + x 的 AHB 别名（UART / I2C FIFO 走它）。与 C3 / S3 寄存器语义相同的直接复用 tryboard-esp32c3（UART、I2C + SSD1306 / BME280、引脚器件、GPIO 记录），偏移不同的 TIMG、SPI1、LEDC 在 `periph.rs` 里做翻译层；I2C 按 `I2cLayout::ESP32`（命令码 RSTART 0 / WRITE 1 / READ 2 / STOP 3 / END 4、16 项命令表、SCL 直接按 APB 80MHz 计 14 位）。DPORT：两张中断矩阵（69 个源）、核间中断、cache 控制。GPIO 40 脚（0–39，无 20 / 24 / 28–31）。
+- 外设：MMIO 0x3FF00000..0x3FF80000，0x60000000 + x 是 0x3FF40000 + x 的 AHB 别名（UART / I2C FIFO 走它）。与 C3 / S3 寄存器语义相同的直接复用 tryboard-soc（UART、I2C + SSD1306 / BME280、引脚器件、GPIO 记录），偏移不同的 TIMG、SPI1、LEDC 在 `periph.rs` 里做翻译层；I2C 按 `I2cLayout::ESP32`（命令码 RSTART 0 / WRITE 1 / READ 2 / STOP 3 / END 4、16 项命令表、SCL 直接按 APB 80MHz 计 14 位）。DPORT：两张中断矩阵（69 个源）、核间中断、cache 控制。GPIO 40 脚（0–39，无 20 / 24 / 28–31）。
 - LEDC：高速 / 低速两组各 8 通道；timer 的 tick_sel 0 = REF_TICK 1MHz，1 = 高速组 APB / 低速组 SLOW_CLK（APB_CLK_SEL 选 APB 或 8MHz），翻译层据此算频率。
 - 启动：直接启动同 S3（ROM 各 .data* 初值、入口窗口帧、双核由 `ets_set_appcpu_boot_addr` 拉起核 1，两核 256 周期量子交替）；一代 ROM（2016-06-08）的启动横幅只有两行。eFuse 只读：芯片版本 v3.0（REV1 / REV2 位 + APB_CTRL_DATE 位 31）、出厂 MAC 02:54:42:00:00:04（本地管理地址，带 CRC8）。
 - Wi-Fi：PHY 射频校准轮询与 C3 同一套（外设偏移相同、APB 基址 0x3FF40000）；MAC 是上一代 IP（0x3FF73000..0x3FF76000），与 C3 / S3 共用 `tryboard_soc::wifi::WifiMac`，寄存器排布由 `WifiLayout::ESP32.mac`（`MacRegs::ESP32`）给出：7 字接收头、RSSI 偏置 96、接收控制重装位自清、"下一个描述符"寄存器（docs/WIFI.md「经典 ESP32」）。SocBus 在 MMIO 分发里先查 MAC 范围再查射频，`impl tryboard_soc::Mem for SocBus` 让 MAC 读写描述符；中断源 WIFI_MAC 进中断矩阵。WPA2 需要的 SHA（0x3FF03000，SHA-1/256/384/512）/ AES（0x3FF01000）在 `crypto.rs`。RFPLL 校准完成位由 HLE regi2c 读回（块 0x62 寄存器 7 位 7）。
@@ -174,13 +179,13 @@ web/（Vite + TS）
 - 调度：设备接上总线后，SoC 每 0.25ms 唤醒一次推进主机（`SocBus::update` 里把 `usb` 从 Option 临时取出，借总线给 DMA 访问内存）；断开后不再唤醒，不影响空闲快进。
 - 对外：CLI `--usb-log`、脚本 `usbcdc=文本`；wasm `tb_usb_version` / `tb_usb_json` / `tb_usb_json_ptr` / `tb_usb_cdc_send`，JSON 结构见 `web/src/usb3d.ts` 的 `UsbView`。
 
-## GP-SPI2 / GDMA / GC9A01 圆屏（ESP32-S3；模型在 `crates/esp32c3/src/{gpspi,gdma}.rs`、`devices/gc9a01.rs`）
+## GP-SPI2 / GDMA / GC9A01 圆屏（ESP32-S3；模型在 `crates/soc/src/{gpspi,gdma}.rs`、`devices/gc9a01.rs`）
 - GP-SPI2 主机（0x60024000，中断源 21）：寄存器按 `spi_reg.h`，复位值由各字段注释的 default 求得。CMD.UPDATE 瞬间完成；写 CMD.USR 时 SoC 按 USER 里的阶段（命令 → 地址 → 哑周期 → MOSI / MISO）组织一次传输：命令值按 bit7..0、bit15..8 顺序，地址从 ADDR 最高位移出，MOSI 数据在 DMA_CONF.dma_tx_ena=1 时从 GDMA 取、否则从 W0..W15 取。字节立即交给从机；CMD.USR 读回 1 直到按 SPI 时钟算出的结束时刻，然后置 DMA_INT_RAW.trans_done（位 12）。时钟：CLK_GATE.mst_clk_sel 选 PLL 80MHz / XTAL 40MHz，CLOCK.clk_equ_sysclk 或 ÷(pre+1)(n+1)。
 - GDMA（0x6003F000，5 通道，间距 0xC0，IN 组在 +0x00、OUT 组在 +0x60；中断源 IN 66..70、OUT 71..75）：PERI_SEL 复位为 0x3F（不接），SPI2 = 0。OUT_LINK 只有低 20 位，完整地址 = 0x3FC00000 | addr；start / stop / restart 自清，park 恒为 1。SPI 传输开始时沿描述符链（字 0：size[11:0]、length[23:12]、suc_eof[30]、owner[31]；字 1 缓冲区；字 2 下一个）一次取完，out_auto_wrback 时交还 owner、记 OUT_EOF_DES_ADDR；传输结束时置 OUT_DONE / OUT_EOF / OUT_TOTAL_EOF。
 - 圆屏 GC9A01（`SocBus::lcd`，CLI `--spi gc9a01`、wasm `tb_lcd_attach`，C3 / S3 都有）：S3 接线固定为 SCLK=12、MOSI=11、CS=10、DC=14、RST=13、背光=15（`tryboard_esp32s3::lcd_pin`）；C3 为 SCLK=6、MOSI=7、CS=10、DC=5、RST=4、背光=3（`tryboard_esp32c3::lcd_pin`）。SCLK / MOSI / CS 都是 SPI2 的 IO_MUX 直连脚。D/C 取传输开始时 DC 脚的电平；片选见 DECISIONS。命令：SWRESET、SLPIN/SLPOUT、DISPON/DISPOFF、INVON/INVOFF、MADCTL（MY/MX/MV 换算显存坐标，BGR 位）、COLMOD（16 / 18 位）、CASET、RASET、RAMWR、RAMWRC，其余算厂商命令只计数。显存 240×240 RGB888；渲染时按"常黑 IPS（INVON 才是原色）、BGR 子像素"换算，圆形可视区（半径 120）外透明。
 - 对外：CLI stderr `[tryboard] LCD GC9A01 非黑像素 N（显示开/关）`、`--lcd-ppm <路径>`；wasm `tb_lcd_attach() -> i32`、`tb_lcd_version() -> u32`、`tb_lcd_ptr() -> *const u8`（240×240×4 RGBA），`tb_report` 在 OLED 行之后追加 `[tryboard] LCD GC9A01 非黑像素 N` 和颜色统计行（见上）。
 
-## I2S + 音频器件（P2-06；模型在 `crates/esp32c3/src/i2s.rs`、`devices/audio.rs`，C3 / S3 共用）
+## I2S + 音频器件（P2-06；模型在 `crates/soc/src/i2s.rs`、`devices/audio.rs`，C3 / S3 共用）
 - I2S（S3：I2S0 0x6000F000 / I2S1 0x6002D000，中断源 25 / 26，GDMA 外设号 3 / 4；C3：I2S0 0x6002D000，源 20，外设号 3）：寄存器按 `i2s_reg.h`（两颗芯片布局逐项相同），复位值由字段注释的 default 求得。TX/RX_CONF.update 瞬间完成（读回 0）；只做主模式 + TDM / 标准格式（Philips / MSB / PCM 都按"每帧若干槽"处理，线上逐位时序不模拟），PDM、从模式、外部 MCLK 不做（该方向不出数据）
 - 帧率 = 源时钟（clk_sel 0 = XTAL 40 MHz，2 = PLL_F160M）÷ (N + 分数) ÷ (bck_div_num+1) ÷ ((tdm_chan_bits+1) × (tot_chan_num+1))；分数是 `i2s_ll_tx_set_mclk` 的逆运算：分母 = z(x+1)+y，分子 = yn1 ? 分母−z : z
 - 数据只走 GDMA（流式，`Gdma::out_next / out_eof / in_peek / in_fill`，通道里多了"当前描述符"`cur`，start 时 = link）：

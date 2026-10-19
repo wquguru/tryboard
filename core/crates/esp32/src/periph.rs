@@ -1,10 +1,10 @@
 //! Classic-ESP32 peripheral models and shims; offsets from ESP-IDF `components/soc/esp32/register/soc/*.h` and `components/hal/esp32/include/hal/*_ll.h` (Apache-2.0).
 //! C3 / S3 models (TIMG timer, SPI1 flash commands, LEDC channels / timers, interrupt matrix lines) are reused; ESP32 mostly moves registers, so we only translate offsets.
 
-use tryboard_esp32c3::ledc::Ledc;
-use tryboard_esp32c3::periph::Timg;
-use tryboard_esp32c3::spiflash::SpiFlash;
 pub use tryboard_esp32s3::periph::{Analog, Intmatrix};
+use tryboard_soc::ledc::Ledc;
+use tryboard_soc::periph::Timg;
+use tryboard_soc::spiflash::SpiFlash;
 
 /// Interrupt source numbers (soc/esp32/include/soc/interrupts.h)
 pub mod src {
