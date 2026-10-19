@@ -7,9 +7,9 @@ type Vars = Record<string, string | number>;
 
 export const LOCALES: { id: Locale; label: string; html: string }[] = [
   { id: 'en', label: 'English', html: 'en' },
-  { id: 'zh', label: '简体中文', html: 'zh-CN' },
-  { id: 'ja', label: '日本語', html: 'ja' },
-  { id: 'ko', label: '한국어', html: 'ko' },
+  { id: 'zh', label: '简体中文', html: 'zh-CN' }, // lint: allow-cjk
+  { id: 'ja', label: '日本語', html: 'ja' }, // lint: allow-cjk
+  { id: 'ko', label: '한국어', html: 'ko' }, // lint: allow-cjk
 ];
 
 const KEY = 'tb-lang';
