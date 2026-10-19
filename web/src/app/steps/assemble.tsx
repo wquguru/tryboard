@@ -46,7 +46,7 @@ const REAL_HW: ConfLevel = '必须上真机'; // lint: allow-cjk
 /** Device name of the assembly-warning row: it is not a device, so the "N devices changed" count skips it */
 const ASM_DEV = t('Assembly');
 
-type Entry = { kind: 'place'; id: string; spot?: string } | { kind: 'test'; ok: boolean; rows: { ok: boolean; text: string; say?: string; tag?: string; dev?: string }[]; fingerprint: string; who: string; temp: number; offset: number };
+type Entry = { kind: 'place'; id: string; spot?: string } | { kind: 'test'; ok: boolean; rows: { ok: boolean; text: string; say?: string; tag?: string; dev?: string; conf?: ConfLevel; note?: string }[]; fingerprint: string; who: string; temp: number; offset: number };
 
 const KEY = (work: string) => `tryboard-app-asm:${work}`;
 /** Locally saved assembly timeline (what went in, how, retest results; nothing beyond the per-row results) */
@@ -738,7 +738,7 @@ export function assembleStep(): StepImpl {
         { i2cWire: hx.i2c ? hz.i2cCm : undefined, antenna: hx.antennaDb || undefined },
       );
       const clean = asm.clean() && hx.ok;
-      const rows: Extract<Entry, { kind: 'test' }>['rows'] = v.results.map((x) => ({ ok: x.ok, text: x.text, say: x.say, tag: x.tag, dev: x.dev }));
+      const rows: Extract<Entry, { kind: 'test' }>['rows'] = v.results.map((x) => ({ ok: x.ok, text: x.text, say: x.say, tag: x.tag, dev: x.dev, conf: x.conf, note: x.note }));
       if (hx.i2c) rows.push({ ok: hx.i2c.verdict === 'ok', text: t('I2C cable {cm} cm: {detail} (estimate, needs real hardware)', { cm: hz.i2cCm, detail: i2cText(hx.i2c) }), say: i2cSay(hx.i2c), tag: EST, dev: t('I2C cable') });
       if (hx.antennaDb) rows.push({ ok: hx.wifi.level !== 'fail', text: t('Antenna loss {db} dB: {wifi} (estimate, needs real hardware)', { db: hx.antennaDb, wifi: hx.wifi.text }), say: wifiSay(hx.antennaDb), tag: EST, dev: t('Wi-Fi antenna') });
       rows.push({

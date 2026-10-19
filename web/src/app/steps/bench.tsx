@@ -2687,6 +2687,8 @@ export function benchStep(): StepImpl {
         say: x.say,
         tag: x.tag,
         dev: x.dev,
+        conf: x.conf,
+        note: x.note,
       }));
       // Assembly checks are geometric estimates the CLI cannot judge, so the Assemble step owns them
       if (l.assembly)

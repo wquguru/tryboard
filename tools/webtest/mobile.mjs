@@ -280,6 +280,15 @@ await page.screenshot({ path: path.join(outDir, 'mobile-product-serial.png') });
 if (half) await page.click('#sheetGrab');
 report('Product: serial strip returns after the drawer closes', await waitFor(page, () => !document.querySelector('#dock[data-sheet="half"]') && !!document.querySelector('#mSerialOpen'), null, 3000));
 report('Product: serial strip tappable after closing', (await tappable('#mSerialOpen')) === 'ok', await tappable('#mSerialOpen'));
+// Real-hardware checklist (D-06) sits in the Details drawer: card fits, checkboxes and both buttons are tap-sized
+await page.click('#toolbar [data-tool="p-info"]');
+report('Product: checklist in Details', await waitFor(page, () => document.querySelectorAll('#props .checklist li').length >= 3, null, 3000));
+await page.$eval('#props .checklist', (e) => e.scrollIntoView());
+report('Product: checklist tick tappable', (await tappable('#props .checklist li > label')) === 'ok', await tappable('#props .checklist li > label'));
+await page.$eval('#props .checklist-acts', (e) => e.scrollIntoView({ block: 'center' }));
+report('Product: checklist copy / print tappable', (await tappable('#props .checklist-acts button')) === 'ok', await tappable('#props .checklist-acts button'));
+await page.screenshot({ path: path.join(outDir, 'mobile-checklist.png') });
+await page.click('#propsClose');
 
 // ---- Example page (U-07/U-10): blank work + example firmware, only Shop / Bench; the firmware drawer covers the serial drawer and bottom bar
 await page.goto(`${base}/app?work=blank&example=bme280#bench`, { waitUntil: 'load' });

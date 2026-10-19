@@ -7,6 +7,7 @@ import type { LiveSim } from '../live';
 import type { BuzzerAudio } from '../audio';
 import type { Effects } from '../views/templates';
 import type { Level } from '../checks';
+import type { ConfLevel } from '../ui/conf';
 import type { Store } from './store';
 import type { Timeline } from './timeline';
 import type { Toolbar } from './toolbar';
@@ -54,7 +55,7 @@ export interface CheckOutcome {
   /** User's own firmware? Only an own-firmware pass counts as progress */
   own: boolean;
   /** text matches the CLI byte for byte; say / tag are the plain-language layer (DESIGN_V2 §9) */
-  rows: { ok: boolean | null; text: string; say?: string; tag?: string; dev?: string }[];
+  rows: { ok: boolean | null; text: string; say?: string; tag?: string; dev?: string; conf?: ConfLevel; note?: string }[];
   fingerprint: string;
   sim: number;
   /** Ran with the real network on (C-03): verdict depends on the internet, fingerprint empty (no run ID) */

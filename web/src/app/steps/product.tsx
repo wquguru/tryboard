@@ -21,6 +21,8 @@ import { i2cLoad, i2cSay, i2cText, wifiSay, wifiText } from '../harness';
 import { I2C_DEVICES } from './assemble';
 import { setBc } from '../chrome';
 import { BuyCard } from '../buycard';
+import { buildChecklist } from '../checklist';
+import { Checklist } from '../checklistview';
 import { loadBom } from './shop';
 import { replay } from '../bom';
 import { getTemplate, type BuyLine } from '../../catalog/templates';
@@ -477,15 +479,7 @@ export function productStep(): StepImpl {
         <Sec>{t('Serial · last few lines')}</Sec>
         {/* Long serial output scrolls: it must be focusable for keyboard scrolling (axe scrollable-region-focusable) */}
         <Brief className="serial-tail" data-live="serial" tabIndex={0} aria-label={t('Last few serial lines')} />
-        <Sec>{t('First three things to do when the real board arrives')}</Sec>
-        <ol className="first3">
-          {(FIRST3[w] ?? []).map(([title, d]) => (
-            <li key={title}>
-              <b>{title}</b>
-              <span>{d}</span>
-            </li>
-          ))}
-        </ol>
+        <Checklist key={w} work={w} title={c.work.title} items={checklistItems()} toast={(s) => c.shell.toast(s)} />
         <Sec className="flex items-center gap-1.5">
           {t("Can't be simulated")} · <Conf c={MUST_REAL} />
         </Sec>
@@ -498,6 +492,14 @@ export function productStep(): StepImpl {
       </>,
     );
     updateLive();
+  }
+
+  /** D-06: project first steps + capability rules + result rows marked "needs real hardware" from saved checks */
+  function checklistItems() {
+    const c = ctx!;
+    const s = c.store.get();
+    const mustReal = c.work.checkpoints.flatMap((id) => (s.checks[id]?.rows ?? []).filter((r) => r.conf === MUST_REAL).map((r) => ({ text: r.text, note: r.note })));
+    return buildChecklist({ first: FIRST3[c.work.id] ?? [], parts: c.session.scene.parts.map((p) => p.type), serial: c.session.consoleText(), mustReal });
   }
 
   // ------------------------------------------------------------ buy card (DESIGN_V2 §8.3, U-18)

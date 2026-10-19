@@ -144,9 +144,13 @@ body.app { --dock-h: var(--dock-desk, 200px); }
 .p3-disclaimer { position: absolute; left: 12px; bottom: 70px; font-size: 11px; color: var(--muted); pointer-events: none; }
 .prod-svg { position: absolute; left: var(--gap); right: var(--gap); top: 50%; transform: translateY(-50%); }
 .prod-svg .tb-view { border-radius: var(--r); box-shadow: var(--shadow); }
-.first3 { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; list-style: decimal; }
-.first3 li b { display: block; font-weight: 500; }
-.first3 li span { color: var(--muted); font-size: 12px; }
+/* D-06: "Print" shows only the body-level copy of the checklist card */
+#checklist-print { display: none; }
+@media print {
+  body.print-checklist > :not(#checklist-print) { display: none !important; }
+  body.print-checklist #checklist-print { display: block; color: #000; background: #fff; }
+  #checklist-print .checklist-acts button { display: none; }
+}
 .serial-tail { min-height: 60px; max-height: 120px; }
 @media (max-width: 767px) {
   .asm-shell, .prod-svg { position: static; transform: none; }
