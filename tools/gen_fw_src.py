@@ -19,7 +19,8 @@ def rel(root, p):
     return os.path.relpath(p, os.path.join(root, 'firmware')).replace(os.sep, '/')
 
 
-def collect_idf(root, fid):
+def idf_paths(root, fid):
+    """收集一个 IDF 工程要展示 / 打包的文件（绝对路径，已排好序）和 main/CMakeLists.txt 文本；gen_fw_zip.py 也用它。"""
     proj = os.path.join(root, 'firmware', fid)
     main = os.path.join(proj, 'main')
     cm = os.path.join(main, 'CMakeLists.txt')
@@ -56,8 +57,16 @@ def collect_idf(root, fid):
     # .c 在前（app_main 所在），头文件其次，构建配置最后
     files.sort(key=lambda p: (not p.endswith('.c'), p not in srcs, rel(root, p)))
     extra = [cm, os.path.join(proj, 'sdkconfig.defaults')]
+    return files + [x for x in extra if os.path.isfile(x)], cmake
+
+
+def collect_idf(root, fid):
+    got = idf_paths(root, fid)
+    if not got:
+        return None
+    paths, cmake = got
     out = []
-    for p in files + [x for x in extra if os.path.isfile(x)]:
+    for p in paths:
         out.append({'path': rel(root, p), 'text': open(p, encoding='utf-8', errors='replace').read()})
     # 引脚 / 阶段宏在 CMake 里定义（与 C3 版共用源码时只覆盖引脚），单独摘出来放在页签顶上
     defs = re.findall(r'target_compile_definitions\([^)]*PRIVATE\s+([^)]+)\)', cmake)

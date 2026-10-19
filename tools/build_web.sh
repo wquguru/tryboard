@@ -52,6 +52,8 @@ PY
 "$ROOT/tools/fonts/fetch.sh" || echo "字体原件下载失败，跳过（页面用系统字体）" >&2
 # 已发布固件的源码（底部坞「代码」页签，按需加载）：fw/<id>/src.json
 python3 "$ROOT/tools/gen_fw_src.py" "$ROOT" $(ls "$PUB/fw" | grep -v '\.json$')
+# 检查点参考固件 + 选板演示固件的可编译源码包（U-22，实验台「下载源码」）：fw/<ref>/src.zip
+python3 "$ROOT/tools/gen_fw_zip.py" "$ROOT"
 # 第三方授权页（LICENSING.md 规则 8）：读依赖清单、ROM、已发布固件的组件、SOURCES.md
 node "$ROOT/tools/gen_licenses.mjs"
 # 自托管字体（P2-19）：下载原件（third_party/fonts）→ venv 里的 fonttools 子集化成 WOFF2（web/public/fonts）。
