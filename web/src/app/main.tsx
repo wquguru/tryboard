@@ -161,7 +161,7 @@ const ownsTimeline = () => store.get().step === 'bench';
       shell.setVerdict(n ? `检查点 ${d}/${n}` : '没有检查点', n && d === n ? 'ok' : 'idle');
       shell.onVerdict(() => {
         const s = store.get();
-        const first = work.checkpoints.find((id) => !(s.checks[id]?.ok && s.checks[id].own)) ?? work.checkpoints[0];
+        const first = work.checkpoints.find((id) => !s.checks[id]?.ok) ?? work.checkpoints.find((id) => !s.checks[id]?.own) ?? work.checkpoints[0];
         if (!first) return;
         if (s.step !== 'bench') location.hash = 'bench';
         store.set({ selection: { kind: 'checkpoint', id: first } });
@@ -302,7 +302,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   const curLevel = () => {
     const s = store.get();
     const sel = s.selection?.kind === 'checkpoint' ? s.selection.id : null;
-    const id = sel ?? work.checkpoints.find((x) => !(s.checks[x]?.ok && s.checks[x].own)) ?? work.checkpoints[0];
+    const id = sel ?? work.checkpoints.find((x) => !s.checks[x]?.ok) ?? work.checkpoints.find((x) => !s.checks[x]?.own) ?? work.checkpoints[0];
     return session.levels.find((l) => l.id === id) ?? null;
   };
   // 选板作品：任务书 = 选板给 AI 的任务书 + 生成的检查点（逐条带判定）
@@ -361,7 +361,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     const n = work.checkpoints.length;
     const d = passedCount(ctx);
     const allOk = !n || d === n;
-    const lockAsm = n && !allOk ? `实验台 ${n} 个检查点全部通过后解锁（${d}/${n}）` : undefined;
+    const lockAsm = n && !allOk ? `实验台 ${n} 个检查点全部跑通后解锁（${d}/${n}，内置固件也算）` : undefined;
     const asmDone = !!s.assembly && s.assembly.placed.length >= s.assembly.total && s.assembly.total > 0;
     setBc({
       locks: { assemble: lockAsm, product: lockAsm ?? (n && !asmDone ? '组装装完后解锁' : undefined) },
@@ -370,7 +370,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
       checkpoints: work.checkpoints.map((id): CpRow => {
         const l = session.levels.find((x) => x.id === id);
         const r = s.checks[id];
-        const state = s.verifying === id ? 'run' : r?.ok && r.own ? 'ok' : r && !r.ok ? 'bad' : 'todo';
+        const state = s.verifying === id ? 'run' : r?.ok ? (r.own ? 'ok' : 'ref') : r && !r.ok ? 'bad' : 'todo';
         return { id, title: l?.title ?? id, state, note: r ? r.who : (l?.pass ?? '') };
       }),
     });

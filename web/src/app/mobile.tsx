@@ -97,7 +97,7 @@ export function MobileTop({
 
 function MobileSteps({ step }: { step: StepId }) {
   const { locks, done, checkpoints } = useStore(bc);
-  const ok = checkpoints.filter((c) => c.state === "ok").length;
+  const ok = checkpoints.filter((c) => c.state === "ok" || c.state === "ref").length;
   return (
     <nav
       id="steps"
@@ -149,7 +149,7 @@ export function MobileStageBar({ wiring }: { wiring: boolean }) {
   const { run, speed, checkpoints, retest } = useStore(bc);
   const [t, dot] = RUN_TEXT[run];
   const live = run === "run" || run === "pause" || run === "seek";
-  const i = checkpoints.findIndex((c) => c.state !== "ok");
+  const i = checkpoints.findIndex((c) => c.state !== "ok" && c.state !== "ref");
   const cp = i >= 0 ? checkpoints[i] : null;
   return (
     <>
@@ -235,10 +235,22 @@ export function MobileStageBar({ wiring }: { wiring: boolean }) {
               <b className="font-medium">
                 {retest === false
                   ? `检查点 ${checkpoints.length}/${checkpoints.length} 通过 · 开机复测 ✗`
-                  : `${checkpoints.length} 个检查点全部通过`}
+                  : `${checkpoints.length} 个检查点全部跑通`}
               </b>
             )}
           </span>
+          {cp && actions.runAllRef && (
+            <button
+              type="button"
+              id="cpAllRefM"
+              disabled={cp.state === "run"}
+              title="用作品自带的参考固件把检查点挨个跑通（◐），同样解锁组装"
+              onClick={() => actions.runAllRef?.()}
+              className="min-h-11 flex-none cursor-pointer rounded-lg border border-line bg-surface px-3 text-[13px] font-medium text-fg disabled:text-muted"
+            >
+              {cp.state === "run" ? "验收中…" : "内置跑通"}
+            </button>
+          )}
           <button
             type="button"
             id="cpGo"

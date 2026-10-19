@@ -393,6 +393,7 @@ function CheckList() {
     );
   const mk = {
     ok: ["✓", "text-ok-ink"],
+    ref: ["◐", "text-ok-ink"],
     bad: ["✗", "text-bad-ink"],
     run: ["…", "text-accent-ink"],
     todo: ["○", "text-muted"],
@@ -483,7 +484,7 @@ function PhoneDock({
     serial.attachPeek(el, true);
     return () => serial.attachPeek(el, false);
   }, []);
-  const ok = c.checkpoints.filter((x) => x.state === "ok").length;
+  const ok = c.checkpoints.filter((x) => x.state === "ok" || x.state === "ref").length;
   const nIssue = c.issues.length;
   const go = (p: Partial<{ sheet: "peek" | "half" | "full" }>) =>
     setMui({ ...p, props: false, more: false, lib: null });
@@ -727,7 +728,7 @@ function DeskDock({
       : !bench && tab === "analyzer"
         ? "serial"
         : tab;
-  const ok = c.checkpoints.filter((x) => x.state === "ok").length;
+  const ok = c.checkpoints.filter((x) => x.state === "ok" || x.state === "ref").length;
   const pick = (t: DockTab) => {
     if (t === "analyzer") actions.analyzer?.(true);
     else if (cur === "analyzer") actions.analyzer?.(false);

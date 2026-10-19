@@ -130,7 +130,7 @@ function Breadcrumb({ name }: { name: string }) {
 
 function StepBar({ step }: { step: StepId }) {
   const { locks, done, checkpoints } = useStore(bc);
-  const ok = checkpoints.filter((c) => c.state === 'ok').length;
+  const ok = checkpoints.filter((c) => c.state === 'ok' || c.state === 'ref').length;
   return (
     <nav id="steps" role="tablist" aria-label={TWO_STEPS ? '两个步骤' : '四个步骤'} className="steps flex min-w-0 items-center justify-center">
       {STEPS.filter((s) => shownSteps().includes(s.id)).map((s, i) => {

@@ -646,6 +646,10 @@ export function CheckpointCard({
   go,
   onGo,
   onAll,
+  own,
+  allBusy,
+  onAllRef,
+  onMine,
 }: {
   id: string;
   title: string;
@@ -655,6 +659,14 @@ export function CheckpointCard({
   go: string | null;
   onGo: () => void;
   onAll: () => void;
+  /** 其中自己的固件通过的个数（✓），其余通过的是参考固件跑通（◐） */
+  own: number;
+  /** 内置固件正在逐个验收 */
+  allBusy: boolean;
+  /** 用内置固件走完全程（作品没有参考固件时为 null） */
+  onAllRef: (() => void) | null;
+  /** 自己写：打开这个检查点（拖入 .bin、交给 AI 的任务书） */
+  onMine: () => void;
 }) {
   return (
     <div
@@ -663,26 +675,47 @@ export function CheckpointCard({
     >
       <div className="flex items-center justify-between text-[11px] text-muted">
         <span>当前检查点</span>
-        <span className="font-mono">
+        <span className="font-mono" title="跑通的检查点；其中「我的」是你自己的固件通过的">
           {done}/{total}
+          {done > 0 && ` · 我的 ${own}`}
         </span>
       </div>
       <b className="mt-1 block text-[13px]">
         <span className="font-mono">{id}</span> {title}
       </b>
       <p className="mt-1 mb-2 line-clamp-3 text-muted">{pass}</p>
-      <div className="flex gap-1.5">
+      {onAllRef && (
+        <>
+          <button
+            type="button"
+            id="cpAllRef"
+            className={`${btnPri} w-full`}
+            disabled={allBusy}
+            onClick={onAllRef}
+            title="每个检查点用作品自带的参考固件验收；跑通记 ◐，同样解锁组装和成品"
+          >
+            {allBusy ? "内置固件验收中…" : "用内置固件走完全程"}
+          </button>
+          <p className="mt-1 mb-2 text-[11px] text-muted">
+            没有工具链也能看到组装和成品；以后换成自己的固件，通过的变成 ✓。
+          </p>
+        </>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        <button type="button" id="cpMine" className={onAllRef ? btn : btnPri} onClick={onMine} title="拖入 .bin、复制交给 AI 的任务书">
+          自己写固件
+        </button>
         <button
           type="button"
           id="cpGo"
-          className={btnPri}
+          className={btn}
           onClick={onGo}
           title={go ? `选中并对准 ${go}` : "打开这个检查点"}
         >
-          带我去接
+          带我去看
         </button>
         <button type="button" id="cpAll" className={btn} onClick={onAll}>
-          看全部检查点
+          全部检查点
         </button>
       </div>
     </div>
@@ -690,10 +723,13 @@ export function CheckpointCard({
 }
 export function AllPassedCard({
   total,
+  own = total,
   retest,
   onNext,
 }: {
   total: number;
+  /** 其中自己的固件通过的个数；其余是内置固件跑通（◐） */
+  own?: number;
   /** 组装后开机复测：false = 没过（台面上通过不代表装进外壳也行，不能还写"全部通过"） */
   retest?: boolean | null;
   onNext: () => void;
@@ -718,8 +754,13 @@ export function AllPassedCard({
       id="cpCard"
       className="rounded-lg border border-line bg-ok-bg p-2.5 text-xs text-ok-ink"
     >
-      <b className="block text-[13px]">{total} 个检查点全部通过</b>
+      <b className="block text-[13px]">{total} 个检查点全部{own === total ? "通过" : "跑通"}</b>
       <p className="mt-1 mb-2">组装已经解锁：把台面上的东西装进外壳。</p>
+      {own < total && (
+        <p className="mt-0 mb-2 text-muted" data-own={own}>
+          我的固件 {own}/{total}：其余是内置固件跑通（◐）。拖自己的 .bin 到检查点，过了变成 ✓。
+        </p>
+      )}
       <button type="button" className={btnPri} onClick={onNext}>
         下一步：组装 →
       </button>

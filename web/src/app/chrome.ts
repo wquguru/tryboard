@@ -19,7 +19,8 @@ export interface Issue {
 export interface CpRow {
   id: string;
   title: string;
-  state: 'ok' | 'bad' | 'todo' | 'run';
+  /** ref = 参考固件跑通（◐，也解锁组装 / 成品），ok = 自己的固件通过（✓） */
+  state: 'ok' | 'ref' | 'bad' | 'todo' | 'run';
   note: string;
 }
 
@@ -141,6 +142,8 @@ export const actions: {
   brief?: () => void;
   uart?: (text: string) => void;
   selectCheckpoint?: (id: string) => void;
+  /** 用内置固件走完全程：每个还没过的检查点取各自的参考固件验收（选板作品 = 演示固件），记 ◐ */
+  runAllRef?: () => void;
   /** 选板作品检查点全过后打开真买卡（手机横幅的主按钮用） */
   openBuy?: () => void;
   analyzer?: (open: boolean) => void;

@@ -8,7 +8,7 @@ import { CHIP_HEAT_OFFSET, SONAR_BLOCK_CM, TEMPLATES, effectScript, type Templat
 import { bootOptions, type Level } from '../../checks';
 import { VerifyStalled, verifyLevel } from '../../verify';
 import { fetchBuf } from '../../assets';
-import { ownFirmware, passedCount } from './bench';
+import { ownFirmware, passedCount, requestAllRef } from './bench';
 import type { AssemblyState, StepCtx, StepImpl } from '../types';
 import type { TimelineStep } from '../timeline';
 import type { Assembly3D } from '../asm3d';
@@ -342,31 +342,34 @@ export function assembleStep(): StepImpl {
     const s = c.store.get();
     const n = c.work.checkpoints.length;
     const d = passedCount(c);
-    const left = c.work.checkpoints.filter((id) => !(s.checks[id]?.ok && s.checks[id].own));
+    const left = c.work.checkpoints.filter((id) => !s.checks[id]?.ok);
     const first = left[0] ?? c.work.checkpoints[0];
     // 锁着只给一张卡（设计稿 unify/Steps）：差哪几个检查点一眼看全，左右两栏和运行组收起，不铺空壳
     c.shell.setBare(true);
     c.shell.layer.render(
       <LockCard role="status">
         <Sec>③ 组装 · 还没解锁</Sec>
-        <PhT>{`实验台的 ${n} 个检查点过了才能装壳`}</PhT>
+        <PhT>{`实验台的 ${n} 个检查点跑通了才能装壳`}</PhT>
         <ul id="lockList" className="my-3 grid list-none gap-1 p-0 text-[13px]">
           {c.work.checkpoints.map((id) => {
-            const ok = s.checks[id]?.ok && s.checks[id].own;
+            const r = s.checks[id];
+            const ok = !!r?.ok;
             return (
-              <li key={id} data-cp={id} data-ok={ok ? '' : undefined} className={ok ? 'text-ok-ink' : 'text-fg'}>
-                <span className="inline-block w-5 font-mono">{ok ? '✓' : '○'}</span>
+              <li key={id} data-cp={id} data-ok={ok ? '' : undefined} data-own={ok && r.own ? '' : undefined} className={ok ? 'text-ok-ink' : 'text-fg'}>
+                <span className="inline-block w-5 font-mono">{ok ? (r.own ? '✓' : '◐') : '○'}</span>
                 <Mono>{id}</Mono> {lvTitle(id)}
               </li>
             );
           })}
         </ul>
         <p className="my-3 text-xs text-muted">
-          {`现在 ${d}/${n}。`}只有你自己上传的固件通过才算，参考固件不算；判定和命令行 <Mono>npx tryboard check</Mono> 相同。
+          {`现在 ${d}/${n}。`}✓ 是你自己的固件通过，◐ 是作品自带的参考固件跑通，两种都算；判定和命令行 <Mono>npx tryboard check</Mono> 相同。没有工具链可以先用内置固件走完全程。
         </p>
         <Btns>
+          <Btn primary id="lockAllRef" onClick={() => requestAllRef()}>
+            用内置固件走完全程
+          </Btn>
           <Btn
-            primary
             id="toBench"
             onClick={() => {
               c.store.set({ selection: { kind: 'checkpoint', id: first } });

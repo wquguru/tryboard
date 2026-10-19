@@ -115,7 +115,8 @@ const url = '/app?work=custom&t=weather&bat=1#bench';
   for (const id of judged) {
     const mark = await cpMark(page, id);
     const r = await pick(page, id);
-    report(`网页 c3-thermo ${id} ✓，指纹一致`, mark === '✓' && r.verdict === 'ok' && r.fp === cli[id].fp, `标记 ${mark} 网页 ${r.fp} / 命令行 ${cli[id].fp}`);
+    // 演示固件记参考跑通 ◐（U-22），自己拖入的固件才是 ✓
+    report(`网页 c3-thermo ${id} ◐ 参考跑通，指纹一致`, mark === '◐' && r.verdict === 'ok' && r.fp === cli[id].fp, `标记 ${mark} 网页 ${r.fp} / 命令行 ${cli[id].fp}`);
   }
   for (const id of manual) report(`手动项 ${id} 不在要判的列表里`, !(await page.$(`[data-cp="${id}"]`)) && !!(await page.$('[data-cp-manual]')));
   await page.close();

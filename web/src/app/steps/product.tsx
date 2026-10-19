@@ -815,7 +815,7 @@ export function productStep(): StepImpl {
     if (passedCount(c) < n) {
       c.shell.setNext(`回实验台 · 还差 ${n - passedCount(c)} 个检查点`, 'bench', '', () => {
         const s = c.store.get();
-        const first = c.work.checkpoints.find((id) => !(s.checks[id]?.ok && s.checks[id].own)) ?? c.work.checkpoints[0];
+        const first = c.work.checkpoints.find((id) => !s.checks[id]?.ok) ?? c.work.checkpoints[0];
         if (first) c.store.set({ selection: { kind: 'checkpoint', id: first } });
         location.hash = 'bench';
       });

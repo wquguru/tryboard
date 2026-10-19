@@ -67,6 +67,7 @@ import {
   KvT,
   Meter,
   Mono,
+  LinkBtn,
   Muted,
   Note,
   Ok,
@@ -124,6 +125,14 @@ const stalled: Record<
   { why: string; buf: ArrayBuffer; who: string; own: boolean }
 > = {};
 
+/** 别的步骤（组装锁住卡）要「用内置固件走完全程」：先切到实验台，挂载后再跑 */
+let pendingAllRef = false;
+export function requestAllRef() {
+  if (actions.runAllRef) return actions.runAllRef();
+  pendingAllRef = true;
+  location.hash = "bench";
+}
+
 /** 本页里用户自己验收过的固件（组装的"开机复测"用同一份固件；刷新后丢失，回落到台面上的固件） */
 export const ownFirmware: Record<string, { buf: ArrayBuffer; name: string }> =
   {};
@@ -131,17 +140,23 @@ export const ownFirmware: Record<string, { buf: ArrayBuffer; name: string }> =
 const PROGRESS_KEY = (work: string) => `tryboard-app-checks:${work}`;
 function loadProgress(
   work: string,
-): Record<string, { fp: string; at: string }> {
+): Record<string, { fp: string; at: string; own?: boolean }> {
   try {
     return JSON.parse(localStorage.getItem(PROGRESS_KEY(work)) ?? "{}");
   } catch {
     return {};
   }
 }
-function saveProgress(work: string, id: string, fp: string) {
+function saveProgress(work: string, id: string, fp: string, own: boolean) {
   try {
     const p = loadProgress(work);
-    p[id] = { fp, at: new Date().toLocaleString("zh-CN", { hour12: false }) };
+    // 参考固件的通过不覆盖自己的通过（旧记录没有 own 字段，当作自己的）
+    if (!own && p[id] && p[id].own !== false) return;
+    p[id] = {
+      fp,
+      at: new Date().toLocaleString("zh-CN", { hour12: false }),
+      own,
+    };
     localStorage.setItem(PROGRESS_KEY(work), JSON.stringify(p));
     noteSaved();
   } catch {
@@ -157,8 +172,9 @@ export function restoreChecks(ctx: StepCtx) {
     if (ctx.work.checkpoints.includes(id))
       checks[id] = {
         ok: true,
-        own: true,
-        who: `你的固件（${v.at} 通过）`,
+        own: v.own !== false,
+        who:
+          v.own !== false ? `你的固件（${v.at} 通过）` : `参考固件（${v.at} 跑通）`,
         rows: [],
         fingerprint: v.fp,
         sim: 0,
@@ -166,7 +182,13 @@ export function restoreChecks(ctx: StepCtx) {
   ctx.store.set({ checks });
 }
 
+/** 解锁组装 / 成品只看是否通过：参考固件跑通（◐）与自己的固件通过（✓）都算 */
 export function passedCount(ctx: StepCtx, s: AppState = ctx.store.get()) {
+  return ctx.work.checkpoints.filter((id) => s.checks[id]?.ok).length;
+}
+
+/** 用自己的固件通过的检查点数（界面上单独显示「我的固件 n/N」） */
+export function ownCount(ctx: StepCtx, s: AppState = ctx.store.get()) {
   return ctx.work.checkpoints.filter(
     (id) => s.checks[id]?.ok && s.checks[id].own,
   ).length;
@@ -381,7 +403,7 @@ export function benchStep(): StepImpl {
           total={n}
           state={(id) => {
             const r = s.checks[id];
-            return s.verifying === id ? "run" : r?.ok && r.own ? "ok" : r && !r.ok ? "bad" : "todo";
+            return s.verifying === id ? "run" : r?.ok ? (r.own ? "ok" : "ref") : r && !r.ok ? "bad" : "todo";
           }}
           onPick={(id) => select({ kind: "checkpoint", id })}
           onExport={exportCheckpoints}
@@ -390,11 +412,11 @@ export function benchStep(): StepImpl {
       );
     else if (n && d === n)
       card = (
-        <AllPassedCard total={n} retest={s.assembly?.retest} onNext={() => (location.hash = "assemble")} />
+        <AllPassedCard total={n} own={ownCount(c, s)} retest={s.assembly?.retest} onNext={() => (location.hash = "assemble")} />
       );
     else if (n) {
       const id =
-        c.work.checkpoints.find((x) => !(s.checks[x]?.ok && s.checks[x].own)) ??
+        c.work.checkpoints.find((x) => !s.checks[x]?.ok) ??
         c.work.checkpoints[0];
       const l = c.session.levels.find((x) => x.id === id);
       const t = cpTarget(l);
@@ -412,6 +434,10 @@ export function benchStep(): StepImpl {
               requestAnimationFrame(() => ctx?.session.bench.view?.("fit", t));
           }}
           onAll={() => setDock({ tab: "checks", collapsed: false })}
+          own={ownCount(c, s)}
+          allBusy={demoBusy || !!s.verifying}
+          onAllRef={actions.runAllRef ?? null}
+          onMine={() => select({ kind: "checkpoint", id })}
         />
       );
     }
@@ -854,7 +880,7 @@ export function benchStep(): StepImpl {
           <TnSt kind="run">…</TnSt>
         ) : r ? (
           r.ok ? (
-            <TnSt kind="ok">{r.own ? "✓" : "✓参考"}</TnSt>
+            <TnSt kind="ok">{r.own ? "✓" : "◐"}</TnSt>
           ) : (
             <TnSt kind="bad">✗</TnSt>
           )
@@ -2451,7 +2477,9 @@ export function benchStep(): StepImpl {
     const st = busy ? undefined : stalled[id];
     // 一张卡只有一个主动作（DESIGN_V2 §9.5）：没过 → 复制给 AI 修；自己的固件过了 → 下一个检查点
     const idx = c.session.levels.findIndex((x) => x.id === id);
-    const nextLv = c.session.levels.slice(idx + 1).find((x) => !s.checks[x.id]?.ok || !s.checks[x.id]?.own);
+    const nextLv = c.session.levels
+      .slice(idx + 1)
+      .find((x) => !s.checks[x.id]?.ok || (r?.own && !s.checks[x.id]?.own));
     const runRef = async () => verify(l, await fetchBuf(`./fw/${l.ref}/flash.bin`), `参考固件 ${l.ref}`, false);
     const stall = st ? (
       <>
@@ -2485,7 +2513,11 @@ export function benchStep(): StepImpl {
           verdict={r.ok ? "ok" : "bad"}
           meta={`${r.who}${r.sim ? `，模拟 ${r.sim.toFixed(1)} 秒` : ""}`}
           title={headline(r.rows)}
-          why={r.ok && !r.own ? "这是参考固件，通过了不算你的进度。" : undefined}
+          why={
+            r.ok && !r.own
+              ? "参考固件跑通（◐）：同样解锁组装和成品；换成你自己的固件通过后变成 ✓。"
+              : undefined
+          }
           rows={r.rows}
           runId={r.fingerprint}
           rawNote={
@@ -2505,7 +2537,7 @@ export function benchStep(): StepImpl {
               用参考固件对比
             </Btn>
           )}
-          {r.ok && r.own && nextLv && (
+          {r.ok && nextLv && (
             <Btn primary data-act="nextcp" className={actCls} onClick={() => select({ kind: "checkpoint", id: nextLv.id })}>
               下一个检查点：{nextLv.title}
             </Btn>
@@ -2583,6 +2615,16 @@ export function benchStep(): StepImpl {
               用参考固件试
             </Btn>
           )}
+          {l.ref && (
+            <LinkBtn id="dlBin" href={`./fw/${l.ref}/flash.bin`} download={`${l.ref}.bin`} title="烧到真板子：esptool.py write_flash 0x0">
+              下载参考 .bin
+            </LinkBtn>
+          )}
+          {l.ref && (
+            <LinkBtn id="dlSrc" href={`./fw/${l.ref}/src.zip`} download={`${l.ref}-src.zip`} title="ESP-IDF 5.5 工程，解压后 idf.py build">
+              下载源码 zip
+            </LinkBtn>
+          )}
         </Btns>
         {stall}
         {result}
@@ -2650,8 +2692,9 @@ export function benchStep(): StepImpl {
         sim: 0,
       };
     }
-    if (own && out.ok) {
-      saveProgress(wkey(c.work), l.id, out.fingerprint);
+    // 参考固件跑通也记进度（◐，同样解锁组装 / 成品）；saveProgress 自己保证不覆盖自己的通过
+    if (out.ok) {
+      saveProgress(wkey(c.work), l.id, out.fingerprint, own);
       buyArmed = true;
     }
     // 参考固件的结果不覆盖你已经通过的记录
@@ -2951,11 +2994,48 @@ export function benchStep(): StepImpl {
       const buf = await fetchBuf(`./fw/${demo}/flash.bin`);
       c.session.loadFirmware(buf, `${demo}/flash.bin`);
       c.shell.toast(`演示固件 ${demo} 上电，同时逐条验收检查点`);
-      // 演示固件算进度（DECISIONS U-17）：它就是按这张引脚表写的，真机上烧的也是它
-      await verifyAll(buf, `演示固件 ${demo}`, true);
+      // 演示固件记 ◐ 参考跑通（DECISIONS U-22 取代 U-17）：同样解锁真买卡，但不算「我的固件」
+      await verifyAll(buf, `演示固件 ${demo}`, false);
     } finally {
       demoBusy = false;
       if (ctx) renderTree();
+    }
+  }
+  /** 用内置固件走完全程（U-22）：没过的检查点挨个取各自的参考固件验收，最后把最后一个参考固件放上台面 */
+  async function runAllRef() {
+    const c = ctx!;
+    if (c.custom) return void runDemo();
+    if (demoBusy || c.store.get().verifying) return;
+    demoBusy = true;
+    renderTree();
+    let last: { ref: string; buf: ArrayBuffer } | null = null;
+    try {
+      for (const id of c.work.checkpoints) {
+        const l = c.session.levels.find((x) => x.id === id);
+        if (!l?.ref || !ctx) continue;
+        if (c.store.get().checks[id]?.ok) continue;
+        c.store.set({ selection: { kind: "checkpoint", id } });
+        const buf = await fetchBuf(`./fw/${l.ref}/flash.bin`);
+        await verify(l, buf, `参考固件 ${l.ref}`, false);
+        last = { ref: l.ref, buf };
+        // 某一关没跑通（或卡住）就停：后面的关通常依赖前面的接线
+        if (!c.store.get().checks[id]?.ok) break;
+      }
+    } catch (e) {
+      c.shell.toast(`内置固件取不到：${e}`);
+    } finally {
+      demoBusy = false;
+      if (ctx) {
+        const n = c.work.checkpoints.length;
+        const d = passedCount(c);
+        if (last) c.session.loadFirmware(last.buf, `${last.ref}/flash.bin`);
+        c.shell.toast(
+          d === n
+            ? `内置固件跑通 ${n}/${n}（◐）：组装解锁了；想换成自己的固件，拖 .bin 到检查点`
+            : `内置固件跑到 ${d}/${n} 停下：看没过的那个检查点`,
+        );
+        renderTree();
+      }
     }
   }
   function exportCheckpoints() {
@@ -3046,7 +3126,7 @@ export function benchStep(): StepImpl {
     if (c.custom)
       return n && done === n
         ? c.shell.setNext("下一步：做成真的 →", "bench", "", openBuy, "hot")
-        : c.shell.setNext(`做成真的 · 还差 ${n - done} 个检查点`, null, `检查点全部通过（${done}/${n}）才出真买卡`);
+        : c.shell.setNext(`做成真的 · 还差 ${n - done} 个检查点`, null, `检查点全部跑通（${done}/${n}，演示固件也算）才出真买卡`);
     // 空白作品没有组装 / 成品（步骤条只有两步）：右上换成去挑一个作品
     if (c.work.id === "blank")
       return c.shell.setNext("需要外壳？选一个作品 →", "bench", "", () =>
@@ -3059,7 +3139,7 @@ export function benchStep(): StepImpl {
     c.shell.setNext(
       `组装 · 还差 ${n - done} 个检查点`,
       null,
-      `检查点全部通过（${done}/${n}）才能组装`,
+      `检查点全部跑通（${done}/${n}，内置固件也算）才能组装`,
     );
   }
 
@@ -3503,6 +3583,8 @@ export function benchStep(): StepImpl {
       toolbarRef = c.shell.toolbar;
       // 「换固件 → 上传」也算你自己的固件：和拖到检查框一样验收（2026-10-18 走查：菜单写着"检查点只认你自己上传的"，以前却不验收）
       actions.openBuy = c.custom ? openBuy : undefined;
+      // 检查点定义（session.levels）可能还在加载：只看作品本身，跑的时候再按关取 ref
+      actions.runAllRef = c.work.checkpoints.length && (!c.custom || c.custom.plan.demo) ? () => void runAllRef() : undefined;
       actions.checkUpload = (buf, name) => {
         const s = c.store.get();
         if (s.verifying) return null;
@@ -3725,6 +3807,10 @@ export function benchStep(): StepImpl {
       renderTree();
       renderProps();
       syncChrome();
+      if (pendingAllRef) {
+        pendingAllRef = false;
+        actions.runAllRef?.();
+      }
       unsubs = [
         c.store.subscribe(() => {
           renderTree();
@@ -3806,6 +3892,7 @@ export function benchStep(): StepImpl {
       ctx?.session.pick.highlight?.(null);
       actions.checkUpload = undefined;
       actions.openBuy = undefined;
+      actions.runAllRef = undefined;
       ctx = null;
     },
   };

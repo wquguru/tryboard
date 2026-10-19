@@ -38,13 +38,14 @@ export function CustomPlacedCard({ n, sub, demo, busy, onFirmware, onBrief, onDe
   );
 }
 
-export type CpState = 'ok' | 'bad' | 'run' | 'todo';
+/** ref = 参考 / 演示固件跑通（◐），ok = 自己的固件通过（✓） */
+export type CpState = 'ok' | 'ref' | 'bad' | 'run' | 'todo';
 
 export function CustomCheckCard({ levels, state, done, total, onPick, onExport, onBuy }: { levels: Level[]; state: (id: string) => CpState; done: number; total: number; onPick: (id: string) => void; onExport: () => void; onBuy: (() => void) | null }) {
   const judged = levels.filter((l) => !l.manual);
   const manual = levels.filter((l) => l.manual);
-  const mark: Record<CpState, string> = { ok: '✓', bad: '✗', run: '…', todo: '待运行' };
-  const cls: Record<CpState, string> = { ok: 'text-ok-ink', bad: 'text-bad-ink', run: 'text-muted', todo: 'text-muted' };
+  const mark: Record<CpState, string> = { ok: '✓', ref: '◐', bad: '✗', run: '…', todo: '待运行' };
+  const cls: Record<CpState, string> = { ok: 'text-ok-ink', ref: 'text-ok-ink', bad: 'text-bad-ink', run: 'text-muted', todo: 'text-muted' };
   return (
     <div id="cpCard" data-custom-cp="" className={`rounded-lg border p-2.5 text-xs ${onBuy ? 'border-line bg-ok-bg' : 'border-line bg-surface'}`}>
       <div className="flex items-center justify-between text-[11px] text-muted">

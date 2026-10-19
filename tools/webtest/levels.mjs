@@ -99,8 +99,10 @@ async function runRef(page, id) {
       await sleep(300);
     }
   }
+  // 已有通过记录时结果卡是恢复出来的：先清掉上次的原始输出，等这一次验收真的跑完
+  await page.evaluate(() => (globalThis.__tbLastVerify = null));
   await clickEl(page, '#runRef:not([disabled])');
-  await waitFor(page, () => !!document.querySelector('#props .verdict-line') && !document.querySelector('#runRef')?.disabled && !document.querySelector('#props .drop.busy'), null, 90000);
+  await waitFor(page, () => !!globalThis.__tbLastVerify && !!document.querySelector('#props .verdict-line') && !document.querySelector('#runRef')?.disabled && !document.querySelector('#props .drop.busy'), null, 90000);
   const text = await page.$eval('#props', (e) => e.textContent).catch(() => '');
   const raw = await page.evaluate(() => globalThis.__tbLastVerify);
   fs.writeFileSync(path.join(outDir, `levels-${id}-web.json`), JSON.stringify(raw, null, 1));
@@ -115,6 +117,46 @@ for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['
     if (!r.ok) console.log(r.text.slice(0, 600));
     if (id === '06' || id === '07-spin') await page.screenshot({ path: path.join(outDir, `levels-cp-${id}.png`) });
   }
+  await page.close();
+}
+
+// ---- 1b. 检查点两档（U-22）：一键用内置固件走完全程 → 全 ◐、指纹与命令行一致、组装解锁；旧进度（没有 own 字段）仍是 ✓，参考固件不降级
+{
+  const W = ['01', '02', '03', '04', '05', '06'];
+  const marks = (page) => page.$$eval('#tree .tn[data-kind="checkpoint"]', (els) => els.map((e) => e.textContent.trim().slice(-1)));
+  const saved = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('tryboard-app-checks:weather') ?? '{}'));
+  const page = await open('/app?work=weather#bench');
+  await page.evaluate(() => ['checks', 'asm', 'case'].forEach((k) => localStorage.removeItem(`tryboard-app-${k}:weather`)));
+  await page.reload({ waitUntil: 'load' });
+  await clickEl(page, '#cpAllRef:not([disabled])').catch(async (e) => {
+    console.log('[levels] #cpCard:', await page.$eval('#cpCard', (x) => x.outerHTML.slice(0, 600)).catch(() => '没有'), page.url());
+    throw e;
+  });
+  const all = await waitFor(page, () => /6 个检查点全部跑通/.test(document.querySelector('#cpCard')?.textContent ?? ''), null, 600000);
+  const m = await marks(page);
+  const sv = await saved(page);
+  await page.screenshot({ path: path.join(outDir, 'levels-allref.png') });
+  report('一键用内置固件走完全程：6/6 跑通、全标 ◐、本机进度记为参考', all && m.join('') === '◐◐◐◐◐◐' && W.every((id) => sv[id]?.own === false), `${m.join('')} ${JSON.stringify(Object.values(sv).map((v) => v.own))}`);
+  report('一键走完的运行编号与命令行 check.py --ref 一致', W.every((id) => sv[id]?.fp === native[id]?.fp), W.map((id) => `${id}:${sv[id]?.fp}/${native[id]?.fp}`).join(' '));
+  report('卡片写明我的固件 0/6', /我的固件 0\/6/.test(await page.$eval('#cpCard', (e) => e.textContent).catch(() => '')));
+  await page.goto(`${base}/app?work=weather&asm=svg#assemble`, { waitUntil: 'load' });
+  report('参考跑通后组装解锁（刷新后仍解锁）', await waitFor(page, () => !!document.querySelector('.asm-box [data-part]') && !document.querySelector('#lockList'), null, 30000));
+  // 旧版本存的进度没有 own 字段：当作自己的固件；再跑参考固件不覆盖
+  await page.evaluate((fp) => {
+    localStorage.setItem('tryboard-app-checks:weather', JSON.stringify({ '01': { fp, at: '旧版' } }));
+    localStorage.removeItem('tryboard-app-asm:weather');
+  }, native['01']?.fp);
+  await page.goto(`${base}/app?work=weather&asm=svg#assemble`, { waitUntil: 'load' });
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('#lockList', { timeout: 30000 });
+  const lock = await page.$$eval('#lockList li', (els) => els.map((e) => e.textContent.trim()[0]).join(''));
+  report('组装锁住卡：旧进度 01 是 ✓，其余 ○，有「用内置固件走完全程」', lock === '✓○○○○○' && !!(await page.$('#lockAllRef')), lock);
+  await page.evaluate(() => (location.hash = 'bench'));
+  const r = await runRef(page, '01');
+  const m2 = await marks(page);
+  const sv2 = await saved(page);
+  report('旧进度不降级：01 再跑参考固件仍是 ✓、本机记录不变', r.ok && m2[0] === '✓' && sv2['01']?.at === '旧版' && sv2['01']?.own !== false, `${m2.join('')} ${JSON.stringify(sv2['01'])}`);
+  await page.evaluate(() => localStorage.removeItem('tryboard-app-checks:weather'));
   await page.close();
 }
 

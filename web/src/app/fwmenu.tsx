@@ -131,9 +131,18 @@ export function FwMenu({ phone }: { phone?: boolean }) {
             <Icon n="restart" size={15} />
             <span className="min-w-0 flex-1">
               换回参考固件
-              <span className="block text-[11px] text-muted">作品自带的固件，只看效果，不算检查点</span>
+              <span className="block text-[11px] text-muted">作品自带的固件，只看效果，不跑检查点</span>
             </span>
           </button>
+          {actions.runAllRef && (
+            <button type="button" role="menuitem" data-fw="allref" className={item} onClick={() => (open(false), actions.runAllRef?.())}>
+              <Icon n="play" size={15} />
+              <span className="min-w-0 flex-1">
+                用内置固件走完全程
+                <span className="block text-[11px] text-muted">每个检查点用各自的参考固件验收，跑通记 ◐，解锁组装</span>
+              </span>
+            </button>
+          )}
         </>
       )}
       {recent.length > 0 && <div className={sec}>最近用过</div>}
