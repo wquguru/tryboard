@@ -838,7 +838,7 @@ function DeskDock({
         ]
       : []),
     ...(c.net
-      ? [{ id: "net" as const, label: "网络", title: "虚拟手机配网、芯片发出的请求" }]
+      ? [{ id: "net" as const, label: t("Network"), title: t("Virtual phone provisioning and the requests the chip sends") }]
       : []),
   ];
   return (

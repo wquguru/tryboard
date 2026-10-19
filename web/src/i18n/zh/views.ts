@@ -247,7 +247,7 @@ const d: Dict = {
   "Screen cable 8 cm": "屏幕排线 8 cm",
   "Screen faces up": "屏幕朝上",
   "Screen lined up with the top window": "屏幕对准顶面窗口",
-  "Sensor": "探头",
+  "Sensor": "传感器",
   "Sensor position": "传感器位置",
   "Sensor sits by the vent": "传感器靠着通风口",
   "Sensor touches the chip": "传感器贴着芯片",

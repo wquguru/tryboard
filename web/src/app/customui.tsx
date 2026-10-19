@@ -1,19 +1,12 @@
 // Two lab cards for advisor-built work=custom (DESIGN_V2 §8.3, mock LoopA): the "placed and wired" card on the bench and the
 // auto-generated checkpoint card at the bottom of the left column. Render only; data and actions come from bench.tsx.
 import { t } from '../i18n';
-import { ConfIcon, type ConfLevel } from '../ui/conf';
+import { ConfIcon, confLabel, type ConfLevel } from '../ui/conf';
 import { levelConf } from './genlevels';
 import type { Level } from '../checks';
 import { Icon } from './icons';
 
 const MANUAL: ConfLevel = '必须上真机'; // lint: allow-cjk (ConfLevel id)
-// ConfLevel ids are Chinese identifiers (ui/conf.tsx); show them through English keys.
-const CONF_NAME: Record<ConfLevel, string> = {
-  仿真验证: t('Simulation-verified'), // lint: allow-cjk
-  行为模拟: t('Behavioral model'), // lint: allow-cjk
-  估算: t('Estimate'), // lint: allow-cjk
-  必须上真机: t('Real hardware only'), // lint: allow-cjk
-};
 
 const btn = 'inline-flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md border border-line bg-surface px-2.5 text-xs text-fg hover:bg-field max-md:h-11';
 const btnPri = 'inline-flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md border border-accent-strong bg-accent-strong px-2.5 text-xs font-medium text-on-accent max-md:h-11';
@@ -69,7 +62,7 @@ export function CustomCheckCard({ levels, state, done, total, onPick, onExport, 
           const st = state(l.id);
           return (
             <li key={l.id}>
-              <button type="button" data-cp={l.id} className="flex min-h-7 w-full cursor-pointer items-center gap-1.5 rounded px-1 text-left text-fg hover:bg-field max-md:min-h-11" title={`${CONF_NAME[levelConf(l)]} · ${l.pass}`} onClick={() => onPick(l.id)}>
+              <button type="button" data-cp={l.id} className="flex min-h-7 w-full cursor-pointer items-center gap-1.5 rounded px-1 text-left text-fg hover:bg-field max-md:min-h-11" title={`${confLabel(levelConf(l))} · ${l.pass}`} onClick={() => onPick(l.id)}>
                 <ConfIcon c={levelConf(l)} size={12} />
                 <span className="min-w-0 flex-1 truncate">{l.title}</span>
                 <span className={`flex-none ${cls[st]}`}>{mark[st]}</span>

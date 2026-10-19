@@ -7,20 +7,33 @@ import { t } from '../i18n';
 export type ConfLevel = '仿真验证' | '行为模拟' | '估算' | '必须上真机'; // lint: allow-cjk
 export const CONF_LEVELS: ConfLevel[] = ['仿真验证', '行为模拟', '估算', '必须上真机']; // lint: allow-cjk
 
-/** Display name of a level in the UI language. */
+/** Display name of a level in the UI language; every confidence badge and tooltip uses this one map. */
 export function confLabel(c: ConfLevel): string {
   const en: Record<ConfLevel, string> = {
-    仿真验证: 'Verified in sim', // lint: allow-cjk
+    仿真验证: 'Simulated', // lint: allow-cjk
     行为模拟: 'Behaviour model', // lint: allow-cjk
     估算: 'Estimate', // lint: allow-cjk
-    必须上真机: 'Real board only', // lint: allow-cjk
+    必须上真机: 'Needs real hardware', // lint: allow-cjk
   };
   return t(en[c] ?? c);
 }
 
+export type RuleBasis = '数据手册' | '估算' | '必须上真机' | '经验规则'; // lint: allow-cjk
+
 /** Map a wiring-rule basis (catalog/rules.ts) to the four levels: datasheet and rules of thumb are computed, not simulated. */
-export function confOfRule(c: '数据手册' | '估算' | '必须上真机' | '经验规则'): ConfLevel { // lint: allow-cjk
+export function confOfRule(c: RuleBasis): ConfLevel {
   return c === '必须上真机' ? '必须上真机' : '估算'; // lint: allow-cjk
+}
+
+/** Display name of a wiring-rule basis. */
+export function ruleBasisLabel(c: RuleBasis): string {
+  const en: Record<RuleBasis, string> = {
+    数据手册: 'Datasheet', // lint: allow-cjk
+    估算: 'Estimate', // lint: allow-cjk
+    必须上真机: 'Needs real hardware', // lint: allow-cjk
+    经验规则: 'Rule of thumb', // lint: allow-cjk
+  };
+  return t(en[c] ?? c);
 }
 
 export function ConfIcon({ c, size = 16, className }: { c: ConfLevel; size?: number; className?: string }) {
