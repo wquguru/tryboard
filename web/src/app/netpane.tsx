@@ -31,42 +31,42 @@ function linkText(k: string): string {
   }
 }
 
-// Core table rows carry Chinese tokens (core output); map the known ones to the UI language.
+// Core table rows carry English tokens (core output); map the known ones to the UI language.
 function coreText(s: string): string {
   switch (s) {
-    case '虚拟': // lint: allow-cjk
+    case 'Virtual':
       return t('Virtual');
-    case '真实': // lint: allow-cjk
+    case 'Real':
       return t('Real');
-    case '未放行': // lint: allow-cjk
+    case 'Not allowed':
       return t('Not allowed');
-    case '等待': // lint: allow-cjk
+    case 'Waiting':
       return t('Waiting');
-    case '超时': // lint: allow-cjk
+    case 'Timed out':
       return t('Timed out');
-    case '解析': // lint: allow-cjk
+    case 'Resolved':
       return t('Resolved');
-    case '拦截': // lint: allow-cjk
+    case 'Blocked':
       return t('Blocked');
-    case '失败': // lint: allow-cjk
+    case 'Failed':
       return t('Failed');
-    case '对方网站不允许跨域（CORS），浏览器拦下了': // lint: allow-cjk
+    case 'The site does not allow cross-origin requests (CORS); the browser blocked it':
       return t('The site does not allow cross-origin requests (CORS); the browser blocked it');
-    case '连不上（域名不存在、断网或被拦）': // lint: allow-cjk
+    case 'Cannot connect (no such domain, offline or blocked)':
       return t('Cannot connect (no such domain, offline or blocked)');
-    case '10 秒没有回应': // lint: allow-cjk
+    case 'No reply in 10 s':
       return t('No reply in 10 s');
-    case '页面是 https，浏览器不许发 http 请求（混合内容）': // lint: allow-cjk
+    case 'The page is https; the browser does not allow http requests (mixed content)':
       return t('The page is https; the browser does not allow http requests (mixed content)');
-    case '浏览器拦下了（跨域或网络错误）': // lint: allow-cjk
+    case 'Blocked by the browser (cross-origin or network error)':
       return t('Blocked by the browser (cross-origin or network error)');
-    case '芯片没等到回复就断开了': // lint: allow-cjk
+    case 'The chip closed the connection before a reply came':
       return t('The chip closed the connection before a reply came');
-    case '真实网络只放行 HTTP，HTTPS 未放行': // lint: allow-cjk
+    case 'The real network only allows HTTP; HTTPS is not allowed':
       return t('The real network only allows HTTP; HTTPS is not allowed');
-    case '真实网络只放行 HTTP': // lint: allow-cjk
+    case 'The real network only allows HTTP':
       return t('The real network only allows HTTP');
-    case '真实网络：芯片没等到回复就关了连接': // lint: allow-cjk
+    case 'Real network: the chip closed the connection before a reply came':
       return t('Real network: the chip closed the connection before a reply came');
     default:
       return s;
@@ -419,9 +419,9 @@ function PhoneView_({ mobile }: { mobile?: boolean }) {
 }
 
 const DEST_CLS: Record<string, string> = {
-    虚拟: 'bg-field text-fg', // lint: allow-cjk
-    真实: 'bg-accent-bg text-accent-ink', // lint: allow-cjk
-    未放行: 'bg-warn-bg text-warn-ink', // lint: allow-cjk
+    Virtual: 'bg-field text-fg',
+    Real: 'bg-accent-bg text-accent-ink',
+    'Not allowed': 'bg-warn-bg text-warn-ink',
 };
 
 export function NetRows({ rows, mobile }: { rows: NetRow[]; mobile?: boolean }) {
@@ -459,7 +459,7 @@ export function NetRows({ rows, mobile }: { rows: NetRow[]; mobile?: boolean }) 
               {/* Note (C-03): why the real network got no reply (cross-origin, timeout...), why HTTPS was not allowed */}
               {r[6] && <span className="net-note block font-sans text-[11px] leading-4 whitespace-normal text-warn-ink">{coreText(r[6])}</span>}
             </td>
-            <td className={cn('truncate px-2 py-1 font-mono', r[4] === '失败' /* lint: allow-cjk */ && 'text-bad-ink', r[4] === '等待' /* lint: allow-cjk */ && 'text-muted')} title={coreText(r[4])}>
+            <td className={cn('truncate px-2 py-1 font-mono', r[4] === 'Failed' && 'text-bad-ink', r[4] === 'Waiting' && 'text-muted')} title={coreText(r[4])}>
               {coreText(r[4])}
             </td>
             <td className={cn('px-2 py-1 font-mono whitespace-nowrap text-muted', mobile && 'hidden')}>{r[5] === null ? '—' : `${Math.round(r[5])} ms`}</td>
