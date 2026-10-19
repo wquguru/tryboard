@@ -184,10 +184,8 @@ fn flash_size(code: u8) -> usize {
 const SPILL_PRO: u32 = 0x3FCE_E8E0 + 64;
 const SPILL_APP: u32 = 0x3FCE_E380 + 64;
 
-/// Enter a windowed-ABI function with CALLINC=0: ENTRY doesn't rotate, the entry frame is the oldest (only bit in
-/// WINDOWSTART), so later overflows won't spill a nonexistent caller frame. Spilling the oldest frame reads
-/// [sp - 12] as "caller's sp" and stores a4..a11 below it; on silicon the caller's spill wrote that, but we have no
-/// caller, so run the entry's ENTRY first, then put a pointer to a free area at [sp-12]. lint: allow-long-comment
+/// Enter a windowed function with CALLINC=0 so its frame is the oldest and overflows never spill a nonexistent caller.
+/// Spilling that frame reads [sp-12] as the caller's sp, which no caller wrote: run ENTRY, then point [sp-12] at free RAM.
 fn enter_windowed(
     c: &mut Cpu,
     bus: &mut SocBus,
@@ -296,11 +294,8 @@ impl Esp32s3 {
 }
 
 impl Esp32s3 {
-    /// Power back up after a software reset (silicon: ROM -> 2nd-stage bootloader -> app; here we boot directly).
-    /// Kept: flash (incl. NVS), RTC slow/fast memory (RTC_NOINIT untouched; .rtc.data reloaded per bootloader semantics,
-    /// .rtc.bss zeroed by app startup), RTC_CNTL store regs (reset-reason hints), the outside world (pin drives, analog
-    /// voltages, I2C devices). Cleared: SRAM, PSRAM, other peripherals, both cores; core 1 restarts via
-    /// ets_set_appcpu_boot_addr from the new app. Simulated time keeps accumulating. lint: allow-long-comment
+    /// Software reset, booting the app directly. Keeps flash/NVS, RTC memory, RTC_CNTL store regs and the outside world;
+    /// clears SRAM, PSRAM, other peripherals and both cores (core 1 restarts via ets_set_appcpu_boot_addr); time keeps running.
     pub fn reboot(&mut self, reason: u32) -> Result<(), String> {
         let old = &mut self.bus;
         let mut bus = SocBus {

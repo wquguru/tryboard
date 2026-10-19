@@ -25,9 +25,8 @@ pub mod src {
     pub const MAX: usize = 99;
 }
 
-/// Xtensa external interrupt line types (xtensa/esp32s3/.../core-isa.h: XCHAL_INTn_TYPE). Level lines follow the source
-/// level; edge lines latch on a rising edge until the CPU writes INTCLEAR. Timer (6/15/16), software (7/29) and
-/// perf-counter (11) lines are CPU-managed; the SoC leaves them alone. lint: allow-long-comment
+/// Level-type external lines per core-isa.h XCHAL_INTn_TYPE; edge lines latch on a rising edge until INTCLEAR.
+/// Timer (6/15/16), software (7/29) and perf-counter (11) lines are CPU-managed, so the SoC leaves them alone.
 pub const EXTERN_LEVEL_LINES: u32 = (1 << 0)
     | (1 << 1)
     | (1 << 2)
