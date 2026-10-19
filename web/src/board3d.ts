@@ -15,6 +15,7 @@ import { SANS, type PickTarget, type PinInfo, type ScenePickApi, type ScreenPoin
 import { capturableOf, type Capturable } from './app/capture';
 import { poseToThree, threeToPose, type Pose } from './imupose';
 import { t } from './i18n';
+import { shaderWarm } from './shaderwarm';
 
 // Units: millimetres
 const PITCH = 2.54;
@@ -2919,6 +2920,7 @@ export function createBench(container: HTMLElement): Bench {
     for (const [id, msg] of faults) if (wires.some((w) => w.id === id)) applyFault(id, msg);
     else setTag('fault:' + id, null, '', () => null);
     applyPose();
+    sw.warm();
   }
 
   const composer = new EffectComposer(renderer);
@@ -2936,6 +2938,8 @@ export function createBench(container: HTMLElement): Bench {
   outline.enabled = false;
   composer.addPass(outline);
   composer.addPass(new OutputPass());
+  const sw = shaderWarm(renderer, scene, camera, composer);
+  sw.warm();
 
   const resize = () => {
     const w = container.clientWidth, h = container.clientHeight;
@@ -3615,7 +3619,7 @@ export function createBench(container: HTMLElement): Bench {
     // Skip bloom when nothing glows (saves 5 blur levels)
     bloom.enabled = glow;
     renderer.info.reset();
-    composer.render();
+    if (!sw.warming()) composer.render();
     lastInfo.calls = renderer.info.render.calls;
     lastInfo.triangles = renderer.info.render.triangles;
     // DOM tags follow their 3D positions

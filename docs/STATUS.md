@@ -203,6 +203,7 @@
 | 手机 实验台 c3-lcd / s3-lvgl | 572 | 1497 / 1621 | 1073 / 1090 | 16.8 | 1.0× / 0.53× |
 
 - 结论：稳定态不掉帧（headless 帧率仅作参考）；实验台启动长任务 0.7–1.2 s，CPU 剖析显示约 0.9 s 在首帧 `WebGLRenderer.render` 同步编译着色器（R-15）；7 处各自 `new WebGLRenderer`。打开分析仪本身约 170 ms。
+- R-15（2026-10-19，`web/src/shaderwarm.ts`）：桌面实验台 weather / c3-lcd / s3-lvgl 长任务 235–267 ms（基线 715–895）；仍有间歇「回访卡顿」约 550 ms（同一浏览器第二次以后打开实验台，Chrome 程序缓存命中，isReady 先报完成而 GPU 进程仍积压，首个同步 GL 调用阻塞），约一半运行落在某一行；手机 4× 降速几乎不变（1030–1190 ms），瓶颈是建场景 CPU 时间，见 PLAN R-16。诊断工具 `node tools/webtest/prof.mjs [url] [--mobile] [--prewarm] [--gl]`。
 - 命令行模拟速度（5 s 模拟）：s3-lvgl 123.6 MIPS（0.79× 实时）、wifi-http 104.4 MIPS、esp32-blink 69.2 MIPS（大部分时间空闲）。
 
 ### C-04 FreeRTOS 任务时间线（2026-10-19）

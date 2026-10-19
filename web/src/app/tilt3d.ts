@@ -5,6 +5,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { poseToThree, threeToPose, type Pose } from '../imupose';
 import { currentTheme, onTheme } from '../theme';
+import { shaderWarm } from '../shaderwarm';
 
 export interface TiltOptions {
   /** Current pose (the one in session / store). */
@@ -82,6 +83,7 @@ export function createTilt3D(container: HTMLElement, o: TiltOptions): Tilt3D {
   scene.add(desk);
 
   const camera = new THREE.PerspectiveCamera(32, 1, 0.5, 200);
+  const sw = shaderWarm(renderer, scene, camera);
   camera.position.set(0, 9, 20);
   camera.lookAt(0, 0, 0);
 
@@ -186,7 +188,7 @@ export function createTilt3D(container: HTMLElement, o: TiltOptions): Tilt3D {
         setFromPose(p);
       }
     }
-    renderer.render(scene, camera);
+    if (!sw.warming()) renderer.render(scene, camera);
   };
 
   return {

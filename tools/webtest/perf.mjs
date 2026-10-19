@@ -49,12 +49,13 @@ async function waitFor(page, fn, ms = 30000) {
 
 // Long tasks and frame intervals are collected in the page from navigation on.
 const PROBE = () => {
-  globalThis.__perf = { long: 0, longMs: 0, frames: [] };
+  globalThis.__perf = { long: 0, longMs: 0, frames: [], tasks: [] };
   try {
     new PerformanceObserver((l) => {
       for (const e of l.getEntries()) {
         __perf.long++;
         __perf.longMs += e.duration;
+        __perf.tasks.push([Math.round(e.startTime), Math.round(e.duration)]);
       }
     }).observe({ type: 'longtask', buffered: true });
   } catch {}
@@ -96,7 +97,7 @@ async function measure(name, url, { mobile = false, ready = null, frameSec = 5, 
     const s1 = globalThis.__tbApp?.store.get().simSeconds ?? null;
     const d = ts.slice(1).map((t, i) => t - ts[i]).sort((a, b) => a - b);
     const q = (p) => +(d[Math.min(d.length - 1, Math.floor(d.length * p))] ?? 0).toFixed(1);
-    return { fps: +((d.length / sec)).toFixed(1), p50: q(0.5), p95: q(0.95), max: q(1), simRate: s0 === null ? null : +(((s1 - s0) / ((performance.now() - w0) / 1000))).toFixed(3), long: __perf.long, longMs: Math.round(__perf.longMs) };
+    return { fps: +((d.length / sec)).toFixed(1), p50: q(0.5), p95: q(0.95), max: q(1), simRate: s0 === null ? null : +(((s1 - s0) / ((performance.now() - w0) / 1000))).toFixed(3), long: __perf.long, longMs: Math.round(__perf.longMs), tasks: __perf.tasks };
   }, frameSec);
   await page.close();
   return { name, url, mobile, loadMs, kb: Math.round(loadBytes / 1024), totalKb: Math.round(bytes / 1024), readyMs, ...fr, errors: errors.length, firstError: errors[0] ?? '' };

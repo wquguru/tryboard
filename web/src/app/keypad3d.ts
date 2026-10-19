@@ -12,6 +12,7 @@ import { createUsbHost, type UsbView } from '../usb3d';
 import { capturableOf, type Capturable } from './capture';
 import { KEYPAD_CAPS, KEYPAD_PINS } from '../views/keypad';
 import { t } from '../i18n';
+import { shaderWarm } from '../shaderwarm';
 
 export interface Keypad3DOptions {
   press(pin: number, down: boolean): void;
@@ -162,6 +163,7 @@ export function createKeypad3D(container: HTMLElement, o: Keypad3DOptions): Keyp
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   composer.addPass(new OutputPass());
+  const sw = shaderWarm(renderer, scene, camera, composer);
   function resize() {
     const w = Math.max(1, container.clientWidth), h = Math.max(1, container.clientHeight);
     renderer.setSize(w, h, false);
@@ -212,7 +214,7 @@ export function createKeypad3D(container: HTMLElement, o: Keypad3DOptions): Keyp
     raf = requestAnimationFrame(frame);
     for (const c of caps) c.mesh.position.y += ((c.down ? c.y0 - 2 : c.y0) - c.mesh.position.y) * 0.5;
     controls.update();
-    composer.render();
+    if (!sw.warming()) composer.render();
     if (!tag.hidden) {
       v.copy(port).add(new THREE.Vector3(0, 26, 0)).project(camera);
       tag.style.left = `${((v.x + 1) / 2) * container.clientWidth}px`;

@@ -1,6 +1,7 @@
 // Step 4 product scene (separate from board3d.ts): a desk weather station, 70×50×32 mm case (units cm). Dial follows
 // GPIO4 PWM with servo-like inertia, OLED framebuffer is a texture, RGB glows via a light pipe; all from the live sim.
 import { t } from '../i18n';
+import { shaderWarm } from '../shaderwarm';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -384,6 +385,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.2, 1.25);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
+  const sw = shaderWarm(renderer, scene, camera, composer);
 
   function resize() {
     const w = Math.max(1, container.clientWidth), h = Math.max(1, container.clientHeight);
@@ -489,7 +491,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
     (hint.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.45 * (0.5 + 0.5 * Math.sin(now / 300));
 
     controls.update();
-    composer.render();
+    if (!sw.warming()) composer.render();
     place(tagKey, new THREE.Vector3(1.35, H + 0.9, 0.4));
     place(tagVent, new THREE.Vector3(W / 2 + 0.2, 5.4, 0.6), 34, 0);
     place(tagHeat, new THREE.Vector3(heater.position.x, 2.6, heater.position.z));

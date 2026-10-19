@@ -12,6 +12,7 @@ import { currentTheme, onTheme, type Theme } from '../theme';
 import type { Pose } from '../imupose';
 import { capturableOf, type Capturable } from './capture';
 import { t } from '../i18n';
+import { shaderWarm } from '../shaderwarm';
 
 export type WorkKind = 'lamp' | 'ruler' | 'tilt';
 
@@ -611,6 +612,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
   composer.addPass(new RenderPass(scene, camera));
   composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.25, 1.2));
   composer.addPass(new OutputPass());
+  const sw = shaderWarm(renderer, scene, camera, composer);
 
   function resize() {
     const w = Math.max(1, container.clientWidth), h = Math.max(1, container.clientHeight);
@@ -647,7 +649,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     last = now;
     tick(o.frame(), dt, now);
     controls.update();
-    composer.render();
+    if (!sw.warming()) composer.render();
     for (const t of tagList) {
       const p = t.at();
       v.copy(p).project(camera);

@@ -12,6 +12,7 @@ import { currentTheme, onTheme, type Theme } from '../theme';
 import { EXT, extModelsOn, loadExt, reportExt } from '../extmodels';
 import { capturableOf, type Capturable } from './capture';
 import { t } from '../i18n';
+import { shaderWarm } from '../shaderwarm';
 
 export interface LcdFrame {
   pwm: number[];
@@ -507,6 +508,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   composer.addPass(new OutputPass());
+  const sw = shaderWarm(renderer, scene, camera, composer);
 
   function resize() {
     const w = Math.max(1, container.clientWidth), h = Math.max(1, container.clientHeight);
@@ -586,7 +588,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     (hint.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.45 * (0.5 + 0.5 * Math.sin(now / 300));
 
     controls.update();
-    composer.render();
+    if (!sw.warming()) composer.render();
     place(tagKey, keyRest.clone().add(new THREE.Vector3(0, 0.9, 0)));
     place(tagInfo, spin ? new THREE.Vector3(-2.4, 2.1, 0.6) : new THREE.Vector3(-2.3, 5.9, 0.4), spin ? -40 : 0, 0);
   }

@@ -10,6 +10,7 @@ import type { CaseLayout, CaseMeshes, MeshData, Pose, Prim, V3 } from './enclosu
 import { currentTheme, onTheme, type Theme } from '../theme';
 import { btnClass } from '../ui/panel';
 import { t } from '../i18n';
+import { shaderWarm } from '../shaderwarm';
 
 export interface Asm3DOptions {
   template: Template;
@@ -107,6 +108,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
   }
 
   const camera = new THREE.PerspectiveCamera(34, 1, 1, 3000);
+  const sw = shaderWarm(renderer, scene, camera);
   const target = toWorld([0, OD * 0.18, topZ * 0.4]);
   // Tray + case must fit between the side panels: back the camera off by size
   const home = target.clone().add(new THREE.Vector3(0.32, 0.78, 1).normalize().multiplyScalar(Math.max(size, trayWidth() * 0.62) * 3.9));
@@ -571,7 +573,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
     clipList.length = 0;
     if (sectionOn) clipList.push(clip);
     controls.update();
-    renderer.render(scene, camera);
+    if (!sw.warming()) renderer.render(scene, camera);
   }
 
   function resize() {
