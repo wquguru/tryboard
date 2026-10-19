@@ -1,7 +1,6 @@
-// 实验台 v2 的台面卡片和左栏内容（U-04）：连线横幅、可连引脚圈、接错线确认、万用表常驻卡、
-// 检查点提示卡、接线表、元件库、可信度徽章、空台面引导、欠压解释。
-// 这里只管画；数据和动作都由 steps/bench.tsx（或 main.tsx）传进来，不碰 Session。
-import { useEffect, useRef, useState, type ReactNode } from "react";
+// Bench v2 cards and left-rail content (U-04): wiring banners, pin rings, wrong-wire card, meter, checkpoint, wiring table, parts.
+// Render only: data and actions come from steps/bench.tsx (or main.tsx); this never touches the Session.
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ScreenPoint } from "../scene-api";
 import { PARTS, type Kind } from "../catalog/parts";
 import { cn } from "../ui/cn";
@@ -10,41 +9,62 @@ import { Icon } from "./icons";
 import { isPhone, setMui, usePhone } from "./mobile";
 import type { BenchWire } from "./wiring";
 import { placeDef } from "./place";
-import { ConfIcon } from "../ui/conf";
+import { ConfIcon, type ConfLevel } from "../ui/conf";
+import { t } from "../i18n";
+
+/** t() with React nodes as placeholders, so markup stays inside one translatable sentence. */
+export function tn(en: string, nodes: Record<string, ReactNode>): ReactNode {
+  return t(en)
+    .split(/(\{\w+\})/)
+    .map((s, i) => {
+      const k = /^\{(\w+)\}$/.exec(s)?.[1];
+      return k && k in nodes ? <Fragment key={i}>{nodes[k]}</Fragment> : s;
+    });
+}
 
 const btn =
+
   "inline-flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md border border-line bg-surface px-2.5 text-xs text-fg hover:bg-field";
 const btnPri =
   "inline-flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md border border-accent-strong bg-accent-strong px-2.5 text-xs font-medium text-on-accent";
 
-// ------------------------------------------------------------ 可信度
-export type Conf = "仿真验证" | "行为模拟" | "估算" | "必须上真机";
+// ------------------------------------------------------------ confidence
+// ConfLevel values are machine identifiers shared with ui/conf.tsx and data files; only labels are translated.
+export type Conf = ConfLevel;
+const [SIMV, BEHV, EST, REAL] = ["仿真验证", "行为模拟", "估算", "必须上真机"] as const satisfies readonly Conf[]; // lint: allow-cjk
+/** Display label per confidence level (the stored value stays the identifier). */
+export const CONF_LABEL: Record<Conf, string> = {
+  [SIMV]: t("Simulated"),
+  [BEHV]: t("Behavior model"),
+  [EST]: t("Estimate"),
+  [REAL]: t("Needs real hardware"),
+};
 const CONF_TIP: Record<Conf, string> = {
-  仿真验证: "有验收固件在模拟器里跑过，读数按数据手册的寄存器和公式算出",
-  行为模拟: "寄存器接口按数据手册，物理量按规则近似；噪声、时序细节没模拟",
-  估算: "没有模型，只按规格书估算",
-  必须上真机: "这一项模拟不了，结论要上真机才算数",
+  [SIMV]: t("An acceptance firmware ran in the simulator; readings follow the datasheet registers and formulas"),
+  [BEHV]: t("Register interface follows the datasheet, physics is approximated; noise and timing details are not modeled"),
+  [EST]: t("No model; estimated from the datasheet only"),
+  [REAL]: t("This can't be simulated; only real hardware gives a verdict"),
 };
-/** 台面零件的可信度：依据见 docs/STATUS.md 各外设一行（有固件验收 = 仿真验证） */
+/** Per-part confidence on the bench; rationale per peripheral in docs/STATUS.md (firmware acceptance = simulated). */
 export const PART_CONF: Record<string, Conf> = {
-  board: "仿真验证",
-  bme280: "仿真验证",
-  oled: "仿真验证",
-  gc9a01: "仿真验证",
-  pot: "仿真验证",
-  led: "仿真验证",
-  key: "仿真验证",
-  encoder: "仿真验证",
-  servo: "行为模拟",
-  buzzer: "行为模拟",
-  hcsr04: "行为模拟",
-  mpu6050: "行为模拟",
-  qmi8658: "行为模拟",
-  cst816s: "行为模拟",
-  max98357a: "行为模拟",
-  inmp441: "行为模拟",
+  board: SIMV,
+  bme280: SIMV,
+  oled: SIMV,
+  gc9a01: SIMV,
+  pot: SIMV,
+  led: SIMV,
+  key: SIMV,
+  encoder: SIMV,
+  servo: BEHV,
+  buzzer: BEHV,
+  hcsr04: BEHV,
+  mpu6050: BEHV,
+  qmi8658: BEHV,
+  cst816s: BEHV,
+  max98357a: BEHV,
+  inmp441: BEHV,
 };
-/** 可信度徽章：墨色图标 + 档名（U-14：颜色只留给结果状态，可信度不再按颜色区分） */
+/** Ink icon + level name (U-14: colour is reserved for result status, not confidence). */
 export function ConfBadge({ c }: { c: Conf }) {
   return (
     <span
@@ -53,13 +73,13 @@ export function ConfBadge({ c }: { c: Conf }) {
       className="inline-flex h-5 flex-none items-center gap-1 text-[11px] whitespace-nowrap text-fg"
     >
       <ConfIcon c={c} size={12} />
-      {c}
+      {CONF_LABEL[c]}
     </span>
   );
 }
 
-// ------------------------------------------------------------ 连线横幅 + 引脚圈
-/** wires / onWire / onUndo：手机上细线很难点中，横幅里直接列出能改接的线；撤销和接线表也放这（DESIGN_V2 §5） */
+// ------------------------------------------------------------ wiring banner + pin rings
+/** Thin wires are hard to tap on phones, so the banner lists rewirable wires plus undo and wiring table (DESIGN_V2 §5). */
 export function WireBanner({
   wire,
   onCancel,
@@ -86,10 +106,10 @@ export function WireBanner({
           <span className="min-w-0 flex-1 leading-snug">
             {wire ? (
               <>
-                已选：<b className="font-mono">{wire}</b>，再点一个发蓝的引脚
+                {tn("Selected {wire}, now tap a blue pin", { wire: <b className="font-mono">{wire}</b> })}
               </>
             ) : (
-              "先点一根要改接的线："
+              t("First tap the wire to rewire:")
             )}
           </span>
           <button
@@ -97,7 +117,7 @@ export function WireBanner({
             onClick={onCancel}
             className="min-h-11 flex-none cursor-pointer rounded-lg border-0 bg-[#ffffff2e] px-3 text-[13px] text-on-accent"
           >
-            取消
+            {t("Cancel")}
           </button>
         </div>
         {!wire && !!wires?.length && (
@@ -123,7 +143,7 @@ export function WireBanner({
             onClick={() => onUndo?.()}
             className="min-h-11 flex-1 cursor-pointer rounded-lg border-0 bg-[#ffffff2e] px-2 text-[13px] text-on-accent disabled:opacity-50"
           >
-            撤销上一步
+            {t("Undo last step")}
           </button>
           <button
             type="button"
@@ -131,7 +151,7 @@ export function WireBanner({
             onClick={() => setMui({ lib: "wires", props: false, more: false })}
             className="min-h-11 flex-1 cursor-pointer rounded-lg border-0 bg-[#ffffff2e] px-2 text-[13px] text-on-accent"
           >
-            看接线表
+            {t("View wiring table")}
           </button>
         </div>
       </div>
@@ -146,10 +166,10 @@ export function WireBanner({
       <span>
         {wire ? (
           <>
-            改接 <b className="font-mono">{wire}</b>：点一根新的引脚
+            {tn("Rewire {wire}: click a new pin", { wire: <b className="font-mono">{wire}</b> })}
           </>
         ) : (
-          "连线中… 先点一根要改接的线"
+          t("Wiring… first click the wire to rewire")
         )}
       </span>
       <button
@@ -157,13 +177,13 @@ export function WireBanner({
         onClick={onCancel}
         className="h-6 cursor-pointer rounded-full border-0 bg-[#ffffff2e] px-2.5 text-xs text-on-accent hover:bg-[#ffffff47]"
       >
-        Esc 取消
+        {t("Esc to cancel")}
       </button>
     </div>
   );
 }
 
-/** 放零件后的逐根接线引导（P2-16）：零件这头的针一根根列出来，当前那根高亮；点开发板上发蓝的圈接上 */
+/** Pin-by-pin wiring guide after placing a part (P2-16): current pin highlighted, click a blue ring on the board. */
 export function PlaceBanner({
   name,
   steps,
@@ -186,7 +206,7 @@ export function PlaceBanner({
   const phone = usePhone();
   const s = steps[cur];
   const what =
-    s.want === "gnd" ? "GND" : s.want === "power" ? "3V3 或 5V" : "一根 GPIO";
+    s.want === "gnd" ? "GND" : s.want === "power" ? t("3V3 or 5V") : t("a GPIO");
   return (
     <div
       id="placeBanner"
@@ -202,8 +222,12 @@ export function PlaceBanner({
       <div className="flex items-center gap-2">
         <Icon n="wire" size={14} className="flex-none" />
         <span className="min-w-0 flex-1 leading-snug">
-          接 <b>{name}</b> 的 <b className="font-mono">{s.label}</b>
-          {s.optional ? "（可不接）" : ""}：点开发板上{what}（蓝圈）
+          {tn(
+            s.optional
+              ? "Wire {pin} of {part} (optional): click {what} on the board (blue ring)"
+              : "Wire {pin} of {part}: click {what} on the board (blue ring)",
+            { part: <b>{name}</b>, pin: <b className="font-mono">{s.label}</b>, what },
+          )}
         </span>
         <button
           type="button"
@@ -213,7 +237,7 @@ export function PlaceBanner({
             phone ? "min-h-11 text-[13px]" : "h-6 text-xs",
           )}
         >
-          {phone ? "不放了" : "Esc 不放了"}
+          {phone ? t("Don't place") : t("Esc: don't place")}
         </button>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
@@ -248,7 +272,7 @@ export function PlaceBanner({
               phone ? "min-h-11 text-[13px]" : "h-6 text-[11px]",
             )}
           >
-            上一根
+            {t("Previous pin")}
           </button>
         )}
         {onSkip && (
@@ -261,7 +285,7 @@ export function PlaceBanner({
               phone ? "min-h-11 text-[13px]" : "h-6 text-[11px]",
             )}
           >
-            这根不接
+            {t("Skip this pin")}
           </button>
         )}
       </div>
@@ -273,10 +297,10 @@ export interface RingPin {
   id: string;
   label: string;
   role?: string;
-  /** 这根针上已经接着的线（零件端） */
+  /** Wires already on this pin (part ends). */
   used: string[];
 }
-/** 可连引脚：每根针一个圈，位置每帧按 3D 投影跟着相机走（直接改 style，不重画） */
+/** One ring per connectable pin, following the 3D projection each frame (style writes, no re-render). */
 export function PinRings({
   pins,
   cur,
@@ -297,7 +321,7 @@ export function PinRings({
         const el = refs.current[p.id];
         if (!el) continue;
         const s = project(p.id);
-        // 相机不动时不改 DOM：每帧写 style 会让页面一直"在变"
+        // Skip DOM writes when the camera is still, otherwise the page never looks idle
         if (el.hidden !== !s) el.hidden = !s;
         const tf = s
           ? `translate(${Math.round(s.x - 9)}px, ${Math.round(s.y - 9)}px)`
@@ -319,13 +343,13 @@ export function PinRings({
           ref={(el) => void (refs.current[p.id] = el)}
           type="button"
           data-ring={p.id}
-          aria-label={`接到 ${p.id}`}
+          aria-label={t("Connect to {pin}", { pin: p.id })}
           onClick={() => onPin(p.id)}
           onPointerEnter={() => setHover(p.id)}
           onPointerLeave={() => setHover((x) => (x === p.id ? null : x))}
           className={cn(
             "pointer-events-auto absolute top-0 left-0 size-[18px] cursor-pointer rounded-full border-2 bg-transparent p-0",
-            // 手机：圈画大一点；点按交给放大镜（useLens）找最近的针，相邻针 2.54 mm 在屏上只有几像素
+            // Phone: bigger rings; taps go through the lens (useLens) since 2.54 mm pitch is a few pixels
             "max-md:scale-125",
             p.id === cur
               ? "border-warn-ink"
@@ -347,14 +371,14 @@ export function PinRings({
         >
           <b className="font-mono">{h.id}</b>
           {h.label !== h.id && (
-            <span className="text-muted">（丝印 {h.label}）</span>
+            <span className="text-muted"> {t("(silkscreen {label})", { label: h.label })}</span>
           )}
           <span className="ml-1.5">
             {h.id === cur
-              ? "现在接在这"
+              ? t("Connected here now")
               : h.used.length
-                ? `占用：${h.used.join("、")}`
-                : "空闲"}
+                ? t("Used by: {list}", { list: h.used.join(", ") })
+                : t("Free")}
           </span>
           {h.role && <span className="block text-muted">{h.role}</span>}
         </div>
@@ -368,8 +392,8 @@ const ringCenter = (el: HTMLElement) => {
   const r = el.getBoundingClientRect();
   return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
 };
-/** 手机连线的放大镜：手指按在台面上时，在指尖上方画一个 140px 的圆，把指尖附近的针放大 2.5 倍画出来，
- *  高亮离指尖最近的那根；松手就接到它。不截 WebGL 画面（要 preserveDrawingBuffer，拖慢每一帧），只画针位示意。 */
+/** Phone lens: a 140px circle above the finger shows nearby pins at 2.5x and connects the nearest on release.
+ *  It draws pin dots, not a WebGL capture (that needs preserveDrawingBuffer and slows every frame). */
 function useLens(
   pins: RingPin[],
   refs: React.RefObject<Record<string, HTMLButtonElement | null>>,
@@ -404,7 +428,7 @@ function useLens(
     };
     const down = (e: PointerEvent) => {
       if (!isPhone() || e.button > 0) return;
-      // 只在针附近按下才接管（别处照常转视角）
+      // Only take over near a pin; elsewhere the drag still orbits the camera
       const id = near(e.clientX, e.clientY, 40);
       if (!id) return;
       e.stopPropagation();
@@ -441,7 +465,7 @@ function useLens(
       window.addEventListener("pointerup", up, true);
       window.addEventListener("pointercancel", cancel, true);
     };
-    // 圈上的 click 也会触发 onPin：手机上由松手接，吞掉随后的 click 免得接两次
+    // Ring clicks also fire onPin; on phones release already connected, so swallow the click
     const click = (e: MouseEvent) => {
       if (isPhone() && (e.target as HTMLElement).closest?.("[data-ring]")) {
         e.stopPropagation();
@@ -469,7 +493,7 @@ function useLens(
       return Math.hypot(dx, dy) < R - 8 ? { p, dx, dy } : null;
     })
     .filter((d) => !!d);
-  // 圆放在指尖正上方（手指不挡住），顶到台面上沿就放到旁边
+  // Lens sits above the fingertip so the finger doesn't cover it; beside it near the top edge
   const lx = st.x - st.ox,
     ly = st.y - st.oy;
   const top = ly - 2 * R - 36 < 0 ? ly - R : ly - 2 * R - 36;
@@ -505,19 +529,19 @@ function useLens(
             <b className="font-mono">{hit.id}</b>
             <span className="block opacity-80">
               {hit.used.length
-                ? `占用：${hit.used.join("、")}`
-                : (hit.role ?? "空闲")}
+                ? t("Used by: {list}", { list: hit.used.join(", ") })
+                : (hit.role ?? t("Free"))}
             </span>
           </>
         ) : (
-          "挪近一根针"
+          t("Move closer to a pin")
         )}
       </div>
     </div>
   );
 }
 
-// ------------------------------------------------------------ 接错线确认
+// ------------------------------------------------------------ wrong-wire confirmation
 export function WrongWireCard({
   title,
   detail,
@@ -532,7 +556,7 @@ export function WrongWireCard({
   detail: string;
   wire: string;
   sim: string;
-  /** 网络求解出的电流和后果（P2-14，估算；算出来之前不显示） */
+  /** Current and consequence from the net solver (P2-14, estimate; hidden until computed). */
   estimate?: { mA: number; text: string; what: string };
   onUndo: () => void;
   onRetry: () => void;
@@ -542,13 +566,13 @@ export function WrongWireCard({
     <div
       id="wrongWire"
       role="alertdialog"
-      aria-label="接错线"
+      aria-label={t("Wrong wire")}
       className="absolute top-14 left-1/2 z-5 w-[380px] max-w-[calc(100%-24px)] -translate-x-1/2 rounded-(--r) border border-(--bad-line) max-md:top-2 max-md:z-6 bg-surface p-3.5 text-fg shadow-panel"
     >
       <div className="flex items-start gap-2">
         <Icon n="warn" size={18} className="mt-0.5 flex-none text-bad-ink" />
         <div className="min-w-0 flex-1">
-          <b className="block text-sm">这样接会出问题：{title}</b>
+          <b className="block text-sm">{t("This wiring will cause trouble: {title}", { title })}</b>
           <span className="block font-mono text-[11px] text-muted">{wire}</span>
         </div>
       </div>
@@ -560,11 +584,11 @@ export function WrongWireCard({
         >
           <div className="flex items-center gap-2">
             <b className="font-mono text-sm text-bad-ink">≈ {estimate.mA} mA</b>
-            <ConfBadge c="估算" />
+            <ConfBadge c={EST} />
           </div>
           <p className="mt-1 mb-0">{estimate.text}</p>
           <p className="mt-0.5 mb-0 text-[11px] text-muted">
-            按最坏情况：{estimate.what}
+            {t("Worst case: {what}", { what: estimate.what })}
           </p>
         </div>
       )}
@@ -576,21 +600,21 @@ export function WrongWireCard({
           className={btnPri}
           onClick={onUndo}
         >
-          撤销这次改接
+          {t("Undo this rewire")}
         </button>
         <button type="button" data-ww="retry" className={btn} onClick={onRetry}>
-          改接到别的针
+          {t("Rewire to another pin")}
         </button>
         <button type="button" data-ww="keep" className={btn} onClick={onKeep}>
-          我知道，保留
+          {t("I know, keep it")}
         </button>
       </div>
     </div>
   );
 }
 
-// ------------------------------------------------------------ 万用表常驻卡
-/** 读数由实验台的 updateLive 按 data-live 填（data-live-root 让它找到这张卡） */
+// ------------------------------------------------------------ multimeter card
+/** Readings are filled by the bench's updateLive via data-live (data-live-root lets it find this card). */
 export function MeterCard({
   target,
   onClose,
@@ -603,14 +627,14 @@ export function MeterCard({
       id="meterCard"
       data-live-root=""
       role="region"
-      aria-label="万用表"
+      aria-label={t("Multimeter")}
       className="absolute right-3 bottom-[calc(var(--tb-h,52px)+12px)] z-3 w-[220px] rounded-(--r) border border-line bg-surface p-3 text-fg shadow-panel max-md:right-2 max-md:bottom-2 max-md:w-[200px]"
     >
       <div className="flex items-center justify-between">
-        <span className="text-[11px] text-muted">万用表 · 直流电压</span>
+        <span className="text-[11px] text-muted">{t("Multimeter · DC voltage")}</span>
         <button
           type="button"
-          aria-label="收起万用表"
+          aria-label={t("Close multimeter")}
           onClick={onClose}
           className="flex size-6 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-field max-md:-my-2 max-md:-mr-2 max-md:size-11"
         >
@@ -625,10 +649,10 @@ export function MeterCard({
       <span className="block text-xs text-muted">
         {target ? (
           <>
-            <span className="font-mono">{target}</span> 对 GND
+            {tn("{target} to GND", { target: <span className="font-mono">{target}</span> })}
           </>
         ) : (
-          "点台面上的一根针或一根线"
+          t("Click a pin or a wire on the bench")
         )}
       </span>
       <Live as="p" k="mnote" className="mt-1.5 mb-0 text-[11px] text-muted" />
@@ -636,7 +660,7 @@ export function MeterCard({
   );
 }
 
-// ------------------------------------------------------------ 检查点提示卡（左栏底部）
+// ------------------------------------------------------------ checkpoint card (bottom of left rail)
 export function CheckpointCard({
   id,
   title,
@@ -659,13 +683,13 @@ export function CheckpointCard({
   go: string | null;
   onGo: () => void;
   onAll: () => void;
-  /** 其中自己的固件通过的个数（✓），其余通过的是参考固件跑通（◐） */
+  /** How many passed with the user's own firmware (✓); the rest passed with reference firmware (◐). */
   own: number;
-  /** 内置固件正在逐个验收 */
+  /** Built-in firmware is being checked one checkpoint at a time. */
   allBusy: boolean;
-  /** 用内置固件走完全程（作品没有参考固件时为 null） */
+  /** Run every checkpoint with built-in firmware (null when the project has no reference firmware). */
   onAllRef: (() => void) | null;
-  /** 自己写：打开这个检查点（拖入 .bin、交给 AI 的任务书） */
+  /** Write your own: open this checkpoint (drop a .bin, copy the brief for an AI). */
   onMine: () => void;
 }) {
   return (
@@ -674,16 +698,16 @@ export function CheckpointCard({
       className="rounded-lg border border-line bg-surface p-2.5 text-xs"
     >
       <div className="flex items-center justify-between text-[11px] text-muted">
-        <span>当前检查点</span>
-        <span className="font-mono" title="跑通的检查点；其中「我的」是你自己的固件通过的">
+        <span>{t("Current checkpoint")}</span>
+        <span className="font-mono" title={t("Checkpoints that ran; \"mine\" passed with your own firmware")}>
           {done}/{total}
-          {done > 0 && ` · 我的 ${own}`}
+          {done > 0 && ` · ${t("mine {n}", { n: own })}`}
         </span>
       </div>
       <b className="mt-1 block text-[13px]">
-        <span className="font-mono">{id}</span> {title}
+        <span className="font-mono">{id}</span> {t(title)}
       </b>
-      <p className="mt-1 mb-2 line-clamp-3 text-muted">{pass}</p>
+      <p className="mt-1 mb-2 line-clamp-3 text-muted">{t(pass)}</p>
       {onAllRef && (
         <>
           <button
@@ -692,30 +716,30 @@ export function CheckpointCard({
             className={`${btnPri} w-full`}
             disabled={allBusy}
             onClick={onAllRef}
-            title="每个检查点用作品自带的参考固件验收；跑通记 ◐，同样解锁组装和成品"
+            title={t("Checks each checkpoint with the project's reference firmware; a pass counts as ◐ and still unlocks Assemble and Product")}
           >
-            {allBusy ? "内置固件验收中…" : "用内置固件走完全程"}
+            {allBusy ? t("Checking built-in firmware…") : t("Run all with built-in firmware")}
           </button>
           <p className="mt-1 mb-2 text-[11px] text-muted">
-            没有工具链也能看到组装和成品；以后换成自己的固件，通过的变成 ✓。
+            {t("See Assemble and Product without a toolchain; switch to your own firmware later and passes become ✓.")}
           </p>
         </>
       )}
       <div className="flex flex-wrap gap-1.5">
-        <button type="button" id="cpMine" className={onAllRef ? btn : btnPri} onClick={onMine} title="拖入 .bin、复制交给 AI 的任务书">
-          自己写固件
+        <button type="button" id="cpMine" className={onAllRef ? btn : btnPri} onClick={onMine} title={t("Drop a .bin, or copy the brief for an AI")}>
+          {t("Write my own firmware")}
         </button>
         <button
           type="button"
           id="cpGo"
           className={btn}
           onClick={onGo}
-          title={go ? `选中并对准 ${go}` : "打开这个检查点"}
+          title={go ? t("Select and focus {part}", { part: go }) : t("Open this checkpoint")}
         >
-          带我去看
+          {t("Show me")}
         </button>
         <button type="button" id="cpAll" className={btn} onClick={onAll}>
-          全部检查点
+          {t("All checkpoints")}
         </button>
       </div>
     </div>
@@ -728,9 +752,9 @@ export function AllPassedCard({
   onNext,
 }: {
   total: number;
-  /** 其中自己的固件通过的个数；其余是内置固件跑通（◐） */
+  /** Passes with the user's own firmware; the rest ran on built-in firmware (◐). */
   own?: number;
-  /** 组装后开机复测：false = 没过（台面上通过不代表装进外壳也行，不能还写"全部通过"） */
+  /** Power-on retest after assembly: false = failed, so the card must not still say "all passed". */
   retest?: boolean | null;
   onNext: () => void;
 }) {
@@ -741,11 +765,11 @@ export function AllPassedCard({
         className="rounded-lg border border-(--warn-line) bg-warn-bg p-2.5 text-xs text-warn-ink"
       >
         <b className="block text-[13px]">
-          检查点 {total}/{total} 通过 · 开机复测 ✗
+          {t("Checkpoints {n}/{n} passed · power-on retest ✗", { n: total })}
         </b>
-        <p className="mt-1 mb-2">台面上没问题，装进外壳后复测没过：回组装看哪里要改。</p>
+        <p className="mt-1 mb-2">{t("Fine on the bench, but the retest failed inside the enclosure: go back to Assemble and see what to change.")}</p>
         <button type="button" className={btnPri} onClick={onNext}>
-          回组装 →
+          {t("Back to Assemble →")}
         </button>
       </div>
     );
@@ -754,21 +778,23 @@ export function AllPassedCard({
       id="cpCard"
       className="rounded-lg border border-line bg-ok-bg p-2.5 text-xs text-ok-ink"
     >
-      <b className="block text-[13px]">{total} 个检查点全部{own === total ? "通过" : "跑通"}</b>
-      <p className="mt-1 mb-2">组装已经解锁：把台面上的东西装进外壳。</p>
+      <b className="block text-[13px]">
+        {own === total ? t("All {n} checkpoints passed", { n: total }) : t("All {n} checkpoints ran", { n: total })}
+      </b>
+      <p className="mt-1 mb-2">{t("Assemble is unlocked: put what's on the bench into an enclosure.")}</p>
       {own < total && (
         <p className="mt-0 mb-2 text-muted" data-own={own}>
-          我的固件 {own}/{total}：其余是内置固件跑通（◐）。拖自己的 .bin 到检查点，过了变成 ✓。
+          {t("My firmware {own}/{total}: the rest ran on built-in firmware (◐). Drop your own .bin on a checkpoint; a pass becomes ✓.", { own, total })}
         </p>
       )}
       <button type="button" className={btnPri} onClick={onNext}>
-        下一步：组装 →
+        {t("Next: Assemble →")}
       </button>
     </div>
   );
 }
 
-// ------------------------------------------------------------ 接线表
+// ------------------------------------------------------------ wiring table
 export function WireTable({
   wires,
   bad,
@@ -781,14 +807,14 @@ export function WireTable({
   onSel: (id: string) => void;
 }) {
   if (!wires.length)
-    return <p className="m-2 text-xs text-muted">台面上没有外接线</p>;
+    return <p className="m-2 text-xs text-muted">{t("No external wires on the bench")}</p>;
   return (
     <table id="wireTable" className="w-full border-collapse text-xs">
       <thead>
         <tr className="text-left text-[11px] text-muted">
-          <th className="px-1 py-1 font-normal">开发板</th>
-          <th className="px-1 py-1 font-normal">零件</th>
-          <th className="px-1 py-1 font-normal">线</th>
+          <th className="px-1 py-1 font-normal">{t("Dev board")}</th>
+          <th className="px-1 py-1 font-normal">{t("Part")}</th>
+          <th className="px-1 py-1 font-normal">{t("Wire")}</th>
         </tr>
       </thead>
       <tbody>
@@ -810,7 +836,7 @@ export function WireTable({
                 {w.a}
                 {w.from && (
                   <span className="block text-[10px] text-muted">
-                    原 {w.from}
+                    {t("was {pin}", { pin: w.from })}
                   </span>
                 )}
               </td>
@@ -820,11 +846,11 @@ export function WireTable({
                   <span className="block text-[11px] text-bad-ink">✗ {b}</span>
                 )}
                 {w.missing && (
-                  <span className="block text-[11px] text-muted">拔掉了</span>
+                  <span className="block text-[11px] text-muted">{t("Unplugged")}</span>
                 )}
               </td>
               <td className="px-1 py-1.5 text-muted">
-                {w.color} · {w.lenCm} cm
+                {t(w.color)} · {w.lenCm} cm
               </td>
             </tr>
           );
@@ -834,30 +860,30 @@ export function WireTable({
   );
 }
 
-// ------------------------------------------------------------ 元件库
+// ------------------------------------------------------------ parts library
 const KIND_NAMES: Partial<Record<Kind, string>> = {
-  sensor: "传感器",
-  display: "屏幕",
-  actuator: "执行器",
-  input: "输入",
-  audio: "音频",
-  module: "模块",
-  power: "电源",
-  passive: "分立元件",
+  sensor: t("Sensors"),
+  display: t("Displays"),
+  actuator: t("Actuators"),
+  input: t("Inputs"),
+  audio: t("Audio"),
+  module: t("Modules"),
+  power: t("Power"),
+  passive: t("Discrete parts"),
 };
-/** 元件库拖到台面时 dataTransfer 里的类型（台面 drop 只认它，不和拖 .bin 混） */
+/** dataTransfer type for library drags; the bench drop accepts only this, so it never mixes with .bin drops. */
 export const LIB_DRAG = "application/x-tryboard-part";
 const SIM_NAMES = {
-  verified: "仿真验证",
-  estimated: "估算",
-  none: "无模型",
+  verified: CONF_LABEL[SIMV],
+  estimated: CONF_LABEL[EST],
+  none: t("No model"),
 } as const;
 const SIM_CONF = {
-  verified: "仿真验证",
-  estimated: "估算",
-  none: "必须上真机",
+  verified: SIMV,
+  estimated: EST,
+  none: REAL,
 } as const;
-/** inBom：已在采购清单里的零件 id（手机整页库里标「在清单」） */
+/** inBom: part ids already in the shopping list (the phone library marks them "In list"). */
 export function PartLib({
   chip,
   inBom,
@@ -865,7 +891,7 @@ export function PartLib({
 }: {
   chip: "esp32" | "esp32c3" | "esp32s3";
   inBom?: ReadonlySet<string>;
-  /** 桌面：点「放到台面」或拖到台面上（P2-16）；没给就只能去采购加 */
+  /** Desktop: click "Place" or drag onto the bench (P2-16); without it parts can only be added via Shop. */
   onPlace?: (id: string) => void;
 }) {
   const [q, setQ] = useState("");
@@ -889,13 +915,13 @@ export function PartLib({
           type="search"
           value={q}
           onChange={(e) => setQ(e.currentTarget.value)}
-          placeholder="找零件：BME280、舵机…"
-          aria-label="找零件"
+          placeholder={t("Find a part: BME280, servo…")}
+          aria-label={t("Find a part")}
           className="h-11 w-full rounded-xl border border-line bg-field px-3 text-[16px] text-fg outline-none focus:border-accent"
         />
         <div
           role="group"
-          aria-label="分类"
+          aria-label={t("Category")}
           className="-mx-4 mt-2 flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none]"
         >
           {([null, ...new Set(all.map((p) => p.kind))] as (Kind | null)[]).map(
@@ -908,13 +934,13 @@ export function PartLib({
                 onClick={() => setKind(k)}
                 className="h-11 flex-none cursor-pointer rounded-full border border-line bg-surface px-3.5 text-[13px] whitespace-nowrap text-fg aria-pressed:border-accent aria-pressed:bg-accent-bg aria-pressed:font-medium aria-pressed:text-accent-ink"
               >
-                {k ? KIND_NAMES[k] : "全部"}
+                {k ? KIND_NAMES[k] : t("All")}
               </button>
             ),
           )}
         </div>
         <p className="mt-1 mb-2 text-xs text-muted">
-          零件从采购清单摆上台面：点一个去采购里勾上它。价格是人工参考区间。
+          {t("Parts reach the bench from the shopping list: tap one to tick it in Shop. Prices are hand-picked reference ranges.")}
         </p>
         {list.map((p) => {
           const has = inBom?.has(p.id);
@@ -926,7 +952,7 @@ export function PartLib({
               className="flex min-h-14 items-center gap-3 border-b border-line-soft py-1.5 text-fg no-underline"
             >
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{p.name}</span>
+                <span className="block truncate font-medium">{t(p.name)}</span>
                 <span className="block truncate text-xs text-muted">
                   {KIND_NAMES[p.kind]} · ¥{p.price.lo}–{p.price.hi} ·{" "}
                   <span className="inline-flex items-center gap-1 align-[-2px]">
@@ -943,12 +969,12 @@ export function PartLib({
                     : "bg-accent-strong text-on-accent",
                 )}
               >
-                {has ? "在清单" : "去加"}
+                {has ? t("In list") : t("Add")}
               </span>
             </a>
           );
         })}
-        {!list.length && <p className="text-muted">没有匹配的零件</p>}
+        {!list.length && <p className="text-muted">{t("No matching parts")}</p>}
       </div>
     );
   return (
@@ -957,14 +983,14 @@ export function PartLib({
         type="search"
         value={q}
         onChange={(e) => setQ(e.currentTarget.value)}
-        placeholder="找零件：BME280、舵机…"
-        aria-label="找零件"
+        placeholder={t("Find a part: BME280, servo…")}
+        aria-label={t("Find a part")}
         className="mb-2 h-8 w-full rounded-md border border-line bg-field px-2 text-xs text-fg outline-none focus:border-accent"
       />
       <p className="mt-0 mb-2 text-[11px] text-muted">
         {onPlace
-          ? "拖到台面上，或点「放」，再一根根接到开发板；灰的放不了，悬停看原因。整套零件仍可从采购清单摆。"
-          : "零件从采购清单摆上台面：点一个去采购里勾上它。"}
+          ? t("Drag onto the bench or click \"Place\", then wire it to the board pin by pin; greyed parts can't be placed (hover for why). Whole kits still come from the shopping list.")
+          : t("Parts reach the bench from the shopping list: click one to tick it in Shop.")}
       </p>
       {kinds.map((k) => (
         <section key={k} className="mb-2">
@@ -986,7 +1012,7 @@ export function PartLib({
                     e.dataTransfer.setData(LIB_DRAG, p.id);
                     e.dataTransfer.effectAllowed = "copy";
                   }}
-                  title={why ?? (d ? "拖到台面上，或点「放」" : undefined)}
+                  title={why ?? (d ? t("Drag onto the bench, or click \"Place\"") : undefined)}
                   className={cn(
                     "flex items-center gap-2 rounded-md px-1.5 py-0.5 hover:bg-field",
                     d && !why && "cursor-grab",
@@ -994,13 +1020,13 @@ export function PartLib({
                 >
                   <a
                     href="#shop"
-                    title="去采购里看它"
+                    title={t("See it in Shop")}
                     className={cn(
                       "min-w-0 flex-1 truncate no-underline",
                       why ? "text-muted" : "text-fg",
                     )}
                   >
-                    {p.name}
+                    {t(p.name)}
                   </a>
                   <span className="inline-flex flex-none items-center gap-1 text-[10px] text-muted">
                     <ConfIcon c={SIM_CONF[p.sim.level]} size={10} />
@@ -1011,11 +1037,11 @@ export function PartLib({
                       type="button"
                       data-place={p.id}
                       disabled={!!why}
-                      aria-label={why ? `${p.name} 放不了：${why}` : `把 ${p.name} 放到台面`}
+                      aria-label={why ? t("{part} can't be placed: {why}", { part: t(p.name), why }) : t("Place {part} on the bench", { part: t(p.name) })}
                       onClick={() => onPlace?.(p.id)}
                       className="h-6 flex-none cursor-pointer rounded-md border border-line bg-surface px-2 text-[11px] text-fg hover:border-accent hover:text-accent-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-fg"
                     >
-                      放
+                      {t("Place")}
                     </button>
                   )}
                 </div>
@@ -1023,12 +1049,12 @@ export function PartLib({
             })}
         </section>
       ))}
-      {!list.length && <p className="text-muted">没有匹配的零件</p>}
+      {!list.length && <p className="text-muted">{t("No matching parts")}</p>}
     </div>
   );
 }
 
-// ------------------------------------------------------------ 空台面引导
+// ------------------------------------------------------------ empty-bench guide
 export function EmptyBench({
   onFirmware,
   hasFw,
@@ -1041,31 +1067,31 @@ export function EmptyBench({
       id="emptyBench"
       className="absolute top-1/2 left-1/2 z-3 w-[340px] max-w-[calc(100%-24px)] -translate-x-1/2 -translate-y-1/2 rounded-(--r) border border-line bg-surface p-4 text-fg shadow-panel"
     >
-      {/* 没固件时只有一个主按钮「换固件…」（设计稿 unify/Steps）；有固件了主按钮让给采购 */}
-      {!hasFw && <span className="block text-[11px] font-medium text-muted">没有固件</span>}
-      <b className="block text-sm">台面上只有一块开发板</b>
+      {/* Without firmware the only primary button is "Change firmware…" (design unify/Steps); with it, Shop gets primary */}
+      {!hasFw && <span className="block text-[11px] font-medium text-muted">{t("No firmware")}</span>}
+      <b className="block text-sm">{t("Only a dev board on the bench")}</b>
       <p className="mt-1 mb-3 text-xs text-muted">
         {hasFw
-          ? "去采购挑零件摆上来，或者从元件库拖单个零件接线。"
-          : "拖一个 ESP-IDF / Arduino 导出的 .bin 进来，或者先跑个示例。"}
+          ? t("Pick parts in Shop to put here, or drag single parts from the library and wire them.")
+          : t("Drop a .bin exported from ESP-IDF / Arduino, or run an example first.")}
       </p>
       <div className="flex flex-wrap gap-1.5">
         {hasFw ? (
           <a href="#shop" className={cn(btnPri, "no-underline")}>
-            去采购挑零件
+            {t("Pick parts in Shop")}
           </a>
         ) : (
           <button type="button" id="emptyFw" data-fw-open="" className={btnPri} onClick={onFirmware}>
-            换固件…
+            {t("Change firmware…")}
           </button>
         )}
         {hasFw ? (
           <button type="button" data-fw-open="" className={btn} onClick={onFirmware}>
-            换固件…
+            {t("Change firmware…")}
           </button>
         ) : (
           <a href="#shop" className={cn(btn, "no-underline")}>
-            去采购挑零件
+            {t("Pick parts in Shop")}
           </a>
         )}
       </div>
@@ -1073,9 +1099,9 @@ export function EmptyBench({
   );
 }
 
-// ------------------------------------------------------------ 欠压复位解释
+// ------------------------------------------------------------ brownout reset explanation
 export function BrownoutBanner({
-  t,
+  t: at,
   v,
   servo,
   onPower,
@@ -1097,26 +1123,27 @@ export function BrownoutBanner({
         <Icon n="warn" size={16} className="mt-px flex-none" />
         <div className="min-w-0 flex-1">
           <b className="block text-[13px]">
-            电压不够，芯片重启了
+            {t("Voltage too low, the chip restarted")}
           </b>
           <p className="mt-1 mb-0 text-[13px]">
             {servo
-              ? "舵机和芯片共用 USB 的电，舵机一转就把电压拉了下来。"
-              : "外设用电太多，USB 供不上。"}
+              ? t("The servo shares USB power with the chip; when it moves it drags the voltage down.")
+              : t("The peripherals draw more than USB can supply.")}
           </p>
           <p className="mt-1 mb-0 opacity-75">
-            {t.toFixed(2)} 秒时 3V3{" "}
-            {v != null ? `最低掉到 ${v.toFixed(2)} V，` : ""}
-            低于欠压门限（欠压复位）。串口会重新打印启动信息。
+            {v != null
+              ? t("At {t} s, 3V3 dropped to {v} V, below the brownout threshold (brownout reset). Serial prints the boot log again.", { t: at.toFixed(2), v: v.toFixed(2) })
+              : t("At {t} s, 3V3 fell below the brownout threshold (brownout reset). Serial prints the boot log again.", { t: at.toFixed(2) })}
           </p>
           <div className="mt-2 flex gap-1.5">
             {onPower && (
               <button type="button" className={btnPri} onClick={onPower}>
-                看供电
+                {t("Check power")}
               </button>
             )}
             <button type="button" className={btn} onClick={onClose}>
-              知道了
+              {t("Got it")}
+
             </button>
           </div>
         </div>
