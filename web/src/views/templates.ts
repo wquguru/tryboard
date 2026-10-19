@@ -6,6 +6,7 @@ import { createProductView, type ProductHandlers } from './product';
 import { createLensProduct, createSpinProduct } from './lcdproducts';
 import { createLampProduct, createRulerProduct, createTiltProduct, type WorkEffects } from './workproducts';
 import { createKeypadView } from './keypad';
+import { CHIP_HEAT_OFFSET } from './chipheat';
 
 export interface Spot {
   key: string;
@@ -86,8 +87,7 @@ export interface Template {
 const has = (s: Picked, k: string) => s.placed.includes(k);
 const row = (label: string, done: boolean, ok: boolean, good: string, bad = '') => ({ label, ok: done ? ok : null, text: done ? (ok ? '✓ ' + good : '! ' + bad) : '—' });
 
-/** How much warmer than the room a sensor next to the chip reads (estimate of ESP32-S3 in-case rise, not calibrated) */
-export const CHIP_HEAT_OFFSET = 2.5;
+export { CHIP_HEAT_OFFSET };
 /** SG90 output spline has 25 teeth, so one tooth off is 14.4° */
 export const SPLINE_TOOTH = 360 / 25;
 

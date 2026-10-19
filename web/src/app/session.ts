@@ -9,7 +9,6 @@ import { push as pushBom } from './bom';
 import { BuzzerAudio } from '../audio';
 import { fetchBuf, imageChip } from '../assets';
 import { expandLevels, type Level } from '../checks';
-import levelsJson from '../../../firmware/levels.json';
 import type { AppState, Env, Session, WorkDef } from './types';
 import type { Store } from './store';
 import { currentTheme, onTheme } from '../theme';
@@ -61,6 +60,9 @@ async function benchInit(work: WorkDef, opts: SessionOpts) {
   return { ex, scene, chip };
 }
 
+// R-12: levels.json (~13 KB gzip) is its own chunk, fetched while the shell paints and GL starts instead of blocking them
+const levelsJson = import('../../../firmware/levels.json').then((m) => m.default as Level[]);
+
 export async function createSession(stage: HTMLElement, work: WorkDef, store: Store<AppState>, hooks: SessionHooks, opts: SessionOpts = {}): Promise<Session> {
   // GL setup starts now, before the first paint; board and parts follow once examples.json is in (R-16)
   const setup = benchInit(work, opts);
@@ -71,7 +73,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   // 3D stage follows the page theme (DESIGN §2 dark).
   pick.setTheme?.(currentTheme());
   onTheme((th) => pick.setTheme?.(th));
-  const levels = [...expandLevels(levelsJson as Level[]), ...(opts.levels ?? [])];
+  const levels = [...expandLevels(await levelsJson), ...(opts.levels ?? [])];
   let consoleBuf = '';
   let lastOled: Uint8Array | null = null;
   let lastLcd: Uint8Array | null = null;

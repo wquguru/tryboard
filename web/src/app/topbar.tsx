@@ -9,7 +9,7 @@ import { decode, encode } from '../advisor/state';
 import { FwMenu, openFwMenu } from './fwmenu';
 import { RealnetSwitch, toggleRealnet, useRealnet } from './realnet';
 import { NetCondChip } from './netcond';
-import { CmdkBox } from './cmdk';
+import { CmdkBox } from './cmdkview';
 import { Icon } from './icons';
 import { useStore } from './react';
 import { savedText } from './saved';

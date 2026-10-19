@@ -1003,3 +1003,9 @@
 - **空闲预取**：固件首次开机 2 s 后用 `requestIdleCallback`（Safari 退回 1.5 s 定时）一项一项取：分析仪 → 选购 / 组装 / 成品 → 各面板 → 选板简报。起初开机即预取，perf.mjs 桌面 c3-lcd 三次里两次 readyMs ≈ 1 s（基线 0.53 s）；加 2 s 宽限后预取落在 ready 之后，5 次中位 539 ms（基线 526 ms），剩下偶发的约 480 ms 长任务就是 R-15 记的「回访卡顿」（改动前的构建在 weather + analyzer 一行每次都有），不是预取。perf.mjs 的 5 秒帧采样窗口里会多出几次短任务。
 - **AI 简报（选板作品）按需 import**：复制前先 `await import`；空闲预取已覆盖，极端情况下浏览器若因丢失用户手势拒绝写剪贴板，会提示手动复制（原有提示）。
 - 替代：只用 Vite `manualChunks` 合并 —— 不减少首屏下载；把步骤文件挪进 `steps/lazy/` 目录 —— lint_size 白名单按路径记，会被当成新违规。
+- **第二轮（2026-10-19，闭包 493.2 → 454.6 KB）**：先用 source map 把首屏闭包按源文件拆开再动手。结论：
+  - 「语言包 `lang-*` 66 KB」是误读：那个 chunk 是 react-dom（rollup 拿 `ui/lang.tsx` 给共享 chunk 命名），zh / ja / ko 词典早就是 `import()` 并在首次渲染前 await，不闪英文，所以方向 1 不用做。
+  - 去掉的（都是首屏渲染用不上、会话起来后才读的）：`firmware/levels.json`（≈ 13 KB，`session.ts` 模块加载时就 `import()`，createSession 里 await）；`asmstate` → `views/templates`（全部组装模板，main 在会话建好后 await；`CHIP_HEAT_OFFSET` 拆到 `views/chipheat.ts` 给实验台尺子用）；⌘K 的搜索逻辑 `cmdk.tsx`（框和列表视图拆到 `cmdkview.tsx` 照常首屏渲染，`createCmdk` 与会话并行取，`__tbApp.cmdk` 赋值时机不变）；`custom.ts` + 选板数据 / 引擎（只在 work=custom 时 top-level await）；自定义作品的购买卡 `buycard`（首次打开时取，空闲预取也会带上）。
+  - 「并行取」不是少下载，是让这些字节不挡首次渲染；首页 index.html 闭包因 chunk 切分多 0.9 KB（160.1 → 161.0）。
+  - 没做到 ≤ 396 KB 的卡点：剩下的 454.6 里 three 149 + react-dom / react 71 + CSS 18 + tailwind-merge 9，实验台 / 3D 舞台（bench3d、board3d、后期 Bloom / Outline）本身约 150 KB 都是首屏画面要用的；零件目录 `catalog/parts`（17 KB）在建 store 时 `loadBom → validHistory` 就同步要用，`wirecheck` / `place` 也要。再降需要把实验台 3D 整体改成会话前动态加载（等于把 three 移出闭包，与「three 保留在首屏」矛盾）或把零件目录拆成首屏索引 + 详情，改动面大，留给后续。
+  - 不做：用手写合并替换 `tailwind-merge`（类名冲突语义会变）；音频门面（audio.ts 实际只有约 1.3 KB，第一轮 13 KB 的估计是 source map 把 levels.json 记到了它头上）。

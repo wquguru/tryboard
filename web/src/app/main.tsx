@@ -10,7 +10,6 @@ import { createShell, registerStep, ShellView, startRouter } from './shell';
 import { createSession, WORKS } from './session';
 import { benchStep, passedCount, restoreChecks } from './steps/bench';
 import { lazyStep, whenIdle } from './steps/lazy';
-import { restoreAssembly } from './asmstate';
 
 import { loadBom, loadPlaced } from './bomstore';
 import type { AppState, StepCtx, WorkDef, WorkId } from './types';
@@ -21,7 +20,6 @@ import { fetchBuf } from '../assets';
 import { createBenchHistory } from './benchhist';
 import { initTheme } from '../theme';
 import { partLabel } from './wiring';
-import { createCmdk } from './cmdk';
 import { loadAnalyzer, onAnalyzer } from './anaload';
 import { prefetchPanes } from './panes';
 import { loadCaseParams } from './caseparams';
@@ -35,7 +33,6 @@ import { usbFeed } from './usbfeed';
 import { bleFeed } from './blefeed';
 import { netFeed } from './netfeed';
 import { toScript, type InputLog } from '../inputlog';
-import { customPlan } from './custom';
 import { genLevels } from './genlevels';
 import { registerTemplate } from '../catalog/templates';
 import { initialHistory, placement, replay } from './bom';
@@ -50,7 +47,7 @@ const want = params.get('work') as WorkId | null;
 const exId = params.get('example');
 const ex = exId ? (await loadExamples()).find((e) => e.id === exId) : undefined;
 // work=custom: board picker result -> shop template + per-part checkpoints (U-17). New query = new work (save key hashes it)
-const plan = !ex && want === 'custom' ? customPlan(location.search) : null;
+const plan = !ex && want === 'custom' ? (await import('./custom')).customPlan(location.search) : null;
 if (plan) registerTemplate(plan.template);
 // Without a saved placement, lay out per the picker pin table (unsaved); a saved one wins (shop may have changed parts)
 const customPlaced = plan
@@ -122,6 +119,9 @@ const prefetchSteps = [
 // Shop, assemble and product have their own timelines, so this one shows only on the bench
 const ownsTimeline = () => store.get().step === 'bench';
 
+// R-12: assembly state (every assembly template) and the ⌘K search are only used once the session is up: fetch them alongside
+const asmstate = import('./asmstate');
+const cmdk = import('./cmdk');
 (async () => {
   try {
     const placed = customPlaced ?? loadPlaced(wkey(work));
@@ -136,7 +136,7 @@ const ownsTimeline = () => store.get().step === 'bench';
     const ctx: StepCtx = { work, store, session, shell, ...(plan ? { custom: { plan, levels: customLevels } } : {}) };
     if (plan) Object.assign(globalThis, { __tbCustomLevels: customLevels });
     restoreChecks(ctx);
-    restoreAssembly(ctx);
+    (await asmstate).restoreAssembly(ctx);
     ctx.hist = createBenchHistory(ctx, { placeLabels: session.scene.parts.map((p) => partLabel(p.type)), placed: !!placed });
     (window as unknown as { __tbApp: Record<string, unknown> }).__tbApp.hist = ctx.hist;
     const app = (window as unknown as { __tbApp: Record<string, unknown> }).__tbApp;
@@ -149,7 +149,7 @@ const ownsTimeline = () => store.get().step === 'bench';
         return replayLog(session.fwBuf!, l, seconds, pwmPin);
       },
     });
-    app.cmdk = createCmdk(ctx);
+    app.cmdk = (await cmdk).createCmdk(ctx);
     onAnalyzer((a) => (app.analyzer = a));
     store.subscribe(() => ctx.hist!.op({ k: 'scene', scene: session.scene, power: session.power, count: session.scene.parts.length, ...(session.sceneLabel ? { label: session.sceneLabel } : {}) }), ['sceneRev']);
     // Brownout reset (P1-02) is one bench timeline step; seeking to it returns to the reset moment

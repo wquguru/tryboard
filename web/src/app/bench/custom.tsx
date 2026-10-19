@@ -4,7 +4,7 @@ import { t } from "../../i18n";
 import { fetchBuf } from "../../assets";
 import { noteSaved } from "../saved";
 import { wkey } from "../works";
-import { BuyCard, BuyDialog } from "../buycard";
+import type * as Buy from "../buycard";
 import { overlay } from "../chrome";
 import { replay } from "../bom";
 import { ownFirmware, passedCount } from "./progress";
@@ -94,6 +94,10 @@ export function mountCustom(b: BenchCtx) {
     }
   };
   function openBuy() {
+    // R-12: the buy card is only used by custom works; its chunk loads on first open (or with the idle prefetch)
+    void import("../buycard").then((m) => showBuy(m.BuyCard, m.BuyDialog));
+  }
+  function showBuy(BuyCard: typeof Buy.BuyCard, BuyDialog: typeof Buy.BuyDialog) {
     const c = b.ctx;
     if (!c?.custom) return;
     const { plan, levels } = c.custom;

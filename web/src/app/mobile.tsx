@@ -7,7 +7,7 @@ import { actions, bc, CUSTOM, EXAMPLE_ID, TWO_STEPS, shownSteps } from "./chrome
 import { Icon } from "./icons";
 import { commit, useStore } from "./react";
 import { createStore } from "./store";
-import { CmdkBox } from "./cmdk";
+import { CmdkBox } from "./cmdkview";
 import { CRUMB, MoreMenu, RUN_TEXT, SPEEDS, WorkMenu } from "./topbar";
 import { FwMenu } from "./fwmenu";
 import { NetCondChip } from "./netcond";
