@@ -1,10 +1,9 @@
-//! 虚拟手机（C-02）：作为终端去连固件自建的热点（WIFI_MODE_AP / APSTA）。
+//! Virtual phone (C-02): a station joining the hotspot the firmware opens (WIFI_MODE_AP / APSTA). lint: allow-long-comment
 //!
-//! 链路：被动扫描（听固件的信标）→ 开放系统认证 → 关联 →（WPA2 时）四次握手，手机是请求方。
-//! 网络：DHCP 客户端、ARP、DNS 客户端、最小 TCP 客户端 + HTTP/1.1（GET、POST 表单）。
-//! 连上后像真手机一样先做联网探测（DNS 查 connectivitycheck 域名 → GET /generate_204）：
-//! 得到的不是 204（固件 DNS 劫持 + 跳转）就判定「需要登录此网络」。
-//! 全部按模拟时间推进，不依赖墙钟：同样的输入序列得到同样的帧序列（重放逐字节一致）。
+//! Link: passive scan (firmware beacons) -> open-system auth -> association -> (WPA2) 4-way handshake as supplicant.
+//! Network: DHCP client, ARP, DNS client, minimal TCP client + HTTP/1.1 (GET, form POST).
+//! Like a real phone it first runs a connectivity check (DNS connectivitycheck -> GET /generate_204); anything but 204 means "sign in".
+//! Driven by simulated time only, no wall clock: same inputs give the same frames (replay is byte-identical).
 
 use super::frame::{self, fc, Mac};
 use super::net::{ipv4, l4_checksum, udp, ETH_ARP, ETH_IP};
@@ -13,22 +12,22 @@ use super::wpa::{Supplicant, ETH_EAPOL};
 use std::collections::{HashMap, VecDeque};
 
 pub const PHONE_MAC: Mac = [0x02, 0x54, 0x42, 0xee, 0x00, 0x01];
-/// 手机放在板子旁边：信号强（估算）
+/// Phone sits next to the board: strong signal (estimated)
 const PHONE_RSSI: i8 = -38;
-/// 手机的 RSN IE：CCMP / CCMP / PSK，能力 0（不声明 PMF）。四次握手消息 2 里原样带上
+/// Phone RSN IE: CCMP / CCMP / PSK, capabilities 0 (no PMF). Sent verbatim in 4-way message 2
 const RSN_IE: [u8; 22] = [
     48, 20, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00,
     0x00, 0x0f, 0xac, 0x02, 0x00, 0x00,
 ];
 const RATES: [u8; 8] = [0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24];
 const EXT_RATES: [u8; 4] = [0x30, 0x48, 0x60, 0x6c];
-/// 联网探测用的域名与路径（安卓的写法；iPhone 用 captive.apple.com/hotspot-detect.html，差异要上真机看）
+/// Connectivity-check host and path (Android style; iPhone uses captive.apple.com/hotspot-detect.html, check on real hardware)
 const PROBE_HOST: &str = "connectivitycheck.gstatic.com";
 const PROBE_PATH: &str = "/generate_204";
-/// 链路层重试间隔与次数
+/// Link-layer retry interval and count
 const LINK_RETRY_US: u64 = 300_000;
 const LINK_TRIES: u32 = 4;
-/// 连续这么久收不到信标：认为热点没了，回到扫描（真手机也会自动重连记住的网络）
+/// No beacon for this long: hotspot is gone, back to scanning (real phones also rejoin remembered networks)
 const BEACON_LOSS_US: u64 = 3_000_000;
 const DHCP_RETRY_US: u64 = 1_000_000;
 const DNS_TIMEOUT_US: u64 = 1_500_000;
@@ -41,26 +40,26 @@ const FIN: u8 = 0x01;
 const RST: u8 = 0x04;
 const PSH: u8 = 0x08;
 
-/// 手机上的操作（脚本动作 phone=...，网页手机面板的每一步）
+/// Phone actions (script action phone=..., each step of the web phone panel)
 #[derive(Clone, Debug, PartialEq)]
 pub enum Cmd {
-    /// 拿起手机：只打开无线局域网列表（开始听信标），不连任何热点
+    /// Pick up the phone: only open the Wi-Fi list (listen for beacons), join nothing
     On,
-    /// 连这个热点（口令空 = 开放网络）
+    /// Join this hotspot (empty passphrase = open network)
     Join {
         ssid: String,
         pass: String,
     },
     Leave,
-    /// 点「打开」：打开登录页（联网探测得到的跳转地址，没有就打开网关首页）
+    /// Tap "Open": open the login page (redirect from the connectivity check, else the gateway home page)
     Open,
     Get(String),
-    /// POST 表单：地址空 = 最近一页表单的 action
+    /// POST a form: empty URL = action of the latest page form
     Post(String, String),
 }
 
 impl Cmd {
-    /// 解析脚本动作 phone= 后面的部分：on / join,ssid[,pass] / leave / open / get,url / post,url,body
+    /// Parse the part after script action phone=: on / join,ssid[,pass] / leave / open / get,url / post,url,body
     pub fn parse(s: &str) -> Option<Cmd> {
         let mut it = s.splitn(3, ',');
         let verb = it.next()?.trim();
@@ -81,11 +80,11 @@ impl Cmd {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Link {
     Off,
-    /// 等目标热点的信标
+    /// Waiting for the target hotspot's beacon
     Scan,
     Auth,
     Assoc,
-    /// WPA2：等四次握手完成
+    /// WPA2: waiting for the 4-way handshake
     Eapol,
     Up,
 }
@@ -103,7 +102,7 @@ impl Link {
     }
 }
 
-/// 手机扫到的热点
+/// A hotspot the phone found
 #[derive(Clone, Debug)]
 pub struct Bss {
     pub ssid: String,
@@ -112,7 +111,7 @@ pub struct Bss {
     pub privacy: bool,
 }
 
-/// 手机看到的一页
+/// A page the phone saw
 #[derive(Clone, Debug, Default)]
 pub struct Page {
     pub method: String,
@@ -125,7 +124,7 @@ pub struct Page {
     pub form_method: String,
     pub fields: Vec<String>,
     pub body_len: usize,
-    /// 出错时的原因（DNS 无回应、连接被拒、超时）
+    /// Failure reason (no DNS answer, connection refused, timeout)
     pub error: String,
 }
 
@@ -191,26 +190,26 @@ pub struct Phone {
     xid: u32,
     dhcp_at: Option<u64>,
     arp: HashMap<[u8; 4], Mac>,
-    /// 等 ARP 的 IP 包：(目的 IP, 协议, 载荷)
+    /// IP packets waiting on ARP: (destination IP, protocol, payload)
     arp_wait: Vec<([u8; 4], u8, Vec<u8>)>,
     ip_id: u16,
     jobs: VecDeque<Job>,
     run: Option<Run>,
-    /// 已关掉、但对方的 FIN 还可能到的连接：(本地端口, 期望序号, 发送序号, 对端)
+    /// Closed connections whose peer FIN may still arrive: (local port, expected seq, send seq, peer)
     closing: Vec<(u16, u32, u32, [u8; 4])>,
     port: u16,
     pub pages: Vec<Page>,
-    /// 联网探测结论：None 未探测；Some(None) 可以上网；Some(Some(url)) 需要登录，登录页地址
+    /// Connectivity check: None not run; Some(None) online; Some(Some(url)) sign-in needed, login page URL
     pub captive: Option<Option<String>>,
-    /// --ap-phone：探测到需要登录就自动打开登录页；--ap-post：拿到表单就自动提交
+    /// --ap-phone: open the login page once captive; --ap-post: submit as soon as a form arrives
     pub auto_open: bool,
     pub auto_post: Option<String>,
-    /// 手机侧日志（模拟时间微秒, 内容）
+    /// Phone-side log (simulated microseconds, text)
     pub log: Vec<(u64, String)>,
-    /// 要发给芯片的帧（相对 now 的延时）；World::poll / on_tx 取走
+    /// Frames to send to the chip (delay relative to now); drained by World::poll / on_tx
     out: Vec<Air>,
     kick: bool,
-    /// 内容变化计数（网页按它决定要不要刷新手机画面）
+    /// Change counter (the web refreshes the phone view when it moves)
     pub version: u64,
 }
 
@@ -260,7 +259,7 @@ fn tcp_seg(
     s
 }
 
-/// 取 HTML 标签属性（引号或裸值）
+/// HTML tag attribute (quoted or bare value)
 fn attr(tag: &str, name: &str) -> String {
     let lower = tag.to_ascii_lowercase();
     let mut from = 0;
@@ -285,7 +284,7 @@ fn attr(tag: &str, name: &str) -> String {
     String::new()
 }
 
-/// 页面摘要：标题、正文前几十个字、第一个表单的 action / method / 字段名
+/// Page summary: title, first few dozen chars of text, first form's action / method / field names
 fn summarize(p: &mut Page, html: &str) {
     let lower = html.to_ascii_lowercase();
     if let (Some(a), Some(b)) = (lower.find("<title>"), lower.find("</title>")) {
@@ -313,7 +312,7 @@ fn summarize(p: &mut Page, html: &str) {
             i = e;
         }
     }
-    // 正文：去掉 head 与标签，压缩空白
+    // Body text: drop head and tags, squeeze whitespace
     let body_start = lower.find("<body").unwrap_or(0);
     let mut text = String::new();
     let mut in_tag = false;
@@ -378,7 +377,7 @@ impl Phone {
         }
     }
 
-    /// 执行一个操作；产生的帧在下一次 poll 时发出（调用方要让 MAC 模型尽快 update）
+    /// Run one action; its frames go out on the next poll (caller should let the MAC model update soon)
     pub fn command(&mut self, c: Cmd, now: u64) {
         self.version += 1;
         match c {
@@ -388,8 +387,8 @@ impl Phone {
                 self.note(
                     now,
                     format!(
-                        "要连 {ssid}（{}）",
-                        if pass.is_empty() { "开放" } else { "WPA2" }
+                        "joining {ssid} ({})",
+                        if pass.is_empty() { "open" } else { "WPA2" }
                     ),
                 );
                 self.ssid = ssid;
@@ -403,13 +402,13 @@ impl Phone {
                     if self.link != Link::Off && self.link != Link::Scan {
                         let seq = self.next_seq();
                         let mut f = frame::mgmt_hdr(fc::DEAUTH, &b.bssid, &self.mac, &b.bssid, seq);
-                        f.extend_from_slice(&3u16.to_le_bytes()); // 终端离开
+                        f.extend_from_slice(&3u16.to_le_bytes()); // station leaving
                         self.send(f, b.channel);
                     }
                 }
                 self.reset_link();
                 self.ssid.clear();
-                self.note(now, "断开热点".into());
+                self.note(now, "left the hotspot".into());
             }
             Cmd::Open => {
                 let url = match &self.captive {
@@ -510,9 +509,12 @@ impl Phone {
         };
         if b.privacy != !self.pass.is_empty() {
             let msg = if b.privacy {
-                format!("{} 要密码（WPA2），手机这边没填", b.ssid)
+                format!(
+                    "{} needs a password (WPA2), none entered on the phone",
+                    b.ssid
+                )
             } else {
-                format!("{} 是开放网络，不用密码", b.ssid)
+                format!("{} is an open network, no password needed", b.ssid)
             };
             self.note(now, msg);
             if b.privacy {
@@ -523,7 +525,7 @@ impl Phone {
         self.note(
             now,
             format!(
-                "找到 {}（{} ch{}），开始认证",
+                "found {} ({} ch{}), authenticating",
                 b.ssid,
                 frame::mac_str(&b.bssid),
                 b.channel
@@ -540,7 +542,7 @@ impl Phone {
         let b = self.bss.clone().unwrap();
         let seq = self.next_seq();
         let mut f = frame::mgmt_hdr(fc::AUTH, &b.bssid, &self.mac, &b.bssid, seq);
-        f.extend_from_slice(&[0, 0, 1, 0, 0, 0]); // 开放系统、序号 1、状态 0
+        f.extend_from_slice(&[0, 0, 1, 0, 0, 0]); // open system, seq 1, status 0
         self.tries += 1;
         self.send(f, b.channel);
     }
@@ -554,7 +556,7 @@ impl Phone {
             cap |= 0x0010;
         }
         f.extend_from_slice(&cap.to_le_bytes());
-        f.extend_from_slice(&10u16.to_le_bytes()); // 监听间隔
+        f.extend_from_slice(&10u16.to_le_bytes()); // listen interval
         frame::ie(&mut f, 0, b.ssid.as_bytes());
         frame::ie(&mut f, 1, &RATES);
         frame::ie(&mut f, 50, &EXT_RATES);
@@ -565,30 +567,30 @@ impl Phone {
         self.send(f, b.channel);
     }
 
-    /// 定时器到点：链路重试、DHCP 重发、DNS / TCP 重传与超时、信标丢失
+    /// Timers: link retries, DHCP resend, DNS / TCP retransmit and timeout, beacon loss
     pub fn poll(&mut self, now: u64) {
         self.kick = false;
         if self.link == Link::Up && now >= self.last_beacon + BEACON_LOSS_US {
             let s = self.ssid.clone();
             self.note(
                 now,
-                format!("{s} 的信号没了（3 秒没收到信标），回到扫描，等它再出现"),
+                format!("{s} signal lost (no beacon for 3 s), back to scanning until it reappears"),
             );
             self.reset_link();
             self.ssid = s;
             self.link = Link::Scan;
-            // 旧的扫描结果作废：等新的信标
+            // Old scan results are stale: wait for fresh beacons
             self.seen.clear();
         }
         if self.link_at.is_some_and(|t| now >= t) {
             self.link_at = None;
             if self.tries >= LINK_TRIES {
                 let what = match self.link {
-                    Link::Auth => "认证",
-                    Link::Assoc => "关联",
-                    _ => "四次握手",
+                    Link::Auth => "authentication",
+                    Link::Assoc => "association",
+                    _ => "4-way handshake",
                 };
-                self.note(now, format!("{what}没有回应，放弃"));
+                self.note(now, format!("{what} got no response, giving up"));
                 self.reset_link();
             } else {
                 match self.link {
@@ -601,8 +603,11 @@ impl Phone {
                         self.link_at = Some(now + LINK_RETRY_US);
                     }
                     Link::Eapol => {
-                        // 四次握手由 AP 驱动，手机只等；超时就算失败
-                        self.note(now, "四次握手没完成（热点口令不对？）".into());
+                        // The AP drives the 4-way handshake, the phone only waits; a timeout is a failure
+                        self.note(
+                            now,
+                            "4-way handshake did not finish (wrong hotspot passphrase?)".into(),
+                        );
                         self.reset_link();
                     }
                     _ => {}
@@ -620,16 +625,16 @@ impl Phone {
         self.job_tick(now);
     }
 
-    /// 芯片（固件热点）发出的一帧；返回 (日志描述, 是否被手机确认)
+    /// One frame from the chip (firmware hotspot); returns (log text, acknowledged by the phone)
     pub fn on_frame(&mut self, f: &[u8], now: u64) -> (String, bool) {
         let Some(h) = frame::parse(f) else {
-            return ("短帧".into(), false);
+            return ("short frame".into(), false);
         };
         let body = &f[h.body.min(f.len())..];
         let to_me = h.a1 == self.mac;
         if h.fc0 == fc::BEACON || h.fc0 == fc::PROBE_RESP {
             if body.len() < 12 {
-                return ("信标（短）".into(), false);
+                return ("beacon (short)".into(), false);
             }
             let ies = &body[12..];
             let ssid = String::from_utf8_lossy(frame::find_ie(ies, 0).unwrap_or(&[])).into_owned();
@@ -661,34 +666,40 @@ impl Phone {
             if self.link == Link::Scan && ssid == self.ssid {
                 self.try_start_auth(now);
             }
-            return (format!("固件热点信标 ssid={ssid:?} ch{channel}"), false);
+            return (
+                format!("firmware hotspot beacon ssid={ssid:?} ch{channel}"),
+                false,
+            );
         }
         if !to_me && h.a1[0] & 1 == 0 {
-            return (format!("帧 FC=0x{:02x}（不是给手机的）", h.fc0), false);
+            return (
+                format!("frame FC=0x{:02x} (not for the phone)", h.fc0),
+                false,
+            );
         }
         let from_bss = self.bss.as_ref().is_some_and(|b| b.bssid == h.a2);
         let desc = match h.fc0 {
             fc::AUTH if to_me && from_bss && self.link == Link::Auth && body.len() >= 6 => {
                 let status = u16::from_le_bytes([body[4], body[5]]);
                 if status != 0 {
-                    self.note(now, format!("认证被拒（状态 {status}）"));
+                    self.note(now, format!("authentication rejected (status {status})"));
                     self.reset_link();
-                    format!("认证响应：拒绝 {status}")
+                    format!("auth response: rejected {status}")
                 } else {
                     self.link = Link::Assoc;
                     self.tries = 0;
                     self.send_assoc();
                     self.link_at = Some(now + LINK_RETRY_US);
-                    "认证响应：成功 → 发关联请求".into()
+                    "auth response: ok -> association request".into()
                 }
             }
             fc::ASSOC_RESP if to_me && from_bss && self.link == Link::Assoc && body.len() >= 6 => {
                 let status = u16::from_le_bytes([body[2], body[3]]);
                 let aid = u16::from_le_bytes([body[4], body[5]]) & 0x3fff;
                 if status != 0 {
-                    self.note(now, format!("关联被拒（状态 {status}）"));
+                    self.note(now, format!("association rejected (status {status})"));
                     self.reset_link();
-                    format!("关联响应：拒绝 {status}")
+                    format!("assoc response: rejected {status}")
                 } else {
                     self.last_beacon = now;
                     let b = self.bss.clone().unwrap();
@@ -706,7 +717,7 @@ impl Phone {
                     } else {
                         self.link_up(now);
                     }
-                    format!("关联响应：成功 AID {aid}")
+                    format!("assoc response: ok AID {aid}")
                 }
             }
             fc::DEAUTH | fc::DISASSOC if from_bss => {
@@ -715,29 +726,29 @@ impl Phone {
                     .map_or(0, |r| u16::from_le_bytes([r[0], r[1]]));
                 self.note(
                     now,
-                    format!("被热点断开（原因 {reason}），记着这个热点，它再出现就自动重连"),
+                    format!("disconnected by the hotspot (reason {reason}); remembering it, will rejoin when it reappears"),
                 );
                 self.reset_link();
-                // 真手机记住连过的网络：回到扫描，等它的信标再出现
+                // Real phones remember joined networks: back to scanning until its beacon returns
                 self.link = Link::Scan;
                 self.seen.clear();
-                format!("去认证 / 去关联 原因 {reason}")
+                format!("deauth / disassoc reason {reason}")
             }
             x if x & 0x0c == 0x08 && h.fc1 & 3 == 2 && from_bss => self.on_data(f, &h, now),
-            x => format!("帧 FC=0x{x:02x}"),
+            x => format!("frame FC=0x{x:02x}"),
         };
-        (format!("→手机 {desc}"), to_me)
+        (format!("->phone {desc}"), to_me)
     }
 
     fn link_up(&mut self, now: u64) {
         self.link = Link::Up;
         self.link_at = None;
         let s = self.ssid.clone();
-        self.note(now, format!("已连上 {s}，DHCP 要地址"));
+        self.note(now, format!("connected to {s}, DHCP requesting an address"));
         self.dhcp = Dhcp::Discover;
         self.xid = self.xid.wrapping_add(1);
         if self.supp.is_some() {
-            // WPA2：对端收到消息 4 后才装密钥，紧跟着的加密帧会被它丢掉；稍等再发（真手机同样有这段间隔）
+            // WPA2: the peer installs keys only after message 4 and drops encrypted frames sent right after; wait a bit (real phones do too)
             self.dhcp_at = Some(now + 20_000);
         } else {
             self.dhcp_send(1, None);
@@ -755,19 +766,19 @@ impl Phone {
                 .and_then(|s| s.decrypt(f))
             {
                 Some(p) => plain = p,
-                None => return "加密数据帧：手机解不开，丢弃".into(),
+                None => return "encrypted data frame: phone cannot decrypt, dropped".into(),
             }
         }
         let body = &plain[h.body.min(plain.len())..];
         if body.len() < 8 || body[..6] != [0xaa, 0xaa, 0x03, 0, 0, 0] {
-            return "数据帧（非 LLC/SNAP）".into();
+            return "data frame (not LLC/SNAP)".into();
         }
         let et = u16::from_be_bytes([body[6], body[7]]);
         let p = body[8..].to_vec();
         match et {
             ETH_EAPOL => {
                 let Some(s) = self.supp.as_mut() else {
-                    return "EAPOL（开放网络，忽略）".into();
+                    return "EAPOL (open network, ignored)".into();
                 };
                 let (note, reply) = s.on_eapol(&p);
                 let done = s.done;
@@ -781,11 +792,11 @@ impl Phone {
             }
             ETH_ARP => self.on_arp(&p),
             ETH_IP => self.on_ip(&p, now),
-            _ => format!("以太类型 0x{et:04x}"),
+            _ => format!("ethertype 0x{et:04x}"),
         }
     }
 
-    /// 以太网帧 → 发给热点的数据帧（ToDS：a1 BSSID、a2 手机、a3 目的）
+    /// Ethernet frame -> data frame to the hotspot (ToDS: a1 BSSID, a2 phone, a3 destination)
     fn send_eth(&mut self, dst: Mac, et: u16, payload: &[u8], encrypt: bool) {
         let Some(b) = self.bss.clone() else { return };
         let seq = self.next_seq();
@@ -807,7 +818,7 @@ impl Phone {
 
     fn on_arp(&mut self, p: &[u8]) -> String {
         if p.len() < 28 {
-            return "ARP（短）".into();
+            return "ARP (short)".into();
         }
         let op = u16::from_be_bytes([p[6], p[7]]);
         let smac: Mac = p[8..14].try_into().unwrap();
@@ -823,9 +834,9 @@ impl Phone {
             r.extend_from_slice(&smac);
             r.extend_from_slice(&sip);
             self.send_eth(smac, ETH_ARP, &r, true);
-            return format!("ARP 谁是 {} → 手机应答", ip_str(&tip));
+            return format!("ARP who-has {} -> phone replies", ip_str(&tip));
         }
-        // 等这个地址的包可以发了
+        // Packets waiting for this address can go now
         let waiting = std::mem::take(&mut self.arp_wait);
         let (ready, rest): (Vec<_>, Vec<_>) = waiting
             .into_iter()
@@ -834,7 +845,7 @@ impl Phone {
         for (d, proto, pl) in ready {
             self.send_ip(d, proto, &pl);
         }
-        format!("ARP {} 是 {}", ip_str(&sip), frame::mac_str(&smac))
+        format!("ARP {} is at {}", ip_str(&sip), frame::mac_str(&smac))
     }
 
     fn next_hop(&self, dst: [u8; 4]) -> [u8; 4] {
@@ -880,7 +891,7 @@ impl Phone {
         d[1] = 1;
         d[2] = 6;
         d[4..8].copy_from_slice(&self.xid.to_be_bytes());
-        d[10] = 0x80; // 请服务器广播回复（手机还没有地址）
+        d[10] = 0x80; // ask the server to broadcast the reply (phone has no address yet)
         d[28..34].copy_from_slice(&self.mac);
         d[236..240].copy_from_slice(&[0x63, 0x82, 0x53, 0x63]);
         d.extend_from_slice(&[53, 1, kind]);
@@ -902,13 +913,13 @@ impl Phone {
 
     fn on_ip(&mut self, p: &[u8], now: u64) -> String {
         if p.len() < 20 || p[0] >> 4 != 4 {
-            return "IP（短）".into();
+            return "IP (short)".into();
         }
         let ihl = (p[0] & 15) as usize * 4;
         let total = (u16::from_be_bytes([p[2], p[3]]) as usize).min(p.len());
         let (proto, src) = (p[9], [p[12], p[13], p[14], p[15]]);
         if ihl > total {
-            return "IP（坏头）".into();
+            return "IP (bad header)".into();
         }
         let body = &p[ihl..total];
         match proto {
@@ -926,13 +937,13 @@ impl Phone {
             }
             6 => self.on_tcp(src, body, now),
             1 => "ICMP".into(),
-            _ => format!("IP 协议 {proto}"),
+            _ => format!("IP protocol {proto}"),
         }
     }
 
     fn on_dhcp(&mut self, d: &[u8], now: u64) -> String {
         if d.len() < 240 || d[0] != 2 || u32::from_be_bytes([d[4], d[5], d[6], d[7]]) != self.xid {
-            return "DHCP（不是给手机的）".into();
+            return "DHCP (not for the phone)".into();
         }
         let yi = [d[16], d[17], d[18], d[19]];
         let (mut kind, mut server, mut router, mut dns, mut mask) = (0, [0u8; 4], None, None, None);
@@ -974,13 +985,13 @@ impl Phone {
                 self.note(
                     now,
                     format!(
-                        "分到 {}（网关 {}，DNS {}）",
+                        "got {} (gateway {}, DNS {})",
                         ip_str(&yi),
                         ip_str(&self.gw),
                         ip_str(&self.dns)
                     ),
                 );
-                // 真手机连上新网络第一件事：联网探测
+                // First thing a real phone does on a new network: connectivity check
                 let url = format!("http://{PROBE_HOST}{PROBE_PATH}");
                 self.jobs.push_front(Job {
                     method: "GET".into(),
@@ -992,16 +1003,16 @@ impl Phone {
                 format!("DHCP ACK {}", ip_str(&yi))
             }
             (6, _) => {
-                self.note(now, "DHCP 被拒（NAK），重新要地址".into());
+                self.note(now, "DHCP refused (NAK), requesting again".into());
                 self.dhcp = Dhcp::Discover;
                 self.dhcp_send(1, None);
                 "DHCP NAK".into()
             }
-            _ => format!("DHCP 消息 {kind}（忽略）"),
+            _ => format!("DHCP message {kind} (ignored)"),
         }
     }
 
-    // ---------------- 应用层：DNS + HTTP 任务 ----------------
+    // ---------------- Application layer: DNS + HTTP jobs ----------------
 
     fn job_tick(&mut self, now: u64) {
         if self.run.is_none() {
@@ -1016,7 +1027,7 @@ impl Phone {
         }
         let r = self.run.as_ref().unwrap();
         if now >= r.deadline {
-            self.finish_err(now, "超时：对方没有回应");
+            self.finish_err(now, "timeout: no response from the peer");
             return;
         }
         if now < r.retry_at {
@@ -1032,9 +1043,9 @@ impl Phone {
         );
         if tries >= 4 {
             let why = match st {
-                0 => "DNS 没有回应",
-                1 => "连不上（SYN 没有回应）",
-                _ => "对方不再回应",
+                0 => "no DNS response",
+                1 => "cannot connect (no answer to SYN)",
+                _ => "peer stopped responding",
             };
             self.finish_err(now, why);
             return;
@@ -1057,10 +1068,10 @@ impl Phone {
             self.pages.push(Page {
                 method: job.method.clone(),
                 url: url.clone(),
-                error: "手机这边只模拟 HTTP，HTTPS 没做".into(),
+                error: "the phone only simulates HTTP, HTTPS is not implemented".into(),
                 ..Default::default()
             });
-            self.note(now, format!("{} {url}：不支持 HTTPS", job.method));
+            self.note(now, format!("{} {url}: HTTPS not supported", job.method));
             self.kick = true;
             return;
         } else {
@@ -1069,7 +1080,7 @@ impl Phone {
             } else {
                 format!("/{url}")
             };
-            // 相对地址：沿用上一页的主机，没有就是网关
+            // Relative URL: reuse the previous page host, else the gateway
             let h = self
                 .pages
                 .iter()
@@ -1151,13 +1162,13 @@ impl Phone {
 
     fn on_dns(&mut self, d: &[u8], now: u64) -> String {
         let Some(r) = self.run.as_mut() else {
-            return "DNS 应答（没在等）".into();
+            return "DNS answer (not waiting)".into();
         };
         if r.st != Js::Dns || d.len() < 12 || u16::from_be_bytes([d[0], d[1]]) != r.dns_id {
-            return "DNS 应答（不是在等的）".into();
+            return "DNS answer (not the one awaited)".into();
         }
         let an = u16::from_be_bytes([d[6], d[7]]);
-        // 跳过问题
+        // Skip the question
         let mut i = 12;
         while i < d.len() && d[i] != 0 {
             i += 1 + d[i] as usize;
@@ -1168,7 +1179,7 @@ impl Phone {
             if i + 12 > d.len() {
                 break;
             }
-            // 名字：压缩指针或标签序列
+            // Name: compression pointer or label sequence
             if d[i] & 0xc0 == 0xc0 {
                 i += 2;
             } else {
@@ -1197,11 +1208,11 @@ impl Phone {
                 r.tries = 0;
                 self.note(now, format!("DNS {host} → {}", ip_str(&a)));
                 self.send_syn(now);
-                format!("DNS 应答 {host} → {}", ip_str(&a))
+                format!("DNS answer {host} -> {}", ip_str(&a))
             }
             None => {
-                self.finish_err(now, "DNS 查不到这个域名");
-                format!("DNS 应答 {host}：没有地址")
+                self.finish_err(now, "DNS cannot resolve this name");
+                format!("DNS answer {host}: no address")
             }
         }
     }
@@ -1225,7 +1236,7 @@ impl Phone {
         let start = r.iss.wrapping_add(1);
         let sent = r.snd_una.wrapping_sub(start) as usize;
         if sent >= r.req.len() {
-            // 请求都被确认了：等回复，不重传
+            // All requests acknowledged: wait for the reply, no retransmit
             r.retry_at = r.deadline;
             return;
         }
@@ -1243,7 +1254,7 @@ impl Phone {
 
     fn on_tcp(&mut self, src: [u8; 4], s: &[u8], now: u64) -> String {
         if s.len() < 20 {
-            return "TCP（短）".into();
+            return "TCP (short)".into();
         }
         let sport = u16::from_be_bytes([s[0], s[1]]);
         let dport = u16::from_be_bytes([s[2], s[3]]);
@@ -1253,7 +1264,7 @@ impl Phone {
         let hl = ((s[12] >> 4) as usize * 4).min(s.len());
         let data = &s[hl..];
         let me = self.ip.unwrap_or([0; 4]);
-        // 已关闭连接上迟到的 FIN：确认它
+        // Late FIN on a closed connection: acknowledge it
         if let Some(k) = self.closing.iter().position(|c| c.0 == dport && c.3 == src) {
             let (lp, rn, sn, peer) = self.closing[k];
             if flags & FIN != 0 {
@@ -1264,19 +1275,19 @@ impl Phone {
             } else {
                 let _ = rn;
             }
-            return format!("TCP :{sport}→:{dport}（收尾）");
+            return format!("TCP :{sport}->:{dport} (closing)");
         }
         let Some(r) = self.run.as_mut() else {
-            return format!("TCP :{sport}→:{dport}（没有连接）");
+            return format!("TCP :{sport}->:{dport} (no connection)");
         };
         if dport != r.sport || src != r.ip {
-            return format!("TCP :{sport}→:{dport}（不是当前连接）");
+            return format!("TCP :{sport}->:{dport} (not the current connection)");
         }
         if flags & RST != 0 {
             let why = if r.st == Js::SynSent {
-                "连接被拒（板子没在 80 端口听）"
+                "connection refused (board not listening on port 80)"
             } else {
-                "连接被对方重置"
+                "connection reset by peer"
             };
             self.finish_err(now, why);
             return format!("TCP RST :{sport}");
@@ -1287,21 +1298,21 @@ impl Phone {
                 r.snd_una = ack;
                 r.st = Js::Est;
                 r.tries = 0;
-                // 握手第三步的 ACK 与请求数据合在一段里发
+                // The handshake's third-step ACK rides in the same segment as the request data
                 self.send_req(now);
-                return "TCP SYN-ACK → 发请求".into();
+                return "TCP SYN-ACK -> sending request".into();
             }
-            return "TCP（等 SYN-ACK）".into();
+            return "TCP (waiting for SYN-ACK)".into();
         }
         if flags & ACK != 0 && ack.wrapping_sub(r.snd_una) as i32 > 0 {
             r.snd_una = ack;
             if r.snd_una == r.snd_nxt {
-                // 请求的这一段已确认：剩下的接着发，否则只等回复
+                // This request segment is acknowledged: send the rest, otherwise just wait for the reply
                 let start = r.iss.wrapping_add(1);
                 if (r.snd_una.wrapping_sub(start) as usize) < r.req.len() {
                     r.tries = 0;
                     self.send_req(now);
-                    return "TCP ACK → 续发请求".into();
+                    return "TCP ACK -> sending more of the request".into();
                 }
                 r.retry_at = r.deadline;
             }
@@ -1349,7 +1360,7 @@ impl Phone {
     fn finish_ok(&mut self, now: u64, got_fin: bool) {
         let r = self.run.take().unwrap();
         let me = self.ip.unwrap_or([0; 4]);
-        // 主动关闭：发 FIN；对方的 FIN 若还没到，留在 closing 里等着确认
+        // Active close: send FIN; if the peer FIN has not arrived, keep it in closing to acknowledge later
         let f = tcp_seg(
             me,
             r.ip,
@@ -1399,27 +1410,27 @@ impl Phone {
         summarize(&mut p, body);
         let mut line = format!("{} {url} → {status}", p.method);
         if !location.is_empty() {
-            line.push_str(&format!(" 跳转 {location}"));
+            line.push_str(&format!(" redirect {location}"));
         }
         if !p.title.is_empty() {
-            line.push_str(&format!("「{}」", p.title));
+            line.push_str(&format!(" \"{}\"", p.title));
         }
         if !p.fields.is_empty() {
             line.push_str(&format!(
-                " 表单 {} {} 字段 {}",
+                " form {} {} fields {}",
                 p.form_method,
                 p.form_action,
                 p.fields.join(", ")
             ));
         }
         if !p.text.is_empty() {
-            line.push_str(&format!(" 正文：{}", p.text));
+            line.push_str(&format!(" text: {}", p.text));
         }
         self.note(now, line);
         if r.job.probe {
             if status == 204 {
                 self.captive = Some(None);
-                self.note(now, "联网探测通过：可以上网".into());
+                self.note(now, "connectivity check passed: online".into());
             } else {
                 let portal = if location.is_empty() {
                     format!("http://{}/", ip_str(&self.gw))
@@ -1428,7 +1439,7 @@ impl Phone {
                 };
                 self.note(
                     now,
-                    format!("需要登录此网络（探测得到 {status}，不是 204）→ 登录页 {portal}"),
+                    format!("sign in to this network (check got {status}, not 204) -> login page {portal}"),
                 );
                 self.captive = Some(Some(portal.clone()));
                 if self.auto_open {
@@ -1455,13 +1466,13 @@ impl Phone {
     fn finish_err(&mut self, now: u64, why: &str) {
         let r = self.run.take().unwrap();
         let url = format!("http://{}{}", r.host, r.path);
-        self.note(now, format!("{} {url}：{why}", r.job.method));
+        self.note(now, format!("{} {url}: {why}", r.job.method));
         if r.job.probe {
-            // 探测失败（多半是固件没做 DNS）：手机只会提示「此网络无法上网」，不弹登录页
+            // Check failed (usually no DNS in the firmware): the phone only says "no internet", no login page pops up
             self.captive = Some(None);
             self.note(
                 now,
-                "联网探测失败：手机会提示「此网络无法访问互联网」，不会自动弹登录页".into(),
+                "connectivity check failed: the phone will say \"no internet access\" and not pop up a login page".into(),
             );
             if self.auto_open {
                 let u = format!("http://{}/", ip_str(&self.gw));
@@ -1477,7 +1488,7 @@ impl Phone {
         self.kick = true;
     }
 
-    /// 芯片复位：热点会消失，手机按信标丢失处理（之后热点再出现会自动重连）
+    /// Chip reset: the hotspot vanishes, handled as beacon loss (rejoins automatically when it returns)
     pub fn chip_reset(&mut self, now: u64) {
         if self.link == Link::Up {
             self.last_beacon = self.last_beacon.min(now);
@@ -1485,7 +1496,7 @@ impl Phone {
         self.kick = true;
     }
 
-    /// 给网页的手机状态（JSON）
+    /// Phone state for the web (JSON)
     pub fn json(&self) -> String {
         fn esc(s: &str) -> String {
             let mut o = String::with_capacity(s.len() + 2);

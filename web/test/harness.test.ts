@@ -62,7 +62,7 @@ test('线束进输入日志：i2cwire=cm / antenna=dB，关卡参数 --i2c-wire 
 
 test('USB level check: state + typed text (same wording as tools/check.py)', () => {
   const l = { id: 'usbkey-3', usb: { state: 'configured', typed: 'aHello TryBoard\n' } } as Level;
-  const ok = evaluate(l, 'TRYBOARD_OK', '[tryboard] USB 主机：configured\n[tryboard] USB 键盘输入: "aHello TryBoard\\n"\n'); // lint: allow-cjk
+  const ok = evaluate(l, 'TRYBOARD_OK', '[tryboard] USB host: configured\n[tryboard] USB keyboard typed: "aHello TryBoard\\n"\n');
   assert.deepEqual(ok.map((r) => r.ok), [true, true]);
   assert.equal(ok[1].text, 'typed on the PC "aHello TryBoard↵" (need "aHello TryBoard↵")');
   const en = evaluate({ ...l, usb: { state: 'configured', typed: 'aHello TryBoard\n' } }, 'TRYBOARD_OK', '[tryboard] USB host: configured\n[tryboard] USB keyboard typed: "aHello TryBoard\\n"\n');

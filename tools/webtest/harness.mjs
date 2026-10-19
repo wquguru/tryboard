@@ -110,14 +110,14 @@ const lastT = () => {
     return !!m && Number(m[1]) !== 23.5;
   }, before, 15000);
   const sim = await page.$eval('[data-k="hzSim"]', (e) => e.textContent).catch(() => '');
-  report('组装：I2C 排线拉到 60 cm → "超出规范"、模拟器读数跑偏', ready && /超出规范/.test(txt) && wrong && /I2C 排线 60 cm/.test(sim), `${txt.slice(0, 40)} · ${sim.slice(0, 70)}`);
+  report('组装：I2C 排线拉到 60 cm → "超出规范"、模拟器读数跑偏', ready && /超出规范/.test(txt) && wrong && /I2C wire 60 cm/.test(sim), `${txt.slice(0, 40)} · ${sim.slice(0, 70)}`);
   await page.screenshot({ path: path.join(outDir, 'harness-asm-i2c.png') });
   await page.click('[data-obs="metal"]');
   await waitFor(page, () => !!document.querySelector('#hzDist'), null, 5000);
   await set('#hzDist', 0);
   await sleep(300);
   const ant = await page.$eval('#hzAntRes', (e) => e.textContent).catch(() => '');
-  const sim2 = await waitFor(page, () => /天线遮挡 45 dB/.test(document.querySelector('[data-k="hzSim"]')?.textContent ?? ''), null, 5000);
+  const sim2 = await waitFor(page, () => /antenna blockage 45 dB/.test(document.querySelector('[data-k="hzSim"]')?.textContent ?? ''), null, 5000);
   report('组装：金属件贴着天线 → 遮挡 45 dB，RSSI −87 dBm 连不上', /遮挡 45 dB/.test(ant) && /-87 dBm/.test(ant) && /连不上/.test(ant) && sim2, ant.slice(0, 60));
   await page.screenshot({ path: path.join(outDir, 'harness-asm-antenna.png') });
   await page.evaluate(() => localStorage.clear());

@@ -96,8 +96,8 @@ export function chromeJson(tasks: readonly TaskRow[], sl: readonly Slice[], chip
   };
   const v: string[] = [];
   v.push(`{"ph":"M","pid":1,"name":"process_name","args":{"name":"${esc(chip)} CPU"}}`);
-  v.push(`{"ph":"M","pid":2,"name":"process_name","args":{"name":"任务"}}`); // lint: allow-cjk
-  for (let c = 0; c < cores; c++) v.push(`{"ph":"M","pid":1,"tid":${c},"name":"thread_name","args":{"name":"核 ${c}"}}`); // lint: allow-cjk
+  v.push(`{"ph":"M","pid":2,"name":"process_name","args":{"name":"tasks"}}`);
+  for (let c = 0; c < cores; c++) v.push(`{"ph":"M","pid":1,"tid":${c},"name":"thread_name","args":{"name":"core ${c}"}}`);
   tasks.forEach((tk, i) => v.push(`{"ph":"M","pid":2,"tid":${i + 10},"name":"thread_name","args":{"name":"${esc(tk.name)}"}}`));
   const lastOut = new Map<number, [number, number]>();
   for (const s of sl) {
@@ -106,8 +106,8 @@ export function chromeJson(tasks: readonly TaskRow[], sl: readonly Slice[], chip
     const fs = f !== undefined ? `,"resume":"${esc(f)}"` : '';
     v.push(`{"ph":"X","pid":1,"tid":${s.core},"name":"${n}","cat":"task","ts":${us(s.t0)},"dur":${us(s.t1 - s.t0)},"args":{"prio":${tasks[s.task]?.prio ?? 0},"pc":"0x${hex8(s.pc)}"${fs},"out":"${stateName(s.end)}"}}`);
     const lo = lastOut.get(s.task);
-    if (lo && lo[1] === ST.WAIT && s.t0 > lo[0]) v.push(`{"ph":"X","pid":2,"tid":${s.task + 10},"name":"等待","cat":"wait","ts":${us(lo[0])},"dur":${us(s.t0 - lo[0])}}`); // lint: allow-cjk
-    v.push(`{"ph":"X","pid":2,"tid":${s.task + 10},"name":"核 ${s.core}","cat":"run","ts":${us(s.t0)},"dur":${us(s.t1 - s.t0)}}`); // lint: allow-cjk
+    if (lo && lo[1] === ST.WAIT && s.t0 > lo[0]) v.push(`{"ph":"X","pid":2,"tid":${s.task + 10},"name":"wait","cat":"wait","ts":${us(lo[0])},"dur":${us(s.t0 - lo[0])}}`);
+    v.push(`{"ph":"X","pid":2,"tid":${s.task + 10},"name":"core ${s.core}","cat":"run","ts":${us(s.t0)},"dur":${us(s.t1 - s.t0)}}`);
     lastOut.set(s.task, [s.t1, s.end]);
   }
   return `{"displayTimeUnit":"ms","traceEvents":[\n${v.join(',\n')}\n]}\n`;

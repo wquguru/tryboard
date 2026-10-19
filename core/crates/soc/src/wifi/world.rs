@@ -28,7 +28,7 @@ pub struct Air {
     pub frame: Vec<u8>,
     pub rssi: i8,
     pub channel: u8,
-    /// 发给芯片的哪个接口：false = STA（接口 0），true = 固件自建热点（接口 1，C-02 虚拟手机发来的帧）
+    /// Target interface on the chip: false = STA (if 0), true = firmware hotspot (if 1, frames from the C-02 virtual phone)
     pub ap_if: bool,
 }
 
@@ -53,9 +53,9 @@ pub struct World {
     pub wpa: Vec<Option<Authenticator>>,
     /// Antenna attenuation from metal parts / battery (dB, estimate, P2-11); applied both ways so the AP hears the chip worse too
     pub antenna_loss_db: i32,
-    /// 虚拟手机（C-02）：只有配了手机（--ap-phone / 网页手机面板）才有；没有时世界与以前逐字节相同
+    /// Virtual phone (C-02): only present with a phone (--ap-phone / web phone panel); without it the world is byte-identical to before
     pub phone: Option<Phone>,
-    /// 固件自建热点的 MAC（从芯片发出的信标学来）：a2 是它的帧走手机，不当作 STA 接口的帧
+    /// MAC of the firmware hotspot (learned from chip beacons): frames with this a2 go to the phone, not the STA interface
     pub ap_mac: Option<Mac>,
 }
 
@@ -238,14 +238,14 @@ impl World {
         let Some(h) = frame::parse(f) else {
             return ("short frame".into(), vec![], false);
         };
-        // 固件热点（AP 接口）发的帧：信标学 MAC，其余给手机；不碰 STA 接口的状态
+        // Frames from the firmware hotspot (AP interface): beacons teach the MAC, the rest go to the phone; STA state untouched
         if h.fc0 == fc::BEACON && self.ap_mac != Some(h.a2) && self.phone.is_some() {
             self.ap_mac = Some(h.a2);
         }
         if self.ap_mac == Some(h.a2) {
             let loss = self.antenna_loss_db;
             let Some(p) = self.phone.as_mut() else {
-                return ("固件热点的帧（没有手机）".into(), vec![], false);
+                return ("firmware hotspot frame (no phone)".into(), vec![], false);
             };
             let (d, acked) = p.on_frame(f, tsf_us);
             let out = Self::phone_air(p, loss);
@@ -523,7 +523,7 @@ impl World {
             .flatten()
             .filter_map(|a| a.next_timer())
             .min();
-        // 有排队要主动发的帧（真实网络的回复）：马上到期
+        // Frames queued to push (real-network replies): due immediately
         let ap = if self.net.pending.is_empty() {
             ap
         } else {
@@ -535,7 +535,7 @@ impl World {
         }
     }
 
-    /// 手机要发的帧：信号按天线遮挡衰减（链路对称）
+    /// Frames the phone sends: signal attenuated by antenna blockage (symmetric link)
     fn phone_air(p: &mut Phone, loss: i32) -> Vec<Air> {
         let mut v = p.take_out();
         for a in &mut v {
@@ -548,7 +548,7 @@ impl World {
     pub fn poll(&mut self, tsf_us: u64) -> (Vec<Air>, Vec<String>) {
         let (mut out, mut log) = (Vec::new(), Vec::new());
         let loss = self.antenna_loss_db;
-        // 真实网络的回复（C-03）：经已关联的 AP 发给芯片（WPA2 已放行就加密）；没关联就丢掉
+        // Real-network reply (C-03): to the chip via the associated AP (encrypted once WPA2 is up); dropped when not associated
         if !self.net.pending.is_empty() {
             let pend = std::mem::take(&mut self.net.pending);
             let notes: Vec<String> = std::mem::take(&mut self.net.log);

@@ -129,8 +129,6 @@ export function fingerprint(stdout: string, report: string) {
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Transition: the USB host state names come from esp32s3 usb/host.rs (core agent); old names map to the English ones
-const USB_STATES: Record<string, string> = { 未连接: 'detached', 复位中: 'resetting', 枚举中: 'enumerating', 已配置: 'configured', 枚举失败: 'enumeration failed' }; // lint: allow-cjk
-const usbState = (s: string) => USB_STATES[s] ?? s;
 
 export function evaluate(l: Level, out: string, report: string): CheckResult[] {
   const res: CheckResult[] = [];
@@ -150,7 +148,7 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
   }
   for (const c of l.i2c_ack ?? []) {
     const a = c.addr.toString(16).padStart(2, '0');
-    const m = report.match(new RegExp(`I2C 0x${a} (?:应答|acked) (\\d+) (?:次|times)`)); // lint: allow-cjk
+    const m = report.match(new RegExp(`I2C 0x${a} acked (\\d+) times`));
     const n = m ? Number(m[1]) : 0;
     const who = chipAt(c.addr);
     const say = n >= c.min ? t('{who} responds', { who }) : n ? t('{who} responded only {n} times, needs at least {min}', { who, n, min: c.min }) : t('{who} does not respond', { who });
@@ -311,15 +309,15 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
     res.push({ ok: n >= c.min, text: `serial "${c.text}" appeared ${n} times (need ≥ ${c.min})`, say, tag: serial, dev: serial });
   }
   if (l.usb) {
-    const m = report.match(/USB (?:主机：|host: )(.+)$/m); // lint: allow-cjk
-    const st = m ? usbState(m[1]) : 'no USB device';
+    const m = report.match(/USB host: (.+)$/m);
+    const st = m ? m[1] : 'no USB device';
     if (l.usb.state !== undefined) {
-      const need = usbState(l.usb.state);
+      const need = l.usb.state;
       const say = st === need ? t('The PC recognized the device: {st}', { st: t(st) }) : t('The PC sees {st}, should be {need}', { st: t(st), need: t(need) });
       res.push({ ok: st === need, text: `USB device seen by the PC: ${st} (need ${need})`, say, tag: 'USB', dev: 'USB' });
     }
     if (l.usb.typed !== undefined) {
-      const tm = report.match(/^\[tryboard\] USB (?:键盘输入|keyboard typed): (".*")$/m); // lint: allow-cjk
+      const tm = report.match(/^\[tryboard\] USB keyboard typed: (".*")$/m);
       const got: string = tm ? JSON.parse(tm[1]) : '';
       const shown = (x: string) => x.replaceAll('\n', '↵');
       const v = { got: shown(got), want: shown(l.usb.typed) };
@@ -328,7 +326,7 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
     }
   }
   if (l.lcd_colors?.length) {
-    const colorRe = /LCD (?:颜色|color) #([0-9a-f]{6}) (\d+) (?:像素，重心|px, centroid) ([\d.]+),([\d.]+)/g; // lint: allow-cjk
+    const colorRe = /LCD color #([0-9a-f]{6}) (\d+) px, centroid ([\d.]+),([\d.]+)/g;
     const seen = [...report.matchAll(colorRe)].map((m) => ({ k: m[1], n: Number(m[2]), x: Number(m[3]), y: Number(m[4]) }));
     const top = seen.slice(0, 4).map((e) => `#${e.k} ${e.n}`).join(', ') || '(all black)';
     const lcd = t('Round LCD');

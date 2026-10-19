@@ -109,10 +109,9 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
         notes.append(f"LCD non-black {n} pixels (display {m.group(2) if m else 'none'})")
         if n < t['lcd_min_pixels']: missing.append('lcd')
     # Speaker: the simulator's analysis of PCM reaching the speaker (sample rate, last-second RMS, peak, dominant frequency).
-    # The line comes from the core crates; both the old Chinese and an English wording parse.
     au = t.get('audio')
     if au:
-        m = re.search(r'I2S (?:喇叭|speaker).*?(?:采样率|sample rate) ([\d.]+) Hz.*?RMS ([\d.]+).*?(?:峰值|peak) ([\d.]+).*?(?:主频|freq\w*) ([\d.]+) Hz', err)  # lint: allow-cjk
+        m = re.search(r'I2S speaker.*?sample rate ([\d.]+) Hz.*?RMS ([\d.]+).*?peak ([\d.]+).*?freq ([\d.]+) Hz', err)
         if not m:
             notes.append('speaker received no sound'); missing.append('audio')
         else:

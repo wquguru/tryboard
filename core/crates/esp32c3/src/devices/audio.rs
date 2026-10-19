@@ -386,39 +386,41 @@ impl Audio {
                 None => 0.0,
             };
             s += &format!(
-                "[tryboard] I2S 喇叭 MAX98357A（BCLK=GPIO{} LRC=GPIO{} DIN=GPIO{}）：收到 {} 帧（{:.2}s），采样率 {:.1} Hz，最近 1 秒 RMS {:.4}、峰值 {:.4}、主频 {:.1} Hz\n", // lint: allow-cjk
+                "[tryboard] I2S speaker MAX98357A (BCLK=GPIO{} LRC=GPIO{} DIN=GPIO{}): got {} frames ({:.2}s), sample rate {:.1} Hz, last 1 s RMS {:.4}, peak {:.4}, freq {:.1} Hz\n",
                 sp.pins.bclk, sp.pins.ws, sp.pins.data, sp.frames, secs, sp.rate, a.rms, a.peak, a.freq
             );
         }
         if let Some(m) = &self.mic {
             let src = match &m.source {
-                MicSource::Silence => "安静".to_string(), // lint: allow-cjk
+                MicSource::Silence => "silence".to_string(),
                 MicSource::Wav { rate, data } => {
                     #[rustfmt::skip]
-                    let s = format!("WAV {} Hz {:.2}s 循环", rate, data.len() as f64 / rate); // lint: allow-cjk
+                    let s = format!("WAV {} Hz {:.2}s loop", rate, data.len() as f64 / rate);
                     s
                 }
-                MicSource::Live { underruns, .. } => format!("实时输入（欠载 {underruns} 帧）"), // lint: allow-cjk
+                MicSource::Live { underruns, .. } => {
+                    format!("live input ({underruns} frames underrun)")
+                }
             };
             s += &format!(
-                "[tryboard] I2S 麦克风 INMP441（SCK=GPIO{} WS=GPIO{} SD=GPIO{}，{}声道）：送出 {} 帧，声源 {}\n", // lint: allow-cjk
+                "[tryboard] I2S mic INMP441 (SCK=GPIO{} WS=GPIO{} SD=GPIO{}, {} channel): sent {} frames, source {}\n",
                 m.pins.bclk,
                 m.pins.ws,
                 m.pins.data,
-                if m.right { "右" } else { "左" }, // lint: allow-cjk
+                if m.right { "right" } else { "left" },
                 m.frames,
                 src
             );
         }
         if self.tx_unrouted > 0 {
             s += &format!(
-                "[tryboard] I2S 接线：有 {} 帧发送数据没到喇叭（DIN 不在 I2S 数据输出上）\n", // lint: allow-cjk
+                "[tryboard] I2S wiring: {} transmitted frames never reached the speaker (DIN is not on the I2S data output)\n",
                 self.tx_unrouted
             );
         }
         if self.rx_unrouted > 0 {
             s += &format!(
-                "[tryboard] I2S 接线：有 {} 帧接收数据不是来自麦克风（数据输入没选到 SD 脚）\n", // lint: allow-cjk
+                "[tryboard] I2S wiring: {} received frames did not come from the mic (data input not routed to the SD pin)\n",
                 self.rx_unrouted
             );
         }
