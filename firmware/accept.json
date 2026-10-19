@@ -1744,5 +1744,47 @@
    "TRYBOARD_OK s3-ft6236",
    "abort()"
   ]
+ },
+ {
+  "id": "c3-ble-hr",
+  "seconds": 4,
+  "args": [
+   "--ble-phone"
+  ],
+  "expect": [
+   "BLE 广播 TryBoard-HR",
+   "连接 成功 status=0",
+   "读电量 87%",
+   "心率订阅 notify=1",
+   "通知 心率 75 bpm rc=0"
+  ],
+  "stderr_expect": [
+   "ADV_IND 02:54:42:00:00:03",
+   "CONNECT_IND 手机 C0:FF:EE:12:34:56",
+   "固件 → 读 2A19 = 57（87%）",
+   "手机：订阅 2A37 后 3 s 内收到 3 条通知"
+  ],
+  "qemu": false
+ },
+ {
+  "id": "c3-ble-led",
+  "fw": "c3-ble-hr",
+  "seconds": 3,
+  "args": [
+   "--ble-phone"
+  ],
+  "script": "2.0:ble=write ffe1 01",
+  "expect": [
+   "写 LED 01 → 亮",
+   "TRYBOARD_OK c3-ble-hr"
+  ],
+  "stderr_expect": [
+   "固件 → 写 FFE1 成功"
+  ],
+  "gpio_toggles": {
+   "pin": 5,
+   "min": 3
+  },
+  "qemu": false
  }
 ]

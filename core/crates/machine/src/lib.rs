@@ -307,6 +307,42 @@ impl Machine {
         }
     }
 
+    /// BLE 虚拟世界（C-01）：固件里认出了 VHCI 边界才有（目前只有 C3）
+    pub fn ble(&self) -> Option<&tryboard_esp32c3::ble::Ble> {
+        match &self.hw {
+            Hw::C3(m) => m.bus.ble.as_deref().map(|b| &*b.world),
+            Hw::S3(_) => None,
+        }
+    }
+
+    pub fn ble_mut(&mut self) -> Option<&mut tryboard_esp32c3::ble::Ble> {
+        match &mut self.hw {
+            Hw::C3(m) => m.bus.ble.as_deref_mut().map(|b| &mut *b.world),
+            Hw::S3(_) => None,
+        }
+    }
+
+    /// 固件用了 BLE 但没认出 VHCI 边界（或 HLE 出错）的原因；None = 没用 BLE 或一切正常
+    pub fn ble_error(&self) -> Option<String> {
+        match &self.hw {
+            Hw::C3(m) => m
+                .bus
+                .ble_error
+                .clone()
+                .or_else(|| m.bus.ble.as_ref().and_then(|b| b.error.clone())),
+            Hw::S3(_) => None,
+        }
+    }
+
+    /// 虚拟手机操作（输入日志 `ble=` 后面那段）
+    pub fn ble_phone(&mut self, cmd: &str) -> Result<(), String> {
+        let now = self.cycles() / (CPU_HZ / 1_000_000);
+        match self.ble_mut() {
+            Some(b) => b.phone_cmd(cmd, now),
+            None => Err("这个固件没有可模拟的 BLE".into()),
+        }
+    }
+
     pub fn chip(&self) -> Chip {
         match &self.hw {
             Hw::C3(_) => Chip::Esp32c3,

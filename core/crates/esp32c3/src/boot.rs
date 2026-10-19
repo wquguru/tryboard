@@ -228,11 +228,47 @@ impl Esp32c3 {
         m.bus.flash = flash;
         let jedec = m.bus.spi1.jedec;
         init_flashchip(&mut m, size_code, jedec)?;
+        install_ble(&mut m, &app);
         m.cpu.pc = app.entry;
         // C3 硬件支持非对齐访存（Wi-Fi 库会对非对齐地址写 32 位哨兵值）
         m.cpu.misaligned_ok = true;
         // ROM 的 .stack_pro 顶端，bootloader 跳进 app 时用的就是这个栈
         m.cpu.x[2] = 0x3FCD_E710;
         Ok((m, app))
+    }
+}
+
+/// BLE（C-01）：按签名找 VHCI 边界，找到就装取指跳板和魔术地址
+fn install_ble(m: &mut Esp32c3, app: &AppInfo) {
+    let flash = &m.bus.flash;
+    let segs: Vec<(u32, &[u8])> = app
+        .segments
+        .iter()
+        .filter_map(|&(load, data, len)| {
+            flash
+                .get(data as usize..(data + len) as usize)
+                .map(|b| (load, b))
+        })
+        .collect();
+    match crate::ble::locate(&segs) {
+        Ok(None) => {}
+        Ok(Some(hooks)) => {
+            // 蓝牙地址 = 基础 MAC + 2（esp_read_mac 的 ESP_MAC_BT 规则），HCI 字节序低字节在前
+            let blk1 = 0x44 / 4;
+            let (lo, hi) = (m.bus.efuse[blk1], m.bus.efuse[blk1 + 1]);
+            let mut mac = [0u8; 6];
+            mac[..4].copy_from_slice(&lo.to_le_bytes());
+            mac[4..].copy_from_slice(&hi.to_le_bytes()[..2]);
+            let v = u64::from_le_bytes([mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], 0, 0]) + 2;
+            let mut addr = [0u8; 6];
+            addr.copy_from_slice(&v.to_le_bytes()[..6]);
+            let b = crate::ble::BleHle::new(hooks, addr);
+            m.bus.code_patch = b.patches();
+            m.bus.ble = Some(Box::new(b));
+            m.cpu.hle_hi = crate::ble::MAGIC_END;
+            m.cpu.hle_addrs.extend(crate::ble::BleHle::magic_addrs());
+            m.cpu.hle_addrs.sort_unstable();
+        }
+        Err(e) => m.bus.ble_error = Some(e),
     }
 }

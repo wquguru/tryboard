@@ -11,6 +11,7 @@ thread_local! {
     static ERR: RefCell<String> = const { RefCell::new(String::new()) };
     static WS: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     static USB_JSON: RefCell<String> = const { RefCell::new(String::new()) };
+    static BLE_JSON: RefCell<String> = const { RefCell::new(String::new()) };
     static REPORT: RefCell<String> = const { RefCell::new(String::new()) };
     static IO: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     static AUDIO: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
@@ -682,6 +683,66 @@ pub unsafe extern "C" fn tb_usb_cdc_send(p: *const u8, len: usize) {
             u.host.cdc_tx.extend_from_slice(d);
         }
     });
+}
+
+// ---------------------------------------------------------------- BLE（C-01）
+
+/// 0 = 固件没用 BLE；1 = 认出了 VHCI 边界、虚拟控制器在跑；2 = 用了 BLE 但没认出来（tb_ble_json 里是原因）
+#[no_mangle]
+pub extern "C" fn tb_ble_state() -> u32 {
+    with(0, |m| {
+        if m.ble_error().is_some() {
+            2
+        } else if m.ble().is_some_and(|b| b.active) {
+            1
+        } else {
+            0
+        }
+    })
+}
+
+/// 空中日志总条数：变了再取
+#[no_mangle]
+pub extern "C" fn tb_ble_seq() -> f64 {
+    with(0.0, |m| m.ble().map_or(0.0, |b| b.log_seq as f64))
+}
+
+/// 广播 / 连接 / 虚拟手机视图 + 序号 ≥ from 的空中日志，序列化成 JSON，返回长度；内容用 tb_ble_json_ptr 读。
+/// 没认出 VHCI 边界时是 {"error": 原因}
+#[no_mangle]
+pub extern "C" fn tb_ble_json(from: f64) -> usize {
+    let j = with(String::new(), |m| {
+        if let Some(e) = m.ble_error() {
+            return format!("{{\"error\":{}}}", json_str(&e));
+        }
+        let Some(b) = m.ble() else {
+            return String::new();
+        };
+        format!("{{\"view\":{},\"log\":{}}}", b.json(), b.log_json(from as u64))
+    });
+    let n = j.len();
+    BLE_JSON.with(|b| *b.borrow_mut() = j);
+    n
+}
+
+#[no_mangle]
+pub extern "C" fn tb_ble_json_ptr() -> *const u8 {
+    BLE_JSON.with(|b| b.borrow().as_ptr())
+}
+
+/// 虚拟手机操作（与命令行 `ble=` 脚本动作同一种文本）。0 = 接受；否则错误文字放进 tb_error_ptr
+/// # Safety
+/// p/len 指向有效缓冲区
+#[no_mangle]
+pub unsafe extern "C" fn tb_ble_cmd(p: *const u8, len: usize) -> i32 {
+    let cmd = String::from_utf8_lossy(std::slice::from_raw_parts(p, len)).into_owned();
+    match with(Err("没有上电".into()), |m| m.ble_phone(&cmd)) {
+        Ok(()) => 0,
+        Err(e) => {
+            ERR.with(|b| *b.borrow_mut() = e);
+            1
+        }
+    }
 }
 
 // ---------------------------------------------------------------- 验收观察（关卡检查用）
