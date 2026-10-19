@@ -13,7 +13,7 @@ import { type PartSpec, type SceneSpec, DEFAULT_VIEW } from './spec';
 import type { BenchCtx } from './ctx';
 
 /** Scene state: rig, breadboard, external-model slots, devboard placement, pick registries and part state. */
-export function mountState(ctx: BenchCtx): void {
+export function* mountState(ctx: BenchCtx): Generator<void> {
   const { scene } = ctx;
   ctx.paintStrip = paintStrip;
   // Breadboard and devboard follow the chip (setBoard); add-on parts shift as a whole by partOffset
@@ -25,6 +25,7 @@ export function mountState(ctx: BenchCtx): void {
   ctx.rig = rig;
   scene.add(rig);
   rig.add(breadboard());
+  yield;
   // External models (P1-09): procedural by default; when on, lazy-load glb to replace slot parts, and swap back when off
   let extOn = extModelsOn();
   let slots: ExtSlot[] = [];
@@ -71,7 +72,8 @@ export function mountState(ctx: BenchCtx): void {
   ctx.offExt = offExt;
   const offReport = reportExt(extList);
   ctx.offReport = offReport;
-  ctx.board = devboard(BOARD_C3);
+  ctx.board = devboard(ctx.chip0 ? BOARDS[ctx.chip0] : BOARD_C3);
+  yield;
   const placeBoard = () => {
     // Board long side along x: rotate -90°, USB to the left; header blocks sit on the breadboard surface
     ctx.board.grp.rotation.y = -Math.PI / 2;
@@ -245,6 +247,7 @@ export function mountScene(ctx: BenchCtx): void {
   ctx.setBoard = setBoard;
   ctx.fitView = fitView;
   ctx.setScene = setScene;
+  ctx.buildScene = buildScene;
   ctx.lastScene = { parts: [] };
 
   // ---------------------------------------------------------------- bench pose (P2-03)
@@ -306,6 +309,11 @@ export function mountScene(ctx: BenchCtx): void {
   }
 
   function setScene(spec: SceneSpec) {
+    const g = buildScene(spec);
+    while (!g.next().done);
+  }
+
+  function* buildScene(spec: SceneSpec): Generator<void> {
     ctx.lastScene = spec;
     levelRig();
     rig.remove(ctx.parts);
@@ -390,6 +398,7 @@ export function mountScene(ctx: BenchCtx): void {
         label(ctx.parts, tl(p.label) ?? `BME280 · I2C 0x${p.addr.toString(16)} · SDA IO${p.sda} SCL IO${p.scl}`, new THREE.Vector3(colX(i2cCol + 1.5), 34, rowZ(0) - 8));
         i2cCol -= 9;
       }
+      yield;
     }
     ctx.parts.updateMatrixWorld(true);
     // An example may set the camera (e.g. close up on a screen), otherwise use the default. Cameras are written for the C3 board

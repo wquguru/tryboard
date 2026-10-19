@@ -92,14 +92,33 @@ export interface Bench extends ScenePickApi {
   dispose(): void;
 }
 
-export function createBench(container: HTMLElement): Bench {
+// Yield to the event loop; scheduler.yield keeps the task's priority where it exists
+const nextTask = () => {
+  const s = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
+  return s?.yield ? s.yield() : new Promise<void>((r) => setTimeout(r, 0));
+};
+
+/** Build the bench in slices (R-16). GL setup runs synchronously first: once the page has painted, the GPU process is busy
+ *  for a few hundred ms and any blocking GL call waits. Board and parts (CPU only) follow per step, below the long-task line. */
+export async function createBench(container: HTMLElement, init: Promise<{ chip: ChipId; scene: SceneSpec }>): Promise<Bench> {
   const ctx = { container } as BenchCtx;
   mountStage(ctx);
-  mountState(ctx);
+  mountPost(ctx);
+  const first = await init;
+  ctx.chip0 = first.chip;
+  let last = performance.now();
+  // Fast machines merge steps (10 ms budget); slow ones yield after each
+  const pace = async () => {
+    if (performance.now() - last < 10) return;
+    await nextTask();
+    last = performance.now();
+  };
+  await pace();
+  for (const _ of mountState(ctx)) await pace();
   mountBuildersA(ctx);
   mountBuildersB(ctx);
   mountScene(ctx);
-  mountPost(ctx);
+  await pace();
   mountPointer(ctx);
   mountTargets(ctx);
   mountInspect(ctx);
@@ -112,6 +131,12 @@ export function createBench(container: HTMLElement): Bench {
   partsById.set('board', ctx.board.grp);
   if (ctx.board.spec.rgbPin >= 0) addRole(apiId('IO' + ctx.board.spec.rgbPin), t('Onboard WS2812 LED'));
   addRole(apiId('IO' + ctx.board.spec.bootPin), t('BOOT button'));
+  await pace();
+  // warm() only flags the scene dirty; programs compile once, on the first frame after the build
+  for (const _ of ctx.buildScene(first.scene)) {
+    ctx.sw.warm();
+    await pace();
+  }
   mountLoop(ctx);
   const { lastInfo } = ctx;
 

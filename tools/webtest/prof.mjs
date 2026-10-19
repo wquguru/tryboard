@@ -4,8 +4,9 @@ import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = '<repo-root>';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dist = path.join(root, 'web/dist');
 const argv = process.argv.slice(2);
 const url = argv.find((a) => !a.startsWith('--')) ?? '/app?work=blank&example=weather#bench';
@@ -70,7 +71,11 @@ if (click) {
   await new Promise((r) => setTimeout(r, 3000));
 }
 const long = await page.evaluate(() => __long);
+// performance.mark() entries the page set (R-16: start-up phases)
+const marks = await page.evaluate(() => performance.getEntriesByType('mark').map((m) => `${m.name}@${Math.round(m.startTime)}`).join(' '));
 if (argv.includes('--gl')) console.log('== slow links', JSON.stringify(await page.evaluate(() => __gl), null, 1));
+// DUMP='<js expr>': print a page value (e.g. a debug global) after the run
+if (process.env.DUMP) console.log('== dump', JSON.stringify(await page.evaluate(process.env.DUMP)));
 const { profile } = await cdp.send('Profiler.stop');
 const byId = new Map(profile.nodes.map((n) => [n.id, n]));
 const parent = new Map();
@@ -94,7 +99,19 @@ for (const [id, ms] of dt) {
   stacks.set(k, (stacks.get(k) ?? 0) + ms);
 }
 const top = (m, n) => [...m].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => `${v.toFixed(0).padStart(5)} ms  ${k.slice(0, process.env.DEPTH ? 4000 : 220)}`).join('\n');
-console.log('== long tasks [start ms, duration ms]', JSON.stringify(long), '\n== native', JSON.stringify(native));
+console.log('== long tasks [start ms, duration ms]', JSON.stringify(long), '\n== marks', marks, '\n== native', JSON.stringify(native));
+// Inclusive time per function (each sample counted once per distinct frame on its stack); INCL=<n> rows
+if (process.env.INCL) {
+  const incl = new Map();
+  for (const [id, ms] of dt) {
+    const seen = new Set();
+    for (let p = id; p; p = parent.get(p)) seen.add(name(byId.get(p)));
+    // FOCUS=<function name>: only samples under that function
+    if (process.env.FOCUS && ![...seen].some((k) => k.startsWith(process.env.FOCUS + ' '))) continue;
+    for (const k of seen) incl.set(k, (incl.get(k) ?? 0) + ms);
+  }
+  console.log('== inclusive\n' + top(incl, +process.env.INCL));
+}
 console.log('== self time\n' + top(self, 20) + '\n== stacks\n' + top(stacks, 15));
 await browser.close();
 server.close();

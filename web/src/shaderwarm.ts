@@ -12,6 +12,9 @@ export interface ShaderWarm {
 
 // A first draw links shaders synchronously (~0.5–1 s blocked at start-up); compile() starts them under
 // KHR_parallel_shader_compile and isReady() polls. Own poll: compileAsync's throws when a material is disposed.
+const SETTLE_FRAMES = 6;
+const SETTLE_MAX = 120;
+
 export function shaderWarm(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, composer?: EffectComposer): ShaderWarm {
   const pending = new Set<THREE.Material>();
   // Post-processing materials (bloom blur kernels, outline, output) on throwaway quads so compile() reaches them;
@@ -37,25 +40,35 @@ export function shaderWarm(renderer: THREE.WebGLRenderer, scene: THREE.Scene, ca
     return fx;
   }
   // Shadow passes draw casters with three's internal MeshDepthMaterial, which compile() never sees: stand-ins with
-  // the same program key (object traits, geometry attributes, flipped side) share the cached program
+  // the same program key (object traits, geometry attributes, flipped side, maps, light counts) share the cached program
   const depthSeen = new Set<string>();
+  // Light counts are part of every program key: adding a part's LED light needs new depth variants
+  const lightSig = () => {
+    const n: Record<string, number> = {};
+    scene.traverseVisible((o) => {
+      const l = o as THREE.Light;
+      if (l.isLight) n[l.type + (l.castShadow ? '*' : '')] = (n[l.type + (l.castShadow ? '*' : '')] ?? 0) + 1;
+    });
+    return Object.entries(n).sort().join();
+  };
   const depthTarget = new THREE.WebGLRenderTarget(1, 1);
   const flip = { [THREE.FrontSide]: THREE.BackSide, [THREE.BackSide]: THREE.FrontSide, [THREE.DoubleSide]: THREE.DoubleSide };
   function depthStandIns() {
     const out: THREE.Object3D[] = [];
+    const lights = lightSig();
     scene.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh || !o.castShadow) return;
       const mats = ([] as THREE.Material[]).concat(mesh.material) as THREE.MeshStandardMaterial[];
-      const masked = (m: THREE.MeshStandardMaterial) => m.alphaTest > 0 && !!(m.map || m.alphaMap);
       const displaced = (m: THREE.MeshStandardMaterial) => !!m.displacementMap && m.displacementScale !== 0;
       const im = o as THREE.InstancedMesh;
-      const key = [im.isInstancedMesh, !!im.instanceColor, (o as THREE.SkinnedMesh).isSkinnedMesh, Object.keys(mesh.geometry.morphAttributes).join(), Object.keys(mesh.geometry.attributes).sort().join(),
-        mats.map((m) => `${m.shadowSide ?? flip[m.side]}/${masked(m)}/${displaced(m)}`).join()].join('|');
+      const key = [lights, im.isInstancedMesh, !!im.instanceColor, (o as THREE.SkinnedMesh).isSkinnedMesh, Object.keys(mesh.geometry.morphAttributes).join(), Object.keys(mesh.geometry.attributes).sort().join(),
+        mats.map((m) => `${m.shadowSide ?? flip[m.side]}/${!!m.map}/${!!m.alphaMap}/${m.alphaTest > 0}/${displaced(m)}`).join()].join('|');
       if (depthSeen.has(key)) return;
       const dms = mats.map((m) => {
         const d = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, side: m.shadowSide ?? flip[m.side] });
-        if (masked(m)) Object.assign(d, { alphaTest: m.alphaTest, map: m.map, alphaMap: m.alphaMap });
+        // three hands every caster's map / alphaMap / alphaTest to its depth material, masked or not
+        Object.assign(d, { alphaTest: m.alphaTest, map: m.map, alphaMap: m.alphaMap });
         if (displaced(m)) Object.assign(d, { displacementMap: m.displacementMap, displacementScale: m.displacementScale });
         return d;
       });
@@ -66,40 +79,87 @@ export function shaderWarm(renderer: THREE.WebGLRenderer, scene: THREE.Scene, ca
     });
     return out;
   }
+  // A texture background is drawn by three's internal plane, also unseen by compile(): same material, same key
+  let bg: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial> | null = null;
+  function backgroundStandIn(): THREE.Object3D[] {
+    const tex = scene.background as THREE.Texture | null;
+    if (!tex?.isTexture || (tex as THREE.CubeTexture).isCubeTexture || tex.mapping === THREE.CubeUVReflectionMapping) return [];
+    if (!bg) {
+      const lib = THREE.ShaderLib.background;
+      const m = new THREE.ShaderMaterial({ name: 'BackgroundMaterial', uniforms: THREE.UniformsUtils.clone(lib.uniforms), vertexShader: lib.vertexShader, fragmentShader: lib.fragmentShader, side: THREE.FrontSide, depthTest: false, depthWrite: false, fog: false });
+      Object.defineProperty(m, 'map', { get: () => m.uniforms.t2D.value });
+      const g = new THREE.PlaneGeometry(2, 2);
+      g.deleteAttribute('normal');
+      bg = new THREE.Mesh(g, m);
+    }
+    bg.material.uniforms.t2D.value = tex;
+    bg.material.toneMapped = THREE.ColorManagement.getTransfer(tex.colorSpace) !== THREE.SRGBTransfer;
+    return [bg];
+  }
   let warmed = false;
-  // Right after compile() a cached program can report ready while its link still blocks the first draw
+  // Right after compile() a cached program can report ready while its link still blocks the first draw. The GPU process
+  // can stay busy for a few hundred ms more: fences (polled, never waited on) tell when it has caught up
+  const gl = renderer.getContext();
+  const gl2 = 'fenceSync' in gl ? gl : null;
   let settled = true;
   let warmGen = 0;
+  // warm() only marks the scene dirty: several rebuilds in one task (setBoard, then setScene) compile once, at the next frame,
+  // so a light count that changes in between never links a throwaway set of programs
+  let dirty = false;
+  function compileNow() {
+    dirty = false;
+    settled = false;
+    const gen = ++warmGen;
+    let k = 0;
+    let fence: WebGLSync | null = null;
+    const step = () => {
+      const done = !fence || gl2!.getSyncParameter(fence, gl2!.SYNC_STATUS) === gl2!.SIGNALED;
+      if ((++k >= SETTLE_FRAMES && done) || k > SETTLE_MAX) {
+        if (fence) gl2!.deleteSync(fence);
+        settled ||= gen === warmGen;
+        return;
+      }
+      if (done && gl2) {
+        if (fence) gl2.deleteSync(fence);
+        fence = gl2.fenceSync(gl2.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        gl2.flush();
+      }
+      next();
+    };
+    const next = () => requestAnimationFrame(step);
+    next();
+    // Same variants the frame will use: with a composer the scene renders into its linear target, not the canvas
+    const prev = renderer.getRenderTarget();
+    if (composer) renderer.setRenderTarget(composer.readBuffer);
+    for (const m of renderer.compile(scene, camera)) pending.add(m);
+    const back = backgroundStandIn();
+    if (back.length) for (const m of renderer.compile(Object.assign(new THREE.Scene(), { children: back }), camera, scene)) pending.add(m);
+    if (composer) {
+      const [mid, screen] = passScenes(composer);
+      for (const m of renderer.compile(mid, camera)) pending.add(m);
+      renderer.setRenderTarget(null);
+      for (const m of renderer.compile(screen, camera)) pending.add(m);
+    }
+    const casters = renderer.shadowMap.enabled ? depthStandIns() : [];
+    if (casters.length) {
+      renderer.setRenderTarget(depthTarget);
+      const holder = Object.assign(new THREE.Scene(), { children: casters });
+      // Lights come from the scene, but the shadow pass draws with an empty one: no fog in the key
+      const fog = scene.fog;
+      scene.fog = null;
+      for (const m of renderer.compile(holder, camera, scene)) pending.add(m);
+      scene.fog = fog;
+    }
+    renderer.setRenderTarget(prev);
+  }
   return {
     warm() {
       warmed = true;
-      settled = false;
-      const gen = ++warmGen;
-      requestAnimationFrame(() => (settled ||= gen === warmGen));
-      // Same variants the frame will use: with a composer the scene renders into its linear target, not the canvas
-      const prev = renderer.getRenderTarget();
-      if (composer) renderer.setRenderTarget(composer.readBuffer);
-      for (const m of renderer.compile(scene, camera)) pending.add(m);
-      if (composer) {
-        const [mid, screen] = passScenes(composer);
-        for (const m of renderer.compile(mid, camera)) pending.add(m);
-        renderer.setRenderTarget(null);
-        for (const m of renderer.compile(screen, camera)) pending.add(m);
-      }
-      const casters = renderer.shadowMap.enabled ? depthStandIns() : [];
-      if (casters.length) {
-        renderer.setRenderTarget(depthTarget);
-        const holder = Object.assign(new THREE.Scene(), { children: casters });
-        // Lights come from the scene, but the shadow pass draws with an empty one: no fog in the key
-        const fog = scene.fog;
-        scene.fog = null;
-        for (const m of renderer.compile(holder, camera, scene)) pending.add(m);
-        scene.fog = fog;
-      }
-      renderer.setRenderTarget(prev);
+      dirty = true;
     },
     warming() {
       if (!warmed) this.warm();
+      if (dirty) compileNow();
       for (const m of pending) {
         const p = (renderer.properties.get(m) as { currentProgram?: { isReady(): boolean } }).currentProgram;
         if (!p || p.isReady()) pending.delete(m);

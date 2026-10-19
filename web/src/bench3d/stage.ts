@@ -85,12 +85,14 @@ export function mountStage(ctx: BenchCtx): void {
     return t;
   };
   const themes = {
-    light: { bg: gradient('#FFFFFF', '#ECEFF3'), shadow: 0.16, hemi: 1.35, key: 1.9 },
-    dark: { bg: gradient('#2C2E33', '#141518'), shadow: 0.45, hemi: 0.75, key: 1.6 },
+    light: { bg: ['#FFFFFF', '#ECEFF3'], shadow: 0.16, hemi: 1.35, key: 1.9 },
+    dark: { bg: ['#2C2E33', '#141518'], shadow: 0.45, hemi: 0.75, key: 1.6 },
   };
+  // Gradients are drawn on first use: most sessions only ever show one theme
+  const bgs: Partial<Record<'light' | 'dark', THREE.Texture>> = {};
   const applyTheme = (t: 'light' | 'dark') => {
     const th = themes[t];
-    scene.background = th.bg;
+    scene.background = bgs[t] ??= gradient(th.bg[0], th.bg[1]);
     groundMat.opacity = th.shadow;
     hemi.intensity = th.hemi;
     hemi.groundColor.set(t === 'light' ? 0xdfe3e8 : 0x303238);
@@ -158,7 +160,6 @@ export function mountPost(ctx: BenchCtx): void {
   composer.addPass(new OutputPass());
   const sw = shaderWarm(renderer, scene, camera, composer);
   ctx.sw = sw;
-  sw.warm();
 
   const resize = () => {
     const w = container.clientWidth, h = container.clientHeight;
@@ -187,8 +188,9 @@ export function mountLoop(ctx: BenchCtx): void {
   const lastInfo = { calls: 0, triangles: 0 };
   ctx.lastInfo = lastInfo;
   const tmp = new THREE.Vector3();
+  const next = () => (ctx.raf = requestAnimationFrame(tick));
   const tick = () => {
-    ctx.raf = requestAnimationFrame(tick);
+    next();
     const t0 = performance.now();
     ctx.frameMs = ctx.frameMs * 0.9 + (t0 - lastT) * 0.1;
     lastT = t0;
@@ -272,5 +274,6 @@ export function mountLoop(ctx: BenchCtx): void {
     }
     ctx.cpuMs = ctx.cpuMs * 0.9 + (performance.now() - t0) * 0.1;
   };
-  tick();
+  // First frame on the next vsync: shader compile gets its own task instead of joining the build's last slice
+  next();
 }
