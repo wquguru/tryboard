@@ -155,6 +155,7 @@ pub fn now_us(cpu: &Cpu) -> u64 {
 }
 
 pub fn call_slot(pc: u32, cpu: &mut Cpu, bus: &mut SocBus) {
+    // Infallible: the only caller checks bus.ble.is_some() first.
     let mut b = bus.ble.take().expect("ble");
     slot(&mut b, (pc - MAGIC) / 4, cpu, bus);
     bus.ble = Some(b);

@@ -354,6 +354,7 @@ impl Cpu {
                         0x20 => ((a as i32) >> shamt) as u32,
                         _ => illegal!(),
                     },
+                    // Infallible: f3 is 3 bits and all eight values are matched above.
                     _ => unreachable!(),
                 };
                 self.set(rd, v);

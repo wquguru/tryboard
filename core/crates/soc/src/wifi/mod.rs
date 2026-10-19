@@ -526,6 +526,7 @@ impl WifiMac {
         let key_id = f[hl + 3] >> 6;
         let unicast = f[4] & 1 == 0;
         // Unicast: TX uses the receiver's (a1) pairwise key, RX the sender's (a2); multicast can only use the group key
+        // Infallible: f.len() >= hl + 16 and hl >= 10, so 4..16 is in range.
         let peer: frame::Mac = if enc {
             f[4..10].try_into().unwrap()
         } else {
@@ -535,6 +536,7 @@ impl WifiMac {
             self.hw_key(&peer, false)?
         } else {
             // Multicast: look up by peer (BSSID as STA), then by sender, finally any group-key slot
+            // Infallible: f.len() >= hl + 16 >= 26 (checked above).
             let a2: frame::Mac = f[10..16].try_into().unwrap();
             self.hw_key(&peer, true)
                 .or_else(|| self.hw_key(&a2, true))

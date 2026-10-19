@@ -504,6 +504,7 @@ impl Host {
     }
 
     fn stalled(&mut self) {
+        // Infallible: only reached from step_ctrl while self.ctrl is Some.
         let c = self.ctrl.take().unwrap();
         self.say(format!("device STALL: {:?} (ignored, continuing)", c.what));
         if c.what == Req::DevDesc8 || c.what == Req::ConfigHead {
@@ -512,6 +513,7 @@ impl Host {
     }
 
     fn done(&mut self) {
+        // Infallible: only reached from step_ctrl while self.ctrl is Some.
         let c = self.ctrl.take().unwrap();
         let d = c.got;
         match c.what {

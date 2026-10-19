@@ -154,6 +154,7 @@ impl Dec {
 
 pub(crate) fn new_cache() -> Box<[Dec; DCACHE_SIZE]> {
     // Fixed-size array so PC-masked indexing lets the compiler drop bounds checks
+    // Infallible: the Vec has exactly DCACHE_SIZE elements.
     vec![Dec::EMPTY; DCACHE_SIZE]
         .into_boxed_slice()
         .try_into()

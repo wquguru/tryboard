@@ -539,6 +539,7 @@ impl Phone {
     }
 
     fn send_auth(&mut self) {
+        // Infallible: Auth/Assoc are only entered with bss set, and reset_link clears both.
         let b = self.bss.clone().unwrap();
         let seq = self.next_seq();
         let mut f = frame::mgmt_hdr(fc::AUTH, &b.bssid, &self.mac, &b.bssid, seq);
@@ -548,6 +549,7 @@ impl Phone {
     }
 
     fn send_assoc(&mut self) {
+        // Infallible: Auth/Assoc are only entered with bss set, and reset_link clears both.
         let b = self.bss.clone().unwrap();
         let seq = self.next_seq();
         let mut f = frame::mgmt_hdr(fc::ASSOC_REQ, &b.bssid, &self.mac, &b.bssid, seq);
@@ -702,6 +704,7 @@ impl Phone {
                     format!("assoc response: rejected {status}")
                 } else {
                     self.last_beacon = now;
+                    // Infallible: from_bss in the match guard already required bss to be Some.
                     let b = self.bss.clone().unwrap();
                     if b.privacy {
                         self.supp = Some(Supplicant::new(
@@ -821,6 +824,7 @@ impl Phone {
             return "ARP (short)".into();
         }
         let op = u16::from_be_bytes([p[6], p[7]]);
+        // Infallible: fixed-width fields of an ARP payload checked to be >= 28 bytes.
         let smac: Mac = p[8..14].try_into().unwrap();
         let sip: [u8; 4] = p[14..18].try_into().unwrap();
         let tip: [u8; 4] = p[24..28].try_into().unwrap();
@@ -1025,6 +1029,7 @@ impl Phone {
             self.start_job(job, now);
             return;
         }
+        // Infallible: the run.is_none() branch above always returns.
         let r = self.run.as_ref().unwrap();
         if now >= r.deadline {
             self.finish_err(now, "timeout: no response from the peer");
@@ -1142,6 +1147,7 @@ impl Phone {
 
     fn send_dns(&mut self, now: u64) {
         let (id, host) = {
+            // Infallible: only called while a job is running (self.run is Some).
             let r = self.run.as_mut().unwrap();
             r.tries += 1;
             r.retry_at = now + DNS_TIMEOUT_US;
@@ -1219,6 +1225,7 @@ impl Phone {
 
     fn send_syn(&mut self, now: u64) {
         let me = self.ip.unwrap_or([0; 4]);
+        // Infallible: only called while a job is running (self.run is Some).
         let r = self.run.as_mut().unwrap();
         r.tries += 1;
         r.retry_at = now + TCP_RTO_US;
@@ -1230,6 +1237,7 @@ impl Phone {
 
     fn send_req(&mut self, now: u64) {
         let me = self.ip.unwrap_or([0; 4]);
+        // Infallible: only called while a job is running (self.run is Some).
         let r = self.run.as_mut().unwrap();
         r.tries += 1;
         r.retry_at = now + TCP_RTO_US;
@@ -1317,6 +1325,7 @@ impl Phone {
                 r.retry_at = r.deadline;
             }
         }
+        // Infallible: run was Some at the let-else above; every path that clears it returns.
         let r = self.run.as_mut().unwrap();
         let mut fin = false;
         if seq == r.rcv_nxt {
@@ -1358,6 +1367,7 @@ impl Phone {
     }
 
     fn finish_ok(&mut self, now: u64, got_fin: bool) {
+        // Infallible: only called while a job is running (self.run is Some).
         let r = self.run.take().unwrap();
         let me = self.ip.unwrap_or([0; 4]);
         // Active close: send FIN; if the peer FIN has not arrived, keep it in closing to acknowledge later
@@ -1464,6 +1474,7 @@ impl Phone {
     }
 
     fn finish_err(&mut self, now: u64, why: &str) {
+        // Infallible: only called while a job is running (self.run is Some).
         let r = self.run.take().unwrap();
         let url = format!("http://{}{}", r.host, r.path);
         self.note(now, format!("{} {url}: {why}", r.job.method));
