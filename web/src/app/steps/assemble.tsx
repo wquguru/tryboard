@@ -1,7 +1,5 @@
-// ③ 组装：3D 视图（app/asm3d.ts，参数化外壳 + 拖到槽位吸附，P1-07）；WebGL 不可用或 ?asm=svg 时用
-// views/assembly.ts 的 SVG 等轴测兜底。两种视图共用 views/asmcore.ts 的规则和 templates.ts 的模板：
-// 左树 = 装配层（从下往上）；右栏 = 选中层说明 + "装法会改变什么"（估算）；时间线 = 每装一层一步 + 开机复测，可回退。
-// 回退不存快照：清空后按时间线重放前 i 步（确定性重算）。开机复测用装好的状态（传感器偏移进 env）跑同一份固件验收。
+// Step 3 Assemble: 3D view (app/asm3d.ts, P1-07) or the views/assembly.ts SVG fallback without WebGL / with ?asm=svg; both share asmcore rules and templates.
+// Undo keeps no snapshots: clear and replay the first i timeline steps (deterministic); the power-on retest runs the same firmware with the assembled offsets in env.
 import { isPhone } from '../mobile';
 import { createAssembly } from '../../views/assembly';
 import { CHIP_HEAT_OFFSET, SONAR_BLOCK_CM, TEMPLATES, effectScript, type Template } from '../../views/templates';
@@ -16,13 +14,14 @@ import { caseFor, layoutFor, layoutKey } from '../casemesh';
 import type { CaseLayout } from '../enclosure';
 import { OBSTACLE_LABEL, antennaLossDb, i2cLoad, i2cSay, i2cText, loadCaseHarness, saveCaseHarness, wifiSay, wifiText, type CaseHarness, type Obstacle } from '../harness';
 import { noteSaved } from '../saved';
+import { t } from '../../i18n';
 
 type SvgAsm = ReturnType<typeof createAssembly>;
 type AsmView = SvgAsm | Assembly3D;
 const is3d = (a: AsmView): a is Assembly3D => (a as Assembly3D).kind === '3d';
-/** 有参数化外壳布局（enclosure.ts）的模板才走 3D；P2-09 的新作品先用平面装配 */
+/** Only templates with a parametric enclosure layout (enclosure.ts) get 3D; the P2-09 projects stay flat for now */
 const HAS_3D = new Set(['weather', 'spin', 'lens']);
-/** 3D 装配要 WebGL2；?asm=svg 强制用平面视图（测试 / 兜底） */
+/** 3D assembly needs WebGL2; ?asm=svg forces the flat view (tests / fallback) */
 function want3d() {
   if (new URLSearchParams(location.search).get('asm') === 'svg') return false;
   try {
@@ -37,14 +36,20 @@ import { cn } from '../../ui/cn';
 import { Host, Txt } from '../../ui/native';
 import { Btn, Btns, Kv, KvBox, KvT, LinkBtn, LockCard, Mono, Note, Ph, PhT, Res, Sec, Seg, SegB, Slider, TnL, TnM, TnSt, TreeEmpty, TreeGroup, btnClass, tnClass } from '../../ui/panel';
 import { lab } from '../../ui/links';
-import { Conf } from '../../ui/conf';
+import { Conf, type ConfLevel } from '../../ui/conf';
 import { ResultCard, Said, actCls } from '../../ui/result';
 import { groupRows, headline, type Verdict } from '../../ui/say';
+
+// ConfLevel values are machine identifiers owned by ui/conf.tsx; <Conf> renders its own label.
+const EST: ConfLevel = '估算'; // lint: allow-cjk
+const REAL_HW: ConfLevel = '必须上真机'; // lint: allow-cjk
+/** Device name of the assembly-warning row: it is not a device, so the "N devices changed" count skips it */
+const ASM_DEV = t('Assembly');
 
 type Entry = { kind: 'place'; id: string; spot?: string } | { kind: 'test'; ok: boolean; rows: { ok: boolean; text: string; say?: string; tag?: string; dev?: string }[]; fingerprint: string; who: string; temp: number; offset: number };
 
 const KEY = (work: string) => `tryboard-app-asm:${work}`;
-/** 本机存的装配时间线（装了哪些、怎么装、复测结果；不存逐条结果以外的东西） */
+/** Locally saved assembly timeline (what went in, how, retest results; nothing beyond the per-row results) */
 function loadEntries(work: string): Entry[] {
   try {
     const v = JSON.parse(localStorage.getItem(KEY(work)) ?? '[]');
@@ -58,7 +63,7 @@ function saveEntries(work: string, list: Entry[]) {
     localStorage.setItem(KEY(work), JSON.stringify(list));
     noteSaved();
   } catch {
-    /* 隐私模式：只在本页有效 */
+    /* private mode: only lasts for this page */
   }
 }
 const lastIsTest = (list: Entry[]) => {
@@ -66,11 +71,10 @@ const lastIsTest = (list: Entry[]) => {
   return e?.kind === 'test' ? e.ok : null;
 };
 
-/** 不建 DOM 也能算出装配结果（成品步骤、刷新后恢复用），与 createAssembly 的 clean / effects 一致 */
-/** 这个作品壳里有没有 I2C 模块（排线长度只对它们有意义） */
+/** Whether this project's enclosure holds I2C modules (cable length only matters for them) */
 export const I2C_DEVICES: Record<string, number> = { weather: 2 };
 
-/** 线束带进成品的东西（估算）：I2C 排线总长、天线遮挡 dB；以及它们会不会让成品出问题 */
+/** What the harness carries into the product (estimate): I2C cable length, antenna loss dB, and whether they break it */
 export function harnessEffects(work: string, h: CaseHarness) {
   const n = I2C_DEVICES[work] ?? 0;
   const i2c = n ? i2cLoad(h.i2cCm, n) : null;
@@ -79,6 +83,7 @@ export function harnessEffects(work: string, h: CaseHarness) {
   return { i2c, antennaDb, wifi, ok: (!i2c || i2c.verdict === 'ok') && wifi.level !== 'fail' };
 }
 
+/** Computes the assembly result without DOM (Product step, restore after reload); must match createAssembly's clean / effects */
 function summarize(T: Template, places: { id: string; spot?: string }[], retest: boolean | null, h: CaseHarness): AssemblyState {
   const placed = places.map((p) => p.id);
   const choice: Record<string, string> = {};
@@ -90,19 +95,19 @@ function summarize(T: Template, places: { id: string; spot?: string }[], retest:
   return { placed, choice, total, clean, effects, retest };
 }
 
-/** 页面启动时恢复本机存过的装配（只存装了哪些、怎么装；复测结果不存，要重新测） */
+/** Restore the saved assembly on page load (only what went in and how; retest results must be rerun) */
 export function restoreAssembly(ctx: StepCtx) {
   const T = TEMPLATES[ctx.work.id];
   if (!T) return;
   const list = loadEntries(ctx.work.id);
   const places = list.filter((e): e is Extract<Entry, { kind: 'place' }> => e.kind === 'place');
-  // 存的顺序必须是模板的从下往上顺序，否则当作没装
+  // Saved order must be the template's bottom-up order, otherwise treat it as not assembled
   const okOrder = places.every((p, i) => T.parts[i]?.id === p.id);
   if (places.length && okOrder) ctx.store.set({ assembly: summarize(T, places, lastIsTest(list), loadCaseHarness(ctx.work.id)) });
   else if (list.length) saveEntries(ctx.work.id, []);
 }
 
-/** 这个作品的哪个检查点带装配（weather 06、spin 07-spin、lens 07-lens） */
+/** Which checkpoint of this project includes assembly (weather 06, spin 07-spin, lens 07-lens) */
 export function assemblyLevel(ctx: StepCtx): Level | undefined {
   return ctx.session.levels.find((l) => ctx.work.checkpoints.includes(l.id) && l.assembly);
 }
@@ -112,36 +117,39 @@ export function unlocked(ctx: StepCtx) {
   return n > 0 && passedCount(ctx) === n;
 }
 
-/** 装法会改变什么（估算）：按模板、按零件说清后果 */
+/** What the assembly choice changes (estimate), per template and part */
 const IMPACT: Record<string, Record<string, string[]>> = {
   weather: {
-    shell: ['USB-C 开孔朝后：线从背后出，不挡表盘'],
-    board: ['开发板卡扣位置决定了芯片在哪：芯片满载时是壳里最热的地方'],
-    bme: [`放通风口旁：读到的就是室温，表盘、彩灯、报警都按真实温度`, `放开发板旁：贴着芯片，读数偏高约 ${CHIP_HEAT_OFFSET} ℃，室温 27.5 ℃ 就会报警，检查点 06 的温度项过不了`],
-    servo: ['舵机轴要对准表盘中心，否则指针扫不到刻度两端'],
-    oled: ['排线 8 cm，需要 ≥ 6 cm 才够得到前面板'],
-    front: ['前面板合上后内腔用了 27 / 32 mm'],
+    shell: [t('USB-C cutout faces back: the cable exits behind and does not block the dial')],
+    board: [t('The dev board clip position decides where the chip sits: under full load it is the hottest spot in the enclosure')],
+    bme: [
+      t('By the vent: it reads room temperature, and the dial, lights and alarm all follow the real temperature'),
+      t('Next to the dev board: right against the chip, reads about {d} ℃ high, alarms at 27.5 ℃ room temperature, and checkpoint 06 fails its temperature item', { d: CHIP_HEAT_OFFSET }),
+    ],
+    servo: [t('Align the servo shaft with the dial center, or the needle cannot reach both ends of the scale')],
+    oled: [t('Cable is 8 cm; it needs ≥ 6 cm to reach the front panel')],
+    front: [t('With the front panel closed the cavity uses 27 / 32 mm')],
   },
   spin: {
-    servo: ['先回中位再装舵盘：固件说「正面」就是正面', `直接按上去：舵盘可能错一个齿，正面偏 ${(360 / 25).toFixed(1)}°`],
+    servo: [t('Center first, then fit the horn: when the firmware says “front” it really faces front'), t('Pressed straight on: the horn may be one tooth off, front shifts by {deg}°', { deg: (360 / 25).toFixed(1) })],
   },
   usbkey: {
-    board: ['USB / OTG 口朝背面开孔：线插得进去，电脑认出键盘', '装反 180°：USB 口顶着前墙，线插不进去，成品里电脑看不到设备'],
-    plate: ['定位板用塑料：金属定位板盖住 WROOM 天线，Wi-Fi 信号会掉几十 dB（估算），可以在下面「线束与天线」里试'],
+    board: [t('USB / OTG port faces the back cutout: the cable fits and the computer sees a keyboard'), t('Rotated 180°: the USB port hits the front wall, the cable does not fit, and the computer sees no device in the product')],
+    plate: [t('Use a plastic plate: a metal plate covers the WROOM antenna and Wi-Fi drops by tens of dB (estimate); try it under “Harness and antenna” below')],
   },
   lens: {
-    dome: ['高档离屏 8 mm：放大约 1.35×，看着更立体', '低档贴着屏：放大约 1.08×，看着是平的'],
+    dome: [t('High notch, 8 mm off the screen: about 1.35× magnification, looks more 3D'), t('Low notch, against the screen: about 1.08× magnification, looks flat')],
   },
   lamp: {
-    strip: ['贴在导光柱上：离灯罩 15 mm，光在乳白罩上散成均匀的一片', '贴着灯罩内壁：罩子上一排 8 个刺眼亮点'],
-    knob: ['旋钮轴要露出面板 ≥ 6 mm，不然手指捏不住、按不下去'],
+    strip: [t('On the light guide: 15 mm from the shade, the light spreads into an even glow on the milky shade'), t('Against the shade wall: a row of 8 glaring hot spots on the shade')],
+    knob: [t('The knob shaft must stick out ≥ 6 mm from the panel, or fingers cannot grip or press it')],
   },
   ruler: {
-    sonar: ['探头伸出前面板孔：量到的就是前方物体', `缩在孔后 6 mm：回波先从孔壁回来，读数约 ${SONAR_BLOCK_CM} cm，蜂鸣器一直响，复测也一样（估算）`],
-    board: ['Echo 线上的 1 kΩ / 2 kΩ 分压电阻跟着开发板一起装，别装壳时漏掉'],
+    sonar: [t('Probe through the front panel hole: it measures the object in front'), t('Recessed 6 mm behind the hole: echoes come back from the hole wall first, reads about {cm} cm, the buzzer keeps sounding, same in the retest (estimate)', { cm: SONAR_BLOCK_CM })],
+    board: [t('The 1 kΩ / 2 kΩ divider resistors on the Echo line go in with the dev board; do not forget them when closing the enclosure')],
   },
   tilt: {
-    imu: ['平贴底板、箭头朝前：小豆跟着歪斜方向运动', '装反 180°：俯仰、横滚方向全反，小豆往高处爬，复测里也一样'],
+    imu: [t('Flat on the base, arrow forward: the bean rolls the way you tilt'), t('Rotated 180°: pitch and roll are both reversed, the bean climbs uphill, same in the retest')],
   },
 };
 
@@ -150,10 +158,10 @@ export function assembleStep(): StepImpl {
   let unsubs: (() => void)[] = [];
   let hooked = false;
   let T: Template | null = null;
-  /** 装配视图整页只建一次：切到别的步骤再回来，装到一半的进度还在 */
+  /** Built once per page: switching steps and back keeps a half-done assembly */
   let node: HTMLElement | null = null;
   let asm: AsmView | null = null;
-  /** 当前视图按哪份外壳参数建的（参数 / 清单变了就重建，装配步骤按时间线重放） */
+  /** Enclosure params the view was built from (rebuild on change, replaying the timeline) */
   let builtKey = '';
   let layout: CaseLayout | null = null;
   let section = false;
@@ -164,13 +172,13 @@ export function assembleStep(): StepImpl {
   let testing: { at: number; progress: number } | null = null;
   let ruler = false;
   let sel = '';
-  /** 线束（P2-11）：排线长度、天线旁边有没有金属件 / 电池（估算）；不进装配时间线，单独存 */
+  /** Harness (P2-11): cable length, metal / battery near the antenna (estimate); kept outside the timeline, saved separately */
   let hz: CaseHarness = loadCaseHarness('weather');
 
-  /** 装配视图（命令式节点）挂进步骤层 */
+  /** Mount the imperative assembly view into the step layer */
   const showNode = () => ctx?.shell.layer.render(<Host node={node} />);
 
-  /** 线束交给模拟器（台面上正在跑的那份固件马上受影响；开机复测、成品也用它） */
+  /** Hand the harness to the simulator (affects the firmware running on the bench now, plus retest and Product) */
   function applyHarness() {
     const c = ctx!;
     const hx = harnessEffects(c.work.id, hz);
@@ -181,6 +189,8 @@ export function assembleStep(): StepImpl {
     if ((cur.antenna ?? 0) !== want.antenna) h.antenna = want.antenna;
     if (Object.keys(h).length) c.session.setHarness(h);
   }
+
+  const simLine = (s: string) => s.replace(/\[tryboard\] (.*)/g, (_, line: string) => t('Simulator: {line}', { line }));
 
   function harnessPanel() {
     const c = ctx!;
@@ -197,7 +207,7 @@ export function assembleStep(): StepImpl {
     const i2c = hx.i2c ? (
       <>
         <KvBox>
-          <span className="k">I2C 排线总长（开发板到 OLED、BME280）</span>
+          <span className="k">{t('Total I2C cable length (dev board to OLED, BME280)')}</span>
           <Slider
             id="hzWire"
             outId="hzWireV"
@@ -205,7 +215,7 @@ export function assembleStep(): StepImpl {
             max={150}
             step={1}
             defaultValue={hz.i2cCm}
-            aria-label="I2C 排线总长"
+            aria-label={t('Total I2C cable length')}
             out={`${hz.i2cCm} cm`}
             on={{
               input: (e) => {
@@ -229,21 +239,23 @@ export function assembleStep(): StepImpl {
     const sim = c.session.harnessText.trim();
     return (
       <>
-        <Sec>线束与天线 · <Conf c="估算" size={11} />，<Conf c="必须上真机" size={11} /></Sec>
+        <Sec>
+          {t('Harness and antenna')} · <Conf c={EST} size={11} /> · <Conf c={REAL_HW} size={11} />
+        </Sec>
         {i2c}
         <KvBox>
-          <span className="k">WROOM 天线旁边放了什么</span>
-          <Seg aria-label="天线旁边">
+          <span className="k">{t('What sits next to the WROOM antenna')}</span>
+          <Seg aria-label={t('Next to the antenna')}>
             {(['none', 'battery', 'metal'] as Obstacle[]).map((o) => (
               <SegB key={o} data-obs={o} on={hz.obstacle === o} onClick={() => commit({ obstacle: o })}>
-                {o === 'metal' ? '金属件' : OBSTACLE_LABEL[o]}
+                {o === 'metal' ? t('Metal part') : OBSTACLE_LABEL[o]}
               </SegB>
             ))}
           </Seg>
         </KvBox>
         {hz.obstacle !== 'none' && (
           <KvBox>
-            <span className="k">离天线区多远（{OBSTACLE_LABEL[hz.obstacle]}）</span>
+            <span className="k">{t('Distance from the antenna area ({what})', { what: OBSTACLE_LABEL[hz.obstacle] })}</span>
             <Slider
               id="hzDist"
               outId="hzDistV"
@@ -251,7 +263,7 @@ export function assembleStep(): StepImpl {
               max={30}
               step={1}
               defaultValue={hz.distMm}
-              aria-label="离天线多远"
+              aria-label={t('Distance from the antenna')}
               out={`${hz.distMm} mm`}
               on={{
                 input: (e) => void (el.querySelector('#hzDistV')!.textContent = `${e.currentTarget.value} mm`),
@@ -261,10 +273,14 @@ export function assembleStep(): StepImpl {
           </KvBox>
         )}
         <Res id="hzAntRes" kind={lv(hx.wifi.level)[0]} mk={lv(hx.wifi.level)[1]}>
-          <Said say={wifiSay(hx.antennaDb)} raw={`天线遮挡 ${hx.antennaDb} dB，${hx.wifi.text}`} />
+          <Said say={wifiSay(hx.antennaDb)} raw={t('Antenna loss {db} dB, {wifi}', { db: hx.antennaDb, wifi: hx.wifi.text })} />
         </Res>
-        <Note>按固定公式估算：总线电容 = 线长 × 1 pF/cm + 每个器件 10 pF + 10 pF，上升时间 = 0.8473 × 上拉 × 电容；天线：金属件贴着衰减 45 dB、电池 30 dB，20 mm 外不算。模拟器也用这个公式，读数会真的出错，Wi-Fi 会真的连不上。</Note>
-        {sim && <Txt as="p" className="note my-2 font-mono text-xs text-muted" data-k="hzSim" text={sim.replace(/\[tryboard\] /g, '模拟器：')} />}
+        <Note>
+          {t(
+            'Fixed-formula estimate: bus capacitance = length × 1 pF/cm + 10 pF per device + 10 pF, rise time = 0.8473 × pull-up × capacitance; antenna: metal right against it loses 45 dB, a battery 30 dB, nothing beyond 20 mm. The simulator uses the same formula, so readings really go wrong and Wi-Fi really fails to connect.',
+          )}
+        </Note>
+        {sim && <Txt as="p" className="note my-2 font-mono text-xs text-muted" data-k="hzSim" text={simLine(sim)} />}
       </>
     );
   }
@@ -272,7 +288,7 @@ export function assembleStep(): StepImpl {
   const placesUpTo = (i: number) => entries.slice(0, i + 1).filter((e): e is Extract<Entry, { kind: 'place' }> => e.kind === 'place');
   const lastTest = () => (cur >= 0 && entries[cur]?.kind === 'test' ? (entries[cur] as Extract<Entry, { kind: 'test' }>) : null);
 
-  /** 复测没过时的「罪魁」：按装配顺序第一件放在不合适位置的零件；at = 放它之前那一步（重装就退到这里） */
+  /** Culprit of a failed retest: first part in assembly order on a bad spot; at = the step before it (reinstall rewinds there) */
   function culprit() {
     for (let i = 0; i <= cur; i++) {
       const e = entries[i];
@@ -292,7 +308,7 @@ export function assembleStep(): StepImpl {
     saveEntries(c.work.id, entries.slice(0, cur + 1));
   }
 
-  /** 回到第 i 步：清空，按时间线重放前 i 步（确定性重算） */
+  /** Go back to step i: clear and replay the first i steps (deterministic) */
   function seek(i: number) {
     if (!asm || testing) return;
     cur = i;
@@ -323,20 +339,23 @@ export function assembleStep(): StepImpl {
       sel = next?.id ?? id;
       publish();
     } else if (s.placed.length < have) {
-      // 引擎内部"重来"：时间线回到开头
+      // The engine's own "start over": timeline goes back to the beginning
       entries = [];
       cur = -1;
       publish();
     } else {
       const m = asm.message();
-      if (m.bad) ctx.shell.toast(`${m.title}：${m.text}`);
+      if (m.bad) ctx.shell.toast(t('{title}: {text}', { title: m.title, text: m.text }));
     }
     renderAll();
   }
 
-  const lvTitle = (id: string) => ctx!.session.levels.find((l) => l.id === id)?.title ?? '';
+  const lvTitle = (id: string) => {
+    const s = ctx!.session.levels.find((l) => l.id === id)?.title;
+    return s ? t(s) : '';
+  };
 
-  // ------------------------------------------------------------ 锁住时
+  // ------------------------------------------------------------ locked
   function renderLocked() {
     const c = ctx!;
     const s = c.store.get();
@@ -344,12 +363,12 @@ export function assembleStep(): StepImpl {
     const d = passedCount(c);
     const left = c.work.checkpoints.filter((id) => !s.checks[id]?.ok);
     const first = left[0] ?? c.work.checkpoints[0];
-    // 锁着只给一张卡（设计稿 unify/Steps）：差哪几个检查点一眼看全，左右两栏和运行组收起，不铺空壳
+    // Locked shows a single card (design unify/Steps): missing checkpoints at a glance, side panes and run group collapsed
     c.shell.setBare(true);
     c.shell.layer.render(
       <LockCard role="status">
-        <Sec>③ 组装 · 还没解锁</Sec>
-        <PhT>{`实验台的 ${n} 个检查点跑通了才能装壳`}</PhT>
+        <Sec>{t('③ Assemble · locked')}</Sec>
+        <PhT>{t('Pass all {n} checkpoints on the Bench before building the enclosure', { n })}</PhT>
         <ul id="lockList" className="my-3 grid list-none gap-1 p-0 text-[13px]">
           {c.work.checkpoints.map((id) => {
             const r = s.checks[id];
@@ -363,11 +382,13 @@ export function assembleStep(): StepImpl {
           })}
         </ul>
         <p className="my-3 text-xs text-muted">
-          {`现在 ${d}/${n}。`}✓ 是你自己的固件通过，◐ 是作品自带的参考固件跑通，两种都算；判定和命令行 <Mono>npx tryboard check</Mono> 相同。没有工具链可以先用内置固件走完全程。
+          {t('Now {d}/{n}. ✓ means your own firmware passed, ◐ means the project’s reference firmware passed; both count.', { d, n })} {t('Verdicts match the command line:')} <Mono>npx tryboard check</Mono>
+          {'. '}
+          {t('No toolchain? Run the whole way with the bundled firmware first.')}
         </p>
         <Btns>
           <Btn primary id="lockAllRef" onClick={() => requestAllRef()}>
-            用内置固件走完全程
+            {t('Run the whole way with the bundled firmware')}
           </Btn>
           <Btn
             id="toBench"
@@ -376,19 +397,19 @@ export function assembleStep(): StepImpl {
               location.hash = 'bench';
             }}
           >
-            {`回实验台，从 ${first} ${lvTitle(first)}开始`}
+            {t('Back to the Bench, start from {id} {title}', { id: first, title: lvTitle(first) })}
           </Btn>
         </Btns>
       </LockCard>,
     );
     c.shell.toolbar.setGroups([]);
-    c.shell.timeline.setSteps([{ id: 'lock', icon: '·', label: `检查点 ${d}/${n}，未解锁` }]);
-    c.shell.setVerdict(`组装 · 未解锁`, 'idle');
+    c.shell.timeline.setSteps([{ id: 'lock', icon: '·', label: t('Checkpoints {d}/{n}, locked', { d, n }) }]);
+    c.shell.setVerdict(t('Assemble · locked'), 'idle');
     c.shell.onVerdict(() => (location.hash = 'bench'));
-    c.shell.setNext('成品 · 先过完检查点再装壳', null, '先解锁并装完');
+    c.shell.setNext(t('Product · pass the checkpoints before building the enclosure'), null, t('Unlock and finish assembling first'));
   }
 
-  // ------------------------------------------------------------ 构建树：装配层
+  // ------------------------------------------------------------ build tree: assembly layers
   function layerStatus(i: number) {
     const s = asm!.state();
     const p = T!.parts[i];
@@ -398,7 +419,7 @@ export function assembleStep(): StepImpl {
     }
     return i === s.placed.length ? 'next' : 'todo';
   }
-  const STATUS = { done: ['✓', '已装', 'ok'], warn: ['!', '有警告', 'warn'], next: ['→', '下一件', 'run'], todo: ['·', '待装', 'muted'] } as const;
+  const STATUS = { done: ['✓', t('Installed'), 'ok'], warn: ['!', t('Has warnings'), 'warn'], next: ['→', t('Next part'), 'run'], todo: ['·', t('To install'), 'muted'] } as const;
 
   function pick(id: string) {
     sel = id;
@@ -415,45 +436,45 @@ export function assembleStep(): StepImpl {
         return (
           <button key={p.id} type="button" className={tnClass(sel === p.id)} data-id={p.id} role="treeitem" aria-selected={sel === p.id} onClick={() => pick(p.id)}>
             <TnM>{i + 1}</TnM>
-            <TnL>{p.name}</TnL>
+            <TnL>{t(p.name)}</TnL>
             <TnSt kind={st[2]}>{`${st[0]} ${st[1]}`}</TnSt>
           </button>
         );
       })
       .reverse();
-    const t = lastTest();
+    const tst = lastTest();
     const lv = assemblyLevel(c);
     c.shell.tree.render(
-      <div role="group" aria-label="装配层">
-        <TreeGroup title="装配层 · 从下往上" count={`${s.placed.length}/${s.total}`} open>
+      <div role="group" aria-label={t('Assembly layers')}>
+        <TreeGroup title={t('Assembly layers · bottom up')} count={`${s.placed.length}/${s.total}`} open>
           {items}
         </TreeGroup>
-        <TreeGroup title="复测" count="" open>
+        <TreeGroup title={t('Retest')} count="" open>
           <button type="button" className={tnClass(sel === 'retest')} data-id="retest" role="treeitem" aria-selected={sel === 'retest'} onClick={() => pick('retest')}>
             <TnL>
-              开机复测
+              {t('Power-on retest')}
               {lv && (
                 <>
-                  {' · 检查点 '}
+                  {` · ${t('Checkpoint')} `}
                   <Mono>{lv.id}</Mono>
                 </>
               )}
             </TnL>
-            <TnSt kind={testing ? 'run' : t ? (t.ok ? 'ok' : 'bad') : 'muted'}>{testing ? '…' : t ? (t.ok ? '✓' : '✗') : '—'}</TnSt>
+            <TnSt kind={testing ? 'run' : tst ? (tst.ok ? 'ok' : 'bad') : 'muted'}>{testing ? '…' : tst ? (tst.ok ? '✓' : '✗') : '—'}</TnSt>
           </button>
         </TreeGroup>
       </div>,
     );
   }
 
-  // ------------------------------------------------------------ 属性面板
+  // ------------------------------------------------------------ properties panel
   function renderProps() {
     const c = ctx!;
     const s = asm!.state();
     const m = asm!.message();
     const head = (
       <>
-        <Sec>当前</Sec>
+        <Sec>{t('Current')}</Sec>
         <div className={cn('asm-msg', m.bad && 'bad')}>
           <b>{m.title}</b>
           <span>{m.text}</span>
@@ -473,52 +494,57 @@ export function assembleStep(): StepImpl {
     const choose =
       p.spots && isNext ? (
         <>
-          <Sec>怎么装</Sec>
+          <Sec>{t('How to install')}</Sec>
           <Btns col>
             {p.spots.map((x) => (
               <Btn key={x.key} className={x.ok ? '' : 'warnb'} data-spot={x.key} onClick={() => asm!.place(p.id, x.key)}>
-                {x.label}
+                {t(x.label)}
               </Btn>
             ))}
           </Btns>
-          <Note>也可以把左边台面上的零件卡片拖到发亮的位置。</Note>
+          <Note>{t('You can also drag the part card on the bench at left onto the glowing spot.')}</Note>
         </>
       ) : isNext ? (
         <Btns>
           <Btn primary data-place="1" onClick={() => asm!.place(p.id)}>
-            装上「{p.short}」
+            {t('Install “{part}”', { part: t(p.short) })}
           </Btn>
         </Btns>
       ) : null;
-    const impact = (IMPACT[T!.id]?.[p.id] ?? []).map((t, k) => {
+    const impact = (IMPACT[T!.id]?.[p.id] ?? []).map((txt, k) => {
       const mark = p.spots ? (p.spots[k]?.key === chosen?.key ? '●' : '○') : '·';
       return (
         <Res key={k} kind={p.spots && p.spots[k] && !p.spots[k].ok ? 'bad' : 'na'} mk={mark}>
-          {t}
+          {txt}
         </Res>
       );
     });
     const checks = T!.checks(s).map((r, k) => (
       <Res key={k} kind={r.ok === null ? 'na' : r.ok ? 'ok' : 'bad'} mk={r.ok === null ? '·' : r.ok ? '✓' : '!'}>
-        {r.label}：{r.text.replace(/^[✓!] /, '')}
+        {t('{label}: {text}', { label: r.label, text: r.text.replace(/^[✓!] /, '') })}
       </Res>
     ));
+    const okMsg = p.okMsg && (p.okMsg.length ? p.okMsg.map((x) => t(x)).reduce((a, b) => t('{a}, {b}', { a, b })) : '');
     c.shell.props.render(
       <>
         {head}
-        <Sec>{`第 ${i + 1} 层 / 共 ${T!.parts.length} 层`}</Sec>
-        <Ph>{p.name}</Ph>
-        <Kv k="状态" v={`${STATUS[st][0]} ${STATUS[st][1]}`} cls={st === 'warn' ? 'warnc' : ''} />
-        {chosen && <KvT k="装法">{chosen.label + (chosen.ok ? '' : ' · 有警告')}</KvT>}
-        {!p.spots && p.okMsg && <KvT k="说明">{p.okMsg.join('，')}</KvT>}
+        <Sec>{t('Layer {i} of {n}', { i: i + 1, n: T!.parts.length })}</Sec>
+        <Ph>{t(p.name)}</Ph>
+        <Kv k={t('Status')} v={`${STATUS[st][0]} ${STATUS[st][1]}`} cls={st === 'warn' ? 'warnc' : ''} />
+        {chosen && <KvT k={t('Placement')}>{chosen.ok ? t(chosen.label) : t('{label} · has warnings', { label: t(chosen.label) })}</KvT>}
+        {!p.spots && okMsg && <KvT k={t('Notes')}>{okMsg}</KvT>}
         {choose}
         {impact.length > 0 && (
           <>
-            <Sec>装法会改变什么 · <Conf c="估算" size={11} /></Sec>
+            <Sec>
+              {t('What the placement changes')} · <Conf c={EST} size={11} />
+            </Sec>
             {impact}
           </>
         )}
-        <Sec>装配检查 · <Conf c="估算" size={11} />（几何），未经真机标定</Sec>
+        <Sec>
+          {t('Assembly check')} · <Conf c={EST} size={11} /> · {t('geometry, not calibrated on real hardware')}
+        </Sec>
         {checks}
         {effectsLine()}
         {harnessPanel()}
@@ -527,17 +553,19 @@ export function assembleStep(): StepImpl {
     );
   }
 
-  /** 参数化外壳的尺寸与警告（与采购页外壳详情同一份布局） */
+  /** Parametric enclosure size and warnings (same layout as the Shop enclosure details) */
   function caseLine() {
     if (!layout) return null;
     const L = layout;
     const enc = `enclosure-${T!.id}`;
     return (
       <>
-        <Sec>外壳 · 参数化，<Conf c="估算" size={11} /></Sec>
-        <Kv k={L.shape === 'rect' ? '外形' : '底座'} v={L.shape === 'rect' ? `${L.outer[0]} × ${L.outer[1]} × ${L.outer[2]} mm` : `Ø${L.outer[0]} × ${L.outer[2]} mm`} />
-        <Kv k="内腔 / 需要" v={`${L.inner} / ${L.need} mm`} cls={L.inner < L.need ? 'bad' : ''} />
-        <Kv k="壁厚 · 圆角" v={`${L.params.wall} · ${L.params.radius} mm`} />
+        <Sec>
+          {t('Enclosure · parametric')} · <Conf c={EST} size={11} />
+        </Sec>
+        <Kv k={L.shape === 'rect' ? t('Outline') : t('Base')} v={L.shape === 'rect' ? `${L.outer[0]} × ${L.outer[1]} × ${L.outer[2]} mm` : `Ø${L.outer[0]} × ${L.outer[2]} mm`} />
+        <Kv k={t('Cavity / needed')} v={`${L.inner} / ${L.need} mm`} cls={L.inner < L.need ? 'bad' : ''} />
+        <Kv k={t('Wall · corner radius')} v={`${L.params.wall} · ${L.params.radius} mm`} />
         {L.warnings.map((w, i) => (
           <Res key={i} kind="bad" mk="!">
             {w.text}
@@ -552,7 +580,7 @@ export function assembleStep(): StepImpl {
               location.hash = 'shop';
             }}
           >
-            改高度 · 导出 STL / 3MF
+            {t('Change height · export STL / 3MF')}
           </Btn>
         </Btns>
       </>
@@ -563,75 +591,78 @@ export function assembleStep(): StepImpl {
     const fx = asm!.effects();
     const rows: ReactNode[] = [];
     const row = (k: string, v: string, bad: boolean) => rows.push(<Kv key={k} k={k} v={v} cls={bad ? 'bad' : ''} />);
-    if (fx.sensorOffset !== undefined) row('传感器受热偏高', fx.sensorOffset ? `+${fx.sensorOffset.toFixed(1)} ℃` : '0 ℃', !!fx.sensorOffset);
-    if (fx.hornOffset !== undefined) row('舵盘偏角', `${fx.hornOffset.toFixed(1)}°`, !!fx.hornOffset);
-    if (fx.lensScale !== undefined) row('透镜放大', `${fx.lensScale.toFixed(2)}×`, fx.lensScale < 1.2);
-    if (fx.glare !== undefined) row('灯罩亮点', fx.glare ? '有：8 个亮点' : '没有', !!fx.glare);
-    if (fx.sonarBlock !== undefined) row('探头读数', fx.sonarBlock ? `被孔壁截到约 ${fx.sonarBlock} cm` : '量到前方物体', !!fx.sonarBlock);
-    if (fx.imuFlip !== undefined) row('六轴方向', fx.imuFlip ? '反了：俯仰、横滚方向全反' : '正', !!fx.imuFlip);
+    if (fx.sensorOffset !== undefined) row(t('Sensor heated high'), fx.sensorOffset ? `+${fx.sensorOffset.toFixed(1)} ℃` : '0 ℃', !!fx.sensorOffset);
+    if (fx.hornOffset !== undefined) row(t('Horn offset'), `${fx.hornOffset.toFixed(1)}°`, !!fx.hornOffset);
+    if (fx.lensScale !== undefined) row(t('Lens magnification'), `${fx.lensScale.toFixed(2)}×`, fx.lensScale < 1.2);
+    if (fx.glare !== undefined) row(t('Shade hot spots'), fx.glare ? t('Yes: 8 hot spots') : t('None'), !!fx.glare);
+    if (fx.sonarBlock !== undefined) row(t('Probe reading'), fx.sonarBlock ? t('Cut off by the hole wall at about {cm} cm', { cm: fx.sonarBlock }) : t('Measures the object in front'), !!fx.sonarBlock);
+    if (fx.imuFlip !== undefined) row(t('IMU orientation'), fx.imuFlip ? t('Reversed: pitch and roll both flipped') : t('Correct'), !!fx.imuFlip);
     const how =
       T!.id === 'weather'
-        ? '受热偏高会影响模拟结果：开机复测和成品里，BME280 读到的就是偏高后的温度。'
+        ? t('The heat offset affects the simulation: in the retest and the Product, BME280 reads the raised temperature.')
         : T!.id === 'ruler' || T!.id === 'tilt'
-          ? '这一项会影响模拟结果：开机复测和成品里，传感器看到的就是装好以后的样子。'
-          : '只改成品画面，不影响模拟结果。';
+          ? t('This affects the simulation: in the retest and the Product, the sensor sees things as assembled.')
+          : t('Only changes the Product view, not the simulation.');
     return rows.length ? (
       <>
-        <Sec>装法带进成品 · <Conf c="估算" size={11} /></Sec>
+        <Sec>
+          {t('Carried into the Product')} · <Conf c={EST} size={11} />
+        </Sec>
         {rows}
         <Note>{how}</Note>
       </>
     ) : null;
   }
 
-  /** 复测没过：固件在实验台上过了，就是装壳带来的变化（DESIGN_V2 §9.2「装壳后变了」） */
-  function retestVerdict(t: Extract<Entry, { kind: 'test' }>): Verdict {
-    if (t.ok) return 'ok';
+  /** Failed retest but the firmware passed on the Bench: the enclosure caused it (DESIGN_V2 §9.2 "changed after enclosure") */
+  function retestVerdict(e: Extract<Entry, { kind: 'test' }>): Verdict {
+    if (e.ok) return 'ok';
     const lv = assemblyLevel(ctx!);
     return lv && ctx!.store.get().checks[lv.id]?.ok ? 'shifted' : 'bad';
   }
-  function retestTitle(t: Extract<Entry, { kind: 'test' }>) {
-    if (t.ok) return '装好后照样能用';
-    if (T!.id === 'weather' && t.offset > 0.05) return `装进外壳后，温度偏高 ${t.offset.toFixed(1)} ℃`;
-    if (retestVerdict(t) !== 'shifted') return headline(t.rows);
-    // 按器件数，不按时间窗数（一个蜂鸣器拆成三个时间窗不算三项）
-    // 「装配」是装法警告，不是器件
-    const n = groupRows(t.rows).filter((g) => g.bad.length && g.dev !== '装配').length;
-    return n > 1 ? `装进外壳后，有 ${n} 个器件变了` : `装进外壳后，${headline(t.rows)}`;
+  function retestTitle(e: Extract<Entry, { kind: 'test' }>) {
+    if (e.ok) return t('Still works after assembly');
+    if (T!.id === 'weather' && e.offset > 0.05) return t('In the enclosure, temperature reads {d} ℃ high', { d: e.offset.toFixed(1) });
+    if (retestVerdict(e) !== 'shifted') return headline(e.rows);
+    // Count devices, not time windows (one buzzer split into three windows is one item); the assembly row is a placement warning
+    const n = groupRows(e.rows).filter((g) => g.bad.length && g.dev !== ASM_DEV).length;
+    return n > 1 ? t('In the enclosure, {n} devices changed', { n }) : t('In the enclosure: {what}', { what: headline(e.rows) });
   }
-  function retestWhy(t: Extract<Entry, { kind: 'test' }>, fallback: string) {
+  function retestWhy(e: Extract<Entry, { kind: 'test' }>, fallback: string) {
     if (T!.id === 'weather') {
-      const room = `传感器读到 ${t.temp.toFixed(1)} ℃，室温 ${(t.temp - t.offset).toFixed(1)} ℃。`;
-      return t.offset > 0.05 ? `传感器离芯片太近，被芯片的热烤到了。${room}挪到通风口旁再测一次。` : room;
+      const room = t('Sensor reads {t} ℃, room is {room} ℃.', { t: e.temp.toFixed(1), room: (e.temp - e.offset).toFixed(1) });
+      return e.offset > 0.05 ? t('The sensor is too close to the chip and gets heated by it. {reading} Move it next to the vent and test again.', { reading: room }) : room;
     }
-    if (t.ok) return undefined;
-    // 原因只写一次，并且是动作：哪件装得不对 + 改成哪儿（DESIGN_V2 §9.5）
+    if (e.ok) return undefined;
+    // State the cause once, as an action: which part is wrong and where to move it (DESIGN_V2 §9.5)
     const k = culprit();
-    return k ? `${k.spot.msg[0]}。${k.good ? `改成「${k.good.label}」再测。` : ''}` : fallback;
+    if (!k) return fallback;
+    const why = t(k.spot.msg[0]);
+    return k.good ? t('{why}. Change to “{fix}” and test again.', { why, fix: t(k.good.label) }) : t('{why}.', { why });
   }
 
   function renderRetest(head: ReactNode) {
     const c = ctx!;
     const lv = assemblyLevel(c);
-    const t = lastTest();
+    const tst = lastTest();
     const s = asm!.state();
     const fw = firmwareFor(lv);
-    const k = t && !t.ok ? culprit() : null;
+    const k = tst && !tst.ok ? culprit() : null;
     const why =
       T!.id === 'weather'
-        ? `传感器放在哪，BME280 就读到哪儿的温度：室温 ${lv ? envOf(lv).temp.toFixed(1) : '—'} ℃，受热偏高 ${(asm!.effects().sensorOffset ?? 0).toFixed(1)} ℃。`
+        ? t('BME280 reads the temperature wherever the sensor sits: room {room} ℃, heated high by {d} ℃.', { room: lv ? envOf(lv).temp.toFixed(1) : '—', d: (asm!.effects().sensorOffset ?? 0).toFixed(1) })
         : T!.id === 'ruler'
-          ? '探头缩在孔里时，HC-SR04 只能量到孔壁。'
+          ? t('With the probe recessed in the hole, HC-SR04 only measures the hole wall.')
           : T!.id === 'tilt'
-            ? '六轴装反时，读到的俯仰、横滚也是反的。'
-            : '装好后重启，跑的还是同一份固件。';
+            ? t('With the IMU reversed, pitch and roll read reversed too.')
+            : t('After assembly it reboots and runs the same firmware.');
     c.shell.props.render(
       <>
-        {/* 复测没过时「当前」那句（如「点下一步：成品」）和结果卡打架，原因已在卡里 */}
-        {!(t && !t.ok) && head}
-        <Sec>开机复测</Sec>
+        {/* On a failed retest the "Current" line (e.g. "Next: Product") clashes with the result card, which already says why */}
+        {!(tst && !tst.ok) && head}
+        <Sec>{t('Power-on retest')}</Sec>
         <Ph>
-          装好的样子再验一次
+          {t('Verify it again as assembled')}
           {lv && (
             <>
               {' '}
@@ -639,24 +670,24 @@ export function assembleStep(): StepImpl {
             </>
           )}
         </Ph>
-        {!t && <Note>{why}</Note>}
-        <Kv k="固件" v={fw.name} />
-        <Kv k="装配" v={`${s.placed.length}/${s.total}`} cls={s.placed.length < s.total ? 'bad' : ''} />
+        {!tst && <Note>{why}</Note>}
+        <Kv k={t('Firmware')} v={fw.name} />
+        <Kv k={t('Assembly')} v={`${s.placed.length}/${s.total}`} cls={s.placed.length < s.total ? 'bad' : ''} />
         <Btns>
-          <Txt as="button" type="button" className={btnClass(!(t && !t.ok))} id="retestBtn" disabled={!!testing || s.placed.length < s.total || !lv} onClick={() => void retest()} text={testing ? `复测中 ${testing.progress.toFixed(1)} s` : '开机复测'} />
+          <Txt as="button" type="button" className={btnClass(!(tst && !tst.ok))} id="retestBtn" disabled={!!testing || s.placed.length < s.total || !lv} onClick={() => void retest()} text={testing ? t('Retesting {s} s', { s: testing.progress.toFixed(1) }) : t('Power-on retest')} />
         </Btns>
-        {t && (
+        {tst && (
           <>
-            <Sec>复测结果</Sec>
-            <ResultCard verdict={retestVerdict(t)} meta={t.who} title={retestTitle(t)} why={retestWhy(t, why)} rows={t.rows} runId={t.fingerprint}>
-              {!t.ok && k && (
+            <Sec>{t('Retest result')}</Sec>
+            <ResultCard verdict={retestVerdict(tst)} meta={tst.who} title={retestTitle(tst)} why={retestWhy(tst, why)} rows={tst.rows} runId={tst.fingerprint}>
+              {!tst.ok && k && (
                 <Btn primary data-act="reinstall" className={actCls} disabled={!!testing} onClick={() => seek(k.at)}>
-                  重装{k.part.short}
+                  {t('Reinstall {part}', { part: t(k.part.short) })}
                 </Btn>
               )}
-              {!t.ok && (
+              {!tst.ok && (
                 <Btn primary={!k} data-act="retest" className={actCls} disabled={!!testing} onClick={() => void retest()}>
-                  再复测
+                  {t('Retest again')}
                 </Btn>
               )}
             </ResultCard>
@@ -669,10 +700,10 @@ export function assembleStep(): StepImpl {
   const envOf = (lv: Level) => bootOptions(lv).env ?? { temp: 23.5, humidity: 45, pressure: 101325 };
   function firmwareFor(lv: Level | undefined): { name: string; get: () => Promise<ArrayBuffer> } {
     const own = lv ? ownFirmware[lv.id] : undefined;
-    if (own) return { name: `${own.name}（你通过「${lv!.title}」时用的）`, get: async () => own.buf.slice(0) };
+    if (own) return { name: t('{name} (used when you passed “{level}”)', { name: own.name, level: t(lv!.title) }), get: async () => own.buf.slice(0) };
     const ses = ctx!.session;
-    if (ses.fwBuf) return { name: `${ses.fwName}（台面上的固件）`, get: async () => ses.fwBuf!.slice(0) };
-    return { name: `参考固件 ${lv?.ref}`, get: () => fetchBuf(`./fw/${lv?.ref}/flash.bin`) };
+    if (ses.fwBuf) return { name: t('{name} (firmware on the bench)', { name: ses.fwName }), get: async () => ses.fwBuf!.slice(0) };
+    return { name: t('Reference firmware {ref}', { ref: lv?.ref ?? '' }), get: () => fetchBuf(`./fw/${lv?.ref}/flash.bin`) };
   }
 
   async function retest() {
@@ -680,8 +711,8 @@ export function assembleStep(): StepImpl {
     if (!c || !asm || testing) return;
     const lv = assemblyLevel(c);
     const s = asm.state();
-    if (!lv) return c.shell.toast('这个作品没有带装配的检查点');
-    if (s.placed.length < s.total) return c.shell.toast(`还没装完（${s.placed.length}/${s.total}）`);
+    if (!lv) return c.shell.toast(t('This project has no checkpoint with assembly'));
+    if (s.placed.length < s.total) return c.shell.toast(t('Not fully assembled yet ({done}/{total})', { done: s.placed.length, total: s.total }));
     const at = cur;
     testing = { at, progress: 0 };
     const base = envOf(lv);
@@ -692,62 +723,69 @@ export function assembleStep(): StepImpl {
     const fw = firmwareFor(lv);
     let entry: Extract<Entry, { kind: 'test' }>;
     try {
-      // 装法改了传感器看到的东西（探头被挡、六轴装反）：复测的输入脚本跟着改
+      // The placement changed what sensors see (probe blocked, IMU reversed): the retest input script follows
       const hx = harnessEffects(c.work.id, hz);
       const v = await verifyLevel(
         { ...lv, script: effectScript(lv.script, asm.effects()) },
         await fw.get(),
-        (t) => {
-          if (!testing || t - testing.progress < 0.2) return;
-          testing.progress = t;
+        (sec) => {
+          if (!testing || sec - testing.progress < 0.2) return;
+          testing.progress = sec;
           const b = ctx?.shell.props.el.querySelector('#retestBtn');
-          if (b) b.textContent = `复测中 ${t.toFixed(1)} s`;
+          if (b) b.textContent = t('Retesting {s} s', { s: sec.toFixed(1) });
         },
         env,
         { i2cWire: hx.i2c ? hz.i2cCm : undefined, antenna: hx.antennaDb || undefined },
       );
       const clean = asm.clean() && hx.ok;
       const rows: Extract<Entry, { kind: 'test' }>['rows'] = v.results.map((x) => ({ ok: x.ok, text: x.text, say: x.say, tag: x.tag, dev: x.dev }));
-      if (hx.i2c) rows.push({ ok: hx.i2c.verdict === 'ok', text: `I2C 排线 ${hz.i2cCm} cm：${i2cText(hx.i2c)}（估算，必须上真机）`, say: i2cSay(hx.i2c), tag: '估算', dev: 'I2C 排线' });
-      if (hx.antennaDb) rows.push({ ok: hx.wifi.level !== 'fail', text: `天线遮挡 ${hx.antennaDb} dB：${hx.wifi.text}（估算，必须上真机）`, say: wifiSay(hx.antennaDb), tag: '估算', dev: 'Wi-Fi 天线' });
-      rows.push({ ok: clean, text: clean ? `装配 ${s.total}/${s.total}，没有警告` : `装配 ${s.total}/${s.total}，有警告`, say: clean ? `${s.total} 件都装在合适的位置` : '有零件装得不合适，看左边带「!」的那件', dev: '装配' });
+      if (hx.i2c) rows.push({ ok: hx.i2c.verdict === 'ok', text: t('I2C cable {cm} cm: {detail} (estimate, needs real hardware)', { cm: hz.i2cCm, detail: i2cText(hx.i2c) }), say: i2cSay(hx.i2c), tag: EST, dev: t('I2C cable') });
+      if (hx.antennaDb) rows.push({ ok: hx.wifi.level !== 'fail', text: t('Antenna loss {db} dB: {wifi} (estimate, needs real hardware)', { db: hx.antennaDb, wifi: hx.wifi.text }), say: wifiSay(hx.antennaDb), tag: EST, dev: t('Wi-Fi antenna') });
+      rows.push({
+        ok: clean,
+        text: clean ? t('Assembly {n}/{n}, no warnings', { n: s.total }) : t('Assembly {n}/{n}, with warnings', { n: s.total }),
+        say: clean ? t('All {n} parts are in the right place', { n: s.total }) : t('A part is placed badly; look for the one marked “!” at left'),
+        dev: ASM_DEV,
+      });
       entry = { kind: 'test', ok: v.ok && clean, rows, fingerprint: v.fingerprint, who: fw.name, temp: env.temp, offset };
     } catch (e) {
-      // 没跑完（Worker 出错 / 卡住）不记成"复测没过"：按钮恢复，直接再点一次
+      // An unfinished run (worker error / stall) is not a failed retest: restore the button so one more click retries
       if (e instanceof VerifyStalled) {
         testing = null;
-        ctx?.shell.toast('开机复测这次没跑完，不算没通过，再点一次就行');
+        ctx?.shell.toast(t('The power-on retest did not finish this time; that is not a fail, just click again'));
         if (ctx) renderAll();
         return;
       }
-      entry = { kind: 'test', ok: false, rows: [{ ok: false, text: `运行失败：${e}`, say: '模拟器出错，这次没跑起来' }], fingerprint: '—', who: fw.name, temp: env.temp, offset };
+      entry = { kind: 'test', ok: false, rows: [{ ok: false, text: t('Run failed: {err}', { err: String(e) }), say: t('The simulator hit an error and did not run this time') }], fingerprint: '—', who: fw.name, temp: env.temp, offset };
     }
     testing = null;
     if (cur !== at) {
-      ctx?.shell.toast('复测期间装配变了，这次结果作废');
+      ctx?.shell.toast(t('The assembly changed during the retest; this result is discarded'));
       if (ctx) renderAll();
       return;
     }
     push(entry);
     publish();
     if (ctx) {
-      ctx.shell.toast(entry.ok ? '开机复测通过' : `开机复测没通过，${isPhone() ? '下面' : '右边'}写了原因`);
+      ctx.shell.toast(entry.ok ? t('Power-on retest passed') : isPhone() ? t('Power-on retest failed; the reason is below') : t('Power-on retest failed; the reason is on the right'));
       renderAll();
     }
   }
 
-  // ------------------------------------------------------------ 时间线、工具条、结论
+  // ------------------------------------------------------------ timeline, toolbar, verdict
   function renderTimeline() {
     const c = ctx!;
-    const steps: TimelineStep[] = [{ id: 'start', icon: '○', label: '空壳' }];
+    const steps: TimelineStep[] = [{ id: 'start', icon: '○', label: t('Empty enclosure') }];
     for (const e of entries) {
       if (e.kind === 'place') {
         const p = T!.parts.find((x) => x.id === e.id)!;
         const sp = p.spots?.find((x) => x.key === e.spot);
-        steps.push({ id: `place:${e.id}`, icon: '+', label: `装 ${p.short}${sp ? `（${sp.label.replace(/^放/, '')}）` : ''}`, status: sp && !sp.ok ? 'bad' : undefined });
-      } else steps.push({ id: 'test', icon: '▶', label: '开机复测', status: e.ok ? 'ok' : 'bad' });
+        // Strip the zh verb prefix of spot labels so "install X (by the vent)" reads naturally; a no-op in other locales
+        const spot = sp ? t(sp.label).replace(/^放/, '') : ''; // lint: allow-cjk
+        steps.push({ id: `place:${e.id}`, icon: '+', label: sp ? t('Install {part} ({spot})', { part: t(p.short), spot }) : t('Install {part}', { part: t(p.short) }), status: sp && !sp.ok ? 'bad' : undefined });
+      } else steps.push({ id: 'test', icon: '▶', label: t('Power-on retest'), status: e.ok ? 'ok' : 'bad' });
     }
-    if (testing) steps.splice(testing.at + 2, steps.length, { id: 'testing', icon: '▶', label: '开机复测', status: 'run' });
+    if (testing) steps.splice(testing.at + 2, steps.length, { id: 'testing', icon: '▶', label: t('Power-on retest'), status: 'run' });
     c.shell.timeline.setSteps(steps);
     c.shell.timeline.setCurrent(testing ? testing.at + 2 : cur + 1);
   }
@@ -766,11 +804,11 @@ export function assembleStep(): StepImpl {
     const bme = T!.parts[L];
     const spot = bme.spots!.find((x) => x.key === s.choice.bme);
     const g = svgEl('g', { 'data-k': 'ruler', 'pointer-events': 'none' });
-    // 芯片 = 开发板上的屏蔽罩中心（板层局部坐标 102,50）；外壳 180 单位 = 70 mm
+    // Chip = shield can center on the dev board (board-layer local 102,50); 180 enclosure units = 70 mm
     const chip = asm!.isoPoint(1, 102, 50);
     const label = { fill: '#F24822', 'font-size': 12, 'font-weight': 700, 'text-anchor': 'middle' };
     if (!spot) {
-      g.append(svgEl('text', { x: chip[0], y: chip[1] - 16, ...label }, 'BME280 还没装，装上后量它到芯片的距离'));
+      g.append(svgEl('text', { x: chip[0], y: chip[1] - 16, ...label }, t('BME280 not installed yet; install it to measure its distance to the chip')));
       svg.appendChild(g);
       return;
     }
@@ -783,7 +821,7 @@ export function assembleStep(): StepImpl {
       svgEl('circle', { cx: chip[0], cy: chip[1], r: 4, fill: '#F24822' }),
       svgEl('circle', { cx: b[0], cy: b[1], r: 4, fill: '#F24822' }),
       svgEl('rect', { x: mid[0] - 78, y: mid[1] - 34, width: 156, height: 22, rx: 4, fill: '#FFFFFF', stroke: '#F24822' }),
-      svgEl('text', { x: mid[0], y: mid[1] - 18, ...label, class: 'tb-mono' }, `到芯片 ≈ ${mm.toFixed(0)} mm（估算）`),
+      svgEl('text', { x: mid[0], y: mid[1] - 18, ...label, class: 'tb-mono' }, t('To chip ≈ {mm} mm (estimate)', { mm: mm.toFixed(0) })),
     );
     svg.appendChild(g);
   }
@@ -791,26 +829,26 @@ export function assembleStep(): StepImpl {
   function syncChrome() {
     const c = ctx!;
     const s = asm!.state();
-    const t = lastTest();
+    const tst = lastTest();
     const done = s.placed.length === s.total;
-    c.shell.setVerdict(testing ? '复测中…' : t ? (t.ok ? '复测通过' : '复测没通过') : `装配 ${s.placed.length}/${s.total}`, t ? (t.ok ? 'ok' : 'bad') : 'idle');
+    c.shell.setVerdict(testing ? t('Retesting…') : tst ? (tst.ok ? t('Retest passed') : t('Retest failed')) : t('Assembly {done}/{total}', { done: s.placed.length, total: s.total }), tst ? (tst.ok ? 'ok' : 'bad') : 'idle');
     c.shell.onVerdict(() => pick('retest'));
-    // 复测没过：主按钮换成补救动作（重装出问题那件）；没复测或通过时照旧去成品（复测不是成品的门槛）
-    const k = t && !t.ok && !testing ? culprit() : null;
-    if (done && k) c.shell.setNext(`重装${k.part.short}`, 'assemble', '', () => seek(k.at), 'hot');
-    else if (done) c.shell.setNext('下一步：成品 →', 'product', '', undefined, 'hot');
-    else c.shell.setNext(`成品 · 还差 ${s.total - s.placed.length} 层没装`, null, `装完才能开机（${s.placed.length}/${s.total}）`);
+    // Failed retest: the main button becomes the fix (reinstall the culprit); otherwise go on to Product (retest does not gate it)
+    const k = tst && !tst.ok && !testing ? culprit() : null;
+    if (done && k) c.shell.setNext(t('Reinstall {part}', { part: t(k.part.short) }), 'assemble', '', () => seek(k.at), 'hot');
+    else if (done) c.shell.setNext(t('Next: Product →'), 'product', '', undefined, 'hot');
+    else c.shell.setNext(t('Product · {n} layers left to install', { n: s.total - s.placed.length }), null, t('Finish assembling before power-on ({done}/{total})', { done: s.placed.length, total: s.total }));
+    const explode = { id: 'asm-explode', label: asm!.exploded() ? t('Close up') : t('Explode') };
+    const rulerTool = { id: 'asm-ruler', label: ruler ? t('Ruler: on') : t('Ruler') };
     c.shell.toolbar.setGroups([
-      { id: 'nav', tools: [{ id: 'asm-select', label: '选择', key: 'V' }] },
+      { id: 'nav', tools: [{ id: 'asm-select', label: t('Select'), key: 'V' }] },
       {
         id: 'view',
-        tools: is3d(asm!)
-          ? [{ id: 'asm-explode', label: asm!.exploded() ? '合上' : '炸开' }, { id: 'asm-section', label: section ? '剖面：开' : '剖面' }, { id: 'asm-ruler', label: ruler ? '尺子：开' : '尺子' }, { id: 'asm-home', label: '复位视角' }]
-          : [{ id: 'asm-explode', label: asm!.exploded() ? '合上' : '炸开' }, ...(T!.id === 'weather' ? [{ id: 'asm-ruler', label: ruler ? '尺子：开' : '尺子' }] : [])],
+        tools: is3d(asm!) ? [explode, { id: 'asm-section', label: section ? t('Section: on') : t('Section') }, rulerTool, { id: 'asm-home', label: t('Reset view') }] : [explode, ...(T!.id === 'weather' ? [rulerTool] : [])],
       },
-      { id: 'edit', tools: [{ id: 'asm-undo', label: '退一步' }, { id: 'asm-reset', label: '重来' }] },
-      // 主按钮已换成补救动作时，复测降为普通按钮：一屏只一个蓝色主按钮
-      { id: 'run', tools: [{ id: 'asm-retest', label: testing ? '复测中…' : '开机复测', primary: !k }] },
+      { id: 'edit', tools: [{ id: 'asm-undo', label: t('Step back') }, { id: 'asm-reset', label: t('Start over') }] },
+      // Once the main button is the fix, retest drops to a normal button: one blue primary per screen
+      { id: 'run', tools: [{ id: 'asm-retest', label: testing ? t('Retesting…') : t('Power-on retest'), primary: !k }] },
     ]);
     c.shell.toolbar.setActive(ruler ? 'asm-ruler' : 'asm-select');
   }
@@ -821,11 +859,11 @@ export function assembleStep(): StepImpl {
       if (loading) {
         ctx.shell.props.render(
           <>
-            <Sec>组装</Sec>
-            <TreeEmpty>正在生成外壳和 3D 场景…</TreeEmpty>
+            <Sec>{t('Assemble')}</Sec>
+            <TreeEmpty>{t('Generating the enclosure and 3D scene…')}</TreeEmpty>
           </>,
         );
-        ctx.shell.setVerdict('组装 · 加载中', 'idle');
+        ctx.shell.setVerdict(t('Assemble · loading'), 'idle');
       }
       return;
     }
@@ -858,7 +896,7 @@ export function assembleStep(): StepImpl {
     else if (id === 'asm-retest') void retest();
   }
 
-  /** 按时间线把装配重放进（新建的）视图 */
+  /** Replay the timeline into a (freshly built) view */
   function replayView() {
     if (!asm) return;
     replaying = true;
@@ -880,13 +918,13 @@ export function assembleStep(): StepImpl {
       {
         boot: (d) => c.session.pressBoot(d),
         temp: (d) => c.session.setEnv({ temp: c.store.get().env.temp + d }),
-        // 温漂只在成品里生效（与旧页面一致）；复测时单独算进 env
+        // Heat drift only applies in the Product (as on the old page); the retest adds it to env separately
         offset: () => {},
         step: () => onAsmStep(),
       },
       { servoPin: 4, template: T!.id },
     );
-    // 右边的"装配"小面板由外壳的属性面板代替：裁掉 SVG 右侧 300 宽
+    // The enclosure properties panel replaces the SVG's own right-hand "assembly" panel: crop 300 units off the right
     a.svg.setAttribute('viewBox', '0 0 704 560');
     asm = a;
     builtKey = 'svg';
@@ -899,7 +937,7 @@ export function assembleStep(): StepImpl {
     node.className = 'asm3d-stage';
     const wait = document.createElement('div');
     wait.className = 'a3-loading';
-    wait.textContent = '正在生成外壳…';
+    wait.textContent = t('Generating the enclosure…');
     node.append(wait);
     const host = node;
     builtKey = key;
@@ -908,7 +946,7 @@ export function assembleStep(): StepImpl {
     void (async () => {
       try {
         const [{ createAssembly3D }, cm] = await Promise.all([import('../asm3d'), caseFor(T!.id, s.bom, s.caseParams)]);
-        if (node !== host) return; // 期间又重建了
+        if (node !== host) return; // rebuilt meanwhile
         host.replaceChildren();
         const v = createAssembly3D(host, { template: T!, layout: cm.layout, meshes: cm.meshes, onStep: () => onAsmStep() });
         asm = v;
@@ -918,7 +956,7 @@ export function assembleStep(): StepImpl {
         if (ctx && ctx.store.get().step === 'assemble') v.start();
       } catch (e) {
         if (node !== host) return;
-        c.shell.toast(`3D 外壳加载失败，改用平面装配：${e}`);
+        c.shell.toast(t('3D enclosure failed to load, using the flat assembly instead: {err}', { err: String(e) }));
         buildSvg(c);
         if (ctx && ctx.store.get().step === 'assemble') showNode();
       } finally {
@@ -929,7 +967,7 @@ export function assembleStep(): StepImpl {
   }
 
   function build(c: StepCtx) {
-    // 刷新后恢复：按存下的步骤重放
+    // Restore after reload: replay the saved steps
     entries = [];
     cur = -1;
     if (c.store.get().assembly) for (const e of loadEntries(c.work.id)) push(e);
@@ -941,7 +979,7 @@ export function assembleStep(): StepImpl {
     const s = c.store.get();
     return layoutKey(layoutFor(T!.id, s.bom, s.caseParams));
   };
-  /** 外壳参数 / 清单变了：丢掉旧视图，按时间线重放进新视图 */
+  /** Enclosure params / BOM changed: drop the old view and replay the timeline into a new one */
   function rebuildIfStale(c: StepCtx) {
     if (!node || builtKey === 'svg') return;
     const key = currentKey(c);
@@ -970,26 +1008,26 @@ export function assembleStep(): StepImpl {
       if (!T) {
         c.shell.layer.render(
           <LockCard role="status">
-            <Sec>③ 组装</Sec>
-            <PhT>这个作品没有组装模板</PhT>
-            <p className="my-3 text-muted">空白实验台只跑固件，不装壳。选一个作品，才有组装和成品。</p>
+            <Sec>{t('③ Assemble')}</Sec>
+            <PhT>{t('This project has no assembly template')}</PhT>
+            <p className="my-3 text-muted">{t('The blank Bench only runs firmware, with no enclosure. Pick a project to get Assemble and Product.')}</p>
             <Btns>
               <LinkBtn primary href={lab('weather', 'assemble')}>
-                去气象站
+                {t('Go to the weather station')}
               </LinkBtn>
             </Btns>
           </LockCard>,
         );
-        c.shell.tree.render(<TreeEmpty>没有装配层</TreeEmpty>);
+        c.shell.tree.render(<TreeEmpty>{t('No assembly layers')}</TreeEmpty>);
         c.shell.props.render(
           <>
-            <Sec>属性</Sec>
-            <TreeEmpty>没有可选中的对象</TreeEmpty>
+            <Sec>{t('Properties')}</Sec>
+            <TreeEmpty>{t('Nothing to select')}</TreeEmpty>
           </>,
         );
         c.shell.toolbar.setGroups([]);
         c.shell.timeline.setSteps([]);
-        c.shell.setNext('成品 · 这个作品没有组装模板', null, '没有组装模板');
+        c.shell.setNext(t('Product · this project has no assembly template'), null, t('No assembly template'));
         return;
       }
       if (!unlocked(c)) {
@@ -997,7 +1035,7 @@ export function assembleStep(): StepImpl {
         unsubs = [
           c.store.subscribe(() => {
             if (unlocked(c)) {
-              // 解锁了（比如另一个标签页里验收通过）：重新挂载
+              // Unlocked (e.g. a check passed in another tab): mount again
               unsubs.forEach((u) => u());
               unsubs = [];
               c.shell.layer.render(null);
@@ -1016,10 +1054,10 @@ export function assembleStep(): StepImpl {
       publish();
       renderAll();
       unsubs.push(
-        c.session.onHarness((t) => {
+        c.session.onHarness((txt) => {
           const n = c.shell.props.el.querySelector('[data-k="hzSim"]');
-          if (n) n.textContent = t.trim().replace(/\[tryboard\] /g, '模拟器：');
-          else if (t.trim() && sel !== 'retest') renderProps();
+          if (n) n.textContent = simLine(txt.trim());
+          else if (txt.trim() && sel !== 'retest') renderProps();
         }),
       );
     },
@@ -1033,7 +1071,7 @@ export function assembleStep(): StepImpl {
   return step;
 }
 
-/** 尺子标注用的 SVG 元素（命令式加进装配视图的 SVG） */
+/** SVG elements for the ruler annotation (appended imperatively to the assembly SVG) */
 function svgEl(tag: string, attrs: Record<string, string | number>, text?: string) {
   const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
   for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));

@@ -1,7 +1,6 @@
-// ② 实验台：构建树（零件 / 引脚 / 连线 / 供电 / 环境 / 固件 / 运行 / 检查点）+ 属性面板 + 检查点验收
-// + 快捷卡片（P0-04）+ 针脚实时值与示波器（P0-11）+ 接线规则检查（P0-12）+ 尺子与运行历史（P0-13）。
-// 点树和点台面（ScenePickApi.onPick）改的是同一个 selection；属性面板只跟着 selection 走。
-// 面板由 React 画（选中变了整块重画）；实时读数（每帧）仍按 data-live 直接改文字，不经 React 状态。
+// Step 2 Bench: build tree + inspector + checkpoints, quick cards (P0-04), pin scope (P0-11), wiring rules (P0-12), ruler/history (P0-13).
+// Tree and scene picks share one selection; React redraws the panel on selection change, per-frame readings go through data-live.
+import { t } from "../../i18n";
 import { openFwMenu } from "../fwmenu";
 import { useState, type ReactNode } from "react";
 import type { PickTarget, ScreenPoint } from "../../scene-api";
@@ -29,7 +28,7 @@ import {
 } from "../pinscope";
 import { diffRuns, summarize, type BenchStep } from "../history";
 import { checkCommand, type Level } from "../../checks";
-import { Conf, confOfRule } from "../../ui/conf";
+import { Conf, confOfRule, type ConfLevel } from "../../ui/conf";
 import { ResultCard, RunningCard, actCls } from "../../ui/result";
 import { headline } from "../../ui/say";
 import { VerifyStalled, verifyLevel } from "../../verify";
@@ -115,19 +114,22 @@ import {
   WireBanner,
   WireTable,
   WrongWireCard,
+  tn,
   type RingPin,
 } from "../benchv2";
 import { HOME, lab } from "../../ui/links";
 
+/** ConfLevel ids are owned by ui/conf.tsx; Conf / ConfBadge render the label. */
+const EST: ConfLevel = "估算"; // lint: allow-cjk
 const hex = (n: number) => "0x" + n.toString(16).toUpperCase().padStart(2, "0");
 
-/** 验收没跑完的关（Worker 出错 / 卡住）：不记成"未通过"，留着固件给「重试」 */
+/** Checks that never finished (worker error / stall): not a fail, keep the firmware for Retry. */
 const stalled: Record<
   string,
   { why: string; buf: ArrayBuffer; who: string; own: boolean }
 > = {};
 
-/** 别的步骤（组装锁住卡）要「用内置固件走完全程」：先切到实验台，挂载后再跑 */
+/** Another step (Assemble lock card) asks to run the built-in firmware through: switch to Bench, run after mount. */
 let pendingAllRef = false;
 export function requestAllRef() {
   if (actions.runAllRef) return actions.runAllRef();
@@ -135,7 +137,7 @@ export function requestAllRef() {
   location.hash = "bench";
 }
 
-/** 本页里用户自己验收过的固件（组装的"开机复测"用同一份固件；刷新后丢失，回落到台面上的固件） */
+/** Firmware the user verified on this page (Assemble's power-on retest reuses it; lost on reload, falls back to bench firmware). */
 export const ownFirmware: Record<string, { buf: ArrayBuffer; name: string }> =
   {};
 
@@ -152,7 +154,7 @@ function loadProgress(
 function saveProgress(work: string, id: string, fp: string, own: boolean) {
   try {
     const p = loadProgress(work);
-    // 参考固件的通过不覆盖自己的通过（旧记录没有 own 字段，当作自己的）
+    // A reference pass never overwrites the user's own pass (old records lack `own`: treat as own).
     if (!own && p[id] && p[id].own !== false) return;
     p[id] = {
       fp,
@@ -162,11 +164,11 @@ function saveProgress(work: string, id: string, fp: string, own: boolean) {
     localStorage.setItem(PROGRESS_KEY(work), JSON.stringify(p));
     noteSaved();
   } catch {
-    /* 隐私模式存不了，进度只在本页有效 */
+    /* Private mode cannot store: progress lives only on this page */
   }
 }
 
-/** 页面启动时把本机存过的进度放进 store（只记了通过与指纹，没有逐条结果） */
+/** On boot, load saved progress into the store (only pass + fingerprint were saved, no per-row results). */
 export function restoreChecks(ctx: StepCtx) {
   const p = loadProgress(wkey(ctx.work));
   const checks: Record<string, CheckOutcome> = {};
@@ -176,7 +178,9 @@ export function restoreChecks(ctx: StepCtx) {
         ok: true,
         own: v.own !== false,
         who:
-          v.own !== false ? `你的固件（${v.at} 通过）` : `参考固件（${v.at} 跑通）`,
+          v.own !== false
+            ? t("Your firmware (passed {at})", { at: v.at })
+            : t("Reference firmware (ran through {at})", { at: v.at }),
         rows: [],
         fingerprint: v.fp,
         sim: 0,
@@ -184,12 +188,12 @@ export function restoreChecks(ctx: StepCtx) {
   ctx.store.set({ checks });
 }
 
-/** 解锁组装 / 成品只看是否通过：参考固件跑通（◐）与自己的固件通过（✓）都算 */
+/** Unlocking Assemble / Product only needs a pass: a reference run (◐) and an own pass (✓) both count. */
 export function passedCount(ctx: StepCtx, s: AppState = ctx.store.get()) {
   return ctx.work.checkpoints.filter((id) => s.checks[id]?.ok).length;
 }
 
-/** 用自己的固件通过的检查点数（界面上单独显示「我的固件 n/N」） */
+/** Checkpoints passed with the user's own firmware (shown separately as "My firmware n/N"). */
 export function ownCount(ctx: StepCtx, s: AppState = ctx.store.get()) {
   return ctx.work.checkpoints.filter(
     (id) => s.checks[id]?.ok && s.checks[id].own,
@@ -208,11 +212,11 @@ const toPick = (s: Selection | null): PickTarget | null =>
     : null;
 
 type NEv = Event & { currentTarget: HTMLInputElement };
-/** 滑块旁的读数（同一个 label 里的 output） */
+/** Reading next to a slider (the output inside the same label). */
 const outOf = (inp: HTMLInputElement) =>
   inp.parentElement?.querySelector("output");
 
-/** OLED 实时画面（每帧由 updateLive 直接画） */
+/** Live OLED image (drawn every frame by updateLive). */
 const OledCanvas = () => (
   <canvas
     className="oled mb-1 block w-full rounded-md bg-(--oled-bg) [image-rendering:pixelated]"
@@ -222,9 +226,9 @@ const OledCanvas = () => (
   />
 );
 
-/** 复制任务书：按钮文字由点击结果直接改（命令式，与原来一致） */
+/** Copy brief: the click handler rewrites the button text imperatively. */
 function CopyBrief({ onCopy }: { onCopy: (b: HTMLButtonElement) => void }) {
-  const ref = useInitText<HTMLButtonElement>("复制任务书");
+  const ref = useInitText<HTMLButtonElement>(t("Copy brief"));
   return (
     <button
       ref={ref}
@@ -251,45 +255,45 @@ export function benchStep(): StepImpl {
     checkpoint: true,
     ble: true,
   };
-  /** 选中的那根针的采样（示波器小窗） */
+  /** Samples of the selected pin (mini scope). */
   const trace = new PinTrace();
-  /** 空白实验台跑示例时（?example=）：右栏没选中东西就显示「这个示例」说明卡（DESIGN_V2 §6.1） */
+  /** Example on an empty bench (?example=): with nothing selected the right column shows the example card (DESIGN_V2 §6.1). */
   let exInfo: { ex: Example; work: WorkDef | null } | null = null;
-  /** 选板作品：「摆好、连好了」说明卡关掉了；演示固件正在逐条验收 */
+  /** Custom-board project: "placed and wired" card dismissed; demo firmware being verified check by check. */
   let customClosed = false;
   let demoBusy = false;
-  /** 本页刚跑出一条自己的通过：只有这时全过才自动弹真买卡（刷新后恢复进度、重放时间线都不弹） */
+  /** Set by a fresh own pass on this page: only then does all-passed pop the buy card (not on restore or replay). */
   let buyArmed = false;
-  /** 尺子：工具条"尺子"按下后，台面上点两个目标 */
+  /** Ruler: after the toolbar Ruler is on, pick two targets on the bench. */
   let ruler: {
     a: PickTarget | null;
     b: PickTarget | null;
     mm: number | null;
   } | null = null;
-  /** 万用表（P1-04）：工具条"万用表"按下后，台面上点一根针量对地电压 */
+  /** Multimeter (P1-04): after the toolbar Multimeter is on, pick a pin to read its voltage to GND. */
   let meter: { target: string | null } | null = null;
-  /** 运行历史里点的第二条（和选中的那条对比） */
+  /** Second run picked in history (compared with the selected one). */
   let cmpRun: number | null = null;
-  /** 快捷卡片跟着的目标 */
+  /** Target the quick card follows. */
   let cardFor: PickTarget | null = null;
   let cardRaf = 0;
-  /** 热源：放上去之前的室温（拿开时回到它） */
+  /** Heat source: room temperature before it was placed (restored on removal). */
   let heatRoom: number | null = null;
   let faults: WireFault[] = [];
   let shownFaults = new Set<string>();
-  /** 接线检查第几次（网络求解是异步的，回来时还是这一次才用） */
+  /** Wiring check generation: the async net solve is used only if still current. */
   let faultGen = 0;
-  /** 开着的接错线卡片：估算到了重画它 */
+  /** Open wrong-wire card: redrawn when the estimate arrives. */
   let wwShow: ((f: WireFault) => void) | null = null;
-  /** 台面上画着的板针到板针跳线（P2-14） */
+  /** Board-pin to board-pin jumpers drawn on the bench (P2-14). */
   let shownBridge = new Set<string>();
-  /** ?debug=1&wiring= 只造一次 */
+  /** ?debug=1&wiring= is injected once. */
   let injected = false;
-  /** 连线工具（U-04）：先点一根线，再点开发板上的新针；wire 是选中的那根 */
+  /** Wire tool (U-04): pick a wire, then a new pin on the dev board; `wire` is the picked one. */
   let wiring: { wire: string | null } | null = null;
-  /** 台面上画成改接过的线（和 wireMods.retarget 对齐） */
+  /** Wires drawn as rewired (kept in sync with wireMods.retarget). */
   let shownRewire = new Set<string>();
-  /** 台面直接放零件（P2-16）：放下后逐根接线；接完才进场景（没接完的件不进模拟，也就不画） */
+  /** Direct placement (P2-16): wire pin by pin after dropping; enters the scene/sim only once fully wired. */
   let placing: {
     def: PlaceDef;
     cur: number;
@@ -298,9 +302,9 @@ export function benchStep(): StepImpl {
   } | null = null;
 
   function select(sel: Selection | null) {
-    // 从台面点中的东西，在构建树里展开它所在的分组
+    // Something picked on the bench expands its group in the build tree.
     if (sel && sel.kind in openGroups) openGroups[sel.kind] = true;
-    // 选了别的东西：卡片和"量到芯片"的尺子标注收起（尺子工具自己管自己的标注）
+    // A different pick closes the card and the "distance to chip" mark (the ruler tool owns its own marks).
     if (cardFor && !(sel && sel.kind === cardFor.kind && sel.id === cardFor.id))
       closeCard();
     if (!ruler) ctx!.session.pick.measure?.(null);
@@ -313,7 +317,7 @@ export function benchStep(): StepImpl {
       ctx!.session.wireMods,
     );
 
-  // ------------------------------------------------------------ 接线规则检查（P0-12）
+  // ------------------------------------------------------------ Wiring rule check (P0-12)
   function recheckWiring() {
     const c = ctx!;
     const s3 = c.session.chip === "esp32s3";
@@ -321,7 +325,7 @@ export function benchStep(): StepImpl {
     const cached = applyCached(fresh, s3);
     faults = cached.faults;
     const gen = ++faultGen;
-    // 错接电流走 wasm 里的 elec 求解（P2-14）：第一次要实例化 wasm，算完补到面板和接错线卡片上
+    // Fault currents come from the wasm elec solver (P2-14); first call instantiates wasm, results patch the panel and card.
     if (!cached.done)
       void enrichFaults(fresh, s3)
         .then((fs) => {
@@ -332,13 +336,13 @@ export function benchStep(): StepImpl {
           const f = wwShow && bc.get().overlays.wrongWire ? wwShow : null;
           if (f) f(faults[0]);
         })
-        .catch((e) => console.warn("接线错误求解失败", e));
+        .catch((e) => console.warn("wiring fault solve failed", e));
     const by = faultByWire(faults);
     for (const id of shownFaults)
       if (!by.has(id)) c.session.pick.setWireFault?.(id, null);
     for (const [id, f] of by) c.session.pick.setWireFault?.(id, f.short);
     shownFaults = new Set(by.keys());
-    // 改接过的线在 3D 里挪到新针上；改回或被 setScene 重建的由 rewire 自己判断
+    // Rewired wires move to the new pin in 3D; rewire() handles reverts and setScene rebuilds itself.
     const moved = benchWires().filter((w) => w.from);
     const now = new Set(moved.map((w) => w.id));
     for (const id of shownRewire)
@@ -351,7 +355,7 @@ export function benchStep(): StepImpl {
       if (!nowJ.has(id)) c.session.pick.bridge?.(id, "", null);
     for (const w of jumps) c.session.pick.bridge?.(w.id, w.a, w.b);
     shownBridge = nowJ;
-    // 问题页签：接线检查的结论（wire: 前缀；欠压那几条由 main.tsx 写）
+    // Issues tab: wiring check results (prefix wire:; brownout entries are written by main.tsx).
     const issues: Issue[] = faults.map((f, i) => ({
       id: `wire:${f.rule}:${i}`,
       level: f.level,
@@ -372,8 +376,8 @@ export function benchStep(): StepImpl {
       setBc({ issues: [...keep, ...issues] });
   }
 
-  // ------------------------------------------------------------ 左栏：元件库、接线表、检查点卡（U-04）
-  /** 检查点"带我去接"对准的东西：关卡判的那根针，没有针就是 I2C 器件 */
+  // ------------------------------------------------------------ Left column: Parts, Wiring table, checkpoint card (U-04)
+  /** What the checkpoint "take me there" targets: the judged pin, else the I2C device. */
   function cpTarget(l: Level | undefined): Selection | null {
     if (!l) return null;
     const pin = l.pwm?.pin ?? l.gpio_toggles?.pin ?? l.ws2812?.pin;
@@ -422,19 +426,19 @@ export function benchStep(): StepImpl {
         c.work.checkpoints.find((x) => !s.checks[x]?.ok) ??
         c.work.checkpoints[0];
       const l = c.session.levels.find((x) => x.id === id);
-      const t = cpTarget(l);
+      const tg = cpTarget(l);
       card = (
         <CheckpointCard
           id={id}
-          title={l?.title ?? ""}
-          pass={l?.pass ?? ""}
+          title={l?.title ? t(l.title) : ""}
+          pass={l?.pass ? t(l.pass) : ""}
           done={d}
           total={n}
-          go={t ? (t.kind === "pin" ? t.id : partName(t.id)) : null}
+          go={tg ? (tg.kind === "pin" ? tg.id : partName(tg.id)) : null}
           onGo={() => {
-            select(t ?? { kind: "checkpoint", id });
-            if (t)
-              requestAnimationFrame(() => ctx?.session.bench.view?.("fit", t));
+            select(tg ?? { kind: "checkpoint", id });
+            if (tg)
+              requestAnimationFrame(() => ctx?.session.bench.view?.("fit", tg));
           }}
           onAll={() => setDock({ tab: "checks", collapsed: false })}
           own={ownCount(c, s)}
@@ -466,7 +470,7 @@ export function benchStep(): StepImpl {
     });
   }
 
-  // ------------------------------------------------------------ 连线工具（U-04）：改接一根线的开发板那一端
+  // ------------------------------------------------------------ Wire tool (U-04): rewire the dev-board end of a wire
   function wireUi() {
     const c = ctx!;
     if (!wiring) {
@@ -481,7 +485,7 @@ export function benchStep(): StepImpl {
     overlay(
       "wire",
       <WireBanner
-        wire={w ? `${w.b}（现在 ${w.a}）` : null}
+        wire={w ? t("{wire} (now {pin})", { wire: w.b, pin: w.a }) : null}
         onCancel={() => setWiring(false)}
         wires={pickable.map((x) => ({ id: x.id, label: `${x.b} · ${x.a}` }))}
         onWire={(id) => {
@@ -524,7 +528,7 @@ export function benchStep(): StepImpl {
     else if (!on) c.session.pick.highlight?.(toPick(c.store.get().selection));
     wireUi();
   }
-  /** 写一步改接线进时间线（不重新上电：模拟器里的器件仍按场景接法，改的是台面和接线检查） */
+  /** Record a rewire in the timeline (no power cycle: the sim keeps scene wiring; only bench and wiring check change). */
   function applyMods(mods: WireMods, label: string) {
     const c = ctx!;
     c.hist?.op({ k: "wiring", mods, scene: c.session.scene, label });
@@ -538,38 +542,38 @@ export function benchStep(): StepImpl {
     if (!w) return;
     const orig = w.from ?? w.a;
     if (to === w.a) {
-      c.shell.toast(`${w.b} 本来就接在 ${to}`);
+      c.shell.toast(t("{wire} is already on {pin}", { wire: w.b, pin: to }));
       return;
     }
     const rt = { ...prev.retarget };
     if (to === orig) delete rt[wireId];
     else rt[wireId] = to;
-    applyMods({ ...prev, retarget: rt }, `${w.b} 改接 ${to}`);
+    applyMods({ ...prev, retarget: rt }, t("Rewire {wire} to {pin}", { wire: w.b, pin: to }));
     setWiring(false);
     select({ kind: "wire", id: wireId });
     const fs = faults.filter((f) => f.wires.includes(wireId));
     if (!fs.length) {
       c.shell.toast(
         to === orig
-          ? `${w.b} 改回 ${to}，接线检查没发现问题`
-          : `${w.b} 改接到 ${to}，接线检查没发现问题（模拟器里仍按原接法跑）`,
+          ? t("{wire} back on {pin}, wiring check found no problems", { wire: w.b, pin: to })
+          : t("{wire} rewired to {pin}, wiring check found no problems (the simulator still runs the original wiring)", { wire: w.b, pin: to }),
       );
       return;
     }
     showWrongWire(
       fs[0],
       wireId,
-      `${w.b}：${w.a} → ${to}`,
+      `${w.b}: ${w.a} → ${to}`,
       () => {
-        applyMods(prev, `撤销 ${w.b} 改接`);
+        applyMods(prev, t("Undo rewire of {wire}", { wire: w.b }));
       },
       () => {
-        applyMods(prev, `撤销 ${w.b} 改接`);
+        applyMods(prev, t("Undo rewire of {wire}", { wire: w.b }));
         setWiring(true, wireId);
       },
     );
   }
-  /** 接错线卡片（U-04）；网络求解的估算异步到了会用同一根线的新结论重画（P2-14） */
+  /** Wrong-wire card (U-04); redrawn with the same wire's new result when the async net estimate arrives (P2-14). */
   function showWrongWire(
     first: WireFault,
     wireId: string,
@@ -589,7 +593,7 @@ export function benchStep(): StepImpl {
           detail={f.detail}
           wire={label}
           estimate={f.estimate}
-          sim={`可信度：${confOfRule(f.confidence)}（${f.confidence}）。模拟器里的器件仍按原来的接法跑，这里只做接线检查。`}
+          sim={t("Confidence: {conf} ({basis}). The simulator still runs the original wiring; this is only a wiring check.", { conf: confOfRule(f.confidence), basis: f.confidence })}
           onUndo={() => {
             close();
             undo();
@@ -610,7 +614,7 @@ export function benchStep(): StepImpl {
     show(first);
   }
 
-  // ------------------------------------------------------------ 台面直接放零件（P2-16）
+  // ------------------------------------------------------------ Direct placement on the bench (P2-16)
   function startPlace(id: string) {
     const c = ctx;
     if (!c || c.store.get().step !== "bench") return;
@@ -674,7 +678,7 @@ export function benchStep(): StepImpl {
         }
         onCancel={() => {
           endPlace();
-          c.shell.toast(`没放 ${p.def.name}`);
+          c.shell.toast(t("{part} not placed", { part: p.def.name }));
         }}
       />,
     );
@@ -708,15 +712,15 @@ export function benchStep(): StepImpl {
     if (!pinOk(step.want, id))
       return c.shell.toast(
         step.want === "gnd"
-          ? `${step.label} 要接 GND`
+          ? t("{pin} must go to GND", { pin: step.label })
           : step.want === "power"
-            ? `${step.label} 要接 3V3 或 5V`
-            : `${step.label} 要接一根 GPIO`,
+            ? t("{pin} must go to 3V3 or 5V", { pin: step.label })
+            : t("{pin} must go to a GPIO", { pin: step.label }),
       );
-    // 同一个零件的两根信号线接到同一根 GPIO（SDA、SCL 接一起）没有意义：直接拦
+    // Two signal lines of one part on the same GPIO (SDA tied to SCL) is meaningless: block it.
     const dup = Object.entries(p.got).find(([k, v]) => v === id && k !== step.pin);
     if (step.want === "gpio" && dup)
-      return c.shell.toast(`${id} 已经接了 ${p.def.name} 的 ${dup[0]}`);
+      return c.shell.toast(t("{gpio} is already wired to {pin} of {part}", { gpio: id, pin: dup[0], part: p.def.name }));
     p.got[step.pin] = id;
     placeNext();
   }
@@ -739,9 +743,9 @@ export function benchStep(): StepImpl {
     const { spec, retarget } = buildPlaced(p.def, p.got, ext5v);
     const pid = partId(spec);
     if (c.session.scene.parts.some((x) => partId(x) === pid)) {
-      // LED / 按键按引脚区分：同一根 GPIO 上已经有一颗了
+      // LEDs / buttons are keyed by pin: this GPIO already has one.
       const i = p.def.steps.findIndex((s) => s.want === "gpio");
-      c.shell.toast(`${p.got[p.def.steps[i].pin]} 上已经有一个${p.def.name}了：换一根 GPIO`);
+      c.shell.toast(t("{gpio} already has a {part}: pick another GPIO", { gpio: p.got[p.def.steps[i].pin], part: p.def.name }));
       delete p.got[p.def.steps[i].pin];
       p.cur = i;
       return placeUi();
@@ -754,13 +758,13 @@ export function benchStep(): StepImpl {
     c.session.applyScene(
       { ...c.session.scene, parts: [...c.session.scene.parts, spec] },
       c.session.power ?? { ext5v: false },
-      `放 ${p.def.name}${sum ? `（${sum}）` : ""}`,
+      sum ? t("Place {part} ({pins})", { part: p.def.name, pins: sum }) : t("Place {part}", { part: p.def.name }),
     );
     const rt = Object.entries(retarget);
     if (rt.length)
       applyMods(
         mergeMods(c.session.wireMods, retarget),
-        `${p.def.name} 电源接 ${rt.map(([, v]) => v).join("、")}`,
+        t("{part} power on {pins}", { part: p.def.name, pins: rt.map(([, v]) => v).join(", ") }),
       );
     recheckWiring();
     renderLeft();
@@ -768,12 +772,12 @@ export function benchStep(): StepImpl {
     const fs = faults.filter((f) => f.wires.some((w) => w.includes(`~${pid}:`)));
     c.shell.toast(
       fs.length
-        ? `已放 ${p.def.name}：接线检查发现「${fs[0].title}」，看问题页签`
-        : `已放 ${p.def.name}，接线检查没发现问题`,
+        ? t("Placed {part}: wiring check found \"{issue}\", see the Issues tab", { part: p.def.name, issue: fs[0].title })
+        : t("Placed {part}, wiring check found no problems", { part: p.def.name }),
     );
   }
 
-  // ------------------------------------------------------------ 构建树
+  // ------------------------------------------------------------ Build tree
   function renderTree() {
     const c = ctx!;
     const s = c.store.get();
@@ -840,7 +844,7 @@ export function benchStep(): StepImpl {
         ),
       ),
     ];
-    // 引脚：只列用到的针（接了线的 + 板上自带用途的，如 BOOT、板载彩灯）
+    // Pins: only used ones (wired, or with an on-board role such as BOOT or the RGB LED).
     const pinInfo = ses.pick.listPins?.() ?? [];
     const used = new Set(usedPins(wires));
     const pins = pinInfo.filter((p) => used.has(p.id) || p.role);
@@ -853,7 +857,7 @@ export function benchStep(): StepImpl {
         ),
       )
     ) : (
-      <TreeEmpty>没有用到的引脚</TreeEmpty>
+      <TreeEmpty>{t("No pins in use")}</TreeEmpty>
     );
     const wireItems = wires.length ? (
       wires.map((w) =>
@@ -865,11 +869,11 @@ export function benchStep(): StepImpl {
         ),
       )
     ) : (
-      <TreeEmpty>没有外接线</TreeEmpty>
+      <TreeEmpty>{t("No external wires")}</TreeEmpty>
     );
     const nBad = new Set(faults.flatMap((f) => f.wires)).size;
     const wireCount = nBad ? (
-      <Bad>{`${wires.length} · ${faults.length} 处问题`}</Bad>
+      <Bad>{t("{n} · issues: {m}", { n: wires.length, m: faults.length })}</Bad>
     ) : (
       `${wires.length} · ✓`
     );
@@ -890,7 +894,7 @@ export function benchStep(): StepImpl {
       return item(
         { kind: "checkpoint", id },
         <>
-          <Mono>{id}</Mono> {l?.title ?? ""}
+          <Mono>{id}</Mono> {l?.title ? t(l.title) : ""}
         </>,
         "",
         st,
@@ -901,37 +905,37 @@ export function benchStep(): StepImpl {
       runs.map((r) =>
         item(
           { kind: "run", id: String(r.n) },
-          `运行 #${r.n}`,
-          r.snap ? `${r.snap.simSeconds.toFixed(1)} s` : "运行中",
+          t("Run #{n}", { n: r.n }),
+          r.snap ? `${r.snap.simSeconds.toFixed(1)} s` : t("Running"),
           r.n === s.runNo && s.hist.seeked ? <TnSt kind="run">◂</TnSt> : null,
         ),
       )
     ) : (
-      <TreeEmpty>还没运行过</TreeEmpty>
+      <TreeEmpty>{t("Not run yet")}</TreeEmpty>
     );
     const ext = !!ses.power?.ext5v;
     const hasServo = parts.some((p) => p.type === "servo");
     c.shell.tree.render(
-      <div role="group" aria-label="构建树">
-        {group("part", "零件", String(parts.length + 1), partItems)}
-        {group("pin", "引脚", String(pins.length), pinItems)}
-        {group("wire", "连线", wireCount, wireItems)}
+      <div role="group" aria-label={t("Build tree")}>
+        {group("part", t("Parts"), String(parts.length + 1), partItems)}
+        {group("pin", t("Pins"), String(pins.length), pinItems)}
+        {group("wire", t("Wires"), wireCount, wireItems)}
         {group(
           "power",
-          "供电",
-          ext ? "USB 和外接" : "USB",
+          t("Power supply"),
+          ext ? t("USB and external") : "USB",
           <>
-            {item({ kind: "power", id: "usb" }, "USB 5 V（电脑）", "5V")}
+            {item({ kind: "power", id: "usb" }, t("USB 5 V (computer)"), "5V")}
             {ext
               ? item(
                   { kind: "power", id: "ext5v" },
-                  "外接 5 V 2 A（舵机）",
+                  t("External 5 V 2 A (servo)"),
                   "EXT5V",
                 )
               : hasServo
                 ? item(
                     { kind: "power", id: "ext5v" },
-                    <Muted>外接 5 V（没接）</Muted>,
+                    <Muted>{t("External 5 V (not connected)")}</Muted>,
                     "",
                   )
                 : null}
@@ -939,30 +943,30 @@ export function benchStep(): StepImpl {
         )}
         {group(
           "env",
-          "环境",
+          t("Environment"),
           "",
           item(
             { kind: "env", id: "room" },
-            "室内",
+            t("Indoors"),
             <Mono>{`${env.temp.toFixed(1)} °C`}</Mono>,
-            ses.heat ? <TnSt kind="bad">热</TnSt> : null,
+            ses.heat ? <TnSt kind="bad">{t("Hot")}</TnSt> : null,
           ),
         )}
         {bleFeed.get().state !== 0 &&
           group(
             "ble",
-            "无线",
+            t("Wireless"),
             "",
             item(
               { kind: "ble", id: "phone" },
-              "虚拟手机",
+              t("Virtual phone"),
               phoneStateText(bleFeed.get()),
               bleFeed.get().state === 2 ? <TnSt kind="warn">!</TnSt> : null,
             ),
           )}
         {group(
           "firmware",
-          "固件",
+          t("Firmware"),
           "",
           ses.fwName
             ? item(
@@ -972,15 +976,15 @@ export function benchStep(): StepImpl {
               )
             : item(
                 { kind: "firmware", id: "main" },
-                "还没有固件",
-                "拖 .bin 进来",
+                t("No firmware yet"),
+                t("Drop a .bin here"),
               ),
         )}
-        {group("run", "运行历史", String(runs.length), runItems)}
+        {group("run", t("Run history"), String(runs.length), runItems)}
         {c.work.checkpoints.length
           ? group(
               "checkpoint",
-              "检查点",
+              t("Checkpoints"),
               `${passedCount(c, s)}/${c.work.checkpoints.length}`,
               cps,
             )
@@ -988,10 +992,10 @@ export function benchStep(): StepImpl {
       </div>,
     );
     renderLeft();
-    // 空台面引导：只有开发板、没摆零件（空白实验台刚打开）
+    // Empty-bench guide: only the dev board, no parts yet (fresh blank bench).
     overlay(
       "empty",
-      // 放零件接线时让开（引导卡片会盖住开发板上的针）
+      // Hidden while placing: the guide card would cover the board pins.
       parts.length || placing ? null : (
         <EmptyBench
           hasFw={!!ses.fwName}
@@ -999,7 +1003,7 @@ export function benchStep(): StepImpl {
         />
       ),
     );
-    // 选板作品：自动摆好之后先说明摆了什么、下一步放固件（上过固件、关掉、在放零件时不挡台面）
+    // Custom-board project: after auto-placing, explain what was placed and ask for firmware (hidden once firmware is in, closed, or placing).
     if (c.custom)
       overlay(
         "customPlaced",
@@ -1021,8 +1025,8 @@ export function benchStep(): StepImpl {
       );
   }
 
-  // ------------------------------------------------------------ 属性面板
-  /** 停在回退点时，属性面板顶上的一条：回到了哪、指纹对不对、从这里继续 */
+  // ------------------------------------------------------------ Inspector
+  /** Banner atop the inspector at a seek point: where we are, whether the fingerprint matches, resume from here. */
   function seekBanner(): ReactNode {
     const c = ctx!;
     const h = c.store.get().hist;
@@ -1031,9 +1035,9 @@ export function benchStep(): StepImpl {
     if (h.busy)
       return (
         <div className={cls}>
-          <b>正在回退…</b>
+          <b>{t("Rewinding…")}</b>
           <Live k="sim" className="font-mono" />
-          <Muted>按记录重放</Muted>
+          <Muted>{t("Replaying the recording")}</Muted>
         </div>
       );
     const r = c.hist?.lastSeek();
@@ -1041,32 +1045,32 @@ export function benchStep(): StepImpl {
     const same =
       r.same === null ? (
         <Muted>
-          同一次运行里后面还有操作：停在下一步发生之前，所以不和整次运行比对
+          {t("More actions follow in this run: stopped before the next one, so it is not compared with the whole run")}
         </Muted>
       ) : r.same ? (
-        <Ok>✓ 和当时一模一样</Ok>
+        <Ok>{t("✓ Identical to the original")}</Ok>
       ) : (
-        <Bad>✗ 和当时不一样</Bad>
+        <Bad>{t("✗ Differs from the original")}</Bad>
       );
     return (
       <div className={cls} data-seek={r.run}>
-        <b>{`回到运行 #${r.run} 的 ${(r.untilMs / 1000).toFixed(2)} s · 已暂停`}</b>
-        <Mono>运行编号 {r.fingerprint}</Mono>
+        <b>{t("Back at {s} s of run #{n} · paused", { n: r.run, s: (r.untilMs / 1000).toFixed(2) })}</b>
+        <Mono>{t("Run ID {id}", { id: r.fingerprint })}</Mono>
         {same}
         <Btns>
           <Btn primary id="resume" onClick={() => c.hist?.resume()}>
-            从这里继续
+            {t("Resume from here")}
           </Btn>
           <Btn id="seekRerun" onClick={() => c.session.reboot()}>
-            重新上电
+            {t("Power cycle")}
           </Btn>
         </Btns>
-        <Muted>接着改、接着跑，后面的步骤会被丢掉</Muted>
+        <Muted>{t("Keep editing and running; later steps will be discarded")}</Muted>
       </div>
     );
   }
 
-  /** 属性面板整块换内容（顶上带回退条），之后补一次实时字段 */
+  /** Replace the whole inspector (with the seek banner on top), then fill live fields once. */
   function show(body: ReactNode, live = true) {
     ctx!.shell.props.render(
       <>
@@ -1085,8 +1089,8 @@ export function benchStep(): StepImpl {
     else if (!sel)
       show(
         <>
-          <Sec>属性</Sec>
-          <TreeEmpty>点左边的构建树或台面上的零件</TreeEmpty>
+          <Sec>{t("Properties")}</Sec>
+          <TreeEmpty>{t("Click the build tree on the left or a part on the bench")}</TreeEmpty>
         </>,
         false,
       );
@@ -1100,45 +1104,45 @@ export function benchStep(): StepImpl {
     else if (sel.kind === "run") renderRuns(Number(sel.id));
     else if (sel.kind === "tool")
       sel.id === "meter" ? renderMeter() : renderRuler();
-    // 虚拟手机自己订阅 bleFeed 刷新，属性面板只在选中时挂一次
+    // The virtual phone subscribes to bleFeed itself; the inspector mounts it once on select.
     else if (sel.kind === "ble")
       show(<PhonePanel send={(cmd) => actions.ble?.(cmd)} />, false);
     else renderPart(sel.id);
   }
 
-  /** 供电网络的实时读数（tryboard-elec 的节点电压 / 电流；本次上电以来的最低 / 峰值 / 复位次数） */
+  /** Live power-net readings (tryboard-elec node voltages/currents; min / peak / resets since power-on). */
   const elecRows = (
     ext: boolean,
     hasServo: boolean,
     hasAmp = ctx!.session.scene.parts.some((p) => p.type === "max98357a"),
   ) => (
     <>
-      <Sec>供电 · 实时</Sec>
-      <Kv k="5V 轨" live="e5" />
+      <Sec>{t("Power supply · live")}</Sec>
+      <Kv k={t("5V rail")} live="e5" />
       <Kv k="3V3" live="e33" />
-      <Kv k="3V3 最低（本次上电）" live="emin" />
-      <Kv k="USB 电流" live="eiu" />
-      <Kv k="USB 峰值电流" live="epu" />
-      {ext && <Kv k="外接 5 V" live="eext" />}
+      <Kv k={t("3V3 minimum (this power-on)")} live="emin" />
+      <Kv k={t("USB current")} live="eiu" />
+      <Kv k={t("USB peak current")} live="epu" />
+      {ext && <Kv k={t("External 5 V")} live="eext" />}
       {hasServo && (
         <>
-          <Kv k="舵机电流" live="eis" />
-          <Kv k="舵机峰值电流" live="eps" />
+          <Kv k={t("Servo current")} live="eis" />
+          <Kv k={t("Servo peak current")} live="eps" />
         </>
       )}
-      {hasAmp && <Kv k="功放电流（5 V，随音量）" live="eia" />}
-      <Kv k="欠压复位" live="ers" />
-      <Kv k="可信度" v="估算" />
+      {hasAmp && <Kv k={t("Amplifier current (5 V, follows volume)")} live="eia" />}
+      <Kv k={t("Brownout resets")} live="ers" />
+      <Kv k={t("Confidence")} v={t("Estimate")} />
     </>
   );
-  /** 舵机供电二选一（属性面板、快捷卡片共用） */
+  /** Servo power choice (shared by inspector and quick card). */
   const powerSeg = (ext: boolean) => (
-    <Seg aria-label="舵机供电">
+    <Seg aria-label={t("Servo power")}>
       <SegB data-power="usb" on={!ext} onClick={() => setPower(false)}>
         USB 5 V
       </SegB>
       <SegB data-power="ext" on={ext} onClick={() => setPower(true)}>
-        外接 5 V 2 A
+        {t("External 5 V 2 A")}
       </SegB>
     </Seg>
   );
@@ -1148,58 +1152,53 @@ export function benchStep(): StepImpl {
     const hasServo = c.session.scene.parts.some((p) => p.type === "servo");
     const toggle = hasServo ? (
       <>
-        <Sec>舵机从哪取电</Sec>
+        <Sec>{t("Where the servo gets power")}</Sec>
         {powerSeg(ext)}
         <Note>
-          运行中可切换。选外接后，采购清单会加上 5 V 2 A 电源和 DC 母座。
+          {t("Switchable while running. Choosing external adds a 5 V 2 A supply and a DC jack to the shopping list.")}
         </Note>
       </>
     ) : null;
     show(
       id === "ext5v" ? (
         <>
-          <Sec>供电</Sec>
-          <Ph>外接 5 V 2 A</Ph>
+          <Sec>{t("Power supply")}</Sec>
+          <Ph>{t("External 5 V 2 A")}</Ph>
           {ext ? (
             <>
-              <KvT k="来源">
-                5 V 2 A 电源适配器经 DC 母座接到面包板电源轨，内阻约 0.15
-                Ω（估算）
+              <KvT k={t("Source")}>
+                {t("5 V 2 A adapter through a DC jack to the breadboard power rail, internal resistance about 0.15 Ω (estimate)")}
               </KvT>
-              <KvT k="给谁">舵机；地线和开发板 GND 接在一起</KvT>
+              <KvT k={t("Feeds")}>{t("Servo; its ground is tied to the dev board GND")}</KvT>
             </>
           ) : (
-            <Note>还没接外接电源，舵机从 USB 5V 取电。</Note>
+            <Note>{t("No external supply connected; the servo takes power from USB 5V.")}</Note>
           )}
-          {ext ? <Kv k="电压" live="eext" /> : <Kv k="电压" v="—" />}
+          {ext ? <Kv k={t("Voltage")} live="eext" /> : <Kv k={t("Voltage")} v="—" />}
           {elecRows(ext, hasServo)}
           {toggle}
         </>
       ) : (
         <>
-          <Sec>供电</Sec>
-          <Ph>USB 5 V（电脑）</Ph>
-          <KvT k="来源">
-            USB-C 接电脑，5 V，限流约 0.5 A（USB 2.0 规范值）；接口内阻加 1 m
-            线阻约 0.5 Ω（估算）
+          <Sec>{t("Power supply")}</Sec>
+          <Ph>{t("USB 5 V (computer)")}</Ph>
+          <KvT k={t("Source")}>
+            {t("USB-C to the computer, 5 V, limited to about 0.5 A (USB 2.0 spec); connector plus 1 m cable about 0.5 Ω (estimate)")}
           </KvT>
           <KvT k="3V3">
-            板载 LDO SGM2212，800 mA 时压差 420 mV，给芯片、BME280、OLED
-            供电；低于 2.44 V 欠压复位（IDF 默认档）
+            {t("On-board LDO SGM2212, 420 mV dropout at 800 mA, feeds the chip, BME280 and OLED; brownout reset below 2.44 V (IDF default level)")}
           </KvT>
-          <KvT k="5V 轨">
+          <KvT k={t("5V rail")}>
             {ext
-              ? "只给开发板；舵机走外接 5 V"
+              ? t("Dev board only; the servo uses external 5 V")
               : hasServo
-                ? "直通 USB，舵机也从这里取电"
-                : "直通 USB"}
+                ? t("Straight from USB; the servo is powered from here too")
+                : t("Straight from USB")}
           </KvT>
           {elecRows(ext, hasServo)}
           {!ext && hasServo && (
             <Note bad>
-              舵机只靠 USB 时，起步电流约 0.7 A，超过 0.5 A 限流，5V 轨掉到约
-              3.5 V（估算）。大幅来回扫、没转到位就反向，5V 轨会被拉垮，3V3 跌破
-              2.44 V 后欠压复位，串口打出 rst:0xf。
+              {t("On USB alone the servo draws about 0.7 A at start, over the 0.5 A limit, and the 5V rail drops to about 3.5 V (estimate). Wide sweeps that reverse before reaching position drag the 5V rail down; once 3V3 falls below 2.44 V a brownout reset happens and serial prints rst:0xf.")}
             </Note>
           )}
           {toggle}
@@ -1214,8 +1213,8 @@ export function benchStep(): StepImpl {
     c.session.setPower(ext);
     c.shell.toast(
       ext
-        ? "舵机改由外接 5 V 2 A 供电，采购清单加上了电源适配器和 DC 母座"
-        : "舵机改回 USB 5 V 供电，采购清单去掉了外接电源",
+        ? t("Servo now powered by external 5 V 2 A; the shopping list gained a power adapter and a DC jack")
+        : t("Servo back on USB 5 V; the external supply was removed from the shopping list"),
     );
   }
 
@@ -1225,7 +1224,7 @@ export function benchStep(): StepImpl {
     if (!w) {
       show(
         <>
-          <Sec>连线</Sec>
+          <Sec>{t("Wire")}</Sec>
           <Ph mono>{id}</Ph>
         </>,
         false,
@@ -1234,7 +1233,7 @@ export function benchStep(): StepImpl {
     }
     const fs = faults.filter((f) => f.wires.includes(id));
     const power = w.part === "servo" && w.pinRole === "power";
-    // I2C 线可以拉长（P2-11）：同一条总线上所有模块的 SDA 线加起来算总线电容
+    // I2C wires can be lengthened (P2-11): bus capacitance sums the SDA wires of every module on the bus.
     const bus =
       w.pinRole === "bus"
         ? i2cBuses(c.session.scene.parts, benchWires()).find((b) =>
@@ -1244,7 +1243,7 @@ export function benchStep(): StepImpl {
     const others = bus ? bus.wireCm - w.lenCm : 0;
     const lenEl = bus ? (
       <>
-        <Sec>线长 · 估算，必须上真机</Sec>
+        <Sec>{t("Wire length · estimate, needs real hardware")}</Sec>
         <Slider
           id="wireLen"
           outId="wireLenV"
@@ -1252,7 +1251,7 @@ export function benchStep(): StepImpl {
           max={150}
           step={1}
           defaultValue={w.lenCm}
-          aria-label={`${partInfo(c.session.scene.parts.find((p) => partId(p) === w.part)!).name} 的线长`}
+          aria-label={t("Wire length of {part}", { part: partInfo(c.session.scene.parts.find((p) => partId(p) === w.part)!).name })}
           out={`${w.lenCm} cm`}
           on={{
             input: (e) => {
@@ -1267,8 +1266,8 @@ export function benchStep(): StepImpl {
           }}
         />
         <Kv
-          k="这条总线"
-          v={`${bus.parts.length} 个模块 · SDA 共 ${bus.wireCm.toFixed(0)} cm`}
+          k={t("This bus")}
+          v={t("Modules: {n} · SDA total {cm} cm", { n: bus.parts.length, cm: bus.wireCm.toFixed(0) })}
         />
         <SayLive
           id="wireLenSay"
@@ -1282,23 +1281,23 @@ export function benchStep(): StepImpl {
     ) : null;
     show(
       <>
-        <Sec>连线</Sec>
+        <Sec>{t("Wire")}</Sec>
         <Ph>{`${w.a} → ${w.b}`}</Ph>
-        <Kv k="作用" v={w.role} />
-        <Kv k="颜色" v={w.color + "色杜邦线"} />
-        <Kv k="开发板一端" v={w.a} cls={w.from ? "bad" : ""} />
-        {w.from && <Kv k="原来接在" v={w.from} />}
-        <Kv k="零件一端" v={w.b} />
+        <Kv k={t("Purpose")} v={w.role} />
+        <Kv k={t("Color")} v={t("{color} jumper wire", { color: w.color })} />
+        <Kv k={t("Dev board end")} v={w.a} cls={w.from ? "bad" : ""} />
+        {w.from && <Kv k={t("Originally on")} v={w.from} />}
+        <Kv k={t("Part end")} v={w.b} />
         {w.ohm !== undefined && (
           <Kv
-            k="限流电阻"
-            v={w.ohm ? `${w.ohm} Ω` : "没有"}
+            k={t("Current-limiting resistor")}
+            v={w.ohm ? `${w.ohm} Ω` : t("None")}
             cls={w.ohm ? "" : "bad"}
           />
         )}
-        {w.missing && <Kv k="状态" v="没插上" cls="bad" />}
-        <Sec>{fs.length ? `接线检查 · ${fs.length} 处问题` : "接线检查"}</Sec>
-        {fs.length ? fs.map(faultEl) : <Res kind="ok">这根线没发现问题</Res>}
+        {w.missing && <Kv k={t("Status")} v={t("Not plugged in")} cls="bad" />}
+        <Sec>{fs.length ? t("Wiring check · issues: {n}", { n: fs.length }) : t("Wiring check")}</Sec>
+        {fs.length ? fs.map(faultEl) : <Res kind="ok">{t("No problems found on this wire")}</Res>}
         {lenEl}
         {power && powerInline()}
       </>,
@@ -1306,7 +1305,7 @@ export function benchStep(): StepImpl {
     );
   }
 
-  /** 拉长 / 缩短一个模块的线（进时间线；模拟器里在线换总线负载，固件下一次读就受影响） */
+  /** Lengthen / shorten a module's wire (timeline op; bus load changes live, so the next firmware read sees it). */
   function setWireLen(part: string, cm: number) {
     const c = ctx!;
     const ses = c.session;
@@ -1321,13 +1320,13 @@ export function benchStep(): StepImpl {
       k: "wiring",
       mods,
       scene: ses.scene,
-      label: `${name} 线长 ${cm} cm`,
+      label: t("{part} wire length {cm} cm", { part: name, cm }),
     });
     ses.setWireMods(mods);
     applyBenchHarness();
   }
 
-  /** 实验台的线束交给模拟器：只在改过线长时才算总线负载；天线在面包板上没有遮挡 */
+  /** Hand the bench harness to the sim: bus load only once a length changed; no antenna blockage on a breadboard. */
   function applyBenchHarness() {
     const ses = ctx!.session;
     const cm = benchI2cWire(ses.scene.parts, ses.wireMods);
@@ -1345,7 +1344,7 @@ export function benchStep(): StepImpl {
           className="mt-1 flex flex-wrap items-center gap-1.5"
         >
           <b className="font-mono">≈ {f.estimate.mA} mA</b>
-          <ConfBadge c="估算" />
+          <ConfBadge c={EST} />
           <span>{f.estimate.text}</span>
         </span>
       )}
@@ -1357,12 +1356,12 @@ export function benchStep(): StepImpl {
   );
   const powerInline = () => (
     <>
-      <Sec>舵机从哪取电</Sec>
+      <Sec>{t("Where the servo gets power")}</Sec>
       {powerSeg(!!ctx!.session.power?.ext5v)}
     </>
   );
 
-  // ------------------------------------------------------------ 针脚（P0-11）
+  // ------------------------------------------------------------ Pins (P0-11)
   function renderPin(id: string) {
     const c = ctx!;
     const pin = c.session.pick.listPins?.().find((p) => p.id === id);
@@ -1370,91 +1369,91 @@ export function benchStep(): StepImpl {
     const kind = pinKind(id, wires);
     const gpio = /^GPIO(\d+)$/.exec(id);
     trace.watch(gpio ? Number(gpio[1]) : -1);
-    const to = wires.map((w) => `${partName(w.part)} · ${w.pin}`).join("；");
+    const to = wires.map((w) => `${partName(w.part)} · ${w.pin}`).join("; ");
     const fs = faults.filter((f) =>
       f.wires.some((x) => wires.some((w) => w.id === x)),
     );
     show(
       <>
-        <Sec>引脚</Sec>
+        <Sec>{t("Pin")}</Sec>
         <Ph mono>{id}</Ph>
-        <Kv k="丝印" v={pin?.label ?? id} />
-        <Kv k="角色" v={pin?.role ?? (wires[0]?.role || "没接东西")} />
-        {to && <KvT k="接到">{to}</KvT>}
-        <Sec>实时值</Sec>
+        <Kv k={t("Silkscreen")} v={pin?.label ?? id} />
+        <Kv k={t("Role")} v={pin?.role ?? (wires[0]?.role || t("Nothing connected"))} />
+        {to && <KvT k={t("Connected to")}>{to}</KvT>}
+        <Sec>{t("Live values")}</Sec>
         {kind === "gpio" ? (
           <>
-            <Kv k="方向" live="pdir" />
-            <Kv k="电平" live="plv" />
-            <Kv k="PWM 频率" live="pf" />
-            <Kv k="脉宽" live="pw2" />
-            <Kv k="占空比" live="pd" />
+            <Kv k={t("Direction")} live="pdir" />
+            <Kv k={t("Level")} live="plv" />
+            <Kv k={t("PWM frequency")} live="pf" />
+            <Kv k={t("Pulse width")} live="pw2" />
+            <Kv k={t("Duty cycle")} live="pd" />
           </>
         ) : kind === "i2c" ? (
           <>
             <Kv
-              k="I2C 角色"
+              k={t("I2C role")}
               v={wires
                 .map(
                   (w) =>
-                    `${w.pin === "SDA" ? "SDA 数据" : "SCL 时钟"} → ${partName(w.part)}`,
+                    `${w.pin === "SDA" ? t("SDA data") : t("SCL clock")} → ${partName(w.part)}`,
                 )
-                .join("；")}
+                .join("; ")}
             />
-            <Kv k="电平" live="plv" />
-            <Kv k="总线" v="开漏，模块上拉到 3V3" />
+            <Kv k={t("Level")} live="plv" />
+            <Kv k={t("Bus")} v={t("Open drain, pulled up to 3V3 on the module")} />
           </>
         ) : (
           <>
             <Kv
-              k="电压"
+              k={t("Voltage")}
               live="pv"
               v={powerVolts(id, !!c.session.power?.ext5v, c.session.frame.elec)}
             />
-            {id === "3V3" && <Kv k="最低（本次上电）" live="emin" />}
-            <Kv k="可信度" v="估算" />
+            {id === "3V3" && <Kv k={t("Minimum (this power-on)")} live="emin" />}
+            <Kv k={t("Confidence")} v={t("Estimate")} />
           </>
         )}
-        <Sec>示波器</Sec>
+        <Sec>{t("Oscilloscope")}</Sec>
         <canvas
           className="scope block h-24 w-full rounded-md border border-line bg-(--scope-bg)"
           data-live="scope"
           width={280}
           height={96}
-          aria-label={`${id} 波形`}
+          aria-label={t("{pin} waveform", { pin: id })}
         />
         <Live as="p" k="scopeNote" className="note my-2 text-xs text-muted" />
         {(kind === "gpio" || kind === "i2c") && (
           <>
             <Btns>
               <Btn data-ana={id} onClick={() => getAnalyzer(c).open(id)}>
-                在分析仪里打开
+                {t("Open in analyzer")}
               </Btn>
             </Btns>
             <Note>
               {kind === "i2c"
-                ? "逻辑分析仪按 I2C 事务解码（起始、地址、每个字节和应答），带寄存器注释。"
-                : "逻辑分析仪里能看电平变化和 PWM 占空比、频率，波形精确到时钟周期。"}
+                ? t("The logic analyzer decodes I2C transactions (start, address, every byte and ACK) with register notes.")
+                : t("The logic analyzer shows level changes and PWM duty and frequency, accurate to the clock cycle.")}
             </Note>
           </>
         )}
         {fs.length > 0 && (
           <>
-            <Sec>接线检查</Sec>
+            <Sec>{t("Wiring check")}</Sec>
             {fs.map(faultEl)}
           </>
         )}
       </>,
     );
   }
-  /** BOOT 键接的 GPIO：C3 是 GPIO9，ESP32 / S3 是 GPIO0 */
+  /** GPIO behind the BOOT key: GPIO9 on C3, GPIO0 on ESP32 / S3. */
   const bootGpio = () => BOOT_GPIO[ctx!.session.chip];
   const partName = (pid: string) => {
     const p = ctx!.session.scene.parts.find((x) => partId(x) === pid);
     return p ? partInfo(p).name : pid;
   };
 
-  /** 按下 / 松开 BOOT：两个按钮的按下态直接改属性（不重画面板） */
+  /** Press / release BOOT: the buttons' pressed state is set directly (no panel redraw). */
   const pressBootBtn = (
     e: React.MouseEvent<HTMLButtonElement>,
     down: boolean,
@@ -1470,17 +1469,17 @@ export function benchStep(): StepImpl {
       );
     ctx!.shell.toast(
       down
-        ? `BOOT 按下了（GPIO${bootGpio()} 接地），点「松开」松手`
-        : "BOOT 松开了",
+        ? t("BOOT pressed (GPIO{n} to ground); click Release to let go", { n: bootGpio() })
+        : t("BOOT released"),
     );
   };
   const bootBtns = () => (
     <Btns>
       <Btn data-boot="down" onClick={(e) => pressBootBtn(e, true)}>
-        按下
+        {t("Press")}
       </Btn>
       <Btn data-boot="up" onClick={(e) => pressBootBtn(e, false)}>
-        松开
+        {t("Release")}
       </Btn>
     </Btns>
   );
@@ -1489,18 +1488,18 @@ export function benchStep(): StepImpl {
     const c = ctx!;
     show(
       <>
-        <Sec>按键</Sec>
+        <Sec>{t("Button")}</Sec>
         <Ph mono>{id}</Ph>
         <Kv
-          k="接了"
-          v={id === "BOOT" ? `GPIO${bootGpio()}，按下接地` : "EN，松开重新上电"}
+          k={t("Wired to")}
+          v={id === "BOOT" ? t("GPIO{n}, grounded when pressed", { n: bootGpio() }) : t("EN, power cycles on release")}
         />
         {id === "BOOT" ? (
           bootBtns()
         ) : (
           <Btns>
             <Btn id="rstBtn" onClick={() => c.session.reboot()}>
-              按一下 RST
+              {t("Press RST")}
             </Btn>
           </Btns>
         )}
@@ -1509,7 +1508,7 @@ export function benchStep(): StepImpl {
     );
   }
 
-  // ------------------------------------------------------------ 运行历史（P0-13）
+  // ------------------------------------------------------------ Run history (P0-13)
   function renderRuns(n: number) {
     const c = ctx!;
     const runs = c.hist?.runs() ?? [];
@@ -1517,8 +1516,8 @@ export function benchStep(): StepImpl {
     if (!a) {
       show(
         <>
-          <Sec>运行历史</Sec>
-          <TreeEmpty>没有运行 #{n}</TreeEmpty>
+          <Sec>{t("Run history")}</Sec>
+          <TreeEmpty>{t("No run #{n}", { n })}</TreeEmpty>
         </>,
         false,
       );
@@ -1551,7 +1550,7 @@ export function benchStep(): StepImpl {
             {tag || "·"}
           </span>
           <span className="rt min-w-0 break-all">
-            <b className="font-medium">运行 #{r.n}</b> <Muted>{x.fw}</Muted>
+            <b className="font-medium">{t("Run #{n}", { n: r.n })}</b> <Muted>{x.fw}</Muted>
             <br />
             <Mono>{x.env0}</Mono> · {x.power}
             <br />
@@ -1570,7 +1569,7 @@ export function benchStep(): StepImpl {
         "drow grid grid-cols-[72px_1fr_1fr] gap-1.5 rounded-md bg-field px-2 py-1 [&>span]:min-w-0 [&>span]:[overflow-wrap:anywhere]";
       cmp = (
         <>
-          <Sec>{`${nCh} 项不同（标 ≠）`}</Sec>
+          <Sec>{t("Differences: {n} (marked ≠)", { n: nCh })}</Sec>
           <div className="diff flex flex-col gap-0.5 text-xs">
             <div
               className={cn(
@@ -1613,27 +1612,26 @@ export function benchStep(): StepImpl {
     const step = (c.hist?.steps() ?? []).findIndex(
       (s: BenchStep) => s.op.k === "run" && s.op.n === n,
     );
-    // 有对比时先给差异项（结论先说），单条详情收进下面的列表
+    // With a comparison, differences come first; single-run details stay in the list below.
     const detail = b ? null : (
       <>
-        <Kv k="固件" v={sa.fw} />
-        <Kv k="上电时环境" v={sa.env0} />
-        <Kv k="运行中改环境" v={`${sa.envChanges} 次`} />
-        <Kv k="供电" v={sa.power} />
-        <Kv k="热源" v={sa.heat} />
-        <Kv k="模拟时长" v={sa.seconds} />
-        <KvT k="最后一行">
+        <Kv k={t("Firmware")} v={sa.fw} />
+        <Kv k={t("Environment at power-on")} v={sa.env0} />
+        <Kv k={t("Environment changes while running")} v={`${sa.envChanges}×`} />
+        <Kv k={t("Power supply")} v={sa.power} />
+        <Kv k={t("Heat source")} v={sa.heat} />
+        <Kv k={t("Simulated time")} v={sa.seconds} />
+        <KvT k={t("Last line")}>
           <Mono>{sa.result}</Mono>
         </KvT>
-        <Kv k="运行编号" v={sa.fingerprint} cls="fp" />
+        <Kv k={t("Run ID")} v={sa.fingerprint} cls="fp" />
       </>
     );
     show(
       <>
-        <Sec>运行历史</Sec>
+        <Sec>{t("Run history")}</Sec>
         <Ph>
-          运行 #{a.n}
-          {b ? ` ↔ 运行 #${b.n}` : ""}
+          {b ? t("Run #{a} ↔ run #{b}", { a: a.n, b: b.n }) : t("Run #{n}", { n: a.n })}
         </Ph>
         {detail}
         {cmp}
@@ -1643,7 +1641,7 @@ export function benchStep(): StepImpl {
             disabled={step < 0}
             onClick={() => step >= 0 && c.hist?.seek(step)}
           >
-            回到运行 #{a.n}
+            {t("Back to run #{n}", { n: a.n })}
           </Btn>
           {b && (
             <Btn
@@ -1653,56 +1651,56 @@ export function benchStep(): StepImpl {
                 renderProps();
               }}
             >
-              不对比
+              {t("Stop comparing")}
             </Btn>
           )}
         </Btns>
-        <Sec>全部运行 · 点一条和 A 对比</Sec>
+        <Sec>{t("All runs · click one to compare with A")}</Sec>
         <div className="runs flex flex-col gap-1">{list}</div>
       </>,
       false,
     );
   }
 
-  // ------------------------------------------------------------ 万用表（P1-04）
+  // ------------------------------------------------------------ Multimeter (P1-04)
   function renderMeter() {
     const m = meter;
-    const pickPin = (t: string) => {
-      meter = { target: t };
+    const pickPin = (pin: string) => {
+      meter = { target: pin };
       renderMeter();
       meterCard();
     };
     show(
       <>
-        <Sec>万用表 · 直流电压</Sec>
+        <Sec>{t("Multimeter · DC voltage")}</Sec>
         <Ph>
           {m?.target ? (
             <>
-              <Mono>{m.target}</Mono> 对 GND
+              <Mono>{m.target}</Mono> {t("to GND")}
             </>
           ) : (
-            "点台面上的一个引脚"
+            t("Click a pin on the bench")
           )}
         </Ph>
         <Meter />
         <Live
           as="p"
           k="mnote"
-          init="黑表笔接 GND，红表笔点电源脚或信号脚。读数为估算。"
+          init={t("Black probe on GND, red probe on a power or signal pin. Readings are estimates.")}
           className="note my-2 text-xs text-muted"
         />
-        <Kv k="3V3 最低（本次上电）" live="emin" />
-        <Kv k="欠压复位" live="ers" />
+        <Kv k={t("3V3 minimum (this power-on)")} live="emin" />
+        <Kv k={t("Brownout resets")} live="ers" />
         <Btns>
           <Btn data-mpin="3V3" onClick={() => pickPin("3V3")}>
-            量 3V3
+            {t("Measure 3V3")}
           </Btn>
           <Btn data-mpin="5V" onClick={() => pickPin("5V")}>
-            量 5V
+            {t("Measure 5V")}
           </Btn>
           {ctx!.session.scene.parts.some((p) => p.type === "servo") && (
             <Btn data-mpin="servo:VCC" onClick={() => pickPin("servo:VCC")}>
-              量舵机红线
+              {t("Measure servo red wire")}
             </Btn>
           )}
         </Btns>
@@ -1720,7 +1718,7 @@ export function benchStep(): StepImpl {
     if (on) select({ kind: "tool", id: "meter" });
     else if (c.store.get().selection?.kind === "tool") select(null);
   }
-  /** 万用表常驻读数卡（台面右下）：读数由 updateLive 填 */
+  /** Pinned multimeter card (bench bottom-right); updateLive fills the reading. */
   function meterCard() {
     overlay(
       "meter",
@@ -1730,7 +1728,7 @@ export function benchStep(): StepImpl {
     );
     if (meter) updateLive();
   }
-  /** 拾取到的东西 → 万用表点在哪根针（导线按它在开发板上的那一端；舵机红线单独一个节点） */
+  /** Pick → probed node (a wire maps to its dev-board end; the servo red wire is its own node). */
   function meterTarget(t: PickTarget): string | null {
     if (t.kind === "pin") return t.id;
     if (t.kind === "wire") {
@@ -1751,13 +1749,13 @@ export function benchStep(): StepImpl {
     );
   }
 
-  // ------------------------------------------------------------ 尺子（P0-13）
-  const pickName = (t: PickTarget) =>
-    t.kind === "part"
-      ? t.id === "board"
-        ? "开发板芯片"
-        : partName(t.id)
-      : t.id;
+  // ------------------------------------------------------------ Ruler (P0-13)
+  const pickName = (x: PickTarget) =>
+    x.kind === "part"
+      ? x.id === "board"
+        ? t("Dev board chip")
+        : partName(x.id)
+      : x.id;
   function renderRuler() {
     const r = ruler;
     const drift =
@@ -1770,35 +1768,35 @@ export function benchStep(): StepImpl {
         : "";
     show(
       <>
-        <Sec>尺子</Sec>
+        <Sec>{t("Ruler")}</Sec>
         <Note>
-          在台面上依次点两个零件、引脚或导线；量完再点就重新开始。点工具条「选择」退出。
+          {t("Click two parts, pins or wires on the bench in turn; click again after measuring to start over. Click Select in the toolbar to exit.")}
         </Note>
-        <Kv k="起点" v={r?.a ? pickName(r.a) : "点第一个目标"} />
-        <Kv k="终点" v={r?.b ? pickName(r.b) : r?.a ? "点第二个目标" : "—"} />
+        <Kv k={t("Start")} v={r?.a ? pickName(r.a) : t("Click the first target")} />
+        <Kv k={t("End")} v={r?.b ? pickName(r.b) : r?.a ? t("Click the second target") : "—"} />
         <Kv
-          k="距离"
+          k={t("Distance")}
           v={r?.mm != null ? `${r.mm.toFixed(1)} mm` : "—"}
           cls="fp"
         />
-        {drift && <KvT k="受热偏高">{drift}</KvT>}
+        {drift && <KvT k={t("Heat bias")}>{drift}</KvT>}
         <Btns>
           <Btn id="rulerChip" onClick={() => measureChip()}>
-            量 BME280 到芯片
+            {t("Measure BME280 to chip")}
           </Btn>
         </Btns>
       </>,
       false,
     );
   }
-  /** 传感器离芯片越近读数越高：组装步骤用的同一个数（贴着芯片 +2.5 ℃），这里按距离线性收到 30 mm 为 0，估算 */
+  /** Closer to the chip reads higher: same offset as Assemble (+2.5 ℃ touching), fading linearly to 0 at 30 mm (estimate). */
   const driftOf = (mm: number) =>
     Math.max(0, Math.min(1, (30 - mm) / 25)) * CHIP_HEAT_OFFSET;
   const driftText = (mm: number) => {
     const d = driftOf(mm);
     return d < 0.05
-      ? `离芯片 ${mm.toFixed(1)} mm：芯片发热影响可以忽略。贴着芯片（5 mm 以内）读数约偏高 ${CHIP_HEAT_OFFSET} ℃（估算）`
-      : `离芯片 ${mm.toFixed(1)} mm：受热偏高约 ${d.toFixed(1)} ℃（估算，未经真机标定）`;
+      ? t("{mm} mm from the chip: chip heating is negligible. Touching the chip (within 5 mm) reads about {d} ℃ high (estimate)", { mm: mm.toFixed(1), d: CHIP_HEAT_OFFSET })
+      : t("{mm} mm from the chip: reads about {d} ℃ high from heat (estimate, not calibrated on real hardware)", { mm: mm.toFixed(1), d: d.toFixed(1) });
   };
   function measureChip(): number | null {
     const mm =
@@ -1817,12 +1815,12 @@ export function benchStep(): StepImpl {
     return mm;
   }
 
-  // ------------------------------------------------------------ 编码器 / 超声波（P2-01 / P2-04）
+  // ------------------------------------------------------------ Encoder / ultrasonic (P2-01 / P2-04)
   const encRows = () => (
     <>
-      <Kv k="旋钮位置" live="encpos" />
-      <Kv k="PCNT 计数（单元 0）" live="pcnt" />
-      <Kv k="固件读数" live="encfw" />
+      <Kv k={t("Knob position")} live="encpos" />
+      <Kv k={t("PCNT count (unit 0)")} live="pcnt" />
+      <Kv k={t("Firmware reading")} live="encfw" />
     </>
   );
   const turn = (n: number) => {
@@ -1838,13 +1836,13 @@ export function benchStep(): StepImpl {
   const encButtons = () => (
     <Btns>
       <Btn data-enc="-1" onClick={() => turn(-1)}>
-        逆时针 1 格
+        {t("Counterclockwise 1 step")}
       </Btn>
       <Btn data-enc="1" onClick={() => turn(1)}>
-        顺时针 1 格
+        {t("Clockwise 1 step")}
       </Btn>
       <Btn data-enc="5" onClick={() => turn(5)}>
-        顺时针 5 格
+        {t("Clockwise 5 steps")}
       </Btn>
       <Btn
         data-encsw="hold"
@@ -1855,16 +1853,16 @@ export function benchStep(): StepImpl {
         onPointerUp={(e) => encRelease(e.currentTarget)}
         onPointerLeave={(e) => encRelease(e.currentTarget)}
       >
-        按住旋钮
+        {t("Hold the knob")}
       </Btn>
     </Btns>
   );
   const sonarRows = () => (
     <>
-      <Kv k="设定距离" live="dist" />
-      <Kv k="最近一次 Echo" live="echo" />
-      <Kv k="触发次数" live="pings" />
-      <Kv k="固件读数" live="sonfw" />
+      <Kv k={t("Set distance")} live="dist" />
+      <Kv k={t("Last Echo")} live="echo" />
+      <Kv k={t("Triggers")} live="pings" />
+      <Kv k={t("Firmware reading")} live="sonfw" />
     </>
   );
   const sonarControls = () => {
@@ -1881,8 +1879,8 @@ export function benchStep(): StepImpl {
           step={0.5}
           defaultValue={d < 0 ? 400 : d}
           data-dist=""
-          aria-label="障碍物距离"
-          out={d < 0 ? "没有障碍物" : `${d.toFixed(1)} cm`}
+          aria-label={t("Obstacle distance")}
+          out={d < 0 ? t("No obstacle") : `${d.toFixed(1)} cm`}
           on={{
             input: (e) => {
               const v = Number(e.currentTarget.value);
@@ -1898,7 +1896,7 @@ export function benchStep(): StepImpl {
             </Btn>
           ))}
           <Btn data-distset="-1" onClick={() => set(-1)}>
-            拿走障碍物
+            {t("Remove obstacle")}
           </Btn>
         </Btns>
       </>
@@ -1912,16 +1910,16 @@ export function benchStep(): StepImpl {
       k: "wiring",
       mods,
       scene: c.session.scene,
-      label: off ? "装回 Echo 分压电阻" : "拆掉 Echo 分压电阻",
+      label: off ? t("Refit Echo divider resistors") : t("Remove Echo divider resistors"),
     });
     c.session.setWireMods(mods);
     c.shell.toast(
       off
-        ? "Echo 经 1k、2k 分压，约 3.3 V 进 GPIO"
-        : "Echo 5 V 直接进 GPIO，接线检查报「5 V 进 GPIO」",
+        ? t("Echo goes through a 1k/2k divider, about 3.3 V into the GPIO")
+        : t("Echo 5 V goes straight into the GPIO; the wiring check reports \"5 V into GPIO\""),
     );
   }
-  /** 串口最近的读数行（固件打印格式见 firmware/s3-encoder、s3-ultrasonic） */
+  /** Latest reading line on serial (print format: firmware/s3-encoder, s3-ultrasonic). */
   const lastLine = (re: RegExp) => {
     const t = ctx!.session.consoleText().slice(-3000);
     let m: RegExpExecArray | null = null;
@@ -1929,7 +1927,7 @@ export function benchStep(): StepImpl {
     return m;
   };
 
-  /** 环境滑块（属性面板、快捷卡片）：一次手势只记一步（第一下 input 时记，后面改这一步的值），松手结束 */
+  /** Env sliders (inspector, quick card): one gesture = one step, recorded on first input and updated until release. */
   const gestures = new WeakMap<HTMLInputElement, BenchStep>();
   const fmtEnv: Record<string, (v: number) => string> = {
     temp: (v) => `${v.toFixed(1)} °C`,
@@ -1961,9 +1959,9 @@ export function benchStep(): StepImpl {
     number,
     number,
   ][] = [
-    ["temp", "温度", -10, 45, 0.5],
-    ["humidity", "湿度", 0, 100, 1],
-    ["pressure", "气压", 90000, 110000, 50],
+    ["temp", t("Temperature"), -10, 45, 0.5],
+    ["humidity", t("Humidity"), 0, 100, 1],
+    ["pressure", t("Pressure"), 90000, 110000, 50],
   ];
   const envSlider = (
     k: "temp" | "humidity" | "pressure",
@@ -1987,7 +1985,7 @@ export function benchStep(): StepImpl {
     );
   };
 
-  /** 热源、量到芯片（属性面板与快捷卡片共用）；量到的距离只在这一块里显示 */
+  /** Heat source + distance to chip (inspector and quick card); the distance shows only in this block. */
   function HeatActs() {
     const [mm, setMm] = useState<number | null | undefined>(undefined);
     const heat = !!ctx!.session.heat;
@@ -1995,19 +1993,19 @@ export function benchStep(): StepImpl {
       <>
         <Btns>
           <Btn data-act="heat" aria-pressed={heat} onClick={() => toggleHeat()}>
-            {heat ? "拿开热源" : "放上热源"}
+            {heat ? t("Remove heat source") : t("Add heat source")}
           </Btn>
           <Btn data-act="chip" onClick={() => setMm(measureChip())}>
-            量到芯片
+            {t("Distance to chip")}
           </Btn>
         </Btns>
         <KvBox data-live="chipmm" hidden={mm === undefined}>
           {mm !== undefined && (
             <>
-              <span className="k flex-none text-muted">量到芯片</span>
+              <span className="k flex-none text-muted">{t("Distance to chip")}</span>
               {mm === null ? (
                 <span className="v txt text-[13px] break-all">
-                  看不到这两个目标
+                  {t("Cannot see these two targets")}
                 </span>
               ) : (
                 <>
@@ -2031,12 +2029,12 @@ export function benchStep(): StepImpl {
         data-act="level"
         onClick={() => ctx!.session.setPose({ pitch: 0, roll: 0, yaw: 0 })}
       >
-        放平
+        {t("Level it")}
       </Btn>
     </Btns>
   );
 
-  /** 直接设一个温度（数字框、预设）：一下就是时间线上一步 */
+  /** Set a temperature directly (number box, presets): one timeline step each. */
   function setTempNow(v: number) {
     const c = ctx!;
     const t = Math.min(45, Math.max(-10, Math.round(v * 10) / 10));
@@ -2053,7 +2051,7 @@ export function benchStep(): StepImpl {
           <input
             type="number"
             data-envnum="temp"
-            aria-label="环境温度（°C）"
+            aria-label={t("Ambient temperature (°C)")}
             min={-10}
             max={45}
             step={0.1}
@@ -2067,15 +2065,15 @@ export function benchStep(): StepImpl {
           °C
         </label>
         <span className="flex-1" />
-        {[18, 32, 4].map((t) => (
+        {[18, 32, 4].map((deg) => (
           <button
-            key={t}
+            key={deg}
             type="button"
-            data-preset={t}
-            onClick={() => setTempNow(t)}
+            data-preset={deg}
+            onClick={() => setTempNow(deg)}
             className="h-8 cursor-pointer rounded-md border border-line bg-surface px-2 font-mono text-xs text-fg hover:bg-field"
           >
-            {t}°
+            {deg}°
           </button>
         ))}
       </div>
@@ -2089,23 +2087,23 @@ export function benchStep(): StepImpl {
       const rgb = RGB_GPIO[ses.chip];
       show(
         <>
-          <Sec>开发板</Sec>
+          <Sec>{t("Dev board")}</Sec>
           <PartHead
             name={BOARD_NAME[ses.chip]}
             type="board"
           />
           <Kv
-            k="芯片"
+            k={t("Chip")}
             v={CHIP_DESC[ses.chip]}
           />
-          <Kv k="供电" v="USB 5 V 经 LDO 降到 3V3" />
+          <Kv k={t("Power supply")} v={t("USB 5 V stepped down to 3V3 by the LDO")} />
           <Kv k="3V3" live="e33" />
-          <Kv k="3V3 总电流（估算）" live="eic" />
-          <Kv k="欠压复位" live="ers" />
-          <Sec>实时</Sec>
-          <Kv k="运行" live="run" />
-          <Kv k="模拟时间" live="sim" />
-          {rgb !== null && <Kv k={`板载 RGB（GPIO${rgb}）`} live="rgb" />}
+          <Kv k={t("3V3 total current (estimate)")} live="eic" />
+          <Kv k={t("Brownout resets")} live="ers" />
+          <Sec>{t("Live")}</Sec>
+          <Kv k={t("Run")} live="run" />
+          <Kv k={t("Simulated time")} live="sim" />
+          {rgb !== null && <Kv k={t("On-board RGB (GPIO{n})", { n: rgb })} live="rgb" />}
           <Btns>
             <Btn
               id="bootBtn"
@@ -2113,10 +2111,10 @@ export function benchStep(): StepImpl {
               onPointerUp={() => ses.pressBoot(false)}
               onPointerLeave={() => ses.pressBoot(false)}
             >
-              按 BOOT（GPIO{BOOT_GPIO[ses.chip]}）
+              {t("Press BOOT (GPIO{n})", { n: BOOT_GPIO[ses.chip] })}
             </Btn>
             <Btn id="rstBtn" onClick={() => ses.reboot()}>
-              RST 重新上电
+              {t("RST power cycle")}
             </Btn>
           </Btns>
         </>,
@@ -2129,15 +2127,15 @@ export function benchStep(): StepImpl {
     if (!p) {
       show(
         <>
-          <Sec>零件</Sec>
+          <Sec>{t("Part")}</Sec>
           <Ph mono>{id}</Ph>
-          <TreeEmpty>这个零件不在当前台面上</TreeEmpty>
+          <TreeEmpty>{t("This part is not on the current bench")}</TreeEmpty>
         </>,
         false,
       );
       return;
     }
-    // 拆掉了 Echo 分压（改接线）：接口说明跟着改
+    // Echo divider removed (rewired): the interface text follows.
     const noDiv = (ses.wireMods.noDivider ?? []).includes("hcsr04");
     const info = partInfo(
       p.type === "hcsr04" && noDiv ? { ...p, divider: false } : p,
@@ -2147,69 +2145,66 @@ export function benchStep(): StepImpl {
     if (p.type === "bme280") {
       live = (
         <>
-          <Sec>实时读数 · 固件串口最近一行</Sec>
-          <Kv k="温度" live="rt" />
-          <Kv k="湿度" live="rh" />
-          <Kv k="气压" live="rp" />
-          <Sec>环境温度</Sec>
-          {envSlider("temp", "环境温度", -10, 45, 0.5)}
+          <Sec>{t("Live reading · latest firmware serial line")}</Sec>
+          <Kv k={t("Temperature")} live="rt" />
+          <Kv k={t("Humidity")} live="rh" />
+          <Kv k={t("Pressure")} live="rp" />
+          <Sec>{t("Ambient temperature")}</Sec>
+          {envSlider("temp", t("Ambient temperature"), -10, 45, 0.5)}
           <TempExact />
           <HeatActs />
-          <Note>湿度、气压在构建树「环境」里调。可信度：仿真验证。</Note>
+          <Note>{t("Humidity and pressure are set under Environment in the build tree. Confidence: simulation verified.")}</Note>
         </>
       );
     } else if (p.type === "oled") {
       live = (
         <>
-          <Sec>实时画面</Sec>
+          <Sec>{t("Live image")}</Sec>
           <OledCanvas />
-          <Kv k="点亮像素" live="oledn" />
+          <Kv k={t("Lit pixels")} live="oledn" />
         </>
       );
     } else if (p.type === "servo") {
       live = (
         <>
-          <Sec>实时</Sec>
-          <Kv k="脉宽" live="pw" />
-          <Kv k="角度" live="ang" />
+          <Sec>{t("Live")}</Sec>
+          <Kv k={t("Pulse width")} live="pw" />
+          <Kv k={t("Angle")} live="ang" />
         </>
       );
     } else if (p.type === "encoder") {
       live = (
         <>
-          <Sec>实时</Sec>
+          <Sec>{t("Live")}</Sec>
           {encRows()}
-          <Sec>转一转</Sec>
+          <Sec>{t("Turn it")}</Sec>
           {encButtons()}
           <Note>
-            台面上左右拖旋钮或滚轮转一格，按住就是按下。可信度：仿真验证；没模拟触点抖动。
+            {t("On the bench, drag the knob left/right or scroll to turn one step; hold to press. Confidence: simulation verified; contact bounce is not modeled.")}
           </Note>
         </>
       );
     } else if (p.type === "hcsr04") {
       live = (
         <>
-          <Sec>实时</Sec>
+          <Sec>{t("Live")}</Sec>
           {sonarRows()}
-          <Sec>障碍物距离</Sec>
+          <Sec>{t("Obstacle distance")}</Sec>
           {sonarControls()}
           <Note>
-            台面上：按住障碍物沿探头方向拖（3D 里最远摆到 100
-            cm，更远用滑块）。Trig 收到 10 µs 以上的高电平，250 µs 后 Echo
-            拉高，高电平时长就是来回距离除以声速 343
-            m/s；距离按探头到障碍物的直线算。声速按 20 ℃ 固定，未经真机标定。
+            {t("On the bench: hold the obstacle and drag it along the sensor axis (up to 100 cm in 3D, use the slider beyond). After a high pulse of 10 µs or more on Trig, Echo goes high 250 µs later; the high time is the round-trip distance divided by the 343 m/s speed of sound, measured in a straight line from sensor to obstacle. Speed of sound is fixed at 20 ℃, not calibrated on real hardware.")}
           </Note>
-          <Sec>电平</Sec>
+          <Sec>{t("Level")}</Sec>
           <KvT k="Echo">
             {p.divider === false || noDiv ? (
-              <Bad>5 V 直接进 GPIO：S3 的 GPIO 不耐 5 V，会伤引脚</Bad>
+              <Bad>{t("5 V straight into the GPIO: S3 GPIOs are not 5 V tolerant and the pin can be damaged")}</Bad>
             ) : (
-              "Echo 输出 5 V，经 1 kΩ / 2 kΩ 分压到约 3.3 V 再进 GPIO"
+              t("Echo outputs 5 V, divided by 1 kΩ / 2 kΩ to about 3.3 V before the GPIO")
             )}
           </KvT>
           <Btns>
             <Btn data-div="" aria-pressed={!noDiv} onClick={toggleDivider}>
-              {noDiv ? "装回分压电阻" : "拆掉分压电阻（看接线检查报警）"}
+              {noDiv ? t("Refit divider resistors") : t("Remove divider resistors (see the wiring check alarm)")}
             </Btn>
           </Btns>
         </>
@@ -2217,20 +2212,17 @@ export function benchStep(): StepImpl {
     } else if (p.type === "mpu6050" || p.type === "qmi8658") {
       live = (
         <>
-          <Sec>姿态 · 端起面包板</Sec>
+          <Sec>{t("Orientation · lift the breadboard")}</Sec>
           {poseSliders()}
           {levelBtn()}
-          <Sec>传感器应读到 · 重力分量</Sec>
+          <Sec>{t("Sensor should read · gravity components")}</Sec>
           <Kv k="ax / ay / az" live="gacc" />
-          <Sec>实时读数 · 固件串口最近一行</Sec>
-          <Kv k="俯仰 pitch" live="ipitch" />
-          <Kv k="横滚 roll" live="iroll" />
-          <Kv k="陀螺" live="igyro" />
+          <Sec>{t("Live reading · latest firmware serial line")}</Sec>
+          <Kv k={t("Pitch")} live="ipitch" />
+          <Kv k={t("Roll")} live="iroll" />
+          <Kv k={t("Gyro")} live="igyro" />
           <Note>
-            也可以在 3D
-            里按住这块模块拖动，整块台面跟着转；拖动时陀螺读到角速度，松手 150
-            ms
-            后回零。只靠加速度计算不出航向（yaw），它只影响陀螺。可信度：行为模拟，寄存器按数据手册、读数按姿态算出；噪声和零偏必须上真机确认。
+            {t("You can also hold and drag this module in 3D and the whole bench turns; while dragging the gyro reads angular rate, returning to zero 150 ms after release. The accelerometer alone cannot give heading (yaw); yaw only affects the gyro. Confidence: behavioral model, registers per datasheet and readings computed from orientation; noise and bias must be confirmed on real hardware.")}
           </Note>
         </>
       );
@@ -2240,34 +2232,33 @@ export function benchStep(): StepImpl {
     ) {
       live = (
         <>
-          <Sec>触摸 · 在 3D 里点或拖圆屏</Sec>
-          <Kv k="手指" live="tch" />
-          <Kv k="INT 电平" live="tint" />
+          <Sec>{t("Touch · tap or drag the round display in 3D")}</Sec>
+          <Kv k={t("Finger")} live="tch" />
+          <Kv k={t("INT level")} live="tint" />
           <Note>
-            点屏幕就是按下，拖动就是移动，松开就是抬起；芯片自己判手势：单击、滑动、长按
-            1 秒。真机的自动睡眠、扫描噪声没模拟，必须上真机确认。
+            {t("Tap the screen to press, drag to move, release to lift; the chip detects gestures itself: tap, swipe, 1 s long press. Auto-sleep and scan noise of the real chip are not modeled; confirm on real hardware.")}
           </Note>
         </>
       );
     }
     show(
       <>
-        <Sec>零件</Sec>
+        <Sec>{t("Part")}</Sec>
         <PartHead name={info.name} type={p.type} />
-        <KvT k="型号">{info.model}</KvT>
-        <KvT k="接口">{info.iface}</KvT>
-        <Kv k="供电" v={info.power} />
+        <KvT k={t("Model")}>{info.model}</KvT>
+        <KvT k={t("Interface")}>{info.iface}</KvT>
+        <Kv k={t("Power supply")} v={info.power} />
         {live}
         {p.type === "servo" && powerInline()}
       </>,
     );
   }
 
-  // ------------------------------------------------------------ 姿态（P2-03）
+  // ------------------------------------------------------------ Orientation (P2-03)
   const POSE_AXES: ["pitch" | "roll" | "yaw", string, number][] = [
-    ["pitch", "俯仰", 90],
-    ["roll", "横滚", 180],
-    ["yaw", "航向", 180],
+    ["pitch", t("Pitch"), 90],
+    ["roll", t("Roll"), 180],
+    ["yaw", t("Yaw"), 180],
   ];
   function poseSliders(axes = POSE_AXES) {
     const pz = ctx!.store.get().pose;
@@ -2298,32 +2289,32 @@ export function benchStep(): StepImpl {
   function renderEnv() {
     show(
       <>
-        <Sec>环境</Sec>
-        <Ph>室内</Ph>
-        <Note>改这里，传感器读数、串口和 OLED 都会跟着变。</Note>
+        <Sec>{t("Environment")}</Sec>
+        <Ph>{t("Indoors")}</Ph>
+        <Note>{t("Change these and the sensor readings, serial output and OLED all follow.")}</Note>
         {ENV_ROWS.map(([k, n, min, max, step]) => (
           <KvBox key={k}>
             <span className="k">{n}</span>
             {envSlider(k, n, min, max, step)}
           </KvBox>
         ))}
-        <Sec>传感器读到</Sec>
-        <Kv k="温度" live="rt" />
-        <Kv k="湿度" live="rh" />
-        <Kv k="气压" live="rp" />
+        <Sec>{t("Sensor reads")}</Sec>
+        <Kv k={t("Temperature")} live="rt" />
+        <Kv k={t("Humidity")} live="rh" />
+        <Kv k={t("Pressure")} live="rp" />
       </>,
     );
   }
 
-  /** 「这个示例」：说明、标签、模拟输入滑块（.env 里的滑块是回归脚本拖的那几个），再指一个用同类器件的作品 */
-  /** 麦克风声源（与旧实验台同一组：测试 WAV 进验收，浏览器麦克风只玩） */
+  /** Mic sources (same set as the old bench: test WAVs count for checks, the browser mic is play only). */
   const MIC_SOURCES: [string, string][] = [
-    ["sine1k.wav", "1 kHz 正弦（测试 WAV）"],
-    ["sweep.wav", "扫频 200→2000 Hz（测试 WAV）"],
-    ["silence", "安静"],
-    ["live", "浏览器麦克风（要授权，只玩不进验收）"],
+    ["sine1k.wav", t("1 kHz sine (test WAV)")],
+    ["sweep.wav", t("Sweep 200→2000 Hz (test WAV)")],
+    ["silence", t("Silence")],
+    ["live", t("Browser microphone (needs permission, play only, not checked)")],
   ];
 
+  /** "This example": about, tags, analog sliders (the .env ones are what regression scripts drag), plus a project using similar parts. */
   function renderExample() {
     const c = ctx!;
     const { ex, work } = exInfo!;
@@ -2331,19 +2322,19 @@ export function benchStep(): StepImpl {
     const analogs = ctl.filter((k): k is AnalogControl => typeof k === "object" && k.type === "analog");
     show(
       <>
-        <Sec>这个示例</Sec>
-        <Ph>{ex.title}</Ph>
-        <Note>{ex.about}</Note>
+        <Sec>{t("This example")}</Sec>
+        <Ph>{t(ex.title)}</Ph>
+        <Note>{t(ex.about)}</Note>
         <div className="mb-1 flex flex-wrap gap-1.5" data-ex-tags>
-          {[CHIP_NAME[chipOf(ex)], ...ex.tags].map((t) => (
+          {[CHIP_NAME[chipOf(ex)], ...ex.tags].map((tag) => (
             <span
-              key={t}
+              key={tag}
               className={cn(
                 "rounded-md px-2 py-0.5 text-[11px]",
-                t.startsWith("✓") ? "bg-ok-bg text-ok-ink" : "bg-field text-muted",
+                tag.startsWith("✓") ? "bg-ok-bg text-ok-ink" : "bg-field text-muted",
               )}
             >
-              {t}
+              {t(tag)}
             </span>
           ))}
         </div>
@@ -2351,28 +2342,28 @@ export function benchStep(): StepImpl {
           <div className="env">
             {ctl.includes("env") && (
               <>
-                <Sec>环境 · 拖动看读数跟着变</Sec>
+                <Sec>{t("Environment · drag and watch the reading follow")}</Sec>
                 {ENV_ROWS.map(([k, n, min, max, step]) => (
                   <KvBox key={k}>
                     <span className="k">{n}</span>
                     {envSlider(k, n, min, max, step)}
                   </KvBox>
                 ))}
-                <Kv k="固件读数" live="rt" />
+                <Kv k={t("Firmware reading")} live="rt" />
               </>
             )}
             {analogs.map((a) => {
               const mv = c.session.analog.get(a.pin) ?? a.value;
               return (
                 <KvBox key={a.pin}>
-                  <span className="k">{a.label}</span>
+                  <span className="k">{t(a.label)}</span>
                   <Slider
                     min={0}
                     max={a.max_mv}
                     step={10}
                     defaultValue={mv}
                     data-analog={a.pin}
-                    aria-label={a.label}
+                    aria-label={t(a.label)}
                     out={`${mv} mV`}
                     on={{
                       input: (e) => {
@@ -2387,19 +2378,19 @@ export function benchStep(): StepImpl {
             })}
             {ctl.includes("imu") && c.session.hasImu() && (
               <>
-                <Sec>倾斜台面</Sec>
+                <Sec>{t("Tilt the bench")}</Sec>
                 {poseSliders()}
-                <Kv k="固件读数" live="ipr" />
+                <Kv k={t("Firmware reading")} live="ipr" />
               </>
             )}
           </div>
         )}
         {c.session.scene.parts.some((p) => p.type === "inmp441") && (
           <>
-            <Sec>麦克风声源</Sec>
+            <Sec>{t("Microphone source")}</Sec>
             <select
               id="micSource"
-              aria-label="麦克风声源"
+              aria-label={t("Microphone source")}
               defaultValue={c.session.micSource}
               className="h-9 w-full cursor-pointer rounded-md border border-line bg-surface px-2 text-[13px] text-fg max-md:h-11"
               onChange={(e) => {
@@ -2411,9 +2402,9 @@ export function benchStep(): StepImpl {
                 });
               }}
             >
-              {MIC_SOURCES.map(([v, t]) => (
+              {MIC_SOURCES.map(([v, label]) => (
                 <option key={v} value={v}>
-                  {t}
+                  {label}
                 </option>
               ))}
             </select>
@@ -2422,26 +2413,26 @@ export function benchStep(): StepImpl {
         )}
         {work && (
           <>
-            <Sec>做成成品</Sec>
+            <Sec>{t("Make it a product")}</Sec>
             <a
               className="text-accent-ink hover:underline"
               href={lab(work.id, 'shop')}
               data-ex-work={work.id}
             >
-              {work.title} · {work.card?.chip ?? ""} →
+              {t(work.title)} · {work.card?.chip ?? ""} →
             </a>
           </>
         )}
-        <Note>点左边的构建树或台面上的零件看它的属性。</Note>
+        <Note>{t("Click the build tree on the left or a part on the bench to see its properties.")}</Note>
       </>,
     );
   }
 
-  /** 文件读不出来（被移走、没权限）时给提示，不抛到页面上 */
+  /** Unreadable file (moved, no permission): toast instead of throwing onto the page. */
   const safeFile = (handle: (f: File) => Promise<void>) => (f: File) =>
     void handle(f).catch((e) =>
       ctx?.shell.toast(
-        `读不了 ${f.name}：${e instanceof Error ? e.message : e}`,
+        t("Cannot read {file}: {err}", { file: f.name, err: e instanceof Error ? e.message : String(e) }),
       ),
     );
 
@@ -2450,20 +2441,20 @@ export function benchStep(): StepImpl {
     const ses = c.session;
     show(
       <>
-        <Sec>固件</Sec>
-        <Ph mono>{ses.fwName || "还没有固件"}</Ph>
+        <Sec>{t("Firmware")}</Sec>
+        <Ph mono>{ses.fwName || t("No firmware yet")}</Ph>
         {ses.fwName && (
           <>
-            <Kv k="大小" v={`${(ses.fwSize / 1024).toFixed(0)} KB`} />
-            <Kv k="芯片" v={CHIP_LABEL[ses.chip]} />
+            <Kv k={t("Size")} v={`${(ses.fwSize / 1024).toFixed(0)} KB`} />
+            <Kv k={t("Chip")} v={CHIP_LABEL[ses.chip]} />
           </>
         )}
-        <Kv k="运行" live="run" />
-        <Kv k="模拟时间" live="sim" />
+        <Kv k={t("Run")} live="run" />
+        <Kv k={t("Simulated time")} live="sim" />
         <Drop
           kind="bench"
-          title="把 .bin 拖到这里"
-          sub="换成你的固件在台面上跑，要 ESP-IDF 或 Arduino 导出的完整 flash 镜像"
+          title={t("Drop a .bin here")}
+          sub={t("Run your own firmware on the bench; needs a full flash image exported by ESP-IDF or Arduino")}
           onFile={safeFile(async (f) => {
             ses.loadFirmware(await f.arrayBuffer(), f.name);
             renderTree();
@@ -2481,8 +2472,8 @@ export function benchStep(): StepImpl {
     if (!l) {
       show(
         <>
-          <Sec>检查点</Sec>
-          <TreeEmpty>没有这个检查点：{id}</TreeEmpty>
+          <Sec>{t("Checkpoint")}</Sec>
+          <TreeEmpty>{t("No such checkpoint: {id}", { id })}</TreeEmpty>
         </>,
         false,
       );
@@ -2492,127 +2483,130 @@ export function benchStep(): StepImpl {
     const busy = s.verifying === id;
     const other = !!s.verifying && !busy;
     const st = busy ? undefined : stalled[id];
-    // 一张卡只有一个主动作（DESIGN_V2 §9.5）：没过 → 复制给 AI 修；自己的固件过了 → 下一个检查点
+    // One primary action per card (DESIGN_V2 §9.5): failed → copy for AI to fix; own pass → next checkpoint.
     const idx = c.session.levels.findIndex((x) => x.id === id);
     const nextLv = c.session.levels
       .slice(idx + 1)
       .find((x) => !s.checks[x.id]?.ok || (r?.own && !s.checks[x.id]?.own));
-    const runRef = async () => verify(l, await fetchBuf(`./fw/${l.ref}/flash.bin`), `参考固件 ${l.ref}`, false);
+    const runRef = async () => verify(l, await fetchBuf(`./fw/${l.ref}/flash.bin`), t("Reference firmware {name}", { name: l.ref ?? "" }), false);
     const stall = st ? (
       <>
-        <Sec>验收结果</Sec>
+        <Sec>{t("Check result")}</Sec>
         <ResultCard
           verdict="stall"
-          title="这次没跑完"
-          why={`模拟卡住，已经停下。这不算没通过，你的代码可能没问题${r ? "；上一次的结果留在下面" : ""}。`}
+          title={t("This run did not finish")}
+          why={
+            r
+              ? t("The simulation stalled and was stopped. This is not a fail; your code may be fine. The previous result is kept below.")
+              : t("The simulation stalled and was stopped. This is not a fail; your code may be fine.")
+          }
           extra={
             <p className="mt-1 mb-0 text-xs text-muted">
-              原因：{st.why} · 固件 <Mono>{st.who}</Mono> 已留着
+              {tn("Reason: {why} · firmware {fw} kept", { why: st.why, fw: <Mono>{st.who}</Mono> })}
             </p>
           }
           rows={[]}
         >
           <Btn id="retryCheck" primary className={actCls} disabled={other} onClick={() => verify(l, st.buf, st.who, st.own)}>
-            再跑一次
+            {t("Run again")}
           </Btn>
         </ResultCard>
       </>
     ) : null;
     const result = busy ? (
       <>
-        <Sec>验收结果</Sec>
-        <RunningCard title={l.title} progress={<>已模拟 <Live k="vp" className="font-mono" /></>} />
+        <Sec>{t("Check result")}</Sec>
+        <RunningCard title={t(l.title)} progress={tn("Simulated {t}", { t: <Live k="vp" className="font-mono" /> })} />
       </>
     ) : r ? (
       <>
-        <Sec>验收结果</Sec>
+        <Sec>{t("Check result")}</Sec>
         <ResultCard
           verdict={r.ok ? "ok" : "bad"}
-          meta={`${r.who}${r.sim ? `，模拟 ${r.sim.toFixed(1)} 秒` : ""}`}
+          meta={r.sim ? t("{who}, simulated {s} s", { who: r.who, s: r.sim.toFixed(1) }) : r.who}
           title={headline(r.rows)}
           why={
             r.ok && !r.own
-              ? "参考固件跑通（◐）：同样解锁组装和成品；换成你自己的固件通过后变成 ✓。"
+              ? t("Reference firmware ran through (◐): it also unlocks Assemble and Product; passing with your own firmware turns it into ✓.")
               : undefined
           }
           rows={r.rows}
           runId={r.fingerprint}
           rawNote={
             <Note>
-              同一固件、同样输入，网页和命令行 <Mono>npx tryboard check</Mono>{" "}
-              得到同一个运行编号。
+              {tn("Same firmware and same inputs give the same run ID on the web and in the CLI {cmd}.", { cmd: <Mono>npx tryboard check</Mono> })}
             </Note>
           }
         >
           {!r.ok && (
             <Btn primary data-act="fix" className={actCls} onClick={(e) => void copyFix(e.currentTarget, r.rows)}>
-              复制给 AI 修
+              {t("Copy for AI to fix")}
             </Btn>
           )}
           {!r.ok && r.own && l.ref && (
             <Btn data-act="compare" className={actCls} disabled={!!s.verifying} onClick={() => void runRef()}>
-              用参考固件对比
+              {t("Compare with reference firmware")}
             </Btn>
           )}
           {r.ok && nextLv && (
             <Btn primary data-act="nextcp" className={actCls} onClick={() => select({ kind: "checkpoint", id: nextLv.id })}>
-              下一个检查点：{nextLv.title}
+              {t("Next checkpoint: {title}", { title: t(nextLv.title) })}
             </Btn>
           )}
         </ResultCard>
       </>
     ) : null;
-    /** 任务书 + 没过的结论原文（和命令行看到的一致），AI 拿去就能改 */
+    /** Brief + raw failing lines (same as the CLI) so an AI can fix it directly. */
+    const briefText = () =>
+      t("{brief}\n\nPass condition: {pass}\nCheck: {cmd} (exit code 0 means pass)", { brief: t(l.brief), pass: t(l.pass), cmd: checkCommand(l) });
     const copyFix = async (b: HTMLButtonElement, rows: { ok: boolean | null; text: string }[]) => {
       const bad = rows.filter((x) => x.ok === false).map((x) => `- ${x.text}`).join("\n");
-      const text = `${l.brief}\n\n通过条件：${l.pass}\n验收：${checkCommand(l)}（退出码 0 表示通过）\n\n上次验收没过的几条：\n${bad}`;
+      const text = t("{brief}\n\nFailed in the last check:\n{bad}", { brief: briefText(), bad });
       try {
         await navigator.clipboard.writeText(text);
-        b.textContent = "已复制，贴给 AI";
+        b.textContent = t("Copied, paste it to the AI");
       } catch {
-        b.textContent = "复制不了，请从下面的任务书手动复制";
+        b.textContent = t("Cannot copy; copy the brief below by hand");
       }
     };
     const copy = async (b: HTMLButtonElement) => {
-      const text = `${l.brief}\n\n通过条件：${l.pass}\n验收：${checkCommand(l)}（退出码 0 表示通过）`;
+      const text = briefText();
       try {
         await navigator.clipboard.writeText(text);
-        b.textContent = "已复制";
+        b.textContent = t("Copied");
       } catch {
         const range = document.createRange();
         range.selectNodeContents(c.shell.props.el.querySelector(".brief")!);
         getSelection()?.removeAllRanges();
         getSelection()?.addRange(range);
-        b.textContent = "已选中，按 ⌘C / Ctrl+C 复制";
+        b.textContent = t("Selected, press ⌘C / Ctrl+C to copy");
       }
     };
     show(
       <>
-        <Sec>检查点 {l.id}</Sec>
-        <Ph>{l.title}</Ph>
-        <p className="goal mt-0 mb-1 text-muted">{l.goal}</p>
-        <Sec>通过条件</Sec>
-        <Field>{l.pass}</Field>
-        <Sec className="edit-only">验收</Sec>
+        <Sec>{t("Checkpoint {id}", { id: l.id })}</Sec>
+        <Ph>{t(l.title)}</Ph>
+        <p className="goal mt-0 mb-1 text-muted">{t(l.goal)}</p>
+        <Sec>{t("Pass condition")}</Sec>
+        <Field>{t(l.pass)}</Field>
+        <Sec className="edit-only">{t("Check")}</Sec>
         <Drop
           kind="check"
           busy={busy || other}
           disabled={busy || other}
           title={
             busy ? (
-              <>
-                模拟中 <Live k="vp" className="font-mono" />
-              </>
+              tn("Simulating {t}", { t: <Live k="vp" className="font-mono" /> })
             ) : (
-              "把 .bin 拖到这里"
+              t("Drop a .bin here")
             )
           }
           sub={
             busy
-              ? "跑完再判定"
+              ? t("Judged once it finishes")
               : other
-                ? "另一个检查点正在验收，稍等"
-                : "或点这里选文件"
+                ? t("Another checkpoint is being checked, please wait")
+                : t("Or click here to choose a file")
           }
           onFile={
             busy || other
@@ -2629,30 +2623,34 @@ export function benchStep(): StepImpl {
               disabled={!!s.verifying}
               onClick={() => void runRef()}
             >
-              用参考固件试
+              {t("Try reference firmware")}
             </Btn>
           )}
           {l.ref && (
-            <LinkBtn id="dlBin" href={`./fw/${l.ref}/flash.bin`} download={`${l.ref}.bin`} title="烧到真板子：esptool.py write_flash 0x0">
-              下载参考 .bin
+            <LinkBtn id="dlBin" href={`./fw/${l.ref}/flash.bin`} download={`${l.ref}.bin`} title={t("Flash to a real board: esptool.py write_flash 0x0")}>
+              {t("Download reference .bin")}
             </LinkBtn>
           )}
           {l.ref && (
-            <LinkBtn id="dlSrc" href={`./fw/${l.ref}/src.zip`} download={`${l.ref}-src.zip`} title="ESP-IDF 5.5 工程，解压后 idf.py build">
-              下载源码 zip
+            <LinkBtn id="dlSrc" href={`./fw/${l.ref}/src.zip`} download={`${l.ref}-src.zip`} title={t("ESP-IDF 5.5 project; unzip and run idf.py build")}>
+              {t("Download source zip")}
             </LinkBtn>
           )}
         </Btns>
         {stall}
         {result}
-        <Sec>交给 AI 的任务书</Sec>
-        <Brief>{l.brief}</Brief>
+        <Sec>{t("Brief for the AI")}</Sec>
+        <Brief>{t(l.brief)}</Brief>
         <Btns>
           <CopyBrief onCopy={(b) => void copy(b)} />
         </Btns>
-        <Sec>验收命令</Sec>
+        <Sec>{t("Check command")}</Sec>
         <Code>{checkCommand(l)}</Code>
-        <Note>命令行跑出的结论和运行编号与网页相同；退出码 0 表示通过。tryboard 命令行包还没发布到 npm，现在要从仓库的 packages/tryboard 本地安装。</Note>
+        <Note>
+          {t(
+            "The command line gives the same verdict and run ID as the page; exit code 0 means pass. The tryboard CLI package is not on npm yet, so install it locally from packages/tryboard in the repository.",
+          )}
+        </Note>
       </>,
     );
   }
@@ -2662,7 +2660,7 @@ export function benchStep(): StepImpl {
     if (c.store.get().verifying) return;
     if (own) ownFirmware[l.id] = { buf: buf.slice(0), name: who };
     delete stalled[l.id];
-    // -1：还在加载模拟器（wasm / ROM），Worker 还没开始跑
+    // -1 means the simulator (wasm / ROM) is still loading and the Worker has not started
     c.store.set({ verifying: l.id, verifyProgress: -1 });
     let out: CheckOutcome;
     try {
@@ -2677,13 +2675,13 @@ export function benchStep(): StepImpl {
         tag: x.tag,
         dev: x.dev,
       }));
-      // 装配检查是几何估算，命令行不判；实验台上也不判，留给「组装」步骤
+      // Assembly checks are geometric estimates the CLI cannot judge, so the Assemble step owns them
       if (l.assembly)
         rows.push({
           ok: null,
-          text: "装配检查（估算）在「组装」步骤判定，这里不计",
-          say: "装配在「组装」那一步检查，这里不判",
-          dev: "装配",
+          text: t("Assembly check (estimate) is judged in the Assemble step and not counted here"),
+          say: t("Assembly is checked in the Assemble step, not here"),
+          dev: t("Assembly"),
         });
       out = {
         ok: v.ok,
@@ -2697,24 +2695,32 @@ export function benchStep(): StepImpl {
       if (e instanceof VerifyStalled) {
         stalled[l.id] = { why: e.message, buf: buf.slice(0), who, own };
         c.store.set({ verifying: null });
-        c.shell.toast(`检查点 ${l.id} 这次没跑完，不算没通过，可以再跑一次`);
+        c.shell.toast(
+          t("Checkpoint {id} did not finish this time; that is not a fail, run it again", { id: l.id }),
+        );
         return;
       }
       out = {
         ok: false,
         who,
         own,
-        rows: [{ ok: false, text: `运行失败：${e}`, say: "模拟器出错，这次没跑起来" }],
+        rows: [
+          {
+            ok: false,
+            text: t("Run failed: {err}", { err: String(e) }),
+            say: t("The simulator hit an error and could not run this time"),
+          },
+        ],
         fingerprint: "—",
         sim: 0,
       };
     }
-    // 参考固件跑通也记进度（◐，同样解锁组装 / 成品）；saveProgress 自己保证不覆盖自己的通过
+    // A reference pass still records progress (◐, unlocks Assemble / Product); saveProgress never overwrites your own pass
     if (out.ok) {
       saveProgress(wkey(c.work), l.id, out.fingerprint, own);
       buyArmed = true;
     }
-    // 参考固件的结果不覆盖你已经通过的记录
+    // A reference result must not replace a pass you earned yourself
     const prev = c.store.get().checks[l.id];
     const keep = prev?.own && prev.ok && !own;
     if (!keep) c.hist?.op({ k: "check", id: l.id, outcome: out });
@@ -2724,26 +2730,29 @@ export function benchStep(): StepImpl {
     }));
     if (keep)
       c.shell.toast(
-        `参考固件${out.ok ? "通过了" : "没通过"}（运行编号 ${out.fingerprint}，不覆盖你的记录）`,
+        out.ok
+          ? t("Reference firmware passed (run ID {fp}; your record is kept)", { fp: out.fingerprint })
+          : t("Reference firmware did not pass (run ID {fp}; your record is kept)", { fp: out.fingerprint }),
       );
   }
 
-  // ------------------------------------------------------------ 实时字段（不重建面板，免得拖滑块时被打断）
+  // ------------------------------------------------------------ live fields (no panel rebuild, so slider drags are not interrupted)
   function updateLive() {
     const c = ctx!;
+    const WAIT_FW = t("Waiting for firmware output…");
     const s = c.store.get();
     const el = c.shell.props.el;
-    // 快捷卡片里的读数和属性面板用同一套 data-live
+    // Quick cards and the properties panel share the same data-live fields
     const card = c.shell.stage.querySelector<HTMLElement>(
       ".qcard:not([hidden])",
     );
-    // 台面浮层里的常驻卡（万用表）也按 data-live 填
+    // Pinned cards over the bench (Multimeter) are filled through data-live too
     const extra = [
       ...c.shell.stage.querySelectorAll<HTMLElement>("[data-live-root]"),
     ];
     const set = (k: string, v: string, bad = false) => {
       for (const root of card ? [el, card, ...extra] : [el, ...extra]) {
-        // 同一字段可能出现多处（拖放框和跑中卡都显示「已模拟」），全填
+        // One field can appear in several places (drop box and running card both show simulated time), so fill all
         for (const n of root.querySelectorAll<HTMLElement>(`[data-live="${k}"]`)) {
           n.textContent = v;
           n.classList.toggle("bad", bad);
@@ -2753,29 +2762,37 @@ export function benchStep(): StepImpl {
     set(
       "run",
       s.run
-        ? `#${s.runNo || s.run}${s.hist.seeked ? " · 回退点（暂停）" : s.running ? " · 运行中" : " · 停止"}`
-        : "未上电",
+        ? s.hist.seeked
+          ? t("#{n} · rewind point (paused)", { n: s.runNo || s.run })
+          : s.running
+            ? t("#{n} · running", { n: s.runNo || s.run })
+            : t("#{n} · stopped", { n: s.runNo || s.run })
+        : t("Not powered"),
     );
     set("sim", `${s.simSeconds.toFixed(2)} s`);
     const rd = s.reading;
-    // 读数和设定差太多（超过第 06 关的容差）标红：通常是固件换算错了
+    // Red when the reading drifts past level 06's tolerance: usually a firmware conversion bug
     set(
       "rt",
-      rd ? `${rd.t.toFixed(2)} °C` : "等固件打印…",
+      rd ? `${rd.t.toFixed(2)} °C` : WAIT_FW,
       !!rd && Math.abs(rd.t - s.env.temp) > 0.5,
     );
     set("rh", rd ? `${rd.h.toFixed(1)} %` : "—");
     set("rp", rd ? `${rd.p.toFixed(2)} hPa` : "—");
     set(
       "vp",
-      s.verifyProgress < 0 ? "· 加载模拟器…" : `${s.verifyProgress.toFixed(1)} s`,
+      s.verifyProgress < 0 ? t("· loading simulator…") : `${s.verifyProgress.toFixed(1)} s`,
     );
     const e = c.session.frame.elec;
     if (e) {
       const V = (x: number) => (Number.isFinite(x) ? `${x.toFixed(3)} V` : "—");
       const A = (x: number) => `${(x * 1000).toFixed(0)} mA`;
       set("e5", V(e.v5), e.v5 < 4.0);
-      set("e33", `${V(e.v3v3)}${e.held ? " · 欠压复位中" : ""}`, e.v3v3 < 3.0);
+      set(
+        "e33",
+        e.held ? t("{v} · in brownout reset", { v: V(e.v3v3) }) : V(e.v3v3),
+        e.v3v3 < 3.0,
+      );
       set("emin", V(e.min3v3), e.min3v3 < 2.44);
       set("eiu", A(e.iUsb), e.iUsb > 0.5);
       set("epu", A(e.peakUsb), e.peakUsb > 0.5);
@@ -2783,7 +2800,7 @@ export function benchStep(): StepImpl {
       set("eis", A(e.iServo));
       set("eps", A(e.peakServo));
       set("eia", A(e.iAmp ?? 0));
-      set("ers", `${e.resets} 次`, e.resets > 0);
+      set("ers", `${e.resets}×`, e.resets > 0);
       set("eic", A(e.i3v3));
       set(
         "pv",
@@ -2794,20 +2811,26 @@ export function benchStep(): StepImpl {
     }
     const pd = c.session.frame.pins;
     if (pd) {
-      set("encpos", pd.encPos === null ? "—" : `${pd.encPos} 格（顺时针为正）`);
+      set(
+        "encpos",
+        pd.encPos === null ? "—" : t("Detents: {n} (clockwise is positive)", { n: pd.encPos }),
+      );
       set("pcnt", pd.pcnt === null ? "—" : String(pd.pcnt));
-      set("pings", pd.pings === null ? "—" : `${pd.pings} 次`);
+      set("pings", pd.pings === null ? "—" : `${pd.pings}×`);
       set(
         "echo",
         pd.echoUs === null || !pd.pings ? "—" : `${pd.echoUs.toFixed(1)} µs`,
       );
     }
     const em = lastLine(/ENC count=(-?\d+) detents=(-?\d+)/g);
-    set("encfw", em ? `count=${em[1]}（${em[2]} 格）` : "等固件打印…");
+    set(
+      "encfw",
+      em ? t("count={count} (detents: {n})", { count: em[1], n: em[2] }) : WAIT_FW,
+    );
     const sm = lastLine(/DIST (?:([\d.]+) cm|out of range|no echo)/g);
-    set("sonfw", sm ? (sm[1] ? `${sm[1]} cm` : sm[0].slice(5)) : "等固件打印…");
+    set("sonfw", sm ? (sm[1] ? `${sm[1]} cm` : sm[0].slice(5)) : WAIT_FW);
     const dist = c.session.distance;
-    set("dist", dist < 0 ? "没有障碍物（超量程）" : `${dist.toFixed(1)} cm`);
+    set("dist", dist < 0 ? t("No obstacle (out of range)") : `${dist.toFixed(1)} cm`);
     for (const root of card ? [el, card] : [el])
       root
         .querySelectorAll<HTMLInputElement>("input[data-dist]")
@@ -2822,14 +2845,14 @@ export function benchStep(): StepImpl {
           const o = outOf(inp);
           if (o) o.textContent = `${dist.toFixed(1)} cm`;
         });
-    // 姿态与 IMU 读数（P2-03）
+    // Pose and IMU readings (P2-03)
     const pz = s.pose;
     const [gx, gy, gz] = gravity(pz);
     set("gacc", `${gx.toFixed(3)} / ${gy.toFixed(3)} / ${gz.toFixed(3)} g`);
     const im = s.imu;
     set(
       "ipitch",
-      im ? `${im.pitch.toFixed(1)}°` : "等固件打印…",
+      im ? `${im.pitch.toFixed(1)}°` : WAIT_FW,
       !!im && Math.abs(im.pitch - pz.pitch) > 1.5 && Math.abs(pz.pitch) < 85,
     );
     set(
@@ -2846,8 +2869,8 @@ export function benchStep(): StepImpl {
     set(
       "ipr",
       im
-        ? `俯仰 ${im.pitch.toFixed(1)}° · 横滚 ${im.roll.toFixed(1)}°`
-        : "等固件打印…",
+        ? t("Pitch {p}° · roll {r}°", { p: im.pitch.toFixed(1), r: im.roll.toFixed(1) })
+        : WAIT_FW,
     );
     for (const root of card ? [el, card] : [el])
       root
@@ -2866,15 +2889,22 @@ export function benchStep(): StepImpl {
       set(
         "tch",
         s.touch
-          ? `${s.touch.down ? "按着" : "抬起"} · x ${s.touch.x} y ${s.touch.y}`
-          : "还没点过",
+          ? s.touch.down
+            ? t("Pressed · x {x} y {y}", { x: s.touch.x, y: s.touch.y })
+            : t("Released · x {x} y {y}", { x: s.touch.x, y: s.touch.y })
+          : t("Not touched yet"),
       );
       const fr = c.session.frame;
       const lv =
         tpart.int < 32
           ? (fr.gpio >>> tpart.int) & 1
           : (fr.gpioHi >>> (tpart.int - 32)) & 1;
-      set("tint", `GPIO${tpart.int} ${lv ? "高（没按）" : "低（按着）"}`);
+      set(
+        "tint",
+        lv
+          ? t("GPIO{n} high (not pressed)", { n: tpart.int })
+          : t("GPIO{n} low (pressed)", { n: tpart.int }),
+      );
     }
     const mr = meterReading();
     if (mr) {
@@ -2891,7 +2921,7 @@ export function benchStep(): StepImpl {
           )
             inp.value = String(s.env.temp);
         });
-    // 别处改了环境（卡片 / 热源 / 回退），没在拖的滑块跟上
+    // The env may change elsewhere (card / heat source / rewind); sliders not being dragged follow it
     for (const root of card ? [el, card] : [el])
       root
         .querySelectorAll<HTMLInputElement>("input[data-env]")
@@ -2912,28 +2942,30 @@ export function benchStep(): StepImpl {
           swatch(css ?? "#000"),
           `#${f.rgb.map((x) => x.toString(16).padStart(2, "0")).join("")}`,
         );
-      else rgbN.textContent = "灭";
+      else rgbN.textContent = t("Off");
     }
     const servo = c.session.scene.parts.find((p) => p.type === "servo");
     if (servo && "pin" in servo) {
       const d = f.pwm[servo.pin];
       set(
         "pw",
-        d !== undefined && d >= 0 ? `${(d * 20).toFixed(3)} ms` : "没有 PWM",
+        d !== undefined && d >= 0 ? `${(d * 20).toFixed(3)} ms` : t("No PWM"),
       );
       const a = servoAngle(f.pwm, servo.pin);
-      // 舵盘实际角度来自内核的二阶动力学（有加速、过冲）；括号里是 PWM 换算的目标角
+      // The horn angle comes from the core's second-order dynamics (with overshoot); the bracket shows the PWM target
       const phys = f.elec?.servoAngle;
       set(
         "ang",
         phys != null
-          ? `${phys.toFixed(1)}°${a === null ? "" : `（目标 ${a.toFixed(1)}°）`}`
+          ? a === null
+            ? `${phys.toFixed(1)}°`
+            : t("{deg}° (target {target}°)", { deg: phys.toFixed(1), target: a.toFixed(1) })
           : a === null
             ? "—"
             : `${a.toFixed(1)}°`,
       );
     }
-    // 针脚实时值 + 示波器
+    // Live pin values and the scope
     const sel = s.selection;
     if (sel?.kind === "pin") {
       const g = /^GPIO(\d+)$/.exec(sel.id);
@@ -2945,16 +2977,16 @@ export function benchStep(): StepImpl {
         const lv = bit(f.gpio, f.gpioHi, pin);
         set(
           "pdir",
-          duty >= 0 ? "输出（LEDC PWM）" : out ? "输出" : "输入或未驱动",
+          duty >= 0 ? t("Output (LEDC PWM)") : out ? t("Output") : t("Input or undriven"),
         );
-        set("plv", duty >= 0 ? "方波" : lv ? "高（3.3 V）" : "低（0 V）");
+        set("plv", duty >= 0 ? t("Square wave") : lv ? t("High (3.3 V)") : t("Low (0 V)"));
         if (duty >= 0 && freq > 0) {
-          const t = pwmText(duty, freq);
-          set("pf", t.freq);
-          set("pw2", t.width);
-          set("pd", t.duty);
+          const pt = pwmText(duty, freq);
+          set("pf", pt.freq);
+          set("pw2", pt.width);
+          set("pd", pt.duty);
         } else {
-          set("pf", "没有 PWM");
+          set("pf", t("No PWM"));
           set("pw2", "—");
           set("pd", "—");
         }
@@ -2990,8 +3022,8 @@ export function benchStep(): StepImpl {
     }
   }
 
-  // ------------------------------------------------------------ 选板作品（U-17）：逐条验收、演示固件、导出检查点、真买卡
-  /** 一份固件把所有要判的检查点挨个跑一遍（生成检查点都是同样的参数，一次拖入就全判） */
+  // ------------------------------------------------------------ picked-board projects (U-17): per-checkpoint checks, demo firmware, export, buy card
+  /** Generated checkpoints share parameters, so one dropped firmware is checked against all of them. */
   async function verifyAll(buf: ArrayBuffer, who: string, own: boolean) {
     const c = ctx;
     if (!c) return;
@@ -3010,15 +3042,15 @@ export function benchStep(): StepImpl {
     try {
       const buf = await fetchBuf(`./fw/${demo}/flash.bin`);
       c.session.loadFirmware(buf, `${demo}/flash.bin`);
-      c.shell.toast(`演示固件 ${demo} 上电，同时逐条验收检查点`);
-      // 演示固件记 ◐ 参考跑通（DECISIONS U-22 取代 U-17）：同样解锁真买卡，但不算「我的固件」
-      await verifyAll(buf, `演示固件 ${demo}`, false);
+      c.shell.toast(t("Demo firmware {name} powered on; checking each checkpoint", { name: demo }));
+      // Demo firmware counts as a ◐ reference pass (DECISIONS U-22 replaces U-17): unlocks the buy card, not "my firmware"
+      await verifyAll(buf, t("Demo firmware {name}", { name: demo }), false);
     } finally {
       demoBusy = false;
       if (ctx) renderTree();
     }
   }
-  /** 用内置固件走完全程（U-22）：没过的检查点挨个取各自的参考固件验收，最后把最后一个参考固件放上台面 */
+  /** Run the whole path on built-in firmware (U-22): each open checkpoint uses its own reference, and the last one stays on the bench. */
   async function runAllRef() {
     const c = ctx!;
     if (c.custom) return void runDemo();
@@ -3033,13 +3065,13 @@ export function benchStep(): StepImpl {
         if (c.store.get().checks[id]?.ok) continue;
         c.store.set({ selection: { kind: "checkpoint", id } });
         const buf = await fetchBuf(`./fw/${l.ref}/flash.bin`);
-        await verify(l, buf, `参考固件 ${l.ref}`, false);
+        await verify(l, buf, t("Reference firmware {name}", { name: l.ref }), false);
         last = { ref: l.ref, buf };
-        // 某一关没跑通（或卡住）就停：后面的关通常依赖前面的接线
+        // Stop at the first failure (or stall): later checkpoints usually depend on earlier wiring
         if (!c.store.get().checks[id]?.ok) break;
       }
     } catch (e) {
-      c.shell.toast(`内置固件取不到：${e}`);
+      c.shell.toast(t("Could not fetch built-in firmware: {err}", { err: String(e) }));
     } finally {
       demoBusy = false;
       if (ctx) {
@@ -3048,8 +3080,8 @@ export function benchStep(): StepImpl {
         if (last) c.session.loadFirmware(last.buf, `${last.ref}/flash.bin`);
         c.shell.toast(
           d === n
-            ? `内置固件跑通 ${n}/${n}（◐）：组装解锁了；想换成自己的固件，拖 .bin 到检查点`
-            : `内置固件跑到 ${d}/${n} 停下：看没过的那个检查点`,
+            ? t("Built-in firmware passed {n}/{n} (◐): Assemble is unlocked; to use your own firmware, drop a .bin on a checkpoint", { n })
+            : t("Built-in firmware stopped at {d}/{n}: look at the checkpoint that failed", { d, n }),
         );
         renderTree();
       }
@@ -3062,7 +3094,7 @@ export function benchStep(): StepImpl {
     a.download = "checkpoints.json";
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    c.shell.toast("已导出 checkpoints.json：npx tryboard check app.bin --level-json checkpoints.json");
+    c.shell.toast(t("Exported checkpoints.json: {cmd}", { cmd: "npx tryboard check app.bin --level-json checkpoints.json" }));
   }
   const BUY_KEY = (w: string) => `tryboard-buy-manual:${w}`;
   const loadBuyChecked = (w: string): string[] => {
@@ -3083,9 +3115,11 @@ export function benchStep(): StepImpl {
       .picks.filter((p) => !have.includes(p.partId))
       .map((p) => ({ partId: p.partId, qty: p.qty ?? 1, why: "" }));
     const manual = [
-      ...levels.filter((l) => l.manual).map((l) => l.title),
-      ...plan.noModel.map((n) => `${n.name}：模拟器里没有，接上真机试`),
-      "真板上的引脚与网页一致（按接线表逐根对）",
+      ...levels.filter((l) => l.manual).map((l) => t(l.title)),
+      ...plan.noModel.map((n) =>
+        t("{name}: not in the simulator, try it on real hardware", { name: t(n.name) }),
+      ),
+      t("Pins on the real board match the page (check each wire against the Wiring table)"),
     ];
     const fp = c.work.checkpoints.map((id) => s.checks[id]?.fingerprint).find(Boolean) ?? null;
     const own = Object.entries(ownFirmware).find(([id]) => c.work.checkpoints.includes(id))?.[1];
@@ -3111,7 +3145,7 @@ export function benchStep(): StepImpl {
                 localStorage.setItem(BUY_KEY(key), JSON.stringify(next));
                 noteSaved();
               } catch {
-                /* 存不了就只在本页有效 */
+                /* If storage fails, the ticks only last for this page */
               }
               draw();
             }}
@@ -3134,37 +3168,41 @@ export function benchStep(): StepImpl {
     draw();
   }
 
-  // ------------------------------------------------------------ 结论、下一步、工具条
+  // ------------------------------------------------------------ verdict, next step, toolbar
   function syncChrome() {
     const c = ctx!;
     const n = c.work.checkpoints.length;
     const done = passedCount(c);
-    // 选板作品只有采购 → 实验台两步：检查点全过后右上是「做成真的」（真买卡）
+    // Picked-board projects only have Shop → Bench; once all checkpoints pass, the top right opens the buy card
     if (c.custom)
       return n && done === n
-        ? c.shell.setNext("下一步：做成真的 →", "bench", "", openBuy, "hot")
-        : c.shell.setNext(`做成真的 · 还差 ${n - done} 个检查点`, null, `检查点全部跑通（${done}/${n}，演示固件也算）才出真买卡`);
-    // 空白作品没有组装 / 成品（步骤条只有两步）：右上换成去挑一个作品
+        ? c.shell.setNext(t("Next: build it for real →"), "bench", "", openBuy, "hot")
+        : c.shell.setNext(
+            t("Build it for real · checkpoints left: {n}", { n: n - done }),
+            null,
+            t("The buy card appears once every checkpoint passes ({done}/{n}, demo firmware counts)", { done, n }),
+          );
+    // The blank project has no Assemble / Product steps, so the top right points to picking a project
     if (c.work.id === "blank")
-      return c.shell.setNext("需要外壳？选一个作品 →", "bench", "", () =>
+      return c.shell.setNext(t("Need an enclosure? Pick a project →"), "bench", "", () =>
         location.assign(`${HOME}#works`),
       );
-    // 倾角仪没有检查点和组装模版：成品（端在手里转的盒子）随时能看
-    if (c.work.id === "imu") return c.shell.setNext("下一步：成品 →", "product");
+    // The inclinometer has no checkpoints or assembly template, so Product (the handheld box) is always open
+    if (c.work.id === "imu") return c.shell.setNext(t("Next: Product →"), "product");
     if (n && done === n)
-      return c.shell.setNext("下一步：组装 →", "assemble", "", undefined, "hot");
+      return c.shell.setNext(t("Next: Assemble →"), "assemble", "", undefined, "hot");
     c.shell.setNext(
-      `组装 · 还差 ${n - done} 个检查点`,
+      t("Assemble · checkpoints left: {n}", { n: n - done }),
       null,
-      `检查点全部跑通（${done}/${n}，内置固件也算）才能组装`,
+      t("Assemble unlocks once every checkpoint passes ({done}/{n}, built-in firmware counts)", { done, n }),
     );
   }
 
-  // ------------------------------------------------------------ 热源 / 量到芯片（P0-04）
+  // ------------------------------------------------------------ heat source / measured at the chip (P0-04)
   function toggleHeat() {
     const c = ctx!;
     if (!c.session.scene.parts.some((p) => p.type === "bme280")) {
-      c.shell.toast("台面上没有 BME280，热源没有可靠近的传感器");
+      c.shell.toast(t("No BME280 on the bench, so the heat source has no sensor to approach"));
       return;
     }
     const on = !c.session.heat;
@@ -3180,103 +3218,105 @@ export function benchStep(): StepImpl {
     c.session.setHeat(on ? "bme280" : null);
     c.shell.toast(
       on
-        ? `热源放到 BME280 旁边：传感器周围从 ${room.toFixed(1)} °C 升到 ${temp.toFixed(1)} °C（示意，固定加 8 °C）`
-        : `热源拿开：回到 ${temp.toFixed(1)} °C`,
+        ? t("Heat source next to the BME280: air around the sensor goes from {from} °C to {to} °C (illustrative, a fixed +8 °C)", { from: room.toFixed(1), to: temp.toFixed(1) })
+        : t("Heat source removed: back to {to} °C", { to: temp.toFixed(1) }),
     );
   }
 
-  // ------------------------------------------------------------ 快捷卡片（P0-04）
-  function cardContent(t: PickTarget): ReactNode | null {
+  // ------------------------------------------------------------ quick cards (P0-04)
+  function cardContent(tg: PickTarget): ReactNode | null {
     const c = ctx!;
-    if (t.kind === "part" && t.id === "bme280") {
+    if (tg.kind === "part" && tg.id === "bme280") {
       return (
         <div>
-          <Sec>BME280 · 温度 / 湿度 / 气压</Sec>
-          <Kv k="读到" live="rt" />
-          {envSlider("temp", "环境温度", -10, 45, 0.5)}
+          <Sec>{t("BME280 · temperature / humidity / pressure")}</Sec>
+          <Kv k={t("Reading")} live="rt" />
+          {envSlider("temp", t("Ambient temperature"), -10, 45, 0.5)}
           <HeatActs />
         </div>
       );
     }
-    if (t.kind === "part" && (t.id === "mpu6050" || t.id === "qmi8658")) {
+    if (tg.kind === "part" && (tg.id === "mpu6050" || tg.id === "qmi8658")) {
       return (
         <div>
-          <Sec>{t.id === "mpu6050" ? "MPU6050" : "QMI8658"} · 倾斜台面</Sec>
+          <Sec>{t("{chip} · tilt the bench", { chip: tg.id === "mpu6050" ? "MPU6050" : "QMI8658" })}</Sec>
           {poseSliders(POSE_AXES.slice(0, 2))}
-          <Kv k="固件读数" live="ipr" />
+          <Kv k={t("Firmware reading")} live="ipr" />
           {levelBtn()}
-          <Note>按住模块拖动也能转。</Note>
+          <Note>{t("You can also drag the module to rotate it.")}</Note>
         </div>
       );
     }
     if (
-      t.kind === "part" &&
-      (t.id === "cst816s" ||
-        (t.id === "gc9a01" &&
+      tg.kind === "part" &&
+      (tg.id === "cst816s" ||
+        (tg.id === "gc9a01" &&
           c.session.scene.parts.some((x) => x.type === "cst816s")))
     ) {
       return (
         <div>
-          <Sec>触摸圆屏 · CST816S</Sec>
-          <Kv k="手指" live="tch" />
-          <Kv k="INT 电平" live="tint" />
-          <Note>直接在 3D 屏幕上点或拖。</Note>
+          <Sec>{t("Touch round display · CST816S")}</Sec>
+          <Kv k={t("Finger")} live="tch" />
+          <Kv k={t("INT level")} live="tint" />
+          <Note>{t("Tap or drag right on the 3D screen.")}</Note>
         </div>
       );
     }
     const isServoPower =
-      (t.kind === "wire" && /servo:VCC/.test(t.id)) ||
-      (t.kind === "pin" &&
-        t.id === "5V" &&
+      (tg.kind === "wire" && /servo:VCC/.test(tg.id)) ||
+      (tg.kind === "pin" &&
+        tg.id === "5V" &&
         c.session.scene.parts.some((p) => p.type === "servo"));
     if (isServoPower) {
       return (
         <div>
           <Sec>
-            舵机供电 · 现在{c.session.power?.ext5v ? "外接 5 V" : " USB 5 V"}
+            {c.session.power?.ext5v
+              ? t("Servo power · now external 5 V")
+              : t("Servo power · now USB 5 V")}
           </Sec>
           {powerSeg(!!c.session.power?.ext5v)}
-          <Kv k="5V 轨" live="e5" />
+          <Kv k={t("5V rail")} live="e5" />
           <Kv k="3V3" live="e33" />
-          <Kv k="欠压复位" live="ers" />
+          <Kv k={t("Brownout resets")} live="ers" />
           <Note>
-            只靠 USB 时，舵机大幅扫动会把 3V3 拉到欠压门限以下，板子复位。
+            {t("On USB alone, big servo sweeps pull 3V3 below the brownout threshold and the board resets.")}
           </Note>
         </div>
       );
     }
-    if (t.kind === "part" && t.id === "encoder") {
+    if (tg.kind === "part" && tg.id === "encoder") {
       return (
         <div>
-          <Sec>EC11 编码器 · 拖动或滚轮转旋钮</Sec>
+          <Sec>{t("EC11 encoder · drag or scroll to turn the knob")}</Sec>
           {encRows()}
           {encButtons()}
         </div>
       );
     }
-    if (t.kind === "part" && (t.id === "hcsr04" || t.id === "obstacle")) {
+    if (tg.kind === "part" && (tg.id === "hcsr04" || tg.id === "obstacle")) {
       return (
         <div>
-          <Sec>HC-SR04 · 拖障碍物或滑块</Sec>
+          <Sec>{t("HC-SR04 · drag the obstacle or the slider")}</Sec>
           {sonarRows()}
           {sonarControls()}
         </div>
       );
     }
-    if (t.kind === "button" && t.id === "BOOT") {
+    if (tg.kind === "button" && tg.id === "BOOT") {
       return (
         <div>
-          <Sec>BOOT 键 · GPIO{bootGpio()}</Sec>
+          <Sec>{t("BOOT button · GPIO{n}", { n: bootGpio() })}</Sec>
           {bootBtns()}
-          <Note>气象站固件：按一下在 ℃ 和 ℉ 之间切换。</Note>
+          <Note>{t("Weather station firmware: press once to switch between ℃ and ℉.")}</Note>
         </div>
       );
     }
-    if (t.kind === "part") {
-      const p = c.session.scene.parts.find((x) => partId(x) === t.id);
+    if (tg.kind === "part") {
+      const p = c.session.scene.parts.find((x) => partId(x) === tg.id);
       return (
         <div>
-          <Sec>{p ? partInfo(p).name : t.id === "board" ? "开发板" : t.id}</Sec>
+          <Sec>{p ? partInfo(p).name : tg.id === "board" ? t("Dev board") : tg.id}</Sec>
         </div>
       );
     }
@@ -3292,7 +3332,7 @@ export function benchStep(): StepImpl {
     cardFor = t;
     c.shell.card.show(c.session.pick.project?.(t) ?? screen, box);
     updateLive();
-    // 台面转动时卡片跟着目标走；目标转到看不见就关掉
+    // The card follows its target as the bench rotates and closes once the target is out of view
     cancelAnimationFrame(cardRaf);
     const follow = () => {
       if (!cardFor || !c.shell.card.open) return;
@@ -3309,34 +3349,34 @@ export function benchStep(): StepImpl {
     ctx?.shell.card.hide();
   }
 
-  function onPick(t: PickTarget | null, screen: ScreenPoint) {
+  function onPick(tg: PickTarget | null, screen: ScreenPoint) {
     if (!ctx || ctx.store.get().step !== "bench") return;
     if (placing) {
-      if (!t) return;
-      if (t.kind === "pin") placePin(t.id);
-      else ctx.shell.toast("点开发板上发蓝的针");
+      if (!tg) return;
+      if (tg.kind === "pin") placePin(tg.id);
+      else ctx.shell.toast(t("Click a blue pin on the dev board"));
       return;
     }
     if (wiring) {
-      if (!t) return;
-      if (t.kind === "wire") {
-        if (!benchWires().some((w) => w.id === t.id))
-          return ctx.shell.toast("这根线两头都在零件上，改不了开发板那一端");
-        wiring.wire = t.id;
-        ctx.session.pick.highlight?.(t);
+      if (!tg) return;
+      if (tg.kind === "wire") {
+        if (!benchWires().some((w) => w.id === tg.id))
+          return ctx.shell.toast(t("Both ends of this wire are on parts, so there is no dev board end to rewire"));
+        wiring.wire = tg.id;
+        ctx.session.pick.highlight?.(tg);
         wireUi();
-      } else if (t.kind === "pin" && wiring.wire) retarget(wiring.wire, t.id);
+      } else if (tg.kind === "pin" && wiring.wire) retarget(wiring.wire, tg.id);
       else
         ctx.shell.toast(
-          wiring.wire ? "点开发板上的一根针（蓝圈）" : "先点一根要改接的线",
+          wiring.wire ? t("Click a pin on the dev board (blue ring)") : t("First click the wire you want to rewire"),
         );
       return;
     }
     if (meter) {
-      if (!t) return;
-      const id = meterTarget(t);
+      if (!tg) return;
+      const id = meterTarget(tg);
       if (!id) {
-        ctx.shell.toast("万用表：点一个引脚（电源脚或 GPIO）或一根导线");
+        ctx.shell.toast(t("Multimeter: click a pin (power pin or GPIO) or a wire"));
         return;
       }
       meter = { target: id };
@@ -3344,13 +3384,11 @@ export function benchStep(): StepImpl {
         select({ kind: "tool", id: "meter" });
       renderMeter();
       meterCard();
-      cardFor = t;
+      cardFor = tg;
       ctx.shell.card.show(
-        ctx.session.pick.project?.(t) ?? screen,
+        ctx.session.pick.project?.(tg) ?? screen,
         <div>
-          <Sec>
-            万用表 · <Mono>{id}</Mono>
-          </Sec>
+          <Sec>{tn("Multimeter · {pin}", { pin: <Mono>{id}</Mono> })}</Sec>
           <Meter sm />
           <Live as="p" k="mnote" className="note my-2 text-xs text-muted" />
         </div>,
@@ -3359,27 +3397,27 @@ export function benchStep(): StepImpl {
       return;
     }
     if (ruler) {
-      if (!t) return;
-      if (!ruler.a || ruler.b) ruler = { a: t, b: null, mm: null };
+      if (!tg) return;
+      if (!ruler.a || ruler.b) ruler = { a: tg, b: null, mm: null };
       else {
-        ruler.b = t;
-        ruler.mm = ctx.session.pick.measure?.(ruler.a, t) ?? null;
+        ruler.b = tg;
+        ruler.mm = ctx.session.pick.measure?.(ruler.a, tg) ?? null;
       }
       if (!ruler.b) ctx.session.pick.measure?.(null);
       renderProps();
       return;
     }
-    if (!t) {
+    if (!tg) {
       closeCard();
       if (isPhone()) setMui({ props: false });
       return select(null);
     }
-    select({ kind: t.kind, id: t.id });
-    // 手机上不弹台面卡片（会挡住大半个台面），改开属性抽屉，同一份 selection
+    select({ kind: tg.kind, id: tg.id });
+    // Phones open the properties drawer instead of a card, which would cover most of the bench
     if (isPhone()) {
       closeCard();
       phoneProps();
-    } else openCard(t, screen);
+    } else openCard(tg, screen);
   }
 
   function setRuler(on: boolean) {
@@ -3395,7 +3433,7 @@ export function benchStep(): StepImpl {
   function onTool(id: string) {
     if (!ctx || ctx.store.get().step !== "bench") return;
     const c = ctx;
-    // 手机：连线 / 测量要看台面，先收起属性抽屉
+    // On phones, wiring and measuring need the bench visible, so close the drawer first
     if ((id === "wire" || id === "meter" || id === "ruler") && isPhone())
       setMui({ props: false, more: false });
     if (placing && id !== "place" && /^(select|orbit|wire|meter|ruler)$/.test(id))
@@ -3406,7 +3444,7 @@ export function benchStep(): StepImpl {
         return;
       }
       c.shell.toolbar.setActive("select");
-      c.shell.toast("从左栏元件库把零件拖到台面上，或点它后面的「放」");
+      c.shell.toast(t("Drag a part from the Parts library onto the bench, or click its Place button"));
       (document.querySelector('[data-left="lib"]') as HTMLElement | null)?.click();
       requestAnimationFrame(() =>
         (document.querySelector("#partLib input") as HTMLInputElement | null)?.focus(),
@@ -3434,26 +3472,26 @@ export function benchStep(): StepImpl {
     else if (id === "heat") toggleHeat();
     else if (id === "scope") getAnalyzer(c).toggle();
     else if (id === "ext") {
-      // 外部模型（P1-09）：舵机 / USB-C / 蜂鸣器换成 KiCad、Adafruit 的 glb，来源见第三方授权页；默认程序生成
+      // External models (P1-09): KiCad / Adafruit glb for servo, USB-C and buzzer; procedural by default, credits on the licenses page
       const on = !extModelsOn();
       setExtModels(on);
-      c.shell.toolbar.setLabel("ext", on ? "外部模型：开" : "外部模型：关");
+      c.shell.toolbar.setLabel("ext", on ? t("External models: on") : t("External models: off"));
       c.shell.toast(
         on
-          ? "外部模型：舵机、USB-C 口、蜂鸣器换成 KiCad / Adafruit 的 3D 模型（署名见第三方授权页）"
-          : "外部模型：关，全部换回程序生成的模型",
+          ? t("External models: servo, USB-C port and buzzer use KiCad / Adafruit 3D models (credits on the third-party licenses page)")
+          : t("External models off: everything is back to procedural models"),
       );
     } else if (id === "photo") {
-      // 拍照（P2-10）：台面当前视角的 2× 静帧
+      // Photo (P2-10): a 2× still of the current bench view
       void takePhoto(
         c.session.bench.capture(),
         `${c.work.id}-bench`,
-        `${c.work.title} · 实验台`,
+        t("{title} · Bench", { title: t(c.work.title) }),
       )
         .then((r) =>
-          c.shell.toast(`已下载 ${r.name}（${r.width}×${r.height}）`),
+          c.shell.toast(t("Downloaded {name} ({w}×{h})", { name: r.name, w: r.width, h: r.height })),
         )
-        .catch((e) => c.shell.toast(`拍照失败：${e}`));
+        .catch((e) => c.shell.toast(t("Photo failed: {err}", { err: String(e) })));
     } else if (id === "rec") {
       if (benchRec) return benchRec.stop();
       try {
@@ -3463,43 +3501,45 @@ export function benchStep(): StepImpl {
           c.session.audio.recordStream(),
         );
         benchRec = r;
-        setRecLabel(`停止 0/${RECORD_SECONDS} s`);
+        setRecLabel(t("Stop {n}/{max} s", { n: 0, max: RECORD_SECONDS }));
         const tick = setInterval(
           () =>
             benchRec === r &&
             setRecLabel(
-              `停止 ${Math.min(RECORD_SECONDS, r.elapsed()).toFixed(0)}/${RECORD_SECONDS} s`,
+              t("Stop {n}/{max} s", { n: Math.min(RECORD_SECONDS, r.elapsed()).toFixed(0), max: RECORD_SECONDS }),
             ),
           500,
         );
         void r.done
           .then((v) =>
             ctx?.shell.toast(
-              `已下载 ${v.name}（${(v.bytes / 1024).toFixed(0)} KB${v.audio ? "，含声音" : ""}）`,
+              v.audio
+                ? t("Downloaded {name} ({kb} KB, with sound)", { name: v.name, kb: (v.bytes / 1024).toFixed(0) })
+                : t("Downloaded {name} ({kb} KB)", { name: v.name, kb: (v.bytes / 1024).toFixed(0) }),
             ),
           )
-          .catch((e) => ctx?.shell.toast(`录像失败：${e}`))
+          .catch((e) => ctx?.shell.toast(t("Recording failed: {err}", { err: String(e) })))
           .finally(() => {
             clearInterval(tick);
             if (benchRec === r) benchRec = null;
-            setRecLabel("录像");
+            setRecLabel(t("Record"));
           });
       } catch (e) {
-        c.shell.toast(`录像失败：${e}`);
+        c.shell.toast(t("Recording failed: {err}", { err: String(e) }));
       }
     } else if (id === "button") {
       c.session.pressBoot(true);
       setTimeout(() => c.session.pressBoot(false), 150);
-      c.shell.toast(`按了一下 BOOT（GPIO${bootGpio()}）`);
-    } else c.shell.toast("这个工具暂未开放");
+      c.shell.toast(t("Pressed BOOT once (GPIO{n})", { n: bootGpio() }));
+    } else c.shell.toast(t("This tool is not available yet"));
   }
 
-  /** 实验台正在录的 10 秒（P2-10） */
+  /** The 10-second bench recording in progress (P2-10). */
   let benchRec: Recording | null = null;
   let toolbarRef: StepCtx["shell"]["toolbar"] | null = null;
-  const setRecLabel = (t: string) => toolbarRef?.setLabel("rec", t);
+  const setRecLabel = (s: string) => toolbarRef?.setLabel("rec", s);
 
-  // ------------------------------------------------------------ 造错误接线（验收用的 debug 钩子，?debug=1 才挂出）
+  // ------------------------------------------------------------ inject bad wiring (acceptance debug hook, exposed only with ?debug=1)
   function injectWiring(
     kind:
       | "drive"
@@ -3520,7 +3560,7 @@ export function benchStep(): StepImpl {
     let label = "";
     const servo = scene.parts.find((p) => p.type === "servo");
     if (kind === "drive") {
-      // 电位器滑片接到舵机信号脚上：滑片在推电平，GPIO 又在出 PWM
+      // Pot wiper on the servo signal pin: the wiper drives a level while the GPIO outputs PWM
       const pin = servo && "pin" in servo ? servo.pin : 4;
       scene = {
         ...scene,
@@ -3529,10 +3569,10 @@ export function benchStep(): StepImpl {
           { type: "pot", pin },
         ],
       };
-      label = `电位器接到 GPIO${pin}`;
+      label = t("Potentiometer on GPIO{n}", { n: pin });
     } else if (kind === "5v") {
       mods = { retarget: { "wire:3V3~bme280:VIN": "5V" } };
-      label = "BME280 供电改接 5V";
+      label = t("BME280 power moved to 5V");
     } else if (kind === "nores") {
       scene = {
         ...scene,
@@ -3542,15 +3582,15 @@ export function benchStep(): StepImpl {
         ],
       };
       mods = { noResistor: ["led:6"] };
-      label = "LED 不串电阻";
+      label = t("LED without series resistor");
     } else if (kind === "nognd") {
       mods = { drop: ["wire:GND~bme280:GND"] };
-      label = "拔掉 BME280 地线";
+      label = t("BME280 ground wire removed");
     } else if (kind === "nodiv") {
       mods = { noDivider: ["hcsr04"] };
-      label = "拆掉 Echo 分压电阻";
+      label = t("Echo divider resistor removed");
     } else if (kind === "clamp") {
-      // 加一个 HC-SR04（Trig GPIO2、Echo GPIO3）并拆掉 Echo 分压：5 V 直接进 GPIO3 的钳位二极管
+      // Add an HC-SR04 (Trig GPIO2, Echo GPIO3) without the Echo divider: 5 V goes straight into GPIO3's clamp diode
       scene = {
         ...scene,
         parts: [
@@ -3559,11 +3599,11 @@ export function benchStep(): StepImpl {
         ],
       };
       mods = { noDivider: ["hcsr04"] };
-      label = "超声波 Echo 不分压直连";
+      label = t("Ultrasonic Echo wired directly without a divider");
     } else if (kind === "short3v3" || kind === "short5v") {
       const r = kind === "short3v3" ? "3V3" : "5V";
       mods = { jumpers: [[r, "GND"]] };
-      label = `跳线把 ${r} 接到 GND`;
+      label = t("Jumper wire from {rail} to GND", { rail: r });
     } else if (kind === "addr") {
       scene = {
         ...scene,
@@ -3571,9 +3611,9 @@ export function benchStep(): StepImpl {
           p.type === "oled" ? { ...p, addr: 0x76 } : p,
         ),
       };
-      label = "OLED 地址改成 0x76";
+      label = t("OLED address changed to 0x76");
     } else {
-      label = "接线复原";
+      label = t("Wiring restored");
     }
     if (kind === "clear")
       scene = {
@@ -3588,7 +3628,7 @@ export function benchStep(): StepImpl {
           .map((p) => (p.type === "oled" ? { ...p, addr: 0x3c } : p)),
       };
     c.hist?.op({ k: "wiring", mods, scene, label });
-    // 只改台面和规则检查，不重新上电（模拟器里的器件不变）：这里验的是接线检查
+    // Only the bench and rule checks change, no power cycle: this hook tests the wiring check
     ses.restoreScene(scene, ses.power);
     ses.setWireMods(mods);
     return faults.flatMap((f) => f.wires);
@@ -3598,9 +3638,9 @@ export function benchStep(): StepImpl {
     mount(c) {
       ctx = c;
       toolbarRef = c.shell.toolbar;
-      // 「换固件 → 上传」也算你自己的固件：和拖到检查框一样验收（2026-10-18 走查：菜单写着"检查点只认你自己上传的"，以前却不验收）
+      // "Change firmware → Upload" counts as your own firmware and is checked like a drop (2026-10-18 walkthrough found it skipped)
       actions.openBuy = c.custom ? openBuy : undefined;
-      // 检查点定义（session.levels）可能还在加载：只看作品本身，跑的时候再按关取 ref
+      // session.levels may still be loading, so decide from the project and fetch each ref at run time
       actions.runAllRef = c.work.checkpoints.length && (!c.custom || c.custom.plan.demo) ? () => void runAllRef() : undefined;
       actions.checkUpload = (buf, name) => {
         const s = c.store.get();
@@ -3609,7 +3649,7 @@ export function benchStep(): StepImpl {
           const first = c.work.checkpoints[0];
           if (!first) return null;
           void verifyAll(buf, name, true);
-          return c.work.checkpoints.join("、");
+          return c.work.checkpoints.join(", ");
         }
         const sel = s.selection?.kind === "checkpoint" ? s.selection.id : null;
         const id =
@@ -3647,7 +3687,7 @@ export function benchStep(): StepImpl {
             out: !!bit(m.enable, m.enableHi, p),
           });
         });
-        // 工具快捷键（工具条角标）：输入框里不拦；Esc 先退出当前工具
+        // Tool shortcuts (toolbar badges) skip text inputs; Esc leaves the current tool first
         window.addEventListener("keydown", (e) => {
           if (
             !ctx ||
@@ -3668,7 +3708,7 @@ export function benchStep(): StepImpl {
             if (placing) {
               const n = placing.def.name;
               endPlace();
-              ctx.shell.toast(`没放 ${n}`);
+              ctx.shell.toast(t("Did not place {name}", { name: n }));
             } else if (bc.get().overlays.wrongWire) overlay("wrongWire", null);
             else if (wiring) setWiring(false);
             else if (ruler) setRuler(false);
@@ -3686,7 +3726,7 @@ export function benchStep(): StepImpl {
           )[k];
           if (tool) onTool(tool);
         });
-        // 元件库拖到台面（P2-16）：只认元件库的拖动类型，拖 .bin 文件不归这里管
+        // Parts library drops (P2-16) only accept the library drag type; .bin drops are handled elsewhere
         const stage = document.getElementById("stage");
         stage?.addEventListener("dragover", (e) => {
           if (!ctx || ctx.store.get().step !== "bench") return;
@@ -3713,7 +3753,7 @@ export function benchStep(): StepImpl {
               mA: f.estimate?.mA ?? null,
               est: f.estimate?.text ?? null,
             }));
-          // 打开某根线的接错线卡片（验收截图用；和改接后弹出的是同一张）
+          // Open a wire's wrong-wire card for acceptance screenshots (same card a rewire shows)
           w.__tbApp.showWrongWire = (wireId: string) => {
             const f = faults.find((x) => x.wires.includes(wireId));
             if (!ctx || !f) return false;
@@ -3734,23 +3774,23 @@ export function benchStep(): StepImpl {
         {
           id: "nav",
           tools: [
-            { id: "select", label: "选择", key: "V" },
-            { id: "orbit", label: "转视角", key: "H" },
+            { id: "select", label: t("Select"), key: "V" },
+            { id: "orbit", label: t("Orbit"), key: "H" },
           ],
         },
         {
           id: "edit",
           tools: [
-            { id: "place", label: "放置" },
-            { id: "wire", label: "连线", key: "W" },
+            { id: "place", label: t("Place") },
+            { id: "wire", label: t("Wire"), key: "W" },
           ],
         },
         {
           id: "measure",
           tools: [
-            { id: "meter", label: "万用表", key: "M" },
-            { id: "ruler", label: "尺子", key: "R" },
-            { id: "scope", label: "示波器" },
+            { id: "meter", label: t("Multimeter"), key: "M" },
+            { id: "ruler", label: t("Ruler"), key: "R" },
+            { id: "scope", label: t("Scope") },
           ],
         },
         {
@@ -3758,25 +3798,25 @@ export function benchStep(): StepImpl {
           tools: [
             {
               id: "ext",
-              label: extModelsOn() ? "外部模型：开" : "外部模型：关",
+              label: extModelsOn() ? t("External models: on") : t("External models: off"),
             },
           ],
         },
         {
           id: "media",
           tools: [
-            { id: "photo", label: "拍照" },
-            { id: "rec", label: benchRec ? "停止录像" : "录像" },
+            { id: "photo", label: t("Photo") },
+            { id: "rec", label: benchRec ? t("Stop recording") : t("Record") },
           ],
         },
         {
           id: "act",
           tools: [
-            { id: "heat", label: "热源" },
-            { id: "button", label: "按 BOOT" },
+            { id: "heat", label: t("Heat source") },
+            { id: "button", label: t("Press BOOT") },
           ],
         },
-        // 重跑在顶栏运行组（重启），工具条不再重复放（DESIGN_V2 §6.3）
+        // Rerun lives in the top bar run group (Reset), so the toolbar does not repeat it (DESIGN_V2 §6.3)
       ]);
       c.shell.toolbar.setActive(
         ruler ? "ruler" : meter ? "meter" : wiring ? "wire" : "select",
@@ -3784,7 +3824,7 @@ export function benchStep(): StepImpl {
       const pinDev = c.session.scene.parts.find(
         (p) => p.type === "encoder" || p.type === "hcsr04",
       );
-      // 跑示例时右栏默认是「这个示例」卡（说明 + 滑块），不抢先选中固件；编码器 / 超声波的调节在零件属性里，照旧选中
+      // Examples default to the "this example" card instead of firmware; encoder / sonar controls live in part properties, so select those
       if (!c.store.get().selection && !(c.work.example && !pinDev))
         c.store.set({
           selection: c.work.checkpoints.length
@@ -3800,11 +3840,11 @@ export function benchStep(): StepImpl {
         c.store.set({ selection: { kind: "part", id: "board" } });
       recheckWiring();
       applyBenchHarness();
-      // ?debug=1&wiring=<种类>：打开就造一种错接，再弹出它的接错线卡片（人眼验收用，和 __tbApp.injectWiring 同一入口）
+      // ?debug=1&wiring=<kind> injects one bad wiring on open and shows its card (visual acceptance, same entry as __tbApp.injectWiring)
       const q = new URLSearchParams(location.search);
       const inj = q.has("debug") ? q.get("wiring") : null;
       if (inj) {
-        // 只造一次；台面重新挂载（切步骤回来）时只把卡片和选中再开出来
+        // Inject once; a remount (coming back from another step) only reopens the card and selection
         if (!injected) injectWiring(inj as Parameters<typeof injectWiring>[0]);
         injected = true;
         recheckWiring();
@@ -3835,7 +3875,7 @@ export function benchStep(): StepImpl {
           c.session.pick.highlight?.(toPick(c.store.get().selection));
           syncChrome();
         }, ["selection", "checks", "verifying"]),
-        // 选板作品：最后一个检查点刚通过时把真买卡打开（恢复进度时不弹）
+        // Picked-board projects open the buy card when the last checkpoint just passed (not on restore)
         c.store.subscribe(
           (s, prev) => {
             const n = c.work.checkpoints.length;
@@ -3849,7 +3889,7 @@ export function benchStep(): StepImpl {
           (s, prev) => {
             recheckWiring();
             renderTree();
-            // 拖滑块时不重建面板（会打断拖动）：时间线只是多了一步不重画；编辑状态变了（供电、热源、改接线、回退）才重画
+            // Rebuilding mid-drag would break slider drags; only edit changes (power, heat, rewire, rewind) redraw
             const h = s.hist,
               p = prev.hist;
             if (s.editRev !== prev.editRev && cardFor && c.shell.card.open) {
@@ -3874,7 +3914,7 @@ export function benchStep(): StepImpl {
           ["editRev", "sceneRev", "hist"],
         ),
         c.store.subscribe(() => renderTree(), ["env", "run", "runNo"]),
-        // 构建树「无线」组：BLE 出现 / 消失、手机状态字变了才重画（通知每秒都来，不能每条都重画整棵树）
+        // Redraw the tree's wireless group only when BLE or phone state text changes; notifications arrive every second
         (() => {
           let label = "";
           return bleFeed.subscribe(() => {
@@ -3907,7 +3947,7 @@ export function benchStep(): StepImpl {
       unsubs.forEach((u) => u());
       unsubs = [];
       closeCard();
-      // 分析仪属于实验台：离开时由 CSS 藏起来（body[data-step]），状态保留，回来接着看
+      // The analyzer belongs to the bench: CSS hides it on leave (body[data-step]) and its state survives
       if (ruler) {
         ruler = null;
         ctx?.session.pick.measure?.(null);
@@ -3927,7 +3967,7 @@ export function benchStep(): StepImpl {
   };
 }
 
-/** 彩灯色块（实时字段里由命令式代码拼） */
+/** RGB LED swatch, built imperatively inside live fields. */
 function swatch(bg: string) {
   const i = document.createElement("i");
   i.className =
@@ -3936,19 +3976,19 @@ function swatch(bg: string) {
   return i;
 }
 
-/** 文字由命令式代码改的说明行（线长换算） */
+/** Note line whose text is updated imperatively (wire length conversion). */
 function NoteLive({ id, init }: { id: string; init: string }) {
   const ref = useInitText<HTMLParagraphElement>(init);
   return <p ref={ref} id={id} className="note my-2 text-xs text-muted" />;
 }
 
-/** 一句人话结论（拖滑块时由事件直接改字，不重渲染） */
+/** Plain-language verdict, updated directly by events during slider drags to avoid re-rendering. */
 function SayLive({ id, init }: { id: string; init: string }) {
   const ref = useInitText<HTMLParagraphElement>(init);
   return <p ref={ref} id={id} className="mt-2 mb-0 text-[13px] font-medium text-fg" />;
 }
 
-/** 属性面板的零件标题：名字 + 可信度徽章（依据见 benchv2 PART_CONF） */
+/** Part heading in properties: name plus confidence badge (see benchv2 PART_CONF). */
 function PartHead({ name, type }: { name: string; type: string }) {
   const conf = PART_CONF[type];
   return (
@@ -3959,7 +3999,7 @@ function PartHead({ name, type }: { name: string; type: string }) {
   );
 }
 
-/** 用到同一类主要器件的作品（灯、按键这类常见件不算），没有就不指 */
+/** A project using the same main part type (common LEDs and buttons ignored), or null. */
 function relatedWork(ex: Example, list: Example[]): WorkDef | null {
   const common = new Set(["led", "button", "key", "buzzer"]);
   const types = new Set((ex.scene?.parts ?? []).map((p) => p.type).filter((t) => !common.has(t)));

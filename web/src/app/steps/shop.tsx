@@ -1,6 +1,5 @@
-// ① 采购（P0-07）+ 买完摆上实验台（P0-09）。
-// 左树：清单分组（必选 / 建议 / 外壳），合计参考价；中间：零件平铺（未选的建议件虚线）；
-// 右栏：规则检查 + 选中零件详情；工具条：切模板、换开发板；时间线：清单变更，点回去 = 重放。
+// Step 1 Shop (P0-07) + put the bought parts on the bench (P0-09).
+// Timeline = BOM ops, so seeking back replays the list instead of storing snapshots.
 import type { SceneSpec } from '../../board3d';
 import { BOARDS, CHECKED_AT, PARTS, PART_BY_ID, getPart, type Kind, type Part } from '../../catalog/parts';
 import { PROCURE_TEMPLATES, bomTotal, getTemplate } from '../../catalog/templates';
@@ -20,12 +19,13 @@ import { noteSaved } from '../saved';
 import { lab } from '../../ui/links';
 import { Conf, ConfIcon, confOfRule, type ConfLevel } from '../../ui/conf';
 import { genLevels } from '../genlevels';
+import { t } from '../../i18n';
 
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
 const yuan = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
 const range = (lo: number, hi: number) => `¥${yuan(lo)}–${yuan(hi)}`;
 
-// ------------------------------------------------------------ 本机存储（per work）
+// ------------------------------------------------------------ local storage (per work)
 const BOM_KEY = (w: string) => `tryboard-app-shop:${w}`;
 const PLACED_KEY = (w: string) => `tryboard-app-placed:${w}`;
 
@@ -34,17 +34,17 @@ export function loadBom(work: string): BomHistory {
     const h = JSON.parse(localStorage.getItem(BOM_KEY(work)) ?? 'null');
     if (validHistory(h)) return h;
   } catch {
-    /* 存的东西坏了：回到模板默认 */
+    /* corrupt data: fall back to the template default */
   }
-  // 选板作品（custom:<哈希>）的模板在 main.tsx 里按地址参数注册成 'custom'
-  return initialHistory(work.startsWith('custom:') ? 'custom' : PROCURE_TEMPLATES.some((t) => t.id === work) ? work : 'blank');
+  // Board-picker works (custom:<hash>) get their template registered as 'custom' by main.tsx from URL params
+  return initialHistory(work.startsWith('custom:') ? 'custom' : PROCURE_TEMPLATES.some((x) => x.id === work) ? work : 'blank');
 }
 export function saveBom(work: string, h: BomHistory) {
   try {
     localStorage.setItem(BOM_KEY(work), JSON.stringify(h));
     noteSaved();
   } catch {
-    /* 隐私模式存不了：清单只在本页有效 */
+    /* private mode can't store: the list lives only on this page */
   }
 }
 export function loadPlaced(work: string): { scene: SceneSpec; ext5v: boolean } | null {
@@ -52,7 +52,7 @@ export function loadPlaced(work: string): { scene: SceneSpec; ext5v: boolean } |
     const p = JSON.parse(localStorage.getItem(PLACED_KEY(work)) ?? 'null');
     if (p && Array.isArray(p.scene?.parts) && typeof p.ext5v === 'boolean') return p;
   } catch {
-    /* 同上 */
+    /* same as above */
   }
   return null;
 }
@@ -61,36 +61,37 @@ function savePlaced(work: string, scene: SceneSpec, ext5v: boolean) {
     localStorage.setItem(PLACED_KEY(work), JSON.stringify({ scene, ext5v }));
     noteSaved();
   } catch {
-    /* 同上 */
+    /* same as above */
   }
 }
 
-// ------------------------------------------------------------ 文案
+// ------------------------------------------------------------ copy
 const KIND: Record<Kind, string> = {
-  board: '开发板',
-  sensor: '传感器',
-  display: '屏幕',
-  actuator: '执行器',
-  input: '输入',
-  audio: '声音',
-  power: '电源',
-  cable: '线材',
-  passive: '阻容小件',
-  module: '模块',
-  proto: '面包板和原型',
-  enclosure: '外壳',
+  board: t('Dev board'),
+  sensor: t('Sensor'),
+  display: t('Screen'),
+  actuator: t('Actuator'),
+  input: t('Input'),
+  audio: t('Audio'),
+  power: t('Power'),
+  cable: t('Cables'),
+  passive: t('Passives'),
+  module: t('Module'),
+  proto: t('Breadboard and prototyping'),
+  enclosure: t('Enclosure'),
 };
 const SIM: Record<Part['sim']['level'], string> = {
-  verified: '有验收固件跑过这个模型',
-  estimated: '模型是近似的，读数不一定准',
-  none: '模拟器里没有它，只算进清单和规则',
+  verified: t('An acceptance firmware has run this model'),
+  estimated: t('The model is approximate; readings may be off'),
+  none: t('Not in the simulator; counted only in the list and rules'),
 };
-/** 零件模拟程度 → 可信度四档（U-14：图标表达，不再按颜色） */
-const SIM_CONF: Record<Part['sim']['level'], ConfLevel> = { verified: '仿真验证', estimated: '行为模拟', none: '必须上真机' };
-const TPL_SHORT: Record<string, string> = { weather: '气象站', spin: '小黄', lens: '透镜小人', usbkey: '小键盘', lamp: '旋钮台灯', ruler: '超声波尺子', tilt: '体感小人', blank: '空白' };
+/** Part sim level -> one of the four confidence levels (U-14: shown by icon, not color) */
+const SIM_CONF: Record<Part['sim']['level'], ConfLevel> = { verified: '仿真验证', estimated: '行为模拟', none: '必须上真机' }; // lint: allow-cjk
+const REAL_HW: ConfLevel = '必须上真机'; // lint: allow-cjk
+const TPL_SHORT: Record<string, string> = { weather: t('Weather station'), spin: t('Little Yellow'), lens: t('Lens buddy'), usbkey: t('Mini keypad'), lamp: t('Knob lamp'), ruler: t('Ultrasonic ruler'), tilt: t('Tilt buddy'), blank: t('Blank') };
 
 
-/** 零件平铺用的示意小图（不是外观模型，只帮人认出是哪一类） */
+/** Tile glyph: not a real look, just enough to recognise the part category */
 function Glyph({ p }: { p: Part }) {
   const svg = (body: ReactNode) => (
     <svg viewBox="0 0 64 40" aria-hidden="true">
@@ -272,25 +273,27 @@ function Glyph({ p }: { p: Part }) {
   }
 }
 
-// ------------------------------------------------------------ 清单的行
+// ------------------------------------------------------------ list lines
 interface Line {
   partId: string;
   part: Part;
   qty: number;
+  /** already translated */
   why: string;
   group: 'req' | 'sug' | 'case';
   required: boolean;
   checked: boolean;
-  /** 选板时勾了「我已有」：照样列出、勾上，但不算进合计（custom） */
+  /** Marked "I have it" in the board picker: listed and checked, but left out of the total (custom) */
   have?: boolean;
 }
 
 function linesOf(b: Bom, have: string[] = []): Line[] {
-  const t = getTemplate(b.template);
+  const tpl = getTemplate(b.template);
   const picked = (id: string) => b.picks.find((p) => p.partId === id);
   const out: Line[] = [];
   const seen = new Set<string>();
-  // R27：清单里有走外接 5 V 的执行器、又没有别的 EXT5V 电源时，5 V 适配器是必选（分组和规则同一个口径，不然"建议"能删、删完又被阻断）
+  // R27: an EXT5V actuator with no other EXT5V source makes the 5 V adapter required.
+  // Grouping must match the rule, otherwise a "suggested" line could be removed and then blocked.
   const ext5vNeeded = b.picks.some((p) => { const q = getPart(p.partId); return q.kind === 'actuator' && q.supplyNet === 'EXT5V'; })
     && !b.picks.some((p) => p.partId !== 'psu-5v2a' && getPart(p.partId).provides?.net === 'EXT5V');
   const add = (partId: string, qty: number, why: string, required: boolean) => {
@@ -302,23 +305,23 @@ function linesOf(b: Bom, have: string[] = []): Line[] {
     const group = part.kind === 'enclosure' ? 'case' : required ? 'req' : 'sug';
     out.push({ partId, part, qty: p?.qty ?? qty, why, group, required, checked: !!p, ...(have.includes(partId) ? { have: true } : {}) });
   };
-  // 开发板一行永远在最上面：模板里的板子换过就显示换后的
-  const boardLine = [...t.required, ...t.suggested].find((l) => getPart(l.partId).kind === 'board');
-  add(b.board, 1, b.board === t.board ? (boardLine?.why ?? '跑固件') : `换过的开发板（模板里是 ${shortName(t.board)}）`, true);
-  // 换成自带同款器件的板（微雪圆屏板自带 GC9A01）：模板的必选件降为可去掉的建议件，R29 说为什么
+  // The board line always comes first; if the board was swapped, show the new one
+  const boardLine = [...tpl.required, ...tpl.suggested].find((l) => getPart(l.partId).kind === 'board');
+  add(b.board, 1, b.board === tpl.board ? (boardLine ? t(boardLine.why) : t('Runs the firmware')) : t('Swapped dev board (template uses {board})', { board: shortName(tpl.board) }), true);
+  // A board with the part built in (Waveshare round-display board has GC9A01): demote it to removable, R29 explains
   const builtin = getPart(b.board).board?.builtin ?? [];
-  for (const l of t.required) {
+  for (const l of tpl.required) {
     if (getPart(l.partId).kind === 'board') continue;
     const bi = builtin.find((x) => x.partId === l.partId);
-    if (bi) add(l.partId, l.qty, `板上已经有${bi.what}，不用再买`, false);
-    else add(l.partId, l.qty, l.why, true);
+    if (bi) add(l.partId, l.qty, t('The board already has {what}; no need to buy it', { what: t(bi.what) }), false);
+    else add(l.partId, l.qty, t(l.why), true);
   }
-  for (const l of t.suggested) if (getPart(l.partId).kind !== 'board') add(l.partId, l.qty, l.why, false);
-  for (const p of b.picks) if (getPart(p.partId).kind !== 'board') add(p.partId, p.qty ?? 1, b.extra[p.partId] ?? '你加的', false);
+  for (const l of tpl.suggested) if (getPart(l.partId).kind !== 'board') add(l.partId, l.qty, t(l.why), false);
+  for (const p of b.picks) if (getPart(p.partId).kind !== 'board') add(p.partId, p.qty ?? 1, t(b.extra[p.partId] ?? 'You added it'), false);
   return out;
 }
 
-/** 多行文字（原来用 <br> 拼） */
+/** Multi-line text (used to be joined with <br>) */
 const lines2 = (xs: string[]) => xs.map((x, i) => (
   <Fragment key={i}>
     {i > 0 && <br />}
@@ -326,7 +329,7 @@ const lines2 = (xs: string[]) => xs.map((x, i) => (
   </Fragment>
 ));
 
-/** 外部链接按钮 */
+/** External link button */
 const ExtLink = ({ href, children }: { href: string; children: ReactNode }) => (
   <LinkBtn href={href} target="_blank" rel="noopener noreferrer">
     {children}
@@ -341,16 +344,16 @@ export function shopStep(): StepImpl {
 
   const hist = () => ctx!.store.get().bom;
   const bom = () => replay(hist());
-  /** 选板作品：我已有的件、没模型只进清单的件（其他作品都是空） */
+  /** Board-picker works only: parts I already have, and list-only parts without a model */
   const have = () => ctx?.custom?.plan.have ?? [];
   const lineList = (b: Bom) => linesOf(b, have());
-  /** 合计：我已有的不算；没模型的件照样要买，加进去 */
+  /** Total skips parts I have; model-less parts still have to be bought, so they count */
   const totalOf = (b: Bom) => {
     const h = have();
-    const t = bomTotal(b.picks.filter((p) => !h.includes(p.partId)), h.includes(b.board) ? undefined : b.board);
+    const tot = bomTotal(b.picks.filter((p) => !h.includes(p.partId)), h.includes(b.board) ? undefined : b.board);
     const nm = ctx?.custom?.plan.noModel ?? [];
     const r = (x: number) => Math.round(x * 100) / 100;
-    return { lo: r(t.lo + nm.reduce((a, n) => a + n.price[0], 0)), hi: r(t.hi + nm.reduce((a, n) => a + n.price[1], 0)), kinds: t.lines.length + nm.length };
+    return { lo: r(tot.lo + nm.reduce((a, n) => a + n.price[0], 0)), hi: r(tot.hi + nm.reduce((a, n) => a + n.price[1], 0)), kinds: tot.lines.length + nm.length };
   };
   const selected = () => {
     const s = ctx!.store.get().selection;
@@ -371,20 +374,20 @@ export function shopStep(): StepImpl {
   function toggle(l: Line) {
     const c = ctx!;
     if (l.required && l.checked) {
-      // 必选不能去：勾选框保持勾上，并说清楚为什么
-      c.shell.toast(l.partId === bom().board ? '开发板不能去掉，只能换：用底部的「换开发板」' : `必选件不能去掉：${shortName(l.partId)}（${l.why}）`);
+      // Required lines stay checked; say why instead of silently ignoring the click
+      c.shell.toast(l.partId === bom().board ? t('The dev board can\'t be removed, only swapped: use "Swap dev board" below') : t('Required part, can\'t be removed: {part} ({why})', { part: shortName(l.partId), why: l.why }));
       if (selected() === l.partId) render();
       else select(l.partId);
       return;
     }
-    // 模板必选、但新板子上已经焊了的件：日志里的普通 remove 会被"必选不能去"拦下，按 R29 的一键去掉记
+    // Template-required but built into the new board: a plain remove would be blocked on replay, so log it as the R29 fix
     const builtin = !!getPart(bom().board).board?.builtin?.some((x) => x.partId === l.partId);
     if (l.checked && builtin) commit({ t: 'fix', fix: { action: 'remove', partId: l.partId }, rule: 'R29' });
     else commit(l.checked ? { t: 'remove', partId: l.partId } : { t: 'add', partId: l.partId });
     select(l.partId);
   }
 
-  // ------------------------------------------------------------ 构建树（清单）
+  // ------------------------------------------------------------ tree (the list)
   function renderTree() {
     const c = ctx!;
     const b = bom();
@@ -396,7 +399,8 @@ export function shopStep(): StepImpl {
     const row = (l: Line) => {
       const lo = l.part.price.lo * l.qty;
       const hi = l.part.price.hi * l.qty;
-      const label = `${l.required ? '必选，不能去掉' : l.checked ? '去掉' : '加上'} ${l.part.name}`;
+      const name = t(l.part.name);
+      const label = l.required ? t('Required, can\'t remove: {part}', { part: name }) : l.checked ? t('Remove {part}', { part: name }) : t('Add {part}', { part: name });
       return (
         <div key={l.partId} className={cn('bn', sel === l.partId && 'on', !l.checked && 'off')} data-id={l.partId} role="treeitem" aria-selected={sel === l.partId}>
           <input
@@ -404,7 +408,7 @@ export function shopStep(): StepImpl {
             defaultChecked={l.checked}
             className={l.required ? 'locked' : ''}
             aria-label={label}
-            title={l.required ? '必选，不能去掉' : ''}
+            title={l.required ? t('Required, can\'t remove') : ''}
             onClick={(e) => {
               if (l.required) e.preventDefault();
               toggle(l);
@@ -418,7 +422,7 @@ export function shopStep(): StepImpl {
                 <Muted className="font-mono">×{l.qty}</Muted>
               </>
             )}
-            {l.have && <> <span className="tag" data-have>我已有</span></>}
+            {l.have && <> <span className="tag" data-have>{t('I have it')}</span></>}
           </button>
           <TnM className={l.have ? 'line-through' : ''}>{range(lo, hi)}</TnM>
         </div>
@@ -444,7 +448,7 @@ export function shopStep(): StepImpl {
           <optgroup key={k} label={KIND[k]}>
             {ps.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name}
+                {t(p.name)}
               </option>
             ))}
           </optgroup>
@@ -452,16 +456,16 @@ export function shopStep(): StepImpl {
       });
     c.shell.tree.render(
       <>
-        <div role="group" aria-label="采购清单">
-          {group('req', '必选')}
-          {group('sug', '建议')}
-          {group('case', '外壳')}
+        <div role="group" aria-label={t('Shopping list')}>
+          {group('req', t('Required'))}
+          {group('sug', t('Suggested'))}
+          {group('case', t('Enclosure'))}
           {noModel.length > 0 && (
-            <TreeGroup g="nomodel" title="只进清单 · 模拟器里没有" count={String(noModel.length)} open onToggle={() => undefined}>
+            <TreeGroup g="nomodel" title={t('List only · not in the simulator')} count={String(noModel.length)} open onToggle={() => undefined}>
               {noModel.map((n) => (
-                <div key={n.id} className="bn" data-nomodel={n.id} role="treeitem" aria-selected={false} title="模拟器里没有它：只进清单，不上实验台">
-                  <ConfIcon c="必须上真机" size={14} />
-                  <span className="bn-l text-fg">{n.name}</span>
+                <div key={n.id} className="bn" data-nomodel={n.id} role="treeitem" aria-selected={false} title={t('Not in the simulator: listed only, not put on the bench')}>
+                  <ConfIcon c={REAL_HW} size={14} />
+                  <span className="bn-l text-fg">{t(n.name)}</span>
                   <TnM>{range(n.price[0], n.price[1])}</TnM>
                 </div>
               ))}
@@ -469,9 +473,9 @@ export function shopStep(): StepImpl {
           )}
         </div>
         <label className="addpart edit-only">
-          <Muted>从元件库加</Muted>
+          <Muted>{t('Add from Parts')}</Muted>
           <NSelect
-            aria-label="从元件库加零件"
+            aria-label={t('Add a part from Parts')}
             defaultValue=""
             on={{
               change: (e) => {
@@ -482,46 +486,49 @@ export function shopStep(): StepImpl {
               },
             }}
           >
-            <option value="">选一个零件…</option>
+            <option value="">{t('Pick a part…')}</option>
             {opts}
           </NSelect>
         </label>
         <div className="bom-total">
           <div className="bt-row">
-            <span>合计参考价</span>
+            <span>{t('Estimated total')}</span>
             <b className="font-mono">{range(total.lo, total.hi)}</b>
           </div>
           <Muted className="block">
-            {total.kinds} 种{nHave ? ` · 我已有的 ${nHave} 件不计` : ''} · 核价 {CHECKED_AT} · 不含运费 · 以店铺实际为准
+            {t('Kinds: {n}', { n: total.kinds })}
+            {nHave ? ` · ${t('Parts I have, not counted: {n}', { n: nHave })}` : ''} · {t('Prices checked {date}', { date: CHECKED_AT })} · {t('Shipping not included')} · {t('Store prices may differ')}
           </Muted>
         </div>
       </>,
     );
   }
 
-  // ------------------------------------------------------------ 右栏：规则检查 + 零件详情
-  /** 开发板的规格与板载占用（P1-12）：换板时一眼看出差在哪 */
+  // ------------------------------------------------------------ right panel: rule check + part details
+  /** Board specs and on-board pin use (P1-12): makes the difference obvious when swapping boards */
   function boardSpec(part: Part) {
     const b = part.board!;
-    const USB = { native: '芯片原生 USB', uart: 'USB 转串口芯片', both: '原生 USB 和 USB 转串口（两个口）' } as const;
-    const psram = b.psram === 'none' || b.psramMB === 0 ? '无' : b.psramMB === null || b.psram === null ? '待核' : `${b.psramMB} MB（${b.psram === 'octal' ? '八线，占 GPIO33–37' : '四线'}）`;
+    const USB = { native: t('Native chip USB'), uart: t('USB-to-serial chip'), both: t('Native USB and USB-to-serial (two ports)') } as const;
+    const tbc = t('To be checked');
+    const psram = b.psram === 'none' || b.psramMB === 0 ? t('None') : b.psramMB === null || b.psram === null ? tbc : b.psram === 'octal' ? t('{n} MB (octal, uses GPIO33–37)', { n: b.psramMB }) : t('{n} MB (quad)', { n: b.psramMB });
     const gpios = (part.pins ?? []).filter((p) => p.gpio !== undefined).length;
-    const occ = b.onboard.map((o) => `GPIO${o.gpio} ${o.what}`);
-    const todo = part.todo.filter((t) => t.startsWith('board') || t.startsWith('pins')).map((t) => t.replace(/^[\w.]+：/, ''));
+    const occ = b.onboard.map((o) => `GPIO${o.gpio} ${t(o.what)}`);
+    // Catalog todo notes are "field：text"; strip the field name for display
+    const todo = part.todo.filter((x) => x.startsWith('board') || x.startsWith('pins')).map((x) => t(x.replace(/^[\w.]+：/, ''))); // lint: allow-cjk
     return (
       <>
-        <Sec>板子</Sec>
-        {b.version && <Kv k="版本" v={b.version} />}
-        <Kv k="flash" v={b.flashMB === null ? '待核' : `${b.flashMB} MB`} />
+        <Sec>{t('Board')}</Sec>
+        {b.version && <Kv k={t('Version')} v={b.version} />}
+        <Kv k="flash" v={b.flashMB === null ? tbc : `${b.flashMB} MB`} />
         <Kv k="PSRAM" v={psram} />
-        <Kv k="USB" v={b.usb ? USB[b.usb] : '待核'} />
-        <Kv k="引出 GPIO" v={part.pins ? String(gpios) : '待核'} />
-        {occ.length > 0 && <KvT k="板载占用">{lines2(occ)}</KvT>}
-        {todo.length > 0 && <KvT k="待核">{lines2(todo)}</KvT>}
+        <Kv k="USB" v={b.usb ? USB[b.usb] : tbc} />
+        <Kv k={t('GPIO broken out')} v={part.pins ? String(gpios) : tbc} />
+        {occ.length > 0 && <KvT k={t('Used on board')}>{lines2(occ)}</KvT>}
+        {todo.length > 0 && <KvT k={tbc}>{lines2(todo)}</KvT>}
         <Btns>
           {b.urls.map((u, i) => (
             <ExtLink key={i} href={u}>
-              资料 {i + 1} ↗
+              {t('Docs {n}', { n: i + 1 })} ↗
             </ExtLink>
           ))}
         </Btns>
@@ -531,7 +538,14 @@ export function shopStep(): StepImpl {
 
   function fixLabel(f: Finding) {
     const fx = f.fix!;
-    return fx.action === 'add' ? `一键补上 ${shortName(fx.partId)}` : fx.action === 'remove' ? `一键去掉 ${shortName(fx.partId)}` : `一键换成 ${shortName(fx.partId)}`;
+    const part = shortName(fx.partId);
+    return fx.action === 'add' ? t('Fix: add {part}', { part }) : fx.action === 'remove' ? t('Fix: remove {part}', { part }) : t('Fix: swap to {part}', { part });
+  }
+  /** Toast after a one-click fix: past tense of fixLabel */
+  function fixDone(f: Finding) {
+    const fx = f.fix!;
+    const vars = { part: shortName(fx.partId), rule: t(f.title) };
+    return fx.action === 'add' ? t('Added {part}: {rule}', vars) : fx.action === 'remove' ? t('Removed {part}: {rule}', vars) : t('Swapped to {part}: {rule}', vars);
   }
 
   function renderProps() {
@@ -546,13 +560,13 @@ export function shopStep(): StepImpl {
         <div className="rf-h">
           <span className="mk">{f.level === 'block' ? '✗' : '!'}</span>
           <span className="rf-t">
-            {f.level === 'block' ? '跑不起来' : '提醒'} · {f.title}
+            {f.level === 'block' ? t('Won\'t run') : t('Heads-up')} · {t(f.title)}
           </span>
           <Muted className="font-mono">{f.id}</Muted>
         </div>
-        <div className="rf-d">{f.detail}</div>
+        <div className="rf-d">{t(f.detail)}</div>
         <div className="rf-s">
-          <Conf c={confOfRule(f.confidence)} /> · {f.source}
+          <Conf c={confOfRule(f.confidence)} /> · {t(f.source)}
         </div>
         {f.fix && PART_BY_ID[f.fix.partId] && (
           <Btn
@@ -561,7 +575,7 @@ export function shopStep(): StepImpl {
             data-fix={i}
             onClick={() => {
               if (commit({ t: 'fix', fix: f.fix!, rule: f.id })) {
-                c.shell.toast(`${fixLabel(f).replace('一键', '已')}：${f.title}`);
+                c.shell.toast(fixDone(f));
                 select(f.fix!.partId);
               }
             }}
@@ -573,23 +587,26 @@ export function shopStep(): StepImpl {
     );
     const rules = (
       <>
-        <Sec>规则检查</Sec>
+        <Sec>{t('Rule check')}</Sec>
         {probs.length ? (
           <>
             <VerdictLine kind={nb ? 'bad' : 'warn'}>
-              {nb ? `有 ${nb} 处要改，不改作品跑不起来` : `有 ${probs.length} 处可以更好`}
-              {nb && probs.length > nb ? `，另有 ${probs.length - nb} 处建议` : ''}
+              {nb
+                ? probs.length > nb
+                  ? t('Must fix: {n}, or the project won\'t run; suggestions: {m}', { n: nb, m: probs.length - nb })
+                  : t('Must fix: {n}, or the project won\'t run', { n: nb })
+                : t('Could be better: {n}', { n: probs.length })}
             </VerdictLine>
             {probs.map(finding)}
           </>
         ) : (
-          <VerdictLine kind="ok">✓ 清单齐了，可以照着买</VerdictLine>
+          <VerdictLine kind="ok">✓ {t('The list is complete; you can buy from it')}</VerdictLine>
         )}
         <details className="oks" open={openGroups.ok} onToggle={(e) => (openGroups.ok = e.currentTarget.open)}>
-          <summary>共检查 {oks.length + probs.length} 项{probs.length ? `，${oks.length} 项没问题` : '，都没问题'}</summary>
+          <summary>{probs.length ? t('Checked: {n}, OK: {ok}', { n: oks.length + probs.length, ok: oks.length }) : t('Checked: {n}, all OK', { n: oks.length + probs.length })}</summary>
           {oks.map((f, i) => (
             <Res key={i} kind="ok">
-              {f.title} <Muted className="font-mono">{f.id}</Muted>
+              {t(f.title)} <Muted className="font-mono">{f.id}</Muted>
             </Res>
           ))}
         </details>
@@ -607,46 +624,46 @@ export function shopStep(): StepImpl {
       const pr = part.price;
       detail = (
         <>
-          <Sec>零件</Sec>
-          <Ph>{part.name}</Ph>
-          <KvT k="型号">{part.model}</KvT>
-          <Kv k="类别" v={KIND[part.kind]} />
-          {v.supply && <Kv k="供电" v={v.supply[0] === v.supply[1] ? `${v.supply[0]} V` : `${v.supply[0]}–${v.supply[1]} V`} />}
-          {v.logic !== null && <Kv k="逻辑电平" v={`${v.logic} V`} />}
-          {(cur.typ !== null || cur.peak !== null) && <Kv k={`电流${cur.est ? '（估算）' : ''}`} v={`${cur.typ ?? '—'} / 峰值 ${cur.peak ?? '—'} mA`} />}
-          {part.i2cAddr && <Kv k="I2C 地址" v={`${hex(part.i2cAddr.default)}${part.i2cAddr.alt.length ? ' / ' + part.i2cAddr.alt.map(hex).join(' / ') : ''}`} />}
-          {part.sizeMm && <Kv k="尺寸" v={`${part.sizeMm[0]} × ${part.sizeMm[1]}${part.sizeMm[2] !== null ? ' × ' + part.sizeMm[2] : ''} mm`} />}
+          <Sec>{t('Part')}</Sec>
+          <Ph>{t(part.name)}</Ph>
+          <KvT k={t('Model')}>{part.model}</KvT>
+          <Kv k={t('Category')} v={KIND[part.kind]} />
+          {v.supply && <Kv k={t('Power supply')} v={v.supply[0] === v.supply[1] ? `${v.supply[0]} V` : `${v.supply[0]}–${v.supply[1]} V`} />}
+          {v.logic !== null && <Kv k={t('Logic level')} v={`${v.logic} V`} />}
+          {(cur.typ !== null || cur.peak !== null) && <Kv k={cur.est ? t('Current (estimated)') : t('Current')} v={t('{typ} / peak {peak} mA', { typ: cur.typ ?? '—', peak: cur.peak ?? '—' })} />}
+          {part.i2cAddr && <Kv k={t('I2C address')} v={`${hex(part.i2cAddr.default)}${part.i2cAddr.alt.length ? ' / ' + part.i2cAddr.alt.map(hex).join(' / ') : ''}`} />}
+          {part.sizeMm && <Kv k={t('Size')} v={`${part.sizeMm[0]} × ${part.sizeMm[1]}${part.sizeMm[2] !== null ? ' × ' + part.sizeMm[2] : ''} mm`} />}
           {part.board && boardSpec(part)}
-          <Sec>参考价</Sec>
-          <Kv k={`参考价${qty > 1 ? ` ×${qty}` : ''}`} v={range(pr.lo * qty, pr.hi * qty)} />
-          <Kv k="核价日期" v={pr.checkedAt} />
-          <Note>参考价：{pr.source}。以店铺实际为准。</Note>
-          <Sec>模拟程度</Sec>
+          <Sec>{t('Reference price')}</Sec>
+          <Kv k={qty > 1 ? t('Reference price ×{n}', { n: qty }) : t('Reference price')} v={range(pr.lo * qty, pr.hi * qty)} />
+          <Kv k={t('Price checked on')} v={pr.checkedAt} />
+          <Note>{t('Reference price: {source}. Store prices may differ.', { source: t(pr.source) })}</Note>
+          <Sec>{t('Simulation level')}</Sec>
           <Field className={`sim-${part.sim.level}`}>
-            <Conf c={SIM_CONF[part.sim.level]} />：{SIM[part.sim.level]}
+            <Conf c={SIM_CONF[part.sim.level]} />: {SIM[part.sim.level]}
           </Field>
-          <Sec>为什么需要</Sec>
+          <Sec>{t('Why it\'s needed')}</Sec>
           <p className="why mt-0 mb-1">
-            {l?.why ?? '不在当前清单里'}
-            {l && (l.required ? <> <span className="tag">必选</span></> : l.checked ? null : <> <span className="tag off">未选</span></>)}
-            {l?.have && <> <span className="tag">我已有 · 不计价</span></>}
+            {l?.why ?? t('Not in the current list')}
+            {l && (l.required ? <> <span className="tag">{t('Required')}</span></> : l.checked ? null : <> <span className="tag off">{t('Not selected')}</span></>)}
+            {l?.have && <> <span className="tag">{t('I have it · not priced')}</span></>}
           </p>
-          {part.note && <Note>{part.note}</Note>}
-          <Sec>去店铺搜</Sec>
+          {part.note && <Note>{t(part.note)}</Note>}
+          <Sec>{t('Search stores')}</Sec>
           <Btns>
-            <ExtLink href={part.searchUrl.taobao}>淘宝搜索 ↗</ExtLink>
-            <ExtLink href={part.searchUrl.szlcsc}>立创商城搜索 ↗</ExtLink>
+            <ExtLink href={part.searchUrl.taobao}>{t('Search Taobao')} ↗</ExtLink>
+            <ExtLink href={part.searchUrl.szlcsc}>{t('Search LCSC')} ↗</ExtLink>
           </Btns>
           <Note>
-            搜索词：<Mono>{part.keywords}</Mono>。只是搜索页，不是推荐某家店。
+            {t('Search terms:')} <Mono>{part.keywords}</Mono>. {t('Just a search page, not a store recommendation.')}
           </Note>
         </>
       );
     } else
       detail = (
         <>
-          <Sec>零件</Sec>
-          <TreeEmpty>点左边清单或中间的零件看详情</TreeEmpty>
+          <Sec>{t('Part')}</Sec>
+          <TreeEmpty>{t('Click a part in the list on the left or in the middle to see details')}</TreeEmpty>
         </>
       );
     const caseT = part && /^enclosure-(weather|spin|lens|usbkey)$/.test(part.id) ? part.id.slice('enclosure-'.length) : null;
@@ -657,17 +674,16 @@ export function shopStep(): StepImpl {
         {detail}
       </>,
     );
-    // 结论：n 条提醒 / 清单没问题
-    c.shell.setVerdict(nb ? `${nb} 处要改` : probs.length ? `${probs.length} 处建议` : '清单齐了', nb ? 'bad' : probs.length ? 'warn' : 'ok');
+    c.shell.setVerdict(nb ? t('Must fix: {n}', { n: nb }) : probs.length ? t('Suggestions: {n}', { n: probs.length }) : t('List complete'), nb ? 'bad' : probs.length ? 'warn' : 'ok');
   }
 
-  // ------------------------------------------------------------ 参数化外壳（P1-08）：尺寸、可调参数、警告、导出
+  // ------------------------------------------------------------ parametric enclosure (P1-08): size, params, warnings, export
   let caseOut: { text: string; ok: boolean } | null = null;
-  const caseParamsOf = (t: string): CaseParams => (t === ctx!.work.id ? ctx!.store.get().caseParams : loadCaseParams(t));
-  function caseDetail(t: string) {
-    const p = caseParamsOf(t);
-    const L = layoutFor(t, ctx!.store.get().bom, p);
-    const dims = L.shape === 'rect' ? `${L.outer[0]} × ${L.outer[1]} × ${L.outer[2]} mm` : `底座 Ø${L.outer[0]} × ${L.outer[2]} mm`;
+  const caseParamsOf = (w: string): CaseParams => (w === ctx!.work.id ? ctx!.store.get().caseParams : loadCaseParams(w));
+  function caseDetail(w: string) {
+    const p = caseParamsOf(w);
+    const L = layoutFor(w, ctx!.store.get().bom, p);
+    const dims = L.shape === 'rect' ? `${L.outer[0]} × ${L.outer[1]} × ${L.outer[2]} mm` : t('Base Ø{d} × {h} mm', { d: L.outer[0], h: L.outer[2] });
     const props = ctx!.shell.props.el;
     const slider = (k: keyof CaseParams, label: string, step: number) => {
       const [lo, hi] = PARAM_RANGE[k];
@@ -688,10 +704,10 @@ export function shopStep(): StepImpl {
                 const n = props.querySelector<HTMLInputElement>(`[data-cpn="${k}"]`);
                 if (n) n.value = e.currentTarget.value;
               },
-              change: (e) => setCase(t, { [k]: Number(e.currentTarget.value) }),
+              change: (e) => setCase(w, { [k]: Number(e.currentTarget.value) }),
             }}
           />
-          <NInput type="number" min={lo} max={hi} step={step} defaultValue={p[k]} data-cpn={k} className="font-mono" aria-label={`${label}（数字）`} on={{ change: (e) => setCase(t, { [k]: Number(e.currentTarget.value) }) }} />
+          <NInput type="number" min={lo} max={hi} step={step} defaultValue={p[k]} data-cpn={k} className="font-mono" aria-label={t('{label} (number)', { label })} on={{ change: (e) => setCase(w, { [k]: Number(e.currentTarget.value) }) }} />
           <Muted>mm</Muted>
         </label>
       );
@@ -699,28 +715,28 @@ export function shopStep(): StepImpl {
     const exportAs = async (b: HTMLButtonElement, fmt: 'stl' | '3mf') => {
       const out = props.querySelector('#caseOut');
       b.disabled = true;
-      if (out) out.textContent = `正在生成外壳 ${fmt.toUpperCase()}…`;
+      if (out) out.textContent = t('Generating enclosure {fmt}…', { fmt: fmt.toUpperCase() });
       try {
-        const r = await exportCase(t, ctx!.store.get().bom, caseParamsOf(t), fmt);
+        const r = await exportCase(w, ctx!.store.get().bom, caseParamsOf(w), fmt);
         download(r.name, r.bytes, fmt === 'stl' ? 'model/stl' : 'model/3mf');
         caseOut = { ok: r.check.ok, text: `${r.name} · ${(r.bytes.length / 1024).toFixed(0)} KB · ${r.check.text}` };
         (window as unknown as { __tbCase: unknown }).__tbCase = { name: r.name, bytes: r.bytes.length, check: r.check };
       } catch (e) {
-        caseOut = { ok: false, text: `导出失败：${e}` };
+        caseOut = { ok: false, text: t('Export failed: {err}', { err: String(e) }) };
       }
       if (ctx) renderProps();
     };
     return (
       <>
-        <Sec>参数化外壳 · 估算，未经真机标定</Sec>
-        <Ph>按清单零件尺寸生成</Ph>
-        <Kv k="外形" v={dims} />
-        <Kv k="内腔 / 需要" v={`${L.inner} / ${L.need} mm`} cls={L.inner < L.need ? 'bad' : ''} />
-        <Kv k="最低高度" v={`${L.minHeight} mm`} />
+        <Sec>{t('Parametric enclosure · estimate, not calibrated on real hardware')}</Sec>
+        <Ph>{t('Generated from the listed parts\' sizes')}</Ph>
+        <Kv k={t('Outer size')} v={dims} />
+        <Kv k={t('Inner / needed')} v={`${L.inner} / ${L.need} mm`} cls={L.inner < L.need ? 'bad' : ''} />
+        <Kv k={t('Minimum height')} v={`${L.minHeight} mm`} />
         <div className="case-ps edit-only">
-          {slider('height', L.shape === 'rect' ? '高度' : '底座高', 0.5)}
-          {slider('wall', '壁厚', 0.1)}
-          {L.shape === 'rect' && slider('radius', '圆角', 0.5)}
+          {slider('height', L.shape === 'rect' ? t('Height') : t('Base height'), 0.5)}
+          {slider('wall', t('Wall thickness'), 0.1)}
+          {L.shape === 'rect' && slider('radius', t('Corner radius'), 0.5)}
         </div>
         {L.warnings.length ? (
           L.warnings.map((w, i) => (
@@ -730,46 +746,46 @@ export function shopStep(): StepImpl {
           ))
         ) : (
           <Res kind="ok">
-            零件都装得下（内腔 {L.inner} mm，需要 {L.need} mm）
+            {t('All parts fit (inner {inner} mm, needed {need} mm)', { inner: L.inner, need: L.need })}
           </Res>
         )}
         <details className="oks">
-          <summary>开孔与定位（{L.features.bottom.length + L.features.lid.length} 处）</summary>
-          {[...L.features.bottom.map((f) => `底：${f}`), ...L.features.lid.map((f) => `盖：${f}`)].map((f, i) => (
+          <summary>{t('Holes and mounts: {n}', { n: L.features.bottom.length + L.features.lid.length })}</summary>
+          {[...L.features.bottom.map((f) => t('Bottom: {f}', { f })), ...L.features.lid.map((f) => t('Lid: {f}', { f }))].map((f, i) => (
             <Res key={i} kind="na">
               {f}
             </Res>
           ))}
         </details>
         <details className="oks">
-          <summary>用到的零件尺寸</summary>
+          <summary>{t('Part sizes used')}</summary>
           {L.sizes.map((x, i) => (
-            <Kv key={i} k={shortName(x.part)} v={`${x.size.map((v) => +v.toFixed(1)).join(' × ')} mm${x.est ? '（估算）' : ''}`} />
+            <Kv key={i} k={shortName(x.part)} v={x.est ? t('{size} mm (estimated)', { size: x.size.map((v) => +v.toFixed(1)).join(' × ') }) : `${x.size.map((v) => +v.toFixed(1)).join(' × ')} mm`} />
           ))}
         </details>
         <Btns>
           <Btn primary data-export="stl" onClick={(e) => void exportAs(e.currentTarget, 'stl')}>
-            导出 STL
+            {t('Export STL')}
           </Btn>
           <Btn data-export="3mf" onClick={(e) => void exportAs(e.currentTarget, '3mf')}>
-            导出 3MF
+            {t('Export 3MF')}
           </Btn>
         </Btns>
-        <Note id="caseOut">{caseOut ? <span className={caseOut.ok ? 'okc text-ok-ink' : 'bad text-bad-ink'}>{caseOut.text}</span> : '3MF 含底壳、顶盖，已按打印朝向摆好，可直接上传打印服务询价。'}</Note>
+        <Note id="caseOut">{caseOut ? <span className={caseOut.ok ? 'okc text-ok-ink' : 'bad text-bad-ink'}>{caseOut.text}</span> : t('The 3MF has the base and lid laid out for printing; upload it to a print service for a quote.')}</Note>
       </>
     );
   }
-  function setCase(t: string, patch: Partial<CaseParams>) {
+  function setCase(w: string, patch: Partial<CaseParams>) {
     const c = ctx!;
-    const p = { ...caseParamsOf(t), ...patch };
+    const p = { ...caseParamsOf(w), ...patch };
     for (const k of Object.keys(PARAM_RANGE) as (keyof CaseParams)[]) p[k] = Math.min(PARAM_RANGE[k][1], Math.max(PARAM_RANGE[k][0], Number(p[k]) || PARAM_RANGE[k][0]));
-    saveCaseParams(t, p);
-    if (t === c.work.id) c.store.set({ caseParams: p });
+    saveCaseParams(w, p);
+    if (w === c.work.id) c.store.set({ caseParams: p });
     caseOut = null;
     renderProps();
   }
 
-  // ------------------------------------------------------------ 中间：零件平铺
+  // ------------------------------------------------------------ middle: part tiles
   function renderStage() {
     const c = ctx!;
     const b = bom();
@@ -777,7 +793,7 @@ export function shopStep(): StepImpl {
     const sel = selected();
     const plan = c.custom?.plan;
     const card = (l: Line) => (
-      <button key={l.partId} type="button" className={cn('pc text-fg', !l.checked && 'off', sel === l.partId && 'on')} data-id={l.partId} aria-pressed={sel === l.partId} title={l.part.name} onClick={() => select(l.partId)}>
+      <button key={l.partId} type="button" className={cn('pc text-fg', !l.checked && 'off', sel === l.partId && 'on')} data-id={l.partId} aria-pressed={sel === l.partId} title={t(l.part.name)} onClick={() => select(l.partId)}>
         <span className="pc-g">
           <Glyph p={l.part} />
         </span>
@@ -785,8 +801,8 @@ export function shopStep(): StepImpl {
           {shortName(l.partId)}
           {l.qty > 1 ? ` ×${l.qty}` : ''}
         </span>
-        <span className="pc-m font-mono">{l.have ? '我已有' : l.checked ? range(l.part.price.lo * l.qty, l.part.price.hi * l.qty) : '未选'}</span>
-        {l.required && <span className="pc-b">必选</span>}
+        <span className="pc-m font-mono">{l.have ? t('I have it') : l.checked ? range(l.part.price.lo * l.qty, l.part.price.hi * l.qty) : t('Not selected')}</span>
+        {l.required && <span className="pc-b">{t('Required')}</span>}
       </button>
     );
     const grp = (key: Line['group'], title: string) => {
@@ -799,27 +815,28 @@ export function shopStep(): StepImpl {
       ) : null;
     };
     c.shell.layer.render(
-      <div className="shop-stage" role="region" aria-label="零件平铺">
+      <div className="shop-stage" role="region" aria-label={t('Part tiles')}>
         <div className="ss-title">
-          <b>{getTemplate(b.template).title}</b>
+          <b>{t(getTemplate(b.template).title)}</b>
           <Muted>
-            {shortName(b.board)} · 点零件看详情，虚线是没选的建议件{b.template !== c.work.id ? ` · 去实验台时会换到这个作品（固件跟着换）` : ''}
+            {shortName(b.board)} · {t('Click a part for details; dashed ones are unselected suggestions')}
+            {b.template !== c.work.id ? ` · ${t('Going to the Bench switches to this project (firmware too)')}` : ''}
           </Muted>
           {plan?.sub && <Muted className="block" data-sub>{plan.sub}</Muted>}
-          {plan && <Muted className="block">第一步只列清单、看参考价，先不用真买：在实验台跑通了再买。</Muted>}
+          {plan && <Muted className="block">{t('Step one only lists parts and reference prices; don\'t buy yet: buy once it works on the Bench.')}</Muted>}
         </div>
-        {grp('req', '必选')}
-        {grp('sug', '建议')}
-        {grp('case', '外壳')}
+        {grp('req', t('Required'))}
+        {grp('sug', t('Suggested'))}
+        {grp('case', t('Enclosure'))}
         {plan && plan.noModel.length > 0 && (
           <section className="ss-g">
-            <div className="ss-h">只进清单 · 模拟器里没有</div>
+            <div className="ss-h">{t('List only · not in the simulator')}</div>
             <div className="ss-grid">
               {plan.noModel.map((n) => (
-                <div key={n.id} className="pc text-fg off" data-nomodel={n.id} title="模拟器里没有它：只进清单，不上实验台">
-                  <span className="pc-n">{n.name}</span>
+                <div key={n.id} className="pc text-fg off" data-nomodel={n.id} title={t('Not in the simulator: listed only, not put on the bench')}>
+                  <span className="pc-n">{t(n.name)}</span>
                   <span className="pc-m font-mono">{range(n.price[0], n.price[1])}</span>
-                  <Conf c="必须上真机" />
+                  <Conf c={REAL_HW} />
                 </div>
               ))}
             </div>
@@ -844,7 +861,7 @@ export function shopStep(): StepImpl {
     ctx.shell.toolbar.setActive(`tpl:${bom().template}`);
   }
 
-  // ------------------------------------------------------------ 换开发板：工具条上方弹一张卡
+  // ------------------------------------------------------------ swap dev board: a card above the toolbar
   function boardPicker() {
     const c = ctx!;
     const b = bom();
@@ -853,7 +870,7 @@ export function shopStep(): StepImpl {
     c.shell.card.show(
       { x: tb.right - st.left - 140, y: tb.top - st.top - 8 },
       <div className="board-pick">
-        <Sec>换开发板</Sec>
+        <Sec>{t('Swap dev board')}</Sec>
         {BOARDS.map((p) => (
           <button
             key={p.id}
@@ -865,27 +882,30 @@ export function shopStep(): StepImpl {
               if (commit({ t: 'board', partId: p.id })) select(p.id);
             }}
           >
-            <TnL>{p.name}</TnL>
+            <TnL>{t(p.name)}</TnL>
             <TnM>{range(p.price.lo, p.price.hi)}</TnM>
           </button>
         ))}
-        <Note>换板不改接线：有引脚冲突会在规则检查里列出。</Note>
+        <Note>{t('Swapping boards keeps the wiring; pin conflicts show up in the rule check.')}</Note>
       </div>,
     );
-    // 卡片挂在 3D 台面里，层级在零件平铺（stepLayer）下面：开着时让平铺不接鼠标，否则点不到卡上的板子
-    const t = tiles();
-    if (t) t.style.pointerEvents = 'none';
+    // The card lives in the 3D stage below the tile layer (stepLayer): disable tile clicks while open, or the card can't be clicked
+    const tl = tiles();
+    if (tl) tl.style.pointerEvents = 'none';
   }
 
   function onTool(id: string) {
     const c = ctx;
     if (!c || c.store.get().step !== 'shop') return;
     if (id.startsWith('tpl:')) {
-      const t = id.slice(4);
-      if (t === bom().template) return c.shell.toast(`已经是「${getTemplate(t).title}」的清单`);
-      commit({ t: 'template', id: t });
-      const ls = lineList(bom());
-      c.shell.toast(`套用「${getTemplate(t).title}」：必选 ${ls.filter((l) => l.required).length} 件，建议件按默认勾选${t !== c.work.id ? '；去实验台时会换成这个作品的固件' : ''}`);
+      const tid = id.slice(4);
+      const title = t(getTemplate(tid).title);
+      if (tid === bom().template) return c.shell.toast(t('Already the list for "{title}"', { title }));
+      commit({ t: 'template', id: tid });
+      const n = lineList(bom()).filter((l) => l.required).length;
+      c.shell.toast(tid !== c.work.id
+        ? t('Applied "{title}": required parts: {n}, suggestions checked by default; the Bench will switch to this project\'s firmware', { title, n })
+        : t('Applied "{title}": required parts: {n}, suggestions checked by default', { title, n }));
     } else if (id === 'board') boardPicker();
   }
 
@@ -903,20 +923,20 @@ export function shopStep(): StepImpl {
     const b = bom();
     if (id && lineList(b).some((l) => l.partId === id)) return;
     if (c.store.get().selection && c.store.get().selection?.kind !== 'part') return;
-    const t = getTemplate(b.template);
-    const first = t.required.find((l) => getPart(l.partId).kind !== 'board' && l.partId !== 'usb-c-cable');
+    const tpl = getTemplate(b.template);
+    const first = tpl.required.find((l) => getPart(l.partId).kind !== 'board' && l.partId !== 'usb-c-cable');
     c.store.set({ selection: { kind: 'part', id: first?.partId ?? b.board } });
   }
 
-  // ------------------------------------------------------------ 摆上实验台（P0-09）
+  // ------------------------------------------------------------ put on the bench (P0-09)
   function place() {
     const c = ctx!;
     const b = bom();
     const p = placement(b);
-    const power = p.ext5v ? 'USB 和外接 5 V' : 'USB';
-    const skipped = p.skipped.length ? `；${p.skipped.map(partLabel).join('、')}没有默认接线，没摆上台` : '';
+    const power = p.ext5v ? t('USB and external 5 V') : 'USB';
+    const skipped = p.skipped.length ? `; ${t('No default wiring, not put on the bench: {parts}', { parts: p.skipped.map(partLabel).join(', ') })}` : '';
     if (b.template !== c.work.id) {
-      // 清单换了作品：固件跟着作品走，换到那个作品的工作台（整页重载，DECISIONS 2026-10-16 外壳）
+      // The list switched project: firmware follows the project, so reload into its bench (DECISIONS 2026-10-16 enclosure)
       const target = b.template as WorkId;
       const h = hist();
       saveBom(target, { ops: h.ops.slice(0, h.cur + 1), cur: h.cur });
@@ -926,7 +946,7 @@ export function shopStep(): StepImpl {
     }
     const scene: SceneSpec = { ...c.session.scene, parts: p.parts as SceneSpec['parts'] };
     savePlaced(wkey(c.work), scene, p.ext5v);
-    // 选板作品的检查点按台面零件生成：零件变了检查点也变，整页重载（会话、进度都按新检查点建）
+    // Board-picker checkpoints are generated from bench parts: if they change, reload so session and progress rebuild
     if (c.custom) {
       const { plan, levels } = c.custom;
       const next = genLevels({ boardName: plan.boardName, chip: plan.chip, parts: scene.parts, deepSleep: plan.deepSleep });
@@ -939,7 +959,7 @@ export function shopStep(): StepImpl {
     c.session.applyScene(scene, { ext5v: p.ext5v });
     location.hash = 'bench';
     c.store.set({ selection: { kind: 'power', id: 'usb' } });
-    c.shell.toast(`按清单摆上 ${p.parts.length} 件（${p.parts.map((x) => partLabel(x.type)).join('、') || '只有开发板'}）；供电：${power}${skipped}`);
+    c.shell.toast(t('Placed from the list: {n} ({parts}); power: {power}', { n: p.parts.length, parts: p.parts.map((x) => partLabel(x.type)).join(', ') || t('dev board only'), power }) + skipped);
   }
 
   return {
@@ -951,27 +971,27 @@ export function shopStep(): StepImpl {
         c.shell.timeline.onSeek((i) => onSeek(i));
         c.shell.card.onHide(() => tiles()?.style.removeProperty('pointer-events'));
       }
-      // 选板作品不给换模板（换了就不是选板结果了，回选板改）
+      // Board-picker works can't switch templates (it would no longer be the picker's result; change it there)
       c.shell.toolbar.setGroups([
-        ...(c.custom ? [] : [{ id: 'tpl', tools: PROCURE_TEMPLATES.map((t) => ({ id: `tpl:${t.id}`, label: TPL_SHORT[t.id] ?? t.title })) }]),
-        { id: 'board', tools: [{ id: 'board', label: '换开发板…' }] },
+        ...(c.custom ? [] : [{ id: 'tpl', tools: PROCURE_TEMPLATES.map((x) => ({ id: `tpl:${x.id}`, label: TPL_SHORT[x.id] ?? t(x.title) })) }]),
+        { id: 'board', tools: [{ id: 'board', label: t('Swap dev board…') }] },
       ]);
       if (c.store.get().selection?.kind !== 'part') c.store.set({ selection: null });
       defaultSelection();
       render();
-      c.shell.setNext('下一步：实验台 →', 'bench', '', place);
-      // 顶栏撤销 / ⌘Z 在采购这一步走清单历史（2026-10-18 走查：以前时间线记了，撤销却是灰的）
+      c.shell.setNext(t('Next: Bench →'), 'bench', '', place);
+      // Top-bar Undo / ⌘Z walks the BOM history here (2026-10-18 walkthrough: timeline recorded it but Undo was greyed)
       actions.shopUndo = (d) => {
         const h = hist();
         const i = h.cur + d;
         if (i < 0 || i >= h.ops.length) return;
         const op = h.ops[d < 0 ? h.cur : i];
         onSeek(i);
-        c.shell.toast(`${d < 0 ? '已撤销' : '已重做'}：${opLabel(op).label}`);
+        c.shell.toast(d < 0 ? t('Undone: {op}', { op: opLabel(op).label }) : t('Redone: {op}', { op: opLabel(op).label }));
       };
       unsubs = [
         c.store.subscribe(() => render(), ['selection']),
-        // 清单变了（含时间线点回去）：选中的件不在新清单里就换成默认选中，再画
+        // BOM changed (incl. timeline seek): reset selection if the part left the list, then redraw
         c.store.subscribe(() => {
           const before = c.store.get().selection;
           defaultSelection();
@@ -982,7 +1002,7 @@ export function shopStep(): StepImpl {
     unmount() {
       unsubs.forEach((u) => u());
       unsubs = [];
-      // 采购页的选中（清单里的零件 id）对实验台没有意义
+      // A shop selection (a BOM part id) means nothing on the Bench
       if (ctx?.store.get().selection?.kind === 'part') ctx.store.set({ selection: null });
       actions.shopUndo = undefined;
       ctx = null;
