@@ -1,6 +1,8 @@
 //! ESP32-C3 peripheral models. Register offsets from ESP-IDF `components/soc/esp32c3/register/soc/*.h` (Apache-2.0 OR MIT).
 //! Time base: CPU 160MHz, `now` is CPU cycles. SYSTIMER 16MHz = now/10; APB 80MHz = now/2.
 
+use tryboard_soc::adc::{AdcChip, AdcModel};
+
 pub const CPU_HZ: u64 = 160_000_000;
 
 // ---------------------------------------------------------------- Interrupt source numbers (soc/interrupts.h)
@@ -862,15 +864,16 @@ impl Extmem {
 }
 
 // ---------------------------------------------------------------- APB_SARADC (one-shot sampling)
-/// ADC1 ch 0..4 = GPIO0..4, ADC2 ch 0 = GPIO5; voltage set externally (web knob / tests). Range per attenuation (datasheet,
-/// approx.): 0dB≈750mV, 2.5dB≈1050mV, 6dB≈1300mV, 12dB≈2500mV. (lint: allow-long-comment)
+
+/// ADC1 ch 0..4 = GPIO0..4, ADC2 ch 0 = GPIO5; voltage set externally (web knob / tests).
+/// Code from voltage: tryboard_soc::adc (real = inverse of IDF calibration + bends + noise; ideal = linear).
 pub struct Adc {
     pub regs: [u32; 0x400 / 4],
     /// Voltage on each pin (mV)
     pub pin_mv: [f32; 22],
-    /// Noise amplitude (LSB), real ADC readings jitter; 0 disables
-    pub noise_lsb: u32,
-    seed: u32,
+    pub model: AdcModel,
+    /// Wi-Fi RF holds the ADC2 arbiter: ADC2 results carry an invalid channel (adc_oneshot_ll_raw_check_valid)
+    pub wifi_busy: bool,
 }
 
 impl Default for Adc {
@@ -878,8 +881,8 @@ impl Default for Adc {
         Adc {
             regs: [0; 0x400 / 4],
             pin_mv: [0.0; 22],
-            noise_lsb: 2,
-            seed: 0x1234_5678,
+            model: AdcModel::new(AdcChip::C3),
+            wifi_busy: false,
         }
     }
 }
@@ -915,21 +918,16 @@ impl Adc {
         let ch = chan & 7;
         let atten = (cfg >> 23) & 3;
         let pin = if unit == 0 { ch as usize } else { 5 };
-        let full = [750.0, 1050.0, 1300.0, 2500.0][atten as usize];
-        let mv = if (unit == 0 && ch <= 4) || (unit == 1 && ch == 0) {
-            self.pin_mv[pin]
-        } else {
-            0.0
-        };
-        // Linear congruential noise, reproducible
-        self.seed = self.seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
-        let n = if self.noise_lsb > 0 {
-            (self.seed >> 16) % (2 * self.noise_lsb + 1)
-        } else {
-            0
-        } as i32
-            - self.noise_lsb as i32;
-        let raw = ((mv / full * 4095.0).round() as i32 + n).clamp(0, 4095) as u32;
+        let pad = (unit == 0 && ch <= 4) || (unit == 1 && ch == 0);
+        if unit == 1 && self.wifi_busy {
+            // Arbiter granted Wi-Fi: data status carries channel 0xF (> 9 = invalid), IDF returns ESP_ERR_TIMEOUT
+            self.model.blocked += 1;
+            self.regs[0x30 / 4] = 0xf << 13;
+            self.regs[0x44 / 4] |= 1 << 30;
+            return;
+        }
+        let mv = if pad { self.pin_mv[pin] } else { 0.0 };
+        let raw = self.model.convert(unit, atten, pad.then_some(pin), mv);
         if unit == 0 {
             self.regs[0x2c / 4] = raw;
             self.regs[0x44 / 4] |= 1 << 31;

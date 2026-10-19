@@ -39,7 +39,9 @@ export type InputEvent =
    *  Actions seed=N / net=preset / netfault=kind[,s] */
   | { tMs: number; kind: 'seed'; seed: number }
   | { tMs: number; kind: 'net'; preset: string }
-  | { tMs: number; kind: 'netfault'; fault: string; dur?: number };
+  | { tMs: number; kind: 'netfault'; fault: string; dur?: number }
+  /** ADC model (D-02): ideal = linear and exact, real = calibration curve + end bends + noise (default). Action adc=ideal|real */
+  | { tMs: number; kind: 'adc'; ideal: boolean };
 
 /** An event not yet stamped (the worker fills in tMs when applying it) */
 export type InputAction = InputEvent extends infer E ? (E extends unknown ? Omit<E, 'tMs'> : never) : never;
@@ -121,11 +123,13 @@ export function action(e: InputEvent): string | null {
     case 'netreply':
       return `netreply=${e.reply}`;
     case 'seed':
-      return `seed=${e.seed}`;
+      return `seed=${e.seed >>> 0}`;
     case 'net':
       return `net=${e.preset}`;
     case 'netfault':
       return `netfault=${e.fault}${e.dur === undefined ? '' : ',' + e.dur}`;
+    case 'adc':
+      return `adc=${e.ideal ? 'ideal' : 'real'}`;
     case 'power':
       return null;
   }

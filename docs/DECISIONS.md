@@ -957,3 +957,13 @@
 - **分析仪布局**：精细采样打开时若底部面板太矮（< 400 px 或 60% 屏高），自动加高一次（只增不减），否则忙等提示会把波形行挤没。手机端分析仪仍按 U-05 隐藏，精细采样的手机布局归 D-07。
 - 参考：只看 DHT11 / Aosong 数据手册与 ESP-IDF 头文件；没有读、没有参考任何 GPL 代码。
 
+## 2026-10-19 真实 ADC（D-02）
+- **调查 (a) S3 ADC2 与 Wi-Fi 冲突是硬件仲裁**：IDF v5.5.1 里 S3 的 `adc2_wifi_acquire` 是空函数（只有经典 ESP32 走软件锁）；Wi-Fi 占着时 SAR 仲裁器把 SENS 读数的标志位 [15:14] 置非 0，`adc_oneshot_ll_raw_check_valid` 判无效，`adc_oneshot_read` 返回 ESP_ERR_TIMEOUT。模型照此：S3 上 ADC2 通道 < 10 且 Wi-Fi MAC 已开（`WifiMac::is_on()` = esp_wifi_start 交出了接收描述符）时，读数返回 `3 << 14`。C3 上通道位 [16:13] > 9 视为无效（模型写 0xF）；但 C3 的 ADC2 单次读需要 `CONFIG_ADC_ONESHOT_FORCE_USE_ADC2_ON_C3`（勘误：ADC2 在 C3 上不可靠），所以不出 C3 固件用例，网页把 C3 GPIO5 标成「ESP-IDF 不支持」。
+- **调查 (b) 曲线拟合需要的 eFuse**：C3 —— BLK2 `BLK_VERSION_MAJOR = 1`（位 128）、OCODE（位 140）、4 档初始码（位 148/158/168/178）、4 档校准电压码（符号-幅值，位 188/198/208/218，参考 400/550/750/1370 mV）。S3 —— BLK_VERSION_MAJOR = 1、ADC1/ADC2 初始码与校准电压码按差分链存（ADC1 4 档、ADC2 的第 3 档字段落在 BLK1 位 186），参考 850 mV。写入值取「典型芯片」：C3 digi 2018/1991/2006/2027，S3 ADC1 a0 3650 … a3 1000，`soc/src/adc.rs::burn_efuse` 在默认 eFuse 上烧这些位。
+- **副作用**：BLK_VERSION_MAJOR = 1 后 IDF 从 eFuse 取 OCODE、不再打印 "calibration efuse version does not match"，启动日志少一行、时间戳整体前移约 1 ms，所以所有关卡 / 用例指纹都变了（仓库里不存指纹，check.py --ref --all 全过）。
+- **传递函数**：真实 = 两头弯曲（< 0.1 V 压低、> 2.9 V 饱和）→ IDF 校准公式（线性系数 + 曲线拟合误差项，系数照 IDF `curve_fitting_coefficients.c`，Apache-2.0）的反函数 → 高斯噪声 σ = 2 LSB（splitmix32，种子 `seed ^ 0x41444300`，缺省 seed 7）→ 取整钳位。码 0 以下反函数线性外推，噪声不会把死区抬起来。效果：C3 / S3 在 0.5–2.5 V 校准后读回与输入误差 ≤ 1 mV。理想 = 旧线性律（量程按数据手册 C3 750/1050/1300/2500、S3 950/1250/1750/3100 mV），无噪声。
+- **理想模式下固件的校准结果是歪的**：eFuse 曲线仍在，固件 adc_cali 会把线性码换算成另一电压（C3 1250 mV 理想码 2048 → 校准报 1380 mV）。这是故意的：理想模式给「读数 = 公式」的教学视角，不是更准的芯片；面板上「真实（默认）」才是要信的数。
+- **重放**：切换走输入日志 `adc=ideal|real`（D 批共用约定），CLI `--adc`、`--seed`，wasm `tb_adc_mode` / `tb_seed`；ADC 随机流只在每次转换时推进，与网络流独立。`tools/webtest/adc.mjs`：网页切换后导出输入日志，CLI `--inputs` 串口逐字节相同、指纹相同。
+- **改动的期望值**（更接近真机，未放宽容差）：pot `ADC raw=2046` → `1847`（1250 mV 在典型 C3 上的码，校准回 1250 mV），pwm max 0.96 → 0.88（2400 mV 读 3604）；s3-pot `2046` → `1852`（1550 mV），pwm max 0.968 → 0.922（3000 mV 读 3778）。s3-i2s-mic RMS 误差 0.0003 → 0.0008、gptimer 误差小幅变化，均因启动时序前移、仍在原容差内。
+- **网页**：器件面板（例子卡片和选中电位器时都有）放理想 / 真实切换、最近读数 ± 抖动、48 次读数条、「估算」标签、接线选脚 ADC1 / ADC2 标注（S3 GPIO1–10 / 11–20，C3 GPIO0–4 / 5）。读数来自 wasm 每次转换记下的环形缓冲（`tb_adc_fetch`），不是解析串口。
+- 替代：按 IDF 的线性系数正向加一条随机曲线 —— 校准后误差不可控，验收「< 1%」无法稳定；照搬 espressif/qemu 的 ADC —— GPL，且它没有 eFuse 曲线。

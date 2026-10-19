@@ -445,7 +445,10 @@ impl SocBus {
             0x6001_9000 => return self.ledc.write(off, v, now),
             crypto_hw::SHA_BASE => return self.sha_write(off, v),
             crypto_hw::AES_BASE => return self.aes_write(off, v),
-            0x6004_0000 => return self.adc.write(off, v),
+            0x6004_0000 => {
+                self.adc.wifi_busy = self.wifi.as_deref().is_some_and(|w| w.is_on());
+                return self.adc.write(off, v);
+            }
             0x6000_9000 if (4..=0x58).contains(&off) => {
                 self.gpio.iomux[((off - 4) / 4) as usize] = v;
                 self.gpio_changed(now);
@@ -1111,6 +1114,7 @@ impl Esp32c3 {
         m.bus.gpio.ext_in = self.bus.gpio.ext_in;
         m.bus.gpio.ext_driven = self.bus.gpio.ext_driven;
         m.bus.adc.pin_mv = self.bus.adc.pin_mv;
+        m.bus.adc.model = self.bus.adc.model.clone();
         // External devices, pin logs and LED strip decoders are part of the outside world and survive reset (as in S3 reboot)
         m.bus.i2c0.devices = std::mem::take(&mut self.bus.i2c0.devices);
         m.bus.ws2812 = std::mem::take(&mut self.bus.ws2812);

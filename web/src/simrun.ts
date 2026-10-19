@@ -20,6 +20,8 @@ export interface Ex {
   tb_console_clear(): void;
   tb_gpio_drive(pin: number, level: number): void;
   tb_analog_set(pin: number, mv: number): void;
+  tb_adc_mode?(ideal: number): void;
+  tb_seed?(seed: number): void;
   tb_uart_push(p: number, n: number): void;
   tb_usb_cdc_send(p: number, n: number): void;
   tb_ble_cmd?(p: number, n: number): number;
@@ -189,6 +191,8 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
       let m: RegExpMatchArray | null;
       if ((m = act.match(/^gpio(\d+)=(.*)$/))) e.tb_gpio_drive(Number(m[1]) || 0, m[2] === 'z' ? -1 : m[2] === '1' ? 1 : 0);
       else if ((m = act.match(/^mv(\d+)=(.*)$/))) e.tb_analog_set(Number(m[1]), Number(m[2]));
+      else if (act.startsWith('adc=')) e.tb_adc_mode?.(act.slice(4).trim() === 'ideal' ? 1 : 0);
+      else if (act.startsWith('seed=')) e.tb_seed?.(Number(act.slice(5)) >>> 0);
       else if (act.startsWith('env=')) {
         const v = act.slice(4).split(',').map(Number);
         if (v.length === 3 && v.every((x) => !Number.isNaN(x))) e.tb_env_set(v[0], v[1], v[2]);
@@ -202,7 +206,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         const d = Number(act.slice(5));
         if (!Number.isNaN(d)) e.tb_sonar_distance?.(d);
       } else if (act.startsWith('realnet=')) e.tb_realnet_set?.(act.slice(8).trim() === '1' ? 1 : 0);
-      else if (/^(seed|net|netfault)=/.test(act)) bytesIn(e, new TextEncoder().encode(act.trim()), (p, n) => void e.tb_net_action?.(p, n));
+      else if (/^(net|netfault)=/.test(act)) bytesIn(e, new TextEncoder().encode(act.trim()), (p, n) => void e.tb_net_action?.(p, n));
       else if (act.startsWith('netreply=')) bytesIn(e, new TextEncoder().encode(act.slice(9).trim()), (p, n) => void e.tb_net_reply?.(p, n));
       else if (act.startsWith('phone=')) bytesIn(e, new TextEncoder().encode(act.slice(6).replaceAll('\\n', '\n')), (p, n) => void e.tb_phone_cmd?.(p, n));
       else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));

@@ -1265,3 +1265,45 @@ pub extern "C" fn tb_audio_report() -> usize {
     REPORT.with(|b| *b.borrow_mut() = r);
     n
 }
+
+thread_local! {
+    static ADC: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Session seed (input-log action `seed=`); same streams as the CLI's --seed
+#[no_mangle]
+pub extern "C" fn tb_seed(seed: u32) {
+    with((), |m| m.set_seed(seed))
+}
+
+/// ADC model: 1 = ideal (linear, exact), 0 = real (default); input-log action `adc=`
+#[no_mangle]
+pub extern "C" fn tb_adc_mode(ideal: u32) {
+    with((), |m| m.set_adc_ideal(ideal != 0))
+}
+
+/// Copy recent conversions on `pin` as (raw, calibrated mV) i32 pairs, oldest first; returns the pair count.
+/// Read them with tb_adc_ptr.
+#[no_mangle]
+pub extern "C" fn tb_adc_fetch(pin: u32) -> usize {
+    let v: Vec<i32> = with(Vec::new(), |m| {
+        m.adc_samples(pin as usize)
+            .iter()
+            .flat_map(|s| [s.raw as i32, s.mv])
+            .collect()
+    });
+    let n = v.len() / 2;
+    ADC.with(|a| *a.borrow_mut() = v);
+    n
+}
+
+#[no_mangle]
+pub extern "C" fn tb_adc_ptr() -> *const i32 {
+    ADC.with(|a| a.borrow().as_ptr())
+}
+
+/// ADC2 reads refused while Wi-Fi held the arbiter
+#[no_mangle]
+pub extern "C" fn tb_adc_blocked() -> f64 {
+    with(0.0, |m| m.adc_blocked() as f64)
+}

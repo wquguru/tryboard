@@ -97,14 +97,14 @@
   "seconds": 1.5,
   "script": "0.0:mv2=0; 0.4:mv2=1250; 0.8:mv2=2400",
   "expect": [
-   "ADC raw=2046",
+   "ADC raw=1847",
    "TRYBOARD_OK pot"
   ],
   "pwm": {
    "pin": 5,
    "freq": 5000,
    "min": 0.0,
-   "max": 0.96
+   "max": 0.88
   }
  },
  {
@@ -605,14 +605,14 @@
   "seconds": 1.5,
   "script": "0.0:mv4=0; 0.4:mv4=1550; 0.8:mv4=3000",
   "expect": [
-   "ADC raw=2046",
+   "ADC raw=1852",
    "TRYBOARD_OK pot"
   ],
   "pwm": {
    "pin": 5,
    "freq": 5000,
    "min": 0.0,
-   "max": 0.968
+   "max": 0.922
   },
   "chip": "esp32s3"
  },

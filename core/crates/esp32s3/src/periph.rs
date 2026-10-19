@@ -1,6 +1,8 @@
 //! ESP32-S3-specific peripheral models (the parts whose layout differs from C3). Register offsets come from ESP-IDF
 //! `components/soc/esp32s3/register/soc/*.h` (Apache-2.0 OR MIT).
 
+use tryboard_soc::adc::{AdcChip, AdcModel};
+
 /// Interrupt source numbers (soc/esp32s3/include/soc/interrupts.h, evaluated by compiling the header with clang)
 pub mod src {
     pub const WIFI_MAC: u32 = 0;
@@ -369,8 +371,9 @@ const TSENS_RAW_25C: u32 = 104;
 pub struct SensAdc {
     pub regs: [u32; 0x100 / 4],
     pub pin_mv: [f32; NPINS],
-    pub noise_lsb: u32,
-    seed: u32,
+    pub model: AdcModel,
+    /// Wi-Fi RF holds the ADC2 arbiter; the bus refreshes it before each SENS write
+    pub wifi_busy: bool,
 }
 
 impl Default for SensAdc {
@@ -378,8 +381,8 @@ impl Default for SensAdc {
         SensAdc {
             regs: [0; 0x100 / 4],
             pin_mv: [0.0; NPINS],
-            noise_lsb: 2,
-            seed: 0x1234_5678,
+            model: AdcModel::new(AdcChip::S3),
+            wifi_busy: false,
         }
     }
 }
@@ -416,23 +419,17 @@ impl SensAdc {
     }
 
     fn sample(&mut self, unit: u32, ch: u32) -> u32 {
+        if unit == 1 && ch < 10 && self.wifi_busy {
+            // Arbiter granted Wi-Fi: data flag bits [15:14] set, adc_oneshot_ll_raw_check_valid fails -> ESP_ERR_TIMEOUT
+            self.model.blocked += 1;
+            return 3 << 14;
+        }
         let atten_reg = self.regs[if unit == 0 { 0x14 / 4 } else { 0x38 / 4 }];
         let atten = (atten_reg >> (ch * 2)) & 3;
-        let full = [950.0, 1250.0, 1750.0, 3100.0][atten as usize];
         let pin = if unit == 0 { ch + 1 } else { ch + 11 } as usize;
-        let mv = if ch < 10 {
-            self.pin_mv.get(pin).copied().unwrap_or(0.0)
-        } else {
-            0.0
-        };
-        self.seed = self.seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
-        let n = if self.noise_lsb > 0 {
-            (self.seed >> 16) % (2 * self.noise_lsb + 1)
-        } else {
-            0
-        } as i32
-            - self.noise_lsb as i32;
-        ((mv / full * 4095.0).round() as i32 + n).clamp(0, 4095) as u32
+        let pad = ch < 10 && pin < NPINS;
+        let mv = if pad { self.pin_mv[pin] } else { 0.0 };
+        self.model.convert(unit, atten, pad.then_some(pin), mv)
     }
 }
 

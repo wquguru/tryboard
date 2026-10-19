@@ -259,6 +259,11 @@ impl WifiMac {
         }
     }
 
+    /// RF is up once the driver has handed the MAC its RX descriptors (esp_wifi_start); it then owns the ADC2 arbiter
+    pub fn is_on(&self) -> bool {
+        self.rx_cur.is_some()
+    }
+
     pub fn irq(&self) -> bool {
         self.int_raw & self.int_ena != 0
     }

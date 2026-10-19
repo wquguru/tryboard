@@ -45,6 +45,7 @@ import type {
   WorkDef,
 } from "../types";
 import { getAnalyzer } from "../analyzer";
+import { AdcPanel } from "../adcpanel";
 import { extModelsOn, setExtModels } from "../../extmodels";
 import {
   RECORD_SECONDS,
@@ -2231,6 +2232,9 @@ export function benchStep(): StepImpl {
           </Note>
         </>
       );
+    } else if (p.type === "pot") {
+      const a = exInfo?.ex.controls?.find((k): k is AnalogControl => typeof k === "object" && k.type === "analog" && k.pin === p.pin);
+      live = analogBox(a ?? { type: "analog", pin: p.pin, label: t("Potentiometer (GPIO{pin})", { pin: p.pin }), max_mv: 3300, value: 0 });
     } else if (
       p.type === "cst816s" ||
       (p.type === "gc9a01" && ses.scene.parts.some((x) => x.type === "cst816s"))
@@ -2319,6 +2323,34 @@ export function benchStep(): StepImpl {
     ["live", t("Browser microphone (needs permission, play only, not checked)")],
   ];
 
+  /** Wiper slider plus the ADC panel (D-02); shown on the example card and when the pot part is selected. */
+  function analogBox(a: AnalogControl) {
+    const c = ctx!;
+    const mv = c.session.analog.get(a.pin) ?? a.value;
+    return (
+      <KvBox key={a.pin}>
+        <span className="k">{t(a.label)}</span>
+        <Slider
+          min={0}
+          max={a.max_mv}
+          step={10}
+          defaultValue={mv}
+          data-analog={a.pin}
+          aria-label={t(a.label)}
+          out={`${mv} mV`}
+          on={{
+            input: (e) => {
+              const v = Number(e.currentTarget.value);
+              outOf(e.currentTarget)!.textContent = `${v} mV`;
+              c.session.setAnalog(a.pin, v);
+            },
+          }}
+        />
+        <AdcPanel session={c.session} chip={c.session.chip} pin={a.pin} />
+      </KvBox>
+    );
+  }
+
   /** "This example": about, tags, analog sliders (the .env ones are what regression scripts drag), plus a project using similar parts. */
   function renderExample() {
     const c = ctx!;
@@ -2357,30 +2389,7 @@ export function benchStep(): StepImpl {
                 <Kv k={t("Firmware reading")} live="rt" />
               </>
             )}
-            {analogs.map((a) => {
-              const mv = c.session.analog.get(a.pin) ?? a.value;
-              return (
-                <KvBox key={a.pin}>
-                  <span className="k">{t(a.label)}</span>
-                  <Slider
-                    min={0}
-                    max={a.max_mv}
-                    step={10}
-                    defaultValue={mv}
-                    data-analog={a.pin}
-                    aria-label={t(a.label)}
-                    out={`${mv} mV`}
-                    on={{
-                      input: (e) => {
-                        const v = Number(e.currentTarget.value);
-                        outOf(e.currentTarget)!.textContent = `${v} mV`;
-                        c.session.setAnalog(a.pin, v);
-                      },
-                    }}
-                  />
-                </KvBox>
-              );
-            })}
+            {analogs.map((a) => analogBox(a))}
             {ctl.includes("imu") && c.session.hasImu() && (
               <>
                 <Sec>{t("Tilt the bench")}</Sec>

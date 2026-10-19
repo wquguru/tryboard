@@ -74,6 +74,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const chip = ex ? chipOf(ex) : (opts.chip ?? 'esp32s3');
   bench.setBoard(chip);
   bench.setScene(scene);
+  // ADC panel pins: knobs the user has touched plus every pot wiper on the bench
+  const adcPins = () => [...new Set([...s.analog.keys(), ...s.scene.parts.flatMap((p) => (p.type === 'pot' ? [p.pin] : []))])];
   const buzzerPins = scene.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : []));
   audio.setPins(buzzerPins);
   audio.setSpeaker(scene.parts.some((p) => p.type === 'max98357a'));
@@ -308,8 +310,15 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     },
     analog: new Map((ex?.controls ?? []).flatMap((c) => (typeof c === 'object' && c.type === 'analog' ? [[c.pin, c.value] as [number, number]] : []))),
     setAnalog(pin, mv) {
+      const fresh = !s.analog.has(pin);
       s.analog.set(pin, mv);
       s.sim?.analog(pin, mv);
+      if (fresh) s.sim?.watchAdc(adcPins());
+    },
+    adcIdeal: false,
+    setAdcIdeal(ideal) {
+      s.adcIdeal = ideal;
+      s.sim?.adcMode(ideal);
     },
     setEnv(e: Partial<Env>) {
       s.sim?.setEnv(e);
@@ -463,6 +472,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         if (s.micSource === 'live' && s.scene.parts.some((p) => p.type === 'inmp441')) void s.setMicSource('live');
         // Pot position is not a boot parameter: apply it as the first input after boot.
         for (const [pin, mv] of s.analog) sim.analog(pin, mv);
+        // Real is the power-up default, so only the ideal choice needs logging again
+        if (s.adcIdeal) sim.adcMode(true);
+        sim.watchAdc(adcPins());
         s.bootCount++;
         imuTail = '';
         store.set((st) => ({ run: st.run + 1, running: true, reading: null, imu: null, touch: null }));
