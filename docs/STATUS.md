@@ -8,7 +8,7 @@
 | CPU RV32IMC + Zicsr | ✅ | riscv-tests rv32ui/um/uc 50/50 | M 模式；A 扩展已实现（给以后的芯片） |
 | 中断矩阵 + CPU 中断控制器 | ✅ | FreeRTOS 调度、vTaskDelay 计时与 QEMU 一致；GPIO / LEDC / UART / RMT / I2C（线 7）/ TIMG 中断 | 电平 / 边沿、优先级、阈值。2026-10-15 修正：CPU_INT_PRI_n 下标错一位（PRI_0 在 0x114），之前 SYSTIMER 能用是碰巧 |
 | SYSTIMER | ✅ | esp_timer 测 500ms 延时误差 < 0.1% | 16MHz，比较器单次 / 周期 |
-| TIMG0/1 | ✅ | 启动期 RTC 校准；c3-gptimer（P2-13，IDF `gptimer` 1 MHz）：跑 100 ms 读回计数 99669 / esp_timer 99671 µs、停止后计数冻结、设计数 123456 读回一致、自动重载告警周期 10 ms × 50 = 499999 µs（首次 10004 µs）且读数始终 < 告警值、单次告警 5003 µs 只触发 1 次；accept 数值容差 count / elapsed ±400、50 周期 ±5 µs | T0 计数 / 告警 / 自动重载 / 计数锁存 / 装载；2026-10-17 修正：自动重载按"到点那拍"重载并补上结算晚了的计数（之前重载相位随结算时刻漂、可读到 ≥ 告警值的计数），写寄存器前先结算到点的告警；已有 accept 用例输出逐字节不变（74/74）；看门狗不触发复位 |
+| TIMG0/1 | ✅ | 启动期 RTC 校准；c3-gptimer（P2-13，IDF `gptimer` 1 MHz）：跑 100 ms 读回计数 99669 / esp_timer 99671 µs、停止后计数冻结、设计数 123456 读回一致、自动重载告警周期 10 ms × 50 = 499999 µs（首次 10004 µs）且读数始终 < 告警值、单次告警 5003 µs 只触发 1 次；accept 数值容差 count / elapsed ±400、50 周期 ±5 µs | T0 计数 / 告警 / 自动重载 / 计数锁存 / 装载；2026-10-17 修正：自动重载按"到点那拍"重载并补上结算晚了的计数（之前重载相位随结算时刻漂、可读到 ≥ 告警值的计数），写寄存器前先结算到点的告警；已有 accept 用例输出逐字节不变（74/74）；2026-10-19 主看门狗 MWDT：使能、XTAL / APB 时钟 + 预分频、4 级超时与动作（关 / 中断 / 复位 CPU / 复位系统）、喂狗从第 0 级重计、写保护钥匙、中断位 1（源 33 / 35）；复位走重启路径，复位原因 7 / 8（系统）、0x0b / 0x11（CPU）。c3-wdt：死循环 8 s，5010 ms 打印「Task watchdog got triggered」列出 IDLE (CPU 0) / 当前任务 main，循环结束后照常往下跑；已有 101 个 accept 用例输出逐字节不变。flashboot 模式不建模（直接启动跳过了会关掉它的二级引导）；RTC 看门狗（RWDT）未建模；IWDT 与 TWDT 复位动作只有单元测试，没有固件用例 |
 | UART0/1 | ✅ | echo：驱动收行回显 | TX 瞬间完成；RX 阈值 + 超时中断 |
 | GPIO 输入 / 中断 | ✅ | button：下降沿中断 + 消抖 | IO_MUX 上下拉；板载 GPIO9 上拉；边沿 / 电平中断 |
 | GPIO 输出 | ✅ | blink：GPIO5 翻转次数 | GPIO 矩阵：RMT 输出信号（51/52）已路由到引脚，其它外设信号未做 |
@@ -41,7 +41,7 @@
 | 启动（直接启动 + ROM） | ✅ | s3-hello：从 call_start_cpu0 跑到 app_main，打印芯片信息 / 16MB flash / Free heap 402804，与 QEMU 逐行一致；FreeRTOS 延时 499.9ms | CALLINC=0 进入口、入口帧 [sp-12] 填指向 ROM .stack_app 的指针；入口帧溢出保存区借用 ROM level 4/5 中断栈；双核启动见「双核」行 |
 | 存储映射 / MMU / PSRAM | ✅ | 单元测试：flash / PSRAM 页翻译、PSRAM 可写、SRAM I/D 别名、SPI1 经 CS1 读 PSRAM 模式寄存器 | 512 项 MMU（位 15 选 PSRAM）；PSRAM 芯片初始化见「八线 PSRAM」行 |
 | 中断矩阵（核 0 / 核 1） | ✅ | 单元测试（电平线、边沿线上升沿、复位映射到线 16 = 不连接）+ s3-dual（FROM_CPU 跨核中断、两核各自 SYSTIMER 节拍） | 99 个源；INTR_STATUS 可读；核 1 表在 +0x800 |
-| UART / SYSTIMER / TIMG / SPI1 flash | ✅ | 控制台、FreeRTOS 节拍、RTC 校准、flash 识别 GD 16MB；s3-gptimer（P2-13，与 c3-gptimer 同一份源码、同判定）：100 ms 计数 99758 / 99760 µs、停止冻结、设计数读回、自动重载 50 周期 500002 µs 且读数 < 告警值、单次告警 5003 µs | 复用 C3 模型（寄存器布局同族）；TIMG 的 T1 未建模（gptimer 先分到 T0）；LEDC 见下方「LEDC」行 |
+| UART / SYSTIMER / TIMG / SPI1 flash | ✅ | 控制台、FreeRTOS 节拍、RTC 校准、flash 识别 GD 16MB；s3-gptimer（P2-13，与 c3-gptimer 同一份源码、同判定）：100 ms 计数 99758 / 99760 µs、停止冻结、设计数读回、自动重载 50 周期 500002 µs 且读数 < 告警值、单次告警 5003 µs | 复用 C3 模型（寄存器布局同族）；TIMG 的 T1 未建模（gptimer 先分到 T0）；LEDC 见下方「LEDC」行；主看门狗同 C3 模型，差别：中断位 2（源 52 / 55）、只计 APB（bit 21 是电平中断使能不是时钟选择），s3-wdt 5020 ms 触发任务看门狗（IDLE0，CPU 0: main / CPU 1: IDLE1，附回溯） |
 | EXTMEM（I/D cache 分开） | ✅ | 启动期 freeze / sync / autoload 轮询通过 | cache 操作瞬间完成 |
 | eFuse | 🟡 | 芯片版本 v0.2、MAC、PSRAM_CAP=8MB | 只读 |
 | 模拟前端（regi2c） | 🟡 | HLE（窗口 ABI 返回），ocode 校准通过；BBPLL 校准完成位（I2C_MST_ANA_CONF0 bit24） | 不建模模拟电路 |
@@ -91,7 +91,7 @@
 | CPU Xtensa LX6 | ✅ | 与 S3 共用核（`Variant::Lx6Esp32`）；`cargo test -p tryboard-xtensa` 自检；esp32-hello 跑到 app_main 与 QEMU 逐行一致 | core-isa.h 本核实现的选项与 LX7 相同；只差 CONFIGID；自检跑的是 LX7 配置，未做 LX6 逐指令 QEMU 差分，只有 esp32-hello 串口逐行一致 |
 | 启动（直接启动 + 一代 ROM） | ✅ | esp32-hello：芯片信息「esp32 chip with 2 CPU core(s)」、4MB flash、Free heap 305156，与 QEMU 一致（`oracle_qemu.sh esp32-hello`） | 双核由 ets_set_appcpu_boot_addr 拉起；ROM esp32_rev300_rom.elf |
 | 存储映射 / MMU | ✅ | 单元测试：DROM / IROM 页翻译、SRAM1 I 视图按字倒序、RTC 快速内存 I / D 同块 | 256 项 MMU；没有 PSRAM |
-| 中断矩阵（DPORT）+ TIMG + FreeRTOS | ✅ | esp32-hello vTaskDelay 计时（took 4999）；双核调度 | 69 个源；TIMG 经翻译层复用 C3 模型 |
+| 中断矩阵（DPORT）+ TIMG + FreeRTOS | ✅ | esp32-hello vTaskDelay 计时（took 4999）；双核调度 | 69 个源；TIMG 经翻译层复用 C3 模型；主看门狗在翻译层的计数器 0 上（中断位 2、源 16 / 20、只计 APB），只有单元级路径，未做 esp32-wdt 固件 |
 | UART0 | ✅ | 同上（串口输出） | 复用 C3 模型 |
 | GPIO 输出 | ✅ | esp32-blink：GPIO2 翻转 ≥ 4 次；网页 DevKitC V4 外接 LED 闪烁 | 40 脚（无 20 / 24 / 28–31） |
 | LEDC | ✅ | esp32-fade：5kHz 13 位硬件渐变，渐亮 / 渐灭完成 | tick_sel 选源见 DECISIONS |

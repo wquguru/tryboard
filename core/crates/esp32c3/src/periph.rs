@@ -370,6 +370,16 @@ pub struct Timg {
     t0_alarm_late: bool,
     pub wdt_cfg: [u32; 6],
     pub wdt_wprotect: u32,
+    /// MWDT: active stage and the cycle it started (each stage times from 0, stage 3 wraps to 0)
+    pub wdt_stage: u8,
+    pub wdt_origin: u64,
+    /// Reset requested by a stage timeout: reset reason for the next boot (drained by the SoC bus)
+    pub wdt_reset: Option<u32>,
+    /// Chip differences: WDT bit in the INT registers (C3 1, S3 / ESP32 2), whether config0 bit 21 selects XTAL
+    /// (C3 only; S3 / ESP32 use it as level-int enable and always count APB), group index for the reset reason
+    pub wdt_int_bit: u32,
+    pub wdt_xtal_sel: bool,
+    pub group: u8,
     pub rtccali: [u32; 3],
     pub int_ena: u32,
     pub int_raw: u32,
@@ -394,6 +404,12 @@ impl Default for Timg {
                 0x0fff_ffff,
             ],
             wdt_wprotect: 0,
+            wdt_stage: 0,
+            wdt_origin: 0,
+            wdt_reset: None,
+            wdt_int_bit: 1 << 1,
+            wdt_xtal_sel: true,
+            group: 0,
             rtccali: [0x0001_b000, 0, 0],
             int_ena: 0,
             int_raw: 0,
@@ -406,7 +422,89 @@ impl Default for Timg {
 const XTAL_HZ: u64 = 40_000_000;
 const SLOW_HZ: u64 = 136_000;
 
+const WDT_KEY: u32 = 0x50d8_3aa1;
+
 impl Timg {
+    /// C3 timer group `group` (0 / 1)
+    pub fn c3(group: u8) -> Timg {
+        Timg {
+            group,
+            ..Timg::default()
+        }
+    }
+
+    /// S3 / ESP32 layout: WDT interrupt is bit 2 (bit 1 is T1) and the MWDT always counts APB
+    pub fn apb_wdt(group: u8) -> Timg {
+        Timg {
+            group,
+            wdt_int_bit: 1 << 2,
+            wdt_xtal_sel: false,
+            ..Timg::default()
+        }
+    }
+
+    pub fn wdt_irq(&self) -> bool {
+        self.int_raw & self.int_ena & self.wdt_int_bit != 0
+    }
+
+    fn wdt_enabled(&self) -> bool {
+        // Flashboot mode (bit 14) is not modelled: direct boot skips the bootloader that would clear it
+        self.wdt_cfg[0] & (1 << 31) != 0
+    }
+
+    /// CPU cycles per MWDT tick: prescaler on XTAL (40 MHz, 4 cycles) or APB (80 MHz, 2 cycles)
+    fn wdt_period(&self) -> u64 {
+        let pre = ((self.wdt_cfg[1] >> 16) as u64).max(1);
+        let per = if self.wdt_xtal_sel && self.wdt_cfg[0] & (1 << 21) != 0 {
+            4
+        } else {
+            2
+        };
+        pre * per
+    }
+
+    fn wdt_deadline(&self) -> u64 {
+        let hold = (self.wdt_cfg[2 + self.wdt_stage as usize] as u64).max(1);
+        self.wdt_origin + hold * self.wdt_period()
+    }
+
+    /// Settle stage timeouts up to `now`; returns the next stage deadline
+    fn wdt_update(&mut self, now: u64) -> u64 {
+        if !self.wdt_enabled() {
+            return u64::MAX;
+        }
+        // Skip whole 4-stage rounds (tiny holds settled late would loop per tick); the last round is
+        // still settled stage by stage, so its interrupt / reset actions fire as before
+        if self.wdt_stage == 0 {
+            let round: u64 = (2..6)
+                .map(|i| (self.wdt_cfg[i] as u64).max(1) * self.wdt_period())
+                .sum();
+            let n = now.saturating_sub(self.wdt_origin) / round;
+            if n > 1 {
+                self.wdt_origin += (n - 1) * round;
+            }
+        }
+        loop {
+            let d = self.wdt_deadline();
+            if d > now {
+                return d;
+            }
+            let act = (self.wdt_cfg[0] >> (29 - 2 * self.wdt_stage as u32)) & 3;
+            // soc/reset_reasons.h: core reset by MWDT0 / MWDT1 = 7 / 8, CPU reset by MWDT0 / MWDT1 = 0x0b / 0x11
+            match act {
+                1 => self.int_raw |= self.wdt_int_bit,
+                2 => self.wdt_reset = Some(if self.group == 0 { 0x0b } else { 0x11 }),
+                3 => self.wdt_reset = Some(if self.group == 0 { 7 } else { 8 }),
+                _ => {}
+            }
+            self.wdt_stage = (self.wdt_stage + 1) & 3;
+            self.wdt_origin = d;
+            if self.wdt_reset.is_some() {
+                return u64::MAX;
+            }
+        }
+    }
+
     fn divider(&self) -> u64 {
         let d = ((self.t0config >> 13) & 0xffff) as u64;
         if d == 0 {
@@ -498,11 +596,21 @@ impl Timg {
                 self.arm(now);
             }
             0x48..=0x5c => {
-                if self.wdt_wprotect == 0x50d8_3aa1 {
+                if self.wdt_wprotect == WDT_KEY {
+                    let was = self.wdt_enabled();
                     self.wdt_cfg[((off - 0x48) / 4) as usize] = v;
+                    if !was && self.wdt_enabled() {
+                        self.wdt_stage = 0;
+                        self.wdt_origin = now;
+                    }
                 }
             }
-            0x60 => {}
+            0x60 => {
+                if self.wdt_wprotect == WDT_KEY {
+                    self.wdt_stage = 0;
+                    self.wdt_origin = now;
+                }
+            }
             0x64 => self.wdt_wprotect = v,
             0x68 => {
                 // Calibration completes instantly: RDY always 1, result = slow-clock cycles x XTAL / slow clock
@@ -521,6 +629,11 @@ impl Timg {
     }
 
     pub fn update(&mut self, now: u64) -> u64 {
+        let wdt = self.wdt_update(now);
+        self.t0_update(now).min(wdt)
+    }
+
+    fn t0_update(&mut self, now: u64) -> u64 {
         // T0 alarm
         if self.t0config & (1 << 31) != 0 && self.t0config & (1 << 10) != 0 {
             let c = self.count(now);
@@ -847,5 +960,89 @@ mod tests {
         t.update(500 * 160);
         assert_eq!(t.int_raw & 1, 1);
         assert_eq!(t.count(500 * 160), 0);
+    }
+
+    /// IDF task watchdog setup on C3: XTAL / 20000 = 500 us ticks, stage 0 interrupt after 5 s, stage 1 system reset after 10 s
+    fn twdt(t: &mut Timg, now: u64) {
+        t.write(0x64, WDT_KEY, now);
+        t.write(0x4c, 20_000 << 16, now);
+        t.write(0x50, 10_000, now);
+        t.write(0x54, 20_000, now);
+        t.write(0x70, 1 << 1, now);
+        t.write(0x48, (1 << 31) | (3 << 27) | (1 << 29) | (1 << 21), now);
+        t.write(0x64, 0, now);
+    }
+
+    const S: u64 = CPU_HZ;
+
+    #[test]
+    fn mwdt_stage_timing() {
+        let mut t = Timg::c3(0);
+        twdt(&mut t, 0);
+        assert_eq!(t.update(S), 5 * S);
+        assert!(!t.wdt_irq());
+        t.update(5 * S);
+        assert!(t.wdt_irq());
+        // Stage 1 times from the stage-0 timeout: system reset (CORE_MWDT0 = 7) at 15 s
+        assert_eq!(t.update(5 * S + 1), 15 * S);
+        assert_eq!(t.wdt_reset, None);
+        t.update(15 * S);
+        assert_eq!(t.wdt_reset, Some(7));
+        // Group 1, CPU-reset action -> CPU0_MWDT1 = 0x11
+        let mut t = Timg::c3(1);
+        twdt(&mut t, 0);
+        t.write(0x64, WDT_KEY, 0);
+        t.write(0x48, (1 << 31) | (2 << 29) | (1 << 21), 0);
+        t.update(5 * S);
+        assert_eq!(t.wdt_reset, Some(0x11));
+        // S3 / ESP32: bit 21 is not a clock select, APB / 40000 is also 500 us; interrupt on bit 2
+        let mut t = Timg::apb_wdt(0);
+        twdt(&mut t, 0);
+        t.write(0x64, WDT_KEY, 0);
+        t.write(0x4c, 40_000 << 16, 0);
+        t.write(0x70, 1 << 2, 0);
+        t.write(0x64, 0, 0);
+        t.update(5 * S);
+        assert!(t.wdt_irq() && t.int_raw == 1 << 2);
+    }
+
+    #[test]
+    fn mwdt_feed_and_write_protect() {
+        let mut t = Timg::c3(0);
+        twdt(&mut t, 0);
+        // Feed while locked is ignored
+        t.write(0x60, 1, 4 * S);
+        assert_eq!(t.update(4 * S), 5 * S);
+        // Unlocked feed restarts stage 0 from now
+        t.write(0x64, WDT_KEY, 4 * S);
+        t.write(0x60, 1, 4 * S);
+        assert_eq!(t.update(4 * S), 9 * S);
+        // ISR path: clear interrupt and feed after stage 0 fired; stage 1 must not be reached
+        t.update(9 * S);
+        assert!(t.wdt_irq());
+        t.write(0x7c, 1 << 1, 9 * S);
+        t.write(0x60, 1, 9 * S);
+        assert!(!t.wdt_irq());
+        assert_eq!(t.update(9 * S), 14 * S);
+        assert_eq!(t.wdt_reset, None);
+        // Config writes while locked are dropped; disabling stops the countdown
+        t.write(0x64, 0, 9 * S);
+        t.write(0x48, 0, 9 * S);
+        assert_eq!(t.update(9 * S), 14 * S);
+        t.write(0x64, WDT_KEY, 9 * S);
+        t.write(0x48, 0, 9 * S);
+        assert_eq!(t.update(20 * S), u64::MAX);
+        // Watchdog never enabled: no deadline from it
+        assert_eq!(Timg::c3(0).update(100 * S), u64::MAX);
+        // Tiny holds settled very late: rounds are skipped arithmetically and the phase is kept
+        let mut t = Timg::c3(0);
+        t.write(0x64, WDT_KEY, 0);
+        t.write(0x4c, 1 << 16, 0);
+        for o in [0x50, 0x54, 0x58, 0x5c] {
+            t.write(o, 1, 0);
+        }
+        t.write(0x48, (1 << 31) | (1 << 29), 0);
+        assert_eq!(t.update(1_000_000_001), 1_000_000_002);
+        assert!(t.int_raw & (1 << 1) != 0);
     }
 }

@@ -223,8 +223,8 @@ impl Default for SocBus {
             uart0: Uart::default(),
             uart1: Uart::default(),
             systimer: Systimer::default(),
-            timg0: Timg::default(),
-            timg1: Timg::default(),
+            timg0: Timg::apb_wdt(0),
+            timg1: Timg::apb_wdt(1),
             intm: Intmatrix::default(),
             intm1: Intmatrix::default(),
             lines: [0; 2],
@@ -740,6 +740,8 @@ impl SocBus {
             src::TG1_T0,
             self.timg1.int_raw & self.timg1.int_ena & 1 != 0,
         );
+        set(src::TG0_WDT, self.timg0.wdt_irq());
+        set(src::TG1_WDT, self.timg1.wdt_irq());
         for i in 0..4 {
             set(src::FROM_CPU0 + i, self.from_cpu & (1 << i) != 0);
         }
@@ -872,6 +874,14 @@ impl SocBus {
         let n1 = self.systimer.update(now);
         let n2 = self.timg0.update(now);
         let n3 = self.timg1.update(now);
+        if let Some(r) = self
+            .timg0
+            .wdt_reset
+            .take()
+            .or_else(|| self.timg1.wdt_reset.take())
+        {
+            self.reset_request = Some(r);
+        }
         let n4 = self.ledc.update(now);
         let n5 = self.rmt.update(now);
         let n6 = self.route_rmt(now);
@@ -1208,6 +1218,10 @@ fn run_core(
         }
         if bus.irq_dirty || bus.now >= bus.next_event {
             bus.update();
+            // A watchdog stage timeout can request a reset from a timer event, not only from an RTC_CNTL write
+            if let Some(r) = bus.reset_request.take() {
+                return Some(Stop::Reset(r));
+            }
             cpu.set_irq_lines(bus.lines[k]);
         }
         // Batch-run to the next point needing SoC attention (peripheral event, line change, exception vector); per-instruction checks match the old step-by-step loop

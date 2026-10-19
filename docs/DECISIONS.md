@@ -931,3 +931,10 @@
 - **accept.json / levels.json 由主会话合并时统一加**，子代理只在报告里给出用例，免得三个分支冲突。
 - **ADC 默认改「真实」会改变已有读数**：pot / s3-pot 等用例和指纹只在新数更接近真机时更新期望值，不放宽容差；变化逐条列进 STATUS。
 - **参考来源**：eFuse ADC 校准与曲线拟合系数照 ESP-IDF v5.5.1 `components/esp_adc/*/curve_fitting_coefficients.c` 与 `components/efuse/*/esp_efuse_rtc_calib.c`（Apache-2.0，LICENSING ✅），模型传递函数取 IDF 曲线的反函数，使校准后误差落在 1% 内；精细采样 / VCD、按收据计时只借 mikroverk/esp32sim（MIT）的思路，不复制代码（依据 RESEARCH_ESP32SIM.md）。
+
+## 2026-10-19 TIMG 主看门狗（MWDT）
+- **模型放在共用的 `Timg`**（C3 / S3 / 经典 ESP32 翻译层都用它）：使能位 31、wdtconfig1 预分频 [31:16]、4 级保持时间 wdtconfig2–5、动作 STG0–3（关 / 中断 / 复位 CPU / 复位系统）。每级从 0 计时，超时后执行动作并进入下一级，第 3 级后回到第 0 级；喂狗（0x60）与使能上升沿从第 0 级重新计时。配置和喂狗都要先写钥匙 0x50D83AA1。事件驱动：`update()` 返回下一级到点的周期，不按周期计数。不模拟分频计数器相位（喂狗时刻对齐），C3 的 conf_update_en 当作写入即生效。
+- **芯片差别做成字段**：C3 的 bit 21 是 use_xtal（IDF 默认 XTAL / 20000 = 500 µs），中断位 1；S3 / ESP32 的 bit 21 是电平中断使能、只计 APB（APB / 40000 = 500 µs），中断位 2（位 1 是 T1）。复位原因按 soc/reset_reasons.h：系统复位 TG0 / TG1 = 7 / 8，CPU 复位 = 0x0B / 0x11；经 `reset_request` 走已有的重新上电路径。S3 / ESP32 的运行循环原来只在 RTC_CNTL 写之后看复位请求，现在定时事件结算后也看。
+- **flashboot 不建模**：芯片从 flash 启动时硬件自动开 MWDT0 / RWDT，由二级引导 `bootloader_init.c` 关掉；我们直接启动跳过二级引导，等效于"已被关掉"的状态，所以 bit 14 只存不用。RTC 看门狗（RWDT）同理未建模。
+- **依据**：ESP-IDF v5.5.1 `hal/*/mwdt_ll.h`、`soc/*/register/soc/timer_group_reg.h`、`esp_system/task_wdt/task_wdt_impl_timergroup.c`、`hal/wdt_hal_iram.c`（Apache-2.0）。没有看 espressif/qemu。
+- **验收**：c3-wdt / s3-wdt 5 s 打印任务看门狗；IDF 在空闲钩子里喂狗、IWDT 在节拍里喂狗，已有 101 个 accept 用例 stdout / stderr 与改前逐字节相同（排除墙钟和未建模寄存器同次数排序）。
