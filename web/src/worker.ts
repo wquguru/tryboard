@@ -287,6 +287,11 @@ function setMic(e: Exports, source: 'wav' | 'silence' | 'live', wav?: ArrayBuffe
 let ratioWall = 0;
 let ratioSim = 0;
 let lastRatio = 1;
+// Hidden tab: UI frames fold into one post per HIDDEN_POST_MS; console, PWM events and brownouts accumulate meanwhile
+const HIDDEN_POST_MS = 250;
+let pageHidden = false;
+let uiPosted = 0;
+let heldConsole = '';
 
 function loop(gen = loopGen) {
   try {
@@ -333,38 +338,44 @@ function loopSlice(gen: number) {
   const text = len ? decoder.decode(new Uint8Array(e.memory.buffer, e.tb_console_ptr(), len)) : '';
   e.tb_console_clear();
   keepStdout(text);
-  post({
-    type: 'tick',
-    console: text,
-    leds: leds(e),
-    strips: strips(e),
-    gpio: e.tb_gpio_level(),
-    enable: e.tb_gpio_enable(),
-    gpioHi: e.tb_gpio_level_hi(),
-    enableHi: e.tb_gpio_enable_hi(),
-    pwm: pwmAll(e),
-    pwmFreq: pwmFreqAll(e),
-    pwmEvents: takePwmEvents(),
-    simSeconds: e.tb_cycles() / CPU_HZ,
-    ratio: lastRatio,
-    running,
-    elec: elecFrame(e),
-    brownouts: takeBrownouts(e),
-    pins: pinDevFrame(e),
-    audio: audioFrame(e),
-    adc: adcFrame(e),
-  });
+  const ui = !pageHidden || stop !== 0 || now - uiPosted >= HIDDEN_POST_MS;
+  if (!ui) heldConsole += text;
+  else {
+    uiPosted = now;
+    post({
+      type: 'tick',
+      console: heldConsole + text,
+      leds: leds(e),
+      strips: strips(e),
+      gpio: e.tb_gpio_level(),
+      enable: e.tb_gpio_enable(),
+      gpioHi: e.tb_gpio_level_hi(),
+      enableHi: e.tb_gpio_enable_hi(),
+      pwm: pwmAll(e),
+      pwmFreq: pwmFreqAll(e),
+      pwmEvents: takePwmEvents(),
+      simSeconds: e.tb_cycles() / CPU_HZ,
+      ratio: lastRatio,
+      running,
+      elec: elecFrame(e),
+      brownouts: takeBrownouts(e),
+      pins: pinDevFrame(e),
+      audio: audioFrame(e),
+      adc: adcFrame(e),
+    });
+    heldConsole = '';
+  }
   flushPcm();
   flushIo(e);
-  postOled(e);
-  postLcd(e);
+  if (ui) postOled(e);
+  if (ui) postLcd(e);
   postUsb(e);
   postBle(e);
   postNet(e);
   pumpNet(e);
-  postHarness(e);
-  postTiming(e);
-  postVcd(e);
+  if (ui) postHarness(e);
+  if (ui) postTiming(e);
+  if (ui) postVcd(e);
   if (stop !== 0) {
     running = false;
     post({ type: 'stopped', reason: errorText(e) });
@@ -904,6 +915,9 @@ async function handle(m: ToWorker) {
       ioLo = m.lo >>> 0;
       ioHi = m.hi >>> 0;
       ex?.tb_io_watch?.(ioLo, ioHi);
+      break;
+    case 'hidden':
+      pageHidden = m.hidden;
       break;
     case 'speed':
       speed = m.factor;

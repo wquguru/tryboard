@@ -107,8 +107,11 @@ export class LiveSim {
   pose: ImuPose = { pitch: 0, roll: 0, yaw: 0 };
   /** Sensor offset from room temperature (a sensor hugging the chip reads high after assembly). */
   sensorOffset = 0;
+  private onVis = () => this.send({ type: 'hidden', hidden: document.hidden });
   constructor(private o: LiveOptions) {
     this.env = { ...o.env };
+    document.addEventListener('visibilitychange', this.onVis);
+    this.onVis();
     this.w.onmessage = (ev: MessageEvent<FromWorker>) => {
       const m = ev.data;
       if (m.type === 'booted') {
@@ -341,6 +344,7 @@ export class LiveSim {
     this.send({ type: 'env', ...this.sensed() });
   }
   dispose() {
+    document.removeEventListener('visibilitychange', this.onVis);
     this.w.terminate();
   }
   pause() {

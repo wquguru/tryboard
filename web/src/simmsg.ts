@@ -134,6 +134,7 @@ export type ToWorker =
   /** Test hook (R-04): make the core panic, to exercise the crash card. */
   | { type: 'debugPanic' }
   | { type: 'speed'; factor: number }
+  | { type: 'hidden'; hidden: boolean }
   | { type: 'gpio'; pin: number; level: number }
   | { type: 'uart'; text: string }
   | { type: 'usbcdc'; text: string }
