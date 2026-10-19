@@ -30,7 +30,7 @@
  "fn:web/src/app/asm3d.ts:createAssembly3D": 635,
  "fn:web/src/app/lcd3d.ts:createLcd3D": 544,
  "fn:web/src/app/product3d.ts:createProduct3D": 433,
- "fn:web/src/app/session.ts:createSession": 544,
+ "fn:web/src/app/session.ts:createSession": 539,
  "fn:web/src/app/steps/assemble.tsx:assembleStep": 917,
  "fn:web/src/app/steps/product.tsx:productStep": 962,
  "fn:web/src/app/steps/shop.tsx:shopStep": 675,
