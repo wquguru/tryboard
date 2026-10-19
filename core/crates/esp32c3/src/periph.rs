@@ -606,10 +606,25 @@ impl Gpio {
                 pull &= !(1 << i);
             }
         }
-        let undriven = !driven & !self.ext_driven;
         // Pins driven by a peripheral (RMT etc.) through the GPIO matrix take the peripheral's level
         let out = (self.out & !self.periph_mask) | (self.periph_level & self.periph_mask);
+        // Open drain (GPIO_PINn_PAD_DRIVER) writing 1 lets go of the line: an attached device (DHT11) sets it. Without one
+        // it still reads 1, as if pulled up, so firmware that never wires an external device sees no change (D-03).
+        let released = driven & out & self.open_drain() & self.ext_driven;
+        let driven = driven & !released;
+        let undriven = !driven & !self.ext_driven;
         (out & driven) | (self.ext_in & self.ext_driven & !driven) | (pull & undriven & 0x3f_ffff)
+    }
+
+    /// Pins in open-drain mode (GPIO_PINn_REG bit 2, PAD_DRIVER)
+    pub fn open_drain(&self) -> u32 {
+        let mut m = 0;
+        for (i, r) in self.pin.iter().enumerate() {
+            if r & (1 << 2) != 0 {
+                m |= 1 << i;
+            }
+        }
+        m
     }
 
     /// After level changes set STATUS bits per pin interrupt type (GPIO_PINn_INT_TYPE: 1 rise, 2 fall, 3 both, 4 low, 5 high).

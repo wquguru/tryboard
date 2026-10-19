@@ -1121,5 +1121,9 @@ const d: Dict = {
   "ESP32-C3 datasheet (no PSRAM interface); ESP32-S3 ordering info (only R variants have PSRAM); Seeed Wiki / M5Stack docs": "ESP32-C3 データシート（PSRAM インターフェースなし）；ESP32-S3 注文情報（R 付き型番のみ PSRAM 搭載）；Seeed Wiki / M5Stack ドキュメント",
   "Dev board pin tables (M5Stack AtomS3: header G5–G8 / G38 / G39 + Grove G1 / G2); on-board use entered per board": "開発ボードのピン表（M5Stack AtomS3：ピンヘッダー G5–G8 / G38 / G39 + Grove G1 / G2）；オンボード使用はボードごとに入力",
   "Waveshare wiki: no-touch display RST GPIO12, backlight GPIO40; touch RST GPIO14, backlight GPIO2": "Waveshare wiki：タッチなし版 RST GPIO12・バックライト GPIO40；タッチ版 RST GPIO14・バックライト GPIO2",
+  "DHT11 temperature / humidity: single-wire bit-bang (ESP32-C3)": "DHT11 温湿度：シングルワイヤを自前のタイミングで（ESP32-C3）",
+  "A DHT11 module on GPIO5 (open drain, 10 kΩ pull-up on the module). The firmware's own driver pulls the line low for 20 ms, then times the sensor's answer by counting esp_rom_delay_us(1) loops: 80 µs low + 80 µs high, then 40 bits of 50 µs low followed by 27 µs (0) or 70 µs (1) high, ending with a checksum. It reads 100 times, one second apart, and prints how many passed the checksum. Drag the sliders to change the readings. Open the logic analyzer's fine sampling on GPIO5 to measure each bit with the cursors; the simulator also flags the busy-wait timing as needing a real-board check.": "DHT11 モジュールを GPIO5 に接続（オープンドレイン、モジュール上に 10 kΩ プルアップ）。ファームウェア自前のドライバが線を 20 ms Low にし、esp_rom_delay_us(1) のループ回数でセンサーの応答を測ります：80 µs Low + 80 µs High、続いて 40 ビット（各 50 µs Low の後 27 µs（0）または 70 µs（1）High）、最後にチェックサム。1 秒おきに 100 回読み、チェックサムが合った回数を表示します。スライダーで値を変えられます。ロジックアナライザで GPIO5 の精細サンプリングを開くとカーソルで各ビットを測れます。シミュレータはこのビジーウェイト計時を実機で要確認として示します。",
+  "Bit-bang": "ビットバング",
+  "Busy-wait timing": "ビジーウェイト計時",
 };
 export default d;

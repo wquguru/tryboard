@@ -60,6 +60,8 @@ export function describe(p: PartSpec, chip: ChipId = 'esp32c3'): string {
       return `${t('Encoder')} · CLK IO${p.a} / DT IO${p.b}${p.sw !== undefined ? ` / SW IO${p.sw}` : ''}`;
     case 'hcsr04':
       return `HC-SR04 · Trig IO${p.trig} / Echo IO${p.echo}`;
+    case 'dht11':
+      return `DHT11 · DATA IO${p.pin}`;
     case 'ws2812':
       return `${t('WS2812 strip')} × ${p.n ?? 8} · DIN IO${p.pin}`;
     case 'oled':

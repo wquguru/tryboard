@@ -134,8 +134,8 @@
 |---|---|---|---|
 | D-01 | 网络故障注入：预设 正常 / 信号弱 / 不稳定 / 断网 + 安排一次故障（路由器重启断 8 s / DNS 失败 / 服务器不回应），全部在内核 `soc/wifi` 按模拟周期执行，种子确定、进输入日志 | 新固件 `c3-wifi-resilient`（断线自动重连 + 周期 GET）：`--net-fault reboot@10` 下串口出现 reason=200 断开、重连、之后 GET 200；`dns@…` 出现 DNS 失败、`silent@…` 出现超时后恢复；网页网络页签操作后导出输入，CLI `--inputs` 重放串口逐字节相同、指纹相同；agent-browser Reviews/ab/D-01.md | ☐ |
 | D-02 | 真实 ADC：噪声、两头非线性、eFuse 校准数据（`adc_cali` 曲线拟合可用，系数来自 IDF curve_fitting_coefficients，Apache-2.0）、理想 / 真实开关（默认真实）、S3 ADC2 遇 Wi-Fi 读超时；接线时 ADC1 / ADC2 引脚标注 | 新固件 `c3-adc-cali` / `s3-adc-cali`：已知电压下校准后误差 < 1%（未校准偏差另行打印）；`s3-adc2-wifi`：Wi-Fi 连上后 `adc_oneshot_read` → ESP_ERR_TIMEOUT、连上前读数正常；原有 pot / s3-pot 等用例不放宽容差；网页器件面板理想 / 真实切换、48 次读数条，重放对拍；agent-browser Reviews/ab/D-02.md | ☐ |
-| D-03 | 时序敏感代码识别：忙等 `esp_rom_delay_us`、读周期计数器自旋、软件翻转 GPIO（bit-bang）按引脚统计，CLI stderr 一行结论 + wasm 导出；新增 DHT11 单线器件模型 | 新固件 `c3-dht11`（自写驱动，`esp_rom_delay_us` 量脉宽）：读数与设定一致、校验 100/100；CLI 结论行指出 GPIO 与原因；网页结果卡对应行标「需真机确认」；Reviews/ab/D-03.md | ☐ |
-| D-04 | 逻辑分析仪精细采样：选引脚 + 时间窗，逐沿周期级、缩放、双光标测量、导出 VCD；CLI `--vcd` | 同一运行 CLI 与网页导出的 VCD 逐字节相同；c3-dht11 波形上光标量出 0 / 1 位脉宽；环形缓冲丢弃数显示；Reviews/ab/D-04.md | ☐ |
+| D-03 | 时序敏感代码识别：忙等 `esp_rom_delay_us`、读周期计数器自旋、软件翻转 GPIO（bit-bang）按引脚统计，CLI stderr 一行结论 + wasm 导出；新增 DHT11 单线器件模型 | 新固件 `c3-dht11`（自写驱动，`esp_rom_delay_us` 量脉宽）：读数与设定一致、校验 100/100；CLI 结论行指出 GPIO 与原因；网页结果卡对应行标「需真机确认」；Reviews/ab/D-03.md | ◐ 模型、固件、CLI 结论行、wasm 导出、分析仪忙等提示（带「需真机确认」）已做；结果卡对应行的标签按批次约定留给主会话合并 |
+| D-04 | 逻辑分析仪精细采样：选引脚 + 时间窗，逐沿周期级、缩放、双光标测量、导出 VCD；CLI `--vcd` | 同一运行 CLI 与网页导出的 VCD 逐字节相同；c3-dht11 波形上光标量出 0 / 1 位脉宽；环形缓冲丢弃数显示；Reviews/ab/D-04.md | ☑ `tools/webtest/vcd.mjs` 网页导出 = `tryboard run --vcd` 逐字节（1792 字节、86 个沿）；光标读「High 70.00 µs → 1」；手机端分析仪仍隐藏（D-07） |
 | D-05 | 结果卡逐条可信度（仿真验证 / 行为模拟 / 估算 / 需真机确认）+ 图例 | levels / custom / mobile 等 webtest 不减断言全过；原始数据仍与命令行逐字一致；agent-browser 桌面 + 390 截图 Reviews/ab/D-05.md | ☐ |
 | D-06 | 成品步骤「上真机检查清单」：按作品器件与结果自动生成（规则表在 TS），勾选、复制清单、打印 | 气象站 / 带 DHT11 / 带 ADC / 带 Wi-Fi 的作品生成的条目正确；勾选按作品存本机；打印样式只印清单；Reviews/ab/D-06.md | ☐ |
 | D-07 | 手机布局：网络状况 2×2、安排故障、精细采样、清单在 390×844 下可用 | mobile.mjs 新断言（无横向滚动、触控 ≥ 44px）；agent-browser 390 截图 | ☐ |

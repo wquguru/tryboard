@@ -1121,5 +1121,9 @@ const d: Dict = {
   "ESP32-C3 datasheet (no PSRAM interface); ESP32-S3 ordering info (only R variants have PSRAM); Seeed Wiki / M5Stack docs": "ESP32-C3 数据手册（无 PSRAM 接口）；ESP32-S3 订购信息（型号带 R 才有 PSRAM）；Seeed Wiki / M5Stack 文档",
   "Dev board pin tables (M5Stack AtomS3: header G5–G8 / G38 / G39 + Grove G1 / G2); on-board use entered per board": "开发板引脚表（M5Stack AtomS3：排针 G5–G8 / G38 / G39 + Grove G1 / G2）；板载占用逐板录入",
   "Waveshare wiki: no-touch display RST GPIO12, backlight GPIO40; touch RST GPIO14, backlight GPIO2": "微雪 wiki：无触摸版屏 RST GPIO12、背光 GPIO40；触摸版 RST GPIO14、背光 GPIO2",
+  "DHT11 temperature / humidity: single-wire bit-bang (ESP32-C3)": "DHT11 温湿度：单总线自己写时序（ESP32-C3）",
+  "A DHT11 module on GPIO5 (open drain, 10 kΩ pull-up on the module). The firmware's own driver pulls the line low for 20 ms, then times the sensor's answer by counting esp_rom_delay_us(1) loops: 80 µs low + 80 µs high, then 40 bits of 50 µs low followed by 27 µs (0) or 70 µs (1) high, ending with a checksum. It reads 100 times, one second apart, and prints how many passed the checksum. Drag the sliders to change the readings. Open the logic analyzer's fine sampling on GPIO5 to measure each bit with the cursors; the simulator also flags the busy-wait timing as needing a real-board check.": "DHT11 模块接 GPIO5（开漏，模块上带 10 kΩ 上拉）。固件自带驱动：先把线拉低 20 ms，再数 esp_rom_delay_us(1) 循环来量传感器的回应：80 µs 低 + 80 µs 高，然后 40 位，每位 50 µs 低，再 27 µs（0）或 70 µs（1）高，最后是校验和。一共读 100 次，每次间隔 1 秒，打印通过校验的次数。拖滑块改读数。在逻辑分析仪里对 GPIO5 开精细采样，可以用光标量每一位；模拟器还会把这种忙等计时标为需真机确认。",
+  "Bit-bang": "软件时序",
+  "Busy-wait timing": "忙等计时",
 };
 export default d;

@@ -3,7 +3,7 @@ import { createBench, type PartSpec, type SceneSpec } from '../board3d';
 import type { ScenePickApi } from '../scene-api';
 import { LiveSim, type SeekJob } from '../live';
 import type { Snapshot } from '../worker';
-import type { FromWorker } from '../worker';
+import type { FromWorker, TimingReport, VcdState } from '../worker';
 import { saveBom } from './steps/shop';
 import { push as pushBom } from './bom';
 import { BuzzerAudio } from '../audio';
@@ -29,6 +29,8 @@ import { t } from '../i18n';
 
 /** weather firmware reading line (format set by level 06); accept single or double spaces (bme280 example). */
 const READING = /T=(-?[\d.]+) C\s+H=([\d.]+) %\s+P=([\d.]+) hPa/g;
+/** c3-dht11 reading line (firmware printf stays Chinese); no pressure, so p is NaN. */
+const DHT_READING = /温度 (-?[\d.]+) 湿度 ([\d.]+)/g; // lint: allow-cjk
 /** s3-imu / s3-qmi8658 reading line. */
 const IMU_LINE = /(?:IMU|POSE) pitch=(-?[\d.]+) roll=(-?[\d.]+)(?:[^\n]*?gyro=\((-?[\d.]+),(-?[\d.]+),(-?[\d.]+)\))?/g;
 
@@ -90,6 +92,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   /** First encoder / ultrasonic on the bench, attached to the core at power-on. */
   const encoderOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'encoder' ? [{ a: p.a, b: p.b, ...(p.sw !== undefined ? { sw: p.sw } : {}) }] : []))[0];
   const sonarOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'hcsr04' ? [{ trig: p.trig, echo: p.echo, cm: s.distance }] : []))[0];
+  /** DHT11 data pin (first one; the core models one per pin, the CLI takes one). */
+  const dht11Of = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'dht11' ? [p.pin] : []))[0];
   /** Signal pin of the first servo; the power network's servo load hangs on it. */
   const servoOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'servo' ? [p.pin] : []))[0];
   const powerMode = () => (s.power?.ext5v ? 'ext' : 'usb') as 'usb' | 'ext';
@@ -101,6 +105,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const io = new IoStore();
   const ioSubs = new Set<() => void>();
   const harnessSubs = new Set<(text: string) => void>();
+  const timingSubs = new Set<(r: TimingReport | null) => void>();
+  const vcdSubs = new Set<(v: VcdState | null) => void>();
   const mic = new MicInput();
   const usbSubs = new Set<(v: UsbView | null) => void>();
   let ioMask = [0, 0];
@@ -128,7 +134,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const lastReading = (text: string) => {
     let m: RegExpExecArray | null = null;
     for (const x of text.matchAll(READING)) m = x;
-    return m ? { t: Number(m[1]), h: Number(m[2]), p: Number(m[3]) } : null;
+    if (m) return { t: Number(m[1]), h: Number(m[2]), p: Number(m[3]) };
+    for (const x of text.matchAll(DHT_READING)) m = x;
+    return m ? { t: Number(m[1]), h: Number(m[2]), p: NaN } : null;
   };
 
   const s: Session = {
@@ -169,7 +177,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       if (JSON.stringify(next) !== JSON.stringify(s.scene)) bench.setScene(next);
       s.scene = next;
       s.power = power;
-      s.sim?.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts), touchInt: touchIntOf(next.parts), i2s: i2sOf(next.parts) });
+      s.sim?.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts), dht11: dht11Of(next.parts), touchInt: touchIntOf(next.parts), i2s: i2sOf(next.parts) });
       audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
       audio.setSpeaker(next.parts.some((p) => p.type === 'max98357a'));
       bumpEdit();
@@ -215,7 +223,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     },
     applyScene(next, power, label) {
       s.sceneLabel = label;
-      const devs = (sc: SceneSpec) => JSON.stringify([i2cOf(sc.parts), sc.parts.some((p) => p.type === 'gc9a01'), servoOf(sc.parts) ?? null, encoderOf(sc.parts) ?? null, sonarOf(sc.parts)?.trig ?? null, sonarOf(sc.parts)?.echo ?? null, touchIntOf(sc.parts) ?? null, i2sOf(sc.parts)]);
+      const devs = (sc: SceneSpec) => JSON.stringify([i2cOf(sc.parts), sc.parts.some((p) => p.type === 'gc9a01'), servoOf(sc.parts) ?? null, encoderOf(sc.parts) ?? null, sonarOf(sc.parts)?.trig ?? null, sonarOf(sc.parts)?.echo ?? null, dht11Of(sc.parts) ?? null, touchIntOf(sc.parts) ?? null, i2sOf(sc.parts)]);
       const rebootNeeded = devs(next) !== devs(s.scene);
       const same = JSON.stringify(next) === JSON.stringify(s.scene);
       const extBefore = !!s.power?.ext5v;
@@ -226,7 +234,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
       const hadExt = extBefore;
       if (s.sim && rebootNeeded) {
-        s.sim.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts), touchInt: touchIntOf(next.parts), i2s: i2sOf(next.parts) });
+        s.sim.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts), dht11: dht11Of(next.parts), touchInt: touchIntOf(next.parts), i2s: i2sOf(next.parts) });
         audio.setSpeaker(next.parts.some((p) => p.type === 'max98357a'));
         s.sim.setPower(powerMode());
         s.reboot();
@@ -357,6 +365,22 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       harnessSubs.add(cb);
       return () => harnessSubs.delete(cb);
     },
+    timing: null,
+    onTiming(cb) {
+      timingSubs.add(cb);
+      return () => timingSubs.delete(cb);
+    },
+    vcd: null,
+    onVcd(cb) {
+      vcdSubs.add(cb);
+      return () => vcdSubs.delete(cb);
+    },
+    vcdStart(pins, from, len, trigger) {
+      s.sim?.vcdStart(pins, from, len, trigger);
+    },
+    vcdText() {
+      return s.sim ? s.sim.vcdText() : Promise.resolve({ text: '', state: null });
+    },
     usb: null,
     onUsb(cb) {
       usbSubs.add(cb);
@@ -381,6 +405,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       servo: servoOf(s.scene.parts),
       encoder: encoderOf(s.scene.parts),
       sonar: sonarOf(s.scene.parts),
+      dht11: dht11Of(s.scene.parts),
       touchInt: touchIntOf(s.scene.parts),
       power: powerMode(),
       harness: s.harness,
@@ -399,6 +424,14 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         s.harnessText = text;
         for (const cb of [...harnessSubs]) cb(text);
       },
+      onTiming(r) {
+        s.timing = r;
+        for (const cb of [...timingSubs]) cb(r);
+      },
+      onVcd(v) {
+        s.vcd = v;
+        for (const cb of [...vcdSubs]) cb(v);
+      },
       onConsole(text) {
         consoleBuf += text;
         if (consoleBuf.length > 200_000) consoleBuf = consoleBuf.slice(-150_000);
@@ -406,10 +439,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         for (const cb of [...consoleSubs]) cb(text);
         // A reading line may span two ticks: prepend the previous tail.
         const buf = tail + text;
-        let m: RegExpExecArray | null = null;
-        for (const x of buf.matchAll(READING)) m = x;
+        const rd = lastReading(buf);
         tail = buf.slice(-80);
-        if (m) store.set({ reading: { t: Number(m[1]), h: Number(m[2]), p: Number(m[3]) } });
+        if (rd) store.set({ reading: rd });
         // IMU lines may span ticks too: update only on a complete line.
         const ib = imuTail + text;
         const nl = ib.lastIndexOf('\n');

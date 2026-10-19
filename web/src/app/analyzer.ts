@@ -6,11 +6,23 @@ import type { StepCtx } from './types';
 import { BOOT_GPIO, RGB_GPIO, type SimChip } from '../chips';
 import { currentTheme, onTheme } from '../theme';
 import { CPU_HZ, firstTxnEndingAfter, fmtTime, hex, lastLE, pwmLabel, txnNote, txnText, type I2cTxn } from './iotrace';
+import { dhtBitAt, dhtBits, dhtFrame, parseVcd, pulseAt, type DhtBit, type FineWave } from './vcdview';
+import type { TimingReport, VcdState } from '../worker';
+import { bc, setDock } from './chrome';
 
 export type Channel =
   | { id: string; kind: 'i2c'; port: number; sda: number; scl: number; label: string }
   | { id: string; kind: 'pin'; pin: number; label: string; role: string }
-  | { id: string; kind: 'ws'; pin: number; label: string };
+  | { id: string; kind: 'ws'; pin: number; label: string }
+  /** Fine capture row (D-04): every edge of one pin from the core's VCD capture */
+  | { id: 'FINE'; kind: 'fine'; pin: number; label: string; role: string };
+
+/** Fine capture settings: pin, window length (s), start = next edge from now (trigger) or an absolute time (s) */
+export interface FineOpts {
+  pin: number;
+  len: number;
+  at?: number;
+}
 
 export interface Analyzer {
   readonly isOpen: boolean;
@@ -28,11 +40,18 @@ export interface Analyzer {
   visibleBubbles(): string[];
   /** Cursor A / B (seconds); null clears */
   setCursor(which: 'a' | 'b', t: number | null): void;
+  /** Fine capture (D-04): start one, read its state / decoded wave, the cursor-A pulse readout, export the VCD */
+  fineStart(o: FineOpts): boolean;
+  fine(): { opts: FineOpts | null; state: VcdState | null; wave: FineWave | null; bits: number[]; frame: ReturnType<typeof dhtFrame> };
+  pulseText(): string;
+  exportVcd(download?: boolean): Promise<string>;
 }
 
 const LABEL_W = 96;
 const RULER_H = 20;
-const ROW_H = { scl: 22, sda: 22, dec: 46, pin: 34, ws: 22 } as const;
+const ROW_H = { scl: 22, sda: 22, dec: 46, pin: 34, ws: 22, fine: 56 } as const;
+/** Default fine window: a DHT11 read is a 20 ms start pulse plus about 5 ms of answer */
+const FINE_LEN = 0.03;
 const css = (n: string, fb: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || fb;
 // canvas can't use color-mix, so translucent overlays get a per-theme palette; values come from lab.css
 const PAL = {
@@ -66,6 +85,7 @@ function defaultChannels(parts: PartSpec[], chip: string): Channel[] {
       if (p.sw !== undefined) ch.push({ id: `GPIO${p.sw}`, kind: 'pin', pin: p.sw, label: `GPIO${p.sw}`, role: t('Encoder button') });
     }
     if (p.type === 'ws2812') ch.push({ id: `RGB${p.pin}`, kind: 'ws', pin: p.pin, label: `GPIO${p.pin}` });
+    if (p.type === 'dht11') ch.push({ id: `GPIO${p.pin}`, kind: 'pin', pin: p.pin, label: `GPIO${p.pin}`, role: t('DHT11 data') });
     if (p.type === 'hcsr04') {
       ch.push({ id: `GPIO${p.trig}`, kind: 'pin', pin: p.trig, label: `GPIO${p.trig}`, role: 'Trig' });
       ch.push({ id: `GPIO${p.echo}`, kind: 'pin', pin: p.echo, label: `GPIO${p.echo}`, role: 'Echo' });
@@ -86,7 +106,7 @@ function h(tag: string, attrs: Record<string, string>, ...kids: (Node | string)[
   return e;
 }
 
-const rowsOf = (c: Channel) => (c.kind === 'i2c' ? ROW_H.scl + ROW_H.sda + ROW_H.dec : c.kind === 'pin' ? ROW_H.pin : ROW_H.ws);
+const rowsOf = (c: Channel) => (c.kind === 'i2c' ? ROW_H.scl + ROW_H.sda + ROW_H.dec : c.kind === 'pin' ? ROW_H.pin : c.kind === 'fine' ? ROW_H.fine : ROW_H.ws);
 
 export function createAnalyzer(ctx: StepCtx): Analyzer {
   const { session, store, shell } = ctx;
@@ -108,13 +128,41 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       btn('prev', t('Previous I2C transaction'), '◂ I2C'),
       btn('next', t('Next I2C transaction'), 'I2C ▸'),
       h('span', { class: 'ana-sep' }),
+      btn('fine', t('Fine sampling: every edge of one pin, stamped by CPU cycle'), t('Fine sampling'), { 'aria-pressed': 'false' }),
+      h('span', { class: 'ana-sep' }),
       btn('out', t('Zoom out (wheel)'), '−'),
       h('span', { class: 'ana-span mono', 'data-a': 'span' }),
       btn('in', t('Zoom in (wheel)'), '+'),
       btn('follow', t('Follow the latest time'), t('Follow'), { 'aria-pressed': 'true' }),
       btn('close', t('Close'), '×', { 'aria-label': t('Close logic analyzer') }),
     ),
+    h(
+      'div',
+      { class: 'ana-fine', 'data-a': 'fine', hidden: '' },
+      h('span', { class: 'ana-chip mono', 'data-a': 'fchip' }),
+      h('span', { class: 'ana-fstat mono muted', 'data-a': 'fstat' }),
+      h('span', { class: 'ana-sp' }),
+      btn('fwin', t('Change the pin or the window'), t('Change window'), { 'aria-expanded': 'false' }),
+      btn('fagain', t('Capture the next window'), t('Capture again')),
+      btn('fvcd', t('Download the capture as a VCD file (same bytes as tryboard run --vcd)'), t('Export VCD')),
+      btn('foff', t('Close fine sampling'), '×', { 'aria-label': t('Close fine sampling') }),
+    ),
+    h(
+      'form',
+      { class: 'ana-fform', 'data-a': 'fform', hidden: '' },
+      h('label', {}, t('Pin'), ' ', h('select', { name: 'pin' })),
+      h('label', {}, t('Window (ms)'), ' ', h('input', { name: 'ms', type: 'number', min: '0.1', max: '2000', step: 'any', inputmode: 'decimal' })),
+      h('label', {}, t('Start'), ' ', h('select', { name: 'mode' }, h('option', { value: 'edge' }, t('Next edge from now')), h('option', { value: 'at' }, t('At sim time (s)')))),
+      h('input', { name: 'at', type: 'number', min: '0', step: 'any', inputmode: 'decimal', 'aria-label': t('Start time (s)') }),
+      h('button', { type: 'submit', class: 'ana-b ana-go' }, t('Start capture')),
+    ),
     h('div', { class: 'ana-body' }, h('canvas', { class: 'ana-cv', 'aria-label': t('Logic analyzer waveforms') })),
+    h(
+      'div',
+      { class: 'ana-note', 'data-a': 'note', hidden: '' },
+      h('div', { class: 'ana-note-t' }, h('b', { 'data-a': 'ntitle' }), h('span', { class: 'ana-badge' }, t('Confirm on real hardware'))),
+      h('div', { class: 'muted', 'data-a': 'nbody' }),
+    ),
     h('footer', { class: 'ana-f' }, h('span', { class: 'mono', 'data-a': 'cur' }), h('span', { class: 'muted', 'data-a': 'hint' }, t('Click to place cursor A, Shift+click for B; wheel to zoom, drag to pan'))),
   );
   document.body.appendChild(el);
@@ -141,6 +189,15 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
   let bubbles: string[] = [];
   let txnHit: { x0: number; x1: number; y0: number; y1: number; x: I2cTxn }[] = [];
   let lastScene = session.scene;
+  // Fine capture: settings, core state, parsed wave (fetched as VCD text while the window fills)
+  let fineOpts: FineOpts | null = null;
+  let fineState: VcdState | null = null;
+  let fineWave: FineWave | null = null;
+  let fineBits: DhtBit[] = [];
+  let fineFetched = '';
+  let fineBusy = false;
+  let fineLast = 0;
+  let fineFitted = false;
 
   const watchChannels = () => {
     const pins = new Set(session.ioPins());
@@ -158,7 +215,8 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
   function layout() {
     const h = RULER_H + chans.reduce((a, c) => a + rowsOf(c), 0);
     el.style.setProperty('--ana-cv-h', `${h}px`);
-    document.body.style.setProperty('--ana-h', `${h + 66}px`);
+    const extra = (['fine', 'fform', 'note'] as const).reduce((a, k) => a + (el.querySelector<HTMLElement>(`[data-a="${k}"]`)!.hidden ? 0 : el.querySelector<HTMLElement>(`[data-a="${k}"]`)!.offsetHeight || 36), 0);
+    document.body.style.setProperty('--ana-h', `${h + 66 + extra}px`);
   }
 
   function setOpen(v: boolean) {
@@ -168,9 +226,9 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     if (v) {
       if (session.scene !== lastScene) {
         // Bench changed (applied from list / rewound): replace default channels, keep manually added ones
-        const keep = chans.filter((c) => c.kind === 'pin' && !defaultChannels(lastScene.parts, session.chip).some((d) => d.id === c.id));
+        const keep = chans.filter((c) => (c.kind === 'pin' && !defaultChannels(lastScene.parts, session.chip).some((d) => d.id === c.id)) || c.kind === 'fine');
         chans = defaultChannels(session.scene.parts, session.chip);
-        for (const k of keep) if (!chans.some((c) => c.id === k.id)) chans.push(k);
+        for (const k of keep) if (!chans.some((c) => c.id === k.id)) (k.kind === 'fine' ? chans.unshift(k) : chans.push(k));
         lastScene = session.scene;
       }
       watchChannels();
@@ -208,6 +266,17 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
   session.onIo(() => {
     if (open) dirty = true;
   });
+  session.onVcd((st) => {
+    fineState = st;
+    if (!st) {
+      // New power-up / rewind: the core capture is gone, keep the last wave on screen until the next capture
+      fineFetched = '';
+    }
+    fineUi();
+    fineFetch();
+  });
+  session.onTiming(() => noteUi());
+  session.onTick(() => fineFetch());
   store.subscribe((s) => {
     // A seek parks the sim at that moment; simSeconds comes from the snapshot
     if (s.hist.seeked || !s.running) now = s.simSeconds;
@@ -292,7 +361,167 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     else if (act === 'out') zoomAt(2);
     else if (act === 'follow') setFollow(!follow);
     else if (act === 'prev' || act === 'next') stepTxn(act === 'next' ? 1 : -1);
+    else if (act === 'fine') {
+      if (fineOpts) fineOff();
+      else formOpen(true);
+    }
   });
+  el.querySelector('[data-a="fine"]')!.addEventListener('click', (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-act]')?.dataset.act;
+    if (act === 'fwin') formOpen(form.hidden);
+    else if (act === 'fagain' && fineOpts) fineStart({ pin: fineOpts.pin, len: fineOpts.len });
+    else if (act === 'fvcd') void exportVcd(true);
+    else if (act === 'foff') fineOff();
+  });
+  const form = el.querySelector<HTMLFormElement>('[data-a="fform"]')!;
+  const fld = <T extends HTMLElement>(n: string) => form.querySelector<T>(`[name="${n}"]`)!;
+  fld<HTMLSelectElement>('mode').addEventListener('change', () => {
+    fld<HTMLInputElement>('at').hidden = fld<HTMLSelectElement>('mode').value !== 'at';
+  });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const pin = Number(fld<HTMLSelectElement>('pin').value);
+    const ms = Number(fld<HTMLInputElement>('ms').value);
+    const at = fld<HTMLSelectElement>('mode').value === 'at' ? Number(fld<HTMLInputElement>('at').value) : undefined;
+    if (!(ms > 0)) return shell.toast(t('Enter a window length in milliseconds'));
+    if (fineStart({ pin, len: Math.min(ms, 2000) / 1e3, at })) formOpen(false);
+  });
+
+  /** Pins offered for fine capture: the bench's pin channels, the DHT11 first */
+  function finePins(): number[] {
+    const out: number[] = [];
+    const dht = session.scene.parts.find((p) => p.type === 'dht11');
+    if (dht && dht.type === 'dht11') out.push(dht.pin);
+    for (const c of chans) if (c.kind === 'pin' && !out.includes(c.pin)) out.push(c.pin);
+    return out;
+  }
+  function formOpen(v: boolean) {
+    form.hidden = !v;
+    el.querySelector('[data-act="fwin"]')!.setAttribute('aria-expanded', String(v));
+    if (v) {
+      const pins = finePins();
+      const cur = fineOpts?.pin ?? pins[0];
+      fld<HTMLSelectElement>('pin').replaceChildren(...pins.map((p) => h('option', p === cur ? { value: String(p), selected: '' } : { value: String(p) }, `GPIO${p}`)));
+      fld<HTMLInputElement>('ms').value = String(+((fineOpts?.len ?? FINE_LEN) * 1e3).toFixed(3));
+      fld<HTMLSelectElement>('mode').value = fineOpts?.at !== undefined ? 'at' : 'edge';
+      fld<HTMLInputElement>('at').value = (fineOpts?.at ?? Math.ceil(now + 1)).toString();
+      fld<HTMLInputElement>('at').hidden = fineOpts?.at === undefined;
+      el.querySelector('[data-a="fine"]')!.removeAttribute('hidden');
+    }
+    layout();
+    fineUi();
+  }
+  function fineStart(o: FineOpts): boolean {
+    if (o.at !== undefined && o.at < now) {
+      shell.toast(t('That time has already passed: pick a start later than {time}', { time: fmtTime(now) }));
+      return false;
+    }
+    fineOpts = o;
+    fineWave = null;
+    fineBits = [];
+    fineFetched = '';
+    fineFitted = false;
+    fineState = null;
+    session.vcdStart([o.pin], o.at ?? now, o.len, o.at === undefined);
+    chans = chans.filter((c) => c.kind !== 'fine');
+    const role = session.scene.parts.some((p) => p.type === 'dht11' && p.pin === o.pin) ? t('DHT11 data') : (chans.find((c) => c.kind === 'pin' && c.pin === o.pin) as { role?: string } | undefined)?.role ?? '';
+    chans.unshift({ id: 'FINE', kind: 'fine', pin: o.pin, label: `GPIO${o.pin}`, role });
+    // The fine bar and the busy-wait note leave no room for rows in a short dock: grow it (never shrink)
+    const want = Math.round(Math.min(window.innerHeight * 0.6, 400));
+    if (bc.get().dock.h < want) setDock({ h: want, collapsed: false });
+    el.querySelector('[data-a="fine"]')!.removeAttribute('hidden');
+    el.querySelector('[data-act="fine"]')!.setAttribute('aria-pressed', 'true');
+    layout();
+    fineUi();
+    dirty = true;
+    return true;
+  }
+  function fineOff() {
+    fineOpts = null;
+    fineWave = null;
+    fineBits = [];
+    chans = chans.filter((c) => c.kind !== 'fine');
+    el.querySelector('[data-a="fine"]')!.setAttribute('hidden', '');
+    form.hidden = true;
+    el.querySelector('[data-act="fine"]')!.setAttribute('aria-pressed', 'false');
+    layout();
+    dirty = true;
+  }
+  /** Pull the VCD text while the window fills (at most 4 times a second) and once when it closes */
+  function fineFetch() {
+    const st = fineState;
+    if (!fineOpts || !st || fineBusy || st.t0 === null || st.t1 === null) return;
+    const closed = now * CPU_HZ >= st.t1;
+    const key = `${st.edges}/${st.t0}/${closed}`;
+    if (key === fineFetched) return;
+    if (!closed && performance.now() - fineLast < 250) return;
+    fineBusy = true;
+    fineLast = performance.now();
+    void session.vcdText().then((r) => {
+      fineBusy = false;
+      fineFetched = key;
+      if (!fineOpts) return;
+      fineWave = parseVcd(r.text, fineOpts.pin);
+      fineBits = fineWave ? dhtBits(fineWave) : [];
+      if (closed && fineWave && !fineFitted) {
+        // Show the whole window once it is complete
+        fineFitted = true;
+        setFollow(false);
+        const w = (fineWave.t1 - fineWave.t0) / CPU_HZ;
+        span = clampSpan(w * 1.04);
+        end = fineWave.t1 / CPU_HZ + w * 0.02;
+      }
+      fineUi();
+      dirty = true;
+    });
+  }
+  async function exportVcd(download: boolean): Promise<string> {
+    const r = await session.vcdText();
+    if (!r.text) {
+      shell.toast(t('No fine capture yet'));
+      return '';
+    }
+    if (download) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([r.text], { type: 'text/plain' }));
+      a.download = `tryboard-GPIO${fineOpts?.pin ?? ''}-${r.state?.t0 ?? 0}.vcd`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+    return r.text;
+  }
+  function fineUi() {
+    if (!fineOpts) return;
+    const ms = +(fineOpts.len * 1e3).toFixed(3);
+    $('fchip').textContent = t('Fine sampling: GPIO{pin} · {ms} ms window · per cycle', { pin: fineOpts.pin, ms });
+    const st = fineState;
+    const parts: string[] = [];
+    if (!st || st.t0 === null || st.t1 === null) parts.push(fineOpts.at !== undefined ? t('Waiting for {time}', { time: fmtTime(fineOpts.at) }) : t('Waiting for the next edge on GPIO{pin}', { pin: fineOpts.pin }));
+    else {
+      const a = st.t0 / CPU_HZ, b = st.t1 / CPU_HZ;
+      parts.push(`${a.toFixed(6)} – ${b.toFixed(6)} s`);
+      if (now * CPU_HZ < st.t1) parts.push(t('Capturing'));
+      parts.push(t('{n} edges', { n: st.edges }));
+      if (st.dropped) parts.push(t('Dropped {n} (capture buffer full)', { n: st.dropped }));
+    }
+    const fr = dhtFrame(fineBits);
+    if (fr) parts.push(t('DHT11: {h} %RH {t} °C, checksum {ok}', { h: fr.humidity, t: fr.temp.toFixed(1), ok: fr.ok ? t('OK') : t('wrong') }));
+    $('fstat').textContent = parts.join(' · ');
+    $('fstat').classList.toggle('bad', !!st?.dropped);
+    (el.querySelector('[data-act="fvcd"]') as HTMLButtonElement).disabled = !st;
+  }
+  function noteUi() {
+    const r: TimingReport | null = session.timing;
+    const box = $('note');
+    box.hidden = !r;
+    if (!r) return layout();
+    const reads = r.items.some((i) => i.kind === 'poll');
+    $('ntitle').textContent = reads ? t('The sensor sends these pulses and their widths are exact, but the firmware measures them with busy-wait loops') : t('The firmware makes these pulses itself with busy-wait loops');
+    const KIND: Record<string, string> = { delay: t('busy-wait delays'), spin: t('cycle-counter spins'), toggle: t('fast pin toggles'), poll: t('fast pin reads') };
+    const items = r.items.map((i) => `GPIO${i.pin} ${KIND[i.kind]} ×${i.n}`).join(' · ');
+    $('nbody').textContent = `${t('In the simulator every instruction takes 1 cycle; on a real chip caches, flash wait states and interrupts can shift the count by a few microseconds. The logic works here; check the margin on real hardware.')} (${items})`;
+    layout();
+  }
 
   function allTxns(): I2cTxn[] {
     return session.io.i2c.get(0) ?? [];
@@ -380,6 +609,13 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
         g.fillStyle = C.muted;
         g.fillText(t('I2C{port} decode', { port: ch.port }), 8, y + ROW_H.scl + ROW_H.sda + ROW_H.dec / 2);
         drawI2c(g, ch, y, W, c0, c1, X, pxPerCyc, nowC, C);
+      } else if (ch.kind === 'fine') {
+        g.fillText(ch.label, 8, y + 12);
+        g.fillStyle = C.muted;
+        g.fillText(ch.role, 8, y + 26);
+        g.fillStyle = C.accent;
+        g.fillText(t('Every edge'), 8, y + 40);
+        drawFine(g, y, h, c0, c1, X, pxPerCyc, C);
       } else if (ch.kind === 'pin') {
         g.fillText(ch.label, 8, y + h / 2 - 6);
         g.fillStyle = C.muted;
@@ -495,7 +731,59 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       const d = Math.abs(cursB - cursA);
       cur.push(`Δ ${fmtTime(d)}${d > 0 ? ` · ${fmtHz(1 / d)}` : ''}`);
     }
+    const pt = pulseText();
+    if (pt) cur.push(pt);
     $('cur').textContent = cur.join('  ');
+  }
+
+  /** Cursor A on the fine wave: level and width of the pulse under it, plus the DHT11 bit when it is one */
+  function pulseText(): string {
+    if (!fineWave || cursA === null) return '';
+    const c = cursA * CPU_HZ;
+    const p = pulseAt(fineWave, c);
+    if (!p) return '';
+    const w = fmtTime((p.b - p.a) / CPU_HZ);
+    const bit = p.level ? dhtBitAt(fineBits, c) : null;
+    const s = p.level ? t('High {w}', { w }) : t('Low {w}', { w });
+    return bit === null ? s : `${s} → ${bit}`;
+  }
+
+  function drawFine(g: CanvasRenderingContext2D, y: number, h: number, c0: number, c1: number, X: (c: number) => number, ppc: number, C: Colors) {
+    const w = fineWave;
+    const hi = y + 16, lo = y + h - 8;
+    if (!w) {
+      g.fillStyle = C.muted;
+      g.fillText(fineState && fineState.t0 !== null ? t('Capturing…') : t('Waiting for the trigger…'), LABEL_W + 10, y + h / 2);
+      return;
+    }
+    // Shade outside the capture window: no data there
+    g.fillStyle = K.nodata;
+    if (w.t0 > c0) g.fillRect(LABEL_W + 1, y + 1, Math.min(X(w.t0), X(c1)) - LABEL_W - 1, h - 2);
+    if (w.t1 < c1) g.fillRect(Math.max(X(w.t1), LABEL_W + 1), y + 1, X(c1) - Math.max(X(w.t1), LABEL_W + 1), h - 2);
+    const a = Math.max(c0, w.t0), b = Math.min(c1, w.t1);
+    if (b <= a) return;
+    drawLevels(g, { t: w.t, v: w.v }, a, b, X, hi, lo, w.pin, C, w.init);
+    // DHT11 bit labels above each data-bit high pulse that is wide enough to read
+    g.textAlign = 'center';
+    for (const x of fineBits) {
+      if (x.b < c0 || x.a > c1) continue;
+      const xa = X(x.a), xb = X(x.b);
+      if (xb - xa < 7) continue;
+      g.fillStyle = x.bit ? C.accent : C.muted;
+      g.fillText(String(x.bit), (xa + xb) / 2, y + 7);
+    }
+    // Pulse widths once each pulse is wide enough for a label
+    if (ppc * CPU_HZ * 20e-6 > 30) {
+      g.fillStyle = C.fg;
+      for (let i = 0; i + 1 < w.t.length; i++) {
+        if (w.t[i + 1] < c0 || w.t[i] > c1) continue;
+        const xa = X(w.t[i]), xb = X(w.t[i + 1]);
+        const lbl = `${((w.t[i + 1] - w.t[i]) / (CPU_HZ / 1e6)).toFixed(1)}µs`;
+        if (xb - xa < g.measureText(lbl).width + 6) continue;
+        g.fillText(lbl, (xa + xb) / 2, (w.v[i] ? hi : lo) + (w.v[i] ? 9 : -7));
+      }
+    }
+    g.textAlign = 'left';
   }
 
   type Colors = Record<'fg' | 'muted' | 'line' | 'soft' | 'accent' | 'abg' | 'bad' | 'ok' | 'field', string>;
@@ -590,12 +878,12 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     }
   }
 
-  function drawLevels(g: CanvasRenderingContext2D, s: { t: number[]; v: number[] } | undefined, a: number, b: number, X: (c: number) => number, hi: number, lo: number, pin: number, C: Colors) {
+  function drawLevels(g: CanvasRenderingContext2D, s: { t: number[]; v: number[] } | undefined, a: number, b: number, X: (c: number) => number, hi: number, lo: number, pin: number, C: Colors, init?: number) {
     // Level at window start = previous event; with no events use the current level (never changed)
     const f = session.frame;
-    const cur = pin < 32 ? (f.gpio >>> pin) & 1 : (f.gpioHi >>> (pin - 32)) & 1;
+    const cur = init ?? (pin < 32 ? (f.gpio >>> pin) & 1 : (f.gpioHi >>> (pin - 32)) & 1);
     let i = s ? lastLE(s.t, a) : -1;
-    let lv = s ? (i >= 0 ? s.v[i] : s.v.length ? 1 - s.v[0] : cur) : cur;
+    let lv = s ? (i >= 0 ? s.v[i] : init !== undefined ? init : s.v.length ? 1 - s.v[0] : cur) : cur;
     g.strokeStyle = C.accent;
     g.lineWidth = 1.4;
     g.beginPath();
@@ -902,7 +1190,12 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       else cursB = t;
       dirty = true;
     },
+    fineStart,
+    fine: () => ({ opts: fineOpts, state: fineState, wave: fineWave, bits: fineBits.map((b) => b.bit), frame: dhtFrame(fineBits) }),
+    pulseText,
+    exportVcd,
   };
+  noteUi();
   return api;
 }
 

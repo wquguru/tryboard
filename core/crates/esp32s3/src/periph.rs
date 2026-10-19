@@ -247,8 +247,14 @@ impl Gpio {
                 pull &= !(1 << i);
             }
         }
-        let undriven = !driven & !self.ext_driven;
         let out = (self.out & !self.periph_mask) | (self.periph_level & self.periph_mask);
+        // Open drain writing 1 releases the line to an attached device (DHT11); see the C3 Gpio::level (D-03)
+        let mut od = 0u64;
+        for (i, r) in self.pin.iter().enumerate() {
+            od |= ((r >> 2) as u64 & 1) << i;
+        }
+        let driven = driven & !(driven & out & od & self.ext_driven);
+        let undriven = !driven & !self.ext_driven;
         (out & driven) | (self.ext_in & self.ext_driven & !driven) | (pull & undriven & MASK)
     }
 

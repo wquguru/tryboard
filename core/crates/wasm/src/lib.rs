@@ -407,6 +407,71 @@ pub extern "C" fn tb_sonar_stat(which: u32) -> f64 {
     })
 }
 
+/// Attach a DHT11 (D-03) on an open-drain data pin; readings follow tb_env_set (call it after attaching)
+#[no_mangle]
+pub extern "C" fn tb_dht11_attach(pin: u32) {
+    with((), |m| m.dht11_attach(pin))
+}
+
+/// DHT11 stats: 0 = frames sent, 1 = start pulses too short; NaN = not attached
+#[no_mangle]
+pub extern "C" fn tb_dht11_stat(which: u32) -> f64 {
+    with(f64::NAN, |m| match (m.dht11_stats(), which) {
+        (Some(s), 0) => s.0 as f64,
+        (Some(s), 1) => s.1 as f64,
+        _ => f64::NAN,
+    })
+}
+
+/// Timing-sensitive code report (D-03) as JSON {"line","items":[{pin,kind,n}]} or {}; length, read via tb_report_ptr
+#[no_mangle]
+pub extern "C" fn tb_timing_report() -> usize {
+    let r = with("{}".to_string(), |m| m.timing_json());
+    let n = r.len();
+    REPORT.with(|b| *b.borrow_mut() = r);
+    n
+}
+
+/// Start a fine capture (D-04): pin mask as two 32-bit halves, window [t0, t1] in seconds (same rounding as the CLI)
+#[no_mangle]
+pub extern "C" fn tb_vcd_start(mask_lo: u32, mask_hi: u32, t0: f64, t1: f64) {
+    let c = tryboard_esp32c3::vcd::VcdCapture::cycles_of;
+    with((), |m| {
+        m.vcd_start(mask_lo as u64 | (mask_hi as u64) << 32, c(t0), c(t1))
+    })
+}
+
+/// Triggered fine capture: from `from` s, the next edge on a captured pin opens a `len` s window
+#[no_mangle]
+pub extern "C" fn tb_vcd_arm(mask_lo: u32, mask_hi: u32, from: f64, len: f64) {
+    let c = tryboard_esp32c3::vcd::VcdCapture::cycles_of;
+    with((), |m| {
+        m.vcd_arm(mask_lo as u64 | (mask_hi as u64) << 32, c(from), c(len))
+    })
+}
+
+/// The fine capture as VCD text, byte-identical to the CLI's --vcd file; length, read via tb_report_ptr
+#[no_mangle]
+pub extern "C" fn tb_vcd_text() -> usize {
+    let r = with(String::new(), |m| m.vcd_text());
+    let n = r.len();
+    REPORT.with(|b| *b.borrow_mut() = r);
+    n
+}
+
+/// Fine capture stats: 0 = edges kept, 1 = edges dropped (buffer full), 2 / 3 = window start / end cycle;
+/// NaN = no capture (2 / 3: still waiting for the trigger)
+#[no_mangle]
+pub extern "C" fn tb_vcd_stat(which: u32) -> f64 {
+    with(f64::NAN, |m| match (m.vcd_stats(), m.vcd_window(), which) {
+        (Some(s), _, 0) => s.0 as f64,
+        (Some(s), _, 1) => s.1 as f64,
+        (_, Some(w), 2) => w.0 as f64,
+        (_, Some(w), 3) => w.1 as f64,
+        _ => f64::NAN,
+    })
+}
+
 // ---------------------------------------------------------------- Power network (tryboard-elec, P1-01 / P1-02)
 
 /// Power mode: 0 = USB only (servo also on USB 5V), 1 = servo on an external 5 V 2 A supply

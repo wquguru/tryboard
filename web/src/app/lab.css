@@ -285,6 +285,21 @@ body.dock-collapsed .analyzer { display: none; }
 .ana-cv { display: block; width: 100%; height: var(--ana-cv-h, 200px); cursor: crosshair; touch-action: none; }
 .ana-f { display: flex; gap: 16px; justify-content: space-between; padding: 4px 12px 6px; border-top: 1px solid var(--line-soft); font-size: 11px; min-height: 24px; }
 .ana-f .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Fine sampling (D-04): chip + state bar, window form, timing note (design-v2/depth/Analyzer) */
+.ana-fine { display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 12px; border-bottom: 1px solid var(--line-soft); min-width: 0; flex-wrap: wrap; }
+.ana-fine[hidden], .ana-fform[hidden], .ana-note[hidden] { display: none; }
+.ana-chip { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; background: var(--accent-bg); color: var(--accent-ink); font-size: 11px; font-weight: 500; flex: none; }
+.ana-fstat { font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 200px; }
+.ana-fstat.bad { color: var(--bad); }
+.ana-fine [data-act='fvcd'] { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ana-fine [data-act='fvcd']:disabled { opacity: 0.45; cursor: default; }
+.ana-fform { display: flex; align-items: center; gap: 10px; padding: 5px 12px; border-bottom: 1px solid var(--line-soft); font-size: 12px; flex-wrap: wrap; }
+.ana-fform input, .ana-fform select { font: inherit; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--fg); padding: 2px 6px; }
+.ana-fform input[type='number'] { width: 80px; }
+.ana-go { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ana-note { margin: 6px 12px; padding: 8px 12px; border-radius: 8px; background: var(--field); font-size: 12px; line-height: 18px; flex: none; }
+.ana-note-t { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
+.ana-badge { flex: none; font-size: 11px; border: 1px solid var(--fg); border-radius: 4px; padding: 0 6px; }
 @media (max-width: 767px) {
   .analyzer { display: none !important; }
 }

@@ -114,6 +114,8 @@ pub struct IoTrace {
     pub pwm_dirty: bool,
     /// LEDC revision at the last scan
     pub ledc_rev: u64,
+    /// Fine capture for VCD (D-04), independent of `watch` and `cap`
+    pub vcd: Option<crate::vcd::VcdCapture>,
 }
 
 impl IoTrace {
@@ -128,6 +130,7 @@ impl IoTrace {
             pwm_last: [(0, 0); 64],
             pwm_dirty: true,
             ledc_rev: u64::MAX,
+            vcd: None,
         }
     }
 
@@ -152,6 +155,9 @@ impl IoTrace {
     /// Pin levels (all pins) may have changed: log only watched pins that actually changed
     #[inline]
     pub fn gpio(&mut self, now: u64, level: u64) {
+        if let Some(v) = self.vcd.as_mut() {
+            v.on_gpio(now, self.gpio_last, level);
+        }
         let diff = (level ^ self.gpio_last) & self.watch;
         self.gpio_last = level;
         if diff == 0 {
@@ -213,6 +219,11 @@ impl IoTrace {
         });
     }
 
+    /// Current levels of all pins as last seen
+    pub fn gpio_level(&self) -> u64 {
+        self.gpio_last
+    }
+
     /// Take all buffered events (in recording order)
     pub fn take(&mut self) -> Vec<IoEvent> {
         self.buf.drain(..).collect()
@@ -226,6 +237,7 @@ impl IoTrace {
         t.dropped = self.dropped;
         t.watch = self.watch;
         t.pwm_last = self.pwm_last;
+        t.vcd = self.vcd.take();
         t
     }
 }

@@ -674,6 +674,7 @@ impl Machine {
 
     pub fn env_set(&mut self, env: Env) {
         let t = env.temp_c;
+        let h = env.humidity;
         let bus = self.i2c0();
         if let Some(b) = bus.device::<Bme280>() {
             b.env = env;
@@ -684,6 +685,10 @@ impl Machine {
         }
         if let Some(d) = bus.device::<Qmi8658>() {
             d.temp_c = t;
+        }
+        for d in &mut self.pins().dhts {
+            d.temp_c = t;
+            d.humidity = h;
         }
     }
 
@@ -927,6 +932,36 @@ impl Machine {
             .map(|s| (s.pings, s.echoes, s.last_us))
     }
 
+    /// Attach a DHT11 (D-03) on one open-drain data pin (25 °C / 50 %RH until env_set; attach before setting env)
+    pub fn dht11_attach(&mut self, pin: u32) {
+        let now = self.cycles();
+        let d = tryboard_esp32c3::devices::pins::Dht11::new(pin, now);
+        self.pins().dhts.push(d);
+        self.elec.add_module("dht11");
+        self.pins_kick();
+    }
+
+    /// DHT11 stats (frames sent, host start pulses that were too short)
+    pub fn dht11_stats(&mut self) -> Option<(u64, u64)> {
+        self.pins().dhts.first().map(|d| (d.reads, d.short_starts))
+    }
+
+    /// Timing-sensitive code report line (D-03), None when nothing was detected; C3 only for now
+    pub fn timing_line(&self) -> Option<String> {
+        match &self.hw {
+            Hw::C3(m) => m.bus.timing.line(),
+            Hw::S3(_) | Hw::E32(_) => None,
+        }
+    }
+
+    /// The same as JSON for the web: {"line":..,"items":[{"pin","kind","n"}]} or {}
+    pub fn timing_json(&self) -> String {
+        match &self.hw {
+            Hw::C3(m) => m.bus.timing.json(),
+            Hw::S3(_) | Hw::E32(_) => "{}".into(),
+        }
+    }
+
     /// Current count of pulse counter unit u (only S3 has PCNT)
     pub fn pcnt_count(&self, u: usize) -> Option<i16> {
         match &self.hw {
@@ -975,6 +1010,38 @@ impl Machine {
     /// Entries dropped because the buffer was full
     pub fn io_dropped(&mut self) -> u64 {
         self.iotrace().dropped
+    }
+
+    /// Start a fine capture (D-04) of the pins in `mask` over cycles [t0, t1]; replaces any earlier one
+    pub fn vcd_start(&mut self, mask: u64, t0: u64, t1: u64) {
+        self.iotrace().vcd = Some(tryboard_esp32c3::vcd::VcdCapture::new(mask, t0, t1));
+    }
+
+    /// Triggered fine capture: the window opens at the first edge on `mask` at or after `from` and lasts `len` cycles
+    pub fn vcd_arm(&mut self, mask: u64, from: u64, len: u64) {
+        self.iotrace().vcd = Some(tryboard_esp32c3::vcd::VcdCapture::armed(mask, from, len));
+    }
+
+    /// Fine capture window in cycles (None while still waiting for the trigger)
+    pub fn vcd_window(&mut self) -> Option<(u64, u64)> {
+        let v = self.iotrace().vcd.as_ref()?;
+        v.arm.is_none().then_some((v.t0, v.t1))
+    }
+
+    /// The fine capture as VCD text ("" when none was started)
+    pub fn vcd_text(&mut self) -> String {
+        let now = self.cycles();
+        let io = self.iotrace();
+        let lv = io.gpio_level();
+        io.vcd.as_ref().map(|v| v.text(lv, now)).unwrap_or_default()
+    }
+
+    /// Fine capture (edges kept, edges dropped because the buffer was full)
+    pub fn vcd_stats(&mut self) -> Option<(usize, u64)> {
+        self.iotrace()
+            .vcd
+            .as_ref()
+            .map(|v| (v.edges.len(), v.dropped))
     }
 
     fn tasktrace(&mut self) -> &mut TaskTrace {

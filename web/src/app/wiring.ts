@@ -15,7 +15,7 @@ export interface PartInfo {
 }
 
 /** Part type → display name (timeline, hints and build tree all use this so raw type names never leak into the UI) */
-export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: t('Servo'), gc9a01: t('Round screen'), buzzer: t('Buzzer'), pot: t('Potentiometer'), led: 'LED', encoder: t('Encoder'), hcsr04: t('Ultrasonic'), mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: t('Touch'), max98357a: t('Speaker'), inmp441: t('Microphone'), key: t('Button'), ws2812: t('LED strip') };
+export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: t('Servo'), gc9a01: t('Round screen'), buzzer: t('Buzzer'), pot: t('Potentiometer'), led: 'LED', encoder: t('Encoder'), hcsr04: t('Ultrasonic'), mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: t('Touch'), max98357a: t('Speaker'), inmp441: t('Microphone'), key: t('Button'), ws2812: t('LED strip'), dht11: 'DHT11' };
 export const partLabel = (type: string) => PART_LABEL[type as PartSpec['type']] ?? t('Part');
 
 export function partId(p: PartSpec) {
@@ -49,6 +49,8 @@ export function partInfo(p: PartSpec, ext5v = false): PartInfo {
       const pins = `Trig GPIO${p.trig} · Echo GPIO${p.echo}`;
       return { name: t('HC-SR04 ultrasonic'), model: t('HC-SR04 ultrasonic ranger (2–400 cm, 40 kHz, 5 V Echo output)'), iface: p.divider === false ? t('{pins} (direct: 5 V into the GPIO will damage the pin)', { pins }) : t('{pins} (through a 1 kΩ / 2 kΩ divider to about 3.3 V)', { pins }), power: t('5V (USB 5V rail, about 15 mA)') };
     }
+    case 'dht11':
+      return { name: 'DHT11', model: t('DHT11 temperature / humidity module (0–50 °C ±2 °C, 20–90 %RH ±5 %, single-wire)'), iface: t('DATA GPIO{pin} (open drain, 10 kΩ pull-up on the module)', { pin: p.pin }), power: '3V3' };
     case 'mpu6050':
       return { name: t('MPU6050 6-axis'), model: t('GY-521 module (InvenSense MPU-6050, 3-axis accelerometer and 3-axis gyro)'), iface: `${i2c(p)}${p.int !== undefined ? ` · INT GPIO${p.int}` : ''}`, power: '3V3' };
     case 'qmi8658':

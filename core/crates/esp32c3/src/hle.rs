@@ -11,6 +11,8 @@ pub enum Hle {
     I2cReadRegMask,
     I2cWriteReg,
     I2cWriteRegMask,
+    /// esp_rom_delay_us: observed only (timing detection), the ROM code then runs as usual
+    DelayUs,
 }
 
 /// ROM symbols to intercept
@@ -19,6 +21,7 @@ pub const TABLE: &[(&str, Hle)] = &[
     ("rom_i2c_readReg_Mask", Hle::I2cReadRegMask),
     ("rom_i2c_writeReg", Hle::I2cWriteReg),
     ("rom_i2c_writeReg_Mask", Hle::I2cWriteRegMask),
+    ("ets_delay_us", Hle::DelayUs),
 ];
 
 /// Internal registers of the analog front end (BBPLL, bias, SAR ADC, ...), accessed via regi2c.
@@ -43,6 +46,11 @@ fn mask(msb: u32, lsb: u32) -> u8 {
 }
 
 pub fn call(kind: Hle, cpu: &mut Cpu, bus: &mut SocBus) {
+    if let Hle::DelayUs = kind {
+        bus.timing.delay(cpu.cycles);
+        cpu.hle_pass = cpu.pc;
+        return;
+    }
     let a = |i: usize| cpu.x[10 + i];
     let (block, reg) = (a(0) as u8, a(2) as u8);
     let ret = match kind {
@@ -55,6 +63,7 @@ pub fn call(kind: Hle, cpu: &mut Cpu, bus: &mut SocBus) {
             bus.analog.regs.insert((block, reg), a(3) as u8);
             0
         }
+        Hle::DelayUs => unreachable!(),
         Hle::I2cWriteRegMask => {
             let (msb, lsb, data) = (a(3) & 7, a(4) & 7, a(5));
             let m = mask(msb, lsb);

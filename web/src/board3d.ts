@@ -166,7 +166,9 @@ export type PartSpec =
   /** INMP441 I2S digital mic module (L/R to GND = left channel): pins fixed per chip, see I2S_WIRING */
   | { type: 'inmp441'; label?: string }
   /** 8-LED WS2812 stick (P2-09 knob lamp): DIN on pin (via 74AHCT125 to 5 V, illustrative), 5V supply; lies on the desk in front, colours from core-decoded frames */
-  | { type: 'ws2812'; pin: number; n?: number; label?: string };
+  | { type: 'ws2812'; pin: number; n?: number; label?: string }
+  /** DHT11 temperature / humidity module (D-03): 3 pins (VCC 3V3, DATA open drain with 10 kΩ pull-up on the module, GND); single-wire protocol */
+  | { type: 'dht11'; pin: number; label?: string };
 
 
 /** The scene's IMU (bench tilt / drag only works when there is one) */
@@ -1418,6 +1420,66 @@ function ledGlow(mat: THREE.MeshStandardMaterial, rgb: number[]) {
 
 const SONAR_PINS = ['VCC', 'Trig', 'Echo', 'GND'];
 /** HC-SR04: upright blue board, two transducers facing local +z; header at the back bottom, horizontal toward -z. Origin at the board's bottom-edge centre on the desk */
+const DHT_PINS = ['VCC', 'DATA', 'GND'];
+/** DHT11 breakout (real dimensions): 15 × 25 mm PCB lying flat, blue 12 × 15.5 × 5.5 mm sensor housing with a vent grid, 3-pin header */
+function dht11Module() {
+  const grp = new THREE.Group();
+  const W = 15, H = 25, T = 1.2;
+  const S = 28;
+  const tex = canvasTexture(W * S, H * S, (g) => {
+    const cw = W * S, ch = H * S;
+    g.fillStyle = '#1f55b0';
+    g.fillRect(0, 0, cw, ch);
+    g.fillStyle = '#d9b860';
+    for (let i = 0; i < 3; i++) {
+      g.beginPath();
+      g.arc(cw / 2 + (i - 1) * PITCH * S, 2 * S, 0.8 * S, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.fillStyle = '#eef3fb';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = `bold ${0.95 * S}px "JetBrains Mono", Menlo, monospace`;
+    DHT_PINS.forEach((t, i) => g.fillText(t, cw / 2 + (i - 1) * PITCH * 1.25 * S, 4.4 * S));
+    g.font = `bold ${0.9 * S}px Helvetica, sans-serif`;
+    g.fillText('R1 10K', cw / 2, 6.6 * S);
+  });
+  const pcb = modulePcb(W, H, T, [], tex, 0x18458f);
+  const flat = new THREE.Group();
+  flat.rotation.x = -Math.PI / 2;
+  pcb.position.y = -H / 2;
+  flat.add(pcb);
+  flat.position.y = 1.2 + T / 2;
+  grp.add(flat);
+  const pcbTop = 1.2 + T;
+  const m = new THREE.Matrix4();
+  const feet = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.7, 0.7, 1.2, 10), MAT.tin, 3);
+  for (let i = 0; i < 3; i++) feet.setMatrixAt(i, m.makeTranslation((i - 1) * PITCH, 0.6, -H / 2 + 2));
+  grp.add(feet);
+  // Sensor housing: light-blue plastic with a grid of square vents on top
+  const grid = canvasTexture(12 * S, 15.5 * S, (g) => {
+    g.fillStyle = '#5aa7e0';
+    g.fillRect(0, 0, 12 * S, 15.5 * S);
+    g.fillStyle = '#1d3f66';
+    for (let r = 0; r < 6; r++) for (let c = 0; c < 4; c++) g.fillRect((1.4 + c * 2.5) * S, (1.6 + r * 2.2) * S, 1.6 * S, 1.3 * S);
+  });
+  const shell = new THREE.MeshStandardMaterial({ color: 0x5aa7e0, roughness: 0.55 });
+  const top = new THREE.MeshStandardMaterial({ map: grid, roughness: 0.55 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(12, 5.5, 15.5), [shell, shell, top, shell, shell, shell]);
+  const bz = H / 2 - 9.5;
+  body.position.set(0, pcbTop + 2.75, bz);
+  body.castShadow = true;
+  grp.add(body);
+  const plastic = new THREE.Mesh(new THREE.BoxGeometry(3 * PITCH, 2.5, 2.5), MAT.plastic);
+  plastic.position.set(0, pcbTop + 1.25, -H / 2 + 2);
+  grp.add(plastic);
+  const pins = new THREE.InstancedMesh(new THREE.BoxGeometry(0.64, 8.5, 0.64), MAT.gold, 3);
+  for (let i = 0; i < 3; i++) pins.setMatrixAt(i, m.makeTranslation((i - 1) * PITCH, pcbTop + 4.25, -H / 2 + 2));
+  grp.add(pins);
+  const plugAt = [0, 1, 2].map((i) => new THREE.Vector3((i - 1) * PITCH, pcbTop + 2.5, -H / 2 + 2));
+  return { grp, plugAt, labels: DHT_PINS, size: [W, H] as const };
+}
+
 function sonarModule() {
   const grp = new THREE.Group();
   const W = 45, H = 20, T = 1.6, Y0 = 6;
@@ -2527,6 +2589,28 @@ export function createBench(container: HTMLElement): Bench {
     if (had) paintStrip(st, had);
   }
 
+  function buildDht(grp: THREE.Group, p: Extract<PartSpec, { type: 'dht11' }>) {
+    const root = new THREE.Group();
+    registerPart('dht11', root);
+    grp.add(root);
+    const m = dht11Module();
+    const sig = pinCands('IO' + p.pin)[0].p;
+    const bx = sig.x - 6, bz = Math.sign(sig.z || 1) * (BB.D / 2 + 17);
+    m.grp.position.set(bx, 0, bz);
+    if (bz < 0) m.grp.rotation.y = Math.PI;
+    root.add(m.grp);
+    const shadow = contactShadow(m.size[0], m.size[1], 0.3);
+    shadow.position.set(bx, shadow.position.y, bz);
+    grp.add(shadow);
+    const ends: [string, number, string, string][] = [
+      ['3V3', WIRE.vcc, 'VCC', t('DHT11 power (3.3 V)')],
+      ['IO' + p.pin, WIRE.sig, 'DATA', t('DHT11 data (open drain, single wire)')],
+      ['GND', WIRE.gnd, 'GND', t('{name} GND', { name: 'DHT11' })],
+    ];
+    tableWires(grp, m.grp, m.plugAt, m.labels, 'dht11', ends, bz);
+    label(grp, tl(p.label) ?? t('DHT11 · DATA IO{pin} · temperature / humidity from the sliders', { pin: p.pin }), new THREE.Vector3(bx, 6, bz + Math.sign(bz) * 22));
+  }
+
   function buildSonar(grp: THREE.Group, p: Extract<PartSpec, { type: 'hcsr04' }>) {
     const root = new THREE.Group();
     registerPart('hcsr04', root);
@@ -2776,6 +2860,7 @@ export function createBench(container: HTMLElement): Bench {
       if (p.type === 'encoder') buildEncoder(parts, p);
       if (p.type === 'ws2812') buildStrip(parts, p);
       if (p.type === 'hcsr04') buildSonar(parts, p);
+      if (p.type === 'dht11') buildDht(parts, p);
       if (p.type === 'max98357a') buildAmp(parts, p);
       if (p.type === 'inmp441') buildMic(parts, p);
       if (p.type === 'oled') {

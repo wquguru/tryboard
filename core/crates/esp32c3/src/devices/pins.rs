@@ -1,4 +1,4 @@
-//! External devices that drive / watch GPIOs directly: rotary encoder (P2-01), HC-SR04 ultrasonic (P2-04).
+//! External devices that drive / watch GPIOs directly: rotary encoder (P2-01), HC-SR04 ultrasonic (P2-04), DHT11 (D-03).
 //! Unlike I2C devices their output is a precisely timed waveform (quadrature, Echo width), so they live in the SoC:
 //! `poll(now)` yields drives (time, pin, level) applied to GPIO in order (firing GPIO IRQs, PCNT / RMT RX, logic analyzer);
 //! `on_level` shows the device the chip's output (Trig). External input (steps, press, distance) arrives from the CLI
@@ -222,21 +222,130 @@ impl Hcsr04 {
     }
 }
 
+/// DHT11 host start: line held low at least this long (datasheet: >= 18 ms)
+pub const DHT_START_CYCLES: u64 = CPU_HZ / 1000 * 18;
+/// DHT11 waveform pieces in µs (datasheet): response wait, 80 low + 80 high, per bit 50 low + 26-28 (0) / 70 (1) high
+pub const DHT_WAIT_US: u64 = 30;
+pub const DHT_RESP_US: u64 = 80;
+pub const DHT_BIT_LOW_US: u64 = 50;
+pub const DHT_ZERO_US: u64 = 27;
+pub const DHT_ONE_US: u64 = 70;
+
+/// DHT11 on one open-drain data pin. The module's pull-up holds the line high (driven 1 here); the host pulls it low
+/// >= 18 ms and releases, then the sensor answers with the response and 40 data bits keyed to simulated cycles.
+#[derive(Clone, Debug)]
+pub struct Dht11 {
+    pub pin: u32,
+    pub temp_c: f64,
+    pub humidity: f64,
+    low_since: Option<u64>,
+    wave: VecDeque<(u64, i8)>,
+    /// Frames sent and host start pulses that were too short (stats)
+    pub reads: u64,
+    pub short_starts: u64,
+    out: Vec<Drive>,
+}
+
+impl Dht11 {
+    pub fn new(pin: u32, now: u64) -> Dht11 {
+        Dht11 {
+            pin,
+            temp_c: 25.0,
+            humidity: 50.0,
+            low_since: None,
+            wave: VecDeque::new(),
+            reads: 0,
+            short_starts: 0,
+            out: vec![(now, pin, 1)],
+        }
+    }
+
+    /// The 5 bytes of one frame: humidity int / dec, temperature int / dec (bit 7 = below zero), checksum
+    pub fn frame(temp_c: f64, humidity: f64) -> [u8; 5] {
+        let h = humidity.round().clamp(0.0, 100.0) as u8;
+        let tenths = (temp_c.abs() * 10.0).round().min(2559.0) as u32;
+        let ti = (tenths / 10).min(255) as u8;
+        let mut td = (tenths % 10) as u8;
+        if temp_c < 0.0 && tenths > 0 {
+            td |= 0x80;
+        }
+        let sum = (h as u32 + ti as u32 + td as u32) as u8;
+        [h, 0, ti, td, sum]
+    }
+
+    /// Chip-side pin levels changed (bit = pin number); the sensor's own edges are ignored while it answers
+    pub fn on_level(&mut self, t: u64, level: u64) {
+        if !self.wave.is_empty() {
+            return;
+        }
+        let hi = level >> self.pin & 1 != 0;
+        match (hi, self.low_since) {
+            (false, None) => self.low_since = Some(t),
+            (true, Some(t0)) => {
+                self.low_since = None;
+                if t - t0 < DHT_START_CYCLES {
+                    self.short_starts += 1;
+                    return;
+                }
+                self.reads += 1;
+                let us = CPU_HZ / 1_000_000;
+                let mut at = t + DHT_WAIT_US * us;
+                let mut push = |w: &mut VecDeque<(u64, i8)>, lv: i8, dur_us: u64| {
+                    w.push_back((at, lv));
+                    at += dur_us * us;
+                };
+                push(&mut self.wave, 0, DHT_RESP_US);
+                push(&mut self.wave, 1, DHT_RESP_US);
+                for b in Self::frame(self.temp_c, self.humidity) {
+                    for k in (0..8).rev() {
+                        push(&mut self.wave, 0, DHT_BIT_LOW_US);
+                        let one = b >> k & 1 != 0;
+                        push(
+                            &mut self.wave,
+                            1,
+                            if one { DHT_ONE_US } else { DHT_ZERO_US },
+                        );
+                    }
+                }
+                push(&mut self.wave, 0, DHT_BIT_LOW_US);
+                push(&mut self.wave, 1, 0);
+            }
+            _ => {}
+        }
+    }
+
+    pub fn poll(&mut self, now: u64, out: &mut Vec<Drive>) -> u64 {
+        out.append(&mut self.out);
+        while let Some(&(t, lv)) = self.wave.front() {
+            if t > now {
+                return t;
+            }
+            out.push((t, self.pin, lv));
+            self.wave.pop_front();
+        }
+        u64::MAX
+    }
+}
+
 /// Devices of this kind attached to the SoC
 #[derive(Clone, Debug, Default)]
 pub struct PinDevices {
     pub encoders: Vec<Encoder>,
     pub sonars: Vec<Hcsr04>,
+    pub dhts: Vec<Dht11>,
 }
 
 impl PinDevices {
     pub fn is_empty(&self) -> bool {
-        self.encoders.is_empty() && self.sonars.is_empty()
+        self.encoders.is_empty() && self.sonars.is_empty() && self.dhts.is_empty()
     }
 
     pub fn on_level(&mut self, t: u64, level: u64) {
         for s in &mut self.sonars {
             s.on_level(t, level);
+        }
+        for d in &mut self.dhts {
+            d.on_level(t, level);
         }
     }
 
@@ -249,6 +358,9 @@ impl PinDevices {
         }
         for s in &mut self.sonars {
             next = next.min(s.poll(now, &mut out));
+        }
+        for d in &mut self.dhts {
+            next = next.min(d.poll(now, &mut out));
         }
         out.sort_by_key(|d| d.0);
         (out, next)
@@ -315,5 +427,45 @@ mod tests {
         s.on_level(10_000 * us, 1 << 17);
         s.on_level(10_005 * us, 0);
         assert_eq!(s.pings, 1);
+    }
+
+    #[test]
+    fn dht11_frame_timing() {
+        let us = CPU_HZ / 1_000_000;
+        let mut d = Dht11::new(5, 0);
+        d.temp_c = 23.5;
+        d.humidity = 45.0;
+        assert_eq!(Dht11::frame(23.5, 45.0), [45, 0, 23, 5, 73]);
+        assert_eq!(Dht11::frame(-1.2, 30.0)[3], 0x82);
+        // 5 ms start: too short, no answer
+        d.on_level(1000 * us, 0);
+        d.on_level(6000 * us, 1 << 5);
+        assert_eq!((d.short_starts, d.reads), (1, 0));
+        d.on_level(10_000 * us, 0);
+        d.on_level(30_000 * us, 1 << 5);
+        assert_eq!(d.reads, 1);
+        let mut out = Vec::new();
+        let mut now = 0;
+        while now != u64::MAX {
+            now = d.poll(now, &mut out);
+        }
+        // Idle drive + 2 response edges + 80 bit edges + end low + release
+        assert_eq!(out.len(), 1 + 2 + 80 + 2);
+        assert_eq!(out[1], (30_030 * us, 5, 0));
+        assert_eq!(out[2].0 - out[1].0, 80 * us);
+        let highs: Vec<u64> = (0..40)
+            .map(|i| (out[5 + 2 * i].0 - out[4 + 2 * i].0) / us)
+            .collect();
+        let byte = |k: usize| {
+            highs[k * 8..k * 8 + 8]
+                .iter()
+                .fold(0u8, |a, &w| a << 1 | (w > 40) as u8)
+        };
+        assert_eq!(
+            [byte(0), byte(1), byte(2), byte(3), byte(4)],
+            [45, 0, 23, 5, 73]
+        );
+        assert!(highs.iter().all(|&w| w == 27 || w == 70));
+        assert_eq!(out[4].0 - out[3].0, 50 * us);
     }
 }

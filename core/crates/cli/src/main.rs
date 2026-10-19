@@ -28,6 +28,8 @@ fn usage() -> ! {
                script actions realnet=1|0 (the web \"real network\" toggle), netreply=id,status,ms,content type|reason,base64 body (real replies recorded on the web; the CLI never goes online)
                [--encoder A,B[,SW]] (EC11 rotary encoder; script actions enc=+N / enc=-N turn N detents, encsw=1|0 press / release)
                [--sonar TRIG,ECHO] [--dist cm] (HC-SR04; script action dist=cm, negative = nothing in front)
+               [--dht11 GPIO] (DHT11 on an open-drain data pin; readings from --env / script action env=)
+               [--vcd <file.vcd>] [--vcd-pins 5[,..]|all] [--vcd-window <start s>..<end s>] (every edge, 1 ps timescale, 1 cycle = 6250 ps)
                [--i2s max98357a,inmp441] (S3: speaker BCLK=16 LRC=17 DIN=18, mic SCK=39 WS=40 SD=41; C3: speaker 0/1/2, mic 0/1/3)
                [--mic <sound.wav>] (INMP441 loops this WAV, attaches the mic automatically) [--audio-wav <speaker output.wav>]
                [--ble-phone] (virtual phone: scan, connect to the first device, read all readable characteristics, subscribe to all notifications; air events on stderr)
@@ -238,6 +240,17 @@ fn run(args: &[String]) {
             }
         }
     }
+    // DHT11: --dht11 DATA (open-drain single wire); attached before --env so it takes the same readings
+    let dht11 = opt(args, "--dht11");
+    if let Some(spec) = &dht11 {
+        match spec.trim().trim_start_matches("GPIO").parse::<u32>() {
+            Ok(p) => m.dht11_attach(p),
+            Err(_) => {
+                eprintln!("--dht11 needs one GPIO number");
+                std::process::exit(2)
+            }
+        }
+    }
     // Environment: --env temp,humidity,pressure(Pa)
     if let Some(e) = opt(args, "--env") {
         let v: Vec<f64> = e.split(',').filter_map(|x| x.parse().ok()).collect();
@@ -348,6 +361,31 @@ fn run(args: &[String]) {
     });
     if let Hw::C3(c) = &mut m.hw {
         c.bus.watch = watch;
+    }
+    // Fine logic analyzer (D-04): --vcd <file> --vcd-pins 5[,..] --vcd-window <start s>..<end s> (default the whole run)
+    let vcd = opt(args, "--vcd");
+    if vcd.is_some() {
+        let pins = opt(args, "--vcd-pins").unwrap_or_else(|| "all".into());
+        let mask = if pins == "all" {
+            u64::MAX
+        } else {
+            pins.split(',')
+                .filter_map(|x| x.trim().trim_start_matches("GPIO").parse::<u32>().ok())
+                .filter(|p| *p < 64)
+                .fold(0u64, |a, p| a | 1 << p)
+        };
+        let (a, b) = match opt(args, "--vcd-window") {
+            Some(w) => {
+                let (a, b) = w.split_once("..").unwrap_or((&w, ""));
+                (
+                    a.trim().parse::<f64>().unwrap_or(0.0),
+                    b.trim().parse::<f64>().unwrap_or(seconds),
+                )
+            }
+            None => (0.0, seconds),
+        };
+        let c = tryboard_esp32c3::vcd::VcdCapture::cycles_of;
+        m.vcd_start(mask, c(a), c(b));
     }
     // Logic analyzer events: drained once per slice into the file (format identical to web iotrace.ts eventLine)
     let trace_io = opt(args, "--trace-io").map(|p| {
@@ -530,6 +568,8 @@ fn run(args: &[String]) {
             && trace_tasks.is_none()
             && encoder.is_none()
             && sonar.is_none()
+            && dht11.is_none()
+            && vcd.is_none()
             && !has_audio
         {
             CPU_HZ / 100
@@ -831,6 +871,18 @@ fn run(args: &[String]) {
     }
     if let Some((pings, echoes, us)) = m.sonar_stats() {
         eprintln!("[tryboard] ultrasonic triggers {pings}, echoes {echoes}, last Echo {us:.1} µs");
+    }
+    if let Some((reads, short)) = m.dht11_stats() {
+        eprintln!("[tryboard] DHT11 frames sent {reads}, start pulses too short {short}");
+    }
+    if let Some(p) = &vcd {
+        let text = m.vcd_text();
+        std::fs::write(p, &text).unwrap_or_else(|e| panic!("write {p}: {e}"));
+        let (n, dropped) = m.vcd_stats().unwrap_or((0, 0));
+        eprintln!("[tryboard] VCD {p}: {n} edges, {dropped} dropped (capture buffer full)");
+    }
+    if let Some(l) = m.timing_line() {
+        eprintln!("{l}");
     }
     let (tr, nack) = m.i2c_stats();
     if tr > 0 {
