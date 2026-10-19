@@ -521,6 +521,8 @@ impl SocBus {
         }
         let mut v = v;
         if wifi::MAC_RANGE.contains(&a) {
+            // Infallible: wifi is set at construction and only taken around write/update,
+            // whose Mem callbacks reach RAM only (never this register path).
             let mut w = self.wifi.take().expect("wifi");
             let keep = w.write(a, v, now, self);
             self.wifi = Some(w);
@@ -720,6 +722,8 @@ impl SocBus {
         let n6 = self.route_rmt(now);
         let n7 = self.i2c0.update(now);
         let n8 = {
+            // Infallible: wifi is set at construction and only taken around write/update,
+            // whose Mem callbacks reach RAM only (never this register path).
             let mut w = self.wifi.take().expect("wifi");
             let n = w.update(now, self);
             self.wifi = Some(w);
@@ -894,6 +898,8 @@ impl SocBus {
         a.write(off, v, links, self);
         self.aes = a;
     }
+    // Infallible: wifi is set at construction and only taken around write/update,
+    // whose Mem callbacks reach RAM only (never this register path).
     pub fn wifi(&self) -> &wifi::WifiMac {
         self.wifi.as_deref().expect("wifi")
     }

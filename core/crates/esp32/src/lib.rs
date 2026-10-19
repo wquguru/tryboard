@@ -466,6 +466,8 @@ impl SocBus {
         }
         let mut v = v;
         if MacRegs::ESP32.contains(a) {
+            // Infallible: wifi is set at construction and only taken around write/update,
+            // whose Mem callbacks reach RAM only (never this register path).
             let mut w = self.wifi.take().expect("wifi");
             let keep = w.write(a, v, now, self);
             self.wifi = Some(w);
@@ -479,6 +481,8 @@ impl SocBus {
         self.regs.insert(a, v);
     }
 
+    // Infallible: wifi is set at construction and only taken around write/update,
+    // whose Mem callbacks reach RAM only (never this register path).
     pub fn wifi(&self) -> &WifiMac {
         self.wifi.as_deref().expect("wifi")
     }
@@ -597,6 +601,8 @@ impl SocBus {
         let n3 = self.i2c0.update(now).min(self.i2c1.update(now));
         let n4 = self.pins_update(now);
         let n5 = {
+            // Infallible: wifi is set at construction and only taken around write/update,
+            // whose Mem callbacks reach RAM only (never this register path).
             let mut w = self.wifi.take().expect("wifi");
             let n = w.update(now, self);
             self.wifi = Some(w);

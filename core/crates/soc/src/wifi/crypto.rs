@@ -357,6 +357,7 @@ pub fn key_wrap(kek: &[u8], p: &[u8]) -> Vec<u8> {
     let aes = Aes::new(kek);
     let n = p.len() / 8;
     let mut a = [0xa6u8; 8];
+    // Infallible: the only caller (wpa msg3) pads p to a multiple of 8.
     let mut r: Vec<[u8; 8]> = p.chunks(8).map(|c| c.try_into().unwrap()).collect();
     for j in 0..6 {
         for (i, ri) in r.iter_mut().enumerate() {
@@ -385,6 +386,7 @@ pub fn key_unwrap(kek: &[u8], c: &[u8]) -> Option<Vec<u8>> {
     }
     let aes = Aes::new(kek);
     let n = c.len() / 8 - 1;
+    // Infallible: c.len() >= 16 and a multiple of 8 (checked above).
     let mut a: [u8; 8] = c[..8].try_into().unwrap();
     let mut r: Vec<[u8; 8]> = c[8..].chunks(8).map(|x| x.try_into().unwrap()).collect();
     for j in (0..6).rev() {
@@ -527,6 +529,7 @@ fn ccmp_nonce_aad(f: &[u8], hl: usize, pn: &[u8; 6]) -> ([u8; 13], Vec<u8>) {
 /// Plain 802.11 frame -> CCMP frame (insert 8-byte CCMP header, append 8-byte MIC, set Protected)
 pub fn ccmp_encrypt(tk: &[u8; 16], f: &[u8], pn: u64, key_id: u8) -> Vec<u8> {
     let hl = hdr_len(f);
+    // Infallible: 6-byte prefix of an 8-byte array.
     let p: [u8; 6] = pn.to_le_bytes()[..6].try_into().unwrap();
     let mut out = f[..hl].to_vec();
     out[1] |= 0x40;

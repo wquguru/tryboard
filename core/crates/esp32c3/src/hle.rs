@@ -42,6 +42,10 @@ impl Analog {
 }
 
 fn mask(msb: u32, lsb: u32) -> u8 {
+    // msb/lsb come from firmware registers; an inverted range would underflow the width
+    if msb < lsb {
+        return 0;
+    }
     (((1u32 << (msb - lsb + 1)) - 1) << lsb) as u8
 }
 
@@ -63,6 +67,7 @@ pub fn call(kind: Hle, cpu: &mut Cpu, bus: &mut SocBus) {
             bus.analog.regs.insert((block, reg), a(3) as u8);
             0
         }
+        // Infallible: DelayUs returns early at the top of this function.
         Hle::DelayUs => unreachable!(),
         Hle::I2cWriteRegMask => {
             let (msb, lsb, data) = (a(3) & 7, a(4) & 7, a(5));

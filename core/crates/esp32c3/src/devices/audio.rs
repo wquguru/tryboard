@@ -308,17 +308,22 @@ pub fn parse_wav(b: &[u8]) -> Result<(u32, Vec<f32>), String> {
         return Err("not a RIFF/WAVE file".into());
     }
     let (mut fmt, mut data) = (None, None);
-    let mut p = 12;
-    while p + 8 <= b.len() {
+    let mut p: usize = 12;
+    while p.saturating_add(8) <= b.len() {
         let id = &b[p..p + 4];
+        // Infallible: 4-byte slice inside the p + 8 <= b.len() bound
         let len = u32::from_le_bytes(b[p + 4..p + 8].try_into().unwrap()) as usize;
-        let body = &b[p + 8..(p + 8 + len).min(b.len())];
+        // Saturate: on wasm32 a huge chunk length would wrap usize and invert the slice or loop
+        let body = &b[p + 8..p.saturating_add(8).saturating_add(len).min(b.len())];
         match id {
             b"fmt " => fmt = Some(body),
             b"data" => data = Some(body),
             _ => {}
         }
-        p += 8 + len + (len & 1);
+        p = p
+            .saturating_add(8)
+            .saturating_add(len)
+            .saturating_add(len & 1);
     }
     let fmt = fmt.ok_or("missing fmt chunk")?;
     let data = data.ok_or("missing data chunk")?;
@@ -327,6 +332,7 @@ pub fn parse_wav(b: &[u8]) -> Result<(u32, Vec<f32>), String> {
     }
     let tag = u16::from_le_bytes([fmt[0], fmt[1]]);
     let ch = u16::from_le_bytes([fmt[2], fmt[3]]).max(1) as usize;
+    // Infallible: fmt.len() >= 16 (checked above).
     let rate = u32::from_le_bytes(fmt[4..8].try_into().unwrap());
     let bits = u16::from_le_bytes([fmt[14], fmt[15]]) as usize;
     // WAVE_FORMAT_EXTENSIBLE: the first two bytes of the subformat GUID are the real format tag
@@ -345,6 +351,7 @@ pub fn parse_wav(b: &[u8]) -> Result<(u32, Vec<f32>), String> {
         .map(|f| {
             let s = &f[..bps];
             match (tag, bps) {
+                // Infallible: these arms have bps == 4, so s is 4 bytes.
                 (3, 4) => f32::from_le_bytes(s.try_into().unwrap()),
                 (_, 1) => (s[0] as f32 - 128.0) / 128.0,
                 (_, 2) => i16::from_le_bytes([s[0], s[1]]) as f32 / 32768.0,

@@ -96,6 +96,7 @@ impl Authenticator {
     }
 
     pub fn tk(&self) -> [u8; 16] {
+        // Infallible: ptk is [u8; 48], so 32..48 is exactly 16 bytes.
         self.ptk[32..48].try_into().unwrap()
     }
 
@@ -193,7 +194,12 @@ impl Authenticator {
         }
         let len = (u16::from_be_bytes([f[2], f[3]]) as usize + 4).min(f.len());
         let f = &f[..len];
+        // A declared body length shorter than a Key descriptor would truncate f below the fixed fields
+        if f.len() < OFF_DATA {
+            return ("EAPOL-Key (truncated, ignored)".into(), None);
+        }
         let info = u16::from_be_bytes([f[OFF_KEYINFO], f[OFF_KEYINFO + 1]]);
+        // Infallible: f is at least OFF_DATA bytes (checked after truncation above).
         let replay = u64::from_be_bytes(f[OFF_REPLAY..OFF_REPLAY + 8].try_into().unwrap());
         if info & KI_MIC == 0 || replay != self.replay {
             return (
@@ -203,6 +209,7 @@ impl Authenticator {
         }
         match self.state {
             Hs::Msg1 if info & KI_SECURE == 0 => {
+                // Infallible: OFF_NONCE + 32 < OFF_DATA <= f.len().
                 let snonce: [u8; 32] = f[OFF_NONCE..OFF_NONCE + 32].try_into().unwrap();
                 let ptk = crypto::wpa_ptk(&self.pmk, &self.aa, &self.spa, &self.anonce, &snonce);
                 if !self.mic_ok(f, &ptk[..16]) {
@@ -318,6 +325,7 @@ impl Supplicant {
     }
 
     pub fn tk(&self) -> [u8; 16] {
+        // Infallible: ptk is [u8; 48], so 32..48 is exactly 16 bytes.
         self.ptk[32..48].try_into().unwrap()
     }
 
@@ -356,6 +364,7 @@ impl Supplicant {
                 && i + 2 + l <= kd.len()
                 && kd[i + 2..i + 6] == [0, 0x0f, 0xac, 1]
             {
+                // Infallible: l >= 22 and i + 2 + l <= kd.len() keep i + 24 in range.
                 let key: [u8; 16] = kd[i + 8..i + 24].try_into().unwrap();
                 self.gtk = Some((key, kd[i + 6] & 3));
                 return true;
@@ -375,6 +384,10 @@ impl Supplicant {
         }
         let len = (u16::from_be_bytes([f[2], f[3]]) as usize + 4).min(f.len());
         let f = &f[..len];
+        // A declared body length shorter than a Key descriptor would truncate f below the fixed fields
+        if f.len() < OFF_DATA {
+            return ("EAPOL-Key (truncated, ignored)".into(), None);
+        }
         let info = u16::from_be_bytes([f[OFF_KEYINFO], f[OFF_KEYINFO + 1]]);
         if info & 7 != KI_VER2 {
             return (
@@ -388,6 +401,7 @@ impl Supplicant {
         let pairwise = info & KI_PAIRWISE != 0;
         if pairwise && info & KI_ACK != 0 && info & KI_MIC == 0 {
             // Message 1: take ANonce, make SNonce, derive PTK, send message 2 (with the association RSN IE)
+            // Infallible: OFF_NONCE + 32 < OFF_DATA <= f.len().
             let anonce: [u8; 32] = f[OFF_NONCE..OFF_NONCE + 32].try_into().unwrap();
             self.nonce_ctr += 1;
             let mut seed = self.spa.to_vec();
