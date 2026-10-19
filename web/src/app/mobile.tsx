@@ -103,7 +103,8 @@ function MobileSteps({ step }: { step: StepId }) {
       id="steps"
       role="tablist"
       aria-label={TWO_STEPS ? t('Two steps') : t('Four steps')}
-      className={cn("steps grid h-[50px] flex-none gap-1 px-2.5 pb-1.5", TWO_STEPS ? "grid-cols-2" : "grid-cols-4")}
+      // Widths follow the labels: equal columns truncated "Assemble" in English while "Shop" had room to spare
+      className="steps flex h-[50px] flex-none gap-1 px-2.5 pb-1.5"
     >
       {STEPS.filter((s) => shownSteps().includes(s.id)).map((s, i) => {
         const on = s.id === step;
@@ -119,7 +120,7 @@ function MobileSteps({ step }: { step: StepId }) {
             title={lock ?? (done[s.id] ? t('{step} · done', { step: s.label }) : s.label)}
             onClick={() => (location.hash = s.id)}
             className={cn(
-              "inline-flex min-w-0 cursor-pointer items-center justify-center gap-1 rounded-lg border-0 bg-transparent px-1 text-[12.5px] whitespace-nowrap text-muted",
+              "inline-flex min-w-0 flex-auto cursor-pointer items-center justify-center gap-1 rounded-lg border-0 bg-transparent px-1 text-[12.5px] whitespace-nowrap text-muted",
               on && "bg-accent-bg font-bold text-accent-ink",
               done[s.id] && !on && "text-ok-ink",
             )}

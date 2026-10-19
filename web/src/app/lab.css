@@ -31,6 +31,11 @@
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   color-scheme: light;
 }
+/* Korean wraps between words, not inside them (the browser default splits Hangul syllables mid-word) */
+:root:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
 /* Dark (DESIGN §2: same tokens inverted). data-theme is set by the inline <head> script before first paint */
 :root[data-theme='dark'] {
   --panel: rgba(30, 32, 36, 0.95);

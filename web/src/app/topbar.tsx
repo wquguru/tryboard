@@ -56,7 +56,7 @@ export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
           aria-expanded={open}
           title={t('Switch work')}
           onClick={() => setOpen(!open)}
-          className={cn('inline-flex min-h-8 max-w-[300px] cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1 text-fg hover:bg-field', phone && 'min-h-11 max-w-full px-2 text-[15px]')}
+          className={cn('inline-flex min-h-8 max-w-[300px] cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1 text-fg hover:bg-field', phone ? 'min-h-11 max-w-full px-2 text-[15px]' : 'max-[1500px]:max-w-[150px]')}
         >
           <span id="workName" className="work truncate font-bold">
             {name}
@@ -135,7 +135,7 @@ function StepBar({ step }: { step: StepId }) {
   const { locks, done, checkpoints } = useStore(bc);
   const ok = checkpoints.filter((c) => c.state === 'ok' || c.state === 'ref').length;
   return (
-    <nav id="steps" role="tablist" aria-label={TWO_STEPS ? t('Two steps') : t('Four steps')} className="steps flex min-w-0 items-center justify-center">
+    <nav id="steps" role="tablist" aria-label={TWO_STEPS ? t('Two steps') : t('Four steps')} className="steps flex flex-none items-center">
       {STEPS.filter((s) => shownSteps().includes(s.id)).map((s, i) => {
         const on = s.id === step;
         const lock = locks[s.id];
@@ -161,7 +161,7 @@ function StepBar({ step }: { step: StepId }) {
               ) : (
                 <span className={cn('inline-flex size-[18px] items-center justify-center rounded-full font-mono text-[11px]', on ? 'bg-accent-strong text-on-accent' : 'border border-line')}>{i + 1}</span>
               )}
-              {s.label}
+              <span className={cn(!on && '@max-[500px]:sr-only')}>{s.label}</span>
               {lock && <Icon n="lock" size={13} className="text-muted" />}
               {on && s.id === 'bench' && checkpoints.length > 0 && <span className="font-mono text-[11px] font-normal">{`${ok}/${checkpoints.length}`}</span>}
             </button>
@@ -365,7 +365,8 @@ export function TopBar(p: { step: StepId; workName: string; bare?: boolean; righ
           <Icon n="redo" />
         </button>
       </div>
-      <div className="flex min-w-0 flex-1 justify-center">
+      {/* Container query: longer locales squeeze the step bar, so idle step labels drop before anything overlaps */}
+      <div className="@container flex min-w-0 flex-1 justify-center-safe overflow-hidden">
         <StepBar step={p.step} />
       </div>
       <CmdkBox />
@@ -373,7 +374,8 @@ export function TopBar(p: { step: StepId; workName: string; bare?: boolean; righ
       <FwMenu />
       {p.right}
       <MoreMenu toast={p.toast} />
-      <LangSelect />
+      {/* Below 1500px the picker shrinks to its globe icon; the native list still names every language */}
+      <LangSelect className="max-[1500px]:[&_select]:w-8 max-[1500px]:[&_select]:pr-0 max-[1500px]:[&_select]:text-transparent [&_option]:text-fg" />
       <ThemeBtn />
     </header>
   );

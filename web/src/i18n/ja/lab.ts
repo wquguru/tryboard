@@ -493,7 +493,7 @@ const d: Dict = {
   "Parked on a queue / semaphore wait list when switched out": "切り替え時にキュー / セマフォの待機リストに入っていました",
   "Part": "部品",
   "Parts": "部品",
-  "Parts library": "部品ライブラリ",
+  "Parts library": "部品棚",
   "Parts pages": "部品ページ",
   "Pass condition: {pass}": "合格条件：{pass}",
   "Passive buzzer": "パッシブブザー",

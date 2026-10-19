@@ -193,11 +193,13 @@ export function FwMenu({ phone }: { phone?: boolean }) {
           data-fw-open=""
           aria-haspopup="menu"
           aria-expanded={fwMenu}
+          aria-label={t('Change firmware')}
           title={t('Run another program on the bench: an example, the reference firmware or your own .bin')}
           onClick={() => open(!fwMenu)}
           className="inline-flex h-8 flex-none cursor-pointer items-center gap-1 rounded-lg border border-line bg-surface px-2.5 text-[13px] whitespace-nowrap text-fg hover:bg-field max-[1100px]:hidden"
         >
-          {t('Change firmware')}
+          <span className="max-[1500px]:hidden">{t('Change firmware')}</span>
+          <span className="min-[1501px]:hidden">{t('Firmware')}</span>
           <Icon n="down" size={14} className="text-muted" />
         </button>
       )}

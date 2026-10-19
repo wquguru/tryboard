@@ -24,7 +24,7 @@ export const setLeft = (p: Partial<LeftData>) => commit(() => left.set(p));
 
 type Tab = "tree" | "lib" | "wires";
 const tabCls =
-  "h-8 flex-1 cursor-pointer rounded-md border-0 bg-transparent px-1 text-xs text-muted hover:text-fg aria-selected:bg-(--seg-on) aria-selected:font-medium aria-selected:text-fg aria-selected:shadow-[0_1px_2px_#0000001a]";
+  "h-8 min-w-0 flex-1 cursor-pointer truncate whitespace-nowrap rounded-md border-0 bg-transparent px-1 text-xs text-muted hover:text-fg aria-selected:bg-(--seg-on) aria-selected:font-medium aria-selected:text-fg aria-selected:shadow-[0_1px_2px_#0000001a]";
 
 export function LeftColumn({ step, tree }: { step: string; tree: ReactNode }) {
   const d = useStore(left);
