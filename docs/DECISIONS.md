@@ -878,3 +878,12 @@
 - **eFuse MAC**：出厂 MAC 用本地管理地址 02:54:42:00:00:04（不冒用乐鑫 OUI，末字节与 C3 / S3 模拟板区分）并按 esp_efuse_table 算好 CRC8，IDF 校验能过；芯片版本 v3.0 由 eFuse REV1 / REV2 位加 APB_CTRL_DATE 位 31 组成。
 - **串口「跟随最新」误关**（走查发现）：串口刷屏时 scroll 事件异步到达，此时新行已把高度撑高，旧逻辑判成「用户往上翻」关掉跟随；ESP32 启动日志的节奏正好触发。改为记下自动滚到的位置，滚动位置不低于它就不算用户翻页（`dock.tsx`）。
 - **板子没有 RGB 灯**：`RGB_GPIO.esp32 = null`、board3d `rgbPin: -1`、worker `LED_PIN = -1`；blink 示例在 GPIO2 外接 LED（同一份 blink 源码，`LED_GPIO=2`）。
+
+## 2026-10-19 国际化（U-07，人已拍板）
+- **人定的范围**：网页支持英 / 中 / 日 / 韩，跟随浏览器语言、回退英文，可手动切换并记住；代码注释、CLI 输出一律英文，连续注释 ≤ 2 行（特殊情况除外：许可证头、寄存器 / 报文布局表、ASCII 图）；README 英文为主，另有 zh-CN / ja / ko 副本；AGENTS.md 改英文；`docs/` 暂留中文；**固件 printf 串口输出保留中文**（验收期望文本跟着不动）。
+- **机制**：不引第三方 i18n 库，自写 `web/src/i18n`（约 80 行）。gettext 风格——英文原文就是键，`t('At least {n}', { n })`；zh / ja / ko 词典按区域分文件（site / lab / views / data / checks），各区域由对应代码的负责人维护，避免并行修改冲突。缺词回退英文。替代：i18next（要新依赖、要登记授权）；按语义键（`home.hero.title`）——要给每句起名，并行翻译时更易撞名。
+- **加载**：词典用顶层 await 按语言懒加载（英文不加载词典），所以模块顶层的 `t()` 常量也拿到正确语言；切换语言即存 localStorage + 重载页面，不做运行时热切换（字符串在模块加载时就定了，热切换要把所有常量改成函数，收益不大）。`?lang=` 只管这一次打开，测试用它固定语言。
+- **Node / Worker 一律英文**：CLI 包与网页共用 `checks.ts`，结论行 `CheckResult.text` 要和命令行逐字一致，所以原始数据层只出英文；人话层（`say.ts` 等主线程代码）才翻译。
+- **数据文件**（levels / examples / accept / 零件目录）：展示字段改成英文原文，其他语言进 `i18n/<语言>/data.ts`；要和固件串口输出比对的字段保持原样。
+- **字体**：自托管的 Noto Sans SC 子集覆盖中文与常用假名；韩文与子集外的日文字退回系统字体（字体栈加 Hiragino Sans / Yu Gothic / Apple SD Gothic Neo / Malgun Gothic），不新增字体文件。
+- **提交信息**：从这一批起改用英文。
