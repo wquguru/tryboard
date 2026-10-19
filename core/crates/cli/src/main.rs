@@ -3,7 +3,7 @@
 use std::io::Write;
 use std::time::Instant;
 use tryboard_machine::{
-    parse_imu, parse_touch, Chip, Hw, Machine, PowerMode, SensorEnv, Stop, BROWNOUT_RESET, CPU_HZ,
+    parse_imu, parse_touch, Chip, Machine, PowerMode, SensorEnv, Stop, BROWNOUT_RESET, CPU_HZ,
 };
 use tryboard_rv32::{elf::Elf, Bus, BusFault, Cpu, Exit};
 
@@ -410,9 +410,7 @@ fn run(args: &[String]) {
         Some((a, b)) => Some((hex(a)?, hex(b)?)),
         None => hex(&s).map(|a| (a, a + 4)),
     });
-    if let Hw::C3(c) = &mut m.hw {
-        c.bus.watch = watch;
-    }
+    m.set_watch(watch);
     // Fine logic analyzer (D-04): --vcd <file> --vcd-pins 5[,..] --vcd-window <start s>..<end s> (default the whole run)
     let vcd = opt(args, "--vcd");
     if vcd.is_some() {
@@ -765,12 +763,13 @@ fn run(args: &[String]) {
     for (a, n) in un.iter().take(top) {
         eprintln!("    0x{:08x}  {:>8} times", a, n);
     }
-    if let Hw::C3(c) = &mut m.hw {
-        if !c.bus.watch_hits.is_empty() {
+    {
+        let hits = m.watch_hits();
+        if !hits.is_empty() {
             // The ordered log goes to a file; the terminal only gets a summary by (address, R/W, PC)
             if let Some(path) = opt(args, "--watch-log") {
                 let mut f = String::new();
-                for (pc, a, v, w) in &c.bus.watch_hits {
+                for (pc, a, v, w) in hits {
                     f.push_str(&format!(
                         "{} 0x{a:08x} 0x{v:08x} {}\n",
                         if *w { "W" } else { "R" },
@@ -781,15 +780,12 @@ fn run(args: &[String]) {
             }
             let mut by: std::collections::BTreeMap<(u32, bool, u32), (u32, u32)> =
                 Default::default();
-            for (pc, a, v, w) in &c.bus.watch_hits {
+            for (pc, a, v, w) in hits {
                 let e = by.entry((*a, *w, *pc)).or_insert((0, *v));
                 e.0 += 1;
                 e.1 = *v;
             }
-            eprintln!(
-                "[tryboard] watched range accesses: {}",
-                c.bus.watch_hits.len()
-            );
+            eprintln!("[tryboard] watched range accesses: {}", hits.len());
             for ((a, w, pc), (n, v)) in by {
                 eprintln!(
                     "    0x{a:08x} {} {:>6} times last 0x{v:08x}  {}",
@@ -803,28 +799,17 @@ fn run(args: &[String]) {
             // --dump addr:len (hex address, decimal length)
             if let Some((a, n)) = spec.split_once(':') {
                 if let (Some(a), Ok(n)) = (hex(a), n.parse::<u32>()) {
-                    for row in (0..n).step_by(16) {
-                        let bytes: Vec<String> = (row..(row + 16).min(n))
-                            .map(|i| format!("{:02x}", c.bus.load(a + i, 1).unwrap_or(0)))
-                            .collect();
-                        eprintln!("    {:08x}: {}", a + row, bytes.join(" "));
+                    let data = m.dump(a, n).unwrap_or_default();
+                    for (row, chunk) in data.chunks(16).enumerate() {
+                        let bytes: Vec<String> = chunk.iter().map(|b| format!("{b:02x}")).collect();
+                        eprintln!("    {:08x}: {}", a + row as u32 * 16, bytes.join(" "));
                     }
                 }
             }
         }
         if args.iter().any(|a| a == "--dump-intc") {
-            let ic = &c.bus.intc;
-            eprintln!(
-                "[tryboard] interrupt lines enable=0x{:08x} edge=0x{:08x} threshold={} current line={}",
-                ic.enable, ic.edge, ic.thresh, c.cpu.irq_line
-            );
-            for (src, line) in ic.map.iter().enumerate() {
-                if *line != 0 {
-                    eprintln!(
-                        "    source {src:>2} -> line {line:>2} (priority {})",
-                        ic.pri[*line as usize]
-                    );
-                }
+            if let Some(r) = m.intc_report() {
+                eprintln!("{r}");
             }
         }
     }
@@ -1155,7 +1140,7 @@ fn harness_wifi_line(m: &Machine) -> Option<String> {
 }
 
 /// What the virtual host saw: enumeration log, device info, keyboard input, mouse, USB serial
-fn print_usb(u: &tryboard_esp32s3::usb::Usb) {
+fn print_usb(u: &tryboard_soc::usb::Usb) {
     let h = &u.host;
     for l in &h.log {
         eprintln!("[usb] {l}");

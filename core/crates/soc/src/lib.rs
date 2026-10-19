@@ -4,6 +4,7 @@
 pub mod adc;
 pub mod ble;
 pub mod boot;
+pub mod chip;
 pub mod crypto_hw;
 pub mod devices;
 pub mod gdma;
@@ -18,6 +19,7 @@ pub mod rmt;
 pub mod sigin;
 pub mod spiflash;
 pub mod tasktrace;
+pub mod usb;
 pub mod vcd;
 pub mod wifi;
 

@@ -13,6 +13,8 @@ pub mod src {
     pub const UART0: u32 = 27;
     pub const UART1: u32 = 28;
     pub const LEDC: u32 = 35;
+    /// ETS_USB_INTR_SOURCE (soc/esp32s3/include/soc/interrupts.h)
+    pub const USB: u32 = 38;
     pub const RMT: u32 = 40;
     pub const PCNT: u32 = 41;
     pub const I2C_EXT0: u32 = 42;

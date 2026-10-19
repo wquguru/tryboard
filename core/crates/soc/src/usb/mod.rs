@@ -1,12 +1,10 @@
-//! Native USB OTG: DWC2 device controller plus a virtual host plugged into the other end.
+//! Native USB OTG (S3 for now): DWC2 device controller plus a virtual host plugged into the other end.
+//! The interrupt source number is chip-specific and stays in the chip crate (S3: `periph::src::USB`).
 
 pub mod dwc2;
 pub mod host;
 
-use crate::CPU_HZ;
-
-/// Interrupt source number (soc/esp32s3/include/soc/interrupts.h: ETS_USB_INTR_SOURCE)
-pub const SRC_USB: u32 = 38;
+use crate::periph::CPU_HZ;
 
 #[derive(Default)]
 pub struct Usb {

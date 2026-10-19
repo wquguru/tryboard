@@ -132,14 +132,6 @@ fn u32at(b: &[u8], o: usize) -> u32 {
     u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]])
 }
 
-/// Chip ID from the image header (offset 12). If flash doesn't start with 0xE9, find the app in the partition table first.
-pub fn image_chip_id(flash: &[u8]) -> Option<u16> {
-    let off = find_app(flash).ok()? as usize;
-    flash
-        .get(off + 13)
-        .map(|_| u16::from_le_bytes([flash[off + 12], flash[off + 13]]))
-}
-
 pub fn parse_app(flash: &[u8], off: u32) -> Result<AppInfo, String> {
     let o = off as usize;
     if flash.get(o) != Some(&0xE9) {

@@ -1365,5 +1365,28 @@ fn max_quad(insn: u32, narrow: bool, ps: u32) -> u32 {
     }
 }
 
+/// Halt state of a dual-core Xtensa chip (debug output shared by S3 and ESP32); sym maps addresses to symbols
+pub fn halt_state(c0: &Cpu, c1: Option<&Cpu>, sym: &dyn Fn(u32) -> String) -> String {
+    let core = |c: &Cpu, k: usize| {
+        format!(
+            "core{k} pc {}  PS=0x{:08x} WB={} WS=0x{:04x} INTENABLE=0x{:08x} INTERRUPT=0x{:08x} EXCCAUSE={} EPC1={}",
+            sym(c.pc),
+            c.ps(),
+            c.windowbase,
+            c.windowstart,
+            c.read_sr(sr::INTENABLE),
+            c.read_sr(sr::INTERRUPT),
+            c.read_sr(sr::EXCCAUSE),
+            sym(c.read_sr(sr::EPC1)),
+        )
+    };
+    let mut s = core(c0, 0);
+    if let Some(c1) = c1 {
+        s += "\n[tryboard] ";
+        s += &core(c1, 1);
+    }
+    s
+}
+
 #[cfg(test)]
 mod tests;
