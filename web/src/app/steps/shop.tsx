@@ -577,15 +577,16 @@ export function shopStep(): StepImpl {
         {probs.length ? (
           <>
             <VerdictLine kind={nb ? 'bad' : 'warn'}>
-              {probs.length} 条提醒{nb ? `，其中 ${nb} 条会让作品跑不起来` : ''}
+              {nb ? `有 ${nb} 处要改，不改作品跑不起来` : `有 ${probs.length} 处可以更好`}
+              {nb && probs.length > nb ? `，另有 ${probs.length - nb} 处建议` : ''}
             </VerdictLine>
             {probs.map(finding)}
           </>
         ) : (
-          <VerdictLine kind="ok">✓ 清单没问题</VerdictLine>
+          <VerdictLine kind="ok">✓ 清单齐了，可以照着买</VerdictLine>
         )}
         <details className="oks" open={openGroups.ok} onToggle={(e) => (openGroups.ok = e.currentTarget.open)}>
-          <summary>{oks.length} 条规则通过</summary>
+          <summary>共检查 {oks.length + probs.length} 项{probs.length ? `，${oks.length} 项没问题` : '，都没问题'}</summary>
           {oks.map((f, i) => (
             <Res key={i} kind="ok">
               {f.title} <Muted className="font-mono">{f.id}</Muted>
@@ -657,7 +658,7 @@ export function shopStep(): StepImpl {
       </>,
     );
     // 结论：n 条提醒 / 清单没问题
-    c.shell.setVerdict(probs.length ? `${probs.length} 条提醒` : '清单没问题', nb ? 'bad' : probs.length ? 'warn' : 'ok');
+    c.shell.setVerdict(nb ? `${nb} 处要改` : probs.length ? `${probs.length} 处建议` : '清单齐了', nb ? 'bad' : probs.length ? 'warn' : 'ok');
   }
 
   // ------------------------------------------------------------ 参数化外壳（P1-08）：尺寸、可调参数、警告、导出

@@ -51,7 +51,8 @@ export interface CheckOutcome {
   who: string;
   /** 是否用户自己的固件（只有自己的固件通过才算进度） */
   own: boolean;
-  rows: { ok: boolean | null; text: string }[];
+  /** text 与命令行逐字一致；say / tag 是人话层（DESIGN_V2 §9） */
+  rows: { ok: boolean | null; text: string; say?: string; tag?: string }[];
   fingerprint: string;
   sim: number;
 }

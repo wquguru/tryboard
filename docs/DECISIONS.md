@@ -801,3 +801,11 @@
 - **测试钩子**：`globalThis.__tbSelect = { state, have, brief, go, share }`，只给 `tools/webtest/selectv3.mjs` 读，不是公开接口。
 - 删掉 `CONF_VARIANT`，可信度全部用 `ui/conf.tsx` 的 ConfIcon / ConfBar（U-14 的选板部分）。
 - 替代方案：把预算放进引擎打分——否掉，「¥60 以内」是用户说的硬线，超了就该不出现，不该只是排后面。
+
+### U-20（结果文案）
+2026-10-19，按 DESIGN_V2 §9 重写结果文案。
+- **两层**：`CheckResult.text` 不动（与 tools/check.py 逐字一致，levels / custom 测试拿它和命令行对拍），新增 `say`（人话一行）和 `tag`（器件 / 引脚小字）。界面第一层显示 `say`，`text` 收进「原始数据」折叠，测试仍能在 DOM 里读到。
+- **器件名**从关卡推断：PWM 50 Hz → 舵机，带 `beeps` 或 100 Hz–20 kHz → 蜂鸣器，`gpio_toggles` → LED，`i2c_ack` 按地址查常见芯片（0x76/0x77 BME280、0x3c/0x3d SSD1306、0x68 MPU6050），查不到写「I2C 器件」。
+- **命令行不改**：check.py / npm 包仍输出「通过 / 未通过」和「指纹」——开发者读、脚本解析，改了要连带改 accept 解析；只改界面。
+- **状态判定加 `data-verdict`**（ok / bad / stall）：测试按属性判，不再靠「✓ 通过」文字（「没通过」里含「通过」，正则要排除）。
+- 替代：在界面层解析 `text` 生成人话——否掉，正则反解析脆，evaluate 手里本来就有数。

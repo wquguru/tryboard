@@ -13,7 +13,7 @@ import type { TimelineStep } from '../timeline';
 import type { Assembly3D } from '../asm3d';
 import { caseFor, layoutFor, layoutKey } from '../casemesh';
 import type { CaseLayout } from '../enclosure';
-import { OBSTACLE_LABEL, antennaLossDb, i2cLoad, i2cText, loadCaseHarness, saveCaseHarness, wifiText, type CaseHarness, type Obstacle } from '../harness';
+import { OBSTACLE_LABEL, antennaLossDb, i2cLoad, i2cSay, i2cText, loadCaseHarness, saveCaseHarness, wifiSay, wifiText, type CaseHarness, type Obstacle } from '../harness';
 import { noteSaved } from '../saved';
 
 type SvgAsm = ReturnType<typeof createAssembly>;
@@ -34,11 +34,13 @@ function want3d() {
 import { type ReactNode } from 'react';
 import { cn } from '../../ui/cn';
 import { Host, Txt } from '../../ui/native';
-import { Btn, Btns, Kv, KvBox, KvT, LinkBtn, LockCard, Mono, Muted, Note, Ph, PhT, Res, Sec, Seg, SegB, Slider, TnL, TnM, TnSt, TreeEmpty, TreeGroup, VerdictLine, btnClass, tnClass } from '../../ui/panel';
+import { Btn, Btns, Kv, KvBox, KvT, LinkBtn, LockCard, Mono, Note, Ph, PhT, Res, Sec, Seg, SegB, Slider, TnL, TnM, TnSt, TreeEmpty, TreeGroup, btnClass, tnClass } from '../../ui/panel';
 import { lab } from '../../ui/links';
 import { Conf } from '../../ui/conf';
+import { ResultCard, Said } from '../../ui/result';
+import { headline, type Verdict } from '../../ui/say';
 
-type Entry = { kind: 'place'; id: string; spot?: string } | { kind: 'test'; ok: boolean; rows: { ok: boolean; text: string }[]; fingerprint: string; who: string; temp: number };
+type Entry = { kind: 'place'; id: string; spot?: string } | { kind: 'test'; ok: boolean; rows: { ok: boolean; text: string; say?: string; tag?: string }[]; fingerprint: string; who: string; temp: number; offset: number };
 
 const KEY = (work: string) => `tryboard-app-asm:${work}`;
 /** 本机存的装配时间线（装了哪些、怎么装、复测结果；不存逐条结果以外的东西） */
@@ -209,15 +211,17 @@ export function assembleStep(): StepImpl {
                 const v = e.currentTarget.value;
                 el.querySelector('#hzWireV')!.textContent = `${v} cm`;
                 const l = harnessEffects(c.work.id, { ...hz, i2cCm: Number(v) }).i2c!;
-                const r = el.querySelector('#hzWireRes span:last-child');
-                if (r) r.textContent = i2cText(l);
+                const say = el.querySelector('#hzWireRes [data-say]');
+                const raw = el.querySelector('#hzWireRes [data-raw]');
+                if (say) say.textContent = i2cSay(l);
+                if (raw) raw.textContent = i2cText(l);
               },
               change: (e) => commit({ i2cCm: Number(e.currentTarget.value) }),
             }}
           />
         </KvBox>
         <Res id="hzWireRes" kind={lv(hx.i2c.verdict)[0]} mk={lv(hx.i2c.verdict)[1]}>
-          {i2cText(hx.i2c)}
+          <Said say={i2cSay(hx.i2c)} raw={i2cText(hx.i2c)} />
         </Res>
       </>
     ) : null;
@@ -256,7 +260,7 @@ export function assembleStep(): StepImpl {
           </KvBox>
         )}
         <Res id="hzAntRes" kind={lv(hx.wifi.level)[0]} mk={lv(hx.wifi.level)[1]}>
-          天线遮挡 {hx.antennaDb} dB，{hx.wifi.text}
+          <Said say={wifiSay(hx.antennaDb)} raw={`天线遮挡 ${hx.antennaDb} dB，${hx.wifi.text}`} />
         </Res>
         <Note>按固定公式估算：总线电容 = 线长 × 1 pF/cm + 每个器件 10 pF + 10 pF，上升时间 = 0.8473 × 上拉 × 电容；天线：金属件贴着衰减 45 dB、电池 30 dB，20 mm 外不算。模拟器也用这个公式，读数会真的出错，Wi-Fi 会真的连不上。</Note>
         {sim && <Txt as="p" className="note my-2 font-mono text-xs text-muted" data-k="hzSim" text={sim.replace(/\[tryboard\] /g, '模拟器：')} />}
@@ -564,6 +568,27 @@ export function assembleStep(): StepImpl {
     ) : null;
   }
 
+  /** 复测没过：固件在实验台上过了，就是装壳带来的变化（DESIGN_V2 §9.2「装壳后变了」） */
+  function retestVerdict(t: Extract<Entry, { kind: 'test' }>): Verdict {
+    if (t.ok) return 'ok';
+    const lv = assemblyLevel(ctx!);
+    return lv && ctx!.store.get().checks[lv.id]?.ok ? 'shifted' : 'bad';
+  }
+  function retestTitle(t: Extract<Entry, { kind: 'test' }>) {
+    if (t.ok) return '装好后照样能用';
+    if (T!.id === 'weather' && t.offset > 0.05) return `装进外壳后，温度偏高 ${t.offset.toFixed(1)} ℃`;
+    if (retestVerdict(t) !== 'shifted') return headline(t.rows);
+    const n = t.rows.filter((r) => r.ok === false).length;
+    return n > 1 ? `装进外壳后，有 ${n} 项变了` : `装进外壳后，${headline(t.rows)}`;
+  }
+  function retestWhy(t: Extract<Entry, { kind: 'test' }>, fallback: string) {
+    if (T!.id === 'weather') {
+      const room = `传感器读到 ${t.temp.toFixed(1)} ℃，室温 ${(t.temp - t.offset).toFixed(1)} ℃。`;
+      return t.offset > 0.05 ? `传感器离芯片太近，被芯片的热烤到了。${room}挪到通风口旁再测一次。` : room;
+    }
+    return t.ok ? undefined : fallback;
+  }
+
   function renderRetest(head: ReactNode) {
     const c = ctx!;
     const lv = assemblyLevel(c);
@@ -600,21 +625,7 @@ export function assembleStep(): StepImpl {
         {t && (
           <>
             <Sec>复测结果</Sec>
-            <VerdictLine kind={t.ok ? 'ok' : 'bad'}>
-              {t.ok ? '✓ 通过' : '✗ 未通过'}
-              {T!.id === 'weather' && (
-                <>
-                  {' '}
-                  <Muted className="font-normal">· 传感器读到 {t.temp.toFixed(1)} ℃</Muted>
-                </>
-              )}
-            </VerdictLine>
-            {t.rows.map((x, i) => (
-              <Res key={i} kind={x.ok ? 'ok' : 'bad'}>
-                {x.text}
-              </Res>
-            ))}
-            <Kv k="运行指纹" v={t.fingerprint} cls="fp" />
+            <ResultCard verdict={retestVerdict(t)} meta={t.who} title={retestTitle(t)} why={retestWhy(t, why)} rows={t.rows} runId={t.fingerprint} />
           </>
         )}
       </>,
@@ -662,20 +673,20 @@ export function assembleStep(): StepImpl {
         { i2cWire: hx.i2c ? hz.i2cCm : undefined, antenna: hx.antennaDb || undefined },
       );
       const clean = asm.clean() && hx.ok;
-      const rows = v.results.map((x) => ({ ok: x.ok, text: x.text }));
-      if (hx.i2c) rows.push({ ok: hx.i2c.verdict === 'ok', text: `I2C 排线 ${hz.i2cCm} cm：${i2cText(hx.i2c)}（估算，必须上真机）` });
-      if (hx.antennaDb) rows.push({ ok: hx.wifi.level !== 'fail', text: `天线遮挡 ${hx.antennaDb} dB：${hx.wifi.text}（估算，必须上真机）` });
-      rows.push({ ok: clean, text: clean ? `装配 ${s.total}/${s.total}，没有警告` : `装配 ${s.total}/${s.total}，有警告` });
-      entry = { kind: 'test', ok: v.ok && clean, rows, fingerprint: v.fingerprint, who: fw.name, temp: env.temp };
+      const rows: Extract<Entry, { kind: 'test' }>['rows'] = v.results.map((x) => ({ ok: x.ok, text: x.text, say: x.say, tag: x.tag }));
+      if (hx.i2c) rows.push({ ok: hx.i2c.verdict === 'ok', text: `I2C 排线 ${hz.i2cCm} cm：${i2cText(hx.i2c)}（估算，必须上真机）`, say: i2cSay(hx.i2c), tag: '估算' });
+      if (hx.antennaDb) rows.push({ ok: hx.wifi.level !== 'fail', text: `天线遮挡 ${hx.antennaDb} dB：${hx.wifi.text}（估算，必须上真机）`, say: wifiSay(hx.antennaDb), tag: '估算' });
+      rows.push({ ok: clean, text: clean ? `装配 ${s.total}/${s.total}，没有警告` : `装配 ${s.total}/${s.total}，有警告`, say: clean ? `${s.total} 件都装在合适的位置` : '有零件装得不合适，看左边带「!」的那件' });
+      entry = { kind: 'test', ok: v.ok && clean, rows, fingerprint: v.fingerprint, who: fw.name, temp: env.temp, offset };
     } catch (e) {
       // 没跑完（Worker 出错 / 卡住）不记成"复测没过"：按钮恢复，直接再点一次
       if (e instanceof VerifyStalled) {
         testing = null;
-        ctx?.shell.toast(`开机复测没跑完：${e.message}，可以再点一次`);
+        ctx?.shell.toast('开机复测这次没跑完，不算没通过，再点一次就行');
         if (ctx) renderAll();
         return;
       }
-      entry = { kind: 'test', ok: false, rows: [{ ok: false, text: `运行失败：${e}` }], fingerprint: '—', who: fw.name, temp: env.temp };
+      entry = { kind: 'test', ok: false, rows: [{ ok: false, text: `运行失败：${e}`, say: '模拟器出错，这次没跑起来' }], fingerprint: '—', who: fw.name, temp: env.temp, offset };
     }
     testing = null;
     if (cur !== at) {
@@ -686,7 +697,7 @@ export function assembleStep(): StepImpl {
     push(entry);
     publish();
     if (ctx) {
-      ctx.shell.toast(entry.ok ? '开机复测通过' : '开机复测没过：看右边哪一项');
+      ctx.shell.toast(entry.ok ? '开机复测通过' : '开机复测没通过，右边写了原因');
       renderAll();
     }
   }
@@ -748,7 +759,7 @@ export function assembleStep(): StepImpl {
     const s = asm!.state();
     const t = lastTest();
     const done = s.placed.length === s.total;
-    c.shell.setVerdict(testing ? '复测中…' : t ? (t.ok ? '复测 ✓' : '复测 ✗') : `装配 ${s.placed.length}/${s.total}`, t ? (t.ok ? 'ok' : 'bad') : 'idle');
+    c.shell.setVerdict(testing ? '复测中…' : t ? (t.ok ? '复测通过' : '复测没通过') : `装配 ${s.placed.length}/${s.total}`, t ? (t.ok ? 'ok' : 'bad') : 'idle');
     c.shell.onVerdict(() => pick('retest'));
     if (done) c.shell.setNext('下一步：成品 →', 'product', '', undefined, 'hot');
     else c.shell.setNext(`成品 · 还差 ${s.total - s.placed.length} 层没装`, null, `装完才能开机（${s.placed.length}/${s.total}）`);

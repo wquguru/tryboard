@@ -121,8 +121,8 @@ function trioOf(plans: Plan[], need: Need) {
 export const yuan = (p: [number, number]) => (p[0] === p[1] ? `¥${fmtN(p[0])}` : `¥${fmtN(p[0])}–${fmtN(p[1])}`);
 const fmtN = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 export const lasts = (days: number) => (days >= 365 ? `约 ${(days / 365).toFixed(1)} 年` : `约 ${days.toFixed(0)} 天`);
-export const avgCurrent = (mA: number) => (mA < 1 ? (mA * 1000).toFixed(0) + 'µA' : mA.toFixed(2) + 'mA');
-export const sleepCurrent = (uA: number) => (uA >= 1000 ? `${(uA / 1000).toFixed(uA % 1000 ? 1 : 0)}mA` : `${uA}µA`);
+export const avgCurrent = (mA: number) => (mA < 1 ? (mA * 1000).toFixed(0) + ' µA' : mA.toFixed(2) + ' mA');
+export const sleepCurrent = (uA: number) => (uA >= 1000 ? `${(uA / 1000).toFixed(uA % 1000 ? 1 : 0)} mA` : `${uA} µA`);
 /** 引脚名：小板用丝印（D4），否则 GPIO 号 */
 export const pinName = (b: Board, p: number) => b.labels?.[p] ?? `GPIO${p}`;
 export const pinFull = (b: Board, p: number) => (b.labels?.[p] ? `${b.labels[p]} (GPIO${p})` : `GPIO${p}`);

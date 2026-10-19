@@ -147,7 +147,7 @@ export const SUMMARY_ROWS: [keyof RunSummary, string][] = [
   ['heat', '热源'],
   ['seconds', '模拟时长'],
   ['result', '最后一行'],
-  ['fingerprint', '指纹'],
+  ['fingerprint', '运行编号'],
 ];
 
 /** 两次运行的差异项（哪一项变了） */

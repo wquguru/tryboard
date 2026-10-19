@@ -119,12 +119,12 @@ await shot(page, 'done-B');
 
 async function retest() {
   await tool('asm-retest');
-  await waitFor(page, () => /复测 [✓✗]/.test(document.getElementById('verdict').textContent), null, 120000);
+  await waitFor(page, () => /复测(没)?通过/.test(document.getElementById('verdict').textContent), null, 120000);
   return page.$eval('#verdict', (e) => e.textContent);
 }
 let v = await retest();
 const rows = await page.$eval('#props', (e) => e.textContent);
-report('开机复测 ✗（传感器贴芯片，读数偏高）', /复测 ✗/.test(v) && /25\.0 ℃|26\.0 ℃|偏/.test(rows), `${v} · ${(rows.match(/传感器读到 [\d.]+ ℃/) ?? [''])[0]}`);
+report('开机复测 ✗（传感器贴芯片，读数偏高）', /复测没通过/.test(v) && /25\.0 ℃|26\.0 ℃|偏/.test(rows), `${v} · ${(rows.match(/传感器读到 [\d.]+ ℃/) ?? [''])[0]}`);
 await shot(page, 'retest-bad');
 
 // 退回到装好开发板那一步（退一步 ×5：复测、前面板、OLED、舵机、BME280），再把 BME280 拖到通风口旁
@@ -134,7 +134,7 @@ report('退一步 ×5 回到开发板装好', a?.placed.length === 2, JSON.strin
 a = await assemble('A', 2);
 report('拖到通风口旁装完', a?.placed.length === 6 && a.choice.bme === 'A' && a.effects.sensorOffset === 0 && a.clean, JSON.stringify(a && a.choice));
 v = await retest();
-report('开机复测 ✓', /复测 ✓/.test(v), v);
+report('开机复测 ✓', /复测通过/.test(v), v);
 await shot(page, 'retest-ok');
 
 // 工具：炸开、剖面、尺子

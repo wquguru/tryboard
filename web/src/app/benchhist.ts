@@ -235,7 +235,7 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
       if (!r) return;
       const s = steps[i];
       const what = label(s.op, runs).label;
-      shell.toast(`回到「${what}」· 运行 #${r.run} 的 ${(r.untilMs / 1000).toFixed(2)} s${r.same === null ? '' : r.same ? ' · ✓ 指纹一致' : ' · ✗ 指纹不同'}`);
+      shell.toast(`回到「${what}」· 运行 #${r.run} 的 ${(r.untilMs / 1000).toFixed(2)} s${r.same === null ? '' : r.same ? ' · 和当时一模一样' : ' · 和当时不一样'}`);
     });
   });
   store.subscribe(() => ownsTimeline() && render(), ['step']);

@@ -147,7 +147,7 @@ const ownsTimeline = () => store.get().step === 'bench';
     // 欠压复位（P1-02）进实验台时间线：一步，回到它 = 回到复位那一刻
     session.onBrownout((t) => {
       ctx.hist!.event({ k: 'brownout', tSec: t, v3v3: session.frame.elec?.min3v3 ?? null }, t * 1000);
-      shell.toast(`欠压复位：3V3 掉到门限以下（${t.toFixed(2)} s）`);
+      shell.toast(`电压不够，芯片重启了（${t.toFixed(2)} 秒）`);
     });
     // 结论按钮：实验台显示检查点进度；采购、组装、成品挂载时自己设
     const verdict = () => {
@@ -381,7 +381,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   // 问题页：欠压复位（模拟器报的）；接线规则检查的问题由实验台写进 issues 的 wire: 前缀项
   const brown: Issue[] = [];
   session.onBrownout((t) => {
-    brown.push({ id: `brown:${brown.length}`, level: 'block', title: '欠压复位', detail: `${t.toFixed(2)} s 时 3V3 掉到门限以下，芯片复位`, go: () => setDock({ tab: 'runs' }) });
+    brown.push({ id: `brown:${brown.length}`, level: 'block', title: '电压不够，芯片重启了', detail: `${t.toFixed(2)} 秒时 3V3 掉到门限以下（欠压复位）`, go: () => setDock({ tab: 'runs' }) });
     setBc({ issues: [...bc.get().issues.filter((x) => !x.id.startsWith('brown:')), ...brown.slice(-5)] });
     // 掉电复位解释（关键状态）：只在实验台上弹，同一次上电只弹一次（舵机抖动会连着复位好几次）
     if (store.get().step !== 'bench' || bc.get().overlays.brown) return;

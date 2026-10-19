@@ -89,7 +89,7 @@ export function createCmdk(ctx: StepCtx): Cmdk {
     }
     goBench();
     const r = await h.seek(i);
-    if (r) shell.toast(`回到运行 #${r.run} 的 ${(r.untilMs / 1000).toFixed(2)} s${r.same === null ? '' : r.same ? ' · ✓ 指纹一致' : ' · ✗ 指纹不同'}`);
+    if (r) shell.toast(`回到运行 #${r.run} 的 ${(r.untilMs / 1000).toFixed(2)} s${r.same === null ? '' : r.same ? ' · 和当时一模一样' : ' · 和当时不一样'}`);
   }
 
   /** 按输入算出全部候选（参数命令随输入生成） */

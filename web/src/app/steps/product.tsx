@@ -18,7 +18,7 @@ import { isPhone, onPhoneChange, setMui } from '../mobile';
 import type { Tool, ToolGroup } from '../toolbar';
 import { HOME_WORKS } from '../works';
 import { RECORD_SECONDS, download, recordCanvas, takePhoto, type Capturable, type Recording } from '../capture';
-import { i2cLoad, i2cText, wifiText } from '../harness';
+import { i2cLoad, i2cSay, i2cText, wifiSay, wifiText } from '../harness';
 import { I2C_DEVICES } from './assemble';
 import { setBc } from '../chrome';
 import { BuyCard } from '../buycard';
@@ -28,6 +28,7 @@ import { getTemplate, type BuyLine } from '../../catalog/templates';
 import { loadHave } from '../../advisor/state';
 import { PART_MAP } from '../../advisor/catalogmap';
 import { Conf } from '../../ui/conf';
+import { Said } from '../../ui/result';
 
 import { Host, Txt } from '../../ui/native';
 import { Brief, Btn, Btns, Kv, LinkBtn, LockCard, Note, Ph, PhT, Res, Sec, TnL, TnM, TnSt, TreeEmpty, TreeGroup, TreeNode, TreeRow, btnClass, tnClass, type ResKind } from '../../ui/panel';
@@ -515,6 +516,7 @@ export function productStep(): StepImpl {
     const ses = c.session;
     const userBin = ses.fwBuf && ses.fwName && !ses.fwName.includes('/') ? { buf: ses.fwBuf, name: ses.fwName } : null;
     return {
+      checks: ids.length,
       remaining: remainingLines(w),
       fingerprint: fp,
       manual,
@@ -582,11 +584,11 @@ export function productStep(): StepImpl {
         <Sec>线束与天线 · 估算，必须上真机</Sec>
         {l && (
           <Res kind={l.verdict === 'ok' ? 'ok' : 'bad'} mk={mk(l.verdict)}>
-            I2C 排线 {fx.i2cWireCm} cm：{i2cText(l)}
+            <Said say={i2cSay(l)} raw={i2cText(l)} />
           </Res>
         )}
         <Res kind={wk} mk={mk(wf.level)}>
-          Wi-Fi：天线遮挡 {fx.antennaDb ?? 0} dB，{wf.text}（本固件没用 Wi-Fi，暂不受影响）
+          <Said say={`${wifiSay(fx.antennaDb ?? 0)}（这个作品没用 Wi-Fi，暂不受影响）`} raw={`天线遮挡 ${fx.antennaDb ?? 0} dB，${wf.text}`} />
         </Res>
         {sim && <Txt as="p" className="note my-2 font-mono text-xs text-muted" data-live="hz" text={sim.replace(/\[tryboard\] /g, '模拟器：')} />}
       </>

@@ -9,7 +9,7 @@ import { Icon } from './icons.tsx';
 export interface BuyCardProps {
   /** 还要买的（已勾「我已有」的不列） */
   remaining: BuyLine[];
-  /** 检查点全过时的运行指纹 */
+  /** 检查点全过时的运行指纹（界面上叫「运行编号」） */
   fingerprint: string | null;
   /** 网页证明不了、要上真机逐项勾的条目（来自本作品「必须上真机」） */
   manual: string[];
@@ -22,6 +22,8 @@ export interface BuyCardProps {
   title?: string;
   /** 目录里没有、只进清单的零件（选板的继电器、人体红外……）：照样要买，算进件数和参考价 */
   extra?: { name: string; price: [number, number]; keywords?: string }[];
+  /** 检查点个数（标题上方「N 个检查点全部通过」）；缺省不写数字 */
+  checks?: number;
   /** 有就显示右上角关闭 */
   onClose?: () => void;
 }
@@ -61,12 +63,12 @@ export function BuyCard(p: BuyCardProps) {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
   const card = 'flex min-w-0 flex-col gap-2 rounded-2xl border border-line bg-surface p-[22px]';
-  const head = (n: number, t: string, sub: string) => (
+  // 每一步只有一个动词和一个数字（DESIGN_V2 §9）
+  const head = (n: number, verb: string, big: string) => (
     <div>
-      <b className="block text-sm">
-        <span className="font-mono">{n}</span> · {t}
-      </b>
-      <span className="text-xs text-muted">{sub}</span>
+      <span className="block font-mono text-xs text-muted">0{n}</span>
+      <b className="block text-base">{verb}</b>
+      <span className="block text-lg font-bold text-accent-strong">{big}</span>
     </div>
   );
   const btn = 'inline-flex min-h-9 cursor-pointer items-center justify-center gap-1 rounded-md border border-line bg-surface px-3 text-xs text-fg hover:bg-field max-md:min-h-11';
@@ -78,10 +80,12 @@ export function BuyCard(p: BuyCardProps) {
           <Icon n="check" size={16} />
         </span>
         <div className="min-w-0 flex-1">
-          <b className="block text-base">{p.title ?? '这个项目'}在网页里做成了。下一步：做成真的</b>
-          <span className="text-xs text-muted">
-            检查点全部通过{p.fingerprint ? <> · 指纹 <span className="font-mono" data-buy-fp="">{p.fingerprint}</span></> : null}
-          </span>
+          <span className="block text-xs font-medium text-ok-ink">{p.checks ? `${p.checks} 个检查点全部通过` : '检查点全部通过'}</span>
+          <b className="block text-lg leading-snug">
+            {p.title ? `${p.title}，` : ''}网页里跑通了。
+            <br />
+            接下来，把它做成真的。
+          </b>
         </div>
         {p.onClose && (
           <button type="button" className="inline-flex size-9 flex-none cursor-pointer items-center justify-center rounded-md text-muted hover:bg-field max-md:size-11" aria-label="关闭" onClick={p.onClose}>
@@ -92,13 +96,9 @@ export function BuyCard(p: BuyCardProps) {
       {/* 按卡片自身宽度排列：作品页右栏只有约 300px，用视口断点会挤成三列 */}
       <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-3">
         <div className={card} data-buy="buy">
-          {head(1, '真买', '采购步列过的清单，现在下单')}
+          {head(1, '买零件', `${rows.length} 件`)}
           <p className="m-0 text-xs text-muted">
-            第一步「采购」只列清单、看参考价，先不用真买；跑通了再买。
-            <b className="text-fg">
-              {rows.length} 件要买，参考价 ¥{yuan(lo)}–{yuan(hi)}
-            </b>
-            ，已有的不再列。
+            约 ¥{yuan(lo)}–{yuan(hi)}，清单按你的接法生成
           </p>
           <ul className="m-0 max-h-36 list-none overflow-auto p-0 text-xs">
             {rows.map((r, i) => (
@@ -121,9 +121,10 @@ export function BuyCard(p: BuyCardProps) {
           </div>
         </div>
         <div className={card} data-buy="flash">
-          {head(2, '烧', '同一份固件，烧进真板')}
+          {head(2, '烧进板子', '1 条命令')}
+          <p className="m-0 text-xs text-muted">用你在网页里跑通的同一份固件</p>
           <pre className="m-0 rounded-md bg-field px-2.5 py-2 font-mono text-xs whitespace-pre-wrap">idf.py -p [串口] flash monitor</pre>
-          <p className="m-0 text-xs text-muted">或下载 flash.bin，用乐鑫官方烧录工具。</p>
+          <p className="m-0 text-xs text-muted">也可以下载 flash.bin，用乐鑫官方烧录工具</p>
           {p.onDownloadBin && (
             <div className="mt-auto">
               <button type="button" className={btn} data-buy-bin="" onClick={p.onDownloadBin}>
@@ -133,7 +134,8 @@ export function BuyCard(p: BuyCardProps) {
           )}
         </div>
         <div className={`${card} border-2 border-dashed`} data-buy="manual">
-          {head(3, '网页证明不了的', '上真机逐项勾')}
+          {head(3, '上真机确认', p.manual.length ? `${p.manual.length} 件事` : '没有要确认的')}
+          {p.manual.length > 0 && <p className="m-0 text-xs text-muted">网页证明不了的，到手后逐项勾掉</p>}
           {p.manual.length ? (
             p.manual.map((m) => (
               <label key={m} className="flex min-h-8 cursor-pointer items-start gap-2 text-xs max-md:min-h-11">
@@ -145,8 +147,18 @@ export function BuyCard(p: BuyCardProps) {
           ) : (
             <p className="m-0 text-xs text-muted">这个作品没有「必须上真机」的条目。</p>
           )}
-          <p className="mt-auto mb-0 text-[11px] text-muted">清单来自本作品的「必须上真机」条目。</p>
         </div>
+      </div>
+      <div className="mt-3 flex flex-wrap justify-between gap-2 border-t border-line-soft pt-2 text-[11px] text-muted">
+        <span>价格是参考价，已有的零件不再列。</span>
+        {p.fingerprint && (
+          <span title="同一固件、同样输入，网页和命令行的运行编号相同，说明结果可复现">
+            运行编号{' '}
+            <span className="font-mono" data-buy-fp="">
+              {p.fingerprint}
+            </span>
+          </span>
+        )}
       </div>
     </section>
   );

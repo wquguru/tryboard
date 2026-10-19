@@ -1056,14 +1056,17 @@ export function BrownoutBanner({
         <Icon n="warn" size={16} className="mt-px flex-none" />
         <div className="min-w-0 flex-1">
           <b className="block text-[13px]">
-            掉电复位：{t.toFixed(2)} s 时芯片重启了
+            电压不够，芯片重启了
           </b>
-          <p className="mt-1 mb-0">
-            3V3 {v != null ? `最低掉到 ${v.toFixed(2)} V，` : ""}
-            低于欠压门限，芯片自动复位，串口会重新打印启动信息。
+          <p className="mt-1 mb-0 text-[13px]">
             {servo
-              ? "常见原因：舵机和芯片共用 USB 的 5 V，舵机启动电流把电压拉下来了。"
-              : "常见原因：外设电流太大，USB 供不上。"}
+              ? "舵机和芯片共用 USB 的电，舵机一转就把电压拉了下来。"
+              : "外设用电太多，USB 供不上。"}
+          </p>
+          <p className="mt-1 mb-0 opacity-75">
+            {t.toFixed(2)} 秒时 3V3{" "}
+            {v != null ? `最低掉到 ${v.toFixed(2)} V，` : ""}
+            低于欠压门限（欠压复位）。串口会重新打印启动信息。
           </p>
           <div className="mt-2 flex gap-1.5">
             {onPower && (

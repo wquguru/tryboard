@@ -430,7 +430,7 @@ function IssueList() {
   if (!issues.length)
     return (
       <p className="m-0 p-3 text-xs text-muted">
-        没有发现问题：接线规则检查通过，也没有欠压复位。
+        没有发现问题：接线没问题，电压也一直够。
       </p>
     );
   return (

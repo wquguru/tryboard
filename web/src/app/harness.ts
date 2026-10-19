@@ -38,9 +38,16 @@ export function i2cLoad(wireCm: number, devices: number, sclHz = ASSUME_SCL_HZ):
 }
 export function i2cText(l: I2cLoad): string {
   const base = `上升时间 ${l.rise.toFixed(0)} ns，${(ASSUME_SCL_HZ / 1000).toFixed(0)} kHz 允许 ${l.limit} ns`;
-  if (l.verdict === 'ok') return `${base}，在规范内（这个接法最长约 ${l.maxCm.toFixed(0)} cm）`;
+  if (l.verdict === 'ok') return `${base}，没超（这个接法最长约 ${l.maxCm.toFixed(0)} cm）`;
   if (l.verdict === 'marginal') return `${base}：超出规范，读到的数据会错，读数离谱、校准数据乱。缩短到 ${l.maxCm.toFixed(0)} cm 以内，或换 4.7 kΩ 上拉、降到 100 kHz`;
   return `${base}：超过两倍，器件不应答（NACK），固件初始化就失败。缩短到 ${l.maxCm.toFixed(0)} cm 以内，或降到 100 kHz`;
+}
+/** 第一层人话（DESIGN_V2 §9）：一句结论 + 该怎么改；上升时间等数字留给 i2cText 当小字 */
+export function i2cSay(l: I2cLoad): string {
+  const max = l.maxCm.toFixed(0);
+  if (l.verdict === 'ok') return `I2C 排线 ${l.wireCm} cm 没问题，最长可以到 ${max} cm`;
+  if (l.verdict === 'marginal') return `I2C 排线太长，读数会出错：缩短到 ${max} cm 以内`;
+  return `I2C 排线太长，传感器没有回应：缩短到 ${max} cm 以内`;
 }
 
 // ------------------------------------------------------------------ 天线遮挡
@@ -68,6 +75,15 @@ export function wifiText(lossDb: number): { rssi: number; level: Verdict; text: 
   if (r < LINK_MIN_DBM) return { rssi: r, level: 'fail', text: `TryBoard-WiFi ${r} dBm：扫得到但连不上（低于 ${LINK_MIN_DBM} dBm）` };
   if (lossDb >= 15) return { rssi: r, level: 'marginal', text: `TryBoard-WiFi ${r} dBm：能连，信号弱，远一点就会掉线` };
   return { rssi: r, level: 'ok', text: `TryBoard-WiFi ${r} dBm` };
+}
+
+/** Wi-Fi 一句人话；dBm 留给 wifiText 当小字 */
+export function wifiSay(lossDb: number): string {
+  const r = rssiAfter(lossDb);
+  if (r < SCAN_MIN_DBM) return '外壳挡住了天线，搜不到 Wi-Fi';
+  if (r < LINK_MIN_DBM) return '外壳挡住了天线，Wi-Fi 连不上';
+  if (lossDb >= 15) return 'Wi-Fi 能连，但信号弱，离路由器远一点就会掉线';
+  return lossDb > 0 ? '外壳对 Wi-Fi 影响不大' : '天线旁边没挡东西，Wi-Fi 不受影响';
 }
 
 /** 组装时的线束选择（存 localStorage 'tryboard-app-harness:<work>'） */

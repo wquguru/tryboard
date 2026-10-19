@@ -15,7 +15,7 @@ import {
   wiresOf,
   type WireMods,
 } from "../wiring";
-import { i2cLoad, i2cText } from "../harness";
+import { i2cLoad, i2cSay, i2cText } from "../harness";
 import { checkWiring, faultByWire, type WireFault } from "../wirecheck";
 import { applyCached, enrichFaults } from "../faultsolve";
 import {
@@ -30,6 +30,8 @@ import {
 import { diffRuns, summarize, type BenchStep } from "../history";
 import { checkCommand, type Level } from "../../checks";
 import { Conf, confOfRule } from "../../ui/conf";
+import { ResultCard, VerdictPill } from "../../ui/result";
+import { headline } from "../../ui/say";
 import { VerifyStalled, verifyLevel } from "../../verify";
 import { fetchBuf } from "../../assets";
 import { servoAngle, ledCss } from "../../views/common";
@@ -78,7 +80,6 @@ import {
   TreeEmpty,
   TreeGroup,
   TreeNode,
-  VerdictLine,
 } from "../../ui/panel";
 import { noteSaved } from "../saved";
 import { CHIP_NAME, chipOf, loadExamples, type AnalogControl, type Example } from "../examples";
@@ -1000,17 +1001,17 @@ export function benchStep(): StepImpl {
     const same =
       r.same === null ? (
         <Muted>
-          同一次运行里后面还有操作：停在下一步发生之前，所以不和整次运行的指纹比
+          同一次运行里后面还有操作：停在下一步发生之前，所以不和整次运行比对
         </Muted>
       ) : r.same ? (
-        <Ok>✓ 指纹一致</Ok>
+        <Ok>✓ 和当时一模一样</Ok>
       ) : (
-        <Bad>✗ 指纹不同</Bad>
+        <Bad>✗ 和当时不一样</Bad>
       );
     return (
       <div className={cls} data-seek={r.run}>
         <b>{`回到运行 #${r.run} 的 ${(r.untilMs / 1000).toFixed(2)} s · 已暂停`}</b>
-        <Mono>指纹 {r.fingerprint}</Mono>
+        <Mono>运行编号 {r.fingerprint}</Mono>
         {same}
         <Btns>
           <Btn primary id="resume" onClick={() => c.hist?.resume()}>
@@ -1215,9 +1216,9 @@ export function benchStep(): StepImpl {
               const v = Number(e.currentTarget.value);
               const props = c.shell.props.el;
               props.querySelector("#wireLenV")!.textContent = `${v} cm`;
-              props.querySelector("#wireLenNote")!.textContent = i2cText(
-                i2cLoad(others + v, bus.parts.length),
-              );
+              const l = i2cLoad(others + v, bus.parts.length);
+              props.querySelector("#wireLenSay")!.textContent = i2cSay(l);
+              props.querySelector("#wireLenNote")!.textContent = i2cText(l);
             },
             change: (e) => setWireLen(w.part, Number(e.currentTarget.value)),
           }}
@@ -1225,6 +1226,10 @@ export function benchStep(): StepImpl {
         <Kv
           k="这条总线"
           v={`${bus.parts.length} 个模块 · SDA 共 ${bus.wireCm.toFixed(0)} cm`}
+        />
+        <SayLive
+          id="wireLenSay"
+          init={i2cSay(i2cLoad(bus.wireCm, bus.parts.length))}
         />
         <NoteLive
           id="wireLenNote"
@@ -1577,7 +1582,7 @@ export function benchStep(): StepImpl {
         <KvT k="最后一行">
           <Mono>{sa.result}</Mono>
         </KvT>
-        <Kv k="指纹" v={sa.fingerprint} cls="fp" />
+        <Kv k="运行编号" v={sa.fingerprint} cls="fp" />
       </>
     );
     show(
@@ -2447,18 +2452,27 @@ export function benchStep(): StepImpl {
     const stall = st ? (
       <>
         <Sec>验收结果</Sec>
-        <VerdictLine kind="bad">✗ 没跑完：{st.why}</VerdictLine>
-        <Note>
-          这次不算未通过{r ? "，上一次的结果保留在下面" : ""}。固件{" "}
-          <Mono>{st.who}</Mono> 已留着，可以直接重试。
-        </Note>
+        <div className="result-card" data-verdict="stall">
+          <div className="verdict-line mb-1 flex items-center gap-2 text-xs">
+            <VerdictPill v="stall" />
+          </div>
+          <div className="result-title mb-1 text-[15px] font-medium">这次没跑完</div>
+          <p className="my-1.5 text-xs leading-relaxed text-muted">
+            模拟卡住，已经停下。这不算没通过，你的代码可能没问题
+            {r ? "；上一次的结果留在下面" : ""}。
+          </p>
+          <p className="my-1.5 text-[11px] text-muted">
+            原因：{st.why} · 固件 <Mono>{st.who}</Mono> 已留着
+          </p>
+        </div>
         <Btns>
           <Btn
             id="retryCheck"
+            primary
             disabled={other}
             onClick={() => verify(l, st.buf, st.who, st.own)}
           >
-            重试
+            再跑一次
           </Btn>
         </Btns>
       </>
@@ -2466,23 +2480,20 @@ export function benchStep(): StepImpl {
     const result = r ? (
       <>
         <Sec>验收结果</Sec>
-        <VerdictLine kind={r.ok ? "ok" : "bad"}>
-          {r.ok ? "✓ 通过" : "✗ 未通过"}{" "}
-          <Muted className="font-normal">
-            · {r.who}
-            {r.sim ? ` · 模拟 ${r.sim.toFixed(2)} s` : ""}
-          </Muted>
-        </VerdictLine>
-        {r.rows.map((x, i) => (
-          <Res key={i} kind={x.ok === null ? "na" : x.ok ? "ok" : "bad"}>
-            {x.text}
-          </Res>
-        ))}
-        <Kv k="运行指纹" v={r.fingerprint} cls="fp" />
-        <Note>
-          同一固件、同样输入，网页和命令行 <Mono>npx tryboard check</Mono>{" "}
-          得到同一个指纹。{r.ok && !r.own ? "参考固件通过不算你的进度。" : ""}
-        </Note>
+        <ResultCard
+          verdict={r.ok ? "ok" : "bad"}
+          meta={`${r.who}${r.sim ? `，模拟 ${r.sim.toFixed(1)} 秒` : ""}`}
+          title={headline(r.rows)}
+          why={r.ok && !r.own ? "这是参考固件，通过了不算你的进度。" : undefined}
+          rows={r.rows}
+          runId={r.fingerprint}
+          rawNote={
+            <Note>
+              同一固件、同样输入，网页和命令行 <Mono>npx tryboard check</Mono>{" "}
+              得到同一个运行编号。
+            </Note>
+          }
+        />
       </>
     ) : null;
     const copy = async (b: HTMLButtonElement) => {
@@ -2561,7 +2572,7 @@ export function benchStep(): StepImpl {
         </Btns>
         <Sec>验收命令</Sec>
         <Code>{checkCommand(l)}</Code>
-        <Note>命令行验收的结论和指纹与网页相同；退出码 0 表示通过。tryboard 命令行包还没发布到 npm，现在要从仓库的 packages/tryboard 本地安装。</Note>
+        <Note>命令行跑出的结论和运行编号与网页相同；退出码 0 表示通过。tryboard 命令行包还没发布到 npm，现在要从仓库的 packages/tryboard 本地安装。</Note>
       </>,
     );
   }
@@ -2582,12 +2593,15 @@ export function benchStep(): StepImpl {
       const rows: CheckOutcome["rows"] = v.results.map((x) => ({
         ok: x.ok,
         text: x.text,
+        say: x.say,
+        tag: x.tag,
       }));
       // 装配检查是几何估算，命令行不判；实验台上也不判，留给「组装」步骤
       if (l.assembly)
         rows.push({
           ok: null,
           text: "装配检查（估算）在「组装」步骤判定，这里不计",
+          say: "装配在「组装」那一步检查，这里不判",
         });
       out = {
         ok: v.ok,
@@ -2601,14 +2615,14 @@ export function benchStep(): StepImpl {
       if (e instanceof VerifyStalled) {
         stalled[l.id] = { why: e.message, buf: buf.slice(0), who, own };
         c.store.set({ verifying: null });
-        c.shell.toast(`检查点 ${l.id} 没跑完：${e.message}`);
+        c.shell.toast(`检查点 ${l.id} 这次没跑完，不算没通过，可以再跑一次`);
         return;
       }
       out = {
         ok: false,
         who,
         own,
-        rows: [{ ok: false, text: `运行失败：${e}` }],
+        rows: [{ ok: false, text: `运行失败：${e}`, say: "模拟器出错，这次没跑起来" }],
         fingerprint: "—",
         sim: 0,
       };
@@ -2627,7 +2641,7 @@ export function benchStep(): StepImpl {
     }));
     if (keep)
       c.shell.toast(
-        `参考固件：${out.ok ? "通过" : "未通过"}，指纹 ${out.fingerprint}（不覆盖你的记录）`,
+        `参考固件${out.ok ? "通过了" : "没通过"}（运行编号 ${out.fingerprint}，不覆盖你的记录）`,
       );
   }
 
@@ -2964,6 +2978,7 @@ export function benchStep(): StepImpl {
         <div className="absolute inset-3 z-5 overflow-auto rounded-(--r) border border-line bg-surface p-4 shadow-panel md:inset-x-[max(12px,calc(50%-440px))] md:top-6 md:bottom-auto md:max-h-[calc(100%-48px)] md:p-6">
           <BuyCard
             title={plan.title}
+            checks={c.work.checkpoints.length}
             remaining={remaining}
             extra={plan.noModel.map((n) => ({ name: n.name, price: n.price }))}
             fingerprint={fp}
@@ -3786,6 +3801,12 @@ function swatch(bg: string) {
 function NoteLive({ id, init }: { id: string; init: string }) {
   const ref = useInitText<HTMLParagraphElement>(init);
   return <p ref={ref} id={id} className="note my-2 text-xs text-muted" />;
+}
+
+/** 一句人话结论（拖滑块时由事件直接改字，不重渲染） */
+function SayLive({ id, init }: { id: string; init: string }) {
+  const ref = useInitText<HTMLParagraphElement>(init);
+  return <p ref={ref} id={id} className="mt-2 mb-0 text-[13px] font-medium text-fg" />;
 }
 
 /** 属性面板的零件标题：名字 + 可信度徽章（依据见 benchv2 PART_CONF） */

@@ -88,6 +88,7 @@ async function pick(page, id) {
   }
   return {
     text: await page.$eval('#props', (e) => e.textContent).catch(() => ''),
+    verdict: await page.$eval('#props .result-card', (e) => e.dataset.verdict).catch(() => ''),
     fp: await page.$eval('#props .kv .v.fp', (e) => e.textContent.trim()).catch(() => ''),
   };
 }
@@ -114,7 +115,7 @@ const url = '/app?work=custom&t=weather&bat=1#bench';
   for (const id of judged) {
     const mark = await cpMark(page, id);
     const r = await pick(page, id);
-    report(`网页 c3-thermo ${id} ✓，指纹一致`, mark === '✓' && /✓ 通过/.test(r.text) && r.fp === cli[id].fp, `标记 ${mark} 网页 ${r.fp} / 命令行 ${cli[id].fp}`);
+    report(`网页 c3-thermo ${id} ✓，指纹一致`, mark === '✓' && r.verdict === 'ok' && r.fp === cli[id].fp, `标记 ${mark} 网页 ${r.fp} / 命令行 ${cli[id].fp}`);
   }
   for (const id of manual) report(`手动项 ${id} 不在要判的列表里`, !(await page.$(`[data-cp="${id}"]`)) && !!(await page.$('[data-cp-manual]')));
   await page.close();

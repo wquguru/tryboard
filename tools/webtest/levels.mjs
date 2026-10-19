@@ -85,6 +85,8 @@ for (const m of cli.matchAll(/检查点 ([\w-]+) .*：(通过|未通过)\s+指�
 
 // ---- 1. 工作台检查点：参考固件，指纹与命令行一致
 const fpOf = (page) => page.$eval('#props .kv .v.fp', (e) => e.textContent.trim()).catch(() => '');
+// 结果卡的状态（ok / bad / stall / shifted，DESIGN_V2 §9.2）：文案改成人话后按 data-verdict 判，不再匹配「✓ 通过」
+const verdictOf = (page) => page.$eval('#props .result-card', (e) => e.dataset.verdict).catch(() => '');
 async function runRef(page, id) {
   // 构建树在上电 / 时间线更新时会整块重画：点的那一刻节点可能刚被换掉（Node is detached），重找一次再点
   for (let i = 0; ; i++) {
@@ -102,7 +104,7 @@ async function runRef(page, id) {
   const text = await page.$eval('#props', (e) => e.textContent).catch(() => '');
   const raw = await page.evaluate(() => globalThis.__tbLastVerify);
   fs.writeFileSync(path.join(outDir, `levels-${id}-web.json`), JSON.stringify(raw, null, 1));
-  return { ok: /✓ 通过/.test(text), fp: await fpOf(page), text };
+  return { ok: (await verdictOf(page)) === 'ok', fp: await fpOf(page), text };
 }
 for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']], ['usbkey', ['usbkey-1', 'usbkey-2', 'usbkey-3']], ['lamp', ['lamp-1', 'lamp-2', 'lamp-3']], ['ruler', ['ruler-1', 'ruler-2', 'ruler-3']], ['tilt', ['tilt-1', 'tilt-2', 'tilt-3']]]) {
   const page = await open(`/app?work=${work}#bench`);
@@ -139,7 +141,7 @@ for (const [hash, work, cp] of [['04', 'weather', '04'], ['07-lens', 'lens', '07
     const started = await waitFor(page, () => !!document.querySelector('#props [data-drop="check"].busy, #props .verdict-line'), null, 3000);
     if (started) break;
   }
-  await waitFor(page, () => /✓ 通过/.test(document.querySelector('#props .verdict-line')?.textContent ?? ''), null, 90000);
+  await waitFor(page, () => document.querySelector('#props .result-card')?.dataset.verdict === 'ok', null, 90000);
   const who = await page.$eval('#props .verdict-line', (e) => e.textContent).catch(() => '');
   const tree = await page.$eval('#tree .tn[data-kind="checkpoint"][data-id="01"] .tn-st', (e) => e.className).catch(() => '');
   await page.reload({ waitUntil: 'load' });
@@ -204,12 +206,13 @@ async function toProduct(page) {
   report('装配：鼠标拖拽 6/6（传感器贴芯片）', await assemble('B'));
   // 室温 23.5，传感器贴着芯片：开机复测里固件读到的温度偏高 2.5 ℃（第 06 关原来的"装法改变读数"用例）
   const hot = await retest(page);
-  report('装配：BME280 贴芯片 → 开机复测读数 26.0 ℃（室温 23.5 + 2.5）、复测不过', /✗ 未通过/.test(hot) && /26\.0 ℃/.test(hot), hot.match(/复测结果.{0,120}/)?.[0]);
+  const hotV = await verdictOf(page);
+  report('装配：BME280 贴芯片 → 开机复测读数 26.0 ℃（室温 23.5 + 2.5）、复测不过', (hotV === 'bad' || hotV === 'shifted') && /26\.0 ℃/.test(hot), hot.match(/复测结果.{0,120}/)?.[0]);
   await page.screenshot({ path: path.join(outDir, 'levels-asm-bad.png') });
   await clickEl(page, '#toolbar [data-tool="asm-reset"]');
   report('装配：鼠标拖拽 6/6（通风口旁）', await assemble('A'));
   const good = await retest(page);
-  report('装配：通风口旁 → 开机复测通过', /✓ 通过/.test(good), good.match(/复测结果.{0,60}/)?.[0]);
+  report('装配：通风口旁 → 开机复测通过', (await verdictOf(page)) === 'ok', good.match(/复测结果.{0,60}/)?.[0]);
   // 时间线记下装配和复测（旧实验台写进串口的"装配：开机"）
   const tl = await page.$eval('#timeline', (e) => e.textContent).catch(() => '');
   report('装配：操作记进时间线', /复测/.test(tl), tl.slice(0, 120));
@@ -266,7 +269,7 @@ async function toProduct(page) {
       }
       // 先等进入"模拟中"，再等这一关的结论（免得读到上一关的结论就去点下一关）
       await waitFor(page, () => !!document.querySelector('#props .drop.busy'), null, 15000);
-      await waitFor(page, () => /✓ 通过|✗/.test(document.querySelector('#props .verdict-line')?.textContent ?? '') && !document.querySelector('#props .drop.busy'), null, 120000);
+      await waitFor(page, () => ['ok', 'bad'].includes(document.querySelector('#props .result-card')?.dataset.verdict) && !document.querySelector('#props .drop.busy'), null, 120000);
     }
     await page.evaluate(() => (location.hash = 'assemble'));
     await page.waitForSelector('.asm-box [data-part]', { timeout: 30000 });
@@ -282,10 +285,11 @@ async function toProduct(page) {
       return page.$eval('#props', (e) => e.textContent);
     };
     const bad = await build('B');
-    report('组装 · ruler：探头缩在孔里 → 开机复测读不到 15 cm、节奏不对（装法进模拟器）', /✗ 未通过/.test(bad) && /✗串口出现 “DIST 15\.0 cm”/.test(bad) && /1\.8–2\.5 s 响 0 声/.test(bad), bad.match(/复测结果.{0,160}/)?.[0]);
+    const badV = await verdictOf(page);
+    report('组装 · ruler：探头缩在孔里 → 开机复测读不到 15 cm、节奏不对（装法进模拟器）', (badV === 'bad' || badV === 'shifted') && /✗串口出现 “DIST 15\.0 cm”/.test(bad) && /1\.8–2\.5 s 响 0 声/.test(bad), bad.match(/复测结果.{0,160}/)?.[0]);
     await clickEl(page, '#toolbar [data-tool="asm-reset"]').catch(() => {});
     const good = await build('A');
-    report('组装 · ruler：探头伸出前面板 → 开机复测通过', /✓ 通过/.test(good) && /装配 6\/6，没有警告/.test(good), good.match(/复测结果.{0,60}/)?.[0]);
+    report('组装 · ruler：探头伸出前面板 → 开机复测通过', (await verdictOf(page)) === 'ok' && /装配 6\/6，没有警告/.test(good), good.match(/复测结果.{0,60}/)?.[0]);
   } catch (e) {
     report('组装 · ruler：流程跑完', false, String(e).slice(0, 200));
   }
