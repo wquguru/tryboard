@@ -99,11 +99,16 @@ function createSerialModel() {
   }
   // 串口刷屏时每段都同步读 scrollHeight 会强制整页重排、拖死主线程：合并到下一帧只滚一次
   let stickRaf = 0;
+  /** 上一次自动滚到的位置：滚动事件是异步的，到达时可能已有新行把高度撑高，不能据此判成「用户往上翻」 */
+  let autoTop = -1;
   function stick() {
     if (stickRaf) return;
     stickRaf = requestAnimationFrame(() => {
       stickRaf = 0;
-      if (host && ui.get().follow) host.scrollTop = host.scrollHeight;
+      if (host && ui.get().follow) {
+        host.scrollTop = host.scrollHeight;
+        autoTop = host.scrollTop;
+      }
     });
   }
   function renderAll() {
@@ -148,6 +153,8 @@ function createSerialModel() {
       host = el;
       renderAll();
     },
+    /** 滚动位置没有低于上次自动滚到的位置：是新行撑高，不是用户往上翻 */
+    autoScrolled: (top: number) => top >= autoTop - 1,
     attachPeek(el: HTMLElement, on: boolean) {
       if (on) peeks.add(el);
       else peeks.delete(el);
@@ -231,6 +238,7 @@ function SerialView() {
       onScroll={(e) => {
         const el = e.currentTarget;
         const bottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
+        if (!bottom && serial.autoScrolled(el.scrollTop)) return;
         if (ui.get().follow !== bottom) ui.set({ follow: bottom });
       }}
       className="serial-view min-h-0 flex-1 overflow-auto bg-(--scope-bg) px-3 py-1.5 font-mono text-[12.5px] leading-[1.7] break-all whitespace-pre-wrap"

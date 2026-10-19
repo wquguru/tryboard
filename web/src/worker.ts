@@ -244,7 +244,7 @@ export interface AudioFrame {
 }
 
 export type FromWorker =
-  | { type: 'booted'; chip: 'esp32c3' | 'esp32s3'; bootPin: number }
+  | { type: 'booted'; chip: 'esp32' | 'esp32c3' | 'esp32s3'; bootPin: number }
   | { type: 'error'; message: string }
   | {
       type: 'tick';
@@ -365,6 +365,7 @@ let wallAnchor = 0;
 const decoder = new TextDecoder();
 /** 板载 WS2812 所在引脚（C3 GPIO8，S3 GPIO48）与引脚数，按芯片在启动后设置 */
 let LED_PIN = 8;
+const CHIP_OF: Record<number, 'esp32' | 'esp32c3' | 'esp32s3'> = { 0: 'esp32', 5: 'esp32c3', 9: 'esp32s3' };
 let NPINS = 22;
 let lastFrames = -1;
 
@@ -692,7 +693,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   ioChunks = [];
   ioBytes = 0;
   flushIo(e, true);
-  inputLog = { version: 1, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
+  inputLog = { version: 1, chip: CHIP_OF[e.tb_chip()] ?? 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
   record(e, { kind: 'power', on: true });
   if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
   // 线束在上电那一刻施加并记进日志（重放 / 回退在第 0 个周期施加，与命令行 --i2c-wire 等价）
@@ -706,9 +707,10 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   bootStdout = '';
   stdoutTruncated = false;
   ex = e;
-  const s3 = e.tb_chip() === 9;
-  LED_PIN = s3 ? 48 : 8;
-  NPINS = s3 ? 49 : 22;
+  const id = e.tb_chip();
+  // ESP32-DevKitC 没有板载 RGB 灯：给一个不存在的脚号，GPIO2 照常当普通脚
+  LED_PIN = id === 9 ? 48 : id === 0 ? -1 : 8;
+  NPINS = id === 9 ? 49 : id === 0 ? 40 : 22;
   lastFrames = -1;
   stripFrames = new Map();
   oledVersion = 0;
@@ -824,7 +826,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       running = false;
       const e = await bootWasm(m);
       if (!e) return;
-      post({ type: 'booted', chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', bootPin: e.tb_boot_pin() });
+      post({ type: 'booted', chip: CHIP_OF[e.tb_chip()] ?? 'esp32c3', bootPin: e.tb_boot_pin() });
       break;
     }
     case 'seek': {

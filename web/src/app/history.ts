@@ -35,7 +35,7 @@ export interface RunRec {
   n: number;
   fwName: string;
   fw: ArrayBuffer;
-  chip: 'esp32c3' | 'esp32s3';
+  chip: 'esp32' | 'esp32c3' | 'esp32s3';
   /** 上电时的供电、热源（只是显示状态） */
   ext5v: boolean;
   heat: string | null;

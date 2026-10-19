@@ -6,4 +6,6 @@ import type { ChipId } from './board3d';
 export const I2S_WIRING: Record<ChipId, { spk: { bclk: number; lrc: number; din: number }; mic: { sck: number; ws: number; sd: number } }> = {
   esp32s3: { spk: { bclk: 16, lrc: 17, din: 18 }, mic: { sck: 39, ws: 40, sd: 41 } },
   esp32c3: { spk: { bclk: 0, lrc: 1, din: 2 }, mic: { sck: 0, ws: 1, sd: 3 } },
+  // 内核还没给 ESP32 接 I2S（C-05 范围外），常用接法占位
+  esp32: { spk: { bclk: 26, lrc: 25, din: 22 }, mic: { sck: 32, ws: 25, sd: 33 } },
 };

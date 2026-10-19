@@ -20,6 +20,17 @@ name = "tryboard-elec"
 version = "0.1.0"
 
 [[package]]
+name = "tryboard-esp32"
+version = "0.1.0"
+dependencies = [
+ "tryboard-esp32c3",
+ "tryboard-esp32s3",
+ "tryboard-rv32",
+ "tryboard-soc",
+ "tryboard-xtensa",
+]
+
+[[package]]
 name = "tryboard-esp32c3"
 version = "0.1.0"
 dependencies = [
@@ -43,6 +54,7 @@ name = "tryboard-machine"
 version = "0.1.0"
 dependencies = [
  "tryboard-elec",
+ "tryboard-esp32",
  "tryboard-esp32c3",
  "tryboard-esp32s3",
  "tryboard-rv32",

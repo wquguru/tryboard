@@ -4,7 +4,7 @@
 import { PARTS, type Kind, type OnboardKind, type Part } from './parts.ts';
 
 const KINDS: Kind[] = ['board', 'sensor', 'display', 'actuator', 'input', 'audio', 'power', 'cable', 'passive', 'module', 'proto', 'enclosure'];
-const CHIPS = ['esp32c3', 'esp32s3'];
+const CHIPS = ['esp32', 'esp32c3', 'esp32s3'];
 const ONBOARD_KINDS: OnboardKind[] = ['rgb', 'led', 'boot', 'button', 'lcd', 'imu', 'touch', 'ir', 'adc', 'other'];
 /** 核价日期：YYYY-MM（只记年月）或 YYYY-MM-DD */
 export const CHECKED_AT_RE = /^(\d{4})-(0[1-9]|1[0-2])(?:-(0[1-9]|[12]\d|3[01]))?$/;
@@ -53,7 +53,7 @@ export function validatePart(p: Part, all: Part[] = PARTS): string[] {
   req(/^[a-z0-9][a-z0-9-]*$/.test(p.id), 'id 只能是小写字母、数字、连字符');
   for (const k of ['name', 'model', 'keywords', 'note'] as const) req(typeof p[k] === 'string' && p[k].trim().length > 0, `${k} 必填`);
   req(KINDS.includes(p.kind), `kind 未知：${p.kind}`);
-  req(Array.isArray(p.chips) && p.chips.length > 0 && p.chips.every((c) => CHIPS.includes(c)), 'chips 至少一颗且只能是 esp32c3 / esp32s3');
+  req(Array.isArray(p.chips) && p.chips.length > 0 && p.chips.every((c) => CHIPS.includes(c)), 'chips 至少一颗且只能是 esp32 / esp32c3 / esp32s3');
   req(Array.isArray(p.sources), 'sources 必须是数组');
   req(Array.isArray(p.todo), 'todo 必须是数组');
   const na = p.na ?? [];

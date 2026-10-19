@@ -841,3 +841,20 @@
 - C-05 复用现有固件校验（fwcheck.tsx），只把芯片 id 0 认作可运行。
 - C-06（esp-emu 作第二对照源）不做：它只发二进制、授权未定（其 issue #10），要人先定 LICENSING。
 - 替代：一次只做 BLE——否掉，SoftAP / 真实网络 / 任务时间线 / 经典 ESP32 彼此独立，可并行。
+
+## 2026-10-19 经典 ESP32（C-05）
+- **核复用、不复制**：`tryboard-xtensa` 加 `Variant`（Lx7Esp32s3 / Lx6Esp32）。对照两颗芯片的 core-isa.h，本核实现到的选项全部相同，只差 HW_VERSION / CONFIGID；不分两份代码。替代：拷一份 LX6 核——否掉，两份同步改不过来。
+- **SoC 新建 `core/crates/esp32`**：外设凡是寄存器语义和 C3 / S3 一样、只是基址 / 偏移不同的（TIMG、SPI1、LEDC），在 `periph.rs` 做地址翻译层后复用原模型；I2C 命令码、命令表长度、SCL 时钟不同，加 `I2cLayout` 参数（C3 / S3 输出逐字节不变）。
+- **LEDC tick_sel**：经典 ESP32 的 LEDC timer 用 tick_sel 选源：0 都是 REF_TICK 1MHz，1 时高速组 = APB、低速组 = SLOW_CLK（APB_CLK_SEL 选 APB 80MHz 或 8MHz），不是 C3 的全局选源；翻译层按它算频率，esp32-fade 5kHz 对上。
+- **PHY 轮询**：ESP32 射频校准轮询的寄存器偏移与 C3 相同，只是 APB 基址 0x3FF40000；有两处语义相反或独有（FM SAR 位 26..24 回 0、PLL 换频位 8 启动 / 位 31 完成），写进 `WifiLayout::ESP32` 的 rf_polls。
+- **Wi-Fi 标 ◐**：`esp_wifi_init` / `start` 能过（esp32-wifi-init），但 ESP32 的 MAC 是上一代 IP（0x3FF73000 一带，收发描述符格式与 C3 / S3 不同），这批不做收发；esp32-wifi（连 AP + HTTP）停在 reason=201，**不进 accept**、在 PLAN / STATUS 标 ✗ 原因。替代：照 GPL 的 QEMU esp32 模型抄——不允许；逆向上一代 MAC 工作量与 C3 那次相当，留待以后。
+- **RMT ✗**：ESP32 的 RMT 寄存器布局（8 通道 conf0/conf1 交错、RAM 64 字 × 8、没有 sys_conf）与 C3 / S3 不兼容，这批不做；选型里依赖 RMT（WS2812）的零件对 ESP32 标「必须上真机」。
+- **选型标注**：advisor 的 esp32 芯片从 simulated 'none' 改为 'partial'；ESP32 只认 GPIO / PWM / I2C 三类需求为可仿真（`engine.ts` SIM_KINDS），其余零件「必须上真机」；需要蓝牙 / 经典蓝牙、DAC / 触摸时另列「必须上真机」行（霍尔随 DAC / 触摸一行）。选板 esp32-devkitc 直接映射到新板 esp32-devkitc-v4，不再用 C3 代跑。
+- **1″ 排针的简化**：DevKitC 两排针相距 25.4 mm，830 孔面包板中缝两边 a–e / f–j 排距不是这个数。做法：整板 z 偏半格，J1 落 j 排、J3 落 b 排（`BoardSpec.rowSpan`），J1 外侧没有空孔时跳线端点就落在针脚自己那个孔上（`boardHole`）。真机上 DevKitC 插 830 孔板也只剩一侧一排孔，这和实物一致。
+- **`tb_image_chip` 认不出返回 u32::MAX**：0 现在是 ESP32 的芯片 id，不能再当"认不出"。网页 `imageChip` 认不出仍按 C3。
+- **短路 / 过流估算沿用 C3 的数**：ESP32 的 GPIO 驱动能力（40mA 档）与 C3 同量级，`tb_fault` 不另开参数；结论本来就标「估算」。
+- **LCD / I2S 接线占位**：`LCD_WIRING.esp32` 用 VSPI 常用脚（SCLK 18、MOSI 23、CS 5、DC 16、RST 17、背光 4），`i2spins.ts` 给 26/25/22（喇叭）、32/25/33（麦克风）。ESP32 上这两类外设没模型，只为界面不崩。
+- **多做的 esp32-fade**：LEDC 是 M2 验收项之一，顺手进 accept。
+- **eFuse MAC**：出厂 MAC 用本地管理地址 02:54:42:00:00:04（不冒用乐鑫 OUI，末字节与 C3 / S3 模拟板区分）并按 esp_efuse_table 算好 CRC8，IDF 校验能过；芯片版本 v3.0 由 eFuse REV1 / REV2 位加 APB_CTRL_DATE 位 31 组成。
+- **串口「跟随最新」误关**（走查发现）：串口刷屏时 scroll 事件异步到达，此时新行已把高度撑高，旧逻辑判成「用户往上翻」关掉跟随；ESP32 启动日志的节奏正好触发。改为记下自动滚到的位置，滚动位置不低于它就不算用户翻页（`dock.tsx`）。
+- **板子没有 RGB 灯**：`RGB_GPIO.esp32 = null`、board3d `rgbPin: -1`、worker `LED_PIN = -1`；blink 示例在 GPIO2 外接 LED（同一份 blink 源码，`LED_GPIO=2`）。

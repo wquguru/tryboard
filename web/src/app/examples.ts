@@ -3,7 +3,7 @@
 import type { SceneSpec } from '../board3d';
 import { lab } from '../ui/links';
 
-export type Chip = 'esp32c3' | 'esp32s3';
+export type Chip = 'esp32' | 'esp32c3' | 'esp32s3';
 
 /** 模拟输入滑块（电位器接 ADC 脚） */
 export interface AnalogControl {
@@ -36,7 +36,7 @@ export function loadExamples(): Promise<Example[]> {
 }
 
 export const chipOf = (e: Example): Chip => e.chip ?? 'esp32c3';
-export const CHIP_NAME: Record<Chip, string> = { esp32c3: 'ESP32-C3', esp32s3: 'ESP32-S3' };
+export const CHIP_NAME: Record<Chip, string> = { esp32: 'ESP32', esp32c3: 'ESP32-C3', esp32s3: 'ESP32-S3' };
 
 /** 示例在工作台里的地址 */
 export const exampleHref = (id: string) => lab('blank', 'bench', { example: id });

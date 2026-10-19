@@ -85,7 +85,7 @@ export function FwMenu({ phone }: { phone?: boolean }) {
       <div className="flex items-center gap-2 px-2.5 py-1">
         <b className={phone ? 'text-[16px]' : 'text-[13px]'}>换固件</b>
         <div role="radiogroup" aria-label="芯片" className="ml-auto flex rounded-lg bg-field p-0.5">
-          {(['esp32c3', 'esp32s3'] as Chip[]).map((c) => (
+          {(['esp32', 'esp32c3', 'esp32s3'] as Chip[]).map((c) => (
             <button
               key={c}
               type="button"
@@ -95,7 +95,7 @@ export function FwMenu({ phone }: { phone?: boolean }) {
               onClick={() => (setChip(c), setAll(false))}
               className={cn(
                 'cursor-pointer rounded-md border-0 bg-transparent px-2.5 font-mono text-[11.5px] text-muted',
-                phone ? 'min-h-11 min-w-[88px]' : 'h-6',
+                phone ? 'min-h-11 min-w-[72px]' : 'h-6',
                 chip === c && 'bg-surface font-medium text-fg shadow-[0_1px_2px_#0000001a]',
               )}
             >

@@ -54,7 +54,7 @@ export interface BenchChrome {
   /** 固件枚举出了原生 USB 设备：坞里多一个「USB」页签（虚拟电脑） */
   usb: boolean;
   /** 台面上的芯片（换固件菜单默认列这颗芯片的示例） */
-  chip: 'esp32c3' | 'esp32s3';
+  chip: 'esp32' | 'esp32c3' | 'esp32s3';
   /** 换固件菜单开着（顶栏按钮、空台面卡、手机 ⋯ 都能打开它） */
   fwMenu: boolean;
 }

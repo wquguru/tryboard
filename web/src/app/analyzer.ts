@@ -5,6 +5,7 @@
 // 跟随：右边缘贴着当前模拟时刻；时间线回退后模拟停在回退点、事件按重放重建，分析仪跟着停在那一刻。
 import type { PartSpec } from '../board3d';
 import type { StepCtx } from './types';
+import { BOOT_GPIO, RGB_GPIO, type SimChip } from '../chips';
 import { currentTheme, onTheme } from '../theme';
 import { CPU_HZ, firstTxnEndingAfter, fmtTime, hex, lastLE, pwmLabel, txnNote, txnText, type I2cTxn } from './iotrace';
 
@@ -72,10 +73,10 @@ function defaultChannels(parts: PartSpec[], chip: string): Channel[] {
       ch.push({ id: `GPIO${p.echo}`, kind: 'pin', pin: p.echo, label: `GPIO${p.echo}`, role: 'Echo' });
     }
   }
-  const boot = chip === 'esp32s3' ? 0 : 9;
+  const boot = BOOT_GPIO[chip as SimChip] ?? 9;
   ch.push({ id: `GPIO${boot}`, kind: 'pin', pin: boot, label: `GPIO${boot}`, role: 'BOOT 键' });
-  const rgb = chip === 'esp32s3' ? 48 : 8;
-  ch.push({ id: `RGB${rgb}`, kind: 'ws', pin: rgb, label: `GPIO${rgb}` });
+  const rgb = RGB_GPIO[chip as SimChip] === undefined ? 8 : RGB_GPIO[chip as SimChip];
+  if (rgb !== null) ch.push({ id: `RGB${rgb}`, kind: 'ws', pin: rgb, label: `GPIO${rgb}` });
   return ch;
 }
 

@@ -77,6 +77,24 @@ const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i)
 const adv = (id: string) => CHIPS.find((c) => c.id === id)!;
 
 export const CHIP_FACTS: Record<ChipId, ChipFacts> = {
+  esp32: {
+    name: 'ESP32',
+    // 经典款没有 GPIO20、24、28–31
+    gpios: [...range(0, 19), 21, 22, 23, 25, 26, 27, ...range(32, 39)],
+    flash: adv('esp32').pins.flash,
+    psramOctal: [],
+    bootPin: 0,
+    straps: [0, 2, 5, 12, 15],
+    usb: [],
+    uart0: [...adv('esp32').pins.uart0],
+    adc1: range(32, 39),
+    adc2: [0, 2, 4, 12, 13, 14, 15, 25, 26, 27],
+    rmtTx: 8,
+    ledc: 16,
+    i2c: 2,
+    caps: new Set(adv('esp32').caps),
+    txPeakMa: adv('esp32').power.txPeak,
+  },
   esp32c3: {
     name: 'ESP32-C3',
     gpios: range(0, 21),
@@ -653,7 +671,7 @@ const IMPL: Record<string, RuleFn> = {
       if (i2c) need += 2;
     }
     if (need <= free.length) return `要 ${need} 根信号线，${c.board.name} 空闲 GPIO ${free.length} 个`;
-    const sibling = c.info.chip === 'esp32s3' ? 's3-devkitc1-v10' : 'c3-devkitm1';
+    const sibling = c.info.chip === 'esp32c3' ? 'c3-devkitm1' : 's3-devkitc1-v10';
     return [
       f('block', `作品要 ${need} 根信号线，${c.board.name} 能自由用的 GPIO 只有 ${free.length} 个（${free.map((g) => 'GPIO' + g).join('、')}）。换引脚多的板，或用 I2C 扩展（PCF8574 / PCA9685）。`, c.board.id, sibling === c.board.id ? undefined : { action: 'swap', partId: sibling, replaces: c.board.id }),
     ];

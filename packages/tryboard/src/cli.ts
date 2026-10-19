@@ -11,7 +11,7 @@ import { toScriptInline, type InputLog } from '../../../web/src/inputlog';
 declare const process: { argv: string[]; exit(c: number): never; stdout: { write(s: string): void }; stderr: { write(s: string): void } };
 
 const PKG = join(dirname(fileURLToPath(import.meta.url)), '..');
-const ROM_FILE = { esp32c3: 'esp32c3_rev3_rom.elf', esp32s3: 'esp32s3_rev0_rom.elf' } as const;
+const ROM_FILE = { esp32: 'esp32_rev300_rom.elf', esp32c3: 'esp32c3_rev3_rom.elf', esp32s3: 'esp32s3_rev0_rom.elf' } as const;
 
 const USAGE = `tryboard（试板）本地命令行 · 本地包，尚未发布
 

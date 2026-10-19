@@ -23,12 +23,40 @@ pub trait I2cDevice: Any {
 
 pub const FIFO_LEN: usize = 32;
 
-mod op {
-    pub const RSTART: u32 = 6;
-    pub const WRITE: u32 = 1;
-    pub const READ: u32 = 3;
-    pub const STOP: u32 = 2;
-    pub const END: u32 = 4;
+/// 控制器的布局差异：命令码、命令表长度、时钟。C3 / S3 一套；经典 ESP32（soc/esp32 i2c_reg.h、hal/esp32 i2c_ll.h）
+/// 命令码不同（RSTART 0、WRITE 1、READ 2、STOP 3、END 4）、命令表 16 项、SCL 计数直接用 APB 80MHz（14 位，没有 CLK_CONF / 分频），
+/// 其余寄存器偏移与位定义相同，所以复用同一个模型
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct I2cLayout {
+    pub op_rstart: u32,
+    pub op_write: u32,
+    pub op_read: u32,
+    pub op_stop: u32,
+    pub op_end: u32,
+    pub ncmd: usize,
+    /// SCL 高 / 低周期按 APB 80MHz 计、14 位（经典 ESP32）；否则按 CLK_CONF 选源和分频、9 位
+    pub apb_clock: bool,
+}
+
+impl I2cLayout {
+    pub const C3: I2cLayout = I2cLayout {
+        op_rstart: 6,
+        op_write: 1,
+        op_read: 3,
+        op_stop: 2,
+        op_end: 4,
+        ncmd: 8,
+        apb_clock: false,
+    };
+    pub const ESP32: I2cLayout = I2cLayout {
+        op_rstart: 0,
+        op_write: 1,
+        op_read: 2,
+        op_stop: 3,
+        op_end: 4,
+        ncmd: 16,
+        apb_clock: true,
+    };
 }
 
 pub mod int {
@@ -68,6 +96,7 @@ pub struct I2c {
     pub slow_nacks: u64,
     /// 每个 7 位地址：发过几次地址字节、其中几次有人应答（生成检查点按器件判"接上了没有"）
     pub addr_acks: BTreeMap<u8, (u64, u64)>,
+    pub layout: I2cLayout,
 }
 
 impl Default for I2c {
@@ -98,6 +127,7 @@ impl Default for I2c {
             slow_bytes: 0,
             slow_nacks: 0,
             addr_acks: BTreeMap::new(),
+            layout: I2cLayout::C3,
         }
     }
 }
@@ -106,6 +136,15 @@ impl I2c {
     /// 第二个控制器（S3 的 I2C1）：事件里带 PORT1 位
     pub fn with_port(port_bit: u16) -> Self {
         I2c {
+            port_bit,
+            ..I2c::default()
+        }
+    }
+
+    /// 指定布局（经典 ESP32 用 `I2cLayout::ESP32`）
+    pub fn with_layout(layout: I2cLayout, port_bit: u16) -> Self {
+        I2c {
+            layout,
             port_bit,
             ..I2c::default()
         }
@@ -129,6 +168,12 @@ impl I2c {
 
     /// 一个 SCL 位周期折合多少 CPU 周期（CPU 160MHz）
     fn bit_cycles(&self) -> u64 {
+        if self.layout.apb_clock {
+            let low = (self.regs[0] & 0x3fff) as u64 + 1;
+            let high = (self.regs[0x38 / 4] & 0x3fff) as u64 + 1;
+            // APB 80MHz = CPU 160MHz 的一半
+            return (low + high).max(4) * 2;
+        }
         let clk = self.regs[0x54 / 4];
         let div = (clk & 0xff) as u64 + 1;
         // sclk_sel：0 = XTAL 40MHz，1 = RC_FAST ≈ 17.5MHz
@@ -250,7 +295,8 @@ impl I2c {
         let pb = self.port_bit;
         // 线太长：上升时间超标（估算）。Marginal 读回的字节丢 0→1 的位；Fail 地址都传不对、没人应答
         let slow = self.load().map(|l| l.2).unwrap_or(Verdict::Ok);
-        for idx in 0..8 {
+        let l = self.layout;
+        for idx in 0..l.ncmd {
             let reg = 0x58 / 4 + idx;
             let cmd = self.regs[reg];
             let opc = (cmd >> 11) & 7;
@@ -258,12 +304,12 @@ impl I2c {
             let ack_en = cmd & (1 << 8) != 0;
             let ack_exp = (cmd >> 9) & 1;
             let ack_val = (cmd >> 10) & 1;
-            if nacked && opc != op::STOP {
+            if nacked && opc != l.op_stop {
                 continue;
             }
             self.regs[reg] |= 1 << 31;
             match opc {
-                op::RSTART => {
+                _ if opc == l.op_rstart => {
                     let b = pb | if self.in_txn { i2cbit::RESTART } else { 0 };
                     self.events.push(IoEvent {
                         t: now + bits * bc,
@@ -276,7 +322,7 @@ impl I2c {
                     self.need_addr = true;
                     bits += 1;
                 }
-                op::WRITE => {
+                _ if opc == l.op_write => {
                     for _ in 0..n {
                         let b = self.tx.pop_front().unwrap_or(0xff);
                         let t = now + bits * bc;
@@ -332,7 +378,7 @@ impl I2c {
                         }
                     }
                 }
-                op::READ => {
+                _ if opc == l.op_read => {
                     for k in 0..n {
                         let mut b = match self.cur {
                             Some(i) => self.devices[i].read(),
@@ -361,7 +407,7 @@ impl I2c {
                         bits += 9;
                     }
                 }
-                op::STOP => {
+                _ if opc == l.op_stop => {
                     self.events.push(IoEvent {
                         t: now + bits * bc,
                         kind: kind::I2C_STOP,
@@ -379,7 +425,7 @@ impl I2c {
                     }
                     break;
                 }
-                op::END => {
+                _ if opc == l.op_end => {
                     ints |= int::END_DETECT;
                     break;
                 }
@@ -413,6 +459,15 @@ impl I2c {
 mod tests {
     use super::*;
     use crate::devices::bme280::Bme280;
+
+    /// C3 命令码（hal/esp32c3 i2c_ll.h）
+    mod op {
+        pub const RSTART: u32 = 6;
+        pub const WRITE: u32 = 1;
+        pub const READ: u32 = 3;
+        pub const STOP: u32 = 2;
+        pub const END: u32 = 4;
+    }
 
     fn cmd(op: u32, n: u32, ack_en: bool, ack_val: u32) -> u32 {
         op << 11 | (ack_en as u32) << 8 | ack_val << 10 | n

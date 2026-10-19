@@ -3,6 +3,8 @@
 目标：用户上传的 .bin（IDF / Arduino）在模拟器里能扫描、连上虚拟 AP、拿到 IP、做 HTTP。
 信息来源：ESP-IDF v5.5.1 的预编译 Wi-Fi 库（libpp / libnet80211 / libphy，Apache-2.0 二进制）反汇编、ROM ELF 符号、IDF 头文件。不参考任何 GPL 实现。
 
+经典 ESP32（C-05，2026-10-19）：PHY 射频校准轮询与 C3 同一套（偏移相同，APB 基址 0x3FF40000；FM SAR 位 26..24 读回语义相反、PLL 换频位 8 / 31 是 ESP32 独有，见 `WifiLayout::ESP32`），`esp_wifi_init` / `start` 能过。MAC 是上一代 IP（0x3FF73000 一带，描述符格式不同），收发没做，扫描收不到信标、连 AP 报 reason=201。
+
 调试工具：
 - `tools/wifi_iter.sh <固件> [秒] [参数]`：重编 CLI、运行、打印停止点并反汇编
 - `tryboard run ... --watch 0x6003xxxx`：记录访问该 MMIO 地址的 PC（按 PC 汇总读写次数与最后值）

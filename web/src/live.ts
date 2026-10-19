@@ -45,7 +45,7 @@ export interface LiveOptions {
   /** 原始 tick（引脚电平、PWM），给要驱动 3D 台面的页面用 */
   onTick?(m: Extract<FromWorker, { type: 'tick' }>): void;
   /** 固件已加载、开始运行（每次 start / reset / load 一次） */
-  onBoot?(chip: 'esp32c3' | 'esp32s3'): void;
+  onBoot?(chip: 'esp32' | 'esp32c3' | 'esp32s3'): void;
   /** watchPwm 引脚上的 PWM 变化（带模拟时刻），接 audio.ts 的 BuzzerAudio.push */
   onPwm?(events: PwmEvent[] | undefined, simSeconds: number): void;
   /** 上一次上电就要结束（重新上电 / 换固件 / 回退之前）：这次运行从上电到此刻的完整记录 */

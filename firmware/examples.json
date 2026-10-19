@@ -1086,5 +1086,37 @@
    "imu"
   ],
   "assembly": "tilt"
+ },
+ {
+  "id": "esp32-hello",
+  "chip": "esp32",
+  "title": "Hello World（经典 ESP32）",
+  "about": "同一份 hello_world 换成经典 ESP32（双核 Xtensa LX6，ESP32-DevKitC V4）：打印芯片型号、核数、flash 大小、剩余堆内存。",
+  "tags": [
+   "✓ 仿真验证",
+   "UART",
+   "双核 FreeRTOS",
+   "ESP-IDF 5.5"
+  ]
+ },
+ {
+  "id": "esp32-blink",
+  "chip": "esp32",
+  "title": "点灯（经典 ESP32）：GPIO2 驱动 LED",
+  "about": "和 C3 版同一份源码。ESP32-DevKitC V4 板上只有电源灯、没有用户灯，所以在 GPIO2 外接一颗 LED（经 220Ω），每 500ms 翻转。",
+  "tags": [
+   "✓ 仿真验证",
+   "GPIO",
+   "双核 FreeRTOS",
+   "ESP-IDF 5.5"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "led",
+     "pin": 2
+    }
+   ]
+  }
  }
 ]

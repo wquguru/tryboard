@@ -2,13 +2,14 @@
 // 选板出来的自定义项目零件组合太多，不手写；这里按零件出 Level，判定字段和 check.py / npm 包同一套。
 // 纯函数：同样的板子和零件永远生成同样的 Level（导出的 JSON 给 check.py --level-json 用，网页和命令行指纹对得上）。
 import type { PartSpec } from '../board3d';
+import { CHIP_LABEL } from '../chips.ts';
 import type { Level } from '../checks.ts';
 import type { ConfLevel } from '../ui/conf.tsx';
 
 export interface GenInput {
   /** 实验台板子名（任务书里写） */
   boardName: string;
-  chip: 'esp32c3' | 'esp32s3';
+  chip: 'esp32' | 'esp32c3' | 'esp32s3';
   parts: PartSpec[];
   /** 电池供电又要深睡：加一条「深睡后能再唤醒」（必须上真机，不判） */
   deepSleep: boolean;
@@ -40,7 +41,7 @@ export function genLevels(g: GenInput): Level[] {
     ...(servo ? [`舵机信号：GPIO${servo.pin}（50 Hz，外接 5 V 供电）`] : []),
     ...(strip ? [`灯带数据 DIN：GPIO${strip.pin}`] : []),
   ];
-  const chipName = g.chip === 'esp32s3' ? 'ESP32-S3' : 'ESP32-C3';
+  const chipName = CHIP_LABEL[g.chip];
   const brief = (goal: string, pass: string) =>
     [`用 ESP-IDF 5.x 给 ${g.boardName}（${chipName}）写固件。`, `目标：${goal}`, ...(wiring.length ? ['接线：', ...wiring.map((w) => `- ${w}`)] : []), `通过条件：${pass}`, '只交 flash.bin（合并镜像，从 0x0 开始）。'].join('\n');
   const out: Level[] = [];

@@ -9,10 +9,10 @@ PUB="$ROOT/web/public"
 mkdir -p "$PUB/wasm" "$PUB/rom" "$PUB/fw"
 cp "$ROOT/core/target/wasm32-unknown-unknown/release/tryboard_wasm.wasm" "$PUB/wasm/tryboard.wasm"
 ROMS="$ROOT/third_party/esp-rom-elfs"
-cp "$ROMS/esp32c3_rev3_rom.elf" "$ROMS/esp32s3_rev0_rom.elf" "$PUB/rom/"
+cp "$ROMS/esp32_rev300_rom.elf" "$ROMS/esp32c3_rev3_rom.elf" "$ROMS/esp32s3_rev0_rom.elf" "$PUB/rom/"
 cp "$ROMS/LICENSE" "$PUB/rom/LICENSE-esp-rom-elfs.txt"
 cat > "$PUB/rom/NOTICE.txt" <<'TXT'
-esp32c3_rev3_rom.elf and esp32s3_rev0_rom.elf come from https://github.com/espressif/esp-rom-elfs (release 20260528),
+esp32_rev300_rom.elf, esp32c3_rev3_rom.elf and esp32s3_rev0_rom.elf come from https://github.com/espressif/esp-rom-elfs (release 20260528),
 licensed under the Apache License 2.0 (see LICENSE-esp-rom-elfs.txt). Copyright Espressif Systems.
 The ROM contains third-party components (Newlib BSD, miniz, TJpgDec and others); see
 https://docs.espressif.com/projects/esp-idf/en/latest/esp32/COPYRIGHT.html

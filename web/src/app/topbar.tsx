@@ -13,6 +13,7 @@ import { useStore } from './react';
 import { savedText } from './saved';
 import { STEPS, type StepId } from './types';
 import { WORKS } from './works';
+import { CHIP_LABEL, type SimChip } from '../chips';
 import { BLANK_LAB, HOME, LICENSES, lab, selectLink } from '../ui/links';
 
 /** 32×32 图标按钮 */
@@ -117,7 +118,7 @@ function Breadcrumb({ name }: { name: string }) {
         <WorkMenu name={EXAMPLE_ID ? `示例 · ${name}` : name} />
         {EXAMPLE_ID && (
           <span id="chipBadge" className="flex-none rounded-md border border-line px-1.5 py-px font-mono text-[11px] text-muted max-[1500px]:hidden">
-            {chip === 'esp32s3' ? 'ESP32-S3' : 'ESP32-C3'}
+            {CHIP_LABEL[chip as SimChip] ?? 'ESP32-C3'}
           </span>
         )}
       </div>

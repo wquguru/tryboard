@@ -46,6 +46,8 @@ impl Power {
 pub enum ChipKind {
     S3,
     C3,
+    /// 经典 ESP32（ESP32-DevKitC V4 + WROOM-32）
+    Esp32,
 }
 
 /// 供电网络参数。每个数的来源写在 `for_chip` 里
@@ -85,7 +87,6 @@ pub struct Params {
 
 impl Params {
     pub fn for_chip(chip: ChipKind) -> Params {
-        let s3 = chip == ChipKind::S3;
         Params {
             // USB 2.0 主机口：5 V，额定 500 mA（规范值；真机口多数能给更多，这里按规范、估算）。
             // 内阻 = 口内 0.1 Ω + 1 m 线两根 28AWG 电源线约 0.43 Ω 加插头（估算 0.4 Ω）
@@ -113,16 +114,38 @@ impl Params {
             ldo_iq: 0.0001,
             // 芯片电流（估算，量级取自 ESP32-S3 / C3 数据手册"功耗"表：modem-sleep 数十 mA、
             // 802.11b 1 Mbps 21 dBm 发射约 340 mA（S3）/ 335 mA（C3）、接收约 90 mA）
-            chip_idle: if s3 { 0.020 } else { 0.014 },
-            chip_core: if s3 { 0.012 } else { 0.010 },
-            chip_rx: if s3 { 0.075 } else { 0.065 },
-            chip_tx: if s3 { 0.340 } else { 0.335 },
+            // 经典 ESP32 取其数据手册：modem-sleep 160MHz 双核 20–68 mA、802.11b 19.5 dBm 发射约 240 mA、接收约 95 mA（估算）
+            chip_idle: match chip {
+                ChipKind::S3 => 0.020,
+                ChipKind::C3 => 0.014,
+                ChipKind::Esp32 => 0.025,
+            },
+            chip_core: match chip {
+                ChipKind::S3 => 0.012,
+                ChipKind::C3 => 0.010,
+                ChipKind::Esp32 => 0.015,
+            },
+            chip_rx: match chip {
+                ChipKind::S3 => 0.075,
+                ChipKind::C3 => 0.065,
+                ChipKind::Esp32 => 0.095,
+            },
+            chip_tx: match chip {
+                ChipKind::S3 => 0.340,
+                ChipKind::C3 => 0.335,
+                ChipKind::Esp32 => 0.240,
+            },
             chip_reset: 0.005,
             // 电源灯约 2 mA + CP2102N 约 8 mA + 板载 WS2812 静态约 1 mA（估算）
             board_3v3: 0.011,
             // IDF 5.5 默认档 ESP_BROWNOUT_DET_LVL_SEL_7：S3 2.44 V、C3 2.51 V（Kconfig.power，乐鑫标注为估计值）。
             // 去抖：brownout_hal_config 写 rst_wait = 0x3ff，计数时钟未核实，按约 8.75 MHz 估 ≈ 0.12 ms（估算）
-            bod_v: if s3 { 2.44 } else { 2.51 },
+            // 经典 ESP32 默认档 ESP_BROWNOUT_DET_LVL_SEL_0：2.43 V（Kconfig，乐鑫标注为估计值）
+            bod_v: match chip {
+                ChipKind::S3 => 2.44,
+                ChipKind::C3 => 2.51,
+                ChipKind::Esp32 => 2.43,
+            },
             bod_debounce: 0.000_12,
             bod_hyst: 0.05,
             tx_airtime: 0.0006,

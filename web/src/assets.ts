@@ -2,7 +2,7 @@
 import type { ChipId } from './board3d';
 import { imageChip as chipOf } from './simrun';
 
-export const ROM_FILE: Record<ChipId, string> = { esp32c3: 'esp32c3_rev3_rom.elf', esp32s3: 'esp32s3_rev0_rom.elf' };
+export const ROM_FILE: Record<ChipId, string> = { esp32: 'esp32_rev300_rom.elf', esp32c3: 'esp32c3_rev3_rom.elf', esp32s3: 'esp32s3_rev0_rom.elf' };
 
 /** 发布到不托管二进制的环境时（页面带 <meta name="tryboard-pack" content="b64">），固件与 ROM 以 base64 文本存放 */
 const PACKED = document.querySelector('meta[name="tryboard-pack"]')?.getAttribute('content') === 'b64';

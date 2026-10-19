@@ -4,6 +4,11 @@ import { BOARDS, I2S_WIRING, LCD_WIRING, type ChipId, type PartSpec, type SceneS
 
 /** 各芯片的 ADC1 引脚与引脚提示（strapping、板载占用、USB、串口、PSRAM） */
 const CHIP_PINS: Record<ChipId, { adc: number[]; hint: Record<number, string>; avoid: number[] }> = {
+  esp32: {
+    adc: [32, 33, 34, 35, 36, 39],
+    hint: { 0: 'strapping · BOOT 键', 2: 'strapping', 5: 'strapping', 12: 'strapping · 上电高 flash 变 1.8V', 15: 'strapping', 34: '只能输入', 35: '只能输入', 36: '只能输入', 39: '只能输入' },
+    avoid: [],
+  },
   esp32c3: {
     adc: [0, 1, 2, 3, 4],
     hint: { 2: 'strapping', 8: 'strapping · 板载 RGB', 9: 'strapping · BOOT 键', 18: 'USB D-', 19: 'USB D+', 20: 'UART0 RX', 21: 'UART0 TX' },

@@ -863,7 +863,7 @@ export function PartLib({
   inBom,
   onPlace,
 }: {
-  chip: "esp32c3" | "esp32s3";
+  chip: "esp32" | "esp32c3" | "esp32s3";
   inBom?: ReadonlySet<string>;
   /** 桌面：点「放到台面」或拖到台面上（P2-16）；没给就只能去采购加 */
   onPlace?: (id: string) => void;
