@@ -4,7 +4,7 @@ import { t } from "../../i18n";
 import { type ReactNode } from "react";
 import { type PickTarget, type ScreenPoint } from "../../scene-api";
 import { partId, partInfo } from "../wiring";
-import { getAnalyzer } from "../analyzer";
+import { loadAnalyzer } from "../anaload";
 import { extModelsOn, setExtModels } from "../../extmodels";
 import { RECORD_SECONDS, recordCanvas, takePhoto } from "../capture";
 import { Live } from "../../ui/native";
@@ -261,7 +261,7 @@ export function mountCards(b: BenchCtx) {
       setRuler(!b.ruler);
     } else if (id === "meter") b.setMeter(!b.meter);
     else if (id === "heat") b.toggleHeat();
-    else if (id === "scope") getAnalyzer(c).toggle();
+    else if (id === "scope") void loadAnalyzer(c).then((a) => a.toggle());
     else if (id === "ext") {
       // External models (P1-09): KiCad / Adafruit glb for servo, USB-C and buzzer; procedural by default, credits on the licenses page
       const on = !extModelsOn();

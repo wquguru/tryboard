@@ -3,7 +3,7 @@
 import type { ManifoldToplevel } from 'manifold-3d';
 import { Box3, Vector3, type Mesh } from 'three';
 import { t } from '../i18n';
-import { DEFAULT_PARAMS, buildCaseMeshes, caseLayout, caseSel, printLayout, type CaseLayout, type CaseMeshes, type CaseParams } from './enclosure';
+import { buildCaseMeshes, caseLayout, caseSel, printLayout, type CaseLayout, type CaseMeshes, type CaseParams } from './enclosure';
 import { to3mf, toStl } from './meshio';
 import { replay, type BomHistory } from './bom';
 
@@ -22,26 +22,7 @@ export function loadManifold(): Promise<ManifoldToplevel> {
   return wasm;
 }
 
-const KEY = (work: string) => `tryboard-app-case:${work}`;
-export function loadCaseParams(work: string): CaseParams {
-  const d = DEFAULT_PARAMS[work] ?? DEFAULT_PARAMS.weather;
-  try {
-    const v = JSON.parse(localStorage.getItem(KEY(work)) ?? 'null');
-    if (v && typeof v.height === 'number' && typeof v.wall === 'number' && typeof v.radius === 'number') return { height: v.height, wall: v.wall, radius: v.radius };
-  } catch {
-    /* Unreadable: fall back to defaults. */
-  }
-  return { ...d };
-}
-export function saveCaseParams(work: string, p: CaseParams) {
-  try {
-    localStorage.setItem(KEY(work), JSON.stringify(p));
-    // The topbar "saved locally" badge listens for this event; keeps this file free of shell imports.
-    globalThis.dispatchEvent?.(new Event('tb-saved'));
-  } catch {
-    /* Private mode: settings last for this page only. */
-  }
-}
+export { loadCaseParams, saveCaseParams } from './caseparams';
 
 /** BOM -> parts the enclosure must fit (board, servo, screen, sensors). */
 export function layoutFor(template: string, bom: BomHistory, p: CaseParams): CaseLayout {

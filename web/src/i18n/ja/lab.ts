@@ -935,5 +935,10 @@ const d: Dict = {
   "DHT11 power (3.3 V)": "DHT11 電源（3.3 V）",
   "Waveform": "波形",
   "Tap to place cursors A and B in turn; drag to pan, − / + to zoom": "タップするたびにカーソル A と B を交互に置きます。ドラッグで移動、− / + で拡大縮小します。",
+  "Loading panel…": "パネルを読み込み中…",
+  "Loading this step…": "このステップを読み込み中…",
+  "This step could not load: {err}": "このステップを読み込めませんでした：{err}",
+  "Check the connection, then open the step again.": "接続を確認してから、もう一度このステップを開いてください。",
+  "This panel could not load: {err}": "パネルを読み込めませんでした：{err}",
 };
 export default d;

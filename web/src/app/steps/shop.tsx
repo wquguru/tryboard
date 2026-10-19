@@ -6,7 +6,7 @@ import { PROCURE_TEMPLATES, bomTotal, getTemplate } from '../../catalog/template
 import { evaluate, type Finding } from '../../catalog/rules';
 import { wkey } from '../works';
 import { actions } from '../chrome';
-import { initialHistory, opLabel, placement, push, replay, ruleInput, shortName, validHistory, type Bom, type BomHistory, type BomOp } from '../bom';
+import { opLabel, placement, push, replay, ruleInput, shortName, type Bom, type BomOp } from '../bom';
 import type { StepCtx, StepImpl, WorkId } from '../types';
 import { partLabel } from '../wiring';
 import { PARAM_RANGE, type CaseParams } from '../enclosure';
@@ -15,7 +15,7 @@ import { Fragment, type ReactNode } from 'react';
 import { cn } from '../../ui/cn';
 import { NInput, NSelect } from '../../ui/native';
 import { Btn, Btns, Field, Kv, KvT, LinkBtn, Mono, Muted, Note, Ph, Res, Sec, TnL, TnM, TreeEmpty, TreeGroup, VerdictLine, tnClass } from '../../ui/panel';
-import { noteSaved } from '../saved';
+import { saveBom, savePlaced } from '../bomstore';
 import { lab } from '../../ui/links';
 import { Conf, ConfIcon, confOfRule, type ConfLevel } from '../../ui/conf';
 import { genLevels } from '../genlevels';
@@ -24,46 +24,6 @@ import { t } from '../../i18n';
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
 const yuan = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
 const range = (lo: number, hi: number) => `¥${yuan(lo)}–${yuan(hi)}`;
-
-// ------------------------------------------------------------ local storage (per work)
-const BOM_KEY = (w: string) => `tryboard-app-shop:${w}`;
-const PLACED_KEY = (w: string) => `tryboard-app-placed:${w}`;
-
-export function loadBom(work: string): BomHistory {
-  try {
-    const h = JSON.parse(localStorage.getItem(BOM_KEY(work)) ?? 'null');
-    if (validHistory(h)) return h;
-  } catch {
-    /* corrupt data: fall back to the template default */
-  }
-  // Board-picker works (custom:<hash>) get their template registered as 'custom' by main.tsx from URL params
-  return initialHistory(work.startsWith('custom:') ? 'custom' : PROCURE_TEMPLATES.some((x) => x.id === work) ? work : 'blank');
-}
-export function saveBom(work: string, h: BomHistory) {
-  try {
-    localStorage.setItem(BOM_KEY(work), JSON.stringify(h));
-    noteSaved();
-  } catch {
-    /* private mode can't store: the list lives only on this page */
-  }
-}
-export function loadPlaced(work: string): { scene: SceneSpec; ext5v: boolean } | null {
-  try {
-    const p = JSON.parse(localStorage.getItem(PLACED_KEY(work)) ?? 'null');
-    if (p && Array.isArray(p.scene?.parts) && typeof p.ext5v === 'boolean') return p;
-  } catch {
-    /* same as above */
-  }
-  return null;
-}
-function savePlaced(work: string, scene: SceneSpec, ext5v: boolean) {
-  try {
-    localStorage.setItem(PLACED_KEY(work), JSON.stringify({ scene, ext5v }));
-    noteSaved();
-  } catch {
-    /* same as above */
-  }
-}
 
 // ------------------------------------------------------------ copy
 const KIND: Record<Kind, string> = {

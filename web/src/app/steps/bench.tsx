@@ -5,7 +5,7 @@ import { bit } from "../pinscope";
 import { type StepImpl } from "../types";
 import { loadExamples } from "../examples";
 import { actions, overlay } from "../chrome";
-import { bleFeed, phoneStateText } from "../blepane";
+import { bleFeed, phoneStateText } from "../blefeed";
 import { setLeft } from "../leftcol";
 import { pending, passedCount } from "../bench/progress";
 import { toPick, relatedWork } from "../bench/shared";

@@ -4,7 +4,7 @@ import { t } from "../../i18n";
 import { partId, partInfo } from "../wiring";
 import { pinKind, powerVolts } from "../pinscope";
 import { BOOT_GPIO } from "../../chips";
-import { getAnalyzer } from "../analyzer";
+import { loadAnalyzer } from "../anaload";
 import { Live } from "../../ui/native";
 import { Btn, Btns, Kv, KvT, Note, Ph, Sec } from "../../ui/panel";
 import type { BenchCtx } from "./ctx";
@@ -74,7 +74,7 @@ export function mountPins(b: BenchCtx) {
         {(kind === "gpio" || kind === "i2c") && (
           <>
             <Btns>
-              <Btn data-ana={id} onClick={() => getAnalyzer(c).open(id)}>
+              <Btn data-ana={id} onClick={() => void loadAnalyzer(c).then((a) => a.open(id))}>
                 {t("Open in analyzer")}
               </Btn>
             </Btns>

@@ -2,52 +2,7 @@
 // Shown once firmware enumerates over native USB; data throttled to ≤ 10 Hz, the mouse trail is canvas-only.
 import { useEffect, useRef, useSyncExternalStore, type FormEvent } from 'react';
 import { t } from '../i18n';
-import type { UsbView } from '../usb3d';
-
-/** Virtual PC data: device state notifies React at ≤ 10 Hz; every mouse report is kept for the canvas trail. */
-function createUsbFeed() {
-  let view: UsbView | null = null;
-  const trail: [number, number][] = [];
-  let lastReports = -1;
-  let timer = 0;
-  let last = 0;
-  const subs = new Set<() => void>();
-  const notify = () => {
-    timer = 0;
-    last = performance.now();
-    for (const f of subs) f();
-  };
-  return {
-    get: () => view,
-    trail,
-    update(v: UsbView | null) {
-      view = v;
-      if (v && v.mouse.reports !== lastReports) {
-        lastReports = v.mouse.reports;
-        trail.push([v.mouse.x, v.mouse.y]);
-        if (trail.length > 300) trail.shift();
-      }
-      if (timer) return;
-      const wait = 100 - (performance.now() - last);
-      if (wait <= 0) notify();
-      else timer = window.setTimeout(notify, wait);
-    },
-    reset() {
-      clearTimeout(timer);
-      view = null;
-      trail.length = 0;
-      lastReports = -1;
-      notify();
-    },
-    subscribe(f: () => void) {
-      subs.add(f);
-      return () => void subs.delete(f);
-    },
-  };
-}
-export type UsbFeed = ReturnType<typeof createUsbFeed>;
-/** One per page: session pushes, the dock tab reads. */
-export const usbFeed = createUsbFeed();
+import { usbFeed, type UsbFeed } from './usbfeed';
 
 const hex4 = (n: number) => n.toString(16).padStart(4, '0').toUpperCase();
 const cap = 'usb-cap mt-1.5 mb-1 text-xs text-muted';

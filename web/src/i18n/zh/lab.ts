@@ -935,5 +935,10 @@ const d: Dict = {
   "DHT11 power (3.3 V)": "DHT11 供电（3.3 V）",
   "Waveform": "波形",
   "Tap to place cursors A and B in turn; drag to pan, − / + to zoom": "轻点依次放光标 A、B；拖动平移，− / + 缩放",
+  "Loading panel…": "正在加载面板…",
+  "Loading this step…": "正在加载这一步…",
+  "This step could not load: {err}": "这一步加载失败：{err}",
+  "Check the connection, then open the step again.": "请检查网络连接，然后重新打开这一步。",
+  "This panel could not load: {err}": "面板加载失败：{err}",
 };
 export default d;

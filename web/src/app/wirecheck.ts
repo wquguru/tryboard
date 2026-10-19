@@ -2,7 +2,7 @@
 // Shop rules (catalog/rules.ts) check the list + template wiring; both share voltage conventions and sources. Pure function.
 import type { PartSpec } from '../board3d';
 import { t } from '../i18n/index.ts';
-import { RULE_BY_ID, netVolt, type Confidence } from '../catalog/rules.ts';
+import { RULE_BY_ID, netVolt, type Confidence } from '../catalog/rulemeta.ts';
 import { i2cBuses, partId, partInfo, type BenchWire } from './wiring.ts';
 import { i2cLoad, i2cText } from './harness.ts';
 

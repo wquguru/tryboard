@@ -7,13 +7,13 @@ import { bootOptions, type Level } from '../../checks';
 import { VerifyStalled, verifyLevel } from '../../verify';
 import { fetchBuf } from '../../assets';
 import { ownFirmware, passedCount, requestAllRef } from './bench';
-import type { AssemblyState, StepCtx, StepImpl } from '../types';
+import type { StepCtx, StepImpl } from '../types';
 import type { TimelineStep } from '../timeline';
 import type { Assembly3D } from '../asm3d';
 import { caseFor, layoutFor, layoutKey } from '../casemesh';
 import type { CaseLayout } from '../enclosure';
-import { OBSTACLE_LABEL, antennaLossDb, i2cLoad, i2cSay, i2cText, loadCaseHarness, saveCaseHarness, wifiSay, wifiText, type CaseHarness, type Obstacle } from '../harness';
-import { noteSaved } from '../saved';
+import { OBSTACLE_LABEL, i2cSay, i2cText, loadCaseHarness, saveCaseHarness, wifiSay, type CaseHarness, type Obstacle } from '../harness';
+import { harnessEffects, loadEntries, saveEntries, summarize, type Entry } from '../asmstate';
 import { t } from '../../i18n';
 
 type SvgAsm = ReturnType<typeof createAssembly>;
@@ -45,67 +45,6 @@ const EST: ConfLevel = '估算'; // lint: allow-cjk
 const REAL_HW: ConfLevel = '必须上真机'; // lint: allow-cjk
 /** Device name of the assembly-warning row: it is not a device, so the "N devices changed" count skips it */
 const ASM_DEV = t('Assembly');
-
-type Entry = { kind: 'place'; id: string; spot?: string } | { kind: 'test'; ok: boolean; rows: { ok: boolean; text: string; say?: string; tag?: string; dev?: string; conf?: ConfLevel; note?: string }[]; fingerprint: string; who: string; temp: number; offset: number };
-
-const KEY = (work: string) => `tryboard-app-asm:${work}`;
-/** Locally saved assembly timeline (what went in, how, retest results; nothing beyond the per-row results) */
-function loadEntries(work: string): Entry[] {
-  try {
-    const v = JSON.parse(localStorage.getItem(KEY(work)) ?? '[]');
-    return Array.isArray(v) ? v.filter((e) => e && (e.kind === 'place' || e.kind === 'test')) : [];
-  } catch {
-    return [];
-  }
-}
-function saveEntries(work: string, list: Entry[]) {
-  try {
-    localStorage.setItem(KEY(work), JSON.stringify(list));
-    noteSaved();
-  } catch {
-    /* private mode: only lasts for this page */
-  }
-}
-const lastIsTest = (list: Entry[]) => {
-  const e = list[list.length - 1];
-  return e?.kind === 'test' ? e.ok : null;
-};
-
-/** Whether this project's enclosure holds I2C modules (cable length only matters for them) */
-export const I2C_DEVICES: Record<string, number> = { weather: 2 };
-
-/** What the harness carries into the product (estimate): I2C cable length, antenna loss dB, and whether they break it */
-export function harnessEffects(work: string, h: CaseHarness) {
-  const n = I2C_DEVICES[work] ?? 0;
-  const i2c = n ? i2cLoad(h.i2cCm, n) : null;
-  const antennaDb = antennaLossDb(h.obstacle, h.distMm);
-  const wifi = wifiText(antennaDb);
-  return { i2c, antennaDb, wifi, ok: (!i2c || i2c.verdict === 'ok') && wifi.level !== 'fail' };
-}
-
-/** Computes the assembly result without DOM (Product step, restore after reload); must match createAssembly's clean / effects */
-function summarize(T: Template, places: { id: string; spot?: string }[], retest: boolean | null, h: CaseHarness): AssemblyState {
-  const placed = places.map((p) => p.id);
-  const choice: Record<string, string> = {};
-  for (const p of places) if (p.spot) choice[p.id] = p.spot;
-  const total = T.parts.length;
-  const hx = harnessEffects(T.id, h);
-  const clean = placed.length === total && hx.ok && T.parts.every((p) => !p.spots || p.spots.find((s) => s.key === choice[p.id])?.ok);
-  const effects = { ...T.effects({ placed, choice }), ...(hx.i2c ? { i2cWireCm: h.i2cCm } : {}), antennaDb: hx.antennaDb };
-  return { placed, choice, total, clean, effects, retest };
-}
-
-/** Restore the saved assembly on page load (only what went in and how; retest results must be rerun) */
-export function restoreAssembly(ctx: StepCtx) {
-  const T = TEMPLATES[ctx.work.id];
-  if (!T) return;
-  const list = loadEntries(ctx.work.id);
-  const places = list.filter((e): e is Extract<Entry, { kind: 'place' }> => e.kind === 'place');
-  // Saved order must be the template's bottom-up order, otherwise treat it as not assembled
-  const okOrder = places.every((p, i) => T.parts[i]?.id === p.id);
-  if (places.length && okOrder) ctx.store.set({ assembly: summarize(T, places, lastIsTest(list), loadCaseHarness(ctx.work.id)) });
-  else if (list.length) saveEntries(ctx.work.id, []);
-}
 
 /** Which checkpoint of this project includes assembly (weather 06, spin 07-spin, lens 07-lens) */
 export function assemblyLevel(ctx: StepCtx): Level | undefined {
