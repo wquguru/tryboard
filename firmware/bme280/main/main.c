@@ -1,5 +1,5 @@
-// 示例：BME280 温湿度气压传感器（I2C 地址 0x76），默认 SDA=GPIO6，SCL=GPIO7（PIN_SDA / PIN_SCL 可覆盖），100kHz。
-// 不依赖外部组件：按 Bosch 数据手册的整数补偿公式自己算。
+// Example: BME280 temp/humidity/pressure sensor (I2C 0x76), default SDA=GPIO6, SCL=GPIO7 (PIN_SDA / PIN_SCL override), 100kHz.
+// No external component: uses the integer compensation formulas from the Bosch datasheet.
 #include <stdio.h>
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"
@@ -58,7 +58,7 @@ void app_main(void)
     bme280_parse_calib(c, h);
     printf("calib T1=%u T2=%d T3=%d P1=%u H1=%u H2=%d H4=%d H5=%d\n", T1, T2, T3, P1, H1, H2, H4, H5);
 
-    // 湿度 ×1；温度 ×1、气压 ×1、正常模式；待机 125ms、关滤波
+    // Humidity x1; temperature x1, pressure x1, normal mode; standby 125ms, filter off
     ESP_ERROR_CHECK(wr(0xF2, 0x01));
     ESP_ERROR_CHECK(wr(0xF5, 0x40));
     ESP_ERROR_CHECK(wr(0xF4, 0x27));
@@ -76,7 +76,7 @@ void app_main(void)
         uint32_t hh = comp_h(ah);
         printf("T=%" PRId32 ".%02" PRId32 " C  H=%" PRIu32 ".%02" PRIu32 " %%  P=%" PRIu32 ".%02" PRIu32 " hPa\n",
                t / 100, (t < 0 ? -t : t) % 100, hh / 1024, (hh % 1024) * 100 / 1024, p / 25600, (p % 25600) * 100 / 25600);
-        // 合理范围：-40..85°C、0..100%、300..1100hPa
+        // Plausible range: -40..85°C, 0..100%, 300..1100hPa
         if (t > -4000 && t < 8500 && hh <= 100 * 1024 && p > 300 * 25600 && p < 1100 * 25600) ok++;
         if (ok == 3) printf("TRYBOARD_OK bme280\n");
     }

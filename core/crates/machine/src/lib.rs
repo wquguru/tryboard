@@ -1,5 +1,5 @@
-//! 芯片无关的机器外壳：按镜像头芯片 ID 选 ESP32-C3 或 ESP32-S3，给 CLI 和 wasm 一套统一接口。
-//! 新加芯片时在这里加一个分支，CLI / 网页不用改。
+//! Chip-agnostic machine shell: picks ESP32-C3 or ESP32-S3 from the image header chip ID, one interface for CLI and wasm.
+//! A new chip adds a branch here; CLI / web stay unchanged.
 
 use std::collections::{HashMap, VecDeque};
 use tryboard_elec::board::{Activity, Board, ChipKind, Power};
@@ -33,7 +33,7 @@ pub enum Chip {
 }
 
 impl Chip {
-    /// 镜像头里的芯片 ID（esp_app_format.h）
+    /// Chip ID from the image header (esp_app_format.h)
     pub fn from_image(flash: &[u8]) -> Option<Chip> {
         match tryboard_esp32s3::boot::image_chip_id(flash)? {
             0 => Some(Chip::Esp32),
@@ -49,7 +49,7 @@ impl Chip {
             Chip::Esp32s3 => "esp32s3",
         }
     }
-    /// esp-rom-elfs 里该芯片 ROM 的文件名
+    /// File name of this chip's ROM in esp-rom-elfs
     pub fn rom_file(self) -> &'static str {
         match self {
             Chip::Esp32 => "esp32_rev300_rom.elf",
@@ -64,7 +64,7 @@ impl Chip {
             Chip::Esp32s3 => tryboard_esp32s3::periph::NPINS,
         }
     }
-    /// 网页 / tb_chip 用的数字编号，与镜像头芯片 ID 一致
+    /// Numeric id for the web / tb_chip, same as the image header chip ID
     pub fn id(self) -> u32 {
         match self {
             Chip::Esp32 => 0,
@@ -74,15 +74,15 @@ impl Chip {
     }
 }
 
-/// 一次运行的停止原因（芯片无关）
+/// Why a run stopped (chip-agnostic)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stop {
     Budget,
-    /// 固件崩溃，文字说明
+    /// Firmware crashed, with a description
     Fault(String),
-    /// 碰到没实现的 HLE 函数
+    /// Hit an unimplemented HLE function
     Hle(String),
-    /// 固件请求软件复位（esp_restart / panic 后重启），值为复位原因；调用 reboot() 重新上电
+    /// Firmware requested a software reset (esp_restart / reboot after panic), value = reset reason; call reboot() to power up
     Reset(u32),
 }
 
@@ -93,21 +93,21 @@ pub enum Hw {
     E32(Esp32),
 }
 
-/// 外接线束（P2-11，估算，必须上真机）：I2C 排线总长、天线被金属件 / 电池挡住的衰减。
-/// 和供电网络一样是外部世界：跨软件复位保留，复位后重新挂到新的总线 / Wi-Fi 模型上
+/// External harness (P2-11, estimate, needs real hardware): total I2C wire length, antenna loss from metal / battery.
+/// Like the power network it's outside world: survives software reset and is reattached to the new bus / Wi-Fi model
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Harness {
-    /// None = 理想总线（不算上升时间；之前所有用例都这样跑）
+    /// None = ideal bus (no rise time; how all earlier cases ran)
     pub i2c_wire_cm: Option<f64>,
     pub antenna_loss_db: i32,
 }
 
-/// 一台机器 = 芯片 + 开发板供电网络（tryboard-elec）。供电网络跨复位保留（它是外部世界）
+/// A machine = chip + board power network (tryboard-elec). The power network survives reset (it's outside world)
 pub struct Machine {
     pub hw: Hw,
     pub elec: Board,
     harness: Harness,
-    /// 触摸控制器的 INT 脚接在哪个 GPIO（按着拉低、抬起回高）；None = 没接
+    /// GPIO the touch controller's INT is wired to (low while pressed, high on release); None = not wired
     pub touch_int: Option<u32>,
 }
 
@@ -171,8 +171,8 @@ impl Machine {
         }
     }
 
-    /// 软件复位后重新上电：flash（含 NVS）保留，模拟时间继续。
-    /// S3 另外保留 RTC 内存与 RTC_CNTL 存储寄存器（RTC_NOINIT、复位原因提示），见 Esp32s3::reboot
+    /// Power up after software reset: flash (incl. NVS) kept, simulated time continues.
+    /// S3 also keeps RTC memory and RTC_CNTL store registers (RTC_NOINIT, reset reason hints), see Esp32s3::reboot
     pub fn reboot(&mut self, reason: u32) -> Result<(), String> {
         match &mut self.hw {
             Hw::C3(m) => m.reboot(reason)?,
@@ -180,8 +180,8 @@ impl Machine {
             Hw::E32(m) => m.reboot(reason)?,
         }
         self.apply_harness();
-        // 我们不跑 ROM 引导，ROM 每次复位都会打印的头三行由这里补上（复位原因与 ROM 的写法一致），
-        // 网页和命令行串口里都能看到 rst:0x..（上电那一次不补：现有用例的串口输出保持不变）
+        // We don't run the ROM boot, so add the three lines ROM prints on every reset (reason worded as ROM does) so web and CLI
+        // consoles show rst:0x.. (not on first power-up, so existing cases' serial output stays unchanged)
         let banner = rom_banner(self.chip(), reason);
         self.console_push(banner.as_bytes());
         Ok(())
@@ -199,13 +199,13 @@ impl Machine {
         self.harness
     }
 
-    /// I2C 排线总长（cm）；None = 理想总线
+    /// Total I2C wire length (cm); None = ideal bus
     pub fn set_i2c_wire(&mut self, cm: Option<f64>) {
         self.harness.i2c_wire_cm = cm.map(|c| c.max(0.0));
         self.apply_harness();
     }
 
-    /// 天线遮挡（dB，≥ 0）
+    /// Antenna loss (dB, >= 0)
     pub fn set_antenna_loss(&mut self, db: i32) {
         self.harness.antenna_loss_db = db.max(0);
         self.apply_harness();
@@ -217,12 +217,12 @@ impl Machine {
         self.wifi_mut().world.antenna_loss_db = h.antenna_loss_db;
     }
 
-    /// I2C0 总线负载：(上升时间 ns, 当前频率下的上限 ns, 结论)；理想总线 None
+    /// I2C0 bus load: (rise time ns, limit ns at current frequency, verdict); None for an ideal bus
     pub fn i2c_load(&mut self) -> Option<(f64, f64, tryboard_elec::i2cbus::Verdict)> {
         self.i2c0().load()
     }
 
-    /// 因上升时间超标读错的字节数、地址不应答次数（估算）
+    /// Bytes misread and address NACKs caused by excessive rise time (estimate)
     pub fn i2c_slow_stats(&mut self) -> (u64, u64) {
         let b = self.i2c0();
         (b.slow_bytes, b.slow_nacks)
@@ -236,17 +236,17 @@ impl Machine {
         }
     }
 
-    /// 舵机信号接在哪个 GPIO（接上才有舵机电流；不接则供电网络只有芯片和模块）
+    /// GPIO the servo signal is on (servo current only when attached; otherwise the network has only chip and modules)
     pub fn servo_attach(&mut self, pin: u32) {
         self.elec.attach_servo(pin);
     }
 
-    /// 供电方式：USB（舵机也吃 USB 的 5V）或外接 5 V（舵机单独供电，共地）
+    /// Power source: USB (servo also draws USB 5V) or external 5 V (servo powered separately, common ground)
     pub fn set_power(&mut self, p: Power) {
         self.elec.set_power(p);
     }
 
-    /// 这一段运行里芯片在干什么，喂给供电网络
+    /// What the chip did during this run segment, fed to the power network
     fn activity(&self, c0: u64, i0: u64, w0: (u64, u64)) -> Activity {
         let dc = self.cycles().saturating_sub(c0).max(1);
         let busy = (self.instret().saturating_sub(i0)) as f64 / dc as f64;
@@ -258,7 +258,7 @@ impl Machine {
             .servo_pin
             .and_then(|p| self.pin_pwm(p as usize))
             .and_then(|(d, f)| {
-                // 舵机只认 50 Hz 量级的脉冲；别的频率（蜂鸣器 kHz）不当舵机信号
+                // Servos only respond to ~50 Hz pulses; other frequencies (kHz buzzers) aren't servo signals
                 if (20.0..=500.0).contains(&f) && d > 0.0 {
                     Some(d as f64 / f as f64 * 1e6)
                 } else {
@@ -279,7 +279,7 @@ impl Machine {
         }
     }
 
-    /// Wi-Fi MAC 模型（两颗芯片共用 tryboard-soc 的实现）：空中日志、收发计数
+    /// Wi-Fi MAC model (both chips share tryboard-soc's implementation): air log, frame counts
     pub fn wifi(&self) -> &tryboard_esp32c3::wifi::WifiMac {
         match &self.hw {
             Hw::C3(m) => m.bus.wifi(),
@@ -288,13 +288,13 @@ impl Machine {
         }
     }
 
-    /// Wi-Fi 收发帧计数（发, 收）
+    /// Wi-Fi frame counts (tx, rx)
     fn wifi_frames(&self) -> (u64, u64) {
         let w = self.wifi();
         (w.tx_frames, w.rx_frames)
     }
 
-    /// 欠压复位按住期间：芯片不执行，时间照走（外设时间随 CPU 周期一起推进）
+    /// While brownout reset is held: the chip doesn't execute, time still runs (peripherals advance with CPU cycles)
     fn hold(&mut self, cycles: u64) {
         match &mut self.hw {
             Hw::C3(m) => {
@@ -318,7 +318,7 @@ impl Machine {
         }
     }
 
-    /// 跑完一段之后推进供电网络；触发欠压就让这一段以"复位（原因 15 = RTCWDT_BROWN_OUT_RESET）"结束
+    /// After a segment, advance the power network; on brownout end the segment as reset (reason 15 = RTCWDT_BROWN_OUT_RESET)
     fn after_run(&mut self, c0: u64, i0: u64, w0: (u64, u64), r: Stop) -> Stop {
         let act = self.activity(c0, i0, w0);
         let now = self.cycles();
@@ -328,7 +328,7 @@ impl Machine {
         r
     }
 
-    /// 原生 USB（只有 S3 有）
+    /// Native USB (S3 only)
     pub fn usb(&self) -> Option<&tryboard_esp32s3::usb::Usb> {
         match &self.hw {
             Hw::S3(m) => m.bus.usb.as_deref(),
@@ -343,7 +343,7 @@ impl Machine {
         }
     }
 
-    /// BLE 虚拟世界（C-01）：固件里认出了 VHCI 边界才有（目前只有 C3）
+    /// BLE virtual world (C-01): present only when the VHCI boundary was found in firmware (C3 only for now)
     pub fn ble(&self) -> Option<&tryboard_esp32c3::ble::Ble> {
         match &self.hw {
             Hw::C3(m) => m.bus.ble.as_deref().map(|b| &*b.world),
@@ -358,7 +358,7 @@ impl Machine {
         }
     }
 
-    /// 固件用了 BLE 但没认出 VHCI 边界（或 HLE 出错）的原因；None = 没用 BLE 或一切正常
+    /// Why firmware uses BLE but the VHCI boundary wasn't found (or HLE failed); None = no BLE or all fine
     pub fn ble_error(&self) -> Option<String> {
         match &self.hw {
             Hw::C3(m) => m
@@ -370,12 +370,12 @@ impl Machine {
         }
     }
 
-    /// 虚拟手机操作（输入日志 `ble=` 后面那段）
+    /// Virtual phone action (the part after `ble=` in the input log)
     pub fn ble_phone(&mut self, cmd: &str) -> Result<(), String> {
         let now = self.cycles() / (CPU_HZ / 1_000_000);
         match self.ble_mut() {
             Some(b) => b.phone_cmd(cmd, now),
-            None => Err("这个固件没有可模拟的 BLE".into()),
+            None => Err("this firmware has no BLE that can be simulated".into()),
         }
     }
 
@@ -387,8 +387,8 @@ impl Machine {
         }
     }
 
-    /// 跑 cycles 个周期，然后按这段时间的芯片活动推进供电网络。
-    /// 欠压复位按住期间不执行指令（时间照走），电压回升后由下一次 run 接着从复位后的状态跑
+    /// Run cycles, then advance the power network from the chip's activity in that span.
+    /// While brownout reset is held no instructions run (time still does); once voltage recovers the next run continues from reset
     pub fn run(&mut self, cycles: u64) -> Stop {
         let (c0, i0, w0) = (self.cycles(), self.instret(), self.wifi_frames());
         if self.elec.held {
@@ -435,7 +435,7 @@ impl Machine {
         self.after_run(c0, i0, w0, r)
     }
 
-    /// 核 0 的周期数（模拟时间）
+    /// Core 0 cycle count (simulated time)
     pub fn cycles(&self) -> u64 {
         match &self.hw {
             Hw::C3(m) => m.cpu.cycles,
@@ -484,7 +484,7 @@ impl Machine {
         }
     }
 
-    /// 外部驱动一个引脚（按键等）。level < 0 表示松开（不驱动）
+    /// Drive a pin externally (button etc.). level < 0 means released (not driven)
     pub fn gpio_drive(&mut self, pin: u32, level: i32) {
         macro_rules! drive {
             ($m:expr, $one:expr) => {{
@@ -511,7 +511,7 @@ impl Machine {
         }
     }
 
-    /// 板载 BOOT 键所在引脚（C3：GPIO9，S3：GPIO0）
+    /// Pin of the onboard BOOT button (C3: GPIO9, S3: GPIO0)
     pub fn boot_pin(&self) -> u32 {
         match &self.hw {
             Hw::C3(_) => 9,
@@ -544,7 +544,7 @@ impl Machine {
         }
     }
 
-    /// 引脚上的模拟电压（毫伏），给 ADC 读
+    /// Analog voltage on a pin (mV), read by the ADC
     pub fn analog_set(&mut self, pin: usize, mv: f32) {
         let slot = match &mut self.hw {
             Hw::C3(m) => m.bus.adc.pin_mv.get_mut(pin),
@@ -572,7 +572,7 @@ impl Machine {
         }
     }
 
-    /// 在 I2C0 总线上接一个器件（"ssd1306" / "bme280"）
+    /// Attach a device to the I2C0 bus ("ssd1306" / "bme280")
     pub fn i2c_attach(&mut self, kind: &str, addr: u8) -> bool {
         match tryboard_esp32c3::devices::make_i2c(kind, addr) {
             Some(d) => {
@@ -595,7 +595,7 @@ impl Machine {
         if let Some(b) = bus.device::<Bme280>() {
             b.env = env;
         }
-        // IMU 的片上温度计读的是芯片温度：取环境温度（自热不建模）
+        // The IMU's on-chip thermometer reads die temperature: use ambient (self-heating not modelled)
         if let Some(d) = bus.device::<Mpu6050>() {
             d.temp_c = t;
         }
@@ -604,7 +604,7 @@ impl Machine {
         }
     }
 
-    /// 姿态（作用于总线上的 MPU6050 / QMI8658）：欧拉角（度）+ 欧拉角速率（°/s），见 devices/imu.rs
+    /// Pose (applies to MPU6050 / QMI8658 on the bus): Euler angles (deg) + rates (deg/s), see devices/imu.rs
     pub fn imu_set(&mut self, pose: Pose) {
         let bus = self.i2c0();
         if let Some(d) = bus.device::<Mpu6050>() {
@@ -615,13 +615,13 @@ impl Machine {
         }
     }
 
-    /// 触摸控制器 INT 接在哪个 GPIO：接上就先驱动成高电平（没按）
+    /// GPIO the touch INT is wired to: drive it high (not pressed) once attached
     pub fn touch_int_attach(&mut self, pin: u32) {
         self.touch_int = Some(pin);
         self.gpio_drive(pin, 1);
     }
 
-    /// 手指在触摸屏上（x, y 为屏幕像素；CST816S 截到 0..239，FT6236 是 12 位）：down = false 表示抬起
+    /// Finger on the touchscreen (x, y in screen pixels; CST816S clamps to 0..239, FT6236 is 12-bit); down = false lifts
     pub fn touch(&mut self, x: u16, y: u16, down: bool) {
         let now = self.cycles();
         let bus = self.i2c0();
@@ -649,8 +649,8 @@ impl Machine {
         self.i2c0().device::<Ssd1306>()
     }
 
-    /// 在 SPI2 上接一块屏（目前只有 "gc9a01"）。引脚按芯片不同：
-    /// S3 见 tryboard_esp32s3::lcd_pin，C3 见 tryboard_esp32c3::lcd_pin
+    /// Attach a screen on SPI2 (only "gc9a01" for now). Pins per chip:
+    /// S3 see tryboard_esp32s3::lcd_pin, C3 see tryboard_esp32c3::lcd_pin
     pub fn lcd_attach(&mut self, kind: &str) -> bool {
         match (&mut self.hw, kind) {
             (Hw::S3(m), "gc9a01") => {
@@ -692,8 +692,8 @@ impl Machine {
         }
     }
 
-    /// 接 I2S 音频器件："max98357a"（喇叭）/ "inmp441"（麦克风）。引脚按芯片：
-    /// S3 见 tryboard_esp32s3::i2s_pin，C3 见 tryboard_esp32c3::i2s_pin
+    /// Attach an I2S audio device: "max98357a" (speaker) / "inmp441" (mic). Pins per chip:
+    /// S3 see tryboard_esp32s3::i2s_pin, C3 see tryboard_esp32c3::i2s_pin
     pub fn i2s_attach(&mut self, kind: &str) -> bool {
         match (&mut self.hw, kind) {
             (Hw::S3(m), "max98357a") => m.bus.attach_speaker(),
@@ -706,7 +706,7 @@ impl Machine {
         true
     }
 
-    /// 麦克风听固定 WAV（循环）；没接麦克风时先接上
+    /// Mic hears a fixed WAV (looped); attaches a mic if none
     pub fn mic_wav(&mut self, rate: f64, data: Vec<f32>) {
         if self.audio_mut().mic.is_none() {
             self.i2s_attach("inmp441");
@@ -716,21 +716,21 @@ impl Machine {
         }
     }
 
-    /// 麦克风听实时推入的声音（网页麦克风），rate = 推入数据的采样率
+    /// Mic hears live pushed audio (web mic), rate = sample rate of the pushed data
     pub fn mic_push(&mut self, rate: f64, x: &[f32]) {
         if let Some(m) = self.audio_mut().mic.as_mut() {
             m.push_live(rate, x);
         }
     }
 
-    /// 麦克风回到安静
+    /// Mic back to silence
     pub fn mic_silence(&mut self) {
         if let Some(m) = self.audio_mut().mic.as_mut() {
             m.source = MicSource::Silence;
         }
     }
 
-    /// 取走喇叭攒下的声音（带模拟时刻）
+    /// Take the speaker's accumulated audio (with simulated timestamps)
     pub fn audio_take(&mut self) -> Vec<AudioBlock> {
         self.audio_mut()
             .speaker
@@ -739,17 +739,17 @@ impl Machine {
             .unwrap_or_default()
     }
 
-    /// 喇叭最近 secs 秒的读数
+    /// Speaker readings over the last secs seconds
     pub fn audio_analyze(&self, secs: f64) -> Option<AudioAnalysis> {
         self.audio()?.speaker.as_ref().map(|s| s.analyze(secs))
     }
 
-    /// `[tryboard] I2S …` 观察记录（没接音频器件时为空）
+    /// `[tryboard] I2S ...` observation records (empty without audio devices)
     pub fn audio_report(&self) -> String {
         self.audio().map(|a| a.report()).unwrap_or_default()
     }
 
-    /// SPI2 传输统计（次数, MOSI 字节数）
+    /// SPI2 transfer stats (count, MOSI bytes)
     pub fn spi_stats(&self) -> (u64, u64) {
         match &self.hw {
             Hw::S3(m) => (m.bus.spi2.transfers, m.bus.spi2.bytes),
@@ -766,7 +766,7 @@ impl Machine {
         }
     }
 
-    /// 让 SoC 马上重新问一次外接引脚器件（新排了波形）
+    /// Make the SoC poll external pin devices again right away (a new waveform was queued)
     fn pins_kick(&mut self) {
         match &mut self.hw {
             Hw::C3(m) => {
@@ -784,7 +784,7 @@ impl Machine {
         }
     }
 
-    /// 接一个旋转编码器（P2-01）：A / B 两相与可选的按键脚；3V3 供电，电流进供电网络
+    /// Attach a rotary encoder (P2-01): A / B phases and optional switch pin; 3V3-powered, current goes to the power network
     pub fn encoder_attach(&mut self, a: u32, b: u32, sw: Option<u32>) {
         let now = self.cycles();
         self.pins()
@@ -794,7 +794,7 @@ impl Machine {
         self.pins_kick();
     }
 
-    /// 编码器转 steps 格（正 = 顺时针）；脚本动作 enc=+N / enc=-N
+    /// Turn the encoder by steps detents (positive = clockwise); script action enc=+N / enc=-N
     pub fn encoder_turn(&mut self, steps: i32) {
         let now = self.cycles();
         if let Some(e) = self.pins().encoders.first_mut() {
@@ -803,7 +803,7 @@ impl Machine {
         self.pins_kick();
     }
 
-    /// 编码器按键；脚本动作 encsw=1|0
+    /// Encoder switch; script action encsw=1|0
     pub fn encoder_press(&mut self, down: bool) {
         let now = self.cycles();
         if let Some(e) = self.pins().encoders.first_mut() {
@@ -812,12 +812,12 @@ impl Machine {
         self.pins_kick();
     }
 
-    /// 编码器已经转完的格数（顺时针为正）
+    /// Detents turned so far (clockwise positive)
     pub fn encoder_position(&mut self) -> Option<i64> {
         self.pins().encoders.first().map(|e| e.position)
     }
 
-    /// 接一个 HC-SR04（P2-04）：Trig 由芯片驱动，Echo 由模块驱动；5 V 供电，电流进 5V 轨
+    /// Attach an HC-SR04 (P2-04): Trig driven by the chip, Echo by the module; 5 V powered, current on the 5V rail
     pub fn sonar_attach(&mut self, trig: u32, echo: u32) {
         let now = self.cycles();
         self.pins()
@@ -829,14 +829,14 @@ impl Machine {
         self.pins_kick();
     }
 
-    /// 探头到障碍物的距离（cm）；负数 = 前方没有东西（超量程）。脚本动作 dist=厘米
+    /// Distance from probe to obstacle (cm); negative = nothing ahead (out of range). Script action dist=<cm>
     pub fn sonar_distance(&mut self, cm: f64) {
         if let Some(s) = self.pins().sonars.first_mut() {
             s.distance_cm = (cm >= 0.0).then_some(cm);
         }
     }
 
-    /// 超声波的统计（触发次数, 回波次数, 最近回波宽度 µs）
+    /// Ultrasonic stats (triggers, echoes, last echo width us)
     pub fn sonar_stats(&mut self) -> Option<(u64, u64, f64)> {
         self.pins()
             .sonars
@@ -844,7 +844,7 @@ impl Machine {
             .map(|s| (s.pings, s.echoes, s.last_us))
     }
 
-    /// 脉冲计数器单元 u 的当前计数（只有 S3 有 PCNT）
+    /// Current count of pulse counter unit u (only S3 has PCNT)
     pub fn pcnt_count(&self, u: usize) -> Option<i16> {
         match &self.hw {
             Hw::S3(m) => Some(m.bus.pcnt.count(u)),
@@ -852,7 +852,7 @@ impl Machine {
         }
     }
 
-    /// GPIO 电平变化记录（周期, 电平）
+    /// GPIO level change log (cycle, levels)
     pub fn gpio_log(&self) -> Vec<(u64, u64)> {
         match &self.hw {
             Hw::C3(m) => m
@@ -874,22 +874,22 @@ impl Machine {
         }
     }
 
-    /// 逻辑分析仪要观察的 GPIO（位 = 引脚号）。PWM / WS2812 / I2C 事件总是记
+    /// GPIOs the logic analyzer watches (bit = pin). PWM / WS2812 / I2C events are always logged
     pub fn io_watch(&mut self, mask: u64) {
         self.iotrace().watch = mask;
     }
 
-    /// 事件缓冲上限（条）；0 = 不记
+    /// Event buffer cap (entries); 0 = don't record
     pub fn io_cap(&mut self, cap: usize) {
         self.iotrace().cap = cap;
     }
 
-    /// 取走事件缓冲里的全部事件（按记录先后）
+    /// Take all buffered events (in recording order)
     pub fn io_take(&mut self) -> Vec<IoEvent> {
         self.iotrace().take()
     }
 
-    /// 缓冲满了丢掉的条数
+    /// Entries dropped because the buffer was full
     pub fn io_dropped(&mut self) -> u64 {
         self.iotrace().dropped
     }
@@ -902,17 +902,17 @@ impl Machine {
         }
     }
 
-    /// 打开任务时间线（C-04）：事件缓冲上限（条），0 = 不记
+    /// Enable the task timeline (C-04): event cap (entries), 0 = don't record
     pub fn tasks_enable(&mut self, cap: usize) {
         self.tasktrace().cap = cap;
     }
 
-    /// 取走任务切换事件（按发生先后）
+    /// Take task switch events (in order)
     pub fn tasks_take(&mut self) -> Vec<TaskEvent> {
         self.tasktrace().take()
     }
 
-    /// 至今见过的任务（事件里的 task 是它的下标；只增不减）
+    /// Tasks seen so far (an event's task is an index here; only grows)
     pub fn tasks_list(&mut self) -> &[TaskInfo] {
         &self.tasktrace().tasks
     }
@@ -921,7 +921,7 @@ impl Machine {
         self.tasktrace().dropped
     }
 
-    /// 核数（任务时间线的泳道数）
+    /// Core count (task timeline lanes)
     pub fn cores(&self) -> usize {
         match &self.hw {
             Hw::C3(_) => 1,
@@ -929,7 +929,7 @@ impl Machine {
         }
     }
 
-    /// 上电时的引脚电平（gpio_log 的起点）
+    /// Pin levels at power-up (gpio_log's starting point)
     pub fn gpio_reset_level(&self) -> u64 {
         match &self.hw {
             Hw::C3(_) => 0,
@@ -948,7 +948,7 @@ impl Machine {
         v
     }
 
-    /// 读一个 32 位字（调试用，会触发 MMIO 读副作用）
+    /// Read a 32-bit word (debug; triggers MMIO read side effects)
     pub fn peek(&mut self, a: u32) -> Option<u32> {
         match &mut self.hw {
             Hw::C3(m) => tryboard_rv32::Bus::load(&mut m.bus, a, 4).ok(),
@@ -957,7 +957,7 @@ impl Machine {
         }
     }
 
-    /// 停机时的 CPU 状态说明（调试用），sym 把地址翻成符号
+    /// CPU state description at halt (debug); sym maps addresses to symbols
     pub fn debug_state(&self, sym: &dyn Fn(u32) -> String) -> String {
         match &self.hw {
             Hw::C3(m) => format!("pc {}  ra {}", sym(m.cpu.pc), sym(m.cpu.x[1])),
@@ -967,7 +967,7 @@ impl Machine {
     }
 }
 
-/// Xtensa 双核的停机状态（S3 与 ESP32 共用）
+/// Halt state of dual-core Xtensa (shared by S3 and ESP32)
 fn xtensa_state(
     c0: &tryboard_xtensa::Cpu,
     c1: Option<&tryboard_xtensa::Cpu>,
@@ -976,7 +976,7 @@ fn xtensa_state(
     use tryboard_xtensa::sr;
     let core = |c: &tryboard_xtensa::Cpu, k: usize| {
         format!(
-            "核{k} pc {}  PS=0x{:08x} WB={} WS=0x{:04x} INTENABLE=0x{:08x} INTERRUPT=0x{:08x} EXCCAUSE={} EPC1={}",
+            "core{k} pc {}  PS=0x{:08x} WB={} WS=0x{:04x} INTENABLE=0x{:08x} INTERRUPT=0x{:08x} EXCCAUSE={} EPC1={}",
             sym(c.pc),
             c.ps(),
             c.windowbase,
@@ -995,10 +995,10 @@ fn xtensa_state(
     s
 }
 
-/// RTCWDT_BROWN_OUT_RESET（esp_rom rtc.h，S3 / C3 相同）：esp_reset_reason() 读到 ESP_RST_BROWNOUT
+/// RTCWDT_BROWN_OUT_RESET (esp_rom rtc.h, same on S3 / C3): esp_reset_reason() reads ESP_RST_BROWNOUT
 pub const BROWNOUT_RESET: u32 = 15;
 
-/// ROM 复位后打印的头三行（ESP32-S3 rev0 ROM 20210327、ESP32-C3 ROM 20210207 的格式）
+/// The three lines ROM prints after reset (format of ESP32-S3 rev0 ROM 20210327, ESP32-C3 ROM 20210207)
 pub fn rom_banner(chip: Chip, reason: u32) -> String {
     let name = match reason {
         1 => "POWERON",
@@ -1008,7 +1008,7 @@ pub fn rom_banner(chip: Chip, reason: u32) -> String {
         _ => "UNKNOWN",
     };
     match chip {
-        // 经典 ESP32 一代 ROM（2016-06-08）：只有两行，复位原因名字也是旧写法
+        // Classic ESP32 first-gen ROM (2016-06-08): only two lines, old-style reset reason names
         Chip::Esp32 => {
             let name = match reason {
                 1 => "POWERON_RESET",
@@ -1029,7 +1029,7 @@ fn c3_stop(m: &Esp32c3, r: tryboard_esp32c3::Stop) -> Stop {
     match r {
         S::Budget => Stop::Budget,
         S::Fault { cause, pc, tval } => Stop::Fault(format!(
-            "CPU 异常 cause={cause} pc=0x{pc:08x} tval=0x{tval:08x}"
+            "CPU exception cause={cause} pc=0x{pc:08x} tval=0x{tval:08x}"
         )),
         S::Hle(pc) => Stop::Hle(format!("0x{pc:08x} {}", m.symbol_at(pc).unwrap_or(""))),
         S::Reset(r) => Stop::Reset(r),
@@ -1041,7 +1041,7 @@ fn e32_stop(m: &Esp32, r: tryboard_esp32::Stop) -> Stop {
     match r {
         S::Budget => Stop::Budget,
         S::Fault { cause, epc, vaddr } => Stop::Fault(format!(
-            "CPU 异常 EXCCAUSE={cause} EPC1=0x{epc:08x} EXCVADDR=0x{vaddr:08x}"
+            "CPU exception EXCCAUSE={cause} EPC1=0x{epc:08x} EXCVADDR=0x{vaddr:08x}"
         )),
         S::Break(v) => Stop::Fault(format!("BREAK 0x{v:x}")),
         S::Hle(pc) => Stop::Hle(format!("0x{pc:08x} {}", m.symbol_at(pc).unwrap_or(""))),
@@ -1054,7 +1054,7 @@ fn s3_stop(m: &Esp32s3, r: tryboard_esp32s3::Stop) -> Stop {
     match r {
         S::Budget => Stop::Budget,
         S::Fault { cause, epc, vaddr } => Stop::Fault(format!(
-            "CPU 异常 EXCCAUSE={cause} EPC1=0x{epc:08x} EXCVADDR=0x{vaddr:08x}"
+            "CPU exception EXCCAUSE={cause} EPC1=0x{epc:08x} EXCVADDR=0x{vaddr:08x}"
         )),
         S::Break(v) => Stop::Fault(format!("BREAK 0x{v:x}")),
         S::Hle(pc) => Stop::Hle(format!("0x{pc:08x} {}", m.symbol_at(pc).unwrap_or(""))),
@@ -1065,7 +1065,7 @@ fn s3_stop(m: &Esp32s3, r: tryboard_esp32s3::Stop) -> Stop {
 pub use tryboard_esp32c3::devices::bme280::Env as SensorEnv;
 pub use tryboard_esp32c3::devices::imu::Pose as ImuPose;
 
-/// 脚本动作 `imu=pitch,roll,yaw[,dpitch,droll,dyaw]`（度、°/s）的参数部分
+/// Argument part of script action `imu=pitch,roll,yaw[,dpitch,droll,dyaw]` (deg, deg/s)
 pub fn parse_imu(s: &str) -> Option<Pose> {
     let v: Vec<f64> = s
         .split(',')
@@ -1085,8 +1085,8 @@ pub fn parse_imu(s: &str) -> Option<Pose> {
     }
 }
 
-/// 脚本动作 `touch=x,y` 的参数部分（屏幕像素）。按触摸芯片的 12 位坐标上限截断，
-/// 具体屏多大由器件模型自己截（CST816S 的圆屏 240×240）
+/// Argument part of script action `touch=x,y` (screen pixels). Clamped to the touch chip's 12-bit range;
+/// the device model clamps to its actual screen (CST816S round screen 240x240)
 pub fn parse_touch(s: &str) -> Option<(u16, u16)> {
     let (x, y) = s.split_once(',')?;
     let f = |t: &str| {
@@ -1099,7 +1099,7 @@ pub fn parse_touch(s: &str) -> Option<(u16, u16)> {
 }
 pub use tryboard_elec::board::Power as PowerMode;
 
-/// I2C 排线（P2-11）的一行结论；没设线长（理想总线）返回 None。命令行与网页共用这段文字
+/// One-line I2C wire verdict (P2-11); None without a wire length (ideal bus). Shared by CLI and web; text matched by accept.json
 pub fn harness_i2c_line(m: &mut Machine) -> Option<String> {
     use tryboard_elec::i2cbus::Verdict;
     let cm = m.harness().i2c_wire_cm?;
@@ -1107,14 +1107,16 @@ pub fn harness_i2c_line(m: &mut Machine) -> Option<String> {
     let khz = m.i2c0().scl_hz() / 1000.0;
     let (bad, nacks) = m.i2c_slow_stats();
     let what = match v {
-        Verdict::Ok => "在规范内".to_string(),
-        Verdict::Marginal => format!("超出规范：读回的字节会错（已读错 {bad} 字节）"),
-        Verdict::Fail => format!("超出两倍：器件不应答（NACK {nacks} 次）"),
+        Verdict::Ok => "在规范内".to_string(), // lint: allow-cjk
+        Verdict::Marginal => format!("超出规范：读回的字节会错（已读错 {bad} 字节）"), // lint: allow-cjk
+        Verdict::Fail => format!("超出两倍：器件不应答（NACK {nacks} 次）"), // lint: allow-cjk
     };
-    Some(format!("[tryboard] I2C 排线 {cm} cm：上升时间 {rise:.0} ns，{khz:.0} kHz 允许 {limit:.0} ns，{what}（估算，必须上真机）"))
+    #[rustfmt::skip]
+    let line = format!("[tryboard] I2C 排线 {cm} cm：上升时间 {rise:.0} ns，{khz:.0} kHz 允许 {limit:.0} ns，{what}（估算，必须上真机）"); // lint: allow-cjk
+    Some(line)
 }
 
-/// 天线遮挡（P2-11）的一行结论；没遮挡返回 None
+/// One-line antenna loss verdict (P2-11); None when unobstructed. Text matched by accept.json / harness.mjs
 pub fn harness_wifi_line(m: &Machine) -> Option<String> {
     use tryboard_esp32c3::wifi::world::{LINK_MIN_DBM, SCAN_MIN_DBM};
     let db = m.harness().antenna_loss_db;
@@ -1126,9 +1128,9 @@ pub fn harness_wifi_line(m: &Machine) -> Option<String> {
         .map(|i| {
             let r = w.rssi(i) as i32;
             let note = if r < SCAN_MIN_DBM {
-                "（收不到）"
+                "（收不到）" // lint: allow-cjk
             } else if r < LINK_MIN_DBM {
-                "（连不上）"
+                "（连不上）" // lint: allow-cjk
             } else {
                 ""
             };
@@ -1136,28 +1138,27 @@ pub fn harness_wifi_line(m: &Machine) -> Option<String> {
         })
         .collect();
     Some(format!(
-        "[tryboard] 天线遮挡 {db} dB：{}（估算，必须上真机）",
-        aps.join("、")
+        "[tryboard] 天线遮挡 {db} dB：{}（估算，必须上真机）", // lint: allow-cjk
+        aps.join("、")                                         // lint: allow-cjk
     ))
 }
 
-/// 关卡验收要看的 USB 虚拟主机结论（P2-12）：主机状态 + 键盘打出的字。
-/// 命令行 `--usb-log` 打印的就是这两行（另有枚举日志等），网页 wasm tb_usb_report 同一段文字，指纹两边一致
+/// USB virtual host verdict for level checks (P2-12): host state + typed text. CLI `--usb-log` prints these two lines (plus
+/// enumeration logs); wasm tb_usb_report emits the same text so fingerprints match
 pub fn usb_report_lines(m: &Machine) -> String {
     let Some(u) = m.usb() else {
         return String::new();
     };
     let h = &u.host;
-    let mut o = format!("[tryboard] USB 主机：{}\n", h.state_name());
+    let mut o = format!("[tryboard] USB 主机：{}\n", h.state_name()); // lint: allow-cjk
     if !h.typed.is_empty() {
-        o.push_str(&format!("[tryboard] USB 键盘输入: {:?}\n", h.typed));
+        o.push_str(&format!("[tryboard] USB 键盘输入: {:?}\n", h.typed)); // lint: allow-cjk
     }
     o
 }
 
-/// 生成检查点的 I2C 判据（U-17）：每个被寻址过的 7 位地址应答了几次，按地址升序。
-/// 命令行 `--i2c-log` 打印的就是这几行，网页 wasm tb_i2c_report 同一段文字，指纹两边一致。
-/// S3 两个控制器合在一起：用户接在哪个控制器上都算接上了
+/// I2C criteria for generated checkpoints (U-17): ACK count per addressed 7-bit address, ascending. CLI `--i2c-log` prints these;
+/// wasm tb_i2c_report emits the same text so fingerprints match. Both S3 controllers merged: any controller counts as wired
 pub fn i2c_ack_lines(m: &Machine) -> String {
     let mut acks: std::collections::BTreeMap<u8, u64> = std::collections::BTreeMap::new();
     let mut add = |b: &tryboard_esp32c3::i2c::I2c| {
@@ -1177,7 +1178,7 @@ pub fn i2c_ack_lines(m: &Machine) -> String {
         }
     }
     acks.iter()
-        .map(|(a, n)| format!("[tryboard] I2C 0x{a:02x} 应答 {n} 次\n"))
+        .map(|(a, n)| format!("[tryboard] I2C 0x{a:02x} 应答 {n} 次\n")) // lint: allow-cjk
         .collect()
 }
 

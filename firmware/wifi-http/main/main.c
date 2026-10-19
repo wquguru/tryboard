@@ -1,4 +1,4 @@
-// 验收固件：连上 Wi-Fi 后用 esp_http_client 访问虚拟互联网上的网页。
+// Acceptance: after joining Wi-Fi, fetch a page from the virtual internet with esp_http_client.
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -9,7 +9,7 @@
 #include "esp_http_client.h"
 #include "nvs_flash.h"
 
-// wifi-wpa2 / wifi-wpa2-bad 共用本文件，在 CMakeLists 里覆盖这几个宏
+// Shared with wifi-wpa2 / wifi-wpa2-bad, which override these macros in CMakeLists
 #ifndef WIFI_SSID
 #define WIFI_SSID "TryBoard-WiFi"
 #define WIFI_PASS ""
@@ -18,7 +18,7 @@
 #ifndef WIFI_AUTH_MIN
 #define WIFI_AUTH_MIN WIFI_AUTH_OPEN
 #endif
-// 期望连接失败的用例：断开这么多次后判定通过（密码错时 IDF 会自动重试）
+// Expected-failure case: pass after this many disconnects (IDF retries on a wrong password)
 #ifndef WIFI_EXPECT_FAIL
 #define WIFI_EXPECT_FAIL 0
 #endif

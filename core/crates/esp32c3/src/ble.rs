@@ -1,23 +1,16 @@
-//! C3 的 BLE 接入（C-01 路线 a′）：在用户固件里按签名找到 libbtdm 的 VHCI 边界，入口改成跳到 HLE 魔术地址。
-//!
-//! 被替换的函数（libbtdm 里的符号）：
-//! - `btdm_osi_funcs_register`：记下 bt.c 的 OS 适配函数表（信号量、建任务都借它调回 FreeRTOS）
-//! - `btdm_controller_init`：不跑真控制器，借 osi 的 task_create 建一个"桩任务"代替控制器任务
-//! - `btdm_controller_enable` / `btdm_controller_get_mode`：直接成功 / 报 BLE 模式
-//! - `API_vhci_host_check_send_available` / `_send_packet` / `_register_callback`：HCI 进出口
-//!
-//! 桩任务全部是 HLE（没有一条真指令）：等信号量 → 有到期事件就调主机的 notify_host_recv 交出去 → 再等。
-//! 调固件函数用"改 ra 指向下一个魔术地址"的接力写法；中间要保存的 ra 压在当前任务自己的栈上，可重入。
-//!
-//! 入口不改 flash：取指时由 [`SocBus::code_patch`] 覆盖成 `lui t0, 0x40060; jalr x0, off(t0)`，
-//! flash 内容（用户导出、复位后重新找签名）保持原样。
+//! C3 BLE hookup (C-01 route a'): find libbtdm's VHCI boundary in user firmware by signature and redirect entries to HLE magic addresses.
+//! Replaced: `btdm_osi_funcs_register` (keep bt.c's OS adapter table to call back into FreeRTOS), `btdm_controller_init` (no real
+//! controller; a stub task via osi task_create), `btdm_controller_enable` / `_get_mode` (succeed / BLE mode), `API_vhci_host_*` (HCI I/O).
+//! The stub task is pure HLE: wait on a semaphore -> hand due events to the host's notify_host_recv -> wait again. Firmware calls chain by
+//! pointing ra at the next magic address, saving ra on the current task's stack (re-entrant). Flash is untouched: fetches are overlaid by
+//! [`SocBus::code_patch`] with `lui t0, 0x40060; jalr x0, off(t0)`, so exports and post-reset signature search see the original. (lint: allow-long-comment)
 
 use crate::SocBus;
 use tryboard_rv32::Cpu;
 use tryboard_soc::ble::sig::{self, Hooks, Seg};
 pub use tryboard_soc::ble::Ble;
 
-/// HLE 魔术地址区（紧跟在 ROM 之后，没有实际存储）
+/// HLE magic address range (right after ROM, no backing storage)
 pub const MAGIC: u32 = 0x4006_0000;
 pub const MAGIC_END: u32 = MAGIC + 4 * SLOTS;
 
@@ -28,47 +21,47 @@ const S_GET_MODE: u32 = 3;
 const S_CHECK: u32 = 4;
 const S_SEND: u32 = 5;
 const S_REG_CB: u32 = 6;
-/// 接力：弹出保存的 ra，返回 0
+/// Chain step: pop the saved ra, return 0
 const S_POP_RET0: u32 = 7;
-/// 桩任务入口 / 信号量建好 / 主循环
+/// Stub task entry / semaphore created / main loop
 const S_ENTRY: u32 = 8;
 const S_CREATED: u32 = 9;
 const S_LOOP: u32 = 10;
-/// send_packet 里 notify_host_send_available 返回后：给桩任务的信号量
+/// After notify_host_send_available returns inside send_packet: give the stub task's semaphore
 const S_SENT: u32 = 11;
-/// sdk_config_extend_set_pll_track：空转
+/// sdk_config_extend_set_pll_track: no-op
 const S_NOP: u32 = 12;
 const SLOTS: u32 = 13;
 
-// osi_funcs_t 偏移（IDF 5.1–5.5.1 的 bt.c 都相同，版本号 0x00010009 / 0x0001000A）
+// osi_funcs_t offsets (same in bt.c for IDF 5.1-5.5.1, versions 0x00010009 / 0x0001000A)
 const OSI_MAGIC: u32 = 0xFADE_BEAD;
 const OSI_SEMPHR_CREATE: u32 = 36;
 const OSI_SEMPHR_TAKE: u32 = 52;
 const OSI_SEMPHR_GIVE: u32 = 56;
 const OSI_TASK_CREATE: u32 = 100;
 
-/// 桩任务栈：主机的收包回调（拷贝、进 NimBLE 事件队列）在这个栈上跑，留足
+/// Stub task stack: the host's receive callback (copy, push to the NimBLE event queue) runs on it, so leave plenty
 const TASK_STACK: u32 = 6144;
-/// 栈上留给"发给主机的一个包"的缓冲
+/// Stack buffer for one packet going to the host
 const BUF: u32 = 528;
-/// 桩任务每次最多等多久（毫秒）：连接事件 30 ms、广播几十毫秒，10 ms 一醒够细
+/// Max wait per stub-task wake (ms): connection events are 30 ms, advertising tens of ms, so 10 ms is fine-grained enough
 const WAIT_MS: u32 = 10;
 
 pub struct BleHle {
     pub hooks: Hooks,
     osi: u32,
-    /// vhci_host_callback_t*：{notify_host_send_available, notify_host_recv}
+    /// vhci_host_callback_t*: {notify_host_send_available, notify_host_recv}
     cb: u32,
     sem: u32,
     buf: u32,
     pub world: Box<Ble>,
-    /// 固件调用过 btdm_controller_init（网页据此显示"蓝牙"页签）
+    /// Firmware called btdm_controller_init (the web page shows the "Bluetooth" tab based on this)
     pub inited: bool,
-    /// HLE 出错（osi 版本不认识等）
+    /// HLE error (unknown osi version, etc.)
     pub error: Option<String>,
 }
 
-/// 在 app 段里找签名。返回 Ok(None) = 固件没用 BLE；Err = 用了但没认出来（网页提示拖 app.elf）
+/// Find signatures in app segments. Ok(None) = no BLE; Err = uses BLE but unrecognized (web suggests dropping in app.elf)
 pub fn locate(segs: &[Seg]) -> Result<Option<Hooks>, String> {
     if !sig::mentions_btdm(segs) {
         return Ok(None);
@@ -95,7 +88,7 @@ impl BleHle {
         }
     }
 
-    /// 取指覆盖：每个入口 8 字节跳板（按半字，与取指一致）
+    /// Fetch overlay: an 8-byte trampoline per entry (as halfwords, matching fetch)
     pub fn patches(&self) -> Vec<(u32, u16)> {
         let h = &self.hooks;
         let mut v = Vec::new();
@@ -123,7 +116,7 @@ impl BleHle {
         v
     }
 
-    /// 魔术地址列表（给 Cpu::hle_addrs）
+    /// Magic address list (for Cpu::hle_addrs)
     pub fn magic_addrs() -> Vec<u32> {
         (0..SLOTS).map(|i| MAGIC + 4 * i).collect()
     }
@@ -133,7 +126,7 @@ fn rd32(bus: &SocBus, a: u32) -> u32 {
     bus.mem_read(a, 4).unwrap_or(0)
 }
 
-/// 调固件函数 f，返回到魔术槽 ret
+/// Call firmware function f, returning to magic slot ret
 fn call(cpu: &mut Cpu, f: u32, ret: u32, args: &[u32]) {
     for (i, a) in args.iter().enumerate() {
         cpu.x[10 + i] = *a;
@@ -144,7 +137,7 @@ fn call(cpu: &mut Cpu, f: u32, ret: u32, args: &[u32]) {
     cpu.cycles += 1;
 }
 
-/// 把 ra 压到当前栈（16 字节对齐的一帧）
+/// Push ra on the current stack (one 16-byte aligned frame)
 fn push_ra(cpu: &mut Cpu, bus: &mut SocBus) {
     cpu.x[2] = cpu.x[2].wrapping_sub(16);
     bus.mem_write(cpu.x[2], 4, cpu.x[1]);
@@ -156,7 +149,7 @@ fn pop_ret(cpu: &mut Cpu, bus: &mut SocBus, ret: u32) {
     cpu.hle_return(ret);
 }
 
-/// 模拟时间（微秒）
+/// Simulated time (µs)
 pub fn now_us(cpu: &Cpu) -> u64 {
     cpu.cycles / (crate::periph::CPU_HZ / 1_000_000)
 }
@@ -175,7 +168,7 @@ fn slot(b: &mut BleHle, s: u32, cpu: &mut Cpu, bus: &mut SocBus) {
             let (magic, ver) = (rd32(bus, p), rd32(bus, p + 4));
             if magic != OSI_MAGIC || !(0x0001_0009..=0x0001_000A).contains(&ver) {
                 b.error = Some(format!(
-                    "bt.c 的 osi 函数表版本不认识（magic {magic:08x} 版本 {ver:08x}）"
+                    "unknown bt.c osi function table version (magic {magic:08x} version {ver:08x})"
                 ));
                 cpu.hle_return(0x103);
                 return;
@@ -184,7 +177,7 @@ fn slot(b: &mut BleHle, s: u32, cpu: &mut Cpu, bus: &mut SocBus) {
             cpu.hle_return(0);
         }
         S_INIT => {
-            // 建桩任务代替控制器任务；任务名临时放在本帧里（xTaskCreate 会拷走）
+            // Create the stub task instead of the controller task; the task name lives in this frame briefly (xTaskCreate copies it)
             b.inited = true;
             b.world.active = true;
             push_ra(cpu, bus);
@@ -218,7 +211,7 @@ fn slot(b: &mut BleHle, s: u32, cpu: &mut Cpu, bus: &mut SocBus) {
                 .map(|i| bus.mem_read(p + i, 1).unwrap_or(0) as u8)
                 .collect();
             b.world.host_send(&pkt, now_us(cpu));
-            // 主机每发一包都要等 notify_host_send_available 把它的发送信号量还回来
+            // For every packet the host waits for notify_host_send_available to return its send semaphore
             if b.cb != 0 {
                 push_ra(cpu, bus);
                 let f = rd32(bus, b.cb);
@@ -272,12 +265,12 @@ mod tests {
     use super::*;
     use crate::boot::{find_app, parse_app};
 
-    /// 签名不能在别的固件里误中：仓库里所有已构建的 C3 验收固件（S3 镜像芯片 ID 不对，跳过），只有 c3-ble-hr 认出 BLE，且每个入口都找到
+    /// Signatures must not false-match: of all built C3 acceptance firmware (S3 images skipped by chip ID) only c3-ble-hr is BLE, with every entry found
     #[test]
     fn sigs_hit_only_ble_firmware() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../firmware/build");
         let Ok(rd) = std::fs::read_dir(&dir) else {
-            eprintln!("跳过：没有 firmware/build");
+            eprintln!("skipped: no firmware/build");
             return;
         };
         let mut n = 0;
@@ -303,7 +296,7 @@ mod tests {
             if name == "c3-ble-hr" {
                 let h = r
                     .unwrap_or_else(|e| panic!("{name}: {e}"))
-                    .expect("应认出 BLE");
+                    .expect("BLE should be recognized");
                 for a in [
                     h.osi_funcs_register,
                     h.controller_init,
@@ -317,9 +310,12 @@ mod tests {
                     assert!(a != 0 && a & 1 == 0, "{name}: {h:x?}");
                 }
             } else {
-                assert!(matches!(r, Ok(None)), "{name} 误认为用了 BLE：{r:?}");
+                assert!(
+                    matches!(r, Ok(None)),
+                    "{name} wrongly detected as using BLE: {r:?}"
+                );
             }
         }
-        eprintln!("检查了 {n} 个固件");
+        eprintln!("checked {n} firmware images");
     }
 }

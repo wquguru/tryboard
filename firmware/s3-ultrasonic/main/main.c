@@ -1,5 +1,5 @@
-// 示例：HC-SR04 超声波测距。Trig=GPIO17 由 GPIO 发 10 µs 高脉冲；Echo=GPIO18（经 1 kΩ / 2 kΩ 分压）接 RMT 接收通道，
-// 1 MHz 分辨率把 Echo 高电平宽度记成一个 RMT 符号；距离 = 宽度 × 声速 / 2（343 m/s，20 ℃）。每 100 ms 测一次。
+// Example: HC-SR04. Trig=GPIO17 10 µs pulse; Echo=GPIO18 (1k/2k divider) into RMT RX at 1 MHz, one symbol per echo;
+// distance = width × speed of sound / 2 (343 m/s, 20 °C), every 100 ms.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -40,7 +40,7 @@ void app_main(void)
     rmt_rx_event_callbacks_t cbs = {.on_recv_done = on_done};
     ESP_ERROR_CHECK(rmt_rx_register_event_callbacks(rx, &cbs, q));
     ESP_ERROR_CHECK(rmt_enable(rx));
-    // 短于 1 µs 的毛刺滤掉；电平 25 ms 不变就算一帧结束（量程 400 cm 的回波约 23.3 ms）
+    // Drop glitches under 1 µs; 25 ms idle ends a frame (a 400 cm echo is about 23.3 ms)
     rmt_receive_config_t rcfg = {.signal_range_min_ns = 1000, .signal_range_max_ns = 25000000};
     static rmt_symbol_word_t buf[48];
 
@@ -58,7 +58,7 @@ void app_main(void)
             rmt_enable(rx);
         } else if (ev.num_symbols >= 1 && ev.received_symbols[0].level0 == 1 && ev.received_symbols[0].duration0 > 0) {
             unsigned us = ev.received_symbols[0].duration0;
-            // 厘米 × 10 = µs × 0.0343 / 2 × 10，四舍五入
+            // mm = µs × 0.0343 / 2 × 10, rounded
             unsigned mm = (us * 343u + 1000u) / 2000u;
             printf("DIST %u.%u cm (echo %u us)\n", mm / 10, mm % 10, us);
             if (++n == 3) printf("TRYBOARD_OK ultrasonic\n");

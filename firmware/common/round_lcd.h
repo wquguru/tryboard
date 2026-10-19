@@ -1,8 +1,6 @@
-// GC9A01 240×240 圆屏（SPI2）公共件：总线 / 面板初始化 + 整帧缓冲上的简单图形。lens、spin 及其检查点固件、c3-lcd 共用。
-// 接线（ESP32-S3）：SCLK=GPIO12 MOSI=GPIO11 CS=GPIO10 DC=GPIO14 RST=GPIO13 背光=GPIO15（高电平亮）。
-// 接线（ESP32-C3）：SCLK=GPIO6 MOSI=GPIO7 CS=GPIO10 DC=GPIO5 RST=GPIO4 背光=GPIO3（高电平亮）。
-// SCLK / MOSI / CS 正好是 SPI2 的 IO_MUX 直连脚，驱动会走 IO_MUX 而不是 GPIO 矩阵。
-// 引脚可以在 include 之前用 #define 覆盖（例如板载圆屏的开发板）。
+// GC9A01 240x240 round LCD (SPI2) helpers: bus / panel init + simple graphics on a frame buffer; shared by lens, spin, their checkpoints, c3-lcd.
+// Wiring S3: SCLK=12 MOSI=11 CS=10 DC=14 RST=13 BL=15; C3: SCLK=6 MOSI=7 CS=10 DC=5 RST=4 BL=3 (backlight active high). SCLK / MOSI / CS are SPI2's
+// IO_MUX direct pins, so the driver bypasses the GPIO matrix. Pins can be overridden with #define before include (boards with a built-in LCD). (lint: allow-long-comment)
 #pragma once
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -19,7 +17,7 @@
 #define LCD_H 240
 #ifndef LCD_SCLK
 #if CONFIG_IDF_TARGET_ESP32C3
-// C3 DevKitM-1：2、8、9 是 strapping 脚（8 还接着板载 RGB），DC / RST / 背光避开它们
+// C3 DevKitM-1: 2, 8, 9 are strapping pins (8 also drives the onboard RGB); DC / RST / backlight avoid them
 #define LCD_SCLK 6
 #define LCD_MOSI 7
 #define LCD_CS 10
@@ -35,14 +33,14 @@
 #define LCD_BL 15
 #endif
 #endif
-// 每次 SPI 传输最多 40 行（19200 字节）：一帧拆成 6 次 DMA，每次 5 个描述符
+// At most 40 lines (19200 bytes) per SPI transfer: a frame is 6 DMAs of 5 descriptors each
 #define LCD_CHUNK_LINES 40
 
 static esp_lcd_panel_handle_t lcd_panel;
-static uint16_t *lcd_fb; // 大端 RGB565（SPI 先发高字节）
+static uint16_t *lcd_fb; // big-endian RGB565 (SPI sends the high byte first)
 static SemaphoreHandle_t lcd_done;
 
-// RGB888 → 线上字节序的 RGB565
+// RGB888 -> RGB565 in wire byte order
 static inline uint16_t rgb(uint32_t c)
 {
     uint16_t v = ((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F);
@@ -82,14 +80,14 @@ static void lcd_init(void)
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)SPI2_HOST, &ioc, &io));
     esp_lcd_panel_dev_config_t pc = {
         .reset_gpio_num = LCD_RST,
-        // 圆屏模组的子像素是 BGR 排列（与 IDF spi_lcd_touch 示例一致）
+        // Round LCD modules use BGR subpixel order (as in the IDF spi_lcd_touch example)
         .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR,
         .bits_per_pixel = 16,
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_gc9a01(io, &pc, &lcd_panel));
     ESP_ERROR_CHECK(esp_lcd_panel_reset(lcd_panel));
     ESP_ERROR_CHECK(esp_lcd_panel_init(lcd_panel));
-    // 常见 GC9A01 模组是 IPS 常黑面板：开反色才是正常颜色
+    // Common GC9A01 modules are normally-black IPS panels: inversion on gives correct colours
     ESP_ERROR_CHECK(esp_lcd_panel_invert_color(lcd_panel, true));
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(lcd_panel, true));
     gpio_config_t bl = {.pin_bit_mask = 1ULL << LCD_BL, .mode = GPIO_MODE_OUTPUT};
@@ -99,7 +97,7 @@ static void lcd_init(void)
     assert(lcd_fb);
 }
 
-// 送出 [y0, y1) 行，等传输完成再返回（缓冲马上要被重画）
+// Send rows [y0, y1) and wait for completion (the buffer is about to be redrawn)
 static void lcd_flush_rows(int y0, int y1)
 {
     ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(lcd_panel, 0, y0, LCD_W, y1, lcd_fb + y0 * LCD_W));
@@ -116,12 +114,12 @@ static void fb_clear(uint16_t c)
     for (int i = 0; i < LCD_W * LCD_H; i++) lcd_fb[i] = c;
 }
 
-// 填充椭圆（中心 cx,cy，半轴 rx,ry）
+// Filled ellipse (centre cx,cy, semi-axes rx,ry)
 static void fb_ellipse(int cx, int cy, int rx, int ry, uint16_t c)
 {
     if (rx <= 0 || ry <= 0) return;
     for (int dy = -ry; dy <= ry; dy++) {
-        // x² / rx² + y² / ry² ≤ 1，整数比较避免浮点
+        // x² / rx² + y² / ry² ≤ 1, compared in integers to avoid floats
         int64_t lim = (int64_t)rx * rx * ((int64_t)ry * ry - (int64_t)dy * dy);
         int w = 0;
         while ((int64_t)(w + 1) * (w + 1) * ry * ry <= lim) w++;
@@ -134,7 +132,7 @@ static void fb_circle(int cx, int cy, int r, uint16_t c)
     fb_ellipse(cx, cy, r, r, c);
 }
 
-// 填充圆角矩形（左上 x,y，宽 w 高 h，圆角半径 r）
+// Filled rounded rectangle (top-left x,y, width w, height h, corner radius r)
 static void fb_rrect(int x, int y, int w, int h, int r, uint16_t c)
 {
     if (w <= 0 || h <= 0) return;
@@ -144,7 +142,7 @@ static void fb_rrect(int x, int y, int w, int h, int r, uint16_t c)
         int inset = 0;
         int d = j < r ? r - j : j >= h - r ? j - (h - r - 1) : 0;
         if (d > 0) {
-            // 圆角处这一行缩进 r - sqrt(r² - d²)
+            // In the corners this row is inset by r - sqrt(r² - d²)
             int k = 0;
             while ((k + 1) * (k + 1) <= r * r - d * d) k++;
             inset = r - k;
@@ -153,7 +151,7 @@ static void fb_rrect(int x, int y, int w, int h, int r, uint16_t c)
     }
 }
 
-// 粗弧线：圆心 cx,cy，外半径 r，线宽 t，只画 y ≤ cy 的上半（开心眼 ^）或 y ≥ cy 的下半（笑嘴）
+// Thick arc: centre cx,cy, outer radius r, width t; only the upper half y ≤ cy (happy eye ^) or lower half y ≥ cy (smile)
 static void fb_arc(int cx, int cy, int r, int t, int upper, uint16_t c)
 {
     int ri = r - t;

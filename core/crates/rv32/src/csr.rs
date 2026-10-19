@@ -1,4 +1,4 @@
-//! 机器模式 CSR。未知地址照样可读写（存进表里），并记下来供验收报告列出。
+//! Machine-mode CSRs. Unknown addresses still read/write (stored in a table) and are recorded for the acceptance report.
 
 use std::collections::BTreeMap;
 
@@ -25,11 +25,11 @@ pub const INSTRET: u32 = 0xc02;
 pub const CYCLEH: u32 = 0xc80;
 pub const TIMEH: u32 = 0xc81;
 pub const INSTRETH: u32 = 0xc82;
-/// ESP32-C3 自定义性能计数器：mpcer / mpcmr / mpccr（IDF 的 esp_cpu_get_cycle_count 读 mpccr）。
+/// ESP32-C3 custom performance counters: mpcer / mpcmr / mpccr (IDF's esp_cpu_get_cycle_count reads mpccr).
 pub const MPCER: u32 = 0x7e0;
 pub const MPCMR: u32 = 0x7e1;
 pub const MPCCR: u32 = 0x7e2;
-/// 用户态别名（C3 ROM 的 ets_delay_us 读这个）
+/// User-mode alias (the C3 ROM's ets_delay_us reads this one)
 pub const UPCCR: u32 = 0x802;
 
 pub struct Csrs {
@@ -54,7 +54,7 @@ impl Default for Csrs {
             mepc: 0,
             mcause: 0,
             mtval: 0,
-            // MXL=1 (32 位)，I M C
+            // MXL=1 (32-bit), I M C
             misa: (1 << 30) | (1 << 8) | (1 << 12) | (1 << 2),
             other: BTreeMap::new(),
         }
@@ -80,7 +80,7 @@ impl Csrs {
 
     pub fn write(&mut self, addr: u32, v: u32) {
         match addr {
-            // 只保留 M 模式相关位：MIE MPIE MPP；MPP 固定为 M
+            // Keep only M-mode bits: MIE MPIE MPP; MPP is hardwired to M
             MSTATUS => self.mstatus = (v & (1 << 3 | 1 << 7)) | (3 << 11),
             MISA => {}
             MIE => self.mie = v,

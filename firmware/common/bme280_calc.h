@@ -1,4 +1,4 @@
-// BME280 出厂校准参数解析 + 数据手册整数补偿公式，供 bme280 / weather 等示例共用（只在一个 .c 里包含）。
+// BME280 factory calibration parsing + datasheet integer compensation, shared by bme280 / weather etc. (include in one .c only).
 #pragma once
 #include <stdint.h>
 
@@ -44,7 +44,7 @@ static inline uint32_t comp_h(int32_t adc)
     return (uint32_t)(v >> 12);
 }
 
-// c = 0x88 起 26 字节，h = 0xE1 起 7 字节
+// c = 26 bytes from 0x88, h = 7 bytes from 0xE1
 static inline void bme280_parse_calib(const uint8_t *c, const uint8_t *h)
 {
     T1 = c[0] | c[1] << 8; T2 = c[2] | c[3] << 8; T3 = c[4] | c[5] << 8;

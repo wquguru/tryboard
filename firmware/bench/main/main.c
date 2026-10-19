@@ -1,5 +1,5 @@
-// 基准：纯 CPU 负载（素数筛 + CRC32 + 浮点），用 CPU 周期计数报告耗时。
-// 真机 160MHz 下的耗时可用于标定模拟器的 CPI 模型。
+// Benchmark: pure CPU load (prime sieve + CRC32 + float), timed in CPU cycles.
+// Timings on real 160MHz silicon can calibrate the simulator's CPI model.
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>

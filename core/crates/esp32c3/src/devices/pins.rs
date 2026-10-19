@@ -1,44 +1,42 @@
-//! 直接驱动 / 观察 GPIO 的外接器件：旋转编码器（P2-01）、HC-SR04 超声波（P2-04）。
-//!
-//! 和 I2C 器件不同，它们的输出是带精确时刻的电平波形（正交相位、Echo 脉宽），不能只在 1ms 时间片之间施加。
-//! 所以放在 SoC 里：`poll(now)` 给出到 now 为止该发生的引脚驱动（时刻, 引脚, 电平），SoC 按时刻施加到 GPIO
-//! （照常触发 GPIO 中断、PCNT / RMT 接收、逻辑分析仪记录）；`on_level` 让器件看到芯片输出的电平（Trig）。
-//! 外部输入（转几格、按下、距离）由 CLI 脚本 / 网页输入日志在时间片之间交给器件，器件自己排出后面的波形。
+//! External devices that drive / watch GPIOs directly: rotary encoder (P2-01), HC-SR04 ultrasonic (P2-04).
+//! Unlike I2C devices their output is a precisely timed waveform (quadrature, Echo width), so they live in the SoC:
+//! `poll(now)` yields drives (time, pin, level) applied to GPIO in order (firing GPIO IRQs, PCNT / RMT RX, logic analyzer);
+//! `on_level` shows the device the chip's output (Trig). External input (steps, press, distance) arrives from the CLI
+//! script / web input log between time slices, and the device schedules the following waveform itself. (lint: allow-long-comment)
 
 use std::collections::VecDeque;
 
 use crate::periph::CPU_HZ;
 
-/// 一次引脚驱动：(周期, 引脚, 电平)，电平 -1 = 松开（高阻）
+/// One pin drive: (cycle, pin, level), level -1 = released (high-Z)
 pub type Drive = (u64, u32, i8);
 
-/// 编码器转一格里相邻两个沿的间隔：0.5 ms（一格四个沿 2 ms，约每秒 500 格的手速上限，远快于真实拧动）
+/// Gap between adjacent edges within one encoder step: 0.5 ms (4 edges = 2 ms per step, ~500 steps/s, far faster than real turning)
 pub const ENC_EDGE_CYCLES: u64 = CPU_HZ / 2000;
 
-/// EC11 类旋转编码器模块（KY-040）：A（CLK）/ B（DT）两相正交，模块上 10 kΩ 上拉，触点闭合接地；
-/// 每格一个完整周期（四个沿）。按键 SW 按下接地、松开悬空（固件开内部上拉）。
-/// 顺时针：A 先落（A 领先 B 90°）。不模拟触点抖动（见 DECISIONS）。
+/// EC11-style encoder module (KY-040): A (CLK) / B (DT) quadrature, 10 kΩ pull-ups on the module, contacts short to GND; one full
+/// cycle (4 edges) per step; SW shorts to GND when pressed. Clockwise: A falls first (A leads B by 90°). No contact bounce (see DECISIONS).
 #[derive(Clone, Debug)]
 pub struct Encoder {
     pub a: u32,
     pub b: u32,
     pub sw: Option<u32>,
-    /// 已经转完的格数（顺时针为正）
+    /// Steps completed (clockwise positive)
     pub position: i64,
     pub pressed: bool,
-    /// 还没转的格（每项 ±1）
+    /// Steps not yet turned (each ±1)
     queue: VecDeque<i8>,
-    /// 当前这一格的方向与已经走了几个沿
+    /// Direction of the current step and edges done so far
     dir: i8,
     phase: u8,
     next_t: u64,
-    /// 要施加的驱动（attach / 按键立即生效的那些）
+    /// Drives to apply (those that take effect immediately: attach / button)
     out: Vec<Drive>,
 }
 
 impl Encoder {
     pub fn new(a: u32, b: u32, sw: Option<u32>, now: u64) -> Encoder {
-        // 上电：两相都开路（上拉为高），按键松开
+        // Power-up: both phases open (pulled high), button released
         let mut out = vec![(now, a, 1), (now, b, 1)];
         if let Some(s) = sw {
             out.push((now, s, -1));
@@ -57,7 +55,7 @@ impl Encoder {
         }
     }
 
-    /// 转 steps 格（正 = 顺时针），排在已经排着的后面
+    /// Turn by steps (positive = clockwise), queued after whatever is pending
     pub fn turn(&mut self, now: u64, steps: i32) {
         if self.dir == 0 && self.queue.is_empty() {
             self.next_t = self.next_t.max(now);
@@ -75,7 +73,7 @@ impl Encoder {
         }
     }
 
-    /// (A, B) 在一格里第 k 个沿之后的电平
+    /// (A, B) levels after edge k within a step
     fn levels(dir: i8, k: u8) -> (bool, bool) {
         const CW: [(bool, bool); 4] = [(false, true), (false, false), (true, false), (true, true)];
         const CCW: [(bool, bool); 4] = [(true, false), (false, false), (false, true), (true, true)];
@@ -124,31 +122,31 @@ impl Encoder {
     }
 }
 
-/// 声速（m/s）：20 ℃ 干燥空气。真实声速随温度变（约 +0.6 m/s/℃），这里固定，见 DECISIONS
+/// Speed of sound (m/s): dry air at 20 °C. Real speed varies with temperature (~+0.6 m/s/°C); fixed here, see DECISIONS
 pub const SOUND_MPS: f64 = 343.0;
-/// Trig 下降沿到 Echo 上升沿：模块先发 8 个 40 kHz 脉冲（200 µs），再拉高 Echo。手册没给这个数，取常见实测量级
+/// Trig falling edge to Echo rising: the module first sends 8 pulses at 40 kHz (200 µs). Not in the datasheet; a typical measured value
 pub const ECHO_DELAY_US: f64 = 250.0;
-/// 测不到（超出量程）时 Echo 的高电平宽度（规格书：约 38 ms）
+/// Echo high width when nothing is in range (datasheet: about 38 ms)
 pub const ECHO_TIMEOUT_US: f64 = 38_000.0;
-/// 量程（规格书 2–400 cm）
+/// Range (datasheet 2-400 cm)
 pub const RANGE_CM: (f64, f64) = (2.0, 400.0);
 
-/// HC-SR04：Trig 收到 ≥ 10 µs 高电平，下降沿后 ECHO_DELAY_US 拉高 Echo，宽度 = 往返时间 = 2 × 距离 / 声速。
-/// Echo 是 5 V 推挽输出（模块 5 V 供电）：电平风险由网页接线检查 / 选型规则提示，这里只给逻辑电平。
+/// HC-SR04: Trig high >= 10 µs; ECHO_DELAY_US after its falling edge Echo goes high for round-trip time = 2 x distance / speed of sound.
+/// Echo is a 5 V push-pull output (module on 5 V): the level risk is flagged by web wiring checks / advisor rules; logic level only here.
 #[derive(Clone, Debug)]
 pub struct Hcsr04 {
     pub trig: u32,
     pub echo: u32,
-    /// 探头到障碍物的距离（cm）；None = 前方什么都没有（超量程）
+    /// Distance from probe to obstacle (cm); None = nothing ahead (out of range)
     pub distance_cm: Option<f64>,
     trig_high: Option<u64>,
-    /// 一次测量的 Echo 上升 / 下降时刻（排着还没发生）
+    /// Echo rise / fall times of one measurement (scheduled, not yet happened)
     pulse: Option<(u64, u64)>,
     echo_high: bool,
-    /// 触发次数、发出的回波次数（统计）
+    /// Trigger count and echoes sent (stats)
     pub pings: u64,
     pub echoes: u64,
-    /// 最近一次 Echo 宽度（µs）
+    /// Width of the latest Echo (µs)
     pub last_us: f64,
     out: Vec<Drive>,
 }
@@ -169,7 +167,7 @@ impl Hcsr04 {
         }
     }
 
-    /// 这个距离对应的 Echo 高电平宽度（µs）
+    /// Echo high width (µs) for this distance
     pub fn echo_us(d: Option<f64>) -> f64 {
         match d {
             Some(cm) if (RANGE_CM.0..=RANGE_CM.1).contains(&cm) => {
@@ -180,14 +178,14 @@ impl Hcsr04 {
         }
     }
 
-    /// 芯片侧引脚电平变了（位 = 引脚号）
+    /// Chip-side pin levels changed (bit = pin number)
     pub fn on_level(&mut self, t: u64, level: u64) {
         let hi = level >> self.trig & 1 != 0;
         match (hi, self.trig_high) {
             (true, None) => self.trig_high = Some(t),
             (false, Some(t0)) => {
                 self.trig_high = None;
-                // 正在测（回波没结束）时的触发不理
+                // Ignore triggers while a measurement is in progress (echo not finished)
                 if t - t0 >= CPU_HZ / 100_000 && self.pulse.is_none() {
                     self.pings += 1;
                     let us = Self::echo_us(self.distance_cm);
@@ -224,7 +222,7 @@ impl Hcsr04 {
     }
 }
 
-/// SoC 里挂的这类器件
+/// Devices of this kind attached to the SoC
 #[derive(Clone, Debug, Default)]
 pub struct PinDevices {
     pub encoders: Vec<Encoder>,
@@ -242,7 +240,7 @@ impl PinDevices {
         }
     }
 
-    /// 到 now 为止的驱动（按时刻排好）与下一次需要再问的时刻
+    /// Drives due by now (time-ordered) and the next time to ask again
     pub fn poll(&mut self, now: u64) -> (Vec<Drive>, u64) {
         let mut out = Vec::new();
         let mut next = u64::MAX;
@@ -273,7 +271,7 @@ mod tests {
         while now != u64::MAX {
             now = e.poll(now, &mut out);
         }
-        // 顺时针：A 落、B 落、A 起、B 起；逆时针：B 落、A 落、B 起、A 起
+        // Clockwise: A falls, B falls, A rises, B rises; counter-clockwise: B falls, A falls, B rises, A rises
         let seq: Vec<(u32, i8)> = out.iter().map(|d| (d.1, d.2)).collect();
         assert_eq!(
             seq,
@@ -313,7 +311,7 @@ mod tests {
         // 50 cm → 2 × 0.5 / 343 = 2915.5 µs
         assert!(((fall - rise) as f64 / us as f64 - 2915.45).abs() < 0.1);
         assert_eq!(rise, 112 * us + 250 * us);
-        // 太短的触发（5 µs）不响应
+        // Too-short trigger (5 µs): no response
         s.on_level(10_000 * us, 1 << 17);
         s.on_level(10_005 * us, 0);
         assert_eq!(s.pings, 1);

@@ -1,14 +1,14 @@
-//! LEDC（LED PWM 控制器）：4 个低速定时器 + 6（C3）/ 8（S3）个通道，含硬件渐变（fade）与中断。
-//! 寄存器见 soc/esp32c3|esp32s3/register/soc/ledc_reg.h（两者布局相同）。PWM 波形不逐周期模拟，按时间惰性计算占空比。
+//! LEDC (LED PWM controller): 4 low-speed timers + 6 (C3) / 8 (S3) channels, with hardware fade and interrupts.
+//! Registers in soc/esp32c3|esp32s3/register/soc/ledc_reg.h (same layout). PWM is not simulated per period; duty is computed lazily from time.
 
 use crate::periph::CPU_HZ;
 
 #[derive(Default, Clone, Copy)]
 pub struct Timer {
     pub conf: u32,
-    /// 生效中的配置（para_up 时更新）
+    /// Active config (updated on para_up)
     pub res: u32,
-    pub div: u32, // 10.8 定点
+    pub div: u32, // 10.8 fixed point
     pub paused: bool,
 }
 
@@ -18,12 +18,12 @@ pub struct Channel {
     pub hpoint: u32,
     pub duty_reg: u32,
     pub conf1: u32,
-    /// 生效中的占空比（含 4 位小数）
+    /// Active duty (with 4 fractional bits)
     pub duty: u32,
     pub out_en: bool,
     pub idle_lv: bool,
     pub timer: usize,
-    // 渐变
+    // Fade
     pub fading: bool,
     pub fade_inc: bool,
     pub fade_left: u32,
@@ -35,12 +35,12 @@ pub struct Channel {
 #[derive(Default)]
 pub struct Ledc {
     pub timers: [Timer; 4],
-    /// 8 个通道的空间（S3 有 8 个、C3 只有前 6 个；C3 固件不会碰后两个）
+    /// Room for 8 channels (S3 has 8, C3 only the first 6; C3 firmware never touches the last two)
     pub ch: [Channel; 8],
     pub conf: u32,
     pub int_raw: u32,
     pub int_ena: u32,
-    /// 输出可能变了就 +1（参数生效、定时器改配置、渐变走一步）：事件记录据此决定要不要重新看各引脚的 PWM
+    /// Bumped whenever output may have changed (params applied, timer reconfigured, fade step): tells the event log to re-check pin PWM
     pub rev: u64,
 }
 
@@ -54,7 +54,7 @@ impl Ledc {
         }
     }
 
-    /// 通道所用定时器的 PWM 频率（Hz）与满量程
+    /// PWM frequency (Hz) and full scale of the channel's timer
     pub fn timer_freq(&self, t: usize) -> (f64, u32) {
         let tm = &self.timers[t];
         let div = tm.div as f64 / 256.0;
@@ -74,7 +74,7 @@ impl Ledc {
         }
     }
 
-    /// 通道 n 的输出：(占空比 0..1, 频率 Hz)；未启用时 None
+    /// Output of channel n: (duty 0..1, frequency Hz); None when disabled
     pub fn output(&self, n: usize) -> Option<(f32, f32)> {
         let c = &self.ch[n];
         if !c.out_en {
@@ -153,7 +153,7 @@ impl Ledc {
         }
     }
 
-    /// 通道参数生效：占空比、输出使能、渐变启动
+    /// Apply channel params: duty, output enable, fade start
     fn para_up(&mut self, n: usize, now: u64) {
         self.rev += 1;
         let conf0 = self.ch[n].conf0;
@@ -179,7 +179,7 @@ impl Ledc {
         }
     }
 
-    /// 推进渐变；返回下一个事件时刻
+    /// Advance fades; returns the next event time
     pub fn update(&mut self, now: u64) -> u64 {
         let mut next = u64::MAX;
         for n in 0..8 {

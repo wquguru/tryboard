@@ -1,14 +1,12 @@
-//! 外设输入端的毛刺滤波（PCNT、RMT 接收共用）。
-//!
-//! 硬件滤波器的效果是"电平稳定满 N 个时钟才认"：输出比输入晚 N 个时钟，短于 N 的脉冲整个被吞掉。
-//! 这里按事件惰性实现：输入跳变先挂起，到期（跳变时刻 + 门限）还没被反向跳变取消就提交。
-//! 两个沿都晚同样的时间，所以脉宽不变——RMT 接收量出来的时长与没开滤波时一致。
+//! Glitch filter on peripheral inputs (shared by PCNT and RMT RX). The hardware only accepts a level stable for N clocks,
+//! so output lags input by N and shorter pulses vanish. Lazy here: a pending edge commits at (edge + threshold) unless
+//! cancelled by an opposite edge. Both edges lag equally, so pulse width (what RMT RX measures) is unchanged. (lint: allow-long-comment)
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Deglitch {
-    /// 滤波后的电平（外设看到的）
+    /// Filtered level (what the peripheral sees)
     pub level: bool,
-    /// 引脚上的原始电平与它最近一次跳变的时刻
+    /// Raw pin level and the time of its last edge
     raw: bool,
     raw_t: u64,
 }
@@ -22,12 +20,12 @@ impl Deglitch {
         }
     }
 
-    /// 挂起的跳变何时生效（没有挂起的为 None）
+    /// When the pending edge takes effect (None if none pending)
     pub fn due(&self, thres: u64) -> Option<u64> {
         (self.raw != self.level).then_some(self.raw_t + thres)
     }
 
-    /// 到 now 为止该生效的挂起跳变：生效就返回 (生效时刻, 新电平)
+    /// Pending edge due by now: returns (effective time, new level) if it commits
     pub fn flush(&mut self, now: u64, thres: u64) -> Option<(u64, bool)> {
         let t = self.due(thres)?;
         if t > now {
@@ -37,7 +35,7 @@ impl Deglitch {
         Some((t, self.level))
     }
 
-    /// 时刻 t 原始电平为 raw（调用方保证先 flush 到 t）。门限为 0 时立即生效并返回
+    /// Raw level is raw at time t (caller flushes up to t first). With threshold 0 it commits immediately and is returned
     pub fn input(&mut self, t: u64, raw: bool, thres: u64) -> Option<(u64, bool)> {
         if raw == self.raw {
             return None;
@@ -59,18 +57,18 @@ mod tests {
     #[test]
     fn short_pulse_swallowed_long_pulse_delayed() {
         let mut d = Deglitch::new(false);
-        // 50 周期的毛刺，门限 100：被吞掉
+        // 50-cycle glitch, threshold 100: swallowed
         assert_eq!(d.input(1000, true, 100), None);
         assert_eq!(d.flush(1049, 100), None);
         assert_eq!(d.input(1050, false, 100), None);
         assert_eq!(d.flush(2000, 100), None);
         assert!(!d.level);
-        // 500 周期的脉冲：两个沿都晚 100
+        // 500-cycle pulse: both edges delayed by 100
         d.input(3000, true, 100);
         assert_eq!(d.flush(3500, 100), Some((3100, true)));
         d.input(3500, false, 100);
         assert_eq!(d.flush(4000, 100), Some((3600, false)));
-        // 门限 0：立即生效
+        // Threshold 0: immediate
         assert_eq!(d.input(5000, true, 0), Some((5000, true)));
     }
 }

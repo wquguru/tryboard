@@ -1,10 +1,9 @@
-//! ESP32-C3 外设模型。寄存器偏移来自 ESP-IDF `components/soc/esp32c3/register/soc/*.h`（Apache-2.0 OR MIT）。
-//!
-//! 时间基准：CPU 160MHz，`now` 是 CPU 周期数。SYSTIMER 16MHz = now/10；APB 80MHz = now/2。
+//! ESP32-C3 peripheral models. Register offsets from ESP-IDF `components/soc/esp32c3/register/soc/*.h` (Apache-2.0 OR MIT).
+//! Time base: CPU 160MHz, `now` is CPU cycles. SYSTIMER 16MHz = now/10; APB 80MHz = now/2.
 
 pub const CPU_HZ: u64 = 160_000_000;
 
-// ---------------------------------------------------------------- 中断源编号（soc/interrupts.h）
+// ---------------------------------------------------------------- Interrupt source numbers (soc/interrupts.h)
 pub mod src {
     pub const WIFI_MAC: u32 = 0;
     pub const GPIO: u32 = 16;
@@ -22,19 +21,19 @@ pub mod src {
     pub const TG1_T0: u32 = 34;
     pub const TG1_WDT: u32 = 35;
     pub const SYSTIMER_TARGET0: u32 = 37;
-    /// GDMA 每通道一个源（IN / OUT 共用）：ETS_DMA_CH0..2_INTR_SOURCE
+    /// One GDMA source per channel (IN / OUT shared): ETS_DMA_CH0..2_INTR_SOURCE
     pub const DMA_CH0: u32 = 44;
     pub const FROM_CPU0: u32 = 50;
 }
 
-// ---------------------------------------------------------------- 中断矩阵 + CPU 中断控制器
+// ---------------------------------------------------------------- Interrupt matrix + CPU interrupt controller
 pub struct Intc {
     pub map: [u8; 64],
     pub enable: u32,
     pub edge: u32,
     pub pri: [u8; 32],
     pub thresh: u32,
-    /// 边沿型线的锁存
+    /// Latches for edge-type lines
     pub latched: u32,
     pub clock_gate: u32,
 }
@@ -82,7 +81,7 @@ impl Intc {
         true
     }
 
-    /// 由各中断源电平算出每条 CPU 线的挂起位。
+    /// Compute each CPU line's pending bit from source levels.
     pub fn pending(&mut self, levels: u64) -> u32 {
         let mut lines = 0u32;
         let mut l = levels;
@@ -94,12 +93,12 @@ impl Intc {
                 lines |= 1 << line;
             }
         }
-        // 边沿型：有电平就锁存，软件写 CLEAR 才清
+        // Edge type: latch while level is high, cleared only by software writing CLEAR
         self.latched |= lines & self.edge;
         (lines & !self.edge) | self.latched
     }
 
-    /// 选出应当响应的线：使能、优先级 ≥ 阈值且非 0，取优先级最高者。
+    /// Pick the line to take: enabled, priority >= threshold and nonzero, highest priority wins.
     pub fn select(&self, pending: u32) -> u32 {
         let mut best = 0u32;
         let mut best_pri = 0u8;
@@ -129,7 +128,7 @@ pub struct Uart {
 impl Default for Uart {
     fn default() -> Self {
         let mut regs = [0u32; 0x84 / 4];
-        regs[0x14 / 4] = 0x2b6; // CLKDIV 默认（115200 @ 80MHz）
+        regs[0x14 / 4] = 0x2b6; // CLKDIV default (115200 @ 80MHz)
         regs[0x20 / 4] = 0x1000_001c;
         regs[0x24 / 4] = 0xc060;
         regs[0x78 / 4] = 0x0320_0000;
@@ -158,9 +157,9 @@ impl Uart {
             0x04 => self.int_raw,
             0x08 => self.int_raw & self.int_ena,
             0x0c => self.int_ena,
-            // STATUS：rxfifo_cnt[9:0]，txfifo_cnt[25:16] 恒为 0（发送瞬间完成）
+            // STATUS: rxfifo_cnt[9:0]; txfifo_cnt[25:16] always 0 (TX completes instantly)
             0x1c => (self.rx.len() as u32).min(127),
-            0x6c => 0, // FSM 空闲
+            0x6c => 0, // FSM idle
             _ => self.regs.get((off / 4) as usize).copied().unwrap_or(0),
         }
     }
@@ -169,7 +168,7 @@ impl Uart {
         match off {
             0x00 => {
                 self.tx.push(v as u8);
-                self.int_raw |= 0x2 | (1 << 14); // TXFIFO_EMPTY、TX_DONE
+                self.int_raw |= 0x2 | (1 << 14); // TXFIFO_EMPTY, TX_DONE
             }
             0x0c => self.int_ena = v,
             0x10 => self.int_raw &= !v,
@@ -191,25 +190,25 @@ impl Uart {
         if self.rx.len() >= thr.max(1) {
             self.int_raw |= 1; // RXFIFO_FULL
         }
-        // RXFIFO_TOUT：真机在线路空闲若干字符时间后触发；这里一批数据到达即视为空闲
+        // RXFIFO_TOUT: silicon fires after the line idles some character times; here a batch arriving counts as idle
         if !self.rx.is_empty() {
             self.int_raw |= 1 << 8;
         }
     }
 }
 
-// ---------------------------------------------------------------- SYSTIMER（16MHz）
+// ---------------------------------------------------------------- SYSTIMER (16MHz)
 pub struct Systimer {
     pub conf: u32,
     pub unit_load: [u64; 2],
-    /// 计数 = (now/10) + offset
+    /// count = (now/10) + offset
     pub unit_offset: [i64; 2],
     pub unit_latch: [u64; 2],
     pub target: [u64; 3],
     pub target_conf: [u32; 3],
     pub int_ena: u32,
     pub int_raw: u32,
-    /// 单次模式比较器只在"装载后第一次计数到达"时触发一次；之后即使计数仍 ≥ 目标也不再触发
+    /// One-shot comparators fire only on the first arrival after load; no refire while count stays >= target
     pub armed: [bool; 3],
 }
 
@@ -263,7 +262,7 @@ impl Systimer {
     pub fn write(&mut self, off: u32, v: u32, now: u64) {
         match off {
             0x00 => {
-                // 比较器从关到开：重新装弹
+                // Comparator off -> on: rearm
                 for i in 0..3 {
                     let bit = 1 << (24 - i);
                     if v & bit != 0 && self.conf & bit == 0 {
@@ -296,7 +295,7 @@ impl Systimer {
             }
             0x34..=0x3c => self.target_conf[((off - 0x34) / 4) as usize] = v,
             0x50..=0x58 => {
-                // COMPx_LOAD：把 target / period 生效。周期模式下从当前计数起算
+                // COMPx_LOAD: apply target / period. Period mode counts from the current count
                 let i = ((off - 0x50) / 4) as usize;
                 self.armed[i] = true;
                 if self.target_conf[i] & (1 << 30) != 0 {
@@ -319,7 +318,7 @@ impl Systimer {
         self.conf & (1 << (24 - i)) != 0
     }
 
-    /// 推进比较器；返回下一次需要检查的 CPU 周期。
+    /// Advance comparators; returns the next CPU cycle to check.
     pub fn update(&mut self, now: u64) -> u64 {
         let mut next = u64::MAX;
         for i in 0..3 {
@@ -339,7 +338,7 @@ impl Systimer {
                     if period == 0 {
                         continue;
                     }
-                    // 跳过已错过的周期，避免追赶风暴
+                    // Skip missed periods to avoid a catch-up storm
                     let missed = (cnt - self.target[i]) / period + 1;
                     self.target[i] += missed * period;
                 } else {
@@ -360,14 +359,14 @@ impl Systimer {
     }
 }
 
-// ---------------------------------------------------------------- TIMG（定时器组：通用定时器 + 看门狗 + RTC 校准）
+// ---------------------------------------------------------------- TIMG (timer group: general timer + watchdog + RTC calibration)
 pub struct Timg {
     pub t0config: u32,
     pub t0_offset: i64,
     pub t0_latch: u64,
     pub t0_alarm: u64,
     pub t0_load: u64,
-    /// 告警装上时计数已经不小于告警值（真机立刻触发）：这种情况重载后从 load 起数，不补"超出的计数"
+    /// Count already >= alarm when armed (silicon fires at once): reload then counts from load without carrying the excess
     t0_alarm_late: bool,
     pub wdt_cfg: [u32; 6],
     pub wdt_wprotect: u32,
@@ -403,7 +402,7 @@ impl Default for Timg {
     }
 }
 
-/// RC 慢时钟约 136kHz，XTAL 40MHz。
+/// RC slow clock about 136kHz, XTAL 40MHz.
 const XTAL_HZ: u64 = 40_000_000;
 const SLOW_HZ: u64 = 136_000;
 
@@ -417,7 +416,7 @@ impl Timg {
         }
     }
     fn src_ticks(&self, now: u64) -> u64 {
-        // use_xtal 为 1 时 40MHz，否则 APB 80MHz
+        // use_xtal = 1 means 40MHz, otherwise APB 80MHz
         if self.t0config & (1 << 9) != 0 {
             now / 4
         } else {
@@ -458,17 +457,17 @@ impl Timg {
         }
     }
 
-    /// 告警（重新）装上时记下是不是已经过点
+    /// When the alarm is (re)armed, note whether it is already past
     fn arm(&mut self, now: u64) {
         self.t0_alarm_late = self.count(now) >= self.t0_alarm;
     }
 
     pub fn write(&mut self, off: u32, v: u32, now: u64) {
-        // 先结算已经过点的告警：自动重载要在读数 / 改配置之前生效，否则会读到 ≥ 告警值的计数
+        // Settle past-due alarms first: auto-reload must apply before reads / config changes, or reads show counts >= alarm
         self.update(now);
         match off {
             0x00 => {
-                // 先冻结当前计数，再换配置，保证计数连续
+                // Freeze the current count before changing config so the count stays continuous
                 let c = self.count(now);
                 self.t0config = v;
                 if v & (1 << 31) != 0 {
@@ -506,7 +505,7 @@ impl Timg {
             0x60 => {}
             0x64 => self.wdt_wprotect = v,
             0x68 => {
-                // 校准瞬间完成：RDY 恒为 1，结果 = 慢时钟周期数 × XTAL/慢时钟
+                // Calibration completes instantly: RDY always 1, result = slow-clock cycles x XTAL / slow clock
                 let max = ((v >> 16) & 0x7fff) as u64;
                 let val = max * XTAL_HZ / SLOW_HZ;
                 self.rtccali[1] = ((val as u32) & 0x1ff_ffff) << 7;
@@ -522,15 +521,15 @@ impl Timg {
     }
 
     pub fn update(&mut self, now: u64) -> u64 {
-        // T0 告警
+        // T0 alarm
         if self.t0config & (1 << 31) != 0 && self.t0config & (1 << 10) != 0 {
             let c = self.count(now);
             if c >= self.t0_alarm {
                 self.int_raw |= 1;
                 self.t0config &= !(1 << 10);
                 if self.t0config & (1 << 29) != 0 {
-                    // 真机在计数到告警值那一拍就重载、接着往上数：结算晚了的话把多数的那几拍补上，
-                    // 周期才不会随结算时刻漂
+                    // Silicon reloads on the tick the count hits the alarm and keeps counting: when settled late, add back the extra ticks
+                    // so the period doesn't drift with settle time
                     let late = if self.t0_alarm_late {
                         0
                     } else {
@@ -550,17 +549,17 @@ impl Timg {
     }
 }
 
-// ---------------------------------------------------------------- GPIO（输出 / 输入 / 引脚配置）
+// ---------------------------------------------------------------- GPIO (output / input / pin config)
 pub struct Gpio {
-    /// IO_MUX 引脚寄存器（上下拉、输入使能、功能选择）
+    /// IO_MUX pin registers (pulls, input enable, function select)
     pub iomux: [u32; 22],
-    /// 板上固定的上拉（如 BOOT 键所在的 GPIO9）
+    /// Fixed board pull-ups (e.g. GPIO9 under the BOOT button)
     pub board_pullup: u32,
-    /// 上一次的引脚电平，用于边沿检测
+    /// Previous pin levels, for edge detection
     pub last_level: u32,
     pub out: u32,
     pub enable: u32,
-    /// 外部驱动到引脚上的电平（按键、传感器），未驱动的输入读到 pull 决定的电平
+    /// Levels driven onto pins externally (buttons, sensors); undriven inputs read their pull level
     pub ext_in: u32,
     pub ext_driven: u32,
     pub pin: [u32; 22],
@@ -568,7 +567,7 @@ pub struct Gpio {
     pub func_in: [u32; 128],
     pub status: u32,
     pub strap: u32,
-    /// 由外设信号（RMT 等，经 GPIO 矩阵）驱动的引脚：掩码与电平
+    /// Pins driven by peripheral signals (RMT etc., via the GPIO matrix): mask and level
     pub periph_mask: u32,
     pub periph_level: u32,
 }
@@ -587,7 +586,7 @@ impl Default for Gpio {
             func_out: [0x80; 22],
             func_in: [0; 128],
             status: 0,
-            strap: 0xc, // GPIO2 / GPIO8 拉高 → SPI 启动
+            strap: 0xc, // GPIO2 / GPIO8 high -> SPI boot
             periph_mask: 0,
             periph_level: 0,
         }
@@ -595,7 +594,7 @@ impl Default for Gpio {
 }
 
 impl Gpio {
-    /// 引脚的实际电平：输出使能时取输出；否则外部驱动优先，再看上下拉（IO_MUX FUN_WPU 位 8 / FUN_WPD 位 7）。
+    /// Actual pin level: output if enabled; else external drive first, then pulls (IO_MUX FUN_WPU bit 8 / FUN_WPD bit 7).
     pub fn level(&self) -> u32 {
         let driven = self.enable & 0x3f_ffff;
         let mut pull = self.board_pullup;
@@ -608,12 +607,12 @@ impl Gpio {
             }
         }
         let undriven = !driven & !self.ext_driven;
-        // 经 GPIO 矩阵由外设（RMT 等）驱动的引脚取外设电平
+        // Pins driven by a peripheral (RMT etc.) through the GPIO matrix take the peripheral's level
         let out = (self.out & !self.periph_mask) | (self.periph_level & self.periph_mask);
         (out & driven) | (self.ext_in & self.ext_driven & !driven) | (pull & undriven & 0x3f_ffff)
     }
 
-    /// 电平变化后按每个引脚的中断类型置 STATUS 位（GPIO_PINn_INT_TYPE：1 上升 2 下降 3 双沿 4 低电平 5 高电平）。
+    /// After level changes set STATUS bits per pin interrupt type (GPIO_PINn_INT_TYPE: 1 rise, 2 fall, 3 both, 4 low, 5 high).
     pub fn sense(&mut self) {
         let lv = self.level();
         let rise = lv & !self.last_level;
@@ -636,7 +635,7 @@ impl Gpio {
         self.last_level = lv;
     }
 
-    /// GPIO 中断输出：STATUS 中且该引脚 INT_ENA（位 13..17，CPU 中断位 13）开启
+    /// GPIO interrupt output: in STATUS and the pin's INT_ENA (bits 13..17, CPU interrupt bit 13) is on
     pub fn irq(&self) -> bool {
         (0..22).any(|i| self.status & (1 << i) != 0 && (self.pin[i] >> 13) & 0x1f != 0)
     }
@@ -683,7 +682,7 @@ impl Gpio {
             0x554..=0x5a8 => {
                 let pin = ((off - 0x554) / 4) as usize;
                 self.func_out[pin] = v;
-                // 改回普通 GPIO 输出（信号 128）时不再由外设驱动
+                // Switching back to plain GPIO output (signal 128) stops peripheral drive
                 if v & 0xff == 0x80 {
                     self.periph_mask &= !(1 << pin);
                 }
@@ -693,9 +692,9 @@ impl Gpio {
     }
 }
 
-// ---------------------------------------------------------------- EXTMEM（cache 控制）
-/// cache 操作（失效、同步、预载、锁定、冻结）在模拟器里瞬间完成：使能位自清，完成位置 1。
-/// cache 本身不建模（flash 读直接经 MMU 翻译），所以这些操作没有别的副作用。
+// ---------------------------------------------------------------- EXTMEM (cache control)
+/// Cache ops (invalidate, sync, preload, lock, freeze) finish instantly: enable bits self-clear, done bits set. Cache itself
+/// isn't modelled (flash reads go straight through the MMU), so these have no other side effects. (lint: allow-long-comment)
 pub struct Extmem {
     pub regs: [u32; 0x100 / 4],
 }
@@ -707,7 +706,7 @@ impl Default for Extmem {
         regs[0x28 / 4] = 1 << 1; // SYNC_DONE
         regs[0x34 / 4] = 1 << 1; // PRELOAD_DONE
         regs[0x40 / 4] = 1 << 3; // AUTOLOAD_DONE
-        regs[0x00] = 1; // ICACHE_ENABLE（bootloader 已开 cache）
+        regs[0x00] = 1; // ICACHE_ENABLE (bootloader already enabled cache)
         Extmem { regs }
     }
 }
@@ -715,7 +714,7 @@ impl Default for Extmem {
 impl Extmem {
     pub fn read(&self, off: u32) -> u32 {
         match off {
-            0xb0 => 1, // CACHE_STATE：空闲
+            0xb0 => 1, // CACHE_STATE: idle
             _ => self.regs.get((off / 4) as usize).copied().unwrap_or(0),
         }
     }
@@ -734,14 +733,14 @@ impl Extmem {
     }
 }
 
-// ---------------------------------------------------------------- APB_SARADC（单次采样）
-/// ADC1 通道 0..4 = GPIO0..4，ADC2 通道 0 = GPIO5。电压由外部（网页旋钮 / 测试脚本）设定。
-/// 量程按数据手册的衰减档位近似：0dB≈750mV、2.5dB≈1050mV、6dB≈1300mV、12dB≈2500mV。
+// ---------------------------------------------------------------- APB_SARADC (one-shot sampling)
+/// ADC1 ch 0..4 = GPIO0..4, ADC2 ch 0 = GPIO5; voltage set externally (web knob / tests). Range per attenuation (datasheet,
+/// approx.): 0dB≈750mV, 2.5dB≈1050mV, 6dB≈1300mV, 12dB≈2500mV. (lint: allow-long-comment)
 pub struct Adc {
     pub regs: [u32; 0x400 / 4],
-    /// 每个引脚上的电压（mV）
+    /// Voltage on each pin (mV)
     pub pin_mv: [f32; 22],
-    /// 噪声幅度（LSB），真实 ADC 读数有抖动；0 关闭
+    /// Noise amplitude (LSB), real ADC readings jitter; 0 disables
     pub noise_lsb: u32,
     seed: u32,
 }
@@ -782,7 +781,7 @@ impl Adc {
     }
 
     fn sample(&mut self, cfg: u32) {
-        // 哪个 ADC 完成由 adc1/adc2_onetime_sample 使能位决定（校准时通道字段可能指向内部通道）
+        // Which ADC finishes is decided by adc1/adc2_onetime_sample enables (during calibration the channel may be internal)
         let chan = (cfg >> 25) & 0xf;
         let unit = if cfg & (1 << 31) != 0 { 0 } else { 1 };
         let ch = chan & 7;
@@ -794,7 +793,7 @@ impl Adc {
         } else {
             0.0
         };
-        // 线性同余噪声，保证可复现
+        // Linear congruential noise, reproducible
         self.seed = self.seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
         let n = if self.noise_lsb > 0 {
             (self.seed >> 16) % (2 * self.noise_lsb + 1)
@@ -817,7 +816,7 @@ impl Adc {
 mod tests {
     use super::*;
 
-    /// gptimer 的写法：APB 80 MHz ÷ 80 = 1 MHz，告警 10000、自动重载到 0
+    /// gptimer style: APB 80 MHz / 80 = 1 MHz, alarm 10000, auto-reload to 0
     fn periodic() -> Timg {
         let mut t = Timg::default();
         t.write(0x10, 10_000, 0);
@@ -831,16 +830,16 @@ mod tests {
 
     #[test]
     fn timg_autoreload_keeps_phase() {
-        // 1 µs = 160 个 CPU 周期。告警到点后晚了 300 µs 才结算：重载后应当是 300，不是 0
+        // 1 us = 160 CPU cycles. Alarm settled 300 us late: after reload the count should be 300, not 0
         let mut t = periodic();
         t.update(10_300 * 160);
         assert_eq!(t.int_raw & 1, 1);
         assert_eq!(t.count(10_300 * 160), 300);
-        // 没结算就先锁存读数（写 UPDATE）：不能读到 ≥ 告警值
+        // Latch a reading (write UPDATE) before settling: must not read >= alarm
         let mut t = periodic();
         t.write(0x0c, 1, 10_050 * 160);
         assert_eq!(t.t0_latch, 50);
-        // 装告警时已经过点：立刻触发，从 load 起数
+        // Already past when armed: fire at once and count from load
         let mut t = Timg::default();
         t.write(0x00, (1 << 31) | (1 << 30) | (1 << 29) | (80 << 13), 0);
         t.write(0x10, 100, 500 * 160);

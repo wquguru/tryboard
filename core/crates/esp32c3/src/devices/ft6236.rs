@@ -1,17 +1,9 @@
-//! FT6236 自容触摸控制器（I2C 0x38），3.5″ 320×480 一类电容触摸屏上常见的那颗（FocalTech FT6x36 系列）。
-//! 寄存器按 FocalTech《FT6x36 Datasheet》与《FT6x06/FT6x36 Application Note》：
-//! 0x00 DEV_MODE（0 = 工作模式）、0x01 GEST_ID、0x02 TD_STATUS（低 4 位 = 触点数 0..2）、
-//! 0x03 P1_XH（[7:6] 事件：0 按下、1 抬起、2 接触、3 无事件；[3:0] X 高 4 位）、0x04 P1_XL、
-//! 0x05 P1_YH（[7:4] 触点 ID；[3:0] Y 高 4 位）、0x06 P1_YL、0x07 P1_WEIGHT、0x08 P1_MISC（[7:4] 面积）、
-//! 0x09..0x0E 第二个触点（同上）、0x80 TH_GROUP、0x86 CTRL、0x88 PERIODACTIVE、0xA1/0xA2 LIB_VER、
-//! 0xA3 CIPHER（芯片 ID：0x36 = FT6236）、0xA4 G_MODE（0 轮询、1 触发）、0xA5 PWR_MODE、0xA6 FIRMID、
-//! 0xA8 FOCALTECH_ID（0x11）、0xAF RELEASE_CODE。读写自动递增（驱动一般从 0x00 或 0x02 起连读）。
-//!
-//! 只模拟一根手指：第二个触点区恒为"无事件"。坐标 12 位，不按某块屏的分辨率截断（屏多大由模组决定）。
-//! 手势：FT6x36 的 GEST_ID 在多数模组固件里不报（恒 0），这里也恒为 0，手势交给主机自己判。
-//! INT 由 Machine 驱动：按着时拉低、抬起回高（G_MODE = 0 轮询模式的电平行为；写成 1 触发模式时真机按扫描周期出低脉冲，
-//! 这里不区分、不模拟脉冲宽度——"下降沿中断"和"低电平期间轮询"两种写法都能用）。
-//! 没做：休眠 / 唤醒（PWR_MODE 写 3 后真机 I2C 不应答，要靠 RST 唤醒）、多点、按压权重 / 面积随手指变化。
+//! FT6236 self-capacitive touch controller (I2C 0x38), common on 3.5" 320x480 touch panels. Per FocalTech FT6x36 datasheet/app note:
+//! 0x00 DEV_MODE, 0x01 GEST_ID, 0x02 TD_STATUS (low 4 bits = touches), 0x03 P1_XH ([7:6] event 0 down/1 up/2 contact/3 none; [3:0] X hi),
+//! 0x04 P1_XL, 0x05 P1_YH ([7:4] ID; [3:0] Y hi), 0x06 P1_YL, 0x07 WEIGHT, 0x08 MISC, 0x09..0x0E point 2, 0x80 TH_GROUP, 0x86 CTRL,
+//! 0x88 PERIODACTIVE, 0xA1/A2 LIB_VER, 0xA3 CIPHER (0x36), 0xA4 G_MODE, 0xA5 PWR_MODE, 0xA6 FIRMID, 0xA8 VENDOR (0x11), 0xAF. Auto-increment.
+//! One finger only, 12-bit coords, GEST_ID always 0 (most module firmware doesn't report it). INT (driven by Machine) is low while
+//! pressed, level-only for both G_MODE values. Not done: sleep/wake (PWR_MODE=3 stops I2C until RST), multi-touch, weight/area. (lint: allow-long-comment)
 
 use crate::i2c::I2cDevice;
 use std::any::Any;
@@ -24,9 +16,9 @@ pub struct Ft6236 {
     regs: [u8; 256],
     ptr: u8,
     expect_reg: bool,
-    /// 按着：(当前 x, y)
+    /// Pressed: (current x, y)
     touch: Option<(u16, u16)>,
-    /// 按下以后还没被读到过一次（事件位报"按下"，之后报"接触"）
+    /// Not yet read since press (event reports "down" once, then "contact")
     fresh: bool,
     pub presses: u64,
     pub reads: u64,
@@ -35,17 +27,17 @@ pub struct Ft6236 {
 impl Ft6236 {
     pub fn new(addr: u8) -> Self {
         let mut regs = [0u8; 256];
-        // 两个触点区都是"无事件"、ID 0xF（无效）
+        // Both point slots "no event", ID 0xF (invalid)
         regs[0x03] = 0xc0;
         regs[0x05] = 0xf0;
         regs[0x09] = 0xc0;
         regs[0x0b] = 0xf0;
-        regs[0x80] = 0x16; // TH_GROUP：出厂触摸阈值（模组固件决定，取常见值）
-        regs[0x88] = 0x0e; // PERIODACTIVE：工作模式扫描周期
+        regs[0x80] = 0x16; // TH_GROUP: factory touch threshold (set by module firmware; a common value)
+        regs[0x88] = 0x0e; // PERIODACTIVE: scan period in active mode
         regs[0xa1] = 0x30; // LIB_VER_H / L
         regs[0xa2] = 0x03;
         regs[0xa3] = CHIP_ID;
-        // G_MODE：0 = 轮询模式（按着期间 INT 保持低），与这里模拟的 INT 行为一致；出厂默认值随模组固件，待真机核对
+        // G_MODE: 0 = polling (INT held low while pressed), matching the INT modelled here; factory default varies by module, to verify on hardware
         regs[0xa4] = 0x00;
         regs[0xa6] = 0x10; // FIRMID
         regs[0xa8] = FOCALTECH_ID;
@@ -66,7 +58,7 @@ impl Ft6236 {
         self.touch.is_some()
     }
 
-    /// 手指按下 / 移动（坐标 12 位）
+    /// Finger down / move (12-bit coordinates)
     pub fn press(&mut self, x: u16, y: u16) {
         let (x, y) = (x.min(0xfff), y.min(0xfff));
         if self.touch.is_none() {
@@ -77,7 +69,7 @@ impl Ft6236 {
         self.latch();
     }
 
-    /// 手指抬起：触点数清零，事件位报"抬起"，坐标保留最后一次
+    /// Finger up: touch count cleared, event reports "up", last coordinates kept
     pub fn release(&mut self) {
         if self.touch.take().is_none() {
             return;
@@ -92,7 +84,7 @@ impl Ft6236 {
         self.regs[0x02] = 1;
         self.regs[0x03] = ev | (x >> 8) as u8;
         self.regs[0x04] = x as u8;
-        self.regs[0x05] = (y >> 8) as u8; // 触点 ID 0
+        self.regs[0x05] = (y >> 8) as u8; // point ID 0
         self.regs[0x06] = y as u8;
         self.regs[0x07] = 0x20;
         self.regs[0x08] = 0x10;
@@ -115,7 +107,7 @@ impl I2cDevice for Ft6236 {
             self.ptr = b;
             self.expect_reg = false;
         } else {
-            // 0x00 与 0x80 起的配置区可写；0x01..0x0E 报告区和 0xA1.. 的 ID 区只读
+            // Config areas at 0x00 and 0x80+ are writable; the 0x01..0x0E report area and 0xA1.. ID area are read-only
             if self.ptr == 0x00
                 || (0x80..0xa0).contains(&self.ptr)
                 || (0xa4..=0xa5).contains(&self.ptr)
@@ -129,7 +121,7 @@ impl I2cDevice for Ft6236 {
     fn read(&mut self) -> u8 {
         let v = self.regs[self.ptr as usize];
         if self.ptr == 0x03 && self.touch.is_some() && self.fresh {
-            // 主机读到过"按下"之后就报"接触"
+            // Once the host has read "down", report "contact"
             self.fresh = false;
             self.regs[0x03] = (self.regs[0x03] & 0x0f) | 0x80;
         }
@@ -158,15 +150,15 @@ mod tests {
         let mut d = Ft6236::new(0x38);
         assert_eq!(rd(&mut d, 0xa3, 1), [0x36]);
         assert_eq!(rd(&mut d, 0xa8, 1), [0x11]);
-        // 没按：触点数 0，事件"无"
+        // Not pressed: 0 touches, event "none"
         assert_eq!(rd(&mut d, 0x02, 2), [0, 0xc0]);
-        // 按下 (300, 450)：12 位坐标拆成高 4 位 + 低 8 位
+        // Press at (300, 450): 12-bit coordinates split into high 4 + low 8 bits
         d.press(300, 450);
         assert_eq!(
             rd(&mut d, 0x00, 7),
             [0, 0, 1, 0x01, (300 & 0xff) as u8, 0x01, (450 & 0xff) as u8]
         );
-        // 第二次读：事件变"接触"
+        // Second read: event becomes "contact"
         assert_eq!(rd(&mut d, 0x03, 1)[0] >> 6, 2);
         d.press(310, 440);
         assert_eq!(
@@ -176,10 +168,10 @@ mod tests {
         d.release();
         let r = rd(&mut d, 0x02, 2);
         assert_eq!((r[0], r[1] >> 6), (0, 1));
-        // 再按：又是"按下"
+        // Press again: "down" again
         d.press(5, 6);
         assert_eq!(rd(&mut d, 0x03, 1)[0] >> 6, 0);
-        // 写 G_MODE / 阈值能读回，ID 区写不进
+        // G_MODE / threshold writes read back; the ID area ignores writes
         d.start(false);
         d.write(0xa3);
         d.write(0x00);

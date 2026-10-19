@@ -1,15 +1,13 @@
-//! I2S 音频器件：MAX98357A（I2S 输入的 D 类功放 + 小喇叭）与 INMP441（I2S 输出的数字 MEMS 麦克风）。
-//! 依据：MAX98357A 数据手册（Philips I2S、(L+R)/2 混音、增益 9 dB 档、静态电流 2.4 mA），
-//! INMP441 数据手册（24 位、MSB 先、Philips 格式，L/R 脚选槽，另一槽高阻，工作电流 1.4 mA）。
-//!
-//! 两个器件只和 I2S 的"槽字"打交道（见 i2s.rs）：喇叭收到每帧左右槽字，麦克风给出每帧左右槽字。
-//! 时间都是模拟时间（CPU 周期），喇叭输出带时间戳，网页按它对齐到 AudioContext 的时间轴。
+//! I2S audio devices: MAX98357A (I2S-input class-D amp + small speaker) and INMP441 (I2S-output MEMS mic). Per datasheets:
+//! MAX98357A Philips I2S, (L+R)/2 mix, 9 dB gain, 2.4 mA quiescent; INMP441 24-bit MSB-first Philips, L/R pin picks the slot
+//! (other slot high-Z), 1.4 mA. Both only see I2S slot words (i2s.rs); time is simulated (CPU cycles) and speaker output is
+//! timestamped so the web page can align it to the AudioContext timeline. (lint: allow-long-comment)
 
 use crate::i2s::I2sIo;
 use crate::periph::CPU_HZ;
 use std::collections::VecDeque;
 
-/// 三根 I2S 线接在哪几个 GPIO（数据线：喇叭是 DIN，麦克风是 SD）
+/// GPIOs of the three I2S lines (data line: DIN for the speaker, SD for the mic)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pins {
     pub bclk: u32,
@@ -17,7 +15,7 @@ pub struct Pins {
     pub data: u32,
 }
 
-/// 喇叭输出的一段连续样本（单声道，16 位），t = 第一个样本的模拟时刻（周期）
+/// A run of contiguous speaker samples (mono, 16-bit); t = simulated time (cycles) of the first sample
 #[derive(Clone, Debug, PartialEq)]
 pub struct Block {
     pub t: u64,
@@ -25,19 +23,19 @@ pub struct Block {
     pub data: Vec<i16>,
 }
 
-/// 一段声音的读数
+/// Readings of a stretch of sound
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Analysis {
     pub rate: f64,
     pub samples: usize,
-    /// 满量程 = 1
+    /// Full scale = 1
     pub rms: f64,
     pub peak: f64,
-    /// 主频（Hz）：去直流后相邻上升过零点线性插值；没有过零为 0
+    /// Dominant frequency (Hz): DC removed, linear interpolation between rising zero crossings; 0 if none
     pub freq: f64,
 }
 
-/// 读数：去直流、RMS、峰值、过零主频
+/// Readings: DC removal, RMS, peak, zero-crossing frequency
 pub fn analyze(x: &[f32], rate: f64) -> Analysis {
     if x.is_empty() || rate <= 0.0 {
         return Analysis::default();
@@ -47,7 +45,7 @@ pub fn analyze(x: &[f32], rate: f64) -> Analysis {
     let mut peak: f64 = 0.0;
     let (mut first, mut last, mut ups) = (-1.0f64, -1.0f64, 0usize);
     let mut prev = 0.0;
-    // 过零加一点回差，免得静音时的舍入噪声算成过零
+    // Hysteresis on zero crossings so rounding noise in silence doesn't count
     let hyst = 1e-4;
     let mut armed = false;
     for (i, v) in x.iter().enumerate() {
@@ -82,19 +80,19 @@ pub fn analyze(x: &[f32], rate: f64) -> Analysis {
     }
 }
 
-/// 分析用的历史样本上限（约 6 秒 @ 44.1 kHz）
+/// History cap for analysis (about 6 s @ 44.1 kHz)
 const HIST_CAP: usize = 1 << 18;
-/// 给网页取的样本上限（约 3 秒）：取得不及时就丢最老的
+/// Cap on samples queued for the web page (about 3 s): oldest are dropped if not fetched in time
 const QUEUE_CAP: usize = 1 << 17;
 
-/// MAX98357A：(L+R)/2 混成单声道，增益 9 dB 档（GAIN 脚悬空），驱动 4Ω 喇叭
+/// MAX98357A: (L+R)/2 mixed to mono, 9 dB gain (GAIN pin floating), driving a 4 Ω speaker
 pub struct Max98357a {
     pub pins: Pins,
     pub queue: VecDeque<Block>,
     queued: usize,
     pub dropped: u64,
     hist: VecDeque<i16>,
-    /// 最近一块的采样率、均方（满量程 = 1）
+    /// Sample rate and mean square of the latest block (full scale = 1)
     pub rate: f64,
     pub recent_ms: f64,
     pub frames: u64,
@@ -103,13 +101,13 @@ pub struct Max98357a {
     pub last_t: u64,
 }
 
-/// 0 dBFS 正弦在 9 dB 档的输出有效值（V）。估算：数据手册给的是增益而不是满量程电压，按 5 V 供电不削顶取 2.5 Vrms
+/// Output RMS (V) of a 0 dBFS sine at 9 dB gain. Estimate: the datasheet gives gain, not full-scale voltage; 2.5 Vrms unclipped at 5 V
 pub const FS_VRMS: f64 = 2.5;
 pub const SPEAKER_OHM: f64 = 4.0;
-/// D 类效率（估算）与静态电流（数据手册 2.4 mA）
+/// Class-D efficiency (estimate) and quiescent current (datasheet 2.4 mA)
 pub const EFFICIENCY: f64 = 0.85;
 pub const AMP_IQ: f64 = 0.0024;
-/// INMP441 工作电流（数据手册 1.4 mA）
+/// INMP441 operating current (datasheet 1.4 mA)
 pub const MIC_I: f64 = 0.0014;
 
 impl Max98357a {
@@ -164,13 +162,13 @@ impl Max98357a {
         }
     }
 
-    /// 取走攒下的输出（网页播放用）
+    /// Take the accumulated output (for web playback)
     pub fn take(&mut self) -> Vec<Block> {
         self.queued = 0;
         self.queue.drain(..).collect()
     }
 
-    /// 最近 secs 秒的读数
+    /// Readings over the last secs seconds
     pub fn analyze(&self, secs: f64) -> Analysis {
         let n = ((secs * self.rate) as usize).min(self.hist.len());
         let x: Vec<f32> = self
@@ -182,20 +180,20 @@ impl Max98357a {
         analyze(&x, self.rate)
     }
 
-    /// 从 5 V 取的电流（A）：静态电流 + 输出功率 / (效率 × 5 V)
+    /// Current drawn from 5 V (A): quiescent + output power / (efficiency x 5 V)
     pub fn supply_current(&self) -> f64 {
         let vrms = FS_VRMS * self.recent_ms.sqrt();
         AMP_IQ + vrms * vrms / SPEAKER_OHM / (EFFICIENCY * 5.0)
     }
 }
 
-/// 麦克风听到的声音
+/// What the mic hears
 pub enum MicSource {
-    /// 安静（只有 0）
+    /// Silence (zeros only)
     Silence,
-    /// 固定 WAV（循环播放，按模拟时间取样：同一 WAV 每次运行读数一样）
+    /// Fixed WAV (looped, sampled by simulated time: the same WAV reads identically every run)
     Wav { rate: f64, data: Vec<f32> },
-    /// 外部实时推入（网页的浏览器麦克风）：按 I2S 帧率从队列里消耗，空了给 0
+    /// Live external input (the browser mic): consumed from a queue at the I2S frame rate, 0 when empty
     Live {
         rate: f64,
         fifo: VecDeque<f32>,
@@ -206,7 +204,7 @@ pub enum MicSource {
 
 pub struct Inmp441 {
     pub pins: Pins,
-    /// L/R 脚接高 = 右声道（默认接地 = 左声道）
+    /// L/R pin high = right channel (default grounded = left)
     pub right: bool,
     pub source: MicSource,
     pub frames: u64,
@@ -222,7 +220,7 @@ impl Inmp441 {
         }
     }
 
-    /// 网页推入实时声音（rate = 推入数据的采样率）。队列最多留 1 秒
+    /// Web page pushes live audio (rate = sample rate of the pushed data). Queue keeps at most 1 s
     pub fn push_live(&mut self, rate: f64, x: &[f32]) {
         if !matches!(&self.source, MicSource::Live { rate: r, .. } if *r == rate) {
             self.source = MicSource::Live {
@@ -262,7 +260,7 @@ impl Inmp441 {
                 pos,
                 underruns,
             } => {
-                // step：每个 I2S 帧对应多少个推入样本
+                // step: pushed samples per I2S frame
                 let _ = rate;
                 let v = match fifo.front() {
                     Some(v) => *v,
@@ -281,7 +279,7 @@ impl Inmp441 {
         }
     }
 
-    /// n 帧的槽字：24 位补码左对齐（低 8 位为 0），不说话的那个槽高阻读 0
+    /// Slot words for n frames: 24-bit two's complement left-aligned (low 8 bits 0); the silent slot is high-Z and reads 0
     pub fn slots(&mut self, t0: u64, rate: f64, n: usize) -> Vec<[i32; 2]> {
         let fc = CPU_HZ as f64 / rate;
         let step = match &self.source {
@@ -304,10 +302,10 @@ impl Inmp441 {
     }
 }
 
-/// 读 WAV（PCM 8/16/24/32 位整数或 32 位浮点，多声道取第一声道）→（采样率, -1..1 样本）
+/// Read a WAV (PCM 8/16/24/32-bit int or 32-bit float, first channel of multi-channel) -> (sample rate, -1..1 samples)
 pub fn parse_wav(b: &[u8]) -> Result<(u32, Vec<f32>), String> {
     if b.len() < 12 || &b[0..4] != b"RIFF" || &b[8..12] != b"WAVE" {
-        return Err("不是 RIFF/WAVE 文件".into());
+        return Err("not a RIFF/WAVE file".into());
     }
     let (mut fmt, mut data) = (None, None);
     let mut p = 12;
@@ -322,16 +320,16 @@ pub fn parse_wav(b: &[u8]) -> Result<(u32, Vec<f32>), String> {
         }
         p += 8 + len + (len & 1);
     }
-    let fmt = fmt.ok_or("缺少 fmt 块")?;
-    let data = data.ok_or("缺少 data 块")?;
+    let fmt = fmt.ok_or("missing fmt chunk")?;
+    let data = data.ok_or("missing data chunk")?;
     if fmt.len() < 16 {
-        return Err("fmt 块太短".into());
+        return Err("fmt chunk too short".into());
     }
     let tag = u16::from_le_bytes([fmt[0], fmt[1]]);
     let ch = u16::from_le_bytes([fmt[2], fmt[3]]).max(1) as usize;
     let rate = u32::from_le_bytes(fmt[4..8].try_into().unwrap());
     let bits = u16::from_le_bytes([fmt[14], fmt[15]]) as usize;
-    // WAVE_FORMAT_EXTENSIBLE：子格式 GUID 的头两个字节是真正的格式号
+    // WAVE_FORMAT_EXTENSIBLE: the first two bytes of the subformat GUID are the real format tag
     let tag = if tag == 0xfffe && fmt.len() >= 26 {
         u16::from_le_bytes([fmt[24], fmt[25]])
     } else {
@@ -339,7 +337,7 @@ pub fn parse_wav(b: &[u8]) -> Result<(u32, Vec<f32>), String> {
     };
     let bps = bits.div_ceil(8);
     if bps == 0 || rate == 0 {
-        return Err("采样率或位宽为 0".into());
+        return Err("sample rate or bit depth is 0".into());
     }
     let frame = bps * ch;
     let out = data
@@ -357,19 +355,19 @@ pub fn parse_wav(b: &[u8]) -> Result<(u32, Vec<f32>), String> {
         })
         .collect::<Vec<_>>();
     if !matches!(tag, 1 | 3) {
-        return Err(format!("不支持的 WAV 格式 {tag}"));
+        return Err(format!("unsupported WAV format {tag}"));
     }
     Ok((rate, out))
 }
 
-/// 挂在 I2S 上的音频器件（外部世界，跨复位保留）
+/// Audio devices on I2S (the outside world, kept across resets)
 #[derive(Default)]
 pub struct Audio {
     pub speaker: Option<Box<Max98357a>>,
     pub mic: Option<Box<Inmp441>>,
-    /// I2S 在发数据、但喇叭的 DIN 不在那个口的数据输出上（接线不对）的帧数
+    /// Frames I2S sent while the speaker's DIN wasn't on that port's data output (miswired)
     pub tx_unrouted: u64,
-    /// I2S 在收、但数据输入没接到麦克风 SD 的帧数
+    /// Frames I2S received while its data input wasn't connected to the mic's SD
     pub rx_unrouted: u64,
 }
 
@@ -378,7 +376,7 @@ impl Audio {
         self.speaker.is_none() && self.mic.is_none()
     }
 
-    /// CLI / 网页共用的观察记录（`[tryboard] I2S …` 行）
+    /// Observation record shared by CLI / web (`[tryboard] I2S ...` lines); text stays Chinese until check.py / checks.ts / fingerprints migrate
     pub fn report(&self) -> String {
         let mut s = String::new();
         if let Some(sp) = &self.speaker {
@@ -388,37 +386,39 @@ impl Audio {
                 None => 0.0,
             };
             s += &format!(
-                "[tryboard] I2S 喇叭 MAX98357A（BCLK=GPIO{} LRC=GPIO{} DIN=GPIO{}）：收到 {} 帧（{:.2}s），采样率 {:.1} Hz，最近 1 秒 RMS {:.4}、峰值 {:.4}、主频 {:.1} Hz\n",
+                "[tryboard] I2S 喇叭 MAX98357A（BCLK=GPIO{} LRC=GPIO{} DIN=GPIO{}）：收到 {} 帧（{:.2}s），采样率 {:.1} Hz，最近 1 秒 RMS {:.4}、峰值 {:.4}、主频 {:.1} Hz\n", // lint: allow-cjk
                 sp.pins.bclk, sp.pins.ws, sp.pins.data, sp.frames, secs, sp.rate, a.rms, a.peak, a.freq
             );
         }
         if let Some(m) = &self.mic {
             let src = match &m.source {
-                MicSource::Silence => "安静".to_string(),
+                MicSource::Silence => "安静".to_string(), // lint: allow-cjk
                 MicSource::Wav { rate, data } => {
-                    format!("WAV {} Hz {:.2}s 循环", rate, data.len() as f64 / rate)
+                    #[rustfmt::skip]
+                    let s = format!("WAV {} Hz {:.2}s 循环", rate, data.len() as f64 / rate); // lint: allow-cjk
+                    s
                 }
-                MicSource::Live { underruns, .. } => format!("实时输入（欠载 {underruns} 帧）"),
+                MicSource::Live { underruns, .. } => format!("实时输入（欠载 {underruns} 帧）"), // lint: allow-cjk
             };
             s += &format!(
-                "[tryboard] I2S 麦克风 INMP441（SCK=GPIO{} WS=GPIO{} SD=GPIO{}，{}声道）：送出 {} 帧，声源 {}\n",
+                "[tryboard] I2S 麦克风 INMP441（SCK=GPIO{} WS=GPIO{} SD=GPIO{}，{}声道）：送出 {} 帧，声源 {}\n", // lint: allow-cjk
                 m.pins.bclk,
                 m.pins.ws,
                 m.pins.data,
-                if m.right { "右" } else { "左" },
+                if m.right { "右" } else { "左" }, // lint: allow-cjk
                 m.frames,
                 src
             );
         }
         if self.tx_unrouted > 0 {
             s += &format!(
-                "[tryboard] I2S 接线：有 {} 帧发送数据没到喇叭（DIN 不在 I2S 数据输出上）\n",
+                "[tryboard] I2S 接线：有 {} 帧发送数据没到喇叭（DIN 不在 I2S 数据输出上）\n", // lint: allow-cjk
                 self.tx_unrouted
             );
         }
         if self.rx_unrouted > 0 {
             s += &format!(
-                "[tryboard] I2S 接线：有 {} 帧接收数据不是来自麦克风（数据输入没选到 SD 脚）\n",
+                "[tryboard] I2S 接线：有 {} 帧接收数据不是来自麦克风（数据输入没选到 SD 脚）\n", // lint: allow-cjk
                 self.rx_unrouted
             );
         }
@@ -426,7 +426,7 @@ impl Audio {
     }
 }
 
-/// 一个 I2S 口此刻接到了哪些器件（SoC 按 GPIO 矩阵算出）
+/// Which devices an I2S port is connected to right now (computed by the SoC from the GPIO matrix)
 pub struct PortIo<'a> {
     pub audio: &'a mut Audio,
     pub speaker: bool,
@@ -504,7 +504,7 @@ mod tests {
             rate: 48000.0,
             data: y,
         };
-        // 48 kHz 帧率、时刻 0 起：逐个样本对上，左槽有数据、右槽 0
+        // 48 kHz frame rate from time 0: samples line up one by one, left slot has data, right slot 0
         let s = m.slots(0, 48000.0, 4);
         assert_eq!(s[2][1], 0);
         assert_eq!(
@@ -537,7 +537,7 @@ mod tests {
             data: 3,
         });
         m.push_live(32000.0, &[0.5, 0.5, -0.5, -0.5]);
-        // 16 kHz 帧率：每帧吃掉 2 个推入样本
+        // 16 kHz frame rate: each frame consumes 2 pushed samples
         let s = m.slots(0, 16000.0, 3);
         assert!(s[0][0] > 0 && s[1][0] < 0 && s[2][0] == 0);
         assert!(matches!(m.source, MicSource::Live { underruns: 1, .. }));

@@ -1,4 +1,4 @@
-// 验收固件：Wi-Fi 驱动初始化到 STA 启动。
+// Acceptance: Wi-Fi driver init through STA start.
 #include <stdio.h>
 #include "esp_wifi.h"
 #include "esp_event.h"

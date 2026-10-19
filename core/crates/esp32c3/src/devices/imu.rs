@@ -1,20 +1,17 @@
-//! IMU 公共件：姿态（欧拉角 + 欧拉角速率）→ 传感器坐标系里的比力（加速度计读数）和角速度（陀螺读数）。
-//!
-//! 约定（MPU6050 / QMI8658 共用）：传感器坐标系 X 沿模块长边、Y 沿短边、Z 垂直芯片朝上（右手系）；
-//! 姿态按航空 ZYX 顺序：R = Rz(yaw) · Ry(pitch) · Rx(roll)，把传感器坐标转到世界坐标（世界 Z 朝上）。
-//! 平放静止时加速度计读 (0, 0, +1 g)；pitch 抬起 X 轴正向时 ax 变负，固件常用的
-//! roll = atan2(ay, az)、pitch = atan2(-ax, √(ay² + az²)) 正好还原出设定值。
-//!
-//! 角速度：输入里给的是欧拉角变化率（°/s，网页由拖动速度算出、脚本里写明），这里换算成机体角速度。
-//! 姿态在两次输入之间保持不变（不按角速率外推）：输入日志里每一次变化都有明确的时刻，重放才逐周期一致。
+//! IMU common code: pose (Euler angles + rates) -> specific force (accel) and angular rate (gyro) in the sensor frame.
+//! Convention (MPU6050 / QMI8658): X along the module's long edge, Y short edge, Z up from the chip (right-handed);
+//! aerospace ZYX order R = Rz(yaw)·Ry(pitch)·Rx(roll) maps sensor to world (world Z up). Flat at rest reads (0, 0, +1 g);
+//! pitching +X up makes ax negative, so roll = atan2(ay, az), pitch = atan2(-ax, √(ay² + az²)) recover the set values.
+//! Input rates are Euler-angle rates (°/s), converted here to body rates. Pose is held between inputs (no extrapolation)
+//! so every change in the input log has an exact time and replay matches cycle for cycle. (lint: allow-long-comment)
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Pose {
-    /// 度
+    /// Degrees
     pub pitch: f64,
     pub roll: f64,
     pub yaw: f64,
-    /// 欧拉角变化率，°/s
+    /// Euler angle rates, °/s
     pub dpitch: f64,
     pub droll: f64,
     pub dyaw: f64,
@@ -30,13 +27,13 @@ impl Pose {
         }
     }
 
-    /// 加速度计读数（单位 g，传感器坐标系）：静止时只有重力的反作用
+    /// Accelerometer reading (g, sensor frame): at rest only the reaction to gravity
     pub fn accel_g(&self) -> [f64; 3] {
         let (t, f) = (self.pitch.to_radians(), self.roll.to_radians());
         [-t.sin(), f.sin() * t.cos(), f.cos() * t.cos()]
     }
 
-    /// 陀螺读数（°/s，传感器坐标系）：欧拉角速率 → 机体角速度
+    /// Gyro reading (°/s, sensor frame): Euler rates -> body angular rate
     pub fn gyro_dps(&self) -> [f64; 3] {
         let (t, f) = (self.pitch.to_radians(), self.roll.to_radians());
         let (dt, df, dy) = (self.dpitch, self.droll, self.dyaw);
@@ -48,7 +45,7 @@ impl Pose {
     }
 }
 
-/// 确定性的小噪声：按样本序号和通道哈希出 [-1, 1)，同一时刻读到的值每次重放都一样
+/// Deterministic small noise: hash of sample index and channel into [-1, 1), so replays read identical values
 pub fn noise(sample: u64, ch: u64) -> f64 {
     let mut x = sample.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ ch.wrapping_mul(0xbf58_476d_1ce4_e5b9);
     x ^= x >> 31;
@@ -57,7 +54,7 @@ pub fn noise(sample: u64, ch: u64) -> f64 {
     (x >> 11) as f64 / (1u64 << 52) as f64 - 1.0
 }
 
-/// 物理量 × 灵敏度 → 16 位有符号输出（饱和）
+/// Physical value x sensitivity -> saturated signed 16-bit output
 pub fn to_i16(v: f64) -> i16 {
     v.round().clamp(i16::MIN as f64, i16::MAX as f64) as i16
 }
@@ -84,11 +81,11 @@ mod tests {
 
     #[test]
     fn rates_to_body() {
-        // 平放时绕 Z 转（yaw 速率）= 陀螺 Z
+        // Rotating about Z while flat (yaw rate) = gyro Z
         let mut p = Pose::new(0.0, 0.0, 0.0);
         p.dyaw = 90.0;
         assert_eq!(p.gyro_dps(), [0.0, 0.0, 90.0]);
-        // 只有横滚速率 = 陀螺 X
+        // Roll rate only = gyro X
         let mut p = Pose::new(20.0, 0.0, 0.0);
         p.droll = 15.0;
         assert!((p.gyro_dps()[0] - 15.0).abs() < 1e-12);

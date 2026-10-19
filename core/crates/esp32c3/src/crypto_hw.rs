@@ -1,12 +1,8 @@
-//! SHA（0x6003B000）与 AES（0x6003A000）硬件加速器。
-//!
-//! 为什么要模拟：IDF 默认打开 MBEDTLS_HARDWARE_SHA / AES，Wi-Fi 的 WPA2 四次握手（PBKDF2、
-//! HMAC-SHA1 MIC、AES Key Unwrap）全经过它们；不建模时寄存器读回 0，sha_hal 发现全零摘要直接 abort。
-//! C3 与 S3 的寄存器排布相同（hwcrypto_reg.h），模型不依赖具体 SoC：寄存器写时由 SoC 先从 GDMA 取链头，再借总线（`DmaMem`）。
-//! 两者的 DMA 模式要从 GDMA 描述符取 / 写数据：通过 SoC 的 GDMA 模型（`gdma.rs`，按芯片排布）按
-//! OUT/IN_PERI_SEL 找到接到本外设的通道、取它配置的链表头。搬数据仍走本文件的 gather / scatter：
-//! IDF 的 AES / SHA 驱动先配链表、再启动加速器，GDMA 的 start 位不一定在触发之前置上，
-//! 不能用 `Gdma::take_out`（它只认已启动的通道）。
+//! SHA (0x6003B000) and AES (0x6003A000) accelerators. Needed because IDF enables MBEDTLS_HARDWARE_SHA / AES by default and the
+//! WPA2 handshake (PBKDF2, HMAC-SHA1 MIC, AES Key Unwrap) uses them; unmodelled registers read 0 and sha_hal aborts on an all-zero digest.
+//! C3 and S3 share the layout (hwcrypto_reg.h). DMA mode finds the GDMA channel wired to this peripheral via OUT/IN_PERI_SEL and its
+//! link head (taken by the SoC before the write, then memory via `DmaMem`); data moves via gather / scatter here, not `Gdma::take_out`,
+//! because IDF configures links before starting the accelerator and the GDMA start bit may not be set yet. (lint: allow-long-comment)
 
 use crate::gdma::{DmaMem, Gdma};
 use crate::wifi::crypto::{sha1_block, Aes};
@@ -14,7 +10,7 @@ use crate::wifi::crypto::{sha1_block, Aes};
 pub const SHA_BASE: u32 = 0x6003_b000;
 pub const AES_BASE: u32 = 0x6003_a000;
 
-/// GDMA 外设编号（soc/gdma_channel.h）
+/// GDMA peripheral IDs (soc/gdma_channel.h)
 const PERI_AES: u32 = 6;
 const PERI_SHA: u32 = 7;
 
@@ -22,7 +18,7 @@ const PERI_SHA: u32 = 7;
 pub struct ShaHw {
     mode: u32,
     block_num: u32,
-    /// H 寄存器（按总线上的字存，即摘要字节按小端装载）
+    /// H registers (stored as bus words, i.e. digest bytes loaded little-endian)
     h: [u32; 8],
     text: [u32; 16],
     pub blocks: u64,
@@ -38,7 +34,7 @@ pub struct AesHw {
     block_mode: u32,
     block_num: u32,
     dma_enable: u32,
-    /// 0 空闲、1 忙、2 DMA 完成（等 DMA_EXIT）
+    /// 0 idle, 1 busy, 2 DMA done (waiting for DMA_EXIT)
     state: u32,
     int_ena: u32,
     pub blocks: u64,
@@ -83,7 +79,7 @@ const K256: [u32; 64] = [
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
-/// SHA-256 压缩函数（FIPS 180-4 §6.2.2），SHA-224 共用
+/// SHA-256 compression function (FIPS 180-4 §6.2.2), shared with SHA-224
 pub fn sha256_block(h: &mut [u32; 8], b: &[u8]) {
     let mut w = [0u32; 64];
     for i in 0..16 {
@@ -115,9 +111,9 @@ pub fn sha256_block(h: &mut [u32; 8], b: &[u8]) {
 }
 
 impl ShaHw {
-    /// 压缩一块；first = 先装初值（START / DMA_START）
+    /// Compress one block; first = load the initial value first (START / DMA_START)
     fn process(&mut self, block: &[u8], first: bool) {
-        // 寄存器里的字是内存字节按小端装载的，算法要大端字：H 进出都要字节翻转
+        // Register words are memory bytes loaded little-endian but the algorithm wants big-endian words: byte-swap H in and out
         match self.mode {
             0 => {
                 let mut h = SHA1_IV;
@@ -144,25 +140,25 @@ impl ShaHw {
                 sha256_block(&mut h, block);
                 self.h = h.map(|x| x.swap_bytes());
             }
-            // SHA-384/512 在 C3 上没有
+            // SHA-384/512 don't exist on the C3
             _ => {}
         }
         self.blocks += 1;
     }
 }
 
-/// 某个外设接到的 GDMA 通道的描述符链头（out = 内存 → 外设）
+/// Descriptor link head of the GDMA channel wired to a peripheral (out = memory -> peripheral)
 fn gdma_link(gdma: &Gdma, peri: u32, out: bool) -> Option<u32> {
     let ch = gdma.channel_for_peri(peri, out)?;
     Some(gdma.configured_link(ch, out))
 }
 
-/// SHA 的 DMA 输入链头（寄存器写之前从 GDMA 取，免得同时借用 GDMA 和总线）
+/// SHA's DMA input link head (taken from GDMA before the register write, to avoid borrowing GDMA and the bus at once)
 pub fn sha_link(gdma: &Gdma) -> Option<u32> {
     gdma_link(gdma, PERI_SHA, true)
 }
 
-/// AES 的 DMA（输入, 输出）链头
+/// AES DMA (input, output) link heads
 pub fn aes_links(gdma: &Gdma) -> (Option<u32>, Option<u32>) {
     (
         gdma_link(gdma, PERI_AES, true),
@@ -170,7 +166,7 @@ pub fn aes_links(gdma: &Gdma) -> (Option<u32>, Option<u32>) {
     )
 }
 
-/// 沿发送描述符链（lldesc）读出最多 n 字节
+/// Read up to n bytes along a TX descriptor chain (lldesc)
 fn dma_gather(mem: &mut dyn DmaMem, mut d: u32, n: usize) -> Vec<u8> {
     let mut out = Vec::with_capacity(n);
     for _ in 0..256 {
@@ -183,7 +179,7 @@ fn dma_gather(mem: &mut dyn DmaMem, mut d: u32, n: usize) -> Vec<u8> {
         for i in 0..len {
             out.push(mem.rd8(buf + i));
         }
-        // 用完交还软件
+        // Hand the descriptor back to software
         mem.wr32(d, w0 & !(1 << 31));
         let next = mem.rd32(d + 8);
         if w0 & (1 << 30) != 0 || next == 0 {
@@ -195,7 +191,7 @@ fn dma_gather(mem: &mut dyn DmaMem, mut d: u32, n: usize) -> Vec<u8> {
     out
 }
 
-/// 沿接收描述符链写入数据，最后一个置 EOF，全部交还软件
+/// Write data along an RX descriptor chain, set EOF on the last one, hand all back to software
 fn dma_scatter(mem: &mut dyn DmaMem, mut d: u32, data: &[u8]) {
     let mut off = 0usize;
     for _ in 0..256 {
@@ -226,7 +222,7 @@ impl ShaHw {
         match off {
             0x00 => self.mode,
             0x0c => self.block_num,
-            0x18 => 0, // BUSY：瞬间完成
+            0x18 => 0, // BUSY: completes instantly
             0x2c => 0x2007_0000,
             0x40..=0x5f => self.h[((off - 0x40) / 4) as usize],
             0x80..=0xbf => self.text[((off - 0x80) / 4) as usize],
@@ -234,7 +230,7 @@ impl ShaHw {
         }
     }
 
-    /// 寄存器写；DMA 模式按 GDMA 里接到 SHA 的通道取数据
+    /// Register write; DMA mode reads data from the GDMA channel wired to SHA
     pub fn write(&mut self, off: u32, v: u32, link: Option<u32>, mem: &mut dyn DmaMem) {
         match off {
             0x00 => self.mode = v & 7,
@@ -308,7 +304,7 @@ impl AesHw {
     }
 
     fn cipher(&self) -> (Aes, bool) {
-        // MODE：位 2 = 解密，低 2 位 0 = 128 位、2 = 256 位（C3 / S3 都没有 192）
+        // MODE: bit 2 = decrypt, low 2 bits 0 = 128-bit, 2 = 256-bit (neither C3 nor S3 has 192)
         let klen = if self.mode & 3 == 2 { 32 } else { 16 };
         let mut key = Vec::with_capacity(32);
         for w in &self.key[..klen / 4] {
@@ -320,7 +316,7 @@ impl AesHw {
     fn trigger(&mut self, links: (Option<u32>, Option<u32>), mem: &mut dyn DmaMem) {
         let (aes, dec) = self.cipher();
         if self.dma_enable == 0 {
-            // 单块模式：TEXT_IN → TEXT_OUT，只有 ECB
+            // Single-block mode: TEXT_IN -> TEXT_OUT, ECB only
             let mut b = words_to_block(&self.text_in);
             if dec {
                 aes.decrypt(&mut b);
@@ -359,7 +355,7 @@ fn block_to_words(b: &[u8; 16]) -> [u32; 4] {
     [0, 1, 2, 3].map(|i| u32::from_le_bytes([b[4 * i], b[4 * i + 1], b[4 * i + 2], b[4 * i + 3]]))
 }
 
-/// DMA 模式下按分组模式处理（BLOCK_MODE：0 ECB、1 CBC、2 OFB、3 CTR、4 CFB8、5 CFB128）；iv 原地更新
+/// DMA mode by block mode (BLOCK_MODE: 0 ECB, 1 CBC, 2 OFB, 3 CTR, 4 CFB8, 5 CFB128); iv updated in place
 pub fn aes_stream(aes: &Aes, dec: bool, mode: u32, iv: &mut [u8; 16], input: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(input.len());
     if mode == 4 {
@@ -409,7 +405,7 @@ pub fn aes_stream(aes: &Aes, dec: bool, mode: u32, iv: &mut [u8; 16], input: &[u
                 let mut k = *iv;
                 aes.encrypt(&mut k);
                 xor(&mut b, &k);
-                // INC_SEL = 0：计数器是最后 32 位（大端）
+                // INC_SEL = 0: the counter is the last 32 bits (big-endian)
                 let c = u32::from_be_bytes([iv[12], iv[13], iv[14], iv[15]]).wrapping_add(1);
                 iv[12..].copy_from_slice(&c.to_be_bytes());
                 b
@@ -447,7 +443,7 @@ mod tests {
             .collect()
     }
 
-    /// 按驱动的用法喂寄存器：消息字按小端写进 TEXT，读 H 得到摘要字节
+    /// Drive the registers the way the driver does: message words little-endian into TEXT, digest bytes from H
     fn hw_hash(bus: &mut SocBus, mode: u32, msg: &[u8], out_words: usize) -> Vec<u8> {
         let mut m = msg.to_vec();
         let bits = (msg.len() as u64) * 8;
@@ -498,7 +494,7 @@ mod tests {
     #[test]
     fn aes_hw_block_and_modes() {
         let mut bus = SocBus::default();
-        // FIPS 197 C.1，单块模式
+        // FIPS 197 C.1, single-block mode
         let key = hex("000102030405060708090a0b0c0d0e0f");
         for i in 0..4 {
             bus.aes_write(
@@ -519,7 +515,7 @@ mod tests {
             .flat_map(|i| bus.aes_read(0x30 + 4 * i).to_le_bytes())
             .collect();
         assert_eq!(ct, hex("69c4e0d86a7b0430d8cdb78070b4c55a"));
-        // NIST SP 800-38A F.2.1 CBC-AES128 加密 / F.5.1 CTR-AES128
+        // NIST SP 800-38A F.2.1 CBC-AES128 encrypt / F.5.1 CTR-AES128
         let aes = Aes::new(&hex("2b7e151628aed2a6abf7158809cf4f3c"));
         let p = hex("6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e51");
         let mut iv: [u8; 16] = hex("000102030405060708090a0b0c0d0e0f").try_into().unwrap();
@@ -532,7 +528,7 @@ mod tests {
             aes_stream(&aes, false, 3, &mut iv, &p),
             hex("874d6191b620e3261bef6864990db6ce9806f66b7970fdff8617187bb9fffdff")
         );
-        // F.3.13 CFB128-AES128 加密
+        // F.3.13 CFB128-AES128 encrypt
         let mut iv: [u8; 16] = hex("000102030405060708090a0b0c0d0e0f").try_into().unwrap();
         assert_eq!(
             aes_stream(&aes, false, 5, &mut iv, &p),

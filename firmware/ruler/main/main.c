@@ -1,9 +1,7 @@
-// 超声波尺子（P2-09）参考固件，三个检查点共用：
-//   STAGE 1 ruler-1「测距打印」：HC-SR04 每 100 ms 测一次，串口打印距离
-//   STAGE 2 ruler-2「OLED 显示」：+ SSD1306 上 2 倍大字距离 + 距离条
-//   STAGE 3 ruler-3「合体」：+ 无源蜂鸣器，越近响得越急（倒车雷达）
-// 接线（ESP32-S3）：Trig=GPIO17，Echo 经 1 kΩ / 2 kΩ 分压接 GPIO18（HC-SR04 是 5 V 器件）；
-// OLED SDA=GPIO8、SCL=GPIO9（0x3C）；蜂鸣器模块 I/O=GPIO5（LEDC 2.7 kHz，占空比 50% = 响、0 = 停）。
+// Ultrasonic ruler (P2-09) reference, shared by three checkpoints: STAGE 1 ruler-1 "print distance" (HC-SR04 every 100 ms); STAGE 2 ruler-2 "OLED"
+// adds 2x distance text + bar on SSD1306; STAGE 3 ruler-3 "combined" adds a passive buzzer beeping faster when closer (parking sensor).
+// Wiring (S3): Trig=GPIO17, Echo via 1k / 2k divider to GPIO18 (HC-SR04 is 5 V); OLED SDA=8, SCL=9 (0x3C); buzzer I/O=GPIO5 (LEDC 2.7 kHz,
+// 50% = on, 0 = off). (lint: allow-long-comment)
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -51,7 +49,7 @@ static void oled_init(void)
     ESP_ERROR_CHECK(ssd1306_init());
 }
 
-// 第一行 2 倍大字距离，下面一条 0–200 cm 的距离条（外框 + 实心部分）
+// First row 2x distance text, below it a 0-200 cm bar (outline + filled part)
 static void oled_show(int mm)
 {
     memset(fb, 0, sizeof fb);
@@ -69,7 +67,7 @@ static void oled_show(int mm)
 #endif
 
 #if STAGE == 3
-// 两次蜂鸣之间停多久（ms）：-1 不响、0 一直响；由测距循环写、蜂鸣任务读
+// Pause between beeps (ms): -1 silent, 0 continuous; written by the ranging loop, read by the buzzer task
 static volatile int gap_ms = -1;
 
 static void buzzer(int on)
@@ -142,7 +140,7 @@ void app_main(void)
     rmt_rx_event_callbacks_t cbs = {.on_recv_done = on_done};
     ESP_ERROR_CHECK(rmt_rx_register_event_callbacks(rx, &cbs, q));
     ESP_ERROR_CHECK(rmt_enable(rx));
-    // 电平 25 ms 不变就算一帧结束：比 400 cm 的回波（约 23.3 ms）长，比测不到时的 38 ms 短
+    // Level unchanged 25 ms ends a frame: longer than a 400 cm echo (~23.3 ms), shorter than the 38 ms no-echo pulse
     rmt_receive_config_t rcfg = {.signal_range_min_ns = 1000, .signal_range_max_ns = 25000000};
     static rmt_symbol_word_t buf[48];
     printf("RULER ready TRIG=GPIO%d ECHO=GPIO%d\n", TRIG_GPIO, ECHO_GPIO);
@@ -158,7 +156,7 @@ void app_main(void)
             rmt_enable(rx);
         } else if (ev.num_symbols >= 1 && ev.received_symbols[0].level0 == 1 && ev.received_symbols[0].duration0 > 0 &&
                    ev.received_symbols[0].level1 == 0) {
-            // 毫米 = µs × 343 m/s / 2，四舍五入到 0.1 cm
+            // mm = us x 343 m/s / 2, rounded to 0.1 cm
             unsigned us = ev.received_symbols[0].duration0;
             mm = (int)((us * 343u + 1000u) / 2000u);
         }

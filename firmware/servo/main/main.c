@@ -1,4 +1,4 @@
-// 示例：SG90 舵机。默认 GPIO6（SERVO_GPIO 可覆盖） 输出 50Hz PWM，脉宽 0.5–2.5ms 对应 0–180°，来回扫动。
+// Example: SG90 servo on GPIO6 (SERVO_GPIO overrides), 50Hz PWM, 0.5–2.5ms pulse for 0–180°, sweeping.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -11,7 +11,7 @@
 static uint32_t angle_to_duty(int angle)
 {
     uint32_t us = 500 + angle * 2000 / 180;   // 0.5–2.5ms
-    return us * (1 << 14) / 20000;            // 14 位分辨率，周期 20ms
+    return us * (1 << 14) / 20000;            // 14-bit resolution, 20ms period
 }
 
 void app_main(void)

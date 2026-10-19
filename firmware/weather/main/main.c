@@ -1,9 +1,5 @@
-// 装配成品：桌面气象站（ESP32-S3）。
-// I2C SDA=GPIO8 SCL=GPIO9 上挂 SSD1306@0x3C 与 BME280@0x76；舵机指针表盘在 GPIO4（LEDC 50Hz，0–40℃ → 0.5–2.5ms）；
-// 板载 WS2812 在 GPIO48（RMT）按温度显示蓝 / 绿 / 红；BOOT 键 GPIO0 切换 ℃ / ℉。
-// 无源蜂鸣器在 GPIO5（LEDC 通道 1 / 定时器 1，2700Hz 50%）：≥ 30℃ 报警，200ms 响 / 200ms 停，降到 29℃ 以下停（1℃ 回差防抖）；
-// 状态变化时串口打印 ALARM ON / ALARM OFF。
-// 串口每次读数一行（温度始终用摄氏，便于解析）：T=23.50 C H=45.0 % P=1013.25 hPa LED=green PWM=1675us
+// Desk weather station (S3): SSD1306@0x3C + BME280@0x76 on I2C 8/9, servo dial GPIO4, WS2812 GPIO48 by temp, BOOT toggles °C/°F,
+// buzzer GPIO5 alarms at ≥30 °C (ALARM ON / OFF, 1 °C hysteresis); serial line per reading: T=23.50 C H=45.0 % P=1013.25 hPa ...
 #include <stdio.h>
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"
@@ -29,7 +25,7 @@
 #define OLED_ADDR 0x3C
 #define BME_ADDR 0x76
 #define PERIOD_MS 500
-// 板载灯珠离眼睛很近，全亮刺眼
+// The onboard LED is close to your eyes; full brightness glares
 #define LED_LEVEL 0x20
 
 static i2c_master_bus_handle_t bus;
@@ -54,7 +50,7 @@ static void IRAM_ATTR on_press(void *arg)
     xQueueSendFromISR(btn_q, &t, NULL);
 }
 
-// 温度（0.01℃）→ 舵机脉宽：0–40℃ 线性映射到 0.5–2.5ms，超出量程贴边
+// Temperature (0.01 °C) → servo pulse: 0–40 °C maps linearly to 0.5–2.5ms, clamped
 static uint32_t temp_to_us(int32_t t)
 {
     if (t < 0) t = 0;
@@ -88,7 +84,7 @@ static void servo_set(uint32_t us)
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
 }
 
-// 蜂鸣器要到第一次报警才配置：不报警时与没有蜂鸣器的版本行为完全相同（第 06 关的运行指纹不变）
+// Buzzer configured only on first alarm, so without an alarm behaviour matches the no-buzzer build (level 06 fingerprint unchanged)
 static volatile int alarm_on;
 
 static void buzzer_duty(uint32_t d)
@@ -115,7 +111,7 @@ static void alarm_task(void *arg)
         .duty = 0,
     };
     ESP_ERROR_CHECK(ledc_channel_config(&ch));
-    // 无源蜂鸣器要方波才响：50% 占空比最响，占空比 0 就是停
+    // A passive buzzer needs a square wave: 50% duty is loudest, 0 is silent
     for (int beep = 1;; beep = !beep) {
         buzzer_duty(alarm_on && beep ? 512 : 0);
         if (!alarm_on) beep = 0;
@@ -123,7 +119,7 @@ static void alarm_task(void *arg)
     }
 }
 
-// 度符号：字库里没有，画一个 3x3 小圈
+// Degree sign: not in the font, so draw a 3x3 ring
 static void degree(int x, int y, int s)
 {
     for (int i = 0; i < 3 * s; i++) {
@@ -138,7 +134,7 @@ static void draw(int32_t t, uint32_t hh, uint32_t p, int fahrenheit)
 {
     memset(fb, 0, sizeof fb);
     char s[32];
-    // 第一行大字温度（保留 1 位小数，四舍五入）
+    // First row: large temperature (1 decimal, rounded)
     int32_t v = fahrenheit ? t * 9 / 5 + 3200 : t;
     int32_t a = v < 0 ? -v : v;
     a = (a + 5) / 10;
@@ -150,10 +146,10 @@ static void draw(int32_t t, uint32_t hh, uint32_t p, int fahrenheit)
     text(x, 4, s, 3);
     degree(x + n * 18 + 1, 4, 2);
     text(x + n * 18 + 8, 4, fahrenheit ? "F" : "C", 3);
-    // 第二行湿度 + 气压（取整）
+    // Second row: humidity + pressure (rounded)
     snprintf(s, sizeof s, "%" PRIu32 "%% %" PRIu32 "hPa", (hh + 512) / 1024, (p + 12800) / 25600);
     text((128 - (int)strlen(s) * 6) / 2, 34, s, 1);
-    // 底部刻度条：0–40℃ 指针位置，和舵机表盘一致
+    // Bottom bar: 0–40 °C pointer, matching the servo dial
     rect(4, 50, 120, 10, 0);
     int32_t c = t < 0 ? 0 : t > 4000 ? 4000 : t;
     rect(6, 52, 116 * c / 4000, 6, 1);
@@ -190,7 +186,7 @@ void app_main(void)
     ESP_ERROR_CHECK(rd(0x88, c, 26));
     ESP_ERROR_CHECK(rd(0xE1, h, 7));
     bme280_parse_calib(c, h);
-    // 湿度 ×1；温度 ×1、气压 ×1、正常模式；待机 125ms、关滤波
+    // Humidity x1; temperature x1, pressure x1, normal mode; standby 125ms, filter off
     ESP_ERROR_CHECK(wr(0xF2, 0x01));
     ESP_ERROR_CHECK(wr(0xF5, 0x40));
     ESP_ERROR_CHECK(wr(0xF4, 0x27));
@@ -215,7 +211,7 @@ void app_main(void)
     ESP_ERROR_CHECK(gpio_install_isr_service(0));
     ESP_ERROR_CHECK(gpio_isr_handler_add(BTN_GPIO, on_press, NULL));
 
-    // 正常模式第一次转换要 ~10ms 才有数据
+    // The first normal-mode conversion takes ~10ms before data is ready
     vTaskDelay(pdMS_TO_TICKS(50));
     int fahrenheit = 0, servo_on = 0;
     int64_t last_press = -1000000;
@@ -262,7 +258,7 @@ void app_main(void)
             }
         }
 
-        // 等到下一次读数，期间响应 BOOT 键（50ms 消抖）
+        // Wait for the next reading while handling BOOT (50ms debounce)
         TickType_t until = xTaskGetTickCount() + pdMS_TO_TICKS(PERIOD_MS);
         for (;;) {
             TickType_t now = xTaskGetTickCount();

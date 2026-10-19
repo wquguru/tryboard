@@ -1,4 +1,4 @@
-// 验收固件：连上开放网络 TryBoard-WiFi，DHCP 拿到 IP。
+// Acceptance: join the open network TryBoard-WiFi and get an IP via DHCP.
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"

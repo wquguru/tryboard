@@ -1,8 +1,5 @@
-// 验收：NimBLE 外设（C-01）。广播 "TryBoard-HR"，提供
-//   心率服务 0x180D：心率测量 0x2A37（notify，订阅后每秒一次）、传感器位置 0x2A38（read）
-//   电池服务 0x180F：电量 0x2A19（read）
-//   LED 服务 0xFFE0：开关 0xFFE1（read / write，写 01 点亮 GPIO5 的 LED，写 00 熄灭）
-// 虚拟手机（tryboard run --ble-phone 或网页）扫描、连接、读、写、订阅，固件串口打印每一步。
+// Acceptance (C-01): NimBLE peripheral "TryBoard-HR": HR 0x180D (0x2A37 notify 1/s, 0x2A38 read), battery 0x180F (0x2A19),
+// LED 0xFFE0 (0xFFE1 r/w: 01 lights GPIO5); the virtual phone scans, connects, reads, writes, subscribes, each step logged.
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -30,7 +27,7 @@ static int chr_access(uint16_t conn_handle, uint16_t attr_handle, struct ble_gat
     uint16_t uuid = ble_uuid_u16(ctxt->chr->uuid);
     switch (uuid) {
     case 0x2A38: {
-        uint8_t loc = 1; // 胸前
+        uint8_t loc = 1; // chest
         return os_mbuf_append(ctxt->om, &loc, 1) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
     }
     case 0x2A19:

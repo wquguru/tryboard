@@ -1,6 +1,5 @@
-// 示例：ESP32-S3 用原生 USB 把自己报成"键盘 + 鼠标"。
-// 插到电脑上 1 秒后自动打一行字、让鼠标画个正方形；之后每按一次 BOOT 键（GPIO0）再来一遍。
-// 真机上直接可用：插板子上标着 USB / OTG 的那个 Type-C 口。
+// Example: S3 native USB as keyboard + mouse; 1 s after plug-in it types a line and draws a square, again on each BOOT (GPIO0).
+// Works on real boards: use the Type-C port marked USB / OTG.
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -20,10 +19,10 @@ static const uint8_t report_desc[] = {
 };
 
 static const char *strings[] = {
-    (char[]){0x09, 0x04}, // 英语
-    "TryBoard",           // 厂商
-    "TryBoard Keyboard",  // 产品
-    "000001",             // 序列号
+    (char[]){0x09, 0x04}, // English
+    "TryBoard",           // manufacturer
+    "TryBoard Keyboard",  // product
+    "000001",             // serial number
     "HID keyboard + mouse",
 };
 

@@ -1,6 +1,5 @@
-// 示例：I2S 放音。ESP32-C3 的 I2S0（C3 只有这一个 I2S） 以标准 Philips 格式（44.1 kHz、16 位、单声道复制到左右声道）
-// 把 440 Hz 正弦波送给 MAX98357A 功放模块（BCLK=GPIO0、LRC=GPIO1、DIN=GPIO2，与模拟器 C3 的 i2s_pin 约定一致），驱动 4Ω 小喇叭。
-// 只用 ESP-IDF 自带的 esp_driver_i2s（Apache-2.0）。
+// Example: I2S playback on the C3's only I2S0, Philips 44.1 kHz 16-bit mono duplicated to L/R: a 440 Hz sine to a MAX98357A amp
+// (BCLK=GPIO0, LRC=GPIO1, DIN=GPIO2, matching the simulator's C3 i2s_pin) driving a 4 ohm speaker. Uses only IDF esp_driver_i2s (Apache-2.0).
 #include <math.h>
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
@@ -38,7 +37,7 @@ void app_main(void)
     printf("TONE %.0f Hz @ %d Hz, 16 bit mono, BCLK=GPIO%d LRC=GPIO%d DIN=GPIO%d\n", TONE_HZ, RATE, PIN_BCLK, PIN_LRC,
            PIN_DIN);
 
-    // 相位累加：不要求一个缓冲正好装整数个周期
+    // Phase accumulator: a buffer needn't hold a whole number of periods
     float phase = 0, step = 2.0f * (float)M_PI * TONE_HZ / RATE;
     int64_t t0 = esp_timer_get_time();
     uint32_t frames = 0;
@@ -51,7 +50,7 @@ void app_main(void)
         size_t w = 0;
         ESP_ERROR_CHECK(i2s_channel_write(tx, buf, sizeof(buf), &w, portMAX_DELAY));
         frames += w / sizeof(int16_t);
-        // 写满 DMA 缓冲之后 write 会按播放速度阻塞：1 秒后检查写入速率是否等于采样率
+        // Once DMA buffers fill, write blocks at playback speed: after 1 s check that write rate equals sample rate
         if (n == 100) {
             int64_t dt = esp_timer_get_time() - t0;
             printf("TONE wrote %u frames in %lld ms\n", (unsigned)frames, dt / 1000);

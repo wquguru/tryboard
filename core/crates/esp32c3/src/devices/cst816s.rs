@@ -1,13 +1,9 @@
-//! CST816S 自容触摸控制器（I2C 0x15），微雪 1.28″ 圆屏触摸板（GC9A01 + CST816S）上的那颗。
-//! 寄存器按海栎创《CST816S 寄存器说明》：0x01 GestureID、0x02 FingerNum、0x03/0x04 X（0x03 高 2 位是事件：
-//! 0 按下、1 抬起、2 接触）、0x05/0x06 Y、0xA7 ChipID（0xB5）、0xA8 ProjID、0xA9 FwVersion，
-//! 0xEC–0xFE 配置寄存器（MotionMask、IrqPluseWidth、IrqCtl、AutoSleepTime、DisAutoSleep……）只存不解释。读写自动递增。
-//!
-//! 手势在芯片里判：按下后位移超过 30 像素算滑动（0x01 上、0x02 下、0x03 左、0x04 右，按主方向），
-//! 不动且按住满 1 秒报长按 0x0C，抬起时没动过就是单击 0x05；新的一次按下清掉上一个手势。
-//! INT 引脚由 Machine 驱动：手指按着时拉低、抬起后回高（真机在按住期间按扫描周期发低脉冲，
-//! 这里简化成电平，下降沿和"低电平期间轮询"两种驱动写法都能用）。
-//! 没做：自动睡眠（真机无触摸约数秒后睡眠、I2C 不应答，要靠 TP_RST 或触摸唤醒——只能上真机确认）、双击、TP_RST 引脚。
+//! CST816S self-capacitive touch controller (I2C 0x15), as on the Waveshare 1.28" round touch board (GC9A01 + CST816S).
+//! Registers per Hynitron's CST816S notes: 0x01 GestureID, 0x02 FingerNum, 0x03/0x04 X (0x03 top 2 bits = event: 0 down, 1 up, 2 contact),
+//! 0x05/0x06 Y, 0xA7 ChipID (0xB5), 0xA8 ProjID, 0xA9 FwVersion, 0xEC-0xFE config (stored, not interpreted). Auto-increment.
+//! Gestures are decided on-chip: > 30 px from press = swipe (0x01 up, 0x02 down, 0x03 left, 0x04 right), held still 1 s = long press 0x0C,
+//! release without moving = tap 0x05. INT (driven by Machine) is low while pressed (real chips pulse per scan; level works for both driver styles).
+//! Not done: auto-sleep (real chip stops answering I2C after a few idle seconds; hardware only), double tap, TP_RST. (lint: allow-long-comment)
 
 use crate::i2c::I2cDevice;
 use crate::periph::CPU_HZ;
@@ -32,12 +28,12 @@ pub struct Cst816s {
     ptr: u8,
     expect_reg: bool,
     now: u64,
-    /// 按着：(当前 x, y)
+    /// Pressed: (current x, y)
     touch: Option<(u16, u16)>,
-    /// 这次按下的起点和时刻
+    /// Start point and time of this press
     down_at: (u16, u16, u64),
     moved: bool,
-    /// 按下以后还没被读到过一次（事件位报"按下"，之后报"接触"）
+    /// Not yet read since press (event reports "down" once, then "contact")
     fresh: bool,
     pub presses: u64,
     pub reads: u64,
@@ -50,9 +46,9 @@ impl Cst816s {
         regs[0xa8] = 0x00;
         regs[0xa9] = 0x01;
         regs[0xec] = 0x00;
-        regs[0xed] = 10; // IrqPluseWidth：10 × 0.1 ms
+        regs[0xed] = 10; // IrqPluseWidth: 10 x 0.1 ms
         regs[0xee] = 1;
-        regs[0xfa] = 0x60; // IrqCtl：EnTouch | EnChange
+        regs[0xfa] = 0x60; // IrqCtl: EnTouch | EnChange
         regs[0xfb] = 2;
         Cst816s {
             addr,
@@ -73,7 +69,7 @@ impl Cst816s {
         self.touch.is_some()
     }
 
-    /// 手指按下 / 移动（now = 当前 CPU 周期）
+    /// Finger down / move (now = current CPU cycle)
     pub fn press(&mut self, x: u16, y: u16, now: u64) {
         let (x, y) = (x.min(239), y.min(239));
         if self.touch.is_none() {
@@ -88,7 +84,7 @@ impl Cst816s {
         let dy = y as i32 - self.down_at.1 as i32;
         if dx.abs() > SWIPE_PX || dy.abs() > SWIPE_PX {
             self.moved = true;
-            // 屏幕坐标 y 向下：手指往上划 = y 变小
+            // Screen y points down: swiping up = y decreases
             self.regs[0x01] = if dx.abs() > dy.abs() {
                 if dx > 0 {
                     gesture::RIGHT
@@ -104,7 +100,7 @@ impl Cst816s {
         self.latch(now);
     }
 
-    /// 手指抬起
+    /// Finger up
     pub fn release(&mut self, now: u64) {
         if self.touch.take().is_none() {
             return;
@@ -118,10 +114,10 @@ impl Cst816s {
             };
         }
         self.regs[0x02] = 0;
-        self.regs[0x03] = (self.regs[0x03] & 0x0f) | 0x40; // 事件 = 抬起
+        self.regs[0x03] = (self.regs[0x03] & 0x0f) | 0x40; // event = up
     }
 
-    /// 刷新手势（长按要看时间）和坐标寄存器
+    /// Refresh gesture (long press depends on time) and coordinate registers
     fn latch(&mut self, now: u64) {
         self.now = now;
         let Some((x, y)) = self.touch else { return };
@@ -156,7 +152,7 @@ impl I2cDevice for Cst816s {
             self.ptr = b;
             self.expect_reg = false;
         } else {
-            // 0x00..0x06 是报告区（只读），其它按配置寄存器保存
+            // 0x00..0x06 is the read-only report area; everything else is stored as config
             if self.ptr >= 0xec {
                 self.regs[self.ptr as usize] = b;
             }
@@ -167,7 +163,7 @@ impl I2cDevice for Cst816s {
     fn read(&mut self) -> u8 {
         let v = self.regs[self.ptr as usize];
         if self.ptr == 0x03 && self.touch.is_some() {
-            // 主机读到过"按下"之后就报"接触"
+            // Once the host has read "down", report "contact"
             self.fresh = false;
         }
         self.ptr = self.ptr.wrapping_add(1);
@@ -198,17 +194,17 @@ mod tests {
         assert_eq!(rd(&mut d, 0x01, 6, 0), [0, 0, 0, 0, 0, 0]);
         d.press(200, 37, 100);
         assert_eq!(rd(&mut d, 0x01, 6, 200), [0, 1, 0x00, 200, 0, 37]);
-        // 第二次读：事件变"接触"
+        // Second read: event becomes "contact"
         assert_eq!(rd(&mut d, 0x03, 1, 300)[0] >> 6, 2);
         d.release(400);
         let r = rd(&mut d, 0x01, 3, 500);
         assert_eq!((r[0], r[1], r[2] >> 6), (gesture::CLICK, 0, 1));
-        // 往左划
+        // Swipe left
         d.press(150, 120, 1000);
         d.press(90, 125, 2000);
         d.release(3000);
         assert_eq!(rd(&mut d, 0x01, 1, 3100), [gesture::LEFT]);
-        // 长按 1 秒
+        // Long press, 1 s
         d.press(120, 120, 10_000);
         assert_eq!(rd(&mut d, 0x01, 1, 10_000 + CPU_HZ), [gesture::LONG]);
         d.release(20_000 + CPU_HZ);

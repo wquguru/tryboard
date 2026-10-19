@@ -1,6 +1,5 @@
-// 验收：ESP32-S3 软件复位（双核）。NVS 记启动次数；第 1 次由核 0 调 esp_restart，
-// 第 2 次由钉在核 1 的任务调 esp_restart（走"核 1 先复位核 0"那条路径），第 3 次核对结果。
-// 同时检查 RTC 内存的复位语义：RTC_NOINIT 跨复位保留，RTC_DATA 每次复位按镜像初值重新装载。
+// Acceptance: S3 software reset on both cores; NVS counts boots: boot 1 restarts from core 0, boot 2 from a core-1 task
+// (core 1 resets core 0), boot 3 checks. Also RTC_NOINIT survives reset while RTC_DATA reloads from the image.
 #include <stdio.h>
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"

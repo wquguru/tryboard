@@ -1,6 +1,5 @@
-// 检查点 spin-2「转身」参考固件（ESP32-S3 + GC9A01 圆屏 + SG90 舵机）：在 spin-1 的脸上加舵机转台。
-// 舵机 GPIO4（LEDC 50Hz）以 90° 为中心在 ±60° 之间来回转，2 秒一个来回；到两端打印 SPIN -60 / SPIN +60。
-// 脸是静态的（眼珠跟随留给 07-spin）。接线见 firmware/common/round_lcd.h。
+// Checkpoint spin-2 "turn" reference (S3 + GC9A01 + SG90): servo on GPIO4 (LEDC 50Hz) swings 90° ±60°, 2 s per cycle,
+// printing SPIN -60 / SPIN +60 at the ends; the face is static (eye tracking is 07-spin). Wiring in round_lcd.h.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -9,9 +8,9 @@
 
 #define SERVO_GPIO 4
 #define STEP_MS 20
-#define HALF_STEPS 50 // 半程 1 秒
+#define HALF_STEPS 50 // half swing = 1 s
 #define CENTER_US 1500
-#define SWING_US 667 // 60°（0.5–2.5ms 对应 0–180°）
+#define SWING_US 667 // 60° (0.5–2.5ms maps 0–180°)
 #define EYE_Y 104
 
 static void servo_us(uint32_t us)
@@ -42,7 +41,7 @@ void app_main(void)
         .clk_cfg = LEDC_AUTO_CLK,
     };
     ESP_ERROR_CHECK(ledc_timer_config(&tc));
-    // 一开机就在 -60°：通道初始占空比直接给起点，不先输出别的脉宽
+    // Start at -60° from power-on: the channel's initial duty is the start point, no other pulse first
     ledc_channel_config_t ch = {
         .gpio_num = SERVO_GPIO,
         .speed_mode = LEDC_LOW_SPEED_MODE,

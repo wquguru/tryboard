@@ -1,25 +1,18 @@
-//! FreeRTOS 任务时间线（C-04）：每个核的任务切换，按 CPU 周期盖戳。C3 / S3 两颗芯片的 SocBus 各有一份。
-//!
-//! 只靠 flash.bin 就能工作，不需要 ELF（办法与降级见 docs/DECISIONS.md 2026-10-19「任务时间线」）：
-//! - 两个移植层换任务都以同一条指令收尾——栈指针取自新任务 TCB 的第一个字 pxTopOfStack：
-//!   RISC-V `rtos_int_exit` 的 `lw sp, 0(a0)`，Xtensa `_frxt_dispatch` / `_frxt_int_exit` 的 `l32i a1, aN, 0`。
-//!   CPU 核在执行 "栈指针 ← mem[基址 + 0]" 时报告基址（`Bus::sp_loaded`），这里判断基址是不是 TCB。
-//! - TCB 自带签名：两个链表项的 pvOwner 都指回 TCB 自己（TCB+16、TCB+36），名字在 TCB+52（以 NUL 结尾的可打印字符）。
-//!   中断入口从 xIsrStackTop 取栈之类的同形指令过不了签名，直接忽略（每次都判断，不拉黑：那块内存以后可能变成 TCB）。
-//! - 被切出的任务处于什么状态，看它的两个链表项挂在哪：状态项还挂在上次在跑时的那条就绪链表 → 被抢占（就绪）；
-//!   事件项挂着（xEventListItem.pxContainer ≠ 0）→ 在等队列 / 信号量；否则 → 延时 / 通知 / 挂起。
-//!
-//! 时刻是换栈那条指令的周期，比 vTaskSwitchContext 晚几条指令；中断处理的时间算在被打断的任务头上（行为模拟）。
+//! FreeRTOS task timeline (C-04): per-core task switches stamped in CPU cycles; one per C3 / S3 SocBus. Needs only flash.bin, no ELF (DECISIONS 2026-10-19).
+//! Both ports end a switch with SP loaded from word 0 of the new TCB (RISC-V `lw sp, 0(a0)` in rtos_int_exit, Xtensa `l32i a1, aN, 0`); the core reports
+//! the base (`Bus::sp_loaded`). TCB signature: both list items' pvOwner point back (TCB+16, +36), printable NUL-ended name at +52; ISR-stack loads fail it
+//! (rechecked every time, memory may become a TCB later). Outgoing state: state item still on its ready list -> preempted; event item linked -> waiting on
+//! queue / semaphore; else delayed / notified / suspended. Stamp = the SP-load instruction; ISR time is billed to the interrupted task. (lint: allow-long-comment)
 
 use std::collections::HashMap;
 
-/// 默认事件上限：65536 条 × 16 字节 = 1MB（网页每批时间片取走一次，CLI 每 1ms 取走一次）
+/// Default cap: 65536 x 16 bytes = 1MB (web drains each time slice, CLI every 1ms)
 pub const DEFAULT_CAP: usize = 1 << 16;
 
-/// 没有任务在跑（启动期、复位之后）
+/// No task running (boot, after reset)
 pub const NO_TASK: u16 = 0xffff;
 
-/// IDF v5.5 FreeRTOS（无 MPU 包装、无链表完整性校验字节）的 TCB 布局
+/// TCB layout of IDF v5.5 FreeRTOS (no MPU wrappers, no list integrity bytes)
 pub mod tcb {
     /// xStateListItem.pvOwner
     pub const STATE_OWNER: u32 = 16;
@@ -33,21 +26,21 @@ pub mod tcb {
     pub const STACK: u32 = 48;
     pub const NAME: u32 = 52;
     pub const NAME_LEN: u32 = 16;
-    /// 双核时名字后面是 xCoreID（绑定的核，0x7fffffff = 不绑定）
+    /// On dual core xCoreID follows the name (pinned core, 0x7fffffff = unpinned)
     pub const CORE_ID: u32 = 68;
 }
 
-/// 被切出任务的状态（事件的 prev 字段）
+/// State of the outgoing task (event's prev field)
 pub mod state {
-    /// 没有被切出的任务（这个核上的第一次切换）
+    /// No outgoing task (first switch on this core)
     pub const NONE: u8 = 0;
-    /// 被抢占：还在就绪链表里
+    /// Preempted: still on the ready list
     pub const READY: u8 = 1;
-    /// 在等队列 / 信号量 / 事件组（事件链表项挂着）
+    /// Waiting on a queue / semaphore / event group (event list item linked)
     pub const WAIT: u8 = 2;
-    /// 延时、等通知或挂起
+    /// Delayed, waiting for a notification or suspended
     pub const BLOCKED: u8 = 3;
-    /// TCB 已经不像 TCB 了（任务删掉、内存被复用）
+    /// TCB no longer looks like one (task deleted, memory reused)
     pub const GONE: u8 = 4;
 
     pub fn name(s: u8) -> &'static str {
@@ -66,14 +59,14 @@ pub struct TaskInfo {
     pub tcb: u32,
     pub name: String,
     pub prio: u32,
-    /// 绑定的核；-1 = 不绑定或单核
+    /// Pinned core; -1 = unpinned or single core
     pub affinity: i32,
 }
 
-/// 一次切换，16 字节小端：t u64 | core u8 | prev u8 | task u16 | pc u32
-/// - task：换上来的任务（`TaskTrace::tasks` 的下标），NO_TASK = 核上没有任务（复位）
-/// - prev：被切出的任务此刻的状态（`state::*`）
-/// - pc：换上来的任务将从哪里继续（栈帧里保存的 PC；配 ELF 可以翻成函数名）
+/// One switch, 16 bytes LE: t u64 | core u8 | prev u8 | task u16 | pc u32  (lint: allow-long-comment)
+/// - task: incoming task (index into `TaskTrace::tasks`), NO_TASK = no task on the core (reset)
+/// - prev: outgoing task's state now (`state::*`)
+/// - pc: where the incoming task resumes (PC saved in its frame; an ELF maps it to a function)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct TaskEvent {
     pub t: u64,
@@ -98,17 +91,17 @@ impl TaskEvent {
 }
 
 pub struct TaskTrace {
-    /// 0 = 不记（CLI 没给 --trace-tasks 时）
+    /// 0 = don't record (CLI without --trace-tasks)
     pub cap: usize,
     pub buf: Vec<TaskEvent>,
     pub dropped: u64,
     pub tasks: Vec<TaskInfo>,
-    /// 栈帧里保存 PC 的偏移：RISC-V RV_STK_MEPC = 0，Xtensa XT_STK_PC / XT_SOL_PC = 4
+    /// Offset of the saved PC in the stack frame: RISC-V RV_STK_MEPC = 0, Xtensa XT_STK_PC / XT_SOL_PC = 4
     pub pc_off: u32,
-    /// 每个核上在跑的 TCB（0 = 没有）
+    /// TCB running on each core (0 = none)
     cur: [u32; 2],
     by_tcb: HashMap<u32, u16>,
-    /// 任务在跑时状态项挂的那条链表（= 它优先级的就绪链表）
+    /// List a task's state item sits on while running (= its priority's ready list)
     ready_list: HashMap<u32, u32>,
 }
 
@@ -126,7 +119,7 @@ impl TaskTrace {
         }
     }
 
-    /// 读 TCB 的名字：以 NUL 结尾、全是可打印 ASCII、至少一个字符
+    /// Read a TCB name: NUL-terminated, all printable ASCII, at least one character
     fn name_at(rd: &dyn Fn(u32) -> Option<u32>, t: u32) -> Option<String> {
         let mut s = String::new();
         for i in 0..tcb::NAME_LEN / 4 {
@@ -141,11 +134,11 @@ impl TaskTrace {
                 s.push(b as char);
             }
         }
-        // 名字正好 16 字节、没有 NUL（configMAX_TASK_NAME_LEN 截断后总有 NUL，这里宽容）
+        // Name exactly 16 bytes with no NUL (configMAX_TASK_NAME_LEN truncation always leaves one; be lenient)
         Some(s)
     }
 
-    /// 基址像不像 TCB：两个链表项的 pvOwner 都指回自己，名字可读
+    /// Does the base look like a TCB: both list items' pvOwner point back, name readable
     pub fn probe(rd: &dyn Fn(u32) -> Option<u32>, t: u32) -> Option<String> {
         if t & 3 != 0 || t == 0 {
             return None;
@@ -156,7 +149,7 @@ impl TaskTrace {
         Self::name_at(rd, t)
     }
 
-    /// 栈指针刚从 `base` 处取出（见模块说明）。`dual` = 双核芯片（TCB 里有 xCoreID）
+    /// SP was just loaded from `base` (see module docs). `dual` = dual-core chip (TCB has xCoreID)
     pub fn on_sp_load(
         &mut self,
         core: u32,
@@ -169,7 +162,7 @@ impl TaskTrace {
             return;
         }
         let core = (core as usize).min(1);
-        // 过不了签名的基址（xIsrStackTop 之类）每次都重新判断：同一块内存以后可能分给新任务的 TCB
+        // Bases failing the signature (xIsrStackTop etc.) are rechecked each time: the memory may later hold a new TCB
         if self.cur[core] == base {
             return;
         }
@@ -185,7 +178,7 @@ impl TaskTrace {
         } else {
             -1
         };
-        // 同一个 TCB 地址换了名字 = 旧任务删了、内存给了新任务：另起一条
+        // Same TCB address with a new name = old task deleted, memory reused: start a new entry
         let idx = match self.by_tcb.get(&base) {
             Some(&i) if self.tasks[i as usize].name == name => {
                 self.tasks[i as usize].prio = prio;
@@ -250,7 +243,7 @@ impl TaskTrace {
         std::mem::take(&mut self.buf)
     }
 
-    /// 软件复位后搬到新总线：已记的事件、任务表保留（时间线继续），各核"没有任务"
+    /// Move to the new bus after a software reset: events and task table kept (timeline continues), no task on any core
     pub fn carry(&mut self, now: u64) -> TaskTrace {
         for c in 0..2 {
             if self.cur[c] != 0 {
@@ -274,23 +267,23 @@ impl TaskTrace {
     }
 }
 
-/// 任务时间线的汇总与导出（CLI 与测试用；网页在 TS 里做同样的事）
+/// Task timeline summary and export (CLI and tests; the web does the same in TS)
 pub mod report {
     use super::*;
 
-    /// 一段"在跑"：[t0, t1) 核 core 上跑 task
+    /// One "running" span: task runs on core over [t0, t1)
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct Slice {
         pub core: u8,
         pub task: u16,
         pub t0: u64,
         pub t1: u64,
-        /// 这段结束时任务的状态（state::*；跑到结尾 = NONE）
+        /// Task state when the span ends (state::*; NONE if it ran to the end)
         pub end: u8,
         pub pc: u32,
     }
 
-    /// 事件序列 → 每核的在跑切片；`end` 是模拟结束时刻（收尾未结束的切片）
+    /// Events -> per-core running slices; `end` is the simulation end (closes open slices)
     pub fn slices(ev: &[TaskEvent], end: u64) -> Vec<Slice> {
         let mut open: [Option<Slice>; 2] = [None, None];
         let mut out = Vec::new();
@@ -322,7 +315,7 @@ pub mod report {
         out
     }
 
-    /// 每核每任务的周期数：[(核, 任务, 周期)]，按核、占用从高到低
+    /// Cycles per core per task: [(core, task, cycles)], by core then usage descending
     pub fn usage(sl: &[Slice]) -> Vec<(u8, u16, u64)> {
         let mut m: HashMap<(u8, u16), u64> = HashMap::new();
         for s in sl {
@@ -346,9 +339,8 @@ pub mod report {
         o
     }
 
-    /// Chrome Trace Event JSON（Perfetto / chrome://tracing 能打开）：
-    /// 进程 1「CPU」每核一条轨道（tid = 核号），切片名 = 任务名；进程 2「任务」每任务一条轨道，画在跑 / 等待。
-    /// `hz` 是 CPU 主频（周期 → 微秒）；`func` 把 PC 翻成函数名（没有 ELF 时返回 None）
+    /// Chrome Trace Event JSON (opens in Perfetto / chrome://tracing): process 1 "CPU" has a track per core, slices named by task;
+    /// process 2 has a track per task (running / waiting). `hz` = CPU clock (cycles -> us); `func` maps PC to a name (None without ELF). (lint: allow-long-comment)
     pub fn chrome_json(
         tasks: &[TaskInfo],
         sl: &[Slice],
@@ -357,7 +349,7 @@ pub mod report {
         hz: u64,
         func: &dyn Fn(u32) -> Option<String>,
     ) -> String {
-        // 周期 → 微秒 3 位小数：整数算、四舍五入（半数进位），网页 BigInt 同一算法，两边逐字相同（浮点格式化在 .5 上舍入规则不同）
+        // Cycles -> us with 3 decimals via integer round-half-up; web BigInt uses the same so text matches (float formatting rounds .5 differently)
         let us = |c: u64| {
             let ns = (c as u128 * 2_000_000_000 + hz as u128) / (2 * hz as u128);
             format!("{}.{:03}", ns / 1000, ns % 1000)
@@ -373,10 +365,10 @@ pub mod report {
             r#"{{"ph":"M","pid":1,"name":"process_name","args":{{"name":"{} CPU"}}}}"#,
             esc(chip)
         ));
-        v.push(r#"{"ph":"M","pid":2,"name":"process_name","args":{"name":"任务"}}"#.into());
+        v.push(r#"{"ph":"M","pid":2,"name":"process_name","args":{"name":"任务"}}"#.into()); // lint: allow-cjk
         for c in 0..cores {
             v.push(format!(
-                r#"{{"ph":"M","pid":1,"tid":{c},"name":"thread_name","args":{{"name":"核 {c}"}}}}"#
+                r#"{{"ph":"M","pid":1,"tid":{c},"name":"thread_name","args":{{"name":"核 {c}"}}}}"# // lint: allow-cjk
             ));
         }
         for (i, t) in tasks.iter().enumerate() {
@@ -386,7 +378,7 @@ pub mod report {
                 esc(&t.name)
             ));
         }
-        // 每个任务上一次被切出的时刻和状态：再被换上来时补一段"等待"
+        // Last switch-out time and state per task: add a "waiting" span when it is switched back in
         let mut last_out: HashMap<u16, (u64, u8)> = HashMap::new();
         for s in sl {
             let n = esc(&name(s.task));
@@ -405,7 +397,7 @@ pub mod report {
             if let Some((t, st)) = last_out.get(&s.task) {
                 if *st == state::WAIT && s.t0 > *t {
                     v.push(format!(
-                        r#"{{"ph":"X","pid":2,"tid":{},"name":"等待","cat":"wait","ts":{},"dur":{}}}"#,
+                        r#"{{"ph":"X","pid":2,"tid":{},"name":"等待","cat":"wait","ts":{},"dur":{}}}"#, // lint: allow-cjk
                         s.task as usize + 10,
                         us(*t),
                         us(s.t0 - t)
@@ -413,7 +405,7 @@ pub mod report {
                 }
             }
             v.push(format!(
-                r#"{{"ph":"X","pid":2,"tid":{},"name":"核 {}","cat":"run","ts":{},"dur":{}}}"#,
+                r#"{{"ph":"X","pid":2,"tid":{},"name":"核 {}","cat":"run","ts":{},"dur":{}}}"#, // lint: allow-cjk
                 s.task as usize + 10,
                 s.core,
                 us(s.t0),
@@ -433,7 +425,7 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
 
-    /// 一块假内存：在 base 处摆一个 TCB
+    /// Fake memory: place a TCB at base
     struct Mem(RefCell<HashMap<u32, u32>>);
     impl Mem {
         fn new() -> Self {
@@ -483,16 +475,16 @@ mod tests {
         );
         let mut tt = TaskTrace::new(0);
         tt.cap = 100;
-        // 不是 TCB 的基址（xIsrStackTop）：忽略
+        // Base that isn't a TCB (xIsrStackTop): ignored
         tt.on_sp_load(0, 0x3fc8_8000, 5, false, &rd);
         tt.on_sp_load(0, 0x3fc9_0000, 10, false, &rd);
-        // 同一个任务再取一次栈（中断返回，没换任务）：不记
+        // Same task loads its stack again (interrupt return, no switch): not recorded
         tt.on_sp_load(0, 0x3fc9_0000, 15, false, &rd);
-        // main 进了延时链表、事件项挂在队列上 → 等队列
+        // main on the delay list with its event item on a queue -> waiting on queue
         m.w(0x3fc9_0000 + tcb::STATE_LIST, 0x3fc8_0100);
         m.w(0x3fc9_0000 + tcb::EVENT_LIST, 0x3fc8_0200);
         tt.on_sp_load(0, 0x3fc9_2000, 20, false, &rd);
-        // main 回到就绪链表；IDLE 被抢占（还挂在原来的就绪链表）
+        // main back on the ready list; IDLE preempted (still on its original ready list)
         m.w(0x3fc9_0000 + tcb::STATE_LIST, 0x3fc8_0014);
         m.w(0x3fc9_0000 + tcb::EVENT_LIST, 0);
         tt.on_sp_load(0, 0x3fc9_0000, 30, false, &rd);
@@ -523,7 +515,9 @@ mod tests {
         let u = report::usage(&sl);
         assert_eq!(u, vec![(0, 0, 20), (0, 1, 10)]);
         let j = report::chrome_json(&tt.tasks, &sl, "ESP32-C3", 1, 160_000_000, &|_| None);
-        assert!(j.contains(r#""name":"main""#) && j.contains(r#""name":"等待""#));
+        #[rustfmt::skip]
+        let ok = j.contains(r#""name":"main""#) && j.contains(r#""name":"等待""#); // lint: allow-cjk
+        assert!(ok);
     }
 
     #[test]
@@ -573,7 +567,7 @@ mod tests {
             0x4200_1234
         );
     }
-    /// 与 web/test/tasktrace.test.ts 同一组事件：两边导出的 JSON 行逐字相同（网页导出 = CLI 导出）
+    /// Same events as web/test/tasktrace.test.ts: both exports produce identical JSON lines (web export = CLI export)
     #[test]
     fn chrome_json_matches_web() {
         use report::*;

@@ -1,5 +1,5 @@
-//! 高层模拟（HLE）：在 ROM 函数入口拦截，用 Rust 实现其效果后直接返回。
-//! 只用于"我们不打算模拟其底层硬件"的 ROM 函数，目前是模拟前端的 regi2c 访问。
+//! High-level emulation (HLE): intercept ROM function entries, apply the effect in Rust and return.
+//! Only for ROM functions whose underlying hardware we don't intend to model; currently the analog front end's regi2c access.
 
 use crate::SocBus;
 use std::collections::HashMap;
@@ -13,7 +13,7 @@ pub enum Hle {
     I2cWriteRegMask,
 }
 
-/// 要拦截的 ROM 符号
+/// ROM symbols to intercept
 pub const TABLE: &[(&str, Hle)] = &[
     ("rom_i2c_readReg", Hle::I2cReadReg),
     ("rom_i2c_readReg_Mask", Hle::I2cReadRegMask),
@@ -21,7 +21,7 @@ pub const TABLE: &[(&str, Hle)] = &[
     ("rom_i2c_writeReg_Mask", Hle::I2cWriteRegMask),
 ];
 
-/// 模拟前端（BBPLL、偏置、SAR ADC 等）的内部寄存器，经 regi2c 访问。
+/// Internal registers of the analog front end (BBPLL, bias, SAR ADC, ...), accessed via regi2c.
 #[derive(Default)]
 pub struct Analog {
     pub regs: HashMap<(u8, u8), u8>,
@@ -31,7 +31,7 @@ impl Analog {
     fn read(&self, block: u8, reg: u8) -> u8 {
         let v = self.regs.get(&(block, reg)).copied().unwrap_or(0);
         match (block, reg) {
-            // I2C_ULP reg3：O_DONE_FLAG（位 0）、BG_O_DONE_FLAG（位 3）——偏置 / ocode 校准立即完成
+            // I2C_ULP reg3: O_DONE_FLAG (bit 0), BG_O_DONE_FLAG (bit 3) -- bias / ocode calibration completes instantly
             (0x61, 3) => v | 0x09,
             _ => v,
         }

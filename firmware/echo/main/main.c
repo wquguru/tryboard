@@ -1,4 +1,4 @@
-// 示例：UART0 行回显。输入一行，板子回一行；输入 ping 回 pong。
+// Example: UART0 line echo. Type a line, the board echoes it; ping answers pong.
 #include <stdio.h>
 #include <string.h>
 #include "driver/uart.h"

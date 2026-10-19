@@ -1,4 +1,4 @@
-// 示例：板载 BOOT 键（默认 GPIO9，按下接地；BTN_GPIO / LED_GPIO 可覆盖）触发下降沿中断，翻转 GPIO5 上的 LED。
+// Example: onboard BOOT button (default GPIO9, active low; BTN_GPIO / LED_GPIO override) falling-edge IRQ toggles the LED on GPIO5.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -40,7 +40,7 @@ void app_main(void)
     for (;;) {
         int64_t t;
         if (xQueueReceive(q, &t, portMAX_DELAY)) {
-            if (t - last < 50000) continue; // 50ms 消抖
+            if (t - last < 50000) continue; // 50ms debounce
             last = t;
             led_on = !led_on;
             gpio_set_level(LED_GPIO, led_on);

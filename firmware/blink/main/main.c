@@ -1,4 +1,4 @@
-// 示例：GPIO5 经 220Ω 接 LED，每 500ms 翻转一次。
+// Example: LED on GPIO5 via 220 ohm, toggled every 500ms.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"

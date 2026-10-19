@@ -1,5 +1,5 @@
-// 验收固件：双核。两个任务分别钉在核 0 / 核 1，共用自旋锁保护的计数器，经队列跨核传消息，
-// 再用 esp_ipc 让核 1 执行一个函数。全部结果正确时打印 TRYBOARD_OK s3-dual。
+// Acceptance: dual core. Two tasks pinned to core 0 / 1 share a spinlock-protected counter, pass messages via a queue across cores,
+// then esp_ipc runs a function on core 1. Prints TRYBOARD_OK s3-dual when all results are right.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"

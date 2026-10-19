@@ -1,8 +1,5 @@
-// 作品"USB 小键盘"（usbkey）的参考固件：ESP32-S3 用原生 USB 把自己报成 HID 键盘。
-// 四个按键接 GPIO4 / 5 / 6 / 7（另一端接地，用内部上拉，按下为低）：
-//   K1 → a，K2 → b，K3 → c（每按一次发一个字母），K4 = 宏键：一次打出 "Hello TryBoard\n"。
-// 三个检查点（firmware/levels.json usbkey-1/2/3）都用这一份：1 枚举成功、2 按键发送字母、3 合体（宏键）。
-// 真机上直接可用：插板子上标着 USB / OTG 的那个 Type-C 口。
+// "USB macro pad" (usbkey) reference: S3 HID keyboard; keys on GPIO4-7 to GND (pull-up): K1-K3 send a / b / c, K4 types "Hello TryBoard\n".
+// One firmware for checkpoints usbkey-1/2/3 (enumerate, keys, macro); on real boards use the USB / OTG Type-C port.
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -21,10 +18,10 @@ static const uint8_t report_desc[] = {
 };
 
 static const char *strings[] = {
-    (char[]){0x09, 0x04}, // 英语
-    "TryBoard",           // 厂商
-    "TryBoard Macro Pad", // 产品
-    "000002",             // 序列号
+    (char[]){0x09, 0x04}, // English
+    "TryBoard",           // manufacturer
+    "TryBoard Macro Pad", // product
+    "000002",             // serial number
     "HID keyboard",
 };
 
@@ -45,7 +42,7 @@ static void wait_ready(void)
     for (int i = 0; i < 100 && !tud_hid_ready(); i++) vTaskDelay(pdMS_TO_TICKS(2));
 }
 
-// 一个字符 = 按下报告 + 松开报告（中间各等 12 ms，主机按 10 ms 轮询）
+// One character = press report + release report (12 ms apart; host polls every 10 ms)
 static void type_char(char ch)
 {
     uint8_t c = (uint8_t)ch & 0x7f;
@@ -77,7 +74,7 @@ void app_main(void)
     printf("USB 已连接：电脑把我当成了键盘\n");
     printf("TRYBOARD_OK usbkey\n");
 
-    // 消抖：电平连续 2 次采样（20 ms）一致才算数；按下沿触发一次
+    // Debounce: level must agree on 2 consecutive samples (20 ms); fires once on press
     int stable[4] = {1, 1, 1, 1}, last[4] = {1, 1, 1, 1};
     for (;;) {
         for (int k = 0; k < 4; k++) {

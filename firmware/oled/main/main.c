@@ -1,5 +1,5 @@
-// 示例：SSD1306 128x64 OLED（I2C 地址 0x3C），SDA=GPIO6，SCL=GPIO7，400kHz。
-// 不依赖任何外部组件：自带 5x7 字库与最小的 SSD1306 驱动。
+// Example: SSD1306 128x64 OLED (I2C 0x3C), SDA=GPIO6, SCL=GPIO7, 400kHz.
+// No external components: built-in 5x7 font and minimal SSD1306 driver.
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -62,7 +62,7 @@ void app_main(void)
         text(16, 5, "TryBoard", 2);
         text(10, 24, CHIP_NAME "+SSD1306", 1);
         text(10, 34, "I2C 0x3C @400kHz", 1);
-        // 进度条：每秒前进一格
+        // Progress bar: one step per second
         rect(10, 46, 108, 10, 0);
         rect(12, 48, 104 * ((t % 10) + 1) / 10, 6, 1);
         int64_t t0 = esp_timer_get_time();

@@ -1,27 +1,19 @@
-//! PCNT 脉冲计数器（ESP32-S3 有，C3 没有；放在这个 crate 里与其它同族外设一起，S3 直接复用）。
-//! 寄存器按 ESP-IDF `soc/esp32s3/register/soc/pcnt_reg.h`（基址 0x60017000），行为按 S3 TRM「脉冲计数控制器」：
-//! 4 个单元，每单元 2 个通道；每通道一个脉冲输入（边沿计数）和一个控制输入（电平改写计数方向 / 禁止计数）。
-//!
-//! - CONFn0：filter_thres[9:0]（APB 周期）、filter_en[10]、zero / h_lim / l_lim / thres0 / thres1 比较使能 [15:11]、
-//!   ch0 neg[17:16] pos[19:18] hctrl[21:20] lctrl[23:22]、ch1 同样排在 [31:24]
-//! - CONFn1：thres0[15:0]、thres1[31:16]；CONFn2：h_lim[15:0]、l_lim[31:16]（有符号 16 位）
-//! - CNTn（0x30 起）：当前计数；INT_RAW/ST/ENA/CLR 0x40..0x4C，每单元一位（任一比较事件）
-//! - STATUSn（0x50 起）：zero_mode[1:0]、thres1 / thres0 / l_lim / h_lim / zero 锁存 [6:2]（最近一次事件）
-//! - CTRL（0x60）：单元 n 的 cnt_rst = 位 2n（置 1 期间计数清零并保持）、cnt_pause = 位 2n+1
-//!
-//! 边沿动作：1 加、2 减、0/3 不动；电平动作：0 不改、1 反向、2/3 禁止。计数到 h_lim / l_lim 时触发事件并清零
-//! （IDF 的 accum_count 靠这个把溢出累加到软件里）；到 thres0 / thres1 / 0 时触发对应事件。
-//! 输入信号经 GPIO 矩阵进来（PCNT_SIG_CH0_IN0_IDX = 33，单元 u 的四路依次为 33+4u … 36+4u），
-//! 由 SoC 在引脚电平变化时按时刻喂进来；滤波器见 `sigin`。
+//! PCNT pulse counter (S3 only; kept beside its sibling peripherals for reuse). Registers: IDF `soc/esp32s3/register/soc/pcnt_reg.h` (base 0x60017000);
+//! behaviour per the S3 TRM: 4 units x 2 channels, each with an edge input and a level input.
+//! - CONFn0: filter_thres[9:0] (APB cycles), filter_en[10], zero/h_lim/l_lim/thres0/thres1 enables [15:11], ch0 neg[17:16] pos[19:18]
+//!   hctrl[21:20] lctrl[23:22], ch1 likewise [31:24]; CONFn1: thres0[15:0] thres1[31:16]; CONFn2: h_lim[15:0] l_lim[31:16] (signed 16)
+//! - CNTn (0x30+), INT_RAW/ST/ENA/CLR 0x40..0x4C (one bit per unit), STATUSn (0x50+): zero_mode[1:0], latched events [6:2]; CTRL (0x60): cnt_rst = bit 2n, cnt_pause = 2n+1
+//! - Edge action 1 inc, 2 dec, 0/3 none; level action 0 keep, 1 invert, 2/3 inhibit; h_lim / l_lim fire and clear (IDF accum_count relies on it), thres0/thres1/0 fire.
+//!   Inputs via GPIO matrix (PCNT_SIG_CH0_IN0_IDX = 33, unit u: 33+4u..36+4u), fed by the SoC on pin changes; filter in `sigin`. (lint: allow-long-comment)
 
 use crate::sigin::Deglitch;
 
 pub const UNITS: usize = 4;
-/// GPIO 矩阵输入信号号（gpio_sig_map.h）：单元 u 的 [脉冲 ch0, 脉冲 ch1, 控制 ch0, 控制 ch1] = SIG0 + 4u + 0..3
+/// GPIO matrix input signals (gpio_sig_map.h): unit u's [pulse ch0, pulse ch1, ctrl ch0, ctrl ch1] = SIG0 + 4u + 0..3
 pub const SIG0: u32 = 33;
 pub const NSIG: usize = 4 * UNITS;
 
-/// STATUS 锁存位（status >> 2 之后的位序，与 IDF pcnt_ll 的 PCNT_LL_WATCH_EVENT_* 一致）
+/// STATUS latch bits (bit order after status >> 2, matching IDF pcnt_ll's PCNT_LL_WATCH_EVENT_*)
 const EV_THRES1: u32 = 1 << 0;
 const EV_THRES0: u32 = 1 << 1;
 const EV_L_LIM: u32 = 1 << 2;
@@ -31,21 +23,21 @@ const EV_ZERO: u32 = 1 << 4;
 pub struct Pcnt {
     pub conf: [[u32; 3]; UNITS],
     cnt: [i16; UNITS],
-    /// 最近一次事件的锁存位（已左移 2）
+    /// Latched bits of the latest event (already shifted left by 2)
     lat: [u32; UNITS],
     zmode: [u32; UNITS],
     pub ctrl: u32,
     pub int_raw: u32,
     pub int_ena: u32,
-    /// 每单元四路输入的滤波状态（顺序同 SIG0 + 4u + k）
+    /// Filter state of each unit's four inputs (same order as SIG0 + 4u + k)
     inp: [[Deglitch; 4]; UNITS],
-    /// 计数变化次数（调试 / 验收统计）
+    /// Count changes (debug / acceptance stats)
     pub steps: u64,
 }
 
 impl Default for Pcnt {
     fn default() -> Self {
-        // 复位值：filter_thres=16、filter_en、zero / h_lim / l_lim 使能；CTRL 四个单元的 cnt_rst 置位
+        // Reset values: filter_thres=16, filter_en, zero / h_lim / l_lim enabled; CTRL cnt_rst set for all four units
         Pcnt {
             conf: [[0x3c10, 0, 0]; UNITS],
             cnt: [0; UNITS],
@@ -103,7 +95,7 @@ impl Pcnt {
         }
     }
 
-    /// 单元 u 的滤波门限（CPU 周期；没开滤波为 0）。APB 80MHz = CPU 的一半
+    /// Unit u's filter threshold (CPU cycles; 0 when off). APB 80MHz = half the CPU clock
     fn thres(&self, u: usize) -> u64 {
         let c = self.conf[u][0];
         if c & (1 << 10) != 0 {
@@ -113,7 +105,7 @@ impl Pcnt {
         }
     }
 
-    /// 下一个挂起的滤波跳变生效的时刻（没有为 u64::MAX）
+    /// When the next pending filtered edge takes effect (u64::MAX if none)
     pub fn next_event(&self) -> u64 {
         let mut n = u64::MAX;
         for u in 0..UNITS {
@@ -127,7 +119,7 @@ impl Pcnt {
         n
     }
 
-    /// 时刻 t 各输入信号（下标 = 信号号 - SIG0）的原始电平。先把 t 之前到期的滤波跳变按时间顺序生效，再看新跳变
+    /// Raw levels of each input signal (index = signal - SIG0) at time t. Edges due before t commit in order first, then new edges are seen
     pub fn feed(&mut self, t: u64, levels: &[bool; NSIG]) {
         self.update(t);
         for u in 0..UNITS {
@@ -140,7 +132,7 @@ impl Pcnt {
         }
     }
 
-    /// 推进到 now：到期的滤波跳变逐个生效（同一单元内按生效时刻先后，控制电平与脉冲沿的先后关系才对）
+    /// Advance to now: due filtered edges commit one by one (in time order within a unit so control levels and pulse edges interleave right)
     pub fn update(&mut self, now: u64) {
         for u in 0..UNITS {
             let th = self.thres(u);
@@ -161,9 +153,9 @@ impl Pcnt {
         }
     }
 
-    /// 单元 u 的第 k 路输入滤波后跳变到 lv
+    /// Unit u's input k (filtered) changed to lv
     fn edge(&mut self, u: usize, k: usize, lv: bool) {
-        // 控制输入只改电平，不计数
+        // Control inputs only change level, they don't count
         if k >= 2 {
             return;
         }
@@ -229,7 +221,7 @@ impl Pcnt {
             }
         }
         self.cnt[u] = now;
-        // zero_mode：0 由正数减到 0、1 由负数加到 0、2 负数、3 正数
+        // zero_mode: 0 positive down to 0, 1 negative up to 0, 2 negative, 3 positive
         self.zmode[u] = match now {
             0 if old > 0 && ev & (EV_H_LIM | EV_L_LIM) == 0 => 0,
             0 if old < 0 && ev & (EV_H_LIM | EV_L_LIM) == 0 => 1,
@@ -248,11 +240,11 @@ impl Pcnt {
 mod tests {
     use super::*;
 
-    /// 与 IDF rotary_encoder 示例相同的正交 4 倍频配置（pulse_cnt 驱动写出的寄存器值）
+    /// Same 4x quadrature config as the IDF rotary_encoder example (register values written by the pulse_cnt driver)
     fn quad(p: &mut Pcnt, h: i16, l: i16) {
-        // ch0：沿 = A，电平 = B；pos 减、neg 加；高电平保持、低电平反向
-        // ch1：沿 = B，电平 = A；pos 加、neg 减；高电平保持、低电平反向
-        let ch0 = 1 | (2 << 2) | (1 << 6); // hctrl = 0（保持）
+        // ch0: edge = A, level = B; pos dec, neg inc; keep on high, invert on low
+        // ch1: edge = B, level = A; pos inc, neg dec; keep on high, invert on low
+        let ch0 = 1 | (2 << 2) | (1 << 6); // hctrl = 0 (keep)
         let ch1 = 2 | (1 << 2) | (1 << 6);
         p.conf[0][0] =
             (1 << 10) | 100 | (1 << 11) | (1 << 12) | (1 << 13) | (ch0 << 16) | (ch1 << 24);
@@ -260,7 +252,7 @@ mod tests {
         p.write(0x60, 0);
     }
 
-    /// 顺时针一格：A 先落、B 再落、A 起、B 起
+    /// One clockwise step: A falls, B falls, A rises, B rises
     fn turn(p: &mut Pcnt, t0: &mut u64, cw: bool) {
         let seq: [(bool, bool); 4] = if cw {
             [(false, true), (false, false), (true, false), (true, true)]
@@ -270,7 +262,7 @@ mod tests {
         for (a, b) in seq {
             *t0 += 10_000;
             let mut lv = [false; NSIG];
-            // 输入顺序：脉冲 ch0 = A、脉冲 ch1 = B、控制 ch0 = B、控制 ch1 = A
+            // Input order: pulse ch0 = A, pulse ch1 = B, control ch0 = B, control ch1 = A
             lv[0] = a;
             lv[1] = b;
             lv[2] = b;
@@ -283,7 +275,7 @@ mod tests {
     fn quadrature_4x_and_limits() {
         let mut p = Pcnt::default();
         let mut t = 0;
-        // 静止时 A、B 都是高（上拉）
+        // At rest A and B are both high (pull-ups)
         p.feed(
             0,
             &[
@@ -299,17 +291,17 @@ mod tests {
         turn(&mut p, &mut t, false);
         p.update(t + 1000);
         assert_eq!(p.count(0), 0);
-        assert_eq!(p.read(0x50) & 3, 0, "从正数减到 0");
-        assert!(p.int_raw & 1 != 0, "过零事件");
+        assert_eq!(p.read(0x50) & 3, 0, "positive down to 0");
+        assert!(p.int_raw & 1 != 0, "zero-crossing event");
         assert_eq!(p.read(0x50) >> 2 & 0x1f, EV_ZERO);
         p.write(0x4c, 1);
-        // 两格到 h_lim=8：清零并锁存 h_lim
+        // Two steps to h_lim=8: clear and latch h_lim
         turn(&mut p, &mut t, true);
         turn(&mut p, &mut t, true);
         p.update(t + 1000);
         assert_eq!(p.count(0), 0);
         assert_eq!(p.read(0x50) >> 2 & 0x1f, EV_H_LIM);
-        // 暂停时不计数
+        // No counting while paused
         p.write(0x60, 2);
         turn(&mut p, &mut t, true);
         p.update(t + 1000);
@@ -325,7 +317,7 @@ mod tests {
     #[test]
     fn glitch_filter() {
         let mut p = Pcnt::default();
-        // 单元 0 ch0：上升沿加 1，滤波 100 APB 周期 = 200 CPU 周期
+        // Unit 0 ch0: +1 on rising edge, filter 100 APB cycles = 200 CPU cycles
         p.conf[0][0] = (1 << 10) | 100 | (1 << 18);
         p.write(0x60, 0);
         let mut lv = [false; NSIG];
@@ -333,7 +325,7 @@ mod tests {
         lv[0] = true;
         p.feed(1000, &lv);
         lv[0] = false;
-        p.feed(1150, &lv); // 150 周期的毛刺
+        p.feed(1150, &lv); // 150-cycle glitch
         p.update(5000);
         assert_eq!(p.count(0), 0);
         lv[0] = true;

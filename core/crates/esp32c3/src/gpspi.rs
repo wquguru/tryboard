@@ -1,9 +1,6 @@
-//! GP-SPI2 主机（通用 SPI，FSPI）。寄存器见 soc/esp32s3/register/soc/spi_reg.h（C3 同族、布局一致），
-//! 驱动写法见 hal/esp32s3/include/hal/spi_ll.h。
-//!
-//! 执行模型与 I2C 相同：写 CMD.USR 时 SoC 立刻按 命令 → 地址 → 哑周期 → MOSI 数据 的顺序把字节交给从机
-//! （数据来自 W0..W15 或 GDMA 描述符链，SoC 负责取），"传输中"状态与 TRANS_DONE 中断推迟到按 SPI 时钟
-//! 算出的耗时之后。MISO 方向没有会应答的器件，读回全 1。
+//! GP-SPI2 master (general-purpose SPI, FSPI). Registers in soc/esp32s3/register/soc/spi_reg.h (C3 same layout), driver usage in hal/esp32s3/include/hal/spi_ll.h.
+//! Like I2C: on CMD.USR the SoC immediately hands bytes (command -> address -> dummy -> MOSI data, from W0..W15 or GDMA chain) to the slave;
+//! busy state and TRANS_DONE are deferred by the SPI-clock duration. No device answers on MISO, so reads are all ones. (lint: allow-long-comment)
 
 use crate::periph::CPU_HZ;
 
@@ -39,14 +36,14 @@ const DMA_TX_ENA: u32 = 1 << 28;
 const DMA_RX_ENA: u32 = 1 << 27;
 pub const INT_TRANS_DONE: u32 = 1 << 12;
 
-/// 一次传输各阶段（CMD.USR 时刻的寄存器快照）
+/// Phases of one transfer (register snapshot at CMD.USR)
 #[derive(Debug, Default, Clone)]
 pub struct Plan {
-    /// 命令 + 地址阶段要移出的字节（按线上顺序）
+    /// Command + address bytes to shift out (in wire order)
     pub head: Vec<u8>,
     pub head_bits: u32,
     pub dummy_bits: u32,
-    /// MOSI 数据位数（0 = 无数据阶段）
+    /// MOSI data bits (0 = no data phase)
     pub mosi_bits: u32,
     pub miso_bits: u32,
     pub dma_tx: bool,
@@ -57,9 +54,9 @@ pub struct GpSpi {
     pub regs: [u32; 0x100 / 4],
     pub int_raw: u32,
     pub int_ena: u32,
-    /// 进行中的传输何时结束
+    /// When the transfer in progress ends
     pending: Option<u64>,
-    /// 本次传输用到的 GDMA 发送通道（结束时由 SoC 给该通道置 EOF）
+    /// GDMA TX channel used by this transfer (the SoC sets EOF on it at the end)
     pub dma_out_ch: Option<usize>,
     pub transfers: u64,
     pub bytes: u64,
@@ -68,7 +65,7 @@ pub struct GpSpi {
 impl Default for GpSpi {
     fn default() -> Self {
         let mut regs = [0u32; 0x100 / 4];
-        // 复位值：由 spi_reg.h 各字段注释里的 default 求得
+        // Reset values: derived from the defaults in spi_reg.h field comments
         regs[(reg::CLOCK / 4) as usize] = 0x8000_3043;
         regs[(reg::USER / 4) as usize] = 0x8000_00c0;
         regs[(reg::USER1 / 4) as usize] = 0xb841_0007;
@@ -117,19 +114,19 @@ impl GpSpi {
         }
     }
 
-    /// 写寄存器。返回 true 表示固件刚启动了一次传输（CMD.USR），SoC 接着调 `plan` / `begin`。
+    /// Register write. true = firmware just started a transfer (CMD.USR); the SoC then calls `plan` / `begin`.
     pub fn write(&mut self, off: u32, v: u32) -> bool {
         match off {
             reg::CMD => {
-                // UPDATE（把配置同步到 SPI 时钟域）瞬间完成；USR 由"传输中"状态代替
+                // UPDATE (sync config to the SPI clock domain) completes instantly; USR is represented by the busy state
                 self.regs[0] = v & !(CMD_USR | CMD_UPDATE);
                 return v & CMD_USR != 0 && !self.busy();
             }
             reg::DMA_INT_ENA => self.int_ena = v,
             reg::DMA_INT_CLR => self.int_raw &= !v,
             reg::DMA_INT_SET => self.int_raw |= v,
-            // C3 的驱动直接写 RAW 清 trans_done（spi_ll_clear_int_stat：dma_int_raw.trans_done = 0），
-            // RAW 在 C3 上是 R/W/WTC；S3 走 INT_CLR，不写这里
+            // The C3 driver clears trans_done by writing RAW (spi_ll_clear_int_stat: dma_int_raw.trans_done = 0);
+            // RAW is R/W/WTC on the C3; the S3 uses INT_CLR instead
             reg::DMA_INT_RAW => self.int_raw = v,
             reg::DMA_INT_ST => {}
             _ => {
@@ -141,14 +138,14 @@ impl GpSpi {
         false
     }
 
-    /// 本次传输的各阶段
+    /// Phases of this transfer
     pub fn plan(&self) -> Plan {
         let user = self.r(reg::USER);
         let user1 = self.r(reg::USER1);
         let user2 = self.r(reg::USER2);
         let mut p = Plan::default();
         if user & USER_COMMAND != 0 {
-            // 命令值按 bit7..0 再 bit15..8 的顺序移出（spi_ll_set_command 已为 MSB 先发做了交换）
+            // Command shifts out bit7..0 then bit15..8 (spi_ll_set_command already swapped for MSB-first)
             let bits = ((user2 >> 28) & 0xf) + 1;
             let val = user2 & 0xffff;
             p.head.push(val as u8);
@@ -158,7 +155,7 @@ impl GpSpi {
             p.head_bits += bits;
         }
         if user & USER_ADDR != 0 {
-            // 地址从 ADDR 寄存器最高位开始移出
+            // Address shifts out from the top bit of ADDR
             let bits = ((user1 >> 27) & 0x1f) + 1;
             let a = self.r(reg::ADDR);
             for i in 0..bits.div_ceil(8) {
@@ -182,14 +179,14 @@ impl GpSpi {
         p
     }
 
-    /// 不用 DMA 时 MOSI 数据来自 W0..W15（小端字节序，最多 64 字节）
+    /// Without DMA, MOSI data comes from W0..W15 (little-endian, up to 64 bytes)
     pub fn tx_buffer(&self, n: usize) -> Vec<u8> {
         (0..n.min(64))
             .map(|i| (self.regs[(reg::W0 / 4) as usize + i / 4] >> (8 * (i % 4))) as u8)
             .collect()
     }
 
-    /// 不用 DMA 时 MISO 数据写回 W0..W15
+    /// Without DMA, MISO data is written back to W0..W15
     pub fn rx_fill(&mut self, data: &[u8]) {
         for (i, b) in data.iter().take(64).enumerate() {
             let r = &mut self.regs[(reg::W0 / 4) as usize + i / 4];
@@ -198,7 +195,7 @@ impl GpSpi {
         }
     }
 
-    /// SPI 时钟（Hz）。源时钟：CLK_GATE.mst_clk_sel=1 为 PLL_F80M，0 为 XTAL 40MHz
+    /// SPI clock (Hz). Source: CLK_GATE.mst_clk_sel=1 is PLL_F80M, 0 is XTAL 40MHz
     pub fn clock_hz(&self) -> u64 {
         let src: u64 = if self.r(reg::CLK_GATE) & (1 << 2) != 0 {
             80_000_000
@@ -214,7 +211,7 @@ impl GpSpi {
         src / (pre * n)
     }
 
-    /// 开始计时：总位数按 SPI 时钟折合 CPU 周期（另加 CS 建立 / 保持各 1 个 SPI 周期）
+    /// Start timing: total bits at the SPI clock in CPU cycles (plus 1 SPI cycle each for CS setup / hold)
     pub fn begin(&mut self, now: u64, p: &Plan, dma_out_ch: Option<usize>) {
         let bits = (p.head_bits + p.dummy_bits + p.mosi_bits.max(p.miso_bits) + 2) as u64;
         let cyc = (bits * CPU_HZ).div_ceil(self.clock_hz().max(1));
@@ -224,7 +221,7 @@ impl GpSpi {
         self.bytes += (p.mosi_bits as u64).div_ceil(8);
     }
 
-    /// 推进：传输到点就置 TRANS_DONE。返回（下一个事件时刻，本次是否刚结束）
+    /// Advance: set TRANS_DONE when the transfer is due. Returns (next event time, just finished)
     pub fn update(&mut self, now: u64) -> (u64, bool) {
         match self.pending {
             Some(t) if now >= t => {
@@ -237,7 +234,7 @@ impl GpSpi {
         }
     }
 
-    /// 片选 CS0 是否参与传输（MISC.cs0_dis=0）
+    /// Whether CS0 takes part in the transfer (MISC.cs0_dis=0)
     pub fn cs0_enabled(&self) -> bool {
         self.r(reg::MISC) & 1 == 0
     }
@@ -254,7 +251,7 @@ mod tests {
     #[test]
     fn plan_and_timing() {
         let mut s = GpSpi::default();
-        // 40MHz：PLL 80MHz 源，pre=0 n=1
+        // 40MHz: PLL 80MHz source, pre=0 n=1
         s.write(reg::CLK_GATE, 0b111);
         s.write(reg::CLOCK, 1 << 12);
         assert_eq!(s.clock_hz(), 40_000_000);
@@ -267,7 +264,7 @@ mod tests {
         assert_eq!(s.tx_buffer(3), vec![0x11, 0x22, 0x33]);
         s.begin(100, &p, None);
         assert!(s.read(reg::CMD) & CMD_USR != 0);
-        // 26 位 × 4 周期
+        // 26 bits x 4 cycles
         assert_eq!(s.update(100 + 103), (100 + 104, false));
         assert_eq!(s.update(100 + 104), (u64::MAX, true));
         assert_eq!(s.read(reg::CMD) & CMD_USR, 0);

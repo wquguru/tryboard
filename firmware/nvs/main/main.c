@@ -1,4 +1,4 @@
-// 示例：开机计数存进 NVS（flash），每次 esp_restart 后加一。验证 flash 写入 / 擦除与软件复位。
+// Example: boot counter in NVS (flash), incremented after each esp_restart. Checks flash write / erase and soft reset.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"

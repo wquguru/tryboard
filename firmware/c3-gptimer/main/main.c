@@ -1,9 +1,5 @@
-// 验收：TIMG 通用定时器（ESP-IDF gptimer，1 MHz 计数）。c3-gptimer 与 s3-gptimer 共用这份源码。
-// 依次检查：
-//   1. 计数读回：跑 100 ms 后 gptimer_get_raw_count 与 esp_timer（SYSTIMER）量到的时间一致
-//   2. 停表冻结：stop 之后计数不再走；set_raw_count 能写进去并读回
-//   3. 自动重载告警：每 10 ms 一次，告警时刻的间隔用 esp_timer 量；运行中读到的计数始终在 0..9999
-//   4. 单次告警：不重载时只响一次，计数越过告警值继续往上走
+// Acceptance: TIMG general timer (ESP-IDF gptimer, 1 MHz); shared by c3-gptimer and s3-gptimer. Checks: 1. raw count after 100 ms matches esp_timer
+// (SYSTIMER); 2. stop freezes, set_raw_count reads back; 3. auto-reload alarm every 10 ms, counts stay 0..9999; 4. one-shot alarm fires once, count keeps going.
 #include <inttypes.h>
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
@@ -42,7 +38,7 @@ void app_main(void)
     ESP_ERROR_CHECK(gptimer_enable(tm));
     printf("GPTIMER ready 1 MHz\n");
 
-    // 1. 计数读回
+    // 1. Count readback
     uint64_t c0 = 0, c1 = 0, c2 = 0;
     int64_t t0 = esp_timer_get_time();
     ESP_ERROR_CHECK(gptimer_start(tm));
@@ -51,7 +47,7 @@ void app_main(void)
     int64_t t1 = esp_timer_get_time();
     printf("GPTIMER count %" PRIu64 " elapsed %" PRId64 " us\n", c0, t1 - t0);
 
-    // 2. 停表冻结 + 写计数
+    // 2. Stop freezes + write count
     ESP_ERROR_CHECK(gptimer_stop(tm));
     ESP_ERROR_CHECK(gptimer_get_raw_count(tm, &c1));
     vTaskDelay(pdMS_TO_TICKS(20));
@@ -61,7 +57,7 @@ void app_main(void)
     ESP_ERROR_CHECK(gptimer_get_raw_count(tm, &c1));
     printf("GPTIMER set 123456 read %" PRIu64 "\n", c1);
 
-    // 3. 自动重载告警
+    // 3. Auto-reload alarm
     gptimer_alarm_config_t al = {.alarm_count = PERIOD, .reload_count = 0, .flags.auto_reload_on_alarm = true};
     ESP_ERROR_CHECK(gptimer_set_raw_count(tm, 0));
     ESP_ERROR_CHECK(gptimer_set_alarm_action(tm, &al));
@@ -80,7 +76,7 @@ void app_main(void)
     printf("GPTIMER reload %s (max count %" PRIu64 ", max at alarm %" PRIu64 ")\n",
            maxc < PERIOD && max_edge_count < PERIOD ? "in range" : "OUT OF RANGE", maxc, max_edge_count);
 
-    // 4. 单次告警
+    // 4. One-shot alarm
     gptimer_alarm_config_t one = {.alarm_count = 5000};
     ESP_ERROR_CHECK(gptimer_set_raw_count(tm, 0));
     ESP_ERROR_CHECK(gptimer_set_alarm_action(tm, &one));

@@ -1,4 +1,4 @@
-// Arduino 示例：GPIO5 LED 闪烁 + Serial 打印。用 Arduino-ESP32 3.x 核心编译。
+// Arduino example: GPIO5 LED blink + Serial print; built with the Arduino-ESP32 3.x core.
 #define LED 5
 void setup() {
   Serial.begin(115200);

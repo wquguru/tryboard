@@ -1,7 +1,5 @@
-//! RV32IMC + Zicsr + Zifencei 解释器核，只实现机器模式（ESP32-C3 固件只跑 M 模式）。
-//!
-//! SoC 通过 [`Bus`] 提供存储访问，通过 `irq_line` 告诉核当前该响应的中断线
-//! （ESP32-C3 的中断优先级 / 阈值在 SoC 侧的中断控制器里裁决）。
+//! RV32IMC + Zicsr + Zifencei interpreter core, machine mode only (ESP32-C3 firmware runs only in M mode).
+//! The SoC provides memory via [`Bus`] and the pending interrupt line via `irq_line` (priority/threshold is decided by the SoC's interrupt controller).
 
 mod compressed;
 pub mod csr;
@@ -9,14 +7,14 @@ pub mod elf;
 
 pub use compressed::expand;
 
-/// 访存失败时由总线返回，核据此进入异常。
+/// Returned by the bus on an access fault; the core raises an exception from it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BusFault;
 
 pub trait Bus {
     fn load(&mut self, addr: u32, size: u32) -> Result<u32, BusFault>;
     fn store(&mut self, addr: u32, size: u32, val: u32) -> Result<(), BusFault>;
-    /// 取指：返回 addr 处的 32 位（可能跨越到下一个半字，压缩指令只用低 16 位）。
+    /// Fetch: the 32 bits at addr (may span into the next halfword; compressed instructions use only the low 16).
     fn fetch(&mut self, addr: u32) -> Result<u32, BusFault> {
         let lo = self.load(addr, 2)?;
         if lo & 3 != 3 {
@@ -25,19 +23,18 @@ pub trait Bus {
         let hi = self.load(addr.wrapping_add(2), 2)?;
         Ok(lo | (hi << 16))
     }
-    /// 取指并译成 32 位形式：返回（指令, 长度）。非法压缩指令返回（原 16 位, 2），由核判非法。
-    /// SoC 可以重写它，把译好的结果缓存起来。
+    /// Fetch and decode to 32-bit form: (insn, length). An illegal compressed insn returns (raw 16 bits, 2) and the core flags it.
+    /// SoCs may override this to cache decoded results.
     #[inline]
     fn fetch_decoded(&mut self, addr: u32) -> Result<(u32, u32), BusFault> {
         Ok(decode_raw(self.fetch(addr)?))
     }
-    /// 执行了 `lw sp, 0(rs1)`（栈指针取自 rs1 指向的字）：FreeRTOS 换任务就是这一条
-    /// （`rtos_int_exit` 的 `sp = pxCurrentTCBs[core]->pxTopOfStack`）。`base` 是 rs1 的值（可能是 TCB），
-    /// `cycles` 是此刻的周期数。任务时间线（C-04）用；默认不关心
+    /// Executed `lw sp, 0(rs1)`: this is FreeRTOS's task switch (`sp = pxCurrentTCBs[core]->pxTopOfStack` in `rtos_int_exit`).
+    /// `base` is rs1 (possibly a TCB), `cycles` the current cycle count. Used by the task timeline (C-04); ignored by default.
     fn sp_loaded(&mut self, _base: u32, _cycles: u64) {}
 }
 
-/// 原始取指字 → （32 位指令, 长度）
+/// Raw fetched word -> (32-bit insn, length)
 #[inline(always)]
 pub fn decode_raw(raw: u32) -> (u32, u32) {
     if raw & 3 != 3 {
@@ -63,16 +60,16 @@ pub mod cause {
     pub const ECALL_M: u32 = 11;
 }
 
-/// 一步执行之后需要外部关心的事件。
+/// Events after one step that the caller must handle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Exit {
-    /// 正常执行了一条指令（或进入了异常 / 中断）。
+    /// Executed one instruction normally (or entered an exception / interrupt).
     Normal,
-    /// PC 落在 HLE 区间内，由 SoC 接管（模拟 ROM 函数）。
+    /// PC landed in the HLE range; the SoC takes over (emulated ROM function).
     Hle(u32),
-    /// 执行了 WFI，CPU 进入等待，直到有中断。
+    /// Executed WFI; the CPU waits until an interrupt arrives.
     Wfi,
-    /// 发生异常且 mtvec 尚未设置（固件跑飞），SoC 应停机报告。
+    /// Exception while mtvec is still unset (firmware ran away); the SoC should halt and report.
     DoubleFault { cause: u32, pc: u32, tval: u32 },
 }
 
@@ -80,21 +77,21 @@ pub struct Cpu {
     pub x: [u32; 32],
     pub pc: u32,
     pub csr: csr::Csrs,
-    /// SoC 写入：当前要求响应的中断线号（1..=31），0 表示无。
+    /// Written by the SoC: interrupt line to service now (1..=31), 0 = none.
     pub irq_line: u32,
-    /// [hle_lo, hle_hi) 内且在 hle_addrs（升序）里的 PC 交给 SoC。
+    /// PCs in [hle_lo, hle_hi) that are also in hle_addrs (sorted) are handed to the SoC.
     pub hle_lo: u32,
     pub hle_hi: u32,
     pub hle_addrs: Vec<u32>,
-    /// 模拟时间基准（CPU 周期）。固件改写周期计数 CSR 只改 cycle_bias，不能让时间跳变
+    /// Simulated time base (CPU cycles). Firmware writing the cycle-count CSR only changes cycle_bias so time never jumps.
     pub cycles: u64,
     pub cycle_bias: u64,
     pub instret: u64,
     pub waiting: bool,
-    /// 硬件支持非对齐访存（ESP32-C3 对内部存储的非对齐读写由硬件拆分完成）。
-    /// 关闭时按 RISC-V 规范报非对齐异常（riscv-tests 用）。
+    /// Hardware handles misaligned accesses (the ESP32-C3 splits misaligned internal-memory accesses in hardware).
+    /// When off, raise misaligned exceptions per the RISC-V spec (for riscv-tests).
     pub misaligned_ok: bool,
-    /// LR/SC 预约（C3 没有 A 扩展，这里保留给以后的芯片）。
+    /// LR/SC reservation (the C3 has no A extension; kept for future chips).
     reservation: Option<u32>,
 }
 
@@ -136,7 +133,7 @@ impl Cpu {
         }
     }
 
-    /// 进入异常或中断。返回 DoubleFault 表示 mtvec 未初始化。
+    /// Enter an exception or interrupt. DoubleFault means mtvec is not initialized.
     pub fn trap(&mut self, cause: u32, tval: u32, is_irq: bool) -> Exit {
         let epc = self.pc;
         if self.csr.mtvec == 0 && !is_irq {
@@ -167,13 +164,13 @@ impl Cpu {
         self.csr.mstatus & (1 << 3) != 0
     }
 
-    /// 执行一条指令。
+    /// Execute one instruction.
     pub fn step<B: Bus>(&mut self, bus: &mut B) -> Exit {
         if self.irq_line != 0 && self.irq_enabled() {
             return self.trap(self.irq_line, 0, true);
         }
         if self.waiting {
-            // WFI 在没有中断（即使全局关中断）时保持等待；有挂起的线就醒来继续。
+            // WFI keeps waiting while no line is pending (even with interrupts globally off); a pending line wakes it.
             if self.irq_line != 0 {
                 self.waiting = false;
             } else {
@@ -400,10 +397,10 @@ impl Cpu {
                 self.set(rd, v);
             }
             0x0f => {
-                // FENCE / FENCE.I：单核解释器下无需动作（SoC 若有取指缓存需自行失效）。
+                // FENCE / FENCE.I: nothing to do in a single-core interpreter (a SoC with a fetch cache must invalidate it itself).
             }
             0x2f => {
-                // A 扩展（ESP32-C6 等以后的芯片会用到；C3 固件不会发出）。
+                // A extension (for later chips such as ESP32-C6; C3 firmware never emits it).
                 if f3 != 2 {
                     illegal!();
                 }
@@ -460,7 +457,7 @@ impl Cpu {
                         0x0000_0073 => return self.trap(cause::ECALL_M, 0, false),
                         0x0010_0073 => return self.trap(cause::BREAKPOINT, pc, false),
                         0x3020_0073 => {
-                            // MRET：MIE <- MPIE, MPIE <- 1
+                            // MRET: MIE <- MPIE, MPIE <- 1
                             let mpie = (self.csr.mstatus >> 7) & 1;
                             self.csr.mstatus =
                                 (self.csr.mstatus & !(1 << 3)) | (mpie << 3) | (1 << 7);
@@ -479,7 +476,7 @@ impl Cpu {
                         }
                         _ => {
                             if insn >> 25 == 0x09 {
-                                // SFENCE.VMA：无 MMU，忽略
+                                // SFENCE.VMA: no MMU, ignore
                             } else {
                                 illegal!();
                             }
@@ -544,7 +541,7 @@ impl Cpu {
         }
     }
 
-    /// HLE 函数返回：a0 = ret，跳回 ra。
+    /// HLE function return: a0 = ret, jump back to ra.
     pub fn hle_return(&mut self, ret: u32) {
         self.x[10] = ret;
         self.pc = self.x[1];

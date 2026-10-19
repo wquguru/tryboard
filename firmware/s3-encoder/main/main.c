@@ -1,6 +1,5 @@
-// 示例：EC11 旋转编码器（KY-040 类模块）接 PCNT。A(CLK)=GPIO6、B(DT)=GPIO7 两相正交，4 倍频计数（一格 4 个计数）；
-// 按键 SW=GPIO15 按下接地（开内部上拉）。写法与 ESP-IDF 示例 peripherals/pcnt/rotary_encoder 相同：
-// 两个通道互为边沿 / 电平，±100 设为上下限并开 accum_count，计数超过 ±100 由驱动在中断里累加。
+// Example: EC11 rotary encoder (KY-040 style) on PCNT. A(CLK)=GPIO6, B(DT)=GPIO7 quadrature x4 (4 counts per detent); SW=GPIO15 active low (pull-up).
+// As in IDF peripherals/pcnt/rotary_encoder: channels swap edge / level, ±100 limits with accum_count so the driver accumulates overflow in the ISR.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -22,7 +21,7 @@ void app_main(void)
     pcnt_unit_config_t unit_config = {.high_limit = 100, .low_limit = -100, .flags.accum_count = 1};
     pcnt_unit_handle_t unit = NULL;
     ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &unit));
-    // 机械触点有抖动：滤掉 1 µs 以下的毛刺
+    // Mechanical contacts bounce: filter glitches under 1 us
     pcnt_glitch_filter_config_t filter = {.max_glitch_ns = 1000};
     ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(unit, &filter));
     pcnt_chan_config_t a_cfg = {.edge_gpio_num = ENC_A, .level_gpio_num = ENC_B};
@@ -35,7 +34,7 @@ void app_main(void)
     ESP_ERROR_CHECK(pcnt_channel_set_level_action(ca, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE));
     ESP_ERROR_CHECK(pcnt_channel_set_edge_action(cb, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_DECREASE));
     ESP_ERROR_CHECK(pcnt_channel_set_level_action(cb, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE));
-    // accum_count 要求上下限也是观察点
+    // accum_count needs the limits as watch points too
     ESP_ERROR_CHECK(pcnt_unit_add_watch_point(unit, 100));
     ESP_ERROR_CHECK(pcnt_unit_add_watch_point(unit, -100));
     ESP_ERROR_CHECK(pcnt_unit_enable(unit));
@@ -54,7 +53,7 @@ void app_main(void)
             last = count;
             printf("ENC count=%d detents=%d\n", count, count / 4);
         }
-        // 按键：连续两次（20 ms）读到同一电平才算（软件消抖）
+        // Button: counts only after two reads in a row (20 ms) agree (software debounce)
         int lv = gpio_get_level(ENC_SW);
         if (lv == sw_last) {
             if (++sw_stable == 2 && lv != -1) {

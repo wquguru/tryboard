@@ -1,4 +1,4 @@
-//! C 扩展：把 16 位压缩指令展开成等价的 32 位指令，执行路径只有一套。
+//! C extension: expand 16-bit compressed instructions into their 32-bit equivalents so there is only one execute path.
 
 #[inline(always)]
 fn r_type(f7: u32, rs2: u32, rs1: u32, f3: u32, rd: u32, op: u32) -> u32 {
@@ -42,7 +42,7 @@ fn bit(v: u32, n: u32) -> u32 {
     (v >> n) & 1
 }
 
-/// 返回 None 表示非法压缩指令（包括全 0）。
+/// None means an illegal compressed instruction (including all zeros).
 pub fn expand(c: u16) -> Option<u32> {
     let c = c as u32;
     let op = c & 3;
@@ -79,7 +79,7 @@ pub fn expand(c: u16) -> Option<u32> {
             i_type(imm, rd, 0, rd, 0x13)
         }
         (1, 1) => {
-            // C.JAL（RV32）
+            // C.JAL (RV32)
             j_type(cj_imm(c), 1)
         }
         (1, 2) => {
