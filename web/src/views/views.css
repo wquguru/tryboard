@@ -1,4 +1,4 @@
-/* 实验桌 / 成品 / 装配 / 成品示意视图（SVG + 叠在上面的按钮） */
+/* Bench / product / assembly / product-preview views (SVG + overlaid buttons) */
 .tb-view { position: relative; width: 100%; aspect-ratio: 1000 / 560; border-radius: 14px; overflow: hidden; background: #2E4A3F; color: #F7F6F3; font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif; user-select: none; -webkit-user-select: none; }
 .tb-view svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif; }
 .tb-view .tb-mono { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; }
@@ -30,3 +30,6 @@
 }
 .lp-root { aspect-ratio: 1000 / 560; }
 .lp-boot { position: absolute; right: 2.4%; bottom: 5%; }
+/* Japanese / Korean would otherwise get Chinese glyph forms from the Noto Sans SC subset listed first above */
+:lang(ja) .tb-view, :lang(ja) .tb-view svg, :lang(ja) .tb-tag, :lang(ja) .as-b, :lang(ja) .sc-controls button { font-family: 'Hiragino Sans', 'Noto Sans JP', 'Yu Gothic', 'Noto Sans SC', system-ui, sans-serif; }
+:lang(ko) .tb-view, :lang(ko) .tb-view svg, :lang(ko) .tb-tag, :lang(ko) .as-b, :lang(ko) .sc-controls button { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'Noto Sans SC', system-ui, sans-serif; }

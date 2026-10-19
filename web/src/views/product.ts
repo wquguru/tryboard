@@ -1,22 +1,23 @@
-// 成品视图：装进外壳后的桌面气象站。表盘指针、屏幕、导光柱都由同一份固件驱动；顶部按键就是 BOOT。
-import { dialLabel, dialTicks, envBoxSvg, envButtons, holdButton, ledCss, mount, oledImage, servoAngle, type LiveFrame } from './common';
+// Product view: the desk weather station in its case. Needle, screen and light pipe run on the same firmware; the top key is BOOT.
+import { t } from '../i18n';
+import { dialLabel, dialTicks, envBoxSvg, envButtons, fitText, holdButton, ledCss, mount, oledImage, servoAngle, type LiveFrame } from './common';
 
 export interface ProductHandlers {
   boot(down: boolean): void;
   temp(delta: number): void;
-  /** 外接按键（USB 小键盘的 K1–K4）：按下接地 */
+  /** External keys (USB keypad K1–K4): pressed = grounded */
   press?(pin: number, down: boolean): void;
 }
 
 export function createProductView(el: HTMLElement, h: ProductHandlers, opts: { servoPin: number }) {
-  const lab = [0, 20, 40].map((t) => {
-    const [x, y] = dialLabel(560, 236, 84, t);
-    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" fill="#C9C6BF" class="tb-mono" font-size="10" font-weight="700" text-anchor="middle">${t}</text>`;
+  const lab = [0, 20, 40].map((deg) => {
+    const [x, y] = dialLabel(560, 236, 84, deg);
+    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" fill="#C9C6BF" class="tb-mono" font-size="10" font-weight="700" text-anchor="middle">${deg}</text>`;
   });
   const q = mount(
     el,
     `<div class="tb-view">
-<svg viewBox="0 0 1000 560" role="img" aria-label="成品：桌面气象站，表盘指针和屏幕显示温度读数">
+<svg viewBox="0 0 1000 560" role="img" aria-label="${t('Product: a desk weather station; the dial needle and screen show the temperature')}">
 <defs><pattern id="pd-grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 L0 40" fill="none" stroke="#3B5C4F"/></pattern></defs>
 <rect width="1000" height="560" fill="#2E4A3F"/><rect width="1000" height="560" fill="url(#pd-grid)"/>
 <ellipse cx="560" cy="486" rx="200" ry="16" fill="#1E332A"/>
@@ -36,10 +37,10 @@ ${lab.join('')}
 <path d="M420 420 L420 452 M432 420 L432 452 M444 420 L444 452 M676 420 L676 452 M688 420 L688 452 M700 420 L700 452" stroke="#C9C6BF" stroke-width="4" stroke-linecap="round"/>
 <circle cx="656" cy="86" r="22" fill="none" stroke="#FF7A1A" stroke-width="1.5" stroke-dasharray="3 4"/>
 ${envBoxSvg}
-<text data-k="caption" x="24" y="34" fill="#C9D6CF" class="tb-mono" font-size="12" font-weight="700">气象站 · 成品 · 和实验台同一份固件</text>
+<text data-k="caption" x="24" y="34" fill="#C9D6CF" class="tb-mono" font-size="12" font-weight="700">${t('Weather station · product · same firmware as the bench')}</text>
 </svg>
-<button type="button" class="tb-hit" data-k="boot" aria-label="按 BOOT（顶部按键）" style="left:65.6%;top:15.4%;width:6%;height:9%"></button>
-<div class="tb-tag" style="left:65.6%;top:7%">按 BOOT 换单位</div>
+<button type="button" class="tb-hit" data-k="boot" aria-label="${t('Press BOOT (top key)')}" style="left:65.6%;top:15.4%;width:6%;height:9%"></button>
+<div class="tb-tag" style="left:65.6%;top:7%">${t('Press BOOT to switch units')}</div>
 ${envButtons}
 </div>`,
   );
@@ -57,9 +58,10 @@ ${envButtons}
     update(f: LiveFrame, roomTemp: number, sensorOffset: number) {
       q('envTemp').textContent = roomTemp.toFixed(1);
       q('caption').textContent = sensorOffset
-        ? `气象站 · 成品 · 传感器贴着芯片，读到 ${(roomTemp + sensorOffset).toFixed(1)} ℃（室温 ${roomTemp.toFixed(1)}）`
-        : '气象站 · 成品 · 和实验台同一份固件';
+        ? t('Weather station · product · sensor next to the chip reads {v} ℃ (room {room})', { v: (roomTemp + sensorOffset).toFixed(1), room: roomTemp.toFixed(1) })
+        : t('Weather station · product · same firmware as the bench');
       q('caption').setAttribute('fill', sensorOffset ? '#FFB27A' : '#C9D6CF');
+      fitText(q('caption'), 940);
       const a = servoAngle(f.pwm, opts.servoPin);
       q('needle').setAttribute('transform', `rotate(${a === null ? -90 : a - 180} 560 236)`);
       const c = f.running ? ledCss(f.rgb) : null;

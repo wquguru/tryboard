@@ -1,5 +1,6 @@
-// 装配的状态与规则（SVG 视图 assembly.ts 和 3D 视图 app/asm3d.ts 共用一份）：
-// 必须从下往上装；有装法选择的零件不给装法就进入"选择中"；装法影响由模板的 checks / effects 算。
+// Assembly state and rules shared by the SVG view (assembly.ts) and the 3D view (app/asm3d.ts): parts go in bottom-up,
+// a part with placement options waits in "choosing" until one is picked, and the template's checks / effects score the choice.
+import { t } from '../i18n';
 import type { Effects, Part, Picked, Template } from './templates';
 
 export interface AsmCoreState extends Picked {
@@ -26,14 +27,14 @@ export function createAsmCore(T: Template) {
       if (id !== next) {
         st.bad = true;
         st.choosing = null;
-        st.msg = [`还不能装「${byId[id].short}」`, next ? `先装「${byId[next].short}」，它在更下面` : '已经装完了'];
+        st.msg = [t('“{part}” can’t go in yet', { part: byId[id].short }), next ? t('Fit “{part}” first, it sits lower', { part: byId[next].short }) : t('Everything is already in')];
         return { kind: 'rejected' };
       }
       const p = byId[id];
       if (p.spots && !spot) {
         st.choosing = id;
         st.bad = false;
-        st.msg = [`${p.short}怎么装？`, p.spots.map((s) => s.label).join('，还是')];
+        st.msg = [t('How should {part} go in?', { part: p.short }), p.spots.map((s) => s.label).join(t(', or '))];
         return { kind: 'choosing' };
       }
       const before = fx().sensorOffset ?? 0;
@@ -42,10 +43,10 @@ export function createAsmCore(T: Template) {
       if (s) st.choice[id] = s.key;
       st.choosing = null;
       st.bad = !!s && !s.ok;
-      st.msg = s ? s.msg : p.okMsg ?? ['装好了', ''];
+      st.msg = s ? s.msg : p.okMsg ?? [t('Fitted'), ''];
       return { kind: 'placed', offsetChanged: (fx().sensorOffset ?? 0) !== before };
     },
-    /** 清空；返回清空前有没有温漂（调用方据此通知模拟器归零） */
+    /** Clear; returns whether there was a temperature offset so the caller can zero the simulator */
     reset(): boolean {
       const before = fx().sensorOffset ?? 0;
       Object.assign(st, { placed: [], choice: {}, msg: T.intro, bad: false, choosing: null });

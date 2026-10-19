@@ -1,4 +1,5 @@
-// 实验桌（面包板）视图：ESP32-S3 开发板 + OLED + BME280 + 舵机表盘。画面由模拟器驱动，BOOT / RST / 室温可操作。
+// Bench (breadboard) view: ESP32-S3 board + OLED + BME280 + servo dial. Driven by the simulator; BOOT / RST / room temp are interactive.
+import { t } from '../i18n';
 import { dialLabel, dialTicks, envBoxSvg, envButtons, holdButton, ledCss, mount, oledImage, servoAngle, type LiveFrame } from './common';
 
 export interface BenchHandlers {
@@ -10,14 +11,14 @@ export interface BenchHandlers {
 export function createBenchView(el: HTMLElement, h: BenchHandlers, opts: { caption: string; servoPin: number }) {
   let ruler = '';
   for (let x = 0; x <= 1000; x += 20) ruler += `M${x} 0 L${x} ${x % 100 === 0 ? 14 : 7} `;
-  const labels = [0, 10, 20, 30, 40].map((t) => {
-    const [x, y] = dialLabel(180, 330, 128, t);
-    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" fill="#C9D6CF" class="tb-mono" font-size="11" font-weight="700" text-anchor="middle">${t}</text>`;
+  const labels = [0, 10, 20, 30, 40].map((deg) => {
+    const [x, y] = dialLabel(180, 330, 128, deg);
+    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" fill="#C9D6CF" class="tb-mono" font-size="11" font-weight="700" text-anchor="middle">${deg}</text>`;
   });
   const q = mount(
     el,
     `<div class="tb-view">
-<svg viewBox="0 0 1000 560" role="img" aria-label="实验桌：ESP32-S3 开发板插在面包板上，接着 OLED 屏、BME280 传感器和一个当作温度表的舵机">
+<svg viewBox="0 0 1000 560" role="img" aria-label="${t('Bench: an ESP32-S3 board on a breadboard, wired to an OLED, a BME280 sensor and a servo used as a thermometer')}">
 <defs>
 <pattern id="tb-grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 L0 40" fill="none" stroke="#3B5C4F"/></pattern>
 <pattern id="tb-holes" width="14" height="14" patternUnits="userSpaceOnUse"><circle cx="7" cy="7" r="2.2" fill="#CFCAC0"/></pattern>
@@ -74,9 +75,9 @@ ${labels.join('')}
 ${envBoxSvg}
 <text x="24" y="34" fill="#C9D6CF" class="tb-mono" font-size="12" font-weight="700">${opts.caption}</text>
 </svg>
-<button type="button" class="tb-hit" data-k="boot" aria-label="按 BOOT" style="left:37.7%;top:47.1%;width:6%;height:10.5%"></button>
-<button type="button" class="tb-hit" data-k="rst" aria-label="按 RST 复位" style="left:37.7%;top:58.9%;width:4%;height:7%"></button>
-<div class="tb-tag" style="left:24.5%;top:36.5%">按 BOOT 换单位</div>
+<button type="button" class="tb-hit" data-k="boot" aria-label="${t('Press BOOT')}" style="left:37.7%;top:47.1%;width:6%;height:10.5%"></button>
+<button type="button" class="tb-hit" data-k="rst" aria-label="${t('Press RST to reset')}" style="left:37.7%;top:58.9%;width:4%;height:7%"></button>
+<div class="tb-tag" style="left:24.5%;top:36.5%">${t('Press BOOT to switch units')}</div>
 ${envButtons}
 </div>`,
   );

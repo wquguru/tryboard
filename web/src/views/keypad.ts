@@ -1,5 +1,6 @@
-// USB 小键盘的平面成品视图（首页卡片"运行固件"、成品页没有 WebGL 时）：四个键帽 + 虚拟电脑屏幕。
-// 键帽按住 = 对应 GPIO 接地（K1..K4 = GPIO4..7）；屏幕上的字来自 USB 虚拟主机（固件真的发出的 HID 报告还原成的文字）。
+// Flat USB keypad product view (home card "run firmware", product page without WebGL): four keycaps + a virtual computer screen.
+// Holding a cap grounds its GPIO (K1..K4 = GPIO4..7); the screen text is rebuilt by the USB virtual host from real HID reports.
+import { t } from '../i18n';
 import { mount } from './common';
 import type { UsbView } from '../usb3d';
 
@@ -16,11 +17,11 @@ export function createKeypadView(el: HTMLElement, h: { press(pin: number, down: 
   const q = mount(
     el,
     `<div class="tb-view sc-root">
-<svg viewBox="50 44 380 350" role="img" aria-label="USB 小键盘接在虚拟电脑上：点键帽打字">
+<svg viewBox="50 44 380 350" role="img" aria-label="${t('USB keypad plugged into a virtual computer: click the keycaps to type')}">
 <rect width="480" height="480" fill="#DCD8D0"/><rect y="330" width="480" height="150" fill="#CFCAC0"/>
 <rect x="96" y="70" width="288" height="180" rx="10" fill="#B9BDC4"/><rect x="108" y="82" width="264" height="156" rx="4" fill="#0F1726"/>
-<text x="120" y="104" fill="#E8EDF5" class="tb-mono" font-size="11" font-weight="700">虚拟电脑 · USB</text>
-<text data-k="state" x="360" y="104" fill="#F2A33A" class="tb-mono" font-size="11" text-anchor="end">等待设备</text>
+<text x="120" y="104" fill="#E8EDF5" class="tb-mono" font-size="11" font-weight="700">${t('Virtual computer · USB')}</text>
+<text data-k="state" x="360" y="104" fill="#F2A33A" class="tb-mono" font-size="11" text-anchor="end">${t('Waiting for device')}</text>
 <text data-k="dev" x="120" y="122" fill="#9FB0C8" class="tb-mono" font-size="10"></text>
 <text data-k="l0" x="120" y="150" fill="#E8EDF5" class="tb-mono" font-size="15"></text>
 <text data-k="l1" x="120" y="172" fill="#E8EDF5" class="tb-mono" font-size="15"></text>
@@ -51,9 +52,9 @@ export function createKeypadView(el: HTMLElement, h: { press(pin: number, down: 
   }
   return {
     setUsb(v: UsbView | null) {
-      q('state').textContent = v ? v.state : '等待设备';
+      q('state').textContent = v ? v.state : t('Waiting for device');
       q('state').setAttribute('fill', v?.configured ? '#4CC38A' : '#F2A33A');
-      q('dev').textContent = v?.product ? `已连接：${v.product}（${v.manufacturer}）` : '';
+      q('dev').textContent = v?.product ? t('Connected: {name}', { name: t('{product} ({maker})', { product: v.product, maker: v.manufacturer }) }) : '';
       const lines = (v?.typed ?? '').replace(/\r/g, '').split('\n').slice(-3);
       for (let i = 0; i < 3; i++) q(`l${i}`).innerHTML = esc((lines[i] ?? '').slice(-28)) + (i === lines.length - 1 ? '▌' : '');
     },

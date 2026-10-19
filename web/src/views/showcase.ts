@@ -1,26 +1,28 @@
-// 成品示意：会转身的小黄、透镜里的小人、桌面气象站。这里只是外观示意，不跑固件；首页的「跑真实固件」会换成由模拟器驱动的成品视图。
-import { dialTicks, mount } from './common';
+// Product previews: turning Little Yellow, the lens buddy, the desk weather station. Looks only, no firmware; the home page's
+// "run real firmware" swaps in the simulator-driven product view.
+import { t } from '../i18n';
+import { dialTicks, fitText, mount } from './common';
 
 export type ShowKind = 'spin' | 'lens' | 'weather' | 'usbkey';
 const SPEC: Record<ShowKind, string> = {
-  usbkey: 'USB 小键盘 · 4 键 + 宏键 · ESP32-S3 原生 USB',
-  spin: '小黄 · 舵机转台 ±60° · ESP32-S3',
-  lens: '透镜小人 · 1.28″ 圆屏 GC9A01 · ESP32-S3',
-  weather: '桌面气象站 · OLED + BME280 · ESP32-S3',
+  usbkey: t('USB keypad · 4 keys + macro · ESP32-S3 native USB'),
+  spin: t('Little Yellow · servo turntable ±60° · ESP32-S3'),
+  lens: t('Lens buddy · 1.28″ round LCD GC9A01 · ESP32-S3'),
+  weather: t('Desk weather station · OLED + BME280 · ESP32-S3'),
 };
 const ARIA: Record<ShowKind, string> = {
-  usbkey: 'USB 小键盘接在笔记本上，按键在电脑屏幕上打出字',
-  spin: '可以转身的小黄桌面机器人，站在舵机转台上',
-  lens: '圆屏上的表情被凸透镜罩放大，看起来像立在罩子里的小人',
-  weather: '桌面气象站，表盘指针和屏幕显示温度湿度',
+  usbkey: t('A USB keypad plugged into a laptop; key presses type on the screen'),
+  spin: t('Little Yellow, a desk robot that turns on a servo turntable'),
+  lens: t('A face on a round LCD magnified by a lens dome, like a little figure inside'),
+  weather: t('A desk weather station; the dial needle and screen show temperature and humidity'),
 };
-const MOODS = ['平常', '开心', '喜欢', '困了'];
+const MOODS = [t('Calm'), t('Happy'), t('Love'), t('Sleepy')];
 
 function art(kind: ShowKind) {
   if (kind === 'usbkey') {
     const keys = ['a', 'b', 'c', 'M'].map((k, i) => `<g data-k="key${i}"><rect x="${150 + i * 48}" y="318" width="40" height="40" rx="8" fill="${k === 'M' ? '#0D99FF' : '#F2EFE8'}" stroke="#141414" stroke-width="2"/><text x="${170 + i * 48}" y="345" fill="${k === 'M' ? '#FFF' : '#141414'}" class="tb-mono" font-size="18" font-weight="700" text-anchor="middle">${k}</text></g>`).join('');
     return `<rect x="96" y="70" width="288" height="180" rx="10" fill="#B9BDC4"/><rect x="108" y="82" width="264" height="156" rx="4" fill="#0F1726"/>
-<text x="120" y="104" fill="#E8EDF5" class="tb-mono" font-size="11" font-weight="700">虚拟电脑 · USB</text>
+<text x="120" y="104" fill="#E8EDF5" class="tb-mono" font-size="11" font-weight="700">${t('Virtual computer · USB')}</text>
 <text data-k="typed" x="120" y="140" fill="#E8EDF5" class="tb-mono" font-size="16"></text>
 <path d="M84 252 L396 252 L410 268 L70 268 Z" fill="#9A9FA6"/>
 <path d="M240 300 C240 286 300 290 300 270" fill="none" stroke="#1C1E22" stroke-width="5"/>
@@ -76,20 +78,20 @@ export function createShowcase(el: HTMLElement, kind: ShowKind) {
 </defs>
 <rect width="480" height="480" fill="#DCD8D0"/><rect y="330" width="480" height="150" fill="#CFCAC0"/><ellipse cx="240" cy="404" rx="170" ry="30" fill="url(#sc-floor)"/>
 ${art(kind)}
-<text x="20" y="30" fill="#6E6A63" class="tb-mono" font-size="11" font-weight="700">${SPEC[kind]}</text>
-<text x="460" y="30" fill="#8A867E" class="tb-mono" font-size="11" text-anchor="end">示意</text>
+<text data-k="spec" x="20" y="30" fill="#6E6A63" class="tb-mono" font-size="11" font-weight="700">${SPEC[kind]}</text>
+<text x="460" y="30" fill="#8A867E" class="tb-mono" font-size="11" text-anchor="end">${t('Illustration')}</text>
 </svg>
 <div class="sc-controls" data-k="controls"></div>
 </div>`,
   );
   const controls: [string, string, () => void][] =
     kind === 'spin'
-      ? [['◀', '向左转', () => (s.angle = Math.max(-60, s.angle - 20))], ['看我', '转向正面', () => (s.angle = 0)], ['▶', '向右转', () => (s.angle = Math.min(60, s.angle + 20))]]
+      ? [['◀', t('Turn left'), () => (s.angle = Math.max(-60, s.angle - 20))], [t('Look at me'), t('Turn to face front'), () => (s.angle = 0)], ['▶', t('Turn right'), () => (s.angle = Math.min(60, s.angle + 20))]]
       : kind === 'usbkey'
-        ? [['a', '按 K1', () => (s.typed += 'a')], ['b', '按 K2', () => (s.typed += 'b')], ['宏', '按宏键', () => (s.typed += 'Hello TryBoard ')]]
+        ? [['a', t('Press K1'), () => (s.typed += 'a')], ['b', t('Press K2'), () => (s.typed += 'b')], [t('Macro'), t('Press the macro key'), () => (s.typed += 'Hello TryBoard ')]]
       : kind === 'lens'
-        ? [['◀', '向左看', () => (s.look = Math.max(-1, s.look - 1))], ['换表情', '换表情', () => (s.mood = (s.mood + 1) % 4)], ['▶', '向右看', () => (s.look = Math.min(1, s.look + 1))]]
-        : [['−', '降温', () => (s.temp = Math.max(0, s.temp - 2))], ['对它哈气', '湿度升高', () => (s.hum = Math.min(95, s.hum + 15))], ['+', '升温', () => (s.temp = Math.min(40, s.temp + 2))]];
+        ? [['◀', t('Look left'), () => (s.look = Math.max(-1, s.look - 1))], [t('Change face'), t('Change face'), () => (s.mood = (s.mood + 1) % 4)], ['▶', t('Look right'), () => (s.look = Math.min(1, s.look + 1))]]
+        : [['−', t('Cooler'), () => (s.temp = Math.max(0, s.temp - 2))], [t('Breathe on it'), t('Raise humidity'), () => (s.hum = Math.min(95, s.hum + 15))], ['+', t('Warmer'), () => (s.temp = Math.min(40, s.temp + 2))]];
   const box = q<HTMLElement>('controls');
   const btns = controls.map(([label, aria, fn]) => {
     const b = document.createElement('button');
@@ -105,7 +107,7 @@ ${art(kind)}
   });
   function render() {
     if (kind === 'usbkey') {
-      q('typed').textContent = (s.typed.slice(-24) || '按下面的键试试') + '▌';
+      q('typed').textContent = (s.typed.slice(-24) || t('Try the keys below')) + '▌';
     } else if (kind === 'spin') {
       const a = (s.angle * Math.PI) / 180;
       q('body').setAttribute('transform', `translate(240 0) scale(${(0.72 + 0.28 * Math.cos(a)).toFixed(3)} 1)`);
@@ -115,7 +117,7 @@ ${art(kind)}
       for (let i = 0; i < 4; i++) q(`m${i}`).setAttribute('opacity', i === s.mood ? '1' : '0');
       q('p1').setAttribute('cx', String(-20 + s.look * 6));
       q('p2').setAttribute('cx', String(32 + s.look * 6));
-      btns[1].textContent = `换表情 · ${MOODS[s.mood]}`;
+      btns[1].textContent = t('Change face · {mood}', { mood: MOODS[s.mood] });
     } else {
       q('needle').setAttribute('transform', `rotate(${s.temp * 4.5 - 180} 240 198)`);
       q('wt').textContent = `${s.temp.toFixed(1)}°C`;
@@ -126,4 +128,6 @@ ${art(kind)}
     }
   }
   render();
+  // Leave room for the right-hand "Illustration" tag when the spec line translates long
+  requestAnimationFrame(() => fitText(q('spec'), 330));
 }
