@@ -257,6 +257,10 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/custom.mjs 2>&1 | grep '^\[custom\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[custom\] PASS（' || { echo "- [custom] 脚本没跑完" >> $REPORT; fail=1; }
+  # 选板 v3（U-14–U-16、U-18）：三问、零件增删、可信度图标、任务书、分享链接
+  r=$(node tools/webtest/selectv3.mjs 2>&1 | grep '^\[selectv3\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[selectv3\] ✓ 全部通过' || { echo "- [selectv3] 脚本没跑完" >> $REPORT; fail=1; }
 fi
 echo -e "\n结论：$([ $fail = 0 ] && echo '全部通过' || echo '有失败项')" >> $REPORT
 cat $REPORT

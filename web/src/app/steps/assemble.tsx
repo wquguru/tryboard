@@ -36,6 +36,7 @@ import { cn } from '../../ui/cn';
 import { Host, Txt } from '../../ui/native';
 import { Btn, Btns, Kv, KvBox, KvT, LinkBtn, LockCard, Mono, Muted, Note, Ph, PhT, Res, Sec, Seg, SegB, Slider, TnL, TnM, TnSt, TreeEmpty, TreeGroup, VerdictLine, btnClass, tnClass } from '../../ui/panel';
 import { lab } from '../../ui/links';
+import { Conf } from '../../ui/conf';
 
 type Entry = { kind: 'place'; id: string; spot?: string } | { kind: 'test'; ok: boolean; rows: { ok: boolean; text: string }[]; fingerprint: string; who: string; temp: number };
 
@@ -223,7 +224,7 @@ export function assembleStep(): StepImpl {
     const sim = c.session.harnessText.trim();
     return (
       <>
-        <Sec>线束与天线 · 估算，必须上真机</Sec>
+        <Sec>线束与天线 · <Conf c="估算" size={11} />，<Conf c="必须上真机" size={11} /></Sec>
         {i2c}
         <KvBox>
           <span className="k">WROOM 天线旁边放了什么</span>
@@ -493,11 +494,11 @@ export function assembleStep(): StepImpl {
         {choose}
         {impact.length > 0 && (
           <>
-            <Sec>装法会改变什么 · 估算</Sec>
+            <Sec>装法会改变什么 · <Conf c="估算" size={11} /></Sec>
             {impact}
           </>
         )}
-        <Sec>装配检查 · 几何估算，未经真机标定</Sec>
+        <Sec>装配检查 · <Conf c="估算" size={11} />（几何），未经真机标定</Sec>
         {checks}
         {effectsLine()}
         {harnessPanel()}
@@ -513,7 +514,7 @@ export function assembleStep(): StepImpl {
     const enc = `enclosure-${T!.id}`;
     return (
       <>
-        <Sec>外壳 · 参数化，估算</Sec>
+        <Sec>外壳 · 参数化，<Conf c="估算" size={11} /></Sec>
         <Kv k={L.shape === 'rect' ? '外形' : '底座'} v={L.shape === 'rect' ? `${L.outer[0]} × ${L.outer[1]} × ${L.outer[2]} mm` : `Ø${L.outer[0]} × ${L.outer[2]} mm`} />
         <Kv k="内腔 / 需要" v={`${L.inner} / ${L.need} mm`} cls={L.inner < L.need ? 'bad' : ''} />
         <Kv k="壁厚 · 圆角" v={`${L.params.wall} · ${L.params.radius} mm`} />
@@ -556,7 +557,7 @@ export function assembleStep(): StepImpl {
           : '只改成品画面，不影响模拟结果。';
     return rows.length ? (
       <>
-        <Sec>装法带进成品 · 估算</Sec>
+        <Sec>装法带进成品 · <Conf c="估算" size={11} /></Sec>
         {rows}
         <Note>{how}</Note>
       </>

@@ -72,7 +72,7 @@ export function BuyCard(p: BuyCardProps) {
   const btn = 'inline-flex min-h-9 cursor-pointer items-center justify-center gap-1 rounded-md border border-line bg-surface px-3 text-xs text-fg hover:bg-field max-md:min-h-11';
   const btnPri = 'inline-flex min-h-9 cursor-pointer items-center justify-center gap-1 rounded-md border border-accent-strong bg-accent-strong px-3 text-xs font-medium text-on-accent max-md:min-h-11';
   return (
-    <section id="buyCard" aria-label="做成真的" className="text-fg">
+    <section id="buyCard" aria-label="做成真的" className="@container text-fg">
       <div className="mb-4 flex items-start gap-3">
         <span className="mt-0.5 inline-flex size-7 flex-none items-center justify-center rounded-full bg-ok-bg text-ok-ink">
           <Icon n="check" size={16} />
@@ -89,7 +89,8 @@ export function BuyCard(p: BuyCardProps) {
           </button>
         )}
       </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      {/* 按卡片自身宽度排列：作品页右栏只有约 300px，用视口断点会挤成三列 */}
+      <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-3">
         <div className={card} data-buy="buy">
           {head(1, '真买', '采购步列过的清单，现在下单')}
           <p className="m-0 text-xs text-muted">

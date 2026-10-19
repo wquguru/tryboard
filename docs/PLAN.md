@@ -105,12 +105,12 @@
 | U-11 | 新主张与文案：首页「试板：完全免费的线上 AI 智能硬件实验台」；作品简介、选板页、实验台、页脚等口语化表达按 DESIGN_V2 §7 改；「选型助手」改名「选板」 | DESIGN_V2 §7 表里「现在」一列在界面上搜不到；agent-browser 首页 / 选板 / 实验台截图 | ☑ Reviews/ab/U-11.md |
 | U-12 | 去掉 .html 后缀（第一步）：站内链接不带后缀，首页 `/`，选板 `/select`；旧地址（home / advisor / levels / index?example=）跳转 | levels.mjs「旧地址 → 新地址」全过；vite preview 下 `/app?work=weather#shop`、`/select`、`/licenses` 直接可开 | ☑ Reviews/ab/U-12.md |
 | U-13 | 授权页 C 版：一页声明 + THIRD_PARTY_NOTICES.txt + tryboard.spdx.json（gen_licenses.mjs 一次生成） | 页面无逐包全文；NOTICES 覆盖原页面全部组件；SPDX 是合法 JSON；390×844 无横向滚动 | ☑ Reviews/ab/U-13.md |
-| U-14 | 可信度图标统一（DESIGN_V2 §8.1）：`ui/conf.tsx` ConfIcon + 分布条，选板 / 采购 / 实验台 / 组装 / 成品全换 | 界面上不再出现按可信度着色的徽章（grep 旧类名为 0）；四档图标在 agent-browser 截图里可辨；levels.mjs、mobile.mjs 照过 | ☐ |
-| U-15 | 选板 v3（§8.2）：线稿项目卡、零件即清单（必选 / 建议 / 我已有）、三问 + 预算、「刚才 + 撤销」、答案先行、为什么是它、术语解释、全部细节折叠、三板对比（用 C3 代替）、0 板时放宽建议、任务书（无命令行）、分享链接、手机布局 | selectv3.mjs：改零件 / 问题 → 变化行出现 → 撤销复原；分享链接复原同一结果；任务书不含 `npx`；390×844 无横向滚动、触控 ≥ 44px；agent-browser 桌面 + 手机截图 | ☐ |
-| U-16 | 选板 → 采购直通（§8.3）：`/app?work=custom&…#shop` 预填清单（地址约定见 DECISIONS），旧 `?t=` 兼容 | selectv3.mjs：选板主按钮 → 采购页清单与选板一致（必选 / 建议 / 我已有）；刷新不丢 | ☐ |
-| U-17 | 实验台按零件生成检查点（§8.3）：自动摆件连线、生成 Level、新检查类型 `i2c_ack`（`--i2c-log`）、check.py / npm 包同步、C3 演示固件 `c3-thermo` | 生成的 Level 用 check.py 跑 c3-thermo 全过且与网页指纹一致；空固件（hello）在 I2C 条目上未过、文字「实际 …；要 …」；accept.json 加 c3-thermo；levels.mjs 原有用例全过 | ☐ |
-| U-18 | 真买卡（§8.3）：自定义作品检查点全过后、现成作品成品步之后出现；成品页按钮按动词分开（§8.4），media.mjs 改选择器不减断言 | agent-browser 走 `/select` → 采购 → 实验台 → 演示固件 → 检查点 ✓ → 真买卡；media.mjs、harness.mjs 全过 | ☐ |
-| U-19 | 全站静态 OG（§8.5）：各 HTML 入口 og/twitter 标签，构建时渲染 og.png；选板结果动态 OG 标 ✗（要部署，问人） | 构建后 dist 每个入口都有 og:image 且文件存在、1200×630；agent-browser 打开 og 预览截图 | ☐ |
+| U-14 | 可信度图标统一（DESIGN_V2 §8.1）：`ui/conf.tsx` ConfIcon + 分布条，选板 / 采购 / 实验台 / 组装 / 成品全换 | 界面上不再出现按可信度着色的徽章（grep 旧类名为 0）；四档图标在 agent-browser 截图里可辨；levels.mjs、mobile.mjs 照过 | ☑ |
+| U-15 | 选板 v3（§8.2）：线稿项目卡、零件即清单（必选 / 建议 / 我已有）、三问 + 预算、「刚才 + 撤销」、答案先行、为什么是它、术语解释、全部细节折叠、三板对比（用 C3 代替）、0 板时放宽建议、任务书（无命令行）、分享链接、手机布局 | selectv3.mjs：改零件 / 问题 → 变化行出现 → 撤销复原；分享链接复原同一结果；任务书不含 `npx`；390×844 无横向滚动、触控 ≥ 44px；agent-browser 桌面 + 手机截图 | ☑ |
+| U-16 | 选板 → 采购直通（§8.3）：`/app?work=custom&…#shop` 预填清单（地址约定见 DECISIONS），旧 `?t=` 兼容 | selectv3.mjs：选板主按钮 → 采购页清单与选板一致（必选 / 建议 / 我已有）；刷新不丢 | ☑ |
+| U-17 | 实验台按零件生成检查点（§8.3）：自动摆件连线、生成 Level、新检查类型 `i2c_ack`（`--i2c-log`）、check.py / npm 包同步、C3 演示固件 `c3-thermo` | 生成的 Level 用 check.py 跑 c3-thermo 全过且与网页指纹一致；空固件（hello）在 I2C 条目上未过、文字「实际 …；要 …」；accept.json 加 c3-thermo；levels.mjs 原有用例全过 | ☑ |
+| U-18 | 真买卡（§8.3）：自定义作品检查点全过后、现成作品成品步之后出现；成品页按钮按动词分开（§8.4），media.mjs 改选择器不减断言 | agent-browser 走 `/select` → 采购 → 实验台 → 演示固件 → 检查点 ✓ → 真买卡；media.mjs、harness.mjs 全过 | ☑ |
+| U-19 | 全站静态 OG（§8.5）：各 HTML 入口 og/twitter 标签，构建时渲染 og.png；选板结果动态 OG 标 ✗（要部署，问人） | 构建后 dist 每个入口都有 og:image 且文件存在、1200×630；agent-browser 打开 og 预览截图 | ☑（选板结果动态 OG ✗：要服务端与部署，需人点头） |
 
 ## P3 · 以后再说
 蓝牙（M7）、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
