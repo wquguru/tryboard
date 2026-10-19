@@ -1,8 +1,8 @@
-// 示例 / 验收固件（C-03）：连上虚拟 Wi-Fi 后依次访问
-//   1) tryboard.local —— 始终由浏览器里的虚拟服务器回答；
-//   2) example.com    —— 打开「真实网络」后经浏览器 fetch 真发出去，对方不给跨域头，浏览器拦下（演示 CORS 失败）；
-//   3) httpbin.org/get —— 对方给跨域头，拿到真实回复。
-// 没开「真实网络」时 2) 3) 也由虚拟服务器回答（example.com 回首页、httpbin.org/get 回 404），固件照样跑完。
+// Example / acceptance firmware (C-03): after joining virtual Wi-Fi, fetches in turn  lint: allow-long-comment
+//   1) tryboard.local  -- always answered by the virtual server in the browser;
+//   2) example.com     -- with "real network" on, really sent via browser fetch; no CORS headers, so the browser blocks it;
+//   3) httpbin.org/get -- sends CORS headers, a real reply comes back.
+// With "real network" off, 2) and 3) are answered by the virtual server too (example.com home page, httpbin.org/get 404).
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -31,10 +31,10 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 
 static char body[2048];
 
-// 返回 HTTP 状态码（打不开返回 -1），正文放进 body
+// Returns the HTTP status (-1 when it cannot open), body goes into body
 static int get(const char *url)
 {
-    // 真实网络的往返按浏览器实测折算成模拟时间，可能要几百毫秒到几秒：超时放宽到 15 秒
+    // Real-network round trips are scaled from browser timings and may take seconds: timeout raised to 15 s
     esp_http_client_config_t c = {.url = url, .timeout_ms = 15000};
     esp_http_client_handle_t h = esp_http_client_init(&c);
     int st = -1;
@@ -74,7 +74,7 @@ void app_main(void)
 
     int st = get("http://example.com/");
     if (strncmp(body, "TRYBOARD_REALNET_ERROR", 22) == 0) {
-        // 正文形如 "TRYBOARD_REALNET_ERROR cors\n"：后面是浏览器给的原因代号
+        // Body looks like "TRYBOARD_REALNET_ERROR cors\n": the rest is the browser reason code
         printf("example.com：浏览器没放行，原因%s", body + 22);
     } else if (strstr(body, "TRYBOARD_HTTP_OK")) {
         printf("example.com：虚拟服务器回答（没开真实网络）\n");
@@ -83,7 +83,7 @@ void app_main(void)
     }
 
     st = get("http://httpbin.org/get");
-    // 只打印回显的 url 字段：httpbin 的回复里还有请求方的公网 IP，不往串口里写
+    // Print only the echoed url field: the httpbin reply also has the caller's public IP, keep it off the serial port
     char *u = strstr(body, "\"url\": \"");
     if (st == 200 && u) {
         u += 8;

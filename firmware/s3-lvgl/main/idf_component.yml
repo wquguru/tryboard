@@ -1,4 +1,4 @@
-# LVGL（MIT）与 esp_lvgl_port（Apache-2.0）来自乐鑫组件注册表；许可证核对见 docs/LICENSING.md
+# LVGL (MIT) and esp_lvgl_port (Apache-2.0) come from the Espressif component registry; licence check in docs/LICENSING.md
 dependencies:
   espressif/esp_lcd_gc9a01: "2.0.4"
   lvgl/lvgl: "9.2.2"

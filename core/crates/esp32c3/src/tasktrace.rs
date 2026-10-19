@@ -365,10 +365,10 @@ pub mod report {
             r#"{{"ph":"M","pid":1,"name":"process_name","args":{{"name":"{} CPU"}}}}"#,
             esc(chip)
         ));
-        v.push(r#"{"ph":"M","pid":2,"name":"process_name","args":{"name":"任务"}}"#.into()); // lint: allow-cjk
+        v.push(r#"{"ph":"M","pid":2,"name":"process_name","args":{"name":"tasks"}}"#.into());
         for c in 0..cores {
             v.push(format!(
-                r#"{{"ph":"M","pid":1,"tid":{c},"name":"thread_name","args":{{"name":"核 {c}"}}}}"# // lint: allow-cjk
+                r#"{{"ph":"M","pid":1,"tid":{c},"name":"thread_name","args":{{"name":"core {c}"}}}}"#
             ));
         }
         for (i, t) in tasks.iter().enumerate() {
@@ -397,7 +397,7 @@ pub mod report {
             if let Some((t, st)) = last_out.get(&s.task) {
                 if *st == state::WAIT && s.t0 > *t {
                     v.push(format!(
-                        r#"{{"ph":"X","pid":2,"tid":{},"name":"等待","cat":"wait","ts":{},"dur":{}}}"#, // lint: allow-cjk
+                        r#"{{"ph":"X","pid":2,"tid":{},"name":"wait","cat":"wait","ts":{},"dur":{}}}"#,
                         s.task as usize + 10,
                         us(*t),
                         us(s.t0 - t)
@@ -405,7 +405,7 @@ pub mod report {
                 }
             }
             v.push(format!(
-                r#"{{"ph":"X","pid":2,"tid":{},"name":"核 {}","cat":"run","ts":{},"dur":{}}}"#, // lint: allow-cjk
+                r#"{{"ph":"X","pid":2,"tid":{},"name":"core {}","cat":"run","ts":{},"dur":{}}}"#,
                 s.task as usize + 10,
                 s.core,
                 us(s.t0),
@@ -516,7 +516,7 @@ mod tests {
         assert_eq!(u, vec![(0, 0, 20), (0, 1, 10)]);
         let j = report::chrome_json(&tt.tasks, &sl, "ESP32-C3", 1, 160_000_000, &|_| None);
         #[rustfmt::skip]
-        let ok = j.contains(r#""name":"main""#) && j.contains(r#""name":"等待""#); // lint: allow-cjk
+        let ok = j.contains(r#""name":"main""#) && j.contains(r#""name":"wait""#);
         assert!(ok);
     }
 

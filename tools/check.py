@@ -23,7 +23,6 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLI = os.path.join(ROOT, 'core/target/release/tryboard')
 
 # Transition: the USB host state names come from esp32s3 usb/host.rs (core agent); old names map to the English ones
-USB_STATES = {'未连接': 'detached', '复位中': 'resetting', '枚举中': 'enumerating', '已配置': 'configured', '枚举失败': 'enumeration failed'}  # lint: allow-cjk
 
 
 def fnv1a(data: bytes) -> int:
@@ -54,11 +53,11 @@ def canonical_report(err: str) -> str:
     oled = [re.sub(r' \(.*$', '', l) for l in lines if l.startswith('[tryboard] OLED lit pixels')]
     lcd = [re.sub(r' \(.*$', '', l) for l in lines if l.startswith('[tryboard] LCD GC9A01 non-black pixels')]
     # Transition: both spellings of the LCD color line (emitter gc9a01.rs is owned by the core agent)
-    lcd += [l for l in lines if l.startswith('[tryboard] LCD 颜色 #') or l.startswith('[tryboard] LCD color #')]  # lint: allow-cjk
+    lcd += [l for l in lines if l.startswith('[tryboard] LCD color #')]
     # USB virtual host (only with --usb-log): state + typed text, same text as wasm tb_usb_report; old and new spellings
-    usb = [l for l in lines if re.match(r'\[tryboard\] USB (主机：|host: |键盘输入: |keyboard typed: )', l)]  # lint: allow-cjk
+    usb = [l for l in lines if re.match(r'\[tryboard\] USB (host: |keyboard typed: )', l)]
     # Acks per address (only with --i2c-log, U-17), same text as wasm tb_i2c_report; old and new spellings
-    ack = [l for l in lines if re.match(r'\[tryboard\] I2C 0x[0-9a-f]{2} (应答 \d+ 次|acked \d+ times)$', l)]  # lint: allow-cjk
+    ack = [l for l in lines if re.match(r'\[tryboard\] I2C 0x[0-9a-f]{2} acked \d+ times$', l)]
     pwm = [l for l in lines if re.match(r'\[tryboard\] PWM GPIO\d+(:| steps)', l)]
     return ''.join(l + '\n' for l in gpio + ws + oled + lcd + usb + ack + pwm)
 
@@ -82,7 +81,7 @@ def evaluate(t: dict, out: str, report: str):
         res.append((n >= 1 and not crashed, f"boot: {n} serial lines within {jsnum(t.get('seconds', 2))} s"))
     for c in t.get('i2c_ack', []):
         a = '%02x' % c['addr']
-        m = re.search(rf'I2C 0x{a} (?:应答|acked) (\d+) (?:次|times)', report)  # lint: allow-cjk
+        m = re.search(rf'I2C 0x{a} acked (\d+) times', report)
         n = int(m.group(1)) if m else 0
         res.append((n >= c['min'], f"I2C 0x{a} acked {n} times (need ≥ {c['min']})"))
     g = t.get('gpio_toggles')
@@ -184,18 +183,18 @@ def evaluate(t: dict, out: str, report: str):
         res.append((n >= c['min'], f"serial \"{c['text']}\" appeared {n} times (need ≥ {c['min']})"))
     u = t.get('usb')
     if u:
-        m = re.search(r'USB (?:主机：|host: )(.+)$', report, re.M)  # lint: allow-cjk
-        st = USB_STATES.get(m.group(1), m.group(1)) if m else 'no USB device'
+        m = re.search(r'USB host: (.+)$', report, re.M)
+        st = m.group(1) if m else 'no USB device'
         if 'state' in u:
-            need = USB_STATES.get(u['state'], u['state'])
+            need = u['state']
             res.append((st == need, f"USB device seen by the PC: {st} (need {need})"))
         if 'typed' in u:
-            m = re.search(r'^\[tryboard\] USB (?:键盘输入|keyboard typed): (".*")$', report, re.M)  # lint: allow-cjk
+            m = re.search(r'^\[tryboard\] USB keyboard typed: (".*")$', report, re.M)
             got = json.loads(m.group(1)) if m else ''
             shown = lambda x: x.replace('\n', '↵')
             res.append((got == u['typed'], f"typed on the PC \"{shown(got)}\" (need \"{shown(u['typed'])}\")"))
     if t.get('lcd_colors'):
-        color_re = r'LCD (?:颜色|color) #([0-9a-f]{6}) (\d+) (?:像素，重心|px, centroid) ([\d.]+),([\d.]+)'  # lint: allow-cjk
+        color_re = r'LCD color #([0-9a-f]{6}) (\d+) px, centroid ([\d.]+),([\d.]+)'
         seen = [(k, int(n), float(x), float(y)) for k, n, x, y in re.findall(color_re, report)]
         top = ', '.join(f'#{k} {n}' for k, n, _, _ in seen[:4]) or '(all black)'
         for c in t['lcd_colors']:
@@ -281,7 +280,7 @@ def run(fw: str, t: dict, inputs: str = '', extra=()):
         tail = [l for l in lines if 'panicked' in l or 'boot failed' in l][:1] or lines[-1:] or ['(no output)']
         res.insert(0, (False, f'simulator did not start: {tail[0][:120]}'))
     # Transition: electrical lines come from the elec crate (core agent); accept both prefixes
-    elec = [l for l in err.splitlines() if l.startswith(('[tryboard] 电气', '[tryboard] elec')) or 'brownout reset (' in l]  # lint: allow-cjk
+    elec = [l for l in err.splitlines() if l.startswith('[tryboard] elec') or 'brownout reset (' in l]
     return res, fingerprint(out, report), elec
 
 

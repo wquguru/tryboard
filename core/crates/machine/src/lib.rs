@@ -247,8 +247,8 @@ impl Machine {
         (b.slow_bytes, b.slow_nacks)
     }
 
-    /// 启用虚拟手机（C-02）：同时出现虚拟路由器 MyHome、虚拟网络换到 192.168.5.0/24。
-    /// auto_open：探测到需要登录就自动打开登录页；auto_post：拿到表单就自动提交这段 body
+    /// Enable the virtual phone (C-02): adds the virtual router MyHome and moves the virtual network to 192.168.5.0/24.
+    /// auto_open: open the login page once captive; auto_post: submit this body once a form shows up
     pub fn phone_enable(&mut self, auto_open: bool, auto_post: Option<String>) {
         let w = &mut self.wifi_mut().world;
         let mut p = w.phone.take().unwrap_or_default();
@@ -257,7 +257,7 @@ impl Machine {
         w.enable_phone(p);
     }
 
-    /// 手机上的一步操作（加入热点、打开登录页、GET / POST）；没启用就先启用
+    /// One phone step (join hotspot, open login page, GET / POST); enables the phone first if needed
     pub fn phone_cmd(&mut self, c: tryboard_esp32c3::wifi::phone::Cmd) {
         if self.wifi().world.phone.is_none() {
             self.phone_enable(false, None);
@@ -269,17 +269,17 @@ impl Machine {
         self.kick_events();
     }
 
-    /// 「真实网络」开关（C-03，脚本动作 realnet=1/0）：开着时 tryboard.local 以外的 HTTP 请求进发件箱
+    /// "Real network" switch (C-03, script action realnet=1/0): when on, HTTP requests not for tryboard.local go to the outbox
     pub fn realnet_set(&mut self, on: bool) {
         self.wifi_mut().world.net.tcp.realnet = on;
     }
 
-    /// 取走发件箱里的请求（网页拿去 fetch；命令行不联网，只靠 --inputs 里记录的 netreply= 回答）
+    /// Drain the outbox (the web fetches them; the CLI stays offline and answers only from netreply= in --inputs)
     pub fn net_outbox_take(&mut self) -> Vec<tryboard_esp32c3::wifi::tcp::RealReq> {
         std::mem::take(&mut self.wifi_mut().world.net.tcp.outbox)
     }
 
-    /// 脚本动作 netreply= 后面的部分；看不懂返回 false
+    /// The part after the script action netreply=; false when unparsable
     pub fn net_reply(&mut self, s: &str) -> bool {
         let Some((id, status, info, body)) = tryboard_esp32c3::wifi::tcp::parse_netreply(s) else {
             return false;
@@ -297,12 +297,12 @@ impl Machine {
         self.wifi().world.phone.as_ref()
     }
 
-    /// Wi-Fi 模型的 TSF（模拟时间微秒）
+    /// TSF of the Wi-Fi model (simulated microseconds)
     fn wifi_tsf_us(&self) -> u64 {
         self.cycles() / (self.wifi().layout.cpu_hz / 1_000_000)
     }
 
-    /// 外部事件改了外设状态：让总线下一步就跑一遍外设更新（否则要等缓存的下一事件时刻）
+    /// An external event changed peripheral state: update peripherals on the next bus step (not at the cached next event)
     fn kick_events(&mut self) {
         match &mut self.hw {
             Hw::C3(m) => m.bus.next_event = 0,
@@ -1190,12 +1190,14 @@ pub fn harness_i2c_line(m: &mut Machine) -> Option<String> {
     let khz = m.i2c0().scl_hz() / 1000.0;
     let (bad, nacks) = m.i2c_slow_stats();
     let what = match v {
-        Verdict::Ok => "在规范内".to_string(), // lint: allow-cjk
-        Verdict::Marginal => format!("超出规范：读回的字节会错（已读错 {bad} 字节）"), // lint: allow-cjk
-        Verdict::Fail => format!("超出两倍：器件不应答（NACK {nacks} 次）"), // lint: allow-cjk
+        Verdict::Ok => "within spec".to_string(),
+        Verdict::Marginal => {
+            format!("out of spec: read-back bytes will be wrong ({bad} bytes wrong so far)")
+        }
+        Verdict::Fail => format!("over twice the limit: device does not ACK (NACK {nacks} times)"),
     };
     #[rustfmt::skip]
-    let line = format!("[tryboard] I2C 排线 {cm} cm：上升时间 {rise:.0} ns，{khz:.0} kHz 允许 {limit:.0} ns，{what}（估算，必须上真机）"); // lint: allow-cjk
+    let line = format!("[tryboard] I2C wire {cm} cm: rise time {rise:.0} ns, {khz:.0} kHz allows {limit:.0} ns, {what} (estimate, must verify on real hardware)");
     Some(line)
 }
 
@@ -1211,9 +1213,9 @@ pub fn harness_wifi_line(m: &Machine) -> Option<String> {
         .map(|i| {
             let r = w.rssi(i) as i32;
             let note = if r < SCAN_MIN_DBM {
-                "（收不到）" // lint: allow-cjk
+                " (out of range)"
             } else if r < LINK_MIN_DBM {
-                "（连不上）" // lint: allow-cjk
+                " (cannot connect)"
             } else {
                 ""
             };
@@ -1221,8 +1223,8 @@ pub fn harness_wifi_line(m: &Machine) -> Option<String> {
         })
         .collect();
     Some(format!(
-        "[tryboard] 天线遮挡 {db} dB：{}（估算，必须上真机）", // lint: allow-cjk
-        aps.join("、")                                         // lint: allow-cjk
+        "[tryboard] antenna blockage {db} dB: {} (estimate, must verify on real hardware)",
+        aps.join(", ")
     ))
 }
 
@@ -1233,9 +1235,9 @@ pub fn usb_report_lines(m: &Machine) -> String {
         return String::new();
     };
     let h = &u.host;
-    let mut o = format!("[tryboard] USB 主机：{}\n", h.state_name()); // lint: allow-cjk
+    let mut o = format!("[tryboard] USB host: {}\n", h.state_name());
     if !h.typed.is_empty() {
-        o.push_str(&format!("[tryboard] USB 键盘输入: {:?}\n", h.typed)); // lint: allow-cjk
+        o.push_str(&format!("[tryboard] USB keyboard typed: {:?}\n", h.typed));
     }
     o
 }
@@ -1261,7 +1263,7 @@ pub fn i2c_ack_lines(m: &Machine) -> String {
         }
     }
     acks.iter()
-        .map(|(a, n)| format!("[tryboard] I2C 0x{a:02x} 应答 {n} 次\n")) // lint: allow-cjk
+        .map(|(a, n)| format!("[tryboard] I2C 0x{a:02x} acked {n} times\n"))
         .collect()
 }
 

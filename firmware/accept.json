@@ -287,8 +287,8 @@
    "no answer"
   ],
   "stderr_expect": [
-   "I2C 0x3c 应答",
-   "I2C 0x76 应答",
+   "I2C 0x3c acked",
+   "I2C 0x76 acked",
    "OLED lit pixels"
   ]
  },
@@ -435,11 +435,11 @@
    "TRYBOARD_OK usb-keyboard"
   ],
   "stderr_expect": [
-   "USB 主机：configured",
+   "USB host: configured",
    "VID 0x303A PID 0x4004",
    "\"TryBoard Keyboard\"",
    "report 1=keyboard, report 2=mouse",
-   "USB 键盘输入: \"Hello from TryBoard!\\n\"",
+   "USB keyboard typed: \"Hello from TryBoard!\\n\"",
    "USB mouse reports 80, position (0, 0)"
   ]
  },
@@ -1025,7 +1025,7 @@
    "T=23.50 C"
   ],
   "stderr_expect": [
-   "I2C 排线 60 cm：上升时间 381 ns，396 kHz 允许 300 ns，超出规范：读回的字节会错"
+   "I2C wire 60 cm: rise time 381 ns, 396 kHz allows 300 ns, out of spec: read-back bytes will be wrong"
   ]
  },
  {
@@ -1048,8 +1048,8 @@
    "T=23.50 C"
   ],
   "stderr_expect": [
-   "I2C 排线 150 cm",
-   "超出两倍：器件不应答"
+   "I2C wire 150 cm",
+   "over twice the limit: device does not ACK"
   ],
   "crash_expected": "the reference firmware's ESP_ERROR_CHECK aborts and reboots on NACK"
  },
@@ -1070,7 +1070,7 @@
    "Neighbor-5G-Ext"
   ],
   "stderr_expect": [
-   "天线遮挡 30 dB：TryBoard-WiFi -72 dBm"
+   "antenna blockage 30 dB: TryBoard-WiFi -72 dBm"
   ]
  },
  {
@@ -1090,7 +1090,7 @@
    "TRYBOARD_OK"
   ],
   "stderr_expect": [
-   "TryBoard-WiFi -87 dBm（连不上）"
+   "TryBoard-WiFi -87 dBm (cannot connect)"
   ]
  },
  {
@@ -1109,9 +1109,9 @@
    "MACRO Hello TryBoard"
   ],
   "stderr_expect": [
-   "USB 主机：configured",
+   "USB host: configured",
    "\"TryBoard Macro Pad\"",
-   "USB 键盘输入: \"abcHello TryBoard\\n\""
+   "USB keyboard typed: \"abcHello TryBoard\\n\""
   ]
  },
  {
@@ -1307,8 +1307,8 @@
    "TOUCH DOWN x=120 y=200"
   ],
   "stderr_expect": [
-   "LCD 颜色 #7bff6b 113 像素，重心 120.0,200.0",
-   "LCD 颜色 #39d3ff 224 像素，重心 65.0,122.5"
+   "LCD color #7bff6b 113 px, centroid 120.0,200.0",
+   "LCD color #39d3ff 224 px, centroid 65.0,122.5"
   ],
   "lcd_min_pixels": 40000
  },
@@ -1568,7 +1568,7 @@
   ],
   "lcd_min_pixels": 40000,
   "stderr_expect": [
-   "LCD 颜色 #ffcb31 1773 像素，重心 120.2,121.8"
+   "LCD color #ffcb31 1773 px, centroid 120.2,121.8"
   ]
  },
  {
@@ -1940,10 +1940,10 @@
    "拿到 IP 192.168.5.100 网关 192.168.5.1"
   ],
   "stderr_expect": [
-   "手机 分到 192.168.4.2（网关 192.168.4.1",
-   "需要登录此网络（探测得到 302，不是 204）",
-   "GET http://192.168.4.1/ → 200「设备配网」 表单 POST /save 字段 ssid, pass",
-   "POST http://192.168.4.1/save → 200「已保存」"
+   "phone got 192.168.4.2 (gateway 192.168.4.1",
+   "sign in to this network (check got 302, not 204)",
+   "GET http://192.168.4.1/ → 200 \"设备配网\" form POST /save fields ssid, pass",
+   "POST http://192.168.4.1/save → 200 \"已保存\""
   ]
  },
  {
@@ -1980,7 +1980,7 @@
    "TRYBOARD_OK"
   ],
   "stderr_expect": [
-   "记着这个热点，它再出现就自动重连"
+   "remembering it, will rejoin when it reappears"
   ]
  },
  {
@@ -1997,8 +1997,8 @@
    "拿到 IP 192.168.5.100 网关 192.168.5.1"
   ],
   "stderr_expect": [
-   "0.522s 手机 GET http://192.168.4.1/ → 200「设备配网」",
-   "1.022s 手机 POST http://192.168.4.1/save → 200"
+   "0.522s phone GET http://192.168.4.1/ → 200 \"设备配网\"",
+   "1.022s phone POST http://192.168.4.1/save → 200"
   ]
  },
  {
@@ -2017,7 +2017,7 @@
    "TRYBOARD_OK c3-softap-wpa2 重启后记住了 MyHome"
   ],
   "stderr_expect": [
-   "手机 分到 192.168.4.2"
+   "phone got 192.168.4.2"
   ]
  },
  {
@@ -2034,7 +2034,7 @@
    "TRYBOARD_OK s3-softap-prov 重启后记住了 MyHome"
   ],
   "stderr_expect": [
-   "需要登录此网络"
+   "sign in to this network"
   ]
  },
  {
@@ -2069,8 +2069,8 @@
    "TRYBOARD_OK c3-http-real"
   ],
   "stderr_expect": [
-   "真实网络请求 #1 GET http://example.com/",
-   "真实网络请求 #2 GET http://httpbin.org/get"
+   "real network request #1 GET http://example.com/",
+   "real network request #2 GET http://httpbin.org/get"
   ]
  },
  {

@@ -270,7 +270,7 @@ fn run(args: &[String]) {
     if let Some(db) = opt(args, "--antenna-loss").and_then(|s| s.parse::<i32>().ok()) {
         m.set_antenna_loss(db);
     }
-    // 虚拟手机（C-02）：--ap-phone 在 0 秒加入热点，--ap-post 拿到表单就提交
+    // Virtual phone (C-02): --ap-phone joins the hotspot at 0 s, --ap-post submits once a form shows up
     let ap_post = opt(args, "--ap-post");
     if let Some(i) = args.iter().position(|a| a == "--ap-phone") {
         let v = args
@@ -477,17 +477,17 @@ fn run(args: &[String]) {
                     eprintln!("[tryboard] {now_s:.3}s phone action failed: {e}");
                 }
             } else if let Some(c) = act.strip_prefix("phone=") {
-                // 网页虚拟手机上的一步（C-02）
+                // One step on the web virtual phone (C-02)
                 match PhoneCmd::parse(c) {
                     Some(c) => m.phone_cmd(c),
-                    None => eprintln!("[tryboard] 看不懂的手机动作: {act}"),
+                    None => eprintln!("[tryboard] unknown phone action: {act}"),
                 }
             } else if let Some(v) = act.strip_prefix("realnet=") {
-                // 网页上的「真实网络」开关（C-03）：命令行不联网，回复只来自后面的 netreply=
+                // Web "real network" switch (C-03): the CLI never goes online, replies only come from later netreply=
                 m.realnet_set(v.trim() == "1");
             } else if let Some(v) = act.strip_prefix("netreply=") {
                 if !m.net_reply(v) {
-                    eprintln!("[tryboard] 看不懂的 netreply 动作");
+                    eprintln!("[tryboard] unknown netreply action");
                 }
             } else if let Some(t) = act.strip_prefix("uart=") {
                 m.uart_push(t.replace("\\n", "\n").as_bytes());
@@ -543,10 +543,10 @@ fn run(args: &[String]) {
             m.run(slice.min(total - done))
         };
         done += m.cycles() - before;
-        // 真实网络（C-03）：命令行从不联网，只报一声；回复要靠 --inputs 里网页记下的 netreply=
+        // Real network (C-03): the CLI never goes online, it only reports; replies come from netreply= recorded by the web in --inputs
         for r in m.net_outbox_take() {
             eprintln!(
-                "[tryboard] {:.3}s 真实网络请求 #{} {} {}（命令行不联网，等 netreply={}）",
+                "[tryboard] {:.3}s real network request #{} {} {} (CLI stays offline, waiting for netreply={})",
                 m.cycles() as f64 / CPU_HZ as f64,
                 r.id,
                 r.method,
@@ -848,20 +848,20 @@ fn run(args: &[String]) {
     }
     if let Some(p) = m.phone() {
         eprintln!(
-            "[tryboard] 虚拟手机：{}，{}，IP {}",
+            "[tryboard] virtual phone: {}, {}, IP {}",
             p.link.name(),
             if p.ssid.is_empty() {
-                "未连接".into()
+                "not connected".into()
             } else {
                 p.ssid.clone()
             },
-            p.ip.map_or("无".into(), |i| format!(
+            p.ip.map_or("none".into(), |i| format!(
                 "{}.{}.{}.{}",
                 i[0], i[1], i[2], i[3]
             ))
         );
         for (t, l) in &p.log {
-            eprintln!("    {:>9.3}s 手机 {l}", *t as f64 / 1e6);
+            eprintln!("    {:>9.3}s phone {l}", *t as f64 / 1e6);
         }
     }
     let show_oled = args.iter().any(|a| a == "--oled");

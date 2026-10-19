@@ -19,28 +19,28 @@ struct Conn {
     req: Vec<u8>,
     responded: bool,
     fin_sent: bool,
-    /// 收到 SYN 的时刻（网络页签的「耗时」从这里算）
+    /// Time the SYN arrived (the network tab "duration" counts from here)
     t0: u64,
-    /// 真实网络（C-03）：已交给浏览器、还在等回复的请求编号
+    /// Real network (C-03): id of the request handed to the browser and still awaiting a reply
     real: Option<u32>,
 }
 
-/// 网络页签的一行（C-02 / C-03）：芯片发出的一次 DNS 查询 / HTTP 请求 / 被拦下的连接
+/// One network-tab row (C-02 / C-03): a DNS query / HTTP request / blocked connection from the chip
 #[derive(Clone, Debug)]
 pub struct NetRow {
     pub t_us: u64,
     /// DNS / GET / POST / HTTPS / MQTT / TCP
     pub method: String,
-    /// 虚拟 / 真实 / 未放行
+    /// Virtual / Real / Not allowed
     pub dest: &'static str,
     pub url: String,
     pub status: String,
     pub dur_us: Option<u64>,
-    /// 补充说明（C-03：跨域失败的原因、HTTPS 未放行……），没有为空
+    /// Extra note (C-03: why cross-origin failed, HTTPS not allowed...), empty when none
     pub note: String,
 }
 
-/// 真实网络（C-03）：交给浏览器 fetch 的一条 HTTP 请求（网页从发件箱取走）
+/// Real network (C-03): an HTTP request for the browser to fetch (the web drains the outbox)
 #[derive(Clone, Debug)]
 pub struct RealReq {
     pub id: u32,
@@ -50,18 +50,18 @@ pub struct RealReq {
     pub body: Vec<u8>,
 }
 
-/// 浏览器给的失败原因代号 → 网络页签上的说明（代号由网页 realfetch.ts 定）
+/// Browser failure reason code -> network-tab note (codes defined by web realfetch.ts)
 pub fn reason_text(code: &str) -> &'static str {
     match code {
-        "cors" => "对方网站不允许跨域（CORS），浏览器拦下了",
-        "net" => "连不上（域名不存在、断网或被拦）",
-        "timeout" => "10 秒没有回应",
-        "mixed" => "页面是 https，浏览器不许发 http 请求（混合内容）",
-        _ => "浏览器拦下了（跨域或网络错误）",
+        "cors" => "The site does not allow cross-origin requests (CORS); the browser blocked it",
+        "net" => "Cannot connect (no such domain, offline or blocked)",
+        "timeout" => "No reply in 10 s",
+        "mixed" => "The page is https; the browser does not allow http requests (mixed content)",
+        _ => "Blocked by the browser (cross-origin or network error)",
     }
 }
 
-/// 回复正文上限（与网页 realfetch.ts 的 MAX_BODY 相同）
+/// Reply body limit (same as MAX_BODY in web realfetch.ts)
 pub const REAL_MAX_BODY: usize = 64 * 1024;
 
 fn reason_phrase(status: u16) -> &'static str {
@@ -84,7 +84,7 @@ fn reason_phrase(status: u16) -> &'static str {
     }
 }
 
-/// 请求头里的某一项（大小写不敏感）
+/// One request header (case-insensitive)
 fn header<'a>(text: &'a str, name: &str) -> Option<&'a str> {
     text.split("\r\n").skip(1).find_map(|l| {
         let (k, v) = l.split_once(':')?;
@@ -102,22 +102,22 @@ pub struct Tcp {
     /// Custom pages: path -> (content type, body); the web page / tests can inject them
     pub pages: HashMap<String, (String, Vec<u8>)>,
     pub requests: u64,
-    /// 给网页「网络」页签的结构化记录（只给人看，不影响回给芯片的字节）
+    /// Structured rows for the web "network" tab (display only, never affects bytes sent to the chip)
     pub rows: Vec<NetRow>,
-    /// 当前模拟时刻（Net 收到每一帧时更新），DNS 行盖时间戳用
+    /// Current simulated time (updated on every frame Net receives), stamps DNS rows
     pub now_us: u64,
-    /// 「真实网络」开关（C-03，默认关）：开着时发往 tryboard.local 以外的 HTTP 请求进发件箱，等网页给回复
+    /// "Real network" switch (C-03, off by default): when on, HTTP requests not for tryboard.local go to the outbox for the web to answer
     pub realnet: bool,
-    /// 等网页取走的请求
+    /// Requests waiting for the web to take them
     pub outbox: Vec<RealReq>,
     pub next_req: u32,
-    /// 等回复的请求：编号 → (连接, 网络页签那一行)
+    /// Requests awaiting a reply: id -> (connection, network-tab row)
     waiting: HashMap<u32, (Key, usize)>,
-    /// 已有行被改写的次数（等待 → 200 / 超时）：网页按 行数 + 这个数 判断要不要重取
+    /// Number of rewritten rows (Waiting -> 200 / Timed out): the web refetches when rows + this change
     pub rev: u64,
 }
 
-/// 按端口猜协议名（被拦下的连接在网络页签里怎么称呼）
+/// Guess a protocol name from the port (how a blocked connection is labelled in the network tab)
 fn proto_name(port: u16) -> &'static str {
     match port {
         443 | 8443 => "HTTPS",
@@ -138,7 +138,7 @@ struct Seg<'a> {
     dst: [u8; 4],
 }
 
-/// 服务端 → 芯片的一段（key 是芯片视角：芯片地址、芯片端口、服务端地址、服务端端口）
+/// One server -> chip segment (key from the chip view: chip addr, chip port, server addr, server port)
 fn to_chip(k: &Key, c: &Conn, flags: u8, opts: &[u8], d: &[u8]) -> Vec<u8> {
     let (src, sport, dst, dport) = *k;
     seg(
@@ -156,7 +156,7 @@ fn to_chip(k: &Key, c: &Conn, flags: u8, opts: &[u8], d: &[u8]) -> Vec<u8> {
     )
 }
 
-/// 整个 HTTP 回复按 MSS 切段发出，最后一段带 FIN（Connection: close）
+/// The whole HTTP reply goes out in MSS-sized segments, the last with FIN (Connection: close)
 fn send_resp(k: &Key, c: &mut Conn, resp: &[u8], line: String) -> Vec<(Vec<u8>, Option<String>)> {
     let mut out = Vec::new();
     let chunks: Vec<&[u8]> = resp.chunks(MSS).collect();
@@ -204,7 +204,7 @@ fn seg(p: Seg, data: &[u8]) -> Vec<u8> {
     s
 }
 
-/// 这个请求要不要交给真实网络：Host 不是 tryboard.local、也不是直接写的网关地址
+/// Should this request go to the real network: Host is neither tryboard.local nor the literal gateway address
 fn goes_real(head: &[u8], server: [u8; 4]) -> bool {
     let text = String::from_utf8_lossy(head);
     let host = header(&text, "host").unwrap_or("");
@@ -225,7 +225,7 @@ fn body_complete(req: &[u8], hp: usize) -> bool {
 }
 
 impl Tcp {
-    /// 请求交给网页：进发件箱，网络页签加一行「等待」
+    /// Hand the request to the web: into the outbox, network tab gets a "Waiting" row
     fn queue_real(&mut self, req: &[u8], hp: usize, t0: u64) -> u32 {
         let text = String::from_utf8_lossy(&req[..hp]).into_owned();
         let first = text.lines().next().unwrap_or("");
@@ -247,30 +247,29 @@ impl Tcp {
         self.rows.push(NetRow {
             t_us: t0,
             method: method.to_string(),
-            dest: "真实",
+            dest: "Real",
             url,
-            status: "等待".into(),
+            status: "Waiting".into(),
             dur_us: None,
             note: String::new(),
         });
         id
     }
 
-    /// 芯片在回复到达前断开：那一行记成超时，迟到的回复丢掉
+    /// Chip disconnected before the reply: mark the row as timed out and drop the late reply
     fn abandon(&mut self, c: &Conn) {
         let Some(id) = c.real else { return };
         if let Some((_, row)) = self.waiting.remove(&id) {
             if let Some(r) = self.rows.get_mut(row) {
-                r.status = "超时".into();
-                r.note = "芯片没等到回复就断开了".into();
+                r.status = "Timed out".into();
+                r.note = "The chip closed the connection before a reply came".into();
                 self.rev += 1;
             }
         }
     }
 
-    /// 网页送来回复（脚本动作 netreply=）：status 0 = 浏览器没拿到回复，info 是原因代号，芯片收到 502；
-    /// 否则 info 是内容类型。回给芯片的字节只由这几个参数决定，网页实时运行与命令行重放逐字节相同。
-    /// 返回（连接, 段, 日志）
+    /// Reply from the web (netreply=): status 0 = browser got nothing (info = reason code, chip gets 502), else info is the content type;
+    /// bytes to the chip depend only on these, so live web and CLI replay match exactly. Returns (connection, segments, log)
     pub fn real_reply(
         &mut self,
         id: u32,
@@ -310,7 +309,7 @@ impl Tcp {
         let url = match self.rows.get_mut(row) {
             Some(r) => {
                 r.status = if status == 0 {
-                    "失败".into()
+                    "Failed".into()
                 } else {
                     code.to_string()
                 };
@@ -321,7 +320,7 @@ impl Tcp {
             None => String::new(),
         };
         self.rev += 1;
-        let line = format!("真实网络 {url} → {code}（{} 字节）", body.len());
+        let line = format!("real network {url} -> {code} ({} bytes)", body.len());
         c.real = None;
         let out = send_resp(&key, &mut c, &resp, line);
         self.conns.insert(key, c);
@@ -369,9 +368,9 @@ impl Tcp {
         self.rows.push(NetRow {
             t_us: self.now_us,
             method: "DNS".into(),
-            dest: "虚拟",
+            dest: "Virtual",
             url: n.clone(),
-            status: "解析".into(),
+            status: "Resolved".into(),
             dur_us: None,
             note: String::new(),
         });
@@ -428,7 +427,7 @@ impl Tcp {
         self.rows.push(NetRow {
             t_us: t0,
             method: method.to_string(),
-            dest: "虚拟",
+            dest: "Virtual",
             url: format!("http://{}{path}", if host.is_empty() { "?" } else { &host }),
             status: status.split(' ').next().unwrap_or("").to_string(),
             dur_us: Some(now.saturating_sub(t0)),
@@ -485,15 +484,17 @@ impl Tcp {
                 self.rows.push(NetRow {
                     t_us: now_us,
                     method: proto_name(dport).into(),
-                    dest: "未放行",
+                    dest: "Not allowed",
                     url: format!("{}.{}.{}.{}:{dport}", dst[0], dst[1], dst[2], dst[3]),
-                    status: "拦截".into(),
+                    status: "Blocked".into(),
                     dur_us: None,
-                    // 真实网络开着时说明为什么没放行（关着时与以前一样不加说明）
+                    // With the real network on, explain why it was blocked (off: no note, as before)
                     note: match (self.realnet, dport) {
                         (false, _) => String::new(),
-                        (true, 443 | 8443) => "真实网络只放行 HTTP，HTTPS 未放行".into(),
-                        (true, _) => "真实网络只放行 HTTP".into(),
+                        (true, 443 | 8443) => {
+                            "The real network only allows HTTP; HTTPS is not allowed".into()
+                        }
+                        (true, _) => "The real network only allows HTTP".into(),
                     },
                 });
                 return out;
@@ -530,7 +531,7 @@ impl Tcp {
         let head = c.req.windows(4).position(|w| w == b"\r\n\r\n");
         if let (false, Some(hp)) = (c.responded, head) {
             if self.realnet && goes_real(&c.req[..hp], dst) {
-                // 真实网络（C-03）：带正文的请求等 Content-Length 收齐，再交给网页去 fetch；回复由 real_reply 送回
+                // Real network (C-03): requests with a body wait for the full Content-Length, then go to the web; real_reply answers
                 if body_complete(&c.req, hp) {
                     c.responded = true;
                     let id = self.queue_real(&c.req, hp, c.t0);
@@ -544,12 +545,12 @@ impl Tcp {
                 need_ack = false;
             }
         }
-        // 芯片等不及（esp_http_client 超时）先关了连接：这一行记成超时，回 RST 了结
+        // The chip gave up first (esp_http_client timeout) and closed: mark the row as timed out and answer with RST
         if peer_fin && c.real.is_some() && !c.fin_sent {
             self.abandon(&c);
             return vec![(
                 mk(&c, RST | ACK, &[], &[]),
-                Some("真实网络：芯片没等到回复就关了连接".into()),
+                Some("Real network: the chip closed the connection before a reply came".into()),
             )];
         }
         if need_ack {
@@ -565,7 +566,7 @@ impl Tcp {
 
 const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-/// base64 编码（真实网络发件箱里的请求体交给网页用）
+/// base64 encode (request bodies in the real-network outbox for the web)
 pub fn b64_encode(d: &[u8]) -> String {
     let mut s = String::with_capacity(d.len().div_ceil(3) * 4);
     for c in d.chunks(3) {
@@ -583,7 +584,7 @@ pub fn b64_encode(d: &[u8]) -> String {
     s
 }
 
-/// base64 解码（netreply= 里的回复正文）；有非法字符返回 None
+/// base64 decode (reply body in netreply=); None on invalid characters
 pub fn b64_decode(s: &str) -> Option<Vec<u8>> {
     let mut out = Vec::with_capacity(s.len() / 4 * 3);
     let (mut acc, mut bits) = (0u32, 0);
@@ -600,8 +601,8 @@ pub fn b64_decode(s: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// 解析脚本动作 netreply= 后面的部分：编号,状态,毫秒,内容类型或原因代号,base64 正文
-/// （毫秒是浏览器实测、只给人看，不影响回给芯片的字节）
+/// Parse the part after script action netreply=: id,status,ms,content type or reason code,base64 body
+/// (ms is the browser-measured time, display only, never affects bytes sent to the chip)
 pub fn parse_netreply(s: &str) -> Option<(u32, u16, String, Vec<u8>)> {
     let mut p = s.splitn(4, ',');
     let id = p.next()?.trim().parse().ok()?;

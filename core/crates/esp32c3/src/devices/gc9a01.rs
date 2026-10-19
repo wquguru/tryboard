@@ -308,7 +308,7 @@ impl Gc9a01 {
         for (c, (n, sx, sy)) in v.into_iter().take(12) {
             let _ = writeln!(
                 o,
-                "[tryboard] LCD 颜色 #{c:06x} {n} 像素，重心 {:.1},{:.1}", // lint: allow-cjk
+                "[tryboard] LCD color #{c:06x} {n} px, centroid {:.1},{:.1}",
                 sx as f64 / n as f64,
                 sy as f64 / n as f64
             );

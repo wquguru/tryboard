@@ -199,7 +199,7 @@ const sk = await page.evaluate(async () => {
 });
 report('时间线回到这次运行末尾：和当时一模一样', sk?.same === true, JSON.stringify(sk));
 const reqAt = (n) => {
-  const l = fs.readFileSync(path.join(outDir, 'realnet-cli.stderr'), 'utf8').split('\n').find((x) => x.includes(`真实网络请求 #${n} `));
+  const l = fs.readFileSync(path.join(outDir, 'realnet-cli.stderr'), 'utf8').split('\n').find((x) => x.includes(`real network request #${n} `));
   return l ? Number(l.match(/([\d.]+)s/)[1]) * 1000 : NaN;
 };
 // 第 1 个回复之后、第 2 个回复之前停住（第 2 个请求已经发出、还没回）

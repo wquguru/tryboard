@@ -684,7 +684,7 @@ pub unsafe extern "C" fn tb_usb_cdc_send(p: *const u8, len: usize) {
     });
 }
 
-// ---------------------------------------------------------------- BLE（C-01）
+// ---------------------------------------------------------------- BLE (C-01)
 
 /// 0 = firmware uses no BLE; 1 = VHCI boundary found, virtual controller running; 2 = BLE used but not recognised (reason in tb_ble_json)
 #[no_mangle]
@@ -747,14 +747,14 @@ pub unsafe extern "C" fn tb_ble_cmd(p: *const u8, len: usize) -> i32 {
     }
 }
 
-// ---------------------------------------------------------------- 虚拟手机 / 网络（C-02 / C-03）
+// ---------------------------------------------------------------- Virtual phone / network (C-02 / C-03)
 
 thread_local! {
     static PHONE_JSON: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
-/// 固件用了 Wi-Fi（发过帧）：网页坞里才出现「网络」页签。
-/// 拿起过虚拟手机也算：固件自己重启（esp_restart）后帧计数清零，页签不能跟着一闪而没
+/// Firmware used Wi-Fi (sent frames): only then does the web dock show the "network" tab.
+/// Having picked up the phone counts too: esp_restart clears the frame count, the tab must not flicker away
 #[no_mangle]
 pub extern "C" fn tb_wifi_used() -> u32 {
     with(0, |m| {
@@ -763,10 +763,8 @@ pub extern "C" fn tb_wifi_used() -> u32 {
     })
 }
 
-/// 虚拟手机上的一步操作（与脚本动作 phone= 后面同一种文字：on / join,ssid[,pass] / leave / open / get,url / post,url,body）。
-/// 返回 0 成功，1 认不出
 /// # Safety
-/// p/len 指向有效的 UTF-8 缓冲区
+/// One virtual phone step (same text as after phone=: on / join,ssid[,pass] / leave / open / get,url / post,url,body); returns 0 ok, 1 unrecognised. p/len must be valid UTF-8
 #[no_mangle]
 pub unsafe extern "C" fn tb_phone_cmd(p: *const u8, len: usize) -> u32 {
     let s = String::from_utf8_lossy(std::slice::from_raw_parts(p, len)).into_owned();
@@ -779,13 +777,13 @@ pub unsafe extern "C" fn tb_phone_cmd(p: *const u8, len: usize) -> u32 {
     })
 }
 
-/// 「真实网络」开关（C-03，脚本动作 realnet=1/0）
+/// "Real network" switch (C-03, script action realnet=1/0)
 #[no_mangle]
 pub extern "C" fn tb_realnet_set(on: u32) {
     with((), |m| m.realnet_set(on != 0));
 }
 
-/// 取走真实网络发件箱：[{id, method, url, ctype, body(base64)}]，返回长度（0 = 没有）；内容用 tb_phone_json_ptr 读
+/// Drain the real-network outbox: [{id, method, url, ctype, body(base64)}], returns the length (0 = none); read via tb_phone_json_ptr
 #[no_mangle]
 pub extern "C" fn tb_net_outbox() -> usize {
     let reqs = with(Vec::new(), |m| m.net_outbox_take());
@@ -811,16 +809,15 @@ pub extern "C" fn tb_net_outbox() -> usize {
     n
 }
 
-/// 真实网络的回复（脚本动作 netreply= 后面的部分）。返回 0 成功，1 看不懂
 /// # Safety
-/// p/len 指向有效的 UTF-8 缓冲区
+/// Real-network reply (the part after netreply=); returns 0 ok, 1 unparsable. p/len must be valid UTF-8
 #[no_mangle]
 pub unsafe extern "C" fn tb_net_reply(p: *const u8, len: usize) -> u32 {
     let s = String::from_utf8_lossy(std::slice::from_raw_parts(p, len)).into_owned();
     with(1, |m| if m.net_reply(&s) { 0 } else { 1 })
 }
 
-/// 手机状态的变化计数（0 = 还没拿起手机）：变了再取 JSON
+/// Phone state change counter (0 = phone never picked up): fetch the JSON when it moves
 #[no_mangle]
 pub extern "C" fn tb_phone_version() -> f64 {
     M.with(|c| {
@@ -831,7 +828,7 @@ pub extern "C" fn tb_phone_version() -> f64 {
     })
 }
 
-/// 手机看到的（附近网络、IP、需要登录、打开过的页面、过程记录），返回长度；内容用 tb_phone_json_ptr 读
+/// What the phone sees (nearby networks, IP, sign-in needed, opened pages, log), returns the length; read via tb_phone_json_ptr
 #[no_mangle]
 pub extern "C" fn tb_phone_json() -> usize {
     let j = M.with(|c| {
@@ -851,17 +848,17 @@ pub extern "C" fn tb_phone_json_ptr() -> *const u8 {
     PHONE_JSON.with(|b| b.borrow().as_ptr())
 }
 
-/// 网络页签的记录条数（变了再取 JSON）
+/// Number of network-tab rows (fetch the JSON when it changes)
 #[no_mangle]
 pub extern "C" fn tb_net_version() -> f64 {
     with(0.0, |m| {
         let n = &m.wifi().world.net;
-        // 行数 + 改写次数（真实网络的行会从「等待」改成 200 / 超时）：两者都只增不减，和变了就是有变化
+        // Rows + rewrites (real-network rows go from "Waiting" to 200 / Timed out): both only grow, so a changed sum means a change
         (n.tcp.rows.len() as u64 + n.tcp.rev) as f64 + if n.leased { 1e9 } else { 0.0 }
     })
 }
 
-/// 网络页签：最近 300 条 [时刻 ms, 方法, 去向, 地址, 状态, 耗时 ms | null, 说明]，返回长度；内容用 tb_phone_json_ptr 读
+/// Network tab: latest 300 rows [time ms, method, dest, url, status, duration ms | null, note], returns the length; read via tb_phone_json_ptr
 #[no_mangle]
 pub extern "C" fn tb_net_json() -> usize {
     let j = with(String::new(), |m| {
@@ -883,7 +880,7 @@ pub extern "C" fn tb_net_json() -> usize {
                 )
             })
             .collect();
-        // 芯片从虚拟路由器拿到的地址（DHCP ACK 之后才有）：配网面板的「拿到 IP」
+        // Address the chip got from the virtual router (only after DHCP ACK): the provisioning panel's "got IP"
         let lease = if net.leased {
             let i = net.sta_ip;
             format!("\"{}.{}.{}.{}\"", i[0], i[1], i[2], i[3])

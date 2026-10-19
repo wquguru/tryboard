@@ -23,13 +23,13 @@ pub struct Net {
     pub leased: bool,
     pub log: Vec<String>,
     pub tcp: super::tcp::Tcp,
-    /// 网关（兼 DHCP / DNS）与分给芯片的地址：缺省 192.168.4.1 / .100；
-    /// 有虚拟手机配网时路由器换到 192.168.5.x，避开固件热点自己的 192.168.4.x（见 DECISIONS C-02）
+    /// Gateway (also DHCP / DNS) and the chip address: default 192.168.4.1 / .100;
+    /// with phone provisioning the router moves to 192.168.5.x, away from the firmware hotspot's 192.168.4.x (DECISIONS C-02)
     pub gw: [u8; 4],
     pub sta_ip: [u8; 4],
-    /// 最近一个 TCP 段的来源 MAC（芯片）：真实网络的回复晚到，要知道发给谁
+    /// Source MAC (the chip) of the latest TCP segment: real-network replies arrive late and need a destination
     peer_mac: Mac,
-    /// 不是对某一帧的即时回应、要主动发给芯片的帧（真实网络的回复，C-03）；World::poll 取走
+    /// Frames to push to the chip unprompted (real-network replies, C-03); drained by World::poll
     pub pending: Vec<Eth>,
 }
 
@@ -145,7 +145,7 @@ impl Net {
         }
     }
 
-    /// 网页送来真实网络的回复（脚本动作 netreply=）：回复段排进 pending，下一次 World::poll 发给芯片
+    /// Real-network reply from the web (script action netreply=): queued in pending, sent on the next World::poll
     pub fn real_reply(&mut self, id: u32, status: u16, info: &str, body: &[u8], now_us: u64) {
         let segs = self.tcp.real_reply(id, status, info, body, now_us);
         let to = self.peer_mac;

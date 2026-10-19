@@ -95,12 +95,12 @@ fn http_over_tcp() {
     );
 }
 
-// ---------- C-02 虚拟手机：用虚拟世界的 AP 当"固件热点"，手机当终端，方向与芯片 STA 相反 ----------
+// ---------- C-02 virtual phone: the virtual world AP plays the "firmware hotspot", phone is the station (reverse of chip STA) ----------
 
 use super::phone::{Cmd, Link, Phone};
 use super::world::World;
 
-/// 在手机与世界之间来回传帧，直到到时；信标每 102.4ms 一次
+/// Shuttle frames between phone and world until the deadline; a beacon every 102.4 ms
 fn shuttle(p: &mut Phone, w: &mut World, ap: usize, mut t: u64, until: u64) -> u64 {
     let mut next_beacon = t;
     while t < until {
@@ -117,7 +117,7 @@ fn shuttle(p: &mut Phone, w: &mut World, ap: usize, mut t: u64, until: u64) -> u
         while !q.is_empty() {
             let f = q.remove(0);
             guard += 1;
-            assert!(guard < 200, "帧来回不停");
+            assert!(guard < 200, "frames ping-pong forever");
             let (_, airs, _) = w.on_tx(&f, t);
             for a in airs {
                 p.on_frame(&a.frame, t);
@@ -146,13 +146,13 @@ fn phone_joins_open_ap_and_gets_dhcp() {
         },
         0,
     );
-    // 还没听到信标：停在扫描
+    // No beacon heard yet: still scanning
     assert_eq!(p.link, Link::Scan);
     shuttle(&mut p, &mut w, 0, 0, 300_000);
     assert_eq!(p.link, Link::Up);
     assert_eq!(p.ip, Some([192, 168, 4, 2]));
     assert_eq!(p.gw, [192, 168, 4, 1]);
-    // 拿到地址后第一件事是联网探测：DNS 查探测域名（虚拟网络的 DNS 答网关地址）
+    // First thing after getting an address is the connectivity check: DNS for the check host (virtual DNS answers the gateway)
     assert!(p
         .log
         .iter()
@@ -172,7 +172,7 @@ fn phone_is_supplicant_in_wpa2_handshake() {
         0,
     );
     shuttle(&mut p, &mut w, 1, 0, 500_000);
-    // 四次握手由 AP（认证方）发起、手机（请求方）应答，双方装上同一把 TK，DHCP 走加密数据帧
+    // AP (authenticator) starts the 4-way handshake, phone (supplicant) answers; both install the same TK, DHCP goes encrypted
     assert!(w.wpa[1].as_ref().unwrap().authorized());
     assert_eq!(p.link, Link::Up);
     assert_eq!(p.ip, Some(net::STA_IP));
@@ -212,12 +212,12 @@ fn phone_cmd_parse() {
     assert_eq!(Cmd::parse("dance"), None);
 }
 
-// ---------- C-03 真实网络 ----------
+// ---------- C-03 real network ----------
 
-/// 网络回给芯片的帧：(帧, 附带的说明)
+/// Frames the network sends back to the chip: (frame, attached note)
 type Frames = Vec<(Vec<u8>, Option<String>)>;
 
-/// 芯片侧打开一条 TCP 连接、发出请求；返回 (SYN-ACK 里的服务端 ISN, 请求段的回应)
+/// Chip opens a TCP connection and sends a request; returns (server ISN from SYN-ACK, response to the request segment)
 fn tcp_request(n: &mut Net, sport: u16, dport: u16, req: &[u8]) -> (u32, Frames) {
     let (c, s) = (net::STA_IP, net::GW_IP);
     let mut syn = sport.to_be_bytes().to_vec();
@@ -242,7 +242,7 @@ fn realnet_queues_and_replies() {
     use super::tcp::{b64_decode, b64_encode, parse_netreply};
     let mut n = Net::default();
     n.tcp.realnet = true;
-    // tryboard.local 照旧由虚拟服务器回答
+    // tryboard.local is still answered by the virtual server
     let (_, r) = tcp_request(
         &mut n,
         1000,
@@ -250,7 +250,7 @@ fn realnet_queues_and_replies() {
         b"GET /hello.txt HTTP/1.1\r\nHost: tryboard.local\r\n\r\n",
     );
     assert!(String::from_utf8_lossy(&r[0].0[20..]).contains("TRYBOARD_HTTP_OK"));
-    // 其它域名进发件箱，只回 ACK，等回复
+    // Other hosts go to the outbox, only an ACK comes back while waiting
     let (_, r) = tcp_request(
         &mut n,
         1001,
@@ -258,15 +258,15 @@ fn realnet_queues_and_replies() {
         b"GET /get HTTP/1.1\r\nHost: httpbin.org\r\n\r\n",
     );
     assert_eq!(r.len(), 1);
-    assert_eq!(r[0].0.len(), 20, "只有 ACK，没有数据");
+    assert_eq!(r[0].0.len(), 20, "ACK only, no data");
     let out = std::mem::take(&mut n.tcp.outbox);
     assert_eq!(out.len(), 1);
     assert_eq!(
         (out[0].id, out[0].method.as_str(), out[0].url.as_str()),
         (1, "GET", "http://httpbin.org/get")
     );
-    assert_eq!(n.tcp.rows.last().unwrap().status, "等待");
-    // 回复：内容由 netreply 参数唯一决定
+    assert_eq!(n.tcp.rows.last().unwrap().status, "Waiting");
+    // Reply: content determined only by the netreply parameters
     let (id, st, info, body) = parse_netreply(&format!(
         "1,200,321,application/json,{}",
         b64_encode(b"{\"ok\":1}")
@@ -280,11 +280,11 @@ fn realnet_queues_and_replies() {
     assert!(text.ends_with("{\"ok\":1}"));
     let row = n.tcp.rows.last().unwrap();
     assert_eq!((row.status.as_str(), row.dur_us), ("200", Some(5000)));
-    // 迟到 / 重复的回复不再生效
+    // Late / duplicate replies no longer apply
     n.pending.clear();
     n.real_reply(1, 200, "text/plain", b"x", 6000);
     assert!(n.pending.is_empty());
-    // 浏览器拿不到回复：芯片收到 502 + 原因
+    // Browser got no reply: chip receives 502 + reason
     let (_, _) = tcp_request(
         &mut n,
         1002,
@@ -296,7 +296,7 @@ fn realnet_queues_and_replies() {
     assert!(text.starts_with("HTTP/1.1 502 Bad Gateway"));
     assert!(text.ends_with("TRYBOARD_REALNET_ERROR cors\n"));
     assert!(n.tcp.rows.last().unwrap().note.contains("CORS"));
-    // base64 往返
+    // base64 round trip
     for d in [&b""[..], b"a", b"ab", b"abc", b"abcd"] {
         assert_eq!(b64_decode(&b64_encode(d)).unwrap(), d);
     }
@@ -306,7 +306,7 @@ fn realnet_queues_and_replies() {
 fn realnet_post_waits_for_body_and_https_is_refused() {
     let mut n = Net::default();
     n.tcp.realnet = true;
-    // 头部到了、正文还没到：不进发件箱
+    // Headers arrived, body not yet: not in the outbox
     let (_, _) = tcp_request(&mut n, 2000, 80, b"POST /post HTTP/1.1\r\nHost: httpbin.org\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nab");
     assert!(n.tcp.outbox.is_empty());
     let (_, _) = tcp_request(
@@ -316,10 +316,10 @@ fn realnet_post_waits_for_body_and_https_is_refused() {
         b"POST /post HTTP/1.1\r\nHost: httpbin.org\r\nContent-Length: 5\r\n\r\nhello",
     );
     assert_eq!(n.tcp.outbox[0].body, b"hello");
-    // HTTPS：照旧在 SYN 就拒绝，开着真实网络时说明只放行 HTTP
+    // HTTPS: still refused at SYN; with the real network on, the note says only HTTP is allowed
     let (_, r) = tcp_request(&mut n, 2002, 443, b"");
     assert_eq!(r[0].0[13] & 0x04, 0x04);
     let row = n.tcp.rows.last().unwrap();
-    assert_eq!((row.method.as_str(), row.dest), ("HTTPS", "未放行"));
-    assert!(row.note.contains("HTTPS 未放行"));
+    assert_eq!((row.method.as_str(), row.dest), ("HTTPS", "Not allowed"));
+    assert!(row.note.contains("HTTPS is not allowed"));
 }

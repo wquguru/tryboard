@@ -1,7 +1,7 @@
-// 验收固件（C-02）：板子自建热点配网。
-// 第一次上电：开热点 TryBoard-Setup（192.168.4.1），DNS 劫持所有域名 → 手机弹「需要登录」，
-// 配网页收 Wi-Fi 名称和密码 → 存 NVS → 关热点去连家里的路由器 → 拿到 IP 后重启，
-// 重启后从 NVS 读出来直接连（验证「记住」）。密码错连不上三次就清掉记住的配置、重新打开热点。
+// Acceptance firmware (C-02): board-hosted hotspot provisioning.  lint: allow-long-comment
+// First boot: hotspot TryBoard-Setup (192.168.4.1), DNS hijacks every name -> phone shows "sign in",
+// portal takes Wi-Fi name and password -> NVS -> hotspot off, join the home router -> reboot after getting an IP;
+// after reboot it reads NVS and joins directly ("remembered"). Three failed joins clear the config and reopen the hotspot.
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
@@ -53,7 +53,7 @@ static esp_err_t page_get(httpd_req_t *req)
     return httpd_resp_send(req, PAGE, HTTPD_RESP_USE_STRLEN);
 }
 
-// 系统的联网探测（generate_204、hotspot-detect.html 等）一律跳到配网页：手机据此认出「需要登录」
+// OS connectivity checks (generate_204, hotspot-detect.html, ...) all redirect to the portal: phones read that as "sign in"
 static esp_err_t redirect_get(httpd_req_t *req)
 {
     printf("HTTP GET %s → 跳转配网页\n", req->uri);
@@ -67,7 +67,7 @@ static int hexv(char c)
     return isdigit((unsigned char)c) ? c - '0' : (tolower((unsigned char)c) - 'a' + 10);
 }
 
-// 取表单字段并做 URL 解码（+ → 空格，%XX）
+// Read a form field and URL-decode it (+ -> space, %XX)
 static void form_field(const char *body, const char *key, char *out, size_t cap)
 {
     out[0] = 0;
@@ -144,7 +144,7 @@ static void start_http(void)
     printf("配网页 http://192.168.4.1/ 已就绪\n");
 }
 
-// DNS 劫持：所有 A 查询都答 192.168.4.1
+// DNS hijack: every A query answers 192.168.4.1
 static void dns_task(void *arg)
 {
     int s = socket(AF_INET, SOCK_DGRAM, 0);
@@ -156,7 +156,7 @@ static void dns_task(void *arg)
         socklen_t fl = sizeof(from);
         int n = recvfrom(s, buf, sizeof(buf) - 16, 0, (struct sockaddr *)&from, &fl);
         if (n < 12) continue;
-        // 只看第一个问题：域名到 QTYPE 之前
+        // Only look at the first question: the name up to QTYPE
         int q = 12;
         char name[100];
         int nl = 0;
@@ -166,7 +166,7 @@ static void dns_task(void *arg)
             for (int i = 0; i < l && q < n && nl < 98; i++) name[nl++] = buf[q++];
         }
         name[nl] = 0;
-        q += 5; // 0 结尾 + QTYPE + QCLASS
+        q += 5; // terminating 0 + QTYPE + QCLASS
         if (q > n) continue;
         printf("DNS 劫持 %s → 192.168.4.1\n", name);
         buf[2] = 0x81;
@@ -293,7 +293,7 @@ void app_main(void)
     for (;;) {
         EventBits_t b = xEventGroupWaitBits(eg, BIT_SUBMIT | 2, true, false, portMAX_DELAY);
         if (b & BIT_SUBMIT) {
-            // 先让配网页的回复发完，再关热点
+            // Let the portal reply finish sending before turning off the hotspot
             vTaskDelay(pdMS_TO_TICKS(500));
             printf("关掉热点，去连 %s\n", sta_ssid);
             fails = 0;
