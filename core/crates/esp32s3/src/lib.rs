@@ -5,10 +5,12 @@
 //! the virtual world are in tryboard-soc (shared with C3, wired up with the S3 layout). lint: allow-long-comment
 
 pub mod boot;
+mod chip;
 pub mod hle;
 pub mod periph;
 pub mod psram;
-pub mod usb;
+/// USB OTG model lives in tryboard-soc (R-06); re-exported for `usb::` paths in this crate
+pub use tryboard_soc::usb;
 
 use periph::*;
 use std::collections::HashMap;
@@ -722,7 +724,7 @@ impl SocBus {
         set(src::GPIO, self.gpio.irq());
         set(src::WIFI_MAC, self.wifi().irq());
         set(src::LEDC, self.ledc.irq());
-        set(usb::SRC_USB, self.usb.as_ref().is_some_and(|u| u.irq()));
+        set(src::USB, self.usb.as_ref().is_some_and(|u| u.irq()));
         set(src::RMT, self.rmt.irq());
         set(src::PCNT, self.pcnt.irq());
         set(src::I2C_EXT0, self.i2c0.irq());

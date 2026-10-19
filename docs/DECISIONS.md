@@ -984,3 +984,11 @@
 - **sigin 一起进 soc**：原计划把 `sigin`（GPIO 输入信号路由）当 C3 专有留下，但 rmt / pcnt 依赖它，只能一起搬；行为不变（金标准 112/112 一致）。
 - **machine 里仍有 `tryboard_esp32c3::`**：剩下的是 `Hw::C3` 构造 C3 SoC 本体用的（`Esp32c3`、`MMIO_LOW/HIGH`、`Stop`），不是共用件；归零放到 R-06（machine 只调 `trait Chip`，按芯片 match 只剩构造处）。不用别名绕过 grep。
 - esp32c3 的 `pub use tryboard_soc::{…}` 转发保留到 R-06 结束，再按引用情况删除。
+
+## 2026-10-19 芯片 trait（R-06）
+- **`Hw` 枚举直接删掉**：machine 持 `Box<dyn tryboard_soc::chip::Chip>`；按批次分派（`run` 一次跑一批），指令循环仍在芯片 crate 里单态化，实测速度在噪声内。trait 不带泛型方法（保持对象安全），I2C 器件的 `device::<T>()` 由调用方在返回的 `&mut I2c` 上做。
+- **只有部分芯片有的功能用缺省实现**：PCNT、ADC 模型、圆屏、I2S 器件、BLE、USB、时序报告缺省 None / false；CLI 的 `--watch` / `--dump` / `--dump-intc` 原来写在 `Hw::C3` 分支里，改成 trait 的 `set_watch` / `watch_hits` / `dump` / `intc_report`（目前只有 C3 实现，其他芯片照旧不输出）。
+- **搬移**：`usb/`（DWC2 + 虚拟主机）从 esp32s3 进 soc（中断源号留在 esp32s3 `periph::src::USB = 38`），`image_chip_id` 从 esp32s3::boot 进 soc::boot，Xtensa 停机状态描述 `halt_state` 从 machine 进 tryboard-xtensa，ROM 复位横幅进各芯片的 `rom_banner`；故障 / HLE 文字原样搬到各芯片 `chip.rs`（金标准 112/112 逐字节一致）。cli / wasm 因此不再依赖 tryboard-esp32s3。
+- **machine 保留 `enum Chip` 元数据表**（id、名字、ROM 文件、BOOT / RGB 引脚、引脚数）：CLI 在开机前就要用引脚数和 ROM 文件名，放进 trait 就得先构造芯片。
+- **esp32c3 转发**：R-05 留下的 `pub use tryboard_soc::{…}` 改为 `pub(crate) use`，没人用的 pcnt / sigin / vcd 转发删除；R-05 记的「machine 里仍有 `tryboard_esp32c3::`」偏离至此只剩构造处。
+- 替代：保留 `enum Hw` 并在每个方法里 match —— 加一款芯片要改几十处；泛型 `Machine<C: Chip>` —— wasm / CLI 都得跟着泛型化或再包一层枚举，收益只是省掉每批一次间接调用。

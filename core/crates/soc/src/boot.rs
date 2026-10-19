@@ -33,3 +33,11 @@ pub fn find_app(flash: &[u8]) -> Result<u32, String> {
     }
     Err("unrecognized flash image: no partition table and not an app image".into())
 }
+
+/// Chip ID from the image header (offset 12). If flash doesn't start with 0xE9, find the app in the partition table first.
+pub fn image_chip_id(flash: &[u8]) -> Option<u16> {
+    let off = find_app(flash).ok()? as usize;
+    flash
+        .get(off + 13)
+        .map(|_| u16::from_le_bytes([flash[off + 12], flash[off + 13]]))
+}

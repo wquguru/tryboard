@@ -2,17 +2,17 @@
 
 pub mod ble;
 pub mod boot;
+mod chip;
 #[cfg(test)]
 mod crypto_hw_tests;
 pub mod hle;
 pub mod periph;
 pub mod timing;
 /// The Wi-Fi model lives in tryboard-soc (shared by C3 / S3); wired here with the C3 layout
-pub use tryboard_soc::wifi;
-/// Shared models moved to tryboard-soc (R-05); re-exported so `crate::x` paths inside this crate stay valid
-pub use tryboard_soc::{
-    crypto_hw, devices, gdma, gpspi, i2c, i2s, iotrace, ledc, pcnt, rmt, sigin, spiflash,
-    tasktrace, vcd,
+pub(crate) use tryboard_soc::wifi;
+/// Shared models moved to tryboard-soc (R-05); crate-internal aliases so `crate::x` paths stay valid (R-06 pruned unused)
+pub(crate) use tryboard_soc::{
+    crypto_hw, devices, gdma, gpspi, i2c, i2s, iotrace, ledc, rmt, spiflash, tasktrace,
 };
 
 use devices::audio::{Audio, PortIo};

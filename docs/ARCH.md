@@ -14,9 +14,9 @@ web/（Vite + TS）
 ```
 
 ## crate 分层（R-05，2026-10-19）
-- `tryboard-soc`（`crates/soc`）：所有芯片共用的部件，芯片差异用 `*Layout` 参数化。外设模型 `periph`（CPU_HZ、Uart、Systimer、Timg）、`i2c`、`spiflash`、`rmt`、`ledc`、`pcnt`、`i2s`、`gpspi`、`gdma`、`crypto_hw`、`sigin`（输入去毛刺）、`adc`；外接器件 `devices/`（引脚器件、音频、GC9A01、SSD1306、BME280、IMU、触摸）；记录 `iotrace`、`vcd`、`tasktrace`；`boot::find_app`（分区表找 app）；Wi-Fi `wifi/`、BLE 内核 `ble/`。依赖只有 `tryboard-elec`（I2C 线长负载公式）。
-- `tryboard-esp32c3`：只剩 C3 本体——`Esp32c3` / `SocBus` / `Stop`、存储映射常量、`lcd_pin` / `i2s_pin` 接线、`periph`（中断矩阵 Intc、`src` 中断源号、GPIO、EXTMEM、SARADC）、`boot`（ROM 装载、eFuse、`parse_app`（芯片 ID 5）、BLE 挂钩）、`hle`、`timing`、`ble`（RISC-V 侧 VHCI HLE）、`crypto_hw_tests`（经 C3 总线驱动 SHA / AES 寄存器）。为兼容 crate 内路径，lib.rs 仍 `pub use tryboard_soc::{devices, i2c, …}`。
-- `esp32s3` / `esp32` 只依赖 `tryboard-soc`，不再依赖 `tryboard-esp32c3`；`machine` 仅为 `Hw::C3` 分支引用 C3 本体（`Esp32c3`、`Stop`、`MMIO_LOW/HIGH`）；`cli` / `wasm` 直接引 `tryboard_soc::`。
+- `tryboard-soc`（`crates/soc`）：所有芯片共用的部件，芯片差异用 `*Layout` 参数化。外设模型 `periph`（CPU_HZ、Uart、Systimer、Timg）、`i2c`、`spiflash`、`rmt`、`ledc`、`pcnt`、`i2s`、`gpspi`、`gdma`、`crypto_hw`、`sigin`（输入去毛刺）、`adc`、`usb/`（DWC2 + 虚拟主机，R-06 从 esp32s3 搬来）；芯片接口 `chip`（`trait Chip`、`Stop`，R-06）；外接器件 `devices/`（引脚器件、音频、GC9A01、SSD1306、BME280、IMU、触摸）；记录 `iotrace`、`vcd`、`tasktrace`；`boot::find_app`（分区表找 app）、`boot::image_chip_id`；Wi-Fi `wifi/`、BLE 内核 `ble/`。依赖只有 `tryboard-elec`（I2C 线长负载公式）。
+- `tryboard-esp32c3`：只剩 C3 本体——`Esp32c3` / `SocBus` / `Stop`、存储映射常量、`lcd_pin` / `i2s_pin` 接线、`periph`（中断矩阵 Intc、`src` 中断源号、GPIO、EXTMEM、SARADC）、`boot`（ROM 装载、eFuse、`parse_app`（芯片 ID 5）、BLE 挂钩）、`hle`、`timing`、`ble`（RISC-V 侧 VHCI HLE）、`crypto_hw_tests`（经 C3 总线驱动 SHA / AES 寄存器）。为兼容 crate 内路径，lib.rs 用 `pub(crate) use tryboard_soc::{devices, i2c, …}`（R-06 起不再对外转发）。每个芯片 crate 的 `src/chip.rs` 实现 `trait Chip`。
+- `esp32s3` / `esp32` 只依赖 `tryboard-soc`，不再依赖 `tryboard-esp32c3`；`machine` 只在 `Machine::boot` 构造处点名 `Esp32c3` / `Esp32s3` / `Esp32`（另读两个 `periph::NPINS` 元数据）；`cli` / `wasm` 依赖 machine、soc、elec 和 CPU 核 crate（rv32 / xtensa），不依赖任何芯片 crate（R-06 起）。
 
 ## 启动方式（ESP32-C3）
 1. ROM：从 esp-rom-elfs 的 `esp32c3_rev3_rom.elf` 装 `.text`（0x40000000）、`.rodata`（DROM 掩膜窗口 0x3FF00000 → ROM 物理 0x40040000）、各 `.data*` 初值（DRAM 顶部 0x3FCDE710 以上）。
@@ -60,7 +60,19 @@ web/（Vite + TS）
 - GDMA 不在这里建模：按 OUT/IN_PERI_SEL（AES = 6、SHA = 7）找到接到本外设的通道，读 OUTLINK / INLINK 描述符地址，沿 lldesc 链读写、清 owner 位。GDMA 模型落地后改成走它的接口（见 DECISIONS）。
 
 ## 芯片无关外壳（`core/crates/machine`）
-- `enum Machine { C3, S3 }`：按镜像头芯片 ID（5 / 9）选芯片，给 CLI 和 wasm 一套接口（运行、控制台、GPIO 读写、PWM、ADC 电压、WS2812、I2C 器件、OLED、SPI 圆屏、调试状态）。加新芯片只改这里。
+- `Machine { hw: Box<dyn tryboard_soc::chip::Chip>, chip: Chip, … }`（R-06）：`Machine::boot` 按镜像头芯片 ID（0 / 5 / 9）构造对应 SoC 装箱，之后所有调用都走 trait（运行、控制台、GPIO 读写、PWM、ADC、WS2812、I2C 器件、OLED、SPI 圆屏、trace、Wi-Fi / BLE / USB、调试状态）。按芯片的 `match` 只剩构造处和 `enum Chip` 元数据表（id、名字、ROM 文件、BOOT / RGB 引脚、引脚数；启动前 CLI 就要用）。
+- 分派按批次：`Chip::run(cycles)` 一次跑一批，指令循环在芯片 crate 里单态化；动态分派开销摊到整批上（R-06 实测速度与改前相差在噪声内）。
+- 只有部分芯片有的功能（PCNT、ADC 模型、圆屏、I2S 器件、BLE、USB、`--watch` / `--dump` / `--dump-intc`、时序报告）在 trait 里有缺省实现（None / false / 空），machine 和 CLI 按「有没有」处理，不按芯片类型判断。
+
+### 新增一款芯片（清单）
+1. 新建 `core/crates/<chip>`，只依赖 `tryboard-soc`（和对应 CPU 核 crate）；共用外设从 soc 拿，差异用 `*Layout` 参数化。
+2. 在 `<chip>/src/chip.rs` 实现 `tryboard_soc::chip::Chip`：
+   - 必须实现：`run` / `run_traced` / `reboot` / `hold` / `cycles` / `instret` / `pc` / `cores` / `debug_state` / `rom_banner`；`mmio_window` / `bus_poke` / `peek` / `unimpl` / `kick_events` / `kick_pins`；`console_take` / `console_push` / `uart_push`；`gpio_level` / `gpio_enable` / `gpio_reset_level` / `gpio_drive` / `gpio_log` / `pin_pwm` / `ws2812` / `analog_set`；`i2c0` / `i2c` / `pins` / `audio` / `audio_mut`；`iotrace` / `tasktrace`；`wifi` / `wifi_mut`。
+   - 按需覆盖（缺省 = 没有）：`pcnt_count`、`adc_model(_mut)`、`lcd_attach` / `lcd` / `spi2_stats`、`attach_speaker` / `attach_mic`、`timing_line` / `timing_json`、`ble` / `ble_mut` / `ble_error`、`usb` / `usb_mut`、`set_watch` / `watch_hits` / `dump` / `intc_report`。
+   - 芯片自己的 `Stop` 在 `chip.rs` 里转成 `tryboard_soc::chip::Stop`（故障描述文字进金标准，定了就别改）。
+3. 登记：`machine` 的 `enum Chip` 加一项（`ALL`、`id`、`name`、`rom_file`、`boot_pin`、`rgb_pin`、`npins`），`Machine::boot` 加一个构造分支；`tryboard-elec` 的 `ChipKind` 加一项（供电 / 功耗表）；machine、cli、wasm 的 Cargo.toml 只有 machine 需要加依赖。
+4. ROM：`tools/fetch_third_party.sh` 拉对应 ROM ELF（LICENSING ✅ 才行）；`core/crates/machine/tests/mmio_fuzz.rs` 加一个 `<chip>_mmio_fuzz`。
+5. 验收：`firmware/` 加该芯片的 hello / blink 等用例并写进 `firmware/accept.json`；`tools/golden.py save` 补金标准；跑 `cargo test`、`tools/accept.sh`、`tools/golden.py check`；R-13 的 id 交叉检查（固件 JSON / 目录 / CLI 名）要能认出新芯片；`docs/STATUS.md` 加一行。
 - 线束（P2-11，估算）：`Machine::harness`（I2C 排线总长、天线遮挡 dB）是外部世界，跨软件复位保留、复位后重新挂到新总线 / Wi-Fi 模型上。I2C 控制器按 `tryboard-elec::i2cbus` 的公式（总线电容 → 上升时间，和固件配置的 SCL 频率对应的规范上限比）决定读回字节是否丢 0→1 的位、地址是否不应答；虚拟世界按遮挡降低所有 AP 的 RSSI，低于门限扫描收不到 / 认证不回。CLI `--i2c-wire` / `--antenna-loss`，脚本 `i2cwire=` / `antenna=`，wasm `tb_i2c_wire` / `tb_antenna_loss` / `tb_harness_report`
 - USB 关卡观察（P2-12）：`tryboard_machine::usb_report_lines` 给出"USB 主机：状态"与"USB 键盘输入: …"两行，CLI `--usb-log` 与 wasm `tb_usb_report` 共用；关卡带 `--usb-log` 时进观察记录（指纹）
 
@@ -77,7 +89,7 @@ web/（Vite + TS）
 - `mna.rs`：节点电压法 + 隐式欧拉；元件 R / C / V（理想或带内阻）/ I / Limit（带限流的源）/ Ldo / Load（恒流，低于 vknee 退成电阻）/ Motor（舵机电机：max(0,(min(v,vcmd)−emf)/r)）。分段线性元件用 Katzenelson 法解（见 DECISIONS「电气模型」），稠密 LU 部分主元。`spice.rs` 读 SPICE 子集（R/C/V/I、.op、.tran，`*tb:` 行写自定义元件），CLI `tryboard elec-net` 用它与 ngspice 对照（`tools/elec/compare.py`）
 - `board.rs`：开发板网络（5V 轨、3V3、舵机红线、外接 5 V 四个节点；USB 口 0.5 A 限流、外接 5 V 2 A、SGM2212 LDO、去耦电容、芯片 / 模块 / 舵机负载；5 V 模块（HC-SR04）接了才在 5V 轨上加恒流负载）。固定 100 µs 一步、只走整步。3V3 < 门限（S3 2.44 V / C3 2.51 V）持续 0.12 ms → 欠压复位，按住到电压回升
 - `servo.rs`：SG90 二阶动力学（比例控制 + 电机 + 减速箱），给电流和角度，不影响固件读数
-- 接法：`Machine { hw: Hw::C3|S3, elec: Board }`。`Machine::run` 跑完一段后按这段的活动（忙的核数 = 指令数 / 周期数、Wi-Fi 收发帧、舵机脚 PWM 脉宽）推进 `elec`；触发欠压就以 `Stop::Reset(15)` 结束，调用方 `reboot(15)`；按住期间 `run` 不执行指令、只走时间。`reboot` 往串口补 ROM 头三行（`rst:0x..`），第一次上电不补
+- 接法：`Machine { hw: Box<dyn Chip>, elec: Board }`。`Machine::run` 跑完一段后按这段的活动（忙的核数 = 指令数 / 周期数、Wi-Fi 收发帧、舵机脚 PWM 脉宽）推进 `elec`；触发欠压就以 `Stop::Reset(15)` 结束，调用方 `reboot(15)`；按住期间 `run` 不执行指令、只走时间。`reboot` 往串口补 ROM 头三行（`rst:0x..`），第一次上电不补
 - CLI：`--power usb|ext`（默认 usb）、`--servo GPIO`（接了就 1 ms 一片）、`--elec-report`（`[tryboard] 电气 …` 各节点最低电压、峰值电流、复位次数与时刻）、脚本动作 `power=usb|ext`；`tryboard elec-net 网表 [--at 秒,…]`
 - wasm：`tb_power_set(0 usb|1 ext)`、`tb_servo_attach(pin)`、`tb_elec_v(1 5V|2 3V3|3 舵机|4 外接)`、`tb_elec_i(0 USB|1 外接|2 舵机|3 3V3|4 芯片)`、`tb_elec_stat(0..8)`（最低电压、峰值电流、复位次数、是否按住）、`tb_elec_brownout_t(i)`、`tb_servo_angle()`、`tb_elec_report()`（文字同 CLI，读 `tb_report_ptr`）
 
@@ -182,7 +194,7 @@ web/（Vite + TS）
 - 网页：台面板 ESP32-DevKitC V4（`board3d.ts` `BOARD_E32`，54.4 × 27.9 mm、两排 19 针相距 1″、micro-USB + CP2102、没有用户灯 / RGB 灯）；两排针相距 1″ 插在 830 孔面包板上，整板沿 z 偏半格，使 J1 落在 j 排、J3 落在 b 排，a 排留给跳线。芯片显示名 / BOOT 键 / RGB 脚统一在 `web/src/chips.ts`。
 - 验收：accept.json 的 esp32-hello（与 QEMU 逐行一致）、esp32-blink（GPIO2）、esp32-fade（LEDC）、esp32-i2c（SSD1306 + BME280）、esp32-wifi-init、esp32-wifi（开放热点 + HTTP）、esp32-wifi-wpa2；`tools/oracle_qemu.sh esp32-hello`。
 
-## 原生 USB OTG（ESP32-S3，`crates/esp32s3/src/usb/`）
+## 原生 USB OTG（ESP32-S3；模型在 `crates/soc/src/usb/`，中断源号在 esp32s3 `periph::src::USB`）
 - `dwc2.rs`：Synopsys DWC2 设备模式（基址 0x60080000，中断源 38）。寄存器按 DWC2 编程模型；ID / 硬件配置读回 S2/S3 实测值（GSNPSID 0x4F54400A = 4.00a，CSRST 自清；GHWCFG2 0x224DD930、GHWCFG3 0x00C804B5、GHWCFG4 0xD3F0A030）。
   - 两条数据通路：GAHBCFG.DMAEN=1 时按 DIEPDMAn / DOEPDMAn 直接读写内存（SETUP 写到 DOEPDMA0 后指针 +8、置 STUP、关 EP0 OUT）；否则走 Slave：GRXSTSP 弹出状态字、FIFO 窗口读数据，IN 数据由固件写入各端点发送 FIFO（按 32 位字，含包尾填充，取包时按 tsiz 算包长并丢弃填充）。
   - 中断：GINTSTS 的 RXFLVL / IEPINT / OEPINT / OTGINT / BOUTNAKEFF 由状态实时算出；DAINT = 各端点 (DxEPINT & DxEPMSK)，IN 端点在 DIEPEMPMSK 置位时加上 TXFE（发送 FIFO 空）。

@@ -1,5 +1,5 @@
-//! Chip-agnostic machine shell: picks ESP32-C3 or ESP32-S3 from the image header chip ID, one interface for CLI and wasm.
-//! A new chip adds a branch here; CLI / web stay unchanged.
+//! Chip-agnostic machine shell: picks the SoC from the image header chip ID, one interface for CLI and wasm.
+//! Everything after boot goes through `tryboard_soc::chip::Chip`; a new chip adds a `Chip` variant and a branch in `boot`.
 
 use std::collections::{HashMap, VecDeque};
 use tryboard_elec::board::{Activity, Board, ChipKind, Power};
@@ -7,6 +7,7 @@ use tryboard_esp32::Esp32;
 use tryboard_esp32c3::Esp32c3;
 use tryboard_esp32s3::Esp32s3;
 use tryboard_soc::adc::{AdcModel, Sample as AdcSample};
+pub use tryboard_soc::chip::Stop;
 pub use tryboard_soc::devices::audio::{Analysis as AudioAnalysis, Block as AudioBlock};
 use tryboard_soc::devices::audio::{Audio, MicSource};
 use tryboard_soc::devices::{
@@ -40,7 +41,7 @@ impl Chip {
     pub const ALL: [Chip; 3] = [Chip::Esp32, Chip::Esp32c3, Chip::Esp32s3];
     /// Chip ID from the image header (esp_app_format.h)
     pub fn from_image(flash: &[u8]) -> Option<Chip> {
-        Chip::from_id(tryboard_esp32s3::boot::image_chip_id(flash)? as u32)
+        Chip::from_id(tryboard_soc::boot::image_chip_id(flash)? as u32)
     }
     pub fn from_id(id: u32) -> Option<Chip> {
         Chip::ALL.into_iter().find(|c| c.id() == id)
@@ -92,25 +93,6 @@ impl Chip {
     }
 }
 
-/// Why a run stopped (chip-agnostic)
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Stop {
-    Budget,
-    /// Firmware crashed, with a description
-    Fault(String),
-    /// Hit an unimplemented HLE function
-    Hle(String),
-    /// Firmware requested a software reset (esp_restart / reboot after panic), value = reset reason; call reboot() to power up
-    Reset(u32),
-}
-
-#[allow(clippy::large_enum_variant)]
-pub enum Hw {
-    C3(Esp32c3),
-    S3(Esp32s3),
-    E32(Esp32),
-}
-
 /// External harness (P2-11, estimate, needs real hardware): total I2C wire length, antenna loss from metal / battery.
 /// Like the power network it's outside world: survives software reset and is reattached to the new bus / Wi-Fi model
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -122,7 +104,9 @@ pub struct Harness {
 
 /// A machine = chip + board power network (tryboard-elec). The power network survives reset (it's outside world)
 pub struct Machine {
-    pub hw: Hw,
+    /// The SoC behind the trait (R-06); the concrete type is chosen only in `boot`
+    hw: Box<dyn tryboard_soc::chip::Chip>,
+    chip: Chip,
     pub elec: Board,
     harness: Harness,
     /// GPIO the touch controller's INT is wired to (low while pressed, high on release); None = not wired
@@ -137,60 +121,60 @@ pub struct BootInfo {
 
 impl Machine {
     pub fn boot(rom: &[u8], flash: Vec<u8>) -> Result<(Machine, BootInfo), String> {
-        match Chip::from_image(&flash) {
-            Some(Chip::Esp32s3) => {
-                let (m, a) = Esp32s3::boot(rom, flash)?;
-                Ok((
-                    Machine {
-                        hw: Hw::S3(m),
-                        elec: Board::new(ChipKind::S3),
-                        touch_int: None,
-                        harness: Harness::default(),
-                    },
-                    BootInfo {
-                        offset: a.offset,
-                        entry: a.entry,
-                        segments: a.segments.len(),
-                    },
-                ))
-            }
-            Some(Chip::Esp32) => {
-                let (m, a) = Esp32::boot(rom, flash)?;
-                Ok((
-                    Machine {
-                        hw: Hw::E32(m),
-                        elec: Board::new(ChipKind::Esp32),
-                        touch_int: None,
-                        harness: Harness::default(),
-                    },
-                    BootInfo {
-                        offset: a.offset,
-                        entry: a.entry,
-                        segments: a.segments.len(),
-                    },
-                ))
-            }
-            None => Err(match tryboard_esp32s3::boot::image_chip_id(&flash) {
+        let chip = Chip::from_image(&flash).ok_or_else(|| {
+            match tryboard_soc::boot::image_chip_id(&flash) {
                 Some(id) => format!("unsupported chip id {id} in the image header (TryBoard simulates ESP32, ESP32-C3, ESP32-S3)"),
                 None => "no ESP-IDF app image found (missing 0xE9 header / partition table)".into(),
-            }),
-            Some(Chip::Esp32c3) => {
-                let (m, a) = Esp32c3::boot(rom, flash)?;
-                Ok((
-                    Machine {
-                        hw: Hw::C3(m),
-                        elec: Board::new(ChipKind::C3),
-                        touch_int: None,
-                        harness: Harness::default(),
-                    },
-                    BootInfo {
-                        offset: a.offset,
-                        entry: a.entry,
-                        segments: a.segments.len(),
-                    },
-                ))
             }
-        }
+        })?;
+        // The only place that names concrete chip types: pick the SoC from the image header chip ID
+        let (hw, kind, offset, entry, segments): (Box<dyn tryboard_soc::chip::Chip>, _, _, _, _) =
+            match chip {
+                Chip::Esp32c3 => {
+                    let (m, a) = Esp32c3::boot(rom, flash)?;
+                    (
+                        Box::new(m),
+                        ChipKind::C3,
+                        a.offset,
+                        a.entry,
+                        a.segments.len(),
+                    )
+                }
+                Chip::Esp32s3 => {
+                    let (m, a) = Esp32s3::boot(rom, flash)?;
+                    (
+                        Box::new(m),
+                        ChipKind::S3,
+                        a.offset,
+                        a.entry,
+                        a.segments.len(),
+                    )
+                }
+                Chip::Esp32 => {
+                    let (m, a) = Esp32::boot(rom, flash)?;
+                    (
+                        Box::new(m),
+                        ChipKind::Esp32,
+                        a.offset,
+                        a.entry,
+                        a.segments.len(),
+                    )
+                }
+            };
+        Ok((
+            Machine {
+                hw,
+                chip,
+                elec: Board::new(kind),
+                touch_int: None,
+                harness: Harness::default(),
+            },
+            BootInfo {
+                offset,
+                entry,
+                segments,
+            },
+        ))
     }
 
     /// Power up after software reset: flash (incl. NVS) kept, simulated time continues.
@@ -206,11 +190,7 @@ impl Machine {
         };
         // Network conditions (D-01) belong to the router, not the board: preset, schedule and PRNG state carry over
         let cond = std::mem::take(&mut self.wifi_mut().world.cond);
-        match &mut self.hw {
-            Hw::C3(m) => m.reboot(reason)?,
-            Hw::S3(m) => m.reboot(reason)?,
-            Hw::E32(m) => m.reboot(reason)?,
-        }
+        self.hw.reboot(reason)?;
         self.apply_harness();
         {
             let t = &mut self.wifi_mut().world.net.tcp;
@@ -225,17 +205,13 @@ impl Machine {
         }
         // We don't run the ROM boot, so add the three lines ROM prints on every reset (reason worded as ROM does) so web and CLI
         // consoles show rst:0x.. (not on first power-up, so existing cases' serial output stays unchanged)
-        let banner = rom_banner(self.chip(), reason);
+        let banner = self.hw.rom_banner(reason);
         self.console_push(banner.as_bytes());
         Ok(())
     }
 
     fn console_push(&mut self, b: &[u8]) {
-        match &mut self.hw {
-            Hw::C3(m) => m.bus.console.extend_from_slice(b),
-            Hw::S3(m) => m.bus.console.extend_from_slice(b),
-            Hw::E32(m) => m.bus.console.extend_from_slice(b),
-        }
+        self.hw.console_push(b);
     }
 
     pub fn harness(&self) -> Harness {
@@ -395,19 +371,11 @@ impl Machine {
 
     /// An external event changed peripheral state: update peripherals on the next bus step (not at the cached next event)
     fn kick_events(&mut self) {
-        match &mut self.hw {
-            Hw::C3(m) => m.bus.next_event = 0,
-            Hw::S3(m) => m.bus.next_event = 0,
-            Hw::E32(m) => m.bus.next_event = 0,
-        }
+        self.hw.kick_events();
     }
 
     fn wifi_mut(&mut self) -> &mut tryboard_soc::wifi::WifiMac {
-        match &mut self.hw {
-            Hw::C3(m) => m.bus.wifi_mut(),
-            Hw::S3(m) => m.bus.wifi_mut(),
-            Hw::E32(m) => m.bus.wifi_mut(),
-        }
+        self.hw.wifi_mut()
     }
 
     /// GPIO the servo signal is on (servo current only when attached; otherwise the network has only chip and modules)
@@ -455,11 +423,7 @@ impl Machine {
 
     /// Wi-Fi MAC model (both chips share tryboard-soc's implementation): air log, frame counts
     pub fn wifi(&self) -> &tryboard_soc::wifi::WifiMac {
-        match &self.hw {
-            Hw::C3(m) => m.bus.wifi(),
-            Hw::S3(m) => m.bus.wifi(),
-            Hw::E32(m) => m.bus.wifi(),
-        }
+        self.hw.wifi()
     }
 
     /// Wi-Fi frame counts (tx, rx)
@@ -470,26 +434,7 @@ impl Machine {
 
     /// While brownout reset is held: the chip doesn't execute, time still runs (peripherals advance with CPU cycles)
     fn hold(&mut self, cycles: u64) {
-        match &mut self.hw {
-            Hw::C3(m) => {
-                m.cpu.cycles += cycles;
-                m.bus.now = m.cpu.cycles;
-            }
-            Hw::S3(m) => {
-                m.cpu.cycles += cycles;
-                m.bus.now = m.cpu.cycles;
-                if m.cpu1_on {
-                    m.cpu1.cycles = m.cpu.cycles;
-                }
-            }
-            Hw::E32(m) => {
-                m.cpu.cycles += cycles;
-                m.bus.now = m.cpu.cycles;
-                if m.cpu1_on {
-                    m.cpu1.cycles = m.cpu.cycles;
-                }
-            }
-        }
+        self.hw.hold(cycles);
     }
 
     /// After a segment, advance the power network; on brownout end the segment as reset (reason 15 = RTCWDT_BROWN_OUT_RESET)
@@ -503,45 +448,26 @@ impl Machine {
     }
 
     /// Native USB (S3 only)
-    pub fn usb(&self) -> Option<&tryboard_esp32s3::usb::Usb> {
-        match &self.hw {
-            Hw::S3(m) => m.bus.usb.as_deref(),
-            Hw::C3(_) | Hw::E32(_) => None,
-        }
+    pub fn usb(&self) -> Option<&tryboard_soc::usb::Usb> {
+        self.hw.usb()
     }
 
-    pub fn usb_mut(&mut self) -> Option<&mut tryboard_esp32s3::usb::Usb> {
-        match &mut self.hw {
-            Hw::S3(m) => m.bus.usb.as_deref_mut(),
-            Hw::C3(_) | Hw::E32(_) => None,
-        }
+    pub fn usb_mut(&mut self) -> Option<&mut tryboard_soc::usb::Usb> {
+        self.hw.usb_mut()
     }
 
     /// BLE virtual world (C-01): present only when the VHCI boundary was found in firmware (C3 only for now)
     pub fn ble(&self) -> Option<&tryboard_soc::ble::Ble> {
-        match &self.hw {
-            Hw::C3(m) => m.bus.ble.as_deref().map(|b| &*b.world),
-            Hw::S3(_) | Hw::E32(_) => None,
-        }
+        self.hw.ble()
     }
 
     pub fn ble_mut(&mut self) -> Option<&mut tryboard_soc::ble::Ble> {
-        match &mut self.hw {
-            Hw::C3(m) => m.bus.ble.as_deref_mut().map(|b| &mut *b.world),
-            Hw::S3(_) | Hw::E32(_) => None,
-        }
+        self.hw.ble_mut()
     }
 
     /// Why firmware uses BLE but the VHCI boundary wasn't found (or HLE failed); None = no BLE or all fine
     pub fn ble_error(&self) -> Option<String> {
-        match &self.hw {
-            Hw::C3(m) => m
-                .bus
-                .ble_error
-                .clone()
-                .or_else(|| m.bus.ble.as_ref().and_then(|b| b.error.clone())),
-            Hw::S3(_) | Hw::E32(_) => None,
-        }
+        self.hw.ble_error()
     }
 
     /// Virtual phone action (the part after `ble=` in the input log)
@@ -554,11 +480,7 @@ impl Machine {
     }
 
     pub fn chip(&self) -> Chip {
-        match &self.hw {
-            Hw::C3(_) => Chip::Esp32c3,
-            Hw::S3(_) => Chip::Esp32s3,
-            Hw::E32(_) => Chip::Esp32,
-        }
+        self.chip
     }
 
     /// Run cycles, then advance the power network from the chip's activity in that span.
@@ -569,20 +491,7 @@ impl Machine {
             self.hold(cycles);
             return self.after_run(c0, i0, w0, Stop::Budget);
         }
-        let r = match &mut self.hw {
-            Hw::C3(m) => {
-                let r = m.run(cycles);
-                c3_stop(m, r)
-            }
-            Hw::S3(m) => {
-                let r = m.run(cycles);
-                s3_stop(m, r)
-            }
-            Hw::E32(m) => {
-                let r = m.run(cycles);
-                e32_stop(m, r)
-            }
-        };
+        let r = self.hw.run(cycles);
         self.after_run(c0, i0, w0, r)
     }
 
@@ -592,97 +501,38 @@ impl Machine {
             self.hold(cycles);
             return self.after_run(c0, i0, w0, Stop::Budget);
         }
-        let r = match &mut self.hw {
-            Hw::C3(m) => {
-                let r = m.run_traced(cycles, ring, cap);
-                c3_stop(m, r)
-            }
-            Hw::S3(m) => {
-                let r = m.run_traced(cycles, ring, cap);
-                s3_stop(m, r)
-            }
-            Hw::E32(m) => {
-                let r = m.run_traced(cycles, ring, cap);
-                e32_stop(m, r)
-            }
-        };
+        let r = self.hw.run_traced(cycles, ring, cap);
         self.after_run(c0, i0, w0, r)
     }
 
     /// Core 0 cycle count (simulated time)
     pub fn cycles(&self) -> u64 {
-        match &self.hw {
-            Hw::C3(m) => m.cpu.cycles,
-            Hw::S3(m) => m.cpu.cycles,
-            Hw::E32(m) => m.cpu.cycles,
-        }
+        self.hw.cycles()
     }
 
     pub fn instret(&self) -> u64 {
-        match &self.hw {
-            Hw::C3(m) => m.cpu.instret,
-            Hw::S3(m) => m.cpu.instret + if m.cpu1_on { m.cpu1.instret } else { 0 },
-            Hw::E32(m) => m.cpu.instret + if m.cpu1_on { m.cpu1.instret } else { 0 },
-        }
+        self.hw.instret()
     }
 
     pub fn pc(&self) -> u32 {
-        match &self.hw {
-            Hw::C3(m) => m.cpu.pc,
-            Hw::S3(m) => m.cpu.pc,
-            Hw::E32(m) => m.cpu.pc,
-        }
+        self.hw.pc()
     }
 
     pub fn console_take(&mut self) -> Vec<u8> {
-        match &mut self.hw {
-            Hw::C3(m) => m.console_take(),
-            Hw::S3(m) => m.console_take(),
-            Hw::E32(m) => m.console_take(),
-        }
+        self.hw.console_take()
     }
 
     pub fn gpio_level(&self) -> u64 {
-        match &self.hw {
-            Hw::C3(m) => m.bus.gpio.level() as u64,
-            Hw::S3(m) => m.bus.gpio.level(),
-            Hw::E32(m) => m.bus.gpio.level(),
-        }
+        self.hw.gpio_level()
     }
 
     pub fn gpio_enable(&self) -> u64 {
-        match &self.hw {
-            Hw::C3(m) => m.bus.gpio.enable as u64,
-            Hw::S3(m) => m.bus.gpio.enable,
-            Hw::E32(m) => m.bus.gpio.enable,
-        }
+        self.hw.gpio_enable()
     }
 
     /// Drive a pin externally (button etc.). level < 0 means released (not driven)
     pub fn gpio_drive(&mut self, pin: u32, level: i32) {
-        macro_rules! drive {
-            ($m:expr, $one:expr) => {{
-                let bit = $one << pin;
-                let g = &mut $m.bus.gpio;
-                if level < 0 {
-                    g.ext_driven &= !bit;
-                } else {
-                    g.ext_driven |= bit;
-                    if level > 0 {
-                        g.ext_in |= bit;
-                    } else {
-                        g.ext_in &= !bit;
-                    }
-                }
-                let now = $m.cpu.cycles;
-                $m.bus.gpio_changed(now);
-            }};
-        }
-        match &mut self.hw {
-            Hw::C3(m) => drive!(m, 1u32),
-            Hw::S3(m) => drive!(m, 1u64),
-            Hw::E32(m) => drive!(m, 1u64),
-        }
+        self.hw.gpio_drive(pin, level);
     }
 
     /// Pin of the onboard BOOT button (C3: GPIO9, S3: GPIO0)
@@ -693,86 +543,30 @@ impl Machine {
     /// Peripheral (MMIO) address window of this chip, for the bus fuzz test (R-04)
     #[doc(hidden)]
     pub fn mmio_window(&self) -> (u32, u32) {
-        match &self.hw {
-            Hw::C3(_) => (tryboard_esp32c3::MMIO_LOW, tryboard_esp32c3::MMIO_HIGH),
-            Hw::S3(_) => (tryboard_esp32s3::MMIO_LOW, tryboard_esp32s3::MMIO_HIGH),
-            Hw::E32(_) => (tryboard_esp32::MMIO_LOW, tryboard_esp32::MMIO_HIGH),
-        }
+        self.hw.mmio_window()
     }
 
     /// Raw bus access as if the firmware did it (fuzz test only); faults are ignored, panics are the bug being hunted
     #[doc(hidden)]
     pub fn bus_poke(&mut self, addr: u32, size: u32, val: u32, write: bool) {
-        use tryboard_xtensa::Bus as XBus;
-        match &mut self.hw {
-            Hw::C3(m) => {
-                use tryboard_rv32::Bus;
-                let _ = if write {
-                    m.bus.store(addr, size, val)
-                } else {
-                    m.bus.load(addr, size).map(|_| ())
-                };
-            }
-            Hw::S3(m) => {
-                let _ = if write {
-                    m.bus.store(addr, size, val)
-                } else {
-                    XBus::load(&mut m.bus, addr, size).map(|_| ())
-                };
-            }
-            Hw::E32(m) => {
-                let _ = if write {
-                    m.bus.store(addr, size, val)
-                } else {
-                    XBus::load(&mut m.bus, addr, size).map(|_| ())
-                };
-            }
-        }
+        self.hw.bus_poke(addr, size, val, write);
     }
 
     pub fn uart_push(&mut self, data: &[u8]) {
-        match &mut self.hw {
-            Hw::C3(m) => {
-                m.bus.uart0.push_rx(data);
-                m.bus.irq_dirty = true;
-            }
-            Hw::S3(m) => {
-                m.bus.uart0.push_rx(data);
-                m.bus.irq_dirty = true;
-            }
-            Hw::E32(m) => {
-                m.bus.uart0.push_rx(data);
-                m.bus.irq_dirty = true;
-            }
-        }
+        self.hw.uart_push(data);
     }
 
     pub fn pin_pwm(&self, pin: usize) -> Option<(f32, f32)> {
-        match &self.hw {
-            Hw::C3(m) => m.bus.pin_pwm(pin),
-            Hw::S3(m) => m.bus.pin_pwm(pin),
-            Hw::E32(m) => m.bus.pin_pwm(pin),
-        }
+        self.hw.pin_pwm(pin)
     }
 
     /// Analog voltage on a pin (mV), read by the ADC
     pub fn analog_set(&mut self, pin: usize, mv: f32) {
-        let slot = match &mut self.hw {
-            Hw::C3(m) => m.bus.adc.pin_mv.get_mut(pin),
-            Hw::S3(m) => m.bus.adc.pin_mv.get_mut(pin),
-            Hw::E32(m) => m.bus.adc.pin_mv.get_mut(pin),
-        };
-        if let Some(p) = slot {
-            *p = mv;
-        }
+        self.hw.analog_set(pin, mv);
     }
 
     fn adc_model(&mut self) -> Option<&mut AdcModel> {
-        match &mut self.hw {
-            Hw::C3(m) => Some(&mut m.bus.adc.model),
-            Hw::S3(m) => Some(&mut m.bus.adc.model),
-            Hw::E32(_) => None,
-        }
+        self.hw.adc_model_mut()
     }
 
     /// `adc=ideal` (linear, noiseless) or `adc=real` (calibration curve, bends, noise; default)
@@ -783,45 +577,28 @@ impl Machine {
     }
 
     pub fn adc_ideal(&self) -> bool {
-        match &self.hw {
-            Hw::C3(m) => m.bus.adc.model.ideal,
-            Hw::S3(m) => m.bus.adc.model.ideal,
-            Hw::E32(_) => false,
-        }
+        self.hw.adc_model().is_some_and(|a| a.ideal)
     }
 
     /// Recent conversions on a pin (raw, calibrated mV), oldest first, at most 48
     pub fn adc_samples(&self, pin: usize) -> Vec<AdcSample> {
-        match &self.hw {
-            Hw::C3(m) => m.bus.adc.model.samples(pin).copied().collect(),
-            Hw::S3(m) => m.bus.adc.model.samples(pin).copied().collect(),
-            Hw::E32(_) => Vec::new(),
-        }
+        self.hw
+            .adc_model()
+            .map(|a| a.samples(pin).copied().collect())
+            .unwrap_or_default()
     }
 
     /// ADC2 reads refused because Wi-Fi held the arbiter
     pub fn adc_blocked(&self) -> u64 {
-        match &self.hw {
-            Hw::C3(m) => m.bus.adc.model.blocked,
-            Hw::S3(m) => m.bus.adc.model.blocked,
-            Hw::E32(_) => 0,
-        }
+        self.hw.adc_model().map_or(0, |a| a.blocked)
     }
 
     pub fn ws2812(&self) -> &HashMap<u32, Ws2812> {
-        match &self.hw {
-            Hw::C3(m) => &m.bus.ws2812,
-            Hw::S3(m) => &m.bus.ws2812,
-            Hw::E32(m) => &m.bus.ws2812,
-        }
+        self.hw.ws2812()
     }
 
     fn i2c0(&mut self) -> &mut tryboard_soc::i2c::I2c {
-        match &mut self.hw {
-            Hw::C3(m) => &mut m.bus.i2c0,
-            Hw::S3(m) => &mut m.bus.i2c0,
-            Hw::E32(m) => &mut m.bus.i2c0,
-        }
+        self.hw.i2c0()
     }
 
     /// Attach a device to the I2C0 bus ("ssd1306" / "bme280")
@@ -907,60 +684,41 @@ impl Machine {
     }
 
     /// Attach a screen on SPI2 (only "gc9a01" for now). Pins per chip:
-    /// S3 see tryboard_esp32s3::lcd_pin, C3 see tryboard_esp32c3::lcd_pin
+    /// see `lcd_pin` in the chip crate (C3 / S3; other chips return false)
     pub fn lcd_attach(&mut self, kind: &str) -> bool {
-        match (&mut self.hw, kind) {
-            (Hw::S3(m), "gc9a01") => {
-                m.bus.attach_lcd();
-                self.elec.add_module("gc9a01");
-                true
-            }
-            (Hw::C3(m), "gc9a01") => {
-                m.bus.attach_lcd();
-                self.elec.add_module("gc9a01");
-                true
-            }
-            _ => false,
+        if kind == "gc9a01" && self.hw.lcd_attach() {
+            self.elec.add_module("gc9a01");
+            true
+        } else {
+            false
         }
     }
 
     pub fn lcd(&mut self) -> Option<&mut Gc9a01> {
-        match &mut self.hw {
-            Hw::S3(m) => m.bus.lcd.as_deref_mut(),
-            Hw::C3(m) => m.bus.lcd.as_deref_mut(),
-            Hw::E32(_) => None,
-        }
+        self.hw.lcd()
     }
 
     pub fn audio(&self) -> Option<&Audio> {
-        let a = match &self.hw {
-            Hw::S3(m) => &m.bus.audio,
-            Hw::C3(m) => &m.bus.audio,
-            Hw::E32(m) => &m.bus.audio,
-        };
+        let a = self.hw.audio();
         (!a.is_empty()).then_some(a)
     }
 
     fn audio_mut(&mut self) -> &mut Audio {
-        match &mut self.hw {
-            Hw::S3(m) => &mut m.bus.audio,
-            Hw::C3(m) => &mut m.bus.audio,
-            Hw::E32(m) => &mut m.bus.audio,
-        }
+        self.hw.audio_mut()
     }
 
     /// Attach an I2S audio device: "max98357a" (speaker) / "inmp441" (mic). Pins per chip:
-    /// S3 see tryboard_esp32s3::i2s_pin, C3 see tryboard_esp32c3::i2s_pin
+    /// see `i2s_pin` in the chip crate (C3 / S3; other chips return false)
     pub fn i2s_attach(&mut self, kind: &str) -> bool {
-        match (&mut self.hw, kind) {
-            (Hw::S3(m), "max98357a") => m.bus.attach_speaker(),
-            (Hw::C3(m), "max98357a") => m.bus.attach_speaker(),
-            (Hw::S3(m), "inmp441") => m.bus.attach_mic(),
-            (Hw::C3(m), "inmp441") => m.bus.attach_mic(),
-            _ => return false,
+        let ok = match kind {
+            "max98357a" => self.hw.attach_speaker(),
+            "inmp441" => self.hw.attach_mic(),
+            _ => false,
+        };
+        if ok {
+            self.elec.add_module(kind);
         }
-        self.elec.add_module(kind);
-        true
+        ok
     }
 
     /// Mic hears a fixed WAV (looped); attaches a mic if none
@@ -1008,37 +766,16 @@ impl Machine {
 
     /// SPI2 transfer stats (count, MOSI bytes)
     pub fn spi_stats(&self) -> (u64, u64) {
-        match &self.hw {
-            Hw::S3(m) => (m.bus.spi2.transfers, m.bus.spi2.bytes),
-            Hw::C3(m) => (m.bus.spi2.transfers, m.bus.spi2.bytes),
-            Hw::E32(_) => (0, 0),
-        }
+        self.hw.spi2_stats()
     }
 
     fn pins(&mut self) -> &mut tryboard_soc::devices::pins::PinDevices {
-        match &mut self.hw {
-            Hw::C3(m) => &mut m.bus.pins,
-            Hw::S3(m) => &mut m.bus.pins,
-            Hw::E32(m) => &mut m.bus.pins,
-        }
+        self.hw.pins()
     }
 
     /// Make the SoC poll external pin devices again right away (a new waveform was queued)
     fn pins_kick(&mut self) {
-        match &mut self.hw {
-            Hw::C3(m) => {
-                m.bus.next_event = 0;
-                m.bus.irq_dirty = true;
-            }
-            Hw::S3(m) => {
-                m.bus.next_event = 0;
-                m.bus.irq_dirty = true;
-            }
-            Hw::E32(m) => {
-                m.bus.next_event = 0;
-                m.bus.irq_dirty = true;
-            }
-        }
+        self.hw.kick_pins();
     }
 
     /// Attach a rotary encoder (P2-01): A / B phases and optional switch pin; 3V3-powered, current goes to the power network
@@ -1115,48 +852,26 @@ impl Machine {
 
     /// Timing-sensitive code report line (D-03), None when nothing was detected; C3 only for now
     pub fn timing_line(&self) -> Option<String> {
-        match &self.hw {
-            Hw::C3(m) => m.bus.timing.line(),
-            Hw::S3(_) | Hw::E32(_) => None,
-        }
+        self.hw.timing_line()
     }
 
     /// The same as JSON for the web: {"line":..,"items":[{"pin","kind","n"}]} or {}
     pub fn timing_json(&self) -> String {
-        match &self.hw {
-            Hw::C3(m) => m.bus.timing.json(),
-            Hw::S3(_) | Hw::E32(_) => "{}".into(),
-        }
+        self.hw.timing_json()
     }
 
     /// Current count of pulse counter unit u (only S3 has PCNT)
     pub fn pcnt_count(&self, u: usize) -> Option<i16> {
-        match &self.hw {
-            Hw::S3(m) => Some(m.bus.pcnt.count(u)),
-            Hw::C3(_) | Hw::E32(_) => None,
-        }
+        self.hw.pcnt_count(u)
     }
 
     /// GPIO level change log (cycle, levels)
     pub fn gpio_log(&self) -> Vec<(u64, u64)> {
-        match &self.hw {
-            Hw::C3(m) => m
-                .bus
-                .gpio_log
-                .iter()
-                .map(|(t, l)| (*t, *l as u64))
-                .collect(),
-            Hw::S3(m) => m.bus.gpio_log.clone(),
-            Hw::E32(m) => m.bus.gpio_log.clone(),
-        }
+        self.hw.gpio_log()
     }
 
     fn iotrace(&mut self) -> &mut IoTrace {
-        match &mut self.hw {
-            Hw::C3(m) => &mut m.bus.iotrace,
-            Hw::S3(m) => &mut m.bus.iotrace,
-            Hw::E32(m) => &mut m.bus.iotrace,
-        }
+        self.hw.iotrace()
     }
 
     /// GPIOs the logic analyzer watches (bit = pin). PWM / WS2812 / I2C events are always logged
@@ -1212,11 +927,7 @@ impl Machine {
     }
 
     fn tasktrace(&mut self) -> &mut TaskTrace {
-        match &mut self.hw {
-            Hw::C3(m) => &mut m.bus.tasks,
-            Hw::S3(m) => &mut m.bus.tasks,
-            Hw::E32(m) => &mut m.bus.tasks,
-        }
+        self.hw.tasktrace()
     }
 
     /// Enable the task timeline (C-04): event cap (entries), 0 = don't record
@@ -1240,27 +951,16 @@ impl Machine {
 
     /// Core count (task timeline lanes)
     pub fn cores(&self) -> usize {
-        match &self.hw {
-            Hw::C3(_) => 1,
-            Hw::S3(_) | Hw::E32(_) => 2,
-        }
+        self.hw.cores()
     }
 
     /// Pin levels at power-up (gpio_log's starting point)
     pub fn gpio_reset_level(&self) -> u64 {
-        match &self.hw {
-            Hw::C3(_) => 0,
-            Hw::S3(_) | Hw::E32(_) => 1,
-        }
+        self.hw.gpio_reset_level()
     }
 
     pub fn unimpl(&self) -> Vec<(u32, u64)> {
-        let m = match &self.hw {
-            Hw::C3(m) => &m.bus.unimpl,
-            Hw::S3(m) => &m.bus.unimpl,
-            Hw::E32(m) => &m.bus.unimpl,
-        };
-        let mut v: Vec<_> = m.iter().map(|(a, n)| (*a, *n)).collect();
+        let mut v: Vec<_> = self.hw.unimpl().iter().map(|(a, n)| (*a, *n)).collect();
         // Address breaks count ties so reports are identical run to run (HashMap order is random)
         v.sort_by_key(|x| (std::cmp::Reverse(x.1), x.0));
         v
@@ -1268,117 +968,37 @@ impl Machine {
 
     /// Read a 32-bit word (debug; triggers MMIO read side effects)
     pub fn peek(&mut self, a: u32) -> Option<u32> {
-        match &mut self.hw {
-            Hw::C3(m) => tryboard_rv32::Bus::load(&mut m.bus, a, 4).ok(),
-            Hw::S3(m) => tryboard_xtensa::Bus::load(&mut m.bus, a, 4).ok(),
-            Hw::E32(m) => tryboard_xtensa::Bus::load(&mut m.bus, a, 4).ok(),
-        }
+        self.hw.peek(a)
     }
 
     /// CPU state description at halt (debug); sym maps addresses to symbols
     pub fn debug_state(&self, sym: &dyn Fn(u32) -> String) -> String {
-        match &self.hw {
-            Hw::C3(m) => format!("pc {}  ra {}", sym(m.cpu.pc), sym(m.cpu.x[1])),
-            Hw::S3(m) => xtensa_state(&m.cpu, m.cpu1_on.then_some(&m.cpu1), sym),
-            Hw::E32(m) => xtensa_state(&m.cpu, m.cpu1_on.then_some(&m.cpu1), sym),
-        }
+        self.hw.debug_state(sym)
     }
-}
 
-/// Halt state of dual-core Xtensa (shared by S3 and ESP32)
-fn xtensa_state(
-    c0: &tryboard_xtensa::Cpu,
-    c1: Option<&tryboard_xtensa::Cpu>,
-    sym: &dyn Fn(u32) -> String,
-) -> String {
-    use tryboard_xtensa::sr;
-    let core = |c: &tryboard_xtensa::Cpu, k: usize| {
-        format!(
-            "core{k} pc {}  PS=0x{:08x} WB={} WS=0x{:04x} INTENABLE=0x{:08x} INTERRUPT=0x{:08x} EXCCAUSE={} EPC1={}",
-            sym(c.pc),
-            c.ps(),
-            c.windowbase,
-            c.windowstart,
-            c.read_sr(sr::INTENABLE),
-            c.read_sr(sr::INTERRUPT),
-            c.read_sr(sr::EXCCAUSE),
-            sym(c.read_sr(sr::EPC1)),
-        )
-    };
-    let mut s = core(c0, 0);
-    if let Some(c1) = c1 {
-        s += "\n[tryboard] ";
-        s += &core(c1, 1);
+    /// Record accesses to this MMIO range (CLI `--watch`; C3 only for now, other chips ignore it)
+    pub fn set_watch(&mut self, range: Option<(u32, u32)>) {
+        self.hw.set_watch(range);
     }
-    s
+
+    /// Watched accesses so far: (pc, address, value, is write)
+    pub fn watch_hits(&self) -> &[(u32, u32, u32, bool)] {
+        self.hw.watch_hits()
+    }
+
+    /// Raw bytes for CLI `--dump` (C3 only for now; None elsewhere)
+    pub fn dump(&mut self, addr: u32, len: u32) -> Option<Vec<u8>> {
+        self.hw.dump(addr, len)
+    }
+
+    /// Interrupt controller state for CLI `--dump-intc` (C3 only for now)
+    pub fn intc_report(&self) -> Option<String> {
+        self.hw.intc_report()
+    }
 }
 
 /// RTCWDT_BROWN_OUT_RESET (esp_rom rtc.h, same on S3 / C3): esp_reset_reason() reads ESP_RST_BROWNOUT
 pub const BROWNOUT_RESET: u32 = 15;
-
-/// The three lines ROM prints after reset (format of ESP32-S3 rev0 ROM 20210327, ESP32-C3 ROM 20210207)
-pub fn rom_banner(chip: Chip, reason: u32) -> String {
-    let name = match reason {
-        1 => "POWERON",
-        3 => "RTC_SW_SYS_RST",
-        12 => "RTC_SW_CPU_RST",
-        15 => "BROWNOUT_RST",
-        _ => "UNKNOWN",
-    };
-    match chip {
-        // Classic ESP32 first-gen ROM (2016-06-08): only two lines, old-style reset reason names
-        Chip::Esp32 => {
-            let name = match reason {
-                1 => "POWERON_RESET",
-                3 => "SW_RESET",
-                12 => "SW_CPU_RESET",
-                15 => "RTCWDT_BROWN_OUT_RESET",
-                _ => "UNKNOWN",
-            };
-            format!("ets Jun  8 2016 00:22:57\n\nrst:0x{reason:x} ({name}),boot:0x13 (SPI_FAST_FLASH_BOOT)\n")
-        }
-        Chip::Esp32s3 => format!("ESP-ROM:esp32s3-20210327\nBuild:Mar 27 2021\nrst:0x{reason:x} ({name}),boot:0x8 (SPI_FAST_FLASH_BOOT)\n"),
-        Chip::Esp32c3 => format!("ESP-ROM:esp32c3-api1-20210207\nBuild:Feb  7 2021\nrst:0x{reason:x} ({name}),boot:0xc (SPI_FAST_FLASH_BOOT)\n"),
-    }
-}
-
-fn c3_stop(m: &Esp32c3, r: tryboard_esp32c3::Stop) -> Stop {
-    use tryboard_esp32c3::Stop as S;
-    match r {
-        S::Budget => Stop::Budget,
-        S::Fault { cause, pc, tval } => Stop::Fault(format!(
-            "CPU exception cause={cause} pc=0x{pc:08x} tval=0x{tval:08x}"
-        )),
-        S::Hle(pc) => Stop::Hle(format!("0x{pc:08x} {}", m.symbol_at(pc).unwrap_or(""))),
-        S::Reset(r) => Stop::Reset(r),
-    }
-}
-
-fn e32_stop(m: &Esp32, r: tryboard_esp32::Stop) -> Stop {
-    use tryboard_esp32::Stop as S;
-    match r {
-        S::Budget => Stop::Budget,
-        S::Fault { cause, epc, vaddr } => Stop::Fault(format!(
-            "CPU exception EXCCAUSE={cause} EPC1=0x{epc:08x} EXCVADDR=0x{vaddr:08x}"
-        )),
-        S::Break(v) => Stop::Fault(format!("BREAK 0x{v:x}")),
-        S::Hle(pc) => Stop::Hle(format!("0x{pc:08x} {}", m.symbol_at(pc).unwrap_or(""))),
-        S::Reset(r) => Stop::Reset(r),
-    }
-}
-
-fn s3_stop(m: &Esp32s3, r: tryboard_esp32s3::Stop) -> Stop {
-    use tryboard_esp32s3::Stop as S;
-    match r {
-        S::Budget => Stop::Budget,
-        S::Fault { cause, epc, vaddr } => Stop::Fault(format!(
-            "CPU exception EXCCAUSE={cause} EPC1=0x{epc:08x} EXCVADDR=0x{vaddr:08x}"
-        )),
-        S::Break(v) => Stop::Fault(format!("BREAK 0x{v:x}")),
-        S::Hle(pc) => Stop::Hle(format!("0x{pc:08x} {}", m.symbol_at(pc).unwrap_or(""))),
-        S::Reset(r) => Stop::Reset(r),
-    }
-}
 
 pub use tryboard_soc::devices::bme280::Env as SensorEnv;
 pub use tryboard_soc::devices::imu::Pose as ImuPose;
@@ -1486,16 +1106,10 @@ pub fn i2c_ack_lines(m: &Machine) -> String {
             *acks.entry(*a).or_insert(0) += ok;
         }
     };
-    match &m.hw {
-        Hw::C3(c) => add(&c.bus.i2c0),
-        Hw::S3(s) => {
-            add(&s.bus.i2c0);
-            add(&s.bus.i2c1);
-        }
-        Hw::E32(s) => {
-            add(&s.bus.i2c0);
-            add(&s.bus.i2c1);
-        }
+    let mut n = 0;
+    while let Some(b) = m.hw.i2c(n) {
+        add(b);
+        n += 1;
     }
     acks.iter()
         .map(|(a, n)| format!("[tryboard] I2C 0x{a:02x} acked {n} times\n"))

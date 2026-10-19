@@ -2,6 +2,7 @@
 //! matching C3 / S3 reuse their models, offset-shifted ones (TIMG, SPI1, LEDC) get a shim in periph.rs. Run loop as S3.
 
 pub mod boot;
+mod chip;
 pub mod crypto;
 pub mod hle;
 pub mod periph;
