@@ -1,4 +1,4 @@
-/* 访存：L8UI/L16UI/L16SI/L32I/S8I/S16I/S32I、窄指令 L32I.N/S32I.N、L32R、L32AI/S32RI、S32C1I、非对齐 */
+/* Memory: L8UI/L16UI/L16SI/L32I/S8I/S16I/S32I, narrow L32I.N/S32I.N, L32R, L32AI/S32RI, S32C1I, unaligned */
 #include "check.h"
     TEST_BEGIN
     movi    a2, buf
@@ -24,17 +24,17 @@
     s16i    a3, a2, 2
     l32i    a4, a2, 0
     EXPECT  a4, 0x345612BB, 8
-    /* 大偏移：l32i 偏移 1020 */
+    /* large offset: l32i offset 1020 */
     movi    a3, 0xCAFE
     s32i    a3, a2, 1020
     l32i    a4, a2, 1020
     EXPECT  a4, 0xCAFE, 9
-    /* 窄指令 */
+    /* narrow instructions */
     movi    a3, 77
     s32i.n  a3, a2, 60
     l32i.n  a4, a2, 60
     EXPECT  a4, 77, 10
-    /* L32R：取字面量池里的常数 */
+    /* L32R: load a constant from the literal pool */
     l32r    a4, lit_const
     EXPECT  a4, 0xDEADBEEF, 11
     /* L32AI / S32RI */
@@ -42,7 +42,7 @@
     s32ri   a3, a2, 8
     l32ai   a4, a2, 8
     EXPECT  a4, 0x1111, 12
-    /* S32C1I：相等才写入，at 总拿到旧值 */
+    /* S32C1I: stores only if equal; at always gets the old value */
     movi    a3, 5
     s32i    a3, a2, 16
     movi    a5, 5
@@ -57,7 +57,7 @@
     EXPECT  a6, 9, 15
     l32i    a4, a2, 16
     EXPECT  a4, 9, 16
-    /* 非对齐（S3 硬件支持） */
+    /* unaligned (supported by S3 hardware) */
     movi    a3, 0x44332211
     s32i    a3, a2, 32
     movi    a3, 0x88776655

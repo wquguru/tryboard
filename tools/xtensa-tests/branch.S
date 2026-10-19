@@ -1,14 +1,14 @@
-/* 分支与跳转：全部 B* 形式、BEQZ.N/BNEZ.N、J/JX、CALL0/CALLX0/RET（RET.N） */
+/* Branches and jumps: every B* form, BEQZ.N/BNEZ.N, J/JX, CALL0/CALLX0/RET (RET.N) */
 #include "check.h"
 
-/* 期望分支被执行：没跳就失败 */
+/* Expect the branch taken: fail if it falls through */
     .macro TAKEN insn:vararg
     \insn, .Lt\@
     movi    a2, 100
     retw
 .Lt\@:
     .endm
-/* 期望分支不执行 */
+/* Expect the branch not taken */
     .macro NOTTAKEN case, insn:vararg
     \insn, .Lnt\@
     j       .Lnt_ok\@
@@ -58,7 +58,7 @@
     TAKEN   bltui a3, 6
     NOTTAKEN 12, bltui a4, 256
     TAKEN   bgeui a4, 65536
-    /* 位测试 */
+    /* bit tests */
     TAKEN   bany a7, a8
     NOTTAKEN 13, bnone a7, a8
     movi    a9, 3
@@ -75,7 +75,7 @@
     movi    a10, 0x80000000
     TAKEN   bbsi a10, 31
     NOTTAKEN 15, bbci a10, 31
-    /* 窄分支 */
+    /* narrow branches */
     TAKEN   beqz.n a6
     TAKEN   bnez.n a3
     NOTTAKEN 16, beqz.n a3
@@ -88,9 +88,9 @@
     movi    a2, 18
     retw
 2:
-    /* CALL0 / CALLX0 / RET：叶函数用 a0 返回，不动窗口 */
+    /* CALL0 / CALLX0 / RET: leaf functions return via a0 without touching the window */
     movi    a11, 0
-    mov     a12, a0          /* call0 会覆盖 a0（本窗口的返回地址），先存起来 */
+    mov     a12, a0          /* call0 clobbers a0 (this window's return address), so save it */
     call0   leaf_inc
     call0   leaf_inc
     movi    a9, leaf_inc

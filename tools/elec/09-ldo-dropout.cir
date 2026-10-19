@@ -1,4 +1,4 @@
-* 09 LDO 压差区：输入 3.45 V（内阻 0.2 Ω），负载 0.4 A
+* 09 LDO dropout: 3.45 V input (0.2 ohm source), 0.4 A load
 V1 s 0 DC 3.45
 R1 s vin 0.2
 *tb: LDO vin vout 3.3 0.01 0.525 1.2 0

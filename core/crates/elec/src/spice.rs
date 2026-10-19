@@ -1,21 +1,18 @@
-//! 读 SPICE 网表的一个小子集，给 tools/elec 与 ngspice 对照用（`tryboard elec-net`）。
-//! 支持：R / C / V（DC）/ I（DC）、`.op`、`.tran 步长 终止`，数值后缀 f p n u m k meg g。
-//! 自定义元件写成以 `*tb:` 开头的注释行（ngspice 当注释跳过，它那边用等价的 B 源）：
-//!   *tb: LIMIT 节点 vs r ilim rlim
-//!   *tb: LDO 输入 输出 vset rout rdo ilim iq
-//!   *tb: LOAD 节点 电流 vknee
-//!   *tb: MOTOR 节点 vcmd emf r
-//!   *tb: DIODE 阳极 阴极 vf rd
-//! B 源行在这里被忽略。节点名任意，0 / gnd 是地。
+//! Tiny SPICE subset for the tools/elec ngspice comparison (`tryboard elec-net`): R / C / V (DC) / I (DC), `.op`,
+//! `.tran step stop`, suffixes f p n u m k meg g. Custom parts are `*tb:` comment lines (ngspice skips them and uses
+//! equivalent B sources, which we ignore). Syntax table (lint: allow-long-comment):
+//!   *tb: LIMIT node vs r ilim rlim | LDO in out vset rout rdo ilim iq | LOAD node i vknee
+//!   *tb: MOTOR node vcmd emf r | DIODE anode cathode vf rd
+//! Node names are free-form; 0 / gnd is ground.
 
 use crate::mna::{Circuit, Elem};
 
 #[derive(Debug, Default)]
 pub struct Netlist {
     pub circuit: Circuit,
-    /// 节点名（下标 = 节点号，0 号是地）
+    /// Node names (index = node number, 0 is ground)
     pub names: Vec<String>,
-    /// .tran（步长, 终止）；None = 只算直流工作点
+    /// .tran (step, stop); None = DC operating point only
     pub tran: Option<(f64, f64)>,
 }
 
@@ -29,7 +26,7 @@ pub fn value(s: &str) -> Option<f64> {
     let n = t
         .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-' || c == '+' || c == 'e'))
         .unwrap_or(t.len());
-    // "1e" 之类不能把后缀里的 e 当指数：先按最长数字前缀解析，失败就往回缩
+    // Don't read a suffix like "1e" as an exponent: parse the longest numeric prefix and shrink it until it parses
     let (mut num, mut rest) = (&t[..n], &t[n..]);
     while !num.is_empty() && num.parse::<f64>().is_err() {
         let k = num.len() - 1;
@@ -75,13 +72,17 @@ impl Netlist {
         let mut elems = Vec::new();
         for (ln, raw) in text.lines().enumerate().skip(1) {
             let line = raw.trim();
-            let bad = |what: &str| format!("第 {} 行：{what}：{line}", ln + 1);
+            let bad = |what: &str| format!("line {}: {what}: {line}", ln + 1);
             if line.is_empty() || line.starts_with('+') {
                 continue;
             }
             if let Some(rest) = line.strip_prefix("*tb:") {
                 let f: Vec<&str> = rest.split_whitespace().collect();
-                let num = |i: usize| f.get(i).and_then(|x| value(x)).ok_or_else(|| bad("缺数值"));
+                let num = |i: usize| {
+                    f.get(i)
+                        .and_then(|x| value(x))
+                        .ok_or_else(|| bad("missing value"))
+                };
                 let e = match f.first().map(|s| s.to_ascii_uppercase()).as_deref() {
                     Some("LIMIT") => Elem::Limit {
                         a: nl.node(f[1]),
@@ -119,7 +120,7 @@ impl Netlist {
                         vf: num(3)?,
                         rd: num(4)?,
                     },
-                    _ => return Err(bad("不认识的 *tb: 元件")),
+                    _ => return Err(bad("unknown *tb: part")),
                 };
                 elems.push(e);
                 continue;
@@ -133,11 +134,11 @@ impl Netlist {
                 let st = f
                     .get(1)
                     .and_then(|x| value(x))
-                    .ok_or_else(|| bad(".tran 步长"))?;
+                    .ok_or_else(|| bad(".tran step"))?;
                 let end = f
                     .get(2)
                     .and_then(|x| value(x))
-                    .ok_or_else(|| bad(".tran 终止"))?;
+                    .ok_or_else(|| bad(".tran stop"))?;
                 nl.tran = Some((st, end));
                 continue;
             }
@@ -149,22 +150,22 @@ impl Netlist {
                 continue;
             }
             if f.len() < 4 {
-                return Err(bad("字段不够"));
+                return Err(bad("too few fields"));
             }
             let (a, b) = (nl.node(f[1]), nl.node(f[2]));
-            // V / I 的值可以写成 "DC 5"
+            // V / I values may be written as "DC 5"
             let vtxt = if f[3].eq_ignore_ascii_case("dc") {
                 f.get(4).copied().unwrap_or("")
             } else {
                 f[3]
             };
-            let x = value(vtxt).ok_or_else(|| bad("数值"))?;
+            let x = value(vtxt).ok_or_else(|| bad("value"))?;
             elems.push(match kind {
                 'r' => Elem::R { a, b, r: x },
                 'c' => Elem::C { a, b, c: x },
                 'v' => Elem::V { a, b, v: x, r: 0.0 },
                 'i' => Elem::I { a, b, i: x },
-                _ => return Err(bad("不支持的元件")),
+                _ => return Err(bad("unsupported part")),
             });
         }
         nl.circuit = Circuit {
@@ -174,7 +175,7 @@ impl Netlist {
         Ok(nl)
     }
 
-    /// 跑一遍：.op 返回一组电压；.tran 从全 0（电容未充电，同 ngspice `uic`）开始，返回每个时刻的电压
+    /// .op returns one voltage set; .tran starts from all-zero (uncharged caps, like ngspice `uic`) and returns each requested time
     pub fn run(&self, at: &[f64]) -> Vec<(f64, Vec<f64>)> {
         match self.tran {
             None => vec![(0.0, self.circuit.solve(None, &[], &[]).v)],
@@ -219,7 +220,7 @@ mod tests {
         let nl = Netlist::parse("title\nV1 in 0 DC 9\nR1 in mid 1k\nR2 mid 0 2k\n*tb: LOAD mid 1m 0.5\nB1 mid 0 I=1m\n.op\n.end\n").unwrap();
         let r = nl.run(&[]);
         let mid = nl.names.iter().position(|x| x == "mid").unwrap();
-        // 9 V 经 1k/2k 分压 6 V，再被 1 mA 拉低 1k∥2k = 0.667 V
+        // 9 V through 1k/2k divides to 6 V; the 1 mA load pulls it down by 1k||2k = 0.667 V
         assert!((r[0].1[mid] - (6.0 - 2.0 / 3.0)).abs() < 1e-6, "{:?}", r);
     }
 }

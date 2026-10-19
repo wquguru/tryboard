@@ -1,6 +1,7 @@
-//! 虚拟 USB 主机（"插在另一头的电脑 / 手机"）：检测连接 → 总线复位 → 枚举 → 设置配置 → 按类驱动轮询。
-//! 支持的类：HID（键盘、鼠标，按报告描述符识别报告 ID）、CDC-ACM（虚拟串口，双向收发）。
-//! 以 0.25ms 为一拍推进；每拍对每个端点最多做一次事务（NAK 就下拍再试），和真实主机的重试节奏同量级。
+//! Virtual USB host (the "PC / phone on the other end"): detect attach -> bus reset -> enumerate -> set config -> poll per class.
+//! Classes: HID (keyboard, mouse; report IDs from the report descriptor), CDC-ACM (virtual serial, both directions).
+//! Ticks every 0.25ms with at most one transaction per endpoint per tick (NAK retries next tick), like a real host's
+//! retry cadence. lint: allow-long-comment
 
 use super::dwc2::{Dwc2, Handshake, Mem};
 
@@ -13,7 +14,7 @@ pub struct DeviceInfo {
     pub manufacturer: String,
     pub product: String,
     pub serial: String,
-    /// 每个接口一行："HID 键盘 + 鼠标"、"CDC-ACM 虚拟串口" ……
+    /// One line per interface, e.g. HID keyboard + mouse, CDC-ACM virtual serial
     pub interfaces: Vec<String>,
     pub ep0_mps: u8,
 }
@@ -32,7 +33,7 @@ struct HidItf {
     interval: u8,
     report_len: u16,
     protocol: u8,
-    /// 报告 ID → 类型；空表示没有报告 ID
+    /// Report ID -> kind; empty means no report IDs
     ids: Vec<(u8, HidKind)>,
     next_poll: u64,
 }
@@ -45,7 +46,7 @@ struct CdcItf {
     mps_out: usize,
 }
 
-/// 控制传输
+/// Control transfer
 #[derive(Debug, Clone)]
 struct Ctrl {
     setup: [u8; 8],
@@ -83,11 +84,11 @@ enum Req {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum State {
     Detached,
-    /// 检测到上拉，等去抖
+    /// Pull-up detected, waiting out debounce
     Attached(u64),
-    /// 复位中（SE0），到时间发 ENUMDNE
+    /// In reset (SE0); sends ENUMDNE when time is up
     Reset(u64),
-    /// 复位后恢复期
+    /// Recovery period after reset
     Recovery(u64),
     Enumerating,
     Configured,
@@ -102,23 +103,23 @@ pub struct Host {
     config: Vec<u8>,
     hid: Vec<HidItf>,
     cdc: Vec<CdcItf>,
-    /// 枚举过程日志（CLI / 网页显示）
+    /// Enumeration log (shown by CLI / web page)
     pub log: Vec<String>,
-    /// 键盘打出的文字
+    /// Text typed by the keyboard
     pub typed: String,
     last_keys: Vec<u8>,
-    /// 鼠标：累计位置、按键、报告数
+    /// Mouse: accumulated position, buttons, report count
     pub mouse: (i32, i32, u8, u64),
     pub cdc_rx: Vec<u8>,
     pub cdc_tx: Vec<u8>,
-    /// 当前时间（微秒）
+    /// Current time (microseconds)
     now_us: u64,
     last_frame_us: u64,
-    /// 已收到的 HID 报告数（调试）
+    /// HID reports received (debug)
     pub hid_reports: u64,
-    /// 失败重试计数
+    /// Failure retry count
     naks: u32,
-    /// 厂商 / 产品 / 序列号字符串序号
+    /// Manufacturer / product / serial string indices
     str_idx: [u8; 3],
 }
 
@@ -168,7 +169,7 @@ fn utf16(d: &[u8]) -> String {
     String::from_utf16_lossy(&w)
 }
 
-/// HID 键码 → 字符（美式布局），shift 为是否按下 Shift
+/// HID keycode -> character (US layout); `shift` is whether Shift is held
 fn keycode_char(k: u8, shift: bool) -> Option<char> {
     let c = match k {
         0x04..=0x1d => {
@@ -265,7 +266,7 @@ fn keycode_char(k: u8, shift: bool) -> Option<char> {
     Some(c)
 }
 
-/// 粗解析 HID 报告描述符：找出每个应用集合（键盘 / 鼠标）对应的报告 ID
+/// Rough parse of the HID report descriptor: report ID of each application collection (keyboard / mouse)
 fn parse_report_desc(d: &[u8]) -> Vec<(u8, HidKind)> {
     let mut out = Vec::new();
     let (mut page, mut usage, mut depth) = (0u32, 0u32, 0i32);
@@ -274,7 +275,7 @@ fn parse_report_desc(d: &[u8]) -> Vec<(u8, HidKind)> {
     while i < d.len() {
         let b = d[i];
         if b == 0xfe {
-            // 长项
+            // Long item
             let len = *d.get(i + 1).unwrap_or(&0) as usize;
             i += 3 + len;
             continue;
@@ -317,11 +318,11 @@ impl Host {
 
     pub fn state_name(&self) -> &'static str {
         match self.state {
-            State::Detached => "未连接",
-            State::Attached(_) | State::Reset(_) | State::Recovery(_) => "复位中",
-            State::Enumerating => "枚举中",
-            State::Configured => "已配置",
-            State::Failed => "枚举失败",
+            State::Detached => "detached",
+            State::Attached(_) | State::Reset(_) | State::Recovery(_) => "resetting",
+            State::Enumerating => "enumerating",
+            State::Configured => "configured",
+            State::Failed => "failed",
         }
     }
 
@@ -329,13 +330,13 @@ impl Host {
         self.state == State::Configured
     }
 
-    /// 推进到 now_us；返回下一次需要被调用的时间（微秒）
+    /// Advance to now_us; returns the next time (microseconds) we need to be called
     pub fn tick(&mut self, dev: &mut Dwc2, mem: &mut dyn Mem, now_us: u64) -> u64 {
         self.now_us = now_us;
-        // 断开：回到未连接
+        // Disconnected: back to detached
         if !dev.connected() {
             if self.state != State::Detached {
-                self.say("设备断开".into());
+                self.say("device detached".into());
                 *self = Host {
                     log: std::mem::take(&mut self.log),
                     ..Default::default()
@@ -349,11 +350,11 @@ impl Host {
         }
         match self.state {
             State::Detached => {
-                self.say("检测到 D+ 上拉：全速设备接入".into());
+                self.say("D+ pull-up detected: full-speed device attached".into());
                 self.state = State::Attached(now_us + 10_000);
             }
             State::Attached(t) if now_us >= t => {
-                self.say("总线复位".into());
+                self.say("bus reset".into());
                 dev.bus_reset();
                 self.state = State::Reset(now_us + 10_000);
             }
@@ -407,7 +408,7 @@ impl Host {
                 setup_pkt(0x21, 0x20, 0, self.cdc[k].comm_itf as u16, 7),
                 vec![0x00, 0xc2, 0x01, 0x00, 0, 0, 8],
             ),
-            // DTR | RTS：终端程序打开了串口
+            // DTR | RTS: a terminal program opened the port
             Req::CdcCtrl(k) => (
                 setup_pkt(0x21, 0x22, 3, self.cdc[k].comm_itf as u16, 0),
                 vec![],
@@ -431,7 +432,7 @@ impl Host {
             let w = self.queue.remove(0);
             self.start(w);
         }
-        // 一拍内尽量往前推，直到碰到 NAK
+        // Push as far as possible within one tick, until a NAK
         for _ in 0..8 {
             let Some(c) = self.ctrl.as_mut() else { return };
             let len = u16::from_le_bytes([c.setup[6], c.setup[7]]) as usize;
@@ -446,7 +447,7 @@ impl Host {
                     } else {
                         Stage::DataOut(0)
                     };
-                    // 设备要先处理 SETUP 中断，这一拍到此为止
+                    // The device must handle the SETUP interrupt first; this tick ends here
                     return;
                 }
                 Stage::DataIn => match dev.token_in(0, mem) {
@@ -492,10 +493,10 @@ impl Host {
 
     fn nak(&mut self) {
         self.naks += 1;
-        // 2 秒（8000 拍）没有进展：放弃这个请求
+        // No progress for 2 s (8000 ticks): give up on this request
         if self.naks > 8000 {
             let w = self.ctrl.take().map(|c| c.what);
-            self.say(format!("控制传输超时：{w:?}"));
+            self.say(format!("control transfer timed out: {w:?}"));
             if self.state == State::Enumerating {
                 self.state = State::Failed;
             }
@@ -504,7 +505,7 @@ impl Host {
 
     fn stalled(&mut self) {
         let c = self.ctrl.take().unwrap();
-        self.say(format!("设备 STALL：{:?}（忽略，继续）", c.what));
+        self.say(format!("device STALL: {:?} (ignored, continuing)", c.what));
         if c.what == Req::DevDesc8 || c.what == Req::ConfigHead {
             self.state = State::Failed;
         }
@@ -517,7 +518,7 @@ impl Host {
             Req::DevDesc8 => {
                 self.info.ep0_mps = *d.get(7).unwrap_or(&64);
                 self.say(format!(
-                    "GET_DESCRIPTOR(设备) 前 {} 字节：EP0 最大包长 {}",
+                    "GET_DESCRIPTOR(device) first {} bytes: EP0 max packet size {}",
                     d.len(),
                     self.info.ep0_mps
                 ));
@@ -534,7 +535,7 @@ impl Host {
                     self.info.vid = u16::from_le_bytes([d[8], d[9]]);
                     self.info.pid = u16::from_le_bytes([d[10], d[11]]);
                     self.say(format!(
-                        "设备描述符：USB {:x}.{:02x}，VID 0x{:04X} PID 0x{:04X}，类 0x{:02X}",
+                        "device descriptor: USB {:x}.{:02x}, VID 0x{:04X} PID 0x{:04X}, class 0x{:02X}",
                         self.info.usb_version >> 8,
                         self.info.usb_version & 0xff,
                         self.info.vid,
@@ -542,7 +543,7 @@ impl Host {
                         self.info.class
                     ));
                     self.queue.push(Req::ConfigHead);
-                    // 记下字符串序号，配置描述符之后取
+                    // Remember string indices; fetch them after the config descriptor
                     for (k, &i) in [d[14], d[15], d[16]].iter().enumerate() {
                         if i != 0 {
                             self.str_idx[k] = i;
@@ -580,10 +581,10 @@ impl Host {
                 if i == self.str_idx[2] {
                     self.info.serial = s.clone();
                 }
-                self.say(format!("字符串 {i}：\"{s}\""));
+                self.say(format!("string {i}: \"{s}\""));
             }
             Req::SetConfig => {
-                self.say("SET_CONFIGURATION(1)：设备进入已配置状态".into());
+                self.say("SET_CONFIGURATION(1): device configured".into());
                 for k in 0..self.hid.len() {
                     self.queue.push(Req::HidIdle(k));
                     self.queue.push(Req::HidReport(k));
@@ -601,21 +602,21 @@ impl Host {
                     .iter()
                     .map(|(id, kind)| {
                         let n = match kind {
-                            HidKind::Keyboard => "键盘",
-                            HidKind::Mouse => "鼠标",
-                            HidKind::Other => "其他",
+                            HidKind::Keyboard => "keyboard",
+                            HidKind::Mouse => "mouse",
+                            HidKind::Other => "other",
                         };
                         if *id == 0 {
                             n.to_string()
                         } else {
-                            format!("报告 {id}={n}")
+                            format!("report {id}={n}")
                         }
                     })
                     .collect();
                 self.say(format!(
-                    "HID 报告描述符 {} 字节：{}",
+                    "HID report descriptor {} bytes: {}",
                     d.len(),
-                    desc.join("，")
+                    desc.join(", ")
                 ));
                 let h = &mut self.hid[k];
                 h.ids = ids;
@@ -634,7 +635,7 @@ impl Host {
             }
             Req::CdcLine(_) => self.say("CDC SET_LINE_CODING 115200 8N1".into()),
             Req::CdcCtrl(_) => {
-                self.say("CDC SET_CONTROL_LINE_STATE DTR=1 RTS=1（终端已打开）".into())
+                self.say("CDC SET_CONTROL_LINE_STATE DTR=1 RTS=1 (terminal opened)".into())
             }
         }
     }
@@ -660,20 +661,22 @@ impl Host {
                     let (itf_num, itf_sub, itf_proto) = (x[2], x[6], x[7]);
                     itf_class = x[5];
                     let name = match (itf_class, itf_sub, itf_proto) {
-                        (3, _, 1) => "HID 键盘（启动协议）".to_string(),
-                        (3, _, 2) => "HID 鼠标（启动协议）".to_string(),
+                        (3, _, 1) => "HID keyboard (boot protocol)".to_string(),
+                        (3, _, 2) => "HID mouse (boot protocol)".to_string(),
                         (3, _, _) => "HID".to_string(),
                         (2, 2, _) => {
                             cdc_comm = Some(itf_num);
-                            "CDC-ACM 控制接口".to_string()
+                            "CDC-ACM control interface".to_string()
                         }
-                        (2, 0x0d, _) => "CDC-NCM 网卡控制接口".to_string(),
-                        (0x0a, _, _) => "CDC 数据接口".to_string(),
-                        (8, _, _) => "大容量存储（U 盘）".to_string(),
-                        (1, _, _) => "音频".to_string(),
-                        (c, s, p) => format!("类 0x{c:02X}/0x{s:02X}/0x{p:02X}"),
+                        (2, 0x0d, _) => "CDC-NCM network control interface".to_string(),
+                        (0x0a, _, _) => "CDC data interface".to_string(),
+                        (8, _, _) => "mass storage (USB drive)".to_string(),
+                        (1, _, _) => "audio".to_string(),
+                        (c, s, p) => format!("class 0x{c:02X}/0x{s:02X}/0x{p:02X}"),
                     };
-                    self.info.interfaces.push(format!("接口 {itf_num}：{name}"));
+                    self.info
+                        .interfaces
+                        .push(format!("interface {itf_num}: {name}"));
                     if itf_class == 3 {
                         pending_hid = Some(HidItf {
                             itf: itf_num,
@@ -728,7 +731,7 @@ impl Host {
         }
         let total = d.len();
         self.say(format!(
-            "配置描述符 {total} 字节，{} 个接口",
+            "config descriptor {total} bytes, {} interfaces",
             self.info.interfaces.len()
         ));
         for s in self.info.interfaces.clone() {
@@ -745,7 +748,7 @@ impl Host {
             let ep = self.hid[k].ep_in as usize;
             if let Handshake::Ack(d) = dev.token_in(ep, mem) {
                 self.on_hid_report(k, &d);
-                // 有数据就继续尽快取（一次报告后下一次在间隔后）
+                // Keep fetching quickly while data flows (after a report, the next one waits one interval)
             }
             self.hid[k].next_poll = now_ms + self.hid[k].interval as u64;
         }
@@ -809,14 +812,14 @@ impl Host {
 mod tests {
     use super::*;
 
-    /// TinyUSB 的 TUD_HID_REPORT_DESC_KEYBOARD / MOUSE 开头片段（带报告 ID 1 / 2）
+    /// Opening fragments of TinyUSB's TUD_HID_REPORT_DESC_KEYBOARD / MOUSE (with report IDs 1 / 2)
     #[test]
     fn report_ids_by_application() {
         let d = [
             0x05, 0x01, 0x09, 0x06, 0xa1, 0x01, 0x85, 0x01, 0x05, 0x07,
-            0xc0, // 键盘，报告 1
+            0xc0, // keyboard, report 1
             0x05, 0x01, 0x09, 0x02, 0xa1, 0x01, 0x85, 0x02, 0x09, 0x01, 0xa1, 0x00, 0xc0,
-            0xc0, // 鼠标，报告 2
+            0xc0, // mouse, report 2
         ];
         assert_eq!(
             parse_report_desc(&d),

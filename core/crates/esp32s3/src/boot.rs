@@ -1,5 +1,5 @@
-//! 直接启动（ESP32-S3）：装 ROM（esp-rom-elfs）、解析 flash 镜像、按二级 bootloader 的方式映射 app，
-//! 以及启动期需要特定读回值的寄存器。流程与 C3 相同，见 crates/esp32c3/src/boot.rs。
+//! Direct boot (ESP32-S3): load ROM (esp-rom-elfs), parse the flash image, map the app as the 2nd-stage bootloader
+//! would, plus registers that must read back specific values during boot. Same flow as C3 (crates/esp32c3/src/boot.rs).
 
 use crate::*;
 use tryboard_rv32::elf::Elf;
@@ -7,19 +7,19 @@ use tryboard_xtensa::{PS_UM, PS_WOE};
 
 pub use tryboard_esp32c3::boot::find_app;
 
-/// 镜像头里的芯片 ID（esp_app_format.h：ESP_CHIP_ID_ESP32S3）
+/// Chip ID in the image header (esp_app_format.h: ESP_CHIP_ID_ESP32S3)
 pub const CHIP_ID: u16 = 9;
 
-/// eFuse 读寄存器（0x60007000 起 0x200 字节），布局与 C3 相同：
-/// BLK1（RD_MAC_SPI_SYS_0，偏移 0x44）：MAC、晶圆版本 v0.2（市面上主流的 S3 版本）
+/// eFuse read registers (0x200 bytes from 0x60007000), same layout as C3:
+/// BLK1 (RD_MAC_SPI_SYS_0, offset 0x44): MAC, wafer version v0.2 (the common S3 revision on the market)
 pub fn default_efuse() -> [u32; 0x200 / 4] {
     let mut e = [0u32; 0x200 / 4];
     let blk1 = 0x44 / 4;
-    // 本地管理地址，避免冒用乐鑫 OUI；与 C3 模拟板区分最后一字节
+    // Locally administered address so we don't borrow Espressif's OUI; last byte differs from the C3 board
     let mac = [0x02u8, 0x54, 0x42, 0x00, 0x00, 0x03];
     e[blk1] = u32::from_le_bytes([mac[5], mac[4], mac[3], mac[2]]);
     e[blk1 + 1] = u32::from_le_bytes([mac[1], mac[0], 0, 0]);
-    // WAFER_VERSION_MINOR_LO = 2（BLK1 位 114..116）；PSRAM_CAP = 1（8MB，位 131..132）
+    // WAFER_VERSION_MINOR_LO = 2 (BLK1 bits 114..116); PSRAM_CAP = 1 (8MB, bits 131..132)
     e[blk1 + 3] |= 2 << 18;
     e[blk1 + 4] |= 1 << 3;
     e[0x1d0 / 4] = 0x1;
@@ -27,19 +27,19 @@ pub fn default_efuse() -> [u32; 0x200 / 4] {
     e
 }
 
-/// 启动期必须返回特定值的寄存器（否则轮询死循环）
+/// Registers that must return specific values during boot (otherwise polling loops spin forever)
 pub fn special_read(a: u32, now: u64) -> Option<u32> {
     Some(match a {
-        // RTC_CNTL_TIME_UPDATE：bit30 TIME_VALID
+        // RTC_CNTL_TIME_UPDATE: bit30 TIME_VALID
         0x6000_800c => 1 << 30,
-        // RTC 慢时钟计数（RC 慢时钟约 136kHz）
+        // RTC slow clock counter (RC slow clock ~136kHz)
         0x6000_8010 => (now * 136_000 / CPU_HZ) as u32,
         0x6000_8014 => ((now * 136_000 / CPU_HZ) >> 32) as u32,
         _ => return None,
     })
 }
 
-/// ROM ELF：代码 / 只读数据装进 ROM 区，各 .data* 节初值装进 DRAM（替代被跳过的 ROM 启动代码）
+/// ROM ELF: code / rodata into the ROM region, .data* initial values into DRAM (replacing the skipped ROM startup code)
 pub fn load_rom(m: &mut Esp32s3, elf_bytes: &[u8]) -> Result<(), String> {
     let elf = Elf::parse(elf_bytes)?;
     for s in &elf.sections {
@@ -64,18 +64,18 @@ pub fn load_rom(m: &mut Esp32s3, elf_bytes: &[u8]) -> Result<(), String> {
             m.rom_symbols.entry(*addr).or_insert_with(|| name.clone());
         }
     }
-    let sym = |n: &str| elf.symbol(n).ok_or(format!("ROM 里没有符号 {n}"));
-    // ets_printf 挂到 UART（ets_install_uart_printf 的效果）；ROM 打印走 UART、不走 USB-Serial-JTAG
+    let sym = |n: &str| elf.symbol(n).ok_or(format!("ROM has no symbol {n}"));
+    // Hook ets_printf to UART (what ets_install_uart_printf does); ROM prints go to UART, not USB-Serial-JTAG
     m.bus
         .mem_write(sym("_putc1")?, 4, sym("ets_write_char_uart")?);
     m.bus.mem_write(sym("g_uart_print")?, 1, 1);
     m.bus.mem_write(sym("g_usb_print")?, 1, 0);
     for (name, kind) in crate::hle::TABLE {
-        // 有的 ROM 函数在 ELF 里只有跳转表项 __call_<名字>（地址与 ROM 链接脚本里的一致）
+        // Some ROM functions only have a jump table entry __call_<name> in the ELF (same address as in the ROM linker script)
         let a = elf
             .symbol(name)
             .or_else(|| elf.symbol(&format!("__call_{name}")))
-            .ok_or(format!("ROM 里没有符号 {name}"))?;
+            .ok_or(format!("ROM has no symbol {name}"))?;
         m.hle.insert(a, *kind);
     }
     let mut addrs: Vec<u32> = m.hle.keys().copied().collect();
@@ -83,21 +83,21 @@ pub fn load_rom(m: &mut Esp32s3, elf_bytes: &[u8]) -> Result<(), String> {
     m.cpu.hle_lo = ROM_LOW;
     m.cpu.hle_hi = ROM_HIGH;
     m.cpu.hle_addrs = addrs;
-    // ROM 启动时写进 RTC 存储寄存器的时钟信息（rom/rtc.h：RTC_XTAL_FREQ_REG = STORE4，RTC_APB_FREQ_REG = STORE5，
-    // S3 上分别在 RTC_CNTL 0xC0 / 0xC4；高低半字相同）
+    // Clock info the ROM stores in RTC store regs at boot (rom/rtc.h: RTC_XTAL_FREQ_REG = STORE4, RTC_APB_FREQ_REG = STORE5,
+    // at RTC_CNTL 0xC0 / 0xC4 on S3; high and low halfwords equal)
     m.bus.regs.insert(0x6000_80C0, 0x0028_0028);
     let apb = 80_000_000u32 >> 12;
     m.bus.regs.insert(0x6000_80C4, apb | (apb << 16));
     Ok(())
 }
 
-/// 二级 bootloader 按镜像头填写 ROM 的 flash 芯片描述（esp_rom_spiflash_chip_t）
+/// The 2nd-stage bootloader fills ROM's flash chip descriptor (esp_rom_spiflash_chip_t) from the image header
 fn init_flashchip(m: &mut Esp32s3, size_code: u8, jedec: u32) -> Result<(), String> {
-    // rom_spiflash_legacy_data（esp32s3.rom.ld，0x3FCEFFE4）是指针，指向 ROM .data 里的结构体
+    // rom_spiflash_legacy_data (esp32s3.rom.ld, 0x3FCEFFE4) is a pointer to a struct in ROM .data
     let p = m
         .bus
         .mem_read(0x3FCE_FFE4, 4)
-        .ok_or("读不到 rom_spiflash_legacy_data")?;
+        .ok_or("cannot read rom_spiflash_legacy_data")?;
     let size = match size_code {
         0 => 1 << 20,
         1 => 2 << 20,
@@ -114,7 +114,7 @@ fn init_flashchip(m: &mut Esp32s3, size_code: u8, jedec: u32) -> Result<(), Stri
     {
         m.bus
             .mem_write(p + 4 * i as u32, 4, *v)
-            .ok_or("写 g_rom_flashchip 失败")?;
+            .ok_or("failed to write g_rom_flashchip")?;
     }
     Ok(())
 }
@@ -130,7 +130,7 @@ fn u32at(b: &[u8], o: usize) -> u32 {
     u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]])
 }
 
-/// 镜像头的芯片 ID（偏移 12）。镜像开头不是 0xE9 时先找分区表里的 app。
+/// Chip ID from the image header (offset 12). If flash doesn't start with 0xE9, find the app in the partition table first.
 pub fn image_chip_id(flash: &[u8]) -> Option<u16> {
     let off = find_app(flash).ok()? as usize;
     flash
@@ -141,14 +141,14 @@ pub fn image_chip_id(flash: &[u8]) -> Option<u16> {
 pub fn parse_app(flash: &[u8], off: u32) -> Result<AppInfo, String> {
     let o = off as usize;
     if flash.get(o) != Some(&0xE9) {
-        return Err(format!("0x{off:x} 处不是 ESP 镜像（魔数不对）"));
+        return Err(format!("no ESP image at 0x{off:x} (bad magic)"));
     }
     let nseg = flash[o + 1] as usize;
     let entry = u32at(flash, o + 4);
     let chip_id = u16::from_le_bytes([flash[o + 12], flash[o + 13]]);
     if chip_id != CHIP_ID {
         return Err(format!(
-            "镜像芯片 ID 是 {chip_id}，不是 ESP32-S3（{CHIP_ID}）"
+            "image chip ID is {chip_id}, not ESP32-S3 ({CHIP_ID})"
         ));
     }
     let mut p = o + 24;
@@ -166,7 +166,7 @@ pub fn parse_app(flash: &[u8], off: u32) -> Result<AppInfo, String> {
     })
 }
 
-/// 板上 flash 容量：镜像头 byte3 高 4 位（0=1MB … 4=16MB），模拟 flash 至少这么大
+/// Board flash size: high nibble of header byte3 (0=1MB ... 4=16MB); the emulated flash is at least this big
 fn flash_size(code: u8) -> usize {
     match code {
         0 => 1 << 20,
@@ -179,15 +179,13 @@ fn flash_size(code: u8) -> usize {
     }
 }
 
-/// 入口帧"调用者 sp"指向的溢出保存区：借用 ROM 的 level 5 / level 4 中断栈（_Pri_5_Stack / _Pri_4_Stack），
-/// app 装了自己的向量表后 ROM 不再用它们
+/// Overflow save area that the entry frame's "caller sp" points at: borrows ROM's level 5 / level 4 interrupt stacks
+/// (_Pri_5_Stack / _Pri_4_Stack), which ROM stops using once the app installs its own vector table
 const SPILL_PRO: u32 = 0x3FCE_E8E0 + 64;
 const SPILL_APP: u32 = 0x3FCE_E380 + 64;
 
-/// 以 CALLINC=0 进入一个窗口 ABI 函数：ENTRY 不转窗口，入口帧就是最老的一帧（WINDOWSTART 只有它），
-/// 以后窗口溢出不会去溢出一个并不存在的调用者帧。
-/// 溢出处理程序溢出最老一帧时会读 [该帧 sp - 12] 当作"调用者的 sp"、把 a4..a11 存到它下面；
-/// 真机上那里是调用者帧溢出时写下的值，我们没有调用者，所以先执行入口的 ENTRY，再在 [sp-12] 填一个空闲区的指针。
+/// Enter a windowed function with CALLINC=0 so its frame is the oldest and overflows never spill a nonexistent caller.
+/// Spilling that frame reads [sp-12] as the caller's sp, which no caller wrote: run ENTRY, then point [sp-12] at free RAM.
 fn enter_windowed(
     c: &mut Cpu,
     bus: &mut SocBus,
@@ -206,14 +204,14 @@ fn enter_windowed(
         c.step(bus);
         let sp = c.a(1);
         bus.mem_write(sp.wrapping_sub(12), 4, spill)
-            .ok_or("写入口帧保存区失败")?;
+            .ok_or("failed to write entry frame save area")?;
     }
     Ok(())
 }
 
 impl Esp32s3 {
-    /// 启动核 1（真机：ROM 里核 1 的复位代码拿到 ets_set_appcpu_boot_addr 设的地址后跳过去）。
-    /// 栈用 ROM 的 .stack_app 顶端（__stack_app，0x3FCED710）；时间与核 0 对齐。
+    /// Start core 1 (silicon: core 1's ROM reset code jumps to the address set by ets_set_appcpu_boot_addr).
+    /// Stack is the top of ROM's .stack_app (__stack_app, 0x3FCED710); time aligned with core 0.
     pub fn start_app_cpu(&mut self, entry: u32) {
         let mut c = Cpu::new();
         c.prid = 0xabab;
@@ -227,19 +225,19 @@ impl Esp32s3 {
         }
     }
 
-    /// 新建一台机器：装 ROM、装 flash、做 bootloader 该做的事，PC 停在 app 入口（call_start_cpu0）
+    /// Build a machine: load ROM and flash, do the bootloader's job, PC parked at the app entry (call_start_cpu0)
     pub fn boot(rom_elf: &[u8], flash: Vec<u8>) -> Result<(Esp32s3, AppInfo), String> {
         Self::boot_with(rom_elf, flash, SocBus::default())
     }
 
-    /// 在给定的总线上启动（复位重新上电时传入保留了 RTC 内存的总线）
+    /// Boot on a given bus (power-cycle after reset passes in a bus that kept RTC memory)
     fn boot_with(
         rom_elf: &[u8],
         flash: Vec<u8>,
         bus: SocBus,
     ) -> Result<(Esp32s3, AppInfo), String> {
         let mut cpu1 = Cpu::new();
-        // PRID：核 0 0xCDCD、核 1 0xABAB（IDF 用位 13 区分核号）
+        // PRID: core 0 0xCDCD, core 1 0xABAB (IDF uses bit 13 to tell cores apart)
         cpu1.prid = 0xabab;
         let mut m = Esp32s3 {
             cpu: Cpu::new(),
@@ -265,7 +263,7 @@ impl Esp32s3 {
             if in_cache {
                 if load & 0xffff != data & 0xffff {
                     return Err(format!(
-                        "段 0x{load:08x} 与 flash 偏移 0x{data:x} 页内偏移不一致"
+                        "segment 0x{load:08x} and flash offset 0x{data:x} differ within the page"
                     ));
                 }
                 let first = ((load & 0x1ff_ffff) >> 16) as usize;
@@ -277,7 +275,9 @@ impl Esp32s3 {
                 for i in 0..len {
                     let b = flash[(data + i) as usize] as u32;
                     if m.bus.mem_write(load + i, 1, b).is_none() {
-                        return Err(format!("段 0x{load:08x} 落在不可写区域"));
+                        return Err(format!(
+                            "segment 0x{load:08x} lands in a non-writable region"
+                        ));
                     }
                 }
             }
@@ -286,7 +286,7 @@ impl Esp32s3 {
         let jedec = m.bus.spi1.jedec;
         init_flashchip(&mut m, size_code, jedec)?;
 
-        // 栈用 ROM 的 .stack_pro 顶端（__stack，0x3FCEB710），与真 bootloader 跳入 app 时一致
+        // Stack is the top of ROM's .stack_pro (__stack, 0x3FCEB710), matching the real bootloader's jump into the app
         let entry = app.entry;
         enter_windowed(&mut m.cpu, &mut m.bus, entry, 0x3FCE_B710, SPILL_PRO)?;
         Ok((m, app))
@@ -294,10 +294,8 @@ impl Esp32s3 {
 }
 
 impl Esp32s3 {
-    /// 软件复位后重新上电（真机：ROM → 二级 bootloader → app，这里直接启动）。
-    /// 保留：flash（含 NVS）、RTC 慢速 / 快速内存（RTC_NOINIT 不变；.rtc.data 段按 bootloader 语义重新装载，
-    /// .rtc.bss 由 app 启动代码清零）、RTC_CNTL 存储寄存器（复位原因提示）、外部世界（引脚驱动、模拟电压、I2C 器件）。
-    /// 清零：SRAM、PSRAM、其它外设、两个核；核 1 由新 app 经 ets_set_appcpu_boot_addr 再次启动。模拟时间继续累计。
+    /// Software reset, booting the app directly. Keeps flash/NVS, RTC memory, RTC_CNTL store regs and the outside world;
+    /// clears SRAM, PSRAM, other peripherals and both cores (core 1 restarts via ets_set_appcpu_boot_addr); time keeps running.
     pub fn reboot(&mut self, reason: u32) -> Result<(), String> {
         let old = &mut self.bus;
         let mut bus = SocBus {
@@ -320,9 +318,9 @@ impl Esp32s3 {
         bus.iotrace = old.iotrace.carry();
         bus.tasks = old.tasks.carry(self.cpu.cycles);
         bus.ws2812 = std::mem::take(&mut old.ws2812);
-        // 编码器、超声波是外部世界：复位后还接着（排着的波形照常发生）
+        // Encoders and ultrasonic sensors are the outside world: still attached after reset (queued waveforms still happen)
         bus.pins = std::mem::take(&mut old.pins);
-        // 外接圆屏是外部世界的一部分：复位后屏还在（画面由新固件重画）
+        // The external round display is part of the outside world: it survives reset (new firmware redraws it)
         bus.lcd = old.lcd.take();
         bus.audio = std::mem::take(&mut old.audio);
         let flash = std::mem::take(&mut old.flash);

@@ -8,7 +8,7 @@ fn cmd(b: &mut Ble, op: u16, params: &[u8], now: u64) {
     b.host_send(&p, now);
 }
 
-/// 取出 [0, until) 内到期的所有包
+/// All packets due in [0, until)
 fn drain(b: &mut Ble, until: u64) -> Vec<Vec<u8>> {
     let mut out = Vec::new();
     let mut t = 0;
@@ -21,7 +21,7 @@ fn drain(b: &mut Ble, until: u64) -> Vec<Vec<u8>> {
     out
 }
 
-/// 最小的从机主机：复位、开 LE 事件、设广播数据、开广播
+/// Minimal peripheral host: reset, enable LE events, set advertising data, start advertising
 fn advertise(b: &mut Ble) {
     cmd(b, 0x0c03, &[], 0);
     cmd(b, 0x0c01, &[0xff; 8], 0);
@@ -58,18 +58,18 @@ fn phone_scans_connects_and_starts_att() {
     advertise(&mut b);
     b.phone_cmd("auto", 0).unwrap();
     let p = drain(&mut b, 500_000);
-    // LE 连接完成（普通或增强）
+    // LE Connection Complete (legacy or enhanced)
     assert!(
         p.iter()
             .any(|e| e[0] == 0x04 && e[1] == 0x3e && (e[3] == 0x01 || e[3] == 0x0a)),
-        "没有连接完成事件"
+        "no connection complete event"
     );
     assert!(b.connected());
-    // 手机发的第一个 ATT 请求是交换 MTU（ACL → L2CAP CID 4 → opcode 0x02）
+    // The phone's first ATT request is MTU exchange (ACL -> L2CAP CID 4 -> opcode 0x02)
     let att: Vec<_> = p.iter().filter(|e| e[0] == 0x02).collect();
     assert!(
         att.iter().any(|e| e.len() > 9 && e[7] == 4 && e[9] == 0x02),
-        "没有 MTU 请求"
+        "no MTU request"
     );
     assert!(b.json().contains("TryBoard-HR"));
 }
@@ -115,7 +115,7 @@ fn adv_helpers() {
     let d = [2, 1, 6, 5, 2, 0x0d, 0x18, 0x0f, 0x18, 3, 9, b'H', b'R'];
     assert_eq!(adv_name(&d).as_deref(), Some("HR"));
     assert_eq!(adv_uuids(&d), vec![0x180d, 0x180f]);
-    // 截断的字段不越界
+    // Truncated fields must not read out of bounds
     assert_eq!(adv_name(&[5, 9, b'a']), None);
     assert_eq!(fmt_addr(&ADDR), "02:54:42:00:00:03");
     assert_eq!(json_str("a\"b\n"), "\"a\\\"b\\n\"");

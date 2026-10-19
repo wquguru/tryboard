@@ -1,4 +1,4 @@
-* 10 欠压瞬态：USB 限流 + 10 µF / 22 µF 去耦 + 舵机反接制动（反电动势 −3.77 V），从电容未充电起算
+* 10 Brownout transient: USB limit + 10 uF / 22 uF decoupling + servo plugging (back-EMF -3.77 V), from uncharged caps
 *tb: LIMIT v5 5 0.5 0.5 20
 *tb: LDO v5 v33 3.3 0.01 0.525 1.2 0
 *tb: LOAD v33 0.055 1

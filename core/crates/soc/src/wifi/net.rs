@@ -1,5 +1,5 @@
-//! 虚拟局域网：AP 背后的一台"路由器"（192.168.4.1），提供 ARP、DHCP、ICMP 回显，以及（net::tcp）DNS / HTTP。
-//! 以以太网帧为单位工作：输入（源 MAC, 目的 MAC, 以太类型, 载荷），输出同样形式的回应。
+//! Virtual LAN: a 'router' behind the AP (192.168.4.1) with ARP, DHCP, ICMP echo and (net::tcp) DNS / HTTP.
+//! Works on Ethernet frames: input (src MAC, dst MAC, ethertype, payload), replies in the same form.
 
 use super::frame::Mac;
 
@@ -19,7 +19,7 @@ pub struct Eth {
 }
 
 pub struct Net {
-    /// 已分配给芯片的地址（DHCP ACK 之后）
+    /// Address leased to the chip (after DHCP ACK)
     pub leased: bool,
     pub log: Vec<String>,
     pub tcp: super::tcp::Tcp,
@@ -63,7 +63,7 @@ pub fn checksum(data: &[u8], init: u32) -> u16 {
     !(s as u16)
 }
 
-/// 构造 IPv4 包（TTL 64，无选项）
+/// Build an IPv4 packet (TTL 64, no options)
 pub fn ipv4(src: [u8; 4], dst: [u8; 4], proto: u8, payload: &[u8], id: u16) -> Vec<u8> {
     let len = 20 + payload.len();
     let mut p = vec![
@@ -89,7 +89,7 @@ pub fn ipv4(src: [u8; 4], dst: [u8; 4], proto: u8, payload: &[u8], id: u16) -> V
     p
 }
 
-/// UDP / TCP 伪首部校验和
+/// UDP / TCP pseudo-header checksum
 pub fn l4_checksum(src: [u8; 4], dst: [u8; 4], proto: u8, seg: &[u8]) -> u16 {
     let mut s = 0u32;
     for w in [src, dst] {
@@ -173,7 +173,7 @@ impl Net {
             return vec![];
         }
         let target = ip4(&p[24..28]);
-        // 网关回应所有局域网内、非芯片自己的地址（芯片做 DHCP 冲突检测时问自己的地址，不能答）
+        // Gateway answers every LAN address except the chip's own (the chip asks for its own during DHCP conflict detection)
         if target == self.sta_ip || target == ip4(&p[14..18]) || target[..3] != self.gw[..3] {
             return vec![];
         }
@@ -182,7 +182,7 @@ impl Net {
         r.extend_from_slice(&target);
         r.extend_from_slice(&p[8..14]);
         r.extend_from_slice(&p[14..18]);
-        self.log.push(format!("ARP {} 是 网关", ip_str(&target)));
+        self.log.push(format!("ARP {} is gateway", ip_str(&target)));
         vec![Eth {
             dst: e.src,
             src: GW_MAC,
@@ -210,8 +210,8 @@ impl Net {
                 if dport == 67 {
                     return self.dhcp(data);
                 }
-                // 普通 DNS（发给网关 53 端口），以及 .local 名字的 mDNS 查询（224.0.0.251:5353，
-                // 按 RFC 6762 §6.7 "传统单播"方式直接回给查询方的端口，ID 与问题原样带回）
+                // Plain DNS (gateway port 53) and mDNS queries for .local names (224.0.0.251:5353), answered RFC 6762 §6.7
+                // 'legacy unicast' style straight to the querier's port, echoing the ID and question
                 if dport == 53 || dport == 5353 {
                     if let Some(ans) = self.tcp.dns(data, self.gw) {
                         self.log.push(ans.1);
@@ -223,7 +223,7 @@ impl Net {
                 vec![]
             }
             1 if body.len() >= 8 && body[0] == 8 => {
-                // ICMP 回显请求 → 回显应答
+                // ICMP echo request -> echo reply
                 let mut r = body.to_vec();
                 r[0] = 0;
                 r[2] = 0;
@@ -231,7 +231,7 @@ impl Net {
                 let c = checksum(&r, 0);
                 r[2] = (c >> 8) as u8;
                 r[3] = c as u8;
-                self.log.push(format!("ping {} → 应答", ip_str(&dst)));
+                self.log.push(format!("ping {} → reply", ip_str(&dst)));
                 vec![self.reply_ip(&e.src, src, dst, 1, &r)]
             }
             6 => {
@@ -254,7 +254,7 @@ impl Net {
         if d.len() < 240 || d[0] != 1 || d[236..240] != [0x63, 0x82, 0x53, 0x63] {
             return vec![];
         }
-        // 找消息类型（选项 53）
+        // Find the message type (option 53)
         let mut i = 240;
         let mut kind = 0;
         while i + 1 < d.len() && d[i] != 255 {

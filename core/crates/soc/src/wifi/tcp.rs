@@ -1,5 +1,5 @@
-//! 虚拟互联网的服务端：DNS（所有域名解析到网关）、TCP（只做被动打开）、HTTP/1.1（80 端口，Connection: close）。
-//! 不做重传与拥塞控制：虚拟网络不丢包，按需一次性回完。
+//! Virtual internet servers: DNS (every name resolves to the gateway), TCP (passive open only), HTTP/1.1 (port 80, Connection: close).
+//! No retransmission or congestion control: the virtual network never drops, so replies go out in one go.
 
 use super::net::l4_checksum;
 use std::collections::HashMap;
@@ -13,7 +13,7 @@ const MSS: usize = 1400;
 
 #[derive(Default)]
 struct Conn {
-    /// 下一个要发的序号、期望收到的序号
+    /// Next sequence number to send / expected to receive
     snd_nxt: u32,
     rcv_nxt: u32,
     req: Vec<u8>,
@@ -99,7 +99,7 @@ pub struct Tcp {
     conns: HashMap<Key, Conn>,
     ip_id: u16,
     isn: u32,
-    /// 自定义页面：路径 → (内容类型, 内容)；网页 / 测试可以注入
+    /// Custom pages: path -> (content type, body); the web page / tests can inject them
     pub pages: HashMap<String, (String, Vec<u8>)>,
     pub requests: u64,
     /// 给网页「网络」页签的结构化记录（只给人看，不影响回给芯片的字节）
@@ -126,7 +126,7 @@ fn proto_name(port: u16) -> &'static str {
     }
 }
 
-/// 一个 TCP 段的参数（服务端 → 芯片方向）
+/// Parameters of one TCP segment (server -> chip)
 struct Seg<'a> {
     sport: u16,
     dport: u16,
@@ -333,12 +333,12 @@ impl Tcp {
         self.ip_id
     }
 
-    /// DNS 查询 → 应答（A 记录指向网关）
+    /// DNS query -> answer (A record pointing at the gateway)
     pub fn dns(&mut self, q: &[u8], gw: [u8; 4]) -> Option<(Vec<u8>, String)> {
         if q.len() < 12 || q[2] & 0x80 != 0 || u16::from_be_bytes([q[4], q[5]]) != 1 {
             return None;
         }
-        // 解析问题里的域名
+        // Parse the name in the question
         let mut i = 12;
         let mut name = Vec::new();
         while i < q.len() && q[i] != 0 {
@@ -355,10 +355,10 @@ impl Tcp {
         }
         let qtype = u16::from_be_bytes([q[i + 1], q[i + 2]]);
         let mut r = q[..qend].to_vec();
-        r[2] = 0x81; // 应答、递归期望
-        r[3] = 0x80; // 可递归、无错
+        r[2] = 0x81; // Response, recursion desired
+        r[3] = 0x80; // Recursion available, no error
         if qtype == 1 {
-            r[7] = 1; // 1 条回答
+            r[7] = 1; // 1 answer
             r.extend_from_slice(&[0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0x0e, 0x10, 0, 4]);
             r.extend_from_slice(&gw);
         } else {
@@ -437,13 +437,13 @@ impl Tcp {
         (
             r,
             format!(
-                "HTTP {method} {host}{path} → {status}（{} 字节）",
+                "HTTP {method} {host}{path} → {status} ({} bytes)",
                 body.len()
             ),
         )
     }
 
-    /// 收到芯片发来的 TCP 段；返回要回的段（和可选日志）
+    /// TCP segment from the chip; returns the segments to reply (and an optional log line)
     pub fn on_segment(
         &mut self,
         src: [u8; 4],
@@ -472,7 +472,7 @@ impl Tcp {
         }
         if flags & SYN != 0 {
             if dport != 80 {
-                // 只有 80 端口在听：其它端口回 RST
+                // Only port 80 listens: RST for other ports
                 let c = Conn {
                     snd_nxt: 0,
                     rcv_nxt: seq.wrapping_add(1),
@@ -480,7 +480,7 @@ impl Tcp {
                 };
                 out.push((
                     mk(&c, RST | ACK, &[], &[]),
-                    Some(format!("TCP :{dport} 拒绝连接")),
+                    Some(format!("TCP :{dport} connection refused")),
                 ));
                 self.rows.push(NetRow {
                     t_us: now_us,
@@ -507,7 +507,7 @@ impl Tcp {
             };
             out.push((
                 mk(&c, SYN | ACK, &[2, 4, (MSS >> 8) as u8, MSS as u8], &[]),
-                Some(format!("TCP 连接 :{dport}")),
+                Some(format!("TCP connect :{dport}")),
             ));
             c.snd_nxt = c.snd_nxt.wrapping_add(1);
             self.conns.insert(key, c);
@@ -555,7 +555,7 @@ impl Tcp {
         if need_ack {
             out.push((mk(&c, ACK, &[], &[]), None));
         }
-        // 双方都发了 FIN：连接结束
+        // Both sides sent FIN: connection over
         if !(peer_fin && c.fin_sent) {
             self.conns.insert(key, c);
         }

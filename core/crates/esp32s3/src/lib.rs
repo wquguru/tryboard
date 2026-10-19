@@ -1,8 +1,8 @@
-//! ESP32-S3 SoC：存储映射（含 PSRAM）、外设分发、直接启动、双核运行循环。
-//! 核 1 在固件调用 ROM 的 ets_set_appcpu_boot_addr 时启动（HLE），两核按固定量子交替执行（确定性）。
-//!
-//! 与 C3 同族、寄存器布局一致的外设（UART、SYSTIMER、TIMG、SPI1 flash、LEDC、I2C、RMT、GP-SPI2、GDMA）复用 tryboard-esp32c3 的模型；
-//! S3 特有的中断矩阵、EXTMEM、49 脚 GPIO 在 periph.rs。Wi-Fi MAC 与虚拟世界在 tryboard-soc（与 C3 共用，按 S3 布局接上）。
+//! ESP32-S3 SoC: memory map (incl. PSRAM), peripheral dispatch, direct boot, dual-core run loop.
+//! Core 1 starts when firmware calls ROM's ets_set_appcpu_boot_addr (HLE); the cores alternate in fixed quanta (deterministic).
+//! Peripherals shared with C3 with identical layout (UART, SYSTIMER, TIMG, SPI1 flash, LEDC, I2C, RMT, GP-SPI2, GDMA)
+//! reuse tryboard-esp32c3 models; S3-only interrupt matrix, EXTMEM and 49-pin GPIO live in periph.rs. Wi-Fi MAC and
+//! the virtual world are in tryboard-soc (shared with C3, wired up with the S3 layout). lint: allow-long-comment
 
 pub mod boot;
 pub mod hle;
@@ -32,28 +32,28 @@ use tryboard_xtensa::{sr, Bus, BusFault, Cpu, Exit};
 
 pub const CPU_HZ: u64 = tryboard_esp32c3::periph::CPU_HZ;
 
-// 存储映射（soc/esp32s3/include/soc/soc.h）
-/// SRAM0（32KB，只有 I 总线）+ SRAM1（416KB，I/D 双映射）
+// Memory map (soc/esp32s3/include/soc/soc.h)
+/// SRAM0 (32KB, I bus only) + SRAM1 (416KB, mapped on both I and D)
 pub const IRAM_LOW: u32 = 0x4037_0000;
 pub const IRAM_HIGH: u32 = 0x403E_0000;
-/// SRAM1 的 D 总线别名 + SRAM2（64KB，只有 D 总线）
+/// D-bus alias of SRAM1 + SRAM2 (64KB, D bus only)
 pub const DRAM_LOW: u32 = 0x3FC8_8000;
 pub const DRAM_HIGH: u32 = 0x3FD0_0000;
-/// D 0x3FC88000 与 I 0x40378000 是同一块 SRAM1
+/// D 0x3FC88000 and I 0x40378000 are the same SRAM1
 pub const DRAM_TO_IRAM: u32 = 0x4037_8000 - DRAM_LOW;
-/// SRAM 缓冲：SRAM0 + SRAM1 + SRAM2 = 512KB，按 IRAM 地址 0x40370000 起排
+/// SRAM buffer: SRAM0 + SRAM1 + SRAM2 = 512KB, laid out from IRAM address 0x40370000
 pub const SRAM_SIZE: usize = 512 << 10;
 pub const ROM_LOW: u32 = 0x4000_0000;
 pub const ROM_HIGH: u32 = 0x4006_0000;
 pub const DROM_MASK_LOW: u32 = 0x3FF0_0000;
 pub const DROM_MASK_HIGH: u32 = 0x3FF2_0000;
 pub const DROM_MASK_TO_ROM: u32 = 0x4004_0000 - DROM_MASK_LOW;
-/// cache 窗口各 32MB，I/D 共用一张 MMU 表（线性地址 = vaddr & 0x1FFFFFF）
+/// Cache windows are 32MB each; I/D share one MMU table (linear address = vaddr & 0x1FFFFFF)
 pub const IROM_LOW: u32 = 0x4200_0000;
 pub const IROM_HIGH: u32 = 0x4400_0000;
 pub const DROM_LOW: u32 = 0x3C00_0000;
 pub const DROM_HIGH: u32 = 0x3E00_0000;
-/// RTC 慢速内存（8KB）与 RTC 快速内存（8KB，I/D 同址）
+/// RTC slow memory (8KB) and RTC fast memory (8KB, same address on I/D)
 pub const RTC_SLOW_LOW: u32 = 0x5000_0000;
 pub const RTC_SLOW_HIGH: u32 = 0x5000_2000;
 pub const RTC_FAST_LOW: u32 = 0x600F_E000;
@@ -63,22 +63,22 @@ pub const MMIO_HIGH: u32 = 0x600D_1000;
 
 pub const MMU_BASE: u32 = 0x600C_5000;
 pub const MMU_ENTRIES: usize = 512;
-/// MMU 表项：位 13..0 物理页号，位 14 无效，位 15 类型（0 flash，1 PSRAM）
+/// MMU entry: bits 13..0 physical page, bit 14 invalid, bit 15 type (0 flash, 1 PSRAM)
 pub const MMU_INVALID: u32 = 1 << 14;
 pub const MMU_PSRAM: u32 = 1 << 15;
 
-/// N16R8：16MB flash + 8MB 八线 PSRAM（最常见的 S3 开发板配置）
+/// N16R8: 16MB flash + 8MB octal PSRAM (the most common S3 dev board configuration)
 pub const PSRAM_SIZE: usize = 8 << 20;
 
-/// RTC_CNTL_OPTIONS0 的软件复位位（rtc_cntl_reg.h）：系统复位、核 0 复位、核 1 复位
+/// Software reset bits of RTC_CNTL_OPTIONS0 (rtc_cntl_reg.h): system reset, core 0 reset, core 1 reset
 const RST_SYS: u32 = 1 << 31;
 const RST_PROCPU: u32 = 1 << 5;
 const RST_APPCPU: u32 = 1 << 4;
 pub const RTC_CNTL_RESET_STATE: u32 = 0x6000_8038;
-/// 硬件随机数（soc/esp32s3/include/soc/wdev_reg.h：WDEV_RND_REG）；C3 在 0x600260B0
+/// Hardware RNG (soc/esp32s3/include/soc/wdev_reg.h: WDEV_RND_REG); on C3 it's at 0x600260B0
 pub const WDEV_RND_REG: u32 = 0x6003_507C;
-/// RTC_CNTL_STORE0..7：在 RTC 域，CPU / 系统复位后保持（复位原因提示、启动时间、RTC 慢时钟校准值等）。
-/// STORE4 / STORE5（晶振 / APB 频率）由 ROM 每次启动重写，不必保留
+/// RTC_CNTL_STORE0..7: in the RTC domain, kept across CPU / system reset (reset-reason hints, boot time, RTC slow clock
+/// calibration, etc.). STORE4 / STORE5 (crystal / APB frequency) are rewritten by ROM every boot, so need not be kept
 const RTC_STORE_KEEP: [u32; 6] = [
     0x6000_8050,
     0x6000_8054,
@@ -87,7 +87,7 @@ const RTC_STORE_KEEP: [u32; 6] = [
     0x6000_80C8,
     0x6000_80CC,
 ];
-/// 圆屏 GC9A01 的接线约定（SPI2 的 IO_MUX 直连脚 + 三根 GPIO）
+/// GC9A01 round display wiring convention (SPI2 IO_MUX direct pins + three GPIOs)
 pub mod lcd_pin {
     pub const SCLK: u32 = 12;
     pub const MOSI: u32 = 11;
@@ -96,13 +96,13 @@ pub mod lcd_pin {
     pub const RST: u32 = 13;
     pub const BL: u32 = 15;
 }
-/// GDMA 的外设编号（soc/gdma_channel.h：SOC_GDMA_TRIG_PERIPH_SPI2 / _I2S0 / _I2S1）
+/// GDMA peripheral IDs (soc/gdma_channel.h: SOC_GDMA_TRIG_PERIPH_SPI2 / _I2S0 / _I2S1)
 const GDMA_PERI_SPI2: u32 = 0;
 const GDMA_PERI_I2S: [u32; 2] = [3, 4];
-/// GPIO 矩阵信号（gpio_sig_map.h）：I2S0O_SD_OUT_IDX = I2S0I_SD_IN_IDX = 25，I2S1 为 30
+/// GPIO matrix signals (gpio_sig_map.h): I2S0O_SD_OUT_IDX = I2S0I_SD_IN_IDX = 25, I2S1 is 30
 const SIG_I2S_SD: [usize; 2] = [25, 30];
-/// I2S 音频器件的接线约定：喇叭（MAX98357A）用 16/17/18，麦克风（INMP441）用 39/40/41——
-/// 避开圆屏（10..15）、I2C（8/9）、舵机 / LED（4/5）、WS2812（48）、USB（19/20）和八线 PSRAM（33..37）
+/// I2S audio wiring convention: speaker (MAX98357A) on 16/17/18, mic (INMP441) on 39/40/41 -- avoiding the round
+/// display (10..15), I2C (8/9), servo / LED (4/5), WS2812 (48), USB (19/20) and octal PSRAM (33..37)
 pub mod i2s_pin {
     pub const SPK_BCLK: u32 = 16;
     pub const SPK_LRC: u32 = 17;
@@ -111,7 +111,7 @@ pub mod i2s_pin {
     pub const MIC_WS: u32 = 40;
     pub const MIC_SD: u32 = 41;
 }
-/// GPIO 矩阵输出信号 FSPICS0_OUT_IDX（gpio_sig_map.h）与 IO_MUX 功能号 FUNC_GPIO10_FSPICS0
+/// GPIO matrix output signal FSPICS0_OUT_IDX (gpio_sig_map.h) and IO_MUX function FUNC_GPIO10_FSPICS0
 const SIG_FSPICS0: u32 = 110;
 const IOMUX_FUNC_FSPICS0: u32 = 4;
 
@@ -122,11 +122,11 @@ pub struct SocBus {
     pub rom: Vec<u8>,
     pub flash: Vec<u8>,
     pub psram: Vec<u8>,
-    /// PSRAM 芯片的命令接口（模式寄存器）；存储体是 `psram`
+    /// Command interface of the PSRAM chip (mode registers); storage is `psram`
     pub psram_chip: psram::OctalPsram,
     pub mmu: Vec<u32>,
-    /// 取指页缓存：最近一次取指所在的 64KB 页（vaddr >> 16，u32::MAX = 无效）、
-    /// 它落在哪块存储（`FetchSrc`）以及页首在那块存储里的偏移。写 MMU 时作废
+    /// Fetch page cache: the 64KB page of the last fetch (vaddr >> 16, u32::MAX = invalid), which storage it's in
+    /// (`FetchSrc`) and the page start's offset there. Invalidated on MMU writes
     fetch_page: u32,
     fetch_src: FetchSrc,
     fetch_base: usize,
@@ -137,45 +137,45 @@ pub struct SocBus {
     pub timg0: Timg,
     pub timg1: Timg,
     pub intm: Intmatrix,
-    /// 核 1 的中断矩阵（INTERRUPT_CORE1_*，在核 0 那张表之后 0x800）
+    /// Core 1 interrupt matrix (INTERRUPT_CORE1_*, 0x800 after core 0's table)
     pub intm1: Intmatrix,
-    /// 每个核当前的外部中断线（update 时算出，轮到该核执行前交给它）
+    /// Each core's current external interrupt lines (computed in update, handed over before that core runs)
     pub lines: [u32; 2],
-    /// 固件请求启动核 1 的入口（ets_set_appcpu_boot_addr，HLE 里设置）
+    /// Core 1 entry requested by firmware (ets_set_appcpu_boot_addr, set in HLE)
     pub appcpu_boot: Option<u32>,
     pub gpio: Gpio,
     pub spi1: SpiFlash,
     pub extmem: Extmem,
     pub ledc: Ledc,
     pub analog: Analog,
-    /// 原生 USB OTG（Option 只为在推进时临时拿出来，让控制器 DMA 能借用总线访问内存；平时恒为 Some）
+    /// Native USB OTG (Option only so it can be taken out while advancing, letting controller DMA borrow the bus; always Some otherwise)
     pub usb: Option<Box<usb::Usb>>,
-    /// RMT（4 发送 + 4 接收）与挂在引脚上的 WS2812 解码器
+    /// RMT (4 TX + 4 RX) and WS2812 decoders hanging on pins
     pub rmt: Rmt,
     pub ws2812: HashMap<u32, Ws2812>,
-    /// 脉冲计数器（4 单元，P2-01）
+    /// Pulse counter (4 units, P2-01)
     pub pcnt: Pcnt,
-    /// 直接接在 GPIO 上、输出带时刻波形的外接器件（旋转编码器、HC-SR04）
+    /// External devices wired straight to GPIO that output timed waveforms (rotary encoder, HC-SR04)
     pub pins: PinDevices,
-    /// I2C0（0x60013000）/ I2C1（0x60027000），模型与 C3 相同
+    /// I2C0 (0x60013000) / I2C1 (0x60027000), same model as C3
     pub i2c0: I2c,
     pub i2c1: I2c,
-    /// GP-SPI2 主机 + GDMA（5 通道），模型与 C3 同族共用
+    /// GP-SPI2 master + GDMA (5 channels), model shared with the C3 family
     pub spi2: GpSpi,
     pub gdma: Gdma,
-    /// 挂在 SPI2 上的圆屏（CLI `--spi gc9a01` / wasm `tb_lcd_attach`）
+    /// Round display on SPI2 (CLI `--spi gc9a01` / wasm `tb_lcd_attach`)
     pub lcd: Option<Box<Gc9a01>>,
-    /// I2S0（0x6000F000）/ I2S1（0x6002D000），模型与 C3 相同；挂在上面的音频器件（引脚见 `i2s_pin`）
+    /// I2S0 (0x6000F000) / I2S1 (0x6002D000), same model as C3; plus the audio devices on them (pins: see `i2s_pin`)
     pub i2s: [I2s; 2],
     pub audio: Audio,
-    /// SAR ADC 单次采样（SENS）
+    /// SAR ADC one-shot sampling (SENS)
     pub adc: SensAdc,
-    /// Wi-Fi MAC + 虚拟世界（Option 只为推进 / 发送时临时取出来借总线；平时恒为 Some）
+    /// Wi-Fi MAC + virtual world (Option only so it can be taken out to borrow the bus while advancing / sending; always Some otherwise)
     pub wifi: Option<Box<WifiMac>>,
-    /// SHA / AES 加速器（WPA2 的 PBKDF2、MIC、密钥解封经 mbedTLS 走它们）
+    /// SHA / AES accelerators (WPA2 PBKDF2, MIC and key unwrap go through them via mbedTLS)
     pub sha: ShaHw,
     pub aes: AesHw,
-    /// WDEV_RND_REG 的状态（xorshift，固定种子，结果可复现）
+    /// WDEV_RND_REG state (xorshift, fixed seed, reproducible)
     pub rng: u32,
     pub efuse: [u32; 0x200 / 4],
     /// SYSTEM_CPU_INTR_FROM_CPU_0..3
@@ -188,21 +188,21 @@ pub struct SocBus {
     pub next_event: u64,
     pub gpio_log: Vec<(u64, u64)>,
     last_gpio: u64,
-    /// 逻辑分析仪事件（P1-05，模型与格式见 tryboard_esp32c3::iotrace）
+    /// Logic analyzer events (P1-05; model and format in tryboard_esp32c3::iotrace)
     pub iotrace: IoTrace,
-    /// FreeRTOS 任务切换（C-04，模型见 tryboard_esp32c3::tasktrace）
+    /// FreeRTOS task switches (C-04; model in tryboard_esp32c3::tasktrace)
     pub tasks: TaskTrace,
-    /// 固件请求复位（RTC_CNTL_OPTIONS0 的 SW_SYS_RST / SW_PROCPU_RST），值为下次上电的复位原因
+    /// Firmware requested a reset (RTC_CNTL_OPTIONS0 SW_SYS_RST / SW_PROCPU_RST); value is the next boot's reset reason
     pub reset_request: Option<u32>,
-    /// 固件单独复位了核 1（SW_APPCPU_RST）：esp_restart 先复位并停住另一个核
+    /// Firmware reset core 1 alone (SW_APPCPU_RST): esp_restart first resets and stalls the other core
     pub appcpu_reset: bool,
-    /// 本次上电的复位原因（RTC_CNTL_RESET_STATE 每核 6 位）：1 上电、3 软件系统复位、12 软件 CPU 复位
+    /// This boot's reset reason (RTC_CNTL_RESET_STATE, 6 bits per core): 1 power-on, 3 software system reset, 12 software CPU reset
     pub reset_reason: u32,
 }
 
 impl Default for SocBus {
     fn default() -> Self {
-        // GD25Q128：16MB
+        // GD25Q128: 16MB
         let spi1 = SpiFlash {
             jedec: 0x18_40_c8,
             ..Default::default()
@@ -262,7 +262,7 @@ impl Default for SocBus {
             gpio_log: Vec::new(),
             last_gpio: 1,
             iotrace: IoTrace::new(1),
-            // Xtensa 栈帧：XT_STK_EXIT / XT_SOL_EXIT 之后是 PC
+            // Xtensa stack frame: PC follows XT_STK_EXIT / XT_SOL_EXIT
             tasks: TaskTrace::new(4),
             reset_request: None,
             appcpu_reset: false,
@@ -291,7 +291,7 @@ fn wr(buf: &mut [u8], off: usize, size: u32, v: u32) -> Option<()> {
     Some(())
 }
 
-/// 取指页缓存指向的存储
+/// Storage the fetch page cache points to
 #[derive(Clone, Copy)]
 enum FetchSrc {
     Sram,
@@ -300,7 +300,7 @@ enum FetchSrc {
     Rom,
 }
 
-/// cache 窗口翻译结果
+/// Cache window translation result
 enum Ext {
     Flash(usize),
     Psram(usize),
@@ -322,7 +322,7 @@ impl SocBus {
         })
     }
 
-    /// SRAM 偏移（以 IRAM 0x40370000 为 0）
+    /// SRAM offset (IRAM 0x40370000 = 0)
     #[inline]
     fn sram_off(a: u32) -> Option<usize> {
         if (DRAM_LOW..DRAM_HIGH).contains(&a) {
@@ -359,7 +359,7 @@ impl SocBus {
         if let Some(o) = Self::sram_off(a) {
             wr(&mut self.sram, o, size, v)
         } else if (DROM_LOW..DROM_HIGH).contains(&a) {
-            // D 总线 cache 窗口只有映射到 PSRAM 的页可写
+            // On the D-bus cache window only pages mapped to PSRAM are writable
             match self.ext_addr(a)? {
                 Ext::Psram(p) => wr(&mut self.psram, p, size, v),
                 Ext::Flash(_) => None,
@@ -408,11 +408,11 @@ impl SocBus {
             0x6002_0000 => return self.timg1.read(off, now),
             0x6002_3000 => return self.systimer.read(off, now),
             0x6003_8000 => match off {
-                0x04 => return 0x2, // EP1_CONF：IN 端点有空位
-                0x08 => return 0x8, // INT_RAW：SERIAL_IN_EMPTY
+                0x04 => return 0x2, // EP1_CONF: IN endpoint has room
+                0x08 => return 0x8, // INT_RAW: SERIAL_IN_EMPTY
                 _ => {}
             },
-            // I2C_MST_ANA_CONF0（regi2c_defs.h）：BBPLL 校准完成位（bit 24）——PLL 校准瞬间完成
+            // I2C_MST_ANA_CONF0 (regi2c_defs.h): BBPLL calibration done bit (bit 24) -- PLL calibration completes instantly
             0x6000_E000 if off == 0x40 => {
                 return self.regs.get(&a).copied().unwrap_or(0) | (1 << 24)
             }
@@ -435,7 +435,7 @@ impl SocBus {
             return self.reset_reason | (self.reset_reason << 6);
         }
         if a == WDEV_RND_REG {
-            // 每次读都给新值（esp_random、lwIP 端口 / DNS 事务号都靠它）
+            // Every read yields a new value (esp_random, lwIP ports / DNS transaction IDs depend on it)
             let mut x = self.rng;
             x ^= x << 13;
             x ^= x >> 17;
@@ -481,7 +481,7 @@ impl SocBus {
                 return;
             }
             0x6001_0000 => return self.uart1.write(off, v),
-            // SPI1 用户命令：片选 CS1 时发给 PSRAM，否则发给 flash
+            // SPI1 user command: goes to PSRAM when CS1 is selected, otherwise to flash
             0x6000_2000
                 if off == 0
                     && v & (1 << 18) != 0
@@ -492,7 +492,7 @@ impl SocBus {
                     .user_transaction(&mut self.spi1.regs, &mut self.psram);
             }
             0x6000_2000 => return self.spi1.write(off, v, &mut self.flash),
-            // 复位位是脉冲（硬件自清零）：只记请求，存回去的值去掉它们，免得后续读改写再触发
+            // Reset bits are pulses (self-clearing in hardware): only record the request and store the value without them, so later read-modify-writes don't retrigger
             0x6000_8000 if off == 0 => {
                 if v & (RST_SYS | RST_PROCPU) != 0 {
                     self.reset_request = Some(if v & RST_SYS != 0 { 3 } else { 12 });
@@ -505,14 +505,14 @@ impl SocBus {
             }
             0x6000_4000 => {
                 self.gpio.write(off, v);
-                // 使能（0x20..0x38，含 GPIO32 以上）和输出信号选择（FUNC_OUT_SEL 0x554 起）决定哪个引脚上有 PWM
+                // Enable (0x20..0x38, incl. GPIO32+) and output signal select (FUNC_OUT_SEL from 0x554) decide which pin carries PWM
                 if (0x20..0x38).contains(&off) || off >= 0x554 {
                     self.iotrace.pwm_dirty = true;
                 }
                 self.gpio_changed(now);
                 return;
             }
-            // eFuse 读寄存器只读；CMD 等写入不保存，读回 0（"命令已完成"）
+            // eFuse read registers are read-only; writes to CMD etc. aren't stored and read back 0 ("command done")
             0x6000_7000 if off < 0x200 => return,
             0x6000_9000 if (4..=0xc4).contains(&off) => {
                 self.gpio.iomux[((off - 4) / 4) as usize] = v;
@@ -569,7 +569,7 @@ impl SocBus {
             0x6002_0000 => return self.timg1.write(off, v, now),
             0x6002_3000 => return self.systimer.write(off, v, now),
             0x6003_8000 if off == 0 => {
-                // USB-Serial-JTAG 第二控制台，内容与 UART0 重复，单独存
+                // USB-Serial-JTAG second console duplicates UART0 output; stored separately
                 self.usj_tx.push(v as u8);
                 if self.usj_tx.len() > 1 << 16 {
                     self.usj_tx.drain(..1 << 15);
@@ -608,7 +608,7 @@ impl SocBus {
             let mut w = self.wifi.take().expect("wifi");
             let keep = w.write(a, v, now, self);
             self.wifi = Some(w);
-            // None = MAC 模型已完全处理；否则照通用寄存器存（仍计入 unimpl）
+            // None = MAC model fully handled it; otherwise store as a generic register (still counted as unimpl)
             match keep {
                 Some(x) => v = x,
                 None => return,
@@ -629,7 +629,7 @@ impl SocBus {
         self.gpio.sense();
         let lv = self.gpio.level();
         if let Some(l) = self.lcd.as_mut() {
-            // RST 低有效，只在固件真的把脚驱动为低时复位（模组板上有上拉）；背光高电平亮
+            // RST is active low and only resets when firmware really drives it low (module boards have a pull-up); backlight on when high
             let en = self.gpio.enable;
             l.set_reset(en >> lcd_pin::RST & 1 != 0 && lv >> lcd_pin::RST & 1 == 0);
             l.set_backlight(lv >> lcd_pin::BL & 1 != 0);
@@ -643,12 +643,12 @@ impl SocBus {
             }
             self.pins.on_level(now, lv);
         }
-        // 引脚电平或 GPIO 矩阵输入选择可能变了：PCNT / RMT 接收的输入按此刻重新取样
+        // Pin levels or GPIO matrix input selects may have changed: resample PCNT / RMT RX inputs now
         self.feed_inputs(now, lv);
         self.irq_dirty = true;
     }
 
-    /// GPIO 矩阵输入信号 sig 此刻的电平（FUNCn_IN_SEL_CFG：sel[5:0]、inv[6]、经矩阵[7]；0x38 常 1、0x3C 常 0）
+    /// Current level of GPIO matrix input signal sig (FUNCn_IN_SEL_CFG: sel[5:0], inv[6], via matrix[7]; 0x38 constant 1, 0x3C constant 0)
     fn sig_level(&self, lv: u64, sig: u32) -> bool {
         let f = self.gpio.func_in[sig as usize];
         if f & (1 << 7) == 0 {
@@ -676,7 +676,7 @@ impl SocBus {
         }
     }
 
-    /// 外接引脚器件到 now 为止的驱动按时刻施加到引脚；返回下一次要问它们的时刻
+    /// Apply external pin devices' drives up to now at their timestamps; returns when to query them next
     fn pins_update(&mut self, now: u64) -> u64 {
         if self.pins.is_empty() {
             return u64::MAX;
@@ -704,7 +704,7 @@ impl SocBus {
         }
     }
 
-    /// 所有中断源的当前电平（99 个源，两个 64 位字）
+    /// Current level of all interrupt sources (99 sources, two 64-bit words)
     pub fn levels(&self) -> [u64; 2] {
         let mut l = [0u64; 2];
         let mut set = |s: u32, on: bool| {
@@ -746,8 +746,8 @@ impl SocBus {
         l
     }
 
-    /// 把 RMT 输出跳变经 GPIO 矩阵送到引脚：更新引脚电平、喂给挂在引脚上的 WS2812 解码器。
-    /// 返回解码器下一次需要检查（帧结束判定）的时刻。
+    /// Route RMT output edges through the GPIO matrix to pins: update pin levels and feed the WS2812 decoders on them.
+    /// Returns when a decoder next needs checking (end-of-frame detection).
     fn route_rmt(&mut self, now: u64) -> u64 {
         let l = self.rmt.layout;
         let mut next = u64::MAX;
@@ -772,7 +772,7 @@ impl SocBus {
             self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
         }
         if !edges.is_empty() {
-            // RMT 发送驱动的引脚也可能接着 PCNT / RMT 接收（回环）
+            // Pins driven by RMT TX may also feed PCNT / RMT RX (loopback)
             let lv = self.gpio.level();
             self.feed_inputs(now, lv);
         }
@@ -781,8 +781,8 @@ impl SocBus {
         next
     }
 
-    /// 圆屏的片选：CS 脚经 IO_MUX / GPIO 矩阵接到 SPI2 的 CS0 时由控制器在传输期间拉低；
-    /// 否则当普通 GPIO 看，固件驱动为低才算选中
+    /// Round display chip select: if the CS pin is routed via IO_MUX / GPIO matrix to SPI2 CS0, the controller pulls it low
+    /// during transfers; otherwise treat it as a plain GPIO, selected only when firmware drives it low
     fn lcd_selected(&self) -> bool {
         let pin = lcd_pin::CS as usize;
         let via_iomux = (self.gpio.iomux[pin] >> 12) & 7 == IOMUX_FUNC_FSPICS0;
@@ -794,12 +794,12 @@ impl SocBus {
         }
     }
 
-    /// 固件写了 SPI2 CMD.USR：取数据（W 寄存器或 GDMA 描述符链）、交给圆屏，再按 SPI 时钟计时
+    /// Firmware wrote SPI2 CMD.USR: fetch data (W registers or GDMA descriptor chain), hand it to the display, time it by SPI clock
     fn spi2_transfer(&mut self, now: u64) {
         let p = self.spi2.plan();
         let mut bytes = p.head.clone();
         let mut out_ch = None;
-        // 把 GDMA 临时取出来，借总线读写内存
+        // Take GDMA out temporarily so it can borrow the bus for memory access
         let mut g = std::mem::replace(&mut self.gdma, Gdma::placeholder());
         if p.mosi_bits > 0 {
             let n = p.mosi_bits.div_ceil(8) as usize;
@@ -814,12 +814,12 @@ impl SocBus {
             } else {
                 self.spi2.tx_buffer(n)
             };
-            // DMA 给的数据不够：移位寄存器里是 0
+            // DMA supplied too little data: the shift register holds 0
             data.resize(n, 0);
             bytes.extend_from_slice(&data);
         }
         if p.miso_bits > 0 {
-            // 没有会应答的从机，MISO 上拉读到全 1
+            // No slave would answer; MISO pull-up reads all 1s
             let rx = vec![0xffu8; p.miso_bits.div_ceil(8) as usize];
             if p.dma_rx {
                 if let Some(ch) = g.in_channel_for(GDMA_PERI_SPI2) {
@@ -840,7 +840,7 @@ impl SocBus {
         self.spi2.begin(now, &p, out_ch);
     }
 
-    /// LEDC 或 GPIO 矩阵改过：把各引脚此刻的 PWM 交给事件记录（没变的引脚不记）
+    /// LEDC or GPIO matrix changed: hand each pin's current PWM to the event log (unchanged pins aren't logged)
     fn trace_pwm(&mut self, now: u64) {
         if !self.iotrace.pwm_scan_needed(self.ledc.rev) {
             return;
@@ -853,8 +853,8 @@ impl SocBus {
         }
     }
 
-    /// 引脚上的 PWM：经 GPIO 矩阵路由到该引脚的 LEDC 通道输出（占空比, 频率）。
-    /// S3 的 LEDC 输出信号是 73..=80（LEDC_LS_SIG_OUT0..7_IDX）
+    /// PWM on a pin: the LEDC channel output routed to it via the GPIO matrix (duty, frequency).
+    /// S3 LEDC output signals are 73..=80 (LEDC_LS_SIG_OUT0..7_IDX)
     pub fn pin_pwm(&self, pin: usize) -> Option<(f32, f32)> {
         let f = *self.gpio.func_out.get(pin)?;
         let sig = f & 0x1ff;
@@ -866,7 +866,7 @@ impl SocBus {
         None
     }
 
-    /// 推进定时器、按两个核各自的中断矩阵算出外部中断线（存进 lines，轮到该核时交给它）
+    /// Advance timers and compute external lines from each core's interrupt matrix (stored in lines, handed over on that core's turn)
     pub fn update(&mut self) {
         let now = self.now;
         let n1 = self.systimer.update(now);
@@ -915,7 +915,7 @@ impl SocBus {
             .min(n12)
             .min(n13);
         let lv = self.levels();
-        // 边沿型线由核自己检测上升沿，这里把电平和本次上升沿一起给出
+        // Edge lines get rising-edge detection in the core itself, so pass both the level and this round's rising edges
         let (l0, r0) = self.intm.lines(&lv);
         let (l1, r1) = self.intm1.lines(&lv);
         self.lines = [l0 | r0, l1 | r1];
@@ -924,7 +924,7 @@ impl SocBus {
 }
 
 impl SocBus {
-    /// I2S 口 k 收发推进：按 GPIO 矩阵判断喇叭 DIN / 麦克风 SD 是不是接在这个口的数据线上，再借总线让 GDMA 搬数据
+    /// Advance I2S port k: check via GPIO matrix whether speaker DIN / mic SD sit on this port's data line, then let GDMA borrow the bus to move data
     fn i2s_update(&mut self, now: u64, k: usize) -> u64 {
         if !self.i2s[k].tx.running && !self.i2s[k].rx.running {
             return u64::MAX;
@@ -936,7 +936,7 @@ impl SocBus {
                 .get(s.pins.data as usize)
                 .is_some_and(|f| (f & 0x1ff) as usize == sig)
         });
-        // FUNCn_IN_SEL_CFG：位 5..0 引脚、位 7 经 GPIO 矩阵
+        // FUNCn_IN_SEL_CFG: bits 5..0 pin, bit 7 via GPIO matrix
         let f = self.gpio.func_in[sig];
         let mic = self
             .audio
@@ -958,7 +958,7 @@ impl SocBus {
         n
     }
 
-    /// 接 MAX98357A 喇叭 / INMP441 麦克风（引脚见 `i2s_pin`）
+    /// Attach a MAX98357A speaker / INMP441 mic (pins: see `i2s_pin`)
     pub fn attach_speaker(&mut self) {
         use i2s_pin::*;
         let p = audio::Pins {
@@ -1004,7 +1004,7 @@ impl DmaMem for SocBus {
 }
 
 impl SocBus {
-    /// 在 SPI2 上接一块 GC9A01 圆屏（引脚见 `lcd_pin`）
+    /// Attach a GC9A01 round display on SPI2 (pins: see `lcd_pin`)
     pub fn attach_lcd(&mut self) {
         self.lcd = Some(Box::default());
         let now = self.now;
@@ -1015,7 +1015,7 @@ impl SocBus {
 impl Bus for SocBus {
     #[inline]
     fn load(&mut self, a: u32, size: u32) -> Result<u32, BusFault> {
-        // 快路径：SRAM（与 mem_read 的第一个分支相同，内联掉一次函数调用）
+        // Fast path: SRAM (same as mem_read's first branch, inlined to save a call)
         if let Some(o) = Self::sram_off(a) {
             if let Some(v) = rd(&self.sram, o, size) {
                 return Ok(v);
@@ -1051,7 +1051,7 @@ impl Bus for SocBus {
             let v = if size == 4 {
                 v
             } else {
-                // 子字写：与外设当前值合并（UART FIFO 读有出队副作用，不参与）
+                // Sub-word write: merge with the peripheral's current value (UART FIFO reads have dequeue side effects, so excluded)
                 let sh = (a & 3) * 8;
                 let mask = if size == 2 { 0xffff } else { 0xff } << sh;
                 let old = if aa == 0x6000_0000 || aa == 0x6001_0000 {
@@ -1079,7 +1079,7 @@ impl Bus for SocBus {
 
     #[inline]
     fn fetch(&mut self, a: u32) -> Result<u32, BusFault> {
-        // 最快路径：与上一条指令同一个 64KB 页，且 4 字节不跨页
+        // Fastest path: same 64KB page as the previous instruction, and the 4 bytes don't cross the page
         let o = (a & 0xffff) as usize;
         if a >> 16 == self.fetch_page && o <= 0xfffc {
             let buf = match self.fetch_src {
@@ -1107,7 +1107,7 @@ impl Bus for SocBus {
 
     #[inline(always)]
     fn attention(&mut self, cycles: u64) -> bool {
-        // 与 run_core 循环顶部相同：外设时间取较快的核；irq_dirty 时先不推进 now（run_core 会先按旧时间 update）
+        // Same as the top of the run_core loop: peripheral time follows the faster core; with irq_dirty don't advance now yet (run_core updates with the old time first)
         if self.irq_dirty {
             return true;
         }
@@ -1119,8 +1119,8 @@ impl Bus for SocBus {
 }
 
 impl SocBus {
-    /// 取指慢路径：一次读 4 字节（指令最长 3 字节）；跨区域边界时退回逐字节。顺便填取指页缓存
-    /// （只缓存整页都在同一块存储里的：IRAM、ROM、IROM 窗口经 MMU 翻译后的页）
+    /// Fetch slow path: read 4 bytes at once (instructions are at most 3 bytes); fall back to bytewise across region
+    /// boundaries. Also fills the fetch page cache (only pages wholly in one storage: IRAM, ROM, MMU-translated IROM pages)
     #[inline(never)]
     fn fetch_slow(&mut self, a: u32) -> Result<u32, BusFault> {
         self.fetch_page = u32::MAX;
@@ -1161,7 +1161,7 @@ impl SocBus {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stop {
     Budget,
-    /// 进入了 ROM 的异常向量（app 还没装自己的 VECBASE，或异常发生在 app 接管之前）
+    /// Entered a ROM exception vector (app hasn't installed its own VECBASE yet, or the exception came before the app took over)
     Fault {
         cause: u32,
         epc: u32,
@@ -1169,29 +1169,29 @@ pub enum Stop {
     },
     /// BREAK / BREAK.N
     Break(u32),
-    /// 碰到没实现的 HLE 函数
+    /// Hit an unimplemented HLE function
     Hle(u32),
-    /// 固件请求复位（esp_restart、panic 后重启）；调用 reboot() 重新上电
+    /// Firmware requested a reset (esp_restart, restart after panic); call reboot() to power back up
     Reset(u32),
 }
 
 pub struct Esp32s3 {
-    /// 核 0（PRO CPU）
+    /// Core 0 (PRO CPU)
     pub cpu: Cpu,
-    /// 核 1（APP CPU），cpu1_on 之前不执行
+    /// Core 1 (APP CPU), not run until cpu1_on
     pub cpu1: Cpu,
     pub cpu1_on: bool,
     pub bus: SocBus,
     pub rom_symbols: HashMap<u32, String>,
     pub hle: HashMap<u32, hle::Hle>,
-    /// 留一份 ROM，复位重新上电时用
+    /// Keep a copy of the ROM for power-up after reset
     pub rom_elf: Vec<u8>,
 }
 
-/// 两核交替执行的量子（周期）：小到让核间中断、自旋锁及时生效，大到切换开销可忽略
+/// Quantum (cycles) for alternating cores: small enough for IPIs and spinlocks to take effect promptly, large enough that switching cost is negligible
 const QUANTUM: u64 = 256;
 
-/// 跑一个核直到它的周期数到 `until`。`idle_until`：这个核进入 WAITI 时允许快进到的最远时刻。
+/// Run one core until its cycle count reaches `until`. `idle_until`: the furthest time this core may skip ahead to on WAITI.
 fn run_core(
     k: usize,
     cpu: &mut Cpu,
@@ -1202,7 +1202,7 @@ fn run_core(
 ) -> Option<Stop> {
     cpu.set_irq_lines(bus.lines[k]);
     while cpu.cycles < until {
-        // 外设时间取两核中走得最远的那个，保证单调
+        // Peripheral time follows whichever core is furthest ahead, keeping it monotonic
         if cpu.cycles > bus.now {
             bus.now = cpu.cycles;
         }
@@ -1210,11 +1210,11 @@ fn run_core(
             bus.update();
             cpu.set_irq_lines(bus.lines[k]);
         }
-        // 批量执行到下一个需要 SoC 介入的点（外设事件、中断线变化、异常向量），逐条检查与原来逐步调 step 相同
+        // Batch-run to the next point needing SoC attention (peripheral event, line change, exception vector); per-instruction checks match the old step-by-step loop
         match cpu.run_batch(bus, until, 0x4000_0300, 0x4000_0400) {
             Exit::Normal => {
-                // ROM 异常向量（0x40000300 Kernel / 0x40000340 User / 0x400003C0 Double）：
-                // app 正常运行时 VECBASE 指向 IRAM，落到这里说明出事了
+                // ROM exception vectors (0x40000300 Kernel / 0x40000340 User / 0x400003C0 Double): in normal app operation
+                // VECBASE points into IRAM, so landing here means something went wrong
                 let pc = cpu.pc;
                 if (0x4000_0300..0x4000_0400).contains(&pc) && cpu.read_sr(sr::VECBASE) == ROM_LOW {
                     return Some(Stop::Fault {
@@ -1224,17 +1224,17 @@ fn run_core(
                     });
                 }
                 if bus.irq_dirty {
-                    // 写了 RTC_CNTL 复位位：本核到此为止，由外层重新上电
+                    // Wrote an RTC_CNTL reset bit: this core stops here and the outer loop powers back up
                     if let Some(r) = bus.reset_request.take() {
                         return Some(Stop::Reset(r));
                     }
-                    // 本核写了外设（可能清掉 / 触发了中断）：马上重算
+                    // This core wrote a peripheral (may have cleared / raised an interrupt): recompute now
                     bus.update();
                     cpu.set_irq_lines(bus.lines[k]);
                 }
             }
             Exit::Waiti => {
-                // 空闲：快进到下一个外设事件或 CCOMPARE 定时器中断
+                // Idle: skip ahead to the next peripheral event or CCOMPARE timer interrupt
                 let target = bus
                     .next_event
                     .min(cpu.next_timer_event().unwrap_or(u64::MAX))
@@ -1250,7 +1250,7 @@ fn run_core(
                 None => return Some(Stop::Hle(pc)),
             },
             Exit::Break(v) => return Some(Stop::Break(v)),
-            // 半主机调用：固件只在 QEMU 测试里用，这里忽略
+            // Semihosting call: firmware only uses it in QEMU tests, ignored here
             Exit::Simcall => {}
         }
     }
@@ -1262,18 +1262,18 @@ impl Esp32s3 {
         let end = self.cpu.cycles.saturating_add(budget);
         while self.cpu.cycles < end {
             let q_end = (self.cpu.cycles + QUANTUM).min(end);
-            // 两核都空闲时可以一起快进到下一个事件；否则核 0 的快进不能越过本量子（核 1 可能马上给它发核间中断）
+            // When both cores are idle they can skip ahead together; otherwise core 0 can't skip past this quantum (core 1 may send it an IPI right away)
             let both_idle = !self.cpu1_on || self.cpu1.waiting;
             let idle0 = if both_idle { end } else { q_end };
             if let Some(s) = run_core(0, &mut self.cpu, &mut self.bus, &self.hle, q_end, idle0) {
                 return s;
             }
             if std::mem::take(&mut self.bus.appcpu_reset) {
-                // 核 1 被复位：真机上它回到 ROM 等新的启动地址（随后还会被 stall），这里直接停掉
+                // Core 1 was reset: on silicon it returns to ROM awaiting a new boot address (and gets stalled); here we just stop it
                 self.cpu1_on = false;
             }
             if self.cpu1_on {
-                // 核 1 追到核 0 的时间，不超过它
+                // Core 1 catches up to core 0's time without passing it
                 let t = self.cpu.cycles;
                 if let Some(s) = run_core(1, &mut self.cpu1, &mut self.bus, &self.hle, t, t) {
                     return s;
@@ -1286,7 +1286,7 @@ impl Esp32s3 {
         Stop::Budget
     }
 
-    /// 调试用：单步跑，记录 PC 不连续处（跳转目标）
+    /// Debug: single-step and record PC discontinuities (jump targets)
     pub fn run_traced(
         &mut self,
         budget: u64,
@@ -1338,26 +1338,26 @@ mod tests {
         };
         b.flash[0x2_0004] = 0xab;
         b.psram[0x1_0008] = 0xcd;
-        // DROM 0x3C010000 → flash 页 2；DROM 0x3C800000（线性页 128）→ PSRAM 页 1
+        // DROM 0x3C010000 -> flash page 2; DROM 0x3C800000 (linear page 128) -> PSRAM page 1
         b.mmu[1] = 2;
         b.mmu[128] = MMU_PSRAM | 1;
         assert_eq!(b.mem_read(0x3C01_0004, 1), Some(0xab));
         assert_eq!(b.mem_read(0x3C80_0008, 1), Some(0xcd));
-        // PSRAM 可写、flash 映射不可写
+        // PSRAM writable, flash mapping not
         assert!(b.mem_write(0x3C80_0000, 4, 0x1234_5678).is_some());
         assert!(b.mem_write(0x3C01_0000, 4, 1).is_none());
-        // 无效页
+        // Invalid page
         assert_eq!(b.mem_read(0x3C02_0000, 4), None);
     }
 
     #[test]
     fn software_reset_bits() {
         let mut b = SocBus::default();
-        // 核 1 复位：只记标志，存回的值不带复位位（读改写不会再触发）
+        // Core 1 reset: only set a flag; the stored value has no reset bit (read-modify-write won't retrigger)
         Bus::store(&mut b, 0x6000_8000, 4, 0x10 | 0x4).unwrap();
         assert!(b.appcpu_reset && b.reset_request.is_none());
         assert_eq!(Bus::load(&mut b, 0x6000_8000, 4).unwrap(), 0x4);
-        // 核 0 复位 = 整机重新上电，原因 12（RTC_SW_CPU_RST）；系统复位原因 3
+        // Core 0 reset = full power-up, reason 12 (RTC_SW_CPU_RST); system reset reason 3
         Bus::store(&mut b, 0x6000_8000, 4, 0x20).unwrap();
         assert_eq!(b.reset_request, Some(12));
         Bus::store(&mut b, 0x6000_8000, 4, 1 << 31).unwrap();
@@ -1372,7 +1372,7 @@ mod tests {
     #[test]
     fn psram_via_spi1_cs1() {
         let mut b = SocBus::default();
-        // MISC：CS0 关、CS1 开；读 MR1（厂商 ID）
+        // MISC: CS0 off, CS1 on; read MR1 (vendor ID)
         Bus::store(&mut b, 0x6000_2034, 4, 1).unwrap();
         Bus::store(&mut b, 0x6000_2018, 4, (1 << 31) | (1 << 30) | (1 << 28)).unwrap();
         Bus::store(&mut b, 0x6000_2020, 4, (15 << 28) | 0x4040).unwrap();
@@ -1383,7 +1383,7 @@ mod tests {
             (Bus::load(&mut b, 0x6000_2058, 4).unwrap() >> 8) & 0xff,
             0x0d
         );
-        // 片选回 CS0：同一命令发给 flash，不碰 PSRAM
+        // Chip select back to CS0: the same command goes to flash, PSRAM untouched
         let n = b.psram_chip.commands;
         Bus::store(&mut b, 0x6000_2034, 4, 2).unwrap();
         Bus::store(&mut b, 0x6000_2000, 4, 1 << 18).unwrap();
@@ -1395,7 +1395,7 @@ mod tests {
         let mut b = SocBus::default();
         b.mem_write(0x3FC8_8000, 4, 0xdead_beef).unwrap();
         assert_eq!(b.mem_read(0x4037_8000, 4), Some(0xdead_beef));
-        // SRAM2 只在 D 总线
+        // SRAM2 is on the D bus only
         b.mem_write(0x3FCF_0000, 4, 7).unwrap();
         assert_eq!(b.mem_read(0x3FCF_0000, 4), Some(7));
     }
@@ -1405,23 +1405,23 @@ mod tests {
         let mut m = Intmatrix::default();
         let mut lv = [0u64; 2];
         lv[(src::SYSTIMER_TARGET0 / 64) as usize] |= 1 << (src::SYSTIMER_TARGET0 % 64);
-        // 映射到电平线 9
+        // Map to level line 9
         m.map[src::SYSTIMER_TARGET0 as usize] = 9;
         assert_eq!(m.lines(&lv), (1 << 9, 0));
-        // 映射到边沿线 10：只在第一次出现时给出上升沿
+        // Map to edge line 10: rising edge reported only on first appearance
         m.map[src::SYSTIMER_TARGET0 as usize] = 10;
         assert_eq!(m.lines(&lv), (0, 1 << 10));
         assert_eq!(m.lines(&lv), (0, 0));
-        // 复位值映射到线 16（定时器线）等于不连接
+        // Reset-value mapping to line 16 (timer line) means unconnected
         assert_eq!(Intmatrix::default().lines(&lv), (0, 0));
     }
 
-    /// 编码器 → GPIO6/7 → GPIO 矩阵 → PCNT 单元 0（与 IDF rotary_encoder 相同的配置）；HC-SR04 → GPIO18 → RMT 接收通道 0
+    /// Encoder -> GPIO6/7 -> GPIO matrix -> PCNT unit 0 (same config as IDF rotary_encoder); HC-SR04 -> GPIO18 -> RMT RX channel 0
     #[test]
     fn encoder_into_pcnt_and_sonar_into_rmt_rx() {
         let mut b = SocBus::default();
         let w = |b: &mut SocBus, a: u32, v: u32| Bus::store(b, a, 4, v).unwrap();
-        // FUNCn_IN_SEL_CFG（0x60004154 + 4n）：信号 33..36 = A、B、B、A，经矩阵
+        // FUNCn_IN_SEL_CFG (0x60004154 + 4n): signals 33..36 = A, B, B, A, via matrix
         for (sig, pin) in [(33, 6), (34, 7), (35, 7), (36, 6)] {
             w(&mut b, 0x6000_4154 + 4 * sig, pin | 1 << 7);
         }
@@ -1453,7 +1453,7 @@ mod tests {
         run(&mut b, CPU_HZ / 20);
         assert_eq!(Bus::load(&mut b, 0x6001_7030, 4).unwrap() as u16 as i16, -8);
 
-        // 超声波：信号 81 = GPIO18；1 MHz 分辨率、空闲 25 ms
+        // Ultrasonic: signal 81 = GPIO18; 1 MHz resolution, 25 ms idle
         w(&mut b, 0x6000_4154 + 4 * 81, 18 | 1 << 7);
         w(&mut b, 0x6001_60c0, 0x0500_0000);
         w(&mut b, 0x6001_6030, 80 | (25000 << 8) | (1 << 24));
@@ -1463,7 +1463,7 @@ mod tests {
             .sonars
             .push(tryboard_esp32c3::devices::pins::Hcsr04::new(17, 18, now));
         b.pins.sonars[0].distance_cm = Some(40.0);
-        // Trig：GPIO17 输出 12 µs 高脉冲
+        // Trig: GPIO17 outputs a 12 us high pulse
         w(&mut b, 0x6000_4020, 1 << 17);
         w(&mut b, 0x6000_4008, 1 << 17);
         let t = b.now + 12 * CPU_HZ / 1_000_000;

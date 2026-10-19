@@ -1,18 +1,18 @@
-//! Synopsys DWC2 USB OTG 控制器（ESP32-S3 的 USB_OTG，基址 0x60080000），只做设备模式。
-//! 两种数据通路都支持：Slave（固件读写 FIFO 窗口）与 Buffer DMA（控制器按 DxEPDMAn 直接读写内存）。
-//! esp_tinyusb 默认用 DMA（CONFIG_TINYUSB_MODE_DMA），TinyUSB 原版默认 Slave。
-//!
-//! 寄存器偏移 / 位定义按 DWC2 编程模型（公开资料与 TinyUSB 的 dwc2_type.h，MIT）。
-//! 线上的事务不逐位模拟：虚拟主机以"一次 SETUP / IN / OUT 令牌"为单位调用本模型。
+//! Synopsys DWC2 USB OTG controller (ESP32-S3 USB_OTG, base 0x60080000), device mode only. Both data paths are
+//! supported: Slave (firmware reads/writes FIFO windows) and Buffer DMA (controller accesses memory via DxEPDMAn).
+//! esp_tinyusb defaults to DMA (CONFIG_TINYUSB_MODE_DMA); upstream TinyUSB defaults to Slave.
+//! Register offsets / bits follow the DWC2 programming model (public docs and TinyUSB's dwc2_type.h, MIT).
+//! Wire transactions aren't bit-simulated: the virtual host calls this model per SETUP / IN / OUT token.
+//! lint: allow-long-comment
 
 use std::collections::VecDeque;
 
 pub const BASE: u32 = 0x6008_0000;
-/// 寄存器 0x000..0xFFF + 16 个 4KB 的 FIFO 窗口
+/// Registers 0x000..0xFFF + 16 FIFO windows of 4KB
 pub const SIZE: u32 = 0x1_1000;
 pub const EP_COUNT: usize = 7;
 
-// GINTSTS 位
+// GINTSTS bits
 const GINT_OTGINT: u32 = 1 << 2;
 const GINT_SOF: u32 = 1 << 3;
 const GINT_RXFLVL: u32 = 1 << 4;
@@ -21,10 +21,10 @@ const GINT_USBRST: u32 = 1 << 12;
 const GINT_ENUMDNE: u32 = 1 << 13;
 const GINT_IEPINT: u32 = 1 << 18;
 const GINT_OEPINT: u32 = 1 << 19;
-/// 只读、由内部状态算出的位
+/// Read-only bits computed from internal state
 const GINT_DERIVED: u32 = GINT_OTGINT | GINT_RXFLVL | GINT_BOUTNAKEFF | GINT_IEPINT | GINT_OEPINT;
 
-// 端点控制位
+// Endpoint control bits
 const EPCTL_NAKSTS: u32 = 1 << 17;
 const EPCTL_STALL: u32 = 1 << 21;
 const EPCTL_CNAK: u32 = 1 << 26;
@@ -34,14 +34,14 @@ const EPCTL_SD1PID: u32 = 1 << 29;
 const EPCTL_EPDIS: u32 = 1 << 30;
 const EPCTL_EPENA: u32 = 1 << 31;
 
-// 端点中断位
+// Endpoint interrupt bits
 const EPINT_XFRC: u32 = 1 << 0;
 const EPINT_EPDISD: u32 = 1 << 1;
 const DOEPINT_STUP: u32 = 1 << 3;
 const DIEPINT_INEPNE: u32 = 1 << 6;
 const DIEPINT_TXFE: u32 = 1 << 7;
 
-// GRXSTSP 包状态
+// GRXSTSP packet status
 const PKT_OUT_DATA: u32 = 2;
 const PKT_OUT_DONE: u32 = 3;
 const PKT_SETUP_DONE: u32 = 4;
@@ -56,13 +56,13 @@ pub struct Ep {
     pub nak: bool,
 }
 
-/// 共享接收 FIFO 里的一项：状态字 + 数据
+/// One entry in the shared receive FIFO: status word + data
 struct RxEntry {
     status: u32,
     data: Vec<u8>,
 }
 
-/// DMA 访问内存用（由 SoC 提供）
+/// Memory access for DMA (provided by the SoC)
 pub trait Mem {
     fn rd8(&mut self, a: u32) -> u8;
     fn wr8(&mut self, a: u32, v: u8);
@@ -70,7 +70,7 @@ pub trait Mem {
 
 const DOEPINT_STPKTRX: u32 = 1 << 15;
 
-/// 主机令牌的结果
+/// Result of a host token
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Handshake {
     Ack(Vec<u8>),
@@ -84,14 +84,14 @@ pub struct Dwc2 {
     pub gotgint: u32,
     pub epin: [Ep; EP_COUNT],
     pub epout: [Ep; EP_COUNT],
-    /// 各 IN 端点的发送 FIFO（固件按 32 位字写入，含包尾填充）
+    /// Per-IN-endpoint transmit FIFO (firmware writes 32-bit words, including tail padding)
     txfifo: [VecDeque<u8>; EP_COUNT],
     rxq: VecDeque<RxEntry>,
-    /// 已用 GRXSTSP 弹出、正被固件读取数据的那一项
+    /// The entry popped via GRXSTSP whose data the firmware is reading
     rx_cur: VecDeque<u8>,
     global_out_nak: bool,
     pub frame: u32,
-    /// 设备已枚举出速度（ENUMDNE 之后）
+    /// Device has enumerated a speed (after ENUMDNE)
     pub enumerated: bool,
 }
 
@@ -113,7 +113,7 @@ impl Default for Dwc2 {
     }
 }
 
-// 常用寄存器偏移
+// Common register offsets
 const GOTGCTL: u32 = 0x000;
 const GOTGINT: u32 = 0x004;
 const GAHBCFG: u32 = 0x008;
@@ -142,7 +142,7 @@ impl Dwc2 {
         self.regs[(off / 4) as usize]
     }
 
-    /// 发送 FIFO 深度（字）：EP0 用 DIEPTXF0，其余用 DIEPTXFn（0x104 起）
+    /// Transmit FIFO depth (words): EP0 uses DIEPTXF0, others DIEPTXFn (from 0x104)
     fn txfifo_depth(&self, ep: usize) -> u32 {
         let r = if ep == 0 {
             self.r(DIEPTXF0)
@@ -219,12 +219,12 @@ impl Dwc2 {
         v
     }
 
-    /// 中断输出：全局中断使能且有未屏蔽的挂起位
+    /// Interrupt output: global interrupt enabled and an unmasked pending bit
     pub fn irq(&self) -> bool {
         self.r(GAHBCFG) & 1 != 0 && self.gintsts_now() & self.r(GINTMSK) != 0
     }
 
-    /// 设备是否在总线上（软断开位 SDIS 已清）
+    /// Whether the device is on the bus (soft-disconnect bit SDIS cleared)
     pub fn connected(&self) -> bool {
         self.r(DCTL) & 2 == 0 && self.r(GAHBCFG) & 1 != 0
     }
@@ -235,7 +235,7 @@ impl Dwc2 {
 
     pub fn read(&mut self, off: u32) -> u32 {
         if off >= 0x1000 {
-            // 任意 FIFO 窗口读：取当前接收项的下一个字
+            // Any FIFO window read returns the next word of the current receive entry
             let mut w = [0u8; 4];
             for b in w.iter_mut() {
                 *b = self.rx_cur.pop_front().unwrap_or(0);
@@ -245,7 +245,7 @@ impl Dwc2 {
         match off {
             GOTGCTL => (self.r(GOTGCTL) & 0xffff) | (1 << 16) | (1 << 18) | (1 << 19),
             GOTGINT => self.gotgint,
-            // AHB 空闲；复位 / 冲刷都是瞬间完成的
+            // AHB idle; reset / flush complete instantly
             GRSTCTL => (self.r(GRSTCTL) & !0x3f) | (1 << 31),
             GINTSTS => self.gintsts_now(),
             GRXSTSR => self.rxq.front().map(|e| e.status).unwrap_or(0),
@@ -339,7 +339,7 @@ impl Dwc2 {
             GOTGINT => self.gotgint &= !v,
             GRSTCTL => {
                 if v & 1 != 0 {
-                    // 内核软复位：清 FIFO 与中断
+                    // Core soft reset: clear FIFOs and interrupts
                     self.rxq.clear();
                     self.rx_cur.clear();
                     self.txfifo.iter_mut().for_each(|f| f.clear());
@@ -359,7 +359,7 @@ impl Dwc2 {
                 }
                 self.regs[(off / 4) as usize] = v & !0x3f;
             }
-            // 写 1 清（派生位写了也没用）
+            // Write 1 to clear (writing derived bits has no effect)
             GINTSTS => self.gintsts &= !(v & !GINT_DERIVED),
             DCTL => {
                 if v & (1 << 9) != 0 {
@@ -406,21 +406,21 @@ impl Dwc2 {
         }
     }
 
-    // ------------------------------------------------------------------ 主机侧接口
+    // ------------------------------------------------------------------ Host-side interface
 
-    /// 总线复位开始（主机拉 SE0）
+    /// Bus reset begins (host drives SE0)
     pub fn bus_reset(&mut self) {
         self.enumerated = false;
         self.gintsts |= GINT_USBRST;
     }
 
-    /// 复位结束，速度协商完成（全速）
+    /// Reset ends, speed negotiated (full speed)
     pub fn enum_done(&mut self) {
         self.enumerated = true;
         self.gintsts |= GINT_ENUMDNE;
     }
 
-    /// 1ms 帧开始
+    /// 1ms frame start
     pub fn sof(&mut self) {
         self.frame = (self.frame + 1) & 0x3fff;
         self.gintsts |= GINT_SOF;
@@ -434,12 +434,12 @@ impl Dwc2 {
         self.r(GAHBCFG) & (1 << 5) != 0
     }
 
-    /// SETUP 令牌 + 8 字节数据：设备总是 ACK（接收 FIFO 有空间时）
+    /// SETUP token + 8 data bytes: device always ACKs (when the receive FIFO has room)
     pub fn setup(&mut self, pkt: [u8; 8], mem: &mut dyn Mem) {
-        // 新的 SETUP 取消 EP0 上还挂着的数据阶段
+        // A new SETUP cancels any data stage still pending on EP0
         self.txfifo[0].clear();
         if self.dma() {
-            // DMA：8 字节写到 DOEPDMA0，指针后移；SETUP 阶段结束（STUP）时 EP0 OUT 自动关闭
+            // DMA: write 8 bytes at DOEPDMA0 and advance; EP0 OUT auto-disables when the SETUP stage ends (STUP)
             let e = &mut self.epout[0];
             for (i, b) in pkt.iter().enumerate() {
                 mem.wr8(e.dma.wrapping_add(i as u32), *b);
@@ -460,7 +460,7 @@ impl Dwc2 {
         });
     }
 
-    /// IN 令牌
+    /// IN token
     pub fn token_in(&mut self, ep: usize, mem: &mut dyn Mem) -> Handshake {
         if ep >= EP_COUNT {
             return Handshake::Stall;
@@ -490,12 +490,12 @@ impl Dwc2 {
             self.epin[ep].dma = a.wrapping_add(len as u32);
             d
         } else {
-            // 数据还没写进 FIFO：NAK，主机稍后重试
+            // Data not in the FIFO yet: NAK, host retries later
             if self.txfifo[ep].len() < len {
                 return Handshake::Nak;
             }
             let d = self.txfifo[ep].drain(..len).collect();
-            // 丢掉包尾填充（固件按整字写入）
+            // Drop tail padding (firmware writes whole words)
             let pad = (4 - len % 4) % 4;
             for _ in 0..pad.min(self.txfifo[ep].len()) {
                 self.txfifo[ep].pop_front();
@@ -514,7 +514,7 @@ impl Dwc2 {
         Handshake::Ack(data)
     }
 
-    /// OUT 令牌 + 数据
+    /// OUT token + data
     pub fn token_out(&mut self, ep: usize, data: &[u8], mem: &mut dyn Mem) -> Handshake {
         if ep >= EP_COUNT {
             return Handshake::Stall;

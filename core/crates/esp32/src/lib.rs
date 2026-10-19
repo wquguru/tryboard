@@ -1,6 +1,5 @@
-//! 经典 ESP32（Xtensa LX6 双核）SoC：存储映射、外设分发、直接启动、双核运行循环。
-//! 核与 S3 共用 tryboard-xtensa（按 LX6 参数化）；与 C3 / S3 寄存器语义相同的外设复用它们的模型，
-//! 偏移不同的（TIMG、SPI1、LEDC）在 periph.rs 里做翻译层。运行循环与 S3 相同（两核按固定量子交替，确定性）。
+//! Classic ESP32 (dual-core Xtensa LX6) SoC. The core is tryboard-xtensa shared with S3 (LX6 parameters); peripherals
+//! matching C3 / S3 reuse their models, offset-shifted ones (TIMG, SPI1, LEDC) get a shim in periph.rs. Run loop as S3.
 
 pub mod boot;
 pub mod hle;
@@ -20,31 +19,31 @@ use tryboard_xtensa::{sr, Bus, BusFault, Cpu, Exit};
 
 pub const CPU_HZ: u64 = tryboard_esp32c3::periph::CPU_HZ;
 
-// 存储映射（soc/esp32/include/soc/soc.h、TRM 第 1 章）
-/// SRAM2 + SRAM1 的 D 总线视图（0x3FFAE000..0x40000000，328KB）
+// Memory map (soc/esp32/include/soc/soc.h, TRM chapter 1)
+/// D-bus view of SRAM2 + SRAM1 (0x3FFAE000..0x40000000, 328KB)
 pub const DRAM_LOW: u32 = 0x3FFA_E000;
 pub const DRAM_HIGH: u32 = 0x4000_0000;
-/// SRAM0 的 I 总线视图（192KB）
+/// I-bus view of SRAM0 (192KB)
 pub const IRAM_LOW: u32 = 0x4007_0000;
 pub const IRAM_HIGH: u32 = 0x400A_0000;
-/// SRAM1 的 I 总线视图：与 D 0x3FFE0000..0x40000000 是同一块，但按字倒序（SOC_DIRAM_INVERTED）
+/// I-bus view of SRAM1: same memory as D 0x3FFE0000..0x40000000 but word-reversed (SOC_DIRAM_INVERTED)
 pub const IRAM1_LOW: u32 = 0x400A_0000;
 pub const IRAM1_HIGH: u32 = 0x400C_0000;
-/// SRAM 缓冲：D 视图 328KB 在前，SRAM0 192KB 在后，共 520KB
+/// SRAM buffer: the 328KB D view first, then SRAM0's 192KB, 520KB total
 const SRAM0_OFF: usize = (DRAM_HIGH - DRAM_LOW) as usize;
 pub const SRAM_SIZE: usize = 520 << 10;
 pub const ROM_LOW: u32 = 0x4000_0000;
 pub const ROM_HIGH: u32 = 0x4007_0000;
-/// ROM1 只读数据（D 总线 64KB），接在 rom 缓冲的 ROM0 之后
+/// ROM1 read-only data (64KB on the D bus), stored after ROM0 in the rom buffer
 pub const DROM1_LOW: u32 = 0x3FF9_0000;
 pub const DROM1_HIGH: u32 = 0x3FFA_0000;
 const DROM1_OFF: usize = (ROM_HIGH - ROM_LOW) as usize;
-/// cache 窗口：DROM0 4MB、IROM0（0x400D0000 起，前面 0x400C0000..0x400D0000 不可用）
+/// Cache windows: DROM0 4MB, IROM0 (from 0x400D0000; 0x400C0000..0x400D0000 below it is unusable)
 pub const DROM_LOW: u32 = 0x3F40_0000;
 pub const DROM_HIGH: u32 = 0x3F80_0000;
 pub const IROM_LOW: u32 = 0x400D_0000;
 pub const IROM_HIGH: u32 = 0x40C0_0000;
-/// RTC 快速内存（8KB，D 0x3FF80000 与 I 0x400C0000 同一块）、慢速内存（8KB）
+/// RTC fast memory (8KB, D 0x3FF80000 and I 0x400C0000 are the same block) and slow memory (8KB)
 pub const RTC_FAST_D: u32 = 0x3FF8_0000;
 pub const RTC_FAST_I: u32 = 0x400C_0000;
 pub const RTC_FAST_SIZE: u32 = 0x2000;
@@ -52,13 +51,13 @@ pub const RTC_SLOW_LOW: u32 = 0x5000_0000;
 pub const RTC_SLOW_HIGH: u32 = 0x5000_2000;
 pub const MMIO_LOW: u32 = 0x3FF0_0000;
 pub const MMIO_HIGH: u32 = 0x3FF8_0000;
-/// 外设的 AHB 别名（UART FIFO、I2C FIFO 用它）：0x60000000 + x = 0x3FF40000 + x
+/// AHB alias of peripherals (used for UART / I2C FIFOs): 0x60000000 + x = 0x3FF40000 + x
 pub const AHB_LOW: u32 = 0x6000_0000;
 pub const AHB_HIGH: u32 = 0x6004_0000;
 const AHB_TO_APB: u32 = 0x3FF4_0000;
 
-/// cache MMU（DPORT_PRO_FLASH_MMU_TABLE）：256 项，每项 64KB 页；0x100 = 无效。
-/// 项 0..63 给 DROM0（0x3F400000 起），项 64.. 给 IROM0（0x40000000 起按 64KB 计）
+/// Cache MMU (DPORT_PRO_FLASH_MMU_TABLE): 256 entries of 64KB pages; 0x100 = invalid.
+/// Entries 0..63 map DROM0 (from 0x3F400000), entries 64.. map IROM0 (counted in 64KB from 0x40000000)
 pub const MMU_PRO: u32 = 0x3FF1_0000;
 pub const MMU_APP: u32 = 0x3FF1_2000;
 pub const MMU_ENTRIES: usize = 256;
@@ -68,12 +67,12 @@ const UART0: u32 = 0x3FF4_0000;
 const UART1: u32 = 0x3FF5_0000;
 const UART2: u32 = 0x3FF6_E000;
 const RTC_CNTL: u32 = 0x3FF4_8000;
-/// RTC_CNTL_OPTIONS0 的软件复位位（rtc_cntl_reg.h，位置与 S3 相同）
+/// Software reset bits of RTC_CNTL_OPTIONS0 (rtc_cntl_reg.h, same positions as S3)
 const RST_SYS: u32 = 1 << 31;
 const RST_PROCPU: u32 = 1 << 5;
 const RST_APPCPU: u32 = 1 << 4;
 pub const RTC_CNTL_RESET_STATE: u32 = RTC_CNTL + 0x34;
-/// RTC_CNTL_STORE0..3（0x4C..0x58）、STORE6..7（0xB8..0xBC）复位后保持；STORE4 / 5 由 ROM 重写
+/// RTC_CNTL_STORE0..3 (0x4C..0x58) and STORE6..7 (0xB8..0xBC) survive reset; ROM rewrites STORE4 / 5
 const RTC_STORE_KEEP: [u32; 6] = [
     RTC_CNTL + 0x4c,
     RTC_CNTL + 0x50,
@@ -82,9 +81,9 @@ const RTC_STORE_KEEP: [u32; 6] = [
     RTC_CNTL + 0xb8,
     RTC_CNTL + 0xbc,
 ];
-/// 硬件随机数（wdev_reg.h：WDEV_RND_REG）
+/// Hardware RNG (wdev_reg.h: WDEV_RND_REG)
 pub const WDEV_RND_REG: u32 = 0x3FF7_5144;
-/// APB_CTRL_DATE_REG：位 31 是芯片版本 v3 的第三个版本位（efuse_hal_get_major_chip_version）
+/// APB_CTRL_DATE_REG: bit 31 is the third version bit for chip revision v3 (efuse_hal_get_major_chip_version)
 const APB_CTRL_DATE: u32 = 0x3FF6_607C;
 
 pub struct SocBus {
@@ -95,7 +94,7 @@ pub struct SocBus {
     pub flash: Vec<u8>,
     pub mmu: Vec<u32>,
     pub mmu_app: Vec<u32>,
-    /// 取指页缓存（同 S3）：最近一次取指所在 64KB 页、所在存储、页首偏移。写 MMU 时作废
+    /// Fetch page cache (as S3): 64KB page, backing store and page base of the last fetch; invalidated on MMU writes
     fetch_page: u32,
     fetch_src: FetchSrc,
     fetch_base: usize,
@@ -105,7 +104,7 @@ pub struct SocBus {
     pub uart2: Uart,
     pub timg0: Esp32Timg,
     pub timg1: Esp32Timg,
-    /// DPORT：两张中断矩阵、核间中断、cache 控制
+    /// DPORT: both interrupt matrices, cross-core interrupts, cache control
     pub dport: Dport,
     pub lines: [u32; 2],
     pub appcpu_boot: Option<u32>,
@@ -113,14 +112,14 @@ pub struct SocBus {
     pub spi1: Spi1,
     pub ledc: Esp32Ledc,
     pub analog: Analog,
-    /// 板上没有 RMT 模型（ESP32 的 RMT 寄存器布局与 C3 / S3 不兼容，见 DECISIONS），表留空给统一接口
+    /// No RMT model (ESP32's RMT layout is incompatible with C3 / S3, see DECISIONS); kept empty for the common interface
     pub ws2812: HashMap<u32, Ws2812>,
     pub pins: PinDevices,
     pub i2c0: I2c,
     pub i2c1: I2c,
     pub adc: Adc,
     pub audio: Audio,
-    /// ESP32 的 Wi-Fi MAC 是上一代 IP，模型未接（见 DECISIONS）；留一个不接地址的实例给统一接口
+    /// ESP32's Wi-Fi MAC is an older IP and not modelled (see DECISIONS); an unmapped instance keeps the common interface
     pub wifi: Option<Box<WifiMac>>,
     pub rng: u32,
     pub efuse: [u32; 0x200 / 4],
@@ -132,14 +131,14 @@ pub struct SocBus {
     pub gpio_log: Vec<(u64, u64)>,
     last_gpio: u64,
     pub iotrace: IoTrace,
-    /// FreeRTOS 任务时间线（C-04）；Xtensa 栈帧第 2 字是 PC
+    /// FreeRTOS task timeline (C-04); word 2 of an Xtensa stack frame is the PC
     pub tasks: TaskTrace,
     pub reset_request: Option<u32>,
     pub appcpu_reset: bool,
     pub reset_reason: u32,
 }
 
-/// 引脚模拟电压（ADC 模型未做，先留存储给统一接口）
+/// Pin analog voltages (no ADC model yet; storage kept for the common interface)
 pub struct Adc {
     pub pin_mv: [f32; NPINS],
 }
@@ -155,7 +154,7 @@ impl Default for Adc {
 impl Default for SocBus {
     fn default() -> Self {
         let mut spi1 = Spi1::default();
-        // DevKitC V4 的 WROOM-32 模组：4MB
+        // DevKitC V4's WROOM-32 module: 4MB
         spi1.inner.jedec = 0x16_40_c8;
         SocBus {
             sram: vec![0; SRAM_SIZE],
@@ -234,7 +233,7 @@ enum FetchSrc {
 }
 
 impl SocBus {
-    /// cache 窗口地址 → flash 偏移
+    /// Cache window address -> flash offset
     #[inline]
     fn flash_addr(&self, vaddr: u32) -> Option<usize> {
         let idx = if (DROM_LOW..DROM_HIGH).contains(&vaddr) {
@@ -251,7 +250,7 @@ impl SocBus {
         Some((((e & 0xff) << 16) | (vaddr & 0xffff)) as usize)
     }
 
-    /// SRAM 缓冲偏移（SRAM1 的 I 总线倒序视图要按字翻转，只给不跨字的访问）
+    /// SRAM buffer offset; SRAM1's word-reversed I view needs flipping, so only accesses within one word are allowed
     #[inline]
     fn sram_off(a: u32) -> Option<usize> {
         if (DRAM_LOW..DRAM_HIGH).contains(&a) {
@@ -308,7 +307,7 @@ impl SocBus {
         }
     }
 
-    /// AHB 别名换成 APB 地址；两段都不是返回 None
+    /// Map the AHB alias to the APB address; None if the address is in neither range
     #[inline]
     fn mmio_addr(a: u32) -> Option<u32> {
         if (MMIO_LOW..MMIO_HIGH).contains(&a) {
@@ -347,9 +346,9 @@ impl SocBus {
             0x3FF5_F000 => return self.timg0.read(off, now),
             0x3FF6_0000 => return self.timg1.read(off, now),
             RTC_CNTL => match off {
-                // TIME_UPDATE：位 30 TIME_VALID 立即有效
+                // TIME_UPDATE: bit 30 TIME_VALID is set immediately
                 0x0c => return self.regs.get(&a).copied().unwrap_or(0) | (1 << 30),
-                // RTC 慢时钟计数（RC 慢时钟约 150kHz，与 TIMG 的 RTC 校准结果一致即可）
+                // RTC slow clock counter (RC slow clock ~150kHz; only needs to agree with TIMG's RTC calibration)
                 0x10 => return (now * 136_000 / CPU_HZ) as u32,
                 0x14 => return ((now * 136_000 / CPU_HZ) >> 32) as u32,
                 0x34 => return self.reset_reason | (self.reset_reason << 6),
@@ -389,7 +388,7 @@ impl SocBus {
                 self.fetch_page = u32::MAX;
                 return;
             }
-            // 核 1 的 MMU 表：IDF 总是两张写成一样，取指只看核 0 的那张
+            // Core 1's MMU table: IDF always writes both identically, so fetch only uses core 0's
             MMU_APP if (off as usize) < MMU_ENTRIES * 4 => {
                 self.mmu_app[(off / 4) as usize] = v & 0x1ff;
                 return;
@@ -432,11 +431,11 @@ impl SocBus {
                 return;
             }
             0x3FF5_9000 => return self.ledc.write(off, v, now),
-            // eFuse 读寄存器只读；CMD 等写入不保存，读回 0（"命令已完成"）
+            // eFuse read registers are read-only; CMD and other writes are dropped and read back 0 ("command done")
             0x3FF5_A000 if off < 0x200 => return,
             0x3FF5_F000 => return self.timg0.write(off, v, now),
             0x3FF6_0000 => return self.timg1.write(off, v, now),
-            // 复位位是脉冲：只记请求，存回去的值去掉它们
+            // Reset bits are pulses: record the request and store the value without them
             RTC_CNTL if off == 0 => {
                 if v & (RST_SYS | RST_PROCPU) != 0 {
                     self.reset_request = Some(if v & RST_SYS != 0 { 3 } else { 12 });
@@ -475,7 +474,7 @@ impl SocBus {
         self.irq_dirty = true;
     }
 
-    /// 外接引脚器件到 now 为止的驱动按时刻施加到引脚；返回下一次要问它们的时刻
+    /// Apply external pin devices' drive up to now, in time order; returns when to poll them next
     fn pins_update(&mut self, now: u64) -> u64 {
         if self.pins.is_empty() {
             return u64::MAX;
@@ -503,7 +502,7 @@ impl SocBus {
         }
     }
 
-    /// 所有中断源的当前电平（69 个源）
+    /// Current level of every interrupt source (69 sources)
     pub fn levels(&self) -> [u64; 2] {
         let mut l = [0u64; 2];
         let mut set = |s: u32, on: bool| {
@@ -543,7 +542,7 @@ impl SocBus {
         }
     }
 
-    /// 引脚上的 PWM：经 GPIO 矩阵路由到该引脚的 LEDC 通道输出（占空比, 频率）
+    /// PWM on a pin: the LEDC channel routed to it through the GPIO matrix, as (duty, frequency)
     pub fn pin_pwm(&self, pin: usize) -> Option<(f32, f32)> {
         let f = *self.gpio.func_out.get(pin)?;
         if self.gpio.enable & (1 << pin) == 0 {
@@ -616,7 +615,7 @@ impl Bus for SocBus {
             let v = if size == 4 {
                 v
             } else {
-                // 子字写：与外设当前值合并（UART FIFO 读有出队副作用，不参与）
+                // Sub-word write: merge with the current value (not for UART FIFO, whose read pops)
                 let sh = (a & 3) * 8;
                 let mask = if size == 2 { 0xffff } else { 0xff } << sh;
                 let old = if aa == UART0 || aa == UART1 || aa == UART2 {
@@ -672,7 +671,7 @@ impl Bus for SocBus {
 }
 
 impl SocBus {
-    /// 取指慢路径；顺便填取指页缓存（只缓存整页连续的：SRAM0、ROM、IROM 窗口；SRAM1 倒序视图不缓存）
+    /// Fetch slow path; also fills the fetch page cache (only page-contiguous SRAM0, ROM, IROM; not SRAM1's reversed view)
     #[inline(never)]
     fn fetch_slow(&mut self, a: u32) -> Result<u32, BusFault> {
         self.fetch_page = u32::MAX;
@@ -859,14 +858,14 @@ mod tests {
         };
         b.flash[0x2_0004] = 0xab;
         b.flash[0x3_0008] = 0xcd;
-        // DROM 0x3F410000 → 项 1；IROM 0x400D0000 → 项 64 + 13
+        // DROM 0x3F410000 -> entry 1; IROM 0x400D0000 -> entry 64 + 13
         b.mmu[1] = 2;
         b.mmu[77] = 3;
         assert_eq!(b.mem_read(0x3F41_0004, 1), Some(0xab));
         assert_eq!(b.mem_read(0x400D_0008, 1), Some(0xcd));
         assert_eq!(Bus::fetch(&mut b, 0x400D_0008).unwrap() & 0xff, 0xcd);
         assert_eq!(b.mem_read(0x3F42_0000, 4), None);
-        // MMU 经 DPORT 地址写入
+        // MMU written through its DPORT address
         Bus::store(&mut b, MMU_PRO + 4 * 2, 4, 2).unwrap();
         assert_eq!(b.mem_read(0x3F42_0004, 1), Some(0xab));
     }
@@ -874,13 +873,13 @@ mod tests {
     #[test]
     fn sram_views() {
         let mut b = SocBus::default();
-        // SRAM1：D 0x3FFFFFFC 的字 = I 0x400A0000 的字（按字倒序）
+        // SRAM1: word at D 0x3FFFFFFC == word at I 0x400A0000 (word-reversed)
         b.mem_write(0x3FFF_FFFC, 4, 0x1122_3344).unwrap();
         assert_eq!(b.mem_read(0x400A_0000, 4), Some(0x1122_3344));
         assert_eq!(b.mem_read(0x400A_0001, 1), Some(0x33));
         b.mem_write(0x400A_0004, 4, 7).unwrap();
         assert_eq!(b.mem_read(0x3FFF_FFF8, 4), Some(7));
-        // RTC 快速内存 I / D 同一块
+        // RTC fast memory: I and D are the same block
         b.mem_write(0x3FF8_0010, 4, 9).unwrap();
         assert_eq!(b.mem_read(0x400C_0010, 4), Some(9));
     }
@@ -905,7 +904,7 @@ mod tests {
     #[test]
     fn dport_intmatrix_routes_timer() {
         let mut b = SocBus::default();
-        // TG0 LACT → 核 0 线 3（电平型）
+        // TG0 LACT -> core 0 line 3 (level-triggered)
         Bus::store(&mut b, 0x3FF0_0000 + 0x104 + 4 * src::TG0_LACT, 4, 3).unwrap();
         b.timg0.int_ena = 8;
         b.timg0.t[2].int_raw = 1;

@@ -32,9 +32,8 @@ fn run(code: &[u8], steps: usize) -> Cpu {
 
 #[test]
 fn movi_add() {
-    // movi a2, 5：RRI8 op0=2 t=2 s=0 r=10 imm8=5 → 字节 22 a0 05
-    // movi.n a3, 7：op0=12 t=0 s=3 r=7 → 字节 0c 73
-    // add.n a4, a2, a3：op0=10 t=3 s=2 r=4 → 字节 3a 42
+    // movi a2, 5 (RRI8 op0=2 t=2 s=0 r=10 imm8=5) = 22 a0 05; movi.n a3, 7 (op0=12 t=0 s=3 r=7) = 0c 73
+    // add.n a4, a2, a3 (op0=10 t=3 s=2 r=4) = 3a 42
     let c = run(&[0x22, 0xa0, 0x05, 0x0c, 0x73, 0x3a, 0x42], 3);
     assert_eq!(c.a(2), 5);
     assert_eq!(c.a(3), 7);
@@ -51,7 +50,7 @@ fn window_rotation() {
     assert_eq!(c.a(9), 0x1234);
 }
 
-/// 中断测试用的 CPU：VECBASE=0x100，PS.INTLEVEL=0、EXCM=0，代码区全是 NOP.N（0xF03D）
+/// Interrupt-test CPU: VECBASE=0x100, PS.INTLEVEL=0, EXCM=0, code area filled with NOP.N (0xF03D)
 fn irq_cpu() -> (Cpu, Ram) {
     let mut ram = Ram(vec![0; 4096]);
     for i in (0..4096).step_by(2) {
@@ -68,14 +67,14 @@ fn irq_cpu() -> (Cpu, Ram) {
 #[test]
 fn level_interrupt_follows_line() {
     let (mut c, mut ram) = irq_cpu();
-    c.write_sr(sr::INTENABLE, 1 << 19); // 外部电平型，level 2
+    c.write_sr(sr::INTENABLE, 1 << 19); // external level-triggered, level 2
     c.set_irq_lines(1 << 19);
     assert_eq!(c.read_sr(sr::INTERRUPT), 1 << 19);
     c.step(&mut ram);
     assert_eq!(c.pc, 0x100 + vec::LEVEL[2]);
     assert_eq!(c.read_sr(sr::EPC2), 0x800);
-    assert_eq!(c.ps() & 0x1f, 0x12); // INTLEVEL=2、EXCM=1
-                                     // 电平型：线撤掉挂起位就没了，INTCLEAR 清不掉
+    assert_eq!(c.ps() & 0x1f, 0x12); // INTLEVEL=2, EXCM=1
+                                     // Level-triggered: pending drops with the line, INTCLEAR cannot clear it
     c.write_sr(sr::INTCLEAR, 1 << 19);
     assert_eq!(c.read_sr(sr::INTERRUPT), 1 << 19);
     c.set_irq_lines(0);
@@ -85,13 +84,13 @@ fn level_interrupt_follows_line() {
 #[test]
 fn edge_and_nmi_latch() {
     let (mut c, mut ram) = irq_cpu();
-    // 边沿型 10（level 1）：上升沿锁存，线撤掉仍挂起，INTCLEAR 清
+    // Edge-triggered 10 (level 1): latched on rising edge, stays pending after the line drops, INTCLEAR clears it
     c.set_irq_lines(1 << 10);
     c.set_irq_lines(0);
     assert_eq!(c.read_sr(sr::INTERRUPT), 1 << 10);
     c.write_sr(sr::INTCLEAR, 1 << 10);
     assert_eq!(c.read_sr(sr::INTERRUPT), 0);
-    // NMI（14，level 7）：PS.INTLEVEL=6 也挡不住
+    // NMI (14, level 7): PS.INTLEVEL=6 cannot mask it
     c.write_sr(sr::PS, 6);
     c.write_sr(sr::INTENABLE, 1 << 14);
     c.set_irq_lines(1 << 14);
@@ -104,7 +103,7 @@ fn edge_and_nmi_latch() {
 fn level1_uses_kernel_vector_with_cause4() {
     let (mut c, mut ram) = irq_cpu();
     c.write_sr(sr::INTENABLE, 1 << 7);
-    c.write_sr(sr::INTERRUPT, 1 << 7); // INTSET 软件中断
+    c.write_sr(sr::INTERRUPT, 1 << 7); // INTSET software interrupt
     c.step(&mut ram);
     assert_eq!(c.pc, 0x100 + vec::KERNEL);
     assert_eq!(c.read_sr(sr::EXCCAUSE), cause::LEVEL1_INTERRUPT);
@@ -114,20 +113,20 @@ fn level1_uses_kernel_vector_with_cause4() {
 #[test]
 fn waiti_fast_forward_to_ccompare() {
     let (mut c, mut ram) = irq_cpu();
-    // WAITI 0（op0=0 op1=0 op2=0 r=7 s=0 t=0）
+    // WAITI 0 (op0=0 op1=0 op2=0 r=7 s=0 t=0)
     ram.0[0x800..0x803].copy_from_slice(&[0x00, 0x70, 0x00]);
     c.write_sr(sr::CCOMPARE0, 1_000_000);
     c.write_sr(sr::INTENABLE, 1 << 6);
     assert_eq!(c.step(&mut ram), Exit::Waiti);
     assert_eq!(c.step(&mut ram), Exit::Waiti);
-    // SoC 快进：直接把 cycles 推到下一个定时器事件
+    // SoC fast-forward: jump cycles straight to the next timer event
     let t = c.next_timer_event().unwrap();
     assert_eq!(t, 1_000_000);
     c.cycles = t;
     assert_eq!(c.step(&mut ram), Exit::Normal);
     assert_eq!(c.pc, 0x100 + vec::KERNEL);
-    assert_eq!(c.read_sr(sr::EPC1), 0x803); // 返回到 WAITI 之后
-                                            // 写 CCOMPARE0 清定时器挂起位
+    assert_eq!(c.read_sr(sr::EPC1), 0x803); // returns to just after WAITI
+                                            // Writing CCOMPARE0 clears the timer pending bit
     c.write_sr(sr::CCOMPARE0, 5);
     assert_eq!(c.read_sr(sr::INTERRUPT) & (1 << 6), 0);
 }
@@ -137,10 +136,10 @@ fn excm_masks_up_to_level3() {
     let (mut c, mut ram) = irq_cpu();
     c.write_sr(sr::PS, PS_EXCM);
     c.write_sr(sr::INTENABLE, 1 << 29 | 1 << 26);
-    c.write_sr(sr::INTERRUPT, 1 << 29); // 软件中断 29，level 3：被 EXCM 挡
+    c.write_sr(sr::INTERRUPT, 1 << 29); // software interrupt 29, level 3: masked by EXCM
     c.step(&mut ram);
-    assert_eq!(c.pc, 0x803 - 1); // 执行了一条 NOP.N
-    c.set_irq_lines(1 << 26); // 外部电平型 26，level 5：能进
+    assert_eq!(c.pc, 0x803 - 1); // one NOP.N executed
+    c.set_irq_lines(1 << 26); // external level-triggered 26, level 5: gets through
     c.step(&mut ram);
     assert_eq!(c.pc, 0x100 + vec::LEVEL[5]);
 }
@@ -149,11 +148,11 @@ fn excm_masks_up_to_level3() {
 fn ccount_write_keeps_time() {
     let (mut c, mut ram) = irq_cpu();
     c.cycles = 1_000_000;
-    // IDF 换频时按比例改写 CCOUNT：只改计数器，不改模拟时间
+    // IDF rescales CCOUNT on frequency change: only the counter moves, not simulated time
     c.write_sr(sr::CCOUNT, 0x10);
     assert_eq!(c.cycles, 1_000_000);
     assert_eq!(c.read_sr(sr::CCOUNT), 0x10);
-    // CCOMPARE 按 CCOUNT 的值比较
+    // CCOMPARE compares against CCOUNT
     c.write_sr(sr::CCOMPARE0, 0x40);
     assert_eq!(c.next_timer_event(), None);
     c.write_sr(sr::INTENABLE, 1 << irq::TIMER_LINE[0]);

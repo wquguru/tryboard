@@ -82,8 +82,8 @@ export function parseBle(state: number, json: string, reset?: boolean, cmdError?
 /** 日志一行的方向（设计稿的三种：板子 → 广播 / 手机 → 板子 / 板子 → 手机，另有手机自己的动作） */
 export function lineDir(l: BleLine): string {
   if (l.k === 'adv') return '板子 → 广播';
-  if (l.s.startsWith('手机 →')) return '手机 → 板子';
-  if (l.s.startsWith('固件 →')) return '板子 → 手机';
+  if (l.s.startsWith('phone →')) return '手机 → 板子';
+  if (l.s.startsWith('fw →')) return '板子 → 手机';
   if (l.k === 'conn') return l.s.startsWith('CONNECT_IND') ? '手机 → 板子' : '连接';
   if (l.k === 'hci') return '固件 ↔ 控制器';
   return '手机';
@@ -91,7 +91,7 @@ export function lineDir(l: BleLine): string {
 
 /** 去掉方向前缀，剩下要说的事 */
 export function lineText(l: BleLine): string {
-  return l.s.replace(/^(手机|固件) → /, '').replace(/^手机：/, '');
+  return l.s.replace(/^(phone|fw) → /, '').replace(/^phone: /, '');
 }
 
 /** 16 位 UUID 的写法：0x180D；128 位原样 */

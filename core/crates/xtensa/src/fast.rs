@@ -1,24 +1,23 @@
-//! 预解码指令缓存（P2-07）：按 PC 直接映射，存"操作种类 + 已拆好的字段 + 已算好的立即数 / 跳转目标 +
-//! 指令长度 + 窗口溢出检查要的最高四元组号"。命中条件是 PC 和取到的原始指令字节都相同，
-//! 解码又只依赖这两样，所以不需要任何作废逻辑：代码被改写（IRAM 装载、改 MMU、换 flash 内容）时字节一变就自然重解。
-//! 常见指令在这里一层 match 直接执行；其余（特殊寄存器、FPU、MAC16、除法、原子、LOOP 等）退回 `exec` / `exec_narrow`，
-//! 语义与逐条解码执行完全相同。
+//! Predecoded instruction cache (P2-07), direct-mapped by PC. An entry hits only when both PC and the fetched raw bytes
+//! match, and decoding depends on nothing else, so rewritten code (IRAM load, MMU change, new flash) just redecodes with
+//! no invalidation logic. Common ops execute in one match here; the rest (SRs, FPU, MAC16, divide, atomics, LOOP...)
+//! fall back to `exec` / `exec_narrow` with identical semantics. lint: allow-long-comment
 
 use crate::{is_narrow, max_quad, sext, sr, Bus, Cpu, Exit, Flow, B4CONST, B4CONSTU};
 
-/// 缓存项数（2 的幂）。按 PC 低位直接映射：连续 64KB 代码互不冲突
+/// Entry count (power of two). Direct-mapped on low PC bits, so 64KB of contiguous code never conflicts
 pub(crate) const DCACHE_SIZE: usize = 1 << 15;
 const DCACHE_MASK: u32 = DCACHE_SIZE as u32 - 1;
 
-/// `Dec::mq` 的特殊值：ENTRY 用到的四元组取决于运行时的 PS.CALLINC，执行前现算
+/// Special `Dec::mq` value: the quads ENTRY touches depend on the runtime PS.CALLINC, so compute them at execution
 const MQ_DYNAMIC: u8 = 0xff;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(u8)]
 pub(crate) enum Op {
-    /// 没有快速实现：按原始字节走 exec / exec_narrow
+    /// No fast path: run the raw bytes through exec / exec_narrow
     Generic,
-    // 16 位
+    // 16-bit
     L32iN,
     S32iN,
     AddN,
@@ -30,7 +29,7 @@ pub(crate) enum Op {
     RetN,
     RetwN,
     Nop,
-    // 24 位
+    // 24-bit
     L32r,
     L8ui,
     L16ui,
@@ -121,21 +120,21 @@ pub(crate) enum Op {
     Extui,
 }
 
-/// 一条解码好的指令
+/// One decoded instruction
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Dec {
     pub pc: u32,
-    /// 取指得到的原始字节（与缓存命中比较用；u32::MAX = 空项，取指结果最多 24 位，永远不会等于它）
+    /// Raw fetched bytes for the hit check; u32::MAX = empty entry (fetches are at most 24 bits, so never equal it)
     pub raw: u32,
-    /// 立即数：偏移、常数、跳转目标等，含义随 op
+    /// Immediate: offset, constant, branch target etc., meaning depends on op
     pub imm: u32,
     pub op: Op,
     pub r: u8,
     pub s: u8,
     pub t: u8,
-    /// 2 或 3
+    /// 2 or 3
     pub len: u8,
-    /// 窗口溢出检查要的最高四元组号（0..=3），或 MQ_DYNAMIC
+    /// Highest quad number (0..=3) the window-overflow check needs, or MQ_DYNAMIC
     pub mq: u8,
 }
 
@@ -154,14 +153,14 @@ impl Dec {
 }
 
 pub(crate) fn new_cache() -> Box<[Dec; DCACHE_SIZE]> {
-    // 定长数组：按 PC 掩码取下标时编译器能去掉越界检查
+    // Fixed-size array so PC-masked indexing lets the compiler drop bounds checks
     vec![Dec::EMPTY; DCACHE_SIZE]
         .into_boxed_slice()
         .try_into()
-        .expect("定长")
+        .expect("fixed length")
 }
 
-/// 解码：只依赖 pc 与原始字节
+/// Decodes using only pc and the raw bytes
 pub(crate) fn decode(pc: u32, insn: u32) -> Dec {
     let narrow = is_narrow(insn);
     let t = (insn >> 4) & 0xf;
@@ -193,7 +192,7 @@ pub(crate) fn decode(pc: u32, insn: u32) -> Dec {
     d.op = op;
     d.imm = imm;
     if op == Op::Bbci || op == Op::Bbsi {
-        // 位号 = r 的最低位 << 4 | t
+        // bit number = low bit of r << 4 | t
         d.t = (((r & 1) << 4) | t) as u8;
     }
     d
@@ -201,7 +200,7 @@ pub(crate) fn decode(pc: u32, insn: u32) -> Dec {
 
 fn decode_narrow(pc: u32, op0: u32, t: u32, r: u32) -> (Op, u32) {
     match op0 {
-        // L32I.N a1, as, 0 走通用路径：exec_narrow 在那里报告换栈（任务切换），快路径不多一次比较
+        // L32I.N a1, as, 0 takes the generic path: exec_narrow reports the stack switch (task switch) there; keeps the fast path one compare shorter
         8 if t == 1 && r == 0 => (Op::Generic, 0),
         8 => (Op::L32iN, r << 2),
         9 => (Op::S32iN, r << 2),
@@ -314,12 +313,12 @@ fn decode_wide(pc: u32, insn: u32, op0: u32, t: u32, s: u32, r: u32) -> (Op, u32
                 11 => (Op::Movgez, 0),
                 _ => (Op::Generic, 0),
             },
-            // EXTUI：s 字段改存移位量，imm 存掩码
+            // EXTUI: the s field holds the shift amount, imm holds the mask
             4 | 5 => (Op::Extui, (((op1 & 1) << 4) | s) << 8 | (op2 + 1)),
             _ => (Op::Generic, 0),
         },
         1 => {
-            // LITBASE 关闭时的地址；打开时执行时退回 exec
+            // Address with LITBASE off; with it on, execution falls back to exec
             let imm = 0xfffc_0000 | ((insn >> 8) << 2);
             (Op::L32r, (pc.wrapping_add(3) & !3).wrapping_add(imm))
         }
@@ -399,7 +398,7 @@ fn decode_wide(pc: u32, insn: u32, op0: u32, t: u32, s: u32, r: u32) -> (Op, u32
 }
 
 impl Cpu {
-    /// 取指 + 查预解码缓存
+    /// Fetch + predecode cache lookup
     #[inline(always)]
     pub(crate) fn fetch_dec<B: Bus>(
         &mut self,
@@ -415,8 +414,8 @@ impl Cpu {
         Ok(*e)
     }
 
-    /// 窗口溢出检查快路径：当前窗口往上 3 个四元组都不属于别的活帧时，不论指令用到哪个都不会溢出。
-    /// 最高四元组号取预解码结果（ENTRY 依赖 PS.CALLINC，现算）
+    /// Window-overflow fast path: if the 3 quads above the current window belong to no other live frame, no register
+    /// can overflow. The highest quad comes from the predecode (ENTRY depends on PS.CALLINC, computed live)
     #[inline(always)]
     pub(crate) fn window_check_dec(&mut self, d: &Dec) -> bool {
         let ps = self.ps();
@@ -436,12 +435,12 @@ impl Cpu {
         self.window_spill(max_quad, ps)
     }
 
-    /// 执行一条预解码指令。分支都已算好目标，结果与 exec / exec_narrow 相同
+    /// Executes one predecoded instruction. Branch targets are precomputed; results match exec / exec_narrow
     #[inline(always)]
     pub(crate) fn exec_dec<B: Bus>(&mut self, bus: &mut B, d: &Dec) -> Result<Flow, Exit> {
         let (r, s, t) = (d.r as u32, d.s as u32, d.t as u32);
         let imm = d.imm;
-        // 窗口基址先读进局部变量：每个分支都要用，省得反复从内存取（ENTRY 改它之前已经读写完寄存器）
+        // Read the window base into a local once: every arm uses it (ENTRY is done with registers before changing it)
         let wb = self.windowbase * 4;
         macro_rules! a {
             ($i:expr) => {

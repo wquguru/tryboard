@@ -1,4 +1,4 @@
-* 07 USB 限流源 → 5V 轨 → LDO → 3V3，芯片 + 模块 60 mA（静态）
+* 07 USB current-limited source -> 5V rail -> LDO -> 3V3, chip + modules 60 mA (static)
 *tb: LIMIT v5 5 0.5 0.5 20
 *tb: LDO v5 v33 3.3 0.01 0.525 1.2 0
 *tb: LOAD v33 0.06 1

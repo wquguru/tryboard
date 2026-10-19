@@ -1,23 +1,17 @@
-//! 接错线的电流（P2-14）：实验台接线检查找到的错接，在这里建一个小网表用 MNA 求一次直流工作点，
-//! 给出"会流多大电流、被谁限住"。网页经 wasm 调同一份代码，tools/elec/11–15 是同样的电路给 ngspice 对照。
-//!
-//! 参数来源（数值都是估算，网页上带"估算"徽章）：
-//! - GPIO 推挽输出内阻：ESP32-C3 数据手册 v2.4 表 5-4（DC 特性，3.3 V、25 °C）PAD_DRIVER = 3 时
-//!   I_OH = 40 mA @ V_OH ≥ 2.64 V → 0.66 V / 40 mA = 16.5 Ω；I_OL = 28 mA @ V_OL = 0.495 V → 17.7 Ω。
-//!   IDF 默认驱动档是 GPIO_DRIVE_CAP_2，按驱动电流减半折算成 33 Ω / 35.4 Ω（估算；S3 手册同表数值相同）。
-//!   真实输出级在大电流下会饱和（电流封顶），线性内阻算出来的短路电流偏大，按"最坏情况"用。
-//! - 红色 5 mm LED：规格书典型 V_F = 2.0 V @ 20 mA，折线化成 1.8 V 起导 + 10 Ω（估算）。
-//! - 引脚 ESD 钳位二极管（引脚 → VDD3P3）：0.6 V 起导 + 10 Ω（估算，乐鑫没有公布注入电流参数）。
-//! - 跳线：20 cm 杜邦线 + 两处面包板接触，约 0.05 Ω（估算）。
-//! - 供电（USB 限流、LDO）沿用 board.rs 的 Params，芯片按一个核满负荷 + 板上其它负载。
+//! Miswiring currents (P2-14): each fault the lab wiring check finds becomes a small netlist solved once at DC with MNA,
+//! reporting how much current flows and what limits it. The web calls this via wasm; tools/elec/11-17 mirror it for ngspice.
+//! All values are estimates (shown with an "estimate" badge on the web). lint: allow-long-comment
+//! Red 5 mm LED: typ V_F = 2.0 V @ 20 mA -> 1.8 V knee + 10 ohm. Pin ESD clamp (pin -> VDD3P3): 0.6 V + 10 ohm (Espressif
+//! publishes no injection data). Jumper: 20 cm Dupont + two breadboard contacts ~ 0.05 ohm. Supply reuses board.rs Params.
 
 use crate::board::{ChipKind, Params};
 use crate::mna::{Circuit, Elem, Solution};
 
 pub const VDD: f64 = 3.3;
-/// GPIO 输出高时的内阻（Ω）：2 × 0.66 V / 40 mA
+/// GPIO output-high resistance (ohm): C3 datasheet v2.4 table 5-4 at PAD_DRIVER = 3 gives 0.66 V / 40 mA; IDF's default
+/// GPIO_DRIVE_CAP_2 halves the drive, hence 2x. Real stages saturate, so linear R overstates short current: a worst case.
 pub const GPIO_R_HIGH: f64 = 33.0;
-/// GPIO 输出低时的内阻（Ω）：2 × 0.495 V / 28 mA
+/// GPIO output-low resistance (ohm): 2 x 0.495 V / 28 mA (I_OL at PAD_DRIVER = 3; the S3 datasheet table matches)
 pub const GPIO_R_LOW: f64 = 35.36;
 pub const LED_VF: f64 = 1.8;
 pub const LED_RD: f64 = 10.0;
@@ -25,34 +19,34 @@ pub const CLAMP_VF: f64 = 0.6;
 pub const CLAMP_RD: f64 = 10.0;
 pub const JUMPER_R: f64 = 0.05;
 
-/// 电流被谁限住
+/// What limits the current
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Limiter {
-    /// 只有导线 / 输出级 / 器件内阻（没有保护，电流就是 V/R）
+    /// Only wire / output stage / part resistance (no protection, current is just V/R)
     Resistance = 0,
-    /// 电脑 USB 口限流（5V 轨被拉垮）
+    /// PC USB port current limit (the 5V rail collapses)
     Usb = 1,
-    /// 外接 5 V 电源限流
+    /// External 5 V supply current limit
     Ext = 2,
-    /// 板载 LDO 限流
+    /// On-board LDO current limit
     Ldo = 3,
-    /// LDO 输入被拉低进了压差区（上游 USB 先顶不住）
+    /// LDO input pulled into dropout (the upstream USB gave out first)
     LdoDropout = 4,
 }
 
-/// 求解结果（A / V）
+/// Result (A / V)
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FaultOut {
-    /// 错接那条支路的电流
+    /// Current in the miswired branch
     pub i: f64,
-    /// 关键节点电压：对打 / LED / 钳位时是引脚，短路时是被短路的电源轨
+    /// Key node voltage: the pin for fights / LED / clamp, the shorted rail for shorts
     pub v_pin: f64,
     pub v5: f64,
     pub v33: f64,
     pub limiter: Limiter,
 }
 
-/// 被短路到 GND 的电源
+/// Supply rail shorted to GND
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Rail {
     V3v3,
@@ -60,7 +54,7 @@ pub enum Rail {
     Ext5v,
 }
 
-/// 两个推挽输出对打：A 侧 va 经 ra，B 侧 vb 经 rb，接在同一个引脚上。节点 1 = A 内部，2 = 引脚，3 = B 内部
+/// Two push-pull outputs fighting on one pin: A is va via ra, B is vb via rb. Node 1 = A internal, 2 = pin, 3 = B internal
 pub fn fight_circuit(va: f64, ra: f64, vb: f64, rb: f64) -> Circuit {
     let mut c = Circuit::new(3);
     c.add(Elem::V {
@@ -91,19 +85,19 @@ pub fn fight(va: f64, ra: f64, vb: f64, rb: f64) -> FaultOut {
     }
 }
 
-/// 零件的输出（vd 经 rd）对上 GPIO 的输出：GPIO 取相反电平（零件推高就当 GPIO 拉低），算最坏情况
+/// A part's output (vd via rd) against a GPIO output: the GPIO takes the opposite level (worst case)
 pub fn fight_gpio(vd: f64, rd: f64) -> FaultOut {
     if vd > VDD / 2.0 {
         fight(vd, rd, 0.0, GPIO_R_LOW)
     } else {
-        // 零件拉低、GPIO 推高：电流方向反过来，报绝对值
+        // Part pulls low, GPIO drives high: the current reverses, report its magnitude
         let mut o = fight(VDD, GPIO_R_HIGH, vd, rd);
         o.i = o.i.abs();
         o
     }
 }
 
-/// GPIO 输出高电平点 LED（串 series Ω，0 = 直接接）。节点 1 = GPIO 内部，2 = 引脚，3 = LED 阳极
+/// GPIO drives an LED high (series ohm, 0 = direct). Node 1 = GPIO internal, 2 = pin, 3 = LED anode
 pub fn led_circuit(series: f64) -> Circuit {
     let mut c = Circuit::new(3);
     c.add(Elem::V {
@@ -117,7 +111,7 @@ pub fn led_circuit(series: f64) -> Circuit {
         b: 2,
         r: GPIO_R_HIGH,
     });
-    // 没有电阻时引脚就是阳极：用一段极小电阻连上，网表结构不变
+    // Without a resistor the pin is the anode: link them with a tiny resistor so the netlist shape stays the same
     c.add(Elem::R {
         a: 2,
         b: 3,
@@ -143,7 +137,7 @@ pub fn led(series: f64) -> FaultOut {
     }
 }
 
-/// 开发板供电（与 board.rs 同参数）：节点 1 = 5V 轨，2 = 3V3，3 = 外接 5 V。元件 0 = USB，1 = LDO，2 = 3V3 负载，3 = 外接源
+/// Board supply (same params as board.rs): node 1 = 5V rail, 2 = 3V3, 3 = external 5 V. Elems 0 = USB, 1 = LDO, 2 = 3V3 load, 3 = ext
 fn supply(c: &mut Circuit, p: &Params, ext: bool) {
     c.add(Elem::Limit {
         a: 1,
@@ -188,7 +182,7 @@ fn limiter_of(p: &Params, s: &Solution, rail: Rail) -> Limiter {
         return Limiter::Ldo;
     }
     if i_usb > p.usb_ilim {
-        // 3V3 短路时 USB 先顶不住，LDO 输入跟着掉、进压差区；5V 短路就是 USB 自己限流
+        // On a 3V3 short USB gives out first and the LDO input drops into dropout; on a 5V short USB limits by itself
         return if rail == Rail::V3v3 {
             Limiter::LdoDropout
         } else {
@@ -198,7 +192,7 @@ fn limiter_of(p: &Params, s: &Solution, rail: Rail) -> Limiter {
     Limiter::Resistance
 }
 
-/// 一根跳线把电源轨直接接到 GND
+/// A jumper tying a supply rail straight to GND
 pub fn short_circuit(rail: Rail, chip: ChipKind) -> Circuit {
     let p = Params::for_chip(chip);
     let mut c = Circuit::new(3);
@@ -234,12 +228,12 @@ pub fn short(rail: Rail, chip: ChipKind) -> FaultOut {
     }
 }
 
-/// 5 V 模块的输出（经 src Ω）进 GPIO：电流经引脚的钳位二极管灌进 3V3 轨。节点 1 = 5V，2 = 3V3，3 = 引脚
+/// A 5 V module output (via src ohm) into a GPIO: current flows through the pin clamp diode into 3V3. Node 1 = 5V, 2 = 3V3, 3 = pin
 pub fn clamp_circuit(src: f64, chip: ChipKind) -> Circuit {
     let p = Params::for_chip(chip);
     let mut c = Circuit::new(3);
     supply(&mut c, &p, false);
-    // supply 里节点 3 是外接 5 V；这里借来当引脚：把那颗 1 MΩ 换成模块输出电阻 + 钳位二极管
+    // Node 3 in supply is the external 5 V; reuse it as the pin by swapping its 1 Mohm for module resistance + clamp diode
     c.elems.pop();
     c.add(Elem::R { a: 1, b: 3, r: src });
     c.add(Elem::Diode {
@@ -269,7 +263,7 @@ mod tests {
 
     const C3: ChipKind = ChipKind::C3;
 
-    /// tools/elec 的网表和这里的构造必须是同一个电路（ngspice 对照的才是网页用的）
+    /// tools/elec netlists must be the same circuits built here (so ngspice checks what the web uses)
     fn net(name: &str) -> (Netlist, Vec<f64>) {
         let path = format!("{}/../../../tools/elec/{name}", env!("CARGO_MANIFEST_DIR"));
         let nl = Netlist::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
@@ -285,11 +279,11 @@ mod tests {
 
     #[test]
     fn gpio_fight() {
-        // 电位器滑片转到头（≈ 3V3，接触 1 Ω）对上 GPIO 拉低：3.3 / (1 + 35.36)
+        // Pot wiper at the end (~3V3, 1 ohm contact) against a GPIO driving low: 3.3 / (1 + 35.36)
         let o = fight_gpio(VDD, 1.0);
         assert!(near(o.i, 3.3 / 36.36, 1e-9), "{o:?}");
-        assert!(o.i > 0.04, "超过 I_OH 40 mA");
-        // 编码器触点闭合接地（1 Ω）对上 GPIO 推高
+        assert!(o.i > 0.04, "exceeds I_OH 40 mA");
+        // Encoder contact closed to ground (1 ohm) against a GPIO driving high
         let o2 = fight_gpio(0.0, 1.0);
         assert!(near(o2.i, 3.3 / 34.0, 1e-9), "{o2:?}");
         let n = net("11-gpio-fight.cir");
@@ -303,12 +297,12 @@ mod tests {
 
     #[test]
     fn led_without_resistor() {
-        // 折线 LED 导通后线性：(3.3 − 1.8) / (33 + 10) ≈ 34.9 mA，超过 LED 额定 20 mA
+        // PWL LED is linear once on: (3.3 - 1.8) / (33 + 10) ~ 34.9 mA, above the LED's 20 mA rating
         let o = led(0.0);
         let want = (VDD - LED_VF) / (GPIO_R_HIGH + 1e-3 + LED_RD);
         assert!(near(o.i, want, 1e-9), "{o:?}");
         assert!(o.i > 0.02 && o.i < 0.04);
-        // 串 220 Ω：约 5.9 mA
+        // With 220 ohm in series: ~5.9 mA
         let ok = led(220.0);
         assert!(near(ok.i, 1.5 / 263.0, 1e-9), "{ok:?}");
         let n = net("12-led-nores.cir");
@@ -318,20 +312,20 @@ mod tests {
     #[test]
     fn rail_shorts() {
         let p = Params::for_chip(C3);
-        // 3V3 接地：USB 口限流在 0.5 A 后按 20 Ω 斜率掉压，LDO 输入跟着塌、进压差区，
-        // 电流 ≈ 0.5 + (4.75 − v5)/20、v5 = I·(rdo + 0.05) + 芯片负载那点压降 → 0.7 A 左右
+        // 3V3 to ground: USB limits at 0.5 A then drops along a 20 ohm slope; the LDO input follows into dropout.
+        // i ~ 0.5 + (4.75 - v5)/20, v5 = I*(rdo + 0.05) + the chip-load drop -> about 0.7 A
         let s = short(Rail::V3v3, C3);
         assert_eq!(s.limiter, Limiter::LdoDropout, "{s:?}");
         assert!(s.i > 0.6 && s.i < 0.8 && s.v5 < 1.0 && s.v33 < 0.1, "{s:?}");
-        // LDO 输入电流 = 短路 + 负载（负载在 v33 < vknee 时退化成电阻）：解出的点满足 USB 源的方程
+        // LDO input current = short + load (load degrades to a resistor below vknee): the solution satisfies the USB source equation
         let i_in = s.i + (p.chip_idle + p.chip_core + p.board_3v3) * s.v33 + p.ldo_iq;
         let usb = p.usb_ilim + (p.usb_v - p.usb_r * p.usb_ilim - s.v5) / p.usb_rlim;
         assert!(near(i_in, usb, 1e-6), "{i_in} {usb}");
-        // 5V 接地：只剩 USB 限流，≈ 0.7375 / 1.0025
+        // 5V to ground: only the USB limit left, ~ 0.7375 / 1.0025
         let f = short(Rail::V5, C3);
         assert_eq!(f.limiter, Limiter::Usb);
         assert!(near(f.i, 0.7375 / (1.0 + 0.05 / 20.0), 2e-3), "{f:?}");
-        // 外接 5 V 2 A 接地：适配器限流 2 A 后按 2 Ω 斜率 → 2 + (5 − 0.3 − 0.05 I)/2
+        // External 5 V 2 A to ground: adapter limits at 2 A then a 2 ohm slope -> 2 + (5 - 0.3 - 0.05 I)/2
         let e = short(Rail::Ext5v, C3);
         assert_eq!(e.limiter, Limiter::Ext);
         assert!(near(e.i, 4.35 / 1.025, 1e-6), "{e:?}");
@@ -339,7 +333,7 @@ mod tests {
         assert!(near(at(&n3, "v5"), s.v5, 1e-9) && near(at(&n3, "v33"), s.v33, 1e-9));
         let n5 = net("14-short-5v.cir");
         assert!(near(at(&n5, "v5"), f.v5, 1e-9));
-        // S3 开发板（芯片电流大一点）：网页实验台上的作品多是 S3，对拍用这两份
+        // S3 board (higher chip current): most lab projects are S3, so these two are cross-checked too
         let (s3, f3) = (
             short(Rail::V3v3, ChipKind::S3),
             short(Rail::V5, ChipKind::S3),
@@ -352,12 +346,12 @@ mod tests {
 
     #[test]
     fn five_volt_into_gpio() {
-        // HC-SR04 Echo 直连（5 V 推挽输出约 50 Ω）：经钳位二极管灌进 3V3，3V3 仍由 LDO 稳住
+        // HC-SR04 Echo wired direct (5 V push-pull ~50 ohm): through the clamp into 3V3, which the LDO still holds
         let o = clamp(50.0, C3);
         let want = (o.v5 - o.v33 - CLAMP_VF) / (50.0 + CLAMP_RD);
         assert!(near(o.i, want, 1e-9), "{o:?}");
         assert!(o.i > 0.01 && o.v_pin > 3.6, "{o:?}");
-        // 模块 10 kΩ 上拉接 5 V：只有约 0.1 mA
+        // Module 10 kohm pull-up to 5 V: only ~0.1 mA
         let pu = clamp(10_000.0, C3);
         assert!(pu.i > 5e-5 && pu.i < 2e-4, "{pu:?}");
         let n = net("15-clamp-5v.cir");

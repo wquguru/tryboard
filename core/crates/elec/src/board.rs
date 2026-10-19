@@ -1,15 +1,13 @@
-//! 开发板供电网络（P1-01 / P1-02）：USB 或外接 5 V → 5V 轨 → 板载 LDO → 3V3 轨 → 芯片 + 模块；舵机挂 5V 轨或外接 5 V。
-//! 按模拟时间固定 100 µs 一步推进（隐式欧拉），3V3 低于欠压门限持续超过去抖时间就报告欠压复位。
-//!
-//! 所有数值的来源见 DECISIONS 2026-10-16「电气模型」；没有数据手册出处的都标了"估算"。
-//!
-//! 节点：1 = 板上 5V 轨（USB VBUS），2 = 3V3，3 = 舵机红线，4 = 外接 5 V（面包板电源轨）
+//! Board power network (P1-01 / P1-02): USB or external 5 V -> 5V rail -> on-board LDO -> 3V3 -> chip + modules; the servo
+//! hangs off the 5V rail or external 5 V. Fixed 100 us implicit-Euler steps; 3V3 below the brownout threshold for longer
+//! than the debounce time reports a brownout reset. Sources: DECISIONS 2026-10-16 electrical model; unsourced values are estimates.
+//! Nodes (lint: allow-long-comment): 1 = board 5V rail (USB VBUS), 2 = 3V3, 3 = servo red wire, 4 = external 5 V (breadboard rail)
 
 use crate::mna::{Circuit, Elem, Solution};
 use crate::servo::{Servo, ServoParams};
 
 pub const CPU_HZ: u64 = 160_000_000;
-/// 一步 100 µs：舵机机械时间常数约 25 ms、去抖 0.12 ms 量级，100 µs 足够；电容回路时间常数更短，隐式欧拉照样稳定
+/// 100 us per step: servo mechanical time constant ~25 ms and debounce ~0.12 ms; faster RC loops stay stable under implicit Euler
 pub const STEP_CYCLES: u64 = CPU_HZ / 10_000;
 const DT: f64 = STEP_CYCLES as f64 / CPU_HZ as f64;
 
@@ -20,9 +18,9 @@ pub const NEXT: usize = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Power {
-    /// 只有电脑 USB：舵机也从 5V 轨取电
+    /// PC USB only: the servo also draws from the 5V rail
     Usb,
-    /// 开发板仍插 USB（看串口），舵机改由外接 5 V 2 A 供电，共地
+    /// Board still on USB (for serial), servo powered by an external 5 V 2 A supply, common ground
     Ext,
 }
 
@@ -46,11 +44,11 @@ impl Power {
 pub enum ChipKind {
     S3,
     C3,
-    /// 经典 ESP32（ESP32-DevKitC V4 + WROOM-32）
+    /// Classic ESP32 (ESP32-DevKitC V4 + WROOM-32)
     Esp32,
 }
 
-/// 供电网络参数。每个数的来源写在 `for_chip` 里
+/// Supply network parameters; each value's source is noted in `for_chip`
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Params {
     pub usb_v: f64,
@@ -69,52 +67,51 @@ pub struct Params {
     pub ldo_rdo: f64,
     pub ldo_ilim: f64,
     pub ldo_iq: f64,
-    /// 芯片：全部核 WAITI 时 / 每个核满负荷增加 / Wi-Fi 打开（接收监听）增加 / 发射时总电流 / 复位保持时
+    /// Chip: all cores in WAITI / extra per fully loaded core / extra with Wi-Fi on (RX listening) / total while transmitting / held in reset
     pub chip_idle: f64,
     pub chip_core: f64,
     pub chip_rx: f64,
     pub chip_tx: f64,
     pub chip_reset: f64,
-    /// 板上其它 3V3 负载（电源灯、USB 转串口芯片、板载彩灯静态）
+    /// Other on-board 3V3 loads (power LED, USB-serial chip, idle on-board RGB LED)
     pub board_3v3: f64,
-    /// 欠压门限（V）与去抖（s）；复位保持到电压回到门限 + 回差
+    /// Brownout threshold (V) and debounce (s); reset is held until the voltage returns above threshold + hysteresis
     pub bod_v: f64,
     pub bod_debounce: f64,
     pub bod_hyst: f64,
-    /// 一个 Wi-Fi 帧算多长的发射时间（s）
+    /// Transmit time counted per Wi-Fi frame (s)
     pub tx_airtime: f64,
 }
 
 impl Params {
     pub fn for_chip(chip: ChipKind) -> Params {
         Params {
-            // USB 2.0 主机口：5 V，额定 500 mA（规范值；真机口多数能给更多，这里按规范、估算）。
-            // 内阻 = 口内 0.1 Ω + 1 m 线两根 28AWG 电源线约 0.43 Ω 加插头（估算 0.4 Ω）
+            // USB 2.0 host port: 5 V, 500 mA rated (spec; real ports often give more, estimate). Resistance = 0.1 ohm in the port
+            // + ~0.43 ohm for two 28AWG power wires in a 1 m cable plus plugs (estimate 0.4 ohm)
             usb_v: 5.0,
             usb_r: 0.5,
             usb_ilim: 0.5,
-            // 超过限流后按 20 Ω 斜率掉压（限流开关进恒流区的分段线性近似，估算）
+            // Past the limit the voltage drops along a 20 ohm slope (PWL approximation of a limit switch in constant-current mode, estimate)
             usb_rlim: 20.0,
-            // 外接 5 V 2 A 适配器 + DC 母座 + 面包板电源轨（估算）
+            // External 5 V 2 A adapter + DC jack + breadboard power rail (estimate)
             ext_v: 5.0,
             ext_r: 0.15,
             ext_ilim: 2.0,
             ext_rlim: 2.0,
-            // 杜邦线两根 20 cm + 面包板接触（估算）
+            // Two 20 cm Dupont wires + breadboard contacts (estimate)
             servo_wire_r: 0.15,
-            // 去耦：5V 轨 10 µF、3V3 轨 22 µF（开发板输入 / 输出电容 + 模组内电容，估算）
+            // Decoupling: 10 uF on 5V, 22 uF on 3V3 (board input / output caps + module caps, estimate)
             c5v: 10e-6,
             c3v3: 22e-6,
-            // 板载 LDO SGM2212-3.3（ESP32-S3-DevKitC-1，乐鑫论坛工程师答复；C3-DevKitM-1 按同款，待核）：
-            // 数据手册 800 mA、压差 420 mV @ 800 mA → 调整管全开等效 0.525 Ω；限流值手册未给，取 1.2 A（估算）
+            // On-board LDO SGM2212-3.3 (ESP32-S3-DevKitC-1 per an Espressif forum engineer; C3-DevKitM-1 assumed the same, unverified):
+            // 800 mA, 420 mV dropout @ 800 mA -> 0.525 ohm fully on; current limit not in the datasheet, 1.2 A assumed (estimate)
             ldo_vset: 3.3,
             ldo_rout: 0.01,
             ldo_rdo: 0.42 / 0.8,
             ldo_ilim: 1.2,
             ldo_iq: 0.0001,
-            // 芯片电流（估算，量级取自 ESP32-S3 / C3 数据手册"功耗"表：modem-sleep 数十 mA、
-            // 802.11b 1 Mbps 21 dBm 发射约 340 mA（S3）/ 335 mA（C3）、接收约 90 mA）
-            // 经典 ESP32 取其数据手册：modem-sleep 160MHz 双核 20–68 mA、802.11b 19.5 dBm 发射约 240 mA、接收约 95 mA（估算）
+            // Chip current (estimate, from the S3 / C3 / ESP32 datasheet power tables): modem-sleep tens of mA, 802.11b TX ~340 mA (S3),
+            // 335 mA (C3), 240 mA (ESP32 at 19.5 dBm), RX ~90-95 mA
             chip_idle: match chip {
                 ChipKind::S3 => 0.020,
                 ChipKind::C3 => 0.014,
@@ -136,11 +133,10 @@ impl Params {
                 ChipKind::Esp32 => 0.240,
             },
             chip_reset: 0.005,
-            // 电源灯约 2 mA + CP2102N 约 8 mA + 板载 WS2812 静态约 1 mA（估算）
+            // Power LED ~2 mA + CP2102N ~8 mA + idle on-board WS2812 ~1 mA (estimate)
             board_3v3: 0.011,
-            // IDF 5.5 默认档 ESP_BROWNOUT_DET_LVL_SEL_7：S3 2.44 V、C3 2.51 V（Kconfig.power，乐鑫标注为估计值）。
-            // 去抖：brownout_hal_config 写 rst_wait = 0x3ff，计数时钟未核实，按约 8.75 MHz 估 ≈ 0.12 ms（估算）
-            // 经典 ESP32 默认档 ESP_BROWNOUT_DET_LVL_SEL_0：2.43 V（Kconfig，乐鑫标注为估计值）
+            // IDF 5.5 default ESP_BROWNOUT_DET_LVL_SEL_7: S3 2.44 V, C3 2.51 V; classic ESP32 LVL_SEL_0: 2.43 V (Kconfig, Espressif estimates).
+            // Debounce: brownout_hal_config sets rst_wait = 0x3ff; counter clock unverified, ~8.75 MHz assumed -> ~0.12 ms (estimate)
             bod_v: match chip {
                 ChipKind::S3 => 2.44,
                 ChipKind::C3 => 2.51,
@@ -153,22 +149,22 @@ impl Params {
     }
 }
 
-/// 一段时间里的芯片活动（由机器在每次 run 之后给出）
+/// Chip activity over an interval (given by the machine after each run)
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Activity {
-    /// 忙的核数（0..=2）：执行的指令数 / 经过的周期数，两核相加
+    /// Busy cores (0..=2): instructions executed / cycles elapsed, summed over both cores
     pub busy: f64,
-    /// Wi-Fi 已打开（收发过帧）
+    /// Wi-Fi is on (has sent or received frames)
     pub wifi_on: bool,
-    /// 这段时间里发射所占比例（0..1）
+    /// Fraction of this interval spent transmitting (0..1)
     pub tx: f64,
-    /// 舵机脉宽（µs）；None = 没有 PWM
+    /// Servo pulse width (us); None = no PWM
     pub servo_pw_us: Option<f64>,
-    /// 接在 5 V 轨上的功放（MAX98357A）此刻的电流（A），随放出的声音大小变
+    /// Current (A) of the amp on the 5 V rail (MAX98357A) right now, varies with output volume
     pub amp_i: f64,
 }
 
-/// 此刻的读数（电压 V、电流 A）
+/// Readings right now (voltage V, current A)
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Readings {
     pub v5: f64,
@@ -180,7 +176,7 @@ pub struct Readings {
     pub i_servo: f64,
     pub i_3v3: f64,
     pub i_chip: f64,
-    /// 5 V 轨上的模块（功放）电流
+    /// Module (amp) current on the 5 V rail
     pub i_amp: f64,
 }
 
@@ -195,7 +191,7 @@ pub struct Stats {
     pub peak_i_3v3: f64,
     pub peak_i_amp: f64,
     pub resets: u32,
-    /// 每次欠压复位的模拟时刻（s）与当时 3V3 的最低值
+    /// Simulated time (s) of each brownout reset and the lowest 3V3 at that moment
     pub brownouts: Vec<(f64, f64)>,
 }
 
@@ -222,19 +218,19 @@ pub struct Board {
     pub p: Params,
     pub power: Power,
     pub servo: Option<Servo>,
-    /// 舵机信号接哪个 GPIO
+    /// GPIO the servo signal is wired to
     pub servo_pin: Option<u32>,
-    /// 模块从 3V3 取的电流（A），由挂上的器件累加
+    /// Current modules draw from 3V3 (A), summed over attached parts
     pub modules_3v3: f64,
-    /// 模块从 5V 轨取的电流（A），如 HC-SR04（5 V 器件）
+    /// Current modules draw from the 5V rail (A), e.g. HC-SR04 (a 5 V part)
     pub modules_5v: f64,
-    /// 接在 5 V 轨上的模块（功放）有没有
+    /// Whether a module (amp) sits on the 5 V rail
     pub amp: bool,
     pub now: Readings,
     pub stats: Stats,
-    /// 已经积分到的模拟时刻（周期，STEP_CYCLES 的整数倍）
+    /// Simulated time integrated so far (cycles, a multiple of STEP_CYCLES)
     pub t: u64,
-    /// 芯片被欠压复位按住（电压回升前不运行）
+    /// Chip held in reset by brownout (does not run until the voltage recovers)
     pub held: bool,
     v: Vec<f64>,
     below: f64,
@@ -264,7 +260,7 @@ impl Board {
         b
     }
 
-    /// 上电时的稳态（电容已充好）
+    /// Power-on steady state (caps already charged)
     pub fn settle(&mut self) {
         let act = Activity {
             busy: 1.0,
@@ -276,48 +272,48 @@ impl Board {
     }
 
     pub fn attach_servo(&mut self, pin: u32) {
-        // 舵机上电前停在哪不知道，按 90°（中位）算
+        // The servo's position before power-on is unknown; assume 90 deg (center)
         self.servo = Some(Servo::new(ServoParams::sg90(), 90.0));
         self.servo_pin = Some(pin);
         self.settle();
     }
 
-    /// 已知器件的 3V3 电流（A），数值取自 web/src/catalog/parts.ts 的 currentMa.typ（同一来源、同样标注）
+    /// 3V3 current (A) of known parts, from currentMa.typ in web/src/catalog/parts.ts (same source, same labelling)
     pub fn module_current(kind: &str) -> Option<f64> {
         match kind {
-            // BME280 数据手册：1 Hz 温湿压 3.6 µA
+            // BME280 datasheet: 3.6 uA at 1 Hz T/H/P
             "bme280" => Some(0.000_003_6),
-            // SSD1306：估算，随点亮像素数，10 mA 量级
+            // SSD1306: estimate, scales with lit pixels, ~10 mA
             "ssd1306" => Some(0.010),
-            // GC9A01 圆屏：估算，主要是背光 25 mA
+            // GC9A01 round display: estimate, mostly the 25 mA backlight
             "gc9a01" => Some(0.025),
-            // MPU6050：估算，数据手册陀螺 3.6 mA + 加速度计 0.5 mA
+            // MPU6050: estimate, datasheet gyro 3.6 mA + accel 0.5 mA
             "mpu6050" => Some(0.0039),
-            // QMI8658：估算，数据手册六轴高性能模式约 1.7 mA 量级（待逐字核对）
+            // QMI8658: estimate, ~1.7 mA in 6-axis high-performance mode per datasheet (to verify verbatim)
             "qmi8658" => Some(0.0017),
-            // CST816S：估算，扫描工作电流 mA 量级（触摸圆屏的背光已算在 gc9a01 里）
+            // CST816S: estimate, mA-level scan current (the round touch display backlight is counted in gc9a01)
             "cst816s" => Some(0.0025),
-            // FT6236：估算，工作模式扫描电流 mA 量级（屏背光不在这里）
+            // FT6236: estimate, mA-level active scan current (display backlight not included)
             "ft6236" => Some(0.004),
-            // EC11 编码器模块：估算，两颗 10 kΩ 上拉在 3.3 V 下（触点闭合时）
+            // EC11 encoder module: estimate, two 10 kohm pull-ups at 3.3 V (contacts closed)
             "encoder" => Some(0.000_66),
-            // INMP441 数据手册：工作电流 1.4 mA
+            // INMP441 datasheet: 1.4 mA operating current
             "inmp441" => Some(0.0014),
             _ => None,
         }
     }
 
-    /// 从 5V 轨取电的器件（A），同样取自 parts.ts 的 currentMa.typ
+    /// Parts powered from the 5V rail (A), also from currentMa.typ in parts.ts
     pub fn module_current_5v(kind: &str) -> Option<f64> {
         match kind {
-            // HC-SR04 模块规格书：工作电流 15 mA
+            // HC-SR04 module spec: 15 mA operating current
             "hcsr04" => Some(0.015),
             _ => None,
         }
     }
 
     pub fn add_module(&mut self, kind: &str) {
-        // MAX98357A 吃 5 V（VIN 接 5V 排针）：电流由机器每段按放音大小给出（Activity::amp_i）
+        // MAX98357A runs on 5 V (VIN to the 5V header): current comes per interval from the machine by volume (Activity::amp_i)
         if kind == "max98357a" {
             self.amp = true;
             return;
@@ -337,7 +333,7 @@ impl Board {
         }
         let rx = if act.wifi_on { p.chip_rx } else { 0.0 };
         let base = p.chip_idle + p.chip_core * act.busy.clamp(0.0, 2.0) + rx;
-        // 发射期间整颗芯片的电流就是发射电流
+        // While transmitting the whole chip draws the TX current
         let tx = act.tx.clamp(0.0, 1.0);
         base * (1.0 - tx) + p.chip_tx.max(base) * tx
     }
@@ -345,7 +341,7 @@ impl Board {
     fn circuit(&self, act: &Activity) -> Circuit {
         let p = &self.p;
         let mut c = Circuit::new(4);
-        // 0：USB 源（下标在 readings 里用到）
+        // 0: USB source (its index is used in readings)
         c.add(Elem::Limit {
             a: N5V,
             vs: p.usb_v,
@@ -353,7 +349,7 @@ impl Board {
             ilim: p.usb_ilim,
             rlim: p.usb_rlim,
         });
-        // 1：外接源（USB 模式下也放着，接在没人用的节点上，保持元件下标固定）
+        // 1: external source (present even in USB mode on an unused node so element indices stay fixed)
         c.add(match self.power {
             Power::Ext => Elem::Limit {
                 a: NEXT,
@@ -368,7 +364,7 @@ impl Board {
                 vknee: 1.0,
             },
         });
-        // 2：LDO
+        // 2: LDO
         c.add(Elem::Ldo {
             inp: N5V,
             out: N3V3,
@@ -378,7 +374,7 @@ impl Board {
             ilim: p.ldo_ilim,
             iq: p.ldo_iq,
         });
-        // 3：芯片，4：板上其它 + 模块
+        // 3: chip, 4: other board loads + modules
         c.add(Elem::Load {
             a: N3V3,
             i: self.chip_current(act),
@@ -389,7 +385,7 @@ impl Board {
             i: p.board_3v3 + self.modules_3v3,
             vknee: 1.0,
         });
-        // 5：舵机电机，6：舵机控制电路静态电流，7：舵机电源线
+        // 5: servo motor, 6: servo control quiescent current, 7: servo supply wire
         let (vcmd, emf, r) = self
             .servo
             .as_ref()
@@ -422,13 +418,13 @@ impl Board {
             b: 0,
             c: p.c3v3,
         });
-        // 10：5 V 轨上的功放
+        // 10: amp on the 5 V rail
         c.add(Elem::Load {
             a: N5V,
             i: if self.amp { act.amp_i } else { 0.0 },
             vknee: 1.0,
         });
-        // 5V 轨上的模块：只在接了时才加元件（不接时网络与以前逐位相同）
+        // 5V-rail modules: only added when attached (otherwise the network is bit-identical to before)
         if self.modules_5v > 0.0 {
             c.add(Elem::Load {
                 a: N5V,
@@ -479,8 +475,8 @@ impl Board {
         st.peak_i_amp = st.peak_i_amp.max(n.i_amp);
     }
 
-    /// 积分到模拟时刻 now（周期）。只走整步（100 µs），余下的留到下次，所以结果只取决于每次调用时给的活动，
-    /// 与调用间隔无关以外的因素无关。返回 true = 这段时间里触发了欠压复位（调用方让芯片复位，原因 15）
+    /// Integrate up to simulated time now (cycles) in whole 100 us steps, carrying the rest, so results depend only on the
+    /// activity given and not on call spacing. Returns true if a brownout reset fired (caller resets the chip, reason 15)
     pub fn advance(&mut self, now: u64, act: &Activity) -> bool {
         if let (Some(s), Some(_)) = (self.servo.as_mut(), self.servo_pin) {
             s.set_pulse(act.servo_pw_us);
@@ -500,7 +496,7 @@ impl Board {
             let v3 = self.now.v3v3;
             let p = self.p;
             if self.held {
-                // 复位按住，直到电压回到门限以上（加回差）
+                // Hold reset until the voltage climbs back above threshold (plus hysteresis)
                 if v3 >= p.bod_v + p.bod_hyst {
                     self.held = false;
                 }
@@ -527,7 +523,7 @@ impl Board {
         fired
     }
 
-    /// 节点电压（V）：给万用表 / wasm 用。0 = 地，1 = 5V 轨，2 = 3V3，3 = 舵机红线，4 = 外接 5 V
+    /// Node voltages (V) for the multimeter / wasm: 0 = ground, 1 = 5V rail, 2 = 3V3, 3 = servo red wire, 4 = external 5 V
     pub fn node_v(&self, n: usize) -> f64 {
         match n {
             N5V => self.now.v5,
@@ -538,7 +534,7 @@ impl Board {
         }
     }
 
-    /// `--elec-report` 的文字（CLI 与 wasm 同一份）
+    /// `--elec-report` text (shared by CLI and wasm)
     pub fn report(&self) -> String {
         use std::fmt::Write;
         let s = &self.stats;
@@ -552,34 +548,37 @@ impl Board {
         };
         let _ = writeln!(
             o,
-            "[tryboard] 电气 供电={} 舵机={}",
+            "[tryboard] elec power={} servo={}",
             self.power.name(),
             self.servo_pin
                 .map(|p| format!("GPIO{p}"))
-                .unwrap_or_else(|| "无".into())
+                .unwrap_or_else(|| "none".into())
         );
         let _ = writeln!(
             o,
-            "[tryboard] 电气 最低电压 5V={} 3V3={} 舵机={}",
+            "[tryboard] elec min voltage 5V={} 3V3={} servo={}",
             fmt_min(s.min_v5),
             fmt_min(s.min_v3v3),
             fmt_min(s.min_v_servo)
         );
         let _ = writeln!(
             o,
-            "[tryboard] 电气 峰值电流 USB={:.3} A 外接={:.3} A 舵机={:.3} A 3V3={:.3} A",
+            "[tryboard] elec peak current USB={:.3} A ext={:.3} A servo={:.3} A 3V3={:.3} A",
             s.peak_i_usb, s.peak_i_ext, s.peak_i_servo, s.peak_i_3v3
         );
         if self.amp {
             let _ = writeln!(
                 o,
-                "[tryboard] 电气 功放（5V）峰值电流 {:.3} A",
+                "[tryboard] elec amp (5V) peak current {:.3} A",
                 s.peak_i_amp
             );
         }
-        let _ = writeln!(o, "[tryboard] 电气 欠压复位 {} 次", s.resets);
+        let _ = writeln!(o, "[tryboard] elec {} brownout resets", s.resets);
         for (t, v) in &s.brownouts {
-            let _ = writeln!(o, "[tryboard] 电气 欠压复位 @{t:.4}s 3V3 最低 {v:.3} V");
+            let _ = writeln!(
+                o,
+                "[tryboard] elec brownout reset @{t:.4}s 3V3 min {v:.3} V"
+            );
         }
         o
     }
@@ -617,7 +616,7 @@ mod tests {
         b.add_module("bme280");
         run(&mut b, 0.05, &|_| None);
         assert!((b.now.v3v3 - 3.3).abs() < 0.01, "{:?}", b.now);
-        // 约 50 mA：USB 端 5 − 0.05·0.5
+        // ~50 mA: USB side 5 - 0.05*0.5
         assert!(b.now.v5 > 4.95 && b.now.v5 < 5.0, "{:?}", b.now);
         assert_eq!(b.stats.resets, 0);
     }
@@ -638,7 +637,7 @@ mod tests {
 
     #[test]
     fn deterministic_independent_of_call_grain() {
-        // 活动不变时，1 ms 调一次和 10 ms 调一次积分到同一时刻，结果逐位相同（只走 100 µs 整步）
+        // With constant activity, calling every 1 ms or every 10 ms reaches the same state bit for bit (only whole 100 us steps)
         let act = Activity {
             busy: 1.0,
             servo_pw_us: Some(2500.0),
@@ -663,7 +662,7 @@ mod tests {
         let mut b = Board::new(ChipKind::S3);
         b.attach_servo(4);
         b.set_power(Power::Ext);
-        // 0↔180° 每 0.15 s 换向（没到位就反转，电流最大的情形）
+        // Reverse 0<->180 deg every 0.15 s (before reaching the target: the worst-current case)
         let r = run(&mut b, 2.0, &|t| {
             Some(if ((t / 0.15) as u64).is_multiple_of(2) {
                 2500.0
@@ -676,7 +675,7 @@ mod tests {
         assert!(b.stats.peak_i_usb < 0.1, "{:?}", b.stats);
     }
 
-    /// 5 V 器件（HC-SR04）从 5V 轨取电：USB 电流多 15 mA，3V3 支路不变
+    /// A 5 V part (HC-SR04) on the 5V rail: USB current rises by 15 mA, the 3V3 branch is unchanged
     #[test]
     fn hcsr04_draws_from_5v() {
         let act = Activity {
@@ -690,7 +689,7 @@ mod tests {
         a.advance(CPU_HZ / 100, &act);
         b.advance(CPU_HZ / 100, &act);
         let d = b.now.i_usb - a.now.i_usb;
-        assert!((d - 0.015 - 0.000_66).abs() < 0.001, "多出 {d} A");
+        assert!((d - 0.015 - 0.000_66).abs() < 0.001, "extra {d} A");
         assert!((b.now.i_3v3 - a.now.i_3v3 - 0.000_66).abs() < 0.0001);
     }
 }
@@ -717,7 +716,7 @@ mod scenarios {
             }
         }
         eprintln!(
-            "{name}: 5V≥{:.3} 3V3≥{:.3} USB≤{:.3} A 舵机≤{:.3} A 复位 {}",
+            "{name}: 5V>={:.3} 3V3>={:.3} USB<={:.3} A servo<={:.3} A resets {}",
             b.stats.min_v5,
             b.stats.min_v3v3,
             b.stats.peak_i_usb,
@@ -726,20 +725,20 @@ mod scenarios {
         );
         b.stats.clone()
     }
-    /// P1-02 的依据：USB 0.5 A 限流下，舵机从静止起步（哪怕 180° 跳变）5V 轨只掉到约 3.0 V，3V3 仍高于 2.44 V；
-    /// 只有"没到位就反向"（反接制动，电流 ≈ (V + 反电动势)/R）才把 5V 轨拉垮、触发欠压复位
+    /// Basis for P1-02: under the 0.5 A USB limit a servo starting from rest (even a 180 deg jump) only drops 5V to ~3.0 V, 3V3 stays
+    /// above 2.44 V; only reversing before arrival (plugging, i ~ (V + back-EMF)/R) collapses 5V and triggers a brownout reset
     #[test]
     fn scenarios() {
         let weather = scen("weather 1675us", 1.0, &|_| Some(1675.0));
         assert_eq!(weather.resets, 0);
         assert!(weather.min_v3v3 > 3.25, "{weather:?}");
-        let l05 = scen("05 0→45→…→180", 3.0, &|t| {
+        let l05 = scen("05 0->45->...->180", 3.0, &|t| {
             let a = [0.0, 45.0, 90.0, 135.0, 180.0, 90.0][((t / 0.4) as usize) % 6];
             Some(500.0 + a / 180.0 * 2000.0)
         });
         assert_eq!(l05.resets, 0);
         assert!(l05.min_v3v3 > 2.9 && l05.min_v3v3 < 3.2, "{l05:?}");
-        let jump = scen("0↔180 停 0.6 s", 3.0, &|t| {
+        let jump = scen("0<->180 hold 0.6 s", 3.0, &|t| {
             Some(if ((t / 0.6) as u64).is_multiple_of(2) {
                 500.0
             } else {
@@ -747,7 +746,7 @@ mod scenarios {
             })
         });
         assert_eq!(jump.resets, 0);
-        let rev = scen("0↔180 每 0.15 s 反向", 3.0, &|t| {
+        let rev = scen("0<->180 reverse every 0.15 s", 3.0, &|t| {
             Some(if ((t / 0.15) as u64).is_multiple_of(2) {
                 2500.0
             } else {

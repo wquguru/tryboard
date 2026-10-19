@@ -1,40 +1,40 @@
-# Xtensa 核自检与 QEMU 差分
+# Xtensa core self-tests and QEMU differential
 
 ```sh
 cd core && cargo test -p tryboard-xtensa -- --nocapture
 ```
 
-- `build.sh` 用 `xtensa-esp32s3-elf-gcc` 把每个 `<名字>.S` 与 `common.S` 链接成 `build/<名字>.elf`（`cargo test` 会先调用它）。
-- 每个测试提供窗口函数 `test_main`，用 `EXPECT` 自检（返回失败用例号），用 `DUMP reg` 把要对照的值追加到 dump 缓冲区。
-- `common.S`：向量表（窗口溢出 / 下溢、level 2–7 中断、User / Kernel / Double 异常）、通用中断处理（记 `irq_log`、关掉对应 INTENABLE 位后返回）、异常处理（记 EXCCAUSE 与次数、跳过出错指令；`cp_lazy` 打开时对协处理器禁用异常像 FreeRTOS 一样打开 CPENABLE 后重试）。
-- 结束时经 SIMCALL 半主机调用输出 `result`、dump 长度与内容，然后 SYS_exit。
+- `build.sh` uses `xtensa-esp32s3-elf-gcc` to link each `<name>.S` with `common.S` into `build/<name>.elf` (`cargo test` calls it first).
+- Each test provides a windowed function `test_main` that checks itself with `EXPECT` (returning the failing case number) and uses `DUMP reg` to append values for comparison to the dump buffer.
+- `common.S`: vector table (window overflow / underflow, level 2–7 interrupts, User / Kernel / Double exceptions), a generic interrupt handler (logs to `irq_log`, clears the matching INTENABLE bit and returns), and an exception handler (records EXCCAUSE and a count, skips the faulting instruction; with `cp_lazy` set, a coprocessor-disabled exception enables CPENABLE and retries, like FreeRTOS).
+- At the end, SIMCALL semihosting calls print `result`, the dump length and its contents, then SYS_exit.
 
-## 与 QEMU 差分
+## Differential against QEMU
 
-本机装了乐鑫 QEMU（`~/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa`，`idf_tools.py install qemu-xtensa`）时，
-测试运行器把同一个 ELF 放到
+When Espressif's QEMU is installed (`~/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa`, via `idf_tools.py install qemu-xtensa`),
+the test runner also runs the same ELF on
 
 ```
 qemu-system-xtensa -M sim -cpu esp32s3 -icount shift=0,sleep=off -nographic -monitor none \
   -semihosting-config enable=on,target=native -device loader,file=<elf>,cpu-num=0
 ```
 
-上跑，取 stdout（半主机输出）与我们的输出逐字比较，打印前几处不一致。QEMU 只作独立进程的对照。
+takes its stdout (the semihosting output), compares it byte for byte with ours and prints the first few mismatches. QEMU only runs as a separate process for comparison.
 
-| 环境变量 | 作用 |
+| Environment variable | Effect |
 |---|---|
-| `XT_NO_QEMU=1` | 不跑 QEMU，只自检 |
-| `XT_ONLY=fp` | 只跑一个测试 |
-| `XT_SAVE=1` | 两边原始输出存成 `build/<名字>.{ours,qemu}.bin` 便于离线分析 |
+| `XT_NO_QEMU=1` | Skip QEMU, self-check only |
+| `XT_ONLY=fp` | Run only one test |
+| `XT_SAVE=1` | Save both raw outputs as `build/<name>.{ours,qemu}.bin` for offline analysis |
 
-sim 机器与真 S3 的差别（测试里已处理）：PRID 读 0；ATOMCTL 复位 0x28 使 S32C1I 在旁路内存上异常（测试设成 0x2a）；
-CCOUNT 按 40MHz 虚拟时间走（测试不输出原始 CCOUNT）。
+Differences between the sim machine and a real S3 (handled in the tests): PRID reads 0; ATOMCTL resets to 0x28, which makes S32C1I fault on bypass memory (the tests set it to 0x2a);
+CCOUNT advances with 40 MHz virtual time (the tests don't print raw CCOUNT).
 
-## 测试
+## Tests
 
-| 测试 | 内容 |
+| Test | Covers |
 |---|---|
-| alu / shift / muldiv / mem / branch / loop / misc / window | 切片 1 的基础 ISA 与窗口 |
-| irq | 软件中断 level 1/3、INTLEVEL / EXCM 屏蔽、CCOMPARE0/1/2、WAITI 唤醒、INTSET / INTCLEAR |
-| fp | FPU：18 个特殊值两两组合 × 4 种舍入模式的加减乘、乘加 / 减、FSR 标志、转换、比较、条件传送、装载存储、协处理器禁用异常、libgcc `__divsf3` / libm sqrtf 的指令序列 |
-| mac16 | MAC16 四种来源、ACC 回绕、LDINC/LDDEC；SALT/SALTU；区域保护 TLB 指令 |
+| alu / shift / muldiv / mem / branch / loop / misc / window | Slice 1 base ISA and register windows |
+| irq | Software interrupts level 1/3, INTLEVEL / EXCM masking, CCOMPARE0/1/2, WAITI wake-up, INTSET / INTCLEAR |
+| fp | FPU: add / sub / mul over all pairs of 18 special values × 4 rounding modes, fused multiply-add / subtract, FSR flags, conversions, compares, conditional moves, loads / stores, coprocessor-disabled exception, libgcc `__divsf3` / libm sqrtf instruction sequences |
+| mac16 | MAC16 four operand sources, ACC wrap-around, LDINC/LDDEC; SALT/SALTU; region protection TLB instructions |

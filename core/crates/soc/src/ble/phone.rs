@@ -1,16 +1,14 @@
-//! 虚拟手机：BLE 中心设备 + L2CAP + ATT/GATT 客户端。
-//!
-//! 行为照着常见手机 App（nRF Connect 之类）的最小子集：扫描 → 连接 → 交换 MTU → 发现服务 / 特征 / 描述符 →
-//! 读、写、写 CCCD 订阅、收通知。一次只挂一个 ATT 请求（ATT 协议本来就这样要求），每个连接事件最多发一个请求。
+//! Virtual phone: BLE central + L2CAP + ATT/GATT client, mimicking a minimal nRF Connect-style app:
+//! scan, connect, MTU exchange, discovery, read / write / CCCD subscribe. One ATT request in flight (ATT requires it), at most one per connection event.
 
 use super::{adv_name, adv_uuids, fmt_addr, hex, json_str};
 use std::collections::VecDeque;
 
-/// 手机发起连接用的连接间隔（30 ms，安卓默认值附近）
+/// Connection interval the phone requests (30 ms, near the Android default)
 pub const CONN_INTERVAL_US: u64 = 30_000;
-/// 手机这边的 ATT MTU
+/// Phone-side ATT MTU
 pub const PHONE_MTU: u16 = 247;
-/// 订阅后统计通知条数的窗口（验收：订阅后 3 s 内至少 2 条）
+/// Window for counting notifications after subscribing (acceptance: at least 2 within 3 s)
 const SUB_WINDOW_US: u64 = 3_000_000;
 const HIST_CAP: usize = 120;
 
@@ -41,7 +39,7 @@ pub struct Chr {
     pub value: Vec<u8>,
     pub notify: bool,
     pub notes: u32,
-    /// (模拟时刻 µs, 数值) —— 网页画曲线
+    /// (simulated time us, value) for the web chart
     pub hist: VecDeque<(u64, f64)>,
     sub_at: Option<u64>,
     sub_reported: bool,
@@ -112,7 +110,7 @@ impl Default for Phone {
 impl Phone {
     pub fn new() -> Phone {
         Phone {
-            // 随机静态地址 C0:FF:EE:12:34:56（最高两位 11）
+            // Random static address C0:FF:EE:12:34:56 (top two bits 11)
             addr: [0x56, 0x34, 0x12, 0xee, 0xff, 0xc0],
             rssi: -52,
             state: State::Idle,
@@ -160,7 +158,7 @@ impl Phone {
         self.state == State::Connected && self.disc == Disc::Ready
     }
 
-    /// 收到一个广播包；返回是否值得记进空中日志（每台设备每秒最多一条）
+    /// Received an advertising packet; returns whether to log it (at most one line per device per second)
     pub fn on_adv(
         &mut self,
         t: u64,
@@ -268,22 +266,24 @@ impl Phone {
             .map_or(format!("0x{h:04x}"), |c| c.uuid.clone())
     }
 
-    /// 解析操作对象：0x 开头是句柄，否则是特征 UUID（16 位十六进制）
+    /// Resolve the target: 0x prefix is a handle, otherwise a 16-bit hex characteristic UUID
     fn resolve(&self, s: &str) -> Result<u16, String> {
         let s = s.trim();
         if let Some(h) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-            return u16::from_str_radix(h, 16).map_err(|_| format!("句柄写错了：{s}"));
+            return u16::from_str_radix(h, 16).map_err(|_| format!("bad handle: {s}"));
         }
-        let u = u16::from_str_radix(s, 16).map_err(|_| format!("UUID 写错了：{s}"))?;
+        let u = u16::from_str_radix(s, 16).map_err(|_| format!("bad UUID: {s}"))?;
         self.services
             .iter()
             .flat_map(|x| x.chars.iter())
             .find(|c| c.uuid16 == Some(u))
             .map(|c| c.handle)
-            .ok_or(format!("没找到特征 {s}（还没连上或还没发现完？）"))
+            .ok_or(format!(
+                "characteristic {s} not found (not connected or discovery not finished?)"
+            ))
     }
 
-    /// 手机操作命令（输入日志 `ble=` 后面那段）
+    /// Phone action command (the part after `ble=` in the input log)
     pub fn command(&mut self, cmd: &str, _now: u64) -> Result<Vec<String>, String> {
         let mut it = cmd.split_whitespace();
         let verb = it.next().unwrap_or("");
@@ -296,7 +296,7 @@ impl Phone {
                 if self.state == State::Idle {
                     self.start_scan();
                     out.push(
-                        "手机：开始扫描（自动：连第一台可连接设备、读全部可读特征、订阅全部通知）"
+                        "phone: scanning (auto: connect to the first connectable device, read every readable characteristic, subscribe to every notification)"
                             .into(),
                     );
                 }
@@ -305,20 +305,20 @@ impl Phone {
                 Some("off") | Some("0") => {
                     if self.state == State::Scanning {
                         self.state = State::Idle;
-                        out.push("手机：停止扫描".into());
+                        out.push("phone: stop scanning".into());
                     }
                 }
                 _ => {
                     if self.state == State::Connected {
-                        return Err("已连接，先断开再扫描".into());
+                        return Err("already connected, disconnect before scanning".into());
                     }
                     self.start_scan();
-                    out.push("手机：开始扫描".into());
+                    out.push("phone: scanning".into());
                 }
             },
             "connect" => {
                 if self.state == State::Connected {
-                    return Err("已经连着了".into());
+                    return Err("already connected".into());
                 }
                 let d = match arg {
                     None => self.devices.iter().find(|d| d.connectable),
@@ -327,11 +327,11 @@ impl Phone {
                         .iter()
                         .find(|d| fmt_addr(&d.addr).eq_ignore_ascii_case(a) || d.name == a),
                 }
-                .ok_or("还没扫到可连接的设备")?;
+                .ok_or("no connectable device found yet")?;
                 let (addr, name) = (d.addr, d.name.clone());
                 self.target = Some(addr);
                 self.state = State::Connecting;
-                out.push(format!("手机：连接 {name} {}", fmt_addr(&addr)));
+                out.push(format!("phone: connect {name} {}", fmt_addr(&addr)));
             }
             "disconnect" => {
                 match self.state {
@@ -343,24 +343,24 @@ impl Phone {
                     _ => {}
                 }
                 self.auto = false;
-                out.push("手机：断开".into());
+                out.push("phone: disconnect".into());
             }
             "read" => {
-                let h = self.resolve(arg.ok_or("read 要给特征")?)?;
+                let h = self.resolve(arg.ok_or("read needs a characteristic")?)?;
                 self.ops.push_back(Op::Read(h));
             }
             "write" => {
-                let h = self.resolve(arg.ok_or("write 要给特征")?)?;
+                let h = self.resolve(arg.ok_or("write needs a characteristic")?)?;
                 let v: String = it.collect();
                 let bytes = parse_hex(&v)?;
                 self.ops.push_back(Op::Write(h, bytes));
             }
             "sub" | "unsub" => {
-                let h = self.resolve(arg.ok_or("sub 要给特征")?)?;
+                let h = self.resolve(arg.ok_or("sub needs a characteristic")?)?;
                 let on = verb == "sub" && it.next() != Some("0");
                 self.ops.push_back(Op::Sub(h, on));
             }
-            _ => return Err(format!("不认识的手机操作：{cmd}")),
+            _ => return Err(format!("unknown phone command: {cmd}")),
         }
         Ok(out)
     }
@@ -371,10 +371,10 @@ impl Phone {
         self.target = None;
     }
 
-    /// 一个连接事件：没有挂起的请求就发下一个（发现流程优先，然后是用户操作）；返回日志与要发的 PDU
+    /// One connection event: if nothing is pending, send the next request (discovery first, then user actions)
     pub fn conn_event(&mut self, t: u64) -> (Vec<String>, Vec<(u16, Vec<u8>)>) {
         let mut lines = Vec::new();
-        // 订阅后 3 s 的统计
+        // Notification count in the 3 s after subscribing
         for s in &mut self.services {
             for c in &mut s.chars {
                 if let Some(at) = c.sub_at {
@@ -385,7 +385,10 @@ impl Phone {
                             .iter()
                             .filter(|(x, _)| *x > at && *x <= at + SUB_WINDOW_US)
                             .count();
-                        lines.push(format!("手机：订阅 {} 后 3 s 内收到 {n} 条通知", c.uuid));
+                        lines.push(format!(
+                            "phone: {n} notifications within 3 s of subscribing to {}",
+                            c.uuid
+                        ));
                     }
                 }
             }
@@ -400,13 +403,13 @@ impl Phone {
             } else if let Some(op) = self.ops.pop_front() {
                 let req = match &op {
                     Op::Read(h) => {
-                        lines.push(format!("手机 → 读 {}", self.chr_name(*h)));
+                        lines.push(format!("phone → read {}", self.chr_name(*h)));
                         let mut r = vec![0x0a];
                         r.extend_from_slice(&h.to_le_bytes());
                         Some(r)
                     }
                     Op::Write(h, v) => {
-                        lines.push(format!("手机 → 写 {} = {}", self.chr_name(*h), hex(v)));
+                        lines.push(format!("phone → write {} = {}", self.chr_name(*h), hex(v)));
                         let mut r = vec![0x12];
                         r.extend_from_slice(&h.to_le_bytes());
                         r.extend_from_slice(v);
@@ -417,7 +420,7 @@ impl Phone {
                         let c = self.chr_mut(*h);
                         match c.and_then(|c| c.cccd.map(|d| (d, c.props))) {
                             Some((d, props)) => {
-                                // 只有 indicate 没有 notify 的特征写 0x0002
+                                // Characteristics with indicate but no notify get 0x0002
                                 let v: u16 = if !*on {
                                     0
                                 } else if props & 0x10 != 0 {
@@ -426,8 +429,8 @@ impl Phone {
                                     2
                                 };
                                 lines.push(format!(
-                                    "手机 → {} {name}（写 CCCD 0x{d:04x} = {v:04x}）",
-                                    if *on { "订阅" } else { "取消订阅" }
+                                    "phone → {} {name} (write CCCD 0x{d:04x} = {v:04x})",
+                                    if *on { "subscribe" } else { "unsubscribe" }
                                 ));
                                 let mut r = vec![0x12];
                                 r.extend_from_slice(&d.to_le_bytes());
@@ -435,7 +438,7 @@ impl Phone {
                                 Some(r)
                             }
                             None => {
-                                lines.push(format!("手机：{name} 没有 CCCD，不能订阅"));
+                                lines.push(format!("phone: {name} has no CCCD, cannot subscribe"));
                                 None
                             }
                         }
@@ -474,7 +477,7 @@ impl Phone {
         }
     }
 
-    /// 发现流程的下一步（从某一步完成后往后找）
+    /// Next discovery step after the given one completes
     fn next_disc(&mut self, from: Disc) -> Disc {
         match from {
             Disc::Mtu => Disc::Svcs(1),
@@ -483,7 +486,7 @@ impl Phone {
                 None => Disc::Ready,
             },
             Disc::Chars(si, _) => {
-                // 本服务特征找完：补每个特征的结束句柄（下一个特征声明之前 / 服务结束）
+                // Characteristics of this service done: fill each end handle (before the next declaration / service end)
                 let end = self.services[si].end;
                 let n = self.services[si].chars.len();
                 for i in 0..n {
@@ -505,7 +508,7 @@ impl Phone {
         }
     }
 
-    /// 从 (si, ci) 起找下一个"值句柄之后还有句柄"（可能有描述符）的特征
+    /// From (si, ci), find the next characteristic with handles after its value handle (may have descriptors)
     fn next_desc(&self, mut si: usize, mut ci: usize) -> Disc {
         loop {
             if si >= self.services.len() {
@@ -530,18 +533,18 @@ impl Phone {
         if d == Disc::Ready {
             let n: usize = self.services.iter().map(|s| s.chars.len()).sum();
             lines.push(format!(
-                "手机：发现完毕，{} 个服务、{n} 个特征",
+                "phone: discovery done, {} services, {n} characteristics",
                 self.services.len()
             ));
             for s in &self.services {
                 lines.push(format!(
-                    "手机：  服务 {}{}",
+                    "phone:   service {}{}",
                     s.uuid,
                     uuid_name(s.uuid16).map_or(String::new(), |x| format!(" {x}"))
                 ));
                 for c in &s.chars {
                     lines.push(format!(
-                        "手机：    特征 {}{} 句柄 0x{:04x} [{}]",
+                        "phone:     characteristic {}{} handle 0x{:04x} [{}]",
                         c.uuid,
                         uuid_name(c.uuid16).map_or(String::new(), |x| format!(" {x}")),
                         c.handle,
@@ -571,29 +574,31 @@ impl Phone {
         }
     }
 
-    /// 收到固件发来的一个 L2CAP 帧；返回日志与要回的 PDU
+    /// L2CAP frame from the firmware; returns log lines and PDUs to reply
     pub fn on_l2cap(&mut self, t: u64, cid: u16, p: &[u8]) -> (Vec<String>, Vec<(u16, Vec<u8>)>) {
         let mut lines = Vec::new();
         let mut out = Vec::new();
         match cid {
             4 => self.on_att(t, p, &mut lines, &mut out),
             5 => {
-                // LE 信令：连接参数更新请求一律接受，其它回 Command Reject
+                // LE signaling: accept every connection parameter update request, Command Reject for others
                 if p.len() >= 4 {
                     let (code, id) = (p[0], p[1]);
                     if code == 0x12 {
-                        lines.push("固件 → 请求更新连接参数，手机接受".into());
+                        lines.push(
+                            "fw → requests connection parameter update, phone accepts".into(),
+                        );
                         out.push((5, vec![0x13, id, 2, 0, 0, 0]));
                     } else if code & 1 == 0 || code == 0x01 {
-                        // 响应类（偶数 code 是请求以外的回复）不用理
+                        // Responses (even codes) need no reply
                     } else {
                         out.push((5, vec![0x01, id, 2, 0, 0, 0]));
                     }
                 }
             }
             6 => {
-                // SMP：不支持配对
-                lines.push("固件 → 请求配对；虚拟手机不支持配对，回 Pairing Failed".into());
+                // SMP: pairing is not supported
+                lines.push("fw → requests pairing; the virtual phone does not pair, replies Pairing Failed".into());
                 out.push((6, vec![0x05, 0x05]));
             }
             _ => {}
@@ -608,7 +613,7 @@ impl Phone {
                 .map_or(0, |b| u16::from_le_bytes([b[0], b[1]]))
         };
         match op {
-            // 固件（服务端）发来的请求：MTU 交换回我们的值，其它不支持
+            // Requests from the firmware (server): answer MTU exchange with our value, nothing else is supported
             0x02 => {
                 let m = PHONE_MTU.to_le_bytes();
                 self.mtu = u16at(1).clamp(23, PHONE_MTU);
@@ -631,17 +636,17 @@ impl Phone {
                     }
                     c.hist.push_back((t, num));
                     lines.push(format!(
-                        "固件 → {} {name} #{n} = {}{}",
-                        if op == 0x1b { "通知" } else { "指示" },
+                        "fw → {} {name} #{n} = {}{}",
+                        if op == 0x1b { "notify" } else { "indicate" },
                         hex(&v),
-                        value_text(c.uuid16, &v).map_or(String::new(), |s| format!("（{s}）"))
+                        value_text(c.uuid16, &v).map_or(String::new(), |s| format!(" ({s})"))
                     ));
                 } else {
-                    lines.push(format!("固件 → 通知 0x{h:04x} = {}", hex(&v)));
+                    lines.push(format!("fw → notify 0x{h:04x} = {}", hex(&v)));
                 }
             }
             _ if op & 1 == 0 && op & 0x40 == 0 && op != 0x1e => {
-                // 其它请求：Request Not Supported
+                // Other requests: Request Not Supported
                 out.push((4, vec![0x01, op, 0, 0, 0x06]));
             }
             _ => self.on_response(t, op, p, lines),
@@ -663,7 +668,7 @@ impl Phone {
                     if op == 0x03 {
                         self.mtu = u16at(1).clamp(23, PHONE_MTU);
                     }
-                    lines.push(format!("手机：MTU {}", self.mtu));
+                    lines.push(format!("phone: MTU {}", self.mtu));
                     self.finish_disc(d, lines);
                 }
                 (Disc::Svcs(_), 0x11) => {
@@ -731,7 +736,7 @@ impl Phone {
                         self.disc = Disc::Descs(si, ci, last + 1);
                     }
                 }
-                // 错误回复（Attribute Not Found）= 这一段找完了
+                // Error reply (Attribute Not Found) means this range is exhausted
                 (_, 0x01) => self.finish_disc(d, lines),
                 _ => self.finish_disc(d, lines),
             },
@@ -739,15 +744,15 @@ impl Phone {
                 Op::Read(h) => {
                     let name = self.chr_name(h);
                     if let Some(e) = err {
-                        lines.push(format!("固件 → 读 {name} 失败（ATT 错误 0x{e:02x}）"));
+                        lines.push(format!("fw → read {name} failed (ATT error 0x{e:02x})"));
                     } else if let Some(c) = self.chr_mut(h) {
                         let v = p[1..].to_vec();
                         let txt = value_text(c.uuid16, &v);
                         c.value = v.clone();
                         lines.push(format!(
-                            "固件 → 读 {name} = {}{}",
+                            "fw → read {name} = {}{}",
                             hex(&v),
-                            txt.map_or(String::new(), |s| format!("（{s}）"))
+                            txt.map_or(String::new(), |s| format!(" ({s})"))
                         ));
                     }
                 }
@@ -755,10 +760,10 @@ impl Phone {
                     let name = self.chr_name(h);
                     match err {
                         Some(e) => {
-                            lines.push(format!("固件 → 写 {name} 失败（ATT 错误 0x{e:02x}）"))
+                            lines.push(format!("fw → write {name} failed (ATT error 0x{e:02x})"))
                         }
                         None => {
-                            lines.push(format!("固件 → 写 {name} 成功"));
+                            lines.push(format!("fw → write {name} ok"));
                             if let Some(c) = self.chr_mut(h) {
                                 c.value = v;
                             }
@@ -768,13 +773,13 @@ impl Phone {
                 Op::Sub(h, on) => {
                     let name = self.chr_name(h);
                     match err {
-                        Some(e) => {
-                            lines.push(format!("固件 → 订阅 {name} 失败（ATT 错误 0x{e:02x}）"))
-                        }
+                        Some(e) => lines.push(format!(
+                            "fw → subscribe {name} failed (ATT error 0x{e:02x})"
+                        )),
                         None => {
                             lines.push(format!(
-                                "固件 → {} {name} 成功",
-                                if on { "订阅" } else { "取消订阅" }
+                                "fw → {} {name} ok",
+                                if on { "subscribe" } else { "unsubscribe" }
                             ));
                             if let Some(c) = self.chr_mut(h) {
                                 c.notify = on;
@@ -910,31 +915,31 @@ fn props_text(p: u8) -> Vec<&'static str> {
     v
 }
 
-/// 常见 SIG 分配的 UUID 的中文名
+/// Readable names for common SIG-assigned UUIDs
 pub fn uuid_name(u: Option<u16>) -> Option<&'static str> {
     Some(match u? {
-        0x1800 => "通用访问",
-        0x1801 => "通用属性",
-        0x180A => "设备信息",
-        0x180D => "心率",
-        0x180F => "电池",
-        0x181A => "环境传感",
-        0x2A00 => "设备名",
-        0x2A01 => "外观",
-        0x2A05 => "服务变更",
-        0x2A19 => "电量",
-        0x2A29 => "厂商名",
-        0x2A37 => "心率测量",
-        0x2A38 => "传感器位置",
-        0x2A6E => "温度",
-        0x2A6F => "湿度",
-        0x2B29 => "客户端特性",
-        0x2B2A => "数据库哈希",
+        0x1800 => "Generic Access",
+        0x1801 => "Generic Attribute",
+        0x180A => "Device Information",
+        0x180D => "Heart Rate",
+        0x180F => "Battery",
+        0x181A => "Environmental Sensing",
+        0x2A00 => "Device Name",
+        0x2A01 => "Appearance",
+        0x2A05 => "Service Changed",
+        0x2A19 => "Battery Level",
+        0x2A29 => "Manufacturer Name",
+        0x2A37 => "Heart Rate Measurement",
+        0x2A38 => "Body Sensor Location",
+        0x2A6E => "Temperature",
+        0x2A6F => "Humidity",
+        0x2B29 => "Client Supported Features",
+        0x2B2A => "Database Hash",
         _ => return None,
     })
 }
 
-/// 曲线用的数值：心率测量按规范解析，其它取小端无符号数（最多 4 字节）
+/// Chart value: Heart Rate Measurement parsed per spec, others as little-endian unsigned (up to 4 bytes)
 fn value_num(u: Option<u16>, v: &[u8]) -> f64 {
     match (u, v) {
         (Some(0x2A37), [f, a, b, ..]) if f & 1 == 1 => u16::from_le_bytes([*a, *b]) as f64,
@@ -952,10 +957,12 @@ fn value_text(u: Option<u16>, v: &[u8]) -> Option<String> {
         (0x2A37, _) if v.len() >= 2 => Some(format!("{} bpm", value_num(u, v))),
         (0x2A19, [p]) => Some(format!("{p}%")),
         (0x2A38, [l]) => Some(
-            ["其它", "胸前", "手腕", "手指", "手掌", "耳垂", "脚"]
-                .get(*l as usize)
-                .unwrap_or(&"?")
-                .to_string(),
+            [
+                "Other", "Chest", "Wrist", "Finger", "Hand", "Ear lobe", "Foot",
+            ]
+            .get(*l as usize)
+            .unwrap_or(&"?")
+            .to_string(),
         ),
         (0x2A00, _) => Some(String::from_utf8_lossy(v).into_owned()),
         _ => None,
@@ -969,10 +976,10 @@ fn parse_hex(s: &str) -> Result<Vec<u8>, String> {
         .collect();
     let s = s.trim_start_matches("0x");
     if s.is_empty() || !s.len().is_multiple_of(2) {
-        return Err(format!("要写的值得是偶数个十六进制数字：{s}"));
+        return Err(format!("value must be an even number of hex digits: {s}"));
     }
     (0..s.len())
         .step_by(2)
-        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).map_err(|_| format!("十六进制写错了：{s}")))
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).map_err(|_| format!("bad hex: {s}")))
         .collect()
 }

@@ -1,4 +1,4 @@
-* 12 W3 LED 不串电阻：GPIO 输出高（内阻 33 Ω）→ 红色 LED（1.8 V 起导 + 10 Ω 折线）→ GND
+* 12 W3 LED without resistor: GPIO high (33 ohm) -> red LED (1.8 V knee + 10 ohm PWL) -> GND
 V1 vg 0 DC 3.3
 R1 vg pin 33
 R2 pin an 1m

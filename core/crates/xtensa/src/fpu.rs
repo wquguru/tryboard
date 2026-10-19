@@ -1,28 +1,15 @@
-//! 单精度 FPU（协处理器 0，受 CPENABLE 位 0 门控）。
-//!
-//! 舍入：FCR[1:0] = 0 就近偶数 / 1 向零 / 2 向 +∞ / 3 向 −∞。为了在任意舍入模式下都精确，
-//! 运算先在 f64 里得到"精确值 = hi + lo"（乘积在 f64 里精确，加法用 TwoSum 取回误差），再一次性舍入到 f32。
-//! 非规格数按 IEEE 处理（不冲零）。
-//!
-//! FSR 异常标志（位 7 不精确 / 8 下溢 / 9 上溢 / 10 除零 / 11 无效）只累加，不触发异常（FCR 使能位只保存）。
-//! 下溢按"舍入前判断微小 + 不精确"。
-//!
-//! NaN（与 QEMU 逐值对照得出）：无效运算（∞−∞、0×∞、0/0、负数开方）给默认 NaN 0x7FC00000；
-//! 输入里有 NaN 时，第二操作数（ft）是 NaN 就取它，否则取第一操作数，并置静默位、保留符号与载荷。
-//!
-//! 除法 / 开方的"分步指令"：libgcc __divsf3 与 libm __ieee754_sqrtf 用 DIV0 / NEXP01 / MADDN / MKDADJ /
-//! ADDEXP / ADDEXPM / DIVN（开方用 SQRT0 / MKSADJ）组成牛顿迭代序列。逐步的真实硬件语义没有公开到可逐位复现的程度，
-//! 这里与对照用的乐鑫 QEMU 采用同一模型：MKDADJ.S fr, fs 直接给出 fs/fr 的正确舍入商，MKSADJ.S 给出 sqrt(fs)，
-//! ADDEXPM.S 把它搬进结果寄存器，其余分步指令（DIV0 / SQRT0 / NEXP01 / MADDN / ADDEXP / DIVN）不改目标寄存器。
-//! 于是编译器生成的标准序列得到正确的 IEEE 结果；手写的、不按标准序列使用这些指令的代码不保证与真机一致。
-//! 例外：RECIP0 / RSQRT0（只在 -ffast-math 的 __recipsf2 / __rsqrtsf2 里用）这里直接给出 1/x、1/√x，
-//! 让这两个函数结果正确（QEMU 把它们当空操作，结果是寄存器里的旧值）。
+//! Single-precision FPU (coprocessor 0, gated by CPENABLE bit 0). Ops form the exact value hi + lo in f64 (TwoSum for
+//! adds) and round once per FCR[1:0] (0 nearest-even, 1 zero, 2 +inf, 3 -inf), so every mode is exact; no denormal flush.
+//! FSR flags (bit 7 inexact, 8 underflow, 9 overflow, 10 div0, 11 invalid) only accumulate; underflow = tiny before rounding + inexact.
+//! Divide / sqrt step ops follow Espressif QEMU (real per-step semantics are unpublished): MKDADJ.S yields the rounded fs/fr,
+//! MKSADJ.S sqrt(fs), ADDEXPM.S moves it, other steps leave the target alone, so only compiler-standard sequences are exact.
+//! RECIP0 / RSQRT0 (-ffast-math __recipsf2 / __rsqrtsf2 only) return 1/x, 1/sqrt(x) where QEMU is a no-op. lint: allow-long-comment
 
 use crate::{cause, sr, Bus, Cpu, Exit, Flow};
 
-/// FCR 可写位：RM[1:0]、异常使能 [6:2]
+/// FCR writable bits: RM[1:0], exception enables [6:2] (stored only, they never trap)
 pub const FCR_MASK: u32 = 0x7f;
-/// FSR 可写位：异常标志 [11:7]
+/// FSR writable bits: exception flags [11:7]
 pub const FSR_MASK: u32 = 0xf80;
 
 pub const FL_INEXACT: u32 = 1 << 7;
@@ -35,7 +22,7 @@ pub fn is_fp_ur(n: u32) -> bool {
     n == sr::UR_FCR || n == sr::UR_FSR
 }
 
-/// 默认（规范）NaN
+/// Default (canonical) NaN for invalid ops (inf-inf, 0*inf, 0/0, sqrt of a negative), matched against QEMU
 pub const DEFAULT_NAN: u32 = 0x7fc0_0000;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -81,12 +68,12 @@ fn is_snan(x: f32) -> bool {
     x.is_nan() && x.to_bits() & 0x0040_0000 == 0
 }
 
-/// 把 NaN 变成静默 NaN（保留符号与载荷）
+/// Quiets a NaN (keeps sign and payload)
 fn quiet(b: u32) -> u32 {
     b | 0x0040_0000
 }
 
-/// 两个输入里的 NaN 怎么传播：第二操作数优先；任一是信号 NaN 置无效标志
+/// NaN propagation for two inputs: the second operand (ft) wins; any signalling NaN sets the invalid flag
 fn nan2(a: f32, b: f32, fl: &mut u32) -> Option<f32> {
     if is_snan(a) || is_snan(b) {
         *fl |= FL_INVALID;
@@ -105,7 +92,7 @@ fn invalid(fl: &mut u32) -> f32 {
     f(DEFAULT_NAN)
 }
 
-/// TwoSum：hi + lo 精确等于 a + b（不溢出时）
+/// TwoSum: hi + lo equals a + b exactly (absent overflow)
 fn two_sum(a: f64, b: f64) -> (f64, f64) {
     let s = a + b;
     if !s.is_finite() {
@@ -116,7 +103,7 @@ fn two_sum(a: f64, b: f64) -> (f64, f64) {
     (s, err)
 }
 
-/// 把精确值 hi + lo（|lo| ≤ hi 的 f64 半 ulp）按 rm 舍入成 f32，并累加不精确 / 上溢 / 下溢标志
+/// Rounds the exact value hi + lo (|lo| <= half an f64 ulp of hi) to f32 per rm, accumulating inexact / overflow / underflow flags
 pub fn round_exact(hi: f64, lo: f64, rm: Rm, fl: &mut u32) -> f32 {
     if hi.is_nan() {
         return f(DEFAULT_NAN);
@@ -124,10 +111,10 @@ pub fn round_exact(hi: f64, lo: f64, rm: Rm, fl: &mut u32) -> f32 {
     if hi.is_infinite() {
         return hi as f32;
     }
-    let r0 = hi as f32; // 就近偶数
+    let r0 = hi as f32; // nearest-even
     if r0.is_infinite() {
         *fl |= FL_OVERFLOW | FL_INEXACT;
-        // 溢出：向零 / 背离方向时给最大有限值
+        // Overflow: toward zero / away from the direction gives the largest finite value
         let pos = hi > 0.0;
         return match (rm, pos) {
             (Rm::Nearest, _) => r0,
@@ -136,8 +123,8 @@ pub fn round_exact(hi: f64, lo: f64, rm: Rm, fl: &mut u32) -> f32 {
             _ => r0,
         };
     }
-    let d = r0 as f64 - hi; // 精确
-                            // 精确值相对 r0 的方向：>0 表示精确值比 r0 大
+    let d = r0 as f64 - hi; // exact
+                            // Direction of the exact value relative to r0: >0 means the exact value is larger
     let dir = if d != 0.0 {
         if d < 0.0 {
             1
@@ -160,7 +147,7 @@ pub fn round_exact(hi: f64, lo: f64, rm: Rm, fl: &mut u32) -> f32 {
     }
     let r = match rm {
         Rm::Nearest => {
-            // 只有 hi 正好落在两个 f32 中点、lo 又非零时，第一次舍入可能选错
+            // Only when hi sits exactly on an f32 midpoint with nonzero lo can the first rounding pick wrong
             if d != 0.0 && lo != 0.0 {
                 let other = if d > 0.0 { next_down(r0) } else { next_up(r0) };
                 if other as f64 - hi == -d {
@@ -196,11 +183,11 @@ pub fn round_exact(hi: f64, lo: f64, rm: Rm, fl: &mut u32) -> f32 {
             }
         }
     };
-    // 定向舍入把最大有限值推到了 ∞：也是上溢
+    // Directed rounding pushed the largest finite value to inf: that is overflow too
     if r.is_infinite() {
         *fl |= FL_OVERFLOW;
     }
-    // 向零 / 向 ±∞ 调整后保持零的符号与精确值一致
+    // After toward-zero / toward +-inf adjustment, keep the zero's sign consistent with the exact value
     if r == 0.0 && hi < 0.0 {
         -0.0
     } else {
@@ -208,7 +195,7 @@ pub fn round_exact(hi: f64, lo: f64, rm: Rm, fl: &mut u32) -> f32 {
     }
 }
 
-/// 结果为精确 0 时的符号（IEEE 754：异号相加得 +0，向 −∞ 舍入时得 −0；同号 0 相加保留符号）
+/// Sign of an exact-zero result (IEEE 754: opposite signs give +0, -0 when rounding toward -inf; same-signed zeros keep it)
 fn zero_sign(a: f64, b: f64, rm: Rm) -> f32 {
     if a == 0.0 && b == 0.0 && a.is_sign_negative() == b.is_sign_negative() {
         return if a.is_sign_negative() { -0.0 } else { 0.0 };
@@ -220,7 +207,7 @@ fn zero_sign(a: f64, b: f64, rm: Rm) -> f32 {
     }
 }
 
-/// a + b（neg_b：a − b）
+/// a + b (neg_b: a - b)
 pub fn add(a: f32, b: f32, neg_b: bool, rm: Rm, fl: &mut u32) -> f32 {
     if let Some(n) = nan2(a, b, fl) {
         return n;
@@ -244,11 +231,11 @@ pub fn mul(a: f32, b: f32, rm: Rm, fl: &mut u32) -> f32 {
     if (a.is_infinite() && b == 0.0) || (a == 0.0 && b.is_infinite()) {
         return invalid(fl);
     }
-    let p = a as f64 * b as f64; // 精确
+    let p = a as f64 * b as f64; // exact
     round_exact(p, 0.0, rm, fl)
 }
 
-/// acc ± a*b，一次舍入（融合乘加；neg：acc − a*b）
+/// acc +- a*b with one rounding (fused multiply-add; neg: acc - a*b)
 pub fn fma(acc: f32, a: f32, b: f32, neg: bool, rm: Rm, fl: &mut u32) -> f32 {
     if is_snan(acc) {
         *fl |= FL_INVALID;
@@ -275,7 +262,7 @@ pub fn fma(acc: f32, a: f32, b: f32, neg: bool, rm: Rm, fl: &mut u32) -> f32 {
     round_exact(hi, lo, rm, fl)
 }
 
-/// IEEE 除法 a / b，按 rm 舍入（f64 商与余数判定方向）
+/// IEEE division a / b rounded per rm (f64 quotient and remainder decide the direction)
 pub fn div(a: f32, b: f32, rm: Rm, fl: &mut u32) -> f32 {
     if let Some(n) = nan2(a, b, fl) {
         return n;
@@ -291,8 +278,8 @@ pub fn div(a: f32, b: f32, rm: Rm, fl: &mut u32) -> f32 {
     if !q.is_finite() || q == 0.0 {
         return round_exact(q, 0.0, rm, fl);
     }
-    // 余数 r = x − q·y（f64 的 fma 精确），其符号给出真值相对 q 的方向；f64 商离 f32 网格远，
-    // 用一个远小于 q 的 f64 半 ulp 的数代表这个方向即可
+    // The sign of r = x - q*y (exact via f64 fma) tells which side of q the true value lies; the f64 quotient is far from
+    // the f32 grid, so any value much smaller than half an f64 ulp of q can stand for that direction
     let r = (-q).mul_add(y, x);
     let lo = if r == 0.0 {
         0.0
@@ -302,7 +289,7 @@ pub fn div(a: f32, b: f32, rm: Rm, fl: &mut u32) -> f32 {
     round_exact(q, lo, rm, fl)
 }
 
-/// IEEE 开方，按 rm 舍入
+/// IEEE square root rounded per rm
 pub fn sqrt(a: f32, rm: Rm, fl: &mut u32) -> f32 {
     if a.is_nan() {
         if is_snan(a) {
@@ -327,15 +314,15 @@ pub fn sqrt(a: f32, rm: Rm, fl: &mut u32) -> f32 {
     round_exact(s, lo, rm, fl)
 }
 
-/// f32 → 整数（先乘 2^scale），按给定方式取整并饱和。
-/// UTRUNC：负数给有符号截断的补码，−∞ 给 0x80000000，NaN / 上溢给 0xFFFFFFFF（与 QEMU 对照）
+/// f32 -> integer (after multiplying by 2^scale), rounded the given way and saturated. UTRUNC: negatives give the
+/// two's complement of the signed truncation, -inf gives 0x80000000, NaN / overflow 0xFFFFFFFF (matched against QEMU)
 fn to_int(x: f32, scale: u32, mode: Rm, unsigned: bool, fl: &mut u32) -> u32 {
     if x.is_nan() {
         *fl |= FL_INVALID;
         return if unsigned { 0xffff_ffff } else { 0x7fff_ffff };
     }
     let v = x as f64 * (1u64 << scale) as f64;
-    // 先按单精度乘 2^scale：有限值乘出界时另有上溢（+不精确）标志；UTRUNC 没有（均与 QEMU 对照）
+    // Scale by 2^scale in single precision first: finite values that overflow also set overflow (+inexact); UTRUNC does not (per QEMU)
     if !unsigned && x.is_finite() && v.abs() > f32::MAX as f64 {
         *fl |= FL_OVERFLOW | FL_INEXACT;
     }
@@ -388,13 +375,13 @@ fn to_int(x: f32, scale: u32, mode: Rm, unsigned: bool, fl: &mut u32) -> u32 {
     }
 }
 
-/// 整数 → f32，再除以 2^scale
+/// Integer -> f32, then divide by 2^scale
 fn from_int(v: u32, scale: u32, unsigned: bool, rm: Rm, fl: &mut u32) -> f32 {
     let x = if unsigned { v as f64 } else { v as i32 as f64 };
     round_exact(x / (1u64 << scale) as f64, 0.0, rm, fl)
 }
 
-/// 比较：返回（结果, 是否置无效）。OLT/OLE/ULT/ULE 遇 NaN 发信号，UN/OEQ/UEQ 只在信号 NaN 时置无效
+/// Compare: returns (result, invalid set). OLT/OLE/ULT/ULE signal on any NaN, UN/OEQ/UEQ only on signalling NaN
 fn compare(op: u32, a: f32, b: f32) -> (bool, bool) {
     let un = a.is_nan() || b.is_nan();
     let sig = is_snan(a) || is_snan(b);
@@ -433,7 +420,7 @@ impl Cpu {
         f(self.fr[i as usize])
     }
 
-    /// op0=3：LSI / SSI / LSIP / SSIP（P：先用 as 访存，再 as += imm）
+    /// op0=3: LSI / SSI / LSIP / SSIP (P: access at as, then as += imm)
     pub(crate) fn exec_lsci<B: Bus>(
         &mut self,
         bus: &mut B,
@@ -472,7 +459,7 @@ impl Cpu {
         Ok(Flow::Next)
     }
 
-    /// op0=0 op1=8：LSX / LSXP / SSX / SSXP
+    /// op0=0 op1=8: LSX / LSXP / SSX / SSXP
     pub(crate) fn exec_lscx<B: Bus>(
         &mut self,
         bus: &mut B,
@@ -507,7 +494,7 @@ impl Cpu {
         Ok(Flow::Next)
     }
 
-    /// op0=0 op1=10：FP0 组
+    /// op0=0 op1=10: FP0 group
     pub(crate) fn exec_fp0(&mut self, t: u32, s: u32, r: u32, op2: u32) -> Result<Flow, Exit> {
         if !self.cp0_enabled() {
             return self.cp0_disabled();
@@ -522,7 +509,7 @@ impl Cpu {
             2 => self.fset(r, mul(fs, ft, rm, &mut fl)),
             4 => self.fset(r, fma(fr, fs, ft, false, rm, &mut fl)),
             5 => self.fset(r, fma(fr, fs, ft, true, rm, &mut fl)),
-            // MADDN.S / DIVN.S：分步除法 / 开方序列里的步骤，结果已由 MKDADJ / MKSADJ 给出（见模块说明）
+            // MADDN.S / DIVN.S: steps of the divide / sqrt sequence; MKDADJ / MKSADJ already produced the result (see module docs)
             6 | 7 => {}
             8..=11 | 14 => {
                 let mode = match op2 {
@@ -545,7 +532,7 @@ impl Cpu {
         Ok(Flow::Next)
     }
 
-    /// FP0 op2=15：按 t 区分的单操作数指令
+    /// FP0 op2=15: single-operand ops selected by t
     fn exec_fp1op(&mut self, t: u32, s: u32, r: u32) -> Result<Flow, Exit> {
         let bs = self.fr[s as usize];
         let br = self.fr[r as usize];
@@ -561,7 +548,7 @@ impl Cpu {
             }
             5 => self.a(s),
             6 => bs ^ 0x8000_0000,
-            // 分步序列里不改目标寄存器的步骤（见模块说明）
+            // Sequence steps that leave the target register unchanged (see module docs)
             7 | 9 | 11 | 14 => br,
             8 => div(1.0, f(bs), rm, &mut fl).to_bits(),
             10 => {
@@ -582,7 +569,7 @@ impl Cpu {
         Ok(Flow::Next)
     }
 
-    /// op0=0 op1=11：比较与条件传送
+    /// op0=0 op1=11: compares and conditional moves
     pub(crate) fn exec_fp1(&mut self, t: u32, s: u32, r: u32, op2: u32) -> Result<Flow, Exit> {
         if !self.cp0_enabled() {
             return self.cp0_disabled();
@@ -620,7 +607,7 @@ impl Cpu {
     }
 }
 
-/// CONST.S 常数表（与 QEMU 对照：按 imm 的低 2 位循环 0、1、2、0.5）
+/// CONST.S constant table (matched against QEMU: low 2 bits of imm cycle 0, 1, 2, 0.5)
 fn const_s(i: u32) -> u32 {
     [0.0f32, 1.0, 2.0, 0.5][(i & 3) as usize].to_bits()
 }
@@ -635,7 +622,7 @@ mod tests {
 
     #[test]
     fn directed_rounding() {
-        let x = 1.0f64 + f64::powi(2.0, -30); // 1 与下一个 f32 之间
+        let x = 1.0f64 + f64::powi(2.0, -30); // between 1 and the next f32
         assert_eq!(r(x, Rm::Nearest), 1.0);
         assert_eq!(r(x, Rm::Zero), 1.0);
         assert_eq!(r(x, Rm::Up), next_up(1.0));
@@ -657,12 +644,12 @@ mod tests {
         ] {
             assert_eq!(div(a, b, Rm::Nearest, &mut fl), a / b, "{a}/{b}");
         }
-        // 1/3 的就近结果 0x3EAAAAAB 比真值大：向上不变，向下 / 向零少一个 ulp
+        // Nearest 1/3 is 0x3EAAAAAB, above the true value: rounding up keeps it, down / toward zero is one ulp less
         assert_eq!(div(1.0, 3.0, Rm::Up, &mut fl).to_bits(), 0x3eaa_aaab);
         assert_eq!(div(1.0, 3.0, Rm::Down, &mut fl).to_bits(), 0x3eaa_aaaa);
         assert_eq!(div(1.0, 3.0, Rm::Zero, &mut fl).to_bits(), 0x3eaa_aaaa);
         assert_eq!(div(-1.0, 3.0, Rm::Down, &mut fl).to_bits(), 0xbeaa_aaab);
-        // RECIP0 / RSQRT0 走同一套除法 / 开方
+        // RECIP0 / RSQRT0 go through the same divide / sqrt path
         let mut c = Cpu::new();
         c.sr[sr::CPENABLE as usize] = 1;
         c.fr[1] = 4.0f32.to_bits();

@@ -1,4 +1,4 @@
-/* 乘除：MUL16U/S、MULL、MULUH、MULSH、QUOU/QUOS/REMU/REMS 与除零异常（EXCCAUSE 6） */
+/* Multiply / divide: MUL16U/S, MULL, MULUH, MULSH, QUOU/QUOS/REMU/REMS and divide-by-zero (EXCCAUSE 6) */
 #include "check.h"
     TEST_BEGIN
     movi    a2, 0x12340003
@@ -31,14 +31,14 @@
     EXPECT  a4, -6, 10
     quou    a4, a2, a3
     EXPECT  a4, 613566613, 11
-    /* -2^31 / -1：结果按硬件定义为 -2^31，余数 0 */
+    /* -2^31 / -1: hardware defines the result as -2^31, remainder 0 */
     movi    a2, 0x80000000
     movi    a3, -1
     quos    a4, a2, a3
     EXPECT  a4, 0x80000000, 12
     rems    a4, a2, a3
     EXPECT  a4, 0, 13
-    /* 除零：触发 IntegerDivideByZero，处理程序跳过该指令；目的寄存器保持不变 */
+    /* Divide by zero: IntegerDivideByZero, the handler skips the insn; the destination stays unchanged */
     movi    a3, 0
     movi    a4, 55
     quou    a4, a2, a3

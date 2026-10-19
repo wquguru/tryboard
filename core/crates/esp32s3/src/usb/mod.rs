@@ -1,11 +1,11 @@
-//! 原生 USB OTG：DWC2 设备控制器 + 插在另一头的虚拟主机。
+//! Native USB OTG: DWC2 device controller plus a virtual host plugged into the other end.
 
 pub mod dwc2;
 pub mod host;
 
 use crate::CPU_HZ;
 
-/// 中断源编号（soc/esp32s3/include/soc/interrupts.h：ETS_USB_INTR_SOURCE）
+/// Interrupt source number (soc/esp32s3/include/soc/interrupts.h: ETS_USB_INTR_SOURCE)
 pub const SRC_USB: u32 = 38;
 
 #[derive(Default)]
@@ -32,10 +32,10 @@ impl Usb {
         self.dev.irq()
     }
 
-    /// 推进虚拟主机；返回下一次需要推进的 CPU 周期。mem 给控制器的 DMA 用
+    /// Advance the virtual host; returns the CPU cycle of the next required update. `mem` is for the controller's DMA
     pub fn update(&mut self, now: u64, mem: &mut dyn dwc2::Mem) -> u64 {
         let now_us = now * 1_000_000 / CPU_HZ;
-        // 固件还没碰过控制器：不必频繁唤醒
+        // Firmware hasn't touched the controller yet: no need to wake up often
         if !self.dev.connected() && self.next_us == 0 {
             return u64::MAX;
         }
@@ -49,7 +49,7 @@ impl Usb {
         (self.next_us * CPU_HZ).div_ceil(1_000_000)
     }
 
-    /// 写过控制器寄存器后调用：设备一旦接上总线就开始调度主机
+    /// Call after a controller register write: once the device attaches to the bus, start scheduling the host
     pub fn kick(&mut self, now: u64) {
         if self.dev.connected() && self.next_us == 0 {
             self.next_us = now * 1_000_000 / CPU_HZ;

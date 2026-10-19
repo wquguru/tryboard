@@ -121,9 +121,8 @@ export function createUsbHost(scene: THREE.Scene, port: THREE.Vector3) {
 
     // Left: text editor (keyboard input) or serial terminal
     const isCdc = v.interfaces.some((s) => s.includes('CDC-ACM'));
-    // Keyboard-only devices (USB keypad) get the whole screen for the editor. Host text may be English or older Chinese builds.
-    const isMouse = (s: string) => /mouse|\u9f20\u6807/i.test(s);
-    const mouse = !isCdc && (v.mouse.reports > 0 || v.interfaces.some(isMouse) || v.log.some((s) => /^HID (report descriptor|\u62a5\u544a\u63cf\u8ff0\u7b26)/i.test(s) && isMouse(s)));
+    // Keyboard-only devices (USB keypad) get the whole screen for the editor, no mouse area
+    const mouse = !isCdc && (v.mouse.reports > 0 || v.interfaces.some((s) => s.includes('mouse')) || v.log.some((s) => s.startsWith('HID report descriptor') && s.includes('mouse')));
     g.fillStyle = '#0a0f18';
     g.fillRect(24, 156, mouse ? 560 : SW - 48, SH - 180);
     g.fillStyle = '#5f6f86';

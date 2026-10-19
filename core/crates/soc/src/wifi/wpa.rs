@@ -1,12 +1,12 @@
-//! 虚拟 AP 的 WPA2-PSK 认证方（IEEE 802.11 §12.7.6 四次握手）与 CCMP 数据通路。
-//! 只做 AKM = PSK、成对 / 组加密 = CCMP、密钥描述符版本 2（HMAC-SHA1 MIC + AES Key Wrap）。
+//! Virtual AP's WPA2-PSK authenticator (IEEE 802.11 §12.7.6 4-way handshake) and CCMP data path.
+//! Only AKM = PSK, pairwise / group cipher = CCMP, key descriptor version 2 (HMAC-SHA1 MIC + AES Key Wrap).
 
 use super::crypto;
 use super::frame::Mac;
 
 pub const ETH_EAPOL: u16 = 0x888e;
 
-// EAPOL-Key 密钥信息位
+// EAPOL-Key key information bits
 const KI_VER2: u16 = 2;
 const KI_PAIRWISE: u16 = 1 << 3;
 const KI_INSTALL: u16 = 1 << 6;
@@ -15,14 +15,14 @@ const KI_MIC: u16 = 1 << 8;
 const KI_SECURE: u16 = 1 << 9;
 const KI_ENC_DATA: u16 = 1 << 12;
 
-/// 802.1X 帧内各字段偏移（从 802.1X 头开始算）
+/// Field offsets inside the 802.1X frame (from the 802.1X header)
 const OFF_KEYINFO: usize = 5;
 const OFF_REPLAY: usize = 9;
 const OFF_NONCE: usize = 17;
 const OFF_MIC: usize = 81;
 const OFF_DATA: usize = 99;
 
-/// hostapd 的缺省重传节奏：第一次 100ms，之后每次 1s，共发 4 次
+/// hostapd default retransmit pacing: first after 100 ms, then every 1 s, 4 sends in total
 const RETRY_FIRST_US: u64 = 100_000;
 const RETRY_US: u64 = 1_000_000;
 const MAX_TRIES: u32 = 4;
@@ -30,18 +30,18 @@ const MAX_TRIES: u32 = 4;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Hs {
     Idle,
-    /// 已发消息 1，等消息 2
+    /// Message 1 sent, waiting for message 2
     Msg1,
-    /// 已发消息 3，等消息 4
+    /// Message 3 sent, waiting for message 4
     Msg3,
     Done,
 }
 
-/// poll 的结果
+/// Result of poll
 pub enum Timer {
-    /// 重发上一条 EAPOL 消息
+    /// Resend the last EAPOL message
     Resend(Vec<u8>),
-    /// 重试用完：AP 踢掉终端（原因码 15 = 四次握手超时）
+    /// Retries exhausted: the AP kicks the station (reason 15 = 4-way handshake timeout)
     Timeout,
 }
 
@@ -59,11 +59,11 @@ pub struct Authenticator {
     tries: u32,
     retry_at: u64,
     nonce_ctr: u32,
-    /// 发给终端的单播 / 组播 PN，以及收到的最大 PN（防重放）
+    /// Unicast / group PN sent to the station, and the highest PN received (replay protection)
     tx_pn: u64,
     gtk_pn: u64,
     rx_pn: u64,
-    /// 消息 2 / 4 的 MIC 校验失败次数（口令错时会增加）
+    /// MIC check failures on messages 2 / 4 (grows when the passphrase is wrong)
     pub mic_failures: u32,
     rsn_ie: Vec<u8>,
 }
@@ -71,7 +71,7 @@ pub struct Authenticator {
 impl Authenticator {
     pub fn new(passphrase: &str, ssid: &[u8], aa: Mac, rsn_ie: &[u8]) -> Self {
         let pmk = crypto::wpa_pmk(passphrase, ssid);
-        // GTK 固定由 PMK 派生，结果可复现
+        // GTK is derived from the PMK so results are reproducible
         let mut gtk = [0u8; 16];
         crypto::prf(&pmk, b"Group key expansion", &aa, &mut gtk);
         Authenticator {
@@ -103,7 +103,7 @@ impl Authenticator {
         self.state == Hs::Done
     }
 
-    /// 关联成功：开始四次握手，返回消息 1（802.1X 帧）
+    /// Association succeeded: start the 4-way handshake, return message 1 (802.1X frame)
     pub fn start(&mut self, spa: Mac, now_us: u64) -> Vec<u8> {
         self.spa = spa;
         self.nonce_ctr += 1;
@@ -143,7 +143,7 @@ impl Authenticator {
         }
         self.tries += 1;
         self.retry_at = now_us + RETRY_US;
-        // 重发要用新的重放计数器（终端按计数器去重）
+        // Resends need a new replay counter (the station deduplicates by it)
         self.replay += 1;
         let mut f = self.last.clone();
         f[OFF_REPLAY..OFF_REPLAY + 8].copy_from_slice(&self.replay.to_be_bytes());
@@ -156,18 +156,18 @@ impl Authenticator {
         Some(Timer::Resend(f))
     }
 
-    /// 构造 EAPOL-Key 帧（802.1X 头起）；mic = 是否用 KCK 计算 MIC
+    /// Build an EAPOL-Key frame (from the 802.1X header); mic = compute the MIC with the KCK
     fn key_frame(&self, info: u16, data: &[u8], mic: bool) -> Vec<u8> {
         let body_len = OFF_DATA - 4 + data.len();
         let mut f = vec![2, 3];
         f.extend_from_slice(&(body_len as u16).to_be_bytes());
-        f.push(2); // 描述符类型 RSN
+        f.push(2); // Descriptor type RSN
         f.extend_from_slice(&info.to_be_bytes());
-        f.extend_from_slice(&16u16.to_be_bytes()); // 成对密钥长度（CCMP）
+        f.extend_from_slice(&16u16.to_be_bytes()); // Pairwise key length (CCMP)
         f.extend_from_slice(&self.replay.to_be_bytes());
         f.extend_from_slice(&self.anonce);
         f.extend_from_slice(&[0; 16]); // Key IV
-        f.extend_from_slice(&[0; 8]); // Key RSC：组密钥 PN 从 0 起
+        f.extend_from_slice(&[0; 8]); // Key RSC: group key PN starts at 0
         f.extend_from_slice(&[0; 8]);
         f.extend_from_slice(&[0; 16]); // MIC
         f.extend_from_slice(&(data.len() as u16).to_be_bytes());
@@ -186,10 +186,10 @@ impl Authenticator {
         m[..16] == f[OFF_MIC..OFF_MIC + 16]
     }
 
-    /// 收到终端的 EAPOL 帧（802.1X 头起）；返回 (日志, 要回的帧)
+    /// EAPOL frame from the station (from the 802.1X header); returns (log, reply frame)
     pub fn on_eapol(&mut self, f: &[u8], now_us: u64) -> (String, Option<Vec<u8>>) {
         if f.len() < OFF_DATA || f[1] != 3 {
-            return ("EAPOL（非 Key 帧，忽略）".into(), None);
+            return ("EAPOL (not a Key frame, ignored)".into(), None);
         }
         let len = (u16::from_be_bytes([f[2], f[3]]) as usize + 4).min(f.len());
         let f = &f[..len];
@@ -197,7 +197,7 @@ impl Authenticator {
         let replay = u64::from_be_bytes(f[OFF_REPLAY..OFF_REPLAY + 8].try_into().unwrap());
         if info & KI_MIC == 0 || replay != self.replay {
             return (
-                format!("EAPOL-Key（info 0x{info:04x}、计数器 {replay}，不是在等的消息）"),
+                format!("EAPOL-Key (info 0x{info:04x}, replay counter {replay}, not the expected message)"),
                 None,
             );
         }
@@ -206,10 +206,10 @@ impl Authenticator {
                 let snonce: [u8; 32] = f[OFF_NONCE..OFF_NONCE + 32].try_into().unwrap();
                 let ptk = crypto::wpa_ptk(&self.pmk, &self.aa, &self.spa, &self.anonce, &snonce);
                 if !self.mic_ok(f, &ptk[..16]) {
-                    // 口令不对：PTK 不同，MIC 必然对不上。真 AP 静默丢弃，靠重传超时踢人
+                    // Wrong passphrase gives a different PTK so the MIC can't match; a real AP drops silently and kicks on retransmit timeout
                     self.mic_failures += 1;
                     return (
-                        "四次握手 2/4：MIC 校验失败（口令不对？），丢弃".into(),
+                        "4-way handshake 2/4: MIC check failed (wrong passphrase?), dropped".into(),
                         None,
                     );
                 }
@@ -219,21 +219,24 @@ impl Authenticator {
                 self.state = Hs::Msg3;
                 self.arm(m3.clone(), now_us);
                 (
-                    "四次握手 2/4 MIC 正确 → 发 3/4（安装 PTK、带 GTK）".into(),
+                    "4-way handshake 2/4 MIC ok → send 3/4 (install PTK, carry GTK)".into(),
                     Some(m3),
                 )
             }
             Hs::Msg3 if info & KI_SECURE != 0 => {
                 if !self.mic_ok(f, &self.ptk[..16]) {
                     self.mic_failures += 1;
-                    return ("四次握手 4/4：MIC 校验失败，丢弃".into(), None);
+                    return (
+                        "4-way handshake 4/4: MIC check failed, dropped".into(),
+                        None,
+                    );
                 }
                 self.state = Hs::Done;
-                ("四次握手 4/4 完成，端口放行".into(), None)
+                ("4-way handshake 4/4 done, port open".into(), None)
             }
             _ => (
                 format!(
-                    "EAPOL-Key（info 0x{info:04x}，状态 {:?}，忽略）",
+                    "EAPOL-Key (info 0x{info:04x}, state {:?}, ignored)",
                     self.state
                 ),
                 None,
@@ -242,11 +245,11 @@ impl Authenticator {
     }
 
     fn msg3(&self) -> Vec<u8> {
-        // 密钥数据 = AP 的 RSN IE + GTK KDE（OUI 00-0F-AC 类型 1，密钥号 1）
+        // Key data = AP RSN IE + GTK KDE (OUI 00-0F-AC type 1, key id 1)
         let mut kd = self.rsn_ie.clone();
         kd.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
         kd.extend_from_slice(&self.gtk);
-        // Key Wrap 要 8 字节对齐：按 §12.7.2 用 0xdd 0x00... 填充
+        // Key Wrap needs 8-byte alignment: pad with 0xdd 0x00... per §12.7.2
         if !kd.len().is_multiple_of(8) {
             kd.push(0xdd);
             while !kd.len().is_multiple_of(8) {
@@ -258,7 +261,7 @@ impl Authenticator {
         self.key_frame(info, &wrapped, true)
     }
 
-    /// AP → 终端的数据帧加密：单播用 TK，组播 / 广播用 GTK（密钥号 1）
+    /// Encrypt AP -> station data frames: TK for unicast, GTK (key id 1) for multicast / broadcast
     pub fn encrypt(&mut self, f: &[u8]) -> Vec<u8> {
         if f[4] & 1 != 0 {
             self.gtk_pn += 1;
@@ -269,11 +272,11 @@ impl Authenticator {
         }
     }
 
-    /// 终端 → AP 的加密帧：解密并检查 PN 递增
+    /// Encrypted station -> AP frame: decrypt and check the PN increases
     pub fn decrypt(&mut self, f: &[u8]) -> Result<Vec<u8>, &'static str> {
-        let (p, pn) = crypto::ccmp_decrypt(&self.tk(), f).ok_or("CCMP MIC 校验失败")?;
+        let (p, pn) = crypto::ccmp_decrypt(&self.tk(), f).ok_or("CCMP MIC check failed")?;
         if pn <= self.rx_pn {
-            return Err("CCMP 重放（PN 未递增）");
+            return Err("CCMP replay (PN did not increase)");
         }
         self.rx_pn = pn;
         Ok(p)
@@ -440,7 +443,7 @@ impl Supplicant {
     }
 }
 
-/// 终端（请求方）一侧的参考实现：只给单元测试用，验证认证方的消息格式自洽
+/// Supplicant-side reference implementation, test only: checks the authenticator's messages are self-consistent
 #[cfg(test)]
 pub(crate) fn supplicant_reply(
     pmk: &[u8; 32],
@@ -485,8 +488,8 @@ mod tests {
         let sn = [7u8; 32];
         let (m2, ptk) = supplicant_reply(&pmk, &AA, &SPA, &m1, &sn);
         let (_, m3) = a.on_eapol(&m2, 10);
-        let m3 = m3.expect("应回消息 3");
-        // 消息 3 的 MIC 用同一个 KCK 能验过，密钥数据能用 KEK 解封并含 GTK
+        let m3 = m3.expect("should reply with message 3");
+        // Message 3's MIC verifies with the same KCK, and its key data unwraps with the KEK and contains the GTK
         let mut z = m3.clone();
         z[OFF_MIC..OFF_MIC + 16].fill(0);
         assert_eq!(
@@ -504,7 +507,7 @@ mod tests {
         a.on_eapol(&m4, 20);
         assert!(a.authorized());
         assert_eq!(a.tk(), ptk[32..48]);
-        // 数据通路：AP 加密 → 终端解密
+        // Data path: AP encrypts -> station decrypts
         let mut f = vec![0x08, 0x02, 0, 0];
         f.extend_from_slice(&SPA);
         f.extend_from_slice(&AA);
@@ -581,7 +584,7 @@ mod tests {
                     m = f;
                 }
                 Some(Timer::Timeout) => break,
-                None => panic!("应有定时动作"),
+                None => panic!("expected a timed action"),
             }
         }
         assert_eq!(resends, 3);

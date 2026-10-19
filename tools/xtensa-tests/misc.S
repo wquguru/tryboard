@@ -1,8 +1,8 @@
-/* 特殊寄存器 RSR/WSR/XSR、用户寄存器 RUR/WUR（THREADPTR）、布尔寄存器、同步指令、
- * 非法指令与 SYSCALL 异常、MOVSP、RSIL */
+/* Special registers RSR/WSR/XSR, user registers RUR/WUR (THREADPTR), boolean registers, sync insns,
+ * illegal-instruction and SYSCALL exceptions, MOVSP, RSIL */
 #include "check.h"
     TEST_BEGIN
-    /* SAR 读写与 XSR 交换 */
+    /* SAR read / write and XSR swap */
     movi    a3, 13
     wsr     a3, sar
     rsr     a4, sar
@@ -12,7 +12,7 @@
     EXPECT  a5, 13, 2
     rsr     a4, sar
     EXPECT  a4, 7, 3
-    /* SCOMPARE1、EXCSAVE1、MISC0 普通读写 */
+    /* plain read / write of SCOMPARE1, EXCSAVE1, MISC0 */
     movi    a3, 0x12345678
     wsr     a3, scompare1
     rsr     a4, scompare1
@@ -20,7 +20,7 @@
     wsr     a3, misc0
     rsr     a4, misc0
     EXPECT  a4, 0x12345678, 5
-    /* PRID：ESP32-S3 核 0 为 0xCDCD；QEMU 的 sim 机器不设 PRID（读 0），对照时也接受 0 */
+    /* PRID: 0xCDCD on ESP32-S3 core 0; QEMU's sim machine leaves it 0, so accept 0 as well */
     rsr     a4, prid
     beqz    a4, 1f
     EXPECT  a4, 0xCDCD, 6
@@ -30,8 +30,7 @@
     wur     a3, threadptr
     rur     a4, threadptr
     EXPECT  a4, 0x3FC90000, 7
-    /* CCOUNT 单调递增 */
-    /* CCOUNT 单调递增（QEMU sim 按 40MHz 虚拟时间计，所以多跑一段再比） */
+    /* CCOUNT increases monotonically (QEMU sim counts 40MHz virtual time, so run a while before comparing) */
     rsr     a5, ccount
     movi    a7, 200
 2:  addi    a7, a7, -1
@@ -41,7 +40,7 @@
     bgei    a7, 2, 1f
     movi    a2, 8
     retw
-1:  /* 同步类指令都是空操作 */
+1:  /* sync-class insns are all no-ops */
     isync
     rsync
     esync
@@ -49,7 +48,7 @@
     memw
     extw
     nop.n
-    /* 布尔寄存器：BR 写 0b0101，b0 真 b1 假 */
+    /* boolean registers: BR = 0b0101, b0 true, b1 false */
     movi    a3, 5
     wsr     a3, br
     movi    a4, 0
@@ -67,8 +66,8 @@
     rsr     a4, br
     extui   a4, a4, 4, 5
     EXPECT  a4, 0b01101, 11
-    any4    b12, b4          /* b4..b7 有 1 */
-    all4    b13, b4          /* b5 是 0 → 假 */
+    any4    b12, b4          /* some of b4..b7 set */
+    all4    b13, b4          /* b5 is 0 -> false */
     rsr     a4, br
     extui   a4, a4, 12, 2
     EXPECT  a4, 0b01, 12
@@ -79,8 +78,8 @@
     movi    a6, 1
     movf    a6, a5, b12
     EXPECT  a6, 1, 14
-    /* 非法指令：EXCCAUSE 0，处理程序跳过 3 字节 */
-    .byte   0x00, 0x00, 0x00   /* ILL（全 0） */
+    /* illegal instruction: EXCCAUSE 0, the handler skips 3 bytes */
+    .byte   0x00, 0x00, 0x00   /* ILL (all zeros) */
     EXC_CAUSE a4
     EXPECT  a4, 0, 15
     EXC_COUNT a4
@@ -90,7 +89,7 @@
     EXPECT  a4, 1, 17
     EXC_COUNT a4
     EXPECT  a4, 2, 18
-    /* RSIL：返回旧 PS 并设 INTLEVEL */
+    /* RSIL: returns the old PS and sets INTLEVEL */
     rsil    a4, 3
     extui   a5, a4, 0, 4
     EXPECT  a5, 0, 19
@@ -99,7 +98,7 @@
     EXPECT  a5, 3, 20
     wsr     a4, ps
     rsync
-    /* MOVSP：调用者帧（_start，WINDOWSTART 在 wb-2）还在寄存器里 → 直接传送，无异常 */
+    /* MOVSP: the caller frame (_start, WINDOWSTART at wb-2) is still in registers -> plain move, no exception */
     EXC_COUNT a6
     movsp   a3, a1
     EXC_COUNT a4
@@ -107,7 +106,7 @@
     EXPECT  a4, 0, 21
     sub     a4, a3, a1
     EXPECT  a4, 0, 22
-    /* 把调用者的 WINDOWSTART 位清掉（假装已溢出到栈上）→ Alloca 异常（cause 5） */
+    /* clear the caller's WINDOWSTART bit (pretend it spilled to the stack) -> Alloca exception (cause 5) */
     rsr     a7, windowstart
     rsr     a4, windowbase
     movi    a5, 1

@@ -7,5 +7,5 @@ license.workspace = true
 [dependencies]
 
 [dev-dependencies]
-# 只在测试里借用 rv32 crate 的最小 ELF 解析器
+# Tests borrow the rv32 crate's minimal ELF parser only
 tryboard-rv32 = { path = "../rv32" }

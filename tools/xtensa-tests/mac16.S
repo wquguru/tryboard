@@ -1,5 +1,5 @@
-/* MAC16（乘、乘累加 / 减到 40 位 ACC，四种操作数来源，LDINC/LDDEC 与并行装载），
- * 以及 IDF 在 S3 上用到的 SALT/SALTU、区域保护 TLB 指令。结果全部 DUMP，与 QEMU 对照。 */
+/* MAC16 (multiply, multiply-accumulate / subtract into the 40-bit ACC, four operand sources, LDINC/LDDEC and parallel loads),
+ * plus SALT/SALTU and the region protection TLB insns IDF uses on S3. Everything is DUMPed for QEMU diff. */
 #include "check.h"
 
     .macro DACC
@@ -10,8 +10,8 @@
     .endm
 
     TEST_BEGIN
-    movi    a2, 0x7fff8000         /* 高半 0x7fff，低半 −32768 */
-    movi    a3, 0xffff0003         /* 高半 −1，低半 3 */
+    movi    a2, 0x7fff8000         /* high half 0x7fff, low half -32768 */
+    movi    a3, 0xffff0003         /* high half -1, low half 3 */
     umul.aa.ll a2, a3
     DACC
     mul.aa.ll a2, a3
@@ -26,14 +26,14 @@
     DACC
     muls.aa.ll a2, a3
     DACC
-    /* 累加溢出 32 位进 ACCHI，再回绕 40 位 */
+    /* accumulate past 32 bits into ACCHI, then wrap at 40 bits */
     movi    a4, 0x7fff7fff
     movi    a6, 300
 1:  mula.aa.ll a4, a4
     addi    a6, a6, -1
     bnez    a6, 1b
     DACC
-    /* m 寄存器来源 */
+    /* m-register sources */
     wsr     a2, m0
     wsr     a3, m1
     movi    a5, 0x00050006
@@ -60,14 +60,14 @@
     DUMP    a7
     sub     a7, a8, a9
     DUMP    a7
-    /* 乘累加 + 并行装载：用旧 m 值计算，再装入 */
+    /* multiply-accumulate + parallel load: compute with the old m value, then load */
     movi    a8, tab
     movi    a7, 0
     wsr     a7, acclo
     wsr     a7, acchi
     mula.dd.ll.ldinc m0, a8, m1, m2
-    /* 并行装载形式的 ACC 不与 QEMU 对照：QEMU 用的是前面 LDINC/LDDEC 之前的 m 值（RSR 却读到新值），
-       不像硬件行为。我们"用当前 m 值"的语义由 crates/xtensa 的单元测试覆盖。这里只对照装载结果 */
+    /* ACC from the parallel-load forms isn't compared: QEMU uses the m value from before the earlier LDINC/LDDEC (yet RSR reads the new one),
+       unlike hardware. Our "use the current m" semantics is covered by crates/xtensa unit tests; only the loaded values are compared */
     rsr     a7, m0
     DUMP    a7
     sub     a7, a8, a9
@@ -92,7 +92,7 @@
     DUMP    a5
     EXPECT  a5, 1, 1
 
-    /* 区域保护：复位属性、写后读回 */
+    /* region protection: reset attributes, read back after write */
     movi    a3, 0x20000000
     rdtlb1  a4, a3
     DUMP    a4

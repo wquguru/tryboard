@@ -432,7 +432,7 @@
    "TRYBOARD_OK"
   ],
   "usb": {
-   "state": "已配置"
+   "state": "configured"
   }
  },
  {
@@ -454,7 +454,7 @@
    "TRYBOARD_OK"
   ],
   "usb": {
-   "state": "已配置",
+   "state": "configured",
    "typed": "abc"
   }
  },
@@ -478,7 +478,7 @@
    "MACRO Hello TryBoard"
   ],
   "usb": {
-   "state": "已配置",
+   "state": "configured",
    "typed": "aHello TryBoard\n"
   },
   "assembly": true
