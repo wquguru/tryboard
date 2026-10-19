@@ -226,6 +226,10 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/realnet.mjs 2>&1 | grep '^\[realnet\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[realnet\] PASS (' || { echo "- [realnet] script did not finish" >> $REPORT; fail=1; }
+  # Network faults (D-01): presets and scheduled faults run in the core; the web input log replays on the CLI
+  r=$(node tools/webtest/netfault.mjs 2>&1 | grep '^\[netfault\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[netfault\] PASS (' || { echo "- [netfault] script did not finish" >> $REPORT; fail=1; }
   r=$(node tools/webtest/elec.mjs 2>&1 | grep '^\[elec\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[elec\] PASS (' || { echo "- [elec] script did not finish" >> $REPORT; fail=1; }

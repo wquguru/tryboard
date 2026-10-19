@@ -2124,5 +2124,76 @@
    "死循环结束",
    "WDT DONE"
   ]
+ },
+ {
+  "id": "wifi-resilient-reboot",
+  "fw": "c3-wifi-resilient",
+  "seconds": 40,
+  "qemu": false,
+  "args": [
+   "--net-fault",
+   "reboot@10"
+  ],
+  "expect": [
+   "断开 reason=",
+   "断线后",
+   "恢复正常：请求又成功了",
+   "TRYBOARD_OK c3-wifi-resilient"
+  ]
+ },
+ {
+  "id": "wifi-resilient-dns",
+  "fw": "c3-wifi-resilient",
+  "seconds": 40,
+  "qemu": false,
+  "args": [
+   "--net-fault",
+   "dns@10"
+  ],
+  "expect": [
+   "DNS 解析失败",
+   "TRYBOARD_OK c3-wifi-resilient"
+  ]
+ },
+ {
+  "id": "wifi-resilient-silent",
+  "fw": "c3-wifi-resilient",
+  "seconds": 40,
+  "qemu": false,
+  "args": [
+   "--net-fault",
+   "silent@10"
+  ],
+  "expect": [
+   "服务器超时没回应",
+   "TRYBOARD_OK c3-wifi-resilient"
+  ]
+ },
+ {
+  "id": "wifi-resilient-weak",
+  "fw": "c3-wifi-resilient",
+  "seconds": 40,
+  "qemu": false,
+  "args": [
+   "--net",
+   "weak"
+  ],
+  "expect": [
+   "GET → 200"
+  ]
+ },
+ {
+  "id": "wifi-resilient-offline",
+  "fw": "c3-wifi-resilient",
+  "seconds": 20,
+  "qemu": false,
+  "args": [
+   "--net",
+   "offline"
+  ],
+  "expect": [
+   "reason=201",
+   "10 秒还没连上网络，继续等"
+  ]
  }
 ]
