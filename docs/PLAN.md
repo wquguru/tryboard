@@ -113,6 +113,7 @@
 | U-19 | 全站静态 OG（§8.5）：各 HTML 入口 og/twitter 标签，构建时渲染 og.png；选板结果动态 OG 标 ✗（要部署，问人） | 构建后 dist 每个入口都有 og:image 且文件存在、1200×630；agent-browser 打开 og 预览截图 | ☑（选板结果动态 OG ✗：要服务端与部署，需人点头） |
 | U-20 | 结果文案重写（DESIGN_V2 §9）：检查点 / 开机复测 / 没跑完 / 欠压 / 清单检查 / 线束 / 真买卡 / 选板理由，第一层人话、原始数据折叠；状态四个词；指纹改称运行编号 | 界面上搜不到「✗ 未通过」「在规范内」「32 条规则通过」「运行指纹」；levels / custom / asm3d / harness / elec / selectv3 / mobile 改选择器不减断言全过；原始数据里仍有与命令行逐字相同的结论行；agent-browser 桌面 + 手机截图 | ☑ |
 | U-21 | 结果卡 v2 精修（DESIGN_V2 §9.5，画布 https://claude.ai/artifact/PT6QqqxSYZdiaiLarXo4K1）：逐条按器件分组、16 px SVG 图标、原始数据整行按钮；结果卡带动作（复测失败 → 重装那一件；检查点没过 → 复制给 AI 修）；跑中卡；手机工具栏主按钮整行、复测失败时底栏换成补救动作；真买卡遮罩 + 三栏等高 + 列表不套滚动；选板理由数字列只放数字、可信度带字；`--muted` 加深、字号五档 | levels / asm3d / mobile / custom / harness / interact / selectv3 改选择器不减断言全过；原始数据仍与命令行逐字一致；agent-browser 桌面 + 390 + 暗色截图（Reviews/ab/U-21.md） | ☑ |
+| U-22 | 内置固件走完全程（新人走查 Reviews/ux/report.md P0）：检查点两档（◐ 参考跑通 / ✓ 我的固件），参考跑通也解锁组装 / 成品；每个作品一键「用内置固件走完全程」；选板作品演示固件改记参考；参考固件可下载 flash.bin + 源码 zip（构建期 gen_fw_zip.py，能 idf.py build）；气象站 GPIO5 加 LED，检查点 01 / 02 与台面一致 | levels.mjs / custom.mjs 新断言（参考 ◐、一键全过后组装解锁、旧进度不降级）；解压 zip 用 IDF 5.5.1 build 通过；agent-browser 走气象站 采购→一键→组装→成品，记录 Reviews/ab/U-22.md | ◐ |
 
 ## P3 · 以后再说
 蓝牙（M7）、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
