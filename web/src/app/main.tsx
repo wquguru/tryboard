@@ -270,6 +270,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   });
   // Network tab (C-02): appears once the firmware sends its first Wi-Fi frame; phone actions go into the input log
   actions.phone = (cmd) => session.sim?.phone(cmd);
+  actions.netFault = (kind) => session.sim?.netFault(kind);
   netFeed.subscribe(() => {
     const used = netFeed.get().used;
     if (used === bc.get().net) return;

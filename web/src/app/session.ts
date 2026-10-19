@@ -17,7 +17,7 @@ import { IoStore, decodeEvents } from './iotrace';
 import { taskStore } from './tasktrace';
 import type { UsbView } from '../usb3d';
 import { bleFeed } from './blepane';
-import { netFeed, realnetSwitch } from './netfeed';
+import { netFeed, netPreset, realnetSwitch } from './netfeed';
 import { PoseRate } from '../imupose';
 import { MicInput } from '../micinput';
 import { chipOf, loadExamples } from './examples';
@@ -372,6 +372,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   s.watchIo(defaultIoPins(scene, chip));
   // Real-network switch (C-03): while running, tell the worker directly (input log); a new power-on picks it up via makeSim realnet()
   realnetSwitch.subscribe(() => s.sim?.realnet(realnetSwitch.get()));
+  // Network preset (D-01): same pattern; faults go straight to the running sim (netFault)
+  netPreset.subscribe(() => s.sim?.netPreset(netPreset.get()));
 
   function makeSim(fw: string | ArrayBuffer) {
     const sim: LiveSim = new LiveSim({
@@ -395,6 +397,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       },
       onNet: (m) => netFeed.update(m),
       realnet: () => realnetSwitch.get(),
+      netPreset: () => netPreset.get(),
       onHarness(text) {
         s.harnessText = text;
         for (const cb of [...harnessSubs]) cb(text);

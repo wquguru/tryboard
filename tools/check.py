@@ -251,6 +251,11 @@ def inputs_file(path: str) -> str:
             'i2cwire': lambda: f"i2cwire={num(e['cm'])}",
             'antenna': lambda: f"antenna={num(e['db'])}",
             'supply': lambda: f"power={e['mode']}",
+            'realnet': lambda: f"realnet={1 if e['on'] else 0}",
+            'netreply': lambda: f"netreply={e['reply']}",
+            'seed': lambda: f"seed={e['seed']}",
+            'net': lambda: f"net={e['preset']}",
+            'netfault': lambda: f"netfault={e['fault']}" + ('' if e.get('dur') is None else f",{num(e['dur'])}"),
         }.get(k)
         if act:
             # Same as the web: seconds, floored to the microsecond

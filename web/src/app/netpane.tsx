@@ -6,6 +6,7 @@ import { Conf, ConfIcon } from '../ui/conf';
 import { t } from '../i18n';
 import { actions, bc, setDock } from './chrome';
 import { netFeed, type NetRow, type PhonePage, type PhoneView } from './netfeed';
+import { NetCondPanel, NetCondSummary } from './netcond';
 import { useStore } from './react';
 
 // Virtual router (core world.rs ROUTER_SSID / ROUTER_PASS): the phone only hears the chip's beacon, so the router row is drawn from constants
@@ -68,6 +69,39 @@ function coreText(s: string): string {
       return t('The real network only allows HTTP');
     case 'Real network: the chip closed the connection before a reply came':
       return t('Real network: the chip closed the connection before a reply came');
+    // Network conditions (D-01): injected fault / preset / Wi-Fi rows
+    case 'Injected':
+      return t('Injected');
+    case 'Recovered':
+      return t('Recovered');
+    case 'Applied':
+      return t('Applied');
+    case 'Disconnected':
+      return t('Disconnected');
+    case 'Reconnected':
+      return t('Reconnected');
+    case 'No reply':
+      return t('No reply');
+    case 'Normal':
+      return t('Stable');
+    case 'Weak signal':
+      return t('Weak signal');
+    case 'Flaky':
+      return t('Flaky');
+    case 'Offline':
+      return t('Offline');
+    case 'Router reboot':
+      return t('Router reboot');
+    case 'DNS failure':
+      return t('DNS failure');
+    case 'Server not responding':
+      return t('Server not responding');
+    case 'Random drop (flaky preset)':
+      return t('Random drop (flaky preset)');
+    case 'Injected fault: DNS answers SERVFAIL':
+      return t('Injected fault: DNS answers SERVFAIL');
+    case 'Injected fault: the server does not respond':
+      return t('Injected fault: the server does not respond');
     default:
       return s;
   }
@@ -422,7 +456,10 @@ const DEST_CLS: Record<string, string> = {
     Virtual: 'bg-field text-fg',
     Real: 'bg-accent-bg text-accent-ink',
     'Not allowed': 'bg-warn-bg text-warn-ink',
+    Injected: 'bg-warn-bg text-warn-ink',
 };
+const BAD = new Set(['Failed', 'No reply', 'Timed out', 'Disconnected']);
+const GOOD = new Set(['Reconnected', 'Recovered']);
 
 export function NetRows({ rows, mobile }: { rows: NetRow[]; mobile?: boolean }) {
   if (!rows.length) return <p className="m-0 px-3.5 py-3 text-xs text-muted">{t('The chip has not sent any DNS / HTTP request yet.')}</p>;
@@ -448,18 +485,18 @@ export function NetRows({ rows, mobile }: { rows: NetRow[]; mobile?: boolean }) 
       </thead>
       <tbody>
         {rows.map((r, i) => (
-          <tr key={i} className="border-b border-line-soft">
+          <tr key={i} data-kind={r[1] === 'FAULT' || r[1] === 'Wi-Fi' || r[1] === 'NET' ? 'cond' : undefined} className={cn('border-b border-line-soft', r[1] === 'FAULT' && r[4] === 'Injected' && 'bg-bad-bg')}>
             <td className={cn('px-2 py-1 font-mono whitespace-nowrap text-muted', mobile && 'hidden')}>{clock(r[0])}</td>
             <td className="px-2 py-1 font-mono">{r[1]}</td>
             <td className="px-2 py-1">
               <span className={cn('rounded-full px-1.5 py-px text-[11px] whitespace-nowrap', DEST_CLS[r[2]] ?? 'bg-field')}>{coreText(r[2])}</span>
             </td>
             <td className="px-2 py-1 font-mono" title={r[3]}>
-              <span className="block truncate">{r[3]}</span>
+              <span className="block truncate">{coreText(r[3])}</span>
               {/* Note (C-03): why the real network got no reply (cross-origin, timeout...), why HTTPS was not allowed */}
               {r[6] && <span className="net-note block font-sans text-[11px] leading-4 whitespace-normal text-warn-ink">{coreText(r[6])}</span>}
             </td>
-            <td className={cn('truncate px-2 py-1 font-mono', r[4] === 'Failed' && 'text-bad-ink', r[4] === 'Waiting' && 'text-muted')} title={coreText(r[4])}>
+            <td className={cn('truncate px-2 py-1 font-mono', BAD.has(r[4]) && 'text-bad-ink', GOOD.has(r[4]) && 'text-ok-ink', r[4] === 'Waiting' && 'text-muted')} title={coreText(r[4])}>
               {coreText(r[4])}
             </td>
             <td className={cn('px-2 py-1 font-mono whitespace-nowrap text-muted', mobile && 'hidden')}>{r[5] === null ? '—' : `${Math.round(r[5])} ms`}</td>
@@ -477,10 +514,10 @@ export function NetPane({ mobile, extra }: { mobile?: boolean; extra?: ReactNode
   // Default: the chip is a client sending requests and the phone is not picked up -> show requests; otherwise the virtual phone
   const cur = view === 'auto' ? (v.rows.length && !v.phone ? 'reqs' : 'phone') : view;
   const { dock } = useStore(bc);
-  // On desktop the phone's three steps need ~430px: raise a dock that is too short (a personal preference, not part of the project)
+  // On desktop the phone's three steps need ~430px and the network-conditions column ~300px: raise a dock that is too short
   useEffect(() => {
-    if (mobile || cur !== 'phone' || dock.collapsed) return;
-    const want = Math.min(Math.round(window.innerHeight * 0.62), 520);
+    if (mobile || dock.collapsed) return;
+    const want = cur === 'phone' ? Math.min(Math.round(window.innerHeight * 0.62), 520) : Math.min(Math.round(window.innerHeight * 0.45), 320);
     // The shell setter commits synchronously (flushSync), so it cannot be called straight in an effect: defer to the next tick
     if (dock.h >= want) return;
     const t = window.setTimeout(() => setDock({ h: want }), 0);
@@ -522,7 +559,28 @@ export function NetPane({ mobile, extra }: { mobile?: boolean; extra?: ReactNode
           <Conf c="行为模拟" size={14} />{/* lint: allow-cjk */}
         </span>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">{cur === 'phone' ? <PhoneView_ mobile={mobile} /> : <NetRows rows={v.rows} mobile={mobile} />}</div>
+      {cur === 'phone' ? (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <PhoneView_ mobile={mobile} />
+        </div>
+      ) : mobile ? (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <NetCondPanel mobile />
+          <NetCondSummary v={v} mobile />
+          <NetRows rows={v.rows} mobile />
+        </div>
+      ) : (
+        // Network conditions on the left, the request timeline on the right (D-01)
+        <div className="flex min-h-0 flex-1">
+          <NetCondPanel />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <NetCondSummary v={v} />
+            <div className="min-h-0 flex-1 overflow-auto">
+              <NetRows rows={v.rows} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -24,7 +24,9 @@ use tryboard_esp32c3::Esp32c3;
 use tryboard_esp32s3::Esp32s3;
 
 pub use tryboard_esp32c3::periph::CPU_HZ;
+use tryboard_esp32c3::wifi::netcond::{FaultKind, Preset, DEFAULT_FAULT_S};
 pub use tryboard_esp32c3::wifi::phone::Cmd as PhoneCmd;
+pub use tryboard_esp32c3::wifi::world::NetSummary;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Chip {
@@ -183,6 +185,8 @@ impl Machine {
             let t = &self.wifi().world.net.tcp;
             (t.realnet, t.next_req)
         };
+        // Network conditions (D-01) belong to the router, not the board: preset, schedule and PRNG state carry over
+        let cond = std::mem::take(&mut self.wifi_mut().world.cond);
         match &mut self.hw {
             Hw::C3(m) => m.reboot(reason)?,
             Hw::S3(m) => m.reboot(reason)?,
@@ -194,6 +198,7 @@ impl Machine {
             t.realnet = realnet;
             t.next_req = next_req;
         }
+        self.wifi_mut().world.cond = cond;
         if let Some(mut p) = phone {
             let now = self.wifi_tsf_us();
             p.chip_reset(now);
@@ -291,6 +296,69 @@ impl Machine {
             .real_reply(id, status, &info, &body, now);
         self.kick_events();
         true
+    }
+
+    /// Run seed (D batch): the network stream is seed ^ 0x4E45_5400; set it before net= so flaky drops follow it
+    pub fn set_seed(&mut self, seed: u32) {
+        self.wifi_mut().world.cond.set_seed(seed);
+    }
+
+    /// Network preset (D-01): normal / weak / flaky / offline; false when unknown
+    pub fn net_preset(&mut self, name: &str) -> bool {
+        let Some(p) = Preset::parse(name) else {
+            return false;
+        };
+        let now = self.wifi_tsf_us();
+        self.wifi_mut().world.set_preset(p, now);
+        self.kick_events();
+        true
+    }
+
+    /// Schedule a fault (D-01): reboot / dns / silent from start_s (None = now) for dur_s seconds (None = 8)
+    pub fn net_fault(&mut self, kind: &str, start_s: Option<f64>, dur_s: Option<f64>) -> bool {
+        let Some(k) = FaultKind::parse(kind) else {
+            return false;
+        };
+        let dur = dur_s.unwrap_or(DEFAULT_FAULT_S);
+        if dur.is_nan()
+            || dur <= 0.0
+            || dur.is_infinite()
+            || start_s.is_some_and(|s| s.is_nan() || s < 0.0)
+        {
+            return false;
+        }
+        let now = self.wifi_tsf_us();
+        let start = start_s.map_or(now, |s| (s * 1e6).round() as u64);
+        self.wifi_mut()
+            .world
+            .add_fault(k, start, (dur * 1e6).round() as u64);
+        self.kick_events();
+        true
+    }
+
+    /// Script actions seed= / net= / netfault=kind[,dur] (D-01; shared by CLI and web); None when not a network action
+    pub fn net_action(&mut self, act: &str) -> Option<bool> {
+        if let Some(v) = act.strip_prefix("seed=") {
+            return Some(v.trim().parse().map(|s| self.set_seed(s)).is_ok());
+        }
+        if let Some(v) = act.strip_prefix("net=") {
+            return Some(self.net_preset(v));
+        }
+        let v = act.strip_prefix("netfault=")?;
+        let (k, d) = v.split_once(',').unwrap_or((v, ""));
+        let dur = match d.trim() {
+            "" => None,
+            d => match d.parse::<f64>() {
+                Ok(x) => Some(x),
+                Err(_) => return Some(false),
+            },
+        };
+        Some(self.net_fault(k, None, dur))
+    }
+
+    /// Network summary (D-01); None while conditions are untouched
+    pub fn net_summary(&self) -> Option<NetSummary> {
+        self.wifi().world.net_summary()
     }
 
     pub fn phone(&self) -> Option<&tryboard_esp32c3::wifi::phone::Phone> {

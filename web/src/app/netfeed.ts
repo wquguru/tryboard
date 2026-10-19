@@ -45,10 +45,26 @@ export interface NetView {
   /** Count / bytes of real-network replies recorded this power-on (netreply in the input log) */
   replies: number;
   replyBytes: number;
+  /** Network conditions summary (D-01); null while preset is normal and no fault was scheduled */
+  cond: NetCond | null;
+}
+/** The core's network-conditions summary (tb_net_json cond, same numbers as the CLI's "[tryboard] network" line) */
+export interface NetCond {
+  preset: string;
+  seed: number;
+  faults: number;
+  disconnects: number;
+  /** Outage length of the latest reconnect (ms); null = not reconnected (yet) */
+  reconnect_ms: number | null;
+  /** Currently disconnected by an injected condition */
+  lost: boolean;
+  ok: number;
+  failed: number;
+  lost_frames: number;
 }
 
 function createNetFeed() {
-  const empty = (): NetView => ({ used: false, phone: null, rows: [], total: 0, lease: null, realnet: false, replies: 0, replyBytes: 0 });
+  const empty = (): NetView => ({ used: false, phone: null, rows: [], total: 0, lease: null, realnet: false, replies: 0, replyBytes: 0, cond: null });
   let view: NetView = empty();
   let timer = 0;
   let last = 0;
@@ -70,11 +86,12 @@ function createNetFeed() {
       const v: NetView = { ...view, used: m.used };
       if (m.phone !== undefined) v.phone = m.phone ? (JSON.parse(m.phone) as PhoneView) : null;
       if (m.rows !== undefined) {
-        const r = m.rows ? (JSON.parse(m.rows) as { total: number; lease: string | null; realnet?: boolean; rows: NetRow[] }) : { total: 0, lease: null, rows: [] };
+        const r = m.rows ? (JSON.parse(m.rows) as { total: number; lease: string | null; realnet?: boolean; cond?: NetCond | null; rows: NetRow[] }) : { total: 0, lease: null, rows: [] };
         v.rows = r.rows;
         v.total = r.total;
         v.lease = r.lease;
         v.realnet = !!r.realnet;
+        v.cond = r.cond ?? null;
         v.replies = m.replies ?? 0;
         v.replyBytes = m.replyBytes ?? 0;
       }
@@ -114,3 +131,23 @@ function createRealnetSwitch() {
   };
 }
 export const realnetSwitch = createRealnetSwitch();
+
+/** Network preset (D-01): one per page, normal by default, survives power-ons (logged as net=… at time 0), not stored */
+export type NetPresetName = 'normal' | 'weak' | 'flaky' | 'offline';
+function createNetPreset() {
+  let v: NetPresetName = 'normal';
+  const subs = new Set<() => void>();
+  return {
+    get: () => v,
+    set(n: NetPresetName) {
+      if (n === v) return;
+      v = n;
+      for (const f of subs) f();
+    },
+    subscribe(f: () => void) {
+      subs.add(f);
+      return () => void subs.delete(f);
+    },
+  };
+}
+export const netPreset = createNetPreset();

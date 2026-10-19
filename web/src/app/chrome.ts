@@ -143,6 +143,8 @@ export const actions: {
   ble?: (cmd: string) => void;
   /** One step on the virtual phone (phone= action, recorded in the input log) */
   phone?: (cmd: string) => void;
+  /** One network fault from now (D-01: reboot / dns / silent, netfault= action in the input log) */
+  netFault?: (kind: string) => void;
   pickFirmware?: (f: File) => void;
   /** On the bench: verify the selected (or first failing) checkpoint with the upload; returns its id, or null. */
   checkUpload?: (buf: ArrayBuffer, name: string) => string | null;

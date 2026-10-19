@@ -1121,5 +1121,9 @@ const d: Dict = {
   "ESP32-C3 datasheet (no PSRAM interface); ESP32-S3 ordering info (only R variants have PSRAM); Seeed Wiki / M5Stack docs": "ESP32-C3 数据手册（无 PSRAM 接口）；ESP32-S3 订购信息（型号带 R 才有 PSRAM）；Seeed Wiki / M5Stack 文档",
   "Dev board pin tables (M5Stack AtomS3: header G5–G8 / G38 / G39 + Grove G1 / G2); on-board use entered per board": "开发板引脚表（M5Stack AtomS3：排针 G5–G8 / G38 / G39 + Grove G1 / G2）；板载占用逐板录入",
   "Waveshare wiki: no-touch display RST GPIO12, backlight GPIO40; touch RST GPIO14, backlight GPIO2": "微雪 wiki：无触摸版屏 RST GPIO12、背光 GPIO40；触摸版 RST GPIO14、背光 GPIO2",
+  // c3-wifi-resilient example (D-01)
+  "Resilient weather station: survives router reboots and DNS failures": "抗断网天气站：路由器重启、DNS 失败都能自己恢复",
+  "Joins TryBoard-WiFi and polls http://api.weather.example every 2 s. Try the presets in the Network tab (weak signal, flaky, offline) or schedule a router reboot, a DNS failure or a silent server: the firmware prints the disconnect reason, reconnects on its own and says when requests succeed again. Faults run on simulated time with a fixed seed, go into the input log and replay with tryboard run --inputs. Real routers and ISPs fail in more ways; check on real hardware.": "连上 TryBoard-WiFi，每 2 s 请求一次 http://api.weather.example。在「网络」页签里试试预设（信号弱、不稳定、断网），或安排一次路由器重启、DNS 失败、服务器不回应：固件会打印断开原因，自己重连，并在请求恢复时说一声。故障按模拟时间和固定种子发生，进输入日志，可用 tryboard run --inputs 重放。真实路由器和运营商的故障花样更多，要在真机上确认。",
+  "Fault injection": "故障注入",
 };
 export default d;

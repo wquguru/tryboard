@@ -1,6 +1,6 @@
 // The simulator runs in a Worker at real-time pace, posting console output and GPIO state to the main thread.
 // Fixed 1 ms slices (same as CLI `--inputs` replay); inputs apply between slices and are logged on sim time, so the CLI replays cycle-exactly.
-import { cyclesToMs, roundImu, type InputAction, type InputEvent, type InputLog } from './inputlog';
+import { action, cyclesToMs, roundImu, type InputAction, type InputEvent, type InputLog } from './inputlog';
 import { realFetch, type RealReq } from './realfetch';
 import { useWorkerLocale, type Locale } from './i18n';
 
@@ -72,6 +72,8 @@ interface Exports {
   tb_realnet_set?(on: number): void;
   tb_net_outbox?(): number;
   tb_net_reply?(p: number, len: number): number;
+  /** Network conditions (D-01): script action text seed= / net= / netfault=; 0 ok */
+  tb_net_action?(p: number, len: number): number;
   tb_harness_report?(): number;
   tb_encoder_attach?(a: number, b: number, sw: number): void;
   tb_encoder_turn?(steps: number): void;
@@ -183,6 +185,8 @@ export type ToWorker =
       harness?: Harness;
       /** "Real network" toggle (C-03): on at boot logs realnet=1 at time 0 */
       realnet?: boolean;
+      /** Network preset (D-01): other than normal, logged as net=<preset> at time 0 */
+      net?: string;
       /** Page locale, so human text the worker makes matches the page (I18N workers). */
       locale?: Locale;
     }
@@ -213,6 +217,9 @@ export type ToWorker =
   | { type: 'phone'; cmd: string }
   /** "Real network" toggle (C-03): chip HTTP to the internet goes through browser fetch; replies are logged as netreply=… */
   | { type: 'realnet'; on: boolean }
+  /** Network conditions (D-01): preset (logged net=…) / one fault starting now (logged netfault=…) */
+  | { type: 'netPreset'; preset: string }
+  | { type: 'netFault'; fault: string; dur?: number }
   /** Sample PWM on these pins each slice; changes go into tick pwmEvents with sim time (for the buzzer). */
   | { type: 'watchPwm'; pins: number[] }
   /** Request the input log since power-up; answered with an inputlog message. */
@@ -240,6 +247,7 @@ export type ToWorker =
       events: InputEvent[];
       untilMs: number;
       realnet?: boolean;
+      net?: string;
     }
   /** Mark a point in time: answered with mark (which sim millisecond this step happened at). */
   | { type: 'mark'; id: number }
@@ -945,6 +953,19 @@ function apply(e: Exports, ev: InputAction) {
       if (!e.tb_realnet_set) return;
       e.tb_realnet_set(ev.on ? 1 : 0);
       break;
+    case 'seed':
+    case 'net':
+    case 'netfault': {
+      if (!e.tb_net_action) return;
+      const b = new TextEncoder().encode(action({ tMs: 0, ...ev } as InputEvent) ?? '');
+      const p = e.tb_alloc(b.length);
+      new Uint8Array(e.memory.buffer, p, b.length).set(b);
+      const bad = e.tb_net_action(p, b.length);
+      e.tb_free(p, b.length);
+      // Unknown presets / faults stay out of the log (the CLI refuses them too)
+      if (bad) return;
+      break;
+    }
     case 'netreply': {
       if (!e.tb_net_reply) return;
       const b = new TextEncoder().encode(ev.reply);
@@ -1043,6 +1064,8 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       if (!e) return;
       // Power on with the real network on: the switch goes into the log as an input at time 0 (first line of the replay script: realnet=1)
       if (realnetOn) apply(e, { kind: 'realnet', on: true });
+      // Network preset survives power-ons (main-thread state): logged at time 0 like the real-network switch
+      if (m.net && m.net !== 'normal') apply(e, { kind: 'net', preset: m.net });
       post({ type: 'booted', chip: CHIP_OF[e.tb_chip()] ?? 'esp32c3', bootPin: e.tb_boot_pin() });
       break;
     }
@@ -1061,6 +1084,10 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
         if (x.kind === 'realnet') wasOn = x.on;
       }
       if (wasOn !== realnetOn) apply(e, { kind: 'realnet', on: realnetOn });
+      // Same for the network preset: the present choice wins if it differs from the last logged one
+      let preset = 'normal';
+      for (const x of inputLog.events) if (x.kind === 'net') preset = x.preset;
+      if (m.net && m.net !== preset) apply(e, { kind: 'net', preset: m.net });
       pumpNet(e, answered);
       flushIo(e);
       post({ type: 'seeked', snap: snapshot(e), bootPin: e.tb_boot_pin() });
@@ -1143,6 +1170,16 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       realnetOn = m.on;
       if (!ex) return;
       apply(ex, { kind: 'realnet', on: m.on });
+      postNet(ex);
+      break;
+    case 'netPreset':
+      if (!ex) return;
+      apply(ex, { kind: 'net', preset: m.preset });
+      postNet(ex);
+      break;
+    case 'netFault':
+      if (!ex) return;
+      apply(ex, { kind: 'netfault', fault: m.fault, ...(m.dur === undefined ? {} : { dur: m.dur }) });
       postNet(ex);
       break;
     case 'power':

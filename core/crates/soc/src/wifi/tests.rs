@@ -323,3 +323,34 @@ fn realnet_post_waits_for_body_and_https_is_refused() {
     assert_eq!((row.method.as_str(), row.dest), ("HTTPS", "Not allowed"));
     assert!(row.note.contains("HTTPS is not allowed"));
 }
+
+// ---------- D-01 network faults ----------
+
+#[test]
+fn dns_fault_answers_servfail() {
+    let mut n = Net::default();
+    let mut q = vec![0x12, 0x34, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0];
+    q.extend_from_slice(b"\x03api\x07example\x00\x00\x01\x00\x01");
+    n.tcp.dns_fail = true;
+    let (r, _) = n.tcp.dns(&q, net::GW_IP).unwrap();
+    assert_eq!(r[3] & 0x0f, 2, "rcode SERVFAIL");
+    assert_eq!(&r[6..12], &[0; 6], "no answers");
+    assert_eq!(n.tcp.rows.last().unwrap().status, "Failed");
+}
+
+#[test]
+fn silent_server_drops_syn_and_lists_it_once() {
+    let mut n = Net::default();
+    n.tcp.silent = true;
+    let (c, s) = (net::STA_IP, net::GW_IP);
+    let syn = vec![
+        0x30, 0x39, 0, 80, 0, 0, 0, 100, 0, 0, 0, 0, 0x50, 0x02, 0x20, 0, 0, 0, 0, 0,
+    ];
+    assert!(n.tcp.on_segment(c, s, &syn, 0).is_empty());
+    assert!(n.tcp.on_segment(c, s, &syn, 1000).is_empty());
+    assert_eq!(n.tcp.rows.len(), 1);
+    assert_eq!(n.tcp.rows[0].status, "No reply");
+    n.tcp.silent = false;
+    let r = n.tcp.on_segment(c, s, &syn, 2000);
+    assert_eq!(r[0].0[13], 0x12, "SYN-ACK after recovery");
+}

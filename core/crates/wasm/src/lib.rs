@@ -783,6 +783,14 @@ pub extern "C" fn tb_realnet_set(on: u32) {
     with((), |m| m.realnet_set(on != 0));
 }
 
+/// # Safety
+/// p/len: script action text seed=N / net=preset / netfault=kind[,s] (D-01); 0 ok, 1 unrecognised
+#[no_mangle]
+pub unsafe extern "C" fn tb_net_action(p: *const u8, len: usize) -> u32 {
+    let s = String::from_utf8_lossy(std::slice::from_raw_parts(p, len)).into_owned();
+    with(1, |m| (m.net_action(&s) != Some(true)) as u32)
+}
+
 /// Drain the real-network outbox: [{id, method, url, ctype, body(base64)}], returns the length (0 = none); read via tb_phone_json_ptr
 #[no_mangle]
 pub extern "C" fn tb_net_outbox() -> usize {
@@ -854,7 +862,8 @@ pub extern "C" fn tb_net_version() -> f64 {
     with(0.0, |m| {
         let n = &m.wifi().world.net;
         // Rows + rewrites (real-network rows go from "Waiting" to 200 / Timed out): both only grow, so a changed sum means a change
-        (n.tcp.rows.len() as u64 + n.tcp.rev) as f64 + if n.leased { 1e9 } else { 0.0 }
+        let c = m.wifi().world.cond.rev;
+        (n.tcp.rows.len() as u64 + n.tcp.rev + c) as f64 + if n.leased { 1e9 } else { 0.0 }
     })
 }
 
@@ -887,8 +896,24 @@ pub extern "C" fn tb_net_json() -> usize {
         } else {
             "null".to_string()
         };
+        // Network conditions summary (D-01): null while untouched
+        let cond = m.net_summary().map_or("null".to_string(), |n| {
+            format!(
+                "{{\"preset\":\"{}\",\"seed\":{},\"faults\":{},\"disconnects\":{},\"reconnect_ms\":{},\"lost\":{},\"ok\":{},\"failed\":{},\"lost_frames\":{}}}",
+                n.preset.name(),
+                n.seed,
+                n.faults,
+                n.disconnects,
+                n.reconnect_us
+                    .map_or("null".to_string(), |d| format!("{}", d as f64 / 1000.0)),
+                n.lost,
+                n.ok,
+                n.failed,
+                n.lost_frames
+            )
+        });
         format!(
-            "{{\"total\":{},\"lease\":{lease},\"realnet\":{},\"rows\":[{}]}}",
+            "{{\"total\":{},\"lease\":{lease},\"realnet\":{},\"cond\":{cond},\"rows\":[{}]}}",
             rows.len(),
             net.tcp.realnet,
             r.join(",")

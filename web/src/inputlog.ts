@@ -34,7 +34,12 @@ export type InputEvent =
   /** "Real network" toggle (C-03). Action realnet=1/0 */
   | { tMs: number; kind: 'realnet'; on: boolean }
   /** One real-network reply (C-03): id,status,ms,content type or reason code,base64 body. Action netreply=… */
-  | { tMs: number; kind: 'netreply'; reply: string };
+  | { tMs: number; kind: 'netreply'; reply: string }
+  /** Network conditions (D-01): PRNG seed, preset (normal / weak / flaky / offline), one fault from now (reboot / dns / silent, seconds).
+   *  Actions seed=N / net=preset / netfault=kind[,s] */
+  | { tMs: number; kind: 'seed'; seed: number }
+  | { tMs: number; kind: 'net'; preset: string }
+  | { tMs: number; kind: 'netfault'; fault: string; dur?: number };
 
 /** An event not yet stamped (the worker fills in tMs when applying it) */
 export type InputAction = InputEvent extends infer E ? (E extends unknown ? Omit<E, 'tMs'> : never) : never;
@@ -113,6 +118,12 @@ export function action(e: InputEvent): string | null {
       return `realnet=${e.on ? 1 : 0}`;
     case 'netreply':
       return `netreply=${e.reply}`;
+    case 'seed':
+      return `seed=${e.seed}`;
+    case 'net':
+      return `net=${e.preset}`;
+    case 'netfault':
+      return `netfault=${e.fault}${e.dur === undefined ? '' : ',' + e.dur}`;
     case 'power':
       return null;
   }

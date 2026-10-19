@@ -115,6 +115,11 @@ pub struct Tcp {
     waiting: HashMap<u32, (Key, usize)>,
     /// Number of rewritten rows (Waiting -> 200 / Timed out): the web refetches when rows + this change
     pub rev: u64,
+    /// Injected faults (D-01, set by the world from its conditions): DNS answers SERVFAIL / the server drops everything
+    pub dns_fail: bool,
+    pub silent: bool,
+    /// Connections already listed as unanswered (SYN retries make one row, not many)
+    silent_seen: std::collections::HashSet<Key>,
 }
 
 /// Guess a protocol name from the port (how a blocked connection is labelled in the network tab)
@@ -356,6 +361,21 @@ impl Tcp {
         let mut r = q[..qend].to_vec();
         r[2] = 0x81; // Response, recursion desired
         r[3] = 0x80; // Recursion available, no error
+        let n = name.join(".");
+        if self.dns_fail {
+            r[3] = 0x82; // SERVFAIL, no answer
+            r[6..12].fill(0);
+            self.rows.push(NetRow {
+                t_us: self.now_us,
+                method: "DNS".into(),
+                dest: "Virtual",
+                url: n.clone(),
+                status: "Failed".into(),
+                dur_us: None,
+                note: "Injected fault: DNS answers SERVFAIL".into(),
+            });
+            return Some((r, format!("DNS {n} → SERVFAIL (injected fault)")));
+        }
         if qtype == 1 {
             r[7] = 1; // 1 answer
             r.extend_from_slice(&[0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0x0e, 0x10, 0, 4]);
@@ -364,7 +384,6 @@ impl Tcp {
             r[7] = 0;
         }
         r[8..12].fill(0);
-        let n = name.join(".");
         self.rows.push(NetRow {
             t_us: self.now_us,
             method: "DNS".into(),
@@ -461,6 +480,21 @@ impl Tcp {
         let data = &s[hl..];
         let key = (src, sport, dst, dport);
         let mut out = Vec::new();
+        if self.silent {
+            // Server not responding (D-01): every segment vanishes; list each connection attempt once
+            if flags & SYN != 0 && flags & ACK == 0 && self.silent_seen.insert(key) {
+                self.rows.push(NetRow {
+                    t_us: now_us,
+                    method: "TCP".into(),
+                    dest: "Virtual",
+                    url: format!("{}.{}.{}.{}:{dport}", dst[0], dst[1], dst[2], dst[3]),
+                    status: "No reply".into(),
+                    dur_us: None,
+                    note: "Injected fault: the server does not respond".into(),
+                });
+            }
+            return out;
+        }
         let mk = |c: &Conn, fl: u8, opts: &[u8], d: &[u8]| to_chip(&key, c, fl, opts, d);
 
         if flags & RST != 0 {

@@ -1171,6 +1171,21 @@
   "chip": "esp32c3"
  },
  {
+  "id": "c3-wifi-resilient",
+  "title": "Resilient weather station: survives router reboots and DNS failures",
+  "about": "Joins TryBoard-WiFi and polls http://api.weather.example every 2 s. Try the presets in the Network tab (weak signal, flaky, offline) or schedule a router reboot, a DNS failure or a silent server: the firmware prints the disconnect reason, reconnects on its own and says when requests succeed again. Faults run on simulated time with a fixed seed, go into the input log and replay with tryboard run --inputs. Real routers and ISPs fail in more ways; check on real hardware.",
+  "tags": [
+   "◐ Behaviour model",
+   "Wi-Fi",
+   "HTTP",
+   "Fault injection"
+  ],
+  "scene": {
+   "parts": []
+  },
+  "chip": "esp32c3"
+ },
+ {
   "id": "esp32-wifi",
   "chip": "esp32",
   "title": "Wi-Fi（经典 ESP32）：联网发 HTTP 请求",

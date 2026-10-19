@@ -8,6 +8,7 @@ import { actions, bc, BLANK, CUSTOM, EXAMPLE_ID, TWO_STEPS, shownSteps } from '.
 import { decode, encode } from '../advisor/state';
 import { FwMenu, openFwMenu } from './fwmenu';
 import { RealnetSwitch, toggleRealnet, useRealnet } from './realnet';
+import { NetCondChip } from './netcond';
 import { CmdkBox } from './cmdk';
 import { Icon } from './icons';
 import { useStore } from './react';
@@ -387,6 +388,7 @@ export function TopBar(p: { step: StepId; workName: string; bare?: boolean; righ
         <StepBar step={p.step} />
       </div>
       <CmdkBox />
+      {!p.bare && bench && <NetCondChip />}
       {!p.bare && bench && <RealnetSwitch />}
       {!p.bare && <RunGroup bench={bench} />}
       <FwMenu />

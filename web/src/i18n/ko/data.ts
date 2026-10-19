@@ -1121,5 +1121,9 @@ const d: Dict = {
   "ESP32-C3 datasheet (no PSRAM interface); ESP32-S3 ordering info (only R variants have PSRAM); Seeed Wiki / M5Stack docs": "ESP32-C3 데이터시트 (PSRAM 인터페이스 없음); ESP32-S3 주문 정보 (R 모델만 PSRAM 탑재); Seeed Wiki / M5Stack 문서",
   "Dev board pin tables (M5Stack AtomS3: header G5–G8 / G38 / G39 + Grove G1 / G2); on-board use entered per board": "개발 보드 핀 표 (M5Stack AtomS3: 핀 헤더 G5–G8 / G38 / G39 + Grove G1 / G2); 온보드 사용은 보드별 입력",
   "Waveshare wiki: no-touch display RST GPIO12, backlight GPIO40; touch RST GPIO14, backlight GPIO2": "Waveshare wiki: 비터치 버전 RST GPIO12, 백라이트 GPIO40; 터치 버전 RST GPIO14, 백라이트 GPIO2",
+  // c3-wifi-resilient example (D-01)
+  "Resilient weather station: survives router reboots and DNS failures": "끊김에 강한 날씨 스테이션: 공유기 재부팅·DNS 실패에서 스스로 복구",
+  "Joins TryBoard-WiFi and polls http://api.weather.example every 2 s. Try the presets in the Network tab (weak signal, flaky, offline) or schedule a router reboot, a DNS failure or a silent server: the firmware prints the disconnect reason, reconnects on its own and says when requests succeed again. Faults run on simulated time with a fixed seed, go into the input log and replay with tryboard run --inputs. Real routers and ISPs fail in more ways; check on real hardware.": "TryBoard-WiFi에 연결해 2초마다 http://api.weather.example 에 요청합니다. '네트워크' 탭에서 프리셋(신호 약함, 불안정, 오프라인)을 시도하거나 공유기 재부팅, DNS 실패, 서버 무응답을 넣어 보세요. 펌웨어는 끊김 원인을 출력하고 스스로 재연결하며 요청이 다시 성공하면 알려 줍니다. 장애는 시뮬레이션 시간과 고정 시드로 발생하고 입력 로그에 기록되어 tryboard run --inputs 로 재생할 수 있습니다. 실제 공유기와 통신사의 장애는 더 다양하므로 실제 하드웨어에서 확인하십시오.",
+  "Fault injection": "장애 주입",
 };
 export default d;

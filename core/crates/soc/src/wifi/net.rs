@@ -21,6 +21,8 @@ pub struct Eth {
 pub struct Net {
     /// Address leased to the chip (after DHCP ACK)
     pub leased: bool,
+    /// DHCP ACKs given (D-01: a new one after a loss marks the reconnect)
+    pub acks: u32,
     pub log: Vec<String>,
     pub tcp: super::tcp::Tcp,
     /// Gateway (also DHCP / DNS) and the chip address: default 192.168.4.1 / .100;
@@ -37,6 +39,7 @@ impl Default for Net {
     fn default() -> Self {
         Net {
             leased: false,
+            acks: 0,
             log: Vec::new(),
             tcp: Default::default(),
             gw: GW_IP,
@@ -302,6 +305,7 @@ impl Net {
         r.push(255);
         if reply == 5 {
             self.leased = true;
+            self.acks += 1;
         }
         self.log.push(format!(
             "DHCP {} → {} {}",
