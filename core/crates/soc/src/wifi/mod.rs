@@ -23,6 +23,7 @@ pub struct WifiLayout {
     pub cpu_hz: u64,
     /// RF / baseband / MAC 'wait for hardware' polls: (address, how it becomes ready)
     pub rf_polls: &'static [(u32, RfReady)],
+    pub mac: MacRegs,
 }
 
 /// How a polled register reports ready
@@ -48,13 +49,13 @@ impl WifiLayout {
             // MAC: hal_init writes bit 1 then waits for bit 0
             (0x6003_3d14, RfReady::StartBit1Done0),
         ],
+        mac: MacRegs::C3,
     };
     pub const S3: WifiLayout = WifiLayout {
         chip: "esp32s3",
         ..WifiLayout::C3
     };
-    /// Classic ESP32: the MAC is the previous IP generation (registers around 0x3FF73000) and not modelled yet;
-    /// this layout only fills the shared interface, the bus routes no addresses to it
+    /// Classic ESP32: the MAC is the previous IP generation (registers around 0x3FF73000, see [`MacRegs::ESP32`])
     pub const ESP32: WifiLayout = WifiLayout {
         chip: "esp32",
         cpu_hz: 160_000_000,
@@ -69,41 +70,130 @@ impl WifiLayout {
             // MAC: hal_init writes bit 1, waits for bit 0 (C3 at +0xD14, ESP32 at +0xD24)
             (0x3ff7_3d24, RfReady::StartBit1Done0),
         ],
+        mac: MacRegs::ESP32,
     };
 }
 
-// MAC registers (base 0x60033000, see docs/WIFI.md)
-/// MAC / power-management address range this module handles
-pub const MAC_RANGE: std::ops::Range<u32> = 0x6003_3000..0x6003_6000;
-const MAC_INT_ENA: u32 = 0x6003_3c34;
-const MAC_INT_ST: u32 = 0x6003_3c3c;
-const MAC_INT_CLR: u32 = 0x6003_3c40;
-const RX_FIRST_DESC: u32 = 0x6003_3088;
-const RX_LAST_DESC: u32 = 0x6003_3090;
-const TXQ_DONE: u32 = 0x6003_3cb0;
-const TXQ_DONE_CLR: u32 = 0x6003_3cac;
-/// TX queue q config register = 0x60033D08 - 8q; bits 19..0 descriptor address low 20 bits, bits 31/30 start
-const TXQ0: u32 = 0x6003_3d08;
+/// MAC register map (see docs/WIFI.md). C3 / S3 share one IP generation; classic ESP32 is the previous one:
+/// same HAL functions, descriptors and TX result codes, but different offsets and a 7-word RX header
+#[derive(Clone, Copy, Debug)]
+pub struct MacRegs {
+    /// MAC / power-management address range this module handles
+    pub range: (u32, u32),
+    pub int_ena: u32,
+    pub int_st: u32,
+    pub int_clr: u32,
+    pub rx_first: u32,
+    /// RX control: bit 0 = reload the descriptor chain, self-clearing (ESP32 driver polls it; C3 doesn't, 0)
+    pub rx_ctrl: u32,
+    /// Read: last filled descriptor; `rx_last_full` = full address (ESP32), else low 20 bits only (C3)
+    pub rx_last: u32,
+    pub rx_last_full: bool,
+    /// Read: next descriptor the hardware will fill (ESP32 driver reads it when recycling; C3 doesn't, 0)
+    pub rx_next: u32,
+    pub txq_done: u32,
+    pub txq_done_clr: u32,
+    /// TX queue q config register = txq0 - 8q; bits 19..0 descriptor address low 20 bits, bits 31/30 start
+    pub txq0: u32,
+    /// TX result = txq_result0 - stride*q: bits 15..12 result code (0 ok, 5 ACK timeout)
+    pub txq_result0: u32,
+    pub txq_result_stride: u32,
+    /// Status registers that always read 0 (TX status, power-management interrupt status)
+    pub zero: [u32; 2],
+    /// TSF timer (us) low / high 32 bits
+    pub tsf_lo: u32,
+    pub tsf_hi: u32,
+    /// Descriptor address registers keep only the low 20 bits; high bits are fixed (C3 / S3 DRAM 0x3FCxxxxx, ESP32 0x3FFxxxxx)
+    pub desc_hi: u32,
+    /// RX interrupt event bit (wDev_ProcessFiq mask)
+    pub ev_rx: u32,
+    /// HW key table (hal_crypto_set_key_entry): valid bitmap + 40 bytes/entry
+    pub key_valid: u32,
+    pub key_table: u32,
+    /// RX metadata header length in words; words holding noise floor (low byte) and length (bits 11..0)
+    pub rx_hdr_words: u32,
+    pub rx_noise_word: usize,
+    pub rx_len_word: usize,
+    /// How much the header RSSI exceeds real dBm: ESP32's wDev_ProcessRxSucData subtracts wDevCtrl+46
+    /// (96 at run time) before reporting; C3 doesn't
+    pub rx_rssi_bias: i32,
+}
+
+impl MacRegs {
+    pub const C3: MacRegs = MacRegs {
+        range: (0x6003_3000, 0x6003_6000),
+        int_ena: 0x6003_3c34,
+        int_st: 0x6003_3c3c,
+        int_clr: 0x6003_3c40,
+        rx_first: 0x6003_3088,
+        rx_ctrl: 0,
+        rx_last: 0x6003_3090,
+        rx_last_full: false,
+        rx_next: 0,
+        txq_done: 0x6003_3cb0,
+        txq_done_clr: 0x6003_3cac,
+        txq0: 0x6003_3d08,
+        txq_result0: 0x6003_4320,
+        txq_result_stride: 76,
+        zero: [0x6003_3ca8, 0x6003_5118],
+        tsf_lo: 0x6003_5018,
+        tsf_hi: 0x6003_501c,
+        desc_hi: 0x3fc0_0000,
+        ev_rx: 1 << 14,
+        key_valid: 0x6003_3814,
+        key_table: 0x6003_4400,
+        rx_hdr_words: 12,
+        rx_noise_word: 5,
+        rx_len_word: 11,
+        rx_rssi_bias: 0,
+    };
+    /// Classic ESP32 (derived from libpp / libnet80211 disassembly, see docs/WIFI.md)
+    pub const ESP32: MacRegs = MacRegs {
+        range: (0x3ff7_3000, 0x3ff7_6000),
+        int_ena: 0x3ff7_3c40,
+        int_st: 0x3ff7_3c48,
+        int_clr: 0x3ff7_3c4c,
+        rx_first: 0x3ff7_3088,
+        rx_ctrl: 0x3ff7_3084,
+        rx_last: 0x3ff7_3090,
+        rx_last_full: true,
+        rx_next: 0x3ff7_308c,
+        txq_done: 0x3ff7_3cc8,
+        txq_done_clr: 0x3ff7_3cc4,
+        txq0: 0x3ff7_3d20,
+        txq_result0: 0x3ff7_4270,
+        txq_result_stride: 60,
+        zero: [0x3ff7_3cc0, 0x3ff7_3cc0],
+        tsf_lo: 0x3ff7_5014,
+        tsf_hi: 0x3ff7_5018,
+        desc_hi: 0x3ff0_0000,
+        // In RX mask 0x1000024, bit 24 is "frame received" (bits 2 / 5 are overflow)
+        ev_rx: 1 << 24,
+        key_valid: 0x3ff7_3814,
+        key_table: 0x3ff7_4400,
+        rx_hdr_words: 7,
+        rx_noise_word: 2,
+        rx_len_word: 6,
+        rx_rssi_bias: 96,
+    };
+
+    pub fn contains(&self, a: u32) -> bool {
+        (self.range.0..self.range.1).contains(&a)
+    }
+}
+
+/// C3 / S3 MAC address range (for bus dispatch)
+pub const MAC_RANGE: std::ops::Range<u32> = MacRegs::C3.range.0..MacRegs::C3.range.1;
 const TXQ_NUM: u32 = 5;
-/// TX result = 0x60034320 - 76q: bits 15..12 result code (0 ok, 5 ACK timeout)
-const TXQ_RESULT0: u32 = 0x6003_4320;
-/// Descriptor address registers keep only the low 20 bits; high bits are fixed (both chips' DRAM is at 0x3FCxxxxx)
-const DESC_HI: u32 = 0x3fc0_0000;
 
-// MAC interrupt event bits (wDev_ProcessFiq)
+// MAC interrupt event bits (wDev_ProcessFiq); TX-done is the same in both generations
 const EV_TX_DONE: u32 = 1 << 7;
-const EV_RX: u32 = 1 << 14;
 
-/// HW key table (hal_crypto_set_key_entry): valid bitmap + 40 bytes/entry. Word 0 = peer MAC 0..3, word 1 low 16 = MAC 4..5, bit 30 = group, word 2.. = key.
+/// Each HW key entry: word 0 = peer MAC 0..3, word 1 low 16 = MAC 4..5, bit 30 = group, word 2.. = key.
 /// Other word-1 fields (cipher, slot class) are unused: IDF was observed to put the GTK in slot 0, the PTK in slot 4, both with peer = BSSID
-const KEY_VALID: u32 = 0x6003_3814;
 const KEY_GROUP: u32 = 1 << 30;
-const KEY_TABLE: u32 = 0x6003_4400;
 const KEY_ENTRY: u32 = 40;
 const KEY_SLOTS: u32 = 32;
-
-/// Hardware-written metadata header in RX descriptors (wifi_pkt_rx_ctrl_t, 12 words)
-const RX_HDR: u32 = 48;
 
 enum Ev {
     TxDone { q: usize, code: u32 },
@@ -199,46 +289,56 @@ impl WifiMac {
 
     /// MAC register read; None falls back to generic read-back
     pub fn read(&mut self, a: u32, now: u64) -> Option<u32> {
+        let m = self.layout.mac;
+        let res = |a: u32| {
+            a <= m.txq_result0
+                && (m.txq_result0 - a).is_multiple_of(m.txq_result_stride)
+                && (m.txq_result0 - a) / m.txq_result_stride < TXQ_NUM
+        };
         Some(match a {
-            MAC_INT_ST => self.int_raw & self.int_ena,
-            MAC_INT_ENA => self.int_ena,
-            TXQ_DONE => self.tx_done,
-            0x6003_3ca8 => 0,
-            RX_LAST_DESC => self.rx_last & 0xf_ffff,
-            a if (TXQ_RESULT0 - 76 * (TXQ_NUM - 1)..=TXQ_RESULT0).contains(&a)
-                && (TXQ_RESULT0 - a).is_multiple_of(76) =>
-            {
-                self.tx_result[((TXQ_RESULT0 - a) / 76) as usize]
+            a if a == m.int_st => self.int_raw & self.int_ena,
+            a if a == m.int_ena => self.int_ena,
+            a if a == m.txq_done => self.tx_done,
+            a if m.zero.contains(&a) => 0,
+            a if a == m.rx_last => {
+                if m.rx_last_full {
+                    self.rx_last
+                } else {
+                    self.rx_last & 0xf_ffff
+                }
             }
-            // TSF timer (us)
-            0x6003_5018 => self.tsf_us(now) as u32,
-            0x6003_501c => (self.tsf_us(now) >> 32) as u32,
-            // Power-management interrupt status
-            0x6003_5118 => 0,
+            // End of chain reads 0x3FF00000 (high bits | null); the driver uses it to decide whether to reset the head
+            a if m.rx_next != 0 && a == m.rx_next => {
+                m.desc_hi | (self.rx_cur.unwrap_or(0) & 0xf_ffff)
+            }
+            a if res(a) => self.tx_result[((m.txq_result0 - a) / m.txq_result_stride) as usize],
+            a if a == m.tsf_lo => self.tsf_us(now) as u32,
+            a if a == m.tsf_hi => (self.tsf_us(now) >> 32) as u32,
             _ => return None,
         })
     }
 
     /// MAC register write. Some(v) tells the caller to store v in the generic register table for read-back; None = handled, don't store
     pub fn write(&mut self, a: u32, v: u32, now: u64, mem: &mut dyn Mem) -> Option<u32> {
+        let m = self.layout.mac;
         match a {
-            MAC_INT_ENA => self.int_ena = v,
-            MAC_INT_CLR => self.int_raw &= !v,
-            TXQ_DONE_CLR => self.tx_done &= !v,
-            RX_FIRST_DESC => {
+            a if a == m.int_ena => self.int_ena = v,
+            a if a == m.int_clr => self.int_raw &= !v,
+            a if a == m.txq_done_clr => self.tx_done &= !v,
+            a if a == m.rx_first => {
                 self.rx_cur = Some(v);
                 return Some(v);
             }
-            KEY_VALID => {
+            // Reload: rx() already follows the last descriptor's next at end of chain, so just clear bit 0
+            a if m.rx_ctrl != 0 && a == m.rx_ctrl => return Some(v & !1),
+            a if a == m.key_valid
+                || (m.key_table..m.key_table + KEY_ENTRY * KEY_SLOTS).contains(&a) =>
+            {
                 self.keys.insert(a, v);
                 return Some(v);
             }
-            a if (KEY_TABLE..KEY_TABLE + KEY_ENTRY * KEY_SLOTS).contains(&a) => {
-                self.keys.insert(a, v);
-                return Some(v);
-            }
-            a if (TXQ0 - 8 * (TXQ_NUM - 1)..=TXQ0).contains(&a) && (TXQ0 - a).is_multiple_of(8) => {
-                let q = ((TXQ0 - a) / 8) as usize;
+            a if a <= m.txq0 && (m.txq0 - a).is_multiple_of(8) && (m.txq0 - a) / 8 < TXQ_NUM => {
+                let q = ((m.txq0 - a) / 8) as usize;
                 if v & 0x8000_0000 != 0 {
                     self.tx(q, v, now, mem);
                     // Hardware clears the start bit when TX ends; clear it now, the driver doesn't read it back
@@ -253,7 +353,7 @@ impl WifiMac {
 
     /// TX queue start: walk the descriptor chain for the whole frame, hand it to the world, schedule TX done and replies by airtime
     fn tx(&mut self, q: usize, reg: u32, now: u64, mem: &mut dyn Mem) {
-        let mut d = DESC_HI | (reg & 0xf_ffff);
+        let mut d = self.layout.mac.desc_hi | (reg & 0xf_ffff);
         let mut f = Vec::new();
         for _ in 0..16 {
             let w0 = mem.rd32(d);
@@ -298,7 +398,7 @@ impl WifiMac {
         }
     }
 
-    /// Write a frame into the next free RX descriptor: 48-byte metadata header + frame + FCS
+    /// Write a frame into the next free RX descriptor: metadata header (C3 48 bytes / ESP32 28 bytes) + frame + FCS
     fn rx(&mut self, air: world::Air, now: u64, mem: &mut dyn Mem) {
         let mut d = match self.rx_cur {
             Some(d) if d != 0 => d,
@@ -337,7 +437,9 @@ impl WifiMac {
         }
         let fcs = frame::crc32(&f);
         f.extend_from_slice(&fcs.to_le_bytes());
-        let total = RX_HDR + f.len() as u32;
+        let m = self.layout.mac;
+        let hdr_len = 4 * m.rx_hdr_words;
+        let total = hdr_len + f.len() as u32;
         if total > size {
             self.rx_dropped += 1;
             return;
@@ -346,16 +448,16 @@ impl WifiMac {
         let mut hdr = [0u32; 12];
         // RSSI and matched interface: bit 28 = interface 0 (STA), bit 29 = interface 1 (firmware SoftAP)
         let iface = if air.ap_if { 1 << 29 } else { 1 << 28 };
-        hdr[0] = (air.rssi as u8 as u32) | iface;
+        hdr[0] = ((air.rssi as i32 + m.rx_rssi_bias) as u8 as u32) | iface;
         hdr[2] = (air.channel as u32 & 0xf) << 16;
         hdr[3] = self.tsf_us(now) as u32;
-        hdr[5] = (-96i8) as u8 as u32; // Noise floor
-        hdr[11] = f.len() as u32 & 0xfff; // sig_len (incl. FCS), rx_state = 0
-        for (i, w) in hdr.iter().enumerate() {
+        hdr[m.rx_noise_word] |= (-96i8) as u8 as u32; // Noise floor
+        hdr[m.rx_len_word] |= f.len() as u32 & 0xfff; // sig_len (incl. FCS), rx_state = 0
+        for (i, w) in hdr[..m.rx_hdr_words as usize].iter().enumerate() {
             mem.wr32(buf + 4 * i as u32, *w);
         }
         for (i, b) in f.iter().enumerate() {
-            mem.wr8(buf + RX_HDR + i as u32, *b);
+            mem.wr8(buf + hdr_len + i as u32, *b);
         }
         // Length, EOF, ownership back to software
         let w0n = (w0 & 0xfff) | (total << 12) | (1 << 30);
@@ -363,7 +465,7 @@ impl WifiMac {
         self.rx_last = d;
         d = mem.rd32(d + 8);
         self.rx_cur = Some(d);
-        self.int_raw |= EV_RX;
+        self.int_raw |= m.ev_rx;
         self.rx_frames += 1;
         let desc = match frame::parse(&air.frame) {
             Some(h) => format!("FC=0x{:02x} from {}", h.fc0, frame::mac_str(&h.a2)),
@@ -385,14 +487,14 @@ impl WifiMac {
         self.hw_key_exact(Some(peer), group)
     }
 
-    /// peer = None：任意一个组密钥槽（固件当 AP 时 GTK 槽的对端 MAC 未必是帧里的地址）
+    /// peer = None: any group-key slot (as an AP the firmware's GTK slot peer MAC need not match the frame)
     fn hw_key_exact(&self, peer: Option<&frame::Mac>, group: bool) -> Option<[u8; 16]> {
         let reg = |a: u32| self.keys.get(&a).copied().unwrap_or(0);
-        let valid = reg(KEY_VALID);
+        let valid = reg(self.layout.mac.key_valid);
         (0..KEY_SLOTS)
             .filter(|i| valid & (1 << i) != 0)
             .find_map(|i| {
-                let e = KEY_TABLE + KEY_ENTRY * i;
+                let e = self.layout.mac.key_table + KEY_ENTRY * i;
                 let (w0, w1) = (reg(e), reg(e + 4));
                 let mut mac = [0u8; 6];
                 mac[..4].copy_from_slice(&w0.to_le_bytes());
@@ -426,7 +528,7 @@ impl WifiMac {
         let tk = if unicast {
             self.hw_key(&peer, false)?
         } else {
-            // 组播：先按对端找（STA 时是 BSSID），再按发送方，最后任意组密钥槽
+            // Multicast: look up by peer (BSSID as STA), then by sender, finally any group-key slot
             let a2: frame::Mac = f[10..16].try_into().unwrap();
             self.hw_key(&peer, true)
                 .or_else(|| self.hw_key(&a2, true))

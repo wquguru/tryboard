@@ -97,12 +97,13 @@
 | LEDC | ✅ | esp32-fade：5kHz 13 位硬件渐变，渐亮 / 渐灭完成 | tick_sel 选源见 DECISIONS |
 | I2C0 + SSD1306 / BME280 | ✅ | esp32-i2c：扫描只应答 0x3C / 0x76、OLED ≥ 300 像素、T / H / P 读回误差在容差内 | `I2cLayout::ESP32`（命令码、16 项命令表、APB 80MHz SCL） |
 | eFuse | 🟡 | 芯片版本 v3.0、MAC（带 CRC） | 只读 |
-| Wi-Fi 初始化（PHY 校准） | 🟡 | esp32-wifi-init：wifi_init / start ok | 只到 PHY；MAC 未做 |
-| Wi-Fi 收发 / 连 AP | ✗ | esp32-wifi 停在「断开 reason=201」，未进 accept | ESP32 的 MAC 是上一代 IP（0x3FF73000 一带），收发 / DMA 描述符没模型 |
+| Wi-Fi 初始化（PHY 校准） | ✅ | esp32-wifi-init：wifi_init / start ok | RFPLL 校准完成位由 HLE regi2c 给 |
+| Wi-Fi 收发 / 连 AP / HTTP | ✅ | esp32-wifi：开放热点 → IP 192.168.4.100 → tryboard.local 200 / example.com 200（应用层输出与 C3 逐行相同）；网页示例 esp32-wifi（Reviews/ab/C-05.md） | 共用 C3 / S3 的 MAC 模型，寄存器排布 `MacRegs::ESP32`（docs/WIFI.md「经典 ESP32」）；没有 QEMU Wi-Fi 对照（乐鑫 QEMU esp32 无 Wi-Fi MAC），未经真机标定 |
+| Wi-Fi WPA2-PSK + 硬件 SHA / AES | ✅ | esp32-wifi-wpa2：四次握手、硬件 CCMP、HTTP 同上；`cargo test -p tryboard-esp32` SHA FIPS 180 / AES FIPS 197 | SHA-1/256/384/512、AES-128/192/256 ECB；DMA 模式未做 |
 | RMT（WS2812） | ✗ | — | 寄存器布局与 C3 / S3 不兼容，这批不做；选型里标「必须上真机」 |
 | ADC / SPI / I2S / DAC / 触摸 / 霍尔 | ☐ | — | 未做；选型里标「必须上真机」 |
 | 蓝牙（经典 / BLE） | ☐ | — | 必须上真机 |
-| 网页 | ✅ | 换芯片菜单有 ESP32（hello / blink 示例）；上传 esp32-blink 台面换成 DevKitC V4、LED 闪、串口有输出（Reviews/ab/C-05.md） | 两排针相距 1″ 的面包板摆放简化见 DECISIONS |
+| 网页 | ✅ | 换芯片菜单有 ESP32（hello / blink / wifi 示例）；上传 esp32-blink 台面换成 DevKitC V4、LED 闪、串口有输出（Reviews/ab/C-05.md） | 两排针相距 1″ 的面包板摆放简化见 DECISIONS |
 
 ## 电气（`core/crates/elec`，C3 / S3 共用）
 | 模块 | 状态 | 验收 | 备注 |

@@ -867,7 +867,7 @@
 - **SoC 新建 `core/crates/esp32`**：外设凡是寄存器语义和 C3 / S3 一样、只是基址 / 偏移不同的（TIMG、SPI1、LEDC），在 `periph.rs` 做地址翻译层后复用原模型；I2C 命令码、命令表长度、SCL 时钟不同，加 `I2cLayout` 参数（C3 / S3 输出逐字节不变）。
 - **LEDC tick_sel**：经典 ESP32 的 LEDC timer 用 tick_sel 选源：0 都是 REF_TICK 1MHz，1 时高速组 = APB、低速组 = SLOW_CLK（APB_CLK_SEL 选 APB 80MHz 或 8MHz），不是 C3 的全局选源；翻译层按它算频率，esp32-fade 5kHz 对上。
 - **PHY 轮询**：ESP32 射频校准轮询的寄存器偏移与 C3 相同，只是 APB 基址 0x3FF40000；有两处语义相反或独有（FM SAR 位 26..24 回 0、PLL 换频位 8 启动 / 位 31 完成），写进 `WifiLayout::ESP32` 的 rf_polls。
-- **Wi-Fi 标 ◐**：`esp_wifi_init` / `start` 能过（esp32-wifi-init），但 ESP32 的 MAC 是上一代 IP（0x3FF73000 一带，收发描述符格式与 C3 / S3 不同），这批不做收发；esp32-wifi（连 AP + HTTP）停在 reason=201，**不进 accept**、在 PLAN / STATUS 标 ✗ 原因。替代：照 GPL 的 QEMU esp32 模型抄——不允许；逆向上一代 MAC 工作量与 C3 那次相当，留待以后。
+- **Wi-Fi 标 ◐**：`esp_wifi_init` / `start` 能过（esp32-wifi-init），但 ESP32 的 MAC 是上一代 IP（0x3FF73000 一带，收发描述符格式与 C3 / S3 不同），这批不做收发；esp32-wifi（连 AP + HTTP）停在 reason=201，**不进 accept**、在 PLAN / STATUS 标 ✗ 原因。替代：照 GPL 的 QEMU esp32 模型抄——不允许；逆向上一代 MAC 工作量与 C3 那次相当，留待以后。（后续：同日补上，见下一节「经典 ESP32 Wi-Fi 收发」。）
 - **RMT ✗**：ESP32 的 RMT 寄存器布局（8 通道 conf0/conf1 交错、RAM 64 字 × 8、没有 sys_conf）与 C3 / S3 不兼容，这批不做；选型里依赖 RMT（WS2812）的零件对 ESP32 标「必须上真机」。
 - **选型标注**：advisor 的 esp32 芯片从 simulated 'none' 改为 'partial'；ESP32 只认 GPIO / PWM / I2C 三类需求为可仿真（`engine.ts` SIM_KINDS），其余零件「必须上真机」；需要蓝牙 / 经典蓝牙、DAC / 触摸时另列「必须上真机」行（霍尔随 DAC / 触摸一行）。选板 esp32-devkitc 直接映射到新板 esp32-devkitc-v4，不再用 C3 代跑。
 - **1″ 排针的简化**：DevKitC 两排针相距 25.4 mm，830 孔面包板中缝两边 a–e / f–j 排距不是这个数。做法：整板 z 偏半格，J1 落 j 排、J3 落 b 排（`BoardSpec.rowSpan`），J1 外侧没有空孔时跳线端点就落在针脚自己那个孔上（`boardHole`）。真机上 DevKitC 插 830 孔板也只剩一侧一排孔，这和实物一致。
@@ -905,3 +905,11 @@
 - **回退 / 重放**：worker 从日志里取出所有 netreply 做回复缓存，回退时先重放到目标时刻，再把已发出、日志里有回复的请求按记录回答，不再联网；日志里没有的才（开关开着时）真的去取。迟到的 fetch 结果按启动代号丢掉。
 - **检查点**：开着开关验收会真的联网，结论标「依赖外网」、不记运行编号（`fp:""`、`net:true`），换回虚拟网络再跑才有运行编号。开关不持久化（每次打开页面都是关的），避免用户忘了开着。
 - 替代：自动把回复存成「夹具」随作品发布——涉及第三方内容再分发，先不做；只给用户自己导出。
+
+## 2026-10-19 经典 ESP32 Wi-Fi 收发（C-05 补完）
+- **共用 MAC 模型、寄存器参数化**：反汇编 esp32 版 libpp 后发现上一代 MAC 与 C3 / S3 的 HAL 函数同名、lldesc 描述符、发送结果码、硬件密钥表格式都相同，只是寄存器偏移逐个不同、接收元数据头 7 字。做法：把 `WifiMac` 里写死的地址收进 `MacRegs`（`WifiLayout.mac`），`MacRegs::C3` 数值与原常量逐个相同（C3 / S3 Wi-Fi 用例输出不变），ESP32 另给一套。替代：给 ESP32 单写一个 MAC——否掉，空中帧、AP、加密、DHCP 都在同一个模型里，两份会分叉。
+- **几处上一代独有的语义**照实跑现象定：接收控制 0x3FF73084 位 0 重装后自清（不清驱动无限轮询、刷 `wifi:reload`）；0x3FF7308C 读回"下一个要填的描述符"，链空时 = 描述符高位 0x3FF00000；接收头 RSSI 驱动会再减 wDevCtrl+46（实测 96），模型写入 rssi + 96 后打印 −42 与 C3 一致；RFPLL 校准完成位（regi2c 块 0x62 寄存器 7 位 7）由 HLE 读回置 1。
+- **ESP32 自带 SHA / AES 模型**：WPA2 在 esp32 端口走硬件 SHA（PBKDF2 / PRF）和 AES，读回全 0 会让四次握手 abort。寄存器按 IDF `hwcrypto_reg.h` / `sha_ll.h` / `aes_ll.h`；SHA-1 / 256 复用已有压缩函数，SHA-384 / 512 新写（常量来自 FIPS 180-4），各有 FIPS 向量单测。只做寄存器模式，DMA 模式没做（IDF 的 Wi-Fi 路径没用到）。
+- **依据与授权**：只看 IDF v5.5.1 预编译库（Apache-2.0）反汇编、IDF 头文件和实跑 `--watch`；没有读、没有参考 espressif/qemu 的任何代码（它的 esp32 机器也没有 Wi-Fi MAC）。因此没有 QEMU Wi-Fi 对照，判定标准是与 C3 wifi-http 相同的应用层串口输出；STATUS 标「未经真机标定」。
+- **验收**：accept.json 加 esp32-wifi、esp32-wifi-wpa2（新固件目录 `firmware/esp32-wifi-wpa2`，与 wifi-wpa2 共用 `wifi-http/main/main.c`）；网页示例 esp32-wifi 进 `firmware/examples.json` 和 accept.sh 网页冒烟。esp32-wifi-init 保留（只验 PHY 起来）。
+- **选型**：Wi-Fi 不是零件种类，`SIM_KINDS.esp32` 不变；只更新芯片 / 板子说明文字（Wi-Fi 联网可模拟）。天线、无线距离仍是「必须上真机」。

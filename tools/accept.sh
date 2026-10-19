@@ -206,7 +206,7 @@ if [ $NO_WEB = 0 ]; then
   echo -e "\n## Web (headless Chrome + wasm)" >> $REPORT
   tools/build_web.sh >/dev/null 2>&1 || { echo "build failed" >> $REPORT; fail=1; }
   # Expected texts are firmware serial prints; the webtest scripts still report in Chinese
-  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接" s3-blink:TRYBOARD_OK s3-rgb:TRYBOARD_OK s3-dual:TRYBOARD_OK weather:TRYBOARD_OK lens:TRYBOARD_OK spin:TRYBOARD_OK s3-wifi-http:TRYBOARD_OK s3-lvgl:TRYBOARD_OK "s3-encoder:ENCODER ready" "s3-ultrasonic:DIST 15.0 cm" s3-imu:TRYBOARD_OK s3-qmi8658:TRYBOARD_OK s3-touch:TRYBOARD_OK "usbkey:TRYBOARD_OK usbkey" "echo:串口回显" esp32-hello:TRYBOARD_OK esp32-blink:TRYBOARD_OK; do  # lint: allow-cjk
+  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接" s3-blink:TRYBOARD_OK s3-rgb:TRYBOARD_OK s3-dual:TRYBOARD_OK weather:TRYBOARD_OK lens:TRYBOARD_OK spin:TRYBOARD_OK s3-wifi-http:TRYBOARD_OK s3-lvgl:TRYBOARD_OK "s3-encoder:ENCODER ready" "s3-ultrasonic:DIST 15.0 cm" s3-imu:TRYBOARD_OK s3-qmi8658:TRYBOARD_OK s3-touch:TRYBOARD_OK "usbkey:TRYBOARD_OK usbkey" "echo:串口回显" esp32-hello:TRYBOARD_OK esp32-blink:TRYBOARD_OK esp32-wifi:TRYBOARD_OK; do  # lint: allow-cjk
     ex=${spec%%:*}; want=${spec#*:}
     r=$(node tools/webtest/webtest.mjs "$ex" "$want" 2>&1 | head -3)
     echo "$r" | sed 's/^/- /' >> $REPORT

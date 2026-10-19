@@ -2072,5 +2072,29 @@
    "真实网络请求 #1 GET http://example.com/",
    "真实网络请求 #2 GET http://httpbin.org/get"
   ]
+ },
+ {
+  "id": "esp32-wifi",
+  "chip": "esp32",
+  "seconds": 4,
+  "expect": [
+   "拿到 IP 192.168.4.100",
+   "GET http://tryboard.local/hello.txt → 200，17 字节",
+   "正文：TRYBOARD_HTTP_OK",
+   "GET http://example.com/api/time → 200",
+   "TRYBOARD_OK wifi-http"
+  ]
+ },
+ {
+  "id": "esp32-wifi-wpa2",
+  "chip": "esp32",
+  "seconds": 4,
+  "expect": [
+   "拿到 IP 192.168.4.100",
+   "GET http://tryboard.local/hello.txt → 200，17 字节",
+   "正文：TRYBOARD_HTTP_OK",
+   "GET http://example.com/api/time → 200",
+   "TRYBOARD_OK wifi-wpa2"
+  ]
  }
 ]
