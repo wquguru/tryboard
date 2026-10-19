@@ -1,11 +1,12 @@
-// 圆屏成品：会转身的小黄（舵机转台 + 圆屏脸）、透镜小人（圆屏 + 凸透镜罩）。屏幕画面来自模拟器里的 GC9A01 帧缓冲。
+// Round-LCD products: turning Little Yellow (servo turntable + LCD face) and the lens buddy (LCD + lens dome). Pixels come from the simulated GC9A01.
+import { t } from '../i18n';
 import { holdButton, lcdImage, mount, servoAngle, type LiveFrame } from './common';
 import type { ProductHandlers } from './product';
 
 export interface LcdEffects {
-  /** 舵盘装偏了多少度（装配时没对中位） */
+  /** Degrees the horn is off (not centred during assembly) */
   hornOffset?: number;
-  /** 透镜放大倍数（垫片高度决定） */
+  /** Lens magnification (set by the spacer height) */
   lensScale?: number;
 }
 
@@ -23,7 +24,7 @@ export function createSpinProduct(el: HTMLElement, h: ProductHandlers, opts: { s
   const q = mount(
     el,
     `<div class="tb-view sc-root lp-root">
-<svg viewBox="0 0 1000 560" role="img" aria-label="成品：站在舵机转台上的小黄，脸是一块圆屏">
+<svg viewBox="0 0 1000 560" role="img" aria-label="${t('Product: Little Yellow on a servo turntable, with a round LCD for a face')}">
 ${floor}
 <ellipse cx="500" cy="470" rx="230" ry="40" fill="url(#lp-floor)"/>
 <ellipse cx="500" cy="462" rx="150" ry="30" fill="#2A2A28"/><rect x="350" y="436" width="300" height="26" fill="#2A2A28"/><ellipse cx="500" cy="436" rx="150" ry="30" fill="#3A3936"/>
@@ -35,11 +36,11 @@ ${floor}
 <g data-k="face"><circle cx="0" cy="210" r="62" fill="#141414"/><image data-k="lcd" x="-56" y="154" width="112" height="112" clip-path="url(#lp-face)"/>
 <circle cx="0" cy="210" r="62" fill="none" stroke="#3A3936" stroke-width="3"/></g>
 </g>
-<text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">小黄 · 成品 · SG90 转台 + 1.28″ 圆屏 GC9A01</text>
+<text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">${t('Little Yellow · product · SG90 turntable + 1.28″ round LCD GC9A01')}</text>
 <text data-k="note" x="24" y="56" fill="#C23A00" class="tb-mono" font-size="12" font-weight="700"></text>
 <text data-k="angle" x="976" y="96" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700" text-anchor="end"></text>
 </svg>
-${bootBtn('按 BOOT：看正面')}
+${bootBtn(t('Press BOOT: face front'))}
 </div>`,
   );
   let dial = '';
@@ -58,8 +59,8 @@ ${bootBtn('按 BOOT：看正面')}
       const r = (turn * Math.PI) / 180;
       q('body').setAttribute('transform', `translate(500 30) scale(${(0.72 + 0.28 * Math.cos(r)).toFixed(3)} 1)`);
       q('face').setAttribute('transform', `translate(${(44 * Math.sin(r)).toFixed(1)} 0)`);
-      q('angle').textContent = a === null ? '舵机未输出' : `转台 ${turn >= 0 ? '+' : ''}${turn.toFixed(0)}°`;
-      q('note').textContent = fx.hornOffset ? `舵盘装偏 ${fx.hornOffset.toFixed(1)}°：固件说「正面」，它其实歪着` : '';
+      q('angle').textContent = a === null ? t('No servo output') : t('Turntable {deg}°', { deg: `${turn >= 0 ? '+' : ''}${turn.toFixed(0)}` });
+      q('note').textContent = fx.hornOffset ? t('Horn off by {n}°: the firmware says “front”, but it is actually turned', { n: fx.hornOffset.toFixed(1) }) : '';
       if (f.lcd !== last) {
         last = f.lcd;
         if (f.lcd) q('lcd').setAttribute('href', lcdImage(f.lcd));
@@ -72,7 +73,7 @@ export function createLensProduct(el: HTMLElement, h: ProductHandlers) {
   const q = mount(
     el,
     `<div class="tb-view sc-root lp-root">
-<svg viewBox="0 0 1000 560" role="img" aria-label="成品：圆屏上的表情被凸透镜罩放大，像立在罩子里的小人">
+<svg viewBox="0 0 1000 560" role="img" aria-label="${t('Product: a face on a round LCD magnified by a lens dome, like a little figure inside')}">
 ${floor}
 <ellipse cx="500" cy="470" rx="230" ry="36" fill="url(#lp-floor)"/>
 <rect x="350" y="388" width="300" height="70" rx="28" fill="#EDEAE2" stroke="#BDB9B0" stroke-width="2"/><rect x="390" y="376" width="220" height="24" rx="10" fill="#D6D1C6"/>
@@ -81,11 +82,11 @@ ${floor}
 <circle cx="500" cy="236" r="150" fill="url(#lp-dome)"/>
 <path d="M395 172 A130 130 0 0 1 478 104" fill="none" stroke="#FFF" opacity="0.75" stroke-width="8" stroke-linecap="round"/>
 <circle cx="500" cy="236" r="150" fill="none" stroke="#8A9BAD" stroke-width="2"/>
-<text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">透镜小人 · 成品 · 1.28″ 圆屏 GC9A01 + 凸透镜罩</text>
+<text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">${t('Lens buddy · product · 1.28″ round LCD GC9A01 + lens dome')}</text>
 <text data-k="note" x="24" y="56" fill="#C23A00" class="tb-mono" font-size="12" font-weight="700"></text>
 <text data-k="mag" x="976" y="96" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700" text-anchor="end"></text>
 </svg>
-${bootBtn('按 BOOT：换表情')}
+${bootBtn(t('Press BOOT: change face'))}
 </div>`,
   );
   holdButton(q('boot'), () => h.boot(true), () => h.boot(false));
@@ -94,8 +95,8 @@ ${bootBtn('按 BOOT：换表情')}
     update(f: LiveFrame, _room: number, fx: LcdEffects) {
       const k = fx.lensScale ?? 1.35;
       q('lcd').setAttribute('transform', `translate(500 236) scale(${k}) translate(-500 -236)`);
-      q('mag').textContent = `放大约 ${k.toFixed(2)}×（估算）`;
-      q('note').textContent = k < 1.2 ? '透镜贴着屏幕：几乎不放大，看着是平的' : '';
+      q('mag').textContent = t('About {k}× magnification (estimate)', { k: k.toFixed(2) });
+      q('note').textContent = k < 1.2 ? t('Lens sits on the screen: barely any magnification, it looks flat') : '';
       if (f.lcd !== last) {
         last = f.lcd;
         if (f.lcd) q('lcd').setAttribute('href', lcdImage(f.lcd));

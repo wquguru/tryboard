@@ -1,12 +1,19 @@
-// 3D 台面与工作台外壳之间的约定。board3d.ts 实现，src/app/ 使用。
-// 两边并行开发，先把接口定死；实现缺失时外壳要能降级（不报错，只是点不到针脚）。
+// Contract between the 3D bench (implemented in board3d.ts) and the lab shell in src/app/.
+// Both sides were built in parallel; if the implementation is missing the shell must degrade quietly (pins just aren't clickable).
+import { locale } from './i18n';
 
-/** 可被点中的东西。id 约定：
- *  零件：'board' | 'oled' | 'bme280' | 'servo' | 'gc9a01' | 'pot' | 'led:<pin>' | 'power'（舵机外接电源模块）
- *        | 'mpu6050' | 'qmi8658'（平插 IMU，P2-03）| 'cst816s'（触摸圆屏上的触摸层，针脚 'cst816s:TP_SDA' 等，P2-02）
- *  针脚：开发板丝印名，如 'GPIO4' | 'GPIO48' | '3V3' | '5V' | 'GND'；模块针脚用 '<零件>:<丝印>'，如 'bme280:SDA'
- *  导线：'wire:<一端针脚>~<另一端针脚>'，如 'wire:GPIO8~bme280:SDA'
- *  按键：'BOOT' | 'RST' */
+// Canvas text gets no CSS lang-based fallback, so pick CJK fonts per locale: ja/ko must not get Chinese glyph forms.
+const CJK: Record<string, string> = {
+  zh: '"Noto Sans SC", "PingFang SC", "Microsoft YaHei"',
+  ja: '"Hiragino Sans", "Noto Sans JP", "Yu Gothic", "Noto Sans SC"',
+  ko: '"Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Noto Sans SC"',
+  en: '"Noto Sans SC", "PingFang SC"',
+};
+/** Sans-serif stack for canvas / overlay text: Latin first, then the locale's CJK fonts. */
+export const SANS = `Inter, Helvetica, ${CJK[locale] ?? CJK.en}, sans-serif`;
+
+/** Ids: parts 'board' | 'oled' | 'bme280' | 'servo' | 'gc9a01' | 'pot' | 'led:<pin>' | 'power' | 'mpu6050' | 'qmi8658' (P2-03) | 'cst816s' (P2-02);
+ *  pins = board silkscreen ('GPIO4', '3V3') or '<part>:<silk>' ('bme280:SDA'); wires 'wire:<pin>~<pin>'; buttons 'BOOT' | 'RST'. */
 export type PickKind = 'part' | 'pin' | 'wire' | 'button';
 export interface PickTarget { kind: PickKind; id: string }
 
@@ -14,31 +21,31 @@ export interface ScreenPoint { x: number; y: number }
 
 export interface PinInfo {
   id: string;
-  /** 丝印文字 */
+  /** Silkscreen text */
   label: string;
-  /** 这根针接了什么，例如 'SG90 信号'；没接为空 */
+  /** What this pin drives, e.g. 'SG90 signal'; empty when unconnected */
   role?: string;
 }
 
 export interface ScenePickApi {
-  /** 点中（或点空白处时 null）；screen 是相对台面容器左上角的 CSS 像素 */
+  /** Pick (null for empty space); screen is CSS px relative to the bench container's top-left */
   onPick(cb: (t: PickTarget | null, screen: ScreenPoint) => void): void;
-  /** 高亮一个目标：零件描边、针脚蓝圈 + 标签、导线加粗；null 取消 */
+  /** Highlight: part outline, pin ring + tag, thicker wire; null clears */
   highlight(t: PickTarget | null): void;
-  /** 目标在台面容器里的屏幕坐标（给快捷卡片定位）；看不见时 null */
+  /** Screen position inside the bench container (to place quick cards); null when off-screen */
   project(t: PickTarget): ScreenPoint | null;
-  /** 开发板上所有针脚（含未接的） */
+  /** Every board pin, connected or not */
   listPins(): PinInfo[];
-  /** 接线规则检查结果：把导线标红并带一句说明；msg 为 null 取消 */
+  /** Wiring-rule result: paint the wire red with a short message; null clears */
   setWireFault(wireId: string, msg: string | null): void;
-  /** 改接：线的开发板那一端挪到 to 这根针（'GPIO5'、'5V'…）；null 改回原位 */
+  /** Rewire: move the board end of a wire to pin `to` ('GPIO5', '5V'…); null restores it */
   rewire?(wireId: string, to: string | null): void;
-  /** 开发板针到开发板针的跳线（a → b，如 '3V3' → 'GND'）；b 为 null 拔掉 */
+  /** Board-to-board jumper (a → b, e.g. '3V3' → 'GND'); b null removes it */
   bridge?(wireId: string, a: string, b: string | null): void;
-  /** 热源靠近某个零件（只影响画面上的热晕，读数由环境值决定） */
+  /** A heat source near a part (only the glow; readings come from the environment values) */
   setHeat(partId: string | null): void;
-  /** 两个目标之间画尺子标注（毫米）；null 取消 */
+  /** Ruler between two targets (mm); null clears */
   measure(a: PickTarget | null, b?: PickTarget): number | null;
-  /** 浅色（工作台默认）/ 深色主题 */
+  /** Light (bench default) / dark theme */
   setTheme(theme: 'light' | 'dark'): void;
 }
