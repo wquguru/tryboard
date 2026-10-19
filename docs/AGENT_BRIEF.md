@@ -1,6 +1,6 @@
 # 子代理任务说明模板
 
-派全新子代理（不是 fork）时照这个写，要求子代理不靠主会话也能独立完成。原因见 AGENTS.md §9。
+派全新子代理（不是 fork）时照这个写；机械类任务（翻译、改名、格式）派 `model: "sonnet"`，要求子代理不靠主会话也能独立完成。原因见 AGENTS.md §9。
 
 ```
 你在 TryBoard 仓库（<repo-root>，本地 git，分支 main）的独立 worktree 里工作。
@@ -17,5 +17,6 @@
 设计：页面照 docs/DESIGN.md；任务对应 docs/PLAN.md 的〈ID〉，完成后把状态改成 ☑。
 授权：只能用 docs/LICENSING.md 里 ✅ 的来源；GPL 代码可读不可抄（不复制、不逐行翻译）；新 npm / crate 依赖先写 DECISIONS。
 完成后：在 worktree 分支提交（英文提交信息，末尾加 Co-Authored-By 行）；更新 docs/STATUS.md 与 DECISIONS.md。
+省 token（AGENTS.md §9 第 6–10 条）：不得再派子代理；单次工具输出 > 2 万字符先重定向到 Reviews/ 再 grep / head；机械改动用脚本抽取 → 整批处理 → 脚本回填，不逐条 Edit。
 汇报（≤ 300 字）：做了什么、验收结果（贴通过 / 失败的行）、遗留问题、改动了哪些公共接口。不要贴大段日志。
 ```

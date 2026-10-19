@@ -126,6 +126,12 @@ Session review 2026-10-15: 495 M cache-read tokens in total, 374 M of them from 
 3. **Write conclusions to disk before dispatching**: what a sub-agent needs to know goes into `docs/` (ARCH, DECISIONS, STATUS) for it to read — two orders of magnitude cheaper than inheriting the conversation.
 4. **Auto-compact at 200 k**: `.claude/settings.json` sets `autoCompactWindow: 200000` (the default only compacts at ~967 k). After each milestone commit and report, a human may also run `/compact` manually (the model can't trigger it).
 5. **Keep long output out of context**: redirect build / acceptance logs into `Reviews/` and `tail` or `grep` them; crop screenshots to the region of interest before Reading them.
+6. **No nested sub-agents**: a sub-agent never spawns its own sub-agents; the brief says so. Split work in the main session instead (U-07 review: 8 planned agents became 25, each paying its own start-up and re-reading the same files).
+7. **Cap tool output at ~20 k characters**: `agent-browser snapshot`, logs, whole-file `cat` and sub-agent `.output` files go to `Reviews/` first, then `grep` / `head`. One 600 k-character result is re-read on every later call.
+8. **Batch mechanical edits**: for translation, renames and similar sweeps, extract the targets with a script (JSON list), transform the whole batch in one call, write back with a script. Dozens of single `Edit` calls each re-read 100 k+ of context.
+9. **Pick the model by task**: mechanical work (translating comments, filling dictionaries, formatting) uses `model: "sonnet"`; architecture, tricky debugging and merge conflicts stay on the default model.
+10. **Keep each sub-agent small**: scope it so its context stays under ~80 k; prefer more short agents over a few long ones. Cost ≈ tool calls × context size.
+11. **Freeze shared files during sweeps**: while a repo-wide sweep (i18n, renames) is running, other sessions don't commit to the same files, or the sweep has to be merged and redone.
 
 ## 10. Autonomy limits
 A human agreed (2026-10-16): work through `docs/PLAN.md` from P0 to P2, report after each batch, continue without waiting for confirmation.
