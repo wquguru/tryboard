@@ -1,7 +1,5 @@
-// 实验台 v2 底部坞（DESIGN_V2 §4）：串口 / 代码 / 逻辑分析仪 / 运行记录 / 检查点 / 问题 / 任务（C-04），可拖高度、可收起。
-// 串口原文仍追加进隐藏的 #console（文本节点原样，回归脚本和重放对拍读它）；看得见的是这里按行切开的视图：
-// 过滤、时间戳（收到这段文字时的模拟时刻）、按 ESP-IDF 级别着色、跟随最新。行视图命令式维护，不经 React——
-// 串口一秒能来几百行，整块重画太贵。
+// Lab v2 bottom dock (DESIGN_V2 §4): serial / code / analyzer / runs / checkpoints / issues / tasks (C-04). Raw serial still goes
+// to hidden #console (replay diffing reads it); the line view (filter, sim-time stamps, IDF colors) is imperative: too many lines for React.
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "../ui/cn";
 import { actions, bc, setDock, type DockTab } from "./chrome";
@@ -12,13 +10,14 @@ import { Icon } from "./icons";
 import { useStore } from "./react";
 import { createStore } from "./store";
 import { Grab, mui, phoneProps, setMui, usePhone } from "./mobile";
+import { t } from "../i18n";
 
-// 代码页签（P2-15）：切到它才下载这块和源码，不进首包
+// Code tab (P2-15): chunk and source load only when opened, not in the first bundle
 const CodeView = lazy(() => import("./code"));
-function CodePane({ phone, toast }: { phone?: boolean; toast: (t: string) => void }) {
+function CodePane({ phone, toast }: { phone?: boolean; toast: (msg: string) => void }) {
   const { fw } = useStore(bc);
   return (
-    <Suspense fallback={<p className="m-0 p-3 text-xs text-muted">正在加载代码页…</p>}>
+    <Suspense fallback={<p className="m-0 p-3 text-xs text-muted">{t('Loading code tab…')}</p>}>
       <CodeView fw={fw} phone={phone} toast={toast} />
     </Suspense>
   );
@@ -30,7 +29,7 @@ interface Line {
   lv: "E" | "W" | "I" | "D" | "";
 }
 const MAX_LINES = 4000;
-// ESP-IDF 日志行：可选的 ANSI 颜色头，然后 "E (1234) tag: …"
+// ESP-IDF log line: optional ANSI color prefix, then "E (1234) tag: …"
 const ANSI = /\x1b\[[0-9;]*m/g;
 const levelOf = (s: string): Line["lv"] => {
   const m = /^([EWID]) \(\d+\)/.exec(s);
@@ -56,7 +55,7 @@ function createSerialModel() {
   let pendingT = 0;
   let host: HTMLElement | null = null;
   let tail: HTMLElement | null = null;
-  /** 手机的窥视条 / 成品串口条：只显示最后一行（命令式改 textContent，和行视图一样不经 React） */
+  /** Phone peek bar / product serial strip: last line only (imperative textContent, no React) */
   const peeks = new Set<HTMLElement>();
   let peekRaf = 0;
   const lastLine = () => {
@@ -70,8 +69,8 @@ function createSerialModel() {
     if (!peeks.size || peekRaf) return;
     peekRaf = requestAnimationFrame(() => {
       peekRaf = 0;
-      const t = lastLine() || "还没有串口输出";
-      for (const el of peeks) if (el.textContent !== t) el.textContent = t;
+      const txt = lastLine() || t('No serial output yet');
+      for (const el of peeks) if (el.textContent !== txt) el.textContent = txt;
     });
   }
 
@@ -99,9 +98,9 @@ function createSerialModel() {
     d.append(l.text || " ");
     return d;
   }
-  // 串口刷屏时每段都同步读 scrollHeight 会强制整页重排、拖死主线程：合并到下一帧只滚一次
+  // Reading scrollHeight per chunk during a serial flood forces reflow: coalesce into one scroll per frame
   let stickRaf = 0;
-  /** 上一次自动滚到的位置：滚动事件是异步的，到达时可能已有新行把高度撑高，不能据此判成「用户往上翻」 */
+  /** Last auto-scroll position: scroll events are async, new lines may have grown the height, so that's not a user scroll-up */
   let autoTop = -1;
   function stick() {
     if (stickRaf) return;
@@ -130,8 +129,8 @@ function createSerialModel() {
       const e = document.createElement("div");
       e.className = "sl-empty text-muted";
       e.textContent = lines.length
-        ? `没有包含「${ui.get().filter}」的行`
-        : "还没有串口输出";
+        ? t('No lines contain “{filter}”', { filter: ui.get().filter })
+        : t('No serial output yet');
       host.append(e);
     }
     stick();
@@ -155,7 +154,7 @@ function createSerialModel() {
       host = el;
       renderAll();
     },
-    /** 滚动位置没有低于上次自动滚到的位置：是新行撑高，不是用户往上翻 */
+    /** Not below the last auto-scroll position: new lines grew it, the user didn't scroll up */
     autoScrolled: (top: number) => top >= autoTop - 1,
     attachPeek(el: HTMLElement, on: boolean) {
       if (on) peeks.add(el);
@@ -235,7 +234,7 @@ function SerialView() {
       id="serialView"
       ref={ref}
       role="log"
-      aria-label="串口输出"
+      aria-label={t('Serial output')}
       tabIndex={0}
       onScroll={(e) => {
         const el = e.currentTarget;
@@ -252,7 +251,7 @@ const EOLS: [string, string][] = [
   ["\r\n", "\\r\\n"],
   ["\n", "\\n"],
   ["\r", "\\r"],
-  ["", "无"],
+  ["", t('None')],
 ];
 function SerialInput({ phone }: { phone?: boolean }) {
   const { eol } = useStore(ui);
@@ -278,8 +277,8 @@ function SerialInput({ phone }: { phone?: boolean }) {
         value={v}
         disabled={!can}
         onChange={(e) => setV(e.currentTarget.value)}
-        placeholder={can ? "发给串口，回车发送" : "会话还没就绪"}
-        aria-label="发给串口"
+        placeholder={can ? t('Send to serial, Enter to send') : t('Session not ready yet')}
+        aria-label={t('Send to serial')}
         autoComplete="off"
         className={cn(
           "min-w-0 flex-1 border-0 bg-transparent font-mono text-[12.5px] text-fg outline-none",
@@ -289,8 +288,8 @@ function SerialInput({ phone }: { phone?: boolean }) {
       />
       <select
         id="serialEol"
-        aria-label="行尾"
-        title="回车时附加的行尾"
+        aria-label={t('Line ending')}
+        title={t('Line ending appended on Enter')}
         value={eol}
         onChange={(e) => ui.set({ eol: e.currentTarget.value })}
         className={cn(
@@ -311,14 +310,14 @@ function SerialInput({ phone }: { phone?: boolean }) {
           disabled={!can}
           className="h-11 w-16 flex-none cursor-pointer rounded-xl border-0 bg-accent-strong text-[14px] font-medium text-on-accent disabled:bg-field disabled:text-muted"
         >
-          发送
+          {t('Send')}
         </button>
       )}
     </form>
   );
 }
 
-function SerialTools({ toast }: { toast: (t: string) => void }) {
+function SerialTools({ toast }: { toast: (msg: string) => void }) {
   const s = useStore(ui);
   return (
     <div className="flex items-center gap-1.5 max-[1180px]:[&_.opt]:hidden">
@@ -327,8 +326,8 @@ function SerialTools({ toast }: { toast: (t: string) => void }) {
         type="search"
         value={s.filter}
         onChange={(e) => ui.set({ filter: e.currentTarget.value })}
-        placeholder="过滤"
-        aria-label="过滤串口"
+        placeholder={t('Filter')}
+        aria-label={t('Filter serial')}
         className="h-7 w-40 rounded-md border border-line bg-field px-2 text-xs text-fg outline-none focus:border-accent max-[1100px]:w-24"
       />
       <button
@@ -336,10 +335,10 @@ function SerialTools({ toast }: { toast: (t: string) => void }) {
         id="serialStamps"
         aria-pressed={s.stamps}
         onClick={() => ui.set({ stamps: !s.stamps })}
-        title="收到这行时的模拟时刻（秒）"
+        title={t('Simulated time when this line arrived (s)')}
         className={cn(ib, "opt w-auto px-1.5 text-xs whitespace-nowrap")}
       >
-        时间戳 {s.stamps ? "开" : "关"}
+        {s.stamps ? t('Timestamps on') : t('Timestamps off')}
       </button>
       <button
         type="button"
@@ -349,14 +348,14 @@ function SerialTools({ toast }: { toast: (t: string) => void }) {
           ui.set({ follow: !s.follow });
           if (!s.follow) serial.renderAll();
         }}
-        title="新输出来了自动滚到最后"
+        title={t('Auto-scroll to the end on new output')}
         className={cn(ib, "opt w-auto px-1.5 text-xs whitespace-nowrap")}
       >
-        跟随最新
+        {t('Follow latest')}
       </button>
       <span
         className="opt font-mono text-xs text-muted"
-        title="UART0 波特率（模拟器里不限速，只是标注）"
+        title={t('UART0 baud rate (the simulator doesn’t throttle; label only)')}
       >
         115200
       </span>
@@ -364,12 +363,12 @@ function SerialTools({ toast }: { toast: (t: string) => void }) {
         type="button"
         id="serialCopy"
         className={ib}
-        title="复制看得到的行"
-        aria-label="复制串口"
+        title={t('Copy the visible lines')}
+        aria-label={t('Copy serial')}
         onClick={() =>
           void navigator.clipboard?.writeText(serial.text()).then(
-            () => toast("已复制串口（按当前过滤）"),
-            () => toast("复制失败：浏览器不让写剪贴板"),
+            () => toast(t('Serial copied (current filter applied)')),
+            () => toast(t('Copy failed: the browser blocked clipboard access')),
           )
         }
       >
@@ -379,8 +378,8 @@ function SerialTools({ toast }: { toast: (t: string) => void }) {
         type="button"
         id="serialClear"
         className={ib}
-        title="清空显示（不影响固件和验收）"
-        aria-label="清空串口"
+        title={t('Clear display (does not affect firmware or checks)')}
+        aria-label={t('Clear serial')}
         onClick={() => {
           serial.reset("", 0);
           const con = document.getElementById("console");
@@ -398,7 +397,7 @@ function CheckList() {
   if (!checkpoints.length)
     return (
       <p className="m-0 p-3 text-xs text-muted">
-        这个台面没有检查点（外设实验台）。
+        {t('This bench has no checkpoints (peripheral lab).')}
       </p>
     );
   const mk = {
@@ -441,7 +440,7 @@ function IssueList() {
   if (!issues.length)
     return (
       <p className="m-0 p-3 text-xs text-muted">
-        没有发现问题：接线没问题，电压也一直够。
+        {t('No issues found: wiring is fine and voltage stayed sufficient.')}
       </p>
     );
   return (
@@ -473,7 +472,7 @@ function IssueList() {
   );
 }
 
-/** 手机的串口抽屉（DESIGN_V2 §5）：平时是台面下沿的一条窥视条（最后一行串口），点 / 上拉到半屏、全屏 */
+/** Phone serial sheet (DESIGN_V2 §5): a peek bar with the last serial line; tap / swipe up for half or full */
 function PhoneDock({
   timeline,
   simtime,
@@ -481,7 +480,7 @@ function PhoneDock({
 }: {
   timeline: ReactNode;
   simtime: ReactNode;
-  toast: (t: string) => void;
+  toast: (msg: string) => void;
 }) {
   const c = useStore(bc);
   const { sheet } = useStore(mui);
@@ -504,28 +503,28 @@ function PhoneDock({
     disabled?: boolean;
     title?: string;
   }[] = [
-    { id: "serial", label: "串口" },
+    { id: "serial", label: t('Serial') },
     {
       id: "code",
-      label: "代码",
-      title: "台面上这个固件的源码（只读）",
+      label: t('Code'),
+      title: t('Source of the firmware on the bench (read-only)'),
     },
     {
       id: "checks",
       label: c.checkpoints.length
-        ? `检查点 ${ok}/${c.checkpoints.length}`
-        : "检查点",
+        ? t('Checkpoints {ok}/{n}', { ok, n: c.checkpoints.length })
+        : t('Checkpoints'),
     },
-    { id: "issues", label: nIssue ? `问题 ${nIssue}` : "问题" },
-    { id: "runs", label: `运行记录 ${c.runs}` },
-    { id: "tasks", label: "任务", title: "FreeRTOS 任务时间线：每核谁在跑、谁在等" },
+    { id: "issues", label: nIssue ? t('Issues {n}', { n: nIssue }) : t('Issues') },
+    { id: "runs", label: t('Runs {n}', { n: c.runs }) },
+    { id: "tasks", label: t('Tasks'), title: t('FreeRTOS task timeline: who runs and who waits on each core') },
     ...(c.usb ? [{ id: "usb" as const, label: "USB" }] : []),
-    ...(c.ble ? [{ id: "ble" as const, label: "蓝牙" }] : []),
+    ...(c.ble ? [{ id: "ble" as const, label: t('Bluetooth') }] : []),
   ];
   return (
     <section
       id="dock"
-      aria-label="串口抽屉"
+      aria-label={t('Serial sheet')}
       data-tab={cur}
       data-sheet={sheet}
       className={cn(
@@ -538,7 +537,7 @@ function PhoneDock({
       )}
     >
       <Grab
-        label={open ? "收起串口抽屉" : "上拉看全部串口"}
+        label={open ? t('Collapse serial sheet') : t('Swipe up for full serial')}
         onUp={() => go({ sheet: sheet === "peek" ? "half" : "full" })}
         onDown={() => go({ sheet: sheet === "full" ? "half" : "peek" })}
         onTap={() => go({ sheet: open ? "peek" : "half" })}
@@ -551,12 +550,12 @@ function PhoneDock({
         className="-mt-1 flex min-h-11 w-full min-w-0 cursor-pointer flex-col gap-0.5 border-0 bg-transparent px-4 pb-1.5 text-left text-fg [&[hidden]]:hidden"
       >
         <span className="flex w-full items-center gap-2 text-[13px]">
-          <b className="font-medium">串口</b>
+          <b className="font-medium">{t('Serial')}</b>
           {nIssue > 0 && (
-            <span className="rounded-full bg-warn-bg px-2 text-[11px] leading-[18px] text-warn-ink">{`${nIssue} 个问题`}</span>
+            <span className="rounded-full bg-warn-bg px-2 text-[11px] leading-[18px] text-warn-ink">{t('{n} issues', { n: nIssue })}</span>
           )}
           <span className="flex-1" />
-          <span className="text-xs text-muted">上拉看全部</span>
+          <span className="text-xs text-muted">{t('Swipe up for all')}</span>
         </span>
         <span
           ref={peek}
@@ -569,7 +568,7 @@ function PhoneDock({
           <div className="flex flex-none items-start gap-1.5 pr-3 pb-1.5">
             <div
               role="tablist"
-              aria-label="串口抽屉"
+              aria-label={t('Serial sheet')}
               className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pl-3 [scrollbar-width:none]"
             >
               {tabs.map((t) => (
@@ -590,7 +589,7 @@ function PhoneDock({
             </div>
             <button
               type="button"
-              aria-label={sheet === "full" ? "半屏" : "全屏"}
+              aria-label={sheet === "full" ? t('Half screen') : t('Full screen')}
               onClick={() => go({ sheet: sheet === "full" ? "half" : "full" })}
               className="inline-flex size-11 flex-none cursor-pointer items-center justify-center rounded-full border-0 bg-field p-0 text-fg"
             >
@@ -611,17 +610,17 @@ function PhoneDock({
                   }}
                   className="min-h-11 cursor-pointer border-0 bg-transparent px-2 text-xs text-muted aria-pressed:text-ok-ink"
                 >
-                  自动换行 · 跟随最新{s.follow ? "" : "（关）"}
+                  {s.follow ? t('Word wrap · follow latest') : t('Word wrap · follow latest (off)')}
                 </button>
                 <span className="flex-1" />
                 <button
                   type="button"
                   id="serialCopy"
-                  aria-label="复制串口"
+                  aria-label={t('Copy serial')}
                   onClick={() =>
                     void navigator.clipboard?.writeText(serial.text()).then(
-                      () => toast("已复制串口"),
-                      () => toast("复制失败：浏览器不让写剪贴板"),
+                      () => toast(t('Serial copied')),
+                      () => toast(t('Copy failed: the browser blocked clipboard access')),
                     )
                   }
                   className="inline-flex size-11 cursor-pointer items-center justify-center border-0 bg-transparent p-0 text-muted"
@@ -630,7 +629,7 @@ function PhoneDock({
                 </button>
                 <span
                   className="font-mono"
-                  title="UART0 波特率（模拟器里不限速，只是标注）"
+                  title={t('UART0 baud rate (the simulator doesn’t throttle; label only)')}
                 >
                   115200
                 </span>
@@ -670,7 +669,7 @@ function PhoneDock({
           )}
         </>
       )}
-      {/* 运行记录页（时间线、模拟时间）一直挂着：回放对拍读 #simtime */}
+      {/* The runs page (timeline, sim time) stays mounted: replay diffing reads #simtime */}
       <div
         hidden={!open || cur !== "runs"}
         className="flex min-h-0 flex-1 flex-col items-start gap-2 overflow-auto border-t border-line-soft px-3 py-2 [&[hidden]]:hidden"
@@ -682,7 +681,7 @@ function PhoneDock({
   );
 }
 
-/** 手机成品页的一行串口条（DESIGN_V2 §5「成品」）：只看最后一行，完整串口回实验台看 */
+/** One-line serial strip on the phone product page (DESIGN_V2 §5): last line only; full serial is on the bench */
 export function SerialStrip() {
   const r = useRef<HTMLSpanElement>(null);
   useEffect(() => {
@@ -695,7 +694,7 @@ export function SerialStrip() {
       id="mSerial"
       className="flex h-11 flex-none items-center gap-2 rounded-xl border border-line bg-surface px-3 text-xs text-fg"
     >
-      <b className="flex-none font-medium">串口</b>
+      <b className="flex-none font-medium">{t('Serial')}</b>
       <span ref={r} className="min-w-0 flex-1 truncate font-mono text-muted" />
     </div>
   );
@@ -710,14 +709,14 @@ export function Dock({
   step: string;
   timeline: ReactNode;
   simtime: ReactNode;
-  toast: (t: string) => void;
+  toast: (msg: string) => void;
 }) {
   const phone = usePhone();
   if (phone)
     return step === "bench" ? (
       <PhoneDock timeline={timeline} simtime={simtime} toast={toast} />
     ) : (
-      // 别的步骤手机上没有坞，但 #simtime / 时间线要一直挂着（main.tsx 每次模拟时间变化都去写它）
+      // Other phone steps have no dock, but #simtime / timeline stay mounted (main.tsx writes them on every sim-time change)
       <div hidden>
         {simtime}
         {timeline}
@@ -737,13 +736,13 @@ function DeskDock({
   step: string;
   timeline: ReactNode;
   simtime: ReactNode;
-  toast: (t: string) => void;
+  toast: (msg: string) => void;
 }) {
   const c = useStore(bc);
   const { tab, collapsed } = c.dock;
   const bench = step === "bench";
   const shop = step === "shop";
-  // 采购没有串口：默认看清单的变更记录
+  // Shop has no serial: default to the list's change log
   const cur: DockTab =
     shop && (tab === "serial" || tab === "analyzer" || tab === "tasks")
       ? "runs"
@@ -765,50 +764,50 @@ function DeskDock({
   }[] = [
     {
       id: "serial",
-      label: "串口",
+      label: t('Serial'),
       disabled: shop,
-      title: shop ? "采购步骤没有在跑的固件" : undefined,
+      title: shop ? t('No firmware runs in the Shop step') : undefined,
     },
     {
       id: "code",
-      label: "代码",
-      title: "台面上这个固件的源码（只读）",
+      label: t('Code'),
+      title: t('Source of the firmware on the bench (read-only)'),
     },
     {
       id: "analyzer",
-      label: "逻辑分析仪",
+      label: t('Logic analyzer'),
       disabled: !bench || !actions.analyzer,
-      title: bench ? "GPIO / PWM / I2C 波形" : "只在实验台",
+      title: bench ? t('GPIO / PWM / I2C waveforms') : t('Bench step only'),
     },
     {
       id: "runs",
-      label: bench ? "运行记录" : "时间线",
+      label: bench ? t('Runs') : t('Timeline'),
       pill: bench ? <span className={pill()}>{c.runs}</span> : undefined,
     },
     {
       id: "checks",
-      label: "检查点",
+      label: t('Checkpoints'),
       pill: c.checkpoints.length ? (
         <span className={pill()}>{`${ok}/${c.checkpoints.length}`}</span>
       ) : undefined,
     },
     {
       id: "issues",
-      label: "问题",
+      label: t('Issues'),
       pill: c.issues.length ? (
         <span className={pill(true)}>{c.issues.length}</span>
       ) : undefined,
     },
     {
       id: "tasks",
-      label: "任务",
+      label: t('Tasks'),
       disabled: shop,
       title: shop
-        ? "采购步骤没有在跑的固件"
-        : "FreeRTOS 任务时间线：每核谁在跑、谁在等（行为模拟）",
+        ? t('No firmware runs in the Shop step')
+        : t('FreeRTOS task timeline: who runs and who waits on each core (behavioral model)'),
       pill: (
         <span className="rounded-full bg-accent-bg px-1.5 text-[11px] leading-[18px] text-accent-ink">
-          新
+          {t('New')}
         </span>
       ),
     },
@@ -817,7 +816,7 @@ function DeskDock({
           {
             id: "usb" as const,
             label: "USB",
-            title: "虚拟电脑：固件枚举出的 USB 设备、键盘打的字、USB 串口",
+            title: t('Virtual PC: USB devices the firmware enumerates, typed keys, USB serial'),
           },
         ]
       : []),
@@ -825,9 +824,9 @@ function DeskDock({
       ? [
           {
             id: "ble" as const,
-            label: "蓝牙",
-            title: "空中日志：广播、连接、读写、通知（按模拟时间）",
-            pill: <span className="rounded px-[5px] text-[11px] font-medium leading-4 bg-accent-bg text-accent-ink">新</span>,
+            label: t('Bluetooth'),
+            title: t('Air log: advertising, connections, reads/writes, notifications (by sim time)'),
+            pill: <span className="rounded px-[5px] text-[11px] font-medium leading-4 bg-accent-bg text-accent-ink">{t('New')}</span>,
           },
         ]
       : []),
@@ -835,7 +834,7 @@ function DeskDock({
   return (
     <section
       id="dock"
-      aria-label="底部坞"
+      aria-label={t('Bottom dock')}
       data-tab={cur}
       data-collapsed={collapsed ? "" : undefined}
       className={cn(
@@ -844,7 +843,7 @@ function DeskDock({
     >
       <div
         aria-hidden="true"
-        title="拖动改高度"
+        title={t('Drag to resize')}
         className="dock-grip absolute top-[-4px] left-1/2 z-1 flex h-3 w-16 -translate-x-1/2 cursor-ns-resize items-center justify-center"
         onPointerDown={(e) => {
           e.preventDefault();
@@ -871,7 +870,7 @@ function DeskDock({
       <div className="flex h-[38px] flex-none items-center gap-2 border-b border-line-soft pr-2">
         <div
           role="tablist"
-          aria-label="底部坞"
+          aria-label={t('Bottom dock')}
           className="flex min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]"
         >
           {tabs.map((t) => (
@@ -892,7 +891,7 @@ function DeskDock({
           ))}
         </div>
         {cur === "serial" && !collapsed && <SerialTools toast={toast} />}
-        {/* 模拟时间一直挂着（回放对拍读它），只在运行记录页显示 */}
+        {/* Sim time stays mounted (replay diffing reads it), shown only on the runs page */}
         <span className={cn("contents", cur !== "runs" && "[&>*]:hidden")}>
           {simtime}
         </span>
@@ -901,8 +900,8 @@ function DeskDock({
           id="dockCollapse"
           className={ib}
           aria-expanded={!collapsed}
-          title={collapsed ? "展开底部坞" : "收起底部坞"}
-          aria-label={collapsed ? "展开底部坞" : "收起底部坞"}
+          title={collapsed ? t('Expand bottom dock') : t('Collapse bottom dock')}
+          aria-label={collapsed ? t('Expand bottom dock') : t('Collapse bottom dock')}
           onClick={() => {
             if (!collapsed && cur === "analyzer") actions.analyzer?.(false);
             setDock({ collapsed: !collapsed });

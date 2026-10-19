@@ -1,5 +1,5 @@
-// 实验台 v2 顶栏（DESIGN_V2 §3、§4）：面包屑 + 切换作品、保存状态、撤销 / 重做、四步条、⌘K、运行状态、换固件、⋯ 菜单。
-// 数据来自 chrome.ts（bc）；按钮的动作由 main.tsx / 实验台注册，没注册（不在实验台、会话还没起来）就灰掉。
+// Lab v2 top bar (DESIGN_V2 §3, §4): breadcrumb + work switch, saved state, undo / redo, steps, ⌘K, run state, firmware, ⋯ menu.
+// Data comes from chrome.ts (bc); actions are registered by main.tsx / the bench and buttons grey out until they are.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '../ui/cn';
 import { Logo } from '../ui/logo';
@@ -15,14 +15,16 @@ import { STEPS, type StepId } from './types';
 import { WORKS } from './works';
 import { CHIP_LABEL, type SimChip } from '../chips';
 import { BLANK_LAB, HOME, LICENSES, lab, selectLink } from '../ui/links';
+import { LangSelect } from '../ui/lang';
+import { t } from '../i18n';
 
-/** 32×32 图标按钮 */
+/** 32×32 icon button */
 const ib =
   'ib inline-flex size-8 flex-none cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-fg hover:bg-field disabled:cursor-not-allowed disabled:text-muted disabled:opacity-50 disabled:hover:bg-transparent';
 export const menuPanel = 'absolute z-30 mt-1 min-w-[220px] rounded-(--r) border border-line bg-surface p-1 text-[13px] text-fg shadow-panel';
 export const menuItem = 'flex w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2.5 py-1.5 text-left text-fg hover:bg-field disabled:cursor-not-allowed disabled:text-muted disabled:hover:bg-transparent';
 
-/** 点外面 / Esc 关掉的下拉 */
+/** Dropdown closed by an outside click / Esc */
 export function usePop() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -40,7 +42,7 @@ export function usePop() {
   return { open, setOpen, ref };
 }
 
-/** phone：手机顶栏居中的作品名（≥ 44 高，菜单铺满宽度） */
+/** phone: work name centered in the phone top bar (≥ 44 tall, full-width menu) */
 export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
   const { open, setOpen, ref } = usePop();
   const cur = new URLSearchParams(location.search).get('work') ?? 'weather';
@@ -52,7 +54,7 @@ export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
           type="button"
           aria-haspopup="menu"
           aria-expanded={open}
-          title="切换作品"
+          title={t('Switch work')}
           onClick={() => setOpen(!open)}
           className={cn('inline-flex min-h-8 max-w-[300px] cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1 text-fg hover:bg-field', phone && 'min-h-11 max-w-full px-2 text-[15px]')}
         >
@@ -63,7 +65,7 @@ export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
         </button>
       </h1>
       {open && (
-        <div role="menu" aria-label="切换作品" id="workMenu" className={cn(menuPanel, 'left-0 max-h-[70vh] overflow-auto', phone && 'fixed top-12 right-2 left-2 [&_a]:min-h-11')}>
+        <div role="menu" aria-label={t('Switch work')} id="workMenu" className={cn(menuPanel, 'left-0 max-h-[70vh] overflow-auto', phone && 'fixed top-12 right-2 left-2 [&_a]:min-h-11')}>
           {Object.values(WORKS).map((w) => (
             <a
               key={w.id}
@@ -75,7 +77,7 @@ export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
             >
               <span className="inline-flex w-4 flex-none justify-center text-accent-ink">{w.id === cur && <Icon n="check" size={14} />}</span>
               <span className="min-w-0 flex-1 truncate">{w.title}</span>
-              <span className="flex-none font-mono text-[11px] text-muted">{w.checkpoints.length ? `${w.checkpoints.length} 个检查点` : '台面'}</span>
+              <span className="flex-none font-mono text-[11px] text-muted">{w.checkpoints.length ? t('{n} checkpoints', { n: w.checkpoints.length }) : t('Bench only')}</span>
             </a>
           ))}
         </div>
@@ -84,27 +86,27 @@ export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
   );
 }
 
-/** 面包屑首段：作品 → 作品列表；空白 / 示例 → 实验台（DESIGN_V2 §6.2 词表：入口统一叫「实验台」） */
+/** First crumb: works → work list; blank / example → Lab (DESIGN_V2 §6.2 glossary: the entry is always called Lab) */
 export const CRUMB = BLANK
-  ? { href: BLANK_LAB, label: '实验台', title: '回到空白实验台' }
+  ? { href: BLANK_LAB, label: t('Lab'), title: t('Back to the blank lab') }
   : CUSTOM
-    ? { href: selectLink(encode(decode(location.search))), label: '选板', title: '回到选板改零件（这里的清单和台面留在本机）' }
-    : { href: HOME, label: '作品', title: '回到作品列表（未保存的连线会留在本机）' };
+    ? { href: selectLink(encode(decode(location.search))), label: t('Board picker'), title: t('Back to the board picker to change parts (this BOM and bench stay on this device)') }
+    : { href: HOME, label: t('Works'), title: t('Back to the work list (unsaved wiring stays on this device)') };
 
 function Breadcrumb({ name }: { name: string }) {
   const { saved, chip } = useStore(bc);
-  // 每 30 s 刷新「刚刚 / n 分钟前」
+  // Refresh "just now / n minutes ago" every 30 s
   const [, tick] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => tick((x) => x + 1), 30_000);
-    return () => clearInterval(t);
+    const iv = setInterval(() => tick((x) => x + 1), 30_000);
+    return () => clearInterval(iv);
   }, []);
   return (
     <div className="crumb flex min-w-0 flex-none flex-col justify-center">
       <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
-        <a href={HOME} aria-label="试板首页" className="brand inline-flex flex-none items-center gap-1.5 leading-none text-fg no-underline">
+        <a href={HOME} aria-label={t('TryBoard home')} className="brand inline-flex flex-none items-center gap-1.5 leading-none text-fg no-underline">
           <Logo size={22} />
-          <b className="text-[14px] max-[1500px]:hidden">试板</b>
+          <b className="text-[14px] max-[1500px]:hidden">{t('TryBoard')}</b>
         </a>
         <a
           id="crumbHome"
@@ -115,7 +117,7 @@ function Breadcrumb({ name }: { name: string }) {
           {CRUMB.label}
         </a>
         <span className="text-muted">/</span>
-        <WorkMenu name={EXAMPLE_ID ? `示例 · ${name}` : name} />
+        <WorkMenu name={EXAMPLE_ID ? t('Example · {name}', { name }) : name} />
         {EXAMPLE_ID && (
           <span id="chipBadge" className="flex-none rounded-md border border-line px-1.5 py-px font-mono text-[11px] text-muted max-[1500px]:hidden">
             {CHIP_LABEL[chip as SimChip] ?? 'ESP32-C3'}
@@ -133,7 +135,7 @@ function StepBar({ step }: { step: StepId }) {
   const { locks, done, checkpoints } = useStore(bc);
   const ok = checkpoints.filter((c) => c.state === 'ok' || c.state === 'ref').length;
   return (
-    <nav id="steps" role="tablist" aria-label={TWO_STEPS ? '两个步骤' : '四个步骤'} className="steps flex min-w-0 items-center justify-center">
+    <nav id="steps" role="tablist" aria-label={TWO_STEPS ? t('Two steps') : t('Four steps')} className="steps flex min-w-0 items-center justify-center">
       {STEPS.filter((s) => shownSteps().includes(s.id)).map((s, i) => {
         const on = s.id === step;
         const lock = locks[s.id];
@@ -146,7 +148,7 @@ function StepBar({ step }: { step: StepId }) {
               data-step={s.id}
               aria-selected={on}
               data-locked={lock ? '' : undefined}
-              title={lock ?? (done[s.id] ? `${s.label} · 已完成` : s.label)}
+              title={lock ?? (done[s.id] ? t('{step} · done', { step: s.label }) : s.label)}
               onClick={() => (location.hash = s.id)}
               className={cn(
                 'inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border-0 bg-transparent px-2.5 text-[13px] whitespace-nowrap text-muted hover:bg-field',
@@ -171,26 +173,26 @@ function StepBar({ step }: { step: StepId }) {
 }
 
 export const RUN_TEXT: Record<string, [string, string]> = {
-  loading: ['加载中', 'bg-muted'],
-  run: ['运行中', 'bg-ok'],
-  pause: ['已暂停', 'bg-warn'],
-  seek: ['回退停住', 'bg-accent'],
-  busy: ['回退中…', 'bg-accent'],
-  idle: ['没在跑', 'bg-muted'],
-  nofw: ['没有固件', 'bg-muted'],
+  loading: [t('Loading'), 'bg-muted'],
+  run: [t('Running'), 'bg-ok'],
+  pause: [t('Paused'), 'bg-warn'],
+  seek: [t('Rewound, stopped'), 'bg-accent'],
+  busy: [t('Rewinding…'), 'bg-accent'],
+  idle: [t('Not running'), 'bg-muted'],
+  nofw: [t('No firmware'), 'bg-muted'],
 };
 export const SPEEDS = [1, 2, 0.5];
 
 function RunGroup({ bench }: { bench: boolean }) {
   const { run, speed, sound } = useStore(bc);
-  const [t, dot] = RUN_TEXT[run];
+  const [txt, dot] = RUN_TEXT[run];
   const live = bench && (run === 'run' || run === 'pause' || run === 'seek');
   return (
-    <div role="group" aria-label="运行状态" id="runGroup" data-run={run} className="flex h-8 flex-none items-center gap-0.5 rounded-lg border border-line pr-0.5 pl-2.5 max-[1280px]:hidden">
+    <div role="group" aria-label={t('Run state')} id="runGroup" data-run={run} className="flex h-8 flex-none items-center gap-0.5 rounded-lg border border-line pr-0.5 pl-2.5 max-[1280px]:hidden">
       <span className="inline-flex items-center gap-1.5 pr-1 text-xs whitespace-nowrap">
         <span className={cn('size-2 rounded-full', dot, run === 'run' && 'animate-pulse')} />
-        {/* 别的步骤里运行按钮是灰的：写明是实验台那边在跑，不然"运行中"配灰按钮像坏了 */}
-        <span id="runState" title={bench ? undefined : '运行控制在实验台；这一步只显示状态'}>{bench ? t : `实验台${t}`}</span>
+        {/* Off-bench the run buttons are grey: say it is the bench running, else "Running" next to grey buttons looks broken */}
+        <span id="runState" title={bench ? undefined : t('Run controls live on the bench; this step only shows the state')}>{bench ? txt : t('Bench: {state}', { state: txt })}</span>
       </span>
       {actions.speed && (
         <button
@@ -198,7 +200,7 @@ function RunGroup({ bench }: { bench: boolean }) {
           id="runSpeed"
           className={cn(ib, 'w-auto px-1.5 font-mono text-xs')}
           disabled={!live}
-          title="倍速：只改跑得快慢（墙钟），模拟时刻和结果不变"
+          title={t('Speed: changes wall-clock pace only; simulated time and results stay the same')}
           onClick={() => actions.speed!(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length])}
         >
           {speed}×
@@ -209,17 +211,17 @@ function RunGroup({ bench }: { bench: boolean }) {
         id="runPause"
         className={ib}
         disabled={!live}
-        title={run === 'run' ? '暂停' : run === 'seek' ? '从这一刻接着跑' : '继续'}
-        aria-label={run === 'run' ? '暂停' : '继续'}
+        title={run === 'run' ? t('Pause') : run === 'seek' ? t('Continue from this moment') : t('Resume')}
+        aria-label={run === 'run' ? t('Pause') : t('Resume')}
         onClick={() => (run === 'run' ? actions.pause?.() : actions.resume?.())}
       >
         <Icon n={run === 'run' ? 'pause' : 'play'} size={15} />
       </button>
-      <button type="button" id="runRestart" className={ib} disabled={!bench || !actions.reboot || run === 'loading' || run === 'nofw'} title="重启（重新上电）" aria-label="重启" onClick={() => actions.reboot?.()}>
+      <button type="button" id="runRestart" className={ib} disabled={!bench || !actions.reboot || run === 'loading' || run === 'nofw'} title={t('Restart (power cycle)')} aria-label={t('Restart')} onClick={() => actions.reboot?.()}>
         <Icon n="restart" size={15} />
       </button>
       {bench && sound.has && (
-        <button type="button" id="sound" className={ib} aria-pressed={sound.on} title={sound.on ? '声音：开（点一下静音）' : '声音：关（默认静音，点一下出声）'} aria-label={sound.on ? '声音：开' : '声音：关'} onClick={() => actions.sound?.()}>
+        <button type="button" id="sound" className={ib} aria-pressed={sound.on} title={sound.on ? t('Sound: on (click to mute)') : t('Sound: off (muted by default, click to unmute)')} aria-label={sound.on ? t('Sound: on') : t('Sound: off')} onClick={() => actions.sound?.()}>
           <Icon n={sound.on ? 'sound' : 'mute'} size={15} />
         </button>
       )}
@@ -227,13 +229,13 @@ function RunGroup({ bench }: { bench: boolean }) {
   );
 }
 
-/** phone：手机顶栏右边的 ⋯（44 的按钮、铺开的菜单，另加主题和换固件——手机顶栏放不下它们） */
-export function MoreMenu({ toast, phone }: { toast: (t: string) => void; phone?: boolean }) {
+/** phone: the ⋯ on the right of the phone top bar (44 px button, wide menu, plus theme / language / firmware that don't fit there) */
+export function MoreMenu({ toast, phone }: { toast: (msg: string) => void; phone?: boolean }) {
   const { open, setOpen, ref } = usePop();
   const [dark, setDark] = useState(currentTheme() === 'dark');
   useEffect(() => {
     if (!phone) return;
-    const off = onTheme((t) => setDark(t === 'dark'));
+    const off = onTheme((th) => setDark(th === 'dark'));
     return () => void off();
   }, [phone]);
   const go = (fn: () => void) => () => {
@@ -242,7 +244,7 @@ export function MoreMenu({ toast, phone }: { toast: (t: string) => void; phone?:
   };
   return (
     <div ref={ref} className="relative flex-none">
-      <button type="button" id="moreBtn" className={cn(ib, phone && 'size-11')} aria-haspopup="menu" aria-expanded={open} aria-label="更多：分享、导出输入日志、交给 AI 的任务书" title="更多" onClick={() => setOpen(!open)}>
+      <button type="button" id="moreBtn" className={cn(ib, phone && 'size-11')} aria-haspopup="menu" aria-expanded={open} aria-label={t('More: share, export input log, task brief for AI')} title={t('More')} onClick={() => setOpen(!open)}>
         <Icon n="more" />
       </button>
       {open && (
@@ -254,32 +256,32 @@ export function MoreMenu({ toast, phone }: { toast: (t: string) => void; phone?:
             className={menuItem}
             onClick={go(() => {
               void navigator.clipboard?.writeText(location.href).then(
-                () => toast('已复制本页链接（只含作品和步骤；你的改动留在本机）'),
-                () => toast('复制失败：浏览器不让写剪贴板'),
+                () => toast(t('Link to this page copied (work and step only; your changes stay on this device)')),
+                () => toast(t('Copy failed: the browser blocked clipboard access')),
               );
             })}
           >
             <Icon n="link" size={15} />
             <span className="flex-1">
-              复制本页链接
-              <span className="block text-[11px] text-muted">只含作品和步骤，改动不随链接走</span>
+              {t('Copy link to this page')}
+              <span className="block text-[11px] text-muted">{t('Work and step only; changes don’t travel with the link')}</span>
             </span>
           </button>
           <button type="button" role="menuitem" data-more="inputs" className={menuItem} disabled={!actions.exportInputs} onClick={go(() => actions.exportInputs?.())}>
             <Icon n="download" size={15} />
             <span className="flex-1">
-              导出输入日志
-              <span className="block text-[11px] text-muted">命令行 tryboard run --inputs 可逐字节重放</span>
+              {t('Export input log')}
+              <span className="block text-[11px] text-muted">{t('Replay byte for byte with tryboard run --inputs')}</span>
             </span>
           </button>
           <button type="button" role="menuitem" data-more="brief" className={menuItem} disabled={!actions.brief} onClick={go(() => actions.brief?.())}>
             <Icon n="doc" size={15} />
             <span className="flex-1">
-              交给 AI 的任务书
-              <span className="block text-[11px] text-muted">当前检查点的目标、接线和验收命令</span>
+              {t('Task brief for AI')}
+              <span className="block text-[11px] text-muted">{t('Goal, wiring and check command of the current checkpoint')}</span>
             </span>
           </button>
-          {/* 换固件：手机顶栏没地方放；窄桌面（≤ 1100px）顶栏的「换固件 ▾」也收起了，都从 ⋯ 进 */}
+          {/* Firmware: no room on the phone bar, and narrow desktops (≤ 1100px) hide the top-bar menu, so both enter from ⋯ */}
           <button
             type="button"
             role="menuitem"
@@ -292,24 +294,28 @@ export function MoreMenu({ toast, phone }: { toast: (t: string) => void; phone?:
           >
             <Icon n="upload" size={15} />
             <span className="flex-1">
-              换固件
-              <span className="block text-[11px] text-muted">示例、参考固件或你自己的 .bin</span>
+              {t('Change firmware')}
+              <span className="block text-[11px] text-muted">{t('Examples, reference firmware or your own .bin')}</span>
             </span>
           </button>
           {phone && (
             <>
               <button type="button" role="menuitem" data-more="theme" className={cn(menuItem, 'theme-btn')} aria-pressed={dark} onClick={go(() => setTheme(dark ? 'light' : 'dark'))}>
                 <Icon n={dark ? 'moon' : 'sun'} size={15} />
-                <span className="flex-1">{dark ? '切到亮色' : '切到暗色'}</span>
+                <span className="flex-1">{dark ? t('Switch to light') : t('Switch to dark')}</span>
               </button>
+              <div role="none" data-more="lang" className="flex min-h-11 items-center gap-2 px-2.5 py-1">
+                <span className="flex-1">{t('Language')}</span>
+                <LangSelect className="min-w-[150px] [&_select]:w-full" />
+              </div>
             </>
           )}
           <div className="my-1 h-px bg-line" />
           <a role="menuitem" data-more="licenses" href={LICENSES} className={cn(menuItem, 'no-underline')}>
             <Icon n="doc" size={15} />
             <span className="flex-1">
-              授权与致谢
-              <span className="block text-[11px] text-muted">第三方组件、固件、字体、3D 模型的许可证</span>
+              {t('Licenses and credits')}
+              <span className="block text-[11px] text-muted">{t('Licenses of third-party components, firmware, fonts and 3D models')}</span>
             </span>
           </a>
           <p lang="en" className="m-0 px-2.5 pt-1 pb-1.5 text-[10.5px] leading-snug text-muted">
@@ -321,14 +327,14 @@ export function MoreMenu({ toast, phone }: { toast: (t: string) => void; phone?:
   );
 }
 
-/** 主题切换：顶栏里只放图标（太阳 / 月亮），文字在 title */
+/** Theme toggle: icon only (sun / moon) in the top bar, text in title */
 function ThemeBtn() {
   const [dark, setDark] = useState(currentTheme() === 'dark');
   useEffect(() => {
-    const off = onTheme((t) => setDark(t === 'dark'));
+    const off = onTheme((th) => setDark(th === 'dark'));
     return () => void off();
   }, []);
-  const title = dark ? '切到亮色' : '切到暗色';
+  const title = dark ? t('Switch to light') : t('Switch to dark');
   return (
     <button type="button" className={cn(ib, 'theme-btn')} title={title} aria-label={title} aria-pressed={dark} onClick={() => setTheme(dark ? 'light' : 'dark')}>
       <Icon n={dark ? 'moon' : 'sun'} />
@@ -336,9 +342,9 @@ function ThemeBtn() {
   );
 }
 
-export function TopBar(p: { step: StepId; workName: string; bare?: boolean; right: ReactNode; toast: (t: string) => void }) {
+export function TopBar(p: { step: StepId; workName: string; bare?: boolean; right: ReactNode; toast: (msg: string) => void }) {
   const { undo, redo } = useStore(bc);
-  // 采购也有自己的清单历史（U-14）：撤销 / 重做在这两步可用
+  // Shop has its own BOM history too (U-14): undo / redo work on these two steps
   const bench = p.step === 'bench';
   const undoable = bench || p.step === 'shop';
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -352,10 +358,10 @@ export function TopBar(p: { step: StepId; workName: string; bare?: boolean; righ
       <Breadcrumb name={p.workName} />
       <span aria-hidden="true" className="h-6 w-px flex-none bg-line" />
       <div className="flex flex-none items-center">
-        <button type="button" id="undoBtn" className={ib} disabled={!undoable || !undo} title={undoable ? `撤销（${mac ? '⌘Z' : 'Ctrl Z'}）：回到时间线上一步` : '只有采购、实验台能撤销'} aria-label="撤销" onClick={() => actions.undo?.()}>
+        <button type="button" id="undoBtn" className={ib} disabled={!undoable || !undo} title={undoable ? t('Undo ({key}): back one step on the timeline', { key: mac ? '⌘Z' : 'Ctrl Z' }) : t('Only Shop and Bench can undo')} aria-label={t('Undo')} onClick={() => actions.undo?.()}>
           <Icon n="undo" />
         </button>
-        <button type="button" id="redoBtn" className={ib} disabled={!undoable || !redo} title={undoable ? `重做（${mac ? '⇧⌘Z' : 'Ctrl Shift Z'}）` : '只有采购、实验台能重做'} aria-label="重做" onClick={() => actions.redo?.()}>
+        <button type="button" id="redoBtn" className={ib} disabled={!undoable || !redo} title={undoable ? t('Redo ({key})', { key: mac ? '⇧⌘Z' : 'Ctrl Shift Z' }) : t('Only Shop and Bench can redo')} aria-label={t('Redo')} onClick={() => actions.redo?.()}>
           <Icon n="redo" />
         </button>
       </div>
@@ -367,6 +373,7 @@ export function TopBar(p: { step: StepId; workName: string; bare?: boolean; righ
       <FwMenu />
       {p.right}
       <MoreMenu toast={p.toast} />
+      <LangSelect />
       <ThemeBtn />
     </header>
   );

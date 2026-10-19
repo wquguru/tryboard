@@ -1,6 +1,5 @@
-// ④ 倾角仪成品（P2-03）：手里端着的小盒子（ESP32-S3 + GY-521 装在透明亚克力壳里）。
-// 拖动 = 转动盒子（轨迹球，物体四元数），姿态换算见 imupose.ts：四元数 → 欧拉角 → 内核算重力分量与角速度。
-// 盒子姿态和实验台的倾斜滑块是同一份（session.setPose），哪边改另一边都跟着变。
+// Step 4 inclinometer (P2-03): an ESP32-S3 + GY-521 in a clear box; dragging rotates it (trackball, see imupose.ts).
+// The pose is shared with the bench tilt sliders via session.setPose, so either side follows the other.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
@@ -8,9 +7,9 @@ import { poseToThree, threeToPose, type Pose } from '../imupose';
 import { currentTheme, onTheme } from '../theme';
 
 export interface TiltOptions {
-  /** 当前姿态（session / store 里那份） */
+  /** Current pose (the one in session / store). */
   pose(): Pose;
-  /** 用户拖动转了盒子：move = 拖动中（≈30 Hz），end = 松手 */
+  /** User rotated the box: move = while dragging (≈30 Hz), end = released. */
   onPose(p: Pose, phase: 'move' | 'end'): void;
 }
 
@@ -18,7 +17,7 @@ export interface Tilt3D {
   start(): void;
   stop(): void;
   dispose(): void;
-  /** 盒子中心在页面上的位置（clientX/Y），给测试用真实鼠标去拖 */
+  /** Box center on the page (clientX/Y), so tests can drag it with a real mouse. */
   centerPos(): [number, number] | null;
 }
 
@@ -39,7 +38,7 @@ function label(text: string, color: string) {
   return s;
 }
 
-/** 传感器坐标轴（X 红、Y 绿、Z 蓝），和 GY-521 丝印一致：X = +x，Y = −z，Z = +y（单位 cm） */
+/** Sensor axes (X red, Y green, Z blue) matching GY-521 silkscreen: X = +x, Y = −z, Z = +y (cm). */
 function axes(len: number) {
   const g = new THREE.Group();
   const mk = (dir: THREE.Vector3, color: number, name: string, css: string) => {
@@ -86,7 +85,7 @@ export function createTilt3D(container: HTMLElement, o: TiltOptions): Tilt3D {
   camera.position.set(0, 9, 20);
   camera.lookAt(0, 0, 0);
 
-  // 盒子：6 × 4 × 1.8 cm 亚克力壳，里面一块 S3 开发板（绿）和 GY-521（蓝，坐标轴丝印朝上）
+  // Box: 6 × 4 × 1.8 cm acrylic with an S3 board (green) and GY-521 (blue, axis silkscreen up).
   const dev = new THREE.Group();
   scene.add(dev);
   const shell = new THREE.Mesh(
@@ -98,7 +97,7 @@ export function createTilt3D(container: HTMLElement, o: TiltOptions): Tilt3D {
   const pcb = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.16, 2.6), new THREE.MeshStandardMaterial({ color: 0x1f6f43, roughness: 0.5 }));
   pcb.position.y = -0.55;
   dev.add(pcb);
-  // ESP32-S3-WROOM 模组（1.8 × 2.55 cm 屏蔽罩）
+  // ESP32-S3-WROOM module (1.8 × 2.55 cm shield can).
   const mod = new THREE.Mesh(new THREE.BoxGeometry(2.55, 0.32, 1.8), new THREE.MeshStandardMaterial({ color: 0xc9ccd1, metalness: 0.9, roughness: 0.3 }));
   mod.position.set(-1.2, -0.31, 0);
   dev.add(mod);
@@ -111,7 +110,7 @@ export function createTilt3D(container: HTMLElement, o: TiltOptions): Tilt3D {
   const ax = axes(2.6);
   ax.position.copy(chip.position);
   dev.add(ax);
-  // 世界里的重力方向（灰色箭头，始终朝下）：看传感器 Z 轴和它的夹角就是倾斜角
+  // World gravity (grey arrow, always down): its angle to the sensor Z axis is the tilt.
   const g = new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), new THREE.Vector3(5.2, 2.6, 0), 2.6, 0x8c8c8c, 0.5, 0.3);
   scene.add(g);
   const gl = label('g', '#8C8C8C');
@@ -139,7 +138,7 @@ export function createTilt3D(container: HTMLElement, o: TiltOptions): Tilt3D {
     return threeToPose([e[0], e[4], e[8], e[1], e[5], e[9], e[2], e[6], e[10]]);
   };
 
-  // 拖动：横向 = 绕相机竖直轴、纵向 = 绕相机水平轴（0.5°/像素）
+  // Drag: horizontal spins about the camera's vertical axis, vertical about its horizontal axis (0.5°/px).
   let drag: { x: number; y: number; t: number } | null = null;
   const qd = new THREE.Quaternion();
   const axis = new THREE.Vector3();
@@ -178,7 +177,7 @@ export function createTilt3D(container: HTMLElement, o: TiltOptions): Tilt3D {
   let last = '';
   const tick = () => {
     raf = requestAnimationFrame(tick);
-    // 别处（实验台滑块、放平按钮）改了姿态，盒子跟上；拖动时以手为准
+    // Follow pose changes from elsewhere (sliders, level button), except while the user is dragging.
     if (!drag) {
       const p = o.pose();
       const k = `${p.pitch},${p.roll},${p.yaw}`;

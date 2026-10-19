@@ -1,6 +1,5 @@
-// 底部坞「代码」页签（P2-15）的 C 高亮：只分注释 / 字符串 / 预处理 / 关键字 / 类型 / 数字 / 宏常量，够读就行。
-// 自己写而不引高亮库：首包预算紧，示例源码都是 ESP-IDF 风格的 C，规则很少。按行切，块注释跨行时带状态。
-// 纯函数，web/test/ctoken.test.ts 直接测。
+// C highlighting for the dock's Code tab (P2-15): comment / string / preprocessor / keyword / type / number / macro only.
+// Hand-written instead of a library: the first-load budget is tight and the samples are plain ESP-IDF C. Tested by ctoken.test.ts.
 
 export type TokKind = 'com' | 'str' | 'pre' | 'kw' | 'type' | 'num' | 'mac' | '';
 export interface Tok {
@@ -13,7 +12,7 @@ const TYPES = new Set('void char short int long float double signed unsigned boo
 const IDENT = /[A-Za-z_]\w*/y;
 const NUM = /(?:0[xX][0-9a-fA-F]+|\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)[uUlLfF]*/y;
 
-/** 把源码切成行，每行一串记号；块注释跨行时下一行接着当注释 */
+/** Split source into lines of tokens; an open block comment carries over to the next line. */
 export function tokenize(src: string): Tok[][] {
   const out: Tok[][] = [];
   let inCom = false;
@@ -37,7 +36,7 @@ export function tokenize(src: string): Tok[][] {
       i = e + 2;
       inCom = false;
     }
-    // 预处理行整行一个颜色（里面的注释仍按注释）
+    // A preprocessor line is one color (comments inside it stay comments).
     if (/^\s*#/.test(line.slice(i))) {
       const c = line.indexOf('//', i);
       const b = line.indexOf('/*', i);

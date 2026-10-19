@@ -1,7 +1,7 @@
-// 实验台 v2 左栏（DESIGN_V2 §4.2）：构建树 / 元件库 / 接线表 三个页签 + 「加零件」+ 底部检查点卡。
-// 构建树仍是 shell 的 tree 面板（各步骤自己画）；元件库、接线表和检查点卡由实验台填进 left 这个 store，
-// 别的步骤不填，左栏就只剩构建树。
+// Lab v2 left column (DESIGN_V2 §4.2): build tree / parts library / wiring tabs, "Add part", checkpoint card at the bottom.
+// The tree is the shell's panel (each step draws it); only the bench fills the `left` store, other steps show just the tree.
 import { useState, type ReactNode } from "react";
+import { t } from "../i18n";
 import { cn } from "../ui/cn";
 import { commit, useStore } from "./react";
 import { createStore } from "./store";
@@ -30,33 +30,33 @@ export function LeftColumn({ step, tree }: { step: string; tree: ReactNode }) {
   const d = useStore(left);
   const [tab, setTab] = useState<Tab>("tree");
   const bench = step === "bench";
-  // 只有实验台有元件库和接线表；离开实验台回到构建树
+  // Only the bench has the library and wiring tabs; elsewhere fall back to the tree.
   const cur: Tab = bench ? tab : "tree";
   const m = useStore(mui);
   const phone = usePhone();
   if (phone && bench) {
-    // 手机：整页（DESIGN_V2 §5「元件库整页」）。页签存在 mui.lib，工具条「加零件」/ 横幅「看接线表」直接跳到对应页
+    // Phone: full page (DESIGN_V2 §5). Tab lives in mui.lib so toolbar "Add part" / banner "wiring" jump straight to it.
     const pc: Tab = m.lib ?? "lib";
     return (
       <>
         <div className="flex-none px-4 pt-[env(safe-area-inset-top)]">
           <SheetHead
             title={
-              pc === "lib" ? "加零件" : pc === "wires" ? "接线表" : "构建树"
+              pc === "lib" ? t("Add part") : pc === "wires" ? t("Wiring") : t("Build tree")
             }
             id="libClose"
             onClose={() => setMui({ lib: null })}
           />
           <div
             role="tablist"
-            aria-label="零件页"
+            aria-label={t("Parts pages")}
             className="mt-1 mb-2 flex gap-0.5 rounded-xl bg-field p-0.5"
           >
             {(
               [
-                ["lib", "元件库"],
-                ["tree", "构建树"],
-                ["wires", `接线表${d.wireCount ? ` ${d.wireCount}` : ""}`],
+                ["lib", t("Parts library")],
+                ["tree", t("Build tree")],
+                ["wires", `${t("Wiring")}${d.wireCount ? ` ${d.wireCount}` : ""}`],
               ] as [Tab, string][]
             ).map(([id, label]) => (
               <button
@@ -99,14 +99,14 @@ export function LeftColumn({ step, tree }: { step: string; tree: ReactNode }) {
       {bench && (
         <div
           role="tablist"
-          aria-label="左栏"
+          aria-label={t("Left column")}
           className="mx-2 mt-2 flex flex-none gap-0.5 rounded-lg bg-field p-0.5"
         >
           {(
             [
-              ["tree", "构建树"],
-              ["lib", "元件库"],
-              ["wires", `接线表${d.wireCount ? ` ${d.wireCount}` : ""}`],
+              ["tree", t("Build tree")],
+              ["lib", t("Parts library")],
+              ["wires", `${t("Wiring")}${d.wireCount ? ` ${d.wireCount}` : ""}`],
             ] as [Tab, string][]
           ).map(([id, label]) => (
             <button
@@ -138,16 +138,16 @@ export function LeftColumn({ step, tree }: { step: string; tree: ReactNode }) {
         <div className="min-h-0 flex-1 overflow-auto px-2 py-2">{d.wires}</div>
       )}
       {bench && (
-        // 固定底栏：上边线把列表截断处标清楚，构建树滚到底时最后一行（固件）完整露出、不被按钮压住
+        // Fixed footer: the top border marks where the list is cut, so the tree's last row (firmware) isn't hidden by the button.
         <div className="flex-none border-t border-line-soft px-2 pt-2 pb-2">
           <a
             id="addPart"
             href="#shop"
-            title="整套零件从采购清单来：在采购里勾上，再点「下一步：实验台」；单个零件可以从上面的元件库拖到台面（或点「放」）再逐根接线"
+            title={t("Full part sets come from the shopping list: tick them in Shop, then \"Next: Lab\". Single parts can be dragged from the library above onto the bench (or click \"Place\") and wired one by one.")}
             className="flex h-8 items-center justify-center gap-1.5 rounded-lg border border-dashed border-hover-line text-xs text-muted no-underline hover:border-accent hover:text-accent-ink"
           >
             <Icon n="plus" size={14} />
-            加零件
+            {t("Add part")}
           </a>
         </div>
       )}

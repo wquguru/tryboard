@@ -1,9 +1,7 @@
-// 实验台底部的逻辑分析仪（P1-05）：多通道时间轴（I2C 的 SCL / SDA + 解码泡泡、PWM、GPIO、板载彩灯），
-// 滚轮缩放、拖动平移、点击放光标读时间差。数据是内核按 CPU 周期盖戳的事件（session.io），不是采样：
-// I2C 来自主机模型的事务层，SCL / SDA 波形按事务和位时序画出来（位级以下标"按事务重建"）；PWM 按占空比 / 频率画，
-// 缩小到一个周期不到 3 像素时画包络和"50 Hz · 1.675 ms"。只画可视窗口（二分查找起点），canvas 2D。
-// 跟随：右边缘贴着当前模拟时刻；时间线回退后模拟停在回退点、事件按重放重建，分析仪跟着停在那一刻。
+// Bench logic analyzer (P1-05). Data are cycle-stamped core events (session.io), not samples: SCL / SDA are rebuilt from
+// I2C transactions and bit timing, PWM from duty / frequency (envelope below 3 px per period). Follow pins the right edge to sim time.
 import type { PartSpec } from '../board3d';
+import { t } from '../i18n/index.ts';
 import type { StepCtx } from './types';
 import { BOOT_GPIO, RGB_GPIO, type SimChip } from '../chips';
 import { currentTheme, onTheme } from '../theme';
@@ -16,19 +14,19 @@ export type Channel =
 
 export interface Analyzer {
   readonly isOpen: boolean;
-  /** 打开；给了针脚（'GPIO4' / 'I2C0'）就确保有这个通道并滚到它、闪一下 */
+  /** Open; with a pin ('GPIO4' / 'I2C0') ensure that channel exists, scroll to it and flash it */
   open(focus?: string): void;
   close(): void;
   toggle(): void;
-  /** 视图（测试 / ⌘K 用）：窗口 [end - span, end]，秒 */
+  /** View (for tests / ⌘K): window [end - span, end] in seconds */
   view(): { end: number; span: number; follow: boolean };
   setView(v: { end?: number; span?: number; follow?: boolean }): void;
-  /** 把窗口对到第 i 个（负数从后数）I2C 事务，按 pad 倍宽度留边 */
+  /** Fit the window to the i-th I2C transaction (negative counts from the end), padded by pad × width */
   zoomToTxn(i: number, pad?: number, filter?: (x: I2cTxn) => boolean): I2cTxn | null;
   channels(): Channel[];
-  /** 画面上看得到的 I2C 泡泡文字（测试读） */
+  /** Visible I2C bubble texts (read by tests) */
   visibleBubbles(): string[];
-  /** 光标 A / B（秒）；null 清掉 */
+  /** Cursor A / B (seconds); null clears */
   setCursor(which: 'a' | 'b', t: number | null): void;
 }
 
@@ -36,14 +34,14 @@ const LABEL_W = 96;
 const RULER_H = 20;
 const ROW_H = { scl: 22, sda: 22, dec: 46, pin: 34, ws: 22 } as const;
 const css = (n: string, fb: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || fb;
-// canvas 里的半透明叠层没有对应的 CSS 变量（canvas 不认 color-mix），按主题各备一套；数值取自 lab.css 两套变量
+// canvas can't use color-mix, so translucent overlays get a per-theme palette; values come from lab.css
 const PAL = {
   light: { bg: '#FFFFFF', nodata: '#F4F4F4C0', future: '#FAFAFAD0', tag: '#FFFFFFE0', wsTag: '#FFFFFFD8', onAccent: '#FFFFFF', hover: '#00000022', env: '#0D99FF33', envMid: '#0D99FF99', txn: '#0D99FF40', abg: '#E5F4FF', okBg: '#E8F7EE', badBg: '#FEF2F2', bubbleFg: '#1E1E1E', wsOff: '#222222' },
   dark: { bg: '#1E2024', nodata: '#2A2C31C0', future: '#17181BD0', tag: '#1E2024E0', wsTag: '#1E2024D8', onAccent: '#08141F', hover: '#FFFFFF33', env: '#3AA8FF33', envMid: '#3AA8FF99', txn: '#3AA8FF40', abg: '#10304A', okBg: '#163826', badBg: '#3B1E19', bubbleFg: '#E8EAED', wsOff: '#0E0F11' },
 };
 
 let single: Analyzer | null = null;
-/** 整页一个分析仪（实验台挂载时建，⌘K 也用它） */
+/** One analyzer per page (created on bench mount, also used by ⌘K) */
 export function getAnalyzer(ctx: StepCtx): Analyzer {
   single ??= createAnalyzer(ctx);
   return single;
@@ -58,14 +56,14 @@ function defaultChannels(parts: PartSpec[], chip: string): Channel[] {
     ch.push({ id: 'I2C0', kind: 'i2c', port: 0, sda: bus.sda, scl: bus.scl, label: devs.join(' · ') });
   }
   for (const p of parts) {
-    if (p.type === 'servo') ch.push({ id: `GPIO${p.pin}`, kind: 'pin', pin: p.pin, label: `GPIO${p.pin}`, role: '舵机' });
-    if (p.type === 'buzzer') ch.push({ id: `GPIO${p.pin}`, kind: 'pin', pin: p.pin, label: `GPIO${p.pin}`, role: '蜂鸣器' });
+    if (p.type === 'servo') ch.push({ id: `GPIO${p.pin}`, kind: 'pin', pin: p.pin, label: `GPIO${p.pin}`, role: t('Servo') });
+    if (p.type === 'buzzer') ch.push({ id: `GPIO${p.pin}`, kind: 'pin', pin: p.pin, label: `GPIO${p.pin}`, role: t('Buzzer') });
     if (p.type === 'led') ch.push({ id: `GPIO${p.pin}`, kind: 'pin', pin: p.pin, label: `GPIO${p.pin}`, role: 'LED' });
-    // 编码器 A / B 相与按键（P2-01）、超声波 Trig / Echo（P2-04）
+    // Encoder A / B phases and button (P2-01), ultrasonic Trig / Echo (P2-04)
     if (p.type === 'encoder') {
-      ch.push({ id: `GPIO${p.a}`, kind: 'pin', pin: p.a, label: `GPIO${p.a}`, role: '编码器 A' });
-      ch.push({ id: `GPIO${p.b}`, kind: 'pin', pin: p.b, label: `GPIO${p.b}`, role: '编码器 B' });
-      if (p.sw !== undefined) ch.push({ id: `GPIO${p.sw}`, kind: 'pin', pin: p.sw, label: `GPIO${p.sw}`, role: '编码器按键' });
+      ch.push({ id: `GPIO${p.a}`, kind: 'pin', pin: p.a, label: `GPIO${p.a}`, role: t('Encoder A') });
+      ch.push({ id: `GPIO${p.b}`, kind: 'pin', pin: p.b, label: `GPIO${p.b}`, role: t('Encoder B') });
+      if (p.sw !== undefined) ch.push({ id: `GPIO${p.sw}`, kind: 'pin', pin: p.sw, label: `GPIO${p.sw}`, role: t('Encoder button') });
     }
     if (p.type === 'ws2812') ch.push({ id: `RGB${p.pin}`, kind: 'ws', pin: p.pin, label: `GPIO${p.pin}` });
     if (p.type === 'hcsr04') {
@@ -74,13 +72,13 @@ function defaultChannels(parts: PartSpec[], chip: string): Channel[] {
     }
   }
   const boot = BOOT_GPIO[chip as SimChip] ?? 9;
-  ch.push({ id: `GPIO${boot}`, kind: 'pin', pin: boot, label: `GPIO${boot}`, role: 'BOOT 键' });
+  ch.push({ id: `GPIO${boot}`, kind: 'pin', pin: boot, label: `GPIO${boot}`, role: t('BOOT button') });
   const rgb = RGB_GPIO[chip as SimChip] === undefined ? 8 : RGB_GPIO[chip as SimChip];
   if (rgb !== null) ch.push({ id: `RGB${rgb}`, kind: 'ws', pin: rgb, label: `GPIO${rgb}` });
   return ch;
 }
 
-/** 建一个元素：属性 + 子节点（文字或元素） */
+/** Build an element from attributes and children (text or nodes) */
 function h(tag: string, attrs: Record<string, string>, ...kids: (Node | string)[]) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
@@ -96,28 +94,28 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
   el.className = 'pnl analyzer';
   el.id = 'analyzer';
   el.hidden = true;
-  el.setAttribute('aria-label', '逻辑分析仪');
-  // 静态骨架：命令式组件（每帧重画画布），用 DOM 接口建，不拼 HTML
+  el.setAttribute('aria-label', t('Logic analyzer'));
+  // Imperative component (canvas redrawn per frame): build the skeleton via DOM APIs, not HTML strings
   const btn = (act: string, title: string, text: string, extra: Record<string, string> = {}) => h('button', { type: 'button', class: 'ana-b', 'data-act': act, title, ...extra }, text);
   el.append(
     h(
       'header',
       { class: 'ana-h' },
-      h('span', { class: 'ana-t' }, '逻辑分析仪'),
+      h('span', { class: 'ana-t' }, t('Logic analyzer')),
       h('span', { class: 'ana-src mono muted', 'data-a': 'src' }),
       h('span', { class: 'ana-read mono', 'data-a': 'read' }),
       h('span', { class: 'ana-sp' }),
-      btn('prev', '上一个 I2C 事务', '◂ I2C'),
-      btn('next', '下一个 I2C 事务', 'I2C ▸'),
+      btn('prev', t('Previous I2C transaction'), '◂ I2C'),
+      btn('next', t('Next I2C transaction'), 'I2C ▸'),
       h('span', { class: 'ana-sep' }),
-      btn('out', '缩小（滚轮）', '−'),
+      btn('out', t('Zoom out (wheel)'), '−'),
       h('span', { class: 'ana-span mono', 'data-a': 'span' }),
-      btn('in', '放大（滚轮）', '+'),
-      btn('follow', '跟随最新时刻', '跟随', { 'aria-pressed': 'true' }),
-      btn('close', '关闭', '×', { 'aria-label': '关闭逻辑分析仪' }),
+      btn('in', t('Zoom in (wheel)'), '+'),
+      btn('follow', t('Follow the latest time'), t('Follow'), { 'aria-pressed': 'true' }),
+      btn('close', t('Close'), '×', { 'aria-label': t('Close logic analyzer') }),
     ),
-    h('div', { class: 'ana-body' }, h('canvas', { class: 'ana-cv', 'aria-label': '逻辑分析仪波形' })),
-    h('footer', { class: 'ana-f' }, h('span', { class: 'mono', 'data-a': 'cur' }), h('span', { class: 'muted', 'data-a': 'hint' }, '点击放光标 A，Shift+点击放 B；滚轮缩放，拖动平移')),
+    h('div', { class: 'ana-body' }, h('canvas', { class: 'ana-cv', 'aria-label': t('Logic analyzer waveforms') })),
+    h('footer', { class: 'ana-f' }, h('span', { class: 'mono', 'data-a': 'cur' }), h('span', { class: 'muted', 'data-a': 'hint' }, t('Click to place cursor A, Shift+click for B; wheel to zoom, drag to pan'))),
   );
   document.body.appendChild(el);
   const cv = el.querySelector<HTMLCanvasElement>('canvas')!;
@@ -126,7 +124,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
   let open = false;
   let chans: Channel[] = defaultChannels(session.scene.parts, session.chip);
   let follow = true;
-  let span = 1; // 秒
+  let span = 1; // seconds
   let end = 0;
   let now = 0;
   let cursA: number | null = null;
@@ -169,7 +167,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     document.body.classList.toggle('ana-open', v);
     if (v) {
       if (session.scene !== lastScene) {
-        // 台面换过（按清单摆上 / 回退）：默认通道跟着换，手动加的保留
+        // Bench changed (applied from list / rewound): replace default channels, keep manually added ones
         const keep = chans.filter((c) => c.kind === 'pin' && !defaultChannels(lastScene.parts, session.chip).some((d) => d.id === c.id));
         chans = defaultChannels(session.scene.parts, session.chip);
         for (const k of keep) if (!chans.some((c) => c.id === k.id)) chans.push(k);
@@ -186,7 +184,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     cancelAnimationFrame(raf);
     if (!open) return;
     if (follow) {
-      // 停住（暂停 / 回退点）时右边留一点空，看得见"回退点"那条线
+      // When stopped (paused / rewind point) leave a margin on the right so the marker line is visible
       const st = store.get();
       const e = Math.max(now, span) + (st.running && !st.hist.seeked ? 0 : span * 0.06);
       if (e !== end) {
@@ -194,7 +192,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
         dirty = true;
       }
     }
-    // 不在实验台（CSS 藏起来了）就不画，回来时再画
+    // Skip drawing when off the bench step (hidden by CSS); redraw on return
     if (dirty && document.body.dataset.step === 'bench') {
       dirty = false;
       draw();
@@ -202,7 +200,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     raf = requestAnimationFrame(loop);
   }
 
-  // ---------------------------------------------------------------- 输入
+  // ---------------------------------------------------------------- Input
   session.onTick((m) => {
     now = m.simSeconds;
     if (open && follow) dirty = true;
@@ -211,7 +209,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     if (open) dirty = true;
   });
   store.subscribe((s) => {
-    // 回退（seek）把模拟停在那一刻：simSeconds 由快照给出
+    // A seek parks the sim at that moment; simSeconds comes from the snapshot
     if (s.hist.seeked || !s.running) now = s.simSeconds;
     dirty = true;
   }, ['simSeconds', 'hist', 'running']);
@@ -223,7 +221,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
   function zoomAt(f: number, x?: number) {
     const W = cv.clientWidth;
     if (x === undefined || follow) {
-      // 跟随时以右边缘为锚
+      // While following, anchor on the right edge
       const ns = clampSpan(span * f);
       if (!follow) end = end - span / 2 + ns / 2;
       span = ns;
@@ -299,10 +297,10 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
   function allTxns(): I2cTxn[] {
     return session.io.i2c.get(0) ?? [];
   }
-  /** 从当前窗口中心找上一个 / 下一个事务 */
+  /** Find the previous / next transaction from the window centre */
   function stepTxn(dir: number) {
     const xs = allTxns();
-    if (!xs.length) return shell.toast('还没有 I2C 事务');
+    if (!xs.length) return shell.toast(t('No I2C transactions yet'));
     const mid = (end - span / 2) * CPU_HZ;
     let i = dir > 0 ? xs.findIndex((x) => (x.t0 + x.t1) / 2 > mid + 1) : findLastIndex(xs, (x) => (x.t0 + x.t1) / 2 < mid - 1);
     if (i < 0) i = dir > 0 ? xs.length - 1 : 0;
@@ -316,7 +314,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     dirty = true;
   }
 
-  // ---------------------------------------------------------------- 画
+  // ---------------------------------------------------------------- Drawing
   function draw() {
     const dpr = window.devicePixelRatio || 1;
     const W = cv.clientWidth || 800;
@@ -341,7 +339,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     g.font = '10px "JetBrains Mono", ui-monospace, monospace';
     g.textBaseline = 'middle';
 
-    // 时间刻度
+    // Time ruler
     const step = niceStep(span / 8);
     g.strokeStyle = C.soft;
     g.fillStyle = C.muted;
@@ -373,14 +371,14 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
         g.fillRect(0, y, W, h);
         dirty = true;
       }
-      // 标签列
+      // Label column
       g.fillStyle = C.fg;
       g.textAlign = 'left';
       if (ch.kind === 'i2c') {
         g.fillText(`SCL GPIO${ch.scl}`, 8, y + ROW_H.scl / 2);
         g.fillText(`SDA GPIO${ch.sda}`, 8, y + ROW_H.scl + ROW_H.sda / 2);
         g.fillStyle = C.muted;
-        g.fillText(`I2C${ch.port} 解码`, 8, y + ROW_H.scl + ROW_H.sda + ROW_H.dec / 2);
+        g.fillText(t('I2C{port} decode', { port: ch.port }), 8, y + ROW_H.scl + ROW_H.sda + ROW_H.dec / 2);
         drawI2c(g, ch, y, W, c0, c1, X, pxPerCyc, nowC, C);
       } else if (ch.kind === 'pin') {
         g.fillText(ch.label, 8, y + h / 2 - 6);
@@ -390,7 +388,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       } else {
         g.fillText(ch.label, 8, y + h / 2 - 5);
         g.fillStyle = C.muted;
-        g.fillText('板载彩灯', 8, y + h / 2 + 6);
+        g.fillText(t('Onboard RGB LED'), 8, y + h / 2 + 6);
         drawWs(g, ch, y, h, c0, c1, X, nowC, C);
       }
       g.strokeStyle = C.soft;
@@ -406,13 +404,13 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     g.lineTo(LABEL_W + 0.5, H);
     g.stroke();
 
-    // 没有数据的那段（上电前 / 被丢掉的）画浅灰
+    // Grey out spans with no data (before power-on / dropped)
     const since = Math.max(session.io.since, 0);
     if (since > c0) {
       g.fillStyle = K.nodata;
       g.fillRect(LABEL_W + 1, RULER_H + 1, Math.min(X(since), W) - LABEL_W - 1, H - RULER_H);
     }
-    // 当前模拟时刻之后：还没发生
+    // After the current sim time: hasn't happened yet
     if (nowC < c1) {
       const x = Math.max(LABEL_W + 1, X(nowC));
       g.fillStyle = K.future;
@@ -425,8 +423,8 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       g.stroke();
       g.setLineDash([]);
       const s = store.get();
-      const lbl = s.hist.seeked ? `回退点 ${fmtTime(now)}` : s.running ? '现在' : `暂停 ${fmtTime(now)}`;
-      // 标签垫白底，免得和刻度字叠在一起
+      const lbl = s.hist.seeked ? t('Rewind point {time}', { time: fmtTime(now) }) : s.running ? t('Now') : t('Paused {time}', { time: fmtTime(now) });
+      // Background behind the label so it doesn't overlap ruler text
       const right = x > W - 120;
       const lw = g.measureText(lbl).width;
       const lx = right ? x - 6 - lw : x + 4;
@@ -435,7 +433,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       g.fillStyle = C.accent;
       g.fillText(lbl, lx, RULER_H / 2);
     }
-    // 光标
+    // Cursors
     for (const [t, col, name] of [
       [cursA, C.accent, 'A'],
       [cursB, C.bad, 'B'],
@@ -456,7 +454,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       g.fillText(name, Math.round(x), RULER_H / 2);
       g.textAlign = 'left';
     }
-    // 悬停竖线
+    // Hover line
     if (hover && hover.x > LABEL_W) {
       g.strokeStyle = K.hover;
       g.lineWidth = 1;
@@ -473,7 +471,11 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     const s = store.get();
     const io = session.io;
     const drop = io.dropped + io.coreDropped;
-    $('src').textContent = `运行 #${s.runNo || s.run}${s.hist.seeked ? ' · 回退' : ''} · ${io.raw.length} 个事件${drop ? ` · 丢了 ${drop} 个` : ''}`;
+    const src = [t('Run #{n}', { n: s.runNo || s.run })];
+    if (s.hist.seeked) src.push(t('rewound'));
+    src.push(t('Events: {n}', { n: io.raw.length }));
+    if (drop) src.push(t('Dropped: {n}', { n: drop }));
+    $('src').textContent = src.join(' · ');
     let read = '';
     if (hover) {
       const h = txnHit.find((r) => hover!.x >= r.x0 && hover!.x <= r.x1 && hover!.y >= r.y0 && hover!.y <= r.y1);
@@ -493,7 +495,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       const d = Math.abs(cursB - cursA);
       cur.push(`Δ ${fmtTime(d)}${d > 0 ? ` · ${fmtHz(1 / d)}` : ''}`);
     }
-    $('cur').textContent = cur.join('　');
+    $('cur').textContent = cur.join('  ');
   }
 
   type Colors = Record<'fg' | 'muted' | 'line' | 'soft' | 'accent' | 'abg' | 'bad' | 'ok' | 'field', string>;
@@ -504,7 +506,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     if (endC <= c0) return;
     const pwm = session.io.pwm.get(ch.pin);
     const gpio = session.io.gpio.get(ch.pin);
-    // 先按 PWM 分段：没有 PWM（频率 0）的段落按 GPIO 电平画
+    // Split by PWM first; segments without PWM (freq 0) are drawn from GPIO levels
     const segs: { a: number; b: number; duty: number; freq: number; from: number }[] = [];
     if (pwm) {
       let i = Math.max(0, lastLE(pwm.t, c0));
@@ -521,7 +523,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     for (const sg of segs) {
       const xa = X(sg.a), xb = X(sg.b);
       if (sg.freq > 0 && (sg.duty < 1e-4 || sg.duty > 1 - 1e-4)) {
-        // 占空比 0 / 100%：线上就是一条直线（蜂鸣器"停"的那 200 ms 就是 duty 0）
+        // Duty 0 / 100% is a flat line (the buzzer's 200 ms pause is duty 0)
         const yv = sg.duty > 0.5 ? hi : lo;
         g.beginPath();
         g.moveTo(xa, yv);
@@ -531,7 +533,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
         const P = CPU_HZ / sg.freq;
         const ppx = P * ppc;
         if (ppx >= 3) {
-          // 逐周期方波：从这段 PWM 生效的时刻起算相位
+          // Per-period square wave, phase counted from when this PWM segment started
           g.beginPath();
           let n = Math.floor((sg.a - sg.from) / P);
           let started = false;
@@ -554,7 +556,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
           }
           g.stroke();
         } else {
-          // 缩小：一个周期不到 3 像素，画包络（高低之间填满）和平均电平线
+          // Zoomed out (< 3 px per period): draw the envelope and the average level line
           g.fillStyle = K.env;
           g.fillRect(xa, hi, xb - xa, lo - hi);
           g.beginPath();
@@ -589,7 +591,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
   }
 
   function drawLevels(g: CanvasRenderingContext2D, s: { t: number[]; v: number[] } | undefined, a: number, b: number, X: (c: number) => number, hi: number, lo: number, pin: number, C: Colors) {
-    // 窗口起点的电平：前一个事件；没有事件就用此刻的电平（还没变过）
+    // Level at window start = previous event; with no events use the current level (never changed)
     const f = session.frame;
     const cur = pin < 32 ? (f.gpio >>> pin) & 1 : (f.gpioHi >>> (pin - 32)) & 1;
     let i = s ? lastLE(s.t, a) : -1;
@@ -604,7 +606,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     while (s && i < s.t.length && s.t[i] < b) {
       const nx = X(s.t[i]);
       if (Math.floor(nx) === lastX) {
-        // 一个像素里好几次翻转：竖线占满
+        // Several toggles within one pixel: draw a full vertical line
         g.lineTo(nx, hi);
         g.lineTo(nx, lo);
       } else {
@@ -629,7 +631,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       const a = Math.max(s.t[i], c0);
       const b = Math.min(i + 1 < s.t.length ? s.t[i + 1] : endC, endC);
       if (b <= a) continue;
-      // 灯珠颜色按亮度拉满再画（真机上 0x002000 这种暗绿肉眼也看得出是绿），原值写在色块里
+      // Normalise LED colour to full brightness (a dim 0x002000 still reads as green); the raw value is labelled
       const rgb = s.rgb[i];
       const [r, gg, bb] = [(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255];
       const k = 255 / Math.max(1, r, gg, bb);
@@ -637,7 +639,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       g.fillRect(X(a), y + 5, Math.max(1, X(b) - X(a)), h - 10);
       g.strokeStyle = C.line;
       g.strokeRect(X(a) + 0.5, y + 5.5, Math.max(1, X(b) - X(a)) - 1, h - 11);
-      // 帧边界
+      // Frame boundary
       if (s.t[i] >= c0) {
         g.fillStyle = C.fg;
         g.fillRect(X(s.t[i]), y + 3, 1, h - 6);
@@ -661,7 +663,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     let i = firstTxnEndingAfter(xs, c0);
     const bitPx = (xs[i]?.bit ?? 400) * ppc;
     const fine = bitPx >= 1.2;
-    // 空闲时两根线都是高（上拉）
+    // Idle: both lines high (pull-ups)
     const idle = (from: number, to: number) => {
       if (to <= from) return;
       g.moveTo(X(from), sclY[0]);
@@ -673,7 +675,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     g.lineWidth = 1.4;
     g.beginPath();
     let cur = c0;
-    // 缩小时挨得近（< 24 px）的事务并成一组：一组一个事务就写整句 + 注释，多个写"n 个事务 · 0x76 ×2 · 0x3C ×3"
+    // Zoomed out, transactions < 24 px apart merge: one gets the full text + note, many get "n transactions · 0x76 ×2 · 0x3C ×3"
     const groups: { x0: number; x1: number; xs: I2cTxn[] }[] = [];
     for (; i < xs.length && xs[i].t0 < endC; i++) {
       const x = xs[i];
@@ -685,7 +687,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       txnHit.push({ x0: bx0 - 2, x1: Math.max(xb, bx0 + 4) + 2, y0: y, y1: decY + ROW_H.dec, x });
       if (fine) {
         drawBits(g, x, X, sclY, sdaY, c0, endC);
-        // 泡泡会另起路径：先把到这里的线画掉
+        // Bubbles start their own path: stroke the lines so far first
         g.stroke();
         drawItemBubbles(g, x, X, decY, C, x.items.some((it) => it.kind === 'addr' && it.nack));
         g.strokeStyle = C.accent;
@@ -693,7 +695,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
         g.beginPath();
         continue;
       }
-      // 缩小：事务画成一块活动区
+      // Zoomed out: draw the transaction as an activity block
       g.stroke();
       g.fillStyle = K.txn;
       g.fillRect(xa, sclY[0], xb - xa, sclY[1] - sclY[0]);
@@ -717,14 +719,14 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       let short = '';
       let tiny = '';
       if (gr.xs.length === 1) {
-        const t = txnText(gr.xs[0]);
+        const tt = txnText(gr.xs[0]);
         const n = txnNote(gr.xs[0]);
-        text = n ? `${t} — ${n}` : t;
-        short = t;
+        text = n ? `${tt} — ${n}` : tt;
+        short = tt;
         const a = gr.xs[0].items.find((it) => it.kind === 'addr');
         const nr = gr.xs[0].items.filter((it) => it.kind === 'data' && it.read).length;
         const nw = gr.xs[0].items.filter((it) => it.kind === 'data' && !it.read).length;
-        tiny = a ? `${hex(a.byte)}${a.nack ? ' NACK' : nr ? ` 读 ${nr} B` : ` 写 ${nw} B`}` : '';
+        tiny = a ? (a.nack ? `${hex(a.byte)} NACK` : nr ? t('{addr} read {n} B', { addr: hex(a.byte), n: nr }) : t('{addr} write {n} B', { addr: hex(a.byte), n: nw })) : '';
       } else {
         const tally = new Map<string, number>();
         for (const x of gr.xs) {
@@ -732,8 +734,8 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
           const key = a ? hex(a.byte) + (a.nack ? ' NACK' : '') : '?';
           tally.set(key, (tally.get(key) ?? 0) + 1);
         }
-        text = `${gr.xs.length} 个事务 · ${[...tally].map(([a, c]) => `${a} ×${c}`).join(' · ')}`;
-        short = `${gr.xs.length} 个事务`;
+        text = t('{n} transactions · {tally}', { n: gr.xs.length, tally: [...tally].map(([a, c]) => `${a} ×${c}`).join(' · ') });
+        short = t('{n} transactions', { n: gr.xs.length });
       }
       const w = gr.x1 - gr.x0;
       const tw = g.measureText(text).width + 12;
@@ -759,7 +761,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     });
   }
 
-  /** 一个事务的 SCL / SDA（按事务和位时序重建：起始 1 位、每字节 8 位 + 应答位、停止 1 位） */
+  /** SCL / SDA of one transaction, rebuilt from bit timing: start 1 bit, 8 bits + ACK per byte, stop 1 bit */
   function drawBits(g: CanvasRenderingContext2D, x: I2cTxn, X: (c: number) => number, sclY: number[], sdaY: number[], c0: number, c1: number) {
     const bit = x.bit;
     let scl: [number, number][] = [];
@@ -820,7 +822,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     sda = [];
   }
 
-  /** 放大到位级：每个起始 / 字节 / 停止一个小泡泡 */
+  /** Bit-level zoom: one small bubble per start / byte / stop */
   function drawItemBubbles(g: CanvasRenderingContext2D, x: I2cTxn, X: (c: number) => number, decY: number, C: Colors, bad: boolean) {
     for (const it of x.items) {
       const len = it.kind === 'addr' || it.kind === 'data' ? 9 : 1;
@@ -832,7 +834,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       const col = it.nack && it.kind !== 'data' ? C.bad : it.kind === 'data' && it.read ? C.ok : C.accent;
       bubble(g, xa + 1, decY + 3, w - 2, 20, g.measureText(txt).width + 6 <= w - 2 ? txt : '', col, bad && it.kind === 'addr');
     }
-    // 第二行：整个事务的一句话 + 寄存器注释，从事务起点写起（被左边裁掉时贴着标签列）
+    // Second line: transaction text + register note from its start (clamped to the label column)
     const note = txnNote(x);
     const full = `${txnText(x)}${note ? ' — ' + note : ''}`;
     const x0 = Math.max(X(x.t0), LABEL_W + 4);
@@ -870,7 +872,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
         const i2c = chans.find((c) => c.kind === 'i2c' && (`GPIO${c.sda}` === focus || `GPIO${c.scl}` === focus));
         if (i2c) id = i2c.id;
         const m = /^GPIO(\d+)$/.exec(id);
-        if (!chans.some((c) => c.id === id) && m) chans.push({ id, kind: 'pin', pin: Number(m[1]), label: id, role: '手动添加' });
+        if (!chans.some((c) => c.id === id) && m) chans.push({ id, kind: 'pin', pin: Number(m[1]), label: id, role: t('Added manually') });
         flash = { id, until: performance.now() + 1200 };
       }
       setOpen(true);
@@ -928,7 +930,7 @@ function niceStep(raw: number) {
 function fmtTick(t: number, step: number) {
   if (step >= 1) return `${t.toFixed(0)} s`;
   if (step >= 1e-3) return `${t.toFixed(Math.max(0, Math.ceil(-Math.log10(step))))} s`;
-  // 步长很小时绝对时刻太长：写成 毫秒
+  // With tiny steps the absolute time gets long: show milliseconds
   const ms = t * 1e3;
   return `${ms.toFixed(Math.max(0, Math.ceil(-Math.log10(step * 1e3))))} ms`;
 }

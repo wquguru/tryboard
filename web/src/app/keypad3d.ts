@@ -1,6 +1,5 @@
-// ④ 成品（usbkey，P2-12）的 3D 场景：桌上的 USB 小键盘（外壳 80×44×22 mm，与 enclosure.ts 的 usbkey 布局同尺寸），
-// 一根 USB 线接到旁边的虚拟电脑（usb3d.ts 的笔记本）。点键帽 = K1–K4 对应的 GPIO4–7 接地；
-// 笔记本屏幕上的字是 USB 虚拟主机收到的 HID 报告还原出来的（同一个实时模拟），不是动画。单位 mm。
+// Step 4 product (usbkey, P2-12): an 80×44×22 mm USB keypad (same as enclosure.ts usbkey) cabled to usb3d.ts's laptop.
+// Keycaps ground GPIO4–7 (K1–K4); laptop text is decoded from real HID reports of the live sim, not an animation. Units: mm.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -12,6 +11,7 @@ import { currentTheme, onTheme, type Theme } from '../theme';
 import { createUsbHost, type UsbView } from '../usb3d';
 import { capturableOf, type Capturable } from './capture';
 import { KEYPAD_CAPS, KEYPAD_PINS } from '../views/keypad';
+import { t } from '../i18n';
 
 export interface Keypad3DOptions {
   press(pin: number, down: boolean): void;
@@ -23,18 +23,18 @@ export interface Keypad3D {
   dispose(): void;
   resetView(): void;
   azimuth(): number;
-  /** 第 i 个键帽在页面上的位置（clientX/Y），测试用真实鼠标去按 */
+  /** Page position (clientX/Y) of keycap i, so tests can press it with a real mouse. */
   keyScreenPos(i: number): [number, number] | null;
-  /** 虚拟主机看到的（null = 没有设备 / 线没插上） */
+  /** What the virtual host sees (null = no device / cable unplugged). */
   setUsb(v: UsbView | null): void;
-  /** 装配时 USB 口装反了：线插不进去 */
+  /** USB port mounted backwards during assembly: the cable can't go in. */
   setBlocked(b: boolean): void;
   capture(): Capturable;
 }
 
 const W = 80, D = 44, H = 22, KEYCAP = 14, PITCH = 19.05;
 
-function capTexture(t: string, accent: boolean) {
+function capTexture(label: string, accent: boolean) {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const g = c.getContext('2d')!;
@@ -44,7 +44,7 @@ function capTexture(t: string, accent: boolean) {
   g.font = '700 64px "JetBrains Mono", Menlo, monospace';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.fillText(t, 64, 68);
+  g.fillText(label, 64, 68);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -59,7 +59,7 @@ export function createKeypad3D(container: HTMLElement, o: Keypad3DOptions): Keyp
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.appendChild(renderer.domElement);
   renderer.domElement.style.touchAction = 'none';
-  renderer.domElement.setAttribute('aria-label', '3D 成品：USB 小键盘接在虚拟电脑上，点键帽打字');
+  renderer.domElement.setAttribute('aria-label', t('3D product: a USB keypad connected to a virtual computer; click the keycaps to type'));
 
   const scene = new THREE.Scene();
   const BG = { light: '#EEF1F5', dark: '#1D2024' }, DESK = { light: '#E4E8EE', dark: '#2A2D32' };
@@ -87,7 +87,7 @@ export function createKeypad3D(container: HTMLElement, o: Keypad3DOptions): Keyp
   };
   const offTheme = onTheme(applyTheme);
 
-  // 小键盘：底壳 + 定位板 + 4 个键帽（长边沿 x，USB 口在左端）
+  // Keypad: base shell + plate + 4 keycaps (long side along x, USB port at the left end).
   const pad = new THREE.Group();
   scene.add(pad);
   const shellMat = new THREE.MeshPhysicalMaterial({ color: '#ECE9E2', roughness: 0.55, clearcoat: 0.2 });
@@ -99,15 +99,15 @@ export function createKeypad3D(container: HTMLElement, o: Keypad3DOptions): Keyp
   plate.position.y = H - 1.1;
   plate.receiveShadow = true;
   pad.add(plate);
-  // USB-C 开孔（左端），里面露出开发板的口
+  // USB-C cutout (left end) exposing the board's port.
   const hole = new THREE.Mesh(new THREE.BoxGeometry(1, 4, 10), new THREE.MeshStandardMaterial({ color: '#2A2D33', roughness: 0.6 }));
   hole.position.set(-W / 2 - 0.2, 8, -8);
   pad.add(hole);
   const caps: { mesh: THREE.Mesh; pin: number; y0: number; down: boolean }[] = [];
-  KEYPAD_CAPS.forEach((t, i) => {
-    const accent = t === 'M';
+  KEYPAD_CAPS.forEach((label, i) => {
+    const accent = label === 'M';
     const side = new THREE.MeshStandardMaterial({ color: accent ? '#0D99FF' : '#F2EFE8', roughness: 0.5 });
-    const top = new THREE.MeshStandardMaterial({ map: capTexture(t, accent), roughness: 0.5 });
+    const top = new THREE.MeshStandardMaterial({ map: capTexture(label, accent), roughness: 0.5 });
     const m = new THREE.Mesh(new THREE.BoxGeometry(KEYCAP, 7, KEYCAP), [side, side, top, side, side, side]);
     m.position.set((i - 1.5) * PITCH, H + 2.4, 4);
     m.castShadow = true;
@@ -115,7 +115,7 @@ export function createKeypad3D(container: HTMLElement, o: Keypad3DOptions): Keyp
     pad.add(m);
     caps.push({ mesh: m, pin: KEYPAD_PINS[i], y0: m.position.y, down: false });
   });
-  // 丝印：K1–K4 与 GPIO
+  // Silkscreen: K1–K4 and GPIO.
   const silk = document.createElement('canvas');
   silk.width = 1024;
   silk.height = 96;
@@ -131,23 +131,23 @@ export function createKeypad3D(container: HTMLElement, o: Keypad3DOptions): Keyp
   label.position.set(0, H + 0.02, -13);
   pad.add(label);
 
-  // 虚拟电脑 + USB 线：线从小键盘左端的开孔出来
+  // Virtual computer + USB cable leaving the keypad's left cutout.
   const port = new THREE.Vector3(-W / 2 - 1, 8, -8);
   let host: ReturnType<typeof createUsbHost> | null = createUsbHost(scene, port);
   let blocked = false;
   let lastView: UsbView | null = null;
-  // 装反时：线头悬在开孔外面（插不进去），屏幕上什么都没有
+  // Backwards: the plug hangs outside the cutout and the screen stays empty.
   const tag = document.createElement('div');
   tag.className = 'p3-tag bad';
-  tag.textContent = 'USB 口装反了：线插不进去，电脑看不到设备';
+  tag.textContent = t('The USB port is mounted backwards: the cable won\'t go in and the computer sees no device.');
   tag.hidden = true;
   const corner = document.createElement('div');
   corner.className = 'p3-disclaimer';
-  corner.textContent = '外观示意，非乐鑫官方模型';
+  corner.textContent = t('Illustrative look, not an official Espressif model');
   container.append(tag, corner);
 
   const camera = new THREE.PerspectiveCamera(32, 1, 1, 8000);
-  // 机位：笔记本在左后、小键盘在右前，两侧浮动面板之间的中间区域放得下（1440 宽时左右面板约占 280 / 315 px）
+  // Camera: laptop back-left, keypad front-right, framed between the side panels (about 280 / 315 px at 1440 wide).
   const HOME = new THREE.Vector3(-62, 215, 560);
   const TARGET = new THREE.Vector3(-66, 22, -12);
   camera.position.copy(HOME);
@@ -174,7 +174,7 @@ export function createKeypad3D(container: HTMLElement, o: Keypad3DOptions): Keyp
   ro.observe(container);
   resize();
 
-  // 按键：按住键帽 = 引脚接地
+  // Holding a keycap grounds its pin.
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   let held: (typeof caps)[number] | null = null;
@@ -264,7 +264,7 @@ export function createKeypad3D(container: HTMLElement, o: Keypad3DOptions): Keyp
       if (b === blocked) return;
       blocked = b;
       tag.hidden = !b;
-      // 装反：重画一根没插进去的线（线头离开孔 30 mm）
+      // Backwards: redraw an unplugged cable, plug 30 mm from the cutout.
       host?.dispose();
       host = createUsbHost(scene, b ? port.clone().add(new THREE.Vector3(-30, -6, 14)) : port);
       host.update(b ? null : lastView);

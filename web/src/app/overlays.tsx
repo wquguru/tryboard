@@ -1,6 +1,7 @@
-// 台面浮层（DESIGN_V2 §4.3）：右上视角按钮、左上「桌面 · 室温」、左下操作提示、「?」快捷键表，
-// 加上实验台临时挂上来的卡片（bc.overlays：连线横幅、万用表、接错线、欠压、固件校验……）。
+// Stage overlays (DESIGN_V2 §4.3): view buttons, desk/room chip, hints, the "?" shortcut sheet, plus cards the bench
+// mounts temporarily via bc.overlays (wiring banner, multimeter, miswire, brownout, firmware verify...).
 import { useEffect, useState } from "react";
+import { t } from "../i18n";
 import { cn } from "../ui/cn";
 import { actions, bc } from "./chrome";
 import { Icon } from "./icons";
@@ -11,30 +12,30 @@ const vb =
   "flex size-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-xs font-medium text-fg hover:bg-field disabled:cursor-not-allowed disabled:text-muted";
 
 const KEYS: [string, string][] = [
-  ["⌘K", "命令框：搜命令、零件、引脚"],
-  ["⌘Z / ⇧⌘Z", "撤销 / 重做（实验台时间线）"],
-  ["V", "选择"],
-  ["W", "改接：点一根线，再点新的引脚"],
-  ["M", "万用表：点引脚量对地电压"],
-  ["R", "尺子"],
-  ["F", "对准选中的东西"],
-  ["Esc", "退出当前工具 / 关闭弹层"],
-  ["?", "打开这张表"],
+  ["⌘K", t("Command box: search commands, parts, pins")],
+  ["⌘Z / ⇧⌘Z", t("Undo / redo (bench timeline)")],
+  ["V", t("Select")],
+  ["W", t("Rewire: click a wire, then the new pin")],
+  ["M", t("Multimeter: click a pin to measure voltage to ground")],
+  ["R", t("Ruler")],
+  ["F", t("Fit the selection")],
+  ["Esc", t("Exit the current tool / close popups")],
+  ["?", t("Open this sheet")],
 ];
 
 function Shortcuts({ onClose }: { onClose: () => void }) {
   return (
     <div
       role="dialog"
-      aria-label="快捷键"
+      aria-label={t("Keyboard shortcuts")}
       id="keySheet"
       className="absolute top-14 right-3 z-6 w-[280px] rounded-(--r) border border-line bg-surface p-3 text-fg shadow-panel"
     >
       <div className="mb-2 flex items-center justify-between">
-        <b className="text-[13px]">快捷键</b>
+        <b className="text-[13px]">{t("Keyboard shortcuts")}</b>
         <button
           type="button"
-          aria-label="关闭"
+          aria-label={t("Close")}
           className={cn(vb, "size-6")}
           onClick={onClose}
         >
@@ -64,8 +65,8 @@ export function StageOverlays({ bench }: { bench: boolean }) {
   useEffect(() => {
     if (!bench) return;
     const on = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement;
-      if (t.closest("input,textarea,select,[contenteditable]")) return;
+      const el = e.target as HTMLElement;
+      if (el.closest("input,textarea,select,[contenteditable]")) return;
       if (e.key === "?") setKeys((v) => !v);
       else if (e.key === "Escape") setKeys(false);
       else if ((e.key === "f" || e.key === "F") && !e.metaKey && !e.ctrlKey)
@@ -83,56 +84,56 @@ export function StageOverlays({ bench }: { bench: boolean }) {
   };
   return (
     <>
-      {/* 左上：桌面标签、外观说明、操作提示叠成一列（台面下边留给工具条） */}
+      {/* Top-left column (the bottom edge belongs to the toolbar). */}
       <div className="pointer-events-none absolute top-3 left-3 z-2 flex flex-col items-start gap-1 max-md:hidden">
         {c.room != null && (
           <div
             id="roomChip"
             className="rounded-full border border-line bg-(--panel) px-2.5 py-1 font-mono text-[11px] text-muted shadow-panel"
           >
-            桌面 · 室温 {c.room.toFixed(1)} °C
+            {t("Desk · room {temp} °C", { temp: c.room.toFixed(1) })}
           </div>
         )}
         <span className="disclaimer pl-1 text-[11px] text-muted">
-          外观示意，非乐鑫官方模型
+          {t("Illustrative look, not an official Espressif model")}
         </span>
         <span className="pl-1 text-[11px] text-muted max-[1280px]:hidden">
-          拖动旋转 · 右键平移 · 滚轮缩放 · 点零件看属性
+          {t("Drag to rotate · right-drag to pan · scroll to zoom · click a part for properties")}
         </span>
       </div>
       <div
         role="group"
-        aria-label="视角"
+        aria-label={t("View")}
         className="viewcube absolute top-3 right-3 z-2 flex gap-0.5 rounded-lg border border-line bg-(--panel) p-0.5 shadow-panel max-md:hidden"
       >
         <button
           type="button"
           data-view="top"
-          title="俯视"
-          aria-label="俯视"
+          title={t("Top view")}
+          aria-label={t("Top view")}
           disabled={!v}
           onClick={() => v?.("top")}
           className={vb}
         >
-          顶
+          {t("Top")}
         </button>
         <button
           type="button"
           data-view="front"
-          title="正视"
-          aria-label="正视"
+          title={t("Front view")}
+          aria-label={t("Front view")}
           disabled={!v}
           onClick={() => v?.("front")}
           className={vb}
         >
-          前
+          {t("Front")}
         </button>
         <span className="mx-0.5 my-1 w-px bg-line" />
         <button
           type="button"
           data-view="in"
-          title="拉近"
-          aria-label="拉近"
+          title={t("Zoom in")}
+          aria-label={t("Zoom in")}
           disabled={!v}
           onClick={() => v?.("in")}
           className={vb}
@@ -142,8 +143,8 @@ export function StageOverlays({ bench }: { bench: boolean }) {
         <button
           type="button"
           data-view="out"
-          title="拉远"
-          aria-label="拉远"
+          title={t("Zoom out")}
+          aria-label={t("Zoom out")}
           disabled={!v}
           onClick={() => v?.("out")}
           className={vb}
@@ -153,8 +154,8 @@ export function StageOverlays({ bench }: { bench: boolean }) {
         <button
           type="button"
           data-view="fit"
-          title="对准选中（F）"
-          aria-label="对准选中"
+          title={t("Fit selection (F)")}
+          aria-label={t("Fit selection")}
           disabled={!v}
           onClick={() => v?.("fit")}
           className={vb}
@@ -164,8 +165,8 @@ export function StageOverlays({ bench }: { bench: boolean }) {
         <button
           type="button"
           data-view="full"
-          title="全屏"
-          aria-label="全屏"
+          title={t("Full screen")}
+          aria-label={t("Full screen")}
           onClick={full}
           className={vb}
         >
@@ -174,8 +175,8 @@ export function StageOverlays({ bench }: { bench: boolean }) {
         <button
           type="button"
           id="keysBtn"
-          aria-label="快捷键"
-          title="快捷键（?）"
+          aria-label={t("Keyboard shortcuts")}
+          title={t("Keyboard shortcuts (?)")}
           aria-expanded={keys}
           onClick={() => setKeys((x) => !x)}
           className={vb}

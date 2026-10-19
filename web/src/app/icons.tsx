@@ -1,4 +1,4 @@
-// 实验台 v2 的内联图标（DESIGN.md：描边 2、圆角端点，跟随文字颜色）。只收实际用到的。
+// Lab v2 inline icons (DESIGN.md: stroke 2, round caps, currentColor). Only the ones actually used.
 const P: Record<string, string> = {
   undo: 'M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
   redo: 'M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13',

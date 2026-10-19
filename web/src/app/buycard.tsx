@@ -1,44 +1,45 @@
-// 「真买」卡（DESIGN_V2 §8.3，稿 LoopB）：网页里做成了之后，做成真的——真买、烧、上真机逐项勾。
-// 自定义作品在实验台检查点全过后出现（bench.tsx），现成作品在成品步之后出现（product.tsx）；两处共用这一个组件。
+// "Make it real" card (DESIGN_V2 §8.3, draft LoopB): after it works in the browser, buy, flash, tick off on hardware.
+// Shown after all bench checkpoints pass (bench.tsx) and after the product step (product.tsx); one shared component.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { BuyLine } from '../catalog/templates.ts';
 import { getPart } from '../catalog/parts.ts';
 import { ConfIcon } from '../ui/conf.tsx';
 import { Icon } from './icons.tsx';
+import { t } from '../i18n';
 
 export interface BuyCardProps {
-  /** 还要买的（已勾「我已有」的不列） */
+  /** Still to buy (lines ticked "I have it" are left out) */
   remaining: BuyLine[];
-  /** 检查点全过时的运行指纹（界面上叫「运行编号」） */
+  /** Run fingerprint once all checkpoints pass (shown as "Run ID") */
   fingerprint: string | null;
-  /** 网页证明不了、要上真机逐项勾的条目（来自本作品「必须上真机」） */
+  /** Items the browser cannot prove, ticked on real hardware (the work's "needs hardware" list) */
   manual: string[];
-  /** 已勾的条目（存本机，由调用方读写） */
+  /** Ticked items (stored locally by the caller) */
   checked: string[];
   onToggleManual: (item: string) => void;
-  /** 下载 flash.bin（没有用户固件时传 null，按钮不出现） */
+  /** Download flash.bin; null when there is no user firmware (button hidden) */
   onDownloadBin: (() => void) | null;
-  /** 作品名（标题「<作品>在网页里做成了」）；缺省写「这个项目」 */
+  /** Work name for the heading; omitted means a generic heading */
   title?: string;
-  /** 目录里没有、只进清单的零件（选板的继电器、人体红外……）：照样要买，算进件数和参考价 */
+  /** Parts not in the catalog (relay, PIR...): still bought, counted in items and price */
   extra?: { name: string; price: [number, number]; keywords?: string }[];
-  /** 检查点个数（标题上方「N 个检查点全部通过」）；缺省不写数字 */
+  /** Checkpoint count for the "N checkpoints passed" line; omitted means no number */
   checks?: number;
-  /** 有就显示右上角关闭 */
+  /** When set, a close button shows top right */
   onClose?: () => void;
 }
 
 const yuan = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
 const csvCell = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
 
-/** 清单行：目录零件按搜索词、参考价展开；没模型的件用名字当搜索词 */
+/** Catalog parts expand to keywords and price; parts without a model use their name as keyword */
 function rowsOf(p: BuyCardProps) {
   const cat = p.remaining.map((l) => {
     const part = getPart(l.partId);
-    return { name: part.name, model: part.model, qty: l.qty, lo: part.price.lo * l.qty, hi: part.price.hi * l.qty, kw: part.keywords, url: part.searchUrl.taobao };
+    return { name: t(part.name), model: part.model, qty: l.qty, lo: part.price.lo * l.qty, hi: part.price.hi * l.qty, kw: part.keywords, url: part.searchUrl.taobao };
   });
-  const ext = (p.extra ?? []).map((e) => ({ name: e.name, model: '', qty: 1, lo: e.price[0], hi: e.price[1], kw: e.keywords ?? e.name, url: '' }));
+  const ext = (p.extra ?? []).map((e) => ({ name: t(e.name), model: '', qty: 1, lo: e.price[0], hi: e.price[1], kw: e.keywords ?? t(e.name), url: '' }));
   return [...cat, ...ext];
 }
 
@@ -48,24 +49,24 @@ export function BuyCard(p: BuyCardProps) {
   const hi = rows.reduce((a, r) => a + r.hi, 0);
   const [copied, setCopied] = useState('');
   const copy = async () => {
-    const text = rows.map((r) => `${r.name}${r.qty > 1 ? ` ×${r.qty}` : ''}：${r.kw}`).join('\n');
+    const text = rows.map((r) => `${r.name}${r.qty > 1 ? ` ×${r.qty}` : ''}: ${r.kw}`).join('\n');
     try {
       await navigator.clipboard.writeText(text);
-      setCopied('已复制搜索词');
+      setCopied(t('Search terms copied'));
     } catch {
-      setCopied('浏览器不让写剪贴板：CSV 里有同样的搜索词');
+      setCopied(t('The browser blocked the clipboard: the CSV has the same search terms'));
     }
-    // CSV 一起下（稿上是一个按钮：复制搜索词 · 导出 CSV）；BOM 开头让 Excel 认 UTF-8
-    const csv = ['零件,型号,数量,参考价低,参考价高,搜索词,淘宝搜索', ...rows.map((r) => [r.name, r.model, String(r.qty), yuan(r.lo), yuan(r.hi), r.kw, r.url].map(csvCell).join(','))].join('\n');
+    // The CSV downloads too (one button in the draft); the leading BOM makes Excel read UTF-8
+    const csv = [[t('Part'), t('Model'), t('Qty'), t('Price low'), t('Price high'), t('Search terms'), t('Taobao search')].map(csvCell).join(','), ...rows.map((r) => [r.name, r.model, String(r.qty), yuan(r.lo), yuan(r.hi), r.kw, r.url].map(csvCell).join(','))].join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
     a.download = 'tryboard-buy.csv';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
-  // 三栏等高、按钮钉底、实线描边（DESIGN_V2 §9.5）：虚线读作「拖到这里」
+  // Equal-height columns, buttons pinned to the bottom, solid border (DESIGN_V2 §9.5): dashed reads as "drop here"
   const card = 'flex min-w-0 flex-col gap-2.5 rounded-xl border border-line bg-surface p-4';
-  // 每一步只有一个动词和一个数字（DESIGN_V2 §9）；数字用正文黑——蓝色只给能点的东西
+  // One verb and one number per step (DESIGN_V2 §9); numbers in body colour, blue is only for clickables
   const head = (n: number, verb: string, big: string | number, unit: string) => (
     <div>
       <span className="block text-xs font-medium text-muted">
@@ -93,27 +94,27 @@ export function BuyCard(p: BuyCardProps) {
   const btn = 'inline-flex min-h-10 cursor-pointer items-center justify-center gap-1 rounded-lg border border-line bg-surface px-3 text-[13px] font-medium text-fg hover:bg-field max-md:min-h-11';
   const btnPri = 'inline-flex min-h-10 cursor-pointer items-center justify-center gap-1 rounded-lg border border-accent-strong bg-accent-strong px-3 text-[13px] font-semibold text-on-accent max-md:min-h-11';
   return (
-    <section id="buyCard" aria-label="做成真的" className="@container text-fg">
+    <section id="buyCard" aria-label={t('Make it real')} className="@container text-fg">
       <div className="mb-4 flex items-start gap-3">
         <span className="mt-0.5 inline-flex size-7 flex-none items-center justify-center rounded-full bg-ok-bg text-ok-ink">
           <Icon n="check" size={16} />
         </span>
         <div className="min-w-0 flex-1">
-          <span className="block text-xs font-medium text-ok-ink">{p.checks ? `${p.checks} 个检查点全部通过` : '检查点全部通过'}</span>
-          <h2 className="m-0 text-xl leading-7 font-semibold">{p.title ? `${p.title}，` : ''}网页里跑通了。</h2>
-          <p className="m-0 text-[15px] leading-6 text-muted">接下来，把它做成真的。</p>
+          <span className="block text-xs font-medium text-ok-ink">{p.checks ? t('All {n} checkpoints passed', { n: p.checks }) : t('All checkpoints passed')}</span>
+          <h2 className="m-0 text-xl leading-7 font-semibold">{p.title ? t('{title} works in the browser.', { title: t(p.title) }) : t('It works in the browser.')}</h2>
+          <p className="m-0 text-[15px] leading-6 text-muted">{t('Next, make it real.')}</p>
         </div>
         {p.onClose && (
-          <button type="button" className="inline-flex size-11 flex-none cursor-pointer items-center justify-center rounded-md text-muted hover:bg-field" aria-label="关闭" onClick={p.onClose}>
+          <button type="button" className="inline-flex size-11 flex-none cursor-pointer items-center justify-center rounded-md text-muted hover:bg-field" aria-label={t('Close')} onClick={p.onClose}>
             <Icon n="x" size={16} />
           </button>
         )}
       </div>
-      {/* 按卡片自身宽度排列：作品页右栏只有约 300px，用视口断点会挤成三列 */}
+      {/* Container query: the product page's right column is ~300px, a viewport breakpoint would cram three columns */}
       <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-3">
         <div className={card} data-buy="buy">
-          {head(1, '买零件', rows.length, `件 · 约 ¥${yuan(lo)}–${yuan(hi)}`)}
-          {/* 只露 3 件，其余点开：卡里不再套一层滚动，名字也不截断 */}
+          {head(1, t('Buy parts'), rows.length, t('items · about ¥{lo}–{hi}', { lo: yuan(lo), hi: yuan(hi) }))}
+          {/* Show 3, the rest expand: no nested scroll and names are never truncated */}
           <ul className="m-0 list-none p-0">{shown.map(line)}</ul>
           {rest.length > 0 && (
             <details className="group">
@@ -121,52 +122,52 @@ export function BuyCard(p: BuyCardProps) {
                 <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" className="-rotate-90 transition-transform group-open:rotate-0">
                   <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                还有 {rest.length} 件
+                {t('{n} more', { n: rest.length })}
               </summary>
               <ul className="m-0 list-none p-0">{rest.map((r, i) => line(r, i + 3))}</ul>
             </details>
           )}
           <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
             <button type="button" className={btnPri} data-buy-copy="" onClick={() => void copy()}>
-              复制搜索词 · 导出 CSV
+              {t('Copy search terms · Export CSV')}
             </button>
             {copied && <span className="text-[11px] text-muted">{copied}</span>}
           </div>
         </div>
         <div className={card} data-buy="flash">
-          {head(2, '烧进板子', 1, '条命令')}
-          <p className="m-0 text-xs text-muted">用你在网页里跑通的同一份固件</p>
-          <pre className="m-0 rounded-md bg-field px-2.5 py-2 font-mono text-xs whitespace-pre-wrap">idf.py -p [串口] flash monitor</pre>
-          <p className="m-0 text-xs text-muted">也可以下载 flash.bin，用乐鑫官方烧录工具</p>
+          {head(2, t('Flash the board'), 1, t('command'))}
+          <p className="m-0 text-xs text-muted">{t('The same firmware that worked in the browser')}</p>
+          <pre className="m-0 rounded-md bg-field px-2.5 py-2 font-mono text-xs whitespace-pre-wrap">{t('idf.py -p [PORT] flash monitor')}</pre>
+          <p className="m-0 text-xs text-muted">{t('Or download flash.bin and use the Espressif flash tool')}</p>
           {p.onDownloadBin && (
             <div className="mt-auto pt-1">
               <button type="button" className={btn} data-buy-bin="" onClick={p.onDownloadBin}>
-                下载 flash.bin
+                {t('Download flash.bin')}
               </button>
             </div>
           )}
         </div>
         <div className={card} data-buy="manual">
-          {head(3, '上真机确认', p.manual.length, p.manual.length ? '件事' : '件要确认')}
-          {p.manual.length > 0 && <p className="m-0 text-xs text-muted">网页证明不了的，到手后逐项勾掉</p>}
+          {head(3, t('Confirm on hardware'), p.manual.length, p.manual.length ? t('items') : t('to confirm'))}
+          {p.manual.length > 0 && <p className="m-0 text-xs text-muted">{t('What the browser cannot prove: tick each off once you have the board')}</p>}
           {p.manual.length ? (
             p.manual.map((m) => (
               <label key={m} className="flex min-h-8 cursor-pointer items-start gap-2 text-xs max-md:min-h-11">
                 <input type="checkbox" className="mt-0.5 accent-(--accent)" checked={p.checked.includes(m)} onChange={() => p.onToggleManual(m)} />
-                <ConfIcon c="必须上真机" size={13} className="mt-0.5" />
-                <span>{m}</span>
+                <ConfIcon c="必须上真机" size={13} className="mt-0.5" /> {/* lint: allow-cjk */}
+                <span>{t(m)}</span>
               </label>
             ))
           ) : (
-            <p className="m-0 text-xs text-muted">这个作品没有「必须上真机」的条目。</p>
+            <p className="m-0 text-xs text-muted">{t('This work has nothing that needs real hardware.')}</p>
           )}
         </div>
       </div>
       <div className="mt-3 flex flex-wrap justify-between gap-2 border-t border-line-soft pt-2 text-[11px] text-muted">
-        <span>价格是参考价，已有的零件不再列。</span>
+        <span>{t('Prices are estimates; parts you already have are not listed.')}</span>
         {p.fingerprint && (
-          <span title="同一固件、同样输入，网页和命令行的运行编号相同，说明结果可复现">
-            运行编号{' '}
+          <span title={t('Same firmware and inputs give the same run ID in the browser and the CLI: the result is reproducible')}>
+            {t('Run ID')}{' '}
             <span className="font-mono" data-buy-fp="">
               {p.fingerprint}
             </span>
@@ -177,7 +178,7 @@ export function BuyCard(p: BuyCardProps) {
   );
 }
 
-/** 实验台上弹出的真买卡：遮罩 + 对话框（点遮罩 / Esc / ✕ 关）。成品页里内嵌的那份不套这个 */
+/** Bench pop-up: backdrop + dialog (backdrop / Esc / close). The product page embeds the card without it */
 export function BuyDialog({ onClose, children }: { onClose: () => void; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -186,14 +187,14 @@ export function BuyDialog({ onClose, children }: { onClose: () => void; children
     addEventListener('keydown', esc);
     return () => removeEventListener('keydown', esc);
   }, [onClose]);
-  // 挂到 body：遮罩要盖住整个实验台（左右栏也算），只盖舞台时两边仍像能点
+  // Portal to body: the backdrop must cover the whole bench incl. side columns, or they look clickable
   return createPortal(
     <div className="fixed inset-0 z-50 bg-black/48" onClick={onClose}>
       <div
         ref={box}
         role="dialog"
         aria-modal="true"
-        aria-label="做成真的"
+        aria-label={t('Make it real')}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         className="absolute inset-3 overflow-auto rounded-2xl border border-line bg-surface p-4 shadow-[0_24px_48px_rgba(0,0,0,0.24)] outline-none md:inset-x-[max(12px,calc(50%-440px))] md:top-6 md:bottom-auto md:max-h-[calc(100%-48px)] md:p-7"

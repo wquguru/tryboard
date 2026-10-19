@@ -1,9 +1,5 @@
-/* 实验台 app.html 余下的样式（原 app/app.css 里实验台还用得上的部分；app.css 原样留给 home / licenses，去掉那两处 link 后可整体删除）。外壳和通用面板件（kv / res / btn / tn / 时间线 / 工具条…）已经搬进
-   React 组件的 Tailwind 类（src/app/*.tsx、src/ui/panel.tsx），这里只留三类：
-   1. tailwind.css 里没有的变量（面板底、台面底、各种浅色描边），组件用 bg-(--x) 引用；
-   2. 命令式节点的样式：逻辑分析仪、SVG / 3D 装配、3D 成品（每帧由代码改，不经 React）；
-   3. 采购 / 组装 / 成品各步专用的类（bn、pc、rf、asm-msg、first3…）。
-   这里的规则不在 @layer 里，会盖过同名 Tailwind 工具类：不要再写通用元素选择器。 */
+/* Remaining bench (app.html) styles; shell and shared panel pieces now use Tailwind classes in src/app/*.tsx and src/ui/panel.tsx.
+   Kept here: missing tokens, imperative nodes (analyzer, SVG/3D views), step classes; not in @layer, so no generic element selectors. */
 :root {
   --panel: rgba(255, 255, 255, 0.95);
   --shadow: 0 2px 10px #0000000f;
@@ -26,7 +22,7 @@
   --r: 12px;
   --gap: 12px;
   --tl-h: 44px;
-  /* 实验台 v2（DESIGN_V2 §4）：顶栏 56 / 左栏 264 / 右栏 312 / 底部坞（高度由 chrome.ts 写在 body 上，可拖动、可收起） */
+  /* Bench v2 (DESIGN_V2 §4): topbar 56 / left 264 / right 312 / dock (height set on body by chrome.ts; draggable, collapsible) */
   --top-h: 56px;
   --left-w: 264px;
   --right-w: 312px;
@@ -35,7 +31,7 @@
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   color-scheme: light;
 }
-/* 暗色（DESIGN §2：同一套变量反转）。data-theme 由页面 <head> 的内联脚本在首帧前设好 */
+/* Dark (DESIGN §2: same tokens inverted). data-theme is set by the inline <head> script before first paint */
 :root[data-theme='dark'] {
   --panel: rgba(30, 32, 36, 0.95);
   --shadow: 0 2px 10px #00000066;
@@ -58,22 +54,22 @@
 @media (min-width: 768px) {
   html, body.app { height: 100%; }
 }
-/* 坞高度：chrome.ts 把拖出来的高度写成 body 上的 --dock-desk；--dock-h 由这里推出来，手机断点才能整块换掉（内联变量会盖过媒体查询） */
+/* Dock height: chrome.ts writes the dragged height as --dock-desk; --dock-h derives here so the phone breakpoint can override it */
 body.app { --dock-h: var(--dock-desk, 200px); }
-/* 手机（U-05，DESIGN_V2 §5）：顶栏 49 + 四步条 50（按钮 44 + 下边距）；没有左右栏；实验台底下是工具条 64 + 串口窥视条，别的步骤底下是一颗吸底主按钮 */
+/* Phone (U-05, DESIGN_V2 §5): topbar 49 + step bar 50; no side columns; bench has toolbar 64 + serial peek, other steps a sticky CTA */
 @media (max-width: 767px) {
   :root { --top-h: 99px; --left-w: 0px; --right-w: 0px; --m-tb: calc(64px + env(safe-area-inset-bottom)); --m-peek: 68px; }
   body.app { --dock-h: calc(var(--m-tb) + var(--m-peek)); }
   body.app:not([data-step='bench']) { --dock-h: calc(72px + env(safe-area-inset-bottom)); }
-  /* 成品（P2-17）：没有吸底主按钮和实验台工具条；底部面板约 200 高（toast 摆在它上面），借来的串口抽屉贴底 */
+  /* Product (P2-17): no sticky CTA or toolbar; bottom panel ~200 tall (toast above it), borrowed serial drawer at the bottom */
   body.app[data-step='product'] { --dock-h: 200px; --m-tb: 0px; }
-  /* 属性抽屉里的滑块：轨道 8、拇指 28（手指按得住） */
+  /* Slider in the property drawer: track 8, thumb 28 (finger-sized) */
   #props input[type='range'] { -webkit-appearance: none; appearance: none; height: 32px; background: transparent; }
   #props input[type='range']::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: var(--line); }
   #props input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; margin-top: -10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); box-shadow: var(--shadow); }
   #props input[type='range']::-moz-range-track { height: 8px; border-radius: 4px; background: var(--line); }
   #props input[type='range']::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
-  /* 手机上的按钮、输入框、树行一律 ≥ 44 高（DESIGN_V2 §0） */
+  /* Phone buttons, inputs and tree rows are all >= 44 tall (DESIGN_V2 §0) */
   body.app #props button, body.app #props select, body.app #props input[type='number'], body.app #props a.btn,
   body.app #tree button, body.app #tree a, body.app #tree summary, body.app #tree select,
   body.app .bn-l, body.app #stepLayer button, body.app #dock [data-cp], body.app #dock [data-issue], body.app #partLib a,
@@ -81,12 +77,12 @@ body.app { --dock-h: var(--dock-desk, 200px); }
   body.app #props input[type='number'] { font-size: 16px; }
   .bn input { width: 20px; height: 20px; }
 }
-/* 命令式代码（分析仪、SVG 视图）和实时字段（classList.toggle('bad')）用的钩子类 */
+/* Hook classes for imperative code (analyzer, SVG views) and live fields (classList.toggle('bad')) */
 .mono { font-family: var(--mono); }
 .muted { color: var(--muted); }
 .bad { color: var(--bad-ink); }
 
-/* ---------- ③ 组装（P0-16）：SVG 装配视图放在两栏之间，按白底主题重新上色 ---------- */
+/* ---------- Step 3 assembly (P0-16): SVG assembly view between the columns, recolored for the light theme ---------- */
 .asm-shell {
   position: fixed;
   left: calc(var(--left-w) + var(--gap));
@@ -111,7 +107,7 @@ body.app { --dock-h: var(--dock-desk, 200px); }
 .asm-shell .as-actions { display: none; }
 .asm-shell .as-choose { left: 77.4%; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
 .asm-shell .as-light { border: 1px solid var(--line); }
-/* 3D 装配（P1-07）：和成品一样铺满台面区域，面板浮在上面 */
+/* 3D assembly (P1-07): fills the bench area like the product view; panels float on top */
 .asm3d-stage { position: fixed; inset: var(--top-h) var(--right-w) var(--dock-h) var(--left-w); background: var(--prod-bg); overflow: hidden; }
 .asm3d-stage canvas { display: block; width: 100% !important; height: 100% !important; }
 .a3-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; }
@@ -130,7 +126,7 @@ body.app { --dock-h: var(--dock-desk, 200px); }
 .asm-msg.bad { background: var(--bad-bg); color: inherit; }
 .asm-msg.bad b { color: var(--bad-ink); }
 
-/* ---------- ④ 成品（P0-17）：3D 成品铺满台面区域 ---------- */
+/* ---------- Step 4 product (P0-17): 3D product fills the bench area ---------- */
 .prod-stage { position: fixed; inset: var(--top-h) var(--right-w) var(--dock-h) var(--left-w); background: var(--prod-bg); overflow: hidden; }
 .prod-stage canvas { display: block; width: 100% !important; height: 100% !important; cursor: grab; }
 .p3-tags { position: absolute; inset: 0; pointer-events: none; }
@@ -154,14 +150,14 @@ body.app { --dock-h: var(--dock-desk, 200px); }
   .prod-stage { height: 56dvh; min-height: 300px; }
   .asm3d-stage { height: 46dvh; min-height: 290px; }
   .prod-preview { position: static; transform: none; white-space: normal; flex-wrap: wrap; margin: 0 0 8px; }
-  /* 成品全屏：3D 铺满顶栏和底部面板之间（#mProduct 是 flex 列，step-layer 绝对定位铺满上半） */
+  /* Product full screen: 3D fills between topbar and bottom panel (#mProduct is a flex column, step-layer absolute) */
   body.app[data-step='product'] .prod-stage { position: absolute; inset: 0; height: auto; min-height: 0; border-radius: 0; }
   body.app[data-step='product'] .prod-preview { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 3; margin: 0; padding: 6px 12px; }
   body.app[data-step='product'] .prod-svg { position: absolute; left: 12px; right: 12px; top: 50%; transform: translateY(-50%); }
   body.app[data-step='product'] .p3-disclaimer { bottom: 14px; }
 }
 
-/* ---------- ① 采购（P0-07）：清单树、零件平铺、规则检查 ---------- */
+/* ---------- Step 1 purchase (P0-07): BOM tree, part tiles, rule checks ---------- */
 .bn { display: flex; align-items: center; gap: 6px; padding: 3px 6px 3px 8px; border-radius: 6px; }
 .bn:hover { background: var(--field); }
 .bn.on { background: var(--accent-bg); }
@@ -216,7 +212,7 @@ body.app { --dock-h: var(--dock-desk, 200px); }
 .pc-n { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pc-m { font-size: 11px; color: var(--muted); }
 .pc-b { position: absolute; top: 6px; right: 6px; font-size: 10px; color: var(--muted); background: var(--field); border-radius: 4px; padding: 0 4px; }
-/* 暗色下零件缩略图（黑色线材、电源头）在深色卡片上看不清：垫一块浅底，像商品图 */
+/* Dark mode: dark part thumbnails (black wires, power plugs) vanish on dark cards, so add a light pad like a product photo */
 :root[data-theme='dark'] .pc-g { background: #c9ced6; border-radius: 6px; }
 :root[data-theme='dark'] .pc.off .pc-g { opacity: 0.35; }
 
@@ -250,7 +246,7 @@ body.app { --dock-h: var(--dock-desk, 200px); }
   .addpart select { min-height: 44px; font-size: 16px; }
 }
 
-/* ---------- 逻辑分析仪（P1-05）：v2 起是底部坞的一个页签，盖在坞的正文区（坞页签条 38px 以下） ---------- */
+/* ---------- Logic analyzer (P1-05): a dock tab since v2, covering the dock body below its 38px tab bar ---------- */
 .analyzer {
   position: fixed;
   left: 0;
@@ -268,7 +264,7 @@ body.app { --dock-h: var(--dock-desk, 200px); }
 }
 .analyzer[hidden] { display: none; }
 body:not([data-step='bench']) .analyzer { display: none; }
-/* 坞收起时分析仪跟着藏（页签条还在，点开再看） */
+/* Hide the analyzer with the collapsed dock (the tab bar stays; open it to see again) */
 body.dock-collapsed .analyzer { display: none; }
 .ana-h { display: flex; align-items: center; gap: 6px; padding: 5px 8px 5px 12px; border-bottom: 1px solid var(--line-soft); min-width: 0; }
 .ana-t { font-size: 11px; font-weight: 500; color: var(--muted); flex: none; }
@@ -288,5 +284,5 @@ body.dock-collapsed .analyzer { display: none; }
   .analyzer { display: none !important; }
 }
 
-/* 实验台 v2：台面右下是工具条的位置，3D 自带的免责说明挪到左上那一列（overlays.tsx） */
+/* Bench v2: the toolbar sits bottom-right, so the 3D disclaimer moves to the top-left column (overlays.tsx) */
 #stage .tb-note { display: none; }

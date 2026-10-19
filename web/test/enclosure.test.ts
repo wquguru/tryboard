@@ -29,7 +29,7 @@ test('气象站默认参数：装得下，没有警告；内腔 28 mm ≥ 舵机
 test('太矮：高度降到 30 mm 就装不下舵机，警告给出最低高度', () => {
   const L = caseLayout('weather', { ...DEFAULT_PARAMS.weather, height: 30 }, sel());
   const w = L.warnings.find((x) => x.id === 'servo-height');
-  assert.ok(w && /太矮/.test(w.text), JSON.stringify(L.warnings));
+  assert.ok(w && /Too short/.test(w.text), JSON.stringify(L.warnings));
   assert.equal(L.minHeight, 31);
   assert.deepEqual(caseLayout('weather', { ...DEFAULT_PARAMS.weather, height: 31 }, sel()).warnings, []);
   // 换金属齿舵机（28.5 mm 高）30 mm 就够了

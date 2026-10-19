@@ -1,8 +1,8 @@
-// 「换固件 ▾」菜单（U-08，设计稿 docs/design-v2/unify/Bench、MobileFw）：取代旧实验台的示例下拉 + 上传按钮。
-// 一个菜单装下所有「换一个程序跑」的路：按芯片列示例、作品自带的参考固件、最近用过、上传自己的 .bin。
-// 桌面是顶栏按钮下的下拉，手机是底部抽屉；开关状态在 bc.fwMenu，空台面卡、手机 ⋯ 菜单也能打开它。
+// "Firmware ▾" menu (U-08, mocks docs/design-v2/unify/Bench, MobileFw): every way to run another program in one place.
+// Desktop dropdown / phone bottom sheet; open state in bc.fwMenu so the empty-bench card and phone ⋯ menu can open it.
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { LOCALES, locale, t } from '../i18n/index.ts';
 import { cn } from '../ui/cn';
 import { actions, bc, BLANK, setBc } from './chrome';
 import { CHIP_NAME, chipOf, exampleHref, loadExamples, type Chip, type Example } from './examples';
@@ -21,21 +21,21 @@ export function recentFw(): Recent[] {
     return [];
   }
 }
-/** 打开示例 / 上传文件时记一笔；文件只记名字（内容不存，浏览器也不让重读），点它重新选文件 */
+/** Record opened examples/uploads; files keep only their name (content can't be re-read), clicking re-picks the file. */
 export function pushRecent(r: Recent) {
   const key = (x: Recent) => (x.kind === 'example' ? `e:${x.id}` : `f:${x.name}`);
   const list = [r, ...recentFw().filter((x) => key(x) !== key(r))].slice(0, 3);
   try {
     localStorage.setItem(RECENT_KEY, JSON.stringify(list));
   } catch {
-    /* 隐私模式：不记 */
+    /* private mode: not recorded */
   }
 }
 
-const hhmm = (t: number) => new Date(t).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+const hhmm = (at: number) => new Date(at).toLocaleTimeString(LOCALES.find((l) => l.id === locale)?.html, { hour: '2-digit', minute: '2-digit' });
 const open = (v: boolean) => setBc({ fwMenu: v });
 
-/** 顶栏按钮 + 下拉 / 抽屉。文件框一直挂着：菜单关了 change 照样到 */
+/** Top-bar button + dropdown/sheet. The file input stays mounted so change still fires after the menu closes. */
 export function FwMenu({ phone }: { phone?: boolean }) {
   const { fwMenu, fw, chip: cur } = useStore(bc);
   const file = useRef<HTMLInputElement>(null);
@@ -44,7 +44,7 @@ export function FwMenu({ phone }: { phone?: boolean }) {
   const [chip, setChip] = useState<Chip>(cur);
   const [all, setAll] = useState(false);
   useEffect(() => void loadExamples().then(setExs), []);
-  // 每次打开都从台面上的芯片开始
+  // Each open starts from the bench chip.
   useEffect(() => {
     if (fwMenu) {
       setChip(cur);
@@ -63,7 +63,7 @@ export function FwMenu({ phone }: { phone?: boolean }) {
     };
   }, [fwMenu]);
   const running = (e: Example) => fw === `${e.id}/flash.bin`;
-  // 正在跑的示例排最前，收起时也看得到「正在跑」
+  // The running example sorts first so "running" shows even when collapsed.
   const list = exs.filter((e) => chipOf(e) === chip).sort((a, b) => +running(b) - +running(a));
   const shown = all ? list : list.slice(0, 5);
   const recent = recentFw().filter((r) => !(r.kind === 'example' && fw === `${r.id}/flash.bin`));
@@ -74,7 +74,7 @@ export function FwMenu({ phone }: { phone?: boolean }) {
       ref={ref}
       role="menu"
       id="fwMenu"
-      aria-label="换固件"
+      aria-label={t('Change firmware')}
       className={
         phone
           ? 'fixed inset-x-0 bottom-0 z-50 max-h-[80dvh] overflow-auto rounded-t-2xl border-t border-line bg-surface px-2 pt-2 pb-[calc(12px+env(safe-area-inset-bottom))] text-[14px] text-fg shadow-[0_-8px_24px_#00000026]'
@@ -83,8 +83,8 @@ export function FwMenu({ phone }: { phone?: boolean }) {
     >
       {phone && <div aria-hidden="true" className="mx-auto mb-2 h-1 w-9 rounded-full bg-line" />}
       <div className="flex items-center gap-2 px-2.5 py-1">
-        <b className={phone ? 'text-[16px]' : 'text-[13px]'}>换固件</b>
-        <div role="radiogroup" aria-label="芯片" className="ml-auto flex rounded-lg bg-field p-0.5">
+        <b className={phone ? 'text-[16px]' : 'text-[13px]'}>{t('Change firmware')}</b>
+        <div role="radiogroup" aria-label={t('Chip')} className="ml-auto flex rounded-lg bg-field p-0.5">
           {(['esp32', 'esp32c3', 'esp32s3'] as Chip[]).map((c) => (
             <button
               key={c}
@@ -104,16 +104,16 @@ export function FwMenu({ phone }: { phone?: boolean }) {
           ))}
         </div>
       </div>
-      <div className={sec}>示例</div>
+      <div className={sec}>{t('Examples')}</div>
       {shown.map((e) => {
         const on = running(e);
         return (
           <a key={e.id} role="menuitem" data-ex={e.id} href={exampleHref(e.id)} aria-current={on || undefined} className={cn(item, on && 'bg-accent-bg')}>
             <span className="min-w-0 flex-1">
-              <span className="block truncate">{e.title}</span>
+              <span className="block truncate">{t(e.title)}</span>
               <span className="block truncate text-[11px] text-muted">
-                {e.tags.filter((t) => !t.startsWith('✓')).slice(0, 3).join(' · ')}
-                {on && ' · 正在跑'}
+                {e.tags.filter((g) => !g.startsWith('✓')).slice(0, 3).map((g) => t(g)).join(' · ')}
+                {on && ` · ${t('Running')}`}
               </span>
             </span>
           </a>
@@ -121,40 +121,40 @@ export function FwMenu({ phone }: { phone?: boolean }) {
       })}
       {list.length > 5 && !all && (
         <button type="button" role="menuitem" data-fw="all" className={cn(item, 'text-accent-ink')} onClick={() => setAll(true)}>
-          {`全部 ${list.length} 个 ${CHIP_NAME[chip].replace('ESP32-', '')} 示例…`}
+          {t('All {n} {chip} examples…', { n: list.length, chip: CHIP_NAME[chip].replace('ESP32-', '') })}
         </button>
       )}
       {!BLANK && actions.loadRef && (
         <>
-          <div className={sec}>这个作品</div>
+          <div className={sec}>{t('This project')}</div>
           <button type="button" role="menuitem" data-fw="ref" className={item} onClick={() => (open(false), actions.loadRef?.())}>
             <Icon n="restart" size={15} />
             <span className="min-w-0 flex-1">
-              换回参考固件
-              <span className="block text-[11px] text-muted">作品自带的固件，只看效果，不跑检查点</span>
+              {t('Back to the reference firmware')}
+              <span className="block text-[11px] text-muted">{t("The project's own firmware: see the result, no checkpoints run")}</span>
             </span>
           </button>
           {actions.runAllRef && (
             <button type="button" role="menuitem" data-fw="allref" className={item} onClick={() => (open(false), actions.runAllRef?.())}>
               <Icon n="play" size={15} />
               <span className="min-w-0 flex-1">
-                用内置固件走完全程
-                <span className="block text-[11px] text-muted">每个检查点用各自的参考固件验收，跑通记 ◐，解锁组装</span>
+                {t('Run the whole route with built-in firmware')}
+                <span className="block text-[11px] text-muted">{t('Each checkpoint is checked with its own reference firmware; passes count as ◐ and unlock assembly')}</span>
               </span>
             </button>
           )}
         </>
       )}
-      {recent.length > 0 && <div className={sec}>最近用过</div>}
+      {recent.length > 0 && <div className={sec}>{t('Recent')}</div>}
       {recent.map((r) =>
         r.kind === 'example' ? (
           <a key={`e:${r.id}`} role="menuitem" data-recent={r.id} href={exampleHref(r.id)} className={item}>
             <Icon n="restart" size={15} />
-            <span className="min-w-0 flex-1 truncate">{`示例 · ${r.title}`}</span>
+            <span className="min-w-0 flex-1 truncate">{t('Example · {title}', { title: t(r.title) })}</span>
             <span className="flex-none font-mono text-[11px] text-muted">{hhmm(r.at)}</span>
           </a>
         ) : (
-          <button key={`f:${r.name}`} type="button" role="menuitem" data-recent-file={r.name} title="浏览器不保存文件内容：点它重新选这个文件" className={item} onClick={() => (open(false), file.current?.click())}>
+          <button key={`f:${r.name}`} type="button" role="menuitem" data-recent-file={r.name} title={t("The browser doesn't keep file contents: click to pick this file again")} className={item} onClick={() => (open(false), file.current?.click())}>
             <Icon n="doc" size={15} />
             <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{r.name}</span>
             <span className="flex-none font-mono text-[11px] text-muted">{hhmm(r.at)}</span>
@@ -165,8 +165,8 @@ export function FwMenu({ phone }: { phone?: boolean }) {
       <button type="button" role="menuitem" data-fw="upload" className={item} disabled={!actions.pickFirmware} onClick={() => (open(false), file.current?.click())}>
         <Icon n="upload" size={15} />
         <span className="min-w-0 flex-1">
-          上传自己的 .bin…
-          <span className="block text-[11px] text-muted">在台面上运行，并验收当前检查点；ESP-IDF / Arduino 导出的完整 flash 镜像，拖到台面上也行（文件不会离开浏览器）</span>
+          {t('Upload your own .bin…')}
+          <span className="block text-[11px] text-muted">{t("Runs on the bench and checks the current checkpoint. A full flash image from ESP-IDF / Arduino; dropping it on the bench works too (the file never leaves your browser).")}</span>
         </span>
       </button>
     </div>
@@ -193,15 +193,15 @@ export function FwMenu({ phone }: { phone?: boolean }) {
           data-fw-open=""
           aria-haspopup="menu"
           aria-expanded={fwMenu}
-          title="换一个程序在台面上跑：示例、参考固件或你自己的 .bin"
+          title={t('Run another program on the bench: an example, the reference firmware or your own .bin')}
           onClick={() => open(!fwMenu)}
           className="inline-flex h-8 flex-none cursor-pointer items-center gap-1 rounded-lg border border-line bg-surface px-2.5 text-[13px] whitespace-nowrap text-fg hover:bg-field max-[1100px]:hidden"
         >
-          换固件
+          {t('Change firmware')}
           <Icon n="down" size={14} className="text-muted" />
         </button>
       )}
-      {/* 手机抽屉挂到 body：顶栏自成层叠上下文（z-20），留在里面会被串口抽屉、底栏盖住 */}
+      {/* Phone sheet portals to body: the top bar's own stacking context (z-20) would put it under the serial sheet and bottom bar. */}
       {fwMenu &&
         phone &&
         createPortal(
@@ -216,5 +216,5 @@ export function FwMenu({ phone }: { phone?: boolean }) {
   );
 }
 
-/** 打开换固件菜单（空台面卡、手机 ⋯ 用）。带 data-fw-open 的元素点了不会被「点外面关掉」立刻关上 */
+/** Open the firmware menu (empty-bench card, phone ⋯). Clicks on [data-fw-open] don't count as "click outside". */
 export const openFwMenu = () => open(true);

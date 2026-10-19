@@ -1,7 +1,8 @@
-// 外壳网格的浏览器入口：懒加载 Manifold（wasm 约 0.47 MB，只在组装 / 采购页外壳详情用到时才下载），
-// 参数与清单不变就复用上次的结果；导出时顺手用 three.js 的 STLLoader / 3MFLoader 读回一遍做自检。
+// Browser entry for enclosure meshes: Manifold (~0.47 MB wasm) loads lazily, only when an enclosure view needs it.
+// Results are reused while params and BOM are unchanged; exports are read back with three.js loaders as a self-check.
 import type { ManifoldToplevel } from 'manifold-3d';
 import { Box3, Vector3, type Mesh } from 'three';
+import { t } from '../i18n';
 import { DEFAULT_PARAMS, buildCaseMeshes, caseLayout, caseSel, printLayout, type CaseLayout, type CaseMeshes, type CaseParams } from './enclosure';
 import { to3mf, toStl } from './meshio';
 import { replay, type BomHistory } from './bom';
@@ -28,21 +29,21 @@ export function loadCaseParams(work: string): CaseParams {
     const v = JSON.parse(localStorage.getItem(KEY(work)) ?? 'null');
     if (v && typeof v.height === 'number' && typeof v.wall === 'number' && typeof v.radius === 'number') return { height: v.height, wall: v.wall, radius: v.radius };
   } catch {
-    /* 读不到就用默认 */
+    /* Unreadable: fall back to defaults. */
   }
   return { ...d };
 }
 export function saveCaseParams(work: string, p: CaseParams) {
   try {
     localStorage.setItem(KEY(work), JSON.stringify(p));
-    // 顶栏「已存在本机」：这个文件也给 node 测试用，不直接引外壳，发个事件
+    // The topbar "saved locally" badge listens for this event; keeps this file free of shell imports.
     globalThis.dispatchEvent?.(new Event('tb-saved'));
   } catch {
-    /* 隐私模式：只在本页有效 */
+    /* Private mode: settings last for this page only. */
   }
 }
 
-/** 清单 → 外壳要的零件（开发板、舵机、屏、传感器） */
+/** BOM -> parts the enclosure must fit (board, servo, screen, sensors). */
 export function layoutFor(template: string, bom: BomHistory, p: CaseParams): CaseLayout {
   const b = replay(bom);
   return caseLayout(template, p, caseSel(b.board, b.picks.map((x) => x.partId)));
@@ -63,18 +64,18 @@ export const layoutKey = (L: CaseLayout) => JSON.stringify([L.template, L.params
 export interface ExportResult {
   name: string;
   bytes: Uint8Array;
-  /** 用 three.js 加载器读回：三角形数、包围盒（mm） */
+  /** Read back with three.js loaders: triangle count, bounding box (mm). */
   check: { ok: boolean; tris: number; size: [number, number, number]; text: string };
 }
 
-/** 生成 STL / 3MF 并读回校验（加载器同样懒加载） */
+/** Build STL / 3MF and verify by reading it back (loaders are lazy too). */
 export async function exportCase(template: string, bom: BomHistory, p: CaseParams, fmt: 'stl' | '3mf'): Promise<ExportResult> {
   const { layout, meshes } = await caseFor(template, bom, p);
   const objs = printLayout(layout, meshes);
   const tris = objs.reduce((a, o) => a + o.mesh.idx.length / 3, 0);
-  const title = `TryBoard ${template} 外壳 H${p.height} 壁厚${p.wall}`;
+  const title = t('TryBoard {template} enclosure H{h} wall {w}', { template, h: p.height, w: p.wall });
   const bytes = fmt === 'stl' ? toStl(objs, `TryBoard ${template} H${p.height} W${p.wall} R${p.radius}`) : to3mf(objs, title);
-  // three 用静态具名导入：动态 import('three') 会让打包器把整个 three 塞进共享块
+  // Static named three imports: a dynamic import('three') would pull all of three into a shared chunk.
   let got = 0;
   const box = new Box3();
   const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
@@ -95,7 +96,7 @@ export async function exportCase(template: string, bom: BomHistory, p: CaseParam
         got += (idx ? idx.count : m.geometry.getAttribute('position').count) / 3;
       }
     });
-    // 3MFLoader 会把 z 朝上的模型转成 y 朝上：包围盒按转过的算，取三边长度
+    // 3MFLoader rotates z-up to y-up; we only need the three side lengths, so the rotated box is fine.
     box.setFromObject(grp);
   }
   const s = box.getSize(new Vector3());
@@ -104,7 +105,7 @@ export async function exportCase(template: string, bom: BomHistory, p: CaseParam
   return {
     name: `tryboard-${template}-case-h${p.height}.${fmt}`,
     bytes,
-    check: { ok, tris: got, size, text: ok ? `外壳 ${fmt.toUpperCase()} 已生成（${got} 个三角形，${size[0]} × ${size[1]} × ${size[2]} mm）` : `${fmt.toUpperCase()} 生成出错，请重试` },
+    check: { ok, tris: got, size, text: ok ? t('Enclosure {fmt} generated ({n} triangles, {x} × {y} × {z} mm)', { fmt: fmt.toUpperCase(), n: got, x: size[0], y: size[1], z: size[2] }) : t('{fmt} generation failed, please try again', { fmt: fmt.toUpperCase() }) },
   };
 }
 

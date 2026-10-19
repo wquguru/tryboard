@@ -1,11 +1,11 @@
-// 示例清单（web/public/fw/examples.json，由 tools/build_web.sh 从 firmware/examples.json 拷来）：整页只取一次。
-// 工作台用它：?work=blank&example=<id> 的台面 / 芯片（session.ts）、「换固件」菜单、右栏「这个示例」说明卡（DESIGN_V2 §6.1）。
+// Example list (web/public/fw/examples.json, copied from firmware/examples.json by tools/build_web.sh), fetched once per page.
+// Used for ?work=blank&example=<id> bench/chip (session.ts), the firmware menu and the "This example" card (DESIGN_V2 §6.1).
 import type { SceneSpec } from '../board3d';
 import { lab } from '../ui/links';
 
 export type Chip = 'esp32' | 'esp32c3' | 'esp32s3';
 
-/** 模拟输入滑块（电位器接 ADC 脚） */
+/** Analog input slider (potentiometer on an ADC pin). */
 export interface AnalogControl {
   type: 'analog';
   pin: number;
@@ -19,10 +19,10 @@ export interface Example {
   title: string;
   about: string;
   tags: string[];
-  /** 缺省 esp32c3 */
+  /** Defaults to esp32c3. */
   chip?: Chip;
   scene?: SceneSpec;
-  /** 'env'：环境滑块；'imu'：倾斜滑块；对象：模拟输入滑块 */
+  /** 'env': environment sliders; 'imu': tilt sliders; object: analog input slider. */
   controls?: (string | AnalogControl)[];
   assembly?: boolean | string;
 }
@@ -38,5 +38,5 @@ export function loadExamples(): Promise<Example[]> {
 export const chipOf = (e: Example): Chip => e.chip ?? 'esp32c3';
 export const CHIP_NAME: Record<Chip, string> = { esp32: 'ESP32', esp32c3: 'ESP32-C3', esp32s3: 'ESP32-S3' };
 
-/** 示例在工作台里的地址 */
+/** Lab URL of an example. */
 export const exampleHref = (id: string) => lab('blank', 'bench', { example: id });

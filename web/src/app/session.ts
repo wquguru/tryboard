@@ -1,4 +1,4 @@
-// 整页唯一的实时模拟 + 3D 台面。步骤切换只换面板，不碰这里，所以模拟时间是连续的。
+// The page's single live sim + 3D stage. Step switches never touch it, so sim time stays continuous.
 import { createBench, type PartSpec, type SceneSpec } from '../board3d';
 import type { ScenePickApi } from '../scene-api';
 import { LiveSim, type SeekJob } from '../live';
@@ -24,79 +24,79 @@ import { chipOf, loadExamples } from './examples';
 export { WORKS } from './works';
 import { wkey } from './works';
 import { BOOT_GPIO, type SimChip } from '../chips';
+import { t } from '../i18n';
 
-/** 串口里 weather 固件的读数行（格式由第 06 关任务书规定） */
-// 气象站固件单空格、bme280 示例两个空格分隔，都要认
+/** weather firmware reading line (format set by level 06); accept single or double spaces (bme280 example). */
 const READING = /T=(-?[\d.]+) C\s+H=([\d.]+) %\s+P=([\d.]+) hPa/g;
-/** s3-imu / s3-qmi8658 的读数行 */
+/** s3-imu / s3-qmi8658 reading line. */
 const IMU_LINE = /(?:IMU|POSE) pitch=(-?[\d.]+) roll=(-?[\d.]+)(?:[^\n]*?gyro=\((-?[\d.]+),(-?[\d.]+),(-?[\d.]+)\))?/g;
 
 export interface SessionHooks {
-  /** 串口新文本（外壳把它追加到左栏串口） */
+  /** New serial text (the shell appends it to the serial view). */
   onConsole(text: string): void;
-  /** 回退以后串口换成那一刻为止的全文 */
+  /** After a rewind, serial is replaced by the full text up to that moment. */
   onConsoleReset?(text: string): void;
 }
 
 export interface SessionOpts {
-  /** 上次在采购页"摆上实验台"存下的场景；没有就用作品默认台面（examples.json） */
+  /** Scene saved by Shop's "place on bench"; otherwise the work's default (examples.json). */
   placed?: { scene: SceneSpec; ext5v: boolean } | null;
-  /** 没有示例的作品（选板 custom）按选板结果定芯片；有示例时以示例为准 */
+  /** Works without an example (custom) take the chip from the advisor; an example's chip wins. */
   chip?: 'esp32' | 'esp32c3' | 'esp32s3';
-  /** 按零件生成的检查点（custom-<n>，U-17），接在 levels.json 后面 */
+  /** Per-part checkpoints (custom-<n>, U-17), appended after levels.json. */
   levels?: Level[];
 }
 
 export async function createSession(stage: HTMLElement, work: WorkDef, store: Store<AppState>, hooks: SessionHooks, opts: SessionOpts = {}): Promise<Session> {
   const bench = createBench(stage);
-  // 拾取接口由 board3d 另行实现；没实现的方法就不调（点不到台面，但不报错）
+  // board3d implements picking separately; missing methods are skipped (no picking, no error).
   const pick = bench as unknown as Partial<ScenePickApi>;
-  // 3D 台面跟随页面主题（DESIGN §2 暗色）
+  // 3D stage follows the page theme (DESIGN §2 dark).
   pick.setTheme?.(currentTheme());
-  onTheme((t) => pick.setTheme?.(t));
+  onTheme((th) => pick.setTheme?.(th));
   const levels = [...expandLevels(levelsJson as Level[]), ...(opts.levels ?? [])];
   let consoleBuf = '';
   let lastOled: Uint8Array | null = null;
   let lastLcd: Uint8Array | null = null;
   let tail = '';
   const consoleSubs = new Set<(text: string) => void>();
-  // 蜂鸣器声音整页一份（默认静音）：实验台、成品共用，声音开关在成品页
+  // One buzzer audio per page (muted by default), shared by bench and product.
   const audio = new BuzzerAudio();
 
   const examples = await loadExamples();
   const ex = work.example ? examples.find((e) => e.id === work.example) : undefined;
-  // 摆过清单就用清单的零件，机位仍用作品默认
+  // A placed list supplies the parts; camera stays at the work default.
   const scene: SceneSpec = opts.placed ? { ...ex?.scene, ...opts.placed.scene } : (ex?.scene ?? { parts: [] });
-  // 示例清单里缺省芯片是 C3；没有示例（真正的空白）摆 S3 开发板
+  // Examples default to C3; a truly blank work gets an S3 devkit.
   const chip = ex ? chipOf(ex) : (opts.chip ?? 'esp32s3');
   bench.setBoard(chip);
   bench.setScene(scene);
   const buzzerPins = scene.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : []));
   audio.setPins(buzzerPins);
   audio.setSpeaker(scene.parts.some((p) => p.type === 'max98357a'));
-  /** I2S 音频器件（引脚按芯片固定）：喇叭的声音走同一个声音开关；麦克风听 1 kHz 测试 WAV */
+  /** I2S audio parts (pins fixed per chip): speaker shares the sound toggle; mic hears a 1 kHz test WAV. */
   const i2sOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'max98357a' || p.type === 'inmp441' ? [p.type] : []));
 
   const i2cOf = (parts: PartSpec[]) => {
     const kind: Record<string, string> = { oled: 'ssd1306', bme280: 'bme280', mpu6050: 'mpu6050', qmi8658: 'qmi8658', cst816s: 'cst816s' };
     return parts.flatMap((p) => ('addr' in p && kind[p.type] ? [{ kind: kind[p.type], addr: p.addr }] : []));
   };
-  /** 触摸 INT 接的 GPIO（台面上的 CST816S） */
+  /** GPIO wired to touch INT (CST816S on the bench). */
   const touchIntOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'cst816s' ? [p.int] : []))[0];
   const poseRate = new PoseRate();
   let poseIdle = 0;
 
-  /** 编码器 / 超声波（台面上第一个）：上电时接到内核里 */
+  /** First encoder / ultrasonic on the bench, attached to the core at power-on. */
   const encoderOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'encoder' ? [{ a: p.a, b: p.b, ...(p.sw !== undefined ? { sw: p.sw } : {}) }] : []))[0];
   const sonarOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'hcsr04' ? [{ trig: p.trig, echo: p.echo, cm: s.distance }] : []))[0];
-  /** 舵机信号脚（台面上第一个舵机）：供电网络里的舵机负载接在它上 */
+  /** Signal pin of the first servo; the power network's servo load hangs on it. */
   const servoOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'servo' ? [p.pin] : []))[0];
   const powerMode = () => (s.power?.ext5v ? 'ext' : 'usb') as 'usb' | 'ext';
   const brownSubs = new Set<(tSec: number) => void>();
   const tickSubs = new Set<(m: Extract<FromWorker, { type: 'tick' }>) => void>();
   const bootSubs = new Set<() => void>();
   const endSubs = new Set<(snap: Snapshot) => void>();
-  // 逻辑分析仪：事件仓库整页一份（跟着每次上电 / 回退重放 reset），观察哪些 GPIO 由分析仪决定
+  // Logic analyzer: one event store per page (reset on each boot / replay); the analyzer picks watched GPIOs.
   const io = new IoStore();
   const ioSubs = new Set<() => void>();
   const harnessSubs = new Set<(text: string) => void>();
@@ -107,7 +107,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     const pins = new Set<number>([BOOT_GPIO[c as SimChip] ?? 9]);
     for (const p of sc.parts) {
       if ('pin' in p && p.type !== 'pot') pins.add(p.pin);
-      // 逻辑分析仪默认看编码器 A / B / 按键、超声波 Trig / Echo
+      // Analyzer defaults: encoder A / B / switch, ultrasonic Trig / Echo.
       if (p.type === 'encoder') [p.a, p.b, ...(p.sw !== undefined ? [p.sw] : [])].forEach((x) => pins.add(x));
       if (p.type === 'hcsr04') [p.trig, p.echo].forEach((x) => pins.add(x));
       if ('sda' in p) {
@@ -147,9 +147,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     setPower(ext5v) {
       const had = !!s.power?.ext5v;
       s.power = { ext5v };
-      // 供电网络在线切换（进输入日志 power=usb|ext，回退时按原来的时刻重放）
+      // Live power switch (input log power=usb|ext, replayed at the original time on rewind).
       if (had !== ext5v) s.sim?.setPower(ext5v ? 'ext' : 'usb');
-      // 清单跟着改：外接 5 V = 加电源适配器 + DC 母座；切回 USB = 去掉
+      // The list follows: external 5 V adds adapter + DC jack; back to USB removes them.
       if (had !== ext5v) {
         let h = store.get().bom;
         for (const partId of ['psu-5v2a', 'dc-jack']) h = pushBom(h, ext5v ? { t: 'add', partId } : { t: 'remove', partId });
@@ -204,7 +204,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       bench.setPowered(true);
       store.set({ running: false, reading: lastReading(snap.stdout), imu: lastImu(snap.stdout), simSeconds: snap.simSeconds, env: { ...sim.env }, pose: { ...sim.pose }, touch: null });
       bench.setPose(s.hasImu() ? sim.pose : null);
-      // 回退停住那一刻的供电（日志里最后一次切换）、线束
+      // Power (last switch in the log) and harness at the rewind moment.
       s.power = { ext5v: sim.powerMode() === 'ext' };
       s.harness = sim.harness();
       return snap;
@@ -278,7 +278,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     pressPin(pin, down) {
       s.sim?.pressPin(pin, down);
     },
-    // 示例预设的旋钮位置（examples.json controls 里的 analog.value）
+    // Example preset knob position (analog.value in examples.json controls).
     micSource: 'sine1k.wav',
     async setMicSource(src) {
       s.micSource = src;
@@ -289,9 +289,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
           s.sim?.setMic('live');
           return '';
         }
-        // 没有权限 / 设备：换回测试声音
+        // No permission / device: fall back to the test tone.
         await s.setMicSource('sine1k.wav');
-        return `${err}，已换回 1 kHz 测试声音`;
+        return t('{err}; switched back to the 1 kHz test tone', { err });
       }
       if (src === 'silence') s.sim?.setMic('silence');
       else s.sim?.setMic('wav', await fetchBuf(`./audio/${src}`), src);
@@ -309,7 +309,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     hasImu: () => s.scene.parts.some((p) => p.type === 'mpu6050' || p.type === 'qmi8658'),
     setPose(p) {
       const pose = { pitch: p.pitch, roll: p.roll, yaw: p.yaw };
-      // 拖动 / 滑块的速度 → 陀螺读到的角速率；停下 150 ms 补一次速率 0（陀螺回零），记进输入日志
+      // Drag/slider speed -> gyro rate; 150 ms after stopping, log a zero rate so the gyro settles.
       const rates = poseRate.push(pose, performance.now());
       s.sim?.setImu({ ...pose, rates });
       bench.setPose(pose);
@@ -399,13 +399,13 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         if (consoleBuf.length > 200_000) consoleBuf = consoleBuf.slice(-150_000);
         hooks.onConsole(text);
         for (const cb of [...consoleSubs]) cb(text);
-        // 读数行可能跨两次 tick，拼上一段尾巴再找
+        // A reading line may span two ticks: prepend the previous tail.
         const buf = tail + text;
         let m: RegExpExecArray | null = null;
         for (const x of buf.matchAll(READING)) m = x;
         tail = buf.slice(-80);
         if (m) store.set({ reading: { t: Number(m[1]), h: Number(m[2]), p: Number(m[3]) } });
-        // IMU 读数行同样可能跨 tick：只在出现完整一行（有换行）时更新
+        // IMU lines may span ticks too: update only on a complete line.
         const ib = imuTail + text;
         const nl = ib.lastIndexOf('\n');
         if (nl >= 0) {
@@ -419,9 +419,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         tail = '';
         audio.reset();
         if (buzzerPins.length) sim.watchPwm(buzzerPins);
-        // 浏览器麦克风不跨上电：上电后重新接上
+        // The browser mic does not survive a boot: reattach after power-on.
         if (s.micSource === 'live' && s.scene.parts.some((p) => p.type === 'inmp441')) void s.setMicSource('live');
-        // 电位器位置不是上电参数：上电后作为第一个输入施加（旋钮还停在原处）
+        // Pot position is not a boot parameter: apply it as the first input after boot.
         for (const [pin, mv] of s.analog) sim.analog(pin, mv);
         s.bootCount++;
         imuTail = '';
@@ -460,7 +460,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         }
         if (m.elec) {
           s.frame.elec = m.elec;
-          // 舵机角度用二阶动力学的结果（有加速、过冲；只影响观感，固件读不到）
+          // Servo angle uses second-order dynamics (visual only; firmware cannot read it).
           const sp = servoOf(s.scene.parts);
           if (sp !== undefined && m.elec.servoAngle !== null) bench.setServoAngle(sp, m.elec.servoAngle);
         }
@@ -493,10 +493,10 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         }
       },
     });
-    // 观察设置在上电之前发出（worker 按顺序处理）：从第 0 个周期就按这份掩码记，命令行 --trace-pins 同一份就能对拍
+    // Send watch settings before boot (worker is ordered) so cycle 0 uses the mask, matching CLI --trace-pins.
     sim.watchIo(ioMask[0], ioMask[1]);
     if (s.scene.parts.some((p) => p.type === 'inmp441')) {
-      // 上电前先把测试声音挂上（浏览器麦克风要等上电后再接，见 onBoot）
+      // Attach the test tone before boot (browser mic waits until onBoot).
       const wav = s.micSource.endsWith('.wav') ? s.micSource : 'sine1k.wav';
       void fetchBuf(`./audio/${wav}`)
         .then((b) => (s.micSource === 'silence' ? sim.setMic('silence') : sim.setMic('wav', b, wav)))
@@ -506,7 +506,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   }
 
   bench.onKey((pin, down) => s.pressPin(pin, down));
-  // 3D 台面上拖 / 滚编码器、拖障碍物：进模拟（输入日志）
+  // Dragging/scrolling the encoder or moving the obstacle feeds the sim (input log).
   bench.onEncoder((steps) => s.turnEncoder(steps));
   bench.onEncoderPress((down) => s.pressEncoder(down));
   bench.onDistance((cm) => {
@@ -514,7 +514,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     s.distance = cm;
     s.sim?.setDistance(cm);
   });
-  // 拖台面上的 IMU 模块 = 端起面包板转（P2-03）；点触摸圆屏 = 手指（P2-02）
+  // Dragging the IMU = tilting the breadboard (P2-03); tapping the touch display = a finger (P2-02).
   bench.onPose((p) => s.setPose(p));
   bench.onTouch((x, y, down) => s.touch(x, y, down));
   bench.onButton((name, down) => {

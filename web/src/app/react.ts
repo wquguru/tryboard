@@ -1,6 +1,5 @@
-// 工作台的 React 接线：命令式代码（步骤、session、benchhist）改状态，React 组件订阅着画。
-// 改状态的一方往往紧接着就要量尺寸、找节点（快捷卡片定位、测试脚本 store.set 后立刻点按钮），
-// 所以外壳的 setter 一律同步提交（flushSync）。不能在渲染 / effect 里调这些 setter。
+// Imperative code (steps, session, benchhist) sets state and React renders it. Setters commit synchronously (flushSync)
+// because callers measure or query the DOM right after (card placement, test scripts); never call them in render/effects.
 import { useSyncExternalStore } from 'react';
 import { flushSync } from 'react-dom';
 import { createStore, type Store } from './store';
@@ -13,10 +12,10 @@ export function useStore<T extends object>(s: Store<T>): T {
   );
 }
 
-/** 同步提交：调用返回时 DOM 已经是新的 */
+/** Synchronous commit: the DOM is updated when this returns. */
 export const commit = (fn: () => void) => flushSync(fn);
 
-/** 外壳里一块可替换内容（构建树、属性面板、步骤层、快捷卡片）：步骤 render 一棵 JSX 进去 */
+/** A replaceable region of the shell (build tree, inspector, step layer, quick card); steps render JSX into it. */
 export interface Slot<T> {
   render(v: T): void;
   get(): T;

@@ -1,5 +1,5 @@
-// 外壳导出（P1-08）：二进制 STL、3MF（zip 里一份 XML）。3MF 的 zip 自己打（只用"存储"不压缩），
-// 不引 zip 依赖：三个小文件，CRC32 + 本地头 + 中央目录 + 结束记录就够切片软件和 three.js 3MFLoader 读。
+// Enclosure export (P1-08): binary STL and 3MF (XML in a zip). The zip is hand-rolled (store only, no dependency):
+// three small files need just CRC32 + local headers + central directory + end record for slicers and 3MFLoader.
 import type { MeshData } from './enclosure.ts';
 
 export interface NamedMesh {
@@ -7,7 +7,7 @@ export interface NamedMesh {
   mesh: MeshData;
 }
 
-/** 二进制 STL：80 字节头 + 三角形数 + 每个三角形 50 字节（法线、三个顶点、属性） */
+/** Binary STL: 80-byte header + triangle count + 50 bytes per triangle (normal, three vertices, attribute). */
 export function toStl(objs: NamedMesh[], header = 'TryBoard enclosure'): Uint8Array {
   const n = objs.reduce((a, o) => a + o.mesh.idx.length / 3, 0);
   const buf = new ArrayBuffer(84 + n * 50);
@@ -39,7 +39,7 @@ export function toStl(objs: NamedMesh[], header = 'TryBoard enclosure'): Uint8Ar
 }
 
 const xmlEsc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-/** 0.001 mm 精度，去掉尾零 */
+/** 0.001 mm precision, trailing zeros dropped. */
 const num = (v: number) => {
   const s = v.toFixed(3);
   return s.indexOf('.') >= 0 ? s.replace(/0+$/, '').replace(/\.$/, '') : s;
@@ -90,7 +90,7 @@ export function crc32(d: Uint8Array): number {
   return (c ^ 0xffffffff) >>> 0;
 }
 
-/** 最小 zip：只存储（method 0），文件名 UTF-8（通用位 11），固定时间 1980-01-01 */
+/** Minimal zip: store only (method 0), UTF-8 names (general flag bit 11), fixed date 1980-01-01. */
 export function zipStore(files: { name: string; data: Uint8Array }[]): Uint8Array {
   const enc = new TextEncoder();
   const locals: Uint8Array[] = [];

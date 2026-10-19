@@ -1,7 +1,7 @@
-// 底部浮动的分组工具条：组之间画竖线；primary 的工具画成蓝色按钮。
-// 窄桌面（1280 宽、两侧面板都开）放不下一行时折成两行，不横向滚动——滚动条藏起来后用户看不到后面的工具。
-// 状态在一个小 store 里，步骤调 setGroups / setActive / setLabel，组件订阅着画（同步提交，调用返回时 DOM 已是新的）。
+// Floating grouped bottom toolbar. On narrow desktops (1280, both panels open) it wraps to two rows instead of
+// scrolling: a hidden scrollbar would hide the trailing tools. Steps drive it via setGroups / setActive / setLabel (sync commit).
 import { Fragment } from 'react';
+import { t } from '../i18n';
 import { cn } from '../ui/cn';
 import { commit, useStore } from './react';
 import { createStore } from './store';
@@ -10,10 +10,10 @@ import { PhoneToolbar, usePhone } from './mobile';
 export interface Tool {
   id: string;
   label: string;
-  /** 键盘提示，如 'V' */
+  /** Keyboard hint, e.g. 'V' */
   key?: string;
   primary?: boolean;
-  /** 尚未实现的工具：可点，但由调用方给出提示 */
+  /** Not implemented yet: clickable, the caller shows a hint */
   todo?: boolean;
 }
 export interface ToolGroup {
@@ -24,10 +24,15 @@ export interface ToolGroup {
 export interface Toolbar {
   setGroups(groups: ToolGroup[]): void;
   onTool(cb: (id: string) => void): void;
-  /** 高亮当前工具（选择 / 转视角 这类互斥工具） */
+  /** Highlight the current tool (mutually exclusive ones like select / orbit) */
   setActive(id: string | null): void;
-  /** 改一个工具的文字（录像倒计时、外部模型开关） */
+  /** Change a tool's text (recording countdown, external model toggle) */
   setLabel(id: string, label: string): void;
+}
+
+function toolTitle(tool: Tool) {
+  const base = tool.key ? t('{label} ({key})', { label: tool.label, key: tool.key }) : tool.label;
+  return tool.todo ? t('{title} · not available yet', { title: base }) : base;
 }
 
 type TbState = { groups: ToolGroup[]; active: string | null; labels: Record<string, string> };
@@ -39,12 +44,12 @@ export function createToolbar(): Toolbar & { View: (p: { step: string }) => Reac
   function View({ step }: { step: string }) {
     const { groups, active, labels } = useStore(st);
     const phone = usePhone();
-    // 手机：实验台是吸底的五键工具条 + 「更多」，别的步骤是 3D 下面的按键网格（mobile.tsx）
+    // Phone: the bench gets a docked five-button bar + More, other steps a button grid under the 3D view (mobile.tsx)
     if (phone)
       return (
         <PhoneToolbar
           step={step}
-          tools={groups.flatMap((g) => g.tools).map((t) => ({ ...t, label: labels[t.id] ?? t.label }))}
+          tools={groups.flatMap((g) => g.tools).map((tool) => ({ ...tool, label: labels[tool.id] ?? tool.label }))}
           active={active}
           fire={(id) => cbs.forEach((f) => f(id))}
         />
@@ -63,24 +68,24 @@ export function createToolbar(): Toolbar & { View: (p: { step: string }) => Reac
           <Fragment key={g.id}>
             {gi > 0 && <span className="tb-sep mx-0.5 my-0.5 w-px self-stretch bg-line" />}
             <div className="tb-group flex gap-0.5" data-group={g.id}>
-              {g.tools.map((t) => (
+              {g.tools.map((tool) => (
                 <button
-                  key={t.id}
+                  key={tool.id}
                   type="button"
-                  data-tool={t.id}
-                  data-key={t.key}
-                  aria-pressed={t.id === active}
-                  title={t.label + (t.key ? `（${t.key}）` : '') + (t.todo ? ' · 暂未开放' : '')}
-                  onClick={() => cbs.forEach((f) => f(t.id))}
+                  data-tool={tool.id}
+                  data-key={tool.key}
+                  aria-pressed={tool.id === active}
+                  title={toolTitle(tool)}
+                  onClick={() => cbs.forEach((f) => f(tool.id))}
                   className={cn(
                     'tb-btn relative cursor-pointer rounded-md border-0 bg-transparent px-[7px] py-[5px] whitespace-nowrap text-fg hover:bg-field aria-pressed:bg-accent-bg aria-pressed:text-accent-ink',
-                    t.todo && 'todo text-muted',
-                    // 角标字母走 CSS 伪元素：按钮文字保持原样（回归脚本按文字找「万用表」）
-                    t.key && !t.primary && 'pr-3 after:absolute after:right-[3px] after:bottom-[2px] after:font-mono after:text-[9px] after:leading-none after:text-muted after:content-[attr(data-key)]',
-                    t.primary && 'primary bg-accent-strong px-3.5 font-medium text-on-accent hover:bg-accent-strong',
+                    tool.todo && 'todo text-muted',
+                    // Key badge is a CSS pseudo-element so the button text stays exact (regression scripts find tools by text)
+                    tool.key && !tool.primary && 'pr-3 after:absolute after:right-[3px] after:bottom-[2px] after:font-mono after:text-[9px] after:leading-none after:text-muted after:content-[attr(data-key)]',
+                    tool.primary && 'primary bg-accent-strong px-3.5 font-medium text-on-accent hover:bg-accent-strong',
                   )}
                 >
-                  {labels[t.id] ?? t.label}
+                  {labels[tool.id] ?? tool.label}
                 </button>
               ))}
             </div>

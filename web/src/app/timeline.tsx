@@ -1,5 +1,5 @@
-// 最底的时间线条：每一步是一个格子（放零件、连线、运行 #n）。本组件只负责画和点；
-// 回到某一步的确定性重算由 P0-03 接在 onSeek 上。步数是低频的（一次操作一格），走 React 状态。
+// Bottom timeline: one cell per step (place part, wire, run #n). This only draws and clicks; deterministic
+// replay to a step (P0-03) hangs off onSeek. Steps change rarely (one per action), so React state is fine.
 import { Fragment, useLayoutEffect, useRef } from 'react';
 import { cn } from '../ui/cn';
 import { commit, useStore } from './react';
@@ -7,7 +7,7 @@ import { createStore } from './store';
 
 export interface TimelineStep {
   id: string;
-  /** 单个字符或短符号，不用 emoji */
+  /** A single character or short symbol, no emoji. */
   icon: string;
   label: string;
   status?: 'ok' | 'bad' | 'run';
@@ -28,7 +28,7 @@ export function createTimeline(): Timeline & { View: () => React.JSX.Element } {
     const { steps, cur } = useStore(st);
     const ref = useRef<HTMLDivElement>(null);
     useLayoutEffect(() => {
-      // 只横向滚时间线自己：scrollIntoView 会连带滚整页（手机上面板堆叠、整页可滚，一跑起来就被拽到页底）
+      // Scroll only the timeline: scrollIntoView also scrolls the page (on phones the stacked page would jump to the bottom).
       const el = ref.current;
       const on = el?.querySelector<HTMLElement>('.tl-step.on');
       if (!el || !on) return;
@@ -48,7 +48,7 @@ export function createTimeline(): Timeline & { View: () => React.JSX.Element } {
               className={cn(
                 'tl-step inline-flex flex-none cursor-pointer items-center gap-[5px] rounded-md border border-transparent bg-transparent px-2 py-[3px] text-xs whitespace-nowrap text-fg hover:bg-field',
                 i === cur && 'on border-accent-line bg-accent-bg hover:bg-accent-bg',
-                // 点回中间某步后，后面的步骤画淡（还在，接着改会被丢掉）
+                // After seeking back, later steps are dimmed (still there, but discarded on the next edit).
                 cur >= 0 && i > cur && 'after border-dashed border-line text-muted',
                 s.status,
                 s.status === 'bad' && 'text-bad-ink',

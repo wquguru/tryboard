@@ -1,7 +1,5 @@
-// ④ 圆屏两件成品的 3D 场景（P1-10）：会转身的小黄、透镜里的小人。和气象站（product3d.ts）一样独立于实验台 board3d。
-// 屏幕画面是模拟器里 GC9A01 的真实帧缓冲（240×240 RGBA → DataTexture），舵机角度来自 GPIO4 的 PWM，按键走同一个 LiveSim。
-// 单位 cm。小黄是原创形象：黄色胶囊身体、头顶一缕卷发、正面一块深色屏幕眼罩（不绕到脑后，没有护目镜和背带）、工具腰带。
-// 透镜：Ø40 mm 平凸透镜，MeshPhysicalMaterial 的 transmission / ior 做折射，是示意，不是光学仿真。
+// (4) 3D scenes for the round-screen works (P1-10), units cm. Screen = simulated GC9A01 framebuffer (DataTexture), servo from GPIO4 PWM.
+// Little Yellow is an original character; the lens refraction (transmission / ior) is illustrative, not optics.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -13,6 +11,7 @@ import { servoAngle } from '../views/common';
 import { currentTheme, onTheme, type Theme } from '../theme';
 import { EXT, extModelsOn, loadExt, reportExt } from '../extmodels';
 import { capturableOf, type Capturable } from './capture';
+import { t } from '../i18n';
 
 export interface LcdFrame {
   pwm: number[];
@@ -24,7 +23,7 @@ export interface Lcd3DOptions {
   kind: 'spin' | 'lens';
   frame(): LcdFrame;
   servoPin: number;
-  /** 装配带来的效果：舵盘装偏（°）、透镜放大倍数 */
+  /** Assembly effects: servo horn offset (°), lens magnification */
   effects(): { hornOffset?: number; lensScale?: number };
   sounding(): boolean;
   onBoot(down: boolean): void;
@@ -37,15 +36,15 @@ export interface Lcd3D {
   buttonScreenPos(): [number, number] | null;
   azimuth(): number;
   resetView(): void;
-  /** 小黄转台的当前角度（°，0 = 正面）；透镜小人恒为 0 */
+  /** Current turntable angle (°, 0 = facing front); always 0 for the lens figure */
   turn(): number;
-  /** 用了哪些外部模型（测试 / 截图核对） */
+  /** External models in use (for tests / screenshot checks) */
   ext(): string[];
-  /** 拍照 / 录像（P2-10） */
+  /** Photo / video capture (P2-10) */
   capture(): Capturable;
 }
 
-/** WebGL 不可用时由调用方退回 SVG 成品 */
+/** Callers fall back to the SVG product when WebGL is unavailable */
 export function webglOk(): boolean {
   try {
     const c = document.createElement('canvas');
@@ -56,9 +55,9 @@ export function webglOk(): boolean {
 }
 
 const YELLOW = '#FFCE3A';
-const LCD_D = 3.24; // GC9A01 1.28″ 可视区直径
+const LCD_D = 3.24; // GC9A01 1.28" visible-area diameter
 
-/** 圆屏：帧缓冲纹理。数据按行从上到下，用纹理矩阵翻转 v，不逐像素拷贝翻转 */
+/** Round screen framebuffer texture. Rows run top to bottom: flip v via the texture matrix instead of copying pixels */
 function lcdTexture() {
   const data = new Uint8Array(240 * 240 * 4);
   const tex = new THREE.DataTexture(data, 240, 240, THREE.RGBAFormat);
@@ -71,7 +70,7 @@ function lcdTexture() {
   return { tex, data };
 }
 
-/** 9 g 舵机（SG90 外形）程序生成版，cm：转轴在原点、竖直向上，壳体朝 -z 偏 0.54 */
+/** Procedural 9 g servo (SG90 shape), cm: shaft at origin pointing up, body offset 0.54 toward -z */
 function servoProc() {
   const g = new THREE.Group();
   const blue = new THREE.MeshPhysicalMaterial({ color: '#2D5BD3', roughness: 0.32, transmission: 0.1, thickness: 0.2 });
@@ -93,7 +92,7 @@ function servoProc() {
 export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  // Neutral 色调映射：比 ACES 少偏色，小黄的黄不会发绿发灰
+  // Neutral tone mapping: less colour shift than ACES, so the yellow doesn't turn green or grey
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -141,22 +140,22 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
   const occluders: THREE.Object3D[] = [];
   const offReport = reportExt(() => [...usedExt]);
 
-  // BOOT 键（两件都在底座正面右侧）
+  // BOOT key (front right of the base on both works)
   const keyMat = new THREE.MeshStandardMaterial({ color: '#C9C6BF', roughness: 0.5 });
   const key = new THREE.Mesh(new RoundedBoxGeometry(0.7, 0.36, 0.3, 3, 0.08), keyMat);
   const keyHit = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.0, 1.0), new THREE.MeshBasicMaterial({ visible: false }));
   const hint = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.56, 48), new THREE.MeshBasicMaterial({ color: '#FF7A1A', transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
   let keyRest = new THREE.Vector3();
 
-  // ------------------------------------------------------------ 小黄
-  const turnGroup = new THREE.Group(); // 随舵机转：舵盘、托盘、小黄
+  // ------------------------------------------------------------ Little Yellow
+  const turnGroup = new THREE.Group(); // Turns with the servo: horn, tray, figure
   let lensMat: THREE.MeshPhysicalMaterial | null = null;
   let lens: THREE.Mesh | null = null;
   let lensRing: THREE.Group | null = null;
   const posts: THREE.Mesh[] = [];
 
   if (spin) {
-    // 底座 Ø60 mm × 10 mm，深灰；上面立着 SG90（壳体一半沉在底座里），转轴对准中心
+    // Base Ø60 x 10 mm, dark grey; the SG90 stands half sunk in it, shaft centred
     const baseMat = new THREE.MeshPhysicalMaterial({ color: '#3A3936', roughness: 0.55, clearcoat: 0.2 });
     const base = new THREE.Mesh(new THREE.CylinderGeometry(3.0, 3.1, 1.0, 64), baseMat);
     base.position.y = 0.5;
@@ -172,7 +171,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     scene.add(servoHolder);
     const proc = servoProc();
     servoHolder.add(proc);
-    // 三色线从壳体背面下来钻进底座
+    // Three-colour lead runs from the back of the servo into the base
     const wireCols = ['#7A4A2A', '#D8342A', '#F28C28'];
     wireCols.forEach((c, i) => {
       const x = (i - 1) * 0.13;
@@ -185,7 +184,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     if (extModelsOn()) {
       void loadExt(EXT.servo).then((m) => {
         if (!m) return;
-        // glb 单位 mm、转轴在原点、壳体沿 -z：缩到 cm，转轴顶（花键顶 +11.9 mm）对齐程序版转轴顶
+        // glb is mm, shaft at origin, body along -z: scale to cm, align shaft top (spline top +11.9 mm) to the procedural one
         m.scale.setScalar(0.1);
         m.position.y = 0.3 - 1.19;
         proc.visible = false;
@@ -204,12 +203,12 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     platter.position.y = 0.3;
     platter.castShadow = platter.receiveShadow = true;
     turnGroup.add(platter);
-    // 正面刻线：一眼看出转台转到了哪
+    // Front notch: shows at a glance where the turntable points
     const mark = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 0.5), new THREE.MeshBasicMaterial({ color: '#FF7A1A' }));
     mark.position.set(0, 0.435, 2.1);
     turnGroup.add(mark);
 
-    // 身体：胶囊（半径 2.0，直段 4.2 → 总高 8.2）。眼罩和腰带都落在直段上，不跟着半球收口
+    // Body: capsule (r 2.0, straight 4.2 -> height 8.2). Visor and belt sit on the straight part, not the dome
     const R = 2.0, LEN = 4.2;
     const ch = new THREE.Group();
     ch.position.y = 0.425;
@@ -220,13 +219,13 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     body.castShadow = true;
     ch.add(body);
     occluders.push(body);
-    // 底下一圈深色脚环，坐在托盘上
+    // Dark foot ring sitting on the tray
     const foot = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.7, 0.3, 48), new THREE.MeshStandardMaterial({ color: '#2A2A28', roughness: 0.6 }));
     foot.position.y = 0.15;
     ch.add(foot);
 
-    // 屏幕眼罩：正面一块圆角方形的深色曲面面罩（只在正面，不是一圈带子，也没有护目镜），圆屏嵌在中间。
-    // 网格平面按身体半径弯过去，圆角用 alpha 贴图裁（ShapeGeometry 内部没有顶点，弯不过去）
+    // Visor: rounded-square dark curved mask on the front only (no band, no goggles) with the round screen inset.
+    // A grid plane bent to the body radius, corners cut by an alpha map (ShapeGeometry has no inner vertices to bend)
     const FACE_Y = R + 2.4;
     const VH = 3.8;
     const VR = R + 0.06;
@@ -257,11 +256,11 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     const plate = new THREE.Mesh(bent(VH, VH, VR), plateMat);
     plate.position.y = FACE_Y;
     ch.add(plate);
-    // 面罩外沿：稍大一圈的深灰边，看起来有厚度
+    // Visor rim: a slightly larger dark grey edge to suggest thickness
     const edge = new THREE.Mesh(bent(VH + 0.2, VH + 0.2, VR - 0.03), new THREE.MeshStandardMaterial({ color: '#2B2D31', roughness: 0.5, alphaMap: roundMask(0.32), alphaTest: 0.5, side: THREE.DoubleSide }));
     edge.position.y = FACE_Y;
     ch.add(edge);
-    // 圆屏：环形网格保证内部有顶点，按眼罩半径弯成曲面
+    // Round screen: a ring grid has inner vertices, so it can bend to the visor radius
     const sg = new THREE.RingGeometry(0.0001, LCD_D / 2, 64, 16);
     const p = sg.attributes.position as THREE.BufferAttribute;
     const SR = VR + 0.012;
@@ -274,7 +273,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     const screen = new THREE.Mesh(sg, lcdMat);
     screen.position.y = FACE_Y;
     ch.add(screen);
-    // 头顶一缕卷发：从头顶冒出来、向前绕一圈半的螺旋，越往发梢越细
+    // Curl of hair: a 1.5-turn helix rising from the head and curling forward, tapering toward the tip
     const curl: THREE.Vector3[] = [new THREE.Vector3(0, -0.1, 0), new THREE.Vector3(0.02, 0.35, 0.02)];
     for (let i = 0; i <= 36; i++) {
       const t = i / 36;
@@ -285,7 +284,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     const TS = 90, RS = 12;
     const hg = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curl), TS, 0.16, RS);
     {
-      // TubeGeometry 是等粗的：按沿线位置把每一圈顶点往中心线收
+      // TubeGeometry has constant radius: pull each ring toward the centreline by position along the curve
       const path = new THREE.CatmullRomCurve3(curl);
       const q = hg.attributes.position as THREE.BufferAttribute;
       const c = new THREE.Vector3(), pt = new THREE.Vector3();
@@ -305,7 +304,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     hair.castShadow = true;
     ch.add(hair);
 
-    // 工具腰带：棕色皮带 + 侧面搭扣 + 两个工具袋 + 一把扳手、一把起子（在腰带上，不是背带裤）
+    // Tool belt: brown strap, side buckle, two pouches, a wrench and a screwdriver (a belt, not overalls)
     const BELT_Y = R + 0.3;
     const leather = new THREE.MeshStandardMaterial({ color: '#7A4E2A', roughness: 0.7 });
     const belt = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.06, R + 0.06, 0.5, 64, 1, true), leather);
@@ -328,7 +327,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
       flap.rotation.y = a;
       ch.add(flap);
     }
-    // 起子：插在右侧工具袋里（橙柄 + 钢杆）
+    // Screwdriver in the right pouch (orange handle + steel shaft)
     const sa = Math.PI / 2.6;
     const drv = new THREE.Group();
     const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.6, 12), new THREE.MeshStandardMaterial({ color: '#FF7A1A', roughness: 0.5 }));
@@ -339,7 +338,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     drv.position.set(Math.sin(sa) * (R + 0.25) + 0.15, BELT_Y, Math.cos(sa) * (R + 0.25));
     drv.rotation.z = -0.2;
     ch.add(drv);
-    // 扳手：挂在搭扣旁的腰带环上
+    // Wrench hanging from the belt loop next to the buckle
     const wa = -Math.PI / 9;
     const wrench = new THREE.Group();
     const shank = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.0, 0.06), steel);
@@ -353,12 +352,12 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     wrench.rotation.z = 0.12;
     ch.add(wrench);
 
-    // BOOT 键：底座正面右侧
+    // BOOT key: front right of the base
     keyRest = new THREE.Vector3(1.9, 0.62, 2.3);
     key.rotation.y = 0.68;
   } else {
-    // ------------------------------------------------------------ 透镜小人
-    // 底座：圆角盒 56 × 14 × 40 mm，米白；后面 USB-C 口
+    // ------------------------------------------------------------ Lens figure
+    // Base: rounded box 56 x 14 x 40 mm, off-white; USB-C port at the back
     const shell = new THREE.MeshPhysicalMaterial({ color: '#EDEAE2', roughness: 0.5, clearcoat: 0.25 });
     const base = new THREE.Mesh(new RoundedBoxGeometry(5.6, 1.4, 4.0, 6, 0.6), shell);
     base.position.y = 0.7;
@@ -373,7 +372,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     if (extModelsOn()) {
       void loadExt(EXT.usbC).then((m) => {
         if (!m) return;
-        // KiCad 封装：开口朝 +z（转换后），贴片面在 y=0；缩到 cm，开口转向后方、外壳中心对齐
+        // KiCad footprint: opening +z after conversion, pads at y=0; scale to cm, turn the opening backwards, centre on the shell
         m.scale.setScalar(0.1);
         m.rotation.y = Math.PI;
         m.position.set(0, -0.16, 0.32);
@@ -382,7 +381,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
         usedExt.push(EXT.usbC);
       });
     }
-    // 屏幕外壳：深色圆筒，立在底座上，后仰 12°
+    // Screen housing: dark cylinder on the base, tilted back 12°
     const head = new THREE.Group();
     head.position.set(0, 3.75, -0.3);
     head.rotation.x = -0.21;
@@ -401,7 +400,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     const bezel = new THREE.Mesh(new THREE.RingGeometry(LCD_D / 2, 2.35, 64), new THREE.MeshStandardMaterial({ color: '#D6D1C6', roughness: 0.45 }));
     bezel.position.z = 0.565;
     head.add(bezel);
-    // 透镜：平凸，Ø40 mm、中心厚 9 mm（曲率半径 ≈ 26.7 mm），三根细柱撑在外框上；离屏高度由装法决定
+    // Lens: plano-convex Ø40 mm, 9 mm centre (R ≈ 26.7 mm) on three posts; height above the screen depends on assembly
     const lensR = 2.0, sag = 0.9, Rc = (lensR * lensR + sag * sag) / (2 * sag);
     const prof: THREE.Vector2[] = [new THREE.Vector2(0, 0)];
     prof.push(new THREE.Vector2(lensR, 0));
@@ -443,7 +442,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
   }
   scene.add(hint);
 
-  // 标签
+  // Labels
   const tags = document.createElement('div');
   tags.className = 'p3-tags';
   const tag = (text: string, cls = '') => {
@@ -453,14 +452,14 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     tags.appendChild(t);
     return t;
   };
-  const tagKey = tag(spin ? 'BOOT · 回正面 / 继续转' : 'BOOT · 换表情', 'hot');
-  const tagInfo = tag(spin ? 'SG90 转台' : '凸透镜 Ø40 · 折射示意');
+  const tagKey = tag(spin ? t('BOOT · face front / keep turning') : t('BOOT · change face'), 'hot');
+  const tagInfo = tag(spin ? t('SG90 turntable') : t('Convex lens Ø40 · illustrative refraction'));
   const corner = document.createElement('div');
   corner.className = 'p3-disclaimer';
-  corner.textContent = spin ? '外观示意，非乐鑫官方模型 · 小黄为原创形象' : '外观示意，非乐鑫官方模型 · 透镜折射为示意，不是光学仿真';
+  corner.textContent = spin ? t('Illustrative look, not an official Espressif model · Little Yellow is an original character') : t('Illustrative look, not an official Espressif model · refraction is illustrative, not an optical simulation');
   container.append(tags, corner);
 
-  // 交互
+  // Interaction
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   let pressing = false;
@@ -521,7 +520,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
   ro.observe(container);
   resize();
 
-  // 舵机：二阶弹簧阻尼追目标，限速 600°/s（SG90 约 0.1 s / 60°）；与气象站指针同一套示意参数
+  // Servo: 2nd-order spring-damper toward target, capped at 600°/s (SG90 ~0.1 s / 60°); same illustrative params as the weather dial
   let theta = 0, omega = 0;
   let lastLcd: Uint8Array | null = null;
   let raf = 0;
@@ -559,7 +558,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     }
     if (spin) {
       const a = servoAngle(f.pwm, o.servoPin);
-      // 舵机没输出时停在原地；装偏的舵盘让"正面"本身就歪着
+      // No servo output: stay put; an offset horn makes "front" itself crooked
       const target = a === null ? theta : a - 90 + (fx.hornOffset ?? 0);
       const k = 90, c = 2 * Math.sqrt(k) * 0.8;
       omega += (k * (target - theta) - c * omega) * dt;
@@ -567,7 +566,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
       theta += omega * dt;
       turnGroup.rotation.y = (theta * Math.PI) / 180;
     } else if (lens && lensMat && lensRing) {
-      // 离屏高度：高档 8 mm（≈1.35×）、低档 1 mm（≈1.08×）。thickness 越大折射偏移越大，跟着放大倍数走（示意）
+      // Lens height: high 8 mm (~1.35x), low 1 mm (~1.08x). More thickness = more refraction shift, so it follows magnification (illustrative)
       const k = fx.lensScale ?? 1.35;
       const g = k > 1.2 ? 0.8 : 0.1;
       if (g !== gap) {

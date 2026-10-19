@@ -101,6 +101,6 @@ test('零件显示名全是中文 / 型号，不漏英文 type 名', () => {
     assert.notEqual(name, type, type);
     assert.equal(partLabel(type), name);
   }
-  assert.equal(partLabel('buzzer'), '蜂鸣器');
-  assert.equal(partLabel('servo'), '舵机');
+  assert.equal(partLabel('buzzer'), 'Buzzer');
+  assert.equal(partLabel('servo'), 'Servo');
 });

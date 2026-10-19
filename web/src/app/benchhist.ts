@@ -1,6 +1,7 @@
-// 实验台时间线的控制器：把 history.ts 的纯函数接到 Session（实时模拟）和外壳时间线条上。
-// 回退的实现方式见 docs/DECISIONS.md「2026-10-16 · 实验台时间线回退」。
+// Bench timeline controller: wires history.ts pure functions to the Session and the shell timeline.
+// Rewind design: docs/DECISIONS.md, entry dated 2026-10-16 (bench timeline rewind).
 import { fingerprint } from '../checks';
+import { t } from '../i18n';
 import type { Snapshot } from '../worker';
 import { fold, replayInputs, seekTarget, summarize, truncate, type BenchOp, type BenchStep, type RunRec } from './history';
 import type { TimelineStep } from './timeline';
@@ -11,7 +12,7 @@ export interface SeekResult {
   run: number;
   untilMs: number;
   fingerprint: string;
-  /** 回到的是一次运行的收尾时刻：当时收尾算的指纹 */
+  /** When the target is a run's end: the fingerprint computed back then. */
   expected: string | null;
   same: boolean | null;
 }
@@ -19,43 +20,43 @@ export interface SeekResult {
 export interface BenchHistory {
   steps(): BenchStep[];
   runs(): RunRec[];
-  /** 记一步。返回这一步（拖滑块时同一手势里改它的值，不另记） */
+  /** Record a step and return it (a slider drag updates it in place within one gesture). */
   op(op: BenchOp): BenchStep;
-  /** 回到第 i 步 */
+  /** Rewind to step i. */
   seek(i: number): Promise<SeekResult | null>;
-  /** 停在回退点时从那一刻接着实时跑（等于做了一个新操作，后面的步骤丢掉） */
+  /** Continue live from the rewind point (counts as a new edit: later steps are dropped). */
   resume(): void;
   lastSeek(): SeekResult | null;
-  /** 时间线条重画 */
+  /** Redraw the timeline bar. */
   render(): void;
-  /** 模拟器报告的事件（欠压复位）：记一步，时刻由 worker 给，停在回退点时不记 */
+  /** Sim-reported event (brownout): worker supplies the time; ignored while rewound. */
   event(op: BenchOp, tMs: number): void;
 }
 
 const label = (op: BenchOp, runs: RunRec[]): TimelineStep => {
   switch (op.k) {
     case 'place':
-      return { id: '', icon: '+', label: `放 ${op.label}` };
+      return { id: '', icon: '+', label: t('Place {part}', { part: op.label }) };
     case 'wire':
-      return { id: '', icon: '~', label: '连线' };
+      return { id: '', icon: '~', label: t('Wire up') };
     case 'scene':
-      return { id: '', icon: '⇢', label: op.label ?? `按清单摆上 ${op.count} 件` };
+      return { id: '', icon: '⇢', label: op.label ?? t('Placed {n} parts from the list', { n: op.count }) };
     case 'run': {
       const r = runs.find((x) => x.n === op.n);
-      return { id: '', icon: '▶', label: `运行 #${op.n}`, status: r?.snap ? undefined : 'run' };
+      return { id: '', icon: '▶', label: t('Run #{n}', { n: op.n }), status: r?.snap ? undefined : 'run' };
     }
     case 'env':
-      return { id: '', icon: '°', label: `室温 ${op.env.temp.toFixed(1)} °C` };
+      return { id: '', icon: '°', label: t('Room {temp} °C', { temp: op.env.temp.toFixed(1) }) };
     case 'heat':
-      return { id: '', icon: '≈', label: op.part ? '热源靠近 BME280' : '移开热源' };
+      return { id: '', icon: '≈', label: op.part ? t('Heat source near BME280') : t('Heat source removed') };
     case 'power':
-      return { id: '', icon: '⚡', label: op.ext5v ? '换外接 5 V' : '换回 USB 供电' };
+      return { id: '', icon: '⚡', label: op.ext5v ? t('Switch to external 5 V') : t('Back to USB power') };
     case 'wiring':
       return { id: '', icon: '~', label: op.label };
     case 'check':
-      return { id: '', icon: '◎', label: `检查点 ${op.id}`, status: op.outcome.ok ? 'ok' : 'bad' };
+      return { id: '', icon: '◎', label: t('Checkpoint {id}', { id: op.id }), status: op.outcome.ok ? 'ok' : 'bad' };
     case 'brownout':
-      return { id: '', icon: '↯', label: `欠压复位 ${op.tSec.toFixed(2)} s${op.count && op.count > 1 ? ` ×${op.count}` : ''}`, status: 'bad' };
+      return { id: '', icon: '↯', label: op.count && op.count > 1 ? t('Brownout reset {t} s ×{n}', { t: op.tSec.toFixed(2), n: op.count }) : t('Brownout reset {t} s', { t: op.tSec.toFixed(2) }), status: 'bad' };
   }
 };
 
@@ -63,9 +64,9 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
   const { session, store, shell } = ctx;
   let steps: BenchStep[] = [];
   let runs: RunRec[] = [];
-  /** 当前停在第几步；-1 = 跟着最新一步 */
+  /** Current step; -1 = follow the latest. */
   let cur = -1;
-  /** 停在回退点：那一刻的快照（之后做新操作时，这次运行就截在这里） */
+  /** Rewind point snapshot (a new edit truncates that run here). */
   let seeked: { res: SeekResult; snap: Snapshot } | null = null;
   let busy = false;
   let last: SeekResult | null = null;
@@ -87,12 +88,12 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
     shell.timeline.setCurrent(curIndex());
   }
 
-  /** 停在中间时做新操作：丢掉后面的步骤；停在回退点的那次运行截到回退的时刻 */
+  /** New edit mid-timeline: drop later steps and cut the rewound run at the rewind moment. */
   function branch() {
     if (cur >= 0 && cur < steps.length - 1) {
-      const t = truncate(steps, runs, cur);
-      steps = t.steps;
-      runs = t.runs;
+      const tr = truncate(steps, runs, cur);
+      steps = tr.steps;
+      runs = tr.runs;
     }
     if (seeked) {
       const r = runs.find((x) => x.n === seeked!.res.run);
@@ -109,12 +110,12 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
     branch();
     const st: BenchStep = { op: o, run: o.k === 'run' ? o.n : currentRun(), tMs: o.k === 'run' ? 0 : null };
     steps.push(st);
-    // 先要时间戳再施加：mark 在 worker 里先于随后的输入处理，所以这一步的时刻 ≤ 它带来的第一条输入
+    // Stamp before applying: the worker handles mark before later inputs, so this step's time ≤ its first input.
     if (st.tMs === null) {
       if (!session.sim || session.bootCount === 0) st.tMs = 0;
-      else session.mark().then((t) => (st.tMs = t));
+      else session.mark().then((ms) => (st.tMs = ms));
     }
-    // 回退点上改环境 / 热源 = 从这一刻接着跑这次运行（输入要施加到正在走的模拟上）
+    // Env/heat change at a rewind point resumes this run from here (inputs must hit a running sim).
     if (wasSeeked && (o.k === 'env' || o.k === 'heat')) {
       const r = runs.find((x) => x.n === seeked!.res.run);
       if (r) {
@@ -124,7 +125,7 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
       seeked = null;
       session.continueRun();
     } else if (o.k !== 'run' && wasSeeked) {
-      // 不影响模拟的操作（供电显示、改接线、验收）：留在回退点，但已经是新分支
+      // Ops that do not affect the sim (power display, rewiring, checks): stay rewound, but on a new branch.
       seeked = { res: { ...seeked!.res, step: steps.length - 1 }, snap: seeked!.snap };
     }
     sync();
@@ -133,7 +134,7 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
 
   function event(o: BenchOp, tMs: number) {
     if (seeked || busy) return;
-    // 一串连续复位（掉压后反复复位）相隔不到 0.5 s 的并成一步，记次数；回到这一步 = 回到第一次复位
+    // Merge a burst of resets < 0.5 s apart into one counted step; rewinding lands on the first one.
     const prev = steps[steps.length - 1];
     if (o.k === 'brownout' && prev?.op.k === 'brownout' && prev.run === currentRun() && prev.tMs !== null && tMs - prev.tMs < 500 + (prev.op.count ?? 1) * 50) {
       prev.op = { ...prev.op, count: (prev.op.count ?? 1) + 1 };
@@ -157,18 +158,18 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
     const r = openRun();
     if (!r) return;
     r.snap = snap;
-    r.fingerprint = snap.truncated ? '（串口太长，没算）' : fingerprint(snap.stdout, snap.report);
+    r.fingerprint = snap.truncated ? t('(serial too long, not computed)') : fingerprint(snap.stdout, snap.report);
     sync();
   });
 
   async function seek(i: number): Promise<SeekResult | null> {
     if (busy || !steps[i]) return null;
     if (store.get().verifying) {
-      shell.toast('正在验收检查点，验收完再回退');
+      shell.toast(t('Checking checkpoints; rewind after the check finishes'));
       return null;
     }
     const live = openRun();
-    // 回到正在跑的这次运行：先拿此刻的日志（seek 会把它收尾）
+    // Rewinding into the live run: grab its log now (seek ends it).
     if (live && !live.snap) {
       const snap = await session.snapshot();
       if (snap) {
@@ -179,12 +180,12 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
     const tgt = seekTarget(steps, i, (n) => runs.find((r) => r.n === n)?.snap?.log.endMs ?? null);
     const rec = tgt && runs.find((r) => r.n === tgt.run);
     if (!tgt || !rec || !rec.snap) {
-      shell.toast('这一步还没有运行记录，回不去');
+      shell.toast(t('No run record for this step yet, cannot rewind'));
       return null;
     }
     busy = true;
     sync();
-    // 编辑状态：折叠到第 i 步
+    // Edit state: fold up to step i.
     const f = fold(steps, i);
     session.restoreScene(f.scene ?? baseScene, f.power ?? basePower);
     session.setHeat(f.heat);
@@ -224,7 +225,7 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
     sync();
   }
 
-  // 第一次上电前的步骤：放零件、连线、按清单摆上（算第 1 次运行的 0 ms）
+  // Steps before the first power-on (place, wire, list) count as run 1 at 0 ms.
   for (const l of init.placeLabels) steps.push({ op: { k: 'place', label: l }, run: 1, tMs: 0 });
   if (init.placeLabels.length) steps.push({ op: { k: 'wire' }, run: 1, tMs: 0 });
   if (init.placed) steps.push({ op: { k: 'scene', scene: session.scene, power: session.power, count: session.scene.parts.length }, run: 1, tMs: 0 });
@@ -235,11 +236,12 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
       if (!r) return;
       const s = steps[i];
       const what = label(s.op, runs).label;
-      shell.toast(`回到「${what}」· 运行 #${r.run} 的 ${(r.untilMs / 1000).toFixed(2)} s${r.same === null ? '' : r.same ? ' · 和当时一模一样' : ' · 和当时不一样'}`);
+      const v = { what, run: r.run, t: (r.untilMs / 1000).toFixed(2) };
+      shell.toast(r.same === null ? t('Back to "{what}" · run #{run} at {t} s', v) : r.same ? t('Back to "{what}" · run #{run} at {t} s · identical to back then', v) : t('Back to "{what}" · run #{run} at {t} s · differs from back then', v));
     });
   });
   store.subscribe(() => ownsTimeline() && render(), ['step']);
-  // 已经上电过（createSession 里就启动了模拟），补记第 1 次运行
+  // Already powered on (createSession starts the sim): record run 1 retroactively.
   if (session.bootCount > 0 && !runs.length) {
     runs.push({ n: 1, fwName: session.fwName, fw: session.fwBuf!, chip: session.chip, ext5v: !!session.power?.ext5v, heat: null, snap: null, fingerprint: null });
     steps.push({ op: { k: 'run', n: 1 }, run: 1, tMs: 0 });

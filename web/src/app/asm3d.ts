@@ -1,7 +1,5 @@
-// ③ 组装的 3D 视图（P1-07）：参数化外壳（enclosure.ts，Manifold 出的网格）剖开放在桌上，没装的零件悬在上方；
-// 拖一个零件，下一件的槽位发亮，靠近就吸过去；错的位置也能放（装法影响照 templates.ts 算），顺序错会被拦下。
-// 工具：炸开（各层往上拉开）、剖面（裁掉靠近相机的半边，切口涂橙色）、尺子（BME280 到芯片 + 点两点量距离）。
-// 状态与规则和 SVG 视图共用 views/asmcore.ts。外壳网格用 three-mesh-bvh 建 BVH：拖动时的落点、尺子取点都打在网格上。
+// (3) 3D assembly (P1-07): parametric case (enclosure.ts), parts snap to the next slot; wrong spots allowed (effects per templates.ts),
+// wrong order blocked; rules shared with views/asmcore.ts. Tools: explode, section, ruler; a BVH makes drops / picks hit the mesh.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -11,19 +9,20 @@ import type { Template } from '../views/templates';
 import type { CaseLayout, CaseMeshes, MeshData, Pose, Prim, V3 } from './enclosure';
 import { currentTheme, onTheme, type Theme } from '../theme';
 import { btnClass } from '../ui/panel';
+import { t } from '../i18n';
 
 export interface Asm3DOptions {
   template: Template;
   layout: CaseLayout;
   meshes: CaseMeshes;
-  /** 装了 / 拒了 / 进入选择：外壳据此重画面板、记时间线 */
+  /** Placed / rejected / choosing: the shell redraws its panel and logs the timeline */
   onStep(): void;
 }
 
 const BG = { light: '#EEF1F5', dark: '#1D2024' };
 const DESK = { light: '#E4E8EE', dark: '#2A2D32' };
 const ORANGE = '#FF7A1A';
-/** 离槽位中心多近（mm，水平距离）就吸过去 */
+/** Horizontal distance (mm) from a slot centre within which a part snaps */
 const SNAP = 16;
 const EXPLODE = 16;
 
@@ -44,7 +43,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.appendChild(renderer.domElement);
   renderer.domElement.style.touchAction = 'none';
-  renderer.domElement.setAttribute('aria-label', '3D 装配：把零件拖进外壳');
+  renderer.domElement.setAttribute('aria-label', t('3D assembly: drag parts into the case'));
 
   const scene = new THREE.Scene();
   const bg = new THREE.Color(BG[currentTheme()]);
@@ -74,7 +73,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
   };
   const offTheme = onTheme(applyTheme);
 
-  // 外壳坐标 z 朝上、y 朝"成品的上方"：整体绕 x 转 -90°，成品的上方朝远离相机的方向
+  // Case coords are z up, y toward the product's top: rotate -90° about x so the top faces away from the camera
   const world = new THREE.Group();
   world.rotation.x = -Math.PI / 2;
   scene.add(world);
@@ -84,7 +83,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
   const [OW, OD, OH] = L.outer;
   const topZ = Math.max(OH, ...Object.values(L.slots).flatMap((s) => Object.values(s).map((p) => p.max[2])));
   const size = Math.max(OW, OD, topZ);
-  /** 托盘：按零件缩放后的宽度依次排开（最大边缩到 26 mm），间隔 7 mm，居中 */
+  /** Tray: parts laid out by scaled width (longest side 26 mm), 7 mm apart, centred */
   const TRAY_MAX = 26, TRAY_GAP = 7;
   const tray = (() => {
     const ids = T.tray.filter((id) => L.slots[id]);
@@ -109,7 +108,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
 
   const camera = new THREE.PerspectiveCamera(34, 1, 1, 3000);
   const target = toWorld([0, OD * 0.18, topZ * 0.4]);
-  // 托盘 + 外壳要都在两侧面板之间的那块里：按尺寸退远
+  // Tray + case must fit between the side panels: back the camera off by size
   const home = target.clone().add(new THREE.Vector3(0.32, 0.78, 1).normalize().multiplyScalar(Math.max(size, trayWidth() * 0.62) * 3.9));
   camera.position.copy(home);
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -122,7 +121,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
   controls.maxPolarAngle = Math.PI * 0.48;
   controls.update();
 
-  // ---------------------------------------------------------------- 剖面：裁掉外壳坐标 y < 剖切面的一半（靠近相机）
+  // ---------------------------------------------------------------- Section: clip case y below half the cut plane (near the camera)
   const cutY = 0;
   const clip = new THREE.Plane(new THREE.Vector3(0, 0, -1), toWorld([0, cutY, 0]).z);
   let sectionOn = false;
@@ -141,7 +140,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
   function caseObject(d: MeshData, color: string, opacity = 1) {
     const geo = caseGeometry(d);
     const mat = new THREE.MeshPhysicalMaterial({ color, roughness: 0.55, clearcoat: 0.2, clippingPlanes: clipList, transparent: opacity < 1, opacity, side: THREE.FrontSide });
-    // 切口：只画背面、涂橙色。剖开后从切口看进壁里看到的是背面，看着像实心截面
+    // Cut face: back faces only, orange. Looking into a cut wall you see back faces, so it reads as a solid section
     const cap = new THREE.MeshBasicMaterial({ color: ORANGE, side: THREE.BackSide, clippingPlanes: clipList });
     const g = new THREE.Group();
     const m = new THREE.Mesh(geo, mat);
@@ -155,7 +154,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
   const bottomObj = caseObject(o.meshes.bottom, caseColor);
   const lidObj = caseObject(o.meshes.lid, lidColor);
 
-  // ---------------------------------------------------------------- 零件
+  // ---------------------------------------------------------------- Parts
   const mats = new Map<string, THREE.Material>();
   const matOf = (p: Prim) => {
     const key = p.color + (p.emissive ? '!' : '') + p.shape;
@@ -177,7 +176,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
       if (p.axis !== 'y') m.rotation.x = Math.PI / 2;
     } else if (p.shape === 'torus') g = new THREE.TorusGeometry(p.size[0] / 2, p.size[1] / 2, 12, 40, Math.PI * 1.6);
     else {
-      // 球冠：底面直径 size[0]、高 size[2]
+      // Spherical cap: base diameter size[0], height size[2]
       const r = p.size[0] / 2, h = p.size[2];
       const R = (r * r + h * h) / (2 * h);
       g = new THREE.SphereGeometry(R, 48, 12, 0, Math.PI * 2, 0, Math.acos((R - h) / R));
@@ -195,12 +194,12 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
 
   interface PartObj {
     id: string;
-    /** 当前用哪个槽位画（装法不同、位置不同） */
+    /** Slot currently drawn (position depends on the assembly choice) */
     key: string;
     root: THREE.Group;
     body: THREE.Group;
     hit: THREE.Mesh;
-    /** 托盘里的缩放与位置（外壳坐标） */
+    /** Scale and position in the tray (case coords) */
     trayAt: THREE.Vector3;
     trayScale: number;
     cur: { pos: THREE.Vector3; scale: number };
@@ -218,7 +217,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
     if (pose.mesh === 'bottom') body.add(bottomObj.group);
     else if (pose.mesh === 'lid') body.add(lidObj.group);
     else for (const p of pose.prims) body.add(primMesh(p));
-    // 零件以槽位中心为原点：root 的位置 = 槽位中心（装好）或托盘位置（没装）
+    // Parts are centred on their slot: root = slot centre (placed) or tray position (loose)
     body.position.set(-pose.center[0], -pose.center[1], -pose.center[2]);
     const ext = new THREE.Vector3(pose.max[0] - pose.min[0], pose.max[1] - pose.min[1], pose.max[2] - pose.min[2]);
     const hit = new THREE.Mesh(new THREE.BoxGeometry(Math.max(ext.x, 8) + 4, Math.max(ext.y, 8) + 4, Math.max(ext.z, 6) + 4), new THREE.MeshBasicMaterial({ visible: false }));
@@ -231,13 +230,13 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
   unplacedTray.forEach((id) => {
     const key = slotKeys(id)[0];
     const b = buildPart(id, key);
-    // 托盘在外壳后上方排一排（屏幕上就在外壳上面），两侧面板挡不住
+    // Tray is a row behind and above the case (above it on screen) so the side panels don't hide it
     const trayAt = new THREE.Vector3(tray.at[id].x, OD / 2 + 30, topZ * 0.5 + 16);
     const trayScale = tray.at[id].scale;
     objs[id] = { id, key, root: b.root, body: b.body, hit: b.hit, trayAt, trayScale, cur: { pos: trayAt.clone(), scale: trayScale } };
   });
 
-  // ---------------------------------------------------------------- 槽位（下一件发亮）
+  // ---------------------------------------------------------------- Slots (next one glows)
   const ghostMat = new THREE.MeshBasicMaterial({ color: ORANGE, transparent: true, opacity: 0.16, depthWrite: false });
   const ghostLine = new THREE.LineBasicMaterial({ color: ORANGE, transparent: true, opacity: 0.95 });
   const ghosts: { id: string; key: string; g: THREE.Group; center: V3 }[] = [];
@@ -247,7 +246,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
     for (const key of keys) {
       const ps = poseOf(id, key);
       const ext: V3 = [ps.max[0] - ps.min[0] + 1, ps.max[1] - ps.min[1] + 1, ps.max[2] - ps.min[2] + 1];
-      // 圆壳的底座 / 外框用圆柱形的虚影
+      // Round cases use a cylindrical ghost for base / rim
       const box = ps.mesh && L.shape === 'round' ? new THREE.CylinderGeometry(ext[0] / 2, ext[0] / 2, ext[2], 48, 1).rotateX(Math.PI / 2) : new THREE.BoxGeometry(...ext);
       const g = new THREE.Group();
       g.add(new THREE.Mesh(box, ghostMat), new THREE.LineSegments(new THREE.EdgesGeometry(box), ghostLine));
@@ -258,12 +257,12 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
     }
   }
 
-  // ---------------------------------------------------------------- HTML 叠加：槽位标签、选择按钮、尺子读数
+  // ---------------------------------------------------------------- HTML overlay: slot labels, chooser buttons, ruler readouts
   const overlay = document.createElement('div');
   overlay.className = 'a3-tags';
   const corner = document.createElement('div');
   corner.className = 'p3-disclaimer a3-disc';
-  corner.textContent = `外观示意，尺寸估算 · 外壳 ${OW}×${OD}×${OH} mm`;
+  corner.textContent = t('Illustrative look, estimated sizes · case {w}×{d}×{h} mm', { w: OW, d: OD, h: OH });
   container.append(overlay, corner);
   const tags = new Map<string, HTMLElement>();
   const tag = (k: string, text: string, cls = '') => {
@@ -283,7 +282,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
   chooser.hidden = true;
   container.appendChild(chooser);
 
-  // ---------------------------------------------------------------- 尺子
+  // ---------------------------------------------------------------- Ruler
   let rulerOn = false;
   const rulerG = new THREE.Group();
   scene.add(rulerG);
@@ -304,7 +303,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
     }
   }
 
-  // ---------------------------------------------------------------- 状态 → 画面
+  // ---------------------------------------------------------------- State -> view
   let explodeOn = false;
   let explodeT = 0;
   const placedOffset = (id: string) => {
@@ -320,7 +319,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
       const placed = st.placed.includes(id);
       const key = placed ? st.choice[id] ?? slotKeys(id)[0] : ob.key;
       if (key !== ob.key && L.slots[id][key]) {
-        // 装法换了位置：按新槽位重建零件
+        // Assembly choice moved the slot: rebuild the part at the new slot
         world.remove(ob.root);
         const b = buildPart(id, key);
         Object.assign(ob, { key, root: b.root, body: b.body, hit: b.hit });
@@ -331,7 +330,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
     if (st.choosing) {
       const p = core.byId[st.choosing];
       const title = document.createElement('b');
-      title.textContent = `${p.short}怎么装？`;
+      title.textContent = t('How should {part} go in?', { part: t(p.short) });
       const at = st.choosing;
       chooser.replaceChildren(
         title,
@@ -340,7 +339,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
           b.type = 'button';
           b.className = btnClass(false, s.ok ? '' : 'warnb');
           b.dataset.k = `pick${s.key}`;
-          b.textContent = s.label;
+          b.textContent = t(s.label);
           b.onclick = () => place(at, s.key);
           return b;
         }),
@@ -354,7 +353,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
     o.onStep();
   }
 
-  // ---------------------------------------------------------------- 拖动
+  // ---------------------------------------------------------------- Drag
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   const el = renderer.domElement;
@@ -364,7 +363,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
     ray.setFromCamera(ndc, camera);
   };
   const hits = () => Object.values(objs).filter((x) => !st.placed.includes(x.id)).map((x) => x.hit);
-  /** 拖动平面：外壳顶上方 8 mm 的水平面 */
+  /** Drag plane: horizontal, 8 mm above the case top */
   const dragPlane = () => new THREE.Plane(new THREE.Vector3(0, 1, 0), -toWorld([0, 0, topZ + 8]).y);
   const toLocal = (v: THREE.Vector3) => world.worldToLocal(v.clone());
   const overCase = (p: THREE.Vector3) => Math.abs(p.x) < OW / 2 + 14 && Math.abs(p.y) < OD / 2 + 14;
@@ -389,7 +388,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
     if (e.button > 0) return;
     setRay(e.clientX, e.clientY);
     if (rulerOn) {
-      // 尺子：点外壳表面取点（BVH 加速的射线）
+      // Ruler: pick points on the case surface (BVH-accelerated ray)
       const h = ray.intersectObjects([bottomObj.mesh, ...(lidObj.group.parent && isPlacedLid() ? [lidObj.mesh] : [])], false).find((x) => !sectionOn || clip.distanceToPoint(x.point) >= 0);
       if (h) {
         if (picks.length >= 2) picks.length = 0;
@@ -430,7 +429,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
       const n = nearestSlot(id, p);
       if (n && n.d < SNAP) drag.snap = n.key;
     }
-    // 落点：射线打在外壳网格上（BVH）
+    // Drop point: ray against the case mesh (BVH)
     const hit = st.placed.length ? ray.intersectObject(bottomObj.mesh, false)[0] : undefined;
     if (hit && overCase(p)) {
       marker.position.copy(hit.point).add(new THREE.Vector3(0, 0.3, 0));
@@ -449,7 +448,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
     el.style.cursor = '';
     if (!moved) return place(id);
     if (snap !== null) return place(id, positional(id) ? snap : undefined);
-    if (!overCase(p)) return sync(); // 放回托盘
+    if (!overCase(p)) return sync(); // Back to the tray
     if (positional(id) && id === core.next()) return place(id, nearestSlot(id, p)!.key);
     place(id);
   };
@@ -472,8 +471,8 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
         const b = toWorld(c).add(new THREE.Vector3(0, placedOffset('bme'), 0));
         rulerLine(chipW, b);
         const mm = Math.hypot(c[0] - L.chip[0], c[1] - L.chip[1], c[2] - L.chip[2]);
-        tagAt.set('r-bme', [chipW.clone().lerp(b, 0.5), `BME280 到芯片 ≈ ${mm.toFixed(0)} mm（估算）`, 'ruler']);
-      } else tagAt.set('r-bme', [chipW, 'BME280 还没装，装上后量它到芯片的距离', 'ruler']);
+        tagAt.set('r-bme', [chipW.clone().lerp(b, 0.5), t('BME280 to chip ≈ {mm} mm (estimate)', { mm: mm.toFixed(0) }), 'ruler']);
+      } else tagAt.set('r-bme', [chipW, t('BME280 is not placed yet; once placed, this measures its distance to the chip'), 'ruler']);
     }
     if (picks.length === 2) {
       rulerLine(picks[0], picks[1]);
@@ -482,13 +481,13 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
       const d = new THREE.Mesh(new THREE.SphereGeometry(1.1, 12, 8), dotMat);
       d.position.copy(picks[0]);
       rulerG.add(d);
-      tagAt.set('r-pick', [picks[0], '再点一下量距离', 'ruler']);
+      tagAt.set('r-pick', [picks[0], t('Click once more to measure'), 'ruler']);
     } else tagAt.delete('r-pick');
-    tagAt.set('r-dim', [toWorld([OW / 2, -OD / 2, 0]), `外形 ${OW} × ${OD} × ${OH} mm`, '']);
+    tagAt.set('r-dim', [toWorld([OW / 2, -OD / 2, 0]), t('Outline {w} × {d} × {h} mm', { w: OW, d: OD, h: OH }), '']);
   }
   const tagAt = new Map<string, [THREE.Vector3, string, string]>();
 
-  // ---------------------------------------------------------------- 每帧
+  // ---------------------------------------------------------------- Per frame
   const v = new THREE.Vector3();
   function project(p: THREE.Vector3): [number, number] | null {
     v.copy(p).project(camera);
@@ -537,7 +536,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
       ob.root.position.copy(ob.cur.pos);
       ob.root.scale.setScalar(ob.cur.scale);
     }
-    // 槽位：下一件发亮（呼吸），拖到附近的那个更亮
+    // Slots: next one breathes, the one being dragged near is brighter
     const pulse = 0.12 + 0.08 * (0.5 + 0.5 * Math.sin(now / 260));
     for (const g of ghosts) {
       if (!g.g.visible) continue;
@@ -546,14 +545,14 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
       (m.material as THREE.MeshBasicMaterial).opacity = hot ? 0.38 : pulse;
       g.g.position.set(g.center[0], g.center[1], g.center[2] + placedOffset(g.id));
     }
-    // 标签
+    // Labels
     for (const t of tags.values()) t.hidden = true;
     if (next && L.slots[next]) {
       const keys = positional(next) ? slotKeys(next) : [slotKeys(next)[0]];
       for (const k of keys) {
         const c = poseOf(next, k).center;
         const s = core.byId[next].spots?.find((x) => x.key === k);
-        const text = positional(next) && s ? s.label.replace(/^放/, '') : `放这里 · ${core.byId[next].short}`;
+        const text = positional(next) && s ? t(s.label).replace(/^放/, '') : t('Place here · {part}', { part: t(core.byId[next].short) }); // lint: allow-cjk (zh labels start with the verb)
         place2(tag(`slot-${k}`, text, drag.snap === k ? 'hot' : 'slot'), toWorld([c[0], c[1], poseOf(next, k).max[2] + 3 + placedOffset(next)]));
       }
     }
@@ -627,7 +626,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
       el.style.cursor = on ? 'crosshair' : '';
     },
     ruler: () => rulerOn,
-    /** 测试钩子：零件（托盘里 / 装好的）和槽位在页面上的位置 */
+    /** Test hook: page positions of parts (tray / placed) and slots */
     partScreen(id: string): [number, number] | null {
       const ob = objs[id];
       if (!ob) return null;
