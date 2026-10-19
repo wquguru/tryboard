@@ -1,5 +1,5 @@
-// 最小 SSD1306 128x64 驱动 + 5x7 字库，供 oled / weather 等示例共用（只在一个 .c 里包含）。
-// 包含前需已包含 driver/i2c_master.h；使用者负责创建设备句柄 oled。
+// Minimal SSD1306 128x64 driver + 5x7 font, shared by oled / weather etc. (include in one .c only).
+// Include driver/i2c_master.h first; the user creates the device handle oled.
 #pragma once
 #include <string.h>
 #include "driver/i2c_master.h"
@@ -7,7 +7,7 @@
 static i2c_master_dev_handle_t oled;
 static uint8_t fb[128 * 64 / 8];
 
-// 经典 5x7 点阵字库，ASCII 0x20..0x7E，每字 5 列，低位在上
+// Classic 5x7 font, ASCII 0x20..0x7E, 5 columns per glyph, LSB on top
 static const uint8_t font5x7[][5] = {
     {0x00,0x00,0x00,0x00,0x00},{0x00,0x00,0x5F,0x00,0x00},{0x00,0x07,0x00,0x07,0x00},{0x14,0x7F,0x14,0x7F,0x14},
     {0x24,0x2A,0x7F,0x2A,0x12},{0x23,0x13,0x08,0x64,0x62},{0x36,0x49,0x55,0x22,0x50},{0x00,0x05,0x03,0x00,0x00},
@@ -64,7 +64,7 @@ static inline void rect(int x, int y, int w, int h, int fill)
 static inline esp_err_t cmds(const uint8_t *c, size_t n)
 {
     uint8_t buf[32];
-    buf[0] = 0x00; // 控制字节：后面全是命令
+    buf[0] = 0x00; // control byte: all commands follow
     memcpy(buf + 1, c, n);
     return i2c_master_transmit(oled, buf, n + 1, 100);
 }
@@ -74,12 +74,12 @@ static inline esp_err_t flush(void)
     static const uint8_t win[] = {0x21, 0, 127, 0x22, 0, 7};
     ESP_ERROR_CHECK(cmds(win, sizeof win));
     static uint8_t buf[1 + sizeof fb];
-    buf[0] = 0x40; // 控制字节：后面全是显存数据
+    buf[0] = 0x40; // control byte: all display data follows
     memcpy(buf + 1, fb, sizeof fb);
     return i2c_master_transmit(oled, buf, sizeof buf, 200);
 }
 
-// 标准初始化序列：关显示、时钟、复用率、偏移、起始行、电荷泵、水平寻址、段重映射、COM 反扫、对比度、开显示
+// Standard init: display off, clock, mux ratio, offset, start line, charge pump, horizontal addressing, segment remap, COM reverse, contrast, display on
 static inline esp_err_t ssd1306_init(void)
 {
     static const uint8_t init[] = {0xAE, 0xD5, 0x80, 0xA8, 0x3F, 0xD3, 0x00, 0x40, 0x8D, 0x14, 0x20, 0x00,

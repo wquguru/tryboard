@@ -1,11 +1,9 @@
-//! QMI8658 六轴 IMU（I2C 0x6B / SA0 接地 0x6A）。寄存器按 QST《QMI8658C Datasheet》Rev 0.9：
-//! WHO_AM_I（0x00 = 0x05）、REVISION_ID（0x01）、CTRL1（地址自增 ADDR_AI、SensorDisable）、CTRL2 / CTRL3
-//! （加速度 / 陀螺量程与输出率）、CTRL7（aEN / gEN）、CTRL9 命令（STATUSINT.CmdDone 握手）、STATUS0（aDA / gDA）、
-//! TIMESTAMP（24 位样本计数）、TEMP（/256 °C）、0x35..0x40 加速度 / 陀螺输出（小端）、RESET（0x60 写 0xB0）。
-//!
-//! 与真机的差别（写进 DECISIONS）：CTRL1.BE（大端）在 I2C 下不改变字节序——常见驱动（微雪示例、SensorLib）
-//! 设了 0x60 仍按小端拼数，按它们的实际表现建模，未经真机标定；没做 FIFO、AttitudeEngine、运动检测、INT1/INT2 引脚。
-//! CTRL1.ADDR_AI=0 时地址不自增（突发读一直读同一个寄存器），这是真机上常见的坑，照样复现。
+//! QMI8658 6-axis IMU (I2C 0x6B / 0x6A with SA0 low), registers per QST "QMI8658C Datasheet" Rev 0.9: WHO_AM_I (0x00 = 0x05),
+//! REVISION_ID (0x01), CTRL1 (ADDR_AI, SensorDisable), CTRL2/3 (range, ODR), CTRL7 (aEN/gEN), CTRL9 cmd (STATUSINT.CmdDone),
+//! STATUS0 (aDA/gDA), TIMESTAMP (24-bit), TEMP (/256 °C), 0x35..0x40 accel/gyro (LE), RESET (write 0xB0 to 0x60).
+//! Deviations (in DECISIONS): CTRL1.BE doesn't swap bytes over I2C, matching common drivers (Waveshare, SensorLib) that set 0x60
+//! yet assemble little-endian; not calibrated on hardware. No FIFO, AttitudeEngine, motion detect, INT1/INT2.
+//! With CTRL1.ADDR_AI=0 the address doesn't auto-increment (bursts reread one register), a common real pitfall kept on purpose. (lint: allow-long-comment)
 
 use super::imu::{noise, to_i16, Pose};
 use crate::i2c::I2cDevice;
@@ -23,10 +21,10 @@ pub struct Qmi8658 {
     ptr: u8,
     expect_reg: bool,
     now: u64,
-    /// 打开传感器（CTRL7 从 0 变非 0）的时刻
+    /// Time the sensors were enabled (CTRL7 from 0 to non-zero)
     on_at: u64,
     status_seen: u64,
-    /// 读事务开始时锁存的 0x30..0x40（时间戳、温度、加速度、陀螺）
+    /// 0x30..0x40 latched at the start of a read (timestamp, temperature, accel, gyro)
     latched: [u8; 17],
     pub reads: u64,
 }
@@ -54,8 +52,8 @@ impl Qmi8658 {
         self.regs = [0; 128];
         self.regs[0x00] = WHO_AM_I;
         self.regs[0x01] = REVISION;
-        self.regs[0x02] = 0x20; // CTRL1 复位值
-                                // 复位完成标志（新版数据手册 0x4D = 0x80；SensorLib 复位后查它）
+        self.regs[0x02] = 0x20; // CTRL1 reset value
+                                // Reset-done flag (newer datasheets: 0x4D = 0x80; SensorLib checks it after reset)
         self.regs[0x4d] = 0x80;
         self.latched = [0; 17];
         self.status_seen = 0;
@@ -69,7 +67,7 @@ impl Qmi8658 {
         self.regs[0x08] & 2 != 0 && self.regs[0x02] & 1 == 0
     }
 
-    /// 输出率（Hz）：陀螺开着时按陀螺的 7174.4 Hz 系列，只开加速度时按名义 8000 Hz 系列；12..15 是低功耗档
+    /// Output rate (Hz): the gyro's 7174.4 Hz series when the gyro is on, nominal 8000 Hz series for accel only; 12..15 are low-power modes
     fn odr(&self) -> f64 {
         if self.gyr_on() {
             let c = (self.regs[0x04] & 0xf).min(8);
@@ -101,7 +99,7 @@ impl Qmi8658 {
             out[3 + 2 * i] = v as u8;
             out[4 + 2 * i] = (v >> 8) as u8;
         };
-        // 温度：有符号 16 位，LSB = 1/256 °C
+        // Temperature: signed 16-bit, LSB = 1/256 °C
         put(0, to_i16(self.temp_c * 256.0));
         if self.acc_on() {
             let fs = 2u32 << ((self.regs[0x03] >> 4) & 7).min(3);
@@ -135,7 +133,7 @@ impl Qmi8658 {
                 }
             }
             0x0a => {
-                // CTRL9 命令：执行完置 STATUSINT.CmdDone；主机写 CTRL_CMD_ACK（0x00）后清掉
+                // CTRL9 command: set STATUSINT.CmdDone when done; cleared after the host writes CTRL_CMD_ACK (0x00)
                 self.regs[0x0a] = v;
                 if v == 0 {
                     self.regs[0x2d] &= !0x80;
@@ -156,7 +154,7 @@ impl Qmi8658 {
         let r = r & 0x7f;
         match r {
             0x2e => {
-                // STATUS0：有新样本就置 aDA / gDA，读一次清
+                // STATUS0: aDA / gDA set on a new sample, cleared on read
                 let n = self.sample();
                 let fresh = n > self.status_seen;
                 self.status_seen = n;
@@ -237,7 +235,7 @@ mod tests {
     #[test]
     fn id_autoinc_and_readout() {
         let mut d = Qmi8658::new(0x6b);
-        // 复位后 ADDR_AI=0：突发读停在同一个寄存器
+        // ADDR_AI=0 after reset: bursts stay on one register
         assert_eq!(rd(&mut d, 0x00, 2), [0x05, 0x05]);
         wr(&mut d, 0x02, 0x40);
         assert_eq!(rd(&mut d, 0x00, 2), [0x05, REVISION]);
@@ -265,12 +263,12 @@ mod tests {
             "{pitch} {roll}"
         );
         assert!((w(4) / 64.0 - 50.0).abs() < 0.2, "gx {}", w(4) / 64.0);
-        // CTRL9 握手
+        // CTRL9 handshake
         wr(&mut d, 0x0a, 0x01);
         assert_eq!(rd(&mut d, 0x2d, 1)[0] & 0x80, 0x80);
         wr(&mut d, 0x0a, 0x00);
         assert_eq!(rd(&mut d, 0x2d, 1)[0] & 0x80, 0);
-        // 软复位：回到不自增、传感器关
+        // Soft reset: back to no auto-increment, sensors off
         wr(&mut d, 0x60, 0xb0);
         assert_eq!(rd(&mut d, 0x02, 1), [0x20]);
         assert_eq!(rd(&mut d, 0x4d, 1), [0x80]);

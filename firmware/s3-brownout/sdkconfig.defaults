@@ -1,3 +1,3 @@
 CONFIG_IDF_TARGET="esp32s3"
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
-# 欠压检测保持 IDF 默认（开、第 7 档 2.44 V、硬件直接复位）
+# Brownout detection left at IDF defaults (on, level 7 = 2.44 V, hardware reset)

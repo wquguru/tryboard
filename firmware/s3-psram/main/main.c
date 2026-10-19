@@ -1,5 +1,5 @@
-// 验收：ESP32-S3 八线 PSRAM（N16R8 模组，8MB OPI）。启动时 IDF 完成 PSRAM 初始化（读模式寄存器、时序调优、
-// 映射进 cache、加进堆），这里从 PSRAM 堆分配 4MB，写入伪随机模式再读回校验，打印耗时。
+// Acceptance: S3 octal PSRAM (N16R8, 8MB OPI). IDF inits and maps PSRAM into the heap at boot;
+// we allocate 4MB from it, write a pseudo-random pattern, read it back and print the time taken.
 #include <stdio.h>
 #include <inttypes.h>
 #include "esp_heap_caps.h"

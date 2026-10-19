@@ -1,6 +1,5 @@
-// 验收固件：16 颗 WS2812（GPIO8）。16×24 = 384 个 RMT 条目远超一块通道内存（48），
-// 驱动必须靠阈值中断乒乓填充 + 回绕模式，用来验收 RMT 的 TX_THR / 回绕时序。
-// 第 k 颗灯 = (k*16, 255-k*16, k) ，每帧整体旋转一格。
+// Acceptance: 16 WS2812 on GPIO8; 16×24 = 384 RMT items far exceed one channel's 48, so the driver must ping-pong
+// via threshold interrupts + wrap mode (tests RMT TX_THR / wrap timing). LED k = (k*16, 255-k*16, k), rotated each frame.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"

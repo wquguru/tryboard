@@ -1,4 +1,4 @@
-//! 最小 ELF32 小端解析：取可加载段与符号表，够测试和加载固件用。
+//! Minimal ELF32 little-endian parser: loadable segments and the symbol table, enough for tests and firmware loading.
 
 pub struct Segment {
     pub paddr: u32,
@@ -31,10 +31,10 @@ fn u32le(b: &[u8], o: usize) -> u32 {
 impl Elf {
     pub fn parse(b: &[u8]) -> Result<Elf, String> {
         if b.len() < 52 || &b[0..4] != b"\x7fELF" {
-            return Err("不是 ELF".into());
+            return Err("not an ELF file".into());
         }
         if b[4] != 1 || b[5] != 1 {
-            return Err("只支持 ELF32 小端".into());
+            return Err("only ELF32 little-endian is supported".into());
         }
         let entry = u32le(b, 24);
         let phoff = u32le(b, 28) as usize;
@@ -57,7 +57,10 @@ impl Elf {
             segments.push(Segment {
                 paddr,
                 vaddr,
-                data: b.get(off..off + filesz).ok_or("段越界")?.to_vec(),
+                data: b
+                    .get(off..off + filesz)
+                    .ok_or("segment out of bounds")?
+                    .to_vec(),
                 memsz,
             });
         }
@@ -79,7 +82,9 @@ impl Elf {
                     .map(|p| name_off + p)
                     .unwrap_or(name_off);
                 let data = if kind == 1 {
-                    b.get(off..off + size).ok_or("节越界")?.to_vec()
+                    b.get(off..off + size)
+                        .ok_or("section out of bounds")?
+                        .to_vec()
                 } else {
                     Vec::new()
                 };

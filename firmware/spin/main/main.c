@@ -1,8 +1,5 @@
-// 成品："会转身的小黄"（ESP32-S3 + GC9A01 圆屏 + 舵机转台）。
-// 舵机 GPIO4（LEDC 50Hz）以 90° 为中心在 ±60° 之间来回转，2 秒一个来回（脉宽 1.5 ± 0.667ms）；
-// 圆屏画小黄的脸，眼珠朝转动方向看（到最右打印 EYE R、最左 EYE L）。按 BOOT（GPIO0）停在正面（90°）、
-// 眼珠回到正中并打印 LOOK FRONT，再按一次继续转。是检查点 spin-1 → spin-2 → 07-spin 的最后一步。
-// 圆屏接线见 firmware/common/round_lcd.h。
+// Finished build: turning Xiaohuang (S3 + GC9A01 + servo GPIO4, 90° ±60°, 2 s cycle); eyes look the way it turns (EYE R / EYE L).
+// BOOT (GPIO0) stops facing front and prints LOOK FRONT, press again to resume. Last of spin-1 → spin-2 → 07-spin.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -14,14 +11,14 @@
 #define SERVO_GPIO 4
 #define BTN_GPIO 0
 #define STEP_MS 20
-// 一个来回 2 秒 = 100 步；半程 50 步从 -60° 走到 +60°
+// One cycle 2 s = 100 steps; half of 50 steps goes from -60° to +60°
 #define HALF_STEPS 50
 #define CENTER_US 1500
-#define SWING_US 667 // 60° 对应的脉宽（0.5–2.5ms 映射 0–180°）
+#define SWING_US 667 // pulse for 60° (0.5–2.5ms maps 0–180°)
 #define EYE_Y 104
 #define EYE_DX 30
 #define PUPIL_MAX 13
-// 屏幕眼罩（深色圆角矩形）所在的行带：只重画这一段
+// Rows covered by the visor (dark rounded rect): only this band is redrawn
 #define BAND_Y0 (EYE_Y - 46)
 #define BAND_Y1 (EYE_Y + 46)
 
@@ -60,8 +57,8 @@ static void servo_us(uint32_t us)
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
 }
 
-// 眼睛：试板原创"小黄"的样子——一块深色屏幕眼罩，里面两只青色圆角矩形眼睛（不是护目镜，不画镜框和头带）。
-// look = 眼睛水平偏移（像素）
+// Eyes: TryBoard's original "Xiaohuang", a dark visor holding two cyan rounded-rect eyes (no goggles, frame or strap).
+// look = horizontal eye offset in pixels
 static void draw_eyes(int look)
 {
     for (int y = BAND_Y0; y < BAND_Y1; y++)
@@ -78,7 +75,7 @@ static void draw_face(int look)
 {
     fb_clear(C_SKIN);
     draw_eyes(look);
-    fb_arc(120, 160, 34, 6, 0, C_MOUTH); // 笑嘴
+    fb_arc(120, 160, 34, 6, 0, C_MOUTH); // smile
     lcd_flush_rows(0, LCD_H);
 }
 
@@ -112,7 +109,7 @@ void app_main(void)
     for (;;) {
         int64_t ts;
         while (xQueueReceive(btn_q, &ts, 0) == pdTRUE) {
-            if (ts - last_press < 50000) continue; // 50ms 消抖
+            if (ts - last_press < 50000) continue; // 50ms debounce
             last_press = ts;
             front = !front;
             printf(front ? "LOOK FRONT\n" : "LOOK AROUND\n");
@@ -122,23 +119,23 @@ void app_main(void)
             servo_us(CENTER_US);
             target = 0;
         } else {
-            // 三角波：前半程 -60° → +60°，后半程回来
+            // Triangle wave: first half -60° → +60°, second half back
             int k = step % (2 * HALF_STEPS);
             int off = k < HALF_STEPS ? -SWING_US + 2 * SWING_US * k / HALF_STEPS
                                      : SWING_US - 2 * SWING_US * (k - HALF_STEPS) / HALF_STEPS;
             servo_us(CENTER_US + off);
             if (k == 0) printf("SPIN -60\n");
             if (k == HALF_STEPS) printf("SPIN +60\n");
-            // 眼珠朝转动方向看（脉宽变大 = 往 + 方向转）
+            // Eyes look the way it turns (wider pulse = turning in the + direction)
             target = k < HALF_STEPS ? PUPIL_MAX : -PUPIL_MAX;
             step++;
         }
-        // 眼珠每步最多挪 4 像素，转向时有个"扫一眼"的过渡
+        // Pupils move at most 4 px per step, giving a glance-over transition when it reverses
         int next = look + (target > look ? 4 : target < look ? -4 : 0);
         if ((target - look) * (target - next) < 0) next = target;
         if (next != look) {
             look = next;
-            // 眼珠到最右 / 最左时各报一次（检查点 07-spin 用串口判"眼珠跟着转"）
+            // Report once at far right / far left (checkpoint 07-spin judges eye tracking from serial)
             if (look == PUPIL_MAX) printf("EYE R\n");
             if (look == -PUPIL_MAX) printf("EYE L\n");
             draw_eyes(look);

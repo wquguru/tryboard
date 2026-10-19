@@ -1,6 +1,5 @@
-// 检查点 lens-1「眼睛 + 眨眼」参考固件（ESP32-S3 + GC9A01 圆屏）：黑底一对青色圆角矩形眼睛、白色高光、粉色腮红，
-// 画好后每 3 秒眨一次眼（6 帧、每帧 30ms），眨完打印 BLINK <次数>。
-// 下一个检查点 lens-2 加按键换表情，07-lens 合成四种表情循环。接线见 firmware/common/round_lcd.h。
+// Checkpoint lens-1 "eyes + blink" reference (S3 + GC9A01): cyan rounded-rect eyes, white highlights, pink cheeks on black; blinks every 3 s
+// (6 frames x 30ms), printing BLINK <count>. lens-2 adds a mood button, 07-lens cycles four moods. Wiring: firmware/common/round_lcd.h.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -10,7 +9,7 @@
 
 static uint16_t C_BG, C_EYE, C_HI, C_CHEEK;
 
-// openness：0..100，眨眼时的睁开程度
+// openness: 0..100, how open the eyes are while blinking
 static void draw_face(int openness)
 {
     fb_clear(C_BG);

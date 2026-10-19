@@ -1,6 +1,5 @@
-// 检查点 lens-2「按键换表情」参考固件（ESP32-S3 + GC9A01 圆屏）：在 lens-1 的眼睛 + 眨眼上加 BOOT 键，
-// 每按一次在 normal（圆角矩形眼，会眨）和 happy（^ ^ 弯眼 + 笑嘴，不眨）之间切换，打印 MOOD <编号> <名字>。
-// 07-lens 再加 love / sleepy 两种并循环。接线见 firmware/common/round_lcd.h。
+// Checkpoint lens-2 "button changes mood" reference (S3 + GC9A01): lens-1 plus BOOT, toggling normal (rounded eyes, blinking) and happy (^ ^ + smile,
+// no blink), printing MOOD <id> <name>. 07-lens adds love / sleepy and cycles. Wiring: firmware/common/round_lcd.h.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -42,7 +41,7 @@ static void draw_face(int mood, int openness)
     }
     fb_ellipse(120 - 78, 170, 18, 10, C_CHEEK);
     fb_ellipse(120 + 78, 170, 18, 10, C_CHEEK);
-    if (mood == 1) fb_arc(120, 168, 18, 5, 0, C_EYE); // 笑嘴
+    if (mood == 1) fb_arc(120, 168, 18, 5, 0, C_EYE); // smile
     lcd_flush_rows(0, LCD_H);
 }
 
@@ -74,7 +73,7 @@ void app_main(void)
         TickType_t now = xTaskGetTickCount();
         int64_t ts;
         if ((int32_t)(next_blink - now) > 0 && xQueueReceive(btn_q, &ts, next_blink - now) == pdTRUE) {
-            if (ts - last_press < 30000) continue; // 30ms 消抖
+            if (ts - last_press < 30000) continue; // 30ms debounce
             last_press = ts;
             mood = !mood;
             printf("MOOD %d %s\n", mood, MOOD_NAME[mood]);

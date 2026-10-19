@@ -1,4 +1,4 @@
-// 验收固件（经典 ESP32）：启动、打印芯片信息、FreeRTOS 延时计时。
+// Acceptance firmware (classic ESP32): boot, print chip info, time FreeRTOS delays.
 #include <stdio.h>
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"

@@ -1,4 +1,4 @@
-// 示例：板载 WS2812（GPIO8）经 RMT 驱动，红 → 绿 → 蓝 → 白循环，每 400ms 换一次。
+// Example: onboard WS2812 (GPIO8) via RMT, cycling red -> green -> blue -> white every 400ms.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"

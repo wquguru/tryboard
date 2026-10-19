@@ -1,11 +1,11 @@
-// 示例：电位器接 GPIO2（ADC1 通道 2），读数映射成 GPIO5 上 LED 的亮度。
+// Example: potentiometer on GPIO2 (ADC1 ch 2), reading mapped to LED brightness on GPIO5.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_adc/adc_oneshot.h"
 #include "driver/ledc.h"
 
-// 引脚可由构建参数覆盖（S3 版本用 GPIO4 = ADC1 通道 3）
+// Pins overridable by build flags (S3 uses GPIO4 = ADC1 ch 3)
 #ifndef POT_CHANNEL
 #define POT_CHANNEL ADC_CHANNEL_2
 #endif

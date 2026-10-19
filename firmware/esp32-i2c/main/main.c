@@ -1,5 +1,5 @@
-// 示例：经典 ESP32 上同一条 I2C 总线挂 SSD1306（0x3C）和 BME280（0x76）。
-// 用 DevKitC 惯用的 SDA=GPIO21、SCL=GPIO22，屏幕上显示读数。
+// Example: SSD1306 (0x3C) and BME280 (0x76) on one I2C bus on classic ESP32,
+// using the usual DevKitC SDA=GPIO21, SCL=GPIO22; readings shown on screen.
 #include <stdio.h>
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"
@@ -58,7 +58,7 @@ void app_main(void)
     ESP_ERROR_CHECK(rd(0x88, c, 26));
     ESP_ERROR_CHECK(rd(0xE1, h, 7));
     bme280_parse_calib(c, h);
-    // 湿度 ×1；温度 ×1、气压 ×1、正常模式；待机 125ms、关滤波
+    // Humidity x1; temperature x1, pressure x1, normal mode; standby 125ms, filter off
     ESP_ERROR_CHECK(wr(0xF2, 0x01));
     ESP_ERROR_CHECK(wr(0xF5, 0x40));
     ESP_ERROR_CHECK(wr(0xF4, 0x27));

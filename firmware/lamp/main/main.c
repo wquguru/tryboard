@@ -1,9 +1,7 @@
-// 旋钮台灯（P2-09）参考固件，三个检查点共用：
-//   STAGE 1 lamp-1「灯带点亮」：8 灯 WS2812 逐颗点亮成暖白（1/4 亮度）
-//   STAGE 2 lamp-2「旋钮读数」：+ EC11 编码器接 PCNT，打印格数和按键次数
-//   STAGE 3 lamp-3「合体」：旋钮调亮度 / 换颜色，按下切换模式
-// 接线（ESP32-S3）：灯条 DIN=GPIO5（经 74AHCT125 升到 5 V），编码器 CLK=GPIO6、DT=GPIO7、SW=GPIO15（按下接地）。
-// WS2812 不用 led_strip 组件：IDF 自带的 RMT TX + 字节编码器就够（10 MHz：0 码 0.3/0.9 µs、1 码 0.9/0.3 µs）。
+// Knob lamp (P2-09) reference firmware, shared by three checkpoints: STAGE 1 lamp-1 "strip on" lights 8 WS2812 one by one warm white (1/4);
+// STAGE 2 lamp-2 "knob reading" adds an EC11 on PCNT printing detents and presses; STAGE 3 lamp-3 "combined": knob sets brightness / colour, press switches mode.
+// Wiring (S3): strip DIN=GPIO5 (via 74AHCT125 to 5 V), encoder CLK=6, DT=7, SW=15 (active low). No led_strip component: IDF RMT TX + bytes encoder
+// suffice (10 MHz: 0 = 0.3/0.9 us, 1 = 0.9/0.3 us). (lint: allow-long-comment)
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -43,7 +41,7 @@ static void strip_init(void)
     ESP_ERROR_CHECK(rmt_enable(tx));
 }
 
-// 送一帧（前 lit 颗是 rgb，其余灭），等发完再留出 > 280 µs 低电平当复位
+// Send a frame (first lit LEDs rgb, rest off), wait for completion, then hold > 280 us low as reset
 static void strip_show(uint32_t rgb, int lit)
 {
     for (int i = 0; i < N_LED; i++) {
@@ -58,7 +56,7 @@ static void strip_show(uint32_t rgb, int lit)
     vTaskDelay(1);
 }
 
-// 颜色按亮度缩放：每个通道 = 值 × k / 255（整数除法），任务书里写的就是这个公式
+// Scale colour by brightness: each channel = value x k / 255 (integer division), the formula from the task brief
 static uint32_t scale(uint32_t c, int k)
 {
     uint32_t r = ((c >> 16) & 0xFF) * k / 255, g = ((c >> 8) & 0xFF) * k / 255, b = (c & 0xFF) * k / 255;
@@ -70,7 +68,7 @@ static uint32_t scale(uint32_t c, int k)
 #if STAGE >= 2
 static pcnt_unit_handle_t unit;
 
-// 与 ESP-IDF 示例 peripherals/pcnt/rotary_encoder 相同：两个通道互为边沿 / 电平，4 倍频，顺时针计数增加
+// Same as the IDF example peripherals/pcnt/rotary_encoder: channels swap edge / level, x4 decoding, clockwise counts up
 static void knob_init(void)
 {
     pcnt_unit_config_t uc = {.high_limit = 100, .low_limit = -100, .flags.accum_count = 1};
@@ -95,7 +93,7 @@ static void knob_init(void)
     gpio_config(&sw);
 }
 
-// 当前格数（一格 4 个计数；停在格上时计数是 4 的倍数）
+// Current detents (4 counts per detent; a multiple of 4 when resting on one)
 static int knob_detents(void)
 {
     int c = 0;
@@ -116,7 +114,7 @@ void app_main(void)
 #if STAGE >= 2
     knob_init();
 #endif
-    // 上电逐颗点亮（每 60 ms 多亮一颗），亮度 64/255
+    // At power-up light one more LED every 60 ms, brightness 64/255
     for (int i = 1; i <= N_LED; i++) {
         strip_show(scale(WARM, 64), i);
         vTaskDelay(pdMS_TO_TICKS(60));
@@ -149,7 +147,7 @@ void app_main(void)
 #endif
             last = d;
         }
-        // 按键：连续 3 次（30 ms）读到同一电平才算
+        // Button: counts only after 3 reads in a row (30 ms) agree
         int lv = gpio_get_level(ENC_SW);
         if (lv == sw_last) {
             if (++sw_stable == 3 && lv != sw_reported) {

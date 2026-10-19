@@ -1,6 +1,5 @@
-// 验收：舵机大幅扫动 → 只靠 USB 供电时 3V3 掉压、欠压复位（P1-02）。
-// GPIO4 接 SG90，0° ↔ 180° 每 150 ms 换一次方向（舵机转完 180° 要约 0.3 s，所以总在半路反向，电流最大）。
-// 每次启动打印复位原因（esp_reset_reason）和 RTC_NOINIT 里的启动次数；扫满 12 次没复位就打印 TRYBOARD_OK。
+// Acceptance: big servo sweeps -> on USB power alone 3V3 sags and brownout resets (P1-02). SG90 on GPIO4 reverses 0°/180° every 150 ms (a full
+// sweep takes ~0.3 s, so it always reverses mid-way at max current). Each boot prints esp_reset_reason and the RTC_NOINIT boot count; 12 sweeps without reset print TRYBOARD_OK.
 #include <stdio.h>
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"
@@ -28,7 +27,7 @@ static const char *reason_name(esp_reset_reason_t r)
 
 static uint32_t us_to_duty(uint32_t us)
 {
-    return us * (1 << 14) / 20000; // 14 位分辨率，周期 20 ms
+    return us * (1 << 14) / 20000; // 14-bit resolution, 20 ms period
 }
 
 void app_main(void)
@@ -65,7 +64,7 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(150));
     }
     printf("TRYBOARD_OK s3-brownout (boot %" PRIu32 ")\n", s_boots);
-    // 停在中间，不再动
+    // Park in the middle, stop moving
     ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, us_to_duty(1500));
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
     while (1) {

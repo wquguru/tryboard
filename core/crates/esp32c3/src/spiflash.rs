@@ -1,15 +1,15 @@
-//! SPI1（SPI_MEM）flash 控制器：用户模式事务 + 预置命令位（RDID / RDSR / PP / SE / BE / CE / READ）。
-//! 寄存器见 soc/esp32c3/register/soc/spi_mem_reg.h；命令语义按 JEDEC 通用 SPI NOR。
+//! SPI1 (SPI_MEM) flash controller: user-mode transactions + preset command bits (RDID / RDSR / PP / SE / BE / CE / READ).
+//! Registers in soc/esp32c3/register/soc/spi_mem_reg.h; command semantics follow generic JEDEC SPI NOR.
 
 pub struct SpiFlash {
     pub regs: [u32; 0x100 / 4],
     pub wel: bool,
-    /// JEDEC ID：GigaDevice（0xC8）GD25Q32，类型 0x40、容量 0x16（4MB），常见开发板用的就是它
+    /// JEDEC ID: GigaDevice (0xC8) GD25Q32, type 0x40, capacity 0x16 (4MB), the part common dev boards use
     pub jedec: u32,
-    /// 编程 / 擦除次数（给 UI 和磨损统计用）
+    /// Program / erase count (for the UI and wear stats)
     pub erases: u64,
     pub programs: u64,
-    /// 状态寄存器 SR1–SR3（SR2 位 1 = QE，四线模式要靠它）；SR1 的 WEL 由 wel 单独维护
+    /// Status registers SR1-SR3 (SR2 bit 1 = QE, required for quad mode); SR1's WEL is tracked separately in wel
     pub sr: [u8; 3],
 }
 
@@ -37,7 +37,7 @@ const W0: usize = 0x58 / 4;
 
 impl SpiFlash {
     pub fn read(&self, off: u32) -> u32 {
-        // CMD 寄存器的命令位在事务完成后由硬件清零；事务是同步完成的，所以读到的永远是 0
+        // Hardware clears CMD bits when the transaction finishes; transactions complete synchronously, so reads always see 0
         if off == 0 {
             return 0;
         }
@@ -81,12 +81,12 @@ impl SpiFlash {
         if !self.wel {
             return;
         }
-        // 页内回绕：PP 不跨 256 字节页
+        // Wrap within the page: PP never crosses a 256-byte page
         let page = addr & !0xff;
         for (i, b) in data.iter().enumerate() {
             let a = page | ((addr + i) & 0xff);
             if let Some(x) = flash.get_mut(a) {
-                *x &= *b; // NOR 只能把 1 编程成 0
+                *x &= *b; // NOR can only program 1s to 0s
             }
         }
         self.programs += 1;
@@ -115,7 +115,7 @@ impl SpiFlash {
         } else if v & (1 << 27) != 0 {
             self.regs[RD_STATUS] = self.sr1() as u32;
         } else if v & (1 << 26) != 0 {
-            // WRSR：写入值取自 RD_STATUS 寄存器（低字节 SR1，次字节 SR2）
+            // WRSR: value comes from the RD_STATUS register (low byte SR1, next byte SR2)
             if self.wel {
                 let st = self.regs[RD_STATUS];
                 self.sr[0] = st as u8 & !3;
@@ -164,7 +164,7 @@ impl SpiFlash {
             0x05 => Some(vec![self.sr1()]),
             0x35 => Some(vec![self.sr[1]]),
             0x15 => Some(vec![self.sr[2]]),
-            // 写状态寄存器：0x01 写 SR1（可带 SR2），0x31 写 SR2，0x11 写 SR3
+            // Write status register: 0x01 writes SR1 (optionally SR2), 0x31 writes SR2, 0x11 writes SR3
             0x01 | 0x31 | 0x11 if mosi => {
                 if self.wel {
                     let d = self.buf_bytes(mosi_len.max(1));
@@ -182,7 +182,7 @@ impl SpiFlash {
                 }
                 None
             }
-            // 易失写使能（0x50）：允许随后写状态寄存器
+            // Volatile write enable (0x50): allows the following status register write
             0x50 => {
                 self.wel = true;
                 None
@@ -224,7 +224,7 @@ impl SpiFlash {
                 }
                 None
             }
-            // SFDP 不支持：返回全 1，IDF 会退回通用芯片驱动
+            // SFDP unsupported: return all ones so IDF falls back to the generic chip driver
             0x5a => Some(vec![0xff; miso_len]),
             _ => None,
         };

@@ -1,17 +1,11 @@
-//! 引脚 / 总线事件记录（逻辑分析仪，P1-05）：有上限的环形缓冲，按 CPU 周期盖戳。
-//! C3 / S3 两颗芯片的 SocBus 各有一份；CLI `--trace-io` 与 wasm `tb_io_take` 读同一份事件序列。
-//!
-//! 记录什么、为什么这样记（格式与上限见 docs/DECISIONS.md「事件缓冲」）：
-//! - GPIO 电平变化：只记被观察（watch 掩码）的引脚。固件逐位翻转的引脚每秒可达上百万次变化，全记会拖慢模拟、塞满缓冲
-//! - LEDC：引脚上的 PWM（占空比、频率）变了才记一条，不逐周期出波形（与 LEDC 模型的约定一致）
-//! - RMT：挂在引脚上的 WS2812 解码器每提交一帧记一条（灯珠数 + 第一颗颜色），不记 800kHz 的逐位跳变
-//! - I2C：来自主机模型的事务层（起始 / 地址 + 读写 / 每字节 + ACK/NACK / 停止），时刻按 SCL 位时序推算，不逐 SCL 边沿
-//!
-//! 所有字段都是整数（频率记毫赫、占空比记 1/65535），文本格式在 Rust 和 TS 两边逐字相同，才能对拍。
+//! Pin / bus event log (logic analyzer, P1-05): bounded ring buffer stamped in CPU cycles, one per SocBus (C3 / S3); CLI `--trace-io` and wasm `tb_io_take`
+//! read the same sequence (format and cap: DECISIONS, event buffer entry). GPIO: only watched pins (bit-banged pins toggle millions of times per second).
+//! LEDC: one entry per PWM change, no waveform. RMT: one per WS2812 frame (LED count + first colour), not 800kHz bits. I2C: transaction level from
+//! the master model, timed by SCL bits. All fields are integers (mHz, duty/65535) so Rust and TS text match exactly. (lint: allow-long-comment)
 
 use std::collections::VecDeque;
 
-/// 默认上限：65536 条 × 16 字节 = 1MB。网页 worker 每个时间片批次（≤ 20ms）取走一次，正常用不满
+/// Default cap: 65536 entries x 16 bytes = 1MB. The web worker drains it every batch (<= 20ms), so it normally never fills
 pub const DEFAULT_CAP: usize = 1 << 16;
 
 pub mod kind {
@@ -24,26 +18,26 @@ pub mod kind {
     pub const I2C_STOP: u8 = 13;
 }
 
-/// I2C 事件 b 字段的位
+/// Bits of an I2C event's b field
 pub mod i2cbit {
-    /// 地址字节的 R/W 位；数据字节的方向（1 = 从机发、主机读）
+    /// R/W bit of an address byte; direction of a data byte (1 = slave sends, master reads)
     pub const READ: u16 = 1;
-    /// 这个字节之后的第 9 位是 NACK（地址 / 写：从机没应答；读：主机不再要）
+    /// The 9th bit after this byte is NACK (address / write: slave didn't ACK; read: master wants no more)
     pub const NACK: u16 = 2;
-    /// START 事件：重复起始
+    /// START event: repeated start
     pub const RESTART: u16 = 4;
-    /// 第几个 I2C 控制器（S3 有 I2C1）
+    /// Which I2C controller (S3 has I2C1)
     pub const PORT1: u16 = 1 << 15;
 }
 
-/// 一条事件，16 字节小端：t u64 | kind u8 | a u8 | b u16 | v u32
-/// - GPIO：a = 引脚，b = 电平
-/// - PWM：a = 引脚，b = 占空比 × 65535（四舍五入），v = 频率（毫赫，0 = 不再输出 PWM）
-/// - WS2812：a = 引脚，b = 灯珠数，v = 第一颗 0xRRGGBB
-/// - I2C_START：b = RESTART / PORT1 位，v = 一个 SCL 位折合多少 CPU 周期（前端按它画 SDA/SCL）
-/// - I2C_ADDR：a = 7 位地址，b = READ / NACK / PORT1
-/// - I2C_DATA：a = 字节，b = READ（方向）/ NACK / PORT1
-/// - I2C_STOP：b = PORT1
+/// One event, 16 bytes LE: t u64 | kind u8 | a u8 | b u16 | v u32  (lint: allow-long-comment)
+/// - GPIO: a = pin, b = level
+/// - PWM: a = pin, b = duty x 65535 (rounded), v = frequency (mHz, 0 = PWM stopped)
+/// - WS2812: a = pin, b = LED count, v = first 0xRRGGBB
+/// - I2C_START: b = RESTART / PORT1 bits, v = CPU cycles per SCL bit (frontend draws SDA/SCL from it)
+/// - I2C_ADDR: a = 7-bit address, b = READ / NACK / PORT1
+/// - I2C_DATA: a = byte, b = READ (direction) / NACK / PORT1
+/// - I2C_STOP: b = PORT1
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct IoEvent {
     pub t: u64,
@@ -66,7 +60,7 @@ impl IoEvent {
         o
     }
 
-    /// 一行文本（CLI `--trace-io` 文件与网页 `web/src/app/iotrace.ts` 的 `eventLine` 逐字相同）
+    /// One text line (identical to the CLI `--trace-io` file and `eventLine` in web `web/src/app/iotrace.ts`)
     pub fn line(&self) -> String {
         use i2cbit::*;
         let port = if self.b & PORT1 != 0 { "I2C1" } else { "I2C0" };
@@ -109,21 +103,21 @@ impl IoEvent {
 pub struct IoTrace {
     pub buf: VecDeque<IoEvent>,
     pub cap: usize,
-    /// 缓冲满了被挤掉的条数（最老的先丢）
+    /// Entries pushed out when full (oldest first)
     pub dropped: u64,
-    /// 被观察的 GPIO（位 = 引脚号）；PWM / WS2812 / I2C 不受它限制（变化本来就少）
+    /// Watched GPIOs (bit = pin); PWM / WS2812 / I2C aren't limited by it (they change rarely anyway)
     pub watch: u64,
     gpio_last: u64,
-    /// 各引脚上次记下的 PWM（占空比 u16, 频率 mHz）；频率 0 = 没有 PWM
+    /// Last recorded PWM per pin (duty u16, frequency mHz); frequency 0 = no PWM
     pwm_last: [(u16, u32); 64],
-    /// GPIO 矩阵 / 使能改过：下次 update 重新扫一遍各引脚的 PWM
+    /// GPIO matrix / enables changed: rescan every pin's PWM on next update
     pub pwm_dirty: bool,
-    /// 上次扫描时 LEDC 的修改计数
+    /// LEDC revision at the last scan
     pub ledc_rev: u64,
 }
 
 impl IoTrace {
-    /// reset_level：上电时引脚电平（与 SocBus 的 gpio_log 起点一致）
+    /// reset_level: pin levels at power-up (same starting point as SocBus's gpio_log)
     pub fn new(reset_level: u64) -> Self {
         IoTrace {
             buf: VecDeque::new(),
@@ -155,7 +149,7 @@ impl IoTrace {
         }
     }
 
-    /// 引脚电平（全部引脚）可能变了：只给被观察且确实变了的引脚记事件
+    /// Pin levels (all pins) may have changed: log only watched pins that actually changed
     #[inline]
     pub fn gpio(&mut self, now: u64, level: u64) {
         let diff = (level ^ self.gpio_last) & self.watch;
@@ -177,13 +171,13 @@ impl IoTrace {
         }
     }
 
-    /// 要不要重新扫 PWM：LEDC 改过（rev 变了）或 GPIO 矩阵 / 使能改过
+    /// Whether to rescan PWM: LEDC changed (rev differs) or GPIO matrix / enables changed
     #[inline]
     pub fn pwm_scan_needed(&self, ledc_rev: u64) -> bool {
         self.pwm_dirty || ledc_rev != self.ledc_rev
     }
 
-    /// 一个引脚此刻的 PWM（None = 没有）；与上次记下的不同就记一条
+    /// A pin's PWM right now (None = none); log an entry if it differs from the last one
     pub fn pwm(&mut self, now: u64, pin: usize, p: Option<(f32, f32)>) {
         let cur = match p {
             Some((d, f)) if f > 0.0 => (
@@ -219,12 +213,12 @@ impl IoTrace {
         });
     }
 
-    /// 取走缓冲里的全部事件（按记录先后）
+    /// Take all buffered events (in recording order)
     pub fn take(&mut self) -> Vec<IoEvent> {
         self.buf.drain(..).collect()
     }
 
-    /// 软件复位后搬到新总线：缓冲、观察设置、已记下的 PWM 状态都保留（模拟时间继续）
+    /// Move to the new bus after a software reset: buffer, watch settings and recorded PWM state carry over (simulated time continues)
     pub fn carry(&mut self) -> IoTrace {
         let mut t = IoTrace::new(self.gpio_last);
         std::mem::swap(&mut t.buf, &mut self.buf);
@@ -245,7 +239,7 @@ mod tests {
         let mut t = IoTrace::new(0);
         t.cap = 3;
         t.watch = 1 << 4;
-        t.gpio(10, 1 << 4 | 1 << 5); // 只记 GPIO4
+        t.gpio(10, 1 << 4 | 1 << 5); // only GPIO4 is logged
         t.gpio(20, 1 << 5);
         t.gpio(30, 1 << 4);
         t.gpio(40, 0);

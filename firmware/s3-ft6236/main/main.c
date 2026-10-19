@@ -1,8 +1,7 @@
-// 验收：FT6236 电容触摸（I2C 0x38，3.5″ 320×480 一类触摸屏上的那颗），裸 I2C 读寄存器，不用组件库。
-// 接线：TP_SDA=GPIO6、TP_SCL=GPIO7、TP_INT=GPIO5、TP_RST=GPIO16。
-// 寄存器按 FocalTech FT6x36 数据手册：0xA3 芯片 ID（0x36）、0xA8 厂商 ID（0x11）、0xA6 固件版本、0xA4 G_MODE；
-// 0x02 TD_STATUS（触点数）、0x03..0x06 第一个触点（P1_XH 高 2 位是事件：0 按下、1 抬起、2 接触）。
-// 按着时 INT 拉低：下降沿中断唤醒任务，按着期间每 20 ms 读一次；INT 没接时退化成每 50 ms 轮询，两种都能跑。
+// Acceptance: FT6236 capacitive touch (I2C 0x38, the chip on 3.5" 320x480 panels), raw I2C register reads, no component. TP_SDA=6, TP_SCL=7, TP_INT=5,
+// TP_RST=16. Registers per FocalTech FT6x36: 0xA3 chip ID (0x36), 0xA8 vendor (0x11), 0xA6 fw, 0xA4 G_MODE; 0x02 TD_STATUS, 0x03..0x06 first point
+// (P1_XH top 2 bits = event: 0 down, 1 up, 2 contact). INT low while touched: falling edge wakes the task, read every 20 ms while held; without INT,
+// poll every 50 ms. (lint: allow-long-comment)
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -38,7 +37,7 @@ static const char *event_name(int ev)
 
 void app_main(void)
 {
-    // 复位：拉低 10 ms 再放开，等 300 ms 芯片固件起来再访问（留足余量）
+    // Reset: low 10 ms then release, wait 300 ms for the chip firmware before access (with margin)
     gpio_config_t rst = {.pin_bit_mask = 1ULL << TP_RST, .mode = GPIO_MODE_OUTPUT};
     ESP_ERROR_CHECK(gpio_config(&rst));
     gpio_set_level(TP_RST, 0);
@@ -60,9 +59,9 @@ void app_main(void)
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus, &dc, &tp));
 
     uint8_t id[6] = {0};
-    // 0xA3 CIPHER、0xA4 G_MODE、0xA5 PWR_MODE、0xA6 FIRMID、0xA7、0xA8 FOCALTECH_ID
+    // 0xA3 CIPHER, 0xA4 G_MODE, 0xA5 PWR_MODE, 0xA6 FIRMID, 0xA7, 0xA8 FOCALTECH_ID
     if (rd(0xA3, id, 6) != ESP_OK) {
-        // 没应答多半是 SDA / SCL 接反、没供电或地址不对：报出来，不要 abort 反复重启
+        // No ACK usually means SDA / SCL swapped, no power or wrong address: report it rather than abort and reboot-loop
         printf("FT6236 no ACK at 0x%02X: check TP_SDA=GPIO%d TP_SCL=GPIO%d and power\n", TP_ADDR, TP_SDA, TP_SCL);
         for (;;) vTaskDelay(portMAX_DELAY);
     }

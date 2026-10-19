@@ -1,4 +1,4 @@
-// 示例：LEDC 硬件渐变做呼吸灯。GPIO5，5kHz，13 位分辨率，1 秒渐亮、1 秒渐灭。
+// Example: LEDC hardware fade breathing LED. GPIO5, 5kHz, 13-bit, 1 s up, 1 s down.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"

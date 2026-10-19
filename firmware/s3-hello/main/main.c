@@ -1,4 +1,4 @@
-// 验收固件：启动、打印芯片信息、FreeRTOS 延时计时。
+// Acceptance firmware: boot, print chip info, time FreeRTOS delays.
 #include <stdio.h>
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"

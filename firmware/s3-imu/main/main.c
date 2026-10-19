@@ -1,8 +1,5 @@
-// 示例：六轴 IMU 测倾角（ESP32-S3，I2C SDA=GPIO8、SCL=GPIO9，400kHz）。
-// 默认 MPU6050（0x68）；定义 IMU_QMI8658 时换成 QMI8658（0x6B，s3-qmi8658 工程）。
-// 用 IDF 的 i2c_master 驱动直接读寄存器：每 200ms 读一次加速度 / 陀螺 / 温度，按重力分量算俯仰和横滚：
-//   roll = atan2(ay, az)，pitch = atan2(-ax, sqrt(ay² + az²))
-// 平放时 pitch = roll = 0。只靠加速度计算不出航向（yaw），陀螺 Z 轴给出转动速率。
+// Example: 6-axis IMU tilt (S3, I2C SDA=GPIO8 SCL=GPIO9 400kHz); MPU6050 at 0x68, or QMI8658 at 0x6B with IMU_QMI8658.
+// Every 200ms: roll = atan2(ay, az), pitch = atan2(-ax, sqrt(ay² + az²)); accel alone gives no yaw, gyro Z gives turn rate.
 #include <stdio.h>
 #include <math.h>
 #include "freertos/FreeRTOS.h"
@@ -39,12 +36,12 @@ static esp_err_t wr(uint8_t reg, uint8_t v)
     return i2c_master_transmit(dev, b, 2, 100);
 }
 
-// 读一组样本：加速度（g）、陀螺（°/s）、温度（°C）
+// Read one sample: accel (g), gyro (°/s), temperature (°C)
 static void sample(float a[3], float g[3], float *t)
 {
     uint8_t d[14];
 #ifdef IMU_QMI8658
-    // 0x33 起：TEMP_L/H、AX..AZ、GX..GZ，小端；±4 g → 8192 LSB/g，±512 °/s → 64 LSB/(°/s)
+    // From 0x33: TEMP_L/H, AX..AZ, GX..GZ, little endian; ±4 g → 8192 LSB/g, ±512 °/s → 64 LSB/(°/s)
     ESP_ERROR_CHECK(rd(0x33, d, 14));
     int16_t v[7];
     for (int i = 0; i < 7; i++) v[i] = (int16_t)(d[2 * i] | d[2 * i + 1] << 8);
@@ -54,7 +51,7 @@ static void sample(float a[3], float g[3], float *t)
         g[i] = v[4 + i] / 64.0f;
     }
 #else
-    // 0x3B 起：AX AY AZ TEMP GX GY GZ，大端；±2 g → 16384 LSB/g，±250 °/s → 131 LSB/(°/s)
+    // From 0x3B: AX AY AZ TEMP GX GY GZ, big endian; ±2 g → 16384 LSB/g, ±250 °/s → 131 LSB/(°/s)
     ESP_ERROR_CHECK(rd(0x3B, d, 14));
     int16_t v[7];
     for (int i = 0; i < 7; i++) v[i] = (int16_t)(d[2 * i] << 8 | d[2 * i + 1]);
@@ -90,16 +87,16 @@ void app_main(void)
     printf(NAME " WHO_AM_I 0x%02X %s\n", id, id == ID_VAL ? "OK" : "(unexpected)");
 
 #ifdef IMU_QMI8658
-    ESP_ERROR_CHECK(wr(0x60, 0xB0)); // 软复位
+    ESP_ERROR_CHECK(wr(0x60, 0xB0)); // soft reset
     vTaskDelay(pdMS_TO_TICKS(20));
-    ESP_ERROR_CHECK(wr(0x02, 0x40)); // CTRL1：地址自增、小端
-    ESP_ERROR_CHECK(wr(0x03, 0x15)); // CTRL2：±4 g，ODR 代码 5
-    ESP_ERROR_CHECK(wr(0x04, 0x55)); // CTRL3：±512 °/s，ODR 代码 5
-    ESP_ERROR_CHECK(wr(0x08, 0x03)); // CTRL7：开加速度计 + 陀螺
+    ESP_ERROR_CHECK(wr(0x02, 0x40)); // CTRL1: address auto-increment, little endian
+    ESP_ERROR_CHECK(wr(0x03, 0x15)); // CTRL2: ±4 g, ODR code 5
+    ESP_ERROR_CHECK(wr(0x04, 0x55)); // CTRL3: ±512 °/s, ODR code 5
+    ESP_ERROR_CHECK(wr(0x08, 0x03)); // CTRL7: enable accel + gyro
 #else
-    ESP_ERROR_CHECK(wr(0x6B, 0x80)); // 复位
+    ESP_ERROR_CHECK(wr(0x6B, 0x80)); // reset
     vTaskDelay(pdMS_TO_TICKS(100));
-    ESP_ERROR_CHECK(wr(0x6B, 0x01)); // 退出睡眠，时钟用陀螺 X 轴 PLL
+    ESP_ERROR_CHECK(wr(0x6B, 0x01)); // leave sleep, clock from gyro X PLL
     ESP_ERROR_CHECK(wr(0x19, 9));    // 1 kHz / (1 + 9) = 100 Hz
     ESP_ERROR_CHECK(wr(0x1A, 0x03)); // DLPF 44 Hz
     ESP_ERROR_CHECK(wr(0x1B, 0x00)); // ±250 °/s

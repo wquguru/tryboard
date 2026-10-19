@@ -1,7 +1,6 @@
-// 演示固件：温湿度计（ESP32-C3，选板 → 采购 → 实验台闭环里的「先跑演示固件看看」）。
-// I2C SDA=GPIO6 SCL=GPIO7（XIAO ESP32C3 的 D4 / D5）上挂 BME280@0x76 与 SSD1306@0x3C；每秒读一次，
-// 串口打印 T=.. C  H=.. %  P=.. hPa，OLED 显示同样三行。读到两次合理读数后打印 TRYBOARD_OK c3-thermo。
-// 某个器件不应答时不 abort：打印一行原因继续跑，生成的检查点会写出"应答 0 次"，比崩溃好懂。
+// Demo firmware: thermo-hygrometer (C3; the "try the demo first" step of board pick -> purchase -> bench). BME280@0x76 + SSD1306@0x3C on SDA=6 SCL=7
+// (XIAO D4 / D5); reads each second, prints T / H / P to serial and OLED; TRYBOARD_OK after two sane reads. A silent device is reported, not aborted,
+// so generated checkpoints show "0 ACKs" instead of a crash. (lint: allow-long-comment)
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -41,7 +40,7 @@ static bool bme_init(void)
     uint8_t c[26], h[7];
     if (rd(0x88, c, 26) != ESP_OK || rd(0xE1, h, 7) != ESP_OK) return false;
     bme280_parse_calib(c, h);
-    // 湿度 ×1；温度 ×1、气压 ×1、正常模式；待机 125ms、关滤波
+    // Humidity x1; temperature x1, pressure x1, normal mode; standby 125ms, filter off
     return wr(0xF2, 0x01) == ESP_OK && wr(0xF5, 0x40) == ESP_OK && wr(0xF4, 0x27) == ESP_OK;
 }
 
@@ -69,7 +68,7 @@ void app_main(void)
 
     int ok = 0;
     for (;;) {
-        // 正常模式第一次换算要等一个测量周期；之后每秒一次
+        // In normal mode the first conversion needs one measurement cycle; then once a second
         vTaskDelay(pdMS_TO_TICKS(has_bme && ok == 0 ? 200 : 1000));
         char l1[24] = "T=--", l2[24] = "H=--", l3[24] = "P=--";
         uint8_t d[8];
@@ -85,7 +84,7 @@ void app_main(void)
             snprintf(l2, sizeof l2, "H=%" PRIu32 ".%02" PRIu32 " %%", hh / 1024, (hh % 1024) * 100 / 1024);
             snprintf(l3, sizeof l3, "P=%" PRIu32 ".%02" PRIu32 " hPa", p / 25600, (p % 25600) * 100 / 25600);
             printf("%s  %s  %s\n", l1, l2, l3);
-            // 合理范围：-40..85°C、0..100%、300..1100hPa
+            // Plausible range: -40..85°C, 0..100%, 300..1100hPa
             if (t > -4000 && t < 8500 && hh <= 100 * 1024 && p > 300 * 25600 && p < 1100 * 25600) ok++;
         }
         if (has_oled) {

@@ -1,2 +1,2 @@
-# 与 C3 版共用源码（firmware/fade/main/main.c，GPIO5 低速 LEDC 渐变）
+# Shares source with the C3 version (firmware/fade/main/main.c, GPIO5 low-speed LEDC fade)
 idf_component_register(SRCS "../../fade/main/main.c" INCLUDE_DIRS ".")

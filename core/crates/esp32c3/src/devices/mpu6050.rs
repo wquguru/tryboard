@@ -1,11 +1,9 @@
-//! MPU-6050 六轴 IMU（I2C 0x68 / AD0 接高 0x69）。寄存器按 InvenSense《MPU-6000/MPU-6050 Register Map and
-//! Descriptions》Rev 4.2：WHO_AM_I（0x75 恒为 0x68，与 AD0 无关）、PWR_MGMT_1（复位值 0x40 = 睡眠）、
-//! SMPLRT_DIV / CONFIG（采样率）、GYRO_CONFIG / ACCEL_CONFIG（量程）、INT_STATUS（DATA_RDY）、
-//! 0x3B..0x48 加速度 / 温度 / 陀螺输出（大端）。读写都自动递增寄存器地址。
-//!
-//! 输出由姿态算出（见 imu.rs），叠一点确定性噪声（加速度约 ±3 mg、陀螺约 ±0.05 °/s，量级取数据手册
-//! 噪声密度 × 带宽的估算，未经真机标定）。一次读事务开始时锁存全部输出，突发读到的 14 字节属于同一个样本，
-//! 与真机的影子寄存器一致。没做：FIFO（FIFO_COUNT 恒为 0）、DMP、自检、辅助 I2C、INT 引脚。
+//! MPU-6050 6-axis IMU (I2C 0x68 / 0x69 with AD0 high), registers per InvenSense "MPU-6000/MPU-6050 Register Map" Rev 4.2:
+//! WHO_AM_I (0x75 = 0x68 regardless of AD0), PWR_MGMT_1 (reset 0x40 = sleep), SMPLRT_DIV / CONFIG (rate), GYRO/ACCEL_CONFIG
+//! (range), INT_STATUS (DATA_RDY), 0x3B..0x48 accel/temp/gyro (BE). Reads and writes auto-increment.
+//! Output comes from the pose (imu.rs) plus deterministic noise (~±3 mg, ~±0.05 °/s from datasheet noise density x bandwidth,
+//! not calibrated on hardware). All outputs latch at the start of a read so a 14-byte burst is one sample, like the real
+//! shadow registers. Not done: FIFO (FIFO_COUNT always 0), DMP, self-test, aux I2C, INT pin. (lint: allow-long-comment)
 
 use super::imu::{noise, to_i16, Pose};
 use crate::i2c::I2cDevice;
@@ -17,17 +15,17 @@ pub const WHO_AM_I: u8 = 0x68;
 pub struct Mpu6050 {
     pub addr: u8,
     pub pose: Pose,
-    /// 芯片温度（°C）：取环境温度
+    /// Die temperature (°C): uses ambient temperature
     pub temp_c: f64,
     regs: [u8; 128],
     ptr: u8,
     expect_reg: bool,
     now: u64,
-    /// 最近一次从睡眠醒来（或复位）的时刻：样本序号从这里数
+    /// Time of the last wake from sleep (or reset): sample numbers count from here
     wake_at: u64,
-    /// 上次读 INT_STATUS 时的样本序号（DATA_RDY 读清）
+    /// Sample number at the last INT_STATUS read (DATA_RDY clears on read)
     status_seen: u64,
-    /// 读事务开始时锁存的 0x3B..0x48
+    /// 0x3B..0x48 latched at the start of a read
     latched: [u8; 14],
     pub reads: u64,
 }
@@ -64,14 +62,14 @@ impl Mpu6050 {
         self.regs[0x6b] & 0x40 != 0
     }
 
-    /// 采样周期（CPU 周期）：陀螺输出率 8 kHz（DLPF 关）或 1 kHz，÷ (1 + SMPLRT_DIV)
+    /// Sample period (CPU cycles): gyro output rate 8 kHz (DLPF off) or 1 kHz, / (1 + SMPLRT_DIV)
     fn sample_cycles(&self) -> u64 {
         let dlpf = self.regs[0x1a] & 7;
         let base = if dlpf == 0 || dlpf == 7 { 8000 } else { 1000 };
         CPU_HZ * (1 + self.regs[0x19] as u64) / base
     }
 
-    /// 当前样本序号（醒着时从 1 开始数）
+    /// Current sample number (counted from 1 while awake)
     fn sample(&self) -> u64 {
         if self.sleeping() {
             return 0;
@@ -79,7 +77,7 @@ impl Mpu6050 {
         (self.now.saturating_sub(self.wake_at)) / self.sample_cycles() + 1
     }
 
-    /// 按姿态算一组输出（大端：AX AY AZ T GX GY GZ）
+    /// Compute one set of outputs from the pose (BE: AX AY AZ T GX GY GZ)
     fn compute(&self, n: u64) -> [u8; 14] {
         let afs = (self.regs[0x1c] >> 3) & 3;
         let gfs = (self.regs[0x1b] >> 3) & 3;
@@ -92,7 +90,7 @@ impl Mpu6050 {
             v[i] = to_i16((a[i] + 0.003 * noise(n, i as u64)) * a_lsb);
             v[4 + i] = to_i16((g[i] + 0.05 * noise(n, 4 + i as u64)) * g_lsb);
         }
-        // 数据手册：Temperature in °C = TEMP_OUT / 340 + 36.53
+        // Datasheet: Temperature in °C = TEMP_OUT / 340 + 36.53
         v[3] = to_i16((self.temp_c - 36.53) * 340.0);
         let mut out = [0u8; 14];
         for (i, x) in v.iter().enumerate() {
@@ -117,8 +115,8 @@ impl Mpu6050 {
                     self.status_seen = 0;
                 }
             }
-            0x75 | 0x3a | 0x3b..=0x48 | 0x72 | 0x73 => {} // 只读
-            0x68 => {}                                    // SIGNAL_PATH_RESET：只清滤波器，输出照常
+            0x75 | 0x3a | 0x3b..=0x48 | 0x72 | 0x73 => {} // read-only
+            0x68 => {} // SIGNAL_PATH_RESET: only clears filters, output unaffected
             _ => self.regs[r as usize] = v,
         }
     }
@@ -127,7 +125,7 @@ impl Mpu6050 {
         let r = r & 0x7f;
         match r {
             0x3a => {
-                // INT_STATUS：DATA_RDY 在有新样本时置位，读一次就清（INT_RD_CLEAR=0 的行为）
+                // INT_STATUS: DATA_RDY set on a new sample, cleared by one read (INT_RD_CLEAR=0 behaviour)
                 let n = self.sample();
                 let rdy = n > self.status_seen;
                 self.status_seen = n;
@@ -150,7 +148,7 @@ impl I2cDevice for Mpu6050 {
         self.expect_reg = !read;
         if read {
             self.reads += 1;
-            // 睡眠时输出寄存器保持最后一次的值
+            // Output registers hold their last value while asleep
             if !self.sleeping() {
                 self.latched = self.compute(self.sample());
             }
@@ -201,7 +199,7 @@ mod tests {
         let mut d = Mpu6050::new(0x69);
         assert_eq!(rd(&mut d, 0x75, 1), [0x68]);
         assert_eq!(rd(&mut d, 0x6b, 1), [0x40]);
-        // 睡眠时输出全 0
+        // Asleep: outputs all zero
         assert!(rd(&mut d, 0x3b, 14).iter().all(|b| *b == 0));
         wr(&mut d, 0x6b, 0x01);
         d.set_time(CPU_HZ / 100);
@@ -232,13 +230,13 @@ mod tests {
         let b = rd(&mut d, 0x3b, 14);
         assert!((i16::from_be_bytes([b[4], b[5]]) as f64 - 8192.0).abs() < 40.0);
         assert!((i16::from_be_bytes([b[12], b[13]]) as f64 / 16.4 - 100.0).abs() < 0.2);
-        // DATA_RDY 读清；1 kHz 下 1 ms 后再置位
+        // DATA_RDY clears on read; at 1 kHz it sets again after 1 ms
         wr(&mut d, 0x1a, 0x03);
         assert_eq!(rd(&mut d, 0x3a, 1), [1]);
         assert_eq!(rd(&mut d, 0x3a, 1), [0]);
         d.set_time(CPU_HZ / 1000 + 1);
         assert_eq!(rd(&mut d, 0x3a, 1), [1]);
-        // 复位回到睡眠
+        // Reset goes back to sleep
         wr(&mut d, 0x6b, 0x80);
         assert_eq!(rd(&mut d, 0x6b, 1), [0x40]);
     }

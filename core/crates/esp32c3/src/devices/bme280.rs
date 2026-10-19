@@ -1,13 +1,11 @@
-//! BME280 温湿度气压传感器（I2C）。寄存器映射、补偿公式按 Bosch BME280 数据手册。
-//!
-//! 输出的原始 ADC 值是"反解"出来的：给定环境（温度 / 湿度 / 气压），在 ADC 取值范围内二分查找，
-//! 使数据手册的整数补偿公式算回来正好等于设定值。驱动用标准公式就能读到设定的环境。
+//! BME280 temperature/humidity/pressure sensor (I2C). Register map and compensation per the Bosch BME280 datasheet.
+//! Raw ADC values are inverted: binary-search the ADC range so the datasheet's integer compensation yields exactly the set environment.
 
 use crate::i2c::I2cDevice;
 use crate::periph::CPU_HZ;
 use std::any::Any;
 
-/// 校准常数：温度 / 气压取数据手册示例值，湿度取量产器件的典型值
+/// Calibration constants: temperature / pressure from the datasheet example, humidity from typical production parts
 #[derive(Clone, Copy)]
 pub struct Calib {
     pub t1: u16,
@@ -35,7 +33,7 @@ pub const CALIB: Calib = Calib {
     h6: 30,
 };
 
-/// 数据手册 4.2.3：返回 (温度 0.01°C, t_fine)
+/// Datasheet 4.2.3: returns (temperature in 0.01°C, t_fine)
 pub fn comp_t(c: &Calib, adc_t: i32) -> (i32, i32) {
     let t1 = c.t1 as i32;
     let var1 = (((adc_t >> 3) - (t1 << 1)) * c.t2 as i32) >> 11;
@@ -45,7 +43,7 @@ pub fn comp_t(c: &Calib, adc_t: i32) -> (i32, i32) {
     ((t_fine * 5 + 128) >> 8, t_fine)
 }
 
-/// 返回 Q24.8 帕
+/// Returns Q24.8 Pa
 pub fn comp_p(c: &Calib, adc_p: i32, t_fine: i32) -> u32 {
     let p = &c.p;
     let mut var1 = t_fine as i64 - 128000;
@@ -65,7 +63,7 @@ pub fn comp_p(c: &Calib, adc_p: i32, t_fine: i32) -> u32 {
     pp as u32
 }
 
-/// 返回 Q22.10 %RH
+/// Returns Q22.10 %RH
 pub fn comp_h(c: &Calib, adc_h: i32, t_fine: i32) -> u32 {
     let mut v: i32 = t_fine - 76800;
     v = ((((adc_h << 14) - ((c.h4 as i32) << 20) - (c.h5 as i32 * v)) + 16384) >> 15)
@@ -78,7 +76,7 @@ pub fn comp_h(c: &Calib, adc_h: i32, t_fine: i32) -> u32 {
     (v >> 12) as u32
 }
 
-/// 单调函数的反解：在 [lo, hi] 里找使 f(x) 最接近 target 的 x
+/// Invert a monotonic function: find x in [lo, hi] with f(x) closest to target
 fn invert(lo: i32, hi: i32, increasing: bool, target: i64, f: impl Fn(i32) -> i64) -> i32 {
     let (mut a, mut b) = (lo, hi);
     while b - a > 1 {
@@ -108,10 +106,10 @@ pub struct Bme280 {
     pub env: Env,
     regs: [u8; 256],
     ptr: u8,
-    /// 写事务里：下一个字节是寄存器地址
+    /// In a write transaction: next byte is the register address
     expect_reg: bool,
     now: u64,
-    /// 测量完成时刻（强制模式 / 正常模式下一次）
+    /// Measurement completion time (forced mode / next one in normal mode)
     meas_done: Option<u64>,
     pub measurements: u64,
 }
@@ -153,12 +151,12 @@ impl Bme280 {
         put16(0xe1, c.h2 as u16);
         self.regs[0xa1] = c.h1;
         self.regs[0xe3] = c.h3;
-        // H4 = E4[7:0]<<4 | E5[3:0]；H5 = E6[7:0]<<4 | E5[7:4]
+        // H4 = E4[7:0]<<4 | E5[3:0]; H5 = E6[7:0]<<4 | E5[7:4]
         self.regs[0xe4] = (c.h4 >> 4) as u8;
         self.regs[0xe5] = ((c.h4 & 0xf) as u8) | (((c.h5 & 0xf) as u8) << 4);
         self.regs[0xe6] = (c.h5 >> 4) as u8;
         self.regs[0xe7] = c.h6 as u8;
-        // 复位后数据寄存器的默认值
+        // Data register defaults after reset
         for a in [0xf7, 0xfa] {
             self.regs[a] = 0x80;
         }
@@ -170,7 +168,7 @@ impl Bme280 {
         (m >> 5, (m >> 2) & 7, self.regs[0xf2] & 7)
     }
 
-    /// 数据手册 9.1 典型测量时间（毫秒）
+    /// Datasheet 9.1 typical measurement time (ms)
     fn t_meas_ms(&self) -> f64 {
         let n = |o: u8| {
             if o == 0 {
@@ -193,7 +191,7 @@ impl Bme280 {
         (ms * CPU_HZ as f64 / 1000.0) as u64
     }
 
-    /// 把当前环境量化成原始 ADC 值写进数据寄存器
+    /// Quantize the current environment into raw ADC values in the data registers
     fn latch(&mut self) {
         let c = CALIB;
         let (ot, op, oh) = self.osrs();
@@ -211,7 +209,7 @@ impl Bme280 {
             regs[a + 1] = (v >> 4) as u8;
             regs[a + 2] = ((v & 0xf) << 4) as u8;
         };
-        // 跳过（osrs=0）的通道输出 0x80000 / 0x8000
+        // Skipped channels (osrs=0) output 0x80000 / 0x8000
         put20(&mut self.regs, 0xfa, if ot > 0 { adc_t } else { 0x80000 });
         put20(&mut self.regs, 0xf7, if op > 0 { adc_p } else { 0x80000 });
         let h = if oh > 0 { adc_h } else { 0x8000 };
@@ -231,7 +229,7 @@ impl Bme280 {
                 self.meas_done = Some(t + Self::ms(self.t_meas_ms() + self.standby_ms()));
             } else {
                 self.meas_done = None;
-                self.regs[0xf4] &= !3; // 强制模式测完回到睡眠
+                self.regs[0xf4] &= !3; // Forced mode returns to sleep after measuring
             }
         }
     }
@@ -276,7 +274,7 @@ impl I2cDevice for Bme280 {
             self.expect_reg = false;
         } else {
             self.write_reg(self.ptr, b);
-            // 写入按"地址, 数据"成对；BME280 不自增
+            // Writes come in "address, data" pairs; BME280 does not auto-increment
             self.expect_reg = true;
         }
         true
@@ -320,7 +318,7 @@ mod tests {
                 pressure_pa: p,
             };
             b.write_reg(0xf2, 1);
-            b.write_reg(0xf4, 0x25); // 强制模式，各 ×1
+            b.write_reg(0xf4, 0x25); // Forced mode, all x1
             b.now = u64::MAX / 2;
             b.advance();
             let r = &b.regs;
@@ -328,14 +326,18 @@ mod tests {
             let adc_t = ((r[0xfa] as i32) << 12) | ((r[0xfb] as i32) << 4) | (r[0xfc] as i32 >> 4);
             let adc_h = ((r[0xfd] as i32) << 8) | r[0xfe] as i32;
             let (tt, tf) = comp_t(&CALIB, adc_t);
-            assert!((tt as f64 / 100.0 - t).abs() <= 0.01, "温度 {tt}");
+            assert!((tt as f64 / 100.0 - t).abs() <= 0.01, "temperature {tt}");
             assert!((comp_p(&CALIB, adc_p, tf) as f64 / 256.0 - p).abs() <= 1.0);
             assert!(
                 (comp_h(&CALIB, adc_h, tf) as f64 / 1024.0 - h).abs() <= 0.1,
-                "湿度 {}",
+                "humidity {}",
                 comp_h(&CALIB, adc_h, tf)
             );
-            assert_eq!(b.regs[0xf4] & 3, 0, "强制模式测完回睡眠");
+            assert_eq!(
+                b.regs[0xf4] & 3,
+                0,
+                "forced mode back to sleep after measuring"
+            );
         }
     }
 }

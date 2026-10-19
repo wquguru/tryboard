@@ -1,5 +1,5 @@
-// 示例：ESP32-S3 用原生 USB 做一个 CDC-ACM 虚拟串口（电脑上出现 COM 口 / /dev/ttyACM0）。
-// 收到一行就回一行（转大写），和 UART 串口不同，这条线不经过 USB 转串口芯片。
+// Example: S3 native USB CDC-ACM virtual serial port (COM port / /dev/ttyACM0); echoes each line in upper case.
+// Unlike the UART console, this path has no USB-to-serial chip.
 #include <stdio.h>
 #include <ctype.h>
 #include "freertos/FreeRTOS.h"
@@ -37,10 +37,10 @@ static void on_rx(int itf, cdcacm_event_t *event)
 }
 
 static const char *strings[] = {
-    (char[]){0x09, 0x04}, // 英语
-    "TryBoard",           // 厂商
-    "TryBoard Serial",    // 产品
-    "000002",             // 序列号
+    (char[]){0x09, 0x04}, // English
+    "TryBoard",           // manufacturer
+    "TryBoard Serial",    // product
+    "000002",             // serial number
     "CDC-ACM",
 };
 

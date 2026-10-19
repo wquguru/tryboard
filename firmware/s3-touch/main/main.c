@@ -1,7 +1,5 @@
-// 示例：1.28″ 触摸圆屏（GC9A01 + CST816S，微雪 1.28inch Touch LCD 这一类模组），点哪画哪。
-// 屏走 SPI2（接线见 firmware/common/round_lcd.h）；触摸走 I2C：TP_SDA=GPIO6、TP_SCL=GPIO7、TP_INT=GPIO5、TP_RST=GPIO16。
-// CST816S 按着时 INT 拉低：INT 下降沿中断唤醒任务，按着期间每 20ms 读一次坐标（0x01..0x06）画点，
-// 抬起后再读一次拿手势（单击 / 滑动 / 长按）。串口打印 TOUCH DOWN / MOVE / UP 与 GESTURE。
+// Example: 1.28" touch round LCD (GC9A01 + CST816S), draw where touched; LCD on SPI2 (see round_lcd.h), touch I2C SDA=6 SCL=7 INT=5 RST=16.
+// INT falling edge wakes the task, which reads 0x01..0x06 every 20ms while pressed, then the gesture on release.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -44,7 +42,7 @@ static const char *gesture_name(uint8_t g)
     }
 }
 
-// 屏幕底色：深蓝灰，中间一个十字准星，方便看点落在哪
+// Background: dark blue-grey with a crosshair so you can see where touches land
 static void draw_background(void)
 {
     fb_clear(rgb(0x101820));
@@ -62,7 +60,7 @@ void app_main(void)
     lcd_init();
     draw_background();
 
-    // 触摸复位：拉低 10ms 再放开，等 50ms 芯片起来
+    // Touch reset: low for 10ms, release, wait 50ms for the chip
     gpio_config_t rst = {.pin_bit_mask = 1ULL << TP_RST, .mode = GPIO_MODE_OUTPUT};
     ESP_ERROR_CHECK(gpio_config(&rst));
     gpio_set_level(TP_RST, 0);
@@ -95,7 +93,7 @@ void app_main(void)
 
     int down = 0, strokes = 0, lx = -1, ly = -1;
     for (;;) {
-        // 没按着就等 INT 下降沿；按着就每 20ms 轮询一次
+        // Not pressed: wait for INT falling edge; pressed: poll every 20ms
         ulTaskNotifyTake(pdTRUE, down ? pdMS_TO_TICKS(20) : portMAX_DELAY);
         uint8_t d[6];
         if (rd(0x01, d, 6) != ESP_OK) continue;
@@ -119,7 +117,7 @@ void app_main(void)
             down = 0;
             printf("TOUCH UP x=%d y=%d\n", x, y);
             printf("GESTURE %s\n", gesture_name(d[0]));
-            // 长按清屏
+            // Long press clears the screen
             if (d[0] == 0x0C) draw_background();
         }
     }

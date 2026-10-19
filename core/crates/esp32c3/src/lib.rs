@@ -1,4 +1,4 @@
-//! ESP32-C3 SoC：存储映射、外设分发、直接启动（替代二级 bootloader）、运行循环。
+//! ESP32-C3 SoC: memory map, peripheral dispatch, direct boot (replaces the 2nd-stage bootloader), run loop.
 
 pub mod ble;
 pub mod boot;
@@ -17,7 +17,7 @@ pub mod rmt;
 pub mod sigin;
 pub mod spiflash;
 pub mod tasktrace;
-/// Wi-Fi 模型在 tryboard-soc（C3 / S3 共用），这里按 C3 布局接上
+/// The Wi-Fi model lives in tryboard-soc (shared by C3 / S3); wired here with the C3 layout
 pub use tryboard_soc::wifi;
 
 use devices::audio::{Audio, PortIo};
@@ -27,18 +27,18 @@ use periph::*;
 use std::collections::HashMap;
 use tryboard_rv32::{Bus, BusFault, Cpu, Exit};
 
-// 存储映射（soc/esp32c3/include/soc/soc.h）
+// Memory map (soc/esp32c3/include/soc/soc.h)
 pub const IRAM_LOW: u32 = 0x4037_C000;
 pub const IRAM_HIGH: u32 = 0x403E_0000;
 pub const DRAM_LOW: u32 = 0x3FC8_0000;
 pub const DRAM_HIGH: u32 = 0x3FCE_0000;
-/// DRAM 0x3FC80000 与 IRAM 0x40380000 是同一块 SRAM1
+/// DRAM 0x3FC80000 and IRAM 0x40380000 are the same SRAM1
 pub const DRAM_TO_IRAM: u32 = 0x4038_0000 - DRAM_LOW;
 pub const ROM_LOW: u32 = 0x4000_0000;
 pub const ROM_HIGH: u32 = 0x4006_0000;
 pub const DROM_MASK_LOW: u32 = 0x3FF0_0000;
 pub const DROM_MASK_HIGH: u32 = 0x3FF2_0000;
-/// DROM 掩膜窗口对应 ROM 物理 0x40040000 起
+/// The DROM mask window maps to ROM physical 0x40040000 onward
 pub const DROM_MASK_TO_ROM: u32 = 0x4004_0000 - DROM_MASK_LOW;
 pub const IROM_LOW: u32 = 0x4200_0000;
 pub const IROM_HIGH: u32 = 0x4280_0000;
@@ -49,14 +49,14 @@ pub const RTC_HIGH: u32 = 0x5000_2000;
 pub const MMIO_LOW: u32 = 0x6000_0000;
 pub const MMIO_HIGH: u32 = 0x600D_1000;
 
-/// 取指缓存：直接映射，按 PC 索引，存译好的 32 位指令与长度（压缩指令已展开）。
-/// 标签 1 表示无效（合法 PC 恒为偶数）。
+/// Fetch cache: direct-mapped by PC, holds the decoded 32-bit instruction and length (compressed already expanded).
+/// Tag 1 means invalid (valid PCs are always even).
 const ICACHE_BITS: u32 = 15;
 const ICACHE_MASK: usize = (1 << ICACHE_BITS) - 1;
 const ICACHE_INVALID: u32 = 1;
 
-/// 圆屏 GC9A01 在 C3 上的接线约定：SCLK / MOSI / CS 用 SPI2 的 IO_MUX 直连脚（soc/spi_pins.h），
-/// DC / RST / 背光用 DevKitM-1 排针上空闲、又不是 strapping 的普通 GPIO（2、8、9 是 strapping，8 还接着板载 RGB）
+/// GC9A01 round LCD wiring on C3: SCLK / MOSI / CS on SPI2's IO_MUX direct pins (soc/spi_pins.h); DC / RST / backlight on free
+/// DevKitM-1 header GPIOs that aren't strapping pins (2, 8, 9 are strapping; 8 also drives the onboard RGB)
 pub mod lcd_pin {
     pub const SCLK: u32 = 6;
     pub const MOSI: u32 = 7;
@@ -65,11 +65,11 @@ pub mod lcd_pin {
     pub const RST: u32 = 4;
     pub const BL: u32 = 3;
 }
-/// GDMA 外设编号（soc/gdma_channel.h：SOC_GDMA_TRIG_PERIPH_SPI2 / _I2S0）
+/// GDMA peripheral ids (soc/gdma_channel.h: SOC_GDMA_TRIG_PERIPH_SPI2 / _I2S0)
 const GDMA_PERI_SPI2: u32 = 0;
 const GDMA_PERI_I2S0: u32 = 3;
-/// I2S 音频器件在 C3 上的接线约定。C3 只有一个 I2S，喇叭和麦克风同时用时共用 BCK / WS（全双工），
-/// 所以两者的时钟脚相同；数据脚避开 strapping（2、8、9）以外的空闲脚——GPIO2 是 strapping 但启动后可当输出用
+/// I2S audio wiring on C3. With one I2S, speaker and mic share BCK / WS (full duplex), so their clock pins match;
+/// data pins use free non-strapping pins, except GPIO2, which is strapping but usable as output after boot
 pub mod i2s_pin {
     pub const SPK_BCLK: u32 = 0;
     pub const SPK_LRC: u32 = 1;
@@ -78,9 +78,9 @@ pub mod i2s_pin {
     pub const MIC_WS: u32 = 1;
     pub const MIC_SD: u32 = 3;
 }
-/// GPIO 矩阵信号（gpio_sig_map.h）：I2SO_SD_OUT_IDX / I2SI_SD_IN_IDX 都是 15
+/// GPIO matrix signals (gpio_sig_map.h): I2SO_SD_OUT_IDX / I2SI_SD_IN_IDX are both 15
 const SIG_I2S_SD: usize = 15;
-/// GPIO 矩阵输出信号 FSPICS0_OUT_IDX（gpio_sig_map.h）与 IO_MUX 功能号 FUNC_GPIO10_FSPICS0（io_mux_reg.h）
+/// GPIO matrix output signal FSPICS0_OUT_IDX (gpio_sig_map.h) and IO_MUX function FUNC_GPIO10_FSPICS0 (io_mux_reg.h)
 const SIG_FSPICS0: u32 = 68;
 const IOMUX_FUNC_FSPICS0: u32 = 2;
 
@@ -110,57 +110,57 @@ pub struct SocBus {
     pub ledc: ledc::Ledc,
     pub adc: Adc,
     pub rmt: rmt::Rmt,
-    /// 挂在各引脚上的 WS2812 解码器（引脚被 GPIO 矩阵连到 RMT 输出时自动创建）
+    /// WS2812 decoders per pin (created when the GPIO matrix routes a pin to an RMT output)
     pub ws2812: HashMap<u32, rmt::Ws2812>,
-    /// 直接接在 GPIO 上、输出带时刻波形的外接器件（HC-SR04 等；C3 没有 PCNT，编码器只能靠 GPIO 中断读）
+    /// Devices wired straight to GPIOs that drive timed waveforms (HC-SR04 etc.; C3 has no PCNT, encoders need GPIO IRQs)
     pub pins: devices::pins::PinDevices,
     pub efuse: [u32; 0x200 / 4],
     /// SYSTEM_CPU_INTR_FROM_CPU_0..3
     pub from_cpu: u32,
     pub usj_tx: Vec<u8>,
-    /// 合并后的控制台输出（UART0 + USB-Serial-JTAG），供前端 / CLI 读取
+    /// Merged console output (UART0 + USB-Serial-JTAG) for the frontend / CLI
     pub console: Vec<u8>,
-    /// 没有模型的寄存器：写入值保存、读回
+    /// Registers without a model: writes are stored and read back
     pub regs: HashMap<u32, u32>,
-    /// 访问了没有模型的寄存器：地址 → 次数
+    /// Accesses to unmodelled registers: address -> count
     pub unimpl: HashMap<u32, u64>,
     pub irq_dirty: bool,
-    /// 固件请求复位（RTC_CNTL_OPTIONS0 的 SW_SYS_RST / SW_PROCPU_RST），值为下次上电的复位原因
+    /// Firmware requested reset (RTC_CNTL_OPTIONS0 SW_SYS_RST / SW_PROCPU_RST); value is the next boot's reset reason
     pub reset_request: Option<u32>,
-    /// 本次上电的复位原因（RTC_CNTL_RESET_STATE 低 6 位）：1 上电、3 软件系统复位、12 软件 CPU 复位
+    /// This boot's reset reason (RTC_CNTL_RESET_STATE low 6 bits): 1 power-on, 3 software system reset, 12 software CPU reset
     pub reset_reason: u32,
-    /// Option 只为推进 / 发送时临时取出来，让 MAC 借总线读写描述符；平时恒为 Some
+    /// Option only so it can be taken out while stepping / sending so the MAC can borrow the bus for descriptors; always Some otherwise
     pub wifi: Option<Box<wifi::WifiMac>>,
     pub sha: crypto_hw::ShaHw,
     pub aes: crypto_hw::AesHw,
-    /// GP-SPI2 主机 + GDMA（3 通道）。GDMA 也给 AES / SHA 的 DMA 模式用
+    /// GP-SPI2 master + GDMA (3 channels). GDMA also serves AES / SHA DMA mode
     pub spi2: gpspi::GpSpi,
     pub gdma: Gdma,
-    /// 挂在 SPI2 上的圆屏（CLI `--spi gc9a01` / wasm `tb_lcd_attach`），引脚见 `lcd_pin`
+    /// Round LCD on SPI2 (CLI `--spi gc9a01` / wasm `tb_lcd_attach`), pins in `lcd_pin`
     pub lcd: Option<Box<Gc9a01>>,
-    /// I2S0（0x6002D000）与挂在上面的音频器件（引脚见 `i2s_pin`）
+    /// I2S0 (0x6002D000) and the audio devices on it (pins in `i2s_pin`)
     pub i2s0: i2s::I2s,
     pub audio: Audio,
-    /// 硬件随机数发生器（WDEV_RND_REG）状态：xorshift，固定种子保证可复现
+    /// Hardware RNG (WDEV_RND_REG) state: xorshift with a fixed seed for reproducibility
     pub rng: u32,
-    /// 调试：监视某个 MMIO 地址，记录访问时的 PC（watch_pc 由运行循环填写）
+    /// Debug: watch one MMIO address and record the PC of each access (watch_pc filled by the run loop)
     pub watch: Option<(u32, u32)>,
     pub watch_pc: u32,
-    /// （PC, 地址, 值, 是否写），按时间顺序
+    /// (PC, address, value, is write), in time order
     pub watch_hits: Vec<(u32, u32, u32, bool)>,
     pub next_event: u64,
-    /// GPIO 电平变化记录（周期, 电平），前端按此驱动 LED 等
+    /// GPIO level changes (cycle, levels); the frontend drives LEDs etc. from it
     pub gpio_log: Vec<(u64, u32)>,
     last_gpio: u32,
-    /// 逻辑分析仪事件（P1-05）
+    /// Logic analyzer events (P1-05)
     pub iotrace: iotrace::IoTrace,
-    /// FreeRTOS 任务切换（C-04）
+    /// FreeRTOS task switches (C-04)
     pub tasks: tasktrace::TaskTrace,
-    /// BLE（C-01）：固件里认出了 VHCI 边界时才有；Option 只为 HLE 时临时取出
+    /// BLE (C-01): present only when the VHCI boundary was found in firmware; Option only to take it out during HLE
     pub ble: Option<Box<ble::BleHle>>,
-    /// 用了 BLE 但没认出 VHCI 边界的原因（网页提示"再拖一个 app.elf"）
+    /// Why BLE is used but the VHCI boundary wasn't found (web suggests dropping in an app.elf)
     pub ble_error: Option<String>,
-    /// 取指覆盖（地址, 半字），升序：BLE 入口跳板，不改 flash
+    /// Fetch overrides (address, halfword), ascending: BLE entry trampolines without modifying flash
     pub code_patch: Vec<(u32, u16)>,
 }
 
@@ -215,7 +215,7 @@ impl Default for SocBus {
             gpio_log: Vec::new(),
             last_gpio: 0,
             iotrace: iotrace::IoTrace::new(0),
-            // RISC-V 栈帧第一个字是 RV_STK_MEPC
+            // First word of a RISC-V stack frame is RV_STK_MEPC
             tasks: tasktrace::TaskTrace::new(0),
             ble: None,
             ble_error: None,
@@ -237,7 +237,7 @@ fn rd(buf: &[u8], off: usize, size: u32) -> Option<u32> {
     }
 }
 
-/// 定长写（避免 copy_from_slice 变长拷贝退化成 memmove 调用）
+/// Fixed-length write (so copy_from_slice doesn't degrade into a memmove call)
 #[inline(always)]
 fn wr(buf: &mut [u8], off: usize, size: u32, v: u32) -> Option<()> {
     match size {
@@ -251,7 +251,7 @@ fn wr(buf: &mut [u8], off: usize, size: u32, v: u32) -> Option<()> {
 }
 
 impl SocBus {
-    /// 取指读半字：先看取指覆盖（只在指令缓存未命中时走到这里，平时没有覆盖，开销只是一次判空）
+    /// Fetch halfword: check overrides first (only reached on fetch-cache miss; usually empty, so just one emptiness test)
     #[inline]
     fn fetch16(&self, a: u32) -> Option<u32> {
         if !self.code_patch.is_empty() {
@@ -262,7 +262,7 @@ impl SocBus {
         self.mem_read(a, 2)
     }
 
-    /// cache 映射：虚拟地址 → flash 偏移
+    /// Cache mapping: virtual address -> flash offset
     #[inline]
     pub fn flash_addr(&self, vaddr: u32) -> Option<usize> {
         let lin = vaddr & 0x7F_FFFF;
@@ -273,7 +273,7 @@ impl SocBus {
         Some((((e & 0xff) << 16) | (lin & 0xffff)) as usize)
     }
 
-    /// 物理存储（非 MMIO）读，调试器 / HLE 也用
+    /// Physical memory (non-MMIO) read, also used by the debugger / HLE
     pub fn mem_read(&self, a: u32, size: u32) -> Option<u32> {
         if (DRAM_LOW..DRAM_HIGH).contains(&a) {
             rd(&self.sram, (a + DRAM_TO_IRAM - IRAM_LOW) as usize, size)
@@ -309,7 +309,7 @@ impl SocBus {
         }
     }
 
-    /// 写可执行内存：失效覆盖这个字的取指缓存项（指令最长 4 字节，可能从前一个半字开始）
+    /// Write to executable memory: invalidate fetch-cache entries over this word (instructions up to 4 bytes may start a halfword earlier)
     #[inline(always)]
     fn icache_invalidate(&mut self, a: u32) {
         let base = a & !1;
@@ -321,7 +321,7 @@ impl SocBus {
         }
     }
 
-    /// MMU 表或 flash 内容变了：整个取指缓存作废
+    /// MMU table or flash contents changed: drop the whole fetch cache
     pub fn icache_flush(&mut self) {
         for e in self.icache.iter_mut() {
             e.0 = ICACHE_INVALID;
@@ -337,7 +337,7 @@ impl SocBus {
             0x6000_4000 => return self.gpio.read(off),
             0x6000_2000 => return self.spi1.read(off),
             0x6002_6000 if off == 0xb0 => {
-                // WDEV_RND_REG：每次读都给新值（esp_random、lwIP 端口 / DNS 事务号都靠它）
+                // WDEV_RND_REG: a new value on every read (esp_random, lwIP ports / DNS ids rely on it)
                 let mut x = self.rng;
                 x ^= x << 13;
                 x ^= x >> 17;
@@ -379,8 +379,8 @@ impl SocBus {
                     .unwrap_or(0)
             }
             0x6004_3000 => match off {
-                0x04 => return 0x2, // EP1_CONF：IN 端点有空位
-                0x08 => return 0x8, // INT_RAW：SERIAL_IN_EMPTY
+                0x04 => return 0x2, // EP1_CONF: IN endpoint has room
+                0x08 => return 0x8, // INT_RAW: SERIAL_IN_EMPTY
                 _ => {}
             },
             _ => {}
@@ -457,7 +457,7 @@ impl SocBus {
             0x600C_4000 if off < 0x100 => return self.extmem.write(off, v),
             0x6000_4000 => {
                 self.gpio.write(off, v);
-                // 使能（0x20..0x2c）和输出信号选择（FUNC_OUT_SEL 0x554 起）决定哪个引脚上有 PWM
+                // Enables (0x20..0x2c) and output signal select (FUNC_OUT_SEL from 0x554) decide which pins carry PWM
                 if (0x20..0x2c).contains(&off) || off >= 0x554 {
                     self.iotrace.pwm_dirty = true;
                 }
@@ -490,7 +490,7 @@ impl SocBus {
                 return;
             }
             0x6004_3000 if off == 0 => {
-                // USB-Serial-JTAG 是 IDF 默认的第二控制台，内容与 UART0 重复；单独存，不进主控制台
+                // USB-Serial-JTAG is IDF's default second console duplicating UART0; kept separately, not in the main console
                 self.usj_tx.push(v as u8);
                 if self.usj_tx.len() > 1 << 16 {
                     self.usj_tx.drain(..1 << 15);
@@ -504,7 +504,7 @@ impl SocBus {
             let mut w = self.wifi.take().expect("wifi");
             let keep = w.write(a, v, now, self);
             self.wifi = Some(w);
-            // None = MAC 模型已完全处理；否则照通用寄存器存（仍计入 unimpl，便于看驱动还碰了哪些位）
+            // None = fully handled by the MAC model; else store as a generic register (still counted in unimpl to show bits touched)
             match keep {
                 Some(x) => v = x,
                 None => return,
@@ -516,12 +516,12 @@ impl SocBus {
         self.regs.insert(a, v);
     }
 
-    /// 引脚电平可能变了：做边沿检测、记日志
+    /// Pin levels may have changed: detect edges, log
     pub fn gpio_changed(&mut self, now: u64) {
         self.gpio.sense();
         let lv = self.gpio.level();
         if let Some(l) = self.lcd.as_mut() {
-            // RST 低有效，只在固件真的把脚驱动为低时复位（模组板上有上拉）；背光高电平亮
+            // RST is active low and only resets when firmware actually drives it low (module has a pull-up); backlight on when high
             let en = self.gpio.enable;
             l.set_reset(en >> lcd_pin::RST & 1 != 0 && lv >> lcd_pin::RST & 1 == 0);
             l.set_backlight(lv >> lcd_pin::BL & 1 != 0);
@@ -539,7 +539,7 @@ impl SocBus {
         self.irq_dirty = true;
     }
 
-    /// RMT 接收通道的输入（GPIO 矩阵 FUNCn_IN_SEL_CFG：sel[4:0]、inv[5]、经矩阵[6]；0x1E 常 1、0x1F 常 0）
+    /// RMT RX input (GPIO matrix FUNCn_IN_SEL_CFG: sel[4:0], inv[5], via matrix[6]; 0x1E constant 1, 0x1F constant 0)
     fn feed_rx(&mut self, t: u64, lv: u32) {
         for i in 0..self.rmt.layout.nrx {
             let f = self.gpio.func_in[(rmt::SIG_OUT0 + i as u32) as usize];
@@ -554,7 +554,7 @@ impl SocBus {
         }
     }
 
-    /// 外接引脚器件到 now 为止的驱动按时刻施加到引脚；返回下一次要问它们的时刻
+    /// Apply external pin devices' drive up to now at their times; returns the next time to poll them
     fn pins_update(&mut self, now: u64) -> u64 {
         if self.pins.is_empty() {
             return u64::MAX;
@@ -582,7 +582,7 @@ impl SocBus {
         }
     }
 
-    /// 引脚上的 PWM：经 GPIO 矩阵路由到该引脚的 LEDC 通道输出（占空比, 频率）
+    /// PWM on a pin: the LEDC channel output routed to it through the GPIO matrix (duty, frequency)
     pub fn pin_pwm(&self, pin: usize) -> Option<(f32, f32)> {
         let sig = self.gpio.func_out.get(pin)? & 0xff;
         if (45..=50).contains(&sig) && self.gpio.enable & (1 << pin) != 0 {
@@ -593,7 +593,7 @@ impl SocBus {
         None
     }
 
-    /// LEDC 或 GPIO 矩阵改过：把各引脚此刻的 PWM 交给事件记录（没变的引脚不记）
+    /// LEDC or GPIO matrix changed: hand each pin's current PWM to the event log (unchanged pins aren't logged)
     fn trace_pwm(&mut self, now: u64) {
         if !self.iotrace.pwm_scan_needed(self.ledc.rev) {
             return;
@@ -606,7 +606,7 @@ impl SocBus {
         }
     }
 
-    /// 所有中断源的当前电平（位 = 源编号）
+    /// Current level of every interrupt source (bit = source number)
     fn levels(&self) -> u64 {
         let mut l = 0u64;
         let mut set = |s: u32, on: bool| {
@@ -646,8 +646,8 @@ impl SocBus {
         l
     }
 
-    /// 把 RMT 输出跳变经 GPIO 矩阵送到引脚：更新引脚电平、喂给挂在引脚上的 WS2812 解码器。
-    /// 返回解码器下一次需要检查（帧结束判定）的时刻。
+    /// Route RMT output edges through the GPIO matrix to pins: update levels and feed pin WS2812 decoders.
+    /// Returns when the decoders next need checking (end-of-frame detection).
     fn route_rmt(&mut self, now: u64) -> u64 {
         let mut next = u64::MAX;
         let mut edges = std::mem::take(&mut self.rmt.edges);
@@ -679,7 +679,7 @@ impl SocBus {
         next
     }
 
-    /// 推进定时器、重新裁决中断线。
+    /// Advance timers and re-arbitrate interrupt lines.
     pub fn update(&mut self, cpu: &mut Cpu) {
         let now = self.now;
         let n1 = self.systimer.update(now);
@@ -723,7 +723,7 @@ impl SocBus {
 }
 
 impl SocBus {
-    /// I2S0 收发推进：按 GPIO 矩阵判断喇叭 DIN / 麦克风 SD 是不是接在 I2S 的数据线上，再借总线让 GDMA 搬数据
+    /// Advance I2S0: check via the GPIO matrix whether speaker DIN / mic SD sit on the I2S data line, then lend the bus to GDMA
     fn i2s_update(&mut self, now: u64) -> u64 {
         if !self.i2s0.tx.running && !self.i2s0.rx.running {
             return u64::MAX;
@@ -734,7 +734,7 @@ impl SocBus {
                 .get(s.pins.data as usize)
                 .is_some_and(|f| (f & 0xff) as usize == SIG_I2S_SD)
         });
-        // FUNCn_IN_SEL_CFG：位 4..0 引脚、位 6 经 GPIO 矩阵
+        // FUNCn_IN_SEL_CFG: bits 4..0 pin, bit 6 via GPIO matrix
         let f = self.gpio.func_in[SIG_I2S_SD];
         let mic = self
             .audio
@@ -756,7 +756,7 @@ impl SocBus {
         n
     }
 
-    /// 接 MAX98357A 喇叭 / INMP441 麦克风（引脚见 `i2s_pin`）
+    /// Attach a MAX98357A speaker / INMP441 mic (pins in `i2s_pin`)
     pub fn attach_speaker(&mut self) {
         use i2s_pin::*;
         let p = devices::audio::Pins {
@@ -776,15 +776,15 @@ impl SocBus {
         self.audio.mic = Some(Box::new(devices::audio::Inmp441::new(p)));
     }
 
-    /// 在 SPI2 上接一块 GC9A01 圆屏（引脚见 `lcd_pin`）
+    /// Attach a GC9A01 round LCD on SPI2 (pins in `lcd_pin`)
     pub fn attach_lcd(&mut self) {
         self.lcd = Some(Box::default());
         let now = self.now;
         self.gpio_changed(now);
     }
 
-    /// 圆屏的片选：CS 脚经 IO_MUX / GPIO 矩阵接到 SPI2 的 CS0 时由控制器在传输期间拉低；
-    /// 否则当普通 GPIO 看，固件驱动为低才算选中
+    /// LCD chip select: if CS is routed via IO_MUX / GPIO matrix to SPI2 CS0, the controller pulls it low during transfers;
+    /// otherwise treat it as plain GPIO, selected only when firmware drives it low
     fn lcd_selected(&self) -> bool {
         let pin = lcd_pin::CS as usize;
         let via_iomux = (self.gpio.iomux[pin] >> 12) & 7 == IOMUX_FUNC_FSPICS0;
@@ -796,13 +796,13 @@ impl SocBus {
         }
     }
 
-    /// 固件写了 SPI2 CMD.USR：取数据（W 寄存器或 GDMA 描述符链）、交给圆屏，再按 SPI 时钟计时。
-    /// 与 S3 的同名函数逻辑相同（模型共用，只有引脚与信号号不同）
+    /// Firmware wrote SPI2 CMD.USR: fetch data (W registers or GDMA chain), hand it to the LCD, then time it by SPI clock.
+    /// Same logic as the S3 function of this name (shared model; only pins and signal ids differ)
     fn spi2_transfer(&mut self, now: u64) {
         let p = self.spi2.plan();
         let mut bytes = p.head.clone();
         let mut out_ch = None;
-        // 把 GDMA 临时取出来，借总线读写内存
+        // Take GDMA out temporarily to borrow the bus for memory access
         let mut g = std::mem::replace(&mut self.gdma, Gdma::placeholder());
         if p.mosi_bits > 0 {
             let n = p.mosi_bits.div_ceil(8) as usize;
@@ -817,12 +817,12 @@ impl SocBus {
             } else {
                 self.spi2.tx_buffer(n)
             };
-            // DMA 给的数据不够：移位寄存器里是 0
+            // DMA supplied too little data: the shift register holds 0
             data.resize(n, 0);
             bytes.extend_from_slice(&data);
         }
         if p.miso_bits > 0 {
-            // 没有会应答的从机，MISO 上拉读到全 1
+            // No slave answers, MISO pull-up reads all ones
             let rx = vec![0xffu8; p.miso_bits.div_ceil(8) as usize];
             if p.dma_rx {
                 if let Some(ch) = g.in_channel_for(GDMA_PERI_SPI2) {
@@ -851,7 +851,7 @@ impl SocBus {
     pub fn aes_read(&self, off: u32) -> u32 {
         self.aes.read(off)
     }
-    /// SHA / AES 寄存器写：先取链头，再把加速器临时取出、借总线给 DMA
+    /// SHA / AES register write: fetch the chain head, then take the accelerator out and lend the bus to DMA
     pub fn sha_write(&mut self, off: u32, v: u32) {
         let link = crypto_hw::sha_link(&self.gdma);
         let mut s = std::mem::take(&mut self.sha);
@@ -947,8 +947,8 @@ impl Bus for SocBus {
             let v = if size == 4 {
                 v
             } else {
-                // 子字写（编译器对位域常用 sb/sh）：先读外设当前值再合并。
-                // UART FIFO 读有出队副作用，不能拿来做读-改-写
+                // Sub-word write (compilers use sb/sh for bitfields): read the peripheral's current value and merge.
+                // UART FIFO reads dequeue, so they can't be used for read-modify-write
                 let sh = (a & 3) * 8;
                 let mask = if size == 2 { 0xffff } else { 0xff } << sh;
                 let old = if aa == 0x6000_0000 || aa == 0x6001_0000 {
@@ -976,20 +976,20 @@ impl Bus for SocBus {
             self.mmio_write(aa, v);
             return Ok(());
         }
-        // 写 ROM / flash 映射区：真机上是总线错误，这里同样报错
+        // Writing ROM / flash-mapped regions is a bus error on silicon; report it here too
         Err(BusFault)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stop {
-    /// 跑满了要求的周期数
+    /// Ran the requested number of cycles
     Budget,
-    /// 固件崩溃（mtvec 未设置时的异常）
+    /// Firmware crashed (exception with mtvec unset)
     Fault { cause: u32, pc: u32, tval: u32 },
-    /// 碰到没实现的 HLE 函数
+    /// Hit an unimplemented HLE function
     Hle(u32),
-    /// 固件请求复位（esp_restart、看门狗、panic 后重启）；调用 reboot() 重新上电
+    /// Firmware requested reset (esp_restart, watchdog, reboot after panic); call reboot() to power up again
     Reset(u32),
 }
 
@@ -998,7 +998,7 @@ pub struct Esp32c3 {
     pub bus: SocBus,
     pub rom_symbols: HashMap<u32, String>,
     pub hle: HashMap<u32, hle::Hle>,
-    /// 留一份 ROM，复位重新上电时用
+    /// Keep a copy of the ROM for power-up after reset
     pub rom_elf: Vec<u8>,
 }
 
@@ -1020,7 +1020,7 @@ impl Esp32c3 {
             match cpu.step(bus) {
                 Exit::Normal => {}
                 Exit::Wfi => {
-                    // 空闲：直接快进到下一个定时器事件
+                    // Idle: fast-forward to the next timer event
                     let target = bus.next_event.min(end);
                     if target > cpu.cycles {
                         cpu.cycles = target;
@@ -1039,7 +1039,7 @@ impl Esp32c3 {
         Stop::Budget
     }
 
-    /// 调试用：单步跑，记录最近的跳转目标（PC 不连续处），用于定位卡死 / 崩溃。
+    /// Debug: single-step, recording recent jump targets (PC discontinuities) to locate hangs / crashes.
     pub fn run_traced(
         &mut self,
         budget: u64,
@@ -1069,7 +1069,7 @@ impl Esp32c3 {
         Stop::Budget
     }
 
-    /// 复位后重新上电：flash 内容（含 NVS）保留，RAM 与外设清零，CPU 周期继续累计
+    /// Power up after reset: flash (incl. NVS) kept, RAM and peripherals cleared, CPU cycles keep counting
     pub fn reboot(&mut self, reason: u32) -> Result<(), String> {
         let flash = std::mem::take(&mut self.bus.flash);
         let (mut m, _) = Esp32c3::boot(&self.rom_elf, flash)?;
@@ -1077,17 +1077,17 @@ impl Esp32c3 {
         m.bus.gpio.ext_in = self.bus.gpio.ext_in;
         m.bus.gpio.ext_driven = self.bus.gpio.ext_driven;
         m.bus.adc.pin_mv = self.bus.adc.pin_mv;
-        // 外接器件、引脚记录、灯带解码是外部世界的一部分，复位后还在（与 S3 的 reboot 一致）
+        // External devices, pin logs and LED strip decoders are part of the outside world and survive reset (as in S3 reboot)
         m.bus.i2c0.devices = std::mem::take(&mut self.bus.i2c0.devices);
         m.bus.ws2812 = std::mem::take(&mut self.bus.ws2812);
         m.bus.pins = std::mem::take(&mut self.bus.pins);
         m.bus.gpio_log = std::mem::take(&mut self.bus.gpio_log);
         m.bus.iotrace = self.bus.iotrace.carry();
         m.bus.tasks = self.bus.tasks.carry(self.cpu.cycles);
-        // 外接屏不随芯片复位消失（它的复位脚由固件重新驱动）
+        // An external LCD doesn't vanish on chip reset (firmware re-drives its reset pin)
         m.bus.lcd = self.bus.lcd.take();
         m.bus.audio = std::mem::take(&mut self.bus.audio);
-        // 虚拟手机是外部世界：复位后还在（连接随芯片复位断开），空中日志接着记
+        // The virtual phone is outside world: survives reset (connection drops with the chip), air log continues
         if let (Some(old), Some(new)) = (self.bus.ble.as_mut(), m.bus.ble.as_mut()) {
             std::mem::swap(&mut old.world, &mut new.world);
             new.world.chip_reset(ble::now_us(&self.cpu));

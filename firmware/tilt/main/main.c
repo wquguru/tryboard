@@ -1,8 +1,5 @@
-// 体感小人（P2-09）参考固件，三个检查点共用：
-//   STAGE 1 tilt-1「读姿态」：QMI8658 六轴，每 100 ms 打印俯仰 / 横滚
-//   STAGE 2 tilt-2「圆屏画小人」：GC9A01 上画原创形象"小豆"（黄色圆身体 + 深色眼罩 + 青色眼睛），站在正中
-//   STAGE 3 tilt-3「合体」：倾斜时小豆往低处滑，碰到圆边贴着边滑
-// 接线（ESP32-S3）：QMI8658 SDA=GPIO8、SCL=GPIO9（0x6B）；圆屏 SPI2，见 firmware/common/round_lcd.h。
+// Tilt buddy (P2-09) reference, STAGE 1 prints pitch / roll every 100 ms, 2 draws "Xiaodou" centred, 3 slides it downhill along the rim.
+// Wiring (S3): QMI8658 SDA=GPIO8 SCL=GPIO9 (0x6B); round LCD on SPI2, see firmware/common/round_lcd.h.
 #include <stdio.h>
 #include <math.h>
 #include "freertos/FreeRTOS.h"
@@ -40,15 +37,15 @@ static void imu_init(void)
     uint8_t reg = 0x00, id = 0;
     ESP_ERROR_CHECK(i2c_master_transmit_receive(imu, &reg, 1, &id, 1, 100));
     printf("QMI8658 WHO_AM_I 0x%02X\n", id);
-    wr(0x60, 0xB0); // 软复位
+    wr(0x60, 0xB0); // soft reset
     vTaskDelay(pdMS_TO_TICKS(20));
-    wr(0x02, 0x40); // CTRL1：地址自增（不开的话突发读一直读同一个寄存器）
-    wr(0x03, 0x15); // CTRL2：±4 g
-    wr(0x08, 0x01); // CTRL7：只开加速度计
+    wr(0x02, 0x40); // CTRL1: address auto-increment (otherwise burst reads repeat one register)
+    wr(0x03, 0x15); // CTRL2: ±4 g
+    wr(0x08, 0x01); // CTRL7: accelerometer only
     vTaskDelay(pdMS_TO_TICKS(30));
 }
 
-// 俯仰 / 横滚（度），由重力分量算：roll = atan2(ay, az)，pitch = atan2(-ax, √(ay²+az²))
+// Pitch / roll (degrees) from gravity: roll = atan2(ay, az), pitch = atan2(-ax, √(ay²+az²))
 static void pose(float *pitch, float *roll)
 {
     uint8_t reg = 0x35, d[6];
@@ -66,12 +63,12 @@ static void pose(float *pitch, float *roll)
 #define VISOR 0x141414
 #define EYE 0x7CF5FF
 #define BODY_R 28
-// 小豆离圆心最远 82 像素：身体（半径 28）正好停在跑道环（半径 108–112）里面
+// Max 82 px from centre: the body (radius 28) stays just inside the track ring (radius 108–112)
 #define MAX_OFF 82
 
 static uint16_t c_bg, c_ring, c_body, c_visor, c_eye;
 
-// 背景 + 跑道环，只画 [y0, y1) 行
+// Background + track ring, rows [y0, y1) only
 static void draw_bg(int y0, int y1)
 {
     for (int y = y0; y < y1; y++)
@@ -81,7 +78,7 @@ static void draw_bg(int y0, int y1)
         }
 }
 
-// 小豆：黄色圆身体、深色圆角眼罩、两只青色眼睛、深色笑嘴
+// Xiaodou: yellow round body, dark rounded visor, two cyan eyes, dark smile
 static void draw_bean(int x, int y)
 {
     fb_circle(x, y, BODY_R, c_body);
@@ -118,7 +115,7 @@ void app_main(void)
     for (int n = 1;; n++) {
         float p, r;
         pose(&p, &r);
-        // 每 20 ms：速度 += 倾角 × 0.03（像素 / 帧），再乘 0.9 阻尼；横滚 > 0 往右，俯仰 > 0 往下
+        // Every 20 ms: velocity += tilt × 0.03 (px / frame), then × 0.9 damping; roll > 0 goes right, pitch > 0 goes down
         vx = (vx + r * 0.03f) * 0.9f;
         vy = (vy + p * 0.03f) * 0.9f;
         x += vx;
@@ -126,7 +123,7 @@ void app_main(void)
         float dx = x - 120, dy = y - 120, d = sqrtf(dx * dx + dy * dy);
         int edge = 0;
         if (d > MAX_OFF) {
-            // 拉回圆上，去掉速度里朝外的分量：贴着边滑
+            // Pull back onto the circle and drop the outward velocity component: slide along the rim
             x = 120 + dx * MAX_OFF / d;
             y = 120 + dy * MAX_OFF / d;
             float vn = (vx * dx + vy * dy) / d;
@@ -140,7 +137,7 @@ void app_main(void)
         touching = edge;
         int nx = (int)lroundf(x), ny = (int)lroundf(y);
         if (nx != ox || ny != oy) {
-            // 只重画新旧位置覆盖的那几行
+            // Redraw only the rows covered by the old and new positions
             int y0 = (oy < ny ? oy : ny) - BODY_R - 1, y1 = (oy > ny ? oy : ny) + BODY_R + 2;
             if (y0 < 0) y0 = 0;
             if (y1 > LCD_H) y1 = LCD_H;

@@ -1,8 +1,5 @@
-// LVGL 基准：ESP32-S3 + GC9A01 圆屏上跑一个典型表盘界面（刻度盘 + 指针 + 数值标签 + 动画弧线），
-// LVGL 刷新周期 16ms（目标 60 FPS），每秒（模拟时间）打印一次实际渲染帧数和送屏像素数。
-// 驱动走标准写法：esp_lcd + espressif/esp_lcd_gc9a01（SPI2 40MHz、GDMA），LVGL 由 espressif/esp_lvgl_port 托管
-// （独立任务、5ms 节拍、双 40 行 DMA 缓冲、RGB565 换字节序）。
-// 接线同 firmware/common/round_lcd.h：SCLK=12 MOSI=11 CS=10 DC=14 RST=13 背光=15。
+// LVGL benchmark: S3 + GC9A01 dial UI (esp_lcd_gc9a01 on SPI2 40MHz + GDMA, esp_lvgl_port, 16ms refresh for 60 FPS);
+// prints rendered frames and pixels sent per simulated second. Wiring as firmware/common/round_lcd.h.
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -25,7 +22,7 @@
 #define LCD_BL 15
 #define BUF_LINES 40
 
-// 由 LVGL 任务写、统计任务读；32 位读写在 Xtensa 上是原子的
+// Written by the LVGL task, read by the stats task; 32-bit accesses are atomic on Xtensa
 static volatile uint32_t frames, pixels;
 static lv_obj_t *scale, *needle, *arc, *val_label, *fps_label;
 
@@ -48,7 +45,7 @@ static void anim_value(void *obj, int32_t v)
 
 static void anim_arc(void *obj, int32_t v)
 {
-    // 弧线绕圈转：起点跟着转，长度在 60°–150° 之间呼吸
+    // The arc spins: its start rotates while its length breathes between 60° and 150°
     lv_arc_set_rotation(arc, v % 360);
     int32_t len = 60 + (v % 180 < 90 ? v % 90 : 90 - v % 90);
     lv_arc_set_bg_angles(arc, 0, len);
@@ -191,7 +188,7 @@ void app_main(void)
     lvgl_port_unlock();
     printf("LVGL %d.%d.%d up\n", LVGL_VERSION_MAJOR, LVGL_VERSION_MINOR, LVGL_VERSION_PATCH);
 
-    // 每秒（模拟时间）统计一次；固件自报的是"模拟时间里的 FPS"
+    // Stats once per simulated second; the firmware reports FPS in simulated time
     TickType_t wake = xTaskGetTickCount();
     uint32_t f0 = frames, p0 = pixels;
     for (int sec = 1;; sec++) {

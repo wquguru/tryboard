@@ -1,7 +1,5 @@
-//! SSD1306 128×64 单色 OLED（I2C）。命令语义按 SSD1306 数据手册（Solomon Systech）。
-//!
-//! 常见 0.96" 模组的面板安装方向使得"段重映射 A1 + COM 反向扫描 C8"时画面正立，
-//! 这里的显示朝向按这个约定换算。
+//! SSD1306 128x64 monochrome OLED (I2C). Command semantics per the Solomon Systech SSD1306 datasheet.
+//! Common 0.96" modules are mounted so the image is upright with segment remap A1 + reversed COM scan C8; orientation here follows that.
 
 use crate::i2c::I2cDevice;
 use std::any::Any;
@@ -35,10 +33,10 @@ pub struct Ssd1306 {
     col_end: u8,
     page_start: u8,
     page_end: u8,
-    /// I2C 控制字节状态：None = 下一个字节是控制字节
+    /// I2C control byte state: None = next byte is a control byte
     ctrl: Option<(bool, bool)>, // (Co, D/C)
     cmd_buf: Vec<u8>,
-    /// 每次画面可能变化时递增，前端据此决定是否重传纹理
+    /// Bumped whenever the image may have changed; the frontend uses it to decide whether to re-upload the texture
     pub version: u32,
     pub frame: Vec<u8>,
     frame_version: u32,
@@ -73,7 +71,7 @@ impl Ssd1306 {
         }
     }
 
-    /// 命令需要的参数个数
+    /// Number of argument bytes a command takes
     fn args_needed(c: u8) -> usize {
         match c {
             0x81 | 0x8d | 0x20 | 0xa8 | 0xd3 | 0xd5 | 0xd9 | 0xda | 0xdb => 1,
@@ -128,7 +126,7 @@ impl Ssd1306 {
             0xa4 => self.entire_on = false,
             0xa5 => self.entire_on = true,
             0xd3 => self.offset = a[0] & 0x3f,
-            // 其余（时钟、预充电、COM 引脚、VCOMH、滚动）不影响静态画面
+            // The rest (clock, precharge, COM pins, VCOMH, scrolling) doesn't affect a static image
             _ => {}
         }
     }
@@ -170,19 +168,19 @@ impl Ssd1306 {
         }
     }
 
-    /// RAM 中某像素是否点亮（RAM 坐标）
+    /// Whether a pixel is lit in RAM (RAM coordinates)
     pub fn ram_pixel(&self, col: usize, row: usize) -> bool {
         self.gddram[(row / 8) * W + col] >> (row % 8) & 1 != 0
     }
 
-    /// 观察者看到的画面：128×64，每像素 0..255 亮度（含开关、电荷泵、对比度、反色）。
+    /// What an observer sees: 128x64, brightness 0..255 per pixel (display on/off, charge pump, contrast, inversion).
     pub fn render(&mut self) -> &[u8] {
         if self.frame_version == self.version {
             return &self.frame;
         }
         self.frame_version = self.version;
         let lit = self.display_on && self.charge_pump;
-        // 对比度对亮度的影响是非线性的，低对比度仍然清晰可见
+        // Contrast affects brightness non-linearly; low contrast is still clearly visible
         let level = (110.0 + 145.0 * (self.contrast as f32 / 255.0).sqrt()) as u8;
         for y in 0..H {
             for x in 0..W {
@@ -203,7 +201,7 @@ impl Ssd1306 {
         self.render().iter().filter(|&&p| p > 0).count()
     }
 
-    /// 文本示意（2×1 像素压成一个字符），给 CLI / 验收看
+    /// Text sketch (2x1 pixels per character) for the CLI / acceptance
     pub fn ascii(&mut self) -> String {
         let f = self.render().to_vec();
         let mut s = String::new();
@@ -230,7 +228,7 @@ impl I2cDevice for Ssd1306 {
     }
     fn start(&mut self, read: bool) -> bool {
         self.ctrl = None;
-        // I2C 接口下读不到 GDDRAM，只有状态字节；照样应答
+        // GDDRAM is not readable over I2C, only the status byte; still ACK
         let _ = read;
         true
     }
@@ -243,7 +241,7 @@ impl I2cDevice for Ssd1306 {
                 } else {
                     self.command(b);
                 }
-                // Co=1：只跟一个数据字节，然后又是控制字节
+                // Co=1: only one data byte follows, then another control byte
                 if co {
                     self.ctrl = None;
                 }
@@ -282,10 +280,10 @@ mod tests {
         d.stop();
         d.start(false);
         d.write(0x40);
-        d.write(0x01); // 第 0 列，最上面一个像素
+        d.write(0x01); // Column 0, topmost pixel
         d.stop();
         let f = d.render().to_vec();
-        assert!(f[0] > 0, "左上角应点亮");
+        assert!(f[0] > 0, "top-left pixel should be lit");
         assert_eq!(f.iter().filter(|&&p| p > 0).count(), 1);
     }
 }

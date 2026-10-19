@@ -1,4 +1,4 @@
-// 验收固件：STA 主动扫描，打印每个 AP 的 SSID / 信道 / RSSI / 加密方式。
+// Acceptance: STA active scan, printing each AP's SSID / channel / RSSI / auth mode.
 #include <stdio.h>
 #include <string.h>
 #include "esp_wifi.h"
