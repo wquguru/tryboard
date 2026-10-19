@@ -2,7 +2,7 @@
 // Moved out of benchStep() (R-08); talks to other sections only through BenchCtx.
 import { t } from "../../i18n";
 import { type PickTarget } from "../../scene-api";
-import { CHIP_HEAT_OFFSET } from "../../views/templates";
+import { CHIP_HEAT_OFFSET } from "../../views/chipheat";
 import { Btn, Btns, Kv, KvT, Note, Sec } from "../../ui/panel";
 import type { BenchCtx } from "./ctx";
 

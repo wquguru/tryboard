@@ -17,7 +17,7 @@ import { createToolbar } from "./toolbar";
 import { createCard } from "./card";
 import { commit, useStore } from "./react";
 import { createStore } from "./store";
-import { CmdkList } from "./cmdk";
+import { CmdkList } from "./cmdkview";
 import { TopBar } from "./topbar";
 import { Dock, SerialStrip } from "./dock";
 import {
