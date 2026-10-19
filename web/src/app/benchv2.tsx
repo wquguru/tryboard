@@ -9,7 +9,7 @@ import { Icon } from "./icons";
 import { isPhone, setMui, usePhone } from "./mobile";
 import type { BenchWire } from "./wiring";
 import { placeDef } from "./place";
-import { ConfIcon, type ConfLevel } from "../ui/conf";
+import { ConfIcon, confLabel, type ConfLevel } from "../ui/conf";
 import { t } from "../i18n";
 
 /** t() with React nodes as placeholders, so markup stays inside one translatable sentence. */
@@ -33,12 +33,7 @@ const btnPri =
 export type Conf = ConfLevel;
 const [SIMV, BEHV, EST, REAL] = ["仿真验证", "行为模拟", "估算", "必须上真机"] as const satisfies readonly Conf[]; // lint: allow-cjk
 /** Display label per confidence level (the stored value stays the identifier). */
-export const CONF_LABEL: Record<Conf, string> = {
-  [SIMV]: t("Simulated"),
-  [BEHV]: t("Behavior model"),
-  [EST]: t("Estimate"),
-  [REAL]: t("Needs real hardware"),
-};
+export const CONF_LABEL: Record<Conf, string> = { [SIMV]: confLabel(SIMV), [BEHV]: confLabel(BEHV), [EST]: confLabel(EST), [REAL]: confLabel(REAL) };
 const CONF_TIP: Record<Conf, string> = {
   [SIMV]: t("An acceptance firmware ran in the simulator; readings follow the datasheet registers and formulas"),
   [BEHV]: t("Register interface follows the datasheet, physics is approximated; noise and timing details are not modeled"),

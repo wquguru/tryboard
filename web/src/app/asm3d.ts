@@ -552,7 +552,7 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
       for (const k of keys) {
         const c = poseOf(next, k).center;
         const s = core.byId[next].spots?.find((x) => x.key === k);
-        const text = positional(next) && s ? t(s.label).replace(/^放/, '') : t('Place here · {part}', { part: t(core.byId[next].short) }); // lint: allow-cjk (zh labels start with the verb)
+        const text = positional(next) && s ? (s.where ?? s.label) : t('Place here · {part}', { part: t(core.byId[next].short) });
         place2(tag(`slot-${k}`, text, drag.snap === k ? 'hot' : 'slot'), toWorld([c[0], c[1], poseOf(next, k).max[2] + 3 + placedOffset(next)]));
       }
     }

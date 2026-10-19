@@ -141,14 +141,14 @@ export const actions: {
   usbCdc?: (text: string) => void;
   /** Virtual phone op (ble=<cmd>); goes into the input log. */
   ble?: (cmd: string) => void;
-  /** 虚拟手机上的一步（phone= 动作，进输入日志） */
+  /** One step on the virtual phone (phone= action, recorded in the input log) */
   phone?: (cmd: string) => void;
   pickFirmware?: (f: File) => void;
   /** On the bench: verify the selected (or first failing) checkpoint with the upload; returns its id, or null. */
   checkUpload?: (buf: ArrayBuffer, name: string) => string | null;
   /** Switch back to the work's reference firmware (blank works have none). */
   loadRef?: () => void;
-  /** realnet：网络页签的「保存回复，离线重放」（同一份输入日志，文件名带 -realnet，C-03） */
+  /** realnet: the Network tab's "save replies, replay offline" (same input log, file name gets -realnet, C-03) */
   exportInputs?: (kind?: 'realnet') => void;
   brief?: () => void;
   uart?: (text: string) => void;

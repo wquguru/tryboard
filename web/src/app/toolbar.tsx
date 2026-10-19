@@ -1,6 +1,6 @@
 // Floating grouped bottom toolbar. On narrow desktops (1280, both panels open) it wraps to two rows instead of
 // scrolling: a hidden scrollbar would hide the trailing tools. Steps drive it via setGroups / setActive / setLabel (sync commit).
-import { Fragment } from 'react';
+import { Fragment, useLayoutEffect, useRef } from 'react';
 import { t } from '../i18n';
 import { cn } from '../ui/cn';
 import { commit, useStore } from './react';
@@ -44,6 +44,21 @@ export function createToolbar(): Toolbar & { View: (p: { step: string }) => Reac
   function View({ step }: { step: string }) {
     const { groups, active, labels } = useStore(st);
     const phone = usePhone();
+    const ref = useRef<HTMLDivElement>(null);
+    // Publish the real height (it wraps to two rows in en / ja at 1280) so floating cards like the multimeter sit above it
+    useLayoutEffect(() => {
+      const el = ref.current;
+      const root = document.documentElement.style;
+      if (!el) return;
+      const sync = () => root.setProperty('--tb-h', `${el.offsetHeight ? el.offsetHeight + 12 : 0}px`);
+      sync();
+      const ro = new ResizeObserver(sync);
+      ro.observe(el);
+      return () => {
+        ro.disconnect();
+        root.removeProperty('--tb-h');
+      };
+    }, [phone]);
     // Phone: the bench gets a docked five-button bar + More, other steps a button grid under the 3D view (mobile.tsx)
     if (phone)
       return (
@@ -57,6 +72,7 @@ export function createToolbar(): Toolbar & { View: (p: { step: string }) => Reac
     return (
       <div
         id="toolbar"
+        ref={ref}
         role="toolbar"
         className={cn(
           'pnl toolbar tb fixed bottom-[calc(var(--dock-h)+12px)] left-[calc((100vw+var(--left-w)-var(--right-w))/2)] z-2 flex -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-(--r) border border-line bg-(--panel) p-1.5 shadow-panel',

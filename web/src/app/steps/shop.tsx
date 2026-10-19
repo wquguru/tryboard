@@ -513,8 +513,10 @@ export function shopStep(): StepImpl {
     const psram = b.psram === 'none' || b.psramMB === 0 ? t('None') : b.psramMB === null || b.psram === null ? tbc : b.psram === 'octal' ? t('{n} MB (octal, uses GPIO33–37)', { n: b.psramMB }) : t('{n} MB (quad)', { n: b.psramMB });
     const gpios = (part.pins ?? []).filter((p) => p.gpio !== undefined).length;
     const occ = b.onboard.map((o) => `GPIO${o.gpio} ${t(o.what)}`);
-    // Catalog todo notes are "field：text"; strip the field name for display
-    const todo = part.todo.filter((x) => x.startsWith('board') || x.startsWith('pins')).map((x) => t(x.replace(/^[\w.]+：/, ''))); // lint: allow-cjk
+    // Catalog todo notes are "field: text" (older entries used a full-width colon); a bare field name means "unknown"
+    const todo = part.todo
+      .filter((x) => x.startsWith('board') || x.startsWith('pins'))
+      .map((x) => (/^[\w.]+$/.test(x) ? `${x} · ${tbc}` : t(x.replace(/^[\w.]+[:\uff1a]\s*/, ''))));
     return (
       <>
         <Sec>{t('Board')}</Sec>
@@ -626,7 +628,7 @@ export function shopStep(): StepImpl {
         <>
           <Sec>{t('Part')}</Sec>
           <Ph>{t(part.name)}</Ph>
-          <KvT k={t('Model')}>{part.model}</KvT>
+          <KvT k={t('Model')}>{t(part.model)}</KvT>
           <Kv k={t('Category')} v={KIND[part.kind]} />
           {v.supply && <Kv k={t('Power supply')} v={v.supply[0] === v.supply[1] ? `${v.supply[0]} V` : `${v.supply[0]}–${v.supply[1]} V`} />}
           {v.logic !== null && <Kv k={t('Logic level')} v={`${v.logic} V`} />}

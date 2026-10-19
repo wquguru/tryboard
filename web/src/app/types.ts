@@ -57,7 +57,7 @@ export interface CheckOutcome {
   rows: { ok: boolean | null; text: string; say?: string; tag?: string; dev?: string }[];
   fingerprint: string;
   sim: number;
-  /** 开着「真实网络」跑的（C-03）：结论依赖外网，fingerprint 为空（不记运行编号） */
+  /** Ran with the real network on (C-03): verdict depends on the internet, fingerprint empty (no run ID) */
   realnet?: boolean;
 }
 

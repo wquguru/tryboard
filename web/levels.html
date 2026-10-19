@@ -24,7 +24,8 @@
         var cp = /^0[1-6]$/.test(h) ? h : '';
         if (h === '07' || h === '07-spin') (work = 'spin'), (cp = '07-spin');
         if (h === '07-lens') (work = 'lens'), (cp = '07-lens');
-        location.replace('./app?work=' + work + (cp ? '&cp=' + cp : '') + '#bench');
+        var lang = new URLSearchParams(location.search).get('lang');
+        location.replace('./app?work=' + work + (cp ? '&cp=' + cp : '') + (lang ? '&lang=' + encodeURIComponent(lang) : '') + '#bench');
       })();
     </script>
     <noscript><meta http-equiv="refresh" content="0; url=./app?work=weather#bench" /></noscript>

@@ -38,7 +38,7 @@ import {
 import { briefMarkdown, checkpointsOf } from './brief.ts';
 import { PART_MAP, boardFor } from './catalogmap.ts';
 import type { Plan } from './engine.ts';
-import { Conf, ConfBar, ConfIcon } from '../ui/conf';
+import { Conf, ConfBar, ConfIcon, confLabel } from '../ui/conf';
 import { SiteFooter, SiteHeader } from '../ui/site';
 import { SELECT, SITE_NAV, customLab, lab, selectLink } from '../ui/links';
 import { cn } from '../ui/cn';
@@ -167,9 +167,8 @@ const TERM_WHAT: Record<TermKey, string> = {
   PWM: 'Fast switching to dim LEDs / drive servos.',
   '原生 USB': 'The board can act as a keyboard / flash drive.', // lint: allow-cjk
 };
-/** Display text of a confidence value; same keys as ui/conf.tsx confLabel */
-const CONF_TEXT: Record<Confidence, string> = { 仿真验证: 'Verified in sim', 行为模拟: 'Behaviour model', 估算: 'Estimate', 必须上真机: 'Real board only' }; // lint: allow-cjk
-const confText = (c: Confidence) => t(CONF_TEXT[c] ?? c);
+/** Display text of a confidence value (ui/conf.tsx owns the labels) */
+const confText = (c: Confidence) => confLabel(c);
 
 function termYou(k: TermKey, r: Result): string {
   const p = r.plan;
