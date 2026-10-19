@@ -51,7 +51,7 @@
 
 ## 3. 另外两个竞品
 
-- **mikroverk/esp32sim**（MIT，**有源码**，362 星）：S3 成熟（块缓存 + JIT，hello 约 30× 实时）、C3 / C6 草稿、**经典 ESP32 早期**；有屏幕、触摸、LED、按键、音频、**摄像头**、Wi-Fi（能上真网 + NTP）、按开发板建模（Waveshare、LilyGO T-Display、S3-CAM）；S3 用 JTAG 与真机锁步对照；能跑 Linux 6.11、两个 C6 跑 Contiki RPL。**在"给玩家用"这条线上它离我们最近**，而且可读源码（MIT 可借鉴实现，引用要按 LICENSING 登记）。
+- **mikroverk/esp32sim**（MIT，**有源码**，362 星）：S3 成熟（块缓存 + JIT，hello 约 30× 实时）、C3 / C6 草稿、**经典 ESP32 早期**；有屏幕、触摸、LED、按键、音频、**摄像头**、Wi-Fi（能上真网 + NTP，仅原生 CLI；浏览器版没有真网）、按开发板建模（Waveshare、LilyGO T-Display、S3-CAM）；S3 用 JTAG 与真机锁步对照；能跑 Linux 6.11、两个 C6 跑 Contiki RPL。**在"给玩家用"这条线上它离我们最近**，而且可读源码（MIT 可借鉴实现，引用要按 LICENSING 登记）。
 - **Wokwi**：老牌，芯片最全（经典 / S2 / S3 / C3 / C6 / H2 / P4），元件生态最大，免费层有虚拟 Wi-Fi；收费 $7–25/月；不做选型、电气、可信度。
 
 ## 4. 我们该怎么做（三档）

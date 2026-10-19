@@ -917,3 +917,17 @@
 - **依据与授权**：只看 IDF v5.5.1 预编译库（Apache-2.0）反汇编、IDF 头文件和实跑 `--watch`；没有读、没有参考 espressif/qemu 的任何代码（它的 esp32 机器也没有 Wi-Fi MAC）。因此没有 QEMU Wi-Fi 对照，判定标准是与 C3 wifi-http 相同的应用层串口输出；STATUS 标「未经真机标定」。
 - **验收**：accept.json 加 esp32-wifi、esp32-wifi-wpa2（新固件目录 `firmware/esp32-wifi-wpa2`，与 wifi-wpa2 共用 `wifi-http/main/main.c`）；网页示例 esp32-wifi 进 `firmware/examples.json` 和 accept.sh 网页冒烟。esp32-wifi-init 保留（只验 PHY 起来）。
 - **选型**：Wi-Fi 不是零件种类，`SIM_KINDS.esp32` 不变；只更新芯片 / 板子说明文字（Wi-Fi 联网可模拟）。天线、无线距离仍是「必须上真机」。
+
+## 2026-10-19 学习深度 D 批（D-01–D-08）共用约定
+派子代理前先定死，免得三个 worktree 改同一处解析器时各起各的名字。
+- **输入日志动作**（CLI `--inputs` 脚本与网页 `inputlog.ts` 同名，各加一个分支）：
+  - `seed=<u32>`：本次运行的随机种子，缺省 7。网络与 ADC 各从种子派生独立的随机流（`seed ^ 0x4E45_5400` 给网络、`seed ^ 0x4144_4300` 给 ADC），切换 ADC 理想 / 真实不会挪动网络故障的时刻。
+  - `net=normal|weak|flaky|offline`：网络状况预设（D-01）。
+  - `netfault=reboot|dns|silent[,<秒>]`：安排一次故障；秒数缺省 8（reboot 断 8 s，dns / silent 持续时长）。在动作所在时刻开始。
+  - `adc=real|ideal`：ADC 模型（D-02），缺省 real。
+- **CLI 参数**：`--seed N`、`--net <预设>`、`--net-fault <kind>@<起始秒>[,<持续秒>]`（可重复）、`--adc ideal|real`、`--vcd <文件>`、`--vcd-pins <列表>`、`--vcd-window <起>..<止>`（秒，D-04）。时序敏感识别（D-03）不用开关，运行结束时 stderr 打一行 `[tryboard] timing-sensitive: GPIO5 busy-wait esp_rom_delay_us ×N, ...`（英文，网页原始数据逐字相同）。
+- **故障一律在 Rust 里按模拟周期执行**（`soc/src/wifi`），网页只发动作，不在 JS 里丢包或计时，否则网页与命令行指纹分叉。路由器重启 = AP 停发信标、不应答 8 s，断线事件（reason 200 BEACON_TIMEOUT）由 Wi-Fi 库自己报，不伪造事件；DNS 失败 = 虚拟 DNS 回 SERVFAIL；服务器不回应 = 丢掉发往虚拟服务器的 SYN / 数据。
+- **检查点用固定时刻的故障**：「不稳定」预设的随机断线（40–90 s）在 30 s 内可能不发生，验收与检查点只用 `netfault=` 定时故障，结果才确定。
+- **accept.json / levels.json 由主会话合并时统一加**，子代理只在报告里给出用例，免得三个分支冲突。
+- **ADC 默认改「真实」会改变已有读数**：pot / s3-pot 等用例和指纹只在新数更接近真机时更新期望值，不放宽容差；变化逐条列进 STATUS。
+- **参考来源**：eFuse ADC 校准与曲线拟合系数照 ESP-IDF v5.5.1 `components/esp_adc/*/curve_fitting_coefficients.c` 与 `components/efuse/*/esp_efuse_rtc_calib.c`（Apache-2.0，LICENSING ✅），模型传递函数取 IDF 曲线的反函数，使校准后误差落在 1% 内；精细采样 / VCD、按收据计时只借 mikroverk/esp32sim（MIT）的思路，不复制代码（依据 RESEARCH_ESP32SIM.md）。
