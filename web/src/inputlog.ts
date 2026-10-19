@@ -34,7 +34,11 @@ export type InputEvent =
   /** "Real network" toggle (C-03). Action realnet=1/0 */
   | { tMs: number; kind: 'realnet'; on: boolean }
   /** One real-network reply (C-03): id,status,ms,content type or reason code,base64 body. Action netreply=… */
-  | { tMs: number; kind: 'netreply'; reply: string };
+  | { tMs: number; kind: 'netreply'; reply: string }
+  /** ADC model (D-02): ideal = linear and exact, real = calibration curve + end bends + noise (default). Action adc=ideal|real */
+  | { tMs: number; kind: 'adc'; ideal: boolean }
+  /** Session seed (D batch, default 7) for the noise streams. Action seed=N */
+  | { tMs: number; kind: 'seed'; seed: number };
 
 /** An event not yet stamped (the worker fills in tMs when applying it) */
 export type InputAction = InputEvent extends infer E ? (E extends unknown ? Omit<E, 'tMs'> : never) : never;
@@ -113,6 +117,10 @@ export function action(e: InputEvent): string | null {
       return `realnet=${e.on ? 1 : 0}`;
     case 'netreply':
       return `netreply=${e.reply}`;
+    case 'adc':
+      return `adc=${e.ideal ? 'ideal' : 'real'}`;
+    case 'seed':
+      return `seed=${e.seed >>> 0}`;
     case 'power':
       return null;
   }

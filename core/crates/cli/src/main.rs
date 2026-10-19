@@ -24,6 +24,8 @@ fn usage() -> ! {
                [--antenna-loss <dB>] (antenna blocked by metal / battery: virtual AP RSSI drops, too low fails to connect, estimate); script actions i2cwire=cm, antenna=dB
                [--ap-phone [ssid[,pass]]] (virtual phone joins the firmware SoftAP, default open TryBoard-Setup; opens the login page when a captive portal is detected)
                [--ap-post 'ssid=MyHome&pass=12345678'] (auto-submits the login form); with the phone a virtual router MyHome / 12345678 (192.168.5.0/24) appears
+               [--seed N] (session seed, default 7; drives ADC noise) [--adc real|ideal] (default real: calibration curve, end bends, noise; ideal: linear, exact)
+               script actions seed=N, adc=real|ideal
                script actions phone=join,ssid[,pass], phone=open, phone=get,URL, phone=post,URL,form, phone=leave
                script actions realnet=1|0 (the web \"real network\" toggle), netreply=id,status,ms,content type|reason,base64 body (real replies recorded on the web; the CLI never goes online)
                [--encoder A,B[,SW]] (EC11 rotary encoder; script actions enc=+N / enc=-N turn N detents, encsw=1|0 press / release)
@@ -263,6 +265,13 @@ fn run(args: &[String]) {
     if let Some(pin) = servo {
         m.servo_attach(pin);
     }
+    // D batch: session seed and ADC model mode
+    if let Some(n) = opt(args, "--seed").and_then(|s| s.parse::<u32>().ok()) {
+        m.set_seed(n);
+    }
+    if let Some(mode) = opt(args, "--adc") {
+        m.set_adc_ideal(mode == "ideal");
+    }
     // Harness (P2-11, estimate): I2C wire length, antenna blockage
     if let Some(cm) = opt(args, "--i2c-wire").and_then(|s| s.parse::<f64>().ok()) {
         m.set_i2c_wire(Some(cm));
@@ -455,6 +464,13 @@ fn run(args: &[String]) {
                 if let Ok(cm) = cm.trim().parse::<f64>() {
                     m.set_i2c_wire(if cm < 0.0 { None } else { Some(cm) });
                 }
+            } else if let Some(mode) = act.strip_prefix("adc=") {
+                // The web ADC panel's ideal / real toggle
+                m.set_adc_ideal(mode.trim() == "ideal");
+            } else if let Some(n) = act.strip_prefix("seed=") {
+                if let Ok(n) = n.trim().parse::<u32>() {
+                    m.set_seed(n);
+                }
             } else if let Some(db) = act.strip_prefix("antenna=") {
                 if let Ok(db) = db.trim().parse::<i32>() {
                     m.set_antenna_loss(db);
@@ -643,6 +659,12 @@ fn run(args: &[String]) {
             eprintln!("[tryboard] could not power up after software reset (reason {r})")
         }
         Stop::Budget => {}
+    }
+    if m.adc_blocked() > 0 {
+        eprintln!(
+            "[tryboard] ADC2: {} reads refused while Wi-Fi held the arbiter (firmware sees ESP_ERR_TIMEOUT)",
+            m.adc_blocked()
+        );
     }
     let un = m.unimpl();
     eprintln!(

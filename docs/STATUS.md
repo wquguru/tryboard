@@ -18,7 +18,7 @@
 | 模拟前端（regi2c） | 🟡 | HLE，ocode 校准通过 | 不建模模拟电路本身 |
 | USB-Serial-JTAG | 🟡 | 第二控制台输出被吞掉 | 网页里暂不显示 |
 | LEDC | ✅ | fade：5kHz 13 位硬件渐变时序与 IDF 计算一致；servo：50Hz 脉宽 | 不逐周期出波形，按占空比给出引脚 PWM |
-| ADC（APB_SARADC 单次） | ✅ | pot：0 / 1250 / 2400mV 读数误差 < 1LSB+噪声 | 衰减档线性近似、±2LSB 噪声；连续模式（DMA）未做；eFuse 校准数据未提供（adc_cali 不可用） |
+| ADC（APB_SARADC 单次） | ✅ | pot：1250mV → raw 1847（典型芯片，D-02 前为 2046），LED 占空比上限 0.96 → 0.88（2400mV 读 3604）；c3-adc-cali：0.5 / 1 / 1.65 / 2V 曲线拟合校准后误差 0mV（< 1%）；网页理想 / 真实切换重放逐字节相同（adc.mjs） | 真实（默认）= IDF 校准曲线反函数 + 两头弯曲 + σ2LSB 种子噪声，理想 = 线性无噪声；eFuse 烧典型芯片校准值（adc_cali 可用）；ADC2 读需 IDF 强制开关，未出用例；连续模式（DMA）未做；未经真机标定 |
 | RMT 发送 | ✅ | rgb：1 颗 WS2812 四色逐帧一致；strip：16 颗 × 3 帧逐颗一致（384 条目，靠阈值中断乒乓填充 + 回绕） | 时钟源 / 组分频 / 通道分频、mem_size 借块、回绕、连续（循环）模式与循环计数中断、结束 / 阈值 / 出错中断；未做载波、APB FIFO 模式 |
 | RMT 接收 | ✅ | c3-ultrasonic（P2-13，与 s3-ultrasonic 同一份源码，Trig=GPIO4 / Echo=GPIO5，`--sonar 4,5`）：25 / 100 / 300 cm → Echo 1457 / 5830 / 17492 µs、超量程 → out of range，16 次触发 16 次回波；单元测试（C3 布局：通道 2/3、mem_size [25:23]、RX_END 位 2+i、多段电平 + 滤波、结束条目、CH3STATUS 写指针） | 与 S3 共用 `rmt.rs` 接收模型（`RmtLayout::C3`），输入经 GPIO 矩阵（sel[4:0]、inv[5]、经矩阵[6]）；未经真机标定 |
 | WS2812 解码器 | ✅ | 同上 | 引脚连到 RMT 输出时自动挂上；高电平 >0.6µs 判 1，低电平 ≥40µs 提交一帧 |
@@ -63,7 +63,7 @@
 | 虚拟器件 HC-SR04（P2-04） | ✅ | 同 s3-ultrasonic；网页：拖 3D 障碍物 15 → 10.9 cm、固件读 10.9 cm，200 cm / 50 cm 快捷按钮，逻辑分析仪看到 Trig / Echo；网页输入日志 → CLI `--sonar 17,18 --inputs` 串口逐字节相同；拆掉 Echo 分压 → 接线检查 W2 | Trig ≥ 10 µs 下降沿后 250 µs 拉高 Echo，宽 2 × 距离 / 343 m/s（20 ℃ 固定）；2–400 cm，超量程 38 ms；测量中再触发不理；距离来自探头沿朝向的射线（3D 里最远摆 100 cm）；15 mA 进 5V 轨；未经真机标定 |
 | I2C0 / I2C1 | ✅ | s3-oled：扫描只应答 0x3C，1KB 帧 400kHz 约 24.0ms，点亮 1636 像素；s3-bme280：-7.25°C / 88.5% / 950.12hPa 读回误差 0 | 与 C3 同一模型（寄存器布局逐项一致），I2C1 在 0x60027000 |
 | I2C 线长（P2-11，估算） | 🟡 | `cargo test`：400 kHz 两个模块 20 cm 正常、60 cm 读回 0x60→0x20、150 cm 地址不应答、降到 100 kHz 又正常；accept weather-i2c-long（60 cm：上升 381 ns > 300 ns，读数 T=-60.92）、weather-i2c-nack（150 cm：NACK → ESP_ERROR_CHECK 重启，扫描时 100 kHz 仍应答） | 确定性模型（`elec::i2cbus`）：C = 线长 × 1 pF/cm + 器件 × 10 pF + 10 pF，模块 10 kΩ 上拉并联，t_r = 0.8473·R·C，按固件配置的 SCL 频率取规范上限（100 k / 400 k / 1 M：1000 / 300 / 120 ns）；超出 → 读回字节丢 0→1 的位，超两倍 → 地址不应答。常数是估算，未经真机标定；只作用于 I2C0；CLI `--i2c-wire`、脚本 `i2cwire=` |
-| SAR ADC 单次（SENS） | ✅ | s3-pot：0 / 1550 / 3000mV 读数正确 | S3 单次采样走 RTC 的 SENS（0x60008800），不是 APB_SARADC；衰减档量程近似 950 / 1250 / 1750 / 3100mV；ADC2 仲裁标志、连续模式未做 |
+| SAR ADC 单次（SENS） | ✅ | s3-pot：1550mV → raw 1852（D-02 前为 2046），占空比上限 0.968 → 0.922（3000mV 读 3778）；s3-adc-cali：0.5–2.5V 校准后误差 0mV；s3-adc2-wifi：Wi-Fi 启动前 ADC2 读数正常、启动后 ESP_ERR_TIMEOUT | S3 单次采样走 RTC 的 SENS（0x60008800）；模型同 C3（典型芯片 eFuse + 校准曲线反函数 + 噪声），理想模式量程 950 / 1250 / 1750 / 3100mV；ADC2 遇 Wi-Fi 由仲裁标志 [15:14] 报无效；连续模式未做；未经真机标定 |
 | 装配成品 weather（桌面气象站） | ✅ | 同一 I2C 挂 SSD1306 + BME280（23.5°C / 45% / 1013.25hPa 读回误差 0）、舵机 GPIO4 1675us、WS2812 GPIO48 绿 #002000、BOOT 切 ℉ 后屏幕重画（点亮 1328 像素） | 场景层验收；35°C 时 LED=red、PWM=2250us、GPIO5 蜂鸣器 2700Hz 报警：accept 用例 weather-alarm（同固件第二个用例，`fw` 字段） |
 | GP-SPI2 主机 | ✅ | lens / spin：esp_lcd + esp_lcd_gc9a01 标准写法（spi_bus_initialize SPI_DMA_CH_AUTO、轮询发命令、队列发像素），40MHz，整帧 115200 字节拆 6 次 DMA | 命令 / 地址 / 哑周期 / MOSI 各阶段、W0..W15 与 DMA 两条数据通路、TRANS_DONE 中断、按 SPI 时钟计时；不模拟逐位时序与 FIFO；MISO 恒读全 1；双 / 四 / 八线模式按单线计时；从机模式未做 |
 | GDMA（5 通道） | ✅ | 同上：描述符链（每次传输 5 个描述符）、owner 回写、OUT_EOF；接收方向见下方「GDMA 流式收发（I2S）」 | 单元测试覆盖链表遍历 / 回写 / 中断；SPI 的 RX（MISO 恒为全 1）仍未经固件验收；不模拟突发、FIFO、优先级、内存到内存 |

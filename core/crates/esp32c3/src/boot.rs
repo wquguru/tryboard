@@ -18,6 +18,8 @@ pub fn default_efuse() -> [u32; 0x200 / 4] {
     // STATUS: read done, idle
     e[0x1d0 / 4] = 0x1;
     e[0x1fc / 4] = 0x2007200;
+    // Typical-chip ADC calibration (BLK2 v1) so curve-fitting cali works like on a real board
+    tryboard_soc::adc::burn_efuse(tryboard_soc::adc::AdcChip::C3, &mut e);
     e
 }
 

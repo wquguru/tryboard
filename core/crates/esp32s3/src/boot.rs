@@ -24,6 +24,8 @@ pub fn default_efuse() -> [u32; 0x200 / 4] {
     e[blk1 + 4] |= 1 << 3;
     e[0x1d0 / 4] = 0x1;
     e[0x1fc / 4] = 0x2003200;
+    // Typical-chip ADC calibration (BLK2 v1) so curve-fitting cali works like on a real board
+    tryboard_soc::adc::burn_efuse(tryboard_soc::adc::AdcChip::S3, &mut e);
     e
 }
 
@@ -312,6 +314,7 @@ impl Esp32s3 {
         bus.gpio.ext_in = old.gpio.ext_in;
         bus.gpio.ext_driven = old.gpio.ext_driven;
         bus.adc.pin_mv = old.adc.pin_mv;
+        bus.adc.model = old.adc.model.clone();
         bus.i2c0.devices = std::mem::take(&mut old.i2c0.devices);
         bus.i2c1.devices = std::mem::take(&mut old.i2c1.devices);
         bus.gpio_log = std::mem::take(&mut old.gpio_log);

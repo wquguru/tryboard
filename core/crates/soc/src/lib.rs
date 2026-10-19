@@ -1,6 +1,7 @@
 //! Shared SoC parts: peripheral models used by several chips.
 //! BLE (virtual controller at VHCI + virtual phone, C-01); Wi-Fi (MAC / RF behaviour model and virtual world), C3 vs S3 register layout via [`wifi::WifiLayout`].
 
+pub mod adc;
 pub mod ble;
 pub mod wifi;
 

@@ -278,6 +278,14 @@ export class LiveSim {
   realnet(on: boolean) {
     this.send({ type: 'realnet', on });
   }
+  /** ADC model (D-02): ideal = linear and exact, real = calibration curve + bends + noise (logged: adc=). */
+  adcMode(ideal: boolean) {
+    this.send({ type: 'adcMode', ideal });
+  }
+  /** Pins whose recent ADC conversions come back in tick.adc */
+  watchAdc(pins: number[]) {
+    this.send({ type: 'watchAdc', pins });
+  }
   /** Potentiometer wiper voltage (mV) into an ADC pin (logged). */
   analog(pin: number, mv: number) {
     this.send({ type: 'analog', pin, mv });

@@ -60,6 +60,11 @@ interface Exports {
   tb_elec_report(): number;
   tb_i2c_wire?(cm: number): void;
   tb_antenna_loss?(db: number): void;
+  /** D-02: session seed, ADC model (1 = ideal), recent (raw, mV) pairs per pin */
+  tb_seed?(seed: number): void;
+  tb_adc_mode?(ideal: number): void;
+  tb_adc_fetch?(pin: number): number;
+  tb_adc_ptr?(): number;
   /** Virtual phone / Network tab (C-02): old cores lack these exports */
   tb_wifi_used?(): number;
   tb_phone_cmd?(p: number, len: number): number;
@@ -201,6 +206,10 @@ export type ToWorker =
   /** USB <-> external 5 V (logged: power=usb|ext). */
   | { type: 'power'; mode: PowerMode }
   | { type: 'analog'; pin: number; mv: number }
+  /** ADC model toggle (D-02, logged: adc=ideal|real) */
+  | { type: 'adcMode'; ideal: boolean }
+  /** Pins whose recent ADC conversions go into tick.adc */
+  | { type: 'watchAdc'; pins: number[] }
   | { type: 'run' }
   | { type: 'pause' }
   | { type: 'speed'; factor: number }
@@ -245,6 +254,12 @@ export type ToWorker =
   | { type: 'mark'; id: number }
   /** GPIOs the logic analyser watches (bitmask, lo = GPIO0..31, hi = GPIO32..); kept for later power-ups. */
   | { type: 'ioWatch'; lo: number; hi: number };
+
+/** Recent conversions on one pin: raw codes and what calibrated firmware would report (mV). */
+export interface AdcSamples {
+  raw: number[];
+  mv: number[];
+}
 
 /** Harness (P2-11): negative i2cWire = ideal bus. */
 export interface Harness {
@@ -306,6 +321,8 @@ export type FromWorker =
       pins?: PinDevFrame;
       /** Readings when an I2S audio device is attached. */
       audio?: AudioFrame;
+      /** Recent ADC conversions on watchAdc pins (oldest first, at most 48). */
+      adc?: Record<number, AdcSamples>;
     }
   /** Speaker sound (only with MAX98357A), scheduled into Web Audio on sim time. */
   | { type: 'pcm'; blocks: PcmBlock[] }
@@ -470,6 +487,24 @@ function record(e: Exports, ev: InputAction) {
 
 // ---- PWM change sampling (buzzer): checked between slices, 1 ms resolution
 let watchPins: number[] = [];
+let adcPins: number[] = [];
+
+function adcFrame(e: Exports): Record<number, AdcSamples> | undefined {
+  if (!e.tb_adc_fetch || !e.tb_adc_ptr || !adcPins.length) return undefined;
+  const out: Record<number, AdcSamples> = {};
+  for (const pin of adcPins) {
+    const n = e.tb_adc_fetch(pin);
+    const v = new Int32Array(e.memory.buffer, e.tb_adc_ptr(), n * 2);
+    const raw: number[] = [];
+    const mv: number[] = [];
+    for (let i = 0; i < n; i++) {
+      raw.push(v[2 * i]);
+      mv.push(v[2 * i + 1]);
+    }
+    out[pin] = { raw, mv };
+  }
+  return out;
+}
 let pwmLast = new Map<number, [number, number]>();
 let pwmEvents: PwmEvent[] = [];
 function samplePwm(e: Exports) {
@@ -645,6 +680,7 @@ function loop(gen = loopGen) {
     brownouts: takeBrownouts(e),
     pins: pinDevFrame(e),
     audio: audioFrame(e),
+    adc: adcFrame(e),
   });
   flushPcm();
   flushIo(e);
@@ -816,7 +852,7 @@ function postHarness(e: Exports, force = false) {
 const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5 };
 
 function postPaused(e: Exports) {
-  post({ type: 'tick', console: '', leds: leds(e), strips: strips(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running, elec: elecFrame(e), brownouts: takeBrownouts(e), pins: pinDevFrame(e) });
+  post({ type: 'tick', console: '', leds: leds(e), strips: strips(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running, elec: elecFrame(e), brownouts: takeBrownouts(e), pins: pinDevFrame(e), adc: adcFrame(e) });
 }
 
 /** Boot fields; locale exists so any human text the worker makes follows the page (core errors are English already). */
@@ -940,6 +976,15 @@ function apply(e: Exports, ev: InputAction) {
       break;
     case 'antenna':
       e.tb_antenna_loss?.(ev.db);
+      break;
+    case 'adc':
+      if (!e.tb_adc_mode) return;
+      e.tb_adc_mode(ev.ideal ? 1 : 0);
+      break;
+    case 'seed':
+      if (!e.tb_seed) return;
+      ev = { kind: 'seed', seed: ev.seed >>> 0 };
+      e.tb_seed(ev.seed);
       break;
     case 'realnet':
       if (!e.tb_realnet_set) return;
@@ -1085,6 +1130,13 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
     case 'analog':
       if (!ex) return;
       apply(ex, { kind: 'pot', pin: m.pin, mv: m.mv });
+      break;
+    case 'adcMode':
+      if (!ex) return;
+      apply(ex, { kind: 'adc', ideal: m.ideal });
+      break;
+    case 'watchAdc':
+      adcPins = [...m.pins];
       break;
     case 'watchPwm':
       watchPins = [...m.pins];

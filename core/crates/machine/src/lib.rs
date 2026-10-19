@@ -22,6 +22,7 @@ use tryboard_esp32c3::rmt::Ws2812;
 pub use tryboard_esp32c3::tasktrace::{TaskEvent, TaskInfo, TaskTrace};
 use tryboard_esp32c3::Esp32c3;
 use tryboard_esp32s3::Esp32s3;
+use tryboard_soc::adc::{AdcModel, Sample as AdcSample};
 
 pub use tryboard_esp32c3::periph::CPU_HZ;
 pub use tryboard_esp32c3::wifi::phone::Cmd as PhoneCmd;
@@ -636,6 +637,54 @@ impl Machine {
         };
         if let Some(p) = slot {
             *p = mv;
+        }
+    }
+
+    fn adc_model(&mut self) -> Option<&mut AdcModel> {
+        match &mut self.hw {
+            Hw::C3(m) => Some(&mut m.bus.adc.model),
+            Hw::S3(m) => Some(&mut m.bus.adc.model),
+            Hw::E32(_) => None,
+        }
+    }
+
+    /// Session seed (D batch, default 7): each random stream salts it (ADC: seed ^ 0x41444300)
+    pub fn set_seed(&mut self, seed: u32) {
+        if let Some(a) = self.adc_model() {
+            a.reseed(seed);
+        }
+    }
+
+    /// `adc=ideal` (linear, noiseless) or `adc=real` (calibration curve, bends, noise; default)
+    pub fn set_adc_ideal(&mut self, ideal: bool) {
+        if let Some(a) = self.adc_model() {
+            a.set_ideal(ideal);
+        }
+    }
+
+    pub fn adc_ideal(&self) -> bool {
+        match &self.hw {
+            Hw::C3(m) => m.bus.adc.model.ideal,
+            Hw::S3(m) => m.bus.adc.model.ideal,
+            Hw::E32(_) => false,
+        }
+    }
+
+    /// Recent conversions on a pin (raw, calibrated mV), oldest first, at most 48
+    pub fn adc_samples(&self, pin: usize) -> Vec<AdcSample> {
+        match &self.hw {
+            Hw::C3(m) => m.bus.adc.model.samples(pin).copied().collect(),
+            Hw::S3(m) => m.bus.adc.model.samples(pin).copied().collect(),
+            Hw::E32(_) => Vec::new(),
+        }
+    }
+
+    /// ADC2 reads refused because Wi-Fi held the arbiter
+    pub fn adc_blocked(&self) -> u64 {
+        match &self.hw {
+            Hw::C3(m) => m.bus.adc.model.blocked,
+            Hw::S3(m) => m.bus.adc.model.blocked,
+            Hw::E32(_) => 0,
         }
     }
 

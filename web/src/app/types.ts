@@ -192,6 +192,9 @@ export interface Session {
   /** Potentiometers (analog input sliders): pin → mV, re-applied after each power-on */
   analog: Map<number, number>;
   setAnalog(pin: number, mv: number): void;
+  /** ADC model (D-02): true = ideal (linear, exact), false = real (default); re-applied after each power-on */
+  adcIdeal: boolean;
+  setAdcIdeal(ideal: boolean): void;
   /** Whether the bench has an IMU (gates the tilt slider and dragging) */
   hasImu(): boolean;
   /** Set pose (P2-03): sent to the sim with angular rate while dragging, rate 0 150 ms after stopping; the bench tilts too */

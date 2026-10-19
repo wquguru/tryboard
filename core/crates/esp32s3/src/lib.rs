@@ -561,6 +561,7 @@ impl SocBus {
             0x6000_F000 => return self.i2s[0].write(off, v, now),
             0x6002_D000 => return self.i2s[1].write(off, v, now),
             0x6000_8000 if off >= 0x800 => {
+                self.adc.wifi_busy = self.wifi.as_deref().is_some_and(|w| w.is_on());
                 if self.adc.write(off - 0x800, v) {
                     return;
                 }
