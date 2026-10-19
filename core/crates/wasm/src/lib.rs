@@ -684,6 +684,117 @@ pub unsafe extern "C" fn tb_usb_cdc_send(p: *const u8, len: usize) {
     });
 }
 
+// ---------------------------------------------------------------- 虚拟手机 / 网络（C-02 / C-03）
+
+thread_local! {
+    static PHONE_JSON: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+/// 固件用了 Wi-Fi（发过帧）：网页坞里才出现「网络」页签。
+/// 拿起过虚拟手机也算：固件自己重启（esp_restart）后帧计数清零，页签不能跟着一闪而没
+#[no_mangle]
+pub extern "C" fn tb_wifi_used() -> u32 {
+    with(0, |m| {
+        let w = m.wifi();
+        (w.tx_frames > 0 || w.world.phone.is_some()) as u32
+    })
+}
+
+/// 虚拟手机上的一步操作（与脚本动作 phone= 后面同一种文字：on / join,ssid[,pass] / leave / open / get,url / post,url,body）。
+/// 返回 0 成功，1 认不出
+/// # Safety
+/// p/len 指向有效的 UTF-8 缓冲区
+#[no_mangle]
+pub unsafe extern "C" fn tb_phone_cmd(p: *const u8, len: usize) -> u32 {
+    let s = String::from_utf8_lossy(std::slice::from_raw_parts(p, len)).into_owned();
+    let Some(c) = tryboard_machine::PhoneCmd::parse(&s) else {
+        return 1;
+    };
+    with(1, |m| {
+        m.phone_cmd(c);
+        0
+    })
+}
+
+/// 手机状态的变化计数（0 = 还没拿起手机）：变了再取 JSON
+#[no_mangle]
+pub extern "C" fn tb_phone_version() -> f64 {
+    M.with(|c| {
+        let b = c.borrow();
+        b.as_ref()
+            .and_then(|m| m.phone())
+            .map_or(0.0, |p| (p.version + p.log.len() as u64 + 1) as f64)
+    })
+}
+
+/// 手机看到的（附近网络、IP、需要登录、打开过的页面、过程记录），返回长度；内容用 tb_phone_json_ptr 读
+#[no_mangle]
+pub extern "C" fn tb_phone_json() -> usize {
+    let j = M.with(|c| {
+        let b = c.borrow();
+        b.as_ref()
+            .and_then(|m| m.phone())
+            .map(|p| p.json())
+            .unwrap_or_default()
+    });
+    let n = j.len();
+    PHONE_JSON.with(|b| *b.borrow_mut() = j);
+    n
+}
+
+#[no_mangle]
+pub extern "C" fn tb_phone_json_ptr() -> *const u8 {
+    PHONE_JSON.with(|b| b.borrow().as_ptr())
+}
+
+/// 网络页签的记录条数（变了再取 JSON）
+#[no_mangle]
+pub extern "C" fn tb_net_version() -> f64 {
+    with(0.0, |m| {
+        let n = &m.wifi().world.net;
+        n.tcp.rows.len() as f64 + if n.leased { 1e9 } else { 0.0 }
+    })
+}
+
+/// 网络页签：最近 300 条 [时刻 ms, 方法, 去向, 地址, 状态, 耗时 ms | null]，返回长度；内容用 tb_phone_json_ptr 读
+#[no_mangle]
+pub extern "C" fn tb_net_json() -> usize {
+    let j = with(String::new(), |m| {
+        let net = &m.wifi().world.net;
+        let rows = &net.tcp.rows;
+        let r: Vec<String> = rows[rows.len().saturating_sub(300)..]
+            .iter()
+            .map(|r| {
+                format!(
+                    "[{},{},{},{},{},{}]",
+                    r.t_us as f64 / 1000.0,
+                    json_str(&r.method),
+                    json_str(r.dest),
+                    json_str(&r.url),
+                    json_str(&r.status),
+                    r.dur_us
+                        .map_or("null".to_string(), |d| format!("{}", d as f64 / 1000.0))
+                )
+            })
+            .collect();
+        // 芯片从虚拟路由器拿到的地址（DHCP ACK 之后才有）：配网面板的「拿到 IP」
+        let lease = if net.leased {
+            let i = net.sta_ip;
+            format!("\"{}.{}.{}.{}\"", i[0], i[1], i[2], i[3])
+        } else {
+            "null".to_string()
+        };
+        format!(
+            "{{\"total\":{},\"lease\":{lease},\"rows\":[{}]}}",
+            rows.len(),
+            r.join(",")
+        )
+    });
+    let n = j.len();
+    PHONE_JSON.with(|b| *b.borrow_mut() = j);
+    n
+}
+
 // ---------------------------------------------------------------- 验收观察（关卡检查用）
 
 /// 生成与命令行 `--gpio-log --ws2812-log` 相同格式的观察记录（GPIO 翻转次数、WS2812 各帧颜色、OLED 点亮像素、圆屏非黑像素），

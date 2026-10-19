@@ -22,6 +22,8 @@ export interface Ex {
   tb_analog_set(pin: number, mv: number): void;
   tb_uart_push(p: number, n: number): void;
   tb_usb_cdc_send(p: number, n: number): void;
+  /** 虚拟手机（C-02），老内核没有 */
+  tb_phone_cmd?(p: number, n: number): number;
   tb_pin_pwm(pin: number): number;
   tb_pin_pwm_freq(pin: number): number;
   tb_i2c_attach(kind: number, addr: number): number;
@@ -180,7 +182,8 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
       else if (act.startsWith('dist=')) {
         const d = Number(act.slice(5));
         if (!Number.isNaN(d)) e.tb_sonar_distance?.(d);
-      } else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));
+      } else if (act.startsWith('phone=')) bytesIn(e, new TextEncoder().encode(act.slice(6).replaceAll('\\n', '\n')), (p, n) => void e.tb_phone_cmd?.(p, n));
+      else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));
       else if (act.startsWith('imu=')) {
         // 与 CLI parse_imu 相同：3 个数（姿态）或 6 个数（再加变化率）
         const v = act.slice(4).split(',').map(Number);

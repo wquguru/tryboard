@@ -54,7 +54,7 @@ fn dns_answers_gateway() {
         q.extend_from_slice(part.as_bytes());
     }
     q.extend_from_slice(&[0, 0, 1, 0, 1]);
-    let (r, _) = n.tcp.dns(&q).unwrap();
+    let (r, _) = n.tcp.dns(&q, net::GW_IP).unwrap();
     assert_eq!(&r[..2], &[0x12, 0x34]);
     assert_eq!(r[7], 1);
     assert_eq!(&r[r.len() - 4..], &net::GW_IP);
@@ -89,4 +89,121 @@ fn http_over_tcp() {
     assert!(text.starts_with("HTTP/1.1 200 OK"));
     assert!(text.contains("TRYBOARD_HTTP_OK"));
     assert_eq!(r.last().unwrap().0[13] & 0x01, 0x01, "最后一段带 FIN");
+}
+
+// ---------- C-02 虚拟手机：用虚拟世界的 AP 当"固件热点"，手机当终端，方向与芯片 STA 相反 ----------
+
+use super::phone::{Cmd, Link, Phone};
+use super::world::World;
+
+/// 在手机与世界之间来回传帧，直到到时；信标每 102.4ms 一次
+fn shuttle(p: &mut Phone, w: &mut World, ap: usize, mut t: u64, until: u64) -> u64 {
+    let mut next_beacon = t;
+    while t < until {
+        if t >= next_beacon {
+            let b = w.beacon(ap, t);
+            p.on_frame(&b.frame, t);
+            next_beacon += 102_400;
+        }
+        if p.next_timer().is_some_and(|x| x <= t) {
+            p.poll(t);
+        }
+        let mut q: Vec<Vec<u8>> = p.take_out().into_iter().map(|a| a.frame).collect();
+        let mut guard = 0;
+        while !q.is_empty() {
+            let f = q.remove(0);
+            guard += 1;
+            assert!(guard < 200, "帧来回不停");
+            let (_, airs, _) = w.on_tx(&f, t);
+            for a in airs {
+                p.on_frame(&a.frame, t);
+                q.extend(p.take_out().into_iter().map(|a| a.frame));
+            }
+        }
+        if w.next_timer().is_some_and(|x| x <= t) {
+            for a in w.poll(t).0 {
+                p.on_frame(&a.frame, t);
+            }
+        }
+        t += 1000;
+    }
+    t
+}
+
+#[test]
+fn phone_joins_open_ap_and_gets_dhcp() {
+    let mut w = World::default();
+    w.net.sta_ip = [192, 168, 4, 2];
+    let mut p = Phone::new();
+    p.command(
+        Cmd::Join {
+            ssid: "TryBoard-WiFi".into(),
+            pass: String::new(),
+        },
+        0,
+    );
+    // 还没听到信标：停在扫描
+    assert_eq!(p.link, Link::Scan);
+    shuttle(&mut p, &mut w, 0, 0, 300_000);
+    assert_eq!(p.link, Link::Up);
+    assert_eq!(p.ip, Some([192, 168, 4, 2]));
+    assert_eq!(p.gw, [192, 168, 4, 1]);
+    // 拿到地址后第一件事是联网探测：DNS 查探测域名（虚拟网络的 DNS 答网关地址）
+    assert!(p
+        .log
+        .iter()
+        .any(|l| l.1.contains("DNS connectivitycheck.gstatic.com")));
+    assert!(p.json().contains("\"ip\":\"192.168.4.2\""));
+}
+
+#[test]
+fn phone_is_supplicant_in_wpa2_handshake() {
+    let mut w = World::default();
+    let mut p = Phone::new();
+    p.command(
+        Cmd::Join {
+            ssid: "TryBoard-WPA2".into(),
+            pass: "tryboard123".into(),
+        },
+        0,
+    );
+    shuttle(&mut p, &mut w, 1, 0, 500_000);
+    // 四次握手由 AP（认证方）发起、手机（请求方）应答，双方装上同一把 TK，DHCP 走加密数据帧
+    assert!(w.wpa[1].as_ref().unwrap().authorized());
+    assert_eq!(p.link, Link::Up);
+    assert_eq!(p.ip, Some(net::STA_IP));
+}
+
+#[test]
+fn phone_wrong_wpa2_password_never_comes_up() {
+    let mut w = World::default();
+    let mut p = Phone::new();
+    p.command(
+        Cmd::Join {
+            ssid: "TryBoard-WPA2".into(),
+            pass: "wrongpass1".into(),
+        },
+        0,
+    );
+    shuttle(&mut p, &mut w, 1, 0, 8_000_000);
+    assert!(!w.wpa[1].as_ref().unwrap().authorized());
+    assert_ne!(p.link, Link::Up);
+    assert!(p.ip.is_none());
+}
+
+#[test]
+fn phone_cmd_parse() {
+    assert_eq!(
+        Cmd::parse("post,/save,ssid=MyHome&pass=1,2"),
+        Some(Cmd::Post("/save".into(), "ssid=MyHome&pass=1,2".into()))
+    );
+    assert_eq!(
+        Cmd::parse("join,TryBoard-Setup"),
+        Some(Cmd::Join {
+            ssid: "TryBoard-Setup".into(),
+            pass: String::new()
+        })
+    );
+    assert_eq!(Cmd::parse("on"), Some(Cmd::On));
+    assert_eq!(Cmd::parse("dance"), None);
 }

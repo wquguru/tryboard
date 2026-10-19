@@ -15,6 +15,7 @@ import type { Store } from './store';
 import { currentTheme, onTheme } from '../theme';
 import { IoStore, decodeEvents } from './iotrace';
 import type { UsbView } from '../usb3d';
+import { netFeed } from './netfeed';
 import { PoseRate } from '../imupose';
 import { MicInput } from '../micinput';
 import { chipOf, loadExamples } from './examples';
@@ -385,6 +386,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         bench.setUsb(v);
         for (const cb of [...usbSubs]) cb(v);
       },
+      onNet: (m) => netFeed.update(m),
       onHarness(text) {
         s.harnessText = text;
         for (const cb of [...harnessSubs]) cb(text);

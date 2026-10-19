@@ -44,6 +44,7 @@ web/（Vite + TS）
 - 加解密分两处，与真机一致：
   - **四次握手在固件里**（IDF wpa_supplicant），它用 mbedTLS → 硬件 SHA / AES 加速器（`crypto_hw.rs`，块模式 + DMA 模式）。
   - **数据帧 CCMP 在 MAC 硬件里**：驱动把 PTK / GTK 写进密钥表（0x60034400 起每项 40 字节，有效位图 0x60033814，字 1 位 30 = 组密钥），发送时帧里已有 CCMP 头（PN）和 8 字节 MIC 空位，MAC 模型按 a1 查成对密钥加密后上"空中"；接收时按 a2 查成对 / 组密钥解密，CCMP 头与 MIC 位置保留（驱动的 `ccmp_decap` 校验 PN 后剥掉）。
+- 固件自建热点（C-02，`phone.rs`）：芯片经 AP 接口发的帧按 Rx 头 `hdr[0]` 第 29 位回送；World 从芯片信标学到 `ap_mac`，发给它的帧交给虚拟手机（扫描 / 认证 / 关联 / WPA2 请求方 / DHCP / DNS / HTTP，联网探测判「需要登录」）。手机定时器并进 World 的 `next_timer`，固件自己重启时保留。拿起手机时多一台路由器 MyHome（192.168.5.1，芯片拿 .100）。脚本动作 `phone=`；wasm `tb_phone_cmd / tb_phone_json / tb_net_json`，网页底部坞「网络」页签（`web/src/app/netpane.tsx`，数据 `netfeed.ts`），固件发过 Wi-Fi 帧（或拿起过手机）才出现。
 - 密码学原语全部自己实现（`wifi/crypto.rs`：SHA-1、HMAC、PBKDF2、PRF、AES-128/192/256、Key Wrap、CCM、CCMP），按 FIPS 180 / RFC 2202 / RFC 6070 / IEEE 802.11 附录 / FIPS 197 / RFC 3394 / RFC 3610 / NIST SP 800-38A 测试向量做单元测试。
 
 ## SHA / AES 加速器（ESP32-C3 / S3，`crates/esp32c3/src/crypto_hw.rs`）

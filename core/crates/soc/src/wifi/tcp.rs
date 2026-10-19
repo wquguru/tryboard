@@ -1,7 +1,7 @@
 //! 虚拟互联网的服务端：DNS（所有域名解析到网关）、TCP（只做被动打开）、HTTP/1.1（80 端口，Connection: close）。
 //! 不做重传与拥塞控制：虚拟网络不丢包，按需一次性回完。
 
-use super::net::{l4_checksum, GW_IP};
+use super::net::l4_checksum;
 use std::collections::HashMap;
 
 const SYN: u8 = 0x02;
@@ -19,6 +19,21 @@ struct Conn {
     req: Vec<u8>,
     responded: bool,
     fin_sent: bool,
+    /// 收到 SYN 的时刻（网络页签的「耗时」从这里算）
+    t0: u64,
+}
+
+/// 网络页签的一行（C-02 / C-03）：芯片发出的一次 DNS 查询 / HTTP 请求 / 被拦下的连接
+#[derive(Clone, Debug)]
+pub struct NetRow {
+    pub t_us: u64,
+    /// DNS / GET / POST / HTTPS / MQTT / TCP
+    pub method: String,
+    /// 虚拟 / 真实 / 未放行
+    pub dest: &'static str,
+    pub url: String,
+    pub status: String,
+    pub dur_us: Option<u64>,
 }
 
 type Key = ([u8; 4], u16, [u8; 4], u16);
@@ -31,6 +46,19 @@ pub struct Tcp {
     /// 自定义页面：路径 → (内容类型, 内容)；网页 / 测试可以注入
     pub pages: HashMap<String, (String, Vec<u8>)>,
     pub requests: u64,
+    /// 给网页「网络」页签的结构化记录（只给人看，不影响回给芯片的字节）
+    pub rows: Vec<NetRow>,
+    /// 当前模拟时刻（Net 收到每一帧时更新），DNS 行盖时间戳用
+    pub now_us: u64,
+}
+
+/// 按端口猜协议名（被拦下的连接在网络页签里怎么称呼）
+fn proto_name(port: u16) -> &'static str {
+    match port {
+        443 | 8443 => "HTTPS",
+        1883 | 8883 => "MQTT",
+        _ => "TCP",
+    }
 }
 
 /// 一个 TCP 段的参数（服务端 → 芯片方向）
@@ -81,7 +109,7 @@ impl Tcp {
     }
 
     /// DNS 查询 → 应答（A 记录指向网关）
-    pub fn dns(&mut self, q: &[u8]) -> Option<(Vec<u8>, String)> {
+    pub fn dns(&mut self, q: &[u8], gw: [u8; 4]) -> Option<(Vec<u8>, String)> {
         if q.len() < 12 || q[2] & 0x80 != 0 || u16::from_be_bytes([q[4], q[5]]) != 1 {
             return None;
         }
@@ -107,16 +135,27 @@ impl Tcp {
         if qtype == 1 {
             r[7] = 1; // 1 条回答
             r.extend_from_slice(&[0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0x0e, 0x10, 0, 4]);
-            r.extend_from_slice(&GW_IP);
+            r.extend_from_slice(&gw);
         } else {
             r[7] = 0;
         }
         r[8..12].fill(0);
         let n = name.join(".");
-        Some((r, format!("DNS {n} → 192.168.4.1")))
+        self.rows.push(NetRow {
+            t_us: self.now_us,
+            method: "DNS".into(),
+            dest: "虚拟",
+            url: n.clone(),
+            status: "解析".into(),
+            dur_us: None,
+        });
+        Some((
+            r,
+            format!("DNS {n} → {}.{}.{}.{}", gw[0], gw[1], gw[2], gw[3]),
+        ))
     }
 
-    fn response(&mut self, req: &[u8]) -> (Vec<u8>, String) {
+    fn response(&mut self, req: &[u8], t0: u64, now: u64) -> (Vec<u8>, String) {
         let text = String::from_utf8_lossy(req);
         let first = text.lines().next().unwrap_or("");
         let mut parts = first.split_whitespace();
@@ -160,6 +199,14 @@ impl Tcp {
         )
         .into_bytes();
         r.extend_from_slice(&body);
+        self.rows.push(NetRow {
+            t_us: t0,
+            method: method.to_string(),
+            dest: "虚拟",
+            url: format!("http://{}{path}", if host.is_empty() { "?" } else { &host }),
+            status: status.split(' ').next().unwrap_or("").to_string(),
+            dur_us: Some(now.saturating_sub(t0)),
+        });
         (
             r,
             format!(
@@ -175,7 +222,7 @@ impl Tcp {
         src: [u8; 4],
         dst: [u8; 4],
         s: &[u8],
-        _now_us: u64,
+        now_us: u64,
     ) -> Vec<(Vec<u8>, Option<String>)> {
         if s.len() < 20 {
             return vec![];
@@ -220,12 +267,21 @@ impl Tcp {
                     mk(&c, RST | ACK, &[], &[]),
                     Some(format!("TCP :{dport} 拒绝连接")),
                 ));
+                self.rows.push(NetRow {
+                    t_us: now_us,
+                    method: proto_name(dport).into(),
+                    dest: "未放行",
+                    url: format!("{}.{}.{}.{}:{dport}", dst[0], dst[1], dst[2], dst[3]),
+                    status: "拦截".into(),
+                    dur_us: None,
+                });
                 return out;
             }
             self.isn = self.isn.wrapping_add(0x0101_0101);
             let mut c = Conn {
                 snd_nxt: self.isn,
                 rcv_nxt: seq.wrapping_add(1),
+                t0: now_us,
                 ..Default::default()
             };
             out.push((
@@ -252,7 +308,7 @@ impl Tcp {
         }
         if !c.responded && c.req.windows(4).any(|w| w == b"\r\n\r\n") {
             c.responded = true;
-            let (resp, line) = self.response(&c.req);
+            let (resp, line) = self.response(&c.req, c.t0, now_us);
             let chunks: Vec<&[u8]> = resp.chunks(MSS).collect();
             for (i, ch) in chunks.iter().enumerate() {
                 let last = i + 1 == chunks.len();

@@ -29,6 +29,7 @@
 | 虚拟器件 BME280 | ✅ | 设定 -7.25°C / 88.5% / 950.12hPa，固件按数据手册公式读回误差 0；网页滑块改温度后读数跟随 | 原始 ADC 由补偿公式二分反解；强制 / 正常模式测量时序；无噪声、无 IIR 滤波 |
 | Wi-Fi STA（开放网络） | ✅ | wifi-init / wifi-scan / wifi-connect / wifi-http：扫描 4 个 AP、关联、DHCP、DNS / mDNS、HTTP GET | MAC 寄存器 + DMA 描述符层（模型在 tryboard-soc，与 S3 共用）；只有 STA，没有 SoftAP / 省电 / 802.11n 聚合 |
 | Wi-Fi WPA2-PSK | ✅ | wifi-wpa2：四次握手完成、拿到 IP、两次 HTTP GET 成功（数据帧全程 CCMP，DHCP 广播走 GTK）；wifi-wpa2-bad：错口令时 AP 判 MIC 失败、IDF 自己报 `reason=15`（4WAY_HANDSHAKE_TIMEOUT），重连时 AP 已被 IDF 拉黑报 `reason=205`，不崩溃 | 只做 PSK + CCMP（不做 TKIP、WPA3-SAE、PMF/802.11w、GTK 轮换）；密钥表字 1 高位只解了"组密钥"位；未经真机标定 |
+| Wi-Fi SoftAP + 虚拟手机配网（C-02） | ✅ | softap-prov（--ap-phone：手机连 TryBoard-Setup 分到 192.168.4.2 → 探测 302 判「需要登录」→ 打开配网页 → POST 表单 → 固件存 NVS、关热点、连 MyHome 拿 192.168.5.100）、softap-prov-reboot（固件自己重启后从 NVS 直接连上）、softap-prov-badpass（错口令：固件报连不上并重开热点）、softap-prov-script（`phone=` 脚本动作）、c3-softap-wpa2（WPA2 热点，手机做请求方四次握手）；网页「网络」页签三步走完、导出输入后 CLI 重放逐字节相同（`tools/webtest/softap.mjs`，含 390×844） | 行为模拟：手机按安卓的探测（connectivitycheck / generate_204）；iPhone 与各家系统弹不弹登录页必须上真机；一次一部手机；手机侧不做 HTTPS；QEMU 没有 Wi-Fi，无法对照；未经真机标定 |
 | SHA / AES 加速器 | ✅ | 单元测试（FIPS 180 / FIPS 197 / SP 800-38A 向量经寄存器接口）；WPA2 握手（PBKDF2 4096 轮走块模式、HMAC 走 DMA 模式、Key Unwrap 走 AES DMA） | SHA-384/512、AES-GCM 硬件 GHASH、中断模式未做；链表头改从 GDMA 模型（`channel_for_peri` / `configured_link`）取；搬数据仍用本模块的 gather / scatter（驱动先配链表、后置 start，`take_out` 只认已启动的通道），GDMA 通道的完成中断不置 |
 | BLE | ☐ | — | M7 |
 
@@ -74,6 +75,7 @@
 | 装配成品 lens（透镜小人） | ✅ | 启动 MOOD 0 normal、每 3 秒眨眼（BLINK n）、BOOT 切 MOOD 1 happy → 2 love → 3 sleepy → 0 normal；检查点 lens-1（lens-blink）、lens-2（lens-mood）、07-lens 参考固件全过 | 场景层验收 |
 | 装配成品 spin（会转身的小黄） | ✅ | GPIO4 50Hz 占空比 0.042..0.108（脉宽 0.833–2.167ms）、SPIN ±60 交替、眼珠随转向重画（EYE R / EYE L）、BOOT 后 LOOK FRONT（1.5ms）且眼珠回正（青色重心 119.7）；检查点 spin-1（spin-face）、spin-2（spin-turn）、07-spin 参考固件全过 | 舵机机械响应不建模 |
 | Wi-Fi STA（开放 / WPA2-PSK） | ✅ | s3-wifi-init / scan / connect / http / wpa2（与 C3 版同源码、同判定，双核）：扫描 4 个 AP、关联、DHCP 192.168.4.100、mDNS / DNS、两次 HTTP GET；WPA2 四次握手（SHA / AES 加速器）+ CCMP 数据帧；网页 s3-wifi-http 跑通（webtest + agent-browser） | 与 C3 共用 MAC 模型（tryboard-soc，`WifiLayout::S3`）；S3 另需 WDEV_RND_REG（0x6003507C）与 TSENS READY；供电按 S3 发射 340 mA 计入。QEMU 的 esp32s3 没有 Wi-Fi，无法对照；未经真机标定；没做 wifi-wpa2-bad 的 S3 版 |
+| Wi-Fi SoftAP 配网（C-02） | ✅ | s3-softap-prov：与 C3 版同源码同判定，虚拟手机配网后连上 MyHome | 同 C3 一行 |
 | USB OTG | ✅ | 见上文「USB OTG（DWC2，设备模式）」行；usbkey（作品 USB 小键盘，P2-12）：4 键 GPIO4–7 + 宏键，accept 用例 usbkey 打出 "abcHello TryBoard\n"，检查点 usbkey-1/2/3 按虚拟主机状态与打出的字判定（命令行 / 网页 / npm 包指纹一致） | 关卡观察记录里的 USB 两行（`USB 主机：…`、`USB 键盘输入: "…"`）只在关卡带 `--usb-log` 时进指纹 |
 | Wi-Fi 天线遮挡（P2-11，估算） | 🟡 | accept wifi-scan-antenna（遮挡 30 dB：TryBoard-WiFi -72、WPA2 -85，另两个收不到，找到 2 个 AP）、wifi-connect-antenna（45 dB：-87 dBm 扫得到但认证没回应，`断开 reason=2`，拿不到 IP） | 虚拟世界里所有 AP 的 RSSI 减去遮挡（双向）：< -92 dBm 扫描收不到，< -82 dBm 认证 / 关联 / 数据帧 AP 不回、也不 ACK。网页按金属件 45 dB、电池 30 dB × (1 − 距离 / 20 mm) 估算遮挡。未经真机标定；CLI `--antenna-loss`、脚本 `antenna=` |
 | BLE | ☐ | — | Wi-Fi 固件启动期碰到的 BT 寄存器只有 0x60011000 段 2 个字（读回写入值） |

@@ -280,6 +280,166 @@ impl Authenticator {
     }
 }
 
+/// 请求方（终端一侧）的四次握手：虚拟手机连固件自建的 WPA2 热点时用（C-02）。
+/// 方向与 [`Authenticator`] 相反：收消息 1 / 3，回消息 2 / 4；密钥数据带的 RSN IE 必须与关联请求里的逐字节相同，
+/// 否则对端（固件里的 hostapd 实现）判定 IE 不一致而踢人
+pub struct Supplicant {
+    pmk: [u8; 32],
+    pub aa: Mac,
+    pub spa: Mac,
+    rsn_ie: Vec<u8>,
+    snonce: [u8; 32],
+    ptk: [u8; 48],
+    nonce_ctr: u32,
+    /// GTK 与密钥号（消息 3 / 组密钥握手里拿到）
+    pub gtk: Option<([u8; 16], u8)>,
+    pub done: bool,
+    tx_pn: u64,
+    pub mic_failures: u32,
+}
+
+impl Supplicant {
+    pub fn new(passphrase: &str, ssid: &[u8], aa: Mac, spa: Mac, rsn_ie: &[u8]) -> Self {
+        Supplicant {
+            pmk: crypto::wpa_pmk(passphrase, ssid),
+            aa,
+            spa,
+            rsn_ie: rsn_ie.to_vec(),
+            snonce: [0; 32],
+            ptk: [0; 48],
+            nonce_ctr: 0,
+            gtk: None,
+            done: false,
+            tx_pn: 0,
+            mic_failures: 0,
+        }
+    }
+
+    pub fn tk(&self) -> [u8; 16] {
+        self.ptk[32..48].try_into().unwrap()
+    }
+
+    /// 回复帧：沿用对方的版本号、重放计数器，按 info 重写密钥信息，密钥数据换成 data
+    fn reply(&self, msg: &[u8], info: u16, nonce: &[u8; 32], data: &[u8]) -> Vec<u8> {
+        let mut f = msg[..OFF_DATA].to_vec();
+        f[2..4].copy_from_slice(&((OFF_DATA - 4 + data.len()) as u16).to_be_bytes());
+        f[OFF_KEYINFO..OFF_KEYINFO + 2].copy_from_slice(&info.to_be_bytes());
+        f[OFF_NONCE..OFF_NONCE + 32].copy_from_slice(nonce);
+        // Key IV / RSC / 保留 / MIC 清零
+        f[OFF_NONCE + 32..OFF_MIC + 16].fill(0);
+        f[OFF_DATA - 2..OFF_DATA].copy_from_slice(&(data.len() as u16).to_be_bytes());
+        f.extend_from_slice(data);
+        let m = crypto::hmac_sha1(&self.ptk[..16], &[&f]);
+        f[OFF_MIC..OFF_MIC + 16].copy_from_slice(&m[..16]);
+        f
+    }
+
+    fn mic_ok(&self, f: &[u8]) -> bool {
+        let mut z = f.to_vec();
+        z[OFF_MIC..OFF_MIC + 16].fill(0);
+        let m = crypto::hmac_sha1(&self.ptk[..16], &[&z]);
+        m[..16] == f[OFF_MIC..OFF_MIC + 16]
+    }
+
+    /// 解出加密的密钥数据里的 GTK KDE（OUI 00-0F-AC 类型 1）
+    fn take_gtk(&mut self, f: &[u8]) -> bool {
+        let Some(kd) = crypto::key_unwrap(&self.ptk[16..32], &f[OFF_DATA..]) else {
+            return false;
+        };
+        let mut i = 0;
+        while i + 2 <= kd.len() {
+            let (t, l) = (kd[i], kd[i + 1] as usize);
+            if t == 0xdd
+                && l >= 6 + 16
+                && i + 2 + l <= kd.len()
+                && kd[i + 2..i + 6] == [0, 0x0f, 0xac, 1]
+            {
+                let key: [u8; 16] = kd[i + 8..i + 24].try_into().unwrap();
+                self.gtk = Some((key, kd[i + 6] & 3));
+                return true;
+            }
+            if t == 0xdd && l == 0 {
+                break;
+            }
+            i += 2 + l;
+        }
+        false
+    }
+
+    /// 收到认证方的 EAPOL-Key 帧（802.1X 头起）；返回 (日志, 要回的帧)
+    pub fn on_eapol(&mut self, f: &[u8]) -> (String, Option<Vec<u8>>) {
+        if f.len() < OFF_DATA || f[1] != 3 {
+            return ("EAPOL（非 Key 帧，忽略）".into(), None);
+        }
+        let len = (u16::from_be_bytes([f[2], f[3]]) as usize + 4).min(f.len());
+        let f = &f[..len];
+        let info = u16::from_be_bytes([f[OFF_KEYINFO], f[OFF_KEYINFO + 1]]);
+        if info & 7 != KI_VER2 {
+            return (
+                format!("EAPOL-Key 描述符版本 {}（只支持 2），忽略", info & 7),
+                None,
+            );
+        }
+        let pairwise = info & KI_PAIRWISE != 0;
+        if pairwise && info & KI_ACK != 0 && info & KI_MIC == 0 {
+            // 消息 1：取 ANonce，生成 SNonce，算 PTK，回消息 2（带关联请求里的 RSN IE）
+            let anonce: [u8; 32] = f[OFF_NONCE..OFF_NONCE + 32].try_into().unwrap();
+            self.nonce_ctr += 1;
+            let mut seed = self.spa.to_vec();
+            seed.extend_from_slice(&self.aa);
+            seed.extend_from_slice(&self.nonce_ctr.to_be_bytes());
+            crypto::prf(&self.pmk, b"Init Counter", &seed, &mut self.snonce);
+            self.ptk = crypto::wpa_ptk(&self.pmk, &self.aa, &self.spa, &anonce, &self.snonce);
+            let sn = self.snonce;
+            let rsn = self.rsn_ie.clone();
+            let m2 = self.reply(f, KI_VER2 | KI_PAIRWISE | KI_MIC, &sn, &rsn);
+            return ("四次握手 1/4 → 回 2/4".into(), Some(m2));
+        }
+        if info & KI_MIC == 0 || !self.mic_ok(f) {
+            self.mic_failures += 1;
+            return (
+                "EAPOL-Key MIC 校验失败（热点口令不对？），丢弃".into(),
+                None,
+            );
+        }
+        if pairwise && info & KI_INSTALL != 0 {
+            // 消息 3：解出 GTK，回消息 4，之后数据帧加密
+            if info & KI_ENC_DATA == 0 || !self.take_gtk(f) {
+                return ("四次握手 3/4 里没有 GTK，丢弃".into(), None);
+            }
+            let m4 = self.reply(f, KI_VER2 | KI_PAIRWISE | KI_MIC | KI_SECURE, &[0; 32], &[]);
+            self.done = true;
+            self.tx_pn = 0;
+            return ("四次握手 3/4 → 回 4/4，装上 PTK / GTK".into(), Some(m4));
+        }
+        if !pairwise && info & KI_ENC_DATA != 0 {
+            // 组密钥握手：换 GTK
+            if !self.take_gtk(f) {
+                return ("组密钥握手：解不出 GTK".into(), None);
+            }
+            let r = self.reply(f, KI_VER2 | KI_MIC | KI_SECURE, &[0; 32], &[]);
+            return ("组密钥握手 1/2 → 回 2/2".into(), Some(r));
+        }
+        (format!("EAPOL-Key（info 0x{info:04x}，忽略）"), None)
+    }
+
+    /// 终端 → AP：单播，用 TK
+    pub fn encrypt(&mut self, f: &[u8]) -> Vec<u8> {
+        self.tx_pn += 1;
+        crypto::ccmp_encrypt(&self.tk(), f, self.tx_pn, 0)
+    }
+
+    /// AP → 终端：单播用 TK，组播 / 广播用 GTK
+    pub fn decrypt(&self, f: &[u8]) -> Option<Vec<u8>> {
+        let key = if f.len() > 4 && f[4] & 1 != 0 {
+            self.gtk?.0
+        } else {
+            self.tk()
+        };
+        crypto::ccmp_decrypt(&key, f).map(|(p, _)| p)
+    }
+}
+
 /// 终端（请求方）一侧的参考实现：只给单元测试用，验证认证方的消息格式自洽
 #[cfg(test)]
 pub(crate) fn supplicant_reply(
@@ -355,6 +515,52 @@ mod tests {
         let (d, pn) = crypto::ccmp_decrypt(&a.tk(), &e).unwrap();
         assert_eq!(&d[24..], &f[24..]);
         assert_eq!(pn, 1);
+    }
+
+    /// 请求方 ↔ 认证方回环：两个方向的四次握手在同一个测试里互相验证（C-02 虚拟手机用请求方）
+    #[test]
+    fn supplicant_loopback() {
+        let rsn = [0x30, 2, 1, 0];
+        let mut a = Authenticator::new("tryboard123", b"TryBoard-Setup", AA, &rsn);
+        let mut s = Supplicant::new("tryboard123", b"TryBoard-Setup", AA, SPA, &rsn);
+        let m1 = a.start(SPA, 0);
+        let (_, m2) = s.on_eapol(&m1);
+        let m2 = m2.unwrap();
+        // 消息 2 带着关联请求里的 RSN IE
+        assert_eq!(&m2[OFF_DATA..], &rsn);
+        let (_, m3) = a.on_eapol(&m2, 10);
+        let (_, m4) = s.on_eapol(&m3.unwrap());
+        a.on_eapol(&m4.unwrap(), 20);
+        assert!(a.authorized() && s.done);
+        assert_eq!(s.tk(), a.tk());
+        assert_eq!(s.gtk.unwrap(), (a.gtk, 1));
+        // 数据通路双向：终端加密 → AP 解密；AP 组播 → 终端用 GTK 解
+        let mut f = vec![0x08, 0x01, 0, 0];
+        f.extend_from_slice(&AA);
+        f.extend_from_slice(&SPA);
+        f.extend_from_slice(&[0xff; 6]);
+        f.extend_from_slice(&[0x10, 0]);
+        f.extend_from_slice(b"\xaa\xaa\x03\0\0\0\x08\x00hi");
+        let e = s.encrypt(&f);
+        assert_eq!(&a.decrypt(&e).unwrap()[24..], &f[24..]);
+        let mut g = f.clone();
+        g[1] = 0x02;
+        g[4..10].copy_from_slice(&[0xff; 6]);
+        let ge = a.encrypt(&g);
+        assert_eq!(&s.decrypt(&ge).unwrap()[24..], &g[24..]);
+    }
+
+    #[test]
+    fn supplicant_wrong_password_rejected() {
+        let rsn = [0x30, 2, 1, 0];
+        let mut a = Authenticator::new("tryboard123", b"X", AA, &rsn);
+        let mut s = Supplicant::new("wrongpass1", b"X", AA, SPA, &rsn);
+        let m1 = a.start(SPA, 0);
+        let (_, m2) = s.on_eapol(&m1);
+        let (_, m3) = a.on_eapol(&m2.unwrap(), 10);
+        assert!(m3.is_none());
+        assert_eq!(a.mic_failures, 1);
+        assert!(!s.done);
     }
 
     #[test]

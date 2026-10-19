@@ -54,6 +54,14 @@ interface Exports {
   tb_elec_report(): number;
   tb_i2c_wire?(cm: number): void;
   tb_antenna_loss?(db: number): void;
+  /** 虚拟手机 / 网络页签（C-02）：老内核没有这几个导出 */
+  tb_wifi_used?(): number;
+  tb_phone_cmd?(p: number, len: number): number;
+  tb_phone_version?(): number;
+  tb_phone_json?(): number;
+  tb_phone_json_ptr?(): number;
+  tb_net_version?(): number;
+  tb_net_json?(): number;
   tb_harness_report?(): number;
   tb_encoder_attach?(a: number, b: number, sw: number): void;
   tb_encoder_turn?(steps: number): void;
@@ -180,6 +188,8 @@ export type ToWorker =
   | { type: 'gpio'; pin: number; level: number }
   | { type: 'uart'; text: string }
   | { type: 'usbcdc'; text: string }
+  /** 虚拟手机上的一步（C-02，进输入日志 phone=…）：on / join,ssid[,pass] / leave / open / get,url / post,url,body */
+  | { type: 'phone'; cmd: string }
   /** 每个时间片采样这些引脚的 PWM，有变化就带模拟时刻放进 tick 的 pwmEvents（蜂鸣器出声用） */
   | { type: 'watchPwm'; pins: number[] }
   /** 要本次上电以来的输入日志，回 inputlog 消息 */
@@ -282,6 +292,8 @@ export type FromWorker =
   | { type: 'usb'; json: string }
   /** 线束结论（与命令行同样的文字：I2C 上升时间、天线遮挡后的 RSSI），变了才发 */
   | { type: 'harness'; text: string }
+  /** 网络页签（C-02）：固件用没用 Wi-Fi、虚拟手机看到的（JSON，结构见 app/netfeed.ts）、芯片发出的请求记录；变了才发 */
+  | { type: 'net'; used: boolean; phone?: string; rows?: string }
   | { type: 'inputlog'; log: InputLog }
   | { type: 'snapshot'; snap: Snapshot }
   | { type: 'seekProgress'; simSeconds: number }
@@ -581,6 +593,7 @@ function loop(gen = loopGen) {
   postOled(e);
   postLcd(e);
   postUsb(e);
+  postNet(e);
   postHarness(e);
   if (stop !== 0) {
     running = false;
@@ -638,6 +651,32 @@ function postUsb(e: Exports) {
   }
   const n = e.tb_usb_json();
   post({ type: 'usb', json: decoder.decode(new Uint8Array(e.memory.buffer, e.tb_usb_json_ptr(), n)) });
+}
+
+// 网络页签：固件发过 Wi-Fi 帧才显示；手机 / 请求记录各自按版本号变了才取
+// null：新上电后还没发过，第一次一定发（换成不用 Wi-Fi 的固件时网页要把页签收起）
+let netUsed: boolean | null = null;
+let phoneVersion = 0;
+let netVersion = 0;
+function postNet(e: Exports) {
+  if (!e.tb_wifi_used) return;
+  const used = e.tb_wifi_used() !== 0;
+  const pv = e.tb_phone_version?.() ?? 0;
+  const nv = e.tb_net_version?.() ?? 0;
+  if (used === netUsed && pv === phoneVersion && nv === netVersion) return;
+  const m: Extract<FromWorker, { type: 'net' }> = { type: 'net', used };
+  if (pv !== phoneVersion && e.tb_phone_json && e.tb_phone_json_ptr) {
+    const n = e.tb_phone_json();
+    m.phone = decoder.decode(new Uint8Array(e.memory.buffer, e.tb_phone_json_ptr(), n));
+  }
+  if (nv !== netVersion && e.tb_net_json && e.tb_phone_json_ptr) {
+    const n = e.tb_net_json();
+    m.rows = decoder.decode(new Uint8Array(e.memory.buffer, e.tb_phone_json_ptr(), n));
+  }
+  netUsed = used;
+  phoneVersion = pv;
+  netVersion = nv;
+  post(m);
 }
 
 let harnessText = '';
@@ -714,6 +753,10 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   oledVersion = 0;
   lcdVersion = 0;
   usbVersion = -1;
+  // 新上电：手机 / 请求记录从空开始（发一条空的，网页清掉上一次的）
+  netUsed = null;
+  phoneVersion = -1;
+  netVersion = -1;
   return e;
 }
 
@@ -749,6 +792,17 @@ function apply(e: Exports, ev: InputAction) {
     case 'antenna':
       e.tb_antenna_loss?.(ev.db);
       break;
+    case 'phone': {
+      if (!e.tb_phone_cmd) return;
+      const b = new TextEncoder().encode(ev.cmd);
+      const p = e.tb_alloc(b.length);
+      new Uint8Array(e.memory.buffer, p, b.length).set(b);
+      const bad = e.tb_phone_cmd(p, b.length);
+      e.tb_free(p, b.length);
+      // 认不出的动作不进日志（重放时 CLI 也不认）
+      if (bad) return;
+      break;
+    }
     case 'enc':
       e.tb_encoder_turn?.(ev.steps);
       break;
@@ -837,6 +891,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       postPaused(e);
       postOled(e);
       postLcd(e, true);
+      postNet(e);
       break;
     }
     case 'snapshot':
@@ -896,6 +951,11 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
     case 'uart':
       if (!ex) return;
       apply(ex, { kind: m.type, text: m.text });
+      break;
+    case 'phone':
+      if (!ex) return;
+      apply(ex, { kind: 'phone', cmd: m.cmd });
+      postNet(ex);
       break;
     case 'power':
       if (!ex) return;

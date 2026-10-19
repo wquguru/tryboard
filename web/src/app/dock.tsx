@@ -6,6 +6,7 @@ import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "rea
 import { cn } from "../ui/cn";
 import { actions, bc, setDock, type DockTab } from "./chrome";
 import { UsbPane } from "./usbpane";
+import { NetPane } from "./netpane";
 import { Icon } from "./icons";
 import { useStore } from "./react";
 import { createStore } from "./store";
@@ -509,6 +510,7 @@ function PhoneDock({
     { id: "issues", label: nIssue ? `问题 ${nIssue}` : "问题" },
     { id: "runs", label: `运行记录 ${c.runs}` },
     ...(c.usb ? [{ id: "usb" as const, label: "USB" }] : []),
+    ...(c.net ? [{ id: "net" as const, label: "网络" }] : []),
   ];
   return (
     <section
@@ -644,6 +646,11 @@ function PhoneDock({
           {cur === "usb" && c.usb && (
             <div className="flex min-h-0 flex-1 flex-col border-t border-line-soft">
               <UsbPane sendCdc={(t) => actions.usbCdc?.(t)} />
+            </div>
+          )}
+          {cur === "net" && c.net && (
+            <div className="flex min-h-0 flex-1 flex-col border-t border-line-soft">
+              <NetPane mobile />
             </div>
           )}
         </>
@@ -786,6 +793,9 @@ function DeskDock({
           },
         ]
       : []),
+    ...(c.net
+      ? [{ id: "net" as const, label: "网络", title: "虚拟手机配网、芯片发出的请求" }]
+      : []),
   ];
   return (
     <section
@@ -885,6 +895,7 @@ function DeskDock({
             <UsbPane sendCdc={(t) => actions.usbCdc?.(t)} />
           </div>
         )}
+        {c.net && cur === "net" && <NetPane />}
         <div
           hidden={cur !== "runs"}
           className="flex min-h-0 flex-1 items-start overflow-auto px-3 py-2 [&[hidden]]:hidden"

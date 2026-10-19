@@ -22,6 +22,7 @@ use tryboard_esp32c3::Esp32c3;
 use tryboard_esp32s3::Esp32s3;
 
 pub use tryboard_esp32c3::periph::CPU_HZ;
+pub use tryboard_esp32c3::wifi::phone::Cmd as PhoneCmd;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Chip {
@@ -149,11 +150,18 @@ impl Machine {
     /// 软件复位后重新上电：flash（含 NVS）保留，模拟时间继续。
     /// S3 另外保留 RTC 内存与 RTC_CNTL 存储寄存器（RTC_NOINIT、复位原因提示），见 Esp32s3::reboot
     pub fn reboot(&mut self, reason: u32) -> Result<(), String> {
+        // 虚拟手机是外部世界：板子复位时手机还在，只是热点暂时消失
+        let phone = self.wifi_mut().world.phone.take();
         match &mut self.hw {
             Hw::C3(m) => m.reboot(reason)?,
             Hw::S3(m) => m.reboot(reason)?,
         }
         self.apply_harness();
+        if let Some(mut p) = phone {
+            let now = self.wifi_tsf_us();
+            p.chip_reset(now);
+            self.wifi_mut().world.enable_phone(p);
+        }
         // 我们不跑 ROM 引导，ROM 每次复位都会打印的头三行由这里补上（复位原因与 ROM 的写法一致），
         // 网页和命令行串口里都能看到 rst:0x..（上电那一次不补：现有用例的串口输出保持不变）
         let banner = rom_banner(self.chip(), reason);
@@ -199,6 +207,45 @@ impl Machine {
     pub fn i2c_slow_stats(&mut self) -> (u64, u64) {
         let b = self.i2c0();
         (b.slow_bytes, b.slow_nacks)
+    }
+
+    /// 启用虚拟手机（C-02）：同时出现虚拟路由器 MyHome、虚拟网络换到 192.168.5.0/24。
+    /// auto_open：探测到需要登录就自动打开登录页；auto_post：拿到表单就自动提交这段 body
+    pub fn phone_enable(&mut self, auto_open: bool, auto_post: Option<String>) {
+        let w = &mut self.wifi_mut().world;
+        let mut p = w.phone.take().unwrap_or_default();
+        p.auto_open = auto_open;
+        p.auto_post = auto_post;
+        w.enable_phone(p);
+    }
+
+    /// 手机上的一步操作（加入热点、打开登录页、GET / POST）；没启用就先启用
+    pub fn phone_cmd(&mut self, c: tryboard_esp32c3::wifi::phone::Cmd) {
+        if self.wifi().world.phone.is_none() {
+            self.phone_enable(false, None);
+        }
+        let now = self.wifi_tsf_us();
+        if let Some(p) = self.wifi_mut().world.phone.as_mut() {
+            p.command(c, now);
+        }
+        self.kick_events();
+    }
+
+    pub fn phone(&self) -> Option<&tryboard_esp32c3::wifi::phone::Phone> {
+        self.wifi().world.phone.as_ref()
+    }
+
+    /// Wi-Fi 模型的 TSF（模拟时间微秒）
+    fn wifi_tsf_us(&self) -> u64 {
+        self.cycles() / (self.wifi().layout.cpu_hz / 1_000_000)
+    }
+
+    /// 外部事件改了外设状态：让总线下一步就跑一遍外设更新（否则要等缓存的下一事件时刻）
+    fn kick_events(&mut self) {
+        match &mut self.hw {
+            Hw::C3(m) => m.bus.next_event = 0,
+            Hw::S3(m) => m.bus.next_event = 0,
+        }
     }
 
     fn wifi_mut(&mut self) -> &mut tryboard_esp32c3::wifi::WifiMac {

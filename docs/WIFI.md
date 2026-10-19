@@ -121,3 +121,16 @@ AP 收到 MIC 不对的 2/4 静默丢弃，按 hostapd 节奏重发 1/4（100ms�
 
 没用到、没做的：S3 的 SHA-384/512 模式（WPA2 只用 SHA-1）、TSENS 随温度变化、802.11n / 省电、蓝牙。
 QEMU 对照：乐鑫 QEMU 的 esp32s3 机器没有 Wi-Fi 模型（只有 ESP32 的 open_eth 网卡），无法做 S3 Wi-Fi 对照；判定与 C3 版相同的串口输出。
+
+## 阶段 5：固件自建热点 + 虚拟手机配网（C-02：softap-prov ✅、c3-softap-wpa2 ✅、s3-softap-prov ✅）
+
+固件开 WIFI_MODE_AP / APSTA 时，空中多了"另一端"：浏览器侧不再只是路由器，还要有一部去连板子热点的手机。
+- **AP 接口帧**：固件经 AP 接口发出的帧在 Tx 描述符头里标了接口号；模型按它填 Rx 元数据 `hdr[0]` 第 29 位（`Air.ap_if`）回送，固件的 hostapd 才认这是给 AP 的帧。World 从芯片自己发出的信标里学到 `ap_mac`，地址 2 == `ap_mac` 的帧都交给手机。
+- **虚拟手机**（`soc/src/wifi/phone.rs`）：被动扫描（只听芯片信标）→ 开放认证 → 关联 →（WPA2 时）作为请求方走四次握手（复用 `wpa.rs` 的 PRF / MIC / AES-KW）→ DHCP 客户端拿 192.168.4.2 → 联网探测：DNS 查 `connectivitycheck.gstatic.com`、GET `/generate_204`，回的不是 204 就判「需要登录此网络」，记下跳转地址 → 用户点「打开」才 GET 登录页 → 解析 `<form>` 的 action / method / 字段 → POST `application/x-www-form-urlencoded`。最小 TCP 客户端（单连接、按模拟时间重传），HTTP/1.1 `Connection: close`。
+- **定时器**：手机的重试 / 超时并进 World 的 `next_timer` / `poll`，按模拟时间推进；同样的输入序列 → 同样的帧序列（重放逐字节一致）。
+- **路由器换网段**：拿起手机时世界里加一台虚拟路由器 `MyHome` / `12345678`（WPA2，信道 6），芯片配网后去连它。热点用了 192.168.4.0/24，路由器挪到 **192.168.5.1**，分给芯片 **192.168.5.100**；只有芯片还没从路由器拿过地址（`!net.leased`）时才挪，正在用的租约不会被改掉。没拿手机时世界与以前逐字节相同（`wifidiff` 对现有 Wi-Fi 用例逐字节比对）。
+- **重启**：固件自己 `esp_restart()` 时（`Machine::reboot`）手机保留：被热点断开后它记着这个网络，信标再出现就自动重连（与真手机一致）。
+- **动作**（脚本 / 输入日志 `phone=`）：`on`（拿起手机，开始听信标）/ `join,ssid[,口令]` / `leave` / `open`（打开探测到的登录页）/ `get,url` / `post,url,body`（url 空 = 当前页表单的 action）。CLI 另有 `--ap-phone [ssid[,口令]]` / `--ap-post body`（自动打开、自动提交，**只给命令行用**；网页每一步都是显式的 `phone=` 事件）。
+- **网络页签记录**：`tcp.rs` 记芯片当客户端时的 DNS / HTTP / 被拦连接（`NetRow`：时刻、方法、去向 虚拟 / 真实 / 未放行、地址、状态、耗时），wasm `tb_net_json` 给网页。
+
+没做：iPhone 的探测地址（captive.apple.com）与各家系统弹不弹登录页的差异（必须上真机）、手机侧 HTTPS、一次连多部手机、WPA3 / SAE。

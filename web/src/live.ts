@@ -27,6 +27,8 @@ export interface LiveOptions {
   harness?: Harness;
   /** 原生 USB 虚拟主机看到的（S3 固件用了 USB 才有；null = 没有 USB 设备） */
   onUsb?(v: UsbView | null): void;
+  /** 网络页签（C-02）：固件用没用 Wi-Fi、虚拟手机 JSON、请求记录 JSON（没变的字段不带） */
+  onNet?(m: { used: boolean; phone?: string; rows?: string }): void;
   /** 线束结论文字（与命令行同样的行），变了才回调 */
   onHarness?(text: string): void;
   /** 旋转编码器 / HC-SR04（接在 GPIO 上，波形由内核按时刻排出） */
@@ -128,6 +130,8 @@ export class LiveSim {
         o.onFrame?.(this.frame, NaN);
       } else if (m.type === 'usb') {
         o.onUsb?.(m.json ? (JSON.parse(m.json) as UsbView) : null);
+      } else if (m.type === 'net') {
+        o.onNet?.(m);
       } else if (m.type === 'harness') {
         o.onHarness?.(m.text);
       } else if (m.type === 'oled') {
@@ -249,6 +253,10 @@ export class LiveSim {
   /** 虚拟电脑往 USB 串口（CDC-ACM）打字 */
   usbCdc(text: string) {
     this.send({ type: 'usbcdc', text });
+  }
+  /** 虚拟手机上的一步（进输入日志 phone=…） */
+  phone(cmd: string) {
+    this.send({ type: 'phone', cmd });
   }
   /** 电位器滑片电压（mV）进 ADC 脚（进输入日志） */
   analog(pin: number, mv: number) {

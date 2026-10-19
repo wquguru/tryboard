@@ -29,6 +29,7 @@ import { BrownoutBanner } from './benchv2';
 import { initSaved } from './saved';
 import { serial } from './dock';
 import { usbFeed } from './usbpane';
+import { netFeed } from './netfeed';
 import { toScript, type InputLog } from '../inputlog';
 import { customPlan } from './custom';
 import { genLevels } from './genlevels';
@@ -255,6 +256,14 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     setBc({ usb: !!v });
     if (v) setDock({ tab: 'usb', collapsed: false });
     else if (bc.get().dock.tab === 'usb') setDock({ tab: 'serial' });
+  });
+  // 网络页签（C-02）：固件发出第一帧 Wi-Fi 才出现；手机动作进输入日志
+  actions.phone = (cmd) => session.sim?.phone(cmd);
+  netFeed.subscribe(() => {
+    const used = netFeed.get().used;
+    if (used === bc.get().net) return;
+    setBc({ net: used });
+    if (!used && bc.get().dock.tab === 'net') setDock({ tab: 'serial' });
   });
   // 换固件：先看镜像头（魔数 0xE9、芯片 id），对不上就不上电，挂一张校验卡说清楚
   actions.pickFirmware = async (f) => {

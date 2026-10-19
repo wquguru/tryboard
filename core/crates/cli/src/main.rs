@@ -21,6 +21,9 @@ fn usage() -> ! {
                [--elec-report]（各节点最低电压、峰值电流、欠压复位次数）；脚本动作 power=usb|ext
                [--i2c-wire <cm>]（I2C 排线总长：总线电容 → 上升时间，超过规范就读错 / 不应答，估算）
                [--antenna-loss <dB>]（天线被金属件 / 电池挡住：虚拟 AP 的 RSSI 降低，太低连不上，估算）；脚本动作 i2cwire=cm、antenna=dB
+               [--ap-phone [ssid[,口令]]]（虚拟手机连固件自建的热点，默认 TryBoard-Setup 开放；探测到需要登录就打开登录页）
+               [--ap-post 'ssid=MyHome&pass=12345678']（登录页有表单就自动提交）；启用手机后多一个虚拟路由器 MyHome / 12345678（192.168.5.0/24）
+               脚本动作 phone=join,ssid[,口令]、phone=open、phone=get,URL、phone=post,URL,表单、phone=leave
                [--encoder A,B[,SW]]（EC11 旋转编码器；脚本动作 enc=+N / enc=-N 转 N 格、encsw=1|0 按下 / 松开）
                [--sonar TRIG,ECHO] [--dist 厘米]（HC-SR04；脚本动作 dist=厘米，负数 = 前方没有东西）
                [--i2s max98357a,inmp441]（S3：喇叭 BCLK=16 LRC=17 DIN=18，麦克风 SCK=39 WS=40 SD=41；C3：喇叭 0/1/2，麦克风 0/1/3）
@@ -38,6 +41,8 @@ fn default_rom(chip: Chip) -> String {
         .to_string_lossy()
         .into_owned()
 }
+
+use tryboard_machine::PhoneCmd;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -201,6 +206,23 @@ fn run(args: &[String]) {
     }
     if let Some(db) = opt(args, "--antenna-loss").and_then(|s| s.parse::<i32>().ok()) {
         m.set_antenna_loss(db);
+    }
+    // 虚拟手机（C-02）：--ap-phone 在 0 秒加入热点，--ap-post 拿到表单就提交
+    let ap_post = opt(args, "--ap-post");
+    if let Some(i) = args.iter().position(|a| a == "--ap-phone") {
+        let v = args
+            .get(i + 1)
+            .filter(|v| !v.starts_with("--"))
+            .cloned()
+            .unwrap_or_else(|| "TryBoard-Setup".into());
+        let (ssid, pass) = v.split_once(',').unwrap_or((v.as_str(), ""));
+        m.phone_enable(true, ap_post.clone());
+        m.phone_cmd(PhoneCmd::Join {
+            ssid: ssid.into(),
+            pass: pass.into(),
+        });
+    } else if ap_post.is_some() {
+        m.phone_enable(false, ap_post.clone());
     }
     let pins_of = |s: &str| {
         s.split(',')
@@ -366,6 +388,12 @@ fn run(args: &[String]) {
                 // 网页上拖障碍物 / 改距离
                 if let Ok(d) = v.trim().parse::<f64>() {
                     m.sonar_distance(d);
+                }
+            } else if let Some(c) = act.strip_prefix("phone=") {
+                // 网页虚拟手机上的一步（C-02）
+                match PhoneCmd::parse(c) {
+                    Some(c) => m.phone_cmd(c),
+                    None => eprintln!("[tryboard] 看不懂的手机动作: {act}"),
                 }
             } else if let Some(t) = act.strip_prefix("uart=") {
                 m.uart_push(t.replace("\\n", "\n").as_bytes());
@@ -670,6 +698,24 @@ fn run(args: &[String]) {
     }
     if let Some(l) = harness_wifi_line(&m) {
         eprintln!("{l}");
+    }
+    if let Some(p) = m.phone() {
+        eprintln!(
+            "[tryboard] 虚拟手机：{}，{}，IP {}",
+            p.link.name(),
+            if p.ssid.is_empty() {
+                "未连接".into()
+            } else {
+                p.ssid.clone()
+            },
+            p.ip.map_or("无".into(), |i| format!(
+                "{}.{}.{}.{}",
+                i[0], i[1], i[2], i[3]
+            ))
+        );
+        for (t, l) in &p.log {
+            eprintln!("    {:>9.3}s 手机 {l}", *t as f64 / 1e6);
+        }
     }
     let show_oled = args.iter().any(|a| a == "--oled");
     if let Some(o) = m.oled() {
