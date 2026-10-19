@@ -1,8 +1,8 @@
-// 模拟器跑在 Worker 里：按真实时间节奏推进，定期把控制台输出与 GPIO 状态发给主线程。
-// 时间片固定 1ms（与 CLI `--inputs` 重放相同），外部输入只在时间片之间施加并按模拟时间记进输入日志（inputlog.ts），
-// 所以网页上的一串操作导出后，命令行能逐周期重放。
+// The simulator runs in a Worker at real-time pace, posting console output and GPIO state to the main thread.
+// Fixed 1 ms slices (same as CLI `--inputs` replay); inputs apply between slices and are logged on sim time, so the CLI replays cycle-exactly.
 import { cyclesToMs, roundImu, type InputAction, type InputEvent, type InputLog } from './inputlog';
 import { realFetch, type RealReq } from './realfetch';
+import { useWorkerLocale, type Locale } from './i18n';
 
 const CPU_HZ = 160_000_000;
 
@@ -103,10 +103,10 @@ interface Exports {
   tb_mic_silence?(): void;
 }
 
-/** 供电方式（P1-02）：usb = 舵机也吃 USB 的 5V；ext = 舵机由外接 5 V 2 A 供电 */
+/** Power source (P1-02): usb = servo also draws from USB 5 V; ext = servo on an external 5 V 2 A supply. */
 export type PowerMode = 'usb' | 'ext';
 
-/** 供电网络此刻的读数（tryboard-elec，电压 V、电流 A）；min / peak / resets 是本次上电以来的统计 */
+/** Supply network readings now (tryboard-elec, V and A); min / peak / resets are since this power-up. */
 export interface ElecFrame {
   v5: number;
   v3v3: number;
@@ -116,16 +116,16 @@ export interface ElecFrame {
   iExt: number;
   iServo: number;
   i3v3: number;
-  /** 5 V 轨上的功放（MAX98357A）电流；没接为 0 */
+  /** Amp (MAX98357A) current on the 5 V rail; 0 when absent. */
   iAmp: number;
   min5: number;
   min3v3: number;
   peakUsb: number;
   peakServo: number;
   resets: number;
-  /** 芯片正被欠压复位按住（电压回升前不运行） */
+  /** Chip held in brown-out reset (does not run until the voltage recovers). */
   held: boolean;
-  /** 舵机二阶动力学给出的角度（度）；没接舵机为 null */
+  /** Servo angle from the second-order dynamics (degrees); null without a servo. */
   servoAngle: number | null;
   power: PowerMode;
 }
@@ -136,20 +136,20 @@ export interface Env {
   pressure: number;
 }
 
-/** 旋转编码器（P2-01）：A / B 两相与可选的按键脚 */
+/** Rotary encoder (P2-01): A / B phases and an optional switch pin. */
 export interface EncoderSpec {
   a: number;
   b: number;
   sw?: number;
 }
-/** HC-SR04（P2-04）：Trig / Echo 两个 GPIO；cm = 上电时探头到障碍物的距离（负数 = 前方没有东西） */
+/** HC-SR04 (P2-04): Trig / Echo GPIOs; cm = distance to the obstacle at power-up (negative = nothing ahead). */
 export interface SonarSpec {
   trig: number;
   echo: number;
   cm: number;
 }
 
-/** 引脚器件此刻的状态（随 tick 发）：编码器转了几格、PCNT 单元 0 计数；超声波触发次数、最近 Echo 宽度 */
+/** Pin-device state per tick: encoder detents and PCNT unit 0 count; ultrasonic trigger count and last Echo width. */
 export interface PinDevFrame {
   encPos: number | null;
   pcnt: number | null;
@@ -165,38 +165,40 @@ export type ToWorker =
       flash: ArrayBuffer;
       i2c?: { kind: string; addr: number }[];
       env?: Env;
-      /** 挂 GC9A01 圆屏（SPI2） */
+      /** Attach the GC9A01 round LCD (SPI2). */
       lcd?: boolean;
-      /** 舵机信号接哪个 GPIO（舵机电流进供电网络） */
+      /** Servo signal GPIO (servo current enters the supply network). */
       servo?: number;
       power?: PowerMode;
       encoder?: EncoderSpec;
       sonar?: SonarSpec;
-      /** 触摸控制器 INT 接的 GPIO（按着拉低） */
+      /** Touch controller INT GPIO (held low while touched). */
       touchInt?: number;
-      /** I2S 音频器件：'max98357a'（喇叭）/ 'inmp441'（麦克风），引脚按芯片固定（board3d 的 I2S_WIRING） */
+      /** I2S audio devices: 'max98357a' (speaker) / 'inmp441' (mic); pins fixed per chip (board3d I2S_WIRING). */
       i2s?: string[];
-      /** 麦克风上电时听的 WAV（缺省安静）与它的文件名（记进输入日志，重放时 --mic tools/audio/<名>） */
+      /** WAV the mic hears at power-up (silent if absent) and its file name (logged; replay uses --mic tools/audio/<name>). */
       micWav?: ArrayBuffer;
       micName?: string;
-      /** 线束（P2-11，估算）：I2C 排线总长（cm）、天线遮挡（dB）；上电时记进输入日志 */
+      /** Harness (P2-11, estimate): I2C cable length (cm), antenna loss (dB); logged at power-up. */
       harness?: Harness;
-      /** 「真实网络」开关（C-03）：开着上电就在 0 时刻记一条 realnet=1 */
+      /** "Real network" toggle (C-03): on at boot logs realnet=1 at time 0 */
       realnet?: boolean;
+      /** Page locale, so human text the worker makes matches the page (I18N workers). */
+      locale?: Locale;
     }
   | ({ type: 'env' } & Env)
-  /** 在线改线束（进输入日志：i2cwire=cm / antenna=dB） */
+  /** Change the harness live (logged: i2cwire=cm / antenna=dB). */
   | ({ type: 'harness' } & Harness)
-  /** 编码器转 steps 格（正 = 顺时针）/ 按键；超声波距离（进输入日志：enc= / encsw= / dist=） */
+  /** Encoder steps (positive = clockwise) / switch; ultrasonic distance (logged: enc= / encsw= / dist=). */
   | { type: 'enc'; steps: number }
   | { type: 'encsw'; down: boolean }
   | { type: 'dist'; cm: number }
-  /** 姿态（imu）、触摸（touch）等不需要专门消息的输入：照原样施加并记进输入日志 */
+  /** Inputs without a dedicated message (imu, touch...): applied as is and logged. */
   | { type: 'input'; act: Extract<InputAction, { kind: 'imu' | 'touch' }> }
-  /** 麦克风声源：WAV（循环，按模拟时间取样，可复现）/ 安静 / 实时（之后用 micPush 推浏览器麦克风的样本，不可复现、不进输入日志） */
+  /** Mic source: WAV (looped, sampled on sim time, reproducible) / silent / live (micPush browser samples; not reproducible, not logged). */
   | { type: 'mic'; source: 'wav' | 'silence' | 'live'; wav?: ArrayBuffer }
   | { type: 'micPush'; rate: number; data: Float32Array }
-  /** USB ↔ 外接 5 V（进输入日志：power=usb|ext） */
+  /** USB <-> external 5 V (logged: power=usb|ext). */
   | { type: 'power'; mode: PowerMode }
   | { type: 'analog'; pin: number; mv: number }
   | { type: 'run' }
@@ -205,19 +207,19 @@ export type ToWorker =
   | { type: 'gpio'; pin: number; level: number }
   | { type: 'uart'; text: string }
   | { type: 'usbcdc'; text: string }
-  /** 虚拟手机操作（C-01，进输入日志：ble=<命令>） */
+  /** Virtual phone action (C-01, logged: ble=<cmd>). */
   | { type: 'ble'; cmd: string }
-  /** 虚拟手机上的一步（C-02，进输入日志 phone=…）：on / join,ssid[,pass] / leave / open / get,url / post,url,body */
+  /** One virtual-phone step (C-02, logged as phone=…): on / join,ssid[,pass] / leave / open / get,url / post,url,body */
   | { type: 'phone'; cmd: string }
-  /** 「真实网络」开关（C-03）：开着时芯片发往外网的 HTTP 由浏览器 fetch 代发，回复进输入日志 netreply=… */
+  /** "Real network" toggle (C-03): chip HTTP to the internet goes through browser fetch; replies are logged as netreply=… */
   | { type: 'realnet'; on: boolean }
-  /** 每个时间片采样这些引脚的 PWM，有变化就带模拟时刻放进 tick 的 pwmEvents（蜂鸣器出声用） */
+  /** Sample PWM on these pins each slice; changes go into tick pwmEvents with sim time (for the buzzer). */
   | { type: 'watchPwm'; pins: number[] }
-  /** 要本次上电以来的输入日志，回 inputlog 消息 */
+  /** Request the input log since power-up; answered with an inputlog message. */
   | { type: 'getInputLog' }
-  /** 本次上电以来的输入日志 + 串口全文 + 观察记录（算运行指纹用），回 snapshot 消息；不打断运行 */
+  /** Input log + full serial + observations since power-up (for the run fingerprint), answered with snapshot; does not interrupt. */
   | { type: 'snapshot' }
-  /** 时间线回退（P0-03）：重新上电，按输入日志在原来的模拟时刻施加，快进到 untilMs 后停住（不按墙钟），回 seeked */
+  /** Timeline rewind (P0-03): power up, apply the log at original sim times, fast-forward to untilMs and stop (not wall clock); answers seeked. */
   | {
       type: 'seek';
       wasm: ArrayBuffer;
@@ -234,23 +236,23 @@ export type ToWorker =
       i2s?: string[];
       micWav?: ArrayBuffer;
       micName?: string;
-      /** 上电以后施加的输入（不含上电和上电时的环境），时间 = 原来施加时的模拟时刻 */
+      /** Inputs applied after power-up (excluding boot and boot env); time = sim time they were applied. */
       events: InputEvent[];
       untilMs: number;
       realnet?: boolean;
     }
-  /** 记一个时间点：回 mark 消息（时间线上"这一步发生在模拟第几毫秒"） */
+  /** Mark a point in time: answered with mark (which sim millisecond this step happened at). */
   | { type: 'mark'; id: number }
-  /** 逻辑分析仪要观察的 GPIO（位掩码，lo = GPIO0..31，hi = GPIO32..）；之后每次上电都沿用 */
+  /** GPIOs the logic analyser watches (bitmask, lo = GPIO0..31, hi = GPIO32..); kept for later power-ups. */
   | { type: 'ioWatch'; lo: number; hi: number };
 
-/** 线束（P2-11）：i2cWire 负数 = 理想总线 */
+/** Harness (P2-11): negative i2cWire = ideal bus. */
 export interface Harness {
   i2cWire?: number;
   antenna?: number;
 }
 
-/** 引脚 PWM 的一次变化（模拟时刻 t 秒；duty < 0 表示不再输出 PWM） */
+/** One PWM change on a pin (sim time t in s; duty < 0 means PWM stopped). */
 export interface PwmEvent {
   pin: number;
   t: number;
@@ -258,14 +260,14 @@ export interface PwmEvent {
   freq: number;
 }
 
-/** 喇叭（MAX98357A）放出的一段声音：t = 第一个样本的模拟时刻（秒），单声道 16 位 */
+/** A chunk of speaker (MAX98357A) output: t = sim time of the first sample (s), mono 16-bit. */
 export interface PcmBlock {
   t: number;
   rate: number;
   data: Int16Array;
 }
 
-/** 音频读数（模拟器侧，最近 1 秒）：喇叭收到的 PCM 的采样率、RMS、主频；麦克风送出的帧数 */
+/** Audio readings (sim side, last second): rate, RMS and pitch of PCM the speaker got; frames the mic sent. */
 export interface AudioFrame {
   rate: number;
   frames: number;
@@ -283,41 +285,39 @@ export type FromWorker =
       console: string;
       gpio: number;
       enable: number;
-      /** GPIO32 以上（S3）的电平 / 使能 */
+      /** Levels / enables of GPIO32 and up (S3). */
       gpioHi: number;
       enableHi: number;
       pwm: number[];
-      /** 各引脚 PWM 频率（Hz，没有 PWM 为 0） */
+      /** PWM frequency per pin (Hz, 0 without PWM). */
       pwmFreq: number[];
-      /** watchPwm 引脚上自上一个 tick 以来的变化（按时间先后） */
+      /** Changes on watchPwm pins since the last tick (in time order). */
       pwmEvents?: PwmEvent[];
       simSeconds: number;
       ratio: number;
       running: boolean;
       leds?: number[][];
-      /** 外接 WS2812 灯带（板载灯以外的引脚）有新帧时：引脚 → 各灯 [r,g,b] */
+      /** External WS2812 strips (pins other than the on-board LED) with a new frame: pin -> [r,g,b] per LED. */
       strips?: Record<number, number[][]>;
       elec?: ElecFrame;
-      /** 自上一个 tick 以来的欠压复位（模拟时刻，秒） */
+      /** Brown-out resets since the last tick (sim time, s). */
       brownouts?: number[];
-      /** 编码器 / 超声波（接了才有） */
+      /** Encoder / ultrasonic (only when attached). */
       pins?: PinDevFrame;
-      /** 接了 I2S 音频器件时的读数 */
+      /** Readings when an I2S audio device is attached. */
       audio?: AudioFrame;
     }
-  /** 喇叭的声音（接了 MAX98357A 才有），按模拟时间排进 Web Audio */
+  /** Speaker sound (only with MAX98357A), scheduled into Web Audio on sim time. */
   | { type: 'pcm'; blocks: PcmBlock[] }
   | { type: 'oled'; pixels: Uint8Array }
-  /** GC9A01：240×240 RGBA，画面变了才发 */
+  /** GC9A01: 240×240 RGBA, sent only when the picture changes. */
   | { type: 'lcd'; pixels: Uint8Array }
-  /** 原生 USB 虚拟主机的状态（JSON，结构见 usb3d.ts 的 UsbView），有变化才发 */
+  /** Native USB virtual host state (JSON, shape in usb3d.ts UsbView), sent on change. */
   | { type: 'usb'; json: string }
-  /**
-   * BLE（C-01）：state 0 = 固件没用 BLE，1 = 虚拟控制器在跑，2 = 没认出 VHCI 边界（json 是 {"error"}）。
-   * json 是 {"view", "log"}，log 只含新增的空中日志；reset = 新上电 / 回退，之前的日志作废。cmdError = 刚才的手机命令被拒的原因
-   */
+  /** BLE (C-01): state 0 = firmware does not use BLE, 1 = controller running, 2 = VHCI boundary not found (json is {"error"}).
+   *  json is {"view", "log"} with new air-log lines only; reset = new power-up / rewind; cmdError = why the last phone command was refused. */
   | { type: 'ble'; state: number; json: string; reset?: boolean; cmdError?: string }
-  /** 线束结论（与命令行同样的文字：I2C 上升时间、天线遮挡后的 RSSI），变了才发 */
+  /** Harness verdict (same text as the CLI: I2C rise time, RSSI after antenna loss), sent on change. */
   | { type: 'harness'; text: string }
   /** 网络页签（C-02）：固件用没用 Wi-Fi、虚拟手机看到的（JSON，结构见 app/netfeed.ts）、芯片发出的请求记录；变了才发 */
   | { type: 'net'; used: boolean; phone?: string; rows?: string; replies?: number; replyBytes?: number }
@@ -326,24 +326,24 @@ export type FromWorker =
   | { type: 'seekProgress'; simSeconds: number }
   | { type: 'seeked'; snap: Snapshot; bootPin: number }
   | { type: 'mark'; id: number; tMs: number }
-  /** 逻辑分析仪事件（tb_io_take 的原始记录，每条 16 字节）；reset = 新上电，之前的作废 */
+  /** Logic analyser events (raw tb_io_take records, 16 bytes each); reset = new power-up, earlier ones void. */
   | { type: 'io'; reset: boolean; data: Uint8Array; dropped: number }
-  /** FreeRTOS 任务切换（tb_tasks_take 的原始记录，每条 16 字节）+ 任务表 JSON；reset = 新上电 */
+  /** FreeRTOS task switches (raw tb_tasks_take records, 16 bytes each) + task table JSON; reset = new power-up. */
   | { type: 'tasks'; reset: boolean; data: Uint8Array; table: string; chip: string }
   | { type: 'stopped'; reason: string };
 
-/** 一次上电到此刻的完整记录：指纹 = fingerprint(stdout, report)，与验收 worker / 命令行同一算法 */
+/** Full record of a power-up so far: fingerprint = fingerprint(stdout, report), same algorithm as the acceptance worker / CLI. */
 export interface Snapshot {
   log: InputLog;
   stdout: string;
   report: string;
   simSeconds: number;
-  /** 串口太长没存全（指纹不可用） */
+  /** Serial output too long to keep in full (fingerprint unavailable). */
   truncated: boolean;
 }
 
 let ex: Exports | null = null;
-// 本次上电以来的串口全文（算运行指纹要从上电开始的全部字节）；超过 4MB 不再存，指纹标"太长"
+// Full serial since power-up (the fingerprint needs every byte from boot); beyond 4 MB we stop storing and mark it too long.
 const STDOUT_CAP = 4 << 20;
 let bootStdout = '';
 let stdoutTruncated = false;
@@ -385,7 +385,7 @@ function elecFrame(e: Exports): ElecFrame | undefined {
     power,
   };
 }
-/** 新出现的欠压复位时刻 */
+/** Newly seen brown-out reset times. */
 function takeBrownouts(e: Exports): number[] | undefined {
   if (!e.tb_elec_stat) return undefined;
   const n = e.tb_elec_stat(7);
@@ -401,16 +401,16 @@ function pinDevFrame(e: Exports): PinDevFrame | undefined {
   const n = (x: number | undefined) => (x === undefined || Number.isNaN(x) ? null : x);
   return { encPos: n(e.tb_encoder_pos?.()), pcnt: n(e.tb_pcnt_count?.(0)), pings: n(e.tb_sonar_stat?.(0)), echoUs: n(e.tb_sonar_stat?.(2)) };
 }
-let simAnchor = 0; // 开始计时时的模拟周期
+let simAnchor = 0; // sim cycle when timing started
 let wallAnchor = 0;
 const decoder = new TextDecoder();
-/** 板载 WS2812 所在引脚（C3 GPIO8，S3 GPIO48）与引脚数，按芯片在启动后设置 */
+/** On-board WS2812 pin (C3 GPIO8, S3 GPIO48) and pin count, set per chip after boot. */
 let LED_PIN = 8;
 const CHIP_OF: Record<number, 'esp32' | 'esp32c3' | 'esp32s3'> = { 0: 'esp32', 5: 'esp32c3', 9: 'esp32s3' };
 let NPINS = 22;
 let lastFrames = -1;
 
-/** 板载灯带有新帧时返回各灯 [r,g,b]，否则 undefined（省掉无变化时的消息体积） */
+/** [r,g,b] per LED when the on-board strip has a new frame, else undefined (saves message size). */
 function leds(e: Exports): number[][] | undefined {
   const f = e.tb_ws2812_frames(LED_PIN);
   if (f === lastFrames) return undefined;
@@ -421,7 +421,7 @@ function leds(e: Exports): number[][] | undefined {
   for (let i = 0; i < n; i++) out.push([b[i * 3], b[i * 3 + 1], b[i * 3 + 2]]);
   return out;
 }
-/** 外接灯带：板载灯以外、出现过 WS2812 帧的引脚，帧数变了才取（P2-09 旋钮台灯） */
+/** External strips: pins other than the on-board LED that saw WS2812 frames, read when the frame count changes (P2-09 lamp). */
 let stripFrames = new Map<number, number>();
 function strips(e: Exports): Record<number, number[][]> | undefined {
   let out: Record<number, number[][]> | undefined;
@@ -450,7 +450,7 @@ function copyIn(e: Exports, data: ArrayBuffer) {
   return p;
 }
 
-/** 每个引脚的 PWM 占空比（-1 表示没有 PWM） */
+/** PWM duty per pin (-1 = no PWM). */
 function pwmAll(e: Exports) {
   const out: number[] = [];
   for (let p = 0; p < NPINS; p++) out.push(e.tb_pin_pwm(p));
@@ -462,13 +462,13 @@ function pwmFreqAll(e: Exports) {
   return out;
 }
 
-// ---- 输入日志：本次上电以来施加过的外部输入，时间戳 = 施加时的模拟时间
+// ---- Input log: external inputs applied since power-up, stamped with sim time when applied
 let inputLog: InputLog = { version: 1, i2c: [], lcd: false, events: [] };
 function record(e: Exports, ev: InputAction) {
   inputLog.events.push({ tMs: cyclesToMs(e.tb_cycles()), ...ev } as InputEvent);
 }
 
-// ---- PWM 变化采样（蜂鸣器）：每个时间片之间看一次，1ms 分辨率
+// ---- PWM change sampling (buzzer): checked between slices, 1 ms resolution
 let watchPins: number[] = [];
 let pwmLast = new Map<number, [number, number]>();
 let pwmEvents: PwmEvent[] = [];
@@ -489,12 +489,12 @@ function takePwmEvents() {
   return v;
 }
 
-// ---- 逻辑分析仪事件：每批时间片之后从内核取走，攒着随 tick 发给主线程（上电 / 回退时先发一条 reset）
+// ---- Logic analyser events: taken from the core after each batch, sent with the tick (a reset first on power-up / rewind)
 let ioLo = 0;
 let ioHi = 0;
 let ioChunks: Uint8Array[] = [];
 let ioBytes = 0;
-// 任务切换和逻辑分析仪事件同一时机取、同一时机发（1ms 一片，与命令行 --trace-tasks 切法一致）
+// Task switches are taken and sent together with analyser events (1 ms slices, same as CLI --trace-tasks).
 let taskChunks: Uint8Array[] = [];
 let taskBytes = 0;
 function drainTasks(e: Exports) {
@@ -544,7 +544,7 @@ function flushIo(e: Exports, reset = false) {
   (self as unknown as Worker).postMessage({ type: 'io', reset, data, dropped: e.tb_io_dropped?.() ?? 0 } satisfies FromWorker, [data.buffer]);
 }
 
-// ---- I2S 音频：喇叭的 PCM 每批时间片之后取走，随 tick 发；麦克风声源由主线程切换
+// ---- I2S audio: speaker PCM taken after each batch and sent with the tick; the main thread switches the mic source
 let hasAudio = false;
 let pcmOut: PcmBlock[] = [];
 function drainPcm(e: Exports) {
@@ -593,14 +593,14 @@ function loop(gen = loopGen) {
   if (!ex || !running || gen !== loopGen) return;
   const e = ex;
   const now = performance.now();
-  // 目标：模拟时间追上（墙钟 × 速度）；每轮最多算 20ms 墙钟，避免卡住消息处理
+  // Goal: sim time catches up with wall clock × speed; at most 20 ms wall per round so messages are not starved.
   const targetCycles = simAnchor + ((now - wallAnchor) / 1000) * CPU_HZ * speed;
   let behind = targetCycles - e.tb_cycles();
   const t0 = performance.now();
   const startCycles = e.tb_cycles();
   let stop = 0;
   while (behind > 0 && performance.now() - t0 < 20) {
-    // 固定 1ms 一片（不按"还差多少"切）：S3 双核的交替点取决于每片的起点，和 CLI 一样切才能逐周期重放
+    // Fixed 1 ms slices (not 'whatever is left'): S3 dual-core interleaving depends on slice starts, so slicing like the CLI keeps replay exact.
     stop = e.tb_run(CPU_HZ / 1000);
     if (watchPins.length) samplePwm(e);
     drainIo(e);
@@ -608,12 +608,12 @@ function loop(gen = loopGen) {
     if (stop !== 0) break;
     behind = targetCycles - e.tb_cycles();
   }
-  // 跟不上真实时间时，重设锚点（不去追欠下的时间）并报告实际倍速
+  // Falling behind real time: reset the anchor (do not chase the debt) and report the actual speed.
   if (behind > CPU_HZ * 0.1) {
     simAnchor = e.tb_cycles();
     wallAnchor = performance.now();
   }
-  // 倍速 = 一段墙钟时间内推进的模拟时间 / 这段墙钟时间
+  // Speed = sim time advanced over a wall-clock window / that window.
   if (ratioWall === 0) {
     ratioWall = now;
     ratioSim = startCycles;
@@ -660,20 +660,20 @@ function loop(gen = loopGen) {
     post({ type: 'stopped', reason: errorText(e) });
     return;
   }
-  // 跟不上时马上接着算：setTimeout 在 worker 里也被钳到 ≥4ms，每 20ms 白等 4ms 加上发帧，整屏动画这类满负荷固件
-  // 实测只剩内核速度的约 80%。MessageChannel 的消息不受钳制，主线程发来的输入消息仍排在它前后，照常在时间片之间施加
+  // Behind schedule: continue at once. setTimeout is clamped to ≥4 ms in workers too, costing ~20% on full-load firmware;
+  // MessageChannel messages are not clamped, and input messages still interleave between slices as usual.
   if (behind > 0) yieldPort.postMessage(loopGen);
   else setTimeout(loop, 4, loopGen);
 }
 
-/** 递增后旧的排程（暂停前排下的 setTimeout / 消息）作废，暂停后马上再运行也不会跑出两条循环 */
+/** Bumped so stale schedules (timeouts / messages queued before pause) are void; resuming right away never runs two loops. */
 let loopGen = 0;
 const yieldChannel = new MessageChannel();
 const yieldPort = yieldChannel.port2;
 yieldChannel.port1.onmessage = (ev: MessageEvent<number>) => loop(ev.data);
 
 let oledVersion = 0;
-/** OLED 画面变了才传（128×64 字节，转移所有权不拷贝两次） */
+/** Send the OLED only on change (128×64 bytes, ownership transferred instead of copied twice). */
 function postOled(e: Exports) {
   const v = e.tb_oled_version();
   if (v === 0 || v === oledVersion) return;
@@ -686,7 +686,7 @@ function postOled(e: Exports) {
 
 let lcdVersion = 0;
 let lcdLast = 0;
-/** 圆屏 240×240×4 = 230KB：画面变了才传，并且最多 30 帧/秒 */
+/** Round LCD 240×240×4 = 230 KB: only on change, at most 30 fps. */
 function postLcd(e: Exports, force = false) {
   if (!e.tb_lcd_version) return;
   const v = e.tb_lcd_version();
@@ -718,7 +718,7 @@ let bleSeq = -1;
 let bleFrom = 0;
 let bleReset = true;
 let bleLast = 0;
-/** 空中日志有新条目、状态变了才发；连着时每 250ms 也补一次视图（通知曲线、RSSI 不一定伴随新日志） */
+/** Send when the air log grows or state changes; while connected also every 250 ms (notify curves, RSSI need no new log). */
 function postBle(e: Exports, force = false) {
   if (!e.tb_ble_state || !e.tb_ble_json || !e.tb_ble_json_ptr || !e.tb_ble_seq) return;
   const st = e.tb_ble_state();
@@ -819,9 +819,10 @@ function postPaused(e: Exports) {
   post({ type: 'tick', console: '', leds: leds(e), strips: strips(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running, elec: elecFrame(e), brownouts: takeBrownouts(e), pins: pinDevFrame(e) });
 }
 
-type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; touchInt?: number; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean };
+/** Boot fields; locale exists so any human text the worker makes follows the page (core errors are English already). */
+type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; touchInt?: number; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
 const I2S_KIND: Record<string, number> = { max98357a: 0, inmp441: 1 };
-/** 上电：建 wasm 实例、挂器件、设环境、开一份新的输入日志 */
+/** Power-up: instantiate wasm, attach devices, set the environment, start a fresh input log. */
 async function bootWasm(m: BootMsg): Promise<Exports | null> {
   const { instance } = await WebAssembly.instantiate(m.wasm, {});
   const e = instance.exports as unknown as Exports;
@@ -842,12 +843,12 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   pcmOut = [];
   for (const k of m.i2s ?? []) if (e.tb_i2s_attach && I2S_KIND[k] !== undefined && e.tb_i2s_attach(I2S_KIND[k]) === 0) hasAudio = true;
   if (m.micWav) setMic(e, 'wav', m.micWav);
-  // 供电网络：舵机接上、供电方式（上电时的状态；之后的切换走 power 消息并进输入日志）
+  // Supply network: servo attached, power source (state at power-up; later switches go through power messages and the log)
   power = m.power ?? 'usb';
   if (e.tb_servo_attach && m.servo !== undefined) e.tb_servo_attach(m.servo);
   e.tb_power_set?.(power === 'ext' ? 1 : 0);
   resetsSeen = 0;
-  // 引脚器件（编码器 / 超声波）：上电时接好；超声波的初始距离作为一条 dist 输入记进日志
+  // Pin devices (encoder / ultrasonic) attach at power-up; the initial ultrasonic distance is logged as a dist input.
   if (m.encoder && e.tb_encoder_attach) e.tb_encoder_attach(m.encoder.a, m.encoder.b, m.encoder.sw ?? -1);
   if (m.sonar && e.tb_sonar_attach) e.tb_sonar_attach(m.sonar.trig, m.sonar.echo);
   hasPinDevs = !!(m.encoder || m.sonar);
@@ -861,11 +862,11 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   inputLog = { version: 1, chip: CHIP_OF[e.tb_chip()] ?? 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
   record(e, { kind: 'power', on: true });
   if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
-  // 线束在上电那一刻施加并记进日志（重放 / 回退在第 0 个周期施加，与命令行 --i2c-wire 等价）
+  // Harness applies at power-up and is logged (replay / rewind apply it at cycle 0, same as CLI --i2c-wire).
   if (m.harness?.i2cWire !== undefined) apply(e, { kind: 'i2cwire', cm: m.harness.i2cWire });
   if (m.harness?.antenna !== undefined) apply(e, { kind: 'antenna', db: m.harness.antenna });
   harnessText = '\u0000';
-  // 回退重放时 cm 给 NaN：初始距离就是日志里 0 时刻那条 dist，由 seekTo 按原样施加
+  // On rewind replay cm is NaN: the initial distance is the dist entry at time 0, applied by seekTo.
   if (m.sonar && Number.isFinite(m.sonar.cm)) apply(e, { kind: 'dist', cm: m.sonar.cm });
   pwmLast = new Map();
   pwmEvents = [];
@@ -873,7 +874,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   stdoutTruncated = false;
   ex = e;
   const id = e.tb_chip();
-  // ESP32-DevKitC 没有板载 RGB 灯：给一个不存在的脚号，GPIO2 照常当普通脚
+  // ESP32-DevKitC has no on-board RGB: pass a nonexistent pin so GPIO2 stays an ordinary pin.
   LED_PIN = id === 9 ? 48 : id === 0 ? -1 : 8;
   NPINS = id === 9 ? 49 : id === 0 ? 40 : 22;
   lastFrames = -1;
@@ -894,7 +895,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   return e;
 }
 
-/** 施加一条输入（实时运行收到的消息和回退重放走同一个函数，记进日志的时刻就是施加时的模拟时刻） */
+/** Apply one input (live messages and rewind replay share this; the logged time is the sim time of application). */
 function apply(e: Exports, ev: InputAction) {
   switch (ev.kind) {
     case 'env':
@@ -923,7 +924,7 @@ function apply(e: Exports, ev: InputAction) {
       new Uint8Array(e.memory.buffer, p, b.length).set(b);
       const r = e.tb_ble_cmd(p, b.length);
       e.tb_free(p, b.length);
-      // 被拒的命令（没广播时连接、句柄不存在……）不进日志：重放时 CLI 也会拒，日志里留着只会让重放报错
+      // Refused commands (connect while not advertising, missing handle...) are not logged: the CLI refuses them too on replay.
       if (r !== 0) {
         post({ type: 'ble', state: e.tb_ble_state?.() ?? 0, json: '', cmdError: errorText(e) });
         return;
@@ -972,12 +973,12 @@ function apply(e: Exports, ev: InputAction) {
       e.tb_encoder_press?.(ev.down ? 1 : 0);
       break;
     case 'dist':
-      // 导出脚本只写两位小数：施加的值先取整到 0.01 cm，重放才逐周期一致
+      // Exported scripts keep two decimals: round the applied value to 0.01 cm so replay matches cycle for cycle.
       ev = { kind: 'dist', cm: Math.round(ev.cm * 100) / 100 };
       e.tb_sonar_distance?.(ev.cm);
       break;
     case 'imu': {
-      // 先取到脚本精度再施加：网页读到的和命令行重放读到的逐位相同
+      // Round to script precision before applying: web and CLI replay read bit-identical values.
       const r = roundImu(ev);
       const [dp, dr, dy] = r.rates ?? [0, 0, 0];
       e.tb_imu_set?.(r.pitch, r.roll, r.yaw, dp, dr, dy);
@@ -997,10 +998,8 @@ function apply(e: Exports, ev: InputAction) {
   record(e, ev);
 }
 
-/**
- * 回退重放：与实时运行同样 1ms 一片、输入在时间片之间施加。原来的事件发生在某个时间片边界（施加时的周期数），
- * 这里在同一个边界施加，所以逐周期重现；跑到 untilMs 所在的边界停住，那一刻的事件不施加（属于下一步）。
- */
+/** Rewind replay: 1 ms slices with inputs between slices like live runs; events replay at their original slice boundary,
+ *  so it is cycle-exact; it stops at the boundary of untilMs and events at that instant are not applied (they belong to the next step). */
 function seekTo(e: Exports, events: InputEvent[], untilMs: number) {
   const until = Math.round(untilMs * (CPU_HZ / 1000));
   const evs = events.filter((x) => x.kind !== 'power').map((x) => ({ at: Math.round(x.tMs * (CPU_HZ / 1000)), x }));
@@ -1024,12 +1023,12 @@ function seekTo(e: Exports, events: InputEvent[], untilMs: number) {
       post({ type: 'seekProgress', simSeconds: e.tb_cycles() / CPU_HZ });
     }
   }
-  // 停住时刻之前的串口输出已经在快照里；主线程用快照的 stdout 重建串口面板
+  // Serial output before the stop point is already in the snapshot; the main thread rebuilds the serial panel from its stdout.
   pwmEvents = [];
-  // 回退重放放出的声音是过去的，不播
+  // Sound from rewind replay is in the past: do not play it.
   if (hasAudio) e.tb_audio_take?.();
   pcmOut = [];
-  // 回退重放里的欠压复位是旧事件（时间线上已经有），不再当新事件报
+  // Brown-outs during replay are old events (already on the timeline): not reported again.
   if (e.tb_elec_stat) resetsSeen = e.tb_elec_stat(7);
 }
 
@@ -1039,6 +1038,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
     case 'boot': {
       running = false;
       if (m.realnet !== undefined) realnetOn = m.realnet;
+      if (m.locale) await useWorkerLocale(m.locale);
       const e = await bootWasm(m);
       if (!e) return;
       // 开着真实网络上电：开关作为 0 时刻的输入进日志（重放脚本第一行 realnet=1）
@@ -1179,7 +1179,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
     case 'micPush': {
       const e = ex;
       if (!e?.tb_mic_push || !m.data.length) return;
-      // tb_alloc 不保证 4 字节对齐：按字节拷（内核按小端 f32 解）
+      // tb_alloc is not 4-byte aligned: copy bytewise (the core decodes little-endian f32).
       const p = e.tb_alloc(m.data.byteLength);
       new Uint8Array(e.memory.buffer, p, m.data.byteLength).set(new Uint8Array(m.data.buffer, m.data.byteOffset, m.data.byteLength));
       e.tb_mic_push(p, m.data.length, m.rate);

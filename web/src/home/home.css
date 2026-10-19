@@ -1,6 +1,5 @@
-/* 首页作品卡预览：沿用 views/ 的成品示意 / 成品视图（命令式 SVG），把旧的米色、墨绿底统一成台面的浅灰底。
-   CSS 的 fill 能盖过 SVG 的 fill 属性，所以不用改视图代码。这些选择器按 SVG 属性挑元素，写成 Tailwind 任意变体不可读，留在这里；
-   颜色只用 ui/tailwind.css 的变量（插画自带的两种字色除外）。 */
+/* Card previews reuse views/ SVGs; CSS fill overrides SVG fill attributes, so backgrounds turn stage grey without touching views.
+   Attribute selectors would be unreadable as Tailwind variants; colours come from ui/tailwind.css variables. */
 .wk-prev .tb-view { aspect-ratio: 1000 / 560; background: transparent; border-radius: 0; color: var(--fg); }
 .wk-prev .tb-view svg > rect[width='480'][height='480'],
 .wk-prev .tb-view svg > rect[width='1000'][height='560'] { fill: transparent; }
@@ -12,7 +11,7 @@
 .wk-prev .tb-view svg text[data-k='wt'], .wk-prev .tb-view svg text[data-k='wh'] { fill: #d7f3ff; }
 .wk-prev .tb-view svg text[data-k='envTemp'] { fill: #ff7a1a; }
 .wk-prev .sc-controls { display: none; }
-/* 角上的规格小字、成品视图的环境箱在卡片里太小太挤：规格写在卡片正文，串口最后一行写在状态行 */
+/* Corner spec text and the env box are too cramped in a card: specs live in the card body, serial in the status line. */
 .wk-prev svg > text[y='30'], .wk-prev svg > text[y='34'], .wk-prev svg > text[data-k='angle'], .wk-prev svg > text[data-k='mag'] { display: none; }
 .wk-prev svg > rect[x='60'][y='420'], .wk-prev svg > rect[x='76'][y='456'], .wk-prev svg > text[x='78'][y='446'], .wk-prev svg > text[data-k='envTemp'], .wk-prev .tb-env { display: none; }
 .wk-prev .tb-tag, .wk-prev .as-hot { background: var(--accent-strong); color: var(--on-accent); }

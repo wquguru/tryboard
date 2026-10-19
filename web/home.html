@@ -1,35 +1,37 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script>try{var t=localStorage.getItem('tb-theme')}catch(e){}document.documentElement.dataset.theme=t==='dark'||t==='light'?t:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'</script>
-    <title>页面已移动，正在跳转… · 试板 TryBoard</title>
-    <!-- 分享卡片（DESIGN_V2 §8.5）：og.png 构建时由 tools/webtest/og.mjs 渲染；上线定域名后 og:image 改绝对地址 -->
+    <title>Page moved, redirecting… · TryBoard</title>
+    <!-- Share card (DESIGN_V2 §8.5): og.png is rendered by tools/webtest/og.mjs; make og:image absolute once the domain is fixed. -->
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="试板 TryBoard" />
-    <meta property="og:title" content="试板 TryBoard · 完全免费的线上 AI 智能硬件实验台" />
-    <meta property="og:description" content="试板是完全免费的线上 AI 智能硬件实验台：选零件、运行真实固件、装进外壳、预览成品。" />
+    <meta property="og:site_name" content="TryBoard" />
+    <meta property="og:title" content="TryBoard · Free online lab for AI hardware projects" />
+    <meta property="og:description" content="TryBoard is a free online lab for AI hardware: pick parts, run real firmware, fit it in a case and preview the finished product." />
     <meta property="og:image" content="./og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="robots" content="noindex" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <!-- 旧首页地址（2026-10-18 起首页是 /，DESIGN_V2 §7.2）：保留 hash（#works） -->
+    <!-- Old home URL (home is / since 2026-10-18, DESIGN_V2 §7.2): keeps the hash (#works). -->
     <script>
       location.replace('./' + location.search + location.hash);
     </script>
     <noscript><meta http-equiv="refresh" content="0; url=./" /></noscript>
     <style>
-      /* DESIGN §2 亮 / 暗两套（与 app.css 同值）；data-theme 由上面的内联脚本设 */
+      /* DESIGN §2 light / dark values (same as app.css); data-theme is set by the inline script above. */
       :root { --bg: #ffffff; --fg: #1e1e1e; --accent: #0d99ff; color-scheme: light; }
       :root[data-theme='dark'] { --bg: #17181b; --fg: #e8eaed; --accent: #3aa8ff; color-scheme: dark; }
       body { margin: 0; font: 13px/1.5 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif; color: var(--fg); background: var(--bg); display: grid; place-items: center; min-height: 100vh; }
+      :lang(ja) body { font-family: 'Hiragino Sans', 'Yu Gothic', 'Noto Sans JP', 'Noto Sans SC', sans-serif; }
+      :lang(ko) body { font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', 'Noto Sans SC', sans-serif; }
       a { color: var(--accent); }
     </style>
   </head>
   <body>
-    <p>页面已移动，正在跳转到 <a href="./">首页</a>…</p>
+    <p>This page has moved. Redirecting to <a href="./">the home page</a>…</p>
   </body>
 </html>

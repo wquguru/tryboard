@@ -1,20 +1,20 @@
 #!/bin/bash
-# 下载字体原件到 third_party/fonts/（git 忽略）：Noto Sans SC、JetBrains Mono 的可变字重 TTF 与 OFL.txt。
-# 来源固定在 google/fonts 仓库的一个提交上，sha256 校验（P2-19，LICENSING.md 字体行 ✅ OFL-1.1）。
+# Downloads Noto Sans SC and JetBrains Mono variable TTFs + OFL.txt to third_party/fonts/ (ignored), pinned to one
+# google/fonts commit and sha256-checked so the subset build is reproducible (P2-19, LICENSING.md fonts row ✅ OFL-1.1).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$ROOT/third_party/fonts"
 REV=47d54ca1ebb14fd864695f1d39dc734f39017c33
 BASE="https://raw.githubusercontent.com/google/fonts/$REV/ofl"
 mkdir -p "$OUT"
-# 名字 | 仓库路径 | sha256
+# name | repo path | sha256
 while IFS='|' read -r name src sum; do
   [ -n "$name" ] || continue
   f="$OUT/$name"
   if [ ! -f "$f" ] || ! echo "$sum  $f" | shasum -a 256 -c - >/dev/null 2>&1; then
     curl -fsSL --retry 5 --retry-all-errors "$BASE/$src" -o "$f.part"
     mv "$f.part" "$f"
-    echo "$sum  $f" | shasum -a 256 -c - >/dev/null || { echo "校验失败: $name" >&2; rm -f "$f"; exit 1; }
+    echo "$sum  $f" | shasum -a 256 -c - >/dev/null || { echo "checksum mismatch: $name" >&2; rm -f "$f"; exit 1; }
   fi
 done <<EOF
 NotoSansSC-wght.ttf|notosanssc/NotoSansSC%5Bwght%5D.ttf|a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da

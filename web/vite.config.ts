@@ -5,11 +5,11 @@ import path from 'node:path';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-// licenses.html 由 tools/gen_licenses.mjs 在构建期生成（不进仓库）；没生成时照样能 build
+// licenses.html is generated at build time by tools/gen_licenses.mjs (not in git); the build still works without it.
 const licenses = existsSync(new URL('./licenses.html', import.meta.url)) ? { licenses: 'licenses.html' } : {};
 
-/** 外部 3D 模型（P1-09）：assets/models/<名字>/ 里的 glb、SOURCES.md、LICENSE 原样发布到 models/<名字>/，
- *  开发服务器直接从 assets 读。CC BY-SA 模型连同许可与来源一起可下载（LICENSING.md 第 1 行）。原始 STEP（src/）不发布。 */
+/** External 3D models (P1-09): glb, SOURCES.md and LICENSE in assets/models/<name>/ ship as is to models/<name>/; dev reads assets.
+ *  CC BY-SA models are downloadable with licence and source (LICENSING.md row 1); the original STEP (src/) is not shipped. */
 function models(): Plugin {
   const dir = fileURLToPath(new URL('../assets/models', import.meta.url));
   const PUBLISH = /^(.+\.glb|SOURCES\.md|LICENSE(\.md)?)$/;
@@ -40,13 +40,13 @@ export default defineConfig({
   base: './',
   worker: { format: 'es' },
   plugins: [react(), tailwindcss(), models()],
-  // 关卡定义 firmware/levels.json 在 web/ 外面，开发服务器要放行上一级目录
+  // Level definitions (firmware/levels.json) live outside web/, so the dev server must allow the parent directory.
   server: { fs: { allow: ['..'] } },
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 1200,
-    // 页面文件带 .html，站内链接不带后缀（/app → app.html 由 Vite 开发 / 预览服务器和静态托管映射，DESIGN_V2 §7.2）。
-    // index.html 是首页；home / advisor / levels 是旧地址跳转页
+    // Page files end in .html but site links have no suffix (/app -> app.html via Vite dev / preview and static hosting, DESIGN_V2 §7.2).
+    // index.html is home; home / advisor / levels are old-URL redirect pages.
     rollupOptions: { input: { main: 'index.html', select: 'select.html', app: 'app.html', home: 'home.html', advisor: 'advisor.html', levels: 'levels.html', ...licenses } },
   },
 });

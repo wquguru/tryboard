@@ -1,16 +1,13 @@
-// I2S 喇叭（MAX98357A）出声：worker 送来带模拟时刻的 PCM 块，按模拟时间排进 Web Audio 的时间轴。
-// 播放走 AudioWorklet：工作线程里一个按"绝对帧号"寻址的环形缓冲，主线程把每块重采样到 AudioContext 的采样率、
-// 连同它该在第几帧开始播一起发过去；工作线程每个渲染量子读出对应帧、读完清零（没数据就是静音）。
-// 浏览器没有 AudioWorklet（老 Safari、非安全上下文）时退回 AudioBufferSourceNode 逐块定时播放。
-// 对齐方式与蜂鸣器（audio.ts）相同：模拟时刻 → 音频时刻领先 LEAD，偏离超过 [0, MAX_LEAD] 就重新对齐。
+// I2S speaker (MAX98357A): the worker sends PCM blocks with sim time; an AudioWorklet ring buffer addressed by absolute frame plays them.
+// Falls back to per-block AudioBufferSourceNode without AudioWorklet; aligned like audio.ts (lead LEAD, re-align outside [0, MAX_LEAD]).
 
 import type { PcmBlock } from './worker';
 
 const LEAD = 0.12;
 const MAX_LEAD = 0.6;
-/** 喇叭音量：满量程正弦也不至于吓人 */
+/** Speaker volume: even a full-scale sine is not startling. */
 const VOLUME = 0.3;
-/** 环形缓冲长度（帧）：约 2.7 秒 @ 48 kHz，比 MAX_LEAD 长得多 */
+/** Ring buffer length (frames): about 2.7 s at 48 kHz, far longer than MAX_LEAD. */
 const RING = 1 << 17;
 
 const WORKLET = `
@@ -24,7 +21,7 @@ class TbPcm extends AudioWorkletProcessor {
       const d = m.data;
       for (let i = 0; i < d.length; i++) {
         const f = m.at + i;
-        // 已经播过的帧、或远在环形缓冲之外的帧不写（写了会在一圈之后才被播出来）
+        // Skip frames already played or far outside the ring (they would play one lap later).
         if (f < currentFrame || f >= currentFrame + ${RING}) continue;
         this.buf[f & ${RING - 1}] = d[i];
       }
@@ -45,7 +42,7 @@ class TbPcm extends AudioWorkletProcessor {
 registerProcessor('tb-pcm', TbPcm);
 `;
 
-/** 读数：去直流、RMS、过零主频（相邻上升过零点线性插值），与内核 devices/audio.rs 的 analyze 同一算法 */
+/** Readings: remove DC, RMS, zero-crossing pitch (interpolated rising crossings); same algorithm as core devices/audio.rs analyze. */
 export function analyze(x: ArrayLike<number>, rate: number): { rms: number; freq: number } {
   const n = x.length;
   if (!n || rate <= 0) return { rms: 0, freq: 0 };
@@ -70,10 +67,8 @@ export function analyze(x: ArrayLike<number>, rate: number): { rms: number; freq
   return { rms: Math.sqrt(sum / n), freq: ups >= 2 && last > first ? ((ups - 1) * rate) / (last - first) : 0 };
 }
 
-/**
- * 线性插值重采样：块的第一个样本落在输出帧 f0（带小数），输出覆盖 [ceil(f0), ceil(f0 + 时长)) 这些整数帧，
- * 相邻块首尾正好接上——按块取整长度会在块边界留下 1 帧空白（0），既是咔哒声，又会被过零测频多数一次
- */
+/** Linear resampling: the first sample lands on fractional frame f0 and covers [ceil(f0), ceil(f0 + duration)), so blocks abut;
+ *  rounding per block would leave a 1-frame gap (a click that also adds a zero crossing). */
 function resample(src: Int16Array, from: number, to: number, f0: number): { start: number; data: Float32Array } {
   const start = Math.ceil(f0);
   const end = Math.ceil(f0 + (src.length * to) / from);
@@ -91,15 +86,15 @@ function resample(src: Int16Array, from: number, to: number, f0: number): { star
 }
 
 export interface PcmState {
-  /** 最近 0.5 秒（墙钟）内排过声音 */
+  /** Sound was scheduled within the last 0.5 s of wall time. */
   playing: boolean;
-  /** 已排进 Web Audio 的块数 / 重新对齐次数 */
+  /** Blocks scheduled into Web Audio / re-alignments. */
   blocks: number;
   realigns: number;
-  /** 输出端（AnalyserNode）测到的主频与 RMS（满量程 = 1，已除掉音量） */
+  /** Pitch and RMS measured at the output (AnalyserNode; full scale = 1, volume divided out). */
   hz: number;
   rms: number;
-  /** 播放方式：worklet / buffer（退回）/ none（还没开声音） */
+  /** Playback: worklet / buffer (fallback) / none (sound not on yet). */
   mode: 'worklet' | 'buffer' | 'none';
 }
 
@@ -123,7 +118,7 @@ export class PcmVoice {
     this.gain.connect(this.analyser).connect(ctx.destination);
   }
 
-  /** 录屏（P2-10）：把喇叭这一路也接到录音节点 */
+  /** Screen recording (P2-10): also connect the speaker path to the recorder node. */
   tap(dest: AudioNode) {
     this.analyser.connect(dest);
   }
@@ -144,7 +139,7 @@ export class PcmVoice {
     return v;
   }
 
-  /** 重新上电 / 静音：清掉排好的声音 */
+  /** Power cycle / mute: drop scheduled sound. */
   reset() {
     this.audioAnchor = -1;
     this.node?.port.postMessage({ clear: true });
@@ -166,7 +161,7 @@ export class PcmVoice {
         const r = resample(b.data, b.rate, ctx.sampleRate, at * ctx.sampleRate);
         this.node.port.postMessage({ at: r.start, data: r.data }, [r.data.buffer]);
       } else {
-        // 退回方案：AudioBuffer 按原采样率建（浏览器负责重采样），定时开播
+        // Fallback: AudioBuffer at the source rate (the browser resamples), started on schedule.
         const buf = ctx.createBuffer(1, b.data.length, b.rate);
         const ch = buf.getChannelData(0);
         for (let i = 0; i < b.data.length; i++) ch[i] = (b.data[i] / 32768) * VOLUME;
@@ -181,7 +176,7 @@ export class PcmVoice {
     this.state.playing = performance.now() - this.lastWall < 500;
   }
 
-  /** 读输出端的时域波形，算主频与 RMS（给测试和面板读数） */
+  /** Read the output waveform to get pitch and RMS (for tests and the panel). */
   measure() {
     const a = this.analyser;
     this.td ??= new Float32Array(a.fftSize);

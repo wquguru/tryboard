@@ -1,5 +1,6 @@
-// BLE（C-01）：内核 tb_ble_json 的结构（core soc/src/ble 的 Ble::json / Phone::json / log_json），与解析。
-// 虚拟控制器 + 虚拟手机都在内核里按模拟时间跑；网页只显示、只发命令（ble=<命令>，与命令行脚本同一种文本）。
+// BLE (C-01): shape of the core's tb_ble_json (core soc/src/ble Ble::json / Phone::json / log_json) and parsing.
+// Controller and phone run in the core on sim time; the page only displays and sends ble=<cmd> (same text as CLI scripts).
+import { t } from './i18n';
 
 export interface BleDevice {
   addr: string;
@@ -14,13 +15,13 @@ export interface BleChar {
   handle: number;
   props: ('read' | 'write-nr' | 'write' | 'notify' | 'indicate')[];
   cccd: number | null;
-  /** 最近一次读到 / 通知来的值（十六进制，空格分隔） */
+  /** Last read / notified value (hex, space separated). */
   value: string;
-  /** 认得的特征给出人话（"87%"、"72 bpm"） */
+  /** Plain-language value for known characteristics ("87%", "72 bpm"). */
   text: string;
   notify: boolean;
   notes: number;
-  /** 通知值的历史：[模拟毫秒, 数值] */
+  /** Notification history: [sim ms, value]. */
   hist: [number, number][];
 }
 export interface BleService {
@@ -50,7 +51,7 @@ export interface BleView {
   log_seq: number;
   phone: PhoneView;
 }
-/** 空中日志一条：n 序号、t 模拟微秒、k 类别（adv / conn / att / phone / hci）、s 文字 */
+/** One air-log line: n sequence, t sim µs, k kind (adv / conn / att / phone / hci), s text. */
 export interface BleLine {
   n: number;
   t: number;
@@ -58,9 +59,9 @@ export interface BleLine {
   s: string;
 }
 
-/** worker 发来的一次 BLE 更新（解析后） */
+/** One parsed BLE update from the worker. */
 export interface BleUpdate {
-  /** 0 = 固件没用 BLE，1 = 在跑，2 = 没认出 VHCI 边界 */
+  /** 0 = firmware does not use BLE, 1 = running, 2 = VHCI boundary not recognised. */
   state: number;
   view?: BleView;
   log: BleLine[];
@@ -79,20 +80,25 @@ export function parseBle(state: number, json: string, reset?: boolean, cmdError?
   return u;
 }
 
-/** 日志一行的方向（设计稿的三种：板子 → 广播 / 手机 → 板子 / 板子 → 手机，另有手机自己的动作） */
+// Core log prefixes: English ('phone → ', 'fw → ', 'phone: ') plus the older Chinese ones, so either core build parses.
+const PHONE_TO = /^(phone|手机) → /; // lint: allow-cjk
+const FW_TO = /^(fw|firmware|固件) → /; // lint: allow-cjk
+const PHONE_SAYS = /^(phone|手机)[:：] ?/; // lint: allow-cjk
+
+/** Direction of a log line (the design's three: board → air / phone → board / board → phone, plus the phone's own actions). */
 export function lineDir(l: BleLine): string {
-  if (l.k === 'adv') return '板子 → 广播';
-  if (l.s.startsWith('phone →')) return '手机 → 板子';
-  if (l.s.startsWith('fw →')) return '板子 → 手机';
-  if (l.k === 'conn') return l.s.startsWith('CONNECT_IND') ? '手机 → 板子' : '连接';
-  if (l.k === 'hci') return '固件 ↔ 控制器';
-  return '手机';
+  if (l.k === 'adv') return t('Board → advertising');
+  if (PHONE_TO.test(l.s)) return t('Phone → board');
+  if (FW_TO.test(l.s)) return t('Board → phone');
+  if (l.k === 'conn') return l.s.startsWith('CONNECT_IND') ? t('Phone → board') : t('Connection');
+  if (l.k === 'hci') return t('Firmware ↔ controller');
+  return t('Phone');
 }
 
-/** 去掉方向前缀，剩下要说的事 */
+/** Strip the direction prefix, leaving what happened. */
 export function lineText(l: BleLine): string {
-  return l.s.replace(/^(phone|fw) → /, '').replace(/^phone: /, '');
+  return l.s.replace(PHONE_TO, '').replace(FW_TO, '').replace(PHONE_SAYS, '');
 }
 
-/** 16 位 UUID 的写法：0x180D；128 位原样 */
+/** 16-bit UUIDs as 0x180D; 128-bit as is. */
 export const uuidLabel = (u: string) => (u.length === 4 ? `0x${u}` : u);

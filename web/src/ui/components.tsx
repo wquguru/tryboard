@@ -1,11 +1,12 @@
-// shadcn 风格的基础组件（写法参考 shadcn/ui，MIT；自己按 DESIGN §2 重写，不整段复制）。
-// 交互件用 Radix 原语：键盘、焦点、aria 状态由它负责，不再手写。
+// shadcn-style base components (modelled on shadcn/ui, MIT; rewritten to DESIGN §2, not copied).
+// Interactive parts use Radix primitives so keyboard, focus and aria state come for free.
 import { useEffect, useState, type ComponentProps } from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { Checkbox as RCheckbox, Collapsible as RCollapsible, Slot, Toggle } from 'radix-ui';
 import { cn } from './cn';
 import { Icon } from '../app/icons';
 import { currentTheme, initTheme, onTheme, setTheme } from '../theme';
+import { t } from '../i18n';
 
 const button = cva(
   'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border text-sm transition-colors cursor-pointer disabled:pointer-events-none disabled:opacity-50',
@@ -23,7 +24,7 @@ const button = cva(
   },
 );
 
-/** 给命令式模块造的按钮（如 audio.ts 的声音键）套同一套样式 */
+/** Same styles for buttons built by imperative modules (e.g. the sound key in audio.ts). */
 export const buttonVariants = button;
 
 export function Button({ className, variant, size, asChild, ...p }: ComponentProps<'button'> & VariantProps<typeof button> & { asChild?: boolean }) {
@@ -49,7 +50,7 @@ export const Badge = ({ className, variant, ...p }: ComponentProps<'span'> & Var
 
 export const Card = ({ className, ...p }: ComponentProps<'div'>) => <div className={cn('rounded-[14px] border border-line bg-surface px-[22px] py-5', className)} {...p} />;
 
-/** 可按下的胶囊（多选标签）：aria-pressed 由 Radix Toggle 维护 */
+/** Pressable pill (multi-select tag); Radix Toggle maintains aria-pressed. */
 export function Chip({ className, ...p }: ComponentProps<typeof Toggle.Root>) {
   return (
     <Toggle.Root
@@ -79,15 +80,15 @@ export function Checkbox({ className, label, ...p }: ComponentProps<typeof RChec
 
 export const Collapsible = RCollapsible;
 
-/** 状态列表：符号 + 颜色同时表达（DESIGN §2），不只靠颜色 */
+/** Status list: symbol plus colour (DESIGN §2), never colour alone. */
 export function StatusList({ kind, items, className }: { kind: 'ok' | 'warn' | 'err'; items: string[]; className?: string }) {
   const mark = { ok: <span className="absolute left-0 text-ok-ink">✓</span>, warn: <span className="absolute left-1 font-bold text-warn-ink">!</span>, err: <span className="absolute left-0 text-bad-ink">✗</span> }[kind];
   return (
     <ul className={cn('m-0 list-none p-0', className)}>
-      {items.map((t, i) => (
+      {items.map((text, i) => (
         <li key={i} className="relative py-[3px] pl-[22px] text-sm">
           {mark}
-          {t}
+          {text}
         </li>
       ))}
     </ul>
@@ -98,18 +99,18 @@ export const Table = ({ className, ...p }: ComponentProps<'table'>) => (
   <table className={cn('w-full border-collapse text-[13px] [&_td]:border-b [&_td]:border-line [&_td]:px-2 [&_td]:py-1.5 [&_td]:align-top [&_th]:border-b [&_th]:border-line [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-medium [&_th]:text-muted', className)} {...p} />
 );
 
-/** 亮 / 暗切换：与旧页的 themeToggle() 同一套存储与文案 */
+/** Light / dark toggle; same storage as the old pages' themeToggle(). */
 export function ThemeToggle({ className }: { className?: string }) {
   initTheme();
   const [dark, setDark] = useState(currentTheme() === 'dark');
   useEffect(() => {
-    const off = onTheme((t) => setDark(t === 'dark'));
+    const off = onTheme((th) => setDark(th === 'dark'));
     return () => void off();
   }, []);
-  const title = dark ? '切到亮色' : '切到暗色';
+  const title = dark ? t('Switch to light') : t('Switch to dark');
   return (
     <Button size="sm" className={cn('theme-btn size-8 flex-none px-0', className)} title={title} aria-label={title} aria-pressed={dark} onClick={() => setTheme(dark ? 'light' : 'dark')}>
-      {/* 与工作台顶栏同一个图标按钮（DESIGN_V2 §6.3：全站一套主题开关） */}
+      {/* Same icon button as the lab top bar (DESIGN_V2 §6.3: one theme switch site-wide). */}
       <Icon n={dark ? 'moon' : 'sun'} />
     </Button>
   );
