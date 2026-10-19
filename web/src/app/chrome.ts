@@ -141,6 +141,8 @@ export const actions: {
   brief?: () => void;
   uart?: (text: string) => void;
   selectCheckpoint?: (id: string) => void;
+  /** 选板作品检查点全过后打开真买卡（手机横幅的主按钮用） */
+  openBuy?: () => void;
   analyzer?: (open: boolean) => void;
   /** 台面视角：顶 / 前 / 拉近 / 拉远 / 对准选中 */
   view?: (k: 'top' | 'front' | 'in' | 'out' | 'fit') => void;

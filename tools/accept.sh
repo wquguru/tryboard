@@ -253,6 +253,10 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/place.mjs 2>&1 | grep '^\[place\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[place\] PASS（' || { echo "- [place] 脚本没跑完" >> $REPORT; fail=1; }
+  # 选板作品（U-17）：生成检查点与 fixture 一致，c3-thermo / hello 的结论和指纹网页 = check.py
+  r=$(node tools/webtest/custom.mjs 2>&1 | grep '^\[custom\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[custom\] PASS（' || { echo "- [custom] 脚本没跑完" >> $REPORT; fail=1; }
 fi
 echo -e "\n结论：$([ $fail = 0 ] && echo '全部通过' || echo '有失败项')" >> $REPORT
 cat $REPORT

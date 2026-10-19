@@ -232,6 +232,8 @@ export function benchStep(): StepImpl {
   /** 选板作品：「摆好、连好了」说明卡关掉了；演示固件正在逐条验收 */
   let customClosed = false;
   let demoBusy = false;
+  /** 本页刚跑出一条自己的通过：只有这时全过才自动弹真买卡（刷新后恢复进度、重放时间线都不弹） */
+  let buyArmed = false;
   /** 尺子：工具条"尺子"按下后，台面上点两个目标 */
   let ruler: {
     a: PickTarget | null;
@@ -2611,7 +2613,10 @@ export function benchStep(): StepImpl {
         sim: 0,
       };
     }
-    if (own && out.ok) saveProgress(wkey(c.work), l.id, out.fingerprint);
+    if (own && out.ok) {
+      saveProgress(wkey(c.work), l.id, out.fingerprint);
+      buyArmed = true;
+    }
     // 参考固件的结果不覆盖你已经通过的记录
     const prev = c.store.get().checks[l.id];
     const keep = prev?.own && prev.ok && !own;
@@ -3459,6 +3464,7 @@ export function benchStep(): StepImpl {
       ctx = c;
       toolbarRef = c.shell.toolbar;
       // 「换固件 → 上传」也算你自己的固件：和拖到检查框一样验收（2026-10-18 走查：菜单写着"检查点只认你自己上传的"，以前却不验收）
+      actions.openBuy = c.custom ? openBuy : undefined;
       actions.checkUpload = (buf, name) => {
         const s = c.store.get();
         if (s.verifying) return null;
@@ -3692,6 +3698,8 @@ export function benchStep(): StepImpl {
         c.store.subscribe(
           (s, prev) => {
             const n = c.work.checkpoints.length;
+            if (!buyArmed) return;
+            buyArmed = false;
             if (c.custom && n && passedCount(c, s) === n && passedCount(c, prev) < n) openBuy();
           },
           ["checks"],
@@ -3759,6 +3767,7 @@ export function benchStep(): StepImpl {
       setLeft({ lib: null, wires: null, wireCount: 0, card: null });
       ctx?.session.pick.highlight?.(null);
       actions.checkUpload = undefined;
+      actions.openBuy = undefined;
       ctx = null;
     },
   };

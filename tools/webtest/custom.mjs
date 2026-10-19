@@ -4,6 +4,7 @@
 //  2. 命令行：c3-thermo 过全部要判的检查点、手动项「不判」；hello 在 I2C 项上未通过，结论里有「要 ≥」
 //  3. 网页：先跑演示固件 → 每条检查点 ✓、真买卡出现，指纹与命令行一致；上传 hello → I2C 项 ✗、写「要 ≥」，指纹一致
 // 用法：node tools/webtest/custom.mjs（先 tools/build_web.sh、tools/build_fw.sh c3-thermo hello）。截图在 Reviews/web/custom-*.png
+// genlevels.ts 或选板数据（模板零件、引脚表）改了：UPDATE_FIXTURE=1 node tools/webtest/custom.mjs 用网页生成的结果重写 fixture，再看 diff 是否合理
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -96,6 +97,11 @@ const url = '/app?work=custom&t=weather&bat=1#bench';
   const page = await open(url);
   await page.waitForSelector('#customPlaced [data-custom-demo]', { timeout: 30000 });
   const web = await page.evaluate(() => globalThis.__tbCustomLevels);
+  if (process.env.UPDATE_FIXTURE) {
+    fs.writeFileSync(fixture, JSON.stringify(web, null, 2) + '\n');
+    console.log(`[custom] 已用网页生成的 ${web.length} 条检查点重写 ${path.relative(root, fixture)}，请重新运行对拍`);
+    process.exit(0);
+  }
   report('网页生成的检查点与 fixture 相同', JSON.stringify(web) === JSON.stringify(levels), `${web?.length} 条`);
   await page.click('#customPlaced [data-custom-demo]');
   const buy = await waitFor(page, () => !!document.querySelector('#buyCard'), null, 120000);

@@ -775,8 +775,9 @@
 - **演示固件算进度**：「先跑演示固件看看」跑的 c3-thermo 结果按「自己的固件」记进度（own=true），全过后弹真买卡。理由：c3-thermo 正是按选板引脚表（XIAO C3，GPIO6/7）写的，真机上烧的也是它；不算的话，只想看效果的人永远拿不到真买卡。替代方案是只当参考固件、不计进度；没采用，因为那样闭环断在最后一步。只有 C3 + （BME280 或 SSD1306）+ I2C 全在 GPIO6/7 时才给演示固件。
 - **手动项不进 work.checkpoints**：`manual: true` 的 Level 只列在检查点卡底部「上真机才知道（不判、不计入）」，并进真买卡第 3 栏。进度分母只数要判的条目。
 - **一次拖入全判**：所有生成的检查点 args / seconds 都相同，同一份固件指纹也相同，所以拖入固件后逐条跑全部要判的检查点（verifyAll），而不是只判当前选中的那条。
+- **只在本页刚通过时自动弹真买卡**：刷新后恢复进度、重放时间线都不弹，因为在手机上它会盖住整个台面。之后靠检查点卡的「看真买卡 →」、顶栏的「下一步：做成真的 →」或手机横幅打开。
 - **改了采购清单就重载**：采购步改了零件，重新生成的检查点和之前不同时，`location.hash='bench'` 后整页重载，让 session 拿到新的 levels。理由：session 的 levels 在创建时就定了；整页重载比热替换简单，也不会留下旧检查点的进度。
 - **实验台用 DevKitM-1 外形**：C3 只有 DevKitM-1 这一块 3D 板，XIAO C3 在台面上用它的外形，引脚号照 XIAO 的引脚表（GPIO6/7）。采购清单与真买卡仍写 Seeed XIAO ESP32C3。
 - **真买卡接口**：BuyCardProps 加了三个可选字段 `title?`、`extra?`（只进清单的无模型零件，算进件数和参考价）、`onClose?`；原有字段不变。进度存 `tryboard-buy-manual:<wkey>`。
-- **对拍 fixture**：`tools/webtest/fixtures/custom-thermo.json` 是 genLevels 对 `?t=weather&bat=1`（xiao-c3 + bme280 + ssd1306 + 电池）的输出。genlevels.ts 改了要同步重生成；`tools/webtest/custom.mjs` 会先比对网页生成结果与它是否逐字相同。
+- **对拍 fixture**：`tools/webtest/fixtures/custom-thermo.json` 是 genLevels 对 `?t=weather&bat=1`（xiao-c3 + bme280 + ssd1306 + 电池）的输出。genlevels.ts 改了要同步重生成；`tools/webtest/custom.mjs` 会先比对网页生成的结果和它是否逐字相同。重生成：`UPDATE_FIXTURE=1 node tools/webtest/custom.mjs`。fixture 依赖选板数据（weather 模板的零件和 planPins），选板代理合并后如果这些变了，要重生成。
 - **任务书占位**：`web/src/advisor/brief.ts` 只是最小占位（签名 `briefMarkdown(s: SelectState): string`）。选板代理的实现合并时以那边为准。
