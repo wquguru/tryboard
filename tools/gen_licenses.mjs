@@ -379,6 +379,15 @@ const html = `<!doctype html>
     <script>try{var t=localStorage.getItem('tb-theme')}catch(e){}document.documentElement.dataset.theme=t==='dark'||t==='light'?t:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'</script>
     <title>授权与致谢 · 试板 TryBoard</title>
     <meta name="description" content="试板 TryBoard 使用的开源软件、芯片 ROM、固件组件、字体和 3D 素材及其许可证；可下载完整第三方声明与 SPDX 物料清单。" />
+    <!-- 分享卡片（DESIGN_V2 §8.5）：og.png 构建时由 tools/webtest/og.mjs 渲染；上线定域名后 og:image 改绝对地址 -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="试板 TryBoard" />
+    <meta property="og:title" content="授权与致谢 · 试板 TryBoard" />
+    <meta property="og:description" content="试板 TryBoard 使用的开源软件、芯片 ROM、固件组件、字体和 3D 素材及其许可证；可下载完整第三方声明与 SPDX 物料清单。" />
+    <meta property="og:image" content="./og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <!-- 自托管字体（P2-19，tools/fonts/subset.py 生成，OFL-1.1） -->
     <link rel="stylesheet" href="/fonts/fonts.css" />

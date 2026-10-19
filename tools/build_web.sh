@@ -65,4 +65,7 @@ if [ -x "$VENV/bin/python" ]; then "$VENV/bin/python" -I "$ROOT/tools/fonts/subs
 ls -la "$PUB/wasm/tryboard.wasm" | awk '{print "wasm", $5, "bytes"}'
 if [ "${1:-}" != "--no-vite" ]; then
   (cd "$ROOT/web" && npm run build --silent)
+  # 全站静态 OG 图（DESIGN_V2 §8.5）：从 tools/webtest/og.html 渲染 dist/og.png，并查每个入口都有 og 标签；不对就让构建失败
+  [ -d "$ROOT/tools/webtest/node_modules" ] || (cd "$ROOT/tools/webtest" && npm ci --silent)
+  node "$ROOT/tools/webtest/og.mjs"
 fi

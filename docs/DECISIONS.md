@@ -769,3 +769,12 @@
 - 判定文字：`I2C 0x76 应答 <n> 次（要 ≥ <min>）`。`boots`：`开机 <s> s 内串口输出 <n> 行`。tools/check.py、packages/tryboard、web/src/checks.ts 三处逐字一致。
 - check.py 读生成 Level：`tools/check.py <bin> --level-json <文件>`（从网页「导出检查点」下载的 JSON，数组或单个 Level）。
 - 演示固件 `firmware/c3-thermo`（XIAO C3，BME280 + SSD1306，GPIO6/7）：每秒读一次，串口一行 `T=.. C  H=.. %  P=.. hPa`，OLED 显示读数；加 accept.json 用例。
+
+### U-18 / U-19（成品页与 OG）
+2026-10-18
+- **成品页去重按 ProdCtl 方案 B**：右栏只留「操作板子」（BOOT / 热源 / 声音，及台灯旋钮、尺子挡板、体感倾斜这类作品专属动作）；桌面底部工具条只留「记录」（拍照 / 录 10 秒），视角（旋转 / 复位视角）和「重启」也留在工具条——它们不是重复项，稿里也在底部。只改 product.tsx 的 `syncToolbar`，别的步骤自己设工具条组，不受影响。手机：底部工具条仍一套（操作 → 记录，`phoneGroups` 不变），详情抽屉里右栏那组操作键 `max-md:hidden`，避免抽屉里再出一套。替代：两边都留（就是要去掉的重复）、操作也放工具条（方案 A，右栏读数和操作分家）。
+- **「不能模拟的项」标题用 `Conf c="必须上真机"`**，不再是纯文字；product.tsx 里已没有按颜色区分可信度的徽章（剩下的 `Res kind="na"` 是结果状态，不是可信度）。
+- **真买卡挂在成品右栏末尾**，只在装完（非参考成品）时出现；数据：remaining = 采购步存的清单（`loadBom` + `replay`）减去「我已有」（`tryboard-have` 经 `PART_MAP` 换成目录 id，含 `with` 附件；找不到映射的按原 id 比）；fingerprint = 检查点全过时最后一个检查点的指纹，否则 null；manual = product.tsx 已有的 `CANNOT[作品]`（不另起一份清单）；checked 存 `tryboard-manual:<作品>`；下载 flash.bin 只在用户自己的固件（fwName 不带 `/`）时给。buycard.tsx 按任务要求没动，目前骨架返回 null——实现时要照顾右栏 312 px 窄单列 / 手机详情抽屉。
+- **全站静态 OG**：每个 HTML 入口（含 gen_licenses 生成的 licenses.html）加 og:type / og:site_name / og:title / og:description / og:image / og:image:width·height / twitter:card=summary_large_image。跳转页（home / advisor / levels）用首页的标题和描述。图由 `tools/webtest/og.html`（仿 ShareA，文案按 §7.1 新主张而不是稿里的旧标语；logo 与 ui/logo.tsx 同几何的反白版；系统字体栈、零外网请求）经 `tools/webtest/og.mjs`（复用已有 puppeteer-core，不加依赖）渲染成 `web/dist/og.png`，脚本断言 1200×630、每个入口标签齐全且 og:image 指向的文件存在；挂在 `tools/build_web.sh` 的 vite build 之后，失败即构建失败。og.png 是构建产物，不进 git。
+- **og:image 暂用相对地址 `./og.png`**：上线定域名后改绝对地址（上线前要问人）。不少抓取方只认绝对地址，所以现在分享卡片未必出图。
+- **选板结果的动态 OG 不做**（每个结果一张图要服务端），PLAN 里由主会话标 ✗。

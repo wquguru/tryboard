@@ -1,0 +1,113 @@
+<!doctype html>
+<!-- 全站静态 OG 图（DESIGN_V2 §8.5，稿 docs/design-v2/select-v3/ShareA.dc.html）：tools/webtest/og.mjs 渲染成 web/dist/og.png。
+     文案按 §7.1 新主张（稿里的旧标语已退役）；不连外网，字体用系统字体栈，离线可渲染。
+     logo 图形与 web/src/ui/logo.tsx 同一套几何（8 个面包板孔 + 琥珀点），这里是白底蓝点的反白版。 -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>试板 TryBoard · OG</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #0b76c8;
+      }
+      .og {
+        width: 1200px;
+        height: 630px;
+        box-sizing: border-box;
+        padding: 64px 72px;
+        background: #0b76c8;
+        color: #fff;
+        font-family: 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 380px;
+        gap: 40px;
+        position: relative;
+        overflow: hidden;
+      }
+      .l {
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 30px;
+        font-weight: 700;
+      }
+      h1 {
+        margin: 0;
+        font-size: 60px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+      .sub {
+        font-size: 24px;
+        line-height: 1.6;
+        color: #d6ecff;
+      }
+      .chips {
+        margin-top: auto;
+        display: flex;
+        gap: 12px;
+        font-size: 18px;
+      }
+      .chips span {
+        border: 1.5px solid rgba(255, 255, 255, 0.5);
+        border-radius: 999px;
+        padding: 6px 16px;
+      }
+      .r {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .site {
+        position: absolute;
+        right: 72px;
+        bottom: 40px;
+        font-size: 18px;
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        color: #d6ecff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="og" id="og">
+      <div class="l">
+        <div class="brand">
+          <svg width="56" height="56" viewBox="0 0 64 64" aria-hidden="true">
+            <rect x="4" y="4" width="56" height="56" rx="14" fill="#FFFFFF" />
+            <g fill="#0B76C8">
+              <circle cx="20" cy="20" r="5" /><circle cx="32" cy="20" r="5" /><circle cx="20" cy="32" r="5" /><circle cx="32" cy="32" r="5" />
+              <circle cx="44" cy="32" r="5" /><circle cx="20" cy="44" r="5" /><circle cx="32" cy="44" r="5" /><circle cx="44" cy="44" r="5" />
+            </g>
+            <circle cx="44" cy="20" r="6" fill="#FFB020" />
+          </svg>
+          试板 TryBoard
+        </div>
+        <h1>完全免费的线上<br />AI 智能硬件实验台</h1>
+        <div class="sub">高仿真 3D 动画，可直接运行真实固件<br />选零件 · 运行固件 · 装进外壳 · 预览成品</div>
+        <div class="chips"><span>ESP32-C3</span><span>ESP32-S3</span><span>免费 · 不用注册</span></div>
+      </div>
+      <div class="r">
+        <svg width="360" height="420" viewBox="0 0 360 420" fill="none" aria-hidden="true">
+          <rect x="20" y="40" width="320" height="340" rx="18" fill="#FFFFFF" opacity="0.12" />
+          <g fill="#FFFFFF" opacity="0.35">
+            <circle cx="60" cy="80" r="4" /><circle cx="90" cy="80" r="4" /><circle cx="120" cy="80" r="4" /><circle cx="150" cy="80" r="4" /><circle cx="180" cy="80" r="4" /><circle cx="210" cy="80" r="4" /><circle cx="240" cy="80" r="4" /><circle cx="270" cy="80" r="4" /><circle cx="300" cy="80" r="4" />
+            <circle cx="60" cy="340" r="4" /><circle cx="90" cy="340" r="4" /><circle cx="120" cy="340" r="4" /><circle cx="150" cy="340" r="4" /><circle cx="180" cy="340" r="4" /><circle cx="210" cy="340" r="4" /><circle cx="240" cy="340" r="4" /><circle cx="270" cy="340" r="4" /><circle cx="300" cy="340" r="4" />
+          </g>
+          <rect x="120" y="130" width="120" height="160" rx="10" fill="#1E1E1E" />
+          <rect x="150" y="160" width="60" height="60" rx="4" fill="#3A3A3A" />
+          <circle cx="220" cy="270" r="8" fill="#FFB020" />
+          <path d="M120 170H70v-40M120 250H70v40M240 200h50" stroke="#FFB020" stroke-width="4" stroke-linecap="round" />
+          <circle cx="70" cy="130" r="8" fill="#FFFFFF" /><circle cx="70" cy="290" r="8" fill="#FFFFFF" /><circle cx="290" cy="200" r="8" fill="#FFFFFF" />
+        </svg>
+      </div>
+      <div class="site">试板 TryBoard</div>
+    </div>
+  </body>
+</html>

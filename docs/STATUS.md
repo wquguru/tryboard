@@ -154,3 +154,10 @@
 | 小黄 / 透镜 3D 成品（P1-10） | ✅ | app/lcd3d.ts：GC9A01 帧缓冲作纹理；agent-browser：小黄随 GPIO4 在 ±60° 转身、拖动方位角 22° → −79°、3D BOOT → LOOK FRONT 停在 0°；透镜拖动 20° → 104°、BOOT → MOOD happy → love；console / errors 无 error（Reviews/ab/P1-10.md） | 透镜折射是 transmission 近似（示意），放大倍数未精确对上 1.35×；圆屏弯成面罩曲面是示意；WebGL 兜底 SVG 未在关 WebGL 的浏览器实测；首页卡片 / 组装仍是 SVG |
 | 3D 装配（P1-07） | ✅ | `tools/webtest/asm3d.mjs`（进 accept.sh）：组装步骤是 3D、顺序错被拦、真实鼠标拖拽 6/6、BME280 芯片旁 → 复测 ✗（读到 26.0 ℃）、退一步 ×5 改拖通风口旁 → 复测 ✓、炸开 / 剖面 / 尺子（BME280 到芯片 ≈ 38 mm）、装完进成品、改外壳高度后回组装重建并重放 6/6、`?asm=svg` 兜底能装；agent-browser 真实鼠标同一流程 + console / errors 无 error（Reviews/ab/P1-07.md） | 零件是按尺寸搭的简单体（不是真实模型，P1-09）；只判零件与外壳的包围关系，零件之间不做干涉；吸附按水平距离（16 mm），不判朝向；手机上组装步骤仍锁着；小黄 / 透镜只看过截图，没有拖拽用例；本分支 accept.sh --no-qemu 只有 npm 对拍的 spin / lens 两行不一致——worktree 的 firmware/build 软链到主仓库，主仓库同时在重建更新的固件，与本改动无关 |
 | 参数化外壳 + STL / 3MF（P1-08） | ✅ | `npm test` enclosure.test.ts：三作品默认布局、太矮警告与最低高度（weather 31 mm）、金属齿舵机 30 mm 够、透镜 DevKitC-1 平放不下 / 加高或换 XIAO 就好、node 里跑真 Manifold 三作品每条边恰好两个三角形、STLLoader 读回三角形数 / 包围盒、3MF 解压后顶点 / 三角形数、CRC32 标准值；asm3d.mjs：采购页高度 28 → 太矮、导出 STL 118 KB / 3MF 135 KB 下载大小与页面一致、three.js STLLoader / 3MFLoader 读回三角形数一致 | 尺寸、壁厚、止口、立柱都是示意，未经打印验证；元件库多数模块没有 sizeMm，用常见规格估算（页面标「估算」）；透镜小人默认清单（DevKitC-1）在 Ø50 底座里放不下，默认就有警告；小黄身体只做了圆柱 + 球顶，没有脸型 / 腰带 |
+
+### U-18 / U-19（成品页与 OG）
+| 项 | 状态 | 验收 | 未覆盖 / 已知 |
+|---|---|---|---|
+| 成品页去重（ProdCtl B） | ✅ | 右栏只剩 声音 / 热源 / 按 BOOT，底栏 旋转 / 复位视角 / 拍照 / 录 10 秒 / 重启；手机工具条一套（BOOT / 热源 / 声音 → 拍照 / 录），详情抽屉不再重复；media.mjs 9 PASS、harness.mjs 8 PASS、mobile.mjs 89 PASS（没改选择器）；agent-browser 按 BOOT（OLED 23.5℃ → 74.3℉）、拍照下载 1728×1288 PNG，console / errors 无 error（Reviews/ab/U-18-product.md） | — |
+| 真买卡挂载（成品步） | ◐ | 数据接线完成、tsc 过；装完后右栏末尾挂 `<BuyCard>` | buycard.tsx 仍是骨架（返回 null），页面上看不到卡；remaining / fingerprint 没有页面级断言 |
+| 全站静态 OG | ✅ | build_web.sh → og.mjs：og.png 1200×630、dist 7 个 HTML 全 PASS；agent-browser 打开 /og.png 目视（Reviews/ab/U-19.md） | og:image 是相对地址，定域名前多数平台不出图；选板结果动态 OG ✗（要服务端） |

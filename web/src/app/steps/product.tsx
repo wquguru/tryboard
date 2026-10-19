@@ -17,10 +17,17 @@ import { createKeypadView, KEYPAD_CAPS, KEYPAD_PINS } from '../../views/keypad';
 import { isPhone, onPhoneChange, setMui } from '../mobile';
 import type { Tool, ToolGroup } from '../toolbar';
 import { HOME_WORKS } from '../works';
-import { RECORD_SECONDS, recordCanvas, takePhoto, type Capturable, type Recording } from '../capture';
+import { RECORD_SECONDS, download, recordCanvas, takePhoto, type Capturable, type Recording } from '../capture';
 import { i2cLoad, i2cText, wifiText } from '../harness';
 import { I2C_DEVICES } from './assemble';
 import { setBc } from '../chrome';
+import { BuyCard } from '../buycard';
+import { loadBom } from './shop';
+import { replay } from '../bom';
+import { getTemplate, type BuyLine } from '../../catalog/templates';
+import { loadHave } from '../../advisor/state';
+import { PART_MAP } from '../../advisor/catalogmap';
+import { Conf } from '../../ui/conf';
 
 import { Host, Txt } from '../../ui/native';
 import { Brief, Btn, Btns, Kv, LinkBtn, LockCard, Note, Ph, PhT, Res, Sec, TnL, TnM, TnSt, TreeEmpty, TreeGroup, TreeNode, TreeRow, btnClass, tnClass, type ResKind } from '../../ui/panel';
@@ -169,6 +176,46 @@ const PARTS: Record<string, { id: string; name: string; about: string }[]> = {
     { id: 'lcd', name: '圆屏 GC9A01', about: 'SPI2，小豆就画在这块屏上，画面就是固件画出来的。' },
   ],
 };
+
+/** 真买卡第 3 栏「上真机逐项勾」：本机记住勾过哪些（按作品） */
+const MANUAL_KEY = (w: string) => `tryboard-manual:${w}`;
+function loadManual(w: string): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(MANUAL_KEY(w)) ?? '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+function saveManual(w: string, items: string[]) {
+  try {
+    localStorage.setItem(MANUAL_KEY(w), JSON.stringify(items));
+  } catch {
+    /* 隐私模式存不了：勾选只在本页有效 */
+  }
+}
+
+/** 还要买的：采购存档重放出的清单，去掉「我已有」。tryboard-have 存的是选板零件 id，
+ *  按选板对照表折成目录件（含随附件），面包板、杜邦线这类本来就是目录 id 的原样比 */
+function remainingLines(work: string): BuyLine[] {
+  const bom = replay(loadBom(work));
+  const have = new Set<string>();
+  for (const id of loadHave()) {
+    const m = PART_MAP[id];
+    if (m) [m.partId, ...(m.with ?? [])].forEach((x) => have.add(x));
+    else have.add(id);
+  }
+  let lines: BuyLine[] = [];
+  try {
+    const t = getTemplate(bom.template);
+    lines = [...t.required, ...t.suggested];
+  } catch {
+    /* 模板没了：只是缺「为什么买」的说明 */
+  }
+  return bom.picks
+    .filter((p) => !have.has(p.partId))
+    .map((p) => ({ partId: p.partId, qty: p.qty ?? 1, why: lines.find((l) => l.partId === p.partId)?.why ?? bom.extra[p.partId] ?? '' }));
+}
 
 /** 这几个作品的成品是 works3d.ts（P2-09） */
 const WORK3D = new Set(['lamp', 'ruler', 'tilt']);
@@ -421,23 +468,12 @@ export function productStep(): StepImpl {
         {fxNote()}
         {assembly()?.effects.usbBlocked && <Note bad>装法：开发板转了 180°，USB 口顶着前墙，线插不进去，电脑看不到设备。回「组装」把 USB 口朝背面开孔。</Note>}
         {harnessPanel()}
-        <Btns>
+        {/* 手机上这几个键已在底部工具条（phoneGroups 的「操作」组），详情抽屉里再放一套就重复了 */}
+        <Btns className="max-md:hidden">
           {c.session.audio.hasSound && <Txt as="button" type="button" className={btnClass()} id="pSound" aria-pressed="false" onClick={() => toggleSound()} text="声音：关" />}
           {weather && <Txt as="button" type="button" className={btnClass()} id="pHeat" onClick={() => toggleHeat()} text="热源：关" />}
           {acts}
         </Btns>
-        {cur3d() && (
-          <>
-            <Sec>拍照 · 录像</Sec>
-            <Btns>
-              <Btn id="pPhoto" onClick={() => void photo()}>
-                拍照
-              </Btn>
-              <Txt as="button" type="button" className={btnClass()} id="pRec" onClick={() => record()} text={rec ? `录制中 ${rec.elapsed().toFixed(0)} / ${RECORD_SECONDS} s` : `录 ${RECORD_SECONDS} 秒`} />
-            </Btns>
-            <Note>照片是 2 倍分辨率 PNG；录像是 webm，开着声音会录进蜂鸣器。文件直接下载。</Note>
-          </>
-        )}
         <Sec>串口 · 最近几行</Sec>
         {/* 串口行多了会出滚动条：可聚焦才能用键盘滚（axe scrollable-region-focusable） */}
         <Brief className="serial-tail" data-live="serial" tabIndex={0} aria-label="串口最近几行" />
@@ -450,15 +486,46 @@ export function productStep(): StepImpl {
             </li>
           ))}
         </ol>
-        <Sec>不能模拟的项 · 必须上真机</Sec>
+        <Sec className="flex items-center gap-1.5">
+          不能模拟的项 · <Conf c="必须上真机" />
+        </Sec>
         {(CANNOT[w] ?? []).map(([t, d]) => (
           <Res key={t} kind="na" mk="×">
             <b>{t}</b> · {d}
           </Res>
         ))}
+        {!preview && <BuyCard {...buyProps()} />}
       </>,
     );
     updateLive();
+  }
+
+  // ------------------------------------------------------------ 真买卡（DESIGN_V2 §8.3，U-18）
+  /** 真买卡要的数据：都从已有的本机存档里取，卡片本身不碰存储 */
+  function buyProps() {
+    const c = ctx!;
+    const w = c.work.id;
+    const manual = (CANNOT[w] ?? []).map(([t]) => t);
+    const checked = loadManual(w).filter((x) => manual.includes(x));
+    const s = c.store.get();
+    const ids = c.work.checkpoints;
+    // 没有"整套检查点"的单独指纹：全过时取最后一个检查点（覆盖最全的那一关）的指纹
+    const fp = ids.length && passedCount(c) === ids.length ? (s.checks[ids[ids.length - 1]]?.fingerprint ?? null) : null;
+    // 示例固件按 `<示例>/flash.bin` 装进来；拖进来的用户固件是文件名本身，只有它值得下载
+    const ses = c.session;
+    const userBin = ses.fwBuf && ses.fwName && !ses.fwName.includes('/') ? { buf: ses.fwBuf, name: ses.fwName } : null;
+    return {
+      remaining: remainingLines(w),
+      fingerprint: fp,
+      manual,
+      checked,
+      onToggleManual: (item: string) => {
+        const cur = loadManual(w);
+        saveManual(w, cur.includes(item) ? cur.filter((x) => x !== item) : [...cur, item]);
+        renderProps();
+      },
+      onDownloadBin: userBin ? () => download(new Blob([userBin.buf], { type: 'application/octet-stream' }), userBin.name) : null,
+    };
   }
 
   /** 装法带来的提示（台灯亮点 / 探头被挡 / 六轴装反） */
@@ -647,8 +714,6 @@ export function productStep(): StepImpl {
     const blocked = !!assembly()?.effects.usbBlocked;
     set('usbstate', blocked ? '没有设备（线插不进去）' : uv ? `${uv.state}${uv.product ? ` · ${uv.product}` : ''}` : '等待设备', blocked || !uv?.configured);
     set('typed', blocked ? '—' : uv?.typed ? uv.typed.replace(/\r/g, '').replace(/\n/g, '↵') : '（还没有输入）');
-    const rb = el.querySelector<HTMLButtonElement>('#pRec');
-    if (rb && rec) rb.textContent = `录制中 ${Math.min(RECORD_SECONDS, rec.elapsed()).toFixed(0)} / ${RECORD_SECONDS} s · 点击停止`;
     const k = assembly()?.effects.lensScale ?? 1.35;
     set('lens', `${k > 1.2 ? '高档 8 mm' : '低档 1 mm'} · 放大约 ${k.toFixed(2)}×（估算）`, k < 1.2);
     const snd = el.querySelector<HTMLButtonElement>('#pSound');
@@ -713,22 +778,19 @@ export function productStep(): StepImpl {
 
   function syncToolbar() {
     const c = ctx!;
-    const weather = c.work.id === 'weather';
-    const w = c.work.id;
     if (isPhone()) {
       c.shell.toolbar.setGroups(phoneGroups());
       c.shell.toolbar.setActive(rec ? 'p-rec' : heat.on ? 'p-heat' : null);
       return;
     }
-    const act = w === 'lamp' ? [{ id: 'p-knob', label: '按旋钮' }] : w === 'ruler' ? [{ id: 'p-near', label: '挡板近' }, { id: 'p-far', label: '挡板远' }] : w === 'tilt' ? [{ id: 'p-level', label: '放平' }] : [{ id: 'p-boot', label: '按 BOOT' }, ...(weather ? [{ id: 'p-heat', label: heat.on ? '热源：开' : '热源' }] : [])];
+    // ProdCtl 方案 B（DESIGN_V2 §8.4）：按动词分。操作板子（BOOT / 热源 / 声音 / 旋钮…）只在右栏，挨着读数；
+    // 底栏只留记录（拍照 / 录像），挨着画面。转视角和重启两边本来就不重复，留在底栏
     c.shell.toolbar.setGroups([
       ...(scene3d || lcd3d || keypad || work3d ? [{ id: 'nav', tools: [{ id: 'p-orbit', label: '旋转', key: '拖动' }, { id: 'p-home', label: '复位视角' }] }] : []),
-      ...(c.work.id === 'usbkey' ? [] : [{ id: 'act', tools: act }]),
-      ...(c.session.audio.hasSound ? [{ id: 'snd', tools: [{ id: 'p-sound', label: c.session.audio.state.muted ? '声音：关' : '声音：开' }] }] : []),
       ...(cur3d() ? [{ id: 'media', tools: [{ id: 'p-photo', label: '拍照' }, { id: 'p-rec', label: rec ? '停止录像' : `录 ${RECORD_SECONDS} 秒` }] }] : []),
       { id: 'run', tools: [{ id: 'p-rerun', label: '重启', primary: true }] },
     ]);
-    c.shell.toolbar.setActive(rec ? 'p-rec' : heat.on ? 'p-heat' : 'p-orbit');
+    c.shell.toolbar.setActive(rec ? 'p-rec' : 'p-orbit');
   }
 
   function previewWhy() {
