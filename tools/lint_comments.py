@@ -77,7 +77,9 @@ def lint(path):
 
 
 def main():
-    paths = sys.argv[1:] or subprocess.run(["git", "ls-files"], capture_output=True, text=True, check=True).stdout.split()
+    # Directory arguments expand to their tracked files, so `lint core` checks the whole crate tree
+    git = ["git", "ls-files", "--", *sys.argv[1:]]
+    paths = subprocess.run(git, capture_output=True, text=True, check=True).stdout.split()
     findings = []
     for p in paths:
         if SKIP.search(p) or not kind(p):
