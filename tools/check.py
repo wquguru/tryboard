@@ -1,26 +1,29 @@
 #!/usr/bin/env python3
-"""关卡验收：用原生内核跑固件，按 firmware/levels.json 里这一关的条件逐条判定，并算出运行指纹。
+"""Level check: run firmware on the native core, judge each criterion of the level in firmware/levels.json, compute the run fingerprint.
 
-网页（web/src/checks.ts）用同一份 levels.json、同样的判定规则和指纹算法；同一个固件在两边应得到同一个指纹。
+The web (web/src/checks.ts) uses the same levels.json, the same rules and the same fingerprint; one firmware gets one fingerprint on both.
 
-用法：
-  tools/check.py <flash.bin> --level 04      验收你的固件（检查点 07 用 --level 07-spin / 07-lens；小黄、透镜的检查点用 spin-1、lens-2 这样的 id）
-  tools/check.py --ref --level 04            验收参考固件（firmware/build/<ref>/flash.bin）
-  tools/check.py --ref --all                 所有检查点的参考固件
+Usage:
+  tools/check.py <flash.bin> --level 04      check your firmware (checkpoint 07 uses --level 07-spin / 07-lens; product checkpoints use ids like spin-1, lens-2)
+  tools/check.py --ref --level 04            check the reference firmware (firmware/build/<ref>/flash.bin)
+  tools/check.py --ref --all                 reference firmware of every checkpoint
   tools/check.py <flash.bin> --level-json cp.json
-                                             按网页「导出检查点」下载的 JSON 验收（选板生成的检查点；manual 条目只列不判）
+                                             check against the JSON from the web's "Export checkpoints" (board-generated checkpoints; manual items listed, not judged)
   tools/check.py <flash.bin> --level 06 --inputs log.txt
-                                             用网页导出的输入日志（实验台「导出输入」，或 InputLog JSON）
-                                             代替检查点自带的输入脚本，与 `tryboard run --inputs` 同样逐周期重放
+                                             replace the checkpoint's own input script with an input log exported by the web
+                                             (bench "Export inputs", or InputLog JSON), replayed cycle by cycle like `tryboard run --inputs`
   tools/check.py --ref --level 05 --servo 4 --power usb --elec-report
-                                             接一个 SG90 到 GPIO4、只用 USB 供电（ext = 外接 5 V），打印各节点最低电压 /
-                                             峰值电流 / 欠压复位次数（电气不进指纹）
-退出码：全部通过 0，否则 1。
+                                             attach an SG90 to GPIO4 on USB power only (ext = external 5 V), print per-node minimum voltage /
+                                             peak current / brownout resets (electrical data is not part of the fingerprint)
+Exit code: 0 if everything passes, else 1.
 """
 import json, math, os, re, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLI = os.path.join(ROOT, 'core/target/release/tryboard')
+
+# Transition: the USB host state names come from esp32s3 usb/host.rs (core agent); old names map to the English ones
+USB_STATES = {'未连接': 'detached', '复位中': 'resetting', '枚举中': 'enumerating', '已配置': 'configured', '枚举失败': 'enumeration failed'}  # lint: allow-cjk
 
 
 def fnv1a(data: bytes) -> int:
@@ -31,88 +34,89 @@ def fnv1a(data: bytes) -> int:
 
 
 def fingerprint(stdout: str, report: str) -> str:
-    """指纹 = 串口输出 + 规范化观察记录 的 FNV-1a，显示成 xxxx·xxxx"""
+    """Fingerprint = FNV-1a of serial output + canonical report, shown as xxxx·xxxx"""
     h = '%08x' % fnv1a((stdout + '\n#report\n' + report).encode('utf-8'))
     return h[:4] + '·' + h[4:]
 
 
 def canonical_report(err: str) -> str:
-    """从命令行 stderr 里取出与 wasm tb_report 同格式的部分，按 GPIO → WS2812 → OLED → LCD → USB → I2C 应答 → PWM 排好"""
+    """Pick the CLI stderr lines that match wasm tb_report, ordered GPIO -> WS2812 -> OLED -> LCD -> USB -> I2C acks -> PWM"""
     lines = err.splitlines()
-    gpio = [l for l in lines if re.match(r'\[tryboard\] GPIO\d+ 翻转 \d+ 次$', l)]
+    gpio = [l for l in lines if re.match(r'\[tryboard\] GPIO\d+ toggled \d+ times$', l)]
     ws = []
     for i, l in enumerate(lines):
-        if re.match(r'\[tryboard\] WS2812 GPIO\d+ 共 \d+ 帧$', l):
+        if re.match(r'\[tryboard\] WS2812 GPIO\d+ \d+ frames$', l):
             ws.append(l)
             for k in lines[i + 1:]:
                 if not k.startswith('    '):
                     break
                 ws.append(k)
-    oled = [re.sub(r'（.*$', '', l) for l in lines if l.startswith('[tryboard] OLED 点亮像素')]
-    lcd = [re.sub(r'（.*$', '', l) for l in lines if l.startswith('[tryboard] LCD GC9A01 非黑像素')]
-    lcd += [l for l in lines if l.startswith('[tryboard] LCD 颜色 #')]
-    # USB 虚拟主机（关卡带 --usb-log 时才有）：状态 + 键盘打出的字，与 wasm tb_usb_report 同一段文字
-    usb = [l for l in lines if l.startswith('[tryboard] USB 主机：') or l.startswith('[tryboard] USB 键盘输入: ')]
-    # 每个地址的应答次数（关卡带 --i2c-log 时才有，U-17），与 wasm tb_i2c_report 同一段文字
-    ack = [l for l in lines if re.match(r'\[tryboard\] I2C 0x[0-9a-f]{2} 应答 \d+ 次$', l)]
-    pwm = [l for l in lines if re.match(r'\[tryboard\] PWM GPIO\d+(:| 变化)', l)]
+    oled = [re.sub(r' \(.*$', '', l) for l in lines if l.startswith('[tryboard] OLED lit pixels')]
+    lcd = [re.sub(r' \(.*$', '', l) for l in lines if l.startswith('[tryboard] LCD GC9A01 non-black pixels')]
+    # Transition: both spellings of the LCD color line (emitter gc9a01.rs is owned by the core agent)
+    lcd += [l for l in lines if l.startswith('[tryboard] LCD 颜色 #') or l.startswith('[tryboard] LCD color #')]  # lint: allow-cjk
+    # USB virtual host (only with --usb-log): state + typed text, same text as wasm tb_usb_report; old and new spellings
+    usb = [l for l in lines if re.match(r'\[tryboard\] USB (主机：|host: |键盘输入: |keyboard typed: )', l)]  # lint: allow-cjk
+    # Acks per address (only with --i2c-log, U-17), same text as wasm tb_i2c_report; old and new spellings
+    ack = [l for l in lines if re.match(r'\[tryboard\] I2C 0x[0-9a-f]{2} (应答 \d+ 次|acked \d+ times)$', l)]  # lint: allow-cjk
+    pwm = [l for l in lines if re.match(r'\[tryboard\] PWM GPIO\d+(:| steps)', l)]
     return ''.join(l + '\n' for l in gpio + ws + oled + lcd + usb + ack + pwm)
 
 
 def jsnum(v) -> str:
-    """数字转字符串与 JS 的 String(x) 一致：整数不带小数点"""
+    """Number to string like JS String(x): integers without a decimal point"""
     return str(int(v)) if float(v).is_integer() else repr(float(v))
 
 
 def evaluate(t: dict, out: str, report: str):
-    """返回 [(通过?, 说明)]；规则与 web/src/checks.ts 一致"""
+    """Return [(passed?, text)]; rules and text identical to web/src/checks.ts"""
     res = []
     for e in t.get('expect', []):
-        res.append((e in out, f'串口出现 “{e}”'))
+        res.append((e in out, f'serial shows "{e}"'))
     if re.search(r'Guru Meditation|abort\(\)|panic', out):
-        res.append((False, '固件崩溃'))
+        res.append((False, 'firmware crashed'))
     if t.get('boots'):
-        # 非空行：去掉空格、制表、回车后还剩东西（与 checks.ts 同一判法）
+        # Non-empty line: something left after stripping spaces, tabs and CRs (same test as checks.ts)
         n = len([x for x in out.split('\n') if x.strip(' \t\r')])
         crashed = re.search(r'Guru Meditation|abort\(\)|panic', out) is not None
-        res.append((n >= 1 and not crashed, f"开机 {jsnum(t.get('seconds', 2))} s 内串口输出 {n} 行"))
+        res.append((n >= 1 and not crashed, f"boot: {n} serial lines within {jsnum(t.get('seconds', 2))} s"))
     for c in t.get('i2c_ack', []):
         a = '%02x' % c['addr']
-        m = re.search(rf'I2C 0x{a} 应答 (\d+) 次', report)
+        m = re.search(rf'I2C 0x{a} (?:应答|acked) (\d+) (?:次|times)', report)  # lint: allow-cjk
         n = int(m.group(1)) if m else 0
-        res.append((n >= c['min'], f"I2C 0x{a} 应答 {n} 次（要 ≥ {c['min']}）"))
+        res.append((n >= c['min'], f"I2C 0x{a} acked {n} times (need ≥ {c['min']})"))
     g = t.get('gpio_toggles')
     if g:
-        m = re.search(rf"GPIO{g['pin']} 翻转 (\d+) 次", report)
+        m = re.search(rf"GPIO{g['pin']} toggled (\d+) times", report)
         n = int(m.group(1)) if m else 0
         ok = n >= g['min'] and ('max' not in g or n <= g['max'])
-        want = f"{g['min']}" if g.get('max') == g['min'] else f"≥ {g['min']}" + (f" 且 ≤ {g['max']}" if 'max' in g else '')
-        res.append((ok, f"GPIO{g['pin']} 翻转 {n} 次（要 {want}）"))
+        want = f"{g['min']}" if g.get('max') == g['min'] else f"≥ {g['min']}" + (f" and ≤ {g['max']}" if 'max' in g else '')
+        res.append((ok, f"GPIO{g['pin']} toggled {n} times (need {want})"))
     pw = t.get('pwm')
     if pw:
-        m = re.search(rf"PWM GPIO{pw['pin']}: (\d+) 次变化，占空比 ([\d.]+)\.\.([\d.]+)，频率 ([\d.]+)Hz", report)
+        m = re.search(rf"PWM GPIO{pw['pin']}: (\d+) changes, duty ([\d.]+)\.\.([\d.]+), freq ([\d.]+)Hz", report)
         if not m or float(m.group(4)) == 0:
-            res.append((False, f"GPIO{pw['pin']} 没有 PWM 输出"))
+            res.append((False, f"GPIO{pw['pin']} has no PWM output"))
         else:
             lo, hi, f = float(m.group(2)), float(m.group(3)), float(m.group(4))
-            sm = re.search(rf"PWM GPIO{pw['pin']} 变化 (.*)", report)
+            sm = re.search(rf"PWM GPIO{pw['pin']} steps (.*)", report)
             ch = [(float(d), float(t)) for d, t in re.findall(r'([\d.]+)@([\d.]+)', sm.group(1))] if sm else []
             if 'from' in pw and ch:
-                # 只看稳定以后：from 时刻正在输出的值 + 之后的变化
+                # Settled part only: the value being output at `from` plus later changes
                 win = [d for d, t in ch if t > pw['from']]
                 before = [d for d, t in ch if t <= pw['from']]
                 win = before[-1:] + win
                 lo, hi = min(win), max(win)
             tol = pw.get('tol', 0.01)
             ok = abs(f - pw['freq']) <= pw['freq'] * 0.01 and abs(lo - pw['min']) <= tol and abs(hi - pw['max']) <= tol
-            # 数字按 JS 的写法（1.0 写成 1），与网页 / npm 包逐字一致
-            when = f"，{jsnum(pw['from'])} s 以后" if 'from' in pw else ''
-            # 先写脉宽（舵机看这个），没过时直接写出要多少
+            # Numbers formatted the JS way (1.0 -> 1) so text matches the web / npm package byte for byte
+            when = f", after {jsnum(pw['from'])} s" if 'from' in pw else ''
+            # Pulse width first (what a servo cares about); on failure state the target directly
             span = lambda a, b: a if a == b else f"{a}–{b}"
             ms = lambda d, hz: f"{d * 1000 / hz:.2f}"
             f_bad = abs(f - pw['freq']) > pw['freq'] * 0.01
-            want = '' if ok else f"；要 {span(ms(pw['min'], pw['freq']), ms(pw['max'], pw['freq']))} ms" + (f"、{jsnum(pw['freq'])} Hz" if f_bad else '')
-            res.append((ok, f"GPIO{pw['pin']} PWM {f:.0f} Hz{when}，脉宽 {span(ms(lo, f), ms(hi, f))} ms（占空比 {span(f'{lo:.3f}', f'{hi:.3f}')}）{want}"))
+            want = '' if ok else f"; need {span(ms(pw['min'], pw['freq']), ms(pw['max'], pw['freq']))} ms" + (f", {jsnum(pw['freq'])} Hz" if f_bad else '')
+            res.append((ok, f"GPIO{pw['pin']} PWM {f:.0f} Hz{when}, pulse {span(ms(lo, f), ms(hi, f))} ms (duty {span(f'{lo:.3f}', f'{hi:.3f}')}){want}"))
             if 'steps' in pw:
                 seq, i, miss = [d for d, _ in ch], 0, []
                 for want in pw['steps']:
@@ -120,37 +124,37 @@ def evaluate(t: dict, out: str, report: str):
                     while j < len(seq) and abs(seq[j] - want) > 0.002:
                         j += 1
                     if j == len(seq):
-                        miss.append(want)  # 没找到不移动游标，后面的台阶照样能对上
+                        miss.append(want)  # not found: keep the cursor so later steps can still match
                     else:
                         i = j + 1
                 ms = lambda d: f'{d * 1000 / pw["freq"]:.1f}'
-                res.append((not miss, f"脉宽依次出现 {' → '.join(ms(d) for d in pw['steps'])} ms" + (f"：缺 {'、'.join(ms(d) for d in miss)} ms" if miss else '')))
+                res.append((not miss, f"pulse widths in order {' → '.join(ms(d) for d in pw['steps'])} ms" + (f": missing {', '.join(ms(d) for d in miss)} ms" if miss else '')))
             for b in pw.get('beeps', []):
-                # 响了几声：时间窗里占空比从 0（或没有输出）变成 > 0 的次数（蜂鸣器节奏，"越近越急"）
+                # Beeps: times duty goes from 0 (or no output) to > 0 inside the window (buzzer rhythm, "faster when closer")
                 n, prev = 0, 0.0
                 for d, at in ch:
                     if d > 0 and prev == 0 and b['from'] <= at <= b['to']:
                         n += 1
                     prev = d
                 want = f"{b['min']}" if b['min'] == b['max'] else f"{b['min']}–{b['max']}"
-                res.append((b['min'] <= n <= b['max'], f"GPIO{pw['pin']} {jsnum(b['from'])}–{jsnum(b['to'])} s 响 {n} 声（要 {want}）"))
+                res.append((b['min'] <= n <= b['max'], f"GPIO{pw['pin']} {jsnum(b['from'])}–{jsnum(b['to'])} s beeped {n} times (need {want})"))
     w = t.get('ws2812')
     if w:
-        sec = re.search(rf"WS2812 GPIO{w['pin']} 共 (\d+) 帧\n((?:    .*\n?)*)", report)
+        sec = re.search(rf"WS2812 GPIO{w['pin']} (\d+) frames\n((?:    .*\n?)*)", report)
         nf = int(sec.group(1)) if sec else 0
         frames = [l.split()[1:] for l in sec.group(2).splitlines()] if sec else []
         ok = nf >= w.get('min_frames', 1)
         for i, want in enumerate(w.get('frames', [])):
             ok = ok and i < len(frames) and frames[i] == want
-        desc = f"WS2812 GPIO{w['pin']} {nf} 帧"
+        desc = f"WS2812 GPIO{w['pin']} {nf} frames"
         if 'dominant' in w:
             last = frames[-1][0] if frames and frames[-1] else '#000000'
             rgb = [int(last[1 + 2 * k:3 + 2 * k], 16) for k in range(3)]
             k = 'rgb'.index(w['dominant'])
             ok = ok and rgb[k] > 0 and rgb[k] == max(rgb) and rgb.count(rgb[k]) == 1
-            desc += f"，最后一帧 {last}（要{ {'r': '红', 'g': '绿', 'b': '蓝'}[w['dominant']] }色）"
+            desc += f", last frame {last} (need { {'r': 'red', 'g': 'green', 'b': 'blue'}[w['dominant']] })"
         if 'last' in w:
-            # 最后一帧逐颗看：灯数、亮了几颗、亮的颜色（每通道 ±tol）
+            # Last frame LED by LED: count, how many lit, lit color (±tol per channel)
             L = w['last']
             last = frames[-1] if frames else []
             want, tol, lit_want = int(L['rgb'][1:], 16), L.get('tol', 0), L.get('lit', L['count'])
@@ -158,40 +162,42 @@ def evaluate(t: dict, out: str, report: str):
             near = lambda c: max(abs(((int(c[1:], 16) >> s) & 255) - ((want >> s) & 255)) for s in (16, 8, 0)) <= tol
             good = len(last) == L['count'] and len(lit) == lit_want and all(near(c) for c in lit)
             ok = ok and good
-            desc += f"，最后一帧 {len(last)} 颗、亮 {len(lit)} 颗（要 {L['count']} 颗、亮 {lit_want} 颗 {L['rgb']} ±{tol}）"
+            desc += f", last frame {len(last)} LEDs, {len(lit)} lit (need {L['count']} LEDs, {lit_want} lit {L['rgb']} ±{tol})"
             if not good:
-                desc += f"：{' '.join(last) or '（没有帧）'}"
+                desc += f": {' '.join(last) or '(no frames)'}"
         res.append((ok, desc))
     for n in t.get('numeric', []):
         vals = [float(v) for v in re.findall(n['regex'], out)]
         worst = max((abs(v - n['value']) for v in vals), default=None)
         ok = worst is not None and worst <= n['tol']
-        res.append((ok, f"{n['name']} {len(vals)} 次读数，最大偏差 {'—' if worst is None else f'{worst:g}'}（容差 {n['tol']}）"))
+        res.append((ok, f"{n['name']} {len(vals)} readings, max deviation {'—' if worst is None else f'{worst:g}'} (tolerance {n['tol']})"))
     if 'oled_min_pixels' in t:
-        m = re.search(r'OLED 点亮像素 (\d+)', report)
+        m = re.search(r'OLED lit pixels (\d+)', report)
         n = int(m.group(1)) if m else 0
-        res.append((n >= t['oled_min_pixels'], f"OLED 点亮 {n} 像素（要 ≥ {t['oled_min_pixels']}）"))
+        res.append((n >= t['oled_min_pixels'], f"OLED lit {n} pixels (need ≥ {t['oled_min_pixels']})"))
     if 'lcd_min_pixels' in t:
-        m = re.search(r'LCD GC9A01 非黑像素 (\d+)', report)
+        m = re.search(r'LCD GC9A01 non-black pixels (\d+)', report)
         n = int(m.group(1)) if m else 0
-        res.append((n >= t['lcd_min_pixels'], f"圆屏点亮 {n} 像素（要 ≥ {t['lcd_min_pixels']}）"))
+        res.append((n >= t['lcd_min_pixels'], f"round LCD lit {n} pixels (need ≥ {t['lcd_min_pixels']})"))
     for c in t.get('serial_count', []):
         n = out.count(c['text'])
-        res.append((n >= c['min'], f"串口 “{c['text']}” 出现 {n} 次（要 ≥ {c['min']}）"))
+        res.append((n >= c['min'], f"serial \"{c['text']}\" appeared {n} times (need ≥ {c['min']})"))
     u = t.get('usb')
     if u:
-        m = re.search(r'USB 主机：(\S+)', report)
-        st = m.group(1) if m else '没有 USB 设备'
+        m = re.search(r'USB (?:主机：|host: )(.+)$', report, re.M)  # lint: allow-cjk
+        st = USB_STATES.get(m.group(1), m.group(1)) if m else 'no USB device'
         if 'state' in u:
-            res.append((st == u['state'], f"电脑看到的 USB 设备：{st}（要{u['state']}）"))
+            need = USB_STATES.get(u['state'], u['state'])
+            res.append((st == need, f"USB device seen by the PC: {st} (need {need})"))
         if 'typed' in u:
-            m = re.search(r'^\[tryboard\] USB 键盘输入: (".*")$', report, re.M)
+            m = re.search(r'^\[tryboard\] USB (?:键盘输入|keyboard typed): (".*")$', report, re.M)  # lint: allow-cjk
             got = json.loads(m.group(1)) if m else ''
             shown = lambda x: x.replace('\n', '↵')
-            res.append((got == u['typed'], f"电脑上打出 “{shown(got)}”（要 “{shown(u['typed'])}”）"))
+            res.append((got == u['typed'], f"typed on the PC \"{shown(got)}\" (need \"{shown(u['typed'])}\")"))
     if t.get('lcd_colors'):
-        seen = [(k, int(n), float(x), float(y)) for k, n, x, y in re.findall(r'LCD 颜色 #([0-9a-f]{6}) (\d+) 像素，重心 ([\d.]+),([\d.]+)', report)]
-        top = '、'.join(f'#{k} {n}' for k, n, _, _ in seen[:4]) or '（全黑）'
+        color_re = r'LCD (?:颜色|color) #([0-9a-f]{6}) (\d+) (?:像素，重心|px, centroid) ([\d.]+),([\d.]+)'  # lint: allow-cjk
+        seen = [(k, int(n), float(x), float(y)) for k, n, x, y in re.findall(color_re, report)]
+        top = ', '.join(f'#{k} {n}' for k, n, _, _ in seen[:4]) or '(all black)'
         for c in t['lcd_colors']:
             want = int(c['rgb'][1:], 16)
             tol = c.get('tol', 24)
@@ -199,24 +205,24 @@ def evaluate(t: dict, out: str, report: str):
             hit = [(n, x, y) for k, n, x, y in seen if near(k)]
             n = sum(h[0] for h in hit)
             ok = n >= c['min'] and ('max' not in c or n <= c['max'])
-            want_n = f"≥ {c['min']}" + (f" 且 ≤ {c['max']}" if 'max' in c else '')
-            desc = f"圆屏{c['name']}（{c['rgb']} ±{tol}）{n} 像素（要 {want_n}）"
+            want_n = f"≥ {c['min']}" + (f" and ≤ {c['max']}" if 'max' in c else '')
+            desc = f"round LCD {c['name']} ({c['rgb']} ±{tol}) {n} px (need {want_n})"
             if 'cx' in c:
                 cx = sum(a * b for a, b, _ in hit) / n if n else -1
                 ok = ok and c['cx'][0] <= cx <= c['cx'][1]
-                desc += f"，水平重心 {'—' if n == 0 else f'{cx:.1f}'}（要 {c['cx'][0]}–{c['cx'][1]}）"
+                desc += f", horizontal centroid {'—' if n == 0 else f'{cx:.1f}'} (need {c['cx'][0]}–{c['cx'][1]})"
             if 'cy' in c:
                 cy = sum(a * y for a, _, y in hit) / n if n else -1
                 ok = ok and c['cy'][0] <= cy <= c['cy'][1]
-                desc += f"，竖直重心 {'—' if n == 0 else f'{cy:.1f}'}（要 {c['cy'][0]}–{c['cy'][1]}）"
+                desc += f", vertical centroid {'—' if n == 0 else f'{cy:.1f}'} (need {c['cy'][0]}–{c['cy'][1]})"
             if not ok:
-                desc += f"；画面主色 {top}"
+                desc += f"; main colors {top}"
             res.append((ok, desc))
     return res
 
 
 def expand(levels):
-    """有多个成品可选的关（第 07 关）展开成 07-spin、07-lens 这样的子关，规则与 web/src/checks.ts 的 expandLevels 一致"""
+    """Levels with several products (level 07) expand into sub-levels like 07-spin, 07-lens; same as expandLevels in web/src/checks.ts"""
     out = []
     for l in levels:
         out.append(l)
@@ -226,15 +232,15 @@ def expand(levels):
 
 
 def inputs_file(path: str) -> str:
-    """--inputs 接受两种形式：CLI 脚本文本（原样用），或网页的 InputLog JSON（按 web/src/inputlog.ts 的 toScript 规则转成脚本）"""
+    """--inputs takes CLI script text (used as is) or the web's InputLog JSON (turned into a script like toScript in web/src/inputlog.ts)"""
     text = open(path, encoding='utf-8').read()
     if not text.lstrip().startswith('{'):
         return path
     log = json.loads(text)
     esc = lambda x: x.replace('\n', '\\n')
-    # 与 JS 的数字转字符串一致：整数不带小数点
+    # Same number formatting as JS: integers without a decimal point
     num = jsnum
-    lines = ['# 由 check.py 从 InputLog JSON 转出']
+    lines = ['# converted by check.py from InputLog JSON']
     for e in log['events']:
         k = e['kind']
         act = {
@@ -248,7 +254,7 @@ def inputs_file(path: str) -> str:
             'supply': lambda: f"power={e['mode']}",
         }.get(k)
         if act:
-            # 与网页相同：秒、向下取整到微秒
+            # Same as the web: seconds, floored to the microsecond
             lines.append(f"{math.floor(e['tMs'] * 1000) / 1e6:.6f}:{act()}")
     out = os.path.join(ROOT, 'Reviews', os.path.basename(path) + '.txt')
     os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -264,24 +270,25 @@ def run(fw: str, t: dict, inputs: str = '', extra=()):
         cmd += ['--script', t['script']]
     if t.get('pwm'):
         cmd += ['--pwm-log', str(t['pwm']['pin'])]
-    # 按字节读、不做换行转换：指纹要和网页逐字节一致（固件输出是 \r\n）
+    # Read raw bytes without newline translation: the fingerprint must match the web byte for byte (firmware prints \r\n)
     p = subprocess.run(cmd, capture_output=True)
     out, err = p.stdout.decode('utf-8', 'replace'), p.stderr.decode('utf-8', 'replace')
     report = canonical_report(err)
     res = evaluate(t, out, report)
-    # 模拟器自己没跑起来（缺 ROM、镜像坏了）不能算成固件的错
-    if p.returncode != 0 or '启动失败' in err:
+    # The simulator itself failing to start (missing ROM, broken image) is not the firmware's fault
+    if p.returncode != 0 or 'boot failed' in err:
         lines = [l for l in err.splitlines() if l.strip()]
-        tail = [l for l in lines if 'panicked' in l or '启动失败' in l][:1] or lines[-1:] or ['（无输出）']
-        res.insert(0, (False, f'模拟器没跑起来：{tail[0][:120]}'))
-    elec = [l for l in err.splitlines() if l.startswith('[tryboard] elec') or '欠压复位（' in l]
+        tail = [l for l in lines if 'panicked' in l or 'boot failed' in l][:1] or lines[-1:] or ['(no output)']
+        res.insert(0, (False, f'simulator did not start: {tail[0][:120]}'))
+    # Transition: electrical lines come from the elec crate (core agent); accept both prefixes
+    elec = [l for l in err.splitlines() if l.startswith(('[tryboard] 电气', '[tryboard] elec')) or 'brownout reset (' in l]  # lint: allow-cjk
     return res, fingerprint(out, report), elec
 
 
 def main():
     a = sys.argv[1:]
     ref = '--ref' in a
-    # --level-json：网页「导出检查点」下载的 Level JSON（数组或单个；选板生成的 custom-<n> 检查点，U-17）
+    # --level-json: Level JSON from the web's "Export checkpoints" (array or single; board-generated custom-<n> checkpoints, U-17)
     custom = None
     if '--level-json' in a:
         d = json.load(open(a[a.index('--level-json') + 1], encoding='utf-8'))
@@ -293,9 +300,9 @@ def main():
         lv = a[a.index('--level') + 1]
         pick = [l for l in levels if l['id'] == (lv.zfill(2) if lv.isdigit() else lv)]
         if not pick:
-            sys.exit(f'没有检查点 {lv}（或它没有命令行验收）')
+            sys.exit(f'no checkpoint {lv} (or it has no command-line check)')
     skip = {a.index(k) + 1 for k in ('--level', '--level-json', '--inputs', '--power', '--servo') if k in a}
-    # 供电（P1-02）：原样交给 tryboard run
+    # Power (P1-02): passed through to tryboard run as is
     extra = []
     for k in ('--power', '--servo'):
         if k in a:
@@ -311,28 +318,28 @@ def main():
     bad = 0
     for t in pick:
         if t.get('manual'):
-            print(f"检查点 {t['id']} {t['title']}：必须上真机，不判")
+            print(f"Checkpoint {t['id']} {t['title']}: needs real hardware, not judged")
             continue
         if ref and not t.get('ref'):
-            print(f"检查点 {t['id']} {t['title']}：没有参考固件")
+            print(f"Checkpoint {t['id']} {t['title']}: no reference firmware")
             bad += 1
             continue
         fw = os.path.join(ROOT, 'firmware/build', t['ref'], 'flash.bin') if ref else user_fw
         if not os.path.exists(fw):
-            print(f"检查点 {t['id']} {t['title']}：找不到 {fw}")
+            print(f"Checkpoint {t['id']} {t['title']}: {fw} not found")
             bad += 1
             continue
         res, fp, elec = run(fw, t, inputs, extra)
         ok = all(r[0] for r in res)
         bad += not ok
-        print(f"检查点 {t['id']} {t['title']}：{'通过' if ok else '未通过'}  指纹 {fp}")
+        print(f"Checkpoint {t['id']} {t['title']}: {'PASS' if ok else 'FAIL'}  fingerprint {fp}")
         for r, d in res:
             print(f"  {'✓' if r else '✗'} {d}")
         if show_elec:
             for l in elec:
                 print('  ' + l.replace('[tryboard] ', ''))
         if t.get('assembly'):
-            print('  · 装配检查（几何估算）只在网页上检查')
+            print('  · assembly check (geometric estimate) runs only on the web')
     sys.exit(1 if bad else 0)
 
 

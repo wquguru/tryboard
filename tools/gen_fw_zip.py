@@ -1,30 +1,30 @@
 #!/usr/bin/env python3
-"""把检查点参考固件的源码打成可直接 `idf.py build` 的包 web/public/fw/<id>/src.zip（U-22，实验台「下载源码」）。
+"""Pack checkpoint reference firmware sources into web/public/fw/<id>/src.zip, ready for `idf.py build` (U-22, lab "Download source").
 
-文件收集复用 gen_fw_src.idf_paths（与「代码」页签同一份清单），再补工程顶层 CMakeLists.txt 和
-main/idf_component.yml。zip 内保持 firmware/ 下的相对布局（<id>/…、common/…、跨工程 SRCS 指到的
-别的工程源文件），原有的相对 include 和 SRCS 不用改就能编译。组件（gc9a01、led_strip 等）由组件管理器
-按 idf_component.yml 下载，不随包分发；build/、sdkconfig、managed_components 不进包。
-日期戳固定，同样的源码打出同样的字节。
-用法：tools/gen_fw_zip.py <仓库根> [id...]（不给 id：levels.json 里全部 ref + 选板作品演示固件）
+Files come from gen_fw_src.idf_paths (same list as the "Code" tab), plus the project's top-level CMakeLists.txt and
+main/idf_component.yml. The zip keeps the layout under firmware/ (<id>/..., common/..., other projects' sources that
+SRCS points to), so existing relative includes and SRCS compile unchanged. Components (gc9a01, led_strip, ...) are
+downloaded by the component manager from idf_component.yml, not shipped; build/, sdkconfig, managed_components are left out.
+Timestamps are fixed so the same sources produce the same bytes.
+Usage: tools/gen_fw_zip.py <repo root> [id...]  (no id: every ref in levels.json + the custom-build demo firmware)
 """
 import json
 import os
 import sys
 import zipfile
 
-sys.dont_write_bytecode = True  # 不在 tools/ 下留 __pycache__
+sys.dont_write_bytecode = True  # keep tools/ free of __pycache__
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gen_fw_src import idf_paths, rel  # noqa: E402
 
-# 选板作品的演示固件（web/src/app/custom.ts 里 plan.demo 的取值），不在 levels.json 里
+# Custom-build demo firmware (plan.demo values in web/src/app/custom.ts); not listed in levels.json
 DEMOS = ['c3-thermo']
 STAMP = (1980, 1, 1, 0, 0, 0)
 MAX_BYTES = 400_000
 
 
 def target_of(root, fid):
-    """与 tools/build_fw.sh 相同：取 sdkconfig.defaults 的 CONFIG_IDF_TARGET，缺省 esp32c3。"""
+    """Same as tools/build_fw.sh: CONFIG_IDF_TARGET from sdkconfig.defaults, default esp32c3."""
     p = os.path.join(root, 'firmware', fid, 'sdkconfig.defaults')
     if os.path.isfile(p):
         for line in open(p, encoding='utf-8'):
@@ -35,7 +35,7 @@ def target_of(root, fid):
 
 
 def checkpoints(root):
-    """ref → 用到它的检查点 id（检查点 07 的分支写成 07-spin，与 check 命令一致）。"""
+    """ref -> checkpoint ids using it (checkpoint 07's variants are written 07-spin, matching the check command)."""
     out = {}
     for lv in json.load(open(os.path.join(root, 'firmware/levels.json'), encoding='utf-8')):
         if lv.get('ref'):
@@ -50,9 +50,9 @@ def readme(fid, target, levels):
     lines = [
         f'# {fid}',
         '',
-        'TryBoard 试板的参考固件源码。环境：ESP-IDF v5.5.1。',
+        'TryBoard reference firmware source. Environment: ESP-IDF v5.5.1.',
         '',
-        '## 编译、烧录',
+        '## Build and flash',
         '',
         '```sh',
         f'cd {fid}',
@@ -60,19 +60,19 @@ def readme(fid, target, levels):
         'idf.py build flash monitor',
         '```',
         '',
-        f'目录布局与仓库 firmware/ 相同：工程在 `{fid}/`，共用的头文件在 `common/`，'
-        '与别的工程共用的源文件放在原来的相对路径上。CMakeLists.txt 里的相对路径不用改。',
-        '`main/idf_component.yml` 里列的组件第一次编译时由组件管理器联网下载（需要网络）。',
+        f'The layout matches the repo\'s firmware/ directory: the project is in `{fid}/`, shared headers in `common/`, '
+        'and source files shared with other projects keep their original relative paths, so CMakeLists.txt needs no changes.',
+        'Components listed in `main/idf_component.yml` are downloaded by the component manager on the first build (needs network).',
         '',
-        '## 在模拟器里验收',
+        '## Check it in the simulator',
         '',
     ]
     if levels:
         lines += ['```sh'] + [f'npx tryboard check build/{fid}.bin --level {lv}' for lv in levels] + ['```']
     else:
-        lines += ['这是选板作品的演示固件，没有固定的检查点；在实验台「导出检查点」后用：', '',
+        lines += ['This is the demo firmware of a custom build and has no fixed checkpoints; use "Export checkpoints" in the lab, then:', '',
                   '```sh', f'npx tryboard check build/{fid}.bin --level-json checkpoints.json', '```']
-    lines += ['', '`npx tryboard` 目前是本地包，尚未发布到 npm。', '']
+    lines += ['', '`npx tryboard` is a local package for now and is not published to npm yet.', '']
     return '\n'.join(lines)
 
 
@@ -87,7 +87,7 @@ def build_zip(root, fid, levels):
             paths.append(p)
     names = sorted({rel(root, p): p for p in paths}.items())
     for n, _ in names:
-        assert not n.startswith('../'), f'{fid}: {n} 不在 firmware/ 下'
+        assert not n.startswith('../'), f'{fid}: {n} is outside firmware/'
     d = os.path.join(root, 'web/public/fw', fid)
     os.makedirs(d, exist_ok=True)
     out = os.path.join(d, 'src.zip')
@@ -103,7 +103,7 @@ def build_zip(root, fid, levels):
     size = os.path.getsize(out)
     if size > MAX_BYTES:
         os.remove(out)
-        print('源码包太大，不发布:', fid, size)
+        print('source zip too large, not published:', fid, size)
         return None
     return size
 
@@ -116,11 +116,11 @@ def main():
     for fid in ids:
         size = build_zip(root, fid, cps.get(fid, []))
         if size is None:
-            print('没有源码包:', fid)
+            print('no source zip:', fid)
             continue
         print(f'  {fid}/src.zip {size} bytes')
         n += 1
-    print('源码包', n, '份')
+    print('source zips:', n)
 
 
 if __name__ == '__main__':

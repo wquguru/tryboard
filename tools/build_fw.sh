@@ -1,6 +1,6 @@
 #!/bin/bash
-# 构建验收 / 示例固件，产物合并成 firmware/build/<名字>/flash.bin（4MB 镜像中实际用到的部分）。
-# 用法：tools/build_fw.sh [名字...]（默认全部）
+# Build acceptance / example firmware, merged into firmware/build/<name>/flash.bin (the used part of the 4MB image).
+# Usage: tools/build_fw.sh [name...]  (default: all)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/tools/idf_env.sh"
@@ -12,7 +12,7 @@ for n in "${names[@]}"; do
   src="$ROOT/firmware/$n"
   out="$ROOT/firmware/build/$n"
   mkdir -p "$out"
-  # 目标芯片取自 sdkconfig.defaults 的 CONFIG_IDF_TARGET，缺省 esp32c3
+  # Target chip comes from CONFIG_IDF_TARGET in sdkconfig.defaults, default esp32c3
   target=$(sed -n 's/^CONFIG_IDF_TARGET="\(.*\)"/\1/p' "$src/sdkconfig.defaults" 2>/dev/null | head -1)
   target=${target:-esp32c3}
   echo "== $n ($target)"

@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""从乐鑫预编译 BLE 控制器库（libbtdm_app*.a）算出 VHCI 边界函数的掩码签名（C-01 路线 a′）。
+"""Compute masked signatures of the VHCI boundary functions from Espressif's prebuilt BLE controller libs (libbtdm_app*.a) (C-01 route a').
 
-用法：
-  tools/ble_sigs.py gen  <输出.rs> <库.a>...        生成 core/crates/soc/src/ble/sigs.rs
-  tools/ble_sigs.py check <app.elf> <库.a>...        对照 ELF 符号，检查每个签名在 .bin 里命中唯一且地址正确
+Usage:
+  tools/ble_sigs.py gen   <out.rs> <lib.a>...                 generate core/crates/soc/src/ble/sigs.rs
+  tools/ble_sigs.py check <flash.bin> <app.elf> <lib.a>...    against ELF symbols, check each signature hits exactly once in the .bin at the right address
+  tools/ble_sigs.py dump  <lib.a>...                          print per-function sizes
 
-签名 = 函数字节在"去掉重定位字段"后的样子。仓库里只存：每条指令的 掩码后取值、掩码、长度
-（重定位立即数位一律清零），不存库的原始二进制、不存反汇编。为对付链接器松弛（R_RISCV_RELAX：
-auipc+jalr → jal、lui+lw → gp 相对），按指令序列匹配，见 core/crates/soc/src/ble/sig.rs。
+A signature is the function's bytes with relocation fields removed. The repo stores only each instruction's masked value,
+mask and length (relocated immediate bits zeroed), never the library's raw bytes or disassembly. To survive linker relaxation
+(R_RISCV_RELAX: auipc+jalr -> jal, lui+lw -> gp-relative) matching works on instruction sequences, see core/crates/soc/src/ble/sig.rs.
 """
 import struct
 import sys
 
-# 要定位的函数（libbtdm 里的符号）。Xtensa（S3）另列。
+# Functions to locate (libbtdm symbols). Xtensa (S3) is listed separately.
 FUNCS_RV = [
     'btdm_osi_funcs_register',
     'btdm_controller_init',
@@ -23,12 +24,12 @@ FUNCS_RV = [
     'API_vhci_host_register_callback',
     'sdk_config_extend_set_pll_track',
 ]
-# 签名和同目标文件里别的 setter 一样，Rust 侧从 esp_bt_controller_enable 的调用点确认（见 sig.rs）
+# Same signature as other setters in its object file; Rust confirms it from the esp_bt_controller_enable call site (see sig.rs)
 AMBIGUOUS_OK = {'sdk_config_extend_set_pll_track'}
 
 
 def ar_members(path):
-    """GNU ar：返回 [(名字, 字节)]"""
+    """GNU ar: return [(name, bytes)]"""
     data = open(path, 'rb').read()
     assert data[:8] == b'!<arch>\n', path
     p = 8
@@ -84,7 +85,7 @@ class Elf:
         return self.b[s['off']:s['off'] + s['size']]
 
     def relocs_for(self, i):
-        """RELA 段里作用于第 i 段的重定位：[(偏移, 类型, 符号名)]"""
+        """Relocations in RELA sections that apply to section i: [(offset, type, symbol name)]"""
         out = []
         for s in self.sh:
             if s['type'] == 4 and s['info'] == i:
@@ -98,19 +99,19 @@ class Elf:
         return out
 
 
-# RISC-V 重定位类型
+# RISC-V relocation types
 R_BRANCH, R_JAL, R_CALL, R_CALL_PLT = 16, 17, 18, 19
 R_HI20, R_LO12_I, R_LO12_S = 26, 27, 28
 R_RVC_BRANCH, R_RVC_JUMP, R_RELAX = 44, 45, 51
 R_PCREL_HI20, R_PCREL_LO12_I, R_PCREL_LO12_S = 23, 24, 25
 R_ALIGN = 43
 
-# 指令种类（与 sig.rs 的 Kind 对应）
+# Instruction kinds (match Kind in sig.rs)
 K_EXACT, K_CALL, K_HI20, K_LO12 = 0, 1, 2, 3
 
 
 def insns(code):
-    """按 RVC 长度切指令：[(偏移, 长度, 字)]"""
+    """Split into instructions by RVC length: [(offset, length, word)]"""
     out = []
     p = 0
     while p < len(code):
@@ -133,7 +134,7 @@ def rv_signature(elf, secidx):
         if typ == R_RELAX:
             relax.add(off)
         elif typ == R_ALIGN:
-            raise ValueError('含 R_RISCV_ALIGN，无法签名')
+            raise ValueError('contains R_RISCV_ALIGN, cannot sign')
         else:
             rel[off] = typ
     units = []  # (kind, value, mask, len)
@@ -143,14 +144,14 @@ def rv_signature(elf, secidx):
         off, ln, w = ins[i]
         t = rel.get(off)
         if t in (R_CALL, R_CALL_PLT):
-            # auipc ra + jalr ra：可能被松弛成 jal ra（4 字节）
+            # auipc ra + jalr ra: may be relaxed into jal ra (4 bytes)
             assert ins[i + 1][1] == 4
             rd = (w >> 7) & 31
             units.append((K_CALL, rd, 0, 8))
             i += 2
             continue
         if t == R_HI20:
-            # lui rd：松弛时可能整条删掉（随后的 lo12 改成 gp 相对）
+            # lui rd: relaxation may delete it entirely (the following lo12 becomes gp-relative)
             units.append((K_HI20, w & 0xfff, 0xfff, 4))
             i += 1
             continue
@@ -159,13 +160,13 @@ def rv_signature(elf, secidx):
                 m = 0x000fffff
             else:
                 m = 0x01fff07f
-            # 松弛成 gp 相对时 rs1 变成 gp（x3），所以 rs1 也掩掉
+            # Relaxing to gp-relative turns rs1 into gp (x3), so mask rs1 too
             m &= ~(31 << 15)
             units.append((K_LO12, w & m, m, 4))
             i += 1
             continue
         if t in (R_BRANCH, R_RVC_BRANCH, R_JAL, R_RVC_JUMP, R_PCREL_HI20, R_PCREL_LO12_I, R_PCREL_LO12_S):
-            # 段内跳转的位移会随松弛改变：掩掉立即数，只留操作码与寄存器
+            # In-section jump offsets change with relaxation: mask the immediate, keep opcode and registers
             if ln == 4:
                 if t == R_BRANCH:
                     m = 0x01fff07f
@@ -183,7 +184,7 @@ def rv_signature(elf, secidx):
             i += 1
             continue
         if t is not None:
-            raise ValueError(f'未处理的重定位类型 {t} @ {off:#x}')
+            raise ValueError(f'unhandled relocation type {t} @ {off:#x}')
         m = 0xffffffff if ln == 4 else 0xffff
         units.append((K_EXACT, w & m, m, ln))
         i += 1
@@ -191,7 +192,7 @@ def rv_signature(elf, secidx):
 
 
 def find_funcs(libs, funcs):
-    """在库里找函数所在段（-ffunction-sections：.text.<名字> 或 .iram1.<n>）"""
+    """Find each function's section in the libs (-ffunction-sections: .text.<name> or .iram1.<n>)"""
     found = {}
     for lib in libs:
         for mname, body in ar_members(lib):
@@ -201,7 +202,7 @@ def find_funcs(libs, funcs):
             for s in e.syms:
                 if s['name'] in funcs and s['shndx'] not in (0, 0xfff1) and (s['info'] & 0xf) == 2:
                     if s['value'] != 0:
-                        raise ValueError(f"{s['name']} 不在段首")
+                        raise ValueError(f"{s['name']} is not at section start")
                     found.setdefault(s['name'], (lib, mname, e, s['shndx']))
     return found
 
@@ -210,7 +211,7 @@ MAX_UNITS = 96
 
 
 def app_segments(flash):
-    """flash 镜像 → app 的代码段 [(加载地址, 字节)]"""
+    """flash image -> app code segments [(load address, bytes)]"""
     off = 0
     if len(flash) > 0x8020 and flash[0x8000:0x8002] == b'\xaa\x50':
         for o in range(0x8000, 0x9000, 32):
@@ -264,7 +265,7 @@ def match_at(b, p, units):
             if is4 and (w & m) == v:
                 p += 4
             else:
-                # 视为松弛删掉了这条 lui：紧接着的低 12 位访问必须改成 gp 相对
+                # Treat the lui as relaxed away: the next lo12 access must then be gp-relative
                 want_gp = True
         elif k == K_LO12:
             if not is4 or (w & m) != v:
@@ -286,7 +287,7 @@ def match_all(segs, units):
 
 
 def lib_version(path):
-    # third_party/btlib/<版本>/<芯片>/<库>
+    # third_party/btlib/<version>/<chip>/<lib>
     parts = path.replace('\\', '/').split('/')
     return parts[-3] if len(parts) >= 3 else path
 
@@ -295,9 +296,9 @@ MIN_UNITS = 24
 
 
 def variants(libs):
-    """每个函数在各版本库里的签名去重，截到"在全部库的函数开头里唯一"的最短前缀（至少 MIN_UNITS 条）"""
-    corpus = []  # 所有库里每个函数段的签名（-ffunction-sections，一段一个函数）
-    full = {}  # 函数名 → {签名: [版本]}
+    """Dedupe each function's signatures across lib versions, cut to the shortest prefix unique among all function starts (>= MIN_UNITS)"""
+    corpus = []  # signature of every function section in all libs (-ffunction-sections: one function per section)
+    full = {}  # function name -> {signature: [versions]}
     for lib in libs:
         ver = lib_version(lib)
         for mname, body in ar_members(lib):
@@ -329,9 +330,9 @@ def variants(libs):
             n = min(n, len(u))
             if any(nm != fn and cu[:n] == u[:n] for nm, cu in corpus):
                 if fn not in AMBIGUOUS_OK:
-                    raise SystemExit(f'{fn} 的签名与其它函数相同，无法区分')
+                    raise SystemExit(f'{fn} has the same signature as other functions, cannot tell apart')
                 dup = sorted({nm for nm, cu in corpus if nm != fn and cu[:n] == u[:n]})
-                print(f'{fn}: 与 {dup} 同形，靠调用点定位', file=sys.stderr)
+                print(f'{fn}: same shape as {dup}, located via call site', file=sys.stderr)
             pre = u[:n]
             for r in res:
                 if r[0] == pre:
@@ -372,7 +373,7 @@ def main():
             lines.append('];')
             lines.append('')
         open(out, 'w').write('\n'.join(lines))
-        print(f'写出 {out}：{len(FUNCS_RV)} 个函数，共 {total} 条')
+        print(f'wrote {out}: {len(FUNCS_RV)} functions, {total} units')
     elif cmd == 'check':
         binp, elfp, libs = sys.argv[2], sys.argv[3], sys.argv[4:]
         found = find_funcs(libs, FUNCS_RV)

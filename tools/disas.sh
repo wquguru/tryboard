@@ -1,6 +1,6 @@
 #!/bin/bash
-# 反汇编某地址附近：tools/disas.sh <elf|rom> <地址> [前后字节数=48]
-# elf 写 rom 表示 C3 ROM
+# Disassemble around an address: tools/disas.sh <elf|rom> <address> [bytes each side=48]
+# Passing rom as the elf means the C3 ROM
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OD=$(ls -d ~/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin | tail -1)/riscv32-esp-elf-objdump

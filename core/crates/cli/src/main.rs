@@ -1,4 +1,4 @@
-//! 原生命令行：跑固件、跑 riscv-tests、出未实现寄存器报告。
+//! Native command line: run firmware, run riscv-tests, report unimplemented registers.
 
 use std::io::Write;
 use std::time::Instant;
@@ -9,30 +9,30 @@ use tryboard_rv32::{elf::Elf, Bus, BusFault, Cpu, Exit};
 
 fn usage() -> ! {
     eprintln!(
-        "用法:
-  tryboard run <flash.bin>（芯片按镜像头自动识别：ESP32-C3 / ESP32-S3）[--rom <rom.elf>] [--seconds <模拟秒数>] [--expect <文本>] [--uart-in <文本>]
-               [--script \"0.5:gpio9=0; 0.6:gpio9=z; 1.0:uart=ping\\n; 1.2:env=35,45,101325\"] [--inputs <网页导出的输入日志.txt>] [--trace N] [--unimpl N] [--gpio-log] [--pwm-log PIN] [--ws2812-log]
-               [--trace-io <事件.txt>] [--trace-pins all|4,8,…]（逻辑分析仪事件：GPIO / PWM / WS2812 / I2C 事务，按周期盖戳）
-               [--trace-tasks <时间线.json>]（FreeRTOS 任务切换，每核一条轨道，Perfetto 能打开；stderr 末尾打印每任务 CPU 占用）
-               [--i2c ssd1306@0x3c,bme280@0x76] [--env 温度,湿度,气压Pa] [--oled] [--i2c-log]（每个地址应答几次）
-               （I2C 器件还有 mpu6050@0x68、qmi8658@0x6b、cst816s@0x15、ft6236@0x38）[--touch-int <GPIO>]（触摸 INT 脚：按着拉低）
-               脚本动作 imu=俯仰,横滚,航向[,三者的变化率 °/s]、touch=x,y（屏幕像素，按下 / 移动）、release（抬起）
-               [--spi gc9a01]（S3：SCLK=12 MOSI=11 CS=10 DC=14 RST=13 背光=15；C3：SCLK=6 MOSI=7 CS=10 DC=5 RST=4 背光=3）[--lcd-ppm <最后一帧.ppm>]
-               [--power usb|ext]（默认 usb；ext = 舵机由外接 5 V 2 A 供电）[--servo <GPIO>]（接一个 SG90，电流进供电网络）
-               [--elec-report]（各节点最低电压、峰值电流、欠压复位次数）；脚本动作 power=usb|ext
-               [--i2c-wire <cm>]（I2C 排线总长：总线电容 → 上升时间，超过规范就读错 / 不应答，估算）
-               [--antenna-loss <dB>]（天线被金属件 / 电池挡住：虚拟 AP 的 RSSI 降低，太低连不上，估算）；脚本动作 i2cwire=cm、antenna=dB
-               [--ap-phone [ssid[,口令]]]（虚拟手机连固件自建的热点，默认 TryBoard-Setup 开放；探测到需要登录就打开登录页）
-               [--ap-post 'ssid=MyHome&pass=12345678']（登录页有表单就自动提交）；启用手机后多一个虚拟路由器 MyHome / 12345678（192.168.5.0/24）
-               脚本动作 phone=join,ssid[,口令]、phone=open、phone=get,URL、phone=post,URL,表单、phone=leave
-               脚本动作 realnet=1|0（网页「真实网络」开关）、netreply=编号,状态,毫秒,内容类型|原因,base64 正文（网页记下的真实回复；命令行不联网）
-               [--encoder A,B[,SW]]（EC11 旋转编码器；脚本动作 enc=+N / enc=-N 转 N 格、encsw=1|0 按下 / 松开）
-               [--sonar TRIG,ECHO] [--dist 厘米]（HC-SR04；脚本动作 dist=厘米，负数 = 前方没有东西）
-               [--i2s max98357a,inmp441]（S3：喇叭 BCLK=16 LRC=17 DIN=18，麦克风 SCK=39 WS=40 SD=41；C3：喇叭 0/1/2，麦克风 0/1/3）
-               [--mic <声音.wav>]（INMP441 循环听这段 WAV，自动接上麦克风）[--audio-wav <喇叭输出.wav>]
-               [--ble-phone]（虚拟手机：扫描、连第一台设备、读全部可读特征、订阅全部通知，空中事件打在 stderr）
-               脚本动作 ble=scan|scan off|connect [地址|名字]|disconnect|read <UUID|0x句柄>|write <UUID|0x句柄> <十六进制>|sub <UUID>|unsub <UUID>|auto
-  tryboard elec-net <网表.cir> [--at 秒,秒...]（直流 / 瞬态求解，与 ngspice 对照用，见 tools/elec）
+        "Usage:
+  tryboard run <flash.bin> (chip detected from the image header: ESP32-C3 / ESP32-S3) [--rom <rom.elf>] [--seconds <simulated s>] [--expect <text>] [--uart-in <text>]
+               [--script \"0.5:gpio9=0; 0.6:gpio9=z; 1.0:uart=ping\\n; 1.2:env=35,45,101325\"] [--inputs <input log exported from the web.txt>] [--trace N] [--unimpl N] [--gpio-log] [--pwm-log PIN] [--ws2812-log]
+               [--trace-io <events.txt>] [--trace-pins all|4,8,…] (logic analyzer events: GPIO / PWM / WS2812 / I2C transactions, cycle-stamped)
+               [--trace-tasks <timeline.json>] (FreeRTOS task switches, one track per core, opens in Perfetto; per-task CPU share printed at the end of stderr)
+               [--i2c ssd1306@0x3c,bme280@0x76] [--env temp,humidity,pressure Pa] [--oled] [--i2c-log] (acks per address)
+               (more I2C devices: mpu6050@0x68, qmi8658@0x6b, cst816s@0x15, ft6236@0x38) [--touch-int <GPIO>] (touch INT pin: low while pressed)
+               script actions imu=pitch,roll,yaw[,their rates in °/s], touch=x,y (screen pixels, press / move), release (lift)
+               [--spi gc9a01] (S3: SCLK=12 MOSI=11 CS=10 DC=14 RST=13 BL=15; C3: SCLK=6 MOSI=7 CS=10 DC=5 RST=4 BL=3) [--lcd-ppm <last frame.ppm>]
+               [--power usb|ext] (default usb; ext = servo powered from an external 5 V 2 A supply) [--servo <GPIO>] (attach an SG90; its current loads the power net)
+               [--elec-report] (per-node minimum voltage, peak current, brownout resets); script action power=usb|ext
+               [--i2c-wire <cm>] (total I2C wire length: bus capacitance -> rise time; beyond spec reads go wrong / NACK, estimate)
+               [--antenna-loss <dB>] (antenna blocked by metal / battery: virtual AP RSSI drops, too low fails to connect, estimate); script actions i2cwire=cm, antenna=dB
+               [--ap-phone [ssid[,pass]]] (virtual phone joins the firmware SoftAP, default open TryBoard-Setup; opens the login page when a captive portal is detected)
+               [--ap-post 'ssid=MyHome&pass=12345678'] (auto-submits the login form); with the phone a virtual router MyHome / 12345678 (192.168.5.0/24) appears
+               script actions phone=join,ssid[,pass], phone=open, phone=get,URL, phone=post,URL,form, phone=leave
+               script actions realnet=1|0 (the web \"real network\" toggle), netreply=id,status,ms,content type|reason,base64 body (real replies recorded on the web; the CLI never goes online)
+               [--encoder A,B[,SW]] (EC11 rotary encoder; script actions enc=+N / enc=-N turn N detents, encsw=1|0 press / release)
+               [--sonar TRIG,ECHO] [--dist cm] (HC-SR04; script action dist=cm, negative = nothing in front)
+               [--i2s max98357a,inmp441] (S3: speaker BCLK=16 LRC=17 DIN=18, mic SCK=39 WS=40 SD=41; C3: speaker 0/1/2, mic 0/1/3)
+               [--mic <sound.wav>] (INMP441 loops this WAV, attaches the mic automatically) [--audio-wav <speaker output.wav>]
+               [--ble-phone] (virtual phone: scan, connect to the first device, read all readable characteristics, subscribe to all notifications; air events on stderr)
+               script actions ble=scan|scan off|connect [address|name]|disconnect|read <UUID|0xhandle>|write <UUID|0xhandle> <hex>|sub <UUID>|unsub <UUID>|auto
+  tryboard elec-net <netlist.cir> [--at s,s...] (DC / transient solve, for comparison with ngspice, see tools/elec)
   tryboard riscv-test <test.elf>..."
     );
     std::process::exit(2)
@@ -58,7 +58,7 @@ fn main() {
     }
 }
 
-/// 符号表：ROM + app.elf（与 flash.bin 同目录时自动加载），按地址找最近的符号。
+/// Symbols from ROM + app.elf (auto-loaded when next to flash.bin); lookup returns the nearest symbol below an address.
 struct Syms(Vec<(u32, String)>);
 impl Syms {
     fn load(paths: &[String]) -> Syms {
@@ -77,7 +77,7 @@ impl Syms {
         v.sort();
         Syms(v)
     }
-    /// 地址所在函数名（找不到返回 None）
+    /// Name of the function containing the address (None if unknown)
     fn func(&self, a: u32) -> Option<String> {
         match self.0.partition_point(|(x, _)| *x <= a) {
             0 => None,
@@ -95,7 +95,7 @@ impl Syms {
     }
 }
 
-/// --trace-tasks：写 Perfetto 文件，stderr 打印每核每任务的 CPU 占用（整段运行）
+/// --trace-tasks: write the Perfetto file and print per-core, per-task CPU share over the whole run
 fn task_report(
     m: &mut Machine,
     ev: &[tryboard_machine::TaskEvent],
@@ -109,11 +109,11 @@ fn task_report(
     let dropped = m.tasks_dropped();
     let tasks = m.tasks_list().to_vec();
     let sl = report::slices(ev, end);
-    // 有符号（ROM / app.elf）就把任务恢复处的 PC 翻成函数名
+    // With symbols (ROM / app.elf) the PC a task resumes at becomes a function name
     let func = |a: u32| syms.func(a);
     let json = report::chrome_json(&tasks, &sl, chip.name(), cores, CPU_HZ, &func);
     if let Err(e) = std::fs::write(path, json) {
-        eprintln!("[tryboard] 写任务时间线 {path} 失败：{e}");
+        eprintln!("[tryboard] failed to write task timeline {path}: {e}");
     }
     let switches = ev
         .iter()
@@ -121,14 +121,14 @@ fn task_report(
         .count();
     let waits = sl.iter().filter(|s| s.end == state::WAIT).count();
     eprintln!(
-        "[tryboard] 任务时间线：{switches} 次切换，{} 个任务，{waits} 次等队列 / 信号量（丢弃 {dropped}）→ {path}",
+        "[tryboard] task timeline: {switches} switches, {} tasks, {waits} queue / semaphore waits (dropped {dropped}) -> {path}",
         tasks.len()
     );
-    // 每核的总时长从第一次切换算起（之前是启动代码，不属于任何任务）
+    // Each core's span starts at its first switch: earlier cycles are startup code owned by no task
     for c in 0..cores as u8 {
         let first = sl.iter().filter(|s| s.core == c).map(|s| s.t0).min();
         let Some(first) = first else {
-            eprintln!("[tryboard] 任务 核{c} 没有看到任务切换");
+            eprintln!("[tryboard] task core{c} saw no task switch");
             continue;
         };
         let span = (end - first).max(1) as f64;
@@ -138,7 +138,7 @@ fn task_report(
             }
             let ti = &tasks[t as usize];
             eprintln!(
-                "[tryboard] 任务 核{c} {} {:.1}%（优先级 {}）",
+                "[tryboard] task core{c} {} {:.1}% (priority {})",
                 ti.name,
                 n as f64 * 100.0 / span,
                 ti.prio
@@ -153,8 +153,8 @@ fn opt(args: &[String], name: &str) -> Option<String> {
         .and_then(|i| args.get(i + 1).cloned())
 }
 
-/// 定时输入脚本：`时间（模拟秒）:动作`，用 `;` 或换行分隔，`#` 开头的是注释。
-/// 动作：gpioN=0|1|z、mvN=毫伏、env=温度,湿度,气压Pa、uart=文本、usbcdc=文本（\\n 为换行）
+/// Timed input script: `time (simulated s):action`, separated by `;` or newlines, `#` starts a comment.
+/// Actions: gpioN=0|1|z, mvN=millivolts, env=temp,humidity,pressure Pa, uart=text, usbcdc=text (\\n = newline)
 fn parse_script(s: &str) -> Vec<(f64, String)> {
     s.split([';', '\n'])
         .filter_map(|e| {
@@ -170,23 +170,23 @@ fn parse_script(s: &str) -> Vec<(f64, String)> {
 
 fn run(args: &[String]) {
     let Some(path) = args.first() else { usage() };
-    let flash = std::fs::read(path).unwrap_or_else(|e| panic!("读固件 {path}: {e}"));
+    let flash = std::fs::read(path).unwrap_or_else(|e| panic!("read firmware {path}: {e}"));
     let chip = Chip::from_image(&flash).unwrap_or(Chip::Esp32c3);
     let rom_path = opt(args, "--rom").unwrap_or_else(|| default_rom(chip));
     let seconds: f64 = opt(args, "--seconds")
         .and_then(|s| s.parse().ok())
         .unwrap_or(5.0);
     let expect = opt(args, "--expect");
-    let rom = std::fs::read(&rom_path).unwrap_or_else(|e| panic!("读 ROM {rom_path}: {e}"));
+    let rom = std::fs::read(&rom_path).unwrap_or_else(|e| panic!("read ROM {rom_path}: {e}"));
     let (mut m, app) = match Machine::boot(&rom, flash) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("启动失败: {e}");
+            eprintln!("boot failed: {e}");
             std::process::exit(1)
         }
     };
     eprintln!(
-        "[tryboard] {} app @0x{:x} 入口 0x{:08x}，{} 段",
+        "[tryboard] {} app @0x{:x} entry 0x{:08x}, {} segments",
         chip.name(),
         app.offset,
         app.entry,
@@ -195,41 +195,41 @@ fn run(args: &[String]) {
     if let Some(s) = opt(args, "--uart-in") {
         m.uart_push(s.replace("\\n", "\n").as_bytes());
     }
-    // 外接 I2C 器件：--i2c ssd1306@0x3c,bme280@0x76
+    // External I2C devices: --i2c ssd1306@0x3c,bme280@0x76
     if let Some(spec) = opt(args, "--i2c") {
         for item in spec.split(',') {
             let (kind, addr) = item.split_once('@').unwrap_or((item, "0"));
             let addr = u8::from_str_radix(addr.trim_start_matches("0x"), 16).unwrap_or(0);
             if !m.i2c_attach(kind, addr) {
-                eprintln!("不认识的 I2C 器件 {kind}");
+                eprintln!("unknown I2C device {kind}");
                 std::process::exit(2)
             }
         }
     }
-    // 触摸 INT 脚：--touch-int GPIO
+    // Touch INT pin: --touch-int GPIO
     if let Some(pin) = opt(args, "--touch-int").and_then(|s| s.parse().ok()) {
         m.touch_int_attach(pin);
     }
-    // SPI 外接器件：--spi gc9a01
+    // External SPI devices: --spi gc9a01
     if let Some(spec) = opt(args, "--spi") {
         for kind in spec.split(',') {
             if !m.lcd_attach(kind) {
-                eprintln!("不支持的 SPI 器件 {kind}（目前只有 gc9a01）");
+                eprintln!("unsupported SPI device {kind} (only gc9a01 so far)");
                 std::process::exit(2)
             }
         }
     }
-    // I2S 音频器件：--i2s max98357a,inmp441；--mic 声音.wav
+    // I2S audio devices: --i2s max98357a,inmp441; --mic sound.wav
     if let Some(spec) = opt(args, "--i2s") {
         for kind in spec.split(',') {
             if !m.i2s_attach(kind) {
-                eprintln!("不支持的 I2S 器件 {kind}（目前有 max98357a、inmp441）");
+                eprintln!("unsupported I2S device {kind} (available: max98357a, inmp441)");
                 std::process::exit(2)
             }
         }
     }
     if let Some(path) = opt(args, "--mic") {
-        let b = std::fs::read(&path).unwrap_or_else(|e| panic!("读 {path}: {e}"));
+        let b = std::fs::read(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
         match tryboard_esp32c3::devices::audio::parse_wav(&b) {
             Ok((rate, x)) => m.mic_wav(rate as f64, x),
             Err(e) => {
@@ -238,7 +238,7 @@ fn run(args: &[String]) {
             }
         }
     }
-    // 环境：--env 温度,湿度,气压(Pa)
+    // Environment: --env temp,humidity,pressure(Pa)
     if let Some(e) = opt(args, "--env") {
         let v: Vec<f64> = e.split(',').filter_map(|x| x.parse().ok()).collect();
         if let [t, h, p] = v.as_slice() {
@@ -249,12 +249,12 @@ fn run(args: &[String]) {
             });
         }
     }
-    // 供电：--power usb|ext、--servo GPIO（舵机电流从哪路电取，见 tryboard-elec）
+    // Power: --power usb|ext, --servo GPIO (which rail feeds the servo current, see tryboard-elec)
     if let Some(p) = opt(args, "--power") {
         match PowerMode::parse(&p) {
             Some(mode) => m.set_power(mode),
             None => {
-                eprintln!("--power 只认 usb / ext");
+                eprintln!("--power accepts only usb / ext");
                 std::process::exit(2)
             }
         }
@@ -263,7 +263,7 @@ fn run(args: &[String]) {
     if let Some(pin) = servo {
         m.servo_attach(pin);
     }
-    // 线束（P2-11，估算）：I2C 排线长度、天线遮挡
+    // Harness (P2-11, estimate): I2C wire length, antenna blockage
     if let Some(cm) = opt(args, "--i2c-wire").and_then(|s| s.parse::<f64>().ok()) {
         m.set_i2c_wire(Some(cm));
     }
@@ -293,25 +293,25 @@ fn run(args: &[String]) {
             .collect::<Result<Vec<_>, _>>()
             .ok()
     };
-    // 旋转编码器：--encoder A,B[,SW]
+    // Rotary encoder: --encoder A,B[,SW]
     let encoder = opt(args, "--encoder");
     if let Some(spec) = &encoder {
         match pins_of(spec).as_deref() {
             Some([a, b]) => m.encoder_attach(*a, *b, None),
             Some([a, b, sw]) => m.encoder_attach(*a, *b, Some(*sw)),
             _ => {
-                eprintln!("--encoder 要 A,B 或 A,B,SW（GPIO 号）");
+                eprintln!("--encoder needs A,B or A,B,SW (GPIO numbers)");
                 std::process::exit(2)
             }
         }
     }
-    // HC-SR04：--sonar TRIG,ECHO，--dist 初始距离（cm）
+    // HC-SR04: --sonar TRIG,ECHO, --dist initial distance (cm)
     let sonar = opt(args, "--sonar");
     if let Some(spec) = &sonar {
         match pins_of(spec).as_deref() {
             Some([t, e]) => m.sonar_attach(*t, *e),
             _ => {
-                eprintln!("--sonar 要 TRIG,ECHO（GPIO 号）");
+                eprintln!("--sonar needs TRIG,ECHO (GPIO numbers)");
                 std::process::exit(2)
             }
         }
@@ -326,21 +326,21 @@ fn run(args: &[String]) {
     let mut done = 0u64;
     let stdout = std::io::stdout();
     let mut resets = 0;
-    // 定时输入：--script 与 --inputs 文件（网页导出的输入日志）合在一起，按时间先后施加
+    // Timed inputs: --script and the --inputs file (input log exported by the web) merged, applied in time order
     let mut script = opt(args, "--script")
         .map(|s| parse_script(&s))
         .unwrap_or_default();
     let inputs = opt(args, "--inputs");
     if let Some(p) = &inputs {
-        let text = std::fs::read_to_string(p).unwrap_or_else(|e| panic!("读输入日志 {p}: {e}"));
+        let text = std::fs::read_to_string(p).unwrap_or_else(|e| panic!("read input log {p}: {e}"));
         script.extend(parse_script(&text));
     }
-    // 稳定排序：同一时刻的多条输入保持写下的先后（网页同一时间片里先按下后松开，重放也要先按后松）
+    // Stable sort: inputs at the same instant keep their written order (press before release, as on the web)
     script.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
     let mut si = 0;
     let pwm_pin: Option<usize> = opt(args, "--pwm-log").and_then(|s| s.parse().ok());
     let mut pwm_trace: Vec<(f64, f32, f32)> = Vec::new();
-    // --watch A 或 A-B（十六进制）：记录这段 MMIO 的访问
+    // --watch A or A-B (hex): record accesses to this MMIO range
     let hex = |s: &str| u32::from_str_radix(s.trim().trim_start_matches("0x"), 16).ok();
     let watch = opt(args, "--watch").and_then(|s| match s.split_once('-') {
         Some((a, b)) => Some((hex(a)?, hex(b)?)),
@@ -349,9 +349,9 @@ fn run(args: &[String]) {
     if let Hw::C3(c) = &mut m.hw {
         c.bus.watch = watch;
     }
-    // 逻辑分析仪事件：每个时间片取走一次写进文件（格式与网页 iotrace.ts 的 eventLine 逐字相同）
+    // Logic analyzer events: drained once per slice into the file (format identical to web iotrace.ts eventLine)
     let trace_io = opt(args, "--trace-io").map(|p| {
-        let f = std::fs::File::create(&p).unwrap_or_else(|e| panic!("写 {p}: {e}"));
+        let f = std::fs::File::create(&p).unwrap_or_else(|e| panic!("write {p}: {e}"));
         std::io::BufWriter::new(f)
     });
     let mut trace_io = trace_io;
@@ -368,12 +368,12 @@ fn run(args: &[String]) {
         m.io_watch(mask);
         writeln!(
             w,
-            "# tryboard trace-io v1 · {} · 观察 GPIO 掩码 0x{mask:x}",
+            "# tryboard trace-io v1 · {} · watched GPIO mask 0x{mask:x}",
             chip.name()
         )
         .ok();
     }
-    // 任务时间线：每个时间片取走一次，结束时写成 Chrome Trace Event JSON
+    // Task timeline: drained once per slice, written as Chrome Trace Event JSON at the end
     let trace_tasks = opt(args, "--trace-tasks");
     let mut task_ev: Vec<tryboard_machine::TaskEvent> = Vec::new();
     if trace_tasks.is_some() {
@@ -389,16 +389,16 @@ fn run(args: &[String]) {
         .into_owned();
     let syms = Syms::load(&[rom_path.clone(), app_elf]);
     let has_audio = m.audio().is_some();
-    // BLE：固件里认出了 VHCI 边界才有虚拟控制器；--ble-phone = 第 0 个周期的输入 ble=auto
+    // BLE: the virtual controller exists only if the VHCI boundary was found; --ble-phone = input ble=auto at cycle 0
     if let Some(e) = m.ble_error() {
         eprintln!(
-            "[tryboard] BLE：固件用了蓝牙控制器，但没认出 VHCI 边界（{e}）；需要再给 app.elf"
+            "[tryboard] BLE: firmware uses the Bluetooth controller but the VHCI boundary was not found ({e}); app.elf is needed"
         );
     }
     let ble_phone = args.iter().any(|a| a == "--ble-phone");
     if ble_phone {
         if let Err(e) = m.ble_phone("auto") {
-            eprintln!("[tryboard] --ble-phone：{e}");
+            eprintln!("[tryboard] --ble-phone: {e}");
         }
     }
     let mut ble_seq = 0u64;
@@ -419,12 +419,12 @@ fn run(args: &[String]) {
                 };
                 m.gpio_drive(pin, level);
             } else if let Some((pin, mv)) = act.strip_prefix("mv").and_then(|r| r.split_once('=')) {
-                // mvN=电压：引脚 N 上的模拟电压（毫伏）
+                // mvN=voltage: analog voltage on pin N (millivolts)
                 if let (Ok(p), Ok(v)) = (pin.parse::<usize>(), mv.parse::<f32>()) {
                     m.analog_set(p, v);
                 }
             } else if let Some(e) = act.strip_prefix("env=") {
-                // env=温度,湿度,气压(Pa)：网页上拖环境滑块
+                // env=temp,humidity,pressure(Pa): the web's environment sliders
                 let v: Vec<f64> = e.split(',').filter_map(|x| x.trim().parse().ok()).collect();
                 if let [t, h, p] = v.as_slice() {
                     m.env_set(SensorEnv {
@@ -434,10 +434,10 @@ fn run(args: &[String]) {
                     });
                 }
             } else if let Some(v) = act.strip_prefix("imu=") {
-                // imu=pitch,roll,yaw[,速率]：网页上拖倾斜滑块 / 转动成品
+                // imu=pitch,roll,yaw[,rate]: the web's tilt sliders / rotating the product
                 match parse_imu(v) {
                     Some(p) => m.imu_set(p),
-                    None => eprintln!("[tryboard] 看不懂的 imu 动作: {act}"),
+                    None => eprintln!("[tryboard] unparsable imu action: {act}"),
                 }
             } else if let Some(v) = act.strip_prefix("touch=") {
                 if let Some((x, y)) = parse_touch(v) {
@@ -446,12 +446,12 @@ fn run(args: &[String]) {
             } else if act == "release" {
                 m.touch(0, 0, false);
             } else if let Some(p) = act.strip_prefix("power=") {
-                // 网页快捷卡片的 USB ↔ 外接 5 V
+                // The web quick card's USB <-> external 5 V toggle
                 if let Some(mode) = PowerMode::parse(p.trim()) {
                     m.set_power(mode);
                 }
             } else if let Some(cm) = act.strip_prefix("i2cwire=") {
-                // 网页上拉长 / 缩短 I2C 排线（负数 = 理想总线）
+                // Lengthening / shortening the I2C wire on the web (negative = ideal bus)
                 if let Ok(cm) = cm.trim().parse::<f64>() {
                     m.set_i2c_wire(if cm < 0.0 { None } else { Some(cm) });
                 }
@@ -460,21 +460,21 @@ fn run(args: &[String]) {
                     m.set_antenna_loss(db);
                 }
             } else if let Some(n) = act.strip_prefix("enc=") {
-                // 网页上拖 / 滚编码器旋钮：转 N 格（+ 顺时针）
+                // Dragging / scrolling the encoder knob on the web: N detents (+ = clockwise)
                 if let Ok(n) = n.trim().trim_start_matches('+').parse::<i32>() {
                     m.encoder_turn(n);
                 }
             } else if let Some(v) = act.strip_prefix("encsw=") {
                 m.encoder_press(v.trim() == "1");
             } else if let Some(v) = act.strip_prefix("dist=") {
-                // 网页上拖障碍物 / 改距离
+                // Dragging the obstacle / changing distance on the web
                 if let Ok(d) = v.trim().parse::<f64>() {
                     m.sonar_distance(d);
                 }
             } else if let Some(c) = act.strip_prefix("ble=") {
-                // 虚拟手机操作（网页"虚拟手机"面板）
+                // Virtual phone action (the web's virtual phone panel)
                 if let Err(e) = m.ble_phone(c.trim()) {
-                    eprintln!("[tryboard] {now_s:.3}s 手机操作失败：{e}");
+                    eprintln!("[tryboard] {now_s:.3}s phone action failed: {e}");
                 }
             } else if let Some(c) = act.strip_prefix("phone=") {
                 // 网页虚拟手机上的一步（C-02）
@@ -492,7 +492,7 @@ fn run(args: &[String]) {
             } else if let Some(t) = act.strip_prefix("uart=") {
                 m.uart_push(t.replace("\\n", "\n").as_bytes());
             } else if let Some(t) = act.strip_prefix("usbcdc=") {
-                // 虚拟电脑往 USB 虚拟串口里写
+                // The virtual PC writes into the USB virtual serial port
                 if let Some(u) = m.usb_mut() {
                     u.host
                         .cdc_tx
@@ -500,14 +500,14 @@ fn run(args: &[String]) {
                 }
             }
             if act.starts_with("netreply=") && act.len() > 80 {
-                // 回复正文的 base64 可能有几十 KB，只打开头
+                // The base64 reply body can be tens of KB; print only the start
                 let cut = (0..=80)
                     .rev()
                     .find(|&i| act.is_char_boundary(i))
                     .unwrap_or(0);
-                eprintln!("[tryboard] {now_s:.3}s 输入: {}…", &act[..cut]);
+                eprintln!("[tryboard] {now_s:.3}s input: {}…", &act[..cut]);
             } else {
-                eprintln!("[tryboard] {now_s:.3}s 输入: {act}");
+                eprintln!("[tryboard] {now_s:.3}s input: {act}");
             }
         }
         if let Some(p) = pwm_pin {
@@ -520,10 +520,8 @@ fn run(args: &[String]) {
                 }
             }
         }
-        // 有 --inputs 时始终 1ms 一片：与网页实时运行（worker.ts）的时间片完全相同，S3 双核的交替点才一致，重放逐周期复现
-        // 接了舵机也 1ms 一片：供电网络按每片的芯片活动 / PWM 推进，片长与网页相同结果才相同
-        // --trace-io 也是 1ms 一片：网页 worker 就这样切，事件序列才能与网页逐条对拍（--trace-tasks 同理）
-        // 接了音频器件也 1ms 一片：功放电流按每片放出的声音算，与网页相同
+        // 1 ms slices whenever results depend on slice length, matching web worker.ts: --inputs (S3 core interleave),
+        // servo / audio (power net steps per slice), --trace-io / --trace-tasks (event-by-event parity with the web)
         let slice = if si >= script.len()
             && pwm_pin.is_none()
             && inputs.is_none()
@@ -587,18 +585,18 @@ fn run(args: &[String]) {
             out.extend_from_slice(&c);
         }
         if let Stop::Reset(r) = stop {
-            // 软件复位：重新上电（flash / NVS 保留），最多 50 次，防止崩溃重启死循环跑满
+            // Software reset: power up again (flash / NVS kept), at most 50 times so a crash loop cannot spin forever
             resets += 1;
             if r == BROWNOUT_RESET {
-                eprintln!("[tryboard] {now_s:.3}s 欠压复位（3V3 低于门限，原因 15），第 {resets} 次重新上电");
+                eprintln!("[tryboard] {now_s:.3}s brownout reset (3V3 below threshold, reason 15), power-up #{resets}");
             } else {
-                eprintln!("[tryboard] 软件复位（原因 {r}），第 {resets} 次重新上电");
+                eprintln!("[tryboard] software reset (reason {r}), power-up #{resets}");
             }
             if resets > 50 {
                 break;
             }
             if let Err(e) = m.reboot(r) {
-                eprintln!("[tryboard] 重新上电失败：{e}");
+                eprintln!("[tryboard] power-up failed: {e}");
                 break;
             }
             stop = Stop::Budget;
@@ -616,7 +614,7 @@ fn run(args: &[String]) {
     if let Some(mut w) = trace_io.take() {
         w.flush().ok();
         eprintln!(
-            "[tryboard] 逻辑分析仪事件 {io_count} 条（缓冲溢出丢弃 {}）",
+            "[tryboard] logic analyzer events {io_count} (dropped on buffer overflow {})",
             m.io_dropped()
         );
     }
@@ -627,35 +625,40 @@ fn run(args: &[String]) {
     let wall = t0.elapsed().as_secs_f64();
     let sim = m.cycles() as f64 / CPU_HZ as f64;
     eprintln!(
-        "\n[tryboard] 停止: {stop:?}  pc=0x{:08x}  模拟 {sim:.3}s / 实际 {wall:.3}s（{:.1} MIPS）",
+        "\n[tryboard] stop: {stop:?}  pc=0x{:08x}  simulated {sim:.3}s / wall {wall:.3}s ({:.1} MIPS)",
         m.pc(),
         m.instret() as f64 / wall / 1e6
     );
     eprintln!("[tryboard] {}", m.debug_state(&|a| syms.name(a)));
     if trace > 0 {
-        eprintln!("[tryboard] 最近的跳转目标：");
+        eprintln!("[tryboard] recent jump targets:");
         for pc in &ring {
             eprintln!("    {}", syms.name(*pc));
         }
     }
     match &stop {
-        Stop::Fault(s) => eprintln!("[tryboard] 异常：{s}"),
-        Stop::Hle(s) => eprintln!("[tryboard] 未实现的 HLE: {s}"),
-        Stop::Reset(r) => eprintln!("[tryboard] 软件复位（原因 {r}）后无法重新上电"),
+        Stop::Fault(s) => eprintln!("[tryboard] exception: {s}"),
+        Stop::Hle(s) => eprintln!("[tryboard] unimplemented HLE: {s}"),
+        Stop::Reset(r) => {
+            eprintln!("[tryboard] could not power up after software reset (reason {r})")
+        }
         Stop::Budget => {}
     }
     let un = m.unimpl();
-    eprintln!("[tryboard] 未建模寄存器 {} 个，访问最多的：", un.len());
-    // --unimpl N：列出前 N 个（默认 12）
+    eprintln!(
+        "[tryboard] unmodeled registers: {}, most accessed:",
+        un.len()
+    );
+    // --unimpl N: list the top N (default 12)
     let top = opt(args, "--unimpl")
         .and_then(|s| s.parse().ok())
         .unwrap_or(12);
     for (a, n) in un.iter().take(top) {
-        eprintln!("    0x{:08x}  {:>8} 次", a, n);
+        eprintln!("    0x{:08x}  {:>8} times", a, n);
     }
     if let Hw::C3(c) = &mut m.hw {
         if !c.bus.watch_hits.is_empty() {
-            // 顺序日志写文件，终端只给按（地址, 读写, PC）汇总
+            // The ordered log goes to a file; the terminal only gets a summary by (address, R/W, PC)
             if let Some(path) = opt(args, "--watch-log") {
                 let mut f = String::new();
                 for (pc, a, v, w) in &c.bus.watch_hits {
@@ -674,18 +677,21 @@ fn run(args: &[String]) {
                 e.0 += 1;
                 e.1 = *v;
             }
-            eprintln!("[tryboard] 监视区间访问 {} 次：", c.bus.watch_hits.len());
+            eprintln!(
+                "[tryboard] watched range accesses: {}",
+                c.bus.watch_hits.len()
+            );
             for ((a, w, pc), (n, v)) in by {
                 eprintln!(
-                    "    0x{a:08x} {} {:>6} 次 最后 0x{v:08x}  {}",
-                    if w { "写" } else { "读" },
+                    "    0x{a:08x} {} {:>6} times last 0x{v:08x}  {}",
+                    if w { "W" } else { "R" },
                     n,
                     syms.name(pc)
                 );
             }
         }
         if let Some(spec) = opt(args, "--dump") {
-            // --dump 地址:长度（十六进制地址，十进制长度）
+            // --dump addr:len (hex address, decimal length)
             if let Some((a, n)) = spec.split_once(':') {
                 if let (Some(a), Ok(n)) = (hex(a), n.parse::<u32>()) {
                     for row in (0..n).step_by(16) {
@@ -700,13 +706,13 @@ fn run(args: &[String]) {
         if args.iter().any(|a| a == "--dump-intc") {
             let ic = &c.bus.intc;
             eprintln!(
-                "[tryboard] 中断线 使能=0x{:08x} 边沿=0x{:08x} 阈值={} 当前线={}",
+                "[tryboard] interrupt lines enable=0x{:08x} edge=0x{:08x} threshold={} current line={}",
                 ic.enable, ic.edge, ic.thresh, c.cpu.irq_line
             );
             for (src, line) in ic.map.iter().enumerate() {
                 if *line != 0 {
                     eprintln!(
-                        "    源 {src:>2} → 线 {line:>2}（优先级 {}）",
+                        "    source {src:>2} -> line {line:>2} (priority {})",
                         ic.pri[*line as usize]
                     );
                 }
@@ -716,7 +722,7 @@ fn run(args: &[String]) {
     if args.iter().any(|a| a == "--wifi-log") {
         let w = m.wifi();
         eprintln!(
-            "[tryboard] Wi-Fi 空中日志：发送 {} 帧，接收 {} 帧，丢弃 {} 帧",
+            "[tryboard] Wi-Fi air log: sent {} frames, received {} frames, dropped {} frames",
             w.tx_frames, w.rx_frames, w.rx_dropped
         );
         for l in &w.log {
@@ -743,13 +749,13 @@ fn run(args: &[String]) {
             }
         }
         eprintln!(
-            "[tryboard] PWM GPIO{p}: {} 次变化，占空比 {:.3}..{:.3}，频率 {:.1}Hz",
+            "[tryboard] PWM GPIO{p}: {} changes, duty {:.3}..{:.3}, freq {:.1}Hz",
             pwm_trace.len(),
             mn,
             mx,
             freq
         );
-        // 变化记录：占空比@时刻（三位小数相同的相邻记录合并），关卡验收据此判断"依次出现的台阶"和"稳定后的值"
+        // Steps as duty@time (neighbours equal to 3 decimals merged); level checks read sequences and settled values from it
         let mut steps: Vec<String> = Vec::new();
         let mut last = String::new();
         for (t, d, _) in &pwm_trace {
@@ -759,7 +765,7 @@ fn run(args: &[String]) {
                 last = k;
             }
         }
-        eprintln!("[tryboard] PWM GPIO{p} 变化 {}", steps.join(" "));
+        eprintln!("[tryboard] PWM GPIO{p} steps {}", steps.join(" "));
     }
     if args.iter().any(|a| a == "--gpio-log") {
         let log = m.gpio_log();
@@ -773,7 +779,7 @@ fn run(args: &[String]) {
                 prev = *lv;
             }
             if n > 0 {
-                eprintln!("[tryboard] GPIO{pin} 翻转 {n} 次");
+                eprintln!("[tryboard] GPIO{pin} toggled {n} times");
             }
         }
     }
@@ -781,7 +787,7 @@ fn run(args: &[String]) {
         let mut pins: Vec<_> = m.ws2812().iter().collect();
         pins.sort_by_key(|(p, _)| **p);
         for (pin, d) in pins {
-            eprintln!("[tryboard] WS2812 GPIO{pin} 共 {} 帧", d.frames);
+            eprintln!("[tryboard] WS2812 GPIO{pin} {} frames", d.frames);
             for (t, rgb) in &d.history {
                 let cols: Vec<String> = rgb
                     .iter()
@@ -799,7 +805,7 @@ fn run(args: &[String]) {
                 .map(|(o, n)| format!("0x{o:04x}×{n}"))
                 .collect();
             eprintln!(
-                "[tryboard] BLE：按\"只回成功\"处理的 HCI 命令 {}",
+                "[tryboard] BLE: HCI commands answered with plain success {}",
                 l.join(" ")
             );
         }
@@ -810,7 +816,7 @@ fn run(args: &[String]) {
                 eprint!("{}", tryboard_machine::usb_report_lines(&m));
                 print_usb(u)
             }
-            None => eprintln!("[tryboard] 这颗芯片没有原生 USB OTG"),
+            None => eprintln!("[tryboard] this chip has no native USB OTG"),
         }
     }
     if args.iter().any(|a| a == "--elec-report") {
@@ -819,18 +825,18 @@ fn run(args: &[String]) {
     if let Some(p) = m.encoder_position() {
         let c = m
             .pcnt_count(0)
-            .map(|c| format!("，PCNT 单元 0 计数 {c}"))
+            .map(|c| format!(", PCNT unit 0 count {c}"))
             .unwrap_or_default();
-        eprintln!("[tryboard] 编码器 转了 {p} 格（顺时针为正）{c}");
+        eprintln!("[tryboard] encoder turned {p} detents (clockwise positive){c}");
     }
     if let Some((pings, echoes, us)) = m.sonar_stats() {
-        eprintln!("[tryboard] 超声波 触发 {pings} 次，回波 {echoes} 次，最近一次 Echo {us:.1} µs");
+        eprintln!("[tryboard] ultrasonic triggers {pings}, echoes {echoes}, last Echo {us:.1} µs");
     }
     let (tr, nack) = m.i2c_stats();
     if tr > 0 {
-        eprintln!("[tryboard] I2C 事务 {tr} 次，NACK {nack} 次");
+        eprintln!("[tryboard] I2C transactions {tr}, NACK {nack}");
     }
-    // 生成检查点的 i2c_ack 判据要看；不带这个开关不打印，老关卡的指纹不变
+    // Generated checkpoints' i2c_ack criterion reads this; off by default so older levels' fingerprints stay put
     if args.iter().any(|a| a == "--i2c-log") {
         eprint!("{}", tryboard_machine::i2c_ack_lines(&m));
     }
@@ -862,9 +868,9 @@ fn run(args: &[String]) {
     if let Some(o) = m.oled() {
         let n = o.lit_pixels();
         eprintln!(
-            "[tryboard] OLED 点亮像素 {n}（显示{}，电荷泵{}）",
-            if o.display_on { "开" } else { "关" },
-            if o.charge_pump { "开" } else { "关" }
+            "[tryboard] OLED lit pixels {n} (display {}, charge pump {})",
+            if o.display_on { "on" } else { "off" },
+            if o.charge_pump { "on" } else { "off" }
         );
         if show_oled {
             eprint!("{}", o.ascii());
@@ -872,40 +878,43 @@ fn run(args: &[String]) {
     }
     let (st, sb) = m.spi_stats();
     if st > 0 {
-        eprintln!("[tryboard] SPI2 传输 {st} 次，MOSI {sb} 字节");
+        eprintln!("[tryboard] SPI2 transfers {st}, MOSI {sb} bytes");
     }
     if let Some(d) = m.lcd() {
         let n = d.lit_pixels();
         eprintln!(
-            "[tryboard] LCD GC9A01 非黑像素 {n}（显示{}）",
-            if d.showing() { "开" } else { "关" }
+            "[tryboard] LCD GC9A01 non-black pixels {n} (display {})",
+            if d.showing() { "on" } else { "off" }
         );
         eprint!("{}", d.color_report());
         eprintln!(
-            "[tryboard] LCD GC9A01 命令 {} 条（厂商寄存器 {} 条），像素写入 {}，背光{}",
+            "[tryboard] LCD GC9A01 commands {} (vendor registers {}), pixels written {}, backlight {}",
             d.commands,
             d.vendor_cmds,
             d.pixels,
-            if d.backlight { "亮" } else { "灭" }
+            if d.backlight { "on" } else { "off" }
         );
         if let Some(path) = opt(args, "--lcd-ppm") {
             match std::fs::write(&path, d.ppm()) {
-                Ok(()) => eprintln!("[tryboard] LCD 画面已存为 {path}"),
-                Err(e) => eprintln!("[tryboard] 写 {path} 失败: {e}"),
+                Ok(()) => eprintln!("[tryboard] LCD frame saved as {path}"),
+                Err(e) => eprintln!("[tryboard] failed to write {path}: {e}"),
             }
         }
     }
     eprint!("{}", m.audio_report());
     if let Some((path, buf)) = audio_wav {
         match std::fs::write(&path, wav16(audio_rate.round() as u32, &buf)) {
-            Ok(()) => eprintln!("[tryboard] 喇叭输出已存为 {path}（{} 个样本）", buf.len()),
-            Err(e) => eprintln!("[tryboard] 写 {path} 失败: {e}"),
+            Ok(()) => eprintln!(
+                "[tryboard] speaker output saved as {path} ({} samples)",
+                buf.len()
+            ),
+            Err(e) => eprintln!("[tryboard] failed to write {path}: {e}"),
         }
     }
     if let Some(e) = expect {
         let ok = String::from_utf8_lossy(&out).contains(e.as_str());
         eprintln!(
-            "[tryboard] 期望输出 {:?}: {}",
+            "[tryboard] expected output {:?}: {}",
             e,
             if ok { "PASS" } else { "FAIL" }
         );
@@ -913,10 +922,10 @@ fn run(args: &[String]) {
     }
 }
 
-/// 解一个 SPICE 子集网表，打印节点电压：`v(节点)@时刻 = 值`（.op 时刻写 0）
+/// Solve a SPICE-subset netlist and print node voltages as `v(node)@time = value` (.op uses time 0)
 fn elec_net(args: &[String]) {
     let Some(path) = args.first() else { usage() };
-    let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("读网表 {path}: {e}"));
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("read netlist {path}: {e}"));
     let nl = match tryboard_elec::spice::Netlist::parse(&text) {
         Ok(n) => n,
         Err(e) => {
@@ -938,7 +947,7 @@ fn elec_net(args: &[String]) {
     }
 }
 
-/// riscv-tests 的 "p" 环境：程序链接在 0x80000000，结果写到 tohost。
+/// riscv-tests "p" environment: linked at 0x80000000, result written to tohost.
 struct TestBus {
     ram: Vec<u8>,
     tohost: u32,
@@ -971,11 +980,11 @@ impl Bus for TestBus {
 fn riscv_tests(paths: &[String]) {
     let mut fail = 0;
     for p in paths {
-        let bytes = std::fs::read(p).expect("读测试");
-        let elf = Elf::parse(&bytes).expect("解析 ELF");
+        let bytes = std::fs::read(p).expect("read test");
+        let elf = Elf::parse(&bytes).expect("parse ELF");
         let mut bus = TestBus {
             ram: vec![0; 1 << 20],
-            tohost: elf.symbol("tohost").expect("没有 tohost"),
+            tohost: elf.symbol("tohost").expect("no tohost"),
             result: None,
         };
         for s in &elf.segments {
@@ -999,20 +1008,20 @@ fn riscv_tests(paths: &[String]) {
         match bus.result {
             Some(1) => println!("PASS {name}"),
             Some(v) => {
-                println!("FAIL {name}（第 {} 个用例）", v >> 1);
+                println!("FAIL {name} (case {})", v >> 1);
                 fail += 1;
             }
             None => {
-                println!("FAIL {name}（没有结果，pc=0x{:08x}）", cpu.pc);
+                println!("FAIL {name} (no result, pc=0x{:08x})", cpu.pc);
                 fail += 1;
             }
         }
     }
-    println!("{} 个测试，失败 {}", paths.len(), fail);
+    println!("{} tests, {} failed", paths.len(), fail);
     std::process::exit(if fail == 0 { 0 } else { 1 });
 }
 
-/// I2C 排线（P2-11）：上升时间与结论（网页 wasm tb_harness_report 同样的文字）
+/// I2C wire (P2-11): rise time and verdict (same text as the web's wasm tb_harness_report)
 fn harness_i2c_line(m: &mut Machine) -> Option<String> {
     tryboard_machine::harness_i2c_line(m)
 }
@@ -1021,7 +1030,7 @@ fn harness_wifi_line(m: &Machine) -> Option<String> {
     tryboard_machine::harness_wifi_line(m)
 }
 
-/// 虚拟主机看到的情况：枚举日志、设备信息、键盘输入、鼠标、USB 串口
+/// What the virtual host saw: enumeration log, device info, keyboard input, mouse, USB serial
 fn print_usb(u: &tryboard_esp32s3::usb::Usb) {
     let h = &u.host;
     for l in &h.log {
@@ -1030,25 +1039,25 @@ fn print_usb(u: &tryboard_esp32s3::usb::Usb) {
     let i = &h.info;
     if i.vid != 0 {
         eprintln!(
-            "[tryboard] USB 设备 {:04x}:{:04x} \"{}\" / \"{}\" 序列号 \"{}\"",
+            "[tryboard] USB device {:04x}:{:04x} \"{}\" / \"{}\" serial \"{}\"",
             i.vid, i.pid, i.manufacturer, i.product, i.serial
         );
     }
     if h.mouse.3 > 0 {
         eprintln!(
-            "[tryboard] USB 鼠标报告 {} 次，位置 ({}, {})，按键 {}",
+            "[tryboard] USB mouse reports {}, position ({}, {}), buttons {}",
             h.mouse.3, h.mouse.0, h.mouse.1, h.mouse.2
         );
     }
     if !h.cdc_rx.is_empty() {
         eprintln!(
-            "[tryboard] USB 串口收到: {:?}",
+            "[tryboard] USB serial received: {:?}",
             String::from_utf8_lossy(&h.cdc_rx)
         );
     }
 }
 
-/// 单声道 16 位 PCM WAV
+/// Mono 16-bit PCM WAV
 fn wav16(rate: u32, x: &[i16]) -> Vec<u8> {
     let n = (x.len() * 2) as u32;
     let mut b = Vec::with_capacity(44 + n as usize);
@@ -1076,7 +1085,7 @@ mod tests {
     fn script_old_and_file_syntax() {
         let v = parse_script("0.5:gpio9=0; 0.6:gpio9=z");
         assert_eq!(v, vec![(0.5, "gpio9=0".into()), (0.6, "gpio9=z".into())]);
-        let f = parse_script("# 试板输入日志\n0.000000:env=23.5,45,101325\n1.25:env=35,45,101325\n2:gpio0=0;2:gpio0=z\n");
+        let f = parse_script("# TryBoard input log\n0.000000:env=23.5,45,101325\n1.25:env=35,45,101325\n2:gpio0=0;2:gpio0=z\n");
         assert_eq!(f.len(), 4);
         assert_eq!(f[1], (1.25, "env=35,45,101325".into()));
         assert_eq!(f[3], (2.0, "gpio0=z".into()));

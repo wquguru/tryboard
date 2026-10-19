@@ -2,7 +2,7 @@
   "name": "tryboard",
   "version": "0.1.0",
   "private": true,
-  "description": "试板 TryBoard 本地命令行：用 wasm 内核跑 ESP32-C3 / ESP32-S3 固件并按关卡验收（本地包，尚未发布）",
+  "description": "TryBoard local command line: runs ESP32 / ESP32-C3 / ESP32-S3 firmware on the wasm core and checks it against levels (local package, not published)",
   "type": "module",
   "bin": { "tryboard": "dist/cli.mjs" },
   "files": ["dist/", "wasm/", "rom/", "levels.json", "LICENSE-esp-rom-elfs.txt", "NOTICE.txt", "README.md"],

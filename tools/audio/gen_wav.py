@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""生成验收 / 示例用的测试声音（我们自己合成，不用外部素材）。
-用法：tools/audio/gen_wav.py [输出目录]（默认 tools/audio/）
-- sine1k.wav：1000 Hz 正弦，幅度 0.5（RMS 0.3536），48 kHz 16 位单声道，1 秒（整数个周期，循环无缝）
-- sweep.wav：200 → 2000 Hz 指数扫频，幅度 0.5，48 kHz 16 位单声道，2 秒（首尾 10 ms 淡入淡出）
+"""Generate test sounds for acceptance / examples (synthesized by us, no external assets).
+Usage: tools/audio/gen_wav.py [output dir]  (default tools/audio/)
+- sine1k.wav: 1000 Hz sine, amplitude 0.5 (RMS 0.3536), 48 kHz 16-bit mono, 1 s (whole periods, loops seamlessly)
+- sweep.wav: 200 -> 2000 Hz exponential sweep, amplitude 0.5, 48 kHz 16-bit mono, 2 s (10 ms fade in / out)
 """
 import math, os, struct, sys, wave
 

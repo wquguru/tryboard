@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""把 P6 PPM（tryboard run --lcd-ppm 的输出）转成 PNG，只用标准库。用法：tools/ppm2png.py in.ppm out.png [放大倍数]"""
+"""Convert a P6 PPM (output of tryboard run --lcd-ppm) to PNG with the standard library only. Usage: tools/ppm2png.py in.ppm out.png [scale]"""
 import struct
 import sys
 import zlib
@@ -7,7 +7,7 @@ import zlib
 
 def read_ppm(path):
     data = open(path, 'rb').read()
-    # 头部：P6 宽 高 最大值，空白分隔
+    # Header: P6 width height maxval, whitespace-separated
     parts, pos = [], 0
     while len(parts) < 4:
         while data[pos:pos + 1].isspace():
@@ -17,7 +17,7 @@ def read_ppm(path):
             pos += 1
         parts.append(data[start:pos])
     pos += 1
-    assert parts[0] == b'P6', '只支持 P6'
+    assert parts[0] == b'P6', 'only P6 is supported'
     w, h = int(parts[1]), int(parts[2])
     return w, h, data[pos:pos + w * h * 3]
 

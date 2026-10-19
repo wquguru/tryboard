@@ -1,6 +1,6 @@
 #!/bin/bash
-# 用 arduino-cli（esp32 核心 3.x）编译 firmware/arduino/<名字>/ 下的草图，产物 firmware/build/arduino-<名字>/flash.bin（合并镜像）与 app.elf。
-# 用法：tools/build_arduino.sh [名字...]（默认全部）；板型默认 esp32c3，可在草图目录放 board.txt 覆盖（如 esp32:esp32:esp32s3）
+# Compile sketches in firmware/arduino/<name>/ with arduino-cli (esp32 core 3.x) into firmware/build/arduino-<name>/flash.bin (merged) + app.elf.
+# Usage: tools/build_arduino.sh [name...]  (default: all); board defaults to esp32c3, override via board.txt in the sketch dir (e.g. esp32:esp32:esp32s3)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 names=("$@")
