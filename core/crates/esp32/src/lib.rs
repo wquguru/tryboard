@@ -175,8 +175,8 @@ impl Default for SocBus {
             uart0: Uart::default(),
             uart1: Uart::default(),
             uart2: Uart::default(),
-            timg0: Esp32Timg::default(),
-            timg1: Esp32Timg::default(),
+            timg0: Esp32Timg::new(0),
+            timg1: Esp32Timg::new(1),
             dport: Dport::default(),
             lines: [0; 2],
             appcpu_boot: None,
@@ -550,6 +550,8 @@ impl SocBus {
         set(src::TG1_T0, self.timg1.irq(0));
         set(src::TG1_T1, self.timg1.irq(1));
         set(src::TG1_LACT, self.timg1.irq(2));
+        set(src::TG0_WDT, self.timg0.wdt_irq());
+        set(src::TG1_WDT, self.timg1.wdt_irq());
         set(src::WIFI_MAC, self.wifi().irq());
         for i in 0..4 {
             set(src::FROM_CPU0 + i, self.dport.from_cpu & (1 << i) != 0);
@@ -584,6 +586,13 @@ impl SocBus {
     pub fn update(&mut self) {
         let now = self.now;
         let n1 = self.timg0.update(now).min(self.timg1.update(now));
+        if let Some(r) = self.timg0.t[0]
+            .wdt_reset
+            .take()
+            .or_else(|| self.timg1.t[0].wdt_reset.take())
+        {
+            self.reset_request = Some(r);
+        }
         let n2 = self.ledc.update(now);
         let n3 = self.i2c0.update(now).min(self.i2c1.update(now));
         let n4 = self.pins_update(now);
@@ -788,6 +797,10 @@ fn run_core(
         }
         if bus.irq_dirty || bus.now >= bus.next_event {
             bus.update();
+            // A watchdog stage timeout can request a reset from a timer event, not only from an RTC_CNTL write
+            if let Some(r) = bus.reset_request.take() {
+                return Some(Stop::Reset(r));
+            }
             cpu.set_irq_lines(bus.lines[k]);
         }
         match cpu.run_batch(bus, until, 0x4000_0300, 0x4000_0400) {

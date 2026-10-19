@@ -16,7 +16,9 @@ pub mod src {
     pub const I2C_EXT0: u32 = 42;
     pub const I2C_EXT1: u32 = 43;
     pub const TG0_T0: u32 = 50;
+    pub const TG0_WDT: u32 = 52;
     pub const TG1_T0: u32 = 53;
+    pub const TG1_WDT: u32 = 55;
     pub const SYSTIMER_TARGET0: u32 = 57;
     pub const DMA_IN_CH0: u32 = 66;
     pub const DMA_OUT_CH0: u32 = 71;

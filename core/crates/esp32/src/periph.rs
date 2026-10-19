@@ -11,9 +11,11 @@ pub mod src {
     pub const WIFI_MAC: u32 = 0;
     pub const TG0_T0: u32 = 14;
     pub const TG0_T1: u32 = 15;
+    pub const TG0_WDT: u32 = 16;
     pub const TG0_LACT: u32 = 17;
     pub const TG1_T0: u32 = 18;
     pub const TG1_T1: u32 = 19;
+    pub const TG1_WDT: u32 = 20;
     pub const TG1_LACT: u32 = 21;
     pub const GPIO: u32 = 22;
     pub const FROM_CPU0: u32 = 24;
@@ -317,7 +319,6 @@ impl Gpio {
 
 /// ESP32 timer group: T0 (0x00..0x20), T1 (0x24..0x44), WDT + RTC cal (0x48..0x6c, as C3), LACT (0x70..0x94, esp_timer), interrupts (0x98..0xa4: bit 0 T0, 1 T1, 2 WDT, 3 LACT).
 /// All three counters share C3 T0's field layout (en 31, inc 30, autoreload 29, divider [28:13], alarm en 10), so each is a C3 Timg with offsets translated; bit 9 is C3's "use XTAL", not ESP32's, so writes clear it.
-#[derive(Default)]
 pub struct Esp32Timg {
     pub t: [Timg; 3],
     pub int_ena: u32,
@@ -327,7 +328,28 @@ pub struct Esp32Timg {
 /// Interrupt bit <-> internal timer
 const TIMG_INT: [(usize, u32); 3] = [(0, 1), (1, 2), (2, 8)];
 
+/// WDT interrupt bit (ESP32 layout); the watchdog lives in counter 0, which also owns the 0x48.. registers
+const WDT_INT: u32 = 1 << 2;
+
+impl Default for Esp32Timg {
+    fn default() -> Self {
+        Esp32Timg::new(0)
+    }
+}
+
 impl Esp32Timg {
+    pub fn new(group: u8) -> Self {
+        Esp32Timg {
+            t: [Timg::apb_wdt(group), Timg::default(), Timg::default()],
+            int_ena: 0,
+            lact_rtc: 0,
+        }
+    }
+
+    pub fn wdt_irq(&self) -> bool {
+        self.int_raw() & self.int_ena & WDT_INT != 0
+    }
+
     /// ESP32 offset -> (which counter, C3 offset)
     fn map(off: u32) -> Option<(usize, u32)> {
         Some(match off {
@@ -345,6 +367,7 @@ impl Esp32Timg {
             .iter()
             .filter(|(i, _)| self.t[*i].int_raw & 1 != 0)
             .fold(0, |v, (_, b)| v | b)
+            | (self.t[0].int_raw & WDT_INT)
     }
 
     pub fn read(&mut self, off: u32, now: u64) -> u32 {
@@ -371,6 +394,7 @@ impl Esp32Timg {
                         self.t[i].int_raw &= !1;
                     }
                 }
+                self.t[0].int_raw &= !(v & WDT_INT);
             }
             _ => {
                 if let Some((i, o)) = Self::map(off) {
