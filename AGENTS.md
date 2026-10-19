@@ -63,6 +63,7 @@ Reviews/               screenshots, traces, reports (git-ignored, regenerated ev
 | Run with external parts | `tryboard run <flash.bin> --i2c ssd1306@0x3c,bme280@0x76 --env 23.5,45,101325 --oled` (`--oled` prints the screen as ASCII art); S3 round LCD: `--spi gc9a01 --lcd-ppm Reviews/x.ppm`, then `tools/ppm2png.py Reviews/x.ppm Reviews/x.png` |
 | Wiring estimate (P2-11) | `tryboard run <flash.bin> --i2c ssd1306@0x3c,bme280@0x76 --i2c-wire 60` (I2C cable cm); `--antenna-loss 30` (antenna blockage dB); conclusion at the end of stderr |
 | Full acceptance | `tools/accept.sh [--no-web] [--no-qemu]` (writes `Reviews/accept.md`; cases in `firmware/accept.json`) |
+| Golden snapshots (R-02) | `tools/golden.py save` on the unchanged tree before a behaviour-preserving refactor, then `tools/golden.py check [ids]` (byte-identical CLI output of every accept case; accept.sh runs it when `Reviews/golden/` exists) |
 | Find hangs / crashes | `tryboard run <flash.bin> --trace 40` (recent jump targets; loads app.elf symbols from the same directory) |
 | Logic-analyzer events | `tryboard run <flash.bin> --trace-io Reviews/io.txt [--trace-pins 4,8]` (GPIO / PWM / WS2812 / I2C transactions stamped by cycle; compare with the web page: `node tools/webtest/traceio.mjs`) |
 | FreeRTOS task timeline (C-04) | `tryboard run <flash.bin> --trace-tasks Reviews/tasks.json` (open in Perfetto; per-task CPU share at the end of stderr); web parity: `node tools/webtest/tasks.mjs` |

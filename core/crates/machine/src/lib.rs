@@ -1208,7 +1208,8 @@ impl Machine {
             Hw::E32(m) => &m.bus.unimpl,
         };
         let mut v: Vec<_> = m.iter().map(|(a, n)| (*a, *n)).collect();
-        v.sort_by_key(|x| std::cmp::Reverse(x.1));
+        // Address breaks count ties so reports are identical run to run (HashMap order is random)
+        v.sort_by_key(|x| (std::cmp::Reverse(x.1), x.0));
         v
     }
 

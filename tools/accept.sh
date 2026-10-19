@@ -141,6 +141,15 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
 sys.exit(1 if bad else 0)
 PY
 
+# Golden snapshots (R-02): byte-identical CLI output vs Reviews/golden/ (take one with `tools/golden.py save` before a refactor)
+echo -e "\n## Golden snapshots (tools/golden.py)" >> $REPORT
+if [ -d Reviews/golden ]; then
+  python3 tools/golden.py check > Reviews/golden.log 2>&1 || fail=1
+  { tail -1 Reviews/golden.log; grep -A2 DIFF Reviews/golden.log | head -30; } >> $REPORT
+else
+  echo "skipped: no snapshot (run tools/golden.py save on the unchanged tree first)" >> $REPORT
+fi
+
 # Circuit solver vs ngspice (P1-01): tools/elec/*.cir; skipped with a reason when ngspice is missing
 echo -e "\n## Circuit solver vs ngspice (tools/elec)" >> $REPORT
 python3 tools/elec/compare.py --md >> $REPORT 2>&1 || fail=1
