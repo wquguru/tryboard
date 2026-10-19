@@ -2,7 +2,7 @@
 // deterministically by re-powering with that run's firmware + input log and fast-forwarding. New edits after a rewind drop later steps.
 import type { SceneSpec } from '../board3d';
 import type { InputEvent } from '../inputlog';
-import type { Snapshot } from '../worker';
+import type { Snapshot } from '../simmsg';
 import type { CheckOutcome, Env } from './types';
 import type { WireMods } from './wiring.ts';
 import { t } from '../i18n/index.ts';

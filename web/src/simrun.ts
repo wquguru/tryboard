@@ -4,62 +4,11 @@
 import { chipFromId, type SimChip } from './chipid';
 import { parseScript } from './checks';
 import { realFetch, type RealReq } from './realfetch';
+import type { WasmExports } from './wasm.gen';
 
 export const CPU_HZ = 160_000_000;
 
-export interface Ex {
-  memory: WebAssembly.Memory;
-  tb_alloc(n: number): number;
-  tb_free(p: number, n: number): void;
-  tb_boot(r: number, rl: number, f: number, fl: number): number;
-  tb_error_ptr(): number;
-  tb_error_len(): number;
-  tb_run(c: number): number;
-  tb_cycles(): number;
-  tb_console_ptr(): number;
-  tb_console_len(): number;
-  tb_console_clear(): void;
-  tb_gpio_drive(pin: number, level: number): void;
-  tb_analog_set(pin: number, mv: number): void;
-  tb_adc_mode?(ideal: number): void;
-  tb_seed?(seed: number): void;
-  tb_uart_push(p: number, n: number): void;
-  tb_usb_cdc_send(p: number, n: number): void;
-  tb_ble_cmd?(p: number, n: number): number;
-  /** Virtual phone (C-02); old cores lack it */
-  tb_phone_cmd?(p: number, n: number): number;
-  /** Real network (C-03); old cores lack it */
-  tb_realnet_set?(on: number): void;
-  tb_net_outbox?(): number;
-  tb_net_reply?(p: number, n: number): number;
-  tb_net_action?(p: number, n: number): number;
-  tb_phone_json_ptr?(): number;
-  tb_pin_pwm(pin: number): number;
-  tb_pin_pwm_freq(pin: number): number;
-  tb_i2c_attach(kind: number, addr: number): number;
-  tb_env_set(t: number, h: number, p: number): void;
-  tb_report(): number;
-  tb_report_ptr(): number;
-  tb_timing_report?(): number;
-  tb_lcd_attach?(): number;
-  tb_reset_limit?(n: number): void;
-  tb_reset_count?(): number;
-  tb_power_set?(mode: number): void;
-  tb_servo_attach?(pin: number): void;
-  tb_usb_report?(): number;
-  tb_i2c_report?(): number;
-  tb_i2c_wire?(cm: number): void;
-  tb_antenna_loss?(db: number): void;
-  tb_encoder_attach?(a: number, b: number, sw: number): void;
-  tb_encoder_turn?(steps: number): void;
-  tb_encoder_press?(down: number): void;
-  tb_sonar_attach?(trig: number, echo: number): void;
-  tb_sonar_distance?(cm: number): void;
-  tb_dht11_attach?(pin: number): void;
-  tb_imu_set?(pitch: number, roll: number, yaw: number, dp: number, dr: number, dy: number): void;
-  tb_touch?(x: number, y: number, down: number): void;
-  tb_touch_int?(pin: number): void;
-}
+export type Ex = WasmExports;
 
 export interface SimJob {
   wasm: ArrayBuffer | Uint8Array;

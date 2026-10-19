@@ -141,6 +141,10 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
 sys.exit(1 if bad else 0)
 PY
 
+# wasm export interface (R-07): web/src/wasm.gen.ts must match core/crates/wasm/src/lib.rs
+echo -e "\n## wasm export interface (tools/gen_wasm_ts.py --check)" >> $REPORT
+python3 tools/gen_wasm_ts.py --check >> $REPORT 2>&1 || fail=1
+
 # Config cross-check (R-13): ids in firmware/*.json and the web catalog resolve to firmware, chips, devices and parts
 echo -e "\n## Config cross-check (tools/check_config.py)\n\`\`\`" >> $REPORT
 { python3 tools/check_config.py && python3 tools/check_config.py --selftest; } >> $REPORT 2>&1 || fail=1

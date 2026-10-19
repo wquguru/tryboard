@@ -1,7 +1,7 @@
 // Buzzer sound: the worker reports PWM changes on buzzer pins (with sim time); a square oscillator plays them on the sim clock.
 // Muted by default (browsers need a user gesture first); the same switch drives the I2S speaker via pcm.ts. Tests read window.__tbAudio.
 
-import type { AudioFrame, PcmBlock, PwmEvent } from './worker';
+import type { AudioFrame, PcmBlock, PwmEvent } from './simmsg';
 import { PcmVoice, type PcmState } from './pcm';
 import { t } from './i18n';
 

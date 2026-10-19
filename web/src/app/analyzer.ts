@@ -7,7 +7,7 @@ import { BOOT_GPIO, RGB_GPIO, type SimChip } from '../chips';
 import { currentTheme, onTheme } from '../theme';
 import { CPU_HZ, firstTxnEndingAfter, fmtTime, hex, lastLE, pwmLabel, txnNote, txnText, type I2cTxn } from './iotrace';
 import { dhtBitAt, dhtBits, dhtFrame, parseVcd, pulseAt, type DhtBit, type FineWave } from './vcdview';
-import type { TimingReport, VcdState } from '../worker';
+import type { TimingReport, VcdState } from '../simmsg';
 import { bc, setDock } from './chrome';
 
 export type Channel =

@@ -1,6 +1,6 @@
 // Live simulation for the home and lab pages: starts worker.ts, runs one firmware and hands each frame to the view.
 import { fetchBuf, imageChip, loadRom, loadWasm } from './assets';
-import type { EncoderSpec, Env, FromWorker, Harness, PcmBlock, PowerMode, PwmEvent, Snapshot, SonarSpec, TimingReport, ToWorker, VcdState } from './worker';
+import type { EncoderSpec, Env, FromWorker, Harness, PcmBlock, PowerMode, PwmEvent, Snapshot, SonarSpec, TimingReport, ToWorker, VcdState } from './simmsg';
 import type { UsbView } from './usb3d';
 import { parseBle, type BleUpdate } from './ble';
 import type { InputEvent, InputLog } from './inputlog';

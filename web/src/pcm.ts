@@ -1,7 +1,7 @@
 // I2S speaker (MAX98357A): the worker sends PCM blocks with sim time; an AudioWorklet ring buffer addressed by absolute frame plays them.
 // Falls back to per-block AudioBufferSourceNode without AudioWorklet; aligned like audio.ts (lead LEAD, re-align outside [0, MAX_LEAD]).
 
-import type { PcmBlock } from './worker';
+import type { PcmBlock } from './simmsg';
 
 const LEAD = 0.12;
 const MAX_LEAD = 0.6;

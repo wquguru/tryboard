@@ -1,7 +1,7 @@
 // Live pin values and the mini "scope" (P0-11), from per-tick level / enable / PWM duty+freq the worker already sends.
 // PWM is synthesized from duty and freq (phase illustrative); GPIO shows tick samples; I2C is illustrative; power is a flat estimate.
 import { t } from '../i18n/index.ts';
-import type { ElecFrame } from '../worker';
+import type { ElecFrame } from '../simmsg';
 import type { BenchWire } from './wiring';
 
 export interface PinSample {

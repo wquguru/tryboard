@@ -5,7 +5,7 @@ import { t } from '../i18n';
 import { cn } from '../ui/cn';
 import { Conf } from '../ui/conf';
 import { Sec, Seg, SegB } from '../ui/panel';
-import type { AdcSamples } from '../worker';
+import type { AdcSamples } from '../simmsg';
 import type { Chip } from './examples';
 import type { Session } from './types';
 

@@ -94,6 +94,10 @@ web/（Vite + TS）
 - ⌘K（P1-06，`app/cmdk.ts` + 纯函数 `app/cmdmatch.ts`）：候选 = 命令（含按输入生成的"把室温设为 N ℃""回到第 n 次运行"）+ 零件 + 引脚（listPins）+ 检查点 + 运行；执行走 store / session / 时间线现有接口
 - 关卡验收：`firmware/levels.json` 是唯一来源，判定规则在 `tools/check.py` 和 `web/src/checks.ts` 各写一份、逐条对应。浏览器里由 `verify-worker.ts` 按**模拟时间**跑（不看墙钟），时间片 / 脚本施加 / PWM 采样照搬 CLI `run` 的循环；观察记录用 wasm 的 `tb_report`（与 CLI `--gpio-log --ws2812-log` 同格式）。运行指纹 = FNV-1a(串口原始字节 + `\n#report\n` + 规范化观察记录)，`tools/webtest/levels.mjs` 逐关核对网页与命令行指纹相同。
 
+## wasm 接口与 worker 消息（R-07）
+- `web/src/wasm.gen.ts` 由 `tools/gen_wasm_ts.py` 从 `core/crates/wasm/src/lib.rs` 生成，不手改；改了导出就重跑脚本（accept.sh 会查是否过期）。
+- 主线程 ↔ worker 的消息类型只在 `web/src/simmsg.ts` 定义，worker.ts / live.ts / app 各处都从它 import。
+
 ## 网页 2D 界面（React，2026-10-17 起，见 DECISIONS 同日）
 - 栈：React 19 + Tailwind v4（`@tailwindcss/vite`）+ shadcn 风格组件（Radix 原语），仍是 Vite 多页面构建，不用 Next.js。公共件在 `web/src/ui/`：`tailwind.css`（唯一的颜色变量定义 + `@theme` 映射，亮暗两套）、`cn.ts`、`components.tsx`（Button / Badge / Card / Chip / Checkbox / Collapsible / StatusList / Table / ThemeToggle）。新组件先加到这里，页面里不重复写一套。
 - 页面入口：`<页面>.html` 里只放 `<div id="root">` 和 `src/<页面>/main.tsx`；`<head>` 的主题内联脚本保留（首帧前定 data-theme）。Tailwind preflight 只在引了 `ui/tailwind.css` 的页面生效，没迁的页面不受影响。

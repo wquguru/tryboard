@@ -2,7 +2,7 @@
 // Rewind design: docs/DECISIONS.md, entry dated 2026-10-16 (bench timeline rewind).
 import { fingerprint } from '../checks';
 import { t } from '../i18n';
-import type { Snapshot } from '../worker';
+import type { Snapshot } from '../simmsg';
 import { fold, replayInputs, seekTarget, summarize, truncate, type BenchOp, type BenchStep, type RunRec } from './history';
 import type { TimelineStep } from './timeline';
 import type { CheckOutcome, StepCtx } from './types';

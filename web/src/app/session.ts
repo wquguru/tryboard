@@ -2,8 +2,8 @@
 import { createBench, type PartSpec, type SceneSpec } from '../board3d';
 import type { ScenePickApi } from '../scene-api';
 import { LiveSim, type SeekJob } from '../live';
-import type { Snapshot } from '../worker';
-import type { FromWorker, TimingReport, VcdState } from '../worker';
+import type { Snapshot } from '../simmsg';
+import type { FromWorker, TimingReport, VcdState } from '../simmsg';
 import { saveBom } from './steps/shop';
 import { push as pushBom } from './bom';
 import { BuzzerAudio } from '../audio';

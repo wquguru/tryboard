@@ -14,7 +14,7 @@ import type { Toolbar } from './toolbar';
 import type { Card } from './card';
 import type { BomHistory } from './bom';
 import type { SeekJob } from '../live';
-import type { ElecFrame, FromWorker, Harness, PinDevFrame, Snapshot, TimingReport, VcdState } from '../worker';
+import type { ElecFrame, FromWorker, Harness, PinDevFrame, Snapshot, TimingReport, VcdState } from '../simmsg';
 import type { UsbView } from '../usb3d';
 import type { WireMods } from './wiring';
 import type { BenchHistory } from './benchhist';
