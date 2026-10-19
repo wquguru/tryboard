@@ -141,6 +141,11 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
 sys.exit(1 if bad else 0)
 PY
 
+# Config cross-check (R-13): ids in firmware/*.json and the web catalog resolve to firmware, chips, devices and parts
+echo -e "\n## Config cross-check (tools/check_config.py)\n\`\`\`" >> $REPORT
+{ python3 tools/check_config.py && python3 tools/check_config.py --selftest; } >> $REPORT 2>&1 || fail=1
+echo '```' >> $REPORT
+
 # Golden snapshots (R-02): byte-identical CLI output vs Reviews/golden/ (take one with `tools/golden.py save` before a refactor)
 echo -e "\n## Golden snapshots (tools/golden.py)" >> $REPORT
 if [ -d Reviews/golden ]; then
