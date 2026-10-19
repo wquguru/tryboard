@@ -1,15 +1,16 @@
-// 结果卡（DESIGN_V2 §9 / §9.5）：状态词 + 一句标题 + 一句原因 + 按器件分组的逐条 + 一个主动作，原始数据收进折叠。
-// 实验台检查点、组装开机复测共用。原始数据里保留与命令行逐字一致的结论行和运行编号（测试也从这里读）。
+// Result card (DESIGN_V2 §9 / §9.5): verdict, title, reason, rows grouped by device, one main action; raw data folded away.
+// Raw data keeps the CLI-identical result lines and run ID (tests read them), shared by lab checkpoints and assembly re-checks.
 import type { ReactNode } from 'react';
 import { cn } from './cn';
 import { Kv, Res } from './panel';
 import { VERDICT, groupRows, type Verdict } from './say';
+import { t } from '../i18n';
 
 export type ResultRow = { ok: boolean | null; text: string; say?: string; tag?: string; dev?: string };
 
 type Mark = 'ok' | 'bad' | 'warn' | 'na';
 
-/** 16 px 图标：字符 ✓✗ 和中文基线差 1–2 px，行高一变就飘，所以自绘 */
+/** Drawn 16 px icons: the ✓✗ glyphs sit 1–2 px off the CJK baseline and drift with line height. */
 export function Mark({ k, size = 16, className }: { k: Mark; size?: number; className?: string }) {
   const body = {
     ok: <path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />,
@@ -38,7 +39,7 @@ const pill: Record<Verdict, string> = {
 };
 const pillMark: Record<Verdict, Mark> = { ok: 'ok', bad: 'bad', stall: 'na', shifted: 'warn' };
 
-/** 状态词胶囊：只用四个词之一，带图标（不只靠颜色区分） */
+/** Verdict pill: one of four words, with an icon so colour is not the only cue. */
 export const VerdictPill = ({ v }: { v: Verdict }) => (
   <span className={cn('inline-flex h-6 flex-none items-center gap-1.5 rounded-full px-2.5 text-xs font-medium', pill[v])}>
     <Mark k={pillMark[v]} size={12} className="text-current" />
@@ -53,20 +54,20 @@ export function ResultCard({ verdict, title, why, meta, rows, runId, rawNote, ch
   verdict: Verdict;
   title: ReactNode;
   why?: ReactNode;
-  /** 状态词右边的小字（谁的固件、模拟了几秒） */
+  /** Small text right of the verdict (whose firmware, seconds simulated). */
   meta?: ReactNode;
   rows: ResultRow[];
   runId?: string;
   rawNote?: ReactNode;
-  /** 动作按钮：一张卡只有一个主动作 */
+  /** Action buttons: one main action per card. */
   children?: ReactNode;
-  /** 原因下面的补充（没跑完的原因小字等） */
+  /** Extra under the reason (e.g. why a run stalled). */
   extra?: ReactNode;
 }) {
   const groups = groupRows(rows);
-  // 装壳后变了：没过的行用琥珀三角，不用红叉（开盖时是好的，不是代码错）
+  // Shifted after casing: amber triangles, not red crosses (it worked open, so it is not a code bug).
   const badMark: Mark = verdict === 'shifted' ? 'warn' : 'bad';
-  // 只有一条且和标题同一句：逐条就是在重复标题，不画（原始数据里还在）
+  // A single row equal to the title would just repeat it; skip it (still in raw data).
   const echo = rows.length === 1 && typeof title === 'string' && (rows[0].say ?? rows[0].text) === title;
   return (
     <div className={cn(card, border[verdict])} data-verdict={verdict}>
@@ -103,7 +104,7 @@ export function ResultCard({ verdict, title, why, meta, rows, runId, rawNote, ch
                   g.bad.map((r, i) => <Row key={i} mark={badMark} text={r.say ?? r.text} ok="bad" />)
                 )}
                 {g.bad.length > 0 && good.length > 0 ? (
-                  <Row mark="ok" text={good.length > 1 ? `其余 ${good.length} 项正常` : (good[0].say ?? good[0].text)} ok="ok" dim />
+                  <Row mark="ok" text={good.length > 1 ? t('The other {n} items are fine', { n: good.length }) : (good[0].say ?? good[0].text)} ok="ok" dim />
                 ) : (
                   good.map((r, i) => <Row key={i} mark={r.ok === null ? 'na' : 'ok'} text={r.say ?? r.text} ok={r.ok === null ? 'na' : 'ok'} dim={r.ok === null} />)
                 )}
@@ -119,11 +120,11 @@ export function ResultCard({ verdict, title, why, meta, rows, runId, rawNote, ch
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" className="flex-none -rotate-90 transition-transform group-open:rotate-0">
               <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            原始数据
+            {t('Raw data')}
             <span className="text-xs font-normal text-muted">
-              {rows.length > 0 && `${rows.length} 条结论`}
+              {rows.length > 0 && t('{n} results', { n: rows.length })}
               {rows.length > 0 && runId && ' + '}
-              {runId && '运行编号'}
+              {runId && t('Run ID')}
             </span>
           </summary>
           <div className="pb-1">
@@ -132,7 +133,7 @@ export function ResultCard({ verdict, title, why, meta, rows, runId, rawNote, ch
                 {x.text}
               </Res>
             ))}
-            {runId && <Kv k={<span title="同一固件、同样输入，网页和命令行的运行编号相同，说明结果可复现">运行编号</span>} v={runId} cls="fp" />}
+            {runId && <Kv k={<span title={t('Same firmware and inputs give the same run ID on the web and the CLI, so the result is reproducible')}>{t('Run ID')}</span>} v={runId} cls="fp" />}
             {rawNote}
           </div>
         </details>
@@ -150,7 +151,7 @@ function Row({ mark, text, ok, dim }: { mark: Mark; text: ReactNode; ok: 'ok' | 
   );
 }
 
-/** 跑中卡：和结果卡同一位置、同一外框，跑完原地换成结果，眼睛不用找 */
+/** Running card: same place and frame as the result card, swapped in place when done so the eye stays put. */
 export function RunningCard({ title, meta, progress }: { title: ReactNode; meta?: ReactNode; progress?: ReactNode }) {
   return (
     <div className={cn('run-card mt-1 rounded-(--r) border border-line bg-surface p-4 max-md:p-3')} aria-live="polite">
@@ -159,7 +160,7 @@ export function RunningCard({ title, meta, progress }: { title: ReactNode; meta?
           <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" className="animate-spin motion-reduce:animate-none">
             <path d="M8 2a6 6 0 1 1-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          模拟中
+          {t('Simulating')}
         </span>
         {meta && <span className="min-w-0 truncate text-xs text-muted">{meta}</span>}
       </div>
@@ -172,10 +173,10 @@ export function RunningCard({ title, meta, progress }: { title: ReactNode; meta?
   );
 }
 
-/** 结果卡里的按钮：桌面 36 高，手机 44 高 */
+/** Result card buttons: 36 px tall on desktop, 44 px on phones. */
 export const actCls = 'h-9 px-4 text-[14px] font-medium max-md:h-11';
 
-/** 单条估算结论：上面一句人话，下面一行小字原数（测试和高级用户读小字） */
+/** One estimate: a plain sentence on top, raw numbers in small print below (for tests and power users). */
 export const Said = ({ say, raw }: { say: ReactNode; raw: ReactNode }) => (
   <>
     <span data-say>{say}</span>

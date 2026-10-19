@@ -1,6 +1,5 @@
-/* React 页面的样式入口（DECISIONS 2026-10-17）。颜色只在这里定义一次：亮色是 DESIGN §2 的值，
-   暗色按同一套变量反转（与 app.css 的 :root[data-theme='dark'] 同值）。data-theme 由各页 <head> 的内联脚本在首帧前设好。
-   Tailwind 的颜色类（bg-surface、text-muted…）都指向这些变量，所以切主题不用 dark: 前缀。 */
+/* Style entry of the React pages (DECISIONS 2026-10-17). Colours are defined once here (DESIGN §2; dark matches app.css).
+   Tailwind colour classes point at these variables, so theme switches need no dark: prefix. */
 @import 'tailwindcss';
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
@@ -10,7 +9,7 @@
   --accent: #0d99ff; --accent-bg: #e5f4ff; --accent-line: #b9e0ff; --on-accent: #ffffff;
   --ok: #14ae5c; --ok-bg: #e8f7ee; --warn: #b7791f; --warn-bg: #fffaf0; --bad: #f24822; --bad-bg: #fef2f2;
   --surface: #ffffff; --hover-line: #cccccc; --head-bg: rgba(255, 255, 255, 0.92);
-  /* 文字用的深一档（WCAG AA 4.5:1，DESIGN §2 对比度）：浅底上的状态字、蓝字、白字蓝底都用它，点和边框仍用原色 */
+  /* One shade darker for text (WCAG AA 4.5:1, DESIGN §2); dots and borders keep the base colour. */
   --accent-ink: #0a6fbd; --accent-strong: #0b76c8; --ok-ink: #0e7a41; --warn-ink: #8a5a12; --bad-ink: #c4361a;
   color-scheme: light;
 }
@@ -22,6 +21,11 @@
   --accent-ink: var(--accent); --accent-strong: var(--accent); --ok-ink: var(--ok); --warn-ink: var(--warn); --bad-ink: var(--bad);
   color-scheme: dark;
 }
+
+/* Per-language sans stack (U-07): kana / hanzi / hangul would otherwise fall back to Chinese glyph forms; Latin stays Noto Sans SC. */
+:root { --tb-sans: 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+:root:lang(ja) { --tb-sans: 'Hiragino Sans', 'Yu Gothic', 'Noto Sans JP', 'Noto Sans SC', 'PingFang SC', sans-serif; }
+:root:lang(ko) { --tb-sans: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', 'Noto Sans SC', 'PingFang SC', sans-serif; }
 
 @theme inline {
   --color-bg: var(--bg);
@@ -48,7 +52,7 @@
   --color-surface: var(--surface);
   --color-hover-line: var(--hover-line);
   --color-head-bg: var(--head-bg);
-  --font-sans: 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-sans: var(--tb-sans);
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --shadow-panel: 0 2px 10px #0000000f;
 }
@@ -59,13 +63,13 @@
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 }
 
-/* 台面 / 示意图底（渐变，不是颜色 token；与 app.css --stage-bg 同值）：首页作品卡预览用 [background:var(--stage-bg)] */
+/* Stage / illustration background (a gradient, not a colour token; same as app.css --stage-bg). */
 :root { --stage-bg: radial-gradient(120% 90% at 50% 40%, #ffffff, #eceff3); }
 :root[data-theme='dark'] { --stage-bg: radial-gradient(120% 90% at 50% 40%, #2b2e33, #16171a); }
 
-/* 手机菜单抽屉从顶部落下（DESIGN_V2 §5）；系统要求少动画时不动 */
+/* Phone drawer drops from the top (DESIGN_V2 §5); no motion when reduced motion is requested. */
 @keyframes tb-drop { from { transform: translateY(-8px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { #siteDrawer { animation: none !important; } }
 
-/* 跑中卡的进度条来回走（模拟没有可靠的总时长，不画假百分比） */
+/* Running card bar sweeps back and forth: a sim has no reliable total time, so no fake percentage. */
 @keyframes tb-run { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }

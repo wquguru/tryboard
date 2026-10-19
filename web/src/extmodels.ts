@@ -1,6 +1,5 @@
-// 外部 3D 模型（P1-09）：assets/models/<名字>/<名字>.glb，构建时由 vite 插件拷到 dist/models/，懒加载。
-// 程序生成的器件始终是默认兜底：没开"外部模型"、加载失败、WebGL 不支持 KHR_mesh_quantization 都退回程序生成。
-// 来源与署名在各素材目录的 SOURCES.md（licenses.html 自动带上），glb 单位是 mm、Y 朝上。
+// External 3D models (P1-09): assets/models/<name>/<name>.glb, copied to dist/models/ by a vite plugin and lazy-loaded.
+// Procedural parts stay the fallback (option off, load error, no KHR_mesh_quantization); credits in each SOURCES.md; glb is mm, Y up.
 import type * as THREE from 'three';
 
 export const EXT = {
@@ -14,7 +13,7 @@ const KEY = 'tb-ext-models';
 let override: boolean | null = null;
 const listeners = new Set<(on: boolean) => void>();
 
-/** 开没开外部模型：URL `?models=ext|proc` 只管这一次打开；否则看 localStorage（默认关） */
+/** External models on? `?models=ext|proc` applies to this visit only; otherwise localStorage (default off). */
 export function extModelsOn(): boolean {
   if (override !== null) return override;
   const q = new URLSearchParams(location.search).get('models');
@@ -30,7 +29,7 @@ export function setExtModels(on: boolean) {
   try {
     localStorage.setItem(KEY, on ? '1' : '0');
   } catch {
-    /* 隐私模式：只在本页生效 */
+    /* Private mode: this page only. */
   }
   listeners.forEach((f) => f(on));
 }
@@ -39,7 +38,7 @@ export function onExtModels(f: (on: boolean) => void) {
   return () => listeners.delete(f);
 }
 
-/** 各场景报告"此刻实际显示着哪些外部模型"（测试 / 截图核对用，`window.__tbExt.shown()`） */
+/** Scenes report which external models are shown right now (for tests / screenshots, `window.__tbExt.shown()`). */
 const reporters = new Set<() => string[]>();
 export function reportExt(f: () => string[]) {
   reporters.add(f);
@@ -49,7 +48,7 @@ export const extShown = () => [...new Set([...reporters].flatMap((f) => f()))];
 if (typeof window !== 'undefined') (window as unknown as { __tbExt: unknown }).__tbExt = { on: extModelsOn, set: setExtModels, shown: extShown };
 
 const cache = new Map<string, Promise<THREE.Group | null>>();
-/** 加载（只下载一次），返回一份可以随便改的克隆（几何体、材质各自独立，场景重建时可以照常释放） */
+/** Load once and return a deep clone (own geometry and materials, so scene rebuilds can dispose them). */
 export async function loadExt(name: ExtName): Promise<THREE.Group | null> {
   if (!cache.has(name)) {
     cache.set(
@@ -61,7 +60,7 @@ export async function loadExt(name: ExtName): Promise<THREE.Group | null> {
           const g = await new GLTFLoader().loadAsync(url);
           return g.scene as THREE.Group;
         } catch (e) {
-          console.warn(`[models] ${name} 加载失败，用程序生成的版本`, e);
+          console.warn(`[models] ${name} failed to load, using the procedural version`, e);
           return null;
         }
       })(),

@@ -1,10 +1,10 @@
-// 页面共用的资源加载：wasm 内核、各芯片 ROM、固件镜像。
+// Shared asset loading: wasm core, chip ROMs, firmware images.
 import type { ChipId } from './board3d';
 import { imageChip as chipOf } from './simrun';
 
 export const ROM_FILE: Record<ChipId, string> = { esp32: 'esp32_rev300_rom.elf', esp32c3: 'esp32c3_rev3_rom.elf', esp32s3: 'esp32s3_rev0_rom.elf' };
 
-/** 发布到不托管二进制的环境时（页面带 <meta name="tryboard-pack" content="b64">），固件与 ROM 以 base64 文本存放 */
+/** Hosts that refuse binaries get firmware and ROMs as base64 text (page has <meta name="tryboard-pack" content="b64">). */
 const PACKED = document.querySelector('meta[name="tryboard-pack"]')?.getAttribute('content') === 'b64';
 
 export async function fetchBuf(url: string) {
@@ -18,7 +18,7 @@ export async function fetchBuf(url: string) {
   return out.buffer;
 }
 
-/** 镜像是哪颗芯片（实现与 npm 命令行共用，见 simrun.ts） */
+/** Which chip an image targets (shared with the npm CLI, see simrun.ts). */
 export function imageChip(buf: ArrayBuffer): ChipId {
   return chipOf(buf);
 }

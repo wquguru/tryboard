@@ -1,4 +1,4 @@
-// 品牌标：8 个白点是面包板孔位，右上琥珀点是"正在试"的那颗器件。暗色主题换亮蓝底深色点，见 DESIGN_V2.md §1。
+// Brand mark: 8 white dots are breadboard holes, the amber one is the part being tried. Dark theme swaps colours (DESIGN_V2 §1).
 const DOTS: [number, number][] = [
   [20, 20], [32, 20], [20, 32], [32, 32], [44, 32], [20, 44], [32, 44], [44, 44],
 ];

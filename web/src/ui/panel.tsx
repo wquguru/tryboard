@@ -1,12 +1,10 @@
-// 实验台面板的小件（属性面板、构建树、快捷卡片共用，DESIGN §2）。
-// 每个件保留原来的钩子类名（kv / v / fp / res / ok / bad / sec / tn / tg / drop / busy…）：网页测试和
-// 命令式实时更新（按 data-live 找节点、classList.toggle('bad')）靠它们定位，样式全在 Tailwind 类里。
-// 文字色一律用 *-ink（浅底上 4.5:1），原色只给点、边框和图形。
+// Lab panel pieces (DESIGN §2). Hook classes (kv / v / fp / res / ok / bad / sec / tn / tg / drop / busy…) stay for web tests
+// and imperative updates; styling is all Tailwind. Text uses *-ink colours (4.5:1), base colours only for dots and borders.
 import { Children, type ComponentProps, type ReactNode } from 'react';
 import { cn } from './cn';
 import { Live, NInput, useInitText } from './native';
 
-/** 面板里的按钮（也给命令式代码拼按钮用：asm3d 的"怎么装"选择框） */
+/** Panel button class (also used by imperative code, e.g. the asm3d mounting picker). */
 export const btnClass = (primary = false, extra = '') =>
   cn(
     'btn inline-flex h-[30px] cursor-pointer items-center justify-center rounded-md border border-line bg-surface px-3 text-fg no-underline hover:border-hover-line',
@@ -41,7 +39,7 @@ export const Brief = ({ className, ...p }: ComponentProps<'pre'>) => <pre classN
 export const Code = ({ className, ...p }: ComponentProps<'pre'>) => <pre className={cn('code mt-1.5 text-muted', preCls, className)} {...p} />;
 
 const vCls = 'v min-w-0 text-right text-xs break-all [&.bad]:text-bad-ink';
-/** 一行键值：值等宽右对齐；live 给了就是实时字段（初值空，由命令式代码填） */
+/** Key-value row, value monospaced and right-aligned; with `live` it is a live field filled by imperative code. */
 export function Kv({ k, v, live, cls }: { k: ReactNode; v?: ReactNode; live?: string; cls?: string }) {
   const c = cn(vCls, 'font-mono', cls === 'fp' && 'fp font-medium', cls === 'bad' && 'bad text-bad-ink', cls === 'warnc' && 'warnc text-warn-ink');
   return (
@@ -51,7 +49,7 @@ export function Kv({ k, v, live, cls }: { k: ReactNode; v?: ReactNode; live?: st
     </div>
   );
 }
-/** 长文字：键在上、值在下，正文字体 */
+/** Long text: key above, value below in body font. */
 export function KvT({ k, children, className }: { k: ReactNode; children?: ReactNode; className?: string }) {
   return (
     <div className={cn('kv col mb-1 flex flex-col gap-0.5 rounded-md bg-field px-2.5 py-1.5', className)}>
@@ -60,12 +58,12 @@ export function KvT({ k, children, className }: { k: ReactNode; children?: React
     </div>
   );
 }
-/** 键值框（键在上），下面放任意内容（滑块等） */
+/** Key box (key on top) holding arbitrary content such as sliders. */
 export const KvBox = ({ className, ...p }: ComponentProps<'div'>) => <div className={cn('kv col mb-1 flex flex-col gap-0.5 rounded-md bg-field px-2.5 py-1.5 [&_.k]:text-muted', className)} {...p} />;
 
 export type ResKind = 'ok' | 'bad' | 'na' | 'warn';
 const resMark: Record<ResKind, string> = { ok: '✓', bad: '✗', na: '·', warn: '!' };
-/** 一条检查结果：符号 + 颜色一起表达（不只靠颜色） */
+/** One check result: symbol plus colour, never colour alone. */
 export function Res({ kind, mk, children, id, className }: { kind: ResKind; mk?: string; children?: ReactNode; id?: string; className?: string }) {
   return (
     <div
@@ -73,7 +71,7 @@ export function Res({ kind, mk, children, id, className }: { kind: ResKind; mk?:
       className={cn(
         'res mb-[3px] flex gap-2 rounded-md bg-field px-2.5 py-[5px] text-xs [&_b]:font-medium',
         kind,
-        // 原样式里 .bad 是全局红字：整条失败结果都是红的
+        // .bad was global red text in the old CSS: the whole failed row is red.
         kind === 'bad' && 'bg-bad-bg text-bad-ink',
         kind === 'warn' && 'bg-warn-bg',
         kind === 'na' && 'text-muted',
@@ -100,7 +98,7 @@ export const SegB = ({ on, className, ...p }: ComponentProps<'button'> & { on: b
   />
 );
 
-/** 滑块 + 读数。输入框非受控、原生监听（测试脚本直接改 value 再派发事件）；读数文字由 onInput 里的代码或调用方改 */
+/** Slider plus readout. Uncontrolled with native listeners (tests set value and dispatch); the readout is updated by callers. */
 export function Slider({ out, on, className, outId, ...p }: Omit<ComponentProps<typeof NInput>, 'type'> & { out: string; outId?: string }) {
   const o = useInitText<HTMLOutputElement>(out);
   return (
@@ -111,7 +109,7 @@ export function Slider({ out, on, className, outId, ...p }: Omit<ComponentProps<
   );
 }
 
-/** 拖放 / 点选固件的框。文件输入框挂原生 change（测试 uploadFile 派发的事件） */
+/** Firmware drop / pick box; the file input uses a native change listener (fired by tests' uploadFile). */
 export function Drop({ kind, busy, disabled, title, sub, onFile, className }: { kind: string; busy?: boolean; disabled?: boolean; title: ReactNode; sub: ReactNode; onFile?: (f: File) => void; className?: string }) {
   const over = (e: React.DragEvent<HTMLLabelElement>, on: boolean) => {
     e.preventDefault();
@@ -160,9 +158,9 @@ export function Drop({ kind, busy, disabled, title, sub, onFile, className }: { 
   );
 }
 
-// ---------------------------------------------------------------- 构建树
+// ---------------------------------------------------------------- build tree
 export function TreeGroup({ g, title, count, open, onToggle, children }: { g?: string; title: ReactNode; count?: ReactNode; open: boolean; onToggle?: (open: boolean) => void; children: ReactNode }) {
-  // 每组一棵 tree：summary 是原生开关，不能当 tree 的子节点（axe aria-required-children）
+  // One tree per group: summary is a native toggle and may not be a tree child (axe aria-required-children).
   return (
     <details className="tg group" data-g={g} open={open} onToggle={(e) => onToggle?.(e.currentTarget.open)}>
       <summary className="flex cursor-pointer list-none justify-between px-1.5 pt-2 pb-1 text-[11px] font-medium text-muted select-none before:mr-1 before:text-[9px] before:content-['▸'] group-open:before:content-['▾'] [&::-webkit-details-marker]:hidden">
@@ -186,7 +184,7 @@ export const TnSt = ({ kind, children }: { kind: StKind; children: ReactNode }) 
   <span className={cn('tn-st flex-none font-mono text-[11px]', kind, { ok: 'text-ok-ink', bad: 'text-bad-ink', run: 'text-accent-ink', warn: 'text-warn-ink', muted: 'text-muted' }[kind])}>{children}</span>
 );
 
-/** 构建树里一个可点的条目 */
+/** Clickable build-tree entry. */
 export function TreeNode({ on, label, meta, st, className, ...p }: Omit<ComponentProps<'button'>, 'children'> & { on?: boolean; label: ReactNode; meta?: ReactNode; st?: ReactNode }) {
   return (
     <button type="button" role="treeitem" aria-selected={!!on} className={cn(tnClass(on), className)} {...p}>
@@ -196,7 +194,7 @@ export function TreeNode({ on, label, meta, st, className, ...p }: Omit<Componen
     </button>
   );
 }
-/** 只看不点的条目 */
+/** Read-only entry. */
 export function TreeRow({ label, meta, st, on }: { label: ReactNode; meta?: ReactNode; st?: ReactNode; on?: boolean }) {
   return (
     <div className={tnClass(on, true)} role="treeitem" aria-selected={!!on}>
@@ -209,7 +207,7 @@ export function TreeRow({ label, meta, st, on }: { label: ReactNode; meta?: Reac
 
 export const TreeEmpty = ({ children }: { children: ReactNode }) => <div role="treeitem" aria-disabled="true" className="tree-empty px-2.5 py-2 text-xs text-muted">{children}</div>;
 
-/** 万用表读数：七段屏的感觉，仍用等宽字体 */
+/** Multimeter readout: seven-segment feel, still monospace. */
 export function Meter({ sm }: { sm?: boolean }) {
   return (
     <div className={cn('meter rounded-md border border-line bg-field text-right', sm ? 'sm my-1 px-2 py-1.5' : 'mt-1.5 mb-2 px-3 py-2.5')}>
@@ -218,7 +216,7 @@ export function Meter({ sm }: { sm?: boolean }) {
   );
 }
 
-/** 叠在台面上的说明卡（锁着、占位、没有模板） */
+/** Info card over the stage (locked, placeholder, no template). */
 export const LockCard = ({ className, ...p }: ComponentProps<'div'>) => (
   <div className={cn('pnl lockcard max-w-[420px] rounded-(--r) border border-line bg-(--panel) px-5 pt-1 pb-4 shadow-panel max-md:max-w-none [&_.ph-t]:mt-0.5', className)} {...p} />
 );

@@ -1,6 +1,6 @@
-// 浏览器麦克风 → 模拟的 INMP441：getUserMedia 拿到声音，AudioWorklet（退回 ScriptProcessor）按块收集，
-// 交给调用方推进 worker（micPush）。只给人玩，不进验收：实时声音没法复现，也不记进输入日志。
-// 没有权限 / 没有设备 / 非安全上下文时 start() 返回错误说明，调用方换回测试 WAV。
+// Browser microphone -> simulated INMP441: getUserMedia plus AudioWorklet (or ScriptProcessor) chunks pushed to the worker (micPush).
+// For play only, not acceptance (live audio cannot be replayed or logged); start() returns an error so callers fall back to the test WAV.
+import { t } from './i18n';
 
 const CAPTURE = `
 class TbCapture extends AudioWorkletProcessor {
@@ -19,10 +19,10 @@ registerProcessor('tb-capture', TbCapture);
 
 export interface MicState {
   on: boolean;
-  /** 最近一次失败的原因（空 = 没失败） */
+  /** Reason of the last failure (empty = none). */
   error: string;
   rate: number;
-  /** 最近一块的 RMS（满量程 = 1），给面板电平条 */
+  /** RMS of the latest chunk (full scale = 1), for the level meter. */
   level: number;
 }
 
@@ -32,18 +32,18 @@ export class MicInput {
   private stream: MediaStream | null = null;
   private nodes: AudioNode[] = [];
 
-  /** 开麦克风；每收满一块调 onChunk(采样率, 样本)。返回 null 表示成功，否则是失败原因 */
+  /** Open the mic; calls onChunk(rate, samples) per full chunk. Returns null on success, else the failure reason. */
   async start(onChunk: (rate: number, data: Float32Array) => void): Promise<string | null> {
     this.stop();
     const md = globalThis.navigator?.mediaDevices;
-    if (!md?.getUserMedia) return this.fail('浏览器不支持麦克风（需要 https 或 localhost）');
+    if (!md?.getUserMedia) return this.fail(t('This browser cannot use the microphone (needs https or localhost)'));
     try {
       this.stream = await md.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
     } catch (e) {
-      return this.fail(`没有拿到麦克风权限（${(e as Error).name || e}）`);
+      return this.fail(t('Microphone permission was not granted ({err})', { err: (e as Error).name || String(e) }));
     }
     const AC = globalThis.AudioContext ?? (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AC) return this.fail('浏览器不支持音频处理，换个新版浏览器试试');
+    if (!AC) return this.fail(t('This browser cannot process audio; try a newer browser'));
     const ctx = (this.ctx = new AC());
     await ctx.resume().catch(() => {});
     const src = ctx.createMediaStreamSource(this.stream);
@@ -62,7 +62,7 @@ export class MicInput {
       src.connect(node);
       this.nodes = [src, node];
     } catch {
-      // 退回：ScriptProcessor（已废弃但到处能用），输出接一个静音增益免得回放到喇叭
+      // Fallback: ScriptProcessor (deprecated but universal); its output goes to a muted gain so it never plays back.
       const sp = ctx.createScriptProcessor(1024, 1, 1);
       const mute = ctx.createGain();
       mute.gain.value = 0;

@@ -1,37 +1,35 @@
-// 蜂鸣器出声：worker 报来接蜂鸣器引脚上 PWM 的变化（带模拟时刻），按模拟时间排进 Web Audio。
-// 一个方波振荡器 + 增益常开，响 / 停只改增益，频率跟着 LEDC 走。默认静音：浏览器要求先有用户手势才能出声，
-// 所以 setMuted(false) 要在点击之类的事件处理里调用（AudioContext 在那一刻创建 / 恢复）。
-// 测试读 window.__tbAudio = { muted, lastFreq, playing, sounding, peakHz, pcm, sim }。
-// 同一个开关也管 I2S 喇叭（MAX98357A）：PCM 块交给 pcm.ts 的 PcmVoice（AudioWorklet），与蜂鸣器共用一个 AudioContext。
+// Buzzer sound: the worker reports PWM changes on buzzer pins (with sim time); a square oscillator plays them on the sim clock.
+// Muted by default (browsers need a user gesture first); the same switch drives the I2S speaker via pcm.ts. Tests read window.__tbAudio.
 
 import type { AudioFrame, PcmBlock, PwmEvent } from './worker';
 import { PcmVoice, type PcmState } from './pcm';
+import { t } from './i18n';
 
-/** 音量很小：方波很刺耳，又是默认开在耳机里的 */
+/** Very quiet: square waves are harsh and may be playing in headphones. */
 const VOLUME = 0.04;
-/** 模拟时间领先 / 落后音频时钟超过这个范围就重新对齐（变速、卡顿、暂停后） */
+/** Re-align when sim time leads / lags the audio clock beyond this (speed change, stalls, pause). */
 const LEAD = 0.06;
 const MAX_LEAD = 0.4;
-/** playing 的含义：最近这么长模拟时间内响过（报警是 200ms 响 / 200ms 停，瞬时状态一半时间是停） */
+/** `playing` means sounded within this much sim time (alarms beep 200 ms on / 200 ms off). */
 const RECENT = 0.5;
 
 export interface AudioState {
   muted: boolean;
-  /** 最近一次开始发声的频率（Hz） */
+  /** Frequency of the last sound start (Hz). */
   lastFreq: number;
-  /** 不静音、且最近 0.5 s 模拟时间内响过 */
+  /** Not muted and sounded within the last 0.5 s of sim time. */
   playing: boolean;
-  /** 此刻（最近一个变化之后）是否在响 */
+  /** Sounding right now (after the latest change). */
   sounding: boolean;
-  /** 分析节点（AnalyserNode）测到的最强频率（Hz），最近一次有声时的读数 */
+  /** Strongest frequency seen by the AnalyserNode (Hz), from the last audible moment. */
   peakHz: number;
-  /** I2S 喇叭：Web Audio 输出端的读数（开声音以后才有） */
+  /** I2S speaker: readings at the Web Audio output (only once sound is on). */
   pcm: PcmState | null;
-  /** I2S 喇叭：模拟器侧的读数（喇叭收到的 PCM，最近 1 秒），接了音频器件才有 */
+  /** I2S speaker: sim-side readings (PCM the speaker got in the last second), only with an audio device. */
   sim: AudioFrame | null;
 }
 
-/** 频率在人耳范围内、占空比 > 0 才响（舵机的 50Hz 不算声音） */
+/** Audible only within human hearing and duty > 0 (a servo's 50 Hz is not sound). */
 export const audible = (duty: number, freq: number) => duty > 0 && freq > 20 && freq < 20000;
 
 export class BuzzerAudio {
@@ -44,9 +42,9 @@ export class BuzzerAudio {
   private gain: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
   private pins = new Set<number>();
-  /** 每个蜂鸣器引脚当前的 [占空比, 频率] */
+  /** Current [duty, frequency] per buzzer pin. */
   private cur = new Map<number, [number, number]>();
-  /** 模拟时刻 → 音频时刻的对齐点 */
+  /** Alignment point: sim time -> audio time. */
   private simAnchor = 0;
   private audioAnchor = -1;
   private lastOnSim = -Infinity;
@@ -57,7 +55,7 @@ export class BuzzerAudio {
     (globalThis as { __tbAudio?: AudioState }).__tbAudio = this.state;
   }
 
-  /** 哪些引脚接了蜂鸣器（examples.json 的 scene.parts 里 type: 'buzzer'） */
+  /** Pins wired to a buzzer (type: 'buzzer' in examples.json scene.parts). */
   setPins(pins: number[]) {
     this.pins = new Set(pins);
     this.reset();
@@ -67,7 +65,7 @@ export class BuzzerAudio {
     return this.pins.size > 0;
   }
 
-  /** 场景里有没有 I2S 喇叭（MAX98357A） */
+  /** Whether the scene has an I2S speaker (MAX98357A). */
   setSpeaker(on: boolean) {
     this.speaker = on;
     this.state.sim = null;
@@ -75,12 +73,12 @@ export class BuzzerAudio {
     this.onChange?.();
   }
 
-  /** 有能出声的器件（蜂鸣器或喇叭）：声音开关要不要显示 */
+  /** Has something that can sound (buzzer or speaker): whether to show the sound switch. */
   get hasSound() {
     return this.pins.size > 0 || this.speaker;
   }
 
-  /** 重新上电：清掉状态，声音停 */
+  /** Power cycle: clear state and stop sound. */
   reset() {
     this.cur.clear();
     this.audioAnchor = -1;
@@ -92,7 +90,7 @@ export class BuzzerAudio {
     this.pcm?.reset();
   }
 
-  /** 开 / 关声音。开要在用户手势里调用；浏览器不放行时保持静音 */
+  /** Sound on / off. Turning on must happen in a user gesture; stays muted if the browser refuses. */
   async setMuted(m: boolean) {
     if (m) {
       this.state.muted = true;
@@ -122,14 +120,14 @@ export class BuzzerAudio {
     await this.ctx.resume().catch(() => {});
     this.state.muted = this.ctx.state !== 'running';
     this.audioAnchor = -1;
-    // 打开那一刻如果正在响，马上接上
+    // If it is sounding when switched on, start right away.
     const on = this.active();
     if (!this.state.muted && on) this.schedule(this.lastSim, on[1], true);
     this.onChange?.();
   }
 
   private recDest: MediaStreamAudioDestinationNode | null = null;
-  /** 录屏（P2-10）要混进去的声音（蜂鸣器 + I2S 喇叭）：声音开着才有（关着就是静音视频）；同一个节点同时接扬声器和录音 */
+  /** Sound to mix into screen recordings (P2-10): only while sound is on; one node feeds both speakers and recorder. */
   recordStream(): MediaStream | null {
     if (!this.ctx || !this.analyser || this.state.muted) return null;
     if (!this.recDest) {
@@ -140,7 +138,7 @@ export class BuzzerAudio {
     return this.recDest.stream;
   }
 
-  /** worker 的 tick：本 tick 内的 PWM 变化 + 当前模拟时刻 */
+  /** Worker tick: PWM changes in this tick plus the current sim time. */
   push(events: PwmEvent[] | undefined, simNow: number) {
     this.lastSim = simNow;
     for (const e of events ?? []) {
@@ -161,7 +159,7 @@ export class BuzzerAudio {
     if (on && !this.state.muted) this.measure();
   }
 
-  /** worker 的 pcm 消息：喇叭放出的声音（静音时丢掉，不攒） */
+  /** Worker pcm message: speaker output (dropped while muted, not queued). */
   pushPcm(blocks: PcmBlock[]) {
     if (!this.pcm || this.state.muted) return;
     this.pcm.push(blocks);
@@ -172,18 +170,18 @@ export class BuzzerAudio {
     }
   }
 
-  /** worker tick 里的模拟器侧音频读数 */
+  /** Sim-side audio readings from the worker tick. */
   setSim(f: AudioFrame | undefined) {
     if (f) this.state.sim = f;
   }
 
-  /** 第一个正在响的蜂鸣器：[占空比, 频率] */
+  /** First sounding buzzer: [duty, frequency]. */
   private active(): [number, number] | null {
     for (const v of this.cur.values()) if (audible(v[0], v[1])) return v;
     return null;
   }
 
-  /** 把模拟时刻 t 的一次变化排到音频时间线上 */
+  /** Schedule a change at sim time t on the audio timeline. */
   private schedule(t: number, freq: number, on: boolean) {
     const ctx = this.ctx;
     if (!ctx || !this.osc || !this.gain || this.state.muted) return;
@@ -192,7 +190,7 @@ export class BuzzerAudio {
       this.simAnchor = t;
       this.audioAnchor = ctx.currentTime + LEAD;
       at = this.audioAnchor;
-      // 新的对齐点可能早于已经排好的变化：清掉，免得旧的"响"排在新的"停"后面
+      // A new alignment point may precede already scheduled changes: clear them so an old 'on' never lands after a new 'off'.
       this.gain.gain.cancelScheduledValues(ctx.currentTime);
       this.osc.frequency.cancelScheduledValues(ctx.currentTime);
     }
@@ -201,7 +199,7 @@ export class BuzzerAudio {
   }
 
   private bins: Float32Array<ArrayBuffer> | null = null;
-  /** 分析节点读最强的频率分量（方波的基频最强） */
+  /** Strongest frequency component from the analyser (a square wave's fundamental is strongest). */
   private measure() {
     const a = this.analyser;
     if (!a || !this.ctx) return;
@@ -213,15 +211,15 @@ export class BuzzerAudio {
     if (k > 0 && best > -90) this.state.peakHz = Math.round((k * this.ctx.sampleRate) / a.fftSize);
   }
 
-  /** 现成的小控件：声音开 / 关按钮（点击就是用户手势） */
+  /** Ready-made control: sound on / off button (the click is the user gesture). */
   button(): HTMLButtonElement {
     const b = document.createElement('button');
     b.type = 'button';
     b.id = 'sound';
     const sync = () => {
-      b.textContent = this.state.muted ? '声音：关' : '声音：开';
+      b.textContent = this.state.muted ? t('Sound: off') : t('Sound: on');
       b.setAttribute('aria-pressed', String(!this.state.muted));
-      b.title = this.speaker ? '喇叭出声（MAX98357A，默认静音）' : this.hasBuzzer ? '蜂鸣器出声（默认静音）' : '这个示例没有接蜂鸣器或喇叭';
+      b.title = this.speaker ? t('Speaker sound (MAX98357A, muted by default)') : this.hasBuzzer ? t('Buzzer sound (muted by default)') : t('This example has no buzzer or speaker');
     };
     this.onChange = sync;
     b.onclick = () => void this.setMuted(!this.state.muted);

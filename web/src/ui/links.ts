@@ -1,14 +1,14 @@
-// 站内地址只在这里拼（DESIGN_V2 §7.2）：不带 .html 后缀，靠 Vite 开发 / 预览服务器和静态托管把 /app 映射到 app.html。
-// 以后改成路径化地址（/works/weather/shop，DECISIONS 2026-10-18 暂缓的第二步）只改这个文件。
-// 一律相对 ./，因为 base 是 './'（pack_artifact 打包、子路径部署都靠它）。
+// All in-site URLs are built here (DESIGN_V2 §7.2): no .html suffix, servers map /app to app.html; path-style URLs later only touch this file.
+// Always relative ./ because base is './' (pack_artifact bundles and sub-path deploys rely on it).
 
+import { t } from '../i18n';
 import type { StepId } from '../app/types';
 
 export const HOME = './';
 export const SELECT = './select';
 export const LICENSES = './licenses';
 
-/** 工作台：作品某一步；cp 选中检查点，example 是空白作品上开的示例 */
+/** Lab URL for one step of a work; cp selects a checkpoint, example opens a sample on the blank work. */
 export function lab(work: string, step: StepId = 'bench', opt: { cp?: string; example?: string } = {}): string {
   const q = new URLSearchParams({ work });
   if (opt.example) q.set('example', opt.example);
@@ -18,15 +18,15 @@ export function lab(work: string, step: StepId = 'bench', opt: { cp?: string; ex
 
 export const BLANK_LAB = lab('blank');
 
-/** 选板结果进采购（work=custom）：参数串由 advisor/state.ts encode(s, true) 给出 */
+/** Board-picker result into the shopping step (work=custom); params come from advisor/state.ts encode(s, true). */
 export const customLab = (params: string, step: StepId = 'shop') => `./app?work=custom${params ? `&${params}` : ''}#${step}`;
 
-/** 选板结果的分享地址（不带「我已有」） */
+/** Share link for a picker result (without the "I already have" list). */
 export const selectLink = (params: string) => `${SELECT}${params ? `?${params}` : ''}`;
 
-/** 文档型页面（首页、选板）的站点导航 */
+/** Site nav for document pages (home, board picker). */
 export const SITE_NAV: [string, string][] = [
-  [HOME, '作品'],
-  [SELECT, '选板'],
-  [BLANK_LAB, '实验台'],
+  [HOME, t('Projects')],
+  [SELECT, t('Pick a board')],
+  [BLANK_LAB, t('Lab')],
 ];
