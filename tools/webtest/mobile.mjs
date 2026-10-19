@@ -336,6 +336,31 @@ for (const [w, key] of Object.entries(WORKS)) {
   await page.screenshot({ path: path.join(outDir, `mobile-product-${w}.png`) });
 }
 
+// ---- 虚拟手机（C-01）：BLE 示例 → 构建树「虚拟手机」→ 属性抽屉里扫描、连接；按钮够大、无横向滚动
+await page.goto(`${base}/app?work=blank&example=c3-ble-hr#bench`, { waitUntil: 'load' });
+await page.evaluate(() => localStorage.clear());
+await page.reload({ waitUntil: 'load' });
+if (await waitFor(page, () => globalThis.__tbApp?.store.get().simSeconds > 0.5, null, 30000)) {
+  await page.click('[data-mtool="lib"]');
+  await waitFor(page, () => !!document.querySelector('[data-left="tree"]'));
+  await page.click('[data-left="tree"]');
+  report('虚拟手机：构建树里有', await waitFor(page, () => !!document.querySelector('#tree [data-kind="ble"]')));
+  await page.click('#tree [data-kind="ble"]');
+  report('虚拟手机：属性抽屉里出现', await waitFor(page, () => !!document.querySelector('#blePhone #bleScan')));
+  report('虚拟手机：扫描键 ≥ 44px', (await tappable('#bleScan')) === 'ok', await tappable('#bleScan'));
+  await page.click('#bleScan');
+  report('虚拟手机：扫到 TryBoard-HR', await waitFor(page, () => !!document.querySelector('#blePhone [data-dev] [data-act="connect"]'), null, 15000));
+  await page.click('#blePhone [data-dev] [data-act="connect"]');
+  report('虚拟手机：连上、出服务', await waitFor(page, () => !!document.querySelector('[data-char="2A37"]'), null, 15000));
+  report('虚拟手机：#bleDisc 可点', (await tappable('#bleDisc')) === 'ok', await tappable('#bleDisc'));
+  await page.$eval('[data-char="FFE1"]', (e) => e.scrollIntoView({ block: 'center' }));
+  await sleep(200);
+  for (const s of ['[data-char="2A19"] [data-act="read"]', '[data-char="FFE1"] [data-act="write"]'])
+    report(`虚拟手机：${s} 可点`, (await tappable(s)) === 'ok', await tappable(s));
+  await stepCheck('虚拟手机');
+  await page.screenshot({ path: path.join(outDir, 'mobile-ble-phone.png') });
+} else report('BLE 示例启动', false);
+
 report('不请求外部域名', external.length === 0, external.slice(0, 3).join(' | '));
 report('页面无报错', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(`[mobile] ${fails ? 'FAIL' : 'PASS'}（${fails} 项失败）`);

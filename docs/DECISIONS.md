@@ -851,3 +851,13 @@
 - 微秒字符串用整数算、半数进位（Rust `{:.3}` 与 JS `toFixed` 在 .5 上舍入规则不同，s3-lvgl 对拍时第 430 段差 0.001 µs 暴露）。
 - 恢复 PC → 函数名：CLI 自动读同目录 app.elf；网页默认没有 ELF（不上传就只给地址），可选上传 app.elf 在浏览器本地解析 .symtab，不发出去。
 - 替代：(a) 按 ELF 符号拦 `vTaskSwitchContext` / 读 pxCurrentTCB——要 ELF，违背"只靠 .bin"；(b) 用 IDF 的 SystemView / apptrace——要改固件配置；(c) 周期性采样 pxCurrentTCB——要知道它的地址，且会漏短切片。
+
+## 2026-10-19 C-01 BLE：路线 a′（按签名找 VHCI 边界）在 C3 跑通
+- 决定：只靠用户的 flash.bin。在 app 镜像的代码段里按掩码签名找 libbtdm 的 8 个函数（`btdm_osi_funcs_register`、`btdm_controller_init / enable / get_mode`、`API_vhci_host_check_send_available / send_packet / register_callback`、`sdk_config_extend_set_pll_track`），取指时把入口覆盖成跳 HLE 魔术地址 0x40060000 + 4×槽（13 个槽，flash 内容不改，复位后重新找）。控制器不跑真代码：借固件自己的 osi 函数表建一个"桩任务"，按模拟时间把事件交给主机（NimBLE）。
+- 签名：`tools/ble_sigs.py` 从 IDF 5.1–5.5.1 各版本 libbtdm_app*.a 的目标文件算，重定位字段清零；链接器松弛（auipc+jalr→jal / c.jal、lui+访存→gp 相对）按"指令序列"匹配而不是逐字节。仓库只存掩码后指令值（`soc/src/ble/sigs.rs`），不存库二进制、不存反汇编；授权是否算派生作品**需人复核**（LICENSING 已加一行）。
+- pll_track 没有可靠的独有序列：改按调用点定位——`btdm_controller_enable` 调用之前 24 字节内的那次调用（BACK = 24），钩成空操作（槽 12）。
+- 虚拟控制器只实现 NimBLE 外设启动和连接要用到的 HCI：Reset / 读版本 / 读地址 / 缓冲区 / 设事件掩码 / 广播参数 / 数据 / 使能 / 连接参数更新等；`0x202d / 0x2029 / 0x2027 / 0x204e`（地址解析、隐私相关）只回成功；Read Remote Version（0x041d）先回 Command Status 再给事件 0x0C，否则 NimBLE 卡在连接建立。
+- 虚拟手机（中心 + GATT 客户端）也在 Rust 里（`soc/src/ble/phone.rs`），无第三方 crate；所有动作按模拟时间排队，可确定性重放：输入日志新增 `ble=<命令>`（scan / scan off / connect [地址] / disconnect / read / write / sub / unsub / auto），网页操作手机就记一条，`tryboard run --inputs` 逐字节重放；CLI `--ble-phone` = 第 0 个周期 `ble=auto`。
+- 网页：固件用了 BLE 才出现「蓝牙」坞页签（空中日志，按模拟时间）和构建树「无线 → 虚拟手机」（属性面板 / 手机抽屉里的手机）；没认出边界时坞里显示「BLE 需要再拖一个 app.elf」卡。新示例 `c3-ble-hr` 进示例库（tags 标 ◐ 行为模拟）。
+- 没做：路线 c（上传 ELF 按符号拦截）只做了提示卡，没接到内核——当前 IDF 5.5.1 的 .bin 都能认出，先不做；S3（Xtensa 版 libbtdm，签名要另算）留后；中心模式、经典蓝牙、Mesh 不做。
+- 替代：按 ROM 地址拦（路线 a）——否掉，libbtdm 重新定义了 ROM 731 个 `r_*` 里的 677 个并经函数表调度，ROM 副本基本是死代码（见 RESEARCH_ESP_EMULATOR.md）；只做路线 c（要求用户传 ELF）——否掉，多一步上传，大多数人只有 .bin。

@@ -125,6 +125,17 @@ const crates = [];
     ['Zephyr USB 协议栈', 'Apache-2.0 AND BSD-3-Clause', ''],
   ];
   for (const [name, license, note] of romThird) add({ cat: '芯片 ROM 内含的组件', name, license, note, inRom: true, url: 'https://docs.espressif.com/projects/esp-idf/en/latest/esp32/COPYRIGHT.html#rom-source-code-copyrights' });
+  // C-01：内核里编进了从 libbtdm 算出的掩码指令签名（不含库本体），按 Apache-2.0 §4 署名；是否算派生作品待人复核（LICENSING）
+  add({
+    cat: '模拟器内核（Rust crate，编译进 wasm）',
+    name: 'esp32c3-bt-lib（BLE 控制器库签名）',
+    version: 'IDF 5.1–5.5.1',
+    license: 'Apache-2.0',
+    copyright: ['Copyright Espressif Systems (Shanghai) Co. Ltd.'],
+    url: 'https://github.com/espressif/esp32c3-bt-lib',
+    text: lic,
+    modified: '只取 libbtdm_app*.a 中 8 个函数的前若干条指令，重定位字段清零后作掩码签名（core/crates/soc/src/ble/sigs.rs），用来在用户固件里定位这些函数；不含库的二进制',
+  });
 }
 
 // ---------------------------------------------------------------- 4. 示例固件：ESP-IDF 与组件管理器拉进来的组件

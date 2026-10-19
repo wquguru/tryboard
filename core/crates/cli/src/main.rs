@@ -26,6 +26,8 @@ fn usage() -> ! {
                [--sonar TRIG,ECHO] [--dist 厘米]（HC-SR04；脚本动作 dist=厘米，负数 = 前方没有东西）
                [--i2s max98357a,inmp441]（S3：喇叭 BCLK=16 LRC=17 DIN=18，麦克风 SCK=39 WS=40 SD=41；C3：喇叭 0/1/2，麦克风 0/1/3）
                [--mic <声音.wav>]（INMP441 循环听这段 WAV，自动接上麦克风）[--audio-wav <喇叭输出.wav>]
+               [--ble-phone]（虚拟手机：扫描、连第一台设备、读全部可读特征、订阅全部通知，空中事件打在 stderr）
+               脚本动作 ble=scan|scan off|connect [地址|名字]|disconnect|read <UUID|0x句柄>|write <UUID|0x句柄> <十六进制>|sub <UUID>|unsub <UUID>|auto
   tryboard elec-net <网表.cir> [--at 秒,秒...]（直流 / 瞬态求解，与 ngspice 对照用，见 tools/elec）
   tryboard riscv-test <test.elf>..."
     );
@@ -364,6 +366,19 @@ fn run(args: &[String]) {
         .into_owned();
     let syms = Syms::load(&[rom_path.clone(), app_elf]);
     let has_audio = m.audio().is_some();
+    // BLE：固件里认出了 VHCI 边界才有虚拟控制器；--ble-phone = 第 0 个周期的输入 ble=auto
+    if let Some(e) = m.ble_error() {
+        eprintln!(
+            "[tryboard] BLE：固件用了蓝牙控制器，但没认出 VHCI 边界（{e}）；需要再给 app.elf"
+        );
+    }
+    let ble_phone = args.iter().any(|a| a == "--ble-phone");
+    if ble_phone {
+        if let Err(e) = m.ble_phone("auto") {
+            eprintln!("[tryboard] --ble-phone：{e}");
+        }
+    }
+    let mut ble_seq = 0u64;
     let mut audio_wav: Option<(String, Vec<i16>)> =
         opt(args, "--audio-wav").map(|p| (p, Vec::new()));
     let mut audio_rate = 0f32;
@@ -433,6 +448,11 @@ fn run(args: &[String]) {
                 if let Ok(d) = v.trim().parse::<f64>() {
                     m.sonar_distance(d);
                 }
+            } else if let Some(c) = act.strip_prefix("ble=") {
+                // 虚拟手机操作（网页"虚拟手机"面板）
+                if let Err(e) = m.ble_phone(c.trim()) {
+                    eprintln!("[tryboard] {now_s:.3}s 手机操作失败：{e}");
+                }
             } else if let Some(t) = act.strip_prefix("uart=") {
                 m.uart_push(t.replace("\\n", "\n").as_bytes());
             } else if let Some(t) = act.strip_prefix("usbcdc=") {
@@ -495,6 +515,12 @@ fn run(args: &[String]) {
             for e in m.io_take() {
                 writeln!(w, "{}", e.line()).ok();
                 io_count += 1;
+            }
+        }
+        if let Some(b) = m.ble() {
+            for (n, l) in b.log_since(ble_seq) {
+                eprintln!("[ble] {:9.3}s {:5} {}", l.t_us as f64 / 1e6, l.kind, l.text);
+                ble_seq = n + 1;
             }
         }
         let c = m.console_take();
@@ -707,6 +733,19 @@ fn run(args: &[String]) {
                     .collect();
                 eprintln!("    {:.4}s {}", *t as f64 / CPU_HZ as f64, cols.join(" "));
             }
+        }
+    }
+    if let Some(b) = m.ble() {
+        if !b.unknown_cmds.is_empty() {
+            let l: Vec<String> = b
+                .unknown_cmds
+                .iter()
+                .map(|(o, n)| format!("0x{o:04x}×{n}"))
+                .collect();
+            eprintln!(
+                "[tryboard] BLE：按\"只回成功\"处理的 HCI 命令 {}",
+                l.join(" ")
+            );
         }
     }
     if args.iter().any(|a| a == "--usb-log") {

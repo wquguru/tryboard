@@ -68,6 +68,7 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | 关卡验收 | `tools/check.py <flash.bin> --level 04`；`tools/check.py --ref --all` 跑全部参考固件（关卡定义在 `firmware/levels.json`） |
 | 关卡 / 装配 / 首页网页测试 | `node tools/webtest/levels.mjs`（含拖拽装配、网页与命令行指纹对拍）；拍照录像 `media.mjs`、线束与 USB 小键盘 `harness.mjs` |
 | 实验台交互 / 手机布局回归 | `node tools/webtest/wiremode.mjs`（连线模式、改接、撤销重做）；`node tools/webtest/mobile.mjs`（390×844 各页无横向滚动、抽屉开合、主按钮可点） |
+| BLE 虚拟手机（C-01） | `tryboard run <flash.bin> --ble-phone`（手机自动扫描→连接→读全部→订阅，空中日志 `[ble]` 打在 stderr）；手动：输入日志行 `秒:ble=scan` / `ble=connect` / `ble=read 2A19` / `ble=sub 2A37` / `ble=write 0x0019 01`（`0x` 开头是句柄，否则是 UUID），`--inputs <文件>` 重放 |
 | 输入日志重放对拍 | `node tools/webtest/replay.mjs`（网页按 BOOT、调温度 → 导出输入 → `tryboard run --inputs` 重放，串口逐字节、指纹相同） |
 | 浏览器验收（新功能必做） | `agent-browser skills get core` 先读用法；`cd web && npx vite preview --port 5180` 起服务后 `agent-browser open <url>` → `snapshot` / `click` / `screenshot Reviews/ab/<项>.png` → `console` / `errors`；用 Read 看截图。并行子代理各用自己的端口和 `--session <名字>`，不要抢同一个浏览器 |
 
@@ -102,7 +103,7 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | M4 | ◐ ESP32-S3（Xtensa LX7） | 同 M0–M2 验收在 S3 上通过 |
 | M5 | ◐ USB OTG | S3 冒充键盘 / 网卡，浏览器里的虚拟电脑 / 手机能枚举并响应（键盘 HID、CDC 串口已通：s3-usb-keyboard / s3-usb-cdc、作品 usbkey；网卡未做） |
 | M6 | ◐ Wi-Fi | 在 netif 层替换，HTTP / MQTT 示例可达浏览器侧虚拟网络（C3：开放网络与 WPA2-PSK 已通） |
-| M7 | ☐ BLE | VHCI 层虚拟控制器 + 虚拟手机 |
+| M7 | ◐ BLE | VHCI 层虚拟控制器 + 虚拟手机（C3 NimBLE 外设已通：c3-ble-hr，见 PLAN C-01；S3、上传 ELF 路线未做） |
 | M8 | ☐ 音频 / 摄像头 | I2S 麦克风 / 喇叭接 Web Audio；摄像头读 3D 渲染画面；小智类项目可跑 |
 | M9 | ◐ 选型决策层 | 项目模板 → 芯片 / 板 / BOM / 引脚 / 功耗，带可信度标注 |
 | M10 | ◐ 发布准备 | 落地页（首页 `/`）、7 关路线（并入实验台检查点）、示例库、授权清单（`/licenses` + NOTICES）；UI v2（PLAN U-01–U-06：logo、选型助手、实验台 v2、全站手机）已完成。**上线前必须问人** |

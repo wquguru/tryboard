@@ -1,5 +1,6 @@
 //! ESP32-C3 SoC：存储映射、外设分发、直接启动（替代二级 bootloader）、运行循环。
 
+pub mod ble;
 pub mod boot;
 pub mod crypto_hw;
 pub mod devices;
@@ -155,6 +156,12 @@ pub struct SocBus {
     pub iotrace: iotrace::IoTrace,
     /// FreeRTOS 任务切换（C-04）
     pub tasks: tasktrace::TaskTrace,
+    /// BLE（C-01）：固件里认出了 VHCI 边界时才有；Option 只为 HLE 时临时取出
+    pub ble: Option<Box<ble::BleHle>>,
+    /// 用了 BLE 但没认出 VHCI 边界的原因（网页提示"再拖一个 app.elf"）
+    pub ble_error: Option<String>,
+    /// 取指覆盖（地址, 半字），升序：BLE 入口跳板，不改 flash
+    pub code_patch: Vec<(u32, u16)>,
 }
 
 impl Default for SocBus {
@@ -210,6 +217,9 @@ impl Default for SocBus {
             iotrace: iotrace::IoTrace::new(0),
             // RISC-V 栈帧第一个字是 RV_STK_MEPC
             tasks: tasktrace::TaskTrace::new(0),
+            ble: None,
+            ble_error: None,
+            code_patch: Vec::new(),
         }
     }
 }
@@ -241,6 +251,17 @@ fn wr(buf: &mut [u8], off: usize, size: u32, v: u32) -> Option<()> {
 }
 
 impl SocBus {
+    /// 取指读半字：先看取指覆盖（只在指令缓存未命中时走到这里，平时没有覆盖，开销只是一次判空）
+    #[inline]
+    fn fetch16(&self, a: u32) -> Option<u32> {
+        if !self.code_patch.is_empty() {
+            if let Ok(i) = self.code_patch.binary_search_by_key(&a, |x| x.0) {
+                return Some(self.code_patch[i].1 as u32);
+            }
+        }
+        self.mem_read(a, 2)
+    }
+
     /// cache 映射：虚拟地址 → flash 偏移
     #[inline]
     pub fn flash_addr(&self, vaddr: u32) -> Option<usize> {
@@ -874,11 +895,11 @@ impl Bus for SocBus {
         if e.0 == addr {
             return Ok((e.1, e.2));
         }
-        let lo = self.mem_read(addr, 2).ok_or(BusFault)?;
+        let lo = self.fetch16(addr).ok_or(BusFault)?;
         let raw = if lo & 3 != 3 {
             lo
         } else {
-            lo | (self.mem_read(addr + 2, 2).ok_or(BusFault)? << 16)
+            lo | (self.fetch16(addr + 2).ok_or(BusFault)? << 16)
         };
         let (insn, len) = tryboard_rv32::decode_raw(raw);
         self.icache[idx] = (addr, insn, len);
@@ -1007,6 +1028,9 @@ impl Esp32c3 {
                 }
                 Exit::Hle(pc) => match hle.get(&pc) {
                     Some(k) => hle::call(*k, cpu, bus),
+                    None if (ble::MAGIC..ble::MAGIC_END).contains(&pc) && bus.ble.is_some() => {
+                        ble::call_slot(pc, cpu, bus)
+                    }
                     None => return Stop::Hle(pc),
                 },
                 Exit::DoubleFault { cause, pc, tval } => return Stop::Fault { cause, pc, tval },
@@ -1063,6 +1087,11 @@ impl Esp32c3 {
         // 外接屏不随芯片复位消失（它的复位脚由固件重新驱动）
         m.bus.lcd = self.bus.lcd.take();
         m.bus.audio = std::mem::take(&mut self.bus.audio);
+        // 虚拟手机是外部世界：复位后还在（连接随芯片复位断开），空中日志接着记
+        if let (Some(old), Some(new)) = (self.bus.ble.as_mut(), m.bus.ble.as_mut()) {
+            std::mem::swap(&mut old.world, &mut new.world);
+            new.world.chip_reset(ble::now_us(&self.cpu));
+        }
         let t = self.cpu.cycles;
         m.cpu.cycles = t;
         m.bus.now = t;

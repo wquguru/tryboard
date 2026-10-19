@@ -2,6 +2,7 @@
 import { fetchBuf, imageChip, loadRom, loadWasm } from './assets';
 import type { EncoderSpec, Env, FromWorker, Harness, PcmBlock, PowerMode, PwmEvent, Snapshot, SonarSpec, ToWorker } from './worker';
 import type { UsbView } from './usb3d';
+import { parseBle, type BleUpdate } from './ble';
 import type { InputEvent, InputLog } from './inputlog';
 
 /** IMU 姿态：欧拉角（度）+ 变化率（°/s），见 core devices/imu.rs */
@@ -27,6 +28,8 @@ export interface LiveOptions {
   harness?: Harness;
   /** 原生 USB 虚拟主机看到的（S3 固件用了 USB 才有；null = 没有 USB 设备） */
   onUsb?(v: UsbView | null): void;
+  /** BLE（C-01）：空中日志增量 + 虚拟手机视图；固件没用 BLE 时只在上电时来一次 state 0 */
+  onBle?(u: BleUpdate): void;
   /** 线束结论文字（与命令行同样的行），变了才回调 */
   onHarness?(text: string): void;
   /** 旋转编码器 / HC-SR04（接在 GPIO 上，波形由内核按时刻排出） */
@@ -132,6 +135,8 @@ export class LiveSim {
         o.onFrame?.(this.frame, NaN);
       } else if (m.type === 'usb') {
         o.onUsb?.(m.json ? (JSON.parse(m.json) as UsbView) : null);
+      } else if (m.type === 'ble') {
+        o.onBle?.(parseBle(m.state, m.json, m.reset, m.cmdError));
       } else if (m.type === 'harness') {
         o.onHarness?.(m.text);
       } else if (m.type === 'oled') {
@@ -253,6 +258,10 @@ export class LiveSim {
   /** 虚拟电脑往 USB 串口（CDC-ACM）打字 */
   usbCdc(text: string) {
     this.send({ type: 'usbcdc', text });
+  }
+  /** 虚拟手机操作（ble=<命令>，进输入日志） */
+  ble(cmd: string) {
+    this.send({ type: 'ble', cmd });
   }
   /** 电位器滑片电压（mV）进 ADC 脚（进输入日志） */
   analog(pin: number, mv: number) {

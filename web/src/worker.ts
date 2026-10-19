@@ -42,6 +42,11 @@ interface Exports {
   tb_usb_json(): number;
   tb_usb_json_ptr(): number;
   tb_usb_cdc_send(p: number, len: number): void;
+  tb_ble_state?(): number;
+  tb_ble_seq?(): number;
+  tb_ble_json?(from: number): number;
+  tb_ble_json_ptr?(): number;
+  tb_ble_cmd?(p: number, len: number): number;
   tb_report(): number;
   tb_report_ptr(): number;
   tb_power_set(mode: number): void;
@@ -185,6 +190,8 @@ export type ToWorker =
   | { type: 'gpio'; pin: number; level: number }
   | { type: 'uart'; text: string }
   | { type: 'usbcdc'; text: string }
+  /** 虚拟手机操作（C-01，进输入日志：ble=<命令>） */
+  | { type: 'ble'; cmd: string }
   /** 每个时间片采样这些引脚的 PWM，有变化就带模拟时刻放进 tick 的 pwmEvents（蜂鸣器出声用） */
   | { type: 'watchPwm'; pins: number[] }
   /** 要本次上电以来的输入日志，回 inputlog 消息 */
@@ -285,6 +292,11 @@ export type FromWorker =
   | { type: 'lcd'; pixels: Uint8Array }
   /** 原生 USB 虚拟主机的状态（JSON，结构见 usb3d.ts 的 UsbView），有变化才发 */
   | { type: 'usb'; json: string }
+  /**
+   * BLE（C-01）：state 0 = 固件没用 BLE，1 = 虚拟控制器在跑，2 = 没认出 VHCI 边界（json 是 {"error"}）。
+   * json 是 {"view", "log"}，log 只含新增的空中日志；reset = 新上电 / 回退，之前的日志作废。cmdError = 刚才的手机命令被拒的原因
+   */
+  | { type: 'ble'; state: number; json: string; reset?: boolean; cmdError?: string }
   /** 线束结论（与命令行同样的文字：I2C 上升时间、天线遮挡后的 RSSI），变了才发 */
   | { type: 'harness'; text: string }
   | { type: 'inputlog'; log: InputLog }
@@ -616,6 +628,7 @@ function loop(gen = loopGen) {
   postOled(e);
   postLcd(e);
   postUsb(e);
+  postBle(e);
   postHarness(e);
   if (stop !== 0) {
     running = false;
@@ -673,6 +686,29 @@ function postUsb(e: Exports) {
   }
   const n = e.tb_usb_json();
   post({ type: 'usb', json: decoder.decode(new Uint8Array(e.memory.buffer, e.tb_usb_json_ptr(), n)) });
+}
+
+let bleState = 0;
+let bleSeq = -1;
+let bleFrom = 0;
+let bleReset = true;
+let bleLast = 0;
+/** 空中日志有新条目、状态变了才发；连着时每 250ms 也补一次视图（通知曲线、RSSI 不一定伴随新日志） */
+function postBle(e: Exports, force = false) {
+  if (!e.tb_ble_state || !e.tb_ble_json || !e.tb_ble_json_ptr || !e.tb_ble_seq) return;
+  const st = e.tb_ble_state();
+  const seq = e.tb_ble_seq();
+  const now = performance.now();
+  if (!force && st === bleState && seq === bleSeq && (st !== 1 || now - bleLast < 250)) return;
+  if (st === 0 && bleState === 0 && !bleReset) return;
+  bleState = st;
+  bleSeq = seq;
+  bleLast = now;
+  const n = st === 0 ? 0 : e.tb_ble_json(bleFrom);
+  const json = n ? decoder.decode(new Uint8Array(e.memory.buffer, e.tb_ble_json_ptr(), n)) : '';
+  post({ type: 'ble', state: st, json, ...(bleReset ? { reset: true } : {}) });
+  bleReset = false;
+  bleFrom = seq;
 }
 
 let harnessText = '';
@@ -752,6 +788,10 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   oledVersion = 0;
   lcdVersion = 0;
   usbVersion = -1;
+  bleState = 0;
+  bleSeq = -1;
+  bleFrom = 0;
+  bleReset = true;
   return e;
 }
 
@@ -775,6 +815,20 @@ function apply(e: Exports, ev: InputAction) {
       if (ev.kind === 'uart') e.tb_uart_push(p, b.length);
       else e.tb_usb_cdc_send(p, b.length);
       e.tb_free(p, b.length);
+      break;
+    }
+    case 'ble': {
+      if (!e.tb_ble_cmd) return;
+      const b = new TextEncoder().encode(ev.cmd);
+      const p = e.tb_alloc(b.length);
+      new Uint8Array(e.memory.buffer, p, b.length).set(b);
+      const r = e.tb_ble_cmd(p, b.length);
+      e.tb_free(p, b.length);
+      // 被拒的命令（没广播时连接、句柄不存在……）不进日志：重放时 CLI 也会拒，日志里留着只会让重放报错
+      if (r !== 0) {
+        post({ type: 'ble', state: e.tb_ble_state?.() ?? 0, json: '', cmdError: errorText(e) });
+        return;
+      }
       break;
     }
     case 'supply':
@@ -875,6 +929,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       postPaused(e);
       postOled(e);
       postLcd(e, true);
+      postBle(e, true);
       break;
     }
     case 'snapshot':
@@ -934,6 +989,11 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
     case 'uart':
       if (!ex) return;
       apply(ex, { kind: m.type, text: m.text });
+      break;
+    case 'ble':
+      if (!ex) return;
+      apply(ex, { kind: 'ble', cmd: m.cmd });
+      postBle(ex, true);
       break;
     case 'power':
       if (!ex) return;
