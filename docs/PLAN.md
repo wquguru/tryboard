@@ -155,7 +155,7 @@
 | R-06 | 芯片 trait：`soc` 定义 `trait Chip`（运行一批周期、GPIO、外接器件、trace、网络 / BLE 钩子），`machine` 只调 trait；分派按批次不按单条指令 | `machine` 中按芯片 `match` 只剩构造处；模拟速度与 R-01 相差 ≤ 3%；金标准一致；ARCH.md 写「新增一款芯片」清单 | ☐ |
 | R-07 | wasm 接口与 worker 消息单一来源：脚本从 `wasm/src/lib.rs` 的 `extern "C"` 生成 TS 声明；worker ↔ 主线程 43 种消息类型集中到一个文件 | 手改 Rust 导出不同步 TS 时 `tools/accept.sh` 失败；worker.ts 不再手写导出接口 | ☐ |
 | R-08 | 拆 `benchStep()`：按现有 18 个分节（接线检查、左栏、改线工具、直接摆放、构建树、检查器、引脚、运行历史、万用表、标尺、编码器 / 超声、姿态、实时字段、选板项目、结论、热源、快捷卡、调试钩子）拆到 `app/bench/`，闭包变量收进显式 `BenchCtx` | 无函数 > 400 行、`bench.tsx` < 500 行；webtest 全过不减断言；金标准一致；agent-browser 桌面 + 390 走查 Reviews/ab/R-08.md | ☐ |
-| R-09 | 拆 `createBench()`（board3d.ts）：开发板、器件网格、拾取、导线、相机灯光分模块 | 同 R-08 的行数与回归要求；截图与重构前像素差 < 0.5% | ☐ |
+| R-09 | 拆 `createBench()`（board3d.ts）：开发板、器件网格、拾取、导线、相机灯光分模块 | 同 R-08 的行数与回归要求；截图与重构前像素差 < 0.5% | ☑ board3d.ts 3906→381 行，拆为 bench3d/ 11 个文件（各段改为 `mount*(ctx)` 显式上下文，最长函数 339 行、最大文件 1078 行）；3D 画布像素差 weather 0.000% / c3-lcd 0.045%，accept 全绿（Reviews/ab/R-09.md） |
 | R-10 | `benchv2.tsx` 实为实验台组件库，改名拆到 `app/bench/ui/`，去掉 v2 命名 | 无行为变化；webtest 全过 | ☐ |
 | R-11 | 统一帧调度：`ui/frame.ts` 一个 rAF 循环，按优先级订阅，页签隐藏 / 面板不可见时暂停；迁移 22 处 | `requestAnimationFrame` 只出现在 frame.ts；R-01 帧耗时、长任务不劣化；后台标签页 CPU 接近 0 | ☐ |
 | R-12 | 包体：按需加载底部面板（分析仪 / USB / BLE / 网络 / 任务 / 代码）和非当前步骤（选购 / 组装 / 成品） | app 主包 gzip 比 R-01 降 ≥ 30%；首次可交互不劣化；各面板首次打开 < 300 ms | ☐ |
