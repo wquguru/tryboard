@@ -6,7 +6,7 @@ import { commit } from './react';
 import { createStore } from './store';
 import type { StepId } from './types';
 
-export type DockTab = 'serial' | 'code' | 'analyzer' | 'runs' | 'checks' | 'issues' | 'usb';
+export type DockTab = 'serial' | 'code' | 'analyzer' | 'runs' | 'checks' | 'issues' | 'usb' | 'ble';
 export type RunState = 'loading' | 'run' | 'pause' | 'seek' | 'busy' | 'idle' | 'nofw';
 
 export interface Issue {
@@ -53,6 +53,8 @@ export interface BenchChrome {
   sound: { has: boolean; on: boolean };
   /** 固件枚举出了原生 USB 设备：坞里多一个「USB」页签（虚拟电脑） */
   usb: boolean;
+  /** 固件用了 BLE（认出了或没认出 VHCI 边界）：坞里多一个「蓝牙」页签，构建树多一组「无线」（C-01） */
+  ble: boolean;
   /** 台面上的芯片（换固件菜单默认列这颗芯片的示例） */
   chip: 'esp32c3' | 'esp32s3';
   /** 换固件菜单开着（顶栏按钮、空台面卡、手机 ⋯ 都能打开它） */
@@ -91,6 +93,7 @@ export const bc = createStore<BenchChrome>({
   room: null,
   sound: { has: false, on: false },
   usb: false,
+  ble: false,
 });
 export const setBc = (p: Partial<BenchChrome>) => commit(() => bc.set(p));
 
@@ -133,6 +136,8 @@ export const actions: {
   sound?: () => void;
   /** 往 USB 串口（CDC-ACM）发字（进输入日志） */
   usbCdc?: (text: string) => void;
+  /** 虚拟手机操作（ble=<命令>，进输入日志） */
+  ble?: (cmd: string) => void;
   pickFirmware?: (f: File) => void;
   /** 实验台在时：拿刚上传的固件验收当前检查点（选中的，或第一个没过的），返回关号；全过了 / 不在实验台返回 null */
   checkUpload?: (buf: ArrayBuffer, name: string) => string | null;

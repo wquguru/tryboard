@@ -29,6 +29,7 @@ import { BrownoutBanner } from './benchv2';
 import { initSaved } from './saved';
 import { serial } from './dock';
 import { usbFeed } from './usbpane';
+import { bleFeed } from './blepane';
 import { toScript, type InputLog } from '../inputlog';
 import { customPlan } from './custom';
 import { genLevels } from './genlevels';
@@ -255,6 +256,15 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     setBc({ usb: !!v });
     if (v) setDock({ tab: 'usb', collapsed: false });
     else if (bc.get().dock.tab === 'usb') setDock({ tab: 'serial' });
+  });
+  // BLE（C-01）：固件一用蓝牙就长出「蓝牙」页签并切过去；没用了（换固件）收起
+  actions.ble = (cmd) => session.sim?.ble(cmd);
+  bleFeed.subscribe(() => {
+    const has = bleFeed.get().state !== 0;
+    if (has === bc.get().ble) return;
+    setBc({ ble: has });
+    if (has) setDock({ tab: 'ble', collapsed: false });
+    else if (bc.get().dock.tab === 'ble') setDock({ tab: 'serial' });
   });
   // 换固件：先看镜像头（魔数 0xE9、芯片 id），对不上就不上电，挂一张校验卡说清楚
   actions.pickFirmware = async (f) => {

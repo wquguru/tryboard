@@ -90,6 +90,7 @@ import { BuyCard, BuyDialog } from "../buycard";
 import { actions, bc, overlay, setBc, setDock, type Issue } from "../chrome";
 import { replay } from "../bom";
 import { isPhone, phoneProps, setMui } from "../mobile";
+import { bleFeed, phoneStateText, PhonePanel } from "../blepane";
 import { setLeft } from "../leftcol";
 import {
   buildPlaced,
@@ -247,6 +248,7 @@ export function benchStep(): StepImpl {
     firmware: true,
     run: true,
     checkpoint: true,
+    ble: true,
   };
   /** 选中的那根针的采样（示波器小窗） */
   const trace = new PinTrace();
@@ -946,6 +948,18 @@ export function benchStep(): StepImpl {
             ses.heat ? <TnSt kind="bad">热</TnSt> : null,
           ),
         )}
+        {bleFeed.get().state !== 0 &&
+          group(
+            "ble",
+            "无线",
+            "",
+            item(
+              { kind: "ble", id: "phone" },
+              "虚拟手机",
+              phoneStateText(bleFeed.get()),
+              bleFeed.get().state === 2 ? <TnSt kind="warn">!</TnSt> : null,
+            ),
+          )}
         {group(
           "firmware",
           "固件",
@@ -1086,6 +1100,9 @@ export function benchStep(): StepImpl {
     else if (sel.kind === "run") renderRuns(Number(sel.id));
     else if (sel.kind === "tool")
       sel.id === "meter" ? renderMeter() : renderRuler();
+    // 虚拟手机自己订阅 bleFeed 刷新，属性面板只在选中时挂一次
+    else if (sel.kind === "ble")
+      show(<PhonePanel send={(cmd) => actions.ble?.(cmd)} />, false);
     else renderPart(sel.id);
   }
 
@@ -3857,6 +3874,18 @@ export function benchStep(): StepImpl {
           ["editRev", "sceneRev", "hist"],
         ),
         c.store.subscribe(() => renderTree(), ["env", "run", "runNo"]),
+        // 构建树「无线」组：BLE 出现 / 消失、手机状态字变了才重画（通知每秒都来，不能每条都重画整棵树）
+        (() => {
+          let label = "";
+          return bleFeed.subscribe(() => {
+            const b = bleFeed.get();
+            const l = `${b.state}|${phoneStateText(b)}`;
+            if (l === label) return;
+            label = l;
+            renderTree();
+            if (b.state === 0 && c.store.get().selection?.kind === "ble") select(null);
+          });
+        })(),
         c.store.subscribe(
           () => updateLive(),
           [

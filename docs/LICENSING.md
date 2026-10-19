@@ -9,6 +9,7 @@
 | `espressif/qemu` 里的 `pc-bios/*rom*.bin` | ⚠️ 无授权声明，**不用** | 改从 esp-rom-elfs 的 ELF 生成 |
 | ESP-IDF（含 `*.rom.ld`、`soc/` 寄存器头） | ✅ Apache-2.0（soc 头为 Apache-2.0 OR MIT） | 可生成派生表，保留来源 |
 | ESP-IDF 闭源库（esp32-wifi-lib、esp-phy-lib、esp32-bt-lib、esp-coex-lib） | ✅ Apache-2.0，可随固件分发 | 各仓库 LICENSE |
+| BLE 控制器库签名（`espressif/esp32c3-bt-lib` 的 libbtdm_app*.a，Apache-2.0，"Copyright Espressif Systems (Shanghai) Co. Ltd."） | ◐ **需人复核**：仓库只存自己算出的掩码指令模式（`core/crates/soc/src/ble/sigs.rs`，由 `tools/ble_sigs.py` 生成；重定位字段清零、只取每个函数前若干条指令），不存库的二进制、不存反汇编；库本身只由 `tools/fetch_third_party.sh` 下到 git 忽略的 `third_party/btlib/` 供生成签名，运行时只在用户自己的固件里出现。代理判断：Apache-2.0 允许派生，签名里仍含少量原指令字，按 Apache-2.0 §4 在 NOTICES 里署名即可；是否构成"派生作品"需人定（C-01，2026-10-19） | esp32c3-bt-lib LICENSE |
 | `espressif/qemu` 源码（GPL-2.0） | ✅ 可以读源码理解硬件行为；❌ 不复制、不逐行翻译、不照搬函数结构；参考了什么行为写进 DECISIONS，并用固件差分验证 | GPLv2 §0（阅读不在许可范围内）；《计算机软件保护条例》第六、十七条 |
 | 其他 GPL / AGPL 模拟器：CircuitJS（GPL-2.0）、SimulIDE（开发仓库 AGPL-3.0）、Velxio（AGPL-3.0 + 商业授权） | ✅ 可读；❌ 代码不进仓库 | 同上 |
 | TRM / 数据手册 | ✅ 依据其中的事实（寄存器、行为、尺寸）写模型；❌ 不在网站上逐字搬运文字 / 图表，链接原 PDF | 版权声明不授予任何 IP |

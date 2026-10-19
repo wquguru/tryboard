@@ -118,7 +118,7 @@
 ## C · 竞品调研后（2026-10-19 人已确认 C-01–C-05，依据 RESEARCH_ESP_EMULATOR.md；C-06 涉及授权，仍待确认）
 | ID | 项 | 验收（草案） | 状态 |
 |---|---|---|---|
-| C-01 | BLE 探针：按 libbtdm 预编译库字节签名在 .bin 里定位 VHCI 边界，只靠 .bin（路线 a′；ROM 地址路线已排除）；不成则改为 ELF 符号拦截（路线 c） | NimBLE `bleprph` 示例：虚拟手机扫到广播名、连接、读一个特征值；结论写进 DECISIONS | ☐ |
+| C-01 | BLE 探针：按 libbtdm 预编译库字节签名在 .bin 里定位 VHCI 边界，只靠 .bin（路线 a′；ROM 地址路线已排除）；不成则改为 ELF 符号拦截（路线 c） | NimBLE `bleprph` 示例：虚拟手机扫到广播名、连接、读一个特征值；结论写进 DECISIONS | ◐ 路线 a′ 在 C3 跑通：`firmware/c3-ble-hr`（NimBLE 外设，IDF 5.5.1）只靠 .bin 认出 VHCI 边界，虚拟手机扫描 / 连接 / 读电量 87% / 订阅心率通知 / 写 01 点亮 GPIO5；accept `c3-ble-hr` / `c3-ble-led`（qemu: false）；网页「蓝牙」坞页签 + 构建树「虚拟手机」，agent-browser 记录 Reviews/ab/C-01.md。余项：路线 c（拖 app.elf 按符号拦截）只做了提示卡、未接；S3（Xtensa libbtdm）未做；签名只用 5.5.1 实机固件验过 |
 | C-02 | 固件自建热点（SoftAP）+ 虚拟手机连上去打开配网页 | IDF `softAP` 示例 + WiFiManager 类配网页：虚拟手机连上、GET 192.168.4.1 拿到页面、POST 表单后固件串口打印收到的 SSID。注意：现有虚拟路由器占 192.168.4.1（`soc/src/wifi/net.rs`），Wi-Fi 模型只有 STA 接口；AP 模式下浏览器一侧改当手机（DHCP 拿 192.168.4.2），要新增 AP 接口（发信标、收关联） | ☐ |
 | C-03 | 网页"真实网络"开关（HTTP 转 fetch，默认关，响应进输入日志可重放） | wifi-http 打开开关后 GET 公网成功、导出输入后 CLI 重放逐字节一致。开关打开的运行：检查点标「依赖外网」，本机进度只记通过、不记运行编号（指纹）；回放 / 回退按记录的回复重放，指纹按重放算，不会误报不一致 | ☐ |
 | C-04 | FreeRTOS 任务时间线（CLI `--trace-tasks` 导出 Perfetto；网页可选上传 ELF） | s3-dual 两任务分核泳道正确；Perfetto 能打开 | ☐ |

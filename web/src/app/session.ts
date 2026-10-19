@@ -15,6 +15,7 @@ import type { Store } from './store';
 import { currentTheme, onTheme } from '../theme';
 import { IoStore, decodeEvents } from './iotrace';
 import type { UsbView } from '../usb3d';
+import { bleFeed } from './blepane';
 import { PoseRate } from '../imupose';
 import { MicInput } from '../micinput';
 import { chipOf, loadExamples } from './examples';
@@ -380,6 +381,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       i2s: i2sOf(s.scene.parts),
       onPcm: (b) => audio.pushPcm(b),
       env: store.get().env,
+      onBle: (u) => bleFeed.update(u),
       onUsb(v) {
         s.usb = v;
         bench.setUsb(v);

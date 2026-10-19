@@ -718,7 +718,11 @@ pub extern "C" fn tb_ble_json(from: f64) -> usize {
         let Some(b) = m.ble() else {
             return String::new();
         };
-        format!("{{\"view\":{},\"log\":{}}}", b.json(), b.log_json(from as u64))
+        format!(
+            "{{\"view\":{},\"log\":{}}}",
+            b.json(),
+            b.log_json(from as u64)
+        )
     });
     let n = j.len();
     BLE_JSON.with(|b| *b.borrow_mut() = j);

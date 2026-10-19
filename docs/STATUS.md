@@ -30,7 +30,7 @@
 | Wi-Fi STA（开放网络） | ✅ | wifi-init / wifi-scan / wifi-connect / wifi-http：扫描 4 个 AP、关联、DHCP、DNS / mDNS、HTTP GET | MAC 寄存器 + DMA 描述符层（模型在 tryboard-soc，与 S3 共用）；只有 STA，没有 SoftAP / 省电 / 802.11n 聚合 |
 | Wi-Fi WPA2-PSK | ✅ | wifi-wpa2：四次握手完成、拿到 IP、两次 HTTP GET 成功（数据帧全程 CCMP，DHCP 广播走 GTK）；wifi-wpa2-bad：错口令时 AP 判 MIC 失败、IDF 自己报 `reason=15`（4WAY_HANDSHAKE_TIMEOUT），重连时 AP 已被 IDF 拉黑报 `reason=205`，不崩溃 | 只做 PSK + CCMP（不做 TKIP、WPA3-SAE、PMF/802.11w、GTK 轮换）；密钥表字 1 高位只解了"组密钥"位；未经真机标定 |
 | SHA / AES 加速器 | ✅ | 单元测试（FIPS 180 / FIPS 197 / SP 800-38A 向量经寄存器接口）；WPA2 握手（PBKDF2 4096 轮走块模式、HMAC 走 DMA 模式、Key Unwrap 走 AES DMA） | SHA-384/512、AES-GCM 硬件 GHASH、中断模式未做；链表头改从 GDMA 模型（`channel_for_peri` / `configured_link`）取；搬数据仍用本模块的 gather / scatter（驱动先配链表、后置 start，`take_out` 只认已启动的通道），GDMA 通道的完成中断不置 |
-| BLE | ☐ | — | M7 |
+| BLE（外设，NimBLE） | ◐ 行为模拟，无 oracle | c3-ble-hr（C-01）：只靠 .bin 按签名认出 libbtdm 的 VHCI 边界；`--ble-phone` 下手机扫到 TryBoard-HR、连接、发现 3 个服务、读电量 = 87%、订阅心率 3 s 内收到 ≥ 3 条通知；c3-ble-led：写 FFE1=01 后 GPIO5 翻转；网页与 `--inputs` 重放一致 | QEMU 没有蓝牙，无对照源；控制器、链路层、空口时序都是 HLE（连接间隔固定 30 ms，无丢包、无信号强度模型），结论只到 HCI 协议层。签名覆盖 IDF 5.1–5.5.1 的 libbtdm_app，只用 5.5.1 固件实测；没认出时报错并在网页提示上传 app.elf（路线 c 未接）。中心模式、经典蓝牙、Mesh、S3 未做；未经真机标定 |
 
 ## ESP32-S3
 | 模块 | 状态 | 验收 | 备注 |

@@ -6,6 +6,7 @@ import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "rea
 import { cn } from "../ui/cn";
 import { actions, bc, setDock, type DockTab } from "./chrome";
 import { UsbPane } from "./usbpane";
+import { BlePane } from "./blepane";
 import { Icon } from "./icons";
 import { useStore } from "./react";
 import { createStore } from "./store";
@@ -509,6 +510,7 @@ function PhoneDock({
     { id: "issues", label: nIssue ? `问题 ${nIssue}` : "问题" },
     { id: "runs", label: `运行记录 ${c.runs}` },
     ...(c.usb ? [{ id: "usb" as const, label: "USB" }] : []),
+    ...(c.ble ? [{ id: "ble" as const, label: "蓝牙" }] : []),
   ];
   return (
     <section
@@ -644,6 +646,11 @@ function PhoneDock({
           {cur === "usb" && c.usb && (
             <div className="flex min-h-0 flex-1 flex-col border-t border-line-soft">
               <UsbPane sendCdc={(t) => actions.usbCdc?.(t)} />
+            </div>
+          )}
+          {cur === "ble" && c.ble && (
+            <div className="flex min-h-0 flex-1 flex-col border-t border-line-soft">
+              <BlePane />
             </div>
           )}
         </>
@@ -786,6 +793,16 @@ function DeskDock({
           },
         ]
       : []),
+    ...(c.ble
+      ? [
+          {
+            id: "ble" as const,
+            label: "蓝牙",
+            title: "空中日志：广播、连接、读写、通知（按模拟时间）",
+            pill: <span className="rounded px-[5px] text-[11px] font-medium leading-4 bg-accent-bg text-accent-ink">新</span>,
+          },
+        ]
+      : []),
   ];
   return (
     <section
@@ -883,6 +900,14 @@ function DeskDock({
             className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden"
           >
             <UsbPane sendCdc={(t) => actions.usbCdc?.(t)} />
+          </div>
+        )}
+        {c.ble && (
+          <div
+            hidden={cur !== "ble"}
+            className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden"
+          >
+            <BlePane />
           </div>
         )}
         <div

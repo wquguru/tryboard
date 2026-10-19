@@ -28,7 +28,9 @@ export type InputEvent =
   /** IMU 姿态（P2-03）：欧拉角（度，ZYX：yaw → pitch → roll）+ 变化率（°/s，拖动时由速度算出）。脚本动作 imu=p,r,y[,dp,dr,dy] */
   | { tMs: number; kind: 'imu'; pitch: number; roll: number; yaw: number; rates?: [number, number, number] }
   /** 触摸屏（P2-02）：按下 / 移动到 (x, y)（屏幕像素 0..239）或抬起。脚本动作 touch=x,y / release */
-  | { tMs: number; kind: 'touch'; down: boolean; x: number; y: number };
+  | { tMs: number; kind: 'touch'; down: boolean; x: number; y: number }
+  /** 虚拟手机（C-01）：扫描 / 连接 / 读 / 写 / 订阅……，命令原样进日志。脚本动作 ble=<命令>（语法见 ARCH.md BLE 节） */
+  | { tMs: number; kind: 'ble'; cmd: string };
 
 /** 还没盖时间戳的事件（worker 施加时补上 tMs） */
 export type InputAction = InputEvent extends infer E ? (E extends unknown ? Omit<E, 'tMs'> : never) : never;
@@ -101,6 +103,8 @@ export function action(e: InputEvent): string | null {
     }
     case 'touch':
       return e.down ? `touch=${Math.round(e.x)},${Math.round(e.y)}` : 'release';
+    case 'ble':
+      return `ble=${e.cmd}`;
     case 'power':
       return null;
   }

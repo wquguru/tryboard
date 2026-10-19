@@ -22,6 +22,7 @@ export interface Ex {
   tb_analog_set(pin: number, mv: number): void;
   tb_uart_push(p: number, n: number): void;
   tb_usb_cdc_send(p: number, n: number): void;
+  tb_ble_cmd?(p: number, n: number): number;
   tb_pin_pwm(pin: number): number;
   tb_pin_pwm_freq(pin: number): number;
   tb_i2c_attach(kind: number, addr: number): number;
@@ -189,6 +190,10 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         const v = act.slice(6).split(',').map(Number);
         if (v.length === 2 && v.every((x) => !Number.isNaN(x))) e.tb_touch?.(v[0], v[1], 1);
       } else if (act === 'release') e.tb_touch?.(0, 0, 0);
+      else if (act.startsWith('ble=') && e.tb_ble_cmd) {
+        const cb = e.tb_ble_cmd;
+        bytesIn(e, new TextEncoder().encode(act.slice(4)), (p, n) => void cb(p, n));
+      }
     }
     if (j.pwmPin !== undefined) {
       const d = e.tb_pin_pwm(j.pwmPin);
