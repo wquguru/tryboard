@@ -145,6 +145,10 @@ PY
 echo -e "\n## wasm export interface (tools/gen_wasm_ts.py --check)" >> $REPORT
 python3 tools/gen_wasm_ts.py --check >> $REPORT 2>&1 || fail=1
 
+# Structural guardrails (R-14): file / function size, rAF outside frame.ts, chip literals, crate layering; allow list only shrinks
+echo -e "\n## Structural guardrails (tools/lint_size.py)" >> $REPORT
+{ python3 tools/lint_size.py && python3 tools/lint_size.py --selftest; } >> $REPORT 2>&1 || fail=1
+
 # Config cross-check (R-13): ids in firmware/*.json and the web catalog resolve to firmware, chips, devices and parts
 echo -e "\n## Config cross-check (tools/check_config.py)\n\`\`\`" >> $REPORT
 { python3 tools/check_config.py && python3 tools/check_config.py --selftest; } >> $REPORT 2>&1 || fail=1
