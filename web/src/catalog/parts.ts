@@ -5,7 +5,7 @@
 // - 价格是人工参考区间，不抓取网站；price.verified = false 表示还没人逐条核过
 // - 外链只用搜索页（淘宝 / 立创商城），不放店铺、不放联盟链接（docs/LICENSING.md）
 
-export type ChipId = 'esp32c3' | 'esp32s3';
+export type ChipId = 'esp32' | 'esp32c3' | 'esp32s3';
 
 export type Kind =
   | 'board'
@@ -132,7 +132,7 @@ export interface Part {
   name: string;
   kind: Kind;
   model: string;
-  /** 适配芯片（模块对两颗芯片都能用就两个都写） */
+  /** 适配芯片（外接模块三颗芯片都能用就都写） */
   chips: ChipId[];
   pins: Pin[] | null;
   voltage: { supply: [number, number] | null; logic: number | null };
@@ -182,7 +182,8 @@ type Draft = Omit<Part, 'price' | 'searchUrl' | 'todo' | 'sources' | 'chips' | '
   sources?: string[];
 };
 
-const BOTH: ChipId[] = ['esp32c3', 'esp32s3'];
+// 外接模块只看电平和总线，经典 ESP32 也能用（C-05 加入）
+const BOTH: ChipId[] = ['esp32', 'esp32c3', 'esp32s3'];
 
 function P(d: Draft): Part {
   return {
@@ -224,6 +225,12 @@ const C3_DEVKITM_PINS = header(
   ['G', '3V3', '3V3', 2, 3, 'G', 'RST', 'G', 0, 1, 10, 'G', '5V', '5V', 'G',
    'G', 21, 20, 'G', 9, 8, 'G', 7, 6, 5, 4, 'G', 18, 19, 'G'],
   { 21: 'TX(GPIO21)', 20: 'RX(GPIO20)' },
+);
+// ESP32-DevKitC V4 用户指南 J1 / J3（VP / VN = GPIO36 / 39；SD0–SD3 / CMD / CLK 接模组内 flash）
+const E32_DEVKITC_PINS = header(
+  ['3V3', 'EN', 36, 39, 34, 35, 32, 33, 25, 26, 27, 14, 12, 'G', 13, 'SD2', 'SD3', 'CMD', '5V',
+   'G', 23, 22, 1, 3, 21, 'G', 19, 18, 5, 17, 16, 4, 0, 2, 15, 'SD1', 'SD0', 'CLK'],
+  { 36: 'VP(GPIO36)', 39: 'VN(GPIO39)', 1: 'TX(GPIO1)', 3: 'RX(GPIO3)' },
 );
 // Seeed XIAO：D0–D10 + 5V / GND / 3V3（Seeed Wiki 引脚表；与 arduino-esp32 variants 一致）
 const xiaoPins = (gpios: number[]) => [
@@ -378,6 +385,30 @@ export const PARTS: Part[] = [
     sources: ['乐鑫 ESP32-C3-DevKitM-1 用户指南（J1 / J3 引脚表、彩灯 GPIO8、BOOT GPIO9）'],
     todo: ['pins：排针顺序按用户指南手录，待脚本对 arduino-esp32 variants 核对', 'board.usb：USB 口是否只有 USB-UART 待核', 'board.ldo', 'sizeMm', 'currentMa'],
     note: 'GPIO8 接彩灯、GPIO9 是 BOOT，两个都是 strapping 脚，外设尽量别接。',
+  }),
+  P({
+    id: 'esp32-devkitc-v4',
+    name: 'ESP32-DevKitC V4（WROOM-32E）',
+    kind: 'board',
+    model: 'ESP32-DevKitC V4（模组 ESP32-WROOM-32E，4 MB flash，CP2102 USB-UART）',
+    chips: ['esp32'],
+    pins: E32_DEVKITC_PINS,
+    voltage: { supply: [5, 5], logic: 3.3 },
+    currentMa: { typ: null, peak: null, est: true, source: BOARD_CURRENT_NOTE },
+    sizeMm: [54.4, 27.9, null],
+    sim: { level: 'verified', model: 'esp32-devkitc' },
+    price: [20, 45],
+    keywords: 'ESP32-DevKitC V4 WROOM-32E 开发板',
+    supplyNet: '5V',
+    board: {
+      chip: 'esp32', family: 'devkitc', version: 'v4', flashMB: 4, psramMB: 0, psram: 'none',
+      onboard: [{ gpio: 0, what: 'BOOT 键', kind: 'boot' }],
+      rgbGpio: null, ldo: { model: null, maxMa: null }, usb: 'uart', charger: false,
+      urls: ['https://docs.espressif.com/projects/esp-dev-kits/zh_CN/latest/esp32/esp32-devkitc/user_guide.html'],
+    },
+    sources: ['乐鑫 ESP32-DevKitC V4 用户指南（J1 / J3 引脚表、BOOT GPIO0、板尺寸 54.4 × 27.9 mm）'],
+    todo: ['sizeMm[2]：高度未量', 'board.ldo：稳压器型号与额定电流按原理图录入', 'currentMa：整板静态电流未测'],
+    note: '没有用户灯（只有电源灯），点灯要外接 LED。两排针相距 1″，插在 830 孔面包板上一侧没有空孔。GPIO34–39 只能输入；GPIO0 / 2 / 5 / 12 / 15 是 strapping 脚。试板模拟到 GPIO、LEDC、I2C、Wi-Fi 初始化；蓝牙、DAC、触摸、霍尔、RMT 必须上真机。',
   }),
   P({
     id: 'xiao-c3',

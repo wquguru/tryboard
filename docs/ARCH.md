@@ -150,6 +150,19 @@ web/（Vite + TS）
 - 未实现：PIE（EE.*）指令，按非法指令处理。
 - 验收：`tools/xtensa-tests/*.S` 自检汇编（`build.sh` 用 xtensa-esp32s3-elf-gcc 构建），`cargo test -p tryboard-xtensa` 跑全部并统计六个窗口向量的命中次数；`window` 测试必须六种都触发。本机有乐鑫 QEMU 时同一 ELF 在 QEMU 上跑一遍逐字差分，见 `tools/xtensa-tests/README.md`。
 
+## 经典 ESP32 SoC（C-05，`core/crates/esp32`）
+- 核：与 S3 同一个 `tryboard-xtensa`，`Cpu::with_variant(Variant::Lx6Esp32)`。两颗芯片的 core-isa.h 在本核实现的选项上一致（中断线类型 / 级别、窗口、循环、MUL/DIV、FPU、MAC16、向量偏移），只差硬件版本号 / CONFIGID（SR 176 / 208）；LX6 没有 PIE（本来就没实现）。
+- 存储映射（soc/esp32/include/soc/soc.h）：SRAM 520KB 一块缓冲，D 视图 0x3FFAE000..0x40000000（SRAM2 + SRAM1，328KB）在前、SRAM0（I 0x40070000，192KB）在后；SRAM1 的 I 视图 0x400A0000..0x400C0000 与 D 0x3FFE0000.. 同一块但**按字倒序**（SOC_DIRAM_INVERTED），只给不跨字的访问，取指页缓存不缓存它。ROM0 0x40000000、ROM1 只读数据 0x3FF90000（64KB）；RTC 快速内存 D 0x3FF80000 = I 0x400C0000，慢速内存 0x50000000。
+- cache：DROM0 0x3F400000、IROM0 0x400D0000 起，MMU 256 项 64KB 页（DPORT_PRO_FLASH_MMU_TABLE 0x3FF10000，0x100 = 无效；项 0..63 给 DROM，64.. 给 IROM），核 1 的表（0x3FF12000）IDF 总写成一样，取指只看核 0 的。默认板 DevKitC V4（WROOM-32E，4MB flash）。
+- 外设：MMIO 0x3FF00000..0x3FF80000，0x60000000 + x 是 0x3FF40000 + x 的 AHB 别名（UART / I2C FIFO 走它）。与 C3 / S3 寄存器语义相同的直接复用 tryboard-esp32c3（UART、I2C + SSD1306 / BME280、引脚器件、GPIO 记录），偏移不同的 TIMG、SPI1、LEDC 在 `periph.rs` 里做翻译层；I2C 按 `I2cLayout::ESP32`（命令码 RSTART 0 / WRITE 1 / READ 2 / STOP 3 / END 4、16 项命令表、SCL 直接按 APB 80MHz 计 14 位）。DPORT：两张中断矩阵（69 个源）、核间中断、cache 控制。GPIO 40 脚（0–39，无 20 / 24 / 28–31）。
+- LEDC：高速 / 低速两组各 8 通道；timer 的 tick_sel 0 = REF_TICK 1MHz，1 = 高速组 APB / 低速组 SLOW_CLK（APB_CLK_SEL 选 APB 或 8MHz），翻译层据此算频率。
+- 启动：直接启动同 S3（ROM 各 .data* 初值、入口窗口帧、双核由 `ets_set_appcpu_boot_addr` 拉起核 1，两核 256 周期量子交替）；一代 ROM（2016-06-08）的启动横幅只有两行。eFuse 只读：芯片版本 v3.0（REV1 / REV2 位 + APB_CTRL_DATE 位 31）、出厂 MAC 02:54:42:00:00:04（本地管理地址，带 CRC8）。
+- Wi-Fi：PHY 射频校准轮询与 C3 同一套（外设偏移相同、APB 基址 0x3FF40000），`esp_wifi_init` / `esp_wifi_start` 能过；**MAC 是上一代 IP（0x3FF73000 一带），收发 / DMA 没模型**，扫描收不到信标，`esp32-wifi` 停在「断开 reason=201」（找不到 AP）。`WifiLayout::ESP32` 只给统一接口用，总线不把地址交给它。
+- 未做（按未实现寄存器记 unimpl）：RMT（寄存器布局与 C3 / S3 不兼容）、ADC、GP-SPI、I2S、DAC、触摸、霍尔、蓝牙。
+- CLI / wasm：镜像头芯片 id 0 → ESP32（`Chip::Esp32`），ROM `esp32_rev300_rom.elf`（`tools/fetch_third_party.sh`）。`tb_image_chip` 认不出时返回 `u32::MAX`（0 已被 ESP32 占用）。短路电流估算沿用 C3 的数（`tb_fault` 的 s3 标志为 0）。
+- 网页：台面板 ESP32-DevKitC V4（`board3d.ts` `BOARD_E32`，54.4 × 27.9 mm、两排 19 针相距 1″、micro-USB + CP2102、没有用户灯 / RGB 灯）；两排针相距 1″ 插在 830 孔面包板上，整板沿 z 偏半格，使 J1 落在 j 排、J3 落在 b 排，a 排留给跳线。芯片显示名 / BOOT 键 / RGB 脚统一在 `web/src/chips.ts`。
+- 验收：accept.json 的 esp32-hello（与 QEMU 逐行一致）、esp32-blink（GPIO2）、esp32-fade（LEDC）、esp32-i2c（SSD1306 + BME280）、esp32-wifi-init；`tools/oracle_qemu.sh esp32-hello`。
+
 ## 原生 USB OTG（ESP32-S3，`crates/esp32s3/src/usb/`）
 - `dwc2.rs`：Synopsys DWC2 设备模式（基址 0x60080000，中断源 38）。寄存器按 DWC2 编程模型；ID / 硬件配置读回 S2/S3 实测值（GSNPSID 0x4F54400A = 4.00a，CSRST 自清；GHWCFG2 0x224DD930、GHWCFG3 0x00C804B5、GHWCFG4 0xD3F0A030）。
   - 两条数据通路：GAHBCFG.DMAEN=1 时按 DIEPDMAn / DOEPDMAn 直接读写内存（SETUP 写到 DOEPDMA0 后指针 +8、置 STUP、关 EP0 OUT）；否则走 Slave：GRXSTSP 弹出状态字、FIFO 窗口读数据，IN 数据由固件写入各端点发送 FIFO（按 32 位字，含包尾填充，取包时按 tsiz 算包长并丢弃填充）。

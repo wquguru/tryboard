@@ -1,0 +1,13 @@
+[package]
+name = "tryboard-esp32"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+tryboard-xtensa = { path = "../xtensa" }
+tryboard-rv32 = { path = "../rv32" }
+# 与 C3 / S3 寄存器语义相同的外设模型（UART、TIMG、SPI flash、LEDC、I2C、中断矩阵线路）直接复用
+tryboard-esp32c3 = { path = "../esp32c3" }
+tryboard-esp32s3 = { path = "../esp32s3" }
+tryboard-soc = { path = "../soc" }

@@ -8,12 +8,13 @@ chip="${3:-$(sed -n 's/^CONFIG_IDF_TARGET="\(.*\)"/\1/p' "$ROOT/firmware/$n/sdkc
 chip="${chip:-esp32c3}"
 case "$chip" in
   esp32c3) Q=$(ls -d ~/.espressif/tools/qemu-riscv32/*/qemu/bin | tail -1); exe=qemu-system-riscv32; size=$((4<<20)) ;;
+  esp32) Q=$(ls -d ~/.espressif/tools/qemu-xtensa/*/qemu/bin | tail -1); exe=qemu-system-xtensa; size=$((4<<20)) ;;
   esp32s3) Q=$(ls -d ~/.espressif/tools/qemu-xtensa/*/qemu/bin | tail -1); exe=qemu-system-xtensa; size=$((16<<20)) ;;
   *) echo "不支持的芯片 $chip"; exit 2 ;;
 esac
 mkdir -p "$ROOT/Reviews/qemu"
 img="$ROOT/Reviews/qemu/$n.flash.bin"
-# QEMU 要求镜像正好是 flash 大小（C3 示例 4MB，S3 示例 16MB）
+# QEMU 要求镜像正好是 flash 大小（C3 / ESP32 示例 4MB，S3 示例 16MB）
 python3 -c "import sys;d=open(sys.argv[1],'rb').read();n=int(sys.argv[3]);open(sys.argv[2],'wb').write(d+b'\xff'*(n-len(d)))" "$ROOT/firmware/build/$n/flash.bin" "$img" "$size"
 "$Q/$exe" -nographic -machine "$chip" -drive "file=$img,if=mtd,format=raw" -serial file:"$ROOT/Reviews/qemu/$n.log" -monitor none &
 pid=$!

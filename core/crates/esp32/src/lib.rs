@@ -1,0 +1,916 @@
+//! 经典 ESP32（Xtensa LX6 双核）SoC：存储映射、外设分发、直接启动、双核运行循环。
+//! 核与 S3 共用 tryboard-xtensa（按 LX6 参数化）；与 C3 / S3 寄存器语义相同的外设复用它们的模型，
+//! 偏移不同的（TIMG、SPI1、LEDC）在 periph.rs 里做翻译层。运行循环与 S3 相同（两核按固定量子交替，确定性）。
+
+pub mod boot;
+pub mod hle;
+pub mod periph;
+
+use periph::*;
+use std::collections::HashMap;
+use tryboard_esp32c3::devices::audio::Audio;
+use tryboard_esp32c3::devices::pins::PinDevices;
+use tryboard_esp32c3::i2c::{I2c, I2cLayout};
+use tryboard_esp32c3::iotrace::IoTrace;
+use tryboard_esp32c3::periph::Uart;
+use tryboard_esp32c3::rmt::Ws2812;
+use tryboard_esp32c3::tasktrace::TaskTrace;
+use tryboard_soc::wifi::{WifiLayout, WifiMac};
+use tryboard_xtensa::{sr, Bus, BusFault, Cpu, Exit};
+
+pub const CPU_HZ: u64 = tryboard_esp32c3::periph::CPU_HZ;
+
+// 存储映射（soc/esp32/include/soc/soc.h、TRM 第 1 章）
+/// SRAM2 + SRAM1 的 D 总线视图（0x3FFAE000..0x40000000，328KB）
+pub const DRAM_LOW: u32 = 0x3FFA_E000;
+pub const DRAM_HIGH: u32 = 0x4000_0000;
+/// SRAM0 的 I 总线视图（192KB）
+pub const IRAM_LOW: u32 = 0x4007_0000;
+pub const IRAM_HIGH: u32 = 0x400A_0000;
+/// SRAM1 的 I 总线视图：与 D 0x3FFE0000..0x40000000 是同一块，但按字倒序（SOC_DIRAM_INVERTED）
+pub const IRAM1_LOW: u32 = 0x400A_0000;
+pub const IRAM1_HIGH: u32 = 0x400C_0000;
+/// SRAM 缓冲：D 视图 328KB 在前，SRAM0 192KB 在后，共 520KB
+const SRAM0_OFF: usize = (DRAM_HIGH - DRAM_LOW) as usize;
+pub const SRAM_SIZE: usize = 520 << 10;
+pub const ROM_LOW: u32 = 0x4000_0000;
+pub const ROM_HIGH: u32 = 0x4007_0000;
+/// ROM1 只读数据（D 总线 64KB），接在 rom 缓冲的 ROM0 之后
+pub const DROM1_LOW: u32 = 0x3FF9_0000;
+pub const DROM1_HIGH: u32 = 0x3FFA_0000;
+const DROM1_OFF: usize = (ROM_HIGH - ROM_LOW) as usize;
+/// cache 窗口：DROM0 4MB、IROM0（0x400D0000 起，前面 0x400C0000..0x400D0000 不可用）
+pub const DROM_LOW: u32 = 0x3F40_0000;
+pub const DROM_HIGH: u32 = 0x3F80_0000;
+pub const IROM_LOW: u32 = 0x400D_0000;
+pub const IROM_HIGH: u32 = 0x40C0_0000;
+/// RTC 快速内存（8KB，D 0x3FF80000 与 I 0x400C0000 同一块）、慢速内存（8KB）
+pub const RTC_FAST_D: u32 = 0x3FF8_0000;
+pub const RTC_FAST_I: u32 = 0x400C_0000;
+pub const RTC_FAST_SIZE: u32 = 0x2000;
+pub const RTC_SLOW_LOW: u32 = 0x5000_0000;
+pub const RTC_SLOW_HIGH: u32 = 0x5000_2000;
+pub const MMIO_LOW: u32 = 0x3FF0_0000;
+pub const MMIO_HIGH: u32 = 0x3FF8_0000;
+/// 外设的 AHB 别名（UART FIFO、I2C FIFO 用它）：0x60000000 + x = 0x3FF40000 + x
+pub const AHB_LOW: u32 = 0x6000_0000;
+pub const AHB_HIGH: u32 = 0x6004_0000;
+const AHB_TO_APB: u32 = 0x3FF4_0000;
+
+/// cache MMU（DPORT_PRO_FLASH_MMU_TABLE）：256 项，每项 64KB 页；0x100 = 无效。
+/// 项 0..63 给 DROM0（0x3F400000 起），项 64.. 给 IROM0（0x40000000 起按 64KB 计）
+pub const MMU_PRO: u32 = 0x3FF1_0000;
+pub const MMU_APP: u32 = 0x3FF1_2000;
+pub const MMU_ENTRIES: usize = 256;
+pub const MMU_INVALID: u32 = 0x100;
+
+const UART0: u32 = 0x3FF4_0000;
+const UART1: u32 = 0x3FF5_0000;
+const UART2: u32 = 0x3FF6_E000;
+const RTC_CNTL: u32 = 0x3FF4_8000;
+/// RTC_CNTL_OPTIONS0 的软件复位位（rtc_cntl_reg.h，位置与 S3 相同）
+const RST_SYS: u32 = 1 << 31;
+const RST_PROCPU: u32 = 1 << 5;
+const RST_APPCPU: u32 = 1 << 4;
+pub const RTC_CNTL_RESET_STATE: u32 = RTC_CNTL + 0x34;
+/// RTC_CNTL_STORE0..3（0x4C..0x58）、STORE6..7（0xB8..0xBC）复位后保持；STORE4 / 5 由 ROM 重写
+const RTC_STORE_KEEP: [u32; 6] = [
+    RTC_CNTL + 0x4c,
+    RTC_CNTL + 0x50,
+    RTC_CNTL + 0x54,
+    RTC_CNTL + 0x58,
+    RTC_CNTL + 0xb8,
+    RTC_CNTL + 0xbc,
+];
+/// 硬件随机数（wdev_reg.h：WDEV_RND_REG）
+pub const WDEV_RND_REG: u32 = 0x3FF7_5144;
+/// APB_CTRL_DATE_REG：位 31 是芯片版本 v3 的第三个版本位（efuse_hal_get_major_chip_version）
+const APB_CTRL_DATE: u32 = 0x3FF6_607C;
+
+pub struct SocBus {
+    pub sram: Vec<u8>,
+    pub rtc_slow: Vec<u8>,
+    pub rtc_fast: Vec<u8>,
+    pub rom: Vec<u8>,
+    pub flash: Vec<u8>,
+    pub mmu: Vec<u32>,
+    pub mmu_app: Vec<u32>,
+    /// 取指页缓存（同 S3）：最近一次取指所在 64KB 页、所在存储、页首偏移。写 MMU 时作废
+    fetch_page: u32,
+    fetch_src: FetchSrc,
+    fetch_base: usize,
+    pub now: u64,
+    pub uart0: Uart,
+    pub uart1: Uart,
+    pub uart2: Uart,
+    pub timg0: Esp32Timg,
+    pub timg1: Esp32Timg,
+    /// DPORT：两张中断矩阵、核间中断、cache 控制
+    pub dport: Dport,
+    pub lines: [u32; 2],
+    pub appcpu_boot: Option<u32>,
+    pub gpio: Gpio,
+    pub spi1: Spi1,
+    pub ledc: Esp32Ledc,
+    pub analog: Analog,
+    /// 板上没有 RMT 模型（ESP32 的 RMT 寄存器布局与 C3 / S3 不兼容，见 DECISIONS），表留空给统一接口
+    pub ws2812: HashMap<u32, Ws2812>,
+    pub pins: PinDevices,
+    pub i2c0: I2c,
+    pub i2c1: I2c,
+    pub adc: Adc,
+    pub audio: Audio,
+    /// ESP32 的 Wi-Fi MAC 是上一代 IP，模型未接（见 DECISIONS）；留一个不接地址的实例给统一接口
+    pub wifi: Option<Box<WifiMac>>,
+    pub rng: u32,
+    pub efuse: [u32; 0x200 / 4],
+    pub console: Vec<u8>,
+    pub regs: HashMap<u32, u32>,
+    pub unimpl: HashMap<u32, u64>,
+    pub irq_dirty: bool,
+    pub next_event: u64,
+    pub gpio_log: Vec<(u64, u64)>,
+    last_gpio: u64,
+    pub iotrace: IoTrace,
+    /// FreeRTOS 任务时间线（C-04）；Xtensa 栈帧第 2 字是 PC
+    pub tasks: TaskTrace,
+    pub reset_request: Option<u32>,
+    pub appcpu_reset: bool,
+    pub reset_reason: u32,
+}
+
+/// 引脚模拟电压（ADC 模型未做，先留存储给统一接口）
+pub struct Adc {
+    pub pin_mv: [f32; NPINS],
+}
+
+impl Default for Adc {
+    fn default() -> Self {
+        Adc {
+            pin_mv: [0.0; NPINS],
+        }
+    }
+}
+
+impl Default for SocBus {
+    fn default() -> Self {
+        let mut spi1 = Spi1::default();
+        // DevKitC V4 的 WROOM-32 模组：4MB
+        spi1.inner.jedec = 0x16_40_c8;
+        SocBus {
+            sram: vec![0; SRAM_SIZE],
+            rtc_slow: vec![0; (RTC_SLOW_HIGH - RTC_SLOW_LOW) as usize],
+            rtc_fast: vec![0; RTC_FAST_SIZE as usize],
+            rom: vec![0; 0x80000],
+            flash: Vec::new(),
+            mmu: vec![MMU_INVALID; MMU_ENTRIES],
+            mmu_app: vec![MMU_INVALID; MMU_ENTRIES],
+            fetch_page: u32::MAX,
+            fetch_src: FetchSrc::Sram,
+            fetch_base: 0,
+            now: 0,
+            uart0: Uart::default(),
+            uart1: Uart::default(),
+            uart2: Uart::default(),
+            timg0: Esp32Timg::default(),
+            timg1: Esp32Timg::default(),
+            dport: Dport::default(),
+            lines: [0; 2],
+            appcpu_boot: None,
+            gpio: Gpio::default(),
+            spi1,
+            ledc: Esp32Ledc::default(),
+            analog: Analog::default(),
+            ws2812: HashMap::new(),
+            pins: PinDevices::default(),
+            i2c0: I2c::with_layout(I2cLayout::ESP32, 0),
+            i2c1: I2c::with_layout(I2cLayout::ESP32, tryboard_esp32c3::iotrace::i2cbit::PORT1),
+            adc: Adc::default(),
+            audio: Audio::default(),
+            wifi: Some(Box::new(WifiMac::new(WifiLayout::ESP32))),
+            rng: 0x2545_f491,
+            efuse: default_efuse(),
+            console: Vec::new(),
+            regs: HashMap::new(),
+            unimpl: HashMap::new(),
+            irq_dirty: true,
+            next_event: 0,
+            gpio_log: Vec::new(),
+            last_gpio: 1,
+            iotrace: IoTrace::new(1),
+            tasks: TaskTrace::new(4),
+            reset_request: None,
+            appcpu_reset: false,
+            reset_reason: 1,
+        }
+    }
+}
+
+#[inline(always)]
+fn rd(buf: &[u8], off: usize, size: u32) -> Option<u32> {
+    match size {
+        4 => buf
+            .get(off..off + 4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])),
+        2 => buf
+            .get(off..off + 2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]) as u32),
+        _ => buf.get(off).map(|b| *b as u32),
+    }
+}
+
+#[inline(always)]
+fn wr(buf: &mut [u8], off: usize, size: u32, v: u32) -> Option<()> {
+    let b = buf.get_mut(off..off + size as usize)?;
+    b.copy_from_slice(&v.to_le_bytes()[..size as usize]);
+    Some(())
+}
+
+#[derive(Clone, Copy)]
+enum FetchSrc {
+    Sram,
+    Flash,
+    Rom,
+}
+
+impl SocBus {
+    /// cache 窗口地址 → flash 偏移
+    #[inline]
+    fn flash_addr(&self, vaddr: u32) -> Option<usize> {
+        let idx = if (DROM_LOW..DROM_HIGH).contains(&vaddr) {
+            ((vaddr - DROM_LOW) >> 16) as usize
+        } else if (IROM_LOW..IROM_HIGH).contains(&vaddr) {
+            64 + ((vaddr - ROM_LOW) >> 16) as usize
+        } else {
+            return None;
+        };
+        let e = *self.mmu.get(idx)?;
+        if e & MMU_INVALID != 0 {
+            return None;
+        }
+        Some((((e & 0xff) << 16) | (vaddr & 0xffff)) as usize)
+    }
+
+    /// SRAM 缓冲偏移（SRAM1 的 I 总线倒序视图要按字翻转，只给不跨字的访问）
+    #[inline]
+    fn sram_off(a: u32) -> Option<usize> {
+        if (DRAM_LOW..DRAM_HIGH).contains(&a) {
+            Some((a - DRAM_LOW) as usize)
+        } else if (IRAM_LOW..IRAM_HIGH).contains(&a) {
+            Some(SRAM0_OFF + (a - IRAM_LOW) as usize)
+        } else if (IRAM1_LOW..IRAM1_HIGH).contains(&a) {
+            let o = a - IRAM1_LOW;
+            let d = DRAM_HIGH - 4 - (o & !3) + (o & 3);
+            Some((d - DRAM_LOW) as usize)
+        } else {
+            None
+        }
+    }
+
+    fn rtc_fast_off(a: u32) -> Option<usize> {
+        if (RTC_FAST_D..RTC_FAST_D + RTC_FAST_SIZE).contains(&a) {
+            Some((a - RTC_FAST_D) as usize)
+        } else if (RTC_FAST_I..RTC_FAST_I + RTC_FAST_SIZE).contains(&a) {
+            Some((a - RTC_FAST_I) as usize)
+        } else {
+            None
+        }
+    }
+
+    pub fn mem_read(&self, a: u32, size: u32) -> Option<u32> {
+        if let Some(o) = Self::sram_off(a) {
+            rd(&self.sram, o, size)
+        } else if (IROM_LOW..IROM_HIGH).contains(&a) || (DROM_LOW..DROM_HIGH).contains(&a) {
+            let f = self.flash_addr(a)?;
+            Some(rd(&self.flash, f, size).unwrap_or(0xffff_ffff))
+        } else if (ROM_LOW..ROM_HIGH).contains(&a) {
+            rd(&self.rom, (a - ROM_LOW) as usize, size)
+        } else if (DROM1_LOW..DROM1_HIGH).contains(&a) {
+            rd(&self.rom, DROM1_OFF + (a - DROM1_LOW) as usize, size)
+        } else if let Some(o) = Self::rtc_fast_off(a) {
+            rd(&self.rtc_fast, o, size)
+        } else if (RTC_SLOW_LOW..RTC_SLOW_HIGH).contains(&a) {
+            rd(&self.rtc_slow, (a - RTC_SLOW_LOW) as usize, size)
+        } else {
+            None
+        }
+    }
+
+    pub fn mem_write(&mut self, a: u32, size: u32, v: u32) -> Option<()> {
+        if let Some(o) = Self::sram_off(a) {
+            wr(&mut self.sram, o, size, v)
+        } else if let Some(o) = Self::rtc_fast_off(a) {
+            wr(&mut self.rtc_fast, o, size, v)
+        } else if (RTC_SLOW_LOW..RTC_SLOW_HIGH).contains(&a) {
+            wr(&mut self.rtc_slow, (a - RTC_SLOW_LOW) as usize, size, v)
+        } else {
+            None
+        }
+    }
+
+    /// AHB 别名换成 APB 地址；两段都不是返回 None
+    #[inline]
+    fn mmio_addr(a: u32) -> Option<u32> {
+        if (MMIO_LOW..MMIO_HIGH).contains(&a) {
+            Some(a)
+        } else if (AHB_LOW..AHB_HIGH).contains(&a) {
+            Some(a - AHB_LOW + AHB_TO_APB)
+        } else {
+            None
+        }
+    }
+
+    fn mmio_read(&mut self, a: u32) -> u32 {
+        let now = self.now;
+        let (base, off) = (a & !0xfff, a & 0xfff);
+        match base {
+            0x3FF0_0000 => {
+                let lv = self.levels();
+                return self.dport.read(off, &lv);
+            }
+            MMU_PRO if (off as usize) < MMU_ENTRIES * 4 => return self.mmu[(off / 4) as usize],
+            MMU_APP if (off as usize) < MMU_ENTRIES * 4 => return self.mmu_app[(off / 4) as usize],
+            UART0 => return self.uart0.read(off),
+            UART1 => return self.uart1.read(off),
+            UART2 => return self.uart2.read(off),
+            0x3FF4_2000 => return self.spi1.read(off),
+            0x3FF4_4000 => return self.gpio.read(off),
+            0x3FF4_9000 => {
+                if let Some(p) = Gpio::iomux_pin(off) {
+                    return self.gpio.iomux[p];
+                }
+            }
+            0x3FF5_3000 => return self.i2c0.read(off),
+            0x3FF6_7000 => return self.i2c1.read(off),
+            0x3FF5_9000 => return self.ledc.read(off),
+            0x3FF5_A000 if off < 0x200 => return self.efuse[(off / 4) as usize],
+            0x3FF5_F000 => return self.timg0.read(off, now),
+            0x3FF6_0000 => return self.timg1.read(off, now),
+            RTC_CNTL => match off {
+                // TIME_UPDATE：位 30 TIME_VALID 立即有效
+                0x0c => return self.regs.get(&a).copied().unwrap_or(0) | (1 << 30),
+                // RTC 慢时钟计数（RC 慢时钟约 150kHz，与 TIMG 的 RTC 校准结果一致即可）
+                0x10 => return (now * 136_000 / CPU_HZ) as u32,
+                0x14 => return ((now * 136_000 / CPU_HZ) >> 32) as u32,
+                0x34 => return self.reset_reason | (self.reset_reason << 6),
+                _ => {}
+            },
+            _ => {}
+        }
+        if a == WDEV_RND_REG {
+            let mut x = self.rng;
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            self.rng = x;
+            return x;
+        }
+        if a == APB_CTRL_DATE {
+            return 0x8000_0000 | 0x1605_1900;
+        }
+        if let Some(v) = self
+            .wifi()
+            .rf_read(a, self.regs.get(&a).copied().unwrap_or(0))
+        {
+            return v;
+        }
+        *self.unimpl.entry(a).or_insert(0) += 1;
+        self.regs.get(&a).copied().unwrap_or(0)
+    }
+
+    fn mmio_write(&mut self, a: u32, v: u32) {
+        let now = self.now;
+        let (base, off) = (a & !0xfff, a & 0xfff);
+        self.irq_dirty = true;
+        match base {
+            0x3FF0_0000 => return self.dport.write(off, v),
+            MMU_PRO if (off as usize) < MMU_ENTRIES * 4 => {
+                self.mmu[(off / 4) as usize] = v & 0x1ff;
+                self.fetch_page = u32::MAX;
+                return;
+            }
+            // 核 1 的 MMU 表：IDF 总是两张写成一样，取指只看核 0 的那张
+            MMU_APP if (off as usize) < MMU_ENTRIES * 4 => {
+                self.mmu_app[(off / 4) as usize] = v & 0x1ff;
+                return;
+            }
+            UART0 => {
+                self.uart0.write(off, v);
+                if off == 0 {
+                    self.console.push(v as u8);
+                }
+                return;
+            }
+            UART1 => return self.uart1.write(off, v),
+            UART2 => return self.uart2.write(off, v),
+            0x3FF4_2000 => return self.spi1.write(off, v, &mut self.flash),
+            0x3FF4_4000 => {
+                self.gpio.write(off, v);
+                if (0x20..0x38).contains(&off) || off >= 0x530 {
+                    self.iotrace.pwm_dirty = true;
+                }
+                self.gpio_changed(now);
+                return;
+            }
+            0x3FF4_9000 => {
+                if let Some(p) = Gpio::iomux_pin(off) {
+                    self.gpio.iomux[p] = v;
+                    self.gpio_changed(now);
+                    return;
+                }
+            }
+            0x3FF5_3000 | 0x3FF6_7000 => {
+                let bus = if base == 0x3FF5_3000 {
+                    &mut self.i2c0
+                } else {
+                    &mut self.i2c1
+                };
+                bus.write(off, v, now);
+                if !bus.events.is_empty() {
+                    self.iotrace.extend(&mut bus.events);
+                }
+                return;
+            }
+            0x3FF5_9000 => return self.ledc.write(off, v, now),
+            // eFuse 读寄存器只读；CMD 等写入不保存，读回 0（"命令已完成"）
+            0x3FF5_A000 if off < 0x200 => return,
+            0x3FF5_F000 => return self.timg0.write(off, v, now),
+            0x3FF6_0000 => return self.timg1.write(off, v, now),
+            // 复位位是脉冲：只记请求，存回去的值去掉它们
+            RTC_CNTL if off == 0 => {
+                if v & (RST_SYS | RST_PROCPU) != 0 {
+                    self.reset_request = Some(if v & RST_SYS != 0 { 3 } else { 12 });
+                } else if v & RST_APPCPU != 0 {
+                    self.appcpu_reset = true;
+                }
+                self.regs
+                    .insert(a, v & !(RST_SYS | RST_PROCPU | RST_APPCPU));
+                return;
+            }
+            _ => {}
+        }
+        *self.unimpl.entry(a).or_insert(0) += 1;
+        self.regs.insert(a, v);
+    }
+
+    pub fn wifi(&self) -> &WifiMac {
+        self.wifi.as_deref().expect("wifi")
+    }
+    pub fn wifi_mut(&mut self) -> &mut WifiMac {
+        self.wifi.as_deref_mut().expect("wifi")
+    }
+
+    pub fn gpio_changed(&mut self, now: u64) {
+        self.gpio.sense();
+        let lv = self.gpio.level();
+        if lv != self.last_gpio {
+            self.last_gpio = lv;
+            self.iotrace.gpio(now, lv);
+            self.gpio_log.push((now, lv));
+            if self.gpio_log.len() > 1 << 16 {
+                self.gpio_log.drain(..1 << 15);
+            }
+            self.pins.on_level(now, lv);
+        }
+        self.irq_dirty = true;
+    }
+
+    /// 外接引脚器件到 now 为止的驱动按时刻施加到引脚；返回下一次要问它们的时刻
+    fn pins_update(&mut self, now: u64) -> u64 {
+        if self.pins.is_empty() {
+            return u64::MAX;
+        }
+        loop {
+            let (drives, next) = self.pins.poll(now);
+            if drives.is_empty() {
+                return next;
+            }
+            for (t, pin, lv) in drives {
+                let bit = 1u64 << pin;
+                let g = &mut self.gpio;
+                if lv < 0 {
+                    g.ext_driven &= !bit;
+                } else {
+                    g.ext_driven |= bit;
+                    if lv > 0 {
+                        g.ext_in |= bit;
+                    } else {
+                        g.ext_in &= !bit;
+                    }
+                }
+                self.gpio_changed(t);
+            }
+        }
+    }
+
+    /// 所有中断源的当前电平（69 个源）
+    pub fn levels(&self) -> [u64; 2] {
+        let mut l = [0u64; 2];
+        let mut set = |s: u32, on: bool| {
+            if on {
+                l[(s / 64) as usize] |= 1 << (s % 64);
+            }
+        };
+        set(src::UART0, self.uart0.irq());
+        set(src::UART1, self.uart1.irq());
+        set(src::UART2, self.uart2.irq());
+        set(src::GPIO, self.gpio.irq());
+        set(src::LEDC, self.ledc.irq());
+        set(src::I2C_EXT0, self.i2c0.irq());
+        set(src::I2C_EXT1, self.i2c1.irq());
+        set(src::TG0_T0, self.timg0.irq(0));
+        set(src::TG0_T1, self.timg0.irq(1));
+        set(src::TG0_LACT, self.timg0.irq(2));
+        set(src::TG1_T0, self.timg1.irq(0));
+        set(src::TG1_T1, self.timg1.irq(1));
+        set(src::TG1_LACT, self.timg1.irq(2));
+        for i in 0..4 {
+            set(src::FROM_CPU0 + i, self.dport.from_cpu & (1 << i) != 0);
+        }
+        l
+    }
+
+    fn trace_pwm(&mut self, now: u64) {
+        let rev = self.ledc.rev();
+        if !self.iotrace.pwm_scan_needed(rev) {
+            return;
+        }
+        self.iotrace.pwm_dirty = false;
+        self.iotrace.ledc_rev = rev;
+        for pin in 0..NPINS {
+            let p = self.pin_pwm(pin);
+            self.iotrace.pwm(now, pin, p);
+        }
+    }
+
+    /// 引脚上的 PWM：经 GPIO 矩阵路由到该引脚的 LEDC 通道输出（占空比, 频率）
+    pub fn pin_pwm(&self, pin: usize) -> Option<(f32, f32)> {
+        let f = *self.gpio.func_out.get(pin)?;
+        if self.gpio.enable & (1 << pin) == 0 {
+            return None;
+        }
+        let (d, hz) = self.ledc.output(f & 0x1ff)?;
+        let inv = f & (1 << 9) != 0;
+        Some((if inv { 1.0 - d } else { d }, hz))
+    }
+
+    pub fn update(&mut self) {
+        let now = self.now;
+        let n1 = self.timg0.update(now).min(self.timg1.update(now));
+        let n2 = self.ledc.update(now);
+        let n3 = self.i2c0.update(now).min(self.i2c1.update(now));
+        let n4 = self.pins_update(now);
+        self.trace_pwm(now);
+        self.next_event = n1.min(n2).min(n3).min(n4);
+        let lv = self.levels();
+        let (l0, r0) = self.dport.pro.lines(&lv);
+        let (l1, r1) = self.dport.app.lines(&lv);
+        self.lines = [l0 | r0, l1 | r1];
+        self.irq_dirty = false;
+    }
+}
+
+impl Bus for SocBus {
+    fn sp_loaded(&mut self, core: u32, base: u32, cycles: u64) {
+        if self.tasks.cap == 0 {
+            return;
+        }
+        let mut t = std::mem::replace(&mut self.tasks, TaskTrace::new(4));
+        t.on_sp_load(core, base, cycles, true, &|a| self.mem_read(a, 4));
+        self.tasks = t;
+    }
+    #[inline]
+    fn load(&mut self, a: u32, size: u32) -> Result<u32, BusFault> {
+        if let Some(o) = Self::sram_off(a) {
+            if let Some(v) = rd(&self.sram, o, size) {
+                return Ok(v);
+            }
+        }
+        if let Some(v) = self.mem_read(a, size) {
+            return Ok(v);
+        }
+        if let Some(m) = Self::mmio_addr(a) {
+            let v = self.mmio_read(m & !3);
+            let sh = (a & 3) * 8;
+            return Ok(match size {
+                4 => v,
+                2 => (v >> sh) & 0xffff,
+                _ => (v >> sh) & 0xff,
+            });
+        }
+        Err(BusFault)
+    }
+
+    #[inline]
+    fn store(&mut self, a: u32, size: u32, v: u32) -> Result<(), BusFault> {
+        if let Some(o) = Self::sram_off(a) {
+            if wr(&mut self.sram, o, size, v).is_some() {
+                return Ok(());
+            }
+        }
+        if self.mem_write(a, size, v).is_some() {
+            return Ok(());
+        }
+        if let Some(m) = Self::mmio_addr(a) {
+            let aa = m & !3;
+            let v = if size == 4 {
+                v
+            } else {
+                // 子字写：与外设当前值合并（UART FIFO 读有出队副作用，不参与）
+                let sh = (a & 3) * 8;
+                let mask = if size == 2 { 0xffff } else { 0xff } << sh;
+                let old = if aa == UART0 || aa == UART1 || aa == UART2 {
+                    0
+                } else {
+                    let before = self.unimpl.get(&aa).copied();
+                    let v = self.mmio_read(aa);
+                    match before {
+                        Some(n) => {
+                            self.unimpl.insert(aa, n);
+                        }
+                        None => {
+                            self.unimpl.remove(&aa);
+                        }
+                    }
+                    v
+                };
+                (old & !mask) | ((v << sh) & mask)
+            };
+            self.mmio_write(aa, v);
+            return Ok(());
+        }
+        Err(BusFault)
+    }
+
+    #[inline]
+    fn fetch(&mut self, a: u32) -> Result<u32, BusFault> {
+        let o = (a & 0xffff) as usize;
+        if a >> 16 == self.fetch_page && o <= 0xfffc {
+            let buf = match self.fetch_src {
+                FetchSrc::Sram => &self.sram,
+                FetchSrc::Flash => &self.flash,
+                FetchSrc::Rom => &self.rom,
+            };
+            let i = self.fetch_base + o;
+            if let Some(b) = buf.get(i..i + 4) {
+                return Ok(u32::from_le_bytes([b[0], b[1], b[2], 0]));
+            }
+        }
+        self.fetch_slow(a)
+    }
+
+    #[inline(always)]
+    fn attention(&mut self, cycles: u64) -> bool {
+        if self.irq_dirty {
+            return true;
+        }
+        if cycles > self.now {
+            self.now = cycles;
+        }
+        self.now >= self.next_event
+    }
+}
+
+impl SocBus {
+    /// 取指慢路径；顺便填取指页缓存（只缓存整页连续的：SRAM0、ROM、IROM 窗口；SRAM1 倒序视图不缓存）
+    #[inline(never)]
+    fn fetch_slow(&mut self, a: u32) -> Result<u32, BusFault> {
+        self.fetch_page = u32::MAX;
+        let page = a & !0xffff;
+        if (IRAM_LOW..IRAM_HIGH).contains(&page) {
+            self.fetch_page = a >> 16;
+            self.fetch_src = FetchSrc::Sram;
+            self.fetch_base = SRAM0_OFF + (page - IRAM_LOW) as usize;
+        } else if (ROM_LOW..ROM_HIGH).contains(&page) {
+            self.fetch_page = a >> 16;
+            self.fetch_src = FetchSrc::Rom;
+            self.fetch_base = (page - ROM_LOW) as usize;
+        } else if (IROM_LOW..IROM_HIGH).contains(&page) {
+            if let Some(f) = self.flash_addr(page) {
+                self.fetch_page = a >> 16;
+                self.fetch_src = FetchSrc::Flash;
+                self.fetch_base = f;
+            }
+        }
+        if !(IRAM1_LOW..IRAM1_HIGH).contains(&a) {
+            if let Some(v) = self.mem_read(a, 4) {
+                return Ok(v & 0xff_ffff);
+            }
+        }
+        let b0 = self.load(a, 1)?;
+        let b1 = self.load(a.wrapping_add(1), 1)?;
+        let b2 = self.load(a.wrapping_add(2), 1).unwrap_or(0);
+        Ok(b0 | (b1 << 8) | (b2 << 16))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Stop {
+    Budget,
+    Fault { cause: u32, epc: u32, vaddr: u32 },
+    Break(u32),
+    Hle(u32),
+    Reset(u32),
+}
+
+pub struct Esp32 {
+    pub cpu: Cpu,
+    pub cpu1: Cpu,
+    pub cpu1_on: bool,
+    pub bus: SocBus,
+    pub rom_symbols: HashMap<u32, String>,
+    pub hle: HashMap<u32, hle::Hle>,
+    pub rom_elf: Vec<u8>,
+}
+
+const QUANTUM: u64 = 256;
+
+fn run_core(
+    k: usize,
+    cpu: &mut Cpu,
+    bus: &mut SocBus,
+    hle: &HashMap<u32, hle::Hle>,
+    until: u64,
+    idle_until: u64,
+) -> Option<Stop> {
+    cpu.set_irq_lines(bus.lines[k]);
+    while cpu.cycles < until {
+        if cpu.cycles > bus.now {
+            bus.now = cpu.cycles;
+        }
+        if bus.irq_dirty || bus.now >= bus.next_event {
+            bus.update();
+            cpu.set_irq_lines(bus.lines[k]);
+        }
+        match cpu.run_batch(bus, until, 0x4000_0300, 0x4000_0400) {
+            Exit::Normal => {
+                let pc = cpu.pc;
+                if (0x4000_0300..0x4000_0400).contains(&pc) && cpu.read_sr(sr::VECBASE) == ROM_LOW {
+                    return Some(Stop::Fault {
+                        cause: cpu.read_sr(sr::EXCCAUSE),
+                        epc: cpu.read_sr(sr::EPC1),
+                        vaddr: cpu.read_sr(sr::EXCVADDR),
+                    });
+                }
+                if bus.irq_dirty {
+                    if let Some(r) = bus.reset_request.take() {
+                        return Some(Stop::Reset(r));
+                    }
+                    bus.update();
+                    cpu.set_irq_lines(bus.lines[k]);
+                }
+            }
+            Exit::Waiti => {
+                let target = bus
+                    .next_event
+                    .min(cpu.next_timer_event().unwrap_or(u64::MAX))
+                    .min(idle_until);
+                if target > cpu.cycles {
+                    cpu.cycles = target;
+                } else {
+                    cpu.cycles += 1;
+                }
+            }
+            Exit::Hle(pc) => match hle.get(&pc) {
+                Some(kind) => hle::call(*kind, cpu, bus),
+                None => return Some(Stop::Hle(pc)),
+            },
+            Exit::Break(v) => return Some(Stop::Break(v)),
+            Exit::Simcall => {}
+        }
+    }
+    None
+}
+
+impl Esp32 {
+    pub fn run(&mut self, budget: u64) -> Stop {
+        let end = self.cpu.cycles.saturating_add(budget);
+        while self.cpu.cycles < end {
+            let q_end = (self.cpu.cycles + QUANTUM).min(end);
+            let both_idle = !self.cpu1_on || self.cpu1.waiting;
+            let idle0 = if both_idle { end } else { q_end };
+            if let Some(s) = run_core(0, &mut self.cpu, &mut self.bus, &self.hle, q_end, idle0) {
+                return s;
+            }
+            if std::mem::take(&mut self.bus.appcpu_reset) {
+                self.cpu1_on = false;
+            }
+            if self.cpu1_on {
+                let t = self.cpu.cycles;
+                if let Some(s) = run_core(1, &mut self.cpu1, &mut self.bus, &self.hle, t, t) {
+                    return s;
+                }
+            }
+            if let Some(entry) = self.bus.appcpu_boot.take() {
+                self.start_app_cpu(entry);
+            }
+        }
+        Stop::Budget
+    }
+
+    pub fn run_traced(
+        &mut self,
+        budget: u64,
+        ring: &mut std::collections::VecDeque<u32>,
+        cap: usize,
+    ) -> Stop {
+        let end = self.cpu.cycles.saturating_add(budget);
+        let mut last = self.cpu.pc;
+        while self.cpu.cycles < end {
+            let before = self.cpu.cycles;
+            let r = self.run(1);
+            let pc = self.cpu.pc;
+            let d = pc.wrapping_sub(last);
+            if d != 2 && d != 3 {
+                if ring.len() == cap {
+                    ring.pop_front();
+                }
+                ring.push_back(pc);
+            }
+            last = pc;
+            if r != Stop::Budget {
+                return r;
+            }
+            if self.cpu.cycles == before {
+                self.cpu.cycles += 1;
+            }
+        }
+        Stop::Budget
+    }
+
+    pub fn console_take(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.bus.console)
+    }
+
+    pub fn symbol_at(&self, pc: u32) -> Option<&str> {
+        self.rom_symbols.get(&pc).map(|s| s.as_str())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mmu_windows() {
+        let mut b = SocBus {
+            flash: vec![0; 1 << 20],
+            ..Default::default()
+        };
+        b.flash[0x2_0004] = 0xab;
+        b.flash[0x3_0008] = 0xcd;
+        // DROM 0x3F410000 → 项 1；IROM 0x400D0000 → 项 64 + 13
+        b.mmu[1] = 2;
+        b.mmu[77] = 3;
+        assert_eq!(b.mem_read(0x3F41_0004, 1), Some(0xab));
+        assert_eq!(b.mem_read(0x400D_0008, 1), Some(0xcd));
+        assert_eq!(Bus::fetch(&mut b, 0x400D_0008).unwrap() & 0xff, 0xcd);
+        assert_eq!(b.mem_read(0x3F42_0000, 4), None);
+        // MMU 经 DPORT 地址写入
+        Bus::store(&mut b, MMU_PRO + 4 * 2, 4, 2).unwrap();
+        assert_eq!(b.mem_read(0x3F42_0004, 1), Some(0xab));
+    }
+
+    #[test]
+    fn sram_views() {
+        let mut b = SocBus::default();
+        // SRAM1：D 0x3FFFFFFC 的字 = I 0x400A0000 的字（按字倒序）
+        b.mem_write(0x3FFF_FFFC, 4, 0x1122_3344).unwrap();
+        assert_eq!(b.mem_read(0x400A_0000, 4), Some(0x1122_3344));
+        assert_eq!(b.mem_read(0x400A_0001, 1), Some(0x33));
+        b.mem_write(0x400A_0004, 4, 7).unwrap();
+        assert_eq!(b.mem_read(0x3FFF_FFF8, 4), Some(7));
+        // RTC 快速内存 I / D 同一块
+        b.mem_write(0x3FF8_0010, 4, 9).unwrap();
+        assert_eq!(b.mem_read(0x400C_0010, 4), Some(9));
+    }
+
+    #[test]
+    fn ahb_alias_and_reset_bits() {
+        let mut b = SocBus::default();
+        Bus::store(&mut b, 0x6000_0000, 4, b'A' as u32).unwrap();
+        assert_eq!(b.console, b"A");
+        Bus::store(&mut b, RTC_CNTL, 4, 0x10 | 0x4).unwrap();
+        assert!(b.appcpu_reset && b.reset_request.is_none());
+        assert_eq!(Bus::load(&mut b, RTC_CNTL, 4).unwrap(), 0x4);
+        Bus::store(&mut b, RTC_CNTL, 4, 1 << 31).unwrap();
+        assert_eq!(b.reset_request, Some(3));
+        b.reset_reason = 12;
+        assert_eq!(
+            Bus::load(&mut b, RTC_CNTL_RESET_STATE, 4).unwrap() & 0xfff,
+            12 | (12 << 6)
+        );
+    }
+
+    #[test]
+    fn dport_intmatrix_routes_timer() {
+        let mut b = SocBus::default();
+        // TG0 LACT → 核 0 线 3（电平型）
+        Bus::store(&mut b, 0x3FF0_0000 + 0x104 + 4 * src::TG0_LACT, 4, 3).unwrap();
+        b.timg0.int_ena = 8;
+        b.timg0.t[2].int_raw = 1;
+        b.update();
+        assert_eq!(b.lines[0], 1 << 3);
+        assert_eq!(b.lines[1], 0);
+    }
+}

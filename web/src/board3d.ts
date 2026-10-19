@@ -18,7 +18,7 @@ import { poseToThree, threeToPose, type Pose } from './imupose';
 // 单位：毫米
 const PITCH = 2.54;
 
-export type ChipId = 'esp32c3' | 'esp32s3';
+export type ChipId = 'esp32' | 'esp32c3' | 'esp32s3';
 
 /** 开发板定义。j1 / j3 照乐鑫用户指南的排针表，从 1 号针（天线端）起，写的是丝印原文。 */
 export interface BoardSpec {
@@ -36,9 +36,14 @@ export interface BoardSpec {
   right: string[];
   /** 排针中心相对板中心沿长边的偏移：让每根针都落在面包板孔上 */
   headerZ: number;
+  /** 两排针相距（mm）：缺省 0.9″ 落在 b / i 行；DevKitC V4 是 1″，只能落在 b / j 行，板子要横向挪半格 */
+  rowSpan?: number;
   module: { title: string; flash: string; W: number; L: number; shieldL: number };
   /** 两个 USB-C（UART 桥 + 芯片原生 USB）还是一个 */
   dualUsb: boolean;
+  /** 老款板子用 micro-USB（ESP32-DevKitC V4） */
+  microUsb?: boolean;
+  /** 板载 WS2812 所在 GPIO；-1 = 没有（DevKitC V4 只有电源灯） */
   rgbPin: number;
   bootPin: number;
   /** 放在面包板哪一列（中心）、旧版半块面包板的列数（元件列号以它为基准）、外接元件整体右移几列 */
@@ -48,7 +53,7 @@ export interface BoardSpec {
 }
 
 /** 丝印名 → 内部名：S3 板上 GPIO 只印数字、地印 G */
-const internalName = (s: string) => (/^\d+$/.test(s) ? 'IO' + s : s === 'G' ? 'GND' : s);
+const internalName = (s: string) => (/^\d+$/.test(s) ? 'IO' + s : s === 'G' ? 'GND' : s === 'VP' ? 'IO36' : s === 'VN' ? 'IO39' : s);
 /** 内部名 → scene-api 的 id */
 const apiId = (n: string) => (/^IO\d+$/.test(n) ? 'GPIO' + n.slice(2) : n);
 
@@ -94,12 +99,36 @@ export const BOARD_S3: BoardSpec = makeSpec({
   partOffset: 10,
 });
 
-export const BOARDS: Record<ChipId, BoardSpec> = { esp32c3: BOARD_C3, esp32s3: BOARD_S3 };
+/** ESP32-DevKitC V4：2×19 针（两排相距 1″），WROOM-32E 模组，micro-USB + CP2102，54.4 × 27.9 mm。
+ *  没有用户灯：板上只有红色电源灯，点灯示例在 GPIO2 外接 LED。SD0–SD3 / CMD / CLK 接着模组内的 flash，不能用 */
+export const BOARD_E32: BoardSpec = makeSpec({
+  chip: 'esp32',
+  title: 'ESP32 DEV',
+  silk: 'ESP32-DevKitC V4',
+  W: 27.9,
+  L: 54.4,
+  j1: ['3V3', 'EN', 'VP', 'VN', 'IO34', 'IO35', 'IO32', 'IO33', 'IO25', 'IO26', 'IO27', 'IO14', 'IO12', 'GND', 'IO13', 'SD2', 'SD3', 'CMD', '5V'],
+  j3: ['GND', 'IO23', 'IO22', 'TX', 'RX', 'IO21', 'GND', 'IO19', 'IO18', 'IO5', 'IO17', 'IO16', 'IO4', 'IO0', 'IO2', 'IO15', 'SD1', 'SD0', 'CLK'],
+  headerZ: -2.54,
+  rowSpan: 25.4,
+  module: { title: 'ESP32-WROOM-32E', flash: 'N4', W: 18, L: 25.5, shieldL: 17.6 },
+  dualUsb: false,
+  microUsb: true,
+  rgbPin: -1,
+  bootPin: 0,
+  boardCol: 8,
+  cols: 36,
+  partOffset: 6,
+});
+
+export const BOARDS: Record<ChipId, BoardSpec> = { esp32: BOARD_E32, esp32c3: BOARD_C3, esp32s3: BOARD_S3 };
 
 /** 圆屏 GC9A01 在各芯片上的固定接线（内核按这个接线建模，见 core 的 lcd_pin） */
 export const LCD_WIRING: Record<ChipId, { sclk: number; mosi: number; cs: number; dc: number; rst: number; bl: number }> = {
   esp32s3: { sclk: 12, mosi: 11, cs: 10, dc: 14, rst: 13, bl: 15 },
   esp32c3: { sclk: 6, mosi: 7, cs: 10, dc: 5, rst: 4, bl: 3 },
+  // 内核还没给 ESP32 接圆屏（C-05 只做到 I2C / LEDC），这里先放 VSPI 的常用接法占位，示例里不用
+  esp32: { sclk: 18, mosi: 23, cs: 5, dc: 16, rst: 17, bl: 4 },
 };
 
 export { I2S_WIRING } from './i2spins.ts';
@@ -533,13 +562,13 @@ function silkTexture(spec: BoardSpec, pinX: number, pinZ: (i: number) => number)
     g.fillText(spec.silk, cx(0), cy(L / 2 - spec.module.L - 2.6));
     g.font = `bold ${0.95 * S}px Helvetica, sans-serif`;
     g.fillText('BOOT', cx(W * 0.26), cy(-L / 2 + 13.6));
-    g.fillText('RST', cx(-W * 0.26), cy(-L / 2 + 13.6));
+    g.fillText(spec.chip === 'esp32' ? 'EN' : 'RST', cx(-W * 0.26), cy(-L / 2 + 13.6));
     if (spec.dualUsb) {
       g.fillText('USB', cx(W * 0.21), cy(-L / 2 + 8.4));
       g.fillText('UART', cx(-W * 0.21), cy(-L / 2 + 8.4));
     }
     g.font = `${0.8 * S}px Helvetica, sans-serif`;
-    g.fillText('RGB', cx(-W * 0.06), cy(-L / 2 + 20.3));
+    if (spec.rgbPin >= 0) g.fillText('RGB', cx(-W * 0.06), cy(-L / 2 + 20.3));
   });
 }
 
@@ -620,7 +649,7 @@ function devboard(spec: BoardSpec) {
   const { W, L } = spec;
   const T = 1.6;
   const n = spec.j1.length;
-  const pinX = 11.43; // 两排针相距 0.9″（22.86 mm），正好落在面包板 b / i 行
+  const pinX = (spec.rowSpan ?? 22.86) / 2; // 缺省两排针相距 0.9″（22.86 mm），正好落在面包板 b / i 行
   // 第 i 根（自 USB 端）针的 z
   const pinZ = (i: number) => spec.headerZ + (i - (n - 1) / 2) * PITCH;
 
@@ -665,26 +694,28 @@ function devboard(spec: BoardSpec) {
 
   // USB-C 口：不锈钢外壳（跑道形截面）+ 黑色舌片。C3 一个，S3 两个（左 USB 原生、右 UART 桥）
   const usbX = spec.dualUsb ? [W * 0.21, -W * 0.21] : [0];
-  const shellShape = roundRect(8.94, 3.26, 1.6);
-  shellShape.holes.push(roundRect(8.3, 2.62, 1.3, new THREE.Path()));
-  const shellGeo = new THREE.ExtrudeGeometry(shellShape, { depth: 7.35, bevelEnabled: false, curveSegments: 10 });
+  const mu = !!spec.microUsb;
+  const shellShape = mu ? roundRect(7.5, 2.45, 0.6) : roundRect(8.94, 3.26, 1.6);
+  shellShape.holes.push(mu ? roundRect(6.9, 1.85, 0.4, new THREE.Path()) : roundRect(8.3, 2.62, 1.3, new THREE.Path()));
+  const shellGeo = new THREE.ExtrudeGeometry(shellShape, { depth: mu ? 5 : 7.35, bevelEnabled: false, curveSegments: 10 });
+  const uy = mu ? 1.23 : 1.63;
   const extSlots: ExtSlot[] = [];
   for (const x of usbX) {
     const shell = new THREE.Mesh(shellGeo, MAT.steel);
-    shell.position.set(x, T / 2 + 1.63, -L / 2 - 0.6);
+    shell.position.set(x, T / 2 + uy, -L / 2 - 0.6);
     shell.castShadow = true;
     grp.add(shell);
-    const back = new THREE.Mesh(new THREE.BoxGeometry(8.3, 2.6, 0.4), MAT.steel);
-    back.position.set(x, T / 2 + 1.63, -L / 2 - 0.6 + 7.1);
+    const back = new THREE.Mesh(mu ? new THREE.BoxGeometry(6.9, 1.8, 0.4) : new THREE.BoxGeometry(8.3, 2.6, 0.4), MAT.steel);
+    back.position.set(x, T / 2 + uy, -L / 2 - 0.6 + (mu ? 4.8 : 7.1));
     grp.add(back);
-    const inner = new THREE.Mesh(new THREE.BoxGeometry(8.2, 2.5, 6.6), MAT.plastic);
-    inner.position.set(x, T / 2 + 1.63, -L / 2 - 0.6 + 3.9);
+    const inner = new THREE.Mesh(mu ? new THREE.BoxGeometry(6.8, 1.7, 4.4) : new THREE.BoxGeometry(8.2, 2.5, 6.6), MAT.plastic);
+    inner.position.set(x, T / 2 + uy, -L / 2 - 0.6 + (mu ? 2.8 : 3.9));
     grp.add(inner);
-    const tongue = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.7, 4.2), MAT.plug);
-    tongue.position.set(x, T / 2 + 1.63, -L / 2 - 0.6 + 2.0);
+    const tongue = new THREE.Mesh(mu ? new THREE.BoxGeometry(5.2, 0.5, 3) : new THREE.BoxGeometry(6.6, 0.7, 4.2), MAT.plug);
+    tongue.position.set(x, T / 2 + uy, -L / 2 - 0.6 + (mu ? 1.6 : 2.0));
     grp.add(tongue);
     // 可选：KiCad 的 GCT USB4105 母座（glb 开口朝 +z、贴片面 y=0、外壳长 7.4 mm）：转 180° 让开口朝板边
-    extSlots.push({
+    if (!mu) extSlots.push({
       root: grp,
       name: EXT.usbC,
       proc: [shell, back, inner, tongue],
@@ -723,6 +754,7 @@ function devboard(spec: BoardSpec) {
     // x, z, w, l, h
     [0, -L / 2 + 28, 5.0, 3.5, 1.6], // LDO SOT-223
     ...(spec.dualUsb ? ([[W * 0.2, -L / 2 + 17, 4, 4, 0.85]] as [number, number, number, number, number][]) : []),
+    ...(spec.microUsb ? ([[-W * 0.05, -L / 2 + 16, 5, 5, 0.9]] as [number, number, number, number, number][]) : []),
   ];
   const chipMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), MAT.chip, chips.length);
   const m = new THREE.Matrix4();
@@ -756,14 +788,14 @@ function devboard(spec: BoardSpec) {
   const rgbBody = new THREE.Mesh(new THREE.BoxGeometry(5, 1.5, 5), new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.6 }));
   rgbBody.position.set(rgbX, T / 2 + 0.75, rgbZ);
   rgbBody.castShadow = true;
-  grp.add(rgbBody);
+  if (spec.rgbPin >= 0) grp.add(rgbBody);
   const rgbMat = new THREE.MeshStandardMaterial({ color: 0xdedbd2, emissive: 0x000000, emissiveIntensity: 1, roughness: 0.3 });
   const rgbLens = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 0.1, 32), rgbMat);
   rgbLens.position.set(rgbX, T / 2 + 1.52, rgbZ);
-  grp.add(rgbLens);
+  if (spec.rgbPin >= 0) grp.add(rgbLens);
   const rgbLight = new THREE.PointLight(0xffffff, 0, 70, 2);
   rgbLight.position.set(rgbX, T / 2 + 5, rgbZ);
-  grp.add(rgbLight);
+  if (spec.rgbPin >= 0) grp.add(rgbLight);
 
   // 排针：每针一个黑塑料座（实例化）+ 镀金针（实例化）+ 板面焊点（实例化）
   const headerY = -T / 2 - 1.25;
@@ -2011,7 +2043,7 @@ export function createBench(container: HTMLElement): Bench {
   const placeBoard = () => {
     // 板子长边沿 x：旋转 -90°，USB 朝左；排针座落在面包板表面
     board.grp.rotation.y = -Math.PI / 2;
-    board.grp.position.set((board.spec.boardCol - (board.spec.cols - 1) / 2) * PITCH, BB_TOP + 2.5 + board.T / 2, 0);
+    board.grp.position.set((board.spec.boardCol - (board.spec.cols - 1) / 2) * PITCH, BB_TOP + 2.5 + board.T / 2, board.spec.rowSpan === 25.4 ? PITCH / 2 : 0);
     rig.add(board.grp);
     board.grp.updateMatrixWorld();
     board.extSlots.forEach(useSlot);
@@ -2036,7 +2068,8 @@ export function createBench(container: HTMLElement): Bench {
     if (near) cands = cands.sort((a, b) => a.p.distanceTo(near) - b.p.distanceTo(near));
     const c = cands.find((c) => !holeUse.get(c.key)) ?? cands[0];
     holeUse.set(c.key, (holeUse.get(c.key) ?? 0) + 1);
-    const z = Math.sign(c.p.z) * -rowZ(0);
+    // 针已经在最外一行（DevKitC V4 的 J1 落在 j 行）时板外没有空孔：线头就落在针所在那一孔
+    const z = Math.abs(c.p.z) > -rowZ(0) - 0.5 ? c.p.z : Math.sign(c.p.z) * -rowZ(0);
     return new THREE.Vector3(c.p.x, BB_TOP, z);
   };
 
@@ -2667,7 +2700,7 @@ export function createBench(container: HTMLElement): Bench {
     if (measured) measure(measured[0], measured[1]);
   }
 
-  /** 换开发板（C3 / S3）：开发板重建，外接元件按新板子的引脚重新接线 */
+  /** 换开发板（ESP32 / C3 / S3）：开发板重建，外接元件按新板子的引脚重新接线 */
   function setBoard(chip: ChipId) {
     if (board.spec.chip === chip) return;
     levelRig();
@@ -2721,7 +2754,7 @@ export function createBench(container: HTMLElement): Bench {
     wires = [];
     rewired = new Map();
     roles = new Map();
-    addRole(apiId('IO' + board.spec.rgbPin), 'WS2812 板载灯');
+    if (board.spec.rgbPin >= 0) addRole(apiId('IO' + board.spec.rgbPin), 'WS2812 板载灯');
     addRole(apiId('IO' + board.spec.bootPin), 'BOOT 键');
     // 多个同类元件依次往左排，避免叠在同一列
     let ledN = 0;
@@ -3413,7 +3446,7 @@ export function createBench(container: HTMLElement): Bench {
 
   applyTheme('light');
   partsById.set('board', board.grp);
-  addRole(apiId('IO' + board.spec.rgbPin), 'WS2812 板载灯');
+  if (board.spec.rgbPin >= 0) addRole(apiId('IO' + board.spec.rgbPin), 'WS2812 板载灯');
   addRole(apiId('IO' + board.spec.bootPin), 'BOOT 键');
 
   // ---------------------------------------------------------------- 渲染循环

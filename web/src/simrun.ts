@@ -97,8 +97,8 @@ export interface SimHooks {
 
 const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5 };
 
-/** 镜像是哪颗芯片：先找分区表（0x8000）里的 app，再读 ESP 镜像头的芯片 ID（5 = C3，9 = S3） */
-export function imageChip(buf: ArrayBuffer | Uint8Array): 'esp32c3' | 'esp32s3' {
+/** 镜像是哪颗芯片：先找分区表（0x8000）里的 app，再读 ESP 镜像头的芯片 ID（0 = ESP32，5 = C3，9 = S3；认不出按 C3） */
+export function imageChip(buf: ArrayBuffer | Uint8Array): 'esp32' | 'esp32c3' | 'esp32s3' {
   const b = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
   const u32 = (o: number) => b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24);
   let app = 0;
@@ -112,7 +112,8 @@ export function imageChip(buf: ArrayBuffer | Uint8Array): 'esp32c3' | 'esp32s3' 
       }
     }
   }
-  return b[app] === 0xe9 && (b[app + 12] | (b[app + 13] << 8)) === 9 ? 'esp32s3' : 'esp32c3';
+  const id = b[app] === 0xe9 ? b[app + 12] | (b[app + 13] << 8) : -1;
+  return id === 9 ? 'esp32s3' : id === 0 ? 'esp32' : 'esp32c3';
 }
 
 const u8 = (b: ArrayBuffer | Uint8Array) => (b instanceof Uint8Array ? b : new Uint8Array(b));

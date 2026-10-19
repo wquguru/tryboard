@@ -23,6 +23,7 @@ import { chipOf, loadExamples } from './examples';
 
 export { WORKS } from './works';
 import { wkey } from './works';
+import { BOOT_GPIO, type SimChip } from '../chips';
 
 /** 串口里 weather 固件的读数行（格式由第 06 关任务书规定） */
 // 气象站固件单空格、bme280 示例两个空格分隔，都要认
@@ -41,7 +42,7 @@ export interface SessionOpts {
   /** 上次在采购页"摆上实验台"存下的场景；没有就用作品默认台面（examples.json） */
   placed?: { scene: SceneSpec; ext5v: boolean } | null;
   /** 没有示例的作品（选板 custom）按选板结果定芯片；有示例时以示例为准 */
-  chip?: 'esp32c3' | 'esp32s3';
+  chip?: 'esp32' | 'esp32c3' | 'esp32s3';
   /** 按零件生成的检查点（custom-<n>，U-17），接在 levels.json 后面 */
   levels?: Level[];
 }
@@ -103,7 +104,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const usbSubs = new Set<(v: UsbView | null) => void>();
   let ioMask = [0, 0];
   const defaultIoPins = (sc: SceneSpec, c: string) => {
-    const pins = new Set<number>([c === 'esp32s3' ? 0 : 9]);
+    const pins = new Set<number>([BOOT_GPIO[c as SimChip] ?? 9]);
     for (const p of sc.parts) {
       if ('pin' in p && p.type !== 'pot') pins.add(p.pin);
       // 逻辑分析仪默认看编码器 A / B / 按键、超声波 Trig / Echo

@@ -7,6 +7,7 @@ import type { StepCtx, StepId, SelKind } from './types';
 import { fuzzy, parseRun, parseTemp, pushRecent } from './cmdmatch';
 import { partId, partInfo } from './wiring';
 import { getAnalyzer } from './analyzer';
+import { BOARD_NAME } from '../chips';
 import { commit, useStore } from './react';
 import { createStore } from './store';
 
@@ -117,7 +118,7 @@ export function createCmdk(ctx: StepCtx): Cmdk {
       out.push({ id: `run:${r.n}`, group: '运行', label: `回到第 ${r.n} 次运行`, meta: r.snap ? `${r.snap.simSeconds.toFixed(1)} s` : '运行中', keys: `回到 运行 run #${r.n} 回退 时间线`, run: () => backToRun(r.n) });
     }
     if (rn !== null && !runs.some((r) => r.n === rn)) out.push({ id: `run:${rn}`, group: '运行', label: `回到第 ${rn} 次运行`, meta: '不存在', keys: '回到 运行 run', run: () => backToRun(rn) });
-    const board = session.chip === 'esp32s3' ? 'ESP32-S3-DevKitC-1' : 'ESP32-C3-DevKitM-1';
+    const board = BOARD_NAME[session.chip];
     out.push({ id: 'part:board', group: '零件', label: board, meta: '开发板', keys: 'board 开发板 esp32', run: () => select('part', 'board') });
     for (const p of session.scene.parts) {
       const info = partInfo(p);

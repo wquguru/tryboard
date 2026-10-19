@@ -104,7 +104,7 @@ const crates = [];
   if (!lic) warn.push('third_party/esp-rom-elfs/LICENSE 不存在（先跑 tools/fetch_third_party.sh）');
   const copy = readme.match(/The ROMs of ESP32 series of chips are (Copyright[^\n]+)/)?.[1] ?? 'Copyright (c) 2015-2022 Espressif Systems (Shanghai) Co. Ltd.';
   const rel = exists(dir) ? (fs.readdirSync(dir).find((n) => /^esp-rom-elfs-\d+\.tar\.gz$/.test(n)) ?? '').match(/\d+/)?.[0] : '';
-  const shipped = exists(path.join(web, 'public/rom')) ? fs.readdirSync(path.join(web, 'public/rom')).filter((n) => n.endsWith('.elf')) : ['esp32c3_rev3_rom.elf', 'esp32s3_rev0_rom.elf'];
+  const shipped = exists(path.join(web, 'public/rom')) ? fs.readdirSync(path.join(web, 'public/rom')).filter((n) => n.endsWith('.elf')) : ['esp32_rev300_rom.elf', 'esp32c3_rev3_rom.elf', 'esp32s3_rev0_rom.elf'];
   add({
     cat: '芯片 ROM',
     name: 'esp-rom-elfs',

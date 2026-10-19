@@ -34,6 +34,7 @@ import { ResultCard, RunningCard, actCls } from "../../ui/result";
 import { headline } from "../../ui/say";
 import { VerifyStalled, verifyLevel } from "../../verify";
 import { fetchBuf } from "../../assets";
+import { BOARD_NAME, BOOT_GPIO, CHIP_DESC, CHIP_LABEL, CHIP_SHORT, RGB_GPIO } from "../../chips";
 import { servoAngle, ledCss } from "../../views/common";
 import type {
   AppState,
@@ -447,7 +448,7 @@ export function benchStep(): StepImpl {
     setLeft({
       lib: (
         <PartLib
-          chip={c.session.chip === "esp32s3" ? "esp32s3" : "esp32c3"}
+          chip={c.session.chip}
           inBom={new Set(replay(s.bom).picks.map((p) => p.partId))}
           onPlace={startPlace}
         />
@@ -816,13 +817,12 @@ export function benchStep(): StepImpl {
         {body}
       </TreeGroup>
     );
-    const board =
-      ses.chip === "esp32s3" ? "ESP32-S3-DevKitC-1" : "ESP32-C3-DevKitM-1";
+    const board = BOARD_NAME[ses.chip];
     const partItems = [
       item(
         { kind: "part", id: "board" },
         board,
-        ses.chip === "esp32s3" ? "S3" : "C3",
+        CHIP_SHORT[ses.chip],
       ),
       ...parts.map((p) =>
         item(
@@ -1447,8 +1447,8 @@ export function benchStep(): StepImpl {
       </>,
     );
   }
-  /** BOOT 键接的 GPIO：C3 是 GPIO9，S3 是 GPIO0 */
-  const bootGpio = () => (ctx!.session.chip === "esp32s3" ? 0 : 9);
+  /** BOOT 键接的 GPIO：C3 是 GPIO9，ESP32 / S3 是 GPIO0 */
+  const bootGpio = () => BOOT_GPIO[ctx!.session.chip];
   const partName = (pid: string) => {
     const p = ctx!.session.scene.parts.find((x) => partId(x) === pid);
     return p ? partInfo(p).name : pid;
@@ -2086,17 +2086,17 @@ export function benchStep(): StepImpl {
     const c = ctx!;
     const ses = c.session;
     if (id === "board") {
-      const s3 = ses.chip === "esp32s3";
+      const rgb = RGB_GPIO[ses.chip];
       show(
         <>
           <Sec>开发板</Sec>
           <PartHead
-            name={s3 ? "ESP32-S3-DevKitC-1" : "ESP32-C3-DevKitM-1"}
+            name={BOARD_NAME[ses.chip]}
             type="board"
           />
           <Kv
             k="芯片"
-            v={s3 ? "ESP32-S3 · 双核 160 MHz" : "ESP32-C3 · 160 MHz"}
+            v={CHIP_DESC[ses.chip]}
           />
           <Kv k="供电" v="USB 5 V 经 LDO 降到 3V3" />
           <Kv k="3V3" live="e33" />
@@ -2105,7 +2105,7 @@ export function benchStep(): StepImpl {
           <Sec>实时</Sec>
           <Kv k="运行" live="run" />
           <Kv k="模拟时间" live="sim" />
-          <Kv k={`板载 RGB（GPIO${s3 ? 48 : 8}）`} live="rgb" />
+          {rgb !== null && <Kv k={`板载 RGB（GPIO${rgb}）`} live="rgb" />}
           <Btns>
             <Btn
               id="bootBtn"
@@ -2113,7 +2113,7 @@ export function benchStep(): StepImpl {
               onPointerUp={() => ses.pressBoot(false)}
               onPointerLeave={() => ses.pressBoot(false)}
             >
-              按 BOOT（GPIO{s3 ? 0 : 9}）
+              按 BOOT（GPIO{BOOT_GPIO[ses.chip]}）
             </Btn>
             <Btn id="rstBtn" onClick={() => ses.reboot()}>
               RST 重新上电
@@ -2455,7 +2455,7 @@ export function benchStep(): StepImpl {
         {ses.fwName && (
           <>
             <Kv k="大小" v={`${(ses.fwSize / 1024).toFixed(0)} KB`} />
-            <Kv k="芯片" v={ses.chip === "esp32s3" ? "ESP32-S3" : "ESP32-C3"} />
+            <Kv k="芯片" v={CHIP_LABEL[ses.chip]} />
           </>
         )}
         <Kv k="运行" live="run" />

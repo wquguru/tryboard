@@ -41,13 +41,13 @@ pub unsafe extern "C" fn tb_free(p: *mut u8, len: usize) {
     drop(Vec::from_raw_parts(p, 0, len));
 }
 
-/// 镜像是哪颗芯片：5 = ESP32-C3，9 = ESP32-S3，0 = 认不出（按 C3 处理）
+/// 镜像是哪颗芯片：0 = ESP32，5 = ESP32-C3，9 = ESP32-S3，u32::MAX = 认不出（0 已被 ESP32 占用）
 /// # Safety
 /// 指针必须指向长度正确的缓冲区
 #[no_mangle]
 pub unsafe extern "C" fn tb_image_chip(flash: *const u8, flash_len: usize) -> u32 {
     let flash = std::slice::from_raw_parts(flash, flash_len);
-    Chip::from_image(flash).map(|c| c.id()).unwrap_or(0)
+    Chip::from_image(flash).map(|c| c.id()).unwrap_or(u32::MAX)
 }
 
 /// 旧名字（USB 分支的网页用过），同 tb_image_chip

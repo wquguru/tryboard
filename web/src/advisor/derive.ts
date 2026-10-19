@@ -151,6 +151,11 @@ export function trustRows(p: Plan, need: Need): [string, Confidence][] {
   });
   rows.push([`芯片 ${p.chip.name} 本身`, simConf(p)]);
   rows.push(['引脚分配', '估算']);
+  if (p.chip.id === 'esp32') {
+    // 经典 ESP32 独有、试板没模型的部分（C-05）
+    if (need.caps.some((c) => c === 'ble' || c === 'bt_classic')) rows.push(['经典蓝牙 / BLE（ESP32）', '必须上真机']);
+    if (need.caps.some((c) => c === 'dac' || c === 'touch')) rows.push(['DAC / 电容触摸 / 霍尔传感器（ESP32）', '必须上真机']);
+  }
   if (p.power) rows.push(['电池续航', p.power.confidence]);
   if (need.battery) rows.push(['锂电池充电、实际放电曲线', '必须上真机']);
   if (need.caps.some((c) => ['wifi', 'ble', 'bt_classic', 'thread', 'zigbee', 'wifi6'].includes(c))) rows.push(['天线、无线距离', '必须上真机']);

@@ -56,7 +56,7 @@ export interface BenchChrome {
   /** 固件用了 BLE（认出了或没认出 VHCI 边界）：坞里多一个「蓝牙」页签，构建树多一组「无线」（C-01） */
   ble: boolean;
   /** 台面上的芯片（换固件菜单默认列这颗芯片的示例） */
-  chip: 'esp32c3' | 'esp32s3';
+  chip: 'esp32' | 'esp32c3' | 'esp32s3';
   /** 换固件菜单开着（顶栏按钮、空台面卡、手机 ⋯ 都能打开它） */
   fwMenu: boolean;
 }

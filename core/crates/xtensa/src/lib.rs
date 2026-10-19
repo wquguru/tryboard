@@ -1,10 +1,33 @@
-//! Xtensa LX7 解释器核，按 ESP32-S3 的配置（ESP-IDF `xtensa/esp32s3/include/xtensa/config/core-isa.h`）：
+//! Xtensa 解释器核，按 ESP32-S3（LX7）/ ESP32（LX6）的配置（ESP-IDF `xtensa/<芯片>/include/xtensa/config/core-isa.h`）：
 //! 64 个物理 AR + 窗口 ABI、16 位密度指令、零开销循环、MUL16/MUL32/DIV32、NSA/MIN/MAX/SEXT/CLAMPS、
 //! 布尔寄存器、S32C1I、硬件非对齐访存、VECBASE 复位值 0x40000000。
 //!
 //! 中断：32 条线，类型 / 级别按 core-isa.h 的 XCHAL_INTn_TYPE / LEVEL；外部线由 SoC 经 `set_irq_lines` 驱动，
 //! 定时器中断来自 CCOMPARE0..2（线 6 / 15 / 16）。FPU（单精度，CP0，受 CPENABLE 门控）与 MAC16 见 fpu.rs / mac16.rs。
 //! 未实现：PIE（EE.*）指令，按非法指令（EXCCAUSE 0）进异常。
+//!
+//! 两颗芯片的 core-isa.h 在本核实现的选项上一致（中断线类型 / 级别、窗口、循环、MUL/DIV、FPU、MAC16、
+//! 向量偏移都相同），只差硬件版本号 / CONFIGID 与 LX6 没有的 PIE（本来就没实现），所以用 `Variant` 参数区分，不分两份代码。
+
+/// 核的配置（core-isa.h）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Variant {
+    /// ESP32-S3：Xtensa LX7（XCHAL_HW_VERSION 270012）
+    #[default]
+    Lx7Esp32s3,
+    /// ESP32：Xtensa LX6（XCHAL_HW_VERSION 260003）
+    Lx6Esp32,
+}
+
+impl Variant {
+    /// XCHAL_HW_CONFIGID0 / 1（SR 176 / 208，只读）：调试器 / gdbstub 据此认核
+    pub fn config_id(self) -> (u32, u32) {
+        match self {
+            Variant::Lx7Esp32s3 => (0xC2F0_FFFE, 0x2309_0F1F),
+            Variant::Lx6Esp32 => (0xC2BC_FFFE, 0x1CC5_FE96),
+        }
+    }
+}
 
 mod fast;
 mod fpu;
@@ -176,8 +199,10 @@ pub struct Cpu {
     pub hle_lo: u32,
     pub hle_hi: u32,
     pub hle_addrs: Vec<u32>,
-    /// 处理器 ID（ESP32-S3：核 0 为 0xCDCD，核 1 为 0xABAB）
+    /// 处理器 ID（ESP32-S3 / ESP32 相同：核 0 为 0xCDCD，核 1 为 0xABAB）
     pub prid: u32,
+    /// 核配置（LX7 / LX6）
+    pub variant: Variant,
     /// SoC 驱动的外部中断线电平（位 = CPU 中断号）
     irq_ext: u32,
     /// 锁存的挂起位：边沿、NMI、软件、定时器
@@ -224,6 +249,7 @@ impl Cpu {
             hle_hi: 0,
             hle_addrs: Vec::new(),
             prid: 0xcdcd,
+            variant: Variant::default(),
             irq_ext: 0,
             irq_latched: 0,
             irq_maybe: false,
@@ -243,6 +269,13 @@ impl Cpu {
         c.sr[sr::VECBASE as usize] = 0x4000_0000;
         // ATOMCTL 复位值（core 配置）。S32C1I 不按它区分内存属性：S3 内部 SRAM 上原子操作总能成功
         c.sr[sr::ATOMCTL as usize] = 0x28;
+        c
+    }
+
+    /// 按指定配置新建（ESP32 用 `Variant::Lx6Esp32`）
+    pub fn with_variant(variant: Variant) -> Self {
+        let mut c = Self::new();
+        c.variant = variant;
         c
     }
 
@@ -286,6 +319,8 @@ impl Cpu {
             sr::WINDOWSTART => self.windowstart,
             sr::CCOUNT => self.ccount(),
             sr::PRID => self.prid,
+            sr::CONFIGID0 => self.variant.config_id().0,
+            sr::CONFIGID1 => self.variant.config_id().1,
             sr::SAR => self.sar(),
             sr::LITBASE => self.sr[n as usize] & 0xffff_f001,
             sr::INTERRUPT => self.pending(),
@@ -305,7 +340,7 @@ impl Cpu {
                 self.ccount_off = v.wrapping_sub(self.cycles as u32);
                 self.cc_next = 0;
             }
-            sr::PRID => {}
+            sr::PRID | sr::CONFIGID0 | sr::CONFIGID1 => {}
             sr::SAR => self.sr[n as usize] = v & 0x3f,
             // 写 INTERRUPT 即 INTSET：只能置软件中断位
             sr::INTERRUPT => self.irq_latched |= v & irq::SOFTWARE,

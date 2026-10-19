@@ -134,7 +134,7 @@ export interface Session {
   sceneLabel?: string;
   fwName: string;
   fwSize: number;
-  chip: 'esp32c3' | 'esp32s3';
+  chip: 'esp32' | 'esp32c3' | 'esp32s3';
   levels: Level[];
   /** 最近一帧：PWM 占空比、彩灯、OLED */
   frame: { pwm: number[]; pwmFreq: number[]; gpio: number; enable: number; gpioHi: number; enableHi: number; rgb: number[] | null; strips: Record<number, number[][]>; oled: Uint8Array | null; lcd: Uint8Array | null; elec: ElecFrame | null; pins: PinDevFrame | null };

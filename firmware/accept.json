@@ -477,8 +477,13 @@
   "fw": "s3-dual",
   "chip": "esp32s3",
   "seconds": 3,
-  "args": ["--trace-tasks", "Reviews/tasks-s3-dual.json"],
-  "expect": ["TRYBOARD_OK s3-dual"],
+  "args": [
+   "--trace-tasks",
+   "Reviews/tasks-s3-dual.json"
+  ],
+  "expect": [
+   "TRYBOARD_OK s3-dual"
+  ],
   "stderr_expect": [
    "任务 核0 w0 ",
    "任务 核1 w1 ",
@@ -492,8 +497,13 @@
   "id": "hello-tasks",
   "fw": "hello",
   "seconds": 3,
-  "args": ["--trace-tasks", "Reviews/tasks-hello.json"],
-  "expect": ["TRYBOARD_OK hello"],
+  "args": [
+   "--trace-tasks",
+   "Reviews/tasks-hello.json"
+  ],
+  "expect": [
+   "TRYBOARD_OK hello"
+  ],
   "stderr_expect": [
    "任务 核0 main ",
    "任务 核0 IDLE ",
@@ -1814,5 +1824,100 @@
    "min": 3
   },
   "qemu": false
+ },
+ {
+  "id": "esp32-hello",
+  "chip": "esp32",
+  "seconds": 3,
+  "expect": [
+   "Hello world!",
+   "This is esp32 chip with 2 CPU core(s)",
+   "4MB flash",
+   "Free heap: 305156 bytes",
+   "took 4999",
+   "TRYBOARD_OK esp32-hello"
+  ],
+  "qemu": true,
+  "qemu_skip": [
+   "took 4999"
+  ]
+ },
+ {
+  "id": "esp32-blink",
+  "chip": "esp32",
+  "seconds": 2.2,
+  "expect": [
+   "LED ON  (0)",
+   "LED OFF (3)",
+   "TRYBOARD_OK blink"
+  ],
+  "gpio_toggles": {
+   "pin": 2,
+   "min": 4
+  }
+ },
+ {
+  "id": "esp32-fade",
+  "chip": "esp32",
+  "seconds": 3.6,
+  "expect": [
+   "渐亮完成，duty=8191",
+   "渐灭完成，duty=0",
+   "TRYBOARD_OK fade"
+  ],
+  "pwm": {
+   "pin": 5,
+   "freq": 5000,
+   "min": 0.0,
+   "max": 1.0
+  }
+ },
+ {
+  "id": "esp32-i2c",
+  "chip": "esp32",
+  "seconds": 2.5,
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c,bme280@0x76",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "expect": [
+   "I2C scan (SDA=GPIO21, SCL=GPIO22): 0x3C 0x76",
+   "SSD1306 init OK",
+   "BME280 chip id 0x60 OK",
+   "TRYBOARD_OK esp32-i2c"
+  ],
+  "numeric": [
+   {
+    "name": "温度",
+    "regex": "T=(-?[\\d.]+) C",
+    "value": 23.5,
+    "tol": 0.02
+   },
+   {
+    "name": "湿度",
+    "regex": "H=([\\d.]+) %",
+    "value": 45.0,
+    "tol": 0.1
+   },
+   {
+    "name": "气压",
+    "regex": "P=([\\d.]+) hPa",
+    "value": 1013.25,
+    "tol": 0.02
+   }
+  ],
+  "oled_min_pixels": 300
+ },
+ {
+  "id": "esp32-wifi-init",
+  "chip": "esp32",
+  "seconds": 3,
+  "expect": [
+   "wifi_init ok",
+   "start ok",
+   "TRYBOARD_OK wifi-init"
+  ]
  }
 ]

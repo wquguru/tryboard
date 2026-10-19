@@ -39,7 +39,7 @@ export interface InputLog {
   version: 1;
   /** 示例 / 固件名（主线程填，worker 不知道） */
   firmware?: string;
-  chip?: 'esp32c3' | 'esp32s3';
+  chip?: 'esp32' | 'esp32c3' | 'esp32s3';
   /** 上电时挂的器件：重放时变成 --i2c / --spi */
   i2c: { kind: string; addr: number }[];
   lcd: boolean;

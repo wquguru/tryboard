@@ -39,6 +39,9 @@ export interface Rejected {
   why: string;
 }
 
+/** 只部分模拟的芯片：外设种类白名单（不在里面的零件标「必须上真机」）。经典 ESP32 只做了 GPIO、LEDC、I2C */
+const SIM_KINDS: Partial<Record<string, string[]>> = { esp32: ['gpio', 'pwm', 'i2c'] };
+
 const CAP_NAME: Record<Cap, string> = {
   wifi: 'Wi-Fi',
   wifi6: 'Wi-Fi 6',
@@ -234,9 +237,16 @@ export function recommend(need: Need): { plans: Plan[]; rejected: Rejected[] } {
     const total: [number, number] = [bom.reduce((s, x) => s + x.price[0], 0), bom.reduce((s, x) => s + x.price[1], 0)];
     if (need.budget && total[0] > need.budget) score -= 20;
     const power = need.duty ? estimatePower(b, c, need.parts, need.duty) : undefined;
+    const kinds = SIM_KINDS[c.id];
     const simCoverage = need.parts.map((id) => ({
       part: PARTS[id].name,
-      level: (c.simulated === 'none' ? '必须上真机' : PARTS[id].simulated === 'full' ? '仿真验证' : PARTS[id].simulated === 'partial' ? '行为模拟' : '必须上真机') as Confidence,
+      level: (c.simulated === 'none' || (kinds && !PARTS[id].needs.every((n) => kinds.includes(n.kind)))
+        ? '必须上真机'
+        : PARTS[id].simulated === 'full'
+          ? '仿真验证'
+          : PARTS[id].simulated === 'partial'
+            ? '行为模拟'
+            : '必须上真机') as Confidence,
     }));
     for (const n of c.notes) if (required.some((k) => n.includes(capName(k)))) warnings.push(n);
     plans.push({ board: b, chip: c, score, reasons, warnings, pins, pinProblems: problems, bom, total, power, simCoverage });

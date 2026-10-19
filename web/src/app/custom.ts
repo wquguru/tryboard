@@ -25,7 +25,7 @@ export interface CustomPlan {
   /** 实验台板子的短名（任务书、检查点里写） */
   boardName: string;
   sub?: string;
-  chip: 'esp32c3' | 'esp32s3';
+  chip: 'esp32' | 'esp32c3' | 'esp32s3';
   template: ProcureTemplate;
   noModel: NoModel[];
   /** 「我已有」：目录零件 id */
@@ -128,7 +128,8 @@ export function customPlan(search: string): CustomPlan {
   if (!advisorBoard) advisorBoard = recommend(need).plans[0]?.board.id ?? 'xiao-c3';
   const { boardId, sub } = boardFor(advisorBoard);
   const benchAdvisor = BOARDS.find((b) => b.id === BENCH_TO_ADVISOR[boardId]) ?? BOARDS.find((b) => b.id === 'xiao-c3')!;
-  const chip = getPart(boardId).chips.includes('esp32s3') ? 'esp32s3' : 'esp32c3';
+  const chips = getPart(boardId).chips;
+  const chip = chips.includes('esp32s3') ? 'esp32s3' : chips.includes('esp32') ? 'esp32' : 'esp32c3';
 
   // 有模型的才分引脚（无模型的继电器、人体红外不上台，也不占台上的引脚）
   const modeled = parts.filter((p) => PART_MAP[p] && ADV_PARTS[p].needs.length);

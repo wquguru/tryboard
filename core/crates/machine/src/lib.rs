@@ -3,6 +3,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use tryboard_elec::board::{Activity, Board, ChipKind, Power};
+use tryboard_esp32::Esp32;
 pub use tryboard_esp32c3::devices::audio::{Analysis as AudioAnalysis, Block as AudioBlock};
 use tryboard_esp32c3::devices::audio::{Audio, MicSource};
 use tryboard_esp32c3::devices::{
@@ -26,6 +27,7 @@ pub use tryboard_esp32c3::periph::CPU_HZ;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Chip {
+    Esp32,
     Esp32c3,
     Esp32s3,
 }
@@ -34,6 +36,7 @@ impl Chip {
     /// 镜像头里的芯片 ID（esp_app_format.h）
     pub fn from_image(flash: &[u8]) -> Option<Chip> {
         match tryboard_esp32s3::boot::image_chip_id(flash)? {
+            0 => Some(Chip::Esp32),
             5 => Some(Chip::Esp32c3),
             9 => Some(Chip::Esp32s3),
             _ => None,
@@ -41,6 +44,7 @@ impl Chip {
     }
     pub fn name(self) -> &'static str {
         match self {
+            Chip::Esp32 => "esp32",
             Chip::Esp32c3 => "esp32c3",
             Chip::Esp32s3 => "esp32s3",
         }
@@ -48,12 +52,14 @@ impl Chip {
     /// esp-rom-elfs 里该芯片 ROM 的文件名
     pub fn rom_file(self) -> &'static str {
         match self {
+            Chip::Esp32 => "esp32_rev300_rom.elf",
             Chip::Esp32c3 => "esp32c3_rev3_rom.elf",
             Chip::Esp32s3 => "esp32s3_rev0_rom.elf",
         }
     }
     pub fn npins(self) -> usize {
         match self {
+            Chip::Esp32 => tryboard_esp32::periph::NPINS,
             Chip::Esp32c3 => 22,
             Chip::Esp32s3 => tryboard_esp32s3::periph::NPINS,
         }
@@ -61,6 +67,7 @@ impl Chip {
     /// 网页 / tb_chip 用的数字编号，与镜像头芯片 ID 一致
     pub fn id(self) -> u32 {
         match self {
+            Chip::Esp32 => 0,
             Chip::Esp32c3 => 5,
             Chip::Esp32s3 => 9,
         }
@@ -83,6 +90,7 @@ pub enum Stop {
 pub enum Hw {
     C3(Esp32c3),
     S3(Esp32s3),
+    E32(Esp32),
 }
 
 /// 外接线束（P2-11，估算，必须上真机）：I2C 排线总长、天线被金属件 / 电池挡住的衰减。
@@ -128,6 +136,22 @@ impl Machine {
                     },
                 ))
             }
+            Some(Chip::Esp32) => {
+                let (m, a) = Esp32::boot(rom, flash)?;
+                Ok((
+                    Machine {
+                        hw: Hw::E32(m),
+                        elec: Board::new(ChipKind::Esp32),
+                        touch_int: None,
+                        harness: Harness::default(),
+                    },
+                    BootInfo {
+                        offset: a.offset,
+                        entry: a.entry,
+                        segments: a.segments.len(),
+                    },
+                ))
+            }
             Some(Chip::Esp32c3) | None => {
                 let (m, a) = Esp32c3::boot(rom, flash)?;
                 Ok((
@@ -153,6 +177,7 @@ impl Machine {
         match &mut self.hw {
             Hw::C3(m) => m.reboot(reason)?,
             Hw::S3(m) => m.reboot(reason)?,
+            Hw::E32(m) => m.reboot(reason)?,
         }
         self.apply_harness();
         // 我们不跑 ROM 引导，ROM 每次复位都会打印的头三行由这里补上（复位原因与 ROM 的写法一致），
@@ -166,6 +191,7 @@ impl Machine {
         match &mut self.hw {
             Hw::C3(m) => m.bus.console.extend_from_slice(b),
             Hw::S3(m) => m.bus.console.extend_from_slice(b),
+            Hw::E32(m) => m.bus.console.extend_from_slice(b),
         }
     }
 
@@ -206,6 +232,7 @@ impl Machine {
         match &mut self.hw {
             Hw::C3(m) => m.bus.wifi_mut(),
             Hw::S3(m) => m.bus.wifi_mut(),
+            Hw::E32(m) => m.bus.wifi_mut(),
         }
     }
 
@@ -257,6 +284,7 @@ impl Machine {
         match &self.hw {
             Hw::C3(m) => m.bus.wifi(),
             Hw::S3(m) => m.bus.wifi(),
+            Hw::E32(m) => m.bus.wifi(),
         }
     }
 
@@ -280,6 +308,13 @@ impl Machine {
                     m.cpu1.cycles = m.cpu.cycles;
                 }
             }
+            Hw::E32(m) => {
+                m.cpu.cycles += cycles;
+                m.bus.now = m.cpu.cycles;
+                if m.cpu1_on {
+                    m.cpu1.cycles = m.cpu.cycles;
+                }
+            }
         }
     }
 
@@ -297,14 +332,14 @@ impl Machine {
     pub fn usb(&self) -> Option<&tryboard_esp32s3::usb::Usb> {
         match &self.hw {
             Hw::S3(m) => m.bus.usb.as_deref(),
-            Hw::C3(_) => None,
+            Hw::C3(_) | Hw::E32(_) => None,
         }
     }
 
     pub fn usb_mut(&mut self) -> Option<&mut tryboard_esp32s3::usb::Usb> {
         match &mut self.hw {
             Hw::S3(m) => m.bus.usb.as_deref_mut(),
-            Hw::C3(_) => None,
+            Hw::C3(_) | Hw::E32(_) => None,
         }
     }
 
@@ -312,14 +347,14 @@ impl Machine {
     pub fn ble(&self) -> Option<&tryboard_esp32c3::ble::Ble> {
         match &self.hw {
             Hw::C3(m) => m.bus.ble.as_deref().map(|b| &*b.world),
-            Hw::S3(_) => None,
+            Hw::S3(_) | Hw::E32(_) => None,
         }
     }
 
     pub fn ble_mut(&mut self) -> Option<&mut tryboard_esp32c3::ble::Ble> {
         match &mut self.hw {
             Hw::C3(m) => m.bus.ble.as_deref_mut().map(|b| &mut *b.world),
-            Hw::S3(_) => None,
+            Hw::S3(_) | Hw::E32(_) => None,
         }
     }
 
@@ -331,7 +366,7 @@ impl Machine {
                 .ble_error
                 .clone()
                 .or_else(|| m.bus.ble.as_ref().and_then(|b| b.error.clone())),
-            Hw::S3(_) => None,
+            Hw::S3(_) | Hw::E32(_) => None,
         }
     }
 
@@ -348,6 +383,7 @@ impl Machine {
         match &self.hw {
             Hw::C3(_) => Chip::Esp32c3,
             Hw::S3(_) => Chip::Esp32s3,
+            Hw::E32(_) => Chip::Esp32,
         }
     }
 
@@ -368,6 +404,10 @@ impl Machine {
                 let r = m.run(cycles);
                 s3_stop(m, r)
             }
+            Hw::E32(m) => {
+                let r = m.run(cycles);
+                e32_stop(m, r)
+            }
         };
         self.after_run(c0, i0, w0, r)
     }
@@ -387,6 +427,10 @@ impl Machine {
                 let r = m.run_traced(cycles, ring, cap);
                 s3_stop(m, r)
             }
+            Hw::E32(m) => {
+                let r = m.run_traced(cycles, ring, cap);
+                e32_stop(m, r)
+            }
         };
         self.after_run(c0, i0, w0, r)
     }
@@ -396,6 +440,7 @@ impl Machine {
         match &self.hw {
             Hw::C3(m) => m.cpu.cycles,
             Hw::S3(m) => m.cpu.cycles,
+            Hw::E32(m) => m.cpu.cycles,
         }
     }
 
@@ -403,6 +448,7 @@ impl Machine {
         match &self.hw {
             Hw::C3(m) => m.cpu.instret,
             Hw::S3(m) => m.cpu.instret + if m.cpu1_on { m.cpu1.instret } else { 0 },
+            Hw::E32(m) => m.cpu.instret + if m.cpu1_on { m.cpu1.instret } else { 0 },
         }
     }
 
@@ -410,6 +456,7 @@ impl Machine {
         match &self.hw {
             Hw::C3(m) => m.cpu.pc,
             Hw::S3(m) => m.cpu.pc,
+            Hw::E32(m) => m.cpu.pc,
         }
     }
 
@@ -417,6 +464,7 @@ impl Machine {
         match &mut self.hw {
             Hw::C3(m) => m.console_take(),
             Hw::S3(m) => m.console_take(),
+            Hw::E32(m) => m.console_take(),
         }
     }
 
@@ -424,6 +472,7 @@ impl Machine {
         match &self.hw {
             Hw::C3(m) => m.bus.gpio.level() as u64,
             Hw::S3(m) => m.bus.gpio.level(),
+            Hw::E32(m) => m.bus.gpio.level(),
         }
     }
 
@@ -431,6 +480,7 @@ impl Machine {
         match &self.hw {
             Hw::C3(m) => m.bus.gpio.enable as u64,
             Hw::S3(m) => m.bus.gpio.enable,
+            Hw::E32(m) => m.bus.gpio.enable,
         }
     }
 
@@ -457,6 +507,7 @@ impl Machine {
         match &mut self.hw {
             Hw::C3(m) => drive!(m, 1u32),
             Hw::S3(m) => drive!(m, 1u64),
+            Hw::E32(m) => drive!(m, 1u64),
         }
     }
 
@@ -464,7 +515,7 @@ impl Machine {
     pub fn boot_pin(&self) -> u32 {
         match &self.hw {
             Hw::C3(_) => 9,
-            Hw::S3(_) => 0,
+            Hw::S3(_) | Hw::E32(_) => 0,
         }
     }
 
@@ -478,6 +529,10 @@ impl Machine {
                 m.bus.uart0.push_rx(data);
                 m.bus.irq_dirty = true;
             }
+            Hw::E32(m) => {
+                m.bus.uart0.push_rx(data);
+                m.bus.irq_dirty = true;
+            }
         }
     }
 
@@ -485,6 +540,7 @@ impl Machine {
         match &self.hw {
             Hw::C3(m) => m.bus.pin_pwm(pin),
             Hw::S3(m) => m.bus.pin_pwm(pin),
+            Hw::E32(m) => m.bus.pin_pwm(pin),
         }
     }
 
@@ -493,6 +549,7 @@ impl Machine {
         let slot = match &mut self.hw {
             Hw::C3(m) => m.bus.adc.pin_mv.get_mut(pin),
             Hw::S3(m) => m.bus.adc.pin_mv.get_mut(pin),
+            Hw::E32(m) => m.bus.adc.pin_mv.get_mut(pin),
         };
         if let Some(p) = slot {
             *p = mv;
@@ -503,6 +560,7 @@ impl Machine {
         match &self.hw {
             Hw::C3(m) => &m.bus.ws2812,
             Hw::S3(m) => &m.bus.ws2812,
+            Hw::E32(m) => &m.bus.ws2812,
         }
     }
 
@@ -510,6 +568,7 @@ impl Machine {
         match &mut self.hw {
             Hw::C3(m) => &mut m.bus.i2c0,
             Hw::S3(m) => &mut m.bus.i2c0,
+            Hw::E32(m) => &mut m.bus.i2c0,
         }
     }
 
@@ -612,6 +671,7 @@ impl Machine {
         match &mut self.hw {
             Hw::S3(m) => m.bus.lcd.as_deref_mut(),
             Hw::C3(m) => m.bus.lcd.as_deref_mut(),
+            Hw::E32(_) => None,
         }
     }
 
@@ -619,6 +679,7 @@ impl Machine {
         let a = match &self.hw {
             Hw::S3(m) => &m.bus.audio,
             Hw::C3(m) => &m.bus.audio,
+            Hw::E32(m) => &m.bus.audio,
         };
         (!a.is_empty()).then_some(a)
     }
@@ -627,6 +688,7 @@ impl Machine {
         match &mut self.hw {
             Hw::S3(m) => &mut m.bus.audio,
             Hw::C3(m) => &mut m.bus.audio,
+            Hw::E32(m) => &mut m.bus.audio,
         }
     }
 
@@ -692,6 +754,7 @@ impl Machine {
         match &self.hw {
             Hw::S3(m) => (m.bus.spi2.transfers, m.bus.spi2.bytes),
             Hw::C3(m) => (m.bus.spi2.transfers, m.bus.spi2.bytes),
+            Hw::E32(_) => (0, 0),
         }
     }
 
@@ -699,6 +762,7 @@ impl Machine {
         match &mut self.hw {
             Hw::C3(m) => &mut m.bus.pins,
             Hw::S3(m) => &mut m.bus.pins,
+            Hw::E32(m) => &mut m.bus.pins,
         }
     }
 
@@ -710,6 +774,10 @@ impl Machine {
                 m.bus.irq_dirty = true;
             }
             Hw::S3(m) => {
+                m.bus.next_event = 0;
+                m.bus.irq_dirty = true;
+            }
+            Hw::E32(m) => {
                 m.bus.next_event = 0;
                 m.bus.irq_dirty = true;
             }
@@ -780,7 +848,7 @@ impl Machine {
     pub fn pcnt_count(&self, u: usize) -> Option<i16> {
         match &self.hw {
             Hw::S3(m) => Some(m.bus.pcnt.count(u)),
-            Hw::C3(_) => None,
+            Hw::C3(_) | Hw::E32(_) => None,
         }
     }
 
@@ -794,6 +862,7 @@ impl Machine {
                 .map(|(t, l)| (*t, *l as u64))
                 .collect(),
             Hw::S3(m) => m.bus.gpio_log.clone(),
+            Hw::E32(m) => m.bus.gpio_log.clone(),
         }
     }
 
@@ -801,6 +870,7 @@ impl Machine {
         match &mut self.hw {
             Hw::C3(m) => &mut m.bus.iotrace,
             Hw::S3(m) => &mut m.bus.iotrace,
+            Hw::E32(m) => &mut m.bus.iotrace,
         }
     }
 
@@ -828,6 +898,7 @@ impl Machine {
         match &mut self.hw {
             Hw::C3(m) => &mut m.bus.tasks,
             Hw::S3(m) => &mut m.bus.tasks,
+            Hw::E32(m) => &mut m.bus.tasks,
         }
     }
 
@@ -854,7 +925,7 @@ impl Machine {
     pub fn cores(&self) -> usize {
         match &self.hw {
             Hw::C3(_) => 1,
-            Hw::S3(_) => 2,
+            Hw::S3(_) | Hw::E32(_) => 2,
         }
     }
 
@@ -862,7 +933,7 @@ impl Machine {
     pub fn gpio_reset_level(&self) -> u64 {
         match &self.hw {
             Hw::C3(_) => 0,
-            Hw::S3(_) => 1,
+            Hw::S3(_) | Hw::E32(_) => 1,
         }
     }
 
@@ -870,6 +941,7 @@ impl Machine {
         let m = match &self.hw {
             Hw::C3(m) => &m.bus.unimpl,
             Hw::S3(m) => &m.bus.unimpl,
+            Hw::E32(m) => &m.bus.unimpl,
         };
         let mut v: Vec<_> = m.iter().map(|(a, n)| (*a, *n)).collect();
         v.sort_by_key(|x| std::cmp::Reverse(x.1));
@@ -881,6 +953,7 @@ impl Machine {
         match &mut self.hw {
             Hw::C3(m) => tryboard_rv32::Bus::load(&mut m.bus, a, 4).ok(),
             Hw::S3(m) => tryboard_xtensa::Bus::load(&mut m.bus, a, 4).ok(),
+            Hw::E32(m) => tryboard_xtensa::Bus::load(&mut m.bus, a, 4).ok(),
         }
     }
 
@@ -888,30 +961,38 @@ impl Machine {
     pub fn debug_state(&self, sym: &dyn Fn(u32) -> String) -> String {
         match &self.hw {
             Hw::C3(m) => format!("pc {}  ra {}", sym(m.cpu.pc), sym(m.cpu.x[1])),
-            Hw::S3(m) => {
-                use tryboard_xtensa::sr;
-                let core = |c: &tryboard_xtensa::Cpu, k: usize| {
-                    format!(
-                        "核{k} pc {}  PS=0x{:08x} WB={} WS=0x{:04x} INTENABLE=0x{:08x} INTERRUPT=0x{:08x} EXCCAUSE={} EPC1={}",
-                        sym(c.pc),
-                        c.ps(),
-                        c.windowbase,
-                        c.windowstart,
-                        c.read_sr(sr::INTENABLE),
-                        c.read_sr(sr::INTERRUPT),
-                        c.read_sr(sr::EXCCAUSE),
-                        sym(c.read_sr(sr::EPC1)),
-                    )
-                };
-                let mut s = core(&m.cpu, 0);
-                if m.cpu1_on {
-                    s += "\n[tryboard] ";
-                    s += &core(&m.cpu1, 1);
-                }
-                s
-            }
+            Hw::S3(m) => xtensa_state(&m.cpu, m.cpu1_on.then_some(&m.cpu1), sym),
+            Hw::E32(m) => xtensa_state(&m.cpu, m.cpu1_on.then_some(&m.cpu1), sym),
         }
     }
+}
+
+/// Xtensa 双核的停机状态（S3 与 ESP32 共用）
+fn xtensa_state(
+    c0: &tryboard_xtensa::Cpu,
+    c1: Option<&tryboard_xtensa::Cpu>,
+    sym: &dyn Fn(u32) -> String,
+) -> String {
+    use tryboard_xtensa::sr;
+    let core = |c: &tryboard_xtensa::Cpu, k: usize| {
+        format!(
+            "核{k} pc {}  PS=0x{:08x} WB={} WS=0x{:04x} INTENABLE=0x{:08x} INTERRUPT=0x{:08x} EXCCAUSE={} EPC1={}",
+            sym(c.pc),
+            c.ps(),
+            c.windowbase,
+            c.windowstart,
+            c.read_sr(sr::INTENABLE),
+            c.read_sr(sr::INTERRUPT),
+            c.read_sr(sr::EXCCAUSE),
+            sym(c.read_sr(sr::EPC1)),
+        )
+    };
+    let mut s = core(c0, 0);
+    if let Some(c1) = c1 {
+        s += "\n[tryboard] ";
+        s += &core(c1, 1);
+    }
+    s
 }
 
 /// RTCWDT_BROWN_OUT_RESET（esp_rom rtc.h，S3 / C3 相同）：esp_reset_reason() 读到 ESP_RST_BROWNOUT
@@ -927,6 +1008,17 @@ pub fn rom_banner(chip: Chip, reason: u32) -> String {
         _ => "UNKNOWN",
     };
     match chip {
+        // 经典 ESP32 一代 ROM（2016-06-08）：只有两行，复位原因名字也是旧写法
+        Chip::Esp32 => {
+            let name = match reason {
+                1 => "POWERON_RESET",
+                3 => "SW_RESET",
+                12 => "SW_CPU_RESET",
+                15 => "RTCWDT_BROWN_OUT_RESET",
+                _ => "UNKNOWN",
+            };
+            format!("ets Jun  8 2016 00:22:57\n\nrst:0x{reason:x} ({name}),boot:0x13 (SPI_FAST_FLASH_BOOT)\n")
+        }
         Chip::Esp32s3 => format!("ESP-ROM:esp32s3-20210327\nBuild:Mar 27 2021\nrst:0x{reason:x} ({name}),boot:0x8 (SPI_FAST_FLASH_BOOT)\n"),
         Chip::Esp32c3 => format!("ESP-ROM:esp32c3-api1-20210207\nBuild:Feb  7 2021\nrst:0x{reason:x} ({name}),boot:0xc (SPI_FAST_FLASH_BOOT)\n"),
     }
@@ -939,6 +1031,19 @@ fn c3_stop(m: &Esp32c3, r: tryboard_esp32c3::Stop) -> Stop {
         S::Fault { cause, pc, tval } => Stop::Fault(format!(
             "CPU 异常 cause={cause} pc=0x{pc:08x} tval=0x{tval:08x}"
         )),
+        S::Hle(pc) => Stop::Hle(format!("0x{pc:08x} {}", m.symbol_at(pc).unwrap_or(""))),
+        S::Reset(r) => Stop::Reset(r),
+    }
+}
+
+fn e32_stop(m: &Esp32, r: tryboard_esp32::Stop) -> Stop {
+    use tryboard_esp32::Stop as S;
+    match r {
+        S::Budget => Stop::Budget,
+        S::Fault { cause, epc, vaddr } => Stop::Fault(format!(
+            "CPU 异常 EXCCAUSE={cause} EPC1=0x{epc:08x} EXCVADDR=0x{vaddr:08x}"
+        )),
+        S::Break(v) => Stop::Fault(format!("BREAK 0x{v:x}")),
         S::Hle(pc) => Stop::Hle(format!("0x{pc:08x} {}", m.symbol_at(pc).unwrap_or(""))),
         S::Reset(r) => Stop::Reset(r),
     }
@@ -1063,6 +1168,10 @@ pub fn i2c_ack_lines(m: &Machine) -> String {
     match &m.hw {
         Hw::C3(c) => add(&c.bus.i2c0),
         Hw::S3(s) => {
+            add(&s.bus.i2c0);
+            add(&s.bus.i2c1);
+        }
+        Hw::E32(s) => {
             add(&s.bus.i2c0);
             add(&s.bus.i2c1);
         }

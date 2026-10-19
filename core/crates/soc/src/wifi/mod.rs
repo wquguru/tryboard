@@ -53,6 +53,23 @@ impl WifiLayout {
         chip: "esp32s3",
         ..WifiLayout::C3
     };
+    /// 经典 ESP32：MAC 是上一代 IP（寄存器在 0x3FF73000 一带，与 C3 / S3 不同），模型还没接上；
+    /// 这个布局只给统一接口用，总线不把任何地址交给它
+    pub const ESP32: WifiLayout = WifiLayout {
+        chip: "esp32",
+        cpu_hz: 160_000_000,
+        // 射频校准轮询与 C3 同一套 PHY：外设偏移相同，只是 APB 基址 0x3FF40000（C3 是 0x60000000）
+        rf_polls: &[
+            // 0x3FF4E050 不列：ESP32 的 ram_get_fm_sar_dout 等位 26..24 回 0（与 C3 相反），存什么读什么正好
+            (0x3ff4_e04c, RfReady::Or(1 << 24)),
+            // FE：IQ 估计完成在位 31（ram_iq_est_enable 轮询；C3 是 0x6174 位 16）
+            (0x3ff4_607c, RfReady::Or(1 << 31)),
+            // ESP32 独有：set_chan_freq_sw_start 置位 8 启动 PLL 换频，等位 31 完成
+            (0x3ff4_e0c4, RfReady::Or(1 << 31)),
+            // MAC：hal_init 写位 1、等位 0（C3 在 +0xD14，ESP32 在 +0xD24）
+            (0x3ff7_3d24, RfReady::StartBit1Done0),
+        ],
+    };
 }
 
 // MAC 寄存器（基址 0x60033000，见 docs/WIFI.md）

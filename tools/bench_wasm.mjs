@@ -28,7 +28,7 @@ const put = (buf) => {
 };
 const fp = put(flash);
 const chip = e.tb_image_chip(fp, flash.byteLength);
-const rom = fs.readFileSync(path.join(ROOT, 'third_party/esp-rom-elfs', chip === 9 ? 'esp32s3_rev0_rom.elf' : 'esp32c3_rev3_rom.elf'));
+const rom = fs.readFileSync(path.join(ROOT, 'third_party/esp-rom-elfs', chip === 9 ? 'esp32s3_rev0_rom.elf' : chip === 0 ? 'esp32_rev300_rom.elf' : 'esp32c3_rev3_rom.elf'));
 const rp = put(rom);
 if (e.tb_boot(rp, rom.byteLength, fp, flash.byteLength) !== 0) {
   console.error('启动失败');

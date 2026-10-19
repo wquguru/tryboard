@@ -3,7 +3,7 @@
 import { Icon } from './icons';
 
 const CHIP_NAMES: Record<number, string> = { 0: 'ESP32', 2: 'ESP32-S2', 5: 'ESP32-C3', 9: 'ESP32-S3', 12: 'ESP32-C2', 13: 'ESP32-C6', 16: 'ESP32-H2', 18: 'ESP32-P4' };
-type Chip = 'esp32c3' | 'esp32s3';
+type Chip = 'esp32' | 'esp32c3' | 'esp32s3';
 
 export interface FwCheck {
   ok: boolean;
@@ -40,9 +40,9 @@ export function fwCheck(buf: ArrayBuffer, cur: Chip): FwCheck {
   rows.push({ ok: true, text: '镜像魔数 0xE9' });
   const id = b[app + 12] | (b[app + 13] << 8);
   const name = CHIP_NAMES[id] ?? `芯片 id ${id}`;
-  const chip: Chip | null = id === 5 ? 'esp32c3' : id === 9 ? 'esp32s3' : null;
+  const chip: Chip | null = id === 0 ? 'esp32' : id === 5 ? 'esp32c3' : id === 9 ? 'esp32s3' : null;
   if (!chip) {
-    rows.push({ ok: false, text: `镜像头写的是 ${name}，试板只模拟 ESP32-C3 和 ESP32-S3` });
+    rows.push({ ok: false, text: `镜像头写的是 ${name}，试板只模拟 ESP32、ESP32-C3 和 ESP32-S3` });
     return { ok: false, chip: null, title: `这是 ${name} 的固件`, rows };
   }
   rows.push({ ok: true, text: `芯片 ${name}${chip !== cur ? '（台面会换成这块板）' : ''}` });

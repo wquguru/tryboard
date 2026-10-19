@@ -39,7 +39,7 @@ export const BOARD_MAP: Record<string, { boardId: string; sub?: string }> = {
   'xiao-s3-sense': { boardId: 'xiao-s3', sub: '摄像头部分必须上真机' },
   'c6-devkitc': { boardId: 'xiao-c3', sub: 'C6 还不能仿真，用 ESP32-C3 代替运行' },
   'xiao-c6': { boardId: 'xiao-c3', sub: 'C6 还不能仿真，用 ESP32-C3 代替运行' },
-  'esp32-devkitc': { boardId: 'xiao-c3', sub: '经典 ESP32 还不能仿真，用 ESP32-C3 代替运行' },
+  'esp32-devkitc': { boardId: 'esp32-devkitc-v4' },
 };
 
 export const boardFor = (advisorBoard: string) => BOARD_MAP[advisorBoard] ?? { boardId: 'xiao-c3', sub: '这块板还不能仿真，用 ESP32-C3 代替运行' };

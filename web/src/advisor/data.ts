@@ -105,7 +105,8 @@ export const CHIPS: Chip[] = [
     },
     power: { txPeak: 240, rx: 100, modemSleep: 30, lightSleepUA: 800, deepSleepUA: 10 },
     notes: ['唯一支持经典蓝牙（A2DP 音箱、SPP 串口）的型号', '没有原生 USB，板上靠 CH340 / CP2102 转串口', '教程最多，但新项目一般优先 S3 / C3 / C6'],
-    simulated: 'none',
+    // C-05：GPIO、LEDC、I2C、Wi-Fi 初始化能跑；RMT、SPI、ADC、I2S、蓝牙等没模型
+    simulated: 'partial',
   },
   {
     id: 'esp32p4',
