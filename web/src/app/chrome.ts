@@ -143,7 +143,8 @@ export const actions: {
   checkUpload?: (buf: ArrayBuffer, name: string) => string | null;
   /** 换回作品自带的参考固件（空白作品没有） */
   loadRef?: () => void;
-  exportInputs?: () => void;
+  /** realnet：网络页签的「保存回复，离线重放」（同一份输入日志，文件名带 -realnet，C-03） */
+  exportInputs?: (kind?: 'realnet') => void;
   brief?: () => void;
   uart?: (text: string) => void;
   selectCheckpoint?: (id: string) => void;

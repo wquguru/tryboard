@@ -11,6 +11,8 @@ export interface VerifyOutcome {
   stdout: string;
   sim: number;
   error?: string;
+  /** 开着真实网络跑的（C-03）：结论依赖外网，不记运行编号；replies 是这次拿到的回复 */
+  realnet?: { replies: string[] };
 }
 
 /** 验收没跑完（Worker 出错、或太久没有进度）：与"跑完但不通过"区分开，界面提示重试 */
@@ -58,16 +60,16 @@ function runJob(job: VerifyJob, onProgress?: (sim: number) => void) {
   });
 }
 
-export async function verifyLevel(l: Level, flash: ArrayBuffer, onProgress?: (sim: number) => void, envOverride?: { temp: number; humidity: number; pressure: number }, harness?: { i2cWire?: number; antenna?: number }): Promise<VerifyOutcome> {
+export async function verifyLevel(l: Level, flash: ArrayBuffer, onProgress?: (sim: number) => void, envOverride?: { temp: number; humidity: number; pressure: number }, harness?: { i2cWire?: number; antenna?: number }, realnet?: boolean): Promise<VerifyOutcome> {
   const [wasm, rom] = await Promise.all([loadWasm(), loadRom(imageChip(flash))]);
   const { i2c, env, lcd, servo, power, encoder, sonar, touchInt, usb, i2cLog, i2cWire, antenna } = bootOptions(l);
-  const job: VerifyJob = { wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), seconds: l.seconds ?? 2, i2c, env: envOverride ?? env, script: l.script, pwmPin: l.pwm?.pin, lcd, servo, power, encoder, sonar, touchInt, usb, i2cLog, i2cWire: harness?.i2cWire ?? i2cWire, antenna: harness?.antenna ?? antenna };
+  const job: VerifyJob = { wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), seconds: l.seconds ?? 2, i2c, env: envOverride ?? env, script: l.script, pwmPin: l.pwm?.pin, lcd, servo, power, encoder, sonar, touchInt, usb, i2cLog, i2cWire: harness?.i2cWire ?? i2cWire, antenna: harness?.antenna ?? antenna, ...(realnet ? { realnet: true } : {}) };
   const msg = await runJob(job, onProgress);
   // 给自动化测试对照命令行用：最近一次验收的原始输出
   (globalThis as { __tbLastVerify?: unknown }).__tbLastVerify = { stdout: msg.stdout, report: msg.report };
   const results = evaluate(l, msg.stdout, msg.report);
   if (msg.error) results.push({ ok: false, text: `模拟器停止：${msg.error}` });
-  return { ok: results.every((r) => r.ok), results, fingerprint: fingerprint(msg.stdout, msg.report), stdout: msg.stdout, sim: msg.sim, error: msg.error };
+  return { ok: results.every((r) => r.ok), results, fingerprint: fingerprint(msg.stdout, msg.report), stdout: msg.stdout, sim: msg.sim, error: msg.error, ...(realnet ? { realnet: { replies: msg.replies ?? [] } } : {}) };
 }
 
 /**

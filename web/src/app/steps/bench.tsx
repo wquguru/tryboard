@@ -33,6 +33,7 @@ import { Conf, confOfRule } from "../../ui/conf";
 import { ResultCard, RunningCard, actCls } from "../../ui/result";
 import { headline } from "../../ui/say";
 import { VerifyStalled, verifyLevel } from "../../verify";
+import { realnetSwitch } from "../netfeed";
 import { fetchBuf } from "../../assets";
 import { servoAngle, ledCss } from "../../views/common";
 import type {
@@ -140,14 +141,14 @@ export const ownFirmware: Record<string, { buf: ArrayBuffer; name: string }> =
 const PROGRESS_KEY = (work: string) => `tryboard-app-checks:${work}`;
 function loadProgress(
   work: string,
-): Record<string, { fp: string; at: string; own?: boolean }> {
+): Record<string, { fp: string; at: string; own?: boolean; net?: boolean }> {
   try {
     return JSON.parse(localStorage.getItem(PROGRESS_KEY(work)) ?? "{}");
   } catch {
     return {};
   }
 }
-function saveProgress(work: string, id: string, fp: string, own: boolean) {
+function saveProgress(work: string, id: string, fp: string, own: boolean, net = false) {
   try {
     const p = loadProgress(work);
     // 参考固件的通过不覆盖自己的通过（旧记录没有 own 字段，当作自己的）
@@ -156,6 +157,8 @@ function saveProgress(work: string, id: string, fp: string, own: boolean) {
       fp,
       at: new Date().toLocaleString("zh-CN", { hour12: false }),
       own,
+      // 真实网络下通过（C-03）：依赖外网，没有运行编号
+      ...(net ? { net: true } : {}),
     };
     localStorage.setItem(PROGRESS_KEY(work), JSON.stringify(p));
     noteSaved();
@@ -174,10 +177,12 @@ export function restoreChecks(ctx: StepCtx) {
         ok: true,
         own: v.own !== false,
         who:
-          v.own !== false ? `你的固件（${v.at} 通过）` : `参考固件（${v.at} 跑通）`,
+          (v.own !== false ? `你的固件（${v.at} 通过）` : `参考固件（${v.at} 跑通）`) +
+          (v.net ? " · 依赖外网" : ""),
         rows: [],
         fingerprint: v.fp,
         sim: 0,
+        ...(v.net ? { realnet: true } : {}),
       };
   ctx.store.set({ checks });
 }
@@ -2511,7 +2516,7 @@ export function benchStep(): StepImpl {
         <Sec>验收结果</Sec>
         <ResultCard
           verdict={r.ok ? "ok" : "bad"}
-          meta={`${r.who}${r.sim ? `，模拟 ${r.sim.toFixed(1)} 秒` : ""}`}
+          meta={`${r.realnet && r.sim ? "依赖外网 · " : ""}${r.who}${r.sim ? `，模拟 ${r.sim.toFixed(1)} 秒` : ""}`}
           title={headline(r.rows)}
           why={
             r.ok && !r.own
@@ -2519,12 +2524,18 @@ export function benchStep(): StepImpl {
               : undefined
           }
           rows={r.rows}
-          runId={r.fingerprint}
+          runId={r.fingerprint || undefined}
           rawNote={
-            <Note>
-              同一固件、同样输入，网页和命令行 <Mono>npx tryboard check</Mono>{" "}
-              得到同一个运行编号。
-            </Note>
+            r.realnet ? (
+              <Note id="realnetNote">
+                依赖外网 · 不记运行编号；重放时按记录的回复算（「网络」页签里「保存回复，离线重放」）。
+              </Note>
+            ) : (
+              <Note>
+                同一固件、同样输入，网页和命令行 <Mono>npx tryboard check</Mono>{" "}
+                得到同一个运行编号。
+              </Note>
+            )
           }
         >
           {!r.ok && (
@@ -2648,11 +2659,13 @@ export function benchStep(): StepImpl {
     // -1：还在加载模拟器（wasm / ROM），Worker 还没开始跑
     c.store.set({ verifying: l.id, verifyProgress: -1 });
     let out: CheckOutcome;
+    // 开着真实网络（C-03）：验收也真的联网，结论标「依赖外网」、不记运行编号
+    const net = realnetSwitch.get();
     try {
       const v = await verifyLevel(l, buf, (t) => {
         if (t - c.store.get().verifyProgress >= 0.1)
           c.store.set({ verifyProgress: t });
-      });
+      }, undefined, undefined, net);
       const rows: CheckOutcome["rows"] = v.results.map((x) => ({
         ok: x.ok,
         text: x.text,
@@ -2673,8 +2686,9 @@ export function benchStep(): StepImpl {
         who,
         own,
         rows,
-        fingerprint: v.fingerprint,
+        fingerprint: net ? "" : v.fingerprint,
         sim: v.sim,
+        ...(net ? { realnet: true } : {}),
       };
     } catch (e) {
       if (e instanceof VerifyStalled) {
@@ -2694,7 +2708,7 @@ export function benchStep(): StepImpl {
     }
     // 参考固件跑通也记进度（◐，同样解锁组装 / 成品）；saveProgress 自己保证不覆盖自己的通过
     if (out.ok) {
-      saveProgress(wkey(c.work), l.id, out.fingerprint, own);
+      saveProgress(wkey(c.work), l.id, out.fingerprint, own, !!out.realnet);
       buyArmed = true;
     }
     // 参考固件的结果不覆盖你已经通过的记录
@@ -2707,7 +2721,7 @@ export function benchStep(): StepImpl {
     }));
     if (keep)
       c.shell.toast(
-        `参考固件${out.ok ? "通过了" : "没通过"}（运行编号 ${out.fingerprint}，不覆盖你的记录）`,
+        `参考固件${out.ok ? "通过了" : "没通过"}（${out.realnet ? "依赖外网" : `运行编号 ${out.fingerprint}`}，不覆盖你的记录）`,
       );
   }
 

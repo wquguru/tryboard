@@ -716,6 +716,47 @@ pub unsafe extern "C" fn tb_phone_cmd(p: *const u8, len: usize) -> u32 {
     })
 }
 
+/// 「真实网络」开关（C-03，脚本动作 realnet=1/0）
+#[no_mangle]
+pub extern "C" fn tb_realnet_set(on: u32) {
+    with((), |m| m.realnet_set(on != 0));
+}
+
+/// 取走真实网络发件箱：[{id, method, url, ctype, body(base64)}]，返回长度（0 = 没有）；内容用 tb_phone_json_ptr 读
+#[no_mangle]
+pub extern "C" fn tb_net_outbox() -> usize {
+    let reqs = with(Vec::new(), |m| m.net_outbox_take());
+    if reqs.is_empty() {
+        return 0;
+    }
+    let v: Vec<String> = reqs
+        .iter()
+        .map(|r| {
+            format!(
+                "{{\"id\":{},\"method\":{},\"url\":{},\"ctype\":{},\"body\":\"{}\"}}",
+                r.id,
+                json_str(&r.method),
+                json_str(&r.url),
+                json_str(&r.ctype),
+                tryboard_esp32c3::wifi::tcp::b64_encode(&r.body)
+            )
+        })
+        .collect();
+    let j = format!("[{}]", v.join(","));
+    let n = j.len();
+    PHONE_JSON.with(|b| *b.borrow_mut() = j);
+    n
+}
+
+/// 真实网络的回复（脚本动作 netreply= 后面的部分）。返回 0 成功，1 看不懂
+/// # Safety
+/// p/len 指向有效的 UTF-8 缓冲区
+#[no_mangle]
+pub unsafe extern "C" fn tb_net_reply(p: *const u8, len: usize) -> u32 {
+    let s = String::from_utf8_lossy(std::slice::from_raw_parts(p, len)).into_owned();
+    with(1, |m| if m.net_reply(&s) { 0 } else { 1 })
+}
+
 /// 手机状态的变化计数（0 = 还没拿起手机）：变了再取 JSON
 #[no_mangle]
 pub extern "C" fn tb_phone_version() -> f64 {
@@ -752,11 +793,12 @@ pub extern "C" fn tb_phone_json_ptr() -> *const u8 {
 pub extern "C" fn tb_net_version() -> f64 {
     with(0.0, |m| {
         let n = &m.wifi().world.net;
-        n.tcp.rows.len() as f64 + if n.leased { 1e9 } else { 0.0 }
+        // 行数 + 改写次数（真实网络的行会从「等待」改成 200 / 超时）：两者都只增不减，和变了就是有变化
+        (n.tcp.rows.len() as u64 + n.tcp.rev) as f64 + if n.leased { 1e9 } else { 0.0 }
     })
 }
 
-/// 网络页签：最近 300 条 [时刻 ms, 方法, 去向, 地址, 状态, 耗时 ms | null]，返回长度；内容用 tb_phone_json_ptr 读
+/// 网络页签：最近 300 条 [时刻 ms, 方法, 去向, 地址, 状态, 耗时 ms | null, 说明]，返回长度；内容用 tb_phone_json_ptr 读
 #[no_mangle]
 pub extern "C" fn tb_net_json() -> usize {
     let j = with(String::new(), |m| {
@@ -766,14 +808,15 @@ pub extern "C" fn tb_net_json() -> usize {
             .iter()
             .map(|r| {
                 format!(
-                    "[{},{},{},{},{},{}]",
+                    "[{},{},{},{},{},{},{}]",
                     r.t_us as f64 / 1000.0,
                     json_str(&r.method),
                     json_str(r.dest),
                     json_str(&r.url),
                     json_str(&r.status),
                     r.dur_us
-                        .map_or("null".to_string(), |d| format!("{}", d as f64 / 1000.0))
+                        .map_or("null".to_string(), |d| format!("{}", d as f64 / 1000.0)),
+                    json_str(&r.note)
                 )
             })
             .collect();
@@ -785,8 +828,9 @@ pub extern "C" fn tb_net_json() -> usize {
             "null".to_string()
         };
         format!(
-            "{{\"total\":{},\"lease\":{lease},\"rows\":[{}]}}",
+            "{{\"total\":{},\"lease\":{lease},\"realnet\":{},\"rows\":[{}]}}",
             rows.len(),
+            net.tcp.realnet,
             r.join(",")
         )
     });

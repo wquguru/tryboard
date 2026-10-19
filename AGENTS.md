@@ -68,6 +68,7 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | 关卡 / 装配 / 首页网页测试 | `node tools/webtest/levels.mjs`（含拖拽装配、网页与命令行指纹对拍）；拍照录像 `media.mjs`、线束与 USB 小键盘 `harness.mjs` |
 | 实验台交互 / 手机布局回归 | `node tools/webtest/wiremode.mjs`（连线模式、改接、撤销重做）；`node tools/webtest/mobile.mjs`（390×844 各页无横向滚动、抽屉开合、主按钮可点） |
 | 虚拟手机配网（C-02） | `tryboard run firmware/build/c3-softap-prov/flash.bin --ap-phone --ap-post 'ssid=MyHome&pass=12345678'`（手机连固件热点、打开登录页、提交；stderr 末尾有手机日志）；脚本动作 `phone=on / join,ssid[,口令] / open / post,,正文`；网页回归 `node tools/webtest/softap.mjs` |
+| 真实网络开关（C-03） | 脚本动作 `realnet=1` / `netreply=编号,状态,毫秒,内容类型\|原因,base64 正文`（网页「保存回复，离线重放」导出，`tryboard run --inputs` 重放，命令行不联网）；网页回归 `node tools/webtest/realnet.mjs`（本机代理顶替外网，不访问公网） |
 | 输入日志重放对拍 | `node tools/webtest/replay.mjs`（网页按 BOOT、调温度 → 导出输入 → `tryboard run --inputs` 重放，串口逐字节、指纹相同） |
 | 浏览器验收（新功能必做） | `agent-browser skills get core` 先读用法；`cd web && npx vite preview --port 5180` 起服务后 `agent-browser open <url>` → `snapshot` / `click` / `screenshot Reviews/ab/<项>.png` → `console` / `errors`；用 Read 看截图。并行子代理各用自己的端口和 `--session <名字>`，不要抢同一个浏览器 |
 

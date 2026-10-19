@@ -7,11 +7,11 @@ export type VerifyJob = SimJob & { wasm: ArrayBuffer; rom: ArrayBuffer; flash: A
 
 export type VerifyMsg =
   | { type: 'progress'; sim: number }
-  | { type: 'done'; stdout: string; report: string; sim: number; error?: string };
+  | { type: 'done'; stdout: string; report: string; sim: number; error?: string; replies?: string[] };
 
 const post = (m: VerifyMsg) => (self as unknown as Worker).postMessage(m);
 
 self.onmessage = async (ev: MessageEvent<VerifyJob>) => {
   const r = await runSim(ev.data, { onProgress: (sim) => post({ type: 'progress', sim }) });
-  post({ type: 'done', stdout: r.stdout, report: r.report, sim: r.sim, error: r.error });
+  post({ type: 'done', stdout: r.stdout, report: r.report, sim: r.sim, error: r.error, ...(r.replies ? { replies: r.replies } : {}) });
 };

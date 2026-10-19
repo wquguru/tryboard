@@ -152,11 +152,21 @@ impl Machine {
     pub fn reboot(&mut self, reason: u32) -> Result<(), String> {
         // 虚拟手机是外部世界：板子复位时手机还在，只是热点暂时消失
         let phone = self.wifi_mut().world.phone.take();
+        // 「真实网络」是网页上的开关，不随板子复位；请求编号接着往上数，复位前迟到的回复不会错认成新请求
+        let (realnet, next_req) = {
+            let t = &self.wifi().world.net.tcp;
+            (t.realnet, t.next_req)
+        };
         match &mut self.hw {
             Hw::C3(m) => m.reboot(reason)?,
             Hw::S3(m) => m.reboot(reason)?,
         }
         self.apply_harness();
+        {
+            let t = &mut self.wifi_mut().world.net.tcp;
+            t.realnet = realnet;
+            t.next_req = next_req;
+        }
         if let Some(mut p) = phone {
             let now = self.wifi_tsf_us();
             p.chip_reset(now);
@@ -229,6 +239,30 @@ impl Machine {
             p.command(c, now);
         }
         self.kick_events();
+    }
+
+    /// 「真实网络」开关（C-03，脚本动作 realnet=1/0）：开着时 tryboard.local 以外的 HTTP 请求进发件箱
+    pub fn realnet_set(&mut self, on: bool) {
+        self.wifi_mut().world.net.tcp.realnet = on;
+    }
+
+    /// 取走发件箱里的请求（网页拿去 fetch；命令行不联网，只靠 --inputs 里记录的 netreply= 回答）
+    pub fn net_outbox_take(&mut self) -> Vec<tryboard_esp32c3::wifi::tcp::RealReq> {
+        std::mem::take(&mut self.wifi_mut().world.net.tcp.outbox)
+    }
+
+    /// 脚本动作 netreply= 后面的部分；看不懂返回 false
+    pub fn net_reply(&mut self, s: &str) -> bool {
+        let Some((id, status, info, body)) = tryboard_esp32c3::wifi::tcp::parse_netreply(s) else {
+            return false;
+        };
+        let now = self.wifi_tsf_us();
+        self.wifi_mut()
+            .world
+            .net
+            .real_reply(id, status, &info, &body, now);
+        self.kick_events();
+        true
     }
 
     pub fn phone(&self) -> Option<&tryboard_esp32c3::wifi::phone::Phone> {

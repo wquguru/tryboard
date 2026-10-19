@@ -24,6 +24,7 @@ fn usage() -> ! {
                [--ap-phone [ssid[,口令]]]（虚拟手机连固件自建的热点，默认 TryBoard-Setup 开放；探测到需要登录就打开登录页）
                [--ap-post 'ssid=MyHome&pass=12345678']（登录页有表单就自动提交）；启用手机后多一个虚拟路由器 MyHome / 12345678（192.168.5.0/24）
                脚本动作 phone=join,ssid[,口令]、phone=open、phone=get,URL、phone=post,URL,表单、phone=leave
+               脚本动作 realnet=1|0（网页「真实网络」开关）、netreply=编号,状态,毫秒,内容类型|原因,base64 正文（网页记下的真实回复；命令行不联网）
                [--encoder A,B[,SW]]（EC11 旋转编码器；脚本动作 enc=+N / enc=-N 转 N 格、encsw=1|0 按下 / 松开）
                [--sonar TRIG,ECHO] [--dist 厘米]（HC-SR04；脚本动作 dist=厘米，负数 = 前方没有东西）
                [--i2s max98357a,inmp441]（S3：喇叭 BCLK=16 LRC=17 DIN=18，麦克风 SCK=39 WS=40 SD=41；C3：喇叭 0/1/2，麦克风 0/1/3）
@@ -395,6 +396,13 @@ fn run(args: &[String]) {
                     Some(c) => m.phone_cmd(c),
                     None => eprintln!("[tryboard] 看不懂的手机动作: {act}"),
                 }
+            } else if let Some(v) = act.strip_prefix("realnet=") {
+                // 网页上的「真实网络」开关（C-03）：命令行不联网，回复只来自后面的 netreply=
+                m.realnet_set(v.trim() == "1");
+            } else if let Some(v) = act.strip_prefix("netreply=") {
+                if !m.net_reply(v) {
+                    eprintln!("[tryboard] 看不懂的 netreply 动作");
+                }
             } else if let Some(t) = act.strip_prefix("uart=") {
                 m.uart_push(t.replace("\\n", "\n").as_bytes());
             } else if let Some(t) = act.strip_prefix("usbcdc=") {
@@ -405,7 +413,16 @@ fn run(args: &[String]) {
                         .extend_from_slice(t.replace("\\n", "\n").as_bytes());
                 }
             }
-            eprintln!("[tryboard] {now_s:.3}s 输入: {act}");
+            if act.starts_with("netreply=") && act.len() > 80 {
+                // 回复正文的 base64 可能有几十 KB，只打开头
+                let cut = (0..=80)
+                    .rev()
+                    .find(|&i| act.is_char_boundary(i))
+                    .unwrap_or(0);
+                eprintln!("[tryboard] {now_s:.3}s 输入: {}…", &act[..cut]);
+            } else {
+                eprintln!("[tryboard] {now_s:.3}s 输入: {act}");
+            }
         }
         if let Some(p) = pwm_pin {
             if let Some((d, f)) = m.pin_pwm(p) {
@@ -441,6 +458,17 @@ fn run(args: &[String]) {
             m.run(slice.min(total - done))
         };
         done += m.cycles() - before;
+        // 真实网络（C-03）：命令行从不联网，只报一声；回复要靠 --inputs 里网页记下的 netreply=
+        for r in m.net_outbox_take() {
+            eprintln!(
+                "[tryboard] {:.3}s 真实网络请求 #{} {} {}（命令行不联网，等 netreply={}）",
+                m.cycles() as f64 / CPU_HZ as f64,
+                r.id,
+                r.method,
+                r.url,
+                r.id
+            );
+        }
         if let Some((_, buf)) = audio_wav.as_mut() {
             for b in m.audio_take() {
                 if buf.is_empty() {

@@ -515,6 +515,12 @@ impl World {
             .flatten()
             .filter_map(|a| a.next_timer())
             .min();
+        // 有排队要主动发的帧（真实网络的回复）：马上到期
+        let ap = if self.net.pending.is_empty() {
+            ap
+        } else {
+            Some(0)
+        };
         match self.phone.as_ref().and_then(|p| p.next_timer()) {
             Some(t) => Some(ap.map_or(t, |a| a.min(t))),
             None => ap,
@@ -534,6 +540,28 @@ impl World {
     pub fn poll(&mut self, tsf_us: u64) -> (Vec<Air>, Vec<String>) {
         let (mut out, mut log) = (Vec::new(), Vec::new());
         let loss = self.antenna_loss_db;
+        // 真实网络的回复（C-03）：经已关联的 AP 发给芯片（WPA2 已放行就加密）；没关联就丢掉
+        if !self.net.pending.is_empty() {
+            let pend = std::mem::take(&mut self.net.pending);
+            let notes: Vec<String> = std::mem::take(&mut self.net.log);
+            log.extend(notes);
+            if let Some(i) = self.associated() {
+                let (rssi, channel, bssid) = (self.rssi(i), self.aps[i].channel, self.aps[i].bssid);
+                for (k, e) in pend.iter().enumerate() {
+                    let mut f = self.data_from_ds(e, &bssid);
+                    if let Some(a) = self.wpa[i].as_mut().filter(|a| a.authorized()) {
+                        f = a.encrypt(&f);
+                    }
+                    out.push(Air {
+                        delay_us: 200 * k as u64,
+                        frame: f,
+                        rssi,
+                        channel,
+                        ap_if: false,
+                    });
+                }
+            }
+        }
         if let Some(p) = self.phone.as_mut() {
             if p.next_timer().is_some_and(|t| t <= tsf_us) {
                 p.poll(tsf_us);

@@ -392,10 +392,14 @@ export function NetRows({ rows, mobile }: { rows: NetRow[]; mobile?: boolean }) 
             <td className="px-2 py-1">
               <span className={cn('rounded-full px-1.5 py-px text-[11px] whitespace-nowrap', DEST_CLS[r[2]] ?? 'bg-field')}>{r[2]}</span>
             </td>
-            <td className="truncate px-2 py-1 font-mono" title={r[3]}>
-              {r[3]}
+            <td className="px-2 py-1 font-mono" title={r[3]}>
+              <span className="block truncate">{r[3]}</span>
+              {/* 说明（C-03）：真实网络为什么没拿到回复（跨域、超时…）、HTTPS 为什么没放行 */}
+              {r[6] && <span className="net-note block font-sans text-[11px] leading-4 whitespace-normal text-warn-ink">{r[6]}</span>}
             </td>
-            <td className="truncate px-2 py-1 font-mono" title={r[4]}>{r[4]}</td>
+            <td className={cn('truncate px-2 py-1 font-mono', r[4] === '失败' && 'text-bad-ink', r[4] === '等待' && 'text-muted')} title={r[4]}>
+              {r[4]}
+            </td>
             <td className={cn('px-2 py-1 font-mono whitespace-nowrap text-muted', mobile && 'hidden')}>{r[5] === null ? '—' : `${Math.round(r[5])} ms`}</td>
           </tr>
         ))}
@@ -434,6 +438,23 @@ export function NetPane({ mobile, extra }: { mobile?: boolean; extra?: ReactNode
           </button>
         ))}
         <span className="flex-1" />
+        {(v.realnet || v.replies > 0) && (
+          <span id="realnetBar" className="inline-flex items-center gap-1.5">
+            <span className="text-xs text-muted max-md:hidden">
+              本次已记录 {v.replies} 条回复 · {(v.replyBytes / 1024).toFixed(1)} KB
+            </span>
+            <button
+              type="button"
+              id="saveReplies"
+              disabled={!actions.exportInputs}
+              title="下载这次的输入日志（含每条回复）：命令行 tryboard run --inputs 离线重放，逐字节相同"
+              onClick={() => actions.exportInputs?.('realnet')}
+              className="min-h-8 cursor-pointer rounded-md border border-line bg-surface px-2.5 text-xs text-fg hover:bg-field disabled:cursor-not-allowed disabled:text-muted max-md:min-h-11"
+            >
+              保存回复，离线重放
+            </button>
+          </span>
+        )}
         {extra}
         <span className="inline-flex items-center gap-1 text-xs" title="手机的行为按常见手机系统写的，不是某一款手机的实测">
           <ConfIcon c="行为模拟" size={14} />

@@ -134,3 +134,13 @@ QEMU 对照：乐鑫 QEMU 的 esp32s3 机器没有 Wi-Fi 模型（只有 ESP32 �
 - **网络页签记录**：`tcp.rs` 记芯片当客户端时的 DNS / HTTP / 被拦连接（`NetRow`：时刻、方法、去向 虚拟 / 真实 / 未放行、地址、状态、耗时），wasm `tb_net_json` 给网页。
 
 没做：iPhone 的探测地址（captive.apple.com）与各家系统弹不弹登录页的差异（必须上真机）、手机侧 HTTPS、一次连多部手机、WPA3 / SAE。
+
+## 阶段 6：真实网络开关（C-03：http-real-virtual ✅、http-real-replay ✅）
+
+网页顶栏「真实网络」（默认关）打开后，芯片发往 `tryboard.local` 以外的 HTTP 请求由浏览器 `fetch` 真发出去。
+- **内核**（`tcp.rs`）：收齐请求后按 `Host:` 判断；开着开关的进发件箱（`RealReq {id, method, url, ctype, body}`），网络页签加一行「真实 · 等待」。回复由 `netreply=` 送回：按 MSS 切段、最后一段带 FIN；状态 0 回 502 + `TRYBOARD_REALNET_ERROR <原因>`。芯片先断开 → 那一行记超时，迟到的回复丢掉。开着时 443 / 8443 的 SYN 回 RST（HTTPS 未放行），其他非 80 端口照旧拦截并写说明。
+- **动作**：`realnet=1|0`、`netreply=编号,状态,毫秒,内容类型|原因,base64 正文`。CLI 不联网，遇到请求只在 stderr 报「真实网络请求 #n GET url」。
+- **wasm**：`tb_realnet_set(on)`、`tb_net_outbox()`（JSON 用 `tb_phone_json_ptr` 读）、`tb_net_reply(p, len)`（0 成功 / 1 看不懂）；`tb_net_json` 每行第 7 项是说明，外加 `"realnet"`；`tb_net_version` 含行改写次数。
+- **网页**：`web/src/realfetch.ts`（fetch + CORS 诊断）、worker / simrun 的 `pumpNet`、网络页签「本次已记录 N 条回复 · 保存回复，离线重放」。
+
+没做：HTTPS、MQTT 等非 HTTP 出网、WPA3、TAP、原始 TCP 出网。

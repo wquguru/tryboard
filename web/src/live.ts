@@ -28,7 +28,9 @@ export interface LiveOptions {
   /** 原生 USB 虚拟主机看到的（S3 固件用了 USB 才有；null = 没有 USB 设备） */
   onUsb?(v: UsbView | null): void;
   /** 网络页签（C-02）：固件用没用 Wi-Fi、虚拟手机 JSON、请求记录 JSON（没变的字段不带） */
-  onNet?(m: { used: boolean; phone?: string; rows?: string }): void;
+  onNet?(m: { used: boolean; phone?: string; rows?: string; replies?: number; replyBytes?: number }): void;
+  /** 「真实网络」开关现在的状态（C-03）：上电 / 回退时带给 worker */
+  realnet?(): boolean;
   /** 线束结论文字（与命令行同样的行），变了才回调 */
   onHarness?(text: string): void;
   /** 旋转编码器 / HC-SR04（接在 GPIO 上，波形由内核按时刻排出） */
@@ -161,7 +163,7 @@ export class LiveSim {
     const [wasm, flash] = [await loadWasm(), this.flash];
     const rom = await loadRom(imageChip(flash));
     Object.assign(this.frame, emptyFrame());
-    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName, harness: this.o.harness });
+    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName, harness: this.o.harness, realnet: this.o.realnet?.() ?? false });
   }
   reset() {
     return this.start();
@@ -258,6 +260,10 @@ export class LiveSim {
   phone(cmd: string) {
     this.send({ type: 'phone', cmd });
   }
+  /** 「真实网络」开关（C-03，进输入日志 realnet=1/0） */
+  realnet(on: boolean) {
+    this.send({ type: 'realnet', on });
+  }
   /** 电位器滑片电压（mV）进 ADC 脚（进输入日志） */
   analog(pin: number, mv: number) {
     this.send({ type: 'analog', pin, mv });
@@ -332,7 +338,7 @@ export class LiveSim {
     Object.assign(this.frame, emptyFrame());
     return new Promise((r) => {
       this.seekWaiter = r;
-      this.send({ type: 'seek', wasm: wasm.slice(0), rom: rom.slice(0), flash: job.flash.slice(0), i2c: job.i2c, env: job.env, lcd: job.lcd, servo: job.servo, power: job.power, encoder: job.encoder, sonar: job.sonar ? { ...job.sonar, cm: NaN } : undefined, touchInt: job.touchInt, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs });
+      this.send({ type: 'seek', wasm: wasm.slice(0), rom: rom.slice(0), flash: job.flash.slice(0), i2c: job.i2c, env: job.env, lcd: job.lcd, servo: job.servo, power: job.power, encoder: job.encoder, sonar: job.sonar ? { ...job.sonar, cm: NaN } : undefined, touchInt: job.touchInt, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs, realnet: this.o.realnet?.() ?? false });
     });
   }
   /** 回退停住以后从那一刻接着实时跑：这次运行重新算"进行中" */

@@ -299,14 +299,14 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
       session.loadFirmware(buf, `${work.example}/flash.bin`);
       shell.toast('已换回参考固件，重新上电');
     };
-  actions.exportInputs = async () => {
+  actions.exportInputs = async (kind) => {
     if (!session.sim) return shell.toast('模拟器还没跑起来，没有输入日志');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([toScript(await session.sim.inputLog())], { type: 'text/plain' }));
-    a.download = `${session.fwName || 'tryboard'}-inputs.txt`;
+    a.download = `${(session.fwName || 'tryboard').replace(/\/flash\.bin$|\.bin$/, '').replaceAll('/', '-')}-${kind ?? 'inputs'}.txt`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    shell.toast('已导出输入日志：tryboard run --inputs 可逐字节重放');
+    shell.toast(kind === 'realnet' ? '已保存回复：tryboard run --inputs 离线重放，不再联网' : '已导出输入日志：tryboard run --inputs 可逐字节重放');
   };
   const curLevel = () => {
     const s = store.get();

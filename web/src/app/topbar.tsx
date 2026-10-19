@@ -7,6 +7,7 @@ import { currentTheme, onTheme, setTheme } from '../theme';
 import { actions, bc, BLANK, CUSTOM, EXAMPLE_ID, TWO_STEPS, shownSteps } from './chrome';
 import { decode, encode } from '../advisor/state';
 import { FwMenu, openFwMenu } from './fwmenu';
+import { RealnetSwitch, toggleRealnet, useRealnet } from './realnet';
 import { CmdkBox } from './cmdk';
 import { Icon } from './icons';
 import { useStore } from './react';
@@ -230,6 +231,7 @@ function RunGroup({ bench }: { bench: boolean }) {
 export function MoreMenu({ toast, phone }: { toast: (t: string) => void; phone?: boolean }) {
   const { open, setOpen, ref } = usePop();
   const [dark, setDark] = useState(currentTheme() === 'dark');
+  const realnet = useRealnet();
   useEffect(() => {
     if (!phone) return;
     const off = onTheme((t) => setDark(t === 'dark'));
@@ -276,6 +278,21 @@ export function MoreMenu({ toast, phone }: { toast: (t: string) => void; phone?:
             <span className="flex-1">
               交给 AI 的任务书
               <span className="block text-[11px] text-muted">当前检查点的目标、接线和验收命令</span>
+            </span>
+          </button>
+          {/* 真实网络（C-03）：窄桌面（≤ 1100px）顶栏的开关收起了、手机顶栏没有，都从 ⋯ 进 */}
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={realnet}
+            data-more="realnet"
+            className={cn(menuItem, !phone && 'min-[1101px]:hidden')}
+            onClick={go(toggleRealnet)}
+          >
+            <Icon n="link" size={15} />
+            <span className="flex-1">
+              真实网络：{realnet ? '开' : '关'}
+              <span className="block text-[11px] text-muted">{realnet ? '点一下回到虚拟网络' : '芯片的 HTTP 请求经浏览器真的发出去'}</span>
             </span>
           </button>
           {/* 换固件：手机顶栏没地方放；窄桌面（≤ 1100px）顶栏的「换固件 ▾」也收起了，都从 ⋯ 进 */}
@@ -362,6 +379,7 @@ export function TopBar(p: { step: StepId; workName: string; bare?: boolean; righ
         <StepBar step={p.step} />
       </div>
       <CmdkBox />
+      {!p.bare && bench && <RealnetSwitch />}
       {!p.bare && <RunGroup bench={bench} />}
       <FwMenu />
       {p.right}

@@ -1861,5 +1861,41 @@
   "stderr_expect": [
    "需要登录此网络"
   ]
+ },
+ {
+  "id": "http-real-virtual",
+  "fw": "c3-http-real",
+  "seconds": 5,
+  "expect": [
+   "GET http://tryboard.local/hello.txt → 200，17 字节",
+   "example.com：虚拟服务器回答（没开真实网络）",
+   "httpbin.org：虚拟服务器回 404（没开真实网络）",
+   "TRYBOARD_OK c3-http-real"
+  ],
+  "absent": [
+   "真实回复",
+   "浏览器没放行"
+  ]
+ },
+ {
+  "id": "http-real-replay",
+  "fw": "c3-http-real",
+  "seconds": 5,
+  "args": [
+   "--script",
+   "0.0:realnet=1; 2.0:netreply=1,0,231,cors,; 2.5:netreply=2,200,412,application/json,ewogICJhcmdzIjoge30sIAogICJ1cmwiOiAiaHR0cDovL2h0dHBiaW4ub3JnL2dldCIKfQo="
+  ],
+  "expect": [
+   "GET http://tryboard.local/hello.txt → 200，17 字节",
+   "GET http://example.com/ → 502，28 字节",
+   "example.com：浏览器没放行，原因 cors",
+   "GET http://httpbin.org/get → 200，53 字节",
+   "httpbin.org：真实回复，url=http://httpbin.org/get",
+   "TRYBOARD_OK c3-http-real"
+  ],
+  "stderr_expect": [
+   "真实网络请求 #1 GET http://example.com/",
+   "真实网络请求 #2 GET http://httpbin.org/get"
+  ]
  }
 ]
