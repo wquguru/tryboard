@@ -1,6 +1,6 @@
 import type { Dict } from '../index.ts';
 
-// Steps area: app/steps/* and app/benchv2.tsx.
+// Steps area: app/steps/* and app/bench/ui/*.
 const d: Dict = {
   "#{n} · rewind point (paused)": "#{n} · 巻き戻し地点（一時停止）",
   "#{n} · running": "#{n} · 実行中",

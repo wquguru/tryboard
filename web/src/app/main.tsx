@@ -26,7 +26,7 @@ import { loadCaseParams } from './casemesh';
 import { actions, bc, overlay, setBc, setDock, syncDockVar, type CpRow, type Issue } from './chrome';
 import { CrashCard } from './crash';
 import { FwCheckCard, fwCheck } from './fwcheck';
-import { BrownoutBanner } from './benchv2';
+import { BrownoutBanner } from './bench/ui';
 import { initSaved } from './saved';
 import { serial } from './dock';
 import { usbFeed } from './usbpane';

@@ -1,6 +1,6 @@
 import type { Dict } from '../index.ts';
 
-// Steps area: app/steps/* and app/benchv2.tsx.
+// Steps area: app/steps/* and app/bench/ui/*.
 const d: Dict = {
   "#{n} · rewind point (paused)": "#{n} · 되감기 지점(일시 정지)",
   "#{n} · running": "#{n} · 실행 중",

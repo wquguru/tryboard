@@ -7,7 +7,7 @@ import { useInitText } from "../../ui/native";
 import { Ph } from "../../ui/panel";
 import { type Example } from "../examples";
 import { HOME_WORKS } from "../works";
-import { ConfBadge, PART_CONF } from "../benchv2";
+import { ConfBadge, PART_CONF } from "./ui";
 
 /** ConfLevel ids are owned by ui/conf.tsx; Conf / ConfBadge render the label. */
 export const EST: ConfLevel = "估算"; // lint: allow-cjk
@@ -74,7 +74,7 @@ export function SayLive({ id, init }: { id: string; init: string }) {
   return <p ref={ref} id={id} className="mt-2 mb-0 text-[13px] font-medium text-fg" />;
 }
 
-/** Part heading in properties: name plus confidence badge (see benchv2 PART_CONF). */
+/** Part heading in properties: name plus confidence badge (see bench/ui PART_CONF). */
 export function PartHead({ name, type }: { name: string; type: string }) {
   const conf = PART_CONF[type];
   return (

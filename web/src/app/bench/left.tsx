@@ -8,7 +8,7 @@ import { CustomCheckCard } from "../customui";
 import { actions, setDock } from "../chrome";
 import { replay } from "../bom";
 import { setLeft } from "../leftcol";
-import { AllPassedCard, CheckpointCard, PartLib, WireTable } from "../benchv2";
+import { AllPassedCard, CheckpointCard, PartLib, WireTable } from "./ui";
 import { passedCount, ownCount } from "./progress";
 import type { BenchCtx } from "./ctx";
 

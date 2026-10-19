@@ -11,7 +11,7 @@ import { Live } from "../../ui/native";
 import { Kv, Meter, Mono, Note, Sec } from "../../ui/panel";
 import { bc, overlay } from "../chrome";
 import { isPhone, phoneProps, setMui } from "../mobile";
-import { tn } from "../benchv2";
+import { tn } from "./ui";
 import type { BenchCtx } from "./ctx";
 
 export function mountCards(b: BenchCtx) {

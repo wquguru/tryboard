@@ -4,7 +4,7 @@ import { t } from "../../i18n";
 import { partId } from "../wiring";
 import { overlay } from "../chrome";
 import { buildPlaced, mergeMods, pinOk, placeConflict, placeDef } from "../place";
-import { LIB_DRAG, PinRings, PlaceBanner, type RingPin } from "../benchv2";
+import { LIB_DRAG, PinRings, PlaceBanner, type RingPin } from "./ui";
 import type { BenchCtx } from "./ctx";
 
 export function mountPlacing(b: BenchCtx) {

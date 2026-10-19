@@ -6,7 +6,7 @@ import { meterVolts } from "../pinscope";
 import { Live } from "../../ui/native";
 import { Btn, Btns, Kv, Meter, Mono, Ph, Sec } from "../../ui/panel";
 import { overlay } from "../chrome";
-import { MeterCard } from "../benchv2";
+import { MeterCard } from "./ui";
 import type { BenchCtx } from "./ctx";
 
 export function mountMeter(b: BenchCtx) {
