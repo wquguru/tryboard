@@ -769,3 +769,16 @@
 - 判定文字：`I2C 0x76 应答 <n> 次（要 ≥ <min>）`。`boots`：`开机 <s> s 内串口输出 <n> 行`。tools/check.py、packages/tryboard、web/src/checks.ts 三处逐字一致。
 - check.py 读生成 Level：`tools/check.py <bin> --level-json <文件>`（从网页「导出检查点」下载的 JSON，数组或单个 Level）。
 - 演示固件 `firmware/c3-thermo`（XIAO C3，BME280 + SSD1306，GPIO6/7）：每秒读一次，串口一行 `T=.. C  H=.. %  P=.. hPa`，OLED 显示读数；加 accept.json 用例。
+
+### U-15（选板）
+2026-10-18，选板页 v3（`web/src/advisor/App.tsx` 重写，DESIGN_V2 §8.2）。
+- **数据**：`data.ts` 加零件 `buzzer`（无源蜂鸣器模块），`PART_MAP.buzzer = { partId: 'buzzer-module' }`（catalogmap 新增一项，既有项不动）；`Template.suggest?` 列每个项目的「建议」零件（虚线框，默认不选）。
+- **引擎**：`Need.sim?`：「要在试板里先跑通？」答是时，能模拟的芯片 +40 分（只影响排序，不过滤）。预算是硬过滤，放在 `derive.ts`（引擎不改），0 块时给「去掉 X → N 块」和放宽预算两种出路。
+- **`derive.ts`**（纯函数，页面和任务书共用）：`resolve(s)` 一次算出模板、需求、方案、三块对比；`sanitize` 丢掉地址里未知的零件 / 能力 id（旧链接、手改地址不崩）；`changeText` 写「刚才」一行（换板 / 多占或空出的引脚 / 参考价差 / 续航变化，数字全来自引擎）。
+- **我已有**：id 规则：板子 = 选板板子 id，`always` = 面包板和杜邦线，`usb-c-cable`，零件 = 选板零件 id，`battery`。存 `localStorage['tryboard-have']`，切换不进撤销栈；只进「按这套开始做」的链接（`encode(s,true)`），分享链接不带。
+- **进采购链接**：总是显式带 `board=`，实验台不必再跑一遍推荐。
+- **`brief.ts`**：`briefMarkdown(s)`（签名按协调约定）+ `checkpointsOf(r)`。检查点名逐字：`开机不崩溃，串口有输出`、`I2C 0x76 有回应（BME280）`、`I2C 0x3c 有回应（SSD1306）`（地址小写十六进制两位，括号里是芯片名不是零件名）、`OLED 收到画面`、`灯带收到数据`、`舵机信号`、`深睡后能再唤醒`（manual）。genlevels 要与此一致。任务书不写命令行，末行固定「想离线跑的，从仓库本地装 packages/tryboard」。
+- **术语**：每次渲染只有第一次出现的术语可点（桌面 Popover、手机底部抽屉、Esc 关）。
+- **测试钩子**：`globalThis.__tbSelect = { state, have, brief, go, share }`，只给 `tools/webtest/selectv3.mjs` 读，不是公开接口。
+- 删掉 `CONF_VARIANT`，可信度全部用 `ui/conf.tsx` 的 ConfIcon / ConfBar（U-14 的选板部分）。
+- 替代方案：把预算放进引擎打分——否掉，「¥60 以内」是用户说的硬线，超了就该不出现，不该只是排后面。

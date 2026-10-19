@@ -284,7 +284,7 @@ export const BOARDS: Board[] = [
 export interface Part {
   id: string;
   name: string;
-  /** 卡片 / 按钮上的短名（选型助手 v2 的模板卡副标题） */
+  /** 卡片 / 按钮上的短名（选板页的项目卡副标题） */
   short: string;
   priceCNY: [number, number];
   /** 需要的接口：引脚需求 */
@@ -306,6 +306,7 @@ export const PARTS: Record<string, Part> = {
   tft: { id: 'tft', short: '彩屏', name: '1.69–2.4 寸 SPI 彩屏（ST7789 / ILI9341）', priceCNY: [15, 40], needs: [{ kind: 'spi', label: '屏幕' }, { kind: 'gpio', count: 3, label: '屏幕 DC / RST / 背光' }], activeMA: 40, caps: ['display_spi'], simulated: 'none' },
   mic: { id: 'mic', short: '麦克风', name: 'INMP441 数字麦克风（I2S）', priceCNY: [8, 15], needs: [{ kind: 'i2s', label: '麦克风' }], caps: ['audio_in'], simulated: 'none' },
   amp: { id: 'amp', short: '功放', name: 'MAX98357A 功放和 3W 小喇叭', priceCNY: [10, 20], needs: [{ kind: 'i2s', label: '功放' }], activeMA: 300, caps: ['audio_out'], simulated: 'none' },
+  buzzer: { id: 'buzzer', short: '蜂鸣器', name: '无源蜂鸣器模块（三针，带三极管）', priceCNY: [1, 4], needs: [{ kind: 'pwm', label: '蜂鸣器' }], activeMA: 30, simulated: 'full' },
   relay: { id: 'relay', short: '继电器', name: '5V 继电器模块（光耦隔离）', priceCNY: [3, 8], needs: [{ kind: 'gpio', label: '继电器' }], activeMA: 70, simulated: 'full' },
   pir: { id: 'pir', short: '人体红外', name: 'HC-SR501 人体红外', priceCNY: [3, 8], needs: [{ kind: 'gpio', label: '人体感应' }], simulated: 'full' },
   battery: { id: 'battery', short: '锂电池', name: '3.7V 锂电池 1000mAh', priceCNY: [10, 20], needs: [], simulated: 'none' },
@@ -322,6 +323,8 @@ export interface Template {
   needCaps: Cap[];
   niceCaps?: Cap[];
   parts: string[];
+  /** 选板 v3「建议」里默认没勾的零件（虚线框）：做这个项目常加的，勾上即进清单 */
+  suggest?: string[];
   /** 工作模式，用于功耗估算：每小时唤醒次数、每次工作秒数、是否联网 */
   duty?: { wakePerHour: number; activeSec: number; wifi: boolean };
   /** 能在试板里跑的示例固件（web/public/fw/examples.json 的 id，C3 和 S3 的都列；界面按推荐芯片挑） */
@@ -340,6 +343,7 @@ export const TEMPLATES: Template[] = [
     blurb: '学单片机的起点，几乎任何板子都行，挑便宜、教程多的。',
     needCaps: [],
     parts: ['led', 'button', 'pot'],
+    suggest: ['buzzer'],
     examples: ['blink', 'button', 'fade', 'pot', 's3-blink', 's3-pot'],
     risks: [],
   },
@@ -351,6 +355,7 @@ export const TEMPLATES: Template[] = [
     blurb: '每 10 分钟醒来测一次、上报一次，其余时间深睡。关键是整板深睡电流。',
     needCaps: ['wifi', 'low_power'],
     parts: ['bme280', 'oled', 'battery'],
+    suggest: ['buzzer', 'button'],
     duty: { wakePerHour: 6, activeSec: 3, wifi: true },
     examples: ['bme280', 'oled', 'weather', 's3-oled'],
     work: 'weather',
@@ -364,6 +369,7 @@ export const TEMPLATES: Template[] = [
     blurb: 'WS2812 灯带，用手机网页控制，WLED 一类固件直接能用。',
     needCaps: ['wifi'],
     parts: ['ws2812', 'button'],
+    suggest: ['pot'],
     examples: ['rgb', 's3-rgb', 'lamp'],
     work: 'lamp',
     risks: ['60 灯 / 米全白约 3.6A / 米，电源要单独供，不能靠开发板的 USB', '3.3V 数据线驱动 5V 灯带偶尔不稳，必要时加电平转换'],
@@ -377,6 +383,7 @@ export const TEMPLATES: Template[] = [
     needCaps: ['wifi'],
     niceCaps: ['thread', 'zigbee', 'wifi6'],
     parts: ['relay', 'pir', 'button'],
+    suggest: ['oled'],
     examples: ['button', 'wifi-http', 's3-wifi-http'],
     risks: ['继电器控制 220V 要用带光耦隔离的模块，断电后再接线；强电部分模拟器验证不了'],
   },
@@ -388,6 +395,7 @@ export const TEMPLATES: Template[] = [
     blurb: '让板子冒充键盘、鼠标或网卡。只有带原生 USB OTG 的型号能做。',
     needCaps: ['usb_otg'],
     parts: ['button'],
+    suggest: ['led'],
     examples: ['usbkey', 's3-usb-keyboard'],
     work: 'usbkey',
     risks: ['确认插的是芯片原生 USB 口，而不是 USB 转串口那个口', 'iPhone 等设备对 USB 设备供电有限，复杂外设需要外部供电'],
@@ -401,6 +409,7 @@ export const TEMPLATES: Template[] = [
     needCaps: ['wifi', 'audio_in', 'audio_out', 'psram'],
     niceCaps: ['display_spi', 'ai_accel'],
     parts: ['mic', 'amp', 'tft', 'battery'],
+    suggest: ['button'],
     examples: ['s3-i2s-mic', 's3-i2s-tone'],
     risks: ['大模型 API 要联网和账号；离线唤醒词才在板上跑', '功放和 Wi-Fi 同时工作时峰值电流大，锂电池要能放 1A 以上'],
   },
@@ -412,6 +421,7 @@ export const TEMPLATES: Template[] = [
     blurb: 'OV2640 拍照或推流，需要 PSRAM 存帧。XIAO S3 Sense 开箱即用。',
     needCaps: ['wifi', 'camera', 'psram'],
     parts: ['camera'],
+    suggest: ['button'],
     examples: [],
     risks: ['持续推流发热和耗电都大，不适合电池长期供电', '画质只到 200 万像素，别期待监控摄像头的效果'],
   },
@@ -423,6 +433,7 @@ export const TEMPLATES: Template[] = [
     blurb: 'A2DP 音频要经典蓝牙，只有经典款 ESP32 有。',
     needCaps: ['bt_classic', 'audio_out'],
     parts: ['amp'],
+    suggest: ['button'],
     examples: [],
     risks: [],
   },

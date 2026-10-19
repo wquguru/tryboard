@@ -1,5 +1,5 @@
 // 选型引擎：纯函数，输入需求，输出推荐板子、引脚分配、物料清单、功耗估算与风险。
-import { BOARDS, CHIPS, PARTS, type Board, type Cap, type Chip, type Template } from './data';
+import { BOARDS, CHIPS, PARTS, type Board, type Cap, type Chip, type Template } from './data.ts';
 
 export type Confidence = '仿真验证' | '行为模拟' | '估算' | '必须上真机';
 
@@ -10,6 +10,8 @@ export interface Need {
   battery: boolean;
   duty?: Template['duty'];
   budget?: number;
+  /** 要在试板里先跑通：能仿真的芯片大幅加分（不排除，三板对比里仍列出不能仿真的板，写「用 C3 代替运行」） */
+  sim?: boolean;
 }
 
 export interface PinAssign {
@@ -216,6 +218,7 @@ export function recommend(need: Need): { plans: Plan[]; rejected: Rejected[] } {
     } else if (c.simulated === 'partial') {
       score += 3;
     }
+    if (need.sim && c.simulated !== 'none') score += 40;
     if (required.includes('usb_otg')) reasons.push('原生 USB OTG：可以冒充键盘、网卡、U 盘');
     if (required.includes('psram')) reasons.push(`${b.psramMB}MB PSRAM，放得下音频和图像缓冲`);
     const { pins, problems } = planPins(b, c, need.parts, required.includes('usb_otg'));

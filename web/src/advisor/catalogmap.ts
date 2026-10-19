@@ -21,6 +21,7 @@ export const PART_MAP: Record<string, CatalogItem | null> = {
   amp: { partId: 'max98357a', with: ['speaker-3w'] },
   mic: { partId: 'inmp441' },
   tft: { partId: 'st7789' },
+  buzzer: { partId: 'buzzer-module' },
   relay: null,
   pir: null,
   camera: null,
