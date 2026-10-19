@@ -892,12 +892,16 @@ impl Adc {
         match off {
             0x48 => self.regs[0x44 / 4] & self.regs[0x40 / 4],
             0x3fc => 0x2007171,
-            _ => self.regs[(off / 4) as usize],
+            // The APB window is 4 KiB but the register file is 1 KiB: reads past it see 0, as on silicon
+            _ => self.regs.get((off / 4) as usize).copied().unwrap_or(0),
         }
     }
 
     pub fn write(&mut self, off: u32, v: u32) {
         let i = (off / 4) as usize;
+        if i >= self.regs.len() {
+            return;
+        }
         match off {
             0x4c => self.regs[0x44 / 4] &= !v,
             0x20 => {

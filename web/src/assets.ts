@@ -2,7 +2,9 @@
 import type { ChipId } from './board3d';
 import { imageChip as chipOf } from './simrun';
 
-export const ROM_FILE: Record<ChipId, string> = { esp32: 'esp32_rev300_rom.elf', esp32c3: 'esp32c3_rev3_rom.elf', esp32s3: 'esp32s3_rev0_rom.elf' };
+import { ROM_FILE } from './chipid';
+
+export { ROM_FILE };
 
 /** Hosts that refuse binaries get firmware and ROMs as base64 text (page has <meta name="tryboard-pack" content="b64">). */
 const PACKED = document.querySelector('meta[name="tryboard-pack"]')?.getAttribute('content') === 'b64';

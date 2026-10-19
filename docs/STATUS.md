@@ -183,6 +183,12 @@
 | 3D 装配（P1-07） | ✅ | `tools/webtest/asm3d.mjs`（进 accept.sh）：组装步骤是 3D、顺序错被拦、真实鼠标拖拽 6/6、BME280 芯片旁 → 复测 ✗（读到 26.0 ℃）、退一步 ×5 改拖通风口旁 → 复测 ✓、炸开 / 剖面 / 尺子（BME280 到芯片 ≈ 38 mm）、装完进成品、改外壳高度后回组装重建并重放 6/6、`?asm=svg` 兜底能装；agent-browser 真实鼠标同一流程 + console / errors 无 error（Reviews/ab/P1-07.md） | 零件是按尺寸搭的简单体（不是真实模型，P1-09）；只判零件与外壳的包围关系，零件之间不做干涉；吸附按水平距离（16 mm），不判朝向；手机上组装步骤仍锁着；小黄 / 透镜只看过截图，没有拖拽用例；本分支 accept.sh --no-qemu 只有 npm 对拍的 spin / lens 两行不一致——worktree 的 firmware/build 软链到主仓库，主仓库同时在重建更新的固件，与本改动无关 |
 | 参数化外壳 + STL / 3MF（P1-08） | ✅ | `npm test` enclosure.test.ts：三作品默认布局、太矮警告与最低高度（weather 31 mm）、金属齿舵机 30 mm 够、透镜 DevKitC-1 平放不下 / 加高或换 XIAO 就好、node 里跑真 Manifold 三作品每条边恰好两个三角形、STLLoader 读回三角形数 / 包围盒、3MF 解压后顶点 / 三角形数、CRC32 标准值；asm3d.mjs：采购页高度 28 → 太矮、导出 STL 118 KB / 3MF 135 KB 下载大小与页面一致、three.js STLLoader / 3MFLoader 读回三角形数一致 | 尺寸、壁厚、止口、立柱都是示意，未经打印验证；元件库多数模块没有 sizeMm，用常见规格估算（页面标「估算」）；透镜小人默认清单（DevKitC-1）在 Ø50 底座里放不下，默认就有警告；小黄身体只做了圆柱 + 球顶，没有脸型 / 腰带 |
 
+### R-03 / R-04 芯片单一来源与不因固件崩模拟器（2026-10-19）
+- R-03：`tryboard chips` 与 `web/src/chipid.ts` 由 `test/chips.test.ts` 比对；未知 chip id（S2 等）CLI 与网页都明确报错，不再当 C3 跑；ESP32 任务导出名正确。
+- R-04：`machine/tests/mmio_fuzz.rs` 默认每固件 10 万次（`cargo test` 约 2 s）；深跑 `FUZZ_OPS=1000000 FUZZ_RSS=1` 13 个固件共 1300 万次 0 panic、峰值 RSS 74 MB。网页注入 panic 出错误卡、可重跑、console 无未捕获错误（Reviews/ab/R-04.md）。
+- 已知遗留：`soc/wifi/crypto.rs` `ccmp_encrypt` 对硬件 CCMP 路径上 ToDS+FromDS（4 地址）且头不足 30 字节的发送帧取 `f[..hdr_len]` 可能越界；模糊测试未触达，待 4 地址帧处理一并修。
+- elec.mjs 曾在本批中途失败（换 s3-brownout 后网页实际跑 weather）：根因是 worker 无机器时不回 snapshot，已修，非测试问题。
+
 ### R-01 / R-02 性能基线与金标准（2026-10-19，main 5188249 + unimpl 排序修复）
 - 金标准：`tools/golden.py` 112 例连跑两次 112/112 逐字节相同；改一字节能报出。修复前「未建模寄存器」同次数项按 HashMap 顺序输出，每次运行都不同。
 - 网页（`node tools/webtest/perf.mjs`，3 次均值 ± 半极差，gzip 字节，headless Chrome / Apple Silicon；手机 = 390×844 + 4× CPU 降速）：

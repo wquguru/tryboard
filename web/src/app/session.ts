@@ -100,6 +100,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const servoOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'servo' ? [p.pin] : []))[0];
   const powerMode = () => (s.power?.ext5v ? 'ext' : 'usb') as 'usb' | 'ext';
   const brownSubs = new Set<(tSec: number) => void>();
+  const crashSubs = new Set<(message: string) => void>();
   const tickSubs = new Set<(m: Extract<FromWorker, { type: 'tick' }>) => void>();
   const bootSubs = new Set<() => void>();
   const endSubs = new Set<(snap: Snapshot) => void>();
@@ -195,6 +196,10 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     onRunEnd(cb) {
       endSubs.add(cb);
       return () => endSubs.delete(cb);
+    },
+    onCrash(cb) {
+      crashSubs.add(cb);
+      return () => crashSubs.delete(cb);
     },
     onBrownout(cb) {
       brownSubs.add(cb);
@@ -462,6 +467,10 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
           if (r) store.set({ imu: r });
         }
         imuTail = ib.slice(nl + 1).slice(-200);
+      },
+      onCrash(msg) {
+        store.set({ running: false });
+        for (const cb of [...crashSubs]) cb(msg);
       },
       onBoot(c) {
         s.chip = c;

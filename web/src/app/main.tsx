@@ -24,6 +24,7 @@ import { createCmdk } from './cmdk';
 import { getAnalyzer } from './analyzer';
 import { loadCaseParams } from './casemesh';
 import { actions, bc, overlay, setBc, setDock, syncDockVar, type CpRow, type Issue } from './chrome';
+import { CrashCard } from './crash';
 import { FwCheckCard, fwCheck } from './fwcheck';
 import { BrownoutBanner } from './benchv2';
 import { initSaved } from './saved';
@@ -238,8 +239,12 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   };
   actions.reboot = () => {
     paused = false;
+    overlay('crash', null);
     session.reboot();
   };
+  session.onCrash((message) => {
+    overlay('crash', <CrashCard message={message} onRerun={() => actions.reboot?.()} onClose={() => overlay('crash', null)} />);
+  });
   actions.speed = (f) => {
     session.sim?.speed(f);
     setBc({ speed: f });

@@ -1,5 +1,6 @@
 // Image check before swapping firmware (DESIGN_V2 §4 key state 3): header only, nothing runs. Same rule as simrun.imageChip:
 // app from the partition table at 0x8000, else at 0; ESP image magic 0xE9, chip id in the two bytes at offset 12.
+import { chipFromId } from '../chipid';
 import { t } from '../i18n';
 import { Icon } from './icons';
 
@@ -41,7 +42,7 @@ export function fwCheck(buf: ArrayBuffer, cur: Chip): FwCheck {
   rows.push({ ok: true, text: t('Image magic 0xE9') });
   const id = b[app + 12] | (b[app + 13] << 8);
   const name = CHIP_NAMES[id] ?? t('chip id {id}', { id });
-  const chip: Chip | null = id === 0 ? 'esp32' : id === 5 ? 'esp32c3' : id === 9 ? 'esp32s3' : null;
+  const chip: Chip | null = chipFromId(id);
   if (!chip) {
     rows.push({ ok: false, text: t('The image header says {name}; TryBoard only simulates ESP32, ESP32-C3 and ESP32-S3', { name }) });
     return { ok: false, chip: null, title: t('This is firmware for {name}', { name }), rows };

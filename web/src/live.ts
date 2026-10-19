@@ -62,6 +62,8 @@ export interface LiveOptions {
   onTick?(m: Extract<FromWorker, { type: 'tick' }>): void;
   /** Firmware loaded and running (once per start / reset / load). */
   onBoot?(chip: 'esp32' | 'esp32c3' | 'esp32s3'): void;
+  /** The core crashed (simulator bug); message from the Rust panic hook */
+  onCrash?(message: string): void;
   /** PWM changes on watchPwm pins (with sim time), feed to audio.ts BuzzerAudio.push. */
   onPwm?(events: PwmEvent[] | undefined, simSeconds: number): void;
   /** The previous power-up is about to end (re-power / new firmware / before rewind): its full record so far. */
@@ -165,6 +167,9 @@ export class LiveSim {
       } else if (m.type === 'oled') {
         this.frame.oled = m.pixels;
         o.onFrame?.(this.frame, NaN);
+      } else if (m.type === 'crash') {
+        o.onCrash?.(m.message);
+        o.onConsole?.(`\n${t('[TryBoard] Simulator internal error: {msg}', { msg: m.message })}\n`);
       } else if (m.type === 'error' || m.type === 'stopped') {
         o.onConsole?.(`\n${m.type === 'error' ? t('[TryBoard] Failed to start: {msg}', { msg: m.message }) : t('[TryBoard] Stopped: {msg}', { msg: m.reason })}\n`);
       }
@@ -179,15 +184,19 @@ export class LiveSim {
     if (!this.live) return;
     this.live = false;
     const snap = await this.snapshot();
-    this.o.onRunEnd?.(snap);
+    if (snap) this.o.onRunEnd?.(snap);
   }
+  private startGen = 0;
   async start() {
+    // A newer start (firmware swapped mid power-up) wins even if this one's awaits finish later
+    const gen = ++this.startGen;
     await this.closeRun();
     this.live = true;
     const fw = this.o.fw;
-    this.flash ??= typeof fw === 'string' ? await fetchBuf(fw) : fw;
-    const [wasm, flash] = [await loadWasm(), this.flash];
+    const flash = (this.flash ??= typeof fw === 'string' ? await fetchBuf(fw) : fw);
+    const wasm = await loadWasm();
     const rom = await loadRom(imageChip(flash));
+    if (gen !== this.startGen) return;
     Object.assign(this.frame, emptyFrame());
     this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName, harness: this.o.harness, dht11: this.o.dht11, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.(), locale });
   }
@@ -337,6 +346,10 @@ export class LiveSim {
   pause() {
     this.send({ type: 'pause' });
   }
+  /** Test hook (R-04): make the core panic. */
+  debugPanic() {
+    this.send({ type: 'debugPanic' });
+  }
   resume() {
     this.send({ type: 'run' });
   }
@@ -348,12 +361,12 @@ export class LiveSim {
   uart(text: string) {
     this.send({ type: 'uart', text });
   }
-  private snapWaiters: ((s: Snapshot) => void)[] = [];
+  private snapWaiters: ((s: Snapshot | null) => void)[] = [];
   private seekWaiter: ((s: Snapshot) => void) | null = null;
   private markWaiters = new Map<number, (tMs: number) => void>();
   private markId = 0;
   /** Input log + full serial + observations since power-up (does not interrupt the run). */
-  snapshot(): Promise<Snapshot> {
+  snapshot(): Promise<Snapshot | null> {
     return new Promise((r) => {
       this.snapWaiters.push(r);
       this.send({ type: 'snapshot' });

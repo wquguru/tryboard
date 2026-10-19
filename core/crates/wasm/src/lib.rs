@@ -8,6 +8,7 @@ thread_local! {
     static M: RefCell<Option<Machine>> = const { RefCell::new(None) };
     static OUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     static ERR: RefCell<String> = const { RefCell::new(String::new()) };
+    static PANIC: RefCell<String> = const { RefCell::new(String::new()) };
     static WS: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     static USB_JSON: RefCell<String> = const { RefCell::new(String::new()) };
     static BLE_JSON: RefCell<String> = const { RefCell::new(String::new()) };
@@ -65,6 +66,10 @@ pub unsafe extern "C" fn tb_boot(
     flash: *const u8,
     flash_len: usize,
 ) -> i32 {
+    // panic = "abort" traps the instance; keep the message so the page can say where the simulator broke (R-04)
+    std::panic::set_hook(Box::new(|info| {
+        PANIC.with(|p| *p.borrow_mut() = info.to_string());
+    }));
     let rom = std::slice::from_raw_parts(rom, rom_len);
     let flash = std::slice::from_raw_parts(flash, flash_len).to_vec();
     match Machine::boot(rom, flash) {
@@ -80,16 +85,32 @@ pub unsafe extern "C" fn tb_boot(
     }
 }
 
-/// Current machine's chip: 5 = ESP32-C3, 9 = ESP32-S3, 0 = no machine
+/// Current machine's chip id (image header id: 0 = ESP32, 5 = C3, 9 = S3); u32::MAX = no machine
 #[no_mangle]
 pub extern "C" fn tb_chip() -> u32 {
-    with(0, |m| m.chip().id())
+    with(u32::MAX, |m| m.chip().id())
 }
 
-/// Pin of the on-board BOOT button (C3: 9, S3: 0)
+/// Pin of the on-board BOOT button (C3: 9, S3 / ESP32: 0); u32::MAX = no machine
 #[no_mangle]
 pub extern "C" fn tb_boot_pin() -> u32 {
-    with(9, |m| m.boot_pin())
+    with(u32::MAX, |m| m.boot_pin())
+}
+
+/// Message of the panic that trapped this instance (empty if none); readable after the trap
+#[no_mangle]
+pub extern "C" fn tb_panic_ptr() -> *const u8 {
+    PANIC.with(|c| c.borrow().as_ptr())
+}
+#[no_mangle]
+pub extern "C" fn tb_panic_len() -> usize {
+    PANIC.with(|c| c.borrow().len())
+}
+
+/// Test hook: panic on purpose so the page's crash card can be checked (tools/webtest, Reviews/ab/R-04.md)
+#[no_mangle]
+pub extern "C" fn tb_debug_panic() {
+    panic!("tb_debug_panic: injected for testing");
 }
 
 #[no_mangle]

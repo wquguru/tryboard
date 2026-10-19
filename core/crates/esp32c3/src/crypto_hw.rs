@@ -167,8 +167,11 @@ pub fn aes_links(gdma: &Gdma) -> (Option<u32>, Option<u32>) {
 }
 
 /// Read up to n bytes along a TX descriptor chain (lldesc)
+/// Most a gather can return: 256 descriptors of at most 4095 bytes each
+const DMA_MAX: usize = 256 * 0xfff;
+
 fn dma_gather(mem: &mut dyn DmaMem, mut d: u32, n: usize) -> Vec<u8> {
-    let mut out = Vec::with_capacity(n);
+    let mut out = Vec::with_capacity(n.min(DMA_MAX));
     for _ in 0..256 {
         if out.len() >= n || d < 0x3fc0_0000 {
             break;
@@ -327,7 +330,8 @@ impl AesHw {
             self.blocks += 1;
             return;
         }
-        let n = self.block_num as usize * 16;
+        // BLOCK_NUM is a raw 32-bit register: bound it by what one DMA chain can carry
+        let n = (self.block_num as usize).min(DMA_MAX / 16) * 16;
         let input = match links.0 {
             Some(d) => dma_gather(mem, d, n),
             None => vec![0; n],

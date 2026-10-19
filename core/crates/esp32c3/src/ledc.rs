@@ -172,7 +172,8 @@ impl Ledc {
             c.fade_scale = conf1 & 0x3ff;
             c.fade_left = num;
             c.fading = num > 0;
-            c.fade_next = now + period * c.fade_cycle as u64;
+            // A stopped timer has a near-infinite period: saturate so the fade just never fires
+            c.fade_next = now.saturating_add(period.saturating_mul(c.fade_cycle as u64));
             if !c.fading {
                 self.int_raw |= 1 << (4 + n);
             }
@@ -200,7 +201,9 @@ impl Ledc {
                     c.duty.saturating_sub(step)
                 };
                 c.fade_left -= 1;
-                c.fade_next += period * c.fade_cycle as u64;
+                c.fade_next = c
+                    .fade_next
+                    .saturating_add(period.saturating_mul(c.fade_cycle as u64));
                 if c.fade_left == 0 {
                     c.fading = false;
                     self.int_raw |= 1 << (4 + n);

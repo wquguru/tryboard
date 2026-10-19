@@ -149,6 +149,8 @@ export interface Session {
   setPower(ext5v: boolean): void;
   /** Brownout reset (sim time, seconds) */
   onBrownout(cb: (tSec: number) => void): () => void;
+  /** Core crash (simulator bug, R-04): message from the panic hook */
+  onCrash(cb: (message: string) => void): () => void;
   /** Rewiring (to create faulty wiring for the wiring rules) */
   wireMods: WireMods;
   setWireMods(m: WireMods): void;

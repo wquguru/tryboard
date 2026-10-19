@@ -10,7 +10,8 @@ use tryboard_rv32::{elf::Elf, Bus, BusFault, Cpu, Exit};
 fn usage() -> ! {
     eprintln!(
         "Usage:
-  tryboard run <flash.bin> (chip detected from the image header: ESP32-C3 / ESP32-S3) [--rom <rom.elf>] [--seconds <simulated s>] [--expect <text>] [--uart-in <text>]
+  tryboard chips (supported chips as JSON: id, pins, BOOT / RGB GPIO, ROM)
+  tryboard run <flash.bin> (chip detected from the image header: ESP32 / ESP32-C3 / ESP32-S3) [--rom <rom.elf>] [--seconds <simulated s>] [--expect <text>] [--uart-in <text>]
                [--script \"0.5:gpio9=0; 0.6:gpio9=z; 1.0:uart=ping\\n; 1.2:env=35,45,101325\"] [--inputs <input log exported from the web.txt>] [--trace N] [--unimpl N] [--gpio-log] [--pwm-log PIN] [--ws2812-log]
                [--trace-io <events.txt>] [--trace-pins all|4,8,…] (logic analyzer events: GPIO / PWM / WS2812 / I2C transactions, cycle-stamped)
                [--trace-tasks <timeline.json>] (FreeRTOS task switches, one track per core, opens in Perfetto; per-task CPU share printed at the end of stderr)
@@ -59,8 +60,24 @@ fn main() {
         Some("run") => run(&args[1..]),
         Some("riscv-test") => riscv_tests(&args[1..]),
         Some("elec-net") => elec_net(&args[1..]),
+        Some("chips") => chips(),
         _ => usage(),
     }
+}
+
+/// Chip table as JSON: the source of truth web/src/chipid.ts and chips.ts are tested against (R-03)
+fn chips() {
+    let rows: Vec<String> = tryboard_machine::Chip::ALL
+        .iter()
+        .map(|c| {
+            let rgb = c.rgb_pin().map_or("null".to_string(), |p| p.to_string());
+            format!(
+                "{{\"name\":\"{}\",\"id\":{},\"npins\":{},\"bootPin\":{},\"rgbPin\":{},\"rom\":\"{}\"}}",
+                c.name(), c.id(), c.npins(), c.boot_pin(), rgb, c.rom_file()
+            )
+        })
+        .collect();
+    println!("[{}]", rows.join(","));
 }
 
 /// Symbols from ROM + app.elf (auto-loaded when next to flash.bin); lookup returns the nearest symbol below an address.

@@ -37,13 +37,27 @@ pub enum Chip {
 }
 
 impl Chip {
+    pub const ALL: [Chip; 3] = [Chip::Esp32, Chip::Esp32c3, Chip::Esp32s3];
     /// Chip ID from the image header (esp_app_format.h)
     pub fn from_image(flash: &[u8]) -> Option<Chip> {
-        match tryboard_esp32s3::boot::image_chip_id(flash)? {
-            0 => Some(Chip::Esp32),
-            5 => Some(Chip::Esp32c3),
-            9 => Some(Chip::Esp32s3),
-            _ => None,
+        Chip::from_id(tryboard_esp32s3::boot::image_chip_id(flash)? as u32)
+    }
+    pub fn from_id(id: u32) -> Option<Chip> {
+        Chip::ALL.into_iter().find(|c| c.id() == id)
+    }
+    /// GPIO wired to the dev board's BOOT button
+    pub fn boot_pin(self) -> u32 {
+        match self {
+            Chip::Esp32c3 => 9,
+            Chip::Esp32 | Chip::Esp32s3 => 0,
+        }
+    }
+    /// GPIO of the on-board WS2812 (ESP32-DevKitC V4 has none)
+    pub fn rgb_pin(self) -> Option<u32> {
+        match self {
+            Chip::Esp32 => None,
+            Chip::Esp32c3 => Some(8),
+            Chip::Esp32s3 => Some(48),
         }
     }
     pub fn name(self) -> &'static str {
@@ -156,7 +170,11 @@ impl Machine {
                     },
                 ))
             }
-            Some(Chip::Esp32c3) | None => {
+            None => Err(match tryboard_esp32s3::boot::image_chip_id(&flash) {
+                Some(id) => format!("unsupported chip id {id} in the image header (TryBoard simulates ESP32, ESP32-C3, ESP32-S3)"),
+                None => "no ESP-IDF app image found (missing 0xE9 header / partition table)".into(),
+            }),
+            Some(Chip::Esp32c3) => {
                 let (m, a) = Esp32c3::boot(rom, flash)?;
                 Ok((
                     Machine {
@@ -669,9 +687,46 @@ impl Machine {
 
     /// Pin of the onboard BOOT button (C3: GPIO9, S3: GPIO0)
     pub fn boot_pin(&self) -> u32 {
+        self.chip().boot_pin()
+    }
+
+    /// Peripheral (MMIO) address window of this chip, for the bus fuzz test (R-04)
+    #[doc(hidden)]
+    pub fn mmio_window(&self) -> (u32, u32) {
         match &self.hw {
-            Hw::C3(_) => 9,
-            Hw::S3(_) | Hw::E32(_) => 0,
+            Hw::C3(_) => (tryboard_esp32c3::MMIO_LOW, tryboard_esp32c3::MMIO_HIGH),
+            Hw::S3(_) => (tryboard_esp32s3::MMIO_LOW, tryboard_esp32s3::MMIO_HIGH),
+            Hw::E32(_) => (tryboard_esp32::MMIO_LOW, tryboard_esp32::MMIO_HIGH),
+        }
+    }
+
+    /// Raw bus access as if the firmware did it (fuzz test only); faults are ignored, panics are the bug being hunted
+    #[doc(hidden)]
+    pub fn bus_poke(&mut self, addr: u32, size: u32, val: u32, write: bool) {
+        use tryboard_xtensa::Bus as XBus;
+        match &mut self.hw {
+            Hw::C3(m) => {
+                use tryboard_rv32::Bus;
+                let _ = if write {
+                    m.bus.store(addr, size, val)
+                } else {
+                    m.bus.load(addr, size).map(|_| ())
+                };
+            }
+            Hw::S3(m) => {
+                let _ = if write {
+                    m.bus.store(addr, size, val)
+                } else {
+                    XBus::load(&mut m.bus, addr, size).map(|_| ())
+                };
+            }
+            Hw::E32(m) => {
+                let _ = if write {
+                    m.bus.store(addr, size, val)
+                } else {
+                    XBus::load(&mut m.bus, addr, size).map(|_| ())
+                };
+            }
         }
     }
 

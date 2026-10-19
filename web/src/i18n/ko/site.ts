@@ -106,5 +106,9 @@ const d: Dict = {
   "Needs real hardware": "실제 보드 필요",
   "Datasheet": "데이터시트",
   "Rule of thumb": "경험 규칙",
+  "[TryBoard] Simulator internal error: {msg}": "[TryBoard] 시뮬레이터 내부 오류: {msg}",
+  "Simulator internal error": "시뮬레이터 내부 오류",
+  "This is a TryBoard bug, not a problem with your firmware. The run stopped here.": "TryBoard 자체 버그이며 펌웨어 문제가 아닙니다. 실행이 여기서 멈췄습니다.",
+  "Run again": "다시 실행",
 };
 export default d;

@@ -106,5 +106,9 @@ const d: Dict = {
   "Needs real hardware": "実機が必要",
   "Datasheet": "データシート",
   "Rule of thumb": "経験則",
+  "[TryBoard] Simulator internal error: {msg}": "[TryBoard] シミュレータ内部エラー：{msg}",
+  "Simulator internal error": "シミュレータ内部エラー",
+  "This is a TryBoard bug, not a problem with your firmware. The run stopped here.": "これは TryBoard 側の不具合で、ファームウェアの問題ではありません。実行はここで止まりました。",
+  "Run again": "もう一度実行",
 };
 export default d;

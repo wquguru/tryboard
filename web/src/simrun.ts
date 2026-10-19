@@ -1,6 +1,7 @@
 // Runs firmware for N simulated seconds (no wall clock), applies inputs at exact simulated times, samples PWM like the CLI.
 // Shared by web checks (verify-worker.ts) and the npm CLI without DOM / Worker, so both match native `tryboard run` / check.py.
 
+import { chipFromId, type SimChip } from './chipid';
 import { parseScript } from './checks';
 import { realFetch, type RealReq } from './realfetch';
 
@@ -117,8 +118,8 @@ export interface SimHooks {
 
 const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5 };
 
-/** Which chip an image targets: find the app in the partition table (0x8000), read the ESP header chip ID (0 = ESP32, 5 = C3, 9 = S3; else C3) */
-export function imageChip(buf: ArrayBuffer | Uint8Array): 'esp32' | 'esp32c3' | 'esp32s3' {
+/** Which chip an image targets: find the app in the partition table (0x8000), read the ESP header chip ID; throws for chips TryBoard does not simulate */
+export function imageChip(buf: ArrayBuffer | Uint8Array): SimChip {
   const b = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
   const u32 = (o: number) => b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24);
   let app = 0;
@@ -133,7 +134,9 @@ export function imageChip(buf: ArrayBuffer | Uint8Array): 'esp32' | 'esp32c3' | 
     }
   }
   const id = b[app] === 0xe9 ? b[app + 12] | (b[app + 13] << 8) : -1;
-  return id === 9 ? 'esp32s3' : id === 0 ? 'esp32' : 'esp32c3';
+  const chip = chipFromId(id);
+  if (!chip) throw new Error(id < 0 ? 'not an ESP-IDF image (no 0xE9 header)' : `unsupported chip id ${id} in image header`);
+  return chip;
 }
 
 const u8 = (b: ArrayBuffer | Uint8Array) => (b instanceof Uint8Array ? b : new Uint8Array(b));

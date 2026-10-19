@@ -1,6 +1,7 @@
 // The simulator runs in a Worker at real-time pace, posting console output and GPIO state to the main thread.
 // Fixed 1 ms slices (same as CLI `--inputs` replay); inputs apply between slices and are logged on sim time, so the CLI replays cycle-exactly.
 import { action, cyclesToMs, roundImu, type InputAction, type InputEvent, type InputLog } from './inputlog';
+import { chipFromId, NPINS as CHIP_NPINS, RGB_GPIO, type SimChip } from './chipid';
 import { realFetch, type RealReq } from './realfetch';
 import { useWorkerLocale, type Locale } from './i18n';
 
@@ -24,6 +25,9 @@ interface Exports {
   tb_gpio_enable_hi(): number;
   tb_chip(): number;
   tb_boot_pin(): number;
+  tb_panic_ptr?(): number;
+  tb_panic_len?(): number;
+  tb_debug_panic?(): void;
   tb_gpio_drive(pin: number, level: number): void;
   tb_uart_push(p: number, len: number): void;
   tb_pin_pwm(pin: number): number;
@@ -246,6 +250,8 @@ export type ToWorker =
   | { type: 'watchAdc'; pins: number[] }
   | { type: 'run' }
   | { type: 'pause' }
+  /** Test hook (R-04): make the core panic, to exercise the crash card. */
+  | { type: 'debugPanic' }
   | { type: 'speed'; factor: number }
   | { type: 'gpio'; pin: number; level: number }
   | { type: 'uart'; text: string }
@@ -384,7 +390,7 @@ export type FromWorker =
   /** Network tab (C-02): whether the firmware used Wi-Fi, what the virtual phone sees (JSON, shape in app/netfeed.ts), the chip's request log; sent only when changed */
   | { type: 'net'; used: boolean; phone?: string; rows?: string; replies?: number; replyBytes?: number }
   | { type: 'inputlog'; log: InputLog }
-  | { type: 'snapshot'; snap: Snapshot }
+  | { type: 'snapshot'; snap: Snapshot | null }
   | { type: 'seekProgress'; simSeconds: number }
   | { type: 'seeked'; snap: Snapshot; bootPin: number }
   | { type: 'mark'; id: number; tMs: number }
@@ -392,7 +398,9 @@ export type FromWorker =
   | { type: 'io'; reset: boolean; data: Uint8Array; dropped: number }
   /** FreeRTOS task switches (raw tb_tasks_take records, 16 bytes each) + task table JSON; reset = new power-up. */
   | { type: 'tasks'; reset: boolean; data: Uint8Array; table: string; chip: string }
-  | { type: 'stopped'; reason: string };
+  | { type: 'stopped'; reason: string }
+  /** The core trapped (Rust panic or wasm fault): simulator bug, not firmware behaviour; the instance is dead until the next boot. */
+  | { type: 'crash'; message: string };
 
 /** Full record of a power-up so far: fingerprint = fingerprint(stdout, report), same algorithm as the acceptance worker / CLI. */
 export interface Snapshot {
@@ -468,8 +476,8 @@ let wallAnchor = 0;
 const decoder = new TextDecoder();
 /** On-board WS2812 pin (C3 GPIO8, S3 GPIO48) and pin count, set per chip after boot. */
 let LED_PIN = 8;
-const CHIP_OF: Record<number, 'esp32' | 'esp32c3' | 'esp32s3'> = { 0: 'esp32', 5: 'esp32c3', 9: 'esp32s3' };
 let NPINS = 22;
+let simChip: SimChip = 'esp32c3';
 let lastFrames = -1;
 
 /** [r,g,b] per LED when the on-board strip has a new frame, else undefined (saves message size). */
@@ -501,6 +509,18 @@ function strips(e: Exports): Record<number, number[][]> | undefined {
   return out;
 }
 const post = (m: FromWorker) => (self as unknown as Worker).postMessage(m);
+
+/** Stop on a core trap and tell the page; the panic hook's message says where in the simulator it broke. */
+function crash(err: unknown) {
+  running = false;
+  loopGen++;
+  let msg = '';
+  try {
+    if (ex?.tb_panic_len?.()) msg = decoder.decode(new Uint8Array(ex.memory.buffer, ex.tb_panic_ptr!(), ex.tb_panic_len()).slice());
+  } catch {}
+  ex = null;
+  post({ type: 'crash', message: msg || String(err) });
+}
 
 function errorText(e: Exports) {
   return decoder.decode(new Uint8Array(e.memory.buffer, e.tb_error_ptr(), e.tb_error_len()));
@@ -598,7 +618,7 @@ function flushTasks(e: Exports, reset: boolean) {
   taskBytes = 0;
   const n = e.tb_tasks_json();
   const table = decoder.decode(new Uint8Array(e.memory.buffer, e.tb_tasks_json_ptr!(), n));
-  (self as unknown as Worker).postMessage({ type: 'tasks', reset, data, table, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3' } satisfies FromWorker, [data.buffer]);
+  (self as unknown as Worker).postMessage({ type: 'tasks', reset, data, table, chip: simChip } satisfies FromWorker, [data.buffer]);
 }
 function drainIo(e: Exports) {
   drainTasks(e);
@@ -670,6 +690,14 @@ let ratioSim = 0;
 let lastRatio = 1;
 
 function loop(gen = loopGen) {
+  try {
+    loopSlice(gen);
+  } catch (err) {
+    crash(err);
+  }
+}
+
+function loopSlice(gen: number) {
   if (!ex || !running || gen !== loopGen) return;
   const e = ex;
   const now = performance.now();
@@ -946,6 +974,12 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
     post({ type: 'error', message: errorText(e) });
     return null;
   }
+  const chip = chipFromId(e.tb_chip());
+  if (!chip) {
+    post({ type: 'error', message: `unsupported chip id ${e.tb_chip()}` });
+    return null;
+  }
+  simChip = chip;
   for (const d of m.i2c ?? []) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
   if (m.env) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
   if (m.lcd && e.tb_lcd_attach) e.tb_lcd_attach();
@@ -975,7 +1009,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   taskChunks = [];
   taskBytes = 0;
   flushIo(e, true);
-  inputLog = { version: 1, chip: CHIP_OF[e.tb_chip()] ?? 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.dht11 !== undefined ? { dht11: m.dht11 } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
+  inputLog = { version: 1, chip: simChip, i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.dht11 !== undefined ? { dht11: m.dht11 } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
   record(e, { kind: 'power', on: true });
   if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
   // Harness applies at power-up and is logged (replay / rewind apply it at cycle 0, same as CLI --i2c-wire).
@@ -989,10 +1023,9 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   bootStdout = '';
   stdoutTruncated = false;
   ex = e;
-  const id = e.tb_chip();
   // ESP32-DevKitC has no on-board RGB: pass a nonexistent pin so GPIO2 stays an ordinary pin.
-  LED_PIN = id === 9 ? 48 : id === 0 ? -1 : 8;
-  NPINS = id === 9 ? 49 : id === 0 ? 40 : 22;
+  LED_PIN = RGB_GPIO[chip] ?? -1;
+  NPINS = CHIP_NPINS[chip];
   lastFrames = -1;
   stripFrames = new Map();
   oledVersion = 0;
@@ -1169,9 +1202,18 @@ function seekTo(e: Exports, events: InputEvent[], untilMs: number) {
   if (e.tb_elec_stat) resetsSeen = e.tb_elec_stat(7);
 }
 
-self.onmessage = async (ev: MessageEvent<ToWorker>) => {
-  const m = ev.data;
+// Handle messages strictly in order: two boots in flight would otherwise race on wasm
+// instantiation and the older firmware could win (example still loading when a .bin is dropped).
+let inbox: Promise<void> = Promise.resolve();
+self.onmessage = (ev: MessageEvent<ToWorker>) => {
+  inbox = inbox.then(() => handle(ev.data)).catch(crash);
+};
+
+async function handle(m: ToWorker) {
   switch (m.type) {
+    case 'debugPanic':
+      ex?.tb_debug_panic?.();
+      break;
     case 'boot': {
       running = false;
       if (m.realnet !== undefined) realnetOn = m.realnet;
@@ -1182,7 +1224,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       if (realnetOn) apply(e, { kind: 'realnet', on: true });
       // Network preset survives power-ons (main-thread state): logged at time 0 like the real-network switch
       if (m.net && m.net !== 'normal') apply(e, { kind: 'net', preset: m.net });
-      post({ type: 'booted', chip: CHIP_OF[e.tb_chip()] ?? 'esp32c3', bootPin: e.tb_boot_pin() });
+      post({ type: 'booted', chip: simChip, bootPin: e.tb_boot_pin() });
       break;
     }
     case 'seek': {
@@ -1215,8 +1257,9 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       break;
     }
     case 'snapshot':
+      // Always answer: a waiter left hanging (no machine yet, or crashed) would stall the next power-up
       if (ex) flushIo(ex);
-      if (ex) post({ type: 'snapshot', snap: snapshot(ex) });
+      post({ type: 'snapshot', snap: ex ? snapshot(ex) : null });
       break;
     case 'mark':
       post({ type: 'mark', id: m.id, tMs: ex ? cyclesToMs(ex.tb_cycles()) : 0 });
@@ -1363,4 +1406,4 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       break;
     }
   }
-};
+}
