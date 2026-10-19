@@ -18,6 +18,7 @@ const USAGE = `tryboard（试板）本地命令行 · 本地包，尚未发布
 用法：
   tryboard check <app.bin|flash.bin> --level <id>   按 levels.json 这个检查点的条件验收（检查点 07 用 07-spin / 07-lens）
   tryboard check <flash.bin> --all                   对所有检查点验收同一个固件
+  tryboard check <flash.bin> --level-json cp.json    按网页「导出检查点」的 JSON 验收（选板生成的检查点）
   tryboard check <flash.bin> --level 06 --inputs log.txt
                                                      用网页导出的输入日志（脚本文本或 InputLog JSON）代替检查点自带输入
   tryboard check <flash.bin> --level 05 --servo 4 --power usb
@@ -66,10 +67,13 @@ function supply(a: string[]) {
 }
 
 async function check(a: string[]) {
-  const levels = expandLevels(JSON.parse(readFileSync(join(PKG, 'levels.json'), 'utf8')) as Level[]).filter((l) => l.ref);
+  // --level-json：网页「导出检查点」下载的 Level JSON（数组或单个），与 check.py --level-json 一致
+  const lj = opt(a, '--level-json');
+  const custom = lj ? ([] as Level[]).concat(JSON.parse(readFileSync(lj, 'utf8'))) : null;
+  const levels = custom ?? expandLevels(JSON.parse(readFileSync(join(PKG, 'levels.json'), 'utf8')) as Level[]).filter((l) => l.ref);
   if (a.includes('--ref')) die('npm 包不带参考固件：--ref 请在仓库里用 tools/check.py --ref');
   let pick: Level[];
-  if (a.includes('--all')) pick = levels;
+  if (a.includes('--all') || (custom && !a.includes('--level'))) pick = levels;
   else {
     const lv = opt(a, '--level');
     if (!lv) die(USAGE);
@@ -78,19 +82,23 @@ async function check(a: string[]) {
     if (!pick.length) die(`没有检查点 ${lv}（或它没有命令行验收）`);
   }
   const inputs = opt(a, '--inputs');
-  const fw = positional(a, ['--level', '--inputs', '--servo', '--power'])[0];
+  const fw = positional(a, ['--level', '--level-json', '--inputs', '--servo', '--power'])[0];
   const sup = supply(a);
   if (!fw) die(USAGE);
   let bad = 0;
   for (const l of pick) {
+    if (l.manual) {
+      console.log(`检查点 ${l.id} ${l.title}：必须上真机，不判`);
+      continue;
+    }
     if (!existsSync(fw)) {
       console.log(`检查点 ${l.id} ${l.title}：找不到 ${fw}`);
       bad++;
       continue;
     }
     const flash = readBin(fw);
-    const { i2c, env, lcd, servo, power, encoder, sonar, touchInt, usb, i2cWire, antenna } = bootOptions(l);
-    const job: SimJob = { ...assets(flash), flash, seconds: l.seconds ?? 2, i2c, env, lcd, touchInt, servo: sup.servo ?? servo, power: sup.power ?? power, encoder, sonar, pwmPin: l.pwm?.pin, script: inputs ? inputsScript(inputs) : l.script, fixedSlice: !!inputs, usb, i2cWire, antenna };
+    const { i2c, env, lcd, servo, power, encoder, sonar, touchInt, usb, i2cLog, i2cWire, antenna } = bootOptions(l);
+    const job: SimJob = { ...assets(flash), flash, seconds: l.seconds ?? 2, i2c, env, lcd, touchInt, servo: sup.servo ?? servo, power: sup.power ?? power, encoder, sonar, pwmPin: l.pwm?.pin, script: inputs ? inputsScript(inputs) : l.script, fixedSlice: !!inputs, usb, i2cLog, i2cWire, antenna };
     const r = await runSim(job);
     const res: CheckResult[] = evaluate(l, r.stdout, r.report);
     // 模拟器自己没跑起来不能算成固件的错（与 check.py 一致，放第一条）

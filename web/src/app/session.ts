@@ -38,6 +38,10 @@ export interface SessionHooks {
 export interface SessionOpts {
   /** 上次在采购页"摆上实验台"存下的场景；没有就用作品默认台面（examples.json） */
   placed?: { scene: SceneSpec; ext5v: boolean } | null;
+  /** 没有示例的作品（选板 custom）按选板结果定芯片；有示例时以示例为准 */
+  chip?: 'esp32c3' | 'esp32s3';
+  /** 按零件生成的检查点（custom-<n>，U-17），接在 levels.json 后面 */
+  levels?: Level[];
 }
 
 export async function createSession(stage: HTMLElement, work: WorkDef, store: Store<AppState>, hooks: SessionHooks, opts: SessionOpts = {}): Promise<Session> {
@@ -47,7 +51,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   // 3D 台面跟随页面主题（DESIGN §2 暗色）
   pick.setTheme?.(currentTheme());
   onTheme((t) => pick.setTheme?.(t));
-  const levels = expandLevels(levelsJson as Level[]);
+  const levels = [...expandLevels(levelsJson as Level[]), ...(opts.levels ?? [])];
   let consoleBuf = '';
   let lastOled: Uint8Array | null = null;
   let lastLcd: Uint8Array | null = null;
@@ -61,7 +65,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   // 摆过清单就用清单的零件，机位仍用作品默认
   const scene: SceneSpec = opts.placed ? { ...ex?.scene, ...opts.placed.scene } : (ex?.scene ?? { parts: [] });
   // 示例清单里缺省芯片是 C3；没有示例（真正的空白）摆 S3 开发板
-  const chip = ex ? chipOf(ex) : 'esp32s3';
+  const chip = ex ? chipOf(ex) : (opts.chip ?? 'esp32s3');
   bench.setBoard(chip);
   bench.setScene(scene);
   const buzzerPins = scene.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : []));

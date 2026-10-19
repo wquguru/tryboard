@@ -10,6 +10,7 @@ import { Icon } from "./icons";
 import { isPhone, setMui, usePhone } from "./mobile";
 import type { BenchWire } from "./wiring";
 import { placeDef } from "./place";
+import { ConfIcon } from "../ui/conf";
 
 const btn =
   "inline-flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md border border-line bg-surface px-2.5 text-xs text-fg hover:bg-field";
@@ -18,12 +19,6 @@ const btnPri =
 
 // ------------------------------------------------------------ 可信度
 export type Conf = "仿真验证" | "行为模拟" | "估算" | "必须上真机";
-const CONF_CLS: Record<Conf, string> = {
-  仿真验证: "bg-ok-bg text-ok-ink",
-  行为模拟: "bg-accent-bg text-accent-ink",
-  估算: "bg-warn-bg text-warn-ink",
-  必须上真机: "bg-bad-bg text-bad-ink",
-};
 const CONF_TIP: Record<Conf, string> = {
   仿真验证: "有验收固件在模拟器里跑过，读数按数据手册的寄存器和公式算出",
   行为模拟: "寄存器接口按数据手册，物理量按规则近似；噪声、时序细节没模拟",
@@ -49,16 +44,15 @@ export const PART_CONF: Record<string, Conf> = {
   max98357a: "行为模拟",
   inmp441: "行为模拟",
 };
+/** 可信度徽章：墨色图标 + 档名（U-14：颜色只留给结果状态，可信度不再按颜色区分） */
 export function ConfBadge({ c }: { c: Conf }) {
   return (
     <span
       data-conf={c}
       title={CONF_TIP[c]}
-      className={cn(
-        "inline-flex h-5 flex-none items-center rounded-full px-2 text-[11px] whitespace-nowrap",
-        CONF_CLS[c],
-      )}
+      className="inline-flex h-5 flex-none items-center gap-1 text-[11px] whitespace-nowrap text-fg"
     >
+      <ConfIcon c={c} size={12} />
       {c}
     </span>
   );
@@ -817,6 +811,11 @@ const SIM_NAMES = {
   estimated: "估算",
   none: "无模型",
 } as const;
+const SIM_CONF = {
+  verified: "仿真验证",
+  estimated: "估算",
+  none: "必须上真机",
+} as const;
 /** inBom：已在采购清单里的零件 id（手机整页库里标「在清单」） */
 export function PartLib({
   chip,
@@ -889,9 +888,8 @@ export function PartLib({
                 <span className="block truncate font-medium">{p.name}</span>
                 <span className="block truncate text-xs text-muted">
                   {KIND_NAMES[p.kind]} · ¥{p.price.lo}–{p.price.hi} ·{" "}
-                  <span
-                    className={p.sim.level === "verified" ? "text-ok-ink" : ""}
-                  >
+                  <span className="inline-flex items-center gap-1 align-[-2px]">
+                    <ConfIcon c={SIM_CONF[p.sim.level]} size={11} />
                     {SIM_NAMES[p.sim.level]}
                   </span>
                 </span>
@@ -963,12 +961,8 @@ export function PartLib({
                   >
                     {p.name}
                   </a>
-                  <span
-                    className={cn(
-                      "flex-none text-[10px]",
-                      p.sim.level === "verified" ? "text-ok-ink" : "text-muted",
-                    )}
-                  >
+                  <span className="inline-flex flex-none items-center gap-1 text-[10px] text-muted">
+                    <ConfIcon c={SIM_CONF[p.sim.level]} size={10} />
                     {SIM_NAMES[p.sim.level]}
                   </span>
                   {d && (

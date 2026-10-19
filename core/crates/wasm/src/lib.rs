@@ -590,6 +590,15 @@ pub extern "C" fn tb_usb_report() -> usize {
     n
 }
 
+/// 生成检查点的 I2C 应答次数（U-17），与命令行 `--i2c-log` 同一段文字；读法同 tb_report
+#[no_mangle]
+pub extern "C" fn tb_i2c_report() -> usize {
+    let r = with(String::new(), |m| tryboard_machine::i2c_ack_lines(m));
+    let n = r.len();
+    REPORT.with(|b| *b.borrow_mut() = r);
+    n
+}
+
 fn json_str(s: &str) -> String {
     let mut o = String::with_capacity(s.len() + 2);
     o.push('"');

@@ -1,6 +1,10 @@
 // 「真买」卡（DESIGN_V2 §8.3，稿 LoopB）：网页里做成了之后，做成真的——真买、烧、上真机逐项勾。
 // 自定义作品在实验台检查点全过后出现（bench.tsx），现成作品在成品步之后出现（product.tsx）；两处共用这一个组件。
+import { useState } from 'react';
 import type { BuyLine } from '../catalog/templates.ts';
+import { getPart } from '../catalog/parts.ts';
+import { ConfIcon } from '../ui/conf.tsx';
+import { Icon } from './icons.tsx';
 
 export interface BuyCardProps {
   /** 还要买的（已勾「我已有」的不列） */
@@ -14,9 +18,135 @@ export interface BuyCardProps {
   onToggleManual: (item: string) => void;
   /** 下载 flash.bin（没有用户固件时传 null，按钮不出现） */
   onDownloadBin: (() => void) | null;
+  /** 作品名（标题「<作品>在网页里做成了」）；缺省写「这个项目」 */
+  title?: string;
+  /** 目录里没有、只进清单的零件（选板的继电器、人体红外……）：照样要买，算进件数和参考价 */
+  extra?: { name: string; price: [number, number]; keywords?: string }[];
+  /** 有就显示右上角关闭 */
+  onClose?: () => void;
 }
 
-/** 骨架：U-18 填实现（参考价合计、复制搜索词、导出 CSV、三栏布局、手机单列） */
-export function BuyCard(_p: BuyCardProps) {
-  return null;
+const yuan = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
+const csvCell = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
+
+/** 清单行：目录零件按搜索词、参考价展开；没模型的件用名字当搜索词 */
+function rowsOf(p: BuyCardProps) {
+  const cat = p.remaining.map((l) => {
+    const part = getPart(l.partId);
+    return { name: part.name, model: part.model, qty: l.qty, lo: part.price.lo * l.qty, hi: part.price.hi * l.qty, kw: part.keywords, url: part.searchUrl.taobao };
+  });
+  const ext = (p.extra ?? []).map((e) => ({ name: e.name, model: '', qty: 1, lo: e.price[0], hi: e.price[1], kw: e.keywords ?? e.name, url: '' }));
+  return [...cat, ...ext];
+}
+
+export function BuyCard(p: BuyCardProps) {
+  const rows = rowsOf(p);
+  const lo = rows.reduce((a, r) => a + r.lo, 0);
+  const hi = rows.reduce((a, r) => a + r.hi, 0);
+  const [copied, setCopied] = useState('');
+  const copy = async () => {
+    const text = rows.map((r) => `${r.name}${r.qty > 1 ? ` ×${r.qty}` : ''}：${r.kw}`).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied('已复制搜索词');
+    } catch {
+      setCopied('浏览器不让写剪贴板：CSV 里有同样的搜索词');
+    }
+    // CSV 一起下（稿上是一个按钮：复制搜索词 · 导出 CSV）；BOM 开头让 Excel 认 UTF-8
+    const csv = ['零件,型号,数量,参考价低,参考价高,搜索词,淘宝搜索', ...rows.map((r) => [r.name, r.model, String(r.qty), yuan(r.lo), yuan(r.hi), r.kw, r.url].map(csvCell).join(','))].join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
+    a.download = 'tryboard-buy.csv';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const card = 'flex min-w-0 flex-col gap-2 rounded-2xl border border-line bg-surface p-[22px]';
+  const head = (n: number, t: string, sub: string) => (
+    <div>
+      <b className="block text-sm">
+        <span className="font-mono">{n}</span> · {t}
+      </b>
+      <span className="text-xs text-muted">{sub}</span>
+    </div>
+  );
+  const btn = 'inline-flex min-h-9 cursor-pointer items-center justify-center gap-1 rounded-md border border-line bg-surface px-3 text-xs text-fg hover:bg-field max-md:min-h-11';
+  const btnPri = 'inline-flex min-h-9 cursor-pointer items-center justify-center gap-1 rounded-md border border-accent-strong bg-accent-strong px-3 text-xs font-medium text-on-accent max-md:min-h-11';
+  return (
+    <section id="buyCard" aria-label="做成真的" className="text-fg">
+      <div className="mb-4 flex items-start gap-3">
+        <span className="mt-0.5 inline-flex size-7 flex-none items-center justify-center rounded-full bg-ok-bg text-ok-ink">
+          <Icon n="check" size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <b className="block text-base">{p.title ?? '这个项目'}在网页里做成了。下一步：做成真的</b>
+          <span className="text-xs text-muted">
+            检查点全部通过{p.fingerprint ? <> · 指纹 <span className="font-mono" data-buy-fp="">{p.fingerprint}</span></> : null}
+          </span>
+        </div>
+        {p.onClose && (
+          <button type="button" className="inline-flex size-9 flex-none cursor-pointer items-center justify-center rounded-md text-muted hover:bg-field max-md:size-11" aria-label="关闭" onClick={p.onClose}>
+            <Icon n="x" size={16} />
+          </button>
+        )}
+      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className={card} data-buy="buy">
+          {head(1, '真买', '采购步列过的清单，现在下单')}
+          <p className="m-0 text-xs text-muted">
+            第一步「采购」只列清单、看参考价，先不用真买；跑通了再买。
+            <b className="text-fg">
+              {rows.length} 件要买，参考价 ¥{yuan(lo)}–{yuan(hi)}
+            </b>
+            ，已有的不再列。
+          </p>
+          <ul className="m-0 max-h-36 list-none overflow-auto p-0 text-xs">
+            {rows.map((r, i) => (
+              <li key={i} className="flex justify-between gap-2 border-b border-line-soft py-1">
+                <span className="min-w-0 truncate">
+                  {r.name}
+                  {r.qty > 1 ? ` ×${r.qty}` : ''}
+                </span>
+                <span className="flex-none font-mono text-muted">
+                  ¥{yuan(r.lo)}–{yuan(r.hi)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-auto flex flex-wrap items-center gap-2">
+            <button type="button" className={btnPri} data-buy-copy="" onClick={() => void copy()}>
+              复制搜索词 · 导出 CSV
+            </button>
+            {copied && <span className="text-[11px] text-muted">{copied}</span>}
+          </div>
+        </div>
+        <div className={card} data-buy="flash">
+          {head(2, '烧', '同一份固件，烧进真板')}
+          <pre className="m-0 rounded-md bg-field px-2.5 py-2 font-mono text-xs whitespace-pre-wrap">idf.py -p [串口] flash monitor</pre>
+          <p className="m-0 text-xs text-muted">或下载 flash.bin，用乐鑫官方烧录工具。</p>
+          {p.onDownloadBin && (
+            <div className="mt-auto">
+              <button type="button" className={btn} data-buy-bin="" onClick={p.onDownloadBin}>
+                下载 flash.bin
+              </button>
+            </div>
+          )}
+        </div>
+        <div className={`${card} border-2 border-dashed`} data-buy="manual">
+          {head(3, '网页证明不了的', '上真机逐项勾')}
+          {p.manual.length ? (
+            p.manual.map((m) => (
+              <label key={m} className="flex min-h-8 cursor-pointer items-start gap-2 text-xs max-md:min-h-11">
+                <input type="checkbox" className="mt-0.5 accent-(--accent)" checked={p.checked.includes(m)} onChange={() => p.onToggleManual(m)} />
+                <ConfIcon c="必须上真机" size={13} className="mt-0.5" />
+                <span>{m}</span>
+              </label>
+            ))
+          ) : (
+            <p className="m-0 text-xs text-muted">这个作品没有「必须上真机」的条目。</p>
+          )}
+          <p className="mt-auto mb-0 text-[11px] text-muted">清单来自本作品的「必须上真机」条目。</p>
+        </div>
+      </div>
+    </section>
+  );
 }

@@ -141,6 +141,8 @@ export const actions: {
   brief?: () => void;
   uart?: (text: string) => void;
   selectCheckpoint?: (id: string) => void;
+  /** 选板作品检查点全过后打开真买卡（手机横幅的主按钮用） */
+  openBuy?: () => void;
   analyzer?: (open: boolean) => void;
   /** 台面视角：顶 / 前 / 拉近 / 拉远 / 对准选中 */
   view?: (k: 'top' | 'front' | 'in' | 'out' | 'fit') => void;
@@ -151,4 +153,7 @@ export const actions: {
 const PAGE_Q = new URLSearchParams(location.search);
 export const BLANK = PAGE_Q.get('work') === 'blank';
 export const EXAMPLE_ID = BLANK ? PAGE_Q.get('example') : null;
-export const shownSteps = (): StepId[] => (BLANK ? ['shop', 'bench'] : ['shop', 'bench', 'assemble', 'product']);
+/** 选板作品（work=custom，U-17）也只有「采购 / 实验台」两步：检查点全过后是真买卡，不进组装 */
+export const CUSTOM = PAGE_Q.get('work') === 'custom' && !PAGE_Q.get('example');
+export const TWO_STEPS = BLANK || CUSTOM;
+export const shownSteps = (): StepId[] => (TWO_STEPS ? ['shop', 'bench'] : ['shop', 'bench', 'assemble', 'product']);

@@ -161,3 +161,7 @@
 | 成品页去重（ProdCtl B） | ✅ | 右栏只剩 声音 / 热源 / 按 BOOT，底栏 旋转 / 复位视角 / 拍照 / 录 10 秒 / 重启；手机工具条一套（BOOT / 热源 / 声音 → 拍照 / 录），详情抽屉不再重复；media.mjs 9 PASS、harness.mjs 8 PASS、mobile.mjs 89 PASS（没改选择器）；agent-browser 按 BOOT（OLED 23.5℃ → 74.3℉）、拍照下载 1728×1288 PNG，console / errors 无 error（Reviews/ab/U-18-product.md） | — |
 | 真买卡挂载（成品步） | ◐ | 数据接线完成、tsc 过；装完后右栏末尾挂 `<BuyCard>` | buycard.tsx 仍是骨架（返回 null），页面上看不到卡；remaining / fingerprint 没有页面级断言 |
 | 全站静态 OG | ✅ | build_web.sh → og.mjs：og.png 1200×630、dist 7 个 HTML 全 PASS；agent-browser 打开 /og.png 目视（Reviews/ab/U-19.md） | og:image 是相对地址，定域名前多数平台不出图；选板结果动态 OG ✗（要服务端） |
+### U-17（custom 作品与生成检查点）
+| 项 | 状态 | 验收 | 局限 |
+|---|---|---|---|
+| 选板结果 → `work=custom`（采购 → 实验台两步、自动摆放连线、生成检查点、真买卡） | ✅ | `tools/webtest/custom.mjs` 15 项全过：网页 `__tbCustomLevels` 与 fixture 逐字相同；命令行 check.py `--level-json` 跑 c3-thermo，4 条要判的全过（指纹随 c3-thermo 的构建变：IDF 镜像里带编译时间；同一份 bin 网页与命令行相同），手动项「不判」；hello 在 I2C 0x3c 未通过、写「要 ≥ 1」；网页跑演示固件 4/4 ✓，真买卡与每条检查点的指纹都和命令行一致；网页拖入 hello，I2C 项 ✗，指纹一致。custom.mjs 已进 accept.sh；`UPDATE_FIXTURE=1` 用网页生成结果重写 fixture。手机上全过后，横幅按钮是「下一步：做成真的」，点它打开真买卡；刷新后恢复的进度不会自动弹出真买卡。agent-browser 走查见 Reviews/ab/U-17.md（桌面清单 → 实验台说明卡 → 演示固件 → 真买卡；手机真买卡单栏），console / errors 无 error。levels.mjs、wiremode.mjs、mobile.mjs、accept.sh --no-web、`check.py --ref --all`（指纹与基线相同）全过 | 实验台 3D 板是 DevKitM-1 外形（引脚照 XIAO 的引脚表）；电池 / TP4056 只进清单，实验台按 USB 供电；只有 C3 + I2C 在 GPIO6/7 的组合有演示固件；无模型零件（继电器、人体红外、摄像头）只进清单，不上台；深睡唤醒不判；「建议」零件目前只有面包板和杜邦线（选板数据里还没有建议零件的概念） |

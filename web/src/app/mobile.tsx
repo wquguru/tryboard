@@ -3,7 +3,7 @@
 // bc / 工具条 / 面板数据，只换摆法——实验台铺满台面，串口和属性面板变成底部抽屉，元件库变成整页。
 import { useRef, useSyncExternalStore, type ReactNode } from "react";
 import { cn } from "../ui/cn";
-import { actions, bc, BLANK, EXAMPLE_ID, shownSteps } from "./chrome";
+import { actions, bc, CUSTOM, EXAMPLE_ID, TWO_STEPS, shownSteps } from "./chrome";
 import { Icon } from "./icons";
 import { commit, useStore } from "./react";
 import { createStore } from "./store";
@@ -102,8 +102,8 @@ function MobileSteps({ step }: { step: StepId }) {
     <nav
       id="steps"
       role="tablist"
-      aria-label={BLANK ? "两个步骤" : "四个步骤"}
-      className={cn("steps grid h-[50px] flex-none gap-1 px-2.5 pb-1.5", BLANK ? "grid-cols-2" : "grid-cols-4")}
+      aria-label={TWO_STEPS ? "两个步骤" : "四个步骤"}
+      className={cn("steps grid h-[50px] flex-none gap-1 px-2.5 pb-1.5", TWO_STEPS ? "grid-cols-2" : "grid-cols-4")}
     >
       {STEPS.filter((s) => shownSteps().includes(s.id)).map((s, i) => {
         const on = s.id === step;
@@ -243,13 +243,14 @@ export function MobileStageBar({ wiring }: { wiring: boolean }) {
             type="button"
             id="cpGo"
             onClick={() => {
-              if (!cp) return void (location.hash = "assemble");
+              // 选板作品没有组装步：全过后的下一步是真买卡
+              if (!cp) return void (CUSTOM ? actions.openBuy?.() : (location.hash = "assemble"));
               actions.selectCheckpoint?.(cp.id);
               phoneProps();
             }}
             className="min-h-11 flex-none cursor-pointer rounded-lg border-0 bg-fg px-3 text-[13px] font-medium text-surface"
           >
-            {cp ? "带我去" : "下一步：组装"}
+            {cp ? "带我去" : CUSTOM ? "下一步：做成真的" : "下一步：组装"}
           </button>
         </div>
       )}

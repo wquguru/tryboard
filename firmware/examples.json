@@ -216,6 +216,38 @@
   "chip": "esp32c3"
  },
  {
+  "id": "c3-thermo",
+  "title": "温湿度计：BME280 + OLED（ESP32-C3）",
+  "about": "选板助手「温湿度计」的演示固件。BME280（0x76）和 SSD1306 OLED（0x3C）挂在同一条 I2C 上：SDA=GPIO6、SCL=GPIO7（XIAO ESP32C3 的 D4 / D5）。每秒读一次温度、湿度、气压，串口打印一行，OLED 显示同样三行。拖动滑块改变虚拟环境，读数跟着变。",
+  "tags": [
+   "✓ 仿真验证",
+   "I2C",
+   "BME280",
+   "SSD1306",
+   "ESP-IDF 5.5"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "bme280",
+     "addr": 118,
+     "sda": 6,
+     "scl": 7
+    },
+    {
+     "type": "oled",
+     "addr": 60,
+     "sda": 6,
+     "scl": 7
+    }
+   ]
+  },
+  "controls": [
+   "env"
+  ],
+  "chip": "esp32c3"
+ },
+ {
   "id": "c3-lcd",
   "title": "圆屏：ESP32-C3 + GC9A01（SPI2 + GDMA）",
   "about": "1.28 英寸 240×240 圆屏 GC9A01 走 C3 的 SPI2（40MHz，GDMA 搬数据）：SCLK=GPIO6、MOSI=GPIO7、CS=GPIO10（这三根是 SPI2 的 IO_MUX 直连脚），DC=GPIO5、RST=GPIO4、背光=GPIO3（高电平亮），VCC 接 3.3V。固件先整屏画四色扇区 + 白环测试图，再让一个白球沿圆周走，每 50ms 局部刷新一次。C3 的 400KB SRAM 放得下一整帧（115KB）缓冲。",

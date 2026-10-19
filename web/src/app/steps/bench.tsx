@@ -29,6 +29,7 @@ import {
 } from "../pinscope";
 import { diffRuns, summarize, type BenchStep } from "../history";
 import { checkCommand, type Level } from "../../checks";
+import { Conf, confOfRule } from "../../ui/conf";
 import { VerifyStalled, verifyLevel } from "../../verify";
 import { fetchBuf } from "../../assets";
 import { servoAngle, ledCss } from "../../views/common";
@@ -81,7 +82,9 @@ import {
 } from "../../ui/panel";
 import { noteSaved } from "../saved";
 import { CHIP_NAME, chipOf, loadExamples, type AnalogControl, type Example } from "../examples";
-import { HOME_WORKS } from "../works";
+import { HOME_WORKS, wkey } from "../works";
+import { CustomCheckCard, CustomPlacedCard } from "../customui";
+import { BuyCard } from "../buycard";
 import { actions, bc, overlay, setBc, setDock, type Issue } from "../chrome";
 import { replay } from "../bom";
 import { isPhone, phoneProps, setMui } from "../mobile";
@@ -147,7 +150,7 @@ function saveProgress(work: string, id: string, fp: string) {
 
 /** 页面启动时把本机存过的进度放进 store（只记了通过与指纹，没有逐条结果） */
 export function restoreChecks(ctx: StepCtx) {
-  const p = loadProgress(ctx.work.id);
+  const p = loadProgress(wkey(ctx.work));
   const checks: Record<string, CheckOutcome> = {};
   for (const [id, v] of Object.entries(p))
     if (ctx.work.checkpoints.includes(id))
@@ -226,6 +229,11 @@ export function benchStep(): StepImpl {
   const trace = new PinTrace();
   /** 空白实验台跑示例时（?example=）：右栏没选中东西就显示「这个示例」说明卡（DESIGN_V2 §6.1） */
   let exInfo: { ex: Example; work: WorkDef | null } | null = null;
+  /** 选板作品：「摆好、连好了」说明卡关掉了；演示固件正在逐条验收 */
+  let customClosed = false;
+  let demoBusy = false;
+  /** 本页刚跑出一条自己的通过：只有这时全过才自动弹真买卡（刷新后恢复进度、重放时间线都不弹） */
+  let buyArmed = false;
   /** 尺子：工具条"尺子"按下后，台面上点两个目标 */
   let ruler: {
     a: PickTarget | null;
@@ -364,7 +372,22 @@ export function benchStep(): StepImpl {
     const n = c.work.checkpoints.length;
     const d = passedCount(c, s);
     let card: ReactNode = null;
-    if (n && d === n)
+    if (c.custom)
+      card = (
+        <CustomCheckCard
+          levels={c.custom.levels}
+          done={d}
+          total={n}
+          state={(id) => {
+            const r = s.checks[id];
+            return s.verifying === id ? "run" : r?.ok && r.own ? "ok" : r && !r.ok ? "bad" : "todo";
+          }}
+          onPick={(id) => select({ kind: "checkpoint", id })}
+          onExport={exportCheckpoints}
+          onBuy={n && d === n ? openBuy : null}
+        />
+      );
+    else if (n && d === n)
       card = (
         <AllPassedCard total={n} retest={s.assembly?.retest} onNext={() => (location.hash = "assemble")} />
       );
@@ -536,7 +559,7 @@ export function benchStep(): StepImpl {
           detail={f.detail}
           wire={label}
           estimate={f.estimate}
-          sim={`可信度：${f.confidence}。模拟器里的器件仍按原来的接法跑，这里只做接线检查。`}
+          sim={`可信度：${confOfRule(f.confidence)}（${f.confidence}）。模拟器里的器件仍按原来的接法跑，这里只做接线检查。`}
           onUndo={() => {
             close();
             undo();
@@ -935,6 +958,26 @@ export function benchStep(): StepImpl {
         />
       ),
     );
+    // 选板作品：自动摆好之后先说明摆了什么、下一步放固件（上过固件、关掉、在放零件时不挡台面）
+    if (c.custom)
+      overlay(
+        "customPlaced",
+        parts.length && !placing && !customClosed && !ses.fwBuf ? (
+          <CustomPlacedCard
+            n={parts.length}
+            sub={c.custom.plan.sub}
+            demo={c.custom.plan.demo}
+            busy={demoBusy}
+            onFirmware={openFwMenu}
+            onBrief={() => void actions.brief?.()}
+            onDemo={() => void runDemo()}
+            onClose={() => {
+              customClosed = true;
+              renderTree();
+            }}
+          />
+        ) : null,
+      );
   }
 
   // ------------------------------------------------------------ 属性面板
@@ -1259,8 +1302,8 @@ export function benchStep(): StepImpl {
         </span>
       )}
       <br />
-      <Muted>
-        {f.confidence} · {f.source}
+      <Muted className="inline-flex flex-wrap items-center gap-1">
+        <Conf c={confOfRule(f.confidence)} /> · {f.source}
       </Muted>
     </Res>
   );
@@ -2570,7 +2613,10 @@ export function benchStep(): StepImpl {
         sim: 0,
       };
     }
-    if (own && out.ok) saveProgress(c.work.id, l.id, out.fingerprint);
+    if (own && out.ok) {
+      saveProgress(wkey(c.work), l.id, out.fingerprint);
+      buyArmed = true;
+    }
     // 参考固件的结果不覆盖你已经通过的记录
     const prev = c.store.get().checks[l.id];
     const keep = prev?.own && prev.ok && !own;
@@ -2847,11 +2893,122 @@ export function benchStep(): StepImpl {
     }
   }
 
+  // ------------------------------------------------------------ 选板作品（U-17）：逐条验收、演示固件、导出检查点、真买卡
+  /** 一份固件把所有要判的检查点挨个跑一遍（生成检查点都是同样的参数，一次拖入就全判） */
+  async function verifyAll(buf: ArrayBuffer, who: string, own: boolean) {
+    const c = ctx;
+    if (!c) return;
+    for (const id of c.work.checkpoints) {
+      const l = c.session.levels.find((x) => x.id === id);
+      if (!l || !ctx) continue;
+      await verify(l, buf, who, own);
+    }
+  }
+  async function runDemo() {
+    const c = ctx!;
+    const demo = c.custom?.plan.demo;
+    if (!demo || demoBusy) return;
+    demoBusy = true;
+    renderTree();
+    try {
+      const buf = await fetchBuf(`./fw/${demo}/flash.bin`);
+      c.session.loadFirmware(buf, `${demo}/flash.bin`);
+      c.shell.toast(`演示固件 ${demo} 上电，同时逐条验收检查点`);
+      // 演示固件算进度（DECISIONS U-17）：它就是按这张引脚表写的，真机上烧的也是它
+      await verifyAll(buf, `演示固件 ${demo}`, true);
+    } finally {
+      demoBusy = false;
+      if (ctx) renderTree();
+    }
+  }
+  function exportCheckpoints() {
+    const c = ctx!;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(c.custom?.levels ?? [], null, 1) + "\n"], { type: "application/json" }));
+    a.download = "checkpoints.json";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    c.shell.toast("已导出 checkpoints.json：npx tryboard check app.bin --level-json checkpoints.json");
+  }
+  const BUY_KEY = (w: string) => `tryboard-buy-manual:${w}`;
+  const loadBuyChecked = (w: string): string[] => {
+    try {
+      const v = JSON.parse(localStorage.getItem(BUY_KEY(w)) ?? "[]");
+      return Array.isArray(v) ? v : [];
+    } catch {
+      return [];
+    }
+  };
+  function openBuy() {
+    const c = ctx;
+    if (!c?.custom) return;
+    const { plan, levels } = c.custom;
+    const s = c.store.get();
+    const have = plan.have;
+    const remaining = replay(s.bom)
+      .picks.filter((p) => !have.includes(p.partId))
+      .map((p) => ({ partId: p.partId, qty: p.qty ?? 1, why: "" }));
+    const manual = [
+      ...levels.filter((l) => l.manual).map((l) => l.title),
+      ...plan.noModel.map((n) => `${n.name}：模拟器里没有，接上真机试`),
+      "真板上的引脚与网页一致（按接线表逐根对）",
+    ];
+    const fp = c.work.checkpoints.map((id) => s.checks[id]?.fingerprint).find(Boolean) ?? null;
+    const own = Object.entries(ownFirmware).find(([id]) => c.work.checkpoints.includes(id))?.[1];
+    const bin = own?.buf ?? c.session.fwBuf;
+    const key = wkey(c.work);
+    const draw = () => {
+      const checked = loadBuyChecked(key);
+      overlay(
+        "buy",
+        <div className="absolute inset-3 z-5 overflow-auto rounded-(--r) border border-line bg-surface p-4 shadow-panel md:inset-x-[max(12px,calc(50%-440px))] md:top-6 md:bottom-auto md:max-h-[calc(100%-48px)] md:p-6">
+          <BuyCard
+            title={plan.title}
+            remaining={remaining}
+            extra={plan.noModel.map((n) => ({ name: n.name, price: n.price }))}
+            fingerprint={fp}
+            manual={manual}
+            checked={checked}
+            onToggleManual={(m) => {
+              const cur = loadBuyChecked(key);
+              const next = cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m];
+              try {
+                localStorage.setItem(BUY_KEY(key), JSON.stringify(next));
+                noteSaved();
+              } catch {
+                /* 存不了就只在本页有效 */
+              }
+              draw();
+            }}
+            onDownloadBin={
+              bin
+                ? () => {
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(new Blob([bin], { type: "application/octet-stream" }));
+                    a.download = "flash.bin";
+                    a.click();
+                    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+                  }
+                : null
+            }
+            onClose={() => overlay("buy", null)}
+          />
+        </div>,
+      );
+    };
+    draw();
+  }
+
   // ------------------------------------------------------------ 结论、下一步、工具条
   function syncChrome() {
     const c = ctx!;
     const n = c.work.checkpoints.length;
     const done = passedCount(c);
+    // 选板作品只有采购 → 实验台两步：检查点全过后右上是「做成真的」（真买卡）
+    if (c.custom)
+      return n && done === n
+        ? c.shell.setNext("下一步：做成真的 →", "bench", "", openBuy, "hot")
+        : c.shell.setNext(`做成真的 · 还差 ${n - done} 个检查点`, null, `检查点全部通过（${done}/${n}）才出真买卡`);
     // 空白作品没有组装 / 成品（步骤条只有两步）：右上换成去挑一个作品
     if (c.work.id === "blank")
       return c.shell.setNext("需要外壳？选一个作品 →", "bench", "", () =>
@@ -3307,9 +3464,16 @@ export function benchStep(): StepImpl {
       ctx = c;
       toolbarRef = c.shell.toolbar;
       // 「换固件 → 上传」也算你自己的固件：和拖到检查框一样验收（2026-10-18 走查：菜单写着"检查点只认你自己上传的"，以前却不验收）
+      actions.openBuy = c.custom ? openBuy : undefined;
       actions.checkUpload = (buf, name) => {
         const s = c.store.get();
         if (s.verifying) return null;
+        if (c.custom) {
+          const first = c.work.checkpoints[0];
+          if (!first) return null;
+          void verifyAll(buf, name, true);
+          return c.work.checkpoints.join("、");
+        }
         const sel = s.selection?.kind === "checkpoint" ? s.selection.id : null;
         const id =
           sel ??
@@ -3530,6 +3694,16 @@ export function benchStep(): StepImpl {
           c.session.pick.highlight?.(toPick(c.store.get().selection));
           syncChrome();
         }, ["selection", "checks", "verifying"]),
+        // 选板作品：最后一个检查点刚通过时把真买卡打开（恢复进度时不弹）
+        c.store.subscribe(
+          (s, prev) => {
+            const n = c.work.checkpoints.length;
+            if (!buyArmed) return;
+            buyArmed = false;
+            if (c.custom && n && passedCount(c, s) === n && passedCount(c, prev) < n) openBuy();
+          },
+          ["checks"],
+        ),
         c.store.subscribe(
           (s, prev) => {
             recheckWiring();
@@ -3588,11 +3762,12 @@ export function benchStep(): StepImpl {
       meter = null;
       wiring = null;
       placing = null;
-      for (const k of ["wire", "rings", "wrongWire", "meter", "empty", "place"])
+      for (const k of ["wire", "rings", "wrongWire", "meter", "empty", "place", "customPlaced", "buy"])
         overlay(k, null);
       setLeft({ lib: null, wires: null, wireCount: 0, card: null });
       ctx?.session.pick.highlight?.(null);
       actions.checkUpload = undefined;
+      actions.openBuy = undefined;
       ctx = null;
     },
   };

@@ -42,7 +42,7 @@ export interface BuyLine {
 }
 
 export interface ProcureTemplate {
-  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'blank';
+  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'blank' | 'custom';
   title: string;
   /** 对应关卡（firmware/levels.json id，07 关的变体写 07:spin） */
   level: string | null;
@@ -317,6 +317,11 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
 
 export const TEMPLATE_BY_ID: Record<string, ProcureTemplate> = Object.fromEntries(PROCURE_TEMPLATES.map((t) => [t.id, t]));
 
+/** 选板结果生成的模板（work=custom，app/custom.ts）：页面启动时登记一次，清单重放、规则、摆台都按它 */
+export function registerTemplate(t: ProcureTemplate) {
+  TEMPLATE_BY_ID[t.id] = t;
+}
+
 export function getTemplate(id: string): ProcureTemplate {
   const t = TEMPLATE_BY_ID[id];
   if (!t) throw new Error(`没有采购模板 ${id}`);
@@ -370,7 +375,7 @@ export function bomTotal(picks: Pick[], board?: string): { lo: number; hi: numbe
 }
 
 /** 元件库 → 实验台场景元件类型（与 examples.json scene.parts[].type 同名） */
-const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812' };
+const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812', pot: 'pot' };
 /** 按键键帽上的字（usbkey：K1–K3 发 a / b / c，K4 宏键） */
 const KEY_CAPS = ['a', 'b', 'c', 'M'];
 
@@ -423,6 +428,10 @@ export function toScene(picks: Pick[], wiring: Wire[]): { type: string; [k: stri
       if (pin !== undefined) out.push({ type, pin });
     } else if (type === 'led') {
       const pin = gpioOf(key, 'io');
+      if (pin !== undefined) out.push({ type, pin });
+    } else if (type === 'pot') {
+      // 电位器只有接了滑片（模拟量）的才摆：现成模板都没接它，选板生成的 custom 模板会接
+      const pin = gpioOf(key, 'analog');
       if (pin !== undefined) out.push({ type, pin });
     } else if (type === 'encoder' || type === 'hcsr04' || type === 'ws2812') {
       // 按丝印找（编码器三根信号线同为 digital-out 类型，按类型分不开）

@@ -33,6 +33,12 @@ export interface Level {
   /** 有多个成品可选（第 07 关）：每个都是一套完整的条件 */
   variants?: (Omit<Level, 'id'> & { key: string })[];
   key?: string;
+  /** 开机：seconds 内没崩溃、串口至少一行（生成检查点 U-17） */
+  boots?: boolean;
+  /** 每个 I2C 地址至少应答几次（关卡带 --i2c-log；地址是 7 位） */
+  i2c_ack?: { addr: number; min: number }[];
+  /** 网页证明不了、必须上真机的条目：只列出，不判、不计入进度 */
+  manual?: boolean;
 }
 
 /** 展开子关（07-spin、07-lens），与 tools/check.py 的 expand 一致 */
@@ -78,7 +84,7 @@ export function bootOptions(l: Level) {
   const i2cWire = wv === undefined ? undefined : Number(wv);
   const av = val('--antenna-loss');
   const antenna = av === undefined ? undefined : Number(av);
-  return { i2c, env, lcd, servo, power, encoder, sonar, touchInt, usb: a.includes('--usb-log'), i2cWire, antenna };
+  return { i2c, env, lcd, servo, power, encoder, sonar, touchInt, usb: a.includes('--usb-log'), i2cLog: a.includes('--i2c-log'), i2cWire, antenna };
 }
 
 /** 与命令行一致的定时输入脚本：时间（模拟秒）:动作，`;` 或换行分隔，`#` 开头是注释（CLI 的 parse_script） */
@@ -115,6 +121,18 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
   const res: CheckResult[] = [];
   for (const e of l.expect ?? []) res.push({ ok: out.includes(e), text: `串口出现 “${e}”` });
   if (/Guru Meditation|abort\(\)|panic/.test(out)) res.push({ ok: false, text: '固件崩溃' });
+  if (l.boots) {
+    // 非空行：去掉空格、制表、回车后还剩东西（与 check.py 同一判法）
+    const n = out.split('\n').filter((x) => x.replace(/[ \t\r]/g, '') !== '').length;
+    const crashed = /Guru Meditation|abort\(\)|panic/.test(out);
+    res.push({ ok: n >= 1 && !crashed, text: `开机 ${l.seconds ?? 2} s 内串口输出 ${n} 行` });
+  }
+  for (const c of l.i2c_ack ?? []) {
+    const a = c.addr.toString(16).padStart(2, '0');
+    const m = report.match(new RegExp(`I2C 0x${a} 应答 (\\d+) 次`));
+    const n = m ? Number(m[1]) : 0;
+    res.push({ ok: n >= c.min, text: `I2C 0x${a} 应答 ${n} 次（要 ≥ ${c.min}）` });
+  }
   const g = l.gpio_toggles;
   if (g) {
     const m = report.match(new RegExp(`GPIO${g.pin} 翻转 (\\d+) 次`));
@@ -274,7 +292,8 @@ function fmtG(x: number) {
 }
 
 /** 给用户和 AI 的验收命令：本地 npm 包 packages/tryboard（与 tools/check.py 同规则、同指纹；本地包，尚未发布） */
-export const checkCommand = (l: Level) => `npx tryboard check app.bin --level ${l.id}`;
+// 选板生成的检查点不在 levels.json 里：命令行读「导出检查点」下载的 JSON（U-17）
+export const checkCommand = (l: Level) => (l.work === 'custom' ? `npx tryboard check app.bin --level-json checkpoints.json --level ${l.id}` : `npx tryboard check app.bin --level ${l.id}`);
 /** 仓库开发者用的同一条验收（原生内核） */
 export const devCheckCommand = (l: Level) => `tools/check.py app.bin --level ${l.id}`;
 /** 命令提示下面那行说明（HTML） */
