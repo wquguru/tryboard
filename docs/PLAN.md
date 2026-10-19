@@ -115,8 +115,20 @@
 | U-21 | 结果卡 v2 精修（DESIGN_V2 §9.5，画布 https://claude.ai/artifact/PT6QqqxSYZdiaiLarXo4K1）：逐条按器件分组、16 px SVG 图标、原始数据整行按钮；结果卡带动作（复测失败 → 重装那一件；检查点没过 → 复制给 AI 修）；跑中卡；手机工具栏主按钮整行、复测失败时底栏换成补救动作；真买卡遮罩 + 三栏等高 + 列表不套滚动；选板理由数字列只放数字、可信度带字；`--muted` 加深、字号五档 | levels / asm3d / mobile / custom / harness / interact / selectv3 改选择器不减断言全过；原始数据仍与命令行逐字一致；agent-browser 桌面 + 390 + 暗色截图（Reviews/ab/U-21.md） | ☑ |
 | U-22 | 内置固件走完全程（新人走查 Reviews/ux/report.md P0）：检查点两档（◐ 参考跑通 / ✓ 我的固件），参考跑通也解锁组装 / 成品；每个作品一键「用内置固件走完全程」；选板作品演示固件改记参考；参考固件可下载 flash.bin + 源码 zip（构建期 gen_fw_zip.py，能 idf.py build）；气象站 GPIO5 加 LED，检查点 01 / 02 与台面一致 | levels.mjs / custom.mjs 新断言（参考 ◐、一键全过后组装解锁、旧进度不降级）；解压 zip 用 IDF 5.5.1 build 通过；agent-browser 走气象站 采购→一键→组装→成品，记录 Reviews/ab/U-22.md | ☑ |
 
+## C · 竞品调研后（2026-10-19 人已确认 C-01–C-05，依据 RESEARCH_ESP_EMULATOR.md；C-06 涉及授权，仍待确认）
+| ID | 项 | 验收（草案） | 状态 |
+|---|---|---|---|
+| C-01 | BLE 探针：按 libbtdm 预编译库字节签名在 .bin 里定位 VHCI 边界，只靠 .bin（路线 a′；ROM 地址路线已排除）；不成则改为 ELF 符号拦截（路线 c） | NimBLE `bleprph` 示例：虚拟手机扫到广播名、连接、读一个特征值；结论写进 DECISIONS | ☐ |
+| C-02 | 固件自建热点（SoftAP）+ 虚拟手机连上去打开配网页 | IDF `softAP` 示例 + WiFiManager 类配网页：虚拟手机连上、GET 192.168.4.1 拿到页面、POST 表单后固件串口打印收到的 SSID。注意：现有虚拟路由器占 192.168.4.1（`soc/src/wifi/net.rs`），Wi-Fi 模型只有 STA 接口；AP 模式下浏览器一侧改当手机（DHCP 拿 192.168.4.2），要新增 AP 接口（发信标、收关联） | ☐ |
+| C-03 | 网页"真实网络"开关（HTTP 转 fetch，默认关，响应进输入日志可重放） | wifi-http 打开开关后 GET 公网成功、导出输入后 CLI 重放逐字节一致。开关打开的运行：检查点标「依赖外网」，本机进度只记通过、不记运行编号（指纹）；回放 / 回退按记录的回复重放，指纹按重放算，不会误报不一致 | ☐ |
+| C-04 | FreeRTOS 任务时间线（CLI `--trace-tasks` 导出 Perfetto；网页可选上传 ELF） | s3-dual 两任务分核泳道正确；Perfetto 能打开 | ☐ |
+| C-05 | 经典 ESP32（LX6）：hello / blink / I2C / Wi-Fi | 同 M0–M2 验收在经典 ESP32 上通过；选板 esp32-devkitc 不再用 C3 代跑。按镜像头识别芯片、换板已有（`fwcheck.tsx` / `simrun.imageChip`），只需把芯片 id 0 映射到 esp32 | ☐ |
+| C-06 | esp-emu 作第二对照源（`tools/oracle_espemu.sh`，运行时下载、仅本机） | 先在 LICENSING 登记；对 hello / nvs / s3-psram / s3-dual 串口差分 | 待确认 |
+
+界面约定（设计稿 https://claude.ai/artifact/7uo4Q73fYgyusK27EZytZp）：新面板进现有底部坞，沿用 USB 标签的做法——固件用到才出现（「蓝牙」「网络」）；「任务」常驻。手机上虚拟手机与配网三步都放进现有底部抽屉（半屏 / 全屏），配网一次只显示一步；390×844 无横向滚动照旧。
+
 ## P3 · 以后再说
-蓝牙（M7）、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
+经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
 
 ## 需要人做的（代理不做）
 推远端、部署公网、给乐鑫发邮件（草稿在 LICENSING_REVIEW.md 第四节）、买零件做真机标定（P1）、找 5 个真人试用（P0 末）、收费 / 广告前请律师。

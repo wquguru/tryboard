@@ -831,3 +831,13 @@
 - 气象站检查点 01 / 02 要求 GPIO5 接 LED，台面上 GPIO5 却只有蜂鸣器模块：在气象站模板里加一颗 LED（经 220 Ω）并在 GPIO5 上，和蜂鸣器共用这只脚。真机上电流约 6 mA + 模块基极电流，GPIO 撑得住；成品报警时 LED 跟着亮，算多一个提示。任务书写明「GPIO5 上同时接着蜂鸣器模块，翻转时会咔哒响，正常」。
 - 替代：(a) 保持锁住，只给截图——新人看不到组装 / 成品；(b) 参考固件也算 ✓——分不出谁自己做到了，「交给 AI 写」的练习就没意义了；(c) 把气象站蜂鸣器挪到别的脚——要改参考固件，运行编号全变，代价更大。
 - 源码包实际做法：文件清单复用 `gen_fw_src.idf_paths`（从 collect_idf 拆出，src.json 逐字节不变），再补工程顶层 CMakeLists.txt 和 main/idf_component.yml；目标芯片与 build_fw.sh 同规则（sdkconfig.defaults 的 CONFIG_IDF_TARGET，缺省 esp32c3）。覆盖 levels.json 全部 ref（含 07 的 spin / lens 分支，README 里写 `--level 07-spin`）+ 演示固件 c3-thermo（README 改给 `--level-json`）。zip 日期戳固定为 1980-01-01，同源码同字节。验收命令写 `build/<id>.bin`（app 镜像，内核按 0xE9 头直接当 app 加载）；s3-blink、spin-face、c3-thermo 解压后实编通过，前两份的 app.bin 用 check.py 过了 01 / spin-1。
+
+
+## 2026-10-19 竞品调研后做 C-01–C-05（人已确认）
+- 起因：对照乐鑫 esp-emulator v0.49（docs/RESEARCH_ESP_EMULATOR.md）。人确认按设计画布 https://claude.ai/artifact/7uo4Q73fYgyusK27EZytZp 实现 PLAN C-01–C-05。
+- BLE（M7）从 P3 提到 C-01：路线 a′（按 libbtdm 预编译库字节签名在 .bin 里找 VHCI 边界）先探，不成再走 c（上传 ELF 按符号拦截）。经典蓝牙 / A2DP 仍留 P3。
+- 界面统一规则：新面板进现有底部坞，像 USB 标签一样按需出现（「蓝牙」「网络」），「任务」常驻；手机端放进现有底部抽屉，不另开区域。
+- C-03 真实网络默认关；打开后的运行不记运行编号（指纹），回复进输入日志，重放按记录算。
+- C-05 复用现有固件校验（fwcheck.tsx），只把芯片 id 0 认作可运行。
+- C-06（esp-emu 作第二对照源）不做：它只发二进制、授权未定（其 issue #10），要人先定 LICENSING。
+- 替代：一次只做 BLE——否掉，SoftAP / 真实网络 / 任务时间线 / 经典 ESP32 彼此独立，可并行。
