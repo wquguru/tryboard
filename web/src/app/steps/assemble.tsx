@@ -476,8 +476,8 @@ export function assembleStep(): StepImpl {
       <>
         <Sec>{t('Current')}</Sec>
         <div className={cn('asm-msg', m.bad && 'bad')}>
-          <b>{m.title}</b>
-          <span>{m.text}</span>
+          <b>{t(m.title)}</b>
+          <span>{t(m.text)}</span>
         </div>
       </>
     );
@@ -521,7 +521,7 @@ export function assembleStep(): StepImpl {
     });
     const checks = T!.checks(s).map((r, k) => (
       <Res key={k} kind={r.ok === null ? 'na' : r.ok ? 'ok' : 'bad'} mk={r.ok === null ? '·' : r.ok ? '✓' : '!'}>
-        {t('{label}: {text}', { label: r.label, text: r.text.replace(/^[✓!] /, '') })}
+        {t('{label}: {text}', { label: t(r.label), text: t(r.text.replace(/^[✓!] /, '')) })}
       </Res>
     ));
     const okMsg = p.okMsg && (p.okMsg.length ? p.okMsg.map((x) => t(x)).reduce((a, b) => t('{a}, {b}', { a, b })) : '');

@@ -3114,19 +3114,24 @@ export function benchStep(): StepImpl {
     const remaining = replay(s.bom)
       .picks.filter((p) => !have.includes(p.partId))
       .map((p) => ({ partId: p.partId, qty: p.qty ?? 1, why: "" }));
-    const manual = [
-      ...levels.filter((l) => l.manual).map((l) => t(l.title)),
-      ...plan.noModel.map((n) =>
-        t("{name}: not in the simulator, try it on real hardware", { name: t(n.name) }),
-      ),
-      t("Pins on the real board match the page (check each wire against the Wiring table)"),
+    // Ticks are stored by the English text so they survive a language switch; the card shows translations
+    const fillEn = (k: string, v: Record<string, string>) => k.replace(/\{(\w+)\}/g, (_, x: string) => v[x] ?? "");
+    const NO_MODEL = "{name}: not in the simulator, try it on real hardware";
+    const PINS = "Pins on the real board match the page (check each wire against the Wiring table)";
+    const manualPairs: [string, string][] = [
+      ...levels.filter((l) => l.manual).map((l): [string, string] => [l.title, t(l.title)]),
+      ...plan.noModel.map((n): [string, string] => [fillEn(NO_MODEL, { name: n.name }), t(NO_MODEL, { name: t(n.name) })]),
+      [PINS, t(PINS)],
     ];
+    const manual = manualPairs.map(([, shown]) => shown);
+    const toEn = (shown: string) => manualPairs.find(([, x]) => x === shown)?.[0] ?? shown;
+    const toShown = (en: string) => manualPairs.find(([k]) => k === en)?.[1] ?? en;
     const fp = c.work.checkpoints.map((id) => s.checks[id]?.fingerprint).find(Boolean) ?? null;
     const own = Object.entries(ownFirmware).find(([id]) => c.work.checkpoints.includes(id))?.[1];
     const bin = own?.buf ?? c.session.fwBuf;
     const key = wkey(c.work);
     const draw = () => {
-      const checked = loadBuyChecked(key);
+      const checked = loadBuyChecked(key).map(toShown);
       overlay(
         "buy",
         <BuyDialog onClose={() => overlay("buy", null)}>
@@ -3140,7 +3145,8 @@ export function benchStep(): StepImpl {
             checked={checked}
             onToggleManual={(m) => {
               const cur = loadBuyChecked(key);
-              const next = cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m];
+              const e = toEn(m);
+              const next = cur.includes(e) ? cur.filter((x) => x !== e) : [...cur, e];
               try {
                 localStorage.setItem(BUY_KEY(key), JSON.stringify(next));
                 noteSaved();
@@ -3475,7 +3481,7 @@ export function benchStep(): StepImpl {
       // External models (P1-09): KiCad / Adafruit glb for servo, USB-C and buzzer; procedural by default, credits on the licenses page
       const on = !extModelsOn();
       setExtModels(on);
-      c.shell.toolbar.setLabel("ext", on ? t("External models: on") : t("External models: off"));
+      c.shell.toolbar.setLabel("ext", on ? t("3D models: on") : t("3D models: off"));
       c.shell.toast(
         on
           ? t("External models: servo, USB-C port and buzzer use KiCad / Adafruit 3D models (credits on the third-party licenses page)")
@@ -3798,7 +3804,7 @@ export function benchStep(): StepImpl {
           tools: [
             {
               id: "ext",
-              label: extModelsOn() ? t("External models: on") : t("External models: off"),
+              label: extModelsOn() ? t("3D models: on") : t("3D models: off"),
             },
           ],
         },
@@ -3812,7 +3818,7 @@ export function benchStep(): StepImpl {
         {
           id: "act",
           tools: [
-            { id: "heat", label: t("Heat source") },
+            { id: "heat", label: t("Heater") },
             { id: "button", label: t("Press BOOT") },
           ],
         },

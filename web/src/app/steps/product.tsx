@@ -396,7 +396,7 @@ export function productStep(): StepImpl {
       ) : null;
     c.shell.tree.render(
       <div role="group" aria-label={t('Product')}>
-        <TreeGroup title={t('Project')} count={t('Switching project reloads the page')} open>
+        <TreeGroup title={t('Project')} count={t('Switching reloads page')} open>
           {WORK_LIST.map((w) => (
             <a key={w.id} className={tnClass(w.id === c.work.id)} href={lab(w.id, 'product')} role="treeitem" aria-selected={w.id === c.work.id}>
               <TnL>{t(w.title)}</TnL>

@@ -630,7 +630,7 @@ export function shopStep(): StepImpl {
           <Kv k={t('Category')} v={KIND[part.kind]} />
           {v.supply && <Kv k={t('Power supply')} v={v.supply[0] === v.supply[1] ? `${v.supply[0]} V` : `${v.supply[0]}–${v.supply[1]} V`} />}
           {v.logic !== null && <Kv k={t('Logic level')} v={`${v.logic} V`} />}
-          {(cur.typ !== null || cur.peak !== null) && <Kv k={cur.est ? t('Current (estimated)') : t('Current')} v={t('{typ} / peak {peak} mA', { typ: cur.typ ?? '—', peak: cur.peak ?? '—' })} />}
+          {(cur.typ !== null || cur.peak !== null) && <Kv k={cur.est ? t('Current (estimated)') : t('Current draw')} v={t('{typ} / peak {peak} mA', { typ: cur.typ ?? '—', peak: cur.peak ?? '—' })} />}
           {part.i2cAddr && <Kv k={t('I2C address')} v={`${hex(part.i2cAddr.default)}${part.i2cAddr.alt.length ? ' / ' + part.i2cAddr.alt.map(hex).join(' / ') : ''}`} />}
           {part.sizeMm && <Kv k={t('Size')} v={`${part.sizeMm[0]} × ${part.sizeMm[1]}${part.sizeMm[2] !== null ? ' × ' + part.sizeMm[2] : ''} mm`} />}
           {part.board && boardSpec(part)}
