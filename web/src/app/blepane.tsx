@@ -1,20 +1,20 @@
-// BLE（C-01）：底部坞「蓝牙」页签（空中日志）+ 属性面板「虚拟手机」（docs/design-v2/compete/Main.dc.html）。
-// 内核按模拟时间跑虚拟控制器和虚拟手机；这里只显示、只发 ble=<命令>（进输入日志，命令行 --inputs 逐字节重放）。
-// 数据节流到 ≤ 10 Hz 再通知 React：通知、广播日志可能一个时间片来好几条。
+// BLE (C-01): dock air log + inspector "Virtual phone" (Main.dc.html). The core simulates both sides; this only shows them and
+// sends ble=<cmd> (input log, replayable via --inputs). Throttled to <= 10 Hz: one slice can carry several events.
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { lineDir, lineText, uuidLabel, type BleChar, type BleLine, type BleUpdate, type BleView } from '../ble';
 import { ConfIcon } from '../ui/conf';
 import { cn } from '../ui/cn';
+import { t } from '../i18n';
 
 const LOG_CAP = 1000;
 
 export interface BleSnap {
-  /** 0 = 固件没用 BLE，1 = 在跑，2 = 没认出 VHCI 边界 */
+  /** 0 = firmware doesn't use BLE, 1 = running, 2 = VHCI boundary not recognised */
   state: number;
   view: BleView | null;
   error: string;
   log: BleLine[];
-  /** 最近一条被拒的手机命令的原因（下一条命令被接受时清掉） */
+  /** Why the last phone command was rejected (cleared when the next one is accepted) */
   cmdError: string;
 }
 
@@ -63,10 +63,10 @@ function createBleFeed() {
       pending.state = u.state;
       if (u.view) pending.view = u.view;
       if (u.error !== undefined) pending.error = u.error;
-      // 状态变化（出现 / 认不出）马上通知：坞的页签、构建树要立刻长出来
+      // Notify state changes (appeared / unrecognised) at once: the dock tab and build tree must appear immediately
       schedule(stateChanged || !!u.reset);
     },
-    /** 用户发了命令：先清掉上一条的错误 */
+    /** The user sent a command: clear the previous error first */
     clearError() {
       if (snap.cmdError) {
         pending.cmdError = '';
@@ -79,28 +79,28 @@ function createBleFeed() {
     },
   };
 }
-/** 整页一份：session 推，坞页签、属性面板、构建树读 */
+/** One per page: session pushes; dock tab, inspector and build tree read */
 export const bleFeed = createBleFeed();
 export const useBle = () => useSyncExternalStore(bleFeed.subscribe, bleFeed.get);
 
-/** 构建树里「虚拟手机」后面的状态字 */
+/** Status word after "Virtual phone" in the build tree */
 export function phoneStateText(s: BleSnap): string {
-  if (s.state === 2) return '认不出';
+  if (s.state === 2) return t('Not recognised');
   const p = s.view?.phone;
   if (!p) return '';
-  return { idle: s.view?.advertising ? '板子在广播' : '空闲', scanning: '扫描中', connecting: '连接中', connected: '已连接' }[p.state];
+  return { idle: s.view?.advertising ? t('Board advertising') : t('Idle'), scanning: t('Scanning'), connecting: t('Connecting'), connected: t('Connected') }[p.state];
 }
 
 const two = (n: number) => String(n).padStart(2, '0');
-/** 模拟微秒 → 00:01.204 */
+/** Simulated microseconds -> 00:01.204 */
 export function simClock(us: number) {
   const ms = Math.floor(us / 1000);
   return `${two(Math.floor(ms / 60000))}:${two(Math.floor(ms / 1000) % 60)}.${String(ms % 1000).padStart(3, '0')}`;
 }
 
-// ------------------------------------------------------------ 坞：空中日志
+// ------------------------------------------------------------ Dock: air log
 
-/** 底部坞「蓝牙」页签：广播、连接、ATT 读写通知，一行一条，按模拟时间 */
+/** Dock "Bluetooth" tab: adverts, connections, ATT reads / writes / notifications, one per line in sim time */
 export function BlePane() {
   const s = useBle();
   const box = useRef<HTMLDivElement>(null);
@@ -113,22 +113,22 @@ export function BlePane() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-none items-center gap-2 px-3 pt-1.5 pb-1 text-xs text-muted">
-        <span id="bleAir">{s.view?.connected ? '已连接' : s.view?.advertising ? `广播中 · ${s.view.adv_name || s.view.addr}` : '没在广播'}</span>
+        <span id="bleAir">{s.view?.connected ? t('Connected') : s.view?.advertising ? t('Advertising · {name}', { name: s.view.adv_name || s.view.addr }) : t('Not advertising')}</span>
         <span className="flex-1" />
-        <span>按模拟时间，可导出重放</span>
+        <span>{t('In simulated time; export to replay')}</span>
       </div>
       <div
         ref={box}
         id="bleLog"
         role="log"
-        aria-label="蓝牙空中日志"
+        aria-label={t('Bluetooth air log')}
         onScroll={(e) => {
           const b = e.currentTarget;
           stick.current = b.scrollHeight - b.scrollTop - b.clientHeight < 24;
         }}
         className="min-h-0 flex-1 overflow-auto px-3 pb-2 font-mono text-xs leading-[22px]"
       >
-        {s.log.length === 0 && <div className="text-muted">还没有空中活动</div>}
+        {s.log.length === 0 && <div className="text-muted">{t('No air activity yet')}</div>}
         {s.log.map((l, i) => (
           <div
             key={l.n}
@@ -148,20 +148,20 @@ export function BlePane() {
   );
 }
 
-/** 路线 a′ 没认出 VHCI 边界：说明原因，指向路线 c（拖 app.elf） */
+/** Route a' found no VHCI boundary: explain and point to route c (drop app.elf) */
 function ElfCard({ reason }: { reason: string }) {
   return (
     <div id="bleElf" className="m-3 flex flex-col gap-1.5 rounded-lg border border-line bg-warn-bg px-3 py-2.5 text-[13px] text-fg">
-      <b className="font-medium">BLE 需要再拖一个 app.elf</b>
+      <b className="font-medium">{t('BLE needs an app.elf as well')}</b>
       <span className="text-xs text-muted">
-        固件里用了蓝牙，但没在 .bin 里认出乐鑫蓝牙库的接口（{reason || '签名没对上'}）。把同一次构建出来的 build/&lt;工程名&gt;.elf 拖进来，按符号接上虚拟控制器。
+        {t('The firmware uses Bluetooth, but the Espressif BLE library interface was not found in the .bin ({reason}). Drop in build/<project>.elf from the same build to attach the virtual controller by symbol.', { reason: reason || t('signature mismatch') })}
       </span>
-      <span className="text-xs text-muted">这一步还在做：目前先显示这张卡，蓝牙不会动。</span>
+      <span className="text-xs text-muted">{t('This step is still in progress: for now only this card shows and Bluetooth stays inactive.')}</span>
     </div>
   );
 }
 
-// ------------------------------------------------------------ 属性面板：虚拟手机
+// ------------------------------------------------------------ Inspector: virtual phone
 
 const pill = (on: boolean) =>
   cn(
@@ -182,7 +182,7 @@ const BtIcon = ({ size = 18 }: { size?: number }) => (
 
 const hhex = (h: number) => `0x${h.toString(16).padStart(4, '0')}`;
 
-/** 通知值曲线（最近 30 个点），纵轴按数据自己的范围 */
+/** Notification value sparkline (last 30 points), y axis fitted to the data */
 function Spark({ hist, label }: { hist: [number, number][]; label: string }) {
   const pts = hist.slice(-30);
   if (pts.length < 2) return null;
@@ -194,13 +194,13 @@ function Spark({ hist, label }: { hist: [number, number][]; label: string }) {
   const tw = pts[pts.length - 1][0] - t0 || 1;
   const poly = pts.map(([t, v]) => `${(((t - t0) / tw) * 300).toFixed(1)},${(34 - ((v - lo) / span) * 28).toFixed(1)}`).join(' ');
   return (
-    <svg data-spark width="100%" height="40" viewBox="0 0 300 40" preserveAspectRatio="none" role="img" aria-label={`${label}最近 ${pts.length} 次通知，在 ${lo} 到 ${hi} 之间`}>
+    <svg data-spark width="100%" height="40" viewBox="0 0 300 40" preserveAspectRatio="none" role="img" aria-label={t('{label}: last {n} notifications, between {lo} and {hi}', { label, n: pts.length, lo, hi })}>
       <polyline points={poly} fill="none" stroke="var(--color-accent)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
 
-/** 一张特征卡：名字 + UUID、当前值（认得的给人话）、读取 / 订阅 / 写入 */
+/** Characteristic card: name + UUID, current value (decoded when known), read / subscribe / write */
 function CharCard({ c, send }: { c: BleChar; send: (cmd: string) => void }) {
   const [hex, setHex] = useState('01');
   const canRead = c.props.includes('read');
@@ -215,20 +215,20 @@ function CharCard({ c, send }: { c: BleChar; send: (cmd: string) => void }) {
   return (
     <div data-char={c.uuid} className="flex flex-col gap-2 rounded-[10px] border border-line px-3 py-2.5">
       <div className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate font-medium">{c.name || '特征'}</span>
+        <span className="truncate font-medium">{c.name || t('Characteristic')}</span>
         <span className="flex-none font-mono text-[11px] text-muted">{uuidLabel(c.uuid)}</span>
         <span className="flex-1" />
-        {c.notify && <span className="flex-none text-xs text-ok-ink">已订阅</span>}
+        {c.notify && <span className="flex-none text-xs text-ok-ink">{t('Subscribed')}</span>}
         {canRead && !canSub && (
           <button type="button" data-act="read" className={smallBtn()} onClick={() => send(`read ${hhex(c.handle)}`)}>
-            读取
+            {t('Read')}
           </button>
         )}
       </div>
       {shown && (
         <div className="flex min-w-0 items-baseline gap-1.5" data-val>
           <span className={cn('font-mono break-all', big ? 'text-[28px] leading-9 font-bold' : 'text-[13px]')}>{c.text ? c.text.replace(/\s*bpm$/, '').replace(/%$/, ' %') : c.value}</span>
-          {/\bbpm$/.test(c.text) && <span className="text-muted">次/分</span>}
+          {/\bbpm$/.test(c.text) && <span className="text-muted">{t('bpm')}</span>}
           {c.text && c.value && !/bpm$|%$/.test(c.text) && <span className="font-mono text-[11px] text-muted">{c.value}</span>}
         </div>
       )}
@@ -237,21 +237,21 @@ function CharCard({ c, send }: { c: BleChar; send: (cmd: string) => void }) {
         <div className="flex flex-wrap gap-1.5">
           {canSub && (
             <button type="button" data-act={c.notify ? 'unsub' : 'sub'} className={smallBtn(!c.notify)} onClick={() => send(`${c.notify ? 'unsub' : 'sub'} ${hhex(c.handle)}`)}>
-              {c.notify ? '取消订阅' : '订阅'}
+              {c.notify ? t('Unsubscribe') : t('Subscribe')}
             </button>
           )}
           {canRead && (
             <button type="button" data-act="read" className={smallBtn()} onClick={() => send(`read ${hhex(c.handle)}`)}>
-              读取
+              {t('Read')}
             </button>
           )}
-          {c.notes > 0 && <span className="self-center text-xs text-muted">{`收到 ${c.notes} 条`}</span>}
+          {c.notes > 0 && <span className="self-center text-xs text-muted">{t('Received: {n}', { n: c.notes })}</span>}
         </div>
       )}
       {canWrite && (
         <form onSubmit={submit} className="flex items-center gap-2">
           <label htmlFor={`bleW${c.handle}`} className="flex-none font-medium">
-            写入
+            {t('Write')}
           </label>
           <input
             id={`bleW${c.handle}`}
@@ -261,11 +261,11 @@ function CharCard({ c, send }: { c: BleChar; send: (cmd: string) => void }) {
             inputMode="text"
             autoComplete="off"
             spellCheck={false}
-            aria-label={`写入 ${c.name || c.uuid} 的十六进制字节`}
+            aria-label={t('Hex bytes to write to {name}', { name: c.name || c.uuid })}
             className="h-8 min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 font-mono text-xs text-fg max-md:h-11 max-md:text-base"
           />
           <button type="submit" data-act="write" className={smallBtn(true)}>
-            发送
+            {t('Send')}
           </button>
         </form>
       )}
@@ -273,7 +273,7 @@ function CharCard({ c, send }: { c: BleChar; send: (cmd: string) => void }) {
   );
 }
 
-/** 属性面板「虚拟手机」：附近设备 / 已连接两页，手机外框里是服务与特征卡 */
+/** Inspector "Virtual phone": Nearby / Connected tabs; services and characteristic cards inside a phone frame */
 export function PhonePanel({ send }: { send: (cmd: string) => void }) {
   const s = useBle();
   const p = s.view?.phone;
@@ -284,7 +284,7 @@ export function PhonePanel({ send }: { send: (cmd: string) => void }) {
     bleFeed.clearError();
     send(cmd);
   };
-  // 连上 / 断开时跟着切页（用户手点过就按手点的，直到下一次连接状态变化）
+  // Follow connect / disconnect with the tab; a manual pick wins until the connection state changes again
   const lastConn = useRef(connected);
   useEffect(() => {
     if (lastConn.current !== connected) setTab(null);
@@ -293,24 +293,24 @@ export function PhonePanel({ send }: { send: (cmd: string) => void }) {
   const dev = p?.devices.find((d) => d.addr === p.target) ?? p?.devices[0];
   const head = (
     <div className="mt-2 flex items-center gap-2">
-      <strong className="text-[15px]">虚拟手机</strong>
-      <span className="inline-flex items-center gap-1 text-xs text-fg" title="协议按规范逐包模拟；射频、距离、手机系统没模拟">
-        <ConfIcon c="行为模拟" />
-        行为模拟
+      <strong className="text-[15px]">{t('Virtual phone')}</strong>
+      <span className="inline-flex items-center gap-1 text-xs text-fg" title={t('The protocol is simulated packet by packet per spec; radio, distance and phone OS are not simulated')}>
+        <ConfIcon c="行为模拟" /> {/* lint: allow-cjk */}
+        {t('Behaviour model')}
       </span>
     </div>
   );
   const foot = (
     <div className="mt-3 flex items-center gap-1.5 text-xs text-muted">
-      <ConfIcon c="必须上真机" />
-      信号距离、穿墙、手机系统差异：必须上真机
+      <ConfIcon c="必须上真机" /> {/* lint: allow-cjk */}
+      {t('Range, walls, phone OS differences: needs real hardware')}
     </div>
   );
   if (s.state !== 1 || !p)
     return (
       <div id="blePhone" data-state={s.state}>
         {head}
-        {s.state === 2 ? <ElfCard reason={s.error} /> : <p className="my-2 text-xs text-muted">台面上的固件没用蓝牙。换一个用 NimBLE 的固件（例如 c3-ble-hr）再来。</p>}
+        {s.state === 2 ? <ElfCard reason={s.error} /> : <p className="my-2 text-xs text-muted">{t('The firmware on the bench does not use Bluetooth. Load a NimBLE firmware (e.g. c3-ble-hr) and try again.')}</p>}
         {foot}
       </div>
     );
@@ -318,12 +318,12 @@ export function PhonePanel({ send }: { send: (cmd: string) => void }) {
     <div id="blePhone" data-state={s.state} data-phone={p.state} className="flex flex-col">
       {head}
       <div className="mt-3 flex flex-col overflow-hidden rounded-[36px] border-8 border-[#1e1e1e] bg-surface text-[13px] text-fg">
-        <div className="flex gap-1.5 px-4 pt-5 pb-2" role="tablist" aria-label="虚拟手机">
+        <div className="flex gap-1.5 px-4 pt-5 pb-2" role="tablist" aria-label={t('Virtual phone')}>
           <button type="button" role="tab" id="blePillNear" aria-selected={cur === 'near'} className={pill(cur === 'near')} onClick={() => setTab('near')}>
-            附近设备
+            {t('Nearby')}
           </button>
           <button type="button" role="tab" id="blePillConn" aria-selected={cur === 'conn'} className={pill(cur === 'conn')} onClick={() => setTab('conn')}>
-            已连接
+            {t('Connected')}
           </button>
         </div>
         {cur === 'near' ? (
@@ -331,33 +331,33 @@ export function PhonePanel({ send }: { send: (cmd: string) => void }) {
             <div className="flex flex-wrap items-center gap-1.5">
               {p.state === 'scanning' ? (
                 <button type="button" id="bleScanOff" className={smallBtn()} onClick={() => go('scan off')}>
-                  停止扫描
+                  {t('Stop scan')}
                 </button>
               ) : (
                 <button type="button" id="bleScan" className={smallBtn(true)} disabled={connected} onClick={() => go('scan')}>
-                  扫描
+                  {t('Scan')}
                 </button>
               )}
-              <button type="button" id="bleAuto" className={smallBtn()} disabled={connected} title="扫描 → 连第一台 → 读全部可读特征 → 订阅全部通知" onClick={() => go('auto')}>
-                一键连上
+              <button type="button" id="bleAuto" className={smallBtn()} disabled={connected} title={t('Scan → connect the first device → read all readable characteristics → subscribe to all notifications')} onClick={() => go('auto')}>
+                {t('Auto connect')}
               </button>
-              <span className="text-xs text-muted">{p.state === 'scanning' ? '扫描中…' : p.state === 'connecting' ? '连接中…' : ''}</span>
+              <span className="text-xs text-muted">{p.state === 'scanning' ? t('Scanning…') : p.state === 'connecting' ? t('Connecting…') : ''}</span>
             </div>
-            {p.devices.length === 0 && <p className="my-1 text-xs text-muted">{p.state === 'scanning' ? '还没听到广播' : '点扫描，听板子的广播'}</p>}
+            {p.devices.length === 0 && <p className="my-1 text-xs text-muted">{p.state === 'scanning' ? t('No adverts heard yet') : t('Tap Scan to listen for the board')}</p>}
             {p.devices.map((d) => (
               <div key={d.addr} data-dev={d.addr} className="flex items-center gap-2.5 border-b border-line-soft py-2 last:border-0">
                 <div className="grid size-9 flex-none place-items-center rounded-[10px] bg-accent-bg text-accent-ink">
                   <BtIcon />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-bold">{d.name || '（没名字）'}</div>
+                  <div className="truncate font-bold">{d.name || t('(no name)')}</div>
                   <div className="truncate font-mono text-[11px] text-muted">{`${d.addr} · ${d.rssi} dBm${d.uuids.length ? ' · ' + d.uuids.map((u) => '0x' + u).join(' ') : ''}`}</div>
                 </div>
                 {connected && p.target === d.addr ? (
-                  <span className="text-xs text-ok-ink">已连接</span>
+                  <span className="text-xs text-ok-ink">{t('Connected')}</span>
                 ) : (
                   <button type="button" data-act="connect" className={smallBtn()} disabled={!d.connectable || connected || p.state === 'connecting'} onClick={() => go(`connect ${d.addr}`)}>
-                    连接
+                    {t('Connect')}
                   </button>
                 )}
               </div>
@@ -365,7 +365,7 @@ export function PhonePanel({ send }: { send: (cmd: string) => void }) {
           </div>
         ) : !connected ? (
           <div className="px-4 pt-2 pb-5 text-xs text-muted">
-            {p.state === 'connecting' ? '连接中…' : '还没连上设备。到「附近设备」扫描、连接。'}
+            {p.state === 'connecting' ? t('Connecting…') : t('Not connected yet. Scan and connect under "Nearby".')}
           </div>
         ) : (
           <>
@@ -375,21 +375,21 @@ export function PhonePanel({ send }: { send: (cmd: string) => void }) {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate font-bold" id="bleConnName">
-                  {dev?.name || s.view?.adv_name || '设备'}
+                  {dev?.name || s.view?.adv_name || t('Device')}
                 </div>
                 <div className="truncate font-mono text-[11px] text-muted">{`${p.target ?? s.view?.addr} · ${p.rssi} dBm · MTU ${p.mtu}`}</div>
               </div>
               <button type="button" id="bleDisc" className={smallBtn()} onClick={() => go('disconnect')}>
-                断开
+                {t('Disconnect')}
               </button>
             </div>
             <div className="flex flex-col gap-3 px-4 pt-3 pb-4">
-              {!p.ready && <p className="my-0 text-xs text-muted">正在发现服务…</p>}
+              {!p.ready && <p className="my-0 text-xs text-muted">{t('Discovering services…')}</p>}
               {p.services
                 .filter((sv) => sv.chars.length && sv.uuid !== '1800' && sv.uuid !== '1801')
                 .map((sv) => (
                   <div key={sv.start} data-svc={sv.uuid} className="flex flex-col gap-2">
-                    <div className="text-xs text-muted">{`${sv.name ? sv.name + '服务' : '自定义服务'} · ${uuidLabel(sv.uuid)}`}</div>
+                    <div className="text-xs text-muted">{`${sv.name ? t('{name} service', { name: sv.name }) : t('Custom service')} · ${uuidLabel(sv.uuid)}`}</div>
                     {sv.chars.map((c) => (
                       <CharCard key={c.handle} c={c} send={go} />
                     ))}
@@ -397,7 +397,7 @@ export function PhonePanel({ send }: { send: (cmd: string) => void }) {
                 ))}
               {p.ready && p.services.some((sv) => sv.uuid === '1800' || sv.uuid === '1801') && (
                 <details className="text-xs text-muted">
-                  <summary className="cursor-pointer">通用服务（设备名、外观、服务变更）</summary>
+                  <summary className="cursor-pointer">{t('Generic services (device name, appearance, service changed)')}</summary>
                   <div className="mt-2 flex flex-col gap-2">
                     {p.services
                       .filter((sv) => sv.uuid === '1800' || sv.uuid === '1801')
@@ -414,7 +414,7 @@ export function PhonePanel({ send }: { send: (cmd: string) => void }) {
       </div>
       {s.cmdError && (
         <p id="bleCmdErr" className="my-2 text-xs text-bad-ink">
-          {`手机没照做：${s.cmdError}`}
+          {t('The phone refused: {reason}', { reason: s.cmdError })}
         </p>
       )}
       {foot}

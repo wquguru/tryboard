@@ -1,5 +1,6 @@
-// 采购清单的状态：只存操作日志（套用模板 / 加 / 去 / 换板 / 一键修），清单由日志重放得到。
-// 时间线点回某一步 = 重放到那一步，不存快照（DESIGN §3）。纯函数，node --test 直接测。
+// Shopping-list state is only an op log (template / add / remove / board swap / fix); the list is its replay.
+// Seeking the timeline replays up to that step, no snapshots (DESIGN §3). Pure, tested with node --test.
+import { t } from '../i18n/index.ts';
 import { getTemplate, removePick, templatePicks, toScene, type Pick } from '../catalog/templates.ts';
 import { applyFix, type Fix, type RuleInput } from '../catalog/rules.ts';
 import { PART_BY_ID, getPart } from '../catalog/parts.ts';
@@ -15,29 +16,29 @@ export interface Bom {
   template: string;
   board: string;
   picks: Pick[];
-  /** 不在模板里的件是怎么来的（"规则 R27 补的" / "从元件库加的"） */
+  /** Where non-template parts came from ("added by rule R27" / "added from the parts library"). */
   extra: Record<string, string>;
 }
 
 export interface BomHistory {
   ops: BomOp[];
-  /** 当前停在第几步（时间线点回去后 < ops.length - 1） */
+  /** Current step (< ops.length - 1 after seeking back on the timeline). */
   cur: number;
 }
 
 export const initialHistory = (template: string): BomHistory => ({ ops: [{ t: 'template', id: template }], cur: 0 });
 
 function fromTemplate(id: string): Bom {
-  const t = getTemplate(id);
+  const tpl = getTemplate(id);
   const picks = templatePicks(id);
-  // 开发板总在清单里（空白模板的板子是建议件，这里也补上；采购页上开发板一行不能取消）
-  if (!picks.some((p) => p.partId === t.board)) picks.unshift({ partId: t.board, qty: 1 });
-  return { template: id, board: t.board, picks, extra: {} };
+  // The board is always listed (a suggestion in the blank template; its row can't be unticked in Shop).
+  if (!picks.some((p) => p.partId === tpl.board)) picks.unshift({ partId: tpl.board, qty: 1 });
+  return { template: id, board: tpl.board, picks, extra: {} };
 }
 
 const lineQty = (template: string, partId: string) => {
-  const t = getTemplate(template);
-  return [...t.required, ...t.suggested].find((l) => l.partId === partId)?.qty ?? 1;
+  const tpl = getTemplate(template);
+  return [...tpl.required, ...tpl.suggested].find((l) => l.partId === partId)?.qty ?? 1;
 };
 
 function step(b: Bom, op: BomOp): Bom {
@@ -46,7 +47,7 @@ function step(b: Bom, op: BomOp): Bom {
       return fromTemplate(op.id);
     case 'add':
       if (b.picks.some((p) => p.partId === op.partId)) return b;
-      return { ...b, picks: [...b.picks, { partId: op.partId, qty: lineQty(b.template, op.partId) }], extra: inTemplate(b.template, op.partId) ? b.extra : { ...b.extra, [op.partId]: '从元件库加的' } };
+      return { ...b, picks: [...b.picks, { partId: op.partId, qty: lineQty(b.template, op.partId) }], extra: inTemplate(b.template, op.partId) ? b.extra : { ...b.extra, [op.partId]: t('Added from the parts library') } };
     case 'remove': {
       const r = removePick(b.template, b.picks, op.partId);
       if (r.refused || op.partId === b.board) return b;
@@ -62,18 +63,18 @@ function step(b: Bom, op: BomOp): Bom {
     case 'fix': {
       const n = applyFix(ruleInput(b), op.fix);
       const extra = { ...b.extra };
-      if (op.fix.action !== 'remove' && !inTemplate(b.template, op.fix.partId)) extra[op.fix.partId] = '规则检查提示后补上的';
+      if (op.fix.action !== 'remove' && !inTemplate(b.template, op.fix.partId)) extra[op.fix.partId] = t('Added after a rule check hint');
       return { ...b, board: n.board, picks: n.parts, extra };
     }
   }
 }
 
 export function inTemplate(template: string, partId: string) {
-  const t = getTemplate(template);
-  return [...t.required, ...t.suggested].some((l) => l.partId === partId);
+  const tpl = getTemplate(template);
+  return [...tpl.required, ...tpl.suggested].some((l) => l.partId === partId);
 }
 
-/** 重放到第 upto 步（含）。日志里有元件库已删掉的件时整份作废，回到模板默认 */
+/** Replay up to step `upto` (inclusive). A log naming parts dropped from the catalog is discarded (template defaults). */
 export function replay(h: BomHistory, upto = h.cur): Bom {
   const first = h.ops[0];
   let b = fromTemplate(first?.t === 'template' ? first.id : 'blank');
@@ -81,7 +82,7 @@ export function replay(h: BomHistory, upto = h.cur): Bom {
   return b;
 }
 
-/** 追加一步：停在中间时丢掉后面的分支（和撤销 / 重做一样）。不改变清单的操作不记 */
+/** Append a step, dropping the branch after cur (like undo/redo). Ops that don't change the list aren't recorded. */
 export function push(h: BomHistory, op: BomOp): BomHistory {
   const before = replay(h);
   const after = step(before, op);
@@ -90,7 +91,7 @@ export function push(h: BomHistory, op: BomOp): BomHistory {
   return { ops, cur: ops.length - 1 };
 }
 
-/** 日志能不能重放（存在 localStorage 里的旧日志可能引用改名的件） */
+/** Whether a log can be replayed (old logs in localStorage may name renamed parts). */
 export function validHistory(x: unknown): x is BomHistory {
   if (!x || typeof x !== 'object') return false;
   const h = x as BomHistory;
@@ -110,48 +111,48 @@ export function validHistory(x: unknown): x is BomHistory {
   }
 }
 
-/** 规则引擎的输入：清单 + 模板的默认接线和固件用法 */
+/** Rule-engine input: the list plus the template's default wiring and firmware usage. */
 export function ruleInput(b: Bom): RuleInput {
-  const t = getTemplate(b.template);
-  return { template: b.template, board: b.board, parts: b.picks.map((p) => ({ ...p })), wiring: t.wiring.map((w) => ({ ...w })), firmware: { ...t.firmware } };
+  const tpl = getTemplate(b.template);
+  return { template: b.template, board: b.board, parts: b.picks.map((p) => ({ ...p })), wiring: tpl.wiring.map((w) => ({ ...w })), firmware: { ...tpl.firmware } };
 }
 
-const short = (partId: string) => getPart(partId).name.split(/[（(]/)[0].trim();
+const short = (partId: string) => t(getPart(partId).name).split(/[（(]/)[0].trim(); // lint: allow-cjk (full-width paren in names)
 export { short as shortName };
 
 export function opLabel(op: BomOp): { icon: string; label: string } {
   switch (op.t) {
     case 'template':
-      return { icon: '▤', label: `套用「${getTemplate(op.id).title}」` };
+      return { icon: '▤', label: t('Apply "{name}"', { name: t(getTemplate(op.id).title) }) };
     case 'add':
-      return { icon: '+', label: `加 ${short(op.partId)}` };
+      return { icon: '+', label: t('Add {part}', { part: short(op.partId) }) };
     case 'remove':
-      return { icon: '−', label: `去 ${short(op.partId)}` };
+      return { icon: '−', label: t('Remove {part}', { part: short(op.partId) }) };
     case 'board':
-      return { icon: '⇄', label: `换 ${short(op.partId)}` };
+      return { icon: '⇄', label: t('Swap to {part}', { part: short(op.partId) }) };
     case 'fix':
-      return { icon: '✓', label: `${op.fix.action === 'add' ? '补' : op.fix.action === 'remove' ? '去' : '换'} ${short(op.fix.partId)}` };
+      return { icon: '✓', label: t(op.fix.action === 'add' ? 'Add {part}' : op.fix.action === 'remove' ? 'Remove {part}' : 'Swap to {part}', { part: short(op.fix.partId) }) };
   }
 }
 
 export interface Placement {
-  /** 与 firmware/examples.json 的 scene.parts 同格式 */
+  /** Same format as scene.parts in firmware/examples.json. */
   parts: { type: string; [k: string]: unknown }[];
-  /** 清单里有外接 5 V 电源（舵机不靠 USB） */
+  /** The list has an external 5 V supply (servo not on USB power). */
   ext5v: boolean;
-  /** 在清单里、模拟器有模型、但没有默认接线所以没摆上的件 */
+  /** Listed parts the simulator models but that weren't placed for lack of default wiring. */
   skipped: string[];
 }
 
-/** 买完摆上实验台（P0-09）：按模板接线生成场景；缺接线的件不摆，列出来 */
+/** After buying, place on the bench (P0-09): scene from template wiring; parts without wiring are listed, not placed. */
 export function placement(b: Bom): Placement {
-  const t = getTemplate(b.template);
-  const raw = toScene(b.picks, t.wiring);
+  const tpl = getTemplate(b.template);
+  const raw = toScene(b.picks, tpl.wiring);
   const parts = raw.filter((p) => Object.entries(p).every(([, v]) => v !== undefined));
   const placedTypes = new Set(parts.map((p) => p.type));
   const SIM = new Set(['oled', 'bme280', 'servo', 'gc9a01', 'led', 'buzzer', 'mpu6050', 'qmi8658', 'cst816s', 'encoder', 'hcsr04', 'ws2812']);
   const skipped = raw.filter((p) => !parts.includes(p)).map((p) => p.type);
-  // toScene 对没接线的 LED / 蜂鸣器直接不输出，这里也算进"没摆上"
+  // toScene drops unwired LEDs / buzzers silently; count them as skipped too.
   for (const p of b.picks) {
     const ty = ({ 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer' } as Record<string, string>)[p.partId];
     if (ty && SIM.has(ty) && !placedTypes.has(ty) && !skipped.includes(ty)) skipped.push(ty);

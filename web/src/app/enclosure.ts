@@ -1,17 +1,16 @@
-// 参数化外壳（P1-08）：按作品模板 + 清单里零件的尺寸算出外壳布局（零件槽位、开孔、定位柱）和警告，
-// 再用 Manifold（wasm，懒加载）做布尔运算出底壳 / 顶盖网格。布局是纯函数（node --test 直接测），
-// 网格函数吃一个 Manifold 模块实例（浏览器懒加载、node 测试直接 import），本文件不 import wasm。
-// 坐标：毫米，z 朝上（打印朝向：底壳的外底面贴打印床）。尺寸、间隙都是估算，未经真机标定。
+// Parametric case (P1-08): pure layout + warnings from template and part sizes; meshes take a passed-in Manifold (no wasm import).
+// Units mm, z up (bottom shell on the print bed). Sizes and clearances are estimates, not hardware-calibrated.
 import { PART_BY_ID } from '../catalog/parts.ts';
+import { t } from '../i18n/index.ts';
 import type { ManifoldToplevel, Manifold, CrossSection } from 'manifold-3d';
 
 export type V3 = [number, number, number];
 
 export interface CaseParams {
-  /** 总高（气象站 = 壳深；小黄 / 透镜小人 = 底座高） */
+  /** Total height (weather = shell depth; spin / lens = base height) */
   height: number;
   wall: number;
-  /** 竖边圆角（只有方壳用） */
+  /** Vertical edge radius (rectangular cases only) */
   radius: number;
 }
 
@@ -23,22 +22,22 @@ export const DEFAULT_PARAMS: Record<string, CaseParams> = {
 };
 export const PARAM_RANGE = { height: [16, 80], wall: [1.2, 4], radius: [0, 12] } as const;
 
-/** 画零件用的简单体（盒子 / 圆柱 / 圆环 / 球冠），在外壳坐标里 */
+/** Simple solids for drawing parts (box / cylinder / torus / cap) in case coordinates */
 export interface Prim {
   shape: 'box' | 'cyl' | 'torus' | 'cap';
   at: V3;
-  /** box：长宽高；cyl：[直径, 直径, 高]；torus：[直径, 管径, 0]；cap：[直径, 直径, 高] */
+  /** box: l, w, h; cyl: [d, d, h]; torus: [d, tube d, 0]; cap: [d, d, h] */
   size: V3;
   color: string;
-  /** cyl 的轴：默认 z */
+  /** cyl axis, default z */
   axis?: 'z' | 'y';
-  /** 绕 z 转（度），舵盘错齿用 */
+  /** Rotation about z (degrees), for horn tooth offset */
   rotZ?: number;
   emissive?: boolean;
 }
 export interface Pose {
   prims: Prim[];
-  /** 网格件（底壳 / 顶盖）没有 prims，用 mesh 标出来 */
+  /** Mesh parts (bottom / lid) have no prims and are tagged by mesh */
   mesh?: 'bottom' | 'lid';
   min: V3;
   max: V3;
@@ -48,29 +47,29 @@ export interface SizeInfo {
   part: string;
   name: string;
   size: V3;
-  /** 元件库没有尺寸，用的是常见规格的估算 */
+  /** Catalog has no size; a common-spec estimate is used */
   est: boolean;
 }
 export interface CaseLayout {
   template: string;
   params: CaseParams;
   shape: 'rect' | 'round';
-  /** 外形：方壳 [宽, 长, 高]；圆壳 [直径, 直径, 底座高] */
+  /** Outline: rect [w, l, h]; round [d, d, base h] */
   outer: V3;
-  /** 顶盖（方壳前面板 / 小黄身体 / 透镜外框）的外形，打印尺寸提示用 */
+  /** Lid outline (front panel / spin body / lens bezel), for print size hints */
   lidSize: V3;
-  /** 槽位：零件 id → 装法 key（无装法差别的用 ''）→ 位置 */
+  /** Slots: part id → mounting key ('' when there's only one) → pose */
   slots: Record<string, Record<string, Pose>>;
-  /** 芯片（模组屏蔽罩顶面中心），尺子用 */
+  /** Chip (module shield top centre), for the ruler */
   chip: V3 | null;
   features: { bottom: string[]; lid: string[] };
   sizes: SizeInfo[];
   warnings: { id: string; text: string }[];
-  /** 高度相关：内腔可用 / 需要（mm），以及不出高度警告的最低高度 */
+  /** Height: available / needed cavity (mm), and the minimum height with no height warning */
   inner: number;
   need: number;
   minHeight: number;
-  /** 网格函数要的几何参数 */
+  /** Geometry parameters for the mesh builder */
   geo: Geo;
 }
 export type Geo =
@@ -79,7 +78,7 @@ export type Geo =
   | { t: 'lens'; R: number; Hb: number; w: number; ledge: number; bez: number; vertical: boolean; bl: number; bw: number }
   | { t: 'usbkey'; W: number; D: number; H: number; w: number; r: number; bx: number; by: number; bl: number; bw: number; kx: number; ky: number[]; cap: number };
 
-/** 元件库没给尺寸时用的常见规格（长 × 宽 × 高，mm；估算） */
+/** Common specs when the catalog has no size (l × w × h, mm; estimate) */
 const FALLBACK: Record<string, V3> = {
   's3-devkitc1-v10': [63, 26, 8],
   's3-devkitc1-v11': [63, 26, 8],
@@ -95,7 +94,7 @@ const FALLBACK: Record<string, V3> = {
   sg90: [22.2, 11.8, 31],
   mg90s: [22.8, 12.2, 28.5],
 };
-/** 舵机轴伸出顶盖的长度：舵机高减去它就是壳里要留的深度 */
+/** Servo shaft length above the lid; servo height minus this is the depth needed inside */
 export const SHAFT_OUT = 4;
 const STANDOFF = 3;
 const PCB = 1.6;
@@ -105,9 +104,9 @@ export function partSize(id: string): SizeInfo {
   const p = PART_BY_ID[id];
   const s = p?.sizeMm;
   const fb = FALLBACK[id] ?? [20, 20, 5];
-  if (s && s[2] !== null) return { part: id, name: p.name, size: [s[0], s[1], s[2]], est: false };
-  if (s) return { part: id, name: p.name, size: [s[0], s[1], fb[2]], est: true };
-  return { part: id, name: p?.name ?? id, size: fb, est: true };
+  if (s && s[2] !== null) return { part: id, name: t(p.name), size: [s[0], s[1], s[2]], est: false };
+  if (s) return { part: id, name: t(p.name), size: [s[0], s[1], fb[2]], est: true };
+  return { part: id, name: p?.name ? t(p.name) : id, size: fb, est: true };
 }
 
 export interface CaseSel {
@@ -117,7 +116,7 @@ export interface CaseSel {
   sensor?: string;
   lcd?: string;
 }
-/** 从清单的件里挑出外壳要用的几个（找不到就用模板默认） */
+/** Pick the case-relevant parts from the list (template defaults when missing) */
 export function caseSel(board: string, picks: string[]): CaseSel {
   const first = (ids: string[], d: string) => ids.find((x) => picks.includes(x)) ?? d;
   return {
@@ -152,11 +151,11 @@ function pose(prims: Prim[], mesh?: 'bottom' | 'lid', box?: { min: V3; max: V3 }
 const box = (at: V3, size: V3, color: string, extra: Partial<Prim> = {}): Prim => ({ shape: 'box', at, size, color, ...extra });
 const cyl = (at: V3, d: number, h: number, color: string, extra: Partial<Prim> = {}): Prim => ({ shape: 'cyl', at, size: [d, d, h], color, ...extra });
 
-/** 平放的开发板：PCB + 模组屏蔽罩 + USB-C 口 + 板载灯。USB 口朝 -y */
+/** Flat dev board: PCB + module shield + USB-C + onboard LED, USB facing -y */
 function boardPrims(cx: number, cy: number, z0: number, l: number, w: number, vertical = false): { prims: Prim[]; chip: V3 } {
   const long = l > 40;
   if (vertical) {
-    // 竖放：长边沿 z，PCB 面朝 -y
+    // Vertical: long edge along z, PCB face toward -y
     const ml = long ? 25.5 : l * 0.7, mw = long ? 18 : w * 0.7;
     const mz = long ? z0 + l - ml / 2 - 0.5 : z0 + l / 2;
     return {
@@ -179,7 +178,7 @@ function boardPrims(cx: number, cy: number, z0: number, l: number, w: number, ve
 }
 
 function servoPrims(sx: number, sy: number, zTop: number, s: V3, hornDeg: number): Prim[] {
-  // 舵机竖着挂在 zTop（顶盖内面 / 底座顶板下面）下面：耳朵贴着，轴从 sy 处穿出去 SHAFT_OUT
+  // Servo hangs below zTop (lid inner face / base top plate) by its ears; the shaft pokes out SHAFT_OUT at sy
   const [sl, sw, sh] = s;
   const bodyH = sh - SHAFT_OUT - 2.5;
   const cy = sy - (sl / 2 - sw / 2);
@@ -199,7 +198,7 @@ export function caseLayout(template: string, params: CaseParams, sel: CaseSel): 
   return weatherLayout(p, sel);
 }
 
-// ------------------------------------------------------------------ 气象站：方壳 50 × 70，前面板是顶盖
+// ------------------------------------------------------------------ Weather station: 50 × 70 box, front panel is the lid
 function weatherLayout(p: CaseParams, sel: CaseSel): CaseLayout {
   const W = 50, D = 70, H = p.height, w = p.wall;
   const ix = W / 2 - w, iy = D / 2 - w;
@@ -207,28 +206,28 @@ function weatherLayout(p: CaseParams, sel: CaseSel): CaseLayout {
   const [bs, ss, vs, os] = sizes.map((x) => x.size);
   const warnings: CaseLayout['warnings'] = [];
   const lidZ = H - w;
-  // 开发板：贴左墙，USB 口朝下（-y）；短板放左下角
+  // Board against the left wall, USB down (-y); short boards go bottom-left
   const [bl, bw] = [bs[0], bs[1]];
   const bx = -ix + 0.5 + bw / 2;
   const by = bl > 2 * iy - 1 ? 0 : bl > 40 ? 0 : -iy + 0.5 + bl / 2;
   const B = boardPrims(bx, by, w + STANDOFF, bl, bw);
-  if (bl > 2 * iy - 0.5 || bw > 2 * ix - 14) warnings.push({ id: 'board-fit', text: `开发板 ${bl}×${bw} mm 放不进内腔 ${r1(2 * ix)}×${r1(2 * iy)} mm（壁厚 ${w} mm）` });
-  // 舵机：开发板右边与右墙之间，轴对着表盘中心；挂在前面板下面
+  if (bl > 2 * iy - 0.5 || bw > 2 * ix - 14) warnings.push({ id: 'board-fit', text: t("Board {l}×{w} mm doesn't fit the {il}×{iw} mm cavity (wall {wall} mm)", { l: bl, w: bw, il: r1(2 * ix), iw: r1(2 * iy), wall: w }) });
+  // Servo between board and right wall, shaft at the dial centre, hung under the front panel
   const boardRight = bx + bw / 2;
   const sx = (boardRight + ix) / 2;
   const sy = Math.min(19, iy - 5.9 - 5 - 1);
-  if (vs[1] + 1 > ix - boardRight) warnings.push({ id: 'servo-side', text: `开发板右边只剩 ${r1(ix - boardRight)} mm，舵机宽 ${vs[1]} mm 塞不下` });
+  if (vs[1] + 1 > ix - boardRight) warnings.push({ id: 'servo-side', text: t('Only {room} mm right of the board; the {w} mm servo won\'t fit', { room: r1(ix - boardRight), w: vs[1] }) });
   const inner = H - 2 * w;
   const need = vs[2] - SHAFT_OUT;
-  if (inner < need) warnings.push({ id: 'servo-height', text: `太矮：内腔 ${r1(inner)} mm，舵机要 ${r1(need)} mm（${vs[2]} mm 高、轴伸出 ${SHAFT_OUT} mm），会顶住底壳` });
+  if (inner < need) warnings.push({ id: 'servo-height', text: t('Too short: cavity {inner} mm, the servo needs {need} mm ({h} mm tall, shaft out {out} mm) and will hit the bottom', { inner: r1(inner), need: r1(need), h: vs[2], out: SHAFT_OUT }) });
   const stack = STANDOFF + PCB + MODULE_H + 1;
-  // OLED：前面板下面、舵机耳朵下方
+  // OLED under the front panel, below the servo ears
   const [ol, ow, oh] = os;
   const ox = -2, oy = sy - (vs[0] - vs[1] / 2) - 5 - 0.5 - ow / 2;
   const oz = lidZ - 1 - oh / 2;
-  if (oy - ow / 2 < -iy) warnings.push({ id: 'oled-fit', text: `OLED 模块 ${ol}×${ow} mm 和舵机在前面板下面挤不下` });
-  if (inner < stack + oh + 1) warnings.push({ id: 'oled-height', text: `太矮：OLED 碰到开发板（内腔 ${r1(inner)} mm）` });
-  // 传感器：A 通风口旁（右墙内侧，立柱上）；B 开发板旁（趴在模组屏蔽罩上）
+  if (oy - ow / 2 < -iy) warnings.push({ id: 'oled-fit', text: t("The {l}×{w} mm OLED module and the servo don't both fit under the front panel", { l: ol, w: ow }) });
+  if (inner < stack + oh + 1) warnings.push({ id: 'oled-height', text: t('Too short: the OLED touches the board (cavity {inner} mm)', { inner: r1(inner) }) });
+  // Sensor: A by the vents (right wall, on a post); B by the board (on the module shield)
   const [tl, tw, th] = ss;
   const A: V3 = [ix - 1 - tl / 2, -10, w + 4 + th / 2];
   const Bp: V3 = [B.chip[0], B.chip[1] - 4, B.chip[2] + th / 2];
@@ -251,8 +250,8 @@ function weatherLayout(p: CaseParams, sel: CaseSel): CaseLayout {
     },
     chip: B.chip,
     features: {
-      bottom: [`4 根开发板定位柱（高 ${STANDOFF} mm）`, 'USB-C 开孔（背面，开发板 USB 口下方）', '右侧 6 条通风槽 + 底面 3 个 BME280 通气孔', 'BME280 立柱（通风口旁）'],
-      lid: [`OLED 窗 22 × 11.5 mm`, `表盘轴孔 Ø7 mm（对准舵机轴）`, '导光柱孔 Ø4 mm', '舵机卡槽、OLED 定位柱', '止口（插进底壳 2 mm）'],
+      bottom: [t('4 board standoffs ({h} mm tall)', { h: STANDOFF }), t('USB-C cutout (back, under the board USB port)'), t('6 vent slots on the right + 3 BME280 vent holes in the floor'), t('BME280 post (by the vents)')],
+      lid: [t('OLED window 22 × 11.5 mm'), t('Dial shaft hole Ø7 mm (aligned with the servo shaft)'), t('Light pipe hole Ø4 mm'), t('Servo clips, OLED pegs'), t('Lip (2 mm into the bottom shell)')],
     },
     sizes,
     warnings,
@@ -263,7 +262,7 @@ function weatherLayout(p: CaseParams, sel: CaseSel): CaseLayout {
   };
 }
 
-// ------------------------------------------------------------------ 小黄：Ø60 底座（舵机仓）+ 身体（顶盖）
+// ------------------------------------------------------------------ Spin: Ø60 base (servo bay) + body (lid)
 function spinLayout(p: CaseParams, sel: CaseSel): CaseLayout {
   const R = 30, Hb = p.height, w = p.wall, TOTAL = 110;
   const sizes = [partSize(sel.board), partSize(sel.servo ?? 'sg90'), partSize(sel.lcd ?? 'gc9a01')];
@@ -271,18 +270,18 @@ function spinLayout(p: CaseParams, sel: CaseSel): CaseLayout {
   const warnings: CaseLayout['warnings'] = [];
   const inner = Hb - 2 * w;
   const need = vs[2] - SHAFT_OUT;
-  if (inner < need) warnings.push({ id: 'servo-height', text: `太矮：底座内腔 ${r1(inner)} mm，舵机要 ${r1(need)} mm，会顶住底` });
-  if (vs[0] + 10 > 2 * (R - w) - 2) warnings.push({ id: 'servo-fit', text: `舵机（含耳朵 ${vs[0] + 10} mm）放不进底座 Ø${r1(2 * (R - w))} mm` });
-  // 身体：底座上方，舵盘上面
+  if (inner < need) warnings.push({ id: 'servo-height', text: t('Too short: base cavity {inner} mm, the servo needs {need} mm and will hit the bottom', { inner: r1(inner), need: r1(need) }) });
+  if (vs[0] + 10 > 2 * (R - w) - 2) warnings.push({ id: 'servo-fit', text: t("The servo ({l} mm with ears) doesn't fit the Ø{d} mm base", { l: vs[0] + 10, d: r1(2 * (R - w)) }) });
+  // Body sits above the base, on the horn
   const z0 = Hb + SHAFT_OUT + 1.6;
   const Rb = 27, bodyH = TOTAL - z0;
-  // 身体 = 圆柱 + 压扁的半球顶（高 0.6 Rb）；开发板竖放在中间，顶端要躲开球顶
+  // Body = cylinder + squashed dome (0.6 Rb tall); the vertical board must clear the dome
   const domeH = Rb * 0.6, cylH = bodyH - domeH;
   const [bl, bw] = [bs[0], bs[1]];
   const boardTop = z0 + 3.5 + bl, dz = boardTop - (z0 + cylH);
   const a = Rb - w, c = domeH - w;
   const availR = dz <= 0 ? a : dz >= c ? 0 : a * Math.sqrt(1 - (dz / c) ** 2);
-  if (Math.hypot(bw / 2, PCB / 2 + MODULE_H) > availR - 0.5) warnings.push({ id: 'board-fit', text: `开发板 ${bl}×${bw} mm 竖放顶到身体的球顶了（底座 ${Hb} mm 太高，或换短一点的板）` });
+  if (Math.hypot(bw / 2, PCB / 2 + MODULE_H) > availR - 0.5) warnings.push({ id: 'board-fit', text: t('Board {l}×{w} mm standing up hits the body dome (base {hb} mm is too tall, or use a shorter board)', { l: bl, w: bw, hb: Hb }) });
   const Bd = boardPrims(0, 0, z0 + 3.5, bl, bw, true);
   const faceZ = z0 + bodyH * 0.58;
   const lcdPose = pose([cyl([0, -(Rb - w - ls[2] / 2 - 1), faceZ], ls[0], ls[2], '#1A1A19', { axis: 'y' }), cyl([0, -(Rb - w - 0.4), faceZ], 32.4, 0.6, '#06070A', { axis: 'y' })]);
@@ -303,8 +302,8 @@ function spinLayout(p: CaseParams, sel: CaseSel): CaseLayout {
     },
     chip: Bd.chip,
     features: {
-      bottom: ['舵机仓（顶板开方孔，耳朵搭在顶板上）', 'USB-C / 电源线开孔（背面）'],
-      lid: [`圆屏窗 Ø34 mm（${ls[0]} mm 模块从里面卡住）`, '舵盘座 + 中心排线孔 Ø6 mm', '底部敞口，套在舵盘上'],
+      bottom: [t('Servo bay (square hole in the top plate, ears rest on it)'), t('USB-C / power cable cutout (back)')],
+      lid: [t('Round LCD window Ø34 mm ({d} mm module clips in from inside)', { d: ls[0] }), t('Horn seat + centre cable hole Ø6 mm'), t('Open bottom, fits over the horn')],
     },
     sizes,
     warnings,
@@ -315,7 +314,7 @@ function spinLayout(p: CaseParams, sel: CaseSel): CaseLayout {
   };
 }
 
-// ------------------------------------------------------------------ 透镜小人：Ø50 底座 + 屏幕外框（顶盖，两档卡槽）
+// ------------------------------------------------------------------ Lens: Ø50 base + screen bezel (lid, two click positions)
 function lensLayout(p: CaseParams, sel: CaseSel): CaseLayout {
   const R = 25, Hb = p.height, w = p.wall;
   const sizes = [partSize(sel.board), partSize(sel.lcd ?? 'gc9a01')];
@@ -329,13 +328,13 @@ function lensLayout(p: CaseParams, sel: CaseSel): CaseLayout {
   let need = stack;
   let vertical = false;
   if (!flat) {
-    // 平放放不下：内腔够高就竖放
+    // Doesn't fit flat: stand it up if the cavity is tall enough
     if (inner - 1 >= bl + 3 && bw <= 2 * (R - w) - 4) vertical = true;
-    else warnings.push({ id: 'board-fit', text: `开发板 ${bl}×${bw} mm 平放进不了底座内径 Ø${r1(2 * (R - w))} mm；竖放要底座高 ≥ ${r1(bl + 3 + 1 + w + 4)} mm。可以换小板（XIAO S3 21×17.8 mm）` });
+    else warnings.push({ id: 'board-fit', text: t("Board {l}×{w} mm doesn't fit flat in the Ø{d} mm base; standing up needs a base height ≥ {h} mm. Or use a smaller board (XIAO S3 21×17.8 mm).", { l: bl, w: bw, d: r1(2 * (R - w)), h: r1(bl + 3 + 1 + w + 4) }) });
     need = bl + 4;
   }
-  if (flat && inner < stack) warnings.push({ id: 'board-height', text: `太矮：屏幕下面只有 ${r1(inner)} mm，开发板要 ${r1(stack)} mm` });
-  if (ls[0] > 2 * (R - w)) warnings.push({ id: 'lcd-fit', text: `圆屏模块 Ø${ls[0]} mm 比底座内径大` });
+  if (flat && inner < stack) warnings.push({ id: 'board-height', text: t('Too short: only {inner} mm under the screen, the board needs {need} mm', { inner: r1(inner), need: r1(stack) }) });
+  if (ls[0] > 2 * (R - w)) warnings.push({ id: 'lcd-fit', text: t('The Ø{d} mm round LCD module is wider than the base inside', { d: ls[0] }) });
   const Bd = vertical ? boardPrims(0, 6, w + 1, bl, bw, true) : boardPrims(0, 0, w + STANDOFF, bl, bw);
   const bez = 12;
   const domeAt = (lift: number): Pose => pose([cyl([0, 0, Hb + 1.2 + lift + 0.75], 40, 1.5, '#BFD3E6'), { shape: 'cap', at: [0, 0, Hb + 1.2 + lift + 1.5 + 3.5], size: [40, 40, 7], color: '#BFD3E6' }]);
@@ -355,8 +354,8 @@ function lensLayout(p: CaseParams, sel: CaseSel): CaseLayout {
     },
     chip: Bd.chip,
     features: {
-      bottom: [vertical ? '开发板竖放卡槽' : '4 根开发板定位柱', `圆屏台阶（离顶 4 mm）`, 'USB-C 开孔（背面）'],
-      lid: ['屏幕窗 Ø34 mm', '两档卡槽：低档贴屏 / 高档离屏 8 mm（转 45° 换档）'],
+      bottom: [vertical ? t('Vertical board slots') : t('4 board standoffs'), t('Round LCD ledge (4 mm below the top)'), t('USB-C cutout (back)')],
+      lid: [t('Screen window Ø34 mm'), t('Two click positions: low on the screen / high 8 mm above (turn 45° to switch)')],
     },
     sizes,
     warnings,
@@ -367,8 +366,8 @@ function lensLayout(p: CaseParams, sel: CaseSel): CaseLayout {
   };
 }
 
-// ------------------------------------------------------------------ USB 小键盘：方壳 44 × 80，定位板（顶盖）上一排 4 个键
-/** 键帽边长（mm）与键距（标准 19.05 mm 键距） */
+// ------------------------------------------------------------------ USB keypad: 44 × 80 box, a row of 4 keys on the plate (lid)
+/** Keycap size (mm) and pitch (standard 19.05 mm) */
 const KEYCAP = 14;
 const KEY_PITCH = 19.05;
 function usbkeyLayout(p: CaseParams, sel: CaseSel): CaseLayout {
@@ -379,22 +378,22 @@ function usbkeyLayout(p: CaseParams, sel: CaseSel): CaseLayout {
   const warnings: CaseLayout['warnings'] = [];
   const lidZ = H - w;
   const [bl, bw] = [bs[0], bs[1]];
-  // 开发板沿长边平放、贴左墙，USB 口朝背面（-y）的开孔；装反（R）时 USB 口顶着前墙
+  // Board flat along the long side against the left wall, USB to the back (-y) cutout; reversed (R) it faces the front wall
   const bx = -ix + 0.5 + bw / 2;
   const by = -iy + 0.5 + bl / 2;
-  if (bl > 2 * iy - 1 || bw > 2 * ix - 1) warnings.push({ id: 'board-fit', text: `开发板 ${bl}×${bw} mm 放不进内腔 ${r1(2 * ix)}×${r1(2 * iy)} mm（壁厚 ${w} mm）` });
+  if (bl > 2 * iy - 1 || bw > 2 * ix - 1) warnings.push({ id: 'board-fit', text: t("Board {l}×{w} mm doesn't fit the {il}×{iw} mm cavity (wall {wall} mm)", { l: bl, w: bw, il: r1(2 * ix), iw: r1(2 * iy), wall: w }) });
   const B = boardPrims(bx, by, w + STANDOFF, bl, bw);
   const flip = (pr: Prim[]): Prim[] => pr.map((x) => ({ ...x, at: [x.at[0], 2 * by - x.at[1], x.at[2]] as V3 }));
-  // 按键：一排 4 个，挂在定位板下面（开关本体 3.4 mm），键帽露在板上
+  // Keys: a row of 4 hanging under the plate (switch body 3.4 mm), caps above it
   const kx = ix - KEYCAP / 2 - 1.5;
   const ky = [-1.5, -0.5, 0.5, 1.5].map((k) => k * KEY_PITCH);
   const swH = ks[2];
   const inner = H - 2 * w;
   const stack = STANDOFF + PCB + MODULE_H + 1;
-  // 键在开发板旁边（x 方向错开）就只要开关本体高；叠在板子上方要加上板子的高度
+  // Keys beside the board need only the switch height; keys above the board add the board stack
   const overBoard = kx - KEYCAP / 2 < bx + bw / 2;
   const need = overBoard ? stack + swH : swH + 1;
-  if (inner < need) warnings.push({ id: 'key-height', text: `太矮：内腔 ${r1(inner)} mm，按键 ${swH} mm${overBoard ? ' 叠在开发板上方' : ''} 要 ${r1(need)} mm` });
+  if (inner < need) warnings.push({ id: 'key-height', text: overBoard ? t('Too short: cavity {inner} mm, {sw} mm keys above the board need {need} mm', { inner: r1(inner), sw: swH, need: r1(need) }) : t('Too short: cavity {inner} mm, {sw} mm keys need {need} mm', { inner: r1(inner), sw: swH, need: r1(need) }) });
   const sw = (y: number): Prim => box([kx, y, lidZ - swH / 2], [6, 6, swH], '#1B1D21');
   const capPrim = (y: number, i: number): Prim => box([kx, y, H + 3], [KEYCAP, KEYCAP, 6], i === 3 ? '#0D99FF' : '#F2EFE8');
   return {
@@ -412,8 +411,8 @@ function usbkeyLayout(p: CaseParams, sel: CaseSel): CaseLayout {
     },
     chip: B.chip,
     features: {
-      bottom: [`4 根开发板定位柱（高 ${STANDOFF} mm）`, 'USB-C 开孔（背面，对准开发板 USB / OTG 口）'],
-      lid: [`4 个键孔 ${KEYCAP + 0.4} × ${KEYCAP + 0.4} mm（键距 ${KEY_PITCH} mm）`, '止口（插进底壳 2 mm）'],
+      bottom: [t('4 board standoffs ({h} mm tall)', { h: STANDOFF }), t('USB-C cutout (back, aligned with the board USB / OTG port)')],
+      lid: [t('4 key holes {s} × {s} mm (pitch {p} mm)', { s: KEYCAP + 0.4, p: KEY_PITCH }), t('Lip (2 mm into the bottom shell)')],
     },
     sizes,
     warnings,
@@ -424,7 +423,7 @@ function usbkeyLayout(p: CaseParams, sel: CaseSel): CaseLayout {
   };
 }
 
-// ================================================================== 网格（Manifold）
+// ================================================================== Meshes (Manifold)
 export interface MeshData {
   pos: Float32Array;
   idx: Uint32Array;
@@ -432,7 +431,7 @@ export interface MeshData {
 export interface CaseMeshes {
   bottom: MeshData;
   lid: MeshData;
-  /** 底壳、顶盖的体积（mm³），打印报价 / 测试用 */
+  /** Bottom / lid volume (mm³), for print quotes and tests */
   volume: { bottom: number; lid: number };
 }
 
@@ -445,7 +444,7 @@ function toData(m: Manifold): MeshData {
   return { pos, idx: new Uint32Array(mesh.triVerts) };
 }
 
-/** 布尔运算：用完的中间体都要 delete（wasm 不进 GC） */
+/** Booleans: every intermediate must be deleted (wasm objects aren't GC'd) */
 export function buildCaseMeshes(M: ManifoldToplevel, L: CaseLayout): CaseMeshes {
   const trash: { delete(): void }[] = [];
   const k = <T extends { delete(): void }>(x: T) => (trash.push(x), x);
@@ -475,13 +474,13 @@ export function buildCaseMeshes(M: ManifoldToplevel, L: CaseLayout): CaseMeshes 
         holes.push(cylZ(2, STANDOFF + 1, [px, py, w + STANDOFF / 2 + 0.5], 16));
       }
       for (const dx of [-tl / 2 + 2, tl / 2 - 2]) posts.push(cylZ(2.6, 4, [A[0] + dx, A[1], w + 2], 16));
-      // 通风槽（右墙）+ 底面通气孔（BME280 下面）
+      // Vent slots (right wall) + floor vent holes (under the BME280)
       for (let i = 0; i < 6; i++) holes.push(cube([w * 3, 1.6, Math.max(4, lidZ - w - 8)], [W / 2, A[1] - 6 + i * 2.4, w + (lidZ - w) / 2]));
       for (let i = -1; i <= 1; i++) holes.push(cylZ(2, w * 3, [A[0] + i * 3.5, A[1] + tw / 2 + 2, w / 2], 16));
-      // USB-C：背面（底面）开孔，开发板 USB 口下方
+      // USB-C cutout in the back (floor), under the board USB port
       holes.push(cube([11, 5, w * 3], [bx, by - bl / 2 + 3.5, w / 2]));
       bottom = sub(union([k(outer.subtract(cavity)), ...posts]), holes);
-      // 前面板：板 + 止口 + 舵机卡槽 + OLED 定位柱，减 OLED 窗 / 轴孔 / 导光柱孔
+      // Front panel: plate + lip + servo clips + OLED pegs, minus OLED window / shaft hole / light pipe hole
       const plate = k(k(rrect(W, D, r).extrude(w)).translate([0, 0, lidZ]));
       const lipO = rrect(W - 2 * w - 0.6, D - 2 * w - 0.6, Math.max(0.5, r - w - 0.3));
       const lipI = rrect(W - 2 * w - 3, D - 2 * w - 3, Math.max(0.3, r - w - 1.5));
@@ -504,7 +503,7 @@ export function buildCaseMeshes(M: ManifoldToplevel, L: CaseLayout): CaseMeshes 
         posts.push(cylZ(5, STANDOFF, [px, py, w + STANDOFF / 2], 24));
         holes.push(cylZ(2, STANDOFF + 1, [px, py, w + STANDOFF / 2 + 0.5], 16));
       }
-      // USB-C：背面墙上开孔，对准开发板 USB 口
+      // USB-C cutout in the back wall, aligned with the board USB port
       holes.push(cube([11, w * 3, 6], [bx, -D / 2 + w / 2, w + STANDOFF + PCB + 1.6]));
       bottom = sub(union([k(outer.subtract(cavity)), ...posts]), holes);
       const plate = k(k(rrect(W, D, r).extrude(w)).translate([0, 0, lidZ]));
@@ -518,7 +517,7 @@ export function buildCaseMeshes(M: ManifoldToplevel, L: CaseLayout): CaseMeshes 
       const inner = cylZ(2 * (R - w), Hb - 2 * w, [0, 0, Hb / 2], 96);
       const servoCy = -(vs[0] / 2 - vs[1] / 2);
       bottom = sub(outer, [inner, cube([vs[1] + 0.6, vs[0] + 0.6, w * 3], [0, servoCy, Hb - w / 2]), cube([12, w * 3, 6], [0, R - w / 2, w + 5]), cylZ(6, w * 3, [0, 12, Hb - w / 2], 24)]);
-      // 身体：圆柱 + 压扁的半球顶，壁厚 w，底敞口（内胆往下多伸 0.5 mm 把底面打穿）
+      // Body: cylinder + squashed dome, wall w, open bottom (inner extends 0.5 mm down to cut through)
       const shellOf = (rr: number, hz: number, dz: number) => union([cylZ(2 * rr, cylH, [0, 0, z0 + cylH / 2 + dz], 96), k(k(k(Mf.sphere(rr, 96)).scale([1, 1, hz / rr])).translate([0, 0, z0 + cylH + dz]))]);
       const outerB = shellOf(Rb, domeH, 0);
       const innerB = shellOf(Rb - w, domeH - w, -0.5);
@@ -532,11 +531,11 @@ export function buildCaseMeshes(M: ManifoldToplevel, L: CaseLayout): CaseMeshes 
       const step = sub(cylZ(2 * (R - w), 2, [0, 0, ledge - 1], 96), [cylZ(2 * (R - w) - 4, 3, [0, 0, ledge - 1], 96)]);
       const bl = g;
       const adds: Manifold[] = [step];
-      // 平放放得下才打定位柱；竖放打两条卡槽；都放不下（有警告）就不打，免得柱子戳到壳外
+      // Standoffs only if it fits flat, slots if vertical, nothing if neither (posts would poke out of the shell)
       if (vertical) for (const dx of [-1, 1]) adds.push(cube([2, 6, 6], [dx * (bl.bw / 2 + 1), 6, w + 3]));
       else if (Math.hypot(bl.bl / 2, bl.bw / 2) <= R - w - 0.5) for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) adds.push(cylZ(4.5, STANDOFF, [dx * (bl.bw / 2 - 2.5), dy * (bl.bl / 2 - 2.5), w + STANDOFF / 2], 20));
       bottom = sub(union([k(outer.subtract(inner)), ...adds]), [cube([12, w * 3, 6], [0, R - w / 2, w + 6])]);
-      // 外框：管 + 底沿（压住屏）+ 两档卡扣（低档在底沿上，高档 8 mm 处，与低档错开 45°）
+      // Bezel: tube + rim (holds the screen) + two click tabs (low on the rim, high at 8 mm, offset 45°)
       const tube = sub(cylZ(2 * R, bez, [0, 0, Hb + bez / 2], 96), [cylZ(41.2, bez + 1, [0, 0, Hb + bez / 2], 96)]);
       const rim = sub(cylZ(41.4, 1.2, [0, 0, Hb + 0.6], 96), [cylZ(34, 2, [0, 0, Hb + 0.6], 64)]);
       const tabs: Manifold[] = [];
@@ -552,20 +551,20 @@ export function buildCaseMeshes(M: ManifoldToplevel, L: CaseLayout): CaseMeshes 
       try {
         t.delete();
       } catch {
-        /* 已经释放过 */
+        /* already freed */
       }
     }
   }
 }
 
-/** 导出用的摆放：底壳原样（外底面贴床），顶盖翻过来贴床、挪到旁边 */
+/** Print layout: bottom as is (floor on the bed), lid flipped onto the bed and moved aside */
 export function printLayout(L: CaseLayout, m: CaseMeshes): { name: string; mesh: MeshData }[] {
   const flip = (d: MeshData, dx: number): MeshData => {
     let zmax = -Infinity;
     for (let i = 2; i < d.pos.length; i += 3) zmax = Math.max(zmax, d.pos[i]);
     const pos = new Float32Array(d.pos.length);
     for (let i = 0; i < d.pos.length; i += 3) {
-      // 绕 x 轴转 180°：(x, y, z) → (x, -y, zmax - z)，绕向不变
+      // 180° about x: (x, y, z) → (x, -y, zmax - z), winding unchanged
       pos[i] = d.pos[i] + dx;
       pos[i + 1] = -d.pos[i + 1];
       pos[i + 2] = zmax - d.pos[i + 2];
@@ -573,9 +572,9 @@ export function printLayout(L: CaseLayout, m: CaseMeshes): { name: string; mesh:
     return { pos, idx: d.idx };
   };
   const gap = L.outer[0] / 2 + L.lidSize[0] / 2 + 10;
-  const names: Record<string, [string, string]> = { weather: ['后壳', '前面板'], spin: ['底座', '身体'], lens: ['底座', '屏幕外框'], usbkey: ['底壳', '定位板'] };
-  const [a, b] = names[L.template] ?? ['底壳', '顶盖'];
-  // 小黄身体是半球顶，倒过来打会悬空：正着放（敞口贴床），只平移
+  const names: Record<string, [string, string]> = { weather: [t('Back shell'), t('Front panel')], spin: [t('Base'), t('Body')], lens: [t('Base'), t('Screen bezel')], usbkey: [t('Bottom shell'), t('Key plate')] };
+  const [a, b] = names[L.template] ?? [t('Bottom shell'), t('Lid')];
+  // The spin body has a dome that would overhang upside down: print it upright (open end on the bed)
   const lid = L.template === 'spin' ? shiftToBed(m.lid, gap) : flip(m.lid, gap);
   return [
     { name: a, mesh: m.bottom },

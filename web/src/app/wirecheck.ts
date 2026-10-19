@@ -1,23 +1,23 @@
-// 实验台接线规则检查（P0-12）：看台面上实际的线（场景推出来的 + 改接线），找出会烧东西 / 不工作的接法。
-// 采购规则（catalog/rules.ts）看的是清单 + 模版接线；这里看的是实验台上的每一根线，两者共用电压约定和来源。
-// 纯函数：同样的接线永远给同样的结论。
+// Bench wiring rules (P0-12): check every actual bench wire (scene-derived + rewired) for burn / no-work faults.
+// Shop rules (catalog/rules.ts) check the list + template wiring; both share voltage conventions and sources. Pure function.
 import type { PartSpec } from '../board3d';
+import { t } from '../i18n/index.ts';
 import { RULE_BY_ID, netVolt, type Confidence } from '../catalog/rules.ts';
 import { i2cBuses, partId, partInfo, type BenchWire } from './wiring.ts';
 import { i2cLoad, i2cText } from './harness.ts';
 
-/** 错接的网表（P2-14）：交给 elec 求解器算电流（faultsolve.ts → wasm tb_fault），kind 与 tb_fault 一致 */
+/** Fault netlist (P2-14) for the elec solver (faultsolve.ts → wasm tb_fault); kind matches tb_fault */
 export interface FaultNet {
-  /** 1 零件输出对 GPIO；2 两个零件对打；3 LED 串电阻（Ω）；4 电源轨接地；5 5 V 经电阻进 GPIO（钳位） */
+  /** 1 part output vs GPIO; 2 two parts fighting; 3 LED + series R (Ω); 4 rail to GND; 5 5 V via R into GPIO (clamp) */
   kind: 1 | 2 | 3 | 4 | 5;
-  /** 每组参数解一次，取电流最大的（最坏情况）；每组与 tb_fault 的 a, b, c, d 对应 */
+  /** Solved once per case, worst (largest current) wins; args map to tb_fault a, b, c, d */
   cases: { args: number[]; what: string }[];
 }
 
-/** 求解器给的估算（mA 与后果），到了才有 */
+/** Solver estimate (mA and consequence), set once it arrives */
 export interface FaultEstimate {
   mA: number;
-  /** 最坏的是哪一种情况（电位器转到头……） */
+  /** Which case was worst (pot turned fully…) */
   what: string;
   text: string;
 }
@@ -26,9 +26,9 @@ export interface WireFault {
   rule: 'W1' | 'W2' | 'W3' | 'W4' | 'W5' | 'W6' | 'W7';
   level: 'block' | 'warn';
   title: string;
-  /** 标红的线（3D 台面里的导线 id） */
+  /** Wires to highlight (3D bench wire ids) */
   wires: string[];
-  /** 标在线上的短句 */
+  /** Short label drawn on the wire */
   short: string;
   detail: string;
   source: string;
@@ -38,22 +38,23 @@ export interface WireFault {
 }
 
 export const WIRE_RULES: Record<WireFault['rule'], { title: string; source: string; confidence: Confidence }> = {
-  W1: { title: '输出接输出', source: 'ESP32-C3 / S3 数据手册 GPIO 驱动能力；两个推挽输出对接会短路', confidence: '数据手册' },
-  W2: { title: '5 V 进 GPIO', source: RULE_BY_ID.R17.source, confidence: RULE_BY_ID.R17.confidence },
-  W3: { title: 'LED 没有限流电阻', source: '5 mm LED 规格书（20 mA 额定）；ESP32 数据手册 GPIO 驱动电流', confidence: '数据手册' },
-  W4: { title: '地线没接', source: '电路常识：器件和开发板不共地，信号没有参考电平', confidence: '经验规则' },
-  W5: { title: 'I2C 地址冲突', source: RULE_BY_ID.R15.source, confidence: RULE_BY_ID.R15.confidence },
-  W7: { title: '电源短路', source: '电路常识：电源轨直接接地；电流由 elec 求解（USB 口 500 mA 限流、板载 LDO，参数见 DECISIONS「电气模型」）', confidence: '估算' },
-  W6: { title: 'I2C 线太长', source: 'I2C 规范 UM10204 §7.1：t_r = 0.8473·R·C，400 kHz 上限 300 ns；线电容 1 pF/cm、模块 10 kΩ 上拉为估算', confidence: '必须上真机' },
+  // confidence values are the Confidence enum of catalog/rules.ts (machine values, rendered via confOfRule)
+  W1: { title: t('Output wired to output'), source: t('ESP32-C3 / S3 datasheet, GPIO drive strength; two push-pull outputs tied together short out'), confidence: '数据手册' }, // lint: allow-cjk
+  W2: { title: t('5 V into GPIO'), source: t(RULE_BY_ID.R17.source), confidence: RULE_BY_ID.R17.confidence },
+  W3: { title: t('LED without current-limiting resistor'), source: t('5 mm LED spec (20 mA rated); ESP32 datasheet GPIO drive current'), confidence: '数据手册' }, // lint: allow-cjk
+  W4: { title: t('Ground not connected'), source: t('Circuit basics: without a common ground the signal has no reference level'), confidence: '经验规则' }, // lint: allow-cjk
+  W5: { title: t('I2C address conflict'), source: t(RULE_BY_ID.R15.source), confidence: RULE_BY_ID.R15.confidence },
+  W7: { title: t('Power short'), source: t('Circuit basics: a rail tied straight to ground; current solved by elec (USB port 500 mA limit, onboard LDO; parameters in DECISIONS, electrical model)'), confidence: '估算' }, // lint: allow-cjk
+  W6: { title: t('I2C wire too long'), source: t('I2C spec UM10204 §7.1: t_r = 0.8473·R·C, 300 ns max at 400 kHz; 1 pF/cm wire capacitance and 10 kΩ module pull-ups are estimates'), confidence: '必须上真机' }, // lint: allow-cjk
 };
 
-/** 零件那一端的输出能推多大电流（P2-14 求解用，估算）：hi = 推高时 [电压, 内阻 Ω]，lo = 拉低时。
- *  电位器 / 触点按最坏情况（滑片转到头、触点闭合），接触电阻 1 Ω；CMOS 推挽按与 ESP32 默认驱动档同量级 */
+/** Part-side output drive for the P2-14 solver (estimate): hi / lo = [volts, source Ω]. Pots / contacts use the worst
+ *  case (wiper at the end, contact closed, 1 Ω); CMOS push-pull is assumed similar to the ESP32 default drive */
 export function driverModel(type: string | undefined, pin: string, divider?: boolean): { hi?: [number, number]; lo?: [number, number]; what: string } {
-  if (type === 'pot') return { hi: [3.3, 1], lo: [0, 1], what: '电位器滑片转到头（≈ 直接接 3V3 / GND）' };
-  if (type === 'encoder') return { hi: [3.3, 10_000], lo: [0, 1], what: `编码器 ${pin} 触点闭合接地` };
-  if (type === 'hcsr04') return divider === false ? { hi: [5, 50], lo: [0, 50], what: 'HC-SR04 Echo 直连（5 V 推挽，约 50 Ω）' } : { hi: [3.33, 667], lo: [0, 667], what: 'HC-SR04 Echo 经 1k / 2k 分压' };
-  return { hi: [3.3, 33], lo: [0, 35.36], what: `${pin} 推挽输出` };
+  if (type === 'pot') return { hi: [3.3, 1], lo: [0, 1], what: t('Pot wiper at the end (≈ tied straight to 3V3 / GND)') };
+  if (type === 'encoder') return { hi: [3.3, 10_000], lo: [0, 1], what: t('Encoder {pin} contact closed to ground', { pin }) };
+  if (type === 'hcsr04') return divider === false ? { hi: [5, 50], lo: [0, 50], what: t('HC-SR04 Echo direct (5 V push-pull, about 50 Ω)') } : { hi: [3.33, 667], lo: [0, 667], what: t('HC-SR04 Echo via 1k / 2k divider') };
+  return { hi: [3.3, 33], lo: [0, 35.36], what: t('{pin} push-pull output', { pin }) };
 }
 
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
@@ -69,70 +70,79 @@ export function checkWiring(parts: PartSpec[], wires: BenchWire[]): WireFault[] 
   const push = (rule: WireFault['rule'], level: WireFault['level'], ws: string[], short: string, detail: string, net?: FaultNet) =>
     out.push({ rule, level, title: WIRE_RULES[rule].title, wires: ws, short, detail, source: WIRE_RULES[rule].source, confidence: WIRE_RULES[rule].confidence, ...(net ? { net } : {}) });
 
-  // W1：同一个 GPIO 上，零件自己往外推电平（电位器滑片等）+ 这个 GPIO 还要驱动别的负载（或两个零件都在推）
+  // W1: a part drives the GPIO net (pot wiper etc.) while the GPIO also drives a load, or two parts drive it
   const byNet = new Map<string, BenchWire[]>();
   for (const w of live) if (/^GPIO\d+$/.test(w.a)) byNet.set(w.a, [...(byNet.get(w.a) ?? []), w]);
   for (const [net, ws] of byNet) {
     const drivers = ws.filter((w) => w.pinRole === 'drive');
     const loads = ws.filter((w) => w.pinRole === 'load');
-    // 求解：零件输出对 GPIO（每个推高 / 拉低的可能都算），两个零件对打时一个推高一个拉低
+    // Solver: part output vs GPIO (both polarities), or one part high vs the other low
     const models = drivers.map((w) => driverModel(typeOf(w.part), w.pin, w.divider));
     const cases: FaultNet['cases'] = [];
     let fnet: FaultNet;
     if (loads.length) {
-      for (const m of models) for (const d of [m.hi, m.lo]) if (d) cases.push({ args: d, what: `${m.what}，GPIO 输出相反电平` });
+      for (const m of models) for (const d of [m.hi, m.lo]) if (d) cases.push({ args: d, what: t('{what}, GPIO drives the opposite level', { what: m.what }) });
       fnet = { kind: 1, cases };
     } else {
-      for (const a of models) for (const b of models) if (a !== b && a.hi && b.lo) cases.push({ args: [...a.hi, ...b.lo], what: `${a.what} 推高、${b.what} 拉低` });
+      for (const a of models) for (const b of models) if (a !== b && a.hi && b.lo) cases.push({ args: [...a.hi, ...b.lo], what: t('{a} pulls high, {b} pulls low', { a: a.what, b: b.what }) });
       fnet = { kind: 2, cases };
     }
     if (drivers.length >= 2 || (drivers.length && loads.length))
-      push('W1', 'block', [...drivers, ...loads].map((w) => w.id), `${net} 两边都在输出`, `${net} 上 ${drivers.map((w) => name(w.part)).join('、')} 都在输出电平，${loads.length ? `固件又要用 ${net} 驱动 ${loads.map((w) => name(w.part)).join('、')}` : '两个输出对接'}：一个拉高一个拉低时等于短路，GPIO 可能烧掉。分开到两个 GPIO。`, fnet);
+      push(
+        'W1',
+        'block',
+        [...drivers, ...loads].map((w) => w.id),
+        t('{net}: both sides are outputs', { net }),
+        loads.length
+          ? t('On {net}, {drivers} drive a level while the firmware also drives {loads} from {net}: one high and one low is a short and can burn the GPIO. Split them onto two GPIOs.', { net, drivers: drivers.map((w) => name(w.part)).join(', '), loads: loads.map((w) => name(w.part)).join(', ') })
+          : t('On {net}, {drivers} all drive a level, two outputs tied together: one high and one low is a short and can burn the GPIO. Split them onto two GPIOs.', { net, drivers: drivers.map((w) => name(w.part)).join(', ') }),
+        fnet,
+      );
   }
 
-  // W2：模块供电接到 5 V，它的上拉 / 输出也跟着到 5 V，再进 GPIO
+  // W2: module powered from 5 V, so its pull-ups / outputs reach 5 V and feed a GPIO
   for (const pid of new Set(live.map((w) => w.part))) {
     const own = live.filter((w) => w.part === pid);
     const vcc = own.find((w) => w.pinRole === 'power');
-    // 经分压电阻降到 3.3 V 的输出不算（HC-SR04 Echo 的 1 kΩ / 2 kΩ）
+    // Outputs divided down to 3.3 V don't count (HC-SR04 Echo 1 kΩ / 2 kΩ)
     const sig = own.filter((w) => (w.pinRole === 'bus' || w.pinRole === 'drive') && /^GPIO\d+$/.test(w.a) && w.divider !== true);
     const v = netVolt(vcc?.a ?? null);
-    // 求解：5 V 经模块上拉（I2C 线 10 kΩ，估算，与 W6 同）或推挽输出（同 driverModel 推高内阻）进引脚钳位二极管
+    // Solver: 5 V via module pull-up (I2C 10 kΩ estimate, as W6) or push-pull (driverModel high Ω) into the clamp diode
     const clamp: FaultNet = {
       kind: 5,
-      cases: sig.map((w) => (w.pinRole === 'bus' ? { args: [10_000], what: `${w.pin} 经模块 10 kΩ 上拉到 5 V` } : { args: [driverModel(typeOf(pid), w.pin, w.divider).hi?.[1] ?? 33], what: `${w.pin} 输出 5 V 高电平` })),
+      cases: sig.map((w) => (w.pinRole === 'bus' ? { args: [10_000], what: t('{pin} pulled up to 5 V through the module 10 kΩ', { pin: w.pin }) } : { args: [driverModel(typeOf(pid), w.pin, w.divider).hi?.[1] ?? 33], what: t('{pin} outputs a 5 V high', { pin: w.pin }) })),
     };
-    if (vcc && v !== null && v > 3.6 && sig.length) push('W2', 'block', [vcc.id, ...sig.map((w) => w.id)], '5 V 进 GPIO', `${name(pid)} 的 ${vcc.pin} 接在 ${vcc.a}（${v} V），它的 ${sig.map((w) => w.pin).join('、')} 上拉或输出也是 ${v} V，直接进 ${sig.map((w) => w.a).join('、')}；ESP32 引脚不耐 5 V。改接 3V3，或加电平转换。`, clamp);
+    if (vcc && v !== null && v > 3.6 && sig.length) push('W2', 'block', [vcc.id, ...sig.map((w) => w.id)], t('5 V into GPIO'), t("{part} {pin} is on {net} ({v} V), so its {sigs} pull-ups or outputs are also {v} V and go straight into {gpios}; ESP32 pins aren't 5 V tolerant. Move it to 3V3 or add a level shifter.", { part: name(pid), pin: vcc.pin, net: vcc.a, v, sigs: sig.map((w) => w.pin).join(', '), gpios: sig.map((w) => w.a).join(', ') }), clamp);
   }
-  // 信号线直接插在 5 V 上（GPIO 一端改接到了 5V）
+  // Signal wire plugged straight into 5 V (GPIO end moved to 5V)
   for (const w of live) {
     if (w.pinRole === 'power' || w.pinRole === 'gnd') continue;
     const v = netVolt(w.a);
-    if (v !== null && v > 3.6 && w.from && /^GPIO\d+$/.test(w.from)) push('W2', 'block', [w.id], '5 V 进 GPIO', `${name(w.part)} 的 ${w.pin} 改接到了 ${w.a}，原来是 ${w.from}。`);
+    if (v !== null && v > 3.6 && w.from && /^GPIO\d+$/.test(w.from)) push('W2', 'block', [w.id], t('5 V into GPIO'), t('{part} {pin} was moved to {net}; it was on {from}.', { part: name(w.part), pin: w.pin, net: w.a, from: w.from }));
   }
 
-  // W3：LED 直接接 GPIO，没有串电阻
-  for (const w of live) if (w.ohm === 0) push('W3', 'block', [w.id], 'LED 没有限流电阻', `${name(w.part)} 直接接在 ${w.a} 上：3.3 V 减去 LED 压降，剩下约 1.2 V 全压在 GPIO 内阻上，电流远超 20 mA（估算），LED 和引脚都可能坏。串一个 220 Ω–1 kΩ 电阻。`, { kind: 3, cases: [{ args: [0], what: `${w.a} 输出高电平直接点红色 LED` }] });
+  // W3: LED straight on a GPIO with no series resistor
+  for (const w of live) if (w.ohm === 0) push('W3', 'block', [w.id], t('LED without current-limiting resistor'), t('{part} is wired straight to {net}: 3.3 V minus the LED drop leaves about 1.2 V across the GPIO driver, far above 20 mA (estimate); the LED and pin may both fail. Add a 220 Ω–1 kΩ resistor.', { part: name(w.part), net: w.a }), { kind: 3, cases: [{ args: [0], what: t('{net} drives a red LED high with no resistor', { net: w.a }) }] });
 
-  // W7：电源轨直接接地（跳线把 3V3 / 5V / 外接 5 V 插到 GND 上）
+  // W7: rail tied to ground (jumper from 3V3 / 5V / external 5 V to GND)
   const RAIL: Record<string, number> = { '3V3': 0, '5V': 1, EXT5V: 2 };
   for (const w of live) {
     if (w.part !== 'jumper') continue;
     const [r, g] = w.a === 'GND' ? [w.b, w.a] : [w.a, w.b];
     if (g !== 'GND' || RAIL[r] === undefined) continue;
-    push('W7', 'block', [w.id], `${r} 短路到 GND`, `一根跳线把 ${r} 直接插到了 GND：电源被短路，电流只受电源自己的限流和导线电阻限制，板子会掉电复位、线和稳压器发烫。拔掉这根线。`, { kind: 4, cases: [{ args: [RAIL[r]], what: `${r} 经跳线（约 0.05 Ω）接地` }] });
+    push('W7', 'block', [w.id], t('{rail} shorted to GND', { rail: r }), t('A jumper ties {rail} straight to GND: the supply is shorted and current is limited only by the source and wire resistance; the board browns out and the wire and regulator get hot. Remove this wire.', { rail: r }), { kind: 4, cases: [{ args: [RAIL[r]], what: t('{rail} to ground via a jumper (about 0.05 Ω)', { rail: r }) }] });
   }
 
-  // W4：零件没有接地（地线被拔了）
+  // W4: part has no ground (ground wire pulled)
   for (const pid of new Set(wires.map((w) => w.part))) {
     const own = wires.filter((w) => w.part === pid);
     if (!own.some((w) => w.pinRole === 'gnd')) continue;
     if (own.some((w) => w.pinRole === 'gnd' && !w.missing && w.a === 'GND')) continue;
     const g = own.filter((w) => w.pinRole === 'gnd');
-    push('W4', 'block', g.map((w) => w.id), '地线没接', `${name(pid)} 的 GND 没接到开发板 GND：没有共同的参考电平，读数乱跳或根本不工作。把地线插好。`);
+    push('W4', 'block', g.map((w) => w.id), t('Ground not connected'), t("{part} GND isn't connected to the board GND: with no common reference, readings jump around or nothing works. Plug the ground wire back in.", { part: name(pid) }));
   }
 
-  // W5：同一条 I2C 总线上两个器件地址相同
+  // W5: two devices with the same address on one I2C bus
   const buses = new Map<string, { pid: string; addr: number }[]>();
   for (const p of parts) if (p.type === 'oled' || p.type === 'bme280' || p.type === 'mpu6050' || p.type === 'qmi8658' || p.type === 'cst816s') {
     const k = `${p.sda}/${p.scl}`;
@@ -144,19 +154,19 @@ export function checkWiring(parts: PartSpec[], wires: BenchWire[]): WireFault[] 
     for (const [addr, who] of by) {
       if (who.length < 2) continue;
       const ws = live.filter((w) => who.includes(w.part) && w.pinRole === 'bus' && w.pin === 'SDA').map((w) => w.id);
-      push('W5', 'block', ws, `地址 ${hex(addr)} 冲突`, `${who.map(name).join(' 和 ')} 都是 ${hex(addr)}，在同一条 SDA / SCL 上：两个器件同时应答，读数错乱。改其中一个的地址跳线（BME280 0x76 / 0x77，SSD1306 0x3C / 0x3D，MPU6050 AD0 0x68 / 0x69，QMI8658 SA0 0x6B / 0x6A）。`);
+      push('W5', 'block', ws, t('Address {addr} conflict', { addr: hex(addr) }), t('{parts} are all {addr} on the same SDA / SCL: both answer at once and readings get garbled. Change one address jumper (BME280 0x76 / 0x77, SSD1306 0x3C / 0x3D, MPU6050 AD0 0x68 / 0x69, QMI8658 SA0 0x6B / 0x6A).', { parts: who.map(name).join(', '), addr: hex(addr) }));
     }
   }
-  // W6：线太长，总线电容大，上升时间超过 I2C 规范（P2-11，估算；内核里同一个公式让读数出错 / 器件不应答）
+  // W6: long wires add bus capacitance and rise time exceeds the I2C spec (P2-11, estimate; the core uses the same formula)
   for (const b of i2cBuses(parts, live)) {
     const l = i2cLoad(b.wireCm, b.parts.length);
     if (l.verdict === 'ok') continue;
-    push('W6', l.verdict === 'fail' ? 'block' : 'warn', b.wires, `上升 ${l.rise.toFixed(0)} ns`, `${b.parts.map(name).join('、')} 的 SDA 线一共 ${b.wireCm.toFixed(0)} cm（估算，必须上真机）：${i2cText(l)}。`);
+    push('W6', l.verdict === 'fail' ? 'block' : 'warn', b.wires, t('Rise {ns} ns', { ns: l.rise.toFixed(0) }), t('SDA wiring for {parts} totals {cm} cm (estimate, verify on hardware): {verdict}.', { parts: b.parts.map(name).join(', '), cm: b.wireCm.toFixed(0), verdict: i2cText(l) }));
   }
   return out;
 }
 
-/** 每根线的第一条问题（3D 标红时一根线只写一句） */
+/** First fault per wire (the 3D highlight shows one sentence per wire) */
 export function faultByWire(faults: WireFault[]): Map<string, WireFault> {
   const m = new Map<string, WireFault>();
   for (const f of faults) for (const w of f.wires) if (!m.has(w)) m.set(w, f);

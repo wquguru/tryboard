@@ -1,6 +1,6 @@
-// 逻辑分析仪的数据层（P1-05）：解内核事件缓冲（tb_io_take 的 16 字节记录）、按通道整理、I2C 事务解码与人话注释。
-// 纯函数 + 一个只追加的仓库，node --test 直接测。事件格式与文本行和 Rust 侧 core/crates/esp32c3/src/iotrace.rs 逐字相同，
-// tools/webtest/traceio.mjs 用 eventLine 拼出的文本和 CLI `--trace-io` 的文件对拍。
+// Logic analyzer data layer (P1-05): decode tb_io_take 16-byte records, group by channel, decode I2C with plain notes.
+// eventLine text must match core/crates/esp32c3/src/iotrace.rs byte for byte (traceio.mjs diffs it against `--trace-io`).
+import { t } from '../i18n/index.ts';
 
 export const CPU_HZ = 160_000_000;
 
@@ -12,7 +12,7 @@ export const B_PORT1 = 1 << 15;
 export const EVENT_BYTES = 16;
 
 export interface IoEvent {
-  /** CPU 周期（160 MHz） */
+  /** CPU cycles (160 MHz) */
   t: number;
   kind: number;
   a: number;
@@ -20,7 +20,7 @@ export interface IoEvent {
   v: number;
 }
 
-/** 解一段 tb_io_take 拷出来的字节（n 条 × 16 字节，小端） */
+/** Decode bytes copied by tb_io_take (n × 16 bytes, little-endian) */
 export function decodeEvents(buf: Uint8Array): IoEvent[] {
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   const out: IoEvent[] = [];
@@ -33,7 +33,7 @@ export function decodeEvents(buf: Uint8Array): IoEvent[] {
 
 const h2 = (n: number) => n.toString(16).padStart(2, '0');
 
-/** 一行文本，与 Rust IoEvent::line 逐字相同 */
+/** One text line, identical to Rust IoEvent::line */
 export function eventLine(e: IoEvent): string {
   const port = e.b & B_PORT1 ? 'I2C1' : 'I2C0';
   const dir = e.b & B_READ ? 'R' : 'W';
@@ -58,7 +58,7 @@ export function eventLine(e: IoEvent): string {
   }
 }
 
-// ------------------------------------------------------------ I2C 事务
+// ------------------------------------------------------------ I2C transactions
 
 export interface I2cItem {
   kind: 'start' | 'restart' | 'addr' | 'data' | 'stop';
@@ -71,9 +71,9 @@ export interface I2cItem {
 export interface I2cTxn {
   port: number;
   t0: number;
-  /** 停止位之后（还没停止时 = 最后一项 + 9 位） */
+  /** After the stop bit (before STOP = last item + 9 bits) */
   t1: number;
-  /** 一个 SCL 位多少周期 */
+  /** Cycles per SCL bit */
   bit: number;
   items: I2cItem[];
   done: boolean;
@@ -81,14 +81,14 @@ export interface I2cTxn {
 
 export const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
 
-/** 泡泡上的一句：START 0x76 W · 0xF7 · RESTART 0x76 R · 8 B · STOP */
+/** Bubble text: START 0x76 W · 0xF7 · RESTART 0x76 R · 8 B · STOP */
 export function txnText(x: I2cTxn): string {
   const parts: string[] = [];
   let run: I2cItem[] = [];
   const flush = () => {
     if (!run.length) return;
     const read = run[0].read;
-    // 写的少量字节逐个写出来（寄存器地址、命令），读或写一长串就只写字节数
+    // Short writes (register address, command) list each byte; reads and long writes show only the count
     if (!read && run.length <= 3) parts.push(...run.map((d) => hex(d.byte) + (d.nack ? ' NACK' : '')));
     else parts.push(`${run.length} B`);
     run = [];
@@ -112,49 +112,50 @@ export function txnText(x: I2cTxn): string {
   return parts.join(' · ');
 }
 
-const BME_REG: [number, number, string][] = [
-  [0xd0, 0xd0, '读芯片 ID（BME280 应为 0x60）'],
-  [0xe0, 0xe0, '软复位'],
-  [0x88, 0xa1, '读温度 / 气压校准参数'],
-  [0xe1, 0xe7, '读湿度校准参数'],
-  [0xf2, 0xf2, '设湿度过采样'],
-  [0xf3, 0xf3, '查状态（是否在测量）'],
-  [0xf4, 0xf4, '设温度 / 气压过采样和工作模式'],
-  [0xf5, 0xf5, '设待机时间和滤波'],
-  [0xf7, 0xf9, '读气压原始值'],
-  [0xfa, 0xfc, '读温度原始值'],
-  [0xfd, 0xfe, '读湿度原始值'],
+/** [lo, hi, note when written, note when read back (config registers only)] */
+const BME_REG: [number, number, string, string?][] = [
+  [0xd0, 0xd0, t('Read chip ID (BME280 should be 0x60)')],
+  [0xe0, 0xe0, t('Soft reset')],
+  [0x88, 0xa1, t('Read temperature / pressure calibration')],
+  [0xe1, 0xe7, t('Read humidity calibration')],
+  [0xf2, 0xf2, t('Set humidity oversampling'), t('Read humidity oversampling')],
+  [0xf3, 0xf3, t('Check status (measuring or not)')],
+  [0xf4, 0xf4, t('Set temperature / pressure oversampling and mode'), t('Read temperature / pressure oversampling and mode')],
+  [0xf5, 0xf5, t('Set standby time and filter'), t('Read standby time and filter')],
+  [0xf7, 0xf9, t('Read raw pressure')],
+  [0xfa, 0xfc, t('Read raw temperature')],
+  [0xfd, 0xfe, t('Read raw humidity')],
 ];
 
 const OLED_CMD: Record<number, string> = {
-  0xae: '关显示',
-  0xaf: '开显示',
-  0x8d: '电荷泵',
-  0x20: '寻址模式',
-  0x21: '列地址范围',
-  0x22: '页地址范围',
-  0x81: '对比度',
-  0xa8: '复用比',
-  0xd3: '显示偏移',
-  0xa1: '列重映射',
-  0xa0: '列不重映射',
-  0xc8: '行扫描反向',
-  0xc0: '行扫描正向',
-  0xda: 'COM 引脚配置',
-  0xd5: '时钟分频',
-  0xd9: '预充电周期',
-  0xdb: 'VCOMH 电平',
-  0xa4: '按显存显示',
-  0xa5: '全亮测试',
-  0xa6: '正常（不反色）',
-  0xa7: '反色',
+  0xae: t('Display off'),
+  0xaf: t('Display on'),
+  0x8d: t('Charge pump'),
+  0x20: t('Addressing mode'),
+  0x21: t('Column address range'),
+  0x22: t('Page address range'),
+  0x81: t('Contrast'),
+  0xa8: t('Multiplex ratio'),
+  0xd3: t('Display offset'),
+  0xa1: t('Column remap'),
+  0xa0: t('No column remap'),
+  0xc8: t('Reverse row scan'),
+  0xc0: t('Normal row scan'),
+  0xda: t('COM pin config'),
+  0xd5: t('Clock divide'),
+  0xd9: t('Pre-charge period'),
+  0xdb: t('VCOMH level'),
+  0xa4: t('Display from RAM'),
+  0xa5: t('All-on test'),
+  0xa6: t('Normal (not inverted)'),
+  0xa7: t('Inverted'),
 };
 
-/** 已知器件寄存器的一句人话（BME280 0x76 / 0x77、SSD1306 0x3C / 0x3D）；认不出返回 '' */
+/** One plain-language note for known device registers (BME280 0x76 / 0x77, SSD1306 0x3C / 0x3D); '' if unknown */
 export function txnNote(x: I2cTxn): string {
   const addr = x.items.find((i) => i.kind === 'addr');
   if (!addr) return '';
-  if (addr.nack) return '没有器件应答（地址扫描或接线问题）';
+  if (addr.nack) return t('No device answered (address scan or wiring problem)');
   const a = addr.byte;
   const w = x.items.filter((i) => i.kind === 'data' && !i.read);
   const r = x.items.filter((i) => i.kind === 'data' && i.read);
@@ -162,36 +163,37 @@ export function txnNote(x: I2cTxn): string {
     const reg = w[0]?.byte;
     if (reg === undefined) return '';
     if (r.length) {
-      if (reg === 0xf7 && r.length >= 8) return '读气压、温度、湿度原始值（一次读 8 字节）';
-      if (reg === 0xf7 && r.length >= 6) return '读气压、温度原始值';
+      if (reg === 0xf7 && r.length >= 8) return t('Read raw pressure, temperature and humidity (one 8-byte read)');
+      if (reg === 0xf7 && r.length >= 6) return t('Read raw pressure and temperature');
       const hit = BME_REG.find(([lo, hi]) => reg >= lo && reg <= hi);
-      if (!hit) return `读寄存器 ${hex(reg)}`;
-      return hit[2].startsWith('设') ? `读${hit[2].slice(1)}` : hit[2];
+      if (!hit) return t('Read register {reg}', { reg: hex(reg) });
+      return hit[3] ?? hit[2];
     }
     const hit = BME_REG.find(([lo, hi]) => reg >= lo && reg <= hi);
-    if (reg === 0xe0 && w[1]?.byte === 0xb6) return '软复位';
-    if (reg === 0xf4 && w[1]) return `设过采样和工作模式（${['睡眠', '单次', '单次', '连续'][w[1].byte & 3]}）`;
-    if (w.length === 1) return `选寄存器 ${hex(reg)}`;
-    return hit ? hit[2] : `写寄存器 ${hex(reg)}`;
+    if (reg === 0xe0 && w[1]?.byte === 0xb6) return t('Soft reset');
+    if (reg === 0xf4 && w[1]) return t('Set oversampling and mode ({mode})', { mode: [t('sleep'), t('forced'), t('forced'), t('normal')][w[1].byte & 3] });
+    if (w.length === 1) return t('Select register {reg}', { reg: hex(reg) });
+    return hit ? hit[2] : t('Write register {reg}', { reg: hex(reg) });
   }
   if (a === 0x3c || a === 0x3d) {
     const ctl = w[0]?.byte;
     if (ctl === undefined) return '';
     const body = w.slice(1);
-    if (ctl === 0x40) return `写显存 ${body.length} 字节`;
+    if (ctl === 0x40) return t('Write display RAM, {n} bytes', { n: body.length });
     if (ctl === 0x00 || ctl === 0x80) {
       const c = body[0]?.byte;
-      if (c === undefined) return 'OLED 命令';
-      if (c >= 0xb0 && c <= 0xb7) return `OLED 命令：选第 ${c - 0xb0} 页`;
-      if (c >= 0x40 && c <= 0x7f && body.length === 1) return 'OLED 命令：起始行';
+      if (c === undefined) return t('OLED command');
+      if (c >= 0xb0 && c <= 0xb7) return t('OLED command: select page {n}', { n: c - 0xb0 });
+      if (c >= 0x40 && c <= 0x7f && body.length === 1) return t('OLED command: start line');
       const name = OLED_CMD[c];
-      return body.length > 3 ? `OLED 命令序列（${body.length} 字节${name ? '，' + name + '起' : ''}）` : `OLED 命令：${name ?? hex(c)}`;
+      if (body.length > 3) return name ? t('OLED command sequence ({n} bytes, starting with {name})', { n: body.length, name }) : t('OLED command sequence ({n} bytes)', { n: body.length });
+      return t('OLED command: {name}', { name: name ?? hex(c) });
     }
   }
   return '';
 }
 
-// ------------------------------------------------------------ 按通道整理的仓库
+// ------------------------------------------------------------ Per-channel store
 
 export interface Series {
   t: number[];
@@ -201,7 +203,7 @@ export interface GpioSeries extends Series {
 }
 export interface PwmSeries extends Series {
   duty: number[];
-  /** Hz；0 = 不再输出 PWM */
+  /** Hz; 0 = PWM stopped */
   freq: number[];
 }
 export interface WsSeries extends Series {
@@ -209,21 +211,21 @@ export interface WsSeries extends Series {
   rgb: number[];
 }
 
-/** 网页这边存多少条（超过就丢最老的一半，按时间整段丢） */
+/** Web-side capacity; beyond it the oldest half is dropped as one time span */
 export const STORE_CAP = 400_000;
 
-/** 只追加的事件仓库：worker 每批发来的事件按通道放好；上电 / 回退时 reset */
+/** Append-only event store, filled per worker batch; reset on power-on / rewind */
 export class IoStore {
   gpio = new Map<number, GpioSeries>();
   pwm = new Map<number, PwmSeries>();
   ws = new Map<number, WsSeries>();
   i2c = new Map<number, I2cTxn[]>();
-  /** 原始事件（对拍、导出用） */
+  /** Raw events (for diffing and export) */
   raw: IoEvent[] = [];
-  /** 丢掉了多少条（网页仓库满了 + 内核缓冲溢出） */
+  /** Dropped count (web store full + core buffer overflow) */
   dropped = 0;
   coreDropped = 0;
-  /** 最早还留着的时刻（周期）；丢过事件后这之前的波形不可信 */
+  /** Earliest retained time (cycles); waveforms before it are unreliable after drops */
   since = 0;
   rev = 0;
   private open = new Map<number, I2cTxn>();
@@ -278,14 +280,14 @@ export class IoStore {
         let x = this.open.get(port);
         const bit = x?.bit ?? 400;
         if (e.kind === K.I2C_START && !(e.b & B_RESTART)) {
-          // 上一个事务没收到 STOP 就开始新的：把它收掉
+          // New START without a STOP: close the previous transaction
           if (x) x.done = true;
           x = { port, t0: e.t, t1: e.t + e.v, bit: e.v || 400, items: [], done: false };
           this.open.set(port, x);
           get(this.i2c, port, () => []).push(x);
         }
         if (!x) {
-          // 缓冲从事务中间开始（前面被丢了）：从这里起一个
+          // Buffer starts mid-transaction (earlier part dropped): open one here
           x = { port, t0: e.t, t1: e.t, bit, items: [], done: false };
           this.open.set(port, x);
           get(this.i2c, port, () => []).push(x);
@@ -304,7 +306,7 @@ export class IoStore {
     }
   }
 
-  /** 网页仓库满了：丢最老的一半，按剩下的重建各通道 */
+  /** Store full: drop the oldest half and rebuild channels from the rest */
   private trim() {
     const keep = this.raw.slice(this.raw.length - Math.floor(STORE_CAP / 2));
     const dropped = this.dropped + this.raw.length - keep.length;
@@ -316,7 +318,7 @@ export class IoStore {
     for (const e of keep) this.add(e);
   }
 
-  /** 与 CLI --trace-io 文件同格式的文本（不含注释头） */
+  /** Same format as the CLI --trace-io file (without the comment header) */
   text(n = this.raw.length) {
     return this.raw
       .slice(0, n)
@@ -334,7 +336,7 @@ function get<K, V>(m: Map<K, V>, k: K, mk: () => V): V {
   return v;
 }
 
-/** 有序数组里最后一个 ≤ x 的下标（没有则 -1） */
+/** Index of the last element ≤ x in a sorted array (-1 if none) */
 export function lastLE(a: number[], x: number): number {
   let lo = 0,
     hi = a.length - 1,
@@ -349,7 +351,7 @@ export function lastLE(a: number[], x: number): number {
   return r;
 }
 
-/** 第一个 t1 ≥ x 的事务下标（事务按 t0 排序，t1 也单调） */
+/** Index of the first transaction with t1 ≥ x (sorted by t0; t1 is monotonic too) */
 export function firstTxnEndingAfter(xs: I2cTxn[], x: number): number {
   let lo = 0,
     hi = xs.length;
@@ -361,16 +363,16 @@ export function firstTxnEndingAfter(xs: I2cTxn[], x: number): number {
   return lo;
 }
 
-/** PWM 标签："50 Hz · 1.675 ms" */
+/** PWM label: "50 Hz · 1.675 ms" */
 export function pwmLabel(duty: number, freq: number): string {
-  if (!(freq > 0)) return '无 PWM';
+  if (!(freq > 0)) return t('No PWM');
   const f = freq >= 1000 ? `${(freq / 1000).toFixed(freq >= 10000 ? 1 : 2)} kHz` : `${freq.toFixed(freq >= 100 ? 0 : freq >= 10 ? 0 : 1)} Hz`;
   const w = duty / freq;
   const ws = w >= 1e-3 ? `${(w * 1e3).toFixed(3)} ms` : `${(w * 1e6).toFixed(1)} µs`;
   return `${f} · ${ws}`;
 }
 
-/** 时间（秒）→ 读数："1.675 ms"、"12.0 µs"、"2.350 s" */
+/** Seconds → readout: "1.675 ms", "12.0 µs", "2.350 s" */
 export function fmtTime(s: number): string {
   const a = Math.abs(s);
   if (a >= 1) return `${s.toFixed(3)} s`;

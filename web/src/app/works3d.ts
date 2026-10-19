@@ -1,8 +1,5 @@
-// ④ P2-09 三个新作品的 3D 成品（与 product3d.ts 的气象站同一套舞台：WebGL + RoomEnvironment + bloom，单位 cm）：
-//   lamp  旋钮台灯：灯座 + 导光柱上的 8 颗 WS2812 + 乳白灯罩，前面一个 EC11 旋钮（拖 / 滚 = 转，点 = 按）
-//   ruler 超声波尺子：蓝色手持外壳、顶面 OLED、前面两个探头；桌上一块可拖动的木挡板，桌面画着刻度
-//   tilt  体感小人：圆盘外壳顶面一块圆屏，拖动圆盘让它倾斜（俯仰 / 横滚），屏上的小豆往低处滑
-// 灯色、OLED、圆屏、蜂鸣器全部来自同一个实时模拟；装法影响（灯罩亮点、探头被挡、六轴装反）由调用方从组装结果传进来。
+// (4) P2-09 3D products for lamp (knob lamp), ruler (ultrasonic ruler) and tilt (motion figure); same stage as product3d.ts, units cm.
+// LEDs, OLED, round screen and buzzer come from the live sim; assembly effects (hot spots, blocked probe, flipped IMU) come from the caller.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -14,6 +11,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { currentTheme, onTheme, type Theme } from '../theme';
 import type { Pose } from '../imupose';
 import { capturableOf, type Capturable } from './capture';
+import { t } from '../i18n';
 
 export type WorkKind = 'lamp' | 'ruler' | 'tilt';
 
@@ -29,15 +27,15 @@ export interface WorkProductOptions {
   kind: WorkKind;
   frame(): WorkFrame;
   effects(): { glare?: boolean; sonarBlock?: number; imuFlip?: boolean };
-  /** 蜂鸣器此刻在不在响（只用来画声波圈） */
+  /** Whether the buzzer is sounding now (only for the sound-wave rings) */
   sounding(): boolean;
-  /** lamp：旋钮转了几格（正 = 顺时针）、按下 / 松开 */
+  /** lamp: knob detents turned (positive = clockwise), pressed / released */
   onKnob?(steps: number): void;
   onKnobPress?(down: boolean): void;
-  /** ruler：挡板离探头正面的距离（cm）；起始距离 */
+  /** ruler: baffle distance from the probe face (cm); initial distance */
   onDistance?(cm: number): void;
   distance?: number;
-  /** tilt：圆盘姿态（度）；起始姿态 */
+  /** tilt: disc pose (degrees); initial pose */
   onPose?(p: Pose): void;
   pose?: Pose;
 }
@@ -48,19 +46,19 @@ export interface WorkProduct3D {
   dispose(): void;
   azimuth(): number;
   resetView(): void;
-  /** 可以拖的那样东西（旋钮 / 挡板 / 圆盘）在页面上的位置，测试用真实鼠标去拖 */
+  /** Page position of the draggable thing (knob / baffle / disc) so tests can drag with a real mouse */
   handleScreenPos(): [number, number] | null;
-  /** 当前状态（测试 / 面板用）：旋钮格数、挡板距离、圆盘姿态 */
+  /** Current state (tests / panel): knob detents, baffle distance, disc pose */
   state(): { knob: number; cm: number; pose: Pose };
   setDistance(cm: number): void;
   setPose(p: Pose): void;
-  /** 拍照 / 录像（P2-10） */
+  /** Photo / video capture (P2-10) */
   capture(): Capturable;
 }
 
 const STRIP_PIN = 5;
 
-/** 灯珠颜色 → 发光色（按最大通道归一化，亮度另算） */
+/** LED colour -> emissive colour (normalised to the max channel; brightness handled separately) */
 function glow(c: number[] | undefined) {
   const m = c ? Math.max(...c) : 0;
   return { m, col: new THREE.Color(m ? c![0] / m : 0, m ? c![1] / m : 0, m ? c![2] / m : 0) };
@@ -80,14 +78,14 @@ function lcdTexture() {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.magFilter = THREE.LinearFilter;
   tex.minFilter = THREE.LinearFilter;
-  // 数据按行从上到下：用纹理矩阵翻转 v
+  // Rows run top to bottom: flip v via the texture matrix
   tex.repeat.set(1, -1);
   tex.offset.set(0, 1);
   tex.needsUpdate = true;
   return { tex, data };
 }
 
-/** 桌面刻度尺（ruler 用）：0–80 cm，每 1 cm 一小格、每 10 cm 一个数字 */
+/** Desk ruler (ruler work): 0–80 cm, tick every 1 cm, number every 10 cm */
 function tapeTexture() {
   const c = document.createElement('canvas');
   c.width = 2048;
@@ -155,7 +153,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
   const V = VIEW[o.kind];
   camera.position.copy(V.home);
 
-  // 标签叠加层
+  // Label overlay
   const tags = document.createElement('div');
   tags.className = 'p3-tags';
   const tag = (text: string, cls = '') => {
@@ -167,16 +165,16 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
   };
   const corner = document.createElement('div');
   corner.className = 'p3-disclaimer';
-  corner.textContent = o.kind === 'tilt' ? '外观示意，非乐鑫官方模型 · 小豆为原创形象' : '外观示意，非乐鑫官方模型';
+  corner.textContent = o.kind === 'tilt' ? t('Illustrative look, not an official Espressif model · the bean is an original character') : t('Illustrative look, not an official Espressif model');
   container.append(tags, corner);
 
   const shellMat = (color: string) => new THREE.MeshPhysicalMaterial({ color, roughness: 0.55, clearcoat: 0.25, clearcoatRoughness: 0.5 });
   const hits: THREE.Object3D[] = [];
   const occluders: THREE.Object3D[] = [];
   const tagList: { el: HTMLElement; at: () => THREE.Vector3; dx?: number; dy?: number }[] = [];
-  /** 每帧的作品专属更新 */
+  /** Per-frame work-specific update */
   let tick: (f: WorkFrame, dt: number, now: number) => void = () => {};
-  /** 指针：返回 true 表示这次按下归我们处理（关掉旋转） */
+  /** Pointer: return true when this press is ours (disables orbiting) */
   let onDown: (hit: THREE.Object3D, e: PointerEvent) => boolean = () => false;
   let onMove: (e: PointerEvent) => void = () => {};
   let onUp: () => void = () => {};
@@ -188,11 +186,11 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
   let setDistance = (_: number) => {};
   let setPose = (_: Pose) => {};
 
-  // 蜂鸣器声波圈（ruler）
+  // Buzzer sound-wave rings (ruler)
   const waves: THREE.Mesh[] = [];
 
   if (o.kind === 'lamp') {
-    // 灯座 8 × 6 × 3.6 cm；导光柱在中间，8 颗灯珠竖着排在柱子前面；灯罩是旋转体
+    // Base 8 x 6 x 3.6 cm; light pipe in the middle with 8 LEDs stacked in front; the shade is a lathe
     const base = new THREE.Mesh(new RoundedBoxGeometry(8, 3.6, 6, 5, 0.6), shellMat('#3A3936'));
     base.position.y = 1.8;
     base.castShadow = base.receiveShadow = true;
@@ -214,7 +212,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
       leds.push(m);
       ledMeshes.push(lens);
     }
-    // 灯罩：乳白 PLA，钟形旋转体（底 Ø7.0，高 7.6），半透明
+    // Shade: milky PLA bell lathe (base Ø7.0, height 7.6), translucent
     const prof: THREE.Vector2[] = [];
     for (let i = 0; i <= 24; i++) {
       const t = i / 24;
@@ -227,14 +225,14 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     const shadeLight = new THREE.PointLight('#FFFFFF', 0, 40, 1.6);
     shadeLight.position.set(0, 6.5, 0);
     scene.add(shadeLight);
-    // 装法 B：灯条贴着灯罩内壁——罩子正面一排 8 个亮点
+    // Assembly B: strip against the shade wall gives a row of 8 hot spots on the front
     const spots: THREE.Mesh[] = [];
     const spotMats: THREE.MeshBasicMaterial[] = [];
     for (let i = 0; i < 8; i++) {
       const y = 4.4 + i * 0.75;
       const t = (y - 3.7) / 7.6;
       const r = 3.5 - 1.6 * Math.pow(t, 1.6) + 0.02;
-      // 亮点画在灯罩外表面、最后画、亮度超过 1 让 bloom 晕开（刺眼）
+      // Hot spots on the outer surface, drawn last, brightness > 1 so bloom spreads them (glare)
       const mat = new THREE.MeshBasicMaterial({ color: '#FFFFFF', transparent: true, opacity: 0, toneMapped: false, depthWrite: false });
       const s = new THREE.Mesh(new THREE.CircleGeometry(0.3, 20), mat);
       s.renderOrder = 10;
@@ -243,7 +241,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
       spots.push(s);
       spotMats.push(mat);
     }
-    // 旋钮：灯座正面右侧，轴朝前（+z）；拖 / 滚转，点按
+    // Knob: front right of the base, shaft forward (+z); drag / wheel to turn, click to press
     const knob = new THREE.Group();
     const kmat = new THREE.MeshStandardMaterial({ color: '#1B1D21', roughness: 0.45, metalness: 0.3 });
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.76, 1.1, 30), kmat);
@@ -272,12 +270,12 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     const hint = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.08, 48), new THREE.MeshBasicMaterial({ color: '#FF7A1A', transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
     hint.position.set(2.3, 1.8, 3.02);
     scene.add(hint);
-    // DC 线从背后出
+    // DC lead out the back
     const cable = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-2, 1, -3), new THREE.Vector3(-2, 0.8, -4.2), new THREE.Vector3(-1.4, 0.12, -6), new THREE.Vector3(1, 0.12, -12)]), 40, 0.14, 10), new THREE.MeshStandardMaterial({ color: '#1E1E1E', roughness: 0.6 }));
     cable.castShadow = true;
     scene.add(cable);
-    tagList.push({ el: tag('EC11 旋钮 · 拖动或滚轮转，点一下切换模式', 'hot'), at: () => new THREE.Vector3(2.3, 0.2, KNOB_Z + 0.4), dy: 16 });
-    tagList.push({ el: tag('WS2812 × 8 · 乳白灯罩'), at: () => new THREE.Vector3(-3.6, 9.5, 0), dx: -50 });
+    tagList.push({ el: tag(t('EC11 knob · drag or scroll to turn, click to switch mode'), 'hot'), at: () => new THREE.Vector3(2.3, 0.2, KNOB_Z + 0.4), dy: 16 });
+    tagList.push({ el: tag(t('WS2812 × 8 · milky shade')), at: () => new THREE.Vector3(-3.6, 9.5, 0), dx: -50 });
 
     let angle = 0;
     let press: { x: number; y: number; acc: number; moved: boolean } | null = null;
@@ -293,7 +291,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     };
     onMove = (e) => {
       if (!press) return;
-      // 往右 / 往上拖 = 顺时针；每 16 px 一格
+      // Drag right / up = clockwise; one detent per 16 px
       const d = e.clientX - press.x - (e.clientY - press.y);
       press.x = e.clientX;
       press.y = e.clientY;
@@ -331,7 +329,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
         peak = Math.max(peak, g.m);
         if (c) c.forEach((v, k) => (sum[k] += v));
         m.emissive.copy(g.col);
-        // 固件写的是 0–255 的真实亮度：按亮度给发光强度（不像板载灯那样一律放大），台灯的"调亮度"才看得出来
+        // Firmware writes real 0–255 brightness: map it to emissive intensity (no blanket boost like the onboard LED) so dimming shows
         m.emissiveIntensity = g.m ? 1.5 + (g.m / 255) * 8 : 0;
         spotMats[i].color.copy(g.col).lerp(new THREE.Color('#FFFFFF'), 0.5).multiplyScalar(1.6 + (g.m / 255) * 2);
         spotMats[i].opacity = glare && g.m ? 1 : 0;
@@ -339,7 +337,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
       const sm = Math.max(...sum);
       avg.setRGB(sm ? sum[0] / sm : 0, sm ? sum[1] / sm : 0, sm ? sum[2] / sm : 0);
       const k = peak / 255;
-      // 灯罩被里面的灯照亮：自发光（漫射后的颜色）+ 点光源照亮桌面；亮点装法时灯罩本身更暗、光不匀
+      // Shade lit from inside: emissive (diffused colour) + point light on the desk; hot-spot assembly makes the shade darker and uneven
       shadeMat.emissive.copy(avg);
       shadeMat.emissiveIntensity = peak ? (glare ? 0.08 + k * 0.3 : 0.3 + k * 1.4) : 0;
       shadeLight.color.copy(avg);
@@ -350,7 +348,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
       void ledMeshes;
     };
   } else if (o.kind === 'ruler') {
-    // 手持外壳 9 × 3 × 4.8 cm 平放；探头朝 +x；顶面 OLED；左侧出声孔
+    // Handheld case 9 x 3 x 4.8 cm lying flat; probes toward +x; OLED on top; sound hole on the left
     const W = 9, H = 3, D = 4.8;
     const body = new THREE.Mesh(new RoundedBoxGeometry(W, H, D, 5, 0.6), shellMat('#2B5FD9'));
     body.position.set(0, H / 2, 0);
@@ -376,7 +374,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     probes.traverse((x) => (x.castShadow = true));
     scene.add(probes);
     const PROBE_OUT = W / 2 + 0.2;
-    // 顶面 OLED
+    // OLED on top
     const { tex: oTex, data: oData } = oledTexture();
     const bez = new THREE.Mesh(new RoundedBoxGeometry(3.5, 0.12, 1.95, 3, 0.05), new THREE.MeshStandardMaterial({ color: '#0B0C0E', roughness: 0.55 }));
     bez.position.set(-1.2, H + 0.02, 0);
@@ -387,7 +385,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     scr.rotation.x = -Math.PI / 2;
     scr.position.set(-1.2, H + 0.09, 0);
     scene.add(scr);
-    // 出声孔 + 声波
+    // Sound hole + waves
     const holeMat = new THREE.MeshStandardMaterial({ color: '#1A2E66', roughness: 0.9 });
     for (let i = 0; i < 7; i++) {
       const a = (i / 6) * Math.PI * 2, r = i === 6 ? 0 : 0.3;
@@ -402,17 +400,17 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
       scene.add(w);
       waves.push(w);
     }
-    // USB 线从尾部出
+    // USB lead out the tail
     const cable = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-W / 2, 1, 0), new THREE.Vector3(-W / 2 - 1.2, 0.8, 0), new THREE.Vector3(-W / 2 - 3, 0.12, 1), new THREE.Vector3(-W / 2 - 9, 0.12, 4)]), 40, 0.13, 10), new THREE.MeshStandardMaterial({ color: '#1E1E1E', roughness: 0.6 }));
     cable.castShadow = true;
     scene.add(cable);
-    // 桌上的刻度尺：0 刻度对准探头正面
+    // Desk ruler: 0 aligned with the probe face
     const tape = new THREE.Mesh(new THREE.PlaneGeometry(80 * (2048 / 2008), 2.4), new THREE.MeshStandardMaterial({ map: tapeTexture(), roughness: 0.6 }));
     tape.rotation.x = -Math.PI / 2;
     tape.position.set(PROBE_OUT + 40 * (2048 / 2008) - 20 * (80 / 2008), 0.02, D / 2 + 1.6);
     tape.receiveShadow = true;
     scene.add(tape);
-    // 挡板：一块木板立在桌上，正面对着探头；拖它前后挪
+    // Baffle: a wooden board standing on the desk facing the probes; drag it back and forth
     const board = new THREE.Group();
     const wood = new THREE.Mesh(new RoundedBoxGeometry(1.2, 9, 12, 3, 0.15), new THREE.MeshStandardMaterial({ color: '#C8A26B', roughness: 0.7 }));
     wood.position.set(0.6, 4.5, 0);
@@ -430,11 +428,11 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     handle = boardHit;
     const tagCm = tag('', 'hot');
     tagList.push({ el: tagCm, at: () => new THREE.Vector3(board.position.x + 0.6, 9.8, 0) });
-    tagList.push({ el: tag('HC-SR04 探头'), at: () => new THREE.Vector3(PROBE_OUT, 3.4, -2.6), dy: -10 });
+    tagList.push({ el: tag(t('HC-SR04 probe')), at: () => new THREE.Vector3(PROBE_OUT, 3.4, -2.6), dy: -10 });
     const place = (d: number) => {
       cm = Math.round(Math.max(2, Math.min(80, d)) * 10) / 10;
       board.position.x = PROBE_OUT + cm;
-      tagCm.textContent = `挡板 · ${cm.toFixed(1)} cm · 可拖动`;
+      tagCm.textContent = t('Baffle · {cm} cm · draggable', { cm: cm.toFixed(1) });
     };
     place(cm);
     setDistance = (d) => place(d);
@@ -471,7 +469,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
           }
         oTex.needsUpdate = true;
       }
-      // 装法 B：探头缩在孔后 6 mm
+      // Assembly B: probes recessed 6 mm behind the holes
       const blocked = !!o.effects().sonarBlock;
       probes.position.set(blocked ? W / 2 - 0.8 : PROBE_OUT - 0.6, H / 2, 0);
       const snd = o.sounding();
@@ -484,7 +482,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
       });
     };
   } else {
-    // 圆盘外壳 Ø5.6 × 2.6 cm，顶面圆屏；放在一个小支架上，拖动让它倾斜
+    // Disc case Ø5.6 x 2.6 cm, round screen on top; on a small stand, drag to tilt
     const stand = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.2, 0.8, 48), shellMat('#3A3936'));
     stand.position.y = 0.4;
     stand.castShadow = stand.receiveShadow = true;
@@ -508,7 +506,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     screen.rotation.x = -Math.PI / 2;
     screen.position.y = 1.11;
     disc.add(screen);
-    // 前面（+z）一个小箭头：六轴的 X 轴朝前
+    // Small arrow at the front (+z): the IMU X axis points forward
     const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.5, 16), new THREE.MeshStandardMaterial({ color: '#FF7A1A', roughness: 0.4 }));
     arrow.rotation.x = Math.PI / 2;
     arrow.position.set(0, 0, 2.9);
@@ -521,9 +519,9 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     tagList.push({ el: tagPose, at: () => new THREE.Vector3(0, 0.2, 3.4), dy: 22 });
     const apply = (p: Pose) => {
       pose = { pitch: Math.max(-40, Math.min(40, p.pitch)), roll: Math.max(-40, Math.min(40, p.roll)), yaw: p.yaw };
-      // roll > 0：右边（+x）放低；pitch > 0：前边（+z）放低（与固件里小豆的滑动方向一致）
+      // roll > 0: right (+x) side down; pitch > 0: front (+z) down (matches the bean's slide direction in firmware)
       disc.rotation.set((pose.pitch * Math.PI) / 180, 0, (-pose.roll * Math.PI) / 180, 'XZY');
-      tagPose.textContent = `拖动倾斜 · 俯仰 ${pose.pitch.toFixed(0)}° 横滚 ${pose.roll.toFixed(0)}°`;
+      tagPose.textContent = t('Drag to tilt · pitch {pitch}° roll {roll}°', { pitch: pose.pitch.toFixed(0), roll: pose.roll.toFixed(0) });
     };
     apply(pose);
     setPose = (p) => apply(p);
@@ -536,7 +534,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     };
     onMove = (e) => {
       if (!drag) return;
-      // 往右拖 = 右边放低（横滚 +），往下拖 = 前边放低（俯仰 +）；每 4 px 1°
+      // Drag right = right side down (roll +), drag down = front down (pitch +); 1° per 4 px
       apply({ pitch: drag.p0.pitch + (e.clientY - drag.y) / 4, roll: drag.p0.roll + (e.clientX - drag.x) / 4, yaw: 0 });
       o.onPose?.(pose);
     };
@@ -553,7 +551,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     };
   }
 
-  // ---------------------------------------------------------------- 交互：先于 OrbitControls 注册
+  // ---------------------------------------------------------------- Interaction: registered before OrbitControls
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   const el = renderer.domElement;

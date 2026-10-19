@@ -32,8 +32,8 @@ test('每种错接都带网表：kind 与参数对得上 tb_fault', () => {
   assert.deepEqual(CASES.drive().net, {
     kind: 1,
     cases: [
-      { args: [3.3, 1], what: '电位器滑片转到头（≈ 直接接 3V3 / GND），GPIO 输出相反电平' },
-      { args: [0, 1], what: '电位器滑片转到头（≈ 直接接 3V3 / GND），GPIO 输出相反电平' },
+      { args: [3.3, 1], what: 'Pot wiper at the end (≈ tied straight to 3V3 / GND), GPIO drives the opposite level' },
+      { args: [0, 1], what: 'Pot wiper at the end (≈ tied straight to 3V3 / GND), GPIO drives the opposite level' },
     ],
   });
   assert.deepEqual(CASES.nores().net?.kind, 3);
@@ -46,10 +46,10 @@ test('每种错接都带网表：kind 与参数对得上 tb_fault', () => {
 });
 
 test('后果文字按门限分档（不依赖 wasm）', () => {
-  assert.match(consequence(1, { i: 0.097, vPin: 0.1, v5: NaN, v33: NaN, limiter: 0 }), /超过数据手册 40 mA 上限（2\.4 倍）/);
-  assert.match(consequence(3, { i: 0.0349, vPin: 2.15, v5: NaN, v33: NaN, limiter: 0 }), /1\.7 倍过流/);
-  assert.match(consequence(4, { i: 0.717, vPin: 0, v5: 0.41, v33: 0.04, limiter: 4 }), /板载 LDO 掉进压差区/);
-  assert.match(consequence(5, { i: 0.0001, vPin: 3.9, v5: 5, v33: 3.3, limiter: 0 }), /电流不大/);
+  assert.match(consequence(1, { i: 0.097, vPin: 0.1, v5: NaN, v33: NaN, limiter: 0 }), /over the datasheet 40 mA limit \(2\.4×\)/);
+  assert.match(consequence(3, { i: 0.0349, vPin: 2.15, v5: NaN, v33: NaN, limiter: 0 }), /1\.7× overcurrent/);
+  assert.match(consequence(4, { i: 0.717, vPin: 0, v5: 0.41, v33: 0.04, limiter: 4 }), /the onboard LDO dropping out/);
+  assert.match(consequence(5, { i: 0.0001, vPin: 3.9, v5: 5, v33: 3.3, limiter: 0 }), /the current is small/);
 });
 
 const WASM = new URL('../public/wasm/tryboard.wasm', import.meta.url);
@@ -69,5 +69,5 @@ test('wasm 求解：电流与 elec 单元测试 / ngspice 同一量级（tools/b
   assert.ok(mA(CASES.bme5v()) > 0.05 && mA(CASES.bme5v()) < 0.2, String(mA(CASES.bme5v())));
   // 同样参数再算一遍，结果逐位相同
   assert.deepEqual(estimateNet(x, CASES.short3v3().net!, false), estimateNet(x, CASES.short3v3().net!, false));
-  assert.match(estimateNet(x, CASES.short3v3().net!, false)!.text, /由板载 LDO 掉进压差区限住/);
+  assert.match(estimateNet(x, CASES.short3v3().net!, false)!.text, /limited by the onboard LDO dropping out/);
 });

@@ -1,7 +1,6 @@
-// ④ 成品的 3D 场景（独立于实验台的 board3d.ts）：桌上的气象站。
-// 外壳 70×50×32 mm（与装配模板一致，单位 cm），表盘指针跟 GPIO4 的 PWM（二阶缓动，像真舵机那样有惯性），
-// OLED 帧缓冲作纹理，板载 RGB 透过导光柱发光（自发光 + bloom + 点光源照亮桌面），顶上的 BOOT 键能点，
-// 右侧通风口旁可以放一个热源（拖动它，离通风口越近传感器越热）。数据全部来自同一个实时模拟。
+// Step 4 product scene (separate from board3d.ts): a desk weather station, 70×50×32 mm case (units cm). Dial follows
+// GPIO4 PWM with servo-like inertia, OLED framebuffer is a texture, RGB glows via a light pipe; all from the live sim.
+import { t } from '../i18n';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -24,10 +23,10 @@ export interface ProductFrame {
 export interface ProductOptions {
   frame(): ProductFrame;
   servoPin: number;
-  /** 蜂鸣器此刻在不在响（只用来画声波圈，声音本身由 audio.ts 出） */
+  /** Whether the buzzer is sounding (only draws rings; audio.ts makes the sound). */
   sounding(): boolean;
   onBoot(down: boolean): void;
-  /** 热源开关或移动：proximity 0..1（1 = 贴着通风口） */
+  /** Heat source toggled or moved: proximity 0..1 (1 = touching the vent). */
   onHeat(on: boolean, proximity: number): void;
 }
 
@@ -38,14 +37,14 @@ export interface ProductScene {
   setHeat(on: boolean): void;
   readonly heatOn: boolean;
   proximity(): number;
-  /** BOOT 键在页面上的位置（clientX/Y），给测试用真实鼠标去按 */
+  /** BOOT key page position (clientX/Y) so tests can press it with a real mouse. */
   buttonScreenPos(): [number, number] | null;
-  /** 相机方位角（度），测试用来确认拖动后角度变了 */
+  /** Camera azimuth in degrees; tests check it changes after a drag. */
   azimuth(): number;
   resetView(): void;
-  /** 指针当前角度（°，0 = 0 ℃ 一侧） */
+  /** Current needle angle in degrees (0 = the 0 °C end). */
   needle(): number;
-  /** 拍照 / 录像（P2-10） */
+  /** Photo / video capture (P2-10). */
   capture(): Capturable;
 }
 
@@ -63,14 +62,14 @@ function dialTexture() {
   const g = c.getContext('2d')!;
   const cx = 512, cy = 500, R = 480;
   g.fillStyle = '#17181A';
-  // 半圆表盘下面多留一条底边，0 和 40 的刻度字落在深色底上
+  // Extra strip under the half dial so the 0 and 40 labels sit on the dark face.
   g.beginPath();
   g.arc(cx, cy, R, Math.PI, 0);
   g.lineTo(cx + R, cy + 36);
   g.lineTo(cx - R, cy + 36);
   g.closePath();
   g.fill();
-  // 28 ℃ 以上的红色区（彩灯变红、30 ℃ 报警）
+  // Red zone above 28 °C (LED turns red, alarm at 30 °C).
   g.strokeStyle = '#F24822';
   g.lineWidth = 18;
   g.beginPath();
@@ -118,7 +117,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
   renderer.domElement.style.touchAction = 'none';
 
   const scene = new THREE.Scene();
-  // 背景与桌面跟随页面主题（DESIGN §2 暗色）；成品本身的材质颜色不变
+  // Background and desk follow the page theme (DESIGN §2 dark); product materials do not.
   const BG = { light: '#EEF1F5', dark: '#1D2024' }, DESK = { light: '#E4E8EE', dark: '#2A2D32' };
   const bgColor = new THREE.Color(BG[currentTheme()]);
   scene.background = bgColor;
@@ -132,7 +131,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
   const TARGET = new THREE.Vector3(2.2, 3.0, 0);
   camera.position.copy(HOME);
 
-  // 光：一盏主光投影 + 天光
+  // Lights: one shadow-casting key light + sky light.
   const sun = new THREE.DirectionalLight('#FFFFFF', 1.25);
   sun.position.set(-6, 14, 9);
   sun.castShadow = true;
@@ -145,7 +144,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
   sun.shadow.bias = -0.0005;
   scene.add(sun, new THREE.HemisphereLight('#FFFFFF', '#C9CED6', 0.35));
 
-  // 桌面
+  // Desk
   const desk = new THREE.Mesh(new THREE.CircleGeometry(40, 64), new THREE.MeshStandardMaterial({ color: DESK[currentTheme()], roughness: 0.92 }));
   const applyTheme = (t: Theme) => {
     bgColor.set(BG[t]);
@@ -159,13 +158,13 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
 
   const station = new THREE.Group();
   scene.add(station);
-  // 外壳：圆角盒，微磨砂塑料（PBR）
+  // Case: rounded box, matte plastic (PBR).
   const shellMat = new THREE.MeshPhysicalMaterial({ color: '#ECE9E2', roughness: 0.55, metalness: 0, clearcoat: 0.25, clearcoatRoughness: 0.5 });
   const shell = new THREE.Mesh(new RoundedBoxGeometry(W, H, D, 6, 0.55), shellMat);
   shell.position.y = H / 2;
   shell.castShadow = shell.receiveShadow = true;
   station.add(shell);
-  // 表盘
+  // Dial
   const dial = new THREE.Mesh(new THREE.PlaneGeometry(4.3, 4.3 * (560 / 1024)), new THREE.MeshStandardMaterial({ map: dialTexture(), roughness: 0.4, transparent: true }));
   dial.position.set(0, PIVOT.y + 4.3 * ((500 - 280) / 1024), FRONT + 0.012);
   station.add(dial);
@@ -181,7 +180,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
   needle.add(hub);
   station.add(needle);
 
-  // OLED：黑色模组框 + 帧缓冲纹理（自发光，不受灯光影响）
+  // OLED: black module frame + emissive framebuffer texture (unaffected by lighting).
   const bezel = new THREE.Mesh(new RoundedBoxGeometry(3.5, 1.95, 0.12, 3, 0.08), new THREE.MeshStandardMaterial({ color: '#0B0C0E', roughness: 0.55, metalness: 0.1 }));
   bezel.position.set(0, 2.7, FRONT + 0.02);
   station.add(bezel);
@@ -196,7 +195,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
   screen.position.set(0, 2.7, FRONT + 0.085);
   station.add(screen);
 
-  // 板载 RGB 透过导光柱：自发光 + bloom + 点光源照亮前面板和桌面
+  // Onboard RGB via light pipe: emissive + bloom + point light on the front panel and desk.
   const pipeMat = new THREE.MeshStandardMaterial({ color: '#F4F4F2', roughness: 0.3, emissive: '#000000', emissiveIntensity: 1 });
   const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.16, 32), pipeMat);
   pipe.rotation.x = Math.PI / 2;
@@ -209,14 +208,14 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
   ledLight.position.set(0, 0.6, FRONT + 0.7);
   station.add(ledLight);
 
-  // 右侧通风口
+  // Right-side vent
   const slotMat = new THREE.MeshStandardMaterial({ color: '#3A3936', roughness: 0.9 });
   for (let i = 0; i < 6; i++) {
     const s = new THREE.Mesh(new RoundedBoxGeometry(0.06, 0.16, 1.9, 2, 0.03), slotMat);
     s.position.set(W / 2 + 0.005, 2.4 + i * 0.42, 0);
     station.add(s);
   }
-  // 左侧蜂鸣器出声孔
+  // Left-side buzzer hole
   const holeMat = new THREE.MeshStandardMaterial({ color: '#2A2A28', roughness: 0.9 });
   for (let i = 0; i < 7; i++) {
     const a = (i / 6) * Math.PI * 2;
@@ -235,7 +234,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
     waves.push(w);
   }
 
-  // 顶部 BOOT 键 + 提示圈
+  // Top BOOT key + hint ring
   const keyMat = new THREE.MeshStandardMaterial({ color: '#C9C6BF', roughness: 0.5 });
   const key = new THREE.Mesh(new RoundedBoxGeometry(0.9, 0.24, 0.6, 3, 0.1), keyMat);
   const KEY_Y = H + 0.08;
@@ -250,7 +249,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
   hint.position.set(1.35, H + 0.02, 0.4);
   station.add(hint);
 
-  // USB-C 线从背后出
+  // USB-C cable exits at the back
   const cable = new THREE.Mesh(
     new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0.8, -FRONT), new THREE.Vector3(0, 0.7, -FRONT - 1.2), new THREE.Vector3(0.6, 0.12, -FRONT - 3), new THREE.Vector3(3, 0.12, -FRONT - 9)]), 40, 0.12, 10),
     new THREE.MeshStandardMaterial({ color: '#1E1E1E', roughness: 0.6 }),
@@ -258,7 +257,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
   cable.castShadow = true;
   station.add(cable);
 
-  // 热源：小暖风机，出风口对着气象站
+  // Heat source: a small fan heater aimed at the station
   const heater = new THREE.Group();
   const body = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.95, 1.9, 40), new THREE.MeshPhysicalMaterial({ color: '#C8463A', roughness: 0.45, clearcoat: 0.4 }));
   body.rotation.z = Math.PI / 2;
@@ -288,25 +287,25 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
   heater.position.copy(PARK);
   scene.add(heater);
 
-  // 标签（HTML 叠加，跟着 3D 位置走）
+  // HTML labels that track 3D positions
   const tags = document.createElement('div');
   tags.className = 'p3-tags';
   const tag = (text: string, cls = '') => {
-    const t = document.createElement('div');
-    t.className = 'p3-tag ' + cls;
-    t.textContent = text;
-    tags.appendChild(t);
-    return t;
+    const el = document.createElement('div');
+    el.className = 'p3-tag ' + cls;
+    el.textContent = text;
+    tags.appendChild(el);
+    return el;
   };
-  const tagKey = tag('BOOT · 点一下换 ℃/℉', 'hot');
-  const tagVent = tag('通风口');
-  const tagHeat = tag('热源 · 可拖动');
+  const tagKey = tag(t('BOOT · click to switch °C/°F'), 'hot');
+  const tagVent = tag(t('Vent'));
+  const tagHeat = tag(t('Heat source · draggable'));
   const corner = document.createElement('div');
   corner.className = 'p3-disclaimer';
-  corner.textContent = '外观示意，非乐鑫官方模型';
+  corner.textContent = t('Illustrative look, not an official Espressif model');
   container.append(tags, corner);
 
-  // 交互：我们的 pointerdown 先于 OrbitControls 注册，点到键 / 热源时先关掉旋转
+  // Our pointerdown registers before OrbitControls, so hitting the key / heat source disables rotation first.
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -343,7 +342,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
     if (dragging) {
       const p = new THREE.Vector3();
       if (ray.ray.intersectPlane(floorPlane, p)) {
-        // 不能推进壳里：离外壳表面至少 1.2 cm
+        // Keep it out of the case: at least 1.2 cm from the surface.
         p.x = Math.max(-14, Math.min(14, p.x));
         p.z = Math.max(-10, Math.min(10, p.z));
         const dx = Math.max(Math.abs(p.x) - (W / 2 + 1.2), 0), dz = Math.max(Math.abs(p.z) - (D / 2 + 1.2), 0);
@@ -391,7 +390,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
     renderer.setSize(w, h, false);
     composer.setSize(w, h);
     camera.aspect = w / h;
-    // 竖屏 / 窄容器时退远一点，整个成品放得下
+    // Back off in portrait / narrow containers so the whole product fits.
     camera.fov = w / h < 1 ? 44 : 32;
     camera.updateProjectionMatrix();
   }
@@ -409,7 +408,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
     o.onHeat(on, on ? (move ? 1 - (Math.hypot(NEAR.x - VENT.x, NEAR.z - VENT.z) - 2.7) / 7 : proximity()) : 0);
   }
 
-  // 指针：二阶系统（弹簧 + 阻尼）追目标角度，再限速 600°/s（SG90 约 0.1 s / 60°）
+  // Needle: spring-damper toward the target, capped at 600°/s (SG90 ≈ 0.1 s / 60°).
   let theta = 0, omega = 0;
   let lastOled: Uint8Array | null = null;
   let raf = 0;
@@ -417,7 +416,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
   const ledColor = new THREE.Color();
   const v = new THREE.Vector3();
   const occRay = new THREE.Raycaster();
-  /** 标签挡在外壳 / 热源后面时藏起来，免得隔着壳子看见"通风口" */
+  /** Hide labels occluded by the case / heater so "Vent" is not seen through the shell. */
   function hidden(p: THREE.Vector3) {
     const dir = p.clone().sub(camera.position);
     const dist = dir.length();
@@ -461,7 +460,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
     const rgb = f.running ? f.rgb : null;
     const m = rgb ? Math.max(...rgb) : 0;
     if (rgb && m > 0) {
-      // 固件常把亮度压很低（0x20）：按最大通道放大到可见，亮度本身不能模拟（见"不能模拟的项"）
+      // Firmware often dims to 0x20: scale by the max channel so it is visible; true brightness is not simulated.
       ledColor.setRGB(rgb[0] / m, rgb[1] / m, rgb[2] / m, THREE.SRGBColorSpace);
       pipeMat.emissive.copy(ledColor);
       pipeMat.emissiveIntensity = 4;

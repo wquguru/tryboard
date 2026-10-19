@@ -1,36 +1,36 @@
-// 作品定义：每个作品走哪几个检查点（firmware/levels.json 的关卡 id）、首页卡片上写什么。
-// 单独成文件，首页（home.ts）也读它来生成作品卡、显示检查点数，不必拉进整套实验台代码：加一个作品只要在这里加一项。
-// 原则：每过一个检查点作品就多一样东西；最后一个带装配（assembly）的检查点是"合体"。
+// Work definitions: which checkpoints (firmware/levels.json level ids) each work walks, and its home card text.
+// Kept separate so home.ts can build cards without pulling in the lab; each checkpoint adds one thing, the last (with assembly) is the "combine".
 import type { WorkDef } from './types';
+import { t } from '../i18n';
 
 export const WORKS: Record<string, WorkDef> = {
-  weather: { id: 'weather', title: '桌面气象站', example: 'weather', checkpoints: ['01', '02', '03', '04', '05', '06'], card: { chip: 'ESP32-S3', blurb: '屏幕显示温湿度和气压，舵机表盘指示温度，彩灯随冷热变色' } },
-  // 画脸 → 转身 → 合体（眼珠跟随 + 按键回头）
-  spin: { id: 'spin', title: '会转身的小黄', example: 'spin', checkpoints: ['spin-1', 'spin-2', '07-spin'], card: { chip: 'ESP32-S3', blurb: '舵机转台加圆屏表情，按下按键后转身面向你' } },
-  // 眼睛 + 眨眼 → 按键换表情 → 合体（四种表情循环）
-  lens: { id: 'lens', title: '透镜里的小人', example: 'lens', checkpoints: ['lens-1', 'lens-2', '07-lens'], card: { chip: 'ESP32-S3', blurb: '凸透镜放大圆屏表情，按键切换表情' } },
-  // 枚举成功 → 按键发字母 → 合体（宏键 + 装壳）。P2-12
-  usbkey: { id: 'usbkey', title: 'USB 小键盘', example: 'usbkey', checkpoints: ['usbkey-1', 'usbkey-2', 'usbkey-3'], card: { chip: 'ESP32-S3', blurb: '四键 USB 键盘：三个字母键加一个宏键，一键输入整句' } },
-  // P2-09 新作品：每条线都是"零件单独跑通 → 第二样东西 → 合体（带装配）"
-  // 灯带点亮 → 旋钮读数 → 合体（旋钮调亮度 / 颜色，按下切换）
-  lamp: { id: 'lamp', title: '旋钮台灯', example: 'lamp', checkpoints: ['lamp-1', 'lamp-2', 'lamp-3'], card: { chip: 'ESP32-S3', blurb: '旋钮调亮度，按下切换调色；8 颗 WS2812 灯珠' } },
-  // 测距打印 → OLED 显示 → 合体（越近蜂鸣器越急）
-  ruler: { id: 'ruler', title: '超声波尺子', example: 'ruler', checkpoints: ['ruler-1', 'ruler-2', 'ruler-3'], card: { chip: 'ESP32-S3', blurb: '超声波测距，屏幕展示结果，蜂鸣器随距离快慢变化' } },
-  // 读姿态 → 圆屏画小豆 → 合体（倾斜时小豆往低处滑）
-  tilt: { id: 'tilt', title: '体感小人', example: 'tilt', checkpoints: ['tilt-1', 'tilt-2', 'tilt-3'], card: { chip: 'ESP32-S3', blurb: '小豆跟着屏幕歪斜方向运动' } },
-  // P2-01 / P2-04 的外设实验台（没有检查点；对应作品是上面的旋钮台灯、超声波尺子）
-  knob: { id: 'knob', title: '旋钮计数（编码器和 PCNT）', example: 's3-encoder', checkpoints: [] },
-  sonar: { id: 'sonar', title: '超声波测距（HC-SR04，RMT 接收）', example: 's3-ultrasonic', checkpoints: [] },
-  blank: { id: 'blank', title: '空白', example: null, checkpoints: [] },
-  // 选板结果（DESIGN_V2 §8.3）：清单、摆台、检查点都按地址参数生成（genlevels.ts），标题换成项目名；只有 采购 → 实验台 两步
-  custom: { id: 'custom', title: '我的项目', example: null, checkpoints: [] },
-  // P2-03 / P2-02 的外设台面（不是完整作品：没有检查点、组装模板；对应作品是上面的体感小人）
-  imu: { id: 'imu', title: '倾角仪（MPU6050）', example: 's3-imu', checkpoints: [] },
-  touch: { id: 'touch', title: '触摸圆屏（CST816S）', example: 's3-touch', checkpoints: [] },
+  weather: { id: 'weather', title: t('Desk weather station'), example: 'weather', checkpoints: ['01', '02', '03', '04', '05', '06'], card: { chip: 'ESP32-S3', blurb: t('A screen shows temperature, humidity and pressure, a servo dial points at the temperature, and the RGB LED changes color with hot and cold') } },
+  // Draw face → turn → combine (eyes follow + button turns it around)
+  spin: { id: 'spin', title: t('Little Yellow who turns around'), example: 'spin', checkpoints: ['spin-1', 'spin-2', '07-spin'], card: { chip: 'ESP32-S3', blurb: t('A servo turntable with a round-screen face; press the button and it turns to face you') } },
+  // Eyes + blink → button changes face → combine (four faces cycle)
+  lens: { id: 'lens', title: t('The little figure in the lens'), example: 'lens', checkpoints: ['lens-1', 'lens-2', '07-lens'], card: { chip: 'ESP32-S3', blurb: t('A convex lens magnifies the round-screen face; the button switches faces') } },
+  // Enumerate → keys send letters → combine (macro key + case). P2-12
+  usbkey: { id: 'usbkey', title: t('USB mini keyboard'), example: 'usbkey', checkpoints: ['usbkey-1', 'usbkey-2', 'usbkey-3'], card: { chip: 'ESP32-S3', blurb: t('A four-key USB keyboard: three letter keys plus a macro key that types a whole sentence') } },
+  // P2-09 works: each line is "part works alone → second thing → combine (with assembly)"
+  // Strip lights → knob reads → combine (knob sets brightness / color, press switches)
+  lamp: { id: 'lamp', title: t('Knob desk lamp'), example: 'lamp', checkpoints: ['lamp-1', 'lamp-2', 'lamp-3'], card: { chip: 'ESP32-S3', blurb: t('Turn the knob for brightness, press to switch to color; 8 WS2812 LEDs') } },
+  // Range print → OLED → combine (closer = faster beeps)
+  ruler: { id: 'ruler', title: t('Ultrasonic ruler'), example: 'ruler', checkpoints: ['ruler-1', 'ruler-2', 'ruler-3'], card: { chip: 'ESP32-S3', blurb: t('Ultrasonic ranging with the result on screen; the buzzer beeps faster or slower with distance') } },
+  // Read attitude → draw bean on round screen → combine (bean slides downhill when tilted)
+  tilt: { id: 'tilt', title: t('Tilt buddy'), example: 'tilt', checkpoints: ['tilt-1', 'tilt-2', 'tilt-3'], card: { chip: 'ESP32-S3', blurb: t('A little bean rolls toward whichever way the screen tilts') } },
+  // P2-01 / P2-04 peripheral benches (no checkpoints; the matching works are the knob lamp and ultrasonic ruler)
+  knob: { id: 'knob', title: t('Knob counter (encoder and PCNT)'), example: 's3-encoder', checkpoints: [] },
+  sonar: { id: 'sonar', title: t('Ultrasonic ranging (HC-SR04, RMT receive)'), example: 's3-ultrasonic', checkpoints: [] },
+  blank: { id: 'blank', title: t('Blank'), example: null, checkpoints: [] },
+  // Board-picker result (DESIGN_V2 §8.3): BOM, bench and checkpoints come from URL params (genlevels.ts); only Shop → Lab
+  custom: { id: 'custom', title: t('My project'), example: null, checkpoints: [] },
+  // P2-03 / P2-02 peripheral benches (no checkpoints or assembly; the matching work is the tilt buddy)
+  imu: { id: 'imu', title: t('Inclinometer (MPU6050)'), example: 's3-imu', checkpoints: [] },
+  touch: { id: 'touch', title: t('Touch round screen (CST816S)'), example: 's3-touch', checkpoints: [] },
 };
 
-/** 作品数据在 localStorage 里的键 */
+/** localStorage key for a work's data */
 export const wkey = (w: WorkDef) => w.key ?? w.id;
 
-/** 首页上的作品（有卡片的），按定义顺序 */
+/** Works shown on the home page (those with a card), in definition order */
 export const HOME_WORKS = Object.values(WORKS).filter((w) => w.card);

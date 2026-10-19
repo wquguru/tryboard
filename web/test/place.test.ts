@@ -58,7 +58,7 @@ test('可选针不接、引脚类别、冲突', () => {
   assert.deepEqual(m.spec, { type: 'mpu6050', addr: 0x68, sda: 8, scl: 9 });
   assert.ok(pinOk('gpio', 'GPIO48') && !pinOk('gpio', '3V3') && pinOk('power', '5V') && !pinOk('gnd', '5V'));
   const scene = { parts: [{ type: 'bme280' as const, addr: 0x76, sda: 8, scl: 9 }] };
-  assert.match(placeConflict(def('bme280'), scene)!, /已经有/);
+  assert.match(placeConflict(def('bme280'), scene)!, /already a/);
   assert.equal(placeConflict(def('ssd1306'), scene), null);
   assert.equal(placeConflict(def('led-kit'), scene), null);
 });

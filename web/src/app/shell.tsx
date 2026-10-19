@@ -1,9 +1,8 @@
-// 工作台外壳：路由（?work= + #步骤）、步骤注册、右上结论 / 下一步、提示条（⌘K 在 cmdk.tsx）。
-// 步骤切换只换面板内容；实时模拟和 3D 台面在 session 里，整页只有一份。
-// 外壳由 React 画（DECISIONS 2026-10-17）：步骤调 shell 的 setter / Panel.render，全部同步提交；
-// 3D 台面的 canvas 由 three.js 自己挂进 #stage，串口文字由 log() 直接追加文本节点，都不经 React。
+// Workbench shell: routing (?work= + #step), step registry, verdict / next, toast. Switching steps only swaps panels;
+// React draws the shell (DECISIONS 2026-10-17), while the three.js canvas and raw serial text bypass React.
 import { Fragment, type ReactNode } from "react";
 import { cn } from "../ui/cn";
+import { t } from "../i18n";
 import {
   STEPS,
   type NextState,
@@ -36,7 +35,7 @@ import { StageOverlays } from "./overlays";
 
 const registry = new Map<StepId, StepImpl>();
 
-/** 步骤注册：后续任务（采购 P0-07、组装 P0-16、成品 P0-17）各自注册一个实现覆盖占位 */
+/** Step registry: Shop (P0-07), Assemble (P0-16), Product (P0-17) each register an impl over the placeholder. */
 export function registerStep(id: StepId, impl: StepImpl) {
   registry.set(id, impl);
   if (active?.id === id && ctxRef) remount(id);
@@ -49,7 +48,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
 
 export function stepFromHash(): StepId {
   const h = location.hash.slice(1) as StepId;
-  // 空白作品没有组装 / 成品：旧链接 #assemble、#product 落到实验台（地址栏也改掉，免得刷新又落空）
+  // Two-step works have no assemble/product: old links land on the bench (URL fixed too, so reload stays put).
   if (STEPS.some((s) => s.id === h) && !shownSteps().includes(h)) {
     history.replaceState(null, "", "#bench");
     return "bench";
@@ -59,29 +58,29 @@ export function stepFromHash(): StepId {
 
 type Verdict = "ok" | "bad" | "warn" | "idle";
 interface Chrome {
-  /** 外壳当前画的步骤（台面滤镜、串口显隐跟着它） */
+  /** Step the shell is drawing (stage filter and serial visibility follow it). */
   step: StepId;
   routed: boolean;
   workName: string;
   verdict: { text: string; state: Verdict };
   next: { label: string; to: StepId | null; why: string; onGo?: () => void; state: NextState };
   toast: { text: string; shown: boolean };
-  /** 只留中间一张卡：左右两栏、运行组都收起（锁住的组装，设计稿 unify/Steps）；换步骤时复位 */
+  /** Only the centre card: side columns and run group hidden (locked assembly, unify/Steps); reset on step change. */
   bare: boolean;
 }
 const chrome = createStore<Chrome>({
   step: stepFromHash(),
   routed: false,
   workName: "",
-  verdict: { text: "检查点 0/0", state: "idle" },
-  next: { label: "下一步", to: null, why: "", state: "lock" },
+  verdict: { text: t("Checkpoints 0/0"), state: "idle" },
+  next: { label: t("Next"), to: null, why: "", state: "lock" },
   toast: { text: "", shown: false },
   bare: false,
 });
 const setChrome = (p: Partial<Chrome>) => commit(() => chrome.set(p));
 let verdictFn: (() => void) | null = null;
 
-/** 一块整块重画的区域：每次 render 换 key，React 整棵重建（与原来 innerHTML 重画一致，命令式改过的状态随之清掉） */
+/** Fully redrawn region: each render changes the key so React rebuilds it, dropping imperative edits like innerHTML did. */
 type PanelProps = {
   className: string;
   tag?: "div" | "aside" | "main";
@@ -128,9 +127,9 @@ const card = createCard(() => $("stage"));
 
 const topBtn =
   "h-8 flex-none cursor-pointer rounded-lg border border-line bg-surface px-3 font-medium whitespace-nowrap";
-/** 手机上采购 / 组装 / 成品各块拆开竖排，每块各自是一张卡 */
+/** On phones, Shop/Assemble/Product blocks stack vertically, each as its own card. */
 const mCard = "rounded-(--r) border border-line bg-(--panel) shadow-panel";
-/** 手机竖排的先后（DESIGN_V2 §5）：采购结论在上、清单、零件平铺；组装 / 成品 3D 在上、属性（装法 / 按键）、工具、构建树 */
+/** Phone stacking order (DESIGN_V2 §5): Shop verdict first; Assemble/Product put 3D first, then props, tools, tree. */
 const M_ORDER: Record<
   string,
   { layer: string; props: string; tools: string; tree: string }
@@ -162,9 +161,9 @@ function App() {
   const { step } = c;
   const bench = step === "bench";
   const own = step === "assemble" || step === "product";
-  /** 手机实验台：台面铺满，属性 / 元件库 / 串口是抽屉；别的步骤：各块竖排滚动，底部吸一条主按钮 */
+  /** Phone bench: full-bleed stage with drawers; other steps scroll vertically with a sticky main button. */
   const pb = phone && bench;
-  /** 手机成品（P2-17，DESIGN_V2 §5）：3D 占满顶栏以下，底部一块面板放一行串口 + 按键网格；详情（读数、真机提醒）是抽屉 */
+  /** Phone product (P2-17, DESIGN_V2 §5): 3D fills the screen, bottom sheet has a serial line + keys; details are a drawer. */
   const pp = phone && step === "product";
   const pf = phone && !bench && !pp;
   const mo = M_ORDER[step] ?? M_ORDER.shop;
@@ -187,13 +186,13 @@ function App() {
         className={cn(
           verdictCls,
           topBtn,
-          // 实验台的检查点进度在步骤条上已有；窄一点就藏起来给步骤条让位
+          // The step bar already shows checkpoint progress; hide this when narrow.
           "max-[1600px]:hidden",
         )}
       >
         {c.verdict.text}
       </button>
-      {/* 下一步一种样式三种状态（DESIGN_V2 §6.3、设计稿 unify/Steps）：可去描边、刚解锁实心、锁着灰掉并写出差什么 */}
+      {/* Next: one style, three states (DESIGN_V2 §6.3): outline, solid when just unlocked, grey with the reason when locked. */}
       <button
         id="next"
         type="button"
@@ -223,7 +222,7 @@ function App() {
     : cn(
         "stage fixed top-(--top-h) right-(--right-w) bottom-(--dock-h) left-(--left-w) overflow-hidden bg-(image:--stage-bg)",
         !bench && step !== "shop" && "[filter:saturate(.4)_opacity(.45)]",
-        // 组装、成品有自己的画面：实验台的 3D 台面藏起来（仍在后台跑，不销毁）
+        // Assemble/Product have their own view: hide the bench 3D stage (it keeps running, not destroyed).
         own && "invisible",
         step === "shop" && "[&_canvas]:invisible",
       );
@@ -263,7 +262,7 @@ function App() {
         <MobileTop
           step={step}
           workName={c.workName}
-          toast={(t) => shell.toast(t)}
+          toast={(s) => shell.toast(s)}
         />
       ) : (
         <TopBar
@@ -271,10 +270,10 @@ function App() {
           workName={c.workName}
           bare={c.bare}
           right={right}
-          toast={(t) => shell.toast(t)}
+          toast={(s) => shell.toast(s)}
         />
       )}
-      <section id="stage" aria-label="3D 台面" className={stageCls}>
+      <section id="stage" aria-label={t("3D stage")} className={stageCls}>
         <card.View />
         <StageOverlays bench={bench} />
       </section>
@@ -284,7 +283,7 @@ function App() {
           className="fixed inset-x-0 top-(--top-h) bottom-0 z-1 flex flex-col"
         >
           <div className="relative min-h-0 flex-1">
-            <layer.View tag="main" label="当前步骤" className={layerCls} />
+            <layer.View tag="main" label={t("Current step")} className={layerCls} />
             <button
               id="verdict"
               type="button"
@@ -302,11 +301,11 @@ function App() {
             id="mProductSheet"
             className="flex-none rounded-t-[18px] border-t border-line bg-surface px-4 pt-2.5 pb-[calc(12px+env(safe-area-inset-bottom))] shadow-[0_-6px_20px_#0000001a]"
           >
-            {/* 一行串口：点开是实验台同一个串口抽屉（半屏），收起回到这里 */}
+            {/* Serial line: opens the bench's serial drawer at half height; closing returns here. */}
             <button
               type="button"
               id="mSerialOpen"
-              aria-label="打开串口抽屉"
+              aria-label={t("Open serial drawer")}
               onClick={() =>
                 setMui({ sheet: "half", props: false, more: false, lib: null })
               }
@@ -328,7 +327,7 @@ function App() {
           </div>
         </div>
       ) : (
-        <layer.View tag="main" label="当前步骤" className={layerCls} />
+        <layer.View tag="main" label={t("Current step")} className={layerCls} />
       )}
       {!phone && step === "assemble" && (
         <div
@@ -337,7 +336,7 @@ function App() {
         />
       )}
 
-      <aside aria-label="构建树" className={leftCls}>
+      <aside aria-label={t("Build tree")} className={leftCls}>
         <LeftColumn
           step={step}
           tree={
@@ -356,13 +355,13 @@ function App() {
 
       <props.View
         tag="aside"
-        label="属性面板"
+        label={t("Properties panel")}
         live
         className={propsCls}
         head={
           pb || pp ? (
             <SheetHead
-              title={pp ? "详情" : "属性"}
+              title={pp ? t("Details") : t("Properties")}
               id="propsClose"
               onClose={() => setMui({ props: false })}
             />
@@ -379,28 +378,28 @@ function App() {
       )}
 
       <Dock
-        // 手机成品点开串口条时借用实验台的串口抽屉（收起后回到一行串口条）
+        // Phone product borrows the bench serial drawer when the strip is opened.
         step={pp && m.sheet !== "peek" ? "bench" : step}
-        toast={(t) => shell.toast(t)}
+        toast={(s) => shell.toast(s)}
         timeline={<timeline.View />}
         simtime={
           <>
             <span
               id="simtime"
               className="mono simtime flex-none font-mono text-xs text-muted"
-              title="模拟时间"
+              title={t("Sim time")}
             />
-            {/* 跑得比真机慢多少：慢于 0.9× 变红（定时相关的现象要打折看） */}
+            {/* Speed vs real hardware: red below 0.9× (discount timing-related behaviour). */}
             <span
               id="ratio"
               className="mono flex-none font-mono text-xs text-muted [&.slow]:text-bad-ink"
-              title="模拟速度 / 真机速度"
+              title={t("Sim speed / real-hardware speed")}
             />
           </>
         }
       />
       {pf && (
-        // 手机上采购 / 组装 / 成品的主按钮吸在底部（结论在左，下一步在右）
+        // Phone Shop/Assemble/Product: main buttons stick to the bottom (verdict left, next right).
         <div
           id="mNext"
           className="fixed inset-x-0 bottom-0 z-20 flex h-(--dock-h) items-start gap-2 border-t border-line bg-surface px-3 pt-2.5 pb-[env(safe-area-inset-bottom)]"
@@ -437,7 +436,7 @@ function App() {
           </button>
         </div>
       )}
-      {/* 串口原文：文本节点原样追加（重放对拍、回归脚本读它）；看得见的是坞里的行视图 */}
+      {/* Raw serial as appended text nodes (replay diff and regression scripts read it); the visible view is in the dock. */}
       <pre id="console" aria-hidden="true" className="sr-only" />
       <div
         id="toast"
@@ -490,7 +489,7 @@ const shell: Shell = {
   },
 };
 
-/** 外壳组件与接口（main 里先 render <ShellView/>，再 createSession） */
+/** Shell component and API (main renders <ShellView/> before createSession). */
 export const ShellView = App;
 export function createShell(workName: string): Shell {
   setChrome({ workName });
@@ -515,7 +514,7 @@ function remount(id: StepId) {
   impl.mount(ctx);
 }
 
-/** 启动路由：读当前 hash、监听 hashchange。四步都在同一页，切换不重载 */
+/** Start routing on the hash; all four steps share one page, so switching never reloads. */
 export function startRouter(ctx: StepCtx) {
   ctxRef = ctx;
   window.addEventListener("hashchange", () => {

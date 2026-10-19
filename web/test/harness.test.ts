@@ -42,7 +42,7 @@ test('接线检查 W6：拉长 BME280 的线，60 cm 警告、150 cm 阻断；�
   assert.equal(checkWiring(weather, wiresOf(weather)).filter((f) => f.rule === 'W6').length, 0);
   const mid = checkWiring(weather, wiresOf(weather, false, { lenCm: { bme280: 50 } })).find((f) => f.rule === 'W6');
   assert.ok(mid && mid.level === 'warn' && mid.confidence === '必须上真机', JSON.stringify(mid));
-  assert.match(mid.detail, /一共 60 cm/);
+  assert.match(mid.detail, /totals 60 cm/);
   assert.equal(mid.wires.length, 4);
   const bad = checkWiring(weather, wiresOf(weather, false, { lenCm: { bme280: 140 } })).find((f) => f.rule === 'W6');
   assert.ok(bad && bad.level === 'block');

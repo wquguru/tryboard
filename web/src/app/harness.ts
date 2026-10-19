@@ -1,22 +1,22 @@
-// 线束（P2-11，估算，必须上真机）：I2C 排线长度 → 上升时间；金属件 / 电池靠近天线 → RSSI 降低。
-// 常数与 core/crates/elec/src/i2cbus.rs、core/crates/soc/src/wifi/world.rs 一致（test/elec.test.ts 对拍同一组数）；
-// 模拟器里真正生效的是内核那一份（读回字节出错、AP 听不到），这里只给界面算提示。全是确定性公式，不引入随机。
+// Harness (P2-11, estimate): I2C wire length -> rise time; metal/battery near the antenna -> RSSI. Constants match
+// core/crates/elec/src/i2cbus.rs and soc/src/wifi/world.rs (test/elec.test.ts); the core applies the effect, this only hints the UI.
+import { t } from '../i18n/index.ts';
 
 export const PF_PER_CM = 1.0;
 export const PF_PER_DEVICE = 10.0;
 export const PF_BASE = 10.0;
 export const PULLUP_PER_MODULE = 10_000;
 export const PULLUP_INTERNAL = 45_000;
-/** 实验台上一根杜邦线默认多长（cm，估算：面包板上常用的 10 cm 线） */
+/** Default bench jumper length in cm (the common 10 cm breadboard wire). */
 export const BENCH_WIRE_CM = 10;
-/** 组装时 I2C 排线总长默认值（cm）：开发板到 OLED、BME280 两段 8 cm */
+/** Default assembled I2C harness length in cm: two 8 cm runs, board to OLED and BME280. */
 export const CASE_WIRE_CM = 16;
-/** 网页提示按 400 kHz 算（参考固件都用 400 kHz；内核按固件实际配置的频率判） */
+/** UI hints assume 400 kHz (all reference firmware uses it); the core uses the configured clock. */
 export const ASSUME_SCL_HZ = 400_000;
 
 export const busPf = (wireCm: number, devices: number) => PF_BASE + PF_PER_DEVICE * devices + PF_PER_CM * Math.max(0, wireCm);
 export const pullupOhm = (devices: number) => (devices === 0 ? PULLUP_INTERNAL : PULLUP_PER_MODULE / devices);
-/** 上升时间（ns）：0.8473 · R · C（I2C 规范 UM10204 §7.1，30% → 70% VDD） */
+/** Rise time in ns: 0.8473 · R · C (UM10204 §7.1, 30% -> 70% VDD). */
 export const riseNs = (wireCm: number, devices: number) => 0.8473 * pullupOhm(devices) * busPf(wireCm, devices) * 1e-3;
 export const limitNs = (sclHz: number) => (sclHz <= 100_000.5 ? 1000 : sclHz <= 400_000.5 ? 300 : 120);
 export type Verdict = 'ok' | 'marginal' | 'fail';
@@ -37,32 +37,32 @@ export function i2cLoad(wireCm: number, devices: number, sclHz = ASSUME_SCL_HZ):
   return { wireCm, devices, rise, limit, verdict: verdict(rise, limit), maxCm: maxWireCm(devices, sclHz) };
 }
 export function i2cText(l: I2cLoad): string {
-  const base = `上升时间 ${l.rise.toFixed(0)} ns，${(ASSUME_SCL_HZ / 1000).toFixed(0)} kHz 允许 ${l.limit} ns`;
-  if (l.verdict === 'ok') return `${base}，没超（这个接法最长约 ${l.maxCm.toFixed(0)} cm）`;
-  if (l.verdict === 'marginal') return `${base}：超出规范，读到的数据会错，读数离谱、校准数据乱。缩短到 ${l.maxCm.toFixed(0)} cm 以内，或换 4.7 kΩ 上拉、降到 100 kHz`;
-  return `${base}：超过两倍，器件不应答（NACK），固件初始化就失败。缩短到 ${l.maxCm.toFixed(0)} cm 以内，或降到 100 kHz`;
+  const v = { rise: l.rise.toFixed(0), khz: (ASSUME_SCL_HZ / 1000).toFixed(0), limit: l.limit, max: l.maxCm.toFixed(0) };
+  if (l.verdict === 'ok') return t('Rise time {rise} ns, {khz} kHz allows {limit} ns: within spec (this wiring can go up to about {max} cm)', v);
+  if (l.verdict === 'marginal') return t('Rise time {rise} ns, {khz} kHz allows {limit} ns: out of spec, reads will be corrupted (wild readings, garbled calibration). Shorten to under {max} cm, or use 4.7 kΩ pull-ups and drop to 100 kHz', v);
+  return t('Rise time {rise} ns, {khz} kHz allows {limit} ns: more than double, the device does not answer (NACK) and firmware init fails. Shorten to under {max} cm, or drop to 100 kHz', v);
 }
-/** 第一层人话（DESIGN_V2 §9）：一句结论 + 该怎么改；上升时间等数字留给 i2cText 当小字 */
+/** Plain-language layer (DESIGN_V2 §9): verdict + fix; the numbers live in i2cText as fine print. */
 export function i2cSay(l: I2cLoad): string {
   const max = l.maxCm.toFixed(0);
-  if (l.verdict === 'ok') return `I2C 排线 ${l.wireCm} cm 没问题，最长可以到 ${max} cm`;
-  if (l.verdict === 'marginal') return `I2C 排线太长，读数会出错：缩短到 ${max} cm 以内`;
-  return `I2C 排线太长，传感器没有回应：缩短到 ${max} cm 以内`;
+  if (l.verdict === 'ok') return t('I2C wire {cm} cm is fine; it can go up to {max} cm', { cm: l.wireCm, max });
+  if (l.verdict === 'marginal') return t('I2C wire too long, readings will be wrong: shorten to under {max} cm', { max });
+  return t('I2C wire too long, the sensor does not respond: shorten to under {max} cm', { max });
 }
 
-// ------------------------------------------------------------------ 天线遮挡
-/** 虚拟 AP（TryBoard-WiFi）在开阔处的信号（dBm），与内核 world.rs 一致 */
+// ------------------------------------------------------------------ antenna obstruction
+/** Virtual AP (TryBoard-WiFi) RSSI in open air, dBm; matches core world.rs. */
 export const AP_RSSI = -42;
 export const SCAN_MIN_DBM = -92;
 export const LINK_MIN_DBM = -82;
 export type Obstacle = 'none' | 'battery' | 'metal';
-export const OBSTACLE_LABEL: Record<Obstacle, string> = { none: '没有', battery: '锂电池', metal: '金属件（螺丝柱、铝片、钢定位板）' };
-/** 贴着天线时的衰减（dB，估算）：金属挡得最狠，电池次之 */
+export const OBSTACLE_LABEL: Record<Obstacle, string> = { none: t('Nothing'), battery: t('Li-ion battery'), metal: t('Metal parts (screw posts, aluminium sheet, steel plate)') };
+/** Loss in dB when touching the antenna (estimate): metal worst, battery next. */
 export const OBSTACLE_DB: Record<Exclude<Obstacle, 'none'>, number> = { metal: 45, battery: 30 };
-/** 离天线多远就不再影响（mm，估算：2.4 GHz 近场约四分之一波长量级） */
+/** Distance in mm beyond which there is no effect (estimate: ~quarter wavelength at 2.4 GHz). */
 export const OBSTACLE_RANGE_MM = 20;
 
-/** 衰减（dB，整数）：K × (1 − d / 20 mm)，d ≥ 20 mm 为 0 */
+/** Loss in whole dB: K × (1 − d / 20 mm), 0 when d ≥ 20 mm. */
 export function antennaLossDb(o: Obstacle, distMm: number): number {
   if (o === 'none') return 0;
   const k = Math.max(0, 1 - Math.max(0, distMm) / OBSTACLE_RANGE_MM);
@@ -71,22 +71,22 @@ export function antennaLossDb(o: Obstacle, distMm: number): number {
 export const rssiAfter = (lossDb: number) => Math.max(-127, AP_RSSI - lossDb);
 export function wifiText(lossDb: number): { rssi: number; level: Verdict; text: string } {
   const r = rssiAfter(lossDb);
-  if (r < SCAN_MIN_DBM) return { rssi: r, level: 'fail', text: `TryBoard-WiFi ${r} dBm：扫描不到` };
-  if (r < LINK_MIN_DBM) return { rssi: r, level: 'fail', text: `TryBoard-WiFi ${r} dBm：扫得到但连不上（低于 ${LINK_MIN_DBM} dBm）` };
-  if (lossDb >= 15) return { rssi: r, level: 'marginal', text: `TryBoard-WiFi ${r} dBm：能连，信号弱，远一点就会掉线` };
+  if (r < SCAN_MIN_DBM) return { rssi: r, level: 'fail', text: t('TryBoard-WiFi {rssi} dBm: not found in scan', { rssi: r }) };
+  if (r < LINK_MIN_DBM) return { rssi: r, level: 'fail', text: t('TryBoard-WiFi {rssi} dBm: visible but cannot connect (below {min} dBm)', { rssi: r, min: LINK_MIN_DBM }) };
+  if (lossDb >= 15) return { rssi: r, level: 'marginal', text: t('TryBoard-WiFi {rssi} dBm: connects, but the signal is weak and drops a little farther away', { rssi: r }) };
   return { rssi: r, level: 'ok', text: `TryBoard-WiFi ${r} dBm` };
 }
 
-/** Wi-Fi 一句人话；dBm 留给 wifiText 当小字 */
+/** One plain sentence for Wi-Fi; dBm stays in wifiText as fine print. */
 export function wifiSay(lossDb: number): string {
   const r = rssiAfter(lossDb);
-  if (r < SCAN_MIN_DBM) return '外壳挡住了天线，搜不到 Wi-Fi';
-  if (r < LINK_MIN_DBM) return '外壳挡住了天线，Wi-Fi 连不上';
-  if (lossDb >= 15) return 'Wi-Fi 能连，但信号弱，离路由器远一点就会掉线';
-  return lossDb > 0 ? '外壳对 Wi-Fi 影响不大' : '天线旁边没挡东西，Wi-Fi 不受影响';
+  if (r < SCAN_MIN_DBM) return t('The enclosure blocks the antenna: Wi-Fi not found');
+  if (r < LINK_MIN_DBM) return t('The enclosure blocks the antenna: Wi-Fi cannot connect');
+  if (lossDb >= 15) return t('Wi-Fi connects, but the signal is weak and drops a little farther from the router');
+  return lossDb > 0 ? t('The enclosure barely affects Wi-Fi') : t('Nothing near the antenna, Wi-Fi unaffected');
 }
 
-/** 组装时的线束选择（存 localStorage 'tryboard-app-harness:<work>'） */
+/** Assembly harness choice (localStorage 'tryboard-app-harness:<work>'). */
 export interface CaseHarness {
   i2cCm: number;
   obstacle: Obstacle;
@@ -99,16 +99,16 @@ export function loadCaseHarness(work: string): CaseHarness {
     const v = JSON.parse(localStorage.getItem(KEY(work)) ?? 'null');
     if (v && typeof v.i2cCm === 'number' && ['none', 'battery', 'metal'].includes(v.obstacle) && typeof v.distMm === 'number') return v;
   } catch {
-    /* 存不了就用默认 */
+    /* Unreadable: use defaults. */
   }
   return defaultCaseHarness();
 }
 export function saveCaseHarness(work: string, h: CaseHarness) {
   try {
     localStorage.setItem(KEY(work), JSON.stringify(h));
-    // 顶栏「已存在本机」：这个文件也给 node 测试用，不直接引外壳，发个事件
+    // Top bar "saved locally": node tests import this file, so signal via an event instead of importing the shell.
     globalThis.dispatchEvent?.(new Event('tb-saved'));
   } catch {
-    /* 隐私模式：只在本页有效 */
+    /* Private mode: lasts for this page only. */
   }
 }

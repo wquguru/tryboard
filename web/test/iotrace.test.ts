@@ -51,7 +51,7 @@ test('I2C 事务解码：泡泡文字 + BME280 寄存器注释', () => {
   const xs = s.i2c.get(0)!;
   assert.equal(xs.length, 1);
   assert.equal(txnText(xs[0]), 'START 0x76 W · 0xF7 · RESTART 0x76 R · 8 B · STOP');
-  assert.match(txnNote(xs[0]), /温度/);
+  assert.match(txnNote(xs[0]), /temperature/);
   assert.ok(xs[0].done);
   // 结束时刻 = STOP 之后一位
   assert.equal(xs[0].t1, burst(1000).at(-1)!.t + 404);
@@ -79,10 +79,10 @@ test('I2C：地址没应答、命令分两批（END 之后接着 RESTART）、SS
   const xs = s.i2c.get(0)!;
   assert.equal(xs.length, 3);
   assert.equal(txnText(xs[0]), 'START 0x08 W NACK · STOP');
-  assert.match(txnNote(xs[0]), /没有器件应答/);
+  assert.match(txnNote(xs[0]), /No device answered/);
   assert.equal(txnText(xs[1]), 'START 0x3C W · 0x00 · 0xAF · STOP');
-  assert.equal(txnNote(xs[1]), 'OLED 命令：开显示');
-  assert.equal(txnNote(xs[2]), '写显存 16 字节');
+  assert.equal(txnNote(xs[1]), 'OLED command: Display on');
+  assert.equal(txnNote(xs[2]), 'Write display RAM, 16 bytes');
   assert.match(txnText(xs[2]), /17 B/);
 });
 

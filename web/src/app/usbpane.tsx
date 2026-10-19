@@ -1,9 +1,10 @@
-// 底部坞「USB」页签：虚拟电脑（DESIGN_V2 §6.1，从旧实验台的侧栏面板迁来；id 不变，验收脚本按 id 读）。
-// 固件用原生 USB 枚举出设备后才出现；数据节流到 ≤ 10 Hz，鼠标轨迹画在 canvas 上，不进 React 状态。
+// Dock "USB" tab: the virtual PC (DESIGN_V2 §6.1, moved from the old lab sidebar; ids kept, test scripts read them).
+// Shown once firmware enumerates over native USB; data throttled to ≤ 10 Hz, the mouse trail is canvas-only.
 import { useEffect, useRef, useSyncExternalStore, type FormEvent } from 'react';
+import { t } from '../i18n';
 import type { UsbView } from '../usb3d';
 
-/** USB 虚拟电脑面板的数据：设备状态节流到 ≤ 10 Hz 再通知 React；鼠标轨迹每个报告都记（画在 canvas 上） */
+/** Virtual PC data: device state notifies React at ≤ 10 Hz; every mouse report is kept for the canvas trail. */
 function createUsbFeed() {
   let view: UsbView | null = null;
   const trail: [number, number][] = [];
@@ -45,14 +46,14 @@ function createUsbFeed() {
   };
 }
 export type UsbFeed = ReturnType<typeof createUsbFeed>;
-/** 整页一份：session 推、坞里的页签读 */
+/** One per page: session pushes, the dock tab reads. */
 export const usbFeed = createUsbFeed();
 
 const hex4 = (n: number) => n.toString(16).padStart(4, '0').toUpperCase();
 const cap = 'usb-cap mt-1.5 mb-1 text-xs text-muted';
 const box = 'm-0 max-h-[120px] min-h-[34px] overflow-auto whitespace-pre-wrap rounded-md border border-line bg-field px-2.5 py-2 font-mono text-xs leading-normal text-fg';
 
-// 画布是"电脑屏幕"的示意：深色底、橙色轨迹，与 3D 里的虚拟电脑同色，不跟主题
+// The canvas stands for the PC screen: dark with an orange trail like the 3D PC, independent of theme.
 const SCREEN = '#0b0f15';
 const TRAIL = '#f2a33a';
 const CURSOR = '#ffffff';
@@ -87,7 +88,7 @@ function MouseCanvas({ feed }: { feed: UsbFeed }) {
     g.closePath();
     g.fill();
   }, [v, feed]);
-  return <canvas id="usbMouse" ref={ref} width={360} height={120} aria-label="鼠标轨迹" style={{ background: SCREEN }} className="h-[90px] w-full rounded-md border border-line" />;
+  return <canvas id="usbMouse" ref={ref} width={360} height={120} aria-label={t('Mouse trail')} style={{ background: SCREEN }} className="h-[90px] w-full rounded-md border border-line" />;
 }
 
 export function UsbPane({ sendCdc }: { sendCdc: (text: string) => void }) {
@@ -108,7 +109,7 @@ export function UsbPane({ sendCdc }: { sendCdc: (text: string) => void }) {
   return (
     <div className="usb min-h-0 flex-1 overflow-auto px-3.5 pt-2 pb-3 text-[13px] text-fg">
       <div className="flex items-baseline gap-2 font-semibold">
-        虚拟电脑{' '}
+        {t('Virtual PC')}{' '}
         <span className="text-xs font-normal text-muted" id="usbState">
           {v?.state}
         </span>
@@ -117,9 +118,9 @@ export function UsbPane({ sendCdc }: { sendCdc: (text: string) => void }) {
         <div id="usbDev">
           {v?.vid ? (
             <>
-              <b>{v.product || '未命名设备'}</b> <span className="muted text-xs text-muted">{v.manufacturer}</span>
+              <b>{v.product || t('Unnamed device')}</b> <span className="muted text-xs text-muted">{v.manufacturer}</span>
               <div className="muted font-mono text-[11px] text-muted">
-                VID {hex4(v.vid)} · PID {hex4(v.pid)} · 序列号 {v.serial || '—'}
+                VID {hex4(v.vid)} · PID {hex4(v.pid)} · {t('Serial number')} {v.serial || '—'}
               </div>
               <ul className="mt-1.5 mb-0 list-disc pl-[18px]">
                 {v.interfaces.map((i, k) => (
@@ -128,33 +129,33 @@ export function UsbPane({ sendCdc }: { sendCdc: (text: string) => void }) {
               </ul>
             </>
           ) : (
-            <span className="muted text-xs text-muted">设备接入，正在枚举…</span>
+            <span className="muted text-xs text-muted">{t('Device attached, enumerating…')}</span>
           )}
         </div>
         <div id="usbKbd" className="mt-2.5" hidden={!hid}>
-          <div className={cap}>键盘输入（电脑上的文本编辑器）</div>
+          <div className={cap}>{t('Keyboard input (text editor on the PC)')}</div>
           <pre id="usbTyped" className={box}>
-            {v?.typed || '（还没有输入）'}
+            {v?.typed || t('(no input yet)')}
           </pre>
           <div className={cap}>
-            鼠标{' '}
+            {t('Mouse')}{' '}
             <span className="muted" id="usbMouseInfo">
-              {hid && v ? `${v.mouse.reports} 次报告 · (${v.mouse.x}, ${v.mouse.y})` : ''}
+              {hid && v ? t('Reports: {n} · ({x}, {y})', { n: v.mouse.reports, x: v.mouse.x, y: v.mouse.y }) : ''}
             </span>
           </div>
           {hid && <MouseCanvas feed={feed} />}
         </div>
         <div id="usbCdc" className="mt-2.5" hidden={!cdc}>
-          <div className={cap}>USB 串口终端（电脑上多出一个串口）</div>
+          <div className={cap}>{t('USB serial terminal (a new serial port on the PC)')}</div>
           <pre id="usbCdcOut" ref={cdcOut} className={box}>
-            {v?.cdc.replace(/\r/g, '') || '（还没有数据）'}
+            {v?.cdc.replace(/\r/g, '') || t('(no data yet)')}
           </pre>
           <form id="usbCdcForm" onSubmit={submit}>
-            <input id="usbCdcIn" name="usbCdcIn" placeholder="发到 USB 串口（回车）" aria-label="发到 USB 串口" autoComplete="off" className="mt-1.5 w-full rounded-md border border-line bg-field px-2.5 py-1.5 font-mono text-xs text-fg outline-none" />
+            <input id="usbCdcIn" name="usbCdcIn" placeholder={t('Send to USB serial (Enter)')} aria-label={t('Send to USB serial')} autoComplete="off" className="mt-1.5 w-full rounded-md border border-line bg-field px-2.5 py-1.5 font-mono text-xs text-fg outline-none" />
           </form>
         </div>
         <details className="usb-log mt-2.5 text-muted md:col-span-2">
-          <summary className="cursor-pointer">枚举过程</summary>
+          <summary className="cursor-pointer">{t('Enumeration log')}</summary>
           <ol id="usbLog" className="mt-1.5 mb-0 list-decimal pl-5 text-xs">
             {v?.log.map((l, k) => (
               <li key={k}>{l}</li>

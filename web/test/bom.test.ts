@@ -80,7 +80,7 @@ test('换开发板（P1-12）：小黄换 XIAO S3 → 板子一行变了，R04 �
 test('从元件库加的件：没有默认接线的不摆上台，列为 skipped', () => {
   const h = push(initialHistory('blank'), { t: 'add', partId: 'ssd1306' });
   const b = replay(h);
-  assert.equal(b.extra.ssd1306, '从元件库加的');
+  assert.equal(b.extra.ssd1306, 'Added from the parts library');
   const p = placement(b);
   assert.deepEqual(p.parts, []);
   assert.deepEqual(p.skipped, ['oled', 'led'], '空白模版默认带 LED 套装，也没有接线');

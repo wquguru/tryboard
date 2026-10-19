@@ -1,5 +1,5 @@
-// 工作台入口：./app?work=weather#bench（文件是 app.html，链接不带后缀）。外壳、实时模拟、3D 台面各一份；四个步骤注册到路由上。
-// 外壳先由 React 同步画出来（#stage 等节点要在 createSession 之前就在），之后的逻辑与原来相同。
+// Lab entry: ./app?work=weather#bench (file is app.html, linked without suffix). One shell, live sim and 3D bench; four routed steps.
+// React renders the shell synchronously first: #stage and friends must exist before createSession.
 import '../ui/tailwind.css';
 import '../views/views.css';
 import './lab.css';
@@ -38,18 +38,19 @@ import { registerTemplate } from '../catalog/templates';
 import { initialHistory, placement, replay } from './bom';
 import { briefMarkdown } from '../advisor/brief';
 import type { PartSpec } from '../board3d';
+import { t } from '../i18n';
 
 export { registerStep } from './shell';
 
 const params = new URLSearchParams(location.search);
 const want = params.get('work') as WorkId | null;
-// &example=<id>：示例 = 空白作品 + 示例的固件、台面、芯片（DESIGN_V2 §6.1；旧 index.html?example= 跳到这里）
+// &example=<id>: blank work + the example's firmware, bench and chip (DESIGN_V2 §6.1; old index.html?example= redirects here)
 const exId = params.get('example');
 const ex = exId ? (await loadExamples()).find((e) => e.id === exId) : undefined;
-// work=custom：选板结果 → 采购模板 + 按零件生成的检查点（U-17）。地址参数变了 = 新作品（存档键带参数哈希）
+// work=custom: board picker result -> shop template + per-part checkpoints (U-17). New query = new work (save key hashes it)
 const plan = !ex && want === 'custom' ? customPlan(location.search) : null;
 if (plan) registerTemplate(plan.template);
-// 没按过「摆上实验台」也按选板引脚表摆好（不存档）；摆过就以摆过的为准（采购页可能加减过零件）
+// Without a saved placement, lay out per the picker pin table (unsaved); a saved one wins (shop may have changed parts)
 const customPlaced = plan
   ? (loadPlaced(plan.wkey) ??
     (() => {
@@ -59,14 +60,14 @@ const customPlaced = plan
   : null;
 const customLevels = plan ? genLevels({ boardName: plan.boardName, chip: plan.chip, parts: customPlaced!.scene.parts, deepSleep: plan.deepSleep }) : [];
 const work: WorkDef = ex
-  ? { ...WORKS.blank, example: ex.id, title: ex.title, key: `blank:${ex.id}` }
+  ? { ...WORKS.blank, example: ex.id, title: t(ex.title), key: `blank:${ex.id}` }
   : plan
     ? { ...WORKS.custom, title: plan.title, key: plan.wkey, checkpoints: customLevels.filter((l) => !l.manual).map((l) => l.id) }
     : (WORKS[want ?? 'weather'] ?? WORKS.weather);
-// &cp=04：打开时选中这个检查点（旧关卡页 levels.html#04 重定向过来用）；不属于这个作品就忽略
+// &cp=04: preselect this checkpoint (old levels.html#04 redirects here); ignored if not in this work
 const cp = params.get('cp');
 if (ex) pushRecent({ kind: 'example', id: ex.id, title: ex.title, at: Date.now() });
-document.title = ex ? `${ex.title} · 示例 · 试板 TryBoard` : `${work.title} · 试板 TryBoard`;
+document.title = ex ? t('{title} · Example · TryBoard', { title: work.title }) : t('{title} · TryBoard', { title: work.title });
 initTheme();
 initSaved(wkey(work));
 syncDockVar();
@@ -99,7 +100,7 @@ const store = createStore<AppState>({
 const shell = createShell(work.title);
 document.getElementById('simtime')!.textContent = '0.00 s';
 
-// 串口原文（#console，回归脚本和重放对拍读它）只留最近约 200 KB；看得见的是底部坞的行视图（按到达时的模拟时刻盖戳）
+// Raw serial (#console, read by regression and replay scripts) keeps ~200 KB; the visible dock view stamps lines with sim time
 const con = document.getElementById('console') as HTMLPreElement;
 function log(text: string) {
   con.appendChild(document.createTextNode(text));
@@ -112,8 +113,8 @@ registerStep('bench', benchStep());
 registerStep('assemble', assembleStep());
 registerStep('product', productStep());
 
-// 实验台时间线（放零件 / 连线 / 改环境 / 运行 #n / 验收……，点回去 = 回到那一刻）在 benchhist.ts；
-// 采购、组装、成品各有自己的时间线（清单变更 / 装配步骤 / 事件），这份只在实验台显示
+// The bench timeline (place / wire / env / run #n / verify; click to go back) lives in benchhist.ts.
+// Shop, assemble and product have their own timelines, so this one shows only on the bench
 const ownsTimeline = () => store.get().step === 'bench';
 
 (async () => {
@@ -134,7 +135,7 @@ const ownsTimeline = () => store.get().step === 'bench';
     ctx.hist = createBenchHistory(ctx, { placeLabels: session.scene.parts.map((p) => partLabel(p.type)), placed: !!placed });
     (window as unknown as { __tbApp: Record<string, unknown> }).__tbApp.hist = ctx.hist;
     const app = (window as unknown as { __tbApp: Record<string, unknown> }).__tbApp;
-    // 给自动化测试（tools/webtest/replay.mjs）：取输入日志、3D 板上按钮的屏幕坐标；在验收 worker 里按同一份日志重放
+    // For automation (tools/webtest/replay.mjs): input log, 3D button screen positions, replay in the verify worker
     Object.assign(globalThis, {
       __tbInputLog: () => session.sim?.inputLog(),
       __tbButtonPos: (name: 'BOOT' | 'RST') => session.bench.buttonScreenPos(name),
@@ -146,12 +147,12 @@ const ownsTimeline = () => store.get().step === 'bench';
     app.cmdk = createCmdk(ctx);
     app.analyzer = getAnalyzer(ctx);
     store.subscribe(() => ctx.hist!.op({ k: 'scene', scene: session.scene, power: session.power, count: session.scene.parts.length, ...(session.sceneLabel ? { label: session.sceneLabel } : {}) }), ['sceneRev']);
-    // 欠压复位（P1-02）进实验台时间线：一步，回到它 = 回到复位那一刻
-    session.onBrownout((t) => {
-      ctx.hist!.event({ k: 'brownout', tSec: t, v3v3: session.frame.elec?.min3v3 ?? null }, t * 1000);
-      shell.toast(`电压不够，芯片重启了（${t.toFixed(2)} 秒）`);
+    // Brownout reset (P1-02) is one bench timeline step; seeking to it returns to the reset moment
+    session.onBrownout((tSec) => {
+      ctx.hist!.event({ k: 'brownout', tSec, v3v3: session.frame.elec?.min3v3 ?? null }, tSec * 1000);
+      shell.toast(t('Voltage too low, the chip rebooted ({s} s)', { s: tSec.toFixed(2) }));
     });
-    // 结论按钮：实验台显示检查点进度；采购、组装、成品挂载时自己设
+    // Verdict button: checkpoint progress on the bench; shop, assemble and product set their own on mount
     const verdict = () => {
       if (store.get().step === 'shop') {
         shell.onVerdict(() => (shell.props.el.scrollTop = 0));
@@ -160,7 +161,7 @@ const ownsTimeline = () => store.get().step === 'bench';
       if (!ownsTimeline()) return;
       const n = work.checkpoints.length;
       const d = passedCount(ctx);
-      shell.setVerdict(n ? `检查点 ${d}/${n}` : '没有检查点', n && d === n ? 'ok' : 'idle');
+      shell.setVerdict(n ? t('Checkpoints {d}/{n}', { d, n }) : t('No checkpoints'), n && d === n ? 'ok' : 'idle');
       shell.onVerdict(() => {
         const s = store.get();
         const first = work.checkpoints.find((id) => !s.checks[id]?.ok) ?? work.checkpoints.find((id) => !s.checks[id]?.own) ?? work.checkpoints[0];
@@ -175,19 +176,19 @@ const ownsTimeline = () => store.get().step === 'bench';
     const ratioEl = document.getElementById('ratio')!;
     session.onTick((m) => {
       if (!m.running) return;
-      ratioEl.textContent = `${m.ratio.toFixed(2)}× 实时`;
+      ratioEl.textContent = t('{x}× real time', { x: m.ratio.toFixed(2) });
       ratioEl.classList.toggle('slow', m.ratio < 0.9);
     });
     wireChrome(ctx, session);
     startRouter(ctx);
   } catch (e) {
-    log(`[试板] 资源加载失败：${e}\n`);
-    setBc({ run: 'idle', boot: { text: `资源加载失败：${e}`, steps: [], loaded: 0, total: 0 } });
-    shell.toast(`资源加载失败：${e}`);
+    log(`${t('[TryBoard] Failed to load resources: {err}', { err: String(e) })}\n`);
+    setBc({ run: 'idle', boot: { text: t('Failed to load resources: {err}', { err: String(e) }), steps: [], loaded: 0, total: 0 } });
+    shell.toast(t('Failed to load resources: {err}', { err: String(e) }));
   }
 })();
 
-/** 顶栏 / 底部坞 / 台面浮层的数据和动作（U-04）：外壳只认 chrome.ts，这里把会话和时间线接上去 */
+/** Data and actions for top bar, dock and bench overlays (U-04): the shell only knows chrome.ts; wire session and timeline here */
 function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSession>>) {
   const hist = ctx.hist!;
   const benchOnly = <A extends unknown[]>(f: (...a: A) => void) => (...a: A) => {
@@ -197,7 +198,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   const runState = () => {
     const s = store.get();
     const run = s.hist.busy ? 'busy' : s.hist.seeked ? 'seek' : paused ? 'pause' : s.running ? 'run' : session.sim ? 'idle' : session.fwName ? 'loading' : 'nofw';
-    // 采购步骤撤销的是清单历史（时间线上那几格），其他步骤是实验台时间线
+    // Undo on the shop step walks the BOM history; elsewhere it walks the bench timeline
     const shop = s.step === 'shop';
     const undo = shop ? s.bom.cur > 0 : !s.hist.busy && s.hist.cur > 0;
     const redo = shop ? s.bom.cur < s.bom.ops.length - 1 : !s.hist.busy && s.hist.cur < s.hist.n - 1;
@@ -206,7 +207,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   store.subscribe(runState, ['running', 'hist', 'env', 'bom', 'step']);
   session.onBoot(() => {
     paused = false;
-    // 每次上电是新的 worker：倍速重新下发
+    // Each power-up is a new worker: resend the speed
     if (bc.get().speed !== 1) session.sim?.speed(bc.get().speed);
     setBc({ boot: null });
     runState();
@@ -243,14 +244,14 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     session.sim?.speed(f);
     setBc({ speed: f });
   };
-  // 声音（默认静音）：点击就是用户手势，AudioContext 在这一刻创建 / 恢复
+  // Sound (muted by default): the click is the user gesture that creates / resumes the AudioContext
   const syncSound = () => setBc({ sound: { has: session.audio.hasSound, on: !session.audio.state.muted } });
   actions.sound = () => void session.audio.setMuted(!session.audio.state.muted).then(syncSound);
   store.subscribe(syncSound, ['sceneRev']);
   syncSound();
   actions.uart = (text) => session.sim?.uart(text);
   actions.usbCdc = (text) => session.sim?.usbCdc(text);
-  // 设备第一次枚举出来时把坞切到「USB」页签：键盘打的字、CDC 回显就在眼前
+  // On first enumeration switch the dock to the USB tab so keyboard input and CDC echo are in view
   session.onUsb((v) => {
     usbFeed.update(v);
     if (!!v === bc.get().usb) return;
@@ -258,7 +259,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     if (v) setDock({ tab: 'usb', collapsed: false });
     else if (bc.get().dock.tab === 'usb') setDock({ tab: 'serial' });
   });
-  // BLE（C-01）：固件一用蓝牙就长出「蓝牙」页签并切过去；没用了（换固件）收起
+  // BLE (C-01): show and switch to the Bluetooth tab once firmware uses it; hide it when it stops (firmware change)
   actions.ble = (cmd) => session.sim?.ble(cmd);
   bleFeed.subscribe(() => {
     const has = bleFeed.get().state !== 0;
@@ -267,7 +268,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     if (has) setDock({ tab: 'ble', collapsed: false });
     else if (bc.get().dock.tab === 'ble') setDock({ tab: 'serial' });
   });
-  // 网络页签（C-02）：固件发出第一帧 Wi-Fi 才出现；手机动作进输入日志
+  // Network tab (C-02): appears once the firmware sends its first Wi-Fi frame; phone actions go into the input log
   actions.phone = (cmd) => session.sim?.phone(cmd);
   netFeed.subscribe(() => {
     const used = netFeed.get().used;
@@ -275,7 +276,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     setBc({ net: used });
     if (!used && bc.get().dock.tab === 'net') setDock({ tab: 'serial' });
   });
-  // 换固件：先看镜像头（魔数 0xE9、芯片 id），对不上就不上电，挂一张校验卡说清楚
+  // New firmware: check the image header (magic 0xE9, chip id) first; on mismatch don't power up, show a check card
   actions.pickFirmware = async (f) => {
     const buf = await f.arrayBuffer();
     const r = fwCheck(buf, session.chip);
@@ -286,37 +287,38 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     overlay('fwcheck', null);
     const onBench = store.get().step === 'bench';
     if (!onBench) location.hash = 'bench';
-    // 提示等新的一次运行真的起来再弹，免得"重新上电"跑在时间线「运行 #n」前面
+    // Toast only once the new run is up, so "powered up" doesn't precede the timeline's "Run #n"
     let done = false;
     const fire = () => {
       if (done) return;
       done = true;
       off();
       const id = onBench ? actions.checkUpload?.(buf, f.name) : null;
-      shell.toast(`已换成 ${f.name}（${(buf.byteLength / 1024).toFixed(0)} KB），重新上电${id ? `；同时验收检查点 ${id}` : ''}`);
+      const kb = (buf.byteLength / 1024).toFixed(0);
+      shell.toast(id ? t('Switched to {name} ({kb} KB), powered up again; also verifying checkpoint {id}', { name: f.name, kb, id }) : t('Switched to {name} ({kb} KB), powered up again', { name: f.name, kb }));
     };
     const off = session.onBoot(fire);
-    // 万一这次没上电成功，别让监听留到下一次上电
+    // If this power-up fails, don't leave the listener for the next one
     setTimeout(fire, 3000);
     session.loadFirmware(buf, f.name);
     pushRecent({ kind: 'file', name: f.name, at: Date.now() });
   };
-  // 换回作品自带的参考固件（上传过自己的 .bin 之后回到起点）；空白作品没有参考固件
+  // Back to the work's reference firmware after uploading your own .bin; blank works have none
   if (work.example && !ex)
     actions.loadRef = async () => {
       const buf = await fetchBuf(`./fw/${work.example}/flash.bin`);
       if (store.get().step !== 'bench') location.hash = 'bench';
       session.loadFirmware(buf, `${work.example}/flash.bin`);
-      shell.toast('已换回参考固件，重新上电');
+      shell.toast(t('Back to the reference firmware, powered up again'));
     };
   actions.exportInputs = async (kind) => {
-    if (!session.sim) return shell.toast('模拟器还没跑起来，没有输入日志');
+    if (!session.sim) return shell.toast(t('The simulator is not running yet, so there is no input log'));
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([toScript(await session.sim.inputLog())], { type: 'text/plain' }));
     a.download = `${(session.fwName || 'tryboard').replace(/\/flash\.bin$|\.bin$/, '').replaceAll('/', '-')}-${kind ?? 'inputs'}.txt`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    shell.toast(kind === 'realnet' ? '已保存回复：tryboard run --inputs 离线重放，不再联网' : '已导出输入日志：tryboard run --inputs 可逐字节重放');
+    shell.toast(kind === 'realnet' ? t('Replies saved: tryboard run --inputs replays them offline, no network needed') : t('Input log exported: tryboard run --inputs replays it byte for byte'));
   };
   const curLevel = () => {
     const s = store.get();
@@ -324,15 +326,15 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     const id = sel ?? work.checkpoints.find((x) => !s.checks[x]?.ok) ?? work.checkpoints.find((x) => !s.checks[x]?.own) ?? work.checkpoints[0];
     return session.levels.find((l) => l.id === id) ?? null;
   };
-  // 选板作品：任务书 = 选板给 AI 的任务书 + 生成的检查点（逐条带判定）
-  const customBrief = plan ? () => [briefMarkdown(plan.state), '', '## 检查点（网页按这些判）', ...customLevels.map((l) => `- ${l.id} ${l.title}：${l.manual ? '必须上真机，网页不判' : l.pass}`)].join('\n') : null;
+  // Picker works: brief = the picker's AI brief + generated checkpoints with their pass criteria
+  const customBrief = plan ? () => [briefMarkdown(plan.state), '', t('## Checkpoints (the browser judges these)'), ...customLevels.map((l) => `- ${l.id} ${t(l.title)}: ${l.manual ? t('Needs real hardware; not judged in the browser') : t(l.pass)}`)].join('\n') : null;
   actions.brief = customBrief
     ? async () => {
         try {
           await navigator.clipboard.writeText(customBrief());
-          shell.toast('已复制给 AI 的任务书');
+          shell.toast(t('Brief for the AI copied'));
         } catch {
-          shell.toast('浏览器不让写剪贴板：任务书在检查点右栏，手动复制');
+          shell.toast(t('The browser blocked the clipboard: the brief is in the checkpoint side panel, copy it by hand'));
         }
       }
     : work.checkpoints.length
@@ -340,11 +342,11 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
         const l = curLevel();
         if (!l) return;
         try {
-          await navigator.clipboard.writeText(l.brief);
-          shell.toast(`已复制检查点 ${l.id} 的任务书`);
+          await navigator.clipboard.writeText(t(l.brief));
+          shell.toast(t('Brief for checkpoint {id} copied', { id: l.id }));
         } catch {
           store.set({ selection: { kind: 'checkpoint', id: l.id } });
-          shell.toast('浏览器不让写剪贴板：任务书在右栏，手动复制');
+          shell.toast(t('The browser blocked the clipboard: the brief is in the side panel, copy it by hand'));
         }
       }
     : undefined;
@@ -354,7 +356,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   };
   const ana = getAnalyzer(ctx);
   actions.analyzer = (open) => (open ? ana.open() : ana.close());
-  // 分析仪也能从工具条、⌘K 打开：开了就把坞切到它的页签，关了切回串口
+  // The analyzer also opens from the toolbar / ⌘K: follow it with the dock tab, back to serial on close
   new MutationObserver(() => {
     const open = document.body.classList.contains('ana-open');
     const d = bc.get().dock;
@@ -365,50 +367,50 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
 
   window.addEventListener('keydown', (e) => {
     if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return;
-    const t = e.target as HTMLElement;
-    if (t.closest('input,textarea,select,[contenteditable]')) return;
+    const el = e.target as HTMLElement;
+    if (el.closest('input,textarea,select,[contenteditable]')) return;
     e.preventDefault();
     if (e.shiftKey) actions.redo?.();
     else actions.undo?.();
   });
 
-  // 步骤锁和完成标记：锁只是提示（各步骤自己会说明为什么还不能做），点了照样能进去看
-  // 采购完成 = 至少按过一次「下一步：实验台」（清单摆上台面存进本机）；只看 sceneRev 的话刷新后 ✓ 就丢了
+  // Step locks are hints only (each step explains itself); clicking still enters.
+  // Shop done = "Next: bench" pressed once (placement saved locally); sceneRev alone would lose the tick on reload
   const shopPlaced = !!loadPlaced(wkey(work));
   const progress = () => {
     const s = store.get();
     const n = work.checkpoints.length;
     const d = passedCount(ctx);
     const allOk = !n || d === n;
-    const lockAsm = n && !allOk ? `实验台 ${n} 个检查点全部跑通后解锁（${d}/${n}，内置固件也算）` : undefined;
+    const lockAsm = n && !allOk ? t('Unlocks once all {n} bench checkpoints pass ({d}/{n}, built-in firmware counts)', { n, d }) : undefined;
     const asmDone = !!s.assembly && s.assembly.placed.length >= s.assembly.total && s.assembly.total > 0;
     setBc({
-      locks: { assemble: lockAsm, product: lockAsm ?? (n && !asmDone ? '组装装完后解锁' : undefined) },
+      locks: { assemble: lockAsm, product: lockAsm ?? (n && !asmDone ? t('Unlocks once assembly is complete') : undefined) },
       done: { shop: s.sceneRev > 0 || shopPlaced, bench: n > 0 && allOk, assemble: asmDone, product: !!s.assembly?.retest },
       retest: s.assembly?.retest ?? null,
       checkpoints: work.checkpoints.map((id): CpRow => {
         const l = session.levels.find((x) => x.id === id);
         const r = s.checks[id];
         const state = s.verifying === id ? 'run' : r?.ok ? (r.own ? 'ok' : 'ref') : r && !r.ok ? 'bad' : 'todo';
-        return { id, title: l?.title ?? id, state, note: r ? r.who : (l?.pass ?? '') };
+        return { id, title: l?.title ? t(l.title) : id, state, note: r ? r.who : l?.pass ? t(l.pass) : '' };
       }),
     });
   };
   store.subscribe(progress, ['checks', 'verifying', 'assembly', 'sceneRev']);
   progress();
 
-  // 问题页：欠压复位（模拟器报的）；接线规则检查的问题由实验台写进 issues 的 wire: 前缀项
+  // Issues tab: brownout resets from the sim; wiring-rule issues are added by the bench with a wire: prefix
   const brown: Issue[] = [];
-  session.onBrownout((t) => {
-    brown.push({ id: `brown:${brown.length}`, level: 'block', title: '电压不够，芯片重启了', detail: `${t.toFixed(2)} 秒时 3V3 掉到门限以下（欠压复位）`, go: () => setDock({ tab: 'runs' }) });
+  session.onBrownout((tSec) => {
+    brown.push({ id: `brown:${brown.length}`, level: 'block', title: t('Voltage too low, the chip rebooted'), detail: t('At {s} s 3V3 dropped below the threshold (brownout reset)', { s: tSec.toFixed(2) }), go: () => setDock({ tab: 'runs' }) });
     setBc({ issues: [...bc.get().issues.filter((x) => !x.id.startsWith('brown:')), ...brown.slice(-5)] });
-    // 掉电复位解释（关键状态）：只在实验台上弹，同一次上电只弹一次（舵机抖动会连着复位好几次）
+    // Brownout explainer: bench only, once per power-up (a jittering servo resets several times in a row)
     if (store.get().step !== 'bench' || bc.get().overlays.brown) return;
     const servo = session.scene.parts.some((p) => p.type === 'servo');
     overlay(
       'brown',
       <BrownoutBanner
-        t={t}
+        t={tSec}
         v={session.frame.elec?.min3v3 ?? null}
         servo={servo}
         onPower={() => {
@@ -421,7 +423,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   });
   store.subscribe((s, prev) => s.step !== prev.step && s.step !== 'bench' && overlay('brown', null), ['step']);
 
-  // 检查点通过提示：自己的固件新通过一个检查点时（恢复进度、参考固件不算）
+  // Toast when your own firmware newly passes a checkpoint (restored progress and reference firmware don't count)
   store.subscribe((s, prev) => {
     const n = work.checkpoints.length;
     for (const id of work.checkpoints) {
@@ -430,7 +432,14 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
       if (!(r?.ok && r.own) || (was?.ok && was.own)) continue;
       const d = passedCount(ctx, s);
       const l = session.levels.find((x) => x.id === id);
-      ctx.shell.toast(d === n ? `检查点 ${id}「${l?.title ?? ''}」通过，${n} 个全部通过：${plan ? '下一步做成真的' : '组装解锁了'}` : `检查点 ${id}「${l?.title ?? ''}」通过（${d}/${n}）`);
+      const title = l?.title ? t(l.title) : '';
+      ctx.shell.toast(
+        d === n
+          ? plan
+            ? t('Checkpoint {id} "{title}" passed, all {n} passed: next, make it real', { id, title, n })
+            : t('Checkpoint {id} "{title}" passed, all {n} passed: assembly unlocked', { id, title, n })
+          : t('Checkpoint {id} "{title}" passed ({d}/{n})', { id, title, d, n }),
+      );
     }
   }, ['checks']);
 }

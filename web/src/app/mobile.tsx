@@ -1,7 +1,7 @@
-// 手机布局（U-05，DESIGN_V2 §5；设计稿 docs/design-v2/MobileWorkbench、MobileSteps）。
-// 断点与 Tailwind 的 md 一致（< 768px）。手机上不另起一套状态：顶栏、四步条、工具条、串口、属性面板都读同一份
-// bc / 工具条 / 面板数据，只换摆法——实验台铺满台面，串口和属性面板变成底部抽屉，元件库变成整页。
+// Phone layout (U-05, DESIGN_V2 §5; mockups docs/design-v2/MobileWorkbench, MobileSteps), breakpoint = Tailwind md (< 768px).
+// No separate state: same bc / toolbar / panel data, only rearranged (full-bleed bench, bottom sheets, full-page part library).
 import { useRef, useSyncExternalStore, type ReactNode } from "react";
+import { t } from "../i18n";
 import { cn } from "../ui/cn";
 import { actions, bc, CUSTOM, EXAMPLE_ID, TWO_STEPS, shownSteps } from "./chrome";
 import { Icon } from "./icons";
@@ -20,7 +20,7 @@ function subPhone(cb: () => void) {
   m.addEventListener("change", cb);
   return () => m.removeEventListener("change", cb);
 }
-/** 跨过手机断点时通知（命令式代码用：成品步骤要换一套工具） */
+/** Notify when crossing the phone breakpoint (imperative code: the product step swaps its tools) */
 export const onPhoneChange = (cb: () => void) =>
   typeof matchMedia === "function" ? subPhone(cb) : () => {};
 export const usePhone = () =>
@@ -29,13 +29,13 @@ export const usePhone = () =>
 export type Sheet = "peek" | "half" | "full";
 export type LibTab = "lib" | "tree" | "wires";
 interface MobileUi {
-  /** 串口抽屉：窥视条 / 半屏 / 全屏 */
+  /** Serial sheet: peek bar / half / full */
   sheet: Sheet;
-  /** 属性抽屉开着（选中零件时） */
+  /** Properties sheet open (when a part is selected) */
   props: boolean;
-  /** 整页元件库（null = 关） */
+  /** Full-page part library (null = closed) */
   lib: LibTab | null;
-  /** 工具条「更多」 */
+  /** Toolbar "More" */
   more: boolean;
 }
 export const mui = createStore<MobileUi>({
@@ -45,16 +45,16 @@ export const mui = createStore<MobileUi>({
   more: false,
 });
 export const setMui = (p: Partial<MobileUi>) => commit(() => mui.set(p));
-/** 手机上点了一个零件 / 一行构建树：打开属性抽屉（桌面什么都不做，属性面板一直在右栏） */
+/** Tapped a part / build-tree row on a phone: open the properties sheet (desktop has it in the right column) */
 export function phoneProps() {
   if (isPhone()) setMui({ props: true, lib: null, more: false, sheet: "peek" });
 }
-/** 换步骤时抽屉全收起 */
+/** Collapse all sheets when switching steps */
 export function resetPhoneUi() {
   setMui({ sheet: "peek", props: false, lib: null, more: false });
 }
 
-// ------------------------------------------------------------ 顶栏 + 四步条
+// ------------------------------------------------------------ Top bar + step bar
 const backCls =
   "inline-flex h-11 flex-none items-center gap-0.5 rounded-[10px] border border-line bg-surface pr-3 pl-1.5 text-[13px] font-medium text-fg no-underline";
 
@@ -65,7 +65,7 @@ export function MobileTop({
 }: {
   step: StepId;
   workName: string;
-  toast: (t: string) => void;
+  toast: (msg: string) => void;
 }) {
   return (
     <header
@@ -83,11 +83,11 @@ export function MobileTop({
           {CRUMB.label}
         </a>
         <div className="flex min-w-0 flex-1 justify-center">
-          <WorkMenu name={EXAMPLE_ID ? `示例 · ${workName}` : workName} phone />
+          <WorkMenu name={EXAMPLE_ID ? t('Example · {name}', { name: workName }) : workName} phone />
         </div>
         <MoreMenu toast={toast} phone />
         <FwMenu phone />
-        {/* 命令框窄屏本来就藏着（max-[1100px]:hidden），但 cmdk.ts 启动时要找到 #cmdk */}
+        {/* The palette is hidden on narrow screens (max-[1100px]:hidden), but cmdk.ts needs #cmdk at startup */}
         <CmdkBox />
       </div>
       <MobileSteps step={step} />
@@ -102,8 +102,9 @@ function MobileSteps({ step }: { step: StepId }) {
     <nav
       id="steps"
       role="tablist"
-      aria-label={TWO_STEPS ? "两个步骤" : "四个步骤"}
-      className={cn("steps grid h-[50px] flex-none gap-1 px-2.5 pb-1.5", TWO_STEPS ? "grid-cols-2" : "grid-cols-4")}
+      aria-label={TWO_STEPS ? t('Two steps') : t('Four steps')}
+      // Widths follow the labels: equal columns truncated "Assemble" in English while "Shop" had room to spare
+      className="steps flex h-[50px] flex-none gap-1 px-2.5 pb-1.5"
     >
       {STEPS.filter((s) => shownSteps().includes(s.id)).map((s, i) => {
         const on = s.id === step;
@@ -116,10 +117,10 @@ function MobileSteps({ step }: { step: StepId }) {
             data-step={s.id}
             aria-selected={on}
             data-locked={lock ? "" : undefined}
-            title={lock ?? (done[s.id] ? `${s.label} · 已完成` : s.label)}
+            title={lock ?? (done[s.id] ? t('{step} · done', { step: s.label }) : s.label)}
             onClick={() => (location.hash = s.id)}
             className={cn(
-              "inline-flex min-w-0 cursor-pointer items-center justify-center gap-1 rounded-lg border-0 bg-transparent px-1 text-[12.5px] whitespace-nowrap text-muted",
+              "inline-flex min-w-0 flex-auto cursor-pointer items-center justify-center gap-1 rounded-lg border-0 bg-transparent px-1 text-[12.5px] whitespace-nowrap text-muted",
               on && "bg-accent-bg font-bold text-accent-ink",
               done[s.id] && !on && "text-ok-ink",
             )}
@@ -141,13 +142,13 @@ function MobileSteps({ step }: { step: StepId }) {
   );
 }
 
-// ------------------------------------------------------------ 台面上：运行状态 + 检查点横幅
+// ------------------------------------------------------------ On the bench: run state + checkpoint banner
 const stBtn =
   "inline-flex size-11 flex-none cursor-pointer items-center justify-center rounded-full border border-line bg-(--panel) p-0 text-fg shadow-panel disabled:cursor-not-allowed disabled:text-muted";
 
 export function MobileStageBar({ wiring }: { wiring: boolean }) {
   const { run, speed, checkpoints, retest } = useStore(bc);
-  const [t, dot] = RUN_TEXT[run];
+  const [txt, dot] = RUN_TEXT[run];
   const live = run === "run" || run === "pause" || run === "seek";
   const i = checkpoints.findIndex((c) => c.state !== "ok" && c.state !== "ref");
   const cp = i >= 0 ? checkpoints[i] : null;
@@ -159,7 +160,7 @@ export function MobileStageBar({ wiring }: { wiring: boolean }) {
         id="runGroup"
         data-run={run}
         role="group"
-        aria-label="运行状态"
+        aria-label={t('Run state')}
       >
         <span className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line bg-(--panel) px-3 text-xs shadow-panel">
           <span
@@ -169,13 +170,13 @@ export function MobileStageBar({ wiring }: { wiring: boolean }) {
               run === "run" && "animate-pulse",
             )}
           />
-          <span id="runState">{t}</span>
+          <span id="runState">{txt}</span>
           {actions.speed && (
             <button
               type="button"
               id="runSpeed"
               disabled={!live}
-              title="倍速：只改跑得快慢（墙钟），模拟时刻和结果不变"
+              title={t('Speed: changes wall-clock pace only; simulated time and results stay the same')}
               onClick={() =>
                 actions.speed!(
                   SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length],
@@ -193,7 +194,7 @@ export function MobileStageBar({ wiring }: { wiring: boolean }) {
           id="runPause"
           className={stBtn}
           disabled={!live}
-          aria-label={run === "run" ? "暂停" : "继续"}
+          aria-label={run === "run" ? t('Pause') : t('Resume')}
           onClick={() =>
             run === "run" ? actions.pause?.() : actions.resume?.()
           }
@@ -205,7 +206,7 @@ export function MobileStageBar({ wiring }: { wiring: boolean }) {
           id="runRestart"
           className={stBtn}
           disabled={!actions.reboot || run === "loading"}
-          aria-label="重启"
+          aria-label={t('Restart')}
           onClick={() => actions.reboot?.()}
         >
           <Icon n="restart" size={16} />
@@ -227,15 +228,15 @@ export function MobileStageBar({ wiring }: { wiring: boolean }) {
           <span className="min-w-0 flex-1 text-[13px] leading-snug">
             {cp ? (
               <>
-                <b className="font-medium">检查点 {i + 1}</b>
+                <b className="font-medium">{t('Checkpoint {n}', { n: i + 1 })}</b>
                 <span className="text-muted"> · </span>
                 <span className="break-words">{cp.title}</span>
               </>
             ) : (
               <b className="font-medium">
                 {retest === false
-                  ? `检查点 ${checkpoints.length}/${checkpoints.length} 通过 · 开机复测 ✗`
-                  : `${checkpoints.length} 个检查点全部跑通`}
+                  ? t('Checkpoints {n}/{n} passed · power-on retest ✗', { n: checkpoints.length })
+                  : t('All {n} checkpoints pass', { n: checkpoints.length })}
               </b>
             )}
           </span>
@@ -244,25 +245,25 @@ export function MobileStageBar({ wiring }: { wiring: boolean }) {
               type="button"
               id="cpAllRefM"
               disabled={cp.state === "run"}
-              title="用作品自带的参考固件把检查点挨个跑通（◐），同样解锁组装"
+              title={t('Run each checkpoint with the work’s reference firmware (◐); this also unlocks assembly')}
               onClick={() => actions.runAllRef?.()}
               className="min-h-11 flex-none cursor-pointer rounded-lg border border-line bg-surface px-3 text-[13px] font-medium text-fg disabled:text-muted"
             >
-              {cp.state === "run" ? "验收中…" : "内置跑通"}
+              {cp.state === "run" ? t('Checking…') : t('Run built-in')}
             </button>
           )}
           <button
             type="button"
             id="cpGo"
             onClick={() => {
-              // 选板作品没有组装步：全过后的下一步是真买卡
+              // Board-picker works have no assembly step: after all pass, next is the buy card
               if (!cp) return void (CUSTOM ? actions.openBuy?.() : (location.hash = "assemble"));
               actions.selectCheckpoint?.(cp.id);
               phoneProps();
             }}
             className="min-h-11 flex-none cursor-pointer rounded-lg border-0 bg-fg px-3 text-[13px] font-medium text-surface"
           >
-            {cp ? "带我去" : CUSTOM ? "下一步：做成真的" : "下一步：组装"}
+            {cp ? t('Take me there') : CUSTOM ? t('Next: make it real') : t('Next: assemble')}
           </button>
         </div>
       )}
@@ -270,7 +271,7 @@ export function MobileStageBar({ wiring }: { wiring: boolean }) {
   );
 }
 
-// ------------------------------------------------------------ 底部工具条（实验台）与工具网格（别的步骤）
+// ------------------------------------------------------------ Bottom toolbar (bench) and tool grid (other steps)
 export interface PhoneTool {
   id: string;
   label: string;
@@ -278,13 +279,13 @@ export interface PhoneTool {
   todo?: boolean;
 }
 const BENCH_MAIN: { id: string; label: string; icon: string }[] = [
-  { id: "select", label: "选择", icon: "cursor" },
-  { id: "wire", label: "连线", icon: "wire" },
-  { id: "lib", label: "加零件", icon: "plus" },
-  { id: "meter", label: "测量", icon: "meter" },
-  { id: "more", label: "更多", icon: "more" },
+  { id: "select", label: t('Select'), icon: "cursor" },
+  { id: "wire", label: t('Wire'), icon: "wire" },
+  { id: "lib", label: t('Add part'), icon: "plus" },
+  { id: "meter", label: t('Measure'), icon: "meter" },
+  { id: "more", label: t('More'), icon: "more" },
 ];
-// 分析仪在手机上不画（太窄看不了波形），「放置」还没开放：不进「更多」
+// The analyzer isn't drawn on phones (too narrow for waveforms) and Place isn't open yet: keep them out of More
 const NOT_ON_PHONE = new Set(["select", "wire", "meter", "scope", "place"]);
 
 export function PhoneToolbar({
@@ -301,14 +302,14 @@ export function PhoneToolbar({
   const ui = useStore(mui);
   if (step !== "bench") {
     if (!tools.length) return null;
-    // 别的步骤：工具排成 44 高的按键网格，放在 3D 下面；成品的网格在底部面板里（P2-17），不再套一层卡片。
-    // 主按钮（开机复测）单独占一整行 48 高：混在网格里会孤零零掉到第二行（DESIGN_V2 §9.5）
-    const cols = Math.min(4, Math.max(1, tools.filter((t) => !t.primary).length));
+    // Other steps: a 44-tall button grid under the 3D view (product: inside the bottom panel, P2-17, no extra card).
+    // The primary button (power-on retest) takes its own 48-tall row, else it strands alone on row two (DESIGN_V2 §9.5)
+    const cols = Math.min(4, Math.max(1, tools.filter((x) => !x.primary).length));
     return (
       <div
         id="toolbar"
         role="toolbar"
-        aria-label={step === "product" ? "成品按键" : undefined}
+        aria-label={step === "product" ? t('Product buttons') : undefined}
         className={cn(
           "toolbar grid gap-1.5",
           ["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4 max-[360px]:grid-cols-3"][cols - 1],
@@ -317,27 +318,27 @@ export function PhoneToolbar({
             : "pnl rounded-(--r) border border-line bg-(--panel) p-2 shadow-panel",
         )}
       >
-        {[...tools.filter((t) => !t.primary), ...tools.filter((t) => t.primary)].map((t) => (
+        {[...tools.filter((x) => !x.primary), ...tools.filter((x) => x.primary)].map((tool) => (
           <button
-            key={t.id}
+            key={tool.id}
             type="button"
-            data-tool={t.id}
-            aria-pressed={t.id === active}
-            onClick={() => fire(t.id)}
+            data-tool={tool.id}
+            aria-pressed={tool.id === active}
+            onClick={() => fire(tool.id)}
             className={cn(
               "tb-btn min-h-11 min-w-0 cursor-pointer rounded-[10px] border border-line bg-surface px-1 text-[12.5px] leading-tight text-fg aria-pressed:border-accent aria-pressed:bg-accent-bg aria-pressed:text-accent-ink",
-              t.primary &&
+              tool.primary &&
                 "primary col-span-full min-h-12 border-accent-strong bg-accent-strong text-[15px] font-semibold text-on-accent",
-              t.todo && "todo text-muted",
+              tool.todo && "todo text-muted",
             )}
           >
-            {t.label}
+            {tool.label}
           </button>
         ))}
       </div>
     );
   }
-  const more = tools.filter((t) => !NOT_ON_PHONE.has(t.id));
+  const more = tools.filter((x) => !NOT_ON_PHONE.has(x.id));
   const onMain = (id: string) => {
     if (id === "lib")
       return setMui({ lib: ui.lib ? null : "lib", more: false, props: false });
@@ -353,27 +354,27 @@ export function PhoneToolbar({
         <div
           id="moreTools"
           role="menu"
-          aria-label="更多工具"
+          aria-label={t('More tools')}
           className="fixed inset-x-0 bottom-(--m-tb) z-26 grid grid-cols-3 gap-1.5 rounded-t-2xl border-t border-line bg-surface p-3 shadow-[0_-8px_24px_#0000001f]"
         >
-          {more.map((t) => (
+          {more.map((tool) => (
             <button
-              key={t.id}
+              key={tool.id}
               type="button"
               role="menuitem"
-              data-tool={t.id}
-              aria-pressed={t.id === active}
+              data-tool={tool.id}
+              aria-pressed={tool.id === active}
               onClick={() => {
                 setMui({ more: false });
-                fire(t.id);
+                fire(tool.id);
               }}
               className={cn(
                 "tb-btn min-h-11 min-w-0 cursor-pointer rounded-[10px] border border-line bg-surface px-1 text-[13px] text-fg aria-pressed:border-accent aria-pressed:bg-accent-bg aria-pressed:text-accent-ink",
-                t.primary &&
+                tool.primary &&
                   "primary col-span-full min-h-12 border-accent-strong bg-accent-strong text-[15px] font-semibold text-on-accent",
               )}
             >
-              {t.label}
+              {tool.label}
             </button>
           ))}
         </div>
@@ -381,21 +382,21 @@ export function PhoneToolbar({
       <nav
         id="toolbar"
         role="toolbar"
-        aria-label="工具"
+        aria-label={t('Tools')}
         className="toolbar fixed inset-x-0 bottom-0 z-27 grid h-(--m-tb) grid-cols-5 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]"
       >
-        {BENCH_MAIN.map((t) => (
+        {BENCH_MAIN.map((tool) => (
           <button
-            key={t.id}
+            key={tool.id}
             type="button"
-            data-mtool={t.id}
-            data-tool={t.id === "lib" || t.id === "more" ? undefined : t.id}
-            aria-pressed={on(t.id)}
-            onClick={() => onMain(t.id)}
+            data-mtool={tool.id}
+            data-tool={tool.id === "lib" || tool.id === "more" ? undefined : tool.id}
+            aria-pressed={on(tool.id)}
+            onClick={() => onMain(tool.id)}
             className="m-1 flex cursor-pointer flex-col items-center justify-center gap-0.5 rounded-[10px] border-0 bg-transparent text-[11px] text-muted aria-pressed:bg-accent-bg aria-pressed:font-medium aria-pressed:text-accent-ink"
           >
-            <Icon n={t.icon} size={22} />
-            {t.label}
+            <Icon n={tool.icon} size={22} />
+            {tool.label}
           </button>
         ))}
       </nav>
@@ -403,7 +404,7 @@ export function PhoneToolbar({
   );
 }
 
-// ------------------------------------------------------------ 抽屉头（属性 / 元件库）
+// ------------------------------------------------------------ Sheet header (properties / part library)
 export function SheetHead({
   title,
   id,
@@ -422,7 +423,7 @@ export function SheetHead({
       <button
         type="button"
         id={id}
-        aria-label="关闭"
+        aria-label={t('Close')}
         onClick={onClose}
         className="inline-flex size-11 flex-none cursor-pointer items-center justify-center rounded-full border-0 bg-field p-0 text-fg"
       >
@@ -432,7 +433,7 @@ export function SheetHead({
   );
 }
 
-/** 抽屉手柄：点一下切档，上下拖切档（只认竖直方向 ≥ 28px 的动作，免得和点按打架） */
+/** Sheet handle: tap or drag to change size (only vertical moves ≥ 28px count, so taps aren't misread) */
 export function Grab({
   onUp,
   onDown,
