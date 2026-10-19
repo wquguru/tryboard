@@ -1,9 +1,9 @@
-# Wi-Fi（ESP32-C3 / ESP32-S3）逆向笔记与实现
+# Wi-Fi（ESP32-C3 / ESP32-S3 / 经典 ESP32）逆向笔记与实现
 
 目标：用户上传的 .bin（IDF / Arduino）在模拟器里能扫描、连上虚拟 AP、拿到 IP、做 HTTP。
 信息来源：ESP-IDF v5.5.1 的预编译 Wi-Fi 库（libpp / libnet80211 / libphy，Apache-2.0 二进制）反汇编、ROM ELF 符号、IDF 头文件。不参考任何 GPL 实现。
 
-经典 ESP32（C-05，2026-10-19）：PHY 射频校准轮询与 C3 同一套（偏移相同，APB 基址 0x3FF40000；FM SAR 位 26..24 读回语义相反、PLL 换频位 8 / 31 是 ESP32 独有，见 `WifiLayout::ESP32`），`esp_wifi_init` / `start` 能过。MAC 是上一代 IP（0x3FF73000 一带，描述符格式不同），收发没做，扫描收不到信标、连 AP 报 reason=201。
+经典 ESP32（C-05，2026-10-19）：PHY 射频校准轮询与 C3 同一套（偏移相同，APB 基址 0x3FF40000；FM SAR 位 26..24 读回语义相反、PLL 换频位 8 / 31 是 ESP32 独有，见 `WifiLayout::ESP32`），`esp_wifi_init` / `start` 能过。MAC 是上一代 IP（0x3FF73000 一带）：同一个 MAC 模型换一套寄存器排布（`MacRegs::ESP32`）后，连开放 / WPA2 热点、DHCP、HTTP 都通，见文末「经典 ESP32」。
 
 调试工具：
 - `tools/wifi_iter.sh <固件> [秒] [参数]`：重编 CLI、运行、打印停止点并反汇编
@@ -123,3 +123,38 @@ AP 收到 MIC 不对的 2/4 静默丢弃，按 hostapd 节奏重发 1/4（100ms�
 
 没用到、没做的：S3 的 SHA-384/512 模式（WPA2 只用 SHA-1）、TSENS 随温度变化、802.11n / 省电、蓝牙。
 QEMU 对照：乐鑫 QEMU 的 esp32s3 机器没有 Wi-Fi 模型（只有 ESP32 的 open_eth 网卡），无法做 S3 Wi-Fi 对照；判定与 C3 版相同的串口输出。
+
+
+## 经典 ESP32（C-05：esp32-wifi / esp32-wifi-wpa2 ✅）
+
+结论：ESP32 的 MAC 是上一代硬件，但 libpp 的 HAL 函数名、lldesc 描述符、发送结果码、硬件密钥表格式都和 C3 一样，差的是寄存器偏移、接收元数据头长度和几个读回语义。
+`WifiMac` 的寄存器地址全部收进 `MacRegs`（`WifiLayout.mac`），C3 / S3 用 `MacRegs::C3`（数值与原来逐个相同），ESP32 用 `MacRegs::ESP32`。
+依据：IDF v5.5.1 的 esp32 版 libpp / libnet80211 / libphy（Apache-2.0 预编译库）反汇编 + `esp_wifi_types_native.h` + 固件实跑时 `--watch` 看访问 PC。没有看、没有用 QEMU 的 esp32 Wi-Fi 代码（乐鑫 QEMU 的 esp32 机器本来也只有 open_eth 网卡，没有 Wi-Fi MAC）。
+
+| 项 | C3 / S3 | ESP32 | 来源（libpp 函数） |
+|---|---|---|---|
+| 中断使能 / 状态 / 清除 | 0x60033C34 / C3C / C40 | 0x3FF73C40 / C48 / C4C | wDev_ProcessFiq、wdev 初始化 |
+| 接收事件位 | 位 14 | 位 24（接收掩码 0x1000024，位 2 / 5 是溢出类） | wDev_ProcessFiq |
+| 发送完成事件位 | 位 7 | 位 7 | 同上 |
+| 接收链首 / 最近填好 | 0x60033088 / 0x60033090（读回低 20 位） | 0x3FF73088 / 0x3FF73090（读回完整地址） | wDev_ProcessRxSucData、hal_mac_rx_* |
+| 接收链"下一个要填的" | — | 0x3FF7308C：读回 0x3FF00000 \| 当前描述符低 20 位，链空时 = 0x3FF00000 | 驱动回收描述符时比较它 |
+| 接收控制 | — | 0x3FF73084 位 0 = 重新装载，硬件做完自清；驱动轮询这一位，不清就一直打 `wifi:reload` | hal_mac_rx_set_base 之后的轮询 |
+| 发送队列 q 配置 | 0x60033D08 − 8q | 0x3FF73D20 − 8q（位 31 启动，位 19..0 描述符低 20 位） | hal_mac_tx_set_ppdu、lmacTxFrame |
+| 发送结果 q | 0x60034320 − 76q | 0x3FF74270 − 60q（位 15..12 结果码，0 成功、5 ACK 超时） | lmacProcessTxComplete |
+| 发送完成位图 / 清除 | 0x60033CB0 / CAC | 0x3FF73CC8 / CC4 | 同上 |
+| 恒读 0 的状态 | 0x60033CA8、0x60035118 | 0x3FF73CC0 | — |
+| TSF 低 / 高 | 0x60035018 / 501C | 0x3FF75014 / 5018 | hal_mac_get_tsf |
+| 描述符地址高位 | 0x3FC00000 | 0x3FF00000 | DRAM 段 |
+| 硬件密钥表 | 有效位图 0x60033814、槽 0x60034400 + 40i | 0x3FF73814、0x3FF74400 + 40i（格式同 C3） | hal_crypto_set_key_entry |
+| 接收元数据头 | 12 字；噪声底在字 5，长度在字 11 | 7 字；字 2 = 噪声底（低字节）+ 信道，字 6 位 11..0 = 长度 | esp_wifi_types_native.h 的 esp32 分支 |
+| RSSI | 字 0 低字节直接是 dBm | 驱动从字 0 低字节再减 wDevCtrl+46（实测 96），模型写入 rssi + 96（`rx_rssi_bias`） | wDev_ProcessRxSucData 反汇编 + 实跑读到 rssi 118 → 修正后 −42 |
+
+PHY / 射频：除前面说的 rf_polls 外，`ram_wait_rfpll_cal_end` 轮询 regi2c 块 0x62（98）寄存器 7 的位 7（RFPLL 校准完成）；HLE 的 I2C 读回给这一位置 1（`hle.rs` `analog_read`），否则 `pll_cal` 刷屏、PHY 初始化拖几秒。
+
+加密：WPA2 的 PBKDF2 / PRF 走硬件 SHA（IDF 的 esp32 端口默认开硬件 SHA），CCMP 前的 AES 也走硬件，所以 ESP32 要有自己的 SHA / AES 模型（`core/crates/esp32/src/crypto.rs`，寄存器按 IDF `hwcrypto_reg.h` / `sha_ll.h` / `aes_ll.h`）：
+- SHA 0x3FF03000：0x00..0x7C 是消息字（大端），每种算法一组 START / CONTINUE / LOAD / BUSY 在 0x80 + 0x10·type 起的 +0 / +4 / +8 / +C；LOAD 把内部状态写回文本寄存器（64 位状态高字在前）。SHA-1 / 256 复用 soc 与 C3 的压缩函数，SHA-384 / 512 自己写了一份（FIPS 180 "abc" 单测）。
+- AES 0x3FF01000：START 0x00、IDLE 0x04（恒 1）、MODE 0x08（位 2 = 解密，位 1..0 = 128 / 192 / 256）、KEY 0x10..0x2C、TEXT 0x30..0x3C，按内存字节序装载（FIPS 197 单测）。
+- 没有这两个模型时 `sha_hal_read_digest` 读回全 0，四次握手 MIC 校验失败后 abort。
+
+验收：accept.json `esp32-wifi`（开放热点 → IP → tryboard.local 200 17 字节 → example.com 200 → TRYBOARD_OK wifi-http）、`esp32-wifi-wpa2`（同一份源码，TryBoard-WPA2 / tryboard123）。命令行应用层输出与 C3 wifi-http 逐行相同（过滤掉芯片相关的 IDF 日志）；网页示例 esp32-wifi（`tools/accept.sh` 网页冒烟 + Reviews/ab/C-05.md）。
+没做：省电（modem sleep 只走到 pm start）、802.11n 聚合、蓝牙共存、SoftAP（C-02 是 C3 的）。

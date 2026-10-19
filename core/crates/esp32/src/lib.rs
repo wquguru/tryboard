@@ -3,6 +3,7 @@
 //! 偏移不同的（TIMG、SPI1、LEDC）在 periph.rs 里做翻译层。运行循环与 S3 相同（两核按固定量子交替，确定性）。
 
 pub mod boot;
+pub mod crypto;
 pub mod hle;
 pub mod periph;
 
@@ -15,7 +16,8 @@ use tryboard_esp32c3::iotrace::IoTrace;
 use tryboard_esp32c3::periph::Uart;
 use tryboard_esp32c3::rmt::Ws2812;
 use tryboard_esp32c3::tasktrace::TaskTrace;
-use tryboard_soc::wifi::{WifiLayout, WifiMac};
+use tryboard_soc::wifi::{MacRegs, WifiLayout, WifiMac};
+use tryboard_soc::Mem as DmaMem;
 use tryboard_xtensa::{sr, Bus, BusFault, Cpu, Exit};
 
 pub const CPU_HZ: u64 = tryboard_esp32c3::periph::CPU_HZ;
@@ -113,6 +115,8 @@ pub struct SocBus {
     pub spi1: Spi1,
     pub ledc: Esp32Ledc,
     pub analog: Analog,
+    pub sha: crypto::ShaHw,
+    pub aes: crypto::AesHw,
     /// 板上没有 RMT 模型（ESP32 的 RMT 寄存器布局与 C3 / S3 不兼容，见 DECISIONS），表留空给统一接口
     pub ws2812: HashMap<u32, Ws2812>,
     pub pins: PinDevices,
@@ -181,6 +185,8 @@ impl Default for SocBus {
             spi1,
             ledc: Esp32Ledc::default(),
             analog: Analog::default(),
+            sha: Default::default(),
+            aes: Default::default(),
             ws2812: HashMap::new(),
             pins: PinDevices::default(),
             i2c0: I2c::with_layout(I2cLayout::ESP32, 0),
@@ -328,6 +334,8 @@ impl SocBus {
                 let lv = self.levels();
                 return self.dport.read(off, &lv);
             }
+            crypto::AES_BASE => return self.aes.read(off),
+            crypto::SHA_BASE => return self.sha.read(off),
             MMU_PRO if (off as usize) < MMU_ENTRIES * 4 => return self.mmu[(off / 4) as usize],
             MMU_APP if (off as usize) < MMU_ENTRIES * 4 => return self.mmu_app[(off / 4) as usize],
             UART0 => return self.uart0.read(off),
@@ -368,6 +376,12 @@ impl SocBus {
         if a == APB_CTRL_DATE {
             return 0x8000_0000 | 0x1605_1900;
         }
+        // 随机数寄存器也落在 MAC 范围里，先判它
+        if MacRegs::ESP32.contains(a) {
+            if let Some(v) = self.wifi_mut().read(a, now) {
+                return v;
+            }
+        }
         if let Some(v) = self
             .wifi()
             .rf_read(a, self.regs.get(&a).copied().unwrap_or(0))
@@ -384,6 +398,8 @@ impl SocBus {
         self.irq_dirty = true;
         match base {
             0x3FF0_0000 => return self.dport.write(off, v),
+            crypto::AES_BASE => return self.aes.write(off, v),
+            crypto::SHA_BASE => return self.sha.write(off, v),
             MMU_PRO if (off as usize) < MMU_ENTRIES * 4 => {
                 self.mmu[(off / 4) as usize] = v & 0x1ff;
                 self.fetch_page = u32::MAX;
@@ -448,6 +464,17 @@ impl SocBus {
                 return;
             }
             _ => {}
+        }
+        let mut v = v;
+        if MacRegs::ESP32.contains(a) {
+            let mut w = self.wifi.take().expect("wifi");
+            let keep = w.write(a, v, now, self);
+            self.wifi = Some(w);
+            // None = MAC 模型已完全处理；否则照通用寄存器存（仍计入 unimpl）
+            match keep {
+                Some(x) => v = x,
+                None => return,
+            }
         }
         *self.unimpl.entry(a).or_insert(0) += 1;
         self.regs.insert(a, v);
@@ -524,6 +551,7 @@ impl SocBus {
         set(src::TG1_T0, self.timg1.irq(0));
         set(src::TG1_T1, self.timg1.irq(1));
         set(src::TG1_LACT, self.timg1.irq(2));
+        set(src::WIFI_MAC, self.wifi().irq());
         for i in 0..4 {
             set(src::FROM_CPU0 + i, self.dport.from_cpu & (1 << i) != 0);
         }
@@ -560,13 +588,34 @@ impl SocBus {
         let n2 = self.ledc.update(now);
         let n3 = self.i2c0.update(now).min(self.i2c1.update(now));
         let n4 = self.pins_update(now);
+        let n5 = {
+            let mut w = self.wifi.take().expect("wifi");
+            let n = w.update(now, self);
+            self.wifi = Some(w);
+            n
+        };
         self.trace_pwm(now);
-        self.next_event = n1.min(n2).min(n3).min(n4);
+        self.next_event = n1.min(n2).min(n3).min(n4).min(n5);
         let lv = self.levels();
         let (l0, r0) = self.dport.pro.lines(&lv);
         let (l1, r1) = self.dport.app.lines(&lv);
         self.lines = [l0 | r0, l1 | r1];
         self.irq_dirty = false;
+    }
+}
+
+impl DmaMem for SocBus {
+    fn rd8(&mut self, a: u32) -> u8 {
+        self.mem_read(a, 1).unwrap_or(0) as u8
+    }
+    fn rd32(&mut self, a: u32) -> u32 {
+        self.mem_read(a, 4).unwrap_or(0)
+    }
+    fn wr8(&mut self, a: u32, v: u8) {
+        self.mem_write(a, 1, v as u32);
+    }
+    fn wr32(&mut self, a: u32, v: u32) {
+        self.mem_write(a, 4, v);
     }
 }
 

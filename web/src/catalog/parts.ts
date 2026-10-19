@@ -408,7 +408,7 @@ export const PARTS: Part[] = [
     },
     sources: ['乐鑫 ESP32-DevKitC V4 用户指南（J1 / J3 引脚表、BOOT GPIO0、板尺寸 54.4 × 27.9 mm）'],
     todo: ['sizeMm[2]：高度未量', 'board.ldo：稳压器型号与额定电流按原理图录入', 'currentMa：整板静态电流未测'],
-    note: '没有用户灯（只有电源灯），点灯要外接 LED。两排针相距 1″，插在 830 孔面包板上一侧没有空孔。GPIO34–39 只能输入；GPIO0 / 2 / 5 / 12 / 15 是 strapping 脚。试板模拟到 GPIO、LEDC、I2C、Wi-Fi 初始化；蓝牙、DAC、触摸、霍尔、RMT 必须上真机。',
+    note: '没有用户灯（只有电源灯），点灯要外接 LED。两排针相距 1″，插在 830 孔面包板上一侧没有空孔。GPIO34–39 只能输入；GPIO0 / 2 / 5 / 12 / 15 是 strapping 脚。试板模拟到 GPIO、LEDC、I2C、Wi-Fi 联网（开放 / WPA2 热点、HTTP）；蓝牙、DAC、触摸、霍尔、RMT 必须上真机。',
   }),
   P({
     id: 'xiao-c3',

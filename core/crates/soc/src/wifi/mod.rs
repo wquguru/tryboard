@@ -23,6 +23,7 @@ pub struct WifiLayout {
     pub cpu_hz: u64,
     /// 射频 / 基带 / MAC 里"等硬件完成"的轮询：(地址, 就绪方式)
     pub rf_polls: &'static [(u32, RfReady)],
+    pub mac: MacRegs,
 }
 
 /// 轮询寄存器的就绪值怎么给
@@ -48,13 +49,13 @@ impl WifiLayout {
             // MAC：hal_init 写位 1 后等位 0 就绪
             (0x6003_3d14, RfReady::StartBit1Done0),
         ],
+        mac: MacRegs::C3,
     };
     pub const S3: WifiLayout = WifiLayout {
         chip: "esp32s3",
         ..WifiLayout::C3
     };
-    /// 经典 ESP32：MAC 是上一代 IP（寄存器在 0x3FF73000 一带，与 C3 / S3 不同），模型还没接上；
-    /// 这个布局只给统一接口用，总线不把任何地址交给它
+    /// 经典 ESP32：MAC 是上一代 IP（寄存器在 0x3FF73000 一带，排布见 [`MacRegs::ESP32`]）
     pub const ESP32: WifiLayout = WifiLayout {
         chip: "esp32",
         cpu_hz: 160_000_000,
@@ -69,42 +70,130 @@ impl WifiLayout {
             // MAC：hal_init 写位 1、等位 0（C3 在 +0xD14，ESP32 在 +0xD24）
             (0x3ff7_3d24, RfReady::StartBit1Done0),
         ],
+        mac: MacRegs::ESP32,
     };
 }
 
-// MAC 寄存器（基址 0x60033000，见 docs/WIFI.md）
-/// 本模块关心的 MAC / 省电模块地址范围
-pub const MAC_RANGE: std::ops::Range<u32> = 0x6003_3000..0x6003_6000;
-const MAC_INT_ENA: u32 = 0x6003_3c34;
-const MAC_INT_ST: u32 = 0x6003_3c3c;
-const MAC_INT_CLR: u32 = 0x6003_3c40;
-const RX_FIRST_DESC: u32 = 0x6003_3088;
-const RX_LAST_DESC: u32 = 0x6003_3090;
-const TXQ_DONE: u32 = 0x6003_3cb0;
-const TXQ_DONE_CLR: u32 = 0x6003_3cac;
-/// 发送队列 q 的配置寄存器 = 0x60033D08 - 8q；位 19..0 描述符地址低 20 位，位 31/30 启动
-const TXQ0: u32 = 0x6003_3d08;
+/// MAC 寄存器排布（见 docs/WIFI.md）。C3 / S3 是同一代 IP；经典 ESP32 是上一代，同名 HAL 函数、
+/// 同样的描述符与发送结果码，但寄存器偏移逐个不同，接收元数据头只有 7 个字（「ESP32」一节）
+#[derive(Clone, Copy, Debug)]
+pub struct MacRegs {
+    /// 本模块关心的 MAC / 省电模块地址范围
+    pub range: (u32, u32),
+    pub int_ena: u32,
+    pub int_st: u32,
+    pub int_clr: u32,
+    pub rx_first: u32,
+    /// 接收控制：位 0 = 重新装载描述符链（硬件读完即清，ESP32 驱动写后轮询到它清零；C3 不轮询，填 0）
+    pub rx_ctrl: u32,
+    /// 读：最近一次填好的描述符；`rx_last_full` = 回完整地址（ESP32），否则只回低 20 位（C3）
+    pub rx_last: u32,
+    pub rx_last_full: bool,
+    /// 读：硬件下一个要填的描述符（ESP32 驱动回收时读它；C3 不读，填 0）
+    pub rx_next: u32,
+    pub txq_done: u32,
+    pub txq_done_clr: u32,
+    /// 发送队列 q 的配置寄存器 = txq0 - 8q；位 19..0 描述符地址低 20 位，位 31/30 启动
+    pub txq0: u32,
+    /// 发送结果 = txq_result0 - stride·q：位 15..12 结果码（0 成功，5 ACK 超时）
+    pub txq_result0: u32,
+    pub txq_result_stride: u32,
+    /// 读回恒 0 的状态寄存器（发送状态、省电中断状态）
+    pub zero: [u32; 2],
+    /// TSF 计时器（微秒）低 / 高 32 位
+    pub tsf_lo: u32,
+    pub tsf_hi: u32,
+    /// 描述符地址寄存器只存低 20 位，高位固定（C3 / S3 的 DRAM 在 0x3FCxxxxx，ESP32 在 0x3FFxxxxx）
+    pub desc_hi: u32,
+    /// 接收中断事件位（wDev_ProcessFiq 的掩码）
+    pub ev_rx: u32,
+    /// 硬件密钥表（hal_crypto_set_key_entry）：有效位图 + 每项 40 字节
+    pub key_valid: u32,
+    pub key_table: u32,
+    /// 接收元数据头字数；噪声底（低字节）、长度（位 11..0）所在字
+    pub rx_hdr_words: u32,
+    pub rx_noise_word: usize,
+    pub rx_len_word: usize,
+    /// 硬件写进头里的 RSSI 比真实 dBm 高多少：ESP32 的 wDev_ProcessRxSucData 先减去 wDevCtrl+46
+    /// （运行时读到 96）再上报，C3 不减
+    pub rx_rssi_bias: i32,
+}
+
+impl MacRegs {
+    pub const C3: MacRegs = MacRegs {
+        range: (0x6003_3000, 0x6003_6000),
+        int_ena: 0x6003_3c34,
+        int_st: 0x6003_3c3c,
+        int_clr: 0x6003_3c40,
+        rx_first: 0x6003_3088,
+        rx_ctrl: 0,
+        rx_last: 0x6003_3090,
+        rx_last_full: false,
+        rx_next: 0,
+        txq_done: 0x6003_3cb0,
+        txq_done_clr: 0x6003_3cac,
+        txq0: 0x6003_3d08,
+        txq_result0: 0x6003_4320,
+        txq_result_stride: 76,
+        zero: [0x6003_3ca8, 0x6003_5118],
+        tsf_lo: 0x6003_5018,
+        tsf_hi: 0x6003_501c,
+        desc_hi: 0x3fc0_0000,
+        ev_rx: 1 << 14,
+        key_valid: 0x6003_3814,
+        key_table: 0x6003_4400,
+        rx_hdr_words: 12,
+        rx_noise_word: 5,
+        rx_len_word: 11,
+        rx_rssi_bias: 0,
+    };
+    /// 经典 ESP32（从 libpp / libnet80211 反汇编推出，见 docs/WIFI.md「ESP32」）
+    pub const ESP32: MacRegs = MacRegs {
+        range: (0x3ff7_3000, 0x3ff7_6000),
+        int_ena: 0x3ff7_3c40,
+        int_st: 0x3ff7_3c48,
+        int_clr: 0x3ff7_3c4c,
+        rx_first: 0x3ff7_3088,
+        rx_ctrl: 0x3ff7_3084,
+        rx_last: 0x3ff7_3090,
+        rx_last_full: true,
+        rx_next: 0x3ff7_308c,
+        txq_done: 0x3ff7_3cc8,
+        txq_done_clr: 0x3ff7_3cc4,
+        txq0: 0x3ff7_3d20,
+        txq_result0: 0x3ff7_4270,
+        txq_result_stride: 60,
+        zero: [0x3ff7_3cc0, 0x3ff7_3cc0],
+        tsf_lo: 0x3ff7_5014,
+        tsf_hi: 0x3ff7_5018,
+        desc_hi: 0x3ff0_0000,
+        // 接收掩码 0x1000024 里位 24 是"收到帧"（位 2 / 5 是溢出类）
+        ev_rx: 1 << 24,
+        key_valid: 0x3ff7_3814,
+        key_table: 0x3ff7_4400,
+        rx_hdr_words: 7,
+        rx_noise_word: 2,
+        rx_len_word: 6,
+        rx_rssi_bias: 96,
+    };
+
+    pub fn contains(&self, a: u32) -> bool {
+        (self.range.0..self.range.1).contains(&a)
+    }
+}
+
+/// C3 / S3 的 MAC 地址范围（总线分派用）
+pub const MAC_RANGE: std::ops::Range<u32> = MacRegs::C3.range.0..MacRegs::C3.range.1;
 const TXQ_NUM: u32 = 5;
-/// 发送结果 = 0x60034320 - 76q：位 15..12 结果码（0 成功，5 ACK 超时）
-const TXQ_RESULT0: u32 = 0x6003_4320;
-/// 描述符地址寄存器只存低 20 位，高位固定（两颗芯片的 DRAM 都在 0x3FCxxxxx）
-const DESC_HI: u32 = 0x3fc0_0000;
 
-// MAC 中断事件位（wDev_ProcessFiq）
+// MAC 中断事件位（wDev_ProcessFiq）：发送完成两代相同
 const EV_TX_DONE: u32 = 1 << 7;
-const EV_RX: u32 = 1 << 14;
 
-/// 硬件密钥表（hal_crypto_set_key_entry）：有效位图 + 每项 40 字节
-/// 字 0 = 对端 MAC 字节 0..3，字 1 低 16 位 = MAC 字节 4..5、位 30 = 组密钥，字 2.. = 密钥（按内存字节装载）。
+/// 硬件密钥表每项：字 0 = 对端 MAC 字节 0..3，字 1 低 16 位 = MAC 字节 4..5、位 30 = 组密钥，字 2.. = 密钥（按内存字节装载）。
 /// 字 1 高位其余字段（算法、槽位类别）没有用到：实测 IDF 把 GTK 装在槽 0、PTK 装在槽 4，对端都是 BSSID
-const KEY_VALID: u32 = 0x6003_3814;
 const KEY_GROUP: u32 = 1 << 30;
-const KEY_TABLE: u32 = 0x6003_4400;
 const KEY_ENTRY: u32 = 40;
 const KEY_SLOTS: u32 = 32;
-
-/// 接收描述符里硬件写的元数据头（wifi_pkt_rx_ctrl_t，12 个字）
-const RX_HDR: u32 = 48;
 
 enum Ev {
     TxDone { q: usize, code: u32 },
@@ -200,46 +289,56 @@ impl WifiMac {
 
     /// MAC 寄存器的读；None 走通用读回
     pub fn read(&mut self, a: u32, now: u64) -> Option<u32> {
+        let m = self.layout.mac;
+        let res = |a: u32| {
+            a <= m.txq_result0
+                && (m.txq_result0 - a).is_multiple_of(m.txq_result_stride)
+                && (m.txq_result0 - a) / m.txq_result_stride < TXQ_NUM
+        };
         Some(match a {
-            MAC_INT_ST => self.int_raw & self.int_ena,
-            MAC_INT_ENA => self.int_ena,
-            TXQ_DONE => self.tx_done,
-            0x6003_3ca8 => 0,
-            RX_LAST_DESC => self.rx_last & 0xf_ffff,
-            a if (TXQ_RESULT0 - 76 * (TXQ_NUM - 1)..=TXQ_RESULT0).contains(&a)
-                && (TXQ_RESULT0 - a).is_multiple_of(76) =>
-            {
-                self.tx_result[((TXQ_RESULT0 - a) / 76) as usize]
+            a if a == m.int_st => self.int_raw & self.int_ena,
+            a if a == m.int_ena => self.int_ena,
+            a if a == m.txq_done => self.tx_done,
+            a if m.zero.contains(&a) => 0,
+            a if a == m.rx_last => {
+                if m.rx_last_full {
+                    self.rx_last
+                } else {
+                    self.rx_last & 0xf_ffff
+                }
             }
-            // TSF 计时器（微秒）
-            0x6003_5018 => self.tsf_us(now) as u32,
-            0x6003_501c => (self.tsf_us(now) >> 32) as u32,
-            // 省电模块中断状态
-            0x6003_5118 => 0,
+            // 链表到头时读回 0x3FF00000（地址高位 | 空指针），驱动据此判断要不要重设起点
+            a if m.rx_next != 0 && a == m.rx_next => {
+                m.desc_hi | (self.rx_cur.unwrap_or(0) & 0xf_ffff)
+            }
+            a if res(a) => self.tx_result[((m.txq_result0 - a) / m.txq_result_stride) as usize],
+            a if a == m.tsf_lo => self.tsf_us(now) as u32,
+            a if a == m.tsf_hi => (self.tsf_us(now) >> 32) as u32,
             _ => return None,
         })
     }
 
     /// MAC 寄存器的写。返回 Some(值) 表示调用方把这个值存进通用寄存器表（读回用），None 表示已处理、不存
     pub fn write(&mut self, a: u32, v: u32, now: u64, mem: &mut dyn Mem) -> Option<u32> {
+        let m = self.layout.mac;
         match a {
-            MAC_INT_ENA => self.int_ena = v,
-            MAC_INT_CLR => self.int_raw &= !v,
-            TXQ_DONE_CLR => self.tx_done &= !v,
-            RX_FIRST_DESC => {
+            a if a == m.int_ena => self.int_ena = v,
+            a if a == m.int_clr => self.int_raw &= !v,
+            a if a == m.txq_done_clr => self.tx_done &= !v,
+            a if a == m.rx_first => {
                 self.rx_cur = Some(v);
                 return Some(v);
             }
-            KEY_VALID => {
+            // 重新装载：rx() 在链表到头时本来就会去看最后一个描述符的 next，这里只需把位 0 清掉
+            a if m.rx_ctrl != 0 && a == m.rx_ctrl => return Some(v & !1),
+            a if a == m.key_valid
+                || (m.key_table..m.key_table + KEY_ENTRY * KEY_SLOTS).contains(&a) =>
+            {
                 self.keys.insert(a, v);
                 return Some(v);
             }
-            a if (KEY_TABLE..KEY_TABLE + KEY_ENTRY * KEY_SLOTS).contains(&a) => {
-                self.keys.insert(a, v);
-                return Some(v);
-            }
-            a if (TXQ0 - 8 * (TXQ_NUM - 1)..=TXQ0).contains(&a) && (TXQ0 - a).is_multiple_of(8) => {
-                let q = ((TXQ0 - a) / 8) as usize;
+            a if a <= m.txq0 && (m.txq0 - a).is_multiple_of(8) && (m.txq0 - a) / 8 < TXQ_NUM => {
+                let q = ((m.txq0 - a) / 8) as usize;
                 if v & 0x8000_0000 != 0 {
                     self.tx(q, v, now, mem);
                     // 启动位由硬件在发送结束后清除；这里立即清，驱动不会读回它
@@ -254,7 +353,7 @@ impl WifiMac {
 
     /// 发送队列启动：沿描述符链取出整帧，交给虚拟世界，按空口时间安排"发送完成"与回应
     fn tx(&mut self, q: usize, reg: u32, now: u64, mem: &mut dyn Mem) {
-        let mut d = DESC_HI | (reg & 0xf_ffff);
+        let mut d = self.layout.mac.desc_hi | (reg & 0xf_ffff);
         let mut f = Vec::new();
         for _ in 0..16 {
             let w0 = mem.rd32(d);
@@ -299,7 +398,7 @@ impl WifiMac {
         }
     }
 
-    /// 把一帧写进下一个空闲接收描述符：48 字节元数据头 + 帧 + FCS
+    /// 把一帧写进下一个空闲接收描述符：元数据头（C3 48 字节 / ESP32 28 字节）+ 帧 + FCS
     fn rx(&mut self, air: world::Air, now: u64, mem: &mut dyn Mem) {
         let mut d = match self.rx_cur {
             Some(d) if d != 0 => d,
@@ -338,23 +437,25 @@ impl WifiMac {
         }
         let fcs = frame::crc32(&f);
         f.extend_from_slice(&fcs.to_le_bytes());
-        let total = RX_HDR + f.len() as u32;
+        let m = self.layout.mac;
+        let hdr_len = 4 * m.rx_hdr_words;
+        let total = hdr_len + f.len() as u32;
         if total > size {
             self.rx_dropped += 1;
             return;
         }
         let buf = mem.rd32(d + 4);
         let mut hdr = [0u32; 12];
-        hdr[0] = (air.rssi as u8 as u32) | (1 << 28); // RSSI、命中接口 0（STA）
+        hdr[0] = ((air.rssi as i32 + m.rx_rssi_bias) as u8 as u32) | (1 << 28); // RSSI、命中接口 0（STA）
         hdr[2] = (air.channel as u32 & 0xf) << 16;
         hdr[3] = self.tsf_us(now) as u32;
-        hdr[5] = (-96i8) as u8 as u32; // 噪声底
-        hdr[11] = f.len() as u32 & 0xfff; // sig_len（含 FCS），rx_state = 0
-        for (i, w) in hdr.iter().enumerate() {
+        hdr[m.rx_noise_word] |= (-96i8) as u8 as u32; // 噪声底
+        hdr[m.rx_len_word] |= f.len() as u32 & 0xfff; // sig_len（含 FCS），rx_state = 0
+        for (i, w) in hdr[..m.rx_hdr_words as usize].iter().enumerate() {
             mem.wr32(buf + 4 * i as u32, *w);
         }
         for (i, b) in f.iter().enumerate() {
-            mem.wr8(buf + RX_HDR + i as u32, *b);
+            mem.wr8(buf + hdr_len + i as u32, *b);
         }
         // 长度、EOF，所有权交还软件
         let w0n = (w0 & 0xfff) | (total << 12) | (1 << 30);
@@ -362,7 +463,7 @@ impl WifiMac {
         self.rx_last = d;
         d = mem.rd32(d + 8);
         self.rx_cur = Some(d);
-        self.int_raw |= EV_RX;
+        self.int_raw |= m.ev_rx;
         self.rx_frames += 1;
         let desc = match frame::parse(&air.frame) {
             Some(h) => format!("FC=0x{:02x} 来自 {}", h.fc0, frame::mac_str(&h.a2)),
@@ -382,11 +483,11 @@ impl WifiMac {
     /// 在硬件密钥表里找对端 MAC 的成对（group = false）或组密钥
     fn hw_key(&self, peer: &frame::Mac, group: bool) -> Option<[u8; 16]> {
         let reg = |a: u32| self.keys.get(&a).copied().unwrap_or(0);
-        let valid = reg(KEY_VALID);
+        let valid = reg(self.layout.mac.key_valid);
         (0..KEY_SLOTS)
             .filter(|i| valid & (1 << i) != 0)
             .find_map(|i| {
-                let e = KEY_TABLE + KEY_ENTRY * i;
+                let e = self.layout.mac.key_table + KEY_ENTRY * i;
                 let (w0, w1) = (reg(e), reg(e + 4));
                 let mut mac = [0u8; 6];
                 mac[..4].copy_from_slice(&w0.to_le_bytes());

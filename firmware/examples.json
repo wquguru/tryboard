@@ -1138,5 +1138,20 @@
     }
    ]
   }
+ },
+ {
+  "id": "esp32-wifi",
+  "chip": "esp32",
+  "title": "Wi-Fi（经典 ESP32）：联网发 HTTP 请求",
+  "about": "与 C3 版同一份源码：连上开放热点 TryBoard-WiFi，DHCP 拿到 192.168.4.100，再请求 http://tryboard.local（mDNS）和 example.com（DNS）。经典 ESP32 的 Wi-Fi MAC 是上一代硬件（寄存器在 0x3FF73000 一带），模拟器用同一个 MAC 模型换一套寄存器排布；网络是虚拟世界，不会访问真实互联网。",
+  "tags": [
+   "✓ 仿真验证",
+   "Wi-Fi",
+   "DHCP",
+   "HTTP"
+  ],
+  "scene": {
+   "parts": []
+  }
  }
 ]

@@ -39,7 +39,7 @@ export interface Rejected {
   why: string;
 }
 
-/** 只部分模拟的芯片：外设种类白名单（不在里面的零件标「必须上真机」）。经典 ESP32 只做了 GPIO、LEDC、I2C */
+/** 只部分模拟的芯片：外设种类白名单（不在里面的零件标「必须上真机」）。经典 ESP32 只做了 GPIO、LEDC、I2C（Wi-Fi 不是零件，不在这里管） */
 const SIM_KINDS: Partial<Record<string, string[]>> = { esp32: ['gpio', 'pwm', 'i2c'] };
 
 const CAP_NAME: Record<Cap, string> = {

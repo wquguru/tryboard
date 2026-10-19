@@ -26,6 +26,17 @@ pub const TABLE: &[(&str, Hle)] = &[
     ("ets_set_appcpu_boot_addr", Hle::SetAppCpuBootAddr),
 ];
 
+/// ESP32 独有的模拟寄存器状态，其余与 S3 共用 [`crate::periph::Analog`]
+fn analog_read(bus: &SocBus, block: u8, reg: u8) -> u8 {
+    let v = bus.analog.read(block, reg);
+    match (block, reg) {
+        // RFPLL（块 0x62）reg7 位 7：换频后 PLL 校准完成（ram_wait_rfpll_cal_end 轮询，100 次不到就报
+        // "pll_cal exceeds 2ms"）
+        (0x62, 7) => v | 0x80,
+        _ => v,
+    }
+}
+
 fn mask(msb: u32, lsb: u32) -> u8 {
     (((1u32 << (msb - lsb + 1)) - 1) << lsb) as u8
 }
@@ -36,10 +47,10 @@ pub fn call(kind: Hle, cpu: &mut Cpu, bus: &mut SocBus) {
     let a = |i: u32| cpu.a(base + 2 + i);
     let (block, reg) = (a(0) as u8, a(2) as u8);
     let ret = match kind {
-        Hle::I2cReadReg => bus.analog.read(block, reg) as u32,
+        Hle::I2cReadReg => analog_read(bus, block, reg) as u32,
         Hle::I2cReadRegMask => {
             let (msb, lsb) = (a(3) & 7, a(4) & 7);
-            ((bus.analog.read(block, reg) & mask(msb, lsb)) >> lsb) as u32
+            ((analog_read(bus, block, reg) & mask(msb, lsb)) >> lsb) as u32
         }
         Hle::I2cWriteReg => {
             bus.analog.regs.insert((block, reg), a(3) as u8);

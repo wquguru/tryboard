@@ -157,11 +157,11 @@ web/（Vite + TS）
 - 外设：MMIO 0x3FF00000..0x3FF80000，0x60000000 + x 是 0x3FF40000 + x 的 AHB 别名（UART / I2C FIFO 走它）。与 C3 / S3 寄存器语义相同的直接复用 tryboard-esp32c3（UART、I2C + SSD1306 / BME280、引脚器件、GPIO 记录），偏移不同的 TIMG、SPI1、LEDC 在 `periph.rs` 里做翻译层；I2C 按 `I2cLayout::ESP32`（命令码 RSTART 0 / WRITE 1 / READ 2 / STOP 3 / END 4、16 项命令表、SCL 直接按 APB 80MHz 计 14 位）。DPORT：两张中断矩阵（69 个源）、核间中断、cache 控制。GPIO 40 脚（0–39，无 20 / 24 / 28–31）。
 - LEDC：高速 / 低速两组各 8 通道；timer 的 tick_sel 0 = REF_TICK 1MHz，1 = 高速组 APB / 低速组 SLOW_CLK（APB_CLK_SEL 选 APB 或 8MHz），翻译层据此算频率。
 - 启动：直接启动同 S3（ROM 各 .data* 初值、入口窗口帧、双核由 `ets_set_appcpu_boot_addr` 拉起核 1，两核 256 周期量子交替）；一代 ROM（2016-06-08）的启动横幅只有两行。eFuse 只读：芯片版本 v3.0（REV1 / REV2 位 + APB_CTRL_DATE 位 31）、出厂 MAC 02:54:42:00:00:04（本地管理地址，带 CRC8）。
-- Wi-Fi：PHY 射频校准轮询与 C3 同一套（外设偏移相同、APB 基址 0x3FF40000），`esp_wifi_init` / `esp_wifi_start` 能过；**MAC 是上一代 IP（0x3FF73000 一带），收发 / DMA 没模型**，扫描收不到信标，`esp32-wifi` 停在「断开 reason=201」（找不到 AP）。`WifiLayout::ESP32` 只给统一接口用，总线不把地址交给它。
+- Wi-Fi：PHY 射频校准轮询与 C3 同一套（外设偏移相同、APB 基址 0x3FF40000）；MAC 是上一代 IP（0x3FF73000..0x3FF76000），与 C3 / S3 共用 `tryboard_soc::wifi::WifiMac`，寄存器排布由 `WifiLayout::ESP32.mac`（`MacRegs::ESP32`）给出：7 字接收头、RSSI 偏置 96、接收控制重装位自清、"下一个描述符"寄存器（docs/WIFI.md「经典 ESP32」）。SocBus 在 MMIO 分发里先查 MAC 范围再查射频，`impl tryboard_soc::Mem for SocBus` 让 MAC 读写描述符；中断源 WIFI_MAC 进中断矩阵。WPA2 需要的 SHA（0x3FF03000，SHA-1/256/384/512）/ AES（0x3FF01000）在 `crypto.rs`。RFPLL 校准完成位由 HLE regi2c 读回（块 0x62 寄存器 7 位 7）。
 - 未做（按未实现寄存器记 unimpl）：RMT（寄存器布局与 C3 / S3 不兼容）、ADC、GP-SPI、I2S、DAC、触摸、霍尔、蓝牙。
 - CLI / wasm：镜像头芯片 id 0 → ESP32（`Chip::Esp32`），ROM `esp32_rev300_rom.elf`（`tools/fetch_third_party.sh`）。`tb_image_chip` 认不出时返回 `u32::MAX`（0 已被 ESP32 占用）。短路电流估算沿用 C3 的数（`tb_fault` 的 s3 标志为 0）。
 - 网页：台面板 ESP32-DevKitC V4（`board3d.ts` `BOARD_E32`，54.4 × 27.9 mm、两排 19 针相距 1″、micro-USB + CP2102、没有用户灯 / RGB 灯）；两排针相距 1″ 插在 830 孔面包板上，整板沿 z 偏半格，使 J1 落在 j 排、J3 落在 b 排，a 排留给跳线。芯片显示名 / BOOT 键 / RGB 脚统一在 `web/src/chips.ts`。
-- 验收：accept.json 的 esp32-hello（与 QEMU 逐行一致）、esp32-blink（GPIO2）、esp32-fade（LEDC）、esp32-i2c（SSD1306 + BME280）、esp32-wifi-init；`tools/oracle_qemu.sh esp32-hello`。
+- 验收：accept.json 的 esp32-hello（与 QEMU 逐行一致）、esp32-blink（GPIO2）、esp32-fade（LEDC）、esp32-i2c（SSD1306 + BME280）、esp32-wifi-init、esp32-wifi（开放热点 + HTTP）、esp32-wifi-wpa2；`tools/oracle_qemu.sh esp32-hello`。
 
 ## 原生 USB OTG（ESP32-S3，`crates/esp32s3/src/usb/`）
 - `dwc2.rs`：Synopsys DWC2 设备模式（基址 0x60080000，中断源 38）。寄存器按 DWC2 编程模型；ID / 硬件配置读回 S2/S3 实测值（GSNPSID 0x4F54400A = 4.00a，CSRST 自清；GHWCFG2 0x224DD930、GHWCFG3 0x00C804B5、GHWCFG4 0xD3F0A030）。
