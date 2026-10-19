@@ -61,6 +61,7 @@ if (ok && example === 'bme280' && (await page.$('.env input'))) {
   ok = ok && seen;
 }
 // Knob: drag the slider to 2400mV and the ADC reading follows (UI -> worker -> ADC -> firmware)
+// The firmware converts without calibration, so the real ADC (D-02, raw 3604) prints about 2200mV
 if (ok && example === 'pot') {
   // The example card renders only after the example list loads; the firmware may print its first line before that
   await page.waitForSelector('.env input', { timeout: 5000 });
@@ -71,9 +72,9 @@ if (ok && example === 'pot') {
   let seen = false;
   for (let i = 0; i < 40 && !seen; i++) {
     await new Promise((r) => setTimeout(r, 250));
-    seen = /约 2[34]\d\d mV/.test(await page.$eval('#console', (e) => e.textContent)); // lint: allow-cjk (firmware serial)
+    seen = /约 2[12]\d\d mV/.test(await page.$eval('#console', (e) => e.textContent)); // lint: allow-cjk (firmware serial)
   }
-  console.log(`[webtest] knob -> ADC reading about 2400mV: ${seen ? 'PASS' : 'FAIL'}`);
+  console.log(`[webtest] knob 2400mV -> uncalibrated reading about 2200mV: ${seen ? 'PASS' : 'FAIL'}`);
   ok = ok && seen;
 }
 // Native USB: the virtual PC shows enumeration; the keyboard example types its line, the CDC example echoes input

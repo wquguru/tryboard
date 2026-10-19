@@ -933,5 +933,7 @@ const d: Dict = {
   "DHT11 · DATA IO{pin} · temperature / humidity from the sliders": "DHT11 · DATA IO{pin} · 温湿度取自滑块",
   "DHT11 data (open drain, single wire)": "DHT11 数据（开漏，单总线）",
   "DHT11 power (3.3 V)": "DHT11 供电（3.3 V）",
+  "Waveform": "波形",
+  "Tap to place cursors A and B in turn; drag to pan, − / + to zoom": "轻点依次放光标 A、B；拖动平移，− / + 缩放",
 };
 export default d;

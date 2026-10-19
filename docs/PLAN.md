@@ -134,12 +134,34 @@
 |---|---|---|---|
 | D-01 | 网络故障注入：预设 正常 / 信号弱 / 不稳定 / 断网 + 安排一次故障（路由器重启断 8 s / DNS 失败 / 服务器不回应），全部在内核 `soc/wifi` 按模拟周期执行，种子确定、进输入日志 | 新固件 `c3-wifi-resilient`（断线自动重连 + 周期 GET）：`--net-fault reboot@10` 下串口出现 reason=200 断开、重连、之后 GET 200；`dns@…` 出现 DNS 失败、`silent@…` 出现超时后恢复；网页网络页签操作后导出输入，CLI `--inputs` 重放串口逐字节相同、指纹相同；agent-browser Reviews/ab/D-01.md | ☑ 2026-10-19：reboot@10 短断（8 s）IDF 报 reason=7（AP 已忘了站点、回 deauth），长断 reboot@10,20 报 reason=200 / 201，两种都自动重连后 GET 200；dns / silent / weak / offline 见 STATUS；网页导出 → CLI 重放逐字节相同、指纹相同（netfault.mjs）；accept.json 用例待主会话合并时加 |
 | D-02 | 真实 ADC：噪声、两头非线性、eFuse 校准数据（`adc_cali` 曲线拟合可用，系数来自 IDF curve_fitting_coefficients，Apache-2.0）、理想 / 真实开关（默认真实）、S3 ADC2 遇 Wi-Fi 读超时；接线时 ADC1 / ADC2 引脚标注 | 新固件 `c3-adc-cali` / `s3-adc-cali`：已知电压下校准后误差 < 1%（未校准偏差另行打印）；`s3-adc2-wifi`：Wi-Fi 连上后 `adc_oneshot_read` → ESP_ERR_TIMEOUT、连上前读数正常；原有 pot / s3-pot 等用例不放宽容差；网页器件面板理想 / 真实切换、48 次读数条，重放对拍；agent-browser Reviews/ab/D-02.md | ☑ 2026-10-19：真实模式默认，校准回读 0.5–2.5 V 误差 0 mV；s3-adc2-wifi 连上后 ESP_ERR_TIMEOUT；pot / s3-pot 期望值随典型芯片读数更新（容差未放宽，见 STATUS）；adc.mjs 重放对拍；Reviews/ab/D-02.md |
-| D-03 | 时序敏感代码识别：忙等 `esp_rom_delay_us`、读周期计数器自旋、软件翻转 GPIO（bit-bang）按引脚统计，CLI stderr 一行结论 + wasm 导出；新增 DHT11 单线器件模型 | 新固件 `c3-dht11`（自写驱动，`esp_rom_delay_us` 量脉宽）：读数与设定一致、校验 100/100；CLI 结论行指出 GPIO 与原因；网页结果卡对应行标「需真机确认」；Reviews/ab/D-03.md | ◐ 模型、固件、CLI 结论行、wasm 导出、分析仪忙等提示（带「需真机确认」）已做；结果卡对应行的标签按批次约定留给主会话合并 |
-| D-04 | 逻辑分析仪精细采样：选引脚 + 时间窗，逐沿周期级、缩放、双光标测量、导出 VCD；CLI `--vcd` | 同一运行 CLI 与网页导出的 VCD 逐字节相同；c3-dht11 波形上光标量出 0 / 1 位脉宽；环形缓冲丢弃数显示；Reviews/ab/D-04.md | ☑ `tools/webtest/vcd.mjs` 网页导出 = `tryboard run --vcd` 逐字节（1792 字节、86 个沿）；光标读「High 70.00 µs → 1」；手机端分析仪仍隐藏（D-07） |
-| D-05 | 结果卡逐条可信度（仿真验证 / 行为模拟 / 估算 / 需真机确认）+ 图例 | levels / custom / mobile 等 webtest 不减断言全过；原始数据仍与命令行逐字一致；agent-browser 桌面 + 390 截图 Reviews/ab/D-05.md | ◐ 卡片与图例已上线（Reviews/ab/D-05.md）；「需真机确认」行待 D-03 合入后用 c3-dht11 走查 |
+| D-03 | 时序敏感代码识别：忙等 `esp_rom_delay_us`、读周期计数器自旋、软件翻转 GPIO（bit-bang）按引脚统计，CLI stderr 一行结论 + wasm 导出；新增 DHT11 单线器件模型 | 新固件 `c3-dht11`（自写驱动，`esp_rom_delay_us` 量脉宽）：读数与设定一致、校验 100/100；CLI 结论行指出 GPIO 与原因；网页结果卡对应行标「需真机确认」；Reviews/ab/D-03.md | ☑ 2026-10-19：模型、固件、CLI 结论行、wasm 导出、分析仪忙等提示（带「需真机确认」）；结论行已接进关卡检查（verify 带 timing，不进指纹），结果卡行标签逻辑由 conf.test.ts 覆盖；用户可见的 DHT11 关卡尚无（见 D-05） |
+| D-04 | 逻辑分析仪精细采样：选引脚 + 时间窗，逐沿周期级、缩放、双光标测量、导出 VCD；CLI `--vcd` | 同一运行 CLI 与网页导出的 VCD 逐字节相同；c3-dht11 波形上光标量出 0 / 1 位脉宽；环形缓冲丢弃数显示；Reviews/ab/D-04.md | ☑ `tools/webtest/vcd.mjs` 网页导出 = `tryboard run --vcd` 逐字节（1792 字节、86 个沿）；光标读「High 70.00 µs → 1」；手机端分析仪已进底部抽屉「波形」页签（D-07） |
+| D-05 | 结果卡逐条可信度（仿真验证 / 行为模拟 / 估算 / 需真机确认）+ 图例 | levels / custom / mobile 等 webtest 不减断言全过；原始数据仍与命令行逐字一致；agent-browser 桌面 + 390 截图 Reviews/ab/D-05.md | ◐ 卡片与图例已上线（Reviews/ab/D-05.md），D-03 结论行已接进 verify；但示例没有关卡、选型数据里没有 DHT11（custom 生成不出 DHT11 关卡），所以「需真机确认」行没有用户能走到的页面，未做走查；待 DHT11 进选型数据后补 |
 | D-06 | 成品步骤「上真机检查清单」：按作品器件与结果自动生成（规则表在 TS），勾选、复制清单、打印 | 气象站 / 带 DHT11 / 带 ADC / 带 Wi-Fi 的作品生成的条目正确；勾选按作品存本机；打印样式只印清单；Reviews/ab/D-06.md | ☑ 规则见 web/src/app/checklist.ts，DHT11 / ADC / Wi-Fi 条目由 test/checklist.test.ts 覆盖（Reviews/ab/D-06.md） |
-| D-07 | 手机布局：网络状况 2×2、安排故障、精细采样、清单在 390×844 下可用 | mobile.mjs 新断言（无横向滚动、触控 ≥ 44px）；agent-browser 390 截图 | ☐ |
-| D-08 | 常见坑覆盖清单 `docs/PITFALLS.md`：真机常见坑逐条标 能复现（附固件 / 用例）/ 只能提示 / 覆盖不了 | 每条「能复现」都有 accept 用例或 webtest 指向 | ☐ |
+| D-07 | 手机布局：网络状况 2×2、安排故障、精细采样、清单在 390×844 下可用 | mobile.mjs 新断言（无横向滚动、触控 ≥ 44px）；agent-browser 390 截图 | ☑ 2026-10-19：网络页签 2×2 预设 + 折叠故障；分析仪进抽屉「波形」页签（全高、按钮 ≥ 44px、点按轮流放 A / B）；mobile.mjs PASS；Reviews/ab/D-07.md（清单 D-06 手机端已在 D-06 验过） |
+| D-08 | 常见坑覆盖清单 `docs/PITFALLS.md`：真机常见坑逐条标 能复现（附固件 / 用例）/ 只能提示 / 覆盖不了 | 每条「能复现」都有 accept 用例或 webtest 指向 | ☑ 2026-10-19：32 条，没有用例的（外设超量、栈溢出崩溃、无 PSRAM）降为「只能提示」并注明待补 |
+
+## R · 结构治理（2026-10-19 规划，待人确认后开工）
+起因：代码体检发现 `benchStep()` 单闭包 3747 行、`createBench()` 1931 行；共享外设放在 `esp32c3` crate 里被 S3 / ESP32 / machine 引用（`soc` 只有 wifi / ble），`machine` 约 42 处按芯片 `match`；`worker.ts:521` 把经典 ESP32 的任务时间线标成 C3；core 非测试代码约 150 处 `unwrap/expect`，wasm 无 panic hook；22 处各自 `requestAnimationFrame`；芯片常量 web / Rust 各写一份。
+原则：**行为不变的重构**，每步都以 R-02 的金标准逐字节对拍；先修 bug、再动结构、最后加护栏防回退。不改 UI 外观，不加依赖。
+顺序：R-01–R-04 → 内核线（R-05 → R-06 → R-07）与前端线（R-08 → R-09 → R-10 → R-11 → R-12）两条 worktree 并行 → R-13 → R-14。D 批未完项（D-03 / D-05 / D-07 / D-08）先合完或冻结 `bench.tsx`，否则拆分要重做（AGENTS.md §9 第 11 条）。
+| ID | 项 | 验收 | 状态 |
+|---|---|---|---|
+| R-01 | 性能基线（2026-10-19 试跑：稳定态 60 fps，桌面与 4× 降速手机都不掉帧；问题在启动长任务，见 R-15；s3-lvgl 模拟速度仅 0.5× 实时）：`tools/webtest/perf.mjs` 量各入口首屏字节（gzip）、首次可交互、长任务数、实验台 + 分析仪 + LCD 同开时帧耗时（桌面 + 4× CPU 降速 390×844）；CLI 各芯片模拟速度（MIPS） | 连跑 3 次波动 < 10%；数字写 `Reviews/perf-baseline.md` 与 STATUS；后续 R 项都与它比 | ☐ |
+| R-02 | 金标准快照：accept 全部 112 个用例的 stdout + stderr（去掉墙钟时间）存 `Reviews/golden/`，`tools/golden.py save / check` 逐字节比，并进 accept.sh。前置：修「未建模寄存器」列表同次数时按 HashMap 顺序输出导致的不确定（`machine` `unimpl()` 加地址次序）——2026-10-19 试跑除此之外 112 例全部确定 | 连跑两次 112/112 相同；故意改一字节能报出 | ☐ |
+| R-03 | 芯片信息单一来源：修 `worker.ts:521`（统一走 `CHIP_OF`）；去掉 `?? 'esp32c3'`、`tb_boot_pin` 默认 9 等静默兜底，未知芯片明确报错；Rust 出 `tryboard chips --json`（id / 名称 / BOOT / RGB 脚），`chips.ts` 加测试与之比对 | ESP32 固件任务页签显示 ESP32；`node --test` 新断言：chips.ts 与 CLI 输出一致；未知 chip id 页面出错误卡、无静默降级 | ☐ |
+| R-04 | 不因固件崩模拟器：固件可触达路径（MMIO 读写、DMA 描述符、外设寄存器）的 `unwrap/expect` 改成 unimpl 计数或 `Result`；wasm 装 panic hook，把位置传回页面，出「模拟器内部错误 + 重新运行」卡 | 新 Rust 测试：随机写满各芯片 MMIO 区 10 万次不 panic；网页注入 panic 后无未捕获 console error、可一键重跑；剩余 `unwrap` 逐处注释为何不可能失败 | ☐ |
+| R-05 | 内核分层：`esp32c3` 里的共享件（devices / iotrace / tasktrace / rmt / ledc / i2c / spiflash / crypto_hw / CPU_HZ 等）搬到 `soc`，纯搬移不改逻辑 | `esp32s3` / `esp32` / `machine` 中 `esp32c3::` 引用为 0；cargo test、clippy 干净；R-02 金标准逐字节一致 | ☐ |
+| R-06 | 芯片 trait：`soc` 定义 `trait Chip`（运行一批周期、GPIO、外接器件、trace、网络 / BLE 钩子），`machine` 只调 trait；分派按批次不按单条指令 | `machine` 中按芯片 `match` 只剩构造处；模拟速度与 R-01 相差 ≤ 3%；金标准一致；ARCH.md 写「新增一款芯片」清单 | ☐ |
+| R-07 | wasm 接口与 worker 消息单一来源：脚本从 `wasm/src/lib.rs` 的 `extern "C"` 生成 TS 声明；worker ↔ 主线程 43 种消息类型集中到一个文件 | 手改 Rust 导出不同步 TS 时 `tools/accept.sh` 失败；worker.ts 不再手写导出接口 | ☐ |
+| R-08 | 拆 `benchStep()`：按现有 18 个分节（接线检查、左栏、改线工具、直接摆放、构建树、检查器、引脚、运行历史、万用表、标尺、编码器 / 超声、姿态、实时字段、选板项目、结论、热源、快捷卡、调试钩子）拆到 `app/bench/`，闭包变量收进显式 `BenchCtx` | 无函数 > 400 行、`bench.tsx` < 500 行；webtest 全过不减断言；金标准一致；agent-browser 桌面 + 390 走查 Reviews/ab/R-08.md | ☐ |
+| R-09 | 拆 `createBench()`（board3d.ts）：开发板、器件网格、拾取、导线、相机灯光分模块 | 同 R-08 的行数与回归要求；截图与重构前像素差 < 0.5% | ☐ |
+| R-10 | `benchv2.tsx` 实为实验台组件库，改名拆到 `app/bench/ui/`，去掉 v2 命名 | 无行为变化；webtest 全过 | ☐ |
+| R-11 | 统一帧调度：`ui/frame.ts` 一个 rAF 循环，按优先级订阅，页签隐藏 / 面板不可见时暂停；迁移 22 处 | `requestAnimationFrame` 只出现在 frame.ts；R-01 帧耗时、长任务不劣化；后台标签页 CPU 接近 0 | ☐ |
+| R-12 | 包体：按需加载底部面板（分析仪 / USB / BLE / 网络 / 任务 / 代码）和非当前步骤（选购 / 组装 / 成品） | app 主包 gzip 比 R-01 降 ≥ 30%；首次可交互不劣化；各面板首次打开 < 300 ms | ☐ |
+| R-13 | 配置一致性：catalog（parts / rules）、`firmware/*.json`、chips.ts、CLI 器件名之间加交叉校验（器件 id 都能映射到模型、用例固件存在、关卡引用有效）；必要时写 schema | 检查进 `tools/accept.sh`；故意写错一个 id 能报出 | ☐ |
+| R-14 | 护栏：`tools/lint_size.py` 文件 > 1500 行 / 函数 > 400 行报错（现存超限进白名单，只减不增）；禁止 `rAF` 出现在 frame.ts 外、芯片字符串字面量出现在 chips.ts 外、其他芯片 crate 引用 `esp32c3::` | 进 accept.sh；每条故意违反一次能报出 | ☐ |
+| R-15 | 首帧着色器编译不阻塞主线程：试跑基线实验台首帧 `WebGLRenderer.render` 同步编译约 0.9 s（`getUniforms` 等链接结果），整体长任务 1.1–2.9 s；改为场景建好后 `renderer.compileAsync`（three r170 自带，走 KHR_parallel_shader_compile）再首帧，编译期间显示已有加载态 | perf.mjs 实验台长任务总时长降 ≥ 60%；画面与重构前截图一致；无 console error | ☐ |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。

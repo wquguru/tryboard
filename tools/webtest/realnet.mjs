@@ -159,7 +159,9 @@ await waitFor(page, () => /Paused/.test(document.getElementById('runState').text
 await sleep(300);
 const log = await page.evaluate(() => globalThis.__tbInputLog());
 const all = await fwConsole(page);
-const live = all.slice(all.indexOf('I (1) cpu_start: Unicore app', pre));
+// Boot timestamps move with the model (D-02 eFuse shifted them by 1 ms), so match any
+const boot = all.slice(pre).search(/I \(\d+\) cpu_start: Unicore app/);
+const live = boot < 0 ? '' : all.slice(pre + boot);
 const dl = await grabDownload(page, '#saveReplies');
 const inputsFile = path.join(outDir, 'realnet-inputs.txt');
 fs.writeFileSync(inputsFile, dl.text);

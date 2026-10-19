@@ -66,7 +66,9 @@ export async function verifyLevel(l: Level, flash: ArrayBuffer, onProgress?: (si
   const msg = await runJob(job, onProgress);
   // For automated tests comparing against the CLI: raw output of the latest check
   (globalThis as { __tbLastVerify?: unknown }).__tbLastVerify = { stdout: msg.stdout, report: msg.report };
-  const results = evaluate(l, msg.stdout, msg.report);
+  // Timing line only for per-row trust (D-05); the fingerprint below stays on the CLI-canonical report
+  const sep = msg.report && !msg.report.endsWith('\n') ? '\n' : '';
+  const results = evaluate(l, msg.stdout, msg.timing ? `${msg.report}${sep}${msg.timing}\n` : msg.report);
   if (msg.error) results.push({ ok: false, text: `simulator stopped: ${msg.error}`, say: t('Simulator stopped: {e}', { e: msg.error }) });
   return { ok: results.every((r) => r.ok), results, fingerprint: fingerprint(msg.stdout, msg.report), stdout: msg.stdout, sim: msg.sim, error: msg.error, ...(realnet ? { realnet: { replies: msg.replies ?? [] } } : {}) };
 }

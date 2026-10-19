@@ -163,7 +163,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       h('div', { class: 'ana-note-t' }, h('b', { 'data-a': 'ntitle' }), h('span', { class: 'ana-badge' }, t('Confirm on real hardware'))),
       h('div', { class: 'muted', 'data-a': 'nbody' }),
     ),
-    h('footer', { class: 'ana-f' }, h('span', { class: 'mono', 'data-a': 'cur' }), h('span', { class: 'muted', 'data-a': 'hint' }, t('Click to place cursor A, Shift+click for B; wheel to zoom, drag to pan'))),
+    h('footer', { class: 'ana-f' }, h('span', { class: 'mono', 'data-a': 'cur' }), h('span', { class: 'muted', 'data-a': 'hint' }, matchMedia('(pointer: coarse)').matches ? t('Tap to place cursors A and B in turn; drag to pan, − / + to zoom') : t('Click to place cursor A, Shift+click for B; wheel to zoom, drag to pan'))),
   );
   document.body.appendChild(el);
   const cv = el.querySelector<HTMLCanvasElement>('canvas')!;
@@ -319,6 +319,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     { passive: false },
   );
   let drag: { x: number; end: number; moved: boolean } | null = null;
+  let tapB = false;
   cv.addEventListener('pointerdown', (e) => {
     drag = { x: e.clientX, end, moved: false };
     cv.setPointerCapture(e.pointerId);
@@ -348,8 +349,10 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     const x = e.clientX - r.left;
     if (x < LABEL_W) return;
     const t = tOf(x, cv.clientWidth);
-    if (e.shiftKey) cursB = t;
+    // Touch has no Shift: taps alternate between A and B
+    if (e.shiftKey || (e.pointerType === 'touch' && tapB)) cursB = t;
     else cursA = t;
+    if (e.pointerType === 'touch') tapB = !tapB;
     dirty = true;
   });
   el.querySelector('.ana-h')!.addEventListener('click', (e) => {
@@ -569,7 +572,8 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     g.textBaseline = 'middle';
 
     // Time ruler
-    const step = niceStep(span / 8);
+    // 8 ticks on the desktop dock; a phone (≈ 300px plot) gets one per 80px so labels don't collide
+    const step = niceStep(span / Math.max(2, Math.min(8, Math.floor((W - LABEL_W) / 80))));
     g.strokeStyle = C.soft;
     g.fillStyle = C.muted;
     g.lineWidth = 1;

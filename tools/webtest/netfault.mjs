@@ -1,5 +1,4 @@
-// Network fault injection (D-01): on the web, schedule a router reboot and switch presets on c3-wifi-resilient -> export inputs
-// -> CLI --inputs replay gives byte-identical serial and the same fingerprint. Also checks the 390×844 phone layout.
+// Network faults (D-01): web reboot + presets on c3-wifi-resilient -> export inputs -> CLI replay must match byte for byte.
 // Usage: node tools/webtest/netfault.mjs (after tools/build_web.sh); logs and screenshots in Reviews/web/netfault-*
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
@@ -81,14 +80,14 @@ print(check.fingerprint(out, check.canonical_report(err)))`, out, err], { encodi
 const page = await browser.newPage();
 newPageErrors(page);
 await page.goto(base + '/app?work=blank&example=c3-wifi-resilient#bench', { waitUntil: 'load' });
-report('resilient firmware gets an IP', await hasText(page, '#console', '拿到 IP', 40000));
+report('resilient firmware gets an IP', await hasText(page, '#console', '拿到 IP', 40000)); // lint: allow-cjk (firmware serial)
 await waitFor(page, () => [...document.querySelectorAll('#dock [role=tab]')].some((b) => b.textContent.trim().startsWith('Network')), null, 20000);
 report('Network tab opens', await clickTab(page, 'Network'));
 report('Network conditions panel with 4 presets and 3 faults', await waitFor(page, () => document.querySelectorAll('#netCond [role=radio]').length === 4 && document.querySelectorAll('#netCond [data-fault]').length === 3, null, 10000));
 await waitSim(page, 2);
 await page.click('[data-fault="reboot"]');
-const reason = await hasText(page, '#console', '断开 reason=', 60000);
-report('router reboot -> firmware reports a disconnect reason', reason, ((await fwConsole(page)).match(/断开 reason=\d+/) || [''])[0]);
+const reason = await hasText(page, '#console', '断开 reason=', 60000); // lint: allow-cjk (firmware serial)
+report('router reboot -> firmware reports a disconnect reason', reason, ((await fwConsole(page)).match(/断开 reason=\d+/) || [''])[0]); // lint: allow-cjk (firmware serial)
 report('firmware reconnects and requests succeed again', await hasText(page, '#console', OK, 90000));
 report('summary chip says reconnected', await hasText(page, '#netSummary', 'reconnected after', 10000), await page.$eval('#netSummary', (e) => e.textContent).catch(() => ''));
 const rows = await page.$$eval('#netRows tr[data-kind=cond]', (l) => l.map((r) => r.textContent));
@@ -155,7 +154,7 @@ const pm = await browser.newPage();
 newPageErrors(pm);
 await pm.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 await pm.goto(base + '/app?work=blank&example=c3-wifi-resilient#bench', { waitUntil: 'load' });
-await hasText(pm, '#console', '拿到 IP', 40000);
+await hasText(pm, '#console', '拿到 IP', 40000); // lint: allow-cjk (firmware serial)
 await waitFor(pm, () => [...document.querySelectorAll('#dock [role=tab]')].some((b) => b.textContent.trim().startsWith('Network')), null, 20000);
 const peek = await pm.$('#sheetPeek:not([hidden])');
 if (peek) await peek.click();

@@ -304,8 +304,16 @@ body.dock-collapsed .analyzer { display: none; }
 .ana-note { margin: 6px 12px; padding: 8px 12px; border-radius: 8px; background: var(--field); font-size: 12px; line-height: 18px; flex: none; }
 .ana-note-t { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
 .ana-badge { flex: none; font-size: 11px; border: 1px solid var(--fg); border-radius: 4px; padding: 0 6px; }
+/* Phone (D-07): only shown inside the bottom sheet's Waveform tab (dock.tsx AnaSheet), with 44px controls */
 @media (max-width: 767px) {
-  .analyzer { display: none !important; }
+  .analyzer:not(.in-sheet) { display: none !important; }
+  .analyzer.in-sheet { position: static; height: auto; flex: 1 1 auto; min-height: 0; border-top: 0; }
+  .analyzer.in-sheet [data-act='close'] { display: none; }
+  .analyzer.in-sheet .ana-h, .analyzer.in-sheet .ana-fine { flex-wrap: wrap; row-gap: 6px; }
+  .analyzer.in-sheet .ana-read { flex-basis: 100%; order: 9; }
+  .analyzer.in-sheet .ana-b { min-height: 44px; min-width: 44px; padding: 0 12px; font-size: 13px; }
+  .analyzer.in-sheet .ana-fform input, .analyzer.in-sheet .ana-fform select { min-height: 44px; font-size: 16px; }
+  .analyzer.in-sheet .ana-f .muted { white-space: normal; }
 }
 
 /* Bench v2: the toolbar sits bottom-right, so the 3D disclaimer moves to the top-left column (overlays.tsx) */

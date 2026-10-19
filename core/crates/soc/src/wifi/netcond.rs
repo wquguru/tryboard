@@ -1,6 +1,5 @@
-//! Network conditions (D-01): presets (normal / weak / flaky / offline) and scheduled faults (router reboot,
-//! DNS failure, silent server), all keyed to simulated time. Random choices come from a PRNG seeded by the run seed,
-//! so `--inputs` replays reproduce every lost frame. Normal with no faults never draws and changes nothing.
+//! Network conditions (D-01): presets and scheduled faults keyed to simulated time; randomness comes from the run
+//! seed so `--inputs` replays reproduce every lost frame. Normal with no faults never draws and changes nothing.
 
 /// Network stream of the run seed (DECISIONS 2026-10-19 D batch: `seed ^ 0x4E45_5400`)
 pub const SEED_XOR: u32 = 0x4E45_5400;

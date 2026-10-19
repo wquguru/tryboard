@@ -486,7 +486,7 @@ function PhoneDock({
   const c = useStore(bc);
   const { sheet } = useStore(mui);
   const s = useStore(ui);
-  const cur: DockTab = c.dock.tab === "analyzer" ? "serial" : c.dock.tab;
+  const cur: DockTab = c.dock.tab === "analyzer" && !actions.analyzer ? "serial" : c.dock.tab;
   const open = sheet !== "peek";
   const peek = useRef<HTMLSpanElement>(null);
   useEffect(() => {
@@ -519,6 +519,7 @@ function PhoneDock({
     { id: "issues", label: nIssue ? t('Issues {n}', { n: nIssue }) : t('Issues') },
     { id: "runs", label: t('Runs {n}', { n: c.runs }) },
     { id: "tasks", label: t('Tasks'), title: t('FreeRTOS task timeline: who runs and who waits on each core') },
+    ...(actions.analyzer ? [{ id: "analyzer" as const, label: t('Waveform'), title: t('Logic analyzer') }] : []),
     ...(c.usb ? [{ id: "usb" as const, label: "USB" }] : []),
     ...(c.ble ? [{ id: "ble" as const, label: t('Bluetooth') }] : []),
     ...(c.net ? [{ id: "net" as const, label: t('Network') }] : []),
@@ -674,6 +675,7 @@ function PhoneDock({
               <NetPane mobile />
             </div>
           )}
+          {cur === "analyzer" && <AnaSheet />}
         </>
       )}
       {/* The runs page (timeline, sim time) stays mounted: replay diffing reads #simtime */}
@@ -686,6 +688,26 @@ function PhoneDock({
       </div>
     </section>
   );
+}
+
+/** Phone: the imperative analyzer moves into the sheet while its tab is open (desktop keeps it fixed over the dock) */
+function AnaSheet() {
+  const host = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = document.getElementById("analyzer");
+    if (!el) return;
+    el.classList.add("in-sheet");
+    host.current!.appendChild(el);
+    // A half sheet leaves the canvas about 80px tall: waveforms need the full sheet
+    if (mui.get().sheet !== "full") setMui({ sheet: "full" });
+    actions.analyzer?.(true);
+    return () => {
+      actions.analyzer?.(false);
+      el.classList.remove("in-sheet");
+      document.body.appendChild(el);
+    };
+  }, []);
+  return <div ref={host} className="flex min-h-0 flex-1 flex-col border-t border-line-soft" />;
 }
 
 /** One-line serial strip on the phone product page (DESIGN_V2 §5): last line only; full serial is on the bench */

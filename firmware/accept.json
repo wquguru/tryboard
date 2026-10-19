@@ -2195,5 +2195,61 @@
    "reason=201",
    "10 秒还没连上网络，继续等"
   ]
+ },
+ {
+  "id": "c3-adc-cali",
+  "seconds": 2.5,
+  "qemu": false,
+  "script": "0.0:mv2=500; 0.5:mv2=1000; 1.0:mv2=1650; 1.5:mv2=2000",
+  "expect": [
+   "曲线拟合校准已启用",
+   "未校准  446 mV  校准  500 mV",
+   "未校准 1824 mV  校准 2000 mV",
+   "TRYBOARD_OK adc-cali"
+  ]
+ },
+ {
+  "id": "s3-adc-cali",
+  "chip": "esp32s3",
+  "seconds": 2.5,
+  "qemu": false,
+  "script": "0.0:mv4=500; 0.5:mv4=1000; 1.0:mv4=1650; 1.5:mv4=2500",
+  "expect": [
+   "曲线拟合校准已启用",
+   "未校准  438 mV  校准  500 mV",
+   "未校准 2298 mV  校准 2500 mV",
+   "TRYBOARD_OK adc-cali"
+  ]
+ },
+ {
+  "id": "s3-adc2-wifi",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "qemu": false,
+  "script": "0.0:mv11=1200",
+  "expect": [
+   "Wi-Fi 启动前: ADC2 raw=1447",
+   "Wi-Fi 启动后: ADC2 读取失败 ESP_ERR_TIMEOUT",
+   "TRYBOARD_OK s3-adc2-wifi"
+  ]
+ },
+ {
+  "id": "c3-dht11",
+  "seconds": 105,
+  "qemu": false,
+  "args": [
+   "--dht11",
+   "5",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "expect": [
+   "温度 23.5 湿度 45 校验通过 100/100",
+   "TRYBOARD_OK dht11"
+  ],
+  "stderr_expect": [
+   "DHT11 frames sent 100",
+   "timing-sensitive: GPIO5 busy-wait esp_rom_delay_us"
+  ]
  }
 ]

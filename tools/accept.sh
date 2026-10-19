@@ -230,6 +230,12 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/netfault.mjs 2>&1 | grep '^\[netfault\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[netfault\] PASS (' || { echo "- [netfault] script did not finish" >> $REPORT; fail=1; }
+  r=$(node tools/webtest/adc.mjs 2>&1 | grep '^\[adc\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[adc\] PASS (' || { echo "- [adc] script did not finish" >> $REPORT; fail=1; }
+  r=$(node tools/webtest/vcd.mjs 2>&1 | grep '^\[vcd\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[vcd\] PASS (' || { echo "- [vcd] script did not finish" >> $REPORT; fail=1; }
   r=$(node tools/webtest/elec.mjs 2>&1 | grep '^\[elec\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[elec\] PASS (' || { echo "- [elec] script did not finish" >> $REPORT; fail=1; }

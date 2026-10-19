@@ -39,6 +39,7 @@ export interface Ex {
   tb_env_set(t: number, h: number, p: number): void;
   tb_report(): number;
   tb_report_ptr(): number;
+  tb_timing_report?(): number;
   tb_lcd_attach?(): number;
   tb_reset_limit?(n: number): void;
   tb_reset_count?(): number;
@@ -95,6 +96,8 @@ export interface SimJob {
 export interface SimResult {
   stdout: string;
   report: string;
+  /** `[tryboard] timing-sensitive: …` line (D-03) or ''; not part of report */
+  timing?: string;
   sim: number;
   /** Stopped mid-run (CPU exception etc.) */
   error?: string;
@@ -304,5 +307,15 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
     }
     report += `[tryboard] PWM GPIO${j.pwmPin} steps ${steps.join(' ')}\n`;
   }
-  return { stdout: out, report, sim: e.tb_cycles() / CPU_HZ, error, ...(j.realnet ? { replies } : {}) };
+  // The timing line (D-03) only feeds per-row trust (D-05): kept out of report so fingerprints match check.py
+  let timing = '';
+  if (e.tb_timing_report) {
+    const tn = e.tb_timing_report();
+    try {
+      timing = (JSON.parse(dec.decode(new Uint8Array(e.memory.buffer, e.tb_report_ptr(), tn))) as { line?: string }).line ?? '';
+    } catch {
+      timing = '';
+    }
+  }
+  return { stdout: out, report, timing, sim: e.tb_cycles() / CPU_HZ, error, ...(j.realnet ? { replies } : {}) };
 }

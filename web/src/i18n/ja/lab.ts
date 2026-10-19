@@ -933,5 +933,7 @@ const d: Dict = {
   "DHT11 · DATA IO{pin} · temperature / humidity from the sliders": "DHT11 · DATA IO{pin} · 温湿度はスライダーから",
   "DHT11 data (open drain, single wire)": "DHT11 データ（オープンドレイン、シングルワイヤ）",
   "DHT11 power (3.3 V)": "DHT11 電源（3.3 V）",
+  "Waveform": "波形",
+  "Tap to place cursors A and B in turn; drag to pan, − / + to zoom": "タップするたびにカーソル A と B を交互に置きます。ドラッグで移動、− / + で拡大縮小します。",
 };
 export default d;

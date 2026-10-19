@@ -1,6 +1,5 @@
-//! SAR ADC transfer model shared by ESP32-C3 and ESP32-S3 (D-02).
-//! "Real" (default) inverts ESP-IDF's curve-fitting calibration for the eFuse values burnt here, then adds end bends
-//! and seeded noise; "ideal" is the plain linear law over the datasheet range. Numbers: docs/DECISIONS.md (D-02).
+//! SAR ADC transfer model shared by ESP32-C3 and ESP32-S3 (D-02; numbers in docs/DECISIONS.md).
+//! "Real" (default) inverts IDF's curve-fit calibration for our eFuse, adds end bends and seeded noise; "ideal" is linear.
 
 use std::collections::VecDeque;
 

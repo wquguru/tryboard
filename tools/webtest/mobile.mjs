@@ -361,6 +361,55 @@ if (await waitFor(page, () => globalThis.__tbApp?.store.get().simSeconds > 0.5, 
   await page.screenshot({ path: path.join(outDir, 'mobile-ble-phone.png') });
 } else report('BLE example starts', false);
 
+// ---- D-07: network conditions 2×2 and the analyzer (Waveform tab) in the bottom sheet
+// Touch emulation only here: earlier sections assert the mouse-pointer layout
+await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+await page.goto(`${base}/app?work=blank&example=c3-wifi-resilient#bench`, { waitUntil: 'load' });
+if (await waitFor(page, () => globalThis.__tbApp?.store.get().simSeconds > 0.5, null, 30000)) {
+  await page.click('#sheetPeek');
+  report('D-07: Network tab in the sheet', await waitFor(page, () => !!document.querySelector('#dock [data-dock="net"]'), null, 20000));
+  await page.click('#dock [data-dock="net"]');
+  report('D-07: 4 presets', await waitFor(page, () => document.querySelectorAll('#netCond [role=radio]').length === 4, null, 10000));
+  // Phone design folds the faults behind "Schedule a fault"
+  report('D-07: fault toggle tappable', (await tappable('#faultToggle')) === 'ok', await tappable('#faultToggle'));
+  await page.click('#faultToggle');
+  report('D-07: 3 faults after unfolding', await waitFor(page, () => document.querySelectorAll('#netCond [data-fault]').length === 3));
+  const cols = await page.$$eval('#netCond [role=radio]', (l) => new Set(l.map((e) => Math.round(e.getBoundingClientRect().left))).size);
+  report('D-07: presets in 2 columns', cols === 2, `${cols} columns`);
+  for (const s of ['[data-preset="flaky"]', '[data-fault="reboot"]']) {
+    await page.$eval(s, (e) => e.scrollIntoView({ block: 'center' }));
+    report(`D-07: ${s} tappable`, (await tappable(s)) === 'ok', await tappable(s));
+  }
+  await stepCheck('D-07 network');
+  await page.screenshot({ path: path.join(outDir, 'mobile-net.png') });
+  await page.click('#dock [data-dock="analyzer"]');
+  report('D-07: analyzer shows in the sheet', await waitFor(page, () => !!document.querySelector('#dock #analyzer.in-sheet:not([hidden])')));
+  for (const s of ['#analyzer [data-act="fine"]', '#analyzer [data-act="in"]', '#analyzer [data-act="follow"]'])
+    report(`D-07: ${s} tappable`, (await tappable(s)) === 'ok', await tappable(s));
+  await page.click('#analyzer [data-act="fine"]');
+  report('D-07: fine-sampling form opens', await waitFor(page, () => !document.querySelector('#analyzer [data-a="fform"]').hidden));
+  await page.$eval('#analyzer .ana-go', (e) => e.scrollIntoView({ block: 'center' }));
+  report('D-07: start capture tappable', (await tappable('#analyzer .ana-go')) === 'ok', await tappable('#analyzer .ana-go'));
+  // Two taps on the canvas place A then B (touch has no Shift)
+  report('D-07: waveform tab opens the sheet full height', await page.$eval('#dock', (e) => e.dataset.sheet) === 'full');
+  // Tap inside the part of the canvas the scrolling body shows
+  const cv = await page.$eval('#analyzer canvas', (e) => {
+    const r = e.getBoundingClientRect();
+    const b = e.closest('.ana-body').getBoundingClientRect();
+    const top = Math.max(r.top, b.top);
+    return { x: r.left, y: (top + Math.min(r.bottom, b.bottom)) / 2, w: r.width };
+  });
+  await page.touchscreen.tap(cv.x + cv.w * 0.5, cv.y);
+  await page.touchscreen.tap(cv.x + cv.w * 0.8, cv.y);
+  await sleep(300);
+  const cur = await page.$eval('#analyzer [data-a="cur"]', (e) => e.textContent);
+  report('D-07: two taps place cursors A and B', /A .*B .*Δ/.test(cur), cur);
+  await stepCheck('D-07 analyzer');
+  await page.screenshot({ path: path.join(outDir, 'mobile-analyzer.png') });
+  await page.click('#dock [data-dock="serial"]');
+  report('D-07: analyzer returns to body when the tab closes', await waitFor(page, () => document.querySelector('#analyzer')?.parentElement === document.body));
+} else report('D-07: wifi example starts', false);
+
 report('no external hosts requested', external.length === 0, external.slice(0, 3).join(' | '));
 report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(`[mobile] ${fails ? 'FAIL' : 'PASS'} (${fails} failed)`);
