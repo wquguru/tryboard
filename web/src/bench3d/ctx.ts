@@ -146,7 +146,8 @@ export interface BenchCtx {
   measured: [PickTarget, PickTarget] | null;
   measure: (a: PickTarget | null, b?: PickTarget) => number | null;
   usbHost: ReturnType<typeof createUsbHost> | null;
-  raf: number;
+  /** Stops the render loop (onFrame unsubscribe). */
+  raf: (() => void) | null;
   rgbPeak: number;
   frameMs: number;
   cpuMs: number;

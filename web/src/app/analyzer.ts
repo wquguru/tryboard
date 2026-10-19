@@ -2,6 +2,7 @@
 // I2C transactions and bit timing, PWM from duty / frequency (envelope below 3 px per period). Follow pins the right edge to sim time.
 import type { PartSpec } from '../board3d';
 import { t } from '../i18n/index.ts';
+import { onFrame, PRIO } from '../ui/frame';
 import type { StepCtx } from './types';
 import { BOOT_GPIO, RGB_GPIO, type SimChip } from '../chips';
 import { currentTheme, onTheme } from '../theme';
@@ -180,7 +181,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
   let hover: { x: number; y: number } | null = null;
   let flash: { id: string; until: number } | null = null;
   let dirty = true;
-  let raf = 0;
+  let raf: (() => void) | null = null;
   let K = PAL[currentTheme()];
   let okCol = '#14AE5C';
   onTheme(() => {
@@ -234,12 +235,11 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       watchChannels();
       layout();
       dirty = true;
-      loop();
-    } else cancelAnimationFrame(raf);
+      raf ??= onFrame(loop, { priority: PRIO.ui, immediate: true });
+    } else raf = (raf?.(), null);
   }
 
   function loop() {
-    cancelAnimationFrame(raf);
     if (!open) return;
     if (follow) {
       // When stopped (paused / rewind point) leave a margin on the right so the marker line is visible
@@ -255,7 +255,6 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       dirty = false;
       draw();
     }
-    raf = requestAnimationFrame(loop);
   }
 
   // ---------------------------------------------------------------- Input

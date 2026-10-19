@@ -3,6 +3,7 @@
 import { createProduct3D, type ProductScene } from '../product3d';
 import { createLcd3D, webglOk, type Lcd3D } from '../lcd3d';
 import { createTilt3D, type Tilt3D } from '../tilt3d';
+import { onFrame, PRIO } from '../../ui/frame';
 import { createWork3D, type WorkKind, type WorkProduct3D } from '../works3d';
 import { gravity } from '../../imupose';
 import { createLensProduct, createSpinProduct } from '../../views/lcdproducts';
@@ -267,7 +268,7 @@ export function productStep(): StepImpl {
   /** Distance / pose the user set (before mounting effects); restored when leaving Product */
   let rawCm = 25;
   let rawPose = { pitch: 0, roll: 0, yaw: 0 };
-  let raf = 0;
+  let raf: (() => void) | null = null;
   let timer = 0;
   let sel = '';
   let room = 23.5;
@@ -1059,7 +1060,6 @@ export function productStep(): StepImpl {
   }
 
   function loopSvg() {
-    raf = requestAnimationFrame(loopSvg);
     const c = ctx;
     if (!c || !svgProduct) return;
     svgProduct.update(frame(), c.store.get().env.temp, assembly()?.effects ?? {});
@@ -1153,7 +1153,7 @@ export function productStep(): StepImpl {
         keypadSvg?.setUsb(v);
       }
       applyHarness();
-      if (svgProduct) loopSvg();
+      if (svgProduct) raf ??= onFrame(loopSvg, { priority: PRIO.ui, immediate: true });
       timer = window.setInterval(() => {
         tickHeat();
         updateLive();
@@ -1183,8 +1183,8 @@ export function productStep(): StepImpl {
       clearInterval(timer);
       clearInterval(tiltTimer);
       tilt?.stop();
-      cancelAnimationFrame(raf);
-      raf = 0;
+      raf?.();
+      raf = null;
       scene3d?.stop();
       lcd3d?.stop();
       work3d?.stop();

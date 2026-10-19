@@ -13,6 +13,7 @@ import { EXT, extModelsOn, loadExt, reportExt } from '../extmodels';
 import { capturableOf, type Capturable } from './capture';
 import { t } from '../i18n';
 import { shaderWarm } from '../shaderwarm';
+import { onFrame, PRIO } from '../ui/frame';
 
 export interface LcdFrame {
   pwm: number[];
@@ -525,7 +526,7 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
   // Servo: 2nd-order spring-damper toward target, capped at 600°/s (SG90 ~0.1 s / 60°); same illustrative params as the weather dial
   let theta = 0, omega = 0;
   let lastLcd: Uint8Array | null = null;
-  let raf = 0;
+  let raf: (() => void) | null = null;
   let last = performance.now();
   let gap = -1;
   const v = new THREE.Vector3();
@@ -544,7 +545,6 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
   }
 
   function frame(now: number) {
-    raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     const f = o.frame();
@@ -597,16 +597,16 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     start() {
       if (raf) return;
       last = performance.now();
-      raf = requestAnimationFrame(frame);
+      raf = onFrame(frame, { priority: PRIO.render, el: container });
     },
     stop() {
-      cancelAnimationFrame(raf);
-      raf = 0;
+      raf?.();
+      raf = null;
       up();
     },
     dispose() {
-      cancelAnimationFrame(raf);
-      raf = 0;
+      raf?.();
+      raf = null;
       offTheme();
       offReport();
       ro.disconnect();

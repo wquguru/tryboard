@@ -2,6 +2,7 @@
 // GPIO4 PWM with servo-like inertia, OLED framebuffer is a texture, RGB glows via a light pipe; all from the live sim.
 import { t } from '../i18n';
 import { shaderWarm } from '../shaderwarm';
+import { onFrame, PRIO } from '../ui/frame';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -413,7 +414,7 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
   // Needle: spring-damper toward the target, capped at 600°/s (SG90 ≈ 0.1 s / 60°).
   let theta = 0, omega = 0;
   let lastOled: Uint8Array | null = null;
-  let raf = 0;
+  let raf: (() => void) | null = null;
   let last = performance.now();
   const ledColor = new THREE.Color();
   const v = new THREE.Vector3();
@@ -433,7 +434,6 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
     t.style.transform = `translate(${((v.x + 1) / 2) * container.clientWidth + dx}px, ${((1 - v.y) / 2) * container.clientHeight + dy}px) translate(-50%, -50%)`;
   }
   function frame(now: number) {
-    raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     const f = o.frame();
@@ -501,16 +501,16 @@ export function createProduct3D(container: HTMLElement, o: ProductOptions): Prod
     start() {
       if (raf) return;
       last = performance.now();
-      raf = requestAnimationFrame(frame);
+      raf = onFrame(frame, { priority: PRIO.render, el: container });
     },
     stop() {
-      cancelAnimationFrame(raf);
-      raf = 0;
+      raf?.();
+      raf = null;
       up();
     },
     dispose() {
-      cancelAnimationFrame(raf);
-      raf = 0;
+      raf?.();
+      raf = null;
       offTheme();
       ro.disconnect();
       controls.dispose();

@@ -28,7 +28,8 @@ export interface BenchState {
   meter: { target: string | null } | null;
   /** Target the quick card follows. */
   cardFor: PickTarget | null;
-  cardRaf: number;
+  /** Stops the info card following its target (onFrame unsubscribe). */
+  cardRaf: (() => void) | null;
   faults: WireFault[];
   /** Open wrong-wire card: redrawn when the estimate arrives. */
   wwShow: ((f: WireFault) => void) | null;
@@ -163,7 +164,7 @@ export function createBenchCtx(): BenchCtx {
     ruler: null,
     meter: null,
     cardFor: null,
-    cardRaf: 0,
+    cardRaf: null,
     faults: [],
     wwShow: null,
     wiring: null,

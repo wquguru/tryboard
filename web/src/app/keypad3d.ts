@@ -13,6 +13,7 @@ import { capturableOf, type Capturable } from './capture';
 import { KEYPAD_CAPS, KEYPAD_PINS } from '../views/keypad';
 import { t } from '../i18n';
 import { shaderWarm } from '../shaderwarm';
+import { onFrame, PRIO } from '../ui/frame';
 
 export interface Keypad3DOptions {
   press(pin: number, down: boolean): void;
@@ -209,9 +210,8 @@ export function createKeypad3D(container: HTMLElement, o: Keypad3DOptions): Keyp
   });
 
   const v = new THREE.Vector3();
-  let raf = 0;
+  let raf: (() => void) | null = null;
   function frame() {
-    raf = requestAnimationFrame(frame);
     for (const c of caps) c.mesh.position.y += ((c.down ? c.y0 - 2 : c.y0) - c.mesh.position.y) * 0.5;
     controls.update();
     if (!sw.warming()) composer.render();
@@ -224,16 +224,16 @@ export function createKeypad3D(container: HTMLElement, o: Keypad3DOptions): Keyp
 
   return {
     start() {
-      if (!raf) raf = requestAnimationFrame(frame);
+      raf ??= onFrame(frame, { priority: PRIO.render, el: container });
     },
     stop() {
-      cancelAnimationFrame(raf);
-      raf = 0;
+      raf?.();
+      raf = null;
       up();
     },
     dispose() {
-      cancelAnimationFrame(raf);
-      raf = 0;
+      raf?.();
+      raf = null;
       offTheme();
       ro.disconnect();
       window.removeEventListener('pointerup', up);

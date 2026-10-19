@@ -128,7 +128,12 @@ web/（Vite + TS）
 - `app/steps/bench.tsx` 只留 `benchStep()` 骨架（< 500 行）：建 `BenchCtx`、按顺序挂各分节、汇总卸载。原闭包里的共享变量（ctx、bench 句柄、openGroups、选中件、unsubs 等）收进显式 `BenchCtx`（`app/bench/ctx.ts`），各分节写成 `app/bench/<分节>.ts(x)`，导出 `mount<分节>(b: BenchCtx): () => void`（返回清理函数），分节之间不互相 import，只经 BenchCtx 的字段 / 回调通信。
 - `board3d.ts` 的 `createBench()` 拆到 `web/src/bench3d/`：`boards.ts`（开发板）、`modules.ts`（器件网格，原 `*Module()` / `*Model()`）、`pick.ts`（拾取与拖放）、`wires.ts`（导线）、`stage.ts`（渲染器、相机、灯光、后处理、shaderWarm、渲染循环），另有 `util.ts`（共用材质 / 纹理）、`spec.ts`（PartSpec / SceneSpec）、`ctx.ts`（显式上下文 `BenchCtx`，各 `mount*(ctx)` 按原顺序挂载）、`scene.ts`（场景状态、setScene）、`build.ts`（各器件摆放）、`inspect.ts`（高亮、故障、热区、量尺）；`board3d.ts` 只留 `createBench` 组装与对外 `Bench` 接口，外部 import 路径不变。
 - 实验台 UI 组件库原 `app/benchv2.tsx` → `app/bench/ui/`（按组件分文件，去掉 v2 命名）。
-- 帧调度：`ui/frame.ts` 唯一的 rAF 循环，`onFrame(fn, { priority, visible? })` 订阅，页签隐藏或订阅方不可见时不调用；其余文件不得直接调 `requestAnimationFrame`（R-14 护栏检查）。
+- 帧调度（R-11 已落地）：`ui/frame.ts` 是全页唯一的 rAF 循环，其余文件不得直接调 `requestAnimationFrame` / `cancelAnimationFrame`（`tools/lint_size.py` 的 raf 规则，allow 列表为空）。新代码一律：
+  - 每帧：`const off = onFrame((t, dt) => …, { priority, el?, visible?, immediate? })`，返回退订函数（原来存 rAF id 的字段改存它，停止 / 卸载时调用）。`priority` 用 `PRIO`：`sim` 0（模拟驱动的状态）→ `render` 10（3D 渲染）→ `warm` 11（shaderWarm 的逐帧计数，必须在渲染之后）→ `ui` 20（DOM 叠层、动画，缺省）；同优先级按订阅顺序。
+  - `el`：该元素不在屏幕上（滚出视口、所在步骤 display:none）时跳过，用 IntersectionObserver，不每帧读布局；3D 视图都传自己的容器。`visible()` 是自定义条件，每帧调用，要便宜。`immediate` 订阅时先同步跑一次（原来「先调一次 tick 再排 rAF」的写法）。
+  - `dt` 是该订阅者距上次被调用的毫秒数（首帧 0），被跳过或页签隐藏期间的间隔会整段算进去，动画要自己限幅（如 `Math.min(0.05, dt / 1000)`）。
+  - 一次性：`afterFrame(fn)`（测量布局、下一帧聚焦，返回取消函数）、`await nextFrame()`；合并到每帧一次的写法用布尔标记 + `afterFrame`（见 `dock.tsx` 的 stick / peek）。
+  - 没有订阅者时不排下一帧；`document.hidden` 时暂停，visibilitychange 恢复；单个订阅者抛错只 `console.error` 一次，不影响其他订阅者与循环。测试用 `createFrameLoop(env)` 注入假 rAF / document（`web/test/frame.test.ts`）。
 - 按需加载：底部坞各面板（分析仪 / USB / BLE / 网络 / 任务 / 代码）与非当前步骤（选购 / 组装 / 成品）用 `React.lazy` / 动态 `import()`，首屏只含实验台与串口。
 - 测试契约不变：webtest 依赖的 id / class / `data-*` / 文案保持；拆分是纯搬移，不改行为。
 

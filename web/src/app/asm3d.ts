@@ -11,6 +11,7 @@ import { currentTheme, onTheme, type Theme } from '../theme';
 import { btnClass } from '../ui/panel';
 import { t } from '../i18n';
 import { shaderWarm } from '../shaderwarm';
+import { onFrame, PRIO } from '../ui/frame';
 
 export interface Asm3DOptions {
   template: Template;
@@ -503,10 +504,9 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
     if (!s) return (t.hidden = true);
     t.style.transform = `translate(${(s[0] - r.left).toFixed(1)}px, ${(s[1] - r.top).toFixed(1)}px) translate(-50%, -50%)`;
   };
-  let raf = 0;
+  let raf: (() => void) | null = null;
   let last = performance.now();
   function frame(now: number) {
-    raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     explodeT += ((explodeOn ? 1 : 0) - explodeT) * Math.min(1, dt * 8);
@@ -594,12 +594,12 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
     start() {
       if (!raf) {
         last = performance.now();
-        raf = requestAnimationFrame(frame);
+        raf = onFrame(frame, { priority: PRIO.render, el: container });
       }
     },
     stop() {
-      cancelAnimationFrame(raf);
-      raf = 0;
+      raf?.();
+      raf = null;
     },
     state: () => ({ placed: [...st.placed], choice: { ...st.choice }, mode: 'build' as const, total: P.length }),
     effects: core.effects,
@@ -645,8 +645,8 @@ export function createAssembly3D(container: HTMLElement, o: Asm3DOptions) {
       controls.target.copy(target);
     },
     dispose() {
-      cancelAnimationFrame(raf);
-      raf = 0;
+      raf?.();
+      raf = null;
       ro.disconnect();
       offTheme();
       controls.dispose();
