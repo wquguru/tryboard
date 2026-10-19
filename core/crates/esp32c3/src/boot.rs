@@ -3,6 +3,8 @@
 
 use crate::*;
 use tryboard_rv32::elf::Elf;
+pub use tryboard_soc::boot::find_app;
+use tryboard_soc::boot::u32at;
 
 /// eFuse read registers (0x200 bytes from 0x60008800).
 /// BLK1 (from RD_MAC_SPI_SYS_0): MAC, wafer version v0.4 (field positions in esp_efuse_table.csv).
@@ -122,40 +124,6 @@ pub struct AppInfo {
     pub offset: u32,
     pub entry: u32,
     pub segments: Vec<(u32, u32, u32)>, // (load addr, flash offset of data, len)
-}
-
-fn u32at(b: &[u8], o: usize) -> u32 {
-    u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]])
-}
-
-/// Find the app in a flash image: factory or ota_0 from the partition table (0x8000);
-/// an image that starts with an app (0xE9 and not a bootloader) is treated as the app.
-pub fn find_app(flash: &[u8]) -> Result<u32, String> {
-    let pt = 0x8000;
-    if flash.len() > pt + 32 && flash[pt] == 0xAA && flash[pt + 1] == 0x50 {
-        let mut ota0 = None;
-        for i in 0..95 {
-            let o = pt + i * 32;
-            if flash[o] != 0xAA || flash[o + 1] != 0x50 {
-                break;
-            }
-            let (ty, sub, off) = (flash[o + 2], flash[o + 3], u32at(flash, o + 4));
-            if ty == 0 && sub == 0 {
-                return Ok(off);
-            }
-            if ty == 0 && sub == 0x10 && ota0.is_none() {
-                ota0 = Some(off);
-            }
-        }
-        if let Some(o) = ota0 {
-            return Ok(o);
-        }
-        return Err("no app partition in the partition table".into());
-    }
-    if flash.first() == Some(&0xE9) {
-        return Ok(0);
-    }
-    Err("unrecognized flash image: no partition table and not an app image".into())
 }
 
 pub fn parse_app(flash: &[u8], off: u32) -> Result<AppInfo, String> {

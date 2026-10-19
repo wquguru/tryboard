@@ -5,7 +5,7 @@
 //! Line timing is not modelled: dummy cycles, DTR sample phase and drive strength are stored but unused, so every
 //! MSPI timing-tuning candidate point reads correctly. lint: allow-long-comment
 
-/// SPI_MEM register indices (same as tryboard_esp32c3::spiflash, soc/esp32s3/register/soc/spi_mem_reg.h)
+/// SPI_MEM register indices (same as tryboard_soc::spiflash, soc/esp32s3/register/soc/spi_mem_reg.h)
 /// Offset 0x04
 const ADDR: usize = 1;
 const USER: usize = 0x18 / 4;

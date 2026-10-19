@@ -6,7 +6,7 @@
 //! suc_eof[30] | owner[31], word 1 = buffer, word 2 = next. (lint: allow-long-comment)
 
 /// Interface for peripherals to access memory (implemented by the SoC); shares tryboard-soc's definition with the Wi-Fi MAC
-pub use tryboard_soc::Mem as DmaMem;
+pub use crate::Mem as DmaMem;
 
 /// Register layout (parameterized per chip)
 #[derive(Clone, Copy, Debug)]

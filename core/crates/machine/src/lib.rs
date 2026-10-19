@@ -4,9 +4,12 @@
 use std::collections::{HashMap, VecDeque};
 use tryboard_elec::board::{Activity, Board, ChipKind, Power};
 use tryboard_esp32::Esp32;
-pub use tryboard_esp32c3::devices::audio::{Analysis as AudioAnalysis, Block as AudioBlock};
-use tryboard_esp32c3::devices::audio::{Audio, MicSource};
-use tryboard_esp32c3::devices::{
+use tryboard_esp32c3::Esp32c3;
+use tryboard_esp32s3::Esp32s3;
+use tryboard_soc::adc::{AdcModel, Sample as AdcSample};
+pub use tryboard_soc::devices::audio::{Analysis as AudioAnalysis, Block as AudioBlock};
+use tryboard_soc::devices::audio::{Audio, MicSource};
+use tryboard_soc::devices::{
     bme280::{Bme280, Env},
     cst816s::Cst816s,
     ft6236::Ft6236,
@@ -16,18 +19,15 @@ use tryboard_esp32c3::devices::{
     qmi8658::Qmi8658,
     ssd1306::Ssd1306,
 };
-pub use tryboard_esp32c3::iotrace::IoEvent;
-use tryboard_esp32c3::iotrace::IoTrace;
-use tryboard_esp32c3::rmt::Ws2812;
-pub use tryboard_esp32c3::tasktrace::{TaskEvent, TaskInfo, TaskTrace};
-use tryboard_esp32c3::Esp32c3;
-use tryboard_esp32s3::Esp32s3;
-use tryboard_soc::adc::{AdcModel, Sample as AdcSample};
+pub use tryboard_soc::iotrace::IoEvent;
+use tryboard_soc::iotrace::IoTrace;
+use tryboard_soc::rmt::Ws2812;
+pub use tryboard_soc::tasktrace::{TaskEvent, TaskInfo, TaskTrace};
 
-pub use tryboard_esp32c3::periph::CPU_HZ;
-use tryboard_esp32c3::wifi::netcond::{FaultKind, Preset, DEFAULT_FAULT_S};
-pub use tryboard_esp32c3::wifi::phone::Cmd as PhoneCmd;
-pub use tryboard_esp32c3::wifi::world::NetSummary;
+pub use tryboard_soc::periph::CPU_HZ;
+use tryboard_soc::wifi::netcond::{FaultKind, Preset, DEFAULT_FAULT_S};
+pub use tryboard_soc::wifi::phone::Cmd as PhoneCmd;
+pub use tryboard_soc::wifi::world::NetSummary;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Chip {
@@ -282,7 +282,7 @@ impl Machine {
     }
 
     /// One phone step (join hotspot, open login page, GET / POST); enables the phone first if needed
-    pub fn phone_cmd(&mut self, c: tryboard_esp32c3::wifi::phone::Cmd) {
+    pub fn phone_cmd(&mut self, c: tryboard_soc::wifi::phone::Cmd) {
         if self.wifi().world.phone.is_none() {
             self.phone_enable(false, None);
         }
@@ -299,13 +299,13 @@ impl Machine {
     }
 
     /// Drain the outbox (the web fetches them; the CLI stays offline and answers only from netreply= in --inputs)
-    pub fn net_outbox_take(&mut self) -> Vec<tryboard_esp32c3::wifi::tcp::RealReq> {
+    pub fn net_outbox_take(&mut self) -> Vec<tryboard_soc::wifi::tcp::RealReq> {
         std::mem::take(&mut self.wifi_mut().world.net.tcp.outbox)
     }
 
     /// The part after the script action netreply=; false when unparsable
     pub fn net_reply(&mut self, s: &str) -> bool {
-        let Some((id, status, info, body)) = tryboard_esp32c3::wifi::tcp::parse_netreply(s) else {
+        let Some((id, status, info, body)) = tryboard_soc::wifi::tcp::parse_netreply(s) else {
             return false;
         };
         let now = self.wifi_tsf_us();
@@ -384,7 +384,7 @@ impl Machine {
         self.wifi().world.net_summary()
     }
 
-    pub fn phone(&self) -> Option<&tryboard_esp32c3::wifi::phone::Phone> {
+    pub fn phone(&self) -> Option<&tryboard_soc::wifi::phone::Phone> {
         self.wifi().world.phone.as_ref()
     }
 
@@ -402,7 +402,7 @@ impl Machine {
         }
     }
 
-    fn wifi_mut(&mut self) -> &mut tryboard_esp32c3::wifi::WifiMac {
+    fn wifi_mut(&mut self) -> &mut tryboard_soc::wifi::WifiMac {
         match &mut self.hw {
             Hw::C3(m) => m.bus.wifi_mut(),
             Hw::S3(m) => m.bus.wifi_mut(),
@@ -454,7 +454,7 @@ impl Machine {
     }
 
     /// Wi-Fi MAC model (both chips share tryboard-soc's implementation): air log, frame counts
-    pub fn wifi(&self) -> &tryboard_esp32c3::wifi::WifiMac {
+    pub fn wifi(&self) -> &tryboard_soc::wifi::WifiMac {
         match &self.hw {
             Hw::C3(m) => m.bus.wifi(),
             Hw::S3(m) => m.bus.wifi(),
@@ -518,14 +518,14 @@ impl Machine {
     }
 
     /// BLE virtual world (C-01): present only when the VHCI boundary was found in firmware (C3 only for now)
-    pub fn ble(&self) -> Option<&tryboard_esp32c3::ble::Ble> {
+    pub fn ble(&self) -> Option<&tryboard_soc::ble::Ble> {
         match &self.hw {
             Hw::C3(m) => m.bus.ble.as_deref().map(|b| &*b.world),
             Hw::S3(_) | Hw::E32(_) => None,
         }
     }
 
-    pub fn ble_mut(&mut self) -> Option<&mut tryboard_esp32c3::ble::Ble> {
+    pub fn ble_mut(&mut self) -> Option<&mut tryboard_soc::ble::Ble> {
         match &mut self.hw {
             Hw::C3(m) => m.bus.ble.as_deref_mut().map(|b| &mut *b.world),
             Hw::S3(_) | Hw::E32(_) => None,
@@ -816,7 +816,7 @@ impl Machine {
         }
     }
 
-    fn i2c0(&mut self) -> &mut tryboard_esp32c3::i2c::I2c {
+    fn i2c0(&mut self) -> &mut tryboard_soc::i2c::I2c {
         match &mut self.hw {
             Hw::C3(m) => &mut m.bus.i2c0,
             Hw::S3(m) => &mut m.bus.i2c0,
@@ -826,7 +826,7 @@ impl Machine {
 
     /// Attach a device to the I2C0 bus ("ssd1306" / "bme280")
     pub fn i2c_attach(&mut self, kind: &str, addr: u8) -> bool {
-        match tryboard_esp32c3::devices::make_i2c(kind, addr) {
+        match tryboard_soc::devices::make_i2c(kind, addr) {
             Some(d) => {
                 self.i2c0().attach(d);
                 self.elec.add_module(kind);
@@ -1015,7 +1015,7 @@ impl Machine {
         }
     }
 
-    fn pins(&mut self) -> &mut tryboard_esp32c3::devices::pins::PinDevices {
+    fn pins(&mut self) -> &mut tryboard_soc::devices::pins::PinDevices {
         match &mut self.hw {
             Hw::C3(m) => &mut m.bus.pins,
             Hw::S3(m) => &mut m.bus.pins,
@@ -1046,7 +1046,7 @@ impl Machine {
         let now = self.cycles();
         self.pins()
             .encoders
-            .push(tryboard_esp32c3::devices::pins::Encoder::new(a, b, sw, now));
+            .push(tryboard_soc::devices::pins::Encoder::new(a, b, sw, now));
         self.elec.add_module("encoder");
         self.pins_kick();
     }
@@ -1079,9 +1079,7 @@ impl Machine {
         let now = self.cycles();
         self.pins()
             .sonars
-            .push(tryboard_esp32c3::devices::pins::Hcsr04::new(
-                trig, echo, now,
-            ));
+            .push(tryboard_soc::devices::pins::Hcsr04::new(trig, echo, now));
         self.elec.add_module("hcsr04");
         self.pins_kick();
     }
@@ -1104,7 +1102,7 @@ impl Machine {
     /// Attach a DHT11 (D-03) on one open-drain data pin (25 °C / 50 %RH until env_set; attach before setting env)
     pub fn dht11_attach(&mut self, pin: u32) {
         let now = self.cycles();
-        let d = tryboard_esp32c3::devices::pins::Dht11::new(pin, now);
+        let d = tryboard_soc::devices::pins::Dht11::new(pin, now);
         self.pins().dhts.push(d);
         self.elec.add_module("dht11");
         self.pins_kick();
@@ -1183,12 +1181,12 @@ impl Machine {
 
     /// Start a fine capture (D-04) of the pins in `mask` over cycles [t0, t1]; replaces any earlier one
     pub fn vcd_start(&mut self, mask: u64, t0: u64, t1: u64) {
-        self.iotrace().vcd = Some(tryboard_esp32c3::vcd::VcdCapture::new(mask, t0, t1));
+        self.iotrace().vcd = Some(tryboard_soc::vcd::VcdCapture::new(mask, t0, t1));
     }
 
     /// Triggered fine capture: the window opens at the first edge on `mask` at or after `from` and lasts `len` cycles
     pub fn vcd_arm(&mut self, mask: u64, from: u64, len: u64) {
-        self.iotrace().vcd = Some(tryboard_esp32c3::vcd::VcdCapture::armed(mask, from, len));
+        self.iotrace().vcd = Some(tryboard_soc::vcd::VcdCapture::armed(mask, from, len));
     }
 
     /// Fine capture window in cycles (None while still waiting for the trigger)
@@ -1382,8 +1380,8 @@ fn s3_stop(m: &Esp32s3, r: tryboard_esp32s3::Stop) -> Stop {
     }
 }
 
-pub use tryboard_esp32c3::devices::bme280::Env as SensorEnv;
-pub use tryboard_esp32c3::devices::imu::Pose as ImuPose;
+pub use tryboard_soc::devices::bme280::Env as SensorEnv;
+pub use tryboard_soc::devices::imu::Pose as ImuPose;
 
 /// Argument part of script action `imu=pitch,roll,yaw[,dpitch,droll,dyaw]` (deg, deg/s)
 pub fn parse_imu(s: &str) -> Option<Pose> {
@@ -1440,7 +1438,7 @@ pub fn harness_i2c_line(m: &mut Machine) -> Option<String> {
 
 /// One-line antenna loss verdict (P2-11); None when unobstructed. Text matched by accept.json / harness.mjs
 pub fn harness_wifi_line(m: &Machine) -> Option<String> {
-    use tryboard_esp32c3::wifi::world::{LINK_MIN_DBM, SCAN_MIN_DBM};
+    use tryboard_soc::wifi::world::{LINK_MIN_DBM, SCAN_MIN_DBM};
     let db = m.harness().antenna_loss_db;
     if db == 0 {
         return None;
@@ -1483,7 +1481,7 @@ pub fn usb_report_lines(m: &Machine) -> String {
 /// wasm tb_i2c_report emits the same text so fingerprints match. Both S3 controllers merged: any controller counts as wired
 pub fn i2c_ack_lines(m: &Machine) -> String {
     let mut acks: std::collections::BTreeMap<u8, u64> = std::collections::BTreeMap::new();
-    let mut add = |b: &tryboard_esp32c3::i2c::I2c| {
+    let mut add = |b: &tryboard_soc::i2c::I2c| {
         for (a, (_, ok)) in &b.addr_acks {
             *acks.entry(*a).or_insert(0) += ok;
         }

@@ -7,5 +7,3 @@ license.workspace = true
 [dependencies]
 tryboard-rv32 = { path = "../rv32" }
 tryboard-soc = { path = "../soc" }
-# The I2C bus-load formula (wire length → rise time, P2-11) lives in the elec crate so the web shares the same constants
-tryboard-elec = { path = "../elec" }

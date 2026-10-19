@@ -5,4 +5,6 @@ version.workspace = true
 license.workspace = true
 
 [dependencies]
+# i2c.rs uses the I2C bus-load formula (P2-11); elec has no dependencies, so no cycle
+tryboard-elec = { path = "../elec" }
 

@@ -456,7 +456,7 @@ pub extern "C" fn tb_timing_report() -> usize {
 /// Start a fine capture (D-04): pin mask as two 32-bit halves, window [t0, t1] in seconds (same rounding as the CLI)
 #[no_mangle]
 pub extern "C" fn tb_vcd_start(mask_lo: u32, mask_hi: u32, t0: f64, t1: f64) {
-    let c = tryboard_esp32c3::vcd::VcdCapture::cycles_of;
+    let c = tryboard_soc::vcd::VcdCapture::cycles_of;
     with((), |m| {
         m.vcd_start(mask_lo as u64 | (mask_hi as u64) << 32, c(t0), c(t1))
     })
@@ -465,7 +465,7 @@ pub extern "C" fn tb_vcd_start(mask_lo: u32, mask_hi: u32, t0: f64, t1: f64) {
 /// Triggered fine capture: from `from` s, the next edge on a captured pin opens a `len` s window
 #[no_mangle]
 pub extern "C" fn tb_vcd_arm(mask_lo: u32, mask_hi: u32, from: f64, len: f64) {
-    let c = tryboard_esp32c3::vcd::VcdCapture::cycles_of;
+    let c = tryboard_soc::vcd::VcdCapture::cycles_of;
     with((), |m| {
         m.vcd_arm(mask_lo as u64 | (mask_hi as u64) << 32, c(from), c(len))
     })
@@ -893,7 +893,7 @@ pub extern "C" fn tb_net_outbox() -> usize {
                 json_str(&r.method),
                 json_str(&r.url),
                 json_str(&r.ctype),
-                tryboard_esp32c3::wifi::tcp::b64_encode(&r.body)
+                tryboard_soc::wifi::tcp::b64_encode(&r.body)
             )
         })
         .collect();
@@ -1081,7 +1081,7 @@ pub extern "C" fn tb_io_watch(lo: u32, hi: u32) {
     with((), |m| m.io_watch(lo as u64 | (hi as u64) << 32))
 }
 
-/// Take the core's event buffer: 16 bytes each (t u64 | kind u8 | a u8 | b u16 | v u32, LE, see tryboard_esp32c3::iotrace),
+/// Take the core's event buffer: 16 bytes each (t u64 | kind u8 | a u8 | b u16 | v u32, LE, see tryboard_soc::iotrace),
 /// copied internally; returns the count, then read count × 16 bytes via tb_io_ptr
 #[no_mangle]
 pub extern "C" fn tb_io_take() -> usize {
@@ -1117,7 +1117,7 @@ pub extern "C" fn tb_tasks_enable(cap: u32) {
 }
 
 /// Take task-switch events: 16 bytes each (t u64 | core u8 | prev u8 | task u16 | pc u32, LE, see
-/// tryboard_esp32c3::tasktrace), copied internally; returns the count, then read via tb_tasks_ptr
+/// tryboard_soc::tasktrace), copied internally; returns the count, then read via tb_tasks_ptr
 #[no_mangle]
 pub extern "C" fn tb_tasks_take() -> usize {
     let ev = with(Vec::new(), |m| m.tasks_take());
@@ -1249,7 +1249,7 @@ pub extern "C" fn tb_audio_stat(which: u32) -> f64 {
 #[no_mangle]
 pub unsafe extern "C" fn tb_mic_wav(ptr: *const u8, len: usize) -> i32 {
     let b = std::slice::from_raw_parts(ptr, len);
-    match tryboard_esp32c3::devices::audio::parse_wav(b) {
+    match tryboard_soc::devices::audio::parse_wav(b) {
         Ok((rate, x)) => with(1, |m| {
             m.mic_wav(rate as f64, x);
             0

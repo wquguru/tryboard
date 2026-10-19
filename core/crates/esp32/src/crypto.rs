@@ -1,7 +1,7 @@
 //! Classic ESP32 SHA (0x3FF03000) and AES (0x3FF01000) accelerators; IDF uses them for the whole WPA2 handshake.
 //! Previous IP generation from C3 / S3 (no DMA, digest read back via LOAD); register notes in docs/WIFI.md.
 
-use tryboard_esp32c3::crypto_hw::sha256_block;
+use tryboard_soc::crypto_hw::sha256_block;
 use tryboard_soc::wifi::crypto::{sha1_block, Aes};
 
 pub const SHA_BASE: u32 = 0x3ff0_3000;

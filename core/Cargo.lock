@@ -7,7 +7,6 @@ name = "tryboard-cli"
 version = "0.1.0"
 dependencies = [
  "tryboard-elec",
- "tryboard-esp32c3",
  "tryboard-esp32s3",
  "tryboard-machine",
  "tryboard-rv32",
@@ -23,7 +22,6 @@ version = "0.1.0"
 name = "tryboard-esp32"
 version = "0.1.0"
 dependencies = [
- "tryboard-esp32c3",
  "tryboard-esp32s3",
  "tryboard-rv32",
  "tryboard-soc",
@@ -34,7 +32,6 @@ dependencies = [
 name = "tryboard-esp32c3"
 version = "0.1.0"
 dependencies = [
- "tryboard-elec",
  "tryboard-rv32",
  "tryboard-soc",
 ]
@@ -43,7 +40,6 @@ dependencies = [
 name = "tryboard-esp32s3"
 version = "0.1.0"
 dependencies = [
- "tryboard-esp32c3",
  "tryboard-rv32",
  "tryboard-soc",
  "tryboard-xtensa",
@@ -69,13 +65,15 @@ version = "0.1.0"
 [[package]]
 name = "tryboard-soc"
 version = "0.1.0"
+dependencies = [
+ "tryboard-elec",
+]
 
 [[package]]
 name = "tryboard-wasm"
 version = "0.1.0"
 dependencies = [
  "tryboard-elec",
- "tryboard-esp32c3",
  "tryboard-esp32s3",
  "tryboard-machine",
  "tryboard-rv32",
