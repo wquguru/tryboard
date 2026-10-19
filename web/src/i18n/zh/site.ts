@@ -102,5 +102,9 @@ const d: Dict = {
   "Two I2C devices share an address and will clash on the bus": "两个 I2C 器件地址相同，总线上会冲突",
   "[TryBoard] Failed to start: {msg}": "[试板] 启动失败：{msg}",
   "[TryBoard] Stopped: {msg}": "[试板] 停止：{msg}",
+  "Simulated": "仿真验证",
+  "Needs real hardware": "必须上真机",
+  "Datasheet": "数据手册",
+  "Rule of thumb": "经验规则",
 };
 export default d;

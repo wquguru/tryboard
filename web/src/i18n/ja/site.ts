@@ -91,7 +91,7 @@ const d: Dict = {
   "Passive buzzer · IO{pin}": "パッシブブザー · IO{pin}",
   "Button {cap} · IO{pin} (pressed = GND)": "ボタン {cap} · IO{pin}（押すと GND）",
   "Encoder": "エンコーダ",
-  "WS2812 strip": "WS2812 テープ LED",
+  "WS2812 strip": "WS2812 LED テープ",
   "CST816S touch": "CST816S タッチ",
   "GC9A01 round LCD": "GC9A01 丸型液晶",
   "MAX98357A amp + speaker": "MAX98357A アンプ + スピーカー",
@@ -102,5 +102,9 @@ const d: Dict = {
   "Two I2C devices share an address and will clash on the bus": "2 つの I2C デバイスのアドレスが同じで、バス上で衝突します",
   "[TryBoard] Failed to start: {msg}": "[TryBoard] 起動に失敗しました：{msg}",
   "[TryBoard] Stopped: {msg}": "[TryBoard] 停止しました：{msg}",
+  "Simulated": "シミュレーション検証",
+  "Needs real hardware": "実機が必要",
+  "Datasheet": "データシート",
+  "Rule of thumb": "経験則",
 };
 export default d;

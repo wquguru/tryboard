@@ -113,7 +113,7 @@ const d: Dict = {
   "BME280 reads": "BME280 读到",
   "BME280 reads the temperature wherever the sensor sits: room {room} ℃, heated high by {d} ℃.": "传感器放在哪，BME280 就读到哪儿的温度：室温 {room} ℃，受热偏高 {d} ℃。",
   "BME280 · temperature / humidity / pressure": "BME280 · 温度 / 湿度 / 气压",
-  "Board": "板子",
+  "Board": "开发板",
   "Board 10 cm closer": "挡板近 10 cm",
   "Board 10 cm farther": "挡板远 10 cm",
   "Board distance": "挡板距离",

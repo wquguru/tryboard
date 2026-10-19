@@ -370,7 +370,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     },
   };
   s.watchIo(defaultIoPins(scene, chip));
-  // 「真实网络」开关（C-03）：运行中切换直接告诉 worker（进输入日志）；新上电由 makeSim 的 realnet() 带上
+  // Real-network switch (C-03): while running, tell the worker directly (input log); a new power-on picks it up via makeSim realnet()
   realnetSwitch.subscribe(() => s.sim?.realnet(realnetSwitch.get()));
 
   function makeSim(fw: string | ArrayBuffer) {

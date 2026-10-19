@@ -85,7 +85,7 @@ export function StageOverlays({ bench }: { bench: boolean }) {
   return (
     <>
       {/* Top-left column (the bottom edge belongs to the toolbar). */}
-      <div className="pointer-events-none absolute top-3 left-3 z-2 flex flex-col items-start gap-1 max-md:hidden">
+      <div className="pointer-events-none absolute top-3 left-3 z-2 flex max-w-[calc(100%-290px)] flex-col items-start gap-1 max-md:hidden">
         {c.room != null && (
           <div
             id="roomChip"

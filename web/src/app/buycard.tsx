@@ -37,7 +37,7 @@ const csvCell = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` 
 function rowsOf(p: BuyCardProps) {
   const cat = p.remaining.map((l) => {
     const part = getPart(l.partId);
-    return { name: t(part.name), model: part.model, qty: l.qty, lo: part.price.lo * l.qty, hi: part.price.hi * l.qty, kw: part.keywords, url: part.searchUrl.taobao };
+    return { name: t(part.name), model: t(part.model), qty: l.qty, lo: part.price.lo * l.qty, hi: part.price.hi * l.qty, kw: part.keywords, url: part.searchUrl.taobao };
   });
   const ext = (p.extra ?? []).map((e) => ({ name: t(e.name), model: '', qty: 1, lo: e.price[0], hi: e.price[1], kw: e.keywords ?? t(e.name), url: '' }));
   return [...cat, ...ext];

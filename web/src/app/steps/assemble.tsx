@@ -780,8 +780,8 @@ export function assembleStep(): StepImpl {
       if (e.kind === 'place') {
         const p = T!.parts.find((x) => x.id === e.id)!;
         const sp = p.spots?.find((x) => x.key === e.spot);
-        // Strip the zh verb prefix of spot labels so "install X (by the vent)" reads naturally; a no-op in other locales
-        const spot = sp ? t(sp.label).replace(/^放/, '') : ''; // lint: allow-cjk
+        // Position-only wording so "install X (by the vent)" reads naturally in every locale
+        const spot = sp ? (sp.where ?? sp.label) : '';
         steps.push({ id: `place:${e.id}`, icon: '+', label: sp ? t('Install {part} ({spot})', { part: t(p.short), spot }) : t('Install {part}', { part: t(p.short) }), status: sp && !sp.ok ? 'bad' : undefined });
       } else steps.push({ id: 'test', icon: '▶', label: t('Power-on retest'), status: e.ok ? 'ok' : 'bad' });
     }

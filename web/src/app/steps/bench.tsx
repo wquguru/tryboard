@@ -28,7 +28,7 @@ import {
 } from "../pinscope";
 import { diffRuns, summarize, type BenchStep } from "../history";
 import { checkCommand, type Level } from "../../checks";
-import { Conf, confOfRule, type ConfLevel } from "../../ui/conf";
+import { Conf, confLabel, confOfRule, ruleBasisLabel, type ConfLevel } from "../../ui/conf";
 import { ResultCard, RunningCard, actCls } from "../../ui/result";
 import { headline } from "../../ui/say";
 import { VerifyStalled, verifyLevel } from "../../verify";
@@ -161,7 +161,7 @@ function saveProgress(work: string, id: string, fp: string, own: boolean, net = 
       fp,
       at: new Date().toLocaleString("zh-CN", { hour12: false }),
       own,
-      // 真实网络下通过（C-03）：依赖外网，没有运行编号
+      // Passed on the real network (C-03): depends on the internet, no run ID
       ...(net ? { net: true } : {}),
     };
     localStorage.setItem(PROGRESS_KEY(work), JSON.stringify(p));
@@ -598,7 +598,7 @@ export function benchStep(): StepImpl {
           detail={f.detail}
           wire={label}
           estimate={f.estimate}
-          sim={t("Confidence: {conf} ({basis}). The simulator still runs the original wiring; this is only a wiring check.", { conf: confOfRule(f.confidence), basis: f.confidence })}
+          sim={t("Confidence: {conf} ({basis}). The simulator still runs the original wiring; this is only a wiring check.", { conf: confLabel(confOfRule(f.confidence)), basis: ruleBasisLabel(f.confidence) })}
           onUndo={() => {
             close();
             undo();
@@ -2674,7 +2674,7 @@ export function benchStep(): StepImpl {
     // -1 means the simulator (wasm / ROM) is still loading and the Worker has not started
     c.store.set({ verifying: l.id, verifyProgress: -1 });
     let out: CheckOutcome;
-    // 开着真实网络（C-03）：验收也真的联网，结论标「依赖外网」、不记运行编号
+    // Real network on (C-03): checks go online too, so the verdict says "needs internet" and keeps no run ID
     const net = realnetSwitch.get();
     try {
       const v = await verifyLevel(l, buf, (t) => {

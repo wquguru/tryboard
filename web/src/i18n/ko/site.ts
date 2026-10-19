@@ -82,7 +82,7 @@ const d: Dict = {
   "Digital output / PWM dimming": "디지털 출력 / PWM 밝기 조절",
   "SG90 servo": "SG90 서보",
   "50 Hz PWM, 0.5–2.5 ms": "50 Hz PWM, 0.5–2.5 ms",
-  "Potentiometer": "가변저항",
+  "Potentiometer": "가변 저항",
   "Analog input (ADC1)": "아날로그 입력(ADC1)",
   "BME280 temperature / humidity / pressure": "BME280 온도·습도·기압",
   "I2C environment sensor": "I2C 환경 센서",
@@ -102,5 +102,9 @@ const d: Dict = {
   "Two I2C devices share an address and will clash on the bus": "두 I2C 장치의 주소가 같아 버스에서 충돌합니다",
   "[TryBoard] Failed to start: {msg}": "[TryBoard] 시작 실패: {msg}",
   "[TryBoard] Stopped: {msg}": "[TryBoard] 정지됨: {msg}",
+  "Simulated": "시뮬레이션 검증",
+  "Needs real hardware": "실제 보드 필요",
+  "Datasheet": "데이터시트",
+  "Rule of thumb": "경험 규칙",
 };
 export default d;
