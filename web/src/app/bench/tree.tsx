@@ -12,7 +12,7 @@ import { CustomPlacedCard } from "../customui";
 import { actions, overlay } from "../chrome";
 import { phoneProps } from "../mobile";
 import { bleFeed, phoneStateText } from "../blepane";
-import { EmptyBench } from "../benchv2";
+import { EmptyBench } from "./ui";
 import { passedCount } from "./progress";
 import { hex, selEq } from "./shared";
 import type { BenchCtx } from "./ctx";

@@ -5,7 +5,7 @@ import { type WireMods } from "../wiring";
 import { type WireFault } from "../wirecheck";
 import { confLabel, confOfRule, ruleBasisLabel } from "../../ui/conf";
 import { actions, bc, overlay } from "../chrome";
-import { PinRings, WireBanner, WrongWireCard, type RingPin } from "../benchv2";
+import { PinRings, WireBanner, WrongWireCard, type RingPin } from "./ui";
 import { toPick } from "./shared";
 import type { BenchCtx } from "./ctx";
 

@@ -11,7 +11,7 @@ import { type CheckOutcome } from "../types";
 import { Live } from "../../ui/native";
 import { Brief, Btn, Btns, Code, Drop, Field, Mono, LinkBtn, Note, Ph, Sec, TreeEmpty } from "../../ui/panel";
 import { wkey } from "../works";
-import { tn } from "../benchv2";
+import { tn } from "./ui";
 import { stalled, ownFirmware, saveProgress } from "./progress";
 import { CopyBrief } from "./shared";
 import type { BenchCtx } from "./ctx";
