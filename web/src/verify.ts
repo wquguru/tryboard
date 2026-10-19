@@ -61,8 +61,8 @@ function runJob(job: VerifyJob, onProgress?: (sim: number) => void) {
 
 export async function verifyLevel(l: Level, flash: ArrayBuffer, onProgress?: (sim: number) => void, envOverride?: { temp: number; humidity: number; pressure: number }, harness?: { i2cWire?: number; antenna?: number }, realnet?: boolean): Promise<VerifyOutcome> {
   const [wasm, rom] = await Promise.all([loadWasm(), loadRom(imageChip(flash))]);
-  const { i2c, env, lcd, servo, power, encoder, sonar, touchInt, usb, i2cLog, i2cWire, antenna } = bootOptions(l);
-  const job: VerifyJob = { wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), seconds: l.seconds ?? 2, i2c, env: envOverride ?? env, script: l.script, pwmPin: l.pwm?.pin, lcd, servo, power, encoder, sonar, touchInt, usb, i2cLog, i2cWire: harness?.i2cWire ?? i2cWire, antenna: harness?.antenna ?? antenna, ...(realnet ? { realnet: true } : {}) };
+  const { i2c, env, lcd, servo, power, encoder, sonar, dht11, touchInt, usb, i2cLog, i2cWire, antenna } = bootOptions(l);
+  const job: VerifyJob = { wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), seconds: l.seconds ?? 2, i2c, env: envOverride ?? env, script: l.script, pwmPin: l.pwm?.pin, lcd, servo, power, encoder, sonar, dht11, touchInt, usb, i2cLog, i2cWire: harness?.i2cWire ?? i2cWire, antenna: harness?.antenna ?? antenna, ...(realnet ? { realnet: true } : {}) };
   const msg = await runJob(job, onProgress);
   // For automated tests comparing against the CLI: raw output of the latest check
   (globalThis as { __tbLastVerify?: unknown }).__tbLastVerify = { stdout: msg.stdout, report: msg.report };
@@ -75,7 +75,7 @@ export async function verifyLevel(l: Level, flash: ArrayBuffer, onProgress?: (si
 // 1 ms slices, inputs at slice start, so serial output and report (fingerprint) match the CLI byte for byte.
 export async function replayLog(flash: ArrayBuffer, log: InputLog, seconds: number, pwmPin?: number) {
   const [wasm, rom] = await Promise.all([loadWasm(), loadRom(imageChip(flash))]);
-  const job: VerifyJob = { wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), seconds, i2c: log.i2c, script: toScriptInline(log), pwmPin, lcd: log.lcd, servo: log.servo, power: log.power, encoder: log.encoder, sonar: log.sonar, touchInt: log.touchInt, fixedSlice: true };
+  const job: VerifyJob = { wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), seconds, i2c: log.i2c, script: toScriptInline(log), pwmPin, lcd: log.lcd, servo: log.servo, power: log.power, encoder: log.encoder, sonar: log.sonar, dht11: log.dht11, touchInt: log.touchInt, fixedSlice: true };
   const msg = await runJob(job);
   return { stdout: msg.stdout, report: msg.report, fingerprint: fingerprint(msg.stdout, msg.report), sim: msg.sim, error: msg.error };
 }

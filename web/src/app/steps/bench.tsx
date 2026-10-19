@@ -2796,7 +2796,7 @@ export function benchStep(): StepImpl {
       !!rd && Math.abs(rd.t - s.env.temp) > 0.5,
     );
     set("rh", rd ? `${rd.h.toFixed(1)} %` : "—");
-    set("rp", rd ? `${rd.p.toFixed(2)} hPa` : "—");
+    set("rp", rd && !Number.isNaN(rd.p) ? `${rd.p.toFixed(2)} hPa` : "—");
     set(
       "vp",
       s.verifyProgress < 0 ? t("· loading simulator…") : `${s.verifyProgress.toFixed(1)} s`,

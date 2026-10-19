@@ -83,6 +83,13 @@ interface Exports {
   tb_sonar_attach?(trig: number, echo: number): void;
   tb_sonar_distance?(cm: number): void;
   tb_sonar_stat?(which: number): number;
+  tb_dht11_attach?(pin: number): void;
+  tb_dht11_stat?(which: number): number;
+  tb_timing_report?(): number;
+  tb_vcd_start?(lo: number, hi: number, t0: number, t1: number): void;
+  tb_vcd_arm?(lo: number, hi: number, from: number, len: number): void;
+  tb_vcd_text?(): number;
+  tb_vcd_stat?(which: number): number;
   tb_imu_set?(pitch: number, roll: number, yaw: number, dp: number, dr: number, dy: number): void;
   tb_touch?(x: number, y: number, down: number): void;
   tb_touch_int?(pin: number): void;
@@ -157,6 +164,23 @@ export interface PinDevFrame {
   pcnt: number | null;
   pings: number | null;
   echoUs: number | null;
+  /** DHT11 frames sent / host start pulses too short (null = no DHT11) */
+  dhtReads: number | null;
+  dhtShort: number | null;
+}
+
+/** Timing-sensitive code report (D-03); line is the CLI's stderr line verbatim */
+export interface TimingReport {
+  line: string;
+  items: { pin: number; kind: 'delay' | 'spin' | 'toggle' | 'poll'; n: number }[];
+}
+
+/** Fine capture (D-04) state: window in cycles (null while waiting for the trigger), edges kept / dropped */
+export interface VcdState {
+  t0: number | null;
+  t1: number | null;
+  edges: number;
+  dropped: number;
 }
 
 export type ToWorker =
@@ -174,6 +198,8 @@ export type ToWorker =
       power?: PowerMode;
       encoder?: EncoderSpec;
       sonar?: SonarSpec;
+      /** DHT11 data GPIO (open drain; readings follow env) */
+      dht11?: number;
       /** Touch controller INT GPIO (held low while touched). */
       touchInt?: number;
       /** I2S audio devices: 'max98357a' (speaker) / 'inmp441' (mic); pins fixed per chip (board3d I2S_WIRING). */
@@ -197,6 +223,10 @@ export type ToWorker =
   | { type: 'enc'; steps: number }
   | { type: 'encsw'; down: boolean }
   | { type: 'dist'; cm: number }
+  /** Fine capture (D-04): absolute window [from, from + len] s, or armed: the first edge at or after `from` opens it */
+  | { type: 'vcdStart'; pins: number[]; from: number; len: number; trigger: boolean }
+  /** Ask for the VCD text, answered with vcdText */
+  | { type: 'vcdGet' }
   /** Inputs without a dedicated message (imu, touch...): applied as is and logged. */
   | { type: 'input'; act: Extract<InputAction, { kind: 'imu' | 'touch' }> }
   /** Mic source: WAV (looped, sampled on sim time, reproducible) / silent / live (micPush browser samples; not reproducible, not logged). */
@@ -239,6 +269,8 @@ export type ToWorker =
       power?: PowerMode;
       encoder?: EncoderSpec;
       sonar?: SonarSpec;
+      /** DHT11 data GPIO (open drain; readings follow env) */
+      dht11?: number;
       touchInt?: number;
       i2s?: string[];
       micWav?: ArrayBuffer;
@@ -327,6 +359,11 @@ export type FromWorker =
   | { type: 'ble'; state: number; json: string; reset?: boolean; cmdError?: string }
   /** Harness verdict (same text as the CLI: I2C rise time, RSSI after antenna loss), sent on change. */
   | { type: 'harness'; text: string }
+  /** Timing-sensitive code report (D-03): JSON {"line","items":[{pin,kind,n}]} or {}; sent on change */
+  | { type: 'timing'; json: string }
+  /** Fine capture state, sent on change; vcdText answers vcdGet (byte-identical to CLI --vcd) */
+  | { type: 'vcd'; state: VcdState | null }
+  | { type: 'vcdText'; text: string; state: VcdState | null }
   /** Network tab (C-02): whether the firmware used Wi-Fi, what the virtual phone sees (JSON, shape in app/netfeed.ts), the chip's request log; sent only when changed */
   | { type: 'net'; used: boolean; phone?: string; rows?: string; replies?: number; replyBytes?: number }
   | { type: 'inputlog'; log: InputLog }
@@ -407,7 +444,7 @@ let hasPinDevs = false;
 function pinDevFrame(e: Exports): PinDevFrame | undefined {
   if (!hasPinDevs) return undefined;
   const n = (x: number | undefined) => (x === undefined || Number.isNaN(x) ? null : x);
-  return { encPos: n(e.tb_encoder_pos?.()), pcnt: n(e.tb_pcnt_count?.(0)), pings: n(e.tb_sonar_stat?.(0)), echoUs: n(e.tb_sonar_stat?.(2)) };
+  return { encPos: n(e.tb_encoder_pos?.()), pcnt: n(e.tb_pcnt_count?.(0)), pings: n(e.tb_sonar_stat?.(0)), echoUs: n(e.tb_sonar_stat?.(2)), dhtReads: n(e.tb_dht11_stat?.(0)), dhtShort: n(e.tb_dht11_stat?.(1)) };
 }
 let simAnchor = 0; // sim cycle when timing started
 let wallAnchor = 0;
@@ -663,6 +700,8 @@ function loop(gen = loopGen) {
   postNet(e);
   pumpNet(e);
   postHarness(e);
+  postTiming(e);
+  postVcd(e);
   if (stop !== 0) {
     running = false;
     post({ type: 'stopped', reason: errorText(e) });
@@ -821,6 +860,34 @@ function postHarness(e: Exports, force = false) {
   post({ type: 'harness', text: t });
 }
 
+let timingText = '';
+function postTiming(e: Exports) {
+  if (!e.tb_timing_report) return;
+  const n = e.tb_timing_report();
+  const t = decoder.decode(new Uint8Array(e.memory.buffer, e.tb_report_ptr(), n));
+  if (t === timingText) return;
+  timingText = t;
+  post({ type: 'timing', json: t });
+}
+
+let vcdKey = '';
+function vcdState(e: Exports): VcdState | null {
+  const edges = e.tb_vcd_stat?.(0) ?? NaN;
+  if (Number.isNaN(edges)) return null;
+  const w = (i: number) => {
+    const v = e.tb_vcd_stat!(i);
+    return Number.isNaN(v) ? null : v;
+  };
+  return { t0: w(2), t1: w(3), edges, dropped: e.tb_vcd_stat!(1) };
+}
+function postVcd(e: Exports) {
+  const st = vcdState(e);
+  const k = JSON.stringify(st);
+  if (k === vcdKey) return;
+  vcdKey = k;
+  post({ type: 'vcd', state: st });
+}
+
 const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5 };
 
 function postPaused(e: Exports) {
@@ -828,7 +895,7 @@ function postPaused(e: Exports) {
 }
 
 /** Boot fields; locale exists so any human text the worker makes follows the page (core errors are English already). */
-type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; touchInt?: number; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
+type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
 const I2S_KIND: Record<string, number> = { max98357a: 0, inmp441: 1 };
 /** Power-up: instantiate wasm, attach devices, set the environment, start a fresh input log. */
 async function bootWasm(m: BootMsg): Promise<Exports | null> {
@@ -859,7 +926,12 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   // Pin devices (encoder / ultrasonic) attach at power-up; the initial ultrasonic distance is logged as a dist input.
   if (m.encoder && e.tb_encoder_attach) e.tb_encoder_attach(m.encoder.a, m.encoder.b, m.encoder.sw ?? -1);
   if (m.sonar && e.tb_sonar_attach) e.tb_sonar_attach(m.sonar.trig, m.sonar.echo);
-  hasPinDevs = !!(m.encoder || m.sonar);
+  // DHT11 takes readings from env: set it again once attached (the CLI also parses --dht11 before --env)
+  if (m.dht11 !== undefined) e.tb_dht11_attach?.(m.dht11);
+  if (m.env && m.dht11 !== undefined) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
+  hasPinDevs = !!(m.encoder || m.sonar || m.dht11 !== undefined);
+  timingText = '\u0000';
+  vcdKey = '';
   e.tb_io_watch?.(ioLo, ioHi);
   e.tb_tasks_enable?.(1 << 16);
   ioChunks = [];
@@ -867,7 +939,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   taskChunks = [];
   taskBytes = 0;
   flushIo(e, true);
-  inputLog = { version: 1, chip: CHIP_OF[e.tb_chip()] ?? 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
+  inputLog = { version: 1, chip: CHIP_OF[e.tb_chip()] ?? 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.dht11 !== undefined ? { dht11: m.dht11 } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
   record(e, { kind: 'power', on: true });
   if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
   // Harness applies at power-up and is logged (replay / rewind apply it at cycle 0, same as CLI --i2c-wire).
@@ -1193,6 +1265,22 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       if (m.antenna !== undefined) apply(ex, { kind: 'antenna', db: m.antenna });
       postHarness(ex);
       break;
+    case 'vcdStart': {
+      if (!ex) return;
+      let lo = 0;
+      let hi = 0;
+      for (const p of m.pins) if (p < 32) lo |= 1 << p; else hi |= 1 << (p - 32);
+      if (m.trigger) ex.tb_vcd_arm?.(lo >>> 0, hi >>> 0, m.from, m.len);
+      else ex.tb_vcd_start?.(lo >>> 0, hi >>> 0, m.from, m.from + m.len);
+      postVcd(ex);
+      break;
+    }
+    case 'vcdGet': {
+      if (!ex?.tb_vcd_text) return;
+      const n = ex.tb_vcd_text();
+      post({ type: 'vcdText', text: decoder.decode(new Uint8Array(ex.memory.buffer, ex.tb_report_ptr(), n)), state: vcdState(ex) });
+      break;
+    }
     case 'enc':
       if (!ex) return;
       apply(ex, { kind: 'enc', steps: m.steps });

@@ -51,6 +51,7 @@ export interface Ex {
   tb_encoder_press?(down: number): void;
   tb_sonar_attach?(trig: number, echo: number): void;
   tb_sonar_distance?(cm: number): void;
+  tb_dht11_attach?(pin: number): void;
   tb_imu_set?(pitch: number, roll: number, yaw: number, dp: number, dr: number, dy: number): void;
   tb_touch?(x: number, y: number, down: number): void;
   tb_touch_int?(pin: number): void;
@@ -83,6 +84,8 @@ export interface SimJob {
   /** Rotary encoder / HC-SR04 (= CLI --encoder A,B[,SW] / --sonar TRIG,ECHO --dist cm); attached means 1 ms slices too */
   encoder?: { a: number; b: number; sw?: number };
   sonar?: { trig: number; echo: number; cm?: number };
+  /** DHT11 data GPIO (= CLI --dht11); attached means 1 ms slices too */
+  dht11?: number;
   /** Run with the "real network" on (C-03, for checkpoints): the chip's HTTP to the internet is fetched on the spot and the replies are applied and kept in the result; the verdict needs internet and records no run ID */
   realnet?: boolean;
 }
@@ -150,6 +153,8 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
   const errText = () => new TextDecoder().decode(new Uint8Array(e.memory.buffer, e.tb_error_ptr(), e.tb_error_len()));
   if (r !== 0) return { stdout: '', report: '', sim: 0, error: errText(), bootError: errText() };
   for (const d of j.i2c) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
+  // DHT11 before env so it takes the readings (CLI parses --dht11 before --env)
+  if (j.dht11 !== undefined) e.tb_dht11_attach?.(j.dht11);
   if (j.env) e.tb_env_set(j.env.temp, j.env.humidity, j.env.pressure);
   if (j.lcd) e.tb_lcd_attach?.();
   // Like the native CLI: at most 50 crash / brownout resets, the 51st stops before resetting (no reboot loop; both sides stop on the same cycle)
@@ -234,7 +239,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         }
       }
     }
-    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice && !j.realnet && j.servo === undefined && !j.encoder && !j.sonar ? CPU_HZ / 100 : CPU_HZ / 1000;
+    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice && !j.realnet && j.servo === undefined && !j.encoder && !j.sonar && j.dht11 === undefined ? CPU_HZ / 100 : CPU_HZ / 1000;
     const before = e.tb_cycles();
     const stop = e.tb_run(Math.min(slice, total - done));
     done += e.tb_cycles() - before;

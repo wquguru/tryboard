@@ -1,6 +1,6 @@
 // Live simulation for the home and lab pages: starts worker.ts, runs one firmware and hands each frame to the view.
 import { fetchBuf, imageChip, loadRom, loadWasm } from './assets';
-import type { EncoderSpec, Env, FromWorker, Harness, PcmBlock, PowerMode, PwmEvent, Snapshot, SonarSpec, ToWorker } from './worker';
+import type { EncoderSpec, Env, FromWorker, Harness, PcmBlock, PowerMode, PwmEvent, Snapshot, SonarSpec, TimingReport, ToWorker, VcdState } from './worker';
 import type { UsbView } from './usb3d';
 import { parseBle, type BleUpdate } from './ble';
 import type { InputEvent, InputLog } from './inputlog';
@@ -42,6 +42,12 @@ export interface LiveOptions {
   /** Rotary encoder / HC-SR04 (on GPIOs; the core times the waveforms). */
   encoder?: EncoderSpec;
   sonar?: SonarSpec;
+  /** DHT11 data GPIO (D-03, open drain; readings follow env). */
+  dht11?: number;
+  /** Timing-sensitive code report (D-03), parsed; null = nothing detected. Called on change. */
+  onTiming?(r: TimingReport | null): void;
+  /** Fine capture state (D-04), called on change; null = no capture. */
+  onVcd?(s: VcdState | null): void;
   /** GPIO wired to the touch controller INT (P2-02). */
   touchInt?: number;
   /** I2S audio devices (max98357a / inmp441); the WAV the mic hears at power-up and its file name. */
@@ -78,6 +84,7 @@ export interface SeekJob {
   encoder?: EncoderSpec;
   /** Pins only; the initial distance is the dist event at time 0 in the log. */
   sonar?: { trig: number; echo: number };
+  dht11?: number;
   touchInt?: number;
   i2s?: string[];
   micWav?: ArrayBuffer;
@@ -148,6 +155,13 @@ export class LiveSim {
         o.onNet?.(m);
       } else if (m.type === 'harness') {
         o.onHarness?.(m.text);
+      } else if (m.type === 'timing') {
+        const r = JSON.parse(m.json) as Partial<TimingReport>;
+        o.onTiming?.(r.line ? (r as TimingReport) : null);
+      } else if (m.type === 'vcd') {
+        o.onVcd?.(m.state);
+      } else if (m.type === 'vcdText') {
+        for (const r of this.vcdWaiters.splice(0)) r({ text: m.text, state: m.state });
       } else if (m.type === 'oled') {
         this.frame.oled = m.pixels;
         o.onFrame?.(this.frame, NaN);
@@ -175,7 +189,7 @@ export class LiveSim {
     const [wasm, flash] = [await loadWasm(), this.flash];
     const rom = await loadRom(imageChip(flash));
     Object.assign(this.frame, emptyFrame());
-    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName, harness: this.o.harness, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.(), locale });
+    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName, harness: this.o.harness, dht11: this.o.dht11, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.(), locale });
   }
   reset() {
     return this.start();
@@ -187,14 +201,27 @@ export class LiveSim {
     return this.start();
   }
   /** Swap attached devices (rearranged per list): takes effect on the next start / reset. */
-  configure(p: { i2c: LiveOptions['i2c']; lcd?: boolean; servo?: number; encoder?: EncoderSpec; sonar?: SonarSpec; touchInt?: number; i2s?: string[] }) {
+  configure(p: { i2c: LiveOptions['i2c']; lcd?: boolean; servo?: number; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; i2s?: string[] }) {
     this.o.i2c = p.i2c;
     this.o.lcd = p.lcd;
     this.o.servo = p.servo;
     this.o.encoder = p.encoder;
     this.o.sonar = p.sonar;
+    this.o.dht11 = p.dht11;
     this.o.touchInt = p.touchInt;
     this.o.i2s = p.i2s;
+  }
+  private vcdWaiters: ((r: { text: string; state: VcdState | null }) => void)[] = [];
+  /** Fine capture (D-04): window [from, from + len] s of sim time, or armed (the next edge at or after `from` opens it). Not logged: observation only. */
+  vcdStart(pins: number[], from: number, len: number, trigger: boolean) {
+    this.send({ type: 'vcdStart', pins, from, len, trigger });
+  }
+  /** VCD text of the fine capture (byte-identical to CLI --vcd for the same run and window). */
+  vcdText(): Promise<{ text: string; state: VcdState | null }> {
+    return new Promise((r) => {
+      this.vcdWaiters.push(r);
+      this.send({ type: 'vcdGet' });
+    });
   }
   /** Turn the encoder by steps (positive = clockwise), logged. */
   turnEncoder(steps: number) {
@@ -342,6 +369,7 @@ export class LiveSim {
     this.o.lcd = job.lcd;
     this.o.servo = job.servo;
     this.o.encoder = job.encoder;
+    this.o.dht11 = job.dht11;
     // Distance after a rewind stop = last dist in the log (initial distance of the next power-up).
     const dl = [...job.events].reverse().find((e) => e.kind === 'dist' && Math.round(e.tMs * 160000) < Math.round(job.untilMs * 160000));
     this.o.sonar = job.sonar ? { ...job.sonar, cm: dl && dl.kind === 'dist' ? dl.cm : (this.o.sonar?.cm ?? 100) } : undefined;
@@ -362,7 +390,7 @@ export class LiveSim {
     Object.assign(this.frame, emptyFrame());
     return new Promise((r) => {
       this.seekWaiter = r;
-      this.send({ type: 'seek', wasm: wasm.slice(0), rom: rom.slice(0), flash: job.flash.slice(0), i2c: job.i2c, env: job.env, lcd: job.lcd, servo: job.servo, power: job.power, encoder: job.encoder, sonar: job.sonar ? { ...job.sonar, cm: NaN } : undefined, touchInt: job.touchInt, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.() });
+      this.send({ type: 'seek', wasm: wasm.slice(0), rom: rom.slice(0), flash: job.flash.slice(0), i2c: job.i2c, env: job.env, lcd: job.lcd, servo: job.servo, power: job.power, encoder: job.encoder, sonar: job.sonar ? { ...job.sonar, cm: NaN } : undefined, touchInt: job.touchInt, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs, dht11: job.dht11, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.() });
     });
   }
   /** Continue live after a rewind stop: this run counts as in progress again. */

@@ -14,7 +14,7 @@ import type { Toolbar } from './toolbar';
 import type { Card } from './card';
 import type { BomHistory } from './bom';
 import type { SeekJob } from '../live';
-import type { ElecFrame, FromWorker, Harness, PinDevFrame, Snapshot } from '../worker';
+import type { ElecFrame, FromWorker, Harness, PinDevFrame, Snapshot, TimingReport, VcdState } from '../worker';
 import type { UsbView } from '../usb3d';
 import type { WireMods } from './wiring';
 import type { BenchHistory } from './benchhist';
@@ -216,6 +216,14 @@ export interface Session {
   /** Harness verdict text from the sim (rise time / RSSI); empty when unset */
   harnessText: string;
   onHarness(cb: (text: string) => void): () => void;
+  /** Timing-sensitive code found by the core (D-03); null = none. Reset on each power-on */
+  timing: TimingReport | null;
+  onTiming(cb: (r: TimingReport | null) => void): () => void;
+  /** Fine capture (D-04): state (null = none), start (absolute window or armed on the next edge), VCD text */
+  vcd: VcdState | null;
+  onVcd(cb: (s: VcdState | null) => void): () => void;
+  vcdStart(pins: number[], from: number, len: number, trigger: boolean): void;
+  vcdText(): Promise<{ text: string; state: VcdState | null }>;
   /** What the virtual USB host sees (P2-12); null = no USB device */
   usb: UsbView | null;
   onUsb(cb: (v: UsbView | null) => void): () => void;

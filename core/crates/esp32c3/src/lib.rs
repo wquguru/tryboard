@@ -17,6 +17,8 @@ pub mod rmt;
 pub mod sigin;
 pub mod spiflash;
 pub mod tasktrace;
+pub mod timing;
+pub mod vcd;
 /// The Wi-Fi model lives in tryboard-soc (shared by C3 / S3); wired here with the C3 layout
 pub use tryboard_soc::wifi;
 
@@ -156,6 +158,8 @@ pub struct SocBus {
     pub iotrace: iotrace::IoTrace,
     /// FreeRTOS task switches (C-04)
     pub tasks: tasktrace::TaskTrace,
+    /// Timing-sensitive code detection (D-03)
+    pub timing: timing::Timing,
     /// BLE (C-01): present only when the VHCI boundary was found in firmware; Option only to take it out during HLE
     pub ble: Option<Box<ble::BleHle>>,
     /// Why BLE is used but the VHCI boundary wasn't found (web suggests dropping in an app.elf)
@@ -217,6 +221,7 @@ impl Default for SocBus {
             iotrace: iotrace::IoTrace::new(0),
             // First word of a RISC-V stack frame is RV_STK_MEPC
             tasks: tasktrace::TaskTrace::new(0),
+            timing: Default::default(),
             ble: None,
             ble_error: None,
             code_patch: Vec::new(),
@@ -334,7 +339,14 @@ impl SocBus {
         match base {
             0x6000_0000 => return self.uart0.read(off),
             0x6001_0000 => return self.uart1.read(off),
-            0x6000_4000 => return self.gpio.read(off),
+            0x6000_4000 => {
+                let v = self.gpio.read(off);
+                if off == 0x3c {
+                    let inputs = !self.gpio.enable | self.gpio.open_drain();
+                    self.timing.in_read(now, v as u64, inputs as u64);
+                }
+                return v;
+            }
             0x6000_2000 => return self.spi1.read(off),
             0x6002_6000 if off == 0xb0 => {
                 // WDEV_RND_REG: a new value on every read (esp_random, lwIP ports / DNS ids rely on it)
@@ -456,7 +468,12 @@ impl SocBus {
             0x6002_D000 => return self.i2s0.write(off, v, now),
             0x600C_4000 if off < 0x100 => return self.extmem.write(off, v),
             0x6000_4000 => {
+                let before = self.gpio.level();
                 self.gpio.write(off, v);
+                let changed = before ^ self.gpio.level();
+                if changed != 0 {
+                    self.timing.cpu_edges(now, changed as u64);
+                }
                 // Enables (0x20..0x2c) and output signal select (FUNC_OUT_SEL from 0x554) decide which pins carry PWM
                 if (0x20..0x2c).contains(&off) || off >= 0x554 {
                     self.iotrace.pwm_dirty = true;
@@ -916,6 +933,13 @@ impl Bus for SocBus {
         Ok((insn, len))
     }
 
+    fn cycle_read(&mut self, pc: u32, cycles: u64) {
+        // ROM reads are esp_rom_delay_us's own loop, already counted at its entry
+        if !(ROM_LOW..ROM_HIGH).contains(&pc) {
+            self.timing.cycle_read(cycles);
+        }
+    }
+
     fn sp_loaded(&mut self, base: u32, cycles: u64) {
         if self.tasks.cap == 0 {
             return;
@@ -1094,6 +1118,7 @@ impl Esp32c3 {
         m.bus.gpio_log = std::mem::take(&mut self.bus.gpio_log);
         m.bus.iotrace = self.bus.iotrace.carry();
         m.bus.tasks = self.bus.tasks.carry(self.cpu.cycles);
+        m.bus.timing = std::mem::take(&mut self.bus.timing);
         // An external LCD doesn't vanish on chip reset (firmware re-drives its reset pin)
         m.bus.lcd = self.bus.lcd.take();
         m.bus.audio = std::mem::take(&mut self.bus.audio);

@@ -58,6 +58,8 @@ export interface InputLog {
   /** Encoder / ultrasonic at power-up: become --encoder A,B[,SW] / --sonar TRIG,ECHO on replay */
   encoder?: { a: number; b: number; sw?: number };
   sonar?: { trig: number; echo: number };
+  /** DHT11 data GPIO at power-up: becomes --dht11 on replay */
+  dht11?: number;
   /** GPIO wired to the touch controller INT: becomes --touch-int on replay */
   touchInt?: number;
   /** I2S audio parts at power-up (max98357a / inmp441) and the mic's test WAV (name under tools/audio/): become --i2s / --mic */
@@ -159,6 +161,7 @@ export function cliArgs(log: InputLog, fw: string, inputsFile: string, seconds?:
   if (log.servo !== undefined) a.push('--servo', String(log.servo), '--power', log.power ?? 'usb');
   if (log.encoder) a.push('--encoder', [log.encoder.a, log.encoder.b, ...(log.encoder.sw !== undefined ? [log.encoder.sw] : [])].join(','));
   if (log.sonar) a.push('--sonar', `${log.sonar.trig},${log.sonar.echo}`);
+  if (log.dht11 !== undefined) a.push('--dht11', String(log.dht11));
   if (log.touchInt !== undefined) a.push('--touch-int', String(log.touchInt));
   if (log.i2s?.length) a.push('--i2s', log.i2s.join(','));
   if (log.mic) a.push('--mic', `tools/audio/${log.mic}`);

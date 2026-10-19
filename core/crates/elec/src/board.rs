@@ -299,6 +299,8 @@ impl Board {
             "encoder" => Some(0.000_66),
             // INMP441 datasheet: 1.4 mA operating current
             "inmp441" => Some(0.0014),
+            // DHT11 datasheet: 0.2-1 mA average while sampling (upper end used)
+            "dht11" => Some(0.001),
             _ => None,
         }
     }

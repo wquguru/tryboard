@@ -32,6 +32,8 @@ pub trait Bus {
     /// Executed `lw sp, 0(rs1)`: this is FreeRTOS's task switch (`sp = pxCurrentTCBs[core]->pxTopOfStack` in `rtos_int_exit`).
     /// `base` is rs1 (possibly a TCB), `cycles` the current cycle count. Used by the task timeline (C-04); ignored by default.
     fn sp_loaded(&mut self, _base: u32, _cycles: u64) {}
+    /// A cycle-count CSR (mcycle / cycle / mpccr) was read at `pc`. Timing-sensitive code detection (D-03); ignored by default.
+    fn cycle_read(&mut self, _pc: u32, _cycles: u64) {}
 }
 
 /// Raw fetched word -> (32-bit insn, length)
@@ -83,6 +85,8 @@ pub struct Cpu {
     pub hle_lo: u32,
     pub hle_hi: u32,
     pub hle_addrs: Vec<u32>,
+    /// An observe-only HLE hook already ran for this PC: execute the real instruction once instead of exiting again.
+    pub hle_pass: u32,
     /// Simulated time base (CPU cycles). Firmware writing the cycle-count CSR only changes cycle_bias so time never jumps.
     pub cycles: u64,
     pub cycle_bias: u64,
@@ -117,6 +121,7 @@ impl Cpu {
             hle_lo: 0,
             hle_hi: 0,
             hle_addrs: Vec::new(),
+            hle_pass: u32::MAX,
             cycles: 0,
             cycle_bias: 0,
             instret: 0,
@@ -180,7 +185,10 @@ impl Cpu {
         }
         let pc = self.pc;
         if pc >= self.hle_lo && pc < self.hle_hi && self.hle_addrs.binary_search(&pc).is_ok() {
-            return Exit::Hle(pc);
+            if self.hle_pass != pc {
+                return Exit::Hle(pc);
+            }
+            self.hle_pass = u32::MAX;
         }
         if pc & 1 != 0 {
             return self.trap(cause::INSN_MISALIGNED, pc, false);
@@ -490,6 +498,9 @@ impl Cpu {
                         Some(v) => v,
                         None => illegal!(),
                     };
+                    if matches!(addr, csr::MCYCLE | csr::CYCLE | csr::MPCCR | csr::UPCCR) {
+                        bus.cycle_read(self.pc, self.cycles);
+                    }
                     if write {
                         let new = match f3 & 3 {
                             1 => src,

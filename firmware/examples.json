@@ -216,6 +216,30 @@
   "chip": "esp32c3"
  },
  {
+  "id": "c3-dht11",
+  "title": "DHT11 temperature / humidity: single-wire bit-bang (ESP32-C3)",
+  "about": "A DHT11 module on GPIO5 (open drain, 10 kΩ pull-up on the module). The firmware's own driver pulls the line low for 20 ms, then times the sensor's answer by counting esp_rom_delay_us(1) loops: 80 µs low + 80 µs high, then 40 bits of 50 µs low followed by 27 µs (0) or 70 µs (1) high, ending with a checksum. It reads 100 times, one second apart, and prints how many passed the checksum. Drag the sliders to change the readings. Open the logic analyzer's fine sampling on GPIO5 to measure each bit with the cursors; the simulator also flags the busy-wait timing as needing a real-board check.",
+  "tags": [
+   "✓ Verified in sim",
+   "DHT11",
+   "Bit-bang",
+   "Busy-wait timing",
+   "ESP-IDF 5.5"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "dht11",
+     "pin": 5
+    }
+   ]
+  },
+  "controls": [
+   "env"
+  ],
+  "chip": "esp32c3"
+ },
+ {
   "id": "c3-thermo",
   "title": "Thermo-hygrometer: BME280 + OLED (ESP32-C3)",
   "about": "Demo firmware for the board advisor's \"thermo-hygrometer\" project. A BME280 (0x76) and an SSD1306 OLED (0x3C) share one I2C bus: SDA=GPIO6, SCL=GPIO7 (D4 / D5 on the XIAO ESP32C3). Once a second it reads temperature, humidity and pressure, prints one line to serial and shows the same three lines on the OLED. Drag the sliders to change the virtual environment and the readings follow.",
