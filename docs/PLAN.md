@@ -125,7 +125,7 @@
 | C-05 | 经典 ESP32（LX6）：hello / blink / I2C / Wi-Fi | 同 M0–M2 验收在经典 ESP32 上通过；选板 esp32-devkitc 不再用 C3 代跑。按镜像头识别芯片、换板已有（`fwcheck.tsx` / `simrun.imageChip`），只需把芯片 id 0 映射到 esp32 | ☐ |
 | C-06 | esp-emu 作第二对照源（`tools/oracle_espemu.sh`，运行时下载、仅本机） | 先在 LICENSING 登记；对 hello / nvs / s3-psram / s3-dual 串口差分 | 待确认 |
 
-界面约定（设计稿 https://claude.ai/artifact/7uo4Q73fYgyusK27EZytZp）：新面板进现有底部坞，沿用 USB 标签的做法——固件用到才出现（「蓝牙」「网络」）；「任务」常驻。手机上虚拟手机与配网三步都放进现有底部抽屉（半屏 / 全屏），配网一次只显示一步；390×844 无横向滚动照旧。
+界面约定（设计稿 https://claude.ai/artifact/7uo4Q73fYgyusK27EZytZp，源文件 docs/design-v2/compete/）：新面板进现有底部坞，沿用 USB 标签的做法——固件用到才出现（「蓝牙」「网络」）；「任务」常驻。手机上虚拟手机与配网三步都放进现有底部抽屉（半屏 / 全屏），配网一次只显示一步；390×844 无横向滚动照旧。
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。

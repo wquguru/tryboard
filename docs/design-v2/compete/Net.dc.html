@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>真实网络开关</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0a6fbd;text-decoration:none}a:hover{color:#0b76c8}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; overflow: hidden; background: #ffffff; color: #1e1e1e; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; font-size: 13px; display: flex; flex-direction: column; position: relative">
+
+  <header style="height: 56px; flex: none; box-sizing: border-box; padding: 0 16px; border-bottom: 1px solid #e6e6e6; display: flex; align-items: center; gap: 14px">
+    <a href="#" aria-label="试板首页" style="display: flex; align-items: center; gap: 6px; color: #1e1e1e">
+      <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="4" width="56" height="56" rx="14" fill="#0B76C8"/><g fill="#fff"><circle cx="20" cy="20" r="5"/><circle cx="32" cy="20" r="5"/><circle cx="20" cy="32" r="5"/><circle cx="32" cy="32" r="5"/><circle cx="44" cy="32" r="5"/><circle cx="20" cy="44" r="5"/><circle cx="32" cy="44" r="5"/><circle cx="44" cy="44" r="5"/></g><circle cx="44" cy="20" r="6" fill="#FFB020"/></svg>
+      <span style="font-size: 14px; font-weight: 700">试板</span>
+    </a>
+    <span style="width: 1px; height: 20px; background: #e6e6e6"></span>
+    <div style="display: flex; align-items: center; gap: 6px; white-space: nowrap"><a href="#">实验台</a><span style="color: #9ba0a7">/</span><strong>我的固件 · 天气小屏</strong><span style="padding: 1px 6px; border: 1px solid #e6e6e6; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #5e5e5e">ESP32-C3</span></div>
+    <div style="flex: 1"></div>
+    <button type="button" role="switch" aria-checked="true" style="height: 32px; padding: 0 10px 0 6px; border: 1px solid #f0c98a; border-radius: 16px; background: #fdf4e3; color: #8a5a12; font: inherit; font-weight: 500; display: flex; align-items: center; gap: 8px">
+      <span style="width: 32px; height: 20px; border-radius: 10px; background: #d9922b; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; border-radius: 8px; background: #ffffff"></span></span>真实网络</button>
+    <div style="display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 16px; background: #e8f7ee; color: #0e7a41; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 4px; background: #14ae5c"></span>运行中 · 00:08.31</div>
+    <button type="button" style="height: 32px; padding: 0 12px; border: 1px solid #e6e6e6; border-radius: 8px; background: #ffffff; font: inherit">暂停</button>
+  </header>
+
+  <!-- 确认弹层 -->
+  <div role="dialog" aria-labelledby="net-title" style="position: absolute; right: 168px; top: 64px; width: 380px; z-index: 2; padding: 16px; box-sizing: border-box; border: 1px solid #e6e6e6; border-radius: 12px; background: #ffffff; box-shadow: 0 12px 32px rgba(20,30,40,.14); display: flex; flex-direction: column; gap: 10px">
+    <div style="position: absolute; right: 72px; top: -7px; width: 12px; height: 12px; background: #ffffff; border-left: 1px solid #e6e6e6; border-top: 1px solid #e6e6e6; transform: rotate(45deg)"></div>
+    <div id="net-title" style="font-size: 15px; font-weight: 700">让板子连真实互联网？</div>
+    <div style="line-height: 20px; color: #444">固件发出的 HTTP / HTTPS 请求会经你的浏览器真的发出去，拿回真实天气、时间、接口数据。</div>
+    <div style="display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 8px; background: #f7f7f7">
+      <div style="display: flex; gap: 8px; line-height: 20px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a5a12" stroke-width="2" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 10v5M12 18v.5"/></svg>每次跑结果可能不同，检查点会标「依赖外网」</div>
+      <div style="display: flex; gap: 8px; line-height: 20px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5e5e5e" stroke-width="2" aria-hidden="true" style="flex: none; margin-top: 2px"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>收到的回复都存下来，以后可以离线重放</div>
+      <div style="display: flex; gap: 8px; line-height: 20px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5e5e5e" stroke-width="2" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z"/></svg>只放行 HTTP(S)；对方网站不允许跨域时会显示原因</div>
+    </div>
+    <div style="display: flex; gap: 8px; justify-content: flex-end">
+      <button type="button" style="height: 36px; padding: 0 14px; border: 1px solid #e6e6e6; border-radius: 8px; background: #ffffff; font: inherit">保持虚拟网络</button>
+      <button type="button" style="height: 36px; padding: 0 14px; border: 0; border-radius: 8px; background: #0b76c8; color: #ffffff; font: inherit; font-weight: 500">打开真实网络</button>
+    </div>
+  </div>
+
+  <div style="flex: 1; display: flex; min-height: 0">
+    <main style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+      <div style="flex: 1; position: relative; background: radial-gradient(120% 90% at 50% 40%, #ffffff, #eceff3); display: flex; align-items: center; justify-content: center; gap: 48px">
+        <div style="width: 260px; height: 170px; border-radius: 10px; background: #1f2a24; box-shadow: 0 18px 40px rgba(20,30,40,.18); display: flex; align-items: center; justify-content: center">
+          <div style="width: 100px; height: 100px; border-radius: 6px; background: #2b2f33; color: #9ba0a7; font-family: 'JetBrains Mono', monospace; font-size: 11px; display: flex; align-items: center; justify-content: center">ESP32-C3</div>
+        </div>
+        <div style="width: 200px; height: 112px; border-radius: 8px; background: #0b0d10; border: 6px solid #2b2f33; color: #dfe9ff; font-family: 'JetBrains Mono', monospace; display: flex; flex-direction: column; justify-content: center; padding: 0 14px; box-sizing: border-box; gap: 4px">
+          <div style="font-size: 11px; color: #8fa3c0">上海 · 实时</div>
+          <div style="font-size: 28px; line-height: 32px">23.6°C</div>
+          <div style="font-size: 11px">多云 · 湿度 61%</div>
+        </div>
+        <div style="position: absolute; left: 16px; top: 16px; padding: 6px 10px; border-radius: 8px; background: #fdf4e3; color: #8a5a12; font-size: 12px; display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>屏上数字来自真实接口，不是模拟值</div>
+      </div>
+
+      <div style="height: 260px; flex: none; border-top: 1px solid #e6e6e6; display: flex; flex-direction: column">
+        <div style="height: 40px; flex: none; padding: 0 12px; display: flex; align-items: center; gap: 4px; border-bottom: 1px solid #f0f0f0">
+          <button type="button" style="height: 28px; padding: 0 10px; border: 0; background: transparent; font: inherit; color: #5e5e5e">串口</button>
+          <button type="button" style="height: 28px; padding: 0 10px; border: 0; background: transparent; font: inherit; color: #5e5e5e">代码</button>
+          <button type="button" style="height: 28px; padding: 0 10px; border: 0; background: transparent; font: inherit; color: #5e5e5e">逻辑分析仪</button>
+          <button type="button" style="height: 28px; padding: 0 10px; border: 0; background: transparent; font: inherit; color: #5e5e5e">运行记录</button>
+          <button type="button" style="height: 28px; padding: 0 10px; border: 0; background: transparent; font: inherit; color: #5e5e5e">检查点</button>
+          <button type="button" style="height: 28px; padding: 0 10px; border: 0; background: transparent; font: inherit; color: #5e5e5e">问题</button>
+          <button type="button" aria-current="true" style="height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: #f2f2f2; font: inherit; font-weight: 500; display: inline-flex; align-items: center; gap: 6px">网络<span style="padding: 0 5px; border-radius: 4px; background: #e5f4ff; color: #0a6fbd; font-size: 11px; font-weight: 500">新</span></button>
+          <div style="flex: 1"></div>
+          <button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #e6e6e6; border-radius: 6px; background: #ffffff; font: inherit; font-size: 12px; display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg>保存回复，离线重放</button>
+        </div>
+        <div style="padding: 6px 12px 0; display: grid; grid-template-columns: 90px 70px 90px minmax(0, 1fr) 70px 80px; gap: 12px; font-size: 12px; color: #5e5e5e"><span>时间</span><span>方法</span><span>去向</span><span>地址</span><span>状态</span><span>耗时</span></div>
+        <div style="flex: 1; overflow: hidden; padding: 4px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 26px">
+          <div style="display: grid; grid-template-columns: 90px 70px 90px minmax(0, 1fr) 70px 80px; gap: 12px"><span style="color: #5e5e5e">00:02.140</span><span>DNS</span><span style="color: #0a6fbd">虚拟</span><span>api.open-meteo.com</span><span style="color: #0e7a41">解析</span><span>—</span></div>
+          <div style="display: grid; grid-template-columns: 90px 70px 90px minmax(0, 1fr) 70px 80px; gap: 12px; background: #fdf4e3"><span style="color: #5e5e5e">00:02.188</span><span>GET</span><span style="color: #8a5a12">真实</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">https://api.open-meteo.com/v1/forecast?latitude=31.2</span><span style="color: #0e7a41">200</span><span>312 ms</span></div>
+          <div style="display: grid; grid-template-columns: 90px 70px 90px minmax(0, 1fr) 70px 80px; gap: 12px"><span style="color: #5e5e5e">00:02.520</span><span>GET</span><span style="color: #0a6fbd">虚拟</span><span>http://tryboard.local/time</span><span style="color: #0e7a41">200</span><span>1 ms</span></div>
+          <div style="display: grid; grid-template-columns: 90px 70px 90px minmax(0, 1fr) 70px 80px; gap: 12px"><span style="color: #5e5e5e">00:05.004</span><span>MQTT</span><span style="color: #5e5e5e">未放行</span><span>broker.emqx.io:1883</span><span style="color: #b42318">拦截</span><span>—</span></div>
+          <div style="display: grid; grid-template-columns: 90px 70px 90px minmax(0, 1fr) 70px 80px; gap: 12px; color: #5e5e5e"><span></span><span></span><span></span><span style="font-family: 'Noto Sans SC', sans-serif">MQTT 走浏览器内的虚拟服务器；外网只放行 HTTP(S)</span><span></span><span></span></div>
+        </div>
+      </div>
+    </main>
+
+    <aside style="width: 320px; flex: none; border-left: 1px solid #e6e6e6; background: #f7f7f7; padding: 16px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px">
+      <strong style="font-size: 15px">网络</strong>
+      <div style="padding: 12px; border-radius: 10px; background: #ffffff; border: 1px solid #e6e6e6; display: flex; flex-direction: column; gap: 6px">
+        <div style="font-size: 12px; color: #5e5e5e">默认：虚拟网络</div>
+        <div style="line-height: 20px">浏览器里的路由器 + tryboard.local 示例服务器。每次跑结果一样，检查点可复现。</div>
+      </div>
+      <div style="padding: 12px; border-radius: 10px; background: #ffffff; border: 1px solid #f0c98a; display: flex; flex-direction: column; gap: 6px">
+        <div style="font-size: 12px; color: #8a5a12; font-weight: 500">现在：虚拟 + 真实互联网</div>
+        <div style="line-height: 20px">tryboard.local 照旧，其他域名的 HTTP(S) 发往真实网站。</div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #5e5e5e">本次已记录 3 条回复 · 4.2 KB</div>
+      </div>
+      <div style="padding: 12px; border-radius: 10px; background: #ffffff; border: 1px solid #e6e6e6; display: flex; flex-direction: column; gap: 6px">
+        <div style="font-size: 12px; color: #5e5e5e">检查点</div>
+        <div style="display: flex; align-items: center; gap: 6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0e7a41" stroke-width="2.4" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>屏上显示温度</div>
+        <span style="align-self: flex-start; padding: 1px 6px; border-radius: 4px; background: #fdf4e3; color: #8a5a12; font-size: 12px">依赖外网 · 不记运行编号；重放时按记录的回复算</span>
+      </div>
+      <div style="margin-top: auto; display: flex; gap: 6px; font-size: 12px; color: #5e5e5e; line-height: 18px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="flex: none"><circle cx="8" cy="8" r="6.2" fill="none" stroke="#1E1E1E" stroke-width="1.6"/><path d="M8 1.8A6.2 6.2 0 0 1 8 14.2Z" fill="#1E1E1E"/></svg>延迟按浏览器实测折算到模拟时间：估算</div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>热点配网</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0a6fbd;text-decoration:none}a:hover{color:#0b76c8}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; overflow: hidden; background: #ffffff; color: #1e1e1e; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; font-size: 13px; display: flex; flex-direction: column">
+
+  <header style="height: 56px; flex: none; box-sizing: border-box; padding: 0 16px; border-bottom: 1px solid #e6e6e6; display: flex; align-items: center; gap: 14px">
+    <a href="#" aria-label="试板首页" style="display: flex; align-items: center; gap: 6px; color: #1e1e1e">
+      <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="4" width="56" height="56" rx="14" fill="#0B76C8"/><g fill="#fff"><circle cx="20" cy="20" r="5"/><circle cx="32" cy="20" r="5"/><circle cx="20" cy="32" r="5"/><circle cx="32" cy="32" r="5"/><circle cx="44" cy="32" r="5"/><circle cx="20" cy="44" r="5"/><circle cx="32" cy="44" r="5"/><circle cx="44" cy="44" r="5"/></g><circle cx="44" cy="20" r="6" fill="#FFB020"/></svg>
+      <span style="font-size: 14px; font-weight: 700">试板</span>
+    </a>
+    <span style="width: 1px; height: 20px; background: #e6e6e6"></span>
+    <div style="display: flex; align-items: center; gap: 6px; white-space: nowrap"><a href="#">实验台</a><span style="color: #9ba0a7">/</span><strong>示例 · 热点配网</strong><span style="padding: 1px 6px; border: 1px solid #e6e6e6; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #5e5e5e">ESP32-C3</span></div>
+    <div style="flex: 1"></div>
+    <div style="display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 16px; background: #e8f7ee; color: #0e7a41; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 4px; background: #14ae5c"></span>运行中 · 00:21.07</div>
+    <button type="button" style="height: 32px; padding: 0 12px; border: 1px solid #e6e6e6; border-radius: 8px; background: #ffffff; font: inherit">暂停</button>
+    <button type="button" style="height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: #0b76c8; color: #ffffff; font: inherit; font-weight: 500">换固件</button>
+  </header>
+
+  <div style="flex: 1; display: flex; flex-direction: column; min-height: 0; background: radial-gradient(120% 90% at 50% 40%, #ffffff, #eceff3)">
+    <div style="padding: 24px 32px 0; display: flex; align-items: baseline; gap: 12px">
+      <h1 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 700">虚拟手机连上板子开的热点，打开配网页</h1>
+      <span style="color: #5e5e5e">三步都在同一部虚拟手机里，点哪里就切到哪一步</span>
+      <div style="flex: 1"></div>
+      <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="#1E1E1E" stroke-width="1.6"/><path d="M8 8V1.8A6.2 6.2 0 1 1 1.8 8Z" fill="#1E1E1E"/></svg>行为模拟</span>
+    </div>
+
+    <div style="flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 40px; padding: 0 32px">
+
+      <!-- 第 1 步 -->
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 12px">
+        <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 22px; height: 22px; border-radius: 11px; background: #1e1e1e; color: #ffffff; display: grid; place-items: center; font-size: 12px">1</span>找到板子的热点</div>
+        <div style="width: 260px; height: 440px; box-sizing: border-box; border-radius: 36px; border: 8px solid #1e1e1e; background: #ffffff; overflow: hidden; display: flex; flex-direction: column">
+          <div style="padding: 20px 16px 8px; font-size: 15px; font-weight: 700">无线局域网</div>
+          <div style="padding: 0 16px; font-size: 12px; color: #5e5e5e">附近网络</div>
+          <div style="margin: 8px 12px 0; padding: 10px; border-radius: 10px; background: #e5f4ff; display: flex; align-items: center; gap: 8px">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0b76c8" stroke-width="2" aria-hidden="true"><path d="M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1"/></svg>
+            <div style="flex: 1"><div style="font-weight: 500">TryBoard-Setup</div><div style="font-size: 11px; color: #0a6fbd">来自你的板子 · 开放</div></div>
+          </div>
+          <div style="margin: 4px 12px 0; padding: 10px; display: flex; align-items: center; gap: 8px; color: #5e5e5e">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1"/></svg>
+            <div style="flex: 1">家里的路由器<div style="font-size: 11px">虚拟 · WPA2</div></div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <svg width="32" height="16" viewBox="0 0 32 16" aria-hidden="true"><path d="M2 8h26m-6-6 6 6-6 6" fill="none" stroke="#9ba0a7" stroke-width="2"/></svg>
+
+      <!-- 第 2 步 -->
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 12px">
+        <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 22px; height: 22px; border-radius: 11px; background: #1e1e1e; color: #ffffff; display: grid; place-items: center; font-size: 12px">2</span>连上，自动弹出登录页</div>
+        <div style="width: 260px; height: 440px; box-sizing: border-box; border-radius: 36px; border: 8px solid #1e1e1e; background: #ffffff; overflow: hidden; display: flex; flex-direction: column">
+          <div style="padding: 20px 16px 8px; font-size: 15px; font-weight: 700">无线局域网</div>
+          <div style="margin: 8px 12px 0; padding: 10px; border-radius: 10px; border: 1px solid #e6e6e6; display: flex; align-items: center; gap: 8px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0e7a41" stroke-width="2.4" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>
+            <div style="flex: 1"><div style="font-weight: 500">TryBoard-Setup</div><div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #5e5e5e">分到 192.168.4.2</div></div>
+          </div>
+          <div style="flex: 1"></div>
+          <div style="margin: 12px; padding: 14px; border-radius: 14px; background: #f7f7f7; display: flex; flex-direction: column; gap: 8px">
+            <div style="font-weight: 700">需要登录此网络</div>
+            <div style="color: #5e5e5e; font-size: 12px; line-height: 18px">板子把所有网址都指向了自己（DNS 劫持），手机识别成"需要登录"。</div>
+            <button type="button" style="height: 36px; border: 0; border-radius: 8px; background: #0b76c8; color: #ffffff; font: inherit; font-weight: 500">打开</button>
+          </div>
+        </div>
+      </div>
+
+      <svg width="32" height="16" viewBox="0 0 32 16" aria-hidden="true"><path d="M2 8h26m-6-6 6 6-6 6" fill="none" stroke="#9ba0a7" stroke-width="2"/></svg>
+
+      <!-- 第 3 步 -->
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 12px">
+        <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 22px; height: 22px; border-radius: 11px; background: #0b76c8; color: #ffffff; display: grid; place-items: center; font-size: 12px">3</span>填家里 Wi-Fi，提交</div>
+        <div style="width: 260px; height: 440px; box-sizing: border-box; border-radius: 36px; border: 8px solid #0b76c8; background: #ffffff; overflow: hidden; display: flex; flex-direction: column">
+          <div style="margin: 16px 12px 0; height: 28px; border-radius: 8px; background: #f2f2f2; display: flex; align-items: center; gap: 6px; padding: 0 10px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #5e5e5e">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>192.168.4.1</div>
+          <div style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+            <div style="font-size: 15px; font-weight: 700">设备配网</div>
+            <div style="color: #5e5e5e; font-size: 12px">这一页是你的固件发出来的</div>
+            <label for="ap-ssid" style="font-size: 12px; color: #5e5e5e">Wi-Fi 名称</label>
+            <input id="ap-ssid" value="MyHome-5G" style="height: 36px; box-sizing: border-box; padding: 0 10px; border: 1px solid #e6e6e6; border-radius: 8px; font: inherit">
+            <label for="ap-pass" style="font-size: 12px; color: #5e5e5e">密码</label>
+            <input id="ap-pass" type="password" value="12345678" style="height: 36px; box-sizing: border-box; padding: 0 10px; border: 1px solid #e6e6e6; border-radius: 8px; font: inherit">
+            <button type="button" style="margin-top: 6px; height: 40px; border: 0; border-radius: 8px; background: #1e1e1e; color: #ffffff; font: inherit; font-weight: 500">保存并连接</button>
+          </div>
+        </div>
+      </div>
+
+      <aside style="width: 300px; flex: none; align-self: stretch; margin: 40px 0; padding: 16px; box-sizing: border-box; border: 1px solid #e6e6e6; border-radius: 12px; background: #ffffff; display: flex; flex-direction: column; gap: 12px">
+        <div style="font-weight: 700; font-size: 15px">提交之后</div>
+        <div style="display: flex; gap: 8px; align-items: flex-start"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0e7a41" stroke-width="2.4" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="m5 12 5 5 9-10"/></svg><span style="line-height: 20px">板子收到名称和密码，存进 NVS</span></div>
+        <div style="display: flex; gap: 8px; align-items: flex-start"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0e7a41" stroke-width="2.4" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="m5 12 5 5 9-10"/></svg><span style="line-height: 20px">关掉热点，去连虚拟路由器 MyHome-5G</span></div>
+        <div style="display: flex; gap: 8px; align-items: flex-start"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0e7a41" stroke-width="2.4" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="m5 12 5 5 9-10"/></svg><span style="line-height: 20px">拿到 IP，检查点「配网后能上网」通过</span></div>
+        <div style="height: 1px; background: #e6e6e6"></div>
+        <div style="font-size: 12px; color: #5e5e5e">也可以试错</div>
+        <button type="button" style="height: 36px; border: 1px solid #e6e6e6; border-radius: 8px; background: #ffffff; font: inherit; text-align: left; padding: 0 10px">故意填错密码，看固件怎么处理</button>
+        <button type="button" style="height: 36px; border: 1px solid #e6e6e6; border-radius: 8px; background: #ffffff; font: inherit; text-align: left; padding: 0 10px">重启板子，看会不会记住</button>
+        <div style="margin-top: auto; display: flex; gap: 6px; font-size: 12px; color: #5e5e5e; line-height: 18px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="flex: none"><circle cx="8" cy="8" r="6.2" fill="none" stroke="#1E1E1E" stroke-width="1.6" stroke-dasharray="2.4 2"/></svg>iPhone / 安卓弹不弹登录页各不相同：必须上真机</div>
+      </aside>
+    </div>
+
+    <div style="height: 150px; flex: none; border-top: 1px solid #e6e6e6; background: #ffffff; display: flex; flex-direction: column">
+      <div style="height: 40px; flex: none; padding: 0 12px; display: flex; align-items: center; gap: 4px; border-bottom: 1px solid #f0f0f0">
+          <button type="button" aria-current="true" style="height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: #f2f2f2; font: inherit; font-weight: 500; display: inline-flex; align-items: center; gap: 6px">串口</button>
+          <button type="button" style="height: 28px; padding: 0 10px; border: 0; background: transparent; font: inherit; color: #5e5e5e">代码</button>
+          <button type="button" style="height: 28px; padding: 0 10px; border: 0; background: transparent; font: inherit; color: #5e5e5e">逻辑分析仪</button>
+          <button type="button" style="height: 28px; padding: 0 10px; border: 0; background: transparent; font: inherit; color: #5e5e5e">运行记录</button>
+          <button type="button" style="height: 28px; padding: 0 10px; border: 0; background: transparent; font: inherit; color: #5e5e5e">检查点</button>
+          <button type="button" style="height: 28px; padding: 0 10px; border: 0; background: transparent; font: inherit; color: #5e5e5e">问题</button>
+          <button type="button" style="height: 28px; padding: 0 10px; border: 0; background: transparent; font: inherit; color: #5e5e5e">网络</button>
+      </div>
+      <div style="flex: 1; padding: 8px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 20px; overflow: hidden">
+        <div style="color: #5e5e5e">I (1204) wifi:mode : softAP (24:0a:c4:00:00:01)</div>
+        <div style="color: #5e5e5e">I (3881) esp_netif_lwip: DHCP server assigned IP to a client, IP is: 192.168.4.2</div>
+        <div>I (9120) prov: received ssid=<span style="background: #e5f4ff">MyHome-5G</span> pass=********</div>
+        <div>I (9840) wifi:connected with MyHome-5G, got ip:192.168.1.23</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

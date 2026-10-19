@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>手机布局</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 900px; height: 940px; background: #f2f3f5; color: #1e1e1e; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; font-size: 13px; display: flex; gap: 40px; padding: 24px 40px; box-sizing: border-box">
+
+  <!-- C-01 手机：虚拟手机进底部抽屉（半屏） -->
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <div style="font-weight: 500">C-01 · 虚拟手机 = 半屏抽屉</div>
+    <div style="width: 390px; height: 844px; overflow: hidden; background: #ffffff; border-radius: 12px; box-shadow: 0 8px 24px rgba(20,30,40,.1); display: flex; flex-direction: column; position: relative">
+      <div style="height: 52px; flex: none; padding: 0 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #e6e6e6">
+        <button type="button" style="height: 44px; padding: 0 10px; border: 1px solid #e6e6e6; border-radius: 8px; background: #ffffff; font: inherit">‹ 实验台</button>
+        <strong style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">蓝牙心率带 ▾</strong>
+        <button type="button" aria-label="更多" style="width: 44px; height: 44px; border: 0; background: transparent; font: inherit; font-size: 18px">⋯</button>
+      </div>
+      <div style="height: 300px; flex: none; position: relative; background: radial-gradient(120% 90% at 50% 40%, #ffffff, #eceff3); display: grid; place-items: center">
+        <div style="position: absolute; left: 12px; top: 12px; padding: 4px 10px; border-radius: 16px; background: #e8f7ee; color: #0e7a41; font-size: 12px; font-weight: 500">运行中 · 00:12</div>
+        <div style="width: 200px; height: 126px; border-radius: 8px; background: #1f2a24; display: grid; place-items: center"><div style="width: 72px; height: 72px; border-radius: 4px; background: #2b2f33; color: #9ba0a7; font-family: 'JetBrains Mono', monospace; font-size: 10px; display: grid; place-items: center">C3</div></div>
+      </div>
+      <!-- 抽屉 -->
+      <div style="flex: 1; min-height: 0; border-radius: 16px 16px 0 0; box-shadow: 0 -6px 20px rgba(20,30,40,.12); background: #ffffff; display: flex; flex-direction: column">
+        <div style="height: 20px; display: grid; place-items: center"><span style="width: 36px; height: 4px; border-radius: 2px; background: #d4d7dc"></span></div>
+        <div style="padding: 0 16px 8px; display: flex; gap: 6px; overflow: hidden">
+          <button type="button" style="height: 44px; padding: 0 12px; border: 0; background: transparent; font: inherit; color: #5e5e5e">串口</button>
+          <button type="button" aria-current="true" style="height: 44px; padding: 0 12px; border: 0; border-radius: 8px; background: #f2f2f2; font: inherit; font-weight: 500">蓝牙</button>
+          <button type="button" style="height: 44px; padding: 0 12px; border: 0; background: transparent; font: inherit; color: #5e5e5e">检查点</button>
+        </div>
+        <div style="padding: 0 16px; display: flex; align-items: center; gap: 10px">
+          <div style="flex: 1"><div style="font-weight: 700">TryBoard-HR</div><div style="font-size: 12px; color: #5e5e5e">已连接 · 行为模拟</div></div>
+          <button type="button" style="height: 44px; padding: 0 14px; border: 1px solid #e6e6e6; border-radius: 8px; background: #ffffff; font: inherit">断开</button>
+        </div>
+        <div style="margin: 12px 16px 0; padding: 12px; border: 1px solid #e6e6e6; border-radius: 10px">
+          <div style="display: flex"><span style="font-weight: 500">心率测量</span><div style="flex: 1"></div><span style="font-size: 12px; color: #0e7a41">已订阅</span></div>
+          <div style="font-size: 28px; line-height: 36px; font-weight: 700; font-family: 'JetBrains Mono', monospace">74 <span style="font-size: 13px; font-weight: 400; color: #5e5e5e; font-family: 'Noto Sans SC', sans-serif">次/分</span></div>
+          <svg width="100%" height="32" viewBox="0 0 300 40" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,24 40,26 80,22 120,24 160,16 200,18 240,14 300,14" fill="none" stroke="#0b76c8" stroke-width="2"/></svg>
+        </div>
+        <div style="margin: 8px 16px 0; padding: 12px; border: 1px solid #e6e6e6; border-radius: 10px; display: flex; align-items: center; gap: 8px">
+          <label for="m-led" style="font-weight: 500">LED 写入</label>
+          <input id="m-led" value="01" style="flex: 1; min-width: 0; height: 44px; box-sizing: border-box; padding: 0 10px; border: 1px solid #e6e6e6; border-radius: 8px; font-family: 'JetBrains Mono', monospace">
+          <button type="button" style="height: 44px; padding: 0 14px; border: 0; border-radius: 8px; background: #0b76c8; color: #ffffff; font: inherit; font-weight: 500">发送</button>
+        </div>
+        <div style="margin-top: auto; height: 56px; flex: none; border-top: 1px solid #e6e6e6; display: grid; grid-template-columns: repeat(5, 1fr); font-size: 11px; color: #5e5e5e">
+          <button type="button" style="border: 0; background: transparent; font: inherit; color: inherit">选择</button>
+          <button type="button" style="border: 0; background: transparent; font: inherit; color: inherit">连线</button>
+          <button type="button" style="border: 0; background: transparent; font: inherit; color: inherit">加零件</button>
+          <button type="button" style="border: 0; background: transparent; font: inherit; color: inherit">测量</button>
+          <button type="button" style="border: 0; background: transparent; font: inherit; color: inherit">更多</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- C-02 手机：配网三步 = 全屏抽屉，一次一步 -->
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <div style="font-weight: 500">C-02 · 配网 = 全屏抽屉，一次一步</div>
+    <div style="width: 390px; height: 844px; overflow: hidden; background: #ffffff; border-radius: 12px; box-shadow: 0 8px 24px rgba(20,30,40,.1); display: flex; flex-direction: column">
+      <div style="height: 20px; flex: none; display: grid; place-items: center"><span style="width: 36px; height: 4px; border-radius: 2px; background: #d4d7dc"></span></div>
+      <div style="padding: 0 16px 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #e6e6e6">
+        <strong style="flex: 1; font-size: 15px">虚拟手机 · 配网</strong>
+        <button type="button" aria-label="收起" style="width: 44px; height: 44px; border: 0; background: transparent; display: grid; place-items: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5e5e" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      </div>
+      <ol aria-label="步骤" style="margin: 0; padding: 12px 16px; list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: 12px">
+        <li style="display: flex; flex-direction: column; gap: 4px; color: #0e7a41"><span style="height: 4px; border-radius: 2px; background: #14ae5c"></span>找到热点</li>
+        <li style="display: flex; flex-direction: column; gap: 4px; color: #0e7a41"><span style="height: 4px; border-radius: 2px; background: #14ae5c"></span>连上</li>
+        <li aria-current="step" style="display: flex; flex-direction: column; gap: 4px; color: #0a6fbd; font-weight: 500"><span style="height: 4px; border-radius: 2px; background: #0b76c8"></span>填 Wi-Fi</li>
+      </ol>
+      <div style="margin: 4px 16px 0; height: 36px; border-radius: 8px; background: #f2f2f2; display: flex; align-items: center; padding: 0 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #5e5e5e">192.168.4.1 · 板子发的页面</div>
+      <div style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+        <div style="font-size: 17px; font-weight: 700">设备配网</div>
+        <label for="m-ssid" style="font-size: 12px; color: #5e5e5e">Wi-Fi 名称</label>
+        <input id="m-ssid" value="MyHome-5G" style="height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #e6e6e6; border-radius: 8px; font: inherit">
+        <label for="m-pass" style="font-size: 12px; color: #5e5e5e">密码</label>
+        <input id="m-pass" type="password" value="12345678" style="height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #e6e6e6; border-radius: 8px; font: inherit">
+      </div>
+      <div style="margin: 0 16px; padding: 10px 12px; border-radius: 8px; background: #f7f7f7; font-size: 12px; line-height: 18px; color: #5e5e5e">手机是 192.168.4.2，板子是 192.168.4.1。这一步里没有虚拟路由器，它要等提交后板子去连。</div>
+      <div style="margin-top: auto; padding: 12px 16px 16px; border-top: 1px solid #e6e6e6; display: flex; flex-direction: column; gap: 8px">
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #5e5e5e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">串口 · I (3881) DHCP assigned 192.168.4.2</div>
+        <button type="button" style="height: 48px; border: 0; border-radius: 8px; background: #1e1e1e; color: #ffffff; font: inherit; font-weight: 500">保存并连接</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":900,"height":940}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
