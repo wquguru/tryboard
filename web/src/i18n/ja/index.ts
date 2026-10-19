@@ -5,6 +5,7 @@ import lab from './lab.ts';
 import views from './views.ts';
 import data from './data.ts';
 import checks from './checks.ts';
+import steps from './steps.ts';
 
-const dict: Dict = { ...data, ...checks, ...views, ...site, ...lab };
+const dict: Dict = { ...data, ...checks, ...views, ...site, ...lab, ...steps };
 export default dict;

@@ -48,7 +48,7 @@ const loaders: Record<Exclude<Locale, 'en'>, () => Promise<{ default: Dict }>> =
 
 // Node (CLI package, tests) and workers have no DOM: they stay English, matching the CLI output.
 const hasDom = typeof document !== 'undefined';
-export const locale: Locale = hasDom ? detectLocale() : 'en';
+export let locale: Locale = hasDom ? detectLocale() : 'en';
 let dict: Dict = {};
 if (locale !== 'en') {
   try {
@@ -58,6 +58,13 @@ if (locale !== 'en') {
   }
 }
 if (hasDom) document.documentElement.lang = LOCALES.find((l) => l.id === locale)!.html;
+
+/** Workers have no DOM or storage: the page posts its locale and the worker loads the same dictionary. */
+export async function useWorkerLocale(l: Locale) {
+  if (hasDom || l === locale || !isLocale(l)) return;
+  dict = l === 'en' ? {} : (await loaders[l]()).default;
+  locale = l;
+}
 
 const fill = (s: string, vars?: Vars) => (vars ? s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m)) : s);
 
