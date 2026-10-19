@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>友好 A · 术语就地解释</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 48px 64px; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 48px">
+  <div style="display: flex; flex-direction: column; gap: 20px">
+    <h2 style="margin: 0; font-size: 28px">术语就地解释：虚线下划线，点开一句话</h2>
+    <div style="border: 1px solid #E6E6E6; border-radius: 14px; padding: 24px; font-size: 16px; line-height: 2; position: relative">
+      推荐 Seeed XIAO ESP32C3：<span style="border-bottom: 1.5px dashed #0D99FF">深睡</span>电流 45µA，有 11 个 <span style="border-bottom: 1.5px dashed #0D99FF">GPIO</span>，BME280 和 OLED 共用一条 <span style="border-bottom: 1.5px dashed #0D99FF; background: #E5F4FF">I2C</span> 总线。不需要 <span style="border-bottom: 1.5px dashed #0D99FF">PSRAM</span>。
+      <div style="position: absolute; left: 330px; top: 92px; width: 340px; background: #1E1E1E; color: #FFFFFF; border-radius: 12px; padding: 16px 18px; font-size: 14px; line-height: 1.7; box-shadow: 0 10px 30px rgba(0,0,0,0.18)">
+        <b>I2C</b>
+        <div style="margin-top: 4px">两根线（SDA 数据、SCL 时钟）就能挂好几个传感器，每个靠地址区分。</div>
+        <div style="margin-top: 8px; font-size: 12px; color: #B3B3B3">对你的项目：BME280 和 OLED 都接 D4 / D5。</div>
+        <div style="margin-top: 10px; display: flex; gap: 14px; font-size: 13px"><span style="color: #7CC4FF">在实验台里看这两根线</span><span style="color: #B3B3B3">术语表</span></div>
+      </div>
+    </div>
+    <div style="height: 120px"></div>
+    <div style="font-size: 13px; color: #6F6F6F; line-height: 1.8">
+      规则：每个术语页内只标第一次出现；解释分两句——「它是什么」和「对你的项目意味着什么」；第二句从选板结果生成，不是通用百科。手机上点按弹底部抽屉。
+    </div>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <span style="font-size: 13px; color: #6F6F6F">首批词条（选板 + 实验台高频）</span>
+    <sc-for list="{{terms}}" as="t" hint-placeholder-count="8">
+      <div style="display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #F0F0F0; font-size: 14px">
+        <b style="font-family: 'JetBrains Mono', monospace; font-size: 13px">{{t.k}}</b>
+        <span style="color: #6F6F6F; text-align: right">{{t.v}}</span>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      terms: [
+        { k: 'GPIO', v: '能自己定义用途的引脚' },
+        { k: 'I2C', v: '两根线挂多个传感器' },
+        { k: 'SPI', v: '更快的四线接口，屏幕常用' },
+        { k: 'PSRAM', v: '外挂内存，摄像头 / 语音要' },
+        { k: '深睡', v: '几乎断电，只留定时唤醒' },
+        { k: 'ADC', v: '把电压读成数字' },
+        { k: 'PWM', v: '快速开关，调亮度 / 舵机' },
+        { k: '原生 USB', v: '板子能当键盘 / U 盘' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

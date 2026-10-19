@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>设计 B · 可信度统一体系</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.cf{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#1E1E1E}
+.st{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 48px 64px; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif; display: flex; flex-direction: column; gap: 22px">
+  <div>
+    <h2 style="margin: 0; font-size: 28px">可信度用「填满多少」，结果状态用颜色——两条轴不混</h2>
+    <div style="font-size: 14px; color: #6F6F6F; margin-top: 6px">10-18 起检查点有四种状态（通过 / 未过 / 没跑完 · 重试 / 开机复测 ✗ 黄卡）。可信度要是也用绿黄红，「估算」挨着检查点就像没过。</div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+    <div style="border: 1px solid #E6E6E6; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+      <b style="font-size: 15px">可信度 · 一个墨色，四档填充（说的是「这个结论有多可靠」）</b>
+      <div style="display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px 16px; font-size: 13px; line-height: 1.6; align-items: center">
+        <span class="cf"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="#1E1E1E"></circle></svg><b>仿真验证</b></span><span>真实固件在指令级模拟器上跑通，外设有验收</span>
+        <span class="cf"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="#1E1E1E" stroke-width="1.6"></circle><path d="M8 8V1.8A6.2 6.2 0 1 1 1.8 8Z" fill="#1E1E1E"></path></svg><b>行为模拟</b></span><span>外设按行为建模，读数合理但不是电路级</span>
+        <span class="cf"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="#1E1E1E" stroke-width="1.6"></circle><path d="M8 1.8A6.2 6.2 0 0 1 8 14.2Z" fill="#1E1E1E"></path></svg><b>估算</b></span><span>按数据手册算，随做工和环境变</span>
+        <span class="cf"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="#1E1E1E" stroke-width="1.6" stroke-dasharray="2.4 2"></circle></svg><b>必须上真机</b></span><span>模拟器给不出答案（虚线圈 = 空的）</span>
+      </div>
+    </div>
+    <div style="border: 1px solid #E6E6E6; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+      <b style="font-size: 15px">结果状态 · 只有它用颜色（说的是「这次跑出来怎样」）</b>
+      <div style="display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 12px 16px; font-size: 13px; line-height: 1.6; align-items: center">
+        <span class="st" style="background: #E8F7EE; color: #0E7A41; justify-self: start">✓ 通过</span><span>和期望一致</span>
+        <span class="st" style="background: #FEF2F2; color: #C4361A; justify-self: start">✗ 未过</span><span>跑完了，结果不对：「实际 x；要 y」</span>
+        <span class="st" style="background: #F2F2F2; color: #444444; justify-self: start">没跑完 · 重试</span><span>20 s 没进度被看门狗停下，不算未过</span>
+        <span class="st" style="background: #FDF4E3; color: #8A5A12; justify-self: start">开机复测 ✗</span><span>实验台过了，装进外壳后没过</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 24px; flex: 1">
+    <div style="border: 1px solid #E6E6E6; border-radius: 14px; padding: 18px 20px; display: flex; flex-direction: column; gap: 4px">
+      <span style="font-size: 12px; color: #6F6F6F; margin-bottom: 6px">两条轴同时出现：检查点卡（状态在右，可信度跟在条目名后）</span>
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+        <div style="display: grid; grid-template-columns: 34px minmax(0, 1fr) 120px; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid #F0F0F0; font-size: 13px">
+          <span style="font-family: 'JetBrains Mono', monospace; color: #6F6F6F">{{r.n}}</span>
+          <span><span style="display: inline-flex; align-items: center; gap: 6px">{{r.t}}
+            <sc-if value="{{r.full}}" hint-placeholder-value="false"><svg width="13" height="13" viewBox="0 0 16 16" aria-label="仿真验证"><circle cx="8" cy="8" r="6.2" fill="#1E1E1E"></circle></svg></sc-if>
+            <sc-if value="{{r.beh}}" hint-placeholder-value="true"><svg width="13" height="13" viewBox="0 0 16 16" aria-label="行为模拟"><circle cx="8" cy="8" r="6.2" fill="none" stroke="#1E1E1E" stroke-width="1.6"></circle><path d="M8 8V1.8A6.2 6.2 0 1 1 1.8 8Z" fill="#1E1E1E"></path></svg></sc-if>
+          </span><span style="display: block; font-size: 12px; color: #6F6F6F">{{r.d}}</span></span>
+          <span style="justify-self: end">
+            <sc-if value="{{r.ok}}" hint-placeholder-value="true"><span class="st" style="background: #E8F7EE; color: #0E7A41; font-size: 12px; padding: 2px 8px">✓ 通过</span></sc-if>
+            <sc-if value="{{r.bad}}" hint-placeholder-value="false"><span class="st" style="background: #FEF2F2; color: #C4361A; font-size: 12px; padding: 2px 8px">✗ 未过</span></sc-if>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="border: 1px solid #E6E6E6; border-radius: 14px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: 12px; color: #6F6F6F">选板结论旁</span>
+        <div style="display: flex; align-items: baseline; gap: 8px"><b style="font-size: 32px">约 49 天</b><span class="cf" style="font-size: 12px; color: #6F6F6F"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="#1E1E1E" stroke-width="1.6"></circle><path d="M8 1.8A6.2 6.2 0 0 1 8 14.2Z" fill="#1E1E1E"></path></svg>估算</span></div>
+      </div>
+      <div style="border: 1px solid #E6E6E6; border-radius: 14px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: 12px; color: #6F6F6F">整份结论的分布条：四段同一墨色、深浅递减</span>
+        <div style="display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 2px"><span style="flex: 1; background: #1E1E1E"></span><span style="flex: 2; background: #6F6F6F"></span><span style="flex: 2; background: #B3B3B3"></span><span style="flex: 2; background: repeating-linear-gradient(90deg, #D9D9D9 0 4px, #FFFFFF 4px 6px)"></span></div>
+        <span style="font-size: 12px; color: #6F6F6F">[a] 仿真验证 · [b] 行为模拟 · [c] 估算 · [d] 必须上真机</span>
+      </div>
+      <div style="font-size: 12px; color: #6F6F6F; line-height: 1.7">替代：可信度改用一个蓝色深浅——但蓝色已是主按钮和链接，会被当成能点。</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const rows = [
+      { n: '01', t: '串口打印启动信息', d: '实际与期望逐字一致', c: 'full', ok: true },
+      { n: '03', t: 'BME280 读到温度', d: '实际 23.5 ℃；要 20–30 ℃', c: 'beh', ok: true },
+      { n: '05', t: '舵机指针', d: '实际脉宽 1.80 ms；要 1.68 ms', c: 'beh', ok: false },
+      { n: '06', t: '彩灯随冷热变色', d: '实际 GPIO8 发出 [N] 颗灯珠数据', c: 'full', ok: true }
+    ];
+    return { rows: rows.map(r => ({ ...r, full: r.c === 'full', beh: r.c === 'beh', bad: !r.ok })) };
+  }
+}
+</script>
+</body>
+</html>

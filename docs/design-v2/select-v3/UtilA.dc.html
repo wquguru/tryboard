@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>实用性 A · 带走的采购清单</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 48px 64px; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 40px">
+  <div style="display: flex; flex-direction: column; gap: 18px">
+    <div>
+      <div style="font-size: 13px; color: #6F6F6F">温湿度计 · Seeed XIAO ESP32C3</div>
+      <h2 style="margin: 6px 0 0; font-size: 28px">采购清单</h2>
+    </div>
+    <div style="border: 1px solid #E6E6E6; border-radius: 14px; overflow: hidden">
+      <div style="display: grid; grid-template-columns: 44px minmax(0, 1fr) 80px 120px 110px; padding: 10px 16px; background: #F7F7F7; font-size: 12px; color: #6F6F6F"><span>我已有</span><span>零件</span><span>数量</span><span>参考价</span><span>搜索词</span></div>
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="5">
+        <div style="display: grid; grid-template-columns: 44px minmax(0, 1fr) 80px 120px 110px; align-items: center; padding: 12px 16px; border-top: 1px solid #F0F0F0; font-size: 14px">
+          <sc-if value="{{r.have}}" hint-placeholder-value="false">
+            <span style="width: 20px; height: 20px; border-radius: 5px; background: #0D99FF; display: flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>
+          </sc-if>
+          <sc-if value="{{r.need}}" hint-placeholder-value="true">
+            <span style="width: 20px; height: 20px; border-radius: 5px; border: 1.5px solid #B3B3B3"></span>
+          </sc-if>
+          <span>{{r.name}}<span style="display: block; font-size: 12px; color: #6F6F6F">{{r.spec}}</span></span>
+          <span>{{r.qty}}</span>
+          <span>{{r.price}}</span>
+          <button type="button" style="justify-self: start; height: 30px; padding: 0 10px; border: 1px solid #E6E6E6; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 12px; display: inline-flex; align-items: center; gap: 4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V4H4v12h4"></path></svg>复制</button>
+        </div>
+      </sc-for>
+    </div>
+    <div style="font-size: 13px; color: #6F6F6F; line-height: 1.7">搜索词是规格关键词（如「XIAO ESP32C3 排针」），用户自己去任意店铺搜。不放商品链接、不放联盟链接——要做得先问人。</div>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 14px; padding-top: 56px">
+    <div style="border: 1px solid #E6E6E6; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 13px; color: #6F6F6F">还要买</span>
+      <b style="font-size: 32px">[参考价]</b>
+      <span style="font-size: 13px; color: #6F6F6F">勾掉已有的 1 项后</span>
+    </div>
+    <button type="button" style="height: 44px; border: 0; border-radius: 10px; background: #0D99FF; color: #FFFFFF; font: inherit; font-weight: 700">复制整份清单</button>
+    <button type="button" style="height: 44px; border: 1px solid #E6E6E6; border-radius: 10px; background: #FFFFFF; font: inherit">下载 CSV</button>
+    <button type="button" style="height: 44px; border: 1px solid #E6E6E6; border-radius: 10px; background: #FFFFFF; font: inherit">打印（带引脚表）</button>
+    <div style="font-size: 12px; color: #6F6F6F; line-height: 1.6">「我已有」存在本机，下次打开还在；链接里不带。</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const rows = [
+      { name: 'Seeed XIAO ESP32C3', spec: '主板 · 带排针', qty: '1', price: '[参考价]', have: false },
+      { name: 'BME280 模块', spec: 'I2C · 3.3V', qty: '1', price: '[参考价]', have: false },
+      { name: 'SSD1306 OLED', spec: '0.96 寸 · I2C · 128×64', qty: '1', price: '[参考价]', have: false },
+      { name: '锂电池', spec: '3.7V · [容量]', qty: '1', price: '[参考价]', have: false },
+      { name: '杜邦线', spec: '母对母', qty: '[N]', price: '[参考价]', have: true }
+    ];
+    return { rows: rows.map(r => ({ ...r, need: !r.have })) };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>闭环 B · 成品之后：真买、烧、上真机</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 44px 64px; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif; display: flex; flex-direction: column; gap: 22px">
+  <div style="display: flex; align-items: center; gap: 16px">
+    <span style="width: 48px; height: 48px; border-radius: 50%; background: #E8F7EE; display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#0E7A41" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>
+    <div>
+      <h2 style="margin: 0; font-size: 28px">桌面气象站在网页里做成了。下一步：做成真的</h2>
+      <div style="font-size: 14px; color: #6F6F6F; margin-top: 4px">检查点全部通过 · 指纹 <span style="font-family: 'JetBrains Mono', monospace">[fingerprint]</span></div>
+    </div>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; flex: 1">
+    <div style="border: 1px solid #E6E6E6; border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 12px">
+      <span style="font-size: 13px; color: #6F6F6F">1 · 真买</span>
+      <b style="font-size: 18px">采购步列过的清单，现在下单</b>
+      <span style="font-size: 14px; line-height: 1.7">第一步「采购」只列清单、看参考价，先不用真买；跑通了再买。[N] 件要买，参考价 [参考价]，已有的不再列。</span>
+      <button type="button" style="margin-top: auto; height: 44px; border: 1px solid #E6E6E6; border-radius: 10px; background: #FFFFFF; font: inherit">复制搜索词 · 导出 CSV</button>
+    </div>
+    <div style="border: 1px solid #E6E6E6; border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 12px">
+      <span style="font-size: 13px; color: #6F6F6F">2 · 烧</span>
+      <b style="font-size: 18px">同一份固件，烧进真板</b>
+      <pre style="margin: 0; background: #F7F7F7; border-radius: 8px; padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.7; white-space: pre-wrap">idf.py -p [串口] flash monitor</pre>
+      <span style="font-size: 13px; color: #6F6F6F; line-height: 1.6">或下载 flash.bin，用乐鑫官方烧录工具。</span>
+      <button type="button" style="margin-top: auto; height: 44px; border: 1px solid #E6E6E6; border-radius: 10px; background: #FFFFFF; font: inherit">下载 flash.bin</button>
+    </div>
+    <div style="border: 2px dashed #1E1E1E; border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 12px">
+      <span style="font-size: 13px; color: #1E1E1E; font-weight: 700">3 · 网页证明不了的</span>
+      <b style="font-size: 18px">上真机逐项勾</b>
+      <sc-for list="{{checks}}" as="c" hint-placeholder-count="4">
+        <label style="display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.6"><span style="flex: none; width: 18px; height: 18px; margin-top: 2px; border-radius: 4px; border: 1.5px solid #B3B3B3"></span>{{c}}</label>
+      </sc-for>
+      <span style="margin-top: auto; font-size: 12px; color: #6F6F6F">清单来自本作品的「必须上真机」条目。</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { checks: ['舵机供电：USB 口带不带得动', '彩灯在真实环境光下是否看得清', '传感器靠近板子时的自热偏差', '外壳装好后 Wi-Fi 信号'] };
+  }
+}
+</script>
+</body>
+</html>

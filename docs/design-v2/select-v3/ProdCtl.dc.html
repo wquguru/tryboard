@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>成品页 · 重复按钮三种收法</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.k{display:inline-flex;align-items:center;justify-content:center;height:24px;padding:0 8px;border-radius:6px;font-size:11px;background:#FFFFFF;border:1px solid #E6E6E6;white-space:nowrap}
+.kr{background:#1E1E1E;color:#FFFFFF;border-color:#1E1E1E}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 44px 56px; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif; display: flex; flex-direction: column; gap: 20px">
+  <div>
+    <h2 style="margin: 0; font-size: 28px">成品页：BOOT / 热源 / 声音 / 拍照 / 录像 出现了两次</h2>
+    <div style="font-size: 14px; color: #6F6F6F; margin-top: 6px; line-height: 1.6">现在底部工具条和右侧面板各一套。右侧面板手机布局和 media.mjs 也在用，所以不能直接删一边。DECISIONS 里写了「要连同设计稿一起定」，这里给三种收法。</div>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; flex: 1">
+    <sc-for list="{{opts}}" as="o" hint-placeholder-count="3">
+      <div style="border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 12px; border: 1px solid #E6E6E6">
+        <sc-if value="{{o.rec}}" hint-placeholder-value="false"><span style="align-self: flex-start; font-size: 12px; font-weight: 700; color: #FFFFFF; background: #0D99FF; padding: 3px 10px; border-radius: 999px">推荐</span></sc-if>
+        <b style="font-size: 17px">{{o.t}}</b>
+        <div style="height: 220px; border-radius: 10px; background: #F2F4F7; display: grid; grid-template-columns: minmax(0, 1fr) 96px; grid-template-rows: minmax(0, 1fr) 40px; overflow: hidden; border: 1px solid #E6E6E6">
+          <div style="display: flex; align-items: center; justify-content: center; font-size: 12px; color: #6F6F6F">3D 成品</div>
+          <div style="grid-row: span 2; background: #FFFFFF; border-left: 1px solid #E6E6E6; padding: 8px; display: flex; flex-direction: column; gap: 6px">
+            <sc-for list="{{o.side}}" as="b" hint-placeholder-count="3"><span class="k" style="justify-content: flex-start">{{b}}</span></sc-for>
+            <sc-if value="{{o.sideEmpty}}" hint-placeholder-value="false"><span style="font-size: 11px; color: #B3B3B3; line-height: 1.5">只剩读数和说明，可收起</span></sc-if>
+          </div>
+          <div style="background: #FFFFFF; border-top: 1px solid #E6E6E6; display: flex; align-items: center; gap: 6px; padding: 0 8px">
+            <sc-for list="{{o.bottom}}" as="b" hint-placeholder-count="2"><span class="k">{{b}}</span></sc-for>
+          </div>
+        </div>
+        <div style="font-size: 13px; line-height: 1.7">{{o.d}}</div>
+        <div style="font-size: 13px; line-height: 1.7; color: #6F6F6F">{{o.cost}}</div>
+      </div>
+    </sc-for>
+  </div>
+  <div style="font-size: 13px; color: #6F6F6F; line-height: 1.6">推荐 B：按动词分——「操作板子」是改变模拟输入，放在读数旁边（右）；「记录」是对画面拍照录像，挨着画面（底）。手机抽屉仍是一套，顺序 操作 → 记录。</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const opts = [
+      { t: 'A · 只留右侧面板', side: ['BOOT', '热源', '声音', '拍照', '录像'], bottom: [],
+        d: '底部工具条去掉。和手机抽屉、media.mjs 完全一致，改动最小。',
+        cost: '代价：拍照录像离画面远；右栏变长，窄桌面要滚。' },
+      { t: 'B · 按动词分开', rec: true, side: ['BOOT', '热源', '声音'], bottom: ['拍照', '录像'],
+        d: '右侧：操作板子（BOOT、热源、声音），旁边就是读数变化。底部：记录（拍照、录像），贴着画面。',
+        cost: '代价：media.mjs 要改选择器（拍照录像按钮换位置）；手机抽屉不变。' },
+      { t: 'C · 只留底部工具条', side: [], bottom: ['BOOT', '热源', '声音', '拍照', '录像'], sideEmpty: true,
+        d: '画面最大，右侧面板默认收起，只放读数和说明。',
+        cost: '代价：手机布局要另做一套底栏；按 BOOT 时看不到读数变化。' }
+    ];
+    return { opts: opts.map(o => ({ rec: false, sideEmpty: false, ...o })) };
+  }
+}
+</script>
+</body>
+</html>

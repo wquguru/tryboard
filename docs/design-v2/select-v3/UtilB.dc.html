@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>实用性 B · 选板结果生成 AI 任务书</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 48px 64px; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif; display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 40px">
+  <div style="display: flex; flex-direction: column; gap: 18px">
+    <h2 style="margin: 0; font-size: 28px; line-height: 1.35">选完板，直接拿到给 AI 的任务书</h2>
+    <p style="margin: 0; font-size: 15px; line-height: 1.75; color: #444444">选板结果已经知道芯片、零件和引脚。把它们写成一份任务书，用户贴给 Claude / Cursor / Codex，生成的固件再拖回实验台验收。</p>
+    <div style="display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+      <div style="display: flex; gap: 10px; align-items: center"><span style="width: 8px; height: 8px; border-radius: 50%; background: #0D99FF"></span>芯片与开发板型号</div>
+      <div style="display: flex; gap: 10px; align-items: center"><span style="width: 8px; height: 8px; border-radius: 50%; background: #0D99FF"></span>引脚表（与接线卡一致）</div>
+      <div style="display: flex; gap: 10px; align-items: center"><span style="width: 8px; height: 8px; border-radius: 50%; background: #0D99FF"></span>功耗要求（深睡、唤醒间隔）</div>
+      <div style="display: flex; gap: 10px; align-items: center"><span style="width: 8px; height: 8px; border-radius: 50%; background: #0D99FF"></span>验收：拖进实验台，自动生成的检查点逐条判</div>
+    </div>
+    <div style="margin-top: auto; display: flex; gap: 10px">
+      <button type="button" style="flex: 1; height: 44px; border: 0; border-radius: 10px; background: #0D99FF; color: #FFFFFF; font: inherit; font-weight: 700">复制任务书</button>
+      <button type="button" style="flex: 1; height: 44px; border: 1px solid #E6E6E6; border-radius: 10px; background: #FFFFFF; font: inherit">下载 .md</button>
+    </div>
+  </div>
+  <div style="border: 1px solid #E6E6E6; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column">
+    <div style="padding: 12px 16px; background: #F7F7F7; font-size: 13px; display: flex; justify-content: space-between"><b>任务书.md</b><span style="color: #6F6F6F">由选板结果生成</span></div>
+    <pre style="margin: 0; padding: 18px 20px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.8; color: #333333; white-space: pre-wrap; flex: 1"># 电池供电的温湿度计
+
+## 硬件
+- 开发板：Seeed XIAO ESP32C3（ESP32-C3）
+- BME280：I2C，SDA = D4 (GPIO6)，SCL = D5 (GPIO7)，地址 0x76
+- SSD1306 OLED：同一 I2C 总线，地址 0x3c
+- 锂电池供电
+
+## 要求
+- 每 [N] 分钟唤醒一次，读温湿度气压，刷新屏幕，然后深睡
+- 串口打印一行读数，格式：[格式]
+- 框架：ESP-IDF v5.x 或 Arduino-ESP32
+
+## 验收（试板按零件自动生成的检查点）
+编译出 flash.bin，拖进 试板 实验台（[地址]），自动跑：
+1. I2C 0x76 有回应（BME280）
+2. I2C 0x3c 收到帧（OLED）
+3. 每次唤醒串口打印一行读数
+4. 深睡后能再次唤醒
+没过时结果写成「实际 x；要 y」，照这句改代码。</pre>
+    <div style="padding: 10px 16px; border-top: 1px solid #F0F0F0; font-size: 12px; color: #6F6F6F; line-height: 1.6">命令行 tryboard 还没发布到 npm（发布要人点头），任务书里不写命令；想离线跑的，从仓库本地装 packages/tryboard。</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

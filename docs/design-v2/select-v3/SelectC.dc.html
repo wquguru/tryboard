@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>选板 C · 只选零件 + 三板对比</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0A6FBD}a:hover{color:#0B76C8}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif">
+  <header style="height: 56px; border-bottom: 1px solid #F0F0F0; display: flex; align-items: center; gap: 28px; padding: 0 24px">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="4" width="56" height="56" rx="14" fill="#0B76C8"></rect><g fill="#FFFFFF"><circle cx="20" cy="20" r="5"></circle><circle cx="32" cy="20" r="5"></circle><circle cx="20" cy="32" r="5"></circle><circle cx="32" cy="32" r="5"></circle><circle cx="44" cy="32" r="5"></circle><circle cx="20" cy="44" r="5"></circle><circle cx="32" cy="44" r="5"></circle><circle cx="44" cy="44" r="5"></circle></g><circle cx="44" cy="20" r="6" fill="#FFB020"></circle></svg>
+      <b style="font-size: 15px">试板</b>
+    </div>
+    <nav style="display: flex; gap: 20px; font-size: 14px">
+      <a href="#" style="color: #6F6F6F; text-decoration: none">作品</a>
+      <a href="#" style="color: #1E1E1E; text-decoration: none; font-weight: 700">选板</a>
+      <a href="#" style="color: #6F6F6F; text-decoration: none">实验台</a>
+    </nav>
+  </header>
+
+  <div style="max-width: 1240px; margin: 0 auto; padding: 32px 24px 56px; display: flex; flex-direction: column; gap: 28px">
+    <div style="display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px">
+      <h1 style="margin: 0; font-size: 30px">选板：基于项目选择配件</h1>
+      <a href="#" style="font-size: 13px; display: inline-flex; align-items: center; gap: 6px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 005.66 0l3-3a4 4 0 00-5.66-5.66l-1 1"></path><path d="M14 10a4 4 0 00-5.66 0l-3 3a4 4 0 005.66 5.66l1-1"></path></svg>
+        复制这个结果的链接
+      </a>
+    </div>
+
+    <section aria-labelledby="c-proj" style="display: flex; flex-direction: column; gap: 10px">
+      <span id="c-proj" style="font-size: 13px; color: #6F6F6F; font-weight: 500">1 · 做什么</span>
+      <div style="display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px">
+        <sc-for list="{{projects}}" as="p" hint-placeholder-count="8">
+          <sc-if value="{{p.on}}" hint-placeholder-val="{{ false }}">
+            <button type="button" aria-pressed="true" style="height: 64px; border: 2px solid #0D99FF; background: #E5F4FF; border-radius: 12px; font: inherit; font-size: 13px; font-weight: 700; padding: 0 6px">{{p.name}}</button>
+          </sc-if>
+          <sc-if value="{{p.off}}" hint-placeholder-val="{{ true }}">
+            <button type="button" aria-pressed="false" style="height: 64px; border: 1px solid #E6E6E6; background: #FFFFFF; border-radius: 12px; font: inherit; font-size: 13px; padding: 0 6px">{{p.name}}</button>
+          </sc-if>
+        </sc-for>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+      <div style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: 13px; color: #6F6F6F; font-weight: 500">2 · 零件（就是采购清单，加减都在这里）</span>
+        <div style="border: 1px solid #E6E6E6; border-radius: 12px">
+          <sc-for list="{{parts}}" as="r" hint-placeholder-count="4">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 0 14px; height: 52px; border-bottom: 1px solid #F0F0F0; font-size: 14px">
+              <span style="flex: 1">{{r.name}}</span>
+              <span style="font-size: 12px; color: #6F6F6F">{{r.why}}</span>
+              <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; width: 64px; text-align: right">{{r.price}}</span>
+              <button type="button" aria-label="移除 {{r.name}}" style="width: 36px; height: 36px; border: 0; background: transparent; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6F6F6F" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+              </button>
+            </div>
+          </sc-for>
+          <button type="button" style="display: flex; align-items: center; gap: 8px; width: 100%; height: 48px; padding: 0 14px; border: 0; background: transparent; font: inherit; font-size: 14px; color: #0A6FBD; cursor: pointer">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+            加零件（舵机、灯带、按键、麦克风…）
+          </button>
+        </div>
+      </div>
+      <div style="flex: 1 1 300px; display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: 13px; color: #6F6F6F; font-weight: 500">3 · 怎么用</span>
+        <div style="border: 1px solid #E6E6E6; border-radius: 12px; padding: 6px 14px">
+          <sc-for list="{{switches}}" as="w" hint-placeholder-count="3">
+            <label style="display: flex; align-items: center; gap: 12px; min-height: 48px; font-size: 14px">
+              <span style="flex: 1">{{w.label}}</span>
+              <sc-if value="{{w.on}}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="width: 40px; height: 24px; border-radius: 12px; background: #0B76C8; position: relative; display: inline-block"><span style="position: absolute; right: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: #FFFFFF"></span></span></sc-if>
+              <sc-if value="{{w.off}}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width: 40px; height: 24px; border-radius: 12px; background: #D6D6D6; position: relative; display: inline-block"><span style="position: absolute; left: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: #FFFFFF"></span></span></sc-if>
+            </label>
+          </sc-for>
+          <div style="display: flex; align-items: center; gap: 12px; min-height: 48px; font-size: 14px; border-top: 1px solid #F0F0F0">
+            <span style="flex: 1">预算</span><span style="color: #6F6F6F">不限</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6F6F6F" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+          </div>
+        </div>
+        <button type="button" style="align-self: flex-start; border: 0; background: transparent; padding: 6px 0; font: inherit; font-size: 13px; color: #0A6FBD; cursor: pointer">更多需求（点名协议 / 内存，给懂行的人）</button>
+      </div>
+    </section>
+
+    <section aria-labelledby="c-cmp" style="display: flex; flex-direction: column; gap: 12px">
+      <span id="c-cmp" style="font-size: 13px; color: #6F6F6F; font-weight: 500">4 · 三块板对比</span>
+      <div style="display: grid; grid-template-columns: 180px repeat(3, minmax(0, 1fr)); border: 1px solid #E6E6E6; border-radius: 14px; overflow: hidden; font-size: 14px">
+        <div style="background: #F7F7F7"></div>
+        <div style="padding: 18px 18px 14px; background: #E5F4FF; border-left: 1px solid #E6E6E6">
+          <span style="background: #0B76C8; color: #FFFFFF; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px">最合适</span>
+          <div style="font-size: 18px; font-weight: 700; margin-top: 8px">Seeed XIAO ESP32C3</div>
+        </div>
+        <div style="padding: 18px 18px 14px; border-left: 1px solid #E6E6E6"><span style="font-size: 11px; color: #6F6F6F">最便宜</span><div style="font-size: 18px; font-weight: 700; margin-top: 8px">ESP32-C3 SuperMini</div></div>
+        <div style="padding: 18px 18px 14px; border-left: 1px solid #E6E6E6"><span style="font-size: 11px; color: #6F6F6F">最省电</span><div style="font-size: 18px; font-weight: 700; margin-top: 8px">Seeed XIAO ESP32C6</div></div>
+        <sc-for list="{{cmp}}" as="c" hint-placeholder-count="5">
+          <div style="padding: 12px 18px; border-top: 1px solid #F0F0F0; color: #6F6F6F; background: #F7F7F7">{{c.k}}</div>
+          <div style="padding: 12px 18px; border-top: 1px solid #F0F0F0; border-left: 1px solid #E6E6E6; background: #F5FAFF">{{c.a}}</div>
+          <div style="padding: 12px 18px; border-top: 1px solid #F0F0F0; border-left: 1px solid #E6E6E6">{{c.b}}</div>
+          <div style="padding: 12px 18px; border-top: 1px solid #F0F0F0; border-left: 1px solid #E6E6E6">{{c.c}}</div>
+        </sc-for>
+        <div style="border-top: 1px solid #F0F0F0; background: #F7F7F7"></div>
+        <div style="padding: 14px 18px; border-top: 1px solid #F0F0F0; border-left: 1px solid #E6E6E6; background: #F5FAFF"><a href="#" style="display: flex; align-items: center; justify-content: center; gap: 8px; height: 44px; border-radius: 10px; background: #0B76C8; color: #FFFFFF; text-decoration: none; font-weight: 700">在实验台运行</a></div>
+        <div style="padding: 14px 18px; border-top: 1px solid #F0F0F0; border-left: 1px solid #E6E6E6"><a href="#" style="display: flex; align-items: center; justify-content: center; height: 44px; border-radius: 10px; border: 1px solid #E6E6E6; color: #1E1E1E; text-decoration: none">在实验台运行</a></div>
+        <div style="padding: 14px 18px; border-top: 1px solid #F0F0F0; border-left: 1px solid #E6E6E6"><a href="#" style="display: flex; align-items: center; justify-content: center; height: 44px; border-radius: 10px; border: 1px solid #E6E6E6; color: #1E1E1E; text-decoration: none; font-size: 13px; text-align: center">用 C3 代替运行（行为接近）</a></div>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px">
+        <button type="button" style="height: 36px; padding: 0 14px; border: 1px solid #E6E6E6; border-radius: 999px; background: #FFFFFF; font: inherit">接线 · 2 组</button>
+        <button type="button" style="height: 36px; padding: 0 14px; border: 1px solid #E6E6E6; border-radius: 999px; background: #FFFFFF; font: inherit">要注意 · 2 条</button>
+        <button type="button" style="height: 36px; padding: 0 14px; border: 1px solid #E6E6E6; border-radius: 999px; background: #FFFFFF; font: inherit">每条结论有多可信</button>
+        <button type="button" style="height: 36px; padding: 0 14px; border: 1px solid #E6E6E6; border-radius: 999px; background: #FFFFFF; font: inherit">另外 [N] 块为什么不合适</button>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const P = ['点灯入门', '温湿度计', '氛围灯', '智能家居', 'USB 宏键盘', '语音助手', '摄像头', '蓝牙音箱'];
+    return {
+      projects: P.map((name) => ({ name, on: name === '温湿度计', off: name !== '温湿度计' })),
+      parts: [
+        { name: 'BME280 温湿度气压模块', why: '来自项目', price: '¥10–25' },
+        { name: '0.96 寸 OLED（SSD1306）', why: '来自项目', price: '¥8–15' },
+        { name: '3.7V 锂电池 1000mAh', why: '因为「用电池」', price: '¥10–20' },
+        { name: '面包板和杜邦线', why: '总会用到', price: '¥8–15' }
+      ],
+      switches: [
+        { label: '用电池，要省电', on: true, off: false },
+        { label: '要连 Wi-Fi', on: true, off: false },
+        { label: '用手机蓝牙连', on: false, off: true }
+      ],
+      cmp: [
+        { k: '整套参考价', a: '¥76–140', b: '¥51–108', c: '¥81–145' },
+        { k: '续航（估算）', a: '约 49 天', b: '约 36 天', c: '约 51 天' },
+        { k: '在试板运行', a: '可以，完整仿真', b: '可以，完整仿真', c: '暂不支持（C6 未建模）' },
+        { k: '好在哪', a: '板载电池充电，深睡 45µA', b: '最便宜', c: '深睡 15µA，多 Thread / Zigbee' },
+        { k: '差在哪', a: '只有 11 个 GPIO', b: '陶瓷小天线，信号比 PCB 天线弱', c: '买前没法在网页上先跑' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

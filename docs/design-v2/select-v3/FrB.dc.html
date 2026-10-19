@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>友好 B · 选项标明来源</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 48px 64px; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif; display: flex; flex-direction: column; gap: 24px">
+  <h2 style="margin: 0; font-size: 28px">选了模板之后，每个被带上的选项都说清来源</h2>
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px">
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <span style="font-size: 13px; color: #6F6F6F">现在：选「温湿度计」后，一片蓝色芯片突然亮起，不知道哪些是自己点的</span>
+      <div style="border: 1px solid #E6E6E6; border-radius: 14px; padding: 20px; display: flex; flex-wrap: wrap; gap: 8px">
+        <span style="padding: 6px 12px; border-radius: 999px; background: #E5F4FF; color: #0A6FBD; font-size: 13px">I2C</span>
+        <span style="padding: 6px 12px; border-radius: 999px; background: #E5F4FF; color: #0A6FBD; font-size: 13px">低功耗</span>
+        <span style="padding: 6px 12px; border-radius: 999px; background: #E5F4FF; color: #0A6FBD; font-size: 13px">电池</span>
+        <span style="padding: 6px 12px; border-radius: 999px; background: #E5F4FF; color: #0A6FBD; font-size: 13px">BME280</span>
+        <span style="padding: 6px 12px; border-radius: 999px; background: #E5F4FF; color: #0A6FBD; font-size: 13px">OLED</span>
+        <span style="padding: 6px 12px; border-radius: 999px; background: #E5F4FF; color: #0A6FBD; font-size: 13px">Wi-Fi</span>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <span style="font-size: 13px; color: #0A6FBD; font-weight: 700">改后：模板带来的用浅底 + 小字来源；自己加的是实心</span>
+      <div style="border: 2px solid #0D99FF; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px">
+          <span style="display: inline-flex; align-items: center; gap: 8px"><span style="padding: 4px 10px; border-radius: 6px; background: #F7F7F7">来自：温湿度计</span><span style="color: #6F6F6F">5 项</span></span>
+          <button type="button" style="height: 32px; padding: 0 12px; border: 1px solid #E6E6E6; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px">恢复模板默认</button>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px">
+          <span style="padding: 6px 12px; border-radius: 999px; border: 1.5px dashed #7CC4FF; color: #0A6FBD; font-size: 13px">BME280</span>
+          <span style="padding: 6px 12px; border-radius: 999px; border: 1.5px dashed #7CC4FF; color: #0A6FBD; font-size: 13px">OLED</span>
+          <span style="padding: 6px 12px; border-radius: 999px; border: 1.5px dashed #7CC4FF; color: #0A6FBD; font-size: 13px">电池供电</span>
+          <span style="padding: 6px 12px; border-radius: 999px; border: 1.5px dashed #7CC4FF; color: #0A6FBD; font-size: 13px">要省电</span>
+          <span style="padding: 6px 12px; border-radius: 999px; border: 1.5px dashed #B3B3B3; color: #6F6F6F; font-size: 13px; text-decoration: line-through">Wi-Fi</span>
+          <span style="padding: 6px 12px; border-radius: 999px; background: #0D99FF; color: #FFFFFF; font-size: 13px">蜂鸣器 · 你加的</span>
+        </div>
+        <div style="font-size: 12px; color: #6F6F6F; line-height: 1.7">I2C 不再单独列：它由 BME280 / OLED 自动推出，显示在结果的引脚表里。被划掉的 Wi-Fi 是你从模板里去掉的，点一下恢复。</div>
+      </div>
+    </div>
+  </div>
+  <div style="border-top: 1px solid #F0F0F0; padding-top: 18px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; font-size: 14px; line-height: 1.7">
+    <div><b>虚线框</b> = 模板带来，可去掉</div>
+    <div><b>实心</b> = 你自己加的</div>
+    <div><b>划线</b> = 从模板去掉的，可恢复</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

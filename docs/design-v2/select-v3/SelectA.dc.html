@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>选板 A · 左配右看</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0A6FBD}a:hover{color:#0B76C8}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif">
+  <header style="height: 56px; border-bottom: 1px solid #F0F0F0; display: flex; align-items: center; gap: 28px; padding: 0 24px">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="4" width="56" height="56" rx="14" fill="#0B76C8"></rect><g fill="#FFFFFF"><circle cx="20" cy="20" r="5"></circle><circle cx="32" cy="20" r="5"></circle><circle cx="20" cy="32" r="5"></circle><circle cx="32" cy="32" r="5"></circle><circle cx="44" cy="32" r="5"></circle><circle cx="20" cy="44" r="5"></circle><circle cx="32" cy="44" r="5"></circle><circle cx="44" cy="44" r="5"></circle></g><circle cx="44" cy="20" r="6" fill="#FFB020"></circle></svg>
+      <b style="font-size: 15px">试板</b>
+    </div>
+    <nav style="display: flex; gap: 20px; font-size: 14px; color: #6F6F6F">
+      <a href="#" style="color: #6F6F6F; text-decoration: none">作品</a>
+      <a href="#" style="color: #1E1E1E; text-decoration: none; font-weight: 700; border-bottom: 2px solid #0D99FF; padding-bottom: 16px; margin-bottom: -18px">选板</a>
+      <a href="#" style="color: #6F6F6F; text-decoration: none">实验台</a>
+    </nav>
+  </header>
+
+  <div style="max-width: 1360px; margin: 0 auto; padding: 28px 24px 48px; display: flex; flex-direction: column; gap: 20px">
+    <div style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap">
+      <h1 style="margin: 0; font-size: 28px; font-weight: 700">选板：基于项目选择配件</h1>
+      <span style="font-size: 14px; color: #6F6F6F">左边改条件，右边立刻更新。</span>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+      <aside style="flex: 1 1 380px; max-width: 420px; border: 1px solid #E6E6E6; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 22px">
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <span style="font-size: 12px; color: #6F6F6F; font-weight: 500">项目</span>
+          <label style="display: flex; align-items: center; gap: 10px; border: 1px solid #E6E6E6; border-radius: 10px; padding: 0 12px; height: 44px; font-size: 14px">
+            <span style="flex: 1">电池供电的温湿度计</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6F6F6F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+            <select aria-label="项目" style="position: absolute; opacity: 0; width: 1px; height: 1px"><option>电池供电的温湿度计</option></select>
+          </label>
+          <span style="font-size: 12px; color: #6F6F6F">带出：BME280 · OLED · 锂电池 · 电池 · Wi-Fi</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <span style="font-size: 12px; color: #6F6F6F; font-weight: 500">怎么用</span>
+          <sc-for list="{{toggles}}" as="t" hint-placeholder-count="4">
+            <label style="display: flex; align-items: center; gap: 12px; font-size: 14px; min-height: 36px">
+              <input type="checkbox" checked="{{t.on}}" onChange="{{t.flip}}" style="width: 18px; height: 18px; accent-color: #0B76C8">
+              <span style="flex: 1">{{t.label}}</span>
+              <span style="font-size: 12px; color: #6F6F6F">{{t.hint}}</span>
+            </label>
+          </sc-for>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <span style="font-size: 12px; color: #6F6F6F; font-weight: 500">零件</span>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px">
+            <sc-for list="{{parts}}" as="p" hint-placeholder-count="10">
+              <sc-if value="{{p.on}}" hint-placeholder-val="{{ false }}">
+                <button type="button" onClick="{{p.flip}}" style="height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid #1E1E1E; background: #1E1E1E; color: #FFFFFF; font: inherit; font-size: 13px; cursor: pointer">{{p.name}}</button>
+              </sc-if>
+              <sc-if value="{{p.off}}" hint-placeholder-val="{{ true }}">
+                <button type="button" onClick="{{p.flip}}" style="height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid #E6E6E6; background: #FFFFFF; color: #1E1E1E; font: inherit; font-size: 13px; cursor: pointer">{{p.name}}</button>
+              </sc-if>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <span style="font-size: 12px; color: #6F6F6F; font-weight: 500">预算（整套）</span>
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: #F7F7F7; border-radius: 10px; padding: 3px; font-size: 13px">
+            <button type="button" style="height: 30px; border: 0; border-radius: 8px; background: #FFFFFF; box-shadow: 0 1px 3px #0000001a; font: inherit">不限</button>
+            <button type="button" style="height: 30px; border: 0; border-radius: 8px; background: transparent; color: #6F6F6F; font: inherit">¥60 内</button>
+            <button type="button" style="height: 30px; border: 0; border-radius: 8px; background: transparent; color: #6F6F6F; font: inherit">¥120 内</button>
+            <button type="button" style="height: 30px; border: 0; border-radius: 8px; background: transparent; color: #6F6F6F; font: inherit">¥200 内</button>
+          </div>
+        </div>
+
+        <button type="button" style="display: flex; align-items: center; gap: 6px; height: 36px; border: 0; background: transparent; padding: 0; font: inherit; font-size: 13px; color: #0A6FBD; cursor: pointer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+          更多需求（Thread、Zigbee、经典蓝牙、PSRAM…）
+        </button>
+      </aside>
+
+      <section style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+        <sc-if value="{{showDelta}}" hint-placeholder-val="{{ true }}">
+          <div role="status" style="display: flex; align-items: center; gap: 10px; background: #E5F4FF; color: #0A6FBD; border-radius: 10px; padding: 10px 14px; font-size: 13px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4l3 2"></path><circle cx="12" cy="12" r="9"></circle></svg>
+            <span style="flex: 1">{{delta}}</span>
+            <button type="button" onClick="{{undo}}" style="border: 0; background: transparent; color: #0A6FBD; font: inherit; font-weight: 700; cursor: pointer; padding: 6px">撤销</button>
+          </div>
+        </sc-if>
+
+        <div style="border: 1px solid #E6E6E6; border-radius: 16px; padding: 24px 28px; display: flex; flex-direction: column; gap: 18px">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="background: #0B76C8; color: #FFFFFF; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 6px">最合适</span>
+            <span style="font-size: 12px; color: #6F6F6F">Seeed Studio</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-end; justify-content: space-between">
+            <div>
+              <h2 style="margin: 0; font-size: 30px; line-height: 1.2">Seeed XIAO ESP32C3</h2>
+              <div style="margin-top: 6px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6F6F6F">ESP32-C3 · RISC-V 160MHz · 4MB flash · 21×17.8mm</div>
+            </div>
+            <a href="#" style="display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 20px; border-radius: 10px; background: #0B76C8; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 14px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true"><path d="M7 5l12 7-12 7z"></path></svg>
+              在实验台运行
+            </a>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+            <div style="background: #F7F7F7; border-radius: 10px; padding: 12px 14px"><div style="font-size: 12px; color: #6F6F6F">芯片</div><div style="font-size: 20px; font-weight: 700; margin-top: 2px">ESP32-C3</div></div>
+            <div style="background: #F7F7F7; border-radius: 10px; padding: 12px 14px"><div style="font-size: 12px; color: #6F6F6F">整套参考价</div><div style="font-size: 20px; font-weight: 700; margin-top: 2px">¥76–140</div></div>
+            <div style="background: #F7F7F7; border-radius: 10px; padding: 12px 14px"><div style="font-size: 12px; color: #6F6F6F">续航 <span style="color: #8A5A12; background: #FDF4E3; padding: 0 6px; border-radius: 4px">估算</span></div><div style="font-size: 20px; font-weight: 700; margin-top: 2px">49 天</div></div>
+          </div>
+          <div role="tablist" aria-label="详情" style="display: flex; gap: 4px; border-bottom: 1px solid #F0F0F0">
+            <sc-for list="{{tabs}}" as="tb" hint-placeholder-count="4">
+              <sc-if value="{{tb.on}}" hint-placeholder-val="{{ false }}">
+                <button type="button" role="tab" aria-selected="true" onClick="{{tb.pick}}" style="height: 40px; padding: 0 14px; border: 0; border-bottom: 2px solid #0D99FF; background: transparent; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer">{{tb.label}}</button>
+              </sc-if>
+              <sc-if value="{{tb.off}}" hint-placeholder-val="{{ true }}">
+                <button type="button" role="tab" aria-selected="false" onClick="{{tb.pick}}" style="height: 40px; padding: 0 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; font: inherit; font-size: 14px; color: #6F6F6F; cursor: pointer">{{tb.label}}</button>
+              </sc-if>
+            </sc-for>
+          </div>
+          <div style="display: flex; flex-direction: column">
+            <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+              <div style="display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid #F0F0F0; font-size: 14px">
+                <span>{{r.a}}</span><span style="font-family: 'JetBrains Mono', monospace; color: #444444">{{r.b}}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px">
+          <div style="border: 1px solid #E6E6E6; border-radius: 12px; padding: 14px 16px; font-size: 13px; line-height: 1.6"><b style="font-size: 14px">XIAO ESP32C6</b><div style="color: #6F6F6F">多 Thread / Zigbee，深睡更省 · 不能在试板运行</div><div style="margin-top: 4px">¥81–145</div></div>
+          <div style="border: 1px solid #E6E6E6; border-radius: 12px; padding: 14px 16px; font-size: 13px; line-height: 1.6"><b style="font-size: 14px">XIAO ESP32S3 Sense</b><div style="color: #6F6F6F">多摄像头、PSRAM，贵一档</div><div style="margin-top: 4px">¥141–230</div></div>
+          <div style="border: 1px solid #E6E6E6; border-radius: 12px; padding: 14px 16px; font-size: 13px; line-height: 1.6"><b style="font-size: 14px">ESP32-C3 SuperMini</b><div style="color: #6F6F6F">同芯片更便宜，天线弱一些</div><div style="margin-top: 4px">¥51–108</div></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(p) {
+    super(p);
+    this.state = {
+      tab: 'bom',
+      t: { battery: true, wifi: true, ble: false, screen: true },
+      parts: { bme280: true, oled: true, led: false, button: false, servo: false, ws2812: false, pot: false, relay: false, pir: false, mic: false },
+      delta: '刚才勾了「用手机蓝牙连」：推荐不变，ESP32-C3 本来就有 BLE。'
+    };
+  }
+  renderVals() {
+    const s = this.state;
+    const T = [
+      ['battery', '用电池，要省电', '影响续航'],
+      ['wifi', '要连 Wi-Fi', '上网 / 家里路由'],
+      ['ble', '用手机蓝牙连', 'BLE'],
+      ['screen', '要显示东西', '屏幕']
+    ];
+    const P = [['bme280', 'BME280'], ['oled', 'OLED'], ['led', 'LED'], ['button', '按键'], ['servo', '舵机'], ['ws2812', 'WS2812B'], ['pot', '电位器'], ['relay', '继电器'], ['pir', '人体红外'], ['mic', '麦克风']];
+    const tabs = [['bom', '零件清单'], ['pins', '接线'], ['risk', '要注意 2'], ['trust', '可信度']];
+    const rowsBy = {
+      bom: [['Seeed XIAO ESP32C3', '¥35–50'], ['BME280 温湿度气压模块', '¥10–25'], ['0.96 寸 OLED（SSD1306）', '¥8–15'], ['3.7V 锂电池 1000mAh', '¥10–20'], ['面包板和杜邦线', '¥8–15'], ['合计', '¥76–140']],
+      pins: [['BME280 SDA / SCL（与 OLED 共用 I2C）', 'D4 GPIO6 · D5 GPIO7'], ['OLED SDA / SCL', 'D4 GPIO6 · D5 GPIO7']],
+      risk: [['开发板的电源灯、LDO、USB 转串口会吃掉大部分电量', '估算'], ['Wi-Fi 连接耗时决定功耗：用静态 IP、记住信道', '估算']],
+      trust: [['芯片 ESP32-C3 本身', '仿真验证'], ['BME280、OLED', '行为模拟'], ['引脚分配、续航', '估算'], ['锂电池充放电、天线距离', '必须上真机']]
+    };
+    return {
+      showDelta: !!s.delta,
+      delta: s.delta,
+      undo: () => this.setState({ delta: '' }),
+      toggles: T.map(([k, label, hint]) => ({ label, hint, on: s.t[k], flip: () => this.setState({ t: { ...s.t, [k]: !s.t[k] }, delta: '刚才改了「' + label + '」：推荐和价格已更新。' }) })),
+      parts: P.map(([k, name]) => ({ name, on: s.parts[k], off: !s.parts[k], flip: () => this.setState({ parts: { ...s.parts, [k]: !s.parts[k] }, delta: (s.parts[k] ? '去掉了 ' : '加了 ') + name + '：清单和接线已更新。' }) })),
+      tabs: tabs.map(([k, label]) => ({ label, on: s.tab === k, off: s.tab !== k, pick: () => this.setState({ tab: k }) })),
+      rows: rowsBy[s.tab].map(([a, b]) => ({ a, b }))
+    };
+  }
+}
+</script>
+</body>
+</html>

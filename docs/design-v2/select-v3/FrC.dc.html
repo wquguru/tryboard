@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>友好 C · 无结果与不能仿真</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 48px 64px; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif; display: flex; flex-direction: column; gap: 24px">
+  <h2 style="margin: 0; font-size: 28px">死胡同给出路：没有板子时、板子不能仿真时</h2>
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; flex: 1">
+    <div style="border: 1px solid #E6E6E6; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+      <span style="font-size: 12px; color: #6F6F6F; font-weight: 700">情况 1 · 条件太多，0 块板满足</span>
+      <b style="font-size: 22px">没有板子同时满足这 [N] 个条件</b>
+      <span style="font-size: 14px; color: #6F6F6F">去掉其中一个就有：</span>
+      <sc-for list="{{relax}}" as="r" hint-placeholder-count="3">
+        <button type="button" style="display: flex; justify-content: space-between; align-items: center; height: 52px; padding: 0 16px; border: 1px solid #E6E6E6; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 15px; text-align: left">
+          <span>去掉 <b>{{r.k}}</b></span>
+          <span style="color: #0A6FBD">→ {{r.n}} 块</span>
+        </button>
+      </sc-for>
+      <span style="margin-top: auto; font-size: 12px; color: #6F6F6F; line-height: 1.6">按「去掉后能选的板数」从多到少排；预算单独一行「预算放宽到 [参考价] → [N] 块」。</span>
+    </div>
+    <div style="border: 1px solid #E6E6E6; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+      <span style="font-size: 12px; color: #6F6F6F; font-weight: 700">情况 2 · 推荐的板子还不能仿真</span>
+      <div style="display: flex; align-items: baseline; gap: 10px"><b style="font-size: 22px">Seeed XIAO ESP32C6</b><span style="font-size: 12px; background: #FEF2F2; color: #C4361A; padding: 2px 8px; border-radius: 999px; font-weight: 700">暂不能仿真</span></div>
+      <div style="font-size: 14px; line-height: 1.7">你选了 Thread，只有 C6 支持。模拟器目前只跑 C3 和 S3。</div>
+      <div style="background: #F7F7F7; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+        <b style="font-size: 15px">先用 ESP32-C3 代替运行</b>
+        <span style="font-size: 13px; line-height: 1.7; color: #444444">同为 RISC-V，引脚、I2C、深睡流程能先验证；Thread 部分标「必须上真机」。</span>
+        <button type="button" style="align-self: flex-start; height: 44px; padding: 0 18px; border: 0; border-radius: 10px; background: #0D99FF; color: #FFFFFF; font: inherit; font-weight: 700">用 C3 在实验台里试</button>
+      </div>
+      <span style="margin-top: auto; font-size: 12px; color: #6F6F6F">不再出现灰掉的「去实验台」按钮而没有说明。</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { relax: [{ k: '经典蓝牙', n: '[N]' }, { k: 'Thread', n: '[N]' }, { k: '摄像头', n: '[N]' }] };
+  }
+}
+</script>
+</body>
+</html>

@@ -725,3 +725,47 @@
 - 暂缓：成品步骤底部工具条和右栏重复的 BOOT / 热源 / 声音 / 拍照 / 录像。右栏那组是手机布局和回归脚本（media.mjs）也在用的入口，删哪一组要连同设计稿一起定，先不动。
 - 串口视图跟随到底（`stick`）改成每帧最多滚一次（rAF 合并）：以前每收到一段输出就同步读 `scrollHeight`，强制整页重排。固件崩溃循环（如 bme280 固件没接传感器，每次 panic 都打栈转储，4 s 约 4000 行）时，主线程 4 s 里有 3.9 s 耗在这里，页面卡死，editor.mjs 等不到引脚圈而超时。试过给串口视图加 `contain: strict` 和逐行 `content-visibility`，实测每帧布局只从 19 ms 降到 15 ms，没有留下。
   - editor.mjs 的超时还和机器负载有关：负载约 10 时（另有一个 agent-browser 会话在后台跑模拟器）原样失败，负载降下来后原样通过。测试脚本没改。
+
+## 2026-10-18 选板 v3 与闭环（DESIGN_V2 §8，PLAN U-14–U-19）
+- 可信度改用「一个墨色、四档填充」（`ui/conf.tsx` ConfIcon），结果状态独占颜色。理由：10-18 起检查点有四种状态色，「估算」的黄挨着检查点会被读成没过。替代：蓝色深浅（蓝已是主按钮 / 链接色，会被当成能点）。
+- 成品页重复按钮按 ProdCtl 方案 B（人在画布上看过推荐）：右栏 BOOT / 热源 / 声音，底栏拍照 / 录像，手机抽屉不变。media.mjs 只改选择器、不减断言。替代：A 只留右栏、C 只留底栏（理由见稿）。
+- 本批不做：UtilC、LoopC、ProdA–C、ShareC、SelectA / B 整页布局。动态 OG（ShareB 按结果出图）要服务端，部署前要问人，标 ✗。静态 OG 图构建时用 puppeteer（已是开发依赖）渲染，不进 git。
+- 深睡唤醒检查：内核没有建模深睡，生成的检查点里它固定是「必须上真机」，列在卡底、不参与判定。
+
+### 接口约定（三个子代理共用，改动要先改这里）
+**1. 地址参数**（选板 ↔ 采购 ↔ 分享，`web/src/advisor/state.ts` 一处编解码，两边都 import）
+```
+/select?t=<模板>&add=<零件,…>&rm=<零件,…>&bat=0|1&net=0|1&sim=0|1&budget=0|60|120|200&req=<需求,…>&board=<选板板子 id>
+/app?work=custom&t=…&add=…&rm=…&bat=…&net=…&sim=…&budget=…&req=…&board=…&have=<零件,…>#shop
+```
+- 零件、需求、模板、板子都用选板（`advisor/data.ts`）里的 id；缺省值不写进地址；`/select?t=weather` 这种旧链接照常可开。
+- `have`（我已有）只出现在进采购的链接里：分享链接不带（别人家里没有）。本机存 `localStorage['tryboard-have']`（零件 id 数组）。
+- `work=custom` 的作品状态存 `tryboard-app-*:custom`，地址参数变了（换了选板结果）就按新结果重建，旧摆台不复用。
+
+**2. 选板零件 → 采购目录（`web/src/catalog/parts.ts`）对照**（`advisor/catalogmap.ts`）
+| 选板 | 目录 | 选板 | 目录 |
+|---|---|---|---|
+| bme280 | bme280 | oled | ssd1306 |
+| ws2812 | ws2812-strip | servo | sg90（加 psu-5v2a，走 EXT5V，同 R27） |
+| button | button | pot | pot |
+| led | led-kit | battery | lipo-1000（加 tp4056） |
+| amp | max98357a + speaker-3w | mic | inmp441 |
+| tft | st7789 | relay / pir / camera | 无模型：只进清单，不上实验台，标「必须上真机」 |
+- 总会加：面包板 breadboard-400、杜邦线 dupont-ff（「我已有」常勾）。
+- 板子：xiao-c3 → xiao-c3；c3-devkitm → c3-devkitm1；c3-supermini → xiao-c3（同芯片代替，说明里写）；s3-devkitc-n16r8 → s3-devkitc1-v11；xiao-s3-sense → xiao-s3；c6 / esp32 / p4 → xiao-c3（「用 C3 代替运行」）。
+- 引脚：用选板 `planPins` 的结果，转成 `Wire { part, pin, net }`；XIAO C3 上 I2C 是 D4 = GPIO6 / D5 = GPIO7（与 firmware/bme280 默认一致）。
+
+**3. 生成检查点**（`web/src/app/genlevels.ts`，输入：板子 + 已摆的目录零件及其引脚；输出：`Level[]`，id `custom-<n>`，`work: 'custom'`）
+| 条件 | 检查点 | 判定字段 | 可信度 |
+|---|---|---|---|
+| 总有 | 开机不崩溃，串口有输出 | 新字段 `boots: true`（`seconds` 内无 panic / abort 且串口至少 1 行输出） | 仿真验证 |
+| 每个 I2C 器件 | I2C 0x76 有回应（BME280） | 新字段 `i2c_ack: [{ addr: 0x76, min: 1 }]`，参数 `--i2c-log` | 行为模拟 |
+| ssd1306 | OLED 收到画面 | `oled_min_pixels: 50` | 仿真验证 |
+| ws2812-strip | 灯带收到数据 | `ws2812: { pin, min_frames: 1 }` | 仿真验证 |
+| sg90 | 舵机信号 | `pwm: { pin, freq: 50, min: 0.075, max: 0.075, tol: 0.05 }`（脉宽 0.5–2.5 ms 都算过） | 行为模拟 |
+| 电池 + 深睡需求 | 深睡后能再唤醒 | 不判定，`manual: true` | 必须上真机 |
+- 所有检查点的 `args` 带上板上器件（`--i2c ssd1306@0x3c,bme280@0x76`、`--env 23.5,45,101325`），网页由 `bootOptions` 翻译；`seconds` 取 3。
+- 新报告行（只有带 `--i2c-log` 时输出，否则不进报告，旧关卡指纹不变）：`[tryboard] I2C 0x76 应答 <n> 次`，按地址升序，每个有过事务的 7 位地址一行（应答 = 地址字节收到 ACK）。CLI（`core/crates/cli`）与 wasm 报告（`core/crates/wasm/src/lib.rs` 报告函数）同一实现、同一文字。
+- 判定文字：`I2C 0x76 应答 <n> 次（要 ≥ <min>）`。`boots`：`开机 <s> s 内串口输出 <n> 行`。tools/check.py、packages/tryboard、web/src/checks.ts 三处逐字一致。
+- check.py 读生成 Level：`tools/check.py <bin> --level-json <文件>`（从网页「导出检查点」下载的 JSON，数组或单个 Level）。
+- 演示固件 `firmware/c3-thermo`（XIAO C3，BME280 + SSD1306，GPIO6/7）：每秒读一次，串口一行 `T=.. C  H=.. %  P=.. hPa`，OLED 显示读数；加 accept.json 用例。
