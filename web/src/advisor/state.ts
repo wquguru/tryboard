@@ -1,25 +1,25 @@
-// 选板结果 ↔ 地址参数（DECISIONS 2026-10-18「选板 v3」接口约定 1）。选板页、采购页（work=custom）、分享链接都只走这里编解码。
-// 缺省值不写进地址，旧链接 /select?t=weather 照常可开。
+// Advisor result <-> URL params (DECISIONS 2026-10-18 advisor v3 contract 1); advisor, shop (work=custom) and share links all use it.
+// Defaults stay out of the URL so old links like /select?t=weather still open.
 
 export type Budget = 0 | 60 | 120 | 200;
 
 export interface SelectState {
-  /** 模板 id（advisor/data.ts TEMPLATES） */
+  /** Template id (advisor/data.ts TEMPLATES) */
   t: string;
-  /** 在模板之外加的零件、从模板里去掉的零件（advisor/data.ts PARTS 的 id） */
+  /** Parts added beyond / removed from the template (advisor/data.ts PARTS ids) */
   add: string[];
   rm: string[];
-  /** 三个白话问题：用电池供电 / 要连网 / 要在试板里先跑通；null = 跟模板默认 */
+  /** The three plain questions: battery / network / run in TryBoard first; null = template default */
   bat: boolean | null;
   net: boolean | null;
   sim: boolean | null;
-  /** 0 = 不限 */
+  /** 0 = no limit */
   budget: Budget;
-  /** 「更多需求」里点名的硬需求（Cap） */
+  /** Hard needs named under "More needs" (Cap) */
   req: string[];
-  /** 用户在三板对比里点的板子（advisor BOARDS id）；空 = 用推荐的 */
+  /** Board picked in the comparison (advisor BOARDS id); empty = the recommended one */
   board: string;
-  /** 我已有：只在进采购的链接里带，分享链接不带 */
+  /** "I have it": only in links into the shop, never in share links */
   have: string[];
 }
 
@@ -46,7 +46,7 @@ export function decode(search: string): SelectState {
   };
 }
 
-/** 参数串（不带 ?）。withHave=false 用于分享链接 */
+/** Query string (no ?). withHave=false is for share links */
 export function encode(s: SelectState, withHave = false): string {
   const q = new URLSearchParams();
   if (s.t) q.set('t', s.t);
@@ -57,11 +57,11 @@ export function encode(s: SelectState, withHave = false): string {
   if (s.req.length) q.set('req', s.req.join(','));
   if (s.board) q.set('board', s.board);
   if (withHave && s.have.length) q.set('have', s.have.join(','));
-  // URLSearchParams 会把逗号转成 %2C，地址里留逗号好读
+  // URLSearchParams turns commas into %2C; plain commas read better in the URL
   return q.toString().replace(/%2C/g, ',');
 }
 
-/** 本机「我已有」（零件 id 数组）；读写都可能被浏览器拦，失败当空 */
+/** Local "I have it" list (part ids); storage may be blocked, so failure means empty */
 export const HAVE_KEY = 'tryboard-have';
 export function loadHave(): string[] {
   try {
@@ -75,6 +75,6 @@ export function saveHave(ids: string[]) {
   try {
     localStorage.setItem(HAVE_KEY, JSON.stringify(ids));
   } catch {
-    /* 隐私模式等：只是下次不记得 */
+    /* Private mode etc.: it just will not be remembered */
   }
 }

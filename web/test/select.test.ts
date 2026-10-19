@@ -1,4 +1,4 @@
-// 选板 v3：地址状态 → 推荐 / 任务书 / 「刚才」文字 / 放宽条件。纯函数，页面和实验台共用。
+// Advisor v3: URL state -> recommendation / brief / "Just now" text / relax options. Pure functions shared by page and bench.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { briefMarkdown, checkpointsOf } from '../src/advisor/brief.ts';
@@ -7,14 +7,14 @@ import { EMPTY, decode, encode } from '../src/advisor/state.ts';
 
 const W = { ...EMPTY, t: 'weather' };
 
-test('旧链接 ?t=weather 能解出温湿度计，并有推荐板', () => {
+test('old link ?t=weather decodes to the weather station and has a recommended board', () => {
   const r = resolve(decode('?t=weather'));
   assert.equal(r.tpl.id, 'weather');
   assert.ok(r.plan);
   assert.ok(r.trio.length >= 2);
 });
 
-test('乱填的地址参数被丢掉，不报错', () => {
+test('garbage URL params are dropped without errors', () => {
   const s = sanitize(decode('?t=nope&add=foo,buzzer&rm=bar&req=xx&board=zz'));
   assert.equal(s.t, 'weather');
   assert.deepEqual(s.add, ['buzzer']);
@@ -23,39 +23,39 @@ test('乱填的地址参数被丢掉，不报错', () => {
   assert.equal(s.board, '');
 });
 
-test('任务书：四节、检查点名照接口约定 3、没有命令行', () => {
+test('brief: four sections, checkpoint names per contract 3, no command lines', () => {
   const md = briefMarkdown(W);
-  for (const h of ['## 硬件', '## 引脚', '## 要求', '## 验收']) assert.ok(md.includes(h), h);
-  assert.ok(md.includes('1. 开机不崩溃，串口有输出'));
-  assert.ok(md.includes('I2C 0x76 有回应（BME280）'));
-  assert.ok(md.includes('I2C 0x3c 有回应（OLED）'));
-  assert.ok(md.includes('OLED 收到画面'));
-  assert.ok(md.includes('深睡后能再唤醒'));
+  for (const h of ['## Hardware', '## Pins', '## Requirements', '## Acceptance']) assert.ok(md.includes(h), h);
+  assert.ok(md.includes('1. Boots without crashing, prints to serial'));
+  assert.ok(md.includes('I2C 0x76 responds (BME280)'));
+  assert.ok(md.includes('I2C 0x3c responds (OLED)'));
+  assert.ok(md.includes('OLED receives a frame'));
+  assert.ok(md.includes('Wakes again after deep sleep'));
   assert.ok(!/npx|idf\.py|tryboard run/.test(md));
-  assert.equal(md.trim().split('\n').at(-1), '想离线跑的，从仓库本地装 packages/tryboard');
+  assert.equal(md.trim().split('\n').at(-1), 'To run offline, install packages/tryboard locally from the repo');
 });
 
-test('检查点：灯带、舵机；不用电池就没有深睡', () => {
+test('checkpoints: LED strip, servo; no battery means no deep sleep', () => {
   const r = resolve({ ...EMPTY, t: 'lights', add: ['servo'] });
   const names = checkpointsOf(r).map((c) => c.name);
-  assert.ok(names.includes('灯带收到数据'));
-  assert.ok(names.includes('舵机信号'));
-  assert.ok(!names.includes('深睡后能再唤醒'));
+  assert.ok(names.includes('LED strip receives data'));
+  assert.ok(names.includes('Servo signal'));
+  assert.ok(!names.includes('Wakes again after deep sleep'));
 });
 
-test('「刚才」：加蜂鸣器推荐没变、多占引脚、价钱涨', () => {
-  const t = changeText('加了蜂鸣器', resolve(W), resolve({ ...W, add: ['buzzer'] }));
-  assert.match(t, /^加了蜂鸣器 → 推荐没变，多占 1 个引脚 .+，参考价 \+¥/);
-  // 续航变了就要说出来（数字来自引擎，不写死）
+test('"Just now": adding a buzzer keeps the pick, uses pins, raises the price', () => {
+  const t = changeText('Added buzzer', resolve(W), resolve({ ...W, add: ['buzzer'] }));
+  assert.match(t, /^Added buzzer → recommendation unchanged; uses 1 more pin .+; reference price \+¥/);
+  // A battery life change must be stated (numbers come from the engine, not hard-coded)
   const a = resolve(W).plan!.power!.days;
   const b = resolve({ ...W, add: ['buzzer'] }).plan!.power!.days;
-  if (lasts(a) !== lasts(b)) assert.match(t, /续航 约 \d+ 天 → 约 \d+ 天$/);
-  // 换模板时差价取整，不出小数
-  const u = changeText('换成「温湿度计」', resolve({ ...EMPTY, t: 'lights' }), resolve(W));
-  assert.doesNotMatch(u, /参考价 [+−]¥\d+\.\d/);
+  if (lasts(a) !== lasts(b)) assert.match(t, /battery life about \d+ days → about \d+ days$/);
+  // Switching templates rounds the price gap, no decimals
+  const u = changeText('Switched to "Weather station"', resolve({ ...EMPTY, t: 'lights' }), resolve(W));
+  assert.doesNotMatch(u, /reference price [+−]¥\d+\.\d/);
 });
 
-test('0 块板时给出能放宽的条件，且每条真的能出板', () => {
+test('zero boards offers relax options, and each one really yields boards', () => {
   const s = { ...W, req: ['bt_classic'], budget: 60 as const };
   const r = resolve(s);
   assert.equal(r.plans.length, 0);
@@ -64,19 +64,19 @@ test('0 块板时给出能放宽的条件，且每条真的能出板', () => {
   for (const o of opts) assert.equal(resolve(o.next).plans.length, o.n);
 });
 
-test('零件清单：必选 / 建议分组，建议默认虚线', () => {
+test('parts list: needed / suggested groups, suggested ones dashed by default', () => {
   const rows = partRows(resolve(W));
   assert.ok(rows.some((x) => x.key === 'bme280' && x.group === 'need' && x.on));
   assert.ok(rows.some((x) => x.key === 'battery' && x.group === 'suggest' && x.on));
   assert.ok(rows.some((x) => x.key === 'buzzer' && x.group === 'suggest' && !x.on));
 });
 
-test('分享参数往返一致', () => {
+test('share params round-trip', () => {
   const s = { ...W, add: ['buzzer'], bat: false, budget: 120 as const, board: 'c3-supermini' };
   assert.deepEqual(decode('?' + encode(s)), { ...s, have: [] });
 });
 
-test('选板与采购（custom）算出的零件一致：两边各自从地址解出，不能对不上', async () => {
+test('advisor and shop (custom) agree on parts: both decode from the URL and must match', async () => {
   const { selectParts } = await import('../src/app/custom.ts');
   const { selectedParts, sanitize: san } = await import('../src/advisor/derive.ts');
   const { TEMPLATES } = await import('../src/advisor/data.ts');
