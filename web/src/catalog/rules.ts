@@ -1,18 +1,17 @@
-// 采购 / 接线规则引擎（docs/RESEARCH_PROCURE.md §2 的 R01–R27，P1-12 加板子特有的 R28–R32）。
-// 全部是确定性纯函数：同样的输入永远给同样的结论，命令行和网页都能重算。
-// 分级照 ESPHome 引脚校验（MIT 的 Python 部分，只参考结构）："不能开机 / 不能用" = block，"能用但有坑" = warn。
-// 每条结论带来源；电流类数字是估算，页面要标"估算，未经真机标定"。
+// Shopping / wiring rule engine (R01–R27 from docs/RESEARCH_PROCURE.md §2, board-specific R28–R32 from P1-12): pure and
+// deterministic so CLI and web agree. Levels follow ESPHome pin checks: cannot boot = block, works with a catch = warn.
+import { t } from '../i18n/index.ts';
 import { CHIPS, type Cap } from '../advisor/data.ts';
 import { BOARDS, PART_BY_ID, getPart, type BoardInfo, type ChipId, type LcdPins, type OnboardKind, type Part, type Pin } from './parts.ts';
 import { TEMPLATE_BY_ID, type FirmwareUse, type Pick, type Wire } from './templates.ts';
 
 export type Level = 'block' | 'warn' | 'ok';
-export type Confidence = '数据手册' | '估算' | '必须上真机' | '经验规则';
+export type Confidence = '数据手册' | '估算' | '必须上真机' | '经验规则'; // lint: allow-cjk
 
 export interface Fix {
   action: 'add' | 'remove' | 'swap';
   partId: string;
-  /** swap：被换掉的件（开发板换板时是旧板 id） */
+  /** swap: the part being replaced (the old board id when swapping boards) */
   replaces?: string;
 }
 
@@ -23,44 +22,44 @@ export interface Finding {
   detail: string;
   source: string;
   confidence: Confidence;
-  /** 触发位置：零件 key、引脚或 GPIO */
+  /** Where it fired: part key, pin or GPIO */
   where?: string;
   fix?: Fix;
 }
 
 export interface RuleInput {
-  /** 开发板 id（元件库 kind = board） */
+  /** Board id (part library kind = board) */
   board: string;
   parts: Pick[];
-  /** 可选：接线。没有接线时只做清单级检查，引脚类规则判"未提供接线" */
+  /** Optional wiring. Without it only list-level checks run and pin rules report "no wiring" */
   wiring?: Wire[];
   firmware?: FirmwareUse;
-  /** 作品需要的芯片能力（R25） */
+  /** Chip capabilities the project needs (R25) */
   needs?: Extract<Cap, 'usb_otg' | 'camera' | 'bt_classic'>[];
-  /** 装配状态（R26） */
+  /** Assembly state (R26) */
   assembly?: { metalCase?: boolean; nearAntenna?: string[] };
-  /** 采购模板 id（R27 检查必选项） */
+  /** Shopping template id (R27 checks its required parts) */
   template?: string;
 }
 
 export interface RuleMeta {
   id: string;
-  /** 触发时的默认级别（个别规则会按情况给另一级，如 R03 PSRAM 类型未知时降为 warn） */
+  /** Default level when fired (some rules pick another, e.g. R03 drops to warn when the PSRAM type is unknown) */
   level: 'block' | 'warn';
   title: string;
   source: string;
   confidence: Confidence;
 }
 
-// ───────── 芯片事实 ─────────
-// flash / USB / UART0 / ADC1 / 射频峰值电流沿用 advisor/data.ts；其余来自 ESP-IDF v5.5.1 soc_caps.h 与数据手册
+// ───────── Chip facts ─────────
+// flash / USB / UART0 / ADC1 / RF peak current come from advisor/data.ts; the rest from ESP-IDF v5.5.1 soc_caps.h and datasheets
 interface ChipFacts {
   name: string;
   gpios: number[];
   flash: number[];
   psramOctal: number[];
   bootPin: number;
-  /** 上电采样、外部电平会改变启动方式的脚（R28）；S3 的 GPIO3 只在烧了 JTAG 选择 eFuse 后才起作用，不列 */
+  /** Pins sampled at power-up whose level changes boot (R28); S3 GPIO3 only matters after the JTAG-select eFuse, so it is left out */
   straps: number[];
   usb: number[];
   uart0: number[];
@@ -79,7 +78,7 @@ const adv = (id: string) => CHIPS.find((c) => c.id === id)!;
 export const CHIP_FACTS: Record<ChipId, ChipFacts> = {
   esp32: {
     name: 'ESP32',
-    // 经典款没有 GPIO20、24、28–31
+    // The classic chip has no GPIO20, 24, 28–31
     gpios: [...range(0, 19), 21, 22, 23, 25, 26, 27, ...range(32, 39)],
     flash: adv('esp32').pins.flash,
     psramOctal: [],
@@ -131,55 +130,56 @@ export const CHIP_FACTS: Record<ChipId, ChipFacts> = {
   },
 };
 
-/** 不开 Wi-Fi 时整板峰值（估算：CPU 全速 + 板载 USB-UART / 电源灯，未经测量） */
+/** Whole-board peak without Wi-Fi (estimate: CPU at full speed + on-board USB-UART / power LED, not measured) */
 export const BOARD_IDLE_MA = 100;
-/** USB 2.0 端口额定 500 mA */
+/** USB 2.0 port rating 500 mA */
 export const USB_LIMIT_MA = 500;
-/** LDO 额定未录入时按 500 mA 估 */
+/** Assume 500 mA when the LDO rating is not entered */
 export const LDO_DEFAULT_MA = 500;
-/** 单个 GPIO 直接驱动负载的建议上限（mA，默认驱动档量级） */
+/** Suggested max load for one GPIO driving directly (mA, default drive level) */
 export const GPIO_LOAD_MA = 20;
-/** I2C 上拉灌电流上限（NXP UM10204 标准 / 快速模式 3 mA） */
+/** I2C pull-up sink limit (NXP UM10204 standard / fast mode 3 mA) */
 export const I2C_SINK_MA = 3;
 
-// ───────── 规则元数据 ─────────
+// ───────── Rule metadata ─────────
+// Titles are English keys translated in evaluate(); sources are citations and stay English.
 export const RULES: RuleMeta[] = [
-  { id: 'R01', level: 'block', title: 'C3 的 GPIO12–17 接着 flash', source: 'ESP32-C3 数据手册 §2 引脚；ESPHome gpio_esp32_c3.py（MIT）', confidence: '数据手册' },
-  { id: 'R02', level: 'block', title: 'S3 的 GPIO26–32 是 flash / PSRAM 的 SPI 脚', source: 'ESP32-S3 数据手册 §2 引脚；ESPHome gpio_esp32_s3.py（MIT）', confidence: '数据手册' },
-  { id: 'R03', level: 'block', title: '八线 PSRAM 占用 GPIO33–37', source: 'ESP32-S3-WROOM-1 数据手册（R8 型号）；ESPHome gpio_esp32_s3.py；PlatformIO boards memory_type qio_opi', confidence: '数据手册' },
-  { id: 'R04', level: 'block', title: '芯片上没有这个 GPIO，或这块板没引出', source: 'ESP32-S3 / C3 数据手册 IO MUX 表；开发板用户指南引脚表', confidence: '数据手册' },
-  { id: 'R05', level: 'warn', title: 'BOOT 脚（C3 GPIO9 / S3 GPIO0）上电被拉低会进下载模式', source: 'ESP32-C3 / S3 数据手册 Strapping 管脚表；ESPHome check_strapping_pin', confidence: '数据手册' },
-  { id: 'R06', level: 'warn', title: 'C3 GPIO8 / GPIO2 上电应保持高', source: 'ESP32-C3 数据手册 Strapping 管脚表', confidence: '数据手册' },
-  { id: 'R07', level: 'block', title: 'S3 GPIO45 上电被拉高，flash 电压会变成 1.8 V', source: 'ESP32-S3 数据手册 Strapping（VDD_SPI 电压）；乐鑫 esp-techpedia S3 硬件指南', confidence: '数据手册' },
-  { id: 'R08', level: 'warn', title: 'S3 GPIO46 上电被拉高可能组成非法启动模式', source: 'ESP32-S3 数据手册 Strapping 管脚表', confidence: '数据手册' },
-  { id: 'R09', level: 'warn', title: '占用了 USB D− / D+', source: 'ESP32-C3 / S3 数据手册 USB Serial/JTAG；ESPHome check_usb_jtag_pin', confidence: '数据手册' },
-  { id: 'R10', level: 'warn', title: '占用了 UART0（下载和日志串口）', source: '乐鑫开发板用户指南（UART0 接 USB-UART）', confidence: '数据手册' },
-  { id: 'R11', level: 'block', title: 'C3 模拟量只能放 ADC1（GPIO0–4）', source: 'ESP-IDF v5.5 ADC Oneshot 文档（ESP32-C3：ADC2 因勘误不再支持）；ESP32-C3 勘误表', confidence: '数据手册' },
-  { id: 'R12', level: 'warn', title: 'S3 开 Wi-Fi 时 ADC2 读数可能超时', source: 'ESP-IDF v5.5 ADC Oneshot 文档（ESP32-S3：ADC2 与 Wi-Fi 共用，可能返回 ESP_ERR_TIMEOUT）', confidence: '数据手册' },
-  { id: 'R13', level: 'warn', title: 'C3 GPIO11 默认是 VDD_SPI 电源脚', source: 'ESP32-C3 技术参考手册 eFuse（VDD_SPI_AS_GPIO）', confidence: '数据手册' },
-  { id: 'R14', level: 'block', title: '外设数量超过片上资源（RMT / LEDC / I2C）', source: 'ESP-IDF v5.5.1 soc_caps.h（C3：RMT TX 2、LEDC 6、I2C 1；S3：RMT TX 4、LEDC 8、I2C 2）', confidence: '数据手册' },
-  { id: 'R15', level: 'block', title: '同一条 I2C 总线上地址冲突', source: '各器件数据手册 I2C 地址', confidence: '数据手册' },
-  { id: 'R16', level: 'warn', title: 'I2C 模块太多，并联上拉过小', source: 'NXP UM10204 I2C 规范（灌电流 3 mA）；模块上拉按 4.7 kΩ 估', confidence: '估算' },
-  { id: 'R17', level: 'block', title: '5 V 信号直接进 GPIO', source: 'ESP32-C3 / S3 数据手册电气特性（输入电压上限 VDD+0.3 V 量级）', confidence: '数据手册' },
-  { id: 'R18', level: 'warn', title: '5 V 供电的 WS2812 用 3.3 V 数据线驱动', source: 'WS2812B 数据手册（VIH = 0.7 × VDD ≈ 3.5 V）', confidence: '数据手册' },
-  { id: 'R19', level: 'block', title: '供电电压超出器件范围（如舵机接 3V3、3.3 V 模块接 5 V）', source: '各器件数据手册 / 规格书供电范围（SG90 4.8–6 V 等）', confidence: '数据手册' },
-  { id: 'R20', level: 'warn', title: '只靠 USB 供电，峰值电流超过 500 mA', source: 'USB 2.0 规范 500 mA；SG90 堵转、WS2812 满白电流为估算', confidence: '估算' },
-  { id: 'R21', level: 'warn', title: '3.3 V 稳压器负载过大', source: 'ESP32-C3 / S3 数据手册射频发射峰值电流；板载 LDO 额定（逐板录入，未录入按 500 mA）', confidence: '估算' },
-  { id: 'R22', level: 'warn', title: 'GPIO 直接驱动大电流负载', source: 'ESP32-C3 / S3 数据手册 GPIO 驱动能力（默认驱动档）', confidence: '数据手册' },
-  { id: 'R23', level: 'warn', title: '板载彩灯引脚与固件不符（DevKitC-1 v1.0 GPIO48 / v1.1 GPIO38）', source: 'ESP32-S3-DevKitC-1 用户指南 v1.1（RGB 改到 GPIO38）', confidence: '数据手册' },
-  { id: 'R24', level: 'warn', title: '引脚和板载器件冲突', source: '开发板用户指南 / Seeed Wiki / M5Stack 文档 / 微雪 wiki（逐板录入）', confidence: '数据手册' },
-  { id: 'R25', level: 'block', title: '芯片不支持作品需要的能力（USB OTG、摄像头、经典蓝牙）', source: 'ESP-IDF v5.5.1 soc_caps.h（SOC_USB_OTG_SUPPORTED 等）', confidence: '数据手册' },
-  { id: 'R26', level: 'warn', title: '天线附近有金属或电池，Wi-Fi 会变差', source: '乐鑫模组硬件设计指南（天线净空区）', confidence: '必须上真机' },
-  { id: 'R27', level: 'block', title: '缺必选件（模板必选、舵机电源、充电、杜邦线、数据线、配套件）', source: '试板采购规则', confidence: '经验规则' },
-  { id: 'R28', level: 'warn', title: '排针上看着普通的脚其实是 strapping 脚（XIAO C3 的 D0 / D8 / D9 等）', source: 'Seeed Wiki XIAO ESP32C3 引脚表（D0 / D8 / D9 = GPIO2 / 8 / 9 为 strapping）；ESP32-C3 / S3 数据手册 Strapping 管脚表', confidence: '数据手册' },
-  { id: 'R29', level: 'warn', title: '板上已经有这个器件，又外接一份（如微雪圆屏板再买 GC9A01）', source: '微雪 wiki ESP32-S3-LCD-1.28 / Touch-LCD-1.28（板载 GC9A01）', confidence: '数据手册' },
-  { id: 'R30', level: 'block', title: '固件要 PSRAM，板子没有（XIAO C3、AtomS3 等）', source: 'ESP32-C3 数据手册（无 PSRAM 接口）；ESP32-S3 订购信息（型号带 R 才有 PSRAM）；Seeed Wiki / M5Stack 文档', confidence: '数据手册' },
-  { id: 'R31', level: 'block', title: '板子能自由用的 GPIO 不够（AtomS3 只有 8 个）', source: '开发板引脚表（M5Stack AtomS3：排针 G5–G8 / G38 / G39 + Grove G1 / G2）；板载占用逐板录入', confidence: '数据手册' },
-  { id: 'R32', level: 'warn', title: '板载屏引脚与固件不符（微雪圆屏触摸版和无触摸版不同）', source: '微雪 wiki：无触摸版屏 RST GPIO12、背光 GPIO40；触摸版 RST GPIO14、背光 GPIO2', confidence: '数据手册' },
+  { id: 'R01', level: 'block', title: 'C3 GPIO12–17 are wired to flash', source: 'ESP32-C3 datasheet §2 pins; ESPHome gpio_esp32_c3.py (MIT)', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R02', level: 'block', title: 'S3 GPIO26–32 are the flash / PSRAM SPI pins', source: 'ESP32-S3 datasheet §2 pins; ESPHome gpio_esp32_s3.py (MIT)', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R03', level: 'block', title: 'Octal PSRAM takes GPIO33–37', source: 'ESP32-S3-WROOM-1 datasheet (R8 variants); ESPHome gpio_esp32_s3.py; PlatformIO boards memory_type qio_opi', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R04', level: 'block', title: 'The chip has no such GPIO, or this board does not break it out', source: 'ESP32-S3 / C3 datasheet IO MUX table; dev board user guide pin tables', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R05', level: 'warn', title: 'BOOT pin (C3 GPIO9 / S3 GPIO0) pulled low at power-up enters download mode', source: 'ESP32-C3 / S3 datasheet strapping pin table; ESPHome check_strapping_pin', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R06', level: 'warn', title: 'C3 GPIO8 / GPIO2 should stay high at power-up', source: 'ESP32-C3 datasheet strapping pin table', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R07', level: 'block', title: 'S3 GPIO45 pulled high at power-up switches flash to 1.8 V', source: 'ESP32-S3 datasheet strapping (VDD_SPI voltage); Espressif esp-techpedia S3 hardware guide', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R08', level: 'warn', title: 'S3 GPIO46 pulled high at power-up can form an illegal boot mode', source: 'ESP32-S3 datasheet strapping pin table', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R09', level: 'warn', title: 'USB D− / D+ are in use', source: 'ESP32-C3 / S3 datasheet USB Serial/JTAG; ESPHome check_usb_jtag_pin', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R10', level: 'warn', title: 'UART0 (flashing and log serial) is in use', source: 'Espressif dev board user guides (UART0 to the USB-UART)', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R11', level: 'block', title: 'C3 analog inputs must be on ADC1 (GPIO0–4)', source: 'ESP-IDF v5.5 ADC Oneshot docs (ESP32-C3: ADC2 dropped due to an erratum); ESP32-C3 errata', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R12', level: 'warn', title: 'S3 ADC2 reads may time out with Wi-Fi on', source: 'ESP-IDF v5.5 ADC Oneshot docs (ESP32-S3: ADC2 shared with Wi-Fi, may return ESP_ERR_TIMEOUT)', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R13', level: 'warn', title: 'C3 GPIO11 is the VDD_SPI power pin by default', source: 'ESP32-C3 technical reference manual eFuse (VDD_SPI_AS_GPIO)', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R14', level: 'block', title: 'More peripherals than on-chip resources (RMT / LEDC / I2C)', source: 'ESP-IDF v5.5.1 soc_caps.h (C3: RMT TX 2, LEDC 6, I2C 1; S3: RMT TX 4, LEDC 8, I2C 2)', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R15', level: 'block', title: 'Address conflict on one I2C bus', source: 'Device datasheets, I2C addresses', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R16', level: 'warn', title: 'Too many I2C modules, parallel pull-ups too strong', source: 'NXP UM10204 I2C spec (3 mA sink); module pull-ups assumed 4.7 kΩ', confidence: '估算' }, // lint: allow-cjk
+  { id: 'R17', level: 'block', title: '5 V signal straight into a GPIO', source: 'ESP32-C3 / S3 datasheet electrical characteristics (input limit around VDD+0.3 V)', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R18', level: 'warn', title: '5 V WS2812 driven by a 3.3 V data line', source: 'WS2812B datasheet (VIH = 0.7 × VDD ≈ 3.5 V)', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R19', level: 'block', title: 'Supply voltage out of range (e.g. servo on 3V3, 3.3 V module on 5 V)', source: 'Device datasheets / specs supply ranges (SG90 4.8–6 V etc.)', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R20', level: 'warn', title: 'USB power only, peak current above 500 mA', source: 'USB 2.0 spec 500 mA; SG90 stall and WS2812 full-white currents are estimates', confidence: '估算' }, // lint: allow-cjk
+  { id: 'R21', level: 'warn', title: '3.3 V regulator overloaded', source: 'ESP32-C3 / S3 datasheet RF TX peak current; on-board LDO rating (entered per board, 500 mA if missing)', confidence: '估算' }, // lint: allow-cjk
+  { id: 'R22', level: 'warn', title: 'GPIO directly driving a high-current load', source: 'ESP32-C3 / S3 datasheet GPIO drive strength (default drive level)', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R23', level: 'warn', title: 'On-board RGB LED pin does not match the firmware (DevKitC-1 v1.0 GPIO48 / v1.1 GPIO38)', source: 'ESP32-S3-DevKitC-1 user guide v1.1 (RGB moved to GPIO38)', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R24', level: 'warn', title: 'Pin conflicts with an on-board device', source: 'Dev board user guides / Seeed Wiki / M5Stack docs / Waveshare wiki (entered per board)', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R25', level: 'block', title: 'The chip lacks a capability the project needs (USB OTG, camera, Classic Bluetooth)', source: 'ESP-IDF v5.5.1 soc_caps.h (SOC_USB_OTG_SUPPORTED etc.)', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R26', level: 'warn', title: 'Metal or a battery near the antenna degrades Wi-Fi', source: 'Espressif module hardware design guidelines (antenna keep-out area)', confidence: '必须上真机' }, // lint: allow-cjk
+  { id: 'R27', level: 'block', title: 'Missing required parts (template required, servo supply, charging, Dupont wires, data cable, companions)', source: 'TryBoard shopping rules', confidence: '经验规则' }, // lint: allow-cjk
+  { id: 'R28', level: 'warn', title: 'A header pin that looks ordinary is really a strapping pin (XIAO C3 D0 / D8 / D9 etc.)', source: 'Seeed Wiki XIAO ESP32C3 pin table (D0 / D8 / D9 = GPIO2 / 8 / 9 are strapping); ESP32-C3 / S3 datasheet strapping pin table', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R29', level: 'warn', title: 'The board already has this device and another one is added (e.g. a GC9A01 on the Waveshare round-display board)', source: 'Waveshare wiki ESP32-S3-LCD-1.28 / Touch-LCD-1.28 (on-board GC9A01)', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R30', level: 'block', title: 'Firmware needs PSRAM but the board has none (XIAO C3, AtomS3 etc.)', source: 'ESP32-C3 datasheet (no PSRAM interface); ESP32-S3 ordering info (only R variants have PSRAM); Seeed Wiki / M5Stack docs', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R31', level: 'block', title: 'Not enough free GPIOs on the board (AtomS3 has only 8)', source: 'Dev board pin tables (M5Stack AtomS3: header G5–G8 / G38 / G39 + Grove G1 / G2); on-board use entered per board', confidence: '数据手册' }, // lint: allow-cjk
+  { id: 'R32', level: 'warn', title: 'On-board display pins do not match the firmware (Waveshare round display touch and no-touch differ)', source: 'Waveshare wiki: no-touch display RST GPIO12, backlight GPIO40; touch RST GPIO14, backlight GPIO2', confidence: '数据手册' }, // lint: allow-cjk
 ];
 export const RULE_BY_ID: Record<string, RuleMeta> = Object.fromEntries(RULES.map((r) => [r.id, r]));
 
-// ───────── 上下文 ─────────
+// ───────── Context ─────────
 interface Inst {
   key: string;
   part: Part;
@@ -220,7 +220,7 @@ export const netVolt = (net: string | null): number | null => {
 
 function makeCtx(input: RuleInput): Ctx {
   const board = getPart(input.board);
-  if (board.kind !== 'board' || !board.board) throw new Error(`${input.board} 不是开发板`);
+  if (board.kind !== 'board' || !board.board) throw new Error(`${input.board} is not a board`);
   const info = board.board;
   const chip = CHIP_FACTS[info.chip];
   const insts: Inst[] = input.parts
@@ -237,7 +237,7 @@ function makeCtx(input: RuleInput): Ctx {
     if (!i.part.pins || i.part.provides) return null;
     const w = wiresOf(i).find((w) => pinOf(i, w.pin)?.type === 'power');
     let net = w ? w.net : (i.part.supplyNet ?? null);
-    // 外接 5 V 轨没有电源时，实际只能从板子 5V 取电
+    // Without a supply on the external 5 V rail, power really comes from the board 5V
     if (net === 'EXT5V' && !hasExt5V) net = '5V';
     return net;
   };
@@ -255,16 +255,20 @@ function makeCtx(input: RuleInput): Ctx {
 }
 
 const at = (u: GpioUse) => `${u.inst.key}.${u.pin.label} → GPIO${u.gpio}`;
-const NO_WIRING = '没有提供接线，引脚类检查跳过';
+const noWiring = () => t('No wiring given, pin checks skipped');
+const onlyC3 = () => t('Only applies to ESP32-C3');
+const onlyS3 = () => t('Only applies to ESP32-S3');
+/** Display name of a part in the current language */
+const nm = (p: Part) => t(p.name);
 
-/** 规则实现：返回触发的结论；返回字符串表示没触发（字符串是给 UI 的说明） */
+/** A rule returns its findings; a string means it did not fire (the string is shown in the UI) */
 type RuleFn = (c: Ctx) => Partial<Finding>[] | string;
 
 function f(level: 'block' | 'warn', detail: string, where?: string, fix?: Fix): Partial<Finding> {
   return { level, detail, where, fix };
 }
 
-/** 在 uses 里找某些 GPIO */
+/** Uses that land on any of the given GPIOs */
 const usesOn = (c: Ctx, gpios: number[]) => c.uses.filter((u) => gpios.includes(u.gpio));
 
 const isLow = (p: Pin) => p.boot === 'pull-down' || p.boot === 'drive-low';
@@ -272,96 +276,98 @@ const isHigh = (p: Pin) => p.boot === 'pull-up' || p.boot === 'drive-high';
 
 const IMPL: Record<string, RuleFn> = {
   R01: (c) => {
-    if (c.info.chip !== 'esp32c3') return '只对 ESP32-C3';
-    if (!c.wiring) return NO_WIRING;
-    return usesOn(c, c.chip.flash).map((u) => f('block', `GPIO${u.gpio} 接着片内 flash，不能当普通 IO；换到 GPIO0–7 / 10。`, at(u)));
+    if (c.info.chip !== 'esp32c3') return onlyC3();
+    if (!c.wiring) return noWiring();
+    return usesOn(c, c.chip.flash).map((u) => f('block', t('GPIO{gpio} is wired to the in-package flash and cannot be a normal IO; move to GPIO0–7 / 10.', { gpio: u.gpio }), at(u)));
   },
   R02: (c) => {
-    if (c.info.chip !== 'esp32s3') return '只对 ESP32-S3';
-    if (!c.wiring) return NO_WIRING;
-    return usesOn(c, c.chip.flash).map((u) => f('block', `GPIO${u.gpio} 是 flash / PSRAM 的 SPI 脚，接外设会开不了机。`, at(u)));
+    if (c.info.chip !== 'esp32s3') return onlyS3();
+    if (!c.wiring) return noWiring();
+    return usesOn(c, c.chip.flash).map((u) => f('block', t('GPIO{gpio} is a flash / PSRAM SPI pin; connecting a peripheral stops the chip from booting.', { gpio: u.gpio }), at(u)));
   },
   R03: (c) => {
-    if (c.info.chip !== 'esp32s3') return '只对 ESP32-S3';
-    if (!c.wiring) return NO_WIRING;
+    if (c.info.chip !== 'esp32s3') return onlyS3();
+    if (!c.wiring) return noWiring();
     const hit = usesOn(c, c.chip.psramOctal);
-    if (c.info.psram === 'octal') return hit.map((u) => f('block', `${c.board.name} 是八线 PSRAM，GPIO${u.gpio} 被 PSRAM 占用（排针上有，但不能用）。`, at(u)));
-    if (c.info.psram === null)
-      return hit.map((u) => f('warn', `${c.board.name} 的 PSRAM 类型待核：如果是 R8（八线 PSRAM）版，GPIO${u.gpio} 不能用。`, at(u)));
-    return '这块板不是八线 PSRAM';
+    const board = nm(c.board);
+    if (c.info.psram === 'octal') return hit.map((u) => f('block', t('{board} has octal PSRAM, so GPIO{gpio} is taken by PSRAM (it is on the header but unusable).', { board, gpio: u.gpio }), at(u)));
+    if (c.info.psram === null) return hit.map((u) => f('warn', t('{board} PSRAM type is unverified: on the R8 (octal PSRAM) version GPIO{gpio} is unusable.', { board, gpio: u.gpio }), at(u)));
+    return t('This board does not have octal PSRAM');
   },
   R04: (c) => {
-    if (!c.wiring) return NO_WIRING;
+    if (!c.wiring) return noWiring();
     const out: Partial<Finding>[] = [];
     for (const u of c.uses) {
-      if (!c.chip.gpios.includes(u.gpio)) out.push(f('block', `${c.chip.name} 没有 GPIO${u.gpio}${c.info.chip === 'esp32s3' && u.gpio >= 22 && u.gpio <= 25 ? '（S3 的 GPIO22–25 不存在）' : ''}。`, at(u)));
-      else if (c.board.pins && !c.board.pins.some((p) => p.gpio === u.gpio)) out.push(f('block', `${c.board.name} 没有把 GPIO${u.gpio} 引到排针上。`, at(u)));
+      if (!c.chip.gpios.includes(u.gpio)) {
+        const s3gap = c.info.chip === 'esp32s3' && u.gpio >= 22 && u.gpio <= 25;
+        out.push(f('block', s3gap ? t('{chip} has no GPIO{gpio} (GPIO22–25 do not exist on the S3).', { chip: c.chip.name, gpio: u.gpio }) : t('{chip} has no GPIO{gpio}.', { chip: c.chip.name, gpio: u.gpio }), at(u)));
+      } else if (c.board.pins && !c.board.pins.some((p) => p.gpio === u.gpio)) out.push(f('block', t('{board} does not break GPIO{gpio} out to the header.', { board: nm(c.board), gpio: u.gpio }), at(u)));
     }
     return out;
   },
   R05: (c) => {
-    if (!c.wiring) return NO_WIRING;
+    if (!c.wiring) return noWiring();
     const g = c.chip.bootPin;
     return usesOn(c, [g])
       .filter((u) => isLow(u.pin))
-      .map((u) => f('warn', `GPIO${g} 是 BOOT 脚，${u.inst.part.name} 的 ${u.pin.label} 上电会把它拉低，芯片进下载模式，程序不运行。换个引脚。`, at(u)));
+      .map((u) => f('warn', t('GPIO{gpio} is the BOOT pin; {pin} on {part} pulls it low at power-up, so the chip enters download mode and your program does not run. Use another pin.', { gpio: g, pin: u.pin.label, part: nm(u.inst.part) }), at(u)));
   },
   R06: (c) => {
-    if (c.info.chip !== 'esp32c3') return '只对 ESP32-C3';
-    if (!c.wiring) return NO_WIRING;
+    if (c.info.chip !== 'esp32c3') return onlyC3();
+    if (!c.wiring) return noWiring();
     return usesOn(c, [8, 2])
       .filter((u) => isLow(u.pin))
-      .map((u) => f('warn', `GPIO${u.gpio} 是 strapping 脚，上电应为高电平；${u.pin.label} 会把它拉低，芯片可能进下载模式或启动失败。`, at(u)));
+      .map((u) => f('warn', t('GPIO{gpio} is a strapping pin and must be high at power-up; {pin} pulls it low, so the chip may enter download mode or fail to boot.', { gpio: u.gpio, pin: u.pin.label }), at(u)));
   },
   R07: (c) => {
-    if (c.info.chip !== 'esp32s3') return '只对 ESP32-S3';
-    if (!c.wiring) return NO_WIRING;
+    if (c.info.chip !== 'esp32s3') return onlyS3();
+    if (!c.wiring) return noWiring();
     return usesOn(c, [45])
       .filter((u) => isHigh(u.pin))
-      .map((u) => f('block', `GPIO45 上电为高会把 flash 供电切到 1.8 V，3.3 V flash 的模组（WROOM-1 等）开不了机。换个引脚。`, at(u)));
+      .map((u) => f('block', t('GPIO45 high at power-up switches flash power to 1.8 V, so modules with 3.3 V flash (WROOM-1 etc.) will not boot. Use another pin.'), at(u)));
   },
   R08: (c) => {
-    if (c.info.chip !== 'esp32s3') return '只对 ESP32-S3';
-    if (!c.wiring) return NO_WIRING;
+    if (c.info.chip !== 'esp32s3') return onlyS3();
+    if (!c.wiring) return noWiring();
     return usesOn(c, [46])
       .filter((u) => isHigh(u.pin))
-      .map((u) => f('warn', `GPIO46 上电为高，和 GPIO0 按下（低）组合是非法启动模式，按 BOOT 烧录会失败。`, at(u)));
+      .map((u) => f('warn', t('GPIO46 high at power-up together with GPIO0 pressed (low) is an illegal boot mode, so flashing with BOOT fails.'), at(u)));
   },
   R09: (c) => {
-    if (!c.wiring) return NO_WIRING;
-    return usesOn(c, c.chip.usb).map((u) => f('warn', `GPIO${u.gpio} 是芯片原生 USB 的 D−/D+，接外设后 USB 串口和烧录口会失效，之后只能按 BOOT 烧录。`, at(u)));
+    if (!c.wiring) return noWiring();
+    return usesOn(c, c.chip.usb).map((u) => f('warn', t('GPIO{gpio} is the chip native USB D−/D+; with a peripheral on it the USB serial and flashing port stop working and you can only flash via BOOT.', { gpio: u.gpio }), at(u)));
   },
   R10: (c) => {
-    if (!c.wiring) return NO_WIRING;
-    return usesOn(c, c.chip.uart0).map((u) => f('warn', `GPIO${u.gpio} 是 UART0（日志串口），上电时的启动日志会输出到 ${u.inst.part.name}。`, at(u)));
+    if (!c.wiring) return noWiring();
+    return usesOn(c, c.chip.uart0).map((u) => f('warn', t('GPIO{gpio} is UART0 (log serial); the boot log at power-up goes out to {part}.', { gpio: u.gpio, part: nm(u.inst.part) }), at(u)));
   },
   R11: (c) => {
-    if (c.info.chip !== 'esp32c3') return '只对 ESP32-C3';
-    if (!c.wiring) return NO_WIRING;
+    if (c.info.chip !== 'esp32c3') return onlyC3();
+    if (!c.wiring) return noWiring();
     return c.uses
       .filter((u) => u.pin.type === 'analog' && !c.chip.adc1.includes(u.gpio))
       .map((u) =>
         u.gpio === 5
-          ? f('block', 'GPIO5 是 ADC2：C3 的 ADC2 有硬件勘误，ESP-IDF 已经不支持，和 Wi-Fi 无关。改用 GPIO0–4。', at(u))
-          : f('block', `GPIO${u.gpio} 不是模拟输入脚；C3 的 ADC1 是 GPIO0–4。`, at(u)),
+          ? f('block', t('GPIO5 is ADC2: C3 ADC2 has a hardware erratum and ESP-IDF no longer supports it, regardless of Wi-Fi. Use GPIO0–4.'), at(u))
+          : f('block', t('GPIO{gpio} is not an analog input; C3 ADC1 is GPIO0–4.', { gpio: u.gpio }), at(u)),
       );
   },
   R12: (c) => {
-    if (c.info.chip !== 'esp32s3') return '只对 ESP32-S3';
-    if (!c.wiring) return NO_WIRING;
+    if (c.info.chip !== 'esp32s3') return onlyS3();
+    if (!c.wiring) return noWiring();
     const out: Partial<Finding>[] = [];
     for (const u of c.uses.filter((u) => u.pin.type === 'analog')) {
       if (c.chip.adc1.includes(u.gpio)) continue;
       if (c.chip.adc2.includes(u.gpio)) {
-        if (c.input.firmware?.wifi) out.push(f('warn', `GPIO${u.gpio} 是 ADC2，S3 开 Wi-Fi 时读数可能超时失败（ESP_ERR_TIMEOUT）；建议放 ADC1（GPIO1–10）。`, at(u)));
-      } else out.push(f('block', `GPIO${u.gpio} 不是模拟输入脚；S3 的 ADC1 是 GPIO1–10，ADC2 是 GPIO11–20。`, at(u)));
+        if (c.input.firmware?.wifi) out.push(f('warn', t('GPIO{gpio} is ADC2; with Wi-Fi on, S3 reads may time out (ESP_ERR_TIMEOUT). Prefer ADC1 (GPIO1–10).', { gpio: u.gpio }), at(u)));
+      } else out.push(f('block', t('GPIO{gpio} is not an analog input; S3 ADC1 is GPIO1–10 and ADC2 is GPIO11–20.', { gpio: u.gpio }), at(u)));
     }
     return out;
   },
   R13: (c) => {
-    if (c.info.chip !== 'esp32c3') return '只对 ESP32-C3';
-    if (!c.wiring) return NO_WIRING;
-    return usesOn(c, [11]).map((u) => f('warn', 'GPIO11 默认是 VDD_SPI（flash 电源），当 GPIO 用要烧 eFuse VDD_SPI_AS_GPIO，不可逆。', at(u)));
+    if (c.info.chip !== 'esp32c3') return onlyC3();
+    if (!c.wiring) return noWiring();
+    return usesOn(c, [11]).map((u) => f('warn', t('GPIO11 is VDD_SPI (flash power) by default; using it as a GPIO needs the eFuse VDD_SPI_AS_GPIO burned, which cannot be undone.'), at(u)));
   },
   R14: (c) => {
     const out: Partial<Finding>[] = [];
@@ -374,12 +380,13 @@ const IMPL: Record<string, RuleFn> = {
     const rmt = countBy('ws2812-din');
     const fwRgb = c.input.firmware?.rgbGpio;
     const nRmt = rmt.size + (fwRgb !== undefined && !(rmt as Set<number | string>).has(fwRgb) ? 1 : 0);
-    if (nRmt > c.chip.rmtTx) out.push(f('block', `WS2812 数据线 ${nRmt} 路（含板载彩灯），${c.chip.name} 只有 ${c.chip.rmtTx} 个 RMT 发送通道；把灯串成一条。`, 'RMT'));
+    const chip = c.chip.name;
+    if (nRmt > c.chip.rmtTx) out.push(f('block', t('{n} WS2812 data lines (including the on-board RGB LED), but {chip} has only {max} RMT TX channels; chain the LEDs into one strip.', { n: nRmt, chip, max: c.chip.rmtTx }), 'RMT'));
     const nPwm = countBy('pwm').size;
-    if (nPwm > c.chip.ledc) out.push(f('block', `PWM 输出 ${nPwm} 路，${c.chip.name} 的 LEDC 只有 ${c.chip.ledc} 个通道；多路舵机用 PCA9685 扩展。`, 'LEDC'));
+    if (nPwm > c.chip.ledc) out.push(f('block', t('{n} PWM outputs, but {chip} LEDC has only {max} channels; use a PCA9685 for many servos.', { n: nPwm, chip, max: c.chip.ledc }), 'LEDC'));
     if (c.wiring) {
       const buses = new Set(c.uses.filter((u) => u.pin.type === 'i2c-sda').map((u) => u.gpio));
-      if (buses.size > c.chip.i2c) out.push(f('block', `用了 ${buses.size} 条 I2C 总线，${c.chip.name} 只有 ${c.chip.i2c} 个 I2C 控制器；把模块并到同一条 SDA / SCL 上。`, 'I2C'));
+      if (buses.size > c.chip.i2c) out.push(f('block', t('{n} I2C buses used, but {chip} has only {max} I2C controllers; put the modules on the same SDA / SCL.', { n: buses.size, chip, max: c.chip.i2c }), 'I2C'));
     }
     return out;
   },
@@ -388,7 +395,7 @@ const IMPL: Record<string, RuleFn> = {
     for (const i of c.insts) {
       if (i.addr === undefined || !i.part.i2cAddr) continue;
       const ok = [i.part.i2cAddr.default, ...i.part.i2cAddr.alt];
-      if (!ok.includes(i.addr)) out.push(f('block', `${i.part.name} 不支持地址 0x${hex(i.addr)}（可选 ${ok.map((a) => '0x' + hex(a)).join(' / ')}）。`, i.key));
+      if (!ok.includes(i.addr)) out.push(f('block', t('{part} does not support address 0x{addr} (options: {alt}).', { part: nm(i.part), addr: hex(i.addr), alt: ok.map((a) => '0x' + hex(a)).join(' / ') }), i.key));
     }
     for (const [bus, list] of i2cBuses(c)) {
       const byAddr = new Map<number, string[]>();
@@ -399,8 +406,19 @@ const IMPL: Record<string, RuleFn> = {
       for (const [a, who] of byAddr) {
         if (who.length < 2) continue;
         const how = list.map((i) => i.part.i2cAddr?.how).filter(Boolean)[0];
-        const second = c.chip.i2c > 1 ? '，或接到第二条 I2C 总线（S3 有两路）' : '';
-        out.push(f('block', `${who.join(' 和 ')} 都是 0x${hex(a)}${bus === '' ? '' : `（总线 ${bus}）`}：地址冲突。${how ? how : '改地址跳线'}${second}。`, who.join(',')));
+        out.push(
+          f(
+            'block',
+            t('{who} all use 0x{addr}{bus}: address conflict. {how}{second}.', {
+              who: who.join(' / '),
+              addr: hex(a),
+              bus: bus === '' ? '' : t(' (bus {bus})', { bus }),
+              how: how ? t(how) : t('Change the address jumper'),
+              second: c.chip.i2c > 1 ? t(', or move one to the second I2C bus (S3 has two)') : '',
+            }),
+            who.join(','),
+          ),
+        );
       }
     }
     return out;
@@ -421,7 +439,7 @@ const IMPL: Record<string, RuleFn> = {
       const r = 1 / g;
       const sink = 3.3 / r;
       if (sink > I2C_SINK_MA)
-        out.push(f('warn', `${n} 个模块各带上拉，并联约 ${r.toFixed(2)} kΩ，低电平时要灌 ${sink.toFixed(1)} mA（估算），规范上限 3 mA。拆掉多余模块的上拉电阻。`, bus || 'I2C'));
+        out.push(f('warn', t("{n} modules each have pull-ups, about {r} kΩ in parallel, sinking {ma} mA when low (estimate) against a 3 mA spec limit. Remove the extra modules' pull-up resistors.", { n, r: r.toFixed(2), ma: sink.toFixed(1) }), bus || 'I2C'));
     }
     return out;
   },
@@ -435,16 +453,15 @@ const IMPL: Record<string, RuleFn> = {
       if (v === null || v <= 3.6) continue;
       if (u.wire.via === 'divider' || u.wire.via === 'level-shifter') continue;
       const i2c = u.pin.type === 'i2c-sda' || u.pin.type === 'i2c-scl';
-      out.push(
-        f('block', `${u.inst.part.name} 的 ${u.pin.label} 是 ${v} V，ESP32 引脚不耐 5 V。${i2c ? '模块改接 3V3 供电，或加双向电平转换。' : '加 1 kΩ / 2 kΩ 分压或电平转换。'}`, at(u), i2c && !c.has('level-bss138') ? { action: 'add', partId: 'level-bss138' } : fix),
-      );
+      const how = i2c ? t('Power the module from 3V3 or add a bidirectional level shifter.') : t('Add a 1 kΩ / 2 kΩ divider or a level shifter.');
+      out.push(f('block', t('{pin} on {part} is {v} V and ESP32 pins are not 5 V tolerant. {fix}', { pin: u.pin.label, part: nm(u.inst.part), v, fix: how }), at(u), i2c && !c.has('level-bss138') ? { action: 'add', partId: 'level-bss138' } : fix));
     }
-    // 没接线的件：按默认供电判断
+    // Unwired parts: judge by their default supply
     for (const i of c.insts) {
-      // 电平转换 / 阻容件的 5 V 侧本来就不接 GPIO
+      // A level shifter's or passive's 5 V side never touches a GPIO
       if (c.wired(i) || !i.part.pins || i.part.kind === 'passive') continue;
       const hot = i.part.pins.find((p) => (p.dir === 'out' || p.dir === 'bi') && (c.pinVolt(i, p) ?? 0) > 3.6);
-      if (hot && !mitigation) out.push(f('block', `${i.part.name} 的 ${hot.label} 输出 ${c.pinVolt(i, hot)} V，ESP32 引脚不耐 5 V，要分压或电平转换。`, i.key, fix));
+      if (hot && !mitigation) out.push(f('block', t('{pin} on {part} outputs {v} V and ESP32 pins are not 5 V tolerant; add a divider or level shifter.', { pin: hot.label, part: nm(i.part), v: c.pinVolt(i, hot) ?? '' }), i.key, fix));
     }
     return out;
   },
@@ -456,7 +473,7 @@ const IMPL: Record<string, RuleFn> = {
       if (!din) continue;
       const vdd = netVolt(c.supplyNet(i));
       if (vdd === null || vdd < 4.5) continue;
-      const msg = `${i.part.name} 用 ${vdd} V 供电，数据高电平门限约 ${(0.7 * vdd).toFixed(1)} V，3.3 V 处在边缘：短线常能亮，长线或部分批次会乱闪。加 74AHCT125 电平转换。`;
+      const msg = t('{part} runs on {vdd} V, so its data high threshold is about {th} V and 3.3 V is marginal: short wires often work, long wires or some batches flicker. Add a 74AHCT125 level shifter.', { part: nm(i.part), vdd, th: (0.7 * vdd).toFixed(1) });
       if (c.wired(i)) {
         for (const u of c.uses.filter((u) => u.inst === i && u.pin === din && u.wire.via !== 'level-shifter')) out.push(f('warn', msg, at(u), fix));
       } else if (!c.has('level-ahct125')) out.push(f('warn', msg, i.key, fix));
@@ -470,9 +487,10 @@ const IMPL: Record<string, RuleFn> = {
       const net = c.supplyNet(i);
       const v = netVolt(net);
       if (!range || v === null || net === 'GND') continue;
+      const vars = { part: nm(i.part), lo: range[0], hi: range[1], net: net ?? '', v };
       if (v < range[0] - 0.05)
-        out.push(f('block', `${i.part.name} 要 ${range[0]}–${range[1]} V，现在接在 ${net}（${v} V）。${range[0] >= 4.5 ? '从 5V 或外接 5 V 取电。' : ''}`, i.key));
-      else if (v > range[1] + 0.05) out.push(f('block', `${i.part.name} 最高 ${range[1]} V，接在 ${net}（${v} V）会损坏，改接 3V3。`, i.key));
+        out.push(f('block', range[0] >= 4.5 ? t('{part} needs {lo}–{hi} V but is on {net} ({v} V). Power it from 5V or an external 5 V supply.', vars) : t('{part} needs {lo}–{hi} V but is on {net} ({v} V).', vars), i.key));
+      else if (v > range[1] + 0.05) out.push(f('block', t('{part} takes at most {hi} V; on {net} ({v} V) it will be damaged. Move it to 3V3.', vars), i.key));
     }
     return out;
   },
@@ -487,20 +505,24 @@ const IMPL: Record<string, RuleFn> = {
       const net = c.supplyNet(i);
       if (net === '3V3' || net === '5V') {
         usb += peak;
-        if (peak >= 100) heavy.push(`${i.part.name} ${peak} mA`);
+        if (peak >= 100) heavy.push(`${nm(i.part)} ${peak} mA`);
       } else if (net === 'EXT5V') ext += peak;
     }
     if (usb > USB_LIMIT_MA)
       out.push(
         f(
           'warn',
-          `只靠电脑 USB：峰值估算 ${Math.round(usb)} mA（板子 ${c.chipLoadMa} mA${heavy.length ? '，' + heavy.join('，') : ''}），超过 USB 2.0 的 500 mA，板子可能反复重启。加 5 V 2 A 电源，或别让大电流件同时动作。`,
+          t('USB only: estimated peak {ma} mA (board {board} mA{heavy}), above the 500 mA of USB 2.0, so the board may keep rebooting. Add a 5 V 2 A supply, or keep heavy parts from running at once.', {
+            ma: Math.round(usb),
+            board: c.chipLoadMa,
+            heavy: heavy.length ? ', ' + heavy.join(', ') : '',
+          }),
           'USB',
           c.hasExt5V ? undefined : { action: 'add', partId: 'psu-5v2a' },
         ),
       );
     const cap = c.insts.filter((i) => i.part.provides?.net === 'EXT5V').reduce((s, i) => s + i.part.provides!.maxMa * i.qty, 0);
-    if (c.hasExt5V && ext > cap) out.push(f('warn', `外接 5 V 轨峰值估算 ${Math.round(ext)} mA，超过电源 ${cap} mA；在固件里给灯带限亮度，或换更大的电源。`, 'EXT5V'));
+    if (c.hasExt5V && ext > cap) out.push(f('warn', t('Estimated peak on the external 5 V rail is {ma} mA, above the supply {cap} mA; limit strip brightness in firmware or use a bigger supply.', { ma: Math.round(ext), cap }), 'EXT5V'));
     return out;
   },
   R21: (c) => {
@@ -508,9 +530,20 @@ const IMPL: Record<string, RuleFn> = {
     for (const i of c.insts) if (c.supplyNet(i) === '3V3') load += (i.part.currentMa.peak ?? 0) * i.qty;
     const known = c.info.ldo.maxMa;
     const limit = known ?? LDO_DEFAULT_MA;
-    if (load <= limit) return `3.3 V 负载峰值约 ${Math.round(load)} mA，未超过 ${limit} mA${known ? '' : '（LDO 额定未录入，按 500 mA 估）'}`;
+    const ma = Math.round(load);
+    if (load <= limit) return known ? t('3.3 V peak load about {ma} mA, within {limit} mA', { ma, limit }) : t('3.3 V peak load about {ma} mA, within {limit} mA (LDO rating not entered, assuming 500 mA)', { ma, limit });
     return [
-      f('warn', `3.3 V 轨峰值约 ${Math.round(load)} mA（估算），其中芯片 ${c.chipLoadMa} mA${c.input.firmware?.wifi ? '，含 Wi-Fi 发射' : ''}，超过板载稳压器 ${limit} mA${known ? '' : '（额定未录入，按 500 mA 算）'}：稳压器会发热、掉压。大电流件改接 5 V，或另加 AMS1117。`, '3V3'),
+      f(
+        'warn',
+        t('3.3 V rail peak about {ma} mA (estimate), chip {chip} mA{wifi}, above the on-board regulator {limit} mA{unknown}: the regulator will heat up and sag. Move heavy parts to 5 V or add an AMS1117.', {
+          ma,
+          chip: c.chipLoadMa,
+          wifi: c.input.firmware?.wifi ? t(' including Wi-Fi TX') : '',
+          limit,
+          unknown: known ? '' : t(' (rating not entered, assuming 500 mA)'),
+        }),
+        '3V3',
+      ),
     ];
   },
   R22: (c) => {
@@ -518,72 +551,80 @@ const IMPL: Record<string, RuleFn> = {
     const fix: Fix | undefined = c.has('npn-s8050') ? undefined : { action: 'add', partId: 'npn-s8050' };
     for (const u of c.uses) {
       if ((u.pin.loadMa ?? 0) > GPIO_LOAD_MA && u.wire.via !== 'transistor')
-        out.push(f('warn', `${u.inst.part.name} 约 ${u.pin.loadMa} mA，超过 GPIO 直驱建议的 ${GPIO_LOAD_MA} mA；用三极管或 MOSFET 驱动，感性负载再加续流二极管。`, at(u), fix));
+        out.push(f('warn', t('{part} draws about {ma} mA, above the {max} mA suggested for direct GPIO drive; use a transistor or MOSFET, plus a flyback diode for inductive loads.', { part: nm(u.inst.part), ma: u.pin.loadMa ?? 0, max: GPIO_LOAD_MA }), at(u), fix));
     }
     for (const i of c.insts) {
       if (c.wired(i) || c.has('npn-s8050')) continue;
       const p = i.part.pins?.find((p) => (p.loadMa ?? 0) > GPIO_LOAD_MA);
-      if (p) out.push(f('warn', `${i.part.name} 约 ${p.loadMa} mA，不能直接接 GPIO，要配三极管。`, i.key, fix));
+      if (p) out.push(f('warn', t('{part} draws about {ma} mA and cannot connect straight to a GPIO; add a transistor.', { part: nm(i.part), ma: p.loadMa ?? 0 }), i.key, fix));
     }
     return out;
   },
   R23: (c) => {
     const want = c.input.firmware?.rgbGpio;
-    if (want === undefined) return '固件没有用板载彩灯';
+    if (want === undefined) return t('Firmware does not use the on-board RGB LED');
     const have = c.info.rgbGpio;
-    if (have === want) return `板载彩灯在 GPIO${have}，与固件一致`;
-    if (have === null) return [f('warn', `固件把 GPIO${want} 当板载彩灯，但 ${c.board.name} 没有板载 WS2812。`, `GPIO${want}`)];
+    if (have === want) return t('On-board RGB LED is on GPIO{gpio}, matching the firmware', { gpio: have });
+    if (have === null) return [f('warn', t('Firmware treats GPIO{gpio} as the on-board RGB LED, but {board} has no on-board WS2812.', { gpio: want, board: nm(c.board) }), `GPIO${want}`)];
     const sibling = BOARDS.find((b) => b.board!.family === c.info.family && b.board!.rgbGpio === want && b.id !== c.board.id);
     return [
       f(
         'warn',
-        `固件用 GPIO${want} 点板载彩灯，${c.board.name} 的彩灯在 GPIO${have}${c.info.family === 'devkitc1' ? '（DevKitC-1 v1.0 是 GPIO48、v1.1 是 GPIO38，看板背丝印）' : ''}。改固件里的引脚${sibling ? `，或换 ${sibling.name}` : ''}。`,
+        t('Firmware drives the on-board RGB LED on GPIO{want}, but {board} has it on GPIO{have}{family}. Change the pin in firmware{sibling}.', {
+          want,
+          board: nm(c.board),
+          have,
+          family: c.info.family === 'devkitc1' ? t(' (DevKitC-1 v1.0 uses GPIO48, v1.1 uses GPIO38; check the silkscreen on the back)') : '',
+          sibling: sibling ? t(', or switch to {board}', { board: nm(sibling) }) : '',
+        }),
         `GPIO${want}`,
         sibling ? { action: 'swap', partId: sibling.id, replaces: c.board.id } : undefined,
       ),
     ];
   },
   R24: (c) => {
-    if (!c.wiring) return NO_WIRING;
+    if (!c.wiring) return noWiring();
     const out: Partial<Finding>[] = [];
     for (const u of c.uses) {
       const o = c.info.onboard.find((o) => o.gpio === u.gpio && o.kind !== 'boot');
       if (!o) continue;
+      const vars = { board: nm(c.board), gpio: u.gpio, what: t(o.what), pin: u.pin.label, part: nm(u.inst.part) };
       if (o.share) {
-        // 总线可以挂多个器件：同一角色的引脚接上来只提醒，拿总线脚当普通 IO 会把板载器件的通信打乱
-        if (o.share === u.pin.type)
-          out.push(f('warn', `${c.board.name} 的 GPIO${u.gpio} 是${o.what}（总线），${u.inst.part.name} 的 ${u.pin.label} 可以共用，但${o.share.startsWith('spi') ? '要单独一根 CS，固件里两个设备共用同一个 SPI 主机' : 'I2C 地址不能和板载器件撞'}。`, at(u)));
-        else out.push(f('block', `${c.board.name} 的 GPIO${u.gpio} 是${o.what}，${u.inst.part.name} 的 ${u.pin.label} 接上去会打乱板载器件的通信。换个空闲引脚。`, at(u)));
-      } else if (EXCLUSIVE.includes(o.kind))
-        out.push(f('block', `${c.board.name} 的 GPIO${u.gpio} 已经接了${o.what}（板载器件独占的控制线），再接 ${u.inst.part.name} 会冲突。换个空闲引脚。`, at(u)));
-      else out.push(f('warn', `${c.board.name} 的 GPIO${u.gpio} 已经接了${o.what}，再接 ${u.inst.part.name} 会互相干扰。`, at(u)));
+        // A bus can carry several devices: same-role pins only warn; using a bus pin as plain IO garbles the on-board device
+        if (o.share === u.pin.type) {
+          const why = o.share.startsWith('spi') ? t('it needs its own CS, and the firmware shares one SPI host between both devices') : t('its I2C address must not clash with the on-board device');
+          out.push(f('warn', t('GPIO{gpio} on {board} is {what} (bus); {pin} on {part} can share it, but {why}.', { ...vars, why }), at(u)));
+        } else out.push(f('block', t('GPIO{gpio} on {board} is {what}; connecting {pin} on {part} disrupts the on-board device. Use a free pin.', vars), at(u)));
+      } else if (EXCLUSIVE.includes(o.kind)) out.push(f('block', t('GPIO{gpio} on {board} is already wired to {what} (a control line owned by the on-board device); adding {part} conflicts. Use a free pin.', vars), at(u)));
+      else out.push(f('warn', t('GPIO{gpio} on {board} is already wired to {what}; adding {part} will interfere.', vars), at(u)));
     }
     return out;
   },
   R25: (c) => {
     const needs = c.input.needs ?? [];
-    if (!needs.length) return '作品没有特殊能力要求';
+    if (!needs.length) return t('No special capability needed');
     const out: Partial<Finding>[] = [];
-    const NAME = { usb_otg: 'USB OTG（冒充键盘、U 盘）', camera: '摄像头接口', bt_classic: '经典蓝牙' } as const;
+    const NAME = { usb_otg: t('USB OTG (acting as a keyboard or USB drive)'), camera: t('a camera interface'), bt_classic: t('Classic Bluetooth') } as const;
     for (const n of needs) {
       if (c.chip.caps.has(n)) {
-        if (n === 'camera' && !/摄像头/.test(c.board.note)) out.push(f('warn', `${c.chip.name} 支持摄像头，但 ${c.board.name} 没有摄像头排座；选带摄像头的板（如 XIAO ESP32S3 Sense，元件库未收录）。`, c.board.id));
+        // Board notes are English data now, so the camera connector is detected by the English word
+        if (n === 'camera' && !/camera/i.test(c.board.note)) out.push(f('warn', t('{chip} supports a camera, but {board} has no camera connector; pick a board with one (e.g. XIAO ESP32S3 Sense, not in the part library).', { chip: c.chip.name, board: nm(c.board) }), c.board.id));
         continue;
       }
       const fix: Fix | undefined = n === 'usb_otg' ? { action: 'swap', partId: 's3-devkitc1-v11', replaces: c.board.id } : undefined;
-      out.push(f('block', `${c.chip.name} 没有${NAME[n]}。${n === 'bt_classic' ? '经典蓝牙要原版 ESP32（元件库未收录）。' : '换 ESP32-S3。'}`, c.board.id, fix));
+      const how = n === 'bt_classic' ? t('Classic Bluetooth needs the original ESP32 (not in the part library).') : t('Switch to ESP32-S3.');
+      out.push(f('block', t('{chip} has no {cap}. {fix}', { chip: c.chip.name, cap: NAME[n], fix: how }), c.board.id, fix));
     }
     return out;
   },
   R26: (c) => {
     const a = c.input.assembly;
-    if (!a) return '没有装配信息';
+    if (!a) return t('No assembly info');
     const out: Partial<Finding>[] = [];
-    if (a.metalCase) out.push(f('warn', '金属外壳会屏蔽 Wi-Fi 和蓝牙，信号明显变差；天线要露在壳外或换塑料壳（必须上真机确认）。', 'enclosure'));
+    if (a.metalCase) out.push(f('warn', t('A metal case blocks Wi-Fi and Bluetooth and signals get much worse; keep the antenna outside the case or use a plastic one (confirm on real hardware).'), 'enclosure'));
     for (const key of a.nearAntenna ?? []) {
       const i = c.insts.find((i) => i.key === key);
-      if (i && (i.part.rfBlocker || i.part.kind === 'display'))
-        out.push(f('warn', `${i.part.name} 放在天线净空区内，Wi-Fi 信号可能衰减 3–10 dB（方向性提示，必须上真机）。`, key));
+      if (i && (i.part.rfBlocker || i.part.kind === 'display')) out.push(f('warn', t('{part} sits in the antenna keep-out area; Wi-Fi may lose 3–10 dB (directional hint, needs real hardware).', { part: nm(i.part) }), key));
     }
     return out;
   },
@@ -596,68 +637,93 @@ const IMPL: Record<string, RuleFn> = {
       out.push(f('block', detail, where, { action: 'add', partId }));
     };
     if (c.input.template) {
-      const t = TEMPLATE_BY_ID[c.input.template];
-      for (const r of t?.required ?? []) {
+      const tpl = TEMPLATE_BY_ID[c.input.template];
+      for (const r of tpl?.required ?? []) {
         if (getPart(r.partId).kind === 'board') continue;
-        // 板上已经焊了（微雪圆屏板的 GC9A01）：模板必选也不用再买，R29 负责说
+        // Already soldered on the board (GC9A01 on the Waveshare round display): no purchase needed, R29 explains
         if (c.info.builtin?.some((b) => b.partId === r.partId)) continue;
-        need(r.partId, `「${t.title}」必选：${getPart(r.partId).name}（${r.why}）。`, r.partId);
+        need(r.partId, t('"{template}" requires {part} ({why}).', { template: t(tpl.title), part: nm(getPart(r.partId)), why: t(r.why) }), r.partId);
       }
     }
     for (const i of c.insts) {
-      if (i.part.supplyNet === 'EXT5V' && i.part.kind === 'actuator' && !c.hasExt5V)
-        need('psu-5v2a', `${i.part.name} 要单独的 5 V 电源：只靠电脑 USB，启动瞬间掉压会让板子复位。`, i.key);
+      if (i.part.supplyNet === 'EXT5V' && i.part.kind === 'actuator' && !c.hasExt5V) need('psu-5v2a', t('{part} needs its own 5 V supply: on computer USB alone, the start-up sag resets the board.', { part: nm(i.part) }), i.key);
     }
     for (const i of c.insts) {
       for (const r of i.part.requires ?? []) {
         if (r.partId === 'tp4056' && c.info.charger) continue;
-        need(r.partId, `${i.part.name} 需要 ${getPart(r.partId).name}：${r.why}。`, i.key);
+        need(r.partId, t('{part} needs {need}: {why}.', { part: nm(i.part), need: nm(getPart(r.partId)), why: t(r.why) }), i.key);
       }
     }
-    need('usb-c-cable', '每个作品都要一根能传数据的 Type-C 线，很多充电线只能充电。', 'usb-c-cable');
+    need('usb-c-cable', t('Every project needs a USB-C cable that carries data; many charging cables only charge.'), 'usb-c-cable');
     return out;
   },
   R28: (c) => {
-    if (!c.wiring) return NO_WIRING;
-    return c.uses
-      // 已知上电电平的交给 R05–R08；I2C 线有上拉、上电为高，正好满足 strapping 要求
-      .filter((u) => c.chip.straps.includes(u.gpio) && u.pin.boot === undefined && (u.pin.dir === 'out' || u.pin.dir === 'bi') && !u.pin.type.startsWith('i2c-'))
-      .map((u) => {
-        const silk = c.board.pins?.find((p) => p.gpio === u.gpio)?.label;
-        const named = silk && silk !== `GPIO${u.gpio}` ? `${silk} 看着是普通引脚，其实` : `GPIO${u.gpio} `;
-        const why = c.info.chip === 'esp32c3' ? (u.gpio === 9 ? '上电为低会进下载模式，程序不运行' : '上电为低可能进下载模式或启动失败') : u.gpio === 0 ? '上电为低会进下载模式' : '上电电平会改变 flash 电压或启动方式';
-        return f('warn', `${named}是 strapping 脚：${u.inst.part.name} 的 ${u.pin.label} 会往这根线上送电平，${why}。确认它上电时是高电平或高阻，否则换个引脚。`, at(u));
-      });
+    if (!c.wiring) return noWiring();
+    return (
+      c.uses
+        // Known power-up levels belong to R05–R08; I2C lines are pulled up, which satisfies the strapping need
+        .filter((u) => c.chip.straps.includes(u.gpio) && u.pin.boot === undefined && (u.pin.dir === 'out' || u.pin.dir === 'bi') && !u.pin.type.startsWith('i2c-'))
+        .map((u) => {
+          const silk = c.board.pins?.find((p) => p.gpio === u.gpio)?.label;
+          const why =
+            c.info.chip === 'esp32c3'
+              ? u.gpio === 9
+                ? t('low at power-up enters download mode and your program does not run')
+                : t('low at power-up may enter download mode or fail to boot')
+              : u.gpio === 0
+                ? t('low at power-up enters download mode')
+                : t('the power-up level changes the flash voltage or boot mode');
+          const vars = { silk: silk ?? '', gpio: u.gpio, pin: u.pin.label, part: nm(u.inst.part), why };
+          const detail =
+            silk && silk !== `GPIO${u.gpio}`
+              ? t('{silk} looks like a normal pin but is a strapping pin: {pin} on {part} drives a level onto it, and {why}. Make sure it is high or high-impedance at power-up, or use another pin.', vars)
+              : t('GPIO{gpio} is a strapping pin: {pin} on {part} drives a level onto it, and {why}. Make sure it is high or high-impedance at power-up, or use another pin.', vars);
+          return f('warn', detail, at(u));
+        })
+    );
   },
   R29: (c) => {
     const builtin = c.info.builtin ?? [];
-    if (!builtin.length) return `${c.board.name} 没有和元件库重复的板载器件`;
+    if (!builtin.length) return t('{board} has no on-board parts that duplicate the part library', { board: nm(c.board) });
     const lcd = c.info.lcd;
-    const pins = lcd ? `SCLK ${lcd.sclk} / MOSI ${lcd.mosi} / CS ${lcd.cs} / DC ${lcd.dc} / RST ${lcd.rst} / 背光 ${lcd.bl}` : '';
+    const pins = lcd ? `SCLK ${lcd.sclk} / MOSI ${lcd.mosi} / CS ${lcd.cs} / DC ${lcd.dc} / RST ${lcd.rst} / ${t('backlight')} ${lcd.bl}` : '';
     return c.insts
       .filter((i) => builtin.some((b) => b.partId === i.part.id))
       .map((i) => {
         const b = builtin.find((b) => b.partId === i.part.id)!;
-        return f('warn', `${c.board.name} 已经有${b.what}，清单里又买了 ${i.part.name}：多花钱，外接的线还会抢板载器件的引脚。去掉外接的${pins ? `，固件改用板载屏的引脚（${pins}）` : ''}。`, i.key, { action: 'remove', partId: i.part.id });
+        return f(
+          'warn',
+          t('{board} already has {what}, yet the list also buys {part}: extra cost, and the external wires compete for the on-board pins. Remove the external one{pins}.', {
+            board: nm(c.board),
+            what: t(b.what),
+            part: nm(i.part),
+            pins: pins ? t(', and point the firmware at the on-board display pins ({pins})', { pins }) : '',
+          }),
+          i.key,
+          { action: 'remove', partId: i.part.id },
+        );
       });
   },
   R30: (c) => {
-    if (!c.input.firmware?.psram) return '固件不需要 PSRAM';
+    if (!c.input.firmware?.psram) return t('Firmware does not need PSRAM');
     const fix: Fix = { action: 'swap', partId: 's3-devkitc1-v10', replaces: c.board.id };
-    if (c.info.psram === 'none' || c.info.psramMB === 0)
-      return [f('block', `固件要用 PSRAM，${c.board.name} 没有 PSRAM（${c.info.chip === 'esp32c3' ? 'ESP32-C3 没有 PSRAM 接口' : '芯片或模组型号不带 R'}）。换带 PSRAM 的板，如 XIAO ESP32S3 或 DevKitC-1 N16R8。`, c.board.id, fix)];
-    if (c.info.psram === null || c.info.psramMB === null) return [f('warn', `固件要用 PSRAM，${c.board.name} 的 PSRAM 配置待核：买前看清型号里的 R2 / R8 字样。`, c.board.id)];
-    return `${c.board.name} 有 ${c.info.psramMB} MB PSRAM`;
+    const board = nm(c.board);
+    if (c.info.psram === 'none' || c.info.psramMB === 0) {
+      const why = c.info.chip === 'esp32c3' ? t('ESP32-C3 has no PSRAM interface') : t('the chip or module part number has no R');
+      return [f('block', t('Firmware needs PSRAM, but {board} has none ({why}). Switch to a board with PSRAM, such as XIAO ESP32S3 or DevKitC-1 N16R8.', { board, why }), c.board.id, fix)];
+    }
+    if (c.info.psram === null || c.info.psramMB === null) return [f('warn', t('Firmware needs PSRAM, but {board} PSRAM config is unverified: check for R2 / R8 in the part number before buying.', { board }), c.board.id)];
+    return t('{board} has {mb} MB PSRAM', { board, mb: c.info.psramMB });
   },
   R31: (c) => {
-    if (!c.board.pins) return `${c.board.name} 的排针表未录入，数不了空闲引脚`;
-    // 空闲 = 排针上的 GPIO 去掉板载独占的（总线脚和 BOOT 键还能接）
+    if (!c.board.pins) return t('{board} has no header table, so free pins cannot be counted', { board: nm(c.board) });
+    // Free = header GPIOs minus those owned by on-board devices (bus pins and the BOOT key stay usable)
     const taken = new Set(c.info.onboard.filter((o) => o.kind !== 'boot' && !o.share).map((o) => o.gpio));
     const free = [...new Set(c.board.pins.map((p) => p.gpio).filter((g): g is number => g !== undefined && !taken.has(g)))];
     let need: number;
     if (c.wiring) need = new Set(c.uses.map((u) => u.gpio)).size;
     else {
-      // 没接线：按零件的信号脚数估，所有 I2C 件共用一对 SDA / SCL
+      // No wiring: count signal pins per part, with every I2C part sharing one SDA / SCL pair
       need = 0;
       let i2c = false;
       for (const i of c.insts) {
@@ -670,25 +736,37 @@ const IMPL: Record<string, RuleFn> = {
       }
       if (i2c) need += 2;
     }
-    if (need <= free.length) return `要 ${need} 根信号线，${c.board.name} 空闲 GPIO ${free.length} 个`;
+    if (need <= free.length) return t('Needs {need} signal lines; {board} has {free} free GPIOs', { need, board: nm(c.board), free: free.length });
     const sibling = c.info.chip === 'esp32c3' ? 'c3-devkitm1' : 's3-devkitc1-v10';
     return [
-      f('block', `作品要 ${need} 根信号线，${c.board.name} 能自由用的 GPIO 只有 ${free.length} 个（${free.map((g) => 'GPIO' + g).join('、')}）。换引脚多的板，或用 I2C 扩展（PCF8574 / PCA9685）。`, c.board.id, sibling === c.board.id ? undefined : { action: 'swap', partId: sibling, replaces: c.board.id }),
+      f(
+        'block',
+        t('The project needs {need} signal lines, but {board} has only {free} free GPIOs ({list}). Pick a board with more pins, or expand over I2C (PCF8574 / PCA9685).', { need, board: nm(c.board), free: free.length, list: free.map((g) => 'GPIO' + g).join(', ') }),
+        c.board.id,
+        sibling === c.board.id ? undefined : { action: 'swap', partId: sibling, replaces: c.board.id },
+      ),
     ];
   },
   R32: (c) => {
     const want = c.input.firmware?.lcdPins;
-    if (!want) return '固件没有声明板载屏引脚';
+    if (!want) return t('Firmware declares no on-board display pins');
     const have = c.info.lcd;
-    if (!have) return `${c.board.name} 没有板载屏，外接屏的引脚由其他引脚检查负责`;
+    if (!have) return t('{board} has no on-board display; external display pins are covered by the other pin checks', { board: nm(c.board) });
     const keys = (Object.keys(want) as (keyof LcdPins)[]).filter((k) => want[k] !== have[k]);
-    if (!keys.length) return '固件里的屏引脚与板载屏一致';
-    const NAME: Record<keyof LcdPins, string> = { sclk: 'SCLK', mosi: 'MOSI', cs: 'CS', dc: 'DC', rst: 'RST', bl: '背光' };
+    if (!keys.length) return t('Firmware display pins match the on-board display');
+    const NAME: Record<keyof LcdPins, string> = { sclk: 'SCLK', mosi: 'MOSI', cs: 'CS', dc: 'DC', rst: 'RST', bl: t('backlight') };
     const sibling = BOARDS.find((b) => b.id !== c.board.id && b.board!.family === c.info.family && b.board!.lcd && (Object.keys(want) as (keyof LcdPins)[]).every((k) => b.board!.lcd![k] === want[k]));
+    const list = (p: LcdPins) => keys.map((k) => `${NAME[k]} GPIO${p[k]}`).join(', ');
     return [
       f(
         'warn',
-        `固件按 ${keys.map((k) => `${NAME[k]} GPIO${want[k]}`).join('、')} 驱动板载屏，${c.board.name} 实际是 ${keys.map((k) => `${NAME[k]} GPIO${have[k]}`).join('、')}${c.info.family === 'ws-lcd128' ? '（微雪圆屏无触摸版 RST 12 / 背光 40，触摸版 RST 14 / 背光 2）' : ''}：屏会黑。改固件引脚${sibling ? `，或换 ${sibling.name}` : ''}。`,
+        t('Firmware drives the on-board display with {want}, but {board} actually uses {have}{family}: the screen stays dark. Change the firmware pins{sibling}.', {
+          want: list(want as LcdPins),
+          board: nm(c.board),
+          have: list(have),
+          family: c.info.family === 'ws-lcd128' ? t(' (Waveshare round display no-touch: RST 12 / backlight 40; touch: RST 14 / backlight 2)') : '',
+          sibling: sibling ? t(', or switch to {board}', { board: nm(sibling) }) : '',
+        }),
         'LCD',
         sibling ? { action: 'swap', partId: sibling.id, replaces: c.board.id } : undefined,
       ),
@@ -696,12 +774,12 @@ const IMPL: Record<string, RuleFn> = {
   },
 };
 
-/** 板载器件独占的控制线：被外接件再用判阻断（R24） */
+/** Control lines owned by on-board devices: reuse by an external part is a blocker (R24) */
 const EXCLUSIVE: OnboardKind[] = ['lcd', 'imu', 'touch'];
 
 const hex = (a: number) => a.toString(16).toUpperCase().padStart(2, '0');
 
-/** I2C 总线分组：有接线按 SDA 所接 GPIO；没接线时同一条默认总线 */
+/** Group I2C parts by bus: by SDA GPIO when wired, otherwise one default bus */
 function i2cBuses(c: Ctx): Map<string, Inst[]> {
   const m = new Map<string, Inst[]>();
   for (const i of c.insts) {
@@ -717,20 +795,20 @@ function i2cBuses(c: Ctx): Map<string, Inst[]> {
   return m;
 }
 
-/** 跑全部规则（R01–R32）：每条至少一项结论，没触发的给 level='ok' */
+/** Run every rule (R01–R32): at least one finding each, level='ok' when not fired */
 export function evaluate(input: RuleInput): Finding[] {
   const c = makeCtx(input);
   const out: Finding[] = [];
   for (const meta of RULES) {
     const r = IMPL[meta.id](c);
-    const base = { id: meta.id, title: meta.title, source: meta.source, confidence: meta.confidence };
-    if (typeof r === 'string' || r.length === 0) out.push({ ...base, level: 'ok', detail: typeof r === 'string' ? r : '未发现问题' });
+    const base = { id: meta.id, title: t(meta.title), source: meta.source, confidence: meta.confidence };
+    if (typeof r === 'string' || r.length === 0) out.push({ ...base, level: 'ok', detail: typeof r === 'string' ? r : t('No problems found') });
     else for (const x of r) out.push({ ...base, level: x.level ?? meta.level, detail: x.detail ?? '', ...(x.where ? { where: x.where } : {}), ...(x.fix ? { fix: x.fix } : {}) });
   }
   return out;
 }
 
-/** 只要触发的（block 在前） */
+/** Only fired findings (blocks first) */
 export function problems(input: RuleInput): Finding[] {
   const rank = { block: 0, warn: 1, ok: 2 } as const;
   return evaluate(input)
@@ -742,7 +820,7 @@ export function summary(findings: Finding[]) {
   return { block: findings.filter((f) => f.level === 'block').length, warn: findings.filter((f) => f.level === 'warn').length, ok: findings.filter((f) => f.level === 'ok').length };
 }
 
-/** 一键修：返回新的输入（不改原对象） */
+/** One-click fix: returns a new input (the original is not changed) */
 export function applyFix(input: RuleInput, fix: Fix): RuleInput {
   const parts = input.parts.map((p) => ({ ...p }));
   const next: RuleInput = { ...input, parts };

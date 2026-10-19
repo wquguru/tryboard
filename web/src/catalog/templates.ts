@@ -1,22 +1,19 @@
-// 采购模板：每个作品要买什么（必选不可去 / 建议可增减）、买完怎么摆上实验台（默认接线）。
-// 接线与 firmware/examples.json 里同名示例的 scene 一致（catalog.test.ts 对拍），
-// 引脚与 firmware/levels.json 第 06 关 / 第 07 关 spin、lens 的任务书一致。
+// Shopping templates: what each project buys (required fixed, suggestions optional) and its default bench wiring.
+// Wiring matches the scene of the same example in firmware/examples.json (catalog.test.ts compares them).
+import { t } from '../i18n/index.ts';
 import { getPart, type LcdPins, type Part } from './parts.ts';
 
-/** 选中的一件：key 区分同型号多件（缺省用 partId） */
+/** One picked part: key tells apart several of the same model (defaults to partId) */
 export interface Pick {
   partId: string;
   key?: string;
   qty?: number;
-  /** 选用的 I2C 地址（改跳线后），缺省用元件库的 default */
+  /** Chosen I2C address (after a jumper change); defaults to the library default */
   addr?: number;
 }
 
-/**
- * 一根线：零件的某个引脚接到哪个网络。
- * 网络名：'GPIOn'（开发板引脚）、'3V3'、'5V'（板上 5V / VBUS）、'GND'、'EXT5V'（外接 5 V 电源轨）、'EXT3V3'。
- * via：中间经过的器件（分压、电平转换、三极管），规则据此放行。
- */
+// One wire: a part pin to a net ('GPIOn', '3V3', '5V' = board 5V / VBUS, 'GND', 'EXT5V' = external 5 V rail, 'EXT3V3').
+// via: the device in between (divider, level shifter, transistor), which the rules accept as a fix.
 export interface Wire {
   part: string;
   pin: string;
@@ -25,13 +22,13 @@ export interface Wire {
 }
 
 export interface FirmwareUse {
-  /** 固件是否开 Wi-Fi（R12、R20、R21） */
+  /** Whether the firmware turns on Wi-Fi (R12, R20, R21) */
   wifi?: boolean;
-  /** 固件把哪个 GPIO 当板载彩灯（R23） */
+  /** Which GPIO the firmware treats as the on-board RGB LED (R23) */
   rgbGpio?: number;
-  /** 固件要用 PSRAM（大帧缓冲、摄像头、音频；R30） */
+  /** Firmware needs PSRAM (large frame buffers, camera, audio; R30) */
   psram?: boolean;
-  /** 固件按哪套引脚驱动板载屏（R32：微雪圆屏触摸版 / 无触摸版不同） */
+  /** Pins the firmware uses for the on-board display (R32: Waveshare touch and no-touch differ) */
   lcdPins?: LcdPins;
 }
 
@@ -44,13 +41,13 @@ export interface BuyLine {
 export interface ProcureTemplate {
   id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'blank' | 'custom';
   title: string;
-  /** 对应关卡（firmware/levels.json id，07 关的变体写 07:spin） */
+  /** Matching level (firmware/levels.json id; level 07 variants are written 07:spin) */
   level: string | null;
-  /** 对应示例 / 成品 id（firmware/examples.json、views/templates.ts） */
+  /** Matching example / product id (firmware/examples.json, views/templates.ts) */
   product: string | null;
   board: string;
   required: BuyLine[];
-  /** checked：默认勾选与否 */
+  /** checked: ticked by default */
   suggested: (BuyLine & { checked: boolean })[];
   wiring: Wire[];
   firmware: FirmwareUse;
@@ -67,46 +64,46 @@ const GC9A01_WIRING: Wire[] = [
   { part: 'gc9a01', pin: 'BLK', net: 'GPIO15' },
 ];
 const SERVO_EXT_WIRING: Wire[] = [
-  { part: 'sg90', pin: '棕 GND', net: 'GND' },
-  { part: 'sg90', pin: '红 VCC', net: 'EXT5V' },
-  { part: 'sg90', pin: '橙 PWM', net: 'GPIO4' },
+  { part: 'sg90', pin: '棕 GND', net: 'GND' }, // lint: allow-cjk
+  { part: 'sg90', pin: '红 VCC', net: 'EXT5V' }, // lint: allow-cjk
+  { part: 'sg90', pin: '橙 PWM', net: 'GPIO4' }, // lint: allow-cjk
   { part: 'dc-jack', pin: '+', net: 'EXT5V' },
   { part: 'dc-jack', pin: '-', net: 'GND' },
 ];
-const SERVO: BuyLine = { partId: 'sg90', qty: 1, why: '表盘指针或转身用的舵机' };
-// 舵机电源放建议件（默认勾选）：去掉后由 R27 / R20 当场说后果（只靠 USB 会掉压复位），
-// 实验台也照"只有 USB"摆，给欠压演示留口子（docs/DECISIONS.md 2026-10-16 采购页）
+const SERVO: BuyLine = { partId: 'sg90', qty: 1, why: 'Servo for the dial needle or for turning around' };
+// Servo supply is a ticked suggestion: removing it lets R27 / R20 explain the USB brown-out on the spot
+// and the bench shows the under-voltage demo (docs/DECISIONS.md 2026-10-16 shopping page)
 const SERVO_SUPPLY: (BuyLine & { checked: boolean })[] = [
-  { partId: 'psu-5v2a', qty: 1, checked: true, why: '舵机单独供电：从电脑 USB 取电启动瞬间会掉压复位' },
-  { partId: 'dc-jack', qty: 1, checked: true, why: '电源插头转面包板' },
+  { partId: 'psu-5v2a', qty: 1, checked: true, why: 'Separate servo supply: on computer USB the start-up sag resets the board' },
+  { partId: 'dc-jack', qty: 1, checked: true, why: 'Takes the power plug onto the breadboard' },
 ];
-const CABLE: BuyLine = { partId: 'usb-c-cable', qty: 1, why: '烧录和看串口，要能传数据的线' };
+const CABLE: BuyLine = { partId: 'usb-c-cable', qty: 1, why: 'For flashing and the serial monitor; must be a data cable' };
 
 export const PROCURE_TEMPLATES: ProcureTemplate[] = [
   {
     id: 'weather',
-    title: '桌面气象站',
+    title: 'Desk weather station',
     level: '06',
     product: 'weather',
     board: 's3-devkitc1-v10',
     required: [
-      { partId: 's3-devkitc1-v10', qty: 1, why: '固件和 3D 板都按 v1.0（彩灯 GPIO48）' },
-      { partId: 'bme280', qty: 1, why: '测温度、湿度、气压' },
-      { partId: 'ssd1306', qty: 1, why: '显示读数' },
+      { partId: 's3-devkitc1-v10', qty: 1, why: 'Firmware and the 3D board both follow v1.0 (RGB LED on GPIO48)' },
+      { partId: 'bme280', qty: 1, why: 'Measures temperature, humidity and pressure' },
+      { partId: 'ssd1306', qty: 1, why: 'Shows the readings' },
       SERVO,
       CABLE,
-      { partId: 'dupont-mf', qty: 1, why: '模块排针接面包板' },
-      { partId: 'enclosure-weather', qty: 1, why: '组装时装壳用' },
+      { partId: 'dupont-mf', qty: 1, why: 'Module headers onto the breadboard' },
+      { partId: 'enclosure-weather', qty: 1, why: 'Enclosure for assembly' },
     ],
     suggested: [
       ...SERVO_SUPPLY,
-      { partId: 'breadboard-830', qty: 1, checked: true, why: '先在面包板上搭通再装壳' },
-      { partId: 'dupont-mm', qty: 1, checked: true, why: '面包板上跳线' },
-      { partId: 'buzzer-module', qty: 1, checked: true, why: '温度超限蜂鸣报警（固件 GPIO5，成品页能听到）' },
-      { partId: 'led-kit', qty: 1, checked: true, why: '检查点 01 / 02 点灯：和蜂鸣器并在 GPIO5，闪灯时蜂鸣器咔哒响是正常的' },
-      { partId: 'resistor-kit', qty: 1, checked: true, why: 'LED 限流 220 Ω' },
-      { partId: 'dupont-ff', qty: 1, checked: false, why: '装进外壳时直接连排针' },
-      { partId: 'cap-1000uf', qty: 1, checked: false, why: '并在舵机电源上，压住转动时的电压跌落' },
+      { partId: 'breadboard-830', qty: 1, checked: true, why: 'Get it working on a breadboard before boxing it' },
+      { partId: 'dupont-mm', qty: 1, checked: true, why: 'Jumpers on the breadboard' },
+      { partId: 'buzzer-module', qty: 1, checked: true, why: 'Beeps when the temperature is out of range (firmware GPIO5, audible on the product page)' },
+      { partId: 'led-kit', qty: 1, checked: true, why: 'LED for checkpoints 01 / 02: shares GPIO5 with the buzzer, so a click while blinking is normal' },
+      { partId: 'resistor-kit', qty: 1, checked: true, why: '220 Ω LED current limiting' },
+      { partId: 'dupont-ff', qty: 1, checked: false, why: 'Connect headers directly when going into the enclosure' },
+      { partId: 'cap-1000uf', qty: 1, checked: false, why: 'Across the servo supply to hold up the voltage while it moves' },
     ],
     wiring: [
       { part: 'ssd1306', pin: 'GND', net: 'GND' },
@@ -121,77 +118,77 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
       { part: 'buzzer-module', pin: 'VCC', net: '3V3' },
       { part: 'buzzer-module', pin: 'I/O', net: 'GPIO5' },
       { part: 'buzzer-module', pin: 'GND', net: 'GND' },
-      { part: 'led-kit', pin: '长脚 +', net: 'GPIO5' },
-      { part: 'led-kit', pin: '短脚 -', net: 'GND' },
+      { part: 'led-kit', pin: '长脚 +', net: 'GPIO5' }, // lint: allow-cjk
+      { part: 'led-kit', pin: '短脚 -', net: 'GND' }, // lint: allow-cjk
     ],
     firmware: { wifi: false, rgbGpio: 48 },
   },
   {
     id: 'spin',
-    title: '会转身的小黄',
+    title: 'Xiaohuang who turns around',
     level: '07:spin',
     product: 'spin',
     board: 's3-devkitc1-v10',
     required: [
-      { partId: 's3-devkitc1-v10', qty: 1, why: '验收固件按 S3' },
-      { partId: 'gc9a01', qty: 1, why: '圆屏脸' },
+      { partId: 's3-devkitc1-v10', qty: 1, why: 'Acceptance firmware targets the S3' },
+      { partId: 'gc9a01', qty: 1, why: 'Round display face' },
       SERVO,
       CABLE,
-      { partId: 'dupont-ff', qty: 1, why: '圆屏排针直接连开发板' },
-      { partId: 'enclosure-spin', qty: 1, why: '身体和转台底座' },
+      { partId: 'dupont-ff', qty: 1, why: 'Round display headers straight to the board' },
+      { partId: 'enclosure-spin', qty: 1, why: 'Body and turntable base' },
     ],
     suggested: [
       ...SERVO_SUPPLY,
-      { partId: 'breadboard-830', qty: 1, checked: true, why: '先搭通再装壳' },
-      { partId: 'dupont-mm', qty: 1, checked: true, why: '面包板上跳线' },
-      { partId: 'cap-1000uf', qty: 1, checked: false, why: '并在舵机电源上，压住转动时的电压跌落' },
-      { partId: 'mg90s', qty: 1, checked: false, why: '想更耐用可以换金属齿' },
+      { partId: 'breadboard-830', qty: 1, checked: true, why: 'Get it working before boxing it' },
+      { partId: 'dupont-mm', qty: 1, checked: true, why: 'Jumpers on the breadboard' },
+      { partId: 'cap-1000uf', qty: 1, checked: false, why: 'Across the servo supply to hold up the voltage while it moves' },
+      { partId: 'mg90s', qty: 1, checked: false, why: 'Metal gears if you want it to last longer' },
     ],
     wiring: [...GC9A01_WIRING, ...SERVO_EXT_WIRING],
     firmware: { wifi: false },
   },
   {
     id: 'lens',
-    title: '透镜里的小人',
+    title: 'Little face in the lens',
     level: '07:lens',
     product: 'lens',
     board: 's3-devkitc1-v10',
     required: [
-      { partId: 's3-devkitc1-v10', qty: 1, why: '验收固件按 S3' },
-      { partId: 'gc9a01', qty: 1, why: '圆屏眼睛' },
+      { partId: 's3-devkitc1-v10', qty: 1, why: 'Acceptance firmware targets the S3' },
+      { partId: 'gc9a01', qty: 1, why: 'Round display eyes' },
       CABLE,
-      { partId: 'dupont-ff', qty: 1, why: '圆屏排针直接连开发板' },
-      { partId: 'enclosure-lens', qty: 1, why: '底座和屏幕外框' },
-      { partId: 'lens-dome', qty: 1, why: '把表情放大，看着更立体' },
+      { partId: 'dupont-ff', qty: 1, why: 'Round display headers straight to the board' },
+      { partId: 'enclosure-lens', qty: 1, why: 'Base and display bezel' },
+      { partId: 'lens-dome', qty: 1, why: 'Magnifies the face so it looks more 3D' },
     ],
     suggested: [
-      { partId: 'breadboard-830', qty: 1, checked: false, why: '想先在面包板上试' },
-      { partId: 'dupont-mm', qty: 1, checked: false, why: '面包板上跳线' },
+      { partId: 'breadboard-830', qty: 1, checked: false, why: 'If you want to try it on a breadboard first' },
+      { partId: 'dupont-mm', qty: 1, checked: false, why: 'Jumpers on the breadboard' },
     ],
     wiring: [...GC9A01_WIRING],
     firmware: { wifi: false },
   },
   {
     id: 'lamp',
-    title: '旋钮台灯',
+    title: 'Knob lamp',
     level: 'lamp-3',
     product: 'lamp',
     board: 's3-devkitc1-v10',
     required: [
-      { partId: 's3-devkitc1-v10', qty: 1, why: '验收固件按 S3' },
-      { partId: 'ws2812-stick8', qty: 1, why: '灯：8 颗 WS2812，DIN 接 GPIO5' },
-      { partId: 'encoder', qty: 1, why: '旋钮：转动调亮度或颜色，按下切换' },
+      { partId: 's3-devkitc1-v10', qty: 1, why: 'Acceptance firmware targets the S3' },
+      { partId: 'ws2812-stick8', qty: 1, why: 'Light: 8 WS2812s, DIN on GPIO5' },
+      { partId: 'encoder', qty: 1, why: 'Knob: turn for brightness or color, press to switch' },
       CABLE,
-      { partId: 'dupont-ff', qty: 1, why: '模块排针直接连开发板' },
-      { partId: 'enclosure-lamp', qty: 1, why: '灯座和乳白灯罩' },
+      { partId: 'dupont-ff', qty: 1, why: 'Module headers straight to the board' },
+      { partId: 'enclosure-lamp', qty: 1, why: 'Lamp base and frosted shade' },
     ],
     suggested: [
-      { partId: 'psu-5v2a', qty: 1, checked: true, why: '灯带单独供电：8 颗满白约 480 mA，加上板子就超过电脑 USB 的 500 mA' },
-      { partId: 'dc-jack', qty: 1, checked: true, why: '电源插头转面包板' },
-      { partId: 'level-ahct125', qty: 1, checked: true, why: '5 V 灯带要 3.5 V 以上的数据电平，3.3 V 直推偶尔会乱色' },
-      { partId: 'breadboard-830', qty: 1, checked: true, why: '先搭通再装壳' },
-      { partId: 'dupont-mm', qty: 1, checked: true, why: '面包板上跳线' },
-      { partId: 'cap-1000uf', qty: 1, checked: false, why: '并在灯带电源上，压住电压跌落，长灯带必加' },
+      { partId: 'psu-5v2a', qty: 1, checked: true, why: 'Separate strip supply: 8 LEDs at full white take about 480 mA, which with the board exceeds the 500 mA of computer USB' },
+      { partId: 'dc-jack', qty: 1, checked: true, why: 'Takes the power plug onto the breadboard' },
+      { partId: 'level-ahct125', qty: 1, checked: true, why: 'A 5 V strip wants data above 3.5 V; driving it with 3.3 V sometimes garbles colors' },
+      { partId: 'breadboard-830', qty: 1, checked: true, why: 'Get it working before boxing it' },
+      { partId: 'dupont-mm', qty: 1, checked: true, why: 'Jumpers on the breadboard' },
+      { partId: 'cap-1000uf', qty: 1, checked: false, why: 'Across the strip supply to hold up the voltage; a must for long strips' },
     ],
     wiring: [
       { part: 'ws2812-stick8', pin: '5V', net: 'EXT5V' },
@@ -209,24 +206,24 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
   },
   {
     id: 'ruler',
-    title: '超声波尺子',
+    title: 'Ultrasonic ruler',
     level: 'ruler-3',
     product: 'ruler',
     board: 's3-devkitc1-v10',
     required: [
-      { partId: 's3-devkitc1-v10', qty: 1, why: '验收固件按 S3' },
-      { partId: 'hc-sr04', qty: 1, why: '测距：Trig GPIO17，Echo 分压后进 GPIO18' },
-      { partId: 'resistor-kit', qty: 1, why: 'Echo 是 5 V：1 kΩ / 2 kΩ 分压到约 3.3 V' },
-      { partId: 'ssd1306', qty: 1, why: '显示距离' },
-      { partId: 'buzzer-module', qty: 1, why: '越近响得越急（GPIO5）' },
+      { partId: 's3-devkitc1-v10', qty: 1, why: 'Acceptance firmware targets the S3' },
+      { partId: 'hc-sr04', qty: 1, why: 'Ranging: Trig GPIO17, Echo through a divider into GPIO18' },
+      { partId: 'resistor-kit', qty: 1, why: 'Echo is 5 V: a 1 kΩ / 2 kΩ divider brings it to about 3.3 V' },
+      { partId: 'ssd1306', qty: 1, why: 'Shows the distance' },
+      { partId: 'buzzer-module', qty: 1, why: 'Beeps faster the closer it gets (GPIO5)' },
       CABLE,
-      { partId: 'dupont-mf', qty: 1, why: '模块排针接面包板' },
-      { partId: 'enclosure-ruler', qty: 1, why: '手持外壳，前面两个探头孔' },
+      { partId: 'dupont-mf', qty: 1, why: 'Module headers onto the breadboard' },
+      { partId: 'enclosure-ruler', qty: 1, why: 'Handheld enclosure with two sensor holes at the front' },
     ],
     suggested: [
-      { partId: 'breadboard-830', qty: 1, checked: true, why: '分压电阻插在面包板上' },
-      { partId: 'dupont-mm', qty: 1, checked: true, why: '面包板上跳线' },
-      { partId: 'dupont-ff', qty: 1, checked: false, why: '装进外壳时直接连排针' },
+      { partId: 'breadboard-830', qty: 1, checked: true, why: 'The divider resistors sit on the breadboard' },
+      { partId: 'dupont-mm', qty: 1, checked: true, why: 'Jumpers on the breadboard' },
+      { partId: 'dupont-ff', qty: 1, checked: false, why: 'Connect headers directly when going into the enclosure' },
     ],
     wiring: [
       { part: 'hc-sr04', pin: 'VCC', net: '5V' },
@@ -245,21 +242,21 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
   },
   {
     id: 'tilt',
-    title: '体感小人',
+    title: 'Tilt buddy',
     level: 'tilt-3',
     product: 'tilt',
     board: 's3-devkitc1-v10',
     required: [
-      { partId: 's3-devkitc1-v10', qty: 1, why: '验收固件按 S3' },
-      { partId: 'qmi8658', qty: 1, why: '感知倾斜（I2C 0x6B）' },
-      { partId: 'gc9a01', qty: 1, why: '圆屏：小豆在上面滑' },
+      { partId: 's3-devkitc1-v10', qty: 1, why: 'Acceptance firmware targets the S3' },
+      { partId: 'qmi8658', qty: 1, why: 'Senses tilt (I2C 0x6B)' },
+      { partId: 'gc9a01', qty: 1, why: 'Round display: the little bean slides on it' },
       CABLE,
-      { partId: 'dupont-ff', qty: 1, why: '模块排针直接连开发板' },
-      { partId: 'enclosure-tilt', qty: 1, why: '圆盘外壳，圆屏在顶面' },
+      { partId: 'dupont-ff', qty: 1, why: 'Module headers straight to the board' },
+      { partId: 'enclosure-tilt', qty: 1, why: 'Disc enclosure with the round display on top' },
     ],
     suggested: [
-      { partId: 'breadboard-830', qty: 1, checked: false, why: '想先在面包板上试' },
-      { partId: 'dupont-mm', qty: 1, checked: false, why: '面包板上跳线' },
+      { partId: 'breadboard-830', qty: 1, checked: false, why: 'If you want to try it on a breadboard first' },
+      { partId: 'dupont-mm', qty: 1, checked: false, why: 'Jumpers on the breadboard' },
     ],
     wiring: [
       ...GC9A01_WIRING,
@@ -272,19 +269,19 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
   },
   {
     id: 'usbkey',
-    title: 'USB 小键盘',
+    title: 'USB mini keypad',
     level: 'usbkey-3',
     product: 'usbkey',
     board: 's3-devkitc1-v10',
     required: [
-      { partId: 's3-devkitc1-v10', qty: 1, why: '要原生 USB（板上标 USB 或 OTG 的口）：C3 的 USB 只能当串口，当不了键盘' },
-      { partId: 'usb-c-cable', qty: 1, why: '数据线（不是只能充电的线）：插 OTG 口' },
-      { partId: 'button', qty: 4, why: 'K1–K3 发 a、b、c，K4 是宏键' },
-      { partId: 'enclosure-usbkey', qty: 1, why: '底壳、定位板和键帽' },
+      { partId: 's3-devkitc1-v10', qty: 1, why: 'Needs native USB (the port labeled USB or OTG): C3 USB can only be a serial port, not a keyboard' },
+      { partId: 'usb-c-cable', qty: 1, why: 'Data cable (not a charge-only one): plug into the OTG port' },
+      { partId: 'button', qty: 4, why: 'K1–K3 send a, b, c; K4 is the macro key' },
+      { partId: 'enclosure-usbkey', qty: 1, why: 'Bottom shell, plate and keycaps' },
     ],
     suggested: [
-      { partId: 'breadboard-830', qty: 1, checked: true, why: '先在面包板上搭通再装壳' },
-      { partId: 'dupont-mm', qty: 1, checked: true, why: '按键接开发板' },
+      { partId: 'breadboard-830', qty: 1, checked: true, why: 'Get it working on a breadboard before boxing it' },
+      { partId: 'dupont-mm', qty: 1, checked: true, why: 'Buttons to the board' },
     ],
     wiring: [
       { part: 'button', pin: 'A', net: 'GPIO4' },
@@ -300,19 +297,19 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
   },
   {
     id: 'blank',
-    title: '空白',
+    title: 'Blank',
     level: null,
     product: null,
     board: 's3-devkitc1-v11',
     required: [CABLE],
     suggested: [
-      { partId: 's3-devkitc1-v11', qty: 1, checked: true, why: '现在新买到的多是 v1.1' },
-      { partId: 'breadboard-830', qty: 1, checked: true, why: '搭电路' },
-      { partId: 'dupont-mm', qty: 1, checked: true, why: '面包板上跳线' },
-      { partId: 'dupont-mf', qty: 1, checked: true, why: '模块接面包板' },
-      { partId: 'resistor-kit', qty: 1, checked: true, why: '限流、分压、上拉' },
-      { partId: 'led-kit', qty: 1, checked: true, why: '第一个实验：点灯' },
-      { partId: 'button', qty: 4, checked: true, why: '输入' },
+      { partId: 's3-devkitc1-v11', qty: 1, checked: true, why: 'Most boards bought new today are v1.1' },
+      { partId: 'breadboard-830', qty: 1, checked: true, why: 'For building circuits' },
+      { partId: 'dupont-mm', qty: 1, checked: true, why: 'Jumpers on the breadboard' },
+      { partId: 'dupont-mf', qty: 1, checked: true, why: 'Modules onto the breadboard' },
+      { partId: 'resistor-kit', qty: 1, checked: true, why: 'Current limiting, dividers, pull-ups' },
+      { partId: 'led-kit', qty: 1, checked: true, why: 'First experiment: light an LED' },
+      { partId: 'button', qty: 4, checked: true, why: 'Input' },
     ],
     wiring: [],
     firmware: {},
@@ -321,32 +318,32 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
 
 export const TEMPLATE_BY_ID: Record<string, ProcureTemplate> = Object.fromEntries(PROCURE_TEMPLATES.map((t) => [t.id, t]));
 
-/** 选板结果生成的模板（work=custom，app/custom.ts）：页面启动时登记一次，清单重放、规则、摆台都按它 */
+/** Template generated from the advisor result (work=custom, app/custom.ts): registered once at startup for replay, rules and bench */
 export function registerTemplate(t: ProcureTemplate) {
   TEMPLATE_BY_ID[t.id] = t;
 }
 
 export function getTemplate(id: string): ProcureTemplate {
   const t = TEMPLATE_BY_ID[id];
-  if (!t) throw new Error(`没有采购模板 ${id}`);
+  if (!t) throw new Error(`no shopping template ${id}`);
   return t;
 }
 
-/** 模板必选件：采购页上灰勾、不能去掉（去掉时 R27 给阻断） */
+/** Template required part: greyed tick on the shop page, cannot be removed (R27 blocks if it is) */
 export function isRequired(templateId: string, partId: string): boolean {
   return getTemplate(templateId).required.some((l) => l.partId === partId);
 }
 
-/** 从清单里去掉一件；必选件不让去，原样返回并给出原因 */
+/** Remove one part from the list; required parts are refused with a reason */
 export function removePick(templateId: string, picks: Pick[], partId: string): { picks: Pick[]; refused?: string } {
   if (isRequired(templateId, partId)) {
     const l = getTemplate(templateId).required.find((x) => x.partId === partId)!;
-    return { picks, refused: `必选件不能去掉：${getPart(partId).name}（${l.why}）` };
+    return { picks, refused: t('Required parts cannot be removed: {part} ({why})', { part: t(getPart(partId).name), why: t(l.why) }) };
   }
   return { picks: picks.filter((p) => p.partId !== partId && p.key !== partId) };
 }
 
-/** 模板 → 默认选中清单（必选 + 默认勾选的建议项；includeAll 时建议项全带上） */
+/** Template -> default picks (required + ticked suggestions; includeAll brings every suggestion) */
 export function templatePicks(id: string, opts: { includeAll?: boolean } = {}): Pick[] {
   const t = getTemplate(id);
   const lines = [...t.required, ...t.suggested.filter((s) => opts.includeAll || s.checked)];
@@ -359,13 +356,13 @@ export function templatePicks(id: string, opts: { includeAll?: boolean } = {}): 
   return out;
 }
 
-/** 规则引擎输入的一份完整草稿：板子 + 清单 + 接线 + 固件用法 */
+/** A full rule engine input draft: board + picks + wiring + firmware use */
 export function templateInput(id: string, opts: { includeAll?: boolean } = {}) {
   const t = getTemplate(id);
   return { template: t.id, board: t.board, parts: templatePicks(id, opts), wiring: t.wiring.map((w) => ({ ...w })), firmware: { ...t.firmware } };
 }
 
-/** BOM 合计（区间，元）；板子若不在 picks 里也要单独算上 */
+/** BOM total (range, CNY); the board counts even when it is not in picks */
 export function bomTotal(picks: Pick[], board?: string): { lo: number; hi: number; lines: { part: Part; qty: number; lo: number; hi: number }[] } {
   const all = [...picks];
   if (board && !all.some((p) => p.partId === board)) all.unshift({ partId: board, qty: 1 });
@@ -378,12 +375,12 @@ export function bomTotal(picks: Pick[], board?: string): { lo: number; hi: numbe
   return { lo: round(lines.reduce((s, l) => s + l.lo, 0)), hi: round(lines.reduce((s, l) => s + l.hi, 0)), lines };
 }
 
-/** 元件库 → 实验台场景元件类型（与 examples.json scene.parts[].type 同名） */
+/** Part library -> bench scene part type (same names as examples.json scene.parts[].type) */
 const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812', pot: 'pot' };
-/** 按键键帽上的字（usbkey：K1–K3 发 a / b / c，K4 宏键） */
+/** Keycap labels (usbkey: K1–K3 send a / b / c, K4 is the macro key) */
 const KEY_CAPS = ['a', 'b', 'c', 'M'];
 
-/** 接线 → 实验台场景（"买完摆上实验台"用；格式同 firmware/examples.json 的 scene.parts） */
+/** Wiring -> bench scene (for "place it on the bench after buying"; same format as examples.json scene.parts) */
 export function toScene(picks: Pick[], wiring: Wire[]): { type: string; [k: string]: unknown }[] {
   const out: { type: string; [k: string]: unknown }[] = [];
   const gpioOf = (key: string, pinType: string) => {
@@ -396,7 +393,7 @@ export function toScene(picks: Pick[], wiring: Wire[]): { type: string; [k: stri
     }
     return undefined;
   };
-  // 顺序按接线里第一次出现的先后（与 examples.json 的 scene 顺序一致），没接线的件排在后面
+  // Order by first appearance in the wiring (matches examples.json scene order); unwired parts go last
   const firstWire = (p: Pick) => {
     const i = wiring.findIndex((w) => w.part === (p.key ?? p.partId));
     return i < 0 ? wiring.length : i;
@@ -415,10 +412,10 @@ export function toScene(picks: Pick[], wiring: Wire[]): { type: string; [k: stri
       const int = type === 'mpu6050' ? gpioOf(key, 'digital-out') : undefined;
       out.push({ type, addr: p.addr ?? part.i2cAddr!.default, sda: gpioOf(key, 'i2c-sda'), scl: gpioOf(key, 'i2c-scl'), ...(int !== undefined ? { int } : {}) });
     } else if (type === 'gc9a01') {
-      // 模拟器只认 SPI2 上的圆屏；引脚由固件配置
+      // The simulator only knows the round display on SPI2; pins come from the firmware
       out.push({ type, spi: 2 });
     } else if (type === 'gc9a01-touch') {
-      // 触摸圆屏 = 圆屏 + 屏上的 CST816S（触摸那 4 针按丝印找，TP_RST 与屏的 RES 同为复位类型）
+      // Touch round display = display + its CST816S (touch pins found by label, since TP_RST and RES share the reset type)
       const byLabel = (label: string) => {
         const w = wiring.find((x) => x.part === key && x.pin === label);
         const m = w && /^GPIO(\d+)$/.exec(w.net);
@@ -434,11 +431,11 @@ export function toScene(picks: Pick[], wiring: Wire[]): { type: string; [k: stri
       const pin = gpioOf(key, 'io');
       if (pin !== undefined) out.push({ type, pin });
     } else if (type === 'pot') {
-      // 电位器只有接了滑片（模拟量）的才摆：现成模板都没接它，选板生成的 custom 模板会接
+      // A pot is placed only when its wiper is wired: stock templates leave it unwired, advisor custom templates wire it
       const pin = gpioOf(key, 'analog');
       if (pin !== undefined) out.push({ type, pin });
     } else if (type === 'encoder' || type === 'hcsr04' || type === 'ws2812') {
-      // 按丝印找（编码器三根信号线同为 digital-out 类型，按类型分不开）
+      // Find by label (the three encoder lines share the digital-out type)
       const byLabel = (label: string) => {
         const w = wiring.find((x) => x.part === key && x.pin === label);
         const m = w && /^GPIO(\d+)$/.exec(w.net);
@@ -450,14 +447,14 @@ export function toScene(picks: Pick[], wiring: Wire[]): { type: string; [k: stri
       } else if (type === 'hcsr04') {
         const trig = byLabel('Trig'), echo = byLabel('Echo');
         const div = wiring.find((x) => x.part === key && x.pin === 'Echo')?.via === 'divider';
-        // 障碍物先放在 15 cm（台面上探头、挡板、开发板都在默认机位里）
+        // Obstacle starts at 15 cm (sensor, board and target all fit the default camera)
         if (trig !== undefined && echo !== undefined) out.push({ type, trig, echo, ...(div ? {} : { divider: false }), cm: 15 });
       } else {
         const pin = byLabel('DIN');
         if (pin !== undefined) out.push({ type, pin, ...(p.partId === 'ws2812-strip' ? { n: 60 } : {}) });
       }
     } else if (type === 'key') {
-      // 一个清单行可以是好几颗按键：每根接到 GPIO 的 A 脚出一颗
+      // One list line can be several buttons: one per A pin wired to a GPIO
       wiring.filter((w) => w.part === key && w.pin === 'A' && /^GPIO\d+$/.test(w.net)).forEach((w, i) => out.push({ type, pin: Number(w.net.slice(4)), cap: KEY_CAPS[i] ?? String(i + 1), label: `K${i + 1} · ${w.net}` }));
     }
   }
