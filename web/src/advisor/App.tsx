@@ -616,14 +616,23 @@ export function App() {
   );
 
   // ------------------------------------------------ 结果：为什么是它
-  // 每条理由一个大数字 + 一句话 + 一行小字（DESIGN_V2 §9）：同一结论不说两遍，贵就说换来什么
-  type Why = { big: ReactNode; t: ReactNode; d?: ReactNode; c: Confidence; tone?: 'warn' | 'ok' };
+  // 每条理由一个数字 + 一句话 + 一行小字（DESIGN_V2 §9 / §9.5）：左列只放数字和单位，「有 / 不够 / 能跑」这类是非用小标签；
+  // 续航总数只在答案卡说，这里只说比最便宜的多几天；差价不带「+」，正负由句子说
+  type Why = { big?: ReactNode; chip?: string; t: ReactNode; d?: ReactNode; c: Confidence; tone?: 'warn' | 'ok' };
+  const num = (v: ReactNode, unit?: string) => (
+    <>
+      {v}
+      {unit && <small> {unit}</small>}
+    </>
+  );
   const whyRows = (pl: Plan): Why[] => {
     const out: Why[] = [];
     const kinds = new Set(pl.pins.map((x) => pinKind(x.label, r.need.parts)));
     const n = r.need.parts.length;
     const used = usedPins(pl).length;
-    if (pl.pinProblems.length) out.push({ big: '✗', tone: 'warn', t: '引脚不够', d: pl.pinProblems.join('；'), c: '估算' });
+    const cheap = [...r.plans].sort((x, y) => x.total[0] - y.total[0])[0];
+    const more = a.bat && pl.power && cheap.power && cheap !== pl ? Math.round(pl.power.days - cheap.power.days) : 0;
+    if (pl.pinProblems.length) out.push({ chip: '不够', tone: 'warn', t: '引脚不够', d: pl.pinProblems.join('；'), c: '估算' });
     else {
       const how = [
         kinds.has('i2c') && <>传感器和屏幕共用 {T('I2C')} 两根线</>,
@@ -632,8 +641,8 @@ export function App() {
         kinds.has('adc') && <>电位器接 {T('ADC')}</>,
       ].filter(Boolean);
       out.push({
-        big: <>{exposedCount(pl) - used}<small> 个</small></>,
-        t: `引脚够用，还剩 ${exposedCount(pl) - used} 个`,
+        big: num(exposedCount(pl) - used, '个'),
+        t: '引脚够用，还剩这么多',
         d: (
           <>
             {n} 个零件占 {used} 个 {T('GPIO')}
@@ -644,28 +653,24 @@ export function App() {
       });
     }
     if (a.bat && pl.power) {
-      const days = lasts(pl.power.days).replace('约 ', '');
-      const m = days.match(/^([\d.]+)\s*(.*)$/);
-      out.push({
-        big: m ? <>{m[1]}<small> {m[2]}</small></> : days,
-        t: '一块 1000 mAh 电池能用这么久',
-        d: <>{T('深睡')}时整板约 {sleepCurrent(pl.board.boardSleepUA)}，平均 {avgCurrent(pl.power.avgMA)}</>,
-        c: pl.power.confidence,
-      });
+      const sleep = sleepCurrent(pl.board.boardSleepUA).split(' ');
+      out.push(
+        more >= 1
+          ? { big: num(`+${more}`, '天'), t: `比最便宜的方案多撑 ${more} 天`, d: <>{T('深睡')}时整板约 {sleepCurrent(pl.board.boardSleepUA)}，平均 {avgCurrent(pl.power.avgMA)}</>, c: pl.power.confidence }
+          : { big: num(sleep[0], sleep[1]), t: <>{T('深睡')}时整板电流</>, d: <>平均 {avgCurrent(pl.power.avgMA)}；能撑多久看上面的续航</>, c: pl.power.confidence },
+      );
     }
-    if (r.need.caps.includes('usb_otg')) out.push({ big: 'USB', t: '插电脑就能当键盘、U 盘', d: <>芯片带{T('原生 USB')}</>, c: simConf(pl) });
-    if (r.need.caps.includes('psram')) out.push({ big: <>{pl.board.psramMB}<small> MB</small></>, t: '放得下音频和图像', d: <>板上带 {T('PSRAM')}</>, c: '估算' });
+    if (r.need.caps.includes('usb_otg')) out.push({ chip: '有', tone: 'ok', t: '插电脑就能当键盘、U 盘', d: <>芯片带{T('原生 USB')}</>, c: simConf(pl) });
+    if (r.need.caps.includes('psram')) out.push({ big: num(pl.board.psramMB, 'MB'), t: '放得下音频和图像', d: <>板上带 {T('PSRAM')}</>, c: '估算' });
     const noModel = r.need.parts.filter((id) => PART_MAP[id] === null).map(partName);
-    if (pl.chip.simulated === 'none') out.push({ big: '!', tone: 'warn', t: '试板里先用 ESP32-C3 代替运行', d: `${pl.chip.name} 还不能仿真，结果只作参考`, c: '必须上真机' });
-    else out.push({ big: '✓', tone: 'ok', t: '买之前，先在试板里跑你的固件', d: `${pl.chip.name}${pl.chip.simulated === 'partial' ? '，部分外设是行为模拟' : '，网页和真机跑同一份固件'}`, c: simConf(pl) });
-    if (noModel.length) out.push({ big: '!', tone: 'warn', t: '这部分要上真机', d: `${noModel.join('、')}试板里没有模型`, c: '必须上真机' });
-    const cheap = [...r.plans].sort((x, y) => x.total[0] - y.total[0])[0];
-    if (cheap === pl) out.push({ big: '¥', tone: 'ok', t: `满足条件的 ${r.plans.length} 块板里最便宜`, c: '估算' });
+    if (pl.chip.simulated === 'none') out.push({ chip: '代替', tone: 'warn', t: '试板里先用 ESP32-C3 代替运行', d: `${pl.chip.name} 还不能仿真，结果只作参考`, c: '必须上真机' });
+    else out.push({ chip: '能跑', tone: 'ok', t: '买之前，先在试板里跑你的固件', d: `${pl.chip.name}${pl.chip.simulated === 'partial' ? '，部分外设是行为模拟' : '，网页和真机跑同一份固件'}`, c: simConf(pl) });
+    if (noModel.length) out.push({ chip: '真机', tone: 'warn', t: '这部分要上真机', d: `${noModel.join('、')}试板里没有模型`, c: '必须上真机' });
+    if (cheap === pl) out.push({ chip: '最便宜', tone: 'ok', t: `满足条件的 ${r.plans.length} 块板里最便宜`, c: '估算' });
     else {
       // 贵就说换来什么：续航多几天，否则说贵在哪个能力上
-      const more = a.bat && pl.power && cheap.power ? pl.power.days - cheap.power.days : 0;
-      const gain = more >= 1 ? `换来多 ${more.toFixed(0)} 天续航` : pl.board.battery && !cheap.board.battery ? '换来板载锂电池充电' : '换来更稳的接法和更多余量';
-      out.push({ big: `+¥${Math.round(pl.total[0] - cheap.total[0])}`, tone: 'warn', t: `比最便宜的方案贵，${gain}`, d: `对比 ${boardShort(cheap.board)}${a.bat && cheap.power ? `，续航${lasts(cheap.power.days)}` : ''}`, c: '估算' });
+      const gain = more >= 1 ? `换来上面多出的 ${more} 天续航` : pl.board.battery && !cheap.board.battery ? '换来板载锂电池充电' : '换来更稳的接法和更多余量';
+      out.push({ big: `¥${Math.round(pl.total[0] - cheap.total[0])}`, t: '比最便宜的方案贵', d: `${gain}；对比 ${boardShort(cheap.board)}`, c: '估算' });
     }
     return out.slice(0, 4);
   };
@@ -678,21 +683,24 @@ export function App() {
       </div>
       <ul className="mt-2 border-t border-line-soft">
         {whyRows(p).map((w, i) => (
-          <li key={i} className="grid grid-cols-[88px_minmax(0,1fr)_auto] items-center gap-4 border-b border-line-soft py-3 max-md:grid-cols-[64px_minmax(0,1fr)_auto] max-md:gap-3">
-            <span className={cn('text-[24px] leading-none font-bold whitespace-nowrap max-md:text-[20px] [&_small]:text-[13px] [&_small]:font-medium', w.tone === 'warn' && 'text-warn-ink', w.tone === 'ok' && 'text-ok-ink')}>{w.big}</span>
+          <li key={i} className="grid min-h-16 grid-cols-[88px_minmax(0,1fr)_auto] items-center gap-4 border-b border-line-soft py-3 last:border-b-0 max-md:grid-cols-[64px_minmax(0,1fr)_auto] max-md:gap-3">
+            {w.big !== undefined ? (
+              <span className="text-right text-[28px] leading-9 font-bold whitespace-nowrap text-fg tabular-nums max-md:text-[22px] max-md:leading-7 [&_small]:text-[13px] [&_small]:font-medium [&_small]:text-muted">{w.big}</span>
+            ) : (
+              <span className={cn('inline-flex h-6 items-center justify-self-end rounded-md px-2 text-xs font-semibold whitespace-nowrap', w.tone === 'warn' ? 'bg-warn-bg text-warn-ink' : 'bg-ok-bg text-ok-ink')}>{w.chip}</span>
+            )}
             <span className="min-w-0">
-              <span className="block text-[14px] font-medium leading-snug">{w.t}</span>
-              {w.d && <span className="mt-0.5 block text-[12px] leading-[1.6] text-muted">{w.d}</span>}
+              <span className="block text-[15px] leading-[22px] font-medium">{w.t}</span>
+              {w.d && <span className="mt-0.5 block text-[13px] leading-5 text-muted">{w.d}</span>}
             </span>
-            <span className="text-fg" title={w.c}>
-              <ConfIcon c={w.c} size={14} />
-            </span>
+            <Conf c={w.c} size={14} className="justify-self-end text-xs whitespace-nowrap text-fg" />
           </li>
         ))}
       </ul>
-      <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
+      <p className="mt-3 mb-0 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-[10px] bg-field px-3 py-2 text-xs text-muted">
+        <span className="font-medium">可信度</span>
         {(['仿真验证', '行为模拟', '估算', '必须上真机'] as Confidence[]).map((c) => (
-          <Conf key={c} c={c} size={11} />
+          <Conf key={c} c={c} size={12} className="text-fg" />
         ))}
       </p>
     </section>

@@ -6,7 +6,7 @@
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
 :root {
-  --bg: #ffffff; --fg: #1e1e1e; --muted: #6f6f6f; --line: #e6e6e6; --line-soft: #f0f0f0; --field: #f7f7f7;
+  --bg: #ffffff; --fg: #1e1e1e; --muted: #5e5e5e; --line: #e6e6e6; --line-soft: #f0f0f0; --field: #f7f7f7;
   --accent: #0d99ff; --accent-bg: #e5f4ff; --accent-line: #b9e0ff; --on-accent: #ffffff;
   --ok: #14ae5c; --ok-bg: #e8f7ee; --warn: #b7791f; --warn-bg: #fffaf0; --bad: #f24822; --bad-bg: #fef2f2;
   --surface: #ffffff; --hover-line: #cccccc; --head-bg: rgba(255, 255, 255, 0.92);
@@ -66,3 +66,6 @@
 /* 手机菜单抽屉从顶部落下（DESIGN_V2 §5）；系统要求少动画时不动 */
 @keyframes tb-drop { from { transform: translateY(-8px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { #siteDrawer { animation: none !important; } }
+
+/* 跑中卡的进度条来回走（模拟没有可靠的总时长，不画假百分比） */
+@keyframes tb-run { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }

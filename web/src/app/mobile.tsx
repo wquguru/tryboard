@@ -289,20 +289,23 @@ export function PhoneToolbar({
   const ui = useStore(mui);
   if (step !== "bench") {
     if (!tools.length) return null;
-    // 别的步骤：工具排成 44 高的按键网格，放在 3D 下面；成品的网格在底部面板里（P2-17），不再套一层卡片
+    // 别的步骤：工具排成 44 高的按键网格，放在 3D 下面；成品的网格在底部面板里（P2-17），不再套一层卡片。
+    // 主按钮（开机复测）单独占一整行 48 高：混在网格里会孤零零掉到第二行（DESIGN_V2 §9.5）
+    const cols = Math.min(4, Math.max(1, tools.filter((t) => !t.primary).length));
     return (
       <div
         id="toolbar"
         role="toolbar"
         aria-label={step === "product" ? "成品按键" : undefined}
         className={cn(
-          "toolbar grid grid-cols-4 gap-1.5 max-[360px]:grid-cols-3",
+          "toolbar grid gap-1.5",
+          ["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4 max-[360px]:grid-cols-3"][cols - 1],
           step === "product"
             ? "mt-2"
             : "pnl rounded-(--r) border border-line bg-(--panel) p-2 shadow-panel",
         )}
       >
-        {tools.map((t) => (
+        {[...tools.filter((t) => !t.primary), ...tools.filter((t) => t.primary)].map((t) => (
           <button
             key={t.id}
             type="button"
@@ -312,7 +315,7 @@ export function PhoneToolbar({
             className={cn(
               "tb-btn min-h-11 min-w-0 cursor-pointer rounded-[10px] border border-line bg-surface px-1 text-[12.5px] leading-tight text-fg aria-pressed:border-accent aria-pressed:bg-accent-bg aria-pressed:text-accent-ink",
               t.primary &&
-                "primary border-accent-strong bg-accent-strong font-medium text-on-accent",
+                "primary col-span-full min-h-12 border-accent-strong bg-accent-strong text-[15px] font-semibold text-on-accent",
               t.todo && "todo text-muted",
             )}
           >
@@ -355,7 +358,7 @@ export function PhoneToolbar({
               className={cn(
                 "tb-btn min-h-11 min-w-0 cursor-pointer rounded-[10px] border border-line bg-surface px-1 text-[13px] text-fg aria-pressed:border-accent aria-pressed:bg-accent-bg aria-pressed:text-accent-ink",
                 t.primary &&
-                  "primary border-accent-strong bg-accent-strong font-medium text-on-accent",
+                  "primary col-span-full min-h-12 border-accent-strong bg-accent-strong text-[15px] font-semibold text-on-accent",
               )}
             >
               {t.label}

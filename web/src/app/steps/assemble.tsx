@@ -2,6 +2,7 @@
 // views/assembly.ts 的 SVG 等轴测兜底。两种视图共用 views/asmcore.ts 的规则和 templates.ts 的模板：
 // 左树 = 装配层（从下往上）；右栏 = 选中层说明 + "装法会改变什么"（估算）；时间线 = 每装一层一步 + 开机复测，可回退。
 // 回退不存快照：清空后按时间线重放前 i 步（确定性重算）。开机复测用装好的状态（传感器偏移进 env）跑同一份固件验收。
+import { isPhone } from '../mobile';
 import { createAssembly } from '../../views/assembly';
 import { CHIP_HEAT_OFFSET, SONAR_BLOCK_CM, TEMPLATES, effectScript, type Template } from '../../views/templates';
 import { bootOptions, type Level } from '../../checks';
@@ -37,10 +38,10 @@ import { Host, Txt } from '../../ui/native';
 import { Btn, Btns, Kv, KvBox, KvT, LinkBtn, LockCard, Mono, Note, Ph, PhT, Res, Sec, Seg, SegB, Slider, TnL, TnM, TnSt, TreeEmpty, TreeGroup, btnClass, tnClass } from '../../ui/panel';
 import { lab } from '../../ui/links';
 import { Conf } from '../../ui/conf';
-import { ResultCard, Said } from '../../ui/result';
-import { headline, type Verdict } from '../../ui/say';
+import { ResultCard, Said, actCls } from '../../ui/result';
+import { groupRows, headline, type Verdict } from '../../ui/say';
 
-type Entry = { kind: 'place'; id: string; spot?: string } | { kind: 'test'; ok: boolean; rows: { ok: boolean; text: string; say?: string; tag?: string }[]; fingerprint: string; who: string; temp: number; offset: number };
+type Entry = { kind: 'place'; id: string; spot?: string } | { kind: 'test'; ok: boolean; rows: { ok: boolean; text: string; say?: string; tag?: string; dev?: string }[]; fingerprint: string; who: string; temp: number; offset: number };
 
 const KEY = (work: string) => `tryboard-app-asm:${work}`;
 /** 本机存的装配时间线（装了哪些、怎么装、复测结果；不存逐条结果以外的东西） */
@@ -270,6 +271,18 @@ export function assembleStep(): StepImpl {
 
   const placesUpTo = (i: number) => entries.slice(0, i + 1).filter((e): e is Extract<Entry, { kind: 'place' }> => e.kind === 'place');
   const lastTest = () => (cur >= 0 && entries[cur]?.kind === 'test' ? (entries[cur] as Extract<Entry, { kind: 'test' }>) : null);
+
+  /** 复测没过时的「罪魁」：按装配顺序第一件放在不合适位置的零件；at = 放它之前那一步（重装就退到这里） */
+  function culprit() {
+    for (let i = 0; i <= cur; i++) {
+      const e = entries[i];
+      if (e?.kind !== 'place') continue;
+      const p = T!.parts.find((x) => x.id === e.id);
+      const sp = p?.spots?.find((x) => x.key === e.spot);
+      if (p && sp && !sp.ok) return { part: p, spot: sp, good: p.spots!.find((x) => x.ok), at: i - 1 };
+    }
+    return null;
+  }
 
   function publish() {
     const c = ctx!;
@@ -578,15 +591,20 @@ export function assembleStep(): StepImpl {
     if (t.ok) return '装好后照样能用';
     if (T!.id === 'weather' && t.offset > 0.05) return `装进外壳后，温度偏高 ${t.offset.toFixed(1)} ℃`;
     if (retestVerdict(t) !== 'shifted') return headline(t.rows);
-    const n = t.rows.filter((r) => r.ok === false).length;
-    return n > 1 ? `装进外壳后，有 ${n} 项变了` : `装进外壳后，${headline(t.rows)}`;
+    // 按器件数，不按时间窗数（一个蜂鸣器拆成三个时间窗不算三项）
+    // 「装配」是装法警告，不是器件
+    const n = groupRows(t.rows).filter((g) => g.bad.length && g.dev !== '装配').length;
+    return n > 1 ? `装进外壳后，有 ${n} 个器件变了` : `装进外壳后，${headline(t.rows)}`;
   }
   function retestWhy(t: Extract<Entry, { kind: 'test' }>, fallback: string) {
     if (T!.id === 'weather') {
       const room = `传感器读到 ${t.temp.toFixed(1)} ℃，室温 ${(t.temp - t.offset).toFixed(1)} ℃。`;
       return t.offset > 0.05 ? `传感器离芯片太近，被芯片的热烤到了。${room}挪到通风口旁再测一次。` : room;
     }
-    return t.ok ? undefined : fallback;
+    if (t.ok) return undefined;
+    // 原因只写一次，并且是动作：哪件装得不对 + 改成哪儿（DESIGN_V2 §9.5）
+    const k = culprit();
+    return k ? `${k.spot.msg[0]}。${k.good ? `改成「${k.good.label}」再测。` : ''}` : fallback;
   }
 
   function renderRetest(head: ReactNode) {
@@ -595,6 +613,7 @@ export function assembleStep(): StepImpl {
     const t = lastTest();
     const s = asm!.state();
     const fw = firmwareFor(lv);
+    const k = t && !t.ok ? culprit() : null;
     const why =
       T!.id === 'weather'
         ? `传感器放在哪，BME280 就读到哪儿的温度：室温 ${lv ? envOf(lv).temp.toFixed(1) : '—'} ℃，受热偏高 ${(asm!.effects().sensorOffset ?? 0).toFixed(1)} ℃。`
@@ -605,7 +624,8 @@ export function assembleStep(): StepImpl {
             : '装好后重启，跑的还是同一份固件。';
     c.shell.props.render(
       <>
-        {head}
+        {/* 复测没过时「当前」那句（如「点下一步：成品」）和结果卡打架，原因已在卡里 */}
+        {!(t && !t.ok) && head}
         <Sec>开机复测</Sec>
         <Ph>
           装好的样子再验一次
@@ -616,16 +636,27 @@ export function assembleStep(): StepImpl {
             </>
           )}
         </Ph>
-        <Note>{why}</Note>
+        {!t && <Note>{why}</Note>}
         <Kv k="固件" v={fw.name} />
         <Kv k="装配" v={`${s.placed.length}/${s.total}`} cls={s.placed.length < s.total ? 'bad' : ''} />
         <Btns>
-          <Txt as="button" type="button" className={btnClass(true)} id="retestBtn" disabled={!!testing || s.placed.length < s.total || !lv} onClick={() => void retest()} text={testing ? `复测中 ${testing.progress.toFixed(1)} s` : '开机复测'} />
+          <Txt as="button" type="button" className={btnClass(!(t && !t.ok))} id="retestBtn" disabled={!!testing || s.placed.length < s.total || !lv} onClick={() => void retest()} text={testing ? `复测中 ${testing.progress.toFixed(1)} s` : '开机复测'} />
         </Btns>
         {t && (
           <>
             <Sec>复测结果</Sec>
-            <ResultCard verdict={retestVerdict(t)} meta={t.who} title={retestTitle(t)} why={retestWhy(t, why)} rows={t.rows} runId={t.fingerprint} />
+            <ResultCard verdict={retestVerdict(t)} meta={t.who} title={retestTitle(t)} why={retestWhy(t, why)} rows={t.rows} runId={t.fingerprint}>
+              {!t.ok && k && (
+                <Btn primary data-act="reinstall" className={actCls} disabled={!!testing} onClick={() => seek(k.at)}>
+                  重装{k.part.short}
+                </Btn>
+              )}
+              {!t.ok && (
+                <Btn primary={!k} data-act="retest" className={actCls} disabled={!!testing} onClick={() => void retest()}>
+                  再复测
+                </Btn>
+              )}
+            </ResultCard>
           </>
         )}
       </>,
@@ -673,10 +704,10 @@ export function assembleStep(): StepImpl {
         { i2cWire: hx.i2c ? hz.i2cCm : undefined, antenna: hx.antennaDb || undefined },
       );
       const clean = asm.clean() && hx.ok;
-      const rows: Extract<Entry, { kind: 'test' }>['rows'] = v.results.map((x) => ({ ok: x.ok, text: x.text, say: x.say, tag: x.tag }));
-      if (hx.i2c) rows.push({ ok: hx.i2c.verdict === 'ok', text: `I2C 排线 ${hz.i2cCm} cm：${i2cText(hx.i2c)}（估算，必须上真机）`, say: i2cSay(hx.i2c), tag: '估算' });
-      if (hx.antennaDb) rows.push({ ok: hx.wifi.level !== 'fail', text: `天线遮挡 ${hx.antennaDb} dB：${hx.wifi.text}（估算，必须上真机）`, say: wifiSay(hx.antennaDb), tag: '估算' });
-      rows.push({ ok: clean, text: clean ? `装配 ${s.total}/${s.total}，没有警告` : `装配 ${s.total}/${s.total}，有警告`, say: clean ? `${s.total} 件都装在合适的位置` : '有零件装得不合适，看左边带「!」的那件' });
+      const rows: Extract<Entry, { kind: 'test' }>['rows'] = v.results.map((x) => ({ ok: x.ok, text: x.text, say: x.say, tag: x.tag, dev: x.dev }));
+      if (hx.i2c) rows.push({ ok: hx.i2c.verdict === 'ok', text: `I2C 排线 ${hz.i2cCm} cm：${i2cText(hx.i2c)}（估算，必须上真机）`, say: i2cSay(hx.i2c), tag: '估算', dev: 'I2C 排线' });
+      if (hx.antennaDb) rows.push({ ok: hx.wifi.level !== 'fail', text: `天线遮挡 ${hx.antennaDb} dB：${hx.wifi.text}（估算，必须上真机）`, say: wifiSay(hx.antennaDb), tag: '估算', dev: 'Wi-Fi 天线' });
+      rows.push({ ok: clean, text: clean ? `装配 ${s.total}/${s.total}，没有警告` : `装配 ${s.total}/${s.total}，有警告`, say: clean ? `${s.total} 件都装在合适的位置` : '有零件装得不合适，看左边带「!」的那件', dev: '装配' });
       entry = { kind: 'test', ok: v.ok && clean, rows, fingerprint: v.fingerprint, who: fw.name, temp: env.temp, offset };
     } catch (e) {
       // 没跑完（Worker 出错 / 卡住）不记成"复测没过"：按钮恢复，直接再点一次
@@ -697,7 +728,7 @@ export function assembleStep(): StepImpl {
     push(entry);
     publish();
     if (ctx) {
-      ctx.shell.toast(entry.ok ? '开机复测通过' : '开机复测没通过，右边写了原因');
+      ctx.shell.toast(entry.ok ? '开机复测通过' : `开机复测没通过，${isPhone() ? '下面' : '右边'}写了原因`);
       renderAll();
     }
   }
@@ -761,7 +792,10 @@ export function assembleStep(): StepImpl {
     const done = s.placed.length === s.total;
     c.shell.setVerdict(testing ? '复测中…' : t ? (t.ok ? '复测通过' : '复测没通过') : `装配 ${s.placed.length}/${s.total}`, t ? (t.ok ? 'ok' : 'bad') : 'idle');
     c.shell.onVerdict(() => pick('retest'));
-    if (done) c.shell.setNext('下一步：成品 →', 'product', '', undefined, 'hot');
+    // 复测没过：主按钮换成补救动作（重装出问题那件）；没复测或通过时照旧去成品（复测不是成品的门槛）
+    const k = t && !t.ok && !testing ? culprit() : null;
+    if (done && k) c.shell.setNext(`重装${k.part.short}`, 'assemble', '', () => seek(k.at), 'hot');
+    else if (done) c.shell.setNext('下一步：成品 →', 'product', '', undefined, 'hot');
     else c.shell.setNext(`成品 · 还差 ${s.total - s.placed.length} 层没装`, null, `装完才能开机（${s.placed.length}/${s.total}）`);
     c.shell.toolbar.setGroups([
       { id: 'nav', tools: [{ id: 'asm-select', label: '选择', key: 'V' }] },
@@ -772,7 +806,8 @@ export function assembleStep(): StepImpl {
           : [{ id: 'asm-explode', label: asm!.exploded() ? '合上' : '炸开' }, ...(T!.id === 'weather' ? [{ id: 'asm-ruler', label: ruler ? '尺子：开' : '尺子' }] : [])],
       },
       { id: 'edit', tools: [{ id: 'asm-undo', label: '退一步' }, { id: 'asm-reset', label: '重来' }] },
-      { id: 'run', tools: [{ id: 'asm-retest', label: testing ? '复测中…' : '开机复测', primary: true }] },
+      // 主按钮已换成补救动作时，复测降为普通按钮：一屏只一个蓝色主按钮
+      { id: 'run', tools: [{ id: 'asm-retest', label: testing ? '复测中…' : '开机复测', primary: !k }] },
     ]);
     c.shell.toolbar.setActive(ruler ? 'asm-ruler' : 'asm-select');
   }

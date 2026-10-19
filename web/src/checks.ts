@@ -54,6 +54,8 @@ export interface CheckResult {
   text: string;
   /** 人话一行（DESIGN_V2 §9）：主语是器件，0 说「没」 */
   say?: string;
+  /** 器件名（舵机 / 蜂鸣器 / BME280 …）：结果卡按它 + tag 分组（DESIGN_V2 §9.5） */
+  dev?: string;
   /** 小字：引脚 / 地址 / 串口 */
   tag?: string;
 }
@@ -128,22 +130,22 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
   const res: CheckResult[] = [];
   for (const e of l.expect ?? []) {
     const ok = out.includes(e);
-    res.push({ ok, text: `串口出现 “${e}”`, say: ok ? `串口打印了「${e}」` : `串口没打印「${e}」`, tag: '串口' });
+    res.push({ ok, text: `串口出现 “${e}”`, say: ok ? `串口打印了「${e}」` : `串口没打印「${e}」`, tag: '串口', dev: '串口' });
   }
-  if (/Guru Meditation|abort\(\)|panic/.test(out)) res.push({ ok: false, text: '固件崩溃', say: '固件崩溃了，芯片在反复重启', tag: '串口' });
+  if (/Guru Meditation|abort\(\)|panic/.test(out)) res.push({ ok: false, text: '固件崩溃', say: '固件崩溃了，芯片在反复重启', tag: '串口', dev: '串口' });
   if (l.boots) {
     // 非空行：去掉空格、制表、回车后还剩东西（与 check.py 同一判法）
     const n = out.split('\n').filter((x) => x.replace(/[ \t\r]/g, '') !== '').length;
     const crashed = /Guru Meditation|abort\(\)|panic/.test(out);
     const ok = n >= 1 && !crashed;
-    res.push({ ok, text: `开机 ${l.seconds ?? 2} s 内串口输出 ${n} 行`, say: ok ? '开机正常，串口有输出' : crashed ? '一开机就崩溃了' : `开机 ${l.seconds ?? 2} 秒内串口没有输出`, tag: '串口' });
+    res.push({ ok, text: `开机 ${l.seconds ?? 2} s 内串口输出 ${n} 行`, say: ok ? '开机正常，串口有输出' : crashed ? '一开机就崩溃了' : `开机 ${l.seconds ?? 2} 秒内串口没有输出`, tag: '串口', dev: '串口' });
   }
   for (const c of l.i2c_ack ?? []) {
     const a = c.addr.toString(16).padStart(2, '0');
     const m = report.match(new RegExp(`I2C 0x${a} 应答 (\\d+) 次`));
     const n = m ? Number(m[1]) : 0;
     const who = chipAt(c.addr);
-    res.push({ ok: n >= c.min, text: `I2C 0x${a} 应答 ${n} 次（要 ≥ ${c.min}）`, say: n >= c.min ? `${who} 有回应` : n ? `${who} 只回应了 ${n} 次，至少要 ${c.min} 次` : `${who} 没有回应`, tag: `I2C 0x${a}` });
+    res.push({ ok: n >= c.min, text: `I2C 0x${a} 应答 ${n} 次（要 ≥ ${c.min}）`, say: n >= c.min ? `${who} 有回应` : n ? `${who} 只回应了 ${n} 次，至少要 ${c.min} 次` : `${who} 没有回应`, tag: `I2C 0x${a}`, dev: who });
   }
   const g = l.gpio_toggles;
   if (g) {
@@ -152,14 +154,14 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
     const ok = n >= g.min && (g.max === undefined || n <= g.max);
     const want = g.max === g.min ? `${g.min}` : `≥ ${g.min}` + (g.max !== undefined ? ` 且 ≤ ${g.max}` : '');
     const times = wantN(g.min, g.max);
-    res.push({ ok, text: `GPIO${g.pin} 翻转 ${n} 次（要 ${want}）`, say: ok ? `LED 闪了 ${n} 次` : n ? `LED 闪了 ${n} 次，应为 ${times} 次` : `LED 没闪，应闪 ${times} 次`, tag: `GPIO${g.pin}` });
+    res.push({ ok, text: `GPIO${g.pin} 翻转 ${n} 次（要 ${want}）`, say: ok ? `LED 闪了 ${n} 次` : n ? `LED 闪了 ${n} 次，应为 ${times} 次` : `LED 没闪，应闪 ${times} 次`, tag: `GPIO${g.pin}`, dev: 'LED' });
   }
   const pw = l.pwm;
   if (pw) {
     const m = report.match(new RegExp(`PWM GPIO${pw.pin}: (\\d+) 次变化，占空比 ([\\d.]+)\\.\\.([\\d.]+)，频率 ([\\d.]+)Hz`));
     const dev = pwmDevice(pw.freq, !!pw.beeps);
     const name = { servo: '舵机', buzzer: '蜂鸣器', other: 'PWM 输出' }[dev];
-    if (!m || Number(m[4]) === 0) res.push({ ok: false, text: `GPIO${pw.pin} 没有 PWM 输出`, say: `${name}没有收到信号`, tag: `GPIO${pw.pin}` });
+    if (!m || Number(m[4]) === 0) res.push({ ok: false, text: `GPIO${pw.pin} 没有 PWM 输出`, say: `${name}没有收到信号`, tag: `GPIO${pw.pin}`, dev: name });
     else {
       let lo = Number(m[2]), hi = Number(m[3]);
       const f = Number(m[4]);
@@ -180,7 +182,7 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
       const ms = (d: number, hz: number) => ((d * 1000) / hz).toFixed(2);
       const fBad = Math.abs(f - pw.freq) > pw.freq * 0.01;
       const want = ok ? '' : `；要 ${span(ms(pw.min, pw.freq), ms(pw.max, pw.freq))} ms${fBad ? `、${pw.freq} Hz` : ''}`;
-      res.push({ ok, text: `GPIO${pw.pin} PWM ${f.toFixed(0)} Hz${when}，脉宽 ${span(ms(lo, f), ms(hi, f))} ms（占空比 ${span(lo.toFixed(3), hi.toFixed(3))}）${want}`, say: pwmSay(dev, ok, fBad, pw, lo, hi, f), tag: `GPIO${pw.pin}` });
+      res.push({ ok, text: `GPIO${pw.pin} PWM ${f.toFixed(0)} Hz${when}，脉宽 ${span(ms(lo, f), ms(hi, f))} ms（占空比 ${span(lo.toFixed(3), hi.toFixed(3))}）${want}`, say: pwmSay(dev, ok, fBad, pw, lo, hi, f), tag: `GPIO${pw.pin}`, dev: name });
       if (pw.steps) {
         const seq = ch.map(([d]) => d);
         let i = 0;
@@ -192,7 +194,7 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
           else i = j + 1;
         }
         const ms = (d: number) => ((d * 1000) / pw.freq).toFixed(1);
-        res.push({ ok: !miss.length, text: `脉宽依次出现 ${pw.steps.map(ms).join(' → ')} ms` + (miss.length ? `：缺 ${miss.map(ms).join('、')} ms` : ''), say: miss.length ? `${name}少走了 ${miss.length} 个位置（共 ${pw.steps.length} 个）` : `${name}依次走到了 ${pw.steps.length} 个位置`, tag: `GPIO${pw.pin}` });
+        res.push({ ok: !miss.length, text: `脉宽依次出现 ${pw.steps.map(ms).join(' → ')} ms` + (miss.length ? `：缺 ${miss.map(ms).join('、')} ms` : ''), say: miss.length ? `${name}少走了 ${miss.length} 个位置（共 ${pw.steps.length} 个）` : `${name}依次走到了 ${pw.steps.length} 个位置`, tag: `GPIO${pw.pin}`, dev: name });
       }
       for (const b of pw.beeps ?? []) {
         // 响了几声：时间窗里占空比从 0（或没有输出）变成 > 0 的次数（蜂鸣器节奏，"越近越急"）
@@ -206,7 +208,7 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
         const ok = b.min <= n && n <= b.max;
         const win = `${b.from}–${b.to} 秒`;
         const say = b.max === 0 ? (ok ? `${win}蜂鸣器安静` : `${win}蜂鸣器应该安静，却响了 ${n} 声`) : ok ? `${win}蜂鸣器响了 ${n} 声` : n ? `${win}蜂鸣器响了 ${n} 声，应为 ${want} 声` : `${win}蜂鸣器没响，应响 ${want} 声`;
-        res.push({ ok, text: `GPIO${pw.pin} ${b.from}–${b.to} s 响 ${n} 声（要 ${want}）`, say, tag: `GPIO${pw.pin}` });
+        res.push({ ok, text: `GPIO${pw.pin} ${b.from}–${b.to} s 响 ${n} 声（要 ${want}）`, say, tag: `GPIO${pw.pin}`, dev: name });
       }
     }
   }
@@ -246,37 +248,37 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
       if (nf) say = good ? `灯带 ${L.count} 颗灯都对` : last.length !== L.count ? `灯带收到 ${last.length} 颗，应为 ${L.count} 颗` : lit.length !== litWant ? `灯带亮了 ${lit.length} 颗，应亮 ${litWant} 颗` : '灯带颜色不对';
     }
     if (nf && !ok && !w.dominant && !w.last) say = '彩灯的数据不对';
-    res.push({ ok, text, say, tag: `GPIO${w.pin}` });
+    res.push({ ok, text, say, tag: `GPIO${w.pin}`, dev: w.last ? '灯带' : '彩灯' });
   }
   for (const n of l.numeric ?? []) {
     const vals = [...out.matchAll(new RegExp(n.regex, 'g'))].map((m) => Number(m[1]));
     const worst = vals.length ? Math.max(...vals.map((v) => Math.abs(v - n.value))) : null;
     const ok = worst !== null && worst <= n.tol;
-    res.push({ ok, text: `${n.name} ${vals.length} 次读数，最大偏差 ${worst === null ? '—' : fmtG(worst)}（容差 ${n.tol}）`, say: worst === null ? `串口没打印${n.name}` : ok ? `${n.name}读数准确` : `${n.name}读数差了 ${fmtG(worst)}，应在 ±${n.tol} 以内`, tag: '串口' });
+    res.push({ ok, text: `${n.name} ${vals.length} 次读数，最大偏差 ${worst === null ? '—' : fmtG(worst)}（容差 ${n.tol}）`, say: worst === null ? `串口没打印${n.name}` : ok ? `${n.name}读数准确` : `${n.name}读数差了 ${fmtG(worst)}，应在 ±${n.tol} 以内`, tag: '串口', dev: '串口' });
   }
   if (l.oled_min_pixels !== undefined) {
     const m = report.match(/OLED 点亮像素 (\d+)/);
     const n = m ? Number(m[1]) : 0;
-    res.push({ ok: n >= l.oled_min_pixels, text: `OLED 点亮 ${n} 像素（要 ≥ ${l.oled_min_pixels}）`, say: n >= l.oled_min_pixels ? '屏幕亮了' : n ? `屏幕上的内容太少：亮了 ${n} 个像素，至少要 ${l.oled_min_pixels} 个` : '屏幕没亮', tag: 'OLED' });
+    res.push({ ok: n >= l.oled_min_pixels, text: `OLED 点亮 ${n} 像素（要 ≥ ${l.oled_min_pixels}）`, say: n >= l.oled_min_pixels ? '屏幕亮了' : n ? `屏幕上的内容太少：亮了 ${n} 个像素，至少要 ${l.oled_min_pixels} 个` : '屏幕没亮', tag: 'OLED', dev: '屏幕' });
   }
   if (l.lcd_min_pixels !== undefined) {
     const m = report.match(/LCD GC9A01 非黑像素 (\d+)/);
     const n = m ? Number(m[1]) : 0;
-    res.push({ ok: n >= l.lcd_min_pixels, text: `圆屏点亮 ${n} 像素（要 ≥ ${l.lcd_min_pixels}）`, say: n >= l.lcd_min_pixels ? '圆屏亮了' : n ? `圆屏上的内容太少：亮了 ${n} 个像素，至少要 ${l.lcd_min_pixels} 个` : '圆屏没亮', tag: '圆屏' });
+    res.push({ ok: n >= l.lcd_min_pixels, text: `圆屏点亮 ${n} 像素（要 ≥ ${l.lcd_min_pixels}）`, say: n >= l.lcd_min_pixels ? '圆屏亮了' : n ? `圆屏上的内容太少：亮了 ${n} 个像素，至少要 ${l.lcd_min_pixels} 个` : '圆屏没亮', tag: '圆屏', dev: '圆屏' });
   }
   for (const c of l.serial_count ?? []) {
     const n = out.split(c.text).length - 1;
-    res.push({ ok: n >= c.min, text: `串口 “${c.text}” 出现 ${n} 次（要 ≥ ${c.min}）`, say: n >= c.min ? `串口打印了 ${n} 次「${c.text}」` : n ? `串口只打印了 ${n} 次「${c.text}」，至少要 ${c.min} 次` : `串口没打印「${c.text}」`, tag: '串口' });
+    res.push({ ok: n >= c.min, text: `串口 “${c.text}” 出现 ${n} 次（要 ≥ ${c.min}）`, say: n >= c.min ? `串口打印了 ${n} 次「${c.text}」` : n ? `串口只打印了 ${n} 次「${c.text}」，至少要 ${c.min} 次` : `串口没打印「${c.text}」`, tag: '串口', dev: '串口' });
   }
   if (l.usb) {
     const m = report.match(/USB 主机：(\S+)/);
     const st = m ? m[1] : '没有 USB 设备';
-    if (l.usb.state !== undefined) res.push({ ok: st === l.usb.state, text: `电脑看到的 USB 设备：${st}（要${l.usb.state}）`, say: st === l.usb.state ? `电脑认出了${st}` : `电脑看到的是${st}，应为${l.usb.state}`, tag: 'USB' });
+    if (l.usb.state !== undefined) res.push({ ok: st === l.usb.state, text: `电脑看到的 USB 设备：${st}（要${l.usb.state}）`, say: st === l.usb.state ? `电脑认出了${st}` : `电脑看到的是${st}，应为${l.usb.state}`, tag: 'USB', dev: 'USB' });
     if (l.usb.typed !== undefined) {
       const t = report.match(/^\[tryboard\] USB 键盘输入: (".*")$/m);
       const got: string = t ? JSON.parse(t[1]) : '';
       const shown = (x: string) => x.replaceAll('\n', '↵');
-      res.push({ ok: got === l.usb.typed, text: `电脑上打出 “${shown(got)}”（要 “${shown(l.usb.typed)}”）`, say: got === l.usb.typed ? `电脑上打出了「${shown(got)}」` : got ? `电脑上打出的是「${shown(got)}」，应为「${shown(l.usb.typed)}」` : '电脑上什么也没打出来', tag: 'USB' });
+      res.push({ ok: got === l.usb.typed, text: `电脑上打出 “${shown(got)}”（要 “${shown(l.usb.typed)}”）`, say: got === l.usb.typed ? `电脑上打出了「${shown(got)}」` : got ? `电脑上打出的是「${shown(got)}」，应为「${shown(l.usb.typed)}」` : '电脑上什么也没打出来', tag: 'USB', dev: 'USB' });
     }
   }
   if (l.lcd_colors?.length) {
@@ -303,7 +305,7 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
       }
       if (!ok) text += `；画面主色 ${top}`;
       const say = ok ? `圆屏上的${c.name}对` : !n ? `圆屏上没有${c.name}` : !enough ? (n < c.min ? `圆屏上的${c.name}太少` : `圆屏上的${c.name}太多`) : `圆屏上的${c.name}位置不对`;
-      res.push({ ok, text, say, tag: '圆屏' });
+      res.push({ ok, text, say, tag: '圆屏', dev: '圆屏' });
     }
   }
   return res;

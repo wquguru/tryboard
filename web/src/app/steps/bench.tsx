@@ -30,7 +30,7 @@ import {
 import { diffRuns, summarize, type BenchStep } from "../history";
 import { checkCommand, type Level } from "../../checks";
 import { Conf, confOfRule } from "../../ui/conf";
-import { ResultCard, VerdictPill } from "../../ui/result";
+import { ResultCard, RunningCard, actCls } from "../../ui/result";
 import { headline } from "../../ui/say";
 import { VerifyStalled, verifyLevel } from "../../verify";
 import { fetchBuf } from "../../assets";
@@ -85,7 +85,7 @@ import { noteSaved } from "../saved";
 import { CHIP_NAME, chipOf, loadExamples, type AnalogControl, type Example } from "../examples";
 import { HOME_WORKS, wkey } from "../works";
 import { CustomCheckCard, CustomPlacedCard } from "../customui";
-import { BuyCard } from "../buycard";
+import { BuyCard, BuyDialog } from "../buycard";
 import { actions, bc, overlay, setBc, setDock, type Issue } from "../chrome";
 import { replay } from "../bom";
 import { isPhone, phoneProps, setMui } from "../mobile";
@@ -2449,35 +2449,36 @@ export function benchStep(): StepImpl {
     const busy = s.verifying === id;
     const other = !!s.verifying && !busy;
     const st = busy ? undefined : stalled[id];
+    // 一张卡只有一个主动作（DESIGN_V2 §9.5）：没过 → 复制给 AI 修；自己的固件过了 → 下一个检查点
+    const idx = c.session.levels.findIndex((x) => x.id === id);
+    const nextLv = c.session.levels.slice(idx + 1).find((x) => !s.checks[x.id]?.ok || !s.checks[x.id]?.own);
+    const runRef = async () => verify(l, await fetchBuf(`./fw/${l.ref}/flash.bin`), `参考固件 ${l.ref}`, false);
     const stall = st ? (
       <>
         <Sec>验收结果</Sec>
-        <div className="result-card" data-verdict="stall">
-          <div className="verdict-line mb-1 flex items-center gap-2 text-xs">
-            <VerdictPill v="stall" />
-          </div>
-          <div className="result-title mb-1 text-[15px] font-medium">这次没跑完</div>
-          <p className="my-1.5 text-xs leading-relaxed text-muted">
-            模拟卡住，已经停下。这不算没通过，你的代码可能没问题
-            {r ? "；上一次的结果留在下面" : ""}。
-          </p>
-          <p className="my-1.5 text-[11px] text-muted">
-            原因：{st.why} · 固件 <Mono>{st.who}</Mono> 已留着
-          </p>
-        </div>
-        <Btns>
-          <Btn
-            id="retryCheck"
-            primary
-            disabled={other}
-            onClick={() => verify(l, st.buf, st.who, st.own)}
-          >
+        <ResultCard
+          verdict="stall"
+          title="这次没跑完"
+          why={`模拟卡住，已经停下。这不算没通过，你的代码可能没问题${r ? "；上一次的结果留在下面" : ""}。`}
+          extra={
+            <p className="mt-1 mb-0 text-xs text-muted">
+              原因：{st.why} · 固件 <Mono>{st.who}</Mono> 已留着
+            </p>
+          }
+          rows={[]}
+        >
+          <Btn id="retryCheck" primary className={actCls} disabled={other} onClick={() => verify(l, st.buf, st.who, st.own)}>
             再跑一次
           </Btn>
-        </Btns>
+        </ResultCard>
       </>
     ) : null;
-    const result = r ? (
+    const result = busy ? (
+      <>
+        <Sec>验收结果</Sec>
+        <RunningCard title={l.title} progress={<>已模拟 <Live k="vp" className="font-mono" /></>} />
+      </>
+    ) : r ? (
       <>
         <Sec>验收结果</Sec>
         <ResultCard
@@ -2493,9 +2494,36 @@ export function benchStep(): StepImpl {
               得到同一个运行编号。
             </Note>
           }
-        />
+        >
+          {!r.ok && (
+            <Btn primary data-act="fix" className={actCls} onClick={(e) => void copyFix(e.currentTarget, r.rows)}>
+              复制给 AI 修
+            </Btn>
+          )}
+          {!r.ok && r.own && l.ref && (
+            <Btn data-act="compare" className={actCls} disabled={!!s.verifying} onClick={() => void runRef()}>
+              用参考固件对比
+            </Btn>
+          )}
+          {r.ok && r.own && nextLv && (
+            <Btn primary data-act="nextcp" className={actCls} onClick={() => select({ kind: "checkpoint", id: nextLv.id })}>
+              下一个检查点：{nextLv.title}
+            </Btn>
+          )}
+        </ResultCard>
       </>
     ) : null;
+    /** 任务书 + 没过的结论原文（和命令行看到的一致），AI 拿去就能改 */
+    const copyFix = async (b: HTMLButtonElement, rows: { ok: boolean | null; text: string }[]) => {
+      const bad = rows.filter((x) => x.ok === false).map((x) => `- ${x.text}`).join("\n");
+      const text = `${l.brief}\n\n通过条件：${l.pass}\n验收：${checkCommand(l)}（退出码 0 表示通过）\n\n上次验收没过的几条：\n${bad}`;
+      try {
+        await navigator.clipboard.writeText(text);
+        b.textContent = "已复制，贴给 AI";
+      } catch {
+        b.textContent = "复制不了，请从下面的任务书手动复制";
+      }
+    };
     const copy = async (b: HTMLButtonElement) => {
       const text = `${l.brief}\n\n通过条件：${l.pass}\n验收：${checkCommand(l)}（退出码 0 表示通过）`;
       try {
@@ -2550,14 +2578,7 @@ export function benchStep(): StepImpl {
             <Btn
               id="runRef"
               disabled={!!s.verifying}
-              onClick={async () =>
-                verify(
-                  l,
-                  await fetchBuf(`./fw/${l.ref}/flash.bin`),
-                  `参考固件 ${l.ref}`,
-                  false,
-                )
-              }
+              onClick={() => void runRef()}
             >
               用参考固件试
             </Btn>
@@ -2595,6 +2616,7 @@ export function benchStep(): StepImpl {
         text: x.text,
         say: x.say,
         tag: x.tag,
+        dev: x.dev,
       }));
       // 装配检查是几何估算，命令行不判；实验台上也不判，留给「组装」步骤
       if (l.assembly)
@@ -2602,6 +2624,7 @@ export function benchStep(): StepImpl {
           ok: null,
           text: "装配检查（估算）在「组装」步骤判定，这里不计",
           say: "装配在「组装」那一步检查，这里不判",
+          dev: "装配",
         });
       out = {
         ok: v.ok,
@@ -2660,8 +2683,8 @@ export function benchStep(): StepImpl {
     ];
     const set = (k: string, v: string, bad = false) => {
       for (const root of card ? [el, card, ...extra] : [el, ...extra]) {
-        const n = root.querySelector<HTMLElement>(`[data-live="${k}"]`);
-        if (n) {
+        // 同一字段可能出现多处（拖放框和跑中卡都显示「已模拟」），全填
+        for (const n of root.querySelectorAll<HTMLElement>(`[data-live="${k}"]`)) {
           n.textContent = v;
           n.classList.toggle("bad", bad);
         }
@@ -2975,7 +2998,7 @@ export function benchStep(): StepImpl {
       const checked = loadBuyChecked(key);
       overlay(
         "buy",
-        <div className="absolute inset-3 z-5 overflow-auto rounded-(--r) border border-line bg-surface p-4 shadow-panel md:inset-x-[max(12px,calc(50%-440px))] md:top-6 md:bottom-auto md:max-h-[calc(100%-48px)] md:p-6">
+        <BuyDialog onClose={() => overlay("buy", null)}>
           <BuyCard
             title={plan.title}
             checks={c.work.checkpoints.length}
@@ -3008,7 +3031,7 @@ export function benchStep(): StepImpl {
             }
             onClose={() => overlay("buy", null)}
           />
-        </div>,
+        </BuyDialog>,
       );
     };
     draw();
