@@ -13,6 +13,7 @@ import type { Pose } from '../imupose';
 import { capturableOf, type Capturable } from './capture';
 import { t } from '../i18n';
 import { shaderWarm } from '../shaderwarm';
+import { onFrame, PRIO } from '../ui/frame';
 
 export type WorkKind = 'lamp' | 'ruler' | 'tilt';
 
@@ -641,10 +642,9 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     const r = el.getBoundingClientRect();
     return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height];
   }
-  let raf = 0;
+  let raf: (() => void) | null = null;
   let last = performance.now();
   function frame(now: number) {
-    raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     tick(o.frame(), dt, now);
@@ -662,16 +662,16 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     start() {
       if (raf) return;
       last = performance.now();
-      raf = requestAnimationFrame(frame);
+      raf = onFrame(frame, { priority: PRIO.render, el: container });
     },
     stop() {
-      cancelAnimationFrame(raf);
-      raf = 0;
+      raf?.();
+      raf = null;
       up();
     },
     dispose() {
-      cancelAnimationFrame(raf);
-      raf = 0;
+      raf?.();
+      raf = null;
       offTheme();
       ro.disconnect();
       controls.dispose();

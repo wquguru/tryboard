@@ -101,7 +101,8 @@ export function benchStep(): StepImpl {
         c.session.pick.onPick?.(b.onPick);
         c.shell.toolbar.onTool(b.onTool);
         c.shell.card.onHide(() => {
-          cancelAnimationFrame(b.cardRaf);
+          b.cardRaf?.();
+          b.cardRaf = null;
           b.cardFor = null;
         });
         c.session.onTick((m) => {

@@ -1,6 +1,7 @@
 // Product previews: turning Little Yellow, the lens buddy, the desk weather station. Looks only, no firmware; the home page's
 // "run real firmware" swaps in the simulator-driven product view.
 import { t } from '../i18n';
+import { afterFrame } from '../ui/frame';
 import { dialTicks, fitText, mount } from './common';
 
 export type ShowKind = 'spin' | 'lens' | 'weather' | 'usbkey';
@@ -129,5 +130,5 @@ ${art(kind)}
   }
   render();
   // Leave room for the right-hand "Illustration" tag when the spec line translates long
-  requestAnimationFrame(() => fitText(q('spec'), 330));
+  afterFrame(() => fitText(q('spec'), 330));
 }

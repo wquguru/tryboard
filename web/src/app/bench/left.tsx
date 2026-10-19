@@ -1,6 +1,7 @@
 // Bench section: Left column: Parts, Wiring table, checkpoint card (U-04).
 // Moved out of benchStep() (R-08); talks to other sections only through BenchCtx.
 import { t } from "../../i18n";
+import { afterFrame } from "../../ui/frame";
 import { type ReactNode } from "react";
 import { type Level } from "../../checks";
 import { type Selection } from "../types";
@@ -74,7 +75,7 @@ export function mountLeft(b: BenchCtx) {
           onGo={() => {
             b.select(tg ?? { kind: "checkpoint", id });
             if (tg)
-              requestAnimationFrame(() => b.ctx?.session.bench.view?.("fit", tg));
+              afterFrame(() => b.ctx?.session.bench.view?.("fit", tg));
           }}
           onAll={() => setDock({ tab: "checks", collapsed: false })}
           own={ownCount(c, s)}

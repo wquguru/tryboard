@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import type { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { onFrame, PRIO } from './ui/frame';
 
 export interface ShaderWarm {
   /** Queue programs for the scene's current materials; call after building or changing the scene. */
@@ -117,6 +118,7 @@ export function shaderWarm(renderer: THREE.WebGLRenderer, scene: THREE.Scene, ca
       if ((++k >= SETTLE_FRAMES && done) || k > SETTLE_MAX) {
         if (fence) gl2!.deleteSync(fence);
         settled ||= gen === warmGen;
+        off();
         return;
       }
       if (done && gl2) {
@@ -124,10 +126,9 @@ export function shaderWarm(renderer: THREE.WebGLRenderer, scene: THREE.Scene, ca
         fence = gl2.fenceSync(gl2.SYNC_GPU_COMMANDS_COMPLETE, 0);
         gl2.flush();
       }
-      next();
     };
-    const next = () => requestAnimationFrame(step);
-    next();
+    // One step per frame, after the views' render (PRIO.warm): the settle count is in frames
+    const off = onFrame(step, { priority: PRIO.warm });
     // Same variants the frame will use: with a composer the scene renders into its linear target, not the canvas
     const prev = renderer.getRenderTarget();
     if (composer) renderer.setRenderTarget(composer.readBuffer);

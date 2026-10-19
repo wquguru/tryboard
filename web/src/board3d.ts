@@ -391,7 +391,7 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
       return { ...lastInfo, frameMs: Math.round(ctx.frameMs * 10) / 10, cpuMs: Math.round(ctx.cpuMs * 100) / 100, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures };
     },
     dispose() {
-      cancelAnimationFrame(ctx.raf);
+      ctx.raf?.();
       offExt();
       offReport();
       ro.disconnect();

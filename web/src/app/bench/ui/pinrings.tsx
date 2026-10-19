@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ScreenPoint } from "../../../scene-api";
 import { cn } from "../../../ui/cn";
+import { onFrame, PRIO } from "../../../ui/frame";
 import { t } from "../../../i18n";
 import { isPhone } from "../../mobile";
 
@@ -26,7 +27,6 @@ export function PinRings({
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [hover, setHover] = useState<string | null>(null);
   useEffect(() => {
-    let raf = 0;
     const tick = () => {
       for (const p of pins) {
         const el = refs.current[p.id];
@@ -39,10 +39,8 @@ export function PinRings({
           : "";
         if (s && el.style.transform !== tf) el.style.transform = tf;
       }
-      raf = requestAnimationFrame(tick);
     };
-    tick();
-    return () => cancelAnimationFrame(raf);
+    return onFrame(tick, { priority: PRIO.ui, immediate: true });
   }, [pins, project]);
   const h = hover ? pins.find((p) => p.id === hover) : null;
   const lens = useLens(pins, refs, onPin);

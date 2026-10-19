@@ -1,6 +1,7 @@
 // Bench section: quick cards (P0-04).
 // Moved out of benchStep() (R-08); talks to other sections only through BenchCtx.
 import { t } from "../../i18n";
+import { afterFrame, onFrame, PRIO } from "../../ui/frame";
 import { type ReactNode } from "react";
 import { type PickTarget, type ScreenPoint } from "../../scene-api";
 import { partId, partInfo } from "../wiring";
@@ -124,18 +125,21 @@ export function mountCards(b: BenchCtx) {
     c.shell.card.show(c.session.pick.project?.(t) ?? screen, box);
     b.updateLive();
     // The card follows its target as the bench rotates and closes once the target is out of view
-    cancelAnimationFrame(b.cardRaf);
+    b.cardRaf?.();
     const follow = () => {
-      if (!b.cardFor || !c.shell.card.open) return;
+      if (!b.cardFor || !c.shell.card.open) return stopFollow();
       const p = c.session.pick.project?.(b.cardFor);
       if (!p) return closeCard();
       c.shell.card.place(p);
-      b.cardRaf = requestAnimationFrame(follow);
     };
-    b.cardRaf = requestAnimationFrame(follow);
+    b.cardRaf = onFrame(follow, { priority: PRIO.ui });
+  }
+  function stopFollow() {
+    b.cardRaf?.();
+    b.cardRaf = null;
   }
   function closeCard() {
-    cancelAnimationFrame(b.cardRaf);
+    stopFollow();
     b.cardFor = null;
     b.ctx?.shell.card.hide();
   }
@@ -237,7 +241,7 @@ export function mountCards(b: BenchCtx) {
       c.shell.toolbar.setActive("select");
       c.shell.toast(t("Drag a part from the Parts library onto the bench, or click its Place button"));
       (document.querySelector('[data-left="lib"]') as HTMLElement | null)?.click();
-      requestAnimationFrame(() =>
+      afterFrame(() =>
         (document.querySelector("#partLib input") as HTMLInputElement | null)?.focus(),
       );
       return;

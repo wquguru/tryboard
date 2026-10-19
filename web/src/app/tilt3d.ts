@@ -6,6 +6,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { poseToThree, threeToPose, type Pose } from '../imupose';
 import { currentTheme, onTheme } from '../theme';
 import { shaderWarm } from '../shaderwarm';
+import { onFrame, PRIO } from '../ui/frame';
 
 export interface TiltOptions {
   /** Current pose (the one in session / store). */
@@ -175,10 +176,9 @@ export function createTilt3D(container: HTMLElement, o: TiltOptions): Tilt3D {
   el.addEventListener('pointerup', up);
   el.addEventListener('pointercancel', up);
 
-  let raf = 0;
+  let raf: (() => void) | null = null;
   let last = '';
   const tick = () => {
-    raf = requestAnimationFrame(tick);
     // Follow pose changes from elsewhere (sliders, level button), except while the user is dragging.
     if (!drag) {
       const p = o.pose();
@@ -193,15 +193,15 @@ export function createTilt3D(container: HTMLElement, o: TiltOptions): Tilt3D {
 
   return {
     start() {
-      if (!raf) tick();
+      raf ??= onFrame(tick, { priority: PRIO.render, el: container, immediate: true });
     },
     stop() {
-      cancelAnimationFrame(raf);
-      raf = 0;
+      raf?.();
+      raf = null;
     },
     dispose() {
-      cancelAnimationFrame(raf);
-      raf = 0;
+      raf?.();
+      raf = null;
       offTheme();
       ro.disconnect();
       renderer.dispose();

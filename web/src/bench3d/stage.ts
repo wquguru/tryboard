@@ -12,6 +12,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { SANS } from '../scene-api';
 import { t } from '../i18n';
 import { shaderWarm } from '../shaderwarm';
+import { onFrame, PRIO } from '../ui/frame';
 import { ACCENT, canvasTexture } from './util';
 import type { BenchCtx } from './ctx';
 
@@ -180,7 +181,7 @@ export function mountLoop(ctx: BenchCtx): void {
   // ---------------------------------------------------------------- render loop
 
   ctx.usbHost = null;
-  ctx.raf = 0;
+  ctx.raf = null;
   ctx.rgbPeak = 0;
   ctx.frameMs = 16.7;
   ctx.cpuMs = 0;
@@ -188,9 +189,7 @@ export function mountLoop(ctx: BenchCtx): void {
   const lastInfo = { calls: 0, triangles: 0 };
   ctx.lastInfo = lastInfo;
   const tmp = new THREE.Vector3();
-  const next = () => (ctx.raf = requestAnimationFrame(tick));
   const tick = () => {
-    next();
     const t0 = performance.now();
     ctx.frameMs = ctx.frameMs * 0.9 + (t0 - lastT) * 0.1;
     lastT = t0;
@@ -275,5 +274,5 @@ export function mountLoop(ctx: BenchCtx): void {
     ctx.cpuMs = ctx.cpuMs * 0.9 + (performance.now() - t0) * 0.1;
   };
   // First frame on the next vsync: shader compile gets its own task instead of joining the build's last slice
-  next();
+  ctx.raf = onFrame(tick, { priority: PRIO.render, el: container });
 }

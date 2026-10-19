@@ -9,6 +9,7 @@ import { useStore } from "./react";
 import { createStore } from "./store";
 import { Grab, mui, phoneProps, setMui, usePhone } from "./mobile";
 import { t } from "../i18n";
+import { afterFrame } from "../ui/frame";
 
 // Code tab (P2-15): chunk and source load only when opened (or at idle, R-12), not in the first bundle
 function CodePane({ phone, toast }: { phone?: boolean; toast: (msg: string) => void }) {
@@ -52,7 +53,7 @@ function createSerialModel() {
   let tail: HTMLElement | null = null;
   /** Phone peek bar / product serial strip: last line only (imperative textContent, no React) */
   const peeks = new Set<HTMLElement>();
-  let peekRaf = 0;
+  let peekRaf = false;
   const lastLine = () => {
     const p = pending.replace(ANSI, "").trim();
     if (p) return p;
@@ -62,8 +63,9 @@ function createSerialModel() {
   };
   function updPeek() {
     if (!peeks.size || peekRaf) return;
-    peekRaf = requestAnimationFrame(() => {
-      peekRaf = 0;
+    peekRaf = true;
+    afterFrame(() => {
+      peekRaf = false;
       const txt = lastLine() || t('No serial output yet');
       for (const el of peeks) if (el.textContent !== txt) el.textContent = txt;
     });
@@ -94,13 +96,14 @@ function createSerialModel() {
     return d;
   }
   // Reading scrollHeight per chunk during a serial flood forces reflow: coalesce into one scroll per frame
-  let stickRaf = 0;
+  let stickRaf = false;
   /** Last auto-scroll position: scroll events are async, new lines may have grown the height, so that's not a user scroll-up */
   let autoTop = -1;
   function stick() {
     if (stickRaf) return;
-    stickRaf = requestAnimationFrame(() => {
-      stickRaf = 0;
+    stickRaf = true;
+    afterFrame(() => {
+      stickRaf = false;
       if (host && ui.get().follow) {
         host.scrollTop = host.scrollHeight;
         autoTop = host.scrollTop;
