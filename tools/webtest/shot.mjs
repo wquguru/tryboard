@@ -1,4 +1,4 @@
-// 截图：node tools/webtest/shot.mjs <页面路径含参数> <输出 png> [宽] [高] [fullPage=1]
+// Screenshot: node tools/webtest/shot.mjs <page path with query> <output png> [width] [height] [fullPage=1]
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -10,7 +10,7 @@ const [page0, out, w = '1440', h = '900', full = '1'] = process.argv.slice(2);
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  // Extensionless paths (/app, /select) map to .html, like Vite preview and static hosting (DESIGN_V2 §7.2)
   const f0 = path.join(dist, u === '/' ? 'index.html' : u);
   const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
@@ -28,5 +28,5 @@ await new Promise((r) => setTimeout(r, 600));
 fs.mkdirSync(path.dirname(out), { recursive: true });
 await page.screenshot({ path: out, fullPage: full === '1' });
 const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
-console.log(`[shot] ${out}${overflow ? '（有横向滚动！）' : ''}${errors.length ? '\n页面错误: ' + errors.join('\n') : ''}`);
+console.log(`[shot] ${out}${overflow ? ' (horizontal scroll!)' : ''}${errors.length ? '\npage errors: ' + errors.join('\n') : ''}`);
 await browser.close(); server.close();

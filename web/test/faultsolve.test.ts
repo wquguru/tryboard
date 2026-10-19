@@ -1,4 +1,4 @@
-// 接线错误走网络求解（P2-14）：wirecheck 给每种错接带上网表参数；有 wasm 产物时直接用它求解，数值与 core/crates/elec/src/fault.rs 的测试同一组
+// Wiring faults via the network solver (P2-14): each fault carries netlist params; with wasm built, values match core/crates/elec/src/fault.rs tests
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -15,7 +15,7 @@ const SONAR = [{ type: 'hcsr04', trig: 17, echo: 18 }] as never[];
 const check = (p: never[], mods = {}) => checkWiring(p, wiresOf(p, false, mods));
 const one = (fs: WireFault[], rule: string) => {
   const f = fs.find((x) => x.rule === rule);
-  assert.ok(f, `没有 ${rule}：${fs.map((x) => x.rule)}`);
+  assert.ok(f, `no ${rule}: ${fs.map((x) => x.rule)}`);
   return f!;
 };
 
@@ -28,7 +28,7 @@ const CASES = {
   bme5v: () => one(check(WEATHER, { retarget: { 'wire:3V3~bme280:VIN': '5V' } }), 'W2'),
 };
 
-test('每种错接都带网表：kind 与参数对得上 tb_fault', () => {
+test('every fault carries a netlist: kind and params match tb_fault', () => {
   assert.deepEqual(CASES.drive().net, {
     kind: 1,
     cases: [
@@ -41,11 +41,11 @@ test('每种错接都带网表：kind 与参数对得上 tb_fault', () => {
   assert.deepEqual(CASES.short5v().net?.cases[0].args, [1]);
   assert.deepEqual(CASES.nodiv().net?.cases.map((c) => c.args), [[50]]);
   assert.deepEqual(CASES.bme5v().net?.cases.map((c) => c.args), [[10_000], [10_000]]);
-  // 跳线不算零件：默认接线加一根无害跳线（GND 接 GND）不出新问题
+  // Jumpers are not parts: adding a harmless jumper (GND to GND) to the default wiring adds no issue
   assert.deepEqual(check(WEATHER, { jumpers: [['GND', 'GND']] }).map((f) => f.rule), []);
 });
 
-test('后果文字按门限分档（不依赖 wasm）', () => {
+test('consequence text is bucketed by threshold (no wasm needed)', () => {
   assert.match(consequence(1, { i: 0.097, vPin: 0.1, v5: NaN, v33: NaN, limiter: 0 }), /over the datasheet 40 mA limit \(2\.4×\)/);
   assert.match(consequence(3, { i: 0.0349, vPin: 2.15, v5: NaN, v33: NaN, limiter: 0 }), /1\.7× overcurrent/);
   assert.match(consequence(4, { i: 0.717, vPin: 0, v5: 0.41, v33: 0.04, limiter: 4 }), /the onboard LDO dropping out/);
@@ -53,21 +53,21 @@ test('后果文字按门限分档（不依赖 wasm）', () => {
 });
 
 const WASM = new URL('../public/wasm/tryboard.wasm', import.meta.url);
-test('wasm 求解：电流与 elec 单元测试 / ngspice 同一量级（tools/build_web.sh 之后才跑）', { skip: !existsSync(WASM) && '没有 public/wasm/tryboard.wasm' }, async () => {
+test('wasm solve: currents match elec unit tests / ngspice in magnitude (runs after tools/build_web.sh)', { skip: !existsSync(WASM) && 'no public/wasm/tryboard.wasm' }, async () => {
   const { instance } = await WebAssembly.instantiate(readFileSync(WASM), {});
   const x = instance.exports as unknown as FaultExports;
   const mA = (f: WireFault) => estimateNet(x, f.net!, false)!.mA;
-  // 电位器接地 vs GPIO 推高 33 Ω：3.3 / 34 = 97.1 mA（比推低那组 90.8 mA 大，取最坏）
+  // Pot to ground vs GPIO driving high 33 Ω: 3.3 / 34 = 97.1 mA (worse than the driving-low 90.8 mA, take the worst)
   assert.equal(mA(CASES.drive()), 97.1);
-  // GPIO 33 Ω + 红灯 1.8 V / 10 Ω：(3.3 - 1.8) / 43 = 34.9 mA
+  // GPIO 33 Ω + red LED 1.8 V / 10 Ω: (3.3 - 1.8) / 43 = 34.9 mA
   assert.equal(mA(CASES.nores()), 34.9);
-  // 3V3 短路：USB 限流折返 + LDO 压差，≈ 0.72 A；5V 短路只剩 USB 口限流，≈ 0.74 A（与 13 / 14-*.cir 同解）
+  // 3V3 short: USB foldback + LDO dropout ≈ 0.72 A; 5V short is only USB-limited ≈ 0.74 A (same as 13 / 14-*.cir)
   assert.ok(Math.abs(mA(CASES.short3v3()) - 717) < 2, String(mA(CASES.short3v3())));
   assert.ok(Math.abs(mA(CASES.short5v()) - 736) < 2, String(mA(CASES.short5v())));
-  // HC-SR04 Echo 直连 5 V（50 Ω）进钳位：≈ 18 mA；BME280 10 kΩ 上拉只有 0.1 mA
+  // HC-SR04 Echo straight at 5 V (50 Ω) into the clamp: ≈ 18 mA; BME280 10 kΩ pull-up is only 0.1 mA
   assert.ok(Math.abs(mA(CASES.nodiv()) - 18) < 1, String(mA(CASES.nodiv())));
   assert.ok(mA(CASES.bme5v()) > 0.05 && mA(CASES.bme5v()) < 0.2, String(mA(CASES.bme5v())));
-  // 同样参数再算一遍，结果逐位相同
+  // Same params solved again give bit-identical results
   assert.deepEqual(estimateNet(x, CASES.short3v3().net!, false), estimateNet(x, CASES.short3v3().net!, false));
   assert.match(estimateNet(x, CASES.short3v3().net!, false)!.text, /limited by the onboard LDO dropping out/);
 });

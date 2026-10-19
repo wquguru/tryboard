@@ -1,11 +1,11 @@
-// 编辑器测试：blink 示例（台面已有 LED@5）→ 上传 bme280 固件 → 元件库放 BME280（SDA 6 / SCL 7）→ 应读到传感器
+// Editor test: blink example (LED@5 on the bench) -> upload bme280 firmware -> place BME280 from the library (SDA 6 / SCL 7) -> sensor reads
 import puppeteer from 'puppeteer-core';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dist = root + '/web/dist';
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
-const server = http.createServer((req, res) => { const u = decodeURIComponent(new URL(req.url, 'http://x').pathname); // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+const server = http.createServer((req, res) => { const u = decodeURIComponent(new URL(req.url, 'http://x').pathname); // Extensionless paths (/app, /select) map to .html, like Vite preview and static hosting (DESIGN_V2 §7.2)
   const f0 = path.join(dist, u === '/' ? 'index.html' : u);
   const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0; if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(res); });
 await new Promise((r) => server.listen(0, r));
@@ -20,10 +20,10 @@ await sleep(1000);
 const input = await page.$('#fwPick');
 await input.uploadFile(root + '/firmware/build/bme280/flash.bin');
 await sleep(1500);
-// 元件库「放」BME280，按引脚圈逐根接：VCC 3V3、GND、SCL GPIO7、SDA GPIO6
+// Place BME280 from the library, wire it ring by ring: VCC 3V3, GND, SCL GPIO7, SDA GPIO6
 async function clickRing(id) {
   await page.waitForFunction((i) => { const e = document.querySelector(`#pinRings [data-ring="${i}"]`); return e && !e.hidden && e.getBoundingClientRect().width > 0; }, { timeout: 10000 }, id);
-  // 相邻脚（5V / GND）的圈在默认视角下叠一半：瞄圈里露出来、确实点得到它的那块（与 wiremode.mjs 同法）
+  // Neighbouring rings (5V / GND) half overlap in the default view: aim at the visible, clickable part (as in wiremode.mjs)
   const b = await page.$eval(`#pinRings [data-ring="${id}"]`, (e) => {
     const r = e.getBoundingClientRect(), cx = r.x + r.width / 2, cy = r.y + r.height / 2;
     for (const k of [0, 0.25, 0.4]) for (const [dx, dy] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]]) {

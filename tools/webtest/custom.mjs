@@ -1,10 +1,5 @@
-// 选板作品（work=custom，U-17）的网页 × 命令行对拍：
-//  1. 网页按 ?t=weather&bat=1 生成的检查点（globalThis.__tbCustomLevels）与 fixtures/custom-thermo.json 逐字相同
-//     ——fixture 是 genLevels 对 xiao-c3 + bme280 + ssd1306 + 电池的输出，check.py / npm 包用它判
-//  2. 命令行：c3-thermo 过全部要判的检查点、手动项「不判」；hello 在 I2C 项上未通过，结论里有「要 ≥」
-//  3. 网页：先跑演示固件 → 每条检查点 ✓、真买卡出现，指纹与命令行一致；上传 hello → I2C 项 ✗、写「要 ≥」，指纹一致
-// 用法：node tools/webtest/custom.mjs（先 tools/build_web.sh、tools/build_fw.sh c3-thermo hello）。截图在 Reviews/web/custom-*.png
-// genlevels.ts 或选板数据（模板零件、引脚表）改了：UPDATE_FIXTURE=1 node tools/webtest/custom.mjs 用网页生成的结果重写 fixture，再看 diff 是否合理
+// Custom work (U-17) web × CLI: generated checkpoints = fixtures/custom-thermo.json, c3-thermo passes, hello fails I2C with "need ≥".
+// Usage: node tools/webtest/custom.mjs (after build_web.sh, build_fw.sh c3-thermo hello); UPDATE_FIXTURE=1 rewrites the fixture from the web
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -27,7 +22,7 @@ const report = (name, ok, extra = '') => {
   if (!ok) fails++;
 };
 
-// ---- 命令行（原生内核）
+// ---- CLI (native core)
 const native = (fw, id) => {
   let out;
   try {
@@ -35,20 +30,20 @@ const native = (fw, id) => {
   } catch (e) {
     out = e.stdout;
   }
-  const m = /：(通过|未通过|必须上真机，不判)(?:\s+指纹 (\S+))?/.exec(out) ?? [];
+  const m = /: (PASS|FAIL|needs real hardware, not judged)(?:\s+fingerprint (\S+))?/.exec(out) ?? [];
   return { verdict: m[1], fp: m[2], out };
 };
 const cli = {};
 for (const id of [...judged, ...manual]) {
   const r = native('c3-thermo', id);
   cli[id] = r;
-  report(`命令行 c3-thermo ${id}`, manual.includes(id) ? r.verdict === '必须上真机，不判' : r.verdict === '通过', r.out.trim().split('\n')[0]);
+  report(`CLI c3-thermo ${id}`, manual.includes(id) ? r.verdict === 'needs real hardware, not judged' : r.verdict === 'PASS', r.out.trim().split('\n')[0]);
 }
 const helloId = judged.find((id) => levels.find((l) => l.id === id).i2c_ack);
 const cliHello = native('hello', helloId);
-report(`命令行 hello ${helloId} 未通过且写「要 ≥」`, cliHello.verdict === '未通过' && cliHello.out.includes('要 ≥'), cliHello.out.trim().split('\n').slice(0, 2).join(' / '));
+report(`CLI hello ${helloId} fails and says need ≥`, cliHello.verdict === 'FAIL' && cliHello.out.includes('need ≥'), cliHello.out.trim().split('\n').slice(0, 2).join(' / '));
 
-// ---- 网页
+// ---- Web
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
@@ -69,7 +64,7 @@ const browser = await puppeteer.launch({
 const errors = [];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function open(url) {
-  // 每次独立上下文：不带上一轮存在本机的进度
+  // A fresh context each time: no progress left in local storage by the previous round
   const ctx = await browser.createBrowserContext();
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(`${url}: ${e}`));
@@ -79,11 +74,11 @@ async function open(url) {
 }
 const waitFor = (page, fn, arg, timeout) => page.waitForFunction(fn, { timeout, polling: 200 }, arg).then(() => true, () => false);
 const cpMark = (page, id) => page.$eval(`[data-cp="${id}"] span:last-child`, (e) => e.textContent.trim()).catch(() => '');
-/** 选中一条检查点，读属性面板里的结论与指纹 */
+/** Select a checkpoint and read the verdict and fingerprint from the properties panel */
 async function pick(page, id) {
   for (let i = 0; i < 5; i++) {
     const ok = await page.evaluate((id) => { const b = document.querySelector(`[data-cp="${id}"]`); b?.click(); return !!b; }, id);
-    if (ok && (await waitFor(page, (id) => document.querySelector('#props')?.textContent.includes(`检查点 ${id}`) && !!document.querySelector('#props .kv .v.fp'), id, 5000))) break;
+    if (ok && (await waitFor(page, (id) => document.querySelector('#props')?.textContent.includes(`Checkpoint ${id}`) && !!document.querySelector('#props .kv .v.fp'), id, 5000))) break;
     await sleep(300);
   }
   return {
@@ -100,43 +95,43 @@ const url = '/app?work=custom&t=weather&bat=1#bench';
   const web = await page.evaluate(() => globalThis.__tbCustomLevels);
   if (process.env.UPDATE_FIXTURE) {
     fs.writeFileSync(fixture, JSON.stringify(web, null, 2) + '\n');
-    console.log(`[custom] 已用网页生成的 ${web.length} 条检查点重写 ${path.relative(root, fixture)}，请重新运行对拍`);
+    console.log(`[custom] rewrote ${path.relative(root, fixture)} with ${web.length} web-generated checkpoints; run again to compare`);
     process.exit(0);
   }
-  report('网页生成的检查点与 fixture 相同', JSON.stringify(web) === JSON.stringify(levels), `${web?.length} 条`);
+  report('web-generated checkpoints equal the fixture', JSON.stringify(web) === JSON.stringify(levels), `${web?.length} checkpoints`);
   await page.click('#customPlaced [data-custom-demo]');
   const buy = await waitFor(page, () => !!document.querySelector('#buyCard'), null, 120000);
   await page.screenshot({ path: path.join(outDir, 'custom-buy.png') });
-  report('演示固件跑完出现真买卡', buy);
+  report('demo firmware run shows the buy-for-real card', buy);
   const fpBuy = await page.$eval('#buyCard [data-buy-fp]', (e) => e.textContent.trim()).catch(() => '');
-  report('真买卡指纹与命令行一致', fpBuy && fpBuy === cli[judged[0]].fp, `网页 ${fpBuy} / 命令行 ${cli[judged[0]].fp}`);
-  // 真买卡是浮层：关掉再点检查点
-  await page.evaluate(() => document.querySelector('#buyCard button[aria-label="关闭"]')?.click());
+  report('buy card fingerprint matches the CLI', fpBuy && fpBuy === cli[judged[0]].fp, `web ${fpBuy} / CLI ${cli[judged[0]].fp}`);
+  // The buy card is an overlay: close it before clicking checkpoints
+  await page.evaluate(() => document.querySelector('#buyCard button[aria-label="Close"]')?.click());
   for (const id of judged) {
     const mark = await cpMark(page, id);
     const r = await pick(page, id);
-    // 演示固件记参考跑通 ◐（U-22），自己拖入的固件才是 ✓
-    report(`网页 c3-thermo ${id} ◐ 参考跑通，指纹一致`, mark === '◐' && r.verdict === 'ok' && r.fp === cli[id].fp, `标记 ${mark} 网页 ${r.fp} / 命令行 ${cli[id].fp}`);
+    // The demo firmware counts as a reference run ◐ (U-22); only your own firmware earns ✓
+    report(`web c3-thermo ${id} ◐ reference run, same fingerprint`, mark === '◐' && r.verdict === 'ok' && r.fp === cli[id].fp, `mark ${mark} web ${r.fp} / CLI ${cli[id].fp}`);
   }
-  for (const id of manual) report(`手动项 ${id} 不在要判的列表里`, !(await page.$(`[data-cp="${id}"]`)) && !!(await page.$('[data-cp-manual]')));
+  for (const id of manual) report(`manual item ${id} is not in the judged list`, !(await page.$(`[data-cp="${id}"]`)) && !!(await page.$('[data-cp-manual]')));
   await page.close();
 }
 {
   const page = await open(url);
   await page.waitForSelector('#fwPick', { timeout: 30000 });
-  // 等实验台挂好（说明卡出现），再拖入 hello
+  // Wait for the bench to mount (the info card appears), then drop in hello
   await page.waitForSelector('#customPlaced', { timeout: 30000 });
   const input = await page.$('#fwPick');
   await input.uploadFile(path.join(root, 'firmware/build/hello/flash.bin'));
   const done = await waitFor(page, (id) => document.querySelector(`[data-cp="${id}"] span:last-child`)?.textContent.trim() === '✗', helloId, 120000);
   const r = await pick(page, helloId);
   await page.screenshot({ path: path.join(outDir, 'custom-hello.png') });
-  report(`网页 hello ${helloId} ✗ 且写「要 ≥」，指纹一致`, done && r.text.includes('要 ≥') && r.fp === cliHello.fp, `网页 ${r.fp} / 命令行 ${cliHello.fp}`);
+  report(`web hello ${helloId} ✗ says need ≥, same fingerprint`, done && r.text.includes('need ≥') && r.fp === cliHello.fp, `web ${r.fp} / CLI ${cliHello.fp}`);
   await page.close();
 }
 
 await browser.close();
 server.close();
-if (errors.length) console.log('[custom] 页面错误:\n  ' + errors.join('\n  '));
-console.log(`[custom] ${fails || errors.length ? 'FAIL' : 'PASS'}（失败 ${fails} 项，页面错误 ${errors.length} 条）`);
+if (errors.length) console.log('[custom] page errors:\n  ' + errors.join('\n  '));
+console.log(`[custom] ${fails || errors.length ? 'FAIL' : 'PASS'} (${fails} failed, ${errors.length} page errors)`);
 process.exit(fails || errors.length ? 1 : 0);

@@ -1,8 +1,5 @@
-// 底部坞「代码」页签回归（P2-15）：
-//  1. weather 打开代码页签 → 显示 main.c，里面有 app_main；行号、高亮、切换文件；源码按需下载
-//  2. 换成上传的 .bin → 显示「没有源码」和原因
-//  3. 手机 390×844 底部坞也能切到代码页签，无横向滚动
-// 用法：node tools/webtest/code.mjs [dist 目录，默认 web/dist]。截图在 Reviews/web/code-*
+// Dock Code tab (P2-15): weather main.c with line numbers / highlight / file switch, lazy src.json, uploaded .bin -> No source, mobile.
+// Usage: node tools/webtest/code.mjs [dist dir, default web/dist]; screenshots in Reviews/web/code-*
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -17,7 +14,7 @@ fs.mkdirSync(outDir, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.svg': 'image/svg+xml' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  // Extensionless paths (/app, /select) map to .html, like Vite preview and static hosting (DESIGN_V2 §7.2)
   const f0 = path.join(dist, u === '/' ? 'index.html' : u);
   const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) {
@@ -64,7 +61,7 @@ async function open(url, vp) {
 }
 const state = (page) => page.$eval('#codeView', (e) => [e.dataset.state, e.dataset.fw ?? '', e.textContent]).catch(() => ['', '', '']);
 
-// 1. 桌面：weather 打开代码页签 → main.c 里有 app_main；切到头文件；行号从 1 起
+// 1. Desktop: weather Code tab -> main.c has app_main; switch to a header; line numbers start at 1
 {
   const page = await open('/app?work=weather&debug=1#bench');
   const lazyBefore = await page.evaluate(() => performance.getEntriesByType('resource').some((r) => /src\.json/.test(r.name)));
@@ -72,44 +69,44 @@ const state = (page) => page.$eval('#codeView', (e) => [e.dataset.state, e.datas
   const ok = await waitFor(page, () => document.querySelector('#codeView')?.dataset.state === 'ok');
   const [st, fw, text] = await state(page);
   const files = await page.$$eval('#codeView [data-file]', (es) => es.map((e) => e.dataset.file));
-  report('weather 代码页签显示 app_main', ok && st === 'ok' && fw === 'weather' && /void app_main\(void\)/.test(text), `${st} ${fw} files=${files.join(',')}`);
-  report('源码按需下载（打开页签前没取 src.json）', !lazyBefore);
+  report('weather Code tab shows app_main', ok && st === 'ok' && fw === 'weather' && /void app_main\(void\)/.test(text), `${st} ${fw} files=${files.join(',')}`);
+  report('source loads lazily (no src.json before opening the tab)', !lazyBefore);
   const hl = await page.$$eval('#codeBody span', (es) => new Set(es.map((e) => e.className)).size);
   const first = await page.$eval('#codeBody tr td', (e) => e.textContent);
-  report('行号 + 高亮', first === '1' && hl >= 4, `首行号=${first} 记号类=${hl}`);
+  report('line numbers + highlighting', first === '1' && hl >= 4, `first line=${first} token classes=${hl}`);
   const h = files.find((f) => f.endsWith('.h'));
   if (h) await page.click(`#codeView [data-file="${h}"]`);
   const sel = await page.$eval('#codeView [aria-selected="true"]', (e) => e.dataset.file).catch(() => '');
-  report('切换文件', !!h && sel === h, sel);
+  report('switch file', !!h && sel === h, sel);
   await page.screenshot({ path: path.join(outDir, 'code-weather.png') });
-  // 2. 换成上传的 .bin：显示没有源码和原因
+  // 2. Swap in an uploaded .bin: No source and the reason
   await page.evaluate(async () => {
     const buf = await (await fetch('./fw/s3-blink/flash.bin')).arrayBuffer();
     await globalThis.__tbApp.session.loadFirmware(buf, 'mine.bin');
   });
   const none = await waitFor(page, () => document.querySelector('#codeView')?.dataset.state === 'none');
   const [, , t2] = await state(page);
-  report('上传 .bin 后显示没有源码', none && /没有源码/.test(t2) && /mine\.bin/.test(t2), t2.slice(0, 60));
+  report('uploaded .bin shows No source', none && /No source/.test(t2) && /mine\.bin/.test(t2), t2.slice(0, 60));
   await page.screenshot({ path: path.join(outDir, 'code-upload.png') });
   await page.close();
 }
-// 3. 手机：底部坞切到代码页签也能看（无横向滚动）
+// 3. Mobile: the dock's Code tab works too (no horizontal scroll)
 {
   const page = await open('/app?work=weather&debug=1#bench', { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await page.click('#sheetPeek');
   await waitFor(page, () => document.querySelector('#dock')?.dataset.sheet === 'half');
-  await page.click('#dock button[aria-label="全屏"]');
+  await page.click('#dock button[aria-label="Full screen"]');
   const tab = await waitFor(page, () => !!document.querySelector('[data-dock="code"]'));
   if (tab) await page.click('[data-dock="code"]');
   const ok = await waitFor(page, () => document.querySelector('#codeView')?.dataset.state === 'ok');
   const [, fw, text] = await state(page);
   const wide = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
-  report('手机代码页签', ok && /app_main/.test(text) && wide <= 0, `fw=${fw} 横向溢出=${wide}`);
+  report('mobile Code tab', ok && /app_main/.test(text) && wide <= 0, `fw=${fw} horizontal overflow=${wide}`);
   await page.screenshot({ path: path.join(outDir, 'code-phone.png') });
   await page.close();
 }
-report('无控制台错误', errors.length === 0, errors.slice(0, 3).join(' | '));
+report('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 server.close();
-console.log(`[code] ${fails ? 'FAIL' : 'PASS'}（${fails} 项失败）`);
+console.log(`[code] ${fails ? 'FAIL' : 'PASS'} (${fails} failed)`);
 process.exit(fails ? 1 : 0);

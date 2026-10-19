@@ -1,4 +1,4 @@
-// 任务时间线数据层（C-04）：切片、占用、Chrome Trace JSON 格式、app.elf 函数符号
+// Task timeline data layer (C-04): slices, usage, Chrome Trace JSON format, app.elf function symbols
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -27,12 +27,12 @@ const EV: TaskEvent[] = [
   { t: 600, core: 1, prev: ST.GONE, task: NO_TASK, pc: 0 },
 ];
 
-test('16 字节记录来回一致（含超过 2^32 的周期）', () => {
+test('16-byte records round-trip (including cycles above 2^32)', () => {
   const ev = [...EV, { t: 2 ** 33 + 5, core: 1, prev: ST.BLOCKED, task: 3, pc: 0xdeadbeef }];
   assert.deepEqual(decodeTaskEvents(bytes(ev)), ev);
 });
 
-test('切片：每核按切换切开，结束状态取下一次切换的 prev；NO_TASK 关掉本核的段', () => {
+test('slices: split per core at switches, end state from the next switch prev; NO_TASK closes the core segment', () => {
   const sl = slices(EV, 1000);
   assert.deepEqual(
     sl.map((s) => [s.core, s.task, s.t0, s.t1, s.end]),
@@ -46,11 +46,11 @@ test('切片：每核按切换切开，结束状态取下一次切换的 prev；
   const u = usage(sl);
   assert.equal(u.get('0:0'), 200 + 500);
   assert.equal(u.get('1:1'), 490);
-  // 窗口裁剪
+  // Window clipping
   assert.equal(usage(sl, 400, 900).get('0:2'), 100);
 });
 
-test('Chrome Trace JSON：合法、每核一条轨道、等待段补在任务轨道上，格式与 Rust 一致', () => {
+test('Chrome Trace JSON: valid, one track per core, wait segments on task tracks, same format as Rust', () => {
   const tasks = [
     { name: 'main', prio: 1, core: -1, tcb: 1 },
     { name: 'w1', prio: 5, core: 1, tcb: 2 },
@@ -67,12 +67,12 @@ test('Chrome Trace JSON：合法、每核一条轨道、等待段补在任务轨
   const wait = d.traceEvents.filter((e: { cat?: string }) => e.cat === 'wait');
   assert.equal(wait.length, 1);
   assert.equal(wait[0].tid, 10);
-  // 逐字：与 Rust report::chrome_json 同一行（ts 微秒 3 位小数、args 字段顺序）
+  // Verbatim: same line as Rust report::chrome_json (ts in µs with 3 decimals, args field order)
   assert.ok(j.includes('{"ph":"X","pid":1,"tid":0,"name":"main","cat":"task","ts":0.625,"dur":1.250,"args":{"prio":1,"pc":"0x42000010","resume":"app_main","out":"wait"}}'), j);
   assert.ok(j.startsWith('{"displayTimeUnit":"ms","traceEvents":[\n{"ph":"M","pid":1,"name":"process_name","args":{"name":"esp32s3 CPU"}}'));
 });
 
-test('仓库：reset 清空、任务表跟着消息走、此刻推进收尾段', () => {
+test('store: reset clears, task table follows messages, now() closes the last segment', () => {
   const s = new TaskStore();
   s.onMsg({ reset: true, data: bytes(EV.slice(0, 2)), table: '{"cores":2,"dropped":0,"tasks":[{"name":"main","prio":1,"core":-1,"tcb":1},{"name":"w1","prio":5,"core":1,"tcb":2}]}', chip: 'esp32s3' });
   assert.equal(s.cores, 2);
@@ -86,7 +86,7 @@ test('仓库：reset 清空、任务表跟着消息走、此刻推进收尾段',
 });
 
 const ELF = new URL('../../firmware/build/hello/app.elf', import.meta.url);
-test('app.elf：从 .symtab 取函数符号，按地址找函数', { skip: !fs.existsSync(ELF) && '没构建 hello' }, () => {
+test('app.elf: function symbols from .symtab, lookup by address', { skip: !fs.existsSync(ELF) && 'hello not built' }, () => {
   const b = fs.readFileSync(ELF);
   const syms = elfFuncs(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength))!;
   assert.ok(syms.length > 500, `${syms.length}`);

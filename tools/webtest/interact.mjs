@@ -1,10 +1,5 @@
-// 实验台交互回归（P0-03 / P0-04 / P0-11 / P0-12 / P0-13）：app.html?work=weather&debug=1#bench
-//  1. 三个作品默认接线没有问题；注入五种错误接线各标红（W1–W5），构建树"连线"显示问题数
-//  2. 点 GPIO4（真实鼠标点 3D 针脚）→ 属性面板 50 Hz + 脉宽，示波器有波形
-//  3. 点 BME280 → 快捷卡片：拖温度、热源（+8 ℃ 读数跟着变）、量到芯片（毫米）；供电切外接 5 V
-//  4. 重启（顶栏运行组）→ 改湿度 → 再跑（这次不编辑）→ 再跑并改温度 → 时间线点回不编辑的那次：指纹与它收尾时的一致；
-//     再用命令行按那次的输入日志重放到同一时刻，check.py 的指纹也一致；尺子、运行历史对比、回退后再跑丢掉后面的分支
-// 用法：node tools/webtest/interact.mjs（先 tools/build_web.sh、cargo build --release -p tryboard-cli）。截图在 Reviews/web/interact-*
+// Bench interaction (P0-03/04/11/12/13): clean default wiring, GPIO4 props + scope, BME280 card, power, timeline seek = CLI replay, ruler, W1–W5.
+// Usage: node tools/webtest/interact.mjs (after tools/build_web.sh and cargo build --release -p tryboard-cli); screenshots in Reviews/web/interact-*
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -23,7 +18,7 @@ const CLI = path.join(root, 'core/target/release/tryboard');
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  // Extensionless paths (/app, /select) map to .html, like Vite preview and static hosting (DESIGN_V2 §7.2)
   const f0 = path.join(dist, u === '/' ? 'index.html' : u);
   const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
@@ -68,7 +63,7 @@ async function open(url) {
   return page;
 }
 const props = (page) => page.$eval('#props', (e) => e.textContent);
-/** 真实鼠标点 3D 目标：先点 project 给的中心，被别的东西挡住（导线从上面跨过）就在周围找一圈 */
+/** Real mouse click on a 3D target: try the projected centre, then circle around it if a wire covers it */
 async function clickTarget(page, t) {
   const c = await screenOf(page, t);
   if (!c) return null;
@@ -80,30 +75,30 @@ async function clickTarget(page, t) {
   }
   return null;
 }
-/** 3D 里某个目标的页面坐标（project 是相对台面容器的） */
+/** Page coordinates of a 3D target (project is relative to the stage container) */
 const screenOf = (page, t) => page.evaluate((t) => {
   const p = globalThis.__tbApp.session.pick.project(t);
   const r = document.getElementById('stage').getBoundingClientRect();
   return p && { x: r.left + p.x, y: r.top + p.y };
 }, t);
 
-// ---- 1. 默认接线无问题（三个作品）
+// ---- 1. Default wiring has no issues (three works)
 for (const work of ['weather', 'spin', 'lens']) {
   const page = await open(`/app?work=${work}&debug=1#bench`);
   const f = await page.evaluate(() => globalThis.__tbApp.faults());
   const tree = await page.$eval('details.tg[data-g="wire"] summary', (e) => e.textContent);
-  report(`${work} 默认接线没有问题`, f.length === 0 && /✓/.test(tree), `连线 ${tree.replace('连线', '').trim()}${f.length ? ' ' + JSON.stringify(f) : ''}`);
+  report(`${work} default wiring has no issues`, f.length === 0 && /✓/.test(tree), `Wires ${tree.replace('Wires', '').trim()}${f.length ? ' ' + JSON.stringify(f) : ''}`);
   await page.close();
 }
 
 const page = await open('/app?work=weather&debug=1#bench');
 
-// ---- 2. 点 GPIO4 针脚
+// ---- 2. Click the GPIO4 pin
 await page.evaluate(() => globalThis.__tbApp.session.bench._debug.controls && 0);
 let pin = await clickTarget(page, { kind: 'pin', id: 'GPIO4' });
 let sel = await page.evaluate(() => globalThis.__tbApp.store.get().selection);
 if (!sel || sel.id !== 'GPIO4') {
-  // 点不准就从构建树选（同一个 selection）
+  // If the click misses, pick it from the build tree (same selection)
   await page.$eval('details.tg[data-g="pin"]', (d) => (d.open = true));
   await page.click('.tn[data-kind="pin"][data-id="GPIO4"]');
 }
@@ -116,38 +111,38 @@ const scopeInk = await page.$eval('canvas.scope', (c) => {
   for (let i = 0; i < d.length; i += 4) if (d[i + 2] > 200 && d[i] < 80) n++;
   return n;
 });
-report('点 GPIO4 → 属性：50 Hz + 脉宽 + 示波器', sel?.id === 'GPIO4' && /50(\.0)? Hz/.test(txt) && /脉宽\d\.\d{3} ms/.test(txt) && scopeInk > 50, `${pin ? '鼠标点 3D' : '构建树'}；${(txt.match(/PWM 频率[^脉]*脉宽[\d. ms]+/) ?? [''])[0]}；示波器蓝色像素 ${scopeInk}`);
+report('click GPIO4 -> props: 50 Hz + pulse width + scope', sel?.id === 'GPIO4' && /50(\.0)? Hz/.test(txt) && /Pulse width\d\.\d{3} ms/.test(txt) && scopeInk > 50, `${pin ? 'mouse on 3D' : 'build tree'}; ${(txt.match(/PWM frequency.*?Pulse width[\d. ms]+/) ?? [''])[0]}; scope blue pixels ${scopeInk}`);
 await page.screenshot({ path: path.join(outDir, 'interact-pin.png') });
 
-// ---- 3. BME280 快捷卡片
+// ---- 3. BME280 quick card
 const bme = await clickTarget(page, { kind: 'part', id: 'bme280' });
 const card = await waitFor(page, () => !document.querySelector('.qcard').hidden && /BME280/.test(document.querySelector('.qcard').textContent), null, 3000);
-report('点 BME280 → 弹快捷卡片', card, bme ? `@${Math.round(bme.x)},${Math.round(bme.y)}` : '看不到 BME280');
+report('click BME280 -> quick card', card, bme ? `@${Math.round(bme.x)},${Math.round(bme.y)}` : 'BME280 not visible');
 await page.$eval('.qcard input[data-env="temp"]', (r) => { r.value = '30'; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); });
 const t30 = await waitFor(page, () => globalThis.__tbApp.store.get().reading?.t === 30, null, 10000);
-report('卡片拖温度到 30 ℃ → 读数 30.00', t30);
+report('card temperature to 30 ℃ -> reading 30.00', t30);
 await page.click('.qcard [data-act="heat"]');
 const t38 = await waitFor(page, () => globalThis.__tbApp.store.get().reading?.t === 38 && globalThis.__tbApp.session.heat === 'bme280', null, 10000);
-report('放上热源 → 读数 38.00、热晕', t38);
+report('heat source -> reading 38.00, heat glow', t38);
 await page.click('.qcard [data-act="chip"]');
 const mm = await page.$eval('.qcard [data-live="chipmm"]', (e) => e.textContent);
-report('量到芯片 → 毫米', /\d+\.\d mm/.test(mm), mm.slice(0, 60));
+report('distance to chip -> mm', /\d+\.\d mm/.test(mm), mm.slice(0, 60));
 await page.screenshot({ path: path.join(outDir, 'interact-card.png') });
 await page.click('.qcard [data-act="heat"]');
 await waitFor(page, () => globalThis.__tbApp.store.get().reading?.t === 30, null, 10000);
 
-// 供电：点舵机供电线 → 卡片切外接 5 V
+// Power: click the servo supply wire -> card switches to external 5 V
 const pw = await clickTarget(page, { kind: 'wire', id: 'wire:5V~servo:VCC' });
 let pcard = await waitFor(page, () => !!document.querySelector('.qcard [data-power="ext"]'), null, 3000);
 if (!pcard) {
   await page.evaluate(() => globalThis.__tbApp.store.set({ selection: { kind: 'power', id: 'usb' } }));
 }
 await page.click(pcard ? '.qcard [data-power="ext"]' : '#props [data-power="ext"]');
-const ext = await waitFor(page, () => globalThis.__tbApp.session.power?.ext5v === true && /外接 5 V 2 A/.test(document.getElementById('tree').textContent), null, 3000);
+const ext = await waitFor(page, () => globalThis.__tbApp.session.power?.ext5v === true && /External 5 V 2 A/.test(document.getElementById('tree').textContent), null, 3000);
 const bom = await page.evaluate(() => { const h = globalThis.__tbApp.store.get().bom; return JSON.stringify(h.ops.slice(1)); });
-report('供电切外接 5 V → 构建树 + 清单', ext, `${pcard ? '点供电线卡片' : '属性面板'}；清单 ${bom}`);
+report('power to external 5 V -> build tree + list', ext, `${pcard ? 'supply wire card' : 'props panel'}; list ${bom}`);
 
-// ---- 4. 运行、改环境、回退
+// ---- 4. Run, change the environment, rewind
 await page.evaluate(() => globalThis.__tbApp.session.reboot());
 await waitFor(page, () => globalThis.__tbApp.hist.runs().length >= 2, null, 10000);
 const r1 = await page.evaluate(() => globalThis.__tbApp.hist.runs().length);
@@ -158,7 +153,7 @@ await waitSim(page, 0.8);
 await page.click('#runRestart');
 await waitFor(page, (n) => globalThis.__tbApp.hist.runs().length > n, r1, 10000);
 await waitSim(page, 2.2);
-// 运行 #(r1+1) 期间不做编辑：时间线上"运行"这一步 = 整次运行，回退后应与收尾时的指纹一致
+// No edits during run #(r1+1): its timeline step is the whole run, so seeking back must match its final fingerprint
 await page.click('#runRestart');
 await waitFor(page, (n) => globalThis.__tbApp.hist.runs().length > n + 1, r1, 10000);
 await waitSim(page, 0.8);
@@ -167,24 +162,24 @@ await waitSim(page, 0.6);
 const runs = await page.evaluate(() => globalThis.__tbApp.hist.runs().map((r) => ({ n: r.n, fp: r.fingerprint, end: r.snap?.log.endMs ?? null })));
 const nRun2 = r1 + 1;
 const rec2 = runs.find((r) => r.n === nRun2);
-// 运行历史：选运行 #2，点运行 #(1) 对比
+// Run history: select run #2, click run #(1) to compare
 await page.evaluate((n) => globalThis.__tbApp.store.set({ selection: { kind: 'run', id: String(n) } }), nRun2);
 await page.click(`.runrow[data-run="${nRun2 - 1}"]`);
 const diff = await page.$$eval('.drow.ch .k', (e) => e.map((x) => x.textContent.replace('≠ ', '')));
-report('运行历史：两次运行对比差异项', diff.includes('运行编号') && diff.length >= 2, diff.join('、'));
+report('run history: two runs compared with differences', diff.includes('Run ID') && diff.length >= 2, diff.join(', '));
 await page.screenshot({ path: path.join(outDir, 'interact-runs.png') });
-// 时间线点回运行 #2（v2：时间线在底部坞的「运行记录」页签里，先切过去）
+// Timeline back to run #2 (v2: the timeline lives in the dock's Runs tab, switch there first)
 await page.click('[data-dock="runs"]');
 const steps = await page.$$eval('.tl-step', (b) => b.map((x) => x.textContent));
-const idx = steps.findIndex((t) => t.includes(`运行 #${nRun2}`));
+const idx = steps.findIndex((t) => t.includes(`Run #${nRun2}`));
 const btns = await page.$$('.tl-step');
 await btns[idx].click();
 await waitFor(page, () => globalThis.__tbApp.store.get().hist.seeked && !globalThis.__tbApp.store.get().hist.busy, null, 60000);
 const seek = await page.evaluate(() => globalThis.__tbApp.hist.lastSeek());
-report(`时间线回到运行 #${nRun2} → ✓ 指纹一致`, !!rec2?.fp && seek?.fingerprint === rec2.fp && seek.same === true, `当时 ${rec2?.fp} · 回退 ${seek?.fingerprint} · ${(seek?.untilMs / 1000).toFixed(3)} s`);
+report(`timeline back to run #${nRun2} -> ✓ same fingerprint`, !!rec2?.fp && seek?.fingerprint === rec2.fp && seek.same === true, `then ${rec2?.fp} · seek ${seek?.fingerprint} · ${(seek?.untilMs / 1000).toFixed(3)} s`);
 await page.screenshot({ path: path.join(outDir, 'interact-seek.png') });
 
-// 命令行按运行 #2 的输入日志重放到同一时刻：check.py 的指纹一致（网页回退 = 命令行重放）
+// CLI replays run #2's input log to the same time: check.py fingerprint matches (web seek = CLI replay)
 if (fs.existsSync(CLI) && fs.existsSync(FW)) {
   const log = await page.evaluate((n) => globalThis.__tbApp.hist.runs().find((r) => r.n === n).snap.log, nRun2);
   const script = log.events.filter((e) => e.kind !== 'power').map((e) => {
@@ -203,20 +198,20 @@ if (fs.existsSync(CLI) && fs.existsSync(FW)) {
   const fp = execFileSync('python3', ['-c', `import sys; sys.path.insert(0, ${JSON.stringify(path.join(root, 'tools'))}); import check
 out = open(sys.argv[1], 'rb').read().decode('utf-8', 'replace'); err = open(sys.argv[2], 'rb').read().decode('utf-8', 'replace')
 print(check.fingerprint(out, check.canonical_report(err)))`, out, err], { encoding: 'utf8' }).trim();
-  report(`命令行 --inputs 重放运行 #${nRun2} → 指纹一致`, fp === rec2?.fp, `命令行 ${fp}`);
-} else report('命令行重放（缺 CLI 或固件）', false, CLI);
+  report(`CLI --inputs replay of run #${nRun2} -> same fingerprint`, fp === rec2?.fp, `CLI ${fp}`);
+} else report('CLI replay (CLI or firmware missing)', false, CLI);
 
-// 从回退点改环境 = 新分支：运行 #3 被丢掉
+// Changing the environment at the seek point = new branch: run #3 is dropped
 await page.evaluate(() => globalThis.__tbApp.hist.resume());
 await waitSim(page, 0.3);
 await page.click('#runRestart');
 await waitFor(page, (n) => globalThis.__tbApp.hist.runs().length === n, nRun2 + 1, 10000);
 const after = await page.evaluate(() => globalThis.__tbApp.hist.runs().map((r) => r.n).join(','));
-report('回退后再跑：后面的运行丢掉、编号接着回退点', after === Array.from({ length: nRun2 + 1 }, (_, i) => i + 1).join(','), `运行 ${after}`);
+report('run after a seek: later runs dropped, numbering continues from the seek point', after === Array.from({ length: nRun2 + 1 }, (_, i) => i + 1).join(','), `runs ${after}`);
 
-// 尺子：工具条尺子 → 点 BME280 和开发板
+// Ruler: toolbar ruler -> click BME280 and the board
 await page.click('.tb-btn[data-tool="ruler"]');
-// 尺子模式下点击不改 selection：用前面找到的 BME280 点位，再点 OLED 中心
+// Clicks in ruler mode don't change the selection: reuse the BME280 point, then the OLED centre
 const pb = await screenOf(page, { kind: 'part', id: 'oled' });
 if (bme && pb) {
   await page.mouse.click(bme.x, bme.y);
@@ -225,10 +220,10 @@ if (bme && pb) {
 }
 await sleep(200);
 const rtxt = await props(page);
-report('尺子：点两个零件 → 毫米', /距离\d+\.\d mm/.test(rtxt), (rtxt.match(/距离[\d.]+ mm/) ?? ['没量到'])[0]);
+report('ruler: click two parts -> mm', /Distance\d+\.\d mm/.test(rtxt), (rtxt.match(/Distance[\d.]+ mm/) ?? ['not measured'])[0]);
 await page.click('.tb-btn[data-tool="select"]');
 
-// ---- 5. 注入错误接线（W1–W5），每条标红 + 构建树问题数
+// ---- 5. Inject wiring faults (W1–W5): each turns red + issue count in the build tree
 const kinds = [['drive', 'W1'], ['5v', 'W2'], ['nores', 'W3'], ['nognd', 'W4'], ['addr', 'W5']];
 for (const [k, rule] of kinds) {
   await page.evaluate(() => globalThis.__tbApp.injectWiring('clear'));
@@ -236,7 +231,7 @@ for (const [k, rule] of kinds) {
   await sleep(150);
   const f = await page.evaluate(() => globalThis.__tbApp.faults());
   const tree = await page.$eval('details.tg[data-g="wire"] summary', (e) => e.textContent);
-  report(`错误接线 ${k} → ${rule} 标红`, f.some((x) => x.rule === rule) && wires.length > 0 && /处问题/.test(tree), `${f.map((x) => x.rule + ':' + x.wires.length).join(' ')} · ${tree.replace('连线', '').trim()}`);
+  report(`miswire ${k} -> ${rule} turns red`, f.some((x) => x.rule === rule) && wires.length > 0 && /issues: \d+/.test(tree), `${f.map((x) => x.rule + ':' + x.wires.length).join(' ')} · ${tree.replace('Wires', '').trim()}`);
   if (k === '5v') {
     await page.evaluate(() => globalThis.__tbApp.store.set({ selection: { kind: 'wire', id: 'wire:GPIO8~bme280:SDA' } }));
     await page.screenshot({ path: path.join(outDir, 'interact-fault.png') });
@@ -244,10 +239,10 @@ for (const [k, rule] of kinds) {
 }
 await page.evaluate(() => globalThis.__tbApp.injectWiring('clear'));
 const clean = await page.evaluate(() => globalThis.__tbApp.faults().length);
-report('接线复原 → 无问题', clean === 0);
+report('wiring restored -> no issues', clean === 0);
 
-report('页面无报错', errors.length === 0, errors.slice(0, 3).join(' | '));
+report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 server.close();
-console.log(`[interact] ${fails ? 'FAIL' : 'PASS'}（${fails} 项失败）`);
+console.log(`[interact] ${fails ? 'FAIL' : 'PASS'} (${fails} failed)`);
 process.exit(fails ? 1 : 0);

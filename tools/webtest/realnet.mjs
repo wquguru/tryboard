@@ -1,13 +1,5 @@
-// 「真实网络」开关验收（C-03）：外网用本机假服务器顶替（Chrome --proxy-server 把所有非本机的 http 请求交给它；本机地址默认不走代理），
-// 所以这个脚本不访问公网，结果每次一样。真联网的走查在 agent-browser（Reviews/ab/C-03.md）。
-//  1. 默认关：c3-http-real 两个外网请求都由虚拟服务器回答；开关 aria-checked=false
-//  2. 点开关 → 确认弹层（只放行 HTTP、依赖外网、离线重放）→ 打开 → 重启：
-//     example.com 不给跨域头 → 串口「原因 cors」、请求表那一行「失败」+ 跨域说明；httpbin.org 给跨域头 → 「真实回复」
-//  3. 「保存回复，离线重放」导出的日志有 realnet=1 和两条 netreply；命令行 --inputs 重放 = 网页串口（逐字节），重放不联网
-//  4. 回退到运行中途再继续：用记录的回复，不再联网（假服务器的计数不涨）
-//  5. 开着真实网络跑检查点（桌面气象站 01）：结果标「依赖外网」、不显示运行编号
-//  6. 手机布局 390×844：⋯ 菜单里有「真实网络」，弹层按钮 ≥ 44px，无横向滚动
-// 用法：node tools/webtest/realnet.mjs（先 tools/build_web.sh）。日志与截图在 Reviews/web/realnet-*
+// Real-network switch (C-03): a local fake internet behind Chrome --proxy-server, so results never depend on the public net.
+// Usage: node tools/webtest/realnet.mjs (after tools/build_web.sh); logs and screenshots in Reviews/web/realnet-*
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -35,10 +27,10 @@ const server = http.createServer((req, res) => {
 await new Promise((r) => server.listen(0, r));
 const base = `http://localhost:${server.address().port}`;
 
-// 假外网：example.com 不给跨域头（浏览器拦下），httpbin.org/get 给 Access-Control-Allow-Origin: *
+// Fake internet: example.com sends no CORS header (the browser blocks it), httpbin.org/get sends Access-Control-Allow-Origin: *
 const hits = { example: 0, httpbin: 0 };
 const fake = http.createServer((req, res) => {
-  // 走代理时 req.url 是绝对地址（http://example.com/）
+  // Through the proxy req.url is absolute (http://example.com/)
   const u = new URL(req.url, `http://${req.headers.host ?? 'x'}`);
   const host = u.hostname;
   if (host === 'example.com') {
@@ -90,7 +82,7 @@ async function clickTab(page, name) {
 async function newPage(w, h, mobile) {
   const p = await browser.newPage();
   await p.setViewport({ width: w, height: h, deviceScaleFactor: 1, isMobile: !!mobile, hasTouch: !!mobile });
-  // 被浏览器按跨域拦下的那次 fetch 会在控制台报一条 CORS 错误：这正是要演示的情形，不算页面错误
+  // The CORS-blocked fetch logs a console error: that is the case under test, not a page error
   p.on('pageerror', (e) => errors.push(`${e}`));
   p.on('console', (m) => {
     if (m.type() !== 'error') return;
@@ -108,7 +100,7 @@ async function tap(page, sel) {
   await el.click();
   return true;
 }
-/** 截下载：点 sel 后拿 Blob 文本（不真的下载） */
+/** Intercept a download: click sel and return the Blob text (no real download) */
 const grabDownload = (page, sel) =>
   page.evaluate(async (s) => {
     let blob = null;
@@ -124,46 +116,46 @@ const grabDownload = (page, sel) =>
     return { text: blob ? await blob.text() : '', name };
   }, sel);
 
-// ---- 1. 默认关
+// ---- 1. Off by default
 const page = await newPage(1440, 1000);
 await page.goto(base + '/app?work=blank&example=c3-http-real#bench', { waitUntil: 'load' });
-report('默认：虚拟服务器回答 example.com', await hasText(page, '#console', 'example.com：虚拟服务器回答（没开真实网络）'));
-report('默认：httpbin.org 虚拟 404', await hasText(page, '#console', 'httpbin.org：虚拟服务器回 404（没开真实网络）'));
+report('default: virtual server answers example.com', await hasText(page, '#console', 'example.com：虚拟服务器回答（没开真实网络）')); // lint: allow-cjk (firmware serial)
+report('default: httpbin.org virtual 404', await hasText(page, '#console', 'httpbin.org：虚拟服务器回 404（没开真实网络）')); // lint: allow-cjk (firmware serial)
 await hasText(page, '#console', 'TRYBOARD_OK c3-http-real');
-report('默认：开关是关的', await page.$eval('#realnetBtn', (b) => b.getAttribute('aria-checked') === 'false'));
-report('默认：没有联网', hits.example + hits.httpbin === 0, JSON.stringify(hits));
+report('default: the switch is off', await page.$eval('#realnetBtn', (b) => b.getAttribute('aria-checked') === 'false'));
+report('default: nothing went online', hits.example + hits.httpbin === 0, JSON.stringify(hits));
 
-// ---- 2. 打开 → 确认 → 重启
+// ---- 2. Turn on -> confirm -> restart
 await page.click('#realnetBtn');
 const dlg = await page.waitForSelector('#realnetDlg', { timeout: 5000 }).catch(() => null);
 const dlgText = dlg ? await dlg.evaluate((e) => e.textContent) : '';
-report('确认弹层：只放行 HTTP / 依赖外网 / 离线重放', /只放行 HTTP/.test(dlgText) && /依赖外网/.test(dlgText) && /离线重放/.test(dlgText), dlgText.slice(0, 40));
+report('confirm dialog: only HTTP / needs internet / replay offline', /Only HTTP is allowed/.test(dlgText) && /needs internet/.test(dlgText) && /replayed offline/.test(dlgText), dlgText.slice(0, 40));
 await page.screenshot({ path: path.join(outDir, 'realnet-dialog.png') });
 await page.click('#realnetDlg [data-act="on"]');
-report('打开后开关 aria-checked=true', await waitFor(page, () => document.getElementById('realnetBtn')?.getAttribute('aria-checked') === 'true', null, 3000));
-report('弹层关掉', await waitFor(page, () => !document.getElementById('realnetDlg'), null, 3000));
-// 重启不清串口面板：和命令行比的是重启之后的部分（从重启前的长度往后找最后一次启动横幅）
+report('after turning on the switch is aria-checked=true', await waitFor(page, () => document.getElementById('realnetBtn')?.getAttribute('aria-checked') === 'true', null, 3000));
+report('dialog closes', await waitFor(page, () => !document.getElementById('realnetDlg'), null, 3000));
+// A restart keeps the console: compare the part after the restart (last boot banner past the old length)
 const pre = (await fwConsole(page)).length;
 await page.click('#runRestart');
-report('example.com：串口「浏览器没放行，原因 cors」', await hasText(page, '#console', 'example.com：浏览器没放行，原因 cors'));
-report('httpbin.org：串口「真实回复」', await hasText(page, '#console', 'httpbin.org：真实回复，url=http://httpbin.org/get'));
+report('example.com: serial says the browser blocked it, reason cors', await hasText(page, '#console', 'example.com：浏览器没放行，原因 cors')); // lint: allow-cjk (firmware serial)
+report('httpbin.org: serial shows a real reply', await hasText(page, '#console', 'httpbin.org：真实回复，url=http://httpbin.org/get')); // lint: allow-cjk (firmware serial)
 report('TRYBOARD_OK', await hasText(page, '#console', 'TRYBOARD_OK c3-http-real'));
-report('假外网各收到请求（example 2 次：fetch + no-cors 诊断；httpbin 1 次）', hits.example === 2 && hits.httpbin === 1, JSON.stringify(hits));
-await clickTab(page, '网络');
+report('fake internet got the requests (example twice: fetch + no-cors probe; httpbin once)', hits.example === 2 && hits.httpbin === 1, JSON.stringify(hits));
+await clickTab(page, 'Network');
 await page.click('[data-net="reqs"]').catch(() => {});
 await waitFor(page, () => !!document.querySelector('#netRows'), null, 5000);
 const rows = await page.$$eval('#netRows tbody tr', (l) => l.map((tr) => [...tr.querySelectorAll('td')].map((td) => td.textContent.trim())));
 const ex = rows.find((r) => r[3].includes('http://example.com/'));
 const hb = rows.find((r) => r[3].includes('httpbin.org/get'));
-report('请求表：example.com 去向「真实」、状态「失败」、说明是跨域', !!ex && ex[2] === '真实' && ex[4] === '失败' && /跨域/.test(ex[3]), JSON.stringify(ex));
-report('请求表：httpbin.org 去向「真实」、状态 200', !!hb && hb[2] === '真实' && hb[4] === '200', JSON.stringify(hb));
-report('请求表：表头 时间/方法/去向/地址/状态/耗时', (await page.$$eval('#netRows th', (l) => l.map((t) => t.textContent).join('/'))) === '时间/方法/去向/地址/状态/耗时');
-report('「本次已记录 2 条回复」', await hasText(page, '#realnetBar', '本次已记录 2 条回复', 5000), await page.$eval('#realnetBar', (e) => e.textContent).catch(() => ''));
+report('request table: example.com destination Real, status Failed, CORS note', !!ex && ex[2] === 'Real' && ex[4] === 'Failed' && /does not allow cross-origin requests \(CORS\)/.test(ex[3]), JSON.stringify(ex));
+report('request table: httpbin.org destination Real, status 200', !!hb && hb[2] === 'Real' && hb[4] === '200', JSON.stringify(hb));
+report('request table: headers Time/Method/Destination/Address/Status/Duration', (await page.$$eval('#netRows th', (l) => l.map((t) => t.textContent).join('/'))) === 'Time/Method/Destination/Address/Status/Duration');
+report('2 replies recorded this run', await hasText(page, '#realnetBar', '2 replies recorded this run', 5000), await page.$eval('#realnetBar', (e) => e.textContent).catch(() => ''));
 await page.screenshot({ path: path.join(outDir, 'realnet-rows.png') });
 
-// ---- 3. 保存回复 → 命令行重放
+// ---- 3. Save replies -> CLI replay
 await page.click('#runPause');
-await waitFor(page, () => /已暂停/.test(document.getElementById('runState').textContent), null, 5000);
+await waitFor(page, () => /Paused/.test(document.getElementById('runState').textContent), null, 5000);
 await sleep(300);
 const log = await page.evaluate(() => globalThis.__tbInputLog());
 const all = await fwConsole(page);
@@ -173,10 +165,10 @@ const inputsFile = path.join(outDir, 'realnet-inputs.txt');
 fs.writeFileSync(inputsFile, dl.text);
 fs.writeFileSync(path.join(outDir, 'realnet-web.stdout'), live);
 const lines = dl.text.split('\n');
-report('保存的文件名 *-realnet.txt', /-realnet\.txt$/.test(dl.name), dl.name);
-report('日志：0 时刻 realnet=1', lines.some((l) => /^0(\.0+)?:realnet=1$/.test(l)), lines.find((l) => /realnet=/.test(l)) ?? '');
+report('saved file name *-realnet.txt', /-realnet\.txt$/.test(dl.name), dl.name);
+report('log: realnet=1 at time 0', lines.some((l) => /^0(\.0+)?:realnet=1$/.test(l)), lines.find((l) => /realnet=/.test(l)) ?? '');
 const replies = lines.filter((l) => /:netreply=/.test(l));
-report('日志：两条 netreply（#1 cors 失败、#2 200 application/json）', replies.length === 2 && /netreply=1,0,\d+,cors,$/.test(replies[0]) && /netreply=2,200,\d+,application\/json,[A-Za-z0-9+/=]+$/.test(replies[1]), replies.map((l) => l.slice(0, 60)).join(' | '));
+report('log: two netreply lines (#1 cors failure, #2 200 application/json)', replies.length === 2 && /netreply=1,0,\d+,cors,$/.test(replies[0]) && /netreply=2,200,\d+,application\/json,[A-Za-z0-9+/=]+$/.test(replies[1]), replies.map((l) => l.slice(0, 60)).join(' | '));
 const before = { ...hits };
 const cycles = Math.round(log.endMs * (CPU_HZ / 1000));
 const p = spawnSync(CLI, ['run', FW, '--seconds', String((cycles + 0.5) / CPU_HZ), '--inputs', inputsFile], { maxBuffer: 64 << 20 });
@@ -185,11 +177,11 @@ fs.writeFileSync(path.join(outDir, 'realnet-cli.stdout'), p.stdout);
 fs.writeFileSync(path.join(outDir, 'realnet-cli.stderr'), p.stderr);
 let at = -1;
 if (cli !== live) at = Math.max(0, [...cli].findIndex((c, i) => c !== live[i]));
-report('命令行 --inputs 重放 = 网页串口（逐字节）', cli === live && p.status === 0 && cli.includes('httpbin.org：真实回复'),
-  cli === live ? `${live.length} 字节，${cycles} 周期` : `第 ${at} 字节起不同（命令行 ${cli.length} / 网页 ${live.length}）：${JSON.stringify(cli.slice(at, at + 50))} vs ${JSON.stringify(live.slice(at, at + 50))}`);
-report('命令行重放不联网', hits.example === before.example && hits.httpbin === before.httpbin);
+report('CLI --inputs replay = web serial (byte for byte)', cli === live && p.status === 0 && cli.includes('httpbin.org：真实回复'), // lint: allow-cjk (firmware serial)
+  cli === live ? `${live.length} bytes, ${cycles} cycles` : `differs from byte ${at} (CLI ${cli.length} / web ${live.length}): ${JSON.stringify(cli.slice(at, at + 50))} vs ${JSON.stringify(live.slice(at, at + 50))}`);
+report('CLI replay stays offline', hits.example === before.example && hits.httpbin === before.httpbin);
 
-// ---- 4. 回退：时间线回到这次运行的末尾（指纹和当时一样）；再回到两个请求之间、继续跑完（#2 用记录的回复）。两次都不联网
+// ---- 4. Rewind: seek to this run's end (same fingerprint), then between the two replies and continue (#2 uses the recorded reply); both offline
 const sk = await page.evaluate(async () => {
   const a = globalThis.__tbApp;
   const steps = a.hist.steps();
@@ -197,12 +189,12 @@ const sk = await page.evaluate(async () => {
   const r = await a.hist.seek(steps.findIndex((s) => s.op.k === 'run' && s.op.n === n));
   return r && { same: r.same, fp: r.fingerprint };
 });
-report('时间线回到这次运行末尾：和当时一模一样', sk?.same === true, JSON.stringify(sk));
+report('timeline back to the end of this run: identical to then', sk?.same === true, JSON.stringify(sk));
 const reqAt = (n) => {
   const l = fs.readFileSync(path.join(outDir, 'realnet-cli.stderr'), 'utf8').split('\n').find((x) => x.includes(`real network request #${n} `));
   return l ? Number(l.match(/([\d.]+)s/)[1]) * 1000 : NaN;
 };
-// 第 1 个回复之后、第 2 个回复之前停住（第 2 个请求已经发出、还没回）
+// Stop after reply 1 and before reply 2 (request 2 already sent, not answered yet)
 const r1 = log.events.find((e) => e.kind === 'netreply' && e.reply.startsWith('1,'));
 const r2 = log.events.find((e) => e.kind === 'netreply' && e.reply.startsWith('2,'));
 const mid = r1 && r2 ? Math.max(r1.tMs, reqAt(2)) + (r2.tMs - Math.max(r1.tMs, reqAt(2))) / 2 : NaN;
@@ -215,20 +207,20 @@ const mz = await page.evaluate(async (untilMs) => {
   a.session.continueRun();
   return true;
 }, mid).catch((e) => `${e}`);
-const okMid = mz === true && (await hasText(page, '#console', 'httpbin.org：真实回复，url=http://httpbin.org/get', 20000));
-report(`回到两个回复之间（${(mid / 1000).toFixed(3)} s）再继续：#2 用记录的回复`, okMid, String(mz));
-report('回退和继续都不联网', hits.example === before.example && hits.httpbin === before.httpbin, JSON.stringify(hits));
+const okMid = mz === true && (await hasText(page, '#console', 'httpbin.org：真实回复，url=http://httpbin.org/get', 20000)); // lint: allow-cjk (firmware serial)
+report(`back between the two replies (${(mid / 1000).toFixed(3)} s) and continue: #2 uses the recorded reply`, okMid, String(mz));
+report('rewind and continue stay offline', hits.example === before.example && hits.httpbin === before.httpbin, JSON.stringify(hits));
 const relog = await page.evaluate(async () => (await globalThis.__tbInputLog()).events.filter((e) => e.kind === 'netreply').map((e) => e.reply));
-report('继续后的日志：两条回复与原来相同', relog.length === 2 && relog[0] === r1?.reply && relog[1] === r2?.reply, `${relog.length} 条`);
+report('log after continuing: both replies as before', relog.length === 2 && relog[0] === r1?.reply && relog[1] === r2?.reply, `${relog.length} replies`);
 
-// ---- 关掉开关：不弹确认
+// ---- Turning it off: no confirmation
 await page.click('#runPause').catch(() => {});
 await page.click('#realnetBtn');
 await sleep(200);
-report('关掉：不弹确认、aria-checked=false', !(await page.$('#realnetDlg')) && (await page.$eval('#realnetBtn', (b) => b.getAttribute('aria-checked'))) === 'false');
+report('off: no confirmation, aria-checked=false', !(await page.$('#realnetDlg')) && (await page.$eval('#realnetBtn', (b) => b.getAttribute('aria-checked'))) === 'false');
 await page.close();
 
-// ---- 5. 开着真实网络跑检查点：依赖外网、不记运行编号
+// ---- 5. Checkpoint with the real network on: needs internet, no run ID
 const pc = await newPage(1440, 1000);
 await pc.goto(base + '/app?work=weather#bench', { waitUntil: 'load' });
 await pc.evaluate(() => { try { localStorage.removeItem('tryboard-app-checks:weather'); } catch { /* */ } });
@@ -242,35 +234,35 @@ if (ref) {
   await ref.click();
   const done = await waitFor(pc, () => !!document.querySelector('#realnetNote'), null, 60000);
   const txt = done ? await pc.$eval('#realnetNote', (e) => e.textContent) : '';
-  report('检查点：结果标「依赖外网 · 不记运行编号」', /依赖外网/.test(txt) && /不记运行编号/.test(txt), txt.slice(0, 40));
+  report('checkpoint: result says needs internet, no run ID', /Needs internet/.test(txt) && /no run ID/.test(txt), txt.slice(0, 40));
   const card = await pc.$eval('#props .result-card', (e) => e.textContent).catch(() => '');
-  report('检查点：结果卡标「依赖外网」', /依赖外网/.test(card), card.slice(0, 60));
+  report('checkpoint: result card says needs internet', /Needs internet/.test(card), card.slice(0, 60));
   const runId = await pc.evaluate(() => [...document.querySelectorAll('.fp')].map((e) => e.textContent).join('|'));
-  report('检查点：不显示运行编号', !/[0-9a-f]{8}/.test(runId), runId);
+  report('checkpoint: no run ID shown', !/[0-9a-f]{8}/.test(runId), runId);
   const saved = await pc.evaluate(() => localStorage.getItem('tryboard-app-checks:weather') ?? '');
-  report('进度：记 net、指纹为空', !saved || (/"net":true/.test(saved) && /"fp":""/.test(saved)), saved.slice(0, 120));
+  report('progress: net recorded, fingerprint empty', !saved || (/"net":true/.test(saved) && /"fp":""/.test(saved)), saved.slice(0, 120));
   await pc.screenshot({ path: path.join(outDir, 'realnet-check.png') });
-} else report('检查点：找到「用参考固件试」', false);
+} else report('checkpoint: found Try reference firmware', false);
 await pc.close();
 
-// ---- 6. 手机布局
+// ---- 6. Mobile layout
 const pm = await newPage(390, 844, true);
 await pm.goto(base + '/app?work=blank&example=c3-http-real#bench', { waitUntil: 'load' });
 await hasText(pm, '#console', 'TRYBOARD_OK', 30000);
 await tap(pm, '#moreBtn');
-report('手机：⋯ 菜单里有「真实网络：关」', await hasText(pm, '[data-more="realnet"]', '真实网络：关', 5000));
+report('mobile: ⋯ menu has Real network: off', await hasText(pm, '[data-more="realnet"]', 'Real network: off', 5000));
 await tap(pm, '[data-more="realnet"]');
 await pm.waitForSelector('#realnetDlg', { timeout: 5000 }).catch(() => null);
 const bh = await pm.$$eval('#realnetDlg button', (l) => Math.min(...l.map((b) => b.getBoundingClientRect().height)));
-report('手机：弹层按钮 ≥ 44px', bh >= 44, `${bh}px`);
+report('mobile: dialog buttons ≥ 44px', bh >= 44, `${bh}px`);
 const [sw, iw] = await pm.evaluate(() => [document.documentElement.scrollWidth, innerWidth]);
-report('手机：无横向滚动', sw <= iw, `${sw} / ${iw}`);
+report('mobile: no horizontal scroll', sw <= iw, `${sw} / ${iw}`);
 await pm.screenshot({ path: path.join(outDir, 'realnet-mobile.png') });
 await pm.close();
 
 await browser.close();
 server.close();
 fake.close();
-if (errors.length) console.log('[realnet] 页面错误:\n  ' + errors.join('\n  '));
-console.log(`[realnet] ${fails || errors.length ? 'FAIL' : 'PASS'}（失败 ${fails} 项，页面错误 ${errors.length} 条）`);
+if (errors.length) console.log('[realnet] page errors:\n  ' + errors.join('\n  '));
+console.log(`[realnet] ${fails || errors.length ? 'FAIL' : 'PASS'} (${fails} failed, ${errors.length} page errors)`);
 process.exit(fails || errors.length ? 1 : 0);

@@ -1,4 +1,4 @@
-// 逻辑分析仪数据层（P1-05）与 ⌘K 匹配（P1-06）的纯函数
+// Logic analyzer data layer (P1-05) and ⌘K matching (P1-06) pure functions
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { B_NACK, B_READ, B_RESTART, IoStore, K, decodeEvents, eventLine, pwmLabel, txnNote, txnText, type IoEvent } from '../src/app/iotrace.ts';
@@ -19,7 +19,7 @@ function bytes(evs: IoEvent[]) {
   return b;
 }
 
-/** BME280 一次突发读：START 0x76 W · 0xF7 · RESTART 0x76 R · 8 B · STOP（与 weather 固件在命令行 --trace-io 里看到的一致） */
+/** One BME280 burst read: START 0x76 W · 0xF7 · RESTART 0x76 R · 8 B · STOP (as the weather firmware shows in CLI --trace-io) */
 function burst(t0: number, bit = 404): IoEvent[] {
   const ev: IoEvent[] = [{ t: t0, kind: K.I2C_START, a: 0, b: 0, v: bit }];
   let t = t0 + bit;
@@ -32,7 +32,7 @@ function burst(t0: number, bit = 404): IoEvent[] {
   return ev;
 }
 
-test('事件字节解码与文本行和 Rust IoEvent::line 一致', () => {
+test('event byte decoding and text lines match Rust IoEvent::line', () => {
   const evs: IoEvent[] = [
     { t: 1, kind: K.PWM, a: 4, b: 5489, v: 50000 },
     { t: 5, kind: K.I2C_ADDR, a: 0x76, b: B_READ, v: 0 },
@@ -45,7 +45,7 @@ test('事件字节解码与文本行和 Rust IoEvent::line 一致', () => {
   assert.deepEqual(back.map(eventLine), ['1 PWM 4 5489 50000', '5 I2C0 ADDR 76 R ACK', `${2 ** 40 + 7} GPIO 0 1`, '9 WS2812 48 1 002000', '10 I2C1 RESTART 404']);
 });
 
-test('I2C 事务解码：泡泡文字 + BME280 寄存器注释', () => {
+test('I2C transaction decoding: bubble text + BME280 register notes', () => {
   const s = new IoStore();
   s.append(burst(1000));
   const xs = s.i2c.get(0)!;
@@ -53,11 +53,11 @@ test('I2C 事务解码：泡泡文字 + BME280 寄存器注释', () => {
   assert.equal(txnText(xs[0]), 'START 0x76 W · 0xF7 · RESTART 0x76 R · 8 B · STOP');
   assert.match(txnNote(xs[0]), /temperature/);
   assert.ok(xs[0].done);
-  // 结束时刻 = STOP 之后一位
+  // End time = one bit after STOP
   assert.equal(xs[0].t1, burst(1000).at(-1)!.t + 404);
 });
 
-test('I2C：地址没应答、命令分两批（END 之后接着 RESTART）、SSD1306 命令与显存', () => {
+test('I2C: address NACK, command in two batches (RESTART after END), SSD1306 commands and VRAM', () => {
   const s = new IoStore();
   s.append([
     { t: 0, kind: K.I2C_START, a: 0, b: 0, v: 400 },
@@ -86,7 +86,7 @@ test('I2C：地址没应答、命令分两批（END 之后接着 RESTART）、SS
   assert.match(txnText(xs[2]), /17 B/);
 });
 
-test('PWM / GPIO 按通道整理、导出文本', () => {
+test('PWM / GPIO grouped by channel, text export', () => {
   const s = new IoStore();
   s.append([
     { t: 10, kind: K.PWM, a: 4, b: 5488, v: 50000 },
@@ -103,15 +103,20 @@ test('PWM / GPIO 按通道整理、导出文本', () => {
   assert.equal(s.text(), '10 PWM 4 5488 50000\n20 GPIO 0 0\n30 PWM 4 0 0\n');
 });
 
-test('⌘K：模糊匹配、参数识别、最近命令', () => {
-  assert.ok(fuzzy('室温', '把室温设为 … ℃'));
+test('⌘K: fuzzy match, argument parsing, recent commands', () => {
+  assert.ok(fuzzy('room', 'Set room temperature to … ℃'));
+  assert.ok(fuzzy('室温', '把室温设为 … ℃')); // lint: allow-cjk (zh labels still match)
   assert.ok(fuzzy('gpio4', 'GPIO4')!.score > fuzzy('gpio4', 'GPIO48')!.score);
   assert.equal(fuzzy('xyz', 'GPIO4'), null);
-  assert.ok(fuzzy('fxy', '打开逻辑分析仪', '逻辑分析仪 示波器 fenxiyi') !== null);
-  assert.equal(parseTemp('室温 35'), 35);
-  assert.equal(parseTemp('把室温设为 18.5 ℃'), 18.5);
+  assert.ok(fuzzy('logic', 'Open logic analyzer') !== null);
+  assert.ok(fuzzy('fxy', '打开逻辑分析仪', '逻辑分析仪 示波器 fenxiyi') !== null); // lint: allow-cjk (pinyin keys)
+  assert.equal(parseTemp('room temperature 35'), 35);
+  assert.equal(parseTemp('室温 35'), 35); // lint: allow-cjk (zh input)
+  assert.equal(parseTemp('Set room temperature to 18.5 ℃'), 18.5);
+  assert.equal(parseTemp('把室温设为 18.5 ℃'), 18.5); // lint: allow-cjk (zh input)
   assert.equal(parseTemp('GPIO4'), null);
-  assert.equal(parseRun('回到第 1 次运行'), 1);
+  assert.equal(parseRun('Back to run 1'), 1);
+  assert.equal(parseRun('回到第 1 次运行'), 1); // lint: allow-cjk (zh input)
   assert.equal(parseRun('GPIO4'), null);
   assert.equal(highlight('GPIO4', [0, 1]), '<mark>GP</mark>IO4');
   assert.deepEqual(pushRecent(['a', 'b', 'c'], 'b', 3), ['b', 'a', 'c']);

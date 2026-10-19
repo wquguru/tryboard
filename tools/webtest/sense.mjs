@@ -1,9 +1,5 @@
-// IMU 与触摸屏的网页回归（P2-02 / P2-03）：真实鼠标在 3D 里拖 IMU 模块、点 / 拖触摸圆屏，读数与命令行重放逐行一致
-//  1. app.html?work=imu#bench：倾斜滑块 → 固件读到的俯仰 / 横滚在 0.5° 内；拖 IMU 模块 → 台面转、拖动中陀螺非零、松手回零
-//  2. 导出输入日志，`tryboard run --inputs` 重放：IMU 读数行与网页逐行相同
-//  3. #product：拖动倾角仪盒子 → 姿态与固件读数跟着变
-//  4. app.html?work=touch#bench：点圆屏 → TOUCH DOWN 坐标对、单击手势；横着拖 → 滑动手势；命令行重放 TOUCH / GESTURE 行相同
-// 用法：node tools/webtest/sense.mjs（先 tools/build_web.sh、cargo build --release -p tryboard-cli）。截图在 Reviews/web/sense-*
+// IMU and touch screen (P2-02 / P2-03): real mouse drags the IMU module and taps / swipes the round screen; CLI replay matches line by line.
+// Usage: node tools/webtest/sense.mjs (after tools/build_web.sh and cargo build --release -p tryboard-cli); screenshots in Reviews/web/sense-*
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -21,7 +17,7 @@ const CLI = path.join(root, 'core/target/release/tryboard');
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  // Extensionless paths (/app, /select) map to .html, like Vite preview and static hosting (DESIGN_V2 §7.2)
   const f0 = path.join(dist, u === '/' ? 'index.html' : u);
   const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) {
@@ -64,7 +60,7 @@ async function open(url) {
   return page;
 }
 const lines = (text, re) => text.replace(/\r/g, '').split('\n').filter((l) => re.test(l));
-/** 网页这次运行的输入日志 → 命令行重放，取同一类行比较（命令行多跑一点，按网页行数截断） */
+/** This run's input log -> CLI replay, compare lines of one kind (CLI runs a bit longer, cut to the web line count) */
 async function replay(page, fw, re) {
   const { log, out } = await page.evaluate(async () => ({ log: await globalThis.__tbApp.session.sim.inputLog(), out: globalThis.__tbApp.session.consoleText() }));
   const file = path.join(outDir, `sense-${fw}-inputs.txt`);
@@ -75,10 +71,10 @@ async function replay(page, fw, re) {
   return { same: web.length > 0 && JSON.stringify(web) === JSON.stringify(cli), web: web.length, cli: cli.length, events: log.events.length };
 }
 
-// ---------------------------------------------------------------- 1. IMU 实验台
+// ---------------------------------------------------------------- 1. IMU bench
 {
   const page = await open('/app?work=imu#bench');
-  report('IMU 台面上电', await page.evaluate(() => globalThis.__tbApp.session.consoleText().includes('MPU6050 WHO_AM_I 0x68 OK')));
+  report('IMU bench powers up', await page.evaluate(() => globalThis.__tbApp.session.consoleText().includes('MPU6050 WHO_AM_I 0x68 OK')));
   await page.evaluate(() => globalThis.__tbApp.store.set({ selection: { kind: 'part', id: 'mpu6050' } }));
   await sleep(300);
   await page.evaluate(async () => {
@@ -95,9 +91,9 @@ async function replay(page, fw, re) {
     const m = globalThis.__tbApp.store.get().imu;
     return m && Math.abs(m.pitch - 30) < 0.5 && Math.abs(m.roll + 20) < 0.5 && m.gyro.every((g) => Math.abs(g) < 0.2);
   }, null, 8000);
-  report('倾斜滑块 → 固件读数', ok, JSON.stringify(await page.evaluate(() => globalThis.__tbApp.store.get().imu)));
+  report('tilt sliders -> firmware readings', ok, JSON.stringify(await page.evaluate(() => globalThis.__tbApp.store.get().imu)));
   await page.screenshot({ path: path.join(outDir, 'sense-imu-slider.png') });
-  // 真实鼠标拖 IMU 模块
+  // Real mouse drag on the IMU module
   const [x0, y0] = await page.evaluate(() => globalThis.__tbApp.session.bench.imuScreenPos());
   const p0 = await page.evaluate(() => globalThis.__tbApp.store.get().pose);
   await page.mouse.move(x0, y0);
@@ -111,16 +107,16 @@ async function replay(page, fw, re) {
   }
   await page.mouse.up();
   const p1 = await page.evaluate(() => globalThis.__tbApp.store.get().pose);
-  report('拖 IMU 模块转台面、陀螺读到角速度', Math.abs(p1.yaw - p0.yaw) + Math.abs(p1.pitch - p0.pitch) > 10 && gyroSeen > 0, `姿态 ${JSON.stringify(p0)} → ${JSON.stringify(p1)}，${gyroSeen} 次采样陀螺非零`);
+  report('drag the IMU module turns the bench, gyro reads angular rate', Math.abs(p1.yaw - p0.yaw) + Math.abs(p1.pitch - p0.pitch) > 10 && gyroSeen > 0, `pose ${JSON.stringify(p0)} -> ${JSON.stringify(p1)}, ${gyroSeen} samples with nonzero gyro`);
   const rest = await waitFor(page, (p) => {
     const m = globalThis.__tbApp.store.get().imu;
     return m && m.gyro.every((g) => Math.abs(g) < 0.2) && Math.abs(m.pitch - p.pitch) < 0.6;
   }, p1, 6000);
-  report('松手后陀螺回零、读数停在新姿态', rest);
+  report('after release gyro returns to zero, readings stay at the new pose', rest);
   await page.screenshot({ path: path.join(outDir, 'sense-imu-drag.png') });
   const r = await replay(page, 's3-imu', /^IMU /);
-  report('IMU 输入日志命令行重放一致', r.same, `网页 ${r.web} 行 / 命令行 ${r.cli} 行，输入 ${r.events} 条`);
-  // 成品：拖盒子
+  report('IMU input log CLI replay matches', r.same, `web ${r.web} lines / CLI ${r.cli} lines, ${r.events} inputs`);
+  // Product: drag the box
   await page.evaluate(() => (location.hash = 'product'));
   await sleep(800);
   const c = await page.evaluate(() => globalThis.__tbProduct?.center?.());
@@ -137,22 +133,22 @@ async function replay(page, fw, re) {
     const m = globalThis.__tbApp.store.get().imu;
     return m && Math.abs(m.pitch - p.pitch) < 0.6 && Math.abs(m.roll - p.roll) < 0.6;
   }, q1, 6000);
-  report('成品拖动盒子 → 姿态与固件读数', JSON.stringify(q0) !== JSON.stringify(q1) && follow, `${JSON.stringify(q1)} 读到 ${JSON.stringify(await page.evaluate(() => globalThis.__tbApp.store.get().imu))}`);
+  report('Product: drag the box -> pose and firmware readings', JSON.stringify(q0) !== JSON.stringify(q1) && follow, `${JSON.stringify(q1)} read ${JSON.stringify(await page.evaluate(() => globalThis.__tbApp.store.get().imu))}`);
   await page.screenshot({ path: path.join(outDir, 'sense-imu-product.png') });
   await page.close();
 }
 
-// ---------------------------------------------------------------- 2. 触摸圆屏
+// ---------------------------------------------------------------- 2. Round touch screen
 {
   const page = await open('/app?work=touch#bench');
-  report('触摸台面上电', await page.evaluate(() => globalThis.__tbApp.session.consoleText().includes('CST816S chip id 0xB5 OK')));
+  report('touch bench powers up', await page.evaluate(() => globalThis.__tbApp.session.consoleText().includes('CST816S chip id 0xB5 OK')));
   const pt = (x, y) => page.evaluate((a, b) => globalThis.__tbApp.session.bench.lcdPoint(a, b), x, y);
   const out = () => page.evaluate(() => globalThis.__tbApp.session.consoleText());
   let [x, y] = await pt(60, 120);
   await page.mouse.click(x, y, { delay: 120 });
   const clicked = await waitFor(page, () => /GESTURE click/.test(globalThis.__tbApp.session.consoleText()), null, 5000);
   const down = /TOUCH DOWN x=(\d+) y=(\d+)/.exec(await out());
-  report('点圆屏 → 坐标与单击', clicked && !!down && Math.abs(+down[1] - 60) <= 2 && Math.abs(+down[2] - 120) <= 2, down?.[0] ?? '没有 TOUCH DOWN');
+  report('tap the round screen -> coordinates and single tap', clicked && !!down && Math.abs(+down[1] - 60) <= 2 && Math.abs(+down[2] - 120) <= 2, down?.[0] ?? 'no TOUCH DOWN');
   [x, y] = await pt(50, 180);
   await page.mouse.move(x, y);
   await page.mouse.down();
@@ -162,18 +158,18 @@ async function replay(page, fw, re) {
     await sleep(40);
   }
   await page.mouse.up();
-  report('横着拖 → 向右滑动', await waitFor(page, () => /GESTURE right/.test(globalThis.__tbApp.session.consoleText()), null, 5000));
+  report('horizontal drag -> swipe right', await waitFor(page, () => /GESTURE right/.test(globalThis.__tbApp.session.consoleText()), null, 5000));
   await sleep(500);
   const lit = await page.evaluate(() => globalThis.__tbApp.session.frame.lcd?.length ?? 0);
-  report('圆屏画面在 3D 里', lit === 240 * 240 * 4);
+  report('round screen image is in 3D', lit === 240 * 240 * 4);
   await page.screenshot({ path: path.join(outDir, 'sense-touch.png') });
   const r = await replay(page, 's3-touch', /^(TOUCH|GESTURE) /);
-  report('触摸输入日志命令行重放一致', r.same, `网页 ${r.web} 行 / 命令行 ${r.cli} 行，输入 ${r.events} 条`);
+  report('touch input log CLI replay matches', r.same, `web ${r.web} lines / CLI ${r.cli} lines, ${r.events} inputs`);
   await page.close();
 }
 
-report('页面没有报错', errors.length === 0, errors.slice(0, 3).join(' | '));
+report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 server.close();
-console.log(`[sense] ${fails ? 'FAIL' : 'PASS'}（${n} 项${fails ? `，${fails} 项失败` : ''}）`);
+console.log(`[sense] ${fails ? 'FAIL' : 'PASS'} (${n} checks${fails ? `, ${fails} failed` : ''})`);
 process.exit(fails ? 1 : 0);

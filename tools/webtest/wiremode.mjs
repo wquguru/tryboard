@@ -1,10 +1,5 @@
-// 实验台改接线回归（U-04）：app.html?work=weather&debug=1#bench
-//  1. 接线表点 bme280:VIN → W 进改接：横幅、引脚圈出现；真实鼠标悬停引脚圈有提示
-//  2. 真实鼠标点 5V 圈 → 接错线卡片（BME280 只吃 3.3 V），引脚圈收起，接线表写「原 3V3」
-//  3. 卡片三个按钮：撤销（回到 3V3）/ 改接到别的针（回到改接模式）/ 保留；Esc 退出改接
-//  4. ⌘Z / ⇧⌘Z 撤销重做这次改接；改回原针 → 接线检查无问题
-//  5. 改接不重新上电：模拟器的指纹和改接前跑出来的一样往前走（串口照常、无报错）
-// 用法：node tools/webtest/wiremode.mjs [dist 目录，默认 web/dist]。截图在 Reviews/web/wiremode-*
+// Bench rewiring (U-04): W mode, rings + hover tips, 5V -> wrong-wire card, its three buttons, Esc, ⌘Z / ⇧⌘Z, no power cycle.
+// Usage: node tools/webtest/wiremode.mjs [dist dir, default web/dist]; screenshots in Reviews/web/wiremode-*
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -19,7 +14,7 @@ fs.mkdirSync(outDir, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.svg': 'image/svg+xml' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  // Extensionless paths (/app, /select) map to .html, like Vite preview and static hosting (DESIGN_V2 §7.2)
   const f0 = path.join(dist, u === '/' ? 'index.html' : u);
   const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) {
@@ -65,8 +60,8 @@ const W = 'wire:3V3~bme280:VIN';
 const row = () => page.$eval(`#wireTable [data-wire="${W}"]`, (e) => e.textContent);
 const has = (sel) => page.$(sel).then(Boolean);
 const toast = () => page.$eval('#toast', (e) => e.textContent).catch(() => '');
-/** 真实鼠标点引脚圈：圈跟着相机投影走，相机还在动（进改接时对焦、布局变化后重算投影）时取到的是旧位置，
- *  5V 和 GND 相邻，点偏一格就接到别的脚上；所以等位置连续两次读数不变再点 */
+/** Real mouse click on a pin ring: rings follow the moving camera and 5V sits next to GND,
+ *  so wait until two position reads agree before clicking */
 async function clickRing(id, hoverOnly = false) {
   const at = () =>
     page.$eval(`#pinRings [data-ring="${id}"]`, (e) => {
@@ -81,7 +76,7 @@ async function clickRing(id, hoverOnly = false) {
     b = c;
     if (still) break;
   }
-  // 相邻脚（5V / GND）的圈在某些视角下会叠一半：像人一样瞄圈里露出来、确实点得到它的那块，而不是死点圆心
+  // Neighbouring rings (5V / GND) half overlap in some views: aim at the visible, clickable part like a person would
   b = await page.$eval(
     `#pinRings [data-ring="${id}"]`,
     (e, c) => {
@@ -105,77 +100,77 @@ async function enterWire() {
 }
 
 await page.click('[data-left="wires"]');
-report('接线表这根线是 3V3', (await row()).includes('3V3') && !(await row()).includes('原'));
+report('wire table: this wire is on 3V3', (await row()).includes('3V3') && !(await row()).includes('was '));
 const sim0 = await page.evaluate(() => globalThis.__tbApp.store.get().simSeconds);
 
-// ---- 1. 改接模式
-report('W 进改接：横幅 + 引脚圈', (await enterWire()) && (await has('#wireBanner')));
+// ---- 1. Rewire mode
+report('W enters rewire mode: banner + pin rings', (await enterWire()) && (await has('#wireBanner')));
 const banner = await page.$eval('#wireBanner', (e) => e.textContent);
-report('横幅写明改哪根线', banner.includes('bme280:VIN') && banner.includes('3V3'), banner);
+report('banner names the wire being moved', banner.includes('bme280:VIN') && banner.includes('3V3'), banner);
 await clickRing('GPIO4', true);
 const tip = await waitFor(page, () => document.querySelector('#pinRings [role=tooltip]')?.textContent.includes('GPIO4'));
-report('悬停引脚圈有提示（占用 / 空闲）', tip && (await page.$eval('#pinRings [role=tooltip]', (e) => /占用|空闲/.test(e.textContent))));
+report('hovering a pin ring shows a tip (used / free)', tip && (await page.$eval('#pinRings [role=tooltip]', (e) => /Used by|Free/.test(e.textContent))));
 await page.screenshot({ path: path.join(outDir, 'wiremode-rings.png') });
 
-// ---- 2. 接到 5V → 接错线
+// ---- 2. Connect to 5V -> wrong wire
 await clickRing('5V');
 const ww = await waitFor(page, () => !!document.querySelector('#wrongWire'));
-report('接到 5V → 接错线卡片', ww, ww ? await page.$eval('#wrongWire', (e) => e.textContent.slice(0, 80)) : '');
-report('引脚圈收起', !(await has('#pinRings')) && !(await has('#wireBanner')));
-report('接线表写「原 3V3」', (await row()).includes('5V') && (await row()).includes('原 3V3'), await row());
+report('connect to 5V -> wrong-wire card', ww, ww ? await page.$eval('#wrongWire', (e) => e.textContent.slice(0, 80)) : '');
+report('pin rings close', !(await has('#pinRings')) && !(await has('#wireBanner')));
+report('wire table says was 3V3', (await row()).includes('5V') && (await row()).includes('was 3V3'), await row());
 await page.screenshot({ path: path.join(outDir, 'wiremode-wrong.png') });
 
-// ---- 3. 卡片按钮
+// ---- 3. Card buttons
 await page.click('#wrongWire [data-ww="undo"]');
 await waitFor(page, () => !document.querySelector('#wrongWire'));
-report('撤销这次改接 → 回到 3V3', !(await has('#wrongWire')) && !(await row()).includes('原'), await row());
+report('undo this rewire -> back on 3V3', !(await has('#wrongWire')) && !(await row()).includes('was '), await row());
 
 await enterWire();
 await clickRing('5V');
 await waitFor(page, () => !!document.querySelector('#wrongWire'));
 await page.click('#wrongWire [data-ww="retry"]');
 const back = await waitFor(page, () => !document.querySelector('#wrongWire') && !!document.querySelector('#pinRings [data-ring]'));
-report('改接到别的针 → 撤销并回到改接模式', back && !(await row()).includes('原'));
+report('move to another pin -> undo and back to rewire mode', back && !(await row()).includes('was '));
 await page.keyboard.press('Escape');
 await waitFor(page, () => !document.querySelector('#wireBanner'));
-report('Esc 退出改接', !(await has('#wireBanner')) && !(await has('#pinRings')));
+report('Esc leaves rewire mode', !(await has('#wireBanner')) && !(await has('#pinRings')));
 
 await enterWire();
 await clickRing('5V');
 await waitFor(page, () => !!document.querySelector('#wrongWire'));
 await page.click('#wrongWire [data-ww="keep"]');
 await waitFor(page, () => !document.querySelector('#wrongWire'));
-report('我知道，保留 → 卡片关、改接留着', !(await has('#wrongWire')) && (await row()).includes('原 3V3'));
+report('keep it -> card closes, rewire stays', !(await has('#wrongWire')) && (await row()).includes('was 3V3'));
 const issues = await page.evaluate(() => globalThis.__tbApp.faults().length);
-report('接线检查记一条问题', issues > 0, `faults=${issues}`);
+report('wiring check records an issue', issues > 0, `faults=${issues}`);
 
-// ---- 4. 撤销 / 重做
+// ---- 4. Undo / redo
 await page.keyboard.press('Escape');
 await page.keyboard.down('Meta');
 await page.keyboard.press('z');
 await page.keyboard.up('Meta');
-await waitFor(page, () => !document.querySelector('#wireTable [data-wire="wire:3V3~bme280:VIN"]')?.textContent.includes('原'));
-report('⌘Z 撤销改接', !(await row()).includes('原'), await row());
+await waitFor(page, () => !document.querySelector('#wireTable [data-wire="wire:3V3~bme280:VIN"]')?.textContent.includes('was '));
+report('⌘Z undoes the rewire', !(await row()).includes('was '), await row());
 await page.keyboard.down('Meta');
 await page.keyboard.down('Shift');
 await page.keyboard.press('z');
 await page.keyboard.up('Shift');
 await page.keyboard.up('Meta');
-await waitFor(page, () => !!document.querySelector('#wireTable [data-wire="wire:3V3~bme280:VIN"]')?.textContent.includes('原'));
-report('⇧⌘Z 重做改接', (await row()).includes('原 3V3'), await row());
+await waitFor(page, () => !!document.querySelector('#wireTable [data-wire="wire:3V3~bme280:VIN"]')?.textContent.includes('was '));
+report('⇧⌘Z redoes the rewire', (await row()).includes('was 3V3'), await row());
 
 await enterWire();
 await clickRing('3V3');
 await waitFor(page, () => !document.querySelector('#pinRings'));
 await sleep(200);
 const t = await toast();
-report('改回原针 → 无问题', !(await row()).includes('原') && (await page.evaluate(() => globalThis.__tbApp.faults().length)) === 0 && t.includes('改回'), t);
+report('back on the original pin -> no issues', !(await row()).includes('was ') && (await page.evaluate(() => globalThis.__tbApp.faults().length)) === 0 && t.includes('back on'), t);
 
-// ---- 5. 模拟器照常跑
+// ---- 5. The simulator keeps running
 const sim1 = await page.evaluate(() => globalThis.__tbApp.store.get().simSeconds);
-report('改接不打断模拟（时间往前走）', sim1 > sim0, `${sim0.toFixed(2)} → ${sim1.toFixed(2)} s`);
-report('页面无报错', errors.length === 0, errors.slice(0, 3).join(' | '));
+report('rewiring does not interrupt the simulation (time moves on)', sim1 > sim0, `${sim0.toFixed(2)} → ${sim1.toFixed(2)} s`);
+report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 server.close();
-console.log(`[wiremode] ${fails ? 'FAIL' : 'PASS'}（${fails} 项失败）`);
+console.log(`[wiremode] ${fails ? 'FAIL' : 'PASS'} (${fails} failed)`);
 process.exit(fails ? 1 : 0);

@@ -204,83 +204,83 @@ console.log(s.length ? 'Price review: ' + s.length + ' parts not reviewed for ov
 if [ $NO_WEB = 0 ]; then
   echo -e "\n## Web (headless Chrome + wasm)" >> $REPORT
   tools/build_web.sh >/dev/null 2>&1 || { echo "build failed" >> $REPORT; fail=1; }
-  # Expected texts are firmware serial prints; the webtest scripts still report in Chinese
+  # Expected texts are firmware serial prints; the webtest scripts report in English
   for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接" s3-blink:TRYBOARD_OK s3-rgb:TRYBOARD_OK s3-dual:TRYBOARD_OK weather:TRYBOARD_OK lens:TRYBOARD_OK spin:TRYBOARD_OK s3-wifi-http:TRYBOARD_OK s3-lvgl:TRYBOARD_OK "s3-encoder:ENCODER ready" "s3-ultrasonic:DIST 15.0 cm" s3-imu:TRYBOARD_OK s3-qmi8658:TRYBOARD_OK s3-touch:TRYBOARD_OK "usbkey:TRYBOARD_OK usbkey" "echo:串口回显" esp32-hello:TRYBOARD_OK esp32-blink:TRYBOARD_OK esp32-wifi:TRYBOARD_OK; do  # lint: allow-cjk
     ex=${spec%%:*}; want=${spec#*:}
     r=$(node tools/webtest/webtest.mjs "$ex" "$want" 2>&1 | head -3)
     echo "$r" | sed 's/^/- /' >> $REPORT
     echo "$r" | grep -q PASS || fail=1
     echo "$r" | grep -q FAIL && fail=1
-    echo "$r" | grep -q 页面错误 && fail=1  # lint: allow-cjk
+    echo "$r" | grep -q 'page errors' && fail=1
   done
   r=$(node tools/webtest/levels.mjs 2>&1 | grep '^\[levels\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   # The last line must be the summary; if a script dies midway the last line is a single item's PASS, which does not count
-  echo "$r" | tail -1 | grep -q '^\[levels\] PASS（' || { echo "- [levels] script did not finish" >> $REPORT; fail=1; }  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[levels\] PASS (' || { echo "- [levels] script did not finish" >> $REPORT; fail=1; }
   r=$(node tools/webtest/replay.mjs 2>&1 | grep '^\[replay\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   # Same rule: only the summary line ("[replay] PASS (...") counts
-  echo "$r" | tail -1 | grep -q '^\[replay\] PASS（' || { echo "- [replay] script did not finish" >> $REPORT; fail=1; }  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[replay\] PASS (' || { echo "- [replay] script did not finish" >> $REPORT; fail=1; }
   # Real-network toggle (C-03): a local proxy stands in for the internet; replies go into the input log,
   # CLI --inputs replays them byte for byte, and rewinding stays offline
   r=$(node tools/webtest/realnet.mjs 2>&1 | grep '^\[realnet\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q '^\[realnet\] PASS（' || { echo "- [realnet] script did not finish" >> $REPORT; fail=1; }  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[realnet\] PASS (' || { echo "- [realnet] script did not finish" >> $REPORT; fail=1; }
   r=$(node tools/webtest/elec.mjs 2>&1 | grep '^\[elec\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q '^\[elec\] PASS（' || { echo "- [elec] script did not finish" >> $REPORT; fail=1; }  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[elec\] PASS (' || { echo "- [elec] script did not finish" >> $REPORT; fail=1; }
   r=$(node tools/webtest/interact.mjs 2>&1 | grep '^\[interact\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   # Same rule: only the summary line ("[interact] PASS (...") counts
-  echo "$r" | tail -1 | grep -q '^\[interact\] PASS（' || { echo "- [interact] script did not finish" >> $REPORT; fail=1; }  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[interact\] PASS (' || { echo "- [interact] script did not finish" >> $REPORT; fail=1; }
   # 3D assembly (P1-07) + parametric case export (P1-08): real mouse drags, recheck ✗ / ✓, explode / section / ruler,
   # STL / 3MF download and read-back, SVG fallback
   r=$(node tools/webtest/asm3d.mjs 2>&1 | grep '^\[asm3d\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q '^\[asm3d\] PASS（' || fail=1  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[asm3d\] PASS (' || fail=1
   # Logic analyzer events (P1-05): live web events = CLI --trace-io replay, line by line, also after rewinding
   r=$(node tools/webtest/traceio.mjs 2>&1 | grep '^\[traceio\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q '^\[traceio\] PASS（' || { echo "- [traceio] script did not finish" >> $REPORT; fail=1; }  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[traceio\] PASS (' || { echo "- [traceio] script did not finish" >> $REPORT; fail=1; }
   # Photo / 10 s recording (P2-10): PNG is 2x the canvas, webm video track = canvas, Opus track when sound is on
   r=$(node tools/webtest/media.mjs 2>&1 | grep '^\[media\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q '^\[media\] PASS（' || { echo "- [media] script did not finish" >> $REPORT; fail=1; }  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[media\] PASS (' || { echo "- [media] script did not finish" >> $REPORT; fail=1; }
   # Harness (P2-11): wire length -> W6 + drifting readings / NACK, metal near antenna -> RSSI; USB keypad (P2-12) home -> typing
   r=$(node tools/webtest/harness.mjs 2>&1 | grep '^\[harness\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q '^\[harness\] PASS（' || { echo "- [harness] script did not finish" >> $REPORT; fail=1; }  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[harness\] PASS (' || { echo "- [harness] script did not finish" >> $REPORT; fail=1; }
   # IMU / touch (P2-02 / P2-03): real mouse drags the IMU and taps the round LCD; readings match CLI --inputs replay
   r=$(node tools/webtest/sense.mjs 2>&1 | grep '^\[sense\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q '^\[sense\] PASS（' || { echo "- [sense] script did not finish" >> $REPORT; fail=1; }  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[sense\] PASS (' || { echo "- [sense] script did not finish" >> $REPORT; fail=1; }
   r=$(node tools/webtest/editor.mjs 2>&1 | tail -1)
   echo "- Part editor (blink example, upload bme280 firmware + place BME280 from the catalog): $r" >> $REPORT
   echo "$r" | grep -q PASS || fail=1
   # Bench rewiring (U-04): pin rings, wrong-wire cards, undo / redo, rewiring does not interrupt the simulation
   r=$(node tools/webtest/wiremode.mjs 2>&1 | grep '^\[wiremode\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q '^\[wiremode\] PASS（' || { echo "- [wiremode] script did not finish" >> $REPORT; fail=1; }  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[wiremode\] PASS (' || { echo "- [wiremode] script did not finish" >> $REPORT; fail=1; }
   # Phone layout (U-05): 390×844 four steps without horizontal scroll, big tappable controls, drawers, rewire loupe, device keys
   r=$(node tools/webtest/mobile.mjs 2>&1 | grep '^\[mobile\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q '^\[mobile\] PASS（' || { echo "- [mobile] script did not finish" >> $REPORT; fail=1; }  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[mobile\] PASS (' || { echo "- [mobile] script did not finish" >> $REPORT; fail=1; }
   # Dock code tab (P2-15): examples show source (app_main), an uploaded .bin says there is no source, works on phones
   r=$(node tools/webtest/code.mjs 2>&1 | grep '^\[code\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q '^\[code\] PASS（' || { echo "- [code] script did not finish" >> $REPORT; fail=1; }  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[code\] PASS (' || { echo "- [code] script did not finish" >> $REPORT; fail=1; }
   # Place parts on the bench (P2-16): LED from the catalog -> wire it -> blink really follows the GPIO, CLI parity
   r=$(node tools/webtest/place.mjs 2>&1 | grep '^\[place\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q '^\[place\] PASS（' || { echo "- [place] script did not finish" >> $REPORT; fail=1; }  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[place\] PASS (' || { echo "- [place] script did not finish" >> $REPORT; fail=1; }
   # Board-picker projects (U-17): generated checkpoints match fixtures; c3-thermo / hello verdict and fingerprint web = check.py
   r=$(node tools/webtest/custom.mjs 2>&1 | grep '^\[custom\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q '^\[custom\] PASS（' || { echo "- [custom] script did not finish" >> $REPORT; fail=1; }  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[custom\] PASS (' || { echo "- [custom] script did not finish" >> $REPORT; fail=1; }
   # Board picker v3 (U-14–U-16, U-18): three questions, part add / remove, confidence icons, brief, share link
   r=$(node tools/webtest/selectv3.mjs 2>&1 | grep '^\[selectv3\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
-  echo "$r" | tail -1 | grep -q '^\[selectv3\] ✓ 全部通过' || { echo "- [selectv3] script did not finish" >> $REPORT; fail=1; }  # lint: allow-cjk
+  echo "$r" | tail -1 | grep -q '^\[selectv3\] PASS (0 failed)' || { echo "- [selectv3] script did not finish" >> $REPORT; fail=1; }
 fi
 echo -e "\nVerdict: $([ $fail = 0 ] && echo 'all passed' || echo 'some items failed')" >> $REPORT
 cat $REPORT

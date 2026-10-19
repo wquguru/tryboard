@@ -1,8 +1,5 @@
-// 任务时间线对拍（C-04）：网页实时运行记下的任务切换 = 命令行 `--trace-tasks` 同一固件同一时段的切换（核、任务名、起点周期、结束状态逐段相同）。
-//  1. app.html?work=blank&example=<示例>（s3-dual / hello / s3-lvgl）实验台实时运行到串口出现 TRYBOARD_OK（lvgl：FPS）、模拟时间 > 1.2 s
-//  2. 暂停，取网页任务仓库（tasktrace.ts）的切片，点开底部坞「任务」页签，导出的 Perfetto JSON 合法
-//  3. 命令行 tryboard run --seconds <网页停住时刻> --trace-tasks 文件，比对起点在停住时刻之前的每一段
-// 用法：node tools/webtest/tasks.mjs（先 tools/build_web.sh）。产物在 Reviews/web/tasks-*
+// Task timeline parity (C-04): web task switches (s3-dual / hello / s3-lvgl) = CLI --trace-tasks up to the pause; Tasks tab lanes; mobile.
+// Usage: node tools/webtest/tasks.mjs (after tools/build_web.sh); output in Reviews/web/tasks-*
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -73,9 +70,9 @@ async function one(example, want, { ready = 'TRYBOARD_OK', args = [] } = {}) {
   fs.writeFileSync(path.join(outDir, `tasks-${example}-web.txt`), web.text);
   fs.writeFileSync(path.join(outDir, `tasks-${example}-web.json`), web.json);
   let parsed = null;
-  try { parsed = JSON.parse(web.json); } catch { /* 下面判失败 */ }
-  report(`${example}：网页跑到 ${ready}，任务仓库有切换，导出 JSON 合法`, ok && !!parsed && web.text.length > 0 && web.dropped === 0, `${web.chip} ${web.cores} 核，任务 ${web.names.join('/')}，停在 ${(web.now / CPU_HZ).toFixed(4)} s`);
-  // 「任务」页签：泳道画出来了
+  try { parsed = JSON.parse(web.json); } catch { /* judged as a failure below */ }
+  report(`${example}: web reaches ${ready}, task store has switches, exported JSON is valid`, ok && !!parsed && web.text.length > 0 && web.dropped === 0, `${web.chip} ${web.cores} cores, tasks ${web.names.join('/')}, paused at ${(web.now / CPU_HZ).toFixed(4)} s`);
+  // Tasks tab: the lanes are drawn
   await page.click('[data-dock="tasks"]');
   await waitFor(page, () => Number(document.getElementById('tasksPane')?.dataset.switches) > 0, null, 5000);
   const pane = await page.evaluate(() => ({
@@ -84,18 +81,18 @@ async function one(example, want, { ready = 'TRYBOARD_OK', args = [] } = {}) {
     cred: document.getElementById('tasksCred')?.textContent ?? '',
   }));
   const lanesOk = want(pane.cores);
-  report(`${example}：「任务」页签每核泳道`, lanesOk && pane.cred.includes('行为模拟'), JSON.stringify(pane.cores) + ' 占用 ' + pane.usage.join(' '));
+  report(`${example}: Tasks tab has a lane per core`, lanesOk && pane.cred.includes('Behaviour model'), JSON.stringify(pane.cores) + ' usage ' + pane.usage.join(' '));
   await page.screenshot({ path: path.join(outDir, `tasks-${example}.png`) });
 
-  // 命令行同一固件、跑到网页停住的时刻
+  // CLI: same firmware, run up to the moment the web paused
   const out = path.join(outDir, `tasks-${example}-cli.json`);
   const fw = path.join(root, 'firmware/build', example, 'flash.bin');
   const p = spawnSync(CLI, ['run', fw, '--seconds', String(web.now / CPU_HZ), '--trace-tasks', out, ...args], { maxBuffer: 64 << 20 });
   const cli = JSON.parse(fs.readFileSync(out, 'utf8')).traceEvents.filter((e) => e.ph === 'X' && e.pid === 1);
-  // 起点在停住时刻之前的段：核、任务名、起点逐段相同；两边都已结束的段结束状态也相同
-  // 任务名可能带空格（"Tmr Svc"）：首字段是核，末三字段是起点 / 终点 / 状态，中间都是名字
+  // Segments starting before the pause: same core, task name, start; segments ended on both sides also share the end state
+  // Task names may contain spaces ("Tmr Svc"): first field is the core, last three start / end / state, the rest is the name
   const wl = web.text.split('\n').filter(Boolean).map((l) => l.split(' ')).map((f) => ({ c: +f[0], n: f.slice(1, -3).join(' '), t0: us(+f.at(-3)), t1: +f.at(-2), st: f.at(-1) }));
-  // ts 取 JSON 原文（解析成浮点再格式化会在 .5 上换舍入）
+  // Take ts from the raw JSON (parsing to float and reformatting changes rounding on .5)
   const raw = [...fs.readFileSync(out, 'utf8').matchAll(/"ph":"X","pid":1,.*?"ts":([0-9.]+)/g)].map((m) => m[1]);
   const cl = cli.map((e, i) => ({ c: e.tid, n: e.name, t0: raw[i], end: e.ts + e.dur, st: e.args.out }));
   const endUs = (web.now * 1e6) / CPU_HZ;
@@ -107,16 +104,16 @@ async function one(example, want, { ready = 'TRYBOARD_OK', args = [] } = {}) {
     const closed = a && b && (a.t1 * 1e6) / CPU_HZ < endUs - 1 && b.end < endUs - 1;
     if (!a || !b || a.c !== b.c || a.n !== b.n || a.t0 !== b.t0 || (closed && a.st !== b.st)) { diff = i; break; }
   }
-  report(`${example}：网页切换序列 = 命令行 --trace-tasks（核、任务名、起点周期、结束状态）`, p.status === 0 && diff < 0, diff < 0 ? `${wl.length} 段一致` : `第 ${diff + 1} 段不同：网页 ${JSON.stringify(wl[diff])} / 命令行 ${JSON.stringify(cut[diff])}`);
+  report(`${example}: web switch sequence = CLI --trace-tasks (core, task name, start cycle, end state)`, p.status === 0 && diff < 0, diff < 0 ? `${wl.length} segments match` : `segment ${diff + 1} differs: web ${JSON.stringify(wl[diff])} / CLI ${JSON.stringify(cut[diff])}`);
   await page.close();
 }
 
 await one('s3-dual', (cores) => cores.length === 2 && cores[0].includes('w0') && !cores[0].includes('w1') && cores[1].includes('w1') && !cores[1].includes('w0') && cores[0].includes('IDLE0') && cores[1].includes('IDLE1'));
 await one('hello', (cores) => cores.length === 1 && cores[0].includes('main') && cores[0].includes('IDLE'));
-// 满负荷的 LVGL 圆屏：几千次切换（esp_timer / taskLVGL / Tmr Svc 等队列），SPI DMA 中断时序也要两边一致
+// Fully loaded LVGL round screen: thousands of switches (esp_timer / taskLVGL / Tmr Svc); SPI DMA interrupt timing must match too
 await one('s3-lvgl', (cores) => cores.length === 2 && cores.flat().includes('taskLVGL') && cores.flat().includes('esp_timer'), { ready: 'FPS', args: ['--spi', 'gc9a01'] });
 
-// 手机 390×844：抽屉里能切到「任务」，页面没有横向滚动
+// Phone 390×844: the drawer reaches Tasks, no horizontal page scroll
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
@@ -130,12 +127,12 @@ await one('s3-lvgl', (cores) => cores.length === 2 && cores.flat().includes('tas
   const ph = await waitFor(page, () => Number(document.getElementById('tasksPane')?.dataset.switches) > 0, null, 5000);
   const sw = await page.evaluate(() => [document.documentElement.scrollWidth, document.getElementById('tasksPane').scrollWidth]);
   await page.screenshot({ path: path.join(outDir, 'tasks-phone.png') });
-  report('手机 390×844：抽屉切到「任务」，无横向滚动', ph && sw[0] <= 390 && sw[1] <= 390, `scrollWidth 页面 ${sw[0]} / 面板 ${sw[1]}`);
+  report('phone 390×844: drawer switches to Tasks, no horizontal scroll', ph && sw[0] <= 390 && sw[1] <= 390, `scrollWidth page ${sw[0]} / pane ${sw[1]}`);
   await page.close();
 }
 
 await browser.close();
 server.close();
-if (errors.length) console.log('[tasks] 页面错误:\n  ' + errors.join('\n  '));
-console.log(`[tasks] ${fails || errors.length ? 'FAIL' : 'PASS'}（失败 ${fails} 项，页面错误 ${errors.length} 条）`);
+if (errors.length) console.log('[tasks] page errors:\n  ' + errors.join('\n  '));
+console.log(`[tasks] ${fails || errors.length ? 'FAIL' : 'PASS'} (${fails} failed, ${errors.length} page errors)`);
 process.exit(fails || errors.length ? 1 : 0);

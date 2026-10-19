@@ -267,8 +267,8 @@ async function toProduct(page) {
   for (const k of ['board', 'lcd', 'body', 'hair']) await clickEl(page, `.asm-box [data-part="${k}"]`);
   const full = await page.$eval('.asm-box', (e) => e.textContent.includes('6/6'));
   const lit = await toProduct(page);
-  const note = await waitFor(page, () => /Horn off by 14\.4°/.test(document.getElementById('props')?.textContent ?? ''), null, 10000);
-  report('assembly · spin: horn off -> Product says 14.4° off, round LCD has a frame', full && lit && note);
+  const note = await waitFor(page, () => /horn is 14\.4° off/.test(document.getElementById('props')?.textContent ?? ''), null, 10000);
+  report('assembly · spin: horn off -> Product says 14.4° off, round LCD has a frame', full && lit && note, `full=${full} lit=${lit} ${(await page.$eval('#props', (e) => e.textContent)).slice(0, 300)}`);
   await page.screenshot({ path: path.join(outDir, 'levels-asm-spin.png') });
   await page.close();
 }
@@ -321,7 +321,7 @@ async function toProduct(page) {
     };
     const bad = await build('B');
     const badV = await verdictOf(page);
-    report('assemble · ruler: probes recessed -> retest misses 15 cm, wrong rhythm (mounting goes into the simulator)', (badV === 'bad' || badV === 'shifted') && /✗Serial did not print "DIST 15\.0 cm"/.test(bad) && /1\.8–2\.5 s: buzzer silent/.test(bad), bad.match(/Retest result.{0,160}/)?.[0]);
+    report('assemble · ruler: probes recessed -> retest misses 15 cm, wrong rhythm (mounting goes into the simulator)', (badV === 'bad' || badV === 'shifted') && /✗serial shows "DIST 15\.0 cm"/.test(bad) && /1\.8–2\.5 s: buzzer silent/.test(bad), bad.match(/Retest result.{0,300}/)?.[0]);
     await clickEl(page, '#toolbar [data-tool="asm-reset"]').catch(() => {});
     const good = await build('A');
     report('assemble · ruler: probes out of the front panel -> retest passes', (await verdictOf(page)) === 'ok' && /Assembly 6\/6, no warnings/.test(good), good.match(/Retest result.{0,60}/)?.[0]);
