@@ -109,6 +109,10 @@ export interface BenchCtx {
   setBoard: (chip: ChipId) => void;
   fitView: (v: Required<SceneSpec>['view']) => void;
   setScene: (spec: SceneSpec) => void;
+  /** setScene in slices: yields after each part so the first build can spread over several tasks. */
+  buildScene: (spec: SceneSpec) => Generator<void>;
+  /** Chip of the first devboard (C3 when unset), so the initial build needs no setBoard swap. */
+  chip0?: ChipId;
   composer: EffectComposer;
   bloom: UnrealBloomPass;
   outline: OutlinePass;

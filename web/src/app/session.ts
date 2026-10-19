@@ -50,8 +50,22 @@ export interface SessionOpts {
   levels?: Level[];
 }
 
+/** Initial board and scene: the work's example (examples.json) or the placed list. */
+async function benchInit(work: WorkDef, opts: SessionOpts) {
+  const examples = await loadExamples();
+  const ex = work.example ? examples.find((e) => e.id === work.example) : undefined;
+  // A placed list supplies the parts; camera stays at the work default.
+  const scene: SceneSpec = opts.placed ? { ...ex?.scene, ...opts.placed.scene } : (ex?.scene ?? { parts: [] });
+  // Examples default to C3; a truly blank work gets an S3 devkit.
+  const chip = ex ? chipOf(ex) : (opts.chip ?? 'esp32s3');
+  return { ex, scene, chip };
+}
+
 export async function createSession(stage: HTMLElement, work: WorkDef, store: Store<AppState>, hooks: SessionHooks, opts: SessionOpts = {}): Promise<Session> {
-  const bench = createBench(stage);
+  // GL setup starts now, before the first paint; board and parts follow once examples.json is in (R-16)
+  const setup = benchInit(work, opts);
+  const bench = await createBench(stage, setup);
+  const { ex, scene, chip } = await setup;
   // board3d implements picking separately; missing methods are skipped (no picking, no error).
   const pick = bench as unknown as Partial<ScenePickApi>;
   // 3D stage follows the page theme (DESIGN §2 dark).
@@ -66,14 +80,6 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   // One buzzer audio per page (muted by default), shared by bench and product.
   const audio = new BuzzerAudio();
 
-  const examples = await loadExamples();
-  const ex = work.example ? examples.find((e) => e.id === work.example) : undefined;
-  // A placed list supplies the parts; camera stays at the work default.
-  const scene: SceneSpec = opts.placed ? { ...ex?.scene, ...opts.placed.scene } : (ex?.scene ?? { parts: [] });
-  // Examples default to C3; a truly blank work gets an S3 devkit.
-  const chip = ex ? chipOf(ex) : (opts.chip ?? 'esp32s3');
-  bench.setBoard(chip);
-  bench.setScene(scene);
   // ADC panel pins: knobs the user has touched plus every pot wiper on the bench
   const adcPins = () => [...new Set([...s.analog.keys(), ...s.scene.parts.flatMap((p) => (p.type === 'pot' ? [p.pin] : []))])];
   const buzzerPins = scene.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : []));
