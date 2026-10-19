@@ -12,7 +12,7 @@ export interface VerifyOutcome {
   stdout: string;
   sim: number;
   error?: string;
-  /** 开着真实网络跑的（C-03）：结论依赖外网，不记运行编号；replies 是这次拿到的回复 */
+  /** Ran with the real network on (C-03): the verdict needs internet and records no run ID; replies are the ones obtained this time */
   realnet?: { replies: string[] };
 }
 

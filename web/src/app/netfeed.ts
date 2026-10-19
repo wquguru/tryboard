@@ -1,7 +1,7 @@
-// 底部坞「网络」页签的数据（C-02 / C-03）：worker 按版本号变了才发，这里合并后节流到 ≤ 10 Hz 再通知 React。
-// 整页一份：session 推、坞里的页签读（和 usbFeed 同样的做法）。
+// Data for the dock's Network tab (C-02 / C-03): sent by the worker only on version change, merged and throttled to <= 10 Hz here.
+// One per page: the session pushes, the dock tab reads (same approach as usbFeed).
 
-/** 虚拟手机看到的（内核 phone.rs 的 json()） */
+/** What the virtual phone sees (the core's phone.rs json()) */
 export interface PhonePage {
   method: string;
   url: string;
@@ -21,28 +21,28 @@ export interface PhoneView {
   ssid: string;
   ip: string | null;
   gw: string;
-  /** null = 还没探测；false = 不需要登录；字符串 = 需要登录，登录页地址 */
+  /** null = not probed yet; false = no sign-in needed; string = sign-in needed, the portal page address */
   captive: null | false | string;
   seen: { ssid: string; bssid: string; ch: number; wpa2: boolean }[];
   pages: PhonePage[];
   log: [number, string][];
   busy: boolean;
 }
-/** 网络页签一行：[时刻 ms, 方法, 去向, 地址, 状态, 耗时 ms | null, 说明（C-03：真实网络失败原因等，老内核没有）] */
+/** One Network tab row: [time ms, method, destination, address, status, duration ms | null, note (C-03: why the real network failed etc.; old cores have none)] */
 export type NetRow = [number, string, string, string, string, number | null, string?];
 
 export interface NetView {
-  /** 固件发过 Wi-Fi 帧：坞里出现「网络」页签 */
+  /** The firmware sent Wi-Fi frames: the Network tab shows up in the dock */
   used: boolean;
-  /** null = 还没拿起虚拟手机 */
+  /** null = the virtual phone has not been picked up yet */
   phone: PhoneView | null;
   rows: NetRow[];
   total: number;
-  /** 芯片从虚拟路由器拿到的地址（null = 还没拿到） */
+  /** Address the chip got from the virtual router (null = not yet) */
   lease: string | null;
-  /** 内核里「真实网络」是否开着（C-03） */
+  /** Whether the core's "real network" is on (C-03) */
   realnet: boolean;
-  /** 本次上电记下的真实网络回复条数 / 字节数（输入日志里的 netreply） */
+  /** Count / bytes of real-network replies recorded this power-on (netreply in the input log) */
   replies: number;
   replyBytes: number;
 }
@@ -95,10 +95,8 @@ function createNetFeed() {
 export type NetFeed = ReturnType<typeof createNetFeed>;
 export const netFeed = createNetFeed();
 
-/**
- * 「真实网络」开关（C-03）：整页一份，默认关、不存本机（每次打开页面都从虚拟网络开始）。
- * 开着时实时运行由 worker 代发、检查点验收也带上（结论标「依赖外网」，不记运行编号）。
- */
+/** "Real network" switch (C-03): one per page, off by default, not stored (every page load starts virtual).
+ * When on, the worker relays live runs and checkpoints use it too (verdict "needs internet", no run ID). */
 function createRealnetSwitch() {
   let on = false;
   const subs = new Set<() => void>();

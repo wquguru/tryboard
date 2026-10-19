@@ -60,7 +60,7 @@ interface Exports {
   tb_elec_report(): number;
   tb_i2c_wire?(cm: number): void;
   tb_antenna_loss?(db: number): void;
-  /** 虚拟手机 / 网络页签（C-02）：老内核没有这几个导出 */
+  /** Virtual phone / Network tab (C-02): old cores lack these exports */
   tb_wifi_used?(): number;
   tb_phone_cmd?(p: number, len: number): number;
   tb_phone_version?(): number;
@@ -68,7 +68,7 @@ interface Exports {
   tb_phone_json_ptr?(): number;
   tb_net_version?(): number;
   tb_net_json?(): number;
-  /** 真实网络（C-03） */
+  /** Real network (C-03) */
   tb_realnet_set?(on: number): void;
   tb_net_outbox?(): number;
   tb_net_reply?(p: number, len: number): number;
@@ -319,7 +319,7 @@ export type FromWorker =
   | { type: 'ble'; state: number; json: string; reset?: boolean; cmdError?: string }
   /** Harness verdict (same text as the CLI: I2C rise time, RSSI after antenna loss), sent on change. */
   | { type: 'harness'; text: string }
-  /** 网络页签（C-02）：固件用没用 Wi-Fi、虚拟手机看到的（JSON，结构见 app/netfeed.ts）、芯片发出的请求记录；变了才发 */
+  /** Network tab (C-02): whether the firmware used Wi-Fi, what the virtual phone sees (JSON, shape in app/netfeed.ts), the chip's request log; sent only when changed */
   | { type: 'net'; used: boolean; phone?: string; rows?: string; replies?: number; replyBytes?: number }
   | { type: 'inputlog'; log: InputLog }
   | { type: 'snapshot'; snap: Snapshot }
@@ -736,8 +736,8 @@ function postBle(e: Exports, force = false) {
   bleFrom = seq;
 }
 
-// 网络页签：固件发过 Wi-Fi 帧才显示；手机 / 请求记录各自按版本号变了才取
-// null：新上电后还没发过，第一次一定发（换成不用 Wi-Fi 的固件时网页要把页签收起）
+// Network tab: shown only after the firmware sent Wi-Fi frames; the phone / request log are each fetched only when their version changed
+// null: nothing sent since the new power-on, so the first one is always sent (the page must hide the tab when the firmware stops using Wi-Fi)
 let netUsed: boolean | null = null;
 let phoneVersion = 0;
 let netVersion = 0;
@@ -755,7 +755,7 @@ function postNet(e: Exports) {
   if (nv !== netVersion && e.tb_net_json && e.tb_phone_json_ptr) {
     const n = e.tb_net_json();
     m.rows = decoder.decode(new Uint8Array(e.memory.buffer, e.tb_phone_json_ptr(), n));
-    // 本次上电记下的真实网络回复（「保存回复，离线重放」旁边的计数）
+    // Real-network replies recorded this power-on (the counter next to "Save replies, replay offline")
     let replies = 0;
     let replyBytes = 0;
     for (const x of inputLog.events)
@@ -772,15 +772,15 @@ function postNet(e: Exports) {
   post(m);
 }
 
-// ---- 真实网络（C-03）：开关在主线程，跨上电保留；每次上电换一代，迟到的 fetch 结果不施加到新的一次上电上
+// ---- Real network (C-03): the switch lives on the main thread and survives power-ons; each power-on bumps a generation so late fetch results are not applied to the new run
 let realnetOn = false;
 let bootGen = 0;
-/** 回退重放时原日志里的回复（按请求号）：重放中途没赶上的请求优先用记录的回复，不再联网 */
+/** Replies from the original log during a rewind replay (by request id): requests not reached mid-replay prefer the recorded reply and never go online */
 let replyCache = new Map<number, string>();
 function replyId(reply: string) {
   return Number(reply.slice(0, reply.indexOf(',')));
 }
-/** 取走内核发件箱：有记录的回复直接施加；开着真实网络的才真的 fetch。done 里的请求号已经回过（回退重放），跳过 */
+/** Take the core outbox: recorded replies are applied directly; only with the real network on is a request really fetched. Ids in done were already answered (rewind replay), skip them */
 function pumpNet(e: Exports, done?: Set<number>) {
   if (!e.tb_net_outbox || !e.tb_phone_json_ptr) return;
   const n = e.tb_net_outbox();
@@ -886,7 +886,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   bleSeq = -1;
   bleFrom = 0;
   bleReset = true;
-  // 新上电：手机 / 请求记录从空开始（发一条空的，网页清掉上一次的）
+  // New power-on: phone / request log start empty (send an empty one so the page clears the previous run)
   netUsed = null;
   phoneVersion = -1;
   netVersion = -1;
@@ -962,7 +962,7 @@ function apply(e: Exports, ev: InputAction) {
       new Uint8Array(e.memory.buffer, p, b.length).set(b);
       const bad = e.tb_phone_cmd(p, b.length);
       e.tb_free(p, b.length);
-      // 认不出的动作不进日志（重放时 CLI 也不认）
+      // Actions it does not recognise stay out of the log (the CLI would not recognise them on replay either)
       if (bad) return;
       break;
     }
@@ -1041,7 +1041,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       if (m.locale) await useWorkerLocale(m.locale);
       const e = await bootWasm(m);
       if (!e) return;
-      // 开着真实网络上电：开关作为 0 时刻的输入进日志（重放脚本第一行 realnet=1）
+      // Power on with the real network on: the switch goes into the log as an input at time 0 (first line of the replay script: realnet=1)
       if (realnetOn) apply(e, { kind: 'realnet', on: true });
       post({ type: 'booted', chip: CHIP_OF[e.tb_chip()] ?? 'esp32c3', bootPin: e.tb_boot_pin() });
       break;
@@ -1053,7 +1053,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       if (m.realnet !== undefined) realnetOn = m.realnet;
       for (const x of m.events) if (x.kind === 'netreply') replyCache.set(replyId(x.reply), x.reply);
       seekTo(e, m.events, m.untilMs);
-      // 重放里已经回过的请求不再回；开关状态以现在的为准（与日志里最后一次不同就补一条）
+      // Requests already answered in the replay are not answered again; the switch state follows the present (add one line if it differs from the last in the log)
       const answered = new Set<number>();
       let wasOn = false;
       for (const x of inputLog.events) {

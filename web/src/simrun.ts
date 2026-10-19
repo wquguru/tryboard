@@ -23,9 +23,9 @@ export interface Ex {
   tb_uart_push(p: number, n: number): void;
   tb_usb_cdc_send(p: number, n: number): void;
   tb_ble_cmd?(p: number, n: number): number;
-  /** 虚拟手机（C-02），老内核没有 */
+  /** Virtual phone (C-02); old cores lack it */
   tb_phone_cmd?(p: number, n: number): number;
-  /** 真实网络（C-03），老内核没有 */
+  /** Real network (C-03); old cores lack it */
   tb_realnet_set?(on: number): void;
   tb_net_outbox?(): number;
   tb_net_reply?(p: number, n: number): number;
@@ -82,7 +82,7 @@ export interface SimJob {
   /** Rotary encoder / HC-SR04 (= CLI --encoder A,B[,SW] / --sonar TRIG,ECHO --dist cm); attached means 1 ms slices too */
   encoder?: { a: number; b: number; sw?: number };
   sonar?: { trig: number; echo: number; cm?: number };
-  /** 开着「真实网络」跑（C-03，检查点用）：芯片发往外网的 HTTP 当场 fetch，回复施加后记在结果里；结论依赖外网，不记运行编号 */
+  /** Run with the "real network" on (C-03, for checkpoints): the chip's HTTP to the internet is fetched on the spot and the replies are applied and kept in the result; the verdict needs internet and records no run ID */
   realnet?: boolean;
 }
 
@@ -94,7 +94,7 @@ export interface SimResult {
   error?: string;
   /** Never started (broken image, missing ROM) */
   bootError?: string;
-  /** realnet 模式下拿到的回复（netreply= 后面的部分，按施加顺序） */
+  /** Replies obtained in realnet mode (the part after netreply=, in the order applied) */
   replies?: string[];
 }
 
@@ -220,7 +220,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         if (!l || Math.abs(f32(l[0] - d)) > f32(0.004) || Math.abs(f32(l[1] - f)) > f32(0.5)) trace.push([d, f, now]);
       }
     }
-    // 真实网络：上一片里芯片发出的请求当场 fetch（模拟时间停在这一片的边界等回复），回复施加后才往下跑
+    // Real network: requests the chip sent in the previous slice are fetched on the spot (simulated time waits at the slice boundary), and the run continues only after the replies are applied
     if (j.realnet && e.tb_net_outbox && e.tb_phone_json_ptr) {
       const n = e.tb_net_outbox();
       if (n) {
