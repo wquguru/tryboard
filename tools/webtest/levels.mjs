@@ -1,12 +1,5 @@
-// 检查点 / 装配 / 首页的网页验收（旧关卡页 levels.html 已并入工作台 app.html 的检查点，P0-21）：
-//  1. 工作台每个作品的检查点跑参考固件，必须"通过"，且运行指纹与 tools/check.py（原生内核）完全一致
-//  2. 旧链接 levels.html#04 / #07-lens 重定向到 app.html 并选中对应检查点
-//  3. 上传自己的固件验收，进度记住（刷新后结论按钮仍是 1/6）
-//  4. 装配（工作台组装步骤 ?asm=svg，views/assembly）：鼠标拖拽、顺序错被拦、
-//     BME280 贴芯片开机复测读数偏高 2.5 ℃、spin 舵盘装偏提示、lens 成品圆屏有画面
-//  5. 作品首页：三张卡片跑真实固件（串口读数、OLED / 圆屏有画面、按 BOOT 屏幕重画），三个入口到达正确页面，手机宽度不溢出
-//  6. 示例卡「做成成品」到作品；点选装配 → 成品屏幕有画面
-// 用法：node tools/webtest/levels.mjs（先 tools/build_web.sh）。截图在 Reviews/web/levels-*.png
+// Checkpoints (reference firmware, fingerprint = tools/check.py), old-link redirects, upload progress, assembly, home cards (P0-21).
+// Usage: node tools/webtest/levels.mjs (after tools/build_web.sh); screenshots in Reviews/web/levels-*.png
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -21,7 +14,7 @@ fs.mkdirSync(outDir, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  // 无后缀地址（/app、/select）映射到 .html，与 Vite 预览和静态托管一致（DESIGN_V2 §7.2）
+  // Extensionless paths (/app, /select) map to .html, like Vite preview and static hosting (DESIGN_V2 §7.2)
   const f0 = path.join(dist, u === '/' ? 'index.html' : u);
   const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
@@ -50,11 +43,11 @@ async function open(url) {
   await page.goto(base + url, { waitUntil: 'load' });
   return page;
 }
-/** 点一个会被重画的元素：在页面里按选择器现找现点（不持有节点句柄，避免 Node is detached） */
+/** Click an element that gets re-rendered: look it up by selector each time (no handle, so no "Node is detached") */
 async function clickEl(page, sel) {
   await page.waitForSelector(sel, { timeout: 30000 });
   for (let i = 0; i < 10; i++) {
-    // HTML 元素直接 click()；SVG 里的零件（没有 click()）用真鼠标点，节点被换掉就重找
+    // HTML elements: click(); SVG parts (no click()) get a real mouse click, re-found if the node was replaced
     const kind = await page.evaluate((s) => { const e = document.querySelector(s); if (!e) return 'none'; if (typeof e.click === 'function') { e.click(); return 'done'; } return 'svg'; }, sel);
     if (kind === 'done') return;
     if (kind === 'svg') {
@@ -62,12 +55,12 @@ async function clickEl(page, sel) {
         await page.click(sel);
         return;
       } catch {
-        /* 重画中，重找 */
+        /* re-rendering, look again */
       }
     }
     await sleep(200);
   }
-  throw new Error(`点不到 ${sel}`);
+  throw new Error(`cannot click ${sel}`);
 }
 async function waitFor(page, fn, arg, ms = 30000) {
   const t0 = Date.now();
@@ -78,17 +71,17 @@ async function waitFor(page, fn, arg, ms = 30000) {
   return false;
 }
 
-// 原生内核的结论与指纹
+// Verdicts and fingerprints from the native core
 const native = {};
 const cli = (() => { try { return execFileSync(path.join(root, 'tools/check.py'), ['--ref', '--all'], { encoding: 'utf8' }); } catch (e) { return e.stdout; } })();
-for (const m of cli.matchAll(/检查点 ([\w-]+) .*：(通过|未通过)\s+指纹 (\S+)/g)) native[m[1]] = { ok: m[2] === '通过', fp: m[3] };
+for (const m of cli.matchAll(/^Checkpoint ([\w-]+) .*: (PASS|FAIL)\s+fingerprint (\S+)/gm)) native[m[1]] = { ok: m[2] === 'PASS', fp: m[3] };
 
-// ---- 1. 工作台检查点：参考固件，指纹与命令行一致
+// ---- 1. Bench checkpoints: reference firmware, fingerprint equals the CLI
 const fpOf = (page) => page.$eval('#props .kv .v.fp', (e) => e.textContent.trim()).catch(() => '');
-// 结果卡的状态（ok / bad / stall / shifted，DESIGN_V2 §9.2）：文案改成人话后按 data-verdict 判，不再匹配「✓ 通过」
+// Result card state (ok / bad / stall / shifted, DESIGN_V2 §9.2): judged by data-verdict, not by the wording
 const verdictOf = (page) => page.$eval('#props .result-card', (e) => e.dataset.verdict).catch(() => '');
 async function runRef(page, id) {
-  // 构建树在上电 / 时间线更新时会整块重画：点的那一刻节点可能刚被换掉（Node is detached），重找一次再点
+  // The build tree re-renders on power-up / timeline updates: the node may be replaced mid-click, so find it again
   for (let i = 0; ; i++) {
     await page.waitForSelector(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`, { timeout: 30000 });
     try {
@@ -99,7 +92,7 @@ async function runRef(page, id) {
       await sleep(300);
     }
   }
-  // 已有通过记录时结果卡是恢复出来的：先清掉上次的原始输出，等这一次验收真的跑完
+  // With a saved pass the result card is restored: clear the last raw output and wait for this run to finish
   await page.evaluate(() => (globalThis.__tbLastVerify = null));
   await clickEl(page, '#runRef:not([disabled])');
   await waitFor(page, () => !!globalThis.__tbLastVerify && !!document.querySelector('#props .verdict-line') && !document.querySelector('#runRef')?.disabled && !document.querySelector('#props .drop.busy'), null, 90000);
@@ -113,14 +106,15 @@ for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['
   for (const id of cps) {
     const r = await runRef(page, id);
     const n = native[id];
-    report(`检查点 ${id}（${work}）参考固件`, r.ok && n?.ok && r.fp === n.fp, `网页 ${r.ok ? '通过' : '未通过'} ${r.fp} / 命令行 ${n?.fp}`);
+    report(`checkpoint ${id} (${work}) reference firmware`, r.ok && n?.ok && r.fp === n.fp, `web ${r.ok ? 'pass' : 'fail'} ${r.fp} / CLI ${n?.fp}`);
     if (!r.ok) console.log(r.text.slice(0, 600));
     if (id === '06' || id === '07-spin') await page.screenshot({ path: path.join(outDir, `levels-cp-${id}.png`) });
   }
   await page.close();
 }
 
-// ---- 1b. 检查点两档（U-22）：一键用内置固件走完全程 → 全 ◐、指纹与命令行一致、组装解锁；旧进度（没有 own 字段）仍是 ✓，参考固件不降级
+// ---- 1b. Two checkpoint grades (U-22): run all with built-in firmware -> all ◐, CLI fingerprints, assembly unlocked;
+//      old progress (no own field) stays ✓ and is not downgraded by the reference firmware
 {
   const W = ['01', '02', '03', '04', '05', '06'];
   const marks = (page) => page.$$eval('#tree .tn[data-kind="checkpoint"]', (els) => els.map((e) => e.textContent.trim().slice(-1)));
@@ -129,56 +123,56 @@ for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['
   await page.evaluate(() => ['checks', 'asm', 'case'].forEach((k) => localStorage.removeItem(`tryboard-app-${k}:weather`)));
   await page.reload({ waitUntil: 'load' });
   await clickEl(page, '#cpAllRef:not([disabled])').catch(async (e) => {
-    console.log('[levels] #cpCard:', await page.$eval('#cpCard', (x) => x.outerHTML.slice(0, 600)).catch(() => '没有'), page.url());
+    console.log('[levels] #cpCard:', await page.$eval('#cpCard', (x) => x.outerHTML.slice(0, 600)).catch(() => 'none'), page.url());
     throw e;
   });
-  const all = await waitFor(page, () => /6 个检查点全部跑通/.test(document.querySelector('#cpCard')?.textContent ?? ''), null, 600000);
+  const all = await waitFor(page, () => /All 6 checkpoints (pass|ran)/.test(document.querySelector('#cpCard')?.textContent ?? ''), null, 600000);
   const m = await marks(page);
   const sv = await saved(page);
   await page.screenshot({ path: path.join(outDir, 'levels-allref.png') });
-  report('一键用内置固件走完全程：6/6 跑通、全标 ◐、本机进度记为参考', all && m.join('') === '◐◐◐◐◐◐' && W.every((id) => sv[id]?.own === false), `${m.join('')} ${JSON.stringify(Object.values(sv).map((v) => v.own))}`);
-  report('一键走完的运行编号与命令行 check.py --ref 一致', W.every((id) => sv[id]?.fp === native[id]?.fp), W.map((id) => `${id}:${sv[id]?.fp}/${native[id]?.fp}`).join(' '));
-  report('卡片写明我的固件 0/6', /我的固件 0\/6/.test(await page.$eval('#cpCard', (e) => e.textContent).catch(() => '')));
+  report('run all with built-in firmware: 6/6 pass, all ◐, local progress saved as reference', all && m.join('') === '◐◐◐◐◐◐' && W.every((id) => sv[id]?.own === false), `${m.join('')} ${JSON.stringify(Object.values(sv).map((v) => v.own))}`);
+  report('run IDs of the full run equal CLI check.py --ref', W.every((id) => sv[id]?.fp === native[id]?.fp), W.map((id) => `${id}:${sv[id]?.fp}/${native[id]?.fp}`).join(' '));
+  report('card says My firmware 0/6', /My firmware 0\/6/.test(await page.$eval('#cpCard', (e) => e.textContent).catch(() => '')));
   await page.goto(`${base}/app?work=weather&asm=svg#assemble`, { waitUntil: 'load' });
-  report('参考跑通后组装解锁（刷新后仍解锁）', await waitFor(page, () => !!document.querySelector('.asm-box [data-part]') && !document.querySelector('#lockList'), null, 30000));
-  // 旧版本存的进度没有 own 字段：当作自己的固件；再跑参考固件不覆盖
+  report('assembly unlocked after the reference run (still after reload)', await waitFor(page, () => !!document.querySelector('.asm-box [data-part]') && !document.querySelector('#lockList'), null, 30000));
+  // Progress saved by older versions has no own field: counts as own firmware; a reference run does not overwrite it
   await page.evaluate((fp) => {
-    localStorage.setItem('tryboard-app-checks:weather', JSON.stringify({ '01': { fp, at: '旧版' } }));
+    localStorage.setItem('tryboard-app-checks:weather', JSON.stringify({ '01': { fp, at: 'old' } }));
     localStorage.removeItem('tryboard-app-asm:weather');
   }, native['01']?.fp);
   await page.goto(`${base}/app?work=weather&asm=svg#assemble`, { waitUntil: 'load' });
   await page.reload({ waitUntil: 'load' });
   await page.waitForSelector('#lockList', { timeout: 30000 });
   const lock = await page.$$eval('#lockList li', (els) => els.map((e) => e.textContent.trim()[0]).join(''));
-  report('组装锁住卡：旧进度 01 是 ✓，其余 ○，有「用内置固件走完全程」', lock === '✓○○○○○' && !!(await page.$('#lockAllRef')), lock);
+  report('assembly lock card: old progress 01 is ✓, rest ○, has "Run all with built-in firmware"', lock === '✓○○○○○' && !!(await page.$('#lockAllRef')), lock);
   await page.evaluate(() => (location.hash = 'bench'));
   const r = await runRef(page, '01');
   const m2 = await marks(page);
   const sv2 = await saved(page);
-  report('旧进度不降级：01 再跑参考固件仍是 ✓、本机记录不变', r.ok && m2[0] === '✓' && sv2['01']?.at === '旧版' && sv2['01']?.own !== false, `${m2.join('')} ${JSON.stringify(sv2['01'])}`);
+  report('old progress not downgraded: 01 after a reference run is still ✓, local record unchanged', r.ok && m2[0] === '✓' && sv2['01']?.at === 'old' && sv2['01']?.own !== false, `${m2.join('')} ${JSON.stringify(sv2['01'])}`);
   await page.evaluate(() => localStorage.removeItem('tryboard-app-checks:weather'));
   await page.close();
 }
 
-// ---- 2. 旧关卡页重定向
+// ---- 2. Old levels page redirects
 for (const [hash, work, cp] of [['04', 'weather', '04'], ['07-lens', 'lens', '07-lens'], ['', 'weather', null]]) {
   const page = await open(`/levels.html${hash ? '#' + hash : ''}`);
   await waitFor(page, () => location.pathname.endsWith('/app'), null, 10000);
-  const sel = cp ? await waitFor(page, (cp) => document.querySelector(`#tree .tn[data-kind="checkpoint"][data-id="${cp}"]`)?.getAttribute('aria-selected') === 'true' && document.querySelector('#props')?.textContent.includes(`检查点 ${cp}`), cp, 30000) : true;
+  const sel = cp ? await waitFor(page, (cp) => document.querySelector(`#tree .tn[data-kind="checkpoint"][data-id="${cp}"]`)?.getAttribute('aria-selected') === 'true' && document.querySelector('#props')?.textContent.includes(`Checkpoint ${cp}`), cp, 30000) : true;
   const u = new URL(page.url());
-  report(`旧链接 levels.html#${hash} → app.html?work=${work}${cp ? '&cp=' + cp : ''}#bench${cp ? '，选中检查点 ' + cp : ''}`, u.pathname.endsWith('/app') && u.searchParams.get('work') === work && u.searchParams.get('cp') === cp && u.hash === '#bench' && sel, page.url().replace(base, ''));
+  report(`old link levels.html#${hash} -> app?work=${work}${cp ? '&cp=' + cp : ''}#bench${cp ? ', checkpoint ' + cp + ' selected' : ''}`, u.pathname.endsWith('/app') && u.searchParams.get('work') === work && u.searchParams.get('cp') === cp && u.hash === '#bench' && sel, page.url().replace(base, ''));
   if (hash === '04') await page.screenshot({ path: path.join(outDir, 'levels-redirect-04.png') });
   await page.close();
 }
 
-// ---- 3. 上传自己的固件（C3 版点灯也满足检查点 01 的条件），进度记住
+// ---- 3. Upload own firmware (C3 blink also meets checkpoint 01), progress is remembered
 {
   const page = await open('/app?work=weather&cp=01#bench');
-  // 面板加载后会重画、换掉输入框：拿到的旧节点已脱离文档，上传落空。现找现传，直到看到「模拟中」或结论再停
+  // The panel re-renders after load and replaces the input, so a stale node loses the upload: retry until busy or a verdict
   for (let i = 0; i < 5; i++) {
     await page.waitForSelector('#props [data-drop="check"] input', { timeout: 30000 });
     const input = await page.$('#props [data-drop="check"] input');
-    // 两步之间也可能被重画：拿到空或已脱离的节点就下一轮重找
+    // It can also re-render between the two steps: a missing or detached node means try again
     await input?.uploadFile(path.join(root, 'firmware/build/blink/flash.bin')).catch(() => {});
     const started = await waitFor(page, () => !!document.querySelector('#props [data-drop="check"].busy, #props .verdict-line'), null, 3000);
     if (started) break;
@@ -187,21 +181,20 @@ for (const [hash, work, cp] of [['04', 'weather', '04'], ['07-lens', 'lens', '07
   const who = await page.$eval('#props .verdict-line', (e) => e.textContent).catch(() => '');
   const tree = await page.$eval('#tree .tn[data-kind="checkpoint"][data-id="01"] .tn-st', (e) => e.className).catch(() => '');
   await page.reload({ waitUntil: 'load' });
-  const kept = await waitFor(page, () => /检查点 1\/6/.test(document.getElementById('verdict')?.textContent ?? ''), null, 30000);
-  report('上传自己的固件 → 检查点 01 通过，刷新后进度还在（1/6）', /flash\.bin/.test(who) && /ok/.test(tree) && kept, who.trim());
+  const kept = await waitFor(page, () => /Checkpoints 1\/6/.test(document.getElementById('verdict')?.textContent ?? ''), null, 30000);
+  report('upload own firmware -> checkpoint 01 passes, progress kept after reload (1/6)', /flash\.bin/.test(who) && /ok/.test(tree) && kept, who.trim());
   await page.evaluate(() => localStorage.clear());
   await page.close();
 }
 
-// ---- 4. 装配：工作台组装步骤的平面视图（?asm=svg，与旧实验台共用 views/assembly）→ 开机复测 → 成品
-//  旧实验台的"装配 · 成品"视图并入工作台（U-08）：开机看读数改成「开机复测」（装法进模拟器），成品画面在成品步骤
+// ---- 4. Assembly: flat view of the Assemble step (?asm=svg, views/assembly) -> power-on retest -> Product (U-08)
 const CPS = { weather: ['01', '02', '03', '04', '05', '06'], spin: ['spin-1', 'spin-2', '07-spin'], lens: ['lens-1', 'lens-2', '07-lens'] };
 async function openAsm(work) {
   const p = await open(`/app?work=${work}#bench`);
-  // 预置检查点全过（解锁组装），清掉上次的装配；与 asm3d.mjs 同一做法
+  // Preset all checkpoints as passed (unlocks assembly) and clear the last assembly, as asm3d.mjs does
   await p.evaluate(([w, ids]) => {
     const c = {};
-    for (const id of ids) c[id] = { fp: 'test', at: '预置' };
+    for (const id of ids) c[id] = { fp: 'test', at: 'preset' };
     localStorage.setItem(`tryboard-app-checks:${w}`, JSON.stringify(c));
     localStorage.removeItem(`tryboard-app-asm:${w}`);
     localStorage.removeItem(`tryboard-app-case:${w}`);
@@ -211,21 +204,21 @@ async function openAsm(work) {
   await p.waitForSelector('.asm-box [data-part]', { timeout: 30000 });
   return p;
 }
-/** 点「开机复测」，等跑完，返回属性面板文字 */
+/** Click power-on retest, wait for it to finish, return the properties panel text */
 async function retest(page) {
   await clickEl(page, '#toolbar [data-tool="asm-retest"]');
-  await waitFor(page, () => /复测中/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 10000);
-  await waitFor(page, () => !!document.querySelector('#props .verdict-line') && !/复测中/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 120000);
+  await waitFor(page, () => /Retesting/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 10000);
+  await waitFor(page, () => !!document.querySelector('#props .verdict-line') && !/Retesting/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 120000);
   return page.$eval('#props', (e) => e.textContent);
 }
-/** 去成品步骤，等屏幕收到画面 */
+/** Go to the Product step and wait for the screen to get a frame */
 async function toProduct(page) {
   await page.evaluate(() => (location.hash = 'product'));
   return waitFor(page, () => location.hash === '#product' && !!globalThis.__tbProduct?.screen?.(), null, 30000);
 }
 {
   const page = await openAsm('weather');
-  // 鼠标拖拽：零件卡片 → 舞台上该层的位置（SVG 坐标换成屏幕坐标）
+  // Mouse drag: part card -> its layer position on the stage (SVG coordinates converted to screen)
   const drag = async (part, sx, sy) => {
     const from = await page.$eval(`.asm-box [data-part="${part}"]`, (g) => { const r = g.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
     const to = await page.$eval('.asm-box svg', (s, [x, y]) => { const p = new DOMPoint(x, y).matrixTransform(s.getScreenCTM()); return [p.x, p.y]; }, [sx, sy]);
@@ -244,29 +237,29 @@ async function toProduct(page) {
     return page.$eval('.asm-box', (e) => e.textContent.includes('6/6'));
   };
   await drag('front', ...iso(0, 90, 50));
-  report('装配：顺序错被拦下', await page.$eval('.asm-box', (e) => e.textContent.includes('还不能装「前面板」')));
-  report('装配：鼠标拖拽 6/6（传感器贴芯片）', await assemble('B'));
-  // 室温 23.5，传感器贴着芯片：开机复测里固件读到的温度偏高 2.5 ℃（第 06 关原来的"装法改变读数"用例）
+  report('assembly: wrong order is blocked', await page.$eval('.asm-box', (e) => e.textContent.includes('“Front panel” can’t go in yet')));
+  report('assembly: mouse drag 6/6 (sensor against the chip)', await assemble('B'));
+  // Room 23.5 ℃ with the sensor against the chip: the retest firmware reads 2.5 ℃ high (old level 06 case)
   const hot = await retest(page);
   const hotV = await verdictOf(page);
-  report('装配：BME280 贴芯片 → 开机复测读数 26.0 ℃（室温 23.5 + 2.5）、复测不过', (hotV === 'bad' || hotV === 'shifted') && /26\.0 ℃/.test(hot), hot.match(/复测结果.{0,120}/)?.[0]);
+  report('assembly: BME280 against the chip -> retest reads 26.0 ℃ (room 23.5 + 2.5), retest fails', (hotV === 'bad' || hotV === 'shifted') && /26\.0 ℃/.test(hot), hot.match(/Retest result.{0,120}/)?.[0]);
   await page.screenshot({ path: path.join(outDir, 'levels-asm-bad.png') });
   await clickEl(page, '#toolbar [data-tool="asm-reset"]');
-  report('装配：鼠标拖拽 6/6（通风口旁）', await assemble('A'));
+  report('assembly: mouse drag 6/6 (next to the vent)', await assemble('A'));
   const good = await retest(page);
-  report('装配：通风口旁 → 开机复测通过', (await verdictOf(page)) === 'ok', good.match(/复测结果.{0,60}/)?.[0]);
-  // 时间线记下装配和复测（旧实验台写进串口的"装配：开机"）
+  report('assembly: next to the vent -> retest passes', (await verdictOf(page)) === 'ok', good.match(/Retest result.{0,60}/)?.[0]);
+  // The timeline records the assembly and the retest
   const tl = await page.$eval('#timeline', (e) => e.textContent).catch(() => '');
-  report('装配：操作记进时间线', /复测/.test(tl), tl.slice(0, 120));
+  report('assembly: steps recorded in the timeline', /Power-on retest/.test(tl), tl.slice(-120));
   const lit = await toProduct(page);
   const reading = await waitFor(page, () => /T=23\.50 C/.test(document.getElementById('console')?.textContent ?? ''), null, 20000);
-  report('装配：成品步骤开机 → 读数 T=23.50、成品屏幕有画面', lit && reading);
+  report('assembly: Product step powers on -> reads T=23.50, product screen has a frame', lit && reading);
   await sleep(800);
   await page.screenshot({ path: path.join(outDir, 'levels-asm-product.png') });
   await page.close();
 }
 {
-  // spin：舵盘直接按上（错一个齿）→ 成品提示偏角，圆屏有画面
+  // spin: horn pressed on directly (one tooth off) -> Product shows the offset, round LCD has a frame
   const page = await openAsm('spin');
   await clickEl(page, '.asm-box [data-part="base"]');
   await clickEl(page, '.asm-box [data-part="servo"]');
@@ -274,8 +267,8 @@ async function toProduct(page) {
   for (const k of ['board', 'lcd', 'body', 'hair']) await clickEl(page, `.asm-box [data-part="${k}"]`);
   const full = await page.$eval('.asm-box', (e) => e.textContent.includes('6/6'));
   const lit = await toProduct(page);
-  const note = await waitFor(page, () => /装偏 14\.4°/.test(document.getElementById('props')?.textContent ?? ''), null, 10000);
-  report('装配 · spin：舵盘装偏 → 成品提示偏 14.4°，圆屏有画面', full && lit && note);
+  const note = await waitFor(page, () => /Horn off by 14\.4°/.test(document.getElementById('props')?.textContent ?? ''), null, 10000);
+  report('assembly · spin: horn off -> Product says 14.4° off, round LCD has a frame', full && lit && note);
   await page.screenshot({ path: path.join(outDir, 'levels-asm-spin.png') });
   await page.close();
 }
@@ -284,21 +277,21 @@ async function toProduct(page) {
   for (const k of ['base', 'board', 'lcd', 'bezel', 'dome']) await clickEl(page, `.asm-box [data-part="${k}"]`);
   await clickEl(page, '.asm-box [data-k="pickH"]');
   const lit = await toProduct(page);
-  report('装配 · lens → 成品步骤圆屏有画面', lit);
+  report('assembly · lens -> Product round LCD has a frame', lit);
   await page.screenshot({ path: path.join(outDir, 'levels-asm-lens.png') });
   await page.close();
 }
 
 {
-  // P2-09：超声波尺子在工作台组装，探头缩在孔里 → 开机复测里模拟器的 HC-SR04 也只能量到孔壁（读数 3 cm、蜂鸣器一直响），
-  // 判定项真的挂掉；改成"伸出前面板"再复测通过。先用自己上传的固件过三个检查点（解锁组装）
+  // P2-09: ruler probes recessed in the holes -> the simulated HC-SR04 only sees the hole wall (3 cm), so the retest really fails;
+  // poking them out passes. Pass the three checkpoints with uploaded firmware first (unlocks assembly)
   const page = await open('/app?work=ruler#bench');
   try {
     for (const [id, ref] of [['ruler-1', 'ruler-dist'], ['ruler-2', 'ruler-oled'], ['ruler-3', 'ruler']]) {
       await page.waitForSelector(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`, { timeout: 30000 });
       await clickEl(page, `#tree .tn[data-kind="checkpoint"][data-id="${id}"]`);
       await page.waitForSelector('#props [data-drop="check"] input:not([disabled])', { timeout: 30000 });
-      // 属性面板会被重画：拿到输入框就立刻上传，节点被换掉就重找
+      // The properties panel re-renders: upload as soon as the input exists, re-find it if replaced
       for (let k = 0; ; k++) {
         try {
           const input = await page.$('#props [data-drop="check"] input:not([disabled])');
@@ -309,7 +302,7 @@ async function toProduct(page) {
           await sleep(300);
         }
       }
-      // 先等进入"模拟中"，再等这一关的结论（免得读到上一关的结论就去点下一关）
+      // Wait for busy first, then this checkpoint's verdict (not the previous one's)
       await waitFor(page, () => !!document.querySelector('#props .drop.busy'), null, 15000);
       await waitFor(page, () => ['ok', 'bad'].includes(document.querySelector('#props .result-card')?.dataset.verdict) && !document.querySelector('#props .drop.busy'), null, 120000);
     }
@@ -321,35 +314,35 @@ async function toProduct(page) {
         if (k === 'sonar') await clickEl(page, `.asm-box [data-k="pick${pick}"]`);
       }
       await clickEl(page, '#toolbar [data-tool="asm-retest"]');
-      // 先等进入"复测中"，再等跑完（免得读到上一次的结果）
-      await waitFor(page, () => /复测中/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 10000);
-      await waitFor(page, () => !!document.querySelector('#props .verdict-line') && !/复测中/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 120000);
+      // Wait for retesting first, then for the end (not the previous result)
+      await waitFor(page, () => /Retesting/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 10000);
+      await waitFor(page, () => !!document.querySelector('#props .verdict-line') && !/Retesting/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 120000);
       return page.$eval('#props', (e) => e.textContent);
     };
     const bad = await build('B');
     const badV = await verdictOf(page);
-    report('组装 · ruler：探头缩在孔里 → 开机复测读不到 15 cm、节奏不对（装法进模拟器）', (badV === 'bad' || badV === 'shifted') && /✗串口出现 “DIST 15\.0 cm”/.test(bad) && /1\.8–2\.5 s 响 0 声/.test(bad), bad.match(/复测结果.{0,160}/)?.[0]);
+    report('assemble · ruler: probes recessed -> retest misses 15 cm, wrong rhythm (mounting goes into the simulator)', (badV === 'bad' || badV === 'shifted') && /✗Serial did not print "DIST 15\.0 cm"/.test(bad) && /1\.8–2\.5 s: buzzer silent/.test(bad), bad.match(/Retest result.{0,160}/)?.[0]);
     await clickEl(page, '#toolbar [data-tool="asm-reset"]').catch(() => {});
     const good = await build('A');
-    report('组装 · ruler：探头伸出前面板 → 开机复测通过', (await verdictOf(page)) === 'ok' && /装配 6\/6，没有警告/.test(good), good.match(/复测结果.{0,60}/)?.[0]);
+    report('assemble · ruler: probes out of the front panel -> retest passes', (await verdictOf(page)) === 'ok' && /Assembly 6\/6, no warnings/.test(good), good.match(/Retest result.{0,60}/)?.[0]);
   } catch (e) {
-    report('组装 · ruler：流程跑完', false, String(e).slice(0, 200));
+    report('assemble · ruler: flow finished', false, String(e).slice(0, 200));
   }
   await page.close();
 }
 
-// ---- 5. 作品首页
+// ---- 5. Home page project cards
 {
   const home = await open('/');
   const cards = await home.$$eval('.wk', (els) => els.map((e) => ({ work: e.dataset.work, go: e.querySelector('[data-go]')?.getAttribute('href'), cps: e.dataset.cps })));
-  // 卡片由作品定义（web/src/app/works.ts）生成：P2-12 加了 USB 小键盘，P2-09 加了旋钮台灯、超声波尺子、体感小人
-  report('首页：七张作品卡（气象站 / 小黄 / 透镜 / USB 小键盘 / 旋钮台灯 / 超声波尺子 / 体感小人）', cards.map((c) => c.work).join() === 'weather,spin,lens,usbkey,lamp,ruler,tilt', JSON.stringify(cards.map((c) => c.work)));
+  // Cards come from web/src/app/works.ts: P2-12 added the USB keypad, P2-09 the knob lamp, ultrasonic ruler and tilt figure
+  report('home: seven project cards (weather / spin / lens / usbkey / lamp / ruler / tilt)', cards.map((c) => c.work).join() === 'weather,spin,lens,usbkey,lamp,ruler,tilt', JSON.stringify(cards.map((c) => c.work)));
   await home.screenshot({ path: path.join(outDir, 'levels-home-0.png') });
-  // 气象站卡：跑真实固件 → 状态行是串口读数、成品屏幕有 OLED 画面；按住 BOOT → 固件切 ℉，屏幕重画
+  // Weather card runs real firmware: status line shows the serial reading, OLED has a frame; holding BOOT switches to ℉ and redraws
   await home.click('[data-run="weather"]');
   const reading = await waitFor(home, () => /T=23\.50 C/.test(document.querySelector('.wk[data-work="weather"] [data-status]').textContent), null, 30000);
   const oled = await waitFor(home, () => !!document.querySelector('.wk[data-work="weather"] image[data-k="oled"][href]'));
-  report('首页：气象站卡跑真实固件（串口 T=23.50、OLED 有画面）', reading && oled);
+  report('home: weather card runs real firmware (serial T=23.50, OLED has a frame)', reading && oled);
   const before = await home.$eval('.wk[data-work="weather"] image[data-k="oled"]', (e) => e.getAttribute('href'));
   const b = await home.$eval('.wk[data-work="weather"] [data-k="boot"]', (e) => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
   await home.mouse.move(b[0], b[1]);
@@ -357,25 +350,25 @@ async function toProduct(page) {
   await sleep(250);
   await home.mouse.up();
   const changed = await waitFor(home, (h) => document.querySelector('.wk[data-work="weather"] image[data-k="oled"]').getAttribute('href') !== h, before, 5000);
-  report('首页：按 BOOT 后屏幕重画（切 ℉）', changed);
-  // 小黄卡：运行固件 → 圆屏有画面；同一时间只跑一张（气象站停止、回到示意图）
+  report('home: screen redraws after BOOT (switch to ℉)', changed);
+  // Spin card: round LCD gets a frame; only one card runs at a time (weather stops, back to the sketch)
   await home.click('[data-run="spin"]');
   const spin = await waitFor(home, () => !!document.querySelector('.wk[data-work="spin"] image[data-k="lcd"][href]'), null, 20000);
   const single = await home.$$eval('.wk.live', (e) => e.map((x) => x.dataset.work).join());
-  report('首页：小黄卡跑真实固件 → 圆屏有画面，同时只跑一张', spin && single === 'spin', single);
+  report('home: spin card runs real firmware -> round LCD frame, only one card runs', spin && single === 'spin', single);
   await sleep(600);
   await home.screenshot({ path: path.join(outDir, 'levels-home-spin.png') });
   await home.click('[data-run="lens"]');
   const lens = await waitFor(home, () => !!document.querySelector('.wk[data-work="lens"] image[data-k="lcd"][href]'), null, 20000);
-  report('首页：透镜卡跑真实固件 → 圆屏有画面', lens);
-  // P2-09 自动生成的卡片也能跑真实固件：尺子卡 OLED 有画面、读数随演示挡板变；台灯卡灯条亮
+  report('home: lens card runs real firmware -> round LCD frame', lens);
+  // P2-09 generated cards run real firmware too: ruler OLED shows the distance, the lamp strip lights up
   await home.click('[data-run="ruler"]');
   const ruler = await waitFor(home, () => !!document.querySelector('.wk[data-work="ruler"] image[data-k="oled"][href]') && /DIST \d/.test(document.querySelector('.wk[data-work="ruler"] [data-status]').textContent), null, 30000);
-  report('首页：尺子卡跑真实固件 → OLED 有画面、串口有距离', ruler);
+  report('home: ruler card runs real firmware -> OLED frame, distance on serial', ruler);
   await home.click('[data-run="lamp"]');
   const lamp = await waitFor(home, () => document.querySelector('.wk[data-work="lamp"] [data-k="led0"]')?.getAttribute('fill') !== '#2A2A28', null, 30000);
-  report('首页：台灯卡跑真实固件 → 灯带亮', lamp);
-  // USB 小键盘卡：跑真实固件 → 虚拟电脑枚举出 TryBoard Macro Pad；点 K1 键帽 → 屏幕上打出 a
+  report('home: lamp card runs real firmware -> strip lights up', lamp);
+  // USB keypad card: the virtual PC enumerates TryBoard Macro Pad; clicking K1 types a
   await home.click('[data-run="usbkey"]');
   const enumd = await waitFor(home, () => /TryBoard Macro Pad/.test(document.querySelector('.wk[data-work="usbkey"] [data-k="dev"]')?.textContent ?? ''), null, 20000);
   const k1 = await home.$eval('.wk[data-work="usbkey"] [data-k="key0"]', (e) => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
@@ -384,61 +377,61 @@ async function toProduct(page) {
   await sleep(200);
   await home.mouse.up();
   const typedA = await waitFor(home, () => /^a▌?$/.test(document.querySelector('.wk[data-work="usbkey"] [data-k="l0"]')?.textContent ?? ''), null, 10000);
-  report('首页：USB 小键盘卡跑真实固件 → 电脑枚举出键盘，点 K1 打出 a', enumd && typedA);
+  report('home: USB keypad card runs real firmware -> PC enumerates it, K1 types a', enumd && typedA);
   await home.screenshot({ path: path.join(outDir, 'levels-home-full.png'), fullPage: true });
   await home.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
   await sleep(300);
   const overflow = await home.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
-  report('首页：手机宽度无横向滚动', !overflow);
+  report('home: no horizontal scroll at phone width', !overflow);
   await home.screenshot({ path: path.join(outDir, 'levels-home-phone.png') });
   await home.close();
-  // 入口：每张卡的"开始做"进采购（卡上 data-cps 的检查点数与工作台一致），"去选板"进选板（首屏的 #pickBoard 只在手机上显示），"运行我的固件"进空白实验台
+  // Entries: each card's start button goes to Shop (data-cps equals the bench checkpoint count), #ownIdea to /select, #haveFw to the blank Bench
   for (const c of cards) {
     const p = await open('/');
     await Promise.all([p.waitForNavigation({ waitUntil: 'load' }), p.click(`.wk[data-work="${c.work}"] [data-go]`)]);
     const u = new URL(p.url());
     const n = c.cps.match(/\d+/)?.[0];
-    // 采购页的结论按钮显示规则提醒数（P0-07 起），检查点进度要到实验台看
+    // The Shop verdict button shows rule warnings (since P0-07); checkpoint progress is on the Bench
     await p.evaluate(() => (location.hash = 'bench'));
-    const v = await waitFor(p, (n) => new RegExp(`检查点 0?\\d*/${n}`).test(document.getElementById('verdict')?.textContent ?? ''), n, 30000);
-    report(`首页「开始做」（${c.work}）→ /app?work=${c.work}#shop，检查点数 ${n} 与工作台一致`, u.pathname.endsWith('/app') && u.searchParams.get('work') === c.work && u.hash === '#shop' && v, p.url().replace(base, ''));
+    const v = await waitFor(p, (n) => new RegExp(`Checkpoints 0?\\d*/${n}`).test(document.getElementById('verdict')?.textContent ?? ''), n, 30000);
+    report(`home start (${c.work}) -> /app?work=${c.work}#shop, ${n} checkpoints as on the Bench`, u.pathname.endsWith('/app') && u.searchParams.get('work') === c.work && u.hash === '#shop' && v, p.url().replace(base, ''));
     await p.close();
   }
   const isSelect = () => !!document.querySelector('#templates');
-  for (const [sel, want, check] of [['#ownIdea', '/select', isSelect], ['#haveFw', '/app', () => new URLSearchParams(location.search).get('work') === 'blank' && location.hash === '#bench' && /^空白$/.test(document.getElementById('workName')?.textContent ?? '')]]) {
+  for (const [sel, want, check] of [['#ownIdea', '/select', isSelect], ['#haveFw', '/app', () => new URLSearchParams(location.search).get('work') === 'blank' && location.hash === '#bench' && /^Blank$/.test(document.getElementById('workName')?.textContent ?? '')]]) {
     const p = await open('/');
     await Promise.all([p.waitForNavigation({ waitUntil: 'load' }), p.click(sel)]);
     const ok = await waitFor(p, check, null, 15000);
-    report(`首页入口 ${sel} → ${want}`, new URL(p.url()).pathname.endsWith(want) && ok, p.url().replace(base, ''));
+    report(`home entry ${sel} -> ${want}`, new URL(p.url()).pathname.endsWith(want) && ok, p.url().replace(base, ''));
     await p.close();
   }
 }
 
-// ---- 5b. 旧地址（带 .html）→ 新地址（DESIGN_V2 §7.2）：旧链接、书签不能断，查询和 hash 带过去
+// ---- 5b. Old .html addresses -> new ones (DESIGN_V2 §7.2): bookmarks keep working, query and hash carried over
 {
   for (const [from, want, check] of [
     ['/home.html#works', (u) => u.pathname.endsWith('/') && u.hash === '#works', () => !!document.querySelector('.wk')],
     ['/advisor.html?t=weather', (u) => u.pathname.endsWith('/select') && u.searchParams.get('t') === 'weather', () => !!document.querySelector('#templates')],
     ['/index.html?example=blink', (u) => u.pathname.endsWith('/app') && u.searchParams.get('work') === 'blank' && u.searchParams.get('example') === 'blink' && u.hash === '#bench', () => !!document.getElementById('workName')],
     ['/levels.html#04', (u) => u.pathname.endsWith('/app') && !!u.searchParams.get('work') && u.hash === '#bench', () => !!document.getElementById('workName')],
-    ['/licenses.html', (u) => u.pathname.endsWith('/licenses.html'), () => /授权与致谢/.test(document.querySelector('h1')?.textContent ?? '')],
+    ['/licenses.html', (u) => u.pathname.endsWith('/licenses.html'), () => /Licenses (&|and) credits/.test(document.querySelector('h1')?.textContent ?? '')],
     ['/licenses', (u) => u.pathname.endsWith('/licenses'), () => !!document.querySelector('a[href="./THIRD_PARTY_NOTICES.txt"]') && !!document.querySelector('a[href="./tryboard.spdx.json"]')],
   ]) {
     const p = await open(from);
     const ok = await waitFor(p, check, null, 15000);
     const u = new URL(p.url());
-    report(`旧地址 ${from} → ${u.pathname.replace(/^.*\//, '/')}${u.search}${u.hash}`, want(u) && ok, p.url().replace(base, ''));
+    report(`old address ${from} -> ${u.pathname.replace(/^.*\//, '/')}${u.search}${u.hash}`, want(u) && ok, p.url().replace(base, ''));
     await p.close();
   }
 }
 
-// ---- 6. 示例（空白实验台）也能走到装配：示例卡「做成成品」→ 作品采购页；点选装配 → 成品有画面
+// ---- 6. Examples (blank Bench) reach assembly too: the example card's make-it-real link -> project Shop; click assembly -> Product frame
 {
   const ex = await open('/app?work=blank&example=weather#bench');
   await ex.waitForSelector('#props [data-ex-work="weather"]', { timeout: 30000 });
   await Promise.all([ex.waitForNavigation({ waitUntil: 'load' }), clickEl(ex, '#props [data-ex-work="weather"]')]);
   const u = new URL(ex.url());
-  report('示例卡「做成成品」→ /app?work=weather#shop', u.searchParams.get('work') === 'weather' && u.hash === '#shop', ex.url().replace(base, ''));
+  report('example card make-it-real -> /app?work=weather#shop', u.searchParams.get('work') === 'weather' && u.hash === '#shop', ex.url().replace(base, ''));
   await ex.close();
   const page = await openAsm('weather');
   for (const k of ['shell', 'board', 'bme']) await clickEl(page, `.asm-box [data-part="${k}"]`);
@@ -446,7 +439,7 @@ async function toProduct(page) {
   for (const k of ['servo', 'oled', 'front']) await clickEl(page, `.asm-box [data-part="${k}"]`);
   const full = await page.$eval('.asm-box', (e) => e.textContent.includes('6/6'));
   const lit = await toProduct(page);
-  report('工作台：点选装配 → 成品有画面', full && lit);
+  report('bench: click-to-assemble -> Product has a frame', full && lit);
   await sleep(800);
   await page.screenshot({ path: path.join(outDir, 'levels-lab-product.png') });
   await page.close();
@@ -454,6 +447,6 @@ async function toProduct(page) {
 
 await browser.close();
 server.close();
-if (errors.length) console.log('[levels] 页面错误:\n  ' + errors.join('\n  '));
-console.log(`[levels] ${fails || errors.length ? 'FAIL' : 'PASS'}（失败 ${fails} 项，页面错误 ${errors.length} 条）`);
+if (errors.length) console.log('[levels] page errors:\n  ' + errors.join('\n  '));
+console.log(`[levels] ${fails || errors.length ? 'FAIL' : 'PASS'} (${fails} failed, ${errors.length} page errors)`);
 process.exit(fails || errors.length ? 1 : 0);
