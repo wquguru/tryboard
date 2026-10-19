@@ -159,7 +159,7 @@ export const actions: {
   runAllRef?: () => void;
   /** Open the buy card once a custom work passes all checkpoints (phone banner primary button). */
   openBuy?: () => void;
-  analyzer?: (open: boolean) => void;
+  analyzer?: (open: boolean) => void | Promise<void>;
   /** Stage view: top / front / zoom in / zoom out / fit selection. */
   view?: (k: 'top' | 'front' | 'in' | 'out' | 'fit') => void;
 } = {};

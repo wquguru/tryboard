@@ -1,26 +1,20 @@
 // Lab v2 bottom dock (DESIGN_V2 §4): serial / code / analyzer / runs / checkpoints / issues / tasks (C-04). Raw serial still goes
 // to hidden #console (replay diffing reads it); the line view (filter, sim-time stamps, IDF colors) is imperative: too many lines for React.
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "../ui/cn";
 import { actions, bc, setDock, type DockTab } from "./chrome";
-import { UsbPane } from "./usbpane";
-import { TasksPane } from "./tasks";
-import { BlePane } from "./blepane";
-import { NetPane } from "./netpane";
+import { BlePane, CodePane as CodeView, NetPane, PaneLoading, TasksPane, UsbPane } from "./panes";
 import { Icon } from "./icons";
 import { useStore } from "./react";
 import { createStore } from "./store";
 import { Grab, mui, phoneProps, setMui, usePhone } from "./mobile";
 import { t } from "../i18n";
 
-// Code tab (P2-15): chunk and source load only when opened, not in the first bundle
-const CodeView = lazy(() => import("./code"));
+// Code tab (P2-15): chunk and source load only when opened (or at idle, R-12), not in the first bundle
 function CodePane({ phone, toast }: { phone?: boolean; toast: (msg: string) => void }) {
   const { fw } = useStore(bc);
   return (
-    <Suspense fallback={<p className="m-0 p-3 text-xs text-muted">{t('Loading code tab…')}</p>}>
-      <CodeView fw={fw} phone={phone} toast={toast} />
-    </Suspense>
+    <CodeView fw={fw} phone={phone} toast={toast} />
   );
 }
 
@@ -693,21 +687,33 @@ function PhoneDock({
 /** Phone: the imperative analyzer moves into the sheet while its tab is open (desktop keeps it fixed over the dock) */
 function AnaSheet() {
   const host = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
   useEffect(() => {
-    const el = document.getElementById("analyzer");
-    if (!el) return;
-    el.classList.add("in-sheet");
-    host.current!.appendChild(el);
+    // The analyzer chunk may still be loading (R-12): open it first, then adopt its node
+    let el: HTMLElement | null = null;
+    let live = true;
+    void Promise.resolve(actions.analyzer?.(true)).then(() => {
+      el = document.getElementById("analyzer");
+      if (!live || !el) return;
+      el.classList.add("in-sheet");
+      host.current!.appendChild(el);
+      setReady(true);
+    });
     // A half sheet leaves the canvas about 80px tall: waveforms need the full sheet
     if (mui.get().sheet !== "full") setMui({ sheet: "full" });
-    actions.analyzer?.(true);
     return () => {
+      live = false;
       actions.analyzer?.(false);
+      if (!el) return;
       el.classList.remove("in-sheet");
       document.body.appendChild(el);
     };
   }, []);
-  return <div ref={host} className="flex min-h-0 flex-1 flex-col border-t border-line-soft" />;
+  return (
+    <div ref={host} className="flex min-h-0 flex-1 flex-col border-t border-line-soft">
+      {!ready && <PaneLoading />}
+    </div>
+  );
 }
 
 /** One-line serial strip on the phone product page (DESIGN_V2 §5): last line only; full serial is on the bench */

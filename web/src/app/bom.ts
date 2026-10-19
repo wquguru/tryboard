@@ -2,7 +2,8 @@
 // Seeking the timeline replays up to that step, no snapshots (DESIGN §3). Pure, tested with node --test.
 import { t } from '../i18n/index.ts';
 import { getTemplate, removePick, templatePicks, toScene, type Pick } from '../catalog/templates.ts';
-import { applyFix, type Fix, type RuleInput } from '../catalog/rules.ts';
+import { applyFix } from '../catalog/fix.ts';
+import type { Fix, RuleInput } from '../catalog/rules.ts';
 import { PART_BY_ID, getPart } from '../catalog/parts.ts';
 
 export type BomOp =

@@ -9,7 +9,7 @@ import { Conf, confOfRule } from "../../ui/conf";
 import { Live } from "../../ui/native";
 import { Bad, Btn, Btns, Kv, KvT, Mono, Muted, Note, Ok, Ph, Res, Sec, Seg, SegB, Slider, TreeEmpty } from "../../ui/panel";
 import { actions } from "../chrome";
-import { PhonePanel } from "../blepane";
+import { PhonePanel } from "../panes";
 import { ConfBadge } from "./ui";
 import { EST, NoteLive, SayLive } from "./shared";
 import type { BenchCtx } from "./ctx";

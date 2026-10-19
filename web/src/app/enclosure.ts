@@ -3,6 +3,7 @@
 import { PART_BY_ID } from '../catalog/parts.ts';
 import { t } from '../i18n/index.ts';
 import type { ManifoldToplevel, Manifold, CrossSection } from 'manifold-3d';
+import { PARAM_RANGE } from './caseparams.ts';
 
 export type V3 = [number, number, number];
 
@@ -14,13 +15,7 @@ export interface CaseParams {
   radius: number;
 }
 
-export const DEFAULT_PARAMS: Record<string, CaseParams> = {
-  weather: { height: 32, wall: 2, radius: 5.5 },
-  spin: { height: 32, wall: 2, radius: 0 },
-  lens: { height: 30, wall: 2, radius: 0 },
-  usbkey: { height: 22, wall: 2, radius: 4 },
-};
-export const PARAM_RANGE = { height: [16, 80], wall: [1.2, 4], radius: [0, 12] } as const;
+export { DEFAULT_PARAMS, PARAM_RANGE } from './caseparams.ts';
 
 /** Simple solids for drawing parts (box / cylinder / torus / cap) in case coordinates */
 export interface Prim {

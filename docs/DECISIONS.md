@@ -992,3 +992,14 @@
 - **machine 保留 `enum Chip` 元数据表**（id、名字、ROM 文件、BOOT / RGB 引脚、引脚数）：CLI 在开机前就要用引脚数和 ROM 文件名，放进 trait 就得先构造芯片。
 - **esp32c3 转发**：R-05 留下的 `pub use tryboard_soc::{…}` 改为 `pub(crate) use`，没人用的 pcnt / sigin / vcd 转发删除；R-05 记的「machine 里仍有 `tryboard_esp32c3::`」偏离至此只剩构造处。
 - 替代：保留 `enum Hw` 并在每个方法里 match —— 加一款芯片要改几十处；泛型 `Machine<C: Chip>` —— wasm / CLI 都得跟着泛型化或再包一层枚举，收益只是省掉每批一次间接调用。
+
+## 2026-10-19 按需加载面板与步骤（R-12）
+- **验收口径**：R-01 只记了首屏字节（572 KB），没有记 app 主包大小，所以以本次改动前的构建为基线（`app-*.js` 262 340 B gzip，app.html 静态闭包 566 626 B）。拆完后 `app-*.js` 降到约 114.4 KB（−56%），但其中一大半是 rollup 把仍被首屏静态引用的共享模块（topbar / mobile / cmdk / wirecheck / bom / rulemeta …）分到了新文件里，不是少下载；真正少下的是静态闭包 566.6 → 476.2 KB（−16%）。PLAN 按闭包口径记 ◐，两个数都写上，不改目标。
+- **剩下的首屏重量不在 R-12 范围**：three.module 150 KB、语言包 `lang-*` 66 KB、audio.ts（约 13 KB，蜂鸣器在实验台开机就要用，改懒加载会动 session 里的发声时序）。下一步可做：audio 懒加载 + 同步门面、按语言拆词典。
+- **不用 React.lazy / Suspense**：React 18 在显示过 fallback 后会把真实内容至少压 300 ms 才提交（FALLBACK_THROTTLE），本地实测各面板首次打开都卡在 ≈ 305 ms，超过 300 ms 验收线；改为 `panes.tsx` 里自己的 `useState + import()` 加载器，已加载的模块直接同步渲染。代码页原来的 `lazy()` 一并换掉。
+- **步骤用占位 StepImpl**：`steps/lazy.tsx` 先同步注册一个只显示「正在加载这一步…」的步骤，chunk 到了再 `registerStep` 真实现（当前步骤会重新挂载），失败显示可重试的错误卡片。
+- **分析仪改为按需创建**：数据本来就在 `session.io`，分析仪只是视图；`anaload.ts` 首次打开或空闲预取时才 import 并创建，`__tbApp.analyzer` 在创建后再赋值（vcd.mjs 本就等它）；⌘K 只读 `body.ana-open` 判断开关，不为显示一个标签去加载。
+- **为切断首屏依赖而搬出的小模块**（纯搬移，行为不变）：`bomstore` / `caseparams` / `asmstate` / `blefeed` / `usbfeed`（原在 shop / casemesh / assemble / blepane / usbpane 里，被首屏引用），`catalog/fix.ts`（applyFix）与 `catalog/rulemeta.ts`（规则元数据 + netVolt），rules.ts 原样转发这些导出，测试与 CLI 不用改。
+- **空闲预取**：固件首次开机 2 s 后用 `requestIdleCallback`（Safari 退回 1.5 s 定时）一项一项取：分析仪 → 选购 / 组装 / 成品 → 各面板 → 选板简报。起初开机即预取，perf.mjs 桌面 c3-lcd 三次里两次 readyMs ≈ 1 s（基线 0.53 s）；加 2 s 宽限后预取落在 ready 之后，5 次中位 539 ms（基线 526 ms），剩下偶发的约 480 ms 长任务就是 R-15 记的「回访卡顿」（改动前的构建在 weather + analyzer 一行每次都有），不是预取。perf.mjs 的 5 秒帧采样窗口里会多出几次短任务。
+- **AI 简报（选板作品）按需 import**：复制前先 `await import`；空闲预取已覆盖，极端情况下浏览器若因丢失用户手势拒绝写剪贴板，会提示手动复制（原有提示）。
+- 替代：只用 Vite `manualChunks` 合并 —— 不减少首屏下载；把步骤文件挪进 `steps/lazy/` 目录 —— lint_size 白名单按路径记，会被当成新违规。

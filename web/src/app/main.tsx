@@ -9,9 +9,10 @@ import { createStore } from './store';
 import { createShell, registerStep, ShellView, startRouter } from './shell';
 import { createSession, WORKS } from './session';
 import { benchStep, passedCount, restoreChecks } from './steps/bench';
-import { assembleStep, restoreAssembly } from './steps/assemble';
-import { productStep } from './steps/product';
-import { loadBom, loadPlaced, shopStep } from './steps/shop';
+import { lazyStep, whenIdle } from './steps/lazy';
+import { restoreAssembly } from './asmstate';
+
+import { loadBom, loadPlaced } from './bomstore';
 import type { AppState, StepCtx, WorkDef, WorkId } from './types';
 import { wkey } from './works';
 import { loadExamples } from './examples';
@@ -21,23 +22,23 @@ import { createBenchHistory } from './benchhist';
 import { initTheme } from '../theme';
 import { partLabel } from './wiring';
 import { createCmdk } from './cmdk';
-import { getAnalyzer } from './analyzer';
-import { loadCaseParams } from './casemesh';
+import { loadAnalyzer, onAnalyzer } from './anaload';
+import { prefetchPanes } from './panes';
+import { loadCaseParams } from './caseparams';
 import { actions, bc, overlay, setBc, setDock, syncDockVar, type CpRow, type Issue } from './chrome';
 import { CrashCard } from './crash';
 import { FwCheckCard, fwCheck } from './fwcheck';
 import { BrownoutBanner } from './bench/ui';
 import { initSaved } from './saved';
 import { serial } from './dock';
-import { usbFeed } from './usbpane';
-import { bleFeed } from './blepane';
+import { usbFeed } from './usbfeed';
+import { bleFeed } from './blefeed';
 import { netFeed } from './netfeed';
 import { toScript, type InputLog } from '../inputlog';
 import { customPlan } from './custom';
 import { genLevels } from './genlevels';
 import { registerTemplate } from '../catalog/templates';
 import { initialHistory, placement, replay } from './bom';
-import { briefMarkdown } from '../advisor/brief';
 import type { PartSpec } from '../board3d';
 import { t } from '../i18n';
 
@@ -109,10 +110,13 @@ function log(text: string) {
   serial.push(text, store.get().simSeconds);
 }
 
-registerStep('shop', shopStep());
 registerStep('bench', benchStep());
-registerStep('assemble', assembleStep());
-registerStep('product', productStep());
+// R-12: the other steps are separate chunks, fetched on first visit or once the bench is idle
+const prefetchSteps = [
+  lazyStep('shop', () => import('./steps/shop').then((m) => m.shopStep())),
+  lazyStep('assemble', () => import('./steps/assemble').then((m) => m.assembleStep())),
+  lazyStep('product', () => import('./steps/product').then((m) => m.productStep())),
+];
 
 // The bench timeline (place / wire / env / run #n / verify; click to go back) lives in benchhist.ts.
 // Shop, assemble and product have their own timelines, so this one shows only on the bench
@@ -146,7 +150,7 @@ const ownsTimeline = () => store.get().step === 'bench';
       },
     });
     app.cmdk = createCmdk(ctx);
-    app.analyzer = getAnalyzer(ctx);
+    onAnalyzer((a) => (app.analyzer = a));
     store.subscribe(() => ctx.hist!.op({ k: 'scene', scene: session.scene, power: session.power, count: session.scene.parts.length, ...(session.sceneLabel ? { label: session.sceneLabel } : {}) }), ['sceneRev']);
     // Brownout reset (P1-02) is one bench timeline step; seeking to it returns to the reset moment
     session.onBrownout((tSec) => {
@@ -215,6 +219,22 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   });
   if (session.sim) setBc({ boot: null });
   runState();
+  // R-12 idle prefetch: once the firmware runs, warm the lazy steps, panes and analyzer one idle slot at a time
+  let warmed = false;
+  const warm = () => {
+    if (warmed) return;
+    warmed = true;
+    const queue: (() => Promise<unknown>)[] = [() => loadAnalyzer(ctx), ...prefetchSteps, prefetchPanes, ...(plan ? [() => import('../advisor/brief')] : [])];
+    const next = () => {
+      const f = queue.shift();
+      if (f) whenIdle(() => void f().catch(() => null).then(next));
+    };
+    next();
+  };
+  // A 2 s grace after boot keeps chunk parsing out of the first frames and the first sim tick (perf.mjs ready)
+  const warmSoon = () => setTimeout(warm, 2000);
+  if (session.sim) warmSoon();
+  else session.onBoot(warmSoon);
 
   const benchUndo = benchOnly(() => {
     const h = store.get().hist;
@@ -333,11 +353,13 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     return session.levels.find((l) => l.id === id) ?? null;
   };
   // Picker works: brief = the picker's AI brief + generated checkpoints with their pass criteria
-  const customBrief = plan ? () => [briefMarkdown(plan.state), '', t('## Checkpoints (the browser judges these)'), ...customLevels.map((l) => `- ${l.id} ${t(l.title)}: ${l.manual ? t('Needs real hardware; not judged in the browser') : t(l.pass)}`)].join('\n') : null;
+  // The brief module loads on demand (R-12) and is warmed at idle on picker works
+  const loadBrief = () => import('../advisor/brief');
+  const customBrief = plan ? async () => [(await loadBrief()).briefMarkdown(plan.state), '', t('## Checkpoints (the browser judges these)'), ...customLevels.map((l) => `- ${l.id} ${t(l.title)}: ${l.manual ? t('Needs real hardware; not judged in the browser') : t(l.pass)}`)].join('\n') : null;
   actions.brief = customBrief
     ? async () => {
         try {
-          await navigator.clipboard.writeText(customBrief());
+          await navigator.clipboard.writeText(await customBrief());
           shell.toast(t('Brief for the AI copied'));
         } catch {
           shell.toast(t('The browser blocked the clipboard: the brief is in the checkpoint side panel, copy it by hand'));
@@ -360,8 +382,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     if (store.get().step !== 'bench') location.hash = 'bench';
     store.set({ selection: { kind: 'checkpoint', id } });
   };
-  const ana = getAnalyzer(ctx);
-  actions.analyzer = (open) => (open ? ana.open() : ana.close());
+  actions.analyzer = (open) => loadAnalyzer(ctx).then((a) => (open ? a.open() : a.close()));
   // The analyzer also opens from the toolbar / ⌘K: follow it with the dock tab, back to serial on close
   new MutationObserver(() => {
     const open = document.body.classList.contains('ana-open');

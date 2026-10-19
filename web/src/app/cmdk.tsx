@@ -4,7 +4,7 @@ import { Fragment, type ReactNode } from 'react';
 import type { StepCtx, StepId, SelKind } from './types';
 import { fuzzy, parseRun, parseTemp, pushRecent } from './cmdmatch';
 import { partId, partInfo } from './wiring';
-import { getAnalyzer } from './analyzer';
+import { analyzerOpen, loadAnalyzer } from './anaload';
 import { BOARD_NAME } from '../chips';
 import { commit, useStore } from './react';
 import { createStore } from './store';
@@ -112,13 +112,12 @@ export function createCmdk(ctx: StepCtx): Cmdk {
         ? { id: `temp:${temp}`, group: G.cmd, ...L('Set room temperature to {temp} ℃', { temp }), meta: t('Environment'), keys: '室温 温度 temp 设为 room set', run: () => setTemp(temp) } // lint: allow-cjk
         : { id: 'temp', group: G.cmd, ...L('Set room temperature to … ℃'), meta: t('Type a number'), keys: '室温 温度 temp 设为 环境 shiwen room set environment', keep: true, run: () => open('temp ') }, // lint: allow-cjk
     );
-    const ana = getAnalyzer(ctx);
     out.push(
       { id: 'meter3v3', group: G.cmd, ...L('Measure 3V3'), meta: t('Multimeter'), keys: '万用表 电压 3.3 3v3 multimeter liang voltage', run: () => { select('pin', '3V3'); shell.toast(t('Selected the 3V3 pin; to read its voltage, press Multimeter in the toolbar, then click 3V3')); } }, // lint: allow-cjk
       { id: 'power:ext', group: G.cmd, ...L('Switch to external 5 V and rerun'), meta: t('Power'), keys: '外接 5v 电源 power ext 重跑 舵机 servo', run: () => powerRerun(true) }, // lint: allow-cjk
       { id: 'power:usb', group: G.cmd, ...L('Switch back to USB power and rerun'), meta: t('Power'), keys: 'usb 电脑 power 重跑', run: () => powerRerun(false) }, // lint: allow-cjk
       { id: 'rerun', group: G.cmd, ...L('Restart (power cycle)'), meta: t('Run'), keys: 'rerun reboot 重新上电 复位 reset', run: () => { goBench(); session.reboot(); } }, // lint: allow-cjk
-      { id: 'analyzer', group: G.cmd, ...(ana.isOpen ? L('Close logic analyzer') : L('Open logic analyzer')), meta: t('Oscilloscope'), keys: '逻辑分析仪 示波器 波形 scope analyzer i2c pwm luoji waveform', run: () => { goBench(); ana.toggle(); } }, // lint: allow-cjk
+      { id: 'analyzer', group: G.cmd, ...(analyzerOpen() ? L('Close logic analyzer') : L('Open logic analyzer')), meta: t('Oscilloscope'), keys: '逻辑分析仪 示波器 波形 scope analyzer i2c pwm luoji waveform', run: () => { goBench(); void loadAnalyzer(ctx).then((a) => a.toggle()); } }, // lint: allow-cjk
     );
     for (const [id, name, keys] of STEP_NAMES) out.push({ id: `step:${id}`, group: G.cmd, ...L(name), meta: t('Step'), keys: `${keys} 切到 去 go switch`, run: () => { location.hash = id; } }); // lint: allow-cjk
     const runs = ctx.hist?.runs() ?? [];
