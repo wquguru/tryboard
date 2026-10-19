@@ -103,6 +103,14 @@ web/（Vite + TS）
 - 不用 `innerHTML` / `dangerouslySetInnerHTML`（JSX 默认转义）；确有必要（如授权页的生成 HTML）写明来源可信的理由。
 - 测试契约：`tools/webtest/*.mjs` 依赖的 id / class / `data-*` / 文案保持不变；确要改，同一提交里改测试脚本，判据不放宽。每迁一页要做：新旧页面状态逐条文字对比（脚本放 `Reviews/ab/react/`）、agent-browser 亮色 / 暗色 / 390px 宽走查截图、`agent-browser a11y` 零违规、console 无 error、`tools/accept.sh --no-qemu` 全过。
 
+## 网页实验台目标结构（R-08 ～ R-12，2026-10-19）
+- `app/steps/bench.tsx` 只留 `benchStep()` 骨架（< 500 行）：建 `BenchCtx`、按顺序挂各分节、汇总卸载。原闭包里的共享变量（ctx、bench 句柄、openGroups、选中件、unsubs 等）收进显式 `BenchCtx`（`app/bench/ctx.ts`），各分节写成 `app/bench/<分节>.ts(x)`，导出 `mount<分节>(b: BenchCtx): () => void`（返回清理函数），分节之间不互相 import，只经 BenchCtx 的字段 / 回调通信。
+- `board3d.ts` 的 `createBench()` 拆到 `web/src/bench3d/`：`boards.ts`（开发板）、`modules.ts`（器件网格，原 `*Module()` / `*Model()`）、`pick.ts`（拾取与拖放）、`wires.ts`（导线）、`stage.ts`（渲染器、相机、灯光、后处理、shaderWarm）；`board3d.ts` 只留 `createBench` 组装与对外 `Bench` 接口，外部 import 路径不变。
+- 实验台 UI 组件库原 `app/benchv2.tsx` → `app/bench/ui/`（按组件分文件，去掉 v2 命名）。
+- 帧调度：`ui/frame.ts` 唯一的 rAF 循环，`onFrame(fn, { priority, visible? })` 订阅，页签隐藏或订阅方不可见时不调用；其余文件不得直接调 `requestAnimationFrame`（R-14 护栏检查）。
+- 按需加载：底部坞各面板（分析仪 / USB / BLE / 网络 / 任务 / 代码）与非当前步骤（选购 / 组装 / 成品）用 `React.lazy` / 动态 `import()`，首屏只含实验台与串口。
+- 测试契约不变：webtest 依赖的 id / class / `data-*` / 文案保持；拆分是纯搬移，不改行为。
+
 ## 引脚器件、PCNT、RMT 接收（P2-01 / P2-04 / P2-05）
 - 引脚器件（`crates/esp32c3/src/devices/pins.rs`，C3 / S3 的 SocBus 都挂 `pins: PinDevices`）：输出带精确时刻波形的外接器件放在 SoC 里，不在 1 ms 时间片之间施加。`poll(now)` 给出到 now 为止的驱动 `(周期, 引脚, 电平)`，SoC 的 `pins_update` 按时刻写 `gpio.ext_in / ext_driven` 并调 `gpio_changed(t)`（照常触发 GPIO 中断、iotrace、PCNT / RMT 接收）；下一次要问的时刻进 `next_event`（WAITI 快进也会停在这里）。`gpio_changed` 在电平变化时调 `pins.on_level(t, 电平)`，让器件看到芯片输出（HC-SR04 的 Trig）
   - EC11 编码器：A/B 正交，一格四个沿、沿间隔 0.5 ms（`ENC_EDGE_CYCLES`），顺时针 A 先落；`turn(steps)` 排队，`press(down)` 按下接地 / 松开悬空。上电驱动 A=B=1（模块上拉）
