@@ -1,4 +1,4 @@
-// 实验台 v2 底部坞（DESIGN_V2 §4）：串口 / 代码 / 逻辑分析仪 / 运行记录 / 检查点 / 问题，可拖高度、可收起。
+// 实验台 v2 底部坞（DESIGN_V2 §4）：串口 / 代码 / 逻辑分析仪 / 运行记录 / 检查点 / 问题 / 任务（C-04），可拖高度、可收起。
 // 串口原文仍追加进隐藏的 #console（文本节点原样，回归脚本和重放对拍读它）；看得见的是这里按行切开的视图：
 // 过滤、时间戳（收到这段文字时的模拟时刻）、按 ESP-IDF 级别着色、跟随最新。行视图命令式维护，不经 React——
 // 串口一秒能来几百行，整块重画太贵。
@@ -6,6 +6,7 @@ import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "rea
 import { cn } from "../ui/cn";
 import { actions, bc, setDock, type DockTab } from "./chrome";
 import { UsbPane } from "./usbpane";
+import { TasksPane } from "./tasks";
 import { Icon } from "./icons";
 import { useStore } from "./react";
 import { createStore } from "./store";
@@ -508,6 +509,7 @@ function PhoneDock({
     },
     { id: "issues", label: nIssue ? `问题 ${nIssue}` : "问题" },
     { id: "runs", label: `运行记录 ${c.runs}` },
+    { id: "tasks", label: "任务", title: "FreeRTOS 任务时间线：每核谁在跑、谁在等" },
     ...(c.usb ? [{ id: "usb" as const, label: "USB" }] : []),
   ];
   return (
@@ -641,6 +643,11 @@ function PhoneDock({
               <IssueList />
             </div>
           )}
+          {cur === "tasks" && (
+            <div className="flex min-h-0 flex-1 flex-col border-t border-line-soft">
+              <TasksPane phone toast={toast} />
+            </div>
+          )}
           {cur === "usb" && c.usb && (
             <div className="flex min-h-0 flex-1 flex-col border-t border-line-soft">
               <UsbPane sendCdc={(t) => actions.usbCdc?.(t)} />
@@ -723,7 +730,7 @@ function DeskDock({
   const shop = step === "shop";
   // 采购没有串口：默认看清单的变更记录
   const cur: DockTab =
-    shop && (tab === "serial" || tab === "analyzer")
+    shop && (tab === "serial" || tab === "analyzer" || tab === "tasks")
       ? "runs"
       : !bench && tab === "analyzer"
         ? "serial"
@@ -776,6 +783,19 @@ function DeskDock({
       pill: c.issues.length ? (
         <span className={pill(true)}>{c.issues.length}</span>
       ) : undefined,
+    },
+    {
+      id: "tasks",
+      label: "任务",
+      disabled: shop,
+      title: shop
+        ? "采购步骤没有在跑的固件"
+        : "FreeRTOS 任务时间线：每核谁在跑、谁在等（行为模拟）",
+      pill: (
+        <span className="rounded-full bg-accent-bg px-1.5 text-[11px] leading-[18px] text-accent-ink">
+          新
+        </span>
+      ),
     },
     ...(c.usb
       ? [
@@ -877,6 +897,7 @@ function DeskDock({
           <SerialInput />
         </div>
         {cur === "code" && <CodePane toast={toast} />}
+        {cur === "tasks" && <TasksPane toast={toast} />}
         {c.usb && (
           <div
             hidden={cur !== "usb"}

@@ -40,6 +40,11 @@ pub trait Bus {
     fn attention(&mut self, _cycles: u64) -> bool {
         false
     }
+    /// 执行了 `L32I a1, as, 0`（栈指针取自 as 指向的字）：FreeRTOS 换任务就是这一条
+    /// （`_frxt_dispatch` / `_frxt_int_exit` 的 `SP = pxCurrentTCBs[core]->pxTopOfStack`）。
+    /// `base` 是 as 的值（可能是 TCB），`core` 是执行它的核（0 / 1），`cycles` 是该核此刻的周期数。
+    /// 任务时间线（C-04）用；默认不关心
+    fn sp_loaded(&mut self, _core: u32, _base: u32, _cycles: u64) {}
 }
 
 /// op0 为 8..=13 的是 16 位密度指令
@@ -618,6 +623,12 @@ impl Cpu {
         e
     }
 
+    /// 核号：PRID 0xABAB 是 APP_CPU（核 1），其余当核 0
+    #[inline]
+    pub fn core_index(&self) -> u32 {
+        (self.prid == 0xabab) as u32
+    }
+
     fn illegal(&mut self) -> Result<Flow, Exit> {
         self.exception(cause::ILLEGAL, 0);
         Ok(Flow::Done)
@@ -663,6 +674,9 @@ impl Cpu {
                 let Some(v) = self.load(bus, a, 4) else {
                     return Ok(Flow::Done);
                 };
+                if t == 1 && r == 0 {
+                    bus.sp_loaded(self.core_index(), a, self.cycles);
+                }
                 self.set_a(t, v);
             }
             9 => {
@@ -789,6 +803,9 @@ impl Cpu {
                         };
                         if r == 9 {
                             v = sext(v, 16);
+                        }
+                        if r == 2 && t == 1 && imm8 == 0 {
+                            bus.sp_loaded(self.core_index(), a, self.cycles);
                         }
                         self.set_a(t, v);
                     }

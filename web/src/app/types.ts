@@ -17,6 +17,7 @@ import type { UsbView } from '../usb3d';
 import type { WireMods } from './wiring';
 import type { BenchHistory } from './benchhist';
 import type { IoStore } from './iotrace';
+import type { TaskStore } from './tasktrace';
 import type { CaseParams } from './enclosure';
 import type { ReactNode } from 'react';
 
@@ -197,6 +198,8 @@ export interface Session {
   consoleText(): string;
   /** 逻辑分析仪事件（本次上电 / 回退重放以来），P1-05 */
   io: IoStore;
+  /** FreeRTOS 任务时间线（本次上电 / 回退重放以来），C-04 */
+  tasks: TaskStore;
   /** 事件仓库有新事件或被 reset */
   onIo(cb: () => void): () => void;
   /** 正在观察的 GPIO（PWM / WS2812 / I2C 不受它限制） */

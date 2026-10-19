@@ -201,6 +201,8 @@ pub(crate) fn decode(pc: u32, insn: u32) -> Dec {
 
 fn decode_narrow(pc: u32, op0: u32, t: u32, r: u32) -> (Op, u32) {
     match op0 {
+        // L32I.N a1, as, 0 走通用路径：exec_narrow 在那里报告换栈（任务切换），快路径不多一次比较
+        8 if t == 1 && r == 0 => (Op::Generic, 0),
         8 => (Op::L32iN, r << 2),
         9 => (Op::S32iN, r << 2),
         10 => (Op::AddN, 0),
@@ -325,6 +327,7 @@ fn decode_wide(pc: u32, insn: u32, op0: u32, t: u32, s: u32, r: u32) -> (Op, u32
             0 => (Op::L8ui, imm8),
             1 => (Op::L16ui, imm8 << 1),
             9 => (Op::L16si, imm8 << 1),
+            2 if t == 1 && imm8 == 0 => (Op::Generic, 0),
             2 => (Op::L32i, imm8 << 2),
             4 => (Op::S8i, imm8),
             5 => (Op::S16i, imm8 << 1),

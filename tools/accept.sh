@@ -174,6 +174,19 @@ sys.exit(0 if burst and servo else 1)
 PY
 then :; else fail=1; fi
 
+# 任务时间线（--trace-tasks）：上面 s3-dual-tasks 用例写出的 Perfetto 文件要是合法 JSON，w0 只在核 0、w1 只在核 1
+echo -e "\n## 任务时间线（--trace-tasks）" >> $REPORT
+if python3 - Reviews/tasks-s3-dual.json >> $REPORT <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+x = [e for e in d['traceEvents'] if e.get('ph') == 'X' and e.get('pid') == 1]
+cores = lambda n: sorted({e['tid'] for e in x if e['name'] == n})
+ok = cores('w0') == [0] and cores('w1') == [1] and cores('IDLE0') == [0] and cores('IDLE1') == [1]
+print(f"- s3-dual：{len(x)} 段；w0 核 {cores('w0')}、w1 核 {cores('w1')}、IDLE0 核 {cores('IDLE0')}、IDLE1 核 {cores('IDLE1')}：{'✅' if ok else '❌'}")
+sys.exit(0 if ok else 1)
+PY
+then :; else fail=1; fi
+
 # 网页单测（元件库 schema、核价提醒、规则引擎 R01–R32）：纯 Node，不需要浏览器，--no-web 也跑
 command -v node >/dev/null || { [ -s ~/.nvm/nvm.sh ] && . ~/.nvm/nvm.sh >/dev/null; }
 echo -e "\n## 网页单测（web/test，node --test）\n\`\`\`" >> $REPORT

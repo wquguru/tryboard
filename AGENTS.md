@@ -58,6 +58,7 @@ Reviews/               截图、trace、报告（git 忽略，每次重生成）
 | 跑全部验收 | `tools/accept.sh [--no-web] [--no-qemu]`（输出 `Reviews/accept.md`；验收用例在 `firmware/accept.json`） |
 | 定位卡死 / 崩溃 | `tryboard run <flash.bin> --trace 40`（打印最近跳转目标，自动加载同目录 app.elf 符号） |
 | 逻辑分析仪事件 | `tryboard run <flash.bin> --trace-io Reviews/io.txt [--trace-pins 4,8]`（GPIO / PWM / WS2812 / I2C 事务，按周期盖戳；与网页逐条对拍：`node tools/webtest/traceio.mjs`） |
+| FreeRTOS 任务时间线（C-04） | `tryboard run <flash.bin> --trace-tasks Reviews/tasks.json`（Perfetto 打开；stderr 末尾每任务 CPU 占用）；网页对拍 `node tools/webtest/tasks.mjs` |
 | 下载第三方输入（ROM、riscv-tests） | `tools/fetch_third_party.sh` |
 | QEMU 对照 | `tools/oracle_qemu.sh <名字>` |
 | 外部 3D 模型（STEP → glb，只用 LICENSING ✅ 来源） | `(cd tools/models && npm ci)` 一次；`node tools/models/fetch.mjs && node tools/models/convert.mjs`（清单 `tools/models/models.json`，产物 + SOURCES.md 在 `assets/models/<名字>/`） |

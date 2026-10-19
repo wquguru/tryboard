@@ -54,6 +54,8 @@ export interface LiveOptions {
   onSeekProgress?(simSeconds: number): void;
   /** 逻辑分析仪事件（原始记录）；reset = 新上电 / 回退重放开始，之前的作废 */
   onIo?(m: Extract<FromWorker, { type: 'io' }>): void;
+  /** FreeRTOS 任务切换（原始记录 + 任务表）；reset = 新上电 / 回退重放开始 */
+  onTasks?(m: Extract<FromWorker, { type: 'tasks' }>): void;
 }
 
 /** 回退到某次运行的某个时刻（P0-03）：用那次运行的固件、器件、环境和输入日志 */
@@ -116,6 +118,8 @@ export class LiveSim {
         this.seekWaiter = null;
       } else if (m.type === 'io') {
         o.onIo?.(m);
+      } else if (m.type === 'tasks') {
+        o.onTasks?.(m);
       } else if (m.type === 'pcm') {
         o.onPcm?.(m.blocks);
       } else if (m.type === 'seekProgress') {

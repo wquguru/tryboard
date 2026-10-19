@@ -26,6 +26,7 @@ use tryboard_esp32c3::pcnt::{self as pcnt_mod, Pcnt};
 use tryboard_esp32c3::periph::{Systimer, Timg, Uart};
 use tryboard_esp32c3::rmt::{Rmt, RmtLayout, Ws2812};
 use tryboard_esp32c3::spiflash::SpiFlash;
+use tryboard_esp32c3::tasktrace::TaskTrace;
 use tryboard_soc::wifi::{self, WifiLayout, WifiMac};
 use tryboard_xtensa::{sr, Bus, BusFault, Cpu, Exit};
 
@@ -189,6 +190,8 @@ pub struct SocBus {
     last_gpio: u64,
     /// 逻辑分析仪事件（P1-05，模型与格式见 tryboard_esp32c3::iotrace）
     pub iotrace: IoTrace,
+    /// FreeRTOS 任务切换（C-04，模型见 tryboard_esp32c3::tasktrace）
+    pub tasks: TaskTrace,
     /// 固件请求复位（RTC_CNTL_OPTIONS0 的 SW_SYS_RST / SW_PROCPU_RST），值为下次上电的复位原因
     pub reset_request: Option<u32>,
     /// 固件单独复位了核 1（SW_APPCPU_RST）：esp_restart 先复位并停住另一个核
@@ -259,6 +262,8 @@ impl Default for SocBus {
             gpio_log: Vec::new(),
             last_gpio: 1,
             iotrace: IoTrace::new(1),
+            // Xtensa 栈帧：XT_STK_EXIT / XT_SOL_EXIT 之后是 PC
+            tasks: TaskTrace::new(4),
             reset_request: None,
             appcpu_reset: false,
             reset_reason: 1,
@@ -1089,6 +1094,15 @@ impl Bus for SocBus {
             }
         }
         self.fetch_slow(a)
+    }
+
+    fn sp_loaded(&mut self, core: u32, base: u32, cycles: u64) {
+        if self.tasks.cap == 0 {
+            return;
+        }
+        let mut t = std::mem::replace(&mut self.tasks, TaskTrace::new(4));
+        t.on_sp_load(core, base, cycles, true, &|a| self.mem_read(a, 4));
+        self.tasks = t;
     }
 
     #[inline(always)]

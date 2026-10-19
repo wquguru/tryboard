@@ -31,6 +31,10 @@ pub trait Bus {
     fn fetch_decoded(&mut self, addr: u32) -> Result<(u32, u32), BusFault> {
         Ok(decode_raw(self.fetch(addr)?))
     }
+    /// 执行了 `lw sp, 0(rs1)`（栈指针取自 rs1 指向的字）：FreeRTOS 换任务就是这一条
+    /// （`rtos_int_exit` 的 `sp = pxCurrentTCBs[core]->pxTopOfStack`）。`base` 是 rs1 的值（可能是 TCB），
+    /// `cycles` 是此刻的周期数。任务时间线（C-04）用；默认不关心
+    fn sp_loaded(&mut self, _base: u32, _cycles: u64) {}
 }
 
 /// 原始取指字 → （32 位指令, 长度）
@@ -290,6 +294,9 @@ impl Cpu {
                     1 => sext(v, 16),
                     _ => v,
                 };
+                if rd == 2 && f3 == 2 && imm_i == 0 {
+                    bus.sp_loaded(addr, self.cycles);
+                }
                 self.set(rd, v);
             }
             0x23 => {

@@ -318,6 +318,7 @@ impl Esp32s3 {
         bus.i2c1.devices = std::mem::take(&mut old.i2c1.devices);
         bus.gpio_log = std::mem::take(&mut old.gpio_log);
         bus.iotrace = old.iotrace.carry();
+        bus.tasks = old.tasks.carry(self.cpu.cycles);
         bus.ws2812 = std::mem::take(&mut old.ws2812);
         // 编码器、超声波是外部世界：复位后还接着（排着的波形照常发生）
         bus.pins = std::mem::take(&mut old.pins);

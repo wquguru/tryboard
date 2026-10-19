@@ -13,6 +13,8 @@ thread_local! {
     static USB_JSON: RefCell<String> = const { RefCell::new(String::new()) };
     static REPORT: RefCell<String> = const { RefCell::new(String::new()) };
     static IO: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    static TASKS: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    static TASKS_JSON: RefCell<String> = const { RefCell::new(String::new()) };
     static AUDIO: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     // 本次上电以来 tb_run 里做过几次复位重新上电；上限（u32::MAX = 不限）给离线验收对齐 CLI 的"最多 50 次"
     static FAULT: RefCell<[f64; 4]> = const { RefCell::new([0.0; 4]) };
@@ -776,6 +778,68 @@ pub extern "C" fn tb_io_ptr() -> *const u8 {
 #[no_mangle]
 pub extern "C" fn tb_io_dropped() -> f64 {
     with(0.0, |m| m.io_dropped() as f64)
+}
+
+// ---------------------------------------------------------------- FreeRTOS 任务时间线（C-04）
+
+/// 开始记任务切换（cap = 内核缓冲条数，0 = 关）。上电后设，重新上电要再设
+#[no_mangle]
+pub extern "C" fn tb_tasks_enable(cap: u32) {
+    with((), |m| m.tasks_enable(cap as usize))
+}
+
+/// 取走任务切换事件：每条 16 字节（t u64 | core u8 | prev u8 | task u16 | pc u32，小端，
+/// 含义见 tryboard_esp32c3::tasktrace），拷进内部缓冲，返回条数；之后用 tb_tasks_ptr 读
+#[no_mangle]
+pub extern "C" fn tb_tasks_take() -> usize {
+    let ev = with(Vec::new(), |m| m.tasks_take());
+    TASKS.with(|b| {
+        let mut b = b.borrow_mut();
+        b.clear();
+        b.reserve(ev.len() * 16);
+        for e in &ev {
+            b.extend_from_slice(&e.to_bytes());
+        }
+    });
+    ev.len()
+}
+
+#[no_mangle]
+pub extern "C" fn tb_tasks_ptr() -> *const u8 {
+    TASKS.with(|b| b.borrow().as_ptr())
+}
+
+/// 任务表 JSON（事件里的 task 是下标）：{"cores":N,"dropped":N,"tasks":[{"name","prio","core","tcb"}]}，
+/// 返回长度；内容用 tb_tasks_json_ptr 读
+#[no_mangle]
+pub extern "C" fn tb_tasks_json() -> usize {
+    let j = with(String::new(), |m| {
+        let cores = m.cores();
+        let dropped = m.tasks_dropped();
+        let list = m
+            .tasks_list()
+            .iter()
+            .map(|t| {
+                format!(
+                    "{{\"name\":{},\"prio\":{},\"core\":{},\"tcb\":{}}}",
+                    json_str(&t.name),
+                    t.prio,
+                    t.affinity,
+                    t.tcb
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        format!("{{\"cores\":{cores},\"dropped\":{dropped},\"tasks\":[{list}]}}")
+    });
+    let n = j.len();
+    TASKS_JSON.with(|b| *b.borrow_mut() = j);
+    n
+}
+
+#[no_mangle]
+pub extern "C" fn tb_tasks_json_ptr() -> *const u8 {
+    TASKS_JSON.with(|b| b.borrow().as_ptr())
 }
 
 // ---------------------------------------------------------------- I2S 音频（P2-06）

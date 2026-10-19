@@ -57,6 +57,15 @@ web/（Vite + TS）
 - 线束（P2-11，估算）：`Machine::harness`（I2C 排线总长、天线遮挡 dB）是外部世界，跨软件复位保留、复位后重新挂到新总线 / Wi-Fi 模型上。I2C 控制器按 `tryboard-elec::i2cbus` 的公式（总线电容 → 上升时间，和固件配置的 SCL 频率对应的规范上限比）决定读回字节是否丢 0→1 的位、地址是否不应答；虚拟世界按遮挡降低所有 AP 的 RSSI，低于门限扫描收不到 / 认证不回。CLI `--i2c-wire` / `--antenna-loss`，脚本 `i2cwire=` / `antenna=`，wasm `tb_i2c_wire` / `tb_antenna_loss` / `tb_harness_report`
 - USB 关卡观察（P2-12）：`tryboard_machine::usb_report_lines` 给出"USB 主机：状态"与"USB 键盘输入: …"两行，CLI `--usb-log` 与 wasm `tb_usb_report` 共用；关卡带 `--usb-log` 时进观察记录（指纹）
 
+## FreeRTOS 任务时间线（C-04，`crates/esp32c3/src/tasktrace.rs`，C3 / S3 共用）
+- 只靠 .bin：FreeRTOS 换任务的最后一步都是"栈指针 ← 新任务 TCB 第 0 字（pxTopOfStack）"。CPU 核在 `lw sp,0(rs1)`（RISC-V）/ `l32i(.n) a1,aN,0`（Xtensa，fast 路径里是 Op::Generic）执行后调总线钩子 `Bus::sp_loaded(core, base)`，核号取 PRID。
+- 判 TCB（IDF v5.5 布局）：`mem[T+16]==T`（xStateListItem.pvOwner）、`mem[T+36]==T`（xEventListItem.pvOwner）、T+52 起是可打印任务名；优先级 T+44、绑核 T+68。签名不对的 SP 装载忽略（中断栈、协程切换等）。
+- 被切出任务的状态：状态链表仍是就绪表 → ready；事件链表非空 → wait（等队列 / 信号量）；否则 blocked（延时 / 挂起）；签名坏了 → gone（删除）。恢复 PC 从新栈帧读（RISC-V 偏移 0、Xtensa 4）。
+- 记录 16 字节：`t u64 | core u8 | prev u8 | task u16 | pc u32`（小端，周期戳），任务表按 TCB+名字去重（TCB 复用 = 新条目）；缓冲满了计 dropped，不覆盖。默认关，`tasks_enable(cap)` 打开；软件复位继续记、换核上无任务记 NO_TASK。
+- `report::{slices, usage, chrome_json}`：每核切片、占用、Chrome Trace Event JSON（进程 1 每核一轨、切片名 = 任务名；进程 2 每任务一轨，在跑 + 「等待」段）。微秒用整数算、半数进位，网页 `web/src/app/tasktrace.ts` 逐字相同。
+- 时间片：CLI `--trace-tasks` 强制 1 ms 片，与网页 worker 相同，切换周期两边逐个一致（`tools/webtest/tasks.mjs`）。
+- wasm 导出：`tb_tasks_enable(cap)`、`tb_tasks_take() -> 字节数` + `tb_tasks_ptr()`（取走增量记录）、`tb_tasks_json() -> 字节数` + `tb_tasks_json_ptr()`（`{"cores","dropped","tasks":[{name,prio,core,tcb}]}`）。worker 每次 flushIo 发 `{type:'tasks', reset, data, table, chip}`，网页 `taskStore` 收；底部坞「任务」页签（`web/src/app/tasks.tsx`）画泳道、最近 1 s 占用、导出 Perfetto、可选上传 app.elf 把恢复 PC 翻成函数名。
+
 ## 供电网络（`core/crates/elec`，C3 / S3 共用）
 - `mna.rs`：节点电压法 + 隐式欧拉；元件 R / C / V（理想或带内阻）/ I / Limit（带限流的源）/ Ldo / Load（恒流，低于 vknee 退成电阻）/ Motor（舵机电机：max(0,(min(v,vcmd)−emf)/r)）。分段线性元件用 Katzenelson 法解（见 DECISIONS「电气模型」），稠密 LU 部分主元。`spice.rs` 读 SPICE 子集（R/C/V/I、.op、.tran，`*tb:` 行写自定义元件），CLI `tryboard elec-net` 用它与 ngspice 对照（`tools/elec/compare.py`）
 - `board.rs`：开发板网络（5V 轨、3V3、舵机红线、外接 5 V 四个节点；USB 口 0.5 A 限流、外接 5 V 2 A、SGM2212 LDO、去耦电容、芯片 / 模块 / 舵机负载；5 V 模块（HC-SR04）接了才在 5V 轨上加恒流负载）。固定 100 µs 一步、只走整步。3V3 < 门限（S3 2.44 V / C3 2.51 V）持续 0.12 ms → 欠压复位，按住到电压回升

@@ -13,6 +13,7 @@ fn usage() -> ! {
   tryboard run <flash.bin>（芯片按镜像头自动识别：ESP32-C3 / ESP32-S3）[--rom <rom.elf>] [--seconds <模拟秒数>] [--expect <文本>] [--uart-in <文本>]
                [--script \"0.5:gpio9=0; 0.6:gpio9=z; 1.0:uart=ping\\n; 1.2:env=35,45,101325\"] [--inputs <网页导出的输入日志.txt>] [--trace N] [--unimpl N] [--gpio-log] [--pwm-log PIN] [--ws2812-log]
                [--trace-io <事件.txt>] [--trace-pins all|4,8,…]（逻辑分析仪事件：GPIO / PWM / WS2812 / I2C 事务，按周期盖戳）
+               [--trace-tasks <时间线.json>]（FreeRTOS 任务切换，每核一条轨道，Perfetto 能打开；stderr 末尾打印每任务 CPU 占用）
                [--i2c ssd1306@0x3c,bme280@0x76] [--env 温度,湿度,气压Pa] [--oled] [--i2c-log]（每个地址应答几次）
                （I2C 器件还有 mpu6050@0x68、qmi8658@0x6b、cst816s@0x15、ft6236@0x38）[--touch-int <GPIO>]（触摸 INT 脚：按着拉低）
                脚本动作 imu=俯仰,横滚,航向[,三者的变化率 °/s]、touch=x,y（屏幕像素，按下 / 移动）、release（抬起）
@@ -68,6 +69,13 @@ impl Syms {
         v.sort();
         Syms(v)
     }
+    /// 地址所在函数名（找不到返回 None）
+    fn func(&self, a: u32) -> Option<String> {
+        match self.0.partition_point(|(x, _)| *x <= a) {
+            0 => None,
+            i => Some(self.0[i - 1].1.clone()),
+        }
+    }
     fn name(&self, a: u32) -> String {
         match self.0.partition_point(|(x, _)| *x <= a) {
             0 => format!("0x{a:08x}"),
@@ -75,6 +83,58 @@ impl Syms {
                 let (b, n) = &self.0[i - 1];
                 format!("0x{a:08x} {n}+0x{:x}", a - b)
             }
+        }
+    }
+}
+
+/// --trace-tasks：写 Perfetto 文件，stderr 打印每核每任务的 CPU 占用（整段运行）
+fn task_report(
+    m: &mut Machine,
+    ev: &[tryboard_machine::TaskEvent],
+    path: &str,
+    chip: Chip,
+    syms: &Syms,
+) {
+    use tryboard_esp32c3::tasktrace::{report, state};
+    let end = m.cycles();
+    let cores = m.cores();
+    let dropped = m.tasks_dropped();
+    let tasks = m.tasks_list().to_vec();
+    let sl = report::slices(ev, end);
+    // 有符号（ROM / app.elf）就把任务恢复处的 PC 翻成函数名
+    let func = |a: u32| syms.func(a);
+    let json = report::chrome_json(&tasks, &sl, chip.name(), cores, CPU_HZ, &func);
+    if let Err(e) = std::fs::write(path, json) {
+        eprintln!("[tryboard] 写任务时间线 {path} 失败：{e}");
+    }
+    let switches = ev
+        .iter()
+        .filter(|e| e.task != tryboard_esp32c3::tasktrace::NO_TASK)
+        .count();
+    let waits = sl.iter().filter(|s| s.end == state::WAIT).count();
+    eprintln!(
+        "[tryboard] 任务时间线：{switches} 次切换，{} 个任务，{waits} 次等队列 / 信号量（丢弃 {dropped}）→ {path}",
+        tasks.len()
+    );
+    // 每核的总时长从第一次切换算起（之前是启动代码，不属于任何任务）
+    for c in 0..cores as u8 {
+        let first = sl.iter().filter(|s| s.core == c).map(|s| s.t0).min();
+        let Some(first) = first else {
+            eprintln!("[tryboard] 任务 核{c} 没有看到任务切换");
+            continue;
+        };
+        let span = (end - first).max(1) as f64;
+        for (core, t, n) in report::usage(&sl) {
+            if core != c {
+                continue;
+            }
+            let ti = &tasks[t as usize];
+            eprintln!(
+                "[tryboard] 任务 核{c} {} {:.1}%（优先级 {}）",
+                ti.name,
+                n as f64 * 100.0 / span,
+                ti.prio
+            );
         }
     }
 }
@@ -288,6 +348,12 @@ fn run(args: &[String]) {
         )
         .ok();
     }
+    // 任务时间线：每个时间片取走一次，结束时写成 Chrome Trace Event JSON
+    let trace_tasks = opt(args, "--trace-tasks");
+    let mut task_ev: Vec<tryboard_machine::TaskEvent> = Vec::new();
+    if trace_tasks.is_some() {
+        m.tasks_enable(tryboard_esp32c3::tasktrace::DEFAULT_CAP);
+    }
     let trace: usize = opt(args, "--trace")
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
@@ -391,13 +457,14 @@ fn run(args: &[String]) {
         }
         // 有 --inputs 时始终 1ms 一片：与网页实时运行（worker.ts）的时间片完全相同，S3 双核的交替点才一致，重放逐周期复现
         // 接了舵机也 1ms 一片：供电网络按每片的芯片活动 / PWM 推进，片长与网页相同结果才相同
-        // --trace-io 也是 1ms 一片：网页 worker 就这样切，事件序列才能与网页逐条对拍
+        // --trace-io 也是 1ms 一片：网页 worker 就这样切，事件序列才能与网页逐条对拍（--trace-tasks 同理）
         // 接了音频器件也 1ms 一片：功放电流按每片放出的声音算，与网页相同
         let slice = if si >= script.len()
             && pwm_pin.is_none()
             && inputs.is_none()
             && servo.is_none()
             && trace_io.is_none()
+            && trace_tasks.is_none()
             && encoder.is_none()
             && sonar.is_none()
             && !has_audio
@@ -420,6 +487,9 @@ fn run(args: &[String]) {
                 }
                 buf.extend_from_slice(&b.data);
             }
+        }
+        if trace_tasks.is_some() {
+            task_ev.extend(m.tasks_take());
         }
         if let Some(w) = trace_io.as_mut() {
             for e in m.io_take() {
@@ -467,6 +537,10 @@ fn run(args: &[String]) {
             "[tryboard] 逻辑分析仪事件 {io_count} 条（缓冲溢出丢弃 {}）",
             m.io_dropped()
         );
+    }
+    if let Some(p) = &trace_tasks {
+        task_ev.extend(m.tasks_take());
+        task_report(&mut m, &task_ev, p, chip, &syms);
     }
     let wall = t0.elapsed().as_secs_f64();
     let sim = m.cycles() as f64 / CPU_HZ as f64;

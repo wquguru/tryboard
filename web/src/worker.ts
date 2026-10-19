@@ -70,6 +70,11 @@ interface Exports {
   tb_io_take?(): number;
   tb_io_ptr?(): number;
   tb_io_dropped?(): number;
+  tb_tasks_enable?(cap: number): void;
+  tb_tasks_take?(): number;
+  tb_tasks_ptr?(): number;
+  tb_tasks_json?(): number;
+  tb_tasks_json_ptr?(): number;
   tb_i2s_attach?(kind: number): number;
   tb_audio_take?(): number;
   tb_audio_ptr?(): number;
@@ -289,6 +294,8 @@ export type FromWorker =
   | { type: 'mark'; id: number; tMs: number }
   /** 逻辑分析仪事件（tb_io_take 的原始记录，每条 16 字节）；reset = 新上电，之前的作废 */
   | { type: 'io'; reset: boolean; data: Uint8Array; dropped: number }
+  /** FreeRTOS 任务切换（tb_tasks_take 的原始记录，每条 16 字节）+ 任务表 JSON；reset = 新上电 */
+  | { type: 'tasks'; reset: boolean; data: Uint8Array; table: string; chip: string }
   | { type: 'stopped'; reason: string };
 
 /** 一次上电到此刻的完整记录：指纹 = fingerprint(stdout, report)，与验收 worker / 命令行同一算法 */
@@ -452,7 +459,34 @@ let ioLo = 0;
 let ioHi = 0;
 let ioChunks: Uint8Array[] = [];
 let ioBytes = 0;
+// 任务切换和逻辑分析仪事件同一时机取、同一时机发（1ms 一片，与命令行 --trace-tasks 切法一致）
+let taskChunks: Uint8Array[] = [];
+let taskBytes = 0;
+function drainTasks(e: Exports) {
+  if (!e.tb_tasks_take) return;
+  const n = e.tb_tasks_take();
+  if (!n) return;
+  const b = new Uint8Array(new Uint8Array(e.memory.buffer, e.tb_tasks_ptr!(), n * 16));
+  taskChunks.push(b);
+  taskBytes += b.byteLength;
+}
+function flushTasks(e: Exports, reset: boolean) {
+  drainTasks(e);
+  if (!e.tb_tasks_json || (!reset && !taskBytes)) return;
+  const data = new Uint8Array(taskBytes);
+  let o = 0;
+  for (const c of taskChunks) {
+    data.set(c, o);
+    o += c.byteLength;
+  }
+  taskChunks = [];
+  taskBytes = 0;
+  const n = e.tb_tasks_json();
+  const table = decoder.decode(new Uint8Array(e.memory.buffer, e.tb_tasks_json_ptr!(), n));
+  (self as unknown as Worker).postMessage({ type: 'tasks', reset, data, table, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3' } satisfies FromWorker, [data.buffer]);
+}
 function drainIo(e: Exports) {
+  drainTasks(e);
   if (!e.tb_io_take) return;
   const n = e.tb_io_take();
   if (!n) return;
@@ -462,6 +496,7 @@ function drainIo(e: Exports) {
 }
 function flushIo(e: Exports, reset = false) {
   drainIo(e);
+  flushTasks(e, reset);
   if (!reset && !ioBytes) return;
   const data = new Uint8Array(ioBytes);
   let o = 0;
@@ -689,8 +724,11 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   if (m.sonar && e.tb_sonar_attach) e.tb_sonar_attach(m.sonar.trig, m.sonar.echo);
   hasPinDevs = !!(m.encoder || m.sonar);
   e.tb_io_watch?.(ioLo, ioHi);
+  e.tb_tasks_enable?.(1 << 16);
   ioChunks = [];
   ioBytes = 0;
+  taskChunks = [];
+  taskBytes = 0;
   flushIo(e, true);
   inputLog = { version: 1, chip: e.tb_chip() === 9 ? 'esp32s3' : 'esp32c3', i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
   record(e, { kind: 'power', on: true });

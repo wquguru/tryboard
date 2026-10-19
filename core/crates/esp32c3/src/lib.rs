@@ -15,6 +15,7 @@ pub mod periph;
 pub mod rmt;
 pub mod sigin;
 pub mod spiflash;
+pub mod tasktrace;
 /// Wi-Fi 模型在 tryboard-soc（C3 / S3 共用），这里按 C3 布局接上
 pub use tryboard_soc::wifi;
 
@@ -152,6 +153,8 @@ pub struct SocBus {
     last_gpio: u32,
     /// 逻辑分析仪事件（P1-05）
     pub iotrace: iotrace::IoTrace,
+    /// FreeRTOS 任务切换（C-04）
+    pub tasks: tasktrace::TaskTrace,
 }
 
 impl Default for SocBus {
@@ -205,6 +208,8 @@ impl Default for SocBus {
             gpio_log: Vec::new(),
             last_gpio: 0,
             iotrace: iotrace::IoTrace::new(0),
+            // RISC-V 栈帧第一个字是 RV_STK_MEPC
+            tasks: tasktrace::TaskTrace::new(0),
         }
     }
 }
@@ -880,6 +885,15 @@ impl Bus for SocBus {
         Ok((insn, len))
     }
 
+    fn sp_loaded(&mut self, base: u32, cycles: u64) {
+        if self.tasks.cap == 0 {
+            return;
+        }
+        let mut t = std::mem::replace(&mut self.tasks, tasktrace::TaskTrace::new(0));
+        t.on_sp_load(0, base, cycles, false, &|a| self.mem_read(a, 4));
+        self.tasks = t;
+    }
+
     #[inline]
     fn load(&mut self, a: u32, size: u32) -> Result<u32, BusFault> {
         if let Some(v) = self.mem_read(a, size) {
@@ -1045,6 +1059,7 @@ impl Esp32c3 {
         m.bus.pins = std::mem::take(&mut self.bus.pins);
         m.bus.gpio_log = std::mem::take(&mut self.bus.gpio_log);
         m.bus.iotrace = self.bus.iotrace.carry();
+        m.bus.tasks = self.bus.tasks.carry(self.cpu.cycles);
         // 外接屏不随芯片复位消失（它的复位脚由固件重新驱动）
         m.bus.lcd = self.bus.lcd.take();
         m.bus.audio = std::mem::take(&mut self.bus.audio);

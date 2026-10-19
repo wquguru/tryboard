@@ -18,6 +18,7 @@ use tryboard_esp32c3::devices::{
 pub use tryboard_esp32c3::iotrace::IoEvent;
 use tryboard_esp32c3::iotrace::IoTrace;
 use tryboard_esp32c3::rmt::Ws2812;
+pub use tryboard_esp32c3::tasktrace::{TaskEvent, TaskInfo, TaskTrace};
 use tryboard_esp32c3::Esp32c3;
 use tryboard_esp32s3::Esp32s3;
 
@@ -785,6 +786,40 @@ impl Machine {
     /// 缓冲满了丢掉的条数
     pub fn io_dropped(&mut self) -> u64 {
         self.iotrace().dropped
+    }
+
+    fn tasktrace(&mut self) -> &mut TaskTrace {
+        match &mut self.hw {
+            Hw::C3(m) => &mut m.bus.tasks,
+            Hw::S3(m) => &mut m.bus.tasks,
+        }
+    }
+
+    /// 打开任务时间线（C-04）：事件缓冲上限（条），0 = 不记
+    pub fn tasks_enable(&mut self, cap: usize) {
+        self.tasktrace().cap = cap;
+    }
+
+    /// 取走任务切换事件（按发生先后）
+    pub fn tasks_take(&mut self) -> Vec<TaskEvent> {
+        self.tasktrace().take()
+    }
+
+    /// 至今见过的任务（事件里的 task 是它的下标；只增不减）
+    pub fn tasks_list(&mut self) -> &[TaskInfo] {
+        &self.tasktrace().tasks
+    }
+
+    pub fn tasks_dropped(&mut self) -> u64 {
+        self.tasktrace().dropped
+    }
+
+    /// 核数（任务时间线的泳道数）
+    pub fn cores(&self) -> usize {
+        match &self.hw {
+            Hw::C3(_) => 1,
+            Hw::S3(_) => 2,
+        }
     }
 
     /// 上电时的引脚电平（gpio_log 的起点）

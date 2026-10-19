@@ -473,6 +473,34 @@
   ]
  },
  {
+  "id": "s3-dual-tasks",
+  "fw": "s3-dual",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": ["--trace-tasks", "Reviews/tasks-s3-dual.json"],
+  "expect": ["TRYBOARD_OK s3-dual"],
+  "stderr_expect": [
+   "任务 核0 w0 ",
+   "任务 核1 w1 ",
+   "任务 核0 IDLE0 ",
+   "任务 核1 IDLE1 ",
+   "任务 核0 main ",
+   "次等队列 / 信号量（丢弃 0）"
+  ]
+ },
+ {
+  "id": "hello-tasks",
+  "fw": "hello",
+  "seconds": 3,
+  "args": ["--trace-tasks", "Reviews/tasks-hello.json"],
+  "expect": ["TRYBOARD_OK hello"],
+  "stderr_expect": [
+   "任务 核0 main ",
+   "任务 核0 IDLE ",
+   "任务时间线：8 次切换，2 个任务"
+  ]
+ },
+ {
   "id": "s3-restart",
   "chip": "esp32s3",
   "seconds": 2,

@@ -14,6 +14,7 @@ import type { AppState, Env, Session, WorkDef } from './types';
 import type { Store } from './store';
 import { currentTheme, onTheme } from '../theme';
 import { IoStore, decodeEvents } from './iotrace';
+import { taskStore } from './tasktrace';
 import type { UsbView } from '../usb3d';
 import { PoseRate } from '../imupose';
 import { MicInput } from '../micinput';
@@ -332,6 +333,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     },
     consoleText: () => consoleBuf,
     io,
+    tasks: taskStore,
     onIo(cb) {
       ioSubs.add(cb);
       return () => ioSubs.delete(cb);
@@ -432,10 +434,14 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         if (m.data.byteLength) io.append(decodeEvents(m.data));
         for (const cb of [...ioSubs]) cb();
       },
+      onTasks(m) {
+        taskStore.onMsg(m);
+      },
       onSeekProgress(t) {
         store.set({ simSeconds: t });
       },
       onTick(m) {
+        taskStore.setNow(Math.round(m.simSeconds * 160_000_000));
         bench.setGpio(m.gpio, m.enable, m.pwm, m.gpioHi, m.enableHi);
         if (m.leds) bench.setRgb(m.leds[0] ?? [0, 0, 0]);
         s.frame.pwm = m.pwm;

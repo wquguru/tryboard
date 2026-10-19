@@ -841,3 +841,13 @@
 - C-05 复用现有固件校验（fwcheck.tsx），只把芯片 id 0 认作可运行。
 - C-06（esp-emu 作第二对照源）不做：它只发二进制、授权未定（其 issue #10），要人先定 LICENSING。
 - 替代：一次只做 BLE——否掉，SoftAP / 真实网络 / 任务时间线 / 经典 ESP32 彼此独立，可并行。
+
+
+## 2026-10-19 FreeRTOS 任务时间线怎么抓（C-04）
+- 决定：不靠符号、不打补丁，在 CPU 核里认"栈指针 ← 某 TCB 第 0 字"这一条指令（RISC-V `lw sp,0(rs1)`；Xtensa `l32i/l32i.n a1,aN,0`）。FreeRTOS 换任务最后一定这样装新栈，所以只有 .bin 也能用；被装的地址用 TCB 自指签名（状态 / 事件链表项的 pvOwner 指回自己）加可打印任务名确认，再从链表状态推被切出任务是 ready / wait / blocked / gone。
+- 时间戳取 SP 装载那一刻（上下文恢复前几十条指令，相对 1 ms 片可忽略）；中断里的时间算在被打断的任务上（不区分 ISR）。
+- 退路：TCB 布局不是 IDF v5.5 默认（开 MPU、`configUSE_LIST_DATA_INTEGRITY_CHECK_BYTES`、改 configMAX_TASK_NAME_LEN 之前的字段）→ 签名对不上，不出事件，界面显示「还没看到任务切换：…不是 ESP-IDF v5.x 的」，不瞎猜；名字不可打印 → 忽略这次装载；缓冲满 → 计 dropped、界面提示，不覆盖。
+- CLI 开 `--trace-tasks` 时强制 1 ms 时间片（与网页 worker 同），这样网页和命令行的切换周期逐个相同，能对拍。
+- 微秒字符串用整数算、半数进位（Rust `{:.3}` 与 JS `toFixed` 在 .5 上舍入规则不同，s3-lvgl 对拍时第 430 段差 0.001 µs 暴露）。
+- 恢复 PC → 函数名：CLI 自动读同目录 app.elf；网页默认没有 ELF（不上传就只给地址），可选上传 app.elf 在浏览器本地解析 .symtab，不发出去。
+- 替代：(a) 按 ELF 符号拦 `vTaskSwitchContext` / 读 pxCurrentTCB——要 ELF，违背"只靠 .bin"；(b) 用 IDF 的 SystemView / apptrace——要改固件配置；(c) 周期性采样 pxCurrentTCB——要知道它的地址，且会漏短切片。

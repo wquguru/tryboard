@@ -155,6 +155,15 @@
 | 3D 装配（P1-07） | ✅ | `tools/webtest/asm3d.mjs`（进 accept.sh）：组装步骤是 3D、顺序错被拦、真实鼠标拖拽 6/6、BME280 芯片旁 → 复测 ✗（读到 26.0 ℃）、退一步 ×5 改拖通风口旁 → 复测 ✓、炸开 / 剖面 / 尺子（BME280 到芯片 ≈ 38 mm）、装完进成品、改外壳高度后回组装重建并重放 6/6、`?asm=svg` 兜底能装；agent-browser 真实鼠标同一流程 + console / errors 无 error（Reviews/ab/P1-07.md） | 零件是按尺寸搭的简单体（不是真实模型，P1-09）；只判零件与外壳的包围关系，零件之间不做干涉；吸附按水平距离（16 mm），不判朝向；手机上组装步骤仍锁着；小黄 / 透镜只看过截图，没有拖拽用例；本分支 accept.sh --no-qemu 只有 npm 对拍的 spin / lens 两行不一致——worktree 的 firmware/build 软链到主仓库，主仓库同时在重建更新的固件，与本改动无关 |
 | 参数化外壳 + STL / 3MF（P1-08） | ✅ | `npm test` enclosure.test.ts：三作品默认布局、太矮警告与最低高度（weather 31 mm）、金属齿舵机 30 mm 够、透镜 DevKitC-1 平放不下 / 加高或换 XIAO 就好、node 里跑真 Manifold 三作品每条边恰好两个三角形、STLLoader 读回三角形数 / 包围盒、3MF 解压后顶点 / 三角形数、CRC32 标准值；asm3d.mjs：采购页高度 28 → 太矮、导出 STL 118 KB / 3MF 135 KB 下载大小与页面一致、three.js STLLoader / 3MFLoader 读回三角形数一致 | 尺寸、壁厚、止口、立柱都是示意，未经打印验证；元件库多数模块没有 sizeMm，用常见规格估算（页面标「估算」）；透镜小人默认清单（DevKitC-1）在 Ø50 底座里放不下，默认就有警告；小黄身体只做了圆柱 + 球顶，没有脸型 / 腰带 |
 
+### C-04 FreeRTOS 任务时间线（2026-10-19）
+
+| 项 | 状态 | 依据 | 缺口 |
+|---|---|---|---|
+| 内核记任务切换（C3 RV32 / S3 Xtensa 双核），只靠 .bin，app.elf 可选 | ✅ | cargo test tasktrace 5/0；accept.json `hello-tasks`（8 次切换、main / IDLE）、`s3-dual-tasks`（w0 只在核 0、w1 只在核 1、main 等队列）；accept.sh「任务时间线」节检查导出 JSON 分核 | 只认 IDF v5.5 TCB 布局（开 MPU / 链表完整性检查的布局不认，不出事件）；未经真机标定 |
+| CLI `--trace-tasks` 导出 Perfetto JSON、stderr 每任务 CPU 占用 | ✅ | accept.sh；Reviews/ab/C-04-perfetto.json 合法（3310 事件） | 占用含中断时间（算在被打断的任务上） |
+| 网页底部坞「任务」（桌面 + 手机抽屉）：每核泳道（在跑 / 等待 / 空闲）、最近 1 s 占用、导出 Perfetto、上传 app.elf，标「行为模拟」 | ✅ | `node tools/webtest/tasks.mjs`：s3-dual 15 段、hello 8 段、s3-lvgl 542 段与命令行逐段一致（核、任务名、起点周期、结束状态）；390×844 无横向滚动；agent-browser 走查 Reviews/ab/C-04.md | 网页导出没上传 ELF 时无函数名（CLI 自动读 app.elf） |
+| 合并验收 | ✅ | `tools/accept.sh`（含 QEMU）全部通过 393 PASS；cargo test 110/0、clippy / fmt 干净；npm test 160/0；levels.mjs、mobile.mjs PASS | — |
+
 ### U-22 内置固件走完全程（2026-10-19）
 
 | 项 | 状态 | 依据 | 缺口 |
