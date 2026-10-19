@@ -6,6 +6,7 @@ import views from './views.ts';
 import data from './data.ts';
 import checks from './checks.ts';
 import steps from './steps.ts';
+import net from './net.ts';
 
-const dict: Dict = { ...data, ...checks, ...views, ...site, ...lab, ...steps };
+const dict: Dict = { ...data, ...checks, ...views, ...site, ...lab, ...steps, ...net };
 export default dict;
