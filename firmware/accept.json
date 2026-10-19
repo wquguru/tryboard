@@ -2096,5 +2096,33 @@
    "GET http://example.com/api/time → 200",
    "TRYBOARD_OK wifi-wpa2"
   ]
+ },
+ {
+  "id": "c3-wdt",
+  "seconds": 9,
+  "qemu": false,
+  "expect": [
+   "开始死循环，不让出 CPU",
+   "task_wdt: Task watchdog got triggered",
+   "task_wdt:  - IDLE (CPU 0)",
+   "task_wdt: CPU 0: main",
+   "死循环结束",
+   "WDT DONE"
+  ]
+ },
+ {
+  "id": "s3-wdt",
+  "chip": "esp32s3",
+  "seconds": 9,
+  "qemu": false,
+  "expect": [
+   "开始死循环，不让出 CPU",
+   "task_wdt: Task watchdog got triggered",
+   "task_wdt:  - IDLE0 (CPU 0)",
+   "task_wdt: CPU 0: main",
+   "task_wdt: CPU 1: IDLE1",
+   "死循环结束",
+   "WDT DONE"
+  ]
  }
 ]
