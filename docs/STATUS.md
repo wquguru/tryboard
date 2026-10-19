@@ -165,3 +165,7 @@
 | 项 | 状态 | 验收 | 局限 |
 |---|---|---|---|
 | 选板结果 → `work=custom`（采购 → 实验台两步、自动摆放连线、生成检查点、真买卡） | ✅ | `tools/webtest/custom.mjs` 15 项全过：网页 `__tbCustomLevels` 与 fixture 逐字相同；命令行 check.py `--level-json` 跑 c3-thermo，4 条要判的全过（指纹随 c3-thermo 的构建变：IDF 镜像里带编译时间；同一份 bin 网页与命令行相同），手动项「不判」；hello 在 I2C 0x3c 未通过、写「要 ≥ 1」；网页跑演示固件 4/4 ✓，真买卡与每条检查点的指纹都和命令行一致；网页拖入 hello，I2C 项 ✗，指纹一致。custom.mjs 已进 accept.sh；`UPDATE_FIXTURE=1` 用网页生成结果重写 fixture。手机上全过后，横幅按钮是「下一步：做成真的」，点它打开真买卡；刷新后恢复的进度不会自动弹出真买卡。agent-browser 走查见 Reviews/ab/U-17.md（桌面清单 → 实验台说明卡 → 演示固件 → 真买卡；手机真买卡单栏），console / errors 无 error。levels.mjs、wiremode.mjs、mobile.mjs、accept.sh --no-web、`check.py --ref --all`（指纹与基线相同）全过 | 实验台 3D 板是 DevKitM-1 外形（引脚照 XIAO 的引脚表）；电池 / TP4056 只进清单，实验台按 USB 供电；只有 C3 + I2C 在 GPIO6/7 的组合有演示固件；无模型零件（继电器、人体红外、摄像头）只进清单，不上台；深睡唤醒不判；「建议」零件目前只有面包板和杜邦线（选板数据里还没有建议零件的概念） |
+### U-15（选板）
+| 项 | 状态 | 验收 | 缺口 |
+|---|---|---|---|
+| 选板 v3（U-15）+ 可信度图标（U-14 选板部分） | ✅ | `npm test` 151 例全过（新增 select.test.ts 8 例：旧链接、预算硬过滤、我已有 id、刚才一行含续航变化、0 块放宽、任务书四节与检查点名、无命令行）；`tools/webtest/selectv3.mjs` 43 项全过（①选项目卡 ②勾零件 / 我已有 / 撤销 ③三个问题与预算 ④术语 / 全部细节 / 三块对比 ⑤任务书 / 分享 / 主按钮地址）；`mobile.mjs`、`levels.mjs` 全过；agent-browser 1440 与 390×844 主流程 + console / errors 无输出（Reviews/ab/U-15.md） | 主按钮去 `app?work=custom…#shop`，本分支实验台还没有 custom 作品（另一代理在做），现在落到空白采购页；「更多需求」能力（Thread、经典蓝牙等）只按芯片能力过滤，不改零件；检查点名与 genlevels 的逐字一致要合并后再对一次；levels.mjs 要先把 firmware/build、core/target 链到主仓库并跑 gen_licenses.mjs，否则命令行对拍 / 上传固件 / 授权页 28 项失败（worktree 缺构建产物，与本改动无关） |
