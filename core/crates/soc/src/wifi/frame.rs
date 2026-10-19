@@ -1,9 +1,9 @@
-//! 802.11 帧的构造与解析（只覆盖虚拟 AP 需要的那部分）。
+//! 802.11 frame building and parsing (only what the virtual AP needs).
 
 pub type Mac = [u8; 6];
 pub const BROADCAST: Mac = [0xff; 6];
 
-/// 帧控制字段第一个字节（类型 / 子类型）
+/// First byte of the frame control field (type / subtype)
 pub mod fc {
     pub const ASSOC_REQ: u8 = 0x00;
     pub const ASSOC_RESP: u8 = 0x10;
@@ -38,7 +38,7 @@ pub fn mac_str(m: &Mac) -> String {
         .join(":")
 }
 
-/// 解析出来的帧头
+/// Parsed frame header
 pub struct Hdr {
     pub fc0: u8,
     pub fc1: u8,
@@ -46,7 +46,7 @@ pub struct Hdr {
     pub a2: Mac,
     pub a3: Mac,
     pub seq: u16,
-    /// 帧体起点（含 QoS 字段时 26，否则 24）
+    /// Body offset (26 with a QoS field, else 24)
     pub body: usize,
 }
 
@@ -88,7 +88,7 @@ pub fn parse(f: &[u8]) -> Option<Hdr> {
     })
 }
 
-/// 在信息元素列表里找某个 ID
+/// Find an element ID in an information element list
 pub fn find_ie(ies: &[u8], id: u8) -> Option<&[u8]> {
     let mut i = 0;
     while i + 2 <= ies.len() {
@@ -104,7 +104,7 @@ pub fn find_ie(ies: &[u8], id: u8) -> Option<&[u8]> {
     None
 }
 
-/// 管理帧头
+/// Management frame header
 pub fn mgmt_hdr(fc0: u8, da: &Mac, sa: &Mac, bssid: &Mac, seq: u16) -> Vec<u8> {
     let mut f = vec![fc0, 0, 0, 0];
     f.extend_from_slice(da);

@@ -1,4 +1,4 @@
-* 15 W2 5 V 进 GPIO：HC-SR04 Echo 直连（5 V 输出约 50 Ω）→ 引脚钳位二极管（0.6 V + 10 Ω）→ 3V3 轨
+* 15 W2 5 V into a GPIO: HC-SR04 Echo direct (5 V output ~50 ohm) -> pin clamp diode (0.6 V + 10 ohm) -> 3V3 rail
 *tb: LIMIT v5 5 0.5 0.5 20
 *tb: LDO v5 v33 3.3 0.01 0.525 1.2 0.0001
 *tb: LOAD v33 0.035 1

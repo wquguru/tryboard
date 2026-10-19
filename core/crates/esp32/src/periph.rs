@@ -1,15 +1,12 @@
-//! 经典 ESP32 特有的外设模型与适配层。寄存器偏移来自 ESP-IDF `components/soc/esp32/register/soc/*.h`
-//! 与 `components/hal/esp32/include/hal/*_ll.h`（Apache-2.0）。
-//!
-//! 能复用的都复用 C3 / S3 的模型：TIMG 的单个定时器、SPI1 flash 命令语义、LEDC 通道 / 定时器、中断矩阵的线路逻辑。
-//! ESP32 与它们的差别主要是寄存器偏移和位置，这里只做翻译。
+//! Classic-ESP32 peripheral models and shims; offsets from ESP-IDF `components/soc/esp32/register/soc/*.h` and `components/hal/esp32/include/hal/*_ll.h` (Apache-2.0).
+//! C3 / S3 models (TIMG timer, SPI1 flash commands, LEDC channels / timers, interrupt matrix lines) are reused; ESP32 mostly moves registers, so we only translate offsets.
 
 use tryboard_esp32c3::ledc::Ledc;
 use tryboard_esp32c3::periph::Timg;
 use tryboard_esp32c3::spiflash::SpiFlash;
 pub use tryboard_esp32s3::periph::{Analog, Intmatrix};
 
-/// 中断源编号（soc/esp32/include/soc/interrupts.h）
+/// Interrupt source numbers (soc/esp32/include/soc/interrupts.h)
 pub mod src {
     pub const WIFI_MAC: u32 = 0;
     pub const TG0_T0: u32 = 14;
@@ -29,21 +26,21 @@ pub mod src {
     pub const MAX: usize = 69;
 }
 
-// ---------------------------------------------------------------- DPORT（中断矩阵、核间中断、cache 控制）
-/// DPORT_PRO_MAC_INTR_MAP_REG / DPORT_APP_MAC_INTR_MAP_REG：每个中断源一个映射寄存器
+// ---------------------------------------------------------------- DPORT (interrupt matrix, cross-core interrupts, cache control)
+/// DPORT_PRO_MAC_INTR_MAP_REG / DPORT_APP_MAC_INTR_MAP_REG: one map register per interrupt source
 const PRO_MAP: u32 = 0x104;
 const APP_MAP: u32 = 0x218;
-/// DPORT_PRO_CACHE_CTRL / DPORT_APP_CACHE_CTRL：FLUSH_ENA 位 4、FLUSH_DONE 位 5、CACHE_ENABLE 位 3
+/// DPORT_PRO_CACHE_CTRL / DPORT_APP_CACHE_CTRL: FLUSH_ENA bit 4, FLUSH_DONE bit 5, CACHE_ENABLE bit 3
 const PRO_CACHE_CTRL: u32 = 0x40;
 const APP_CACHE_CTRL: u32 = 0x58;
 const CACHE_FLUSH_DONE: u32 = 1 << 5;
 const CACHE_ENABLE: u32 = 1 << 3;
 
 pub struct Dport {
-    /// 两个核各自的中断矩阵（线路逻辑复用 S3 的：同为 LX 核、外部中断线类型表相同）
+    /// Per-core interrupt matrices (line logic reused from S3: both are LX cores with the same external line type table)
     pub pro: Intmatrix,
     pub app: Intmatrix,
-    /// DPORT_CPU_INTR_FROM_CPU_0..3（位 0）
+    /// DPORT_CPU_INTR_FROM_CPU_0..3 (bit 0)
     pub from_cpu: u32,
     pub regs: Vec<u32>,
 }
@@ -51,7 +48,7 @@ pub struct Dport {
 impl Default for Dport {
     fn default() -> Self {
         let mut regs = vec![0u32; 0x1000 / 4];
-        // 二级 bootloader 已经打开核 0 的 cache（spi_flash_cache_enabled 会查这一位）
+        // The 2nd-stage bootloader already enabled core 0's cache (spi_flash_cache_enabled checks this bit)
         regs[(PRO_CACHE_CTRL / 4) as usize] = CACHE_ENABLE;
         Dport {
             pro: Intmatrix::default(),
@@ -78,7 +75,7 @@ impl Dport {
         let max = src::MAX as u32 * 4;
         match off {
             0xdc..=0xe8 => (self.from_cpu >> ((off - 0xdc) / 4)) & 1,
-            // PRO_INTR_STATUS_0..2 / APP_INTR_STATUS_0..2：中断源当前电平
+            // PRO_INTR_STATUS_0..2 / APP_INTR_STATUS_0..2: current interrupt source levels
             0xec..=0xf4 => Self::status(levels, (off - 0xec) / 4),
             0xf8..=0x100 => Self::status(levels, (off - 0xf8) / 4),
             _ if (PRO_MAP..PRO_MAP + max).contains(&off) => {
@@ -87,16 +84,16 @@ impl Dport {
             _ if (APP_MAP..APP_MAP + max).contains(&off) => {
                 self.app.map[((off - APP_MAP) / 4) as usize] as u32
             }
-            // cache 操作瞬间完成：刷新完成位恒为 1
+            // Cache operations complete instantly: the flush-done bit always reads 1
             PRO_CACHE_CTRL | APP_CACHE_CTRL => self.regs[(off / 4) as usize] | CACHE_FLUSH_DONE,
-            // PRO_DCACHE_DBUG0 / APP_DCACHE_DBUG0：CACHE_STATE（位 18..7）= 1 空闲；ROM 的 Cache_Read_Enable/Disable 轮询它
+            // PRO_DCACHE_DBUG0 / APP_DCACHE_DBUG0: CACHE_STATE (bits 18..7) = 1 is idle; ROM's Cache_Read_Enable/Disable polls it
             0x3f0 | 0x418 => 1 << 7,
             0xffc => 0x0160_5190,
             _ => self.regs[(off / 4) as usize],
         }
     }
 
-    /// 写；返回 true 表示核间中断变了
+    /// Register write; may change the cross-core interrupt lines
     pub fn write(&mut self, off: u32, v: u32) {
         let max = src::MAX as u32 * 4;
         match off {
@@ -119,20 +116,20 @@ impl Dport {
     }
 }
 
-// ---------------------------------------------------------------- GPIO（40 个引脚）+ IO_MUX
+// ---------------------------------------------------------------- GPIO (40 pins) + IO_MUX
 pub const NPINS: usize = 40;
 const MASK: u64 = (1 << NPINS) - 1;
 
-/// IO_MUX 寄存器（0x3FF49000 + 0x04 起）依次对应的 GPIO 号（io_mux_reg.h：PERIPHS_IO_MUX_*_U）
+/// GPIO number of each IO_MUX register in order, from 0x3FF49000 + 0x04 (io_mux_reg.h: PERIPHS_IO_MUX_*_U)
 pub const IOMUX_ORDER: [u8; 36] = [
     36, 37, 38, 39, 34, 35, 32, 33, 25, 26, 27, 14, 12, 13, 15, 2, 0, 4, 16, 17, 9, 10, 11, 6, 7,
     8, 5, 18, 19, 20, 21, 22, 3, 1, 23, 24,
 ];
 
-/// GPIO 矩阵输入的常量源（gpio_pins.h：GPIO_MATRIX_CONST_ONE_INPUT / _ZERO_INPUT）
+/// Constant sources for GPIO matrix inputs (gpio_pins.h: GPIO_MATRIX_CONST_ONE_INPUT / _ZERO_INPUT)
 pub const IN_CONST_ONE: u32 = 0x38;
 pub const IN_CONST_ZERO: u32 = 0x30;
-/// FUNCn_OUT_SEL 的"普通 GPIO 输出"信号号
+/// FUNCn_OUT_SEL signal number meaning "plain GPIO output"
 pub const SIG_GPIO_OUT: u32 = 0x100;
 
 pub struct Gpio {
@@ -141,13 +138,13 @@ pub struct Gpio {
     pub ext_in: u64,
     pub ext_driven: u64,
     pub status: u64,
-    /// GPIO_PINn_REG：中断类型 [9:7]、中断使能 [17:13]（位 13 APP CPU、位 15 PRO CPU）
+    /// GPIO_PINn_REG: interrupt type [9:7], interrupt enable [17:13] (bit 13 APP CPU, bit 15 PRO CPU)
     pub pin: [u32; NPINS],
     pub func_out: [u32; NPINS],
     pub func_in: [u32; 256],
-    /// 按 GPIO 号排的 IO_MUX 寄存器（上拉位 8、下拉位 7、功能 [14:12]）
+    /// IO_MUX registers indexed by GPIO number (pull-up bit 8, pull-down bit 7, function [14:12])
     pub iomux: [u32; NPINS],
-    /// 板上固定上拉（BOOT 键 GPIO0）
+    /// Fixed pull-ups on the board (BOOT button on GPIO0)
     pub board_pullup: u64,
     pub last_level: u64,
     pub strap: u32,
@@ -169,7 +166,7 @@ impl Default for Gpio {
             iomux: [0; NPINS],
             board_pullup: 1,
             last_level: 1,
-            // GPIO0、GPIO5 高、MTDI 低 → SPI 启动、3.3V flash（GPIO_STRAP_REG）
+            // GPIO0, GPIO5 high, MTDI low -> SPI boot, 3.3V flash (GPIO_STRAP_REG)
             strap: 0x13,
             periph_mask: 0,
             periph_level: 0,
@@ -225,7 +222,7 @@ impl Gpio {
         self.last_level = lv;
     }
 
-    /// 某个核的中断状态（PCPU_INT / ACPU_INT）：只算给该核开了中断的引脚
+    /// One core's interrupt status (PCPU_INT / ACPU_INT): only pins with interrupts enabled for that core
     fn cpu_status(&self, pro: bool) -> u64 {
         let ena = if pro { 0b11 << 2 } else { 0b11 };
         let mut v = 0;
@@ -304,7 +301,7 @@ impl Gpio {
         }
     }
 
-    /// IO_MUX 寄存器偏移 → GPIO 号
+    /// IO_MUX register offset -> GPIO number
     pub fn iomux_pin(off: u32) -> Option<usize> {
         if off < 4 || !off.is_multiple_of(4) {
             return None;
@@ -316,11 +313,10 @@ impl Gpio {
     }
 }
 
-// ---------------------------------------------------------------- TIMG（两个通用定时器 + LACT）
-/// ESP32 的定时器组：T0（0x00..0x20）、T1（0x24..0x44）、看门狗与 RTC 校准（0x48..0x6c，与 C3 同偏移）、
-/// LACT（0x70..0x94，esp_timer 用它）、中断（0x98..0xa4，位 0 T0、1 T1、2 WDT、3 LACT）。
-/// 三个计数器的字段布局（使能 31、递增 30、自动重载 29、分频 [28:13]、告警使能 10）都与 C3 的 T0 相同，
-/// 所以各用一个 C3 Timg 承载、只翻译偏移。位 9 在 C3 是"用 XTAL"，ESP32 上不是，写入时去掉
+// ---------------------------------------------------------------- TIMG (two general timers + LACT)
+
+/// ESP32 timer group: T0 (0x00..0x20), T1 (0x24..0x44), WDT + RTC cal (0x48..0x6c, as C3), LACT (0x70..0x94, esp_timer), interrupts (0x98..0xa4: bit 0 T0, 1 T1, 2 WDT, 3 LACT).
+/// All three counters share C3 T0's field layout (en 31, inc 30, autoreload 29, divider [28:13], alarm en 10), so each is a C3 Timg with offsets translated; bit 9 is C3's "use XTAL", not ESP32's, so writes clear it.
 #[derive(Default)]
 pub struct Esp32Timg {
     pub t: [Timg; 3],
@@ -328,11 +324,11 @@ pub struct Esp32Timg {
     pub lact_rtc: u32,
 }
 
-/// 中断位 ↔ 内部定时器
+/// Interrupt bit <-> internal timer
 const TIMG_INT: [(usize, u32); 3] = [(0, 1), (1, 2), (2, 8)];
 
 impl Esp32Timg {
-    /// ESP32 偏移 → (哪个计数器, C3 偏移)
+    /// ESP32 offset -> (which counter, C3 offset)
     fn map(off: u32) -> Option<(usize, u32)> {
         Some(match off {
             0x00..=0x20 => (0, off),
@@ -393,19 +389,20 @@ impl Esp32Timg {
         n
     }
 
-    /// 某个计数器的中断线电平（0 = T0、1 = T1、2 = LACT）
+    /// Interrupt line level of one counter (0 = T0, 1 = T1, 2 = LACT)
     pub fn irq(&self, k: usize) -> bool {
         let b = TIMG_INT[k].1;
         self.int_raw() & self.int_ena & b != 0
     }
 }
 
-// ---------------------------------------------------------------- SPI1（flash）
-/// ESP32 的 SPI1 与 C3 的 SPI_MEM 命令位相同，寄存器偏移不同（spi_reg.h）。
-/// 用户命令的地址左对齐：低位补 1（spi_flash_ll_set_usr_address），交给 C3 模型前先移回去
+// ---------------------------------------------------------------- SPI1 (flash)
+
+/// ESP32's SPI1 has the same command bits as C3's SPI_MEM but different offsets (spi_reg.h).
+/// User-command addresses are left-aligned with low bits padded with 1s (spi_flash_ll_set_usr_address); shift back before the C3 model
 pub struct Spi1 {
     pub inner: SpiFlash,
-    /// 不参与 flash 操作的寄存器（时钟、引脚、从机配置等）原样存
+    /// Registers not involved in flash operations (clock, pins, slave config, ...) are stored as is
     pub extra: Vec<u32>,
 }
 
@@ -434,7 +431,7 @@ impl Spi1 {
     pub fn read(&self, off: u32) -> u32 {
         match Self::map(off) {
             Some(o) => self.inner.read(o),
-            // EXT2（0xF8）：状态机空闲
+            // EXT2 (0xF8): state machine idle
             None if off == 0xf8 => 0,
             None => self.extra.get((off / 4) as usize).copied().unwrap_or(0),
         }
@@ -448,7 +445,7 @@ impl Spi1 {
             return;
         };
         if o == 0 && v & (1 << 18) != 0 {
-            // 用户命令：USER1 [31:26] 是地址位数 − 1
+            // User command: USER1 [31:26] is address bit count - 1
             let addr = self.inner.regs[1];
             let bits = (self.inner.regs[0x1c / 4] >> 26) + 1;
             if bits < 32 {
@@ -462,16 +459,17 @@ impl Spi1 {
     }
 }
 
-// ---------------------------------------------------------------- LEDC（8 高速 + 8 低速通道）
-/// 高速、低速两组各用一个 C3 LEDC 承载（通道寄存器布局相同）。定时器寄存器位置不同（分辨率 5 位、
-/// 分频 [22:5]、暂停 23、时钟选择 25、低速的参数更新 26），这里换算成 80MHz 源的等效分频直接写进内部定时器
+// ---------------------------------------------------------------- LEDC (8 high-speed + 8 low-speed channels)
+
+/// High- and low-speed groups each sit on a C3 LEDC (same channel layout). Timer registers differ (5-bit resolution, divider [22:5],
+/// pause 23, clock select 25, low-speed para_up 26), so we convert to an equivalent divider of an 80MHz source in the internal timer
 pub struct Esp32Ledc {
     pub hs: Ledc,
     pub ls: Ledc,
     pub timer_conf: [u32; 8],
     pub conf: u32,
     pub int_ena: u32,
-    /// 定时器溢出中断（不模拟，只留写入）
+    /// Timer overflow interrupt (not simulated; writes are only stored)
     pub rev: u64,
 }
 
@@ -479,7 +477,7 @@ impl Default for Esp32Ledc {
     fn default() -> Self {
         let mut hs = Ledc::default();
         let mut ls = Ledc::default();
-        // 内部模型统一按 80MHz 源计时
+        // The internal model always counts from an 80MHz source
         hs.conf = 1;
         ls.conf = 1;
         Esp32Ledc {
@@ -494,7 +492,7 @@ impl Default for Esp32Ledc {
 }
 
 impl Esp32Ledc {
-    /// 输出可能变了就变（给事件记录判断要不要重新扫 PWM）
+    /// Changes whenever the output may have changed (lets the event log decide whether to rescan PWM)
     pub fn rev(&self) -> u64 {
         self.rev + self.hs.rev + self.ls.rev
     }
@@ -503,12 +501,12 @@ impl Esp32Ledc {
         (((self.hs.int_raw >> 4) & 0xff) << 8) | (((self.ls.int_raw >> 4) & 0xff) << 16)
     }
 
-    /// 把 ESP32 定时器配置折算进内部定时器
+    /// Fold an ESP32 timer config into the internal timer
     fn apply_timer(&mut self, k: usize) {
         let v = self.timer_conf[k];
         let hs = k < 4;
         let tick = v & (1 << 25) != 0;
-        // 源时钟与 80MHz 的比：tick_sel 0 都是 REF_TICK 1MHz；1 时高速 = APB、低速 = SLOW_CLK（APB 或 8MHz）
+        // Source clock relative to 80MHz: tick_sel 0 is REF_TICK 1MHz for both; 1 is APB for high speed, SLOW_CLK (APB or 8MHz) for low speed
         let scale = match (hs, tick) {
             (true, true) => 1,
             (_, false) => 80,
@@ -553,7 +551,7 @@ impl Esp32Ledc {
     pub fn write(&mut self, off: u32, v: u32, now: u64) {
         match off {
             0x00..=0x9c => {
-                // 高速通道没有 para_up 位：CONF0 写入、或 CONF1 置 DUTY_START 时生效
+                // High-speed channels have no para_up bit: changes apply on a CONF0 write or when CONF1 sets DUTY_START
                 let r = off % 0x14;
                 self.hs.write(off, v, now);
                 if r == 0 || (r == 0x0c && v & (1 << 31) != 0) {
@@ -567,7 +565,7 @@ impl Esp32Ledc {
                 let k = ((off - 0x140) / 8) as usize;
                 let first = self.timer_conf[k] == 0;
                 self.timer_conf[k] = v;
-                // 低速定时器要写 para_up（位 26）才生效；高速立即生效
+                // Low-speed timers apply only when para_up (bit 26) is written; high-speed ones apply immediately
                 if k < 4 || v & (1 << 26) != 0 || first {
                     self.apply_timer(k);
                 }
@@ -595,7 +593,7 @@ impl Esp32Ledc {
         self.int_raw() & self.int_ena != 0
     }
 
-    /// 输出信号 sig（LEDC_HS_SIG_OUT0..7 = 71..78、LEDC_LS_SIG_OUT0..7 = 79..86）上的 PWM
+    /// PWM on output signal sig (LEDC_HS_SIG_OUT0..7 = 71..78, LEDC_LS_SIG_OUT0..7 = 79..86)
     pub fn output(&self, sig: u32) -> Option<(f32, f32)> {
         match sig {
             71..=78 => self.hs.output((sig - 71) as usize),
@@ -606,23 +604,23 @@ impl Esp32Ledc {
 }
 
 // ---------------------------------------------------------------- eFuse
-/// BLK0 读寄存器（0x3FF5A000 起）：出厂 MAC、芯片版本 v3.0（市面主流的 ECO3）、双核
+/// BLK0 read registers (from 0x3FF5A000): factory MAC, chip revision v3.0 (ECO3, the common one on the market), dual core
 pub fn default_efuse() -> [u32; 0x200 / 4] {
     let mut e = [0u32; 0x200 / 4];
-    // 本地管理地址，避免冒用乐鑫 OUI；末字节与 C3（01）/ S3（03）模拟板区分
+    // Locally administered address so we don't borrow Espressif's OUI; last byte tells it apart from simulated C3 (01) / S3 (03)
     let mac = [0x02u8, 0x54, 0x42, 0x00, 0x00, 0x04];
     let crc = mac_crc8(&mac);
-    // MAC_FACTORY：位 32..79，mac[5] 在最低字节（esp_efuse_table.c）；CRC 在位 80..87
+    // MAC_FACTORY: bits 32..79, mac[5] in the lowest byte (esp_efuse_table.c); CRC in bits 80..87
     e[1] = u32::from_le_bytes([mac[5], mac[4], mac[3], mac[2]]);
     e[2] = u32::from_le_bytes([mac[1], mac[0], crc, 0]);
-    // CHIP_VER_REV1（位 111）
+    // CHIP_VER_REV1 (bit 111)
     e[3] |= 1 << 15;
-    // CHIP_VER_REV2（BLK0 RDATA5 位 20）；连同 APB_CTRL_DATE 位 31 = 版本 3
+    // CHIP_VER_REV2 (BLK0 RDATA5 bit 20); together with APB_CTRL_DATE bit 31 this means revision 3
     e[5] |= 1 << 20;
     e
 }
 
-/// eFuse MAC 的 CRC8（Dallas/Maxim：反射多项式 0x8C，初值 0）
+/// CRC8 of the eFuse MAC (Dallas/Maxim: reflected polynomial 0x8C, initial value 0)
 pub fn mac_crc8(mac: &[u8]) -> u8 {
     let mut crc = 0u8;
     for &b in mac {
@@ -646,11 +644,11 @@ mod tests {
     #[test]
     fn timg_lact_offsets() {
         let mut t = Esp32Timg::default();
-        // LACT：分频 80（1MHz），递增、使能
+        // LACT: divider 80 (1MHz), counting up, enabled
         t.write(0x70, (1 << 31) | (1 << 30) | (80 << 13), 0);
         t.write(0x80, 1, 160_000);
         assert_eq!(t.read(0x78, 160_000), 1000);
-        // 告警 2000 µs、开中断
+        // Alarm at 2000 us, interrupt enabled
         t.write(0x84, 2000, 160_000);
         t.write(0x88, 0, 160_000);
         t.write(0x98, 8, 160_000);
@@ -669,7 +667,7 @@ mod tests {
         let mut s = Spi1::default();
         let mut flash = vec![0u8; 0x2000];
         flash[0x1234] = 0x5a;
-        // 读数据（0x03）、24 位地址、读 8 位
+        // Read data (0x03), 24-bit address, read 8 bits
         s.write(0x1c, (1 << 31) | (1 << 30) | (1 << 28), &mut flash);
         s.write(0x20, 23 << 26, &mut flash);
         s.write(0x24, (7 << 28) | 0x03, &mut flash);
@@ -683,15 +681,15 @@ mod tests {
     #[test]
     fn ledc_low_speed_ref_tick() {
         let mut l = Esp32Ledc::default();
-        // 低速定时器 0：13 位、REF_TICK 1MHz（tick_sel = 0）、分频 1.0 → 1e6 / 8192 Hz
+        // Low-speed timer 0: 13 bits, REF_TICK 1MHz (tick_sel = 0), divider 1.0 -> 1e6 / 8192 Hz
         l.write(0x160, 13 | (256 << 5) | (1 << 26), 0);
-        // 低速通道 0：定时器 0、输出使能、占空比一半
+        // Low-speed channel 0: timer 0, output enabled, 50% duty
         l.write(0xa0 + 0x08, 4096 << 4, 0);
         l.write(0xa0, (1 << 2) | (1 << 4), 0);
         let (d, hz) = l.output(79).unwrap();
         assert!((d - 0.5).abs() < 1e-3);
         assert!((hz - 1e6 / 8192.0).abs() < 0.1, "{hz}");
-        // IDF fade 示例实写的值：tick_sel = 1 选 SLOW_CLK，APB_CLK_SEL = 1 → 80MHz / 1.953 / 8192 = 5kHz
+        // Values the IDF fade example actually writes: tick_sel = 1 picks SLOW_CLK, APB_CLK_SEL = 1 -> 80MHz / 1.953 / 8192 = 5kHz
         l.write(0x190, 1, 0);
         l.write(0x160, 0x2003e8d | (1 << 26), 0);
         let (_, hz) = l.output(79).unwrap();
@@ -700,7 +698,7 @@ mod tests {
 
     #[test]
     fn efuse_mac_crc() {
-        // 已知样例：乐鑫文档里 CRC8 对全 0 为 0
+        // Known sample from Espressif docs: CRC8 of all zeros is 0
         assert_eq!(mac_crc8(&[0; 6]), 0);
         let e = default_efuse();
         assert_eq!(e[1] & 0xff, 0x04);

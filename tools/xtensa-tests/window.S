@@ -1,19 +1,19 @@
-/* 窗口 ABI：CALL4/8/12、CALLX8、ENTRY/RETW、深递归（触发溢出 / 下溢）、MOVSP、ROTW、RETW.N */
+/* Windowed ABI: CALL4/8/12, CALLX8, ENTRY/RETW, deep recursion (overflow / underflow), MOVSP, ROTW, RETW.N */
 #include "check.h"
     TEST_BEGIN
-    /* 深递归 fib(20)，call8：调用深度 20，远超 16 个四元组 */
+    /* deep recursion fib(20) via call8: depth 20, far beyond 16 quads */
     movi    a10, 20
     call8   fib8
     EXPECT  a10, 6765, 1
-    /* call12 递归求和 1..40 */
+    /* call12 recursive sum 1..40 */
     movi    a14, 40
     call12  sum12
     EXPECT  a14, 820, 2
-    /* call4 递归求和 1..30 */
+    /* call4 recursive sum 1..30 */
     movi    a6, 30
     call4   sum4
     EXPECT  a6, 465, 3
-    /* 混合：call8 → call4 → call12 链 */
+    /* mixed: call8 -> call4 -> call12 chain */
     movi    a10, 12
     call8   mix8
     EXPECT  a10, 12 * 7, 4
@@ -22,13 +22,13 @@
     movi    a10, 10
     callx8  a9
     EXPECT  a10, 55, 5
-    /* 递归回来后本帧寄存器完好 */
+    /* this frame's registers survive the recursion */
     movi    a3, 0x5A5A
     movi    a10, 18
     call8   fib8
     EXPECT  a3, 0x5A5A, 6
     EXPECT  a10, 2584, 7
-    /* WINDOWBASE / WINDOWSTART 可读 */
+    /* WINDOWBASE / WINDOWSTART are readable */
     rsr     a4, windowbase
     rsr     a5, windowstart
     movi    a6, 1
@@ -38,7 +38,7 @@
     bnez    a6, 1f
     movi    a2, 8
     retw
-1:  /* ROTW：转一格后 a3 / a4 分别是原来的 a7 / a8 */
+1:  /* ROTW: after rotating by one, a3 / a4 are the old a7 / a8 */
     movi    a7, 0
     movi    a8, 0xABCD
     rotw    1
@@ -47,7 +47,7 @@
     EXPECT  a7, 0xABCD, 9
     PASS
 
-/* fib(n)：a2 = n，返回 a2 */
+/* fib(n): a2 = n, returns a2 */
     .align 4
 fib8:
     entry   a1, 32
@@ -78,7 +78,7 @@ sum4:
     add     a2, a2, a6
 1:  retw.n
 
-/* mix：n>0 时返回 7 + mix4(n-1)，三种调用交替 */
+/* mix: returns 7 + mix4(n-1) for n>0, alternating the three call kinds */
     .align 4
 mix8:
     entry   a1, 32

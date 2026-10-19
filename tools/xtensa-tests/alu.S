@@ -1,4 +1,4 @@
-/* 算术 / 逻辑 / 立即数 / 条件传送 / NSA / SEXT / CLAMPS / MIN / MAX / EXTUI */
+/* Arithmetic / logic / immediates / conditional moves / NSA / SEXT / CLAMPS / MIN / MAX / EXTUI */
 #include "check.h"
     TEST_BEGIN
     movi    a2, 100

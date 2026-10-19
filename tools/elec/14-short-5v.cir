@@ -1,4 +1,4 @@
-* 14 5V 跳线接 GND（0.05 Ω）：只剩电脑 USB 口限流
+* 14 5V jumpered to GND (0.05 ohm): only the PC USB port limit is left
 *tb: LIMIT v5 5 0.5 0.5 20
 *tb: LDO v5 v33 3.3 0.01 0.525 1.2 0.0001
 *tb: LOAD v33 0.035 1

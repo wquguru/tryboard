@@ -1,4 +1,4 @@
-* 01 分压：5 V，1 k / 2.2 k
+* 01 Divider: 5 V, 1 k / 2.2 k
 V1 in 0 DC 5
 R1 in out 1k
 R2 out 0 2.2k

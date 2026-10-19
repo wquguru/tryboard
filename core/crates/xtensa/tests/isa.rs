@@ -1,10 +1,8 @@
-//! 跑 tools/xtensa-tests 下的自检汇编测试：每个 ELF 装进 0x40000000 起 1MB 的平坦 RAM，
-//! 跑到半主机 SYS_exit，检查 result：0x600D 通过，0xBAD00000|n 表示第 n 个用例失败。
-//!
-//! 差分对照：测试结束时经半主机 SYS_write 输出 result + dump 缓冲区。本机装了乐鑫 QEMU
-//! （~/.espressif/tools/qemu-xtensa）时，同一个 ELF 也在 `qemu-system-xtensa -M sim -cpu esp32s3`
-//! 上跑一遍，两边输出逐字节比较。QEMU 只作独立进程的对照，不引入任何 QEMU 代码。
-//! 环境变量 XT_NO_QEMU=1 跳过对照；XT_ONLY=名字 只跑一个测试。
+//! Runs the self-checking asm tests in tools/xtensa-tests: each ELF loads into 1MB flat RAM at 0x40000000 and runs
+//! until semihosting SYS_exit; result 0x600D = pass, 0xBAD00000|n = case n failed. lint: allow-long-comment
+//! Differential check: result + dump buffer go out via SYS_write; if Espressif QEMU (~/.espressif/tools/qemu-xtensa) is
+//! installed the same ELF runs on `qemu-system-xtensa -M sim -cpu esp32s3` as a separate process and outputs are
+//! compared byte by byte (no QEMU code is used). XT_NO_QEMU=1 skips it; XT_ONLY=<name> runs a single test.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -42,9 +40,9 @@ fn test_dir() -> PathBuf {
 struct Run {
     instret: u64,
     result: u32,
-    /// 六个窗口向量各自命中次数
+    /// Hit count of each of the six window vectors
     hits: [u32; 6],
-    /// 半主机输出
+    /// Semihosting output
     out: Vec<u8>,
 }
 
@@ -56,7 +54,7 @@ fn run_one(path: &Path) -> Result<Run, String> {
         let o = (s.paddr - BASE) as usize;
         ram.0[o..o + s.data.len()].copy_from_slice(&s.data);
     }
-    let result = elf.symbol("result").ok_or("没有 result 符号")?;
+    let result = elf.symbol("result").ok_or("no result symbol")?;
     let mut cpu = Cpu::new();
     cpu.pc = elf.entry;
     let mut hits = [0u32; 6];
@@ -72,7 +70,11 @@ fn run_one(path: &Path) -> Result<Run, String> {
                 4 => {
                     let (buf, len) = (cpu.a(4), cpu.a(5));
                     for i in 0..len {
-                        out.push(ram.load(buf + i, 1).map_err(|_| "SYS_write 越界")? as u8);
+                        out.push(
+                            ram.load(buf + i, 1)
+                                .map_err(|_| "SYS_write out of bounds")?
+                                as u8,
+                        );
                     }
                     cpu.set_a(2, len);
                 }
@@ -86,11 +88,11 @@ fn run_one(path: &Path) -> Result<Run, String> {
                         out,
                     });
                 }
-                n => return Err(format!("不支持的半主机调用 {n}")),
+                n => return Err(format!("unsupported semihosting call {n}")),
             },
             Exit::Break(pc) => {
                 return Err(format!(
-                    "在 0x{pc:08x} 意外 BREAK（双重异常？EXCCAUSE={} EPC1=0x{:08x} DEPC=0x{:08x}）",
+                    "unexpected BREAK at 0x{pc:08x} (double exception? EXCCAUSE={} EPC1=0x{:08x} DEPC=0x{:08x})",
                     cpu.read_sr(tryboard_xtensa::sr::EXCCAUSE),
                     cpu.read_sr(tryboard_xtensa::sr::EPC1),
                     cpu.read_sr(tryboard_xtensa::sr::DEPC)
@@ -99,7 +101,7 @@ fn run_one(path: &Path) -> Result<Run, String> {
             _ => {}
         }
     }
-    Err(format!("超时，pc=0x{:08x}", cpu.pc))
+    Err(format!("timeout, pc=0x{:08x}", cpu.pc))
 }
 
 fn qemu_bin() -> Option<PathBuf> {
@@ -117,7 +119,7 @@ fn qemu_bin() -> Option<PathBuf> {
     p.exists().then_some(p)
 }
 
-/// 在 QEMU sim 机器（esp32s3 核配置）上跑同一个 ELF，取半主机输出
+/// Runs the same ELF on the QEMU sim machine (esp32s3 core config) and returns its semihosting output
 fn run_qemu(qemu: &Path, elf: &Path) -> Result<Vec<u8>, String> {
     let mut child = Command::new(qemu)
         .args([
@@ -129,7 +131,7 @@ fn run_qemu(qemu: &Path, elf: &Path) -> Result<Vec<u8>, String> {
             "-monitor",
             "none",
         ])
-        // icount：定时器按指令数确定性触发（否则 CCOMPARE 中断由宿主计时器异步送达，时刻不确定）
+        // icount makes timers fire deterministically by instruction count (else CCOMPARE IRQs arrive async from the host clock)
         .args(["-icount", "shift=0,sleep=off"])
         .args(["-semihosting-config", "enable=on,target=native"])
         .arg("-device")
@@ -146,7 +148,7 @@ fn run_qemu(qemu: &Path, elf: &Path) -> Result<Vec<u8>, String> {
         }
         if t0.elapsed() > Duration::from_secs(20) {
             let _ = child.kill();
-            return Err("QEMU 超时".into());
+            return Err("QEMU timeout".into());
         }
         std::thread::sleep(Duration::from_millis(5));
     }
@@ -170,7 +172,7 @@ fn words(b: &[u8]) -> Vec<u32> {
         .collect()
 }
 
-/// 两边输出逐字比较，返回不一致的字数（并打印前几处）
+/// Compares both outputs word by word; returns the number of differing words (prints the first few)
 fn diff(name: &str, ours: &[u8], qemu: &[u8]) -> usize {
     let (a, b) = (words(ours), words(qemu));
     let mut bad = 0;
@@ -178,13 +180,13 @@ fn diff(name: &str, ours: &[u8], qemu: &[u8]) -> usize {
         let (x, y) = (a.get(i), b.get(i));
         if x != y {
             if bad < 12 {
-                // 前两个字是 result、dump 长度，之后 dump[i-2]
+                // The first two words are result and dump length, then dump[i-2]
                 let what = match i {
                     0 => "result".to_string(),
                     1 => "dump_len".to_string(),
                     _ => format!("dump[{}]", i - 2),
                 };
-                eprintln!("  DIFF {name} {what}: 我们 {:08x?}  QEMU {:08x?}", x, y);
+                eprintln!("  DIFF {name} {what}: ours {:08x?}  QEMU {:08x?}", x, y);
             }
             bad += 1;
         }
@@ -201,7 +203,10 @@ fn xtensa_selfcheck() {
         .map(|s| s.success())
         .unwrap_or(false);
     if !ok && !build.exists() {
-        eprintln!("跳过：没有 Xtensa 工具链，无法构建 {}", build.display());
+        eprintln!(
+            "skipped: no Xtensa toolchain, cannot build {}",
+            build.display()
+        );
         return;
     }
     let only = std::env::var("XT_ONLY").ok();
@@ -216,10 +221,10 @@ fn xtensa_selfcheck() {
         })
         .collect();
     elfs.sort();
-    assert!(!elfs.is_empty(), "build 目录里没有测试");
+    assert!(!elfs.is_empty(), "no tests in the build directory");
     let qemu = qemu_bin();
     if qemu.is_none() {
-        eprintln!("（没有 QEMU，只跑自检，不做差分对照）");
+        eprintln!("(no QEMU: self-checks only, no differential check)");
     }
     let mut failed = Vec::new();
     let (mut diff_words, mut compared_words) = (0usize, 0usize);
@@ -230,18 +235,18 @@ fn xtensa_selfcheck() {
                 let mut msg = String::new();
                 let mut fail = false;
                 if r.result != 0x600d {
-                    msg = format!("用例 {}", r.result & 0xfffff);
+                    msg = format!("case {}", r.result & 0xfffff);
                     fail = true;
                 }
-                // 深递归测试必须真的把六种溢出 / 下溢处理程序都跑到
+                // The deep-recursion test must actually exercise all six overflow / underflow handlers
                 if name == "window" && r.hits.contains(&0) {
-                    msg += " 有窗口向量没被触发";
+                    msg += " some window vector never fired";
                     fail = true;
                 }
                 if let Some(q) = &qemu {
                     match run_qemu(q, p) {
                         Ok(qo) => {
-                            // XT_SAVE=1：两边的原始输出存到 build/<名字>.{ours,qemu}.bin，便于离线分析
+                            // XT_SAVE=1: save both raw outputs to build/<name>.{ours,qemu}.bin for offline analysis
                             if std::env::var("XT_SAVE").is_ok() {
                                 let _ =
                                     std::fs::write(build.join(format!("{name}.ours.bin")), &r.out);
@@ -250,23 +255,23 @@ fn xtensa_selfcheck() {
                             compared_words += r.out.len().max(qo.len()) / 4;
                             let n = diff(&name, &r.out, &qo);
                             if n > 0 {
-                                msg += &format!(" 与 QEMU 不一致 {n} 字");
+                                msg += &format!(" differs from QEMU in {n} words");
                                 diff_words += n;
                                 fail = true;
                             }
                         }
                         Err(e) => {
-                            msg += &format!(" QEMU 失败：{e}");
+                            msg += &format!(" QEMU failed: {e}");
                             fail = true;
                         }
                     }
                 }
                 if fail {
-                    eprintln!("FAIL {name}：{msg}");
+                    eprintln!("FAIL {name}: {msg}");
                     failed.push(name);
                 } else {
                     eprintln!(
-                        "PASS {name}（{} 条指令，dump {} 字，窗口向量 OF4/UF4/OF8/UF8/OF12/UF12 = {:?}）",
+                        "PASS {name} ({} instructions, dump {} words, window vectors OF4/UF4/OF8/UF8/OF12/UF12 = {:?})",
                         r.instret,
                         r.out.len().saturating_sub(8) / 4,
                         r.hits
@@ -274,14 +279,14 @@ fn xtensa_selfcheck() {
                 }
             }
             Err(e) => {
-                eprintln!("FAIL {name}：{e}");
+                eprintln!("FAIL {name}: {e}");
                 failed.push(name);
             }
         }
     }
     if qemu.is_some() {
-        eprintln!("QEMU 对照：比较 {compared_words} 字，不一致 {diff_words} 字");
+        eprintln!("QEMU diff: compared {compared_words} words, {diff_words} differ");
     }
-    eprintln!("{} 个测试，失败 {}", elfs.len(), failed.len());
-    assert!(failed.is_empty(), "失败：{failed:?}");
+    eprintln!("{} tests, {} failed", elfs.len(), failed.len());
+    assert!(failed.is_empty(), "failed: {failed:?}");
 }

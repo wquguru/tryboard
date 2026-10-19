@@ -1,9 +1,9 @@
-//! 高层模拟（HLE）：在 ROM 函数入口拦截，用 Rust 实现效果后直接返回调用者。
-//! 目前只有模拟前端的 regi2c 访问（rom_i2c_*）。
-//!
-//! Xtensa 窗口 ABI：拦截点在被调函数的 ENTRY 之前，此时窗口仍是调用者的。调用者用 CALLn
-//! （n = PS.CALLINC）调用：参数在调用者的 a(4n+2..)，返回地址在 a(4n)（高 2 位是 CALLINC 编码），
-//! 返回值写回 a(4n+2)。不执行 ENTRY / RETW，窗口不变，PC 直接回到调用点之后。
+//! High-level emulation (HLE): intercept ROM function entries, do the effect in Rust and return to the caller.
+//! Currently only the analog front end's regi2c access (rom_i2c_*).
+//! Xtensa windowed ABI: we intercept before the callee's ENTRY, so the window is still the caller's. The caller used
+//! CALLn (n = PS.CALLINC): args live in caller a(4n+2..), return address in a(4n) (top 2 bits encode CALLINC),
+//! and the result goes back to a(4n+2). No ENTRY / RETW runs, so the window is untouched and PC returns past the call.
+//! lint: allow-long-comment
 
 use crate::SocBus;
 use tryboard_xtensa::{Cpu, PS_CALLINC_SHIFT};
@@ -14,7 +14,7 @@ pub enum Hle {
     I2cReadRegMask,
     I2cWriteReg,
     I2cWriteRegMask,
-    /// ets_set_appcpu_boot_addr(addr)：记下核 1 入口，由运行循环启动核 1（真机上是 ROM 里核 1 的复位代码在等这个地址）
+    /// ets_set_appcpu_boot_addr(addr): record the core 1 entry so the run loop can start core 1 (on silicon, core 1's ROM reset code waits for this address)
     SetAppCpuBootAddr,
 }
 
@@ -63,7 +63,7 @@ pub fn call(kind: Hle, cpu: &mut Cpu, bus: &mut SocBus) {
     };
     let ra = cpu.a(base);
     if callinc == 0 {
-        // CALL0 约定：返回值在 a2
+        // CALL0 convention: return value in a2
         cpu.hle_return_call0(ret);
         return;
     }

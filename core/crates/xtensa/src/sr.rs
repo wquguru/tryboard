@@ -1,4 +1,4 @@
-//! 特殊寄存器（SR）与用户寄存器（UR）编号，见 Xtensa ISA RM 第 5 章 / binutils xtensa-modules。
+//! Special register (SR) and user register (UR) numbers, see Xtensa ISA RM ch. 5 / binutils xtensa-modules.
 
 pub const LBEG: u32 = 0;
 pub const LEND: u32 = 1;
@@ -44,7 +44,7 @@ pub const EPC2: u32 = 178;
 pub const EXCSAVE2: u32 = 210;
 pub const MISC0: u32 = 244;
 
-/// 用户寄存器（RUR / WUR）
+/// User registers (RUR / WUR)
 pub const UR_THREADPTR: u32 = 231;
 pub const UR_FCR: u32 = 232;
 pub const UR_FSR: u32 = 233;

@@ -1,4 +1,4 @@
-* 17 同 14，S3 开发板（芯片 + 板上负载 43 mA）
+* 17 Same as 14, S3 dev board (chip + board load 43 mA)
 *tb: LIMIT v5 5 0.5 0.5 20
 *tb: LDO v5 v33 3.3 0.01 0.525 1.2 0.0001
 *tb: LOAD v33 0.043 1

@@ -1,21 +1,11 @@
-//! 舵机二阶动力学（P1-03）。只决定电流和 3D 里的角度，不回写固件能读到的任何东西。
-//!
-//! 模型：位置伺服 = 比例控制器 + 有刷直流电机 + 减速箱，全部折算到输出轴。
-//!   控制器：电机电压 vm = clamp(Kp·误差, ±电源电压)，误差在死区内为 0（不驱动）
-//!   电机：  i = (vm − k·ω)/R；输出扭矩 = η·k·i
-//!   机械：  J·ω' = η·k·i − b·ω − τ负载；碰到机械限位就停住（堵转）
-//! 从电源取的电流 = 静态电流 + max(0, sign(vm)·i)（H 桥：驱动时从电源取电；回馈时电流经体二极管回电源，这里记 0）。
-//! 所以电流自然分成：静态 + 加速度项（J·ω'/ηk）+ 摩擦 / 负载项 + 起步尖峰（ω=0 时 i = V/R，就是堵转电流）。
-//!
-//! 参数（SG90，全部是估算，见 DECISIONS 2026-10-16「电气模型」）：
-//!   规格书：4.8 V 时 0.1 s/60°（空载 10.47 rad/s）、堵转扭矩 1.8 kgf·cm（0.176 N·m）、死区 10 µs
-//!   堵转电流 0.7 A（catalog sg90.currentMa.peak，估算）→ R = 4.8/0.7 = 6.86 Ω
-//!   空载运行电流 0.15 A（catalog typ，估算）→ k = (4.8 − 0.15·R)/10.47 = 0.360 V·s/rad
-//!   η 取 0.7，使 η·k·0.7 A = 0.176 N·m 与规格书堵转扭矩一致；b = η·k·0.15/10.47
-//!   J：按"起步约 25 ms 到全速"反推 J = 0.025·η·k²/R（机械时间常数，估算）
-//!   比例带 10°：误差超过 10° 时满电压（模拟舵机芯片的典型做法，估算）
+//! Second-order servo dynamics (P1-03). Only drives current draw and the 3D angle; nothing the firmware can read.
+//! Model (lint: allow-long-comment): P controller vm = clamp(Kp*err, +-supply) with a dead band; motor i = (vm - k*w)/R;
+//! mechanics J*w' = eta*k*i - b*w - tau_load, stopping at the end stops (stall).
+//! Supply current = quiescent + max(0, sign(vm)*i): an H-bridge draws while driving; regenerated current returns via body
+//! diodes and is counted as 0. So current splits naturally into quiescent + acceleration + friction/load + the start
+//! spike (at w=0, i = V/R, the stall current).
 
-/// 一种舵机的参数（全部折算到输出轴，SI 单位）
+/// Servo parameters, all referred to the output shaft, SI units
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ServoParams {
     pub r: f64,
@@ -23,16 +13,16 @@ pub struct ServoParams {
     pub eta: f64,
     pub b: f64,
     pub j: f64,
-    /// 满电压对应的误差（rad）
+    /// Error that maps to full voltage (rad)
     pub band: f64,
-    /// 死区（rad）
+    /// Dead band (rad)
     pub dead: f64,
-    /// 控制电路静态电流（A）
+    /// Control circuit quiescent current (A)
     pub iq: f64,
-    /// 机械限位（rad）
+    /// Mechanical end stops (rad)
     pub stop_lo: f64,
     pub stop_hi: f64,
-    /// 脉宽 → 角度：pw_lo µs = 0°，pw_hi µs = 180°
+    /// Pulse width -> angle: pw_lo us = 0 deg, pw_hi us = 180 deg
     pub pw_lo: f64,
     pub pw_hi: f64,
 }
@@ -40,6 +30,8 @@ pub struct ServoParams {
 const DEG: f64 = std::f64::consts::PI / 180.0;
 
 impl ServoParams {
+    // SG90 estimates (DECISIONS 2026-10-16 electrical model): 0.1 s/60 deg @4.8 V, 1.8 kgf*cm stall, 0.7 A stall -> R,
+    // 0.15 A no-load -> k; eta = 0.7 matches stall torque; J from ~25 ms to full speed; 10 deg proportional band.
     pub fn sg90() -> ServoParams {
         let r = 4.8 / 0.7;
         let w0 = 60.0 * DEG / 0.1;
@@ -65,26 +57,26 @@ impl ServoParams {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Servo {
     pub p: ServoParams,
-    /// 输出轴角度（rad）与角速度（rad/s）
+    /// Output shaft angle (rad) and angular velocity (rad/s)
     pub theta: f64,
     pub omega: f64,
-    /// 目标角度（rad）；None = 没有脉冲（不驱动）
+    /// Target angle (rad); None = no pulse (not driven)
     pub target: Option<f64>,
-    /// 外加负载扭矩（N·m，与转动方向相反的摩擦型负载）
+    /// External load torque (N*m, friction-like, opposes rotation)
     pub load: f64,
-    /// 外力卡住（堵转测试 / 网页上用手按住）
+    /// Held by an external force (stall test / held by hand on the web page)
     pub blocked: bool,
-    /// 本步的电机电流（A，带符号）与从电源取的电流（A，含静态）
+    /// This step's motor current (A, signed) and supply current (A, including quiescent)
     pub i_motor: f64,
     pub i_supply: f64,
-    /// 本步加速度（rad/s²），给 3D 观感用
+    /// This step's acceleration (rad/s^2), for the 3D look
     pub alpha: f64,
 }
 
-/// 比例带满量程电压：取 SG90 允许的最高电源电压，实际再被电源电压夹住
+/// Full-scale voltage of the proportional band: SG90's max supply, then clamped by the actual supply
 const VFULL: f64 = 6.0;
 
-/// 控制器想加的电机电压大小（夹到电源电压之前）与方向
+/// Motor voltage magnitude the controller wants (before supply clamping) and its direction
 pub fn command(p: &ServoParams, theta: f64, target: Option<f64>) -> (f64, f64) {
     let Some(t) = target else { return (0.0, 0.0) };
     let e = t - theta;
@@ -92,7 +84,7 @@ pub fn command(p: &ServoParams, theta: f64, target: Option<f64>) -> (f64, f64) {
         return (0.0, 0.0);
     }
     let s = e.signum();
-    // 比例带内按误差比例给电压，超出就是满电压（再被实际电源电压夹住）
+    // Proportional inside the band, full voltage outside it (then clamped by the actual supply)
     ((e.abs() / p.band).min(1.0) * VFULL, s)
 }
 
@@ -115,7 +107,7 @@ impl Servo {
         self.theta / DEG
     }
 
-    /// 由 PWM 设目标：脉宽（µs）；None = 没有脉冲
+    /// Set the target from PWM pulse width (us); None = no pulse
     pub fn set_pulse(&mut self, pw_us: Option<f64>) {
         self.target = pw_us.map(|pw| {
             let a = (pw - self.p.pw_lo) / (self.p.pw_hi - self.p.pw_lo) * 180.0;
@@ -123,14 +115,14 @@ impl Servo {
         });
     }
 
-    /// 给 MNA 的电机元件参数：(vcmd, emf, r)。电源电流 = max(0, (min(v, vcmd) − emf)/r)，见 mna::Elem::Motor。
-    /// 反方向驱动时把方向折进去：sign·i = (|vm| − sign·k·ω)/R
+    /// Motor element for MNA: (vcmd, emf, r); supply current = max(0, (min(v, vcmd) - emf)/r), see mna::Elem::Motor.
+    /// Reverse drive folds the sign in: sign*i = (|vm| - sign*k*w)/R
     pub fn motor_elem(&self) -> (f64, f64, f64) {
         let (v, s) = command(&self.p, self.theta, self.target);
         (v, s * self.p.k * self.omega, self.p.r)
     }
 
-    /// 用解出来的电源电压 vs 推进 dt 秒
+    /// Advance dt seconds using the solved supply voltage vs
     pub fn step(&mut self, vs: f64, dt: f64) {
         let p = self.p;
         let (v, s) = command(&p, self.theta, self.target);
@@ -140,7 +132,7 @@ impl Servo {
         } else {
             (vm - p.k * self.omega) / p.r
         };
-        // 驱动时从电源取电；回馈（i 与 vm 反向）记 0
+        // Draws from the supply while driving; regeneration (i opposite to vm) counts as 0
         let isup = if s == 0.0 { 0.0 } else { (s * i).max(0.0) };
         self.i_motor = i;
         self.i_supply = p.iq + isup;
@@ -151,7 +143,7 @@ impl Servo {
         }
         let tau = p.eta * p.k * i - p.b * self.omega - self.load * self.omega.signum();
         let alpha = tau / p.j;
-        // 半隐式欧拉：先更新速度再更新角度（对这种阻尼系统稳定）
+        // Semi-implicit Euler (velocity first, then angle) is stable for this damped system
         let mut w = self.omega + alpha * dt;
         let mut th = self.theta + w * dt;
         if th <= p.stop_lo {
@@ -166,7 +158,7 @@ impl Servo {
         self.theta = th;
     }
 
-    /// 是否顶在机械限位上还在使劲（堵转）
+    /// Pushing against an end stop or held (stall)
     pub fn stalled(&self) -> bool {
         let at_stop = self.theta <= self.p.stop_lo + 1e-9 || self.theta >= self.p.stop_hi - 1e-9;
         (self.blocked || at_stop) && self.i_motor.abs() > 0.3 * 4.8 / self.p.r
@@ -177,7 +169,7 @@ impl Servo {
 mod tests {
     use super::*;
 
-    /// 理想 5 V 电源下跑 t 秒，返回 (最大角, 峰值电流, 最后角度, 到达目标 ±1° 的时刻)
+    /// Run on an ideal 5 V supply; returns (max angle, peak current, final angle, time within +-1 deg of target)
     fn run(s: &mut Servo, secs: f64, target_deg: f64) -> (f64, f64, f64, Option<f64>) {
         s.set_pulse(Some(500.0 + target_deg / 180.0 * 2000.0));
         let dt = 1e-4;
@@ -197,25 +189,25 @@ mod tests {
     fn sg90_speed_overshoot_and_spike() {
         let mut s = Servo::new(ServoParams::sg90(), 0.0);
         let (mx, ip, end, reach) = run(&mut s, 0.6, 180.0);
-        // 5 V 下 180° 约 0.3 s（规格 0.1 s/60° @4.8 V）
+        // 180 deg takes ~0.3 s at 5 V (spec 0.1 s/60 deg @4.8 V)
         let t = reach.unwrap();
-        eprintln!("SG90 0→180°：到位 {t:.3} s，最大 {mx:.2}°，峰值 {ip:.3} A，最后 {end:.2}°");
-        assert!((0.24..0.40).contains(&t), "到位 {t}");
-        // 有过冲但不大，最后停在目标附近（死区内）
-        assert!(mx > 180.2 && mx < 186.0, "最大 {mx}");
-        assert!((end - 180.0).abs() < 1.0, "最后 {end}");
-        // 起步尖峰 ≈ 堵转电流（5 V / 6.86 Ω ≈ 0.73 A）
-        assert!((0.65..0.8).contains(&ip), "峰值 {ip}");
-        // 停下以后只剩静态电流
+        eprintln!("SG90 0->180 deg: reached {t:.3} s, max {mx:.2} deg, peak {ip:.3} A, final {end:.2} deg");
+        assert!((0.24..0.40).contains(&t), "reached {t}");
+        // Small overshoot, settles near the target (inside the dead band)
+        assert!(mx > 180.2 && mx < 186.0, "max {mx}");
+        assert!((end - 180.0).abs() < 1.0, "final {end}");
+        // Start spike ~ stall current (5 V / 6.86 ohm ~ 0.73 A)
+        assert!((0.65..0.8).contains(&ip), "peak {ip}");
+        // Once stopped only quiescent current remains
         assert!((s.i_supply - s.p.iq).abs() < 1e-9);
     }
 
     #[test]
     fn small_move_stays_in_band() {
-        // 5° 小幅动作在比例带内：电压只给一半，电流远小于堵转电流
+        // A 5 deg move stays in the band: half voltage, current well under stall
         let mut s = Servo::new(ServoParams::sg90(), 90.0);
         let (_, ip, end, _) = run(&mut s, 0.3, 95.0);
-        assert!(ip < 0.45, "峰值 {ip}");
+        assert!(ip < 0.45, "peak {ip}");
         assert!((end - 95.0).abs() < 1.0);
     }
 

@@ -1,4 +1,4 @@
-* 11 W1 输出对打（最坏一组）：电位器滑片转到 GND 头（接触 1 Ω）对上 GPIO 输出高（默认驱动档内阻 33 Ω）
+* 11 W1 output fight (worst pair): pot wiper at the GND end (1 ohm contact) vs GPIO driving high (33 ohm default drive)
 V1 vd 0 DC 0
 R1 vd pin 1
 R2 pin vg 33

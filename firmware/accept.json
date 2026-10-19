@@ -435,10 +435,10 @@
    "TRYBOARD_OK usb-keyboard"
   ],
   "stderr_expect": [
-   "USB 主机：已配置",
+   "USB 主机：configured",
    "VID 0x303A PID 0x4004",
    "\"TryBoard Keyboard\"",
-   "报告 1=键盘，报告 2=鼠标",
+   "report 1=keyboard, report 2=mouse",
    "USB 键盘输入: \"Hello from TryBoard!\\n\"",
    "USB 鼠标报告 80 次，位置 (0, 0)"
   ]
@@ -457,7 +457,7 @@
    "TRYBOARD_OK usb-cdc"
   ],
   "stderr_expect": [
-   "CDC-ACM 控制接口",
+   "CDC-ACM control interface",
    "SET_CONTROL_LINE_STATE DTR=1",
    "USB 串口收到: \"Hi from TryBoard CDC\\r\\nECHO: HELLO\\r\\nECHO: PING\\r\\n\""
   ]
@@ -862,7 +862,7 @@
    "rst:0x"
   ],
   "stderr_expect": [
-   "电气 欠压复位 0 次"
+   "elec 0 brownout resets"
   ]
  },
  {
@@ -1109,7 +1109,7 @@
    "MACRO Hello TryBoard"
   ],
   "stderr_expect": [
-   "USB 主机：已配置",
+   "USB 主机：configured",
    "\"TryBoard Macro Pad\"",
    "USB 键盘输入: \"abcHello TryBoard\\n\""
   ]
@@ -1798,9 +1798,9 @@
   ],
   "stderr_expect": [
    "ADV_IND 02:54:42:00:00:03",
-   "CONNECT_IND 手机 C0:FF:EE:12:34:56",
-   "固件 → 读 2A19 = 57（87%）",
-   "手机：订阅 2A37 后 3 s 内收到 3 条通知"
+   "CONNECT_IND phone C0:FF:EE:12:34:56",
+   "fw → read 2A19 = 57 (87%)",
+   "phone: 3 notifications within 3 s of subscribing to 2A37"
   ],
   "qemu": false
  },
@@ -1817,7 +1817,7 @@
    "TRYBOARD_OK c3-ble-hr"
   ],
   "stderr_expect": [
-   "固件 → 写 FFE1 成功"
+   "fw → write FFE1 ok"
   ],
   "gpio_toggles": {
    "pin": 5,

@@ -1,6 +1,6 @@
 #!/bin/bash
-# 构建 Xtensa 自检测试：每个 <名字>.S 与 common.S 链接成 build/<名字>.elf
-# 用法：tools/xtensa-tests/build.sh
+# Build the Xtensa self-tests: link each <name>.S with common.S into build/<name>.elf
+# Usage: tools/xtensa-tests/build.sh
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 bin=$(ls -d ~/.espressif/tools/xtensa-esp-elf/*/xtensa-esp-elf/bin | tail -1)

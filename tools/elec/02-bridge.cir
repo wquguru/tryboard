@@ -1,4 +1,4 @@
-* 02 惠斯通电桥，中间跨 4.7 k 负载
+* 02 Wheatstone bridge with a 4.7 k load across the middle
 V1 top 0 DC 3.3
 R1 top a 1k
 R2 a 0 2k

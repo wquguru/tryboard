@@ -38,7 +38,7 @@ fn dhcp_offer_then_ack() {
         assert_eq!(r.len(), 1);
         let ip = &r[0].payload;
         let bootp = &ip[28..];
-        assert_eq!(&bootp[4..8], &[1, 2, 3, 4], "xid 原样带回");
+        assert_eq!(&bootp[4..8], &[1, 2, 3, 4], "xid echoed back");
         assert_eq!(&bootp[16..20], &net::STA_IP);
         assert_eq!(&bootp[240..243], &[53, 1, want]);
     }
@@ -88,5 +88,9 @@ fn http_over_tcp() {
     let text = String::from_utf8_lossy(&resp);
     assert!(text.starts_with("HTTP/1.1 200 OK"));
     assert!(text.contains("TRYBOARD_HTTP_OK"));
-    assert_eq!(r.last().unwrap().0[13] & 0x01, 0x01, "最后一段带 FIN");
+    assert_eq!(
+        r.last().unwrap().0[13] & 0x01,
+        0x01,
+        "last segment carries FIN"
+    );
 }

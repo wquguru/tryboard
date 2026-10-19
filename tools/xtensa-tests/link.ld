@@ -1,5 +1,5 @@
-/* 自检测试的链接脚本：一块平坦 RAM 0x40000000..0x40100000。
-   向量在最低处（VECBASE 复位值），L32R 字面量池在代码之前（L32R 只能向低地址取）。 */
+/* Self-test linker script: one flat RAM 0x40000000..0x40100000. Vectors sit at the bottom (VECBASE reset value);
+   the L32R literal pool precedes the code because L32R can only load from lower addresses. */
 ENTRY(_start)
 SECTIONS
 {

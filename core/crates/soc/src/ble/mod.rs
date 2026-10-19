@@ -1,11 +1,9 @@
-//! BLE 虚拟世界（C-01）：在 VHCI 边界上替换乐鑫的链路层控制器。
-//!
-//! 固件里的主机协议栈（NimBLE）照常跑，它发出的 HCI 命令 / ACL 交给这里的虚拟 LE 控制器；
-//! 控制器只实现"HCI 语义需要的那部分链路层"：广播 / 扫描响应、建立连接、按连接间隔收发 ACL、断开。
-//! 空中另一端是一台虚拟手机（中心设备，[`phone::Phone`]），带 L2CAP 与 ATT/GATT 客户端。
-//!
-//! 一切按模拟时间（微秒）推进，没有墙钟和随机数：同一固件 + 同一输入日志，空中事件逐字节相同。
-//! 结论属"行为模拟"：信号距离、穿墙、手机系统差异都不在模型里，必须上真机。
+//! BLE virtual world (C-01): replaces Espressif's link-layer controller at the VHCI boundary. lint: allow-long-comment
+//! The firmware's host stack (NimBLE) runs unchanged; its HCI commands / ACL go to a virtual LE controller that only does
+//! the link layer HCI semantics need (advertising, scan response, connect, ACL per connection interval, disconnect).
+//! The peer is a virtual phone (central, [`phone::Phone`]) with L2CAP and an ATT/GATT client.
+//! Driven by simulated time (us), no wall clock or RNG, so same firmware + input log gives byte-identical air events.
+//! Behavioural only: range, walls and phone OS differences are not modelled and need real hardware.
 
 pub mod phone;
 pub mod sig;
@@ -17,13 +15,13 @@ mod tests;
 use phone::Phone;
 use std::collections::VecDeque;
 
-/// 连接句柄（只支持一条连接）
+/// Connection handle (only one connection is supported)
 pub const CONN_HANDLE: u16 = 0x0001;
-/// 主机侧 ACL 缓冲（LE Read Buffer Size 报给主机的值）
+/// Host-side ACL buffer size reported by LE Read Buffer Size
 pub const ACL_LEN: u16 = 251;
 pub const ACL_NUM: u8 = 12;
 
-/// 空中事件日志的一行（网页"蓝牙"页签、命令行 stderr）
+/// One line of the air event log (web Bluetooth tab, CLI stderr)
 #[derive(Clone, Debug, PartialEq)]
 pub struct AirLine {
     pub t_us: u64,
@@ -35,9 +33,9 @@ pub struct AirLine {
 #[derive(Default)]
 struct Adv {
     enabled: bool,
-    /// 广播间隔（微秒），取 LE Set Advertising Parameters 的最小间隔
+    /// Advertising interval (us), taken from the minimum interval of LE Set Advertising Parameters
     interval_us: u64,
-    /// 0 ADV_IND、1 直连高占空、2 ADV_SCAN_IND、3 ADV_NONCONN_IND、4 直连低占空
+    /// 0 ADV_IND, 1 directed high duty, 2 ADV_SCAN_IND, 3 ADV_NONCONN_IND, 4 directed low duty
     kind: u8,
     own_random: bool,
     data: Vec<u8>,
@@ -48,31 +46,31 @@ struct Adv {
 struct Link {
     interval_us: u64,
     next_event_us: u64,
-    /// 主机发来、还没上空中的 ACL 包数（连接事件时上空中并回 Number Of Completed Packets）
+    /// ACL packets from the host not yet on air (sent at the connection event, then Number Of Completed Packets)
     host_pkts: u16,
-    /// 主机 → 手机：正在拼的 L2CAP 帧 + 拼好待发的
+    /// Host -> phone: L2CAP frame being reassembled + finished frames waiting to send
     rx_frag: Vec<u8>,
     to_phone: VecDeque<Vec<u8>>,
 }
 
 pub struct Ble {
-    /// 控制器公共地址（HCI 字节序：低字节在前）
+    /// Controller public address (HCI byte order: low byte first)
     pub addr: [u8; 6],
     random_addr: [u8; 6],
     event_mask: u64,
     le_event_mask: u64,
     adv: Adv,
     link: Option<Link>,
-    /// 发给主机的 H4 包（0x04 事件 / 0x02 ACL），按到期时刻排好
+    /// H4 packets to the host (0x04 event / 0x02 ACL), sorted by due time
     to_host: VecDeque<(u64, Vec<u8>)>,
     rand: u64,
     pub phone: Phone,
     log: VecDeque<AirLine>,
-    /// 日志总条数（网页按序号增量取）
+    /// Total log lines (the web page fetches incrementally by sequence number)
     pub log_seq: u64,
-    /// 主机发过来的 HCI 命令计数（opcode → 次数），未实现的命令也照样回 Command Complete
+    /// HCI commands from the host (opcode -> count); unimplemented ones still get Command Complete
     pub unknown_cmds: Vec<(u16, u32)>,
-    /// 固件是否已经把控制器初始化起来了（决定网页显不显示"蓝牙"页签）
+    /// Whether the firmware has brought up the controller (decides if the web shows the Bluetooth tab)
     pub active: bool,
 }
 
@@ -97,11 +95,11 @@ impl Ble {
         }
     }
 
-    /// 芯片复位：控制器状态清空、连接断掉；手机（外部世界）还在，回到扫描前的状态
+    /// Chip reset clears controller state and drops the link; the phone (outside world) survives and goes back to pre-scan
     pub fn chip_reset(&mut self, now: u64) {
         if self.link.take().is_some() {
             self.phone.on_disconnect(now, 0x08);
-            self.air(now, "conn", "芯片复位，连接超时断开".into());
+            self.air(now, "conn", "chip reset, connection timed out".into());
         }
         self.adv = Adv::default();
         self.to_host.clear();
@@ -116,7 +114,7 @@ impl Ble {
         self.log_seq += 1;
     }
 
-    /// 序号 ≥ from 的日志（序号从 0 起）
+    /// Log lines with sequence >= from (sequence starts at 0)
     pub fn log_since(&self, from: u64) -> impl Iterator<Item = (u64, &AirLine)> {
         let first = self.log_seq - self.log.len() as u64;
         let skip = from.saturating_sub(first) as usize;
@@ -128,7 +126,7 @@ impl Ble {
     }
 
     fn rand64(&mut self) -> u64 {
-        // 固定种子的 xorshift：LE Rand 只要"像随机"，重放必须相同
+        // Fixed-seed xorshift: LE Rand only has to look random, and replays must match
         let mut x = self.rand;
         x ^= x << 13;
         x ^= x >> 7;
@@ -144,7 +142,7 @@ impl Ble {
     }
 
     fn push_host(&mut self, at: u64, pkt: Vec<u8>) {
-        // 保持按时刻有序；同一时刻保持先后
+        // Keep sorted by time; equal times keep insertion order
         let i = self
             .to_host
             .iter()
@@ -172,7 +170,7 @@ impl Ble {
         self.push_event(at, 0x0f, &[status, 1, op as u8, (op >> 8) as u8]);
     }
 
-    /// 主机发来一个 H4 包（固件调 esp_vhci_host_send_packet）
+    /// H4 packet from the host (firmware calls esp_vhci_host_send_packet)
     pub fn host_send(&mut self, pkt: &[u8], now: u64) {
         self.active = true;
         match pkt.first() {
@@ -187,7 +185,11 @@ impl Ble {
                 let n = (u16::from_le_bytes([pkt[3], pkt[4]]) as usize).min(pkt.len() - 5);
                 self.host_acl(hf & 0x0fff, (hf >> 12) as u8 & 3, &pkt[5..5 + n], now);
             }
-            _ => self.air(now, "hci", format!("主机发来未知 H4 包 {:02x?}", pkt)),
+            _ => self.air(
+                now,
+                "hci",
+                format!("unknown H4 packet from host {:02x?}", pkt),
+            ),
         }
     }
 
@@ -222,15 +224,15 @@ impl Ble {
                 );
                 self.cmd_complete(at, op, &[0]);
             }
-            // Read Local Version：HCI / LMP 5.0（0x09），厂商 0x02E5（乐鑫）
+            // Read Local Version: HCI / LMP 5.0 (0x09), manufacturer 0x02E5 (Espressif)
             0x1001 => self.cmd_complete(at, op, &[0, 0x09, 0, 0, 0x09, 0xe5, 0x02, 0, 0]),
-            // Read Local Supported Commands：全 0（主机走最保守的路径）
+            // Read Local Supported Commands: all zero so the host takes the most conservative path
             0x1002 => {
                 let mut r = vec![0u8; 65];
                 r[0] = 0;
                 self.cmd_complete(at, op, &r);
             }
-            // Read Local Supported Features：只支持 LE（位 38），不支持 BR/EDR（位 37）
+            // Read Local Supported Features: LE only (bit 38), no BR/EDR (bit 37)
             0x1003 => self.cmd_complete(at, op, &[0, 0, 0, 0, 0, 0x60, 0, 0, 0]),
             0x1005 => self.cmd_complete(at, op, &[0, 0, 0, 0, 0, 0, 0, 0, 0]),
             0x1009 => {
@@ -242,7 +244,7 @@ impl Ble {
                 let l = ACL_LEN.to_le_bytes();
                 self.cmd_complete(at, op, &[0, l[0], l[1], ACL_NUM]);
             }
-            // LE 本地特性：全 0（不报数据长度扩展、隐私、2M、扩展广播，主机就不会发这些命令）
+            // LE local features all zero: no DLE, privacy, 2M or extended adv, so the host never sends those commands
             0x2003 => self.cmd_complete(at, op, &[0, 0, 0, 0, 0, 0, 0, 0, 0]),
             0x2005 => {
                 if let Some(a) = p.get(..6) {
@@ -273,7 +275,7 @@ impl Ble {
             0x200a => {
                 let on = p.first().copied().unwrap_or(0) == 1;
                 if on && self.link.is_some() {
-                    // 只支持一条连接：连着时不再广播（真控制器会报 0x0C 命令不允许）
+                    // Single connection: no advertising while connected (a real controller returns 0x0C command disallowed)
                     self.cmd_complete(at, op, &[0x0c]);
                     return;
                 }
@@ -286,23 +288,23 @@ impl Ble {
                         "adv",
                         if on {
                             format!(
-                                "开始广播 {}（间隔 {} ms）",
+                                "advertising started {} (interval {} ms)",
                                 name,
                                 self.adv.interval_us / 1000
                             )
                         } else {
-                            "停止广播".into()
+                            "advertising stopped".into()
                         },
                     );
                 }
                 self.cmd_complete(at, op, &[0]);
             }
             0x200f => self.cmd_complete(at, op, &[0, 12]),
-            // Read Remote Version：从机侧 NimBLE 等它完成才上报 BLE_GAP_EVENT_CONNECT
+            // Read Remote Version: peripheral-side NimBLE waits for it before reporting BLE_GAP_EVENT_CONNECT
             0x041d => {
                 self.cmd_status(at, op, 0);
                 let h = CONN_HANDLE.to_le_bytes();
-                // 手机：LL 5.0，厂商号 0xFFFF（规范保留给测试用）
+                // Phone: LL 5.0, manufacturer 0xFFFF (reserved by the spec for testing)
                 self.push_event(at + 30_000, 0x0c, &[0, h[0], h[1], 0x09, 0xff, 0xff, 0, 0]);
             }
             0x2016 => {
@@ -358,7 +360,11 @@ impl Ble {
                     let reason = p.get(2).copied().unwrap_or(0x13);
                     self.link = None;
                     self.phone.on_disconnect(now, reason);
-                    self.air(now, "conn", format!("固件断开连接（原因 0x{reason:02x}）"));
+                    self.air(
+                        now,
+                        "conn",
+                        format!("firmware disconnected (reason 0x{reason:02x})"),
+                    );
                     let h = CONN_HANDLE.to_le_bytes();
                     self.push_event(at + 10_000, 0x05, &[0, h[0], h[1], 0x16]);
                 } else {
@@ -366,7 +372,7 @@ impl Ble {
                 }
             }
             _ => {
-                // 其余命令（含乐鑫厂商命令 0xFCxx、各种"设置"命令）一律回成功、不带返回值
+                // Everything else (incl. Espressif vendor commands 0xFCxx and the many 'set' commands) succeeds with no return data
                 match self.unknown_cmds.iter_mut().find(|(o, _)| *o == op) {
                     Some(e) => e.1 += 1,
                     None => self.unknown_cmds.push((op, 1)),
@@ -398,7 +404,7 @@ impl Ble {
         let _ = now;
     }
 
-    /// 下一个到期事件（给主机的包、广播、连接事件、手机定时器）的时刻
+    /// Time of the next due event (host packet, advertising, connection event, phone timer)
     pub fn next_due(&self) -> Option<u64> {
         let mut t = self.to_host.front().map(|x| x.0);
         let mut m = |x: Option<u64>| {
@@ -416,7 +422,7 @@ impl Ble {
         t
     }
 
-    /// 推进到 now：处理到期的广播事件、连接事件、手机定时器；取出一个到期的给主机的包
+    /// Advance to now: run due advertising / connection events and phone timers; pop one due host packet
     pub fn poll(&mut self, now: u64) -> Option<Vec<u8>> {
         self.advance(now);
         if self.to_host.front().is_some_and(|x| x.0 <= now) {
@@ -426,17 +432,17 @@ impl Ble {
     }
 
     fn advance(&mut self, now: u64) {
-        // 手机侧定时器（扫描超时、自动流程）
+        // Phone-side timers (scan timeout, auto flow)
         let acts = self.phone.tick(now);
         for a in acts {
             self.phone_action(a, now);
         }
-        // 广播：只有手机在扫描或等着连接时才逐个事件模拟（没人听时广播不影响固件，省得空转）
+        // Advertising is simulated event by event only while the phone scans or waits to connect; unheard adv can't affect firmware
         while self.adv.enabled && self.adv.next_us <= now {
             let t = self.adv.next_us;
             self.adv.next_us += self.adv.interval_us.max(20_000);
             if !self.phone.wants_adv() {
-                // 跳到当前时刻附近，免得关掉扫描很久后再打开要补跑一大串
+                // Jump close to now so re-enabling a scan long after doesn't replay a huge backlog
                 if self.adv.next_us < now {
                     let k = (now - self.adv.next_us) / self.adv.interval_us.max(20_000) + 1;
                     self.adv.next_us += k * self.adv.interval_us.max(20_000);
@@ -448,7 +454,7 @@ impl Ble {
                 break;
             }
         }
-        // 连接事件
+        // Connection events
         while let Some(l) = self.link.as_mut() {
             if l.next_event_us > now {
                 break;
@@ -485,17 +491,17 @@ impl Ble {
             self.air(
                 t,
                 "adv",
-                format!("{pdu} {} 数据 {}", fmt_addr(&addr), hex(&data)),
+                format!("{pdu} {} data {}", fmt_addr(&addr), hex(&data)),
             );
         }
         if scannable && self.phone.scanning() {
             if first {
-                self.air(t, "adv", format!("SCAN_REQ → SCAN_RSP 数据 {}", hex(&rsp)));
+                self.air(t, "adv", format!("SCAN_REQ → SCAN_RSP data {}", hex(&rsp)));
             }
             self.phone.on_scan_rsp(addr, &rsp);
         }
         if connectable && self.phone.connect_target() == Some(addr) {
-            // CONNECT_IND：手机发起连接，固件这边广播结束、连接建立
+            // CONNECT_IND: the phone connects, firmware side stops advertising and the link is up
             let interval_us = phone::CONN_INTERVAL_US;
             self.adv.enabled = false;
             self.link = Some(Link {
@@ -510,7 +516,7 @@ impl Ble {
                 t,
                 "conn",
                 format!(
-                    "CONNECT_IND 手机 {} → {}（间隔 {} ms）",
+                    "CONNECT_IND phone {} → {} (interval {} ms)",
                     fmt_addr(&paddr),
                     fmt_addr(&addr),
                     interval_us / 1000
@@ -519,7 +525,7 @@ impl Ble {
             self.phone.on_connected(t);
             let h = CONN_HANDLE.to_le_bytes();
             let itv = ((interval_us / 1250) as u16).to_le_bytes();
-            // 角色 1 = 从机；对端地址类型 1 = 随机地址（手机）；监督超时 5 s
+            // Role 1 = peripheral; peer address type 1 = random (phone); supervision timeout 5 s
             let mut r = vec![0, h[0], h[1], 1, 1];
             r.extend_from_slice(&paddr);
             let enhanced = self.le_event_mask & (1 << 9) != 0;
@@ -533,7 +539,7 @@ impl Ble {
 
     fn conn_event(&mut self, t: u64) {
         let Some(l) = self.link.as_mut() else { return };
-        // 主机 → 手机
+        // Host -> phone
         let frames: Vec<Vec<u8>> = l.to_phone.drain(..).collect();
         let done = std::mem::take(&mut l.host_pkts);
         if done > 0 {
@@ -554,7 +560,7 @@ impl Ble {
                 self.phone.queue_tx(r);
             }
         }
-        // 手机 → 主机：每个连接事件发出排队的 PDU
+        // Phone -> host: queued PDUs go out at every connection event
         let (lines, out) = self.phone.conn_event(t);
         for s in lines {
             self.air(t, "att", s);
@@ -574,7 +580,7 @@ impl Ble {
         if self.phone.wants_disconnect() {
             self.link = None;
             self.phone.on_disconnect(t, 0x13);
-            self.air(t, "conn", "手机断开连接".into());
+            self.air(t, "conn", "phone disconnected".into());
             let h = CONN_HANDLE.to_le_bytes();
             self.push_event(t, 0x05, &[0, h[0], h[1], 0x13]);
         }
@@ -586,13 +592,13 @@ impl Ble {
         }
     }
 
-    /// 网页 / 输入日志里的手机操作（`ble=` 后面那段）。返回错误文字给调用方提示
+    /// Phone action from the web / input log (the part after `ble=`); returns an error text for the caller to show
     pub fn phone_cmd(&mut self, cmd: &str, now: u64) -> Result<(), String> {
         let lines = self.phone.command(cmd, now)?;
         for s in lines {
             self.air(now, "phone", s);
         }
-        // 手机开始扫描时，广播从当前时刻接着发（之前没人听时跳过的不补）
+        // When the phone starts scanning, advertising resumes from now (skipped unheard events are not replayed)
         if self.adv.enabled && self.adv.next_us < now {
             self.adv.next_us = now;
         }
@@ -607,7 +613,7 @@ impl Ble {
         self.adv.enabled
     }
 
-    /// 网页用：广播 / 连接 / 手机视图的 JSON
+    /// For the web: JSON of the advertising / connection / phone view
     pub fn json(&self) -> String {
         format!(
             "{{\"active\":{},\"advertising\":{},\"adv_name\":{},\"connected\":{},\"addr\":\"{}\",\"log_seq\":{},\"phone\":{}}}",
@@ -621,7 +627,7 @@ impl Ble {
         )
     }
 
-    /// 网页用：序号 ≥ from 的空中日志 JSON 数组
+    /// For the web: JSON array of air log lines with sequence >= from
     pub fn log_json(&self, from: u64) -> String {
         let mut s = String::from("[");
         for (i, (n, l)) in self.log_since(from).enumerate() {
@@ -640,14 +646,14 @@ impl Ble {
     }
 }
 
-/// 广播数据里的设备名（AD 类型 0x09 完整名 / 0x08 简称）
+/// Device name in advertising data (AD type 0x09 complete / 0x08 short)
 pub fn adv_name(d: &[u8]) -> Option<String> {
     ad_fields(d)
         .find(|(t, _)| *t == 0x09 || *t == 0x08)
         .map(|(_, v)| String::from_utf8_lossy(v).into_owned())
 }
 
-/// 广播数据里的 16 位服务 UUID（AD 类型 0x02 / 0x03）
+/// 16-bit service UUIDs in advertising data (AD type 0x02 / 0x03)
 pub fn adv_uuids(d: &[u8]) -> Vec<u16> {
     ad_fields(d)
         .filter(|(t, _)| *t == 0x02 || *t == 0x03)
@@ -674,7 +680,7 @@ fn ad_fields(d: &[u8]) -> impl Iterator<Item = (u8, &[u8])> {
     })
 }
 
-/// 地址按习惯写法（高字节在前）
+/// Address in the usual notation (high byte first)
 pub fn fmt_addr(a: &[u8; 6]) -> String {
     format!(
         "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",

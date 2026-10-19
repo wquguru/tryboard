@@ -1,24 +1,21 @@
-//! 修正节点分析（MNA）+ 隐式欧拉。节点只有个位数，稠密 LU（部分主元）足够。
-//!
-//! 非线性元件都写成分段线性（PWL）：电流 = max(0, min(若干条直线))。每次求解先按上一次的电压选定每个元件
-//! 落在哪一段，线性化后解一次，再按新电压重选，段不再变化就收敛（PWL 上的牛顿法，通常 2–4 次）。
-//! 这样不需要导数、不需要步长控制，结果只取决于输入，网页和命令行逐位相同。
+//! Modified nodal analysis (MNA) + implicit Euler; a handful of nodes, so dense LU with partial pivoting is enough.
+//! Non-linear parts are piecewise linear (max(0, min(lines))), solved without derivatives or step control so web and CLI match bit for bit.
 
-/// 节点编号：0 是地
+/// Node number: 0 is ground
 pub type Node = usize;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Elem {
-    /// 电阻
+    /// Resistor
     R { a: Node, b: Node, r: f64 },
-    /// 电容（瞬态用后向欧拉伴随模型；直流工作点时开路）
+    /// Capacitor (backward-Euler companion model in transient; open at the DC operating point)
     C { a: Node, b: Node, c: f64 },
-    /// 电压源 v(a) − v(b) = v。r > 0 时是带内阻的源（诺顿等效），r = 0 是理想源（MNA 附加变量）
+    /// Voltage source v(a) - v(b) = v; r > 0 is a source with internal resistance (Norton), r = 0 is ideal (MNA extra variable)
     V { a: Node, b: Node, v: f64, r: f64 },
-    /// 电流源：SPICE 约定，电流从 a 经源流到 b（从节点 a 流出、流入节点 b）
+    /// Current source, SPICE convention: current flows from a through the source to b (out of node a, into node b)
     I { a: Node, b: Node, i: f64 },
-    /// 带限流的源（USB 口、电源适配器），接在节点 a 与地之间：
-    /// 电流 = max(0, min((vs − v)/r, ilim + (vs − r·ilim − v)/rlim))，超过 ilim 后内阻从 r 变成 rlim（限流开关进恒流区）
+    /// Current-limited source (USB port, adapter) between a and ground: i = max(0, min((vs - v)/r, ilim + (vs - r*ilim - v)/rlim));
+    /// above ilim the resistance goes from r to rlim (the limit switch enters constant-current mode)
     Limit {
         a: Node,
         vs: f64,
@@ -26,8 +23,8 @@ pub enum Elem {
         ilim: f64,
         rlim: f64,
     },
-    /// 线性稳压器：输出电流 = max(0, min((vset − vout)/rout, (vin − vout)/rdo, ilim))；输入电流 = 输出电流 + iq
-    /// 三段分别是稳压、压差（调整管全开，等效 rdo）、限流
+    /// Linear regulator: iout = max(0, min((vset - vout)/rout, (vin - vout)/rdo, ilim)); iin = iout + iq.
+    /// The three segments are regulation, dropout (pass device fully on, rdo) and current limit
     Ldo {
         inp: Node,
         out: Node,
@@ -37,34 +34,34 @@ pub enum Elem {
         ilim: f64,
         iq: f64,
     },
-    /// 恒流负载（节点 a 到地）：电流 = min(i, v·i/vknee)，电压低于 vknee 时退化成电阻，免得把节点拉成负压
+    /// Constant-current load (a to ground): i = min(i, v*i/vknee); below vknee it degrades to a resistor so it can't pull the node negative
     Load { a: Node, i: f64, vknee: f64 },
-    /// 舵机电机从电源取的电流（节点 a 到地）：电流 = max(0, (min(v, vcmd) − emf)/r)。
-    /// vcmd = 控制器想加的电压（比例控制 Kp·误差，最多到电源电压），emf = 反电动势（含方向符号）
+    /// Servo motor supply current (a to ground): i = max(0, (min(v, vcmd) - emf)/r); vcmd = controller voltage (Kp*err,
+    /// capped at supply), emf = back-EMF including direction sign
     Motor {
         a: Node,
         vcmd: f64,
         emf: f64,
         r: f64,
     },
-    /// 二极管（LED、引脚钳位二极管），a 是阳极：电流 = max(0, (v(a) − v(b) − vf)/rd)。
-    /// 一段折线代替指数曲线：只在工作电流附近（mA–几十 mA）准，够算"接错线会流多大电流"
+    /// Diode (LED, pin clamp), a = anode: i = max(0, (v(a) - v(b) - vf)/rd). One linear piece instead of the exponential;
+    /// accurate only near mA to tens of mA, enough to tell how much current a miswired part draws
     Diode { a: Node, b: Node, vf: f64, rd: f64 },
 }
 
-/// 一条 PWL 段：I = g·(v_a) + c（只依赖一个节点电压时）
+/// One PWL segment: I = g*(v_a) + c (when it depends on one node voltage)
 #[derive(Clone, Copy, Debug)]
 struct Seg {
     g: f64,
     c: f64,
 }
 
-/// 求解结果：各节点电压（下标 = 节点号，0 号恒为 0）、各元件电流（流出第一个节点为正）
+/// Result: node voltages (index = node number, 0 is always 0) and element currents (positive out of the first node)
 #[derive(Clone, Debug, Default)]
 pub struct Solution {
     pub v: Vec<f64>,
     pub i: Vec<f64>,
-    /// PWL 迭代次数
+    /// PWL iteration count
     pub iters: usize,
 }
 
@@ -87,12 +84,12 @@ impl Circuit {
         self.elems.len() - 1
     }
 
-    /// 求一次：dt = None 是直流工作点（电容开路）；dt = Some(h) 是隐式欧拉一步，prev 是上一步的节点电压。
-    /// guess 是 PWL 选段的初始电压（通常用上一步的结果）
+    /// dt = None solves the DC operating point (caps open); Some(h) is one implicit Euler step from node voltages prev.
+    /// guess seeds the PWL segment choice (usually the previous result)
     pub fn solve(&self, dt: Option<f64>, prev: &[f64], guess: &[f64]) -> Solution {
         let n = self.nodes;
         let dim = n + self.n_ideal();
-        // 未知量 x = [节点 1..n 的电压, 理想电压源支路电流]
+        // Unknowns x = [voltages of nodes 1..n, ideal voltage source branch currents]
         let mut x: Vec<f64> = (0..dim)
             .map(|k| {
                 if k < n {
@@ -108,9 +105,8 @@ impl Circuit {
             v
         };
         let mut iters = 0;
-        // Katzenelson 法（分段线性网络的经典解法）：在当前段线性化 → 解线性方程；解落在同一组段里就是精确解。
-        // 否则沿"当前点 → 线性解"这条线段走到第一个段边界（二分找），换段再解。每轮只跨一个边界，
-        // 不会像普通牛顿那样在段之间来回跳，也不会被浮空节点的超大线性解带跑（只走到边界为止）
+        // Katzenelson: linearise in the current segments and solve; if the solution stays in them it is exact, otherwise walk to the
+        // first segment boundary (bisection) and re-solve. One boundary per round: no Newton ping-pong, no runaway on floating nodes
         while iters < 200 {
             iters += 1;
             let segs = self.pick(&volts(&x));
@@ -146,19 +142,19 @@ impl Circuit {
             .count()
     }
 
-    /// 按电压选每个非线性元件所在的段（编号），用于判断收敛
+    /// Segment index of each non-linear element at these voltages, used to detect convergence
     fn pick(&self, v: &[f64]) -> Vec<u8> {
         self.elems.iter().map(|e| pwl(e, v).0).collect()
     }
 
-    /// 在给定的段上组线性方程 a·x = z（a 按行存放）
+    /// Build the linear system a*x = z for the given segments (a is row-major)
     fn system(&self, dt: Option<f64>, prev: &[f64], segs: &[u8]) -> (Vec<f64>, Vec<f64>) {
         let n = self.nodes;
-        // 理想电压源各占一个附加变量（支路电流）
+        // Each ideal voltage source adds one variable (its branch current)
         let dim = n + self.n_ideal();
         let mut a = vec![0.0; dim * dim];
         let mut z = vec![0.0; dim];
-        // 节点 k（1..=n）对应行 / 列 k-1；地不进矩阵
+        // Node k (1..=n) maps to row / column k-1; ground is not in the matrix
         let idx = |k: Node| if k == 0 { None } else { Some(k - 1) };
         let stamp_g = |a: &mut Vec<f64>, p: Node, q: Node, g: f64| {
             if let Some(i) = idx(p) {
@@ -172,7 +168,7 @@ impl Circuit {
                 a[j * dim + i] -= g;
             }
         };
-        // 电流 i 从节点 p 流出、流进节点 q
+        // Current i flows out of node p into node q
         let inject = |z: &mut Vec<f64>, p: Node, q: Node, i: f64| {
             if let Some(k) = idx(p) {
                 z[k] -= i;
@@ -191,7 +187,7 @@ impl Circuit {
                         stamp_g(&mut a, p, q, g);
                         let vp = prev.get(p).copied().unwrap_or(0.0)
                             - prev.get(q).copied().unwrap_or(0.0);
-                        // 伴随模型：电流 = g·(v − vprev)，常数项 −g·vprev 从 p 流出 → 等效往 p 注入 g·vprev
+                        // Companion model: i = g*(v - vprev); the constant -g*vprev out of p is an injection of g*vprev into p
                         inject(&mut z, q, p, g * vp);
                     }
                 }
@@ -206,7 +202,7 @@ impl Circuit {
                         stamp_g(&mut a, p, q, g);
                         inject(&mut z, q, p, vs * g);
                     } else {
-                        // 附加行：v(p) − v(q) = vs；支路电流 j 从 p 经源内部流到 q 的反方向（SPICE：流进 p 端）
+                        // Extra row: v(p) - v(q) = vs; branch current j flows into the p terminal (SPICE convention)
                         if let Some(i) = idx(p) {
                             a[i * dim + vk] += 1.0;
                             a[vk * dim + i] += 1.0;
@@ -221,14 +217,14 @@ impl Circuit {
                 }
                 Elem::I { a: p, b: q, i } => inject(&mut z, p, q, i),
                 Elem::Diode { a: p, b: q, vf, rd } => {
-                    // 导通段：I = (v(p) − v(q))/rd − vf/rd，常数项当作从 p 流到 q 的电流源
+                    // Conducting segment: I = (v(p) - v(q))/rd - vf/rd; the constant term is a current source from p to q
                     if s == 1 {
                         stamp_g(&mut a, p, q, 1.0 / rd);
                         inject(&mut z, p, q, -vf / rd);
                     }
                 }
                 Elem::Limit { a: p, .. } | Elem::Load { a: p, .. } | Elem::Motor { a: p, .. } => {
-                    // 单节点 PWL：电流从 p 流到地 = g·v(p) + c（Limit 是电源，pwl 里已经取了负号）
+                    // Single-node PWL: current from p to ground = g*v(p) + c (Limit is a source, already negated in pwl)
                     let sg = seg1(e, s);
                     stamp_g(&mut a, p, 0, sg.g);
                     inject(&mut z, p, 0, sg.c);
@@ -242,17 +238,16 @@ impl Circuit {
                     ilim,
                     iq,
                 } => {
-                    // 输出电流 io（流进 out），输入电流 io + iq（从 inp 流出）
-                    // 稳压段 io = (vset − vout)/rout；压差段 io = (vin − vout)/rdo；限流段 io = ilim；关断 io = 0
+                    // Output current io flows into out, input current io + iq out of inp; regulation io = (vset - vout)/rout,
+                    // dropout io = (vin - vout)/rdo, limit io = ilim, off io = 0
                     let (gi, go, c) = match s {
                         1 => (0.0, -1.0 / rout, vset / rout),
                         2 => (1.0 / rdo, -1.0 / rdo, 0.0),
                         3 => (0.0, 0.0, ilim),
                         _ => (0.0, 0.0, 0.0),
                     };
-                    // io = gi·vin + go·vout + c
-                    // 节点 out 的 KCL：流出 = −io → 行 out 加 −gi·vin − go·vout，右边 +c
-                    // 节点 inp 的 KCL：流出 = io + iq → 行 inp 加 gi·vin + go·vout，右边 −c − iq
+                    // io = gi*vin + go*vout + c. KCL at out: outflow -io -> row out gets -gi*vin - go*vout, rhs +c;
+                    // KCL at inp: outflow io + iq -> row inp gets gi*vin + go*vout, rhs -c - iq
                     let (ii, oo) = (idx(inp), idx(out));
                     if let Some(o) = oo {
                         if let Some(i) = ii {
@@ -271,14 +266,14 @@ impl Circuit {
                 }
             }
         }
-        // 浮空节点（没有任何直流通路）给一个极小电导，矩阵才不奇异
+        // A floating node (no DC path) gets a tiny conductance so the matrix is not singular
         for k in 0..n {
             a[k * dim + k] += 1e-12;
         }
         (a, z)
     }
 
-    /// 各元件电流（从第一个节点流出为正；电源、LDO 给的是输出电流）
+    /// Element currents (positive out of the first node; sources and LDO report output current)
     fn currents(&self, v: &[f64], dt: Option<f64>, prev: &[f64]) -> Vec<f64> {
         let at = |k: Node| v.get(k).copied().unwrap_or(0.0);
         let pv = |k: Node| prev.get(k).copied().unwrap_or(0.0);
@@ -291,7 +286,7 @@ impl Circuit {
                     .unwrap_or(0.0),
                 Elem::V { a, b, v: vs, r } => {
                     if r > 0.0 {
-                        // 源对外输出的电流（从 a 端流出到外电路）
+                        // Current the source delivers to the outside (out of terminal a)
                         (vs - (at(a) - at(b))) / r
                     } else {
                         f64::NAN
@@ -308,7 +303,7 @@ impl Circuit {
     }
 }
 
-/// 元件在电压 v 下所在的段与电流。Limit / Ldo 返回对外输出的电流，Load / Motor 返回吸收的电流
+/// Segment and current of an element at voltage v; Limit / Ldo return output current, Load / Motor absorbed current
 fn pwl(e: &Elem, v: &[f64]) -> (u8, f64) {
     let at = |k: Node| v.get(k).copied().unwrap_or(0.0);
     match *e {
@@ -343,7 +338,7 @@ fn pwl(e: &Elem, v: &[f64]) -> (u8, f64) {
             let reg = (vset - vo) / rout;
             let dro = (vi - vo) / rdo;
             let m = reg.min(dro).min(ilim);
-            // 正好为 0（猜测值恰在稳压点上）算稳压段，否则输出节点会被当成浮空
+            // Exactly 0 (guess right at the set point) counts as regulation, otherwise the output node looks floating
             if m < 0.0 {
                 (0, 0.0)
             } else if m == reg {
@@ -389,10 +384,10 @@ fn pwl(e: &Elem, v: &[f64]) -> (u8, f64) {
     }
 }
 
-/// 单节点 PWL 元件在第 s 段的线性化：从节点流到地的电流 = g·v + c
+/// Linearisation of a single-node PWL element in segment s: current from node to ground = g*v + c
 fn seg1(e: &Elem, s: u8) -> Seg {
     match *e {
-        // 电源：输出电流 i1 = (vs − v)/r → 流到地 = −i1 = v/r − vs/r
+        // Source: output i1 = (vs - v)/r -> to ground = -i1 = v/r - vs/r
         Elem::Limit {
             vs, r, ilim, rlim, ..
         } => match s {
@@ -429,11 +424,11 @@ fn seg1(e: &Elem, s: u8) -> Seg {
     }
 }
 
-/// 稠密 LU（部分主元）解 a·x = z，a 按行存放、dim × dim；会改写 a、z
+/// Dense LU with partial pivoting for a*x = z; a is row-major dim x dim and both a and z are overwritten
 pub fn lu_solve(a: &mut [f64], z: &mut [f64], dim: usize) -> Vec<f64> {
     let mut perm: Vec<usize> = (0..dim).collect();
     for k in 0..dim {
-        // 选主元
+        // Pick the pivot
         let mut p = k;
         let mut best = a[perm[k] * dim + k].abs();
         for (i, &row) in perm.iter().enumerate().skip(k + 1) {
@@ -503,7 +498,7 @@ mod tests {
 
     #[test]
     fn lu_needs_pivoting() {
-        // 第一列主元为 0
+        // The first column's pivot is 0
         let mut a = vec![0.0, 1.0, 1.0, 1.0];
         let mut z = vec![2.0, 3.0];
         let x = lu_solve(&mut a, &mut z, 2);
@@ -512,7 +507,7 @@ mod tests {
 
     #[test]
     fn rc_charge_implicit_euler() {
-        // 1 kΩ / 1 µF，τ = 1 ms；1 µs 步长跑 1 ms，应接近 1 − e⁻¹
+        // 1 kohm / 1 uF, tau = 1 ms; 1 us steps for 1 ms should approach 1 - e^-1
         let mut c = Circuit::new(2);
         c.add(Elem::V {
             a: 1,
@@ -539,7 +534,7 @@ mod tests {
 
     #[test]
     fn usb_limit_and_ldo_dropout() {
-        // 5 V / 0.5 Ω / 0.5 A 限流，接 4 Ω：不限流时要 1.11 A，限流后进 rlim 段
+        // 5 V / 0.5 ohm / 0.5 A limit into 4 ohm: unlimited would need 1.11 A, so it lands in the rlim segment
         let mut c = Circuit::new(1);
         let src = c.add(Elem::Limit {
             a: 1,
@@ -550,10 +545,10 @@ mod tests {
         });
         c.add(Elem::R { a: 1, b: 0, r: 4.0 });
         let s = c.solve(None, &[], &[0.0, 5.0]);
-        // v = 4·i，i = 0.5 + (4.75 − v)/20 → i = 0.5 + (4.75 − 4i)/20 → 1.2 i = 0.7375
+        // v = 4i, i = 0.5 + (4.75 - v)/20 -> i = 0.5 + (4.75 - 4i)/20 -> 1.2 i = 0.7375
         let i = 0.7375 / 1.2;
         assert!((s.i[src] - i).abs() < 1e-6, "{} vs {i}", s.i[src]);
-        // LDO：输入 3.4 V 时进压差段
+        // LDO: 3.4 V input lands in dropout
         let mut c = Circuit::new(2);
         c.add(Elem::V {
             a: 1,
@@ -581,7 +576,7 @@ mod tests {
             "{:?}",
             s.v
         );
-        // 输入 5 V 时稳压
+        // 5 V input regulates
         let mut c2 = c.clone();
         c2.elems[0] = Elem::V {
             a: 1,

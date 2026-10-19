@@ -1,4 +1,4 @@
-* 03 两个带内阻的源并联给同一负载（USB 5 V 与 4.8 V 电池）
+* 03 Two sources with internal resistance in parallel on one load (USB 5 V and a 4.8 V battery)
 V1 s1 0 DC 5
 R1 s1 n 0.5
 V2 s2 0 DC 4.8

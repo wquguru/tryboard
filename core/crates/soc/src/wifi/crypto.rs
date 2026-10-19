@@ -1,7 +1,6 @@
-//! WPA2-PSK 用到的密码学原语，按公开标准自己实现（不引第三方 crate）：
-//! SHA-1（FIPS 180-4）、HMAC（RFC 2104）、PBKDF2（RFC 8018）、802.11 PRF（IEEE 802.11 §12.7.1.2）、
-//! AES（FIPS 197）、AES Key Wrap（RFC 3394）、CCM（RFC 3610 / NIST SP 800-38C）。
-//! 只追求正确，不追求常数时间：这里加解密的是模拟出来的空中帧，不是真秘密。
+//! WPA2-PSK crypto primitives implemented from public standards (no third-party crates): SHA-1 (FIPS 180-4), HMAC (RFC 2104),
+//! PBKDF2 (RFC 8018), 802.11 PRF (IEEE 802.11 §12.7.1.2), AES (FIPS 197), Key Wrap (RFC 3394), CCM (RFC 3610 / NIST SP 800-38C).
+//! Correct but not constant-time: it only protects simulated air frames, not real secrets. lint: allow-long-comment
 
 // ---------------- SHA-1 ----------------
 
@@ -29,7 +28,7 @@ impl Default for Sha1 {
     }
 }
 
-/// 压缩一个 64 字节块（硬件 SHA 加速器模型也直接用它）
+/// Compress one 64-byte block (the hardware SHA accelerator model uses it directly)
 pub fn sha1_block(h: &mut [u32; 5], b: &[u8]) {
     let mut w = [0u32; 80];
     for i in 0..16 {
@@ -100,7 +99,7 @@ pub fn sha1(d: &[u8]) -> [u8; 20] {
     s.finish()
 }
 
-/// HMAC-SHA1，消息分段给出（PRF 与 EAPOL MIC 都要拼接多段）
+/// HMAC-SHA1 over a message given in parts (PRF and EAPOL MIC both concatenate several)
 pub fn hmac_sha1(key: &[u8], parts: &[&[u8]]) -> [u8; 20] {
     let mut k = [0u8; 64];
     if key.len() > 64 {
@@ -135,14 +134,14 @@ pub fn pbkdf2_sha1(pw: &[u8], salt: &[u8], iters: u32, out: &mut [u8]) {
     }
 }
 
-/// WPA2-PSK：PMK = PBKDF2-HMAC-SHA1(口令, SSID, 4096, 32)
+/// WPA2-PSK: PMK = PBKDF2-HMAC-SHA1(passphrase, SSID, 4096, 32)
 pub fn wpa_pmk(passphrase: &str, ssid: &[u8]) -> [u8; 32] {
     let mut pmk = [0u8; 32];
     pbkdf2_sha1(passphrase.as_bytes(), ssid, 4096, &mut pmk);
     pmk
 }
 
-/// 802.11 PRF-n：HMAC-SHA1(K, A || 0 || B || i) 逐块拼接
+/// 802.11 PRF-n: concatenated blocks of HMAC-SHA1(K, A || 0 || B || i)
 pub fn prf(key: &[u8], label: &[u8], data: &[u8], out: &mut [u8]) {
     for (i, chunk) in out.chunks_mut(20).enumerate() {
         let h = hmac_sha1(key, &[label, &[0], data, &[i as u8]]);
@@ -151,7 +150,7 @@ pub fn prf(key: &[u8], label: &[u8], data: &[u8], out: &mut [u8]) {
 }
 
 /// PTK = PRF-384(PMK, "Pairwise key expansion", min(AA,SPA) || max(AA,SPA) || min(ANonce,SNonce) || max(...))
-/// 返回 KCK(16) || KEK(16) || TK(16)
+/// Returns KCK(16) || KEK(16) || TK(16)
 pub fn wpa_ptk(
     pmk: &[u8; 32],
     aa: &[u8; 6],
@@ -178,7 +177,7 @@ pub fn wpa_ptk(
 // ---------------- AES ----------------
 
 const SBOX: [u8; 256] = {
-    // 按 FIPS 197 §5.1.1 由 GF(2^8) 求逆 + 仿射变换在编译期生成，省得手抄 256 个常数
+    // Generated at compile time from GF(2^8) inverse + affine transform (FIPS 197 §5.1.1) instead of hand-copying 256 constants
     let mut s = [0u8; 256];
     let mut i = 0;
     while i < 256 {
@@ -223,7 +222,7 @@ const fn gf_mul(mut a: u8, mut b: u8) -> u8 {
     p
 }
 
-/// a^254 = a^-1（GF(2^8) 乘法群阶 255）
+/// a^254 = a^-1 (the GF(2^8) multiplicative group has order 255)
 const fn gf_inv(a: u8) -> u8 {
     let mut r = 1u8;
     let mut k = 0;
@@ -234,7 +233,7 @@ const fn gf_inv(a: u8) -> u8 {
     r
 }
 
-/// 展开后的 AES 轮密钥（128 / 192 / 256 位）
+/// Expanded AES round keys (128 / 192 / 256 bit)
 pub struct Aes {
     rk: Vec<[u8; 16]>,
 }
@@ -242,7 +241,7 @@ pub struct Aes {
 impl Aes {
     pub fn new(key: &[u8]) -> Aes {
         let nk = key.len() / 4;
-        assert!(matches!(nk, 4 | 6 | 8), "AES 密钥长度只能是 16/24/32 字节");
+        assert!(matches!(nk, 4 | 6 | 8), "AES key must be 16/24/32 bytes");
         let nr = nk + 6;
         let mut w: Vec<[u8; 4]> = key.chunks(4).map(|c| [c[0], c[1], c[2], c[3]]).collect();
         let mut rcon = 1u8;
@@ -312,7 +311,7 @@ fn xor16(a: &mut [u8; 16], b: &[u8; 16]) {
     }
 }
 
-// 状态按列存放：b[4c + r] 是第 r 行第 c 列
+// State is column-major: b[4c + r] is row r, column c
 fn shift_rows(b: &mut [u8; 16]) {
     let s = *b;
     for c in 0..4 {
@@ -353,7 +352,7 @@ fn inv_mix_columns(b: &mut [u8; 16]) {
     }
 }
 
-/// RFC 3394 AES Key Wrap（默认 IV A6A6...），输入长度为 8 的倍数
+/// RFC 3394 AES Key Wrap (default IV A6A6...); input length is a multiple of 8
 pub fn key_wrap(kek: &[u8], p: &[u8]) -> Vec<u8> {
     let aes = Aes::new(kek);
     let n = p.len() / 8;
@@ -379,7 +378,7 @@ pub fn key_wrap(kek: &[u8], p: &[u8]) -> Vec<u8> {
     out
 }
 
-/// RFC 3394 解封；完整性校验失败返回 None
+/// RFC 3394 unwrap; None if the integrity check fails
 pub fn key_unwrap(kek: &[u8], c: &[u8]) -> Option<Vec<u8>> {
     if c.len() < 16 || !c.len().is_multiple_of(8) {
         return None;
@@ -406,7 +405,7 @@ pub fn key_unwrap(kek: &[u8], c: &[u8]) -> Option<Vec<u8>> {
 
 // ---------------- CCM ----------------
 
-/// CCM 认证加密（L = 15 - nonce 长度，M = 标签长度）；返回 密文 || 标签
+/// CCM authenticated encryption (L = 15 - nonce length, M = tag length); returns ciphertext || tag
 pub fn ccm_encrypt(key: &[u8], nonce: &[u8], aad: &[u8], msg: &[u8], m: usize) -> Vec<u8> {
     let aes = Aes::new(key);
     let tag = ccm_mac(&aes, nonce, aad, msg, m);
@@ -417,7 +416,7 @@ pub fn ccm_encrypt(key: &[u8], nonce: &[u8], aad: &[u8], msg: &[u8], m: usize) -
     out
 }
 
-/// CCM 解密并校验；标签不符返回 None
+/// CCM decrypt and verify; None on tag mismatch
 pub fn ccm_decrypt(key: &[u8], nonce: &[u8], aad: &[u8], ct: &[u8], m: usize) -> Option<Vec<u8>> {
     if ct.len() < m {
         return None;
@@ -469,7 +468,7 @@ fn ccm_mac(aes: &Aes, nonce: &[u8], aad: &[u8], msg: &[u8], m: usize) -> Vec<u8>
         }
     };
     if !aad.is_empty() {
-        // 802.11 的 AAD 不超过 30 字节，只需要 2 字节长度前缀的形式
+        // 802.11 AAD is at most 30 bytes, so only the 2-byte length prefix form is needed
         let mut a = (aad.len() as u16).to_be_bytes().to_vec();
         a.extend_from_slice(aad);
         absorb(&a, &mut x);
@@ -478,9 +477,9 @@ fn ccm_mac(aes: &Aes, nonce: &[u8], aad: &[u8], msg: &[u8], m: usize) -> Vec<u8>
     x[..m].to_vec()
 }
 
-// ---------------- CCMP（IEEE 802.11 §12.5.3） ----------------
+// ---------------- CCMP (IEEE 802.11 §12.5.3) ----------------
 
-/// 802.11 帧头长度（数据帧：24 + 可选 A4 + 可选 QoS）
+/// 802.11 header length (data frame: 24 + optional A4 + optional QoS)
 fn hdr_len(f: &[u8]) -> usize {
     let mut n = 24;
     if f[1] & 3 == 3 {
@@ -498,12 +497,12 @@ fn ccmp_nonce_aad(f: &[u8], hl: usize, pn: &[u8; 6]) -> ([u8; 13], Vec<u8>) {
     let mut nonce = [0u8; 13];
     nonce[0] = if qos { f[hl - 2] & 0x0f } else { 0 };
     nonce[1..7].copy_from_slice(&f[10..16]);
-    // PN 在 nonce 里按大端（PN5 在前）
+    // PN goes into the nonce big-endian (PN5 first)
     for i in 0..6 {
         nonce[7 + i] = pn[5 - i];
     }
     let mut aad = Vec::with_capacity(30);
-    // FC：数据帧清子类型位 4..6；清重传、省电、更多数据位；置受保护位
+    // FC: data frames clear subtype bits 4..6; clear Retry, PwrMgt, MoreData; set Protected
     let fc0 = if f[0] & 0x0c == 0x08 {
         f[0] & 0x8f
     } else {
@@ -512,7 +511,7 @@ fn ccmp_nonce_aad(f: &[u8], hl: usize, pn: &[u8; 6]) -> ([u8; 13], Vec<u8>) {
     aad.push(fc0);
     aad.push((f[1] & !0x38) | 0x40);
     aad.extend_from_slice(&f[4..22]);
-    // 序列控制只留分片号
+    // Sequence control keeps only the fragment number
     aad.push(f[22] & 0x0f);
     aad.push(0);
     if a4 {
@@ -525,7 +524,7 @@ fn ccmp_nonce_aad(f: &[u8], hl: usize, pn: &[u8; 6]) -> ([u8; 13], Vec<u8>) {
     (nonce, aad)
 }
 
-/// 明文 802.11 帧 → CCMP 加密帧（插入 8 字节 CCMP 头、末尾附 8 字节 MIC、置受保护位）
+/// Plain 802.11 frame -> CCMP frame (insert 8-byte CCMP header, append 8-byte MIC, set Protected)
 pub fn ccmp_encrypt(tk: &[u8; 16], f: &[u8], pn: u64, key_id: u8) -> Vec<u8> {
     let hl = hdr_len(f);
     let p: [u8; 6] = pn.to_le_bytes()[..6].try_into().unwrap();
@@ -537,7 +536,7 @@ pub fn ccmp_encrypt(tk: &[u8; 16], f: &[u8], pn: u64, key_id: u8) -> Vec<u8> {
     out
 }
 
-/// CCMP 加密帧 → 明文帧（去掉 CCMP 头与 MIC、清受保护位）与 PN；MIC 不符返回 None
+/// CCMP frame -> plain frame (strip CCMP header and MIC, clear Protected) and PN; None on MIC mismatch
 pub fn ccmp_decrypt(tk: &[u8; 16], f: &[u8]) -> Option<(Vec<u8>, u64)> {
     let hl = hdr_len(f);
     if f.len() < hl + 16 || f[hl + 3] & 0x20 == 0 {
@@ -601,7 +600,7 @@ mod tests {
             hmac_sha1(b"Jefe", &[b"what do ya ", b"want for nothing?"]).to_vec(),
             hex("effcdf6ae5eb2fa2d27416d5f184df9c259a7c79")
         );
-        // 用例 6：80 字节密钥（超过块长，先散列）
+        // Case 6: 80-byte key (longer than the block, hashed first)
         assert_eq!(
             hmac_sha1(
                 &[0xaa; 80],
@@ -634,7 +633,7 @@ mod tests {
 
     #[test]
     fn wpa_psk_ieee80211_annex() {
-        // IEEE 802.11 附录 J.4（口令 → PSK）
+        // IEEE 802.11 Annex J.4 (passphrase -> PSK)
         assert_eq!(
             wpa_pmk("password", b"IEEE").to_vec(),
             hex("f42c6fc52df0ebef9ebb4b90b38a5f902e83fe1b135a70e23aed762e9710a12e")
@@ -647,7 +646,7 @@ mod tests {
 
     #[test]
     fn prf_ieee80211_annex() {
-        // IEEE 802.11 附录 J.3 PRF 测试向量 1
+        // IEEE 802.11 Annex J.3 PRF test vector 1
         let mut o = [0u8; 64];
         prf(&[0x0b; 20], b"prefix", b"Hi There", &mut o);
         assert_eq!(
@@ -689,7 +688,7 @@ mod tests {
         let c = key_wrap(&kek, &key);
         assert_eq!(c, hex("1FA68B0A8112B447 AEF34BD8FB5A7B82 9D3E862371D2CFE5"));
         assert_eq!(key_unwrap(&kek, &c).unwrap(), key);
-        // 4.6：256 位 KEK 封装 256 位密钥
+        // 4.6: 256-bit KEK wrapping a 256-bit key
         let kek = hex("000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F");
         let key = hex("00112233445566778899AABBCCDDEEFF000102030405060708090A0B0C0D0E0F");
         let c = key_wrap(&kek, &key);
@@ -701,7 +700,7 @@ mod tests {
 
     #[test]
     fn ccm_rfc3610() {
-        // RFC 3610 包向量 #1
+        // RFC 3610 packet vector #1
         let key = hex("C0C1C2C3C4C5C6C7C8C9CACBCCCDCECF");
         let nonce = hex("00000003020100A0A1A2A3A4A5");
         let aad = hex("0001020304050607");
@@ -712,7 +711,7 @@ mod tests {
             hex("588C979A61C663D2F066D0C2C0F989806D5F6B61DAC38417E8D12CFDF926E0")
         );
         assert_eq!(ccm_decrypt(&key, &nonce, &aad, &ct, 8).unwrap(), msg);
-        // 包向量 #2（31 字节，跨块边界）
+        // Packet vector #2 (31 bytes, crosses a block boundary)
         let nonce = hex("00000004030201A0A1A2A3A4A5");
         let msg = hex("08090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F");
         let ct = ccm_encrypt(&key, &nonce, &aad, &msg, 8);
@@ -727,7 +726,7 @@ mod tests {
 
     #[test]
     fn ccmp_ieee80211_annex() {
-        // IEEE 802.11 附录 J.6.4 CCMP 测试向量（数据帧、A4 缺省、非 QoS）
+        // IEEE 802.11 Annex J.6.4 CCMP test vector (data frame, no A4, non-QoS)
         let tk: [u8; 16] = hex("c9 7c 1f 67 ce 37 11 85 51 4a 8a 19 f2 bd d5 2f")
             .try_into()
             .unwrap();
@@ -745,7 +744,7 @@ mod tests {
         let enc = ccmp_encrypt(&tk, &plain, pn, 0);
         assert_eq!(enc, want);
         let (dec, p) = ccmp_decrypt(&tk, &enc).unwrap();
-        // 解密后受保护位清掉，其余与原帧相同
+        // After decryption the Protected bit is cleared, everything else matches the original
         let mut exp = plain.clone();
         exp[1] &= !0x40;
         assert_eq!(dec, exp);

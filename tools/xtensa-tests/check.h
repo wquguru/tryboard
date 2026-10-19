@@ -1,4 +1,4 @@
-/* 自检宏：寄存器不等于期望值时返回用例编号。a14 / a15 作临时寄存器，测试不要用它们存值。 */
+/* Self-check macro: return the case number when reg != expected. a14 / a15 are scratch, so tests must not keep values there. */
     .macro EXPECT reg, val, case
     movi    a14, \val
     beq     \reg, a14, .Lok\@
@@ -12,7 +12,7 @@
     retw
     .endm
 
-/* 读异常记录：EXC_CAUSE / EXC_COUNT 到 reg */
+/* Read the exception record (EXC_CAUSE / EXC_COUNT) into reg */
     .macro EXC_CAUSE reg
     movi    a15, exc_save
     l32i    \reg, a15, 4
@@ -30,7 +30,7 @@ test_main:
     entry   a1, 64
     .endm
 
-/* 追加一个值到 dump（与 QEMU 逐字节对照）。用 a14 / a15 */
+/* Append a value to the dump (compared byte for byte with QEMU). Clobbers a14 / a15 */
     .macro DUMP reg
     movi    a15, dump_end
     l32i    a14, a15, 0
@@ -39,7 +39,7 @@ test_main:
     s32i    a14, a15, 0
     .endm
 
-/* 读 irq_log 条数 / 第 n 条 */
+/* Read the irq_log entry count / entry n */
     .macro IRQ_COUNT reg
     movi    a15, irq_log
     l32i    \reg, a15, 0

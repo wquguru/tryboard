@@ -1,5 +1,5 @@
-//! 直接启动（经典 ESP32）：装 ROM（esp-rom-elfs 的 esp32_rev300_rom.elf）、解析 flash 镜像、
-//! 按二级 bootloader 的方式映射 app。流程与 S3 相同（见 crates/esp32s3/src/boot.rs），差别在地址。
+//! Direct boot (classic ESP32): load ROM (esp32_rev300_rom.elf from esp-rom-elfs), parse the flash image and map
+//! the app like the 2nd-stage bootloader. Same flow as S3 (see crates/esp32s3/src/boot.rs); only addresses differ.
 
 use crate::*;
 use tryboard_rv32::elf::Elf;
@@ -7,10 +7,10 @@ use tryboard_xtensa::{Variant, PS_UM, PS_WOE};
 
 pub use tryboard_esp32c3::boot::find_app;
 
-/// 镜像头里的芯片 ID（esp_app_format.h：ESP_CHIP_ID_ESP32）
+/// Chip ID in the image header (esp_app_format.h: ESP_CHIP_ID_ESP32)
 pub const CHIP_ID: u16 = 0;
 
-/// ROM 的 flash 芯片描述 g_rom_flashchip（esp32.rom.ld）
+/// ROM's flash chip descriptor g_rom_flashchip (esp32.rom.ld)
 const G_ROM_FLASHCHIP: u32 = 0x3FFA_E270;
 
 pub fn load_rom(m: &mut Esp32, elf_bytes: &[u8]) -> Result<(), String> {
@@ -37,15 +37,15 @@ pub fn load_rom(m: &mut Esp32, elf_bytes: &[u8]) -> Result<(), String> {
             m.rom_symbols.entry(*addr).or_insert_with(|| name.clone());
         }
     }
-    let sym = |n: &str| elf.symbol(n).ok_or(format!("ROM 里没有符号 {n}"));
-    // ets_printf 挂到 UART（ets_install_uart_printf 的效果）
+    let sym = |n: &str| elf.symbol(n).ok_or(format!("ROM has no symbol {n}"));
+    // Route ets_printf to UART (what ets_install_uart_printf does)
     m.bus
         .mem_write(sym("_putc1")?, 4, sym("ets_write_char_uart")?);
     for (name, kind) in crate::hle::TABLE {
         let a = elf
             .symbol(name)
             .or_else(|| elf.symbol(&format!("__call_{name}")))
-            .ok_or(format!("ROM 里没有符号 {name}"))?;
+            .ok_or(format!("ROM has no symbol {name}"))?;
         m.hle.insert(a, *kind);
     }
     let mut addrs: Vec<u32> = m.hle.keys().copied().collect();
@@ -53,11 +53,11 @@ pub fn load_rom(m: &mut Esp32, elf_bytes: &[u8]) -> Result<(), String> {
     m.cpu.hle_lo = ROM_LOW;
     m.cpu.hle_hi = ROM_HIGH;
     m.cpu.hle_addrs = addrs;
-    // RTC_XTAL_FREQ_REG = STORE4（0xB0）、RTC_APB_FREQ_REG = STORE5（0xB4），高低半字相同
+    // RTC_XTAL_FREQ_REG = STORE4 (0xB0), RTC_APB_FREQ_REG = STORE5 (0xB4); high and low halfwords equal, as IDF expects
     m.bus.regs.insert(RTC_CNTL + 0xb0, 0x0028_0028);
     let apb = 80_000_000u32 >> 12;
     m.bus.regs.insert(RTC_CNTL + 0xb4, apb | (apb << 16));
-    // ROM 里每核一份的"每微秒周期数"（ets_update_cpu_frequency 写它，esp_rom_delay_us 读它）：二级 bootloader 交接时是 160MHz
+    // Per-core ROM "ticks per us" (written by ets_update_cpu_frequency, read by esp_rom_delay_us): 160 MHz at bootloader handoff
     for s in ["g_ticks_per_us_pro", "g_ticks_per_us_app"] {
         if let Some(a) = elf.symbol(s) {
             m.bus.mem_write(a, 4, 160);
@@ -66,7 +66,7 @@ pub fn load_rom(m: &mut Esp32, elf_bytes: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-/// 二级 bootloader 按镜像头填写 ROM 的 flash 芯片描述（esp_rom_spiflash_chip_t）
+/// The 2nd-stage bootloader fills ROM's flash chip descriptor (esp_rom_spiflash_chip_t) from the image header
 fn init_flashchip(m: &mut Esp32, size: usize, jedec: u32) -> Result<(), String> {
     let id = ((jedec & 0xff) << 16) | (jedec & 0xff00) | ((jedec >> 16) & 0xff);
     for (i, v) in [id, size as u32, 64 << 10, 4 << 10, 256, 0xffff]
@@ -75,7 +75,7 @@ fn init_flashchip(m: &mut Esp32, size: usize, jedec: u32) -> Result<(), String> 
     {
         m.bus
             .mem_write(G_ROM_FLASHCHIP + 4 * i as u32, 4, *v)
-            .ok_or("写 g_rom_flashchip 失败")?;
+            .ok_or("failed to write g_rom_flashchip")?;
     }
     Ok(())
 }
@@ -94,13 +94,13 @@ fn u32at(b: &[u8], o: usize) -> u32 {
 pub fn parse_app(flash: &[u8], off: u32) -> Result<AppInfo, String> {
     let o = off as usize;
     if flash.get(o) != Some(&0xE9) {
-        return Err(format!("0x{off:x} 处不是 ESP 镜像（魔数不对）"));
+        return Err(format!("no ESP image at 0x{off:x} (bad magic)"));
     }
     let nseg = flash[o + 1] as usize;
     let entry = u32at(flash, o + 4);
     let chip_id = u16::from_le_bytes([flash[o + 12], flash[o + 13]]);
     if chip_id != CHIP_ID {
-        return Err(format!("镜像芯片 ID 是 {chip_id}，不是 ESP32（{CHIP_ID}）"));
+        return Err(format!("image chip ID is {chip_id}, not ESP32 ({CHIP_ID})"));
     }
     let mut p = o + 24;
     let mut segments = Vec::new();
@@ -128,15 +128,15 @@ fn flash_size(code: u8) -> usize {
     }
 }
 
-/// 入口帧的"调用者 sp"指向的溢出保存区：借 ROM 的 level 5 / level 4 中断栈（_Pri_5_Stack / _Pri_4_Stack）。
-/// 它们在 IDF 标成"启动栈"的区域里，调度器起来之后才并入堆，那时入口帧已不会再被溢出
+/// Overflow save area the entry frame's "caller sp" points at: borrows ROM's level 5 / 4 interrupt stacks (_Pri_5_Stack /
+/// _Pri_4_Stack). IDF marks them as startup stack and only adds them to the heap once the scheduler runs, when the entry frame can no longer spill
 const SPILL_PRO: u32 = 0x3FFE_0DC0 + 64;
 const SPILL_APP: u32 = 0x3FFE_0860 + 64;
-/// ROM 的 .stack_pro / .stack_app 顶端（__stack / __stack_app）
+/// Tops of ROM's .stack_pro / .stack_app (__stack / __stack_app)
 const STACK_PRO: u32 = 0x3FFE_3F20;
 const STACK_APP: u32 = 0x3FFE_7E30;
 
-/// 以 CALLINC=0 进入一个窗口 ABI 函数（理由见 S3 的同名函数）
+/// Enter a windowed-ABI function with CALLINC=0 (see the S3 function of the same name for why)
 fn enter_windowed(
     c: &mut Cpu,
     bus: &mut SocBus,
@@ -155,7 +155,7 @@ fn enter_windowed(
         c.step(bus);
         let sp = c.a(1);
         bus.mem_write(sp.wrapping_sub(12), 4, spill)
-            .ok_or("写入口帧保存区失败")?;
+            .ok_or("failed to write entry frame save area")?;
     }
     Ok(())
 }
@@ -174,7 +174,7 @@ impl Esp32 {
         }
     }
 
-    /// 新建一台机器：装 ROM、装 flash、做 bootloader 该做的事，PC 停在 app 入口（call_start_cpu0）
+    /// Build a machine: load ROM and flash, do the bootloader's job, and stop with PC at the app entry (call_start_cpu0)
     pub fn boot(rom_elf: &[u8], flash: Vec<u8>) -> Result<(Esp32, AppInfo), String> {
         Self::boot_with(rom_elf, flash, SocBus::default())
     }
@@ -208,7 +208,7 @@ impl Esp32 {
             if in_cache {
                 if load & 0xffff != data & 0xffff {
                     return Err(format!(
-                        "段 0x{load:08x} 与 flash 偏移 0x{data:x} 页内偏移不一致"
+                        "segment 0x{load:08x} and flash offset 0x{data:x} differ within the page"
                     ));
                 }
                 let entry_of = |v: u32| {
@@ -227,7 +227,9 @@ impl Esp32 {
                 for i in 0..len {
                     let b = flash[(data + i) as usize] as u32;
                     if m.bus.mem_write(load + i, 1, b).is_none() {
-                        return Err(format!("段 0x{load:08x} 落在不可写区域"));
+                        return Err(format!(
+                            "segment 0x{load:08x} lands in a non-writable region"
+                        ));
                     }
                 }
             }
@@ -239,7 +241,7 @@ impl Esp32 {
         Ok((m, app))
     }
 
-    /// 软件复位后重新上电（保留内容与 S3 的 reboot 相同）
+    /// Power back up after a software reset (keeps the same state as S3's reboot)
     pub fn reboot(&mut self, reason: u32) -> Result<(), String> {
         let old = &mut self.bus;
         let mut bus = SocBus {

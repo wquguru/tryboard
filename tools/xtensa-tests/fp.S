@@ -1,13 +1,13 @@
-/* 单精度 FPU：主要靠与 QEMU 的差分对照（所有结果都 DUMP）。
- * 输入取 18 个特殊值（±0、±1、1.5、3、0.1、−2.5、最小 / 最大非规格数、最小规格数、最大有限值、±∞、
- * qNaN、sNaN、2^24+2、2^−24），两两组合 × 4 种舍入模式。
- * 另外跑 libgcc __divsf3 与 libm __ieee754_sqrtf 的原样指令序列（由 DIV0/NEXP01/MKDADJ/ADDEXP/DIVN 等组成），
- * 以及协处理器禁用异常（含 FreeRTOS 式的惰性打开后重试）。自检部分只验少量确定的值。 */
+/* Single-precision FPU, checked mainly by QEMU diff (every result is DUMPed): all pairs of 18 special values (±0, ±1, 1.5, 3, 0.1,
+ * -2.5, min / max subnormal, min normal, max finite, ±inf, qNaN, sNaN, 2^24+2, 2^-24) × 4 rounding modes,
+ * plus the verbatim libgcc __divsf3 and libm __ieee754_sqrtf sequences (DIV0/NEXP01/MKDADJ/ADDEXP/DIVN, ...) and the
+ * coprocessor-disabled exception (incl. FreeRTOS-style lazy enable and retry). The self-check part verifies only a few exact values.
+ * lint: allow-long-comment */
 #include "check.h"
 
 #define NV 18
 
-/* a9 = dump 写指针（整个测试期间独占），结束时写回 dump_end */
+/* a9 = dump write pointer (owned for the whole test), written back to dump_end at the end */
     .macro OUT reg
     s32i    \reg, a9, 0
     addi    a9, a9, 4
@@ -17,7 +17,7 @@
     addi    a9, a9, 4
     .endm
 
-/* 对 vals 中每对 (x, y)：f1=x、f2=y、f0 预置为 f3（1.5），执行 \op，输出 f0 */
+/* For each pair (x, y) in vals: f1=x, f2=y, f0 preset to f3 (1.5), run \op, output f0 */
     .macro PAIRS op
     movi    a7, 0
     wur.fsr a7
@@ -42,7 +42,7 @@
     OUT     a7
     .endm
 
-/* 两操作数（fr 兼作输入）：对每对 (x, y)，f0=x 后执行 \op f0, y，输出 f0 */
+/* Two operands (fr is also an input): for each pair (x, y), f0=x, run \op f0, y, output f0 */
     .macro PAIRS2 op
     movi    a7, 0
     wur.fsr a7
@@ -66,7 +66,7 @@
     OUT     a7
     .endm
 
-/* 对 vals 中每个 x：f1=x，f0 预置 f3，执行 \op f0, f1，输出 f0 */
+/* For each x in vals: f1=x, f0 preset to f3, run \op f0, f1, output f0 */
     .macro UNARY op
     movi    a7, 0
     wur.fsr a7
@@ -84,7 +84,7 @@
     OUT     a7
     .endm
 
-/* f→int：\op a7, f1, \scale */
+/* f->int: \op a7, f1, \scale */
     .macro TOINT op, scale
     movi    a7, 0
     wur.fsr a7
@@ -101,7 +101,7 @@
     OUT     a7
     .endm
 
-/* int→f：\op f0, a7, \scale */
+/* int->f: \op f0, a7, \scale */
     .macro TOFLT op, scale
     movi    a7, 0
     wur.fsr a7
@@ -118,7 +118,7 @@
     OUT     a7
     .endm
 
-/* 比较：每对输出一个 0/1 */
+/* Compares: one 0/1 per pair */
     .macro CMP op
     movi    a7, 0
     wur.fsr a7
@@ -145,7 +145,7 @@
     OUT     a7
     .endm
 
-/* 所有舍入模式下跑一遍 \what（宏名）\arg */
+/* Run \what (a macro name) \arg under every rounding mode */
     .macro ALLRM what, a1, a2
     movi    a10, 0
 .Lr\@:
@@ -161,7 +161,7 @@
     wur.fcr a10
     .endm
 
-/* libgcc __divsf3 的指令序列：f0 = f1 / f2（会改 f2..f8） */
+/* libgcc __divsf3 sequence: f0 = f1 / f2 (clobbers f2..f8) */
     .macro DIVSEQ
     div0.s  f3, f2
     nexp01.s f4, f2
@@ -190,7 +190,7 @@
     divn.s  f0, f2, f6
     .endm
 
-/* libm __ieee754_sqrtf 的指令序列：f0 = sqrt(f1)（会改 f1..f7） */
+/* libm __ieee754_sqrtf sequence: f0 = sqrt(f1) (clobbers f1..f7) */
     .macro SQRTSEQ
     sqrt0.s f2, f1
     const.s f3, 0
@@ -223,7 +223,7 @@
     divn.s  f0, f1, f3
     .endm
 
-/* 与 PAIRS 相同的循环，但跑整段 DIVSEQ（会改 f3：每次重设） */
+/* Same loop as PAIRS but running the whole DIVSEQ (clobbers f3, so reset each time) */
     .macro PAIRS_DIV
     movi    a3, vals
     movi    a4, NV
@@ -256,7 +256,7 @@
     .endm
 
     TEST_BEGIN
-    /* ---- 协处理器禁用：CPENABLE=0 时 FP 指令进 EXCCAUSE 32 */
+    /* ---- Coprocessor disabled: with CPENABLE=0 FP insns raise EXCCAUSE 32 */
     movi    a3, 0
     wsr     a3, cpenable
     rsync
@@ -267,11 +267,11 @@
     EXPECT  a6, 1, 1
     EXC_CAUSE a6
     EXPECT  a6, 32, 2
-    /* RFR 同样受门控 */
+    /* RFR is gated too */
     rfr     a7, f0
     EXC_CAUSE a6
     EXPECT  a6, 32, 3
-    /* 惰性打开：处理程序置 CPENABLE 后重新执行 WFR */
+    /* Lazy enable: the handler sets CPENABLE and re-runs WFR */
     movi    a3, cp_lazy
     movi    a4, 1
     s32i    a4, a3, 0
@@ -286,10 +286,10 @@
 
     movi    a9, dump_end
     l32i    a9, a9, 0
-    movi    a3, 0x3fc00000         /* f3 = 1.5：PAIRS / UNARY 里 f0 的初值 */
+    movi    a3, 0x3fc00000         /* f3 = 1.5: initial f0 for PAIRS / UNARY */
     wfr     f3, a3
 
-    /* 少量自检：1.5 + 1.5 = 3，1/3 的 DIV 序列 */
+    /* A few self-checks: 1.5 + 1.5 = 3, DIV sequence for 1/3 */
     add.s   f0, f3, f3
     rfr     a4, f0
     EXPECT  a4, 0x40400000, 6
@@ -308,7 +308,7 @@
     movi    a3, 0x3fc00000
     wfr     f3, a3
 
-    /* FCR / FSR 可写位 */
+    /* FCR / FSR writable bits */
     movi    a3, -1
     wur.fcr a3
     rur.fcr a4
@@ -320,7 +320,7 @@
     wur.fcr a3
     wur.fsr a3
 
-    /* 二元运算 × 舍入模式 */
+    /* Binary ops × rounding modes */
     ALLRM   PAIRS, add.s
     ALLRM   PAIRS, sub.s
     ALLRM   PAIRS, mul.s
@@ -328,11 +328,11 @@
     ALLRM   PAIRS, msub.s
     ALLRM   PAIRS, maddn.s
     ALLRM   PAIRS, divn.s
-    /* 运算后 FSR 的异常标志（看 QEMU 是否维护） */
+    /* FSR exception flags after the ops (does QEMU maintain them?) */
     rur.fsr a4
     OUT     a4
 
-    /* 单操作数 */
+    /* Unary ops */
     UNARY   mov.s
     UNARY   abs.s
     UNARY   neg.s
@@ -366,7 +366,7 @@
     const.s f0, 15
     OUTF    f0
 
-    /* 转换 */
+    /* Conversions */
     TOINT   round.s, 0
     TOINT   round.s, 3
     TOINT   trunc.s, 0
@@ -380,7 +380,7 @@
     TOFLT   float.s, 7
     TOFLT   ufloat.s, 15
 
-    /* 比较 */
+    /* Compares */
     CMP     un.s
     CMP     oeq.s
     CMP     ueq.s
@@ -389,7 +389,7 @@
     CMP     ole.s
     CMP     ule.s
 
-    /* 条件传送 */
+    /* Conditional moves */
     movi    a3, 0
     movi    a4, 0x40000000
     wfr     f1, a4
@@ -415,7 +415,7 @@
     movf.s  f0, f1, b2
     OUTF    f0
 
-    /* 装载 / 存储：LSI/SSI/LSIP/SSIP/LSX/SSX/LSXP/SSXP（输出数据与指针变化） */
+    /* Loads / stores: LSI/SSI/LSIP/SSIP/LSX/SSX/LSXP/SSXP (output data and pointer updates) */
     movi    a3, fbuf
     movi    a4, 0x11111111
     wfr     f1, a4
@@ -445,7 +445,7 @@
     OUT     a6
     OUTF    f2
 
-    /* 除法与开方序列：所有组合 × 舍入模式 */
+    /* Divide and sqrt sequences: all combinations × rounding modes */
     ALLRM   PAIRS_DIV
     ALLRM   UNARY_SQRT
 

@@ -121,7 +121,7 @@ export function createUsbHost(scene: THREE.Scene, port: THREE.Vector3) {
     // 左：文本编辑器（键盘输入）或串口终端
     const isCdc = v.interfaces.some((s) => s.includes('CDC-ACM'));
     // 只有键盘、没有鼠标（USB 小键盘）：编辑器占满整屏，不画鼠标区
-    const mouse = !isCdc && (v.mouse.reports > 0 || v.interfaces.some((s) => s.includes('鼠标')) || v.log.some((s) => s.startsWith('HID 报告描述符') && s.includes('鼠标')));
+    const mouse = !isCdc && (v.mouse.reports > 0 || v.interfaces.some((s) => s.includes('mouse')) || v.log.some((s) => s.startsWith('HID report descriptor') && s.includes('mouse')));
     g.fillStyle = '#0a0f18';
     g.fillRect(24, 156, mouse ? 560 : SW - 48, SH - 180);
     g.fillStyle = '#5f6f86';

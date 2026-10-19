@@ -61,10 +61,10 @@ test('线束进输入日志：i2cwire=cm / antenna=dB，关卡参数 --i2c-wire 
 });
 
 test('USB 关卡判定：状态 + 打出的字（与 tools/check.py 同样的文字）', () => {
-  const l = { id: 'usbkey-3', usb: { state: '已配置', typed: 'aHello TryBoard\n' } } as Level;
-  const ok = evaluate(l, 'TRYBOARD_OK', '[tryboard] USB 主机：已配置\n[tryboard] USB 键盘输入: "aHello TryBoard\\n"\n');
+  const l = { id: 'usbkey-3', usb: { state: 'configured', typed: 'aHello TryBoard\n' } } as Level;
+  const ok = evaluate(l, 'TRYBOARD_OK', '[tryboard] USB 主机：configured\n[tryboard] USB 键盘输入: "aHello TryBoard\\n"\n');
   assert.deepEqual(ok.map((r) => r.ok), [true, true]);
   assert.equal(ok[1].text, '电脑上打出 “aHello TryBoard↵”（要 “aHello TryBoard↵”）');
   const none = evaluate(l, '', '');
-  assert.deepEqual(none.map((r) => r.text), ['电脑看到的 USB 设备：没有 USB 设备（要已配置）', '电脑上打出 “”（要 “aHello TryBoard↵”）']);
+  assert.deepEqual(none.map((r) => r.text), ['电脑看到的 USB 设备：没有 USB 设备（要configured）', '电脑上打出 “”（要 “aHello TryBoard↵”）']);
 });

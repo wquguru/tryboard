@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""直流电路求解器（tryboard-elec）与 ngspice 对照：tools/elec/*.cir 每个网表两边都解一遍，比较所有节点电压。
+"""Compare the DC/transient solver (tryboard-elec) with ngspice: solve every tools/elec/*.cir both ways, compare all node voltages.
 
-.op 比工作点；.tran 比 终止时刻的 1/4、1/2、1（瞬态从电容未充电开始，ngspice 用 uic）。
-误差 = |我们 − ngspice| / max(|ngspice|, 0.1 V)，全部 < 2% 才通过。自定义元件（USB 限流、LDO、负载、舵机电机）
-在网表里写两遍：`*tb:` 行给我们读，等价的 B 源给 ngspice 读（互相当注释 / 忽略）。
-用法：tools/elec/compare.py [--md]（--md 输出 Markdown 表）；没有 ngspice 时打印原因、退出码 0（accept.sh 记为跳过）。
+.op compares the operating point; .tran compares 1/4, 1/2 and 1 of the stop time (from uncharged caps, ngspice uses uic).
+Error = |ours - ngspice| / max(|ngspice|, 0.1 V); all must be < 2%. Custom parts (USB limit, LDO, load, servo motor) are
+written twice: `*tb:` lines for us and equivalent B sources for ngspice (each side ignores the other's).
+Usage: tools/elec/compare.py [--md] (--md prints a Markdown table). Without ngspice it prints why and exits 0 (accept.sh skips).
 """
 import glob, os, re, shutil, subprocess, sys, tempfile
 
@@ -60,7 +60,7 @@ def spice(path, nodes, times, tran):
 def main():
     md = '--md' in sys.argv
     if not shutil.which('ngspice'):
-        print('ngspice 对照：跳过（本机没有 ngspice，brew install ngspice 后再跑）')
+        print('ngspice comparison: skipped (ngspice not installed; brew install ngspice and rerun)')
         return 0
     rows, worst_all, bad = [], 0.0, 0
     for path in sorted(glob.glob(os.path.join(HERE, '*.cir'))):
@@ -84,20 +84,20 @@ def main():
             vb = b[k]
             e = abs(va - vb) / max(abs(vb), 0.1)
             if e >= worst:
-                worst, detail = e, f'v({k[0]})@{k[1]:g}s：{va:.5f} / {vb:.5f} V'
+                worst, detail = e, f'v({k[0]})@{k[1]:g}s: {va:.5f} / {vb:.5f} V'
         ok = worst < LIMIT and not missing
         bad += not ok
         worst_all = max(worst_all, worst)
         rows.append((name, title, len(a), worst, detail, ok, missing))
     if md:
-        print('| 网表 | 内容 | 比较点 | 最大误差 | 最大误差处（我们 / ngspice） | 结论 |')
+        print('| Netlist | Circuit | Points | Max error | At max error (ours / ngspice) | Result |')
         print('|---|---|---|---|---|---|')
     for name, title, n, worst, detail, ok, missing in rows:
         if md:
             print(f'| {name} | {title} | {n} | {worst * 100:.4f}% | {detail} | {"✅" if ok else "❌"} |')
         else:
-            print(f'{"PASS" if ok else "FAIL"} {name}：{n} 点，最大误差 {worst * 100:.4f}%（{detail}）' + (f' ngspice 缺 {missing}' if missing else ''))
-    print(f'{"" if not md else chr(10)}ngspice 对照：{len(rows)} 个电路，最大误差 {worst_all * 100:.4f}%，{"全部 < 2%" if not bad else f"{bad} 个超限"}')
+            print(f'{"PASS" if ok else "FAIL"} {name}: {n} points, max error {worst * 100:.4f}% ({detail})' + (f' ngspice missing {missing}' if missing else ''))
+    print(f'{"" if not md else chr(10)}ngspice comparison: {len(rows)} circuits, max error {worst_all * 100:.4f}%, {"all < 2%" if not bad else f"{bad} over limit"}')
     return 1 if bad else 0
 
 

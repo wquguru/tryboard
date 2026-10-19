@@ -1,4 +1,4 @@
-* 05 RC 充电：3.3 V 经 1 k 给 10 µF 充电（τ = 10 ms）
+* 05 RC charge: 3.3 V through 1 k into 10 uF (tau = 10 ms)
 V1 in 0 DC 3.3
 R1 in out 1k
 C1 out 0 10u

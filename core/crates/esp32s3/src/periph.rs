@@ -1,7 +1,7 @@
-//! ESP32-S3 特有的外设模型（与 C3 布局不同的部分）。寄存器偏移来自 ESP-IDF
-//! `components/soc/esp32s3/register/soc/*.h`（Apache-2.0 OR MIT）。
+//! ESP32-S3-specific peripheral models (the parts whose layout differs from C3). Register offsets come from ESP-IDF
+//! `components/soc/esp32s3/register/soc/*.h` (Apache-2.0 OR MIT).
 
-/// 中断源编号（soc/esp32s3/include/soc/interrupts.h，用 clang 编译头文件求得）
+/// Interrupt source numbers (soc/esp32s3/include/soc/interrupts.h, evaluated by compiling the header with clang)
 pub mod src {
     pub const WIFI_MAC: u32 = 0;
     pub const GPIO: u32 = 16;
@@ -25,9 +25,9 @@ pub mod src {
     pub const MAX: usize = 99;
 }
 
-/// Xtensa 外部中断线的类型（xtensa/esp32s3/.../core-isa.h：XCHAL_INTn_TYPE）。
-/// 电平型线的 INTERRUPT 位跟随中断源电平；边沿型线在上升沿置位、由 CPU 写 INTCLEAR 清除；
-/// 定时器（6/15/16）、软件（7/29）、性能计数（11）线由 CPU 自己管理，SoC 不碰。
+/// Xtensa external interrupt line types (xtensa/esp32s3/.../core-isa.h: XCHAL_INTn_TYPE). Level lines follow the source
+/// level; edge lines latch on a rising edge until the CPU writes INTCLEAR. Timer (6/15/16), software (7/29) and
+/// perf-counter (11) lines are CPU-managed; the SoC leaves them alone. lint: allow-long-comment
 pub const EXTERN_LEVEL_LINES: u32 = (1 << 0)
     | (1 << 1)
     | (1 << 2)
@@ -50,26 +50,27 @@ pub const EXTERN_LEVEL_LINES: u32 = (1 << 0)
     | (1 << 27)
     | (1 << 31);
 pub const EXTERN_EDGE_LINES: u32 = (1 << 10) | (1 << 22) | (1 << 28) | (1 << 30);
-/// NMI（线 14）也是外部电平输入
+/// NMI (line 14) is also an external level input
 pub const NMI_LINE: u32 = 1 << 14;
-/// 中断线 → 级别（XCHAL_INTn_LEVEL）
+/// Interrupt line -> level (XCHAL_INTn_LEVEL)
 pub const LINE_LEVEL: [u8; 32] = [
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 7, 3, 5, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 3, 4, 3, 4, 5,
 ];
 
-// ---------------------------------------------------------------- 中断矩阵（核 0）
-/// 每个外设中断源映射到核 0 的一条 CPU 中断线（INTERRUPT_CORE0_*_MAP_REG，偏移 = 4 × 源编号）。
-/// 线号 6/7/11/14(NMI 除外)/15/16/29 是内部线，映射到这些线等于屏蔽（IDF 用 16 之类的线当"禁用"）。
+// ---------------------------------------------------------------- Interrupt matrix (core 0)
+
+/// Each peripheral source maps to one core 0 CPU line (INTERRUPT_CORE0_*_MAP_REG, offset = 4 x source). Lines
+/// 6/7/11/14 (except NMI)/15/16/29 are internal, so mapping there masks the source (IDF uses e.g. 16 as "disabled").
 pub struct Intmatrix {
     pub map: [u8; src::MAX],
     pub clock_gate: u32,
-    /// 边沿型线的上一次输入电平，用于检测上升沿
+    /// Previous input level of edge lines, for rising-edge detection
     pub last_edge_in: u32,
 }
 
 impl Default for Intmatrix {
     fn default() -> Self {
-        // 复位值：所有源映射到线 16（定时器线，等于不连接）
+        // Reset value: every source maps to line 16 (a timer line, i.e. unconnected)
         Intmatrix {
             map: [16; src::MAX],
             clock_gate: 1,
@@ -84,7 +85,7 @@ impl Intmatrix {
         Some(match off {
             _ if i < src::MAX => self.map[i] as u32,
             0x18c..=0x198 => {
-                // INTR_STATUS_0..3：各 32 个源的当前电平
+                // INTR_STATUS_0..3: current level of 32 sources each
                 let k = ((off - 0x18c) / 4) as usize;
                 let bit0 = k * 32;
                 let mut v = 0u32;
@@ -112,7 +113,7 @@ impl Intmatrix {
         true
     }
 
-    /// 由各中断源电平得出外部中断线的输入：(电平线, 本次新出现的边沿线)
+    /// Derive external line inputs from source levels: (level lines, newly rising edge lines)
     pub fn lines(&mut self, levels: &[u64; 2]) -> (u32, u32) {
         let mut lines = 0u32;
         for (w, &word) in levels.iter().enumerate() {
@@ -133,8 +134,8 @@ impl Intmatrix {
     }
 }
 
-// ---------------------------------------------------------------- EXTMEM（S3：I/D cache 分开）
-/// cache 操作瞬间完成：使能位自清、完成位置 1。cache 内容不建模（flash / PSRAM 读直接经 MMU 翻译）。
+// ---------------------------------------------------------------- EXTMEM (S3: separate I/D caches)
+/// Cache ops complete instantly: enable bits self-clear, done bits set. Contents not modelled (flash / PSRAM reads go straight through the MMU).
 pub struct Extmem {
     pub regs: [u32; 0x400 / 4],
 }
@@ -146,12 +147,12 @@ impl Default for Extmem {
             regs[(off / 4) as usize] = done;
         }
         regs[0] = 1; // DCACHE_ENABLE
-        regs[0x60 / 4] = 1; // ICACHE_ENABLE（bootloader 已开 cache）
+        regs[0x60 / 4] = 1; // ICACHE_ENABLE (bootloader already enabled the cache)
         Extmem { regs }
     }
 }
 
-/// (偏移, 完成位)：DCACHE_LOCK / SYNC / OCCUPY / PRELOAD / AUTOLOAD、ICACHE_LOCK / SYNC / PRELOAD / AUTOLOAD
+/// (offset, done bit): DCACHE_LOCK / SYNC / OCCUPY / PRELOAD / AUTOLOAD, ICACHE_LOCK / SYNC / PRELOAD / AUTOLOAD
 const OPS: [(u32, u32); 9] = [
     (0x1c, 1 << 2),
     (0x28, 1 << 3),
@@ -167,7 +168,7 @@ const OPS: [(u32, u32); 9] = [
 impl Extmem {
     pub fn read(&self, off: u32) -> u32 {
         match off {
-            0x130 => 0x1001, // CACHE_STATE：I / D 都空闲
+            0x130 => 0x1001, // CACHE_STATE: I / D both idle
             0x3fc => 0x2101040,
             _ => self.regs.get((off / 4) as usize).copied().unwrap_or(0),
         }
@@ -179,7 +180,7 @@ impl Extmem {
             0x28 => (v & !7) | 8,
             0x34 | 0x40 | 0x88 | 0x94 => (v & !1) | 2,
             0x4c | 0xa0 => v | 8,
-            // DCACHE_FREEZE / ICACHE_FREEZE：ena 位 0，done 位 2
+            // DCACHE_FREEZE / ICACHE_FREEZE: ena bit 0, done bit 2
             0x150 | 0x154 => (v & !4) | if v & 1 != 0 { 4 } else { 0 },
             _ => v,
         };
@@ -189,7 +190,7 @@ impl Extmem {
     }
 }
 
-// ---------------------------------------------------------------- GPIO（49 个引脚）
+// ---------------------------------------------------------------- GPIO (49 pins)
 pub const NPINS: usize = 49;
 
 pub struct Gpio {
@@ -202,11 +203,11 @@ pub struct Gpio {
     pub func_out: [u32; NPINS],
     pub func_in: [u32; 256],
     pub iomux: [u32; NPINS],
-    /// 板上固定上拉（BOOT 键 GPIO0）
+    /// Fixed on-board pull-up (BOOT button GPIO0)
     pub board_pullup: u64,
     pub last_level: u64,
     pub strap: u32,
-    /// 由外设信号（RMT 等，经 GPIO 矩阵）驱动的引脚：掩码与电平
+    /// Pins driven by peripheral signals (RMT etc., via the GPIO matrix): mask and level
     pub periph_mask: u64,
     pub periph_level: u64,
 }
@@ -225,7 +226,7 @@ impl Default for Gpio {
             iomux: [0; NPINS],
             board_pullup: 1,
             last_level: 1,
-            // GPIO0 拉高 → SPI 启动
+            // GPIO0 pulled high -> SPI boot
             strap: 0x8,
             periph_mask: 0,
             periph_level: 0,
@@ -339,7 +340,7 @@ impl Gpio {
             0x554..=0x614 => {
                 let pin = ((off - 0x554) / 4) as usize;
                 self.func_out[pin] = v;
-                // 改回普通 GPIO 输出（信号 256）时不再由外设驱动
+                // Switching back to plain GPIO output (signal 256) releases the peripheral drive
                 if v & 0x1ff == 0x100 {
                     self.periph_mask &= !(1 << pin);
                 }
@@ -349,12 +350,12 @@ impl Gpio {
     }
 }
 
-// ---------------------------------------------------------------- SAR ADC 单次采样（S3 走 RTC 的 SENS 控制器）
-/// S3 的单次采样由 SENS（0x60008800）完成，与 C3 的 APB_SARADC 不同：
-/// SAR_MEAS1_CTRL2（0x0C）：数据 [15:0]、完成位 16、启动位 17、通道位图 sar1_en_pad [30:19]；
-/// SAR_MEAS2_CTRL2（0x30）同理给 ADC2；SAR_ATTEN1 / 2（0x14 / 0x38）每通道 2 位衰减。
-/// ADC1 通道 n = GPIO(n+1)，ADC2 通道 n = GPIO(n+11)。量程按数据手册衰减档近似：0dB≈950mV、2.5dB≈1250mV、6dB≈1750mV、12dB≈3100mV。
-/// SENS_SAR_TSENS_CTRL_REG 相对 SENS 基址（0x60008800）的偏移
+// ---------------------------------------------------------------- SAR ADC one-shot (S3 uses the RTC SENS controller)
+// Unlike C3's APB_SARADC, S3 one-shot sampling goes through SENS (0x60008800). lint: allow-long-comment
+// SAR_MEAS1_CTRL2 (0x0C): data [15:0], done bit 16, start bit 17, channel bitmap sar1_en_pad [30:19];
+// SAR_MEAS2_CTRL2 (0x30) likewise for ADC2; SAR_ATTEN1 / 2 (0x14 / 0x38) 2 attenuation bits per channel.
+// ADC1 ch n = GPIO(n+1), ADC2 ch n = GPIO(n+11). Full scale approximates datasheet atten steps: 0dB~950mV, 2.5dB~1250mV, 6dB~1750mV, 12dB~3100mV.
+/// Offset of SENS_SAR_TSENS_CTRL_REG from the SENS base (0x60008800)
 const TSENS_CTRL: u32 = 0x50;
 const TSENS_RAW_25C: u32 = 104;
 
@@ -380,9 +381,8 @@ impl SensAdc {
     pub fn read(&self, off: u32) -> Option<u32> {
         let v = self.regs.get((off / 4) as usize).copied()?;
         Some(if off == TSENS_CTRL {
-            // 片上温度传感器（SENS_SAR_TSENS_CTRL_REG）：写 DUMP_OUT（位 24）后等 READY（位 8），
-            // 读 OUT（位 7..0）。libphy 的 temperature_sensor_get_raw_value 在 Wi-Fi 校准时调用。
-            // 原始值 104 ≈ 25 ℃（tsens 换算 0.4386 × raw − 20.52，偏移档 0）
+            // On-chip temp sensor (SENS_SAR_TSENS_CTRL_REG): write DUMP_OUT (bit 24), wait READY (bit 8), read OUT (bits 7..0); libphy's
+            // temperature_sensor_get_raw_value calls it during Wi-Fi calibration. Raw 104 ~ 25 C (0.4386 x raw - 20.52, offset step 0)
             (v & !0x1ff) | (1 << 8) | TSENS_RAW_25C
         } else {
             v
@@ -397,7 +397,7 @@ impl SensAdc {
         if off == 0x0c || off == 0x30 {
             let unit = if off == 0x0c { 0 } else { 1 };
             if v & (1 << 17) == 0 {
-                v &= !(1 << 16); // 启动位清零：完成位也清
+                v &= !(1 << 16); // start bit cleared: clear the done bit too
             } else if old & (1 << 17) == 0 {
                 let pads = (v >> 19) & 0xfff;
                 let raw = self.sample(unit, pads.trailing_zeros());
@@ -429,7 +429,7 @@ impl SensAdc {
     }
 }
 
-// ---------------------------------------------------------------- 模拟前端（regi2c，经 ROM 函数 HLE 访问）
+// ---------------------------------------------------------------- Analog front end (regi2c, accessed via ROM function HLE)
 #[derive(Default)]
 pub struct Analog {
     pub regs: std::collections::HashMap<(u8, u8), u8>,
@@ -439,7 +439,7 @@ impl Analog {
     pub fn read(&self, block: u8, reg: u8) -> u8 {
         let v = self.regs.get(&(block, reg)).copied().unwrap_or(0);
         match (block, reg) {
-            // I2C_ULP（0x61）reg3：O_DONE_FLAG（位 0）、BG_O_DONE_FLAG（位 3）—— 偏置 / ocode 校准立即完成
+            // I2C_ULP (0x61) reg3: O_DONE_FLAG (bit 0), BG_O_DONE_FLAG (bit 3) -- bias / ocode calibration completes immediately
             (0x61, 3) => v | 0x09,
             _ => v,
         }

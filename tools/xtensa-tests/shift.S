@@ -1,4 +1,4 @@
-/* 移位：SLLI / SRLI / SRAI，SAR 系列 SSL/SSR/SSAI/SSA8L/SSA8B 与 SLL/SRL/SRA/SRC */
+/* Shifts: SLLI / SRLI / SRAI, the SAR family SSL/SSR/SSAI/SSA8L/SSA8B and SLL/SRL/SRA/SRC */
 #include "check.h"
     TEST_BEGIN
     movi    a2, 0x81234567
@@ -34,7 +34,7 @@
     EXPECT  a4, 0x00081234, 11
     sra     a4, a2
     EXPECT  a4, 0xFFF81234, 12
-    /* SSAI + SRC（漏斗移位） */
+    /* SSAI + SRC (funnel shift) */
     movi    a5, 0xAABBCCDD
     ssai    8
     src     a4, a5, a2
@@ -45,7 +45,7 @@
     ssai    31
     src     a4, a5, a2
     EXPECT  a4, 0x557799BB, 15
-    /* SSA8L：按字节偏移的小端拼接 */
+    /* SSA8L: little-endian concatenation by byte offset */
     movi    a3, 2
     ssa8l   a3
     src     a4, a5, a2
@@ -59,7 +59,7 @@
     ssa8b   a3
     rsr     a4, sar
     EXPECT  a4, 24, 19
-    /* SAR=32：SRL 结果为 0 */
+    /* SAR=32: SRL yields 0 */
     movi    a3, 0
     ssl     a3
     rsr     a4, sar

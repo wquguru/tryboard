@@ -274,7 +274,7 @@ def run(fw: str, t: dict, inputs: str = '', extra=()):
         lines = [l for l in err.splitlines() if l.strip()]
         tail = [l for l in lines if 'panicked' in l or '启动失败' in l][:1] or lines[-1:] or ['（无输出）']
         res.insert(0, (False, f'模拟器没跑起来：{tail[0][:120]}'))
-    elec = [l for l in err.splitlines() if l.startswith('[tryboard] 电气') or '欠压复位（' in l]
+    elec = [l for l in err.splitlines() if l.startswith('[tryboard] elec') or '欠压复位（' in l]
     return res, fingerprint(out, report), elec
 
 
