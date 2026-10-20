@@ -20,6 +20,15 @@ pub(crate) enum Host {
     Vspi,
 }
 
+impl Host {
+    fn base(self) -> u32 {
+        match self {
+            Host::Hspi => 0x3FF6_4000,
+            Host::Vspi => 0x3FF6_5000,
+        }
+    }
+}
+
 impl SocBus {
     pub(crate) fn spi(&mut self, h: Host) -> &mut ClassicSpi {
         match h {
@@ -30,7 +39,7 @@ impl SocBus {
 
     pub(crate) fn spi_write(&mut self, h: Host, off: u32, v: u32, now: u64) {
         if !ClassicSpi::known(off) {
-            *self.unimpl.entry(0x3FF6_4000 + off).or_insert(0) += 1;
+            *self.unimpl.entry(h.base() + off).or_insert(0) += 1;
         }
         if self.spi(h).write(off, v) {
             self.spi_transfer(h, now);
@@ -39,7 +48,7 @@ impl SocBus {
 
     pub(crate) fn spi_read(&mut self, h: Host, off: u32) -> u32 {
         if !ClassicSpi::known(off) {
-            *self.unimpl.entry(0x3FF6_4000 + off).or_insert(0) += 1;
+            *self.unimpl.entry(h.base() + off).or_insert(0) += 1;
         }
         self.spi(h).read(off)
     }
@@ -88,8 +97,7 @@ impl SocBus {
         let pins = self.lcd_pins;
         let en = self.gpio.enable;
         let cs = pins.cs as usize;
-        let cs_high =
-            !self.lcd_cs_by_spi() && en >> cs & 1 != 0 && lv >> cs & 1 != 0;
+        let cs_high = !self.lcd_cs_by_spi() && en >> cs & 1 != 0 && lv >> cs & 1 != 0;
         let rst_low = pins
             .rst
             .is_some_and(|r| en >> r & 1 != 0 && lv >> r & 1 == 0);
@@ -170,7 +178,15 @@ impl SocBus {
     /// Attach a DCS panel on the given GPIOs (CO5300 is an S3-only QSPI part)
     pub fn attach_lcd_pins(&mut self, kind: LcdKind, pins: LcdPins) -> bool {
         let fits = |p: u8| (p as usize) < NPINS;
-        let all = [Some(pins.sclk), Some(pins.mosi), Some(pins.cs), Some(pins.dc), pins.rst, pins.bl, pins.miso];
+        let all = [
+            Some(pins.sclk),
+            Some(pins.mosi),
+            Some(pins.cs),
+            Some(pins.dc),
+            pins.rst,
+            pins.bl,
+            pins.miso,
+        ];
         if kind == LcdKind::Co5300 || !all.into_iter().flatten().all(fits) {
             return false;
         }

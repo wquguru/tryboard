@@ -1,10 +1,11 @@
 //! `tryboard_soc::chip::Chip` for the classic ESP32 (R-06): what the machine shell calls, one batch at a time.
-//! No ADC model, LCD, I2S devices, PCNT, BLE or USB yet: those keep the trait's "absent" defaults.
+//! No ADC model, I2S devices, PCNT, BLE or USB yet: those keep the trait's "absent" defaults.
 
 use crate::{Esp32, Stop, MMIO_HIGH, MMIO_LOW};
 use std::collections::{HashMap, VecDeque};
 use tryboard_soc::chip::{self, Chip};
 use tryboard_soc::devices::audio::Audio;
+use tryboard_soc::devices::lcd::{Lcd, LcdKind, LcdPins};
 use tryboard_soc::devices::pins::PinDevices;
 use tryboard_soc::i2c::I2c;
 use tryboard_soc::i2cpins::{PinBus, PinBuses};
@@ -216,5 +217,23 @@ impl Chip for Esp32 {
     }
     fn wifi_mut(&mut self) -> &mut WifiMac {
         self.bus.wifi_mut()
+    }
+    fn lcd_attach(&mut self, kind: LcdKind) -> bool {
+        self.bus.attach_lcd_pins(kind, LcdPins::ESP32_DEFAULT)
+    }
+    fn lcd_attach_pins(&mut self, kind: LcdKind, pins: LcdPins) -> bool {
+        self.bus.attach_lcd_pins(kind, pins)
+    }
+    fn lcd(&mut self) -> Option<&mut Lcd> {
+        self.bus.lcd.as_deref_mut()
+    }
+    fn lcd_default_pins(&self) -> LcdPins {
+        LcdPins::ESP32_DEFAULT
+    }
+    fn spi2_stats(&self) -> (u64, u64) {
+        (self.bus.hspi.transfers, self.bus.hspi.bytes)
+    }
+    fn spi3_stats(&self) -> (u64, u64) {
+        (self.bus.vspi.transfers, self.bus.vspi.bytes)
     }
 }

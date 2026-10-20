@@ -20,6 +20,8 @@ pub mod src {
     pub const TG1_LACT: u32 = 21;
     pub const GPIO: u32 = 22;
     pub const FROM_CPU0: u32 = 24;
+    pub const SPI2: u32 = 30;
+    pub const SPI3: u32 = 31;
     pub const UART0: u32 = 34;
     pub const UART1: u32 = 35;
     pub const UART2: u32 = 36;
@@ -27,6 +29,8 @@ pub mod src {
     pub const RMT: u32 = 47;
     pub const I2C_EXT0: u32 = 49;
     pub const I2C_EXT1: u32 = 50;
+    pub const SPI2_DMA: u32 = 51;
+    pub const SPI3_DMA: u32 = 52;
     pub const MAX: usize = 69;
 }
 

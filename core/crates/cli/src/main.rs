@@ -27,7 +27,7 @@ fn usage() -> ! {
                script actions imu=pitch,roll,yaw[,their rates in °/s], touch=x,y (screen pixels, press / move), release (lift)
                [--spi gc9a01] (S3: SCLK=12 MOSI=11 CS=10 DC=14 RST=13 BL=15; C3: SCLK=6 MOSI=7 CS=10 DC=5 RST=4 BL=3) [--lcd-ppm <last frame.ppm>]
                [--spi co5300] (S3 QSPI AMOLED 480x480: CS=12 CLK=38 D0..D3=4..7 RST=39)
-               [--spi <panel>@sclk=N,mosi=N,miso=N,cs=N,dc=N,rst=N,bl=N] (S3 panels gc9a01 gc9107 st7735 st7789 st7789l ili9342 ili9342e; -1 = not connected)
+               [--spi <panel>@sclk=N,mosi=N,miso=N,cs=N,dc=N,rst=N,bl=N] (S3 / ESP32 panels gc9a01 gc9107 st7735 st7789 st7789l ili9342 ili9342e; -1 = not connected)
                [--power usb|ext] (default usb; ext = servo powered from an external 5 V 2 A supply) [--servo <GPIO>] (attach an SG90; its current loads the power net)
                [--elec-report] (per-node minimum voltage, peak current, brownout resets); script action power=usb|ext
                [--i2c-wire <cm>] (total I2C wire length: bus capacitance -> rise time; beyond spec reads go wrong / NACK, estimate)

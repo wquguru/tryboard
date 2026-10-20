@@ -261,8 +261,9 @@ impl ClassicSpi {
     pub fn tx_buffer(&self, n: usize) -> Vec<u8> {
         let base = self.w_base(USER_MOSI_HIGHPART);
         let cap = (16 - (base - (reg::W0 / 4) as usize)) * 4;
-        (0..n.min(cap))
-            .map(|i| (self.regs[base + i / 4] >> (8 * (i % 4))) as u8)
+        // Longer than the buffer wraps around it (M5GFX fills 2048-bit runs from a 64-byte pattern)
+        (0..n)
+            .map(|i| (self.regs[base + (i % cap) / 4] >> (8 * (i % 4))) as u8)
             .collect()
     }
 
@@ -415,7 +416,8 @@ pub fn lldesc_fill(link: u32, data: &[u8], mem: &mut dyn Mem) -> Option<u32> {
         }
         pos += n;
         let end = pos >= data.len() || next == 0;
-        let w0n = (w0 & !(0xfff << 12) & !(3 << 30)) | ((n as u32) << 12) | if end { 1 << 30 } else { 0 };
+        let w0n =
+            (w0 & !(0xfff << 12) & !(3 << 30)) | ((n as u32) << 12) | if end { 1 << 30 } else { 0 };
         mem.wr32(desc, w0n);
         last = Some(desc);
         if end {
@@ -465,6 +467,12 @@ mod tests {
         assert_eq!(p.head, vec![0x2c, 0x12, 0x34, 0x00]);
         assert_eq!((p.mosi_bits, p.miso_bits, p.dma_tx), (24, 0, false));
         assert_eq!(s.tx_buffer(3), vec![0x11, 0x22, 0x33]);
+        // Runs longer than W0..W15 wrap around to W0
+        let long = s.tx_buffer(68);
+        assert_eq!(
+            (long.len(), &long[64..]),
+            (68, &[0x11, 0x22, 0x33, 0x00][..])
+        );
         s.begin(100, &p);
         assert!(s.read(reg::CMD) & CMD_USR != 0);
         // (8 + 24 + 24 + 2) clocks x 4 cycles
@@ -478,7 +486,10 @@ mod tests {
         s.write(reg::SLAVE, s.read(reg::SLAVE) & !SLAVE_TRANS_DONE);
         assert!(!s.irq());
         // High part: data from W8
-        s.write(reg::USER, USER_MOSI | USER_MOSI_HIGHPART | USER_MISO_HIGHPART);
+        s.write(
+            reg::USER,
+            USER_MOSI | USER_MOSI_HIGHPART | USER_MISO_HIGHPART,
+        );
         s.write(reg::W0 + 32, 0xddcc_bbaa);
         assert_eq!(s.tx_buffer(2), vec![0xaa, 0xbb]);
         s.rx_fill(&[1, 2]);
