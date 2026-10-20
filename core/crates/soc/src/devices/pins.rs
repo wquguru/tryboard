@@ -333,11 +333,16 @@ pub struct PinDevices {
     pub encoders: Vec<Encoder>,
     pub sonars: Vec<Hcsr04>,
     pub dhts: Vec<Dht11>,
+    /// 1-Wire buses with DS18B20s (F-04c)
+    pub onewire: Vec<super::ds18b20::OneWireBus>,
 }
 
 impl PinDevices {
     pub fn is_empty(&self) -> bool {
-        self.encoders.is_empty() && self.sonars.is_empty() && self.dhts.is_empty()
+        self.encoders.is_empty()
+            && self.sonars.is_empty()
+            && self.dhts.is_empty()
+            && self.onewire.is_empty()
     }
 
     pub fn on_level(&mut self, t: u64, level: u64) {
@@ -346,6 +351,9 @@ impl PinDevices {
         }
         for d in &mut self.dhts {
             d.on_level(t, level);
+        }
+        for b in &mut self.onewire {
+            b.on_level(t, level);
         }
     }
 
@@ -361,6 +369,9 @@ impl PinDevices {
         }
         for d in &mut self.dhts {
             next = next.min(d.poll(now, &mut out));
+        }
+        for b in &mut self.onewire {
+            next = next.min(b.poll(now, &mut out));
         }
         out.sort_by_key(|d| d.0);
         (out, next)

@@ -2500,6 +2500,88 @@
   ]
  },
  {
+  "id": "c3-ds18b20",
+  "seconds": 12,
+  "qemu": false,
+  "args": [
+   "--ds18b20",
+   "4,2",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "expect": [
+   "找到设备 1 ROM 283A5C1E0B000064",
+   "找到设备 2 ROM 287B5C1E0C00005C",
+   "总线上共 2 个 DS18B20",
+   "供电方式: 外部供电",
+   "上电默认值 85.0000 配置 0x7F",
+   "设备 1 温度 23.5000 °C",
+   "设备 2 温度 24.0000 °C",
+   "校验通过 20/20 转换时间正常 10/10",
+   "TRYBOARD_OK ds18b20"
+  ],
+  "stderr_expect": [
+   "DS18B20 x2 on GPIO4: resets 35, conversions 20, scratchpad reads 21, unknown commands 0 (ROM 283A5C1E0B000064 287B5C1E0C00005C)"
+  ]
+ },
+ {
+  "id": "c3-ds18b20-cold",
+  "fw": "c3-ds18b20",
+  "seconds": 12,
+  "qemu": false,
+  "args": [
+   "--ds18b20",
+   "4",
+   "--env",
+   "-10.125,45,101325"
+  ],
+  "expect": [
+   "总线上共 1 个 DS18B20",
+   "设备 1 温度 -10.1250 °C",
+   "校验通过 10/10 转换时间正常 10/10",
+   "TRYBOARD_OK ds18b20"
+  ]
+ },
+ {
+  "id": "c3-ds18b20-absent",
+  "fw": "c3-ds18b20",
+  "seconds": 3,
+  "qemu": false,
+  "expect": [
+   "错误: GPIO4 上没有存在脉冲，未检测到 DS18B20（检查接线和 4.7k 上拉）"
+  ],
+  "absent": [
+   "找到设备",
+   "TRYBOARD_OK ds18b20"
+  ]
+ },
+ {
+  "id": "s3-ds18b20",
+  "chip": "esp32s3",
+  "seconds": 12,
+  "qemu": false,
+  "args": [
+   "--ds18b20",
+   "4,2",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "expect": [
+   "找到设备 1 ROM 283A5C1E0B000064",
+   "找到设备 2 ROM 287B5C1E0C00005C",
+   "总线上共 2 个 DS18B20",
+   "供电方式: 外部供电",
+   "上电默认值 85.0000 配置 0x7F",
+   "设备 1 温度 23.5000 °C",
+   "设备 2 温度 24.0000 °C",
+   "校验通过 20/20 转换时间正常 10/10",
+   "TRYBOARD_OK ds18b20"
+  ],
+  "stderr_expect": [
+   "DS18B20 x2 on GPIO4: resets 35, conversions 20, scratchpad reads 21, unknown commands 0 (ROM 283A5C1E0B000064 287B5C1E0C00005C)"
+  ]
+ },
+ {
   "id": "c3-ble-nus",
   "seconds": 25,
   "args": [
