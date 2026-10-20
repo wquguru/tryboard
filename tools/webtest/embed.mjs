@@ -164,7 +164,7 @@ await waitFor(pp, () => document.body.dataset.state === 'poster', null, 10000);
 report('paced: poster offers "Replay at original speed", preselected by &replay=1', await pp.evaluate(() => document.getElementById('embedPaced')?.checked === true));
 await pp.click('#embedPlay');
 await waitFor(pp, () => document.body.dataset.state === 'ready', null, 60000);
-// Sample (sim seconds, serial, room temperature) until the replay ends
+// Sample (sim seconds, serial, room temperature) until the replay ends; simSeconds is the last tick's, so it can trail the serial by a slice
 const seen = [];
 const t0 = Date.now();
 while (Date.now() - t0 < 90000) {
@@ -177,7 +177,7 @@ fs.writeFileSync(path.join(outDir, 'embed-paced-samples.json'), JSON.stringify(s
 const first = seen.find((o) => !o.done);
 report('paced: sim time starts near 0 with a progress tag', !!first && first.t < 1.0 && first.tag, first ? `${first.t.toFixed(2)} s` : 'no sample');
 const firstF = seen.find((o) => o.unitF);
-report('paced: UNIT F appears only after the BOOT press at 1.2 s', !!firstF && firstF.t >= 1.2 && seen.some((o) => !o.unitF && o.t > 0.5), firstF ? `first at ${firstF.t.toFixed(2)} s` : 'never');
+report('paced: UNIT F appears only after the BOOT press at 1.2 s', !!firstF && firstF.t >= 1.1 && seen.some((o) => !o.unitF && o.t > 1.0), firstF ? `first at ${firstF.t.toFixed(2)} s` : 'never');
 const hot = seen.find((o) => o.temp === 35);
 report('paced: room temperature follows the log (35 °C from 2 s)', !!hot && hot.t >= 2 && seen.some((o) => o.temp !== 35 && o.t > 0.5), hot ? `at ${hot.t.toFixed(2)} s` : 'never');
 const pr = await pp.evaluate(() => globalThis.__tbShareRestored ?? {});

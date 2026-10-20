@@ -201,6 +201,7 @@ export class LiveSim {
         o.onCrash?.(m.message);
         o.onConsole?.(`\n${t('[TryBoard] Simulator internal error: {msg}', { msg: m.message })}\n`);
       } else if (m.type === 'error' || m.type === 'stopped') {
+        this.endPaced(null);
         o.onConsole?.(`\n${m.type === 'error' ? t('[TryBoard] Failed to start: {msg}', { msg: m.message }) : t('[TryBoard] Stopped: {msg}', { msg: m.reason })}\n`);
       }
     };
