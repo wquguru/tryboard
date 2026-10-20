@@ -155,6 +155,10 @@ pub trait Chip {
     fn lcd(&mut self) -> Option<&mut Lcd> {
         None
     }
+    /// Wiring `lcd_attach` uses, and the base that `--spi kind@pins` overrides
+    fn lcd_default_pins(&self) -> LcdPins {
+        LcdPins::S3_DEFAULT
+    }
     /// SPI2 transfer stats (count, MOSI bytes)
     fn spi2_stats(&self) -> (u64, u64) {
         (0, 0)

@@ -813,7 +813,7 @@ impl Machine {
         let ok = match pins {
             None => self.hw.lcd_attach(k),
             Some(p) => {
-                let pins = LcdPins::parse(LcdPins::S3_DEFAULT, p)?;
+                let pins = LcdPins::parse(self.hw.lcd_default_pins(), p)?;
                 self.hw.lcd_attach_pins(k, pins)
             }
         };

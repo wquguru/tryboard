@@ -2100,6 +2100,64 @@
   "oled_min_pixels": 300
  },
  {
+  "id": "esp32-spi-lcd",
+  "chip": "esp32",
+  "seconds": 2,
+  "args": [
+   "--spi",
+   "st7789@sclk=13,mosi=15,cs=5,dc=14,rst=12,bl=27"
+  ],
+  "expect": [
+   "ST7789 135x240 init OK (VSPI, DMA)",
+   "draw done: 4 bands of 16200 bytes",
+   "RDDID: 85 85 52",
+   "TRYBOARD_OK esp32-spi-lcd"
+  ],
+  "lcd_min_pixels": 32400,
+  "lcd_regions": [
+   {
+    "name": "red band",
+    "x": 0,
+    "y": 0,
+    "w": 135,
+    "h": 60,
+    "color": "#ff0000",
+    "min_pixels": 8100,
+    "max_pixels": 8100
+   },
+   {
+    "name": "green band",
+    "x": 0,
+    "y": 60,
+    "w": 135,
+    "h": 60,
+    "color": "#00ff00",
+    "min_pixels": 8100,
+    "max_pixels": 8100
+   },
+   {
+    "name": "blue band",
+    "x": 0,
+    "y": 120,
+    "w": 135,
+    "h": 60,
+    "color": "#0000ff",
+    "min_pixels": 8100,
+    "max_pixels": 8100
+   },
+   {
+    "name": "white band",
+    "x": 0,
+    "y": 180,
+    "w": 135,
+    "h": 60,
+    "color": "#ffffff",
+    "min_pixels": 8100,
+    "max_pixels": 8100
+   }
+  ]
+ },
+ {
   "id": "esp32-wifi-init",
   "chip": "esp32",
   "seconds": 3,
