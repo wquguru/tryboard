@@ -4026,5 +4026,23 @@
     ]
    ]
   }
+ },
+ {
+  "id": "mpy-c3-rawpaste",
+  "chip": "esp32c3",
+  "seconds": 5,
+  "qemu": false,
+  "bin": "third_party/micropython/ESP32_GENERIC_C3-20260824-v1.29.0.bin",
+  "script": "1.50:uart=print('mpy line', len('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'))\\n; 1.60:uart=\\x03\\x03; 1.70:uart=\\x01; 1.80:uart=\\x05A\\x01; 1.90:uart=open('main.py','w').write('''\\x23 TryBoard F-07a acceptance script: written to flash over raw-paste, run after a soft reset.\\n\\x23 It i; 2.00:uart=s sent in 128-byte raw-paste windows, so the UART RX path must take a full FIFO at once.\\nimport time\\n\\n\\ndef fib(n):\\n    a, b = 0,; 2.10:uart=\\x201\\n    for _ in range(n):\\n        a, b = b, a + b\\n    return a\\n\\n\\ndef primes(limit):\\n    sieve = bytearray([1] * (limit + 1))\\n  \\x20; 2.20:uart=\\x20sieve[0] = sieve[1] = 0\\n    for i in range(2, int(limit ** 0.5) + 1):\\n        if sieve[i]:\\n            for j in range(i * i, li; 2.30:uart=mit + 1, i):\\n                sieve[j] = 0\\n    return [i for i in range(limit + 1) if sieve[i]]\\n\\n\\ndef digest(text):\\n    \\x23 32-bit\\x20; 2.40:uart=polynomial hash\\x3b the checker computes the same value on the host\\n    h = 0\\n    for c in text:\\n        h = (h * 31 + ord(c)) & 0x; 2.50:uart=FFFFFFFF\\n    return h\\n\\n\\nsrc = open(\"main.py\").read()\\nprint(\"mpy self\", len(src), digest(src))\\nprint(\"mpy fib\", fib(30))\\np = prim; 2.60:uart=es(1000)\\nprint(\"mpy primes\", len(p), sum(p))\\nwords = \"the quick brown fox jumps over the lazy dog\".split()\\nprint(\"mpy words\", le; 2.70:uart=n(words), \" \".join(sorted(set(words))))\\nt0 = time.ticks_ms()\\nfor i in range(3):\\n    print(\"mpy tick\", i)\\n    time.sleep_ms(100)\\n; 2.80:uart=print(\"mpy dt\", time.ticks_diff(time.ticks_ms(), t0) // 100)\\nprint(\"mpy done\")\\n''')\\n; 2.90:uart=\\x04; 3.00:uart=\\x02; 3.10:uart=\\x04",
+  "expect": [
+   "Type \"help()\" for more information.",
+   "mpy line 170",
+   "mpy self 1202 495793483",
+   "mpy fib 832040",
+   "mpy primes 168 76127",
+   "mpy tick 2",
+   "mpy dt 3",
+   "mpy done"
+  ]
  }
 ]

@@ -85,7 +85,7 @@ def check(cfg):
 
     for t in cfg["accept"]:
         w = f"accept.json {t['id']}"
-        if t.get("fw", t["id"]) not in cfg["fw_dirs"]:
+        if "bin" not in t and t.get("fw", t["id"]) not in cfg["fw_dirs"]:
             errs.append(f"{w}: firmware/{t.get('fw', t['id'])} does not exist")
         if "chip" in t and t["chip"] not in cfg["chips"]:
             errs.append(f"{w}: unknown chip '{t['chip']}'")

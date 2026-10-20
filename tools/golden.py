@@ -15,7 +15,8 @@ WALL = re.compile(r'wall [\d.]+ ?s|[\d.]+ MIPS|[\d.]+x real ?time|took [\d.]+ ?m
 
 
 def cmd_of(t):
-    fw = f"{ROOT}/firmware/build/{t.get('fw', t['id'])}/flash.bin"
+    # bin: optional git-ignored third-party image (e.g. MicroPython); missing means skipped
+    fw = f"{ROOT}/{t['bin']}" if t.get('bin') else f"{ROOT}/firmware/build/{t.get('fw', t['id'])}/flash.bin"
     c = [BIN, 'run', fw, '--seconds', str(t['seconds']), '--gpio-log'] + t.get('args', [])
     if t.get('script'): c += ['--script', t['script']]
     if t.get('pwm'): c += ['--pwm-log', str(t['pwm']['pin'])]
@@ -26,7 +27,7 @@ def cmd_of(t):
 def run(t):
     fw, c = cmd_of(t)
     if not os.path.exists(fw):
-        return t['id'], None
+        return t['id'], 'skip' if t.get('bin') else None
     p = subprocess.run(c, capture_output=True, cwd=ROOT)
     err = WALL.sub('<wall>', p.stderr.decode('utf-8', 'replace'))
     return t['id'], p.stdout.decode('utf-8', 'replace') + '\n--stderr--\n' + err + f'\n--exit {p.returncode}--\n'
@@ -44,6 +45,8 @@ def main():
         path = f'{DIR}/{cid}.txt'
         if text is None:
             print(f'{cid}: not built'); bad += 1; continue
+        if text == 'skip':
+            print(f'{cid}: skipped (optional third-party image not fetched)'); continue
         if mode == 'save':
             open(path, 'w', newline='').write(text); continue
         if not os.path.exists(path):

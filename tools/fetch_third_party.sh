@@ -37,4 +37,13 @@ for pair in M5Unified:35903583211e1f39ca88920714525fbcd1eb714a M5GFX:a8ebd7bdaae
   [ -d "arduino-libs/$name/.git" ] || git clone -q "https://github.com/m5stack/$name" "arduino-libs/$name"
   [ "$(git -C "arduino-libs/$name" rev-parse HEAD)" = "$sha" ] || { git -C "arduino-libs/$name" fetch -q origin && git -C "arduino-libs/$name" checkout -q "$sha"; }
 done
+# Optional (--micropython): official MicroPython C3 image for the mpy-c3-rawpaste accept case (F-07a).
+# Never shipped or committed (distribution is a human decision, RS-1); without it the case is skipped.
+if [ "${1:-}" = "--micropython" ]; then
+  MPY=ESP32_GENERIC_C3-20260824-v1.29.0.bin
+  mkdir -p micropython
+  [ -f "micropython/$MPY" ] || curl -fsSL --retry 3 "https://micropython.org/resources/firmware/$MPY" -o "micropython/$MPY"
+  echo "bf72ed9eb88ad3a8f49d02c3d371f9ea34c90a8a303aeb9e324d8efd4a2a655a  micropython/$MPY" | shasum -a 256 -c - \
+    || { rm -f "micropython/$MPY"; exit 1; }
+fi
 echo "third_party ready"

@@ -29,6 +29,11 @@ bad = 0
 for t in json.load(open(f'{root}/firmware/accept.json')):
     # fw: firmware directory when one firmware serves several cases (e.g. temperatures); defaults to id
     fw = f"{root}/firmware/build/{t.get('fw', t['id'])}/flash.bin"
+    # bin: optional third-party image from tools/fetch_third_party.sh (git-ignored); absent means skip, not fail
+    if t.get('bin'):
+        fw = f"{root}/{t['bin']}"
+        if not os.path.exists(fw):
+            print(f"| {t['id']} | ⏭️ | skipped: {t['bin']} not fetched (tools/fetch_third_party.sh) |"); continue
     if not os.path.exists(fw):
         print(f"| {t['id']} | ❌ | not built |"); bad += 1; continue
     cmd = [f'{root}/core/target/release/tryboard', 'run', fw, '--seconds', str(t['seconds']), '--gpio-log'] + t.get('args', [])

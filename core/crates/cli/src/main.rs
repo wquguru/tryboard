@@ -12,7 +12,7 @@ fn usage() -> ! {
     eprintln!(
         "Usage:
   tryboard chips (supported chips as JSON: id, pins, BOOT / RGB GPIO, ROM)
-  tryboard run <flash.bin> (chip detected from the image header: ESP32 / ESP32-C3 / ESP32-S3) [--rom <rom.elf>] [--seconds <simulated s>] [--expect <text>] [--uart-in <text>]
+  tryboard run <flash.bin> (chip detected from the image header: ESP32 / ESP32-C3 / ESP32-S3) [--rom <rom.elf>] [--seconds <simulated s>] [--expect <text>] [--uart-in <text, \\n newline, \\xNN byte>]
                [--script \"0.5:gpio9=0; 0.6:gpio9=z; 1.0:uart=ping\\n; 1.2:env=35,45,101325\"] [--inputs <input log exported from the web.txt>] [--trace N] [--unimpl N] [--gpio-log] [--pwm-log PIN] [--ws2812-log]
                [--trace-io <events.txt>] [--trace-pins all|4,8,…] (logic analyzer events: GPIO / PWM / WS2812 / I2C transactions, cycle-stamped)
                [--trace-tasks <timeline.json>] (FreeRTOS task switches, one track per core, opens in Perfetto; per-task CPU share printed at the end of stderr)
@@ -75,6 +75,7 @@ fn default_rom(chip: Chip) -> String {
 
 use tryboard_machine::PhoneCmd;
 
+mod escape;
 mod parts;
 use parts::parts_args;
 
@@ -271,7 +272,7 @@ fn opt(args: &[String], name: &str) -> Option<String> {
 }
 
 /// Timed input script: `time (simulated s):action`, separated by `;` or newlines, `#` starts a comment.
-/// Actions: gpioN=0|1|z, mvN=millivolts, env=temp,humidity,pressure Pa, uart=text, usbcdc=text (\\n = newline)
+/// Actions: gpioN=0|1|z, mvN=millivolts, env=temp,humidity,pressure Pa, uart=text, usbcdc=text (\\n = newline, \\xNN = byte)
 fn parse_script(s: &str) -> Vec<(f64, String)> {
     s.split([';', '\n'])
         .filter_map(|e| {
@@ -314,7 +315,7 @@ fn run(args: &[String]) {
         app.segments
     );
     if let Some(s) = opt(args, "--uart-in") {
-        m.uart_push(s.replace("\\n", "\n").as_bytes());
+        m.uart_push(&escape::unescape(&s));
     }
     board_preset_args(&mut m, args);
     if let Some(unit) = opt(args, "--grove") {
@@ -669,13 +670,11 @@ fn run(args: &[String]) {
                     eprintln!("[tryboard] unknown network action: {act}");
                 }
             } else if let Some(t) = act.strip_prefix("uart=") {
-                m.uart_push(t.replace("\\n", "\n").as_bytes());
+                m.uart_push(&escape::unescape(t));
             } else if let Some(t) = act.strip_prefix("usbcdc=") {
                 // The virtual PC writes into the USB virtual serial port
                 if let Some(u) = m.usb_mut() {
-                    u.host
-                        .cdc_tx
-                        .extend_from_slice(t.replace("\\n", "\n").as_bytes());
+                    u.host.cdc_tx.extend_from_slice(&escape::unescape(t));
                 }
             }
             if act.starts_with("netreply=") && act.len() > 80 {

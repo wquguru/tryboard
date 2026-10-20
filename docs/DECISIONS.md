@@ -1212,3 +1212,8 @@
 - **作品 faults 不上首页卡片**：没有采购 / 组装内容，首页作品区下方一行链接进入；开关状态按关存 localStorage（仅本机便利，读写包 try/catch）。
 - 备选：把健康配置写进 args、故障放 fault —— 否，`--ref --all` 就证明不了故障能复现。
 
+## 2026-10-20 F-07a UART 长输入 + MicroPython 验收
+- **UART RX 语义**：`periph.rs` 的 STATUS.rxfifo_cnt 封顶硬件 FIFO 深度 128（`UART_FIFO_LEN`，ESP32 / C3 / S3 相同，TRM），而不是 10 位字段上限 1023：IDF 驱动按 FIFO 深度开读缓冲，报更多会写越界；之前的 127 少报一个。多出的字节视作「还在线上」，INT_CLR 后只要 `rx` 不空就重新置 TOUT（达阈值再置 FULL）——FULL 在真机是电平式的，TOUT 相当于下一批字节到达后再次空闲。备选：真做 128 字节 FIFO + 线上队列按波特率进 FIFO —— 否，要改时序，所有 golden 会变。golden 173/173 字节一致。
+- **`\xNN` 转义**（`cli/src/escape.rs`，`--uart-in`、`uart=`、`usbcdc=`）：只认 `\n` 和严格两位十六进制 `\xNN`，其它反斜杠原样保留；不加 `\\`，因为 web `inputlog.ts` 的 `esc` 不转义反斜杠，加了会改变旧输入日志的含义。旧日志只有含字面 `\xNN` 的文本解码会变。web 侧 `unesc` 仍只认 `\n`，F-07b 做网页时同步（届时 `esc` 也应把 `\`、`;` 写成 `\xNN`）。
+- **验收用例取第三方 bin**：accept.json 新字段 `bin`（相对仓库根的路径）；文件不存在时 accept.sh 记 ⏭️、golden.py 记 skipped，都不算失败；check_config 对带 `bin` 的用例不查 firmware/ 目录。下载由 `tools/fetch_third_party.sh --micropython` 可选执行并校验 sha256，bin 只在 git 忽略的 third_party/ 下，不发布。
+- **raw-paste 用定时发送**（`tools/micropython/paste.py` 生成 `--script`）而不是按提示符走状态机：CLI 脚本只有时间轴；每 128 字节窗口隔 0.1 s，远大于固件消化时间。网页（F-07b）照 RS-1 用提示符驱动。脚本里 `;`、`#`、`\`、控制字节和块首尾空格都写成 `\xNN`（脚本按 `;` 分割、动作会 trim）。
