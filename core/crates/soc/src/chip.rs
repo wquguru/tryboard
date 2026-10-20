@@ -4,7 +4,7 @@
 use crate::adc::AdcModel;
 use crate::ble::Ble;
 use crate::devices::audio::Audio;
-use crate::devices::lcd::{Lcd, LcdKind};
+use crate::devices::lcd::{Lcd, LcdKind, LcdPins};
 use crate::devices::pins::PinDevices;
 use crate::i2c::I2c;
 use crate::i2cpins::{PinBus, PinBuses};
@@ -144,11 +144,19 @@ pub trait Chip {
     fn lcd_attach(&mut self, _kind: LcdKind) -> bool {
         false
     }
+    /// Attach a 4-wire SPI panel on the given GPIOs (M5 board presets, `--spi kind@pins`); false when unsupported
+    fn lcd_attach_pins(&mut self, _kind: LcdKind, _pins: LcdPins) -> bool {
+        false
+    }
     fn lcd(&mut self) -> Option<&mut Lcd> {
         None
     }
     /// SPI2 transfer stats (count, MOSI bytes)
     fn spi2_stats(&self) -> (u64, u64) {
+        (0, 0)
+    }
+    /// SPI3 transfer stats (count, MOSI bytes)
+    fn spi3_stats(&self) -> (u64, u64) {
         (0, 0)
     }
     fn audio(&self) -> &Audio;

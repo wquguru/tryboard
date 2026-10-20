@@ -1,22 +1,39 @@
-//! Screen on SPI2: one of the supported display models behind a single type (Chip trait / machine / wasm see only `Lcd`).
+//! Screen on an SPI host: one of the supported display models behind a single type (Chip trait / machine / wasm see only `Lcd`).
 //! An enum rather than a trait object: two models, matched in the SoC's SPI path where wiring differs (D/C pin vs QSPI frames)
 
 use super::co5300::Co5300;
-use super::gc9a01::Gc9a01;
+use super::dcs::{self, DcsPanel, PanelSpec};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LcdKind {
     /// 240x240 round TFT, 4-wire SPI with D/C
     Gc9a01,
+    /// 128x128 TFT (AtomS3 / AtomS3R)
+    Gc9107,
+    /// 128x128 TFT (AtomS3 later revision)
+    St7735,
+    /// 135x240 TFT (StickC Plus2), portrait
+    St7789,
+    /// The same glass mounted landscape, 240x135 (Cardputer)
+    St7789Land,
+    /// 320x240 TFT (CoreS3 / Core2); C and E differ only in vendor register read-back
+    Ili9342c,
+    Ili9342e,
     /// 480x480 AMOLED, QSPI
     Co5300,
 }
 
 impl LcdKind {
-    /// CLI / wasm name ("gc9a01", "co5300")
+    /// CLI / wasm name ("gc9a01", "co5300", ...); "ili9342" means the C revision
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "gc9a01" => Some(LcdKind::Gc9a01),
+            "gc9107" => Some(LcdKind::Gc9107),
+            "st7735" => Some(LcdKind::St7735),
+            "st7789" => Some(LcdKind::St7789),
+            "st7789l" => Some(LcdKind::St7789Land),
+            "ili9342" | "ili9342c" => Some(LcdKind::Ili9342c),
+            "ili9342e" => Some(LcdKind::Ili9342e),
             "co5300" => Some(LcdKind::Co5300),
             _ => None,
         }
@@ -25,27 +42,120 @@ impl LcdKind {
     pub fn id(self) -> &'static str {
         match self {
             LcdKind::Gc9a01 => "gc9a01",
+            LcdKind::Gc9107 => "gc9107",
+            LcdKind::St7735 => "st7735",
+            LcdKind::St7789 => "st7789",
+            LcdKind::St7789Land => "st7789l",
+            LcdKind::Ili9342c => "ili9342c",
+            LcdKind::Ili9342e => "ili9342e",
             LcdKind::Co5300 => "co5300",
         }
+    }
+
+    /// Panel description of the MIPI-DCS kinds (None for the QSPI AMOLED)
+    pub fn spec(self) -> Option<PanelSpec> {
+        Some(match self {
+            LcdKind::Gc9a01 => dcs::GC9A01,
+            LcdKind::Gc9107 => dcs::GC9107,
+            LcdKind::St7735 => dcs::ST7735S,
+            LcdKind::St7789 => dcs::ST7789,
+            LcdKind::St7789Land => dcs::ST7789_LAND,
+            LcdKind::Ili9342c => dcs::ILI9342C,
+            LcdKind::Ili9342e => dcs::ILI9342E,
+            LcdKind::Co5300 => return None,
+        })
+    }
+}
+
+const DCS_KINDS: [LcdKind; 7] = [
+    LcdKind::Gc9a01,
+    LcdKind::Gc9107,
+    LcdKind::St7735,
+    LcdKind::St7789,
+    LcdKind::St7789Land,
+    LcdKind::Ili9342c,
+    LcdKind::Ili9342e,
+];
+
+/// GPIO numbers of a 4-wire SPI panel. `miso` may equal `dc` (CoreS3 shares GPIO35); `bl: None` = backlight always on
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LcdPins {
+    pub sclk: u8,
+    pub mosi: u8,
+    pub miso: Option<u8>,
+    pub cs: u8,
+    pub dc: u8,
+    pub rst: Option<u8>,
+    pub bl: Option<u8>,
+}
+
+impl LcdPins {
+    /// Pin-compatible with the ESP-IDF spi_lcd_touch example (what `--spi gc9a01` means on S3)
+    pub const S3_DEFAULT: LcdPins = LcdPins {
+        sclk: 12,
+        mosi: 11,
+        miso: None,
+        cs: 10,
+        dc: 14,
+        rst: Some(13),
+        bl: Some(15),
+    };
+
+    /// Override fields from "sclk=36,mosi=37,miso=35,cs=3,dc=35,rst=-1,bl=-1" (-1 = not connected)
+    pub fn parse(base: LcdPins, spec: &str) -> Result<LcdPins, String> {
+        let mut p = base;
+        for item in spec.split(',').filter(|s| !s.is_empty()) {
+            let (k, v) = item
+                .split_once('=')
+                .ok_or_else(|| format!("bad pin item '{item}' (expected name=gpio)"))?;
+            let n: i32 = v
+                .trim()
+                .parse()
+                .map_err(|_| format!("bad GPIO number in '{item}'"))?;
+            if !(-1..=48).contains(&n) {
+                return Err(format!("GPIO out of range in '{item}'"));
+            }
+            let opt = (n >= 0).then_some(n as u8);
+            let need = || opt.ok_or_else(|| format!("pin '{k}' is required"));
+            match k.trim() {
+                "sclk" | "sck" | "clk" => p.sclk = need()?,
+                "mosi" | "sda" => p.mosi = need()?,
+                "cs" => p.cs = need()?,
+                "dc" => p.dc = need()?,
+                "miso" => p.miso = opt,
+                "rst" => p.rst = opt,
+                "bl" => p.bl = opt,
+                _ => {
+                    return Err(format!(
+                        "unknown pin '{k}' (sclk, mosi, miso, cs, dc, rst, bl)"
+                    ))
+                }
+            }
+        }
+        Ok(p)
     }
 }
 
 pub enum Lcd {
-    Gc9a01(Gc9a01),
+    /// Any MIPI-DCS SPI TFT (GC9A01, GC9107, ST7735S, ST7789, ILI9342C / E)
+    Dcs(DcsPanel),
     Co5300(Co5300),
 }
 
 impl Lcd {
     pub fn new(kind: LcdKind) -> Self {
         match kind {
-            LcdKind::Gc9a01 => Lcd::Gc9a01(Gc9a01::new()),
             LcdKind::Co5300 => Lcd::Co5300(Co5300::new()),
+            k => Lcd::Dcs(DcsPanel::new(k.spec().expect("DCS kind"))),
         }
     }
 
     pub fn kind(&self) -> LcdKind {
         match self {
-            Lcd::Gc9a01(_) => LcdKind::Gc9a01,
+            Lcd::Dcs(d) => DCS_KINDS
+                .into_iter()
+                .find(|k| k.spec() == Some(d.spec))
+                .unwrap_or(LcdKind::Gc9a01),
             Lcd::Co5300(_) => LcdKind::Co5300,
         }
     }
@@ -53,7 +163,7 @@ impl Lcd {
     /// Report name ("GC9A01", "CO5300")
     pub fn name(&self) -> &'static str {
         match self {
-            Lcd::Gc9a01(_) => "GC9A01",
+            Lcd::Dcs(d) => d.spec.name,
             Lcd::Co5300(_) => "CO5300",
         }
     }
@@ -61,28 +171,28 @@ impl Lcd {
     /// Frame size in pixels (width, height); `render` returns width × height × 4 RGBA
     pub fn size(&self) -> (usize, usize) {
         match self {
-            Lcd::Gc9a01(_) => (super::gc9a01::W, super::gc9a01::H),
+            Lcd::Dcs(d) => d.size(),
             Lcd::Co5300(_) => (super::co5300::W, super::co5300::H),
         }
     }
 
     pub fn version(&self) -> u32 {
         match self {
-            Lcd::Gc9a01(d) => d.version,
+            Lcd::Dcs(d) => d.version,
             Lcd::Co5300(d) => d.version,
         }
     }
 
     pub fn render(&mut self) -> &[u8] {
         match self {
-            Lcd::Gc9a01(d) => d.render(),
+            Lcd::Dcs(d) => d.render(),
             Lcd::Co5300(d) => d.render(),
         }
     }
 
     pub fn lit_pixels(&mut self) -> usize {
         match self {
-            Lcd::Gc9a01(d) => d.lit_pixels(),
+            Lcd::Dcs(d) => d.lit_pixels(),
             Lcd::Co5300(d) => d.lit_pixels(),
         }
     }
@@ -90,41 +200,41 @@ impl Lcd {
     /// Colour stats lines (`[tryboard] LCD color #rrggbb N px, centroid x,y`), top 12 colours with >= 50 px
     pub fn color_report(&mut self) -> String {
         match self {
-            Lcd::Gc9a01(d) => d.color_report(),
+            Lcd::Dcs(d) => d.color_report(),
             Lcd::Co5300(d) => color_report(d.render(), super::co5300::W),
         }
     }
 
     pub fn showing(&self) -> bool {
         match self {
-            Lcd::Gc9a01(d) => d.showing(),
+            Lcd::Dcs(d) => d.showing(),
             Lcd::Co5300(d) => d.showing(),
         }
     }
 
     pub fn ppm(&mut self) -> Vec<u8> {
         match self {
-            Lcd::Gc9a01(d) => d.ppm(),
+            Lcd::Dcs(d) => d.ppm(),
             Lcd::Co5300(d) => d.ppm(),
         }
     }
 
     pub fn set_reset(&mut self, active: bool) {
         match self {
-            Lcd::Gc9a01(d) => d.set_reset(active),
+            Lcd::Dcs(d) => d.set_reset(active),
             Lcd::Co5300(d) => d.set_reset(active),
         }
     }
 
     /// Backlight pin level; AMOLED panels have none and ignore it
     pub fn set_backlight(&mut self, on: bool) {
-        if let Lcd::Gc9a01(d) = self {
+        if let Lcd::Dcs(d) = self {
             d.set_backlight(on);
         }
     }
 }
 
-/// Same rules as `Gc9a01::color_report` (transparent and black skipped, ties by colour value) for any frame width
+/// Same rules as `DcsPanel::color_report` (transparent and black skipped, ties by colour value) for any frame width
 fn color_report(frame: &[u8], w: usize) -> String {
     use std::collections::HashMap;
     use std::fmt::Write as _;

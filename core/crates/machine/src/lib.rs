@@ -10,7 +10,7 @@ use tryboard_soc::adc::{AdcModel, Sample as AdcSample};
 pub use tryboard_soc::chip::Stop;
 pub use tryboard_soc::devices::audio::{Analysis as AudioAnalysis, Block as AudioBlock};
 use tryboard_soc::devices::audio::{Audio, MicSource};
-pub use tryboard_soc::devices::lcd::{Lcd, LcdKind};
+pub use tryboard_soc::devices::lcd::{Lcd, LcdKind, LcdPins};
 use tryboard_soc::devices::{
     axp192::Axp192,
     axp2101::Axp2101,
@@ -787,13 +787,29 @@ impl Machine {
     /// Attach a screen on SPI2: "gc9a01" (C3 / S3, pins `lcd_pin`) or "co5300" (S3 only, pins `co5300_pin`);
     /// other chips / names return false
     pub fn lcd_attach(&mut self, kind: &str) -> bool {
-        match LcdKind::parse(kind) {
-            Some(k) if self.hw.lcd_attach(k) => {
-                self.elec.add_module(k.id());
-                true
+        self.lcd_attach_spec(kind).is_ok()
+    }
+
+    /// "kind" or "kind@sclk=36,mosi=37,miso=35,cs=3,dc=35,rst=-1,bl=-1" (S3; pins not given keep `LcdPins::S3_DEFAULT`).
+    /// DCS kinds: gc9a01 gc9107 st7735 st7789 st7789l ili9342(c) ili9342e; Err says what is wrong
+    pub fn lcd_attach_spec(&mut self, spec: &str) -> Result<(), String> {
+        let (name, pins) = match spec.split_once('@') {
+            Some((n, p)) => (n, Some(p)),
+            None => (spec, None),
+        };
+        let k = LcdKind::parse(name).ok_or_else(|| format!("unknown SPI device {name}"))?;
+        let ok = match pins {
+            None => self.hw.lcd_attach(k),
+            Some(p) => {
+                let pins = LcdPins::parse(LcdPins::S3_DEFAULT, p)?;
+                self.hw.lcd_attach_pins(k, pins)
             }
-            _ => false,
+        };
+        if !ok {
+            return Err(format!("SPI device {spec} is not supported on this chip"));
         }
+        self.elec.add_module(k.id());
+        Ok(())
     }
 
     pub fn lcd(&mut self) -> Option<&mut Lcd> {
@@ -869,6 +885,11 @@ impl Machine {
     /// SPI2 transfer stats (count, MOSI bytes)
     pub fn spi_stats(&self) -> (u64, u64) {
         self.hw.spi2_stats()
+    }
+
+    /// SPI3 transfer stats (count, MOSI bytes)
+    pub fn spi3_stats(&self) -> (u64, u64) {
+        self.hw.spi3_stats()
     }
 
     fn pins(&mut self) -> &mut tryboard_soc::devices::pins::PinDevices {
