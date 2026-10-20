@@ -1184,3 +1184,19 @@
 - **固件**：s3-pir-relay / s3-rc522 用 `../../c3-*/main/main.c` 同一份源码，按 `CONFIG_IDF_TARGET_ESP32S3` 换脚（S3 LDR 在 GPIO2，因 GPIO3 是 strapping 脚；RC522 用 SPI2 IO_MUX 脚 12/13/11/10）。
 - **CLI 行数**：`run` 受 lint_size 限制不能变长，新增动作 / 事件 / 报告放进 `cli/src/parts.rs`（`parts_action`、`parts_events`、`pin_reports`），顺带把编码器 / 超声 / DHT11 的结束汇总挪进 `pin_reports`（输出顺序与文字不变）。
 
+## 2026-10-20 M5 批次（M5-01 – M5-14）汇总决定
+
+- **经典 ESP32 四线 PSRAM 容量（M5-14）**：默认关闭，`--efuse-pkg 6` 隐含 2MB（PICO-V3-02 封装内置），Core2 等外置 PSRAM 由板预设传 `--psram 8`（CLI 取 0/2/4/8）。PSRAM MMU 表项（1152..1279）复位值取恒等映射而不是无效：TRM 没写复位值，IDF 的 low/high 模式写回循环在 2MB 芯片上会读 +2MB 处，恒等映射不报错且与真机可观察行为一致。替代：无效（PICO-V3-02 启动 LoadStoreError）。flash JEDEC 容量 = max(镜像头, 4MB)；CS1 无芯片时 MISO 读 0xFF；reboot 保留 efuse / chip_v3 / psram（板子事实）。
+- **USB-Serial-JTAG 与 UART0 控制台去重（M5-05 / M5-03，`core/crates/esp32s3/src/usj_console.rs`）**：IDF 次控制台会把同一行同时写到 USJ 和 UART0。启发式：USJ 的 INT_ENA=0 + 2 ms 窗口 + 内容匹配才判为镜像并丢弃。理由：只按时间会丢掉纯 USJ 固件的 main_task 行，全保留则每行出现两次。USJ 只模拟 CDC 一侧，主机默认已连接（SOF 每 1 ms，64 字节满自动送出），否则 IDF 会卡 50 ms 发送超时。一个串口输入框同时喂 UART0 RX 和 USJ OUT。参考 Arduino HWCDC.cpp（LGPL）与 IDF 源码理解行为，未复制。
+- **S3 GPIO 下拉语义与 4 个 AtomS3 golden 变化（M5-08）**：开漏释放、外部无人驱动、只有 IO_MUX 下拉（FUN_PD）的焊盘现在读 0（之前按 D-03 读 1）。原因：M5GFX 区分 Cardputer / Adv 对 G9/G8/G6/G5 做 `input_pulldown`，旧规则四脚全读 1 → 误判 Adv；真硬件上弱下拉也会把浮空焊盘拉低。替代：在预设里固定电平（拒绝，属于掩盖问题）。副作用：M5Unified 的 I2C 总线检测先下拉再要求读 1，在无上拉焊盘上现在读 0，直接跳过位拨 I2C 探测——不存在的器件探测快速失败。所以 4 个 AtomS3 golden 快照只有翻转计数变化（如 GPIO2 156→36、GPIO41 1133→3），检测结果相同，是有意变化，已重存快照。C3 / 经典 ESP32 暂保留旧规则（不对称，待统一）。
+- **未解决：经典 ESP32 PDM RX 样本两两颠倒（M5-13）**：M5Unified（`Mic_Class.inl` 约 770 行）认为经典 ESP32 RX FIFO 每两个 16 位样本顺序相反并会换回；我们 `i2s.rs` 的 `encode_rx` 对 PDM 跳过了交换（`!msb_right && !pdm`），M5Unified 录到的样本因此是锯齿。去掉 `&& !pdm` 后 M5Unified 正确，但 IDF 的 esp32-pdm-mic 从 1000 Hz 变成 3005 Hz（golden 不允许），所以没改，待调查：IDF 在真机上是否也颠倒（即 IDF 例子期望值本身有误），还是只有 rx_chan_mod=1（右槽，M5Unified）才颠倒（IDF 用 2）。在此之前 M5 麦克风 demo 只检查 peak > 0，频率行仅供参考。
+- **待人处理的许可事项（M5-00）**：LovyanGFX 内的 `utility/lgfx_qoi.c/.h` 与 `Fonts/Custom/{Orbitron_Light_24,Roboto_Thin_24,Satisfy_24,Yellowtail_32}.h` 4 个字体头文件没有任何许可声明，需人复核（可用 `nm app.elf` 看 bin 里是否真有）；LovyanGFX（BSD-2）库内没有独立 license 文件，其 BSD-2 声明必须在托管任何 M5 Arduino bin 之前加入 NOTICES。在此之前 M5 Arduino 固件只在本地构建，不进仓库、不上站点。
+- **M5-01 SPI LCD**：GC9A01 并入参数化 `DcsPanel`（PanelSpec 描述尺寸 / 偏移 / 极性 / ID），新屏只加常量；1 位哑时钟按 MISC.ck_idle_edge 翻转计数建模；屏挂在哪个 SPI 主机由 SCLK 的 GPIO 矩阵 func_out 决定；背光认 LEDC PWM 路由到 BL 脚且占空比 > 0；3 线与 4 线读共用读位流，使 CoreS3 MISO=DC=35 共用脚无副作用。参考 M5GFX（MIT）只读学习。
+- **M5-02 I2C 按引脚总线**：哪个控制器的矩阵输出信号同时落在 SDA/SCL 焊盘上就由它访问总线，两脚都是普通 GPIO 时走位拨从机状态机；旧 `--i2c` 仍挂 I2C0 不看引脚（golden 不变）；上拉默认开。`--efuse-pkg 5` 同时清 APB_CTRL_DATE bit 31（M5GFX 该位为 1 时把 PICO-D4 映射成 6）。
+- **M5-04 器件**：MPU6886 / FT6336U / FT3267 参数化复用 `Mpu6050` / `Ft6236`；BMM150 输出未补偿原始值（默认磁场 (25,0,−40) µT 为估算）；PCF8563 世纪位 1 按 19xx 解释（与 M5Unified 一致，与 NXP 原意相反）。
+- **M5-05 板预设**：用 Rust 常量表（`boards.rs`）而非 JSON，`table_is_consistent` 在编译期 / 单测发现拼错；`verified` 标志区分「跑通过」与「按资料推测」（存根只警告，CLI 标 UNVERIFIED）。
+- **M5-06 IMU 安装方向**放在板预设（`BoardPreset.imu_mount`），器件默认恒等映射：驱动会按板补偿安装方向，模拟器须提供补偿前原始轴。AtomS3 Lite / R 复用 m5stack_atoms3 的 bin。
+- **M5-07 S3 PSRAM 四线 / 八线由板型决定**，默认八线：Arduino esp32 3.3.2 的 `m5stack_cores3` 声明 `psram_type=qspi`，模型按 AP 四线 die 回 ID `0D 5D 52`（8MB）；不改 eFuse / sdkconfig 让固件走八线（不符合真机）。
+- **M5-08 其它**：I2S PDM RX 只做到 PCM 层；板载麦克风两声道放同一样本（`both`）；键盘图例映射是推断的，标「需真机」。
+- **M5-10 / M5-11 / M5-12 经典 ESP32 外设**：GP-SPI 用独立 `ClassicSpi`（启动 / 中断 / DMA / 环形 W 缓冲语义差异大）；RMT 复用 `rmt.rs`（`RmtLayout::ESP32`，接收 / 载波 / APB FIFO 不做）；I2S 单独建模 `esp32/src/i2s.rs`（片内 lldesc DMA），PDM 在 PCM 层；ADC 校准走 eFuse ADC_VREF=3（1121 mV）的 IDF line fitting 路径。均只参考 TRM 与 IDF（Apache-2.0），未复制 espressif/qemu。
+- **M5-13 其它**：经典 ESP32 触摸脚测量立即完成、OUT 固定 1000（只为让 M5Unified 区分 Atom Lite / Matrix）；`BoardPreset.battery_adc` 让无 PMIC 的板用 ADC 分压读电池（复用 AXP2101 OCV 曲线，开机 80%）。

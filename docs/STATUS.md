@@ -113,10 +113,27 @@
 | Wi-Fi 初始化（PHY 校准） | ✅ | esp32-wifi-init：wifi_init / start ok | RFPLL 校准完成位由 HLE regi2c 给 |
 | Wi-Fi 收发 / 连 AP / HTTP | ✅ | esp32-wifi：开放热点 → IP 192.168.4.100 → tryboard.local 200 / example.com 200（应用层输出与 C3 逐行相同）；网页示例 esp32-wifi（Reviews/ab/C-05.md） | 共用 C3 / S3 的 MAC 模型，寄存器排布 `MacRegs::ESP32`（docs/WIFI.md「经典 ESP32」）；没有 QEMU Wi-Fi 对照（乐鑫 QEMU esp32 无 Wi-Fi MAC），未经真机标定 |
 | Wi-Fi WPA2-PSK + 硬件 SHA / AES | ✅ | esp32-wifi-wpa2：四次握手、硬件 CCMP、HTTP 同上；`cargo test -p tryboard-esp32` SHA FIPS 180 / AES FIPS 197 | SHA-1/256/384/512、AES-128/192/256 ECB；DMA 模式未做 |
-| RMT（WS2812） | ✗ | — | 寄存器布局与 C3 / S3 不兼容，这批不做；选型里标「必须上真机」 |
-| ADC / SPI / I2S / DAC / 触摸 / 霍尔 | ☐ | — | 未做；选型里标「必须上真机」 |
+| RMT 发送 + WS2812（M5-11） | ✅ | esp32-ws2812：GPIO27 5 颗 × 2 帧逐颗一致（121 符号 > 64 字块，阈值中断乒乓 + 全局回绕）；单元测试 esp32_layout_wrap_and_decode | 与 C3 / S3 同一 `rmt.rs`，`RmtLayout::ESP32`（8 通道 × 64 字、全局回绕、中断源 47、信号 87..94）；接收 / 载波 / APB FIFO 未做（记 unimpl）；QEMU 的 esp32.rmt 只是占位，无法对照；未在真机校准 |
+| DAC / 霍尔 / 蓝牙以外的其余外设 | ☐ | — | ADC / SPI / I2S / 触摸 / RMT / PSRAM 见下方 M5 批次行；DAC、霍尔未做，选型里标「必须上真机」 |
 | 蓝牙（经典 / BLE） | ☐ | — | 必须上真机 |
 | 网页 | ✅ | 换芯片菜单有 ESP32（hello / blink / wifi 示例）；上传 esp32-blink 台面换成 DevKitC V4、LED 闪、串口有输出（Reviews/ab/C-05.md） | 两排针相距 1″ 的面包板摆放简化见 DECISIONS |
+
+## M5Stack 板预设与器件（M5 批次，2026-10-20）
+所有行：QEMU 无对应模型或只能比到 init；**真机 HIL 缺失，未在真机校准**；M5 Arduino 固件只在本地构建，托管前须先解决 LovyanGFX 许可（DECISIONS「M5 批次」）。
+| 模块 | 状态 | 验收 | 备注 |
+|---|---|---|---|
+| SPI LCD（DCS：GC9A01 / GC9107 / ST7735 / ST7789 / ILI9342C/E，读 ID）M5-01 | S3 ✅，C3 仅 GC9A01 | 单元测试 + AtomS3 / Cardputer / Dial 探针 autodetect | CoreS3 用 PSRAM 另见下 |
+| I2C 按引脚总线 / GPIO 位拨（M5-02） | ✅ C3 单测 / S3 s3-i2c-bitbang / ESP32 esp32-i2c-bitbang | 同左 | 时钟拉伸、位拨线长未模拟 |
+| USB-Serial-JTAG 控制台 CDC（M5-03/05） | S3 ☑，C3 ☐ | accept `arduino-s3-usbcdc-echo` / `s3-usj-echo` | 去重启发式见 DECISIONS；QEMU 无 |
+| M5 I2C 器件（M5-04） | ◐ | MPU6886 / BMI270+BMM150 / BM8563 / AW9523 / AXP192 / LP5562 / TCA8418 / FT6336U / FT3267 / INA3221 行为模型，LTR-553 / AW88298 壳；单测覆盖 ID / 读写 / 随环境变化 | 地磁默认值为估算 |
+| 板预设 `--board` / `tb_board_preset`（M5-05） | S3：M5Dial ☑；AtomS3 ☑；其余存根 ☐ | accept `arduino-m5-probe-dial` / `arduino-m5-dial-demo` / `arduino-m5-probe-atoms3` | 蜂鸣器无模型 |
+| AtomS3 / Lite / R（M5-06） | ☑ | 同一固件识别为 11 / 137 / 18；`arduino-m5-probe-atoms3{,lite,r,r_opi}`、`arduino-m5-atoms3-imu{,-r,-lite}` | 背光不受 LP5562 控制，ST7735 版未建模 |
+| CoreS3 / CoreS3-SE（M5-07） | ☑ | 识别（GC0308 区分 SE）、ILI9342C 截图、FT6336 触摸、BMI270+BMM150、AXP2101、AW88298 扬声器 1kHz@48kHz；四线 PSRAM 8MB | 功放使能 / 增益未建模，摄像头无图像 |
+| Cardputer / Cardputer-Adv（M5-08） | 检测 ✅、ST7789 ✅、键盘 ◐（映射未核对，需真机）、PDM 麦克风 ✅（PCM 层）、Adv 麦克风 ◐、扬声器 ☐ | `arduino-m5-probe-cardputer(adv)`、`arduino-m5-cardputer(adv)-demo` | S3 GPIO 下拉语义改变（DECISIONS） |
+| 经典 ESP32 GP-SPI + DMA + SPI LCD（M5-10） | ✅ 驱动层 | esp32-spi-lcd、StickC Plus2 / Core2 探针 | QEMU 无 SPI 模型 |
+| 经典 ESP32 I2S TX / PDM RX / ADC1（M5-12） | ☑ | esp32-i2s-tone（440 Hz）、esp32-pdm-mic（1 kHz，PCM 层）、esp32-adc（五档误差 ≤ 1 mV） | PDM 半字顺序**未解决**（M5Unified 颠倒，见 DECISIONS） |
+| 经典 ESP32 M5 板（M5-13） | StickC Plus2 ✅ · Core2 / v1.1 ✅ · Atom Lite ✅ | 检测 / 屏 / IMU / RTC / 电池 / 按钮 / 麦克风（peak > 0，频率待定）/ 扬声器 2 kHz / WS2812 | 蜂鸣器无模型；Atom Matrix 预设未做；没有网页验收 |
+| 经典 ESP32 四线 PSRAM + flash 容量随镜像头（M5-14） | ✅ 驱动层（esp32-psram，2/4/8MB；4MB 与 QEMU 一致） | 同左 | himem / 时序未建模；C3 / S3 的 flash 容量随头部待做 |
 
 ## 电气（`core/crates/elec`，C3 / S3 共用）
 | 模块 | 状态 | 验收 | 备注 |
