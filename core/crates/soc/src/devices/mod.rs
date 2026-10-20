@@ -28,6 +28,7 @@ pub mod pins;
 pub mod qmi8658;
 pub mod qmp6988;
 pub mod rc522;
+pub mod sh1106;
 pub mod sht;
 pub mod ssd1306;
 pub mod tca8418;
@@ -68,6 +69,8 @@ pub fn make_i2c(kind: &str, addr: u8) -> Option<Box<dyn I2cDevice>> {
         "sht40" | "sht41" | "sht45" => Box::new(sht::Sht4x::new(addr)),
         "qmp6988" => Box::new(qmp6988::Qmp6988::new(addr)),
         "bmp280" => Box::new(bme280::Bme280::bmp280(addr)),
+        // 1.3" 128x64 OLED (F-04b)
+        "sh1106" => Box::new(sh1106::Sh1106::new(addr)),
         _ => return None,
     })
 }

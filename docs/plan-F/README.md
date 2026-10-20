@@ -22,6 +22,7 @@
 | 波 2 F-03 嵌入页 | ☑ | 2026-10-20 `/embed?s=` 点击加载、不写 localStorage；embed.mjs 19/19；`_headers` 的 frame-ancestors 需部署后验证；F-03b 原速回放未做；`Reviews/ab/F-03.md` |
 | 波 2 F-04a 器件上台面（第 1 部分） | ◐ | 2026-10-20 DS18B20 / PIR / 光敏 / 继电器 / RC522 上网页（3D、接线、手机、输入日志）+ 3 个示例，parts.mjs 18/18；第 2 部分（ILI9341 / SH1106 等显示屏）等 F-04b |
 | 波 2 F-07a UART + MicroPython | ☑ | 2026-10-20 UART RX 超过一个 FIFO、`\xNN` 串口转义、`mpy-c3-rawpaste` 用例（bin 由 `fetch_third_party.sh --micropython` 可选下载，缺失则跳过） |
+| 波 3 F-04b ILI9341 + SH1106 + 裸屏验收 | ☑ | 2026-10-20 DCS 面板新增 ILI9341 / ST7789 240×240 / 240×320（`--spi ili9341` / `st7789-240x240` / `st7789-240x320`，C3 也接受全部 DCS 屏），SH1106 新模型（`--i2c sh1106@0x3c`，132 列 RAM、偏移 2）；固件 c3-ili9341（esp_lcd_ili9341 2.1.0）/ s3-st7789（IDF 内置驱动）/ c3-sh1106，4 个 accept 用例通过；网页拖放与 3D 在 F-04a2 |
 
 ## 调研结论汇总
 

@@ -21,6 +21,10 @@ pub enum LcdKind {
     Ili9342e,
     /// 480x480 AMOLED, QSPI
     Co5300,
+    /// Bare SPI modules (F-04b): ILI9341 240x320, ST7789 240x240 and 240x320
+    Ili9341,
+    St7789Sq,
+    St7789Tall,
 }
 
 impl LcdKind {
@@ -35,6 +39,9 @@ impl LcdKind {
             "ili9342" | "ili9342c" => Some(LcdKind::Ili9342c),
             "ili9342e" => Some(LcdKind::Ili9342e),
             "co5300" => Some(LcdKind::Co5300),
+            "ili9341" => Some(LcdKind::Ili9341),
+            "st7789-240x240" => Some(LcdKind::St7789Sq),
+            "st7789-240x320" => Some(LcdKind::St7789Tall),
             _ => None,
         }
     }
@@ -49,6 +56,9 @@ impl LcdKind {
             LcdKind::Ili9342c => "ili9342c",
             LcdKind::Ili9342e => "ili9342e",
             LcdKind::Co5300 => "co5300",
+            LcdKind::Ili9341 => "ili9341",
+            LcdKind::St7789Sq => "st7789-240x240",
+            LcdKind::St7789Tall => "st7789-240x320",
         }
     }
 
@@ -62,12 +72,15 @@ impl LcdKind {
             LcdKind::St7789Land => dcs::ST7789_LAND,
             LcdKind::Ili9342c => dcs::ILI9342C,
             LcdKind::Ili9342e => dcs::ILI9342E,
+            LcdKind::Ili9341 => dcs::ILI9341,
+            LcdKind::St7789Sq => dcs::ST7789_240,
+            LcdKind::St7789Tall => dcs::ST7789_320,
             LcdKind::Co5300 => return None,
         })
     }
 }
 
-const DCS_KINDS: [LcdKind; 7] = [
+const DCS_KINDS: [LcdKind; 10] = [
     LcdKind::Gc9a01,
     LcdKind::Gc9107,
     LcdKind::St7735,
@@ -75,6 +88,9 @@ const DCS_KINDS: [LcdKind; 7] = [
     LcdKind::St7789Land,
     LcdKind::Ili9342c,
     LcdKind::Ili9342e,
+    LcdKind::Ili9341,
+    LcdKind::St7789Sq,
+    LcdKind::St7789Tall,
 ];
 
 /// GPIO numbers of a 4-wire SPI panel. `miso` may equal `dc` (CoreS3 shares GPIO35); `bl: None` = backlight always on
@@ -312,4 +328,19 @@ fn color_report(frame: &[u8], w: usize) -> String {
         );
     }
     o
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every DCS kind round-trips name -> kind -> spec -> kind (Lcd::kind matches on the spec)
+    #[test]
+    fn dcs_kinds_round_trip() {
+        for k in DCS_KINDS {
+            assert_eq!(LcdKind::parse(k.id()), Some(k));
+            assert_eq!(Lcd::new(k).kind(), k);
+        }
+        assert_eq!(LcdKind::parse("ili9341"), Some(LcdKind::Ili9341));
+    }
 }

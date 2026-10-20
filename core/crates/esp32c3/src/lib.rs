@@ -836,9 +836,9 @@ impl SocBus {
         self.audio.mic = Some(Box::new(devices::audio::Inmp441::new(p)));
     }
 
-    /// Attach a GC9A01 round LCD on SPI2 (pins in `lcd_pin`)
-    pub fn attach_lcd(&mut self) {
-        self.lcd = Some(Box::new(Lcd::new(LcdKind::Gc9a01)));
+    /// Attach a DCS SPI panel on SPI2 (pins in `lcd_pin`): GC9A01 round LCD or a bare ILI9341 / ST7789 module
+    pub fn attach_lcd(&mut self, kind: LcdKind) {
+        self.lcd = Some(Box::new(Lcd::new(kind)));
         let now = self.now;
         self.gpio_changed(now);
     }

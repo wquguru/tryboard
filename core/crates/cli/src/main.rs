@@ -33,6 +33,8 @@ fn usage() -> ! {
                [--spi gc9a01] (S3: SCLK=12 MOSI=11 CS=10 DC=14 RST=13 BL=15; C3: SCLK=6 MOSI=7 CS=10 DC=5 RST=4 BL=3) [--lcd-ppm <last frame.ppm>]
                [--spi co5300] (S3 QSPI AMOLED 480x480: CS=12 CLK=38 D0..D3=4..7 RST=39)
                [--spi <panel>@sclk=N,mosi=N,miso=N,cs=N,dc=N,rst=N,bl=N] (S3 / ESP32 panels gc9a01 gc9107 st7735 st7789 st7789l ili9342 ili9342e; -1 = not connected)
+               [--spi ili9341|st7789-240x240|st7789-240x320] (bare SPI modules, C3 / S3 default pins as gc9a01; S3 / ESP32 also take @pins)
+               [--i2c sh1106@0x3c] (1.3-inch 128x64 OLED; --oled prints it like SSD1306)
                [--power usb|ext] (default usb; ext = servo powered from an external 5 V 2 A supply) [--servo <GPIO>] (attach an SG90; its current loads the power net)
                [--elec-report] (per-node minimum voltage, peak current, brownout resets); script action power=usb|ext
                [--i2c-wire <cm>] (total I2C wire length: bus capacitance -> rise time; beyond spec reads go wrong / NACK, estimate)
@@ -76,7 +78,9 @@ fn default_rom(chip: Chip) -> String {
 use tryboard_machine::PhoneCmd;
 
 mod escape;
+mod oled;
 mod parts;
+use oled::report_oled;
 use parts::parts_args;
 
 fn main() {
@@ -1048,18 +1052,7 @@ fn run(args: &[String]) {
             eprintln!("    {:>9.3}s phone {l}", *t as f64 / 1e6);
         }
     }
-    let show_oled = args.iter().any(|a| a == "--oled");
-    if let Some(o) = m.oled() {
-        let n = o.lit_pixels();
-        eprintln!(
-            "[tryboard] OLED lit pixels {n} (display {}, charge pump {})",
-            if o.display_on { "on" } else { "off" },
-            if o.charge_pump { "on" } else { "off" }
-        );
-        if show_oled {
-            eprint!("{}", o.ascii());
-        }
-    }
+    report_oled(&mut m, args);
     let (st, sb) = m.spi_stats();
     if st > 0 {
         eprintln!("[tryboard] SPI2 transfers {st}, MOSI {sb} bytes");
@@ -1324,7 +1317,7 @@ fn spi_args(m: &mut Machine, args: &[String]) {
     }
     for dev in devs {
         if let Err(e) = m.lcd_attach_spec(&dev) {
-            eprintln!("unsupported SPI device: {e} (gc9a01, rc522 on C3 / S3; gc9107, st7735, st7789, st7789l, ili9342, ili9342e, co5300 on S3)");
+            eprintln!("unsupported SPI device: {e} (gc9a01, rc522 on C3 / S3; gc9107, st7735, st7789, st7789l, ili9342, ili9342e, co5300 on S3; ili9341, st7789-240x240, st7789-240x320 on C3 / S3)");
             std::process::exit(2)
         }
     }

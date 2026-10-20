@@ -146,6 +146,38 @@ pub const ILI9342E: PanelSpec = PanelSpec {
     variant: Variant::Ili9342e,
     ..ILI9342C
 };
+/// Bare 2.4" / 2.8" TN module (F-04b): 240×320 portrait, normally white (no INVON), BGR (the IDF spi_lcd_touch example sets BGR)
+pub const ILI9341: PanelSpec = PanelSpec {
+    name: "ILI9341",
+    mem_w: 240,
+    mem_h: 320,
+    w: 240,
+    h: 320,
+    ox: 0,
+    oy: 0,
+    round: false,
+    normally_black: false,
+    bgr_panel: true,
+    landscape: false,
+    id: [0x00, 0x93, 0x41],
+    variant: Variant::Generic,
+};
+/// Bare 1.3" IPS module: 240×240 glass at (0, 0) of the 240×320 GRAM, RGB subpixels (MADCTL mirroring needs a 80-row gap)
+pub const ST7789_240: PanelSpec = PanelSpec {
+    name: "ST7789_240",
+    w: 240,
+    h: 240,
+    ox: 0,
+    oy: 0,
+    bgr_panel: false,
+    ..ST7789
+};
+/// Bare 2.0" / 2.4" IPS module: the full 240×320 GRAM, RGB subpixels
+pub const ST7789_320: PanelSpec = PanelSpec {
+    name: "ST7789_320",
+    h: 320,
+    ..ST7789_240
+};
 
 pub struct DcsPanel {
     pub spec: PanelSpec,
@@ -754,5 +786,51 @@ mod tests {
         let mut l = DcsPanel::new(ST7789_LAND);
         assert_eq!(l.size(), (240, 135));
         assert_eq!(l.render().len(), 240 * 135 * 4);
+    }
+
+    /// F-04b bare modules: ILI9341 is normally white (true colours without INVON) and needs BGR=1 like the IDF example
+    #[test]
+    fn ili9341_normally_white_bgr() {
+        let mut d = DcsPanel::new(ILI9341);
+        d.set_backlight(true);
+        send(&mut d, 0x11, &[]);
+        send(&mut d, 0x29, &[]);
+        send(&mut d, 0x36, &[0x08]);
+        send(&mut d, 0x3a, &[0x55]);
+        send(&mut d, 0x2a, &[0, 0, 0, 0]);
+        send(&mut d, 0x2b, &[0x01, 0x3f, 0x01, 0x3f]);
+        send(&mut d, 0x2c, &[0xf8, 0x00]);
+        assert_eq!(d.size(), (240, 320));
+        let o = (319 * 240) * 4;
+        assert_eq!(&d.render()[o..o + 4], &[255, 0, 0, 255]);
+        // The rest of GRAM is black and shows black: only one lit pixel
+        assert_eq!(d.lit_pixels(), 1);
+        // Without BGR the red pixel comes out blue
+        send(&mut d, 0x36, &[0x00]);
+        assert_eq!(&d.render()[o..o + 4], &[0, 0, 255, 255]);
+    }
+
+    /// 240x240 ST7789: glass is GRAM rows 0..239, so MY mirroring moves row 0 to GRAM row 319, off the glass,
+    /// until the driver adds the 80-row gap (esp_lcd_panel_set_gap); RGB panel, normally black
+    #[test]
+    fn st7789_240_mirror_needs_gap() {
+        let mut d = DcsPanel::new(ST7789_240);
+        d.set_backlight(true);
+        send(&mut d, 0x11, &[]);
+        send(&mut d, 0x21, &[]);
+        send(&mut d, 0x29, &[]);
+        send(&mut d, 0x36, &[0x80]);
+        send(&mut d, 0x3a, &[0x55]);
+        send(&mut d, 0x2a, &[0, 0, 0, 0]);
+        send(&mut d, 0x2b, &[0, 0, 0, 0]);
+        send(&mut d, 0x2c, &[0xf8, 0x00]);
+        assert_eq!(d.size(), (240, 240));
+        assert_eq!(d.lit_pixels(), 0);
+        send(&mut d, 0x2b, &[0, 80, 0, 80]);
+        send(&mut d, 0x2c, &[0xf8, 0x00]);
+        let o = (239 * 240) * 4;
+        assert_eq!(&d.render()[o..o + 4], &[255, 0, 0, 255]);
+        let t = DcsPanel::new(ST7789_320);
+        assert_eq!(t.size(), (240, 320));
     }
 }
