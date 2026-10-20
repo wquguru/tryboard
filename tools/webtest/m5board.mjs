@@ -112,8 +112,11 @@ for (const c of CASES) {
   }
   await page.screenshot({ path: path.join(outDir, `m5board-${tag}.png`) });
 
-  // Input log -> CLI --inputs replay: serial matches the live web run line by line
-  const log = await page.evaluate(() => globalThis.__tbApp.session.sim.inputLog());
+  // Input log -> CLI --inputs replay: serial matches the live web run byte for byte.
+  // Pause first, then take one snapshot: its log (endMs) and its stdout (since the preset boot) describe the same instant, like replay.mjs
+  await page.evaluate(() => globalThis.__tbApp.session.sim.pause());
+  const snap = await page.evaluate(() => globalThis.__tbApp.session.sim.snapshot());
+  const log = snap.log;
   report(`${c.board}: input log header carries the preset`, log.board === c.board && log.grove === c.grove, `board=${log.board} grove=${log.grove}`);
   if (c.env) report(`${c.board} + ${c.grove}: input log has the env change`, log.events.filter((e) => e.kind === 'env').length >= 2, toScript(log).split('\n').filter((l) => l.includes('env=')).join(' | '));
   const file = path.join(outDir, `m5board-${tag}-inputs.txt`);
@@ -121,15 +124,16 @@ for (const c of CASES) {
   const cycles = Math.round(log.endMs * (CPU_HZ / 1000));
   const args = cliArgs(log, bin, file, (cycles + 0.5) / CPU_HZ).slice(2);
   const live = cliRun(args, `${tag}-live`);
-  // The console keeps earlier boots (start example, upload): compare from the preset boot's first line on
-  const all = (await page.evaluate(() => globalThis.__tbApp.session.consoleText())).replace(/\r/g, '').split('\n').slice(0, -1).filter((l) => l && !l.startsWith('[TryBoard]'));
-  const cli = live.stdout.replace(/\r/g, '').split('\n').filter(Boolean);
-  // A repeated first line (e.g. I2C probe errors) would fool lastIndexOf: take the tail when it starts at cli[0]
-  const tail = all.length - cli.length;
-  const fresh = all.slice(tail >= 0 && all[tail] === cli[0] ? tail : Math.max(0, all.lastIndexOf(cli[0])));
-  fs.writeFileSync(path.join(outDir, `m5board-${tag}-web.txt`), all.join('\n'));
-  const diff = fresh.findIndex((l, i) => l !== cli[i]);
-  report(`${c.board}: CLI ${args.filter((a) => a.startsWith('--')).join(' ')} replay = web serial`, cli.length > 0 && fresh.length === cli.length && diff < 0 && live.code === 0, diff < 0 ? `${fresh.length}/${cli.length} lines` : `#${diff}: web "${fresh[diff]}" / CLI "${cli[diff]}"`);
+  const web = snap.stdout;
+  fs.writeFileSync(path.join(outDir, `m5board-${tag}-web.stdout`), web);
+  let at = [...live.stdout].findIndex((ch, i) => ch !== web[i]);
+  if (at < 0 && live.stdout.length !== web.length) at = Math.min(live.stdout.length, web.length);
+  report(`${c.board}: CLI ${args.filter((a) => a.startsWith('--')).join(' ')} replay = web serial (byte for byte)`, at < 0 && web.length > 0 && !snap.truncated && live.code === 0,
+    at < 0 ? `${web.length} bytes, ${cycles} cycles` : `differs from byte ${at} (CLI ${live.stdout.length} / web ${web.length}): ${JSON.stringify(live.stdout.slice(at, at + 60))} vs ${JSON.stringify(web.slice(at, at + 60))}`);
+  // The serial panel shows the same bytes: the preset boot's output is the tail of the console (earlier boots precede it)
+  const panel = await page.evaluate(() => globalThis.__tbApp.session.consoleText());
+  fs.writeFileSync(path.join(outDir, `m5board-${tag}-web.txt`), panel);
+  report(`${c.board}: serial panel ends with the run's serial`, panel.endsWith(web), JSON.stringify(panel.slice(-80)));
 
   // Fingerprint: verify worker vs CLI on the same log
   const SECS = Math.max(3, Math.ceil(log.endMs / 1000));
