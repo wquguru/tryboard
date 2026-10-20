@@ -16,7 +16,7 @@
 | 评估 | ☑ | `EVAL.md` |
 | 波 0 调研 RS-1 … RS-6 | ☑ | 2026-10-20 完成，六份报告在 `research/` |
 | 调研汇总 → 改写波次计划 | ☑ | `EVAL.md` §5.2–5.4 已修订：约 28 个实现 session、5 波 |
-| F 批写入 PLAN.md、开工实现 | ◐ | 2026-10-20 人确认开工；波 1 ☑（`Reviews/batch-F1.md`）；波 2 ☑（`Reviews/batch-F2.md`）；F-04b 的阻塞（M5-01）已解除，待人定是否进波 3 |
+| F 批写入 PLAN.md、开工实现 | ◐ | 2026-10-20 人确认开工；波 1 ☑（`Reviews/batch-F1.md`）；波 2 ☑（`Reviews/batch-F2.md`）；波 3 ☑（`Reviews/batch-F3.md`：F-04b、F-04e、F-08c、F-08a、F-03b） |
 | 波 2 F-01b `.tryboard` 文件 | ☑ | 2026-10-20 ⋯「下载 .tryboard 文件」+ 换固件 / 拖到页面打开；自带 bin 带 sha256 校验；share.mjs 17/17；`Reviews/ab/F-01b.md` |
 | 波 2 F-02 分享卡 | ☑ | 2026-10-20 自写 QR（v1–40、ECC M）+ 1080×1350 卡片，MP4 优先、退 webm，另出 PNG；修 Safari 录屏扩展名；sharecard.mjs 15/15；`Reviews/ab/F-02.md` |
 | 波 2 F-03 嵌入页 | ☑ | 2026-10-20 `/embed?s=` 点击加载、不写 localStorage；embed.mjs 19/19；`_headers` 的 frame-ancestors 需部署后验证；F-03b 原速回放未做；`Reviews/ab/F-03.md` |
@@ -25,8 +25,8 @@
 | 波 3 F-04e AHT20 / INA219 / DS3231 | ☑ | 2026-10-20 三个 I2C 模型（aht20.rs / ina219.rs / ds3231.rs）；AHT20、DS3231 温度跟 `--env`，INA219 读电气模型 USB 输入；`c3-i2c-trio` 进 accept；网页未接 |
 | 波 2 F-07a UART + MicroPython | ☑ | 2026-10-20 UART RX 超过一个 FIFO、`\xNN` 串口转义、`mpy-c3-rawpaste` 用例（bin 由 `fetch_third_party.sh --micropython` 可选下载，缺失则跳过） |
 | 波 3 F-04b ILI9341 + SH1106 + 裸屏验收 | ☑ | 2026-10-20 DCS 面板新增 ILI9341 / ST7789 240×240 / 240×320（`--spi ili9341` / `st7789-240x240` / `st7789-240x320`，C3 也接受全部 DCS 屏），SH1106 新模型（`--i2c sh1106@0x3c`，132 列 RAM、偏移 2）；固件 c3-ili9341（esp_lcd_ili9341 2.1.0）/ s3-st7789（IDF 内置驱动）/ c3-sh1106，4 个 accept 用例通过；网页拖放与 3D 在 F-04a2 |
-| F-08c BLE 多 IDF 签名 | ☑ | 2026-10-20 补 11 个 bt-lib 提交（IDF 5.1.0–5.3.1）：C3 / S3 各加 osi_reg 3 个、init 2 个变体；osi 版本放宽到 0x10006–0x1000A，5.1.0 / 5.1.1 不挂 pll_track；`tools/ble_cover.sh` 裸链接 42 个库，Rust 自测 37 个全中（S3 `_flash` 库 5 个为已知缺口）；62 个已编镜像原始扫描误匹配 0；9 个 BLE 用例 CLI 输出与改前逐字节一致。Arduino 3.0.x 真验收要装 core 3.0.7，待人批 |
-| 波 3 F-08a Arduino 库矩阵（显示与传感器） | ◐ | 2026-10-20 11 个库示例在 C3 上通过（`arduino-lib-*`，矩阵见 STATUS「Arduino 库矩阵」）；OneWire / TFT_eSPI 只进本地 accept；ILI9341 / RTClib 草图已编译，等 F-04b / F-04e 合并后加用例 |
+| 波 3 F-08c BLE 多 IDF 签名 | ☑ | 2026-10-20 补 11 个 bt-lib 提交（IDF 5.1.0–5.3.1）：C3 / S3 各加 osi_reg 3 个、init 2 个变体；osi 版本放宽到 0x10006–0x1000A，5.1.0 / 5.1.1 不挂 pll_track；`tools/ble_cover.sh` 裸链接 42 个库，Rust 自测 37 个全中（S3 `_flash` 库 5 个为已知缺口）；62 个已编镜像原始扫描误匹配 0；9 个 BLE 用例 CLI 输出与改前逐字节一致。Arduino 3.0.x 真验收要装 core 3.0.7，待人批 |
+| 波 3 F-08a Arduino 库矩阵（显示与传感器） | ◐ | 2026-10-20 12 个库示例在 C3 上通过（`arduino-lib-*`，矩阵见 STATUS「Arduino 库矩阵」；RTClib 用例在合并后由主会话加）；OneWire / TFT_eSPI 只进本地 accept；Adafruit ILI9341 草图在 C3 上 0 条命令（草图引脚与 C3 固定 lcd_pin 不符），待修；LICENSING 新增两行待人核 |
 
 ## 调研结论汇总
 
@@ -65,7 +65,7 @@
 
 ## 下一步要人决定的
 
-1. ~~是否开工 F 批~~：2026-10-20 已确认，波 1、波 2 完成。F-04b 是否进下一波（M5-01 已合并）。
+1. ~~是否开工 F 批~~：2026-10-20 已确认，波 1–3 完成（F-04b 已在波 3 做完）。
 2. MicroPython 二进制分发方式和定位扩展（RS-1）。
 3. xiaozhi 四项（RS-2）。
 4. 四个 Arduino 库的许可证（RS-3）、BLE 签名的衍生作品问题（RS-5）。

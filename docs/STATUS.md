@@ -160,8 +160,8 @@ arduino-cli 1.5.1 + esp32 core 3.3.2，FQBN `esp32:esp32:esp32c3`；草图在 `f
 | MFRC522（miguelbalboa/rfid 1.4.12） | Unlicense | ReadNUID：放卡 / 移卡 / 换 7 字节卡 | ✅ | `arduino-lib-mfrc522`：版本 0x92，两张卡 UID 与类型正确，unsupported 0 | 可（公有领域，见 DECISIONS） |
 | DallasTemperature 4.0.6 + OneWire 2.3.8 | MIT + **未核** | GPIO4 总线 2 个 DS18B20 | ✅ 仅本地 | `arduino-lib-dallas`：找到 2 个、ROM 与温度正确、未知命令 0 | **否**（OneWire 无 LICENSE 文件） |
 | TFT_eSPI 2.5.44 | **混合，未核** | GC9A01 240×240（C3 SCLK 6 / MOSI 7 / CS 10 / DC 5 / RST 4 / BL 3，`flags.txt` 传 setup） | ✅ 仅本地 | `arduino-lib-tft-espi`：非黑 14673 像素 | **否** |
-| Adafruit ILI9341 1.6.4 | BSD | graphicstest 简化版（CS 10 / DC 1 / RST 0） | ⏳ 已编译 | 等 F-04b ILI9341 模型合并后加 `lcd_min_pixels` 用例；现在没有模型，读回 0xFF（草图不靠读回判断成功，用例必须看像素） | 合并后可 |
-| RTClib 2.1.4 | MIT | DS3231 设时间 → 读时间 / 温度 | ⏳ 已编译 | 等 F-04e DS3231 模型；现在报 `Couldn't find RTC` | 合并后可 |
+| Adafruit ILI9341 1.6.4 | BSD | graphicstest 简化版（CS 10 / DC 1 / RST 0） | ⏳ 已编译 | F-04b 已合并，但 C3 上 LCD 收到 0 条命令：草图引脚（CS 10 / DC 1 / RST 0）与 C3 固定 lcd_pin 接线不符、C3 不支持 `@pins`；待修后加 `lcd_min_pixels` 用例 | 合并后可 |
+| RTClib 2.1.4 | MIT | DS3231 设时间 → 读时间 / 温度 | ✅ | `arduino-lib-rtclib`（F-04e 合并后加）：lost power → 设时间 → 读回，温度 23.50 °C 跟 `--env` | 合并后可 |
 | lvgl（Arduino 版） | MIT | — | ✗ 本条目不做 | Arduino 版要在库外放 `lv_conf.h` 并接显示驱动（官方示例用 TFT_eSPI，许可证未核）；LVGL 已由 IDF 示例 s3-lvgl / s3-ai-dash 覆盖 | — |
 
 - 内核修复：esptool 在 Arduino 产物里插入加载地址 0 的填充段，C3 / S3 / 经典 ESP32 的直接引导原先报 `segment 0x00000000 lands in a non-writable region`（ArduinoJson、SHT31 两例触发）；现在与二级引导一样跳过 0x1000_0000 以下的段。

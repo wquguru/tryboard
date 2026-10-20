@@ -234,8 +234,8 @@
 | F-06 | 公开数字自动生成（tools/stats.py；README 标记块 + web/public/stats.json，build_web.sh 调用；首页暂无手写数字） | stats.py --check | ☑ |
 | F-07a | UART > 127 字节修复 + `--script` `\xNN` + MicroPython C3 验收 | golden 字节一致；MicroPython 用例 | ☑ 2026-10-20：golden 173/173 一致，`mpy-c3-rawpaste` 通过（新用例快照待合并后 save） |
 | F-07b | 网页 main.py 编辑器（需人定 MicroPython 分发方式与定位） | micropython.mjs | ☐ |
-| F-08a / F-08b | Arduino 库矩阵 2 × 10 例（MIT / BSD 优先） | accept 矩阵写进 STATUS | ☐ |
-| F-08c | BLE 多 IDF 签名 + osi 版本放宽 + pll_track | 覆盖自测；误匹配 0 | ☑（Arduino 3.0.x 未验） |
+| F-08a / F-08b | Arduino 库矩阵 2 × 10 例（MIT / BSD 优先） | accept 矩阵写进 STATUS | ◐ F-08a 2026-10-20：12 个显示 / 传感器库示例在 C3 通过（`arduino-lib-*`），Adafruit ILI9341 草图待修；F-08b 未开始 |
+| F-08c | BLE 多 IDF 签名 + osi 版本放宽 + pll_track | 覆盖自测；误匹配 0 | ☑ IDF 5.1.0–5.3.1 部分（2026-10-20）；Arduino 3.0.x 未验（要装 arduino-cli core 3.0.7，待人批） |
 | F-09a | xiaozhi 虚拟服务端（长连接 TCP + WebSocket + 脚本） | 单测 + golden | ☐ |
 | F-09b | xiaozhi-lite 示例 + 语音面板（需人拍板 RS-2 四项） | accept 3 例 + xiaozhi.mjs | ☐ |
 | F-10c | 经典 ESP32 RMT 收 + 载波 + IR 器件 | esp32-ir accept | ☐ |
