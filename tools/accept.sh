@@ -35,6 +35,12 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
     if t.get('script'): cmd += ['--script', t['script']]
     if t.get('pwm'): cmd += ['--pwm-log', str(t['pwm']['pin'])]
     if t.get('ws2812'): cmd += ['--ws2812-log']
+    ppm = None
+    if t.get('lcd_regions'):
+        os.makedirs(f'{root}/Reviews/lcd', exist_ok=True)
+        ppm = f"{root}/Reviews/lcd/{t['id']}.ppm"
+        if os.path.exists(ppm): os.remove(ppm)
+        cmd += ['--lcd-ppm', ppm]
     p = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
     out, err = p.stdout, p.stderr
     missing = [e for e in t['expect'] if e not in out]
@@ -108,6 +114,29 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
         n = int(m.group(1)) if m else 0
         notes.append(f"LCD non-black {n} pixels (display {m.group(2) if m else 'none'})")
         if n < t['lcd_min_pixels']: missing.append('lcd')
+    # lcd_regions: pixel counts in rectangles of the last frame (--lcd-ppm); 'color' matches within 'tol' per channel, else any non-black
+    if ppm:
+        try:
+            parts = open(ppm, 'rb').read().split(b'\n', 3)
+            lw, px = int(parts[1].split()[0]), parts[3]
+        except (OSError, IndexError, ValueError):
+            px, lw = None, 0
+        for r in t['lcd_regions']:
+            name = r.get('name', f"{r['x']},{r['y']} {r['w']}x{r['h']}")
+            if px is None:
+                missing.append(f'lcd region {name}'); notes.append('no LCD frame'); break
+            c = r.get('color')
+            want = (int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16)) if c else None
+            tol = r.get('tol', 8)
+            n = 0
+            for y in range(r['y'], r['y'] + r['h']):
+                row = px[(y * lw + r['x']) * 3:(y * lw + r['x'] + r['w']) * 3]
+                for i in range(0, len(row), 3):
+                    p3 = row[i:i + 3]
+                    n += all(abs(p3[k] - want[k]) <= tol for k in range(3)) if want else max(p3) > 16
+            ok_r = r.get('min_pixels', 0) <= n <= r.get('max_pixels', 1 << 30)
+            notes.append(f"region {name}: {n} px{'' if ok_r else ' (out of range)'}")
+            if not ok_r: missing.append(f'lcd region {name}')
     # Speaker: the simulator's analysis of PCM reaching the speaker (sample rate, last-second RMS, peak, dominant frequency).
     au = t.get('audio')
     if au:

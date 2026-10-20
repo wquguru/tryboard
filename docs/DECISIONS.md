@@ -1093,3 +1093,12 @@
 - **固件截尾**：拷到 `web/public/fw` 时去掉尾部 0xFF，长度按 4 KB 向上取整。三款 SoC 开机都把 flash 补 0xFF 到 max(头部声明容量, 4 MB)（c3 `boot.rs:168`、s3 `boot.rs:249`、esp32 `boot.rs:200`），内置固件都 ≤ 4 MB，所以模拟结果逐字节不变（levels / replay 指纹一致）；JS 侧不补齐。唯一可见变化：实验台「大小」显示截后大小（arduino-blink 4096 KB → 356 KB），与 b64 打包模式（pack_artifact.py 早就 rstrip 0xFF）一致。
 - **fetchBuf 回退顺序**：b64 打包页 → `.b64.txt`（不碰 `.gz`，pack_artifact.py 删掉 `.gz`）；否则 `.bin` / `.elf` / `.wasm` 且有 `DecompressionStream` 时先取 `url + '.gz'`：非 2xx 或 Content-Type 含 html（SPA 兜底页）→ 回退原文件；字节以 1f 8b 开头 → 解压，解压出错 → 回退；不是 gzip 魔数 → 当成托管已按 `Content-Encoding: gzip` 解过（vite preview 就这样）直接用。音频等别的类型不试 `.gz`，避免 404 噪声。
 - 替代：只靠托管压缩 —— 不少静态托管不压 `.bin` / `.elf`（R-18 要求不依赖托管配置）；把原长度写进 manifest 在 JS 侧补齐 —— 多一次请求，且 Rust 本来就补齐。
+## 2026-10-20 E-07a 示例固件「AI 网关仪表盘」（s3-ai-dash）
+- 决定：一个固件串起 E-01 / E-02 / E-04 / E-06：CO5300 QSPI（照 s3-co5300 初始化）+ LVGL 9.2.2 / esp_lvgl_port 2.6.0（照 s3-lvgl，40 行 × 2 DMA 缓冲在内部 RAM，不用 PSRAM / 整帧缓冲）+ I2C 三颗（照 s3-amoled-i2c）+ NimBLE NUS（照 c3-ble-nus，广播名 Claude-Dash）。**没有新依赖**：组件版本与已核的 s3-co5300 / s3-lvgl 相同（esp_lcd_co5300 锁 2.0.3）。字体只开 LVGL 自带 Montserrat 14 / 20 / 28 / 48（MIT），英文界面，不带中文字库。
+- 触摸不用 esp_lcd_touch_cst9220 组件（不在 LICENSING 清单，也省一次许可证核对）：自写 LVGL 指针 read_cb，按下状态取 INT 脚电平（低 = 按下），坐标读 0xD000 报点并回 0xAB；翻页由 read_cb 在松手时按位移判定（|dx| ≥ 60 且大于 |dy|），不用 LVGL 手势 / tileview——后者依赖每次读的速度阈值且翻页动画要重画十几帧整屏，脚本触摸下结果对时间点敏感。
+- 页面用 4 个容器显隐切换；CO5300 窗口要求偶数起点 / 偶数宽高，加 `LV_EVENT_INVALIDATE_AREA` rounder（真机同样需要，模型不强制）。
+- RTC：收到 `time` 消息时 `settimeofday` 并把**本地时间**（epoch + tz）写进 PCF85063（板子官方示例的做法）；顶栏和第 4 页每秒读 RTC，OS 位置 1 时显示 `--:--`。电量每秒读 AXP2101 0xA4 / 0x00，status ack 带真实电量（虚拟电脑日志 `battery 50%` 可核）。
+- 验收用屏幕区域：accept.json 新键 `lcd_regions: [{name, x, y, w, h, color?, tol?=8, min_pixels?, max_pixels?}]`，accept.sh 自动加 `--lcd-ppm Reviews/lcd/<id>.ppm`，统计矩形内颜色（每通道 ±tol）或非黑像素。数值用几何量绑定（LOAD 条 running/total、上下文条 tokens/200000、电量条 pct），所以像素数精确等于期望值即「数值对」；不做 OCR。没有改 CLI（`run` 不变长）：每个用例只看结束时一帧，翻页用单独用例结束在目标页来验。
+- 核心改动只有一处测试：`esp32s3::ble` 的 `sigs_hit_only_ble_firmware` 把 s3-ai-dash 列为 BLE 固件（它确实链接 NimBLE，签名认出是对的）；模型行为未改，已有用例输出不变。
+- 替代：ArduinoJson / 第三方 Buddy 固件（vthinkxie/claude-desktop-buddy-esp32，许可证 NOASSERTION）——不用，协议按公开文档自写，JSON 用 IDF 自带 cJSON。
+- 未做：网页示例库 / 蓝牙坞（E-07b）；配对加密（E-08）；时区只按 time 消息里的偏移，不存 NVS。

@@ -2414,5 +2414,233 @@
    "pc: ack status #5 ok, battery 87%"
   ],
   "qemu": false
+ },
+ {
+  "id": "s3-ai-dash",
+  "chip": "esp32s3",
+  "seconds": 10,
+  "args": [
+   "--spi",
+   "co5300",
+   "--i2c",
+   "cst9220@0x5a,axp2101@0x34,pcf85063@0x51",
+   "--touch-int",
+   "11",
+   "--desk-pc",
+   "--battery",
+   "87,usb"
+  ],
+  "expect": [
+   "首屏 已显示",
+   "电量 87% USB 已插",
+   "BLE 广播 Claude-Dash",
+   "蓝牙 ONLINE",
+   "RTC 已写入 2026-10-20 10:42:00",
+   "主人 TryBoard",
+   "心跳 #1 total=3 running=0 waiting=0 tokens=184502 tokens_today=31200 entries=8",
+   "心跳 #2 total=3 running=1 waiting=0 tokens=184724 tokens_today=31422 entries=8",
+   "屏幕 已更新 心跳 #2（第 1/4 页 Requests）",
+   "TRYBOARD_OK s3-ai-dash"
+  ],
+  "absent": [
+   "JSON 解析失败",
+   "RTC 写入失败"
+  ],
+  "numeric": [
+   {
+    "name": "first frame (ms, simulated)",
+    "regex": "首屏 已显示 (\\d+) ms",
+    "value": 1000,
+    "tol": 1000
+   }
+  ],
+  "stderr_expect": [
+   "pc: session up (MTU 247, chunks of 244 B)",
+   "pc: ack owner #1 ok",
+   "pc: ack status #4 ok, battery 87%"
+  ],
+  "lcd_min_pixels": 60000,
+  "lcd_regions": [
+   {
+    "name": "load bar running 1/3",
+    "x": 24,
+    "y": 276,
+    "w": 432,
+    "h": 24,
+    "color": "#31d35a",
+    "min_pixels": 3456,
+    "max_pixels": 3456
+   },
+   {
+    "name": "load bar waiting 0",
+    "x": 24,
+    "y": 276,
+    "w": 432,
+    "h": 24,
+    "color": "#ffb221",
+    "max_pixels": 0
+   },
+   {
+    "name": "BLE icon online",
+    "x": 330,
+    "y": 14,
+    "w": 40,
+    "h": 40,
+    "color": "#0886ff",
+    "min_pixels": 50
+   },
+   {
+    "name": "page dot 1 active",
+    "x": 198,
+    "y": 448,
+    "w": 12,
+    "h": 12,
+    "color": "#ffffff",
+    "min_pixels": 60
+   },
+   {
+    "name": "page dot 2 idle",
+    "x": 222,
+    "y": 448,
+    "w": 12,
+    "h": 12,
+    "color": "#ffffff",
+    "max_pixels": 0
+   }
+  ],
+  "qemu": false
+ },
+ {
+  "id": "s3-ai-dash-swipe",
+  "fw": "s3-ai-dash",
+  "chip": "esp32s3",
+  "seconds": 10,
+  "args": [
+   "--spi",
+   "co5300",
+   "--i2c",
+   "cst9220@0x5a,axp2101@0x34,pcf85063@0x51",
+   "--touch-int",
+   "11",
+   "--desk-pc",
+   "--battery",
+   "87,usb"
+  ],
+  "script": "6.5:touch=400,240; 6.55:touch=320,240; 6.60:touch=200,240; 6.65:touch=120,242; 6.70:release; 7.0:touch=400,240; 7.05:touch=320,240; 7.10:touch=200,240; 7.15:touch=120,242; 7.20:release; 7.5:touch=100,240; 7.55:touch=200,240; 7.60:touch=300,240; 7.65:touch=380,238; 7.70:release; 8.5:pc=hb,eyJ0b3RhbCI6NSwicnVubmluZyI6Miwid2FpdGluZyI6MSwibXNnIjoiYXBwcm92ZTogQmFzaCIsImVudHJpZXMiOlsiMTA6NDMgY2FyZ28gdGVzdCIsIjEwOjQyIGNhcmdvIGZtdCJdLCJ0b2tlbnMiOjE1MDAwMCwidG9rZW5zX3RvZGF5Ijo0MjAwMH0=",
+  "expect": [
+   "滑动 向左 dx=-280 → 页 2/4 Context",
+   "滑动 向左 dx=-280 → 页 3/4 Sessions",
+   "滑动 向右 dx=280 → 页 2/4 Context",
+   "心跳 #3 total=5 running=2 waiting=1 tokens=150000 tokens_today=42000 entries=2",
+   "屏幕 已更新 心跳 #3（第 2/4 页 Context）",
+   "TRYBOARD_OK s3-ai-dash"
+  ],
+  "lcd_regions": [
+   {
+    "name": "context bar 150000/200000",
+    "x": 24,
+    "y": 280,
+    "w": 432,
+    "h": 24,
+    "color": "#0886ff",
+    "min_pixels": 7776,
+    "max_pixels": 7776
+   },
+   {
+    "name": "no page-1 green",
+    "x": 0,
+    "y": 64,
+    "w": 480,
+    "h": 368,
+    "color": "#31d35a",
+    "max_pixels": 0
+   },
+   {
+    "name": "page dot 1 idle",
+    "x": 198,
+    "y": 448,
+    "w": 12,
+    "h": 12,
+    "color": "#ffffff",
+    "max_pixels": 0
+   },
+   {
+    "name": "page dot 2 active",
+    "x": 222,
+    "y": 448,
+    "w": 12,
+    "h": 12,
+    "color": "#ffffff",
+    "min_pixels": 60
+   }
+  ],
+  "qemu": false
+ },
+ {
+  "id": "s3-ai-dash-usage",
+  "fw": "s3-ai-dash",
+  "chip": "esp32s3",
+  "seconds": 10,
+  "args": [
+   "--spi",
+   "co5300",
+   "--i2c",
+   "cst9220@0x5a,axp2101@0x34,pcf85063@0x51",
+   "--touch-int",
+   "11",
+   "--desk-pc",
+   "--battery",
+   "50"
+  ],
+  "script": "6.5:touch=400,240; 6.55:touch=320,240; 6.60:touch=200,240; 6.65:touch=120,242; 6.70:release; 7.0:touch=400,240; 7.05:touch=320,240; 7.10:touch=200,240; 7.15:touch=120,242; 7.20:release; 7.5:touch=400,240; 7.55:touch=320,240; 7.60:touch=200,240; 7.65:touch=120,242; 7.70:release; 8.0:touch=400,240; 8.05:touch=320,240; 8.10:touch=200,240; 8.15:touch=120,242; 8.20:release",
+  "expect": [
+   "电量 50% USB 未插",
+   "滑动 向左 dx=-280 → 页 4/4 Usage",
+   "滑动 向左：已经是最后一页",
+   "TRYBOARD_OK s3-ai-dash"
+  ],
+  "stderr_expect": [
+   "pc: ack status #4 ok, battery 50%"
+  ],
+  "lcd_regions": [
+   {
+    "name": "battery bar 50%",
+    "x": 40,
+    "y": 302,
+    "w": 178,
+    "h": 12,
+    "color": "#31d35a",
+    "min_pixels": 1068,
+    "max_pixels": 1068
+   },
+   {
+    "name": "BLUETOOTH ONLINE",
+    "x": 262,
+    "y": 268,
+    "w": 180,
+    "h": 40,
+    "color": "#31d35a",
+    "min_pixels": 100
+   },
+   {
+    "name": "page dot 3 idle",
+    "x": 246,
+    "y": 448,
+    "w": 12,
+    "h": 12,
+    "color": "#ffffff",
+    "max_pixels": 0
+   },
+   {
+    "name": "page dot 4 active",
+    "x": 270,
+    "y": 448,
+    "w": 12,
+    "h": 12,
+    "color": "#ffffff",
+    "min_pixels": 60
+   }
+  ],
+  "qemu": false
  }
 ]
