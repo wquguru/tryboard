@@ -8,6 +8,7 @@ import { Bad, Btn, Btns, Kv, KvT, Note, Ph, Sec, TreeEmpty } from "../../ui/pane
 import { type AnalogControl } from "../examples";
 import { OledCanvas, PartHead } from "./shared";
 import type { BenchCtx } from "./ctx";
+import { AmoledCtrls, sceneBoard } from "./amoled";
 
 export function mountPart(b: BenchCtx) {
   function renderPart(id: string) {
@@ -15,25 +16,27 @@ export function mountPart(b: BenchCtx) {
     const ses = c.session;
     if (id === "board") {
       const rgb = RGB_GPIO[ses.chip];
+      const aio = !!sceneBoard(ses);
       b.show(
         <>
           <Sec>{t("Dev board")}</Sec>
           <PartHead
-            name={BOARD_NAME[ses.chip]}
+            name={aio ? sceneBoard(ses)!.name : BOARD_NAME[ses.chip]}
             type="board"
           />
           <Kv
             k={t("Chip")}
             v={CHIP_DESC[ses.chip]}
           />
-          <Kv k={t("Power supply")} v={t("USB 5 V stepped down to 3V3 by the LDO")} />
+          <Kv k={t("Power supply")} v={aio ? t("USB 5 V or the Li-ion battery, through the AXP2101 PMU") : t("USB 5 V stepped down to 3V3 by the LDO")} />
           <Kv k="3V3" live="e33" />
           <Kv k={t("3V3 total current (estimate)")} live="eic" />
           <Kv k={t("Brownout resets")} live="ers" />
           <Sec>{t("Live")}</Sec>
           <Kv k={t("Run")} live="run" />
           <Kv k={t("Simulated time")} live="sim" />
-          {rgb !== null && <Kv k={t("On-board RGB (GPIO{n})", { n: rgb })} live="rgb" />}
+          {rgb !== null && !aio && <Kv k={t("On-board RGB (GPIO{n})", { n: rgb })} live="rgb" />}
+          {aio && <AmoledCtrls ses={ses} />}
           <Btns>
             <Btn
               id="bootBtn"

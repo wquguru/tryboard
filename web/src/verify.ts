@@ -78,7 +78,7 @@ export async function verifyLevel(l: Level, flash: ArrayBuffer, onProgress?: (si
 // 1 ms slices, inputs at slice start, so serial output and report (fingerprint) match the CLI byte for byte.
 export async function replayLog(flash: ArrayBuffer, log: InputLog, seconds: number, pwmPin?: number) {
   const [wasm, rom] = await Promise.all([loadWasmModule(), loadRom(imageChip(flash))]);
-  const job: VerifyJob = { wasm, rom: rom.slice(0), flash: flash.slice(0), seconds, i2c: log.i2c, script: toScriptInline(log), pwmPin, lcd: log.lcd, servo: log.servo, power: log.power, encoder: log.encoder, sonar: log.sonar, dht11: log.dht11, touchInt: log.touchInt, fixedSlice: true };
+  const job: VerifyJob = { wasm, rom: rom.slice(0), flash: flash.slice(0), seconds, i2c: log.i2c, script: toScriptInline(log), pwmPin, lcd: log.spi ?? log.lcd, battery: log.battery, servo: log.servo, power: log.power, encoder: log.encoder, sonar: log.sonar, dht11: log.dht11, touchInt: log.touchInt, fixedSlice: true };
   const msg = await runJob(job);
   return { stdout: msg.stdout, report: msg.report, fingerprint: fingerprint(msg.stdout, msg.report), sim: msg.sim, error: msg.error };
 }

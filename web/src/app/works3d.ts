@@ -545,9 +545,9 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     };
     let lastLcd: Uint8Array | null = null;
     tick = (f) => {
-      if (f.lcd && f.lcd !== lastLcd) {
+      if (f.lcd && f.lcd !== lastLcd && f.lcd.length === lData.length) {
         lastLcd = f.lcd;
-        lData.set(f.lcd.subarray(0, lData.length));
+        lData.set(f.lcd);
         lTex.needsUpdate = true;
       }
     };

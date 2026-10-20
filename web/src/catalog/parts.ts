@@ -1,5 +1,6 @@
 // Part catalog: plain data shared by the shop, the rule engine and "put it on the bench" (P0-06, RESEARCH_PROCURE §1).
 // Datasheet values only (unsure = null + todo); prices are manual estimates; links are search pages only (LICENSING).
+import { AMOLED216 } from './aioboards.ts';
 
 export type ChipId = 'esp32' | 'esp32c3' | 'esp32s3';
 
@@ -169,7 +170,7 @@ export const searchUrls = (kw: string) => ({
   szlcsc: 'https://so.szlcsc.com/global.html?k=' + encodeURIComponent(kw),
 });
 
-type Draft = Omit<Part, 'price' | 'searchUrl' | 'todo' | 'sources' | 'chips' | 'i2cAddr' | 'sim' | 'sizeMm'> & {
+export type Draft = Omit<Part, 'price' | 'searchUrl' | 'todo' | 'sources' | 'chips' | 'i2cAddr' | 'sim' | 'sizeMm'> & {
   price: [number, number];
   sizeMm?: Part['sizeMm'];
   chips?: ChipId[];
@@ -568,6 +569,7 @@ export const PARTS: Part[] = [
     note: 'Same shape as the no-touch version, but display reset is on GPIO14 and backlight on GPIO2 (GPIO12 / 40 on the no-touch one), so firmware pins depend on the version. Only 6 GPIOs on the SH1.0 connector are exposed.',
   }),
 
+  P({ ...AMOLED216, currentMa: { typ: null, peak: null, est: true, source: BOARD_CURRENT_NOTE } }),
   // ───────── Sensors ─────────
   P({
     id: 'bme280',

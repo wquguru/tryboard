@@ -642,6 +642,60 @@
   }
  },
  {
+  "id": "s3-co5300",
+  "chip": "esp32s3",
+  "title": "2.16″ AMOLED: CO5300 over QSPI, four-quadrant test picture",
+  "about": "The Waveshare ESP32-S3-Touch-AMOLED-2.16 all-in-one board: a 480×480 AMOLED driven by a CO5300 over quad SPI (CS=GPIO12, CLK=GPIO38, D0–D3=GPIO4–7, RST=GPIO39) through esp_lcd and the esp_lcd_co5300 component. The firmware draws red / green / blue quadrants and a grey ramp in the bottom-right in 40-row strips, then prints a pixel checksum and how long the bus took. The picture appears on the square screen of the 3D board.",
+  "tags": [
+   "✓ Verified in sim",
+   "SPI",
+   "QSPI",
+   "CO5300",
+   "AMOLED",
+   "esp_lcd",
+   "ESP-IDF 5.5"
+  ],
+  "pins": {
+   "lcd_cs": 12,
+   "lcd_clk": 38,
+   "lcd_d0": 4,
+   "lcd_d1": 5,
+   "lcd_d2": 6,
+   "lcd_d3": 7,
+   "lcd_rst": 39
+  },
+  "scene": {
+   "board": "ws-amoled216",
+   "parts": []
+  }
+ },
+ {
+  "id": "s3-amoled-i2c",
+  "chip": "esp32s3",
+  "title": "2.16″ AMOLED board: touch, battery, PWR key and RTC on one I2C bus",
+  "about": "Same Waveshare AMOLED board, now its I2C bus (SDA=GPIO15, SCL=GPIO14): CST9220 touch (0x5A, INT=GPIO11, RST=GPIO40), AXP2101 power management (0x34), PCF85063 RTC (0x51) and the ES8311 / ES7210 audio codecs (0x18 / 0x40). It reads every chip ID and the battery state, sets the RTC and reads it back 3 s later, then prints touches and AXP2101 events. Tap the 3D screen for TOUCH lines; in the board panel drag the battery slider, plug or unplug USB and press PWR (short / long). The audio codecs only answer ID reads: no sound is simulated.",
+  "tags": [
+   "✓ Verified in sim",
+   "I2C",
+   "CST9220",
+   "AXP2101",
+   "PCF85063",
+   "GPIO interrupt",
+   "Audio codecs: ID only",
+   "ESP-IDF 5.5"
+  ],
+  "pins": {
+   "i2c_sda": 15,
+   "i2c_scl": 14,
+   "tp_int": 11,
+   "tp_rst": 40
+  },
+  "scene": {
+   "board": "ws-amoled216",
+   "parts": []
+  }
+ },
+ {
   "id": "weather",
   "chip": "esp32s3",
   "title": "Desk weather station: temperature + screen + dial",

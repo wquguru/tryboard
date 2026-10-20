@@ -1,5 +1,5 @@
 // The page's single live sim + 3D stage. Step switches never touch it, so sim time stays continuous.
-import { createBench, type PartSpec, type SceneSpec } from '../board3d';
+import { createBench, type SceneSpec } from '../board3d';
 import type { ScenePickApi } from '../scene-api';
 import { LiveSim, type SeekJob } from '../live';
 import type { Snapshot } from '../simmsg';
@@ -25,6 +25,7 @@ export { WORKS } from './works';
 import { wkey } from './works';
 import { BOOT_GPIO, type SimChip } from '../chips';
 import { t } from '../i18n';
+import { devsOf, i2sOf, servoOf } from './devs';
 
 /** weather firmware reading line (format set by level 06); accept single or double spaces (bme280 example). */
 const READING = /T=(-?[\d.]+) C\s+H=([\d.]+) %\s+P=([\d.]+) hPa/g;
@@ -87,25 +88,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const buzzerPins = scene.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : []));
   audio.setPins(buzzerPins);
   audio.setSpeaker(scene.parts.some((p) => p.type === 'max98357a'));
-  /** I2S audio parts (pins fixed per chip): speaker shares the sound toggle; mic hears a 1 kHz test WAV. */
-  const i2sOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'max98357a' || p.type === 'inmp441' ? [p.type] : []));
-
-  const i2cOf = (parts: PartSpec[]) => {
-    const kind: Record<string, string> = { oled: 'ssd1306', bme280: 'bme280', mpu6050: 'mpu6050', qmi8658: 'qmi8658', cst816s: 'cst816s' };
-    return parts.flatMap((p) => ('addr' in p && kind[p.type] ? [{ kind: kind[p.type], addr: p.addr }] : []));
-  };
-  /** GPIO wired to touch INT (CST816S on the bench). */
-  const touchIntOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'cst816s' ? [p.int] : []))[0];
   const poseRate = new PoseRate();
   let poseIdle = 0;
 
-  /** First encoder / ultrasonic on the bench, attached to the core at power-on. */
-  const encoderOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'encoder' ? [{ a: p.a, b: p.b, ...(p.sw !== undefined ? { sw: p.sw } : {}) }] : []))[0];
-  const sonarOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'hcsr04' ? [{ trig: p.trig, echo: p.echo, cm: s.distance }] : []))[0];
-  /** DHT11 data pin (first one; the core models one per pin, the CLI takes one). */
-  const dht11Of = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'dht11' ? [p.pin] : []))[0];
-  /** Signal pin of the first servo; the power network's servo load hangs on it. */
-  const servoOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'servo' ? [p.pin] : []))[0];
   const powerMode = () => (s.power?.ext5v ? 'ext' : 'usb') as 'usb' | 'ext';
   const brownSubs = new Set<(tSec: number) => void>();
   const crashSubs = new Set<(message: string) => void>();
@@ -188,7 +173,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       if (JSON.stringify(next) !== JSON.stringify(s.scene)) bench.setScene(next);
       s.scene = next;
       s.power = power;
-      s.sim?.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts), dht11: dht11Of(next.parts), touchInt: touchIntOf(next.parts), i2s: i2sOf(next.parts) });
+      s.sim?.configure(devsOf(next, s));
       audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
       audio.setSpeaker(next.parts.some((p) => p.type === 'max98357a'));
       bumpEdit();
@@ -238,7 +223,10 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     },
     applyScene(next, power, label) {
       s.sceneLabel = label;
-      const devs = (sc: SceneSpec) => JSON.stringify([i2cOf(sc.parts), sc.parts.some((p) => p.type === 'gc9a01'), servoOf(sc.parts) ?? null, encoderOf(sc.parts) ?? null, sonarOf(sc.parts)?.trig ?? null, sonarOf(sc.parts)?.echo ?? null, dht11Of(sc.parts) ?? null, touchIntOf(sc.parts) ?? null, i2sOf(sc.parts)]);
+      const devs = (sc: SceneSpec) => {
+        const d = devsOf(sc, s);
+        return JSON.stringify([d.i2c, d.lcd, d.servo ?? null, d.encoder ?? null, d.sonar?.trig ?? null, d.sonar?.echo ?? null, d.dht11 ?? null, d.touchInt ?? null, d.i2s]);
+      };
       const rebootNeeded = devs(next) !== devs(s.scene);
       const same = JSON.stringify(next) === JSON.stringify(s.scene);
       const extBefore = !!s.power?.ext5v;
@@ -249,7 +237,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
       const hadExt = extBefore;
       if (s.sim && rebootNeeded) {
-        s.sim.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts), dht11: dht11Of(next.parts), touchInt: touchIntOf(next.parts), i2s: i2sOf(next.parts) });
+        s.sim.configure(devsOf(next, s));
         audio.setSpeaker(next.parts.some((p) => p.type === 'max98357a'));
         s.sim.setPower(powerMode());
         s.reboot();
@@ -352,6 +340,14 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
           s.sim?.setImu({ ...pose, rates: [0, 0, 0] });
         }, 150);
     },
+    battery: null,
+    setBattery(pct, usb) {
+      s.battery = { pct: Math.round(Math.min(100, Math.max(0, pct))), usb };
+      s.sim?.battery(s.battery.pct, usb);
+    },
+    pwrKey(long) {
+      s.sim?.pwrkey(long);
+    },
     touch(x, y, down) {
       s.sim?.touch(x, y, down);
       store.set({ touch: { x: Math.round(x), y: Math.round(y), down } });
@@ -424,16 +420,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   function makeSim(fw: string | ArrayBuffer) {
     const sim: LiveSim = new LiveSim({
       fw,
-      i2c: i2cOf(s.scene.parts),
-      lcd: s.scene.parts.some((p) => p.type === 'gc9a01'),
-      servo: servoOf(s.scene.parts),
-      encoder: encoderOf(s.scene.parts),
-      sonar: sonarOf(s.scene.parts),
-      dht11: dht11Of(s.scene.parts),
-      touchInt: touchIntOf(s.scene.parts),
+      ...devsOf(s.scene, s),
       power: powerMode(),
       harness: s.harness,
-      i2s: i2sOf(s.scene.parts),
       onPcm: (b) => audio.pushPcm(b),
       env: store.get().env,
       onBle: (u) => bleFeed.update(u),
@@ -558,7 +547,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         if (f.lcd && f.lcd !== lastLcd) {
           lastLcd = f.lcd;
           s.frame.lcd = f.lcd;
-          bench.setLcd(f.lcd);
+          s.frame.lcdW = f.lcdW;
+          s.frame.lcdH = f.lcdH;
+          bench.setLcd(f.lcd, f.lcdW ?? 240, f.lcdH ?? 240);
         }
       },
     });
@@ -586,9 +577,15 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   // Dragging the IMU = tilting the breadboard (P2-03); tapping the touch display = a finger (P2-02).
   bench.onPose((p) => s.setPose(p));
   bench.onTouch((x, y, down) => s.touch(x, y, down));
+  // PWR key on the 3D board (E-03): held ≥ 1 s on release counts as a long press
+  let pwrDown = 0;
   bench.onButton((name, down) => {
     if (name === 'BOOT') s.pressBoot(down);
     if (name === 'RST' && !down) s.reboot();
+    if (name === 'PWR') {
+      if (down) pwrDown = performance.now();
+      else s.pwrKey(performance.now() - pwrDown >= 1000);
+    }
   });
 
   if (ex) {

@@ -1121,5 +1121,15 @@ const d: Dict = {
   "ADC1, use freely": "ADC1，随便用",
   "ADC2, not supported by ESP-IDF on C3": "ADC2，C3 上 ESP-IDF 不支持",
   "ADC2, unusable with Wi-Fi on": "ADC2，开 Wi-Fi 不能用",
+  "Power management": "电源管理",
+  "Battery level": "电池电量",
+  "Unplug USB": "拔掉 USB",
+  "Plug in USB": "插上 USB",
+  "PWR short press": "PWR 短按",
+  "PWR long press": "PWR 长按",
+  "Touch: tap the square screen. The ES8311 / ES7210 audio codecs only answer ID reads; no sound is simulated.": "触摸：直接点方形屏幕。ES8311 / ES7210 音频编解码器只应答读 ID，不模拟声音。",
+  "AMOLED board · battery, USB, PWR key": "AMOLED 板 · 电池、USB、PWR 键",
+  "USB 5 V or the Li-ion battery, through the AXP2101 PMU": "USB 5 V 或锂电池，经 AXP2101 电源管理芯片",
+  "AXP2101 PWRON (not a GPIO); held ≥ 1 s = long press": "AXP2101 PWRON（不是 GPIO）；按住 ≥ 1 s 算长按",
 };
 export default d;

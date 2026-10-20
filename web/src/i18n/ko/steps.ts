@@ -1121,5 +1121,15 @@ const d: Dict = {
   "ADC1, use freely": "ADC1, 자유롭게 사용",
   "ADC2, not supported by ESP-IDF on C3": "ADC2, C3에서는 ESP-IDF 미지원",
   "ADC2, unusable with Wi-Fi on": "ADC2, Wi-Fi 켜면 사용 불가",
+  "Power management": "전원 관리",
+  "Battery level": "배터리 잔량",
+  "Unplug USB": "USB 분리",
+  "Plug in USB": "USB 연결",
+  "PWR short press": "PWR 짧게 누르기",
+  "PWR long press": "PWR 길게 누르기",
+  "Touch: tap the square screen. The ES8311 / ES7210 audio codecs only answer ID reads; no sound is simulated.": "터치: 사각 화면을 직접 탭하세요. ES8311 / ES7210 오디오 코덱은 ID 읽기에만 응답하며 소리는 시뮬레이션하지 않습니다.",
+  "AMOLED board · battery, USB, PWR key": "AMOLED 보드 · 배터리, USB, PWR 키",
+  "USB 5 V or the Li-ion battery, through the AXP2101 PMU": "USB 5 V 또는 리튬 이온 배터리, AXP2101 PMU 경유",
+  "AXP2101 PWRON (not a GPIO); held ≥ 1 s = long press": "AXP2101 PWRON(GPIO 아님); 1초 이상 누르면 길게 누르기",
 };
 export default d;

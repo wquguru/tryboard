@@ -42,7 +42,7 @@ def load():
     cli = read("core/crates/cli/src/main.rs")
     cfg["spi_devices"] = set(re.findall(r"--spi (\w+)", cli))
     parts = read("web/src/catalog/parts.ts")
-    cfg["part_ids"] = set(re.findall(r"^    id: '([\w.-]+)'", parts, re.M))
+    cfg["part_ids"] = set(re.findall(r"^    id: '([\w.-]+)'", parts, re.M)) | set(re.findall(r"^  id: '([\w.-]+)'", read("web/src/catalog/aioboards.ts"), re.M))
     cfg["part_refs"] = {}
     for f in ("web/src/catalog/templates.ts", "web/src/catalog/rules.ts", "web/src/advisor/data.ts"):
         if (ROOT / f).exists():

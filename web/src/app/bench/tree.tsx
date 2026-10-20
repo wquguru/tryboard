@@ -6,6 +6,7 @@ import { type ReactNode } from "react";
 import { partId, partInfo, usedPins } from "../wiring";
 import { faultByWire } from "../wirecheck";
 import { BOARD_NAME, CHIP_SHORT } from "../../chips";
+import { boardDevs } from "../../bench3d/boarddevs";
 import { type Selection } from "../types";
 import { Bad, Mono, Muted, TnSt, TreeEmpty, TreeGroup, TreeNode } from "../../ui/panel";
 import { CustomPlacedCard } from "../customui";
@@ -64,7 +65,7 @@ export function mountTree(b: BenchCtx) {
         {body}
       </TreeGroup>
     );
-    const board = BOARD_NAME[ses.chip];
+    const board = boardDevs(ses.scene.board)?.name ?? BOARD_NAME[ses.chip];
     const partItems = [
       item(
         { kind: "part", id: "board" },
@@ -239,7 +240,8 @@ export function mountTree(b: BenchCtx) {
     overlay(
       "empty",
       // Hidden while placing: the guide card would cover the board pins.
-      parts.length || b.placing ? null : (
+      // An all-in-one board already carries its screen and sensors, so no "only a dev board" hint
+      parts.length || b.placing || ses.scene.board ? null : (
         <EmptyBench
           hasFw={!!ses.fwName}
           onFirmware={openFwMenu}

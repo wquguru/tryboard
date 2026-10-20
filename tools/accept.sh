@@ -256,7 +256,7 @@ if [ $NO_WEB = 0 ]; then
   echo -e "\n## Web (headless Chrome + wasm)" >> $REPORT
   tools/build_web.sh >/dev/null 2>&1 || { echo "build failed" >> $REPORT; fail=1; }
   # Expected texts are firmware serial prints; the webtest scripts report in English
-  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接" s3-blink:TRYBOARD_OK s3-rgb:TRYBOARD_OK s3-dual:TRYBOARD_OK weather:TRYBOARD_OK lens:TRYBOARD_OK spin:TRYBOARD_OK s3-wifi-http:TRYBOARD_OK s3-lvgl:TRYBOARD_OK "s3-encoder:ENCODER ready" "s3-ultrasonic:DIST 15.0 cm" s3-imu:TRYBOARD_OK s3-qmi8658:TRYBOARD_OK s3-touch:TRYBOARD_OK "usbkey:TRYBOARD_OK usbkey" "echo:串口回显" esp32-hello:TRYBOARD_OK esp32-blink:TRYBOARD_OK esp32-wifi:TRYBOARD_OK; do  # lint: allow-cjk
+  for spec in blink:TRYBOARD_OK hello:TRYBOARD_OK rgb:TRYBOARD_OK oled:TRYBOARD_OK bme280:TRYBOARD_OK servo:TRYBOARD_OK "pot:ADC raw" s3-usb-keyboard:TRYBOARD_OK "s3-usb-cdc:USB 已连接" s3-blink:TRYBOARD_OK s3-rgb:TRYBOARD_OK s3-dual:TRYBOARD_OK weather:TRYBOARD_OK lens:TRYBOARD_OK spin:TRYBOARD_OK s3-wifi-http:TRYBOARD_OK s3-lvgl:TRYBOARD_OK "s3-encoder:ENCODER ready" "s3-ultrasonic:DIST 15.0 cm" s3-imu:TRYBOARD_OK s3-qmi8658:TRYBOARD_OK s3-touch:TRYBOARD_OK s3-co5300:TRYBOARD_OK s3-amoled-i2c:TRYBOARD_OK "usbkey:TRYBOARD_OK usbkey" "echo:串口回显" esp32-hello:TRYBOARD_OK esp32-blink:TRYBOARD_OK esp32-wifi:TRYBOARD_OK; do  # lint: allow-cjk
     ex=${spec%%:*}; want=${spec#*:}
     r=$(node tools/webtest/webtest.mjs "$ex" "$want" 2>&1 | head -3)
     echo "$r" | sed 's/^/- /' >> $REPORT
@@ -315,6 +315,10 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/sense.mjs 2>&1 | grep '^\[sense\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[sense\] PASS (' || { echo "- [sense] script did not finish" >> $REPORT; fail=1; }
+  # AMOLED all-in-one board (E-03): CO5300 480×480 picture, square-screen taps, battery / USB / PWR; CLI --inputs replay
+  r=$(node tools/webtest/amoled.mjs 2>&1 | grep '^\[amoled\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[amoled\] PASS (' || { echo "- [amoled] script did not finish" >> $REPORT; fail=1; }
   r=$(node tools/webtest/editor.mjs 2>&1 | tail -1)
   echo "- Part editor (blink example, upload bme280 firmware + place BME280 from the catalog): $r" >> $REPORT
   echo "$r" | grep -q PASS || fail=1

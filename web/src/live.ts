@@ -1,6 +1,6 @@
 // Live simulation for the home and lab pages: starts worker.ts, runs one firmware and hands each frame to the view.
 import { fetchBuf, imageChip, loadRom, loadWasmModule } from './assets';
-import type { EncoderSpec, Env, FromWorker, Harness, PcmBlock, PowerMode, PwmEvent, Snapshot, SonarSpec, TimingReport, ToWorker, VcdState } from './simmsg';
+import type { Battery, EncoderSpec, Env, FromWorker, Harness, LcdKind, PcmBlock, PowerMode, PwmEvent, Snapshot, SonarSpec, TimingReport, ToWorker, VcdState } from './simmsg';
 import type { UsbView } from './usb3d';
 import { parseBle, type BleUpdate } from './ble';
 import type { InputEvent, InputLog } from './inputlog';
@@ -20,7 +20,9 @@ export interface LiveOptions {
   fw: string | ArrayBuffer;
   i2c: { kind: string; addr: number }[];
   env: Env;
-  lcd?: boolean;
+  lcd?: boolean | LcdKind;
+  /** AXP2101 battery at power-up (E-03) */
+  battery?: Battery;
   /** Servo signal pin (needed for servo current and brown-out resets). */
   servo?: number;
   /** Power source at power-up (default usb). */
@@ -80,7 +82,8 @@ export interface LiveOptions {
 export interface SeekJob {
   flash: ArrayBuffer;
   i2c: { kind: string; addr: number }[];
-  lcd: boolean;
+  lcd: boolean | LcdKind;
+  battery?: Battery;
   servo?: number;
   power?: PowerMode;
   encoder?: EncoderSpec;
@@ -156,6 +159,8 @@ export class LiveSim {
         this.markWaiters.delete(m.id);
       } else if (m.type === 'lcd') {
         this.frame.lcd = m.pixels;
+        this.frame.lcdW = m.w;
+        this.frame.lcdH = m.h;
         o.onFrame?.(this.frame, NaN);
       } else if (m.type === 'usb') {
         o.onUsb?.(m.json ? (JSON.parse(m.json) as UsbView) : null);
@@ -217,7 +222,7 @@ export class LiveSim {
     const rom = await loadRom(imageChip(flash));
     if (gen !== this.startGen) return;
     Object.assign(this.frame, emptyFrame());
-    this.send({ type: 'boot', wasm, ...this.blobs(rom, flash), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName, harness: this.o.harness, dht11: this.o.dht11, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.(), locale });
+    this.send({ type: 'boot', wasm, ...this.blobs(rom, flash), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, battery: this.o.battery, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName, harness: this.o.harness, dht11: this.o.dht11, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.(), locale });
   }
   reset() {
     return this.start();
@@ -229,9 +234,10 @@ export class LiveSim {
     return this.start();
   }
   /** Swap attached devices (rearranged per list): takes effect on the next start / reset. */
-  configure(p: { i2c: LiveOptions['i2c']; lcd?: boolean; servo?: number; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; i2s?: string[] }) {
+  configure(p: { i2c: LiveOptions['i2c']; lcd?: boolean | LcdKind; battery?: Battery; servo?: number; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; i2s?: string[] }) {
     this.o.i2c = p.i2c;
     this.o.lcd = p.lcd;
+    this.o.battery = p.battery;
     this.o.servo = p.servo;
     this.o.encoder = p.encoder;
     this.o.sonar = p.sonar;
@@ -271,6 +277,15 @@ export class LiveSim {
   /** Touch (P2-02): press / move to (x, y), down=false lifts. */
   touch(x: number, y: number, down: boolean) {
     this.send({ type: 'input', act: { kind: 'touch', x, y, down } });
+  }
+  /** AXP2101 battery percent / USB plug (E-03, logged bat=); also the state for the next power-up. */
+  battery(pct: number, usb: boolean) {
+    this.o.battery = { pct: Math.round(Math.min(100, Math.max(0, pct))), usb };
+    this.send({ type: 'input', act: { kind: 'bat', ...this.o.battery } });
+  }
+  /** PWR key on the AXP2101 PWRON pin (E-03, logged pwrkey=). */
+  pwrkey(long: boolean) {
+    this.send({ type: 'input', act: { kind: 'pwrkey', long } });
   }
   /** Mic source: WAV (also the source for the next power-up) / silent / live (then micPush streams the browser mic). */
   setMic(source: 'wav' | 'silence' | 'live', wav?: ArrayBuffer, name?: string) {
@@ -408,6 +423,7 @@ export class LiveSim {
     this.o.fw = job.flash;
     this.o.i2c = job.i2c;
     this.o.lcd = job.lcd;
+    this.o.battery = job.battery;
     this.o.servo = job.servo;
     this.o.encoder = job.encoder;
     this.o.dht11 = job.dht11;
@@ -431,7 +447,7 @@ export class LiveSim {
     Object.assign(this.frame, emptyFrame());
     return new Promise((r) => {
       this.seekWaiter = r;
-      this.send({ type: 'seek', wasm, ...this.blobs(rom, job.flash), i2c: job.i2c, env: job.env, lcd: job.lcd, servo: job.servo, power: job.power, encoder: job.encoder, sonar: job.sonar ? { ...job.sonar, cm: NaN } : undefined, touchInt: job.touchInt, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs, dht11: job.dht11, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.() });
+      this.send({ type: 'seek', wasm, ...this.blobs(rom, job.flash), i2c: job.i2c, env: job.env, lcd: job.lcd, battery: job.battery, servo: job.servo, power: job.power, encoder: job.encoder, sonar: job.sonar ? { ...job.sonar, cm: NaN } : undefined, touchInt: job.touchInt, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs, dht11: job.dht11, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.() });
     });
   }
   /** Continue live after a rewind stop: this run counts as in progress again. */

@@ -220,12 +220,12 @@ export function mountPointer(ctx: BenchCtx): void {
     controls.enabled = false;
     pressed = b;
     b.position.y = b.userData.baseY - 0.4;
-    ctx.buttonCb?.(b.name as 'BOOT' | 'RST', true);
+    ctx.buttonCb?.(b.name as 'BOOT' | 'RST' | 'PWR', true);
   });
   window.addEventListener('pointerup', () => {
     if (!pressed) return;
     pressed.position.y = pressed.userData.baseY;
-    ctx.buttonCb?.(pressed.name as 'BOOT' | 'RST', false);
+    ctx.buttonCb?.(pressed.name as 'BOOT' | 'RST' | 'PWR', false);
     pressed = null;
     controls.enabled = true;
   });
@@ -270,8 +270,8 @@ export function mountPointer(ctx: BenchCtx): void {
     if (!h?.uv) return null;
     finger.position.copy(h.point);
     finger.quaternion.copy(ctx.touchScreen.getWorldQuaternion(new THREE.Quaternion()));
-    // CircleGeometry UV: u = 0.5 + x/2r, v = 0.5 + y/2r; texture is flipY, row 0 at the top
-    return { x: Math.min(239, Math.max(0, h.uv.x * 240)), y: Math.min(239, Math.max(0, (1 - h.uv.y) * 240)) };
+    // Circle / rounded-square UV: u = 0.5 + x/w, v = 0.5 + y/h; texture is flipY, row 0 at the top
+    return { x: Math.min(ctx.lcdW - 1, Math.max(0, h.uv.x * ctx.lcdW)), y: Math.min(ctx.lcdH - 1, Math.max(0, (1 - h.uv.y) * ctx.lcdH)) };
   };
   ctx.rotating = null;
   const imuRoot = () => partsById.get('mpu6050') ?? partsById.get('qmi8658');

@@ -44,6 +44,8 @@ export const imuPart = (s: SceneSpec) => s.parts.find((p): p is Extract<PartSpec
 
 export interface SceneSpec {
   parts: PartSpec[];
+  /** All-in-one board replacing the devboard + breadboard (E-03); its onboard devices come from BOARD_DEVS */
+  board?: 'ws-amoled216';
   /** Initial camera (mm, world coordinates) */
   view?: { position: [number, number, number]; target: [number, number, number] };
 }
