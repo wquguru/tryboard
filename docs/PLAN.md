@@ -205,7 +205,7 @@
 | M5-07 | CoreS3 / CoreS3-SE（摄像头不做，SE 识别靠 GC0308 不应答） | 识别正确；ILI9342 截图；触摸 / IMU / PMIC 电量；喇叭 I2S 有输出 | ☐ |
 | M5-08 | Cardputer / Cardputer-Adv：ST7789、键盘部件（74HC138 矩阵 / TCA8418）、I2S PDM 接收 | 识别正确；脚本按键回显到屏；麦克风读数非零 | ☐ |
 | M5-09 | 网页：M5 板预设（3D 外壳程序生成、板载器件自动出现、Grove 口）+ Grove Unit：ENV III（SHT30 + QMP6988）、ENV IV（SHT40 + BMP280） | agent-browser：选 M5 板 → 示例跑起 → 接 ENV IV → 读数；网页与 CLI 指纹一致；390×844 无横向滚动 | ☐ |
-| M5-10 | 经典 ESP32 GP-SPI（HSPI / VSPI）+ SPI DMA | IDF spi_master 示例与 QEMU 对照 | ☐ |
+| M5-10 | 经典 ESP32 GP-SPI（HSPI / VSPI）+ SPI DMA | IDF spi_master 示例与 QEMU 对照 | ☑ 2026-10-20（esp32-spi-lcd：RDDID 读回、DMA 绘图；StickC Plus2 / Core2 探测跑通；QEMU 无 HSPI/VSPI，只比到 init；从模式未做） |
 | M5-11 | 经典 ESP32 RMT（8 通道、64 字块） | IDF led_strip 示例；WS2812 帧与 C3 一致 | ☑ 2026-10-20（esp32-ws2812；QEMU 无 RMT，该例 QEMU 关闭；RX/载波未建模） |
 | M5-12 | 经典 ESP32 I2S（含 PDM RX）+ ADC1 | IDF 示例；麦克风 / 电池电压读数 | ☐ |
 | M5-13 | StickC Plus2、Core2（v1.0 AXP192 / v1.1 AXP2101）、Atom Lite / Matrix | 各板 m5-probe 识别正确；屏截图 | ☐ |
