@@ -1087,3 +1087,16 @@
 - 已知小瑕疵：输入在 1 ms 片边界应用，BLE 的连接事件是惰性推进的，所以 `pc=json` 记在 9.000 s 而发出那行标 8.998 s（与 `ble=write` 同样的现有行为，确定性不受影响；改成先推进再应用会让 c3-ble-led 的 golden 变，暂不动）。
 - 固件 c3-ble-nus：NimBLE，广播名 Claude-TB（NUS 128 位 UUID 放扫描响应，31 字节放不下），RX 可写 / 无应答写，行缓冲 4096 字节，JSON 用 IDF 自带 cJSON（json 组件）；status ack 带 bat / sys / stats / fw，故意 > 244 字节以验收电脑侧重组；owner / 未知命令回 ack（未知命令 ok:false）；time 调 `settimeofday`。
 - 授权：协议按公开文档 anthropics/claude-desktop-buddy REFERENCE.md 自写，没有用任何第三方实现代码。
+## 2026-10-20 E-05 Bluedroid 主机栈
+- 决定：只补虚拟控制器（`soc/src/ble/mod.rs` `Ble::command`），VHCI 定位与 HLE 不动——Bluedroid 固件链接的 libbtdm_app 与 NimBLE 固件是同一份，c3 / s3 签名都直接认出（`sigs_hit_only_ble_firmware` 的名字前缀加上 `c3-bluedroid-` / `s3-bluedroid-`）。
+- 先跑 c3-bluedroid-nus 看 `unknown_cmds` 与崩溃，逐条按蓝牙核心规范 v5.3 Vol 4 Part E 补：
+  - 0x2003 LE Read Local Supported Features（§7.8.3）：由全 0 改成只置 bit 6 LL Privacy。原因：Bluedroid 默认 `CONTROLLER_RPA_LIST_ENABLE`，`BTM_SecRegister` → `btm_ble_add_default_entry_to_resolving_list` 无条件入队解析列表待办，而队列只在 `supports_ble_privacy()` 且 Read Resolving List Size（0x202A，已有，回 8）> 0 时分配；不报 privacy 就写空指针（实测 Store access fault 后无限重启），队列下标还对列表大小取模。真 libbtdm 支持 LL Privacy，所以和硬件一致。其余位（DLE、2M、扩展广播）仍报 0，主机不走那些路径。NimBLE（IDF 5.5.1）只存不读这个字，golden 证明它的输出逐字节不变。
+  - 0x0C14 Read Local Name（§7.3.12）：status + 248 字节名字（"TryBoard" 补 0）。原来兜底只回 status，返回参数长度不符合规范。
+  - 0x0C35 Host Number Of Completed Packets（§7.3.40）：按规范正常情况不产生事件，不再回 Command Complete（Bluedroid 发它时带 NOACK 标志，不等应答）。主机侧 ACL 信用不建模：主机处理很快，控制器从不扣着包。
+  - 0x0C31 Set Controller To Host Flow Control（§7.3.38）、0x0C33 Host Buffer Size（§7.3.39）、0x202E Set RPA Timeout（§7.8.45）、0xFD09 Espressif 厂商命令「广播报告流控」（Bluedroid `HCI_VENDOR_BLE_SET_ADV_FLOW_CONTROL`）：只回 status 0，显式分支，不再算未知。
+  - 0x2027 / 0x2028 / 0x2029（解析列表增删清，§7.8.38–40）、0x202D（地址解析使能，§7.8.44）、0x204E（隐私模式，§7.8.77）：只回状态本来就对，但 NimBLE 也发，挪成显式分支会让 c3-ble-* / s3-ble-* 的 `HCI commands answered with plain success` 行变掉，所以留在兜底。解析列表只应答，不做 RPA 解析，所有对端地址当身份地址。
+- 连接建立后 Bluedroid 没有再发未知命令，Number Of Completed Packets 节奏沿用 NimBLE 那套就够（golden 里 Bluedroid 只剩 0x2029×1 0x2027×1 走兜底）。
+- 固件 c3-bluedroid-nus / s3-bluedroid-nus（同一份 main.c，S3 用 `../../c3-bluedroid-nus/main/main.c`）：属性表 API（`esp_ble_gatts_create_attr_tab`），广播名 Claude-BD（名字放广播、NUS 128 位 UUID 放扫描响应，原始数据 API），本地 MTU 247，RX 可写 / 无应答写，TX 通知按 MTU-3 拆片；协议行为同 c3-ble-nus 但简化（status ack 约 264 字节，故意 > 244 让 Bluedroid 连发 2 条通知；订阅后约 100 ms 发一条问候，给不写 RX 的虚拟手机一条通知）。sdkconfig 同时开 `CONFIG_BT_BLE_42_FEATURES_SUPPORTED` 与 `_50_`，与 Arduino-ESP32 预编译库一致（IDF 默认只开 5.0，传统广播 API 链接不上）。
+- 验收：accept.json 新增 c3-bluedroid-nus / s3-bluedroid-nus（`--desk-pc`，固件收 time / owner / 心跳、回 ack，电脑重组 2 片 status ack）与 c3-bluedroid-phone / s3-bluedroid-phone（`--ble-phone`，扫到、连上、发现 NUS、订阅 TX、3 s 内 1 条通知）；c3-ble-hr / c3-ble-led / c3-ble-nus / s3-ble-hr / s3-ble-led golden 逐字节一致。
+- 替代方案：sdkconfig 关掉 RPA 列表（`CONFIG_BT_BLE_RPA_SUPPORTED` 一类）——只对我们自己的固件有效，用户 / Arduino 固件照样崩，否掉；按主机栈分别应答——要猜主机是谁，否掉。
+- 未做：Arduino 未安装，没用 Arduino 编译产物实测；配对加密（E-08）、经典蓝牙不在范围。

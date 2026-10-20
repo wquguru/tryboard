@@ -247,8 +247,8 @@ impl Ble {
                 let l = ACL_LEN.to_le_bytes();
                 self.cmd_complete(at, op, &[0, l[0], l[1], ACL_NUM]);
             }
-            // LE local features all zero: no DLE, privacy, 2M or extended adv, so the host never sends those commands
-            0x2003 => self.cmd_complete(at, op, &[0, 0, 0, 0, 0, 0, 0, 0, 0]),
+            // LE features: only LL Privacy (bit 6); Bluedroid assumes a resolving list and divides by its size. NimBLE ignores this
+            0x2003 => self.cmd_complete(at, op, &[0, 0x40, 0, 0, 0, 0, 0, 0, 0]),
             0x2005 => {
                 if let Some(a) = p.get(..6) {
                     self.random_addr.copy_from_slice(a);
@@ -303,6 +303,17 @@ impl Ble {
                 self.cmd_complete(at, op, &[0]);
             }
             0x200f => self.cmd_complete(at, op, &[0, 12]),
+            // Read Local Name (Bluedroid): 248-byte zero-padded name
+            0x0c14 => {
+                let mut r = vec![0u8; 249];
+                r[1..9].copy_from_slice(b"TryBoard");
+                self.cmd_complete(at, op, &r);
+            }
+            // Host Number Of Completed Packets: no event unless it fails (Core 4.E 7.3.40); host credits are not modelled
+            0x0c35 => {}
+            // Status-only setup Bluedroid sends: C2H flow control, host buffer size, Espressif adv-report flow control
+            // (resolving-list ops stay in the fallthrough below: NimBLE sends them too and its report must not change)
+            0x0c31 | 0x0c33 | 0xfd09 | 0x202e => self.cmd_complete(at, op, &[0]),
             // Read Remote Version: peripheral-side NimBLE waits for it before reporting BLE_GAP_EVENT_CONNECT
             0x041d => {
                 self.cmd_status(at, op, 0);

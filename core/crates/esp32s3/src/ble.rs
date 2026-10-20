@@ -351,7 +351,7 @@ mod tests {
                 .collect();
             let r = locate(&segs);
             n += 1;
-            if name.starts_with("s3-ble") {
+            if name.starts_with("s3-ble") || name.starts_with("s3-bluedroid-") {
                 let h = r
                     .unwrap_or_else(|e| panic!("{name}: {e}"))
                     .expect("BLE should be recognized");
