@@ -314,6 +314,11 @@ impl Board {
             "rc522" => Some(0.013),
             // Photoresistor + 10 kohm divider: <= 0.33 mA (worst case, LDR near 0 ohm)
             "ldr" => Some(0.000_33),
+            // F-04e, not yet in parts.ts. AHT20: 980 uA while measuring, 0.25 uA asleep; estimate, uA-level at 1 Hz polling
+            "aht20" => Some(0.000_005),
+            // INA219 datasheet: 0.7 mA quiescent (typ, 1 mA max); DS3231 datasheet: ~0.2 mA active at 3.3 V
+            "ina219" => Some(0.0007),
+            "ds3231" => Some(0.0002),
             _ => None,
         }
     }

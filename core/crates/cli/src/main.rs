@@ -1362,7 +1362,7 @@ fn board_args(m: &mut Machine, args: &[String]) {
     if let Some(v) = opt(args, "--rtc") {
         match v.trim().parse::<i64>() {
             Ok(t) if m.rtc_set(t) => {}
-            Ok(_) => eprintln!("[tryboard] --rtc needs pcf85063 or bm8563 on --i2c"),
+            Ok(_) => eprintln!("[tryboard] --rtc needs pcf85063, bm8563 or ds3231 on --i2c"),
             Err(_) => {
                 eprintln!("--rtc {v}: expected unix seconds");
                 std::process::exit(2)

@@ -1,5 +1,6 @@
 //! External devices on the simulated buses (sensors, displays, ...).
 
+pub mod aht20;
 pub mod audio;
 pub mod aw88298;
 pub mod aw9523;
@@ -14,9 +15,11 @@ pub mod cst816s;
 pub mod cst9220;
 pub mod dcs;
 pub mod ds18b20;
+pub mod ds3231;
 pub mod ft6236;
 pub mod gpio_parts;
 pub mod imu;
+pub mod ina219;
 pub mod ina3221;
 pub mod keymatrix;
 pub mod lcd;
@@ -71,6 +74,10 @@ pub fn make_i2c(kind: &str, addr: u8) -> Option<Box<dyn I2cDevice>> {
         "bmp280" => Box::new(bme280::Bme280::bmp280(addr)),
         // 1.3" 128x64 OLED (F-04b)
         "sh1106" => Box::new(sh1106::Sh1106::new(addr)),
+        // Common breakout modules (F-04e)
+        "aht20" => Box::new(aht20::Aht20::new(addr)),
+        "ina219" => Box::new(ina219::Ina219::new(addr)),
+        "ds3231" => Box::new(ds3231::Ds3231::new(addr)),
         _ => return None,
     })
 }

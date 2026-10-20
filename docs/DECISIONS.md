@@ -1272,3 +1272,11 @@
 - **SH1106 单独一个模型**（`devices/sh1106.rs`），对外接口与 Ssd1306 相同（`render` 128×64、`ascii`、`lit_pixels`、`display_on`、`version`、`frame`），`Machine::sh1106()` 另给访问器；CLI 摘要行同样以 `OLED lit pixels` 开头，accept 的 `oled_min_pixels` 通用。DC-DC（ADh）上电默认开，SSD1306 的 20h / 21h / 22h / 8Dh 不认、计入 `foreign_cmds`，所以 SSD1306 驱动接 SH1106 会像真机一样错位 2 列、只写一页。
 - **一个 ST7789 固件跑两种玻璃**：s3-st7789 按 240×320 画；240×240 用例（`fw` 字段）只看上 240 行，下边框和白带落在玻璃外，正是真机上"买错尺寸"的样子。
 - **护栏两处顺带改动**：`tools/check_config.py` 收集 `--spi` 设备名的正则从 `\w+` 放宽为 `[\w|-]+` 并按 `|` 拆分（带连字符的裸屏名和 usage 里的 `a|b|c` 写法才认得出）；CLI 的 OLED 摘要挪到新文件 `cli/src/oled.rs`（`report_oled`），`run()` 和 main.rs 不超 lint_size 上限。
+
+## 2026-10-20 AHT20 / INA219 / DS3231（F-04e）
+- **INA219 测什么**：默认高边串在板子的 USB 5V 输入上，`after_run` 里每个运行段把电气模型的 `v5` / `i_usb` 写进去；`--power ext` 只把舵机换到外部电源，板子仍由 USB 供电，所以不切换。只有挂了 INA219 才走这一步（`Machine.ina219` 标志），其它用例行为不变。分流电阻按常见模块 R100（0.1 Ω）。备选：测 3V3 轨（否：模块常用来量"整块板吃多少电"，且 USB 口是用户真会接表的地方）；加 CLI 开关手动给负载（否：先跟电气模型走，有需要再加 `Ina219::set_load` 的入口）。
+- **公共接口**：`devices::make_i2c` 新名字 `aht20` / `ina219` / `ds3231`；`Ina219::set_load(bus_v, current_a)`；`Aht20` / `Ds3231` 的 `temp_c`（AHT20 还有 `humidity`）由 `env_set` 写；`rtc_set` 在 PCF85063 / PCF8563 都没有时设置 DS3231；`Ds3231::int_active()` 给中断脚（未接 GPIO）。
+- **DS3231 星期**：寄存器 1..7 的起点由固件定，模型记下写入时的偏移；上电默认按 Arduino RTClib 习惯 1 = 周日。世纪位：2100 年起置位，写入时置位 = 21xx。
+- **AHT20 CRC** 与 Sensirion 相同（多项式 0x31、初值 0xFF），直接复用 `sht::crc8`。
+- **模块电流**写进 `board.rs` 的 `module_current`（AHT20 5 µA 估算、INA219 0.7 mA、DS3231 0.2 mA 按手册典型值）；注释写明 parts.ts 尚未加，等网页接这三个器件时同步。
+- 参考：AHT20、INA219、DS3231 数据手册；未读任何 GPL 实现。
