@@ -134,6 +134,15 @@ Session review 2026-10-15: 495 M cache-read tokens in total, 374 M of them from 
 10. **Keep each sub-agent small**: scope it so its context stays under ~80 k; prefer more short agents over a few long ones. Cost ≈ tool calls × context size.
 11. **Freeze shared files during sweeps**: while a repo-wide sweep (i18n, renames) is running, other sessions don't commit to the same files, or the sweep has to be merged and redone.
 
+Session review 2026-10-19 (top 3 sessions, 655 M tokens, ~98% cache read, so cost ≈ calls × context): sub-agents averaged ~100 k context per call and all climbed to 163–171 k before compacting (up to 16 times), including sessions started after rule 10; a 38–41 k fixed prefix (system prompt, tools, ~7.7 k skill list, this file) was ~40% of the total; Bash output was another ~40%, about 70% of it from reading code (grep plus wide `sed -n 1,320p` views), re-read after every compaction (one `lib.rs` 12 times); 30 of 31 U-07 translation agents ran on the default model; one main session did 886 calls itself (95 M, 28 compactions). Screenshots (~1.5%) and build logs (~2%) were not a problem. Added rules:
+12. **One PLAN ID per sub-agent**: never merge items (C-02 + C-03 in one agent took 504 calls). If a task will clearly exceed ~150 calls, split it before dispatching.
+13. **Give the map in the brief**: list entry files with `path:line` and the functions to change, so the sub-agent doesn't spend its first 50 calls exploring. Keep reusable locations in `docs/ARCH.md`.
+14. **Read code narrowly**: `grep -n` first, then view ≤ 60 lines around the hit; no whole-file `cat` or `sed -n 1,300p`. Write down what you learned (file:line, signatures) in your notes rather than re-reading after a compaction.
+15. **Model is part of the brief**: every `Agent` call states `model` explicitly; translation, comment and dictionary sweeps use `sonnet` (rule 9 was ignored when left implicit).
+16. **The main session coordinates, it doesn't grind**: hands-on browser verification, sweeps and multi-file edits go to a fresh sub-agent; the main session reads short reports, merges and commits. A human runs `/clear` between batches once the batch report is on disk.
+17. **Trim the fixed prefix**: user-level skills and MCP connectors unrelated to this repo (trading, proxy, invoice, social media, docs connectors) cost ~5–8 k tokens on every call; a human disables them for this project. Don't let this file grow — history belongs in `docs/DECISIONS.md`.
+18. **Untested lever**: lowering `autoCompactWindow` (e.g. 120 k) caps average context but compacts more often and causes re-reads; try it on one sub-agent and compare tokens before adopting.
+
 ## 10. Autonomy limits
 A human agreed (2026-10-16): work through `docs/PLAN.md` from P0 to P2, report after each batch, continue without waiting for confirmation.
 - **OK to do directly**: write code, edit docs, commit on local main, start worktree sub-agents, add dependencies recorded in DECISIONS and ✅ in LICENSING, replace old pages (old links must redirect), download LICENSING ✅ assets into the build.
