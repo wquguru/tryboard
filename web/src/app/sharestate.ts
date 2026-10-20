@@ -43,6 +43,8 @@ export interface ShareStateV1 {
   run?: { endMs: number; s: string };
   /** What redaction removed before sharing: wifi = Wi-Fi credentials in provisioning posts, net = real-network replies */
   cut?: ('wifi' | 'net')[];
+  /** .tryboard only (F-01b): the user's own firmware appended after the JSON line; h = full sha256 hex, size in bytes */
+  bin?: { name: string; h: string; size: number };
 }
 export type ShareState = ShareStateV1;
 
@@ -125,6 +127,7 @@ function validV1(r: Record<string, unknown>): ShareStateV1 {
       bad(`run.s: ${e}`);
     }
   }
+  if (r.bin !== undefined && (!isObj(r.bin) || typeof r.bin.name !== 'string' || !/^[^/\\]{1,200}$/.test(r.bin.name) || typeof r.bin.h !== 'string' || !/^[0-9a-f]{64}$/.test(r.bin.h) || typeof r.bin.size !== 'number' || !(r.bin.size > 0))) bad('bin');
   if (r.cut !== undefined && (!Array.isArray(r.cut) || !r.cut.every((c) => c === 'wifi' || c === 'net'))) bad('cut');
   return r as unknown as ShareStateV1;
 }
@@ -193,15 +196,22 @@ export interface CaptureInput {
   heat: string | null;
   loc: string;
   log: InputLog | null;
+  /** Keep the run for the user's own firmware too (the .tryboard file carries the bin, F-01b) */
+  ownRun?: boolean;
 }
 
 /** Built-in firmware name -> example id; anything else (dropped .bin) is the user's own */
 export const builtinFw = (fwName: string) => /^([\w.-]+)\/flash\.bin$/.exec(fwName)?.[1] ?? null;
 
+/** Full sha256 hex (the .tryboard bin check) */
+export async function sha256Hex(buf: ArrayBuffer | Uint8Array): Promise<string> {
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', buf as BufferSource));
+  return [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 /** sha256[:10] hex, the same content hash tools/asset_hashes.py writes for fw/<id>/flash.bin */
 export async function fwHash(buf: ArrayBuffer): Promise<string> {
-  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', buf));
-  return [...d].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 10);
+  return (await sha256Hex(buf)).slice(0, 10);
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -224,7 +234,7 @@ export async function captureState(c: CaptureInput): Promise<{ state: ShareState
   if (c.heat) state.heat = c.heat;
   state.loc = c.loc;
   // The input log only replays on the firmware it was recorded with
-  if (c.log && state.fw && c.log.endMs !== undefined) {
+  if (c.log && (state.fw || (c.ownRun && c.fwBuf)) && c.log.endMs !== undefined) {
     const r = redact(c.log.events);
     state.run = { endMs: c.log.endMs, s: toScriptBody(r.events) };
     if (r.cut.length) state.cut = r.cut;
@@ -261,4 +271,47 @@ export function shareKey(s: string): string {
     h = Math.imul(h, 0x01000193) >>> 0;
   }
   return `share:${h.toString(16).padStart(8, '0')}`;
+}
+
+/** First line of a .tryboard file (F-01b); the number is the file format version, independent of the state's `v` */
+export const TRYFILE_MAGIC = 'TRYBOARD';
+export const TRYFILE_VERSION = 1;
+
+/** .tryboard bytes: `TRYBOARD 1\n` + state JSON + `\n` + raw bin (uncompressed). The bin's name comes from state.bin.name */
+export async function packTryfile(state: ShareState, bin: ArrayBuffer | null, binName = 'firmware.bin'): Promise<Uint8Array> {
+  const st: ShareState = { ...state };
+  if (bin && bin.byteLength) st.bin = { name: binName.replace(/[/\\]/g, '-').slice(0, 200), h: await sha256Hex(bin), size: bin.byteLength };
+  else delete st.bin;
+  const head = new TextEncoder().encode(`${TRYFILE_MAGIC} ${TRYFILE_VERSION}\n${JSON.stringify(st)}\n`);
+  const out = new Uint8Array(head.length + (st.bin ? bin!.byteLength : 0));
+  out.set(head);
+  if (st.bin) out.set(new Uint8Array(bin!), head.length);
+  return out;
+}
+
+/** Parse and check a .tryboard file: magic, version, state schema, bin size and sha256. Throws ShareDecodeError */
+export async function unpackTryfile(bytes: Uint8Array): Promise<{ state: ShareState; bin: ArrayBuffer | null }> {
+  // Split on bytes: only the two header lines are text, the bin is not UTF-8
+  const nl1 = bytes.indexOf(0x0a);
+  const nl2 = nl1 < 0 ? -1 : bytes.indexOf(0x0a, nl1 + 1);
+  if (nl2 < 0) throw new ShareDecodeError('corrupt', 'no header');
+  const m = /^TRYBOARD (\d+)$/.exec(new TextDecoder().decode(bytes.subarray(0, nl1)));
+  if (!m) throw new ShareDecodeError('corrupt', 'not a .tryboard file');
+  if (+m[1] > TRYFILE_VERSION) throw new ShareDecodeError('newer', `file v${m[1]}`);
+  if (+m[1] !== TRYFILE_VERSION) throw new ShareDecodeError('corrupt', `file v${m[1]}`);
+  let raw: unknown;
+  try {
+    raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(nl1 + 1, nl2)));
+  } catch (e) {
+    throw new ShareDecodeError('corrupt', String(e));
+  }
+  const state = migrate(raw);
+  const rest = bytes.slice(nl2 + 1);
+  if (!state.bin) {
+    if (rest.length) throw new ShareDecodeError('corrupt', 'unexpected bytes after the state');
+    return { state, bin: null };
+  }
+  if (rest.length !== state.bin.size) throw new ShareDecodeError('corrupt', `bin size ${rest.length} != ${state.bin.size}`);
+  if ((await sha256Hex(rest)) !== state.bin.h) throw new ShareDecodeError('corrupt', 'bin sha256 mismatch');
+  return { state, bin: rest.buffer };
 }

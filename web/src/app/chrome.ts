@@ -154,6 +154,8 @@ export const actions: {
   exportInputs?: (kind?: 'realnet') => void;
   /** Copy the share link of this bench (F-01a) */
   share?: () => void;
+  /** Download the bench, actions and own firmware as a .tryboard file (F-01b) */
+  shareFile?: () => void;
   brief?: () => void;
   uart?: (text: string) => void;
   selectCheckpoint?: (id: string) => void;

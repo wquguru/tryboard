@@ -17,6 +17,8 @@
 | 波 0 调研 RS-1 … RS-6 | ☑ | 2026-10-20 完成，六份报告在 `research/` |
 | 调研汇总 → 改写波次计划 | ☑ | `EVAL.md` §5.2–5.4 已修订：约 28 个实现 session、5 波 |
 | F 批写入 PLAN.md、开工实现 | ◐ | 2026-10-20 人确认开工；波 1 ☑（F-01a、F-04c、F-04d、F-05、F-06 合并，accept.sh 全绿，见 `Reviews/batch-F1.md`）；F-04b 等 M5-01；下一步波 2。波 2：F-07a ☑（UART 修复 + `\xNN` + MicroPython 用例） |
+| F 批写入 PLAN.md、开工实现 | ◐ | 2026-10-20 人确认开工；波 1 ☑（F-01a、F-04c、F-04d、F-05、F-06 合并，accept.sh 全绿，见 `Reviews/batch-F1.md`）；F-04b 等 M5-01；下一步波 2 |
+| 波 2 F-01b `.tryboard` 文件 | ☑ | 2026-10-20 ⋯「下载 .tryboard 文件」+ 换固件 / 拖到页面打开；自带 bin 带 sha256 校验；share.mjs 17 项全过；`Reviews/ab/F-01b.md` |
 
 ## 调研结论汇总
 

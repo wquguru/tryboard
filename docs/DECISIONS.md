@@ -1217,3 +1217,12 @@
 - **`\xNN` 转义**（`cli/src/escape.rs`，`--uart-in`、`uart=`、`usbcdc=`）：只认 `\n` 和严格两位十六进制 `\xNN`，其它反斜杠原样保留；不加 `\\`，因为 web `inputlog.ts` 的 `esc` 不转义反斜杠，加了会改变旧输入日志的含义。旧日志只有含字面 `\xNN` 的文本解码会变。web 侧 `unesc` 仍只认 `\n`，F-07b 做网页时同步（届时 `esc` 也应把 `\`、`;` 写成 `\xNN`）。
 - **验收用例取第三方 bin**：accept.json 新字段 `bin`（相对仓库根的路径）；文件不存在时 accept.sh 记 ⏭️、golden.py 记 skipped，都不算失败；check_config 对带 `bin` 的用例不查 firmware/ 目录。下载由 `tools/fetch_third_party.sh --micropython` 可选执行并校验 sha256，bin 只在 git 忽略的 third_party/ 下，不发布。
 - **raw-paste 用定时发送**（`tools/micropython/paste.py` 生成 `--script`）而不是按提示符走状态机：CLI 脚本只有时间轴；每 128 字节窗口隔 0.1 s，远大于固件消化时间。网页（F-07b）照 RS-1 用提示符驱动。脚本里 `;`、`#`、`\`、控制字节和块首尾空格都写成 `\xNN`（脚本按 `;` 分割、动作会 trim）。
+
+## 2026-10-20 F-01b `.tryboard` 作品文件
+- **格式**：照 RS-4：`TRYBOARD 1\n` + 状态 v1 JSON 一行 + `\n` + 原始 bin。状态加可选字段 `bin {name, h, size}`（可选字段不升 `v`，ARCH 规则）；sha256 用完整 64 位 hex，不用链接里 10 位的 `fw.h`，因为这里是防损坏而不是认示例版本。按字节找前两个换行再解码，bin 不按文本处理。
+- **打开走重新加载**：读状态 → `encodeState` 串和 bin 一起存 IndexedDB → 跳到短的 `?f=<shareKey 的 8 位 hex>`；`main.tsx` 取回状态串交给 `readShare`（和 `?s=` 同一函数），开机后 `restoreShare` 多一个可选参数 `own` 装自带 bin。不直接跳 `?s=`：长操作的状态远超 8000 字符，Node / nginx 等对请求行有 8–16 KB 上限会回 431。自带 bin 加载前再跑一次 `fwCheck`，防手改文件把别的芯片镜像配到本作品。场景、作品、检查点都在会话创建前定好，原地恢复要另写一条路径；重载保证和链接完全同一路径。备选：sessionStorage 放 base64（S3 镜像几 MB 会超限，否）；原地换场景（重复 main.tsx 的启动逻辑，否）。
+- **IndexedDB 只做本机缓存**：刷新还能恢复；按 `?f=` 键存，只留最近 3 个，访问全部 try/catch，被禁用时提示后不跳转。项目里第一次用 IndexedDB，没加依赖。
+- **坏文件整体拒收**：魔数 / 版本 / JSON / 大小 / sha256 任一不过就提示「文件已损坏」，台面不动、不跳转。备选：只恢复台面不带 bin —— 否，损坏文件里状态也不可信。
+- **拖放**：页面级 `drop` 只接 `.tryboard`，且 `defaultPrevented` 时让给已有拖放区（检查点上传、零件库），`.bin` 拖到别处的行为不变。
+- **链接提示改文案**：F-01a 的「下个版本支持导出文件」两条提示改成指向 ⋯「下载 .tryboard 文件」，三种语言同步改。
+- 不做：上传服务器；CLI 直接读 `.tryboard`（RS-4 列为后续项，现有「导出输入日志」已能给 CLI）。

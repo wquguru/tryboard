@@ -9,6 +9,7 @@ import { defaultCaseHarness, loadCaseHarness, saveCaseHarness, scopeCaseHarness 
 import { replayInputs } from './history';
 import { loadExamples } from './examples';
 import { encode } from '../advisor/state';
+import { fwCheck } from './fwcheck';
 import type { StepCtx, WorkId } from './types';
 
 export interface OpenedShare {
@@ -52,8 +53,9 @@ const waitBoot = (ctx: StepCtx) =>
     }, 20000);
   });
 
-/** After the session is up: wire mods, heat, firmware, then re-power and fast-forward through the shared input log */
-export async function restoreShare(ctx: StepCtx, sh: OpenedShare): Promise<Snapshot | null> {
+/** After the session is up: wire mods, heat, firmware, then re-power and fast-forward through the shared input log.
+ * own = the user's bin from a .tryboard file (F-01b, checked against state.bin when the file was opened) */
+export async function restoreShare(ctx: StepCtx, sh: OpenedShare, own?: { buf: ArrayBuffer; name: string } | null): Promise<Snapshot | null> {
   const { session, shell, store } = ctx;
   const st = sh.state;
   const notes: string[] = [t('Opened a shared bench: this is a local copy, your own work is untouched')];
@@ -61,27 +63,36 @@ export async function restoreShare(ctx: StepCtx, sh: OpenedShare): Promise<Snaps
   if (st.heat) session.setHeat(st.heat);
   let snap: Snapshot | null = null;
   try {
-    if (st.fw && session.sim) {
+    if ((st.fw || own) && session.sim) {
       if (session.bootCount === 0) await waitBoot(ctx);
       let buf = session.fwBuf;
-      const name = `${st.fw.ex}/flash.bin`;
-      if (!buf || session.fwName !== name) {
+      const name = own ? own.name : `${st.fw!.ex}/flash.bin`;
+      if (own) {
+        // A hand-edited file could pair this work's chip with another chip's image
+        const chk = fwCheck(own.buf, session.chip);
+        if (!chk.ok) throw new Error(chk.title);
+        buf = own.buf;
+        const booted = waitBoot(ctx);
+        session.loadFirmware(buf, name);
+        await booted;
+      } else if (!buf || session.fwName !== name) {
         buf = await fetchBuf(`./fw/${name}`);
         const booted = waitBoot(ctx);
         session.loadFirmware(buf, name);
         await booted;
       }
-      if ((await fwHash(buf)) !== st.fw.h) notes.push(t('The example firmware has changed since this link was made, so results may differ from the sharer’s'));
+      if (st.fw && !own && (await fwHash(buf!)) !== st.fw.h) notes.push(t('The example firmware has changed since this link was made, so results may differ from the sharer’s'));
       if (st.run) {
         // Device header comes from this power-up (same scene, same devsOf), so the CLI replay header matches too
         const l: InputLog = await session.sim.inputLog();
         const inputs = replayInputs(fromScript(st.run.s));
-        snap = await session.seek({ flash: buf, i2c: l.i2c, lcd: l.spi ?? l.lcd, battery: l.battery, servo: l.servo, power: l.power, encoder: l.encoder, sonar: l.sonar, dht11: l.dht11, touchInt: l.touchInt, board: l.board, grove: l.grove, env: inputs.env0 ?? store.get().env, events: inputs.events, untilMs: st.run.endMs });
+        snap = await session.seek({ flash: buf!, i2c: l.i2c, lcd: l.spi ?? l.lcd, battery: l.battery, servo: l.servo, power: l.power, encoder: l.encoder, sonar: l.sonar, dht11: l.dht11, touchInt: l.touchInt, board: l.board, grove: l.grove, env: inputs.env0 ?? store.get().env, events: inputs.events, untilMs: st.run.endMs });
         (globalThis as { __tbShareRestored?: unknown }).__tbShareRestored = { stdout: snap.stdout, report: snap.report, endMs: st.run.endMs, simSeconds: snap.simSeconds };
         session.continueRun();
         notes.push(t('Replayed the shared actions up to {t} s; it keeps running from there', { t: (st.run.endMs / 1000).toFixed(2) }));
       }
-    } else if (!st.fw) notes.push(t('The sharer’s own firmware is not in the link, so only the bench came along'));
+    } else if (st.bin && !own) notes.push(t('The firmware of this .tryboard file is no longer stored in this browser, so only the bench came along; open the file again'));
+    else if (!st.fw) notes.push(t('The sharer’s own firmware is not in the link, so only the bench came along'));
   } catch (e) {
     notes.push(t('Could not replay the shared actions: {err}', { err: String(e) }));
     (globalThis as { __tbShareRestored?: unknown }).__tbShareRestored = { error: String(e) };
@@ -91,12 +102,12 @@ export async function restoreShare(ctx: StepCtx, sh: OpenedShare): Promise<Snaps
   return snap;
 }
 
-/** Build the share link of the current bench (also behind window.__tbShare for tests) */
-export async function makeShare(ctx: StepCtx): Promise<{ url: string; notes: string[]; s: string; run: boolean }> {
+/** Collect the current bench into a state (link: ownRun false; .tryboard file: true keeps the run on the user's bin) */
+export async function captureBench(ctx: StepCtx, ownRun = false) {
   const { session, store, work } = ctx;
   const ex = work.example ? (await loadExamples()).find((e) => e.id === work.example) : undefined;
   const sel = store.get().selection;
-  const { state, ownFw } = await captureState({
+  return captureState({
     workId: work.id,
     example: work.example ?? undefined,
     sel: ctx.custom ? encode(ctx.custom.plan.state, false) : undefined,
@@ -114,11 +125,17 @@ export async function makeShare(ctx: StepCtx): Promise<{ url: string; notes: str
     heat: session.heat,
     loc: locale,
     log: session.sim ? await session.sim.inputLog() : null,
+    ownRun,
   });
+}
+
+/** Build the share link of the current bench (also behind window.__tbShare for tests) */
+export async function makeShare(ctx: StepCtx): Promise<{ url: string; notes: string[]; s: string; run: boolean }> {
+  const { state, ownFw } = await captureBench(ctx);
   const link = await shareLink(location.origin + location.pathname, state);
   const notes: string[] = [];
-  if (ownFw) notes.push(t('Your own firmware can’t go in a link yet (file export comes in the next version), so the link carries the bench only'));
-  else if (link.truncated) notes.push(t('Your actions are too long for a link, so it carries the bench only; the next version can export them as a file'));
+  if (ownFw) notes.push(t('Your own firmware can’t go in a link, so it carries the bench only; ⋯ → Download .tryboard file takes the firmware and your actions'));
+  else if (link.truncated) notes.push(t('Your actions are too long for a link, so it carries the bench only; ⋯ → Download .tryboard file takes them all'));
   if (state.cut?.length && !link.truncated) notes.push(t('Not shared, for privacy: {what}; results that depend on them may differ', { what: state.cut.map((c) => (c === 'wifi' ? t('Wi-Fi credentials') : t('real-network replies'))).join(', ') }));
   return { url: link.url, notes, s: link.s, run: !!state.run && !link.truncated };
 }
