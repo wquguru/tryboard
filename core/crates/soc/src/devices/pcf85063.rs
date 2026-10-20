@@ -16,16 +16,44 @@ pub struct Pcf85063 {
     regs: [u8; NREG],
     ptr: u8,
     expect_reg: bool,
-    now: u64,
-    /// Clock: epoch seconds `base` at cycle `base_cycle` (while stopped, frozen at `base`)
-    base: i64,
-    base_cycle: u64,
+    clock: RtcClock,
     /// A time register was written in this transaction: re-base at STOP
     dirty: bool,
 }
 
+/// Clock core shared by the RTC models: epoch seconds `base` at cycle `base_cycle`, advancing with simulated time
+pub(crate) struct RtcClock {
+    pub now: u64,
+    base: i64,
+    base_cycle: u64,
+}
+
+impl RtcClock {
+    pub fn new() -> Self {
+        RtcClock {
+            now: 0,
+            base: DEFAULT_EPOCH,
+            base_cycle: 0,
+        }
+    }
+
+    /// Restart from `epoch` as of now
+    pub fn set(&mut self, epoch: i64) {
+        self.base = epoch;
+        self.base_cycle = self.now;
+    }
+
+    /// Current time; while stopped the clock is frozen at its base
+    pub fn epoch(&self, stopped: bool) -> i64 {
+        if stopped {
+            return self.base;
+        }
+        self.base + (self.now.saturating_sub(self.base_cycle) / CPU_HZ) as i64
+    }
+}
+
 /// Days since 1970-01-01 -> (year, month, day) (proleptic Gregorian, era-based)
-fn civil(days: i64) -> (i64, u32, u32) {
+pub(crate) fn civil(days: i64) -> (i64, u32, u32) {
     let z = days + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097);
@@ -39,7 +67,7 @@ fn civil(days: i64) -> (i64, u32, u32) {
 }
 
 /// (year, month, day) -> days since 1970-01-01
-fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
+pub(crate) fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = y.div_euclid(400);
     let yoe = y.rem_euclid(400);
@@ -49,11 +77,11 @@ fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-fn bcd(v: u32) -> u8 {
+pub(crate) fn bcd(v: u32) -> u8 {
     (((v / 10) << 4) | (v % 10)) as u8
 }
 
-fn unbcd(b: u8) -> u32 {
+pub(crate) fn unbcd(b: u8) -> u32 {
     (b >> 4) as u32 * 10 + (b & 15) as u32
 }
 
@@ -64,9 +92,7 @@ impl Pcf85063 {
             regs: [0; NREG],
             ptr: 0,
             expect_reg: false,
-            now: 0,
-            base: DEFAULT_EPOCH,
-            base_cycle: 0,
+            clock: RtcClock::new(),
             dirty: false,
         };
         d.reset_regs();
@@ -84,8 +110,7 @@ impl Pcf85063 {
 
     /// Set the clock to `epoch` seconds (UTC) as of now
     pub fn set_epoch(&mut self, epoch: i64) {
-        self.base = epoch;
-        self.base_cycle = self.now;
+        self.clock.set(epoch);
     }
 
     fn stopped(&self) -> bool {
@@ -93,10 +118,7 @@ impl Pcf85063 {
     }
 
     pub fn epoch(&self) -> i64 {
-        if self.stopped() {
-            return self.base;
-        }
-        self.base + (self.now.saturating_sub(self.base_cycle) / CPU_HZ) as i64
+        self.clock.epoch(self.stopped())
     }
 
     /// Copy the running time into the BCD registers
@@ -124,8 +146,7 @@ impl Pcf85063 {
             unbcd(r[7] & 0x3f).max(1),
         );
         let secs = unbcd(r[6] & 0x3f) * 3600 + unbcd(r[5] & 0x7f) * 60 + unbcd(r[4] & 0x7f);
-        self.base = days * 86_400 + secs as i64;
-        self.base_cycle = self.now;
+        self.clock.set(days * 86_400 + secs as i64);
     }
 }
 
@@ -182,7 +203,7 @@ impl I2cDevice for Pcf85063 {
         }
     }
     fn set_time(&mut self, now: u64) {
-        self.now = now;
+        self.clock.now = now;
     }
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self

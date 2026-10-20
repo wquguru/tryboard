@@ -33,6 +33,16 @@ impl Pose {
         [-t.sin(), f.sin() * t.cos(), f.cos() * t.cos()]
     }
 
+    /// World vector (X north, Y west, Z up) seen in the sensor frame: R^T * v with R = Rz(yaw)·Ry(pitch)·Rx(roll)
+    pub fn world_to_sensor(&self, v: [f64; 3]) -> [f64; 3] {
+        let (sy, cy) = self.yaw.to_radians().sin_cos();
+        let (st, ct) = self.pitch.to_radians().sin_cos();
+        let (sf, cf) = self.roll.to_radians().sin_cos();
+        let a = [cy * v[0] + sy * v[1], -sy * v[0] + cy * v[1], v[2]];
+        let b = [ct * a[0] - st * a[2], a[1], st * a[0] + ct * a[2]];
+        [b[0], cf * b[1] + sf * b[2], -sf * b[1] + cf * b[2]]
+    }
+
     /// Gyro reading (°/s, sensor frame): Euler rates -> body angular rate
     pub fn gyro_dps(&self) -> [f64; 3] {
         let (t, f) = (self.pitch.to_radians(), self.roll.to_radians());
@@ -77,6 +87,18 @@ mod tests {
             );
             assert!(((a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) - 1.0).abs() < 1e-12);
         }
+    }
+
+    #[test]
+    fn world_to_sensor_matches_gravity() {
+        for (p, r, y) in [(0.0, 0.0, 0.0), (30.0, -20.0, 77.0), (-60.0, 45.0, 200.0)] {
+            let pose = Pose::new(p, r, y);
+            let (a, b) = (pose.accel_g(), pose.world_to_sensor([0.0, 0.0, 1.0]));
+            assert!((0..3).all(|i| (a[i] - b[i]).abs() < 1e-12), "{a:?} {b:?}");
+        }
+        // Yaw 90° (nose to west): a north vector lies along sensor -Y
+        let v = Pose::new(0.0, 0.0, 90.0).world_to_sensor([1.0, 0.0, 0.0]);
+        assert!(v[0].abs() < 1e-12 && (v[1] + 1.0).abs() < 1e-12);
     }
 
     #[test]

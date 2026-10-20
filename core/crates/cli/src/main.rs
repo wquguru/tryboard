@@ -17,7 +17,10 @@ fn usage() -> ! {
                [--trace-io <events.txt>] [--trace-pins all|4,8,…] (logic analyzer events: GPIO / PWM / WS2812 / I2C transactions, cycle-stamped)
                [--trace-tasks <timeline.json>] (FreeRTOS task switches, one track per core, opens in Perfetto; per-task CPU share printed at the end of stderr)
                [--i2c ssd1306@0x3c,bme280@0x76] [--env temp,humidity,pressure Pa] [--oled] [--i2c-log] (acks per address)
-               (more I2C devices: mpu6050@0x68, qmi8658@0x6b, cst816s@0x15, ft6236@0x38, cst9220@0x5a, axp2101@0x34, pcf85063@0x51, es8311@0x18, es7210@0x40) [--battery PCT[,usb]] (AXP2101) [--rtc EPOCH] (PCF85063, UTC) [--touch-int <GPIO>] (touch INT pin: low while pressed)
+               (more I2C devices: mpu6050@0x68, qmi8658@0x6b, cst816s@0x15, ft6236@0x38, cst9220@0x5a, axp2101@0x34, pcf85063@0x51, es8311@0x18, es7210@0x40;
+               M5 parts: mpu6886@0x68, bmi270@0x68 (BMM150 on its AUX bus), bmm150@0x10, bm8563@0x51 (= pcf8563), aw9523@0x58, axp192@0x34,
+               lp5562@0x30, tca8418@0x34, ft6336@0x38, ft3267@0x38, ina3221@0x40, ltr553@0x23, aw88298@0x36)
+               [--battery PCT[,usb]] (AXP2101 / AXP192) [--rtc EPOCH] (PCF85063 / BM8563, UTC) [--touch-int <GPIO>] (touch INT pin: low while pressed)
                script actions imu=pitch,roll,yaw[,their rates in °/s], touch=x,y (screen pixels, press / move), release (lift)
                [--spi gc9a01] (S3: SCLK=12 MOSI=11 CS=10 DC=14 RST=13 BL=15; C3: SCLK=6 MOSI=7 CS=10 DC=5 RST=4 BL=3) [--lcd-ppm <last frame.ppm>]
                [--spi co5300] (S3 QSPI AMOLED 480x480: CS=12 CLK=38 D0..D3=4..7 RST=39)
@@ -754,11 +757,11 @@ fn run(args: &[String]) {
             m.adc_blocked()
         );
     }
-    // Only printed with an AXP2101 attached, so other cases' output stays byte-identical
-    let pu = m.pmic_unimpl();
+    // Only printed with a PMIC attached, so other cases' output stays byte-identical
+    let (pmic, pu) = m.pmic_unimpl();
     if !pu.is_empty() {
         let list: Vec<String> = pu.iter().map(|(r, n)| format!("0x{r:02x}x{n}")).collect();
-        eprintln!("[tryboard] AXP2101 unmodeled registers: {}", list.join(" "));
+        eprintln!("[tryboard] {pmic} unmodeled registers: {}", list.join(" "));
     }
     let un = m.unimpl();
     eprintln!(
@@ -1177,12 +1180,12 @@ fn wav16(rate: u32, x: &[i16]) -> Vec<u8> {
     b
 }
 
-/// Board power / clock chips: --battery PCT[,usb] (AXP2101), --rtc <unix seconds, UTC> (PCF85063)
+/// Board power / clock chips: --battery PCT[,usb] (AXP2101 / AXP192), --rtc <unix seconds, UTC> (PCF85063 / BM8563)
 fn board_args(m: &mut Machine, args: &[String]) {
     if let Some(v) = opt(args, "--battery") {
         match parse_battery(&v) {
             Some((pct, usb)) if m.battery_set(pct, usb) => {}
-            Some(_) => eprintln!("[tryboard] --battery needs axp2101 on --i2c"),
+            Some(_) => eprintln!("[tryboard] --battery needs axp2101 or axp192 on --i2c"),
             None => {
                 eprintln!("--battery {v}: expected PCT[,usb]");
                 std::process::exit(2)
@@ -1192,7 +1195,7 @@ fn board_args(m: &mut Machine, args: &[String]) {
     if let Some(v) = opt(args, "--rtc") {
         match v.trim().parse::<i64>() {
             Ok(t) if m.rtc_set(t) => {}
-            Ok(_) => eprintln!("[tryboard] --rtc needs pcf85063 on --i2c"),
+            Ok(_) => eprintln!("[tryboard] --rtc needs pcf85063 or bm8563 on --i2c"),
             Err(_) => {
                 eprintln!("--rtc {v}: expected unix seconds");
                 std::process::exit(2)

@@ -1,6 +1,8 @@
 //! Audio codec register shells so board init finds them: ES8311 DAC (I2C 0x18; chip ID 0xFD = 0x83, 0xFE = 0x11, 0xFF version) and
 //! ES7210 4-ch ADC (I2C 0x40; 0x3D = 0x72, 0x3E = 0x10 ID, 0x3F version), ID values as read by the public Espressif drivers. 8-bit addresses,
-//! auto-increment; everything else is plain storage. No audio path (I2S is not connected to these). (lint: allow-long-comment)
+//! auto-increment; everything else is plain storage. No audio path (I2S is not connected to these). Also used for the LTR-553ALS
+//! light / proximity sensor shell (I2C 0x23; 0x86 PART_ID 0x92, 0x87 MANUFAC_ID 0x05, Lite-On datasheet): data registers
+//! 0x88..0x8E read 0 (dark, nothing near). (lint: allow-long-comment)
 
 use crate::i2c::I2cDevice;
 use std::any::Any;
@@ -40,6 +42,23 @@ impl Codec {
             "es8311",
             &[(0x00, 0x1f), (0xfd, 0x83), (0xfe, 0x11), (0xff, 0x00)],
             &[0xfd, 0xfe, 0xff],
+        )
+    }
+
+    pub fn ltr553(addr: u8) -> Self {
+        // Power-on defaults: PS_LED 0x7F, PS_N_PULSES 1, PS_MEAS_RATE 0x02, ALS_MEAS_RATE 0x03
+        Self::with(
+            addr,
+            "ltr553",
+            &[
+                (0x82, 0x7f),
+                (0x83, 0x01),
+                (0x84, 0x02),
+                (0x85, 0x03),
+                (0x86, 0x92),
+                (0x87, 0x05),
+            ],
+            &[0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e],
         )
     }
 
@@ -111,5 +130,17 @@ mod tests {
         a.write(0x01);
         a.write(0x3f);
         assert_eq!(rd(&mut a, 0x01, 1), [0x3f]);
+    }
+
+    #[test]
+    fn ltr553_shell() {
+        let mut d = Codec::ltr553(0x23);
+        assert_eq!(rd(&mut d, 0x86, 2), [0x92, 0x05]);
+        d.start(false);
+        d.write(0x80);
+        d.write(0x01); // ALS active
+        d.write(0x03); // PS active
+        assert_eq!(rd(&mut d, 0x80, 3), [0x01, 0x03, 0x7f]);
+        assert_eq!(rd(&mut d, 0x88, 4), [0, 0, 0, 0]);
     }
 }

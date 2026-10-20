@@ -10,6 +10,10 @@ use std::any::Any;
 
 pub const CHIP_ID: u8 = 0x36;
 pub const FOCALTECH_ID: u8 = 0x11;
+/// FT6336U (M5 Core2 / CoreS3), from FocalTech's FT6x36 family table
+pub const CHIP_ID_FT6336U: u8 = 0x64;
+/// FT3267 (M5Dial): M5GFX only logs CIPHER and needs VENDID != 0, so this value is unverified on hardware
+pub const CHIP_ID_FT3267: u8 = 0x33;
 
 pub struct Ft6236 {
     pub addr: u8,
@@ -26,6 +30,11 @@ pub struct Ft6236 {
 
 impl Ft6236 {
     pub fn new(addr: u8) -> Self {
+        Self::with_cipher(addr, CHIP_ID)
+    }
+
+    /// Same register layout, different CIPHER (0xA3): FT6336U, FT3267
+    pub fn with_cipher(addr: u8, cipher: u8) -> Self {
         let mut regs = [0u8; 256];
         // Both point slots "no event", ID 0xF (invalid)
         regs[0x03] = 0xc0;
@@ -36,7 +45,7 @@ impl Ft6236 {
         regs[0x88] = 0x0e; // PERIODACTIVE: scan period in active mode
         regs[0xa1] = 0x30; // LIB_VER_H / L
         regs[0xa2] = 0x03;
-        regs[0xa3] = CHIP_ID;
+        regs[0xa3] = cipher;
         // G_MODE: 0 = polling (INT held low while pressed), matching the INT modelled here; factory default varies by module, to verify on hardware
         regs[0xa4] = 0x00;
         regs[0xa6] = 0x10; // FIRMID
@@ -181,5 +190,15 @@ mod tests {
         d.write(0x80);
         d.write(0x28);
         assert_eq!(rd(&mut d, 0x80, 1), [0x28]);
+    }
+
+    #[test]
+    fn other_ciphers() {
+        let mut d = Ft6236::with_cipher(0x38, CHIP_ID_FT6336U);
+        assert_eq!(rd(&mut d, 0xa3, 6), [0x64, 0x00, 0x00, 0x10, 0x00, 0x11]);
+        d.press(100, 200);
+        assert_eq!(rd(&mut d, 0x02, 1), [1]);
+        let mut d = Ft6236::with_cipher(0x38, CHIP_ID_FT3267);
+        assert_eq!(rd(&mut d, 0xa3, 1), [0x33]);
     }
 }

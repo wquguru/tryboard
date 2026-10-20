@@ -12,14 +12,17 @@ pub use tryboard_soc::devices::audio::{Analysis as AudioAnalysis, Block as Audio
 use tryboard_soc::devices::audio::{Audio, MicSource};
 pub use tryboard_soc::devices::lcd::{Lcd, LcdKind};
 use tryboard_soc::devices::{
+    axp192::Axp192,
     axp2101::Axp2101,
     bme280::{Bme280, Env},
+    bmi270::Bmi270,
     cst816s::Cst816s,
     cst9220::Cst9220,
     ft6236::Ft6236,
     imu::Pose,
     mpu6050::Mpu6050,
     pcf85063::Pcf85063,
+    pcf8563::Pcf8563,
     qmi8658::Qmi8658,
     ssd1306::Ssd1306,
 };
@@ -636,19 +639,25 @@ impl Machine {
         if let Some(d) = bus.device::<Qmi8658>() {
             d.temp_c = t;
         }
+        if let Some(d) = bus.device::<Bmi270>() {
+            d.temp_c = t;
+        }
         for d in &mut self.pins().dhts {
             d.temp_c = t;
             d.humidity = h;
         }
     }
 
-    /// Pose (applies to MPU6050 / QMI8658 on the bus): Euler angles (deg) + rates (deg/s), see devices/imu.rs
+    /// Pose (applies to MPU6050 / MPU6886 / QMI8658 / BMI270 + BMM150 on the bus): Euler angles (deg) + rates (deg/s), see devices/imu.rs
     pub fn imu_set(&mut self, pose: Pose) {
         let bus = self.i2c0();
         if let Some(d) = bus.device::<Mpu6050>() {
             d.pose = pose;
         }
         if let Some(d) = bus.device::<Qmi8658>() {
+            d.pose = pose;
+        }
+        if let Some(d) = bus.device::<Bmi270>() {
             d.pose = pose;
         }
     }
@@ -689,47 +698,60 @@ impl Machine {
         }
     }
 
-    /// AXP2101 battery level / USB plug (action `bat=pct[,usb]`); false without the PMIC on the bus
+    /// AXP2101 / AXP192 battery level / USB plug (action `bat=pct[,usb]`); false without a PMIC on the bus
     pub fn battery_set(&mut self, percent: u8, usb: bool) -> bool {
-        match self.i2c0().device::<Axp2101>() {
-            Some(d) => {
-                d.set_battery(percent, usb);
-                true
-            }
-            None => false,
+        let bus = self.i2c0();
+        if let Some(d) = bus.device::<Axp2101>() {
+            d.set_battery(percent, usb);
+        } else if let Some(d) = bus.device::<Axp192>() {
+            d.set_battery(percent, usb);
+        } else {
+            return false;
         }
+        true
     }
 
-    /// AXP2101 PWRON key press (action `pwrkey=short|long`)
+    /// AXP2101 PWRON / AXP192 PEK key press (action `pwrkey=short|long`)
     pub fn pwrkey(&mut self, long: bool) -> bool {
-        match self.i2c0().device::<Axp2101>() {
-            Some(d) => {
-                d.pwrkey(long);
-                true
-            }
-            None => false,
+        let bus = self.i2c0();
+        if let Some(d) = bus.device::<Axp2101>() {
+            d.pwrkey(long);
+        } else if let Some(d) = bus.device::<Axp192>() {
+            d.pwrkey(long);
+        } else {
+            return false;
         }
+        true
     }
 
-    /// PCF85063 time (UTC epoch seconds) as of now
+    /// PCF85063 / PCF8563 (BM8563) time (UTC epoch seconds) as of now
     pub fn rtc_set(&mut self, epoch: i64) -> bool {
         let now = self.cycles();
-        match self.i2c0().device::<Pcf85063>() {
-            Some(d) => {
-                d.set_time(now);
-                d.set_epoch(epoch);
-                true
-            }
-            None => false,
+        let bus = self.i2c0();
+        if let Some(d) = bus.device::<Pcf85063>() {
+            d.set_time(now);
+            d.set_epoch(epoch);
+        } else if let Some(d) = bus.device::<Pcf8563>() {
+            d.set_time(now);
+            d.set_epoch(epoch);
+        } else {
+            return false;
         }
+        true
     }
 
-    /// AXP2101 registers accessed without a model (register, count); empty without the PMIC
-    pub fn pmic_unimpl(&mut self) -> Vec<(u8, u64)> {
-        self.i2c0()
-            .device::<Axp2101>()
-            .map(|d| d.unimpl.iter().map(|(r, n)| (*r, *n)).collect())
-            .unwrap_or_default()
+    /// PMIC registers accessed without a model: (chip name, [(register, count)]); empty list without a PMIC
+    pub fn pmic_unimpl(&mut self) -> (&'static str, Vec<(u8, u64)>) {
+        let bus = self.i2c0();
+        let list =
+            |m: &std::collections::BTreeMap<u8, u64>| m.iter().map(|(r, n)| (*r, *n)).collect();
+        if let Some(d) = bus.device::<Axp2101>() {
+            ("AXP2101", list(&d.unimpl))
+        } else if let Some(d) = bus.device::<Axp192>() {
+            ("AXP192", list(&d.unimpl))
+        } else {
+            ("", Vec::new())
+        }
     }
 
     pub fn oled(&mut self) -> Option<&mut Ssd1306> {
