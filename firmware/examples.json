@@ -696,6 +696,34 @@
   }
  },
  {
+  "id": "s3-ai-dash",
+  "chip": "esp32s3",
+  "title": "AI gateway dashboard: Claude Desktop heartbeats on the 2.16″ AMOLED",
+  "about": "The Waveshare AMOLED board as a desk buddy for Claude Desktop. The firmware (LVGL, NimBLE, advertising as Claude-Dash) takes heartbeat JSON lines over the Nordic UART service and draws four pages on the 480×480 screen: requests (sessions running / waiting), context, sessions and usage (tokens, battery, RTC clock). Swipe left or right on the screen to change pages. The virtual PC in the \"Bluetooth\" tab of the bottom dock is already on: it finds the board, sets the time and sends a heartbeat every few seconds; edit the numbers there and send to watch the screen change. Battery and USB come from the board panel. The BLE link is a behaviour model; range and pairing need real hardware.",
+  "tags": [
+   "✓ Verified in sim",
+   "BLE",
+   "LVGL",
+   "CO5300",
+   "AMOLED",
+   "Touch",
+   "Virtual PC",
+   "ESP-IDF 5.5"
+  ],
+  "pins": {
+   "lcd_cs": 12,
+   "lcd_clk": 38,
+   "i2c_sda": 15,
+   "i2c_scl": 14,
+   "tp_int": 11
+  },
+  "scene": {
+   "board": "ws-amoled216",
+   "parts": []
+  },
+  "pc": true
+ },
+ {
   "id": "weather",
   "chip": "esp32s3",
   "title": "Desk weather station: temperature + screen + dial",

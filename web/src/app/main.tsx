@@ -285,7 +285,11 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     else if (bc.get().dock.tab === 'usb') setDock({ tab: 'serial' });
   });
   // BLE (C-01): show and switch to the Bluetooth tab once firmware uses it; hide it when it stops (firmware change)
-  actions.ble = (cmd) => session.sim?.ble(cmd);
+  actions.ble = (cmd) => {
+    // The PC toggle survives reboots (session.ts onBoot re-sends pc=on)
+    if (cmd === 'pc=on' || cmd === 'pc=off') session.deskPc = cmd === 'pc=on';
+    session.sim?.ble(cmd);
+  };
   bleFeed.subscribe(() => {
     const has = bleFeed.get().state !== 0;
     if (has === bc.get().ble) return;

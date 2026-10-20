@@ -209,6 +209,8 @@ export interface Session {
   setBattery(pct: number, usb: boolean): void;
   /** PWR key on the AXP2101 PWRON pin (E-03): short or long press */
   pwrKey(long: boolean): void;
+  /** Virtual PC (E-07b) wanted on: pc=on is sent after every boot. From the example's `pc`, then the panel toggle */
+  deskPc: boolean;
   consoleText(): string;
   /** Logic analyzer events since this power-on / rewind replay (P1-05) */
   io: IoStore;

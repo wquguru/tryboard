@@ -41,6 +41,20 @@ export interface PhoneView {
   target: string | null;
   devices: BleDevice[];
   services: BleService[];
+  /** Virtual PC (E-06): Claude Desktop Buddy central sharing the phone's GATT client */
+  pc?: DeskView;
+}
+/** Desk::json() in core/crates/soc/src/ble/desk.rs */
+export interface DeskView {
+  on: boolean;
+  /** TX subscribed, lines flow */
+  active: boolean;
+  sent: number;
+  heartbeats: number;
+  polls: number;
+  acks: number;
+  last_rx: string;
+  last_hb: string;
 }
 export interface BleView {
   active: boolean;
@@ -84,9 +98,13 @@ export function parseBle(state: number, json: string, reset?: boolean, cmdError?
 const PHONE_TO = /^(phone|手机) → /; // lint: allow-cjk
 const FW_TO = /^(fw|firmware|固件) → /; // lint: allow-cjk
 const PHONE_SAYS = /^(phone|手机)[:：] ?/; // lint: allow-cjk
+const PC_TO = /^pc → /;
+const FW_TO_PC = /^fw → pc /;
+const PC_SAYS = /^pc: /;
 
 /** Direction of a log line (the design's three: board → air / phone → board / board → phone, plus the phone's own actions). */
 export function lineDir(l: BleLine): string {
+  if (l.k === 'pc') return PC_TO.test(l.s) ? t('PC → board') : FW_TO_PC.test(l.s) ? t('Board → PC') : t('Virtual PC');
   if (l.k === 'adv') return t('Board → advertising');
   if (PHONE_TO.test(l.s)) return t('Phone → board');
   if (FW_TO.test(l.s)) return t('Board → phone');
@@ -97,6 +115,7 @@ export function lineDir(l: BleLine): string {
 
 /** Strip the direction prefix, leaving what happened. */
 export function lineText(l: BleLine): string {
+  if (l.k === 'pc') return l.s.replace(PC_TO, '').replace(FW_TO_PC, '').replace(PC_SAYS, '');
   return l.s.replace(PHONE_TO, '').replace(FW_TO, '').replace(PHONE_SAYS, '');
 }
 

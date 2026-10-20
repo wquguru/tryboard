@@ -1110,6 +1110,15 @@
 - 核心改动只有一处测试：`esp32s3::ble` 的 `sigs_hit_only_ble_firmware` 把 s3-ai-dash 列为 BLE 固件（它确实链接 NimBLE，签名认出是对的）；模型行为未改，已有用例输出不变。
 - 替代：ArduinoJson / 第三方 Buddy 固件（vthinkxie/claude-desktop-buddy-esp32，许可证 NOASSERTION）——不用，协议按公开文档自写，JSON 用 IDF 自带 cJSON。
 - 未做：网页示例库 / 蓝牙坞（E-07b）；配对加密（E-08）；时区只按 time 消息里的偏移，不存 NVS。
+## 2026-10-20 E-07b 网页：虚拟电脑面板与 s3-ai-dash 示例
+- **决定**：虚拟电脑命令走现有 `sim.ble()` 通道（wasm `tb_ble_cmd` 已认 `pc=`），但输入日志序列化成裸 `pc=...`（不加 `ble=` 前缀），与 CLI `board_action` 一致；simrun 重放同时接受 `ble=` 与 `pc=`。core / CLI 未改。
+- **决定**：examples.json 新键 `"pc": true` → `Session.deskPc`；onBoot 时 `sim.ble('pc=on')` 作为一条被记录的输入（重启后仍开，导出重放可复现）；loadFirmware 换固件时清零；面板开关同步该标志。
+- **决定**：心跳编辑表单发 `pc=hb,<base64>`，数字是字面值，entries 里保留 `{time}` 占位（由 core 模板填时间）；之后按 core 规则每 10 s 重发。「JSON 行」发 `pc=json`，只发一次。
+- **决定**：布局：桌面在「蓝牙」坞右侧 340 px 侧栏；移动端（< md）用「空中日志 / 虚拟电脑」两页签切换，虚拟电脑开着时默认显示它。虚拟手机面板与 `ble=` 行为不变。
+- **原因**：不改内核即可网页 / CLI 对齐；示例开箱即见数据。
+- **备选**：给 PC 单开 wasm 导出（多改 core，否决）；把心跳模板做成自由 JSON 编辑框（易写错 total 键，保留为「JSON 行」高级入口）。
+- **备注**：brief 指定 5191 端口被别的进程占用，走查改用 5197；已知：虚拟电脑占用共享中心时构建树「虚拟手机」行显示「已连接」。
+
 ## 2026-10-20 E-05 Bluedroid 主机栈
 - 决定：只补虚拟控制器（`soc/src/ble/mod.rs` `Ble::command`），VHCI 定位与 HLE 不动——Bluedroid 固件链接的 libbtdm_app 与 NimBLE 固件是同一份，c3 / s3 签名都直接认出（`sigs_hit_only_ble_firmware` 的名字前缀加上 `c3-bluedroid-` / `s3-bluedroid-`）。
 - 先跑 c3-bluedroid-nus 看 `unknown_cmds` 与崩溃，逐条按蓝牙核心规范 v5.3 Vol 4 Part E 补：

@@ -664,7 +664,7 @@ function PhoneDock({
           )}
           {cur === "ble" && c.ble && (
             <div className="flex min-h-0 flex-1 flex-col border-t border-line-soft">
-              <BlePane />
+              <BlePane send={(c) => actions.ble?.(c)} />
             </div>
           )}
           {cur === "net" && c.net && (
@@ -976,7 +976,7 @@ function DeskDock({
             hidden={cur !== "ble"}
             className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden"
           >
-            <BlePane />
+            <BlePane send={(c) => actions.ble?.(c)} />
           </div>
         )}
         {c.net && cur === "net" && <NetPane />}

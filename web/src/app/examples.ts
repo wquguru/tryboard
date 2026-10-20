@@ -25,6 +25,8 @@ export interface Example {
   /** 'env': environment sliders; 'imu': tilt sliders; object: analog input slider. */
   controls?: (string | AnalogControl)[];
   assembly?: boolean | string;
+  /** Virtual PC (E-07b) on from boot: pc=on as the first input */
+  pc?: boolean;
 }
 
 let cache: Promise<Example[]> | null = null;
