@@ -64,6 +64,21 @@ test('each tutorial part is placeable and wires up with no faults', () => {
   assert.deepEqual(specs, [{ type: 'ds18b20', pin: 4 }, { type: 'pir', pin: 4, hold: 2 }, { type: 'relay', pin: 5 }, { type: 'ldr', pin: 3 }, { type: 'rc522', cs: 7, sck: 4, mosi: 6, miso: 5, rst: 3 }]);
 });
 
+test('3.3 V-only tutorial parts on the 5V rail are blocked by W2 (PIR and relay on 5V are fine)', () => {
+  const cases: [string, Record<string, string>, boolean][] = [
+    ['rc522', { '3.3V': '5V', GND: 'GND', SDA: 'GPIO7', SCK: 'GPIO4', MOSI: 'GPIO6', MISO: 'GPIO5' }, true],
+    ['ldr-module', { VCC: '5V', AO: 'GPIO3', GND: 'GND' }, true],
+    ['ds18b20', { VDD: '5V', DQ: 'GPIO4', GND: 'GND' }, true],
+    ['hc-sr501', { VCC: '5V', OUT: 'GPIO4', GND: 'GND' }, false],
+    ['relay-1ch', { VCC: '5V', IN: 'GPIO5', GND: 'GND' }, false],
+  ];
+  for (const [id, got, bad] of cases) {
+    const { spec, retarget } = buildPlaced(placeDef(id) as PlaceDef, got);
+    const rules = checkWiring([spec], wiresOf([spec], false, { retarget })).map((f) => f.rule);
+    assert.equal(rules.includes('W2'), bad, `${id}: ${rules.join(',')}`);
+  }
+});
+
 test('share state keeps the tutorial parts in the scene', async () => {
   const scene = { parts: [{ type: 'ds18b20', pin: 4, n: 2 }, { type: 'pir', pin: 4, hold: 2 }, { type: 'relay', pin: 5, low: true }, { type: 'ldr', pin: 3, lux: 120 }, { type: 'rc522', cs: 7, sck: 4, mosi: 6, miso: 5, rst: 3 }] as PartSpec[] };
   const st = { v: 1 as const, w: 'blank:weather', scene };

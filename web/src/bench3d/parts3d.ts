@@ -226,8 +226,8 @@ export function rc522Module(): FlatModule {
 export type TutorialPart = Extract<PartSpec, { type: 'ds18b20' | 'pir' | 'relay' | 'ldr' | 'rc522' }>;
 export const isTutorialPart = (p: PartSpec): p is TutorialPart => p.type === 'ds18b20' || p.type === 'pir' || p.type === 'relay' || p.type === 'ldr' || p.type === 'rc522';
 
-/** Desk slot per type (x offset from the signal pin, which side of the breadboard), so several fit side by side */
-const SLOT: Record<TutorialPart['type'], { dx: number; out: number }> = { ds18b20: { dx: -14, out: 17 }, pir: { dx: 20, out: 22 }, relay: { dx: -44, out: 34 }, ldr: { dx: 44, out: 24 }, rc522: { dx: 0, out: 46 } };
+/** Desk slot per type (fixed x, distance out from the breadboard on the signal pin's side), so all five fit side by side */
+const SLOT: Record<TutorialPart['type'], { dx: number; out: number }> = { ds18b20: { dx: -25, out: 17 }, pir: { dx: 10, out: 22 }, relay: { dx: -58, out: 34 }, ldr: { dx: 45, out: 24 }, rc522: { dx: 52, out: 76 } };
 
 /** Module on the desk + Dupont wires to the board (same routing as the DHT11 builder) */
 export function buildTutorialPart(ctx: BenchCtx, grp: THREE.Group, p: TutorialPart) {
@@ -279,7 +279,7 @@ export function buildTutorialPart(ctx: BenchCtx, grp: THREE.Group, p: TutorialPa
   const sig = sigPin !== undefined ? pinCands('IO' + sigPin)[0]?.p : undefined;
   const slot = SLOT[p.type];
   const side = Math.sign(sig?.z || 1);
-  const bx = (sig?.x ?? 0) + slot.dx, bz = side * (BB.D / 2 + slot.out);
+  const bx = slot.dx, bz = side * (BB.D / 2 + slot.out);
   m.grp.position.set(bx, 0, bz);
   if (bz < 0) m.grp.rotation.y = Math.PI;
   root.add(m.grp);

@@ -9,6 +9,9 @@ import { CHIP_NAME, chipOf, type AnalogControl } from "../examples";
 import { lab } from "../../ui/links";
 import { outOf } from "./shared";
 import type { BenchCtx } from "./ctx";
+import { partInfo } from "../wiring";
+import { isTutorialPart } from "../../bench3d/parts3d";
+import { tutorialControls } from "./tutorial";
 
 export function mountOrientation(b: BenchCtx) {
   const POSE_AXES: ["pitch" | "roll" | "yaw", string, number][] = [
@@ -146,6 +149,12 @@ export function mountOrientation(b: BenchCtx) {
             )}
           </div>
         )}
+        {c.session.scene.parts.filter(isTutorialPart).filter((p) => !(p.type === "ds18b20" && ctl.includes("env"))).map((p, i) => (
+          <div key={`tut${i}`} data-tutorial={p.type}>
+            <Sec>{partInfo(p).name}</Sec>
+            {tutorialControls(b, p)}
+          </div>
+        ))}
         {c.session.scene.parts.some((p) => p.type === "inmp441") && (
           <>
             <Sec>{t("Microphone source")}</Sec>
