@@ -55,7 +55,7 @@ export interface WasmExports {
   tb_uart_push(p: number, len: number): void;
   /** Set a pin's analog voltage (mV) for the ADC */
   tb_analog_set(pin: number, mv: number): void;
-  /** Attach an I2C device. kind: 1 = SSD1306, 2 = BME280, 3 = MPU6050, 4 = QMI8658, 5 = CST816S. Returns 0 on success. */
+  /** Attach an I2C device. kind: 1 = SSD1306, 2 = BME280, 3 = MPU6050, 4 = QMI8658, 5 = CST816S, 6 = FT6236, 7 = CST9220, 8 = AXP2101, 9 = PCF85063, 10 = ES8311, 11 = ES7210. Returns 0 on success. */
   tb_i2c_attach(kind: number, addr: number): number;
   /** Set the environment (read by BME280 and other environment sensors) */
   tb_env_set(tempC: number, humidity: number, pressurePa: number): void;
@@ -65,6 +65,12 @@ export interface WasmExports {
   tb_touch_int(pin: number): void;
   /** Touch: down = 1 presses / moves to (x, y) (screen pixels 0..239), 0 = release */
   tb_touch(x: number, y: number, down: number): void;
+  /** AXP2101 battery percent + USB plugged (action `bat=pct[,usb]`); 1 without the PMIC */
+  tb_battery(percent: number, usb: number): number;
+  /** AXP2101 PWRON key (action `pwrkey=short|long`): long = 1 for a long press */
+  tb_pwrkey(long: number): number;
+  /** PCF85063 time as of now, UTC unix seconds */
+  tb_rtc_set(epoch: number): number;
   /** OLED frame version: refetch pixels only when it changes. 0 = no OLED. */
   tb_oled_version(): number;
   /** OLED frame: 128×64 bytes, brightness 0..255 per pixel (display on/off and contrast applied). Null = no OLED. */
