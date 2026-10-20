@@ -155,6 +155,7 @@ web/（Vite + TS）
 - 对外：CLI `--i2c mpu6050@0x68,qmi8658@0x6b,cst816s@0x15`、`--touch-int GPIO`，脚本动作 `imu=p,r,y[,dp,dr,dy]`、`touch=x,y`、`release`（`machine::parse_imu / parse_touch`）；wasm `tb_i2c_attach(3|4|5, addr)`、`tb_imu_set(p, r, y, dp, dr, dy)`、`tb_touch_int(pin)`、`tb_touch(x, y, down)`；simrun（网页验收 + npm 包）认同样的脚本动作与 `--touch-int`。
 - 网页：输入日志事件 `imu`（施加前取到 0.01°，与脚本精度一致）/ `touch`，InputLog 顶层 `touchInt`；worker 收 `{type:'input', act}`。姿态源三个：实验台倾斜滑块（属性面板 + 快捷卡片）、3D 里按住 IMU 模块拖（`Bench.onPose`，轨迹球改台面 rig 的四元数）、成品页倾角仪盒子（`app/tilt3d.ts`）；都经 `session.setPose`：`PoseRate` 按墙钟算欧拉角速率一起施加，停 150 ms 补一次速率 0。`imupose.ts` 是纯函数（three 坐标 Q = M·R·Mᵀ，M 把传感器轴换成 three 的 Y 朝上坐标）。
 - board3d：有 IMU 时整块台面（rig：面包板 + 开发板 + 外接件）绕 IMU 模块按姿态转；建模前 rig 复位成单位变换（零件按世界坐标挂进来）。IMU 模块平插（GY-521 8 针 / QMI8658 6 针，针在 f 行、跳线落 j 行）。触摸圆屏：场景里同时有 `gc9a01` 和 `cst816s` 时圆屏画 12 针触摸版，射线命中屏面网格的 UV → (u·240, (1−v)·240) → `Bench.onTouch`；测试接口 `lcdPoint(x, y)`、`imuScreenPos()`。ScenePickApi 新 id：`mpu6050`、`qmi8658`、`cst816s`（针 `cst816s:TP_SDA` 等）。
+- AMOLED 板 I2C 器件（E-02）：`devices/{cst9220,axp2101,pcf85063,codec}.rs`，`make_i2c("cst9220" | "axp2101" | "pcf85063" | "es8311" | "es7210", addr)`。`Machine::touch` 依次找 Cst816s → Ft6236 → Cst9220（16 位大端寄存器，0xD000 报点 + 0xAB 应答）；`battery_set / pwrkey / rtc_set / pmic_unimpl`；CLI `--battery PCT[,usb]`、`--rtc EPOCH`，动作 `bat=pct[,usb]`、`pwrkey=short|long`（`machine::parse_battery`），wasm `tb_battery / tb_pwrkey / tb_rtc_set`。
 - 供电网络：`module_current` 加 mpu6050 3.9 mA、qmi8658 1.7 mA、cst816s 2.5 mA（估算，与 parts.ts 同源）。
 
 ## Xtensa LX7 核（ESP32-S3，`core/crates/xtensa`）

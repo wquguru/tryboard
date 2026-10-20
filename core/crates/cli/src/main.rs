@@ -3,7 +3,8 @@
 use std::io::Write;
 use std::time::Instant;
 use tryboard_machine::{
-    parse_imu, parse_touch, Chip, Machine, PowerMode, SensorEnv, Stop, BROWNOUT_RESET, CPU_HZ,
+    parse_battery, parse_imu, parse_touch, Chip, Machine, PowerMode, SensorEnv, Stop,
+    BROWNOUT_RESET, CPU_HZ,
 };
 use tryboard_rv32::{elf::Elf, Bus, BusFault, Cpu, Exit};
 
@@ -16,7 +17,7 @@ fn usage() -> ! {
                [--trace-io <events.txt>] [--trace-pins all|4,8,…] (logic analyzer events: GPIO / PWM / WS2812 / I2C transactions, cycle-stamped)
                [--trace-tasks <timeline.json>] (FreeRTOS task switches, one track per core, opens in Perfetto; per-task CPU share printed at the end of stderr)
                [--i2c ssd1306@0x3c,bme280@0x76] [--env temp,humidity,pressure Pa] [--oled] [--i2c-log] (acks per address)
-               (more I2C devices: mpu6050@0x68, qmi8658@0x6b, cst816s@0x15, ft6236@0x38) [--touch-int <GPIO>] (touch INT pin: low while pressed)
+               (more I2C devices: mpu6050@0x68, qmi8658@0x6b, cst816s@0x15, ft6236@0x38, cst9220@0x5a, axp2101@0x34, pcf85063@0x51, es8311@0x18, es7210@0x40) [--battery PCT[,usb]] (AXP2101) [--rtc EPOCH] (PCF85063, UTC) [--touch-int <GPIO>] (touch INT pin: low while pressed)
                script actions imu=pitch,roll,yaw[,their rates in °/s], touch=x,y (screen pixels, press / move), release (lift)
                [--spi gc9a01] (S3: SCLK=12 MOSI=11 CS=10 DC=14 RST=13 BL=15; C3: SCLK=6 MOSI=7 CS=10 DC=5 RST=4 BL=3) [--lcd-ppm <last frame.ppm>]
                [--power usb|ext] (default usb; ext = servo powered from an external 5 V 2 A supply) [--servo <GPIO>] (attach an SG90; its current loads the power net)
@@ -231,6 +232,28 @@ fn run(args: &[String]) {
     // Touch INT pin: --touch-int GPIO
     if let Some(pin) = opt(args, "--touch-int").and_then(|s| s.parse().ok()) {
         m.touch_int_attach(pin);
+    }
+    // AXP2101 battery: --battery 98[,usb]
+    if let Some(v) = opt(args, "--battery") {
+        match parse_battery(&v) {
+            Some((pct, usb)) if m.battery_set(pct, usb) => {}
+            Some(_) => eprintln!("[tryboard] --battery needs axp2101 on --i2c"),
+            None => {
+                eprintln!("--battery {v}: expected PCT[,usb]");
+                std::process::exit(2)
+            }
+        }
+    }
+    // PCF85063 start time: --rtc <unix seconds, UTC>
+    if let Some(v) = opt(args, "--rtc") {
+        match v.trim().parse::<i64>() {
+            Ok(t) if m.rtc_set(t) => {}
+            Ok(_) => eprintln!("[tryboard] --rtc needs pcf85063 on --i2c"),
+            Err(_) => {
+                eprintln!("--rtc {v}: expected unix seconds");
+                std::process::exit(2)
+            }
+        }
     }
     // External SPI devices: --spi gc9a01
     if let Some(spec) = opt(args, "--spi") {
@@ -532,6 +555,22 @@ fn run(args: &[String]) {
                 }
             } else if act == "release" {
                 m.touch(0, 0, false);
+            } else if let Some(v) = act.strip_prefix("bat=") {
+                // bat=pct[,usb]: the web's battery slider / USB plug toggle
+                match parse_battery(v) {
+                    Some((pct, usb)) => {
+                        m.battery_set(pct, usb);
+                    }
+                    None => eprintln!("[tryboard] unparsable bat action: {act}"),
+                }
+            } else if let Some(v) = act.strip_prefix("pwrkey=") {
+                // pwrkey=short|long: pressing the PWR button (wired to the AXP2101 PWRON pin)
+                match v.trim() {
+                    "short" | "long" => {
+                        m.pwrkey(v.trim() == "long");
+                    }
+                    _ => eprintln!("[tryboard] unparsable pwrkey action: {act}"),
+                }
             } else if let Some(p) = act.strip_prefix("power=") {
                 // The web quick card's USB <-> external 5 V toggle
                 if let Some(mode) = PowerMode::parse(p.trim()) {
@@ -750,6 +789,12 @@ fn run(args: &[String]) {
             "[tryboard] ADC2: {} reads refused while Wi-Fi held the arbiter (firmware sees ESP_ERR_TIMEOUT)",
             m.adc_blocked()
         );
+    }
+    // Only printed with an AXP2101 attached, so other cases' output stays byte-identical
+    let pu = m.pmic_unimpl();
+    if !pu.is_empty() {
+        let list: Vec<String> = pu.iter().map(|(r, n)| format!("0x{r:02x}x{n}")).collect();
+        eprintln!("[tryboard] AXP2101 unmodeled registers: {}", list.join(" "));
     }
     let un = m.unimpl();
     eprintln!(

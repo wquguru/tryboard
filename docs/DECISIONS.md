@@ -1022,3 +1022,10 @@
 - 决定：`tools/strip_rom.py`（纯 python）在 build_web.sh 拷贝 ROM 时删掉这两个非加载段并压紧文件，重写 e_shoff / 节头表；NOTICE.txt 与授权页按 Apache-2.0 §4(b) 写明修改。third_party 原件不动。
 - 理由：模拟器只读 PT_LOAD 与 .symtab（rv32/src/elf.rs），这两段是 Xtensa 工具链属性表，S3 共 330 KB、ESP32 共 260 KB。
 - 保留：.symtab / .strtab / .comment / .xtensa.info（合计很小或被读）。备选：用 xtensa objcopy —— build_web.sh 不应依赖 IDF 环境，放弃。
+## 2026-10-20 E-02：AMOLED 板 I2C 器件模型
+- CST9220（`devices/cst9220.rs`）：报点布局、0xAB 标记与应答、0xD101 / 0xD109 命令 / 正常模式、0xD1FC 校验码、0xD1F8 分辨率、0xD204 芯片类型（小端 32 位，高 16 位 0x9220）按 lewisxhe/SensorLib `TouchDrvCST92xx`（MIT）核对；乐鑫 esp_lcd_touch_cst9220（Apache-2.0）与 ESPHome cst9220（GPL，只读未抄）没有逐行读。自定的地方：命令模式下不出报点、正常模式下信息字读 0；应答后报点作废直到下一次扫描（按着时视为每次读都是新扫描）；抬起时出一帧 0 点报点再停；压力字节固定 0x08（驱动把高 4 位置位当盖屏按键）。
+- AXP2101（`devices/axp2101.rs`）：寄存器与位按 XPowersLib（MIT）`XPowersAXP2101.hpp` / `XPowersParams.hpp` 核对（0x49 bit3 短按、bit2 长按、bit1 / bit0 下降 / 上升沿、bit7 / bit6 VBUS 插 / 拔；0x4A bit3 / bit4 开始 / 充满；0x01 bit6:5 电流方向、bit2:0 充电状态；电压 H6L8 mV）。中断状态只在对应使能位为 1 时锁存（数据手册未确认，XPowersLib 读取时也按使能过滤）；电量静态、不随充电变化；ADC 不看 0x30 通道使能；电池电压按自拟的锂电开路电压折线（估算）。未列入已知表的寄存器照常存取并计数，CLI 结尾打印一行（只有挂了 AXP2101 才打印，不影响其它用例的金样）。
+- PCF85063（`devices/pcf85063.rs`）：按 NXP 数据手册；时间以 UTC 保存，默认起点 1792123200（与虚拟网络 /api/time 一致）；写时间寄存器的事务结束时以写入值和当前周期重新起算（等效分频器复位）；读事务开始时锁存。日期换算用公开的 days-from-civil 算法手写（不加 crate）。
+- ES8311 / ES7210 合一个 `devices/codec.rs` 应答空壳：ID 值取乐鑫公开驱动读到的值（ES8311 0xFD/0xFE = 0x83/0x11，ES7210 0x3D/0x3E = 0x72/0x10），未逐字对数据手册。
+- 对外名字（E-03 网页用）：`--i2c cst9220@0x5a,axp2101@0x34,pcf85063@0x51,es8311@0x18,es7210@0x40`、`--battery PCT[,usb]`、`--rtc EPOCH`；输入日志 / 脚本动作 `bat=pct[,usb]`、`pwrkey=short|long`；wasm `tb_i2c_attach(6..11)`、`tb_battery(pct, usb)`、`tb_pwrkey(long)`、`tb_rtc_set(epoch)`。`tb_touch` 仍把坐标夹到 0..239，E-03 要改成按屏尺寸。
+- 替代：五颗器件做一个「板级 I2C 包」——否，按器件分文件与现有约定一致，也方便别的板复用。
