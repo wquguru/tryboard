@@ -781,5 +781,35 @@ const d: Dict = {
   "Weather station · product · sensor next to the chip reads {v} ℃ (room {room})": "気象ステーション · 完成品 · センサーがチップのそばで {v} ℃（室温 {room}）",
   "{n}° off (one tooth)": "{n}° ずれ（1 歯）",
   "{product} ({maker})": "{product}（{maker}）",
+
+  // c3-wifi-resilient example (D-01)
+  "DHT11 temperature / humidity module (3-pin, with pull-up)": "DHT11 温湿度モジュール（3 ピン、プルアップ付き）",
+  "Open drain; 10 kΩ pull-up on the module": "オープンドレイン。モジュール上に 10 kΩ プルアップ",
+  "Proprietary single-wire protocol timed in microseconds; at least 1 s between reads. Integer humidity, 0–50 °C ±2 °C. Firmware that bit-bangs it with busy-wait loops must be checked on a real board.": "マイクロ秒単位で計時する独自のシングルワイヤプロトコル。読み取り間隔は 1 s 以上。湿度は整数、0–50 °C ±2 °C。ビジーウェイトでビットバンするファームウェアは実機での確認が必要です。",
+  "Waveshare ESP32-S3-Touch-AMOLED-2.16 square AMOLED board (touch)": "Waveshare ESP32-S3-Touch-AMOLED-2.16 角型 AMOLED ボード（タッチ）",
+  "Waveshare ESP32-S3-Touch-AMOLED-2.16 (ESP32-S3; CO5300 480×480 QSPI AMOLED, CST9220 touch, AXP2101 PMIC, PCF85063 RTC, ES8311 / ES7210 audio)": "Waveshare ESP32-S3-Touch-AMOLED-2.16（ESP32-S3；CO5300 480×480 QSPI AMOLED、CST9220 タッチ、AXP2101 PMIC、PCF85063 RTC、ES8311 / ES7210 オーディオ）",
+  "On-board AMOLED QSPI CS": "オンボード AMOLED QSPI CS",
+  "On-board AMOLED QSPI CLK": "オンボード AMOLED QSPI CLK",
+  "On-board AMOLED QSPI D0": "オンボード AMOLED QSPI D0",
+  "On-board AMOLED QSPI D1": "オンボード AMOLED QSPI D1",
+  "On-board AMOLED QSPI D2": "オンボード AMOLED QSPI D2",
+  "On-board AMOLED QSPI D3": "オンボード AMOLED QSPI D3",
+  "On-board AMOLED reset": "オンボード AMOLED リセット",
+  "On-board I2C SDA (touch, PMU, RTC, audio codecs)": "オンボード I2C SDA（タッチ、PMU、RTC、オーディオコーデック）",
+  "On-board I2C SCL (touch, PMU, RTC, audio codecs)": "オンボード I2C SCL（タッチ、PMU、RTC、オーディオコーデック）",
+  "pins: expansion header pin-out not entered; check the Waveshare wiki / schematic": "pins：拡張ヘッダーのピン配置は未入力。Waveshare wiki / 回路図で確認",
+  "board.flashMB: flash size unverified": "board.flashMB：フラッシュ容量は未確認",
+  "board.psramMB: PSRAM size unverified": "board.psramMB：PSRAM 容量は未確認",
+  "board.psram: PSRAM type (quad / octal) unverified": "board.psram：PSRAM 種類（quad / octal）は未確認",
+  "board.usb: whether the USB-C port is native USB only is unverified": "board.usb：USB-C ポートがネイティブ USB のみかは未確認",
+  "board.ldo: regulator model not checked (the AXP2101 provides the rails)": "board.ldo：レギュレーター型番は未確認（電源レールは AXP2101 が供給）",
+  "sizeMm: the 3D model uses an estimated 44 × 50 mm outline; 2.16″ square panel active area ≈ 38.8 mm": "sizeMm：3D モデルは推定 44 × 50 mm の外形；2.16″ 角型パネルの表示領域は約 38.8 mm",
+  "board.onboard: on-board IMU (QMI8658) and TF card pins not entered; the bench does not attach an IMU for this board": "board.onboard：オンボード IMU（QMI8658）と TF カードのピンは未入力；ベンチはこのボードに IMU を接続しない",
+  "All in one: 2.16″ 480×480 AMOLED (CO5300, QSPI), capacitive touch, AXP2101 battery management with a PWR key, RTC and an audio codec pair. In the simulator the screen, touch, battery / USB / PWR key and RTC are modelled; the ES8311 / ES7210 audio codecs only answer ID reads (no sound).": "オールインワン：2.16″ 480×480 AMOLED（CO5300、QSPI）、静電容量タッチ、PWR キー付き AXP2101 バッテリー管理、RTC、オーディオコーデック 2 個。シミュレーターでは画面、タッチ、バッテリー / USB / PWR キー、RTC をモデル化；ES8311 / ES7210 オーディオコーデックは ID 読み出しに応答するだけ（音なし）。",
+
+  // Moved from lab.ts
+  "Virtual PC": "仮想 PC",
+  "PC → board": "PC → ボード",
+  "Board → PC": "ボード → PC",
 };
 export default d;

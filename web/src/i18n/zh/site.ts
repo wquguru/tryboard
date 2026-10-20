@@ -781,5 +781,35 @@ const d: Dict = {
   "Weather station · product · sensor next to the chip reads {v} ℃ (room {room})": "气象站 · 成品 · 传感器贴着芯片，读到 {v} ℃（室温 {room}）",
   "{n}° off (one tooth)": "偏了 {n}°（一个齿）",
   "{product} ({maker})": "{product}（{maker}）",
+
+  // c3-wifi-resilient example (D-01)
+  "DHT11 temperature / humidity module (3-pin, with pull-up)": "DHT11 温湿度模块（三针，带上拉）",
+  "Open drain; 10 kΩ pull-up on the module": "开漏；模块上带 10 kΩ 上拉",
+  "Proprietary single-wire protocol timed in microseconds; at least 1 s between reads. Integer humidity, 0–50 °C ±2 °C. Firmware that bit-bangs it with busy-wait loops must be checked on a real board.": "单总线私有协议，按微秒计时；两次读之间至少 1 s。湿度只有整数，0–50 °C ±2 °C。用忙等循环自己写时序的固件必须上真机确认。",
+  "Waveshare ESP32-S3-Touch-AMOLED-2.16 square AMOLED board (touch)": "微雪 ESP32-S3-Touch-AMOLED-2.16 方形 AMOLED 板（触摸）",
+  "Waveshare ESP32-S3-Touch-AMOLED-2.16 (ESP32-S3; CO5300 480×480 QSPI AMOLED, CST9220 touch, AXP2101 PMIC, PCF85063 RTC, ES8311 / ES7210 audio)": "微雪 ESP32-S3-Touch-AMOLED-2.16（ESP32-S3；CO5300 480×480 QSPI AMOLED、CST9220 触摸、AXP2101 电源管理、PCF85063 RTC、ES8311 / ES7210 音频）",
+  "On-board AMOLED QSPI CS": "板载 AMOLED QSPI CS",
+  "On-board AMOLED QSPI CLK": "板载 AMOLED QSPI CLK",
+  "On-board AMOLED QSPI D0": "板载 AMOLED QSPI D0",
+  "On-board AMOLED QSPI D1": "板载 AMOLED QSPI D1",
+  "On-board AMOLED QSPI D2": "板载 AMOLED QSPI D2",
+  "On-board AMOLED QSPI D3": "板载 AMOLED QSPI D3",
+  "On-board AMOLED reset": "板载 AMOLED 复位",
+  "On-board I2C SDA (touch, PMU, RTC, audio codecs)": "板载 I2C SDA（触摸、电源管理、RTC、音频编解码器）",
+  "On-board I2C SCL (touch, PMU, RTC, audio codecs)": "板载 I2C SCL（触摸、电源管理、RTC、音频编解码器）",
+  "pins: expansion header pin-out not entered; check the Waveshare wiki / schematic": "pins：扩展排针引脚表未录入，需查微雪 wiki / 原理图",
+  "board.flashMB: flash size unverified": "board.flashMB：Flash 容量未核实",
+  "board.psramMB: PSRAM size unverified": "board.psramMB：PSRAM 容量未核实",
+  "board.psram: PSRAM type (quad / octal) unverified": "board.psram：PSRAM 类型（quad / octal）未核实",
+  "board.usb: whether the USB-C port is native USB only is unverified": "board.usb：USB-C 口是否只接原生 USB 未核实",
+  "board.ldo: regulator model not checked (the AXP2101 provides the rails)": "board.ldo：稳压器型号未查（电源轨由 AXP2101 提供）",
+  "sizeMm: the 3D model uses an estimated 44 × 50 mm outline; 2.16″ square panel active area ≈ 38.8 mm": "sizeMm：3D 模型用的是估算的 44 × 50 mm 外形；2.16″ 方屏显示区约 38.8 mm",
+  "board.onboard: on-board IMU (QMI8658) and TF card pins not entered; the bench does not attach an IMU for this board": "board.onboard：板载 IMU（QMI8658）和 TF 卡引脚未录入；实验台不给这块板挂 IMU",
+  "All in one: 2.16″ 480×480 AMOLED (CO5300, QSPI), capacitive touch, AXP2101 battery management with a PWR key, RTC and an audio codec pair. In the simulator the screen, touch, battery / USB / PWR key and RTC are modelled; the ES8311 / ES7210 audio codecs only answer ID reads (no sound).": "一体板：2.16″ 480×480 AMOLED（CO5300，QSPI）、电容触摸、带 PWR 键的 AXP2101 电池管理、RTC 和一对音频编解码器。模拟器里屏幕、触摸、电池 / USB / PWR 键和 RTC 有模型；ES8311 / ES7210 音频编解码器只应答读 ID（没有声音）。",
+
+  // Moved from lab.ts
+  "Virtual PC": "虚拟电脑",
+  "PC → board": "电脑 → 板子",
+  "Board → PC": "板子 → 电脑",
 };
 export default d;

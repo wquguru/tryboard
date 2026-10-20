@@ -384,5 +384,12 @@ const d: Dict = {
   "I2C SDA / SCL, shared bus": "I2C SDA / SCL，共用总线",
   "I2S BCLK / WS / data": "I2S BCLK / WS / 数据",
   "SPI SCK / MOSI / CS": "SPI SCK / MOSI / CS",
+
+  // c3-wifi-resilient example (D-01)
+  "DHT11 temperature / humidity module (single-wire, 3-pin)": "DHT11 温湿度模块（单总线，三针）",
+
+  // Moved from lab.ts
+  "DHT11 data": "DHT11 数据",
+  "DHT11 reading": "DHT11 读数",
 };
 export default d;

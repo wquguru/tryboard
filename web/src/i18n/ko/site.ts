@@ -781,5 +781,35 @@ const d: Dict = {
   "Weather station · product · sensor next to the chip reads {v} ℃ (room {room})": "기상 스테이션 · 완성품 · 센서가 칩 옆이라 {v} ℃(실내 {room})",
   "{n}° off (one tooth)": "{n}° 어긋남(톱니 하나)",
   "{product} ({maker})": "{product}({maker})",
+
+  // c3-wifi-resilient example (D-01)
+  "DHT11 temperature / humidity module (3-pin, with pull-up)": "DHT11 온습도 모듈 (3핀, 풀업 포함)",
+  "Open drain; 10 kΩ pull-up on the module": "오픈 드레인, 모듈에 10 kΩ 풀업",
+  "Proprietary single-wire protocol timed in microseconds; at least 1 s between reads. Integer humidity, 0–50 °C ±2 °C. Firmware that bit-bangs it with busy-wait loops must be checked on a real board.": "마이크로초 단위로 타이밍을 맞추는 독자 단일 와이어 프로토콜, 읽기 간격 최소 1 s. 습도는 정수, 0–50 °C ±2 °C. 바쁜 대기 루프로 비트뱅하는 펌웨어는 실기기에서 확인해야 합니다.",
+  "Waveshare ESP32-S3-Touch-AMOLED-2.16 square AMOLED board (touch)": "Waveshare ESP32-S3-Touch-AMOLED-2.16 사각 AMOLED 보드(터치)",
+  "Waveshare ESP32-S3-Touch-AMOLED-2.16 (ESP32-S3; CO5300 480×480 QSPI AMOLED, CST9220 touch, AXP2101 PMIC, PCF85063 RTC, ES8311 / ES7210 audio)": "Waveshare ESP32-S3-Touch-AMOLED-2.16(ESP32-S3; CO5300 480×480 QSPI AMOLED, CST9220 터치, AXP2101 PMIC, PCF85063 RTC, ES8311 / ES7210 오디오)",
+  "On-board AMOLED QSPI CS": "온보드 AMOLED QSPI CS",
+  "On-board AMOLED QSPI CLK": "온보드 AMOLED QSPI CLK",
+  "On-board AMOLED QSPI D0": "온보드 AMOLED QSPI D0",
+  "On-board AMOLED QSPI D1": "온보드 AMOLED QSPI D1",
+  "On-board AMOLED QSPI D2": "온보드 AMOLED QSPI D2",
+  "On-board AMOLED QSPI D3": "온보드 AMOLED QSPI D3",
+  "On-board AMOLED reset": "온보드 AMOLED 리셋",
+  "On-board I2C SDA (touch, PMU, RTC, audio codecs)": "온보드 I2C SDA(터치, PMU, RTC, 오디오 코덱)",
+  "On-board I2C SCL (touch, PMU, RTC, audio codecs)": "온보드 I2C SCL(터치, PMU, RTC, 오디오 코덱)",
+  "pins: expansion header pin-out not entered; check the Waveshare wiki / schematic": "pins: 확장 헤더 핀 배치 미입력, Waveshare wiki / 회로도 확인 필요",
+  "board.flashMB: flash size unverified": "board.flashMB: 플래시 용량 미확인",
+  "board.psramMB: PSRAM size unverified": "board.psramMB: PSRAM 용량 미확인",
+  "board.psram: PSRAM type (quad / octal) unverified": "board.psram: PSRAM 종류(quad / octal) 미확인",
+  "board.usb: whether the USB-C port is native USB only is unverified": "board.usb: USB-C 포트가 네이티브 USB 전용인지 미확인",
+  "board.ldo: regulator model not checked (the AXP2101 provides the rails)": "board.ldo: 레귤레이터 모델 미확인(전원 레일은 AXP2101 제공)",
+  "sizeMm: the 3D model uses an estimated 44 × 50 mm outline; 2.16″ square panel active area ≈ 38.8 mm": "sizeMm: 3D 모델은 추정 44 × 50 mm 외형 사용; 2.16″ 사각 패널 표시 영역 약 38.8 mm",
+  "board.onboard: on-board IMU (QMI8658) and TF card pins not entered; the bench does not attach an IMU for this board": "board.onboard: 온보드 IMU(QMI8658)와 TF 카드 핀 미입력; 실험대는 이 보드에 IMU를 연결하지 않음",
+  "All in one: 2.16″ 480×480 AMOLED (CO5300, QSPI), capacitive touch, AXP2101 battery management with a PWR key, RTC and an audio codec pair. In the simulator the screen, touch, battery / USB / PWR key and RTC are modelled; the ES8311 / ES7210 audio codecs only answer ID reads (no sound).": "일체형: 2.16″ 480×480 AMOLED(CO5300, QSPI), 정전식 터치, PWR 키가 있는 AXP2101 배터리 관리, RTC, 오디오 코덱 한 쌍. 시뮬레이터에서는 화면, 터치, 배터리 / USB / PWR 키, RTC를 모델링하며 ES8311 / ES7210 오디오 코덱은 ID 읽기에만 응답합니다(소리 없음).",
+
+  // Moved from lab.ts
+  "Virtual PC": "가상 PC",
+  "PC → board": "PC → 보드",
+  "Board → PC": "보드 → PC",
 };
 export default d;
