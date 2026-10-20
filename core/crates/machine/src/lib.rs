@@ -746,6 +746,12 @@ impl Machine {
             d.set_battery(percent, usb);
         } else if let Some(d) = self.i2c_dev::<Axp192>() {
             d.set_battery(percent, usb);
+        } else if let Some((pin, div)) = self.board.and_then(|b| b.battery_adc) {
+            // No PMIC: the cell sits behind a divider on an ADC pin (StickC Plus2 G38 / 2)
+            self.analog_set(
+                pin,
+                tryboard_soc::devices::axp2101::ocv_mv(percent) as f32 / div,
+            );
         } else {
             return false;
         }

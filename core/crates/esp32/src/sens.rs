@@ -14,6 +14,12 @@ const SLAVE_ADDR1: u32 = 0x3c;
 const MEAS_START1: u32 = 0x54;
 const READ_CTRL2: u32 = 0x90;
 const MEAS_START2: u32 = 0x94;
+// Touch pads (M5-13): a measurement completes at once; OUT1..5 hold the counts, slot 2n in [31:16], 2n+1 in [15:0]
+const TOUCH_OUT1: u32 = 0x70;
+const TOUCH_OUT5: u32 = 0x80;
+const TOUCH_CTRL2: u32 = 0x84;
+/// Count of an untouched pad with the IDF default charge settings; a finger lowers it
+pub const TOUCH_IDLE: u16 = 1000;
 /// ADC1 channel n -> GPIO, ADC2 channel n -> GPIO (soc/esp32/adc_periph.c)
 pub const ADC1_GPIO: [usize; 8] = [36, 37, 38, 39, 32, 33, 34, 35];
 pub const ADC2_GPIO: [usize; 10] = [4, 0, 2, 15, 13, 12, 14, 27, 25, 26];
@@ -22,6 +28,8 @@ pub const ADC2_GPIO: [usize; 10] = [4, 0, 2, 15, 13, 12, 14, 27, 25, 26];
 pub struct Adc {
     pub pin_mv: [f32; NPINS],
     pub model: AdcModel,
+    /// Touch pad counts by pad number (board presets lower a pad to mimic its load)
+    pub touch: [u16; 10],
     regs: [u32; 0x100 / 4],
 }
 
@@ -30,6 +38,7 @@ impl Default for Adc {
         Adc {
             pin_mv: [0.0; NPINS],
             model: AdcModel::new(AdcChip::Esp32),
+            touch: [TOUCH_IDLE; 10],
             regs: [0; 0x100 / 4],
         }
     }
@@ -48,16 +57,24 @@ impl Adc {
                 | MEAS_START1
                 | READ_CTRL2
                 | MEAS_START2
+                | TOUCH_OUT1..=TOUCH_OUT5 | TOUCH_CTRL2
         )
     }
 
     pub fn read(&self, off: u32) -> u32 {
         let v = self.regs[(off / 4) as usize];
         // meas_status [29:22]: 0 = RTC controller idle (adc_oneshot_ll_start spins on it)
-        if off == SLAVE_ADDR1 {
-            v & !(0xff << 22)
-        } else {
-            v
+        match off {
+            SLAVE_ADDR1 => v & !(0xff << 22),
+            // touch_meas_done: the FSM finishes before the driver polls
+            TOUCH_CTRL2 => v | 1 << 10,
+            TOUCH_OUT1..=TOUCH_OUT5 => {
+                // Register slots 8 / 9 hold pads 9 / 8 (TOUCH_LL_CHAN_SWAP)
+                let pad = |s: usize| [0, 1, 2, 3, 4, 5, 6, 7, 9, 8][s];
+                let n = ((off - TOUCH_OUT1) / 4 * 2) as usize;
+                (self.touch[pad(n)] as u32) << 16 | self.touch[pad(n + 1)] as u32
+            }
+            _ => v,
         }
     }
 
@@ -129,5 +146,14 @@ mod tests {
         a.write(MEAS_START1, go);
         a.write(MEAS_START1, go | 1 << 17);
         assert_eq!(a.read(MEAS_START1) & 0xffff, 4095 - 2048);
+    }
+
+    #[test]
+    fn touch_pads_read_back() {
+        let mut a = Adc::default();
+        a.touch[7] = 300;
+        assert_eq!(a.read(TOUCH_CTRL2) >> 10 & 1, 1);
+        // OUT4 holds pads 6 (high half) and 7 (low half)
+        assert_eq!(a.read(TOUCH_OUT1 + 12), (TOUCH_IDLE as u32) << 16 | 300);
     }
 }

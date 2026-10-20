@@ -291,12 +291,14 @@ web/（Vite + TS）
   5. 接触摸 INT。
   6. 接编码器。
   7. 把按钮驱到松开电平，并驱固定电平。
+  8. PSRAM：经典 ESP32 用 `set_psram_mb` 挂上（M5-14 建模）；S3 仍只给警告。
+  9. `battery_adc: Some((pin, 分压比))`（无 PMIC 的板，如 StickC Plus2 G38 / 2）：开机给 80% 的 OCV；脚本 `bat=` 走 `battery_set` 的 ADC 分支。
   CLI 的 `--i2c` / `--spi` / `--i2c-bus` 等在预设之后叠加。
 - `verified`：
-  - 只有 m5dial 标为已验证。它用 `arduino-m5-probe-dial` / `arduino-m5-dial-demo` 跑通了 M5Unified 检测、触摸、RTC、编码器、BtnA 和屏幕。
+  - m5dial 用 `arduino-m5-probe-dial` / `arduino-m5-dial-demo` 跑通了 M5Unified 检测、触摸、RTC、编码器、BtnA 和屏幕。
+  - 经典 ESP32 的 m5stickcplus2 / m5core2 / m5core2v11 / m5atomlite（M5-13）用 `arduino-m5-probe-*` 与 `arduino-m5-stickc-demo-*` 验证（检测、屏、IMU、RTC、PMIC / 电池、按钮或触摸区、麦克风、Atom 的 WS2812）。Atom Lite 与 Matrix 靠触摸脚 4 / 7（G13 / G27）区分：SENS 触摸模型（`sens.rs` TOUCH_OUT1..5 = 0x70..0x80，CTRL2 0x84 bit10 恒为完成，各脚空闲计数 `TOUCH_IDLE` = 1000）读数相等即判为 Lite。
   - 其余是存根，备注写明由哪个 PLAN 项验证。CLI 会打印 "(UNVERIFIED preset)"。
   - 已验证的预设只要有一个部件挂不上就返回错误；存根只给警告。
-  - PSRAM 没有建模，只给警告。
 - 单测 `table_is_consistent`：id 不重复，所有器件 kind 都能创建，所有屏 spec 都能解析。
 - 接口：
   - Rust：`board_preset(id) -> Result<Vec<String>, String>`（返回警告列表）、`board()`、`board_button(name, down)`、`board_list()`。
