@@ -286,6 +286,11 @@ impl GpSpi {
         self.r(reg::MISC) & 1 == 0
     }
 
+    /// CS line n (0..=5) is driven by this transfer (MISC.CSn_DIS clear)
+    pub fn cs_enabled(&self, n: u32) -> bool {
+        n < 6 && self.r(reg::MISC) >> n & 1 == 0
+    }
+
     pub fn irq(&self) -> bool {
         self.int_raw & self.int_ena != 0
     }

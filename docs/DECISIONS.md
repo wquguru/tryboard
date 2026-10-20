@@ -1175,3 +1175,12 @@
 - 自带 .bin 不进链接（只带台面，提示下一版导出文件）；超过 8000 字符去掉输入脚本、只留台面和首个环境值，同样提示。
 - 开机时的线束（i2cwire / antenna）、真网开关、网络预设本来就经 worker `apply()` 记进输入日志，不用补。
 - asmstate / caseparams 只读不写；sharestate 里自带一个 fnv32（`custom.ts` 的会带进重依赖）。
+## 2026-10-20 PIR / 光敏电阻 / 继电器 / RC522 模型（F-04d）
+- **放在 `PinDevices.parts`（soc `devices/gpio_parts.rs`）**：跟 DHT11 / HC-SR04 一样随 PinDevices 跨软复位保留，C3 / S3 / 经典 ESP32 共用；RC522 也挂在这里（只记片选和卡），不给 SocBus 加字段，减少和 M5 会话改同一文件。
+- **HC-SR501 按可重复触发（H 档，模块出厂常见跳线）**：有人期间一直高，人走后再保持 `hold`（`--pir GPIO,秒`，默认 5 s，对应延时电位器）；输出落下后 2.5 s 封锁期（BISS0001 典型值）内不再触发。上电约 60 s 预热不模拟（教程固件都不等，等了只会拖慢验收）。替代：L 档不可重复触发——少见，以后加 `,l` 参数即可。
+- **继电器只看 IN 脚电平**：默认高电平吸合（三极管驱动模块），`--relay GPIO,low` 为低电平触发光耦板；吸合约 10 ms 延时与触点抖动不模拟；电源估算按线圈一直吸合计 5V 70 mA（最坏情况，教程要提醒的正是 USB 口带不带得动）。
+- **光敏电阻**：3V3—LDR—脚—10 kΩ—GND，越亮电压越高；GL5528 级参数（10 lux 时 10 kΩ、γ 0.7、暗阻 1 MΩ 封顶），10 lux 正好 1650 mV。C3 / S3 ADC 12 dB 量程约 2.5 V 饱和，亮处读数饱和是真机也会有的现象，不改公式。C3 只允许 GPIO0–5（ADC1/2 脚）、S3 GPIO1–20。
+- **RC522**：按 NXP MFRC522 数据手册寄存器帧（读 `0x80|reg<<1`、写 `reg<<1`，同一帧内连读 FIFO）、ISO 14443-3 REQA / WUPA / 防冲突 / SELECT（CRC_A）/ HLTA 实现，可读 4 / 7 字节 UID；收发与 CalcCRC 立即完成，超时由「没卡」直接置 TimerIRq；MFAuthent 回 ProtocolErr，读块不做（F-04d 范围只到 UID）。软复位或关天线让卡回 Idle。只接 SPI2（C3 `spi2_transfer`、S3 `spi_transfer` 在别的设备都不认时才交给它）；片选三种走法都认：IO_MUX FSPICS0、GPIO 矩阵 FSPICS0–5、普通 GPIO 拉低（Arduino 写法，GPIO 拉高结束一帧）。默认 CS 取 Arduino 核的 SS 脚（C3 GPIO7、S3 GPIO10），`--spi rc522@cs=N` 可改。经典 ESP32 的 SPI 路径属 M5 会话在改的区域，暂不接（报错）。参考：MFRC522 数据手册、ISO/IEC 14443-3 公开描述；未看任何 GPL 驱动代码。
+- **固件**：s3-pir-relay / s3-rc522 用 `../../c3-*/main/main.c` 同一份源码，按 `CONFIG_IDF_TARGET_ESP32S3` 换脚（S3 LDR 在 GPIO2，因 GPIO3 是 strapping 脚；RC522 用 SPI2 IO_MUX 脚 12/13/11/10）。
+- **CLI 行数**：`run` 受 lint_size 限制不能变长，新增动作 / 事件 / 报告放进 `cli/src/parts.rs`（`parts_action`、`parts_events`、`pin_reports`），顺带把编码器 / 超声 / DHT11 的结束汇总挪进 `pin_reports`（输出顺序与文字不变）。
+

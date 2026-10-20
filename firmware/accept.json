@@ -3283,5 +3283,104 @@
    "rate": 48000,
    "min_rms": 0.02
   }
+ },
+ {
+  "id": "c3-pir-relay",
+  "seconds": 11.5,
+  "qemu": false,
+  "args": [
+   "--pir",
+   "4,2",
+   "--relay",
+   "5",
+   "--ldr",
+   "3"
+  ],
+  "script": "0:lux=500; 0.5:pir=1; 0.8:pir=0; 3.5:lux=2; 6.0:pir=1; 6.3:pir=0; 7.5:pir=1; 7.6:pir=0; 10.0:pir=1; 10.1:pir=0",
+  "expect": [
+   "光线 暗",
+   "继电器 吸合",
+   "继电器 释放 吸合 3.6 s",
+   "PIR 触发 2 次 继电器 吸合 1 次 共 3600 ms",
+   "TRYBOARD_OK pir-relay"
+  ],
+  "stderr_expect": [
+   "6.003s relay GPIO5 ON (closed)",
+   "PIR GPIO4: 2 triggers",
+   "relay GPIO5 (active high): 2 switches, energized 3.60 s, final OFF",
+   "LDR GPIO3: 2 lux -> 808 mV"
+  ]
+ },
+ {
+  "id": "s3-pir-relay",
+  "chip": "esp32s3",
+  "seconds": 11.5,
+  "qemu": false,
+  "args": [
+   "--pir",
+   "4,2",
+   "--relay",
+   "5",
+   "--ldr",
+   "2"
+  ],
+  "script": "0:lux=500; 0.5:pir=1; 0.8:pir=0; 3.5:lux=2; 6.0:pir=1; 6.3:pir=0; 7.5:pir=1; 7.6:pir=0; 10.0:pir=1; 10.1:pir=0",
+  "expect": [
+   "光线 暗",
+   "继电器 吸合",
+   "继电器 释放 吸合 3.6 s",
+   "PIR 触发 2 次 继电器 吸合 1 次 共 3600 ms",
+   "TRYBOARD_OK pir-relay"
+  ],
+  "stderr_expect": [
+   "PIR GPIO4: 2 triggers",
+   "relay GPIO5 (active high): 2 switches, energized 3.60 s, final OFF",
+   "LDR GPIO2: 2 lux -> 808 mV"
+  ]
+ },
+ {
+  "id": "c3-rc522",
+  "seconds": 5,
+  "qemu": false,
+  "args": [
+   "--spi",
+   "rc522"
+  ],
+  "script": "0.5:card=DEADBEEF; 1.5:card=none; 2.0:card=04A1B2C3D4E5F6",
+  "expect": [
+   "RC522 版本 0x92 天线 开",
+   "读到卡 UID DE:AD:BE:EF (4 字节) SAK 08 ATQA 0400",
+   "卡已移开",
+   "读到卡 UID 04:A1:B2:C3:D4:E5:F6 (7 字节) SAK 00 ATQA 4400",
+   "RC522 读卡 2 次",
+   "TRYBOARD_OK rc522"
+  ],
+  "stderr_expect": [
+   "RC522 CS=GPIO7",
+   "unsupported 0"
+  ]
+ },
+ {
+  "id": "s3-rc522",
+  "chip": "esp32s3",
+  "seconds": 5,
+  "qemu": false,
+  "args": [
+   "--spi",
+   "rc522"
+  ],
+  "script": "0.5:card=DEADBEEF; 1.5:card=none; 2.0:card=04A1B2C3D4E5F6",
+  "expect": [
+   "RC522 版本 0x92 天线 开",
+   "读到卡 UID DE:AD:BE:EF (4 字节) SAK 08 ATQA 0400",
+   "卡已移开",
+   "读到卡 UID 04:A1:B2:C3:D4:E5:F6 (7 字节) SAK 00 ATQA 4400",
+   "RC522 读卡 2 次",
+   "TRYBOARD_OK rc522"
+  ],
+  "stderr_expect": [
+   "RC522 CS=GPIO10",
+   "unsupported 0"
+  ]
  }
 ]

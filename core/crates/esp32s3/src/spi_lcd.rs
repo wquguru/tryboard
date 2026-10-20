@@ -201,6 +201,7 @@ impl SocBus {
             }
             _ => None,
         };
+        let rx = rx.or_else(|| self.rc522_exchange(h, &p, &data));
         if p.miso_bits > 0 {
             // No slave answering: MISO pull-up reads all 1s
             let rx = rx.unwrap_or_else(|| vec![0xffu8; p.miso_bits.div_ceil(8) as usize]);
