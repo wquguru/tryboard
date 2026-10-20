@@ -196,7 +196,7 @@
 | ID | 项 | 验收 | 状态 |
 |---|---|---|---|
 | M5-00 | 授权与构建：LICENSING 补 M5Unified / M5GFX（MIT）、LovyanGFX（BSD-2）、字体声明；build_arduino.sh 支持钉提交的库；探测草图 `m5-probe`（M5.begin 后打印板型 / 屏尺寸 / IMU / RTC / 触摸 / PMIC），按各板 FQBN 编出 | 6 种 FQBN（AtomS3、Dial、CoreS3、Cardputer、StickC Plus2、Core2）都编出 flash.bin；LGPL 三件套（协议、源码提交、构建配置）随 bin | ☑ 2026-10-20（Reviews/ab/M5-00.md） |
-| M5-01 | SPI 屏底座：面板读回（RDDID 0x04 / RDDST 0x09 / D9h）+ 三线半双工 + dummy 位；通用 DCS 面板模型（分辨率 / GRAM 偏移 / ID / 引脚可配：GC9107、ST7735、ST7789、ILI9342C / E、GC9A01）；S3 SPI3 | 单测：各型号 RDDID 读回正确；现有 gc9a01 / co5300 用例 golden 逐字节不变 | ☐ |
+| M5-01 | SPI 屏底座：面板读回（RDDID 0x04 / RDDST 0x09 / D9h）+ 三线半双工 + dummy 位；通用 DCS 面板模型（分辨率 / GRAM 偏移 / ID / 引脚可配：GC9107、ST7735、ST7789、ILI9342C / E、GC9A01）；S3 SPI3 | 单测：各型号 RDDID 读回正确；现有 gc9a01 / co5300 用例 golden 逐字节不变 | ☑ 2026-10-20（Reviews/ab/M5-01.md；m5-probe：AtomS3 board=11 128×128、Cardputer board=24 240×135、Dial board=12 240×240） |
 | M5-02 | I2C 底座：外接器件可挂 I2C1 / 按引脚挂；GPIO 开漏线与 + 外部上拉（软件 I2C 探测能看到器件）；eFuse 封装号可配（S3 / ESP32） | 单测 + 固件：软件 I2C 扫描与硬件 I2C 扫描结果一致；golden 不变 | ☑ 2026-10-20（Reviews/ab/M5-02.md） |
 | M5-03 | S3 USB-Serial-JTAG 控制台：TX 接 CLI / 网页串口，报主机在线，RX 能输入 | Arduino S3 草图（CDC on boot）`Serial.println` 在 CLI 与网页逐字节一致；输入回显 | ☑ 2026-10-20（Reviews/ab/M5-03.md；IDF 把 UART0 输出复制到 USJ 时按时间 + 内容去重，属启发式，见 DECISIONS） |
 | M5-04 | I2C 器件模型：MPU6886、BMI270(+BMM150 AUX)、BM8563、AW9523、AXP192、LP5562、TCA8418、FT6336U / FT3267 ID、INA3221、LTR-553 / AW88298 应答壳 | 每颗单测（ID、关键寄存器、随环境变化） | ☑ 2026-10-20（Reviews/ab/M5-04.md） |
