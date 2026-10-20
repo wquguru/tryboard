@@ -1,6 +1,7 @@
 //! Classic-ESP32 peripheral models and shims; offsets from ESP-IDF `components/soc/esp32/register/soc/*.h` and `components/hal/esp32/include/hal/*_ll.h` (Apache-2.0).
 //! C3 / S3 models (TIMG timer, SPI1 flash commands, LEDC channels / timers, interrupt matrix lines) are reused; ESP32 mostly moves registers, so we only translate offsets.
 
+use crate::psram::{QuadPsram, SPI_PIN};
 pub use tryboard_esp32s3::periph::{Analog, Intmatrix};
 use tryboard_soc::ledc::Ledc;
 use tryboard_soc::periph::Timg;
@@ -434,6 +435,8 @@ pub struct Spi1 {
     pub inner: SpiFlash,
     /// Registers not involved in flash operations (clock, pins, slave config, ...) are stored as is
     pub extra: Vec<u32>,
+    /// Chip on CS1 (M5-14); its storage also backs the cache's DRAM1 window
+    pub psram: QuadPsram,
 }
 
 impl Default for Spi1 {
@@ -441,6 +444,7 @@ impl Default for Spi1 {
         Spi1 {
             inner: SpiFlash::default(),
             extra: vec![0; 0x100 / 4],
+            psram: QuadPsram::default(),
         }
     }
 }
@@ -474,6 +478,10 @@ impl Spi1 {
             }
             return;
         };
+        if o == 0 && v & (1 << 18) != 0 && QuadPsram::selected(self.extra[SPI_PIN]) {
+            self.psram.user_transaction(&mut self.inner.regs);
+            return;
+        }
         if o == 0 && v & (1 << 18) != 0 {
             // User command: USER1 [31:26] is address bit count - 1
             let addr = self.inner.regs[1];

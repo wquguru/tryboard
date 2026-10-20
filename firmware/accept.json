@@ -2790,5 +2790,56 @@
    "TRYBOARD_OK i2c-bitbang"
   ],
   "qemu": false
+ },
+ {
+  "id": "esp32-psram",
+  "chip": "esp32",
+  "seconds": 3,
+  "args": [
+   "--psram",
+   "4"
+  ],
+  "expect": [
+   "Found 4MB PSRAM device",
+   "SPI SRAM memory test OK",
+   "PSRAM 4 MB, 4 MB mapped, test 1 MB OK",
+   "TRYBOARD_OK esp32-psram"
+  ],
+  "qemu": true
+ },
+ {
+  "id": "esp32-psram-8mb",
+  "fw": "esp32-psram",
+  "chip": "esp32",
+  "seconds": 3,
+  "args": [
+   "--psram",
+   "8"
+  ],
+  "expect": [
+   "Found 8MB PSRAM device",
+   "SPI SRAM memory test OK",
+   "PSRAM 8 MB, 4 MB mapped, test 1 MB OK",
+   "TRYBOARD_OK esp32-psram"
+  ],
+  "qemu": false
+ },
+ {
+  "id": "esp32-psram-pico",
+  "fw": "esp32-psram",
+  "chip": "esp32",
+  "seconds": 3,
+  "args": [
+   "--efuse-pkg",
+   "6"
+  ],
+  "expect": [
+   "ESP32-PICO-V3-02",
+   "Found 2MB PSRAM device",
+   "SPI SRAM memory test OK",
+   "PSRAM 2 MB, 2 MB mapped, test 1 MB OK",
+   "TRYBOARD_OK esp32-psram"
+  ],
+  "qemu": false
  }
 ]

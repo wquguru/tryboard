@@ -6,6 +6,7 @@ mod chip;
 pub mod crypto;
 pub mod hle;
 pub mod periph;
+pub mod psram;
 
 use periph::*;
 use std::collections::HashMap;
@@ -66,6 +67,11 @@ pub const MMU_PRO: u32 = 0x3FF1_0000;
 pub const MMU_APP: u32 = 0x3FF1_2000;
 pub const MMU_ENTRIES: usize = 256;
 pub const MMU_INVALID: u32 = 0x100;
+/// 4KB pages holding the PSRAM entries (1152 * 4 = 0x1200 into each table)
+const PSRAM_MMU_PRO: u32 = MMU_PRO + 0x1000;
+const PSRAM_MMU_APP: u32 = MMU_APP + 0x1000;
+const PSRAM_MMU_OFF: u32 = (psram::MMU_FIRST * 4) as u32 - 0x1000;
+const PSRAM_MMU_END: u32 = PSRAM_MMU_OFF + (psram::MMU_COUNT * 4) as u32;
 
 const UART0: u32 = 0x3FF4_0000;
 const UART1: u32 = 0x3FF5_0000;
@@ -98,6 +104,9 @@ pub struct SocBus {
     pub flash: Vec<u8>,
     pub mmu: Vec<u32>,
     pub mmu_app: Vec<u32>,
+    /// PSRAM entries 1152..1279 of both MMU tables (32KB pages of the DRAM1 window, M5-14)
+    pub psram_mmu: Vec<u32>,
+    pub psram_mmu_app: Vec<u32>,
     /// Fetch page cache (as S3): 64KB page, backing store and page base of the last fetch; invalidated on MMU writes
     fetch_page: u32,
     fetch_src: FetchSrc,
@@ -174,6 +183,10 @@ impl Default for SocBus {
             flash: Vec::new(),
             mmu: vec![MMU_INVALID; MMU_ENTRIES],
             mmu_app: vec![MMU_INVALID; MMU_ENTRIES],
+            // Reset contents are undocumented and IDF never invalidates them; identity keeps IDF's low/high
+            // write-back loop (reads 2MB past the mapped part on 2MB chips) working as on a real StickC Plus2
+            psram_mmu: (0..psram::MMU_COUNT as u32).collect(),
+            psram_mmu_app: (0..psram::MMU_COUNT as u32).collect(),
             fetch_page: u32::MAX,
             fetch_src: FetchSrc::Sram,
             fetch_base: 0,
@@ -264,6 +277,22 @@ impl SocBus {
         Some((((e & 0xff) << 16) | (vaddr & 0xffff)) as usize)
     }
 
+    /// DRAM1 window address -> PSRAM offset. IDF always uses 32KB SRAM pages (CMMU_SRAM_PAGE_MODE 0), and writes
+    /// both cores' tables alike, so the low/high split between the two caches needs no modelling
+    #[inline]
+    fn psram_addr(&self, vaddr: u32) -> Option<usize> {
+        if !(psram::DRAM1_LOW..psram::DRAM1_HIGH).contains(&vaddr) {
+            return None;
+        }
+        let e = self.psram_mmu[((vaddr - psram::DRAM1_LOW) >> 15) as usize];
+        let n = self.spi1.psram.mem.len();
+        if e & MMU_INVALID != 0 || n == 0 {
+            return None;
+        }
+        // A smaller chip ignores the high address bits
+        Some(((((e & 0xff) << 15) | (vaddr & 0x7fff)) as usize) % n)
+    }
+
     /// SRAM buffer offset; SRAM1's word-reversed I view needs flipping, so only accesses within one word are allowed
     #[inline]
     fn sram_off(a: u32) -> Option<usize> {
@@ -298,6 +327,8 @@ impl SocBus {
             Some(rd(&self.flash, f, size).unwrap_or(0xffff_ffff))
         } else if (ROM_LOW..ROM_HIGH).contains(&a) {
             rd(&self.rom, (a - ROM_LOW) as usize, size)
+        } else if let Some(p) = self.psram_addr(a) {
+            rd(&self.spi1.psram.mem, p, size)
         } else if (DROM1_LOW..DROM1_HIGH).contains(&a) {
             rd(&self.rom, DROM1_OFF + (a - DROM1_LOW) as usize, size)
         } else if let Some(o) = Self::rtc_fast_off(a) {
@@ -316,6 +347,8 @@ impl SocBus {
             wr(&mut self.rtc_fast, o, size, v)
         } else if (RTC_SLOW_LOW..RTC_SLOW_HIGH).contains(&a) {
             wr(&mut self.rtc_slow, (a - RTC_SLOW_LOW) as usize, size, v)
+        } else if let Some(p) = self.psram_addr(a) {
+            wr(&mut self.spi1.psram.mem, p, size, v)
         } else {
             None
         }
@@ -345,6 +378,12 @@ impl SocBus {
             crypto::SHA_BASE => return self.sha.read(off),
             MMU_PRO if (off as usize) < MMU_ENTRIES * 4 => return self.mmu[(off / 4) as usize],
             MMU_APP if (off as usize) < MMU_ENTRIES * 4 => return self.mmu_app[(off / 4) as usize],
+            PSRAM_MMU_PRO if (PSRAM_MMU_OFF..PSRAM_MMU_END).contains(&off) => {
+                return self.psram_mmu[((off - PSRAM_MMU_OFF) / 4) as usize]
+            }
+            PSRAM_MMU_APP if (PSRAM_MMU_OFF..PSRAM_MMU_END).contains(&off) => {
+                return self.psram_mmu_app[((off - PSRAM_MMU_OFF) / 4) as usize]
+            }
             UART0 => return self.uart0.read(off),
             UART1 => return self.uart1.read(off),
             UART2 => return self.uart2.read(off),
@@ -415,6 +454,14 @@ impl SocBus {
             // Core 1's MMU table: IDF always writes both identically, so fetch only uses core 0's
             MMU_APP if (off as usize) < MMU_ENTRIES * 4 => {
                 self.mmu_app[(off / 4) as usize] = v & 0x1ff;
+                return;
+            }
+            PSRAM_MMU_PRO if (PSRAM_MMU_OFF..PSRAM_MMU_END).contains(&off) => {
+                self.psram_mmu[((off - PSRAM_MMU_OFF) / 4) as usize] = v & 0x1ff;
+                return;
+            }
+            PSRAM_MMU_APP if (PSRAM_MMU_OFF..PSRAM_MMU_END).contains(&off) => {
+                self.psram_mmu_app[((off - PSRAM_MMU_OFF) / 4) as usize] = v & 0x1ff;
                 return;
             }
             UART0 => {
@@ -976,6 +1023,74 @@ mod tests {
         // MMU written through its DPORT address
         Bus::store(&mut b, MMU_PRO + 4 * 2, 4, 2).unwrap();
         assert_eq!(b.mem_read(0x3F42_0004, 1), Some(0xab));
+    }
+
+    #[test]
+    fn psram_mmu_window() {
+        let mut b = SocBus::default();
+        b.spi1.psram = psram::QuadPsram::with_size(8 << 20);
+        // Entry 1152 + 1 (0x3F808000) -> PSRAM page 5, written through the PRO table like cache_sram_mmu_set
+        Bus::store(&mut b, MMU_PRO + 4 * 1153, 4, 5).unwrap();
+        Bus::store(&mut b, MMU_APP + 4 * 1153, 4, 5).unwrap();
+        assert_eq!(Bus::load(&mut b, MMU_PRO + 4 * 1153, 4).unwrap(), 5);
+        Bus::store(&mut b, 0x3F80_8010, 4, 0xdead_beef).unwrap();
+        assert_eq!(b.spi1.psram.mem[5 * 0x8000 + 0x10], 0xef);
+        assert_eq!(Bus::load(&mut b, 0x3F80_8012, 2).unwrap(), 0xdead);
+        // Invalid entry faults; a smaller chip wraps high pages
+        Bus::store(&mut b, MMU_PRO + 4 * 1154, 4, MMU_INVALID).unwrap();
+        assert!(Bus::load(&mut b, 0x3F81_0000, 4).is_err());
+        b.spi1.psram = psram::QuadPsram::with_size(2 << 20);
+        Bus::store(&mut b, 0x3FA0_0000, 1, 0x77).unwrap();
+        assert_eq!(b.spi1.psram.mem[0], 0x77);
+        // No chip: the window faults
+        b.spi1.psram = psram::QuadPsram::default();
+        assert!(Bus::load(&mut b, 0x3F80_0000, 4).is_err());
+    }
+
+    /// psram_read_id as IDF issues it: SPI1 user command with CS1 selected, 8-byte MISO
+    fn psram_id(b: &mut SocBus, short_cmd: bool) -> u32 {
+        let spi = 0x3FF4_2000;
+        Bus::store(b, spi + 0x34, 4, 1).unwrap();
+        let (user1, user2, addr) = if short_cmd {
+            (31 << 26, 1 << 28, 0x9f00_0000)
+        } else {
+            (23 << 26, (7 << 28) | 0x9f, 0)
+        };
+        Bus::store(b, spi + 0x1c, 4, (1 << 31) | (1 << 30) | (1 << 28)).unwrap();
+        Bus::store(b, spi + 0x20, 4, user1).unwrap();
+        Bus::store(b, spi + 0x24, 4, user2).unwrap();
+        Bus::store(b, spi + 0x2c, 4, 63).unwrap();
+        Bus::store(b, spi + 0x04, 4, addr).unwrap();
+        Bus::store(b, spi, 4, 1 << 18).unwrap();
+        Bus::store(b, spi + 0x34, 4, 2).unwrap();
+        Bus::load(b, spi + 0x80, 4).unwrap()
+    }
+
+    #[test]
+    fn psram_id_via_spi1_cs1() {
+        let mut b = SocBus::default();
+        // Without a chip MISO floats high, as on a PSRAM-less module
+        assert_eq!(psram_id(&mut b, false), 0xffff_ffff);
+        b.spi1.psram = psram::QuadPsram::with_size(8 << 20);
+        assert_eq!(psram_id(&mut b, false) & 0xff_ffff, 0x52_5d0d);
+        b.spi1.psram = psram::QuadPsram::with_size(2 << 20);
+        assert_eq!(psram_id(&mut b, true) & 0xff_ffff, 0x12_5d0d);
+        assert_eq!(b.spi1.psram.commands, 1);
+        // CS0 again: the same command reaches the flash
+        let spi = 0x3FF4_2000;
+        Bus::store(&mut b, spi + 0x24, 4, (7 << 28) | 0x9f).unwrap();
+        Bus::store(&mut b, spi, 4, 1 << 18).unwrap();
+        assert_eq!(
+            Bus::load(&mut b, spi + 0x80, 4).unwrap() & 0xff_ffff,
+            0x16_40c8
+        );
+    }
+
+    #[test]
+    fn flash_id_follows_header_size() {
+        assert_eq!(boot::jedec_for_size(0x16_40c8, 2 << 20), 0x16_40c8);
+        assert_eq!(boot::jedec_for_size(0x16_40c8, 8 << 20), 0x17_40c8);
+        assert_eq!(boot::jedec_for_size(0x16_40c8, 16 << 20), 0x18_40c8);
     }
 
     #[test]

@@ -63,6 +63,8 @@ export interface WasmExports {
   tb_i2c_attach_bus(bus: number, kind: number, addr: number): number;
   /** Package version eFuse (S3 0 = QFN56 / 1 = PICO; ESP32 5 = PICO-D4 / 6 = PICO-V3-02). Returns 0 on success. */
   tb_efuse_pkg(pkg: number): number;
+  /** Quad PSRAM size in MB (classic ESP32: 0 / 2 / 4 / 8). Returns 0 on success. */
+  tb_psram(mb: number): number;
   /** Set the environment (read by BME280 and other environment sensors) */
   tb_env_set(tempC: number, humidity: number, pressurePa: number): void;
   /** Pose (MPU6050 / QMI8658): Euler angles (deg) + their rates (°/s), same as the script action imu= */

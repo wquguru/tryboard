@@ -14,9 +14,19 @@ case "$chip" in
 esac
 mkdir -p "$ROOT/Reviews/qemu"
 img="$ROOT/Reviews/qemu/$n.flash.bin"
-# QEMU needs the image to be exactly the flash size (C3 / ESP32 examples 4MB, S3 examples 16MB)
-python3 -c "import sys;d=open(sys.argv[1],'rb').read();n=int(sys.argv[3]);open(sys.argv[2],'wb').write(d+b'\xff'*(n-len(d)))" "$ROOT/firmware/build/$n/flash.bin" "$img" "$size"
-"$Q/$exe" -nographic -machine "$chip" -drive "file=$img,if=mtd,format=raw" -serial file:"$ROOT/Reviews/qemu/$n.log" -monitor none &
+# QEMU needs the image to be exactly the flash size: the chip default (C3 / ESP32 4MB, S3 16MB), or larger
+# when the bootloader header (at 0 or 0x1000) says so, as QEMU derives the flash ID from the image size
+python3 -c "
+import sys
+d = open(sys.argv[1], 'rb').read(); n = int(sys.argv[3])
+h = next((o for o in (0, 0x1000) if d[o:o + 1] == b'\xe9'), None)
+if h is not None and (d[h + 3] >> 4) <= 4:
+    n = max(n, 1 << (20 + (d[h + 3] >> 4)))
+open(sys.argv[2], 'wb').write(d + b'\xff' * (n - len(d)))" "$ROOT/firmware/build/$n/flash.bin" "$img" "$size"
+# Optional per-firmware machine options (e.g. '-m 4M' for PSRAM) in firmware/<name>/qemu.args
+extra=()
+[ -f "$ROOT/firmware/$n/qemu.args" ] && read -r -a extra < "$ROOT/firmware/$n/qemu.args"
+"$Q/$exe" -nographic -machine "$chip" ${extra[@]+"${extra[@]}"} -drive "file=$img,if=mtd,format=raw" -serial file:"$ROOT/Reviews/qemu/$n.log" -monitor none &
 pid=$!
 sleep "$secs"; kill $pid 2>/dev/null || true; wait $pid 2>/dev/null || true
 cat "$ROOT/Reviews/qemu/$n.log"

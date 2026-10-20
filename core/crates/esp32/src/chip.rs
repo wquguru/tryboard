@@ -184,6 +184,17 @@ impl Chip for Esp32 {
         *w = *w & !(7 << 9 | 1 << 2) | (pkg & 7) << 9 | (pkg >> 3) << 2;
         // PICO-D4 boards (Atom, StickC) are pre-v3 silicon; M5GFX maps PICO-D4 + DATE bit 31 to PICO-V3-02
         self.bus.chip_v3 = pkg != 5;
+        // PICO-V3-02 carries 2MB PSRAM in the package; --psram after this still overrides
+        if pkg == 6 {
+            self.set_psram(2 << 20);
+        }
+        true
+    }
+    fn set_psram(&mut self, bytes: usize) -> bool {
+        if ![0, 2 << 20, 4 << 20, 8 << 20].contains(&bytes) {
+            return false;
+        }
+        self.bus.spi1.psram = crate::psram::QuadPsram::with_size(bytes);
         true
     }
     fn audio(&self) -> &Audio {
