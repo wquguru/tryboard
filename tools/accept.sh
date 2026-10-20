@@ -316,6 +316,18 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/sharecard.mjs 2>&1 | grep '^\[sharecard\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[sharecard\] PASS (' || { echo "- [sharecard] script did not finish" >> $REPORT; fail=1; }
+  # Share links and .tryboard files (F-01a / F-01b): reopened bench and replay = CLI --inputs
+  r=$(node tools/webtest/share.mjs 2>&1 | grep '^\[share\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[share\] PASS (' || { echo "- [share] script did not finish" >> $REPORT; fail=1; }
+  # Embed page (F-03): another-origin iframe, click to load, serial = CLI, no localStorage writes
+  r=$(node tools/webtest/embed.mjs 2>&1 | grep '^\[embed\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[embed\] PASS (' || { echo "- [embed] script did not finish" >> $REPORT; fail=1; }
+  # Bench parts (F-04a): DS18B20 / PIR / LDR / relay / RC522 examples, web fingerprint = CLI
+  r=$(node tools/webtest/parts.mjs 2>&1 | grep '^\[parts\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[parts\] PASS (' || { echo "- [parts] script did not finish" >> $REPORT; fail=1; }
   # Harness (P2-11): wire length -> W6 + drifting readings / NACK, metal near antenna -> RSSI; USB keypad (P2-12) home -> typing
   r=$(node tools/webtest/harness.mjs 2>&1 | grep '^\[harness\]')
   echo "$r" | sed 's/^/- /' >> $REPORT

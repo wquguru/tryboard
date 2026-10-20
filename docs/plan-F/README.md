@@ -16,12 +16,12 @@
 | 评估 | ☑ | `EVAL.md` |
 | 波 0 调研 RS-1 … RS-6 | ☑ | 2026-10-20 完成，六份报告在 `research/` |
 | 调研汇总 → 改写波次计划 | ☑ | `EVAL.md` §5.2–5.4 已修订：约 28 个实现 session、5 波 |
-| F 批写入 PLAN.md、开工实现 | ◐ | 2026-10-20 人确认开工；波 1 ☑（F-01a、F-04c、F-04d、F-05、F-06 合并，accept.sh 全绿，见 `Reviews/batch-F1.md`）；F-04b 等 M5-01；下一步波 2。波 2：F-07a ☑（UART 修复 + `\xNN` + MicroPython 用例） |
-| F 批写入 PLAN.md、开工实现 | ◐ | 2026-10-20 人确认开工；波 1 ☑（F-01a、F-04c、F-04d、F-05、F-06 合并，accept.sh 全绿，见 `Reviews/batch-F1.md`）；F-04b 等 M5-01；下一步波 2 |
-| 波 2 F-01b `.tryboard` 文件 | ☑ | 2026-10-20 ⋯「下载 .tryboard 文件」+ 换固件 / 拖到页面打开；自带 bin 带 sha256 校验；share.mjs 17 项全过；`Reviews/ab/F-01b.md` |
-| F 批写入 PLAN.md、开工实现 | ◐ | 2026-10-20 人确认开工；波 1 ☑（F-01a、F-04c、F-04d、F-05、F-06 合并，accept.sh 全绿，见 `Reviews/batch-F1.md`）；F-04b 等 M5-01；下一步波 2；波 2 F-02 分享卡 ☑（sharecard.mjs 15/15） |
-| F-03 嵌入页 | ☑ | 2026-10-20 `/embed?s=` 点击加载、不写 localStorage，embed.mjs 19 项全过（`Reviews/ab/F-03.md`）；F-03b 原速回放未做 |
-| F 批写入 PLAN.md、开工实现 | ◐ | 2026-10-20 人确认开工；波 1 ☑（F-01a、F-04c、F-04d、F-05、F-06 合并，accept.sh 全绿，见 `Reviews/batch-F1.md`）；F-04b 等 M5-01；F-04a 第 1 部分（DS18B20 / PIR / 光敏 / 继电器 / RC522 上网页）☑ 2026-10-20；下一步波 2 |
+| F 批写入 PLAN.md、开工实现 | ◐ | 2026-10-20 人确认开工；波 1 ☑（`Reviews/batch-F1.md`）；波 2 ☑（`Reviews/batch-F2.md`）；F-04b 的阻塞（M5-01）已解除，待人定是否进波 3 |
+| 波 2 F-01b `.tryboard` 文件 | ☑ | 2026-10-20 ⋯「下载 .tryboard 文件」+ 换固件 / 拖到页面打开；自带 bin 带 sha256 校验；share.mjs 17/17；`Reviews/ab/F-01b.md` |
+| 波 2 F-02 分享卡 | ☑ | 2026-10-20 自写 QR（v1–40、ECC M）+ 1080×1350 卡片，MP4 优先、退 webm，另出 PNG；修 Safari 录屏扩展名；sharecard.mjs 15/15；`Reviews/ab/F-02.md` |
+| 波 2 F-03 嵌入页 | ☑ | 2026-10-20 `/embed?s=` 点击加载、不写 localStorage；embed.mjs 19/19；`_headers` 的 frame-ancestors 需部署后验证；F-03b 原速回放未做；`Reviews/ab/F-03.md` |
+| 波 2 F-04a 器件上台面（第 1 部分） | ◐ | 2026-10-20 DS18B20 / PIR / 光敏 / 继电器 / RC522 上网页（3D、接线、手机、输入日志）+ 3 个示例，parts.mjs 18/18；第 2 部分（ILI9341 / SH1106 等显示屏）等 F-04b |
+| 波 2 F-07a UART + MicroPython | ☑ | 2026-10-20 UART RX 超过一个 FIFO、`\xNN` 串口转义、`mpy-c3-rawpaste` 用例（bin 由 `fetch_third_party.sh --micropython` 可选下载，缺失则跳过） |
 
 ## 调研结论汇总
 
@@ -60,7 +60,7 @@
 
 ## 下一步要人决定的
 
-1. **是否开工 F 批**（写进 PLAN.md，按 `EVAL.md` §5.4 的波 1 派单）。不涉及上线和花钱的部分（F-01a … F-06）可以先开。
+1. ~~是否开工 F 批~~：2026-10-20 已确认，波 1、波 2 完成。F-04b 是否进下一波（M5-01 已合并）。
 2. MicroPython 二进制分发方式和定位扩展（RS-1）。
 3. xiaozhi 四项（RS-2）。
 4. 四个 Arduino 库的许可证（RS-3）、BLE 签名的衍生作品问题（RS-5）。
