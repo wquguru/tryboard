@@ -25,8 +25,13 @@ mkdir -p "$PUB/audio"
 cp "$ROOT/tools/audio/sine1k.wav" "$ROOT/tools/audio/sweep.wav" "$PUB/audio/"
 # Example list: publish only what has been built
 python3 - "$ROOT" <<'PY'
-import json, os, shutil, sys
+import json, os, sys
 root = sys.argv[1]
+def publish(src, d):
+    # R-18: drop the erased (0xFF) tail, 4 KB aligned; every SoC boot pads flash back to >= 4 MB with 0xFF
+    data = open(src, 'rb').read()
+    n = (len(data.rstrip(b'\xff')) + 4095) & ~4095
+    open(os.path.join(d, 'flash.bin'), 'wb').write(data[:n])
 catalog = json.load(open(os.path.join(root, 'firmware/examples.json')))
 out = []
 for ex in catalog:
@@ -35,7 +40,7 @@ for ex in catalog:
         print('skipped (not built):', ex['id']); continue
     d = os.path.join(root, 'web/public/fw', ex['id'])
     os.makedirs(d, exist_ok=True)
-    shutil.copy(src, d)
+    publish(src, d)
     out.append(ex)
 json.dump(out, open(os.path.join(root, 'web/public/fw/examples.json'), 'w'), ensure_ascii=False, indent=1)
 print('examples:', len(out))
@@ -48,8 +53,10 @@ for lv in json.load(open(os.path.join(root, 'firmware/levels.json'))):
         print('level reference firmware not built:', ref); continue
     d = os.path.join(root, 'web/public/fw', ref)
     os.makedirs(d, exist_ok=True)
-    shutil.copy(src, d)
+    publish(src, d)
 PY
+# R-18: gzip -9 sidecars (fetchBuf inflates with DecompressionStream, falls back to the plain file); -n keeps builds byte-identical
+gzip -9 -n -k -f "$PUB/wasm/tryboard.wasm" "$PUB"/rom/*.elf "$PUB"/fw/*/flash.bin
 # Fetch font originals first (P2-19): the licences page includes their full OFL text
 "$ROOT/tools/fonts/fetch.sh" || echo "font download failed, skipping (pages use system fonts)" >&2
 # Sources of published firmware (bottom-dock "Code" tab, loaded on demand): fw/<id>/src.json

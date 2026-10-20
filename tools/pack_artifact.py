@@ -37,6 +37,10 @@ for dp, _, fns in os.walk(out):
         rel = os.path.relpath(full, out)
         if rel == 'index.html':
             continue
+        if fn.endswith(('.bin.gz', '.elf.gz', '.wasm.gz')):
+            # R-18 gzip sidecars are binary too; packed pages skip them and read .b64.txt / plain wasm
+            os.remove(full)
+            continue
         if fn.endswith(('.bin', '.elf')):
             data = open(full, 'rb').read()
             if fn.endswith('.bin'):

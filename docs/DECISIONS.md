@@ -1087,3 +1087,9 @@
 - 已知小瑕疵：输入在 1 ms 片边界应用，BLE 的连接事件是惰性推进的，所以 `pc=json` 记在 9.000 s 而发出那行标 8.998 s（与 `ble=write` 同样的现有行为，确定性不受影响；改成先推进再应用会让 c3-ble-led 的 golden 变，暂不动）。
 - 固件 c3-ble-nus：NimBLE，广播名 Claude-TB（NUS 128 位 UUID 放扫描响应，31 字节放不下），RX 可写 / 无应答写，行缓冲 4096 字节，JSON 用 IDF 自带 cJSON（json 组件）；status ack 带 bat / sys / stats / fw，故意 > 244 字节以验收电脑侧重组；owner / 未知命令回 ack（未知命令 ok:false）；time 调 `settimeofday`。
 - 授权：协议按公开文档 anthropics/claude-desktop-buddy REFERENCE.md 自写，没有用任何第三方实现代码。
+
+## 2026-10-20 二进制预压缩旁文件（R-18）
+- **格式 gzip -9（`gzip -9 -n -k -f`）**：build_web.sh 给 `wasm/tryboard.wasm`、`rom/*.elf`、`fw/*/flash.bin` 生成 `.gz` 旁文件，`-n` 不写时间戳，重复构建逐字节相同（R-19 内容哈希要用）。不用 brotli：浏览器 `DecompressionStream` 不支持；不用 deflate-raw：没有现成命令行工具，gzip 头只多 18 字节。
+- **固件截尾**：拷到 `web/public/fw` 时去掉尾部 0xFF，长度按 4 KB 向上取整。三款 SoC 开机都把 flash 补 0xFF 到 max(头部声明容量, 4 MB)（c3 `boot.rs:168`、s3 `boot.rs:249`、esp32 `boot.rs:200`），内置固件都 ≤ 4 MB，所以模拟结果逐字节不变（levels / replay 指纹一致）；JS 侧不补齐。唯一可见变化：实验台「大小」显示截后大小（arduino-blink 4096 KB → 356 KB），与 b64 打包模式（pack_artifact.py 早就 rstrip 0xFF）一致。
+- **fetchBuf 回退顺序**：b64 打包页 → `.b64.txt`（不碰 `.gz`，pack_artifact.py 删掉 `.gz`）；否则 `.bin` / `.elf` / `.wasm` 且有 `DecompressionStream` 时先取 `url + '.gz'`：非 2xx 或 Content-Type 含 html（SPA 兜底页）→ 回退原文件；字节以 1f 8b 开头 → 解压，解压出错 → 回退；不是 gzip 魔数 → 当成托管已按 `Content-Encoding: gzip` 解过（vite preview 就这样）直接用。音频等别的类型不试 `.gz`，避免 404 噪声。
+- 替代：只靠托管压缩 —— 不少静态托管不压 `.bin` / `.elf`（R-18 要求不依赖托管配置）；把原长度写进 manifest 在 JS 侧补齐 —— 多一次请求，且 Rust 本来就补齐。
