@@ -196,7 +196,8 @@ const cmdk = import('./cmdk');
     startRouter(ctx);
     if (shareIn?.error) shell.toast(shareIn.error);
     if (params.get('f') && !fileIn) shell.toast(t('This .tryboard file is no longer stored in this browser; open the file again'));
-    if (shared) await shareIn!.m.restoreShare(ctx, shared, fileIn?.own ?? null);
+    // &replay=1 (F-03b): the shared actions play at their original speed
+    if (shared) await shareIn!.m.restoreShare(ctx, shared, fileIn?.own ?? null, shareIn!.m.wantsPaced(location.search));
   } catch (e) {
     log(`${t('[TryBoard] Failed to load resources: {err}', { err: String(e) })}\n`);
     setBc({ run: 'idle', boot: { text: t('Failed to load resources: {err}', { err: String(e) }), steps: [], loaded: 0, total: 0 } });

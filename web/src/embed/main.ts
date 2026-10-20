@@ -69,18 +69,26 @@ async function poster() {
   play.setAttribute('aria-label', t('Run'));
   play.innerHTML = '<svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>';
   const hint = el('p', 'tb-embed-hint', t('Click to load the simulator (about 2 MB) and run the firmware'));
-  box.append(el('div', 'tb-embed-brand', 'TryBoard'), el('h1', 'tb-embed-title', title), ...(chip ? [el('div', 'tb-embed-chip', CHIP_LABEL[chip] ?? chip)] : []), play, hint);
+  // F-03b: with recorded actions, choose to watch them at their original speed (&replay=1 preselects it)
+  const pace = el('label', 'tb-embed-pace');
+  const paced = el('input', '');
+  paced.type = 'checkbox';
+  paced.id = 'embedPaced';
+  paced.checked = new URLSearchParams(location.search).get('replay') === '1';
+  pace.append(paced, document.createTextNode(t('Replay at original speed')));
+  box.append(el('div', 'tb-embed-brand', 'TryBoard'), el('h1', 'tb-embed-title', title), ...(chip ? [el('div', 'tb-embed-chip', CHIP_LABEL[chip] ?? chip)] : []), play, ...(st.run ? [pace] : []), hint);
   root.replaceChildren(box, openLink(s));
   document.body.dataset.state = 'poster';
   play.addEventListener(
     'click',
     async () => {
       play.disabled = true;
+      paced.disabled = true;
       hint.textContent = t('Loading the simulator…');
       document.body.dataset.state = 'loading';
       try {
         const m = await import('./run');
-        await m.runEmbed(root, { state: st, s: s!, work, title, openLink: () => openLink(s) });
+        await m.runEmbed(root, { state: st, s: s!, work, title, openLink: () => openLink(s), paced: !!st.run && paced.checked });
       } catch (e) {
         fail(t('Could not start the simulator: {err}', { err: String(e) }));
       }

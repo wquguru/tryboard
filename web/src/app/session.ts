@@ -3,6 +3,7 @@ import { createBench, type SceneSpec } from '../board3d';
 import type { ScenePickApi } from '../scene-api';
 import { LiveSim, type SeekJob } from '../live';
 import type { Snapshot } from '../simmsg';
+import type { InputEvent } from '../inputlog';
 import type { FromWorker, TimingReport, VcdState } from '../simmsg';
 import { saveBom } from './bomstore';
 import { push as pushBom } from './bom';
@@ -134,6 +135,25 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     for (const x of text.matchAll(DHT_READING)) m = x;
     return m ? { t: Number(m[1]), h: Number(m[2]), p: NaN } : null;
   };
+  // Paced replay (F-03b): the worker applies the log; the page only mirrors what the user would have seen (keys, room temperature, pose)
+  let pacedUi: { evs: InputEvent[]; i: number } | null = null;
+  const mirrorPaced = (simSeconds: number) => {
+    const p = pacedUi!;
+    const sim = s.sim;
+    while (sim && p.i < p.evs.length && p.evs[p.i].tMs <= simSeconds * 1000) {
+      const x = p.evs[p.i++];
+      if (x.kind === 'gpio') bench.showPress(x.pin, x.level === 0, sim.bootPin);
+      else if (x.kind === 'env') {
+        sim.env = { temp: x.temp, humidity: x.humidity, pressure: x.pressure };
+        store.set({ env: { ...sim.env } });
+      } else if (x.kind === 'imu') {
+        sim.pose = { pitch: x.pitch, roll: x.roll, yaw: x.yaw };
+        store.set({ pose: { ...sim.pose } });
+        bench.setPose(s.hasImu() ? sim.pose : null);
+      } else if (x.kind === 'dist') bench.setDistance(x.cm);
+    }
+    if (p.i >= p.evs.length) pacedUi = null;
+  };
 
   const s: Session = {
     bench,
@@ -202,6 +222,11 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     mark: () => s.sim?.mark() ?? Promise.resolve(0),
     async seek(job: SeekJob) {
       const sim = s.sim!;
+      pacedUi = job.paced ? { evs: job.events, i: 0 } : null;
+      // Keys shown held by an earlier paced replay end up as the log leaves them at the stop point
+      const held = new Map<number, boolean>();
+      for (const x of job.events) if (x.kind === 'gpio') held.set(x.pin, !job.paced && x.tMs < job.untilMs ? x.level === 0 : (held.get(x.pin) ?? false));
+      for (const [pin, down] of held) bench.showPress(pin, down, sim.bootPin);
       const snap = await sim.seek({ ...job, i2s: job.i2s ?? i2sOf(s.scene.parts) });
       consoleBuf = snap.stdout.length > 200_000 ? snap.stdout.slice(-150_000) : snap.stdout;
       tail = consoleBuf.slice(-80);
@@ -267,6 +292,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     audio,
     sensorOffset: 0,
     reboot() {
+      pacedUi = null;
       if (!s.sim) return;
       bench.setPowered(true);
       s.sim.reset();
@@ -505,6 +531,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         store.set({ simSeconds: t });
       },
       onTick(m) {
+        if (pacedUi) mirrorPaced(m.simSeconds);
         taskStore.setNow(Math.round(m.simSeconds * 160_000_000));
         bench.setGpio(m.gpio, m.enable, m.pwm, m.gpioHi, m.enableHi);
         if (m.leds) bench.setRgb(m.leds[0] ?? [0, 0, 0]);

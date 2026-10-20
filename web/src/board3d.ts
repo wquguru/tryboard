@@ -40,6 +40,8 @@ export interface Bench extends ScenePickApi {
   setLcd(rgba: Uint8Array, w?: number, h?: number): void;
   /** Bench pose (P2-03): breadboard, board and modules tilt together; null = level */
   setPose(p: Pose | null): void;
+  /** Show a board button / breadboard key held or released with no pointer (F-03b paced replay); BOOT goes by bootPin */
+  showPress(pin: number, down: boolean, bootPin: number): void;
   /** User drags the IMU module to rotate the bench: move = dragging (≈30 Hz), end = release */
   onPose(cb: (p: Pose, phase: 'move' | 'end') => void): void;
   /** User taps / drags the touch LCD (P2-02): x, y in screen pixels 0..239 */
@@ -185,6 +187,10 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
           sv.phys = true;
           sv.target = deg;
         }
+    },
+    showPress(pin, down, bootPin) {
+      for (const b of ctx.board.buttons) if (b.userData.gpio === pin || (b.name === 'BOOT' && pin === bootPin && typeof b.userData.gpio !== 'number')) b.position.y = b.userData.baseY - (down ? 0.4 : 0);
+      for (const k of ctx.keys) if (k.pin === pin) k.key.position.y = k.key.userData.baseY - (down ? 1.2 : 0);
     },
     setPose(p) {
       ctx.pose = p ? { pitch: p.pitch, roll: p.roll, yaw: p.yaw } : { pitch: 0, roll: 0, yaw: 0 };

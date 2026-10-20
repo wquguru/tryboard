@@ -101,6 +101,7 @@ const restored = restoredOk ? await frame.evaluate(() => globalThis.__tbShareRes
 report('click -> wasm fetched', reqs.some((u) => /\.wasm/.test(u)));
 report('shared actions replayed', restoredOk && !restored.error, restored.error ?? `${restored.simSeconds?.toFixed?.(3)} s`);
 const es = restored.stdout ?? '';
+const er = restored.report ?? '';
 fs.writeFileSync(path.join(outDir, 'embed-restored.stdout'), es);
 report('serial shows UNIT F and ALARM ON', es.includes('UNIT F') && es.includes('ALARM ON'));
 report('serial panel prints live output', await waitFor(frame, () => /T=\d/.test(document.getElementById('console').textContent), null, 20000));
@@ -154,6 +155,51 @@ if (app) {
   report('full page serial = embed serial (same s)', ok && as === es, as === es ? `${as.length} bytes` : `differs at ${diff(as, es)}`);
 }
 
+// ---- 7b. F-03b paced replay (&replay=1): sim time starts from 0, BOOT / heat land at their own time, the end state equals the fast-forward
+const pp = await ctx.newPage();
+pp.on('pageerror', (e) => errors.push(`paced: ${e}`));
+pp.on('console', (m) => { if (m.type() === 'error') errors.push(`paced: ${m.text()}`); });
+await pp.goto(embedUrl + '&replay=1', { waitUntil: 'load' });
+await waitFor(pp, () => document.body.dataset.state === 'poster', null, 10000);
+report('paced: poster offers "Replay at original speed", preselected by &replay=1', await pp.evaluate(() => document.getElementById('embedPaced')?.checked === true));
+await pp.click('#embedPlay');
+await waitFor(pp, () => document.body.dataset.state === 'ready', null, 60000);
+// Sample (sim seconds, serial, room temperature) until the replay ends; simSeconds is the last tick's, so it can trail the serial by a slice
+const seen = [];
+const t0 = Date.now();
+while (Date.now() - t0 < 90000) {
+  const o = await pp.evaluate(() => ({ t: globalThis.__tbEmbed.store.get().simSeconds, unitF: document.getElementById('console').textContent.includes('UNIT F'), temp: globalThis.__tbEmbed.store.get().env.temp, tag: !!document.getElementById('embedReplay'), done: !!globalThis.__tbShareRestored }));
+  seen.push(o);
+  if (o.done) break;
+  await sleep(100);
+}
+fs.writeFileSync(path.join(outDir, 'embed-paced-samples.json'), JSON.stringify(seen));
+const first = seen.find((o) => !o.done);
+report('paced: sim time starts near 0 with a progress tag', !!first && first.t < 1.0 && first.tag, first ? `${first.t.toFixed(2)} s` : 'no sample');
+const firstF = seen.find((o) => o.unitF);
+report('paced: UNIT F appears only after the BOOT press at 1.2 s', !!firstF && firstF.t >= 1.1 && seen.some((o) => !o.unitF && o.t > 1.0), firstF ? `first at ${firstF.t.toFixed(2)} s` : 'never');
+const hot = seen.find((o) => o.temp === 35);
+report('paced: room temperature follows the log (35 °C from 2 s)', !!hot && hot.t >= 2 && seen.some((o) => o.temp !== 35 && o.t > 0.5), hot ? `at ${hot.t.toFixed(2)} s` : 'never');
+const pr = await pp.evaluate(() => globalThis.__tbShareRestored ?? {});
+report('paced: end state = fast-forward (serial and report at the same cycle)', pr.paced === true && pr.stdout === es && pr.report === er, pr.stdout === es ? `${es.length} bytes, report ${pr.report === er ? 'same' : 'differs'}` : `differs at ${diff(pr.stdout ?? '', es)}`);
+report('paced: progress tag gone after the end', await waitFor(pp, () => !document.getElementById('embedReplay'), null, 5000));
+await pp.screenshot({ path: path.join(outDir, 'embed-paced.png') });
+// Skip to end mid-replay = the usual fast-forward
+await pp.goto(embedUrl + '&replay=1', { waitUntil: 'load' });
+await waitFor(pp, () => document.body.dataset.state === 'poster', null, 10000);
+await pp.click('#embedPlay');
+await waitFor(pp, () => document.body.dataset.state === 'ready' && !!document.getElementById('embedSkip'), null, 60000);
+await pp.click('#embedRun');
+await sleep(300);
+const pt = await pp.$eval('#simtime', (e) => e.textContent);
+await sleep(600);
+report('paced: pause holds sim time mid-replay', pt === (await pp.$eval('#simtime', (e) => e.textContent)) && parseFloat(pt) < 3, pt);
+await pp.click('#embedSkip');
+await waitFor(pp, () => !!globalThis.__tbShareRestored, null, 60000);
+const sk = await pp.evaluate(() => ({ r: globalThis.__tbShareRestored, tag: !!document.getElementById('embedReplay'), run: document.getElementById('embedRun').getAttribute('aria-pressed') }));
+report('paced: Skip to end = fast-forward serial, then runs on', sk.r.stdout === es && sk.r.report === er && !sk.tag && sk.run === 'false', `${sk.r.stdout?.length} bytes`);
+await pp.close();
+
 // ---- 8. Damaged link: message and a link home, no crash
 const bad = await ctx.newPage();
 bad.on('pageerror', (e) => errors.push(`bad: ${e}`));
@@ -167,6 +213,8 @@ await m.goto(embedUrl, { waitUntil: 'load' });
 await waitFor(m, () => document.body.dataset.state === 'poster', null, 10000);
 const sw = () => document.documentElement.scrollWidth <= innerWidth;
 const posterFits = await m.evaluate(sw);
+const paceH = await m.$eval('.tb-embed-pace', (e) => e.getBoundingClientRect().height);
+report('390 px: "Replay at original speed" >= 44 px', paceH >= 44, `${paceH} px`);
 await m.click('#embedPlay');
 await waitFor(m, () => document.body.dataset.state === 'ready', null, 60000);
 report('390 px: no horizontal scroll (poster and run view)', posterFits && (await m.evaluate(sw)));

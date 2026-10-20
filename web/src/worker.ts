@@ -321,7 +321,9 @@ function loopSlice(gen: number) {
   const t0 = performance.now();
   const startCycles = e.tb_cycles();
   let stop = 0;
+  let pacedDone = false;
   while (behind > 0 && performance.now() - t0 < 20) {
+    if (paced && (pacedDone = pacedStep(e, paced))) break;
     // Fixed 1 ms slices (not 'whatever is left'): S3 dual-core interleaving depends on slice starts, so slicing like the CLI keeps replay exact.
     stop = e.tb_run(CPU_HZ / 1000);
     if (watchPins.length) samplePwm(e);
@@ -382,7 +384,15 @@ function loopSlice(gen: number) {
   postUsb(e);
   postBle(e);
   postNet(e);
-  pumpNet(e);
+  if (pacedDone && paced) {
+    // Serial up to here is already in bootStdout (kept above), so the snapshot matches seek's at the same cycle
+    const p = paced;
+    paced = null;
+    settleReplay(e, p.events, p.net);
+    post({ type: 'replayed', snap: snapshot(e) });
+  }
+  // Mid paced replay, recorded replies arrive as logged netreply events at their own time, never early from the cache or online
+  if (!paced) pumpNet(e);
   if (ui) postHarness(e);
   if (ui) postTiming(e);
   if (ui) postVcd(e);
@@ -699,6 +709,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   netVersion = -1;
   bootGen++;
   replyCache = new Map();
+  paced = null;
   return e;
 }
 
@@ -848,11 +859,51 @@ function apply(e: Exports, ev: InputAction) {
   record(e, ev);
 }
 
+// ---- Paced replay (F-03b): the live loop applies the shared log at its sim times; same 1 ms slices as seekTo, so the end state matches
+interface Paced {
+  evs: { at: number; x: InputEvent }[];
+  i: number;
+  until: number;
+  events: InputEvent[];
+  net?: string;
+}
+let paced: Paced | null = null;
+const dueList = (events: InputEvent[]) => events.filter((x) => x.kind !== 'power').map((x) => ({ at: Math.round(x.tMs * (CPU_HZ / 1000)), x }));
+
+/** Before a slice: apply events due by now; true once untilMs is reached (seekTo would stop here, events at that instant excluded) */
+function pacedStep(e: Exports, p: Paced) {
+  if (e.tb_cycles() >= p.until) return true;
+  while (p.i < p.evs.length && p.evs[p.i].at <= e.tb_cycles()) {
+    const { tMs: _t, ...act } = p.evs[p.i++].x;
+    apply(e, act as InputAction);
+  }
+  return false;
+}
+
+/** After a rewind / paced replay: recorded replies, then the present real-network switch and preset win over the log */
+function settleReplay(e: Exports, events: InputEvent[], net?: string) {
+  for (const x of events) if (x.kind === 'netreply') replyCache.set(replyId(x.reply), x.reply);
+  // Requests already answered in the replay are not answered again; the switch state follows the present (add one line if it differs from the last in the log)
+  const answered = new Set<number>();
+  let wasOn = false;
+  for (const x of inputLog.events) {
+    if (x.kind === 'netreply') answered.add(replyId(x.reply));
+    if (x.kind === 'realnet') wasOn = x.on;
+  }
+  if (wasOn !== realnetOn) apply(e, { kind: 'realnet', on: realnetOn });
+  // Same for the network preset: the present choice wins if it differs from the last logged one
+  let preset = 'normal';
+  for (const x of inputLog.events) if (x.kind === 'net') preset = x.preset;
+  if (net && net !== preset) apply(e, { kind: 'net', preset: net });
+  pumpNet(e, answered);
+  flushIo(e);
+}
+
 /** Rewind replay: 1 ms slices with inputs between slices like live runs; events replay at their original slice boundary,
  *  so it is cycle-exact; it stops at the boundary of untilMs and events at that instant are not applied (they belong to the next step). */
 function seekTo(e: Exports, events: InputEvent[], untilMs: number) {
   const until = Math.round(untilMs * (CPU_HZ / 1000));
-  const evs = events.filter((x) => x.kind !== 'power').map((x) => ({ at: Math.round(x.tMs * (CPU_HZ / 1000)), x }));
+  const evs = dueList(events);
   let i = 0;
   let lastPost = performance.now();
   while (e.tb_cycles() < until) {
@@ -912,22 +963,15 @@ async function handle(m: ToWorker) {
       const e = await bootWasm(m);
       if (!e) return;
       if (m.realnet !== undefined) realnetOn = m.realnet;
-      for (const x of m.events) if (x.kind === 'netreply') replyCache.set(replyId(x.reply), x.reply);
-      seekTo(e, m.events, m.untilMs);
-      // Requests already answered in the replay are not answered again; the switch state follows the present (add one line if it differs from the last in the log)
-      const answered = new Set<number>();
-      let wasOn = false;
-      for (const x of inputLog.events) {
-        if (x.kind === 'netreply') answered.add(replyId(x.reply));
-        if (x.kind === 'realnet') wasOn = x.on;
+      if (m.paced) {
+        // Stop at 0; the next run applies the log as sim time passes and settles the network at untilMs, like below
+        paced = { evs: dueList(m.events), i: 0, until: Math.round(m.untilMs * (CPU_HZ / 1000)), events: m.events, net: m.net };
+        flushIo(e);
+      } else {
+        for (const x of m.events) if (x.kind === 'netreply') replyCache.set(replyId(x.reply), x.reply);
+        seekTo(e, m.events, m.untilMs);
+        settleReplay(e, m.events, m.net);
       }
-      if (wasOn !== realnetOn) apply(e, { kind: 'realnet', on: realnetOn });
-      // Same for the network preset: the present choice wins if it differs from the last logged one
-      let preset = 'normal';
-      for (const x of inputLog.events) if (x.kind === 'net') preset = x.preset;
-      if (m.net && m.net !== preset) apply(e, { kind: 'net', preset: m.net });
-      pumpNet(e, answered);
-      flushIo(e);
       post({ type: 'seeked', snap: snapshot(e), bootPin: e.tb_boot_pin() });
       postPaused(e);
       postOled(e);
