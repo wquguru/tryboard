@@ -7,7 +7,9 @@
 
 pub mod phone;
 pub mod sig;
+pub mod sig_xt;
 pub mod sigs;
+pub mod sigs_xt;
 
 #[cfg(test)]
 mod tests;
