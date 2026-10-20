@@ -25,6 +25,8 @@ fn usage() -> ! {
                (more I2C devices: mpu6050@0x68, qmi8658@0x6b, cst816s@0x15, ft6236@0x38, cst9220@0x5a, axp2101@0x34, pcf85063@0x51, es8311@0x18, es7210@0x40;
                M5 parts: mpu6886@0x68, bmi270@0x68 (BMM150 on its AUX bus), bmm150@0x10, bm8563@0x51 (= pcf8563), aw9523@0x58, axp192@0x34,
                lp5562@0x30, tca8418@0x34, ft6336@0x38, ft3267@0x38, ina3221@0x40, ltr553@0x23, aw88298@0x36, gc0308@0x21)
+               [--grove env3|env4] (M5 Grove unit on the --board's Port A: ENV III = sht30@0x44 + qmp6988@0x70, ENV IV = sht40@0x44 + bmp280@0x76;
+               readings follow --env / script env=; also as I2C kinds sht30, sht40, qmp6988, bmp280)
                [--battery PCT[,usb]] (AXP2101 / AXP192) [--rtc EPOCH] (PCF85063 / BM8563, UTC) [--touch-int <GPIO>] (touch INT pin: low while pressed)
                script actions imu=pitch,roll,yaw[,their rates in °/s], touch=x,y (screen pixels, press / move), release (lift)
                [--spi gc9a01] (S3: SCLK=12 MOSI=11 CS=10 DC=14 RST=13 BL=15; C3: SCLK=6 MOSI=7 CS=10 DC=5 RST=4 BL=3) [--lcd-ppm <last frame.ppm>]
@@ -314,6 +316,12 @@ fn run(args: &[String]) {
         m.uart_push(s.replace("\\n", "\n").as_bytes());
     }
     board_preset_args(&mut m, args);
+    if let Some(unit) = opt(args, "--grove") {
+        if let Err(e) = m.grove_attach(&unit) {
+            eprintln!("--grove: {e}");
+            std::process::exit(2)
+        }
+    }
     i2c_opts(&mut m, args, chip.name());
     // Touch INT pin: --touch-int GPIO
     if let Some(pin) = opt(args, "--touch-int").and_then(|s| s.parse().ok()) {

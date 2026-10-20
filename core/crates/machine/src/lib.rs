@@ -4,7 +4,8 @@
 mod boards;
 mod parts;
 pub use boards::{
-    list as board_list, BoardPreset, Button as BoardButton, I2cBus as BoardI2cBus, BOARDS,
+    list as board_list, BoardPreset, Button as BoardButton, GroveUnit, I2cBus as BoardI2cBus,
+    BOARDS, GROVE_UNITS,
 };
 use std::collections::{HashMap, VecDeque};
 use tryboard_elec::board::{Activity, Board, ChipKind, Power};
@@ -30,6 +31,8 @@ use tryboard_soc::devices::{
     pcf85063::Pcf85063,
     pcf8563::Pcf8563,
     qmi8658::Qmi8658,
+    qmp6988::Qmp6988,
+    sht::{Sht3x, Sht4x},
     ssd1306::Ssd1306,
 };
 use tryboard_soc::i2c::I2cDevice;
@@ -673,6 +676,14 @@ impl Machine {
         self.hw.i2c_pin_buses()?.device::<T>()
     }
 
+    /// Apply `f` to every device of type T on I2C0 and the pin buses
+    fn i2c_each<T: 'static>(&mut self, mut f: impl FnMut(&mut T)) {
+        self.hw.i2c0().devices_of::<T>().for_each(&mut f);
+        if let Some(p) = self.hw.i2c_pin_buses() {
+            p.devices_of::<T>().for_each(f);
+        }
+    }
+
     pub fn i2c_stats(&mut self) -> (u64, u64) {
         let b = self.i2c0();
         (b.transactions, b.nacks)
@@ -681,9 +692,17 @@ impl Machine {
     pub fn env_set(&mut self, env: Env) {
         let t = env.temp_c;
         let h = env.humidity;
-        if let Some(b) = self.i2c_dev::<Bme280>() {
-            b.env = env;
-        }
+        let p = env.pressure_pa;
+        self.i2c_each::<Bme280>(|b| {
+            b.env = Env {
+                temp_c: t,
+                humidity: h,
+                pressure_pa: p,
+            }
+        });
+        self.i2c_each::<Sht3x>(|d| (d.temp_c, d.humidity) = (t, h));
+        self.i2c_each::<Sht4x>(|d| (d.temp_c, d.humidity) = (t, h));
+        self.i2c_each::<Qmp6988>(|d| (d.temp_c, d.pressure_pa) = (t, p));
         // The IMU's on-chip thermometer reads die temperature: use ambient (self-heating not modelled)
         if let Some(d) = self.i2c_dev::<Mpu6050>() {
             d.temp_c = t;

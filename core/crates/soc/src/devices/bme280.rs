@@ -112,6 +112,8 @@ pub struct Bme280 {
     /// Measurement completion time (forced mode / next one in normal mode)
     meas_done: Option<u64>,
     pub measurements: u64,
+    /// false = BMP280: chip id 0x58, no humidity channel or calibration
+    humidity: bool,
 }
 
 impl Bme280 {
@@ -129,14 +131,23 @@ impl Bme280 {
             now: 0,
             meas_done: None,
             measurements: 0,
+            humidity: true,
         };
+        b.reset();
+        b
+    }
+
+    /// BMP280: same register map and T / P compensation, without the humidity block
+    pub fn bmp280(addr: u8) -> Self {
+        let mut b = Self::new(addr);
+        b.humidity = false;
         b.reset();
         b
     }
 
     fn reset(&mut self) {
         self.regs = [0; 256];
-        self.regs[0xd0] = 0x60;
+        self.regs[0xd0] = if self.humidity { 0x60 } else { 0x58 };
         let c = CALIB;
         let mut put16 = |a: usize, v: u16| {
             self.regs[a] = v as u8;
@@ -148,7 +159,16 @@ impl Bme280 {
         for (i, p) in c.p.iter().enumerate() {
             put16(0x8e + 2 * i, *p as i16 as u16);
         }
-        put16(0xe1, c.h2 as u16);
+        // Data register defaults after reset
+        for a in [0xf7, 0xfa] {
+            self.regs[a] = 0x80;
+        }
+        if !self.humidity {
+            return;
+        }
+        self.regs[0xfd] = 0x80;
+        self.regs[0xe1] = c.h2 as u8;
+        self.regs[0xe2] = (c.h2 >> 8) as u8;
         self.regs[0xa1] = c.h1;
         self.regs[0xe3] = c.h3;
         // H4 = E4[7:0]<<4 | E5[3:0]; H5 = E6[7:0]<<4 | E5[7:4]
@@ -156,11 +176,6 @@ impl Bme280 {
         self.regs[0xe5] = ((c.h4 & 0xf) as u8) | (((c.h5 & 0xf) as u8) << 4);
         self.regs[0xe6] = (c.h5 >> 4) as u8;
         self.regs[0xe7] = c.h6 as u8;
-        // Data register defaults after reset
-        for a in [0xf7, 0xfa] {
-            self.regs[a] = 0x80;
-        }
-        self.regs[0xfd] = 0x80;
     }
 
     fn osrs(&self) -> (u8, u8, u8) {
@@ -212,9 +227,11 @@ impl Bme280 {
         // Skipped channels (osrs=0) output 0x80000 / 0x8000
         put20(&mut self.regs, 0xfa, if ot > 0 { adc_t } else { 0x80000 });
         put20(&mut self.regs, 0xf7, if op > 0 { adc_p } else { 0x80000 });
-        let h = if oh > 0 { adc_h } else { 0x8000 };
-        self.regs[0xfd] = (h >> 8) as u8;
-        self.regs[0xfe] = h as u8;
+        if self.humidity {
+            let h = if oh > 0 { adc_h } else { 0x8000 };
+            self.regs[0xfd] = (h >> 8) as u8;
+            self.regs[0xfe] = h as u8;
+        }
         self.measurements += 1;
     }
 
@@ -242,7 +259,7 @@ impl Bme280 {
                     self.meas_done = None;
                 }
             }
-            0xf2 => self.regs[0xf2] = v & 7,
+            0xf2 if self.humidity => self.regs[0xf2] = v & 7,
             0xf5 => self.regs[0xf5] = v,
             0xf4 => {
                 self.regs[0xf4] = v;
@@ -339,5 +356,30 @@ mod tests {
                 "forced mode back to sleep after measuring"
             );
         }
+    }
+
+    #[test]
+    fn bmp280_variant() {
+        let mut b = Bme280::bmp280(0x76);
+        assert_eq!(b.regs[0xd0], 0x58);
+        assert_eq!(b.regs[0xe1..0xe8], [0; 7], "no humidity calibration");
+        b.env = Env {
+            temp_c: 30.2,
+            humidity: 60.0,
+            pressure_pa: 99_000.0,
+        };
+        b.write_reg(0xf2, 1);
+        b.write_reg(0xf4, 0x25);
+        b.now = u64::MAX / 2;
+        b.advance();
+        let r = &b.regs;
+        assert_eq!((r[0xf2], r[0xfd], r[0xfe]), (0, 0, 0));
+        let adc_p = ((r[0xf7] as i32) << 12) | ((r[0xf8] as i32) << 4) | (r[0xf9] as i32 >> 4);
+        let adc_t = ((r[0xfa] as i32) << 12) | ((r[0xfb] as i32) << 4) | (r[0xfc] as i32 >> 4);
+        let (tt, tf) = comp_t(&CALIB, adc_t);
+        assert_eq!(tt, 3020);
+        assert!((comp_p(&CALIB, adc_p, tf) as f64 / 256.0 - 99_000.0).abs() <= 1.0);
+        b.write_reg(0xe0, 0xb6);
+        assert_eq!(b.regs[0xd0], 0x58, "soft reset keeps the variant");
     }
 }

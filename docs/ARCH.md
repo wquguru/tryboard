@@ -307,6 +307,7 @@ web/（Vite + TS）
   - Rust：`board_preset(id) -> Result<Vec<String>, String>`（返回警告列表）、`board()`、`board_button(name, down)`、`board_list()`。
   - CLI：`--board <id>`、`--board list`；脚本动作 `btn=A,1|0`（预设按钮）、`rtc=EPOCH`（改板上 RTC）。触摸用已有的 `touch=x,y` / `release`，编码器用 `enc=±N`。
   - wasm：`tb_board_preset(p, len) -> i32`（0 成功，1 失败）。网页 UI 尚未接入。
+- Grove 单元（M5-09a）：`BoardPreset.grove_a: Option<(sda, scl)>` 是 Port A 引脚；`GROVE_UNITS`（`GroveUnit { id, name, devices }`）：`env3` = sht30@0x44 + qmp6988@0x70，`env4` = sht40@0x44 + bmp280@0x76。`Machine::grove_attach(unit)` 在 `board_preset` 之后用 `i2c_bus_add(sda, scl, true)` 新建一条引脚总线挂上器件。CLI `--grove env3|env4`（在 `--env` 之前生效），wasm `tb_grove(p, len) -> i32`。`env_set` 更新所有总线上的 Bme280 / Bmp280 / Sht3x / Sht4x / Qmp6988。器件在 `devices/sht.rs`（SHT3x 单次 / 周期 / ART / 状态 / 序列号，SHT4x 单字节命令；没测完时 NACK 读头）、`devices/qmp6988.rs`（OTP 25 字节，QST 参考的整数补偿反解出原始值，强制 / 正常模式，IIR 未建模）、`Bme280::bmp280`（id 0x58，无湿度）。
 - M5Dial 映射（参考 M5Unified / M5GFX 读出来的，不是复制）：
   - GC9A01：SCLK 6、MOSI 5、CS 7、DC 4、RST 8、BL 9。
   - 内部 I2C（SDA 11 / SCL 12）：FT3267 0x38、BM8563 0x51。触摸 INT 14。

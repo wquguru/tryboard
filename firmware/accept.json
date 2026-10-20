@@ -3204,6 +3204,46 @@
   ]
  },
  {
+  "id": "arduino-m5-env3",
+  "fw": "arduino-m5-env",
+  "chip": "esp32s3",
+  "seconds": 3.5,
+  "args": [
+   "--board",
+   "m5atoms3",
+   "--grove",
+   "env3",
+   "--env",
+   "21.3,48.7,100420"
+  ],
+  "script": "2.0:env=30.2,60.4,99870",
+  "expect": [
+   "ENV ready unit=3 port_a=2/1 sht_serial=1d2c3b4a init=ok",
+   "ENV3 t=21.3 h=48.7 p=1004.2 bt=21.3",
+   "ENV3 t=30.2 h=60.4 p=998.7 bt=30.2"
+  ]
+ },
+ {
+  "id": "arduino-m5-env4",
+  "fw": "arduino-m5-env",
+  "chip": "esp32s3",
+  "seconds": 3.5,
+  "args": [
+   "--board",
+   "m5atoms3",
+   "--grove",
+   "env4",
+   "--env",
+   "-5.4,82.3,96730"
+  ],
+  "script": "2.0:env=35.6,12.9,102260",
+  "expect": [
+   "ENV ready unit=4 port_a=2/1 sht_serial=1d2c3b4a init=ok",
+   "ENV4 t=-5.4 h=82.3 p=967.3 bt=-5.4",
+   "ENV4 t=35.6 h=12.9 p=1022.6 bt=35.6"
+  ]
+ },
+ {
   "id": "esp32-i2s-tone",
   "chip": "esp32",
   "seconds": 1.5,

@@ -158,6 +158,13 @@ impl I2c {
             .find_map(|d| d.as_any_mut().downcast_mut::<T>())
     }
 
+    /// Every device of type T (a bus can carry several, e.g. two sensors of one family)
+    pub fn devices_of<T: 'static>(&mut self) -> impl Iterator<Item = &mut T> {
+        self.devices
+            .iter_mut()
+            .filter_map(|d| d.as_any_mut().downcast_mut::<T>())
+    }
+
     fn busy(&self) -> bool {
         self.pending.is_some()
     }
