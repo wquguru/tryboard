@@ -862,7 +862,7 @@ impl SocBus {
         self.gdma = g;
         let selected = self.lcd_selected();
         let dc = self.gpio.level() >> lcd_pin::DC & 1 != 0;
-        if let (Some(Lcd::Gc9a01(l)), true) = (self.lcd.as_deref_mut(), selected) {
+        if let (Some(Lcd::Dcs(l)), true) = (self.lcd.as_deref_mut(), selected) {
             for b in bytes {
                 l.byte(dc, b);
             }

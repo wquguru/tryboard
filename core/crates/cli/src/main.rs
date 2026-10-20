@@ -21,6 +21,7 @@ fn usage() -> ! {
                script actions imu=pitch,roll,yaw[,their rates in °/s], touch=x,y (screen pixels, press / move), release (lift)
                [--spi gc9a01] (S3: SCLK=12 MOSI=11 CS=10 DC=14 RST=13 BL=15; C3: SCLK=6 MOSI=7 CS=10 DC=5 RST=4 BL=3) [--lcd-ppm <last frame.ppm>]
                [--spi co5300] (S3 QSPI AMOLED 480x480: CS=12 CLK=38 D0..D3=4..7 RST=39)
+               [--spi <panel>@sclk=N,mosi=N,miso=N,cs=N,dc=N,rst=N,bl=N] (S3 panels gc9a01 gc9107 st7735 st7789 st7789l ili9342 ili9342e; -1 = not connected)
                [--power usb|ext] (default usb; ext = servo powered from an external 5 V 2 A supply) [--servo <GPIO>] (attach an SG90; its current loads the power net)
                [--elec-report] (per-node minimum voltage, peak current, brownout resets); script action power=usb|ext
                [--i2c-wire <cm>] (total I2C wire length: bus capacitance -> rise time; beyond spec reads go wrong / NACK, estimate)
@@ -237,15 +238,7 @@ fn run(args: &[String]) {
         m.touch_int_attach(pin);
     }
     board_args(&mut m, args);
-    // External SPI devices: --spi gc9a01
-    if let Some(spec) = opt(args, "--spi") {
-        for kind in spec.split(',') {
-            if !m.lcd_attach(kind) {
-                eprintln!("unsupported SPI device {kind} (gc9a01 on C3 / S3, co5300 on S3)");
-                std::process::exit(2)
-            }
-        }
-    }
+    spi_args(&mut m, args);
     // I2S audio devices: --i2s max98357a,inmp441; --mic sound.wav
     if let Some(spec) = opt(args, "--i2s") {
         for kind in spec.split(',') {
@@ -998,6 +991,10 @@ fn run(args: &[String]) {
     if st > 0 {
         eprintln!("[tryboard] SPI2 transfers {st}, MOSI {sb} bytes");
     }
+    let (st, sb) = m.spi3_stats();
+    if st > 0 {
+        eprintln!("[tryboard] SPI3 transfers {st}, MOSI {sb} bytes");
+    }
     if let Some(d) = m.lcd() {
         report_lcd(d, args);
     }
@@ -1178,6 +1175,30 @@ fn wav16(rate: u32, x: &[i16]) -> Vec<u8> {
 }
 
 /// Board power / clock chips: --battery PCT[,usb] (AXP2101), --rtc <unix seconds, UTC> (PCF85063)
+/// External SPI devices: --spi gc9a01, --spi ili9342@sclk=36,mosi=37,miso=35,cs=3,dc=35,rst=-1
+fn spi_args(m: &mut Machine, args: &[String]) {
+    let Some(spec) = opt(args, "--spi") else {
+        return;
+    };
+    // Commas separate devices, except "name=gpio" items that continue the previous device's pin list
+    let mut devs: Vec<String> = Vec::new();
+    for tok in spec.split(',') {
+        match devs.last_mut() {
+            Some(d) if d.contains('@') && tok.contains('=') && !tok.contains('@') => {
+                d.push(',');
+                d.push_str(tok);
+            }
+            _ => devs.push(tok.to_string()),
+        }
+    }
+    for dev in devs {
+        if let Err(e) = m.lcd_attach_spec(&dev) {
+            eprintln!("unsupported SPI device: {e} (gc9a01 on C3 / S3; gc9107, st7735, st7789, st7789l, ili9342, ili9342e, co5300 on S3)");
+            std::process::exit(2)
+        }
+    }
+}
+
 fn board_args(m: &mut Machine, args: &[String]) {
     if let Some(v) = opt(args, "--battery") {
         match parse_battery(&v) {
@@ -1241,12 +1262,14 @@ fn report_lcd(d: &mut Lcd, args: &[String]) {
     );
     eprint!("{}", d.color_report());
     match d {
-        Lcd::Gc9a01(d) => eprintln!(
-            "[tryboard] LCD GC9A01 commands {} (vendor registers {}), pixels written {}, backlight {}",
+        Lcd::Dcs(d) => eprintln!(
+            "[tryboard] LCD {} commands {} (vendor registers {}), pixels written {}, backlight {}{}",
+            d.spec.name,
             d.commands,
             d.vendor_cmds,
             d.pixels,
-            if d.backlight { "on" } else { "off" }
+            if d.backlight { "on" } else { "off" },
+            if d.reads > 0 { format!(", reads {}", d.reads) } else { String::new() }
         ),
         Lcd::Co5300(d) => eprintln!(
             "[tryboard] LCD CO5300 commands {}, reads {}, pixels written {}, brightness {} (BCTRL {}), unimplemented: {}",

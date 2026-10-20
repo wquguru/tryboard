@@ -18,7 +18,7 @@ use periph::*;
 use std::collections::HashMap;
 use tryboard_soc::crypto_hw::{self, AesHw, ShaHw};
 use tryboard_soc::devices::audio::{self, Audio, PortIo};
-use tryboard_soc::devices::lcd::Lcd;
+use tryboard_soc::devices::lcd::{Lcd, LcdPins};
 use tryboard_soc::devices::pins::PinDevices;
 use tryboard_soc::gdma::{DmaMem, Gdma, GdmaLayout};
 use tryboard_soc::pcnt::{self as pcnt_mod, Pcnt};
@@ -90,6 +90,7 @@ const RTC_STORE_KEEP: [u32; 6] = [
 pub use spi_lcd::{co5300_pin, lcd_pin};
 /// GDMA peripheral IDs (soc/gdma_channel.h: SOC_GDMA_TRIG_PERIPH_SPI2 / _I2S0 / _I2S1)
 pub(crate) const GDMA_PERI_SPI2: u32 = 0;
+pub(crate) const GDMA_PERI_SPI3: u32 = 1;
 const GDMA_PERI_I2S: [u32; 2] = [3, 4];
 /// GPIO matrix signals (gpio_sig_map.h): I2S0O_SD_OUT_IDX = I2S0I_SD_IN_IDX = 25, I2S1 is 30
 const SIG_I2S_SD: [usize; 2] = [25, 30];
@@ -154,9 +155,13 @@ pub struct SocBus {
     pub i2c1: I2c,
     /// GP-SPI2 master + GDMA (5 channels), model shared with the C3 family
     pub spi2: GpSpi,
+    /// GP-SPI3 (0x60025000), same model; M5GFX re-inits AtomS3 / Cardputer panels on it after probing on SPI2
+    pub spi3: GpSpi,
     pub gdma: Gdma,
-    /// Screen on SPI2 (CLI `--spi gc9a01|co5300` / wasm `tb_lcd_attach`)
+    /// Screen on SPI2 / SPI3 (CLI `--spi gc9a01|co5300|...[@pins]` / wasm `tb_lcd_attach`)
     pub lcd: Option<Box<Lcd>>,
+    /// GPIOs of a DCS panel (`LcdPins::S3_DEFAULT` unless attached with pins)
+    pub lcd_pins: LcdPins,
     /// I2S0 (0x6000F000) / I2S1 (0x6002D000), same model as C3; plus the audio devices on them (pins: see `i2s_pin`)
     pub i2s: [I2s; 2],
     pub audio: Audio,
@@ -235,8 +240,10 @@ impl Default for SocBus {
             i2c0: I2c::default(),
             i2c1: I2c::with_port(tryboard_soc::iotrace::i2cbit::PORT1),
             spi2: GpSpi::default(),
+            spi3: GpSpi::default(),
             gdma: Gdma::new(GdmaLayout::S3),
             lcd: None,
+            lcd_pins: LcdPins::S3_DEFAULT,
             i2s: [I2s::new(0, true), I2s::new(1, true)],
             audio: Audio::default(),
             adc: SensAdc::default(),
@@ -387,6 +394,7 @@ impl SocBus {
             0x6001_3000 => return self.i2c0.read(off),
             0x6002_7000 => return self.i2c1.read(off),
             0x6002_4000 => return self.spi2.read(off),
+            0x6002_5000 => return self.spi3.read(off),
             0x6003_F000 => return self.gdma.read(off),
             crypto_hw::SHA_BASE => return self.sha.read(off),
             crypto_hw::AES_BASE => return self.aes.read(off),
@@ -530,12 +538,8 @@ impl SocBus {
                 }
                 return;
             }
-            0x6002_4000 => {
-                if self.spi2.write(off, v) {
-                    self.spi2_transfer(now);
-                }
-                return;
-            }
+            0x6002_4000 => return self.spi_write(spi_lcd::Host::Spi2, off, v, now),
+            0x6002_5000 => return self.spi_write(spi_lcd::Host::Spi3, off, v, now),
             0x6003_F000 => return self.gdma.write(off, v),
             crypto_hw::SHA_BASE => {
                 let link = crypto_hw::sha_link(&self.gdma);
@@ -716,6 +720,7 @@ impl SocBus {
         set(src::I2C_EXT0, self.i2c0.irq());
         set(src::I2C_EXT1, self.i2c1.irq());
         set(src::SPI2, self.spi2.irq());
+        set(src::SPI3, self.spi3.irq());
         set(src::I2S0, self.i2s[0].irq());
         set(src::I2S1, self.i2s[1].irq());
         for ch in 0..self.gdma.layout.nch as u32 {
@@ -824,9 +829,17 @@ impl SocBus {
         self.pcnt.update(now);
         let n12 = self.pcnt.next_event();
         let (n9, spi_done) = self.spi2.update(now);
+        let (n9b, spi3_done) = self.spi3.update(now);
+        let n9 = n9.min(n9b);
         self.trace_pwm(now);
+        self.lcd_pwm_backlight();
         if spi_done {
             if let Some(ch) = self.spi2.dma_out_ch.take() {
+                self.gdma.out_done(ch);
+            }
+        }
+        if spi3_done {
+            if let Some(ch) = self.spi3.dma_out_ch.take() {
                 self.gdma.out_done(ch);
             }
         }

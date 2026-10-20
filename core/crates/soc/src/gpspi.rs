@@ -39,6 +39,7 @@ const CTRL_FADDR_DUAL: u32 = 5;
 const CTRL_FREAD_DUAL: u32 = 14;
 const USER_FWRITE_DUAL: u32 = 12;
 const MISC_CS_KEEP_ACTIVE: u32 = 1 << 30;
+const MISC_CK_IDLE_EDGE: u32 = 1 << 29;
 const DMA_TX_ENA: u32 = 1 << 28;
 const DMA_RX_ENA: u32 = 1 << 27;
 pub const INT_TRANS_DONE: u32 = 1 << 12;
@@ -74,6 +75,10 @@ pub struct GpSpi {
     pub dma_out_ch: Option<usize>,
     pub transfers: u64,
     pub bytes: u64,
+    /// MISC.CK_IDLE_EDGE as last synced by UPDATE / USR
+    idle_latched: bool,
+    /// Idle-level flips synced since the SoC last drained them; each pair is one SCLK pulse with no data
+    pub idle_flips: u32,
 }
 
 impl Default for GpSpi {
@@ -97,6 +102,8 @@ impl Default for GpSpi {
             dma_out_ch: None,
             transfers: 0,
             bytes: 0,
+            idle_latched: false,
+            idle_flips: 0,
         }
     }
 }
@@ -134,6 +141,14 @@ impl GpSpi {
             reg::CMD => {
                 // UPDATE (sync config to the SPI clock domain) completes instantly; USR is represented by the busy state
                 self.regs[0] = v & !(CMD_USR | CMD_UPDATE);
+                if v & (CMD_USR | CMD_UPDATE) != 0 {
+                    // M5GFX makes its one-bit read dummy by flipping the idle clock level and syncing it twice
+                    let e = self.r(reg::MISC) & MISC_CK_IDLE_EDGE != 0;
+                    if e != self.idle_latched {
+                        self.idle_latched = e;
+                        self.idle_flips += 1;
+                    }
+                }
                 return v & CMD_USR != 0 && !self.busy();
             }
             reg::DMA_INT_ENA => self.int_ena = v,

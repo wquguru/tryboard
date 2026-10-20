@@ -384,7 +384,15 @@ pub extern "C" fn tb_lcd_attach_kind(kind: u32) -> i32 {
     with(1, |m| if m.lcd_attach(k) { 0 } else { 1 })
 }
 
-/// Attached screen: 0 = GC9A01, 1 = CO5300, -1 = none
+/// # Safety
+/// Attach a screen by CLI spec ("ili9342@sclk=36,mosi=37,cs=3,dc=35,rst=-1", see `Machine::lcd_attach_spec`); 0 = ok, 1 = rejected. p/len must be valid UTF-8
+#[no_mangle]
+pub unsafe extern "C" fn tb_lcd_attach_spec(p: *const u8, len: usize) -> i32 {
+    let s = String::from_utf8_lossy(std::slice::from_raw_parts(p, len)).into_owned();
+    with(1, |m| m.lcd_attach_spec(&s).map_or(1, |_| 0))
+}
+
+/// Attached screen: 0 = SPI TFT (any DCS panel), 1 = CO5300, -1 = none
 #[no_mangle]
 pub extern "C" fn tb_lcd_kind() -> i32 {
     with(-1, |m| {
