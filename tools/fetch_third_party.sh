@@ -30,4 +30,11 @@ for pair in 5.1-5.2:ed99228396aaa18935b575d600bc19da38dc4746 5.3:daab5dbba958a13
   done
 done
 [ -d riscv-tests ] || git clone -q --depth 1 --recursive --shallow-submodules https://github.com/riscv-software-src/riscv-tests.git
+# Arduino libraries for firmware/arduino/*/libs.txt (MIT; M5GFX bundles LovyanGFX BSD-2), pinned to full commits; sources never enter the repo
+mkdir -p arduino-libs
+for pair in M5Unified:35903583211e1f39ca88920714525fbcd1eb714a M5GFX:a8ebd7bdaae2e9bdc2f3c69c25b83a84d819af72; do
+  name=${pair%%:*}; sha=${pair#*:}
+  [ -d "arduino-libs/$name/.git" ] || git clone -q "https://github.com/m5stack/$name" "arduino-libs/$name"
+  [ "$(git -C "arduino-libs/$name" rev-parse HEAD)" = "$sha" ] || { git -C "arduino-libs/$name" fetch -q origin && git -C "arduino-libs/$name" checkout -q "$sha"; }
+done
 echo "third_party ready"
