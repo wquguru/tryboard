@@ -4,6 +4,7 @@
 //! reuse tryboard-soc models; S3-only interrupt matrix, EXTMEM and 49-pin GPIO live in periph.rs. Wi-Fi MAC and
 //! the virtual world are in tryboard-soc (shared with C3, wired up with the S3 layout). lint: allow-long-comment
 
+pub mod ble;
 pub mod boot;
 mod chip;
 pub mod hle;
@@ -20,17 +21,13 @@ use tryboard_soc::devices::audio::{self, Audio, PortIo};
 use tryboard_soc::devices::lcd::Lcd;
 use tryboard_soc::devices::pins::PinDevices;
 use tryboard_soc::gdma::{DmaMem, Gdma, GdmaLayout};
-use tryboard_soc::gpspi::GpSpi;
-use tryboard_soc::i2c::I2c;
-use tryboard_soc::i2s::I2s;
-use tryboard_soc::iotrace::IoTrace;
-use tryboard_soc::ledc::Ledc;
 use tryboard_soc::pcnt::{self as pcnt_mod, Pcnt};
 use tryboard_soc::periph::{Systimer, Timg, Uart};
 use tryboard_soc::rmt::{Rmt, RmtLayout, Ws2812};
 use tryboard_soc::spiflash::SpiFlash;
 use tryboard_soc::tasktrace::TaskTrace;
 use tryboard_soc::wifi::{self, WifiLayout, WifiMac};
+use tryboard_soc::{gpspi::GpSpi, i2c::I2c, i2s::I2s, iotrace::IoTrace, ledc::Ledc};
 use tryboard_xtensa::{sr, Bus, BusFault, Cpu, Exit};
 
 pub const CPU_HZ: u64 = tryboard_soc::periph::CPU_HZ;
@@ -137,6 +134,7 @@ pub struct SocBus {
     pub lines: [u32; 2],
     /// Core 1 entry requested by firmware (ets_set_appcpu_boot_addr, set in HLE)
     pub appcpu_boot: Option<u32>,
+    pub ble: ble::Slot,
     pub gpio: Gpio,
     pub spi1: SpiFlash,
     pub extmem: Extmem,
@@ -223,6 +221,7 @@ impl Default for SocBus {
             intm1: Intmatrix::default(),
             lines: [0; 2],
             appcpu_boot: None,
+            ble: ble::Slot::default(),
             gpio: Gpio::default(),
             spi1,
             extmem: Extmem::default(),
@@ -1189,6 +1188,7 @@ fn run_core(
             }
             Exit::Hle(pc) => match hle.get(&pc) {
                 Some(kind) => hle::call(*kind, cpu, bus),
+                None if ble::call_at(pc, cpu, bus) => {}
                 None => return Some(Stop::Hle(pc)),
             },
             Exit::Break(v) => return Some(Stop::Break(v)),

@@ -5,6 +5,8 @@ Usage:
   tools/ble_sigs.py gen   <out.rs> <lib.a>...                 generate core/crates/soc/src/ble/sigs.rs
   tools/ble_sigs.py check <flash.bin> <app.elf> <lib.a>...    against ELF symbols, check each signature hits exactly once in the .bin at the right address
   tools/ble_sigs.py dump  <lib.a>...                          print per-function sizes
+  tools/ble_sigs.py gen-xt   <out.rs> <lib.a>...              ESP32-S3 (Xtensa) libs -> core/crates/soc/src/ble/sigs_xt.rs (E-04)
+  tools/ble_sigs.py check-xt <flash.bin> <app.elf> <lib.a>... same check for an S3 build (matcher: ble/sig_xt.rs)
 
 A signature is the function's bytes with relocation fields removed. The repo stores only each instruction's masked value,
 mask and length (relocated immediate bits zeroed), never the library's raw bytes or disassembly. To survive linker relaxation
@@ -330,7 +332,7 @@ def variants(libs):
             n = min(n, len(u))
             if any(nm != fn and cu[:n] == u[:n] for nm, cu in corpus):
                 if fn not in AMBIGUOUS_OK:
-                    raise SystemExit(f'{fn} has the same signature as other functions, cannot tell apart')
+                    raise SystemExit(f'{fn} has the same signature as {sorted({nm for nm, cu in corpus if nm != fn and cu[:n] == u[:n]})[:5]}, cannot tell apart')
                 dup = sorted({nm for nm, cu in corpus if nm != fn and cu[:n] == u[:n]})
                 print(f'{fn}: same shape as {dup}, located via call site', file=sys.stderr)
             pre = u[:n]
@@ -344,8 +346,295 @@ def variants(libs):
     return out
 
 
+# ---- Xtensa (ESP32-S3 libbtdm, E-04) ----
+# Literal pool precedes each function; SLOT0_OP / ASM_EXPAND (relaxable longcall) relocs. Details: DECISIONS 2026-10-20 E-04
+R_XT_SLOT0_OP, R_XT_ASM_EXPAND = 20, 11
+EM_XTENSA = 94
+
+# Kinds (match sig_xt.rs): exact under mask / longcall (n << 4 | reg) / unreachable fill (0-3 zero bytes) /
+# literal constant of the preceding L32R (tells apart look-alikes, e.g. osi_funcs_register vs r_h4tl_eif_register)
+X_EXACT, X_LONGCALL, X_FILL, X_LIT = 0, 1, 2, 3
+
+
+def xt_len(b0):
+    """Instruction length from op0 (8..13 are the 16-bit density forms)"""
+    return 2 if 8 <= (b0 & 0xf) <= 13 else 3
+
+
+def xt_reloc_mask(w, ln):
+    """Mask that keeps opcode / registers and drops the PC-relative field of a SLOT0_OP-relocated instruction"""
+    op0 = w & 0xf
+    if ln == 2:
+        if op0 == 0xc and (w >> 7) & 1:  # BEQZ.N / BNEZ.N (RI6): keep op0, i/z, s
+            return 0x0fcf
+        raise ValueError(f'unhandled narrow relocated insn {w:04x}')
+    if op0 == 1:  # L32R: keep at
+        return 0x0000ff
+    if op0 == 5:  # CALLn: keep n
+        return 0x00003f
+    if op0 == 6:
+        n = (w >> 4) & 3
+        if n == 0:  # J
+            return 0x00003f
+        if n == 1:  # BZ (BRI12)
+            return 0x000fff
+        if n == 3 and (w >> 6) & 3 == 0:
+            raise ValueError(f'relocated ENTRY {w:06x}')
+        return 0x00ffff  # BI0 / BI1 / LOOP* (BRI8)
+    if op0 == 7:  # B (RRI8)
+        return 0x00ffff
+    raise ValueError(f'unhandled relocated insn {w:06x}')
+
+
+def xt_word(b, p):
+    ln = xt_len(b[p])
+    w = 0
+    for i in range(ln):
+        w |= b[p + i] << (8 * i)
+    return w, ln
+
+
+def xt_fills(e, si):
+    """Unreachable fill ranges of section si from the .xt.prop property table: {offset: size}"""
+    out = {}
+    for i, s in enumerate(e.sh):
+        if s['nm'] != '.xt.prop' and not s['nm'].startswith('.xt.prop.'):
+            continue
+        d = e.sec_data(i)
+        for rs in e.sh:
+            if rs['type'] != 4 or rs['info'] != i:
+                continue
+            symsec = e.sh[rs['link']]
+            for j in range(rs['size'] // 12):
+                off, info, addend = struct.unpack_from('<IIi', e.b, rs['off'] + j * 12)
+                shndx = struct.unpack_from('<H', e.b, symsec['off'] + (info >> 8) * 16 + 14)[0]
+                if shndx != si or off % 12:
+                    continue
+                a, n, flags = struct.unpack_from('<III', d, off)
+                if flags & 8:
+                    out[a + addend] = n
+    return out
+
+
+def xt_relocs(e, i):
+    """Relocations applying to section i: [(offset, type, symbol section, symbol value, addend)]"""
+    out = []
+    for s in e.sh:
+        if s['type'] == 4 and s['info'] == i:
+            symsec = e.sh[s['link']]
+            for j in range(s['size'] // 12):
+                off, info, addend = struct.unpack_from('<IIi', e.b, s['off'] + j * 12)
+                _, value, _, _, _, shndx = struct.unpack_from('<IIIBBH', e.b, symsec['off'] + (info >> 8) * 16)
+                out.append((off, info & 0xff, shndx, value, addend))
+    return out
+
+
+def xt_signature(e, si, start, size):
+    sec = e.sec_data(si)
+    code = sec[start:start + size]
+    fills = xt_fills(e, si)
+    rel = {}
+    expand = set()
+    for off, typ, shndx, value, addend in xt_relocs(e, si):
+        if not start <= off < start + size:
+            continue
+        if typ == R_XT_ASM_EXPAND:
+            expand.add(off - start)
+        elif typ == R_XT_SLOT0_OP:
+            rel[off - start] = (shndx, value + addend)
+        else:
+            raise ValueError(f'unhandled relocation type {typ} @ {off:#x}')
+    units = []
+    p = 0
+    filled = set()
+    while p < len(code):
+        if start + p in fills and p not in filled:
+            filled.add(p)
+            n = fills[start + p]
+            assert n <= 3 and code[p:p + n] == bytes(n), (p, n)
+            units.append((X_FILL, 0, 0, n))
+            p += n
+            continue
+        w, ln = xt_word(code, p)
+        if p in expand:
+            # l32r aR, lit ; callxN aR
+            w2, ln2 = xt_word(code, p + ln)
+            assert w & 0xf == 1 and ln2 == 3 and w2 & 0xff00cf == 0xc0, (hex(w), hex(w2))
+            reg = (w >> 4) & 0xf
+            assert (w2 >> 8) & 0xf == reg
+            units.append((X_LONGCALL, ((w2 >> 4) & 3) << 4 | reg, 0, 6))
+            p += 6
+            continue
+        m = xt_reloc_mask(w, ln) if p in rel else (0xffff if ln == 2 else 0xffffff)
+        units.append((X_EXACT, w & m, m, ln))
+        if p in rel and w & 0xf == 1 and rel[p][0] not in (0, 0xfff1):
+            lsec, loff = rel[p]
+            if not any(o == loff for o, *_ in xt_relocs(e, lsec)):
+                units.append((X_LIT, struct.unpack_from('<I', e.sec_data(lsec), loff)[0], 0xffffffff, 0))
+        p += ln
+    return units
+
+
+def xt_funcs(e):
+    """All function symbols of an object: [(name, section, start, size)]"""
+    return [(s['name'], s['shndx'], s['value'], s['size']) for s in e.syms
+            if (s['info'] & 0xf) == 2 and s['shndx'] not in (0, 0xfff1) and s['size'] > 0]
+
+
+def xt_match_at(b, p, units, base):
+    lit = None
+    for i, (k, v, m, ln) in enumerate(units):
+        if k == X_FILL:
+            # Try every fill size; zero bytes only
+            return any(p + n <= len(b) and b[p:p + n] == bytes(n) and xt_match_at(b, p + n, units[i + 1:], base)
+                       for n in range(4))
+        if k == X_LIT:
+            if lit is None or not 0 <= lit <= len(b) - 4 or struct.unpack_from('<I', b, lit)[0] != v:
+                return False
+            continue
+        if p >= len(b):
+            return False
+        n = xt_len(b[p])
+        if p + n > len(b):
+            return False
+        w, _ = xt_word(b, p)
+        if k == X_EXACT:
+            if n != ln or (w & m) != v:
+                return False
+            if w & 0xf == 1:
+                # L32R literal (segment-relative): ((pc + 3) & ~3) + (sign-extended imm16 << 2), imm16 always negative
+                pc = base + p
+                lit = ((pc + 3) & ~3) + (((w >> 8) | ~0xffff) << 2) - base
+            p += n
+        elif k == X_LONGCALL:
+            cn, reg = v >> 4, v & 0xf
+            if n == 3 and w & 0x3f == (cn << 4) | 5:
+                p += 3
+            elif n == 3 and w & 0xff == (reg << 4) | 1 and p + 6 <= len(b):
+                w2 = b[p + 3] | b[p + 4] << 8 | b[p + 5] << 16
+                if w2 != (0xc0 | cn << 4 | reg << 8):
+                    return False
+                p += 6
+            else:
+                return False
+    return True
+
+
+def xt_match_all(segs, units):
+    hits = []
+    for a, b in segs:
+        for p in range((-a) & 3, len(b) - 1, 4):
+            if xt_match_at(b, p, units, a):
+                hits.append(a + p)
+    return hits
+
+
+def xt_variants(libs):
+    """As variants(), for Xtensa: dedupe across versions, shortest prefix unique among all function starts"""
+    corpus = []
+    full = {}
+    for lib in libs:
+        ver = lib_version(lib)
+        for mname, body in ar_members(lib):
+            if not body.startswith(b'\x7fELF'):
+                continue
+            e = Elf(body)
+            if e.machine != EM_XTENSA:
+                continue
+            for nm, si, start, size in xt_funcs(e):
+                try:
+                    u = xt_signature(e, si, start, size)
+                except (ValueError, AssertionError, IndexError):
+                    continue
+                corpus.append((nm, u))
+                if nm in FUNCS_RV:
+                    lst = full.setdefault(nm, {}).setdefault(tuple(u), [])
+                    if ver not in lst:
+                        lst.append(ver)
+    out = {}
+    for fn, vs in full.items():
+        res = []
+        for u, vers in vs.items():
+            u = list(u)
+            n = min(len(u), MIN_UNITS)
+            while n < len(u) and any(nm != fn and cu[:n] == u[:n] for nm, cu in corpus):
+                n += 4
+            n = min(n, len(u))
+            if any(nm != fn and cu[:n] == u[:n] for nm, cu in corpus):
+                if fn not in AMBIGUOUS_OK:
+                    raise SystemExit(f'{fn} has the same signature as {sorted({nm for nm, cu in corpus if nm != fn and cu[:n] == u[:n]})[:5]}, cannot tell apart')
+                dup = sorted({nm for nm, cu in corpus if nm != fn and cu[:n] == u[:n]})
+                print(f'{fn}: same shape as {dup[:6]}..., located via call site', file=sys.stderr)
+            pre = u[:n]
+            for r in res:
+                if r[0] == pre:
+                    r[1].extend(v for v in vers if v not in r[1])
+                    break
+            else:
+                res.append((pre, list(vers)))
+        out[fn] = res
+    return out
+
+
+def xt_gen(out, libs):
+    var = xt_variants(libs)
+    lines = [
+        '//! Generated by tools/ble_sigs.py gen-xt, do not edit. Source: ESP32-S3 libbtdm_app*.a shipped with ESP-IDF 5.1-5.5.1',
+        '//! (esp32c3-bt-lib, Apache-2.0). Masked instruction values only; each entry: (kind, masked value, mask, length), kind per sig_xt.rs.',
+        '',
+        'use super::sig::Unit;',
+        '',
+    ]
+    total = 0
+    for fn in FUNCS_RV:
+        vs = var.get(fn)
+        if not vs:
+            raise SystemExit(f'{fn} not found in the library')
+        lines.append(f'/// {fn}: {len(vs)} version variants')
+        lines.append(f'pub const {fn.upper()}: &[&[Unit]] = &[')
+        for units, vers in vs:
+            total += len(units)
+            lines.append(f'    // {", ".join(vers)}')
+            lines.append('    &[')
+            for k, v, m, ln in units:
+                lines.append(f'        Unit({k}, 0x{v:06x}, 0x{m:06x}, {ln}),')
+            lines.append('    ],')
+        lines.append('];')
+        lines.append('')
+    open(out, 'w').write('\n'.join(lines))
+    print(f'wrote {out}: {len(FUNCS_RV)} functions, {total} units')
+
+
+def xt_check(binp, elfp, libs):
+    """Each full-length object signature must hit exactly once, at the ELF symbol address"""
+    segs = app_segments(open(binp, 'rb').read())
+    e = Elf(open(elfp, 'rb').read())
+    truth = {s['name']: s['value'] for s in e.syms if s['name'] in FUNCS_RV and (s['info'] & 0xf) == 2}
+    ok = True
+    for fn in FUNCS_RV:
+        hits = None
+        for lib in libs:
+            for mname, body in ar_members(lib):
+                if not body.startswith(b'\x7fELF'):
+                    continue
+                oe = Elf(body)
+                for nm, si, start, size in xt_funcs(oe):
+                    if nm == fn:
+                        h = xt_match_all(segs, xt_signature(oe, si, start, size)[:MAX_UNITS])
+                        if h:
+                            hits = h
+        good = hits == [truth.get(fn)]
+        ok &= good
+        print(('OK ' if good else 'BAD'), fn, [hex(h) for h in hits or []], 'elf', hex(truth.get(fn, 0)))
+    sys.exit(0 if ok else 1)
+
+
 def main():
     cmd = sys.argv[1]
+    if cmd == 'gen-xt':
+        return xt_gen(sys.argv[2], sys.argv[3:])
+    if cmd == 'check-xt':
+        return xt_check(sys.argv[2], sys.argv[3], sys.argv[4:])
     if cmd == 'gen':
         out, libs = sys.argv[2], sys.argv[3:]
         var = variants(libs)

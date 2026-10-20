@@ -1053,3 +1053,27 @@
 - AMOLED 无背光脚：显示只看 SLPOUT + DISPON；亮度 0x51 只在 0x53 BCTRL 置位时缩放（默认初始化发 0x53 0x20、0x51 0xFF），避免不发 0x51 的初始化变全黑。
 - 依赖 esp_lcd_co5300 锁 2.0.3（注册表标 Apache-2.0）；2.1.0 / 2.2.0 注册表标「Custom」，license.txt 虽相同仍不用。
 - CO5300 3V3 电流按 40 mA 估算（典型亮界面，随画面变化，未标定）。
+
+## 2026-10-20 E-04 S3 BLE：Xtensa 版 libbtdm 掩码签名 + 窗口 ABI 的 VHCI HLE
+- 决定：S3 沿用 C3 的路线 a′，只靠 .bin 认出 libbtdm 的 8 个边界函数。`tools/ble_sigs.py gen-xt` 从 `third_party/btlib/*/esp32s3/libbtdm_app*.a`（IDF 5.1–5.5.1，Apache-2.0，见 LICENSING）生成 `core/crates/soc/src/ble/sigs_xt.rs`（8 个函数、488 个单元），匹配器 `ble/sig_xt.rs`，接入 `esp32s3/src/ble.rs`。仓库里只有掩码后的指令值、掩码和长度，没有库的原始字节，也没有反汇编。
+- 掩码：库里指令上的重定位只有两种。
+  - `R_XTENSA_SLOT0_OP`：PC 相对字段，按指令清零。L32R 留 at（0xff）；CALLn / J 留 op0 + n（0x3f）；BZ（BRI12）0xfff；BI0 / BI1 / LOOP / B（RRI8）0xffff；BEQZ.N / BNEZ.N 0x0fcf。遇到别的被重定位的指令（含 ENTRY）生成器直接报错，不猜。
+  - `R_XTENSA_ASM_EXPAND`：`-mlongcalls` 的 `l32r aR, lit; callxN aR`。链接器可能松弛成 `callN` 并删掉 3 字节，所以记成一个 LONGCALL 单元（值 = n<<4 | R），两种形态都认。
+- 文本段字面量池：`-mtext-section-literals` 把字面量池放在同一个 section 里、函数前面。签名从符号地址开始取，只取函数体。L32R 的立即数链接后会变，所以屏蔽掉。
+- FILL：`.xt.prop` 里 flag 8（unreachable）的条目标出跳转后的对齐填充。松弛后，二进制里这里是 0–3 个零字节。记成 FILL 单元，匹配时 n = 0..3 回溯；size 为 0 的条目也算，因为链接后可能补字节。
+- LIT：被重定位的 L32R 指向的字面量如果是无重定位的常量，就追加一个 LIT 单元，要求链接后那个字等于原值（地址按 `((pc+3)&~3) + (imm16|~0xffff)<<2` 算）。原因：5.1–5.3 的 `btdm_osi_funcs_register` 和 `r_h4tl_eif_register` 指令形状完全相同，只差 osi 版本常量。
+- 搜索：函数入口 4 字节对齐（Xtensa ENTRY 函数要求），只在 4 对齐处试。短函数的处理同 C3：`register_callback` 只在 send_packet 附近 ±64KB 找，`get_mode` 只在 init 附近找。pll_track 单靠签名有 11 个同形函数，所以照 C3 按 `btdm_controller_enable` 调用前 24 字节内的 call 找；Xtensa 指令按字节对齐，逐字节扫，认 CALLn 和未松弛的 `l32r+callxN`。
+- HLE（与 C3 用 code_patch 改取指不同）：
+  - 入口地址直接放进 `Cpu::hle_addrs`，在 ENTRY 执行前拦截，窗口还是调用者的。
+  - 读写都按 CALLINC 偏移 4n：参数 a(4n+2..)，返回地址 a(4n)，结果写 a(4n+2)。PC = (ra & 0x3fffffff) | 高 2 位，不跑 RETW，窗口不变，和已有 `hle.rs` 的 ROM HLE 同一套规则。
+  - 要回调固件函数（malloc_internal、task_create、信号量、notify_host_*）时，借调用者的 CALLn：设 a(4n) = n<<30 | 魔术槽、PS.CALLINC = n、PC = f。f 自己跑 ENTRY / RETW 回到魔术槽，窗口仍是调用者的。原返回地址按调用者 SP 存进表，所以不同任务交错调用也不会乱。
+  - 不在会返回的帧里临时降 SP：窗口溢出写的位置和下溢读的位置会对不上。只有永不返回的桩任务入口把收包缓冲放在 SP 下方，和 C3 一样。
+  - 桩任务名不能放栈上（会被溢出区覆盖），改成用 osi `_malloc_internal`（偏移 120）分配 8 字节。
+  - task_create 的第 7 个参数 core_id 走调用者栈。我们不写调用者的帧，原样读；bt.c 把 ≥ 核数的值当 tskNO_AFFINITY，取到 0 或 1 也都能跑。
+- 公共接口变化：`tryboard_soc::ble` 新增 `pub mod sig_xt`、`pub mod sigs_xt`，`sig::{Unit, Seg, Hooks}` 复用。原有函数签名一个没改；`ble_sigs.py` 的 RV `gen` 输出与改动前逐字节相同。esp32s3 `SocBus` 新增 `ble: ble::Slot`；Chip 的 `ble()` / `ble_mut()` / `ble_error()` 在 S3 上实现，CLI `--ble-phone` / `--inputs ble=` / wasm `tb_ble_*` 不用改就能用。
+- 覆盖：签名覆盖 5.1-5.2、5.3、5.4、5.5.0、5.5.1 的 S3 库（`libbtdm_app.a` 与 `libbtdm_app_flash.a`），只用本机 5.5.1 编的 s3-ble-hr 实测；`check-xt` 对照 app.elf 确认 8 个函数各自唯一命中且地址正确。
+- 防误认：`esp32s3::ble::tests::sigs_hit_only_ble_firmware` 遍历 firmware/build 下所有 S3 镜像（51 个），只有 s3-ble-hr 被认出；其余镜像去掉 BLE_INIT 门槛单跑 5 个长签名，也零命中。
+- 替代方案：
+  - 改取指打补丁（C3 做法）：Xtensa 的 3 字节指令和 L32R 字面量池让 8 字节跳板难放，否掉。
+  - 在 ENTRY 之后拦截：要自己模拟 RETW 和窗口下溢，否掉。
+  - 解析 app.elf（路线 c）：要求用户上传 ELF，留作后备。

@@ -279,11 +279,49 @@ impl Esp32s3 {
         m.bus.flash = flash;
         let jedec = m.bus.spi1.jedec;
         init_flashchip(&mut m, size_code, jedec)?;
+        install_ble(&mut m, &app);
 
         // Stack is the top of ROM's .stack_pro (__stack, 0x3FCEB710), matching the real bootloader's jump into the app
         let entry = app.entry;
         enter_windowed(&mut m.cpu, &mut m.bus, entry, 0x3FCE_B710, SPILL_PRO)?;
         Ok((m, app))
+    }
+}
+
+/// BLE (E-04): find the VHCI boundary by signature and, if found, intercept its entries and the magic return slots
+fn install_ble(m: &mut Esp32s3, app: &AppInfo) {
+    let flash = &m.bus.flash;
+    let segs: Vec<(u32, &[u8])> = app
+        .segments
+        .iter()
+        .filter_map(|&(load, data, len)| {
+            flash
+                .get(data as usize..(data + len) as usize)
+                .map(|b| (load, b))
+        })
+        .collect();
+    match crate::ble::locate(&segs) {
+        Ok(None) => {}
+        Ok(Some(hooks)) => {
+            // BT address = base MAC + 2 (esp_read_mac's ESP_MAC_BT rule); HCI byte order is little-endian
+            let blk1 = 0x44 / 4;
+            let (lo, hi) = (m.bus.efuse[blk1], m.bus.efuse[blk1 + 1]);
+            let mut mac = [0u8; 6];
+            mac[..4].copy_from_slice(&lo.to_le_bytes());
+            mac[4..].copy_from_slice(&hi.to_le_bytes()[..2]);
+            let v = u64::from_le_bytes([mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], 0, 0]) + 2;
+            let mut addr = [0u8; 6];
+            addr.copy_from_slice(&v.to_le_bytes()[..6]);
+            let b = crate::ble::BleHle::new(hooks, addr);
+            let addrs = b.hle_addrs();
+            // Hooked entries are in flash, above the ROM range the HLE check normally covers
+            let top = addrs.iter().copied().max().unwrap_or(0) + 1;
+            m.cpu.hle_hi = m.cpu.hle_hi.max(top);
+            m.cpu.hle_addrs.extend(addrs);
+            m.cpu.hle_addrs.sort_unstable();
+            m.bus.ble.hle = Some(Box::new(b));
+        }
+        Err(e) => m.bus.ble.error = Some(e),
     }
 }
 
@@ -321,6 +359,11 @@ impl Esp32s3 {
         let flash = std::mem::take(&mut old.flash);
         let rom = std::mem::take(&mut self.rom_elf);
         let (mut m, _) = Esp32s3::boot_with(&rom, flash, bus)?;
+        // The virtual phone is outside world: survives reset (connection drops with the chip), air log continues
+        if let (Some(old), Some(new)) = (self.bus.ble.hle.as_mut(), m.bus.ble.hle.as_mut()) {
+            std::mem::swap(&mut old.world, &mut new.world);
+            new.world.chip_reset(crate::ble::now_us(&self.cpu));
+        }
         let t = self.cpu.cycles;
         m.cpu.cycles = t;
         m.bus.now = t;
