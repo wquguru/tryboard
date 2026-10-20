@@ -134,6 +134,9 @@ await frame.click('#embedSerial');
 // ---- 5. Storage: nothing written in the iframe's real localStorage
 const keys1 = await frame.evaluate(() => globalThis.__tbEmbedRealKeys());
 report('iframe localStorage untouched', keys0 === 0 && keys1.length === 0, JSON.stringify(keys1));
+// The shim itself: a page write lands in memory only
+const probe = await frame.evaluate(() => { localStorage.setItem('tb-probe', '1'); return { mem: localStorage.getItem('tb-probe'), real: globalThis.__tbEmbedRealKeys() }; });
+report('writes go to the in-memory copy', probe.mem === '1' && !probe.real.includes('tb-probe'), JSON.stringify(probe.real));
 
 // ---- 6. "Open in TryBoard" opens /app with the same s in a new tab (sandbox lets the popup escape)
 const href = await frame.$eval('#embedOpen', (a) => a.href);
