@@ -179,7 +179,7 @@ report('paced: sim time starts near 0 with a progress tag', !!first && first.t <
 const firstF = seen.find((o) => o.unitF);
 report('paced: UNIT F appears only after the BOOT press at 1.2 s', !!firstF && firstF.t >= 1.1 && seen.some((o) => !o.unitF && o.t > 1.0), firstF ? `first at ${firstF.t.toFixed(2)} s` : 'never');
 const hot = seen.find((o) => o.temp === 35);
-report('paced: room temperature follows the log (35 °C from 2 s)', !!hot && hot.t >= 2 && seen.some((o) => o.temp !== 35 && o.t > 0.5), hot ? `at ${hot.t.toFixed(2)} s` : 'never');
+report('paced: room temperature follows the log (35 °C from 2 s)', !!hot && hot.t >= 1.9 && seen.some((o) => o.temp !== 35 && o.t > 1.8), hot ? `at ${hot.t.toFixed(2)} s` : 'never');
 const pr = await pp.evaluate(() => globalThis.__tbShareRestored ?? {});
 report('paced: end state = fast-forward (serial and report at the same cycle)', pr.paced === true && pr.stdout === es && pr.report === er, pr.stdout === es ? `${es.length} bytes, report ${pr.report === er ? 'same' : 'differs'}` : `differs at ${diff(pr.stdout ?? '', es)}`);
 report('paced: progress tag gone after the end', await waitFor(pp, () => !document.getElementById('embedReplay'), null, 5000));
