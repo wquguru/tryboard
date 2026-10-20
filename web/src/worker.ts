@@ -582,7 +582,7 @@ function postPaused(e: Exports) {
 }
 
 /** Boot fields; locale exists so any human text the worker makes follows the page (core errors are English already). */
-type BootMsg = { wasm: WebAssembly.Module; rom?: ArrayBuffer; romId: number; flash?: ArrayBuffer; flashId: number; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean | LcdKind; battery?: Battery; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; board?: string; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
+type BootMsg = { wasm: WebAssembly.Module; rom?: ArrayBuffer; romId: number; flash?: ArrayBuffer; flashId: number; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean | LcdKind; battery?: Battery; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; board?: string; grove?: string; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
 const I2S_KIND: Record<string, number> = { max98357a: 0, inmp441: 1 };
 // ROM / firmware bytes by main-thread id (R-23): sent once, then every boot / seek copies them into a fresh instance.
 // ROMs are one per chip; firmware keeps only the latest (live.ts resends bytes whenever the id changes).
@@ -621,6 +621,11 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
     post({ type: 'error', message: `--board ${m.board}: rejected (unknown id or the firmware is built for another chip than ${chip})` });
     return null;
   }
+  // Grove unit on the preset's Port A (M5-09d), right after the preset like CLI --grove, before --env
+  if (m.grove && withStr(e, m.grove, (p, n) => e.tb_grove(p, n)) !== 0) {
+    post({ type: 'error', message: `--grove ${m.grove}: rejected (unknown unit or no board preset with Port A)` });
+    return null;
+  }
   for (const d of m.i2c ?? []) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
   if (m.env) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
   // Same order as the CLI: I2C devices, touch INT, battery (needs the PMIC), then the screen
@@ -655,7 +660,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   taskChunks = [];
   taskBytes = 0;
   flushIo(e, true);
-  inputLog = { version: 1, chip: simChip, i2c: [...(m.i2c ?? [])], lcd: m.lcd === true || m.lcd === 'gc9a01', ...(m.lcd === 'co5300' ? { spi: 'co5300' as const } : {}), ...(m.battery ? { battery: { ...m.battery } } : {}), ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.dht11 !== undefined ? { dht11: m.dht11 } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.board ? { board: m.board } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
+  inputLog = { version: 1, chip: simChip, i2c: [...(m.i2c ?? [])], lcd: m.lcd === true || m.lcd === 'gc9a01', ...(m.lcd === 'co5300' ? { spi: 'co5300' as const } : {}), ...(m.battery ? { battery: { ...m.battery } } : {}), ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.dht11 !== undefined ? { dht11: m.dht11 } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.board ? { board: m.board } : {}), ...(m.grove ? { grove: m.grove } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
   record(e, { kind: 'power', on: true });
   if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
   // Harness applies at power-up and is logged (replay / rewind apply it at cycle 0, same as CLI --i2c-wire).

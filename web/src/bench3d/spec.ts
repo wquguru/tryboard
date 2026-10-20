@@ -1,6 +1,9 @@
 // Scene description types: the add-on parts an example declares and the initial camera.
 import type { BoardId } from './boarddevs';
 
+/** Grove units the core models (core/crates/machine/src/boards.rs GROVE_UNITS) */
+export type GroveId = 'env3' | 'env4';
+
 
 
 /** Add-on parts declared by an example (scene.parts in examples.json). */
@@ -46,6 +49,8 @@ export interface SceneSpec {
   parts: PartSpec[];
   /** All-in-one board replacing the devboard + breadboard (E-03); its onboard devices come from BOARD_DEVS (M5 ids: a core preset, M5-09b) */
   board?: BoardId;
+  /** Grove unit on the preset board's Port A (M5-09d, = CLI --grove); ignored without an M5 preset */
+  grove?: GroveId;
   /** Initial camera (mm, world coordinates) */
   view?: { position: [number, number, number]; target: [number, number, number] };
 }

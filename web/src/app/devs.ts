@@ -33,6 +33,7 @@ export const devsOf = (sc: SceneSpec, st: DevState) => {
     touchInt: bd?.touchInt ?? touchIntOf(parts),
     i2s: i2sOf(parts),
     board: bd?.preset,
+    grove: bd?.preset ? sc.grove : undefined,
   };
 };
 /** First encoder / ultrasonic on the bench, attached to the core at power-on. */

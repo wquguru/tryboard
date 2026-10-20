@@ -1106,5 +1106,9 @@ const d: Dict = {
   "The bench is as found. Change a switch or drop your own firmware, then check again.": "벤치는 받은 그대로입니다. 스위치를 바꾸거나 직접 만든 펌웨어를 놓고 다시 검사하세요.",
   "The first line checks the bench firmware with your switches, the second your own firmware; both give the same verdict and run ID as the page.": "첫 줄은 스위치 설정으로 벤치 펌웨어를, 둘째 줄은 직접 만든 펌웨어를 검사합니다. 둘 다 페이지와 같은 판정과 실행 ID를 냅니다.",
   "Checks your own firmware; gives the same verdict and run ID as the page.": "직접 만든 펌웨어를 검사합니다. 판정과 실행 ID는 페이지와 같습니다.",
+  "Grove Port A": "Grove 포트 A",
+  "Grove unit {name}": "Grove 유닛 {name}",
+  "Grove unit removed": "Grove 유닛 분리",
+  "Same as CLI --grove {id}: temperature, humidity and pressure follow the environment controls.": "CLI --grove {id}와 같음: 온도, 습도, 기압이 환경 컨트롤을 따릅니다.",
 };
 export default d;

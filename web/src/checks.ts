@@ -99,6 +99,7 @@ export function bootOptions(l: Level) {
   const dh = val('--dht11');
   const dht11 = dh === undefined ? undefined : Number(dh);
   const board = val('--board');
+  const grove = val('--grove');
   const ti = val('--touch-int');
   const touchInt = ti === undefined ? undefined : Number(ti);
   // Harness (P2-11, estimate): total I2C wire length, antenna blockage
@@ -106,7 +107,7 @@ export function bootOptions(l: Level) {
   const i2cWire = wv === undefined ? undefined : Number(wv);
   const av = val('--antenna-loss');
   const antenna = av === undefined ? undefined : Number(av);
-  return { i2c, env, lcd, servo, power, encoder, sonar, dht11, touchInt, board, usb: a.includes('--usb-log'), i2cLog: a.includes('--i2c-log'), i2cWire, antenna };
+  return { i2c, env, lcd, servo, power, encoder, sonar, dht11, touchInt, board, grove, usb: a.includes('--usb-log'), i2cLog: a.includes('--i2c-log'), i2cWire, antenna };
 }
 
 /** Timed input script like the CLI's parse_script: time (simulated s):action, split by `;` or newline, `#` starts a comment */
