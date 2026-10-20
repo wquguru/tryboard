@@ -101,6 +101,17 @@ impl LcdPins {
         bl: Some(15),
     };
 
+    /// Classic ESP32 default: M5StickC Plus2 wiring (ST7789 on the GPIO matrix, backlight on GPIO27)
+    pub const ESP32_DEFAULT: LcdPins = LcdPins {
+        sclk: 13,
+        mosi: 15,
+        miso: None,
+        cs: 5,
+        dc: 14,
+        rst: Some(12),
+        bl: Some(27),
+    };
+
     /// Override fields from "sclk=36,mosi=37,miso=35,cs=3,dc=35,rst=-1,bl=-1" (-1 = not connected)
     pub fn parse(base: LcdPins, spec: &str) -> Result<LcdPins, String> {
         let mut p = base;
@@ -148,6 +159,46 @@ impl Lcd {
             LcdKind::Co5300 => Lcd::Co5300(Co5300::new()),
             k => Lcd::Dcs(DcsPanel::new(k.spec().expect("DCS kind"))),
         }
+    }
+
+    /// One SPI transfer while selected: command / address bytes, dummy clocks and MOSI data in, then `miso_bits`
+    /// read back (MISO, or SDA in 3-wire mode; None for CO5300). `release` = the controller raises CS afterwards
+    pub fn spi_transfer(
+        &mut self,
+        dc: bool,
+        head: &[u8],
+        dummy_bits: u32,
+        data: &[u8],
+        miso_bits: u32,
+        release: bool,
+    ) -> Option<Vec<u8>> {
+        let mut rx = None;
+        match self {
+            Lcd::Dcs(l) => {
+                for b in head {
+                    l.byte(dc, *b);
+                }
+                l.clock(dummy_bits);
+                for b in data {
+                    l.byte(dc, *b);
+                }
+                if miso_bits > 0 {
+                    rx = Some(l.read_bits(miso_bits));
+                }
+                if release {
+                    l.cs_release();
+                }
+            }
+            Lcd::Co5300(l) => {
+                for b in head.iter().chain(data) {
+                    l.byte(*b);
+                }
+                if release {
+                    l.cs_release();
+                }
+            }
+        }
+        rx
     }
 
     pub fn kind(&self) -> LcdKind {

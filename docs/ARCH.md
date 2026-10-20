@@ -189,7 +189,7 @@ web/（Vite + TS）
 - 执行快路径（P2-07，不改变任何结果）：`run_core` 调 `Cpu::run_batch` 连续执行，每条指令后用 `Bus::attention` 做与原来逐步循环相同的检查（irq_dirty、外设时间推进到 next_event、落进 ROM 异常向量区）；取指走 64KB 页缓存（IRAM / ROM / 经 MMU 翻译的 IROM 页，写 MMU 时作废）；SRAM 读写在 `Bus::load/store` 里内联；CCOMPARE 记下一次触发的绝对周期，没到就不算。基准见 Reviews/ab/P2-07.md
 - HLE：rom_i2c_* 在 ROM 函数入口（ENTRY 之前）拦截，此时窗口仍是调用者的：参数在 a(4·CALLINC+2..)，返回地址在 a(4·CALLINC)（高 2 位为 CALLINC），返回值写回 a(4·CALLINC+2)，PC 直接回到调用点之后。
 - 软件复位：`mmio_write` 看 RTC_CNTL_OPTIONS0 的复位位（脉冲，存回的值去掉它们）。SW_PROCPU_RST / SW_SYS_RST 记 `reset_request`，写它的那个核在下一条指令前停下，`run` 返回 `Stop::Reset(12 / 3)`；SW_APPCPU_RST（esp_restart 先复位并停住另一个核）直接把核 1 停掉。`Esp32s3::reboot` 用一条新总线重新直接启动：先放进旧的 RTC 慢 / 快速内存和 RTC_CNTL_STORE0–3/6/7，再装镜像段（.rtc.data 被重新装载，与 bootloader 在非深睡唤醒时的做法一致；RTC_NOINIT 不在镜像里所以保留）；RTC_CNTL_RESET_STATE 读回复位原因（两核同值），`esp_reset_reason()` 结合 STORE6 里的提示得到 ESP_RST_SW。外部世界（引脚外部驱动、ADC 电压、I2C 器件、GPIO 记录、WS2812 解码）搬到新机器；模拟时间继续。
-- 八线 PSRAM（`psram.rs`）：不 HLE，ROM 的 `esp_rom_opiflash_exec_cmd` 照常配 SPI1 寄存器；写 CMD 的 USR 位时若 SPI_MEM_MISC 选的是 CS1（CS0_DIS=1、CS1_DIS=0）就交给 `OctalPsram`：0x4040 / 0xC0C0 读写模式寄存器（MR1 厂商 0x0D AP、MR2 density 3 = 8MB / 第 3 代 / good-die，MR3 VCC=3V；写只落 MR0/4/8），0x0000 / 0x8080 同步读写存储体（与 cache 共用 `SocBus::psram`）。dummy、DTR 采样相位、驱动强度只存不用。
+- 八线 / 四线 PSRAM（`psram.rs` 的 `Psram`，`quad` 选协议，默认八线；`Machine::set_psram_quad` / `Chip::set_psram_quad` / CLI `--psram quad|octal`）：四线模式按 USER2 命令位宽 8 位解码 0x9F（ID 0D 5D 52：8MB、非 2T）/ 0x03 / 0x0B / 0xEB 读、0x02 / 0x38 写，24 位地址，0x35 / 0xF5 / 0x66 / 0x99 / 0xC0 只计数；命令位宽与模式不符或不认识的命令计入 unimpl 0x60002000。八线模式不 HLE，ROM 的 `esp_rom_opiflash_exec_cmd` 照常配 SPI1 寄存器；写 CMD 的 USR 位时若 SPI_MEM_MISC 选的是 CS1（CS0_DIS=1、CS1_DIS=0）就交给 `OctalPsram`：0x4040 / 0xC0C0 读写模式寄存器（MR1 厂商 0x0D AP、MR2 density 3 = 8MB / 第 3 代 / good-die，MR3 VCC=3V；写只落 MR0/4/8），0x0000 / 0x8080 同步读写存储体（与 cache 共用 `SocBus::psram`）。dummy、DTR 采样相位、驱动强度只存不用。
 - 外设：与 C3 同族的模型直接复用 tryboard-soc（UART、SYSTIMER、TIMG、SPI1、LEDC、I2C + 器件、RMT + WS2812 + 接收、PCNT、GP-SPI2、GDMA + GC9A01、SHA / AES、引脚器件），Wi-Fi MAC 复用 tryboard-soc（`WifiLayout::S3`，中断源 0；WDEV_RND_REG 在 0x6003507C；SENS 温度传感器给 READY），按芯片参数化的是 RMT（`RmtLayout`：通道数、寄存器块起点、RAM 偏移、GPIO 矩阵信号号）与 GDMA（`GdmaLayout`）；S3 独有的是中断矩阵、EXTMEM、49 脚 GPIO、SENS 单次 ADC（periph.rs）。
 - 入口帧溢出保存区：核 0 / 核 1 分别借用 ROM 的 level 5 / level 4 中断栈（app 装了自己的向量表后 ROM 不再用）。
 - 崩溃检测：落进 ROM 异常向量（VECBASE 仍为 0x40000000 时）停机报 EXCCAUSE / EPC1；app 装了自己的 VECBASE 后，崩溃由固件自己的 panic 处理程序打印（Guru Meditation），CLI 照常转发。
@@ -210,10 +210,17 @@ web/（Vite + TS）
 - 启动：直接启动同 S3（ROM 各 .data* 初值、入口窗口帧、双核由 `ets_set_appcpu_boot_addr` 拉起核 1，两核 256 周期量子交替）；一代 ROM（2016-06-08）的启动横幅只有两行。eFuse 只读：芯片版本 v3.0（REV1 / REV2 位 + APB_CTRL_DATE 位 31）、出厂 MAC 02:54:42:00:00:04（本地管理地址，带 CRC8）。
 - Wi-Fi：PHY 射频校准轮询与 C3 同一套（外设偏移相同、APB 基址 0x3FF40000）；MAC 是上一代 IP（0x3FF73000..0x3FF76000），与 C3 / S3 共用 `tryboard_soc::wifi::WifiMac`，寄存器排布由 `WifiLayout::ESP32.mac`（`MacRegs::ESP32`）给出：7 字接收头、RSSI 偏置 96、接收控制重装位自清、"下一个描述符"寄存器（docs/WIFI.md「经典 ESP32」）。SocBus 在 MMIO 分发里先查 MAC 范围再查射频，`impl tryboard_soc::Mem for SocBus` 让 MAC 读写描述符；中断源 WIFI_MAC 进中断矩阵。WPA2 需要的 SHA（0x3FF03000，SHA-1/256/384/512）/ AES（0x3FF01000）在 `crypto.rs`。RFPLL 校准完成位由 HLE regi2c 读回（块 0x62 寄存器 7 位 7）。
 - RMT 发送（M5-11）：共用 `tryboard_soc::rmt::Rmt`，`RmtLayout::ESP32`（`classic = true`）：0x3FF56000，8 通道 × 64 字块（RAM +0x800），CHnCONF0 / CONF1 成对在 0x20 + 8n（mem_size CONF0[27:24]、div[7:0]；tx_start / mem_rd_rst / conti / idle_out 在 CONF1，脉冲位读回 0），STATUS 0x60、INT 0xA0（结束 3n、出错 3n+2、阈值 24+n，无循环计数）、TX_LIM 0xD0、APB_CONF 0xF0（回绕是全局位 1）；时钟按通道 ref_always_on 选 APB 80MHz / REF_TICK 1MHz。中断源 47，输出信号 87..94，`route_rmt` 同 S3 喂 WS2812 解码与 iotrace。接收、载波、APB FIFO 未做：访问 FIFO / 地址寄存器、置 rx_en、载波开着启动发送都记 unimpl。
-- 未做（按未实现寄存器记 unimpl）：ADC、GP-SPI、I2S、DAC、触摸、霍尔、蓝牙。
+- HSPI / VSPI 主机 + DMA（M5-10，`crates/soc/src/gpspi_classic.rs` `ClassicSpi`，接入 `esp32/src/spi_lcd.rs`）：0x3FF64000 / 0x3FF65000，中断源 30 / 31（SPI 完成，SLAVE.trans_done 位 4 & trans_inten 位 9）、51 / 52（DMA）。与 S3 `gpspi` 分开写而不是加 layout 枚举：差在语义——CMD.USR 是位 18 且无 UPDATE、MOSI / MISO 长度分开（0x28 / 0x2C，24 位）、地址取 ADDR 高字 + SLV_WR_STATUS、W0..W15 在 0x80、USR_MOSI/MISO_HIGHPART（位 25 / 24）改用 W8..W15、时钟源 APB 80MHz、DMA 是块内 lldesc 引擎（DMA_CONF 0x100、OUT_LINK 0x104 / IN_LINK 0x108，start 位 29，地址 = 0x3FF00000 | 低 20 位；中断 0x110..0x11C，in_suc_eof 5 / out_done 6 / out_eof 7 / out_total_eof 8；OUT_EOF_DES_ADDR 0x138、IN_SUC_EOF_DES_ADDR 0x124）。共用 `gpspi::Plan`、按时钟计时和 `Lcd::spi_transfer`（S3 `spi_lcd.rs` 也改走它）。没有 dma_tx_ena：上次传输后写过 OUT_LINK / IN_LINK start 才算 DMA；DPORT_SPI_DMA_CHAN_SEL 只存不判。W 缓冲按环读：MOSI 长度超过 64 字节（HIGHPART 时 32）从头绕回（M5GFX `writeDataRepeat` 在 ESP32 上一次发 2048 位）。屏归哪个主机看 SCLK 的走线（矩阵信号 8 = HSPICLK、63 = VSPICLK，或 IO_MUX 功能 1 的 14 / 18 脚）；CS 走矩阵 11 / 68 或 IO_MUX 15 / 5 时按 PIN.cs0_dis 选中，否则按 GPIO 低电平。`Chip::lcd_default_pins`（新，默认 S3_DEFAULT）在 esp32 上是 `LcdPins::ESP32_DEFAULT`（StickC Plus2：SCLK13 MOSI15 CS5 DC14 RST12 BL27），`--spi st7789@...` 的引脚覆盖基于它。CO5300 拒绝挂接。M5Stack Core2 的屏检测走软件 I2C 读 AXP192，CLI 要用 `--i2c-bus sda=21,scl=22:axp192@0x34`（`--i2c` 只挂硬件 I2C 不够）。
+- 经典 I2S（M5-12，`crates/esp32/src/i2s.rs`）：**没有复用** `tryboard_soc::i2s`——经典 ESP32 的寄存器布局（CONF / FIFO_CONF / CONF_CHAN / CLKM 0xAC / SAMPLE_RATE 0xB0 / PDM_CONF 0xB4）和 DMA（I2S 自带 lldesc 链表，OUT_LINK / IN_LINK 0x30 / 0x34，stop / start / restart 位 28 / 29 / 30 自清，地址 20 位 | 0x3FF00000）与 C3 / S3（TX/RX_CONF + GDMA）几乎没有共同点，硬套只会让共用模型满是分支；只共用器件层（`devices/audio.rs` 的 MAX98357A / INMP441 与 `AudioBus`）。I2S0 0x3FF4F000 / I2S1 0x3FF6D000，中断源 32 / 33，SD 输出信号 163 / 189，SD 输入 155 / 181。
+  - lldesc：字 0 = size[11:0] / length[23:12] / eof 位 30 / owner 位 31，字 1 = buf，字 2 = next。TX 按帧率一块一块取（取出时刻 = 第一帧播放时刻），放完报 OUT_DONE，带 eof 的报 OUT_EOF（OUT_EOF_DES = 这块），next = 0 报 OUT_TOTAL_EOF；RX 按帧率录满一块写回 length / eof、owner 交还 CPU，报 IN_DONE，累计满 RX_EOF_NUM（**按字计**，IDF 写 字节/4）报 IN_SUC_EOF（IN_EOF_DES），链表走完报 IN_DSCR_EMPTY。时钟没配 / 从模式 / APLL：1 ms 后再看（`stalls`）。
+  - 帧率 = 160 MHz ÷ (N + b/a) ÷ bck_div ÷ (2 × bits_mod)；fifo_mod 0 = 16 位双声道、1 = 16 位单声道、2 = 32 位双、3 = 32 位单；tx_chan_mod 3 / 4 时 CONF_SINGLE_DATA 送另一槽，16 位时 msb_right 决定半字顺序。IDF i2s_std 单声道默认 slot_mask = LEFT（chan_mod 4），喇叭混 (L+R)/2 只剩一半幅度，所以示例固件显式写 `I2S_STD_SLOT_BOTH`。
+  - PDM RX（只 I2S0，同真机）：**按 PCM 层建模**——硬件 PDM→PCM 抽取滤波器的输出（16 位补码）直接进 DMA，线上 1 位 PDM 流不模拟；采样率 = BCK ÷ 64（DSR_8S）或 ÷ 128（DSR_16S）。麦克风模型复用 INMP441（`pdm = true` 时报告名为 SPM1423，取 24 位样本的高 16 位）；PDM TX、I2S1 的 PDM 不出数据。
+  - 引脚约定（`i2s::pin`，同 M5 Core2）：喇叭 BCLK 12 / LRC 0 / DIN 2，PDM 麦克风 CLK 0 / DATA 34（StickC Plus2 / Core2 SPM1423）。接线判断同 C3 / S3：DIN 脚的 FUNC_OUT_SEL = SD 输出信号、SD 输入信号的 FUNC_IN_SEL（位 7 经矩阵）= 麦克风 DATA 脚。CLI `--i2s max98357a` / `--mic <wav>` 与 C3 / S3 相同。
+- ADC1 / ADC2 单次读（M5-12，`crates/esp32/src/sens.rs`，SENS 0x3FF48800 = RTC_CNTL 页 +0x800）：只接管 READ_CTRL / START_FORCE（位宽 9..12）/ ATTEN1 / ATTEN2 / SLAVE_ADDR1（meas_status 读 0）/ MEAS_START1 / READ_CTRL2 / MEAS_START2（data[15:0]、done 16、start 17 上升沿采样、en_pad[30:19]），其余 SENS 寄存器仍按通用寄存器记 unimpl。通道 → 脚：ADC1 {36,37,38,39,32,33,34,35}，ADC2 {4,0,2,15,13,12,14,27,25,26}。DATA_INV = 1（IDF 默认）时给正码，否则取反。转换用共用的 `AdcModel`（`AdcChip::Esp32`：满量程 1050 / 1350 / 1900 / 3150 mV）；eFuse BLK0 位 136..140 烧 ADC_VREF = 3（1121 mV，符号-幅值 7 mV 步），`adc_cali_create_scheme_line_fitting` 走 eFuse Vref 路径；`AdcModel` 的 calibrated_mv 按 IDF 线性拟合（scale / offset / 12 dB 高端 LUT 混合）求逆，使校准结果对准输入电压。输入：`--script t:mv38=…`（`bus.adc.pin_mv`，复位保留）。
+- 未做（按未实现寄存器记 unimpl）：DAC、触摸、霍尔、蓝牙；GP-SPI 从机模式、双工同时收发 DMA 的细节、SPI 中断以外的 DMA 链错误位；I2S 从模式 / PDM TX / APLL / LCD / 相机模式；ADC 的 DIG（DMA）读法与 Two Point eFuse。
 - CLI / wasm：镜像头芯片 id 0 → ESP32（`Chip::Esp32`），ROM `esp32_rev300_rom.elf`（`tools/fetch_third_party.sh`）。`tb_image_chip` 认不出时返回 `u32::MAX`（0 已被 ESP32 占用）。短路电流估算沿用 C3 的数（`tb_fault` 的 s3 标志为 0）。
 - 网页：台面板 ESP32-DevKitC V4（`board3d.ts` `BOARD_E32`，54.4 × 27.9 mm、两排 19 针相距 1″、micro-USB + CP2102、没有用户灯 / RGB 灯）；两排针相距 1″ 插在 830 孔面包板上，整板沿 z 偏半格，使 J1 落在 j 排、J3 落在 b 排，a 排留给跳线。芯片显示名 / BOOT 键 / RGB 脚统一在 `web/src/chips.ts`。
-- 验收：accept.json 的 esp32-hello（与 QEMU 逐行一致）、esp32-blink（GPIO2）、esp32-fade（LEDC）、esp32-i2c（SSD1306 + BME280）、esp32-wifi-init、esp32-wifi（开放热点 + HTTP）、esp32-wifi-wpa2；`tools/oracle_qemu.sh esp32-hello`。
+- 验收：accept.json 的 esp32-hello（与 QEMU 逐行一致）、esp32-blink（GPIO2）、esp32-fade（LEDC）、esp32-i2c（SSD1306 + BME280）、esp32-wifi-init、esp32-wifi（开放热点 + HTTP）、esp32-wifi-wpa2、esp32-spi-lcd（VSPI + DMA 画 ST7789 四色带，三线半双工读 RDDID 85 85 52）、esp32-i2s-tone（440 Hz）、esp32-pdm-mic（1 kHz WAV）、esp32-adc（GPIO38 五档 1%）；`tools/oracle_qemu.sh esp32-hello`（Espressif QEMU 的 esp32 机器没有 HSPI / VSPI 模型、I2S 只是空占位、没有 SENS ADC，这几例只能比到开头的打印 / 首个 DMA 画图之前）。
 
 ## 原生 USB OTG（ESP32-S3；模型在 `crates/soc/src/usb/`，中断源号在 esp32s3 `periph::src::USB`）
 - `dwc2.rs`：Synopsys DWC2 设备模式（基址 0x60080000，中断源 38）。寄存器按 DWC2 编程模型；ID / 硬件配置读回 S2/S3 实测值（GSNPSID 0x4F54400A = 4.00a，CSRST 自清；GHWCFG2 0x224DD930、GHWCFG3 0x00C804B5、GHWCFG4 0xD3F0A030）。
@@ -247,7 +254,7 @@ web/（Vite + TS）
 
 ## I2S + 音频器件（P2-06；模型在 `crates/soc/src/i2s.rs`、`devices/audio.rs`，C3 / S3 共用）
 - I2S（S3：I2S0 0x6000F000 / I2S1 0x6002D000，中断源 25 / 26，GDMA 外设号 3 / 4；C3：I2S0 0x6002D000，源 20，外设号 3）：寄存器按 `i2s_reg.h`（两颗芯片布局逐项相同），复位值由字段注释的 default 求得。TX/RX_CONF.update 瞬间完成（读回 0）；只做主模式 + TDM / 标准格式（Philips / MSB / PCM 都按"每帧若干槽"处理，线上逐位时序不模拟），PDM、从模式、外部 MCLK 不做（该方向不出数据）
-- 帧率 = 源时钟（clk_sel 0 = XTAL 40 MHz，2 = PLL_F160M）÷ (N + 分数) ÷ (bck_div_num+1) ÷ ((tdm_chan_bits+1) × (tot_chan_num+1))；分数是 `i2s_ll_tx_set_mclk` 的逆运算：分母 = z(x+1)+y，分子 = yn1 ? 分母−z : z
+- 帧率 = 源时钟（clk_sel 0 = XTAL 40 MHz，1 = PLL_D2 240 MHz（M5Unified 直接写寄存器选它），2 = PLL_F160M）÷ (N + 分数) ÷ (bck_div_num+1) ÷ ((tdm_chan_bits+1) × (tot_chan_num+1))；分数是 `i2s_ll_tx_set_mclk` 的逆运算：分母 = z(x+1)+y，分子 = yn1 ? 分母−z : z
 - 数据只走 GDMA（流式，`Gdma::out_next / out_eof / in_peek / in_fill`，通道里多了"当前描述符"`cur`，start 时 = link）：
   - TX：tx_start 之后按帧率一块一块取描述符（length 字节），取出时刻 = 这块第一帧的播放时刻；放完这一块报 OUT_DONE，描述符带 suc_eof 的再报 OUT_EOF（OUT_EOF_DES_ADDR = 这块），next = 0 的报 OUT_TOTAL_EOF 并停。IDF 在 EOF 中断里把缓冲还给 `i2s_channel_write`，所以写入被播放速度卡住
   - RX：rx_start 之后每块 = min(描述符 size, RXEOF_NUM 剩余) 字节（整帧），按帧率录满的时刻写进描述符（length、owner 交还 CPU），累计满 RXEOF_NUM 置 suc_eof、报 IN_SUC_EOF（IN_SUC_EOF_DES_ADDR = 这块），每块报 IN_DONE
@@ -289,7 +296,10 @@ web/（Vite + TS）
   - 只有 m5dial 标为已验证。它用 `arduino-m5-probe-dial` / `arduino-m5-dial-demo` 跑通了 M5Unified 检测、触摸、RTC、编码器、BtnA 和屏幕。
   - 其余是存根，备注写明由哪个 PLAN 项验证。CLI 会打印 "(UNVERIFIED preset)"。
   - 已验证的预设只要有一个部件挂不上就返回错误；存根只给警告。
-  - PSRAM 没有建模，只给警告。
+  - m5cores3 / m5cores3se 也已验证（M5-07，`arduino-m5-probe-cores3` 一个固件两块板 + `arduino-m5-cores3-demo`）。
+  - PSRAM：S3 8MB 不再警告；`psram_quad` 让 S3 的 PSRAM 走四线协议（Arduino `m5stack_cores3` 的 `psram_type=qspi`），其余仍警告。
+  - `touch_int_aw9523: Some((port, bit, gpio))`：触摸 INT 接在 AW9523 输入脚上，`touch()` 改 AW9523 输入，`after_run` 开头把 AW9523 INTN 同步到 gpio（CoreS3 为 P1_2 → G21）。
+  - `speaker: Some((bclk, ws, dout))`：在这几脚挂扬声器接收端（`Chip::attach_speaker_at`），CoreS3 为 34 / 33 / 13（AW88298 的增益 / 使能未建模）。
 - 单测 `table_is_consistent`：id 不重复，所有器件 kind 都能创建，所有屏 spec 都能解析。
 - 接口：
   - Rust：`board_preset(id) -> Result<Vec<String>, String>`（返回警告列表）、`board()`、`board_button(name, down)`、`board_list()`。
@@ -302,10 +312,10 @@ web/（Vite + TS）
   - BtnA G42（低有效）。电源保持 G46。
   - 蜂鸣器 G3（I2S 1-bit，尚无模型）。
 - Cardputer / Cardputer-Adv（M5-08）：
-  - 预设新字段：`keyboard: Option<Keyboard>`（`Hc138 { select, cols }` 或 `Tca8418`）、`mic: Option<Mic>`（`bclk / ws / data / pdm / both`）。挂载顺序在 I2C 之后。
+  - 预设新字段：`keyboard: Option<Keyboard>`（`Hc138 { select, cols }` 或 `Tca8418`）、`mic: Option<Mic>`（`bclk / ws / data / pdm / both`；both = 两个声道同样本，M5Unified 默认读右声道）。挂载顺序在 I2C 之后。
   - 键盘：`crates/machine/src/keyboard.rs` 的 4×14 图例 `KEY_LEGEND`，`key_pos(name)`；Rust `board_key(name, down)`；脚本动作 `key=<名>,1|0`（`,` `;` 等用别名 comma / semicolon …）；wasm `tb_board_key(p, len, down) -> i32`。
-  - 74HC138 矩阵：`soc/devices/keymatrix.rs` `KeyMatrix`，Chip 默认方法 `key_matrix_attach / key_matrix_set`（目前只有 S3 实现）；S3 在 `gpio_changed` 里组合求值（`keymatrix_settle`，同 `i2c_pins_settle`），被选行把按下键所在列拉低。
+  - 74HC138 矩阵：`soc/devices/keymatrix.rs` `KeyMatrix`，Chip 默认方法 `key_matrix_attach / key_matrix_set`（目前只有 S3 实现）；S3 在 `gpio_changed` 里组合求值（`Gpio::key_matrix_settle`，同 `i2c_pins_settle`），被选行把按下键所在列拉低。
   - 图例→矩阵 / TCA8418 行列映射是推断的（未对照 M5Cardputer 库），需真机核对。
   - 麦克风：Cardputer 是 SPM1423 PDM（CLK G43、DATA G46），走 `i2s.rs` 的 PDM2PCM（RX_CONF bit20 PDM_EN + bit21 PDM2PCM_EN；bit22 DSR16 → 每样本 128 个 PDM 时钟，否则 64，依 IDF i2s_pdm.c）；Adv 用 INMP441 模型顶替 ES8311（BCK 41、WS 43、DIN 46，两个声道同样本）。
-  - I2S clk_sel=1：IDF 不用，M5Unified 原始分频用它，按其说明当 120 MHz（C3 / S3）。
+  - PDM 帧率 = BCK ÷ 64 或 128（DSR16）；clk_sel 1 按 M5-07 定为 240 MHz，M5Unified 写的分频这样算出正好 16 kHz（M5Unified 自己按 120 MHz、64× 算，两处偏差互相抵消，需真机核对）。
 - S3 GPIO 电平（M5-08 改）：开漏释放、外部无人驱动的焊盘，若只有 IO_MUX 下拉（FUN_PD）则读 0（之前一律读 1）。M5GFX 的 Cardputer / Adv 区分和 M5Unified 的 I2C 总线检测都靠这个。C3 / 经典 ESP32 未改。

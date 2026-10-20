@@ -20,6 +20,8 @@ pub mod src {
     pub const TG1_LACT: u32 = 21;
     pub const GPIO: u32 = 22;
     pub const FROM_CPU0: u32 = 24;
+    pub const SPI2: u32 = 30;
+    pub const SPI3: u32 = 31;
     pub const UART0: u32 = 34;
     pub const UART1: u32 = 35;
     pub const UART2: u32 = 36;
@@ -27,6 +29,8 @@ pub mod src {
     pub const RMT: u32 = 47;
     pub const I2C_EXT0: u32 = 49;
     pub const I2C_EXT1: u32 = 50;
+    pub const SPI2_DMA: u32 = 51;
+    pub const SPI3_DMA: u32 = 52;
     pub const MAX: usize = 69;
 }
 
@@ -656,6 +660,8 @@ pub fn default_efuse() -> [u32; 0x200 / 4] {
     e[3] |= 1 << 15;
     // CHIP_VER_REV2 (BLK0 RDATA5 bit 20); together with APB_CTRL_DATE bit 31 this means revision 3
     e[5] |= 1 << 20;
+    // ADC_VREF (BLK0 bits 136..140) for adc_cali line fitting (M5-12)
+    tryboard_soc::adc::burn_efuse(tryboard_soc::adc::AdcChip::Esp32, &mut e);
     e
 }
 

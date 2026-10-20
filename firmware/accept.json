@@ -2100,6 +2100,64 @@
   "oled_min_pixels": 300
  },
  {
+  "id": "esp32-spi-lcd",
+  "chip": "esp32",
+  "seconds": 2,
+  "args": [
+   "--spi",
+   "st7789@sclk=13,mosi=15,cs=5,dc=14,rst=12,bl=27"
+  ],
+  "expect": [
+   "ST7789 135x240 init OK (VSPI, DMA)",
+   "draw done: 4 bands of 16200 bytes",
+   "RDDID: 85 85 52",
+   "TRYBOARD_OK esp32-spi-lcd"
+  ],
+  "lcd_min_pixels": 32400,
+  "lcd_regions": [
+   {
+    "name": "red band",
+    "x": 0,
+    "y": 0,
+    "w": 135,
+    "h": 60,
+    "color": "#ff0000",
+    "min_pixels": 8100,
+    "max_pixels": 8100
+   },
+   {
+    "name": "green band",
+    "x": 0,
+    "y": 60,
+    "w": 135,
+    "h": 60,
+    "color": "#00ff00",
+    "min_pixels": 8100,
+    "max_pixels": 8100
+   },
+   {
+    "name": "blue band",
+    "x": 0,
+    "y": 120,
+    "w": 135,
+    "h": 60,
+    "color": "#0000ff",
+    "min_pixels": 8100,
+    "max_pixels": 8100
+   },
+   {
+    "name": "white band",
+    "x": 0,
+    "y": 180,
+    "w": 135,
+    "h": 60,
+    "color": "#ffffff",
+    "min_pixels": 8100,
+    "max_pixels": 8100
+   }
+  ]
+ },
+ {
   "id": "esp32-wifi-init",
   "chip": "esp32",
   "seconds": 3,
@@ -2439,6 +2497,88 @@
   "stderr_expect": [
    "DHT11 frames sent 100",
    "timing-sensitive: GPIO5 busy-wait esp_rom_delay_us"
+  ]
+ },
+ {
+  "id": "c3-ds18b20",
+  "seconds": 12,
+  "qemu": false,
+  "args": [
+   "--ds18b20",
+   "4,2",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "expect": [
+   "找到设备 1 ROM 283A5C1E0B000064",
+   "找到设备 2 ROM 287B5C1E0C00005C",
+   "总线上共 2 个 DS18B20",
+   "供电方式: 外部供电",
+   "上电默认值 85.0000 配置 0x7F",
+   "设备 1 温度 23.5000 °C",
+   "设备 2 温度 24.0000 °C",
+   "校验通过 20/20 转换时间正常 10/10",
+   "TRYBOARD_OK ds18b20"
+  ],
+  "stderr_expect": [
+   "DS18B20 x2 on GPIO4: resets 35, conversions 20, scratchpad reads 21, unknown commands 0 (ROM 283A5C1E0B000064 287B5C1E0C00005C)"
+  ]
+ },
+ {
+  "id": "c3-ds18b20-cold",
+  "fw": "c3-ds18b20",
+  "seconds": 12,
+  "qemu": false,
+  "args": [
+   "--ds18b20",
+   "4",
+   "--env",
+   "-10.125,45,101325"
+  ],
+  "expect": [
+   "总线上共 1 个 DS18B20",
+   "设备 1 温度 -10.1250 °C",
+   "校验通过 10/10 转换时间正常 10/10",
+   "TRYBOARD_OK ds18b20"
+  ]
+ },
+ {
+  "id": "c3-ds18b20-absent",
+  "fw": "c3-ds18b20",
+  "seconds": 3,
+  "qemu": false,
+  "expect": [
+   "错误: GPIO4 上没有存在脉冲，未检测到 DS18B20（检查接线和 4.7k 上拉）"
+  ],
+  "absent": [
+   "找到设备",
+   "TRYBOARD_OK ds18b20"
+  ]
+ },
+ {
+  "id": "s3-ds18b20",
+  "chip": "esp32s3",
+  "seconds": 12,
+  "qemu": false,
+  "args": [
+   "--ds18b20",
+   "4,2",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "expect": [
+   "找到设备 1 ROM 283A5C1E0B000064",
+   "找到设备 2 ROM 287B5C1E0C00005C",
+   "总线上共 2 个 DS18B20",
+   "供电方式: 外部供电",
+   "上电默认值 85.0000 配置 0x7F",
+   "设备 1 温度 23.5000 °C",
+   "设备 2 温度 24.0000 °C",
+   "校验通过 20/20 转换时间正常 10/10",
+   "TRYBOARD_OK ds18b20"
+  ],
+  "stderr_expect": [
+   "DS18B20 x2 on GPIO4: resets 35, conversions 20, scratchpad reads 21, unknown commands 0 (ROM 283A5C1E0B000064 287B5C1E0C00005C)"
   ]
  },
  {
@@ -3004,7 +3144,7 @@
    "CARDPUTER mic rms=3"
   ],
   "stderr_expect": [
-   "I2S mic SPM1423 PDM (CLK=GPIO43 DATA=GPIO46)",
+   "PDM mic SPM1423 (CLK=GPIO43 DATA=GPIO46",
    "LCD ST7789"
   ]
  },
@@ -3031,5 +3171,198 @@
   "stderr_expect": [
    "I2S mic INMP441 (SCK=GPIO41 WS=GPIO43 SD=GPIO46"
   ]
+ },
+ {
+  "id": "esp32-i2s-tone",
+  "chip": "esp32",
+  "seconds": 1.5,
+  "qemu": false,
+  "args": [
+   "--i2s",
+   "max98357a"
+  ],
+  "expect": [
+   "TONE 440 Hz @ 44100 Hz",
+   "TRYBOARD_OK esp32-i2s-tone"
+  ],
+  "audio": {
+   "freq": 440,
+   "tol": 1,
+   "rate": 44100,
+   "min_rms": 0.3
+  }
+ },
+ {
+  "id": "esp32-pdm-mic",
+  "chip": "esp32",
+  "seconds": 1.2,
+  "qemu": false,
+  "args": [
+   "--mic",
+   "tools/audio/sine1k.wav"
+  ],
+  "expect": [
+   "MIC SPM1423 PDM on I2S0 @ 16000 Hz",
+   "TRYBOARD_OK esp32-pdm-mic"
+  ],
+  "numeric": [
+   {
+    "name": "zero-crossing frequency (Hz)",
+    "regex": "MIC rms=[\\d.]+ freq=([\\d.]+) Hz",
+    "value": 1000,
+    "tol": 1
+   },
+   {
+    "name": "RMS",
+    "regex": "MIC rms=([\\d.]+)",
+    "value": 0.3536,
+    "tol": 0.002
+   }
+  ]
+ },
+ {
+  "id": "esp32-adc",
+  "chip": "esp32",
+  "seconds": 2.5,
+  "qemu": false,
+  "script": "0.0:mv38=500; 0.5:mv38=1200; 1.0:mv38=1650; 1.5:mv38=2100; 2.0:mv38=2800",
+  "expect": [
+   "线性拟合校准已启用（来源 eFuse Vref）",
+   "TRYBOARD_OK esp32-adc"
+  ],
+  "numeric": [
+   {
+    "name": "GPIO38 500 mV calibrated",
+    "regex": "ADC#0 raw=\\s*\\d+  校准\\s+(\\d+) mV",
+    "value": 500,
+    "tol": 5.0
+   },
+   {
+    "name": "GPIO38 1200 mV calibrated",
+    "regex": "ADC#1 raw=\\s*\\d+  校准\\s+(\\d+) mV",
+    "value": 1200,
+    "tol": 12.0
+   },
+   {
+    "name": "GPIO38 1650 mV calibrated",
+    "regex": "ADC#2 raw=\\s*\\d+  校准\\s+(\\d+) mV",
+    "value": 1650,
+    "tol": 16.5
+   },
+   {
+    "name": "GPIO38 2100 mV calibrated",
+    "regex": "ADC#3 raw=\\s*\\d+  校准\\s+(\\d+) mV",
+    "value": 2100,
+    "tol": 21.0
+   },
+   {
+    "name": "GPIO38 2800 mV calibrated",
+    "regex": "ADC#4 raw=\\s*\\d+  校准\\s+(\\d+) mV",
+    "value": 2800,
+    "tol": 28.0
+   }
+  ]
+ },
+ {
+  "id": "arduino-m5-probe-cores3",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--board",
+   "m5cores3"
+  ],
+  "expect": [
+   "M5PROBE board=M5StackCoreS3 board_id=10",
+   "display=320x240",
+   "imu=6 rtc=1 touch=1 pmic=4 bat=80",
+   "M5PROBE_DRAWN",
+   "TRYBOARD_OK m5-probe"
+  ],
+  "stderr_expect": [
+   "board m5cores3: expects M5StackCoreS3"
+  ],
+  "lcd_regions": [
+   {
+    "name": "green band",
+    "x": 0,
+    "y": 60,
+    "w": 320,
+    "h": 60,
+    "color": "#00ff00",
+    "min_pixels": 19000
+   }
+  ]
+ },
+ {
+  "id": "arduino-m5-probe-cores3se",
+  "fw": "arduino-m5-probe-cores3",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--board",
+   "m5cores3se"
+  ],
+  "expect": [
+   "M5PROBE board=M5StackCoreS3SE board_id=17",
+   "display=320x240",
+   "imu=0 rtc=1 touch=1 pmic=4 bat=80",
+   "M5PROBE_DRAWN",
+   "TRYBOARD_OK m5-probe"
+  ],
+  "stderr_expect": [
+   "board m5cores3se: expects M5StackCoreS3SE"
+  ],
+  "lcd_regions": [
+   {
+    "name": "green band",
+    "x": 0,
+    "y": 60,
+    "w": 320,
+    "h": 60,
+    "color": "#00ff00",
+    "min_pixels": 19000
+   }
+  ]
+ },
+ {
+  "id": "arduino-m5-cores3-demo",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--board",
+   "m5cores3",
+   "--battery",
+   "57",
+   "--script",
+   "1.5:touch=200,150; 1.7:release"
+  ],
+  "expect": [
+   "CS3 ready board=10 display=320x240 psram=8388608 touch=1 imu=6",
+   "CS3 bat=57",
+   "CS3 accel z=1.00 mag=1",
+   "CS3 tone 1000 speaker=1 playing=1",
+   "TRYBOARD_OK m5-cores3-demo",
+   "CS3 touch x=200 y=150"
+  ],
+  "stderr_expect": [
+   "board m5cores3: expects M5StackCoreS3"
+  ],
+  "lcd_regions": [
+   {
+    "name": "touch dot",
+    "x": 189,
+    "y": 139,
+    "w": 23,
+    "h": 23,
+    "color": "#ffff00",
+    "min_pixels": 300
+   }
+  ],
+  "audio": {
+   "freq": 1000,
+   "tol": 5,
+   "rate": 48000,
+   "min_rms": 0.02
+  }
  }
 ]

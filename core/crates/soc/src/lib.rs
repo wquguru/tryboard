@@ -9,6 +9,7 @@ pub mod crypto_hw;
 pub mod devices;
 pub mod gdma;
 pub mod gpspi;
+pub mod gpspi_classic;
 pub mod i2c;
 pub mod i2cpins;
 pub mod i2s;

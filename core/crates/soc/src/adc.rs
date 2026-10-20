@@ -1,4 +1,4 @@
-//! SAR ADC transfer model shared by ESP32-C3 and ESP32-S3 (D-02; numbers in docs/DECISIONS.md).
+//! SAR ADC transfer model shared by ESP32, ESP32-C3 and ESP32-S3 (D-02; numbers in docs/DECISIONS.md).
 //! "Real" (default) inverts IDF's curve-fit calibration for our eFuse, adds end bends and seeded noise; "ideal" is linear.
 
 use std::collections::VecDeque;
@@ -16,6 +16,8 @@ const NOISE_SIGMA: f64 = 2.0;
 pub enum AdcChip {
     C3,
     S3,
+    /// Classic ESP32: line-fitting calibration (eFuse Vref) plus IDF's 12 dB lookup table
+    Esp32,
 }
 
 /// Datasheet input range per attenuation (0 / 2.5 / 6 / 12 dB, mV); the ideal model is linear over it
@@ -23,6 +25,7 @@ pub fn range_mv(chip: AdcChip, atten: u32) -> f64 {
     let r = match chip {
         AdcChip::C3 => [750.0, 1050.0, 1300.0, 2500.0],
         AdcChip::S3 => [950.0, 1250.0, 1750.0, 3100.0],
+        AdcChip::Esp32 => [1050.0, 1350.0, 1900.0, 3150.0],
     };
     r[(atten & 3) as usize]
 }
@@ -69,10 +72,14 @@ const S3_FIELDS: &[Field] = &[
     (BLK1, 186, 6, 8), // ADC2_CAL_VOL_ATTEN3 lives in BLK1
 ];
 
+// Classic ESP32 ADC_VREF (BLK0 bits 136..140, sign-magnitude 7 mV steps from 1100): 3 -> 1121 mV
+const ESP32_FIELDS: &[Field] = &[(0, 136, 5, 3)];
+
 fn fields(chip: AdcChip) -> &'static [Field] {
     match chip {
         AdcChip::C3 => C3_FIELDS,
         AdcChip::S3 => S3_FIELDS,
+        AdcChip::Esp32 => ESP32_FIELDS,
     }
 }
 
@@ -130,7 +137,73 @@ pub fn cal_point(chip: AdcChip, unit: u32, atten: u32) -> (u32, u32) {
             };
             (digi, 850)
         }
+        AdcChip::Esp32 => (4096, esp32_vref()),
     }
+}
+
+/// eFuse Vref as adc_cali_line_fitting's read_efuse_vref decodes it
+fn esp32_vref() -> u32 {
+    let v = field(AdcChip::Esp32, 0, 136);
+    let m = (v & 0xf) as i32 * 7;
+    (1100 + if v & 0x10 != 0 { -m } else { m }) as u32
+}
+
+// esp_adc/esp32/adc_cali_line_fitting.c (IDF v5.5.1, Apache-2.0): Vref scheme and 12 dB LUT
+const E32_SCALE: [[u32; 4]; 2] = [
+    [57431, 76236, 105481, 196602],
+    [57236, 76175, 105678, 197170],
+];
+const E32_OFFSET: [[u32; 4]; 2] = [[75, 78, 107, 142], [63, 66, 89, 128]];
+const E32_LUT: [[[i32; 20]; 2]; 2] = [
+    [
+        [
+            2240, 2297, 2352, 2405, 2457, 2512, 2564, 2616, 2664, 2709, 2754, 2795, 2832, 2868,
+            2903, 2937, 2969, 3000, 3030, 3060,
+        ],
+        [
+            2667, 2706, 2745, 2780, 2813, 2844, 2873, 2901, 2928, 2956, 2982, 3006, 3032, 3059,
+            3084, 3110, 3135, 3160, 3184, 3209,
+        ],
+    ],
+    [
+        [
+            2238, 2293, 2347, 2399, 2451, 2507, 2561, 2613, 2662, 2710, 2754, 2792, 2831, 2869,
+            2904, 2937, 2968, 2999, 3029, 3059,
+        ],
+        [
+            2657, 2698, 2738, 2774, 2807, 2838, 2867, 2894, 2921, 2946, 2971, 2996, 3020, 3043,
+            3067, 3092, 3116, 3139, 3162, 3185,
+        ],
+    ],
+];
+
+/// What esp32 adc_cali (line fitting, Vref scheme, LUT on) returns for a 12-bit `raw`
+fn esp32_calibrated_mv(unit: u32, atten: u32, raw: u32) -> i32 {
+    let (u, a) = ((unit & 1) as usize, (atten & 3) as usize);
+    let vref = esp32_vref();
+    let coeff_a = vref * E32_SCALE[u][a] / 4096;
+    let linear = ((coeff_a * raw + 32768) / 65536 + E32_OFFSET[u][a]) as i32;
+    if a != 3 || raw < 2880 {
+        return linear;
+    }
+    let i = ((raw - 2880) / 64) as usize;
+    let (lo, hi) = (&E32_LUT[u][0], &E32_LUT[u][1]);
+    let (x2, x1) = (1200 - vref as i32, vref as i32 - 1000);
+    let (y2, y1) = (
+        ((i + 1) * 64 + 2880) as i32 - raw as i32,
+        raw as i32 - (i * 64 + 2880) as i32,
+    );
+    let lut = (lo[i] * x2 * y2
+        + hi[i] * x1 * y2
+        + lo[i + 1] * x2 * y1
+        + hi[i + 1] * x1 * y1
+        + 200 * 64 / 2)
+        / (200 * 64);
+    if raw > 2944 {
+        return lut;
+    }
+    let x = raw as i32 - 2880;
+    (linear * 64 + lut * x - linear * x + 32) / 64
 }
 
 // ---------------------------------------------------------------- IDF second-step curves (curve_fitting_coefficients.c)
@@ -224,6 +297,7 @@ const S3_SIGN2: [&[i32]; 4] = [&[-1, 1, 1], &[-1, -1, 1], &[-1, -1, 1], &[1, -1,
 pub fn calibrated_mv(chip: AdcChip, unit: u32, atten: u32, raw: u32) -> i32 {
     let a = (atten & 3) as usize;
     let (coef, sign) = match (chip, unit) {
+        (AdcChip::Esp32, _) => return esp32_calibrated_mv(unit, atten, raw),
         (AdcChip::C3, _) => (C3_COEF[a], C3_SIGN[a]),
         (AdcChip::S3, 0) => (S3_COEF1[a], S3_SIGN1[a]),
         (AdcChip::S3, _) => (S3_COEF2[a], S3_SIGN2[a]),
@@ -398,7 +472,7 @@ mod tests {
 
     #[test]
     fn calibrated_error_under_one_percent_mid_range() {
-        for chip in [AdcChip::C3, AdcChip::S3] {
+        for chip in [AdcChip::C3, AdcChip::S3, AdcChip::Esp32] {
             for unit in 0..2 {
                 for atten in 0..4 {
                     let range = range_mv(chip, atten);
@@ -419,6 +493,22 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn esp32_line_fitting_matches_idf() {
+        let mut e = [0u32; 0x80];
+        burn_efuse(AdcChip::Esp32, &mut e);
+        assert_eq!(e[4] >> 8 & 0x1f, 3);
+        assert_eq!(esp32_vref(), 1121);
+        // coeff_a = 1121 * 196602 / 4096 = 53806; (53806 * 2000 + 32768) / 65536 + 142
+        assert_eq!(calibrated_mv(AdcChip::Esp32, 0, 3, 2000), 1784);
+        assert_eq!(calibrated_mv(AdcChip::Esp32, 0, 0, 0), 75);
+        // LUT region stays monotonic across the linear blend
+        let v: Vec<_> = (2800..4096)
+            .map(|r| calibrated_mv(AdcChip::Esp32, 0, 3, r))
+            .collect();
+        assert!(v.windows(2).all(|w| w[1] >= w[0]));
     }
 
     #[test]

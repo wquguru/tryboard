@@ -26,6 +26,8 @@ pub struct Mic {
     pub ws: u32,
     pub data: u32,
     pub pdm: bool,
+    /// Same sample on both slots: M5Unified reads the right slot by default, the real L/R strap / codec slot is unchecked
+    pub both: bool,
 }
 
 pub struct BoardPreset {
@@ -35,15 +37,21 @@ pub struct BoardPreset {
     pub chip: Chip,
     /// eFuse package version (S3: 0 = QFN56, 1 = PICO; ESP32: 5 = PICO-D4, 6 = PICO-V3-02); None keeps the default
     pub efuse_pkg: Option<u32>,
-    /// What the real board carries; the simulator does not enforce flash size and does not model PSRAM yet
+    /// What the real board carries; the simulator does not enforce flash size (S3 PSRAM: always the 8 MB die)
     pub flash_mb: u32,
     pub psram_mb: u32,
+    /// S3 PSRAM die on the QSPI interface (Arduino `psram_type=qspi`) rather than octal
+    pub psram_quad: bool,
     /// `Machine::lcd_attach_spec` string
     pub lcd: Option<&'static str>,
     pub i2c: &'static [I2cBus],
     pub touch_int: Option<u32>,
+    /// Touch INT wired to an AW9523 input (port, bit) whose INTN drives this host GPIO (CoreS3: P1_2 -> G21)
+    pub touch_int_aw9523: Option<(usize, u8, u32)>,
     /// Rotary encoder A / B phase pins
     pub encoder: Option<(u32, u32)>,
+    /// On-board I2S amplifier input (BCLK, WS, DOUT): the speaker sink listens there
+    pub speaker: Option<(u32, u32, u32)>,
     pub buttons: &'static [Button],
     /// Keyboard part (script action `key=<name>,1|0`)
     pub keyboard: Option<Keyboard>,
@@ -81,10 +89,13 @@ const NONE: BoardPreset = BoardPreset {
     efuse_pkg: None,
     flash_mb: 8,
     psram_mb: 0,
+    psram_quad: false,
     lcd: None,
     i2c: &[],
     touch_int: None,
+    touch_int_aw9523: None,
     encoder: None,
+    speaker: None,
     buttons: &[],
     keyboard: None,
     mic: None,
@@ -93,6 +104,12 @@ const NONE: BoardPreset = BoardPreset {
     verified: false,
     note: "",
 };
+
+/// CoreS3 / CoreS3-SE: MISO shares G35 with D/C (3-wire read-back); reset and backlight through AW9523 / AXP2101
+const CORES3_LCD: &str = "ili9342@sclk=36,mosi=37,miso=35,cs=3,dc=35,rst=-1,bl=-1";
+/// AW88298 amp: BCK G34, WS G33, DOUT G13 (I2S MCK G0 unused by the amp)
+const CORES3_SPEAKER: Option<(u32, u32, u32)> = Some((34, 33, 13));
+const CORES3_OUTPUTS: &[(&str, u32)] = &[("i2s_mck", 0)];
 
 /// Pins and addresses: Reviews/m5/boards.md (docs.m5stack.com) and M5Unified / M5GFX autodetect (read, not copied)
 pub const BOARDS: &[BoardPreset] = &[
@@ -150,7 +167,8 @@ pub const BOARDS: &[BoardPreset] = &[
         efuse_pkg: Some(0),
         flash_mb: 16,
         psram_mb: 8,
-        lcd: Some("ili9342@sclk=36,mosi=37,miso=35,cs=3,dc=35,rst=-1,bl=-1"),
+        psram_quad: true,
+        lcd: Some(CORES3_LCD),
         i2c: &[bus(
             12,
             11,
@@ -163,9 +181,42 @@ pub const BOARDS: &[BoardPreset] = &[
                 ("ltr553", 0x23),
                 ("es7210", 0x40),
                 ("aw88298", 0x36),
+                ("gc0308", 0x21),
             ],
         )],
-        note: "M5-07 verifies; boot stops at PSRAM init (not modelled); touch INT and LCD reset behind AW9523",
+        touch_int_aw9523: Some((1, 2, 21)),
+        speaker: CORES3_SPEAKER,
+        outputs: CORES3_OUTPUTS,
+        note: "GC0308 camera answers its chip ID only (no image); touch INT and LCD reset behind AW9523",
+        verified: true,
+        ..NONE
+    },
+    BoardPreset {
+        id: "m5cores3se",
+        name: "M5StackCoreS3SE",
+        efuse_pkg: Some(0),
+        flash_mb: 16,
+        psram_mb: 8,
+        psram_quad: true,
+        lcd: Some(CORES3_LCD),
+        // SE drops camera, IMU, magnetometer and proximity sensor (docs.m5stack.com CoreS3-SE)
+        i2c: &[bus(
+            12,
+            11,
+            &[
+                ("axp2101", 0x34),
+                ("aw9523", 0x58),
+                ("ft6336", 0x38),
+                ("bm8563", 0x51),
+                ("es7210", 0x40),
+                ("aw88298", 0x36),
+            ],
+        )],
+        touch_int_aw9523: Some((1, 2, 21)),
+        speaker: CORES3_SPEAKER,
+        outputs: CORES3_OUTPUTS,
+        note: "told apart from CoreS3 by the GC0308 camera (0x21) not answering",
+        verified: true,
         ..NONE
     },
     BoardPreset {
@@ -183,6 +234,7 @@ pub const BOARDS: &[BoardPreset] = &[
             ws: 43,
             data: 46,
             pdm: true,
+            both: true,
         }),
         outputs: &[("ir", 44), ("backlight", 38), ("speaker", 42)],
         verified: true,
@@ -207,6 +259,7 @@ pub const BOARDS: &[BoardPreset] = &[
             ws: 43,
             data: 46,
             pdm: false,
+            both: true,
         }),
         outputs: &[("ir", 44), ("backlight", 38), ("speaker", 42)],
         verified: true,
@@ -345,8 +398,17 @@ impl Machine {
         if let Some(pin) = b.touch_int {
             self.touch_int_attach(pin);
         }
+        if let Some((_, _, pin)) = b.touch_int_aw9523 {
+            self.gpio_drive(pin, 1);
+        }
         if let Some((a, p)) = b.encoder {
             self.encoder_attach(a, p, None);
+        }
+        if let Some((bclk, ws, data)) = b.speaker {
+            let pins = tryboard_soc::devices::audio::Pins { bclk, ws, data };
+            if !self.hw.attach_speaker_at(pins) {
+                warn.push("speaker sink unsupported".into());
+            }
         }
         for k in b.buttons {
             self.gpio_drive(k.pin, k.active_low as i32);
@@ -365,7 +427,7 @@ impl Machine {
             let mut d = Inmp441::new(pins);
             d.pdm = m.pdm;
             // A codec stand-in (ES8311) has one ADC; M5Unified reads the right slot by default
-            d.both = m.bclk.is_some();
+            d.both = m.both;
             self.hw.audio_mut().mic = Some(Box::new(d));
         }
         for &(pin, lv) in b.levels {
@@ -374,7 +436,10 @@ impl Machine {
         if b.verified && !warn.is_empty() {
             return Err(format!("board {id}: {}", warn.join("; ")));
         }
-        if b.psram_mb > 0 {
+        if b.psram_quad {
+            self.set_psram_quad(true);
+        }
+        if b.psram_mb > 0 && !(b.chip == Chip::Esp32s3 && b.psram_mb == 8) {
             warn.push(format!("{} MB PSRAM not modelled", b.psram_mb));
         }
         self.board = Some(b);

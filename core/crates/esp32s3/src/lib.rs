@@ -19,7 +19,6 @@ use periph::*;
 use std::collections::HashMap;
 use tryboard_soc::crypto_hw::{self, AesHw, ShaHw};
 use tryboard_soc::devices::audio::{self, Audio, PortIo};
-use tryboard_soc::devices::keymatrix::KeyMatrix;
 use tryboard_soc::devices::lcd::{Lcd, LcdPins};
 use tryboard_soc::devices::pins::PinDevices;
 use tryboard_soc::gdma::{DmaMem, Gdma, GdmaLayout};
@@ -119,7 +118,7 @@ pub struct SocBus {
     pub flash: Vec<u8>,
     pub psram: Vec<u8>,
     /// Command interface of the PSRAM chip (mode registers); storage is `psram`
-    pub psram_chip: psram::OctalPsram,
+    pub psram_chip: psram::Psram,
     pub mmu: Vec<u32>,
     /// Fetch page cache: the 64KB page of the last fetch (vaddr >> 16, u32::MAX = invalid), which storage it's in
     /// (`FetchSrc`) and the page start's offset there. Invalidated on MMU writes
@@ -160,7 +159,7 @@ pub struct SocBus {
     /// Buses on fixed SDA / SCL pads (M5-02): reached by the routed controller or by bit-banged GPIO
     pub i2c_pins: PinBuses,
     /// Board key matrix scanned through GPIO (M5-08 Cardputer)
-    pub keymatrix: Option<KeyMatrix>,
+    pub keymatrix: Option<tryboard_soc::devices::keymatrix::KeyMatrix>,
     /// GP-SPI2 master + GDMA (5 channels), model shared with the C3 family
     pub spi2: GpSpi,
     /// GP-SPI3 (0x60025000), same model; M5GFX re-inits AtomS3 / Cardputer panels on it after probing on SPI2
@@ -223,7 +222,7 @@ impl Default for SocBus {
             rom: vec![0; (ROM_HIGH - ROM_LOW) as usize],
             flash: Vec::new(),
             psram: vec![0; PSRAM_SIZE],
-            psram_chip: psram::OctalPsram::default(),
+            psram_chip: psram::Psram::default(),
             mmu: vec![MMU_INVALID; MMU_ENTRIES],
             fetch_page: u32::MAX,
             fetch_src: FetchSrc::Sram,
@@ -512,13 +511,16 @@ impl SocBus {
             0x6001_0000 => return self.uart1.write(off, v),
             // SPI1 user command: goes to PSRAM when CS1 is selected, otherwise to flash
             0x6000_2000
-                if off == 0
-                    && v & (1 << 18) != 0
-                    && psram::OctalPsram::selected(&self.spi1.regs) =>
+                if off == 0 && v & (1 << 18) != 0 && psram::Psram::selected(&self.spi1.regs) =>
             {
-                return self
+                // A command the die ignores is reported against the SPI1 CMD register
+                if !self
                     .psram_chip
-                    .user_transaction(&mut self.spi1.regs, &mut self.psram);
+                    .user_transaction(&mut self.spi1.regs, &mut self.psram)
+                {
+                    *self.unimpl.entry(0x6000_2000).or_insert(0) += 1;
+                }
+                return;
             }
             0x6000_2000 => return self.spi1.write(off, v, &mut self.flash),
             // Reset bits are pulses (self-clearing in hardware): only record the request and store the value without them, so later read-modify-writes don't retrigger

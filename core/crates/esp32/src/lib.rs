@@ -5,13 +5,18 @@ pub mod boot;
 mod chip;
 pub mod crypto;
 pub mod hle;
+pub mod i2s;
 pub mod periph;
 pub mod psram;
+pub mod sens;
+mod spi_lcd;
 
 use periph::*;
 use std::collections::HashMap;
 use tryboard_soc::devices::audio::Audio;
+use tryboard_soc::devices::lcd::{Lcd, LcdPins};
 use tryboard_soc::devices::pins::PinDevices;
+use tryboard_soc::gpspi_classic::ClassicSpi;
 use tryboard_soc::i2c::{I2c, I2cLayout};
 use tryboard_soc::i2cpins::PinBuses;
 use tryboard_soc::iotrace::IoTrace;
@@ -140,6 +145,12 @@ pub struct SocBus {
     pub aes: crypto::AesHw,
     /// RMT TX (M5-11): shared model with the classic register map; RX / carrier / APB FIFO count as unimpl
     pub rmt: Rmt,
+    /// HSPI (SPI2) / VSPI (SPI3) masters with their in-block DMA (M5-10)
+    pub hspi: ClassicSpi,
+    pub vspi: ClassicSpi,
+    /// SPI screen and the GPIOs it is wired to
+    pub lcd: Option<Box<Lcd>>,
+    pub lcd_pins: LcdPins,
     /// WS2812 decoders on pins routed to an RMT output
     pub ws2812: HashMap<u32, Ws2812>,
     pub pins: PinDevices,
@@ -150,6 +161,8 @@ pub struct SocBus {
     pub chip_v3: bool,
     pub i2c1: I2c,
     pub adc: Adc,
+    /// I2S0 / I2S1 (M5-12): classic lldesc DMA, PDM RX on I2S0
+    pub i2s: [i2s::I2s; 2],
     pub audio: Audio,
     /// ESP32's Wi-Fi MAC is an older IP and not modelled (see DECISIONS); an unmapped instance keeps the common interface
     pub wifi: Option<Box<WifiMac>>,
@@ -170,18 +183,7 @@ pub struct SocBus {
     pub reset_reason: u32,
 }
 
-/// Pin analog voltages (no ADC model yet; storage kept for the common interface)
-pub struct Adc {
-    pub pin_mv: [f32; NPINS],
-}
-
-impl Default for Adc {
-    fn default() -> Self {
-        Adc {
-            pin_mv: [0.0; NPINS],
-        }
-    }
-}
+pub use sens::Adc;
 
 impl Default for SocBus {
     fn default() -> Self {
@@ -219,6 +221,10 @@ impl Default for SocBus {
             sha: Default::default(),
             aes: Default::default(),
             rmt: Rmt::new(RmtLayout::ESP32),
+            hspi: ClassicSpi::default(),
+            vspi: ClassicSpi::default(),
+            lcd: None,
+            lcd_pins: LcdPins::ESP32_DEFAULT,
             ws2812: HashMap::new(),
             pins: PinDevices::default(),
             i2c0: I2c::with_layout(I2cLayout::ESP32, 0),
@@ -226,6 +232,7 @@ impl Default for SocBus {
             chip_v3: true,
             i2c1: I2c::with_layout(I2cLayout::ESP32, tryboard_soc::iotrace::i2cbit::PORT1),
             adc: Adc::default(),
+            i2s: [i2s::I2s::new(0), i2s::I2s::new(1)],
             audio: Audio::default(),
             wifi: Some(Box::new(WifiMac::new(WifiLayout::ESP32))),
             rng: 0x2545_f491,
@@ -410,6 +417,8 @@ impl SocBus {
             }
             0x3FF5_3000 => return self.i2c0.read(off),
             0x3FF6_7000 => return self.i2c1.read(off),
+            0x3FF6_4000 => return self.spi_read(spi_lcd::Host::Hspi, off),
+            0x3FF6_5000 => return self.spi_read(spi_lcd::Host::Vspi, off),
             0x3FF5_9000 => return self.ledc.read(off),
             RMT_BASE => {
                 if rmt_unmodelled(&self.rmt, off, None) {
@@ -427,8 +436,18 @@ impl SocBus {
                 0x10 => return (now * 136_000 / CPU_HZ) as u32,
                 0x14 => return ((now * 136_000 / CPU_HZ) >> 32) as u32,
                 0x34 => return self.reset_reason | (self.reset_reason << 6),
+                o if o >= sens::OFFSET && Adc::owns(o - sens::OFFSET) => {
+                    return self.adc.read(o - sens::OFFSET)
+                }
                 _ => {}
             },
+            b if i2s::BASE.contains(&b) => {
+                let k = (b == i2s::BASE[1]) as usize;
+                if !i2s::modelled(off) {
+                    *self.unimpl.entry(a).or_insert(0) += 1;
+                }
+                return self.i2s[k].read(off);
+            }
             _ => {}
         }
         if a == WDEV_RND_REG {
@@ -509,6 +528,8 @@ impl SocBus {
                     return;
                 }
             }
+            0x3FF6_4000 => return self.spi_write(spi_lcd::Host::Hspi, off, v, now),
+            0x3FF6_5000 => return self.spi_write(spi_lcd::Host::Vspi, off, v, now),
             0x3FF5_3000 | 0x3FF6_7000 => {
                 // I2CEXT0 SDA/SCL out = 30/29, I2CEXT1 = 96/95 (gpio_sig_map.h)
                 let (bus, sda, scl) = if base == 0x3FF5_3000 {
@@ -545,6 +566,16 @@ impl SocBus {
                 self.regs
                     .insert(a, v & !(RST_SYS | RST_PROCPU | RST_APPCPU));
                 return;
+            }
+            RTC_CNTL if off >= sens::OFFSET && Adc::owns(off - sens::OFFSET) => {
+                return self.adc.write(off - sens::OFFSET, v)
+            }
+            b if i2s::BASE.contains(&b) => {
+                let k = (b == i2s::BASE[1]) as usize;
+                if !i2s::modelled(off) {
+                    *self.unimpl.entry(a).or_insert(0) += 1;
+                }
+                return self.i2s[k].write(off, v, now);
             }
             _ => {}
         }
@@ -614,6 +645,7 @@ impl SocBus {
                 self.gpio_log.drain(..1 << 15);
             }
             self.pins.on_level(now, lv);
+            self.lcd_pins_changed(lv);
         }
         self.irq_dirty = true;
     }
@@ -662,6 +694,10 @@ impl SocBus {
         set(src::RMT, self.rmt.irq());
         set(src::I2C_EXT0, self.i2c0.irq());
         set(src::I2C_EXT1, self.i2c1.irq());
+        set(src::SPI2, self.hspi.irq());
+        set(src::SPI3, self.vspi.irq());
+        set(src::SPI2_DMA, self.hspi.dma_irq());
+        set(src::SPI3_DMA, self.vspi.dma_irq());
         set(src::TG0_T0, self.timg0.irq(0));
         set(src::TG0_T1, self.timg0.irq(1));
         set(src::TG0_LACT, self.timg0.irq(2));
@@ -671,6 +707,8 @@ impl SocBus {
         set(src::TG0_WDT, self.timg0.wdt_irq());
         set(src::TG1_WDT, self.timg1.wdt_irq());
         set(src::WIFI_MAC, self.wifi().irq());
+        set(i2s::SRC[0], self.i2s[0].irq());
+        set(i2s::SRC[1], self.i2s[1].irq());
         for i in 0..4 {
             set(src::FROM_CPU0 + i, self.dport.from_cpu & (1 << i) != 0);
         }
@@ -744,6 +782,7 @@ impl SocBus {
         let n2 = self.ledc.update(now);
         let n2 = n2.min(self.rmt.update(now)).min(self.route_rmt(now));
         let n3 = self.i2c0.update(now).min(self.i2c1.update(now));
+        let n3 = n3.min(self.hspi.update(now)).min(self.vspi.update(now));
         let n4 = self.pins_update(now);
         let n5 = {
             // Infallible: wifi is set at construction and only taken around write/update,
@@ -753,8 +792,10 @@ impl SocBus {
             self.wifi = Some(w);
             n
         };
+        let n6 = self.i2s_update(now, 0).min(self.i2s_update(now, 1));
         self.trace_pwm(now);
-        self.next_event = n1.min(n2).min(n3).min(n4).min(n5);
+        self.lcd_pwm_backlight();
+        self.next_event = n1.min(n2).min(n3).min(n4).min(n5).min(n6);
         let lv = self.levels();
         let (l0, r0) = self.dport.pro.lines(&lv);
         let (l1, r1) = self.dport.app.lines(&lv);

@@ -19,18 +19,18 @@ fn usage() -> ! {
                [--i2c ssd1306@0x3c,bme280@0x76] [--env temp,humidity,pressure Pa] [--oled] [--i2c-log] (acks per address)
                [--i2c-bus sda=N,scl=N[,nopull]:kind@addr,...] (repeatable: bus on fixed pads, reached by the routed I2C0/I2C1 or bit-banged GPIO; external pull-ups unless nopull)
                [--efuse-pkg N] (package version eFuse: S3 0 QFN56 / 1 PICO; ESP32 5 PICO-D4 / 6 PICO-V3-02)
-               [--psram MB] (classic ESP32 quad PSRAM: 0 / 2 / 4 / 8; --efuse-pkg 6 implies 2)
+               [--psram MB] (classic ESP32 quad PSRAM: 0 / 2 / 4 / 8; --efuse-pkg 6 implies 2; S3: quad | octal die, default octal)
                [--board <id>|list] (board preset: eFuse, panel, I2C buses + devices, touch INT, encoder, buttons in one go; other flags add on top;
                script actions btn=A,1|0 (preset button), rtc=EPOCH (set the board RTC), key=<name>,1|0 (Cardputer keyboard:
                legend name a / 1 / enter / space / shift / fn ..., or comma / semicolon / period / slash / quote ...))
                (more I2C devices: mpu6050@0x68, qmi8658@0x6b, cst816s@0x15, ft6236@0x38, cst9220@0x5a, axp2101@0x34, pcf85063@0x51, es8311@0x18, es7210@0x40;
                M5 parts: mpu6886@0x68, bmi270@0x68 (BMM150 on its AUX bus), bmm150@0x10, bm8563@0x51 (= pcf8563), aw9523@0x58, axp192@0x34,
-               lp5562@0x30, tca8418@0x34, ft6336@0x38, ft3267@0x38, ina3221@0x40, ltr553@0x23, aw88298@0x36)
+               lp5562@0x30, tca8418@0x34, ft6336@0x38, ft3267@0x38, ina3221@0x40, ltr553@0x23, aw88298@0x36, gc0308@0x21)
                [--battery PCT[,usb]] (AXP2101 / AXP192) [--rtc EPOCH] (PCF85063 / BM8563, UTC) [--touch-int <GPIO>] (touch INT pin: low while pressed)
                script actions imu=pitch,roll,yaw[,their rates in °/s], touch=x,y (screen pixels, press / move), release (lift)
                [--spi gc9a01] (S3: SCLK=12 MOSI=11 CS=10 DC=14 RST=13 BL=15; C3: SCLK=6 MOSI=7 CS=10 DC=5 RST=4 BL=3) [--lcd-ppm <last frame.ppm>]
                [--spi co5300] (S3 QSPI AMOLED 480x480: CS=12 CLK=38 D0..D3=4..7 RST=39)
-               [--spi <panel>@sclk=N,mosi=N,miso=N,cs=N,dc=N,rst=N,bl=N] (S3 panels gc9a01 gc9107 st7735 st7789 st7789l ili9342 ili9342e; -1 = not connected)
+               [--spi <panel>@sclk=N,mosi=N,miso=N,cs=N,dc=N,rst=N,bl=N] (S3 / ESP32 panels gc9a01 gc9107 st7735 st7789 st7789l ili9342 ili9342e; -1 = not connected)
                [--power usb|ext] (default usb; ext = servo powered from an external 5 V 2 A supply) [--servo <GPIO>] (attach an SG90; its current loads the power net)
                [--elec-report] (per-node minimum voltage, peak current, brownout resets); script action power=usb|ext
                [--i2c-wire <cm>] (total I2C wire length: bus capacitance -> rise time; beyond spec reads go wrong / NACK, estimate)
@@ -45,6 +45,7 @@ fn usage() -> ! {
                [--encoder A,B[,SW]] (EC11 rotary encoder; script actions enc=+N / enc=-N turn N detents, encsw=1|0 press / release)
                [--sonar TRIG,ECHO] [--dist cm] (HC-SR04; script action dist=cm, negative = nothing in front)
                [--dht11 GPIO] (DHT11 on an open-drain data pin; readings from --env / script action env=)
+               [--ds18b20 GPIO[,count]] (1-Wire bus with count DS18B20s, default 1; device i reads --env temperature + 0.5·i °C)
                [--vcd <file.vcd>] [--vcd-pins 5[,..]|all] [--vcd-window <start s>..<end s>] (every edge, 1 ps timescale, 1 cycle = 6250 ps)
                [--i2s max98357a,inmp441] (S3: speaker BCLK=16 LRC=17 DIN=18, mic SCK=39 WS=40 SD=41; C3: speaker 0/1/2, mic 0/1/3)
                [--mic <sound.wav>] (INMP441 loops this WAV, attaches the mic automatically) [--audio-wav <speaker output.wav>]
@@ -216,8 +217,12 @@ fn i2c_opts(m: &mut Machine, args: &[String], chip: &str) {
         }
     }
     if let Some(p) = opt(args, "--psram") {
-        if !p.parse().is_ok_and(|n| m.set_psram_mb(n)) {
-            eprintln!("--psram {p}: unsupported on {chip} (classic ESP32: 0, 2, 4 or 8 MB)");
+        let ok = match p.as_str() {
+            "quad" | "octal" => m.set_psram_quad(p == "quad"),
+            _ => p.parse().is_ok_and(|n| m.set_psram_mb(n)),
+        };
+        if !ok {
+            eprintln!("--psram {p}: unsupported on {chip} (classic ESP32: 0, 2, 4 or 8 MB; ESP32-S3: quad or octal)");
             std::process::exit(2)
         }
     }
@@ -329,17 +334,8 @@ fn run(args: &[String]) {
             }
         }
     }
-    // DHT11: --dht11 DATA (open-drain single wire); attached before --env so it takes the same readings
-    let dht11 = opt(args, "--dht11");
-    if let Some(spec) = &dht11 {
-        match spec.trim().trim_start_matches("GPIO").parse::<u32>() {
-            Ok(p) => m.dht11_attach(p),
-            Err(_) => {
-                eprintln!("--dht11 needs one GPIO number");
-                std::process::exit(2)
-            }
-        }
-    }
+    // DHT11 / DS18B20 data pins; attached before --env so they take the same readings
+    let wire_sensors = wire_sensor_args(&mut m, args);
     // Environment: --env temp,humidity,pressure(Pa)
     if let Some(e) = opt(args, "--env") {
         let v: Vec<f64> = e.split(',').filter_map(|x| x.parse().ok()).collect();
@@ -696,7 +692,7 @@ fn run(args: &[String]) {
             && trace_tasks.is_none()
             && encoder.is_none()
             && sonar.is_none()
-            && dht11.is_none()
+            && !wire_sensors
             && vcd.is_none()
             && !has_audio
         {
@@ -999,9 +995,7 @@ fn run(args: &[String]) {
     if let Some((pings, echoes, us)) = m.sonar_stats() {
         eprintln!("[tryboard] ultrasonic triggers {pings}, echoes {echoes}, last Echo {us:.1} µs");
     }
-    if let Some((reads, short)) = m.dht11_stats() {
-        eprintln!("[tryboard] DHT11 frames sent {reads}, start pulses too short {short}");
-    }
+    report_wire_sensors(&mut m);
     if let Some(p) = &vcd {
         let text = m.vcd_text();
         std::fs::write(p, &text).unwrap_or_else(|e| panic!("write {p}: {e}"));
@@ -1087,6 +1081,64 @@ fn run(args: &[String]) {
             if ok { "PASS" } else { "FAIL" }
         );
         std::process::exit(if ok { 0 } else { 1 });
+    }
+}
+
+/// --dht11 / --ds18b20 (timed single-wire sensors); true when any is attached (the run then uses 1 ms slices)
+fn wire_sensor_args(m: &mut Machine, args: &[String]) -> bool {
+    // DHT11: --dht11 DATA (open-drain single wire)
+    let dht11 = opt(args, "--dht11");
+    if let Some(spec) = &dht11 {
+        match spec.trim().trim_start_matches("GPIO").parse::<u32>() {
+            Ok(p) => m.dht11_attach(p),
+            Err(_) => {
+                eprintln!("--dht11 needs one GPIO number");
+                std::process::exit(2)
+            }
+        }
+    }
+    // DS18B20: --ds18b20 DATA[,count] (1-Wire, external pull-up)
+    let ds18b20 = opt(args, "--ds18b20");
+    if let Some(spec) = &ds18b20 {
+        let v: Vec<Option<u32>> = spec
+            .split(',')
+            .map(|x| x.trim().trim_start_matches("GPIO").parse().ok())
+            .collect();
+        match v.as_slice() {
+            [Some(p)] => m.ds18b20_attach(*p, 1),
+            [Some(p), Some(n)] if (1..=8).contains(n) => m.ds18b20_attach(*p, *n as usize),
+            _ => {
+                eprintln!("--ds18b20 needs GPIO[,count] (count 1-8)");
+                std::process::exit(2)
+            }
+        }
+    }
+    dht11.is_some() || ds18b20.is_some()
+}
+
+/// End-of-run lines for the single-wire sensors
+fn report_wire_sensors(m: &mut Machine) {
+    if let Some((reads, short)) = m.dht11_stats() {
+        eprintln!("[tryboard] DHT11 frames sent {reads}, start pulses too short {short}");
+    }
+    if let Some((pin, n, st, roms)) = m.ds18b20_stats() {
+        let ids: Vec<String> = roms
+            .iter()
+            .map(|r| {
+                r.iter()
+                    .map(|b| format!("{b:02X}"))
+                    .collect::<Vec<_>>()
+                    .join("")
+            })
+            .collect();
+        eprintln!(
+            "[tryboard] DS18B20 x{n} on GPIO{pin}: resets {}, conversions {}, scratchpad reads {}, unknown commands {} (ROM {})",
+            st.resets,
+            st.conversions,
+            st.scratch_reads,
+            st.unknown_cmds,
+            ids.join(" ")
+        );
     }
 }
 

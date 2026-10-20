@@ -194,34 +194,13 @@ impl SocBus {
         let dc = self.gpio.level() >> self.lcd_pins.dc & 1 != 0;
         // CO5300 frames span transfers while CS_KEEP_ACTIVE holds CS low; SPI-driven CS rises after the last one
         let release = self.lcd_cs_by_spi() && !self.spi(h).cs_keep_active();
-        let mut rx = None;
-        match (self.lcd.as_deref_mut(), selected) {
-            (Some(Lcd::Dcs(l)), true) => {
-                for b in &p.head {
-                    l.byte(dc, *b);
-                }
-                l.clock(p.dummy_bits);
-                for b in &data {
-                    l.byte(dc, *b);
-                }
-                // MISO, or the shared SDA line in 3-wire (USER.SIO) mode: the same bit stream either way
-                if p.miso_bits > 0 {
-                    rx = Some(l.read_bits(p.miso_bits));
-                }
-                if release {
-                    l.cs_release();
-                }
+        // MISO, or the shared SDA line in 3-wire (USER.SIO) mode: the same bit stream either way
+        let rx = match self.lcd.as_deref_mut() {
+            Some(l) if selected => {
+                l.spi_transfer(dc, &p.head, p.dummy_bits, &data, p.miso_bits, release)
             }
-            (Some(Lcd::Co5300(l)), true) => {
-                for b in p.head.iter().chain(&data) {
-                    l.byte(*b);
-                }
-                if release {
-                    l.cs_release();
-                }
-            }
-            _ => {}
-        }
+            _ => None,
+        };
         if p.miso_bits > 0 {
             // No slave answering: MISO pull-up reads all 1s
             let rx = rx.unwrap_or_else(|| vec![0xffu8; p.miso_bits.div_ceil(8) as usize]);

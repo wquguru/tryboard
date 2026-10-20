@@ -206,12 +206,12 @@ pub struct Inmp441 {
     pub pins: Pins,
     /// L/R pin high = right channel (default grounded = left)
     pub right: bool,
-    /// PDM mic (SPM1423, M5-08) read through the PDM2PCM filter: same sample stream, CLK on `ws`, no BCLK
-    pub pdm: bool,
-    /// Same sample on both slots (codec stand-ins with a mono ADC, M5-08); PDM always does this
+    /// Same sample on both slots (M5-08 board mics: a mono codec ADC, or a PDM mic whose L/R strap is unknown)
     pub both: bool,
     pub source: MicSource,
     pub frames: u64,
+    /// PDM part (SPM1423 on M5 boards): the SoC decimates to PCM, so only the report differs
+    pub pdm: bool,
 }
 
 impl Inmp441 {
@@ -219,10 +219,10 @@ impl Inmp441 {
         Inmp441 {
             pins,
             right: false,
-            pdm: false,
             both: false,
             source: MicSource::Silence,
             frames: 0,
+            pdm: false,
         }
     }
 
@@ -302,8 +302,7 @@ impl Inmp441 {
                 let v24 = (x as f64 * 8_388_608.0).round() as i32;
                 let mut s = [0i32; 2];
                 s[k] = v24 << 8;
-                // The board's L/R strap picks the PDM clock edge; feed both so either slot mask hears it
-                if self.pdm || self.both {
+                if self.both {
                     s[1 - k] = v24 << 8;
                 }
                 s
@@ -419,22 +418,18 @@ impl Audio {
                     format!("live input ({underruns} frames underrun)")
                 }
             };
-            if m.pdm {
-                s += &format!(
-                    "[tryboard] I2S mic SPM1423 PDM (CLK=GPIO{} DATA=GPIO{}): sent {} frames, source {}\n",
-                    m.pins.ws, m.pins.data, m.frames, src
-                );
+            let side = if m.right { "right" } else { "left" };
+            s += &if m.pdm {
+                format!(
+                    "[tryboard] PDM mic SPM1423 (CLK=GPIO{} DATA=GPIO{}, {} channel): sent {} PCM frames, source {}\n",
+                    m.pins.ws, m.pins.data, side, m.frames, src
+                )
             } else {
-                s += &format!(
+                format!(
                     "[tryboard] I2S mic INMP441 (SCK=GPIO{} WS=GPIO{} SD=GPIO{}, {} channel): sent {} frames, source {}\n",
-                    m.pins.bclk,
-                    m.pins.ws,
-                    m.pins.data,
-                    if m.right { "right" } else { "left" },
-                    m.frames,
-                    src
-                );
-            }
+                    m.pins.bclk, m.pins.ws, m.pins.data, side, m.frames, src
+                )
+            };
         }
         if self.tx_unrouted > 0 {
             s += &format!(

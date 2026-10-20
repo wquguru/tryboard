@@ -45,6 +45,8 @@ def load():
     cfg["i2c_devices"] = set(re.findall(r'"(\w+)"', make.group(0))) if make else set()
     cli = read("core/crates/cli/src/main.rs")
     cfg["spi_devices"] = set(re.findall(r"--spi (\w+)", cli))
+    # Pin-spec panels (only valid with @pins) are listed in the usage text: "(S3 / ESP32 panels gc9a01 ...;"
+    cfg["spi_panels"] = {n for m in re.findall(r"panels ([\w ]+)[;)]", cli) for n in m.split()}
     parts = read("web/src/catalog/parts.ts")
     cfg["part_ids"] = set(re.findall(r"^    id: '([\w.-]+)'", parts, re.M)) | set(re.findall(r"^  id: '([\w.-]+)'", read("web/src/catalog/aioboards.ts"), re.M))
     cfg["part_refs"] = {}
@@ -65,13 +67,14 @@ def args_devices(args):
         if flag == "--i2c":
             out += [("i2c", d.split("@")[0]) for d in val.split(",")]
         elif flag == "--spi":
-            out += [("spi", d) for d in val.split(",")]
+            # A pin spec (panel@sclk=..,mosi=..) is one device whose commas separate pins
+            out += [("spi_panel", val.split("@")[0])] if "@" in val else [("spi", d) for d in val.split(",")]
     return out
 
 
 def check(cfg):
     errs = []
-    known = {"i2c": cfg["i2c_devices"], "spi": cfg["spi_devices"]}
+    known = {"i2c": cfg["i2c_devices"], "spi": cfg["spi_devices"], "spi_panel": cfg["spi_panels"]}
 
     def args_ok(where, args):
         for bus, name in args_devices(args):

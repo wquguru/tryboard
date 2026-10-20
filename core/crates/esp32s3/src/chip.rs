@@ -200,6 +200,10 @@ impl Chip for Esp32s3 {
         self.bus.gpio_changed(now);
         Some(i)
     }
+    fn set_psram_quad(&mut self, quad: bool) -> bool {
+        self.bus.psram_chip.quad = quad;
+        true
+    }
     fn set_efuse_pkg(&mut self, pkg: u32) -> bool {
         if pkg > 7 {
             return false;
@@ -241,6 +245,10 @@ impl Chip for Esp32s3 {
     }
     fn attach_mic(&mut self) -> bool {
         self.bus.attach_mic();
+        true
+    }
+    fn attach_speaker_at(&mut self, pins: tryboard_soc::devices::audio::Pins) -> bool {
+        self.bus.audio.speaker = Some(Box::new(tryboard_soc::devices::audio::Max98357a::new(pins)));
         true
     }
 

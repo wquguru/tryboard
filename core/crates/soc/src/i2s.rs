@@ -183,6 +183,7 @@ impl I2s {
             reg::INT_RAW | reg::INT_ST | reg::STATE => {}
             reg::TX_CONF | reg::RX_CONF => {
                 let old = self.r(off);
+
                 // update (sync config to the I2S clock domain) completes instantly and reads back 0
                 self.regs[(off / 4) as usize] = v & !UPDATE;
                 let s = if off == reg::TX_CONF {
@@ -235,14 +236,14 @@ impl I2s {
             )
         };
         let c = self.r(clkm);
-        // clk_active (bit 26); clk_sel (bits 27..28): 0 XTAL 40MHz, 2 PLL_F160M, 3 external MCLK (unsupported)
+        // clk_active (bit 26); clk_sel (bits 27..28): 0 XTAL 40MHz, 1 PLL_D2 240MHz (M5Unified picks it), 2 PLL_F160M,
+        // 3 external MCLK (unsupported)
         if c & (1 << 26) == 0 {
             return 0.0;
         }
         let src = match (c >> 27) & 3 {
             0 => 40e6,
-            // IDF never picks 1; M5Unified's raw mic / speaker clock does and documents it as PLL_D2 = 120 MHz on C3 / S3
-            1 => 120e6,
+            1 => 240e6,
             2 => 160e6,
             _ => return 0.0,
         };
@@ -607,19 +608,23 @@ mod tests {
         // update bit self-clears
         i.write(reg::TX_CONF, TDM_EN | UPDATE, 0);
         assert_eq!(i.read(reg::TX_CONF) & UPDATE, 0);
+        // clk_sel 1 = PLL_D2 240 MHz: same dividers run 1.5x faster
+        i.write(reg::TX_CLKM_CONF, (1 << 26) | (1 << 27) | 14, 0);
+        let r = i.format(true).rate;
+        assert!((r - 44101.04 * 1.5).abs() < 0.02, "{r}");
     }
 
     #[test]
     fn pdm_rx_rate_and_format() {
-        // Register values M5Unified's Mic_Class leaves on a Cardputer: clk_sel 1 (120 MHz), div 58 (fraction left 0), bck_div 2, DSR16
+        // Register values M5Unified's Mic_Class leaves on a Cardputer: clk_sel 1 (240 MHz), div 58 (fraction left 0), bck_div 2, DSR16
         let mut i = I2s::new(0, true);
         i.write(reg::RX_CONF1, 0x2f3d_e080, 0);
         i.write(reg::RX_CLKM_CONF, 0x2c00_003a, 0);
         i.write(reg::RX_CONF, 0x0070_9404 & !START, 0);
         let f = i.format(false);
         assert!(i.usable(false, &f));
-        // DSR16 = 128 PDM clocks per PCM sample (IDF i2s_pdm.c)
-        let want = 120e6 / 58.0 / 2.0 / 128.0;
+        // DSR16 = 128 PDM clocks per PCM sample (IDF i2s_pdm.c); with the real fraction this is M5Unified's 16 kHz
+        let want = 240e6 / 58.0 / 2.0 / 128.0;
         assert!((f.rate - want).abs() < 0.01, "{}", f.rate);
         assert_eq!((f.slots, f.msb_shift, f.bytes), (2, true, 2));
         // Without PDM2PCM, raw PDM is not modelled and the port stays idle
