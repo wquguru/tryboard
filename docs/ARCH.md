@@ -281,12 +281,14 @@ web/（Vite + TS）
   2. 写 eFuse 封装号。
   3. 挂屏。
   4. 加 I2C 总线和器件。
-  5. 接触摸 INT。
-  6. 接编码器。
-  7. 把按钮驱到松开电平，并驱固定电平。
+  5. 设 IMU 安装方向 `imu_mount`（M5-06）：BMI270 加速度 / 陀螺和 AUX 上 BMM150 的轴映射（`imu::Mount`，传感器轴 i = 符号 × 板轴），取 M5Unified 对该板重排轴的逆，使同一 `imu=` 姿态在各板上经驱动后读数一致。AtomS3R：加速度 / 陀螺 (-y, x, z)，地磁 (-x, y, -z)。
+  6. 接触摸 INT。
+  7. 接编码器。
+  8. 把按钮驱到松开电平，并驱固定电平。
   CLI 的 `--i2c` / `--spi` / `--i2c-bus` 等在预设之后叠加。
 - `verified`：
-  - 只有 m5dial 标为已验证。它用 `arduino-m5-probe-dial` / `arduino-m5-dial-demo` 跑通了 M5Unified 检测、触摸、RTC、编码器、BtnA 和屏幕。
+  - m5dial 已验证：`arduino-m5-probe-dial` / `arduino-m5-dial-demo` 跑通了 M5Unified 检测、触摸、RTC、编码器、BtnA 和屏幕。
+  - m5atoms3 / m5atoms3lite / m5atoms3r 已验证（M5-06）：同一个 `m5stack_atoms3` FQBN 固件（arduino-esp32 3.3.2 没有 Lite / R 的 FQBN）运行时识别三块板，`arduino-m5-probe-atoms3*`、`arduino-m5-atoms3-imu*` 用例。
   - 其余是存根，备注写明由哪个 PLAN 项验证。CLI 会打印 "(UNVERIFIED preset)"。
   - 已验证的预设只要有一个部件挂不上就返回错误；存根只给警告。
   - PSRAM 没有建模，只给警告。

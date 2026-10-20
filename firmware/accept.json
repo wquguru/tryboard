@@ -2931,6 +2931,43 @@
   ]
  },
  {
+  "id": "arduino-m5-probe-atoms3lite",
+  "fw": "arduino-m5-probe-atoms3",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--board",
+   "m5atoms3lite"
+  ],
+  "expect": [
+   "M5PROBE board=M5AtomS3Lite board_id=137 dispboard=unknown display=0x0 imu=0",
+   "M5PROBE_DRAWN",
+   "TRYBOARD_OK m5-probe"
+  ],
+  "stderr_expect": [
+   "board m5atoms3lite: expects M5AtomS3Lite"
+  ]
+ },
+ {
+  "id": "arduino-m5-probe-atoms3r",
+  "fw": "arduino-m5-probe-atoms3",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--board",
+   "m5atoms3r"
+  ],
+  "expect": [
+   "M5PROBE board=M5AtomS3R board_id=18 dispboard=M5AtomS3R display=128x128 imu=6",
+   "M5PROBE_DRAWN",
+   "TRYBOARD_OK m5-probe"
+  ],
+  "stderr_expect": [
+   "board m5atoms3r: expects M5AtomS3R",
+   "LCD GC9107 non-black pixels"
+  ]
+ },
+ {
   "id": "arduino-m5-dial-demo",
   "chip": "esp32s3",
   "seconds": 4,
@@ -2949,6 +2986,64 @@
    "DIAL touch x=60 y=180",
    "DIAL btnA presses=1",
    "DIAL rtc=2027-01-15 08:00:0"
+  ]
+ },
+ {
+  "id": "arduino-m5-atoms3-imu",
+  "chip": "esp32s3",
+  "seconds": 4.5,
+  "args": [
+   "--board",
+   "m5atoms3"
+  ],
+  "script": "0.5:imu=0,0,0; 1.6:imu=90,0,0; 2.6:imu=0,90,0; 3.6:imu=180,0,0",
+  "expect": [
+   "IMU ready board=11 imu=4 display=128x128",
+   "IMU tilt change flat",
+   "IMU tilt change x_down",
+   "IMU tilt change y_up",
+   "IMU tilt change upside_down"
+  ]
+ },
+ {
+  "id": "arduino-m5-atoms3-imu-r",
+  "fw": "arduino-m5-atoms3-imu",
+  "chip": "esp32s3",
+  "seconds": 4.5,
+  "args": [
+   "--board",
+   "m5atoms3r"
+  ],
+  "script": "0.5:imu=0,0,0; 1.6:imu=90,0,0; 2.6:imu=0,90,0; 3.6:imu=180,0,0",
+  "expect": [
+   "IMU ready board=18 imu=6 display=128x128",
+   "IMU tilt change flat",
+   "IMU tilt change x_down",
+   "IMU tilt change y_up",
+   "IMU tilt change upside_down"
+  ]
+ },
+ {
+  "id": "arduino-m5-atoms3-imu-lite",
+  "fw": "arduino-m5-atoms3-imu",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--board",
+   "m5atoms3lite",
+   "--ws2812-log"
+  ],
+  "expect": [
+   "IMU ready board=137 imu=0 display=0x0",
+   "IMU led=00ff00",
+   "IMU led=0000ff",
+   "IMU led=ff0000"
+  ],
+  "stderr_expect": [
+   "WS2812 GPIO35",
+   "#001000",
+   "#000010",
+   "#100000"
   ]
  }
 ]

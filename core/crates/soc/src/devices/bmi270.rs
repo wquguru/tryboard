@@ -10,7 +10,7 @@
 //! read at each latch. Not done: FIFO (length 0), feature engine (step counter, gestures), INT pins, self-test, OIS. (lint: allow-long-comment)
 
 use super::bmm150::Bmm150;
-use super::imu::{noise, to_i16, Pose};
+use super::imu::{mount, noise, to_i16, Mount, Pose, MOUNT_IDENTITY};
 use crate::i2c::I2cDevice;
 use crate::periph::CPU_HZ;
 use std::any::Any;
@@ -21,6 +21,8 @@ pub const CONFIG_SIZE: usize = 8192;
 pub struct Bmi270 {
     pub addr: u8,
     pub pose: Pose,
+    /// Chip axes against the board's (pose) axes
+    pub mount: Mount,
     pub temp_c: f64,
     /// Magnetometer on the AUX bus (AUX_DEV_ID must name its address)
     pub aux: Option<Bmm150>,
@@ -47,6 +49,7 @@ impl Bmi270 {
         let mut d = Bmi270 {
             addr,
             pose: Pose::default(),
+            mount: MOUNT_IDENTITY,
             temp_c: 23.5,
             aux: Some(Bmm150::new(0x10)),
             regs: [0; 128],
@@ -146,7 +149,7 @@ impl Bmi270 {
         let gfs = (self.regs[0x43] & 7).min(4) as i32;
         if self.pwr(0x04) {
             let n = self.sample(0x40);
-            let a = self.pose.accel_g();
+            let a = mount(&self.mount, self.pose.accel_g());
             for (i, ai) in a.iter().enumerate() {
                 let lsb = 16384.0 / 2f64.powi(afs);
                 let v = to_i16((ai + 0.003 * noise(n, i as u64)) * lsb);
@@ -155,7 +158,7 @@ impl Bmi270 {
         }
         if self.pwr(0x02) {
             let n = self.sample(0x42);
-            let g = self.pose.gyro_dps();
+            let g = mount(&self.mount, self.pose.gyro_dps());
             for (i, gi) in g.iter().enumerate() {
                 let lsb = 16.384 * 2f64.powi(gfs);
                 let v = to_i16((gi + 0.05 * noise(n, 4 + i as u64)) * lsb);

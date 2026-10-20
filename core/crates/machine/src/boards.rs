@@ -2,6 +2,7 @@
 //! with their devices, touch INT, encoder, buttons). Data only; `Machine::board_preset` applies it. CLI `--board`, wasm `tb_board_preset`.
 
 use crate::{Chip, Machine};
+use tryboard_soc::devices::{bmi270::Bmi270, imu::Mount};
 
 /// An I2C bus on fixed pads with external pull-ups and its devices (kind, 7-bit address), see `Machine::i2c_bus_add`
 pub struct I2cBus {
@@ -32,6 +33,8 @@ pub struct BoardPreset {
     pub lcd: Option<&'static str>,
     pub i2c: &'static [I2cBus],
     pub touch_int: Option<u32>,
+    /// BMI270 (accel / gyro, then its AUX BMM150) mounting, the inverse of the remap M5Unified applies for this board
+    pub imu_mount: Option<(Mount, Mount)>,
     /// Rotary encoder A / B phase pins
     pub encoder: Option<(u32, u32)>,
     pub buttons: &'static [Button],
@@ -71,6 +74,7 @@ const NONE: BoardPreset = BoardPreset {
     lcd: None,
     i2c: &[],
     touch_int: None,
+    imu_mount: None,
     encoder: None,
     buttons: &[],
     levels: &[],
@@ -103,7 +107,8 @@ pub const BOARDS: &[BoardPreset] = &[
         i2c: &[bus(38, 39, &[("mpu6886", 0x68)])],
         buttons: &[btn("A", 41)],
         outputs: &[("ir", 4), ("backlight", 16)],
-        note: "M5-06 verifies",
+        verified: true,
+        note: "M5GFX finds the GC9107 by its ID; MPU6886 axes need no remap",
         ..NONE
     },
     BoardPreset {
@@ -114,7 +119,8 @@ pub const BOARDS: &[BoardPreset] = &[
         // M5Unified's fallback heuristic tells AtomS3 Lite by G4 reading 0 even with a pull-up
         levels: &[(4, 0)],
         outputs: &[("rgb", 35), ("ir", 4)],
-        note: "M5-06 verifies; G4 level from the M5Unified heuristic, not the schematic",
+        verified: true,
+        note: "no panel answers; G4 level from the M5Unified heuristic, not the schematic; WS2812 on G35",
         ..NONE
     },
     BoardPreset {
@@ -124,9 +130,12 @@ pub const BOARDS: &[BoardPreset] = &[
         psram_mb: 8,
         lcd: Some("gc9107@sclk=15,mosi=21,cs=14,dc=42,rst=48,bl=-1"),
         i2c: &[bus(45, 0, &[("bmi270", 0x68), ("lp5562", 0x30)])],
+        // M5Unified reads accel / gyro as (y, -x, z) and the magnetometer as (-x, y, -z)
+        imu_mount: Some(([(1, -1), (0, 1), (2, 1)], [(0, -1), (1, 1), (2, -1)])),
         buttons: &[btn("A", 41)],
         outputs: &[("ir", 47)],
-        note: "M5-06 verifies; backlight via LP5562 W channel; octal PSRAM not modelled",
+        verified: true,
+        note: "backlight is LP5562 W but the panel model keeps it on; octal PSRAM not modelled",
         ..NONE
     },
     BoardPreset {
@@ -305,6 +314,17 @@ impl Machine {
                 if !self.i2c_attach_bus(n, kind, *addr) {
                     warn.push(format!("I2C device {kind} unknown"));
                 }
+            }
+        }
+        if let Some((ag, mag)) = b.imu_mount {
+            match self.i2c_dev::<Bmi270>() {
+                Some(d) => {
+                    d.mount = ag;
+                    if let Some(m) = d.aux.as_mut() {
+                        m.mount = mag;
+                    }
+                }
+                None => warn.push("IMU mount set but no BMI270 attached".into()),
             }
         }
         if let Some(pin) = b.touch_int {
