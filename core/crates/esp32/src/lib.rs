@@ -5,7 +5,9 @@ pub mod boot;
 mod chip;
 pub mod crypto;
 pub mod hle;
+pub mod i2s;
 pub mod periph;
+pub mod sens;
 
 use periph::*;
 use std::collections::HashMap;
@@ -141,6 +143,8 @@ pub struct SocBus {
     pub chip_v3: bool,
     pub i2c1: I2c,
     pub adc: Adc,
+    /// I2S0 / I2S1 (M5-12): classic lldesc DMA, PDM RX on I2S0
+    pub i2s: [i2s::I2s; 2],
     pub audio: Audio,
     /// ESP32's Wi-Fi MAC is an older IP and not modelled (see DECISIONS); an unmapped instance keeps the common interface
     pub wifi: Option<Box<WifiMac>>,
@@ -161,18 +165,7 @@ pub struct SocBus {
     pub reset_reason: u32,
 }
 
-/// Pin analog voltages (no ADC model yet; storage kept for the common interface)
-pub struct Adc {
-    pub pin_mv: [f32; NPINS],
-}
-
-impl Default for Adc {
-    fn default() -> Self {
-        Adc {
-            pin_mv: [0.0; NPINS],
-        }
-    }
-}
+pub use sens::Adc;
 
 impl Default for SocBus {
     fn default() -> Self {
@@ -213,6 +206,7 @@ impl Default for SocBus {
             chip_v3: true,
             i2c1: I2c::with_layout(I2cLayout::ESP32, tryboard_soc::iotrace::i2cbit::PORT1),
             adc: Adc::default(),
+            i2s: [i2s::I2s::new(0), i2s::I2s::new(1)],
             audio: Audio::default(),
             wifi: Some(Box::new(WifiMac::new(WifiLayout::ESP32))),
             rng: 0x2545_f491,
@@ -388,8 +382,18 @@ impl SocBus {
                 0x10 => return (now * 136_000 / CPU_HZ) as u32,
                 0x14 => return ((now * 136_000 / CPU_HZ) >> 32) as u32,
                 0x34 => return self.reset_reason | (self.reset_reason << 6),
+                o if o >= sens::OFFSET && Adc::owns(o - sens::OFFSET) => {
+                    return self.adc.read(o - sens::OFFSET)
+                }
                 _ => {}
             },
+            b if i2s::BASE.contains(&b) => {
+                let k = (b == i2s::BASE[1]) as usize;
+                if !i2s::modelled(off) {
+                    *self.unimpl.entry(a).or_insert(0) += 1;
+                }
+                return self.i2s[k].read(off);
+            }
             _ => {}
         }
         if a == WDEV_RND_REG {
@@ -498,6 +502,16 @@ impl SocBus {
                 self.regs
                     .insert(a, v & !(RST_SYS | RST_PROCPU | RST_APPCPU));
                 return;
+            }
+            RTC_CNTL if off >= sens::OFFSET && Adc::owns(off - sens::OFFSET) => {
+                return self.adc.write(off - sens::OFFSET, v)
+            }
+            b if i2s::BASE.contains(&b) => {
+                let k = (b == i2s::BASE[1]) as usize;
+                if !i2s::modelled(off) {
+                    *self.unimpl.entry(a).or_insert(0) += 1;
+                }
+                return self.i2s[k].write(off, v, now);
             }
             _ => {}
         }
@@ -624,6 +638,8 @@ impl SocBus {
         set(src::TG0_WDT, self.timg0.wdt_irq());
         set(src::TG1_WDT, self.timg1.wdt_irq());
         set(src::WIFI_MAC, self.wifi().irq());
+        set(i2s::SRC[0], self.i2s[0].irq());
+        set(i2s::SRC[1], self.i2s[1].irq());
         for i in 0..4 {
             set(src::FROM_CPU0 + i, self.dport.from_cpu & (1 << i) != 0);
         }
@@ -706,8 +722,9 @@ impl SocBus {
             self.wifi = Some(w);
             n
         };
+        let n6 = self.i2s_update(now, 0).min(self.i2s_update(now, 1));
         self.trace_pwm(now);
-        self.next_event = n1.min(n2).min(n3).min(n4).min(n5);
+        self.next_event = n1.min(n2).min(n3).min(n4).min(n5).min(n6);
         let lv = self.levels();
         let (l0, r0) = self.dport.pro.lines(&lv);
         let (l1, r1) = self.dport.app.lines(&lv);

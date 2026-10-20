@@ -2844,5 +2844,96 @@
    "TRYBOARD_OK i2c-bitbang"
   ],
   "qemu": false
+ },
+ {
+  "id": "esp32-i2s-tone",
+  "chip": "esp32",
+  "seconds": 1.5,
+  "qemu": false,
+  "args": [
+   "--i2s",
+   "max98357a"
+  ],
+  "expect": [
+   "TONE 440 Hz @ 44100 Hz",
+   "TRYBOARD_OK esp32-i2s-tone"
+  ],
+  "audio": {
+   "freq": 440,
+   "tol": 1,
+   "rate": 44100,
+   "min_rms": 0.3
+  }
+ },
+ {
+  "id": "esp32-pdm-mic",
+  "chip": "esp32",
+  "seconds": 1.2,
+  "qemu": false,
+  "args": [
+   "--mic",
+   "tools/audio/sine1k.wav"
+  ],
+  "expect": [
+   "MIC SPM1423 PDM on I2S0 @ 16000 Hz",
+   "TRYBOARD_OK esp32-pdm-mic"
+  ],
+  "numeric": [
+   {
+    "name": "zero-crossing frequency (Hz)",
+    "regex": "MIC rms=[\\d.]+ freq=([\\d.]+) Hz",
+    "value": 1000,
+    "tol": 1
+   },
+   {
+    "name": "RMS",
+    "regex": "MIC rms=([\\d.]+)",
+    "value": 0.3536,
+    "tol": 0.002
+   }
+  ]
+ },
+ {
+  "id": "esp32-adc",
+  "chip": "esp32",
+  "seconds": 2.5,
+  "qemu": false,
+  "script": "0.0:mv38=500; 0.5:mv38=1200; 1.0:mv38=1650; 1.5:mv38=2100; 2.0:mv38=2800",
+  "expect": [
+   "线性拟合校准已启用（来源 eFuse Vref）",
+   "TRYBOARD_OK esp32-adc"
+  ],
+  "numeric": [
+   {
+    "name": "GPIO38 500 mV calibrated",
+    "regex": "ADC#0 raw=\\s*\\d+  校准\\s+(\\d+) mV",
+    "value": 500,
+    "tol": 5.0
+   },
+   {
+    "name": "GPIO38 1200 mV calibrated",
+    "regex": "ADC#1 raw=\\s*\\d+  校准\\s+(\\d+) mV",
+    "value": 1200,
+    "tol": 12.0
+   },
+   {
+    "name": "GPIO38 1650 mV calibrated",
+    "regex": "ADC#2 raw=\\s*\\d+  校准\\s+(\\d+) mV",
+    "value": 1650,
+    "tol": 16.5
+   },
+   {
+    "name": "GPIO38 2100 mV calibrated",
+    "regex": "ADC#3 raw=\\s*\\d+  校准\\s+(\\d+) mV",
+    "value": 2100,
+    "tol": 21.0
+   },
+   {
+    "name": "GPIO38 2800 mV calibrated",
+    "regex": "ADC#4 raw=\\s*\\d+  校准\\s+(\\d+) mV",
+    "value": 2800,
+    "tol": 28.0
+   }
+  ]
  }
 ]

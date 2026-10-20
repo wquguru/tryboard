@@ -208,6 +208,8 @@ pub struct Inmp441 {
     pub right: bool,
     pub source: MicSource,
     pub frames: u64,
+    /// PDM part (SPM1423 on M5 boards): the SoC decimates to PCM, so only the report differs
+    pub pdm: bool,
 }
 
 impl Inmp441 {
@@ -217,6 +219,7 @@ impl Inmp441 {
             right: false,
             source: MicSource::Silence,
             frames: 0,
+            pdm: false,
         }
     }
 
@@ -409,15 +412,18 @@ impl Audio {
                     format!("live input ({underruns} frames underrun)")
                 }
             };
-            s += &format!(
-                "[tryboard] I2S mic INMP441 (SCK=GPIO{} WS=GPIO{} SD=GPIO{}, {} channel): sent {} frames, source {}\n",
-                m.pins.bclk,
-                m.pins.ws,
-                m.pins.data,
-                if m.right { "right" } else { "left" },
-                m.frames,
-                src
-            );
+            let side = if m.right { "right" } else { "left" };
+            s += &if m.pdm {
+                format!(
+                    "[tryboard] PDM mic SPM1423 (CLK=GPIO{} DATA=GPIO{}, {} channel): sent {} PCM frames, source {}\n",
+                    m.pins.ws, m.pins.data, side, m.frames, src
+                )
+            } else {
+                format!(
+                    "[tryboard] I2S mic INMP441 (SCK=GPIO{} WS=GPIO{} SD=GPIO{}, {} channel): sent {} frames, source {}\n",
+                    m.pins.bclk, m.pins.ws, m.pins.data, side, m.frames, src
+                )
+            };
         }
         if self.tx_unrouted > 0 {
             s += &format!(
