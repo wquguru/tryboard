@@ -178,6 +178,19 @@
 | R-22 | perf.mjs 记全部字节并按类型拆（font / rom / fw / core / js / css） | 输出每页分类字节；`--only` / `--desktop` 子集 | ☑ 2026-10-19 |
 | R-23 | worker 缓存编译好的 `WebAssembly.Module`（boot / seek / verify 不重复编译、不重复拷贝 wasm 字节） | seek 10 次耗时不劣化且 web 指纹一致；无 console error | ☐ |
 
+## E · AMOLED AI 网关仪表盘（2026-10-20 人确认「直接做、全自主完成」）
+起因：用户贴了一条推文——Waveshare ESP32-S3-Touch-AMOLED-2.16 做的 Magpie（LLM 网关）仪表盘，电脑端程序经 BLE 推数据（截图有蓝牙 ONLINE 图标）。目标：这块板 + 同类固件在网页里跑起来。板子（Waveshare 文档 / 官方仓库 Apache-2.0）：CO5300 480×480 QSPI（CS=12 CLK=38 D0–D3=4/5/6/7 RST=39）；I2C SCL=14 SDA=15 上挂 CST9220 触摸（0x5A，INT=11 RST=40）、AXP2101、PCF85063（INT=13）、QMI8658、ES8311 / ES7210；按键 GPIO18、GPIO0、PWRON（经 AXP2101）；16MB flash + 8MB OPI PSRAM。协议用公开的 Claude Desktop Buddy BLE 协议（NUS + 每行一个 JSON），原作者固件未公开，我们自写示例固件。决定见 DECISIONS 2026-10-20 E。
+| ID | 项 | 验收 | 状态 |
+|---|---|---|---|
+| E-01 | SPI 四线（fcmd/faddr/fwrite_quad 等）时序 + S3 LCD 引脚可配置 + CO5300 屏模型（opcode 0x02 写命令 / 0x32 写像素，`opcode<<24 \| cmd<<8`，480×480 RGB565，亮度 0x51） | 新固件 `s3-co5300`（esp_lcd_co5300 + QSPI，画已知图案）：CLI `--spi co5300 --lcd-ppm` 像素与预期一致；四线下一帧传输的模拟时间约为单线的 1/4；GC9A01 用例输出逐字节不变（golden） | ☐ |
+| E-02 | I2C 器件：CST9220 触摸（16 位寄存器、0xD000 报点 + 0xAB 应答、ID 0x9220）、AXP2101（芯片 ID、电量 / 充电 / VBUS、PWRON 按键中断）、PCF85063（跟模拟时钟、可设时间）、ES8311 / ES7210 应答空壳 | 新固件 `s3-amoled-i2c`：五颗都探到；触摸脚本坐标对上；电量百分比可由 CLI 参数设定并读回；RTC 写入后走时正确；accept 用例 | ☐ |
+| E-03 | 网页：新板 ESP32-S3-Touch-AMOLED-2.16（方形 AMOLED 3D 模型、按尺寸程序生成）、LCD 分辨率参数化（去掉 240 写死）、480×480 屏触摸映射、电量 / 按键交互 | 示例在网页显示 s3-co5300 画面；点屏 = 触摸，与 CLI 重放一致；390×844 无横向滚动；agent-browser 走查 Reviews/ab/E-03.md | ☐ |
+| E-04 | S3 BLE：Xtensa 版 libbtdm 签名（`tools/ble_sigs.py`）+ S3 接入 VHCI HLE（照 `esp32c3/src/ble.rs`） | 新固件 `s3-ble-hr`（c3-ble-hr 的 S3 版）`--ble-phone` 结果与 C3 相同；S3 其它固件不误认 | ☐ |
+| E-05 | Bluedroid 主机栈：补虚拟控制器缺的 HCI（Arduino-ESP32 默认 BLE 库即 Bluedroid） | Arduino 或 IDF Bluedroid 的 NUS 外设固件（C3 与 S3）：虚拟手机扫到、连接、写 RX、订阅 TX 收到通知 | ☐ |
+| E-06 | 虚拟电脑：BLE 中心按 Buddy 协议推心跳 JSON（MTU 协商、无应答写、长消息分片、TX 通知按 `\n` 重组）；数据源：脚本 / 录制 / 本机 Magpie（经本地代理，可选）；CLI `--desk-pc` 与输入日志 `pc=...` | C3 NUS 固件（E-06 自带）收到完整 JSON 并回 ack；网页「蓝牙」坞显示虚拟电脑；导出输入后 CLI 重放逐字节一致 | ☐ |
+| E-07 | 示例固件「AI 网关仪表盘」（S3 + CO5300 + CST9220 + AXP2101 + PCF85063 + BLE NUS，LVGL 4 页：请求 / 上下文 / 会话 / 用量，左右滑翻页） | accept：收到心跳后屏上数值正确（ppm 区域检查）、滑动翻页；网页示例库加入，agent-browser 走查 Reviews/ab/E-07.md | ☐ |
+| E-08 | （后置）LE 安全连接配对：虚拟电脑手写 P-256 ECDH + AES-CMAC（f4/f5/f6）、配对码输入 | 加密特征值的 NUS 固件配对成功、`sec:true` | ☐ |
+
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
 

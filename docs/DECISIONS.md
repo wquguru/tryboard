@@ -1009,3 +1009,11 @@
   - 「并行取」不是少下载，是让这些字节不挡首次渲染；首页 index.html 闭包因 chunk 切分多 0.9 KB（160.1 → 161.0）。
   - 没做到 ≤ 396 KB 的卡点：剩下的 454.6 里 three 149 + react-dom / react 71 + CSS 18 + tailwind-merge 9，实验台 / 3D 舞台（bench3d、board3d、后期 Bloom / Outline）本身约 150 KB 都是首屏画面要用的；零件目录 `catalog/parts`（17 KB）在建 store 时 `loadBom → validHistory` 就同步要用，`wirecheck` / `place` 也要。再降需要把实验台 3D 整体改成会话前动态加载（等于把 three 移出闭包，与「three 保留在首屏」矛盾）或把零件目录拆成首屏索引 + 详情，改动面大，留给后续。
   - 不做：用手写合并替换 `tailwind-merge`（类名冲突语义会变）；音频门面（audio.ts 实际只有约 1.3 KB，第一轮 13 KB 的估计是 source map 把 levels.json 记到了它头上）。
+
+## 2026-10-20 E：AMOLED AI 网关仪表盘（PLAN 节 E）
+- 决定：以 Waveshare ESP32-S3-Touch-AMOLED-2.16 为目标板，补 CO5300 QSPI 屏、CST9220 / AXP2101 / PCF85063 三个 I2C 模型、S3 BLE、Bluedroid HCI、虚拟电脑；协议采用公开的 Claude Desktop Buddy BLE 协议（NUS `6e400001-…`，RX 写 / TX 通知，每行一个 JSON，心跳含 total / running / waiting / tokens / tokens_today / entries），示例固件自写。
+- QSPI 不按四根线仿真：乐鑫 `esp_lcd_co5300`（Apache-2.0，源码头已核）每笔传输为 32 位命令 `opcode<<24 | cmd<<8`（0x02 写命令、0x32 写像素、0x03 读），GP-SPI 模型本来就按顺序交出 cmd / addr / data 字节，屏模型从字节流解析；只把四线 / 双线阶段的位时间按线数折算。
+- 原作者 Magpie 推送协议未公开（yetone/magpie 仓库无 BLE / ESP32 代码），不猜。第三方固件 vthinkxie/claude-desktop-buddy-esp32（支持此板）GitHub 许可证 NOASSERTION：不进仓库、不上网站、也不在本机跑，等人决定。
+- 用户真实桌面程序连不到网页里的虚拟板（浏览器 Web Bluetooth 只能当中心连真设备，不能当外设），所以「电脑端」由浏览器里的虚拟电脑扮演；接本机 Magpie 走现有 realnet 本地代理思路，作可选项。
+- LE 安全连接配对（E-08）后置：Buddy 协议把加密列为推荐而非必需。
+- 替代：走 Wi-Fi 直接拉 Magpie HTTP（127.0.0.1:3425）——用户判断原作是 BLE 推送，且 realnet 只放 80 端口、需 CORS，否掉作主路径。
