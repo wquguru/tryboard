@@ -1264,3 +1264,13 @@
 - **3D 固定槽位**：五种元件各有固定 x 偏移和离板距离，只按信号脚决定放在面包板哪一侧，避免同时放多个时重叠。
 - **控制放在示例面板**：教学元件的控制同时出现在「这个示例」面板，不必先点开元件卡（回归脚本也靠它）。
 - 备选：每个元件单独做显示面板 —— 否，简报限定不做显示面板。
+
+## 2026-10-20 BLE 多 IDF 签名（F-08c）
+- **新提交按 tag 命名目录**：`tools/fetch_third_party.sh` 新增 11 个 bt-lib 提交，目录名用 IDF tag（5.1.0、5.2.2…；5.1.4 与 5.2.1 同提交只下一份）；旧目录名（5.1-5.2、5.3、5.4、5.5.0、5.5.1）不改，免得老脚本和笔记失效。新提交只有 libbtdm_app.a，没有 `_flash`。
+- **osi 版本范围 0x10006–0x1000A**：逐个读了 5.1 / 5.1.1 / 5.1.2 / 5.1.5 / 5.2 / 5.2.2 / 5.3 / 5.3.1 / 5.5.1 的 bt.c，HLE 用到的 osi 表偏移（36 / 52 / 56 / 100）全一样，所以只放宽版本判断，不按版本分支。
+- **pll_track 可以找不到**：5.1.0 / 5.1.1（0x10006）的 bt.c 不调 `sdk_config_extend_set_pll_track`，`sig::locate` / `sig_xt::locate` 找不到时不再报错、给 0；改到 osi_reg 时判：版本 ≥ 0x10007 却没找到才报错。备选：按版本分两套 locate —— 否，多一套代码路径但判据一样。
+- **覆盖自测用裸链接**：`tools/ble_cover.sh` 把每个库用 5.5.1 工具链 `--gc-sections` 裸链接（未定义符号 PROVIDE 到 0x40001000，避开 Xtensa longcall 跨 1 GB 报错），elf2image 后让 Python `ble_sigs.py check` 和 Rust `cover.rs` 都按 ELF 符号对答案。产物在 git 忽略的 `third_party/btlib-cover/`，没有就跳过。
+- **S3 `_flash` 缺口不修**：S3 libbtdm_app_flash.a 裸链接时 ld 放松 longcall 会把 `or a10,a2,a2` 缩成 `mov.n`，send_packet 签名不中；改前改后都不中，真 RUN_IN_FLASH_ONLY 固件没见过，记 STATUS 缺口，自测里标 known gap 不算失败。
+- **check 容忍 AMBIGUOUS_OK**：Python check 对允许多处命中的函数，只要真值在命中里就算对（与 Rust 侧一致）。
+- **固件不重编**：worktree 的 firmware/build 从主仓库复制（同源码），改前改后 CLI 输出对比用复制的镜像。
+- 签名是否算 Espressif 库的衍生作品，仍待人审（同 E-04 的说法）。

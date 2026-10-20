@@ -118,7 +118,7 @@ pub struct Hooks {
     pub send_packet: u32,
     pub register_callback: u32,
     /// sdk_config_extend_set_pll_track writes through the sdk_config pointer set by the real btdm_controller_init, which we skip,
-    /// so it must be a no-op too. IDF 5.1-5.5.1 bt.c all call it right before btdm_controller_enable
+    /// so it must be a no-op too. IDF 5.1.2-5.5.1 bt.c call it right before btdm_controller_enable; 0 = no call (5.1.0 / 5.1.1)
     pub pll_track: u32,
 }
 
@@ -172,12 +172,8 @@ pub fn locate(segs: &[Seg]) -> Result<Hooks, String> {
     )?;
     let (lo, hi) = near(init);
     let mode = one("btdm_controller_get_mode", BTDM_CONTROLLER_GET_MODE, lo, hi)?;
+    // 0 = no call found: fine for IDF 5.1.0 / 5.1.1 bt.c (osi 0x10006, never calls it); the HLE rejects newer tables then
     let pll_track = pll_track_near_enable_call(segs, enable);
-    if pll_track == 0 {
-        return Err(
-            "no sdk_config_extend_set_pll_track call found before btdm_controller_enable".into(),
-        );
-    }
     Ok(Hooks {
         pll_track,
         osi_funcs_register: osi,

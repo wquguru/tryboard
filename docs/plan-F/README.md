@@ -22,6 +22,7 @@
 | 波 2 F-03 嵌入页 | ☑ | 2026-10-20 `/embed?s=` 点击加载、不写 localStorage；embed.mjs 19/19；`_headers` 的 frame-ancestors 需部署后验证；F-03b 原速回放未做；`Reviews/ab/F-03.md` |
 | 波 2 F-04a 器件上台面（第 1 部分） | ◐ | 2026-10-20 DS18B20 / PIR / 光敏 / 继电器 / RC522 上网页（3D、接线、手机、输入日志）+ 3 个示例，parts.mjs 18/18；第 2 部分（ILI9341 / SH1106 等显示屏）等 F-04b |
 | 波 2 F-07a UART + MicroPython | ☑ | 2026-10-20 UART RX 超过一个 FIFO、`\xNN` 串口转义、`mpy-c3-rawpaste` 用例（bin 由 `fetch_third_party.sh --micropython` 可选下载，缺失则跳过） |
+| F-08c BLE 多 IDF 签名 | ☑ | 2026-10-20 补 11 个 bt-lib 提交（IDF 5.1.0–5.3.1）：C3 / S3 各加 osi_reg 3 个、init 2 个变体；osi 版本放宽到 0x10006–0x1000A，5.1.0 / 5.1.1 不挂 pll_track；`tools/ble_cover.sh` 裸链接 42 个库，Rust 自测 37 个全中（S3 `_flash` 库 5 个为已知缺口）；62 个已编镜像原始扫描误匹配 0；9 个 BLE 用例 CLI 输出与改前逐字节一致。Arduino 3.0.x 真验收要装 core 3.0.7，待人批 |
 
 ## 调研结论汇总
 

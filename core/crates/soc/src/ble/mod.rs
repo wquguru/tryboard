@@ -13,6 +13,8 @@ pub mod sigs;
 pub mod sigs_xt;
 
 #[cfg(test)]
+mod cover;
+#[cfg(test)]
 mod tests;
 
 use phone::Phone;

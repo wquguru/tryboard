@@ -3,9 +3,63 @@
 
 use super::sig::Unit;
 
-/// btdm_osi_funcs_register: 3 version variants
+/// btdm_osi_funcs_register: 6 version variants
 pub const BTDM_OSI_FUNCS_REGISTER: &[&[Unit]] = &[
-    // 5.1-5.2
+    // 5.1.0, 5.1.1
+    &[
+        Unit(0, 0x004136, 0xffffff, 3),
+        Unit(0, 0x00f37c, 0x00ffff, 2),
+        Unit(0, 0x000216, 0x000fff, 3),
+        Unit(0, 0x000031, 0x0000ff, 3),
+        Unit(0, 0x002382, 0xffffff, 3),
+        Unit(0, 0x0048a6, 0x00ffff, 3),
+        Unit(0, 0x0000c1, 0x0000ff, 3),
+        Unit(3, 0x010006, 0xffffffff, 0),
+        Unit(0, 0x0000b1, 0x0000ff, 3),
+        Unit(3, 0xfadebead, 0xffffffff, 0),
+        Unit(0, 0x0000a1, 0x0000ff, 3),
+        Unit(1, 0x000028, 0x000000, 6),
+        Unit(0, 0x0000b1, 0x0000ff, 3),
+        Unit(3, 0xfadebead, 0xffffffff, 0),
+        Unit(0, 0x000288, 0x00ffff, 2),
+        Unit(0, 0x0018b7, 0x00ffff, 3),
+        Unit(0, 0x000328, 0x00ffff, 2),
+        Unit(0, 0x0000a1, 0x0000ff, 3),
+        Unit(0, 0x00e37c, 0x00ffff, 2),
+        Unit(0, 0x0012e6, 0x00ffff, 3),
+        Unit(0, 0x000006, 0x00003f, 3),
+        Unit(2, 0x000000, 0x000000, 0),
+        Unit(0, 0x0000b1, 0x0000ff, 3),
+        Unit(3, 0x010006, 0xffffffff, 0),
+    ],
+    // 5.1.2, 5.1.3, 5.1.4, 5.2.0
+    &[
+        Unit(0, 0x004136, 0xffffff, 3),
+        Unit(0, 0x00f37c, 0x00ffff, 2),
+        Unit(0, 0x000216, 0x000fff, 3),
+        Unit(0, 0x000031, 0x0000ff, 3),
+        Unit(0, 0x002382, 0xffffff, 3),
+        Unit(0, 0x0048a6, 0x00ffff, 3),
+        Unit(0, 0x0000c1, 0x0000ff, 3),
+        Unit(3, 0x010007, 0xffffffff, 0),
+        Unit(0, 0x0000b1, 0x0000ff, 3),
+        Unit(3, 0xfadebead, 0xffffffff, 0),
+        Unit(0, 0x0000a1, 0x0000ff, 3),
+        Unit(1, 0x000028, 0x000000, 6),
+        Unit(0, 0x0000b1, 0x0000ff, 3),
+        Unit(3, 0xfadebead, 0xffffffff, 0),
+        Unit(0, 0x000288, 0x00ffff, 2),
+        Unit(0, 0x0018b7, 0x00ffff, 3),
+        Unit(0, 0x000328, 0x00ffff, 2),
+        Unit(0, 0x0000a1, 0x0000ff, 3),
+        Unit(0, 0x00e37c, 0x00ffff, 2),
+        Unit(0, 0x0012e6, 0x00ffff, 3),
+        Unit(0, 0x000006, 0x00003f, 3),
+        Unit(2, 0x000000, 0x000000, 0),
+        Unit(0, 0x0000b1, 0x0000ff, 3),
+        Unit(3, 0x010007, 0xffffffff, 0),
+    ],
+    // 5.1.5, 5.2.3, 5.3.1, 5.1-5.2
     &[
         Unit(0, 0x004136, 0xffffff, 3),
         Unit(0, 0x00f37c, 0x00ffff, 2),
@@ -31,6 +85,33 @@ pub const BTDM_OSI_FUNCS_REGISTER: &[&[Unit]] = &[
         Unit(2, 0x000000, 0x000000, 0),
         Unit(0, 0x0000b1, 0x0000ff, 3),
         Unit(3, 0x010009, 0xffffffff, 0),
+    ],
+    // 5.2.2, 5.3.0
+    &[
+        Unit(0, 0x004136, 0xffffff, 3),
+        Unit(0, 0x00f37c, 0x00ffff, 2),
+        Unit(0, 0x000216, 0x000fff, 3),
+        Unit(0, 0x000031, 0x0000ff, 3),
+        Unit(0, 0x002382, 0xffffff, 3),
+        Unit(0, 0x0048a6, 0x00ffff, 3),
+        Unit(0, 0x0000c1, 0x0000ff, 3),
+        Unit(3, 0x010008, 0xffffffff, 0),
+        Unit(0, 0x0000b1, 0x0000ff, 3),
+        Unit(3, 0xfadebead, 0xffffffff, 0),
+        Unit(0, 0x0000a1, 0x0000ff, 3),
+        Unit(1, 0x000028, 0x000000, 6),
+        Unit(0, 0x0000b1, 0x0000ff, 3),
+        Unit(3, 0xfadebead, 0xffffffff, 0),
+        Unit(0, 0x000288, 0x00ffff, 2),
+        Unit(0, 0x0018b7, 0x00ffff, 3),
+        Unit(0, 0x000328, 0x00ffff, 2),
+        Unit(0, 0x0000a1, 0x0000ff, 3),
+        Unit(0, 0x00e37c, 0x00ffff, 2),
+        Unit(0, 0x0012e6, 0x00ffff, 3),
+        Unit(0, 0x000006, 0x00003f, 3),
+        Unit(2, 0x000000, 0x000000, 0),
+        Unit(0, 0x0000b1, 0x0000ff, 3),
+        Unit(3, 0x010008, 0xffffffff, 0),
     ],
     // 5.3
     &[
@@ -88,34 +169,61 @@ pub const BTDM_OSI_FUNCS_REGISTER: &[&[Unit]] = &[
     ],
 ];
 
-/// btdm_controller_init: 7 version variants
+/// btdm_controller_init: 9 version variants
 pub const BTDM_CONTROLLER_INIT: &[&[Unit]] = &[
-    // 5.1-5.2
+    // 5.1.0, 5.1.1
     &[
         Unit(0, 0x00a136, 0xffffff, 3),
-        Unit(0, 0x000051, 0x0000ff, 3),
-        Unit(0, 0xffaf42, 0xffffff, 3),
-        Unit(0, 0x002532, 0xffffff, 3),
-        Unit(0, 0x000356, 0x000fff, 3),
         Unit(0, 0x000061, 0x0000ff, 3),
-        Unit(0, 0x002632, 0xffffff, 3),
-        Unit(0, 0x0033a6, 0x00ffff, 3),
-        Unit(0, 0x0000a1, 0x0000ff, 3),
-        Unit(1, 0x000028, 0x000000, 6),
-        Unit(0, 0x000031, 0x0000ff, 3),
-        Unit(0, 0x000348, 0x00ffff, 2),
-        Unit(0, 0x392442, 0xffffff, 3),
-        Unit(0, 0x0004e0, 0xffffff, 3),
-        Unit(0, 0x000278, 0x00ffff, 2),
-        Unit(0, 0x000041, 0x0000ff, 3),
-        Unit(3, 0x5a5aa5a5, 0xffffffff, 0),
-        Unit(0, 0x009747, 0x00ffff, 3),
-        Unit(0, 0x001278, 0x00ffff, 2),
-        Unit(0, 0x000041, 0x0000ff, 3),
-        Unit(3, 0x2410230, 0xffffffff, 0),
-        Unit(0, 0x001747, 0x00ffff, 3),
+        Unit(0, 0x00027d, 0x00ffff, 2),
         Unit(0, 0x000628, 0x00ffff, 2),
-        Unit(0, 0x0012e6, 0x00ffff, 3),
+        Unit(0, 0x00f57c, 0x00ffff, 2),
+        Unit(0, 0x000256, 0x000fff, 3),
+        Unit(0, 0x000041, 0x0000ff, 3),
+        Unit(0, 0x18a1a2, 0xffffff, 3),
+        Unit(0, 0x000428, 0x00ffff, 2),
+        Unit(0, 0x1e2222, 0xffffff, 3),
+        Unit(0, 0x0002e0, 0xffffff, 3),
+        Unit(0, 0x000031, 0x0000ff, 3),
+        Unit(0, 0x0003a9, 0x00ffff, 2),
+        Unit(0, 0x000a16, 0x000fff, 3),
+        Unit(0, 0x002422, 0xffffff, 3),
+        Unit(0, 0xd0a3a2, 0xffffff, 3),
+        Unit(0, 0x1e2222, 0xffffff, 3),
+        Unit(0, 0x0002e0, 0xffffff, 3),
+        Unit(0, 0x000021, 0x0000ff, 3),
+        Unit(0, 0x0002a9, 0x00ffff, 2),
+        Unit(0, 0x000a16, 0x000fff, 3),
+        Unit(0, 0x000458, 0x00ffff, 2),
+        Unit(0, 0x0000a1, 0x0000ff, 3),
+        Unit(3, 0x000928, 0xffffffff, 0),
+    ],
+    // 5.1.2, 5.1.3, 5.1.4, 5.1.5, 5.2.3, 5.3.0, 5.3.1, 5.2.0, 5.2.2
+    &[
+        Unit(0, 0x00a136, 0xffffff, 3),
+        Unit(0, 0x000061, 0x0000ff, 3),
+        Unit(0, 0x00027d, 0x00ffff, 2),
+        Unit(0, 0x000628, 0x00ffff, 2),
+        Unit(0, 0x00f57c, 0x00ffff, 2),
+        Unit(0, 0x000256, 0x000fff, 3),
+        Unit(0, 0x000031, 0x0000ff, 3),
+        Unit(0, 0x18a1a2, 0xffffff, 3),
+        Unit(0, 0x000328, 0x00ffff, 2),
+        Unit(0, 0x1e2222, 0xffffff, 3),
+        Unit(0, 0x0002e0, 0xffffff, 3),
+        Unit(0, 0x000041, 0x0000ff, 3),
+        Unit(0, 0x0004a9, 0x00ffff, 2),
+        Unit(0, 0x000a16, 0x000fff, 3),
+        Unit(0, 0x002322, 0xffffff, 3),
+        Unit(0, 0xd0a3a2, 0xffffff, 3),
+        Unit(0, 0x1e2222, 0xffffff, 3),
+        Unit(0, 0x0002e0, 0xffffff, 3),
+        Unit(0, 0x000021, 0x0000ff, 3),
+        Unit(0, 0x0002a9, 0x00ffff, 2),
+        Unit(0, 0x000a16, 0x000fff, 3),
+        Unit(0, 0x000358, 0x00ffff, 2),
+        Unit(0, 0x0000a1, 0x0000ff, 3),
+        Unit(3, 0x0009e0, 0xffffffff, 0),
     ],
     // 5.1-5.2, 5.3
     &[
@@ -143,6 +251,33 @@ pub const BTDM_CONTROLLER_INIT: &[&[Unit]] = &[
         Unit(0, 0x000458, 0x00ffff, 2),
         Unit(0, 0x000071, 0x0000ff, 3),
         Unit(3, 0x0009e4, 0xffffffff, 0),
+    ],
+    // 5.1-5.2
+    &[
+        Unit(0, 0x00a136, 0xffffff, 3),
+        Unit(0, 0x000051, 0x0000ff, 3),
+        Unit(0, 0xffaf42, 0xffffff, 3),
+        Unit(0, 0x002532, 0xffffff, 3),
+        Unit(0, 0x000356, 0x000fff, 3),
+        Unit(0, 0x000061, 0x0000ff, 3),
+        Unit(0, 0x002632, 0xffffff, 3),
+        Unit(0, 0x0033a6, 0x00ffff, 3),
+        Unit(0, 0x0000a1, 0x0000ff, 3),
+        Unit(1, 0x000028, 0x000000, 6),
+        Unit(0, 0x000031, 0x0000ff, 3),
+        Unit(0, 0x000348, 0x00ffff, 2),
+        Unit(0, 0x392442, 0xffffff, 3),
+        Unit(0, 0x0004e0, 0xffffff, 3),
+        Unit(0, 0x000278, 0x00ffff, 2),
+        Unit(0, 0x000041, 0x0000ff, 3),
+        Unit(3, 0x5a5aa5a5, 0xffffffff, 0),
+        Unit(0, 0x009747, 0x00ffff, 3),
+        Unit(0, 0x001278, 0x00ffff, 2),
+        Unit(0, 0x000041, 0x0000ff, 3),
+        Unit(3, 0x2410230, 0xffffffff, 0),
+        Unit(0, 0x001747, 0x00ffff, 3),
+        Unit(0, 0x000628, 0x00ffff, 2),
+        Unit(0, 0x0012e6, 0x00ffff, 3),
     ],
     // 5.3
     &[
@@ -174,6 +309,33 @@ pub const BTDM_CONTROLLER_INIT: &[&[Unit]] = &[
     // 5.4
     &[
         Unit(0, 0x00a136, 0xffffff, 3),
+        Unit(0, 0x00025d, 0x00ffff, 2),
+        Unit(0, 0x000021, 0x0000ff, 3),
+        Unit(0, 0x000238, 0x00ffff, 2),
+        Unit(0, 0x00f27c, 0x00ffff, 2),
+        Unit(0, 0x000356, 0x000fff, 3),
+        Unit(0, 0x000031, 0x0000ff, 3),
+        Unit(0, 0x18a1a2, 0xffffff, 3),
+        Unit(0, 0x000328, 0x00ffff, 2),
+        Unit(0, 0x1e2222, 0xffffff, 3),
+        Unit(0, 0x0002e0, 0xffffff, 3),
+        Unit(0, 0x000041, 0x0000ff, 3),
+        Unit(0, 0x0004a9, 0x00ffff, 2),
+        Unit(0, 0x000a16, 0x000fff, 3),
+        Unit(0, 0x000328, 0x00ffff, 2),
+        Unit(0, 0xd0a3a2, 0xffffff, 3),
+        Unit(0, 0x1e2222, 0xffffff, 3),
+        Unit(0, 0x0002e0, 0xffffff, 3),
+        Unit(0, 0x000021, 0x0000ff, 3),
+        Unit(0, 0x0002a9, 0x00ffff, 2),
+        Unit(0, 0x000a16, 0x000fff, 3),
+        Unit(0, 0x000368, 0x00ffff, 2),
+        Unit(0, 0x79a272, 0xffffff, 3),
+        Unit(0, 0x1e2662, 0xffffff, 3),
+    ],
+    // 5.4
+    &[
+        Unit(0, 0x00a136, 0xffffff, 3),
         Unit(0, 0x000061, 0x0000ff, 3),
         Unit(0, 0x00024d, 0x00ffff, 2),
         Unit(0, 0x000638, 0x00ffff, 2),
@@ -198,10 +360,10 @@ pub const BTDM_CONTROLLER_INIT: &[&[Unit]] = &[
         Unit(0, 0x001727, 0x00ffff, 3),
         Unit(0, 0x000528, 0x00ffff, 2),
     ],
-    // 5.4
+    // 5.5.0, 5.5.1
     &[
         Unit(0, 0x00a136, 0xffffff, 3),
-        Unit(0, 0x00025d, 0x00ffff, 2),
+        Unit(0, 0x00024d, 0x00ffff, 2),
         Unit(0, 0x000021, 0x0000ff, 3),
         Unit(0, 0x000238, 0x00ffff, 2),
         Unit(0, 0x00f27c, 0x00ffff, 2),
@@ -211,8 +373,8 @@ pub const BTDM_CONTROLLER_INIT: &[&[Unit]] = &[
         Unit(0, 0x000328, 0x00ffff, 2),
         Unit(0, 0x1e2222, 0xffffff, 3),
         Unit(0, 0x0002e0, 0xffffff, 3),
-        Unit(0, 0x000041, 0x0000ff, 3),
-        Unit(0, 0x0004a9, 0x00ffff, 2),
+        Unit(0, 0x000051, 0x0000ff, 3),
+        Unit(0, 0x0005a9, 0x00ffff, 2),
         Unit(0, 0x000a16, 0x000fff, 3),
         Unit(0, 0x000328, 0x00ffff, 2),
         Unit(0, 0xd0a3a2, 0xffffff, 3),
@@ -252,61 +414,11 @@ pub const BTDM_CONTROLLER_INIT: &[&[Unit]] = &[
         Unit(0, 0x001727, 0x00ffff, 3),
         Unit(0, 0x000528, 0x00ffff, 2),
     ],
-    // 5.5.0, 5.5.1
-    &[
-        Unit(0, 0x00a136, 0xffffff, 3),
-        Unit(0, 0x00024d, 0x00ffff, 2),
-        Unit(0, 0x000021, 0x0000ff, 3),
-        Unit(0, 0x000238, 0x00ffff, 2),
-        Unit(0, 0x00f27c, 0x00ffff, 2),
-        Unit(0, 0x000356, 0x000fff, 3),
-        Unit(0, 0x000031, 0x0000ff, 3),
-        Unit(0, 0x18a1a2, 0xffffff, 3),
-        Unit(0, 0x000328, 0x00ffff, 2),
-        Unit(0, 0x1e2222, 0xffffff, 3),
-        Unit(0, 0x0002e0, 0xffffff, 3),
-        Unit(0, 0x000051, 0x0000ff, 3),
-        Unit(0, 0x0005a9, 0x00ffff, 2),
-        Unit(0, 0x000a16, 0x000fff, 3),
-        Unit(0, 0x000328, 0x00ffff, 2),
-        Unit(0, 0xd0a3a2, 0xffffff, 3),
-        Unit(0, 0x1e2222, 0xffffff, 3),
-        Unit(0, 0x0002e0, 0xffffff, 3),
-        Unit(0, 0x000021, 0x0000ff, 3),
-        Unit(0, 0x0002a9, 0x00ffff, 2),
-        Unit(0, 0x000a16, 0x000fff, 3),
-        Unit(0, 0x000368, 0x00ffff, 2),
-        Unit(0, 0x79a272, 0xffffff, 3),
-        Unit(0, 0x1e2662, 0xffffff, 3),
-    ],
 ];
 
 /// btdm_controller_enable: 2 version variants
 pub const BTDM_CONTROLLER_ENABLE: &[&[Unit]] = &[
-    // 5.1-5.2, 5.3, 5.4, 5.5.0, 5.5.1
-    &[
-        Unit(0, 0x004136, 0xffffff, 3),
-        Unit(1, 0x000028, 0x000000, 6),
-        Unit(0, 0x0c0a82, 0xffffff, 3),
-        Unit(0, 0x743020, 0xffffff, 3),
-        Unit(0, 0x00f27c, 0x00ffff, 2),
-        Unit(0, 0x009837, 0x00ffff, 3),
-        Unit(0, 0x000c0c, 0x00ffff, 2),
-        Unit(0, 0x20bcc0, 0xffffff, 3),
-        Unit(0, 0x001d0c, 0x00ffff, 2),
-        Unit(0, 0x09a0a2, 0xffffff, 3),
-        Unit(1, 0x000028, 0x000000, 6),
-        Unit(0, 0x000021, 0x0000ff, 3),
-        Unit(0, 0x000081, 0x0000ff, 3),
-        Unit(0, 0x000228, 0x00ffff, 2),
-        Unit(0, 0x0008a8, 0x00ffff, 2),
-        Unit(0, 0x00d228, 0x00ffff, 2),
-        Unit(0, 0xffafb2, 0xffffff, 3),
-        Unit(0, 0x0002e0, 0xffffff, 3),
-        Unit(0, 0x00020c, 0x00ffff, 2),
-        Unit(0, 0x00f01d, 0x00ffff, 2),
-    ],
-    // 5.1-5.2, 5.3, 5.4, 5.5.0, 5.5.1
+    // 5.1.0, 5.1.1, 5.1.2, 5.1.3, 5.1.4, 5.1.5, 5.2.0, 5.2.2, 5.2.3, 5.3.0, 5.3.1, 5.1-5.2, 5.3, 5.4, 5.5.0, 5.5.1
     &[
         Unit(0, 0x004136, 0xffffff, 3),
         Unit(0, 0x000031, 0x0000ff, 3),
@@ -333,18 +445,34 @@ pub const BTDM_CONTROLLER_ENABLE: &[&[Unit]] = &[
         Unit(0, 0x0002e0, 0xffffff, 3),
         Unit(0, 0x00020c, 0x00ffff, 2),
     ],
-];
-
-/// btdm_controller_get_mode: 2 version variants
-pub const BTDM_CONTROLLER_GET_MODE: &[&[Unit]] = &[
     // 5.1-5.2, 5.3, 5.4, 5.5.0, 5.5.1
     &[
         Unit(0, 0x004136, 0xffffff, 3),
         Unit(1, 0x000028, 0x000000, 6),
-        Unit(0, 0x0c0a22, 0xffffff, 3),
+        Unit(0, 0x0c0a82, 0xffffff, 3),
+        Unit(0, 0x743020, 0xffffff, 3),
+        Unit(0, 0x00f27c, 0x00ffff, 2),
+        Unit(0, 0x009837, 0x00ffff, 3),
+        Unit(0, 0x000c0c, 0x00ffff, 2),
+        Unit(0, 0x20bcc0, 0xffffff, 3),
+        Unit(0, 0x001d0c, 0x00ffff, 2),
+        Unit(0, 0x09a0a2, 0xffffff, 3),
+        Unit(1, 0x000028, 0x000000, 6),
+        Unit(0, 0x000021, 0x0000ff, 3),
+        Unit(0, 0x000081, 0x0000ff, 3),
+        Unit(0, 0x000228, 0x00ffff, 2),
+        Unit(0, 0x0008a8, 0x00ffff, 2),
+        Unit(0, 0x00d228, 0x00ffff, 2),
+        Unit(0, 0xffafb2, 0xffffff, 3),
+        Unit(0, 0x0002e0, 0xffffff, 3),
+        Unit(0, 0x00020c, 0x00ffff, 2),
         Unit(0, 0x00f01d, 0x00ffff, 2),
     ],
-    // 5.1-5.2, 5.3, 5.4, 5.5.0, 5.5.1
+];
+
+/// btdm_controller_get_mode: 2 version variants
+pub const BTDM_CONTROLLER_GET_MODE: &[&[Unit]] = &[
+    // 5.1.0, 5.1.1, 5.1.2, 5.1.3, 5.1.4, 5.1.5, 5.2.0, 5.2.2, 5.2.3, 5.3.0, 5.3.1, 5.1-5.2, 5.3, 5.4, 5.5.0, 5.5.1
     &[
         Unit(0, 0x004136, 0xffffff, 3),
         Unit(0, 0x000081, 0x0000ff, 3),
@@ -354,30 +482,18 @@ pub const BTDM_CONTROLLER_GET_MODE: &[&[Unit]] = &[
         Unit(0, 0x0c0a22, 0xffffff, 3),
         Unit(0, 0x00f01d, 0x00ffff, 2),
     ],
-];
-
-/// API_vhci_host_check_send_available: 4 version variants
-pub const API_VHCI_HOST_CHECK_SEND_AVAILABLE: &[&[Unit]] = &[
-    // 5.1-5.2, 5.3
+    // 5.1-5.2, 5.3, 5.4, 5.5.0, 5.5.1
     &[
         Unit(0, 0x004136, 0xffffff, 3),
         Unit(1, 0x000028, 0x000000, 6),
         Unit(0, 0x0c0a22, 0xffffff, 3),
-        Unit(0, 0x0002cc, 0x000fcf, 2),
-        Unit(0, 0x00020c, 0x00ffff, 2),
-        Unit(0, 0x00f01d, 0x00ffff, 2),
-        Unit(2, 0x000000, 0x000000, 2),
-        Unit(1, 0x000028, 0x000000, 6),
-        Unit(0, 0x170a22, 0xffffff, 3),
-        Unit(0, 0x001266, 0x00ffff, 3),
-        Unit(0, 0x000081, 0x0000ff, 3),
-        Unit(0, 0x00090c, 0x00ffff, 2),
-        Unit(0, 0x000888, 0x00ffff, 2),
-        Unit(0, 0x832980, 0xffffff, 3),
-        Unit(0, 0x742020, 0xffffff, 3),
         Unit(0, 0x00f01d, 0x00ffff, 2),
     ],
-    // 5.1-5.2, 5.3
+];
+
+/// API_vhci_host_check_send_available: 4 version variants
+pub const API_VHCI_HOST_CHECK_SEND_AVAILABLE: &[&[Unit]] = &[
+    // 5.1.0, 5.1.1, 5.1.2, 5.1.3, 5.1.4, 5.1.5, 5.2.0, 5.2.2, 5.2.3, 5.3.0, 5.3.1, 5.1-5.2, 5.3
     &[
         Unit(0, 0x004136, 0xffffff, 3),
         Unit(0, 0x000021, 0x0000ff, 3),
@@ -402,22 +518,22 @@ pub const API_VHCI_HOST_CHECK_SEND_AVAILABLE: &[&[Unit]] = &[
         Unit(0, 0x742020, 0xffffff, 3),
         Unit(0, 0x00f01d, 0x00ffff, 2),
     ],
-    // 5.4, 5.5.0, 5.5.1
+    // 5.1-5.2, 5.3
     &[
         Unit(0, 0x004136, 0xffffff, 3),
         Unit(1, 0x000028, 0x000000, 6),
         Unit(0, 0x0c0a22, 0xffffff, 3),
         Unit(0, 0x0002cc, 0x000fcf, 2),
         Unit(0, 0x00020c, 0x00ffff, 2),
-        Unit(0, 0x000006, 0x00003f, 3),
-        Unit(2, 0x000000, 0x000000, 1),
+        Unit(0, 0x00f01d, 0x00ffff, 2),
+        Unit(2, 0x000000, 0x000000, 2),
         Unit(1, 0x000028, 0x000000, 6),
         Unit(0, 0x170a22, 0xffffff, 3),
         Unit(0, 0x001266, 0x00ffff, 3),
         Unit(0, 0x000081, 0x0000ff, 3),
-        Unit(0, 0x000898, 0x00ffff, 2),
-        Unit(0, 0x00080c, 0x00ffff, 2),
-        Unit(0, 0x832890, 0xffffff, 3),
+        Unit(0, 0x00090c, 0x00ffff, 2),
+        Unit(0, 0x000888, 0x00ffff, 2),
+        Unit(0, 0x832980, 0xffffff, 3),
         Unit(0, 0x742020, 0xffffff, 3),
         Unit(0, 0x00f01d, 0x00ffff, 2),
     ],
@@ -446,38 +562,30 @@ pub const API_VHCI_HOST_CHECK_SEND_AVAILABLE: &[&[Unit]] = &[
         Unit(0, 0x742020, 0xffffff, 3),
         Unit(0, 0x00f01d, 0x00ffff, 2),
     ],
+    // 5.4, 5.5.0, 5.5.1
+    &[
+        Unit(0, 0x004136, 0xffffff, 3),
+        Unit(1, 0x000028, 0x000000, 6),
+        Unit(0, 0x0c0a22, 0xffffff, 3),
+        Unit(0, 0x0002cc, 0x000fcf, 2),
+        Unit(0, 0x00020c, 0x00ffff, 2),
+        Unit(0, 0x000006, 0x00003f, 3),
+        Unit(2, 0x000000, 0x000000, 1),
+        Unit(1, 0x000028, 0x000000, 6),
+        Unit(0, 0x170a22, 0xffffff, 3),
+        Unit(0, 0x001266, 0x00ffff, 3),
+        Unit(0, 0x000081, 0x0000ff, 3),
+        Unit(0, 0x000898, 0x00ffff, 2),
+        Unit(0, 0x00080c, 0x00ffff, 2),
+        Unit(0, 0x832890, 0xffffff, 3),
+        Unit(0, 0x742020, 0xffffff, 3),
+        Unit(0, 0x00f01d, 0x00ffff, 2),
+    ],
 ];
 
 /// API_vhci_host_send_packet: 4 version variants
 pub const API_VHCI_HOST_SEND_PACKET: &[&[Unit]] = &[
-    // 5.1-5.2, 5.3
-    &[
-        Unit(0, 0x004136, 0xffffff, 3),
-        Unit(1, 0x000028, 0x000000, 6),
-        Unit(0, 0x0c0a42, 0xffffff, 3),
-        Unit(0, 0xf43030, 0xffffff, 3),
-        Unit(0, 0x00f87c, 0x00ffff, 2),
-        Unit(0, 0x000416, 0x000fff, 3),
-        Unit(1, 0x000028, 0x000000, 6),
-        Unit(0, 0x170a52, 0xffffff, 3),
-        Unit(0, 0x00e87c, 0x00ffff, 2),
-        Unit(0, 0x001566, 0x00ffff, 3),
-        Unit(0, 0x00040c, 0x00ffff, 2),
-        Unit(0, 0x834520, 0xffffff, 3),
-        Unit(0, 0x744040, 0xffffff, 3),
-        Unit(0, 0x000456, 0x000fff, 3),
-        Unit(0, 0x834530, 0xffffff, 3),
-        Unit(0, 0x000456, 0x000fff, 3),
-        Unit(0, 0x000061, 0x0000ff, 3),
-        Unit(0, 0x00b87c, 0x00ffff, 2),
-        Unit(0, 0x000698, 0x00ffff, 2),
-        Unit(0, 0x000916, 0x000fff, 3),
-        Unit(0, 0x0003bd, 0x00ffff, 2),
-        Unit(0, 0x20a220, 0xffffff, 3),
-        Unit(1, 0x000028, 0x000000, 6),
-        Unit(0, 0x00d87c, 0x00ffff, 2),
-    ],
-    // 5.1-5.2, 5.3
+    // 5.1.0, 5.1.1, 5.1.2, 5.1.3, 5.1.4, 5.1.5, 5.2.0, 5.2.2, 5.2.3, 5.3.0, 5.3.1, 5.1-5.2, 5.3
     &[
         Unit(0, 0x004136, 0xffffff, 3),
         Unit(0, 0x000041, 0x0000ff, 3),
@@ -504,7 +612,7 @@ pub const API_VHCI_HOST_SEND_PACKET: &[&[Unit]] = &[
         Unit(0, 0x000488, 0x00ffff, 2),
         Unit(0, 0x0003bd, 0x00ffff, 2),
     ],
-    // 5.4, 5.5.0, 5.5.1
+    // 5.1-5.2, 5.3
     &[
         Unit(0, 0x004136, 0xffffff, 3),
         Unit(1, 0x000028, 0x000000, 6),
@@ -516,10 +624,10 @@ pub const API_VHCI_HOST_SEND_PACKET: &[&[Unit]] = &[
         Unit(0, 0x170a52, 0xffffff, 3),
         Unit(0, 0x00e87c, 0x00ffff, 2),
         Unit(0, 0x001566, 0x00ffff, 3),
-        Unit(0, 0x00080c, 0x00ffff, 2),
-        Unit(0, 0x838520, 0xffffff, 3),
-        Unit(0, 0x744080, 0xffffff, 3),
-        Unit(0, 0x000856, 0x000fff, 3),
+        Unit(0, 0x00040c, 0x00ffff, 2),
+        Unit(0, 0x834520, 0xffffff, 3),
+        Unit(0, 0x744040, 0xffffff, 3),
+        Unit(0, 0x000456, 0x000fff, 3),
         Unit(0, 0x834530, 0xffffff, 3),
         Unit(0, 0x000456, 0x000fff, 3),
         Unit(0, 0x000061, 0x0000ff, 3),
@@ -558,11 +666,38 @@ pub const API_VHCI_HOST_SEND_PACKET: &[&[Unit]] = &[
         Unit(0, 0x834530, 0xffffff, 3),
         Unit(0, 0x000456, 0x000fff, 3),
     ],
+    // 5.4, 5.5.0, 5.5.1
+    &[
+        Unit(0, 0x004136, 0xffffff, 3),
+        Unit(1, 0x000028, 0x000000, 6),
+        Unit(0, 0x0c0a42, 0xffffff, 3),
+        Unit(0, 0xf43030, 0xffffff, 3),
+        Unit(0, 0x00f87c, 0x00ffff, 2),
+        Unit(0, 0x000416, 0x000fff, 3),
+        Unit(1, 0x000028, 0x000000, 6),
+        Unit(0, 0x170a52, 0xffffff, 3),
+        Unit(0, 0x00e87c, 0x00ffff, 2),
+        Unit(0, 0x001566, 0x00ffff, 3),
+        Unit(0, 0x00080c, 0x00ffff, 2),
+        Unit(0, 0x838520, 0xffffff, 3),
+        Unit(0, 0x744080, 0xffffff, 3),
+        Unit(0, 0x000856, 0x000fff, 3),
+        Unit(0, 0x834530, 0xffffff, 3),
+        Unit(0, 0x000456, 0x000fff, 3),
+        Unit(0, 0x000061, 0x0000ff, 3),
+        Unit(0, 0x00b87c, 0x00ffff, 2),
+        Unit(0, 0x000698, 0x00ffff, 2),
+        Unit(0, 0x000916, 0x000fff, 3),
+        Unit(0, 0x0003bd, 0x00ffff, 2),
+        Unit(0, 0x20a220, 0xffffff, 3),
+        Unit(1, 0x000028, 0x000000, 6),
+        Unit(0, 0x00d87c, 0x00ffff, 2),
+    ],
 ];
 
 /// API_vhci_host_register_callback: 1 version variants
 pub const API_VHCI_HOST_REGISTER_CALLBACK: &[&[Unit]] = &[
-    // 5.1-5.2, 5.3, 5.4, 5.5.0, 5.5.1
+    // 5.1.0, 5.1.1, 5.1.2, 5.1.3, 5.1.4, 5.1.5, 5.2.0, 5.2.2, 5.2.3, 5.3.0, 5.3.1, 5.1-5.2, 5.3, 5.4, 5.5.0, 5.5.1
     &[
         Unit(0, 0x004136, 0xffffff, 3),
         Unit(0, 0x000081, 0x0000ff, 3),
@@ -578,14 +713,7 @@ pub const API_VHCI_HOST_REGISTER_CALLBACK: &[&[Unit]] = &[
 
 /// sdk_config_extend_set_pll_track: 2 version variants
 pub const SDK_CONFIG_EXTEND_SET_PLL_TRACK: &[&[Unit]] = &[
-    // 5.1-5.2, 5.3, 5.4, 5.5.0, 5.5.1
-    &[
-        Unit(0, 0x004136, 0xffffff, 3),
-        Unit(0, 0x000081, 0x0000ff, 3),
-        Unit(0, 0x004822, 0xffffff, 3),
-        Unit(0, 0x00f01d, 0x00ffff, 2),
-    ],
-    // 5.1-5.2, 5.3, 5.4, 5.5.0, 5.5.1
+    // 5.1.0, 5.1.1, 5.1.2, 5.1.3, 5.1.4, 5.1.5, 5.2.0, 5.2.2, 5.2.3, 5.3.0, 5.3.1, 5.1-5.2, 5.3, 5.4, 5.5.0, 5.5.1
     &[
         Unit(0, 0x004136, 0xffffff, 3),
         Unit(0, 0x000081, 0x0000ff, 3),
@@ -594,6 +722,13 @@ pub const SDK_CONFIG_EXTEND_SET_PLL_TRACK: &[&[Unit]] = &[
         Unit(0, 0x3d28a2, 0xffffff, 3),
         Unit(0, 0x000ae0, 0xffffff, 3),
         Unit(0, 0x004a22, 0xffffff, 3),
+        Unit(0, 0x00f01d, 0x00ffff, 2),
+    ],
+    // 5.1-5.2, 5.3, 5.4, 5.5.0, 5.5.1
+    &[
+        Unit(0, 0x004136, 0xffffff, 3),
+        Unit(0, 0x000081, 0x0000ff, 3),
+        Unit(0, 0x004822, 0xffffff, 3),
         Unit(0, 0x00f01d, 0x00ffff, 2),
     ],
 ];
