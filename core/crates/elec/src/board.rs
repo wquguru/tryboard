@@ -295,6 +295,8 @@ impl Board {
             "cst816s" => Some(0.0025),
             // FT6236: estimate, mA-level active scan current (display backlight not included)
             "ft6236" => Some(0.004),
+            // CST9220: estimate, mA-level active scan current (AMOLED panel not included)
+            "cst9220" => Some(0.003),
             // EC11 encoder module: estimate, two 10 kohm pull-ups at 3.3 V (contacts closed)
             "encoder" => Some(0.000_66),
             // INMP441 datasheet: 1.4 mA operating current

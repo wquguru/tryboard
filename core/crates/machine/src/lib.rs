@@ -11,15 +11,19 @@ pub use tryboard_soc::chip::Stop;
 pub use tryboard_soc::devices::audio::{Analysis as AudioAnalysis, Block as AudioBlock};
 use tryboard_soc::devices::audio::{Audio, MicSource};
 use tryboard_soc::devices::{
+    axp2101::Axp2101,
     bme280::{Bme280, Env},
     cst816s::Cst816s,
+    cst9220::Cst9220,
     ft6236::Ft6236,
     gc9a01::Gc9a01,
     imu::Pose,
     mpu6050::Mpu6050,
+    pcf85063::Pcf85063,
     qmi8658::Qmi8658,
     ssd1306::Ssd1306,
 };
+use tryboard_soc::i2c::I2cDevice;
 pub use tryboard_soc::iotrace::IoEvent;
 use tryboard_soc::iotrace::IoTrace;
 use tryboard_soc::rmt::Ws2812;
@@ -655,7 +659,7 @@ impl Machine {
         self.gpio_drive(pin, 1);
     }
 
-    /// Finger on the touchscreen (x, y in screen pixels; CST816S clamps to 0..239, FT6236 is 12-bit); down = false lifts
+    /// Finger on the touchscreen (x, y in screen pixels; CST816S clamps to 0..239, FT6236 is 12-bit, CST9220 480x480); down = false lifts
     pub fn touch(&mut self, x: u16, y: u16, down: bool) {
         let now = self.cycles();
         let bus = self.i2c0();
@@ -671,12 +675,61 @@ impl Machine {
             } else {
                 d.release();
             }
+        } else if let Some(d) = bus.device::<Cst9220>() {
+            if down {
+                d.press(x, y);
+            } else {
+                d.release();
+            }
         } else {
             return;
         }
         if let Some(pin) = self.touch_int {
             self.gpio_drive(pin, if down { 0 } else { 1 });
         }
+    }
+
+    /// AXP2101 battery level / USB plug (action `bat=pct[,usb]`); false without the PMIC on the bus
+    pub fn battery_set(&mut self, percent: u8, usb: bool) -> bool {
+        match self.i2c0().device::<Axp2101>() {
+            Some(d) => {
+                d.set_battery(percent, usb);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// AXP2101 PWRON key press (action `pwrkey=short|long`)
+    pub fn pwrkey(&mut self, long: bool) -> bool {
+        match self.i2c0().device::<Axp2101>() {
+            Some(d) => {
+                d.pwrkey(long);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// PCF85063 time (UTC epoch seconds) as of now
+    pub fn rtc_set(&mut self, epoch: i64) -> bool {
+        let now = self.cycles();
+        match self.i2c0().device::<Pcf85063>() {
+            Some(d) => {
+                d.set_time(now);
+                d.set_epoch(epoch);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// AXP2101 registers accessed without a model (register, count); empty without the PMIC
+    pub fn pmic_unimpl(&mut self) -> Vec<(u8, u64)> {
+        self.i2c0()
+            .device::<Axp2101>()
+            .map(|d| d.unimpl.iter().map(|(r, n)| (*r, *n)).collect())
+            .unwrap_or_default()
     }
 
     pub fn oled(&mut self) -> Option<&mut Ssd1306> {
@@ -1023,6 +1076,18 @@ pub fn parse_imu(s: &str) -> Option<Pose> {
     }
 }
 
+/// Argument part of action `bat=pct[,usb]` (AXP2101 battery percent, USB plugged)
+pub fn parse_battery(s: &str) -> Option<(u8, bool)> {
+    let mut it = s.split(',').map(str::trim);
+    let pct: f64 = it.next()?.parse().ok()?;
+    let usb = match it.next() {
+        None | Some("") | Some("bat") => false,
+        Some("usb") => true,
+        _ => return None,
+    };
+    Some((pct.round().clamp(0.0, 100.0) as u8, usb))
+}
+
 /// Argument part of script action `touch=x,y` (screen pixels). Clamped to the touch chip's 12-bit range;
 /// the device model clamps to its actual screen (CST816S round screen 240x240)
 pub fn parse_touch(s: &str) -> Option<(u16, u16)> {
@@ -1128,5 +1193,8 @@ mod tests {
         assert_eq!(parse_touch("120.4, 300"), Some((120, 300)));
         assert_eq!(parse_touch("-3, 9000"), Some((0, 4095)));
         assert_eq!(parse_touch("x,1"), None);
+        assert_eq!(parse_battery("98,usb"), Some((98, true)));
+        assert_eq!(parse_battery("140"), Some((100, false)));
+        assert_eq!(parse_battery("5,car"), None);
     }
 }

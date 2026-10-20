@@ -272,7 +272,8 @@ pub extern "C" fn tb_analog_set(pin: u32, mv: f32) {
     with((), |m| m.analog_set(pin as usize, mv))
 }
 
-/// Attach an I2C device. kind: 1 = SSD1306, 2 = BME280, 3 = MPU6050, 4 = QMI8658, 5 = CST816S. Returns 0 on success.
+/// Attach an I2C device. kind: 1 = SSD1306, 2 = BME280, 3 = MPU6050, 4 = QMI8658, 5 = CST816S, 6 = FT6236,
+/// 7 = CST9220, 8 = AXP2101, 9 = PCF85063, 10 = ES8311, 11 = ES7210. Returns 0 on success.
 #[no_mangle]
 pub extern "C" fn tb_i2c_attach(kind: u32, addr: u32) -> i32 {
     let name = match kind {
@@ -281,6 +282,12 @@ pub extern "C" fn tb_i2c_attach(kind: u32, addr: u32) -> i32 {
         3 => "mpu6050",
         4 => "qmi8658",
         5 => "cst816s",
+        6 => "ft6236",
+        7 => "cst9220",
+        8 => "axp2101",
+        9 => "pcf85063",
+        10 => "es8311",
+        11 => "es7210",
         _ => return 1,
     };
     with(1, |m| if m.i2c_attach(name, addr as u8) { 0 } else { 1 })
@@ -324,6 +331,25 @@ pub extern "C" fn tb_touch_int(pin: u32) {
 pub extern "C" fn tb_touch(x: f64, y: f64, down: u32) {
     let c = |v: f64| v.round().clamp(0.0, 239.0) as u16;
     with((), |m| m.touch(c(x), c(y), down != 0))
+}
+
+/// AXP2101 battery percent + USB plugged (action `bat=pct[,usb]`); 1 without the PMIC
+#[no_mangle]
+pub extern "C" fn tb_battery(percent: f64, usb: u32) -> i32 {
+    let p = percent.round().clamp(0.0, 100.0) as u8;
+    with(1, |m| if m.battery_set(p, usb != 0) { 0 } else { 1 })
+}
+
+/// AXP2101 PWRON key (action `pwrkey=short|long`): long = 1 for a long press
+#[no_mangle]
+pub extern "C" fn tb_pwrkey(long: u32) -> i32 {
+    with(1, |m| if m.pwrkey(long != 0) { 0 } else { 1 })
+}
+
+/// PCF85063 time as of now, UTC unix seconds
+#[no_mangle]
+pub extern "C" fn tb_rtc_set(epoch: f64) -> i32 {
+    with(1, |m| if m.rtc_set(epoch as i64) { 0 } else { 1 })
 }
 
 /// OLED frame version: refetch pixels only when it changes. 0 = no OLED.

@@ -1784,6 +1784,65 @@
   ]
  },
  {
+  "id": "s3-amoled-i2c",
+  "chip": "esp32s3",
+  "seconds": 6,
+  "args": [
+   "--i2c",
+   "cst9220@0x5a,axp2101@0x34,pcf85063@0x51,es8311@0x18,es7210@0x40",
+   "--touch-int",
+   "11",
+   "--battery",
+   "98,usb"
+  ],
+  "script": "4.0:touch=300,450; 4.1:touch=310,440; 4.3:release; 4.5:touch=20,470; 4.7:release; 5.0:pwrkey=short; 5.2:bat=55; 5.4:pwrkey=long",
+  "expect": [
+   "发现 0x5A CST9220 芯片 0x9220 OK 校验 0xCACA 分辨率 480x480",
+   "发现 0x34 AXP2101 芯片ID 0x4A OK",
+   "发现 0x51 PCF85063",
+   "发现 0x18 ES8311 芯片ID 0x8311 OK",
+   "发现 0x40 ES7210 芯片ID 0x7210 OK",
+   "I2C 扫描完成：5/5 个器件",
+   "开机 电量 98% USB 已插 充电中 充电状态 恒流",
+   "RTC 读回 2026-10-20 12:34:59 星期2",
+   "TRYBOARD_OK s3-amoled-i2c",
+   "TOUCH DOWN x=300 y=450",
+   "TOUCH MOVE x=310 y=440",
+   "TOUCH UP x=310 y=440",
+   "TOUCH DOWN x=20 y=470",
+   "TOUCH UP x=20 y=470",
+   "PWRON 短按",
+   "USB 拔出",
+   "变化 电量 55% USB 未插 放电中 充电状态 未充电",
+   "PWRON 长按"
+  ],
+  "absent": [
+   "abort()",
+   "AXP2101 unmodeled registers"
+  ]
+ },
+ {
+  "id": "s3-amoled-i2c-notouch",
+  "fw": "s3-amoled-i2c",
+  "chip": "esp32s3",
+  "seconds": 5,
+  "args": [
+   "--i2c",
+   "axp2101@0x34,pcf85063@0x51,es8311@0x18,es7210@0x40"
+  ],
+  "script": "4.0:touch=300,450; 4.3:release",
+  "expect": [
+   "CST9220 无应答 0x5A",
+   "I2C 扫描完成：4/5 个器件",
+   "开机 电量 80% USB 已插",
+   "TRYBOARD_OK s3-amoled-i2c"
+  ],
+  "absent": [
+   "abort()",
+   "TOUCH DOWN"
+  ]
+ },
+ {
   "id": "c3-ble-hr",
   "seconds": 4,
   "args": [
