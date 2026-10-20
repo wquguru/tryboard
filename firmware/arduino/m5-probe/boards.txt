@@ -1,0 +1,7 @@
+# <name> <fqbn>  ->  firmware/build/arduino-m5-probe-<name>/  (esp32 core 3.3.2)
+atoms3 esp32:esp32:m5stack_atoms3
+dial esp32:esp32:m5stack_dial
+cores3 esp32:esp32:m5stack_cores3
+cardputer esp32:esp32:m5stack_cardputer
+stickc_plus2 esp32:esp32:m5stack_stickc_plus2
+core2 esp32:esp32:m5stack_core2

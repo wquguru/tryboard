@@ -277,6 +277,17 @@ ROM 里的第三方代码见 IDF COPYRIGHT 页 "ROM Source Code Copyrights"：Ne
 
 **结论**【明确允许】：两款字体都可以自托管、转 WOFF2、子集化。要做的：字体目录放 `OFL.txt`（含版权行）；子集文件名和字体内部名称都不要带 "Source"。另外，从工程上看，国内访问 Google Fonts CDN 不稳定，自托管本来就更好。
 
+### 15. M5Unified / M5GFX（M5-00，2026-10-20 读本地克隆）
+
+**实查**
+- M5Unified `35903583211e1f39ca88920714525fbcd1eb714a`（library.properties 0.2.27）、M5GFX `a8ebd7bdaae2e9bdc2f3c69c25b83a84d819af72`（0.2.34）：根目录 `LICENSE` 均为 "MIT License, Copyright (c) 2021 M5Stack"。
+- M5GFX `src/lgfx/v1/LGFXBase.hpp:8` 注明基于 LovyanGFX（FreeBSD，BSD-2）；仓库内没有 LovyanGFX 的独立 license 文件，需随 NOTICES 附上其许可证原文和版权行。
+- 库内自带许可证文件：`Fonts/GFXFF/license.txt`（Adafruit BSD，2012）、`Fonts/efont/COPYRIGHT.txt`（/efont/ BSD 式）、`Fonts/IPA/IPA_Font_License_Agreement_v1.0.txt`（IPA 字体许可 v1.0）。
+- 文件头自带声明：`utility/lgfx_pngle.*`（MIT, kikuchan 2019）、`lgfx_qrcode.c`（MIT, Richard Moore 2017）、`lgfx_tjpgd.c`（ChaN 2019，自有条款）、`lgfx_miniz.c`（公有领域 / unlicense）、`Fonts/Custom/DejaVu*.h`（链接 DejaVu 许可）。
+- 无任何声明：`utility/lgfx_qoi.c` / `.h`（文件头直接是 include）、`Fonts/Custom/{Orbitron_Light_24,Roboto_Thin_24,Satisfy_24,Yellowtail_32}.h`（squix 在线工具生成，原字体多为 OFL / Apache，库里没带）。
+
+**结论**：【明确允许】MIT / BSD 部分，保留版权与许可声明即可。【需要继续确认】无声明的 qoi 与 squix 字体头文件：只是编进固件里（链接时只有被引用的才进 bin），要托管含它们的 bin 前先确认 bin 里是否真有这些符号，有就补查上游（phoboslab/qoi MIT；squix 字体的原字体许可）再写进 NOTICES。IPA 字体仅在用到日文字体时进 bin。
+
 ---
 
 ## 三、不能放宽的项及原因
