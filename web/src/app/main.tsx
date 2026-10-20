@@ -243,13 +243,32 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   if (session.sim) warmSoon();
   else session.onBoot(warmSoon);
 
+  // ⌘Z / ⇧⌘Z pressed while a seek is still replaying must not be dropped: remember the newest
+  // target and walk to it once the running seek settles (a rewind takes up to a few seconds)
+  let want: number | null = null;
+  let walking = false;
+  const stepTo = async (i: number) => {
+    want = i;
+    if (walking) return;
+    walking = true;
+    try {
+      while (want !== null && want !== store.get().hist.cur) {
+        if (!(await hist.seek(want))) break;
+      }
+    } finally {
+      want = null;
+      walking = false;
+    }
+  };
   const benchUndo = benchOnly(() => {
     const h = store.get().hist;
-    if (!h.busy && h.cur > 0) void hist.seek(h.cur - 1);
+    const at = want ?? h.cur;
+    if ((walking || !h.busy) && at > 0) void stepTo(at - 1);
   });
   const benchRedo = benchOnly(() => {
     const h = store.get().hist;
-    if (!h.busy && h.cur < h.n - 1) void hist.seek(h.cur + 1);
+    const at = want ?? h.cur;
+    if ((walking || !h.busy) && at < h.n - 1) void stepTo(at + 1);
   });
   actions.undo = () => (store.get().step === 'shop' ? actions.shopUndo?.(-1) : benchUndo());
   actions.redo = () => (store.get().step === 'shop' ? actions.shopUndo?.(1) : benchRedo());
