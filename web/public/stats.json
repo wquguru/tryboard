@@ -1,8 +1,8 @@
 {
- "accept": 136,
+ "accept": 137,
  "examples": 52,
  "devices": 17,
  "chips": 3,
- "wasm_bytes": 1321965,
- "wasm_gzip_bytes": 463917
+ "wasm_bytes": 1236936,
+ "wasm_gzip_bytes": 435288
 }
