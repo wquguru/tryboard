@@ -272,6 +272,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       s.sim.reset();
     },
     loadFirmware(buf, name) {
+      s.deskPc = false; // another firmware does not inherit the example's virtual PC
       s.fwBuf = buf;
       s.fwName = name;
       s.fwSize = buf.byteLength;
@@ -348,6 +349,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     pwrKey(long) {
       s.sim?.pwrkey(long);
     },
+    deskPc: !!ex?.pc,
     touch(x, y, down) {
       s.sim?.touch(x, y, down);
       store.set({ touch: { x: Math.round(x), y: Math.round(y), down } });
@@ -480,6 +482,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         for (const [pin, mv] of s.analog) sim.analog(pin, mv);
         // Real is the power-up default, so only the ideal choice needs logging again
         if (s.adcIdeal) sim.adcMode(true);
+        if (s.deskPc) sim.ble('pc=on'); // Virtual PC (E-07b): a logged input, so --inputs replays it
         sim.watchAdc(adcPins());
         s.bootCount++;
         imuTail = '';

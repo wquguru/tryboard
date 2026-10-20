@@ -27,7 +27,7 @@ export type InputEvent =
   | { tMs: number; kind: 'imu'; pitch: number; roll: number; yaw: number; rates?: [number, number, number] }
   /** Touch screen (P2-02): press / move to (x, y) (screen pixels, clamped to the screen) or lift. Script action touch=x,y / release */
   | { tMs: number; kind: 'touch'; down: boolean; x: number; y: number }
-  /** Virtual phone (C-01): scan / connect / read / write / subscribe..., logged verbatim. Action ble=<command> (syntax: ARCH.md BLE) */
+  /** Virtual phone (C-01): scan / connect / read / write / subscribe..., logged verbatim. Action ble=<command> (syntax: ARCH.md BLE); virtual PC commands log as pc=… */
   | { tMs: number; kind: 'ble'; cmd: string }
   /** One virtual-phone step (C-02): on / join,ssid[,pass] / leave / open / get,url / post,url,body. Action phone=… */
   | { tMs: number; kind: 'phone'; cmd: string }
@@ -123,7 +123,8 @@ export function action(e: InputEvent): string | null {
     case 'touch':
       return e.down ? `touch=${Math.round(e.x)},${Math.round(e.y)}` : 'release';
     case 'ble':
-      return `ble=${e.cmd}`;
+      // Virtual PC (E-07b) rides the phone channel but logs as the CLI's own pc= action
+      return e.cmd.startsWith('pc=') ? e.cmd : `ble=${e.cmd}`;
     case 'phone':
       return `phone=${esc(e.cmd)}`;
     case 'realnet':

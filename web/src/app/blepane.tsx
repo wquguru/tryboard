@@ -5,54 +5,79 @@ import { lineDir, lineText, uuidLabel, type BleChar } from '../ble';
 import { bleFeed, simClock, useBle } from './blefeed';
 import { ConfIcon } from '../ui/conf';
 import { cn } from '../ui/cn';
+import { PcPanel } from './pcpanel';
 import { t } from '../i18n';
 
 // ------------------------------------------------------------ Dock: air log
 
-/** Dock "Bluetooth" tab: adverts, connections, ATT reads / writes / notifications, one per line in sim time */
-export function BlePane() {
+/** Dock "Bluetooth" tab: air log (adverts, connections, ATT, one per line in sim time) + virtual PC panel (E-07b) */
+export function BlePane({ send }: { send?: (cmd: string) => void }) {
   const s = useBle();
   const box = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  // Mobile shows one of the two at a time; desktop puts the PC panel beside the log
+  const [view, setView] = useState<'log' | 'pc' | null>(null);
+  const cur = view ?? (s.view?.phone?.pc?.on ? 'pc' : 'log');
   useEffect(() => {
     const b = box.current;
     if (b && stick.current) b.scrollTop = b.scrollHeight;
-  }, [s.log]);
+  }, [s.log, cur]);
   if (s.state === 2) return <ElfCard reason={s.error} />;
+  const go = (cmd: string) => {
+    bleFeed.clearError();
+    send?.(cmd);
+  };
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-none items-center gap-2 px-3 pt-1.5 pb-1 text-xs text-muted">
-        <span id="bleAir">{s.view?.connected ? t('Connected') : s.view?.advertising ? t('Advertising · {name}', { name: s.view.adv_name || s.view.addr }) : t('Not advertising')}</span>
-        <span className="flex-1" />
-        <span>{t('In simulated time; export to replay')}</span>
+    <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      {send && (
+        <div className="flex flex-none gap-1.5 px-3 pt-2 md:hidden" role="tablist" aria-label={t('Bluetooth')}>
+          <button type="button" role="tab" id="bleViewLog" aria-selected={cur === 'log'} className={pill(cur === 'log')} onClick={() => setView('log')}>
+            {t('Air log')}
+          </button>
+          <button type="button" role="tab" id="bleViewPc" aria-selected={cur === 'pc'} className={pill(cur === 'pc')} onClick={() => setView('pc')}>
+            {t('Virtual PC')}
+          </button>
+        </div>
+      )}
+      <div className={cn('flex min-h-0 min-w-0 flex-1 flex-col', send && cur !== 'log' && 'max-md:hidden')}>
+        <div className="flex flex-none items-center gap-2 px-3 pt-1.5 pb-1 text-xs text-muted">
+          <span id="bleAir">{s.view?.connected ? t('Connected') : s.view?.advertising ? t('Advertising · {name}', { name: s.view.adv_name || s.view.addr }) : t('Not advertising')}</span>
+          <span className="flex-1" />
+          <span>{t('In simulated time; export to replay')}</span>
+        </div>
+        <div
+          ref={box}
+          id="bleLog"
+          role="log"
+          aria-label={t('Bluetooth air log')}
+          onScroll={(e) => {
+            const b = e.currentTarget;
+            stick.current = b.scrollHeight - b.scrollTop - b.clientHeight < 24;
+          }}
+          className="min-h-0 flex-1 overflow-auto px-3 pb-2 font-mono text-xs leading-[22px]"
+        >
+          {s.log.length === 0 && <div className="text-muted">{t('No air activity yet')}</div>}
+          {s.log.map((l, i) => (
+            <div
+              key={l.n}
+              data-k={l.k}
+              className={cn(
+                'grid grid-cols-[72px_minmax(0,1fr)] gap-x-3 md:grid-cols-[90px_140px_minmax(0,1fr)]',
+                i === s.log.length - 1 && 'bg-accent-bg',
+              )}
+            >
+              <span className="text-muted">{simClock(l.t)}</span>
+              <span className="max-md:text-muted">{lineDir(l)}</span>
+              <span className="min-w-0 break-words max-md:col-span-2">{lineText(l)}</span>
+            </div>
+          ))}
+        </div>
       </div>
-      <div
-        ref={box}
-        id="bleLog"
-        role="log"
-        aria-label={t('Bluetooth air log')}
-        onScroll={(e) => {
-          const b = e.currentTarget;
-          stick.current = b.scrollHeight - b.scrollTop - b.clientHeight < 24;
-        }}
-        className="min-h-0 flex-1 overflow-auto px-3 pb-2 font-mono text-xs leading-[22px]"
-      >
-        {s.log.length === 0 && <div className="text-muted">{t('No air activity yet')}</div>}
-        {s.log.map((l, i) => (
-          <div
-            key={l.n}
-            data-k={l.k}
-            className={cn(
-              'grid grid-cols-[72px_minmax(0,1fr)] gap-x-3 md:grid-cols-[90px_140px_minmax(0,1fr)]',
-              i === s.log.length - 1 && 'bg-accent-bg',
-            )}
-          >
-            <span className="text-muted">{simClock(l.t)}</span>
-            <span className="max-md:text-muted">{lineDir(l)}</span>
-            <span className="min-w-0 break-words max-md:col-span-2">{lineText(l)}</span>
-          </div>
-        ))}
-      </div>
+      {send && (
+        <aside aria-label={t('Virtual PC')} className={cn('min-h-0 overflow-auto border-line-soft md:w-[340px] md:flex-none md:border-l', cur !== 'pc' && 'max-md:hidden')}>
+          <PcPanel s={s} send={go} />
+        </aside>
+      )}
     </div>
   );
 }

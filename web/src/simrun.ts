@@ -183,9 +183,10 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         const [p, u] = act.slice(4).split(',');
         if (!Number.isNaN(Number(p)) && (u === undefined || u.trim() === 'usb')) e.tb_battery?.(Number(p), u ? 1 : 0);
       } else if (act.startsWith('pwrkey=')) e.tb_pwrkey?.(act.slice(7).trim() === 'long' ? 1 : 0);
-      else if (act.startsWith('ble=') && e.tb_ble_cmd) {
+      else if ((act.startsWith('ble=') || act.startsWith('pc=')) && e.tb_ble_cmd) {
+        // pc=… goes to the same phone channel whole, like CLI main.rs
         const cb = e.tb_ble_cmd;
-        bytesIn(e, new TextEncoder().encode(act.slice(4)), (p, n) => void cb(p, n));
+        bytesIn(e, new TextEncoder().encode(act.startsWith('pc=') ? act : act.slice(4)), (p, n) => void cb(p, n));
       }
     }
     if (j.pwmPin !== undefined) {

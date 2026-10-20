@@ -319,6 +319,10 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/amoled.mjs 2>&1 | grep '^\[amoled\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[amoled\] PASS (' || { echo "- [amoled] script did not finish" >> $REPORT; fail=1; }
+  # AI dashboard (E-07b): virtual PC in the Bluetooth dock, edited heartbeat, swipe, pc= input log replays byte for byte
+  r=$(node tools/webtest/aidash.mjs 2>&1 | grep '^\[aidash\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[aidash\] PASS (' || { echo "- [aidash] script did not finish" >> $REPORT; fail=1; }
   r=$(node tools/webtest/editor.mjs 2>&1 | tail -1)
   echo "- Part editor (blink example, upload bme280 firmware + place BME280 from the catalog): $r" >> $REPORT
   echo "$r" | grep -q PASS || fail=1
