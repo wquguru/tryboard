@@ -4,7 +4,7 @@
 use crate::adc::AdcModel;
 use crate::ble::Ble;
 use crate::devices::audio::Audio;
-use crate::devices::gc9a01::Gc9a01;
+use crate::devices::lcd::{Lcd, LcdKind};
 use crate::devices::pins::PinDevices;
 use crate::i2c::I2c;
 use crate::iotrace::IoTrace;
@@ -127,11 +127,11 @@ pub trait Chip {
     /// I2C controller n (None past the last one)
     fn i2c(&self, n: usize) -> Option<&I2c>;
     fn pins(&mut self) -> &mut PinDevices;
-    /// Attach a GC9A01 round LCD on SPI2 (pins per chip crate's `lcd_pin`); false when unsupported
-    fn lcd_attach(&mut self) -> bool {
+    /// Attach a screen on SPI2 (pins per chip crate's `lcd_pin` / `co5300_pin`); false when the chip lacks that model
+    fn lcd_attach(&mut self, _kind: LcdKind) -> bool {
         false
     }
-    fn lcd(&mut self) -> Option<&mut Gc9a01> {
+    fn lcd(&mut self) -> Option<&mut Lcd> {
         None
     }
     /// SPI2 transfer stats (count, MOSI bytes)

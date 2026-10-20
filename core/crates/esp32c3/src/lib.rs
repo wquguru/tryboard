@@ -16,7 +16,7 @@ pub(crate) use tryboard_soc::{
 };
 
 use devices::audio::{Audio, PortIo};
-use devices::gc9a01::Gc9a01;
+use devices::lcd::{Lcd, LcdKind};
 use gdma::{Gdma, GdmaLayout};
 use periph::*;
 use std::collections::HashMap;
@@ -132,7 +132,7 @@ pub struct SocBus {
     pub spi2: gpspi::GpSpi,
     pub gdma: Gdma,
     /// Round LCD on SPI2 (CLI `--spi gc9a01` / wasm `tb_lcd_attach`), pins in `lcd_pin`
-    pub lcd: Option<Box<Gc9a01>>,
+    pub lcd: Option<Box<Lcd>>,
     /// I2S0 (0x6002D000) and the audio devices on it (pins in `i2s_pin`)
     pub i2s0: i2s::I2s,
     pub audio: Audio,
@@ -805,7 +805,7 @@ impl SocBus {
 
     /// Attach a GC9A01 round LCD on SPI2 (pins in `lcd_pin`)
     pub fn attach_lcd(&mut self) {
-        self.lcd = Some(Box::default());
+        self.lcd = Some(Box::new(Lcd::new(LcdKind::Gc9a01)));
         let now = self.now;
         self.gpio_changed(now);
     }
@@ -862,7 +862,7 @@ impl SocBus {
         self.gdma = g;
         let selected = self.lcd_selected();
         let dc = self.gpio.level() >> lcd_pin::DC & 1 != 0;
-        if let (Some(l), true) = (self.lcd.as_mut(), selected) {
+        if let (Some(Lcd::Gc9a01(l)), true) = (self.lcd.as_deref_mut(), selected) {
             for b in bytes {
                 l.byte(dc, b);
             }

@@ -10,11 +10,11 @@ use tryboard_soc::adc::{AdcModel, Sample as AdcSample};
 pub use tryboard_soc::chip::Stop;
 pub use tryboard_soc::devices::audio::{Analysis as AudioAnalysis, Block as AudioBlock};
 use tryboard_soc::devices::audio::{Audio, MicSource};
+pub use tryboard_soc::devices::lcd::{Lcd, LcdKind};
 use tryboard_soc::devices::{
     bme280::{Bme280, Env},
     cst816s::Cst816s,
     ft6236::Ft6236,
-    gc9a01::Gc9a01,
     imu::Pose,
     mpu6050::Mpu6050,
     qmi8658::Qmi8658,
@@ -683,18 +683,19 @@ impl Machine {
         self.i2c0().device::<Ssd1306>()
     }
 
-    /// Attach a screen on SPI2 (only "gc9a01" for now). Pins per chip:
-    /// see `lcd_pin` in the chip crate (C3 / S3; other chips return false)
+    /// Attach a screen on SPI2: "gc9a01" (C3 / S3, pins `lcd_pin`) or "co5300" (S3 only, pins `co5300_pin`);
+    /// other chips / names return false
     pub fn lcd_attach(&mut self, kind: &str) -> bool {
-        if kind == "gc9a01" && self.hw.lcd_attach() {
-            self.elec.add_module("gc9a01");
-            true
-        } else {
-            false
+        match LcdKind::parse(kind) {
+            Some(k) if self.hw.lcd_attach(k) => {
+                self.elec.add_module(k.id());
+                true
+            }
+            _ => false,
         }
     }
 
-    pub fn lcd(&mut self) -> Option<&mut Gc9a01> {
+    pub fn lcd(&mut self) -> Option<&mut Lcd> {
         self.hw.lcd()
     }
 

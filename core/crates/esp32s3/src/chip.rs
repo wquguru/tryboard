@@ -5,7 +5,7 @@ use std::collections::{HashMap, VecDeque};
 use tryboard_soc::adc::AdcModel;
 use tryboard_soc::chip::{self, Chip};
 use tryboard_soc::devices::audio::Audio;
-use tryboard_soc::devices::gc9a01::Gc9a01;
+use tryboard_soc::devices::lcd::{Lcd, LcdKind};
 use tryboard_soc::devices::pins::PinDevices;
 use tryboard_soc::i2c::I2c;
 use tryboard_soc::iotrace::IoTrace;
@@ -168,11 +168,11 @@ impl Chip for Esp32s3 {
     fn pins(&mut self) -> &mut PinDevices {
         &mut self.bus.pins
     }
-    fn lcd_attach(&mut self) -> bool {
-        self.bus.attach_lcd();
+    fn lcd_attach(&mut self, kind: LcdKind) -> bool {
+        self.bus.attach_lcd(kind);
         true
     }
-    fn lcd(&mut self) -> Option<&mut Gc9a01> {
+    fn lcd(&mut self) -> Option<&mut Lcd> {
         self.bus.lcd.as_deref_mut()
     }
     fn spi2_stats(&self) -> (u64, u64) {

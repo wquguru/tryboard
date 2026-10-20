@@ -2,7 +2,7 @@
 //! (more boards = more instances / Workers); JS calls tb_image_chip to pick the matching ROM, then tb_boot.
 
 use std::cell::RefCell;
-use tryboard_machine::{Chip, ImuPose, Machine, PowerMode, SensorEnv, Stop};
+use tryboard_machine::{Chip, ImuPose, Lcd, Machine, PowerMode, SensorEnv, Stop};
 
 thread_local! {
     static M: RefCell<Option<Machine>> = const { RefCell::new(None) };
@@ -348,14 +348,46 @@ pub extern "C" fn tb_lcd_attach() -> i32 {
     with(1, |m| if m.lcd_attach("gc9a01") { 0 } else { 1 })
 }
 
+/// Attach a screen by kind: 0 = GC9A01, 1 = CO5300 (S3 only). 0 = ok, 1 = unsupported
+#[no_mangle]
+pub extern "C" fn tb_lcd_attach_kind(kind: u32) -> i32 {
+    let k = match kind {
+        0 => "gc9a01",
+        1 => "co5300",
+        _ => return 1,
+    };
+    with(1, |m| if m.lcd_attach(k) { 0 } else { 1 })
+}
+
+/// Attached screen: 0 = GC9A01, 1 = CO5300, -1 = none
+#[no_mangle]
+pub extern "C" fn tb_lcd_kind() -> i32 {
+    with(-1, |m| {
+        m.lcd()
+            .map(|d| matches!(d, Lcd::Co5300(_)) as i32)
+            .unwrap_or(-1)
+    })
+}
+
+/// Screen frame width / height in pixels (0 = no screen); `tb_lcd_ptr` holds w × h × 4 bytes
+#[no_mangle]
+pub extern "C" fn tb_lcd_w() -> u32 {
+    with(0, |m| m.lcd().map(|d| d.size().0 as u32).unwrap_or(0))
+}
+
+#[no_mangle]
+pub extern "C" fn tb_lcd_h() -> u32 {
+    with(0, |m| m.lcd().map(|d| d.size().1 as u32).unwrap_or(0))
+}
+
 /// Round LCD frame version: refetch pixels only when it changes. 0 = no LCD
 #[no_mangle]
 pub extern "C" fn tb_lcd_version() -> u32 {
-    with(0, |m| m.lcd().map(|d| d.version).unwrap_or(0))
+    with(0, |m| m.lcd().map(|d| d.version()).unwrap_or(0))
 }
 
-/// Round LCD frame: 240×240×4 RGBA (row-major), alpha=0 outside the circle; opaque black inside when off / asleep / backlight off.
-/// Null = no LCD
+/// Screen frame: w×h×4 RGBA (row-major; GC9A01 240×240 with alpha=0 outside the circle, CO5300 480×480 opaque);
+/// opaque black when off / asleep / backlight off. Null = no screen
 #[no_mangle]
 pub extern "C" fn tb_lcd_ptr() -> *const u8 {
     with(std::ptr::null(), |m| {
@@ -1056,7 +1088,8 @@ pub extern "C" fn tb_report() -> usize {
         if let Some(d) = m.lcd() {
             let _ = writeln!(
                 o,
-                "[tryboard] LCD GC9A01 non-black pixels {}",
+                "[tryboard] LCD {} non-black pixels {}",
+                d.name(),
                 d.lit_pixels()
             );
             o.push_str(&d.color_report());

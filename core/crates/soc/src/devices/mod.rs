@@ -2,10 +2,12 @@
 
 pub mod audio;
 pub mod bme280;
+pub mod co5300;
 pub mod cst816s;
 pub mod ft6236;
 pub mod gc9a01;
 pub mod imu;
+pub mod lcd;
 pub mod mpu6050;
 pub mod pins;
 pub mod qmi8658;

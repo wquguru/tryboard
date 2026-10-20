@@ -104,7 +104,7 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
         if n < t['oled_min_pixels']: missing.append('oled')
     # Round LCD: '[tryboard] LCD GC9A01 non-black pixels N (display on)', counted inside the round visible area only
     if 'lcd_min_pixels' in t:
-        m = re.search(r'LCD GC9A01 non-black pixels (\d+) \(display (\w+)\)', err)
+        m = re.search(r'LCD (?:GC9A01|CO5300) non-black pixels (\d+) \(display (\w+)\)', err)
         n = int(m.group(1)) if m else 0
         notes.append(f"LCD non-black {n} pixels (display {m.group(2) if m else 'none'})")
         if n < t['lcd_min_pixels']: missing.append('lcd')

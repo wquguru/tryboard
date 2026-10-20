@@ -27,7 +27,7 @@
 | 乐鑫 MIT / 乐鑫修改版 MIT（esp-sr、ESP-ADF、esp_audio_codec、esp_audio_effects、esp_codec_dev 2.x 等） | ❌ 不托管含这些组件的固件（原文禁止为非乐鑫产品再分发）；构建脚本检测到 `LicenseRef-Espressif-Modified-MIT` 或 "ESPRESSIF MIT" 时拒绝发布；esp_codec_dev 锁 1.x（Apache-2.0） | 许可证原文 |
 | xiaozhi | 自身 MIT，**但依赖上一行的组件**，乐鑫书面许可前不托管 | |
 | `espressif/esp_lcd_gc9a01` 2.0.4、`espressif/cmake_utilities` | ✅ Apache-2.0，可随示例固件分发，附 LICENSE | 组件包 license.txt |
-| `espressif/esp_lcd_co5300`（E-01，版本在固件 idf_component.yml 锁定） | ✅ Apache-2.0（2026-10-20 核 esp-iot-solution 源码 SPDX；锁版本时再核组件包 license.txt，非乐鑫修改版 MIT 才可用），可随示例固件分发，附 LICENSE | 组件包 license.txt |
+| `espressif/esp_lcd_co5300` **2.0.3**（E-01，firmware/s3-co5300 锁定）及其依赖 `espressif/cmake_utilities` 0.5.3 | ✅ Apache-2.0：2026-10-20 核 2.0.3 组件包 license.txt 为标准 Apache-2.0 全文（202 行，非乐鑫修改版 MIT），源码 SPDX Apache-2.0，注册表标注 Apache-2.0；cmake_utilities 0.5.3 包内 license.txt 同为 Apache-2.0。2.1.0 / 2.2.0 注册表标「Custom」（license.txt 内容与 2.0.3 相同），为免歧义不用。可随示例固件分发，附 LICENSE | 组件包 license.txt |
 | `lvgl/lvgl` 9.2.2（组件注册表）、`espressif/esp_lvgl_port` 2.6.0 | ✅ LVGL 为标准 MIT（"Copyright (c) 2021 LVGL Kft"），esp_lvgl_port 为 Apache-2.0（源文件 SPDX 均为 Apache-2.0，示例为 CC0-1.0）；2026-10-16 核对组件包内 LICENCE.txt / license.txt，两者都**不是**乐鑫修改版 MIT，可随示例固件分发，附许可证。LVGL 源码里另带的第三方库（FreeType、ThorVG、lodepng 等）只在对应 Kconfig 打开时编译，s3-lvgl 没开 | 组件包 LICENCE.txt / license.txt |
 | ngspice | 本机 tools/ 对照用 ✅；网页版：排除 `xspice/icm/table`（GPL）、`--disable-klu`、不 `--with-tcl`；numparam（LGPL）排除不掉，编成独立 wasm，附源码与构建脚本 | 各模块许可证 |
 | three.js、three-mesh-bvh、three-gpu-pathtracer、glTF-Transform（MIT）；Manifold、Rapier（Apache-2.0）；Poly Haven HDRI（CC0） | ✅ 可用（引入前仍要写进 DECISIONS） | 各 LICENSE |
