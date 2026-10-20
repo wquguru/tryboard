@@ -645,6 +645,11 @@ impl Machine {
         self.hw.set_efuse_pkg(pkg)
     }
 
+    /// Quad PSRAM size in MB (classic ESP32: 0 / 2 / 4 / 8); false if unsupported
+    pub fn set_psram_mb(&mut self, mb: u32) -> bool {
+        self.hw.set_psram(mb as usize * (1 << 20))
+    }
+
     /// First device of type T: legacy I2C0 devices, then pin buses
     fn i2c_dev<T: 'static>(&mut self) -> Option<&mut T> {
         if self.hw.i2c0().device::<T>().is_some() {
