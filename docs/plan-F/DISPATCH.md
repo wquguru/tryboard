@@ -2,7 +2,7 @@
 
 本文件给主会话照着派子代理用：怎么建 session、每个 session 的提示词、先后约束、每波合并和收尾。计划依据见 `EVAL.md` §5，调研结论见 `README.md`。
 
-**状态：2026-10-20 人确认开工，F 批已写进 `docs/PLAN.md`。** 与 M5 专项的重叠按 PLAN.md F 节处理：F-10a 并入 M5-10、F-10b / F-10d 并入 M5-12（下面这两段提示词保留作参考，不再单独派），F-04b 等 M5-01 合并后再派。下面的行号于 2026-10-20 在 `6c9640f` 上核对；派单前主会话用 `grep -n` 再确认一遍，行号漂了就改本文件再派。
+**状态：2026-10-20 人确认开工，F 批已写进 `docs/PLAN.md`。** 与 M5 专项的重叠按 PLAN.md F 节处理：F-10a 并入 M5-10、F-10b / F-10d 并入 M5-12（下面这两段提示词保留作参考，不再单独派），F-04b 等 M5-01 合并后再派。下面的行号于 2026-10-20 在 `6c9640f` 上核对（波 3 条目在 `774de94` 上复核）；派单前主会话用 `grep -n` 再确认一遍，行号漂了就改本文件再派。
 
 ## 1. 怎么建一个 session
 
@@ -111,7 +111,7 @@ F-10a ──> CYD 示例（F-10a 范围内）
 ```
 条目 F-04b：ILI9341 + SH1106 仿真模型，以及 ST7789 / ILI9341 裸屏模块在 C3、S3 上的 CLI 验收。
 先读：docs/plan-F/research/RS-3-interest.md §3（器件优先级），docs/STATUS.md 显示屏相关行。
-现状（已核对）：core/crates/soc/src/devices/lcd.rs:27 LcdKind::parse 已有 st7789 / st7789l / ili9342(c/e) / gc9a01 等，ST7789 模型已存在（M5 专项做的）；SH1106、ILI9341 没有。
+现状（已核对）：core/crates/soc/src/devices/lcd.rs:28 LcdKind::parse 已有 st7789 / st7789l / ili9342(c/e) / gc9a01 等，ST7789 模型已存在（M5 专项做的）；SH1106、ILI9341 没有。
 入口：
 - core/crates/soc/src/devices/dcs.rs:60 起 PanelSpec 常量（M5-01 的参数化 DCS 面板；ILI9342C 在 :129）—— ILI9341 加一个 PanelSpec（240×320 竖屏、MADCTL 默认值、ID），lcd.rs:8 LcdKind / :28 parse 加名字
 - core/crates/soc/src/devices/ssd1306.rs —— SH1106 参照它写（页寻址、132 列 RAM 偏移 2），新文件 sh1106.rs
@@ -307,7 +307,7 @@ M5 专项已全部合并（M5-01 DCS 面板、M5-10 GP-SPI、M5-11 RMT TX、M5-1
 参数：`model: "opus"`，端口 5187，session `f03b`。预计 60 次调用。
 ```
 条目 F-03b：分享链接 / 嵌入页可以选「按原速回放」，按时间轴重演输入日志，而不是快进到结尾。
-入口：web/src/live.ts:446 seek（快进路径，参照）；web/src/inputlog.ts 事件时间戳；F-01a 的 sharestate.ts；F-03 的 embed 入口。
+入口：web/src/live.ts:446 seek（快进路径，参照）；web/src/inputlog.ts 事件时间戳；web/src/app/sharestate.ts（F-01a）；web/src/embed/run.ts（F-03 的 embed 入口）。
 目标：回放时按钮、温度变化在 3D 和串口按原时间出现；可暂停、可跳到结尾。
 验收：回放结束时指纹与快进结果一致；agent-browser 在 embed 页走一遍。
 ```
