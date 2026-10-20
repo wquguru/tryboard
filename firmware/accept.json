@@ -424,6 +424,30 @@
   }
  },
  {
+  "id": "arduino-s3-usbcdc-echo",
+  "seconds": 1.5,
+  "script": "0.5:uart=hello tryboard\\n; 1.0:uart=ping\\n",
+  "expect": [
+   "USB CDC console start",
+   "Serial is HWCDC, connected=1",
+   "ECHO: hello tryboard",
+   "pong",
+   "TRYBOARD_OK s3-usbcdc-echo"
+  ]
+ },
+ {
+  "id": "s3-usj-echo",
+  "seconds": 1.5,
+  "script": "0.5:uart=hello tryboard\\n; 1.0:uart=ping\\n",
+  "expect": [
+   "main_task: Calling app_main()",
+   "USB 串口回显",
+   "ECHO: hello tryboard (14 字节)",
+   "pong",
+   "TRYBOARD_OK s3-usj-echo"
+  ]
+ },
+ {
   "id": "s3-usb-keyboard",
   "chip": "esp32s3",
   "seconds": 4,

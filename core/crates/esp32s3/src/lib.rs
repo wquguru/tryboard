@@ -26,11 +26,16 @@ use tryboard_soc::periph::{Systimer, Timg, Uart};
 use tryboard_soc::rmt::{Rmt, RmtLayout, Ws2812};
 use tryboard_soc::spiflash::SpiFlash;
 use tryboard_soc::tasktrace::TaskTrace;
+use tryboard_soc::usj::Usj;
 use tryboard_soc::wifi::{self, WifiLayout, WifiMac};
 use tryboard_soc::{gpspi::GpSpi, i2c::I2c, i2s::I2s, iotrace::IoTrace, ledc::Ledc};
 use tryboard_xtensa::{sr, Bus, BusFault, Cpu, Exit};
 
 pub const CPU_HZ: u64 = tryboard_soc::periph::CPU_HZ;
+/// USJ bytes within 2 ms of a UART0 byte count as the IDF secondary-console mirror (see `usj_route`)
+const USJ_MIRROR_WINDOW: u64 = CPU_HZ / 500;
+/// Bytes a mirrored USJ packet may run ahead of UART0
+const USJ_MIRROR_LAG: usize = 16;
 
 // Memory map (soc/esp32s3/include/soc/soc.h)
 /// SRAM0 (32KB, I bus only) + SRAM1 (416KB, mapped on both I and D)
@@ -172,7 +177,11 @@ pub struct SocBus {
     pub efuse: [u32; 0x200 / 4],
     /// SYSTEM_CPU_INTR_FROM_CPU_0..3
     pub from_cpu: u32,
-    pub usj_tx: Vec<u8>,
+    /// USB-Serial-JTAG serial port (virtual host attached by default)
+    pub usj: Usj,
+    /// Cycle of the last UART0 TX byte and the recent UART0 bytes, to spot IDF's secondary-console mirror on USJ
+    last_uart0_tx: Option<u64>,
+    uart0_recent: Vec<u8>,
     pub console: Vec<u8>,
     pub regs: HashMap<u32, u32>,
     pub unimpl: HashMap<u32, u64>,
@@ -246,7 +255,9 @@ impl Default for SocBus {
             rng: 0x2545_f491,
             efuse: boot::default_efuse(),
             from_cpu: 0,
-            usj_tx: Vec::new(),
+            usj: Usj::default(),
+            last_uart0_tx: None,
+            uart0_recent: Vec::new(),
             console: Vec::new(),
             regs: HashMap::new(),
             unimpl: HashMap::new(),
@@ -400,11 +411,15 @@ impl SocBus {
             0x6001_F000 => return self.timg0.read(off, now),
             0x6002_0000 => return self.timg1.read(off, now),
             0x6002_3000 => return self.systimer.read(off, now),
-            0x6003_8000 => match off {
-                0x04 => return 0x2, // EP1_CONF: IN endpoint has room
-                0x08 => return 0x8, // INT_RAW: SERIAL_IN_EMPTY
-                _ => {}
-            },
+            0x6003_8000 => {
+                if let Some(v) = self.usj.read(off, now) {
+                    if off == 0 {
+                        // Popping OUT data can clear DATA_AVAIL / the pending packet interrupt
+                        self.irq_dirty = true;
+                    }
+                    return v;
+                }
+            }
             // I2C_MST_ANA_CONF0 (regi2c_defs.h): BBPLL calibration done bit (bit 24) -- PLL calibration completes instantly
             0x6000_E000 if off == 0x40 => {
                 return self.regs.get(&a).copied().unwrap_or(0) | (1 << 24)
@@ -470,6 +485,14 @@ impl SocBus {
                 self.uart0.write(off, v);
                 if off == 0 {
                     self.console.push(v as u8);
+                    self.last_uart0_tx = Some(now);
+                    // Line ends dropped: the USJ copy of a line can be flushed before UART0 gets its CR LF
+                    if !matches!(v as u8, b'\r' | b'\n') {
+                        self.uart0_recent.push(v as u8);
+                    }
+                    if self.uart0_recent.len() > 8192 {
+                        self.uart0_recent.drain(..4096);
+                    }
                 }
                 return;
             }
@@ -562,13 +585,11 @@ impl SocBus {
             0x6001_F000 => return self.timg0.write(off, v, now),
             0x6002_0000 => return self.timg1.write(off, v, now),
             0x6002_3000 => return self.systimer.write(off, v, now),
-            0x6003_8000 if off == 0 => {
-                // USB-Serial-JTAG second console duplicates UART0 output; stored separately
-                self.usj_tx.push(v as u8);
-                if self.usj_tx.len() > 1 << 16 {
-                    self.usj_tx.drain(..1 << 15);
+            0x6003_8000 => {
+                if self.usj.write(off, v, now) {
+                    self.usj_route();
+                    return;
                 }
-                return;
             }
             0x600C_0000 if (0x30..=0x3c).contains(&off) => {
                 let bit = (off - 0x30) / 4;
@@ -711,6 +732,7 @@ impl SocBus {
         set(src::WIFI_MAC, self.wifi().irq());
         set(src::LEDC, self.ledc.irq());
         set(src::USB, self.usb.as_ref().is_some_and(|u| u.irq()));
+        set(src::USB_SERIAL_JTAG, self.usj.irq(self.now));
         set(src::RMT, self.rmt.irq());
         set(src::PCNT, self.pcnt.irq());
         set(src::I2C_EXT0, self.i2c0.irq());
@@ -739,6 +761,33 @@ impl SocBus {
             set(src::FROM_CPU0 + i, self.from_cpu & (1 << i) != 0);
         }
         l
+    }
+
+    /// Hand bytes the USJ host received to the console. IDF's default secondary console polls USJ (no interrupts)
+    /// and repeats what UART0 prints: such packets are dropped so each line shows once.
+    fn usj_route(&mut self) {
+        if self.usj.flushed.is_empty() {
+            return;
+        }
+        let data = std::mem::take(&mut self.usj.flushed);
+        let recent = self
+            .last_uart0_tx
+            .is_some_and(|t| self.now.saturating_sub(t) < USJ_MIRROR_WINDOW);
+        if !(self.usj.int_ena == 0 && recent && self.uart0_echoes(&data)) {
+            self.console.extend_from_slice(&data);
+        }
+    }
+
+    /// UART0 recently printed this packet's text. Line ends are ignored and a few trailing bytes may still be
+    /// on their way to UART0 (the ROM putc reaches USJ first when both consoles are on).
+    fn uart0_echoes(&self, data: &[u8]) -> bool {
+        let d: Vec<u8> = data
+            .iter()
+            .copied()
+            .filter(|b| !matches!(b, b'\r' | b'\n'))
+            .collect();
+        let head = &d[..d.len() - (d.len() / 2).min(USJ_MIRROR_LAG)];
+        head.is_empty() || self.uart0_recent.windows(head.len()).any(|w| w == head)
     }
 
     /// Route RMT output edges through the GPIO matrix to pins: update pin levels and feed the WS2812 decoders on them.
@@ -847,6 +896,7 @@ impl SocBus {
             }
             None => u64::MAX,
         };
+        let n14 = self.usj.next_event(now);
         self.next_event = n1
             .min(n2)
             .min(n3)
@@ -859,7 +909,8 @@ impl SocBus {
             .min(n10)
             .min(n11)
             .min(n12)
-            .min(n13);
+            .min(n13)
+            .min(n14);
         let lv = self.levels();
         // Edge lines get rising-edge detection in the core itself, so pass both the level and this round's rising edges
         let (l0, r0) = self.intm.lines(&lv);
@@ -991,7 +1042,7 @@ impl Bus for SocBus {
                 // Sub-word write: merge with the peripheral's current value (UART FIFO reads have dequeue side effects, so excluded)
                 let sh = (a & 3) * 8;
                 let mask = if size == 2 { 0xffff } else { 0xff } << sh;
-                let old = if aa == 0x6000_0000 || aa == 0x6001_0000 {
+                let old = if aa == 0x6000_0000 || aa == 0x6001_0000 || aa == 0x6003_8000 {
                     0
                 } else {
                     let before = self.unimpl.get(&aa).copied();
