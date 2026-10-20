@@ -203,7 +203,8 @@ export function mountTree(b: BenchCtx) {
             "",
             item(
               { kind: "ble", id: "phone" },
-              t("Virtual phone"),
+              // The virtual PC drives the same central, so name whichever holds it
+              bleFeed.get().view?.phone?.pc?.on ? t("Virtual PC") : t("Virtual phone"),
               phoneStateText(bleFeed.get()),
               bleFeed.get().state === 2 ? <TnSt kind="warn">!</TnSt> : null,
             ),
