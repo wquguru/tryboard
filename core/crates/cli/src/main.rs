@@ -40,6 +40,8 @@ fn usage() -> ! {
                [--mic <sound.wav>] (INMP441 loops this WAV, attaches the mic automatically) [--audio-wav <speaker output.wav>]
                [--ble-phone] (virtual phone: scan, connect to the first device, read all readable characteristics, subscribe to all notifications; air events on stderr)
                script actions ble=scan|scan off|connect [address|name]|disconnect|read <UUID|0xhandle>|write <UUID|0xhandle> <hex>|sub <UUID>|unsub <UUID>|auto
+               [--desk-pc] (virtual desktop, Claude Desktop Buddy protocol over BLE Nordic UART: connects to a device named Claude*, sends time / owner / heartbeats, polls status every 2 s)
+               script actions pc=on|off|json,<base64 one-line JSON>|hb,<base64 heartbeat template, {{tokens}} {{tokens_today}} {{running}} {{time}} substituted>
   tryboard elec-net <netlist.cir> [--at s,s...] (DC / transient solve, for comparison with ngspice, see tools/elec)
   tryboard riscv-test <test.elf>..."
     );
@@ -485,10 +487,12 @@ fn run(args: &[String]) {
             "[tryboard] BLE: firmware uses the Bluetooth controller but the VHCI boundary was not found ({e}); app.elf is needed"
         );
     }
-    let ble_phone = args.iter().any(|a| a == "--ble-phone");
-    if ble_phone {
-        if let Err(e) = m.ble_phone("auto") {
-            eprintln!("[tryboard] --ble-phone: {e}");
+    // --desk-pc = input pc=on at cycle 0 (E-06)
+    for (flag, cmd) in [("--ble-phone", "auto"), ("--desk-pc", "pc=on")] {
+        if args.iter().any(|a| a == flag) {
+            if let Err(e) = m.ble_phone(cmd) {
+                eprintln!("[tryboard] {flag}: {e}");
+            }
         }
     }
     let mut ble_seq = 0u64;
@@ -535,7 +539,7 @@ fn run(args: &[String]) {
                 }
             } else if act == "release" {
                 m.touch(0, 0, false);
-            } else if board_action(&mut m, &act) {
+            } else if board_action(&mut m, &act, now_s) {
             } else if let Some(p) = act.strip_prefix("power=") {
                 // The web quick card's USB <-> external 5 V toggle
                 if let Some(mode) = PowerMode::parse(p.trim()) {
@@ -568,11 +572,6 @@ fn run(args: &[String]) {
                 // Dragging the obstacle / changing distance on the web
                 if let Ok(d) = v.trim().parse::<f64>() {
                     m.sonar_distance(d);
-                }
-            } else if let Some(c) = act.strip_prefix("ble=") {
-                // Virtual phone action (the web's virtual phone panel)
-                if let Err(e) = m.ble_phone(c.trim()) {
-                    eprintln!("[tryboard] {now_s:.3}s phone action failed: {e}");
                 }
             } else if let Some(c) = act.strip_prefix("phone=") {
                 // One step on the web virtual phone (C-02)
@@ -1202,10 +1201,17 @@ fn board_args(m: &mut Machine, args: &[String]) {
     }
 }
 
-/// Input-log actions for the AXP2101: bat=pct[,usb] (battery slider / USB plug), pwrkey=short|long (PWR button).
-/// Returns false when `act` is not one of them.
-fn board_action(m: &mut Machine, act: &str) -> bool {
-    if let Some(v) = act.strip_prefix("bat=") {
+/// Input-log actions for the AXP2101 (bat=pct[,usb], pwrkey=short|long) and the virtual BLE phone
+/// (ble=…) / desktop (pc=…, E-06). Returns false when `act` is not one of them.
+fn board_action(m: &mut Machine, act: &str, now_s: f64) -> bool {
+    let ble = act
+        .strip_prefix("ble=")
+        .or(act.starts_with("pc=").then_some(act));
+    if let Some(c) = ble {
+        if let Err(e) = m.ble_phone(c.trim()) {
+            eprintln!("[tryboard] {now_s:.3}s BLE action failed: {e}");
+        }
+    } else if let Some(v) = act.strip_prefix("bat=") {
         match parse_battery(v) {
             Some((pct, usb)) => {
                 m.battery_set(pct, usb);

@@ -2386,5 +2386,33 @@
    "DHT11 frames sent 100",
    "timing-sensitive: GPIO5 busy-wait esp_rom_delay_us"
   ]
+ },
+ {
+  "id": "c3-ble-nus",
+  "seconds": 25,
+  "args": [
+   "--desk-pc"
+  ],
+  "expect": [
+   "BLE 广播 Claude-TB",
+   "MTU 247",
+   "TX 订阅 notify=1",
+   "时间 已设置 2026-10-20 10:42:00 (UTC+8)",
+   "主人 TryBoard",
+   "(302 字节 2 片)",
+   "心跳 #1 tokens=184502 running=0",
+   "心跳 #2 tokens=184724 running=1",
+   "status #5 → ack",
+   "TRYBOARD_OK c3-ble-nus"
+  ],
+  "stderr_expect": [
+   "pc: Nordic UART RX 0x0010 (write without response), TX 0x0012",
+   "pc: session up (MTU 247, chunks of 244 B)",
+   "(303 B, 2 writes)",
+   "pc: ack owner #1 ok",
+   "(281 B, 2 notifications)",
+   "pc: ack status #5 ok, battery 87%"
+  ],
+  "qemu": false
  }
 ]

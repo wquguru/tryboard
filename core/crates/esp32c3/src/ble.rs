@@ -294,7 +294,7 @@ mod tests {
                 .collect();
             let r = locate(&segs);
             n += 1;
-            if name == "c3-ble-hr" {
+            if name.starts_with("c3-ble-") {
                 let h = r
                     .unwrap_or_else(|e| panic!("{name}: {e}"))
                     .expect("BLE should be recognized");
