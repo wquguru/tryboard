@@ -1,6 +1,5 @@
-// Share card (F-02): weather bench, press BOOT, ⋯ "Make a share card" -> PNG card + 6 s video. The QR is sampled from the
-// rendered PNG pixels and decoded (web/test/qrdecode.ts); it must equal the share link, and that link must open the bench.
-// Card and logs in Reviews/web/sharecard-*; usage: node tools/webtest/sharecard.mjs (needs web/dist).
+// Share card (F-02): weather bench, BOOT, ⋯ "Make a share card" -> PNG + 6 s video; the QR sampled from the PNG pixels
+// (web/test/qrdecode.ts) must equal the share link, which must open the bench. Output in Reviews/web/sharecard-* (needs web/dist).
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';

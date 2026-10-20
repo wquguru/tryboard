@@ -48,6 +48,6 @@ mod tests {
         assert_eq!(unescape("\\xg1\\x4"), b"\\xg1\\x4");
         assert_eq!(unescape("\\x+1"), b"\\x+1");
         assert_eq!(unescape("C:\\temp \\t"), b"C:\\temp \\t");
-        assert_eq!(unescape("温度\\n"), "温度\n".as_bytes());
+        assert_eq!(unescape("25°C\\n"), "25°C\n".as_bytes());
     }
 }

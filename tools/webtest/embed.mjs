@@ -1,5 +1,4 @@
-// Embed page (F-03): a host page on another origin frames /embed?s= with the documented sandbox snippet.
-// Before the click no wasm / firmware is fetched; after it the shared actions replay (serial = CLI --inputs = full /app page),
+// Embed page (F-03): another-origin host frames /embed?s=; nothing loads before the click, then serial = CLI --inputs = /app,
 // the iframe's real localStorage stays empty and "Open in TryBoard" opens /app with the same s. Logs in Reviews/web/embed-*
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';

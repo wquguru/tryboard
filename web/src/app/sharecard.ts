@@ -6,6 +6,7 @@ import { PAGE_SANS } from '../scene-api';
 import { recordCanvas, renderStill, videoExt, type Capturable } from './capture';
 import { encodeQr, QR_MAX_BYTES, type QrCode } from './qr';
 import type { StepCtx } from './types';
+import { onFrame, PRIO } from '../ui/frame';
 
 export const CARD_W = 1080;
 export const CARD_H = 1350;
@@ -205,18 +206,18 @@ export function recordCard(cap: Capturable, base: HTMLCanvasElement, slug: strin
   frame();
   let blob: Blob | null = null;
   const rec = recordCanvas(cv, slug, null, seconds, { prefer: 'mp4', bitrate: 4_000_000, onBlob: (b) => (blob = b) });
-  let raf = 0;
-  const loop = () => {
-    frame();
-    onTick?.(rec.elapsed());
-    raf = requestAnimationFrame(loop);
-  };
-  raf = requestAnimationFrame(loop);
+  const off = onFrame(
+    () => {
+      frame();
+      onTick?.(rec.elapsed());
+    },
+    { priority: PRIO.ui },
+  );
   const done = rec.done
     .then((v) => {
       if (!blob) throw new Error(t('Recording failed'));
       return { blob, name: `tryboard-${slug}.${videoExt(v.mime)}`, mime: v.mime, seconds: v.seconds };
     })
-    .finally(() => cancelAnimationFrame(raf));
+    .finally(off);
   return { done, stop: () => rec.stop() };
 }
