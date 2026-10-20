@@ -1148,3 +1148,8 @@
 - **`assetUrl` 单独放 `web/src/assetver.ts`**（不碰 document 以外的 DOM，模块顶层不执行查询）：`examples.ts` 被 node 测试间接引用，不能依赖 `assets.ts` 顶层的 `document.querySelector`。没有清单（vite dev 未跑 build_web、node 测试、npm CLI）→ 原样 URL；b64 打包页不加（文件名必须与打包时一致）。
 - **`_headers` 不用 `/*` 兜底**：Cloudflare Pages 文档写明同一路径匹配到的多条 Cache-Control 用逗号拼接（Netlify 未核实，按同样处理）（`no-cache, public, max-age=…, immutable` 含义冲突），所以只列哈希目录（immutable）和页面路径（no-cache），其余吃托管默认（`max-age=0, must-revalidate`）。不用 `/*.html` 这类中间通配，两家语法支持不一致。
 - **测试**：`web/test/assethash.test.ts`（npm test）在临时目录里造文件跑 asset_hashes.py，翻 wasm 一字节只变一个 key；perf.mjs `--revisit` 按 dist/_headers 发 Cache-Control + ETag / 304，每个入口用新 profile 连开两次。托管尚未定，没有部署任何东西。
+
+## 2026-10-20 M5Stack 支持可行性评估（待人确认）
+- 结论写在 `docs/M5STACK.md`：可行，先做共用底座（SPI 屏读回、通用屏模型、I2C1 挂设备、USB-Serial-JTAG 串口、S3 SPI3、eFuse 封装号），再按 M5Dial → AtomS3 → CoreS3 → Cardputer 接入；经典 ESP32 板等经典 SPI / RMT / I2S 补齐。不做 Tab5（P4）、NanoC6（C6）、PaperS3。
+- 参考了 M5Unified `3590358` / M5GFX `a8ebd7b`（MIT，内含 LovyanGFX BSD-2）的源码来理解自动识别流程，只读、未抄；三者尚未进 LICENSING.md，动手前补。
+- 建议的 M5-00 – M5-10 条目尚未写进 PLAN，等人确认范围。
