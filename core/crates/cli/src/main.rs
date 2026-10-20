@@ -234,28 +234,7 @@ fn run(args: &[String]) {
     if let Some(pin) = opt(args, "--touch-int").and_then(|s| s.parse().ok()) {
         m.touch_int_attach(pin);
     }
-    // AXP2101 battery: --battery 98[,usb]
-    if let Some(v) = opt(args, "--battery") {
-        match parse_battery(&v) {
-            Some((pct, usb)) if m.battery_set(pct, usb) => {}
-            Some(_) => eprintln!("[tryboard] --battery needs axp2101 on --i2c"),
-            None => {
-                eprintln!("--battery {v}: expected PCT[,usb]");
-                std::process::exit(2)
-            }
-        }
-    }
-    // PCF85063 start time: --rtc <unix seconds, UTC>
-    if let Some(v) = opt(args, "--rtc") {
-        match v.trim().parse::<i64>() {
-            Ok(t) if m.rtc_set(t) => {}
-            Ok(_) => eprintln!("[tryboard] --rtc needs pcf85063 on --i2c"),
-            Err(_) => {
-                eprintln!("--rtc {v}: expected unix seconds");
-                std::process::exit(2)
-            }
-        }
-    }
+    board_args(&mut m, args);
     // External SPI devices: --spi gc9a01
     if let Some(spec) = opt(args, "--spi") {
         for kind in spec.split(',') {
@@ -556,22 +535,7 @@ fn run(args: &[String]) {
                 }
             } else if act == "release" {
                 m.touch(0, 0, false);
-            } else if let Some(v) = act.strip_prefix("bat=") {
-                // bat=pct[,usb]: the web's battery slider / USB plug toggle
-                match parse_battery(v) {
-                    Some((pct, usb)) => {
-                        m.battery_set(pct, usb);
-                    }
-                    None => eprintln!("[tryboard] unparsable bat action: {act}"),
-                }
-            } else if let Some(v) = act.strip_prefix("pwrkey=") {
-                // pwrkey=short|long: pressing the PWR button (wired to the AXP2101 PWRON pin)
-                match v.trim() {
-                    "short" | "long" => {
-                        m.pwrkey(v.trim() == "long");
-                    }
-                    _ => eprintln!("[tryboard] unparsable pwrkey action: {act}"),
-                }
+            } else if board_action(&mut m, &act) {
             } else if let Some(p) = act.strip_prefix("power=") {
                 // The web quick card's USB <-> external 5 V toggle
                 if let Some(mode) = PowerMode::parse(p.trim()) {
@@ -1212,6 +1176,53 @@ fn wav16(rate: u32, x: &[i16]) -> Vec<u8> {
         b.extend_from_slice(&v.to_le_bytes());
     }
     b
+}
+
+/// Board power / clock chips: --battery PCT[,usb] (AXP2101), --rtc <unix seconds, UTC> (PCF85063)
+fn board_args(m: &mut Machine, args: &[String]) {
+    if let Some(v) = opt(args, "--battery") {
+        match parse_battery(&v) {
+            Some((pct, usb)) if m.battery_set(pct, usb) => {}
+            Some(_) => eprintln!("[tryboard] --battery needs axp2101 on --i2c"),
+            None => {
+                eprintln!("--battery {v}: expected PCT[,usb]");
+                std::process::exit(2)
+            }
+        }
+    }
+    if let Some(v) = opt(args, "--rtc") {
+        match v.trim().parse::<i64>() {
+            Ok(t) if m.rtc_set(t) => {}
+            Ok(_) => eprintln!("[tryboard] --rtc needs pcf85063 on --i2c"),
+            Err(_) => {
+                eprintln!("--rtc {v}: expected unix seconds");
+                std::process::exit(2)
+            }
+        }
+    }
+}
+
+/// Input-log actions for the AXP2101: bat=pct[,usb] (battery slider / USB plug), pwrkey=short|long (PWR button).
+/// Returns false when `act` is not one of them.
+fn board_action(m: &mut Machine, act: &str) -> bool {
+    if let Some(v) = act.strip_prefix("bat=") {
+        match parse_battery(v) {
+            Some((pct, usb)) => {
+                m.battery_set(pct, usb);
+            }
+            None => eprintln!("[tryboard] unparsable bat action: {act}"),
+        }
+    } else if let Some(v) = act.strip_prefix("pwrkey=") {
+        match v.trim() {
+            "short" | "long" => {
+                m.pwrkey(v.trim() == "long");
+            }
+            _ => eprintln!("[tryboard] unparsable pwrkey action: {act}"),
+        }
+    } else {
+        return false;
+    }
+    true
 }
 
 /// Screen summary on stderr (pixel count, per-model counters) and optional PPM dump
