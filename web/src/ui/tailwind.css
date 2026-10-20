@@ -22,10 +22,11 @@
   color-scheme: dark;
 }
 
-/* Per-language sans stack (U-07): kana / hanzi / hangul would otherwise fall back to Chinese glyph forms; Latin stays Noto Sans SC. */
-:root { --tb-sans: 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
-:root:lang(ja) { --tb-sans: 'Hiragino Sans', 'Yu Gothic', 'Noto Sans JP', 'Noto Sans SC', 'PingFang SC', sans-serif; }
-:root:lang(ko) { --tb-sans: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', 'Noto Sans SC', 'PingFang SC', sans-serif; }
+/* Per-language sans stack (U-07): kana / hanzi / hangul would otherwise fall back to Chinese glyph forms.
+   R-17: 'TB Sans' is the Latin-only Noto slice; system CJK fonts come next, the sliced Noto Sans SC only as a fallback. */
+:root { --tb-sans: 'TB Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif; }
+:root:lang(ja) { --tb-sans: 'TB Sans', 'Hiragino Sans', 'Yu Gothic', 'Noto Sans JP', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif; }
+:root:lang(ko) { --tb-sans: 'TB Sans', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif; }
 
 @theme inline {
   --color-bg: var(--bg);

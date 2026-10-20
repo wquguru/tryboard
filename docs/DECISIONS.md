@@ -1009,3 +1009,11 @@
   - 「并行取」不是少下载，是让这些字节不挡首次渲染；首页 index.html 闭包因 chunk 切分多 0.9 KB（160.1 → 161.0）。
   - 没做到 ≤ 396 KB 的卡点：剩下的 454.6 里 three 149 + react-dom / react 71 + CSS 18 + tailwind-merge 9，实验台 / 3D 舞台（bench3d、board3d、后期 Bloom / Outline）本身约 150 KB 都是首屏画面要用的；零件目录 `catalog/parts`（17 KB）在建 store 时 `loadBom → validHistory` 就同步要用，`wirecheck` / `place` 也要。再降需要把实验台 3D 整体改成会话前动态加载（等于把 three 移出闭包，与「three 保留在首屏」矛盾）或把零件目录拆成首屏索引 + 详情，改动面大，留给后续。
   - 不做：用手写合并替换 `tailwind-merge`（类名冲突语义会变）；音频门面（audio.ts 实际只有约 1.3 KB，第一轮 13 KB 的估计是 source map 把 levels.json 记到了它头上）。
+
+## 2026-10-20 字体按需切片与字体栈（R-17）
+- 决定：subset.py 把 Noto Sans SC 子集切成多片 unicode-range（同 family 多个 @font-face）：Latin（U+2E80 以下所有扫描字，含通用标点、箭头、℃）、CJK 标点、假名、页面用到的汉字按扫描字频每 400 字一片、其余 GB2312 一级字按码位每 400 字一片；共 14 片，浏览器只取页面实际渲染到的片。可变字重轴用 fontTools instancer 收窄到 400–700（CSS 里只用到 400 / 500 / 600 / 700），GSUB 只留横排用的特性（去掉 vert / hwid / pwid 等，假名片 128 → 42 KB）。源字体里没有的码位（韩文、emoji 等）不再计入子集码位数（浏览器本来就按 cmap 逐字回退，字形没有变化）；`tnum` 保留（CSS 里有 tabular-nums）。
+- 字体栈：新增别名 family 'TB Sans' = 同一个 Latin 片文件（同 URL，只下一次）。全站栈改为 `'TB Sans', <系统 CJK>, 'Noto Sans SC', sans-serif`：默认 / en / zh 系统 CJK 为 PingFang SC、Hiragino Sans GB、Microsoft YaHei；ja 为 Hiragino Sans、Yu Gothic、Noto Sans JP，ko 为 Apple SD Gothic Neo、Malgun Gothic、Noto Sans KR，两者再接 PingFang SC / YaHei（页面上的简体字如「试板」）后才是 Noto。lab.css 的 `--sans` 改为引用 `--tb-sans`（原来没有 ja / ko 分支）；canvas 用 scene-api.ts 的 `PAGE_SANS`，拍照前 `document.fonts.load` 角标文字。
+- 取舍：西文四种语言一致用 Noto（与设计稿一致），汉字 / 假名在 macOS / Windows 上用系统字体，和 P2-19 时「全站 Noto 字形」相比 zh 页面汉字从 Noto 变成苹方 / 雅黑，字形略不同但同属无衬线黑体；换来 en 页面字体 1317 → 84 KB、有系统 CJK 字体的 zh / ja / ko 用户也不下 CJK 片。没有这些系统字体的平台（Linux、部分 Android）退到 Noto 分片，只取用到的片。
+- 代价：fonts.css 从 0.5 KB 变成 30 KB（gzip 11 KB），因为按字频分片的码位不连续、unicode-range 很长；按码位连续分片 CSS 只有约 1 KB，但 zh 页面用字散在所有片里，退回 Noto 时要下几乎全部 1.2 MB，所以选字频。
+- 不变：P2-19 的自托管与来源、OFL（文件名 tb-sans-sc-*.woff2，不用保留名）；等宽字体 tb-mono.woff2 原样（66 KB，保留全部 OpenType 特性，en 首页也会下，是剩下 84 KB 的大头）。
+- 替代：zh 栈 Noto 在前（视觉与原来一致，但 zh 用户每页要下 3–4 片约 370 KB）；`local()` 引用系统 Noto Sans CJK（可变字重下 local 只能对应单一字重，放弃）；en 栈只用系统字体（不下任何字体，但西文在各平台不一致）。

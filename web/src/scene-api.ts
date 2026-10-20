@@ -4,11 +4,13 @@ import { locale } from './i18n';
 
 // Canvas text gets no CSS lang-based fallback, so pick CJK fonts per locale: ja/ko must not get Chinese glyph forms.
 const CJK: Record<string, string> = {
-  zh: '"Noto Sans SC", "PingFang SC", "Microsoft YaHei"',
-  ja: '"Hiragino Sans", "Noto Sans JP", "Yu Gothic", "Noto Sans SC"',
-  ko: '"Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Noto Sans SC"',
-  en: '"Noto Sans SC", "PingFang SC"',
+  zh: '"PingFang SC", "Microsoft YaHei", "Noto Sans SC"',
+  ja: '"Hiragino Sans", "Noto Sans JP", "Yu Gothic", "PingFang SC", "Microsoft YaHei", "Noto Sans SC"',
+  ko: '"Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "PingFang SC", "Microsoft YaHei", "Noto Sans SC"',
+  en: '"PingFang SC", "Microsoft YaHei", "Noto Sans SC"',
 };
+/** Same stack with the self-hosted Latin slice first (R-17), for canvas text that should match the page font. */
+export const PAGE_SANS = `"TB Sans", ${CJK[locale] ?? CJK.en}, sans-serif`;
 /** Sans-serif stack for canvas / overlay text: Latin first, then the locale's CJK fonts. */
 export const SANS = `Inter, Helvetica, ${CJK[locale] ?? CJK.en}, sans-serif`;
 

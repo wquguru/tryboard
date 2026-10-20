@@ -27,7 +27,7 @@
   --left-w: 264px;
   --right-w: 312px;
   --dock-h: 200px;
-  --sans: 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --sans: var(--tb-sans);
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   color-scheme: light;
 }

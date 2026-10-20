@@ -3,6 +3,10 @@
 import * as THREE from 'three';
 import { t } from '../i18n/index.ts';
 import { currentTheme } from '../theme';
+import { PAGE_SANS } from '../scene-api';
+
+const captionFont = (px: number) => `500 ${px}px ${PAGE_SANS}`;
+const captionText = (caption: string) => t('TryBoard · {caption} · Illustrative look, not an official Espressif model', { caption });
 
 /** What the 3D scene exposes for capture: renderer, scene, render one frame (with post), set pixel ratio (incl. composer). */
 export interface Capturable {
@@ -96,10 +100,10 @@ export function renderStill(c: Capturable, caption: string): Still {
   }
   // Corner caption: project name + "illustrative" (DESIGN §4: the 3D is not an official Espressif model).
   const fs = Math.round(13 * outScale);
-  g.font = `500 ${fs}px "Noto Sans SC", "PingFang SC", sans-serif`;
+  g.font = captionFont(fs);
   g.fillStyle = currentTheme() === 'dark' ? 'rgba(232,234,237,0.75)' : 'rgba(30,30,30,0.6)';
   g.textBaseline = 'bottom';
-  g.fillText(t('TryBoard · {caption} · Illustrative look, not an official Espressif model', { caption }), Math.round(16 * outScale), height - Math.round(14 * outScale));
+  g.fillText(captionText(caption), Math.round(16 * outScale), height - Math.round(14 * outScale));
   return { canvas: out, width, height, renderW: Math.round(css.x * renderScale), renderH: Math.round(css.y * renderScale) };
 }
 
@@ -130,6 +134,8 @@ const last: LastCapture = {};
 (globalThis as { __tbCapture?: LastCapture }).__tbCapture = last;
 
 export async function takePhoto(c: Capturable, slug: string, caption: string) {
+  // Font slices load only once rendered text needs them (R-17); a canvas never triggers that, so fetch them first.
+  await document.fonts?.load(captionFont(13), captionText(caption)).catch(() => {});
   const s = renderStill(c, caption);
   const blob = await new Promise<Blob | null>((res) => s.canvas.toBlob(res, 'image/png'));
   if (!blob) throw new Error(t("The browser couldn't create the PNG"));
