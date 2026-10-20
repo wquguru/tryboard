@@ -4352,5 +4352,217 @@
     "tol": 6
    }
   ]
+ },
+ {
+  "id": "arduino-lib-arduinojson",
+  "seconds": 1,
+  "expect": [
+   "json parse sensor=gps time=1351824120",
+   "json parse lat=48.756080 lon=2.302038",
+   "json build {\"sensor\":\"bme280\",\"temp\":23.5,\"history\":[0,10,20]} (51 bytes)",
+   "TRYBOARD_OK lib-arduinojson"
+  ]
+ },
+ {
+  "id": "arduino-lib-u8g2",
+  "seconds": 1.5,
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c"
+  ],
+  "expect": [
+   "u8g2 begin 1, 128x64",
+   "u8g2 drawn",
+   "TRYBOARD_OK lib-u8g2"
+  ],
+  "oled_min_pixels": 1000
+ },
+ {
+  "id": "arduino-lib-adafruit-ssd1306",
+  "seconds": 2,
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c"
+  ],
+  "expect": [
+   "ssd1306 begin ok",
+   "ssd1306 drawn",
+   "TRYBOARD_OK lib-adafruit-ssd1306"
+  ],
+  "oled_min_pixels": 1000
+ },
+ {
+  "id": "arduino-lib-oled-thingpulse",
+  "seconds": 1.5,
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c"
+  ],
+  "expect": [
+   "thingpulse init 1",
+   "thingpulse drawn",
+   "TRYBOARD_OK lib-oled-thingpulse"
+  ],
+  "oled_min_pixels": 1000
+ },
+ {
+  "id": "arduino-lib-dht",
+  "seconds": 8,
+  "args": [
+   "--dht11",
+   "5",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "expect": [
+   "DHT11 humidity 45.0 % temperature 23.5 C",
+   "dht reads ok 3/3",
+   "TRYBOARD_OK lib-dht"
+  ],
+  "stderr_expect": [
+   "DHT11 frames sent 3"
+  ],
+  "absent": [
+   "Failed to read from DHT sensor!"
+  ]
+ },
+ {
+  "id": "arduino-lib-bme280",
+  "seconds": 2,
+  "args": [
+   "--i2c",
+   "bme280@0x76",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "expect": [
+   "bme280 id 0x60",
+   "TRYBOARD_OK lib-bme280"
+  ],
+  "numeric": [
+   {
+    "name": "BME280 temperature (C)",
+    "regex": "bme280 temp ([\\d.-]+) C",
+    "value": 23.5,
+    "tol": 0.1
+   },
+   {
+    "name": "BME280 humidity (%)",
+    "regex": "bme280 hum ([\\d.]+) %",
+    "value": 45,
+    "tol": 0.5
+   },
+   {
+    "name": "BME280 pressure (hPa)",
+    "regex": "bme280 press ([\\d.]+) hPa",
+    "value": 1013.25,
+    "tol": 0.5
+   }
+  ]
+ },
+ {
+  "id": "arduino-lib-mpu6050",
+  "seconds": 2,
+  "args": [
+   "--i2c",
+   "mpu6050@0x68"
+  ],
+  "expect": [
+   "MPU6050 Found!",
+   "accel range 2 gyro range 1",
+   "TRYBOARD_OK lib-mpu6050"
+  ],
+  "numeric": [
+   {
+    "name": "MPU6050 accel z at rest (m/s2)",
+    "regex": "mpu accel x [\\d.-]+ y [\\d.-]+ z ([\\d.-]+)",
+    "value": 9.81,
+    "tol": 0.15
+   }
+  ]
+ },
+ {
+  "id": "arduino-lib-sht31",
+  "seconds": 2,
+  "args": [
+   "--i2c",
+   "sht30@0x44",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "expect": [
+   "sht31 heater 0",
+   "TRYBOARD_OK lib-sht31"
+  ],
+  "numeric": [
+   {
+    "name": "SHT31 temperature (C)",
+    "regex": "sht31 temp ([\\d.-]+) C",
+    "value": 23.5,
+    "tol": 0.1
+   },
+   {
+    "name": "SHT31 humidity (%)",
+    "regex": "sht31 hum ([\\d.]+) %",
+    "value": 45,
+    "tol": 0.2
+   }
+  ]
+ },
+ {
+  "id": "arduino-lib-mfrc522",
+  "seconds": 3,
+  "args": [
+   "--spi",
+   "rc522"
+  ],
+  "script": "0.5:card=DEADBEEF; 1.5:card=none; 2.0:card=04A1B2C3D4E5F6",
+  "expect": [
+   "MFRC522 version 0x92",
+   "PICC type: MIFARE 1KB",
+   "UID: DE AD BE EF",
+   "PICC type: MIFARE Ultralight or Ultralight C",
+   "UID: 04 A1 B2 C3 D4 E5 F6",
+   "TRYBOARD_OK lib-mfrc522"
+  ],
+  "stderr_expect": [
+   "RC522 CS=GPIO7",
+   "unsupported 0"
+  ]
+ },
+ {
+  "id": "arduino-lib-dallas",
+  "seconds": 3,
+  "args": [
+   "--ds18b20",
+   "4,2",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "expect": [
+   "dallas devices 2 parasite 0",
+   "dallas rom 0:283A5C1E0B000064",
+   "dallas rom 1:287B5C1E0C00005C",
+   "dallas temp 0 23.50 C",
+   "dallas temp 1 24.00 C",
+   "TRYBOARD_OK lib-dallas"
+  ],
+  "stderr_expect": [
+   "unknown commands 0"
+  ]
+ },
+ {
+  "id": "arduino-lib-tft-espi",
+  "seconds": 2,
+  "args": [
+   "--spi",
+   "gc9a01"
+  ],
+  "expect": [
+   "tft_espi 240x240",
+   "tft_espi drawn",
+   "TRYBOARD_OK lib-tft-espi"
+  ],
+  "lcd_min_pixels": 10000
  }
 ]
