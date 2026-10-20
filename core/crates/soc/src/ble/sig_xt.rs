@@ -162,12 +162,8 @@ pub fn locate(segs: &[Seg]) -> Result<Hooks, String> {
     )?;
     let (lo, hi) = near(init);
     let mode = one("btdm_controller_get_mode", BTDM_CONTROLLER_GET_MODE, lo, hi)?;
+    // 0 = no call found: fine for IDF 5.1.0 / 5.1.1 bt.c (osi 0x10006, never calls it); the HLE rejects newer tables then
     let pll_track = pll_track_near_enable_call(segs, enable);
-    if pll_track == 0 {
-        return Err(
-            "no sdk_config_extend_set_pll_track call found before btdm_controller_enable".into(),
-        );
-    }
     Ok(Hooks {
         pll_track,
         osi_funcs_register: osi,

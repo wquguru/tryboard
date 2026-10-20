@@ -33,8 +33,10 @@ const S_SENT: u32 = 11;
 const S_NOP: u32 = 12;
 const SLOTS: u32 = 13;
 
-// osi_funcs_t offsets (same in bt.c for IDF 5.1-5.5.1, versions 0x00010009 / 0x0001000A)
+// osi_funcs_t offsets (same in bt.c for IDF 5.1.0-5.5.1, versions 0x00010006-0x0001000A)
 const OSI_MAGIC: u32 = 0xFADE_BEAD;
+/// IDF 5.1.0 / 5.1.1 = 0x10006 ... 5.4-5.5.1 = 0x1000A (F-08c: field offsets below checked in each bt.c)
+const OSI_VERSIONS: std::ops::RangeInclusive<u32> = 0x0001_0006..=0x0001_000A;
 const OSI_SEMPHR_CREATE: u32 = 36;
 const OSI_SEMPHR_TAKE: u32 = 52;
 const OSI_SEMPHR_GIVE: u32 = 56;
@@ -167,10 +169,21 @@ fn slot(b: &mut BleHle, s: u32, cpu: &mut Cpu, bus: &mut SocBus) {
         S_OSI_REG => {
             let p = a(0);
             let (magic, ver) = (rd32(bus, p), rd32(bus, p + 4));
-            if magic != OSI_MAGIC || !(0x0001_0009..=0x0001_000A).contains(&ver) {
-                b.error = Some(format!(
+            let err = if magic != OSI_MAGIC || !OSI_VERSIONS.contains(&ver) {
+                Some(format!(
                     "unknown bt.c osi function table version (magic {magic:08x} version {ver:08x})"
-                ));
+                ))
+            } else if ver >= 0x0001_0007 && b.hooks.pll_track == 0 {
+                // This bt.c calls the setter, which would write through the sdk_config pointer we never set
+                Some(
+                    "no sdk_config_extend_set_pll_track call found before btdm_controller_enable"
+                        .into(),
+                )
+            } else {
+                None
+            };
+            if let Some(msg) = err {
+                b.error = Some(msg);
                 cpu.hle_return(0x103);
                 return;
             }

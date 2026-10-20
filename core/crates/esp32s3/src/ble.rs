@@ -26,8 +26,10 @@ const S_SENT: u32 = 5;
 const SLOTS: u32 = 6;
 pub const MAGIC_END: u32 = MAGIC + 4 * SLOTS;
 
-// osi_funcs_t offsets (S3 builds the same controller/esp32c3/bt.c, IDF 5.1-5.5.1)
+// osi_funcs_t offsets (S3 builds the same controller/esp32c3/bt.c, IDF 5.1.0-5.5.1)
 const OSI_MAGIC: u32 = 0xFADE_BEAD;
+/// IDF 5.1.0 / 5.1.1 = 0x10006 ... 5.4-5.5.1 = 0x1000A (F-08c: field offsets below checked in each bt.c)
+const OSI_VERSIONS: std::ops::RangeInclusive<u32> = 0x0001_0006..=0x0001_000A;
 const OSI_SEMPHR_CREATE: u32 = 36;
 const OSI_SEMPHR_TAKE: u32 = 52;
 const OSI_SEMPHR_GIVE: u32 = 56;
@@ -123,7 +125,13 @@ impl BleHle {
 
     /// Addresses for Cpu::hle_addrs: hooked entries plus the magic return slots
     pub fn hle_addrs(&self) -> Vec<u32> {
-        let mut v: Vec<u32> = self.entries().iter().map(|e| e.0).collect();
+        // pll_track is 0 when the firmware's bt.c never calls it (IDF 5.1.0 / 5.1.1)
+        let mut v: Vec<u32> = self
+            .entries()
+            .iter()
+            .map(|e| e.0)
+            .filter(|&a| a != 0)
+            .collect();
         v.extend((0..SLOTS).map(|i| MAGIC + 4 * i));
         v
     }
@@ -195,10 +203,21 @@ fn entry(b: &mut BleHle, e: Entry, cpu: &mut Cpu, bus: &mut SocBus) {
         Entry::OsiReg => {
             let p = a(0);
             let (magic, ver) = (rd32(bus, p), rd32(bus, p + 4));
-            if magic != OSI_MAGIC || !(0x0001_0009..=0x0001_000A).contains(&ver) {
-                b.error = Some(format!(
+            let err = if magic != OSI_MAGIC || !OSI_VERSIONS.contains(&ver) {
+                Some(format!(
                     "unknown bt.c osi function table version (magic {magic:08x} version {ver:08x})"
-                ));
+                ))
+            } else if ver >= 0x0001_0007 && b.hooks.pll_track == 0 {
+                // This bt.c calls the setter, which would write through the sdk_config pointer we never set
+                Some(
+                    "no sdk_config_extend_set_pll_track call found before btdm_controller_enable"
+                        .into(),
+                )
+            } else {
+                None
+            };
+            if let Some(msg) = err {
+                b.error = Some(msg);
                 ret(cpu, n, ra, 0x103);
                 return;
             }

@@ -1280,3 +1280,13 @@
 - **AHT20 CRC** 与 Sensirion 相同（多项式 0x31、初值 0xFF），直接复用 `sht::crc8`。
 - **模块电流**写进 `board.rs` 的 `module_current`（AHT20 5 µA 估算、INA219 0.7 mA、DS3231 0.2 mA 按手册典型值）；注释写明 parts.ts 尚未加，等网页接这三个器件时同步。
 - 参考：AHT20、INA219、DS3231 数据手册；未读任何 GPL 实现。
+
+## 2026-10-20 BLE 多 IDF 签名（F-08c）
+- **新提交按 tag 命名目录**：`tools/fetch_third_party.sh` 新增 11 个 bt-lib 提交，目录名用 IDF tag（5.1.0、5.2.2…；5.1.4 与 5.2.1 同提交只下一份）；旧目录名（5.1-5.2、5.3、5.4、5.5.0、5.5.1）不改，免得老脚本和笔记失效。新提交只有 libbtdm_app.a，没有 `_flash`。
+- **osi 版本范围 0x10006–0x1000A**：逐个读了 5.1 / 5.1.1 / 5.1.2 / 5.1.5 / 5.2 / 5.2.2 / 5.3 / 5.3.1 / 5.5.1 的 bt.c，HLE 用到的 osi 表偏移（36 / 52 / 56 / 100）全一样，所以只放宽版本判断，不按版本分支。
+- **pll_track 可以找不到**：5.1.0 / 5.1.1（0x10006）的 bt.c 不调 `sdk_config_extend_set_pll_track`，`sig::locate` / `sig_xt::locate` 找不到时不再报错、给 0；改到 osi_reg 时判：版本 ≥ 0x10007 却没找到才报错。备选：按版本分两套 locate —— 否，多一套代码路径但判据一样。
+- **覆盖自测用裸链接**：`tools/ble_cover.sh` 把每个库用 5.5.1 工具链 `--gc-sections` 裸链接（未定义符号 PROVIDE 到 0x40001000，避开 Xtensa longcall 跨 1 GB 报错），elf2image 后让 Python `ble_sigs.py check` 和 Rust `cover.rs` 都按 ELF 符号对答案。产物在 git 忽略的 `third_party/btlib-cover/`，没有就跳过。
+- **S3 `_flash` 缺口不修**：S3 libbtdm_app_flash.a 裸链接时 ld 放松 longcall 会把 `or a10,a2,a2` 缩成 `mov.n`，send_packet 签名不中；改前改后都不中，真 RUN_IN_FLASH_ONLY 固件没见过，记 STATUS 缺口，自测里标 known gap 不算失败。
+- **check 容忍 AMBIGUOUS_OK**：Python check 对允许多处命中的函数，只要真值在命中里就算对（与 Rust 侧一致）。
+- **固件不重编**：worktree 的 firmware/build 从主仓库复制（同源码），改前改后 CLI 输出对比用复制的镜像。
+- 签名是否算 Espressif 库的衍生作品，仍待人审（同 E-04 的说法）。

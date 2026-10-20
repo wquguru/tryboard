@@ -15,10 +15,16 @@ for f in LICENSE README.md; do
   [ -f "esp-rom-elfs/$f" ] || curl -fsSL --retry 5 --retry-all-errors "https://raw.githubusercontent.com/espressif/esp-rom-elfs/master/$f" -o "esp-rom-elfs/$f"
 done
 # Espressif BLE controller blobs (esp32c3-bt-lib, Apache-2.0) per IDF version, only for tools/ble_sigs.py signatures (C-01);
-# never in the repo or site. Commits are the submodule pointers of each esp-idf tag.
+# never in the repo or site. Commits are the submodule pointers of each esp-idf tag (5.1.4 = 5.2.1; F-08c added 5.1.0-5.3.1).
 for pair in 5.1-5.2:ed99228396aaa18935b575d600bc19da38dc4746 5.3:daab5dbba958a13041bd496e4a6ed506c9284a06 \
             5.4:72599d583c232ea78d6461b5b502426c6e5a1ec9 5.5.0:3ff529142f6e2707d57b10eb87ac8d86e9098b88 \
-            5.5.1:0c68809d62e432427de97b5294f6619307f62f40; do
+            5.5.1:0c68809d62e432427de97b5294f6619307f62f40 \
+            5.1.0:d7513ebe88d7d207f6c062ce9381d347a0a70918 5.1.1:b438f60a295183e7c67eb42ae05f4580f4b1ced0 \
+            5.1.2:0cfac1b21ebc995e8e9aa040ab1ab29deee4f580 5.1.3:9d40b3bc0ac38d72b66fe0f612a8dda64c7330d7 \
+            5.1.4:e5c0f7256ecf5b5f8eb28c1793051a6b88f95124 5.1.5:061e70c319576bf28b5695f5478dbe01ad18b18d \
+            5.2.0:393ac4c33b419226aac9d1e8f1b5d553b7f3bc97 5.2.2:76ed4114ee7d081435a3c65793b4c8eb1dfaf199 \
+            5.2.3:b8ef2c474d392a88ea7e6626f89acf1fa5f30e4a 5.3.0:4b1338827fa19fbacc02dd9e46e76be2b0dd17a9 \
+            5.3.1:bfdfe8f851c99ced8316b133b0b15521917ea049; do
   ver=${pair%%:*}; sha=${pair#*:}
   for chip in esp32c3 esp32s3; do
     for lib in libbtdm_app.a libbtdm_app_flash.a; do
