@@ -16,7 +16,7 @@
 | 评估 | ☑ | `EVAL.md` |
 | 波 0 调研 RS-1 … RS-6 | ☑ | 2026-10-20 完成，六份报告在 `research/` |
 | 调研汇总 → 改写波次计划 | ☑ | `EVAL.md` §5.2–5.4 已修订：约 28 个实现 session、5 波 |
-| F 批写入 PLAN.md、开工实现 | ◐ | 2026-10-20 人确认开工；波 1 ☑（F-01a、F-04c、F-04d、F-05、F-06 合并，accept.sh 全绿，见 `Reviews/batch-F1.md`）；F-04b 等 M5-01；下一步波 2 |
+| F 批写入 PLAN.md、开工实现 | ◐ | 2026-10-20 人确认开工；波 1 ☑（F-01a、F-04c、F-04d、F-05、F-06 合并，accept.sh 全绿，见 `Reviews/batch-F1.md`）；F-04b 等 M5-01；下一步波 2。波 2：F-07a ☑（UART 修复 + `\xNN` + MicroPython 用例） |
 
 ## 调研结论汇总
 

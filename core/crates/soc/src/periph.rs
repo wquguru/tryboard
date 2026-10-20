@@ -3,6 +3,9 @@
 
 pub const CPU_HZ: u64 = 160_000_000;
 
+/// Hardware RX FIFO depth of UART0/1 on ESP32, ESP32-C3 and ESP32-S3 (TRM: 128 bytes)
+pub const UART_FIFO_LEN: usize = 128;
+
 // ---------------------------------------------------------------- UART
 pub struct Uart {
     pub tx: Vec<u8>,
@@ -45,7 +48,8 @@ impl Uart {
             0x08 => self.int_raw & self.int_ena,
             0x0c => self.int_ena,
             // STATUS: rxfifo_cnt[9:0]; txfifo_cnt[25:16] always 0 (TX completes instantly)
-            0x1c => (self.rx.len() as u32).min(127),
+            // Bytes beyond the FIFO depth wait on the wire; drivers size their read buffer to the FIFO
+            0x1c => self.rx.len().min(UART_FIFO_LEN) as u32,
             0x6c => 0, // FSM idle
             _ => self.regs.get((off / 4) as usize).copied().unwrap_or(0),
         }
@@ -58,7 +62,10 @@ impl Uart {
                 self.int_raw |= 0x2 | (1 << 14); // TXFIFO_EMPTY, TX_DONE
             }
             0x0c => self.int_ena = v,
-            0x10 => self.int_raw &= !v,
+            0x10 => {
+                self.int_raw &= !v;
+                self.rx_rearm();
+            }
             _ => {
                 if let Some(r) = self.regs.get_mut((off / 4) as usize) {
                     *r = v;
@@ -73,6 +80,11 @@ impl Uart {
 
     pub fn push_rx(&mut self, data: &[u8]) {
         self.rx.extend(data.iter().copied());
+        self.rx_rearm();
+    }
+
+    /// FULL is level-like on silicon and the wire keeps refilling the FIFO, so a clear with bytes left re-raises
+    fn rx_rearm(&mut self) {
         let thr = (self.regs[0x24 / 4] & 0x1ff) as usize;
         if self.rx.len() >= thr.max(1) {
             self.int_raw |= 1; // RXFIFO_FULL

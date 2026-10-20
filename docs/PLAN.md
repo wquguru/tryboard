@@ -232,7 +232,7 @@
 | F-04e | AHT20 + INA219 + DS3231 | accept | ☐ |
 | F-05 | 故障挑战关卡 3–5 个（缺的 CLI 故障开关一并补） | check.py --ref --all；faults.mjs 网页判定一致 | ☑ 4 关（线长 / 供电 / 天线 / ADC2），现有开关够用，未加 CLI 开关 |
 | F-06 | 公开数字自动生成（tools/stats.py；README 标记块 + web/public/stats.json，build_web.sh 调用；首页暂无手写数字） | stats.py --check | ☑ |
-| F-07a | UART > 127 字节修复 + `--script` `\xNN` + MicroPython C3 验收 | golden 字节一致；MicroPython 用例 | ☐ |
+| F-07a | UART > 127 字节修复 + `--script` `\xNN` + MicroPython C3 验收 | golden 字节一致；MicroPython 用例 | ☑ 2026-10-20：golden 173/173 一致，`mpy-c3-rawpaste` 通过（新用例快照待合并后 save） |
 | F-07b | 网页 main.py 编辑器（需人定 MicroPython 分发方式与定位） | micropython.mjs | ☐ |
 | F-08a / F-08b | Arduino 库矩阵 2 × 10 例（MIT / BSD 优先） | accept 矩阵写进 STATUS | ☐ |
 | F-08c | BLE 多 IDF 签名 + osi 版本放宽 + pll_track | 覆盖自测；误匹配 0 | ☐ |
