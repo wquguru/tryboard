@@ -75,6 +75,9 @@ def collect_idf(root, fid):
 
 def collect_arduino(root, fid):
     d = os.path.join(root, 'firmware', 'arduino', fid[len('arduino-'):])
+    # arduino-<name>-<variant> (boards.txt) shares the sketch of arduino-<name>
+    if not os.path.isdir(d) and os.path.isfile(os.path.join(d.rsplit('-', 1)[0], 'boards.txt')):
+        d = d.rsplit('-', 1)[0]
     if not os.path.isdir(d):
         return None
     files = sorted(f for f in os.listdir(d) if f.endswith(('.ino', '.h', '.cpp', '.c')))

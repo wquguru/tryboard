@@ -1,6 +1,10 @@
 //! Chip-agnostic machine shell: picks the SoC from the image header chip ID, one interface for CLI and wasm.
 //! Everything after boot goes through `tryboard_soc::chip::Chip`; a new chip adds a `Chip` variant and a branch in `boot`.
 
+mod boards;
+pub use boards::{
+    list as board_list, BoardPreset, Button as BoardButton, I2cBus as BoardI2cBus, BOARDS,
+};
 use std::collections::{HashMap, VecDeque};
 use tryboard_elec::board::{Activity, Board, ChipKind, Power};
 use tryboard_esp32::Esp32;
@@ -118,6 +122,8 @@ pub struct Machine {
     harness: Harness,
     /// GPIO the touch controller's INT is wired to (low while pressed, high on release); None = not wired
     pub touch_int: Option<u32>,
+    /// Board preset applied by `board_preset` (M5-05)
+    board: Option<&'static BoardPreset>,
 }
 
 pub struct BootInfo {
@@ -174,6 +180,7 @@ impl Machine {
                 chip,
                 elec: Board::new(kind),
                 touch_int: None,
+                board: None,
                 harness: Harness::default(),
             },
             BootInfo {

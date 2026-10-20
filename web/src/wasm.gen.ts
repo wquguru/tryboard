@@ -87,6 +87,8 @@ export interface WasmExports {
   tb_lcd_attach_kind(kind: number): number;
   /** # Safety Attach a screen by CLI spec ("ili9342@sclk=36,mosi=37,cs=3,dc=35,rst=-1", see `Machine::lcd_attach_spec`); 0 = ok, 1 = rejected. p/len must be valid UTF-8 */
   tb_lcd_attach_spec(p: number, len: number): number;
+  /** # Safety Apply a board preset ("m5dial", see `Machine::board_preset`) after load; 0 = ok, 1 = rejected. p/len valid UTF-8 */
+  tb_board_preset(p: number, len: number): number;
   /** Attached screen: 0 = SPI TFT (any DCS panel), 1 = CO5300, -1 = none */
   tb_lcd_kind(): number;
   /** Screen frame width / height in pixels (0 = no screen); `tb_lcd_ptr` holds w × h × 4 bytes */

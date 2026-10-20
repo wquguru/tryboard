@@ -429,6 +429,14 @@ pub unsafe extern "C" fn tb_lcd_attach_spec(p: *const u8, len: usize) -> i32 {
     with(1, |m| m.lcd_attach_spec(&s).map_or(1, |_| 0))
 }
 
+/// # Safety
+/// Apply a board preset ("m5dial", see `Machine::board_preset`) after load; 0 = ok, 1 = rejected. p/len valid UTF-8
+#[no_mangle]
+pub unsafe extern "C" fn tb_board_preset(p: *const u8, len: usize) -> i32 {
+    let s = String::from_utf8_lossy(std::slice::from_raw_parts(p, len)).into_owned();
+    with(1, |m| m.board_preset(&s).map_or(1, |_| 0))
+}
+
 /// Attached screen: 0 = SPI TFT (any DCS panel), 1 = CO5300, -1 = none
 #[no_mangle]
 pub extern "C" fn tb_lcd_kind() -> i32 {

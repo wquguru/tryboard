@@ -2814,5 +2814,60 @@
    "TRYBOARD_OK i2c-bitbang"
   ],
   "qemu": false
+ },
+ {
+  "id": "arduino-m5-probe-dial",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--board",
+   "m5dial"
+  ],
+  "expect": [
+   "M5PROBE board=M5Dial board_id=12",
+   "display=240x240",
+   "rtc=1 touch=1",
+   "M5PROBE_DRAWN",
+   "TRYBOARD_OK m5-probe"
+  ],
+  "stderr_expect": [
+   "board m5dial: expects M5Dial"
+  ]
+ },
+ {
+  "id": "arduino-m5-probe-atoms3",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--board",
+   "m5atoms3"
+  ],
+  "expect": [
+   "M5PROBE board=M5AtomS3 board_id=11",
+   "display=128x128 imu=4",
+   "M5PROBE_DRAWN",
+   "TRYBOARD_OK m5-probe"
+  ]
+ },
+ {
+  "id": "arduino-m5-dial-demo",
+  "chip": "esp32s3",
+  "seconds": 4,
+  "args": [
+   "--board",
+   "m5dial",
+   "--rtc",
+   "1767225600"
+  ],
+  "script": "1.0:enc=+5; 1.5:enc=-2; 2.0:touch=60,180; 2.2:release; 2.5:btn=A,1; 2.6:btn=A,0; 3.0:rtc=1800000000",
+  "expect": [
+   "DIAL ready board=12 display=240x240 rtc=1 touch=1",
+   "DIAL rtc=2026-01-01 00:00:01",
+   "DIAL enc=5",
+   "DIAL enc=3",
+   "DIAL touch x=60 y=180",
+   "DIAL btnA presses=1",
+   "DIAL rtc=2027-01-15 08:00:0"
+  ]
  }
 ]
