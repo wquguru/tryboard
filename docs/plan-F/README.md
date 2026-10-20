@@ -5,6 +5,7 @@
 | 文件 | 内容 |
 |---|---|
 | `EVAL.md` | 评估：13 维 × L1–L5 分级、证据、用户旅程、优化项 O1–O14、session 拆分与并行波次 |
+| `DISPATCH.md` | 派单手册：怎么建子代理 session、先后约束（依赖图、资源上限、冲突规则）、每个 F 项的完整提示词、每波收尾步骤 |
 | `research/RS-*.md` | 波 0 深度调研，每个问题一个文件 |
 | 画布 | https://claude.ai/artifact/GEvggYdYqbSXkNupMWv4MW |
 
