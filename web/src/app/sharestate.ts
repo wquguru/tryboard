@@ -232,11 +232,11 @@ export async function captureState(c: CaptureInput): Promise<{ state: ShareState
   return { state, ownFw: !!c.fwBuf && !ex };
 }
 
-/** Link for a state: drops `run` above SHARE_LINK_MAX characters (truncated = true) */
-export async function shareLink(base: string, state: ShareState): Promise<{ url: string; s: string; truncated: boolean }> {
+/** Link for a state: drops `run` above `max` characters of `s` (truncated = true; the share card's QR passes a lower max) */
+export async function shareLink(base: string, state: ShareState, max = SHARE_LINK_MAX): Promise<{ url: string; s: string; truncated: boolean }> {
   let s = await encodeState(state);
   let truncated = false;
-  if (s.length > SHARE_LINK_MAX && state.run) {
+  if (s.length > max && state.run) {
     const { run, cut: _cut, ...rest } = state;
     s = await encodeState({ ...rest, env: firstEnv(run.s) ?? undefined });
     truncated = true;

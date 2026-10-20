@@ -307,6 +307,10 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/media.mjs 2>&1 | grep '^\[media\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[media\] PASS (' || { echo "- [media] script did not finish" >> $REPORT; fail=1; }
+  # Share card (F-02): QR sampled from the card PNG decodes to the share link, which reopens the bench; 6 s MP4 / webm
+  r=$(node tools/webtest/sharecard.mjs 2>&1 | grep '^\[sharecard\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[sharecard\] PASS (' || { echo "- [sharecard] script did not finish" >> $REPORT; fail=1; }
   # Harness (P2-11): wire length -> W6 + drifting readings / NACK, metal near antenna -> RSSI; USB keypad (P2-12) home -> typing
   r=$(node tools/webtest/harness.mjs 2>&1 | grep '^\[harness\]')
   echo "$r" | sed 's/^/- /' >> $REPORT

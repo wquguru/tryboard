@@ -66,7 +66,7 @@ export interface Still {
   renderH: number;
 }
 
-/** High-res still, synchronous: the WebGL canvas doesn't preserve its buffer, so copy it in the same task. */
+/** High-res still, synchronous: the WebGL canvas doesn't preserve its buffer, so copy it in the same task. Caption '' = none (share card draws its own). */
 export function renderStill(c: Capturable, caption: string): Still {
   const r = c.renderer;
   const css = r.getSize(new THREE.Vector2());
@@ -100,6 +100,7 @@ export function renderStill(c: Capturable, caption: string): Still {
   }
   // Corner caption: project name + "illustrative" (DESIGN §4: the 3D is not an official Espressif model).
   const fs = Math.round(13 * outScale);
+  if (!caption) return { canvas: out, width, height, renderW: Math.round(css.x * renderScale), renderH: Math.round(css.y * renderScale) };
   g.font = captionFont(fs);
   g.fillStyle = currentTheme() === 'dark' ? 'rgba(232,234,237,0.75)' : 'rgba(30,30,30,0.6)';
   g.textBaseline = 'bottom';
@@ -154,14 +155,25 @@ export interface Recording {
   done: Promise<NonNullable<LastCapture['video']>>;
 }
 
-/** Record the canvas for `seconds` (webm); audio is the Web Audio output stream when sound is on. */
-export function recordCanvas(canvas: HTMLCanvasElement, slug: string, audio: MediaStream | null, seconds = RECORD_SECONDS): Recording {
+const WEBM = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+const MP4 = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4'];
+/** First recordable container: webm first for the bench clip, mp4 first for the share card (F-02); '' = browser default. */
+export function pickMime(prefer: 'webm' | 'mp4' = 'webm'): string {
+  const list = prefer === 'mp4' ? [...MP4, ...WEBM] : [...WEBM, ...MP4];
+  return list.find((m) => MediaRecorder.isTypeSupported(m)) ?? '';
+}
+/** File extension of a recorded mime type (Safari records MP4 even when asked for nothing). */
+export const videoExt = (mime: string) => (/mp4/i.test(mime) ? 'mp4' : 'webm');
+
+/** Record the canvas for `seconds`; audio is the Web Audio output stream when sound is on. Name and type follow rec.mimeType. */
+export function recordCanvas(canvas: HTMLCanvasElement, slug: string, audio: MediaStream | null, seconds = RECORD_SECONDS, opt: { prefer?: 'webm' | 'mp4'; bitrate?: number; onBlob?: (b: Blob) => void } = {}): Recording {
   if (typeof MediaRecorder === 'undefined' || !canvas.captureStream) throw new Error(t("This browser can't record video (MediaRecorder)"));
   const stream = canvas.captureStream(30);
   const tracks = audio?.getAudioTracks() ?? [];
   for (const tr of tracks) stream.addTrack(tr);
-  const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m)) ?? '';
-  const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 8_000_000 } : undefined);
+  const mime = pickMime(opt.prefer);
+  const bps = opt.bitrate ?? 8_000_000;
+  const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: bps } : { videoBitsPerSecond: bps });
   const chunks: Blob[] = [];
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
   const t0 = performance.now();
@@ -171,10 +183,13 @@ export function recordCanvas(canvas: HTMLCanvasElement, slug: string, audio: Med
     rec.onstop = () => {
       // Stop video tracks only; the audio track belongs to Web Audio and the speaker still needs it.
       for (const tr of stream.getVideoTracks()) tr.stop();
-      const blob = new Blob(chunks, { type: 'video/webm' });
-      const name = `tryboard-${slug}-${stamp()}.webm`;
-      last.video = { name, bytes: blob.size, width, height, seconds: (performance.now() - t0) / 1000, mime: rec.mimeType || 'video/webm', audio: tracks.length > 0 };
-      download(blob, name);
+      const type = rec.mimeType || chunks[0]?.type || mime || 'video/webm';
+      const blob = new Blob(chunks, { type });
+      const name = `tryboard-${slug}-${stamp()}.${videoExt(type)}`;
+      last.video = { name, bytes: blob.size, width, height, seconds: (performance.now() - t0) / 1000, mime: type, audio: tracks.length > 0 };
+      // onBlob: the caller offers the download itself (share card dialog)
+      if (opt.onBlob) opt.onBlob(blob);
+      else download(blob, name);
       resolve(last.video);
     };
   });

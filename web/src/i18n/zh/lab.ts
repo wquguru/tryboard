@@ -875,5 +875,22 @@ const d: Dict = {
   "Share link copied: it opens this bench and replays your actions": "分享链接已复制：打开后是这个台面，并重放你的操作",
   "Share link copied: it opens this bench with your parts and wiring": "分享链接已复制：打开后是这个台面，带着你的器件和接线",
   "Could not make the share link: {err}": "分享链接没生成出来：{err}",
+
+  // F-02 share card
+  "Scan to open": "扫码打开",
+  "{chip} · runs in your browser, no board needed": "{chip} · 在浏览器里运行，不用买板子",
+  "Opens this bench and replays the run": "打开是这个台面，并重放这次运行",
+  "Opens this bench with its parts and wiring": "打开是这个台面，带着器件和接线",
+  "The share link is too long for a QR code": "分享链接太长，放不进二维码",
+  "Your actions are too long for a QR code, so the card links to the bench only": "操作记录太长放不进二维码，卡片只链接到台面",
+  "Share card": "分享卡",
+  "Share card preview": "分享卡预览",
+  "Making the card…": "正在生成卡片…",
+  "Could not make the share card: {err}": "分享卡没生成出来：{err}",
+  "Ready: a {s} s {fmt} clip and a PNG still; the QR code opens the same bench": "好了：{s} 秒 {fmt} 视频和一张 PNG 图片；扫二维码打开的是同一个台面",
+  "Recording {n}/{max} s…": "录制中 {n}/{max} 秒…",
+  "Video ({fmt})": "视频（{fmt}）",
+  "Image (PNG)": "图片（PNG）",
+  "Copy link": "复制链接",
 };
 export default d;

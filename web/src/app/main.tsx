@@ -351,6 +351,8 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   // F-01a share link (top bar ⋯); __tbShare is the test hook (tools/webtest/share.mjs)
   actions.share = async () => (await import('./shareopen')).copyShare(ctx);
   Object.assign(globalThis, { __tbShare: async () => (await import('./shareopen')).makeShare(ctx) });
+  // F-02 share card (top bar ⋯); window.__tbCardLast is the test hook (tools/webtest/sharecard.mjs)
+  actions.shareCard = async () => (await import('./sharecardview')).openShareCard(ctx);
   actions.exportInputs = async (kind) => {
     if (!session.sim) return shell.toast(t('The simulator is not running yet, so there is no input log'));
     const a = document.createElement('a');
