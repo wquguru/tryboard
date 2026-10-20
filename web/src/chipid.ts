@@ -10,6 +10,8 @@ export const NPINS: Record<SimChip, number> = { esp32: 40, esp32c3: 22, esp32s3:
 export const BOOT_GPIO: Record<SimChip, number> = { esp32: 0, esp32c3: 9, esp32s3: 0 };
 /** GPIO of the on-board WS2812; DevKitC V4 has none (null). */
 export const RGB_GPIO: Record<SimChip, number | null> = { esp32: null, esp32c3: 8, esp32s3: 48 };
+/** Default RC522 chip-select GPIO (machine/src/parts.rs rc522_default_cs). */
+export const RC522_CS: Record<SimChip, number> = { esp32: 10, esp32c3: 7, esp32s3: 10 };
 /** ROM ELF per chip, from esp-rom-elfs. */
 export const ROM_FILE: Record<SimChip, string> = { esp32: 'esp32_rev300_rom.elf', esp32c3: 'esp32c3_rev3_rom.elf', esp32s3: 'esp32s3_rev0_rom.elf' };
 

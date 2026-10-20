@@ -1,6 +1,7 @@
 // F-04a: the F-04c / F-04d tutorial parts (DS18B20, PIR, relay, photoresistor, RC522) as one device bundle.
 // Same flags as core/crates/cli/src/parts.rs and main.rs wire_sensor_args; shared by worker, simrun, inputlog and devs.
 import type { WasmExports } from './wasm.gen.ts';
+import { RC522_CS, type SimChip } from './chipid.ts';
 
 export interface PartsDevs {
   /** --ds18b20 PIN,N: one 1-Wire bus with n probes (device i reads env + 0.5·i °C) */
@@ -18,7 +19,7 @@ export interface PartsDevs {
 export const PIR_HOLD_DEFAULT = 5;
 export const LDR_LUX_DEFAULT = 300;
 /** machine/src/parts.rs rc522_default_cs */
-export const rc522DefaultCs = (chip: string | undefined) => (chip === 'esp32c3' ? 7 : 10);
+export const rc522DefaultCs = (chip: string | undefined) => RC522_CS[chip as SimChip] ?? 10;
 
 /** True when nothing is attached (keeps logs and boot messages free of an empty object) */
 export const partsEmpty = (p: PartsDevs | undefined) => !p || !(p.ds18b20 || p.pir || p.relay || p.ldr || p.rc522);

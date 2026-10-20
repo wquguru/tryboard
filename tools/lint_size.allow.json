@@ -16,7 +16,7 @@
  "chip:web/src/app/tasktrace.ts": 1,
  "chip:web/src/app/types.ts": 3,
  "chip:web/src/bench3d/boards.ts": 7,
- "chip:web/src/catalog/parts.ts": 32,
+ "chip:web/src/catalog/parts.ts": 29,
  "chip:web/src/catalog/rules.ts": 30,
  "chip:web/src/catalog/schema.ts": 3,
  "chip:web/src/editor.ts": 2,
