@@ -313,6 +313,14 @@ web/（Vite + TS）
   - 编码器 40 / 41（A/B 顺序是推断的）。
   - BtnA G42（低有效）。电源保持 G46。
   - 蜂鸣器 G3（I2S 1-bit，尚无模型）。
+- Cardputer / Cardputer-Adv（M5-08）：
+  - 预设新字段：`keyboard: Option<Keyboard>`（`Hc138 { select, cols }` 或 `Tca8418`）、`mic: Option<Mic>`（`bclk / ws / data / pdm / both`；both = 两个声道同样本，M5Unified 默认读右声道）。挂载顺序在 I2C 之后。
+  - 键盘：`crates/machine/src/keyboard.rs` 的 4×14 图例 `KEY_LEGEND`，`key_pos(name)`；Rust `board_key(name, down)`；脚本动作 `key=<名>,1|0`（`,` `;` 等用别名 comma / semicolon …）；wasm `tb_board_key(p, len, down) -> i32`。
+  - 74HC138 矩阵：`soc/devices/keymatrix.rs` `KeyMatrix`，Chip 默认方法 `key_matrix_attach / key_matrix_set`（目前只有 S3 实现）；S3 在 `gpio_changed` 里组合求值（`Gpio::key_matrix_settle`，同 `i2c_pins_settle`），被选行把按下键所在列拉低。
+  - 图例→矩阵 / TCA8418 行列映射是推断的（未对照 M5Cardputer 库），需真机核对。
+  - 麦克风：Cardputer 是 SPM1423 PDM（CLK G43、DATA G46），走 `i2s.rs` 的 PDM2PCM（RX_CONF bit20 PDM_EN + bit21 PDM2PCM_EN；bit22 DSR16 → 每样本 128 个 PDM 时钟，否则 64，依 IDF i2s_pdm.c）；Adv 用 INMP441 模型顶替 ES8311（BCK 41、WS 43、DIN 46，两个声道同样本）。
+  - PDM 帧率 = BCK ÷ 64 或 128（DSR16）；clk_sel 1 按 M5-07 定为 240 MHz，M5Unified 写的分频这样算出正好 16 kHz（M5Unified 自己按 120 MHz、64× 算，两处偏差互相抵消，需真机核对）。
+- S3 GPIO 电平（M5-08 改）：开漏释放、外部无人驱动的焊盘，若只有 IO_MUX 下拉（FUN_PD）则读 0（之前一律读 1）。M5GFX 的 Cardputer / Adv 区分和 M5Unified 的 I2C 总线检测都靠这个。C3 / 经典 ESP32 未改。
 
 ## 分享状态 v1（F-01a；`web/src/app/sharestate.ts`，页面接入在 `web/src/app/shareopen.ts`）
 - 链接：`/app?s=<base64url(deflate-raw(JSON))>#bench`。导出 `encodeState` / `decodeState`（抛 `ShareDecodeError`，`reason` = `corrupt` | `newer`）、类型 `ShareStateV1`、`captureState`、`shareLink`、`redact`、`shareKey`。

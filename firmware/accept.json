@@ -3494,5 +3494,86 @@
    "RC522 CS=GPIO10",
    "unsupported 0"
   ]
+ },
+ {
+  "id": "arduino-m5-probe-cardputer",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--board",
+   "m5cardputer"
+  ],
+  "expect": [
+   "M5PROBE board=M5Cardputer board_id=14",
+   "display=240x135",
+   "M5PROBE_DRAWN",
+   "TRYBOARD_OK m5-probe"
+  ]
+ },
+ {
+  "id": "arduino-m5-probe-cardputeradv",
+  "fw": "arduino-m5-probe-cardputer",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--board",
+   "m5cardputeradv"
+  ],
+  "expect": [
+   "M5PROBE board=M5CardputerADV board_id=24",
+   "display=240x135",
+   "M5PROBE_DRAWN",
+   "TRYBOARD_OK m5-probe"
+  ]
+ },
+ {
+  "id": "arduino-m5-cardputer-demo",
+  "chip": "esp32s3",
+  "seconds": 5,
+  "args": [
+   "--board",
+   "m5cardputer",
+   "--mic",
+   "tools/audio/sine1k.wav"
+  ],
+  "script": "1.0:key=h,1; 1.1:key=h,0; 1.2:key=i,1; 1.3:key=i,0; 1.4:key=space,1; 1.5:key=space,0; 1.6:key=comma,1; 1.7:key=comma,0; 1.8:key=enter,1; 1.9:key=enter,0; 2.0:key=A,1; 2.1:key=A,0",
+  "expect": [
+   "CARDPUTER ready board=14 display=240x135 keyboard=74hc138",
+   "CARDPUTER key=h down",
+   "CARDPUTER text=hi",
+   "CARDPUTER text=hi ,",
+   "CARDPUTER line=hi ,",
+   "CARDPUTER key=a down",
+   "CARDPUTER text=a",
+   "CARDPUTER mic rms=3"
+  ],
+  "stderr_expect": [
+   "PDM mic SPM1423 (CLK=GPIO43 DATA=GPIO46",
+   "LCD ST7789"
+  ]
+ },
+ {
+  "id": "arduino-m5-cardputeradv-demo",
+  "fw": "arduino-m5-cardputer-demo",
+  "chip": "esp32s3",
+  "seconds": 5,
+  "args": [
+   "--board",
+   "m5cardputeradv",
+   "--mic",
+   "tools/audio/sine1k.wav"
+  ],
+  "script": "1.0:key=h,1; 1.1:key=h,0; 1.2:key=i,1; 1.3:key=i,0; 1.4:key=space,1; 1.5:key=space,0; 1.6:key=comma,1; 1.7:key=comma,0; 1.8:key=enter,1; 1.9:key=enter,0; 2.0:key=A,1; 2.1:key=A,0",
+  "expect": [
+   "CARDPUTER ready board=24 display=240x135 keyboard=tca8418",
+   "CARDPUTER key=h down",
+   "CARDPUTER text=hi",
+   "CARDPUTER line=hi ,",
+   "CARDPUTER text=a",
+   "CARDPUTER mic rms=3"
+  ],
+  "stderr_expect": [
+   "I2S mic INMP441 (SCK=GPIO41 WS=GPIO43 SD=GPIO46"
+  ]
  }
 ]

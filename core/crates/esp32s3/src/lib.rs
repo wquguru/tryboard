@@ -159,6 +159,8 @@ pub struct SocBus {
     pub i2c1: I2c,
     /// Buses on fixed SDA / SCL pads (M5-02): reached by the routed controller or by bit-banged GPIO
     pub i2c_pins: PinBuses,
+    /// Board key matrix scanned through GPIO (M5-08 Cardputer)
+    pub keymatrix: Option<tryboard_soc::devices::keymatrix::KeyMatrix>,
     /// GP-SPI2 master + GDMA (5 channels), model shared with the C3 family
     pub spi2: GpSpi,
     /// GP-SPI3 (0x60025000), same model; M5GFX re-inits AtomS3 / Cardputer panels on it after probing on SPI2
@@ -250,6 +252,7 @@ impl Default for SocBus {
             i2c0: I2c::default(),
             i2c1: I2c::with_port(tryboard_soc::iotrace::i2cbit::PORT1),
             i2c_pins: PinBuses::default(),
+            keymatrix: None,
             spi2: GpSpi::default(),
             spi3: GpSpi::default(),
             gdma: Gdma::new(GdmaLayout::S3),
@@ -658,6 +661,7 @@ impl SocBus {
 
     pub fn gpio_changed(&mut self, now: u64) {
         self.i2c_pins_settle(now);
+        self.gpio.key_matrix_settle(self.keymatrix.as_ref());
         self.gpio.sense();
         let lv = self.gpio.level();
         self.lcd_pins_changed(lv);

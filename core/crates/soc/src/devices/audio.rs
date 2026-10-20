@@ -206,6 +206,8 @@ pub struct Inmp441 {
     pub pins: Pins,
     /// L/R pin high = right channel (default grounded = left)
     pub right: bool,
+    /// Same sample on both slots (M5-08 board mics: a mono codec ADC, or a PDM mic whose L/R strap is unknown)
+    pub both: bool,
     pub source: MicSource,
     pub frames: u64,
     /// PDM part (SPM1423 on M5 boards): the SoC decimates to PCM, so only the report differs
@@ -217,6 +219,7 @@ impl Inmp441 {
         Inmp441 {
             pins,
             right: false,
+            both: false,
             source: MicSource::Silence,
             frames: 0,
             pdm: false,
@@ -299,6 +302,9 @@ impl Inmp441 {
                 let v24 = (x as f64 * 8_388_608.0).round() as i32;
                 let mut s = [0i32; 2];
                 s[k] = v24 << 8;
+                if self.both {
+                    s[1 - k] = v24 << 8;
+                }
                 s
             })
             .collect()

@@ -2,10 +2,12 @@
 //! Everything after boot goes through `tryboard_soc::chip::Chip`; a new chip adds a `Chip` variant and a branch in `boot`.
 
 mod boards;
+mod keyboard;
 mod parts;
 pub use boards::{
     list as board_list, BoardPreset, Button as BoardButton, I2cBus as BoardI2cBus, BOARDS,
 };
+pub use keyboard::{key_pos, Keyboard, LEGEND as KEY_LEGEND};
 use std::collections::{HashMap, VecDeque};
 use tryboard_elec::board::{Activity, Board, ChipKind, Power};
 use tryboard_esp32::Esp32;

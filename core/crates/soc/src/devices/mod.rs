@@ -18,6 +18,7 @@ pub mod ft6236;
 pub mod gpio_parts;
 pub mod imu;
 pub mod ina3221;
+pub mod keymatrix;
 pub mod lcd;
 pub mod lp5562;
 pub mod mpu6050;
