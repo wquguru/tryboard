@@ -1123,3 +1123,12 @@
 - 验收：accept.json 新增 c3-bluedroid-nus / s3-bluedroid-nus（`--desk-pc`，固件收 time / owner / 心跳、回 ack，电脑重组 2 片 status ack）与 c3-bluedroid-phone / s3-bluedroid-phone（`--ble-phone`，扫到、连上、发现 NUS、订阅 TX、3 s 内 1 条通知）；c3-ble-hr / c3-ble-led / c3-ble-nus / s3-ble-hr / s3-ble-led golden 逐字节一致。
 - 替代方案：sdkconfig 关掉 RPA 列表（`CONFIG_BT_BLE_RPA_SUPPORTED` 一类）——只对我们自己的固件有效，用户 / Arduino 固件照样崩，否掉；按主机栈分别应答——要猜主机是谁，否掉。
 - 未做：Arduino 未安装，没用 Arduino 编译产物实测；配对加密（E-08）、经典蓝牙不在范围。
+
+## 2026-10-20 词典按页面分组、HTML 预加载（R-20）
+- **按「谁用」分组，不按区域文件**：首页 / 选板用到的词条散在全部 7 个区域文件里（首页 719 条分布在 data / lab / views / checks / steps / net / site），按文件整体分组省不下来。改为三组：`site`（首页可达 + 模拟 worker 可达，所有页面都装）、`select`（选板可达且首页不可达）、`app`（其余，原区域文件 data / checks / views / lab / steps / net 合并成 `app.ts`）。页面在 `<html data-i18n="...">` 里声明要装的组；没写就装全部（安全默认）。
+- **「可达」靠脚本算，测试兜底**：`tools/i18n_reach.mjs` 用 TypeScript 解析器从页面入口走静态 + 动态 import（不进 worker），收集字符串字面量、JSX 文本和被 import 的 JSON 值，与词典键求交。`web/test/i18n-groups.test.ts` 要求每页可达的键都在它声明的组里、组之间不重叠、三种语言每组键相同。漏了用 `tools/i18n_regroup.mjs` 自动上移（只上移不下移，保留分节注释）。看不到的情况：键只在运行时数据里（fetch 的 JSON、拼出来的键）——首页 / 选板目前没有这类（已 grep 两页可达模块里的 fetch，只有 wasm / ROM / 固件 / 真联网）。
+- **保留 top-level await，只换等什么**：没有改成「入口先 await 词典再动态 import 页面」，那样多一跳；`i18n/index.ts` 并行 `import()` 本页的几个组再合并，模块顶层的 `t()` 照常可用。worker 固定只装 `site`（worker 可达的 7 条都在 site）。
+- **去瀑布用构建期内联脚本**：Vite 插件 `dictPreload`（`web/vite.config.ts`）在构建产物 HTML 的 `<head>` 最前面插一段内联脚本，按 `?lang=` > `tb-lang` > 浏览器语言（与 `detectLocale()` 同序）选语言，给本页各组插 `<link rel="modulepreload">`。语言选择逻辑因此有两份（内联 JS 与 TS），改一处要同步改另一处。dev 没有 bundle，不插。词典 chunk 统一命名 `assets/i18n-<语言>-<组>-<hash>.js`（主构建和 worker 构建都是），perf.mjs 据此单列 `dict` 字节。
+- **跨文件重复键去重**：原合并顺序下同一键在多个区域文件里每种语言有 165 条重复（只有 zh 1 条译文不同），按原合并顺序保留胜出的那一条，其余删掉；合并后的整本词典与改前逐条相同（三语言各 3704 条）；新规则：只有 app 组内部的区域文件之间允许重复。
+- **`hasT()` 语义变为「本页装的组里有没有」**：数据文件用它挑翻译字段，首页 / 选板可达的数据键都在 site / select，结果不变。
+- **不做**：按键生成每页专属词典文件（最省字节，但词典变成生成物、人工改翻译要回到源头再生成，太绕）；把 site 再拆成「首页」与「共享」（site 现 zh gzip 25 KB，再拆收益小于多一个请求）。

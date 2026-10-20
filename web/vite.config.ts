@@ -7,6 +7,12 @@ import tailwindcss from '@tailwindcss/vite';
 
 // licenses.html is generated at build time by tools/gen_licenses.mjs (not in git); the build still works without it.
 const licenses = existsSync(new URL('./licenses.html', import.meta.url)) ? { licenses: 'licenses.html' } : {};
+const DICT = /\/i18n\/(zh|ja|ko)\/(\w+)\.ts$/;
+// Dictionary chunks are named i18n-<locale>-<group> so perf.mjs and the HTML preload can find them (R-20).
+const chunkFileNames = (c: { facadeModuleId: string | null }) => {
+  const m = DICT.exec(c.facadeModuleId ?? '');
+  return m ? `assets/i18n-${m[1]}-${m[2]}-[hash].js` : 'assets/[name]-[hash].js';
+};
 
 /** External 3D models (P1-09): glb, SOURCES.md and LICENSE in assets/models/<name>/ ship as is to models/<name>/; dev reads assets.
  *  CC BY-SA models are downloadable with licence and source (LICENSING.md row 1); the original STEP (src/) is not shipped. */
@@ -36,10 +42,32 @@ function models(): Plugin {
   };
 }
 
+/** R-20: preload this page's dictionary groups for the visitor's locale from the HTML, so they download alongside the entry
+ *  instead of after it. The locale pick mirrors detectLocale() in src/i18n/index.ts; dev has no bundle and skips this. */
+function dictPreload(): Plugin {
+  return {
+    name: 'tb-dict-preload',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, ctx) {
+        const groups = html.match(/<html[^>]*\sdata-i18n="([^"]*)"/)?.[1];
+        if (!ctx.bundle || !groups) return html;
+        const map: Record<string, Record<string, string>> = {};
+        for (const f of Object.keys(ctx.bundle)) {
+          const m = f.match(/^assets\/i18n-(zh|ja|ko)-(\w+)-[^/]*\.js$/);
+          if (m) (map[m[1]] ??= {})[m[2]] = `./${f}`;
+        }
+        const code = `(function(){try{var m=${JSON.stringify(map)},g=${JSON.stringify(groups.split(/\s+/))},q=new URLSearchParams(location.search).get('lang'),l=q==='en'||m[q]?q:null;if(!l)try{var s=localStorage.getItem('tb-lang');if(s==='en'||m[s])l=s}catch(e){}if(!l)for(var n=navigator.languages||[navigator.language],i=0;i<n.length&&!l;i++){var p=(n[i]||'').toLowerCase().split('-')[0];if(p==='en'||m[p])l=p}var d=m[l];if(d)g.forEach(function(k){if(!d[k])return;var e=document.createElement('link');e.rel='modulepreload';e.crossOrigin='';e.href=d[k];document.head.appendChild(e)})}catch(e){}})()`;
+        return { html, tags: [{ tag: 'script', children: code, injectTo: 'head-prepend' }] };
+      },
+    },
+  };
+}
+
 export default defineConfig({
   base: './',
-  worker: { format: 'es' },
-  plugins: [react(), tailwindcss(), models()],
+  worker: { format: 'es', rollupOptions: { output: { chunkFileNames } } },
+  plugins: [react(), tailwindcss(), models(), dictPreload()],
   // Level definitions (firmware/levels.json) live outside web/, so the dev server must allow the parent directory.
   server: { fs: { allow: ['..'] } },
   build: {
@@ -47,6 +75,9 @@ export default defineConfig({
     chunkSizeWarningLimit: 1200,
     // Page files end in .html but site links have no suffix (/app -> app.html via Vite dev / preview and static hosting, DESIGN_V2 §7.2).
     // index.html is home; home / advisor / levels are old-URL redirect pages.
-    rollupOptions: { input: { main: 'index.html', select: 'select.html', app: 'app.html', home: 'home.html', advisor: 'advisor.html', levels: 'levels.html', ...licenses } },
+    rollupOptions: {
+      input: { main: 'index.html', select: 'select.html', app: 'app.html', home: 'home.html', advisor: 'advisor.html', levels: 'levels.html', ...licenses },
+      output: { chunkFileNames },
+    },
   },
 });
