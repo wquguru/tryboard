@@ -55,8 +55,8 @@ impl Axp2101 {
         regs[0x80] = 0x01;
         regs[0x82] = 18; // DCDC1: 1.5 V + 18 * 0.1 V = 3.3 V
         regs[0x90] = 0x3f;
-        for r in 0x92..=0x97 {
-            regs[r] = 28; // 0.5 V + 28 * 0.1 V = 3.3 V
+        for r in regs.iter_mut().take(0x98).skip(0x92) {
+            *r = 28; // 0.5 V + 28 * 0.1 V = 3.3 V
         }
         regs[0x30] = 0x0b;
         regs[0x27] = 0x00;

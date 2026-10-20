@@ -50,7 +50,7 @@ fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
 }
 
 fn bcd(v: u32) -> u8 {
-    ((v / 10) << 4 | v % 10) as u8
+    (((v / 10) << 4) | (v % 10)) as u8
 }
 
 fn unbcd(b: u8) -> u32 {
@@ -214,10 +214,7 @@ mod tests {
     fn runs_and_sets() {
         let mut d = Pcf85063::new(0x51);
         // 2026-10-16 04:00:00 UTC, Friday (5)
-        assert_eq!(
-            rd(&mut d, 0x04, 7),
-            [0x00, 0x00, 0x04, 0x16, 5, 0x10, 0x26]
-        );
+        assert_eq!(rd(&mut d, 0x04, 7), [0x00, 0x00, 0x04, 0x16, 5, 0x10, 0x26]);
         d.set_time(CPU_HZ * 61);
         assert_eq!(rd(&mut d, 0x04, 2), [0x01, 0x01]);
         // Write 2025-12-31 23:59:58 (weekday 3), then 3 s later it is 2026-01-01 00:00:01
@@ -227,10 +224,7 @@ mod tests {
         }
         d.stop();
         d.set_time(CPU_HZ * 64);
-        assert_eq!(
-            rd(&mut d, 0x04, 7),
-            [0x01, 0x00, 0x00, 0x01, 4, 0x01, 0x26]
-        );
+        assert_eq!(rd(&mut d, 0x04, 7), [0x01, 0x00, 0x00, 0x01, 4, 0x01, 0x26]);
         // STOP freezes the clock
         d.start(false);
         d.write(0x00);

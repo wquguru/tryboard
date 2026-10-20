@@ -3,7 +3,8 @@
 use std::io::Write;
 use std::time::Instant;
 use tryboard_machine::{
-    parse_battery, parse_imu, parse_touch, Chip, Machine, PowerMode, SensorEnv, Stop, BROWNOUT_RESET, CPU_HZ,
+    parse_battery, parse_imu, parse_touch, Chip, Machine, PowerMode, SensorEnv, Stop,
+    BROWNOUT_RESET, CPU_HZ,
 };
 use tryboard_rv32::{elf::Elf, Bus, BusFault, Cpu, Exit};
 
