@@ -15,7 +15,7 @@ use tryboard_soc::i2c::{I2c, I2cLayout};
 use tryboard_soc::i2cpins::PinBuses;
 use tryboard_soc::iotrace::IoTrace;
 use tryboard_soc::periph::Uart;
-use tryboard_soc::rmt::Ws2812;
+use tryboard_soc::rmt::{Rmt, RmtLayout, Ws2812};
 use tryboard_soc::tasktrace::TaskTrace;
 use tryboard_soc::wifi::{MacRegs, WifiLayout, WifiMac};
 use tryboard_soc::Mem as DmaMem;
@@ -68,6 +68,17 @@ pub const MMU_ENTRIES: usize = 256;
 pub const MMU_INVALID: u32 = 0x100;
 
 const UART0: u32 = 0x3FF4_0000;
+/// RMT registers; RMTMEM (8 x 64 words) at +0x800 in the same page
+const RMT_BASE: u32 = 0x3FF5_6000;
+
+/// RMT accesses the model doesn't cover, counted as unimpl: APB FIFO data / address registers,
+/// RX enable (CONF1 bit 1) and tx_start with carrier_en (CONF0 bit 28) on
+fn rmt_unmodelled(rmt: &Rmt, off: u32, write: Option<u32>) -> bool {
+    let fifo = off < 0x20 || (0x80..0xa0).contains(&off);
+    let conf1 = (0x20..0x60).contains(&off) && off % 8 == 4;
+    let carrier = |v: u32| v & 1 != 0 && rmt.read(off - 4) & (1 << 28) != 0;
+    fifo || (conf1 && write.is_some_and(|v| v & 2 != 0 || carrier(v)))
+}
 const UART1: u32 = 0x3FF5_0000;
 const UART2: u32 = 0x3FF6_E000;
 const RTC_CNTL: u32 = 0x3FF4_8000;
@@ -118,7 +129,9 @@ pub struct SocBus {
     pub analog: Analog,
     pub sha: crypto::ShaHw,
     pub aes: crypto::AesHw,
-    /// No RMT model (ESP32's RMT layout is incompatible with C3 / S3, see DECISIONS); kept empty for the common interface
+    /// RMT TX (M5-11): shared model with the classic register map; RX / carrier / APB FIFO count as unimpl
+    pub rmt: Rmt,
+    /// WS2812 decoders on pins routed to an RMT output
     pub ws2812: HashMap<u32, Ws2812>,
     pub pins: PinDevices,
     pub i2c0: I2c,
@@ -192,6 +205,7 @@ impl Default for SocBus {
             analog: Analog::default(),
             sha: Default::default(),
             aes: Default::default(),
+            rmt: Rmt::new(RmtLayout::ESP32),
             ws2812: HashMap::new(),
             pins: PinDevices::default(),
             i2c0: I2c::with_layout(I2cLayout::ESP32, 0),
@@ -358,6 +372,12 @@ impl SocBus {
             0x3FF5_3000 => return self.i2c0.read(off),
             0x3FF6_7000 => return self.i2c1.read(off),
             0x3FF5_9000 => return self.ledc.read(off),
+            RMT_BASE => {
+                if rmt_unmodelled(&self.rmt, off, None) {
+                    *self.unimpl.entry(a).or_insert(0) += 1;
+                }
+                return self.rmt.read(off);
+            }
             0x3FF5_A000 if off < 0x200 => return self.efuse[(off / 4) as usize],
             0x3FF5_F000 => return self.timg0.read(off, now),
             0x3FF6_0000 => return self.timg1.read(off, now),
@@ -458,6 +478,12 @@ impl SocBus {
                 return;
             }
             0x3FF5_9000 => return self.ledc.write(off, v, now),
+            RMT_BASE => {
+                if rmt_unmodelled(&self.rmt, off, Some(v)) {
+                    *self.unimpl.entry(a).or_insert(0) += 1;
+                }
+                return self.rmt.write(off, v, now);
+            }
             // eFuse read registers are read-only; CMD and other writes are dropped and read back 0 ("command done")
             0x3FF5_A000 if off < 0x200 => return,
             0x3FF5_F000 => return self.timg0.write(off, v, now),
@@ -586,6 +612,7 @@ impl SocBus {
         set(src::UART2, self.uart2.irq());
         set(src::GPIO, self.gpio.irq());
         set(src::LEDC, self.ledc.irq());
+        set(src::RMT, self.rmt.irq());
         set(src::I2C_EXT0, self.i2c0.irq());
         set(src::I2C_EXT1, self.i2c1.irq());
         set(src::TG0_T0, self.timg0.irq(0));
@@ -601,6 +628,36 @@ impl SocBus {
             set(src::FROM_CPU0 + i, self.dport.from_cpu & (1 << i) != 0);
         }
         l
+    }
+
+    /// Route RMT output edges through the GPIO matrix to pins and their WS2812 decoders (as C3 / S3);
+    /// returns when a decoder next needs checking (end-of-frame detection)
+    fn route_rmt(&mut self, now: u64) -> u64 {
+        let l = self.rmt.layout;
+        let mut next = u64::MAX;
+        let mut edges = std::mem::take(&mut self.rmt.edges);
+        for pin in 0..NPINS as u32 {
+            let sel = self.gpio.func_out[pin as usize] & 0x1ff;
+            if !(l.sig_out0..l.sig_out0 + l.ntx as u32).contains(&sel) {
+                continue;
+            }
+            let ch = (sel - l.sig_out0) as u8;
+            let dec = self.ws2812.entry(pin).or_default();
+            let frames = dec.frames;
+            for &(t, c, lv) in &edges {
+                if c == ch {
+                    dec.feed(t, lv);
+                }
+            }
+            next = next.min(dec.finalize(now));
+            if dec.frames != frames {
+                self.iotrace.ws2812(now, pin, &dec.rgb);
+            }
+            self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
+        }
+        edges.clear();
+        self.rmt.edges = edges;
+        next
     }
 
     fn trace_pwm(&mut self, now: u64) {
@@ -638,6 +695,7 @@ impl SocBus {
             self.reset_request = Some(r);
         }
         let n2 = self.ledc.update(now);
+        let n2 = n2.min(self.rmt.update(now)).min(self.route_rmt(now));
         let n3 = self.i2c0.update(now).min(self.i2c1.update(now));
         let n4 = self.pins_update(now);
         let n5 = {
