@@ -14,6 +14,7 @@ pub mod cst816s;
 pub mod cst9220;
 pub mod dcs;
 pub mod ft6236;
+pub mod gpio_parts;
 pub mod imu;
 pub mod ina3221;
 pub mod lcd;
@@ -23,6 +24,7 @@ pub mod pcf85063;
 pub mod pcf8563;
 pub mod pins;
 pub mod qmi8658;
+pub mod rc522;
 pub mod ssd1306;
 pub mod tca8418;
 

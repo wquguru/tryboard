@@ -333,11 +333,16 @@ pub struct PinDevices {
     pub encoders: Vec<Encoder>,
     pub sonars: Vec<Hcsr04>,
     pub dhts: Vec<Dht11>,
+    /// PIR / relay / LDR / RC522 chip select (F-04d)
+    pub parts: super::gpio_parts::GpioParts,
 }
 
 impl PinDevices {
     pub fn is_empty(&self) -> bool {
-        self.encoders.is_empty() && self.sonars.is_empty() && self.dhts.is_empty()
+        self.encoders.is_empty()
+            && self.sonars.is_empty()
+            && self.dhts.is_empty()
+            && self.parts.is_empty()
     }
 
     pub fn on_level(&mut self, t: u64, level: u64) {
@@ -347,6 +352,7 @@ impl PinDevices {
         for d in &mut self.dhts {
             d.on_level(t, level);
         }
+        self.parts.on_level(t, level);
     }
 
     /// Drives due by now (time-ordered) and the next time to ask again
@@ -362,6 +368,7 @@ impl PinDevices {
         for d in &mut self.dhts {
             next = next.min(d.poll(now, &mut out));
         }
+        next = next.min(self.parts.poll(now, &mut out));
         out.sort_by_key(|d| d.0);
         (out, next)
     }

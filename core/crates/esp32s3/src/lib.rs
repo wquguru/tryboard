@@ -11,6 +11,7 @@ pub mod hle;
 pub mod periph;
 pub mod psram;
 mod spi_lcd;
+mod spi_rc522;
 mod usj_console;
 /// USB OTG model lives in tryboard-soc (R-06); re-exported for `usb::` paths in this crate
 pub use tryboard_soc::usb;

@@ -44,6 +44,10 @@ fn usage() -> ! {
                [--encoder A,B[,SW]] (EC11 rotary encoder; script actions enc=+N / enc=-N turn N detents, encsw=1|0 press / release)
                [--sonar TRIG,ECHO] [--dist cm] (HC-SR04; script action dist=cm, negative = nothing in front)
                [--dht11 GPIO] (DHT11 on an open-drain data pin; readings from --env / script action env=)
+               [--pir GPIO[,hold s]] (HC-SR501 output, repeatable trigger, hold default 5 s; script action pir=1|0 motion / gone)
+               [--relay GPIO[,low]] (relay module IN, active high unless ,low; switch events on stderr)
+               [--ldr GPIO[,lux]] (photoresistor to 3V3 + 10 kohm to GND on an ADC pin, default 300 lux; script action lux=N)
+               [--spi rc522[@cs=N]] (RC522 RFID on SPI2, CS default C3 GPIO7 / S3 GPIO10; script action card=<uid hex>|none)
                [--vcd <file.vcd>] [--vcd-pins 5[,..]|all] [--vcd-window <start s>..<end s>] (every edge, 1 ps timescale, 1 cycle = 6250 ps)
                [--i2s max98357a,inmp441] (S3: speaker BCLK=16 LRC=17 DIN=18, mic SCK=39 WS=40 SD=41; C3: speaker 0/1/2, mic 0/1/3)
                [--mic <sound.wav>] (INMP441 loops this WAV, attaches the mic automatically) [--audio-wav <speaker output.wav>]
@@ -66,6 +70,9 @@ fn default_rom(chip: Chip) -> String {
 }
 
 use tryboard_machine::PhoneCmd;
+
+mod parts;
+use parts::parts_args;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -339,6 +346,7 @@ fn run(args: &[String]) {
             }
         }
     }
+    let has_parts = parts_args(&mut m, args);
     // Environment: --env temp,humidity,pressure(Pa)
     if let Some(e) = opt(args, "--env") {
         let v: Vec<f64> = e.split(',').filter_map(|x| x.parse().ok()).collect();
@@ -631,6 +639,7 @@ fn run(args: &[String]) {
                 }
             } else if let Some(v) = act.strip_prefix("encsw=") {
                 m.encoder_press(v.trim() == "1");
+            } else if parts::parts_action(&mut m, &act) {
             } else if let Some(v) = act.strip_prefix("dist=") {
                 // Dragging the obstacle / changing distance on the web
                 if let Ok(d) = v.trim().parse::<f64>() {
@@ -696,6 +705,7 @@ fn run(args: &[String]) {
             && encoder.is_none()
             && sonar.is_none()
             && dht11.is_none()
+            && !has_parts
             && vcd.is_none()
             && !has_audio
         {
@@ -710,6 +720,7 @@ fn run(args: &[String]) {
             m.run(slice.min(total - done))
         };
         done += m.cycles() - before;
+        parts::parts_events(&mut m);
         // Real network (C-03): the CLI never goes online, it only reports; replies come from netreply= recorded by the web in --inputs
         for r in m.net_outbox_take() {
             eprintln!(
@@ -988,19 +999,7 @@ fn run(args: &[String]) {
     if args.iter().any(|a| a == "--elec-report") {
         eprint!("{}", m.elec.report());
     }
-    if let Some(p) = m.encoder_position() {
-        let c = m
-            .pcnt_count(0)
-            .map(|c| format!(", PCNT unit 0 count {c}"))
-            .unwrap_or_default();
-        eprintln!("[tryboard] encoder turned {p} detents (clockwise positive){c}");
-    }
-    if let Some((pings, echoes, us)) = m.sonar_stats() {
-        eprintln!("[tryboard] ultrasonic triggers {pings}, echoes {echoes}, last Echo {us:.1} µs");
-    }
-    if let Some((reads, short)) = m.dht11_stats() {
-        eprintln!("[tryboard] DHT11 frames sent {reads}, start pulses too short {short}");
-    }
+    parts::pin_reports(&mut m);
     if let Some(p) = &vcd {
         let text = m.vcd_text();
         std::fs::write(p, &text).unwrap_or_else(|e| panic!("write {p}: {e}"));
@@ -1263,7 +1262,7 @@ fn spi_args(m: &mut Machine, args: &[String]) {
     }
     for dev in devs {
         if let Err(e) = m.lcd_attach_spec(&dev) {
-            eprintln!("unsupported SPI device: {e} (gc9a01 on C3 / S3; gc9107, st7735, st7789, st7789l, ili9342, ili9342e, co5300 on S3)");
+            eprintln!("unsupported SPI device: {e} (gc9a01, rc522 on C3 / S3; gc9107, st7735, st7789, st7789l, ili9342, ili9342e, co5300 on S3)");
             std::process::exit(2)
         }
     }
