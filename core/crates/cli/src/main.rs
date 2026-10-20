@@ -19,6 +19,7 @@ fn usage() -> ! {
                [--i2c ssd1306@0x3c,bme280@0x76] [--env temp,humidity,pressure Pa] [--oled] [--i2c-log] (acks per address)
                [--i2c-bus sda=N,scl=N[,nopull]:kind@addr,...] (repeatable: bus on fixed pads, reached by the routed I2C0/I2C1 or bit-banged GPIO; external pull-ups unless nopull)
                [--efuse-pkg N] (package version eFuse: S3 0 QFN56 / 1 PICO; ESP32 5 PICO-D4 / 6 PICO-V3-02)
+               [--psram MB] (classic ESP32 quad PSRAM: 0 / 2 / 4 / 8; --efuse-pkg 6 implies 2)
                (more I2C devices: mpu6050@0x68, qmi8658@0x6b, cst816s@0x15, ft6236@0x38, cst9220@0x5a, axp2101@0x34, pcf85063@0x51, es8311@0x18, es7210@0x40;
                M5 parts: mpu6886@0x68, bmi270@0x68 (BMM150 on its AUX bus), bmm150@0x10, bm8563@0x51 (= pcf8563), aw9523@0x58, axp192@0x34,
                lp5562@0x30, tca8418@0x34, ft6336@0x38, ft3267@0x38, ina3221@0x40, ltr553@0x23, aw88298@0x36)
@@ -208,6 +209,12 @@ fn i2c_opts(m: &mut Machine, args: &[String], chip: &str) {
     if let Some(p) = opt(args, "--efuse-pkg") {
         if !p.parse().is_ok_and(|n| m.set_efuse_pkg(n)) {
             eprintln!("--efuse-pkg {p}: unsupported on {chip}");
+            std::process::exit(2)
+        }
+    }
+    if let Some(p) = opt(args, "--psram") {
+        if !p.parse().is_ok_and(|n| m.set_psram_mb(n)) {
+            eprintln!("--psram {p}: unsupported on {chip} (classic ESP32: 0, 2, 4 or 8 MB)");
             std::process::exit(2)
         }
     }

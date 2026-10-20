@@ -2016,6 +2016,36 @@
   }
  },
  {
+  "id": "esp32-ws2812",
+  "chip": "esp32",
+  "seconds": 1.5,
+  "expect": [
+   "ws2812 frame 0",
+   "ws2812 frame 1",
+   "TRYBOARD_OK esp32-ws2812"
+  ],
+  "ws2812": {
+   "pin": 27,
+   "min_frames": 2,
+   "frames": [
+    [
+     "#ff0000",
+     "#00ff00",
+     "#0000ff",
+     "#ffffff",
+     "#102030"
+    ],
+    [
+     "#000000",
+     "#ff8000",
+     "#010203",
+     "#8000ff",
+     "#004000"
+    ]
+   ]
+  }
+ },
+ {
   "id": "esp32-fade",
   "chip": "esp32",
   "seconds": 3.6,
@@ -2812,6 +2842,57 @@
    "I2C1 BME280 id 0x60",
    "bitbang rescan: 0x3C 0x76",
    "TRYBOARD_OK i2c-bitbang"
+  ],
+  "qemu": false
+ },
+ {
+  "id": "esp32-psram",
+  "chip": "esp32",
+  "seconds": 3,
+  "args": [
+   "--psram",
+   "4"
+  ],
+  "expect": [
+   "Found 4MB PSRAM device",
+   "SPI SRAM memory test OK",
+   "PSRAM 4 MB, 4 MB mapped, test 1 MB OK",
+   "TRYBOARD_OK esp32-psram"
+  ],
+  "qemu": true
+ },
+ {
+  "id": "esp32-psram-8mb",
+  "fw": "esp32-psram",
+  "chip": "esp32",
+  "seconds": 3,
+  "args": [
+   "--psram",
+   "8"
+  ],
+  "expect": [
+   "Found 8MB PSRAM device",
+   "SPI SRAM memory test OK",
+   "PSRAM 8 MB, 4 MB mapped, test 1 MB OK",
+   "TRYBOARD_OK esp32-psram"
+  ],
+  "qemu": false
+ },
+ {
+  "id": "esp32-psram-pico",
+  "fw": "esp32-psram",
+  "chip": "esp32",
+  "seconds": 3,
+  "args": [
+   "--efuse-pkg",
+   "6"
+  ],
+  "expect": [
+   "ESP32-PICO-V3-02",
+   "Found 2MB PSRAM device",
+   "SPI SRAM memory test OK",
+   "PSRAM 2 MB, 2 MB mapped, test 1 MB OK",
+   "TRYBOARD_OK esp32-psram"
   ],
   "qemu": false
  }

@@ -1,0 +1,7 @@
+CONFIG_IDF_TARGET="esp32"
+# 8MB header: the app's flash probe must see an 8MB JEDEC ID (M5-14)
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+# Quad PSRAM (WROVER / Core2 class, or PICO-V3-02 in-package) with the boot memory test, added to malloc
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MEMTEST=y
+CONFIG_SPIRAM_USE_MALLOC=y

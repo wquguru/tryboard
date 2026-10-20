@@ -140,6 +140,10 @@ pub trait Chip {
     fn set_efuse_pkg(&mut self, _pkg: u32) -> bool {
         false
     }
+    /// Quad PSRAM on the board (classic ESP32, M5-14; 0 removes it); false if the chip has no such option
+    fn set_psram(&mut self, _bytes: usize) -> bool {
+        false
+    }
     /// Attach a screen on SPI2 (pins per chip crate's `lcd_pin` / `co5300_pin`); false when the chip lacks that model
     fn lcd_attach(&mut self, _kind: LcdKind) -> bool {
         false

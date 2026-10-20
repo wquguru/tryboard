@@ -313,6 +313,12 @@ pub extern "C" fn tb_efuse_pkg(pkg: u32) -> i32 {
     with(1, |m| if m.set_efuse_pkg(pkg) { 0 } else { 1 })
 }
 
+/// Quad PSRAM size in MB (classic ESP32: 0 / 2 / 4 / 8). Returns 0 on success.
+#[no_mangle]
+pub extern "C" fn tb_psram(mb: u32) -> i32 {
+    with(1, |m| if m.set_psram_mb(mb) { 0 } else { 1 })
+}
+
 fn i2c_kind(kind: u32) -> Option<&'static str> {
     Some(match kind {
         1 => "ssd1306",

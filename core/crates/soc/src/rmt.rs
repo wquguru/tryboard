@@ -1,5 +1,6 @@
 //! RMT (IR remote / generic pulse TX+RX). C3: 2 TX (CH0/1) + 2 RX (CH2/3), RAM at base+0x400; S3: 4 TX + 4 RX, RAM at base+0x800; same layout rules (`RmtLayout`,
 //! rmt_reg.h), TX IRQ bits end = ch, err = 4+ch, thres = 8+ch, loop = 12+ch; 48 32-bit items per block. Item: [14:0] dur0, 15 level0, [30:16] dur1, 31 level1; dur 0 = end.
+//! Classic ESP32 (`RmtLayout::ESP32`, M5-11): 8 channels x 64 words, CONF0/CONF1 pairs, IRQ end = 3ch / err = 3ch+2 / thres = 24+ch, global wrap in APB_CONF, TX only.
 //! TX advances lazily: `update(now)` consumes elapsed half-items, records level edges (`edges`), raises thres / end / err IRQs, returns the next due time.
 //! RX (P2-05): input via GPIO matrix (RMT_SIG_IN0_IDX matches output numbering), fed by the SoC to `rx_input` on pin changes. After rx_en, start at the first
 //! edge, write each level's ticks as a half-item; a level held > idle_thres ticks ends the frame (0-length half-item pads it, RX_END). Filter in `sigin`; rx_lim
@@ -29,6 +30,10 @@ pub struct RmtLayout {
     pub rx_end_bit: u32,
     pub rx_err_bit: u32,
     pub rx_thr_bit: u32,
+    /// 32-bit items per RAM block (C3 / S3 48, ESP32 64)
+    pub block: usize,
+    /// Classic ESP32 register map (CONF0 + CONF1 per channel, wrap in APB_CONF, per-channel clock)
+    pub classic: bool,
 }
 
 impl RmtLayout {
@@ -43,6 +48,8 @@ impl RmtLayout {
         rx_end_bit: 2,
         rx_err_bit: 6,
         rx_thr_bit: 10,
+        block: BLOCK_WORDS,
+        classic: false,
     };
     pub const S3: RmtLayout = RmtLayout {
         ntx: 4,
@@ -55,6 +62,24 @@ impl RmtLayout {
         rx_end_bit: 16,
         rx_err_bit: 20,
         rx_thr_bit: 24,
+        block: BLOCK_WORDS,
+        classic: false,
+    };
+    /// Classic ESP32 (soc/esp32/register/soc/rmt_struct.h): 8 TX-capable channels, CHnCONF0/1 at 0x20 + 8n,
+    /// STATUS 0x60, INT_RAW 0xa0, TX_LIM 0xd0, APB_CONF 0xf0, RAM +0x800; RX not modelled (nrx = 0).
+    pub const ESP32: RmtLayout = RmtLayout {
+        ntx: 8,
+        nrx: 0,
+        ram_off: 0x800,
+        sig_out0: 87,
+        int_mask: 0xffff_ffff,
+        rx_mem_shift: 24,
+        rx_mem_mask: 15,
+        rx_end_bit: 1,
+        rx_err_bit: 2,
+        rx_thr_bit: 24,
+        block: 64,
+        classic: true,
     };
     /// CONF0 of RX channel i (CONF1 at +4)
     pub fn rx_conf0(&self, i: usize) -> u32 {
@@ -66,14 +91,32 @@ impl RmtLayout {
     pub fn conf0(&self) -> u32 {
         4 * self.n() as u32
     }
+    /// Word stride between TX channels' CONF0 (classic has CONF0 + CONF1 pairs)
+    fn conf_stride(&self) -> u32 {
+        if self.classic {
+            8
+        } else {
+            4
+        }
+    }
     pub fn status(&self) -> u32 {
-        self.conf0() + 4 * self.ntx as u32 + 8 * self.nrx as u32
+        self.conf0() + self.conf_stride() * self.ntx as u32 + 8 * self.nrx as u32
     }
     pub fn int_raw(&self) -> u32 {
-        self.status() + 4 * self.n() as u32
+        // Classic has 8 APB_MEM_ADDR words between STATUS and INT_RAW
+        self.status() + 4 * self.n() as u32 * if self.classic { 2 } else { 1 }
     }
     pub fn tx_lim(&self) -> u32 {
         self.int_raw() + 0x10 + 4 * self.n() as u32
+    }
+    /// Interrupt bits of TX channel ch: (end, error, threshold, loop count)
+    pub fn tx_bits(&self, ch: usize) -> (u32, u32, u32, Option<u32>) {
+        let c = ch as u32;
+        if self.classic {
+            (3 * c, 3 * c + 2, 24 + c, None)
+        } else {
+            (c, 4 + c, 8 + c, Some(12 + c))
+        }
     }
     pub fn sys_conf(&self) -> u32 {
         self.tx_lim() + 4 * self.n() as u32
@@ -134,6 +177,27 @@ impl Default for Rmt {
 impl Rmt {
     pub fn new(layout: RmtLayout) -> Rmt {
         let mut regs = [0u32; 0x100 / 4];
+        let n = layout.ntx + layout.nrx;
+        let tx = vec![Tx::default(); layout.ntx];
+        if layout.classic {
+            // CONF0: div=2, idle_thres=0x1000, mem_size=1, carrier on; CONF1: mem_owner=1, filter_thres=15; LIM 0x80
+            for ch in 0..layout.ntx {
+                regs[8 + 2 * ch] = 0x3110_0002;
+                regs[9 + 2 * ch] = 0xf20;
+                regs[(layout.tx_lim() / 4) as usize + ch] = 0x80;
+            }
+            return Rmt {
+                layout,
+                regs,
+                ram: vec![0; layout.block * n],
+                tx,
+                rx: Vec::new(),
+                int_raw: 0,
+                int_ena: 0,
+                level: vec![false; layout.ntx],
+                edges: Vec::new(),
+            };
+        }
         // Resets: TX CONF0 mem_size=1, div=2, idle_out_en; LIM 0x80; SYS_CONF sclk_sel=1 (APB), apb_fifo_mask
         for ch in 0..layout.ntx {
             regs[(layout.conf0() / 4) as usize + ch] = 0x0071_0200;
@@ -148,12 +212,11 @@ impl Rmt {
         }
         regs[(layout.sys_conf() / 4) as usize] = 0x0500_0010;
         regs[0xcc / 4] = 0x2006231;
-        let n = layout.ntx + layout.nrx;
         Rmt {
             layout,
             regs,
-            ram: vec![0; BLOCK_WORDS * n],
-            tx: vec![Tx::default(); layout.ntx],
+            ram: vec![0; layout.block * n],
+            tx,
             rx: vec![Rx::default(); layout.nrx],
             int_raw: 0,
             int_ena: 0,
@@ -163,12 +226,51 @@ impl Rmt {
     }
 
     fn conf0(&self, ch: usize) -> u32 {
-        self.regs[(self.layout.conf0() / 4) as usize + ch]
+        let stride = (self.layout.conf_stride() / 4) as usize;
+        self.regs[(self.layout.conf0() / 4) as usize + ch * stride]
+    }
+
+    /// Classic CONF1 of channel ch (tx_start, conti, idle level, clock select)
+    fn conf1(&self, ch: usize) -> u32 {
+        self.regs[9 + 2 * ch]
     }
 
     fn mem_words(&self, ch: usize) -> usize {
-        let blocks = ((self.conf0(ch) >> 16) & 7).max(1) as usize;
-        (blocks * BLOCK_WORDS).min(BLOCK_WORDS * (self.layout.ntx + self.layout.nrx - ch))
+        let l = self.layout;
+        let blocks = if l.classic {
+            (self.conf0(ch) >> 24) & 15
+        } else {
+            (self.conf0(ch) >> 16) & 7
+        };
+        (blocks.max(1) as usize * l.block).min(l.block * (l.ntx + l.nrx - ch))
+    }
+
+    /// Continuous (loop) mode
+    fn tx_conti(&self, ch: usize) -> bool {
+        if self.layout.classic {
+            self.conf1(ch) & (1 << 6) != 0
+        } else {
+            self.conf0(ch) & (1 << 3) != 0
+        }
+    }
+
+    /// Wrap at the end of channel memory (classic: global APB_CONF.mem_tx_wrap_en)
+    fn tx_wrap(&self, ch: usize) -> bool {
+        if self.layout.classic {
+            self.regs[(self.layout.sys_conf() / 4) as usize] & 2 != 0
+        } else {
+            self.conf0(ch) & (1 << 4) != 0
+        }
+    }
+
+    /// Idle output level when idle_out_en is set
+    fn tx_idle(&self, ch: usize) -> Option<bool> {
+        let (c, en, lv) = if self.layout.classic {
+            (self.conf1(ch), 19, 18)
+        } else {
+            (self.conf0(ch), 6, 5)
+        };
+        (c & (1 << en) != 0).then_some(c & (1 << lv) != 0)
     }
 
     /// RMT source clock (SYS_CONF.sclk_sel)
@@ -189,6 +291,17 @@ impl Rmt {
     }
 
     fn tick_cycles_x256(&self, ch: usize) -> u64 {
+        if self.layout.classic {
+            // ref_always_on: APB 80 MHz, else REF_TICK 1 MHz; no group divider
+            let div = self.conf0(ch) & 0xff;
+            let div = if div == 0 { 256 } else { div as u64 };
+            let src = if self.conf1(ch) & (1 << 17) != 0 {
+                80_000_000
+            } else {
+                1_000_000
+            };
+            return CPU_HZ * 256 * div / src;
+        }
         self.cycles_x256((self.conf0(ch) >> 8) & 0xff)
     }
 
@@ -213,18 +326,25 @@ impl Rmt {
                 .copied()
                 .unwrap_or(0);
         }
+        if l.classic && (0x60..0x80).contains(&off) {
+            // CHnSTATUS: mem_waddr_ex[9:0], mem_raddr_ex[19:10], state[22:20] (1 = sending)
+            let ch = ((off - 0x60) / 4) as usize;
+            let t = &self.tx[ch];
+            let base = (ch * l.block) as u32;
+            return base | (base + t.rd as u32) << 10 | if t.active { 1 << 20 } else { 0 };
+        }
         let st = l.status();
         let ir = l.int_raw();
         // CHnSTATUS (TX): mem_raddr_ex[8:0], state[11:9] (0 idle / 1 sending)
         if off >= st && off < st + 4 * l.ntx as u32 {
             let ch = ((off - st) / 4) as usize;
             let t = &self.tx[ch];
-            return (t.rd as u32 + (ch * BLOCK_WORDS) as u32) | if t.active { 1 << 9 } else { 0 };
+            return (t.rd as u32 + (ch * l.block) as u32) | if t.active { 1 << 9 } else { 0 };
         }
         // RX STATUS: mem_waddr_ex (absolute item index; IDF subtracts channel start for count), apb_mem_raddr, state[24:22]
         if off >= st + 4 * l.ntx as u32 && off < st + 4 * l.n() as u32 {
             let i = ((off - st) / 4) as usize - l.ntx;
-            let base = ((l.ntx + i) * BLOCK_WORDS) as u32;
+            let base = ((l.ntx + i) * l.block) as u32;
             let r = &self.rx[i];
             return (base + r.wr as u32) | (base << 11) | if r.started { 1 << 22 } else { 0 };
         }
@@ -245,6 +365,27 @@ impl Rmt {
             return;
         }
         let (c0, ir, lim) = (l.conf0(), l.int_raw(), l.tx_lim());
+        if l.classic && off >= c0 && off < c0 + 8 * l.ntx as u32 {
+            let ch = ((off - c0) / 8) as usize;
+            if (off - c0).is_multiple_of(8) {
+                self.regs[off as usize / 4] = v;
+                return;
+            }
+            // CONF1 pulses read back 0 (IDF read-modify-writes CONF1, a sticky tx_start would retrigger):
+            // tx_start, mem_wr_rst, mem_rd_rst, apb_mem_rst, ref_cnt_rst
+            self.regs[off as usize / 4] = v & !(1 | 4 | 8 | 16 | 1 << 16);
+            if v & 8 != 0 {
+                self.tx[ch].rd = 0;
+                self.tx[ch].half = 0;
+            }
+            if v & 1 != 0 {
+                self.start(ch, now);
+            }
+            if !self.tx[ch].active {
+                self.set_idle(ch, now);
+            }
+            return;
+        }
         if off >= c0 && off < c0 + 4 * l.ntx as u32 {
             let ch = ((off - c0) / 4) as usize;
             // Self-clearing: tx_start, mem_rd_rst, apb_mem_rst, afifo_rst, conf_update, tx_stop
@@ -318,9 +459,8 @@ impl Rmt {
     }
 
     fn set_idle(&mut self, ch: usize, t: u64) {
-        let c = self.conf0(ch);
-        if c & (1 << 6) != 0 {
-            self.emit(ch, t, c & (1 << 5) != 0);
+        if let Some(lv) = self.tx_idle(ch) {
+            self.emit(ch, t, lv);
         }
     }
 
@@ -341,7 +481,7 @@ impl Rmt {
     fn begin_half(&mut self, ch: usize, t: u64) {
         // In loop mode an end marker right after another would loop forever: cap iterations per call
         for _ in 0..4 {
-            let base = ch * BLOCK_WORDS;
+            let base = ch * self.layout.block;
             let idx = (base + self.tx[ch].rd) % self.ram.len();
             let item = self.ram[idx];
             let (dur, lv) = if self.tx[ch].half == 0 {
@@ -358,27 +498,30 @@ impl Rmt {
                 return;
             }
             // End marker
-            if self.conf0(ch) & (1 << 3) != 0 {
+            let (end, _, _, loop_bit) = self.layout.tx_bits(ch);
+            if self.tx_conti(ch) {
                 // Continuous (loop) mode: restart from the beginning
                 let lim = self.lim_reg(ch);
                 let tx = &mut self.tx[ch];
                 tx.rd = 0;
                 tx.half = 0;
                 tx.loops += 1;
-                if lim & (1 << 19) != 0 && tx.loops >= (lim >> 9) & 0x3ff {
-                    tx.loops = 0;
-                    self.int_raw |= 1 << (12 + ch);
+                if let Some(b) = loop_bit {
+                    if lim & (1 << 19) != 0 && tx.loops >= (lim >> 9) & 0x3ff {
+                        tx.loops = 0;
+                        self.int_raw |= 1 << b;
+                    }
                 }
                 continue;
             }
             self.tx[ch].active = false;
-            self.int_raw |= 1 << ch; // TX_END
+            self.int_raw |= 1 << end; // TX_END
             self.set_idle(ch, t);
             return;
         }
         // Back-to-back end markers (empty loop): stop here
         self.tx[ch].active = false;
-        self.int_raw |= 1 << (4 + ch);
+        self.int_raw |= 1 << self.layout.tx_bits(ch).1;
     }
 
     fn end_half(&mut self, ch: usize) {
@@ -390,16 +533,17 @@ impl Rmt {
             self.tx[ch].rd += 1;
             self.tx[ch].sent += 1;
             let lim = self.tx_lim(ch);
+            let (_, err, thr, _) = self.layout.tx_bits(ch);
             if lim > 0 && self.tx[ch].sent.is_multiple_of(lim) {
-                self.int_raw |= 1 << (8 + ch); // TX_THR_EVENT
+                self.int_raw |= 1 << thr; // TX_THR_EVENT
             }
             if self.tx[ch].rd >= self.mem_words(ch) {
-                if self.conf0(ch) & (1 << 4) != 0 {
+                if self.tx_wrap(ch) {
                     self.tx[ch].rd = 0; // wrap
                 } else {
                     // Reached end of channel memory without an end marker: error and stop
                     self.tx[ch].active = false;
-                    self.int_raw |= 1 << (4 + ch);
+                    self.int_raw |= 1 << err;
                     self.set_idle(ch, t);
                     return;
                 }
@@ -442,13 +586,13 @@ impl Rmt {
         let l = self.layout;
         let blocks = ((self.rx_conf(i).0 >> l.rx_mem_shift) & l.rx_mem_mask).max(1) as usize;
         let ch = l.ntx + i;
-        (blocks * BLOCK_WORDS).min(BLOCK_WORDS * (l.n() - ch))
+        (blocks * l.block).min(l.block * (l.n() - ch))
     }
 
     /// Write a half-item (ticks, level); on a full item advance the write pointer, handle threshold IRQ / wrap / overflow
     fn rx_put(&mut self, i: usize, ticks: u64, lv: bool) {
         let l = self.layout;
-        let base = (l.ntx + i) * BLOCK_WORDS;
+        let base = (l.ntx + i) * l.block;
         let r = self.rx[i];
         let idx = (base + r.wr) % self.ram.len();
         let half = (ticks.min(0x7fff) as u32) | (lv as u32) << 15;
@@ -721,6 +865,66 @@ mod tests {
         r.update(10_000);
         assert!(r.irq());
         assert_eq!(r.read(0x74), 1 << 2);
+    }
+
+    /// Classic ESP32 channel 1: 64-word blocks, CONF0/CONF1 pairs, global wrap in APB_CONF, IRQ bits 3n / 3n+2 / 24+n.
+    /// 100 items (> one block) of WS2812 data ping-pong through the wrap; the frame decodes intact.
+    #[test]
+    fn esp32_layout_wrap_and_decode() {
+        let l = RmtLayout::ESP32;
+        assert_eq!(
+            (l.conf0(), l.status(), l.int_raw(), l.tx_lim(), l.sys_conf()),
+            (0x20, 0x60, 0xa0, 0xd0, 0xf0)
+        );
+        let mut r = Rmt::new(l);
+        let ram = 0x800 + 64 * 4; // channel 1's block
+        let colors: Vec<u8> = (0..12).map(|k| (k * 23) as u8).collect(); // 4 pixels = 96 bits
+        let bit = |k: usize| colors[k / 8] >> (7 - k % 8) & 1 != 0;
+        let enc = |k: usize| {
+            if k < 96 {
+                if bit(k) {
+                    item(8, 4)
+                } else {
+                    item(4, 8)
+                }
+            } else {
+                0
+            }
+        };
+        for k in 0..64 {
+            r.write(ram + 4 * k as u32, enc(k), 0);
+        }
+        r.write(0xf0, 3, 0); // fifo_mask, mem_tx_wrap_en
+        r.write(0xd4, 32, 0); // ch1 tx_lim
+        r.write(0xa8, 1 << 3 | 1 << 5 | 1 << 25, 0);
+        r.write(0x28, (1 << 24) | 8, 0); // ch1 CONF0: mem_size 1, div 8
+                                         // CONF1: APB clock, idle out low enabled, mem_rd_rst + tx_start
+        r.write(0x2c, 1 << 19 | 1 << 17 | 8 | 1, 0);
+        assert_eq!(r.read(0x2c) & 1, 0, "tx_start reads back 0");
+        let (mut d, mut now, mut next_fill) = (Ws2812::default(), 0u64, 64usize);
+        while now < 400_000 {
+            let n = r.update(now);
+            if r.int_raw & (1 << 25) != 0 {
+                // Refill the half just sent (IDF ping-pong)
+                r.write(0xac, 1 << 25, now);
+                for _ in 0..32 {
+                    r.write(ram + 4 * (next_fill % 64) as u32, enc(next_fill), now);
+                    next_fill += 1;
+                }
+            }
+            for (t, c, lv) in r.edges.drain(..) {
+                assert_eq!(c, 1);
+                d.feed(t, lv);
+            }
+            d.finalize(now);
+            now = n.min(now + 500);
+        }
+        assert_eq!(r.int_raw & (1 << 5), 0, "no TX error");
+        assert!(r.int_raw & (1 << 3) != 0, "TX_END ch1");
+        assert!(r.irq());
+        assert_eq!(d.frames, 1);
+        let rgb: Vec<[u8; 3]> = colors.chunks(3).map(|g| [g[1], g[0], g[2]]).collect();
+        assert_eq!(d.rgb, rgb);
     }
 
     /// S3 RX channel 0 (hw channel 4): 1 MHz resolution, 12 ms idle ends; one 1000 us high pulse -> one item {1000, 1, 0, 0}

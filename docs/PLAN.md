@@ -206,10 +206,10 @@
 | M5-08 | Cardputer / Cardputer-Adv：ST7789、键盘部件（74HC138 矩阵 / TCA8418）、I2S PDM 接收 | 识别正确；脚本按键回显到屏；麦克风读数非零 | ☐ |
 | M5-09 | 网页：M5 板预设（3D 外壳程序生成、板载器件自动出现、Grove 口）+ Grove Unit：ENV III（SHT30 + QMP6988）、ENV IV（SHT40 + BMP280） | agent-browser：选 M5 板 → 示例跑起 → 接 ENV IV → 读数；网页与 CLI 指纹一致；390×844 无横向滚动 | ☐ |
 | M5-10 | 经典 ESP32 GP-SPI（HSPI / VSPI）+ SPI DMA | IDF spi_master 示例与 QEMU 对照 | ☐ |
-| M5-11 | 经典 ESP32 RMT（8 通道、64 字块） | IDF led_strip 示例；WS2812 帧与 C3 一致 | ☐ |
+| M5-11 | 经典 ESP32 RMT（8 通道、64 字块） | IDF led_strip 示例；WS2812 帧与 C3 一致 | ☑ 2026-10-20（esp32-ws2812；QEMU 无 RMT，该例 QEMU 关闭；RX/载波未建模） |
 | M5-12 | 经典 ESP32 I2S（含 PDM RX）+ ADC1 | IDF 示例；麦克风 / 电池电压读数 | ☐ |
 | M5-13 | StickC Plus2、Core2（v1.0 AXP192 / v1.1 AXP2101）、Atom Lite / Matrix | 各板 m5-probe 识别正确；屏截图 | ☐ |
-| M5-14 | 经典 ESP32：flash 芯片 ID 容量随镜像头（8 / 16 MB）、PSRAM（PICO-V3-02 内置 2 MB、Core2 8 MB，四线） | m5-probe（stickc_plus2 / core2）不再因 flash 容量 / PSRAM 断言；IDF CONFIG_SPIRAM 示例内存测试通过 | ☐ |
+| M5-14 | 经典 ESP32：flash 芯片 ID 容量随镜像头（8 / 16 MB）、PSRAM（PICO-V3-02 内置 2 MB、Core2 8 MB，四线） | m5-probe（stickc_plus2 / core2）不再因 flash 容量 / PSRAM 断言；IDF CONFIG_SPIRAM 示例内存测试通过 | ☑ 2026-10-20（esp32-psram / -8mb / -pico；QEMU 4 MB 一致；himem、2T、时序未建模） |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。

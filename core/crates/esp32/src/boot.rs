@@ -117,6 +117,12 @@ pub fn parse_app(flash: &[u8], off: u32) -> Result<AppInfo, String> {
     })
 }
 
+/// The app's esp_flash probe compares the JEDEC capacity byte (log2 of bytes) with the image header size,
+/// so the modelled part grows with the header (never below the 4MB the flash buffer is padded to)
+pub fn jedec_for_size(jedec: u32, size: usize) -> u32 {
+    (jedec & 0xffff) | size.max(4 << 20).trailing_zeros() << 16
+}
+
 fn flash_size(code: u8) -> usize {
     match code {
         0 => 1 << 20,
@@ -235,7 +241,8 @@ impl Esp32 {
             }
         }
         m.bus.flash = flash;
-        let jedec = m.bus.spi1.inner.jedec;
+        let jedec = jedec_for_size(m.bus.spi1.inner.jedec, size);
+        m.bus.spi1.inner.jedec = jedec;
         init_flashchip(&mut m, flash_size(size_code), jedec)?;
         enter_windowed(&mut m.cpu, &mut m.bus, app.entry, STACK_PRO, SPILL_PRO)?;
         Ok((m, app))
@@ -265,6 +272,10 @@ impl Esp32 {
         bus.ws2812 = std::mem::take(&mut old.ws2812);
         bus.pins = std::mem::take(&mut old.pins);
         bus.audio = std::mem::take(&mut old.audio);
+        // Board facts survive a reset: package eFuse, revision marker, PSRAM chip (its contents stay powered)
+        bus.efuse = old.efuse;
+        bus.chip_v3 = old.chip_v3;
+        bus.spi1.psram = std::mem::take(&mut old.spi1.psram);
         let flash = std::mem::take(&mut old.flash);
         let rom = std::mem::take(&mut self.rom_elf);
         let (mut m, _) = Esp32::boot_with(&rom, flash, bus)?;
