@@ -144,6 +144,10 @@ pub trait Chip {
     fn set_psram(&mut self, _bytes: usize) -> bool {
         false
     }
+    /// S3: wire the PSRAM die as quad (QSPI) instead of octal; false when the chip has no such choice
+    fn set_psram_quad(&mut self, _quad: bool) -> bool {
+        false
+    }
     /// Attach a screen on SPI2 (pins per chip crate's `lcd_pin` / `co5300_pin`); false when the chip lacks that model
     fn lcd_attach(&mut self, _kind: LcdKind) -> bool {
         false
@@ -154,6 +158,10 @@ pub trait Chip {
     }
     fn lcd(&mut self) -> Option<&mut Lcd> {
         None
+    }
+    /// Wiring `lcd_attach` uses, and the base that `--spi kind@pins` overrides
+    fn lcd_default_pins(&self) -> LcdPins {
+        LcdPins::S3_DEFAULT
     }
     /// SPI2 transfer stats (count, MOSI bytes)
     fn spi2_stats(&self) -> (u64, u64) {
@@ -170,6 +178,10 @@ pub trait Chip {
         false
     }
     fn attach_mic(&mut self) -> bool {
+        false
+    }
+    /// Speaker sink on board-specific pins (amp on a board preset, e.g. CoreS3 AW88298); false when unsupported
+    fn attach_speaker_at(&mut self, _pins: crate::devices::audio::Pins) -> bool {
         false
     }
 

@@ -13,6 +13,7 @@ pub mod codec;
 pub mod cst816s;
 pub mod cst9220;
 pub mod dcs;
+pub mod ds18b20;
 pub mod ft6236;
 pub mod imu;
 pub mod ina3221;
@@ -55,6 +56,7 @@ pub fn make_i2c(kind: &str, addr: u8) -> Option<Box<dyn I2cDevice>> {
         "ft3267" => Box::new(ft6236::Ft6236::with_cipher(addr, ft6236::CHIP_ID_FT3267)),
         "ina3221" => Box::new(ina3221::Ina3221::new(addr)),
         "ltr553" => Box::new(codec::Codec::ltr553(addr)),
+        "gc0308" => Box::new(codec::Codec::gc0308(addr)),
         "aw88298" => Box::new(aw88298::Aw88298::new(addr)),
         _ => return None,
     })

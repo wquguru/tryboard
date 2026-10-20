@@ -305,6 +305,8 @@ impl Board {
             "inmp441" => Some(0.0014),
             // DHT11 datasheet: 0.2-1 mA average while sampling (upper end used)
             "dht11" => Some(0.001),
+            // DS18B20: 1 mA while converting, ~1 µA idle; a 1 s polling loop averages well under this
+            "ds18b20" => Some(0.001),
             _ => None,
         }
     }

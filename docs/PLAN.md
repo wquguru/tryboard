@@ -202,14 +202,41 @@
 | M5-04 | I2C 器件模型：MPU6886、BMI270(+BMM150 AUX)、BM8563、AW9523、AXP192、LP5562、TCA8418、FT6336U / FT3267 ID、INA3221、LTR-553 / AW88298 应答壳 | 每颗单测（ID、关键寄存器、随环境变化） | ☑ 2026-10-20（Reviews/ab/M5-04.md） |
 | M5-05 | 核心板预设 `--board <m5-*>`（CLI + wasm）：自动挂板载器件、引脚、封装号；M5Dial 跑通 | m5-probe 在 Dial 上识别为 board_M5Dial；圆屏截图；旋钮 / 触摸 / RTC 输出与脚本一致 | ☑ 2026-10-20（M5Dial 全通：探测 board=M5Dial、编码器 / 触摸 / RTC / 按键；蜂鸣器、RFID、PSRAM 未建模；其余板为未验证桩，见 M5-06..13） |
 | M5-06 | AtomS3 / AtomS3 Lite / AtomS3R | 三块识别正确；屏截图；IMU 读数随姿态变化 | ☐ |
-| M5-07 | CoreS3 / CoreS3-SE（摄像头不做，SE 识别靠 GC0308 不应答） | 识别正确；ILI9342 截图；触摸 / IMU / PMIC 电量；喇叭 I2S 有输出 | ☐ |
+| M5-07 | CoreS3 / CoreS3-SE（摄像头不做，SE 识别靠 GC0308 不应答） | 识别正确；ILI9342 截图；触摸 / IMU / PMIC 电量；喇叭 I2S 有输出 | ☑ 2026-10-20（CoreS3 / SE 识别、ILI9342C 截图、触摸 / IMU / 电量、喇叭 1 kHz；修 S3 四线 PSRAM 与 I2S 时钟源 1；摄像头只回 ID） |
 | M5-08 | Cardputer / Cardputer-Adv：ST7789、键盘部件（74HC138 矩阵 / TCA8418）、I2S PDM 接收 | 识别正确；脚本按键回显到屏；麦克风读数非零 | ☐ |
 | M5-09 | 网页：M5 板预设（3D 外壳程序生成、板载器件自动出现、Grove 口）+ Grove Unit：ENV III（SHT30 + QMP6988）、ENV IV（SHT40 + BMP280） | agent-browser：选 M5 板 → 示例跑起 → 接 ENV IV → 读数；网页与 CLI 指纹一致；390×844 无横向滚动 | ☐ |
-| M5-10 | 经典 ESP32 GP-SPI（HSPI / VSPI）+ SPI DMA | IDF spi_master 示例与 QEMU 对照 | ☐ |
+| M5-10 | 经典 ESP32 GP-SPI（HSPI / VSPI）+ SPI DMA | IDF spi_master 示例与 QEMU 对照 | ☑ 2026-10-20（esp32-spi-lcd：RDDID 读回、DMA 绘图；StickC Plus2 / Core2 探测跑通；QEMU 无 HSPI/VSPI，只比到 init；从模式未做） |
 | M5-11 | 经典 ESP32 RMT（8 通道、64 字块） | IDF led_strip 示例；WS2812 帧与 C3 一致 | ☑ 2026-10-20（esp32-ws2812；QEMU 无 RMT，该例 QEMU 关闭；RX/载波未建模） |
-| M5-12 | 经典 ESP32 I2S（含 PDM RX）+ ADC1 | IDF 示例；麦克风 / 电池电压读数 | ☐ |
+| M5-12 | 经典 ESP32 I2S（含 PDM RX）+ ADC1 | IDF 示例；麦克风 / 电池电压读数 | ☑ 2026-10-20（esp32-i2s-tone 440 Hz、esp32-pdm-mic 1 kHz、esp32-adc GPIO38 五档 1%；PDM 按 PCM 层建模；QEMU 无 I2S / ADC） |
 | M5-13 | StickC Plus2、Core2（v1.0 AXP192 / v1.1 AXP2101）、Atom Lite / Matrix | 各板 m5-probe 识别正确；屏截图 | ☐ |
 | M5-14 | 经典 ESP32：flash 芯片 ID 容量随镜像头（8 / 16 MB）、PSRAM（PICO-V3-02 内置 2 MB、Core2 8 MB，四线） | m5-probe（stickc_plus2 / core2）不再因 flash 容量 / PSRAM 断言；IDF CONFIG_SPIRAM 示例内存测试通过 | ☑ 2026-10-20（esp32-psram / -8mb / -pico；QEMU 4 MB 一致；himem、2T、时序未建模） |
+
+## F · 留存与传播（2026-10-20 人确认开工；评估、调研、派单手册见 docs/plan-F/）
+
+依据 `docs/plan-F/EVAL.md` §5、提示词见 `docs/plan-F/DISPATCH.md`。与 M5 专项重叠的：F-10a 并入 M5-10（经典 ESP32 GP-SPI），CYD 示例在 M5-10 合并后补；F-10b（ADC）、F-10d（I2S）并入 M5-12；F-04b 等 M5-01（参数化 DCS 屏）合并后再开。
+
+| ID | 内容 | 验收 | 状态 |
+|---|---|---|---|
+| F-01a | 台面状态 v1 + `?s=` 分享链接（内置固件；剥 Wi-Fi 凭据和真网回包） | share.mjs：链接打开后串口与 CLI 重放逐字节一致 | ◐ |
+| F-01b | `.tryboard` 作品文件（> 8k 或自带 bin） | share.mjs 往返用例 | ☐ |
+| F-02 | 分享卡：MP4 + 自写二维码 + 链接；修 Safari 录屏扩展名 | sharecard.mjs 解码二维码 = 链接 | ☐ |
+| F-03 | 独立 embed.html（点击加载、不写 localStorage） | embed.mjs | ☐ |
+| F-03b | 分享 / 嵌入页按原速回放 | 回放结束指纹 = 快进 | ☐ |
+| F-04a | 已建模器件全部上网页元件库 + 3D + 手机 | levels / wiremode / mobile.mjs；网页与 CLI 指纹一致 | ☐ |
+| F-04b | ILI9341 + SH1106 模型；ST7789 / ILI9341 裸屏 C3、S3 验收（等 M5-01） | accept 截图核对 | ☐ |
+| F-04c | DS18B20 单总线（含 SEARCH ROM） | accept：温度随 --env | ☑ CLI + 模型（c3-ds18b20 / -cold / -absent、s3-ds18b20 通过）；网页未做 |
+| F-04d | PIR / LDR / 继电器 + RC522（读 UID） | accept + 脚本动作可重放 | ◐ |
+| F-04e | AHT20 + INA219 + DS3231 | accept | ☐ |
+| F-05 | 故障挑战关卡 3–5 个（缺的 CLI 故障开关一并补） | check.py --ref --all；faults.mjs 网页判定一致 | ◐ |
+| F-06 | 公开数字自动生成（tools/stats.py；README 标记块 + web/public/stats.json，build_web.sh 调用；首页暂无手写数字） | stats.py --check | ☑ |
+| F-07a | UART > 127 字节修复 + `--script` `\xNN` + MicroPython C3 验收 | golden 字节一致；MicroPython 用例 | ☐ |
+| F-07b | 网页 main.py 编辑器（需人定 MicroPython 分发方式与定位） | micropython.mjs | ☐ |
+| F-08a / F-08b | Arduino 库矩阵 2 × 10 例（MIT / BSD 优先） | accept 矩阵写进 STATUS | ☐ |
+| F-08c | BLE 多 IDF 签名 + osi 版本放宽 + pll_track | 覆盖自测；误匹配 0 | ☐ |
+| F-09a | xiaozhi 虚拟服务端（长连接 TCP + WebSocket + 脚本） | 单测 + golden | ☐ |
+| F-09b | xiaozhi-lite 示例 + 语音面板（需人拍板 RS-2 四项） | accept 3 例 + xiaozhi.mjs | ☐ |
+| F-10c | 经典 ESP32 RMT 收 + 载波 + IR 器件 | esp32-ir accept | ☐ |
+| F-11 | 环境脚本时间轴（先交互稿，人确认后实现） | --inputs 重放指纹一致 | ☐ |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
