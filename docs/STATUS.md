@@ -213,6 +213,7 @@
 - R 批次收尾复测（2026-10-19，main，perf.mjs 3 次）：实验台 4 行长任务桌面 392–396 ms（R-15 前 3160）、手机 4× 1817–1834 ms（R-15 前 4540），12 个桌面行均无约 550 ms 回访卡顿，R-15 改 ☑；accept.sh 全绿、cargo test 156/0、首次打开 36/36 < 300 ms、后台页主线程脚本 25 ms/5 s。
 - R-13（2026-10-19）：配置交叉校验 `tools/check_config.py`（accept.sh 内）0 问题，自测 10/10。
 - R-23（2026-10-20，`web/src/assets.ts` `loadWasmModule`、`live.ts`、`worker.ts`、`verify.ts`、`simrun.ts`、`app/faultsolve.ts`）：wasm 每页只编译一次，worker / 验收 worker / 故障求解共用 `WebAssembly.Module`（结构化克隆，不复制字节）；实时 worker 按 id 缓存 ROM 与固件，boot / seek 只发 id，每次仍是全新实例。`tools/webtest/seektime.mjs`（weather 跑 3 s 后各 10 次，3 轮中位数）：短 seek（50 ms，≈固定上电开销）62.2 → 45.2 ms（−27%），整段 seek（≈3.08 s 回放）164 / 141 → 120 / 109 / 120 ms；主线程长任务前后均 0。replay / levels / tasks / traceio、`npm test` 184/184、`npm_parity.sh` 27/27 一致。
+- R-17（2026-10-20，`tools/fonts/subset.py`、`web/src/ui/tailwind.css`）：Noto Sans SC 切 14 片 unicode-range（Latin 18 KB / CJK 标点 3 / 假名 42 / 页面用字按字频 4 片 54–112 / 其余 GB2312 一级 7 片 77–122），字重轴收窄 400–700、去掉竖排 / 宽度替换特性；栈改 'TB Sans'（Latin 片别名）→ 系统 CJK → 'Noto Sans SC'。perf.mjs 桌面 font 字节 首页 / 选板 / 实验台 1317 → 84 KB；fonts.css 30 KB（gzip 11 KB，计入 css）。macOS 上 zh / ja / ko 首页与实验台均只下 Latin + 等宽；强制只用 'Noto Sans SC' 时扫描字、未扫描的一级字、假名、标点 400 / 700 都有字形（Reviews/ab/R-17.md）。mobile.mjs PASS、npm test 184/0、media.mjs 8 PASS（拍照角标、成品 3D 表盘 ℃ 正常）。缺口：Linux / Android 没有 PingFang / 雅黑时 zh 页面会取 3–4 个用字片（约 370 KB，仍比原来 1.25 MB 少）。
 - 命令行模拟速度（5 s 模拟）：s3-lvgl 123.6 MIPS（0.79× 实时）、wifi-http 104.4 MIPS、esp32-blink 69.2 MIPS（大部分时间空闲）。
 
 ### C-04 FreeRTOS 任务时间线（2026-10-19）

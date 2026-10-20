@@ -1029,3 +1029,11 @@
 - ES8311 / ES7210 合一个 `devices/codec.rs` 应答空壳：ID 值取乐鑫公开驱动读到的值（ES8311 0xFD/0xFE = 0x83/0x11，ES7210 0x3D/0x3E = 0x72/0x10），未逐字对数据手册。
 - 对外名字（E-03 网页用）：`--i2c cst9220@0x5a,axp2101@0x34,pcf85063@0x51,es8311@0x18,es7210@0x40`、`--battery PCT[,usb]`、`--rtc EPOCH`；输入日志 / 脚本动作 `bat=pct[,usb]`、`pwrkey=short|long`；wasm `tb_i2c_attach(6..11)`、`tb_battery(pct, usb)`、`tb_pwrkey(long)`、`tb_rtc_set(epoch)`。`tb_touch` 仍把坐标夹到 0..239，E-03 要改成按屏尺寸。
 - 替代：五颗器件做一个「板级 I2C 包」——否，按器件分文件与现有约定一致，也方便别的板复用。
+
+## 2026-10-20 字体按需切片与字体栈（R-17）
+- 决定：subset.py 把 Noto Sans SC 子集切成多片 unicode-range（同 family 多个 @font-face）：Latin（U+2E80 以下所有扫描字，含通用标点、箭头、℃）、CJK 标点、假名、页面用到的汉字按扫描字频每 400 字一片、其余 GB2312 一级字按码位每 400 字一片；共 14 片，浏览器只取页面实际渲染到的片。可变字重轴用 fontTools instancer 收窄到 400–700（CSS 里只用到 400 / 500 / 600 / 700），GSUB 只留横排用的特性（去掉 vert / hwid / pwid 等，假名片 128 → 42 KB）。源字体里没有的码位（韩文、emoji 等）不再计入子集码位数（浏览器本来就按 cmap 逐字回退，字形没有变化）；`tnum` 保留（CSS 里有 tabular-nums）。
+- 字体栈：新增别名 family 'TB Sans' = 同一个 Latin 片文件（同 URL，只下一次）。全站栈改为 `'TB Sans', <系统 CJK>, 'Noto Sans SC', sans-serif`：默认 / en / zh 系统 CJK 为 PingFang SC、Hiragino Sans GB、Microsoft YaHei；ja 为 Hiragino Sans、Yu Gothic、Noto Sans JP，ko 为 Apple SD Gothic Neo、Malgun Gothic、Noto Sans KR，两者再接 PingFang SC / YaHei（页面上的简体字如「试板」）后才是 Noto。lab.css 的 `--sans` 改为引用 `--tb-sans`（原来没有 ja / ko 分支）；canvas 用 scene-api.ts 的 `PAGE_SANS`，拍照前 `document.fonts.load` 角标文字。
+- 取舍：西文四种语言一致用 Noto（与设计稿一致），汉字 / 假名在 macOS / Windows 上用系统字体，和 P2-19 时「全站 Noto 字形」相比 zh 页面汉字从 Noto 变成苹方 / 雅黑，字形略不同但同属无衬线黑体；换来 en 页面字体 1317 → 84 KB、有系统 CJK 字体的 zh / ja / ko 用户也不下 CJK 片。没有这些系统字体的平台（Linux、部分 Android）退到 Noto 分片，只取用到的片。
+- 代价：fonts.css 从 0.5 KB 变成 30 KB（gzip 11 KB），因为按字频分片的码位不连续、unicode-range 很长；按码位连续分片 CSS 只有约 1 KB，但 zh 页面用字散在所有片里，退回 Noto 时要下几乎全部 1.2 MB，所以选字频。
+- 不变：P2-19 的自托管与来源、OFL（文件名 tb-sans-sc-*.woff2，不用保留名）；等宽字体 tb-mono.woff2 原样（66 KB，保留全部 OpenType 特性，en 首页也会下，是剩下 84 KB 的大头）。
+- 替代：zh 栈 Noto 在前（视觉与原来一致，但 zh 用户每页要下 3–4 片约 370 KB）；`local()` 引用系统 Noto Sans CJK（可变字重下 local 只能对应单一字重，放弃）；en 栈只用系统字体（不下任何字体，但西文在各平台不一致）。

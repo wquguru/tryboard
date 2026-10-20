@@ -14,6 +14,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { servoAngle } from '../views/common';
 import { currentTheme, onTheme, type Theme } from '../theme';
 import { capturableOf, type Capturable } from './capture';
+import { PAGE_SANS } from '../scene-api';
 
 export interface ProductFrame {
   pwm: number[];
@@ -99,7 +100,7 @@ function dialTexture() {
       g.fillText(String(t), cx + (R - 175) * Math.cos(a), cy + (R - 175) * Math.sin(a) - (t === 0 || t === 40 ? 26 : 0));
     }
   }
-  g.font = '500 44px "Noto Sans SC", sans-serif';
+  g.font = `500 44px ${PAGE_SANS}`;
   g.fillStyle = '#8C8C8C';
   g.fillText('℃', cx, cy - 190);
   const tex = new THREE.CanvasTexture(c);

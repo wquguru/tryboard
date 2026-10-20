@@ -170,7 +170,7 @@
 
 | ID | 内容 | 验收 | 状态 |
 |---|---|---|---|
-| R-17 | 字体按需：Noto Sans SC 按 unicode-range 切片（Latin / 常用 CJK 分片），en 页面不下 CJK 片；zh 栈系统字体（PingFang / YaHei）在前；字重只留实际用到的 | perf.mjs 首页 / 选板 en 字体字节 ≤ 150 KB；zh 页面中文字形不缺（截图）；四语言 390×844 无横向滚动 | ☐ |
+| R-17 | 字体按需：Noto Sans SC 按 unicode-range 切片（Latin / 常用 CJK 分片），en 页面不下 CJK 片；zh 栈系统字体（PingFang / YaHei）在前；字重只留实际用到的 | perf.mjs 首页 / 选板 en 字体字节 ≤ 150 KB；zh 页面中文字形不缺（截图）；四语言 390×844 无横向滚动 | ☑ 2026-10-20：en 首页 / 选板 / 实验台 font 1317 → 84 KB（Latin 片 18 + 等宽 66）；zh / ja / ko 在有系统 CJK 字体的机器上也只下这 84 KB，强制 Noto 时按需取 3–5 片（每片 ≤ 122 KB）；字重 400–700 |
 | R-18 | 二进制瘦身：固件截掉尾部 0xFF（加载时补齐语义不变），`.bin` / `.elf` 发预压缩旁文件，`fetchBuf` 用 `DecompressionStream` 解压，失败回退原文件 | 实验台 weather 全部字节降 ≥ 700 KB；所有内置固件 web 与 CLI 指纹一致（levels.mjs、replay.mjs）；accept.sh 全绿 | ☐ |
 | R-19 | 大资源带内容哈希：wasm / ROM / 固件 / 字体 URL 带 hash（manifest 或 `?v=`），可设 immutable 长缓存；写托管缓存建议 | 改一字节 wasm 重建后 URL 变化；二次访问实验台（启用缓存）全部字节 ≤ 100 KB | ☐ |
 | R-20 | 词典不阻塞首屏：按页面拆分（site / select / app），当前语言词典 HTML 里预加载，去掉串行瀑布 | zh 首页词典字节降 ≥ 50%；zh 首页首次渲染不劣化（perf.mjs）；i18n 测试与 lint 全过；四语言走查无缺 key | ☐ |

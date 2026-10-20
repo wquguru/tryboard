@@ -184,7 +184,7 @@ const crates = [];
   const rev = exists(path.join(fd, 'REVISION')) ? rd(path.join(fd, 'REVISION')).trim() : '';
   if (!rev) warn.push('third_party/fonts does not exist (run tools/fonts/fetch.sh first): font license texts not attached');
   const fonts = [
-    { name: 'Noto Sans SC', dir: 'notosanssc', file: 'tb-sans-sc.woff2', ofl: 'OFL-NotoSansSC.txt', copy: 'Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name "Source"' },
+    { name: 'Noto Sans SC', dir: 'notosanssc', file: 'tb-sans-sc-*.woff2 (unicode-range slices)', ofl: 'OFL-NotoSansSC.txt', copy: 'Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name "Source"' },
     { name: 'JetBrains Mono', dir: 'jetbrainsmono', file: 'tb-mono.woff2', ofl: 'OFL-JetBrainsMono.txt', copy: 'Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)' },
   ];
   for (const f of fonts) {
@@ -196,7 +196,7 @@ const crates = [];
       copyright: [f.copy],
       url: rev ? `https://github.com/google/fonts/tree/${rev}/ofl/${f.dir}` : 'https://github.com/google/fonts',
       text: exists(path.join(fd, f.ofl)) ? rd(path.join(fd, f.ofl)) : '',
-      modified: 'Subset to WOFF2 with fonttools (characters used by the pages + the 3755 GB2312 level-1 hanzi; the monospace font keeps its full Latin set); renamed files do not use the Reserved Font Name "Source"',
+      modified: 'Subset to WOFF2 with fonttools (characters used by the pages + the 3755 GB2312 level-1 hanzi, weight axis narrowed to 400-700 and split into unicode-range slices; the monospace font keeps its full Latin set); renamed files do not use the Reserved Font Name "Source"',
       note: `File published on the site: fonts/${f.file}, with ${f.ofl} alongside`,
     });
   }
