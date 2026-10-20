@@ -11,6 +11,7 @@ import type { Pose } from '../imupose';
 import type { ExtSlot, PinRec } from './util';
 import type { ChipId, devboard } from './boards';
 import type { amoledBoard } from './amoled';
+import type { m5Shell } from './m5shell';
 import type { roundLcdModule } from './modules';
 import type { WireRec } from './wires';
 import type { PartSpec, SceneSpec } from './spec';
@@ -44,7 +45,7 @@ export interface BenchCtx {
   setExt: (on: boolean) => void;
   offExt: () => boolean;
   offReport: () => boolean;
-  board: ReturnType<typeof devboard> | ReturnType<typeof amoledBoard>;
+  board: ReturnType<typeof devboard> | ReturnType<typeof amoledBoard> | ReturnType<typeof m5Shell>;
   /** Breadboard group (hidden under an all-in-one board) */
   bbGrp: THREE.Group;
   placeBoard: () => void;
@@ -126,6 +127,8 @@ export interface BenchCtx {
   sw: ShaderWarm;
   ro: ResizeObserver;
   buttonCb: ((n: 'BOOT' | 'RST' | 'PWR', d: boolean) => void) | null;
+  /** M5 shell keys (M5-09c): the preset button's GPIO, driven 0 / 1 like the core's board_button */
+  boardBtnCb: ((pin: number, d: boolean) => void) | null;
   pickCb: ((t: PickTarget | null, s: ScreenPoint) => void) | null;
   keyCb: ((pin: number, down: boolean) => void) | null;
   turnPot: (pot: { pin: number; knob: THREE.Group; hit: THREE.Mesh; v: number; }, v: number) => void;

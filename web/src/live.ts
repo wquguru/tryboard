@@ -325,6 +325,10 @@ export class LiveSim {
   press(down: boolean) {
     this.send({ type: 'gpio', pin: this.bootPin, level: down ? 0 : -1 });
   }
+  /** M5 preset key (M5-09c): press drives 0, release drives 1 (the board pull-up, as the core's board_button; logged gpioN=0|1). */
+  pressBoardPin(pin: number, down: boolean) {
+    this.send({ type: 'gpio', pin, level: down ? 0 : 1 });
+  }
   /** External button: press pulls the pin to GND, release floats it (logged gpioN=0|z). */
   pressPin(pin: number, down: boolean) {
     this.send({ type: 'gpio', pin, level: down ? 0 : -1 });

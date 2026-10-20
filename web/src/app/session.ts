@@ -567,8 +567,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     }
     return sim;
   }
-
   bench.onKey((pin, down) => s.pressPin(pin, down));
+  bench.onBoardButton((pin, down) => s.sim?.pressBoardPin(pin, down));
   // Dragging/scrolling the encoder or moving the obstacle feeds the sim (input log).
   bench.onEncoder((steps) => s.turnEncoder(steps));
   bench.onEncoderPress((down) => s.pressEncoder(down));

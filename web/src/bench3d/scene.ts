@@ -7,8 +7,9 @@ import { poseToThree } from '../imupose';
 import { t } from '../i18n';
 import { PITCH, type ExtSlot, disposeTree, canvasTexture, pinHits } from './util';
 import { type ChipId, apiId, BOARD_C3, BOARDS, LCD_WIRING, BB, rowZ, breadboard, devboard } from './boards';
-import { AMOLED, amoledBoard } from './amoled';
-import { type BoardId, modelBoard } from './boarddevs';
+import { amoledBoard } from './amoled';
+import { m5Shell } from './m5shell';
+import { type BoardId, boardDevs } from './boarddevs';
 import { roundLcdModule, oledModule, bmeModule, ledGlow } from './modules';
 import { type WireRec, wire } from './wires';
 import { type PartSpec, type SceneSpec, DEFAULT_VIEW } from './spec';
@@ -83,7 +84,7 @@ export function* mountState(ctx: BenchCtx): Generator<void> {
     if ('flat' in ctx.board) {
       // All-in-one board lies screen-up on the desk, USB towards the viewer
       ctx.board.grp.rotation.y = 0;
-      ctx.board.grp.position.set(0, ctx.board.T / 2 + 3.2, 0); // resting on the 3.2 mm USB-C shell underneath
+      ctx.board.grp.position.set(0, ctx.board.T / 2 + ctx.board.rest, 0); // AMOLED rests on its 3.2 mm USB-C shell, M5 shells on the desk
       rig.add(ctx.board.grp);
       ctx.board.grp.updateMatrixWorld();
       return;
@@ -304,13 +305,13 @@ export function mountScene(ctx: BenchCtx): void {
   function swapBoard(chip: ChipId, board: BoardId | undefined) {
     const cur = 'boardId' in ctx.board ? ctx.board.boardId : undefined;
     if (board) chip = AIO_CHIP[board];
-    // M5 presets (M5-09b) show the generic dev board of their chip until M5-09c models them
-    const id = modelBoard(board) ? board : undefined;
+    // M5 presets get their procedural enclosure (M5-09c)
+    const id = board && boardDevs(board) ? board : undefined;
     if (cur === id && ctx.board.spec.chip === chip) return false;
     levelRig();
     rig.remove(ctx.board.grp);
     disposeTree(ctx.board.grp);
-    ctx.board = id ? amoledBoard(id) : devboard(BOARDS[chip]);
+    ctx.board = !id ? devboard(BOARDS[chip]) : id === 'ws-amoled216' ? amoledBoard(id) : m5Shell(id);
     placeBoard();
     return true;
   }
@@ -338,7 +339,10 @@ export function mountScene(ctx: BenchCtx): void {
     for (const c of ctx.parts.children) if (!ctx.wires.some((w) => w.grp === c)) box.expandByObject(c);
     box.max.y = Math.min(box.max.y, 40);
     const center = box.getCenter(new THREE.Vector3());
-    const r = box.getSize(new THREE.Vector3()).length() / 2;
+    // A lone M5 shell gets head room (floor 40 mm, ×1.4) so a 24 mm Atom doesn't fill the view and the toolbar doesn't cover it
+    const shell = 'flat' in ctx.board && !!boardDevs(ctx.board.boardId)?.preset;
+    const r0 = box.getSize(new THREE.Vector3()).length() / 2;
+    const r = shell ? Math.max(40, r0 * 1.4) : r0;
     const vfov = (camera.fov * Math.PI) / 180;
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * Math.max(camera.aspect, 0.5));
     const dist = (r / Math.sin(Math.min(vfov, hfov) / 2)) * 0.82;
@@ -373,16 +377,19 @@ export function mountScene(ctx: BenchCtx): void {
     ctx.oledTex = null;
     ctx.lcdTex = null;
     swapBoard(ctx.board.spec.chip, spec.board);
-    if ('flat' in ctx.board) {
-      // Onboard AMOLED: 480×480 texture on the rounded square, which is also the touch surface
+    if ('flat' in ctx.board && ctx.board.screen && ctx.board.lcdPx) {
+      // On-board panel: frame-sized texture (must equal tb_lcd_w / h or setLcd drops frames); touch panels take the finger ray
       const mat = ctx.board.screen.material as THREE.MeshBasicMaterial;
       mat.map?.dispose();
-      mat.map = lcdTexture(480, 480);
+      mat.map = lcdTexture(...ctx.board.lcdPx);
       mat.color.set(0xffffff);
       mat.needsUpdate = true;
-      ctx.touchScreen = ctx.board.screen;
-      ctx.touchHalf = [AMOLED.screen / 2, AMOLED.screen / 2];
+      if (ctx.board.touch) {
+        ctx.touchScreen = ctx.board.screen;
+        ctx.touchHalf = [ctx.board.screenMm[0] / 2, ctx.board.screenMm[1] / 2];
+      }
     }
+    if ('flat' in ctx.board) ctx.leds.push(...ctx.board.gpioLeds);
     ctx.holeUse = new Map();
     partsById.clear();
     partsById.set('board', ctx.board.grp);
@@ -396,7 +403,8 @@ export function mountScene(ctx: BenchCtx): void {
     let ledN = 0;
     let keyN = 0;
     let i2cCol = 21;
-    for (const p of spec.parts) {
+    // All-in-one / M5 boards have no header to wire breadboard parts to: they stay in the sim but aren't drawn (Grove units: M5-09d)
+    for (const p of 'flat' in ctx.board ? [] : spec.parts) {
       if (p.type === 'led') buildLed(ctx.parts, { ...p, col: p.col ?? 24 - 4 * ledN++ });
       if (p.type === 'servo') buildServo(ctx.parts, p);
       if (p.type === 'pot') buildPot(ctx.parts, p);
@@ -450,7 +458,8 @@ export function mountScene(ctx: BenchCtx): void {
     // An example may set the camera (e.g. close up on a screen), otherwise use the default. Cameras are written for the C3 board
     // and shift with the parts on longer boards
     const v = spec.view ?? DEFAULT_VIEW;
-    if (spec.view) {
+    // M5 shells always frame themselves: an example's camera was written for the breadboard it came with
+    if (spec.view && !('flat' in ctx.board && boardDevs(ctx.board.boardId)?.preset)) {
       const dx = colX(0) + ((BOARD_C3.cols - 1) / 2) * PITCH;
       camera.position.set(v.position[0] + dx, v.position[1], v.position[2]);
       controls.target.set(v.target[0] + dx, v.target[1], v.target[2]);

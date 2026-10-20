@@ -43,6 +43,7 @@ export function mountPointer(ctx: BenchCtx): void {
 
   // Board buttons: press / release
   ctx.buttonCb = null;
+  ctx.boardBtnCb = null;
   ctx.pickCb = null;
   let pressed: THREE.Mesh | null = null;
   const pick = (ev: PointerEvent) => {
@@ -220,12 +221,14 @@ export function mountPointer(ctx: BenchCtx): void {
     controls.enabled = false;
     pressed = b;
     b.position.y = b.userData.baseY - 0.4;
-    ctx.buttonCb?.(b.name as 'BOOT' | 'RST' | 'PWR', true);
+    if (typeof b.userData.gpio === 'number') ctx.boardBtnCb?.(b.userData.gpio, true);
+    else ctx.buttonCb?.(b.name as 'BOOT' | 'RST' | 'PWR', true);
   });
   window.addEventListener('pointerup', () => {
     if (!pressed) return;
     pressed.position.y = pressed.userData.baseY;
-    ctx.buttonCb?.(pressed.name as 'BOOT' | 'RST' | 'PWR', false);
+    if (typeof pressed.userData.gpio === 'number') ctx.boardBtnCb?.(pressed.userData.gpio, false);
+    else ctx.buttonCb?.(pressed.name as 'BOOT' | 'RST' | 'PWR', false);
     pressed = null;
     controls.enabled = true;
   });
