@@ -244,7 +244,7 @@ F-10a ──> CYD 示例（F-10a 范围内）
 先读：docs/plan-F/research/RS-1-micropython.md 全文。
 入口：
 - core/crates/soc/src/periph.rs:48 STATUS 读 rxfifo_cnt 被 `.min(127)` 截断；:61 写 INT_CLR 后，FIFO 里还有数据时不会再拉起 RXFIFO_FULL / TOUT 中断 —— 两处一起修，行为对照 TRM（rxfifo_cnt 是 10 位，FIFO 深度按芯片）
-- core/crates/cli/src/main.rs:455 `--script` —— 支持 `\xNN` 转义（发 Ctrl-C / Ctrl-D / raw-paste 控制字节）
+- core/crates/cli/src/main.rs:475 `--script` —— 支持 `\xNN` 转义（发 Ctrl-C / Ctrl-D / raw-paste 控制字节）
 目标：MicroPython v1.29.0 C3 官方 bin 上，raw-paste 一次送 128 字节以上的 main.py 能完整执行。
 范围：
 - tools/fetch_third_party.sh 加可选下载 MicroPython C3 bin 到 third_party/（git 忽略），不提交二进制。
