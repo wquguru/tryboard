@@ -875,5 +875,13 @@ const d: Dict = {
   "Share link copied: it opens this bench and replays your actions": "分享链接已复制：打开后是这个台面，并重放你的操作",
   "Share link copied: it opens this bench with your parts and wiring": "分享链接已复制：打开后是这个台面，带着你的器件和接线",
   "Could not make the share link: {err}": "分享链接没生成出来：{err}",
+  // F-03 embed page
+  "Open in TryBoard": "在 TryBoard 打开",
+  "Click to load the simulator (about 2 MB) and run the firmware": "点一下加载模拟器（约 2 MB）并运行固件",
+  "Could not start the simulator: {err}": "模拟器没能启动：{err}",
+  "Loading the simulator…": "正在加载模拟器…",
+  "Shared bench": "分享的台面",
+  "This embed has no shared bench in its link": "这个嵌入链接里没有分享的台面",
+  "This share link is damaged and cannot be opened": "分享链接已损坏，打不开",
 };
 export default d;

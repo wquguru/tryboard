@@ -333,3 +333,15 @@ web/（Vite + TS）
 - 往后加字段只能可选；改语义就升 `v` 并在 `migrate` 里转换。
 - 打开：`readShare` 在会话启动前解码并把作品改成本地副本（`work.key = share:<fnv>`）；`restoreShare` 在开机后换固件、`session.seek` 快进到 `endMs`，然后接着跑。测试钩子：`__tbShare()` 生成链接，`__tbShareRestored` 是快进结果（stdout / report / endMs）。
 - 验收：`node tools/webtest/share.mjs`。
+
+## 嵌入页（F-03；`web/embed.html`，代码在 `web/src/embed/`）
+- 地址：`/embed?s=<同分享链接的 s>`（可加 `&lang=zh`、`&theme=dark`）。`main.ts` 只解码状态、显示标题 + 芯片 + ▶ 海报（首屏 JS 约 12 KB，不含 wasm / three.js / 固件）；点 ▶ 后才动态 `import('./run')`，`createSession` + `restoreShare` 复用实验台的同一套代码（快进到 `endMs` 后接着跑）。
+- 精简台面：3D 台面（板上 BOOT / RST 可按）、暂停 / 继续、重启、模拟时间、可折叠串口（`#console`）、右下角「在 TryBoard 打开」（新窗口 `/app?s=<同一个 s>`）。没有顶栏、步骤条、放件改线、时间线、装配。
+- 存储：不读 `readShare`（它会写线束），工作键用 `share:<fnv>`；点 ▶ 时 `memstore.ts shieldStorage()` 把 `window.localStorage` 换成内存副本（从真实存储拷一份只读），会话里任何保存都只进内存。测试钩子 `__tbEmbedRealKeys()` 返回真实存储的键、`__tbEmbed` = `{store, session}`；`__tbShareRestored` 同完整页。
+- 头：`web/public/_headers` 只给 `/embed` 和 `/embed.html` 加 `Content-Security-Policy: frame-ancestors *`（其它页面保持托管默认）。本地 vite preview / 测试服务器不读 `_headers`，这条规则要上线后才能验证。
+- 嵌入代码（推荐；`allow-popups*` 是「在 TryBoard 打开」新窗口要的，只要能运行的最小集合是 `sandbox="allow-scripts allow-same-origin"`，同源那项是 worker / wasm 同源加载必需）：
+```
+<iframe src="https://<域名>/embed?s=…" width="640" height="420" style="border:0;max-width:100%" loading="lazy"
+ allow="fullscreen; autoplay" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="TryBoard"></iframe>
+```
+- 验收：`node tools/webtest/embed.mjs`（宿主页 `tools/webtest/fixtures/embed-host.html` 放在另一个源）。没做：按原速回放（F-03b）。
