@@ -1087,3 +1087,13 @@
 - 已知小瑕疵：输入在 1 ms 片边界应用，BLE 的连接事件是惰性推进的，所以 `pc=json` 记在 9.000 s 而发出那行标 8.998 s（与 `ble=write` 同样的现有行为，确定性不受影响；改成先推进再应用会让 c3-ble-led 的 golden 变，暂不动）。
 - 固件 c3-ble-nus：NimBLE，广播名 Claude-TB（NUS 128 位 UUID 放扫描响应，31 字节放不下），RX 可写 / 无应答写，行缓冲 4096 字节，JSON 用 IDF 自带 cJSON（json 组件）；status ack 带 bat / sys / stats / fw，故意 > 244 字节以验收电脑侧重组；owner / 未知命令回 ack（未知命令 ok:false）；time 调 `settimeofday`。
 - 授权：协议按公开文档 anthropics/claude-desktop-buddy REFERENCE.md 自写，没有用任何第三方实现代码。
+
+## 2026-10-20 E-07a 示例固件「AI 网关仪表盘」（s3-ai-dash）
+- 决定：一个固件串起 E-01 / E-02 / E-04 / E-06：CO5300 QSPI（照 s3-co5300 初始化）+ LVGL 9.2.2 / esp_lvgl_port 2.6.0（照 s3-lvgl，40 行 × 2 DMA 缓冲在内部 RAM，不用 PSRAM / 整帧缓冲）+ I2C 三颗（照 s3-amoled-i2c）+ NimBLE NUS（照 c3-ble-nus，广播名 Claude-Dash）。**没有新依赖**：组件版本与已核的 s3-co5300 / s3-lvgl 相同（esp_lcd_co5300 锁 2.0.3）。字体只开 LVGL 自带 Montserrat 14 / 20 / 28 / 48（MIT），英文界面，不带中文字库。
+- 触摸不用 esp_lcd_touch_cst9220 组件（不在 LICENSING 清单，也省一次许可证核对）：自写 LVGL 指针 read_cb，按下状态取 INT 脚电平（低 = 按下），坐标读 0xD000 报点并回 0xAB；翻页由 read_cb 在松手时按位移判定（|dx| ≥ 60 且大于 |dy|），不用 LVGL 手势 / tileview——后者依赖每次读的速度阈值且翻页动画要重画十几帧整屏，脚本触摸下结果对时间点敏感。
+- 页面用 4 个容器显隐切换；CO5300 窗口要求偶数起点 / 偶数宽高，加 `LV_EVENT_INVALIDATE_AREA` rounder（真机同样需要，模型不强制）。
+- RTC：收到 `time` 消息时 `settimeofday` 并把**本地时间**（epoch + tz）写进 PCF85063（板子官方示例的做法）；顶栏和第 4 页每秒读 RTC，OS 位置 1 时显示 `--:--`。电量每秒读 AXP2101 0xA4 / 0x00，status ack 带真实电量（虚拟电脑日志 `battery 50%` 可核）。
+- 验收用屏幕区域：accept.json 新键 `lcd_regions: [{name, x, y, w, h, color?, tol?=8, min_pixels?, max_pixels?}]`，accept.sh 自动加 `--lcd-ppm Reviews/lcd/<id>.ppm`，统计矩形内颜色（每通道 ±tol）或非黑像素。数值用几何量绑定（LOAD 条 running/total、上下文条 tokens/200000、电量条 pct），所以像素数精确等于期望值即「数值对」；不做 OCR。没有改 CLI（`run` 不变长）：每个用例只看结束时一帧，翻页用单独用例结束在目标页来验。
+- 核心改动只有一处测试：`esp32s3::ble` 的 `sigs_hit_only_ble_firmware` 把 s3-ai-dash 列为 BLE 固件（它确实链接 NimBLE，签名认出是对的）；模型行为未改，已有用例输出不变。
+- 替代：ArduinoJson / 第三方 Buddy 固件（vthinkxie/claude-desktop-buddy-esp32，许可证 NOASSERTION）——不用，协议按公开文档自写，JSON 用 IDF 自带 cJSON。
+- 未做：网页示例库 / 蓝牙坞（E-07b）；配对加密（E-08）；时区只按 time 消息里的偏移，不存 NVS。
