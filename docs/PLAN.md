@@ -227,7 +227,7 @@
 | F-04c | DS18B20 单总线（含 SEARCH ROM） | accept：温度随 --env | ◐ |
 | F-04d | PIR / LDR / 继电器 + RC522（读 UID） | accept + 脚本动作可重放 | ◐ |
 | F-04e | AHT20 + INA219 + DS3231 | accept | ☐ |
-| F-05 | 故障挑战关卡 3–5 个（缺的 CLI 故障开关一并补） | check.py --ref --all；faults.mjs 网页判定一致 | ◐ |
+| F-05 | 故障挑战关卡 3–5 个（缺的 CLI 故障开关一并补） | check.py --ref --all；faults.mjs 网页判定一致 | ☑ 4 关（线长 / 供电 / 天线 / ADC2），现有开关够用，未加 CLI 开关 |
 | F-06 | 公开数字自动生成（tools/stats.py） | stats.py --check | ◐ |
 | F-07a | UART > 127 字节修复 + `--script` `\xNN` + MicroPython C3 验收 | golden 字节一致；MicroPython 用例 | ☐ |
 | F-07b | 网页 main.py 编辑器（需人定 MicroPython 分发方式与定位） | micropython.mjs | ☐ |

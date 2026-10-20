@@ -4,6 +4,7 @@
 import { t } from './i18n/index.ts';
 import { chipAt, pwmDevice, servoDeg, want as wantN } from './ui/say.ts';
 import type { ConfLevel } from './ui/conf.tsx';
+import type { Fault } from './faults.ts';
 
 export interface Level {
   id: string;
@@ -44,6 +45,8 @@ export interface Level {
   i2c_ack?: { addr: number; min: number }[];
   /** Items the web cannot prove and real hardware must: listed, not judged, not counted */
   manual?: boolean;
+  /** Fault checkpoint (F-05): bench as found + switches the player may change; run through faultLevel() in faults.ts */
+  fault?: Fault;
 }
 
 /** Expand sub-levels (07-spin, 07-lens), same as expand in tools/check.py */

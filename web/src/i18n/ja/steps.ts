@@ -1093,5 +1093,11 @@ const d: Dict = {
   "AMOLED board · battery, USB, PWR key": "AMOLED ボード · バッテリー、USB、PWR キー",
   "USB 5 V or the Li-ion battery, through the AXP2101 PMU": "USB 5 V またはリチウムイオン電池、AXP2101 PMU 経由",
   "AXP2101 PWRON (not a GPIO); held ≥ 1 s = long press": "AXP2101 PWRON（GPIO ではない）；1 秒以上押すと長押し",
+  "Run the bench firmware": "ベンチのファームウェアを実行",
+  "Bench switches": "ベンチのスイッチ",
+  "Nothing on the bench can fix this one: the fix is in the firmware. Drop your own .bin above.": "この問題はベンチでは直せません。直すのはファームウェアです。自分の .bin を上にドロップしてください。",
+  "Checks run with these switches. The bench firmware is the one that came with the bench, not an answer.": "チェックはこのスイッチ設定で実行します。ベンチのファームウェアは最初から付いていたもので、答えではありません。",
+  "The bench is as found. Change a switch or drop your own firmware, then check again.": "ベンチは受け取ったままです。スイッチを変えるか自分のファームウェアをドロップして、もう一度チェックしましょう。",
+  "The first line checks the bench firmware with your switches, the second your own firmware; both give the same verdict and run ID as the page.": "1 行目はスイッチ設定でベンチのファームウェアを、2 行目は自分のファームウェアをチェックします。どちらもページと同じ判定と実行 ID になります。",
 };
 export default d;

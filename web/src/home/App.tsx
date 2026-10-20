@@ -84,6 +84,11 @@ export function App() {
             <WorkCard key={w.id} w={w} live={live === w.id} onToggle={() => setLive((cur) => (cur === w.id ? null : w.id))} />
           ))}
         </section>
+        <p className="mt-4 mb-0 text-[13px] text-muted">
+          <a id="faultsLink" className="inline-flex min-h-11 items-center hover:text-accent-ink md:min-h-0" href={lab('faults', 'bench')}>
+            {t('Find the fault: four broken benches to repair →')}
+          </a>
+        </p>
       </main>
       <SiteFooter />
     </div>

@@ -1093,5 +1093,11 @@ const d: Dict = {
   "AMOLED board · battery, USB, PWR key": "AMOLED 板 · 电池、USB、PWR 键",
   "USB 5 V or the Li-ion battery, through the AXP2101 PMU": "USB 5 V 或锂电池，经 AXP2101 电源管理芯片",
   "AXP2101 PWRON (not a GPIO); held ≥ 1 s = long press": "AXP2101 PWRON（不是 GPIO）；按住 ≥ 1 s 算长按",
+  "Run the bench firmware": "运行实验台上的固件",
+  "Bench switches": "实验台开关",
+  "Nothing on the bench can fix this one: the fix is in the firmware. Drop your own .bin above.": "这一关实验台上改什么都没用，问题在固件里。把你自己的 .bin 拖到上面。",
+  "Checks run with these switches. The bench firmware is the one that came with the bench, not an answer.": "检查会按这些开关来跑。实验台上的固件是原来带的那份，不是答案。",
+  "The bench is as found. Change a switch or drop your own firmware, then check again.": "实验台还是原样。改一个开关或拖入你自己的固件，再检查一次。",
+  "The first line checks the bench firmware with your switches, the second your own firmware; both give the same verdict and run ID as the page.": "第一行用你的开关检查实验台固件，第二行检查你自己的固件；两者给出的判定和运行 ID 都与网页一致。",
 };
 export default d;

@@ -1093,5 +1093,11 @@ const d: Dict = {
   "AMOLED board · battery, USB, PWR key": "AMOLED 보드 · 배터리, USB, PWR 키",
   "USB 5 V or the Li-ion battery, through the AXP2101 PMU": "USB 5 V 또는 리튬 이온 배터리, AXP2101 PMU 경유",
   "AXP2101 PWRON (not a GPIO); held ≥ 1 s = long press": "AXP2101 PWRON(GPIO 아님); 1초 이상 누르면 길게 누르기",
+  "Run the bench firmware": "벤치 펌웨어 실행",
+  "Bench switches": "벤치 스위치",
+  "Nothing on the bench can fix this one: the fix is in the firmware. Drop your own .bin above.": "이 문제는 벤치에서 고칠 수 없습니다. 펌웨어를 고쳐야 합니다. 직접 만든 .bin을 위에 놓으세요.",
+  "Checks run with these switches. The bench firmware is the one that came with the bench, not an answer.": "검사는 이 스위치 설정으로 실행됩니다. 벤치 펌웨어는 원래 들어 있던 것이고 정답이 아닙니다.",
+  "The bench is as found. Change a switch or drop your own firmware, then check again.": "벤치는 받은 그대로입니다. 스위치를 바꾸거나 직접 만든 펌웨어를 놓고 다시 검사하세요.",
+  "The first line checks the bench firmware with your switches, the second your own firmware; both give the same verdict and run ID as the page.": "첫 줄은 스위치 설정으로 벤치 펌웨어를, 둘째 줄은 직접 만든 펌웨어를 검사합니다. 둘 다 페이지와 같은 판정과 실행 ID를 냅니다.",
 };
 export default d;
