@@ -222,6 +222,13 @@ web/（Vite + TS）
 - 调度：设备接上总线后，SoC 每 0.25ms 唤醒一次推进主机（`SocBus::update` 里把 `usb` 从 Option 临时取出，借总线给 DMA 访问内存）；断开后不再唤醒，不影响空闲快进。
 - 对外：CLI `--usb-log`、脚本 `usbcdc=文本`；wasm `tb_usb_version` / `tb_usb_json` / `tb_usb_json_ptr` / `tb_usb_cdc_send`，JSON 结构见 `web/src/usb3d.ts` 的 `UsbView`。
 
+## USB-Serial-JTAG 控制台（M5-03；模型在 `crates/soc/src/usj.rs`，S3 接入在 `crates/esp32s3/src/lib.rs` 0x6003_8000，中断源 `periph::src::USB_SERIAL_JTAG` = 96）
+- 只模拟 CDC-ACM 串口一侧：EP1 FIFO（64 字节，满即自动送出，WR_DONE 立即送出）、EP1_CONF 空闲 / 有数据位、INT_RAW/ST/ENA/CLR（SOF、SERIAL_OUT_RECV_PKT、SERIAL_IN_EMPTY）、FRAM_NUM、OUT_EP1_ST 计数、JFIFO_ST 恒为两个 FIFO 空；JTAG 端点不模拟。
+- 主机默认已连接：每 1 ms 帧边界置 SOF（只有 INT_ENA 开了 SOF 才把帧边界计入 `next_event`，否则不打断空闲快进）；IDF 连接检测 / Arduino `HWCDC::isPlugged()` 都看到"已连接"。`Usj::set_connected` 预留拔插。
+- 输出：主机收到的包并入同一个控制台（CLI stdout / 网页串口面板，`console_take`）。IDF 默认的"次控制台"会轮询把 UART0 内容再写一遍到 USJ（不开 USJ 中断）：`INT_ENA == 0`、紧跟 UART0 输出 2 ms 内、内容（去 CR/LF、允许尾部最多 16 字节滞后）能在最近 UART0 字节里找到的包视为镜像丢掉，保证每行只出现一次。
+- 输入：`Chip::uart_push`（CLI `uart=` 脚本 / `--inputs`、wasm `tb_uart_push`）同时喂 UART0 RX 和 USJ OUT FIFO（置 OUT_RECV），固件用哪个口就从哪个口读到。
+- 窄存储：HWCDC 用 `s8i` 写 EP1，子字写合并会先 `mmio_read`（会弹 RX），所以 0x6003_8000 不做合并。C3 的 USJ（0x6004_3000）尚未接入。
+
 ## GP-SPI2 / GDMA / GC9A01 圆屏（ESP32-S3；模型在 `crates/soc/src/{gpspi,gdma}.rs`、`devices/gc9a01.rs`）
 - GP-SPI2 主机（0x60024000，中断源 21）：寄存器按 `spi_reg.h`，复位值由各字段注释的 default 求得。CMD.UPDATE 瞬间完成；写 CMD.USR 时 SoC 按 USER 里的阶段（命令 → 地址 → 哑周期 → MOSI / MISO）组织一次传输：命令值按 bit7..0、bit15..8 顺序，地址从 ADDR 最高位移出，MOSI 数据在 DMA_CONF.dma_tx_ena=1 时从 GDMA 取、否则从 W0..W15 取。字节立即交给从机；CMD.USR 读回 1 直到按 SPI 时钟算出的结束时刻，然后置 DMA_INT_RAW.trans_done（位 12）。时钟：CLK_GATE.mst_clk_sel 选 PLL 80MHz / XTAL 40MHz，CLOCK.clk_equ_sysclk 或 ÷(pre+1)(n+1)。
 - GDMA（0x6003F000，5 通道，间距 0xC0，IN 组在 +0x00、OUT 组在 +0x60；中断源 IN 66..70、OUT 71..75）：PERI_SEL 复位为 0x3F（不接），SPI2 = 0。OUT_LINK 只有低 20 位，完整地址 = 0x3FC00000 | addr；start / stop / restart 自清，park 恒为 1。SPI 传输开始时沿描述符链（字 0：size[11:0]、length[23:12]、suc_eof[30]、owner[31]；字 1 缓冲区；字 2 下一个）一次取完，out_auto_wrback 时交还 owner、记 OUT_EOF_DES_ADDR；传输结束时置 OUT_DONE / OUT_EOF / OUT_TOTAL_EOF。

@@ -21,6 +21,7 @@ pub mod sigin;
 pub mod spiflash;
 pub mod tasktrace;
 pub mod usb;
+pub mod usj;
 pub mod vcd;
 pub mod wifi;
 

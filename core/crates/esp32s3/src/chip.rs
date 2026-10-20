@@ -105,6 +105,8 @@ impl Chip for Esp32s3 {
     }
     fn uart_push(&mut self, data: &[u8]) {
         self.bus.uart0.push_rx(data);
+        // One serial input box: whichever port the firmware reads (UART0 or USB-Serial-JTAG) sees the bytes
+        self.bus.usj.push_rx(data);
         self.bus.irq_dirty = true;
     }
 
