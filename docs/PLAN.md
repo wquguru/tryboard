@@ -202,7 +202,7 @@
 | M5-04 | I2C 器件模型：MPU6886、BMI270(+BMM150 AUX)、BM8563、AW9523、AXP192、LP5562、TCA8418、FT6336U / FT3267 ID、INA3221、LTR-553 / AW88298 应答壳 | 每颗单测（ID、关键寄存器、随环境变化） | ☑ 2026-10-20（Reviews/ab/M5-04.md） |
 | M5-05 | 核心板预设 `--board <m5-*>`（CLI + wasm）：自动挂板载器件、引脚、封装号；M5Dial 跑通 | m5-probe 在 Dial 上识别为 board_M5Dial；圆屏截图；旋钮 / 触摸 / RTC 输出与脚本一致 | ☑ 2026-10-20（M5Dial 全通：探测 board=M5Dial、编码器 / 触摸 / RTC / 按键；蜂鸣器、RFID、PSRAM 未建模；其余板为未验证桩，见 M5-06..13） |
 | M5-06 | AtomS3 / AtomS3 Lite / AtomS3R | 三块识别正确；屏截图；IMU 读数随姿态变化 | ☐ |
-| M5-07 | CoreS3 / CoreS3-SE（摄像头不做，SE 识别靠 GC0308 不应答） | 识别正确；ILI9342 截图；触摸 / IMU / PMIC 电量；喇叭 I2S 有输出 | ☐ |
+| M5-07 | CoreS3 / CoreS3-SE（摄像头不做，SE 识别靠 GC0308 不应答） | 识别正确；ILI9342 截图；触摸 / IMU / PMIC 电量；喇叭 I2S 有输出 | ☑ 2026-10-20（CoreS3 / SE 识别、ILI9342C 截图、触摸 / IMU / 电量、喇叭 1 kHz；修 S3 四线 PSRAM 与 I2S 时钟源 1；摄像头只回 ID） |
 | M5-08 | Cardputer / Cardputer-Adv：ST7789、键盘部件（74HC138 矩阵 / TCA8418）、I2S PDM 接收 | 识别正确；脚本按键回显到屏；麦克风读数非零 | ☐ |
 | M5-09 | 网页：M5 板预设（3D 外壳程序生成、板载器件自动出现、Grove 口）+ Grove Unit：ENV III（SHT30 + QMP6988）、ENV IV（SHT40 + BMP280） | agent-browser：选 M5 板 → 示例跑起 → 接 ENV IV → 读数；网页与 CLI 指纹一致；390×844 无横向滚动 | ☐ |
 | M5-10 | 经典 ESP32 GP-SPI（HSPI / VSPI）+ SPI DMA | IDF spi_master 示例与 QEMU 对照 | ☑ 2026-10-20（esp32-spi-lcd：RDDID 读回、DMA 绘图；StickC Plus2 / Core2 探测跑通；QEMU 无 HSPI/VSPI，只比到 init；从模式未做） |
