@@ -73,8 +73,12 @@ await sleep(400);
 const ers = await page.$eval('[data-live="ers"]', (e) => e.textContent).catch(() => '');
 report('power panel shows 3V3 min / peak current / reset count', /^\d+×$/.test(ers) && ers !== '0×', `brownout resets ${ers}`);
 await page.screenshot({ path: path.join(outDir, 'elec-usb.png') });
+// Pause before reading the count so resets between the read and the switch landing in the worker are not miscounted
+await page.evaluate(() => globalThis.__tbApp.session.sim.pause());
+await sleep(300);
 const resetsBefore = (await page.evaluate(() => globalThis.__tbApp.session.frame.elec.resets));
 await page.click('[data-power="ext"]');
+await page.evaluate(() => globalThis.__tbApp.session.sim.resume());
 const okExt = await waitFor(page, () => document.getElementById('console').textContent.includes('TRYBOARD_OK s3-brownout'), null, 40000);
 await sleep(500);
 const e2 = await page.evaluate(() => globalThis.__tbApp.session.frame.elec);
