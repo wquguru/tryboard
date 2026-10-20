@@ -1,5 +1,5 @@
 // Performance baseline (R-01): first-load bytes per entry, boot time, frame time, long tasks, sim speed.
-// Usage: node tools/webtest/perf.mjs [dist dir] [--json out.json]; desktop 1440×900 and 4× CPU-throttled 390×844.
+// Usage: node tools/webtest/perf.mjs [dist dir] [--json out.json] [--desktop] [--only home,weather]; desktop 1440×900 and 4× CPU-throttled 390×844.
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const args = process.argv.slice(2);
 const jsonOut = args.includes('--json') ? args[args.indexOf('--json') + 1] : null;
-const dist = path.resolve(args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--json') ?? path.join(root, 'web/dist'));
+const dist = path.resolve(args.find((a, i) => !a.startsWith('--') && !['--json', '--only'].includes(args[i - 1])) ?? path.join(root, 'web/dist'));
 
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.png': 'image/png', '.glb': 'model/gltf-binary' };
 // Serve gzip like a static host would, so byte counts reflect what users download.
@@ -61,6 +61,18 @@ const PROBE = () => {
   } catch {}
 };
 
+function resKind(url) {
+  const p = new URL(url).pathname;
+  if (/\.woff2?$/.test(p)) return 'font';
+  if (p.includes('/rom/')) return 'rom';
+  if (p.includes('/fw/')) return 'fw';
+  if (/tryboard[^/]*\.wasm/.test(p)) return 'core';
+  if (/\.wasm$/.test(p)) return 'wasm';
+  if (/\.js$/.test(p)) return 'js';
+  if (/\.css$/.test(p)) return 'css';
+  return 'other';
+}
+
 async function measure(name, url, { mobile = false, ready = null, frameSec = 5, after = null } = {}) {
   const page = await browser.newPage();
   await page.setViewport(mobile ? { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { width: 1440, height: 900 });
@@ -69,7 +81,15 @@ async function measure(name, url, { mobile = false, ready = null, frameSec = 5, 
   await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
   if (mobile) await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   let bytes = 0;
-  cdp.on('Network.loadingFinished', (e) => (bytes += e.encodedDataLength));
+  // R-22: bytes per resource kind over the whole run; fonts, ROM, wasm and firmware all land after the load event.
+  const kindOf = {};
+  const byKind = {};
+  cdp.on('Network.requestWillBeSent', (e) => (kindOf[e.requestId] = resKind(e.request.url)));
+  cdp.on('Network.loadingFinished', (e) => {
+    bytes += e.encodedDataLength;
+    const k = kindOf[e.requestId] ?? 'other';
+    byKind[k] = (byKind[k] ?? 0) + e.encodedDataLength;
+  });
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e).slice(0, 200)));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text().slice(0, 200)));
@@ -100,7 +120,7 @@ async function measure(name, url, { mobile = false, ready = null, frameSec = 5, 
     return { fps: +((d.length / sec)).toFixed(1), p50: q(0.5), p95: q(0.95), max: q(1), simRate: s0 === null ? null : +(((s1 - s0) / ((performance.now() - w0) / 1000))).toFixed(3), long: __perf.long, longMs: Math.round(__perf.longMs), tasks: __perf.tasks };
   }, frameSec);
   await page.close();
-  return { name, url, mobile, loadMs, kb: Math.round(loadBytes / 1024), totalKb: Math.round(bytes / 1024), readyMs, ...fr, errors: errors.length, firstError: errors[0] ?? '' };
+  return { name, url, mobile, loadMs, kb: Math.round(loadBytes / 1024), totalKb: Math.round(bytes / 1024), kindKb: Object.fromEntries(Object.entries(byKind).map(([k, v]) => [k, Math.round(v / 1024)])), readyMs, ...fr, errors: errors.length, firstError: errors[0] ?? '' };
 }
 
 const booted = () => (globalThis.__tbApp?.store.get().simSeconds ?? 0) > 0.2;
@@ -108,6 +128,7 @@ const openAnalyzer = async (page) => {
   await page.evaluate(() => document.querySelector('[data-dock="analyzer"]')?.click());
   await sleep(1500);
 };
+const ONLY = args.includes('--only') ? args[args.indexOf('--only') + 1].split(',') : null;
 const S = [
   ['home', '/', {}],
   ['select', '/select', {}],
@@ -117,10 +138,12 @@ const S = [
   ['lab s3-lvgl', '/app?work=blank&example=s3-lvgl#bench', { ready: booted }],
 ];
 const rows = [];
-for (const mobile of [false, true]) for (const [n, u, o] of S) {
+for (const mobile of args.includes('--desktop') ? [false] : [false, true]) for (const [n, u, o] of S) {
+  if (ONLY && !ONLY.some((x) => n.includes(x))) continue;
   const r = await measure(n, u, { ...o, mobile });
   rows.push(r);
   console.log(`[perf] ${mobile ? 'mobile4x' : 'desktop '} ${n.padEnd(24)} load ${String(r.loadMs).padStart(5)} ms ${String(r.kb).padStart(5)} KB (total ${r.totalKb}) ready ${r.readyMs ?? '-'} ms  fps ${r.fps} p50 ${r.p50} p95 ${r.p95} max ${r.max}  long ${r.long}/${r.longMs} ms  sim ${r.simRate ?? '-'}x  errors ${r.errors}${r.firstError ? ' (' + r.firstError + ')' : ''}`);
+  console.log(`[perf]          bytes by kind (KB): ${Object.entries(r.kindKb).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')}`);
 }
 if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify(rows, null, 1));
 await browser.close();

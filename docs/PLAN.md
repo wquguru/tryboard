@@ -164,6 +164,20 @@
 | R-15 | 首帧着色器编译不阻塞主线程：试跑基线实验台首帧 `WebGLRenderer.render` 同步编译约 0.9 s（`getUniforms` 等链接结果），整体长任务 1.1–2.9 s；改为场景建好后 `renderer.compileAsync`（three r170 自带，走 KHR_parallel_shader_compile）再首帧，编译期间显示已有加载态 | perf.mjs 实验台长任务总时长降 ≥ 60%；画面与重构前截图一致；无 console error | ☑ 2026-10-19（R-16 合并后复测）：perf.mjs 3 次，实验台长任务总和桌面 3160 → 392–396 ms（−87%，12 行无回访卡顿：R-16 首帧前 WebGL2 fence 等 GPU 进程追上），手机 4× 4540 → 1817–1834 ms（−60%），0 error。原记录：`web/src/shaderwarm.ts` 共用（7 个 3D 视图），场景建好后 `renderer.compile` 预编译场景 + 后处理 pass + 阴影深度替身材质，`isReady()` 轮询完再首帧（未用 compileAsync：材质被 dispose 时它会抛错）。桌面实验台单行 725–895 → 235–267 ms（−65～−72%），但约一半运行里会有一次约 550 ms 的「回访卡顿」随机落在某一行（Chrome 程序二进制缓存命中时 isReady 已报完成、GPU 进程仍积压，首个同步 GL 调用阻塞；试过 fence、逐帧触碰、canary 程序均无效），桌面总计 3160 → 1480–1900（−40～−53%）。手机（4× 降速）总计 4540 → 4140–4490，几乎不变：剖析显示其长任务主要是建场景 + 首帧 JS 的 CPU 时间，不是着色器，转 R-16。画面一致、无 console error（Reviews/ab/R-15.md） |
 | R-16 | 手机实验台启动长任务：4× 降速下 createBench / 建场景 + 首帧 JS 约 450–550 ms 一整块（R-15 剖析）；拆成多帧建（先板子与面包板，零件 / 导线分批），或在首帧后再建非关键部分 | perf.mjs 手机实验台长任务总时长降 ≥ 40%；画面最终一致；levels.mjs / mobile.mjs PASS | ☑ 2026-10-19：手机 4 行长任务总和约 4095 → 2104 ms（−49%，3 次均值），桌面约 982–1685 → 约 405 ms；`createBench` 先同步做 GL 初始化，再按约 10 ms 切片建状态 / 零件（生成器 + `scheduler.yield`），每片后 `shaderWarm.warm()`（脏标记，合并编译）；首帧前用 WebGL2 fence 轮询等 GPU 进程追上，消掉首个同步 GL 调用阻塞；levels / mobile / wiremode / harness PASS |
 
+
+### R2 · 加载体积（2026-10-19 排查，`Reviews/perf-audit.md`；用户授权自主完成）
+基线（`node tools/webtest/perf.mjs --desktop`，全部字节，gzip 后线上字节）：首页 1482 KB（字体 1317）、选板 1477、实验台 weather 3607（字体 1317、ROM 928、JS 584、核心 wasm 401、固件 357）、s3-lvgl 3910。
+
+| ID | 内容 | 验收 | 状态 |
+|---|---|---|---|
+| R-17 | 字体按需：Noto Sans SC 按 unicode-range 切片（Latin / 常用 CJK 分片），en 页面不下 CJK 片；zh 栈系统字体（PingFang / YaHei）在前；字重只留实际用到的 | perf.mjs 首页 / 选板 en 字体字节 ≤ 150 KB；zh 页面中文字形不缺（截图）；四语言 390×844 无横向滚动 | ☐ |
+| R-18 | 二进制瘦身：固件截掉尾部 0xFF（加载时补齐语义不变），`.bin` / `.elf` 发预压缩旁文件，`fetchBuf` 用 `DecompressionStream` 解压，失败回退原文件 | 实验台 weather 全部字节降 ≥ 700 KB；所有内置固件 web 与 CLI 指纹一致（levels.mjs、replay.mjs）；accept.sh 全绿 | ☐ |
+| R-19 | 大资源带内容哈希：wasm / ROM / 固件 / 字体 URL 带 hash（manifest 或 `?v=`），可设 immutable 长缓存；写托管缓存建议 | 改一字节 wasm 重建后 URL 变化；二次访问实验台（启用缓存）全部字节 ≤ 100 KB | ☐ |
+| R-20 | 词典不阻塞首屏：按页面拆分（site / select / app），当前语言词典 HTML 里预加载，去掉串行瀑布 | zh 首页词典字节降 ≥ 50%；zh 首页首次渲染不劣化（perf.mjs）；i18n 测试与 lint 全过；四语言走查无缺 key | ☐ |
+| R-21 | ROM ELF 去掉不加载的 `.xt.prop` / `.xt.lit`（Apache-2.0 §4b：NOTICE 写明修改） | S3 ROM ≤ 640 KB；accept.sh、golden 全绿（ROM 符号名不变） | ☐ |
+| R-22 | perf.mjs 记全部字节并按类型拆（font / rom / fw / core / js / css） | 输出每页分类字节；`--only` / `--desktop` 子集 | ☑ 2026-10-19 |
+| R-23 | worker 缓存编译好的 `WebAssembly.Module`（boot / seek / verify 不重复编译、不重复拷贝 wasm 字节） | seek 10 次耗时不劣化且 web 指纹一致；无 console error | ☐ |
+
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
 
