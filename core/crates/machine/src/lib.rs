@@ -16,6 +16,7 @@ pub use tryboard_soc::devices::audio::{Analysis as AudioAnalysis, Block as Audio
 use tryboard_soc::devices::audio::{Audio, MicSource};
 pub use tryboard_soc::devices::lcd::{Lcd, LcdKind, LcdPins};
 use tryboard_soc::devices::{
+    aw9523::Aw9523,
     axp192::Axp192,
     axp2101::Axp2101,
     bme280::{Bme280, Env},
@@ -453,6 +454,7 @@ impl Machine {
 
     /// After a segment, advance the power network; on brownout end the segment as reset (reason 15 = RTCWDT_BROWN_OUT_RESET)
     fn after_run(&mut self, c0: u64, i0: u64, w0: (u64, u64), r: Stop) -> Stop {
+        self.sync_expander_int();
         let act = self.activity(c0, i0, w0);
         let now = self.cycles();
         if self.elec.advance(now, &act) && matches!(r, Stop::Budget | Stop::Reset(_)) {
@@ -657,6 +659,11 @@ impl Machine {
         self.hw.set_psram(mb as usize * (1 << 20))
     }
 
+    /// ESP32-S3: PSRAM die on the QSPI interface (e.g. CoreS3) instead of the default octal one
+    pub fn set_psram_quad(&mut self, quad: bool) -> bool {
+        self.hw.set_psram_quad(quad)
+    }
+
     /// First device of type T: legacy I2C0 devices, then pin buses
     fn i2c_dev<T: 'static>(&mut self) -> Option<&mut T> {
         if self.hw.i2c0().device::<T>().is_some() {
@@ -741,6 +748,21 @@ impl Machine {
         if let Some(pin) = self.touch_int {
             self.gpio_drive(pin, if down { 0 } else { 1 });
         }
+        if let Some((port, bit, _)) = self.board.and_then(|b| b.touch_int_aw9523) {
+            if let Some(d) = self.i2c_dev::<Aw9523>() {
+                d.set_input(port, bit, !down);
+            }
+            self.sync_expander_int();
+        }
+    }
+
+    /// AW9523 INTN follows its pending state, which a port read clears; resynced once per run slice
+    fn sync_expander_int(&mut self) {
+        let Some((_, _, pin)) = self.board.and_then(|b| b.touch_int_aw9523) else {
+            return;
+        };
+        let pending = self.i2c_dev::<Aw9523>().is_some_and(|d| d.int_pending());
+        self.gpio_drive(pin, !pending as i32);
     }
 
     /// AXP2101 / AXP192 battery level / USB plug (action `bat=pct[,usb]`); false without a PMIC on the bus

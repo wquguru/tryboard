@@ -189,7 +189,7 @@ web/（Vite + TS）
 - 执行快路径（P2-07，不改变任何结果）：`run_core` 调 `Cpu::run_batch` 连续执行，每条指令后用 `Bus::attention` 做与原来逐步循环相同的检查（irq_dirty、外设时间推进到 next_event、落进 ROM 异常向量区）；取指走 64KB 页缓存（IRAM / ROM / 经 MMU 翻译的 IROM 页，写 MMU 时作废）；SRAM 读写在 `Bus::load/store` 里内联；CCOMPARE 记下一次触发的绝对周期，没到就不算。基准见 Reviews/ab/P2-07.md
 - HLE：rom_i2c_* 在 ROM 函数入口（ENTRY 之前）拦截，此时窗口仍是调用者的：参数在 a(4·CALLINC+2..)，返回地址在 a(4·CALLINC)（高 2 位为 CALLINC），返回值写回 a(4·CALLINC+2)，PC 直接回到调用点之后。
 - 软件复位：`mmio_write` 看 RTC_CNTL_OPTIONS0 的复位位（脉冲，存回的值去掉它们）。SW_PROCPU_RST / SW_SYS_RST 记 `reset_request`，写它的那个核在下一条指令前停下，`run` 返回 `Stop::Reset(12 / 3)`；SW_APPCPU_RST（esp_restart 先复位并停住另一个核）直接把核 1 停掉。`Esp32s3::reboot` 用一条新总线重新直接启动：先放进旧的 RTC 慢 / 快速内存和 RTC_CNTL_STORE0–3/6/7，再装镜像段（.rtc.data 被重新装载，与 bootloader 在非深睡唤醒时的做法一致；RTC_NOINIT 不在镜像里所以保留）；RTC_CNTL_RESET_STATE 读回复位原因（两核同值），`esp_reset_reason()` 结合 STORE6 里的提示得到 ESP_RST_SW。外部世界（引脚外部驱动、ADC 电压、I2C 器件、GPIO 记录、WS2812 解码）搬到新机器；模拟时间继续。
-- 八线 PSRAM（`psram.rs`）：不 HLE，ROM 的 `esp_rom_opiflash_exec_cmd` 照常配 SPI1 寄存器；写 CMD 的 USR 位时若 SPI_MEM_MISC 选的是 CS1（CS0_DIS=1、CS1_DIS=0）就交给 `OctalPsram`：0x4040 / 0xC0C0 读写模式寄存器（MR1 厂商 0x0D AP、MR2 density 3 = 8MB / 第 3 代 / good-die，MR3 VCC=3V；写只落 MR0/4/8），0x0000 / 0x8080 同步读写存储体（与 cache 共用 `SocBus::psram`）。dummy、DTR 采样相位、驱动强度只存不用。
+- 八线 / 四线 PSRAM（`psram.rs` 的 `Psram`，`quad` 选协议，默认八线；`Machine::set_psram_quad` / `Chip::set_psram_quad` / CLI `--psram quad|octal`）：四线模式按 USER2 命令位宽 8 位解码 0x9F（ID 0D 5D 52：8MB、非 2T）/ 0x03 / 0x0B / 0xEB 读、0x02 / 0x38 写，24 位地址，0x35 / 0xF5 / 0x66 / 0x99 / 0xC0 只计数；命令位宽与模式不符或不认识的命令计入 unimpl 0x60002000。八线模式不 HLE，ROM 的 `esp_rom_opiflash_exec_cmd` 照常配 SPI1 寄存器；写 CMD 的 USR 位时若 SPI_MEM_MISC 选的是 CS1（CS0_DIS=1、CS1_DIS=0）就交给 `OctalPsram`：0x4040 / 0xC0C0 读写模式寄存器（MR1 厂商 0x0D AP、MR2 density 3 = 8MB / 第 3 代 / good-die，MR3 VCC=3V；写只落 MR0/4/8），0x0000 / 0x8080 同步读写存储体（与 cache 共用 `SocBus::psram`）。dummy、DTR 采样相位、驱动强度只存不用。
 - 外设：与 C3 同族的模型直接复用 tryboard-soc（UART、SYSTIMER、TIMG、SPI1、LEDC、I2C + 器件、RMT + WS2812 + 接收、PCNT、GP-SPI2、GDMA + GC9A01、SHA / AES、引脚器件），Wi-Fi MAC 复用 tryboard-soc（`WifiLayout::S3`，中断源 0；WDEV_RND_REG 在 0x6003507C；SENS 温度传感器给 READY），按芯片参数化的是 RMT（`RmtLayout`：通道数、寄存器块起点、RAM 偏移、GPIO 矩阵信号号）与 GDMA（`GdmaLayout`）；S3 独有的是中断矩阵、EXTMEM、49 脚 GPIO、SENS 单次 ADC（periph.rs）。
 - 入口帧溢出保存区：核 0 / 核 1 分别借用 ROM 的 level 5 / level 4 中断栈（app 装了自己的向量表后 ROM 不再用）。
 - 崩溃检测：落进 ROM 异常向量（VECBASE 仍为 0x40000000 时）停机报 EXCCAUSE / EPC1；app 装了自己的 VECBASE 后，崩溃由固件自己的 panic 处理程序打印（Guru Meditation），CLI 照常转发。
@@ -254,7 +254,7 @@ web/（Vite + TS）
 
 ## I2S + 音频器件（P2-06；模型在 `crates/soc/src/i2s.rs`、`devices/audio.rs`，C3 / S3 共用）
 - I2S（S3：I2S0 0x6000F000 / I2S1 0x6002D000，中断源 25 / 26，GDMA 外设号 3 / 4；C3：I2S0 0x6002D000，源 20，外设号 3）：寄存器按 `i2s_reg.h`（两颗芯片布局逐项相同），复位值由字段注释的 default 求得。TX/RX_CONF.update 瞬间完成（读回 0）；只做主模式 + TDM / 标准格式（Philips / MSB / PCM 都按"每帧若干槽"处理，线上逐位时序不模拟），PDM、从模式、外部 MCLK 不做（该方向不出数据）
-- 帧率 = 源时钟（clk_sel 0 = XTAL 40 MHz，2 = PLL_F160M）÷ (N + 分数) ÷ (bck_div_num+1) ÷ ((tdm_chan_bits+1) × (tot_chan_num+1))；分数是 `i2s_ll_tx_set_mclk` 的逆运算：分母 = z(x+1)+y，分子 = yn1 ? 分母−z : z
+- 帧率 = 源时钟（clk_sel 0 = XTAL 40 MHz，1 = PLL_D2 240 MHz（M5Unified 直接写寄存器选它），2 = PLL_F160M）÷ (N + 分数) ÷ (bck_div_num+1) ÷ ((tdm_chan_bits+1) × (tot_chan_num+1))；分数是 `i2s_ll_tx_set_mclk` 的逆运算：分母 = z(x+1)+y，分子 = yn1 ? 分母−z : z
 - 数据只走 GDMA（流式，`Gdma::out_next / out_eof / in_peek / in_fill`，通道里多了"当前描述符"`cur`，start 时 = link）：
   - TX：tx_start 之后按帧率一块一块取描述符（length 字节），取出时刻 = 这块第一帧的播放时刻；放完这一块报 OUT_DONE，描述符带 suc_eof 的再报 OUT_EOF（OUT_EOF_DES_ADDR = 这块），next = 0 的报 OUT_TOTAL_EOF 并停。IDF 在 EOF 中断里把缓冲还给 `i2s_channel_write`，所以写入被播放速度卡住
   - RX：rx_start 之后每块 = min(描述符 size, RXEOF_NUM 剩余) 字节（整帧），按帧率录满的时刻写进描述符（length、owner 交还 CPU），累计满 RXEOF_NUM 置 suc_eof、报 IN_SUC_EOF（IN_SUC_EOF_DES_ADDR = 这块），每块报 IN_DONE
@@ -296,7 +296,10 @@ web/（Vite + TS）
   - 只有 m5dial 标为已验证。它用 `arduino-m5-probe-dial` / `arduino-m5-dial-demo` 跑通了 M5Unified 检测、触摸、RTC、编码器、BtnA 和屏幕。
   - 其余是存根，备注写明由哪个 PLAN 项验证。CLI 会打印 "(UNVERIFIED preset)"。
   - 已验证的预设只要有一个部件挂不上就返回错误；存根只给警告。
-  - PSRAM 没有建模，只给警告。
+  - m5cores3 / m5cores3se 也已验证（M5-07，`arduino-m5-probe-cores3` 一个固件两块板 + `arduino-m5-cores3-demo`）。
+  - PSRAM：S3 8MB 不再警告；`psram_quad` 让 S3 的 PSRAM 走四线协议（Arduino `m5stack_cores3` 的 `psram_type=qspi`），其余仍警告。
+  - `touch_int_aw9523: Some((port, bit, gpio))`：触摸 INT 接在 AW9523 输入脚上，`touch()` 改 AW9523 输入，`after_run` 开头把 AW9523 INTN 同步到 gpio（CoreS3 为 P1_2 → G21）。
+  - `speaker: Some((bclk, ws, dout))`：在这几脚挂扬声器接收端（`Chip::attach_speaker_at`），CoreS3 为 34 / 33 / 13（AW88298 的增益 / 使能未建模）。
 - 单测 `table_is_consistent`：id 不重复，所有器件 kind 都能创建，所有屏 spec 都能解析。
 - 接口：
   - Rust：`board_preset(id) -> Result<Vec<String>, String>`（返回警告列表）、`board()`、`board_button(name, down)`、`board_list()`。
