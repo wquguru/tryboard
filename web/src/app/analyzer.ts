@@ -87,6 +87,9 @@ function defaultChannels(parts: PartSpec[], chip: string): Channel[] {
     }
     if (p.type === 'ws2812') ch.push({ id: `RGB${p.pin}`, kind: 'ws', pin: p.pin, label: `GPIO${p.pin}` });
     if (p.type === 'dht11') ch.push({ id: `GPIO${p.pin}`, kind: 'pin', pin: p.pin, label: `GPIO${p.pin}`, role: t('DHT11 data') });
+    if (p.type === 'ds18b20') ch.push({ id: `GPIO${p.pin}`, kind: 'pin', pin: p.pin, label: `GPIO${p.pin}`, role: t('DS18B20 1-Wire') });
+    if (p.type === 'pir') ch.push({ id: `GPIO${p.pin}`, kind: 'pin', pin: p.pin, label: `GPIO${p.pin}`, role: t('PIR output') });
+    if (p.type === 'relay') ch.push({ id: `GPIO${p.pin}`, kind: 'pin', pin: p.pin, label: `GPIO${p.pin}`, role: t('Relay IN') });
     if (p.type === 'hcsr04') {
       ch.push({ id: `GPIO${p.trig}`, kind: 'pin', pin: p.trig, label: `GPIO${p.trig}`, role: 'Trig' });
       ch.push({ id: `GPIO${p.echo}`, kind: 'pin', pin: p.echo, label: `GPIO${p.echo}`, role: 'Echo' });

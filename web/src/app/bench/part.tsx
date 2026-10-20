@@ -11,6 +11,8 @@ import type { BenchCtx } from "./ctx";
 import { AmoledCtrls, sceneBoard } from "./amoled";
 import { PresetPick } from "./preset";
 import { boardDevs } from "../../bench3d/boarddevs";
+import { isTutorialPart } from "../../bench3d/parts3d";
+import { tutorialControls } from "./tutorial";
 
 export function mountPart(b: BenchCtx) {
   function renderPart(id: string) {
@@ -179,6 +181,8 @@ export function mountPart(b: BenchCtx) {
           </Note>
         </>
       );
+    } else if (isTutorialPart(p)) {
+      live = tutorialControls(b, p);
     }
     b.show(
       <>

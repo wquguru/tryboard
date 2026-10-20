@@ -225,7 +225,7 @@
 | F-02 | 分享卡：MP4 + 自写二维码 + 链接；修 Safari 录屏扩展名 | sharecard.mjs 解码二维码 = 链接 | ☑ |
 | F-03 | 独立 embed.html（点击加载、不写 localStorage） | embed.mjs | ☑ |
 | F-03b | 分享 / 嵌入页按原速回放 | 回放结束指纹 = 快进 | ☐ |
-| F-04a | 已建模器件全部上网页元件库 + 3D + 手机 | levels / wiremode / mobile.mjs；网页与 CLI 指纹一致 | ☐ |
+| F-04a | 已建模器件全部上网页元件库 + 3D + 手机 | levels / wiremode / mobile.mjs；网页与 CLI 指纹一致 | ◐ 第 1 部分 ☑ 2026-10-20：DS18B20 / PIR / 光敏 / 继电器 / RC522 上元件库 + 3D + 手机 + 输入日志；示例 c3-pir-relay / c3-rc522 / c3-ds18b20，`tools/webtest/parts.mjs` 指纹一致；其余已建模器件待后续部分 |
 | F-04b | ILI9341 + SH1106 模型；ST7789 / ILI9341 裸屏 C3、S3 验收（等 M5-01） | accept 截图核对 | ☐ |
 | F-04c | DS18B20 单总线（含 SEARCH ROM） | accept：温度随 --env | ☑ CLI + 模型（c3-ds18b20 / -cold / -absent、s3-ds18b20 通过）；网页未做 |
 | F-04d | PIR / LDR / 继电器 + RC522（读 UID） | accept + 脚本动作可重放 | ☑ 2026-10-20（CLI：`--pir` / `--relay` / `--ldr` / `--spi rc522`，动作 `pir=` / `lux=` / `card=`；c3 / s3-pir-relay、c3 / s3-rc522 进 accept，`--inputs` 重放一致；网页未接、经典 ESP32 无 RC522） |

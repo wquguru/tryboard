@@ -13,6 +13,7 @@ import type { BenchCtx } from './bench3d/ctx';
 import { mountStage, mountPost, mountLoop } from './bench3d/stage';
 import { mountState, mountScene } from './bench3d/scene';
 import { mountBuildersA, mountBuildersB } from './bench3d/build';
+import { paintPartLamps } from './bench3d/parts3d';
 import { mountPointer, mountTargets } from './bench3d/pick';
 import { mountInspect } from './bench3d/inspect';
 export { BOARD_C3, BOARD_S3, BOARD_E32, BOARDS, LCD_WIRING } from './bench3d/boards';
@@ -156,6 +157,7 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
     setGpio(level, enable, pwm, levelHi = 0, enableHi = 0) {
       const bit = (lo: number, hi: number, pin: number) => (pin < 32 ? (lo >>> pin) & 1 : (hi >>> (pin - 32)) & 1);
       // Under PWM, LED brightness ≈ duty (the eye can't see 5 kHz flicker, only the average)
+      paintPartLamps((pin) => bit(level, levelHi, pin));
       for (const l of ctx.leds) {
         const d = pwm?.[l.pin] ?? -1;
         l.target = d >= 0 ? d : bit(enable, enableHi, l.pin) && bit(level, levelHi, l.pin) ? 1 : 0;

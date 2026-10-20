@@ -78,5 +78,20 @@ const d: Dict = {
   "{name} power": "{name} 전원",
   "{part} · I2C 0x{addr} · SDA IO{sda} SCL IO{scl} · drag to tilt the bench": "{part} · I2C 0x{addr} · SDA IO{sda} SCL IO{scl} · 드래그로 작업대 기울이기",
   "“{part}” can’t go in yet": "'{part}'은(는) 아직 넣을 수 없어요",
+  // F-04a tutorial parts (DS18B20 / PIR / relay / LDR / RC522)
+  "DS18B20 power (3.3 V)": "DS18B20 전원(3.3 V)",
+  "DS18B20 1-Wire data (4.7 kΩ pull-up)": "DS18B20 1-Wire 데이터(4.7 kΩ 풀업)",
+  "DS18B20 × {n} · DQ IO{pin} · temperature from the slider": "DS18B20 × {n} · DQ IO{pin} · 온도는 슬라이더로",
+  "PIR power (5 V)": "PIR 전원(5 V)",
+  "PIR motion output": "PIR 인체 감지 출력",
+  "HC-SR501 · OUT IO{pin} · press \"Wave\" to trigger": "HC-SR501 · OUT IO{pin} · \"손 흔들기\"로 트리거",
+  "Relay coil power (5 V)": "릴레이 코일 전원(5 V)",
+  "Relay · IN IO{pin} · red LED = contacts closed": "릴레이 · IN IO{pin} · 빨간 LED = 접점 닫힘",
+  "Light sensor power (3.3 V)": "조도 센서 전원(3.3 V)",
+  "Photoresistor · AO IO{pin} · light from the slider": "포토레지스터 · AO IO{pin} · 밝기는 슬라이더로",
+  "RC522 chip select": "RC522 칩 선택",
+  "RC522 reset": "RC522 리셋",
+  "RC522 power (3.3 V only)": "RC522 전원(3.3 V 전용)",
+  "RC522 · SDA IO{pin} · tap a card below": "RC522 · SDA IO{pin} · 아래에서 카드 태그",
 };
 export default d;

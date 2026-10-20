@@ -15,6 +15,8 @@ import { isPhone, phoneProps, setMui } from "../mobile";
 import { tn } from "./ui";
 import { AmoledCtrls, sceneBoard } from "./amoled";
 import type { BenchCtx } from "./ctx";
+import { isTutorialPart } from "../../bench3d/parts3d";
+import { tutorialControls } from "./tutorial";
 
 export function mountCards(b: BenchCtx) {
   function cardContent(tg: PickTarget): ReactNode | null {
@@ -84,6 +86,15 @@ export function mountCards(b: BenchCtx) {
           <Sec>{t("EC11 encoder · drag or scroll to turn the knob")}</Sec>
           {b.encRows()}
           {b.encButtons()}
+        </div>
+      );
+    }
+    const tut = tg.kind === "part" ? c.session.scene.parts.find((p) => p.type === tg.id) : undefined;
+    if (tut && isTutorialPart(tut)) {
+      return (
+        <div>
+          <Sec>{partInfo(tut).name}</Sec>
+          {tutorialControls(b, tut)}
         </div>
       );
     }

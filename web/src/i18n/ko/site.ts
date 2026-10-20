@@ -813,5 +813,18 @@ const d: Dict = {
   "Board → PC": "보드 → PC",
   "Find the fault": "고장 찾기",
   "Find the fault: four broken benches to repair →": "고장 찾기: 고장 난 벤치 4대를 고쳐 보세요 →",
+  // F-04a tutorial parts (DS18B20 / PIR / relay / LDR / RC522)
+  "Light sensor": "조도 센서",
+  "HC-SR501 PIR motion sensor module": "HC-SR501 PIR 인체 감지 센서 모듈",
+  "3.3 V high while motion is seen, held for the delay pot time": "움직임을 감지하면 3.3 V High, 지연 가변저항 시간만큼 유지",
+  "Needs 5 V on VCC; OUT is 3.3 V, safe for any GPIO. After power-up it settles for about a minute (not simulated). The jumper picks repeatable (H) or single (L) triggering; the simulator models H.": "VCC에는 5 V가 필요합니다. OUT은 3.3 V라 어떤 GPIO에나 바로 연결할 수 있습니다. 전원을 켠 뒤 약 1분간 안정화가 필요합니다(시뮬레이션 안 함). 점퍼로 반복 트리거(H) / 단일 트리거(L)를 고르며, 시뮬레이터는 H를 재현합니다.",
+  "1-channel 5 V relay module": "1채널 5 V 릴레이 모듈",
+  "High-level trigger by default; some boards have an H / L jumper": "기본은 High 트리거이며, H / L 점퍼가 있는 보드도 있습니다",
+  "The coil runs on 5 V; 3.3 V GPIO is enough for the input on most modules. Mains wiring on the contacts is dangerous: keep the simulation to low-voltage loads.": "코일은 5 V로 동작하며, 대부분의 모듈은 입력을 3.3 V GPIO로 구동할 수 있습니다. 접점에 상용 전원을 연결하는 것은 위험하니 시뮬레이션은 저전압 부하로만 하세요.",
+  "Photoresistor light sensor module (analog)": "포토레지스터 조도 센서 모듈(아날로그)",
+  "Divider output: brighter = higher voltage": "분압 출력: 밝을수록 전압이 높음",
+  "Power it from 3V3, not 5 V, so AO never exceeds the ADC range. The reading is a rough light level, not a calibrated lux meter.": "AO가 ADC 범위를 넘지 않도록 5 V가 아닌 3V3에서 전원을 공급하세요. 측정값은 대략적인 밝기일 뿐 보정된 조도계가 아닙니다.",
+  "RC522 RFID reader module (13.56 MHz)": "RC522 RFID 리더 모듈(13.56 MHz)",
+  "3.3 V only. The simulator reads card UIDs; MIFARE authentication and block reads are not modelled.": "3.3 V 전용입니다. 시뮬레이터는 카드 UID를 읽으며, MIFARE 인증과 블록 읽기는 모델링하지 않았습니다.",
 };
 export default d;

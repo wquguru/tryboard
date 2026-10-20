@@ -39,7 +39,17 @@ export type PartSpec =
   /** 8-LED WS2812 stick (P2-09 knob lamp): DIN on pin (via 74AHCT125 to 5 V, illustrative), 5V supply; lies on the desk in front, colours from core-decoded frames */
   | { type: 'ws2812'; pin: number; n?: number; label?: string }
   /** DHT11 temperature / humidity module (D-03): 3 pins (VCC 3V3, DATA open drain with 10 kΩ pull-up on the module, GND); single-wire protocol */
-  | { type: 'dht11'; pin: number; label?: string };
+  | { type: 'dht11'; pin: number; label?: string }
+  /** DS18B20 waterproof probe(s) (F-04c): VDD 3V3, DQ on pin with a 4.7 kΩ pull-up to 3V3, GND; n probes share the wire (= CLI --ds18b20 pin,n) */
+  | { type: 'ds18b20'; pin: number; n?: number; label?: string }
+  /** HC-SR501 PIR module (F-04d): 5 V supply, 3.3 V push-pull OUT on pin; hold = delay pot seconds (= CLI --pir pin,hold) */
+  | { type: 'pir'; pin: number; hold?: number; label?: string }
+  /** 1-channel 5 V relay module (F-04d): IN on pin; low = low-level trigger jumper (= CLI --relay pin[,low]) */
+  | { type: 'relay'; pin: number; low?: boolean; label?: string }
+  /** Photoresistor module (GL5528 + 10 kΩ, F-04d): AO on an ADC pin; lux = initial light (= CLI --ldr pin,lux) */
+  | { type: 'ldr'; pin: number; lux?: number; label?: string }
+  /** RC522 RFID reader (F-04d, SPI2): SDA (CS) is the only pin the model watches; the other wires are drawn as placed (= CLI --spi rc522[@cs=N]) */
+  | { type: 'rc522'; cs?: number; sck?: number; mosi?: number; miso?: number; rst?: number; label?: string };
 
 
 /** The scene's IMU (bench tilt / drag only works when there is one) */

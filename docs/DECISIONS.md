@@ -1254,3 +1254,13 @@
 - **3D 外壳（M5-09c）**：一个参数化生成器 + 毫米尺寸表（`web/src/bench3d/m5shell.ts`），不画商标 / logo，不用外部模型。按键松开时主动拉高引脚：经典 ESP32 的 G37 / G39 没有内部上拉，悬空会读成按下。
 - **Grove 单元放在 `SceneSpec.grove`（M5-09d）**：与 board 并列，不作为实验台上的可拖零件；只有 M5 预设时才送进内核。备选：可拖 Grove 零件 + 连线（否：Port A 引脚固定，连线没有可选项）。
 - **撤销 / 重做竞态**：seek 进行中按下的撤销 / 重做不再丢弃，记下目标步，seek 结束后再跳（wiremode.mjs 原先偶发失败，与 M5 合并无关）。m5board.mjs 回放比对改为暂停后一次快照取输入日志与串口，逐字节比较。
+## 2026-10-20 教学元件上网页（F-04a 第 1 部分）
+- **wasm 新增导出并重编**：`tb_ds18b20_attach` / `tb_pir_attach` / `tb_relay_attach` / `tb_ldr_attach` / `tb_part_action` / `tb_parts_report`，只把已有 soc 模型接到浏览器，不改仿真行为；简报原说不重编 wasm，但不导出网页就接不上，故在 worktree 用 scratchpad target 重编并拷进 web/public/wasm（cargo test、clippy -D warnings 通过）。主会话合并后需按主树重编一次 wasm。
+- **参数与 CLI 一个来源**：`web/src/partsdev.ts` 的 `partsArgs` / `partsFromArgs` / `rc522Spec` 生成与解析 `--ds18b20` / `--pir` / `--relay` / `--ldr` / `--spi rc522`；输入日志新增 `parts` 字段和 `pir` / `lux` / `card` 事件，`cliArgs` 直接给出可重放命令；worker 只在模型接受动作时才记日志。
+- **RC522 只核对 CS**：C3 默认 CS=7 时 `--spi rc522`，其它 CS 写 `@cs=N`；SCK / MOSI / MISO 由固件 SPI 配置决定，模型不看，接线检查只按教程画线。
+- **指示灯看 GPIO 电平**：继电器 LED、PIR 圆顶着色读 GPIO 电平，不从模型取内部状态（少一个导出，结果一样）。
+- **W2 豁免 PIR**：HC-SR501 板上有稳压，VCC 接 5V 是正常接法；继电器本来就是 5V 模块。RC522 / 光敏 / DS18B20 接 5V 仍报 W2。
+- **PIR 放置默认保持 2 s**：与 c3-pir-relay 示例和 accept 用例一致，属性面板里说明真模块靠电位器调。
+- **3D 固定槽位**：五种元件各有固定 x 偏移和离板距离，只按信号脚决定放在面包板哪一侧，避免同时放多个时重叠。
+- **控制放在示例面板**：教学元件的控制同时出现在「这个示例」面板，不必先点开元件卡（回归脚本也靠它）。
+- 备选：每个元件单独做显示面板 —— 否，简报限定不做显示面板。

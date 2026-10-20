@@ -46,6 +46,11 @@ const DEFS: Record<string, { type: PartSpec['type']; steps: PlaceStep[] }> = {
   'ws2812-stick8': { type: 'ws2812', steps: [P('5V', '5V'), G('DIN'), GND()] },
   'ws2812-strip': { type: 'ws2812', steps: [P('5V', '5V'), G('DIN'), GND()] },
   dht11: { type: 'dht11', steps: [P('VCC', '3V3'), G('DATA'), GND()] },
+  ds18b20: { type: 'ds18b20', steps: [P('VDD', '3V3', t('Red VDD')), G('DQ', t('Yellow DQ (4.7 kΩ pull-up)')), GND(t('Black GND'))] },
+  'hc-sr501': { type: 'pir', steps: [P('VCC', '5V'), G('OUT'), GND()] },
+  'relay-1ch': { type: 'relay', steps: [P('VCC', '5V'), G('IN'), GND()] },
+  'ldr-module': { type: 'ldr', steps: [P('VCC', '3V3'), G('AO', t('AO (ADC pin)')), GND()] },
+  rc522: { type: 'rc522', steps: [P('3.3V', '3V3'), GND(), G('SDA', t('SDA (chip select)')), G('SCK'), G('MOSI'), G('MISO'), { ...G('RST'), optional: true }] },
 };
 
 /** Why a part cannot be placed (hint on the greyed-out library entry). */
@@ -127,6 +132,24 @@ export function buildPlaced(def: PlaceDef, got: Record<string, string>, ext5v = 
       // Obstacle starts at 15 cm, same as when placed from Shop.
       spec = { type: 'hcsr04', trig: g('Trig')!, echo: g('Echo')!, cm: 15 };
       break;
+    case 'ds18b20':
+      spec = { type: 'ds18b20', pin: g('DQ')! };
+      break;
+    case 'pir':
+      // Short hold so a tap is visible quickly; the CLI default is 5 s
+      spec = { type: 'pir', pin: g('OUT')!, hold: 2 };
+      break;
+    case 'relay':
+      spec = { type: 'relay', pin: g('IN')! };
+      break;
+    case 'ldr':
+      spec = { type: 'ldr', pin: g('AO')! };
+      break;
+    case 'rc522': {
+      const rst = g('RST');
+      spec = { type: 'rc522', cs: g('SDA')!, sck: g('SCK')!, mosi: g('MOSI')!, miso: g('MISO')!, ...(rst !== undefined ? { rst } : {}) };
+      break;
+    }
     default:
       throw new Error(`cannot place ${def.type}`);
   }

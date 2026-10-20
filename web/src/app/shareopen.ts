@@ -86,7 +86,7 @@ export async function restoreShare(ctx: StepCtx, sh: OpenedShare, own?: { buf: A
         // Device header comes from this power-up (same scene, same devsOf), so the CLI replay header matches too
         const l: InputLog = await session.sim.inputLog();
         const inputs = replayInputs(fromScript(st.run.s));
-        snap = await session.seek({ flash: buf!, i2c: l.i2c, lcd: l.spi ?? l.lcd, battery: l.battery, servo: l.servo, power: l.power, encoder: l.encoder, sonar: l.sonar, dht11: l.dht11, touchInt: l.touchInt, board: l.board, grove: l.grove, env: inputs.env0 ?? store.get().env, events: inputs.events, untilMs: st.run.endMs });
+        snap = await session.seek({ flash: buf!, i2c: l.i2c, lcd: l.spi ?? l.lcd, battery: l.battery, servo: l.servo, power: l.power, encoder: l.encoder, sonar: l.sonar, dht11: l.dht11, parts: l.parts, touchInt: l.touchInt, board: l.board, grove: l.grove, env: inputs.env0 ?? store.get().env, events: inputs.events, untilMs: st.run.endMs });
         (globalThis as { __tbShareRestored?: unknown }).__tbShareRestored = { stdout: snap.stdout, report: snap.report, endMs: st.run.endMs, simSeconds: snap.simSeconds };
         session.continueRun();
         notes.push(t('Replayed the shared actions up to {t} s; it keeps running from there', { t: (st.run.endMs / 1000).toFixed(2) }));

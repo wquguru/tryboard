@@ -78,5 +78,20 @@ const d: Dict = {
   "{name} power": "{name} 電源",
   "{part} · I2C 0x{addr} · SDA IO{sda} SCL IO{scl} · drag to tilt the bench": "{part} · I2C 0x{addr} · SDA IO{sda} SCL IO{scl} · ドラッグで台を傾ける",
   "“{part}” can’t go in yet": "「{part}」はまだ入りません",
+  // F-04a tutorial parts (DS18B20 / PIR / relay / LDR / RC522)
+  "DS18B20 power (3.3 V)": "DS18B20 電源（3.3 V）",
+  "DS18B20 1-Wire data (4.7 kΩ pull-up)": "DS18B20 1-Wire データ（4.7 kΩ プルアップ）",
+  "DS18B20 × {n} · DQ IO{pin} · temperature from the slider": "DS18B20 × {n} · DQ IO{pin} · 温度はスライダーから",
+  "PIR power (5 V)": "PIR 電源（5 V）",
+  "PIR motion output": "PIR 人感出力",
+  "HC-SR501 · OUT IO{pin} · press \"Wave\" to trigger": "HC-SR501 · OUT IO{pin} · 「手を振る」でトリガー",
+  "Relay coil power (5 V)": "リレーコイル電源（5 V）",
+  "Relay · IN IO{pin} · red LED = contacts closed": "リレー · IN IO{pin} · 赤 LED = 接点が閉",
+  "Light sensor power (3.3 V)": "光センサー電源（3.3 V）",
+  "Photoresistor · AO IO{pin} · light from the slider": "フォトレジスター · AO IO{pin} · 明るさはスライダーから",
+  "RC522 chip select": "RC522 チップセレクト",
+  "RC522 reset": "RC522 リセット",
+  "RC522 power (3.3 V only)": "RC522 電源（3.3 V 専用）",
+  "RC522 · SDA IO{pin} · tap a card below": "RC522 · SDA IO{pin} · 下でカードをかざす",
 };
 export default d;
