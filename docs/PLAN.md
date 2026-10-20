@@ -174,7 +174,7 @@
 | R-18 | 二进制瘦身：固件截掉尾部 0xFF（加载时补齐语义不变），`.bin` / `.elf` 发预压缩旁文件，`fetchBuf` 用 `DecompressionStream` 解压，失败回退原文件 | 实验台 weather 全部字节降 ≥ 700 KB；所有内置固件 web 与 CLI 指纹一致（levels.mjs、replay.mjs）；accept.sh 全绿 | ☐ |
 | R-19 | 大资源带内容哈希：wasm / ROM / 固件 / 字体 URL 带 hash（manifest 或 `?v=`），可设 immutable 长缓存；写托管缓存建议 | 改一字节 wasm 重建后 URL 变化；二次访问实验台（启用缓存）全部字节 ≤ 100 KB | ☐ |
 | R-20 | 词典不阻塞首屏：按页面拆分（site / select / app），当前语言词典 HTML 里预加载，去掉串行瀑布 | zh 首页词典字节降 ≥ 50%；zh 首页首次渲染不劣化（perf.mjs）；i18n 测试与 lint 全过；四语言走查无缺 key | ☐ |
-| R-21 | ROM ELF 去掉不加载的 `.xt.prop` / `.xt.lit`（Apache-2.0 §4b：NOTICE 写明修改） | S3 ROM ≤ 640 KB；accept.sh、golden 全绿（ROM 符号名不变） | ☐ |
+| R-21 | ROM ELF 去掉不加载的 `.xt.prop` / `.xt.lit`（Apache-2.0 §4b：NOTICE 写明修改） | S3 ROM ≤ 640 KB；accept.sh、golden 全绿（ROM 符号名不变） | ☑ S3 ROM 949 552 → 619 788 B、ESP32 857 500 → 596 888 B（C3 无 .xt.*，不变）；`tools/strip_rom.py` 校验 PT_LOAD 与符号表（S3 5574 / ESP32 3166 / C3 4516 个）一致 |
 | R-22 | perf.mjs 记全部字节并按类型拆（font / rom / fw / core / js / css） | 输出每页分类字节；`--only` / `--desktop` 子集 | ☑ 2026-10-19 |
 | R-23 | worker 缓存编译好的 `WebAssembly.Module`（boot / seek / verify 不重复编译、不重复拷贝 wasm 字节） | seek 10 次耗时不劣化且 web 指纹一致；无 console error | ☑ 2026-10-20：`seektime.mjs` 短 seek 中位数 62.2 → 45.2 ms（−27%），3 s 整段 141–164 → 109–120 ms；长任务 0 → 0；指纹 / 回归全一致 |
 

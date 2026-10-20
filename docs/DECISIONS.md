@@ -1017,3 +1017,8 @@
 - 用户真实桌面程序连不到网页里的虚拟板（浏览器 Web Bluetooth 只能当中心连真设备，不能当外设），所以「电脑端」由浏览器里的虚拟电脑扮演；接本机 Magpie 走现有 realnet 本地代理思路，作可选项。
 - LE 安全连接配对（E-08）后置：Buddy 协议把加密列为推荐而非必需。
 - 替代：走 Wi-Fi 直接拉 Magpie HTTP（127.0.0.1:3425）——用户判断原作是 BLE 推送，且 realnet 只放 80 端口、需 CORS，否掉作主路径。
+
+### 2026-10-20 R-21：网页 ROM 删除 .xt.prop / .xt.lit
+- 决定：`tools/strip_rom.py`（纯 python）在 build_web.sh 拷贝 ROM 时删掉这两个非加载段并压紧文件，重写 e_shoff / 节头表；NOTICE.txt 与授权页按 Apache-2.0 §4(b) 写明修改。third_party 原件不动。
+- 理由：模拟器只读 PT_LOAD 与 .symtab（rv32/src/elf.rs），这两段是 Xtensa 工具链属性表，S3 共 330 KB、ESP32 共 260 KB。
+- 保留：.symtab / .strtab / .comment / .xtensa.info（合计很小或被读）。备选：用 xtensa objcopy —— build_web.sh 不应依赖 IDF 环境，放弃。
