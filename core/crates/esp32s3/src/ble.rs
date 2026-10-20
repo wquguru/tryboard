@@ -351,8 +351,11 @@ mod tests {
                 .collect();
             let r = locate(&segs);
             n += 1;
-            // BLE firmware: s3-ble-* plus examples that link NimBLE (E-07a dashboard)
-            if name.starts_with("s3-ble") || name == "s3-ai-dash" {
+            // BLE firmware: s3-ble-* / s3-bluedroid-* plus examples that link NimBLE (E-07a dashboard)
+            if name.starts_with("s3-ble")
+                || name.starts_with("s3-bluedroid-")
+                || name == "s3-ai-dash"
+            {
                 let h = r
                     .unwrap_or_else(|e| panic!("{name}: {e}"))
                     .expect("BLE should be recognized");

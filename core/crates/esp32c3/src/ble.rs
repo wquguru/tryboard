@@ -266,7 +266,7 @@ mod tests {
     use super::*;
     use crate::boot::{find_app, parse_app};
 
-    /// Signatures must not false-match: of all built C3 acceptance firmware (S3 images skipped by chip ID) only c3-ble-hr is BLE, with every entry found
+    /// Signatures must not false-match: of all built C3 acceptance firmware (S3 images skipped by chip ID) only c3-ble-* / c3-bluedroid-* are BLE, with every entry found
     #[test]
     fn sigs_hit_only_ble_firmware() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../firmware/build");
@@ -294,7 +294,7 @@ mod tests {
                 .collect();
             let r = locate(&segs);
             n += 1;
-            if name.starts_with("c3-ble-") {
+            if name.starts_with("c3-ble-") || name.starts_with("c3-bluedroid-") {
                 let h = r
                     .unwrap_or_else(|e| panic!("{name}: {e}"))
                     .expect("BLE should be recognized");
