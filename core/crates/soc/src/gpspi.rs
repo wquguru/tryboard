@@ -7,6 +7,7 @@ use crate::periph::CPU_HZ;
 pub mod reg {
     pub const CMD: u32 = 0x00;
     pub const ADDR: u32 = 0x04;
+    pub const CTRL: u32 = 0x08;
     pub const CLOCK: u32 = 0x0c;
     pub const USER: u32 = 0x10;
     pub const USER1: u32 = 0x14;
@@ -32,6 +33,12 @@ const USER_ADDR: u32 = 1 << 30;
 const USER_DUMMY: u32 = 1 << 29;
 const USER_MISO: u32 = 1 << 28;
 const USER_MOSI: u32 = 1 << 27;
+// Multi-line phases (spi_ll_master_set_line_mode): CTRL fcmd 8/9/10, faddr 5/6/7, fread 14/15/16; USER fwrite 12/13/14
+const CTRL_FCMD_DUAL: u32 = 8;
+const CTRL_FADDR_DUAL: u32 = 5;
+const CTRL_FREAD_DUAL: u32 = 14;
+const USER_FWRITE_DUAL: u32 = 12;
+const MISC_CS_KEEP_ACTIVE: u32 = 1 << 30;
 const DMA_TX_ENA: u32 = 1 << 28;
 const DMA_RX_ENA: u32 = 1 << 27;
 pub const INT_TRANS_DONE: u32 = 1 << 12;
@@ -42,6 +49,13 @@ pub struct Plan {
     /// Command + address bytes to shift out (in wire order)
     pub head: Vec<u8>,
     pub head_bits: u32,
+    pub cmd_bits: u32,
+    pub addr_bits: u32,
+    /// Data lines per phase (1 / 2 / 4 / 8): command, address, MOSI, MISO
+    pub cmd_lines: u32,
+    pub addr_lines: u32,
+    pub mosi_lines: u32,
+    pub miso_lines: u32,
     pub dummy_bits: u32,
     /// MOSI data bits (0 = no data phase)
     pub mosi_bits: u32,
@@ -143,7 +157,14 @@ impl GpSpi {
         let user = self.r(reg::USER);
         let user1 = self.r(reg::USER1);
         let user2 = self.r(reg::USER2);
-        let mut p = Plan::default();
+        let ctrl = self.r(reg::CTRL);
+        let mut p = Plan {
+            cmd_lines: lines(ctrl, CTRL_FCMD_DUAL),
+            addr_lines: lines(ctrl, CTRL_FADDR_DUAL),
+            mosi_lines: lines(user, USER_FWRITE_DUAL),
+            miso_lines: lines(ctrl, CTRL_FREAD_DUAL),
+            ..Plan::default()
+        };
         if user & USER_COMMAND != 0 {
             // Command shifts out bit7..0 then bit15..8 (spi_ll_set_command already swapped for MSB-first)
             let bits = ((user2 >> 28) & 0xf) + 1;
@@ -153,6 +174,7 @@ impl GpSpi {
                 p.head.push((val >> 8) as u8);
             }
             p.head_bits += bits;
+            p.cmd_bits = bits;
         }
         if user & USER_ADDR != 0 {
             // Address shifts out from the top bit of ADDR
@@ -162,6 +184,7 @@ impl GpSpi {
                 p.head.push((a >> (24 - 8 * i)) as u8);
             }
             p.head_bits += bits;
+            p.addr_bits = bits;
         }
         if user & USER_DUMMY != 0 {
             p.dummy_bits = (user1 & 0xff) + 1;
@@ -211,10 +234,19 @@ impl GpSpi {
         src / (pre * n)
     }
 
-    /// Start timing: total bits at the SPI clock in CPU cycles (plus 1 SPI cycle each for CS setup / hold)
+    /// Whether CS stays asserted after this transfer (MISC.cs_keep_active, set per transaction by spi_ll_master_keep_cs)
+    pub fn cs_keep_active(&self) -> bool {
+        self.r(reg::MISC) & MISC_CS_KEEP_ACTIVE != 0
+    }
+
+    /// Start timing: SPI clocks of all phases in CPU cycles (plus 1 SPI cycle each for CS setup / hold).
+    /// A phase on n lines moves n bits per clock; dummy is already counted in clocks
     pub fn begin(&mut self, now: u64, p: &Plan, dma_out_ch: Option<usize>) {
-        let bits = (p.head_bits + p.dummy_bits + p.mosi_bits.max(p.miso_bits) + 2) as u64;
-        let cyc = (bits * CPU_HZ).div_ceil(self.clock_hz().max(1));
+        let clk = |bits: u32, n: u32| bits.div_ceil(n.max(1));
+        let data = clk(p.mosi_bits, p.mosi_lines).max(clk(p.miso_bits, p.miso_lines));
+        let clocks =
+            clk(p.cmd_bits, p.cmd_lines) + clk(p.addr_bits, p.addr_lines) + p.dummy_bits + data + 2;
+        let cyc = (clocks as u64 * CPU_HZ).div_ceil(self.clock_hz().max(1));
         self.pending = Some(now + cyc.max(1));
         self.dma_out_ch = dma_out_ch;
         self.transfers += 1;
@@ -241,6 +273,16 @@ impl GpSpi {
 
     pub fn irq(&self) -> bool {
         self.int_raw & self.int_ena != 0
+    }
+}
+
+/// Line count from three consecutive dual / quad / octal bits starting at `dual`
+fn lines(r: u32, dual: u32) -> u32 {
+    match (r >> dual) & 7 {
+        0 => 1,
+        b if b & 4 != 0 => 8,
+        b if b & 2 != 0 => 4,
+        _ => 2,
     }
 }
 
@@ -271,5 +313,35 @@ mod tests {
         assert_eq!(s.read(reg::DMA_INT_RAW) & INT_TRANS_DONE, INT_TRANS_DONE);
         s.write(reg::DMA_INT_CLR, INT_TRANS_DONE);
         assert_eq!(s.read(reg::DMA_INT_RAW), 0);
+    }
+
+    /// Quad write (QIO data phase): 32-bit single-line command then a 480x20 RGB565 strip on four lines
+    #[test]
+    fn quad_timing() {
+        let run = |quad: bool| {
+            let mut s = GpSpi::default();
+            s.write(reg::CLK_GATE, 0b111);
+            s.write(reg::CLOCK, 1 << 31);
+            let fw = if quad { 1 << 13 } else { 0 };
+            s.write(reg::USER, USER_MOSI | fw);
+            s.write(reg::MS_DLEN, 480 * 20 * 16 - 1);
+            let p = s.plan();
+            assert_eq!(p.mosi_lines, if quad { 4 } else { 1 });
+            s.begin(0, &p, None);
+            s.update(0).0
+        };
+        let (one, four) = (run(false), run(true));
+        // 80 MHz SPI clock, CPU_HZ 160 MHz: 2 cycles per clock; data clocks quarter, the 2 CS clocks stay
+        assert_eq!(one, (480 * 20 * 16 + 2) * 2);
+        assert_eq!(four, (480 * 20 * 4 + 2) * 2);
+        let mut s = GpSpi::default();
+        s.write(reg::CTRL, 1 << 9 | 1 << 6 | 1 << 15);
+        s.write(reg::USER, USER_COMMAND | 1 << 14);
+        let p = s.plan();
+        assert_eq!(
+            (p.cmd_lines, p.addr_lines, p.mosi_lines, p.miso_lines),
+            (4, 4, 8, 4)
+        );
+        assert_eq!(lines(1 << 8, CTRL_FCMD_DUAL), 2);
     }
 }

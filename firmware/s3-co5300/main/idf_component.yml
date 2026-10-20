@@ -1,0 +1,3 @@
+# esp_lcd_co5300 (Apache-2.0, licence check in docs/LICENSING.md) comes from the Espressif component registry
+dependencies:
+  espressif/esp_lcd_co5300: "2.0.3"

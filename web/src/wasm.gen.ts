@@ -71,9 +71,16 @@ export interface WasmExports {
   tb_oled_ptr(): number;
   /** Attach a GC9A01 round LCD on SPI2 (S3: SCLK=12 MOSI=11 CS=10 DC=14 RST=13 BL=15). 0 = ok (C3 unsupported: 1) */
   tb_lcd_attach(): number;
+  /** Attach a screen by kind: 0 = GC9A01, 1 = CO5300 (S3 only). 0 = ok, 1 = unsupported */
+  tb_lcd_attach_kind(kind: number): number;
+  /** Attached screen: 0 = GC9A01, 1 = CO5300, -1 = none */
+  tb_lcd_kind(): number;
+  /** Screen frame width / height in pixels (0 = no screen); `tb_lcd_ptr` holds w × h × 4 bytes */
+  tb_lcd_w(): number;
+  tb_lcd_h(): number;
   /** Round LCD frame version: refetch pixels only when it changes. 0 = no LCD */
   tb_lcd_version(): number;
-  /** Round LCD frame: 240×240×4 RGBA (row-major), alpha=0 outside the circle; opaque black inside when off / asleep / backlight off. Null = no LCD */
+  /** Screen frame: w×h×4 RGBA (row-major; GC9A01 240×240 with alpha=0 outside the circle, CO5300 480×480 opaque); opaque black when off / asleep / backlight off. Null = no screen */
   tb_lcd_ptr(): number;
   /** Attach a rotary encoder: phases A / B, sw < 0 = no push button */
   tb_encoder_attach(a: number, b: number, sw: number): void;

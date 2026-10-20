@@ -1046,3 +1046,10 @@
 - 替代：examples.json / levels.json 加 c3-dht11 关卡 —— 用户从示例库进来的是空白作品，看不到选型 → 实验台这条主线；给 c3-dht11 加按引脚切换 —— 要改固件和验收用例，范围超出 D-05。
 - **parts.ts 体量（R-14）**：新增条目让文件从 1504 涨到 1521 行，守卫只许缩。改成 `Draft.sizeMm` 可选、`P()` 默认 `null`，删掉 41 处 `sizeMm: null,`（1481 行，跌破 1500，allow list 用 `--update` 去掉这一项）；导出的 Part 字段值不变。替代：把 DHT11 拆到单独文件 —— 要导出 `P` / `pin` 等辅助函数，只为绕守卫。
 - wiremode.mjs「⇧⌘Z 重做」偶发失败：撤销后时间线还在 replay（`hist.busy`）时按重做会被忽略；本分支连跑 3 次前 2 次失败、第 3 次通过，HEAD 基线 2 次都通过，最终 accept.sh 里也通过；weather 作品不含 DHT11，判断为时序偶发但未完全排除，未改测试，留给主会话复核。
+## 2026-10-20 E-01：屏幕抽象与 CO5300 QSPI
+- 决定：屏幕用 `enum Lcd { Gc9a01, Co5300 }`（`soc/devices/lcd.rs`）而不是 trait 对象。两种屏接线差异（D/C 脚 vs 片选帧）只在 SoC 的 SPI 路径分派，出图接口（尺寸、版本、RGBA、ppm、颜色统计）在 enum 上统一；只有两种型号，enum 免装箱、免 downcast，加第三种时再考虑 trait。
+- `esp_lcd_panel_io_spi` 的 32 位命令是单独一笔单线 MOSI 传输（带 SPI_TRANS_CS_KEEP_ACTIVE），参数 / 像素是后续若干笔（像素才走 QIO）。所以 CO5300 按「CS 拉低到抬起」解析帧：SPI 控制的 CS 以 MISC.cs_keep_active（位 30）判断传输后是否抬起，GPIO 片选看引脚拉高。头 4 字节不区分来自 COMMAND/ADDR 阶段还是 MOSI 数据，按线上字节顺序解析。
+- 多线计时：各阶段 ceil(位数 / 线数) 个时钟；单线时与原公式逐位相同，golden 112/112 不变。实测（s3-co5300，40 MHz）：四线整帧总线时间 30.1 ms，强制单线 97.1 ms；纯像素数据 23.0 / 92.2 ms 正好 1/4。
+- AMOLED 无背光脚：显示只看 SLPOUT + DISPON；亮度 0x51 只在 0x53 BCTRL 置位时缩放（默认初始化发 0x53 0x20、0x51 0xFF），避免不发 0x51 的初始化变全黑。
+- 依赖 esp_lcd_co5300 锁 2.0.3（注册表标 Apache-2.0）；2.1.0 / 2.2.0 注册表标「Custom」，license.txt 虽相同仍不用。
+- CO5300 3V3 电流按 40 mA 估算（典型亮界面，随画面变化，未标定）。

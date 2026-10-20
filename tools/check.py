@@ -175,7 +175,7 @@ def evaluate(t: dict, out: str, report: str):
         n = int(m.group(1)) if m else 0
         res.append((n >= t['oled_min_pixels'], f"OLED lit {n} pixels (need ≥ {t['oled_min_pixels']})"))
     if 'lcd_min_pixels' in t:
-        m = re.search(r'LCD GC9A01 non-black pixels (\d+)', report)
+        m = re.search(r'LCD (?:GC9A01|CO5300) non-black pixels (\d+)', report)
         n = int(m.group(1)) if m else 0
         res.append((n >= t['lcd_min_pixels'], f"round LCD lit {n} pixels (need ≥ {t['lcd_min_pixels']})"))
     for c in t.get('serial_count', []):

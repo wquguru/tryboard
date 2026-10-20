@@ -3,12 +3,14 @@
 pub mod audio;
 pub mod axp2101;
 pub mod bme280;
+pub mod co5300;
 pub mod codec;
 pub mod cst816s;
 pub mod cst9220;
 pub mod ft6236;
 pub mod gc9a01;
 pub mod imu;
+pub mod lcd;
 pub mod mpu6050;
 pub mod pcf85063;
 pub mod pins;

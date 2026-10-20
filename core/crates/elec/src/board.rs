@@ -287,6 +287,8 @@ impl Board {
             "ssd1306" => Some(0.010),
             // GC9A01 round display: estimate, mostly the 25 mA backlight
             "gc9a01" => Some(0.025),
+            // CO5300 AMOLED 480x480: estimate, panel current depends on the image (~40 mA typical bright UI)
+            "co5300" => Some(0.040),
             // MPU6050: estimate, datasheet gyro 3.6 mA + accel 0.5 mA
             "mpu6050" => Some(0.0039),
             // QMI8658: estimate, ~1.7 mA in 6-axis high-performance mode per datasheet (to verify verbatim)

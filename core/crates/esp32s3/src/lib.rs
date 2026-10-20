@@ -9,6 +9,7 @@ mod chip;
 pub mod hle;
 pub mod periph;
 pub mod psram;
+mod spi_lcd;
 /// USB OTG model lives in tryboard-soc (R-06); re-exported for `usb::` paths in this crate
 pub use tryboard_soc::usb;
 
@@ -16,7 +17,7 @@ use periph::*;
 use std::collections::HashMap;
 use tryboard_soc::crypto_hw::{self, AesHw, ShaHw};
 use tryboard_soc::devices::audio::{self, Audio, PortIo};
-use tryboard_soc::devices::gc9a01::Gc9a01;
+use tryboard_soc::devices::lcd::Lcd;
 use tryboard_soc::devices::pins::PinDevices;
 use tryboard_soc::gdma::{DmaMem, Gdma, GdmaLayout};
 use tryboard_soc::gpspi::GpSpi;
@@ -89,17 +90,9 @@ const RTC_STORE_KEEP: [u32; 6] = [
     0x6000_80C8,
     0x6000_80CC,
 ];
-/// GC9A01 round display wiring convention (SPI2 IO_MUX direct pins + three GPIOs)
-pub mod lcd_pin {
-    pub const SCLK: u32 = 12;
-    pub const MOSI: u32 = 11;
-    pub const CS: u32 = 10;
-    pub const DC: u32 = 14;
-    pub const RST: u32 = 13;
-    pub const BL: u32 = 15;
-}
+pub use spi_lcd::{co5300_pin, lcd_pin};
 /// GDMA peripheral IDs (soc/gdma_channel.h: SOC_GDMA_TRIG_PERIPH_SPI2 / _I2S0 / _I2S1)
-const GDMA_PERI_SPI2: u32 = 0;
+pub(crate) const GDMA_PERI_SPI2: u32 = 0;
 const GDMA_PERI_I2S: [u32; 2] = [3, 4];
 /// GPIO matrix signals (gpio_sig_map.h): I2S0O_SD_OUT_IDX = I2S0I_SD_IN_IDX = 25, I2S1 is 30
 const SIG_I2S_SD: [usize; 2] = [25, 30];
@@ -113,9 +106,8 @@ pub mod i2s_pin {
     pub const MIC_WS: u32 = 40;
     pub const MIC_SD: u32 = 41;
 }
-/// GPIO matrix output signal FSPICS0_OUT_IDX (gpio_sig_map.h) and IO_MUX function FUNC_GPIO10_FSPICS0
+
 const SIG_FSPICS0: u32 = 110;
-const IOMUX_FUNC_FSPICS0: u32 = 4;
 
 pub struct SocBus {
     pub sram: Vec<u8>,
@@ -165,8 +157,8 @@ pub struct SocBus {
     /// GP-SPI2 master + GDMA (5 channels), model shared with the C3 family
     pub spi2: GpSpi,
     pub gdma: Gdma,
-    /// Round display on SPI2 (CLI `--spi gc9a01` / wasm `tb_lcd_attach`)
-    pub lcd: Option<Box<Gc9a01>>,
+    /// Screen on SPI2 (CLI `--spi gc9a01|co5300` / wasm `tb_lcd_attach`)
+    pub lcd: Option<Box<Lcd>>,
     /// I2S0 (0x6000F000) / I2S1 (0x6002D000), same model as C3; plus the audio devices on them (pins: see `i2s_pin`)
     pub i2s: [I2s; 2],
     pub audio: Audio,
@@ -635,12 +627,7 @@ impl SocBus {
     pub fn gpio_changed(&mut self, now: u64) {
         self.gpio.sense();
         let lv = self.gpio.level();
-        if let Some(l) = self.lcd.as_mut() {
-            // RST is active low and only resets when firmware really drives it low (module boards have a pull-up); backlight on when high
-            let en = self.gpio.enable;
-            l.set_reset(en >> lcd_pin::RST & 1 != 0 && lv >> lcd_pin::RST & 1 == 0);
-            l.set_backlight(lv >> lcd_pin::BL & 1 != 0);
-        }
+        self.lcd_pins_changed(lv);
         if lv != self.last_gpio {
             self.last_gpio = lv;
             self.iotrace.gpio(now, lv);
@@ -788,65 +775,6 @@ impl SocBus {
         edges.clear();
         self.rmt.edges = edges;
         next
-    }
-
-    /// Round display chip select: if the CS pin is routed via IO_MUX / GPIO matrix to SPI2 CS0, the controller pulls it low
-    /// during transfers; otherwise treat it as a plain GPIO, selected only when firmware drives it low
-    fn lcd_selected(&self) -> bool {
-        let pin = lcd_pin::CS as usize;
-        let via_iomux = (self.gpio.iomux[pin] >> 12) & 7 == IOMUX_FUNC_FSPICS0;
-        let via_matrix = self.gpio.func_out[pin] & 0x1ff == SIG_FSPICS0;
-        if via_iomux || via_matrix {
-            self.spi2.cs0_enabled()
-        } else {
-            self.gpio.enable >> pin & 1 != 0 && self.gpio.level() >> pin & 1 == 0
-        }
-    }
-
-    /// Firmware wrote SPI2 CMD.USR: fetch data (W registers or GDMA descriptor chain), hand it to the display, time it by SPI clock
-    fn spi2_transfer(&mut self, now: u64) {
-        let p = self.spi2.plan();
-        let mut bytes = p.head.clone();
-        let mut out_ch = None;
-        // Take GDMA out temporarily so it can borrow the bus for memory access
-        let mut g = std::mem::replace(&mut self.gdma, Gdma::placeholder());
-        if p.mosi_bits > 0 {
-            let n = p.mosi_bits.div_ceil(8) as usize;
-            let mut data = if p.dma_tx {
-                match g.out_channel_for(GDMA_PERI_SPI2) {
-                    Some(ch) => {
-                        out_ch = Some(ch);
-                        g.take_out(ch, n, self)
-                    }
-                    None => Vec::new(),
-                }
-            } else {
-                self.spi2.tx_buffer(n)
-            };
-            // DMA supplied too little data: the shift register holds 0
-            data.resize(n, 0);
-            bytes.extend_from_slice(&data);
-        }
-        if p.miso_bits > 0 {
-            // No slave would answer; MISO pull-up reads all 1s
-            let rx = vec![0xffu8; p.miso_bits.div_ceil(8) as usize];
-            if p.dma_rx {
-                if let Some(ch) = g.in_channel_for(GDMA_PERI_SPI2) {
-                    g.put_in(ch, &rx, self);
-                }
-            } else {
-                self.spi2.rx_fill(&rx);
-            }
-        }
-        self.gdma = g;
-        let selected = self.lcd_selected();
-        let dc = self.gpio.level() >> lcd_pin::DC & 1 != 0;
-        if let (Some(l), true) = (self.lcd.as_mut(), selected) {
-            for b in bytes {
-                l.byte(dc, b);
-            }
-        }
-        self.spi2.begin(now, &p, out_ch);
     }
 
     /// LEDC or GPIO matrix changed: hand each pin's current PWM to the event log (unchanged pins aren't logged)
@@ -1019,15 +947,6 @@ impl DmaMem for SocBus {
     }
     fn wr32(&mut self, a: u32, v: u32) {
         self.mem_write(a, 4, v);
-    }
-}
-
-impl SocBus {
-    /// Attach a GC9A01 round display on SPI2 (pins: see `lcd_pin`)
-    pub fn attach_lcd(&mut self) {
-        self.lcd = Some(Box::default());
-        let now = self.now;
-        self.gpio_changed(now);
     }
 }
 

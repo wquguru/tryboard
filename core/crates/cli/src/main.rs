@@ -3,7 +3,7 @@
 use std::io::Write;
 use std::time::Instant;
 use tryboard_machine::{
-    parse_battery, parse_imu, parse_touch, Chip, Machine, PowerMode, SensorEnv, Stop,
+    parse_battery, parse_imu, parse_touch, Chip, Lcd, Machine, PowerMode, SensorEnv, Stop,
     BROWNOUT_RESET, CPU_HZ,
 };
 use tryboard_rv32::{elf::Elf, Bus, BusFault, Cpu, Exit};
@@ -20,6 +20,7 @@ fn usage() -> ! {
                (more I2C devices: mpu6050@0x68, qmi8658@0x6b, cst816s@0x15, ft6236@0x38, cst9220@0x5a, axp2101@0x34, pcf85063@0x51, es8311@0x18, es7210@0x40) [--battery PCT[,usb]] (AXP2101) [--rtc EPOCH] (PCF85063, UTC) [--touch-int <GPIO>] (touch INT pin: low while pressed)
                script actions imu=pitch,roll,yaw[,their rates in °/s], touch=x,y (screen pixels, press / move), release (lift)
                [--spi gc9a01] (S3: SCLK=12 MOSI=11 CS=10 DC=14 RST=13 BL=15; C3: SCLK=6 MOSI=7 CS=10 DC=5 RST=4 BL=3) [--lcd-ppm <last frame.ppm>]
+               [--spi co5300] (S3 QSPI AMOLED 480x480: CS=12 CLK=38 D0..D3=4..7 RST=39)
                [--power usb|ext] (default usb; ext = servo powered from an external 5 V 2 A supply) [--servo <GPIO>] (attach an SG90; its current loads the power net)
                [--elec-report] (per-node minimum voltage, peak current, brownout resets); script action power=usb|ext
                [--i2c-wire <cm>] (total I2C wire length: bus capacitance -> rise time; beyond spec reads go wrong / NACK, estimate)
@@ -259,7 +260,7 @@ fn run(args: &[String]) {
     if let Some(spec) = opt(args, "--spi") {
         for kind in spec.split(',') {
             if !m.lcd_attach(kind) {
-                eprintln!("unsupported SPI device {kind} (only gc9a01 so far)");
+                eprintln!("unsupported SPI device {kind} (gc9a01 on C3 / S3, co5300 on S3)");
                 std::process::exit(2)
             }
         }
@@ -1035,25 +1036,7 @@ fn run(args: &[String]) {
         eprintln!("[tryboard] SPI2 transfers {st}, MOSI {sb} bytes");
     }
     if let Some(d) = m.lcd() {
-        let n = d.lit_pixels();
-        eprintln!(
-            "[tryboard] LCD GC9A01 non-black pixels {n} (display {})",
-            if d.showing() { "on" } else { "off" }
-        );
-        eprint!("{}", d.color_report());
-        eprintln!(
-            "[tryboard] LCD GC9A01 commands {} (vendor registers {}), pixels written {}, backlight {}",
-            d.commands,
-            d.vendor_cmds,
-            d.pixels,
-            if d.backlight { "on" } else { "off" }
-        );
-        if let Some(path) = opt(args, "--lcd-ppm") {
-            match std::fs::write(&path, d.ppm()) {
-                Ok(()) => eprintln!("[tryboard] LCD frame saved as {path}"),
-                Err(e) => eprintln!("[tryboard] failed to write {path}: {e}"),
-            }
-        }
+        report_lcd(d, args);
     }
     eprint!("{}", m.audio_report());
     if let Some((path, buf)) = audio_wav {
@@ -1229,6 +1212,41 @@ fn wav16(rate: u32, x: &[i16]) -> Vec<u8> {
         b.extend_from_slice(&v.to_le_bytes());
     }
     b
+}
+
+/// Screen summary on stderr (pixel count, per-model counters) and optional PPM dump
+fn report_lcd(d: &mut Lcd, args: &[String]) {
+    let n = d.lit_pixels();
+    let name = d.name();
+    eprintln!(
+        "[tryboard] LCD {name} non-black pixels {n} (display {})",
+        if d.showing() { "on" } else { "off" }
+    );
+    eprint!("{}", d.color_report());
+    match d {
+        Lcd::Gc9a01(d) => eprintln!(
+            "[tryboard] LCD GC9A01 commands {} (vendor registers {}), pixels written {}, backlight {}",
+            d.commands,
+            d.vendor_cmds,
+            d.pixels,
+            if d.backlight { "on" } else { "off" }
+        ),
+        Lcd::Co5300(d) => eprintln!(
+            "[tryboard] LCD CO5300 commands {}, reads {}, pixels written {}, brightness {} (BCTRL {}), unimplemented: {}",
+            d.commands,
+            d.reads,
+            d.pixels,
+            d.brightness,
+            if d.ctrl_display & 0x20 != 0 { "on" } else { "off" },
+            if d.unimpl.is_empty() { "none".to_string() } else { d.unimpl_report() }
+        ),
+    }
+    if let Some(path) = opt(args, "--lcd-ppm") {
+        match std::fs::write(&path, d.ppm()) {
+            Ok(()) => eprintln!("[tryboard] LCD frame saved as {path}"),
+            Err(e) => eprintln!("[tryboard] failed to write {path}: {e}"),
+        }
+    }
 }
 
 #[cfg(test)]

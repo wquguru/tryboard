@@ -866,6 +866,35 @@
   ]
  },
  {
+  "id": "s3-co5300",
+  "chip": "esp32s3",
+  "seconds": 2,
+  "args": [
+   "--spi",
+   "co5300"
+  ],
+  "expect": [
+   "CO5300 QSPI init ok",
+   "frame checksum 5c24af00",
+   "TRYBOARD_OK s3-co5300"
+  ],
+  "numeric": [
+   {
+    "name": "QSPI frame bus time (us, simulated)",
+    "regex": "bus time (\\d+) us",
+    "value": 30074,
+    "tol": 3000
+   }
+  ],
+  "lcd_min_pixels": 229000,
+  "stderr_expect": [
+   "LCD color #ff0000 57600 px, centroid 119.5,119.5",
+   "LCD color #00ff00 57600 px, centroid 359.5,119.5",
+   "LCD color #0000ff 57600 px, centroid 119.5,359.5",
+   "LCD CO5300 non-black pixels 229440 (display on)"
+  ]
+ },
+ {
   "id": "s3-lvgl",
   "chip": "esp32s3",
   "seconds": 3,
