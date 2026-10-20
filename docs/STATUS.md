@@ -209,6 +209,7 @@
 - R-12（2026-10-19，`web/src/app/panes.tsx`、`steps/lazy.tsx`、`anaload.ts`）：底部面板与选购 / 组装 / 成品按需加载；`app-*.js` gzip −56%，首屏静态闭包 −16%（◐，未到 30%）；perf.mjs readyMs 中位数不劣化（桌面 +0.6～2.5%，手机 4× 略快）；首次打开 36/36 < 300 ms（`node tools/webtest/opentime.mjs [--desktop] [--only ids] [--json out]`，冷 / 已预取 × 桌面 / 手机 4×）。headless 3D 组装另有既有报错 `Cannot read properties of null (reading 'state')`（改动前构建同样出现），opentime 用 `&asm=svg`。第二轮（同日）：app.html 首屏静态闭包 493.2 → 454.6 KB gzip（`python3 tools/webtest/closure.py`），对 566.6 基线 −19.8%，仍 ◐；perf.mjs 两轮 readyMs 差 ≤ 7%，opentime 36/36 < 300 ms，levels / mobile / wiremode / harness / softap / replay / traceio / custom 全 PASS。
 - R 批次收尾复测（2026-10-19，main，perf.mjs 3 次）：实验台 4 行长任务桌面 392–396 ms（R-15 前 3160）、手机 4× 1817–1834 ms（R-15 前 4540），12 个桌面行均无约 550 ms 回访卡顿，R-15 改 ☑；accept.sh 全绿、cargo test 156/0、首次打开 36/36 < 300 ms、后台页主线程脚本 25 ms/5 s。
 - R-13（2026-10-19）：配置交叉校验 `tools/check_config.py`（accept.sh 内）0 问题，自测 10/10。
+- R-18（2026-10-20，`tools/build_web.sh`、`web/src/assets.ts`、`tools/pack_artifact.py`）：固件截尾部 0xFF（4 KB 对齐）+ wasm / ROM / 固件 gzip -9 旁文件，`fetchBuf` 用 `DecompressionStream` 解压、失败回退原文件；perf.mjs 桌面 weather 全部字节 3607 → 2899 KB、s3-lvgl 3910 → 3061 KB；levels / replay 指纹一致，arduino-blink、缺 `.gz` 回退、b64 打包三种走查见 `Reviews/ab/R-18.md`。已知：accept.sh 里 wiremode 2 项（⇧⌘Z 重做改线）失败，换回改前 assets.ts 同样失败，非本项引起；golden 未在 worktree 保存（Rust 未改）。
 - 命令行模拟速度（5 s 模拟）：s3-lvgl 123.6 MIPS（0.79× 实时）、wifi-http 104.4 MIPS、esp32-blink 69.2 MIPS（大部分时间空闲）。
 
 ### C-04 FreeRTOS 任务时间线（2026-10-19）

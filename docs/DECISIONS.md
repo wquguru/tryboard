@@ -1009,3 +1009,9 @@
   - 「并行取」不是少下载，是让这些字节不挡首次渲染；首页 index.html 闭包因 chunk 切分多 0.9 KB（160.1 → 161.0）。
   - 没做到 ≤ 396 KB 的卡点：剩下的 454.6 里 three 149 + react-dom / react 71 + CSS 18 + tailwind-merge 9，实验台 / 3D 舞台（bench3d、board3d、后期 Bloom / Outline）本身约 150 KB 都是首屏画面要用的；零件目录 `catalog/parts`（17 KB）在建 store 时 `loadBom → validHistory` 就同步要用，`wirecheck` / `place` 也要。再降需要把实验台 3D 整体改成会话前动态加载（等于把 three 移出闭包，与「three 保留在首屏」矛盾）或把零件目录拆成首屏索引 + 详情，改动面大，留给后续。
   - 不做：用手写合并替换 `tailwind-merge`（类名冲突语义会变）；音频门面（audio.ts 实际只有约 1.3 KB，第一轮 13 KB 的估计是 source map 把 levels.json 记到了它头上）。
+
+## 2026-10-20 二进制预压缩旁文件（R-18）
+- **格式 gzip -9（`gzip -9 -n -k -f`）**：build_web.sh 给 `wasm/tryboard.wasm`、`rom/*.elf`、`fw/*/flash.bin` 生成 `.gz` 旁文件，`-n` 不写时间戳，重复构建逐字节相同（R-19 内容哈希要用）。不用 brotli：浏览器 `DecompressionStream` 不支持；不用 deflate-raw：没有现成命令行工具，gzip 头只多 18 字节。
+- **固件截尾**：拷到 `web/public/fw` 时去掉尾部 0xFF，长度按 4 KB 向上取整。三款 SoC 开机都把 flash 补 0xFF 到 max(头部声明容量, 4 MB)（c3 `boot.rs:168`、s3 `boot.rs:249`、esp32 `boot.rs:200`），内置固件都 ≤ 4 MB，所以模拟结果逐字节不变（levels / replay 指纹一致）；JS 侧不补齐。唯一可见变化：实验台「大小」显示截后大小（arduino-blink 4096 KB → 356 KB），与 b64 打包模式（pack_artifact.py 早就 rstrip 0xFF）一致。
+- **fetchBuf 回退顺序**：b64 打包页 → `.b64.txt`（不碰 `.gz`，pack_artifact.py 删掉 `.gz`）；否则 `.bin` / `.elf` / `.wasm` 且有 `DecompressionStream` 时先取 `url + '.gz'`：非 2xx 或 Content-Type 含 html（SPA 兜底页）→ 回退原文件；字节以 1f 8b 开头 → 解压，解压出错 → 回退；不是 gzip 魔数 → 当成托管已按 `Content-Encoding: gzip` 解过（vite preview 就这样）直接用。音频等别的类型不试 `.gz`，避免 404 噪声。
+- 替代：只靠托管压缩 —— 不少静态托管不压 `.bin` / `.elf`（R-18 要求不依赖托管配置）；把原长度写进 manifest 在 JS 侧补齐 —— 多一次请求，且 Rust 本来就补齐。
