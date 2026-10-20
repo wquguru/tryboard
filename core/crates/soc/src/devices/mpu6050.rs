@@ -2,7 +2,8 @@
 //! WHO_AM_I (0x75 = 0x68 regardless of AD0), PWR_MGMT_1 (reset 0x40 = sleep), SMPLRT_DIV / CONFIG (rate), GYRO/ACCEL_CONFIG
 //! (range), INT_STATUS (DATA_RDY), 0x3B..0x48 accel/temp/gyro (BE). Reads and writes auto-increment.
 //! Output comes from the pose (imu.rs) plus deterministic noise (~±3 mg, ~±0.05 °/s from datasheet noise density x bandwidth,
-//! not calibrated on hardware). All outputs latch at the start of a read so a 14-byte burst is one sample, like the real
+//! not calibrated on hardware). MPU-6886 (`Mpu6050::mpu6886`, M5 boards): same accel/gyro map, WHO_AM_I 0x19, temperature
+//! raw / 326.8 + 25 °C (TDK MPU-6886 datasheet); its ACCEL_CONFIG2 0x1D / FIFO_EN 0x23 are plain storage here. All outputs latch at the start of a read so a 14-byte burst is one sample, like the real
 //! shadow registers. Not done: FIFO (FIFO_COUNT always 0), DMP, self-test, aux I2C, INT pin. (lint: allow-long-comment)
 
 use super::imu::{noise, to_i16, Pose};
@@ -11,6 +12,7 @@ use crate::periph::CPU_HZ;
 use std::any::Any;
 
 pub const WHO_AM_I: u8 = 0x68;
+pub const WHO_AM_I_MPU6886: u8 = 0x19;
 
 pub struct Mpu6050 {
     pub addr: u8,
@@ -28,6 +30,10 @@ pub struct Mpu6050 {
     /// 0x3B..0x48 latched at the start of a read
     latched: [u8; 14],
     pub reads: u64,
+    /// WHO_AM_I value and temperature transfer (LSB per °C, offset °C): differ between MPU-6050 and MPU-6886
+    pub who_am_i: u8,
+    temp_lsb: f64,
+    temp_offset: f64,
 }
 
 impl Mpu6050 {
@@ -44,7 +50,19 @@ impl Mpu6050 {
             status_seen: 0,
             latched: [0; 14],
             reads: 0,
+            who_am_i: WHO_AM_I,
+            temp_lsb: 340.0,
+            temp_offset: 36.53,
         };
+        d.reset();
+        d
+    }
+
+    pub fn mpu6886(addr: u8) -> Self {
+        let mut d = Self::new(addr);
+        d.who_am_i = WHO_AM_I_MPU6886;
+        d.temp_lsb = 326.8;
+        d.temp_offset = 25.0;
         d.reset();
         d
     }
@@ -52,7 +70,7 @@ impl Mpu6050 {
     fn reset(&mut self) {
         self.regs = [0; 128];
         self.regs[0x6b] = 0x40; // SLEEP
-        self.regs[0x75] = WHO_AM_I;
+        self.regs[0x75] = self.who_am_i;
         self.latched = [0; 14];
         self.wake_at = self.now;
         self.status_seen = 0;
@@ -90,8 +108,8 @@ impl Mpu6050 {
             v[i] = to_i16((a[i] + 0.003 * noise(n, i as u64)) * a_lsb);
             v[4 + i] = to_i16((g[i] + 0.05 * noise(n, 4 + i as u64)) * g_lsb);
         }
-        // Datasheet: Temperature in °C = TEMP_OUT / 340 + 36.53
-        v[3] = to_i16((self.temp_c - 36.53) * 340.0);
+        // MPU-6050: TEMP_OUT / 340 + 36.53; MPU-6886: TEMP_OUT / 326.8 + 25
+        v[3] = to_i16((self.temp_c - self.temp_offset) * self.temp_lsb);
         let mut out = [0u8; 14];
         for (i, x) in v.iter().enumerate() {
             out[2 * i] = (*x >> 8) as u8;
@@ -215,6 +233,41 @@ mod tests {
         );
         let t = w(3) / 340.0 + 36.53;
         assert!((t - 23.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn mpu6886_id_temp_and_storage() {
+        let mut d = Mpu6050::mpu6886(0x68);
+        assert_eq!(rd(&mut d, 0x75, 1), [0x19]);
+        // M5Unified init writes then reads back each config register
+        wr(&mut d, 0x6b, 0x80);
+        for (r, v) in [
+            (0x6b, 0x01),
+            (0x1c, 0x10),
+            (0x1b, 0x18),
+            (0x1a, 0x01),
+            (0x19, 0x03),
+            (0x37, 0xc0),
+            (0x1d, 0x00),
+            (0x23, 0x00),
+        ] {
+            wr(&mut d, r, v);
+            assert_eq!(rd(&mut d, r, 1), [v], "reg {r:#x}");
+        }
+        assert_eq!(rd(&mut d, 0x75, 1), [0x19]);
+        d.temp_c = 31.0;
+        d.pose = Pose::new(0.0, 90.0, 0.0);
+        d.set_time(CPU_HZ);
+        let b = rd(&mut d, 0x3b, 14);
+        let w = |i: usize| i16::from_be_bytes([b[2 * i], b[2 * i + 1]]) as f64;
+        assert!((w(3) / 326.8 + 25.0 - 31.0).abs() < 0.01);
+        // Rolled 90°: gravity on +Y at ±8 g (4096 LSB/g)
+        assert!(
+            (w(1) - 4096.0).abs() < 30.0 && w(2).abs() < 30.0,
+            "{} {}",
+            w(1),
+            w(2)
+        );
     }
 
     #[test]

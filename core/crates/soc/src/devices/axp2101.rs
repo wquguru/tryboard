@@ -32,7 +32,7 @@ fn modelled(r: u8) -> bool {
 }
 
 /// Rough open-circuit voltage curve for a 1-cell Li-ion (mV), estimate
-fn ocv_mv(pct: u8) -> u16 {
+pub(crate) fn ocv_mv(pct: u8) -> u16 {
     const T: [(u8, u16); 6] = [
         (0, 3300),
         (10, 3600),
