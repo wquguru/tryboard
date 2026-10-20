@@ -2,7 +2,8 @@
 //! ES7210 4-ch ADC (I2C 0x40; 0x3D = 0x72, 0x3E = 0x10 ID, 0x3F version), ID values as read by the public Espressif drivers. 8-bit addresses,
 //! auto-increment; everything else is plain storage. No audio path (I2S is not connected to these). Also used for the LTR-553ALS
 //! light / proximity sensor shell (I2C 0x23; 0x86 PART_ID 0x92, 0x87 MANUFAC_ID 0x05, Lite-On datasheet): data registers
-//! 0x88..0x8E read 0 (dark, nothing near). (lint: allow-long-comment)
+//! 0x88..0x8E read 0 (dark, nothing near). And for the GC0308 camera's SCCB port (I2C 0x21; 0x00 CHIP_ID 0x9B, the value
+//! M5GFX checks to tell CoreS3 from CoreS3-SE); no image path. (lint: allow-long-comment)
 
 use crate::i2c::I2cDevice;
 use std::any::Any;
@@ -60,6 +61,10 @@ impl Codec {
             ],
             &[0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e],
         )
+    }
+
+    pub fn gc0308(addr: u8) -> Self {
+        Self::with(addr, "gc0308", &[(0x00, 0x9b)], &[0x00])
     }
 
     pub fn es7210(addr: u8) -> Self {

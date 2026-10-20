@@ -180,6 +180,7 @@ impl I2s {
             reg::INT_RAW | reg::INT_ST | reg::STATE => {}
             reg::TX_CONF | reg::RX_CONF => {
                 let old = self.r(off);
+
                 // update (sync config to the I2S clock domain) completes instantly and reads back 0
                 self.regs[(off / 4) as usize] = v & !UPDATE;
                 let s = if off == reg::TX_CONF {
@@ -232,12 +233,14 @@ impl I2s {
             )
         };
         let c = self.r(clkm);
-        // clk_active (bit 26); clk_sel (bits 27..28): 0 XTAL 40MHz, 2 PLL_F160M, 3 external MCLK (unsupported)
+        // clk_active (bit 26); clk_sel (bits 27..28): 0 XTAL 40MHz, 1 PLL_D2 240MHz (M5Unified picks it), 2 PLL_F160M,
+        // 3 external MCLK (unsupported)
         if c & (1 << 26) == 0 {
             return 0.0;
         }
         let src = match (c >> 27) & 3 {
             0 => 40e6,
+            1 => 240e6,
             2 => 160e6,
             _ => return 0.0,
         };
@@ -585,6 +588,10 @@ mod tests {
         // update bit self-clears
         i.write(reg::TX_CONF, TDM_EN | UPDATE, 0);
         assert_eq!(i.read(reg::TX_CONF) & UPDATE, 0);
+        // clk_sel 1 = PLL_D2 240 MHz: same dividers run 1.5x faster
+        i.write(reg::TX_CLKM_CONF, (1 << 26) | (1 << 27) | 14, 0);
+        let r = i.format(true).rate;
+        assert!((r - 44101.04 * 1.5).abs() < 0.02, "{r}");
     }
 
     #[test]
