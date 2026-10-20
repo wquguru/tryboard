@@ -176,7 +176,7 @@
 | R-20 | 词典不阻塞首屏：按页面拆分（site / select / app），当前语言词典 HTML 里预加载，去掉串行瀑布 | zh 首页词典字节降 ≥ 50%；zh 首页首次渲染不劣化（perf.mjs）；i18n 测试与 lint 全过；四语言走查无缺 key | ☐ |
 | R-21 | ROM ELF 去掉不加载的 `.xt.prop` / `.xt.lit`（Apache-2.0 §4b：NOTICE 写明修改） | S3 ROM ≤ 640 KB；accept.sh、golden 全绿（ROM 符号名不变） | ☐ |
 | R-22 | perf.mjs 记全部字节并按类型拆（font / rom / fw / core / js / css） | 输出每页分类字节；`--only` / `--desktop` 子集 | ☑ 2026-10-19 |
-| R-23 | worker 缓存编译好的 `WebAssembly.Module`（boot / seek / verify 不重复编译、不重复拷贝 wasm 字节） | seek 10 次耗时不劣化且 web 指纹一致；无 console error | ☐ |
+| R-23 | worker 缓存编译好的 `WebAssembly.Module`（boot / seek / verify 不重复编译、不重复拷贝 wasm 字节） | seek 10 次耗时不劣化且 web 指纹一致；无 console error | ☑ 2026-10-20：`seektime.mjs` 短 seek 中位数 62.2 → 45.2 ms（−27%），3 s 整段 141–164 → 109–120 ms；长任务 0 → 0；指纹 / 回归全一致 |
 
 ## E · AMOLED AI 网关仪表盘（2026-10-20 人确认「直接做、全自主完成」）
 起因：用户贴了一条推文——Waveshare ESP32-S3-Touch-AMOLED-2.16 做的 Magpie（LLM 网关）仪表盘，电脑端程序经 BLE 推数据（截图有蓝牙 ONLINE 图标）。目标：这块板 + 同类固件在网页里跑起来。板子（Waveshare 文档 / 官方仓库 Apache-2.0）：CO5300 480×480 QSPI（CS=12 CLK=38 D0–D3=4/5/6/7 RST=39）；I2C SCL=14 SDA=15 上挂 CST9220 触摸（0x5A，INT=11 RST=40）、AXP2101、PCF85063（INT=13）、QMI8658、ES8311 / ES7210；按键 GPIO18、GPIO0、PWRON（经 AXP2101）；16MB flash + 8MB OPI PSRAM。协议用公开的 Claude Desktop Buddy BLE 协议（NUS + 每行一个 JSON），原作者固件未公开，我们自写示例固件。决定见 DECISIONS 2026-10-20 E。

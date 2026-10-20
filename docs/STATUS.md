@@ -209,6 +209,7 @@
 - R-12（2026-10-19，`web/src/app/panes.tsx`、`steps/lazy.tsx`、`anaload.ts`）：底部面板与选购 / 组装 / 成品按需加载；`app-*.js` gzip −56%，首屏静态闭包 −16%（◐，未到 30%）；perf.mjs readyMs 中位数不劣化（桌面 +0.6～2.5%，手机 4× 略快）；首次打开 36/36 < 300 ms（`node tools/webtest/opentime.mjs [--desktop] [--only ids] [--json out]`，冷 / 已预取 × 桌面 / 手机 4×）。headless 3D 组装另有既有报错 `Cannot read properties of null (reading 'state')`（改动前构建同样出现），opentime 用 `&asm=svg`。第二轮（同日）：app.html 首屏静态闭包 493.2 → 454.6 KB gzip（`python3 tools/webtest/closure.py`），对 566.6 基线 −19.8%，仍 ◐；perf.mjs 两轮 readyMs 差 ≤ 7%，opentime 36/36 < 300 ms，levels / mobile / wiremode / harness / softap / replay / traceio / custom 全 PASS。
 - R 批次收尾复测（2026-10-19，main，perf.mjs 3 次）：实验台 4 行长任务桌面 392–396 ms（R-15 前 3160）、手机 4× 1817–1834 ms（R-15 前 4540），12 个桌面行均无约 550 ms 回访卡顿，R-15 改 ☑；accept.sh 全绿、cargo test 156/0、首次打开 36/36 < 300 ms、后台页主线程脚本 25 ms/5 s。
 - R-13（2026-10-19）：配置交叉校验 `tools/check_config.py`（accept.sh 内）0 问题，自测 10/10。
+- R-23（2026-10-20，`web/src/assets.ts` `loadWasmModule`、`live.ts`、`worker.ts`、`verify.ts`、`simrun.ts`、`app/faultsolve.ts`）：wasm 每页只编译一次，worker / 验收 worker / 故障求解共用 `WebAssembly.Module`（结构化克隆，不复制字节）；实时 worker 按 id 缓存 ROM 与固件，boot / seek 只发 id，每次仍是全新实例。`tools/webtest/seektime.mjs`（weather 跑 3 s 后各 10 次，3 轮中位数）：短 seek（50 ms，≈固定上电开销）62.2 → 45.2 ms（−27%），整段 seek（≈3.08 s 回放）164 / 141 → 120 / 109 / 120 ms；主线程长任务前后均 0。replay / levels / tasks / traceio、`npm test` 184/184、`npm_parity.sh` 27/27 一致。
 - 命令行模拟速度（5 s 模拟）：s3-lvgl 123.6 MIPS（0.79× 实时）、wifi-http 104.4 MIPS、esp32-blink 69.2 MIPS（大部分时间空闲）。
 
 ### C-04 FreeRTOS 任务时间线（2026-10-19）

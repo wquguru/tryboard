@@ -106,8 +106,8 @@ export function applyCached(faults: WireFault[], s3: boolean): { faults: WireFau
 /** Browser: lazy-load the wasm (same cached file as the simulator) and add estimates to faults with a net. */
 export async function enrichFaults(faults: WireFault[], s3: boolean): Promise<WireFault[]> {
   if (!faults.some((f) => f.net)) return faults;
-  exP ??= import('../assets').then(async ({ loadWasm }) => {
-    const { instance } = await WebAssembly.instantiate(await loadWasm(), {});
+  exP ??= import('../assets').then(async ({ loadWasmModule }) => {
+    const instance = await WebAssembly.instantiate(await loadWasmModule(), {});
     return instance.exports as unknown as FaultExports;
   });
   const x = await exP;

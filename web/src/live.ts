@@ -1,5 +1,5 @@
 // Live simulation for the home and lab pages: starts worker.ts, runs one firmware and hands each frame to the view.
-import { fetchBuf, imageChip, loadRom, loadWasm } from './assets';
+import { fetchBuf, imageChip, loadRom, loadWasmModule } from './assets';
 import type { EncoderSpec, Env, FromWorker, Harness, PcmBlock, PowerMode, PwmEvent, Snapshot, SonarSpec, TimingReport, ToWorker, VcdState } from './simmsg';
 import type { UsbView } from './usb3d';
 import { parseBle, type BleUpdate } from './ble';
@@ -97,6 +97,11 @@ export interface SeekJob {
   untilMs: number;
 }
 
+// Identity ids for ROM / firmware buffers (treated as immutable everywhere: callers swap buffers, never patch them).
+const ids = new WeakMap<ArrayBuffer, number>();
+let nextId = 0;
+const bufId = (b: ArrayBuffer) => ids.get(b) ?? (ids.set(b, ++nextId), nextId);
+
 export class LiveSim {
   private w = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
   private flash: ArrayBuffer | null = null;
@@ -178,6 +183,17 @@ export class LiveSim {
       }
     };
   }
+  // Bytes this worker already holds (R-23): ROM ids per chip, and the one firmware it keeps
+  private sentRoms = new Set<number>();
+  private sentFlash = -1;
+  /** rom / flash fields for boot / seek: bytes (structured-cloned, not transferred) only on first send, else just the ids. */
+  private blobs(rom: ArrayBuffer, flash: ArrayBuffer) {
+    const romId = bufId(rom), flashId = bufId(flash);
+    const r = { romId, flashId, rom: this.sentRoms.has(romId) ? undefined : rom, flash: this.sentFlash === flashId ? undefined : flash };
+    this.sentRoms.add(romId);
+    this.sentFlash = flashId;
+    return r;
+  }
   private send(m: ToWorker, t: Transferable[] = []) {
     this.w.postMessage(m, t);
   }
@@ -197,11 +213,11 @@ export class LiveSim {
     this.live = true;
     const fw = this.o.fw;
     const flash = (this.flash ??= typeof fw === 'string' ? await fetchBuf(fw) : fw);
-    const wasm = await loadWasm();
+    const wasm = await loadWasmModule();
     const rom = await loadRom(imageChip(flash));
     if (gen !== this.startGen) return;
     Object.assign(this.frame, emptyFrame());
-    this.send({ type: 'boot', wasm: wasm.slice(0), rom: rom.slice(0), flash: flash.slice(0), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName, harness: this.o.harness, dht11: this.o.dht11, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.(), locale });
+    this.send({ type: 'boot', wasm, ...this.blobs(rom, flash), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName, harness: this.o.harness, dht11: this.o.dht11, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.(), locale });
   }
   reset() {
     return this.start();
@@ -387,7 +403,7 @@ export class LiveSim {
   /** Rewind: wrap up the current run, re-power per job and fast-forward to untilMs, then pause; resume() continues live from there. */
   async seek(job: SeekJob): Promise<Snapshot> {
     await this.closeRun();
-    const [wasm, rom] = [await loadWasm(), await loadRom(imageChip(job.flash))];
+    const [wasm, rom] = [await loadWasmModule(), await loadRom(imageChip(job.flash))];
     this.flash = job.flash;
     this.o.fw = job.flash;
     this.o.i2c = job.i2c;
@@ -415,7 +431,7 @@ export class LiveSim {
     Object.assign(this.frame, emptyFrame());
     return new Promise((r) => {
       this.seekWaiter = r;
-      this.send({ type: 'seek', wasm: wasm.slice(0), rom: rom.slice(0), flash: job.flash.slice(0), i2c: job.i2c, env: job.env, lcd: job.lcd, servo: job.servo, power: job.power, encoder: job.encoder, sonar: job.sonar ? { ...job.sonar, cm: NaN } : undefined, touchInt: job.touchInt, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs, dht11: job.dht11, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.() });
+      this.send({ type: 'seek', wasm, ...this.blobs(rom, job.flash), i2c: job.i2c, env: job.env, lcd: job.lcd, servo: job.servo, power: job.power, encoder: job.encoder, sonar: job.sonar ? { ...job.sonar, cm: NaN } : undefined, touchInt: job.touchInt, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs, dht11: job.dht11, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.() });
     });
   }
   /** Continue live after a rewind stop: this run counts as in progress again. */

@@ -3,7 +3,7 @@
 
 import { runSim, type SimJob } from './simrun';
 
-export type VerifyJob = SimJob & { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer };
+export type VerifyJob = SimJob & { wasm: WebAssembly.Module; rom: ArrayBuffer; flash: ArrayBuffer };
 
 export type VerifyMsg =
   | { type: 'progress'; sim: number }
