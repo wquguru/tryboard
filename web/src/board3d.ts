@@ -71,12 +71,14 @@ export interface Bench extends ScenePickApi {
   /** External WS2812 strip (on pin) per-LED colours, 0–255 */
   setStrip(pin: number, leds: number[][]): void;
   onButton(cb: (name: 'BOOT' | 'RST' | 'PWR', down: boolean) => void): void;
+  /** M5 shell key pressed / released (M5-09c): GPIO of the preset button */
+  onBoardButton(cb: (pin: number, down: boolean) => void): void;
   /** Breadboard tactile key (PartSpec 'key') pressed / released */
   onKey(cb: (pin: number, down: boolean) => void): void;
   /** Key page position (clientX/Y) for tests; null if not visible */
   keyScreenPos(pin: number): [number, number] | null;
   /** Button page position (clientX/Y) so automated tests can press the 3D button with a real mouse; null if not visible */
-  buttonScreenPos(name: 'BOOT' | 'RST' | 'PWR'): [number, number] | null;
+  buttonScreenPos(name: string): [number, number] | null;
   /** Native USB: plug in the virtual PC once firmware enumerates a device (null = unplug) */
   setUsb(v: UsbView | null): void;
   /** Photo / video capture (P2-10) */
@@ -264,6 +266,8 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
     },
     setStrip(pin, leds) {
       stripLast.set(pin, leds);
+      // M5 Atom family: the on-board WS2812 is not the chip's default RGB pin, so it arrives as a strip
+      if ('ledPin' in ctx.board && ctx.board.ledPin === pin) this.setRgb(leds[0] ?? [0, 0, 0]);
       for (const st of ctx.strips) if (st.pin === pin) paintStrip(st, leds);
     },
     setLcd(px, w = 240, h = 240) {
@@ -290,6 +294,9 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
     },
     onButton(cb) {
       ctx.buttonCb = cb;
+    },
+    onBoardButton(cb) {
+      ctx.boardBtnCb = cb;
     },
     onKey(cb) {
       ctx.keyCb = cb;

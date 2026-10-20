@@ -5,6 +5,7 @@ import { MAT, canvasTexture, roundRect } from './util';
 import type { BoardSpec } from './boards';
 import type { BoardId } from './boarddevs';
 import { AIO_CHIP } from '../chipid';
+import type { LedState } from './ctx';
 
 /** 2.16″ square panel: active area 2.16·25.4/√2 ≈ 38.8 mm; PCB outline is an estimate (catalog todo: sizeMm) */
 export const AMOLED = { W: 44, L: 50, T: 1.6, screen: 38.8, glassW: 41.6, glassL: 43.4, corner: 4 };
@@ -95,12 +96,13 @@ export function amoledBoard(id: BoardId) {
   const rgbLight = new THREE.PointLight(0xffffff, 0, 1, 2);
   return {
     grp, buttons, pwrMat, rgbMat, rgbLight, pinPositions: {} as Record<string, THREE.Vector3>, pinRecs: [], usbPort, L, T, spec: SPEC, extSlots: [],
-    screen, boardId: id, flat: true as const,
+    screen: screen as THREE.Mesh | null, boardId: id, flat: true as const,
+    lcdPx: [480, 480] as [number, number] | null, screenMm: [S, S] as [number, number], touch: true, rest: 3.2, ledPin: -1, gpioLeds: [] as LedState[],
   };
 }
 
 /** Normalised UVs over the w×h outline (ShapeGeometry / Extrude UVs are in raw mm) */
-function remapUv(g: THREE.BufferGeometry, w: number, h: number, plane: 'xy' | 'xz') {
+export function remapUv(g: THREE.BufferGeometry, w: number, h: number, plane: 'xy' | 'xz') {
   const pos = g.getAttribute('position');
   const uv = g.getAttribute('uv');
   for (let i = 0; i < pos.count; i++) {

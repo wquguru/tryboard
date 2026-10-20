@@ -51,7 +51,7 @@ export const BOARD_DEVS: Record<BoardId, BoardDevs> = {
 };
 
 export const boardDevs = (id: string | undefined): BoardDevs | undefined => (id && id in BOARD_DEVS ? BOARD_DEVS[id as BoardId] : undefined);
-/** Board with its own 3D model and AXP2101 panel (E-03); preset boards keep the generic dev board until M5-09c */
+/** Board with the AXP2101 panel (E-03); M5 preset boards get their enclosure from m5shell.ts (M5-09c) */
 export const modelBoard = (id: string | undefined) => {
   const b = boardDevs(id);
   return b && !b.preset ? b : undefined;
