@@ -443,6 +443,14 @@ pub unsafe extern "C" fn tb_board_preset(p: *const u8, len: usize) -> i32 {
     with(1, |m| m.board_preset(&s).map_or(1, |_| 0))
 }
 
+/// # Safety
+/// Press (down = 1) / release a board key by legend name (M5-08 Cardputer); 0 ok, 1 no keyboard / unknown key. p/len valid UTF-8
+#[no_mangle]
+pub unsafe extern "C" fn tb_board_key(p: *const u8, len: usize, down: i32) -> i32 {
+    let s = String::from_utf8_lossy(std::slice::from_raw_parts(p, len)).into_owned();
+    with(1, |m| m.board_key(&s, down != 0).map_or(1, |_| 0))
+}
+
 /// Attached screen: 0 = SPI TFT (any DCS panel), 1 = CO5300, -1 = none
 #[no_mangle]
 pub extern "C" fn tb_lcd_kind() -> i32 {

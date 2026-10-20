@@ -1,7 +1,9 @@
 //! Board presets (M5-05): one id wires every on-board part of a dev board (eFuse package, SPI panel, I2C buses
 //! with their devices, touch INT, encoder, buttons). Data only; `Machine::board_preset` applies it. CLI `--board`, wasm `tb_board_preset`.
 
+use crate::keyboard::Keyboard;
 use crate::{Chip, Machine};
+use tryboard_soc::devices::audio::{Inmp441, Pins as I2sPins};
 
 /// An I2C bus on fixed pads with external pull-ups and its devices (kind, 7-bit address), see `Machine::i2c_bus_add`
 pub struct I2cBus {
@@ -16,6 +18,14 @@ pub struct Button {
     pub name: &'static str,
     pub pin: u32,
     pub active_low: bool,
+}
+
+/// On-board I2S microphone; `--mic` / web audio feed it. PDM mics (SPM1423) put the clock on `ws` and need no BCLK
+pub struct Mic {
+    pub bclk: Option<u32>,
+    pub ws: u32,
+    pub data: u32,
+    pub pdm: bool,
 }
 
 pub struct BoardPreset {
@@ -35,6 +45,9 @@ pub struct BoardPreset {
     /// Rotary encoder A / B phase pins
     pub encoder: Option<(u32, u32)>,
     pub buttons: &'static [Button],
+    /// Keyboard part (script action `key=<name>,1|0`)
+    pub keyboard: Option<Keyboard>,
+    pub mic: Option<Mic>,
     /// Pins held at a level by board circuitry that board detection reads (pin, level)
     pub levels: &'static [(u32, i32)],
     /// Driven by the firmware, listed for UI / docs only: (role, pin)
@@ -73,6 +86,8 @@ const NONE: BoardPreset = BoardPreset {
     touch_int: None,
     encoder: None,
     buttons: &[],
+    keyboard: None,
+    mic: None,
     levels: &[],
     outputs: &[],
     verified: false,
@@ -159,8 +174,19 @@ pub const BOARDS: &[BoardPreset] = &[
         efuse_pkg: Some(0),
         lcd: Some("st7789l@sclk=36,mosi=35,cs=37,dc=34,rst=33,bl=38"),
         buttons: &[btn("A", 0)],
-        outputs: &[("ir", 44), ("backlight", 38)],
-        note: "M5-08 verifies; 74HC138 key matrix not modelled",
+        keyboard: Some(Keyboard::Hc138 {
+            select: [8, 9, 11],
+            cols: [13, 15, 3, 4, 5, 6, 7],
+        }),
+        mic: Some(Mic {
+            bclk: None,
+            ws: 43,
+            data: 46,
+            pdm: true,
+        }),
+        outputs: &[("ir", 44), ("backlight", 38), ("speaker", 42)],
+        verified: true,
+        note: "key legend map from the M5Cardputer scan convention (unchecked); NS4168 speaker shares WS G43",
         ..NONE
     },
     BoardPreset {
@@ -174,8 +200,17 @@ pub const BOARDS: &[BoardPreset] = &[
             &[("tca8418", 0x34), ("bmi270", 0x68), ("es8311", 0x18)],
         )],
         buttons: &[btn("A", 0)],
-        outputs: &[("ir", 44), ("backlight", 38)],
-        note: "M5-08 verifies; BMI270 address assumed 0x68",
+        keyboard: Some(Keyboard::Tca8418),
+        // ES8311 ADC output on ASDOUT G46: the mic stream stands in for the codec's analog path
+        mic: Some(Mic {
+            bclk: Some(41),
+            ws: 43,
+            data: 46,
+            pdm: false,
+        }),
+        outputs: &[("ir", 44), ("backlight", 38), ("speaker", 42)],
+        verified: true,
+        note: "BMI270 address assumed 0x68; TCA8418 key map assumed; ES8311 analog path not modelled",
         ..NONE
     },
     BoardPreset {
@@ -315,6 +350,23 @@ impl Machine {
         }
         for k in b.buttons {
             self.gpio_drive(k.pin, k.active_low as i32);
+        }
+        if let Some(k) = b.keyboard {
+            if !self.keyboard_attach(k) {
+                warn.push("keyboard part unavailable".into());
+            }
+        }
+        if let Some(m) = &b.mic {
+            let pins = I2sPins {
+                bclk: m.bclk.unwrap_or(m.ws),
+                ws: m.ws,
+                data: m.data,
+            };
+            let mut d = Inmp441::new(pins);
+            d.pdm = m.pdm;
+            // A codec stand-in (ES8311) has one ADC; M5Unified reads the right slot by default
+            d.both = m.bclk.is_some();
+            self.hw.audio_mut().mic = Some(Box::new(d));
         }
         for &(pin, lv) in b.levels {
             self.gpio_drive(pin, lv);

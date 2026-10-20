@@ -21,7 +21,8 @@ fn usage() -> ! {
                [--efuse-pkg N] (package version eFuse: S3 0 QFN56 / 1 PICO; ESP32 5 PICO-D4 / 6 PICO-V3-02)
                [--psram MB] (classic ESP32 quad PSRAM: 0 / 2 / 4 / 8; --efuse-pkg 6 implies 2)
                [--board <id>|list] (board preset: eFuse, panel, I2C buses + devices, touch INT, encoder, buttons in one go; other flags add on top;
-               script actions btn=A,1|0 (preset button), rtc=EPOCH (set the board RTC))
+               script actions btn=A,1|0 (preset button), rtc=EPOCH (set the board RTC), key=<name>,1|0 (Cardputer keyboard:
+               legend name a / 1 / enter / space / shift / fn ..., or comma / semicolon / period / slash / quote ...))
                (more I2C devices: mpu6050@0x68, qmi8658@0x6b, cst816s@0x15, ft6236@0x38, cst9220@0x5a, axp2101@0x34, pcf85063@0x51, es8311@0x18, es7210@0x40;
                M5 parts: mpu6886@0x68, bmi270@0x68 (BMM150 on its AUX bus), bmm150@0x10, bm8563@0x51 (= pcf8563), aw9523@0x58, axp192@0x34,
                lp5562@0x30, tca8418@0x34, ft6336@0x38, ft3267@0x38, ina3221@0x40, ltr553@0x23, aw88298@0x36)
@@ -1317,7 +1318,7 @@ fn board_args(m: &mut Machine, args: &[String]) {
     }
 }
 
-/// Input-log actions for the AXP2101 (bat=pct[,usb], pwrkey=short|long), board RTC / buttons (rtc=, btn=) and the virtual BLE phone
+/// Input-log actions for the AXP2101 (bat=pct[,usb], pwrkey=short|long), board RTC / buttons / keys (rtc=, btn=, key=) and the virtual BLE phone
 /// (ble=…) / desktop (pc=…, E-06). Returns false when `act` is not one of them.
 fn board_action(m: &mut Machine, act: &str, now_s: f64) -> bool {
     let ble = act
@@ -1345,6 +1346,14 @@ fn board_action(m: &mut Machine, act: &str, now_s: f64) -> bool {
         let (name, lv) = v.split_once(',').unwrap_or((v, "1"));
         if !m.board_button(name.trim(), lv.trim() == "1") {
             eprintln!("[tryboard] {now_s:.3}s no board button {name} (needs --board)");
+        }
+    } else if let Some(v) = act.strip_prefix("key=") {
+        let (name, lv) = match v.rsplit_once(',') {
+            Some((n, l)) if !n.is_empty() && (l.trim() == "1" || l.trim() == "0") => (n, l.trim()),
+            _ => (v, "1"),
+        };
+        if let Err(e) = m.board_key(name.trim(), lv == "1") {
+            eprintln!("[tryboard] {now_s:.3}s key action: {e}");
         }
     } else if let Some(v) = act.strip_prefix("pwrkey=") {
         match v.trim() {

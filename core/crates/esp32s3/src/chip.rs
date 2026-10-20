@@ -6,6 +6,7 @@ use tryboard_soc::adc::AdcModel;
 use tryboard_soc::ble::Ble;
 use tryboard_soc::chip::{self, Chip};
 use tryboard_soc::devices::audio::Audio;
+use tryboard_soc::devices::keymatrix::KeyMatrix;
 use tryboard_soc::devices::lcd::{Lcd, LcdKind, LcdPins};
 use tryboard_soc::devices::pins::PinDevices;
 use tryboard_soc::i2c::I2c;
@@ -171,6 +172,22 @@ impl Chip for Esp32s3 {
     }
     fn pins(&mut self) -> &mut PinDevices {
         &mut self.bus.pins
+    }
+    fn key_matrix_attach(&mut self, k: KeyMatrix) -> bool {
+        self.bus.keymatrix = Some(k);
+        let now = self.cpu.cycles;
+        self.bus.gpio_changed(now);
+        true
+    }
+    fn key_matrix_set(&mut self, row: usize, col: usize, down: bool) -> bool {
+        let ok = self
+            .bus
+            .keymatrix
+            .as_mut()
+            .is_some_and(|k| k.set(row, col, down));
+        let now = self.cpu.cycles;
+        self.bus.gpio_changed(now);
+        ok
     }
     fn i2c_pin_buses(&mut self) -> Option<&mut PinBuses> {
         Some(&mut self.bus.i2c_pins)

@@ -243,6 +243,13 @@ impl Default for Gpio {
 const MASK: u64 = (1 << NPINS) - 1;
 
 impl Gpio {
+    /// Key matrix columns follow the select lines at once: firmware reads them right after writing the select (M5-08)
+    pub fn key_matrix_settle(&mut self, k: &tryboard_soc::devices::keymatrix::KeyMatrix) {
+        let (low, mask) = (k.low_cols(self.level()), k.col_mask());
+        self.ext_in &= !mask;
+        self.ext_driven = (self.ext_driven & !mask) | low;
+    }
+
     pub fn level(&self) -> u64 {
         let driven = self.enable & MASK;
         let mut pull = self.board_pullup;
@@ -260,9 +267,18 @@ impl Gpio {
         for (i, r) in self.pin.iter().enumerate() {
             od |= ((r >> 2) as u64 & 1) << i;
         }
-        let driven = driven & !(driven & out & od & self.ext_driven);
+        let released = driven & out & od;
+        // A released line nobody drives keeps reading 1 (D-03) unless only the IO_MUX pulldown holds it (M5GFX Cardputer probe)
+        let mut pd_only = 0u64;
+        for (i, r) in self.iomux.iter().enumerate() {
+            if r & (1 << 7) != 0 && pull & (1 << i) == 0 {
+                pd_only |= 1 << i;
+            }
+        }
+        let driven = driven & !released;
         let undriven = !driven & !self.ext_driven;
-        (out & driven) | (self.ext_in & self.ext_driven & !driven) | (pull & undriven & MASK)
+        let held = pull | (released & !pd_only);
+        (out & driven) | (self.ext_in & self.ext_driven & !driven) | (held & undriven & MASK)
     }
 
     pub fn set_periph_level(&mut self, pin: u32, on: bool) {

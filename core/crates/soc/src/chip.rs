@@ -136,6 +136,14 @@ pub trait Chip {
     fn i2c_bus_add(&mut self, _bus: PinBus) -> Option<usize> {
         None
     }
+    /// Attach a decoder-scanned key matrix (M5-08); false on chips without the model
+    fn key_matrix_attach(&mut self, _k: crate::devices::keymatrix::KeyMatrix) -> bool {
+        false
+    }
+    /// Press / release key (row, col) of the attached matrix; false without one or outside it
+    fn key_matrix_set(&mut self, _row: usize, _col: usize, _down: bool) -> bool {
+        false
+    }
     /// Package version eFuse (C3 / S3 PKG_VERSION, ESP32 CHIP_VER_PKG); false if unsupported
     fn set_efuse_pkg(&mut self, _pkg: u32) -> bool {
         false

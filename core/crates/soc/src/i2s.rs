@@ -1,5 +1,5 @@
 //! I2S (S3 I2S0 / I2S1, C3 I2S0; identical layout; soc/esp32s3 i2s_reg.h, hal i2s_ll.h / i2s_hal.c, esp_driver_i2s/i2s_common.c). Master-mode TDM / standard
-//! only (Philips, MSB, PCM short frame all as "N slots per frame"), no bit timing, no PDM; data via GDMA only (as IDF i2s_std does). TX: after tx_start, take
+//! only (Philips, MSB, PCM short frame all as "N slots per frame") plus RX PDM2PCM at PCM level, no bit timing; data via GDMA only (as IDF i2s_std does). TX: after tx_start, take
 //! descriptor blocks at the sample rate; taken at the block's first frame time (real FIFO is tiny), OUT_DONE when played (+OUT_EOF on suc_eof), so
 //! i2s_channel_write is paced by playback as on silicon. RX: after rx_start, record RXEOF_NUM-byte blocks (<= descriptor size) at their due time; IN_SUC_EOF
 //! per RXEOF_NUM bytes. Slots are 32-bit MSB-aligned "slot words" internally; TX samples shift up to 32 bits, RX takes the top data_bits. (lint: allow-long-comment)
@@ -38,6 +38,9 @@ const FILL24: u32 = 1 << 16;
 const TDM_EN: u32 = 1 << 19;
 const PDM_EN: u32 = 1 << 20;
 const SKIP_MSK: u32 = 1 << 20;
+/// RX_CONF PDM bits (S3 I2S0, M5-08): PDM-to-PCM filter on, and 128x instead of 64x down-sampling
+const RX_PDM2PCM: u32 = 1 << 21;
+const RX_PDM_DSR16: u32 = 1 << 22;
 
 /// INT_RAW bits
 pub mod int {
@@ -238,6 +241,8 @@ impl I2s {
         }
         let src = match (c >> 27) & 3 {
             0 => 40e6,
+            // IDF never picks 1; M5Unified's raw mic / speaker clock does and documents it as PLL_D2 = 120 MHz on C3 / S3
+            1 => 120e6,
             2 => 160e6,
             _ => return 0.0,
         };
@@ -262,7 +267,21 @@ impl I2s {
         let bck_div = ((conf1 >> 7) & 0x3f) as f64 + 1.0;
         let chan_bits = ((conf1 >> 24) & 0x1f) as f64 + 1.0;
         let slots = ((self.r(tdm) >> 16) & 0xf) as f64 + 1.0;
+        if let Some(osr) = self.pdm_rx_osr(tx) {
+            return src / div_total / bck_div / osr;
+        }
         src / div_total / bck_div / (chan_bits * slots)
+    }
+
+    /// PDM RX at PCM level (M5-08): the PDM clock is BCK and one PCM frame takes 64 / 128 of them (IDF i2s_pdm.c
+    /// pdm_rx clock). Some(oversampling) when RX runs PDM through the PDM2PCM filter; raw PDM stays unsupported
+    fn pdm_rx_osr(&self, tx: bool) -> Option<f64> {
+        let c = self.r(reg::RX_CONF);
+        (!tx && c & PDM_EN != 0 && c & RX_PDM2PCM != 0).then_some(if c & RX_PDM_DSR16 != 0 {
+            128.0
+        } else {
+            64.0
+        })
     }
 
     pub fn format(&self, tx: bool) -> Format {
@@ -287,23 +306,26 @@ impl I2s {
             }
             _ => 4,
         };
+        let pdm = self.pdm_rx_osr(tx).is_some();
         Format {
             rate: self.rate(tx),
             data_bits,
             slot_bits: ((c1 >> 24) & 0x1f) + 1,
-            slots: ((t >> 16) & 0xf) + 1,
+            // PDM2PCM output: left / right slots, PCM samples with no Philips bit delay
+            slots: if pdm { 2 } else { ((t >> 16) & 0xf) + 1 },
             mask: t & 0xffff,
             mono: c & MONO != 0,
             skip: tx && t & SKIP_MSK != 0,
-            msb_shift: c1 & MSB_SHIFT != 0,
+            msb_shift: pdm || c1 & MSB_SHIFT != 0,
             bytes,
         }
     }
 
-    /// Whether this model can run the direction: master mode, TDM (standard) not PDM, clock configured
+    /// Whether this model can run the direction: master mode, TDM (standard) or RX PDM2PCM, clock configured
     fn usable(&self, tx: bool, f: &Format) -> bool {
         let c = self.r(if tx { reg::TX_CONF } else { reg::RX_CONF });
-        c & SLAVE == 0 && c & PDM_EN == 0 && c & TDM_EN != 0 && f.rate > 1.0
+        let mode = (c & PDM_EN == 0 && c & TDM_EN != 0) || self.pdm_rx_osr(tx).is_some();
+        c & SLAVE == 0 && mode && f.rate > 1.0
     }
 
     /// Advance to now: TX takes blocks / reports EOF, RX writes blocks. peri = GDMA peripheral id (I2S0 = 3, S3 I2S1 = 4).
@@ -585,6 +607,24 @@ mod tests {
         // update bit self-clears
         i.write(reg::TX_CONF, TDM_EN | UPDATE, 0);
         assert_eq!(i.read(reg::TX_CONF) & UPDATE, 0);
+    }
+
+    #[test]
+    fn pdm_rx_rate_and_format() {
+        // Register values M5Unified's Mic_Class leaves on a Cardputer: clk_sel 1 (120 MHz), div 58 (fraction left 0), bck_div 2, DSR16
+        let mut i = I2s::new(0, true);
+        i.write(reg::RX_CONF1, 0x2f3d_e080, 0);
+        i.write(reg::RX_CLKM_CONF, 0x2c00_003a, 0);
+        i.write(reg::RX_CONF, 0x0070_9404 & !START, 0);
+        let f = i.format(false);
+        assert!(i.usable(false, &f));
+        // DSR16 = 128 PDM clocks per PCM sample (IDF i2s_pdm.c)
+        let want = 120e6 / 58.0 / 2.0 / 128.0;
+        assert!((f.rate - want).abs() < 0.01, "{}", f.rate);
+        assert_eq!((f.slots, f.msb_shift, f.bytes), (2, true, 2));
+        // Without PDM2PCM, raw PDM is not modelled and the port stays idle
+        i.write(reg::RX_CONF, 0x0050_9404 & !START, 0);
+        assert!(!i.usable(false, &i.format(false)));
     }
 
     #[test]

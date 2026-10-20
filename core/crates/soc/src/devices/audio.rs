@@ -206,6 +206,10 @@ pub struct Inmp441 {
     pub pins: Pins,
     /// L/R pin high = right channel (default grounded = left)
     pub right: bool,
+    /// PDM mic (SPM1423, M5-08) read through the PDM2PCM filter: same sample stream, CLK on `ws`, no BCLK
+    pub pdm: bool,
+    /// Same sample on both slots (codec stand-ins with a mono ADC, M5-08); PDM always does this
+    pub both: bool,
     pub source: MicSource,
     pub frames: u64,
 }
@@ -215,6 +219,8 @@ impl Inmp441 {
         Inmp441 {
             pins,
             right: false,
+            pdm: false,
+            both: false,
             source: MicSource::Silence,
             frames: 0,
         }
@@ -296,6 +302,10 @@ impl Inmp441 {
                 let v24 = (x as f64 * 8_388_608.0).round() as i32;
                 let mut s = [0i32; 2];
                 s[k] = v24 << 8;
+                // The board's L/R strap picks the PDM clock edge; feed both so either slot mask hears it
+                if self.pdm || self.both {
+                    s[1 - k] = v24 << 8;
+                }
                 s
             })
             .collect()
@@ -409,15 +419,22 @@ impl Audio {
                     format!("live input ({underruns} frames underrun)")
                 }
             };
-            s += &format!(
-                "[tryboard] I2S mic INMP441 (SCK=GPIO{} WS=GPIO{} SD=GPIO{}, {} channel): sent {} frames, source {}\n",
-                m.pins.bclk,
-                m.pins.ws,
-                m.pins.data,
-                if m.right { "right" } else { "left" },
-                m.frames,
-                src
-            );
+            if m.pdm {
+                s += &format!(
+                    "[tryboard] I2S mic SPM1423 PDM (CLK=GPIO{} DATA=GPIO{}): sent {} frames, source {}\n",
+                    m.pins.ws, m.pins.data, m.frames, src
+                );
+            } else {
+                s += &format!(
+                    "[tryboard] I2S mic INMP441 (SCK=GPIO{} WS=GPIO{} SD=GPIO{}, {} channel): sent {} frames, source {}\n",
+                    m.pins.bclk,
+                    m.pins.ws,
+                    m.pins.data,
+                    if m.right { "right" } else { "left" },
+                    m.frames,
+                    src
+                );
+            }
         }
         if self.tx_unrouted > 0 {
             s += &format!(
