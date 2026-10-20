@@ -1,5 +1,5 @@
 // The page's single live sim + 3D stage. Step switches never touch it, so sim time stays continuous.
-import { createBench, type PartSpec, type SceneSpec } from '../board3d';
+import { createBench, type SceneSpec } from '../board3d';
 import type { ScenePickApi } from '../scene-api';
 import { LiveSim, type SeekJob } from '../live';
 import type { Snapshot } from '../simmsg';
@@ -24,8 +24,8 @@ import { chipOf, loadExamples } from './examples';
 export { WORKS } from './works';
 import { wkey } from './works';
 import { BOOT_GPIO, type SimChip } from '../chips';
-import { boardDevs } from '../bench3d/boarddevs';
 import { t } from '../i18n';
+import { devsOf, i2sOf, servoOf } from './devs';
 
 /** weather firmware reading line (format set by level 06); accept single or double spaces (bme280 example). */
 const READING = /T=(-?[\d.]+) C\s+H=([\d.]+) %\s+P=([\d.]+) hPa/g;
@@ -88,41 +88,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const buzzerPins = scene.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : []));
   audio.setPins(buzzerPins);
   audio.setSpeaker(scene.parts.some((p) => p.type === 'max98357a'));
-  /** I2S audio parts (pins fixed per chip): speaker shares the sound toggle; mic hears a 1 kHz test WAV. */
-  const i2sOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'max98357a' || p.type === 'inmp441' ? [p.type] : []));
-
-  const i2cOf = (parts: PartSpec[]) => {
-    const kind: Record<string, string> = { oled: 'ssd1306', bme280: 'bme280', mpu6050: 'mpu6050', qmi8658: 'qmi8658', cst816s: 'cst816s' };
-    return parts.flatMap((p) => ('addr' in p && kind[p.type] ? [{ kind: kind[p.type], addr: p.addr }] : []));
-  };
-  /** GPIO wired to touch INT (CST816S on the bench). */
-  const touchIntOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'cst816s' ? [p.int] : []))[0];
-  /** Simulator devices of a scene: onboard ones of an all-in-one board (E-03) first, then bench parts */
-  const devsOf = (sc: SceneSpec) => {
-    const bd = boardDevs(sc.board);
-    const parts = sc.parts;
-    return {
-      i2c: [...(bd?.i2c ?? []), ...i2cOf(parts)],
-      lcd: bd?.lcd ?? parts.some((p) => p.type === 'gc9a01'),
-      battery: bd ? (s.battery ?? bd.battery) : undefined,
-      servo: servoOf(parts),
-      encoder: encoderOf(parts),
-      sonar: sonarOf(parts),
-      dht11: dht11Of(parts),
-      touchInt: bd?.touchInt ?? touchIntOf(parts),
-      i2s: i2sOf(parts),
-    };
-  };
   const poseRate = new PoseRate();
   let poseIdle = 0;
 
-  /** First encoder / ultrasonic on the bench, attached to the core at power-on. */
-  const encoderOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'encoder' ? [{ a: p.a, b: p.b, ...(p.sw !== undefined ? { sw: p.sw } : {}) }] : []))[0];
-  const sonarOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'hcsr04' ? [{ trig: p.trig, echo: p.echo, cm: s.distance }] : []))[0];
-  /** DHT11 data pin (first one; the core models one per pin, the CLI takes one). */
-  const dht11Of = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'dht11' ? [p.pin] : []))[0];
-  /** Signal pin of the first servo; the power network's servo load hangs on it. */
-  const servoOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'servo' ? [p.pin] : []))[0];
   const powerMode = () => (s.power?.ext5v ? 'ext' : 'usb') as 'usb' | 'ext';
   const brownSubs = new Set<(tSec: number) => void>();
   const crashSubs = new Set<(message: string) => void>();
@@ -205,7 +173,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       if (JSON.stringify(next) !== JSON.stringify(s.scene)) bench.setScene(next);
       s.scene = next;
       s.power = power;
-      s.sim?.configure(devsOf(next));
+      s.sim?.configure(devsOf(next, s));
       audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
       audio.setSpeaker(next.parts.some((p) => p.type === 'max98357a'));
       bumpEdit();
@@ -256,7 +224,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     applyScene(next, power, label) {
       s.sceneLabel = label;
       const devs = (sc: SceneSpec) => {
-        const d = devsOf(sc);
+        const d = devsOf(sc, s);
         return JSON.stringify([d.i2c, d.lcd, d.servo ?? null, d.encoder ?? null, d.sonar?.trig ?? null, d.sonar?.echo ?? null, d.dht11 ?? null, d.touchInt ?? null, d.i2s]);
       };
       const rebootNeeded = devs(next) !== devs(s.scene);
@@ -269,7 +237,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
       const hadExt = extBefore;
       if (s.sim && rebootNeeded) {
-        s.sim.configure(devsOf(next));
+        s.sim.configure(devsOf(next, s));
         audio.setSpeaker(next.parts.some((p) => p.type === 'max98357a'));
         s.sim.setPower(powerMode());
         s.reboot();
@@ -452,7 +420,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   function makeSim(fw: string | ArrayBuffer) {
     const sim: LiveSim = new LiveSim({
       fw,
-      ...devsOf(s.scene),
+      ...devsOf(s.scene, s),
       power: powerMode(),
       harness: s.harness,
       onPcm: (b) => audio.pushPcm(b),

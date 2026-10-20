@@ -85,7 +85,7 @@ async function replay(page, fw, re) {
 {
   const page = await open('/app?work=blank&example=s3-amoled-i2c#bench');
   const out = () => page.evaluate(() => globalThis.__tbApp.session.consoleText());
-  report('all five I2C chips found', (await out()).includes('I2C 扫描完成：5/5 个器件'));
+  report('all five I2C chips found', (await out()).includes('I2C 扫描完成：5/5 个器件')); // lint: allow-cjk
   const has = (re) => waitFor(page, (s) => new RegExp(s).test(globalThis.__tbApp.session.consoleText()), re.source, 5000);
   // Tap at panel pixel (120, 360): the CST9220 must report it within 2 px
   const [x, y] = await page.evaluate(() => globalThis.__tbApp.session.bench.lcdPoint(120, 360));
@@ -109,19 +109,19 @@ async function replay(page, fw, re) {
     b?.click();
     return !!b;
   }, act);
-  report('battery slider to 100 % -> charge done', (await slide(100)) && (await has(/充电完成/)));
-  report('unplug USB -> USB 拔出', (await click('usb')) && (await has(/USB 拔出/)));
+  report('battery slider to 100 % -> charge done', (await slide(100)) && (await has(/充电完成/))); // lint: allow-cjk
+  report('unplug USB -> USB 拔出', (await click('usb')) && (await has(/USB 拔出/))); // lint: allow-cjk
   await slide(37);
   await sleep(300);
-  report('PWR short press -> PWRON 短按, battery reads 37 %', (await click('pwr-short')) && (await has(/PWRON 短按/)) && (await has(/电量 37% USB 未插/)));
-  report('PWR long press -> PWRON 长按', (await click('pwr-long')) && (await has(/PWRON 长按/)));
+  report('PWR short press -> PWRON 短按, battery reads 37 %', (await click('pwr-short')) && (await has(/PWRON 短按/)) && (await has(/电量 37% USB 未插/))); // lint: allow-cjk
+  report('PWR long press -> PWRON 长按', (await click('pwr-long')) && (await has(/PWRON 长按/))); // lint: allow-cjk
   // Second tap after the board events, so the replay interleaves input kinds
   const [x2, y2] = await page.evaluate(() => globalThis.__tbApp.session.bench.lcdPoint(400, 80));
   await page.mouse.click(x2, y2, { delay: 120 });
   report('second tap -> TOUCH near (400, 80)', await has(/TOUCH DOWN x=(39[89]|40[012]) y=(7[89]|8[012])\b/));
   await sleep(500);
   await page.screenshot({ path: path.join(outDir, 'amoled-i2c.png') });
-  const r = await replay(page, 's3-amoled-i2c', /^(TOUCH|PWRON|USB|开始充电|充电完成|变化|发现|RTC|I2C)/);
+  const r = await replay(page, 's3-amoled-i2c', /^(TOUCH|PWRON|USB|开始充电|充电完成|变化|发现|RTC|I2C)/); // lint: allow-cjk
   report('input log CLI replay matches line by line', r.same, `web ${r.web} lines / CLI ${r.cli} lines, ${r.events} inputs ${r.diff}`);
   if (!r.same) console.log(`[amoled] cli args: ${r.args}`);
   await page.close();

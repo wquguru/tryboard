@@ -63,7 +63,7 @@ export interface WasmExports {
   tb_imu_set(pitch: number, roll: number, yaw: number, dpitch: number, droll: number, dyaw: number): void;
   /** GPIO wired to the touch INT pin (low while touched, high on release) */
   tb_touch_int(pin: number): void;
-  /** Touch: down = 1 presses / moves to (x, y) (screen pixels 0..239), 0 = release */
+  /** Touch: down = 1 presses / moves to (x, y) (screen pixels, same clamp as script `touch=`), 0 = release */
   tb_touch(x: number, y: number, down: number): void;
   /** AXP2101 battery percent + USB plugged (action `bat=pct[,usb]`); 1 without the PMIC */
   tb_battery(percent: number, usb: number): number;

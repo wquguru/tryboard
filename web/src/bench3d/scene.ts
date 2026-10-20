@@ -13,6 +13,7 @@ import { roundLcdModule, oledModule, bmeModule, ledGlow } from './modules';
 import { type WireRec, wire } from './wires';
 import { type PartSpec, type SceneSpec, DEFAULT_VIEW } from './spec';
 import type { BenchCtx } from './ctx';
+import { AIO_CHIP } from '../chipid';
 
 /** Scene state: rig, breadboard, external-model slots, devboard placement, pick registries and part state. */
 export function* mountState(ctx: BenchCtx): Generator<void> {
@@ -302,7 +303,7 @@ export function mountScene(ctx: BenchCtx): void {
   /** Rebuild the board when the chip or the all-in-one board id (E-03, fixes the chip) changes; true if it did */
   function swapBoard(chip: ChipId, id: BoardId | undefined) {
     const cur = 'boardId' in ctx.board ? ctx.board.boardId : undefined;
-    if (id) chip = 'esp32s3';
+    if (id) chip = AIO_CHIP[id];
     if (cur === id && ctx.board.spec.chip === chip) return false;
     levelRig();
     rig.remove(ctx.board.grp);

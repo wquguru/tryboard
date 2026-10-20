@@ -4,12 +4,13 @@ import type { PickTarget } from '../scene-api';
 import { MAT, canvasTexture, roundRect } from './util';
 import type { BoardSpec } from './boards';
 import type { BoardId } from './boarddevs';
+import { AIO_CHIP } from '../chipid';
 
 /** 2.16″ square panel: active area 2.16·25.4/√2 ≈ 38.8 mm; PCB outline is an estimate (catalog todo: sizeMm) */
 export const AMOLED = { W: 44, L: 50, T: 1.6, screen: 38.8, glassW: 41.6, glassL: 43.4, corner: 4 };
 
 const SPEC: BoardSpec = {
-  chip: 'esp32s3',
+  chip: AIO_CHIP['ws-amoled216'],
   title: 'ESP32-S3-Touch-AMOLED-2.16',
   silk: 'ESP32-S3-Touch-AMOLED-2.16',
   W: AMOLED.W,
