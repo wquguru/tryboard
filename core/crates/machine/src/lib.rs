@@ -3,6 +3,7 @@
 
 mod boards;
 mod keyboard;
+mod parts;
 pub use boards::{
     list as board_list, BoardPreset, Button as BoardButton, I2cBus as BoardI2cBus, BOARDS,
 };
@@ -832,6 +833,9 @@ impl Machine {
     /// "kind" or "kind@sclk=36,mosi=37,miso=35,cs=3,dc=35,rst=-1,bl=-1" (S3; pins not given keep `LcdPins::S3_DEFAULT`).
     /// DCS kinds: gc9a01 gc9107 st7735 st7789 st7789l ili9342(c) ili9342e; Err says what is wrong
     pub fn lcd_attach_spec(&mut self, spec: &str) -> Result<(), String> {
+        if let Some(rest) = spec.strip_prefix("rc522") {
+            return self.rc522_attach_spec(rest);
+        }
         let (name, pins) = match spec.split_once('@') {
             Some((n, p)) => (n, Some(p)),
             None => (spec, None),

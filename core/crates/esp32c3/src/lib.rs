@@ -7,6 +7,7 @@ mod chip;
 mod crypto_hw_tests;
 pub mod hle;
 pub mod periph;
+mod spi_rc522;
 pub mod timing;
 /// The Wi-Fi model lives in tryboard-soc (shared by C3 / S3); wired here with the C3 layout
 pub(crate) use tryboard_soc::wifi;
@@ -880,9 +881,10 @@ impl SocBus {
             data.resize(n, 0);
             bytes.extend_from_slice(&data);
         }
+        let rc522_rx = self.rc522_exchange(&p, &bytes);
         if p.miso_bits > 0 {
             // No slave answers, MISO pull-up reads all ones
-            let rx = vec![0xffu8; p.miso_bits.div_ceil(8) as usize];
+            let rx = rc522_rx.unwrap_or_else(|| vec![0xffu8; p.miso_bits.div_ceil(8) as usize]);
             if p.dma_rx {
                 if let Some(ch) = g.in_channel_for(GDMA_PERI_SPI2) {
                     g.put_in(ch, &rx, self);

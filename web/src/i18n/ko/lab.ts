@@ -857,5 +857,23 @@ const d: Dict = {
   "Send once": "한 번 보내기",
   "Last heartbeat sent": "마지막으로 보낸 하트비트",
   "Last line from the board": "보드가 보낸 마지막 줄",
+  // F-01a share link
+  "{title} (shared)": "{title} (공유)",
+  "Parts, wiring and your actions: others open the same bench at the same moment": "부품, 배선, 조작까지: 연 사람은 같은 작업대의 같은 순간에서 시작합니다",
+  "This share link was made by a newer TryBoard; reload the page to get the latest version": "이 공유 링크는 더 새로운 TryBoard에서 만들어졌습니다. 페이지를 새로고침해 최신 버전으로 여세요",
+  "This share link is damaged and cannot be opened; showing the default bench instead": "공유 링크가 손상되어 열 수 없습니다. 대신 기본 작업대를 보여 줍니다",
+  "Opened a shared bench: this is a local copy, your own work is untouched": "공유된 작업대를 열었습니다: 로컬 사본이며 내 작품은 그대로입니다",
+  "The example firmware has changed since this link was made, so results may differ from the sharer’s": "링크를 만든 뒤 예제 펌웨어가 바뀌어 결과가 공유한 사람과 다를 수 있습니다",
+  "Replayed the shared actions up to {t} s; it keeps running from there": "공유된 조작을 {t} s까지 재생했습니다. 거기서부터 계속 실행합니다",
+  "The sharer’s own firmware is not in the link, so only the bench came along": "공유한 사람의 자체 펌웨어는 링크에 없어 작업대만 가져왔습니다",
+  "Could not replay the shared actions: {err}": "공유된 조작을 재생하지 못했습니다: {err}",
+  "Not shared, for privacy: {what}; results that depend on them may differ": "개인정보 보호를 위해 공유하지 않음: {what}. 이에 따라 달라지는 결과는 다를 수 있습니다",
+  "Wi-Fi credentials": "Wi-Fi 이름과 비밀번호",
+  "real-network replies": "실제 네트워크 응답",
+  "Your own firmware can’t go in a link yet (file export comes in the next version), so the link carries the bench only": "내 펌웨어는 아직 링크에 넣을 수 없습니다(다음 버전에서 파일 내보내기 지원). 이번 링크에는 작업대만 담깁니다",
+  "Your actions are too long for a link, so it carries the bench only; the next version can export them as a file": "조작 기록이 너무 길어 링크에는 작업대만 담았습니다. 다음 버전에서 파일로 내보낼 수 있습니다",
+  "Share link copied: it opens this bench and replays your actions": "공유 링크를 복사했습니다: 이 작업대를 열고 조작을 재생합니다",
+  "Share link copied: it opens this bench with your parts and wiring": "공유 링크를 복사했습니다: 부품과 배선 그대로 이 작업대를 엽니다",
+  "Could not make the share link: {err}": "공유 링크를 만들지 못했습니다: {err}",
 };
 export default d;

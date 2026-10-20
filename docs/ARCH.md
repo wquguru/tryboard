@@ -319,3 +319,10 @@ web/（Vite + TS）
   - 麦克风：Cardputer 是 SPM1423 PDM（CLK G43、DATA G46），走 `i2s.rs` 的 PDM2PCM（RX_CONF bit20 PDM_EN + bit21 PDM2PCM_EN；bit22 DSR16 → 每样本 128 个 PDM 时钟，否则 64，依 IDF i2s_pdm.c）；Adv 用 INMP441 模型顶替 ES8311（BCK 41、WS 43、DIN 46，两个声道同样本）。
   - PDM 帧率 = BCK ÷ 64 或 128（DSR16）；clk_sel 1 按 M5-07 定为 240 MHz，M5Unified 写的分频这样算出正好 16 kHz（M5Unified 自己按 120 MHz、64× 算，两处偏差互相抵消，需真机核对）。
 - S3 GPIO 电平（M5-08 改）：开漏释放、外部无人驱动的焊盘，若只有 IO_MUX 下拉（FUN_PD）则读 0（之前一律读 1）。M5GFX 的 Cardputer / Adv 区分和 M5Unified 的 I2C 总线检测都靠这个。C3 / 经典 ESP32 未改。
+
+## 分享状态 v1（F-01a；`web/src/app/sharestate.ts`，页面接入在 `web/src/app/shareopen.ts`）
+- 链接：`/app?s=<base64url(deflate-raw(JSON))>#bench`。导出 `encodeState` / `decodeState`（抛 `ShareDecodeError`，`reason` = `corrupt` | `newer`）、类型 `ShareStateV1`、`captureState`、`shareLink`、`redact`、`shareKey`。
+- 字段：`v`=1；`w` 作品 id（空白作品 `blank:<示例>`）；`sel` 选板地址参数（自定义作品）；`cp` 检查点；`fw` `{ex, h}` 内置示例 + `fw/<ex>/flash.bin` 的 sha256 前 10 位（同 `tools/asset_hashes.py`）；`chip`；`scene` / `ext5v` 和默认不同时才有；`mods` 改线；`harness` 装配线束（和默认不同才有）；`env`、`heat`、`loc`；`run` `{endMs, s}`，`s` 是 `tryboard run --inputs` 正文；`cut` 被剥掉的隐私项（`wifi` / `net`）。
+- 往后加字段只能可选；改语义就升 `v` 并在 `migrate` 里转换。
+- 打开：`readShare` 在会话启动前解码并把作品改成本地副本（`work.key = share:<fnv>`）；`restoreShare` 在开机后换固件、`session.seek` 快进到 `endMs`，然后接着跑。测试钩子：`__tbShare()` 生成链接，`__tbShareRestored` 是快进结果（stdout / report / endMs）。
+- 验收：`node tools/webtest/share.mjs`。

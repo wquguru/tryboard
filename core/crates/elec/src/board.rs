@@ -307,6 +307,10 @@ impl Board {
             "dht11" => Some(0.001),
             // DS18B20: 1 mA while converting, ~1 µA idle; a 1 s polling loop averages well under this
             "ds18b20" => Some(0.001),
+            // MFRC522 datasheet: ~10 mA operating plus the antenna drivers (module typical ~13 mA)
+            "rc522" => Some(0.013),
+            // Photoresistor + 10 kohm divider: <= 0.33 mA (worst case, LDR near 0 ohm)
+            "ldr" => Some(0.000_33),
             _ => None,
         }
     }
@@ -316,6 +320,10 @@ impl Board {
         match kind {
             // HC-SR04 module spec: 15 mA operating current
             "hcsr04" => Some(0.015),
+            // HC-SR501 module: < 65 uA quiescent
+            "pir" => Some(0.000_065),
+            // Relay module: ~70 mA coil, worst case counted as always energized (see DECISIONS F-04d)
+            "relay" => Some(0.070),
             _ => None,
         }
     }

@@ -11,6 +11,7 @@ pub mod hle;
 pub mod periph;
 pub mod psram;
 mod spi_lcd;
+mod spi_rc522;
 mod usj_console;
 /// USB OTG model lives in tryboard-soc (R-06); re-exported for `usb::` paths in this crate
 pub use tryboard_soc::usb;
@@ -660,9 +661,7 @@ impl SocBus {
 
     pub fn gpio_changed(&mut self, now: u64) {
         self.i2c_pins_settle(now);
-        if let Some(k) = &self.keymatrix {
-            self.gpio.key_matrix_settle(k);
-        }
+        self.gpio.key_matrix_settle(self.keymatrix.as_ref());
         self.gpio.sense();
         let lv = self.gpio.level();
         self.lcd_pins_changed(lv);

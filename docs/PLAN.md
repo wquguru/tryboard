@@ -217,7 +217,7 @@
 
 | ID | 内容 | 验收 | 状态 |
 |---|---|---|---|
-| F-01a | 台面状态 v1 + `?s=` 分享链接（内置固件；剥 Wi-Fi 凭据和真网回包） | share.mjs：链接打开后串口与 CLI 重放逐字节一致 | ◐ |
+| F-01a | 台面状态 v1 + `?s=` 分享链接（内置固件；剥 Wi-Fi 凭据和真网回包） | share.mjs：链接打开后串口与 CLI 重放逐字节一致 | ☑ |
 | F-01b | `.tryboard` 作品文件（> 8k 或自带 bin） | share.mjs 往返用例 | ☐ |
 | F-02 | 分享卡：MP4 + 自写二维码 + 链接；修 Safari 录屏扩展名 | sharecard.mjs 解码二维码 = 链接 | ☐ |
 | F-03 | 独立 embed.html（点击加载、不写 localStorage） | embed.mjs | ☐ |
@@ -225,7 +225,7 @@
 | F-04a | 已建模器件全部上网页元件库 + 3D + 手机 | levels / wiremode / mobile.mjs；网页与 CLI 指纹一致 | ☐ |
 | F-04b | ILI9341 + SH1106 模型；ST7789 / ILI9341 裸屏 C3、S3 验收（等 M5-01） | accept 截图核对 | ☐ |
 | F-04c | DS18B20 单总线（含 SEARCH ROM） | accept：温度随 --env | ☑ CLI + 模型（c3-ds18b20 / -cold / -absent、s3-ds18b20 通过）；网页未做 |
-| F-04d | PIR / LDR / 继电器 + RC522（读 UID） | accept + 脚本动作可重放 | ◐ |
+| F-04d | PIR / LDR / 继电器 + RC522（读 UID） | accept + 脚本动作可重放 | ☑ 2026-10-20（CLI：`--pir` / `--relay` / `--ldr` / `--spi rc522`，动作 `pir=` / `lux=` / `card=`；c3 / s3-pir-relay、c3 / s3-rc522 进 accept，`--inputs` 重放一致；网页未接、经典 ESP32 无 RC522） |
 | F-04e | AHT20 + INA219 + DS3231 | accept | ☐ |
 | F-05 | 故障挑战关卡 3–5 个（缺的 CLI 故障开关一并补） | check.py --ref --all；faults.mjs 网页判定一致 | ◐ |
 | F-06 | 公开数字自动生成（tools/stats.py；README 标记块 + web/public/stats.json，build_web.sh 调用；首页暂无手写数字） | stats.py --check | ☑ |

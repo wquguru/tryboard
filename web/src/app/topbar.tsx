@@ -252,6 +252,13 @@ export function MoreMenu({ toast, phone }: { toast: (msg: string) => void; phone
       </button>
       {open && (
         <div role="menu" id="moreMenu" className={cn(menuPanel, 'right-0 w-[280px]', phone && 'fixed top-12 right-2 w-[min(300px,calc(100vw-16px))] [&_button]:min-h-11')}>
+          <button type="button" role="menuitem" data-more="share" className={menuItem} disabled={!actions.share} onClick={go(() => actions.share?.())}>
+            <Icon n="ext" size={15} />
+            <span className="flex-1">
+              {t('Copy share link')}
+              <span className="block text-[11px] text-muted">{t('Parts, wiring and your actions: others open the same bench at the same moment')}</span>
+            </span>
+          </button>
           <button
             type="button"
             role="menuitem"

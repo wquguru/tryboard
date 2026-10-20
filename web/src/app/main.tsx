@@ -42,29 +42,33 @@ import { t } from '../i18n';
 export { registerStep } from './shell';
 
 const params = new URLSearchParams(location.search);
-const want = params.get('work') as WorkId | null;
+// F-01a: ?s=<state> opens a shared bench as a local copy (key share:<fnv>); the state names the work, example and checkpoint
+const shareIn = params.get('s') ? await import('./shareopen').then(async (m) => ({ m, ...(await m.readShare(params.get('s')!)) })) : null;
+const shared = shareIn?.share ?? null;
+const want = (shared?.work ?? params.get('work')) as WorkId | null;
 // &example=<id>: blank work + the example's firmware, bench and chip (DESIGN_V2 §6.1; old index.html?example= redirects here)
-const exId = params.get('example');
+const exId = shared ? shared.example : params.get('example');
 const ex = exId ? (await loadExamples()).find((e) => e.id === exId) : undefined;
 // work=custom: board picker result -> shop template + per-part checkpoints (U-17). New query = new work (save key hashes it)
-const plan = !ex && want === 'custom' ? (await import('./custom')).customPlan(location.search) : null;
+const plan = !ex && want === 'custom' ? (await import('./custom')).customPlan(shared?.search ?? location.search) : null;
 if (plan) registerTemplate(plan.template);
 // Without a saved placement, lay out per the picker pin table (unsaved); a saved one wins (shop may have changed parts)
 const customPlaced = plan
-  ? (loadPlaced(plan.wkey) ??
+  ? (shareIn?.m.sharedPlaced(shared) ?? loadPlaced(plan.wkey) ??
     (() => {
       const pl = placement(replay(initialHistory('custom')));
       return { scene: { parts: pl.parts as unknown as PartSpec[] }, ext5v: pl.ext5v };
     })())
   : null;
 const customLevels = plan ? genLevels({ boardName: plan.boardName, chip: plan.chip, parts: customPlaced!.scene.parts, deepSleep: plan.deepSleep }) : [];
-const work: WorkDef = ex
+const work0: WorkDef = ex
   ? { ...WORKS.blank, example: ex.id, title: t(ex.title), key: `blank:${ex.id}` }
   : plan
     ? { ...WORKS.custom, title: plan.title, key: plan.wkey, checkpoints: customLevels.filter((l) => !l.manual).map((l) => l.id) }
     : (WORKS[want ?? 'weather'] ?? WORKS.weather);
+const work: WorkDef = shared ? { ...work0, key: shared.key, title: t('{title} (shared)', { title: work0.title }) } : work0;
 // &cp=04: preselect this checkpoint (old levels.html#04 redirects here); ignored if not in this work
-const cp = params.get('cp');
+const cp = shared ? (shared.state.cp ?? null) : params.get('cp');
 if (ex) pushRecent({ kind: 'example', id: ex.id, title: ex.title, at: Date.now() });
 document.title = ex ? t('{title} · Example · TryBoard', { title: work.title }) : t('{title} · TryBoard', { title: work.title });
 initTheme();
@@ -77,7 +81,7 @@ const store = createStore<AppState>({
   work: work.id,
   step: 'bench',
   selection: cp && work.checkpoints.includes(cp) ? { kind: 'checkpoint', id: cp } : null,
-  env: { temp: 23.5, humidity: 45, pressure: 101325 },
+  env: shared?.state.env ?? { temp: 23.5, humidity: 45, pressure: 101325 },
   run: 0,
   simSeconds: 0,
   running: false,
@@ -90,7 +94,7 @@ const store = createStore<AppState>({
   verifyProgress: 0,
   assembly: null,
   caseParams: loadCaseParams(work.id),
-  bom: loadBom(wkey(work)),
+  bom: loadBom(wkey(work), shared ? (plan ? 'custom' : work0.id) : undefined),
   sceneRev: 0,
   editRev: 0,
   runNo: 0,
@@ -124,7 +128,7 @@ const asmstate = import('./asmstate');
 const cmdk = import('./cmdk');
 (async () => {
   try {
-    const placed = customPlaced ?? loadPlaced(wkey(work));
+    const placed = customPlaced ?? shareIn?.m.sharedPlaced(shared) ?? loadPlaced(wkey(work));
     const session = await createSession(shell.stage, work, store, {
         onConsole: log,
         onConsoleReset: (t) => {
@@ -186,6 +190,8 @@ const cmdk = import('./cmdk');
     });
     wireChrome(ctx, session);
     startRouter(ctx);
+    if (shareIn?.error) shell.toast(shareIn.error);
+    if (shared) await shareIn!.m.restoreShare(ctx, shared);
   } catch (e) {
     log(`${t('[TryBoard] Failed to load resources: {err}', { err: String(e) })}\n`);
     setBc({ run: 'idle', boot: { text: t('Failed to load resources: {err}', { err: String(e) }), steps: [], loaded: 0, total: 0 } });
@@ -341,6 +347,9 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
       session.loadFirmware(buf, `${work.example}/flash.bin`);
       shell.toast(t('Back to the reference firmware, powered up again'));
     };
+  // F-01a share link (top bar ⋯); __tbShare is the test hook (tools/webtest/share.mjs)
+  actions.share = async () => (await import('./shareopen')).copyShare(ctx);
+  Object.assign(globalThis, { __tbShare: async () => (await import('./shareopen')).makeShare(ctx) });
   actions.exportInputs = async (kind) => {
     if (!session.sim) return shell.toast(t('The simulator is not running yet, so there is no input log'));
     const a = document.createElement('a');

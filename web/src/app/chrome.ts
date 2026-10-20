@@ -152,6 +152,8 @@ export const actions: {
   loadRef?: () => void;
   /** realnet: the Network tab's "save replies, replay offline" (same input log, file name gets -realnet, C-03) */
   exportInputs?: (kind?: 'realnet') => void;
+  /** Copy the share link of this bench (F-01a) */
+  share?: () => void;
   brief?: () => void;
   uart?: (text: string) => void;
   selectCheckpoint?: (id: string) => void;

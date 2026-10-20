@@ -93,7 +93,10 @@ export interface CaseHarness {
   distMm: number;
 }
 export const defaultCaseHarness = (): CaseHarness => ({ i2cCm: CASE_WIRE_CM, obstacle: 'none', distMm: 20 });
-const KEY = (work: string) => `tryboard-app-harness:${work}`;
+// A shared bench (F-01a, ?s=) keeps its harness under the local copy's key, so the user's own work is never overwritten
+let scope: string | null = null;
+export const scopeCaseHarness = (key: string | null) => void (scope = key);
+const KEY = (work: string) => `tryboard-app-harness:${scope ?? work}`;
 export function loadCaseHarness(work: string): CaseHarness {
   try {
     const v = JSON.parse(localStorage.getItem(KEY(work)) ?? 'null');

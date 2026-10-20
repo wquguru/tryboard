@@ -7,7 +7,8 @@ import { noteSaved } from './saved';
 const BOM_KEY = (w: string) => `tryboard-app-shop:${w}`;
 const PLACED_KEY = (w: string) => `tryboard-app-placed:${w}`;
 
-export function loadBom(work: string): BomHistory {
+/** template: list to start from when nothing is saved (a shared copy's key share:<fnv> names no template) */
+export function loadBom(work: string, template?: string): BomHistory {
   try {
     const h = JSON.parse(localStorage.getItem(BOM_KEY(work)) ?? 'null');
     if (validHistory(h)) return h;
@@ -15,6 +16,7 @@ export function loadBom(work: string): BomHistory {
     /* corrupt data: fall back to the template default */
   }
   // Board-picker works (custom:<hash>) get their template registered as 'custom' by main.tsx from URL params
+  if (template) return initialHistory(template);
   return initialHistory(work.startsWith('custom:') ? 'custom' : PROCURE_TEMPLATES.some((x) => x.id === work) ? work : 'blank');
 }
 export function saveBom(work: string, h: BomHistory) {

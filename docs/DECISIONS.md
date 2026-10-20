@@ -569,7 +569,7 @@
 - 只做有后端的功能，没有的灰显并写明原因，不造假数据：
   - 「代码」页签灰显：作品只有编译好的固件，没有源码数据。
   - 台面「放零件」工具灰显：零件清单归采购步骤管；左栏零件库只链到采购（#shop）。
-  - 「分享」只复制作品链接：没有服务端，也没有把连线 / 环境编进链接的格式，分享改动不做。
+  - 「分享」只复制作品链接：没有服务端，也没有把连线 / 环境编进链接的格式，分享改动不做。（2026-10-20 被 F-01a 取代：改动编进 `?s=`，见文末）
 - 改接线（W 键 / 接线表）只改台面上的线和接线检查（`WireMods.retarget` + `pick.rewire`），不给模拟器重新上电，改动不跨刷新保存。
   - 理由：重新上电会打断时间线和指纹对拍；接线检查已经能说清「接错会怎样」。
   - 替代：改接后整机复位重跑——更真实，但要改 worker 协议，留给以后。
@@ -1163,3 +1163,24 @@
 - **上电温度寄存器 85 °C（0x0550）**：和真件一样，转换前读暂存器得到 85，固件 / 用户能看到这个经典坑。
 - **CLI 结构**：`--dht11` 与 `--ds18b20` 的解析和结尾统计挪到 `wire_sensor_args` / `report_wire_sensors`，因为 `run` 函数受 lint_size 限长（818 行不许涨）；行为不变（c3-dht11 用例照过），`run` 因此缩短，allow 表已更新。
 - **未做**：网页（不在本条范围，wasm 没导出接口）；寄生供电、超速模式、EEPROM 写入 10 ms 忙、转换精度误差与自热。
+
+## 2026-10-20 · F-01a 分享链接（台面状态 v1）
+- 格式：JSON `{v:1, w, sel?, cp?, fw?:{ex,h}, chip?, scene?, ext5v?, mods?, harness?, env?, heat?, loc?, run?:{endMs,s}, cut?}` → `CompressionStream('deflate-raw')` → base64url → `?s=`；编解码在 `web/src/app/sharestate.ts`（纯模块，F-01b / F-02 / F-03 共用）。不加 npm 依赖。
+  - 输入脚本存成 `--inputs` 正文（换行分隔、秒精确到微秒），不用 `toScriptInline`：和 CLI 文件同一格式，Node 里解码后直接写文件就能重放；新增 `inputlog.fromScript / fromAction / toScriptBody` 做反向解析。
+  - 场景只在和示例默认不同（或自定义作品、开了外接 5V）时才写，链接短（weather 按 BOOT + 改温度约 233 字符）。
+  - 版本号比当前新 → 提示刷新；解不开 / 校验不过 → 提示后开默认台面。字段逐个校验，脚本必须能被 `fromScript` 解析。
+- 打开链接：存成本地副本，键 `share:<fnv32(s)>`（`work.key`），BOM、放置、装配线束都走这个键（`scopeCaseHarness`、`loadBom(work, template)` 用原作品的清单做起点），不覆盖自己的作品。看的人保持自己的界面语言（`loc` 只记录不切换）。
+- 恢复：等首次开机 → 必要时换成链接里的内置固件 → 哈希不同就提示「示例固件已更新」→ `session.seek` 重新上电快进到 endMs → 自动接着跑。台面「历史」不记录这一段快进（v1 已知限制）。
+- 隐私：真网开关（`realnet`）和回包（`netreply`）整条丢掉；手机提交的表单里 ssid / pass / password / psk / key 等字段，非演示值（MyHome / 12345678 / wrongpass）换成 `***`；固件热点的 `join` 保留（是固件自己的热点）。被剥的项记进 `cut`，两边都提示。
+- 自带 .bin 不进链接（只带台面，提示下一版导出文件）；超过 8000 字符去掉输入脚本、只留台面和首个环境值，同样提示。
+- 开机时的线束（i2cwire / antenna）、真网开关、网络预设本来就经 worker `apply()` 记进输入日志，不用补。
+- asmstate / caseparams 只读不写；sharestate 里自带一个 fnv32（`custom.ts` 的会带进重依赖）。
+## 2026-10-20 PIR / 光敏电阻 / 继电器 / RC522 模型（F-04d）
+- **放在 `PinDevices.parts`（soc `devices/gpio_parts.rs`）**：跟 DHT11 / HC-SR04 一样随 PinDevices 跨软复位保留，C3 / S3 / 经典 ESP32 共用；RC522 也挂在这里（只记片选和卡），不给 SocBus 加字段，减少和 M5 会话改同一文件。
+- **HC-SR501 按可重复触发（H 档，模块出厂常见跳线）**：有人期间一直高，人走后再保持 `hold`（`--pir GPIO,秒`，默认 5 s，对应延时电位器）；输出落下后 2.5 s 封锁期（BISS0001 典型值）内不再触发。上电约 60 s 预热不模拟（教程固件都不等，等了只会拖慢验收）。替代：L 档不可重复触发——少见，以后加 `,l` 参数即可。
+- **继电器只看 IN 脚电平**：默认高电平吸合（三极管驱动模块），`--relay GPIO,low` 为低电平触发光耦板；吸合约 10 ms 延时与触点抖动不模拟；电源估算按线圈一直吸合计 5V 70 mA（最坏情况，教程要提醒的正是 USB 口带不带得动）。
+- **光敏电阻**：3V3—LDR—脚—10 kΩ—GND，越亮电压越高；GL5528 级参数（10 lux 时 10 kΩ、γ 0.7、暗阻 1 MΩ 封顶），10 lux 正好 1650 mV。C3 / S3 ADC 12 dB 量程约 2.5 V 饱和，亮处读数饱和是真机也会有的现象，不改公式。C3 只允许 GPIO0–5（ADC1/2 脚）、S3 GPIO1–20。
+- **RC522**：按 NXP MFRC522 数据手册寄存器帧（读 `0x80|reg<<1`、写 `reg<<1`，同一帧内连读 FIFO）、ISO 14443-3 REQA / WUPA / 防冲突 / SELECT（CRC_A）/ HLTA 实现，可读 4 / 7 字节 UID；收发与 CalcCRC 立即完成，超时由「没卡」直接置 TimerIRq；MFAuthent 回 ProtocolErr，读块不做（F-04d 范围只到 UID）。软复位或关天线让卡回 Idle。只接 SPI2（C3 `spi2_transfer`、S3 `spi_transfer` 在别的设备都不认时才交给它）；片选三种走法都认：IO_MUX FSPICS0、GPIO 矩阵 FSPICS0–5、普通 GPIO 拉低（Arduino 写法，GPIO 拉高结束一帧）。默认 CS 取 Arduino 核的 SS 脚（C3 GPIO7、S3 GPIO10），`--spi rc522@cs=N` 可改。经典 ESP32 的 SPI 路径属 M5 会话在改的区域，暂不接（报错）。参考：MFRC522 数据手册、ISO/IEC 14443-3 公开描述；未看任何 GPL 驱动代码。
+- **固件**：s3-pir-relay / s3-rc522 用 `../../c3-*/main/main.c` 同一份源码，按 `CONFIG_IDF_TARGET_ESP32S3` 换脚（S3 LDR 在 GPIO2，因 GPIO3 是 strapping 脚；RC522 用 SPI2 IO_MUX 脚 12/13/11/10）。
+- **CLI 行数**：`run` 受 lint_size 限制不能变长，新增动作 / 事件 / 报告放进 `cli/src/parts.rs`（`parts_action`、`parts_events`、`pin_reports`），顺带把编码器 / 超声 / DHT11 的结束汇总挪进 `pin_reports`（输出顺序与文字不变）。
+

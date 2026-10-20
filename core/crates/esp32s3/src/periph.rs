@@ -244,7 +244,10 @@ const MASK: u64 = (1 << NPINS) - 1;
 
 impl Gpio {
     /// Key matrix columns follow the select lines at once: firmware reads them right after writing the select (M5-08)
-    pub fn key_matrix_settle(&mut self, k: &tryboard_soc::devices::keymatrix::KeyMatrix) {
+    pub fn key_matrix_settle(&mut self, k: Option<&tryboard_soc::devices::keymatrix::KeyMatrix>) {
+        let Some(k) = k else {
+            return;
+        };
         let (low, mask) = (k.low_cols(self.level()), k.col_mask());
         self.ext_in &= !mask;
         self.ext_driven = (self.ext_driven & !mask) | low;

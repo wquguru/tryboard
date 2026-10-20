@@ -335,6 +335,8 @@ pub struct PinDevices {
     pub dhts: Vec<Dht11>,
     /// 1-Wire buses with DS18B20s (F-04c)
     pub onewire: Vec<super::ds18b20::OneWireBus>,
+    /// PIR / relay / LDR / RC522 chip select (F-04d)
+    pub parts: super::gpio_parts::GpioParts,
 }
 
 impl PinDevices {
@@ -343,6 +345,7 @@ impl PinDevices {
             && self.sonars.is_empty()
             && self.dhts.is_empty()
             && self.onewire.is_empty()
+            && self.parts.is_empty()
     }
 
     pub fn on_level(&mut self, t: u64, level: u64) {
@@ -355,6 +358,7 @@ impl PinDevices {
         for b in &mut self.onewire {
             b.on_level(t, level);
         }
+        self.parts.on_level(t, level);
     }
 
     /// Drives due by now (time-ordered) and the next time to ask again
@@ -373,6 +377,7 @@ impl PinDevices {
         for b in &mut self.onewire {
             next = next.min(b.poll(now, &mut out));
         }
+        next = next.min(self.parts.poll(now, &mut out));
         out.sort_by_key(|d| d.0);
         (out, next)
     }
