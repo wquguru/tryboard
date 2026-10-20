@@ -1226,3 +1226,14 @@
 - **拖放**：页面级 `drop` 只接 `.tryboard`，且 `defaultPrevented` 时让给已有拖放区（检查点上传、零件库），`.bin` 拖到别处的行为不变。
 - **链接提示改文案**：F-01a 的「下个版本支持导出文件」两条提示改成指向 ⋯「下载 .tryboard 文件」，三种语言同步改。
 - 不做：上传服务器；CLI 直接读 `.tryboard`（RS-4 列为后续项，现有「导出输入日志」已能给 CLI）。
+
+
+## 2026-10-20 分享卡（F-02）
+- **二维码自写**（`web/src/app/qr.ts`，约 330 行）：照 ISO/IEC 18004 写字节模式、纠错 M、8 种掩码按罚分选。版本做到 1–40 而不是 RS-4 说的 1–25：条目要求「链接 > 2000 字符才去掉运行记录」，2000 字符要 v37 左右，v25-M 只装 997 字节。典型链接 200–600 字符落在 v10–v20；屏幕扫码稳定上限约 v25 仍是经验值，没有真机验证。剥掉运行记录后仍超 2331 字节就报错，不出卡。
+- **测试夹具来自 qrencode 4.1.1**（本机 brew 已装的 CLI，只用来生成 `web/test/qr-qrencode.json`，测试运行时不调用、不是依赖）：固定版本 + qrencode 选的掩码，自写编码器逐模块一致。测试端解码器 `web/test/qrdecode.ts` 自带 GF 表并校验每块 RS 校验子为 0，sharecard.mjs 用它解码从 PNG 像素采样的二维码。
+- **录像 mime**：分享卡按 `video/mp4;codecs=avc1,mp4a.40.2` → `avc1` → `video/mp4` → webm 顺序挑；台面「录像」保持 webm 优先（media.mjs 校验 webm 轨道参数，不改其行为）。两者文件扩展名和 Blob 类型都按 `rec.mimeType`，修掉 Safari 录 MP4 却叫 .webm 的问题。分享卡码率 4 Mbps（6 秒约 0.8–3 MB）。
+- **没有短链接服务**：架短链服务要部署和域名，超出自主范围；卡片上印 host + 路径 + `?s=` 开头并省略号截断，完整链接靠二维码和「复制链接」。
+- **卡片固定浅色**（不跟页面主题）：二维码黑底白码才稳，分享出去也不该受分享者主题影响。版式 1080×1350，上 810 px 是台面画面（静图用 `renderStill` 2× 超采样，视频每帧自己 `render()` 后同一任务里拷贝，因为 WebGL 缓冲不保留）。
+- **出口是弹窗而不是自动下载**：一次点击要下两个文件，Chrome 会拦第二个；弹窗里预览视频，再分别下载视频 / PNG / 复制链接。`recordCanvas` 加了可选 `onBlob`（不传时行为不变）。
+- 公共接口改动（全是可选参数、向后兼容）：`shareLink(base, state, max?)`、`makeShare(ctx, max?)` 返回值多 `truncated`；`recordCanvas(..., opt?: { prefer, bitrate, onBlob })`；新增 `pickMime` / `videoExt`；`renderStill(c, '')` 不画角标；`actions.shareCard`；测试钩子 `window.__tbCardLast`。
+- 备选：npm qrcode / nayuki（MIT，但要先进 LICENSING）——否，自写 + 夹具对照足够；GIF / muxer —— 否，理由见 RS-4 §3。

@@ -391,5 +391,9 @@ const d: Dict = {
   // Moved from lab.ts
   "DHT11 data": "DHT11 데이터",
   "DHT11 reading": "DHT11 읽기",
+
+  // F-02 share card
+  "Make a share card": "공유 카드 만들기",
+  "6 s video and image with a QR code, for chats and posts": "QR 코드가 들어간 6초 영상과 이미지, 채팅·게시글용",
 };
 export default d;

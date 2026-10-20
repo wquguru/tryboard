@@ -391,5 +391,9 @@ const d: Dict = {
   // Moved from lab.ts
   "DHT11 data": "DHT11 数据",
   "DHT11 reading": "DHT11 读数",
+
+  // F-02 share card
+  "Make a share card": "生成分享卡",
+  "6 s video and image with a QR code, for chats and posts": "6 秒视频和图片，带二维码，发群、发帖用",
 };
 export default d;

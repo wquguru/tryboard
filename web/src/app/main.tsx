@@ -386,6 +386,8 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
       return { name: f.name, own: f.own, run: f.run, b64: btoa(s) };
     },
   });
+  // F-02 share card (top bar ⋯); window.__tbCardLast is the test hook (tools/webtest/sharecard.mjs)
+  actions.shareCard = async () => (await import('./sharecardview')).openShareCard(ctx);
   actions.exportInputs = async (kind) => {
     if (!session.sim) return shell.toast(t('The simulator is not running yet, so there is no input log'));
     const a = document.createElement('a');

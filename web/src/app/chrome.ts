@@ -156,6 +156,8 @@ export const actions: {
   share?: () => void;
   /** Download the bench, actions and own firmware as a .tryboard file (F-01b) */
   shareFile?: () => void;
+  /** Share card: 6 s video + PNG with a QR of the share link (F-02) */
+  shareCard?: () => void;
   brief?: () => void;
   uart?: (text: string) => void;
   selectCheckpoint?: (id: string) => void;

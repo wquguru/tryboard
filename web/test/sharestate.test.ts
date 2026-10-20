@@ -176,3 +176,18 @@ test(".tryboard file round trip with the user's own bin; checks magic, version, 
   assert.equal(builtin.bin, null);
   assert.equal(builtin.state.fw!.ex, 'weather');
 });
+
+test('F-02 QR budget: a mid-size run fits the 8000 link but is dropped at the card max of 2000', async () => {
+  let x = 7;
+  const mid: InputEvent[] = [{ tMs: 0, kind: 'env', temp: 22, humidity: 41, pressure: 101100 }];
+  for (let i = 0; i < 600; i++) {
+    x = (x * 1103515245 + 12345) >>> 0;
+    mid.push({ tMs: i * 3.7 + (x % 1000) / 1000, kind: 'pot', pin: 1, mv: x % 3300 });
+  }
+  const { state } = await captureState({ ...base, log: { ...LOG, events: mid } });
+  const full = await shareLink('http://x/app', state);
+  assert.ok(!full.truncated && full.s.length > 2000, `${full.s.length} chars`);
+  const card = await shareLink('http://x/app', state, 2000 - 'http://x/app?s=#bench'.length);
+  assert.ok(card.truncated && card.url.length <= 2000, `${card.url.length} chars`);
+  assert.deepEqual((await decodeState(card.s)).env, { temp: 22, humidity: 41, pressure: 101100 });
+});

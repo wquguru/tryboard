@@ -130,14 +130,14 @@ export async function captureBench(ctx: StepCtx, ownRun = false) {
 }
 
 /** Build the share link of the current bench (also behind window.__tbShare for tests) */
-export async function makeShare(ctx: StepCtx): Promise<{ url: string; notes: string[]; s: string; run: boolean }> {
+export async function makeShare(ctx: StepCtx, max?: number): Promise<{ url: string; notes: string[]; s: string; run: boolean; truncated: boolean }> {
   const { state, ownFw } = await captureBench(ctx);
-  const link = await shareLink(location.origin + location.pathname, state);
+  const link = await shareLink(location.origin + location.pathname, state, max);
   const notes: string[] = [];
   if (ownFw) notes.push(t('Your own firmware can’t go in a link, so it carries the bench only; ⋯ → Download .tryboard file takes the firmware and your actions'));
   else if (link.truncated) notes.push(t('Your actions are too long for a link, so it carries the bench only; ⋯ → Download .tryboard file takes them all'));
   if (state.cut?.length && !link.truncated) notes.push(t('Not shared, for privacy: {what}; results that depend on them may differ', { what: state.cut.map((c) => (c === 'wifi' ? t('Wi-Fi credentials') : t('real-network replies'))).join(', ') }));
-  return { url: link.url, notes, s: link.s, run: !!state.run && !link.truncated };
+  return { url: link.url, notes, s: link.s, run: !!state.run && !link.truncated, truncated: link.truncated };
 }
 
 /** Top bar ⋯ "Copy share link" */

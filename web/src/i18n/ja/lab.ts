@@ -888,5 +888,22 @@ const d: Dict = {
   "Download .tryboard file": ".tryboard ファイルをダウンロード",
   "Also takes your own firmware and long action logs; drop the file on a TryBoard page to open it": "自分のファームウェアや長い操作記録も含められます。ファイルを TryBoard のページにドロップすると開けます",
   "This .tryboard file is no longer stored in this browser; open the file again": "この .tryboard ファイルはもうこのブラウザに残っていません。ファイルをもう一度開いてください",
+
+  // F-02 share card
+  "Scan to open": "スキャンして開く",
+  "{chip} · runs in your browser, no board needed": "{chip} · ブラウザで動作、ボード不要",
+  "Opens this bench and replays the run": "このベンチを開き、操作を再生します",
+  "Opens this bench with its parts and wiring": "部品と配線ごとこのベンチを開きます",
+  "The share link is too long for a QR code": "共有リンクが長すぎて QR コードに入りません",
+  "Your actions are too long for a QR code, so the card links to the bench only": "操作記録が長すぎて QR コードに入らないため、カードはベンチだけにリンクします",
+  "Share card": "シェアカード",
+  "Share card preview": "シェアカードのプレビュー",
+  "Making the card…": "カードを作成中…",
+  "Could not make the share card: {err}": "シェアカードを作れませんでした：{err}",
+  "Ready: a {s} s {fmt} clip and a PNG still; the QR code opens the same bench": "完成：{s} 秒の {fmt} 動画と PNG 静止画。QR コードで同じベンチが開きます",
+  "Recording {n}/{max} s…": "録画中 {n}/{max} 秒…",
+  "Video ({fmt})": "動画（{fmt}）",
+  "Image (PNG)": "画像（PNG）",
+  "Copy link": "リンクをコピー",
 };
 export default d;

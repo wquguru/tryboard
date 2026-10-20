@@ -888,5 +888,22 @@ const d: Dict = {
   "Download .tryboard file": "下载 .tryboard 文件",
   "Also takes your own firmware and long action logs; drop the file on a TryBoard page to open it": "自己的固件和很长的操作记录也能带上；把文件拖到 TryBoard 页面即可打开",
   "This .tryboard file is no longer stored in this browser; open the file again": "这个 .tryboard 文件已不在本浏览器中；请重新打开该文件",
+
+  // F-02 share card
+  "Scan to open": "扫码打开",
+  "{chip} · runs in your browser, no board needed": "{chip} · 在浏览器里运行，不用买板子",
+  "Opens this bench and replays the run": "打开是这个台面，并重放这次运行",
+  "Opens this bench with its parts and wiring": "打开是这个台面，带着器件和接线",
+  "The share link is too long for a QR code": "分享链接太长，放不进二维码",
+  "Your actions are too long for a QR code, so the card links to the bench only": "操作记录太长放不进二维码，卡片只链接到台面",
+  "Share card": "分享卡",
+  "Share card preview": "分享卡预览",
+  "Making the card…": "正在生成卡片…",
+  "Could not make the share card: {err}": "分享卡没生成出来：{err}",
+  "Ready: a {s} s {fmt} clip and a PNG still; the QR code opens the same bench": "好了：{s} 秒 {fmt} 视频和一张 PNG 图片；扫二维码打开的是同一个台面",
+  "Recording {n}/{max} s…": "录制中 {n}/{max} 秒…",
+  "Video ({fmt})": "视频（{fmt}）",
+  "Image (PNG)": "图片（PNG）",
+  "Copy link": "复制链接",
 };
 export default d;

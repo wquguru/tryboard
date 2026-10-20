@@ -266,6 +266,13 @@ export function MoreMenu({ toast, phone }: { toast: (msg: string) => void; phone
               <span className="block text-[11px] text-muted">{t('Also takes your own firmware and long action logs; drop the file on a TryBoard page to open it')}</span>
             </span>
           </button>
+          <button type="button" role="menuitem" data-more="card" className={menuItem} disabled={!actions.shareCard} onClick={go(() => actions.shareCard?.())}>
+            <Icon n="play" size={15} />
+            <span className="flex-1">
+              {t('Make a share card')}
+              <span className="block text-[11px] text-muted">{t('6 s video and image with a QR code, for chats and posts')}</span>
+            </span>
+          </button>
           <button
             type="button"
             role="menuitem"
