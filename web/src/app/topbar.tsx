@@ -259,6 +259,13 @@ export function MoreMenu({ toast, phone }: { toast: (msg: string) => void; phone
               <span className="block text-[11px] text-muted">{t('Parts, wiring and your actions: others open the same bench at the same moment')}</span>
             </span>
           </button>
+          <button type="button" role="menuitem" data-more="file" className={menuItem} disabled={!actions.shareFile} onClick={go(() => actions.shareFile?.())}>
+            <Icon n="download" size={15} />
+            <span className="flex-1">
+              {t('Download .tryboard file')}
+              <span className="block text-[11px] text-muted">{t('Also takes your own firmware and long action logs; drop the file on a TryBoard page to open it')}</span>
+            </span>
+          </button>
           <button
             type="button"
             role="menuitem"

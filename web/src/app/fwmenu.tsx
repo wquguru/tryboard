@@ -176,7 +176,7 @@ export function FwMenu({ phone }: { phone?: boolean }) {
       <input
         ref={file}
         type="file"
-        accept=".bin"
+        accept=".bin,.tryboard"
         hidden
         id="fwPick"
         onChange={(e) => {

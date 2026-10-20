@@ -44,7 +44,10 @@ export { registerStep } from './shell';
 
 const params = new URLSearchParams(location.search);
 // F-01a: ?s=<state> opens a shared bench as a local copy (key share:<fnv>); the state names the work, example and checkpoint
-const shareIn = params.get('s') ? await import('./shareopen').then(async (m) => ({ m, ...(await m.readShare(params.get('s')!)) })) : null;
+// F-01b: ?f=<key> is a .tryboard file opened in this browser; its state string takes the same path as ?s=
+const fileIn = params.get('f') ? await import('./tryfile').then((m) => m.takeFile(params.get('f')!)) : null;
+const sIn = params.get('s') ?? fileIn?.s ?? null;
+const shareIn = sIn ? await import('./shareopen').then(async (m) => ({ m, ...(await m.readShare(sIn)) })) : null;
 const shared = shareIn?.share ?? null;
 const want = (shared?.work ?? params.get('work')) as WorkId | null;
 // &example=<id>: blank work + the example's firmware, bench and chip (DESIGN_V2 §6.1; old index.html?example= redirects here)
@@ -192,7 +195,8 @@ const cmdk = import('./cmdk');
     wireChrome(ctx, session);
     startRouter(ctx);
     if (shareIn?.error) shell.toast(shareIn.error);
-    if (shared) await shareIn!.m.restoreShare(ctx, shared);
+    if (params.get('f') && !fileIn) shell.toast(t('This .tryboard file is no longer stored in this browser; open the file again'));
+    if (shared) await shareIn!.m.restoreShare(ctx, shared, fileIn?.own ?? null);
   } catch (e) {
     log(`${t('[TryBoard] Failed to load resources: {err}', { err: String(e) })}\n`);
     setBc({ run: 'idle', boot: { text: t('Failed to load resources: {err}', { err: String(e) }), steps: [], loaded: 0, total: 0 } });
@@ -315,6 +319,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   });
   // New firmware: check the image header (magic 0xE9, chip id) first; on mismatch don't power up, show a check card
   actions.pickFirmware = async (f) => {
+    if (/\.tryboard$/i.test(f.name)) return void (await import('./tryfile')).openFile(f, (m) => shell.toast(m));
     const buf = await f.arrayBuffer();
     const r = fwCheck(buf, session.chip);
     if (!r.ok) {
@@ -351,6 +356,17 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   // F-01a share link (top bar ⋯); __tbShare is the test hook (tools/webtest/share.mjs)
   actions.share = async () => (await import('./shareopen')).copyShare(ctx);
   Object.assign(globalThis, { __tbShare: async () => (await import('./shareopen')).makeShare(ctx) });
+  // F-01b .tryboard file (⋯ menu, fw picker, page drop); __tbShareFile returns base64 bytes for share.mjs
+  actions.shareFile = async () => (await import('./tryfile')).exportFile(ctx);
+  void import('./tryfile').then((m) => m.installDrop((s) => shell.toast(s)));
+  Object.assign(globalThis, {
+    __tbShareFile: async () => {
+      const f = await (await import('./tryfile')).makeFile(ctx);
+      let s = '';
+      for (let i = 0; i < f.bytes.length; i += 0x8000) s += String.fromCharCode(...f.bytes.subarray(i, i + 0x8000));
+      return { name: f.name, own: f.own, run: f.run, b64: btoa(s) };
+    },
+  });
   actions.exportInputs = async (kind) => {
     if (!session.sim) return shell.toast(t('The simulator is not running yet, so there is no input log'));
     const a = document.createElement('a');

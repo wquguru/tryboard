@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { action, fromScript, toScript, toScriptBody, toScriptInline, type InputEvent, type InputLog } from '../src/inputlog.ts';
-import { captureState, decodeState, encodeState, redact, shareKey, shareLink, ShareDecodeError, SHARE_LINK_MAX, type ShareState } from '../src/app/sharestate.ts';
+import { captureState, decodeState, encodeState, packTryfile, redact, shareKey, shareLink, ShareDecodeError, SHARE_LINK_MAX, unpackTryfile, type ShareState } from '../src/app/sharestate.ts';
 
 const EVENTS: InputEvent[] = [
   { tMs: 0, kind: 'power', on: true },
@@ -145,4 +145,34 @@ test('typical bench fits a short link; very long runs fall back to the bench-onl
   const back = await decodeState(long.s);
   assert.equal(back.run, undefined);
   assert.deepEqual(back.env, { temp: 21, humidity: 40, pressure: 101000 });
+});
+
+test(".tryboard file round trip with the user's own bin; checks magic, version, size and sha256 (F-01b)", async () => {
+  const own = await captureState({ ...base, fwName: 'my/blink.bin', ownRun: true });
+  assert.equal(own.ownFw, true);
+  assert.equal(own.state.run!.endMs, LOG.endMs);
+  // Binary that is not UTF-8 and contains newlines
+  const bin = new Uint8Array([0xe9, 0x0a, 0xff, 0x00, 0x0a, 0x80]).buffer;
+  const bytes = await packTryfile(own.state, bin, 'my/blink.bin');
+  assert.equal(new TextDecoder().decode(bytes.subarray(0, 11)), 'TRYBOARD 1\n');
+  const back = await unpackTryfile(bytes);
+  assert.deepEqual(new Uint8Array(back.bin!), new Uint8Array(bin));
+  assert.equal(back.state.bin!.name, 'my-blink.bin');
+  assert.equal(back.state.bin!.size, 6);
+  assert.match(back.state.bin!.h, /^[0-9a-f]{64}$/);
+  assert.deepEqual({ ...back.state, bin: undefined }, { ...own.state, bin: undefined });
+  // The state survives the ?s= hop the page makes after opening the file
+  assert.deepEqual(await decodeState(await encodeState(back.state)), back.state);
+  const reject = (b: Uint8Array, reason: 'corrupt' | 'newer') => assert.rejects(unpackTryfile(b), (e) => e instanceof ShareDecodeError && e.reason === reason);
+  const flip = bytes.slice();
+  flip[flip.length - 1] ^= 1;
+  await reject(flip, 'corrupt');
+  await reject(bytes.slice(0, -1), 'corrupt');
+  await reject(new TextEncoder().encode('TRYBOARD 2\n{}\n'), 'newer');
+  await reject(new TextEncoder().encode('hello\n{}\n'), 'corrupt');
+  await reject(new TextEncoder().encode('TRYBOARD 1\n{"v":1,"w":"x","bin":{"name":"a","h":"00","size":1}}\nA'), 'corrupt');
+  // Built-in firmware: no bin bytes, the file is just the state (long runs that a link drops)
+  const builtin = await unpackTryfile(await packTryfile((await captureState(base)).state, null));
+  assert.equal(builtin.bin, null);
+  assert.equal(builtin.state.fw!.ex, 'weather');
 });

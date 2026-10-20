@@ -333,3 +333,5 @@ web/（Vite + TS）
 - 往后加字段只能可选；改语义就升 `v` 并在 `migrate` 里转换。
 - 打开：`readShare` 在会话启动前解码并把作品改成本地副本（`work.key = share:<fnv>`）；`restoreShare` 在开机后换固件、`session.seek` 快进到 `endMs`，然后接着跑。测试钩子：`__tbShare()` 生成链接，`__tbShareRestored` 是快进结果（stdout / report / endMs）。
 - 验收：`node tools/webtest/share.mjs`。
+- `.tryboard` 文件（F-01b；纯函数在 `sharestate.ts`：`packTryfile(state, bin, name)` / `unpackTryfile(bytes)`，页面接入在 `web/src/app/tryfile.ts`）：`TRYBOARD 1\n` + 一行状态 JSON + `\n` + 原始 bin。头行数字是文件格式版本，与状态 `v` 无关；高于 1 报 `newer`。状态多一个可选字段 `bin` `{name, h, size}`（h = 完整 sha256 hex），只出现在文件里；有 `bin` 时 `run` 绑定这个 bin（`CaptureInput.ownRun`）。
+- 打开文件：`openFile` 校验魔数 / 版本 / 大小 / sha256，把 `encodeState(state)` 串和 bin 存进 IndexedDB `tryboard-files/files`（键 = `shareKey(s)` 的 8 位 hex，留最近 3 个），然后跳到 `?f=<键>#bench`；`main.tsx` 启动时 `takeFile(键)` 取回状态串交给 `readShare`，开机后把 bin 传给 `restoreShare(ctx, sh, own)`（先过 `fwCheck`）。不放进 `?s=`：长操作的状态超过服务器请求行上限。入口：换固件文件框（`accept=".bin,.tryboard"`，`pickFirmware` 按扩展名分流）、页面任意处拖放（`installDrop`，只接 `.tryboard`，不抢已有拖放区）、⋯「下载 .tryboard 文件」（`actions.shareFile`）。测试钩子 `__tbShareFile()` 返回 `{name, own, run, b64}`。

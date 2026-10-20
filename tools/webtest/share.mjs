@@ -146,8 +146,119 @@ bad.on('pageerror', (e) => errors.push(`bad link: ${e}`));
 await bad.goto(base + '/app?s=AAAA_not-a-link#bench', { waitUntil: 'load' });
 const badToast = await waitFor(bad, () => /damaged/.test(document.getElementById('toast')?.textContent ?? ''), null, 20000);
 report('damaged link -> toast, default bench', badToast);
-
 await ctx2.close();
+
+// ---- 7. .tryboard file (F-01b): own bin (button) + BOOT presses -> file -> open by picker and by drop in fresh contexts
+const OWN = path.join(root, 'firmware/build/button/flash.bin');
+const ctx3 = await browser.createBrowserContext();
+const own = await ctx3.newPage();
+own.on('pageerror', (e) => errors.push(`file sharer: ${e}`));
+own.on('console', (m) => { if (m.type() === 'error') errors.push(`file sharer: ${m.text()}`); });
+await own.goto(base + '/app?work=blank&example=weather#bench', { waitUntil: 'load' });
+await waitFor(own, () => /T=23\.50 C/.test(document.getElementById('console').textContent), null, 30000);
+await (await own.$('#fwPick')).uploadFile(OWN);
+report('own bin (button) runs on the bench', await waitFor(own, () => document.getElementById('console').textContent.includes('BOOT'), null, 20000));
+const press = async () => {
+  const p = await own.evaluate(() => globalThis.__tbButtonPos('BOOT'));
+  if (!p) return;
+  await own.mouse.move(p[0], p[1]);
+  await own.mouse.down();
+  const t0 = await simNow(own);
+  await waitFor(own, (t) => parseFloat(document.getElementById('simtime').textContent) > t + 0.15, t0, 10000);
+  await own.mouse.up();
+  const t1 = await simNow(own);
+  await waitFor(own, (t) => parseFloat(document.getElementById('simtime').textContent) > t + 0.3, t1, 10000);
+};
+await press();
+await press();
+report('two BOOT presses -> TRYBOARD_OK button', await waitFor(own, () => document.getElementById('console').textContent.includes('TRYBOARD_OK button'), null, 15000));
+await own.click('#runPause');
+await waitFor(own, () => /Paused/.test(document.getElementById('runState').textContent), null, 5000);
+await sleep(300);
+const ownLog = await own.evaluate(() => globalThis.__tbInputLog());
+const ownLive = await fwConsole(own);
+const file = await own.evaluate(() => globalThis.__tbShareFile());
+const bytes = Buffer.from(file.b64, 'base64');
+const fileOut = path.join(outDir, 'share-own.tryboard');
+fs.writeFileSync(fileOut, bytes);
+const nl1 = bytes.indexOf(10), nl2 = bytes.indexOf(10, nl1 + 1);
+const fst = JSON.parse(bytes.subarray(nl1 + 1, nl2).toString('utf8'));
+const binBytes = bytes.subarray(nl2 + 1);
+const ownBin = fs.readFileSync(OWN);
+const crypto = await import('node:crypto');
+report('.tryboard = header + state (run, no fw) + the exact bin', bytes.subarray(0, nl1).toString() === 'TRYBOARD 1' && file.own && file.run && !fst.fw && fst.bin?.name === 'flash.bin' && fst.bin.h === crypto.createHash('sha256').update(ownBin).digest('hex') && binBytes.equals(ownBin) && fst.run?.endMs === ownLog.endMs && /:gpio9=0/.test(fst.run.s),
+  `${bytes.length} bytes, ${file.name}, endMs ${fst.run?.endMs}`);
+await ctx3.close();
+
+/** Open the file in a fresh context on the default bench; how = picker (#fwPick) or a page drop */
+async function openFile(buf, how, tag) {
+  const c = await browser.createBrowserContext();
+  const p = await c.newPage();
+  p.on('pageerror', (e) => errors.push(`${tag}: ${e}`));
+  p.on('console', (m) => { if (m.type() === 'error') errors.push(`${tag}: ${m.text()}`); });
+  await p.goto(base + '/app#bench', { waitUntil: 'load' });
+  await waitFor(p, () => /T=23\.50 C/.test(document.getElementById('console').textContent), null, 30000);
+  const f = path.join(outDir, `share-${tag}.tryboard`);
+  fs.writeFileSync(f, buf);
+  if (how === 'pick') await (await p.$('#fwPick')).uploadFile(f);
+  else
+    await p.evaluate((b64, name) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0))], name));
+      const ev = (type) => new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true });
+      document.body.dispatchEvent(ev('dragover'));
+      document.body.dispatchEvent(ev('drop'));
+    }, buf.toString('base64'), 'mine.tryboard');
+  return { c, p };
+}
+const btnI2c = ownLog.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(',');
+const ownInputs = path.join(outDir, 'share-own-inputs.txt');
+fs.writeFileSync(ownInputs, fst.run.s + '\n');
+const ownCycles = Math.round(fst.run.endMs * (CPU_HZ / 1000));
+const cliOwn = spawnSync(CLI, ['run', OWN, '--seconds', String((ownCycles + 0.5) / CPU_HZ), ...(btnI2c ? ['--i2c', btnI2c] : []), '--inputs', ownInputs], { maxBuffer: 64 << 20 }).stdout.toString('utf8');
+fs.writeFileSync(path.join(outDir, 'share-own-cli.stdout'), cliOwn);
+for (const how of ['pick', 'drop']) {
+  const { c, p } = await openFile(bytes, how, `file-${how}`);
+  const ok = await waitFor(p, () => !!globalThis.__tbShareRestored, null, 60000);
+  const r = ok ? await p.evaluate(() => globalThis.__tbShareRestored) : { error: 'timeout' };
+  const rs = r.stdout ?? '';
+  fs.writeFileSync(path.join(outDir, `share-file-${how}.stdout`), rs);
+  report(`.tryboard via ${how}: restored own bin + actions = CLI --inputs replay (byte for byte)`, ok && !r.error && rs === cliOwn && rs.includes('TRYBOARD_OK button') && ownLive.endsWith(rs),
+    r.error ?? (rs === cliOwn ? `${rs.length} bytes` : `differs at ${diff(rs, cliOwn)} (web ${rs.length} / CLI ${cliOwn.length})`));
+  if (how === 'pick') await p.screenshot({ path: path.join(outDir, 'share-file.png') });
+  await c.close();
+}
+// A flipped bin byte fails the sha256 check: toast, no reload, bench untouched
+const bad2 = Buffer.from(bytes);
+bad2[bad2.length - 100] ^= 0xff;
+{
+  const { c, p } = await openFile(bad2, 'pick', 'file-bad');
+  const toastOk = await waitFor(p, () => /damaged/.test(document.getElementById('toast')?.textContent ?? ''), null, 15000);
+  const url = p.url();
+  report('tampered .tryboard -> damaged toast, page not reloaded', toastOk && !url.includes('?f='), url);
+  await c.close();
+}
+// Built-in firmware with a run too long for any link: the section-2 run padded with 4000 random-time toggles of unused GPIO6
+{
+  const lines = state.run.s.split('\n');
+  const t0 = 1.3, t1 = state.run.endMs / 1000 - 0.01;
+  const times = Array.from({ length: 4000 }, () => t0 + Math.random() * (t1 - t0)).sort((x, y) => x - y);
+  const pad = times.map((t, i) => `${t.toFixed(6)}:gpio6=${i % 2 ? 'z' : '0'}`);
+  const long = { ...state, run: { endMs: state.run.endMs, s: [...lines, ...pad].join('\n') } };
+  const enc = zlib.deflateRawSync(Buffer.from(JSON.stringify(long))).toString('base64url').length;
+  const longFile = Buffer.concat([Buffer.from(`TRYBOARD 1\n${JSON.stringify(long)}\n`)]);
+  const longInputs = path.join(outDir, 'share-long-inputs.txt');
+  fs.writeFileSync(longInputs, long.run.s + '\n');
+  const cl = cliRun(['--seconds', String((cycles + 0.5) / CPU_HZ), '--i2c', i2c, '--inputs', longInputs], 'long-cli');
+  const { c, p } = await openFile(longFile, 'drop', 'file-long');
+  const ok = await waitFor(p, () => !!globalThis.__tbShareRestored, null, 60000);
+  const r = ok ? await p.evaluate(() => globalThis.__tbShareRestored) : { error: 'timeout' };
+  const rs = r.stdout ?? '';
+  report('.tryboard with a long run on built-in firmware (state far past a URL) restores = CLI replay', enc > 16000 && ok && !r.error && rs === cl.stdout && rs.includes('ALARM ON') && /\?f=[0-9a-f]{8}#bench$/.test(p.url()),
+    r.error ?? `encoded state ${enc} chars, ${p.url().length}-char URL, ${rs === cl.stdout ? `${rs.length} bytes` : `differs at ${diff(rs, cl.stdout)}`}`);
+  await c.close();
+}
+
 await browser.close();
 server.close();
 if (errors.length) console.log('[share] page errors:\n  ' + errors.join('\n  '));
