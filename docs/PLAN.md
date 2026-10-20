@@ -195,11 +195,11 @@
 验收固件统一用 M5Unified + M5GFX 的 Arduino 草图（`firmware/arduino/m5-*`，`tools/build_arduino.sh`），必须走真实自动识别路径（不预置 NVS 板型）；没有 QEMU 对照，结论标「未经真机标定」。
 | ID | 项 | 验收 | 状态 |
 |---|---|---|---|
-| M5-00 | 授权与构建：LICENSING 补 M5Unified / M5GFX（MIT）、LovyanGFX（BSD-2）、字体声明；build_arduino.sh 支持钉提交的库；探测草图 `m5-probe`（M5.begin 后打印板型 / 屏尺寸 / IMU / RTC / 触摸 / PMIC），按各板 FQBN 编出 | 6 种 FQBN（AtomS3、Dial、CoreS3、Cardputer、StickC Plus2、Core2）都编出 flash.bin；LGPL 三件套（协议、源码提交、构建配置）随 bin | ☐ |
+| M5-00 | 授权与构建：LICENSING 补 M5Unified / M5GFX（MIT）、LovyanGFX（BSD-2）、字体声明；build_arduino.sh 支持钉提交的库；探测草图 `m5-probe`（M5.begin 后打印板型 / 屏尺寸 / IMU / RTC / 触摸 / PMIC），按各板 FQBN 编出 | 6 种 FQBN（AtomS3、Dial、CoreS3、Cardputer、StickC Plus2、Core2）都编出 flash.bin；LGPL 三件套（协议、源码提交、构建配置）随 bin | ☑ 2026-10-20（Reviews/ab/M5-00.md） |
 | M5-01 | SPI 屏底座：面板读回（RDDID 0x04 / RDDST 0x09 / D9h）+ 三线半双工 + dummy 位；通用 DCS 面板模型（分辨率 / GRAM 偏移 / ID / 引脚可配：GC9107、ST7735、ST7789、ILI9342C / E、GC9A01）；S3 SPI3 | 单测：各型号 RDDID 读回正确；现有 gc9a01 / co5300 用例 golden 逐字节不变 | ☐ |
-| M5-02 | I2C 底座：外接器件可挂 I2C1 / 按引脚挂；GPIO 开漏线与 + 外部上拉（软件 I2C 探测能看到器件）；eFuse 封装号可配（S3 / ESP32） | 单测 + 固件：软件 I2C 扫描与硬件 I2C 扫描结果一致；golden 不变 | ☐ |
+| M5-02 | I2C 底座：外接器件可挂 I2C1 / 按引脚挂；GPIO 开漏线与 + 外部上拉（软件 I2C 探测能看到器件）；eFuse 封装号可配（S3 / ESP32） | 单测 + 固件：软件 I2C 扫描与硬件 I2C 扫描结果一致；golden 不变 | ☑ 2026-10-20（Reviews/ab/M5-02.md） |
 | M5-03 | S3 USB-Serial-JTAG 控制台：TX 接 CLI / 网页串口，报主机在线，RX 能输入 | Arduino S3 草图（CDC on boot）`Serial.println` 在 CLI 与网页逐字节一致；输入回显 | ☐ |
-| M5-04 | I2C 器件模型：MPU6886、BMI270(+BMM150 AUX)、BM8563、AW9523、AXP192、LP5562、TCA8418、FT6336U / FT3267 ID、INA3221、LTR-553 / AW88298 应答壳 | 每颗单测（ID、关键寄存器、随环境变化） | ☐ |
+| M5-04 | I2C 器件模型：MPU6886、BMI270(+BMM150 AUX)、BM8563、AW9523、AXP192、LP5562、TCA8418、FT6336U / FT3267 ID、INA3221、LTR-553 / AW88298 应答壳 | 每颗单测（ID、关键寄存器、随环境变化） | ☑ 2026-10-20（Reviews/ab/M5-04.md） |
 | M5-05 | 核心板预设 `--board <m5-*>`（CLI + wasm）：自动挂板载器件、引脚、封装号；M5Dial 跑通 | m5-probe 在 Dial 上识别为 board_M5Dial；圆屏截图；旋钮 / 触摸 / RTC 输出与脚本一致 | ☐ |
 | M5-06 | AtomS3 / AtomS3 Lite / AtomS3R | 三块识别正确；屏截图；IMU 读数随姿态变化 | ☐ |
 | M5-07 | CoreS3 / CoreS3-SE（摄像头不做，SE 识别靠 GC0308 不应答） | 识别正确；ILI9342 截图；触摸 / IMU / PMIC 电量；喇叭 I2S 有输出 | ☐ |
@@ -209,6 +209,7 @@
 | M5-11 | 经典 ESP32 RMT（8 通道、64 字块） | IDF led_strip 示例；WS2812 帧与 C3 一致 | ☐ |
 | M5-12 | 经典 ESP32 I2S（含 PDM RX）+ ADC1 | IDF 示例；麦克风 / 电池电压读数 | ☐ |
 | M5-13 | StickC Plus2、Core2（v1.0 AXP192 / v1.1 AXP2101）、Atom Lite / Matrix | 各板 m5-probe 识别正确；屏截图 | ☐ |
+| M5-14 | 经典 ESP32：flash 芯片 ID 容量随镜像头（8 / 16 MB）、PSRAM（PICO-V3-02 内置 2 MB、Core2 8 MB，四线） | m5-probe（stickc_plus2 / core2）不再因 flash 容量 / PSRAM 断言；IDF CONFIG_SPIRAM 示例内存测试通过 | ☐ |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
