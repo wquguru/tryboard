@@ -51,7 +51,8 @@ def canonical_report(err: str) -> str:
                     break
                 ws.append(k)
     oled = [re.sub(r' \(.*$', '', l) for l in lines if l.startswith('[tryboard] OLED lit pixels')]
-    lcd = [re.sub(r' \(.*$', '', l) for l in lines if l.startswith('[tryboard] LCD GC9A01 non-black pixels')]
+    # Any controller name: tb_report prints the same line for GC9107 / ST7789 / ILI9342 on M5 presets (M5-09b)
+    lcd = [re.sub(r' \(.*$', '', l) for l in lines if re.match(r'\[tryboard\] LCD \S+ non-black pixels', l)]
     # Transition: both spellings of the LCD color line (emitter gc9a01.rs is owned by the core agent)
     lcd += [l for l in lines if l.startswith('[tryboard] LCD color #')]
     # USB virtual host (only with --usb-log): state + typed text, same text as wasm tb_usb_report; old and new spellings

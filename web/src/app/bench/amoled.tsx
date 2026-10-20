@@ -3,12 +3,12 @@
 import { t } from "../../i18n";
 import { useState } from "react";
 import { Btn, Btns, Kv, Note, Slider } from "../../ui/panel";
-import { boardDevs } from "../../bench3d/boarddevs";
+import { modelBoard } from "../../bench3d/boarddevs";
 import { type NEv, outOf } from "./shared";
 import type { Session } from "../types";
 
-/** The scene's all-in-one board devices, if any */
-export const sceneBoard = (ses: Session) => boardDevs(ses.scene.board);
+/** The scene's all-in-one board with an AXP2101 panel (E-03), if any; M5 presets have none */
+export const sceneBoard = (ses: Session) => modelBoard(ses.scene.board);
 
 export function AmoledCtrls({ ses }: { ses: Session }) {
   const def = sceneBoard(ses)?.battery ?? { pct: 98, usb: true };

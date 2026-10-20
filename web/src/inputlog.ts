@@ -45,7 +45,9 @@ export type InputEvent =
   /** AXP2101 battery percent and USB plugged (E-03). Action bat=pct[,usb] */
   | { tMs: number; kind: 'bat'; pct: number; usb: boolean }
   /** PWR key wired to the AXP2101 PWRON pin (E-03). Action pwrkey=short|long */
-  | { tMs: number; kind: 'pwrkey'; long: boolean };
+  | { tMs: number; kind: 'pwrkey'; long: boolean }
+  /** Board keyboard key (M5-09b Cardputer, script-safe name of core keyboard.rs). Action key=<name>,1|0 */
+  | { tMs: number; kind: 'key'; name: string; down: boolean };
 
 /** An event not yet stamped (the worker fills in tMs when applying it) */
 export type InputAction = InputEvent extends infer E ? (E extends unknown ? Omit<E, 'tMs'> : never) : never;
@@ -72,6 +74,8 @@ export interface InputLog {
   dht11?: number;
   /** GPIO wired to the touch controller INT: becomes --touch-int on replay */
   touchInt?: number;
+  /** Core board preset at power-up (M5-09b): becomes --board on replay */
+  board?: string;
   /** I2S audio parts at power-up (max98357a / inmp441) and the mic's test WAV (name under tools/audio/): become --i2s / --mic */
   i2s?: string[];
   mic?: string;
@@ -143,6 +147,8 @@ export function action(e: InputEvent): string | null {
       return `bat=${e.pct}${e.usb ? ',usb' : ''}`;
     case 'pwrkey':
       return `pwrkey=${e.long ? 'long' : 'short'}`;
+    case 'key':
+      return `key=${e.name},${e.down ? 1 : 0}`;
     case 'power':
       return null;
   }
@@ -173,6 +179,7 @@ export function toScriptInline(log: InputLog): string {
 export function cliArgs(log: InputLog, fw: string, inputsFile: string, seconds?: number): string[] {
   const a = ['tryboard', 'run', fw];
   if (seconds !== undefined) a.push('--seconds', String(seconds));
+  if (log.board) a.push('--board', log.board);
   if (log.i2c.length) a.push('--i2c', log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(','));
   if (log.lcd || log.spi) a.push('--spi', log.spi ?? 'gc9a01');
   if (log.battery) a.push('--battery', `${log.battery.pct}${log.battery.usb ? ',usb' : ''}`);
@@ -253,6 +260,9 @@ export function fromAction(a: string): InputAction {
       return { kind: 'bat', pct: num(p[0]), usb: p[1] === 'usb' };
     case 'pwrkey':
       return { kind: 'pwrkey', long: v === 'long' };
+    case 'key':
+      if (p.length === 2 && (p[1] === '0' || p[1] === '1')) return { kind: 'key', name: p[0], down: p[1] === '1' };
+      break;
   }
   throw new Error(`bad action "${a}"`);
 }

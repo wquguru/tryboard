@@ -1093,5 +1093,11 @@ const d: Dict = {
   "AMOLED board · battery, USB, PWR key": "AMOLED 板 · 电池、USB、PWR 键",
   "USB 5 V or the Li-ion battery, through the AXP2101 PMU": "USB 5 V 或锂电池，经 AXP2101 电源管理芯片",
   "AXP2101 PWRON (not a GPIO); held ≥ 1 s = long press": "AXP2101 PWRON（不是 GPIO）；按住 ≥ 1 s 算长按",
+  "Board preset": "板预设",
+  "Board preset {name}": "板预设 {name}",
+  "Generic dev board": "通用开发板",
+  "Generic dev board (no preset)": "通用开发板（无预设）",
+  "Same as CLI --board {id}: the core attaches this board's screen, I2C devices and buttons. Upload firmware built for it ({chip}).": "等同 CLI --board {id}：内核接上这块板的屏幕、I2C 器件和按键。请上传为它编译的固件（{chip}）。",
+  "Keys you type while the bench has focus press the matching Cardputer keys.": "实验台获得焦点时，你敲的键会按下 Cardputer 上对应的键。",
 };
 export default d;

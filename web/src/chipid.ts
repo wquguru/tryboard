@@ -14,7 +14,22 @@ export const RGB_GPIO: Record<SimChip, number | null> = { esp32: null, esp32c3: 
 export const ROM_FILE: Record<SimChip, string> = { esp32: 'esp32_rev300_rom.elf', esp32c3: 'esp32c3_rev3_rom.elf', esp32s3: 'esp32s3_rev0_rom.elf' };
 
 /** Chip soldered on each all-in-one board (E-03), keyed by SceneSpec.board. */
-export const AIO_CHIP: Record<string, SimChip> = { 'ws-amoled216': 'esp32s3' };
+export const AIO_CHIP: Record<string, SimChip> = {
+  'ws-amoled216': 'esp32s3',
+  // M5Stack presets (M5-09b): same chips as core/crates/machine/src/boards.rs
+  m5dial: 'esp32s3',
+  m5atoms3: 'esp32s3',
+  m5atoms3lite: 'esp32s3',
+  m5atoms3r: 'esp32s3',
+  m5cores3: 'esp32s3',
+  m5cores3se: 'esp32s3',
+  m5cardputer: 'esp32s3',
+  m5cardputeradv: 'esp32s3',
+  m5stickcplus2: 'esp32',
+  m5core2: 'esp32',
+  m5core2v11: 'esp32',
+  m5atomlite: 'esp32',
+};
 
 /** Chip for a header / tb_chip() id; null when TryBoard does not simulate it. */
 export function chipFromId(id: number): SimChip | null {

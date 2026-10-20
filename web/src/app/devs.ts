@@ -18,20 +18,21 @@ const i2cOf = (parts: PartSpec[]) => {
 };
 /** GPIO wired to touch INT (CST816S on the bench). */
 const touchIntOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'cst816s' ? [p.int] : []))[0];
-/** Simulator devices of a scene: onboard ones of an all-in-one board (E-03) first, then bench parts */
+/** Simulator devices of a scene: onboard ones of an all-in-one board (E-03) first, then bench parts; M5 boards add only the preset */
 export const devsOf = (sc: SceneSpec, st: DevState) => {
   const bd = boardDevs(sc.board);
   const parts = sc.parts;
   return {
     i2c: [...(bd?.i2c ?? []), ...i2cOf(parts)],
     lcd: bd?.lcd ?? parts.some((p) => p.type === 'gc9a01'),
-    battery: bd ? (st.battery ?? bd.battery) : undefined,
+    battery: bd?.battery ? (st.battery ?? bd.battery) : undefined,
     servo: servoOf(parts),
     encoder: encoderOf(parts),
     sonar: sonarOf(parts, st.distance),
     dht11: dht11Of(parts),
     touchInt: bd?.touchInt ?? touchIntOf(parts),
     i2s: i2sOf(parts),
+    board: bd?.preset,
   };
 };
 /** First encoder / ultrasonic on the bench, attached to the core at power-on. */

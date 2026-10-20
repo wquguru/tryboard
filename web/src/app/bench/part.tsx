@@ -9,6 +9,8 @@ import { type AnalogControl } from "../examples";
 import { OledCanvas, PartHead } from "./shared";
 import type { BenchCtx } from "./ctx";
 import { AmoledCtrls, sceneBoard } from "./amoled";
+import { PresetPick } from "./preset";
+import { boardDevs } from "../../bench3d/boarddevs";
 
 export function mountPart(b: BenchCtx) {
   function renderPart(id: string) {
@@ -21,13 +23,14 @@ export function mountPart(b: BenchCtx) {
         <>
           <Sec>{t("Dev board")}</Sec>
           <PartHead
-            name={aio ? sceneBoard(ses)!.name : BOARD_NAME[ses.chip]}
+            name={boardDevs(ses.scene.board)?.name ?? BOARD_NAME[ses.chip]}
             type="board"
           />
           <Kv
             k={t("Chip")}
             v={CHIP_DESC[ses.chip]}
           />
+          {!aio && <PresetPick ses={ses} onChange={() => renderPart("board")} />}
           <Kv k={t("Power supply")} v={aio ? t("USB 5 V or the Li-ion battery, through the AXP2101 PMU") : t("USB 5 V stepped down to 3V3 by the LDO")} />
           <Kv k="3V3" live="e33" />
           <Kv k={t("3V3 total current (estimate)")} live="eic" />

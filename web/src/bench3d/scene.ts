@@ -8,7 +8,7 @@ import { t } from '../i18n';
 import { PITCH, type ExtSlot, disposeTree, canvasTexture, pinHits } from './util';
 import { type ChipId, apiId, BOARD_C3, BOARDS, LCD_WIRING, BB, rowZ, breadboard, devboard } from './boards';
 import { AMOLED, amoledBoard } from './amoled';
-import type { BoardId } from './boarddevs';
+import { type BoardId, modelBoard } from './boarddevs';
 import { roundLcdModule, oledModule, bmeModule, ledGlow } from './modules';
 import { type WireRec, wire } from './wires';
 import { type PartSpec, type SceneSpec, DEFAULT_VIEW } from './spec';
@@ -301,9 +301,11 @@ export function mountScene(ctx: BenchCtx): void {
   }
 
   /** Rebuild the board when the chip or the all-in-one board id (E-03, fixes the chip) changes; true if it did */
-  function swapBoard(chip: ChipId, id: BoardId | undefined) {
+  function swapBoard(chip: ChipId, board: BoardId | undefined) {
     const cur = 'boardId' in ctx.board ? ctx.board.boardId : undefined;
-    if (id) chip = AIO_CHIP[id];
+    if (board) chip = AIO_CHIP[board];
+    // M5 presets (M5-09b) show the generic dev board of their chip until M5-09c models them
+    const id = modelBoard(board) ? board : undefined;
     if (cur === id && ctx.board.spec.chip === chip) return false;
     levelRig();
     rig.remove(ctx.board.grp);

@@ -1093,5 +1093,11 @@ const d: Dict = {
   "AMOLED board · battery, USB, PWR key": "AMOLED 보드 · 배터리, USB, PWR 키",
   "USB 5 V or the Li-ion battery, through the AXP2101 PMU": "USB 5 V 또는 리튬 이온 배터리, AXP2101 PMU 경유",
   "AXP2101 PWRON (not a GPIO); held ≥ 1 s = long press": "AXP2101 PWRON(GPIO 아님); 1초 이상 누르면 길게 누르기",
+  "Board preset": "보드 프리셋",
+  "Board preset {name}": "보드 프리셋 {name}",
+  "Generic dev board": "범용 개발 보드",
+  "Generic dev board (no preset)": "범용 개발 보드 (프리셋 없음)",
+  "Same as CLI --board {id}: the core attaches this board's screen, I2C devices and buttons. Upload firmware built for it ({chip}).": "CLI --board {id}와 같습니다: 코어가 이 보드의 화면, I2C 장치, 버튼을 연결합니다. 이 보드용으로 빌드한 펌웨어를 업로드하세요 ({chip}).",
+  "Keys you type while the bench has focus press the matching Cardputer keys.": "실험대에 포커스가 있을 때 입력한 키가 Cardputer의 해당 키를 누릅니다.",
 };
 export default d;

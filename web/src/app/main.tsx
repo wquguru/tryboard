@@ -38,6 +38,7 @@ import { registerTemplate } from '../catalog/templates';
 import { initialHistory, placement, replay } from './bom';
 import type { PartSpec } from '../board3d';
 import { t } from '../i18n';
+import { boardDevs, cardputerKey } from '../bench3d/boarddevs';
 
 export { registerStep } from './shell';
 
@@ -405,6 +406,18 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   actions.view = (k) => session.bench.view?.(k, store.get().selection);
 
+  // Cardputer preset (M5-09b): bench key presses reach the board keyboard; shortcuts and text fields keep theirs
+  const boardKey = (e: KeyboardEvent, down: boolean) => {
+    if (!boardDevs(session.scene.board)?.keyboard || store.get().step !== 'bench' || e.repeat) return;
+    if ((e.metaKey || e.ctrlKey) && !/^(Control|Meta)/.test(e.code)) return;
+    if ((e.target as HTMLElement).closest?.('input,textarea,select,[contenteditable]')) return;
+    const k = cardputerKey(e.code);
+    if (!k || !session.sim) return;
+    e.preventDefault();
+    session.sim.boardKey(k, down);
+  };
+  window.addEventListener('keydown', (e) => boardKey(e, true));
+  window.addEventListener('keyup', (e) => boardKey(e, false));
   window.addEventListener('keydown', (e) => {
     if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return;
     const el = e.target as HTMLElement;
