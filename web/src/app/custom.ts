@@ -112,6 +112,8 @@ function wiresFor(partId: string, pins: number[][]): Wire[] {
       return G(p[0]) ? [...w('A', G(p[0])), ...w('B', 'GND')] : [];
     case 'pot':
       return G(p[0]) ? [...w('1', '3V3'), ...w('2', G(p[0])), ...w('3', 'GND')] : [];
+    case 'dht11':
+      return G(p[0]) ? [...w('VCC', '3V3'), ...w('DATA', G(p[0])), ...w('GND', 'GND')] : [];
     case 'led-kit':
       return G(p[0]) ? [...w('长脚 +', G(p[0])), ...w('短脚 -', 'GND')] : []; // lint: allow-cjk
     default:
@@ -192,6 +194,9 @@ export function customPlan(search: string): CustomPlan {
   const catIds = new Set([...required, ...suggested].map((l) => l.partId));
   // c3-thermo hardcodes I2C on GPIO6/7 (XIAO C3 D4/D5); other pin tables would get 0 ACKs, so no demo.
   const i2cOn67 = wiring.filter((w) => w.pin === 'SDA' || w.pin === 'SCL').every((w) => w.net === (w.pin === 'SDA' ? 'GPIO6' : 'GPIO7'));
-  const demo = chip === 'esp32c3' && (catIds.has('bme280') || catIds.has('ssd1306')) && i2cOn67 ? 'c3-thermo' : null;
+  // c3-dht11 hardcodes DATA on GPIO5 (the advisor prefers it); I2C parts keep c3-thermo, which covers more checkpoints.
+  const dhtOn5 = wiring.some((w) => w.part === 'dht11' && w.pin === 'DATA' && w.net === 'GPIO5');
+  const i2cDemo = (catIds.has('bme280') || catIds.has('ssd1306')) && i2cOn67;
+  const demo = chip !== 'esp32c3' ? null : i2cDemo ? 'c3-thermo' : catIds.has('dht11') && dhtOn5 && !catIds.has('bme280') && !catIds.has('ssd1306') ? 'c3-dht11' : null;
   return { state, title, advisorBoard, boardId, boardName, sub, chip, template, noModel, have, deepSleep, wkey: `custom:${fnv(encode(state))}`, demo };
 }

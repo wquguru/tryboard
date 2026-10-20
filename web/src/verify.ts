@@ -66,7 +66,7 @@ export async function verifyLevel(l: Level, flash: ArrayBuffer, onProgress?: (si
   const job: VerifyJob = { wasm, rom: rom.slice(0), flash: flash.slice(0), seconds: l.seconds ?? 2, i2c, env: envOverride ?? env, script: l.script, pwmPin: l.pwm?.pin, lcd, servo, power, encoder, sonar, dht11, touchInt, usb, i2cLog, i2cWire: harness?.i2cWire ?? i2cWire, antenna: harness?.antenna ?? antenna, ...(realnet ? { realnet: true } : {}) };
   const msg = await runJob(job, onProgress);
   // For automated tests comparing against the CLI: raw output of the latest check
-  (globalThis as { __tbLastVerify?: unknown }).__tbLastVerify = { stdout: msg.stdout, report: msg.report };
+  (globalThis as { __tbLastVerify?: unknown }).__tbLastVerify = { stdout: msg.stdout, report: msg.report, timing: msg.timing };
   // Timing line only for per-row trust (D-05); the fingerprint below stays on the CLI-canonical report
   const sep = msg.report && !msg.report.endsWith('\n') ? '\n' : '';
   const results = evaluate(l, msg.stdout, msg.timing ? `${msg.report}${sep}${msg.timing}\n` : msg.report);

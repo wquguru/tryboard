@@ -169,8 +169,9 @@ export const searchUrls = (kw: string) => ({
   szlcsc: 'https://so.szlcsc.com/global.html?k=' + encodeURIComponent(kw),
 });
 
-type Draft = Omit<Part, 'price' | 'searchUrl' | 'todo' | 'sources' | 'chips' | 'i2cAddr' | 'sim'> & {
+type Draft = Omit<Part, 'price' | 'searchUrl' | 'todo' | 'sources' | 'chips' | 'i2cAddr' | 'sim' | 'sizeMm'> & {
   price: [number, number];
+  sizeMm?: Part['sizeMm'];
   chips?: ChipId[];
   i2cAddr?: Part['i2cAddr'];
   sim?: Part['sim'];
@@ -186,6 +187,7 @@ function P(d: Draft): Part {
     ...d,
     chips: d.chips ?? BOTH,
     i2cAddr: d.i2cAddr ?? null,
+    sizeMm: d.sizeMm ?? null,
     sim: d.sim ?? { level: 'none', model: null },
     price: { lo: d.price[0], hi: d.price[1], currency: 'CNY', checkedAt: CHECKED_AT, source: PRICE_SRC, verified: false },
     searchUrl: searchUrls(d.keywords),
@@ -250,7 +252,6 @@ export const PARTS: Part[] = [
     pins: S3_DEVKITC_PINS,
     voltage: { supply: [5, 5], logic: 3.3 },
     currentMa: { typ: null, peak: null, est: true, source: BOARD_CURRENT_NOTE },
-    sizeMm: null,
     sim: { level: 'verified', model: 's3-devkitc' },
     price: [35, 70],
     keywords: 'ESP32-S3-DevKitC-1 N16R8 开发板', // lint: allow-cjk
@@ -274,7 +275,6 @@ export const PARTS: Part[] = [
     pins: S3_DEVKITC_PINS,
     voltage: { supply: [5, 5], logic: 3.3 },
     currentMa: { typ: null, peak: null, est: true, source: BOARD_CURRENT_NOTE },
-    sizeMm: null,
     sim: { level: 'estimated', model: 's3-devkitc' },
     price: [35, 70],
     keywords: 'ESP32-S3-DevKitC-1 v1.1 N16R8',
@@ -298,7 +298,6 @@ export const PARTS: Part[] = [
     pins: null,
     voltage: { supply: [5, 5], logic: 3.3 },
     currentMa: { typ: null, peak: null, est: true, source: BOARD_CURRENT_NOTE },
-    sizeMm: null,
     sim: { level: 'estimated', model: 'esp32s3' },
     price: [25, 45],
     keywords: '合宙 ESP32S3 核心板', // lint: allow-cjk
@@ -367,7 +366,6 @@ export const PARTS: Part[] = [
     pins: C3_DEVKITM_PINS,
     voltage: { supply: [5, 5], logic: 3.3 },
     currentMa: { typ: null, peak: null, est: true, source: BOARD_CURRENT_NOTE },
-    sizeMm: null,
     sim: { level: 'verified', model: 'c3-devkitm' },
     price: [40, 60],
     keywords: 'ESP32-C3-DevKitM-1 开发板', // lint: allow-cjk
@@ -482,7 +480,6 @@ export const PARTS: Part[] = [
     pins: header(['VSYS', 'G', '3V3', 'RST', 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46]),
     voltage: { supply: [5, 5], logic: 3.3 },
     currentMa: { typ: null, peak: null, est: true, source: BOARD_CURRENT_NOTE },
-    sizeMm: null,
     sim: { level: 'estimated', model: 'esp32s3' },
     price: [70, 110],
     keywords: '微雪 ESP32-S3-LCD-1.28 圆屏', // lint: allow-cjk
@@ -530,7 +527,6 @@ export const PARTS: Part[] = [
     pins: header(['VSYS', 'G', 'RST', 0, 15, 16, 17, 18, 21, 33]),
     voltage: { supply: [5, 5], logic: 3.3 },
     currentMa: { typ: null, peak: null, est: true, source: BOARD_CURRENT_NOTE },
-    sizeMm: null,
     sim: { level: 'estimated', model: 'esp32s3' },
     price: [80, 120],
     keywords: '微雪 ESP32-S3-Touch-LCD-1.28 触摸圆屏', // lint: allow-cjk
@@ -583,7 +579,6 @@ export const PARTS: Part[] = [
     currentMa: { typ: 0.0036, peak: 0.714, est: false, source: 'BME280 datasheet: 3.6 µA at 1 Hz T/H/P; 714 µA during pressure measurement' },
     i2cAddr: { default: 0x76, alt: [0x77], how: 'Tie SDO to VCC for 0x77' },
     i2cPullupK: null,
-    sizeMm: null,
     sim: { level: 'verified', model: 'bme280' },
     price: [10, 25],
     keywords: 'BME280 模块 3.3V I2C 温湿度气压', // lint: allow-cjk
@@ -602,7 +597,6 @@ export const PARTS: Part[] = [
     currentMa: { typ: null, peak: 0.98, est: true, source: 'Estimate: AHT20 datasheet measurement current around 980 µA (to be checked word for word)' },
     i2cAddr: { default: 0x38, alt: [] },
     i2cPullupK: null,
-    sizeMm: null,
     price: [3, 8],
     keywords: 'AHT20 温湿度传感器模块 I2C', // lint: allow-cjk
     supplyNet: '3V3',
@@ -618,13 +612,28 @@ export const PARTS: Part[] = [
     pins: [VCC('+'), pin('OUT', 'onewire', 'vcc', { dir: 'bi', boot: 'pull-up' }), GND('-')],
     voltage: { supply: [3.3, 6], logic: null },
     currentMa: { typ: 1, peak: 1.5, est: false, source: 'AM2302 datasheet: 1–1.5 mA measuring, 40–50 µA standby' },
-    sizeMm: null,
     price: [12, 25],
     keywords: 'DHT22 AM2302 温湿度模块', // lint: allow-cjk
     supplyNet: '3V3',
     sources: ['Aosong AM2302 datasheet'],
     todo: ['voltage.logic: data line pulled up to VCC, so the level follows the supply', 'sizeMm'],
     note: 'Proprietary single-wire protocol; at least 2 s between reads. The data line is pulled up to module VCC, so on 5 V it is a 5 V signal.',
+  }),
+  P({
+    id: 'dht11',
+    name: 'DHT11 temperature / humidity module (3-pin, with pull-up)',
+    kind: 'sensor',
+    model: 'Aosong DHT11',
+    pins: [VCC('VCC'), pin('DATA', 'onewire', 'vcc', { dir: 'bi', boot: 'pull-up', note: 'Open drain; 10 kΩ pull-up on the module' }), GND()],
+    voltage: { supply: [3.3, 5.5], logic: null },
+    currentMa: { typ: 1, peak: 2.5, est: false, source: 'DHT11 datasheet: 0.5–2.5 mA measuring, 100–150 µA standby' },
+    sim: { level: 'verified', model: 'dht11' },
+    price: [3, 8],
+    keywords: 'DHT11 温湿度传感器模块 三针', // lint: allow-cjk
+    supplyNet: '3V3',
+    sources: ['Aosong DHT11 datasheet'],
+    todo: ['voltage.logic: data line pulled up to VCC, so the level follows the supply', 'sizeMm: module outline varies by seller'],
+    note: 'Proprietary single-wire protocol timed in microseconds; at least 1 s between reads. Integer humidity, 0–50 °C ±2 °C. Firmware that bit-bangs it with busy-wait loops must be checked on a real board.',
   }),
   P({
     id: 'ds18b20',
@@ -634,7 +643,6 @@ export const PARTS: Part[] = [
     pins: [pin('红 VDD', 'power', 'vcc'), GND('黑 GND'), pin('黄 DQ', 'onewire', null, { dir: 'bi', note: 'Open drain; level set by an external 4.7 kΩ pull-up' })], // lint: allow-cjk
     voltage: { supply: [3.0, 5.5], logic: null },
     currentMa: { typ: 1, peak: 1.5, est: false, source: 'DS18B20 datasheet: 1 mA typ / 1.5 mA max converting, 750 nA standby' },
-    sizeMm: null,
     price: [3, 10],
     keywords: 'DS18B20 防水探头 不锈钢', // lint: allow-cjk
     supplyNet: '3V3',
@@ -670,7 +678,6 @@ export const PARTS: Part[] = [
     currentMa: { typ: 3.9, peak: 3.9, est: true, source: 'Estimate: MPU-6000/6050 datasheet gyro 3.6 mA + accelerometer 500 µA (DMP not counted)' },
     i2cAddr: { default: 0x68, alt: [0x69], how: 'Pull AD0 high for 0x69' },
     i2cPullupK: null,
-    sizeMm: null,
     sim: { level: 'verified', model: 'mpu6050' },
     price: [6, 15],
     keywords: 'MPU6050 GY-521 模块', // lint: allow-cjk
@@ -689,7 +696,6 @@ export const PARTS: Part[] = [
     currentMa: { typ: 1.7, peak: 1.7, est: true, source: 'Estimate: QMI8658C datasheet 6-axis high-performance mode around 1.7 mA (to be checked word for word)' },
     i2cAddr: { default: 0x6b, alt: [0x6a], how: 'Tie SA0 to GND for 0x6A' },
     i2cPullupK: null,
-    sizeMm: null,
     sim: { level: 'verified', model: 'qmi8658' },
     price: [8, 20],
     keywords: 'QMI8658 六轴 模块', // lint: allow-cjk
@@ -708,7 +714,6 @@ export const PARTS: Part[] = [
     currentMa: { typ: 0.2, peak: 0.575, est: false, source: 'DS3231 datasheet: 200 µA active, 575 µA during temperature conversion (3.63 V)' },
     i2cAddr: { default: 0x68, alt: [], how: 'Fixed; the on-board EEPROM AT24C32 also takes 0x57' },
     i2cPullupK: 4.7,
-    sizeMm: null,
     price: [8, 15],
     keywords: 'DS3231 时钟模块 AT24C32', // lint: allow-cjk
     supplyNet: '3V3',
@@ -726,7 +731,6 @@ export const PARTS: Part[] = [
     currentMa: { typ: 0.7, peak: 1, est: false, source: 'INA219 datasheet: quiescent current 0.7 mA typ / 1 mA max' },
     i2cAddr: { default: 0x40, alt: [0x41, 0x44, 0x45], how: 'Change the address with the A0 / A1 pads' },
     i2cPullupK: null,
-    sizeMm: null,
     price: [5, 12],
     keywords: 'INA219 模块 I2C 电流', // lint: allow-cjk
     supplyNet: '3V3',
@@ -742,7 +746,6 @@ export const PARTS: Part[] = [
     pins: [pin('SCK', 'i2s-bclk', 3.3, { dir: 'in' }), pin('WS', 'i2s-ws', 3.3, { dir: 'in' }), pin('SD', 'i2s-data', 3.3, { dir: 'out' }), pin('L/R', 'addr', null, { note: 'GND = left channel' }), pin('VDD', 'power', 3.3), GND()],
     voltage: { supply: [1.62, 3.63], logic: 3.3 },
     currentMa: { typ: 1.4, peak: 1.4, est: false, source: 'INMP441 datasheet: 1.4 mA operating current' },
-    sizeMm: null,
     price: [8, 15],
     keywords: 'INMP441 I2S 麦克风模块', // lint: allow-cjk
     supplyNet: '3V3',
@@ -776,7 +779,6 @@ export const PARTS: Part[] = [
     pins: [pin('1', 'power', 'vcc'), pin('2', 'analog', 'vcc', { dir: 'out', note: 'Wiper, voltage between 0 and VCC' }), GND('3')],
     voltage: { supply: [0, 5], logic: null },
     currentMa: { typ: 0.33, peak: 0.33, est: true, source: 'Estimate: 3.3 V / 10 kΩ' },
-    sizeMm: null,
     sim: { level: 'verified', model: 'pot' },
     price: [0.5, 2],
     keywords: 'B10K 电位器 单联', // lint: allow-cjk
@@ -793,7 +795,6 @@ export const PARTS: Part[] = [
     pins: [pin('CLK', 'digital-out', 'vcc', { dir: 'out', boot: 'pull-up' }), pin('DT', 'digital-out', 'vcc', { dir: 'out', boot: 'pull-up' }), pin('SW', 'digital-out', null, { dir: 'out' }), pin('+', 'power', 'vcc'), GND()],
     voltage: { supply: [3.3, 5], logic: null },
     currentMa: { typ: 0.66, peak: 0.66, est: true, source: 'Estimate: two 10 kΩ pull-ups at 3.3 V' },
-    sizeMm: null,
     sim: { level: 'verified', model: 'encoder' },
     price: [2, 6],
     keywords: 'EC11 旋转编码器模块 带按键', // lint: allow-cjk
@@ -814,7 +815,6 @@ export const PARTS: Part[] = [
     currentMa: { typ: 10, peak: 20, est: true, source: 'Estimate: varies with lit pixels, about 20 mA fully lit' },
     i2cAddr: { default: 0x3c, alt: [0x3d], how: 'Move the resistor on the back for 0x3D' },
     i2cPullupK: null,
-    sizeMm: null,
     sim: { level: 'verified', model: 'ssd1306' },
     price: [8, 15],
     keywords: '0.96寸 OLED SSD1306 I2C 4针', // lint: allow-cjk
@@ -833,7 +833,6 @@ export const PARTS: Part[] = [
     currentMa: { typ: 12, peak: 25, est: true, source: 'Estimate: same range as SSD1306, larger screen' },
     i2cAddr: { default: 0x3c, alt: [0x3d] },
     i2cPullupK: null,
-    sizeMm: null,
     price: [12, 22],
     keywords: '1.3寸 OLED SH1106 I2C', // lint: allow-cjk
     supplyNet: '3V3',
@@ -849,7 +848,6 @@ export const PARTS: Part[] = [
     pins: [VCC(), GND(), pin('SCL', 'spi-sclk', 3.3, { dir: 'in' }), pin('SDA', 'spi-mosi', 3.3, { dir: 'in' }), pin('RES', 'rst', 3.3, { dir: 'in' }), pin('DC', 'spi-dc', 3.3, { dir: 'in' }), pin('CS', 'spi-cs', 3.3, { dir: 'in' }), pin('BLK', 'backlight', 3.3, { dir: 'in' })],
     voltage: { supply: [3.3, 3.3], logic: 3.3 },
     currentMa: { typ: 25, peak: 40, est: true, source: 'Estimate: mostly the backlight, varies by seller' },
-    sizeMm: null,
     sim: { level: 'verified', model: 'gc9a01' },
     price: [12, 25],
     keywords: '1.28寸 圆形 IPS GC9A01 SPI', // lint: allow-cjk
@@ -871,7 +869,6 @@ export const PARTS: Part[] = [
     currentMa: { typ: 27.5, peak: 43, est: true, source: 'Estimate: backlight about 25 mA (as gc9a01) + CST816S scanning in the mA range' },
     i2cAddr: { default: 0x15, alt: [] },
     i2cPullupK: null,
-    sizeMm: null,
     sim: { level: 'verified', model: 'gc9a01+cst816s' },
     price: [25, 45],
     keywords: '1.28寸 圆形 触摸屏 GC9A01 CST816S', // lint: allow-cjk
@@ -888,7 +885,6 @@ export const PARTS: Part[] = [
     pins: [GND(), VCC(), pin('SCL', 'spi-sclk', 3.3, { dir: 'in' }), pin('SDA', 'spi-mosi', 3.3, { dir: 'in' }), pin('RES', 'rst', 3.3, { dir: 'in' }), pin('DC', 'spi-dc', 3.3, { dir: 'in' }), pin('CS', 'spi-cs', 3.3, { dir: 'in' }), pin('BLK', 'backlight', 3.3, { dir: 'in' })],
     voltage: { supply: [3.3, 3.3], logic: 3.3 },
     currentMa: { typ: 25, peak: 50, est: true, source: 'Estimate: mostly the backlight' },
-    sizeMm: null,
     price: [12, 28],
     keywords: '1.54寸 IPS ST7789 SPI 240x240', // lint: allow-cjk
     supplyNet: '3V3',
@@ -959,7 +955,6 @@ export const PARTS: Part[] = [
     pins: [pin('5V', 'power', 'vcc'), pin('DIN', 'ws2812-din', null, { dir: 'in' }), GND(), pin('DOUT', 'ws2812-dout', null, { dir: 'out' })],
     voltage: { supply: [3.5, 5.3], logic: null },
     currentMa: { typ: null, peak: 480, est: true, source: 'Estimate: 60 mA × 8' },
-    sizeMm: null,
     sim: { level: 'verified', model: 'ws2812' },
     price: [3, 8],
     keywords: 'WS2812 8位 灯条 RGB', // lint: allow-cjk
@@ -1011,7 +1006,6 @@ export const PARTS: Part[] = [
     pins: [VCC(), pin('I/O', 'pwm', null, { dir: 'in', note: 'Transistor base on the module, through a resistor' }), GND()],
     voltage: { supply: [3.3, 5], logic: null },
     currentMa: { typ: 30, peak: 60, est: true, source: 'Estimate: depends on drive voltage and duty cycle' },
-    sizeMm: null,
     price: [1, 4],
     keywords: '无源蜂鸣器模块 低电平触发 三线', // lint: allow-cjk
     supplyNet: '3V3',
@@ -1027,7 +1021,6 @@ export const PARTS: Part[] = [
     pins: [pin('LRC', 'i2s-ws', 3.3, { dir: 'in' }), pin('BCLK', 'i2s-bclk', 3.3, { dir: 'in' }), pin('DIN', 'i2s-data', 3.3, { dir: 'in' }), pin('GAIN', 'addr', null), pin('SD', 'en', null), GND(), pin('Vin', 'power', 'vcc')],
     voltage: { supply: [2.5, 5.5], logic: 3.3 },
     currentMa: { typ: 2.4, peak: 800, est: true, source: 'Datasheet quiescent 2.4 mA; peak is an estimate (5 V, 4 Ω, about 3 W out)' },
-    sizeMm: null,
     price: [8, 18],
     keywords: 'MAX98357A I2S amplifier module',
     supplyNet: '5V',
@@ -1061,7 +1054,6 @@ export const PARTS: Part[] = [
     pins: [pin('+', 'power', 5), GND('-')],
     voltage: { supply: [100, 240], logic: null },
     currentMa: { typ: null, peak: null, est: true, source: 'Supplies power, does not consume it' },
-    sizeMm: null,
     price: [8, 20],
     keywords: '5V2A 电源适配器 DC5.5x2.1', // lint: allow-cjk
     provides: { net: 'EXT5V', maxMa: 2000 },
@@ -1079,7 +1071,6 @@ export const PARTS: Part[] = [
     pins: [pin('+', 'power', 'vcc'), GND('-')],
     voltage: { supply: [0, 24], logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: 'Passive connector' },
-    sizeMm: null,
     price: [0.5, 3],
     keywords: 'DC5.5x2.1 母座 接线端子 免焊', // lint: allow-cjk
     sources: [],
@@ -1095,7 +1086,6 @@ export const PARTS: Part[] = [
     pins: [pin('VIN', 'power', 'vcc'), GND(), pin('3.3V', 'power', 3.3)],
     voltage: { supply: [4.75, 12], logic: null },
     currentMa: { typ: 5, peak: 5, est: false, source: 'AMS1117 datasheet: quiescent current about 5 mA' },
-    sizeMm: null,
     price: [0.5, 3],
     keywords: 'AMS1117-3.3 regulator module',
     provides: { net: 'EXT3V3', maxMa: 800 },
@@ -1112,7 +1102,6 @@ export const PARTS: Part[] = [
     pins: null,
     voltage: { supply: null, logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: 'Cable' },
-    sizeMm: null,
     price: [5, 15],
     keywords: 'Type-C 数据线 USB2.0 可传数据', // lint: allow-cjk
     sources: [],
@@ -1128,7 +1117,6 @@ export const PARTS: Part[] = [
     pins: [pin('红 +', 'power', 3.7), GND('黑 -')], // lint: allow-cjk
     voltage: { supply: [3.0, 4.2], logic: null },
     currentMa: { typ: null, peak: null, est: true, source: 'Supplies power' },
-    sizeMm: null,
     price: [10, 20],
     keywords: '3.7V 锂电池 1000mAh 带保护板 PH2.0', // lint: allow-cjk
     supplyNet: 'BAT',
@@ -1147,7 +1135,6 @@ export const PARTS: Part[] = [
     pins: [pin('IN+', 'power', 5), GND('IN-'), pin('B+', 'power', 'vcc'), GND('B-'), pin('OUT+', 'power', 'vcc'), GND('OUT-')],
     voltage: { supply: [4.5, 5.5], logic: null },
     currentMa: { typ: 1000, peak: 1000, est: false, source: 'TP4056 datasheet: charge current set by RPROG, module default 1.2 kΩ ≈ 1 A' },
-    sizeMm: null,
     price: [1, 4],
     keywords: 'TP4056 Type-C 充电模块 带保护', // lint: allow-cjk
     sources: ['TP4056 datasheet'],
@@ -1200,7 +1187,6 @@ export const PARTS: Part[] = [
     pins: null,
     voltage: { supply: null, logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: 'Cable' },
-    sizeMm: null,
     price: [3, 8],
     keywords: '杜邦线 公对公 20cm 40P', // lint: allow-cjk
     sources: [],
@@ -1216,7 +1202,6 @@ export const PARTS: Part[] = [
     pins: null,
     voltage: { supply: null, logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: 'Cable' },
-    sizeMm: null,
     price: [3, 8],
     keywords: '杜邦线 公对母 20cm 40P', // lint: allow-cjk
     sources: [],
@@ -1232,7 +1217,6 @@ export const PARTS: Part[] = [
     pins: null,
     voltage: { supply: null, logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: 'Cable' },
-    sizeMm: null,
     price: [3, 8],
     keywords: '杜邦线 母对母 20cm 40P', // lint: allow-cjk
     sources: [],
@@ -1248,7 +1232,6 @@ export const PARTS: Part[] = [
     pins: null,
     voltage: { supply: null, logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: 'Passive' },
-    sizeMm: null,
     price: [5, 12],
     keywords: '电阻包 1/4W 金属膜 套装 30种', // lint: allow-cjk
     sources: [],
@@ -1282,7 +1265,6 @@ export const PARTS: Part[] = [
     pins: [pin('VCC', 'power', 5), GND(), pin('1A', 'digital-in', null, { dir: 'in' }), pin('1Y', 'digital-out', 5, { dir: 'out' }), pin('1OE', 'en', null)],
     voltage: { supply: [4.5, 5.5], logic: 5 },
     currentMa: { typ: 0.04, peak: 0.04, est: false, source: '74AHCT125 datasheet: ICC max 40 µA (static)' },
-    sizeMm: null,
     price: [1, 4],
     keywords: '74AHCT125 DIP14',
     sources: ['TI SN74AHCT125 datasheet (VIH 2.0 V at 5 V supply)'],
@@ -1297,7 +1279,6 @@ export const PARTS: Part[] = [
     pins: [pin('LV', 'power', 3.3), pin('HV', 'power', 5), GND(), pin('LV1', 'io', 3.3, { dir: 'bi' }), pin('HV1', 'io', 5, { dir: 'bi' })],
     voltage: { supply: [1.8, 5], logic: 3.3 },
     currentMa: { typ: 0, peak: 0, est: true, source: 'Passive (pull-up current only)' },
-    sizeMm: null,
     price: [1, 4],
     keywords: '4路 电平转换模块 BSS138 双向', // lint: allow-cjk
     sources: [],
@@ -1312,7 +1293,6 @@ export const PARTS: Part[] = [
     pins: [pin('E', 'gnd', 0), pin('B', 'digital-in', null, { dir: 'in', loadMa: 2.6 }), pin('C', 'passive', null)],
     voltage: { supply: null, logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: 'Switching part' },
-    sizeMm: null,
     price: [0.05, 0.3],
     keywords: 'S8050 三极管 TO-92', // lint: allow-cjk
     sources: [],
@@ -1328,7 +1308,6 @@ export const PARTS: Part[] = [
     pins: [pin('+', 'passive', null), pin('-', 'gnd', 0)],
     voltage: { supply: [0, 10], logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: 'Passive' },
-    sizeMm: null,
     price: [0.3, 1.5],
     keywords: '1000uF 10V 电解电容', // lint: allow-cjk
     sources: ['Rated 10 V (the part number is the spec)'],
@@ -1344,7 +1323,6 @@ export const PARTS: Part[] = [
     pins: null,
     voltage: { supply: null, logic: null },
     currentMa: { typ: 0, peak: 0, est: true, source: 'Passive' },
-    sizeMm: null,
     price: [0.5, 2],
     keywords: '2.54mm 单排排针 40P', // lint: allow-cjk
     sources: [],

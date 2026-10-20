@@ -28,6 +28,7 @@ export function checkpointsOf(r: Result): Checkpoint[] {
   if (ids.includes('ssd1306')) out.push({ name: t('OLED receives a frame'), conf: '仿真验证' }); // lint: allow-cjk
   if (ids.includes('ws2812-strip')) out.push({ name: t('LED strip receives data'), conf: '仿真验证' }); // lint: allow-cjk
   if (ids.includes('sg90')) out.push({ name: t('Servo signal'), conf: '行为模拟' }); // lint: allow-cjk
+  if (ids.includes('dht11')) out.push({ name: t('DHT11 reading'), conf: '必须上真机' }); // lint: allow-cjk (busy-wait timed, D-03)
   if (r.need.battery) out.push({ name: t('Wakes again after deep sleep'), conf: '必须上真机', manual: true }); // lint: allow-cjk
   return out;
 }

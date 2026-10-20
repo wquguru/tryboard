@@ -1,10 +1,10 @@
 // Custom work (U-17) web × CLI: generated checkpoints = fixtures/custom-thermo.json, c3-thermo passes, hello fails I2C with "need ≥".
-// Usage: node tools/webtest/custom.mjs (after build_web.sh, build_fw.sh c3-thermo hello); UPDATE_FIXTURE=1 rewrites the fixture from the web
+// Usage: node tools/webtest/custom.mjs (after build_web.sh, build_fw.sh c3-thermo hello c3-dht11); UPDATE_FIXTURE=1 rewrites the thermo fixture, UPDATE_FIXTURE=dht11 the DHT11 one
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -93,7 +93,7 @@ const url = '/app?work=custom&t=weather&bat=1#bench';
   const page = await open(url);
   await page.waitForSelector('#customPlaced [data-custom-demo]', { timeout: 30000 });
   const web = await page.evaluate(() => globalThis.__tbCustomLevels);
-  if (process.env.UPDATE_FIXTURE) {
+  if (process.env.UPDATE_FIXTURE && process.env.UPDATE_FIXTURE !== 'dht11') {
     fs.writeFileSync(fixture, JSON.stringify(web, null, 2) + '\n');
     console.log(`[custom] rewrote ${path.relative(root, fixture)} with ${web.length} web-generated checkpoints; run again to compare`);
     process.exit(0);
@@ -127,6 +127,50 @@ const url = '/app?work=custom&t=weather&bat=1#bench';
   const r = await pick(page, helloId);
   await page.screenshot({ path: path.join(outDir, 'custom-hello.png') });
   report(`web hello ${helloId} ✗ says need ≥, same fingerprint`, done && r.text.includes('need ≥') && r.fp === cliHello.fp, `web ${r.fp} / CLI ${cliHello.fp}`);
+  await page.close();
+}
+
+// ---- DHT11 (D-05): advisor XIAO C3 + DHT11 -> DATA on GPIO5, demo c3-dht11; the reading rows need real hardware (D-03 timing line)
+{
+  const fx = path.join(root, 'tools/webtest/fixtures/custom-dht11.json');
+  const page = await open('/app?work=custom&add=dht11&board=xiao-c3#bench');
+  await page.waitForSelector('#customPlaced [data-custom-demo="c3-dht11"]', { timeout: 30000 });
+  const web = await page.evaluate(() => globalThis.__tbCustomLevels);
+  if (process.env.UPDATE_FIXTURE === 'dht11') {
+    fs.writeFileSync(fx, JSON.stringify(web, null, 2) + '\n');
+    console.log(`[custom] rewrote ${path.relative(root, fx)} with ${web.length} web-generated checkpoints; run again to compare`);
+    process.exit(0);
+  }
+  const lv = JSON.parse(fs.readFileSync(fx, 'utf8'));
+  report('DHT11 web-generated checkpoints equal the fixture', JSON.stringify(web) === JSON.stringify(lv), `${web?.length} checkpoints`);
+  const dhtId = lv.find((l) => l.args?.includes('--dht11') && l.numeric)?.id;
+  let out = '';
+  try {
+    out = execFileSync(path.join(root, 'tools/check.py'), [path.join(root, 'firmware/build/c3-dht11/flash.bin'), '--level-json', fx, '--level', dhtId], { encoding: 'utf8' });
+  } catch (e) {
+    out = e.stdout;
+  }
+  const cliFp = /fingerprint (\S+)/.exec(out)?.[1];
+  const cliRows = out.split('\n').filter((l) => /^  [✓✗] /.test(l)).map((l) => l.slice(4));
+  report(`CLI c3-dht11 ${dhtId} PASS`, /: PASS/.test(out), out.trim().split('\n')[0]);
+  // Same run as check.py, timing line from stderr (the web gets it from tb_timing_report)
+  const cliArgs = ['run', path.join(root, 'firmware/build/c3-dht11/flash.bin'), '--seconds', String(lv.find((l) => l.id === dhtId).seconds), ...lv.find((l) => l.id === dhtId).args];
+  const run = spawnSync(path.join(root, 'core/target/release/tryboard'), cliArgs, { encoding: 'utf8' });
+  const cliTiming = /\[tryboard\] timing-sensitive: .*/.exec(run.stderr)?.[0] ?? '';
+  await page.click('#customPlaced [data-custom-demo]');
+  const done = await waitFor(page, (id) => document.querySelector(`[data-cp="${id}"] span:last-child`)?.textContent.trim() === '◐', dhtId, 120000);
+  const webTiming = await page.evaluate(() => globalThis.__tbLastVerify?.timing ?? '');
+  const r = await pick(page, dhtId);
+  const card = await page.$eval('#props .result-card', (e) => ({
+    hw: [...e.querySelectorAll('[data-conf="必须上真机"][data-ok]')].length, // lint: allow-cjk
+    legend: e.querySelector('.conf-legend')?.textContent ?? '',
+    raw: [...e.querySelectorAll('details.raw .pb-1 > *')].map((x) => x.textContent.trim().replace(/^[✓✗·]\s*/, '')).filter((x) => x && !/run ID/i.test(x)),
+  })).catch(() => ({ hw: 0, legend: '', raw: [] }));
+  await page.screenshot({ path: path.join(outDir, 'custom-dht11.png') });
+  report(`web c3-dht11 ${dhtId} ◐ reference run, same fingerprint`, done && r.verdict === 'ok' && r.fp === cliFp, `web ${r.fp} / CLI ${cliFp}`);
+  report('DHT11 reading rows marked "needs real hardware" with legend', card.hw >= 1 && /real/i.test(card.legend), `${card.hw} rows, legend "${card.legend}"`);
+  report('DHT11 raw rows equal the CLI rows', JSON.stringify(card.raw.slice(0, cliRows.length)) === JSON.stringify(cliRows), JSON.stringify(card.raw));
+  report('DHT11 timing line equals the CLI stderr line', !!cliTiming && webTiming.trim() === cliTiming, `web "${webTiming.trim()}" / CLI "${cliTiming}"`);
   await page.close();
 }
 

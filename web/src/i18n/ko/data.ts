@@ -1129,5 +1129,9 @@ const d: Dict = {
   "A DHT11 module on GPIO5 (open drain, 10 kΩ pull-up on the module). The firmware's own driver pulls the line low for 20 ms, then times the sensor's answer by counting esp_rom_delay_us(1) loops: 80 µs low + 80 µs high, then 40 bits of 50 µs low followed by 27 µs (0) or 70 µs (1) high, ending with a checksum. It reads 100 times, one second apart, and prints how many passed the checksum. Drag the sliders to change the readings. Open the logic analyzer's fine sampling on GPIO5 to measure each bit with the cursors; the simulator also flags the busy-wait timing as needing a real-board check.": "DHT11 모듈을 GPIO5 에 연결합니다 (오픈 드레인, 모듈에 10 kΩ 풀업). 펌웨어 자체 드라이버가 선을 20 ms 동안 Low 로 당긴 뒤 esp_rom_delay_us(1) 루프 횟수로 센서 응답을 잽니다: 80 µs Low + 80 µs High, 이어서 40비트(각각 50 µs Low 뒤 27 µs(0) 또는 70 µs(1) High), 마지막으로 체크섬. 1초 간격으로 100번 읽고 체크섬이 맞은 횟수를 출력합니다. 슬라이더로 값을 바꿀 수 있습니다. 로직 분석기에서 GPIO5 정밀 샘플링을 켜면 커서로 각 비트를 잴 수 있고, 시뮬레이터는 이런 바쁜 대기 타이밍을 실기 확인 필요로 표시합니다.",
   "Bit-bang": "비트뱅",
   "Busy-wait timing": "바쁜 대기 타이밍",
+  "DHT11 temperature / humidity module (single-wire, 3-pin)": "DHT11 온습도 모듈 (단일 와이어, 3핀)",
+  "DHT11 temperature / humidity module (3-pin, with pull-up)": "DHT11 온습도 모듈 (3핀, 풀업 포함)",
+  "Open drain; 10 kΩ pull-up on the module": "오픈 드레인, 모듈에 10 kΩ 풀업",
+  "Proprietary single-wire protocol timed in microseconds; at least 1 s between reads. Integer humidity, 0–50 °C ±2 °C. Firmware that bit-bangs it with busy-wait loops must be checked on a real board.": "마이크로초 단위로 타이밍을 맞추는 독자 단일 와이어 프로토콜, 읽기 간격 최소 1 s. 습도는 정수, 0–50 °C ±2 °C. 바쁜 대기 루프로 비트뱅하는 펌웨어는 실기기에서 확인해야 합니다.",
 };
 export default d;

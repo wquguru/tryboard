@@ -45,6 +45,7 @@ const DEFS: Record<string, { type: PartSpec['type']; steps: PlaceStep[] }> = {
   'hc-sr04': { type: 'hcsr04', steps: [P('VCC', '5V'), G('Trig'), G('Echo', t('Echo (via 1k/2k divider)')), GND()] },
   'ws2812-stick8': { type: 'ws2812', steps: [P('5V', '5V'), G('DIN'), GND()] },
   'ws2812-strip': { type: 'ws2812', steps: [P('5V', '5V'), G('DIN'), GND()] },
+  dht11: { type: 'dht11', steps: [P('VCC', '3V3'), G('DATA'), GND()] },
 };
 
 /** Why a part cannot be placed (hint on the greyed-out library entry). */
@@ -100,6 +101,9 @@ export function buildPlaced(def: PlaceDef, got: Record<string, string>, ext5v = 
     case 'servo':
     case 'pot':
       spec = { type: def.type, pin: g(def.steps.find((s) => s.want === 'gpio')!.pin)! };
+      break;
+    case 'dht11':
+      spec = { type: 'dht11', pin: g('DATA')! };
       break;
     case 'ws2812':
       spec = { type: 'ws2812', pin: g('DIN')!, ...(def.partId === 'ws2812-strip' ? { n: 60 } : {}) };

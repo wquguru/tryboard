@@ -1037,3 +1037,12 @@
 - 代价：fonts.css 从 0.5 KB 变成 30 KB（gzip 11 KB），因为按字频分片的码位不连续、unicode-range 很长；按码位连续分片 CSS 只有约 1 KB，但 zh 页面用字散在所有片里，退回 Noto 时要下几乎全部 1.2 MB，所以选字频。
 - 不变：P2-19 的自托管与来源、OFL（文件名 tb-sans-sc-*.woff2，不用保留名）；等宽字体 tb-mono.woff2 原样（66 KB，保留全部 OpenType 特性，en 首页也会下，是剩下 84 KB 的大头）。
 - 替代：zh 栈 Noto 在前（视觉与原来一致，但 zh 用户每页要下 3–4 片约 370 KB）；`local()` 引用系统 Noto Sans CJK（可变字重下 local 只能对应单一字重，放弃）；en 栈只用系统字体（不下任何字体，但西文在各平台不一致）。
+
+## 2026-10-19 DHT11 进选型数据（D-05 收尾）
+- **选型数据这条路，不加示例关卡**：PLAN 原话「待 DHT11 进选型数据后补」，而且选型 → 自定义作品（work=custom）是用户自己挑器件时自然走到的路；c3-dht11 早就在示例库里（examples.json），再加关卡只多一份手写判定。做法：顾问 `PARTS.dht11`（gpio，¥3–8，simulated 'partial' = 行为模拟）、目录 `catalog/parts.ts` 新增 `dht11`（VCC / DATA / GND，sim verified → 模型 dht11）、`PART_MAP`、`SCENE_TYPE` / `toScene`、`place.ts`（也能在商店单独摆上台）、`custom.ts wiresFor`、`genLevels` 加「DHT11 读数」检查点（args 带 `--dht11 <pin>`）。
+- **检查点判定**：生成的检查点只跑 3 s，c3-dht11 的「校验通过 100/100」要 105 s 才出现，所以用 `numeric` 读第一次读数行（`温度 23.5 湿度 45`，±1）。numeric 行默认行为模拟，D-03 时序结论行命中后被 `withConf` 标「需真机确认」；`levelConf` 对带 `--dht11` 的 numeric 检查点、`checkpointsOf` 对 DHT11 都给「必须上真机」档。
+- **引脚**：c3-dht11 固件写死 GPIO5。顾问引擎 `needs` 加可选 `prefer`（空闲且不是 strapping 才先取），DHT11 填 `[5]`；XIAO C3 / C3 DevKitM / SuperMini 单独选 DHT11 或与温湿度计模板合用都落在 GPIO5，其他器件分配不变（custom-thermo fixture 未变）。
+- **演示固件**：C3 + DHT11 在 GPIO5 且没有 I2C 器件 → `c3-dht11`；有 BME280 / OLED（I2C 在 6/7）时仍是 `c3-thermo`（覆盖的检查点更多，DHT11 检查点要用户自己的固件）。
+- 替代：examples.json / levels.json 加 c3-dht11 关卡 —— 用户从示例库进来的是空白作品，看不到选型 → 实验台这条主线；给 c3-dht11 加按引脚切换 —— 要改固件和验收用例，范围超出 D-05。
+- **parts.ts 体量（R-14）**：新增条目让文件从 1504 涨到 1521 行，守卫只许缩。改成 `Draft.sizeMm` 可选、`P()` 默认 `null`，删掉 41 处 `sizeMm: null,`（1481 行，跌破 1500，allow list 用 `--update` 去掉这一项）；导出的 Part 字段值不变。替代：把 DHT11 拆到单独文件 —— 要导出 `P` / `pin` 等辅助函数，只为绕守卫。
+- wiremode.mjs「⇧⌘Z 重做」偶发失败：撤销后时间线还在 replay（`hist.busy`）时按重做会被忽略；本分支连跑 3 次前 2 次失败、第 3 次通过，HEAD 基线 2 次都通过，最终 accept.sh 里也通过；weather 作品不含 DHT11，判断为时序偶发但未完全排除，未改测试，留给主会话复核。

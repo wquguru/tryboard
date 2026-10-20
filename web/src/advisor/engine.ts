@@ -156,7 +156,8 @@ export function planPins(b: Board, c: Chip, parts: string[], needUsb: boolean) {
         else out.push({ label: `${n.label} (I2S BCLK / WS / data)`, pins: [...i2s, ...d] });
         continue;
       }
-      const pool = n.kind === 'adc' ? c.pins.adc1.filter((p) => !reserved.has(p) && (!b.exposed || b.exposed.includes(p))) : usable;
+      const base = n.kind === 'adc' ? c.pins.adc1.filter((p) => !reserved.has(p) && (!b.exposed || b.exposed.includes(p))) : usable;
+      const pool = n.prefer ? [...n.prefer.filter((p) => base.includes(p) && !strap.has(p)), ...base] : base;
       const got = take(n.count ?? 1, pool, n.kind !== 'adc');
       if (!got) problems.push(n.kind === 'adc' ? t('{label}: no free ADC1 pin', { label: t(n.label) }) : t('{label}: not enough pins', { label: t(n.label) }));
       else
