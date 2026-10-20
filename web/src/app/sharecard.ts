@@ -180,7 +180,7 @@ export async function makeCard(ctx: StepCtx): Promise<CardResult & { base: HTMLC
   const png = await new Promise<Blob | null>((res) => out.toBlob(res, 'image/png'));
   if (!png) throw new Error(t("The browser couldn't create the PNG"));
   const slug = `${ctx.work.example ?? ctx.work.id}-card`;
-  const notes = link.truncated ? [t('Your actions are too long for a QR code, so the card links to the bench only')] : link.notes;
+  const notes = link.truncated ? [t('Your actions are too long for a QR code, so the card links to the bench only'), ...link.notes] : link.notes;
   return { url: link.url, truncated: link.truncated, run: link.run, notes, qr: { ...box, version: q.version }, png, pngName: `tryboard-${slug}.png`, slug, base };
 }
 
