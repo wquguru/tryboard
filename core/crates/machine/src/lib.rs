@@ -690,6 +690,9 @@ impl Machine {
             d.temp_c = t;
             d.humidity = h;
         }
+        for b in &mut self.pins().onewire {
+            b.set_temp(t);
+        }
     }
 
     /// Pose (applies to MPU6050 / MPU6886 / QMI8658 / BMI270 + BMM150 on the bus): Euler angles (deg) + rates (deg/s), see devices/imu.rs
@@ -978,6 +981,32 @@ impl Machine {
         self.pins().dhts.push(d);
         self.elec.add_module("dht11");
         self.pins_kick();
+    }
+
+    /// Attach a 1-Wire bus with `count` DS18B20s (F-04c) on one data pin; device i reads env + 0.5·i °C (attach before env_set)
+    pub fn ds18b20_attach(&mut self, pin: u32, count: usize) {
+        let now = self.cycles();
+        let b = tryboard_soc::devices::ds18b20::OneWireBus::new(pin, count, now);
+        for _ in &b.devs {
+            self.elec.add_module("ds18b20");
+        }
+        self.pins().onewire.push(b);
+        self.pins_kick();
+    }
+
+    /// DS18B20 bus stats (pin, devices, resets, conversions, scratchpad reads, unknown commands) and ROM codes
+    pub fn ds18b20_stats(
+        &mut self,
+    ) -> Option<(
+        u32,
+        usize,
+        tryboard_soc::devices::ds18b20::OneWireStats,
+        Vec<[u8; 8]>,
+    )> {
+        self.pins().onewire.first().map(|b| {
+            let roms = b.devs.iter().map(|d| d.rom).collect();
+            (b.pin, b.devs.len(), b.stats.clone(), roms)
+        })
     }
 
     /// DHT11 stats (frames sent, host start pulses that were too short)

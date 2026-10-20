@@ -44,6 +44,7 @@ fn usage() -> ! {
                [--encoder A,B[,SW]] (EC11 rotary encoder; script actions enc=+N / enc=-N turn N detents, encsw=1|0 press / release)
                [--sonar TRIG,ECHO] [--dist cm] (HC-SR04; script action dist=cm, negative = nothing in front)
                [--dht11 GPIO] (DHT11 on an open-drain data pin; readings from --env / script action env=)
+               [--ds18b20 GPIO[,count]] (1-Wire bus with count DS18B20s, default 1; device i reads --env temperature + 0.5·i °C)
                [--vcd <file.vcd>] [--vcd-pins 5[,..]|all] [--vcd-window <start s>..<end s>] (every edge, 1 ps timescale, 1 cycle = 6250 ps)
                [--i2s max98357a,inmp441] (S3: speaker BCLK=16 LRC=17 DIN=18, mic SCK=39 WS=40 SD=41; C3: speaker 0/1/2, mic 0/1/3)
                [--mic <sound.wav>] (INMP441 loops this WAV, attaches the mic automatically) [--audio-wav <speaker output.wav>]
@@ -328,17 +329,8 @@ fn run(args: &[String]) {
             }
         }
     }
-    // DHT11: --dht11 DATA (open-drain single wire); attached before --env so it takes the same readings
-    let dht11 = opt(args, "--dht11");
-    if let Some(spec) = &dht11 {
-        match spec.trim().trim_start_matches("GPIO").parse::<u32>() {
-            Ok(p) => m.dht11_attach(p),
-            Err(_) => {
-                eprintln!("--dht11 needs one GPIO number");
-                std::process::exit(2)
-            }
-        }
-    }
+    // DHT11 / DS18B20 data pins; attached before --env so they take the same readings
+    let wire_sensors = wire_sensor_args(&mut m, args);
     // Environment: --env temp,humidity,pressure(Pa)
     if let Some(e) = opt(args, "--env") {
         let v: Vec<f64> = e.split(',').filter_map(|x| x.parse().ok()).collect();
@@ -695,7 +687,7 @@ fn run(args: &[String]) {
             && trace_tasks.is_none()
             && encoder.is_none()
             && sonar.is_none()
-            && dht11.is_none()
+            && !wire_sensors
             && vcd.is_none()
             && !has_audio
         {
@@ -998,9 +990,7 @@ fn run(args: &[String]) {
     if let Some((pings, echoes, us)) = m.sonar_stats() {
         eprintln!("[tryboard] ultrasonic triggers {pings}, echoes {echoes}, last Echo {us:.1} µs");
     }
-    if let Some((reads, short)) = m.dht11_stats() {
-        eprintln!("[tryboard] DHT11 frames sent {reads}, start pulses too short {short}");
-    }
+    report_wire_sensors(&mut m);
     if let Some(p) = &vcd {
         let text = m.vcd_text();
         std::fs::write(p, &text).unwrap_or_else(|e| panic!("write {p}: {e}"));
@@ -1086,6 +1076,64 @@ fn run(args: &[String]) {
             if ok { "PASS" } else { "FAIL" }
         );
         std::process::exit(if ok { 0 } else { 1 });
+    }
+}
+
+/// --dht11 / --ds18b20 (timed single-wire sensors); true when any is attached (the run then uses 1 ms slices)
+fn wire_sensor_args(m: &mut Machine, args: &[String]) -> bool {
+    // DHT11: --dht11 DATA (open-drain single wire)
+    let dht11 = opt(args, "--dht11");
+    if let Some(spec) = &dht11 {
+        match spec.trim().trim_start_matches("GPIO").parse::<u32>() {
+            Ok(p) => m.dht11_attach(p),
+            Err(_) => {
+                eprintln!("--dht11 needs one GPIO number");
+                std::process::exit(2)
+            }
+        }
+    }
+    // DS18B20: --ds18b20 DATA[,count] (1-Wire, external pull-up)
+    let ds18b20 = opt(args, "--ds18b20");
+    if let Some(spec) = &ds18b20 {
+        let v: Vec<Option<u32>> = spec
+            .split(',')
+            .map(|x| x.trim().trim_start_matches("GPIO").parse().ok())
+            .collect();
+        match v.as_slice() {
+            [Some(p)] => m.ds18b20_attach(*p, 1),
+            [Some(p), Some(n)] if (1..=8).contains(n) => m.ds18b20_attach(*p, *n as usize),
+            _ => {
+                eprintln!("--ds18b20 needs GPIO[,count] (count 1-8)");
+                std::process::exit(2)
+            }
+        }
+    }
+    dht11.is_some() || ds18b20.is_some()
+}
+
+/// End-of-run lines for the single-wire sensors
+fn report_wire_sensors(m: &mut Machine) {
+    if let Some((reads, short)) = m.dht11_stats() {
+        eprintln!("[tryboard] DHT11 frames sent {reads}, start pulses too short {short}");
+    }
+    if let Some((pin, n, st, roms)) = m.ds18b20_stats() {
+        let ids: Vec<String> = roms
+            .iter()
+            .map(|r| {
+                r.iter()
+                    .map(|b| format!("{b:02X}"))
+                    .collect::<Vec<_>>()
+                    .join("")
+            })
+            .collect();
+        eprintln!(
+            "[tryboard] DS18B20 x{n} on GPIO{pin}: resets {}, conversions {}, scratchpad reads {}, unknown commands {} (ROM {})",
+            st.resets,
+            st.conversions,
+            st.scratch_reads,
+            st.unknown_cmds,
+            ids.join(" ")
+        );
     }
 }
 

@@ -13,6 +13,7 @@ pub mod codec;
 pub mod cst816s;
 pub mod cst9220;
 pub mod dcs;
+pub mod ds18b20;
 pub mod ft6236;
 pub mod imu;
 pub mod ina3221;
