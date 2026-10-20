@@ -55,6 +55,8 @@ def load():
             cfg["part_refs"][f] = set(re.findall(r"partId: '([\w.-]+)'", read(f)))
     tpl = read("web/src/catalog/templates.ts")
     cfg["works"] = set(re.findall(r"'(\w+)'", re.search(r"id: ('[^;\n]*);", tpl).group(1)))
+    # Works without a shop template (F-05 faults) live only in app/works.ts; the lab falls back to the blank template
+    cfg["works"] |= set(re.findall(r"^  (\w+): \{ id: '\1'", read("web/src/app/works.ts"), re.M))
     adv = read("web/src/advisor/data.ts")
     cfg["advisor_examples"] = {e for lst in re.findall(r"examples: \[([^\]]*)\]", adv) for e in re.findall(r"'([\w-]+)'", lst)}
     return cfg

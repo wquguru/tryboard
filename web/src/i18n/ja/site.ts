@@ -811,5 +811,7 @@ const d: Dict = {
   "Virtual PC": "仮想 PC",
   "PC → board": "PC → ボード",
   "Board → PC": "ボード → PC",
+  "Find the fault": "故障を探せ",
+  "Find the fault: four broken benches to repair →": "故障を探せ：壊れたベンチ 4 台を直そう →",
 };
 export default d;

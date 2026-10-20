@@ -12,6 +12,11 @@ Usage:
   tools/check.py <flash.bin> --level 06 --inputs log.txt
                                              replace the checkpoint's own input script with an input log exported by the web
                                              (bench "Export inputs", or InputLog JSON), replayed cycle by cycle like `tryboard run --inputs`
+  tools/check.py --ref --level fault-wire     fault checkpoint (F-05): runs the bench as found (must FAIL) and the reference fix (must PASS)
+  tools/check.py --ref --level fault-wire --i2c-wire 20
+                                             fault checkpoint with your bench fix: the bench firmware plus your switches
+                                             (--i2c-wire / --antenna-loss / --power / --servo replace the as-found values)
+  tools/check.py app.bin --level fault-adc   fault checkpoint with your firmware on the bench as found
   tools/check.py --ref --level 05 --servo 4 --power usb --elec-report
                                              attach an SG90 to GPIO4 on USB power only (ext = external 5 V), print per-node minimum voltage /
                                              peak current / brownout resets (electrical data is not part of the fingerprint)
@@ -267,6 +272,63 @@ def inputs_file(path: str) -> str:
     return out
 
 
+# Bench switches a player may change (F-05 knobs); each takes one value
+KNOB_FLAGS = ('--i2c-wire', '--antenna-loss', '--power', '--servo')
+
+
+def merge_args(base, overlay):
+    """Lay flag/value pairs over args: a flag already there gets the new value, others append (= mergeArgs in web/src/faults.ts)"""
+    out = list(base)
+    for i in range(0, len(overlay) - 1, 2):
+        k, v = overlay[i], overlay[i + 1]
+        if k in out and out.index(k) + 1 < len(out):
+            out[out.index(k) + 1] = v
+        else:
+            out += [k, v]
+    return out
+
+
+def fault_level(t: dict, knobs=(), fix=False):
+    """Fault checkpoint as a plain one: bench as found (or the reference fix), then the player's switches on top"""
+    f = t['fault']
+    args = merge_args(t.get('args', []), f.get('args', []))
+    if fix:
+        args = merge_args(args, f.get('fix', []))
+    return {**t, 'args': merge_args(args, list(knobs))}
+
+
+def fault_self_check(t: dict, fw: str, inputs: str, extra, show_elec: bool) -> bool:
+    """Reference check of a fault checkpoint: the bench as found must FAIL, every reference fix must PASS"""
+    f = t['fault']
+    base = t.get('args', [])
+    flags = lambda lv: ' '.join(lv['args'][len(base):]) or 'bench as found'
+    runs = [('as found', fw, fault_level(t), False)]
+    if f.get('fix'):
+        runs.append(('fixed', fw, fault_level(t, fix=True), True))
+    if f.get('fix_ref'):
+        runs.append((f"fixed firmware {f['fix_ref']}", os.path.join(ROOT, 'firmware/build', f['fix_ref'], 'flash.bin'), fault_level(t), True))
+    out, good, head = [], True, None
+    for name, path, lv, want in runs:
+        if not os.path.exists(path):
+            good = False
+            out.append(f"  {name}: {path} not found")
+            continue
+        res, fp, elec = run(path, lv, inputs, extra)
+        ok = all(r[0] for r in res)
+        good = good and ok == want
+        if want and head is None:
+            head = fp
+        tag = ('PASS' if ok else 'FAIL') + ('' if ok == want else f" (expected {'PASS' if want else 'FAIL'})")
+        out.append(f"  {name} ({flags(lv)}): {tag}  fingerprint {fp}")
+        out += [f"    {'✓' if r else '✗'} {d}" for r, d in res]
+        if show_elec:
+            out += ['    ' + l.replace('[tryboard] ', '') for l in elec]
+    # Headline fingerprint = the first reference fix, which a web run with the same fix reproduces
+    print(f"Checkpoint {t['id']} {t['title']}: {'PASS' if good else 'FAIL'}  fingerprint {head or '-'}  (fault reproduces, reference fix passes)")
+    print('\n'.join(out))
+    return good
+
+
 def run(fw: str, t: dict, inputs: str = '', extra=()):
     cmd = [CLI, 'run', fw, '--seconds', str(t.get('seconds', 2)), '--gpio-log', '--ws2812-log'] + t.get('args', []) + list(extra)
     if inputs:
@@ -306,12 +368,13 @@ def main():
         pick = [l for l in levels if l['id'] == (lv.zfill(2) if lv.isdigit() else lv)]
         if not pick:
             sys.exit(f'no checkpoint {lv} (or it has no command-line check)')
-    skip = {a.index(k) + 1 for k in ('--level', '--level-json', '--inputs', '--power', '--servo') if k in a}
-    # Power (P1-02): passed through to tryboard run as is
-    extra = []
-    for k in ('--power', '--servo'):
+    skip = {a.index(k) + 1 for k in ('--level', '--level-json', '--inputs') + KNOB_FLAGS if k in a}
+    # Power (P1-02) and harness: passed through to tryboard run; fault checkpoints merge them into the bench instead
+    knobs = []
+    for k in KNOB_FLAGS:
         if k in a:
-            extra += [k, a[a.index(k) + 1]]
+            knobs += [k, a[a.index(k) + 1]]
+    extra = []
     show_elec = '--elec-report' in a
     if show_elec:
         extra.append('--elec-report')
@@ -334,7 +397,14 @@ def main():
             print(f"Checkpoint {t['id']} {t['title']}: {fw} not found")
             bad += 1
             continue
-        res, fp, elec = run(fw, t, inputs, extra)
+        if t.get('fault') and ref and not knobs:
+            bad += not fault_self_check(t, fw, inputs, extra, show_elec)
+            continue
+        if t.get('fault'):
+            t = fault_level(t, knobs)
+            res, fp, elec = run(fw, t, inputs, extra)
+        else:
+            res, fp, elec = run(fw, t, inputs, extra + knobs)
         ok = all(r[0] for r in res)
         bad += not ok
         print(f"Checkpoint {t['id']} {t['title']}: {'PASS' if ok else 'FAIL'}  fingerprint {fp}")

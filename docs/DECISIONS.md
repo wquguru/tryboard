@@ -1200,3 +1200,15 @@
 - **M5-08 其它**：I2S PDM RX 只做到 PCM 层；板载麦克风两声道放同一样本（`both`）；键盘图例映射是推断的，标「需真机」。
 - **M5-10 / M5-11 / M5-12 经典 ESP32 外设**：GP-SPI 用独立 `ClassicSpi`（启动 / 中断 / DMA / 环形 W 缓冲语义差异大）；RMT 复用 `rmt.rs`（`RmtLayout::ESP32`，接收 / 载波 / APB FIFO 不做）；I2S 单独建模 `esp32/src/i2s.rs`（片内 lldesc DMA），PDM 在 PCM 层；ADC 校准走 eFuse ADC_VREF=3（1121 mV）的 IDF line fitting 路径。均只参考 TRM 与 IDF（Apache-2.0），未复制 espressif/qemu。
 - **M5-13 其它**：经典 ESP32 触摸脚测量立即完成、OUT 固定 1000（只为让 M5Unified 区分 Atom Lite / Matrix）；`BoardPreset.battery_adc` 让无 PMIC 的板用 ADC 分压读电池（复用 AXP2101 OCV 曲线，开机 80%）。
+
+## 2026-10-20 F-05 故障挑战关卡
+- **格式**：levels.json 关卡加 `fault` 字段：`args` = 原样台面（叠在关卡 args 上）、`fix` = 参考台面修法、`fix_ref` = 参考固件修法、`knobs` = 玩家可改的开关（每个对应一个单值 CLI 开关）。叠加规则 check.py `merge_args` 与 web `faults.ts mergeArgs` 相同（已有开关改值，否则追加），所以网页和命令行跑的参数逐字相同、指纹相同。
+- **check.py**：`--ref` 跑故障关做双跑自检（原样须 FAIL、修法须 PASS，标题行指纹取修好的那次），这样 `--ref --all` 保持全绿又能证明故障可复现；带开关（`--i2c-wire / --antenna-loss / --power / --servo`）就按原样 + 开关跑一次。npm 包同规则。
+- **没加新 CLI 开关**：现有 `--i2c-wire`（elec::i2cbus 上升时间）、`--antenna-loss`、`--power` + `--servo`（欠压）足够覆盖四关；不碰 core。
+- **跳过**：上拉电阻故障（要改 soc/i2c.rs，M5 会话正在改）；接错脚（内核不建模 I2C 引脚分配，无法命令行一致）。
+- **新固件 `firmware/s3-adc1-wifi`**：fault-adc 的参考固件修法（ADC1_CH3 / GPIO4）。不发布到网页 fw/（那就是答案），faults.mjs 直接上传本地构建。
+- **页面显示的命令**：有开关的关显示 `--ref --level <id> <开关>`（单次运行）；fault-adc 这类没开关的关只显示 `app.bin` 那行，因为单独的 `--ref --level <id>` 是自检、结论与页面「运行实验台固件」不同。faults.mjs 直接执行页面上显示的命令对比。accept.json 补 s3-adc1-wifi 用例。
+- **check_config 的作品集合**：levels.json 的 `work` 除了 catalog/templates.ts 的模板 id，也接受 app/works.ts 里声明的作品（faults 没有商店模板，实验台回退到空白模板）。
+- **作品 faults 不上首页卡片**：没有采购 / 组装内容，首页作品区下方一行链接进入；开关状态按关存 localStorage（仅本机便利，读写包 try/catch）。
+- 备选：把健康配置写进 args、故障放 fault —— 否，`--ref --all` 就证明不了故障能复现。
+

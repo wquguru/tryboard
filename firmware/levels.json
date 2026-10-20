@@ -822,5 +822,192 @@
    }
   ],
   "assembly": "tilt"
+ },
+ {
+  "id": "fault-wire",
+  "work": "faults",
+  "title": "Fault: wrong readings",
+  "goal": "The weather station's screen works, but it reads 11.83 °C and 4.3 % in a 23.5 °C / 45 % room. Find out why and fix it",
+  "pass": "With the room at 23.5 ℃ / 45 % / 1013.25 hPa, every reading line is within ±0.02 ℃ / ±0.1 % / ±0.02 hPa",
+  "buy": "No new parts needed",
+  "learn": "I2C rise time, bus capacitance, why long wires corrupt bits without any error",
+  "brief": "An ESP32-S3 weather station (BME280 at 0x76 and SSD1306 OLED at 0x3C, SDA=GPIO8, SCL=GPIO9, I2C at 400 kHz) prints readings that are far off but reports no error.\nThe sensors sit at the end of 60 cm of Dupont wire. Explain what a long I2C wire does to the signal at 400 kHz,\nthen fix it either on the bench (shorter wire) or in firmware (a lower I2C clock), keeping the output format:\nT=23.50 C H=45.0 % P=1013.25 hPa",
+  "ref": "weather",
+  "seconds": 3,
+  "args": [
+   "--i2c",
+   "ssd1306@0x3c,bme280@0x76",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "fault": {
+   "args": [
+    "--i2c-wire",
+    "60"
+   ],
+   "fix": [
+    "--i2c-wire",
+    "20"
+   ],
+   "knobs": [
+    {
+     "flag": "--i2c-wire",
+     "name": "I2C wire length",
+     "options": [
+      {
+       "v": "60",
+       "label": "60 cm (as found)"
+      },
+      {
+       "v": "40",
+       "label": "40 cm"
+      },
+      {
+       "v": "20",
+       "label": "20 cm"
+      },
+      {
+       "v": "10",
+       "label": "10 cm"
+      }
+     ]
+    }
+   ]
+  },
+  "numeric": [
+   {
+    "name": "Temperature",
+    "regex": "T=(-?[\\d.]+) C",
+    "value": 23.5,
+    "tol": 0.02
+   },
+   {
+    "name": "Humidity",
+    "regex": "H=([\\d.]+) %",
+    "value": 45,
+    "tol": 0.1
+   },
+   {
+    "name": "Pressure",
+    "regex": "P=([\\d.]+) hPa",
+    "value": 1013.25,
+    "tol": 0.02
+   }
+  ]
+ },
+ {
+  "id": "fault-power",
+  "work": "faults",
+  "title": "Fault: reboots when the servo moves",
+  "goal": "The board restarts every time the servo starts to turn. Find out why and fix it",
+  "pass": "From the first power-on the sweep finishes all 11 moves without a reset: TRYBOARD_OK s3-brownout (boot 1) appears on serial",
+  "buy": "5 V 2 A external supply",
+  "learn": "Brownout reset, servo stall current, why a USB port can't feed a servo",
+  "brief": "An ESP32-S3 sweeps an SG90 servo on GPIO4 and keeps resetting; serial shows rst:0xf (BROWNOUT_RST) again and again.\nThe servo's red wire is on the dev board's 5V pin, powered from the PC's USB port.\nExplain why the board browns out, and how to power the servo so it runs (common ground with the ESP32).",
+  "ref": "s3-brownout",
+  "seconds": 2.5,
+  "args": [
+   "--servo",
+   "4"
+  ],
+  "fault": {
+   "args": [
+    "--power",
+    "usb"
+   ],
+   "fix": [
+    "--power",
+    "ext"
+   ],
+   "knobs": [
+    {
+     "flag": "--power",
+     "name": "Servo supply",
+     "options": [
+      {
+       "v": "usb",
+       "label": "USB 5V pin (as found)"
+      },
+      {
+       "v": "ext",
+       "label": "External 5 V 2 A"
+      }
+     ]
+    }
+   ]
+  },
+  "expect": [
+   "TRYBOARD_OK s3-brownout (boot 1)"
+  ]
+ },
+ {
+  "id": "fault-antenna",
+  "work": "faults",
+  "title": "Fault: Wi-Fi won't connect",
+  "goal": "The board never gets an IP address once it's inside the case. Find out why and fix it",
+  "pass": "Serial shows 拿到 IP and TRYBOARD_OK wifi-connect within 4 s",
+  "buy": "Plastic mounting plate",
+  "learn": "Antenna keep-out area, RSSI, why metal near the antenna kills Wi-Fi",
+  "brief": "An ESP32-S3 (WROOM module) connects to the open AP TryBoard-WiFi; on the desk it works, but mounted in the case it never gets an IP and serial shows 断开 reason=2.\nThe module is screwed onto an aluminium plate that covers the antenna end.\nExplain what the plate does to the signal and what to change so it connects.",
+  "ref": "s3-wifi-connect",
+  "seconds": 4,
+  "fault": {
+   "args": [
+    "--antenna-loss",
+    "45"
+   ],
+   "fix": [
+    "--antenna-loss",
+    "0"
+   ],
+   "knobs": [
+    {
+     "flag": "--antenna-loss",
+     "name": "Next to the antenna",
+     "options": [
+      {
+       "v": "45",
+       "label": "Aluminium plate over the antenna (as found)"
+      },
+      {
+       "v": "30",
+       "label": "Li-ion battery next to it"
+      },
+      {
+       "v": "0",
+       "label": "Nothing (plastic plate)"
+      }
+     ]
+    }
+   ]
+  },
+  "expect": [
+   "拿到 IP",
+   "TRYBOARD_OK wifi-connect"
+  ]
+ },
+ {
+  "id": "fault-adc",
+  "work": "faults",
+  "title": "Fault: knob dies when Wi-Fi starts",
+  "goal": "The knob reads fine until Wi-Fi starts, then every read fails. Find out why and fix the firmware",
+  "pass": "After Wi-Fi starts, the reading is raw 1440 ± 60 (1.2 V on the knob)",
+  "buy": "No new parts needed",
+  "learn": "ADC1 vs ADC2, peripherals Wi-Fi takes over",
+  "brief": "ESP32-S3 firmware reads a knob (1.2 V) on GPIO11 with adc_oneshot, then starts Wi-Fi in STA mode and reads again.\nBefore Wi-Fi the reading is fine; after esp_wifi_start every read returns ESP_ERR_TIMEOUT.\nExplain why, and rewrite it so the knob still reads with Wi-Fi on. The same 1.2 V is also wired to GPIO4.\nPrint each reading as: Wi-Fi 启动后: ADC1 raw=1434",
+  "ref": "s3-adc2-wifi",
+  "seconds": 3,
+  "script": "0.0:mv11=1200; 0.0:mv4=1200",
+  "fault": {
+   "fix_ref": "s3-adc1-wifi"
+  },
+  "numeric": [
+   {
+    "name": "ADC reading after Wi-Fi starts",
+    "regex": "Wi-Fi 启动后: ADC\\d raw=(\\d+)",
+    "value": 1440,
+    "tol": 60
+   }
+  ]
  }
 ]

@@ -16,6 +16,7 @@ import { tn } from "./ui";
 import { stalled, ownFirmware, saveProgress } from "./progress";
 import { CopyBrief } from "./shared";
 import type { BenchCtx } from "./ctx";
+import { FaultKnobs, levelToRun } from "./faultknobs";
 
 export function mountCheckpoint(b: BenchCtx) {
   function renderCheckpoint(id: string) {
@@ -182,7 +183,7 @@ export function mountCheckpoint(b: BenchCtx) {
               disabled={!!s.verifying}
               onClick={() => void runRef()}
             >
-              {t("Try reference firmware")}
+              {l.fault ? t("Run the bench firmware") : t("Try reference firmware")}
             </Btn>
           )}
           {l.ref && (
@@ -196,6 +197,7 @@ export function mountCheckpoint(b: BenchCtx) {
             </LinkBtn>
           )}
         </Btns>
+        {l.fault && <FaultKnobs key={l.id} l={l} disabled={!!s.verifying} />}
         {stall}
         {result}
         <Sec>{t("Brief for the AI")}</Sec>
@@ -203,8 +205,8 @@ export function mountCheckpoint(b: BenchCtx) {
         <Btns>
           <CopyBrief onCopy={(btn) => void copy(btn)} />
         </Btns>
-        <Sec>{t("Check command")}</Sec>
-        <Code>{checkCommand(l)}</Code>
+        {!l.fault && <Sec>{t("Check command")}</Sec>}
+        {!l.fault && <Code>{checkCommand(l)}</Code>}
         <Note>
           {t(
             "The command line gives the same verdict and run ID as the page; exit code 0 means pass. The tryboard CLI package is not on npm yet, so install it locally from packages/tryboard in the repository.",
@@ -225,7 +227,7 @@ export function mountCheckpoint(b: BenchCtx) {
     // Real network on (C-03): checks go online too, so the verdict says "needs internet" and keeps no run ID
     const net = realnetSwitch.get();
     try {
-      const v = await verifyLevel(l, buf, (t) => {
+      const v = await verifyLevel(levelToRun(l), buf, (t) => {
         if (t - c.store.get().verifyProgress >= 0.1)
           c.store.set({ verifyProgress: t });
       }, undefined, undefined, net);

@@ -1099,5 +1099,12 @@ const d: Dict = {
   "Generic dev board (no preset)": "범용 개발 보드 (프리셋 없음)",
   "Same as CLI --board {id}: the core attaches this board's screen, I2C devices and buttons. Upload firmware built for it ({chip}).": "CLI --board {id}와 같습니다: 코어가 이 보드의 화면, I2C 장치, 버튼을 연결합니다. 이 보드용으로 빌드한 펌웨어를 업로드하세요 ({chip}).",
   "Keys you type while the bench has focus press the matching Cardputer keys.": "실험대에 포커스가 있을 때 입력한 키가 Cardputer의 해당 키를 누릅니다.",
+  "Run the bench firmware": "벤치 펌웨어 실행",
+  "Bench switches": "벤치 스위치",
+  "Nothing on the bench can fix this one: the fix is in the firmware. Drop your own .bin above.": "이 문제는 벤치에서 고칠 수 없습니다. 펌웨어를 고쳐야 합니다. 직접 만든 .bin을 위에 놓으세요.",
+  "Checks run with these switches. The bench firmware is the one that came with the bench, not an answer.": "검사는 이 스위치 설정으로 실행됩니다. 벤치 펌웨어는 원래 들어 있던 것이고 정답이 아닙니다.",
+  "The bench is as found. Change a switch or drop your own firmware, then check again.": "벤치는 받은 그대로입니다. 스위치를 바꾸거나 직접 만든 펌웨어를 놓고 다시 검사하세요.",
+  "The first line checks the bench firmware with your switches, the second your own firmware; both give the same verdict and run ID as the page.": "첫 줄은 스위치 설정으로 벤치 펌웨어를, 둘째 줄은 직접 만든 펌웨어를 검사합니다. 둘 다 페이지와 같은 판정과 실행 ID를 냅니다.",
+  "Checks your own firmware; gives the same verdict and run ID as the page.": "직접 만든 펌웨어를 검사합니다. 판정과 실행 ID는 페이지와 같습니다.",
 };
 export default d;

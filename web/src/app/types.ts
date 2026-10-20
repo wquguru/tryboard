@@ -33,7 +33,7 @@ export const STEPS: { id: StepId; label: string }[] = [
   { id: 'product', label: t('Product') },
 ];
 
-export type WorkId = 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'knob' | 'sonar' | 'blank' | 'imu' | 'touch' | 'custom';
+export type WorkId = 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'knob' | 'sonar' | 'blank' | 'imu' | 'touch' | 'custom' | 'faults';
 
 /** kind maps 1:1 to build-tree groups; pin / wire / button come from bench picking */
 export type SelKind = 'part' | 'wire' | 'power' | 'env' | 'firmware' | 'checkpoint' | 'pin' | 'button' | 'run' | 'tool' | 'ble';

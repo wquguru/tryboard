@@ -1099,5 +1099,12 @@ const d: Dict = {
   "Generic dev board (no preset)": "汎用開発ボード（プリセットなし）",
   "Same as CLI --board {id}: the core attaches this board's screen, I2C devices and buttons. Upload firmware built for it ({chip}).": "CLI の --board {id} と同じ：コアがこのボードの画面、I2C デバイス、ボタンを接続します。このボード向けにビルドしたファームウェアをアップロードしてください（{chip}）。",
   "Keys you type while the bench has focus press the matching Cardputer keys.": "実験台にフォーカスがある間、入力したキーが Cardputer の対応するキーを押します。",
+  "Run the bench firmware": "ベンチのファームウェアを実行",
+  "Bench switches": "ベンチのスイッチ",
+  "Nothing on the bench can fix this one: the fix is in the firmware. Drop your own .bin above.": "この問題はベンチでは直せません。直すのはファームウェアです。自分の .bin を上にドロップしてください。",
+  "Checks run with these switches. The bench firmware is the one that came with the bench, not an answer.": "チェックはこのスイッチ設定で実行します。ベンチのファームウェアは最初から付いていたもので、答えではありません。",
+  "The bench is as found. Change a switch or drop your own firmware, then check again.": "ベンチは受け取ったままです。スイッチを変えるか自分のファームウェアをドロップして、もう一度チェックしましょう。",
+  "The first line checks the bench firmware with your switches, the second your own firmware; both give the same verdict and run ID as the page.": "1 行目はスイッチ設定でベンチのファームウェアを、2 行目は自分のファームウェアをチェックします。どちらもページと同じ判定と実行 ID になります。",
+  "Checks your own firmware; gives the same verdict and run ID as the page.": "自分のファームウェアをチェックします。判定と実行 ID はページと同じです。",
 };
 export default d;

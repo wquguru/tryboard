@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { bootOptions, evaluate, expandLevels, fingerprint, type CheckResult, type Level } from '../../../web/src/checks';
 import { runSim, imageChip, type SimJob } from '../../../web/src/simrun';
 import { toScriptInline, type InputLog } from '../../../web/src/inputlog';
+import { mergeArgs } from '../../../web/src/faults';
 
 declare const process: { argv: string[]; exit(c: number): never; stdout: { write(s: string): void }; stderr: { write(s: string): void } };
 
@@ -22,6 +23,8 @@ Usage:
                                                      use an input log exported by the web (script text or InputLog JSON) instead of the checkpoint's inputs
   tryboard check <flash.bin> --level 05 --servo 4 --power usb
                                                      put an SG90 on the supply network (same as check.py; ext = external 5 V 2 A)
+  tryboard check <flash.bin> --level fault-wire --i2c-wire 20
+                                                     fault checkpoint (F-05): bench as found plus your switches (--i2c-wire / --antenna-loss / --power / --servo)
   tryboard run <flash.bin> [--seconds 5] [--i2c ssd1306@0x3c,bme280@0x76] [--env 23.5,45,101325]
                [--spi gc9a01] [--inputs log.txt] [--script "0.5:gpio0=0"] [--pwm-log 4] [--servo 4] [--power usb|ext]
                                                      run firmware, serial to stdout, report to stderr
@@ -65,6 +68,18 @@ function supply(a: string[]) {
   return { servo: sv === undefined ? undefined : Number(sv), power: pw === undefined ? undefined : pw === 'ext' ? ('ext' as const) : ('usb' as const) };
 }
 
+/** Bench switches given on the command line, as flag/value pairs (same set as KNOB_FLAGS in check.py) */
+const KNOB_FLAGS = ['--i2c-wire', '--antenna-loss', '--power', '--servo'];
+function knobArgs(a: string[]) {
+  return KNOB_FLAGS.flatMap((f) => (opt(a, f) === undefined ? [] : [f, opt(a, f)!]));
+}
+
+/** A fault checkpoint runs the bench as found plus the switches; other levels just get the switches layered on */
+function withKnobs(l: Level, a: string[]): Level {
+  const base = l.fault ? mergeArgs(l.args ?? [], l.fault.args ?? []) : l.args ?? [];
+  return { ...l, args: mergeArgs(base, knobArgs(a)) };
+}
+
 async function check(a: string[]) {
   // --level-json: Level JSON (array or single) from the web's Export checkpoint, same as check.py --level-json
   const lj = opt(a, '--level-json');
@@ -81,11 +96,12 @@ async function check(a: string[]) {
     if (!pick.length) die(`no checkpoint ${lv} (or it has no command-line check)`);
   }
   const inputs = opt(a, '--inputs');
-  const fw = positional(a, ['--level', '--level-json', '--inputs', '--servo', '--power'])[0];
+  const fw = positional(a, ['--level', '--level-json', '--inputs', ...KNOB_FLAGS])[0];
   const sup = supply(a);
   if (!fw) die(USAGE);
   let bad = 0;
-  for (const l of pick) {
+  for (const l0 of pick) {
+    const l = withKnobs(l0, a);
     if (l.manual) {
       console.log(`Checkpoint ${l.id} ${l.title}: needs real hardware, not judged`);
       continue;
