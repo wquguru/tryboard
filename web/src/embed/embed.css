@@ -1,0 +1,56 @@
+/* Embed page (F-03): fills the host iframe; colours come from the DESIGN tokens in ui/tailwind.css. */
+html, body.tb-embed { height: 100%; margin: 0; }
+body.tb-embed { background: var(--bg); color: var(--fg); font: 13px/1.5 Inter, system-ui, sans-serif; overflow: hidden; }
+#embed { position: relative; height: 100%; }
+
+.tb-embed-poster {
+  height: 100%; box-sizing: border-box; padding: 16px 16px 64px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center;
+  background: radial-gradient(circle at 50% 40%, var(--accent-bg), var(--bg) 70%);
+}
+.tb-embed-brand { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--muted); }
+.tb-embed-title { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.3; max-width: 32em; overflow-wrap: anywhere; }
+.tb-embed-chip { font: 12px/1 ui-monospace, Menlo, monospace; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+.tb-embed-play {
+  margin-top: 8px; width: 64px; height: 64px; border-radius: 50%; border: 0; cursor: pointer;
+  display: grid; place-items: center; background: var(--accent); color: var(--on-accent);
+  box-shadow: 0 4px 16px rgba(13, 153, 255, 0.35);
+}
+.tb-embed-play:hover { background: var(--accent-strong); }
+.tb-embed-play:focus-visible, .tb-embed-btn:focus-visible, .tb-embed-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tb-embed-play:disabled { opacity: 0.6; cursor: progress; }
+.tb-embed-hint { margin: 0; color: var(--muted); font-size: 12px; max-width: 28em; }
+.tb-embed-error { margin: 0; color: var(--bad-ink); max-width: 28em; }
+
+.tb-embed-open {
+  position: absolute; right: 8px; bottom: 8px; z-index: 5; min-height: 44px; box-sizing: border-box;
+  display: inline-flex; align-items: center; padding: 0 12px; border-radius: 8px;
+  background: var(--head-bg); border: 1px solid var(--line); color: var(--accent-ink); font-weight: 600; text-decoration: none;
+}
+.tb-embed-open::after { content: '\2197'; margin-left: 4px; }
+.tb-embed-open:hover { border-color: var(--accent-line); }
+.tb-embed-poster .tb-embed-open { position: static; margin-top: 8px; }
+
+/* Run view: stage on top, toolbar, then the serial (collapsible) */
+.tb-embed-run { height: 100%; display: flex; flex-direction: column; }
+.tb-embed-stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.tb-embed-bar { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-top: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
+.tb-embed-btn {
+  min-height: 44px; min-width: 44px; padding: 0 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--field); color: var(--fg); font: inherit;
+}
+.tb-embed-btn:hover { border-color: var(--hover-line); }
+.tb-embed-time { font: 12px ui-monospace, Menlo, monospace; color: var(--muted); }
+.tb-embed-console {
+  flex: 0 0 30%; margin: 0; padding: 8px 8px 56px; overflow: auto; box-sizing: border-box;
+  border-top: 1px solid var(--line); background: var(--field); font: 12px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.tb-embed-console[hidden] { display: none; }
+.tb-embed-run[data-serial='off'] .tb-embed-bar { padding-right: 180px; }
+.tb-embed-toast {
+  position: absolute; left: 8px; right: 8px; top: 8px; z-index: 6; padding: 8px 12px; border-radius: 8px;
+  background: var(--head-bg); border: 1px solid var(--line); font-size: 12px; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.tb-embed-toast[data-on] { opacity: 1; }
+/* Mouse-driven frames wider than a phone (an iframe is often < 768 px): compact toolbar so the bench keeps its height (phones keep 44 px targets) */
+@media (min-width: 480px) and (pointer: fine) { .tb-embed-btn, .tb-embed-open { min-height: 32px; } .tb-embed-bar { padding: 2px 8px; } }

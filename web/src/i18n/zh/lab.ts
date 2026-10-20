@@ -905,5 +905,13 @@ const d: Dict = {
   "Video ({fmt})": "视频（{fmt}）",
   "Image (PNG)": "图片（PNG）",
   "Copy link": "复制链接",
+  // F-03 embed page
+  "Open in TryBoard": "在 TryBoard 打开",
+  "Click to load the simulator (about 2 MB) and run the firmware": "点一下加载模拟器（约 2 MB）并运行固件",
+  "Could not start the simulator: {err}": "模拟器没能启动：{err}",
+  "Loading the simulator…": "正在加载模拟器…",
+  "Shared bench": "分享的台面",
+  "This embed has no shared bench in its link": "这个嵌入链接里没有分享的台面",
+  "This share link is damaged and cannot be opened": "分享链接已损坏，打不开",
 };
 export default d;

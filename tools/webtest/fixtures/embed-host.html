@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Embed host (F-03 test)</title>
+    <style>
+      body { font: 15px/1.6 system-ui, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; background: #faf8f5; color: #222; }
+    </style>
+  </head>
+  <body>
+    <h1>My weather station write-up</h1>
+    <p>A third-party blog post (another origin) that embeds a TryBoard bench with the documented snippet.</p>
+    <!-- Same snippet as docs/ARCH.md "嵌入页"; tools/webtest/embed.mjs fills in the src -->
+    <iframe src="__SRC__" width="640" height="420" style="border:0;max-width:100%" loading="lazy"
+      allow="fullscreen; autoplay" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="TryBoard"></iframe>
+    <p>Text after the embed.</p>
+  </body>
+</html>

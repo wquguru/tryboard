@@ -905,5 +905,13 @@ const d: Dict = {
   "Video ({fmt})": "영상 ({fmt})",
   "Image (PNG)": "이미지 (PNG)",
   "Copy link": "링크 복사",
+  // F-03 embed page
+  "Open in TryBoard": "TryBoard에서 열기",
+  "Click to load the simulator (about 2 MB) and run the firmware": "클릭하면 시뮬레이터(약 2 MB)를 불러와 펌웨어를 실행합니다",
+  "Could not start the simulator: {err}": "시뮬레이터를 시작하지 못했습니다: {err}",
+  "Loading the simulator…": "시뮬레이터를 불러오는 중…",
+  "Shared bench": "공유된 작업대",
+  "This embed has no shared bench in its link": "이 임베드 링크에는 공유된 작업대가 없습니다",
+  "This share link is damaged and cannot be opened": "공유 링크가 손상되어 열 수 없습니다",
 };
 export default d;

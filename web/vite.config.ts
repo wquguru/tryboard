@@ -95,7 +95,7 @@ export default defineConfig({
     // Page files end in .html but site links have no suffix (/app -> app.html via Vite dev / preview and static hosting, DESIGN_V2 §7.2).
     // index.html is home; home / advisor / levels are old-URL redirect pages.
     rollupOptions: {
-      input: { main: 'index.html', select: 'select.html', app: 'app.html', home: 'home.html', advisor: 'advisor.html', levels: 'levels.html', ...licenses },
+      input: { main: 'index.html', select: 'select.html', app: 'app.html', home: 'home.html', advisor: 'advisor.html', levels: 'levels.html', ...licenses, embed: 'embed.html' },
       output: { chunkFileNames },
     },
   },

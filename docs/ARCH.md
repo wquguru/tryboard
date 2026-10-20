@@ -335,3 +335,15 @@ web/（Vite + TS）
 - 验收：`node tools/webtest/share.mjs`。
 - `.tryboard` 文件（F-01b；纯函数在 `sharestate.ts`：`packTryfile(state, bin, name)` / `unpackTryfile(bytes)`，页面接入在 `web/src/app/tryfile.ts`）：`TRYBOARD 1\n` + 一行状态 JSON + `\n` + 原始 bin。头行数字是文件格式版本，与状态 `v` 无关；高于 1 报 `newer`。状态多一个可选字段 `bin` `{name, h, size}`（h = 完整 sha256 hex），只出现在文件里；有 `bin` 时 `run` 绑定这个 bin（`CaptureInput.ownRun`）。
 - 打开文件：`openFile` 校验魔数 / 版本 / 大小 / sha256，把 `encodeState(state)` 串和 bin 存进 IndexedDB `tryboard-files/files`（键 = `shareKey(s)` 的 8 位 hex，留最近 3 个），然后跳到 `?f=<键>#bench`；`main.tsx` 启动时 `takeFile(键)` 取回状态串交给 `readShare`，开机后把 bin 传给 `restoreShare(ctx, sh, own)`（先过 `fwCheck`）。不放进 `?s=`：长操作的状态超过服务器请求行上限。入口：换固件文件框（`accept=".bin,.tryboard"`，`pickFirmware` 按扩展名分流）、页面任意处拖放（`installDrop`，只接 `.tryboard`，不抢已有拖放区）、⋯「下载 .tryboard 文件」（`actions.shareFile`）。测试钩子 `__tbShareFile()` 返回 `{name, own, run, b64}`。
+
+## 嵌入页（F-03；`web/embed.html`，代码在 `web/src/embed/`）
+- 地址：`/embed?s=<同分享链接的 s>`（可加 `&lang=zh`、`&theme=dark`）。`main.ts` 只解码状态、显示标题 + 芯片 + ▶ 海报（首屏 JS + CSS gzip 约 25 KB，中日韩另预载 site + app 词典约 140 KB gzip；不含 wasm / three.js / 固件）；点 ▶ 后才动态 `import('./run')`，`createSession` + `restoreShare` 复用实验台的同一套代码（快进到 `endMs` 后接着跑）。
+- 精简台面：3D 台面（板上 BOOT / RST 可按）、暂停 / 继续、重启、模拟时间、可折叠串口（`#console`）、右下角「在 TryBoard 打开」（新窗口 `/app?s=<同一个 s>`）。没有顶栏、步骤条、放件改线、时间线、装配。
+- 存储：不读 `readShare`（它会写线束），工作键用 `share:<fnv>`；点 ▶ 时 `memstore.ts shieldStorage()` 把 `window.localStorage` 换成内存副本（从真实存储拷一份只读），会话里任何保存都只进内存。测试钩子 `__tbEmbedRealKeys()` 返回真实存储的键、`__tbEmbed` = `{store, session}`；`__tbShareRestored` 同完整页。
+- 头：`web/public/_headers` 只给 `/embed` 和 `/embed.html` 加 `Content-Security-Policy: frame-ancestors *`（其它页面保持托管默认）。本地 vite preview / 测试服务器不读 `_headers`，这条规则要上线后才能验证。
+- 嵌入代码（推荐；`allow-popups*` 是「在 TryBoard 打开」新窗口要的，只要能运行的最小集合是 `sandbox="allow-scripts allow-same-origin"`，同源那项是 worker / wasm 同源加载必需）：
+```
+<iframe src="https://<域名>/embed?s=…" width="640" height="420" style="border:0;max-width:100%" loading="lazy"
+ allow="fullscreen; autoplay" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="TryBoard"></iframe>
+```
+- 验收：`node tools/webtest/embed.mjs`（宿主页 `tools/webtest/fixtures/embed-host.html` 放在另一个源）。没做：按原速回放（F-03b）。

@@ -43,3 +43,10 @@
   Cache-Control: no-cache
 /licenses
   Cache-Control: no-cache
+# F-03 embed page: any site may frame it (other pages keep the host default); one block per path, as above
+/embed.html
+  Cache-Control: no-cache
+  Content-Security-Policy: frame-ancestors *
+/embed
+  Cache-Control: no-cache
+  Content-Security-Policy: frame-ancestors *

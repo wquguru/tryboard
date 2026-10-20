@@ -1237,3 +1237,12 @@
 - **出口是弹窗而不是自动下载**：一次点击要下两个文件，Chrome 会拦第二个；弹窗里预览视频，再分别下载视频 / PNG / 复制链接。`recordCanvas` 加了可选 `onBlob`（不传时行为不变）。
 - 公共接口改动（全是可选参数、向后兼容）：`shareLink(base, state, max?)`、`makeShare(ctx, max?)` 返回值多 `truncated`；`recordCanvas(..., opt?: { prefer, bitrate, onBlob })`；新增 `pickMime` / `videoExt`；`renderStill(c, '')` 不画角标；`actions.shareCard`；测试钩子 `window.__tbCardLast`。
 - 备选：npm qrcode / nayuki（MIT，但要先进 LICENSING）——否，自写 + 夹具对照足够；GIF / muxer —— 否，理由见 RS-4 §3。
+
+
+## 2026-10-20 F-03 嵌入页
+- **入口独立**：`embed.html` + `web/src/embed/`，不走 `createShell`；海报模块只引 i18n / sharestate / examples / works，`run.ts` 动态导入，会话、three.js、wasm 都在点击后。共享文件只做追加（vite.config 入口、`_headers`、三种语言 lab.ts 末尾 7 个键）。
+- **不调 `readShare`**：它会 `saveCaseHarness` 写 localStorage；嵌入页自己解码、按 main.tsx 同样规则映射作品，直接用 `restoreShare`（只用到 `shell.toast`，传一个小 toast 对象），shareopen.ts 不改。
+- **localStorage 内存副本**：点 ▶ 时把 `window.localStorage` 换成内存 Map（从真实存储拷贝），保证会话代码任何保存都不落盘，也避开 Safari 第三方 iframe 存储被拦时抛异常。备选：逐处加「嵌入模式」开关 —— 否，改动散在多个共享文件，漏一处就违约。
+- **sandbox**：条目要求 `allow-scripts allow-same-origin`；但这样「在 TryBoard 打开」的 `target=_blank` 会被拦。文档给 RS-4 的完整写法（加 `allow-popups allow-popups-to-escape-sandbox`），并注明前两项是能运行的最小集合；测试宿主页用完整写法。
+- **`_headers`**：只给 `/embed`、`/embed.html` 加 `frame-ancestors *`（与 Cache-Control 同块），其它页面不加 `frame-ancestors 'self'`（RS-4 建议的），避免影响现有托管行为，上线前再定。
+- **工具栏尺寸**：鼠标设备且 iframe ≥ 480 px 时按钮 32 px（博客里 iframe 常 < 768 px，台面要留高度）；触屏 / 窄屏保持 44 px。

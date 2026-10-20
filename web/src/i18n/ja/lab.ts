@@ -905,5 +905,13 @@ const d: Dict = {
   "Video ({fmt})": "動画（{fmt}）",
   "Image (PNG)": "画像（PNG）",
   "Copy link": "リンクをコピー",
+  // F-03 embed page
+  "Open in TryBoard": "TryBoard で開く",
+  "Click to load the simulator (about 2 MB) and run the firmware": "クリックでシミュレーター（約 2 MB）を読み込み、ファームウェアを実行します",
+  "Could not start the simulator: {err}": "シミュレーターを起動できませんでした：{err}",
+  "Loading the simulator…": "シミュレーターを読み込み中…",
+  "Shared bench": "共有されたベンチ",
+  "This embed has no shared bench in its link": "この埋め込みリンクには共有ベンチが含まれていません",
+  "This share link is damaged and cannot be opened": "共有リンクが壊れていて開けません",
 };
 export default d;

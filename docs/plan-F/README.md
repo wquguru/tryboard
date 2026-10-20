@@ -20,6 +20,7 @@
 | F 批写入 PLAN.md、开工实现 | ◐ | 2026-10-20 人确认开工；波 1 ☑（F-01a、F-04c、F-04d、F-05、F-06 合并，accept.sh 全绿，见 `Reviews/batch-F1.md`）；F-04b 等 M5-01；下一步波 2 |
 | 波 2 F-01b `.tryboard` 文件 | ☑ | 2026-10-20 ⋯「下载 .tryboard 文件」+ 换固件 / 拖到页面打开；自带 bin 带 sha256 校验；share.mjs 17 项全过；`Reviews/ab/F-01b.md` |
 | F 批写入 PLAN.md、开工实现 | ◐ | 2026-10-20 人确认开工；波 1 ☑（F-01a、F-04c、F-04d、F-05、F-06 合并，accept.sh 全绿，见 `Reviews/batch-F1.md`）；F-04b 等 M5-01；下一步波 2；波 2 F-02 分享卡 ☑（sharecard.mjs 15/15） |
+| F-03 嵌入页 | ☑ | 2026-10-20 `/embed?s=` 点击加载、不写 localStorage，embed.mjs 19 项全过（`Reviews/ab/F-03.md`）；F-03b 原速回放未做 |
 
 ## 调研结论汇总
 
