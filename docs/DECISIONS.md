@@ -1009,3 +1009,12 @@
   - 「并行取」不是少下载，是让这些字节不挡首次渲染；首页 index.html 闭包因 chunk 切分多 0.9 KB（160.1 → 161.0）。
   - 没做到 ≤ 396 KB 的卡点：剩下的 454.6 里 three 149 + react-dom / react 71 + CSS 18 + tailwind-merge 9，实验台 / 3D 舞台（bench3d、board3d、后期 Bloom / Outline）本身约 150 KB 都是首屏画面要用的；零件目录 `catalog/parts`（17 KB）在建 store 时 `loadBom → validHistory` 就同步要用，`wirecheck` / `place` 也要。再降需要把实验台 3D 整体改成会话前动态加载（等于把 three 移出闭包，与「three 保留在首屏」矛盾）或把零件目录拆成首屏索引 + 详情，改动面大，留给后续。
   - 不做：用手写合并替换 `tailwind-merge`（类名冲突语义会变）；音频门面（audio.ts 实际只有约 1.3 KB，第一轮 13 KB 的估计是 source map 把 levels.json 记到了它头上）。
+
+## 2026-10-19 DHT11 进选型数据（D-05 收尾）
+- **选型数据这条路，不加示例关卡**：PLAN 原话「待 DHT11 进选型数据后补」，而且选型 → 自定义作品（work=custom）是用户自己挑器件时自然走到的路；c3-dht11 早就在示例库里（examples.json），再加关卡只多一份手写判定。做法：顾问 `PARTS.dht11`（gpio，¥3–8，simulated 'partial' = 行为模拟）、目录 `catalog/parts.ts` 新增 `dht11`（VCC / DATA / GND，sim verified → 模型 dht11）、`PART_MAP`、`SCENE_TYPE` / `toScene`、`place.ts`（也能在商店单独摆上台）、`custom.ts wiresFor`、`genLevels` 加「DHT11 读数」检查点（args 带 `--dht11 <pin>`）。
+- **检查点判定**：生成的检查点只跑 3 s，c3-dht11 的「校验通过 100/100」要 105 s 才出现，所以用 `numeric` 读第一次读数行（`温度 23.5 湿度 45`，±1）。numeric 行默认行为模拟，D-03 时序结论行命中后被 `withConf` 标「需真机确认」；`levelConf` 对带 `--dht11` 的 numeric 检查点、`checkpointsOf` 对 DHT11 都给「必须上真机」档。
+- **引脚**：c3-dht11 固件写死 GPIO5。顾问引擎 `needs` 加可选 `prefer`（空闲且不是 strapping 才先取），DHT11 填 `[5]`；XIAO C3 / C3 DevKitM / SuperMini 单独选 DHT11 或与温湿度计模板合用都落在 GPIO5，其他器件分配不变（custom-thermo fixture 未变）。
+- **演示固件**：C3 + DHT11 在 GPIO5 且没有 I2C 器件 → `c3-dht11`；有 BME280 / OLED（I2C 在 6/7）时仍是 `c3-thermo`（覆盖的检查点更多，DHT11 检查点要用户自己的固件）。
+- 替代：examples.json / levels.json 加 c3-dht11 关卡 —— 用户从示例库进来的是空白作品，看不到选型 → 实验台这条主线；给 c3-dht11 加按引脚切换 —— 要改固件和验收用例，范围超出 D-05。
+- **parts.ts 体量（R-14）**：新增条目让文件从 1504 涨到 1521 行，守卫只许缩。改成 `Draft.sizeMm` 可选、`P()` 默认 `null`，删掉 41 处 `sizeMm: null,`（1481 行，跌破 1500，allow list 用 `--update` 去掉这一项）；导出的 Part 字段值不变。替代：把 DHT11 拆到单独文件 —— 要导出 `P` / `pin` 等辅助函数，只为绕守卫。
+- wiremode.mjs「⇧⌘Z 重做」偶发失败：撤销后时间线还在 replay（`hist.busy`）时按重做会被忽略；本分支连跑 3 次前 2 次失败、第 3 次通过，HEAD 基线 2 次都通过，最终 accept.sh 里也通过；weather 作品不含 DHT11，判断为时序偶发但未完全排除，未改测试，留给主会话复核。

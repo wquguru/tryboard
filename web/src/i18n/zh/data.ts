@@ -1129,5 +1129,9 @@ const d: Dict = {
   "A DHT11 module on GPIO5 (open drain, 10 kΩ pull-up on the module). The firmware's own driver pulls the line low for 20 ms, then times the sensor's answer by counting esp_rom_delay_us(1) loops: 80 µs low + 80 µs high, then 40 bits of 50 µs low followed by 27 µs (0) or 70 µs (1) high, ending with a checksum. It reads 100 times, one second apart, and prints how many passed the checksum. Drag the sliders to change the readings. Open the logic analyzer's fine sampling on GPIO5 to measure each bit with the cursors; the simulator also flags the busy-wait timing as needing a real-board check.": "DHT11 模块接 GPIO5（开漏，模块上带 10 kΩ 上拉）。固件自带驱动：先把线拉低 20 ms，再数 esp_rom_delay_us(1) 循环来量传感器的回应：80 µs 低 + 80 µs 高，然后 40 位，每位 50 µs 低，再 27 µs（0）或 70 µs（1）高，最后是校验和。一共读 100 次，每次间隔 1 秒，打印通过校验的次数。拖滑块改读数。在逻辑分析仪里对 GPIO5 开精细采样，可以用光标量每一位；模拟器还会把这种忙等计时标为需真机确认。",
   "Bit-bang": "软件时序",
   "Busy-wait timing": "忙等计时",
+  "DHT11 temperature / humidity module (single-wire, 3-pin)": "DHT11 温湿度模块（单总线，三针）",
+  "DHT11 temperature / humidity module (3-pin, with pull-up)": "DHT11 温湿度模块（三针，带上拉）",
+  "Open drain; 10 kΩ pull-up on the module": "开漏；模块上带 10 kΩ 上拉",
+  "Proprietary single-wire protocol timed in microseconds; at least 1 s between reads. Integer humidity, 0–50 °C ±2 °C. Firmware that bit-bangs it with busy-wait loops must be checked on a real board.": "单总线私有协议，按微秒计时；两次读之间至少 1 s。湿度只有整数，0–50 °C ±2 °C。用忙等循环自己写时序的固件必须上真机确认。",
 };
 export default d;

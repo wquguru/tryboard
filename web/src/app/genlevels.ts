@@ -18,9 +18,10 @@ export interface GenInput {
 const hex2 = (n: number) => '0x' + n.toString(16).padStart(2, '0');
 const I2C_KIND: Record<string, { kind: string; name: string }> = { bme280: { kind: 'bme280', name: 'BME280' }, oled: { kind: 'ssd1306', name: 'OLED' }, mpu6050: { kind: 'mpu6050', name: 'MPU6050' }, qmi8658: { kind: 'qmi8658', name: 'QMI8658' } };
 
-/** Confidence of a checkpoint: manual ones need hardware; I2C ack and servo pulse are behavioural; the rest are acceptance-tested. */
+/** Confidence of a checkpoint: manual ones and DHT11 readings (busy-wait timed, D-03) need hardware; I2C ack and servo pulse
+ *  are behavioural; the rest are acceptance-tested. */
 export function levelConf(l: Level): ConfLevel {
-  if (l.manual) return '必须上真机'; // lint: allow-cjk (ConfLevel id, ui/conf.tsx)
+  if (l.manual || (l.numeric?.length && l.args?.includes('--dht11'))) return '必须上真机'; // lint: allow-cjk (ConfLevel id, ui/conf.tsx)
   if (l.i2c_ack?.length || l.pwm) return '行为模拟'; // lint: allow-cjk
   return '仿真验证'; // lint: allow-cjk
 }
@@ -30,16 +31,19 @@ export function genLevels(g: GenInput): Level[] {
   const servo = g.parts.find((p): p is Extract<PartSpec, { type: 'servo' }> => p.type === 'servo');
   const strip = g.parts.find((p): p is Extract<PartSpec, { type: 'ws2812' }> => p.type === 'ws2812');
   const oled = g.parts.some((p) => p.type === 'oled');
+  const dht = g.parts.find((p): p is Extract<PartSpec, { type: 'dht11' }> => p.type === 'dht11');
   // Every checkpoint carries the bench devices (--i2c, env; bootOptions maps them for the web); servo runs on external 5 V.
   const args = [
     ...(i2c.length ? ['--i2c', i2c.map((d) => `${d.kind}@${hex2(d.addr)}`).join(','), '--i2c-log'] : []),
     '--env', '23.5,45,101325',
     ...(servo ? ['--servo', String(servo.pin), '--power', 'ext'] : []),
+    ...(dht ? ['--dht11', String(dht.pin)] : []),
   ];
   const wiring = [
     ...i2c.map((d) => t('{name} (I2C address {addr}): SDA=GPIO{sda}, SCL=GPIO{scl}', { name: d.name, addr: hex2(d.addr), sda: d.sda, scl: d.scl })),
     ...(servo ? [t('Servo signal: GPIO{pin} (50 Hz, external 5 V supply)', { pin: servo.pin })] : []),
     ...(strip ? [t('LED strip data DIN: GPIO{pin}', { pin: strip.pin })] : []),
+    ...(dht ? [t('DHT11 DATA: GPIO{pin} (open drain, 10 kΩ pull-up on the module)', { pin: dht.pin })] : []),
   ];
   const chipName = CHIP_LABEL[g.chip];
   const brief = (goal: string, pass: string) =>
@@ -60,6 +64,17 @@ export function genLevels(g: GenInput): Level[] {
   if (oled) add({ title: t('OLED receives a frame'), goal: t('Draw something on the OLED (text or readings)'), pass: t('The last OLED frame lights at least 50 pixels'), oled_min_pixels: 50 });
   if (strip) add({ title: t('LED strip receives data'), goal: t('Send color data to the WS2812 strip with RMT'), pass: t('At least 1 WS2812 frame decoded on GPIO{pin}', { pin: strip.pin }), ws2812: { pin: strip.pin, min_frames: 1 } });
   if (servo) add({ title: t('Servo signal'), goal: t('Output a 50 Hz servo signal with LEDC'), pass: t('50 Hz PWM on GPIO{pin}, pulse width 0.5–2.5 ms', { pin: servo.pin }), pwm: { pin: servo.pin, freq: 50, min: 0.075, max: 0.075, tol: 0.05 } });
+  // c3-dht11 prints its first reading line about 1 s after boot, inside the 3 s run
+  if (dht)
+    add({
+      title: t('DHT11 reading'),
+      goal: t('Read the DHT11 with your own single-wire driver and print temperature and humidity to serial'),
+      pass: t('Serial prints "{line}" matching the environment (23.5 °C ±1, 45 %RH ±1)', { line: '温度 <°C> 湿度 <%RH>' }), // lint: allow-cjk (firmware printf)
+      numeric: [
+        { name: 'Temperature', regex: '温度 (-?[\\d.]+) 湿度', value: 23.5, tol: 1 }, // lint: allow-cjk (firmware printf)
+        { name: 'Humidity', regex: '湿度 ([\\d.]+)', value: 45, tol: 1 }, // lint: allow-cjk
+      ],
+    });
   if (g.deepSleep) add({ title: t('Wakes again after deep sleep'), goal: t('Deep sleep after measuring, wake on a timer and measure again'), pass: t("The web can't judge this: deep-sleep current and wake-up must be measured on real hardware"), manual: true });
   return out;
 }

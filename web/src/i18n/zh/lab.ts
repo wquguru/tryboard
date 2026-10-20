@@ -940,5 +940,9 @@ const d: Dict = {
   "This step could not load: {err}": "这一步加载失败：{err}",
   "Check the connection, then open the step again.": "请检查网络连接，然后重新打开这一步。",
   "This panel could not load: {err}": "面板加载失败：{err}",
+  "DHT11 reading": "DHT11 读数",
+  "DHT11 DATA: GPIO{pin} (open drain, 10 kΩ pull-up on the module)": "DHT11 DATA：GPIO{pin}（开漏，模块上带 10 kΩ 上拉）",
+  "Read the DHT11 with your own single-wire driver and print temperature and humidity to serial": "用自己写的单总线驱动读 DHT11，把温度和湿度打印到串口",
+  "Serial prints \"{line}\" matching the environment (23.5 °C ±1, 45 %RH ±1)": "串口打印「{line}」，与环境一致（23.5 °C ±1，45 %RH ±1）",
 };
 export default d;

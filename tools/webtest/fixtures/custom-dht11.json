@@ -1,0 +1,53 @@
+[
+  {
+    "id": "custom-1",
+    "title": "Boots without crashing, prints to serial",
+    "goal": "Start normally after power-on and print something to serial",
+    "pass": "No panic / abort within 3 s, at least 1 line of serial output",
+    "boots": true,
+    "buy": "",
+    "learn": "",
+    "brief": "Write firmware for Seeed XIAO ESP32C3 (ESP32-C3) with ESP-IDF 5.x.\nGoal: Start normally after power-on and print something to serial\nWiring:\n- DHT11 DATA: GPIO5 (open drain, 10 kΩ pull-up on the module)\nPass condition: No panic / abort within 3 s, at least 1 line of serial output\nSubmit only flash.bin (merged image, starting at 0x0).",
+    "ref": null,
+    "work": "custom",
+    "seconds": 3,
+    "args": [
+      "--env",
+      "23.5,45,101325",
+      "--dht11",
+      "5"
+    ]
+  },
+  {
+    "id": "custom-2",
+    "title": "DHT11 reading",
+    "goal": "Read the DHT11 with your own single-wire driver and print temperature and humidity to serial",
+    "pass": "Serial prints \"温度 <°C> 湿度 <%RH>\" matching the environment (23.5 °C ±1, 45 %RH ±1)",
+    "numeric": [
+      {
+        "name": "Temperature",
+        "regex": "温度 (-?[\\d.]+) 湿度",
+        "value": 23.5,
+        "tol": 1
+      },
+      {
+        "name": "Humidity",
+        "regex": "湿度 ([\\d.]+)",
+        "value": 45,
+        "tol": 1
+      }
+    ],
+    "buy": "",
+    "learn": "",
+    "brief": "Write firmware for Seeed XIAO ESP32C3 (ESP32-C3) with ESP-IDF 5.x.\nGoal: Read the DHT11 with your own single-wire driver and print temperature and humidity to serial\nWiring:\n- DHT11 DATA: GPIO5 (open drain, 10 kΩ pull-up on the module)\nPass condition: Serial prints \"温度 <°C> 湿度 <%RH>\" matching the environment (23.5 °C ±1, 45 %RH ±1)\nSubmit only flash.bin (merged image, starting at 0x0).",
+    "ref": null,
+    "work": "custom",
+    "seconds": 3,
+    "args": [
+      "--env",
+      "23.5,45,101325",
+      "--dht11",
+      "5"
+    ]
+  }
+]

@@ -288,7 +288,7 @@ export interface Part {
   short: string;
   priceCNY: [number, number];
   /** Interfaces needed: pin requirements */
-  needs: { kind: 'gpio' | 'adc' | 'pwm' | 'i2c' | 'spi' | 'i2s' | 'rmt' | 'uart' | 'usb' | 'camera'; count?: number; label: string }[];
+  needs: { kind: 'gpio' | 'adc' | 'pwm' | 'i2c' | 'spi' | 'i2s' | 'rmt' | 'uart' | 'usb' | 'camera'; count?: number; label: string; /** Taken first when free and not strapping: the pin TryBoard's demo firmware uses (DHT11: c3-dht11 GPIO5) */ prefer?: number[] }[];
   caps?: Cap[];
   /** Extra current while active (mA) */
   activeMA?: number;
@@ -308,6 +308,7 @@ export const PARTS: Record<string, Part> = {
   amp: { id: 'amp', short: 'Amplifier', name: 'MAX98357A amplifier and 3 W speaker', priceCNY: [10, 20], needs: [{ kind: 'i2s', label: 'Amplifier' }], activeMA: 300, caps: ['audio_out'], simulated: 'none' },
   buzzer: { id: 'buzzer', short: 'Buzzer', name: 'Passive buzzer module (3-pin, with transistor)', priceCNY: [1, 4], needs: [{ kind: 'pwm', label: 'Buzzer' }], activeMA: 30, simulated: 'full' },
   relay: { id: 'relay', short: 'Relay', name: '5 V relay module (optocoupler isolated)', priceCNY: [3, 8], needs: [{ kind: 'gpio', label: 'Relay' }], activeMA: 70, simulated: 'full' },
+  dht11: { id: 'dht11', short: 'DHT11', name: 'DHT11 temperature / humidity module (single-wire, 3-pin)', priceCNY: [3, 8], needs: [{ kind: 'gpio', label: 'DHT11 data', prefer: [5] }], activeMA: 1, simulated: 'partial' },
   pir: { id: 'pir', short: 'PIR sensor', name: 'HC-SR501 PIR sensor', priceCNY: [3, 8], needs: [{ kind: 'gpio', label: 'Motion sensing' }], simulated: 'full' },
   battery: { id: 'battery', short: 'Li-ion battery', name: '3.7 V Li-ion battery 1000 mAh', priceCNY: [10, 20], needs: [], simulated: 'none' },
   camera: { id: 'camera', short: 'OV2640', name: 'OV2640 camera', priceCNY: [15, 30], needs: [{ kind: 'camera', label: 'Camera DVP' }], caps: ['camera', 'psram'], activeMA: 120, simulated: 'none' },

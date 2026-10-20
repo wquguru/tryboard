@@ -23,6 +23,7 @@ export const PART_MAP: Record<string, CatalogItem | null> = {
   mic: { partId: 'inmp441' },
   tft: { partId: 'st7789' },
   buzzer: { partId: 'buzzer-module' },
+  dht11: { partId: 'dht11' },
   relay: null,
   pir: null,
   camera: null,

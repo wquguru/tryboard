@@ -1129,5 +1129,9 @@ const d: Dict = {
   "A DHT11 module on GPIO5 (open drain, 10 kΩ pull-up on the module). The firmware's own driver pulls the line low for 20 ms, then times the sensor's answer by counting esp_rom_delay_us(1) loops: 80 µs low + 80 µs high, then 40 bits of 50 µs low followed by 27 µs (0) or 70 µs (1) high, ending with a checksum. It reads 100 times, one second apart, and prints how many passed the checksum. Drag the sliders to change the readings. Open the logic analyzer's fine sampling on GPIO5 to measure each bit with the cursors; the simulator also flags the busy-wait timing as needing a real-board check.": "DHT11 モジュールを GPIO5 に接続（オープンドレイン、モジュール上に 10 kΩ プルアップ）。ファームウェア自前のドライバが線を 20 ms Low にし、esp_rom_delay_us(1) のループ回数でセンサーの応答を測ります：80 µs Low + 80 µs High、続いて 40 ビット（各 50 µs Low の後 27 µs（0）または 70 µs（1）High）、最後にチェックサム。1 秒おきに 100 回読み、チェックサムが合った回数を表示します。スライダーで値を変えられます。ロジックアナライザで GPIO5 の精細サンプリングを開くとカーソルで各ビットを測れます。シミュレータはこのビジーウェイト計時を実機で要確認として示します。",
   "Bit-bang": "ビットバング",
   "Busy-wait timing": "ビジーウェイト計時",
+  "DHT11 temperature / humidity module (single-wire, 3-pin)": "DHT11 温湿度モジュール（シングルワイヤ、3 ピン）",
+  "DHT11 temperature / humidity module (3-pin, with pull-up)": "DHT11 温湿度モジュール（3 ピン、プルアップ付き）",
+  "Open drain; 10 kΩ pull-up on the module": "オープンドレイン。モジュール上に 10 kΩ プルアップ",
+  "Proprietary single-wire protocol timed in microseconds; at least 1 s between reads. Integer humidity, 0–50 °C ±2 °C. Firmware that bit-bangs it with busy-wait loops must be checked on a real board.": "マイクロ秒単位で計時する独自のシングルワイヤプロトコル。読み取り間隔は 1 s 以上。湿度は整数、0–50 °C ±2 °C。ビジーウェイトでビットバンするファームウェアは実機での確認が必要です。",
 };
 export default d;

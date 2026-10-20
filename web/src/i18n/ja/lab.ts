@@ -940,5 +940,9 @@ const d: Dict = {
   "This step could not load: {err}": "このステップを読み込めませんでした：{err}",
   "Check the connection, then open the step again.": "接続を確認してから、もう一度このステップを開いてください。",
   "This panel could not load: {err}": "パネルを読み込めませんでした：{err}",
+  "DHT11 reading": "DHT11 の読み取り",
+  "DHT11 DATA: GPIO{pin} (open drain, 10 kΩ pull-up on the module)": "DHT11 DATA：GPIO{pin}（オープンドレイン、モジュール上に 10 kΩ プルアップ）",
+  "Read the DHT11 with your own single-wire driver and print temperature and humidity to serial": "自作のシングルワイヤドライバで DHT11 を読み、温度と湿度をシリアルに出力する",
+  "Serial prints \"{line}\" matching the environment (23.5 °C ±1, 45 %RH ±1)": "シリアルに「{line}」が出力され、環境と一致する（23.5 °C ±1、45 %RH ±1）",
 };
 export default d;

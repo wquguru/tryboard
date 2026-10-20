@@ -376,7 +376,7 @@ export function bomTotal(picks: Pick[], board?: string): { lo: number; hi: numbe
 }
 
 /** Part library -> bench scene part type (same names as examples.json scene.parts[].type) */
-const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812', pot: 'pot' };
+const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812', pot: 'pot', dht11: 'dht11' };
 /** Keycap labels (usbkey: K1–K3 send a / b / c, K4 is the macro key) */
 const KEY_CAPS = ['a', 'b', 'c', 'M'];
 
@@ -433,6 +433,9 @@ export function toScene(picks: Pick[], wiring: Wire[]): { type: string; [k: stri
     } else if (type === 'pot') {
       // A pot is placed only when its wiper is wired: stock templates leave it unwired, advisor custom templates wire it
       const pin = gpioOf(key, 'analog');
+      if (pin !== undefined) out.push({ type, pin });
+    } else if (type === 'dht11') {
+      const pin = gpioOf(key, 'onewire');
       if (pin !== undefined) out.push({ type, pin });
     } else if (type === 'encoder' || type === 'hcsr04' || type === 'ws2812') {
       // Find by label (the three encoder lines share the digital-out type)

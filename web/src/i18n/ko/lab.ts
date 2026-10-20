@@ -940,5 +940,9 @@ const d: Dict = {
   "This step could not load: {err}": "이 단계를 불러오지 못했습니다: {err}",
   "Check the connection, then open the step again.": "연결을 확인한 뒤 이 단계를 다시 여세요.",
   "This panel could not load: {err}": "패널을 불러오지 못했습니다: {err}",
+  "DHT11 reading": "DHT11 읽기",
+  "DHT11 DATA: GPIO{pin} (open drain, 10 kΩ pull-up on the module)": "DHT11 DATA: GPIO{pin} (오픈 드레인, 모듈에 10 kΩ 풀업)",
+  "Read the DHT11 with your own single-wire driver and print temperature and humidity to serial": "직접 만든 단일 와이어 드라이버로 DHT11을 읽고 온도와 습도를 시리얼로 출력",
+  "Serial prints \"{line}\" matching the environment (23.5 °C ±1, 45 %RH ±1)": "시리얼에 \"{line}\"이 출력되고 환경과 일치 (23.5 °C ±1, 45 %RH ±1)",
 };
 export default d;
