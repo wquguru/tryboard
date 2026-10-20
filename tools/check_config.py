@@ -31,6 +31,10 @@ def load():
     cfg["fw_dirs"] = {p.name for p in fw.iterdir() if (p / "CMakeLists.txt").exists()}
     # Arduino sketches build to firmware/build/arduino-<name> (tools/build_fw.sh)
     cfg["fw_dirs"] |= {f"arduino-{p.name}" for p in (fw / "arduino").iterdir() if p.is_dir()}
+    # boards.txt variants build to arduino-<name>-<variant> (one output per board)
+    for p in (fw / "arduino").glob("*/boards.txt"):
+        rows = [l.split() for l in p.read_text().splitlines() if l.strip() and not l.startswith("#")]
+        cfg["fw_dirs"] |= {f"arduino-{p.parent.name}-{r[0]}" for r in rows}
     cfg["chips"] = set(re.findall(r"(\w+): '", re.search(r"CHIP_LABEL[^{]*\{([^}]*)\}", read("web/src/chips.ts")).group(1)))
     # The union may move between files during refactors: find it wherever it is declared
     union = next(m.group(1) for p in ts_files() if (m := re.search(r"export type PartSpec =(.*?);\n\n", p.read_text(), re.S)))

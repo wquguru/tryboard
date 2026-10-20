@@ -20,6 +20,8 @@ fn usage() -> ! {
                [--i2c-bus sda=N,scl=N[,nopull]:kind@addr,...] (repeatable: bus on fixed pads, reached by the routed I2C0/I2C1 or bit-banged GPIO; external pull-ups unless nopull)
                [--efuse-pkg N] (package version eFuse: S3 0 QFN56 / 1 PICO; ESP32 5 PICO-D4 / 6 PICO-V3-02)
                [--psram MB] (classic ESP32 quad PSRAM: 0 / 2 / 4 / 8; --efuse-pkg 6 implies 2)
+               [--board <id>|list] (board preset: eFuse, panel, I2C buses + devices, touch INT, encoder, buttons in one go; other flags add on top;
+               script actions btn=A,1|0 (preset button), rtc=EPOCH (set the board RTC))
                (more I2C devices: mpu6050@0x68, qmi8658@0x6b, cst816s@0x15, ft6236@0x38, cst9220@0x5a, axp2101@0x34, pcf85063@0x51, es8311@0x18, es7210@0x40;
                M5 parts: mpu6886@0x68, bmi270@0x68 (BMM150 on its AUX bus), bmm150@0x10, bm8563@0x51 (= pcf8563), aw9523@0x58, axp192@0x34,
                lp5562@0x30, tca8418@0x34, ft6336@0x38, ft3267@0x38, ina3221@0x40, ltr553@0x23, aw88298@0x36)
@@ -269,6 +271,10 @@ fn parse_script(s: &str) -> Vec<(f64, String)> {
 }
 
 fn run(args: &[String]) {
+    if opt(args, "--board").as_deref() == Some("list") {
+        print!("{}", tryboard_machine::board_list());
+        return;
+    }
     let Some(path) = args.first() else { usage() };
     let flash = std::fs::read(path).unwrap_or_else(|e| panic!("read firmware {path}: {e}"));
     let chip = Chip::from_image(&flash).unwrap_or(Chip::Esp32c3);
@@ -295,6 +301,7 @@ fn run(args: &[String]) {
     if let Some(s) = opt(args, "--uart-in") {
         m.uart_push(s.replace("\\n", "\n").as_bytes());
     }
+    board_preset_args(&mut m, args);
     i2c_opts(&mut m, args, chip.name());
     // Touch INT pin: --touch-int GPIO
     if let Some(pin) = opt(args, "--touch-int").and_then(|s| s.parse().ok()) {
@@ -1262,6 +1269,31 @@ fn spi_args(m: &mut Machine, args: &[String]) {
     }
 }
 
+/// `--board <id>`: wire the board's on-board parts before the other device flags add to them
+fn board_preset_args(m: &mut Machine, args: &[String]) {
+    let Some(id) = opt(args, "--board") else {
+        return;
+    };
+    match m.board_preset(&id) {
+        Ok(warn) => {
+            let b = m.board().expect("preset applied");
+            let v = if b.verified {
+                ""
+            } else {
+                " (UNVERIFIED preset)"
+            };
+            eprintln!("[tryboard] board {id}: expects {}{v}", b.name);
+            for w in warn {
+                eprintln!("[tryboard] board {id}: {w}");
+            }
+        }
+        Err(e) => {
+            eprintln!("--board: {e}");
+            std::process::exit(2)
+        }
+    }
+}
+
 fn board_args(m: &mut Machine, args: &[String]) {
     if let Some(v) = opt(args, "--battery") {
         match parse_battery(&v) {
@@ -1285,7 +1317,7 @@ fn board_args(m: &mut Machine, args: &[String]) {
     }
 }
 
-/// Input-log actions for the AXP2101 (bat=pct[,usb], pwrkey=short|long) and the virtual BLE phone
+/// Input-log actions for the AXP2101 (bat=pct[,usb], pwrkey=short|long), board RTC / buttons (rtc=, btn=) and the virtual BLE phone
 /// (ble=…) / desktop (pc=…, E-06). Returns false when `act` is not one of them.
 fn board_action(m: &mut Machine, act: &str, now_s: f64) -> bool {
     let ble = act
@@ -1301,6 +1333,18 @@ fn board_action(m: &mut Machine, act: &str, now_s: f64) -> bool {
                 m.battery_set(pct, usb);
             }
             None => eprintln!("[tryboard] unparsable bat action: {act}"),
+        }
+    } else if let Some(v) = act.strip_prefix("rtc=") {
+        match v.trim().parse::<i64>() {
+            Ok(t) if m.rtc_set(t) => {}
+            _ => {
+                eprintln!("[tryboard] {now_s:.3}s rtc action needs an RTC and unix seconds: {act}")
+            }
+        }
+    } else if let Some(v) = act.strip_prefix("btn=") {
+        let (name, lv) = v.split_once(',').unwrap_or((v, "1"));
+        if !m.board_button(name.trim(), lv.trim() == "1") {
+            eprintln!("[tryboard] {now_s:.3}s no board button {name} (needs --board)");
         }
     } else if let Some(v) = act.strip_prefix("pwrkey=") {
         match v.trim() {

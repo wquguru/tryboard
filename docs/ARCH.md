@@ -274,3 +274,31 @@ web/（Vite + TS）
 - S3（E-04）：定位用 `ble/sig_xt.rs` + 生成的 `ble/sigs_xt.rs`（`tools/ble_sigs.py gen-xt`；种类 EXACT / LONGCALL / FILL / LIT，4 字节对齐起点，方法见 DECISIONS 2026-10-20 E-04）；pll_track 同样按 `btdm_controller_enable` 调用前 24 字节内的 call 找（CALLn 或未松弛的 `l32r+callxN`）。钩子不改取指：8 个入口地址和魔术槽 0x40060000..+4×6 都放进 `Cpu::hle_addrs`（`hle_hi` 抬到最高入口 + 1），`run_core` 的 `Exit::Hle` 先查 ROM HLE 表、再交 `ble::call_at`。拦在 ENTRY 之前，窗口还是调用者的：n = PS.CALLINC，参数 a(4n+2..)，返回地址 a(4n)，结果写 a(4n+2)，PC 回到调用点之后，不跑 RETW。要回调固件函数时借调用者的 CALLn：a(4n) = n<<30 | 魔术槽、PS.CALLINC = n、PC = f，f 的 RETW 回到魔术槽且窗口不变；原返回地址按调用者 SP 存在 `BleHle::frames`（跨任务可重入）。桩任务名用 osi `_malloc_internal`（偏移 120）分配再交 task_create；task_create 的第 7 个参数 core_id 在调用者栈上，原样读，bt.c 把越界值当不绑核。`SocBus::ble` 是 `ble::Slot { hle, error }`。BT 地址 = eFuse MAC + 2 = 02:54:42:00:00:05。
 - Bluedroid（E-05）：虚拟控制器的应答对两种主机栈一样，NimBLE 不看的位才改。LE 本地特性只报 LL Privacy（bit 6）：Bluedroid 开了 `CONTROLLER_RPA_LIST_ENABLE` 就无条件往控制器解析列表加默认项，列表大小为 0 会空指针 / 除零；解析列表只应答不解析。另有 Bluedroid 才发的 Read Local Name（0x0C14，248 字节）、Host Number Of Completed Packets（0x0C35，按规范不回事件，主机信用不建模）、C2H 流控 / Host Buffer Size / RPA 超时 / Espressif 广播报告流控 0xFD09（只回状态）。解析列表增删清（0x2027–0x2029）、地址解析使能（0x202D）、隐私模式（0x204E）留在兜底分支：NimBLE 也发，挪出来会改它的 `unknown_cmds` 报告。签名不用改：Bluedroid 固件里的 libbtdm 与 NimBLE 固件同一份。
 - 虚拟电脑（E-06，`ble/desk.rs`）：手机的一种模式（`Phone.desk`），复用其 GATT 客户端。`pc=on` → 扫描并连名字以 `Claude` 开头的设备 → MTU（247）→ 发现后按 128 位 UUID 找 NUS RX `6e400002` / TX `6e400003` → 订阅 TX → `Desk::start`：依次发 `{"time":[BASE_EPOCH+模拟秒,28800]}`、`{"cmd":"owner","name":"TryBoard"}`、首条心跳；之后每 2 s `{"cmd":"status"}`，心跳在脚本相位（6 s）变化或 10 s 保活时发。一行按 (MTU-3) 拆片（`desk::fragment`）：RX 有无应答写属性就用 0x52（每连接事件最多 4 片，不占 pending），否则 0x12 一片一事件；TX 通知进 `LineBuf` 按 `\n` 重组，>4096 字节整行丢弃，ack 解析成 `pc: ack <cmd> #n ok`。空中日志新类别 `k: "pc"`（`pc …` / `fw → pc …`）。命令走同一通道：`Ble::phone_cmd("pc=…")` / `tb_ble_cmd`；CLI `--desk-pc` = 第 0 周期 `pc=on`。`Phone::json()` 多一个 `pc` 字段（on / active / sent / heartbeats / polls / acks / last_rx / last_hb）给 E-07 网页用。所有内容只由模拟时间决定，无墙钟。
+
+## 板预设（M5-05，`crates/machine/src/boards.rs`）
+- 数据表 `BOARDS: &[BoardPreset]`，每项包括：id、显示名、芯片、eFuse 封装号、Flash / PSRAM 容量、屏 spec（与 `lcd_attach_spec` 同格式，-1 = 未接）、引脚 I2C 总线和器件（`make_i2c` 的 kind@addr）、触摸 INT 脚、编码器 A/B 脚、按钮（名、脚、低有效）、需要固定电平的脚、仅作说明的输出脚（蜂鸣器、背光、电源保持……）、`verified`、备注。加板只需加一行，不写代码。
+- 应用顺序（`Machine::board_preset(id)`，在 boot 之后、其它器件参数之前）：
+  1. 检查芯片，不符时报错，CLI 退出码 2。
+  2. 写 eFuse 封装号。
+  3. 挂屏。
+  4. 加 I2C 总线和器件。
+  5. 接触摸 INT。
+  6. 接编码器。
+  7. 把按钮驱到松开电平，并驱固定电平。
+  CLI 的 `--i2c` / `--spi` / `--i2c-bus` 等在预设之后叠加。
+- `verified`：
+  - 只有 m5dial 标为已验证。它用 `arduino-m5-probe-dial` / `arduino-m5-dial-demo` 跑通了 M5Unified 检测、触摸、RTC、编码器、BtnA 和屏幕。
+  - 其余是存根，备注写明由哪个 PLAN 项验证。CLI 会打印 "(UNVERIFIED preset)"。
+  - 已验证的预设只要有一个部件挂不上就返回错误；存根只给警告。
+  - PSRAM 没有建模，只给警告。
+- 单测 `table_is_consistent`：id 不重复，所有器件 kind 都能创建，所有屏 spec 都能解析。
+- 接口：
+  - Rust：`board_preset(id) -> Result<Vec<String>, String>`（返回警告列表）、`board()`、`board_button(name, down)`、`board_list()`。
+  - CLI：`--board <id>`、`--board list`；脚本动作 `btn=A,1|0`（预设按钮）、`rtc=EPOCH`（改板上 RTC）。触摸用已有的 `touch=x,y` / `release`，编码器用 `enc=±N`。
+  - wasm：`tb_board_preset(p, len) -> i32`（0 成功，1 失败）。网页 UI 尚未接入。
+- M5Dial 映射（参考 M5Unified / M5GFX 读出来的，不是复制）：
+  - GC9A01：SCLK 6、MOSI 5、CS 7、DC 4、RST 8、BL 9。
+  - 内部 I2C（SDA 11 / SCL 12）：FT3267 0x38、BM8563 0x51。触摸 INT 14。
+  - 编码器 40 / 41（A/B 顺序是推断的）。
+  - BtnA G42（低有效）。电源保持 G46。
+  - 蜂鸣器 G3（I2S 1-bit，尚无模型）。

@@ -107,7 +107,7 @@
 | F-02 | 分享卡：MediaRecorder 录 MP4（不做 GIF、不引 muxer）+ 自写二维码（约 250 行）+ 链接；> 2k 字符的链接二维码里去掉运行记录。顺手修 `capture.ts:104-116` Safari 把 MP4 命名成 `.webm` | F-01a | `web/src/app/capture.ts`、新组件 | 默认 | 90 |
 | F-03 | 独立 `embed.html` 入口：点一下才加载、不写 localStorage、`_headers` 只对 embed 路径设 `frame-ancestors *`（wasm 不用 SAB，不需要 COOP/COEP） | F-01a | `web/` 新入口、`vite.config` | 默认 | 80 |
 | F-03b | 嵌入 / 分享页的实时回放（按时间轴播放输入日志，而不是快进到末尾） | F-03 | `web/src/app/live.ts` | 默认 | 60 |
-| F-04b | ST7789 / ILI9341（C3、S3 的 SPI，复用 GC9A01 骨架）+ SH1106 + CLI 验收 | — | `core/crates/soc/src/devices/`、新固件 | 默认 | 110 |
+| F-04b | ILI9341 + SH1106 模型（ST7789 模型 M5 专项已有，`lcd.rs:27`）+ ST7789 / ILI9341 裸屏在 C3、S3 的 CLI 验收 | — | `core/crates/soc/src/devices/`、新固件 | 默认 | 110 |
 | F-04c | DS18B20 单总线（参考 DHT11）+ CLI 验收 | — | 同上 | 默认 | 100 |
 | F-04d | PIR / LDR / 继电器（纯 GPIO、ADC）+ RC522（SPI）+ CLI 验收 | — | 同上 | 默认 | 100 |
 | F-04a | 网页：所有已建模器件可拖放 + 手机元件库 + 3D 外观 | F-04b/c/d 合并后 | `web/src/bench3d/spec.ts`、`modules.ts`、`app/place.ts`、`mobile.tsx` | 默认 | 130 |
@@ -128,7 +128,7 @@ O4 清单按 RS-3 重排：ILI9341 / ST7789、DS18B20、SH1106、PIR / LDR / 继
 | F-08c | BLE 多 IDF：补 esp32c3-bt-lib 各 commit 的签名变体 + 覆盖自测；osi 表版本放宽到 0x10006–0x1000A（`esp32c3/src/ble.rs:170`、`esp32s3/src/ble.rs:198`）；≤ 0x10006 时跳过 `pll_track` 钩子；用 5.5.1 工具链把旧库链进空 ELF 跑 `ble_sigs.py check` | RS-5 | 默认 | 1–1.5 |
 | F-09a | xiaozhi 虚拟服务端：`tcp.rs` 抽 `Conn` 长连接 + 服务端主动推送；`wifi/ws.rs`（握手、掩码、分片）；`wifi/xiaozhi.rs` 脚本回放预编码 Opus | RS-2 | 默认 | 2 |
 | F-09b | `firmware/s3-xiaozhi-lite`（IDF 5.5.1 + esp_websocket_client + micro-opus + SSD1306，BOOT 键按住说话）+ 网页语音面板 + 3 个 accept 用例。第 0 步先在模拟器里跑 micro-opus benchmark，不行退 libopus 或原始 PCM | F-09a、人拍板 RS-2 四项 | 默认 | 2–3 |
-| F-10a–d | 经典 ESP32：SPI（先，CYD 依赖）、ADC、RMT、I2S，每个外设一个 session | RS-3：保持 P1 并提前 | 默认 | 4 |
+| F-10a–d | 经典 ESP32：SPI（先，CYD 依赖）、ADC（现无模型）、RMT 收和载波（发送 M5-11 已做）、I2S，每个外设一个 session | RS-3：保持 P1 并提前 | 默认 | 4 |
 | F-11 | 环境脚本时间轴（先出交互稿再实现） | F-01a | 默认 | 1 |
 
 ### 5.4 哪些能并行（修订）
@@ -166,6 +166,8 @@ O4 清单按 RS-3 重排：ILI9341 / ST7789、DS18B20、SH1106、PIR / LDR / 继
 - **经典 ESP32 的 BLE**：RS-5 指出完全没覆盖，可能比多 IDF 更重要；需要单独调研（RS-8 候选）。
 - **周期精度 / 缓存模型**：目前明确不做。只有在出现"时序敏感固件跑不对"的真实用例时才重开。
 - **权重本身**：§1 的视角权重是评审判断。上线后若有真实用户数据（漏斗、分享率），应该用数据重定。
+
+派单细节（提示词、依赖图、收尾步骤）见 `DISPATCH.md`。
 
 ## 6. 研究产出
 
