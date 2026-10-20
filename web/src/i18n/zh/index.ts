@@ -1,12 +1,8 @@
-// Merges the per-area dictionaries; each area file is owned by the code that uses it.
+// The whole dictionary (tests, tools); pages load only their groups via web/src/i18n/index.ts (R-20).
 import type { Dict } from '../index.ts';
 import site from './site.ts';
-import lab from './lab.ts';
-import views from './views.ts';
-import data from './data.ts';
-import checks from './checks.ts';
-import steps from './steps.ts';
-import net from './net.ts';
+import select from './select.ts';
+import app from './app.ts';
 
-const dict: Dict = { ...data, ...checks, ...views, ...site, ...lab, ...steps, ...net };
+const dict: Dict = { ...app, ...select, ...site };
 export default dict;
