@@ -106,7 +106,7 @@ const crates = [];
     copyright: [copy],
     url: 'https://github.com/espressif/esp-rom-elfs',
     text: lic,
-    note: `Files published on the site: ${shipped.join(', ')}. Third-party components inside the ROM are listed in the next section.`,
+    note: `Files published on the site: ${shipped.join(', ')}. Modified (Apache-2.0 section 4(b)): the .xt.prop and .xt.lit sections were removed by tools/strip_rom.py; loadable content and symbols are unchanged. Third-party components inside the ROM are listed in the next section.`,
   });
   // Third-party code inside the ROM (ESP-IDF COPYRIGHT, ROM Source Code Copyrights): part of the ROM files, not counted separately
   const romThird = [

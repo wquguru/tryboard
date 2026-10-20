@@ -262,3 +262,5 @@
 | 项 | 状态 | 验收 | 缺口 |
 |---|---|---|---|
 | 选板 v3（U-15）+ 可信度图标（U-14 选板部分） | ✅ | `npm test` 151 例全过（新增 select.test.ts 8 例：旧链接、预算硬过滤、我已有 id、刚才一行含续航变化、0 块放宽、任务书四节与检查点名、无命令行）；`tools/webtest/selectv3.mjs` 43 项全过（①选项目卡 ②勾零件 / 我已有 / 撤销 ③三个问题与预算 ④术语 / 全部细节 / 三块对比 ⑤任务书 / 分享 / 主按钮地址）；`mobile.mjs`、`levels.mjs` 全过；agent-browser 1440 与 390×844 主流程 + console / errors 无输出（Reviews/ab/U-15.md） | 主按钮去 `app?work=custom…#shop`（合并后已通，见 U-14–U-19 合并验收）；「更多需求」能力（Thread、经典蓝牙等）只按芯片能力过滤，不改零件；检查点名与 genlevels 逐字一致（合并后加了 select.test.ts 断言）；levels.mjs 要先把 firmware/build、core/target 链到主仓库并跑 gen_licenses.mjs，否则命令行对拍 / 上传固件 / 授权页 28 项失败（worktree 缺构建产物，与本改动无关） |
+
+- R-21（ROM 瘦身）：网页发布的 ROM 去掉 `.xt.prop` / `.xt.lit`（`tools/strip_rom.py`，build_web.sh 调用）：S3 949 552 → 619 788 B，ESP32 857 500 → 596 888 B，C3 不变；可加载段与符号表逐项相同（脚本断言，仅 ELF 头里的 e_shoff / e_shnum / e_shstrndx 变，该头被第一个 PT_LOAD 映射但无人读）；命令行用裁剪 ROM 与原 ROM 跑 weather / esp32-blink / hello / esp32-wifi，stdout 与 stderr（除墙钟）逐字相同；levels.mjs 全过。

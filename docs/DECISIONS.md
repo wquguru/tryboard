@@ -1009,3 +1009,8 @@
   - 「并行取」不是少下载，是让这些字节不挡首次渲染；首页 index.html 闭包因 chunk 切分多 0.9 KB（160.1 → 161.0）。
   - 没做到 ≤ 396 KB 的卡点：剩下的 454.6 里 three 149 + react-dom / react 71 + CSS 18 + tailwind-merge 9，实验台 / 3D 舞台（bench3d、board3d、后期 Bloom / Outline）本身约 150 KB 都是首屏画面要用的；零件目录 `catalog/parts`（17 KB）在建 store 时 `loadBom → validHistory` 就同步要用，`wirecheck` / `place` 也要。再降需要把实验台 3D 整体改成会话前动态加载（等于把 three 移出闭包，与「three 保留在首屏」矛盾）或把零件目录拆成首屏索引 + 详情，改动面大，留给后续。
   - 不做：用手写合并替换 `tailwind-merge`（类名冲突语义会变）；音频门面（audio.ts 实际只有约 1.3 KB，第一轮 13 KB 的估计是 source map 把 levels.json 记到了它头上）。
+
+### 2026-10-20 R-21：网页 ROM 删除 .xt.prop / .xt.lit
+- 决定：`tools/strip_rom.py`（纯 python）在 build_web.sh 拷贝 ROM 时删掉这两个非加载段并压紧文件，重写 e_shoff / 节头表；NOTICE.txt 与授权页按 Apache-2.0 §4(b) 写明修改。third_party 原件不动。
+- 理由：模拟器只读 PT_LOAD 与 .symtab（rv32/src/elf.rs），这两段是 Xtensa 工具链属性表，S3 共 330 KB、ESP32 共 260 KB。
+- 保留：.symtab / .strtab / .comment / .xtensa.info（合计很小或被读）。备选：用 xtensa objcopy —— build_web.sh 不应依赖 IDF 环境，放弃。
