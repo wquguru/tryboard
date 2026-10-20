@@ -38,11 +38,13 @@ pub struct BoardPreset {
     pub chip: Chip,
     /// eFuse package version (S3: 0 = QFN56, 1 = PICO; ESP32: 5 = PICO-D4, 6 = PICO-V3-02); None keeps the default
     pub efuse_pkg: Option<u32>,
-    /// What the real board carries; the simulator does not enforce flash size (S3 PSRAM: always the 8 MB die)
+    /// What the real board carries; flash size comes from the image header, PSRAM is applied where the chip models it
     pub flash_mb: u32,
     pub psram_mb: u32,
     /// S3 PSRAM die on the QSPI interface (Arduino `psram_type=qspi`) rather than octal
     pub psram_quad: bool,
+    /// Battery sensed on an ADC pin through a divider (pin, ratio) when the board has no PMIC
+    pub battery_adc: Option<(usize, f32)>,
     /// `Machine::lcd_attach_spec` string
     pub lcd: Option<&'static str>,
     pub i2c: &'static [I2cBus],
@@ -93,6 +95,7 @@ const NONE: BoardPreset = BoardPreset {
     flash_mb: 8,
     psram_mb: 0,
     psram_quad: false,
+    battery_adc: None,
     lcd: None,
     i2c: &[],
     touch_int: None,
@@ -284,8 +287,10 @@ pub const BOARDS: &[BoardPreset] = &[
         lcd: Some("st7789@sclk=13,mosi=15,cs=5,dc=14,rst=12,bl=27"),
         i2c: &[bus(21, 22, &[("mpu6886", 0x68), ("bm8563", 0x51)])],
         buttons: &[btn("A", 37), btn("B", 39), btn("C", 35)],
+        battery_adc: Some((38, 2.0)),
         outputs: &[("buzzer", 2), ("led", 19), ("power_hold", 4)],
-        note: "M5-10 verifies; classic ESP32 has no SPI panel model yet, 8 MB flash header and PSRAM probe fail",
+        verified: true,
+        note: "button C = power key G35; PDM mic CLK G0 / DATA G34 (--mic); IR G19 shares the LED",
         ..NONE
     },
     BoardPreset {
@@ -307,7 +312,8 @@ pub const BOARDS: &[BoardPreset] = &[
             ],
         )],
         touch_int: Some(39),
-        note: "M5-11 verifies; LCD reset / backlight through AXP192; classic ESP32 SPI panel, flash and PSRAM not ready",
+        verified: true,
+        note: "buttons A/B/C are touch zones below the panel; LCD reset / backlight via AXP192; NS4168 I2S speaker",
         ..NONE
     },
     BoardPreset {
@@ -330,7 +336,8 @@ pub const BOARDS: &[BoardPreset] = &[
             ],
         )],
         touch_int: Some(39),
-        note: "M5-11 verifies; v1.1 = AXP2101 + INA3221",
+        verified: true,
+        note: "v1.1 = AXP2101 + INA3221; same Arduino build as v1.0, M5Unified tells them apart by the PMIC",
         ..NONE
     },
     BoardPreset {
@@ -341,7 +348,8 @@ pub const BOARDS: &[BoardPreset] = &[
         flash_mb: 4,
         buttons: &[btn("A", 39)],
         outputs: &[("rgb", 27), ("ir", 12)],
-        note: "M5-12 verifies; Lite vs Matrix is told by touch-pad readings (not modelled)",
+        verified: true,
+        note: "Lite vs Matrix is told by touch pads 4 / 7 (G13 / G27): equal idle counts read as Lite",
         ..NONE
     },
 ];
@@ -459,8 +467,15 @@ impl Machine {
         if b.psram_quad {
             self.set_psram_quad(true);
         }
-        if b.psram_mb > 0 && !(b.chip == Chip::Esp32s3 && b.psram_mb == 8) {
+        // S3 always carries the 8 MB die; classic ESP32 quad PSRAM is sized here (M5-14)
+        if b.psram_mb > 0
+            && !(b.chip == Chip::Esp32s3 && b.psram_mb == 8)
+            && !self.set_psram_mb(b.psram_mb)
+        {
             warn.push(format!("{} MB PSRAM not modelled", b.psram_mb));
+        }
+        if let Some((pin, div)) = b.battery_adc {
+            self.analog_set(pin, tryboard_soc::devices::axp2101::ocv_mv(80) as f32 / div);
         }
         self.board = Some(b);
         Ok(warn)

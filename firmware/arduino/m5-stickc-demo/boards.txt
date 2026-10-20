@@ -1,0 +1,4 @@
+# <name> <fqbn>  ->  firmware/build/arduino-m5-stickc-demo-<name>/  (esp32 core 3.3.2); same sketch on each classic-ESP32 M5 board
+stickc_plus2 esp32:esp32:m5stack_stickc_plus2
+core2 esp32:esp32:m5stack_core2
+atomlite esp32:esp32:m5stack_atom

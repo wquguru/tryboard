@@ -210,7 +210,7 @@ pub struct Inmp441 {
     pub both: bool,
     pub source: MicSource,
     pub frames: u64,
-    /// PDM part (SPM1423 on M5 boards): the SoC decimates to PCM, so only the report differs
+    /// PDM part (SPM1423 on M5 boards): the SoC decimates to PCM; data shows on both slots (see `slots`)
     pub pdm: bool,
 }
 
@@ -300,6 +300,11 @@ impl Inmp441 {
                     .level(t0 as f64 + i as f64 * fc, step)
                     .clamp(-1.0, 1.0 - 1.0 / 8_388_608.0);
                 let v24 = (x as f64 * 8_388_608.0).round() as i32;
+                // A lone PDM mic's data line keeps its bit through the idle clock phase, so both slots decode it
+                // (M5Unified reads the right slot, IDF's default the left one, both on SPM1423 boards)
+                if self.pdm {
+                    return [v24 << 8; 2];
+                }
                 let mut s = [0i32; 2];
                 s[k] = v24 << 8;
                 if self.both {

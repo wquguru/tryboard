@@ -3575,5 +3575,384 @@
   "stderr_expect": [
    "I2S mic INMP441 (SCK=GPIO41 WS=GPIO43 SD=GPIO46"
   ]
+ },
+ {
+  "id": "arduino-m5-probe-stickc_plus2",
+  "chip": "esp32",
+  "seconds": 4,
+  "qemu": false,
+  "args": [
+   "--board",
+   "m5stickcplus2"
+  ],
+  "expect": [
+   "M5PROBE board=M5StickCPlus2 board_id=5",
+   "display=135x240 imu=4 rtc=1 touch=0 pmic=1",
+   "M5PROBE_DRAWN",
+   "TRYBOARD_OK m5-probe"
+  ],
+  "stderr_expect": [
+   "board m5stickcplus2: expects M5StickCPlus2"
+  ],
+  "numeric": [
+   {
+    "name": "battery level (%)",
+    "regex": "pmic=\\d bat=(\\d+)",
+    "value": 82,
+    "tol": 5
+   }
+  ],
+  "lcd_regions": [
+   {
+    "name": "red band",
+    "x": 0,
+    "y": 0,
+    "w": 135,
+    "h": 240,
+    "color": "#ff0000",
+    "min_pixels": 6000,
+    "max_pixels": 8100
+   },
+   {
+    "name": "green band",
+    "x": 0,
+    "y": 0,
+    "w": 135,
+    "h": 240,
+    "color": "#00ff00",
+    "min_pixels": 8100,
+    "max_pixels": 8100
+   },
+   {
+    "name": "blue band",
+    "x": 0,
+    "y": 0,
+    "w": 135,
+    "h": 240,
+    "color": "#0000ff",
+    "min_pixels": 8100,
+    "max_pixels": 8100
+   },
+   {
+    "name": "white band",
+    "x": 0,
+    "y": 0,
+    "w": 135,
+    "h": 240,
+    "color": "#ffffff",
+    "min_pixels": 8100,
+    "max_pixels": 10000
+   }
+  ]
+ },
+ {
+  "id": "arduino-m5-probe-core2",
+  "chip": "esp32",
+  "seconds": 4,
+  "qemu": false,
+  "args": [
+   "--board",
+   "m5core2"
+  ],
+  "expect": [
+   "M5PROBE board=M5StackCore2 board_id=2",
+   "display=320x240 imu=4 rtc=1 touch=1 pmic=2",
+   "M5PROBE_DRAWN",
+   "TRYBOARD_OK m5-probe"
+  ],
+  "stderr_expect": [
+   "board m5core2: expects M5StackCore2"
+  ],
+  "numeric": [
+   {
+    "name": "battery level (%)",
+    "regex": "pmic=\\d bat=(\\d+)",
+    "value": 87,
+    "tol": 5
+   }
+  ],
+  "lcd_regions": [
+   {
+    "name": "red band",
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 240,
+    "color": "#ff0000",
+    "min_pixels": 17000,
+    "max_pixels": 19200
+   },
+   {
+    "name": "green band",
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 240,
+    "color": "#00ff00",
+    "min_pixels": 19200,
+    "max_pixels": 19200
+   },
+   {
+    "name": "blue band",
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 240,
+    "color": "#0000ff",
+    "min_pixels": 19200,
+    "max_pixels": 19200
+   },
+   {
+    "name": "white band",
+    "x": 0,
+    "y": 0,
+    "w": 320,
+    "h": 240,
+    "color": "#ffffff",
+    "min_pixels": 19200,
+    "max_pixels": 21000
+   }
+  ]
+ },
+ {
+  "id": "arduino-m5-probe-core2v11",
+  "chip": "esp32",
+  "seconds": 4,
+  "qemu": false,
+  "args": [
+   "--board",
+   "m5core2v11"
+  ],
+  "expect": [
+   "M5PROBE board=M5StackCore2 board_id=2",
+   "display=320x240 imu=4 rtc=1 touch=1 pmic=4",
+   "M5PROBE_DRAWN",
+   "TRYBOARD_OK m5-probe"
+  ],
+  "stderr_expect": [
+   "board m5core2v11: expects M5StackCore2"
+  ],
+  "fw": "arduino-m5-probe-core2",
+  "numeric": [
+   {
+    "name": "battery level (%)",
+    "regex": "pmic=\\d bat=(\\d+)",
+    "value": 80,
+    "tol": 5
+   }
+  ]
+ },
+ {
+  "id": "arduino-m5-probe-atomlite",
+  "chip": "esp32",
+  "seconds": 4,
+  "qemu": false,
+  "args": [
+   "--board",
+   "m5atomlite"
+  ],
+  "expect": [
+   "M5PROBE board=M5AtomLite board_id=128",
+   "display=0x0 imu=0 rtc=0 touch=0 pmic=0",
+   "M5PROBE_DRAWN",
+   "TRYBOARD_OK m5-probe"
+  ],
+  "stderr_expect": [
+   "board m5atomlite: expects M5AtomLite"
+  ]
+ },
+ {
+  "id": "arduino-m5-stickc-demo-stickc_plus2",
+  "chip": "esp32",
+  "seconds": 4.5,
+  "qemu": false,
+  "args": [
+   "--board",
+   "m5stickcplus2",
+   "--rtc",
+   "1767225600",
+   "--mic",
+   "tools/audio/sine1k.wav"
+  ],
+  "script": "0.0:bat=30; 0.0:imu=20,-15,0; 1.0:btn=A,1; 1.1:btn=A,0; 2.5:btn=B,1; 2.6:btn=B,0; 3.0:btn=C,1; 3.1:btn=C,0; 3.5:rtc=1800000000",
+  "expect": [
+   "DEMO ready board=5 display=135x240 imu=4 rtc=1 pmic=1",
+   "DEMO rtc=2026-01-01 00:00:00",
+   "DEMO btnA presses=1 led=1",
+   "DEMO btnB presses=1",
+   "DEMO mic peak=",
+   "DEMO btnPWR clicks=1",
+   "rtc=2027-01-15 08:00:00"
+  ],
+  "absent": [
+   "DEMO mic peak=0 "
+  ],
+  "numeric": [
+   {
+    "name": "battery mV (G38 x2, 30 %)",
+    "regex": "DEMO bat=(\\d+)mV",
+    "value": 3700,
+    "tol": 30
+   },
+   {
+    "name": "IMU pitch (deg)",
+    "regex": "DEMO bat=.* pitch=(-?[\\d.]+)",
+    "value": 20,
+    "tol": 0.6
+   },
+   {
+    "name": "IMU roll (deg)",
+    "regex": "DEMO bat=.* roll=(-?[\\d.]+)",
+    "value": -15,
+    "tol": 0.6
+   }
+  ],
+  "pwm": {
+   "pin": 19,
+   "freq": 256,
+   "min": 1.0,
+   "max": 1.0
+  }
+ },
+ {
+  "id": "arduino-m5-stickc-demo-core2",
+  "chip": "esp32",
+  "seconds": 4.5,
+  "qemu": false,
+  "args": [
+   "--board",
+   "m5core2",
+   "--rtc",
+   "1767225600",
+   "--mic",
+   "tools/audio/sine1k.wav"
+  ],
+  "script": "0.0:bat=30; 0.0:imu=20,-15,0; 1.0:touch=50,260; 1.15:release; 2.5:touch=160,260; 2.65:release; 3.0:touch=270,260; 3.15:release; 3.5:rtc=1800000000",
+  "expect": [
+   "DEMO ready board=2 display=320x240 imu=4 rtc=1 pmic=2 led=1",
+   "DEMO rtc=2026-01-01 00:00:00",
+   "DEMO btnA presses=1 led=1",
+   "DEMO btnB presses=1",
+   "DEMO mic peak=",
+   "DEMO btnC",
+   "rtc=2027-01-15 08:00:00"
+  ],
+  "absent": [
+   "DEMO mic peak=0 "
+  ],
+  "numeric": [
+   {
+    "name": "battery mV (AXP192, 30 %)",
+    "regex": "DEMO bat=(\\d+)mV",
+    "value": 3700,
+    "tol": 30
+   },
+   {
+    "name": "IMU pitch (deg)",
+    "regex": "DEMO bat=.* pitch=(-?[\\d.]+)",
+    "value": 20,
+    "tol": 0.6
+   },
+   {
+    "name": "IMU roll (deg)",
+    "regex": "DEMO bat=.* roll=(-?[\\d.]+)",
+    "value": -15,
+    "tol": 0.6
+   }
+  ],
+  "lcd_regions": [
+   {
+    "name": "bubble",
+    "x": 100,
+    "y": 150,
+    "w": 120,
+    "h": 80,
+    "color": "#ffff00",
+    "min_pixels": 150,
+    "max_pixels": 300
+   }
+  ]
+ },
+ {
+  "id": "arduino-m5-stickc-demo-core2v11",
+  "fw": "arduino-m5-stickc-demo-core2",
+  "chip": "esp32",
+  "seconds": 3,
+  "qemu": false,
+  "args": [
+   "--board",
+   "m5core2v11"
+  ],
+  "script": "0.0:bat=30; 0.0:imu=20,-15,0; 1.0:touch=50,260; 1.15:release",
+  "expect": [
+   "DEMO ready board=2 display=320x240 imu=4 rtc=1 pmic=4 led=1",
+   "DEMO btnA presses=1 led=1",
+   "level=30 "
+  ],
+  "numeric": [
+   {
+    "name": "battery mV (AXP2101, 30 %)",
+    "regex": "DEMO bat=(\\d+)mV",
+    "value": 3700,
+    "tol": 30
+   },
+   {
+    "name": "IMU pitch (deg)",
+    "regex": "DEMO bat=.* pitch=(-?[\\d.]+)",
+    "value": 20,
+    "tol": 0.6
+   },
+   {
+    "name": "IMU roll (deg)",
+    "regex": "DEMO bat=.* roll=(-?[\\d.]+)",
+    "value": -15,
+    "tol": 0.6
+   }
+  ]
+ },
+ {
+  "id": "arduino-m5-stickc-demo-atomlite",
+  "chip": "esp32",
+  "seconds": 2.6,
+  "qemu": false,
+  "args": [
+   "--board",
+   "m5atomlite"
+  ],
+  "script": "1.0:btn=A,1; 1.1:btn=A,0; 1.6:btn=A,1; 1.7:btn=A,0; 2.2:btn=A,1; 2.3:btn=A,0",
+  "expect": [
+   "DEMO ready board=128 display=0x0 imu=0 rtc=0 pmic=0 led=1",
+   "DEMO btnA presses=3"
+  ],
+  "ws2812": {
+   "pin": 27,
+   "min_frames": 8,
+   "frames": [
+    [
+     "#010203"
+    ],
+    [
+     "#010203"
+    ],
+    [
+     "#0f0000"
+    ],
+    [
+     "#0f0000"
+    ],
+    [
+     "#000f00"
+    ],
+    [
+     "#000f00"
+    ],
+    [
+     "#00000f"
+    ],
+    [
+     "#00000f"
+    ]
+   ]
+  }
  }
 ]

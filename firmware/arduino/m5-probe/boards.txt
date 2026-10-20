@@ -6,3 +6,4 @@ cardputer esp32:esp32:m5stack_cardputer
 stickc_plus2 esp32:esp32:m5stack_stickc_plus2
 core2 esp32:esp32:m5stack_core2
 atoms3r_opi esp32:esp32:m5stack_atoms3:PSRAM=opi
+atomlite esp32:esp32:m5stack_atom
