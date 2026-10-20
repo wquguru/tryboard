@@ -228,7 +228,7 @@
 | F-04d | PIR / LDR / 继电器 + RC522（读 UID） | accept + 脚本动作可重放 | ◐ |
 | F-04e | AHT20 + INA219 + DS3231 | accept | ☐ |
 | F-05 | 故障挑战关卡 3–5 个（缺的 CLI 故障开关一并补） | check.py --ref --all；faults.mjs 网页判定一致 | ◐ |
-| F-06 | 公开数字自动生成（tools/stats.py） | stats.py --check | ◐ |
+| F-06 | 公开数字自动生成（tools/stats.py；README 标记块 + web/public/stats.json，build_web.sh 调用；首页暂无手写数字） | stats.py --check | ☑ |
 | F-07a | UART > 127 字节修复 + `--script` `\xNN` + MicroPython C3 验收 | golden 字节一致；MicroPython 用例 | ☐ |
 | F-07b | 网页 main.py 编辑器（需人定 MicroPython 分发方式与定位） | micropython.mjs | ☐ |
 | F-08a / F-08b | Arduino 库矩阵 2 × 10 例（MIT / BSD 优先） | accept 矩阵写进 STATUS | ☐ |
