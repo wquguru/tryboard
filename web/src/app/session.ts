@@ -24,6 +24,7 @@ import { chipOf, loadExamples } from './examples';
 export { WORKS } from './works';
 import { wkey } from './works';
 import { BOOT_GPIO, type SimChip } from '../chips';
+import { boardDevs } from '../bench3d/boarddevs';
 import { t } from '../i18n';
 
 /** weather firmware reading line (format set by level 06); accept single or double spaces (bme280 example). */
@@ -96,6 +97,22 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   };
   /** GPIO wired to touch INT (CST816S on the bench). */
   const touchIntOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'cst816s' ? [p.int] : []))[0];
+  /** Simulator devices of a scene: onboard ones of an all-in-one board (E-03) first, then bench parts */
+  const devsOf = (sc: SceneSpec) => {
+    const bd = boardDevs(sc.board);
+    const parts = sc.parts;
+    return {
+      i2c: [...(bd?.i2c ?? []), ...i2cOf(parts)],
+      lcd: bd?.lcd ?? parts.some((p) => p.type === 'gc9a01'),
+      battery: bd ? (s.battery ?? bd.battery) : undefined,
+      servo: servoOf(parts),
+      encoder: encoderOf(parts),
+      sonar: sonarOf(parts),
+      dht11: dht11Of(parts),
+      touchInt: bd?.touchInt ?? touchIntOf(parts),
+      i2s: i2sOf(parts),
+    };
+  };
   const poseRate = new PoseRate();
   let poseIdle = 0;
 
@@ -188,7 +205,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       if (JSON.stringify(next) !== JSON.stringify(s.scene)) bench.setScene(next);
       s.scene = next;
       s.power = power;
-      s.sim?.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts), dht11: dht11Of(next.parts), touchInt: touchIntOf(next.parts), i2s: i2sOf(next.parts) });
+      s.sim?.configure(devsOf(next));
       audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
       audio.setSpeaker(next.parts.some((p) => p.type === 'max98357a'));
       bumpEdit();
@@ -238,7 +255,10 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     },
     applyScene(next, power, label) {
       s.sceneLabel = label;
-      const devs = (sc: SceneSpec) => JSON.stringify([i2cOf(sc.parts), sc.parts.some((p) => p.type === 'gc9a01'), servoOf(sc.parts) ?? null, encoderOf(sc.parts) ?? null, sonarOf(sc.parts)?.trig ?? null, sonarOf(sc.parts)?.echo ?? null, dht11Of(sc.parts) ?? null, touchIntOf(sc.parts) ?? null, i2sOf(sc.parts)]);
+      const devs = (sc: SceneSpec) => {
+        const d = devsOf(sc);
+        return JSON.stringify([d.i2c, d.lcd, d.servo ?? null, d.encoder ?? null, d.sonar?.trig ?? null, d.sonar?.echo ?? null, d.dht11 ?? null, d.touchInt ?? null, d.i2s]);
+      };
       const rebootNeeded = devs(next) !== devs(s.scene);
       const same = JSON.stringify(next) === JSON.stringify(s.scene);
       const extBefore = !!s.power?.ext5v;
@@ -249,7 +269,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
       const hadExt = extBefore;
       if (s.sim && rebootNeeded) {
-        s.sim.configure({ i2c: i2cOf(next.parts), lcd: next.parts.some((p) => p.type === 'gc9a01'), servo: servoOf(next.parts), encoder: encoderOf(next.parts), sonar: sonarOf(next.parts), dht11: dht11Of(next.parts), touchInt: touchIntOf(next.parts), i2s: i2sOf(next.parts) });
+        s.sim.configure(devsOf(next));
         audio.setSpeaker(next.parts.some((p) => p.type === 'max98357a'));
         s.sim.setPower(powerMode());
         s.reboot();
@@ -352,6 +372,14 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
           s.sim?.setImu({ ...pose, rates: [0, 0, 0] });
         }, 150);
     },
+    battery: null,
+    setBattery(pct, usb) {
+      s.battery = { pct: Math.round(Math.min(100, Math.max(0, pct))), usb };
+      s.sim?.battery(s.battery.pct, usb);
+    },
+    pwrKey(long) {
+      s.sim?.pwrkey(long);
+    },
     touch(x, y, down) {
       s.sim?.touch(x, y, down);
       store.set({ touch: { x: Math.round(x), y: Math.round(y), down } });
@@ -424,16 +452,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   function makeSim(fw: string | ArrayBuffer) {
     const sim: LiveSim = new LiveSim({
       fw,
-      i2c: i2cOf(s.scene.parts),
-      lcd: s.scene.parts.some((p) => p.type === 'gc9a01'),
-      servo: servoOf(s.scene.parts),
-      encoder: encoderOf(s.scene.parts),
-      sonar: sonarOf(s.scene.parts),
-      dht11: dht11Of(s.scene.parts),
-      touchInt: touchIntOf(s.scene.parts),
+      ...devsOf(s.scene),
       power: powerMode(),
       harness: s.harness,
-      i2s: i2sOf(s.scene.parts),
       onPcm: (b) => audio.pushPcm(b),
       env: store.get().env,
       onBle: (u) => bleFeed.update(u),
@@ -558,7 +579,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         if (f.lcd && f.lcd !== lastLcd) {
           lastLcd = f.lcd;
           s.frame.lcd = f.lcd;
-          bench.setLcd(f.lcd);
+          s.frame.lcdW = f.lcdW;
+          s.frame.lcdH = f.lcdH;
+          bench.setLcd(f.lcd, f.lcdW ?? 240, f.lcdH ?? 240);
         }
       },
     });
@@ -586,9 +609,15 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   // Dragging the IMU = tilting the breadboard (P2-03); tapping the touch display = a finger (P2-02).
   bench.onPose((p) => s.setPose(p));
   bench.onTouch((x, y, down) => s.touch(x, y, down));
+  // PWR key on the 3D board (E-03): held ≥ 1 s on release counts as a long press
+  let pwrDown = 0;
   bench.onButton((name, down) => {
     if (name === 'BOOT') s.pressBoot(down);
     if (name === 'RST' && !down) s.reboot();
+    if (name === 'PWR') {
+      if (down) pwrDown = performance.now();
+      else s.pwrKey(performance.now() - pwrDown >= 1000);
+    }
   });
 
   if (ex) {

@@ -6,6 +6,7 @@ import { fuzzy, parseRun, parseTemp, pushRecent } from './cmdmatch';
 import { partId, partInfo } from './wiring';
 import { analyzerOpen, loadAnalyzer } from './anaload';
 import { BOARD_NAME } from '../chips';
+import { boardDevs } from '../bench3d/boarddevs';
 import { commit } from './react';
 import { view } from './cmdkview';
 import { t } from '../i18n';
@@ -127,7 +128,7 @@ export function createCmdk(ctx: StepCtx): Cmdk {
       out.push({ id: `run:${r.n}`, group: G.run, ...L('Back to run {n}', { n: r.n }), meta: r.snap ? `${r.snap.simSeconds.toFixed(1)} s` : t('Running'), keys: `回到 运行 run #${r.n} 回退 时间线 back timeline`, run: () => backToRun(r.n) }); // lint: allow-cjk
     }
     if (rn !== null && !runs.some((r) => r.n === rn)) out.push({ id: `run:${rn}`, group: G.run, ...L('Back to run {n}', { n: rn }), meta: t('Does not exist'), keys: '回到 运行 run back', run: () => backToRun(rn) }); // lint: allow-cjk
-    const board = BOARD_NAME[session.chip];
+    const board = boardDevs(session.scene.board)?.name ?? BOARD_NAME[session.chip];
     out.push({ id: 'part:board', group: G.part, label: board, meta: t('Dev board'), keys: 'board 开发板 esp32', run: () => select('part', 'board') }); // lint: allow-cjk
     for (const p of session.scene.parts) {
       const info = partInfo(p);

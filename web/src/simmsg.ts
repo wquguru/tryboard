@@ -4,6 +4,10 @@ import type { Locale } from './i18n';
 
 /** Power source (P1-02): usb = servo also draws from USB 5 V; ext = servo on an external 5 V 2 A supply. */
 export type PowerMode = 'usb' | 'ext';
+/** Screen model attached at power-up (E-03) */
+export type LcdKind = 'gc9a01' | 'co5300';
+/** AXP2101 battery state: percent and whether USB is plugged (E-03) */
+export type Battery = { pct: number; usb: boolean };
 
 /** Supply network readings now (tryboard-elec, V and A); min / peak / resets are since this power-up. */
 export interface ElecFrame {
@@ -85,8 +89,10 @@ export type ToWorker =
       flashId: number;
       i2c?: { kind: string; addr: number }[];
       env?: Env;
-      /** Attach the GC9A01 round LCD (SPI2). */
-      lcd?: boolean;
+      /** Attach a screen: true / 'gc9a01' = GC9A01 round LCD (SPI2), 'co5300' = CO5300 QSPI AMOLED (E-03). */
+      lcd?: boolean | LcdKind;
+      /** AXP2101 battery at power-up (percent, USB plugged); needs axp2101 in i2c. */
+      battery?: Battery;
       /** Servo signal GPIO (servo current enters the supply network). */
       servo?: number;
       power?: PowerMode;
@@ -122,7 +128,7 @@ export type ToWorker =
   /** Ask for the VCD text, answered with vcdText */
   | { type: 'vcdGet' }
   /** Inputs without a dedicated message (imu, touch...): applied as is and logged. */
-  | { type: 'input'; act: Extract<InputAction, { kind: 'imu' | 'touch' }> }
+  | { type: 'input'; act: Extract<InputAction, { kind: 'imu' | 'touch' | 'bat' | 'pwrkey' }> }
   /** Mic source: WAV (looped, sampled on sim time, reproducible) / silent / live (micPush browser samples; not reproducible, not logged). */
   | { type: 'mic'; source: 'wav' | 'silence' | 'live'; wav?: ArrayBuffer }
   | { type: 'micPush'; rate: number; data: Float32Array }
@@ -169,7 +175,8 @@ export type ToWorker =
       flashId: number;
       i2c?: { kind: string; addr: number }[];
       env?: Env;
-      lcd?: boolean;
+      lcd?: boolean | LcdKind;
+      battery?: Battery;
       servo?: number;
       power?: PowerMode;
       encoder?: EncoderSpec;
@@ -263,8 +270,8 @@ export type FromWorker =
   /** Speaker sound (only with MAX98357A), scheduled into Web Audio on sim time. */
   | { type: 'pcm'; blocks: PcmBlock[] }
   | { type: 'oled'; pixels: Uint8Array }
-  /** GC9A01: 240×240 RGBA, sent only when the picture changes. */
-  | { type: 'lcd'; pixels: Uint8Array }
+  /** Screen frame w×h RGBA (GC9A01 240×240, CO5300 480×480), sent only when the picture changes. */
+  | { type: 'lcd'; pixels: Uint8Array; w: number; h: number }
   /** Native USB virtual host state (JSON, shape in usb3d.ts UsbView), sent on change. */
   | { type: 'usb'; json: string }
   /** BLE (C-01): state 0 = firmware does not use BLE, 1 = controller running, 2 = VHCI boundary not found (json is {"error"}).

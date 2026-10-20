@@ -184,7 +184,7 @@
 |---|---|---|---|
 | E-01 | SPI 四线（fcmd/faddr/fwrite_quad 等）时序 + S3 LCD 引脚可配置 + CO5300 屏模型（opcode 0x02 写命令 / 0x32 写像素，`opcode<<24 \| cmd<<8`，480×480 RGB565，亮度 0x51） | 新固件 `s3-co5300`（esp_lcd_co5300 + QSPI，画已知图案）：CLI `--spi co5300 --lcd-ppm` 像素与预期一致；四线下一帧传输的模拟时间约为单线的 1/4；GC9A01 用例输出逐字节不变（golden） | ☑ s3-co5300：四色块 + 灰阶 ppm 核对，像素数据四线 23.0 ms / 单线 92.2 ms（整帧含命令 30.1 / 97.1 ms），golden 112/112 不变 |
 | E-02 | I2C 器件：CST9220 触摸（16 位寄存器、0xD000 报点 + 0xAB 应答、ID 0x9220）、AXP2101（芯片 ID、电量 / 充电 / VBUS、PWRON 按键中断）、PCF85063（跟模拟时钟、可设时间）、ES8311 / ES7210 应答空壳 | 新固件 `s3-amoled-i2c`：五颗都探到；触摸脚本坐标对上；电量百分比可由 CLI 参数设定并读回；RTC 写入后走时正确；accept 用例 | ☑ s3-amoled-i2c / s3-amoled-i2c-notouch；`--battery`、`--rtc`，动作 `bat=` / `pwrkey=`（DECISIONS 2026-10-20 E-02） |
-| E-03 | 网页：新板 ESP32-S3-Touch-AMOLED-2.16（方形 AMOLED 3D 模型、按尺寸程序生成）、LCD 分辨率参数化（去掉 240 写死）、480×480 屏触摸映射、电量 / 按键交互 | 示例在网页显示 s3-co5300 画面；点屏 = 触摸，与 CLI 重放一致；390×844 无横向滚动；agent-browser 走查 Reviews/ab/E-03.md | ☐ |
+| E-03 | 网页：新板 ESP32-S3-Touch-AMOLED-2.16（方形 AMOLED 3D 模型、按尺寸程序生成）、LCD 分辨率参数化（去掉 240 写死）、480×480 屏触摸映射、电量 / 按键交互 | 示例在网页显示 s3-co5300 画面；点屏 = 触摸，与 CLI 重放一致；390×844 无横向滚动；agent-browser 走查 Reviews/ab/E-03.md | ☑ |
 | E-04 | S3 BLE：Xtensa 版 libbtdm 签名（`tools/ble_sigs.py`）+ S3 接入 VHCI HLE（照 `esp32c3/src/ble.rs`） | 新固件 `s3-ble-hr`（c3-ble-hr 的 S3 版）`--ble-phone` 结果与 C3 相同；S3 其它固件不误认 | ☐ |
 | E-05 | Bluedroid 主机栈：补虚拟控制器缺的 HCI（Arduino-ESP32 默认 BLE 库即 Bluedroid） | Arduino 或 IDF Bluedroid 的 NUS 外设固件（C3 与 S3）：虚拟手机扫到、连接、写 RX、订阅 TX 收到通知 | ☐ |
 | E-06 | 虚拟电脑：BLE 中心按 Buddy 协议推心跳 JSON（MTU 协商、无应答写、长消息分片、TX 通知按 `\n` 重组）；数据源：脚本 / 录制 / 本机 Magpie（经本地代理，可选）；CLI `--desk-pc` 与输入日志 `pc=...` | C3 NUS 固件（E-06 自带）收到完整 JSON 并回 ack；网页「蓝牙」坞显示虚拟电脑；导出输入后 CLI 重放逐字节一致 | ☐ |

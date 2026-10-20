@@ -7,6 +7,8 @@ import { poseToThree } from '../imupose';
 import { t } from '../i18n';
 import { PITCH, type ExtSlot, disposeTree, canvasTexture, pinHits } from './util';
 import { type ChipId, apiId, BOARD_C3, BOARDS, LCD_WIRING, BB, rowZ, breadboard, devboard } from './boards';
+import { AMOLED, amoledBoard } from './amoled';
+import type { BoardId } from './boarddevs';
 import { roundLcdModule, oledModule, bmeModule, ledGlow } from './modules';
 import { type WireRec, wire } from './wires';
 import { type PartSpec, type SceneSpec, DEFAULT_VIEW } from './spec';
@@ -24,7 +26,8 @@ export function* mountState(ctx: BenchCtx): Generator<void> {
   const rig = new THREE.Group();
   ctx.rig = rig;
   scene.add(rig);
-  rig.add(breadboard());
+  ctx.bbGrp = breadboard();
+  rig.add(ctx.bbGrp);
   yield;
   // External models (P1-09): procedural by default; when on, lazy-load glb to replace slot parts, and swap back when off
   let extOn = extModelsOn();
@@ -75,6 +78,15 @@ export function* mountState(ctx: BenchCtx): Generator<void> {
   ctx.board = devboard(ctx.chip0 ? BOARDS[ctx.chip0] : BOARD_C3);
   yield;
   const placeBoard = () => {
+    ctx.bbGrp.visible = !('flat' in ctx.board);
+    if ('flat' in ctx.board) {
+      // All-in-one board lies screen-up on the desk, USB towards the viewer
+      ctx.board.grp.rotation.y = 0;
+      ctx.board.grp.position.set(0, ctx.board.T / 2 + 3.2, 0); // resting on the 3.2 mm USB-C shell underneath
+      rig.add(ctx.board.grp);
+      ctx.board.grp.updateMatrixWorld();
+      return;
+    }
     // Board long side along x: rotate -90°, USB to the left; header blocks sit on the breadboard surface
     ctx.board.grp.rotation.y = -Math.PI / 2;
     ctx.board.grp.position.set((ctx.board.spec.boardCol - (ctx.board.spec.cols - 1) / 2) * PITCH, BB_TOP + 2.5 + ctx.board.T / 2, ctx.board.spec.rowSpan === 25.4 ? PITCH / 2 : 0);
@@ -232,15 +244,16 @@ export function* mountState(ctx: BenchCtx): Generator<void> {
   const oledData = new Uint8Array(128 * 64 * 4);
   ctx.oledData = oledData;
   ctx.oledTex = null;
-  const lcdData = new Uint8Array(240 * 240 * 4);
-  ctx.lcdData = lcdData;
+  ctx.lcdData = new Uint8Array(240 * 240 * 4);
   ctx.lcdTex = null;
+  ctx.lcdW = ctx.lcdH = 240;
+  ctx.touchHalf = [16.25, 16.25];
 }
 
 /** Pose, board switching, camera fit and setScene. */
 export function mountScene(ctx: BenchCtx): void {
   const {
-    camera, controls, setTag, BB_TOP, rig, placeBoard, colX, partsById, addRole, tl, label, oledData, lcdData, buildLed, buildSpiLcd, buildImu,
+    camera, controls, setTag, BB_TOP, rig, placeBoard, colX, partsById, addRole, tl, label, oledData, buildLed, buildSpiLcd, buildImu,
     buildI2c, buildServo, buildPot, buildKey, buildBuzzer, buildEncoder, buildStrip, buildDht, buildSonar, buildAmp, buildMic,
   } = ctx;
   ctx.applyPose = applyPose;
@@ -283,13 +296,36 @@ export function mountScene(ctx: BenchCtx): void {
 
   /** Switch board (ESP32 / C3 / S3): rebuild the board and rewire add-on parts to the new board's pins */
   function setBoard(chip: ChipId) {
-    if (ctx.board.spec.chip === chip) return;
+    if (swapBoard(chip, ctx.lastScene?.board)) setScene(ctx.lastScene);
+  }
+
+  /** Rebuild the board when the chip or the all-in-one board id (E-03, fixes the chip) changes; true if it did */
+  function swapBoard(chip: ChipId, id: BoardId | undefined) {
+    const cur = 'boardId' in ctx.board ? ctx.board.boardId : undefined;
+    if (id) chip = 'esp32s3';
+    if (cur === id && ctx.board.spec.chip === chip) return false;
     levelRig();
     rig.remove(ctx.board.grp);
     disposeTree(ctx.board.grp);
-    ctx.board = devboard(BOARDS[chip]);
+    ctx.board = id ? amoledBoard(id) : devboard(BOARDS[chip]);
     placeBoard();
-    setScene(ctx.lastScene);
+    return true;
+  }
+
+  /** Fresh DataTexture for a w×h screen (row 0 at the top), black with opaque alpha */
+  function lcdTexture(w: number, h: number) {
+    if (ctx.lcdData.length !== w * h * 4) ctx.lcdData = new Uint8Array(w * h * 4);
+    const d = ctx.lcdData;
+    d.fill(0);
+    for (let i = 3; i < d.length; i += 4) d[i] = 255;
+    ctx.lcdW = w;
+    ctx.lcdH = h;
+    const tex = new THREE.DataTexture(d, w, h, THREE.RGBAFormat);
+    tex.flipY = true;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    ctx.lcdTex = tex;
+    return tex;
   }
 
   // Without a set camera, frame the board + parts bounding box: at real size S3 plus a servo is twice as wide as C3, a fixed camera would crop.
@@ -333,6 +369,17 @@ export function mountScene(ctx: BenchCtx): void {
     ctx.mics = [];
     ctx.oledTex = null;
     ctx.lcdTex = null;
+    swapBoard(ctx.board.spec.chip, spec.board);
+    if ('flat' in ctx.board) {
+      // Onboard AMOLED: 480×480 texture on the rounded square, which is also the touch surface
+      const mat = ctx.board.screen.material as THREE.MeshBasicMaterial;
+      mat.map?.dispose();
+      mat.map = lcdTexture(480, 480);
+      mat.color.set(0xffffff);
+      mat.needsUpdate = true;
+      ctx.touchScreen = ctx.board.screen;
+      ctx.touchHalf = [AMOLED.screen / 2, AMOLED.screen / 2];
+    }
     ctx.holeUse = new Map();
     partsById.clear();
     partsById.set('board', ctx.board.grp);
@@ -372,14 +419,10 @@ export function mountScene(ctx: BenchCtx): void {
         i2cCol -= 9;
       }
       if (p.type === 'gc9a01') {
-        lcdData.fill(0);
-        for (let i = 3; i < lcdData.length; i += 4) lcdData[i] = 255;
-        ctx.lcdTex = new THREE.DataTexture(lcdData, 240, 240, THREE.RGBAFormat);
-        ctx.lcdTex.flipY = true;
-        ctx.lcdTex.colorSpace = THREE.SRGBColorSpace;
-        ctx.lcdTex.needsUpdate = true;
+        lcdTexture(240, 240);
+        ctx.touchHalf = [16.25, 16.25];
         const tp = spec.parts.find((x): x is Extract<PartSpec, { type: 'cst816s' }> => x.type === 'cst816s');
-        const lm = roundLcdModule(ctx.lcdTex, !!tp);
+        const lm = roundLcdModule(ctx.lcdTex!, !!tp);
         if (tp) ctx.touchScreen = lm.screen;
         buildSpiLcd(ctx.parts, lm, 16, tp);
         const w = LCD_WIRING[ctx.board.spec.chip];

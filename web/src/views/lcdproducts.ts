@@ -63,7 +63,7 @@ ${bootBtn(t('Press BOOT: face front'))}
       q('note').textContent = fx.hornOffset ? t('Horn off by {n}°: the firmware says “front”, but it is actually turned', { n: fx.hornOffset.toFixed(1) }) : '';
       if (f.lcd !== last) {
         last = f.lcd;
-        if (f.lcd) q('lcd').setAttribute('href', lcdImage(f.lcd));
+        if (f.lcd) q('lcd').setAttribute('href', lcdImage(f.lcd, f.lcdW, f.lcdH));
       }
     },
   };
@@ -99,7 +99,7 @@ ${bootBtn(t('Press BOOT: change face'))}
       q('note').textContent = k < 1.2 ? t('Lens sits on the screen: barely any magnification, it looks flat') : '';
       if (f.lcd !== last) {
         last = f.lcd;
-        if (f.lcd) q('lcd').setAttribute('href', lcdImage(f.lcd));
+        if (f.lcd) q('lcd').setAttribute('href', lcdImage(f.lcd, f.lcdW, f.lcdH));
       }
     },
   };

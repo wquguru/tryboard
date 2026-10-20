@@ -35,7 +35,8 @@ export interface Bench extends ScenePickApi {
   /** OLED frame: 128×64 brightness bytes */
   setOled(pixels: Uint8Array): void;
   /** GC9A01 frame: 240×240 RGBA */
-  setLcd(rgba: Uint8Array): void;
+  /** Screen frame w×h RGBA; ignored unless it matches the bench screen's size */
+  setLcd(rgba: Uint8Array, w?: number, h?: number): void;
   /** Bench pose (P2-03): breadboard, board and modules tilt together; null = level */
   setPose(p: Pose | null): void;
   /** User drags the IMU module to rotate the bench: move = dragging (≈30 Hz), end = release */
@@ -69,13 +70,13 @@ export interface Bench extends ScenePickApi {
   setRgb(rgb: number[]): void;
   /** External WS2812 strip (on pin) per-LED colours, 0–255 */
   setStrip(pin: number, leds: number[][]): void;
-  onButton(cb: (name: 'BOOT' | 'RST', down: boolean) => void): void;
+  onButton(cb: (name: 'BOOT' | 'RST' | 'PWR', down: boolean) => void): void;
   /** Breadboard tactile key (PartSpec 'key') pressed / released */
   onKey(cb: (pin: number, down: boolean) => void): void;
   /** Key page position (clientX/Y) for tests; null if not visible */
   keyScreenPos(pin: number): [number, number] | null;
   /** Button page position (clientX/Y) so automated tests can press the 3D button with a real mouse; null if not visible */
-  buttonScreenPos(name: 'BOOT' | 'RST'): [number, number] | null;
+  buttonScreenPos(name: 'BOOT' | 'RST' | 'PWR'): [number, number] | null;
   /** Native USB: plug in the virtual PC once firmware enumerates a device (null = unplug) */
   setUsb(v: UsbView | null): void;
   /** Photo / video capture (P2-10) */
@@ -124,7 +125,7 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
   mountInspect(ctx);
   const {
     applyTheme, partsById, addRole, renderer, scene, camera, controls, overlay, extList, setExt, offExt, offReport, stripLast, paintStrip, oledData,
-    lcdData, placeObstacle, rayDistance, applyPose, setBoard, fitView, setScene, composer, ro, turnPot, showKnob, imuRoot, pinsById, pinWorldPos,
+    placeObstacle, rayDistance, applyPose, setBoard, fitView, setScene, composer, ro, turnPot, showKnob, imuRoot, pinsById, pinWorldPos,
     targetPos, project, highlight, rewire, bridge, setWireFault, setHeat, measure,
   } = ctx;
   applyTheme('light');
@@ -193,9 +194,9 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
     },
     lcdPoint(x, y) {
       if (!ctx.touchScreen) return null;
-      // Screen pixel → round LCD mesh local coords (radius 16.25 mm, y up) → page coords
-      const r = 16.25;
-      const v = new THREE.Vector3(((x + 0.5) / 240 - 0.5) * 2 * r, (0.5 - (y + 0.5) / 240) * 2 * r, 0).applyMatrix4(ctx.touchScreen.matrixWorld).project(camera);
+      // Screen pixel → touch mesh local coords (half extents touchHalf mm, y up) → page coords
+      const [hx, hy] = ctx.touchHalf;
+      const v = new THREE.Vector3(((x + 0.5) / ctx.lcdW - 0.5) * 2 * hx, (0.5 - (y + 0.5) / ctx.lcdH) * 2 * hy, 0).applyMatrix4(ctx.touchScreen.matrixWorld).project(camera);
       if (Math.abs(v.x) > 1 || Math.abs(v.y) > 1) return null;
       const rc = renderer.domElement.getBoundingClientRect();
       return [rc.left + ((v.x + 1) / 2) * rc.width, rc.top + ((1 - v.y) / 2) * rc.height];
@@ -265,9 +266,9 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
       stripLast.set(pin, leds);
       for (const st of ctx.strips) if (st.pin === pin) paintStrip(st, leds);
     },
-    setLcd(px) {
-      if (!ctx.lcdTex) return;
-      lcdData.set(px.subarray(0, lcdData.length));
+    setLcd(px, w = 240, h = 240) {
+      if (!ctx.lcdTex || w !== ctx.lcdW || h !== ctx.lcdH || px.length < ctx.lcdData.length) return;
+      ctx.lcdData.set(px.subarray(0, ctx.lcdData.length));
       ctx.lcdTex.needsUpdate = true;
     },
     setOled(px) {

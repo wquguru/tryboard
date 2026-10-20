@@ -659,7 +659,7 @@ impl Machine {
         self.gpio_drive(pin, 1);
     }
 
-    /// Finger on the touchscreen (x, y in screen pixels; CST816S clamps to 0..239, FT6236 is 12-bit, CST9220 480x480); down = false lifts
+    /// Finger on the touchscreen (x, y in screen pixels; CST816S clamps to 0..239, FT6236 is 12-bit, CST9220 to its resolution); down = false lifts
     pub fn touch(&mut self, x: u16, y: u16, down: bool) {
         let now = self.cycles();
         let bus = self.i2c0();
@@ -1089,16 +1089,19 @@ pub fn parse_battery(s: &str) -> Option<(u8, bool)> {
     Some((pct.round().clamp(0.0, 100.0) as u8, usb))
 }
 
-/// Argument part of script action `touch=x,y` (screen pixels). Clamped to the touch chip's 12-bit range;
-/// the device model clamps to its actual screen (CST816S round screen 240x240)
+/// One touch coordinate in screen pixels, rounded and clamped to the touch chip's 12-bit range.
+/// Shared by the script action and the wasm `tb_touch`; each device model clamps to its own screen
+pub fn touch_coord(v: f64) -> u16 {
+    if v.is_nan() {
+        return 0;
+    }
+    v.round().clamp(0.0, 4095.0) as u16
+}
+
+/// Argument part of script action `touch=x,y` (screen pixels), see `touch_coord`
 pub fn parse_touch(s: &str) -> Option<(u16, u16)> {
     let (x, y) = s.split_once(',')?;
-    let f = |t: &str| {
-        t.trim()
-            .parse::<f64>()
-            .ok()
-            .map(|v| v.round().clamp(0.0, 4095.0) as u16)
-    };
+    let f = |t: &str| t.trim().parse::<f64>().ok().map(touch_coord);
     Some((f(x)?, f(y)?))
 }
 pub use tryboard_elec::board::Power as PowerMode;
@@ -1194,6 +1197,11 @@ mod tests {
         assert_eq!(parse_touch("120.4, 300"), Some((120, 300)));
         assert_eq!(parse_touch("-3, 9000"), Some((0, 4095)));
         assert_eq!(parse_touch("x,1"), None);
+        // 480x480 AMOLED coordinates pass through; the wasm path shares the helper
+        assert_eq!(touch_coord(479.4), 479);
+        assert_eq!(touch_coord(-0.6), 0);
+        assert_eq!(touch_coord(f64::NAN), 0);
+        assert_eq!(touch_coord(1e9), 4095);
         assert_eq!(parse_battery("98,usb"), Some((98, true)));
         assert_eq!(parse_battery("140"), Some((100, false)));
         assert_eq!(parse_battery("5,car"), None);

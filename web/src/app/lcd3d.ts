@@ -549,9 +549,9 @@ export function createLcd3D(container: HTMLElement, o: Lcd3DOptions): Lcd3D {
     last = now;
     const f = o.frame();
     const fx = o.effects();
-    if (f.lcd && f.lcd !== lastLcd) {
+    if (f.lcd && f.lcd !== lastLcd && f.lcd.length === lcdData.length) {
       lastLcd = f.lcd;
-      lcdData.set(f.lcd.subarray(0, lcdData.length));
+      lcdData.set(f.lcd);
       lcdTex.needsUpdate = true;
     } else if (!f.lcd && lastLcd) {
       lastLcd = null;

@@ -4,8 +4,11 @@ import { t } from '../i18n';
 /** One simulator frame for the views: OLED pixels, per-pin PWM duty, onboard RGB, running flag */
 export interface LiveFrame {
   oled: Uint8Array | null;
-  /** GC9A01 round LCD: 240×240 RGBA; null without one */
+  /** Screen frame RGBA, lcdW × lcdH (GC9A01 240×240, CO5300 480×480); null without one */
   lcd: Uint8Array | null;
+  /** Size of lcd (absent = 240×240) */
+  lcdW?: number;
+  lcdH?: number;
   pwm: number[];
   rgb: number[] | null;
   /** External WS2812 strips: pin → per-LED [r,g,b] (P2-09 knob lamp) */
@@ -60,12 +63,12 @@ export function oledImage(px: Uint8Array): string {
 }
 
 const lcdCanvas = document.createElement('canvas');
-lcdCanvas.width = 240;
-lcdCanvas.height = 240;
-/** GC9A01 240×240 RGBA → data URL */
-export function lcdImage(rgba: Uint8Array): string {
+/** Screen frame RGBA (default GC9A01 240×240) → data URL */
+export function lcdImage(rgba: Uint8Array, w = 240, h = 240): string {
+  if (lcdCanvas.width !== w) lcdCanvas.width = w;
+  if (lcdCanvas.height !== h) lcdCanvas.height = h;
   const g = lcdCanvas.getContext('2d')!;
-  g.putImageData(new ImageData(new Uint8ClampedArray(rgba.buffer, rgba.byteOffset, 240 * 240 * 4), 240, 240), 0, 0);
+  g.putImageData(new ImageData(new Uint8ClampedArray(rgba.buffer, rgba.byteOffset, w * h * 4), w, h), 0, 0);
   return lcdCanvas.toDataURL();
 }
 

@@ -7,6 +7,7 @@ import { BOOT_GPIO } from "../../chips";
 import { loadAnalyzer } from "../anaload";
 import { Live } from "../../ui/native";
 import { Btn, Btns, Kv, KvT, Note, Ph, Sec } from "../../ui/panel";
+import { AmoledCtrls } from "./amoled";
 import type { BenchCtx } from "./ctx";
 
 export function mountPins(b: BenchCtx) {
@@ -134,6 +135,18 @@ export function mountPins(b: BenchCtx) {
 
   function renderButton(id: string) {
     const c = b.ctx!;
+    if (id === "PWR") {
+      b.show(
+        <>
+          <Sec>{t("Button")}</Sec>
+          <Ph mono>PWR</Ph>
+          <Kv k={t("Wired to")} v={t("AXP2101 PWRON (not a GPIO); held ≥ 1 s = long press")} />
+          <AmoledCtrls ses={c.session} />
+        </>,
+        false,
+      );
+      return;
+    }
     b.show(
       <>
         <Sec>{t("Button")}</Sec>

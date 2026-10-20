@@ -2,7 +2,7 @@
 //! (more boards = more instances / Workers); JS calls tb_image_chip to pick the matching ROM, then tb_boot.
 
 use std::cell::RefCell;
-use tryboard_machine::{Chip, ImuPose, Lcd, Machine, PowerMode, SensorEnv, Stop};
+use tryboard_machine::{touch_coord, Chip, ImuPose, Lcd, Machine, PowerMode, SensorEnv, Stop};
 
 thread_local! {
     static M: RefCell<Option<Machine>> = const { RefCell::new(None) };
@@ -326,11 +326,10 @@ pub extern "C" fn tb_touch_int(pin: u32) {
     with((), |m| m.touch_int_attach(pin))
 }
 
-/// Touch: down = 1 presses / moves to (x, y) (screen pixels 0..239), 0 = release
+/// Touch: down = 1 presses / moves to (x, y) (screen pixels, same clamp as script `touch=`), 0 = release
 #[no_mangle]
 pub extern "C" fn tb_touch(x: f64, y: f64, down: u32) {
-    let c = |v: f64| v.round().clamp(0.0, 239.0) as u16;
-    with((), |m| m.touch(c(x), c(y), down != 0))
+    with((), |m| m.touch(touch_coord(x), touch_coord(y), down != 0))
 }
 
 /// AXP2101 battery percent + USB plugged (action `bat=pct[,usb]`); 1 without the PMIC

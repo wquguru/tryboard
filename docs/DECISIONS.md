@@ -1046,6 +1046,14 @@
 - 替代：examples.json / levels.json 加 c3-dht11 关卡 —— 用户从示例库进来的是空白作品，看不到选型 → 实验台这条主线；给 c3-dht11 加按引脚切换 —— 要改固件和验收用例，范围超出 D-05。
 - **parts.ts 体量（R-14）**：新增条目让文件从 1504 涨到 1521 行，守卫只许缩。改成 `Draft.sizeMm` 可选、`P()` 默认 `null`，删掉 41 处 `sizeMm: null,`（1481 行，跌破 1500，allow list 用 `--update` 去掉这一项）；导出的 Part 字段值不变。替代：把 DHT11 拆到单独文件 —— 要导出 `P` / `pin` 等辅助函数，只为绕守卫。
 - wiremode.mjs「⇧⌘Z 重做」偶发失败：撤销后时间线还在 replay（`hist.busy`）时按重做会被忽略；本分支连跑 3 次前 2 次失败、第 3 次通过，HEAD 基线 2 次都通过，最终 accept.sh 里也通过；weather 作品不含 DHT11，判断为时序偶发但未完全排除，未改测试，留给主会话复核。
+## 2026-10-20 E-03：网页 AMOLED 一体板
+- 一体板用场景字段 `SceneSpec.board`（'ws-amoled216'）标识，不当成「零件」：板载器件表 `web/src/bench3d/boarddevs.ts`（与 accept.json 的 s3-amoled-i2c 参数同序），会话里 `devsOf(scene)` 把板载器件与台面零件合并后再交给 worker / 重放。备选：把屏和各芯片当零件塞进 parts——会出现在零件列表里、能被删、能被改接，与「焊死在板上」不符。
+- LCD 分辨率参数化：lcd 消息带 `w / h`，3D 纹理按尺寸 `lcdTexture(w, h)` 重建，触摸 UV 按 `lcdW / lcdH` 映射；旧的 240×240 消费者（作品页、lcd3d）只收长度相符的帧。输入日志头 `spi:'co5300'` → CLI `--spi co5300`，`battery` → `--battery`。
+- 电量滑块只在松手（change）时记一条 `bat=` 输入，拖动过程只改读数：避免一次拖动写几十条输入、也让 CLI 重放与网页一一对应。USB 插拔同样走 `bat=pct,usb`。
+- PWR 键：面板给「短按 / 长按」两个按钮；3D 上按住 ≥ 1 s 松手算长按（AXP2101 默认长按阈值 1 s 量级，未按寄存器配置细分）。
+- 3D 板外形按 44 × 50 × 1.6 mm、屏有效区 38.8 mm 估计（官方未给机械图），USB-C 放在板底下沿、板子垫在 USB 壳上；目录条目 `sim.level` 标 estimated，todo 记尺寸、存储、排针、IMU / TF 卡未核实。
+- 音频编解码器 ES8311 / ES7210 只答 ID 读，面板与示例说明里写明「不出声」。
+
 ## 2026-10-20 E-01：屏幕抽象与 CO5300 QSPI
 - 决定：屏幕用 `enum Lcd { Gc9a01, Co5300 }`（`soc/devices/lcd.rs`）而不是 trait 对象。两种屏接线差异（D/C 脚 vs 片选帧）只在 SoC 的 SPI 路径分派，出图接口（尺寸、版本、RGBA、ppm、颜色统计）在 enum 上统一；只有两种型号，enum 免装箱、免 downcast，加第三种时再考虑 trait。
 - `esp_lcd_panel_io_spi` 的 32 位命令是单独一笔单线 MOSI 传输（带 SPI_TRANS_CS_KEEP_ACTIVE），参数 / 像素是后续若干笔（像素才走 QIO）。所以 CO5300 按「CS 拉低到抬起」解析帧：SPI 控制的 CS 以 MISC.cs_keep_active（位 30）判断传输后是否抬起，GPIO 片选看引脚拉高。头 4 字节不区分来自 COMMAND/ADDR 阶段还是 MOSI 数据，按线上字节顺序解析。

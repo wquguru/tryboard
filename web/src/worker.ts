@@ -5,7 +5,7 @@ import { chipFromId, NPINS as CHIP_NPINS, RGB_GPIO, type SimChip } from './chipi
 import { realFetch, type RealReq } from './realfetch';
 import { useWorkerLocale, type Locale } from './i18n';
 import type { WasmExports } from './wasm.gen';
-import type { PowerMode, ElecFrame, Env, EncoderSpec, SonarSpec, PinDevFrame, VcdState, ToWorker, AdcSamples, Harness, PwmEvent, PcmBlock, AudioFrame, FromWorker, Snapshot } from './simmsg';
+import type { PowerMode, ElecFrame, Env, EncoderSpec, SonarSpec, PinDevFrame, VcdState, ToWorker, AdcSamples, Harness, PwmEvent, PcmBlock, AudioFrame, FromWorker, Snapshot, LcdKind, Battery } from './simmsg';
 
 const CPU_HZ = 160_000_000;
 
@@ -407,7 +407,10 @@ function postOled(e: Exports) {
 
 let lcdVersion = 0;
 let lcdLast = 0;
-/** Round LCD 240×240×4 = 230 KB: only on change, at most 30 fps. */
+/** Attached screen size (touch clamp); 240 without a screen keeps the old CST816S behaviour */
+let lcdW = 240;
+let lcdH = 240;
+/** Screen frame w×h×4 (GC9A01 230 KB, CO5300 900 KB): only on change, at most 30 fps. */
 function postLcd(e: Exports, force = false) {
   if (!e.tb_lcd_version) return;
   const v = e.tb_lcd_version();
@@ -417,8 +420,9 @@ function postLcd(e: Exports, force = false) {
   if (!p) return;
   lcdVersion = v;
   lcdLast = now;
-  const px = new Uint8Array(new Uint8Array(e.memory.buffer, p, 240 * 240 * 4));
-  (self as unknown as Worker).postMessage({ type: 'lcd', pixels: px } satisfies FromWorker, [px.buffer]);
+  const w = e.tb_lcd_w?.() ?? 240, h = e.tb_lcd_h?.() ?? 240;
+  const px = new Uint8Array(new Uint8Array(e.memory.buffer, p, w * h * 4));
+  (self as unknown as Worker).postMessage({ type: 'lcd', pixels: px, w, h } satisfies FromWorker, [px.buffer]);
 }
 
 let usbVersion = 0;
@@ -562,14 +566,14 @@ function postVcd(e: Exports) {
   post({ type: 'vcd', state: st });
 }
 
-const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5 };
+const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5, ft6236: 6, cst9220: 7, axp2101: 8, pcf85063: 9, es8311: 10, es7210: 11 };
 
 function postPaused(e: Exports) {
   post({ type: 'tick', console: '', leds: leds(e), strips: strips(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running, elec: elecFrame(e), brownouts: takeBrownouts(e), pins: pinDevFrame(e), adc: adcFrame(e) });
 }
 
 /** Boot fields; locale exists so any human text the worker makes follows the page (core errors are English already). */
-type BootMsg = { wasm: WebAssembly.Module; rom?: ArrayBuffer; romId: number; flash?: ArrayBuffer; flashId: number; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
+type BootMsg = { wasm: WebAssembly.Module; rom?: ArrayBuffer; romId: number; flash?: ArrayBuffer; flashId: number; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean | LcdKind; battery?: Battery; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
 const I2S_KIND: Record<string, number> = { max98357a: 0, inmp441: 1 };
 // ROM / firmware bytes by main-thread id (R-23): sent once, then every boot / seek copies them into a fresh instance.
 // ROMs are one per chip; firmware keeps only the latest (live.ts resends bytes whenever the id changes).
@@ -605,8 +609,13 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   simChip = chip;
   for (const d of m.i2c ?? []) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
   if (m.env) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
-  if (m.lcd && e.tb_lcd_attach) e.tb_lcd_attach();
+  // Same order as the CLI: I2C devices, touch INT, battery (needs the PMIC), then the screen
   if (m.touchInt !== undefined) e.tb_touch_int?.(m.touchInt);
+  if (m.battery) e.tb_battery?.(m.battery.pct, m.battery.usb ? 1 : 0);
+  if (m.lcd === 'co5300') e.tb_lcd_attach_kind?.(1);
+  else if (m.lcd && e.tb_lcd_attach) e.tb_lcd_attach();
+  lcdW = e.tb_lcd_w?.() || 240;
+  lcdH = e.tb_lcd_h?.() || 240;
   hasAudio = false;
   pcmOut = [];
   for (const k of m.i2s ?? []) if (e.tb_i2s_attach && I2S_KIND[k] !== undefined && e.tb_i2s_attach(I2S_KIND[k]) === 0) hasAudio = true;
@@ -632,7 +641,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   taskChunks = [];
   taskBytes = 0;
   flushIo(e, true);
-  inputLog = { version: 1, chip: simChip, i2c: [...(m.i2c ?? [])], lcd: !!m.lcd, ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.dht11 !== undefined ? { dht11: m.dht11 } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
+  inputLog = { version: 1, chip: simChip, i2c: [...(m.i2c ?? [])], lcd: m.lcd === true || m.lcd === 'gc9a01', ...(m.lcd === 'co5300' ? { spi: 'co5300' as const } : {}), ...(m.battery ? { battery: { ...m.battery } } : {}), ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.dht11 !== undefined ? { dht11: m.dht11 } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
   record(e, { kind: 'power', on: true });
   if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
   // Harness applies at power-up and is logged (replay / rewind apply it at cycle 0, same as CLI --i2c-wire).
@@ -779,12 +788,22 @@ function apply(e: Exports, ev: InputAction) {
       return;
     }
     case 'touch': {
-      const x = Math.round(Math.min(239, Math.max(0, ev.x)));
-      const y = Math.round(Math.min(239, Math.max(0, ev.y)));
+      // Clamp to the attached screen and log what was applied (the CLI replays these exact pixels)
+      const x = Math.round(Math.min(lcdW - 1, Math.max(0, ev.x)));
+      const y = Math.round(Math.min(lcdH - 1, Math.max(0, ev.y)));
       e.tb_touch?.(x, y, ev.down ? 1 : 0);
       record(e, { ...ev, x, y });
       return;
     }
+    case 'bat': {
+      const pct = Math.round(Math.min(100, Math.max(0, ev.pct)));
+      e.tb_battery?.(pct, ev.usb ? 1 : 0);
+      record(e, { kind: 'bat', pct, usb: ev.usb });
+      return;
+    }
+    case 'pwrkey':
+      e.tb_pwrkey?.(ev.long ? 1 : 0);
+      break;
     case 'power':
       return;
   }

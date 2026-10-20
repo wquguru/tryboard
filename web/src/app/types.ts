@@ -141,7 +141,7 @@ export interface Session {
   chip: 'esp32' | 'esp32c3' | 'esp32s3';
   levels: Level[];
   /** Latest frame: PWM duty, RGB LED, OLED */
-  frame: { pwm: number[]; pwmFreq: number[]; gpio: number; enable: number; gpioHi: number; enableHi: number; rgb: number[] | null; strips: Record<number, number[][]>; oled: Uint8Array | null; lcd: Uint8Array | null; elec: ElecFrame | null; pins: PinDevFrame | null };
+  frame: { pwm: number[]; pwmFreq: number[]; gpio: number; enable: number; gpioHi: number; enableHi: number; rgb: number[] | null; strips: Record<number, number[][]>; oled: Uint8Array | null; lcd: Uint8Array | null; lcdW?: number; lcdH?: number; elec: ElecFrame | null; pins: PinDevFrame | null };
   /** Part near the heat source (display only; readings follow ambient temperature) */
   heat: string | null;
   setHeat(part: string | null): void;
@@ -202,8 +202,13 @@ export interface Session {
   hasImu(): boolean;
   /** Set pose (P2-03): sent to the sim with angular rate while dragging, rate 0 150 ms after stopping; the bench tilts too */
   setPose(p: { pitch: number; roll: number; yaw: number }): void;
-  /** Touch the round LCD (P2-02): x, y in screen pixels */
+  /** Touch the screen (P2-02): x, y in screen pixels */
   touch(x: number, y: number, down: boolean): void;
+  /** AXP2101 battery set from the board panel (E-03); null = board default. Kept across reboots */
+  battery: { pct: number; usb: boolean } | null;
+  setBattery(pct: number, usb: boolean): void;
+  /** PWR key on the AXP2101 PWRON pin (E-03): short or long press */
+  pwrKey(long: boolean): void;
   consoleText(): string;
   /** Logic analyzer events since this power-on / rewind replay (P1-05) */
   io: IoStore;

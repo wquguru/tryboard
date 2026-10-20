@@ -13,6 +13,7 @@ import { Kv, Meter, Mono, Note, Sec } from "../../ui/panel";
 import { bc, overlay } from "../chrome";
 import { isPhone, phoneProps, setMui } from "../mobile";
 import { tn } from "./ui";
+import { AmoledCtrls, sceneBoard } from "./amoled";
 import type { BenchCtx } from "./ctx";
 
 export function mountCards(b: BenchCtx) {
@@ -101,6 +102,14 @@ export function mountCards(b: BenchCtx) {
           <Sec>{t("BOOT button · GPIO{n}", { n: b.bootGpio() })}</Sec>
           {b.bootBtns()}
           <Note>{t("Weather station firmware: press once to switch between ℃ and ℉.")}</Note>
+        </div>
+      );
+    }
+    if (sceneBoard(c.session) && ((tg.kind === "part" && tg.id === "board") || (tg.kind === "button" && tg.id === "PWR"))) {
+      return (
+        <div>
+          <Sec>{t("AMOLED board · battery, USB, PWR key")}</Sec>
+          <AmoledCtrls ses={c.session} />
         </div>
       );
     }

@@ -20,7 +20,9 @@ export interface SimJob {
   env?: { temp: number; humidity: number; pressure: number };
   script?: string;
   pwmPin?: number;
-  lcd?: boolean;
+  lcd?: boolean | 'gc9a01' | 'co5300';
+  /** AXP2101 battery at power-up (= CLI --battery) */
+  battery?: { pct: number; usb: boolean };
   /** Servo signal pin and supply (= CLI --servo / --power); with a servo, always 1 ms slices like the CLI */
   servo?: number;
   power?: 'usb' | 'ext';
@@ -66,7 +68,7 @@ export interface SimHooks {
   onReset?: (n: number, stopped: boolean) => void;
 }
 
-const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5 };
+const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5, ft6236: 6, cst9220: 7, axp2101: 8, pcf85063: 9, es8311: 10, es7210: 11 };
 
 /** Which chip an image targets: find the app in the partition table (0x8000), read the ESP header chip ID; throws for chips TryBoard does not simulate */
 export function imageChip(buf: ArrayBuffer | Uint8Array): SimChip {
@@ -114,7 +116,9 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
   // DHT11 before env so it takes the readings (CLI parses --dht11 before --env)
   if (j.dht11 !== undefined) e.tb_dht11_attach?.(j.dht11);
   if (j.env) e.tb_env_set(j.env.temp, j.env.humidity, j.env.pressure);
-  if (j.lcd) e.tb_lcd_attach?.();
+  if (j.battery) e.tb_battery?.(j.battery.pct, j.battery.usb ? 1 : 0);
+  if (j.lcd === 'co5300') e.tb_lcd_attach_kind?.(1);
+  else if (j.lcd) e.tb_lcd_attach?.();
   // Like the native CLI: at most 50 crash / brownout resets, the 51st stops before resetting (no reboot loop; both sides stop on the same cycle)
   e.tb_reset_limit?.(50);
   if (j.servo !== undefined) e.tb_servo_attach?.(j.servo);
@@ -174,6 +178,11 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         const v = act.slice(6).split(',').map(Number);
         if (v.length === 2 && v.every((x) => !Number.isNaN(x))) e.tb_touch?.(v[0], v[1], 1);
       } else if (act === 'release') e.tb_touch?.(0, 0, 0);
+      else if (act.startsWith('bat=')) {
+        // Same as CLI parse_battery: pct[,usb]
+        const [p, u] = act.slice(4).split(',');
+        if (!Number.isNaN(Number(p)) && (u === undefined || u.trim() === 'usb')) e.tb_battery?.(Number(p), u ? 1 : 0);
+      } else if (act.startsWith('pwrkey=')) e.tb_pwrkey?.(act.slice(7).trim() === 'long' ? 1 : 0);
       else if (act.startsWith('ble=') && e.tb_ble_cmd) {
         const cb = e.tb_ble_cmd;
         bytesIn(e, new TextEncoder().encode(act.slice(4)), (p, n) => void cb(p, n));

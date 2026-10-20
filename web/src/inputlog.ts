@@ -25,7 +25,7 @@ export type InputEvent =
   | { tMs: number; kind: 'dist'; cm: number }
   /** IMU attitude (P2-03): Euler angles (deg, ZYX: yaw -> pitch -> roll) + rates (°/s, from drag speed). Action imu=p,r,y[,dp,dr,dy] */
   | { tMs: number; kind: 'imu'; pitch: number; roll: number; yaw: number; rates?: [number, number, number] }
-  /** Touch screen (P2-02): press / move to (x, y) (screen pixels 0..239) or lift. Script action touch=x,y / release */
+  /** Touch screen (P2-02): press / move to (x, y) (screen pixels, clamped to the screen) or lift. Script action touch=x,y / release */
   | { tMs: number; kind: 'touch'; down: boolean; x: number; y: number }
   /** Virtual phone (C-01): scan / connect / read / write / subscribe..., logged verbatim. Action ble=<command> (syntax: ARCH.md BLE) */
   | { tMs: number; kind: 'ble'; cmd: string }
@@ -41,7 +41,11 @@ export type InputEvent =
   | { tMs: number; kind: 'net'; preset: string }
   | { tMs: number; kind: 'netfault'; fault: string; dur?: number }
   /** ADC model (D-02): ideal = linear and exact, real = calibration curve + end bends + noise (default). Action adc=ideal|real */
-  | { tMs: number; kind: 'adc'; ideal: boolean };
+  | { tMs: number; kind: 'adc'; ideal: boolean }
+  /** AXP2101 battery percent and USB plugged (E-03). Action bat=pct[,usb] */
+  | { tMs: number; kind: 'bat'; pct: number; usb: boolean }
+  /** PWR key wired to the AXP2101 PWRON pin (E-03). Action pwrkey=short|long */
+  | { tMs: number; kind: 'pwrkey'; long: boolean };
 
 /** An event not yet stamped (the worker fills in tMs when applying it) */
 export type InputAction = InputEvent extends infer E ? (E extends unknown ? Omit<E, 'tMs'> : never) : never;
@@ -54,6 +58,10 @@ export interface InputLog {
   /** Devices attached at power-up: become --i2c / --spi on replay */
   i2c: { kind: string; addr: number }[];
   lcd: boolean;
+  /** Screen other than the GC9A01 (E-03): becomes --spi co5300 on replay */
+  spi?: 'co5300';
+  /** AXP2101 battery at power-up: becomes --battery pct[,usb] on replay */
+  battery?: { pct: number; usb: boolean };
   /** Servo (GPIO) and supply at power-up: become --servo / --power on replay */
   servo?: number;
   power?: 'usb' | 'ext';
@@ -130,6 +138,10 @@ export function action(e: InputEvent): string | null {
       return `netfault=${e.fault}${e.dur === undefined ? '' : ',' + e.dur}`;
     case 'adc':
       return `adc=${e.ideal ? 'ideal' : 'real'}`;
+    case 'bat':
+      return `bat=${e.pct}${e.usb ? ',usb' : ''}`;
+    case 'pwrkey':
+      return `pwrkey=${e.long ? 'long' : 'short'}`;
     case 'power':
       return null;
   }
@@ -161,7 +173,8 @@ export function cliArgs(log: InputLog, fw: string, inputsFile: string, seconds?:
   const a = ['tryboard', 'run', fw];
   if (seconds !== undefined) a.push('--seconds', String(seconds));
   if (log.i2c.length) a.push('--i2c', log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(','));
-  if (log.lcd) a.push('--spi', 'gc9a01');
+  if (log.lcd || log.spi) a.push('--spi', log.spi ?? 'gc9a01');
+  if (log.battery) a.push('--battery', `${log.battery.pct}${log.battery.usb ? ',usb' : ''}`);
   if (log.servo !== undefined) a.push('--servo', String(log.servo), '--power', log.power ?? 'usb');
   if (log.encoder) a.push('--encoder', [log.encoder.a, log.encoder.b, ...(log.encoder.sw !== undefined ? [log.encoder.sw] : [])].join(','));
   if (log.sonar) a.push('--sonar', `${log.sonar.trig},${log.sonar.echo}`);

@@ -10,6 +10,7 @@ import type { PickTarget, ScreenPoint } from '../scene-api';
 import type { Pose } from '../imupose';
 import type { ExtSlot, PinRec } from './util';
 import type { ChipId, devboard } from './boards';
+import type { amoledBoard } from './amoled';
 import type { roundLcdModule } from './modules';
 import type { WireRec } from './wires';
 import type { PartSpec, SceneSpec } from './spec';
@@ -43,7 +44,9 @@ export interface BenchCtx {
   setExt: (on: boolean) => void;
   offExt: () => boolean;
   offReport: () => boolean;
-  board: ReturnType<typeof devboard>;
+  board: ReturnType<typeof devboard> | ReturnType<typeof amoledBoard>;
+  /** Breadboard group (hidden under an all-in-one board) */
+  bbGrp: THREE.Group;
   placeBoard: () => void;
   colX: (c: number) => number;
   pinCands: (name: string) => { key: string; p: THREE.Vector3; }[];
@@ -87,6 +90,10 @@ export interface BenchCtx {
   oledTex: THREE.DataTexture | null;
   lcdData: Uint8Array<ArrayBuffer>;
   lcdTex: THREE.DataTexture | null;
+  /** Screen pixels (lcdData size) and the touch mesh half extents in mm (round LCD: radius) */
+  lcdW: number;
+  lcdH: number;
+  touchHalf: [number, number];
   buildLed: (grp: THREE.Group, p: Extract<PartSpec, { type: 'led'; }>) => void;
   buildSpiLcd: (grp: THREE.Group, m: ReturnType<typeof roundLcdModule>, firstCol: number, tp?: Extract<PartSpec, { type: 'cst816s'; }>) => void;
   buildImu: (grp: THREE.Group, p: Extract<PartSpec, { type: 'mpu6050' | 'qmi8658'; }>, firstCol: number) => void;
@@ -118,7 +125,7 @@ export interface BenchCtx {
   outline: OutlinePass;
   sw: ShaderWarm;
   ro: ResizeObserver;
-  buttonCb: ((n: 'BOOT' | 'RST', d: boolean) => void) | null;
+  buttonCb: ((n: 'BOOT' | 'RST' | 'PWR', d: boolean) => void) | null;
   pickCb: ((t: PickTarget | null, s: ScreenPoint) => void) | null;
   keyCb: ((pin: number, down: boolean) => void) | null;
   turnPot: (pot: { pin: number; knob: THREE.Group; hit: THREE.Mesh; v: number; }, v: number) => void;

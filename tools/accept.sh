@@ -286,6 +286,10 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/sense.mjs 2>&1 | grep '^\[sense\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[sense\] PASS (' || { echo "- [sense] script did not finish" >> $REPORT; fail=1; }
+  # AMOLED all-in-one board (E-03): CO5300 480×480 picture, square-screen taps, battery / USB / PWR; CLI --inputs replay
+  r=$(node tools/webtest/amoled.mjs 2>&1 | grep '^\[amoled\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[amoled\] PASS (' || { echo "- [amoled] script did not finish" >> $REPORT; fail=1; }
   r=$(node tools/webtest/editor.mjs 2>&1 | tail -1)
   echo "- Part editor (blink example, upload bme280 firmware + place BME280 from the catalog): $r" >> $REPORT
   echo "$r" | grep -q PASS || fail=1
