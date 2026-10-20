@@ -31,6 +31,10 @@ pub mod rc522;
 pub mod sht;
 pub mod ssd1306;
 pub mod tca8418;
+// F-04e
+pub mod aht20;
+pub mod ds3231;
+pub mod ina219;
 
 use crate::i2c::I2cDevice;
 
@@ -68,6 +72,10 @@ pub fn make_i2c(kind: &str, addr: u8) -> Option<Box<dyn I2cDevice>> {
         "sht40" | "sht41" | "sht45" => Box::new(sht::Sht4x::new(addr)),
         "qmp6988" => Box::new(qmp6988::Qmp6988::new(addr)),
         "bmp280" => Box::new(bme280::Bme280::bmp280(addr)),
+        // Common breakout modules (F-04e)
+        "aht20" => Box::new(aht20::Aht20::new(addr)),
+        "ina219" => Box::new(ina219::Ina219::new(addr)),
+        "ds3231" => Box::new(ds3231::Ds3231::new(addr)),
         _ => return None,
     })
 }

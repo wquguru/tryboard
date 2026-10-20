@@ -229,7 +229,7 @@
 | F-04b | ILI9341 + SH1106 模型；ST7789 / ILI9341 裸屏 C3、S3 验收（等 M5-01） | accept 截图核对 | ☐ |
 | F-04c | DS18B20 单总线（含 SEARCH ROM） | accept：温度随 --env | ☑ CLI + 模型（c3-ds18b20 / -cold / -absent、s3-ds18b20 通过）；网页未做 |
 | F-04d | PIR / LDR / 继电器 + RC522（读 UID） | accept + 脚本动作可重放 | ☑ 2026-10-20（CLI：`--pir` / `--relay` / `--ldr` / `--spi rc522`，动作 `pir=` / `lux=` / `card=`；c3 / s3-pir-relay、c3 / s3-rc522 进 accept，`--inputs` 重放一致；网页未接、经典 ESP32 无 RC522） |
-| F-04e | AHT20 + INA219 + DS3231 | accept | ☐ |
+| F-04e | AHT20 + INA219 + DS3231 | accept | ☑ 2026-10-20（CLI：`--i2c aht20@0x38,ina219@0x40,ds3231@0x68`；AHT20 / DS3231 温度跟 `--env`，INA219 读电气模型的 USB 5V 输入；c3-i2c-trio 进 accept；网页未接） |
 | F-05 | 故障挑战关卡 3–5 个（缺的 CLI 故障开关一并补） | check.py --ref --all；faults.mjs 网页判定一致 | ☑ 4 关（线长 / 供电 / 天线 / ADC2），现有开关够用，未加 CLI 开关 |
 | F-06 | 公开数字自动生成（tools/stats.py；README 标记块 + web/public/stats.json，build_web.sh 调用；首页暂无手写数字） | stats.py --check | ☑ |
 | F-07a | UART > 127 字节修复 + `--script` `\xNN` + MicroPython C3 验收 | golden 字节一致；MicroPython 用例 | ☑ 2026-10-20：golden 173/173 一致，`mpy-c3-rawpaste` 通过（新用例快照待合并后 save） |

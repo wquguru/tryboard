@@ -20,6 +20,8 @@ pub use tryboard_soc::devices::audio::{Analysis as AudioAnalysis, Block as Audio
 use tryboard_soc::devices::audio::{Audio, MicSource};
 pub use tryboard_soc::devices::lcd::{Lcd, LcdKind, LcdPins};
 use tryboard_soc::devices::{
+    // F-04e
+    aht20::Aht20,
     aw9523::Aw9523,
     axp192::Axp192,
     axp2101::Axp2101,
@@ -27,8 +29,10 @@ use tryboard_soc::devices::{
     bmi270::Bmi270,
     cst816s::Cst816s,
     cst9220::Cst9220,
+    ds3231::Ds3231,
     ft6236::Ft6236,
     imu::Pose,
+    ina219::Ina219,
     mpu6050::Mpu6050,
     pcf85063::Pcf85063,
     pcf8563::Pcf8563,
@@ -131,6 +135,8 @@ pub struct Machine {
     pub touch_int: Option<u32>,
     /// Board preset applied by `board_preset` (M5-05)
     board: Option<&'static BoardPreset>,
+    /// An INA219 is attached: it gets the supply readings after every run segment (F-04e)
+    ina219: bool,
 }
 
 pub struct BootInfo {
@@ -189,6 +195,7 @@ impl Machine {
                 touch_int: None,
                 board: None,
                 harness: Harness::default(),
+                ina219: false,
             },
             BootInfo {
                 offset,
@@ -463,10 +470,20 @@ impl Machine {
         self.sync_expander_int();
         let act = self.activity(c0, i0, w0);
         let now = self.cycles();
-        if self.elec.advance(now, &act) && matches!(r, Stop::Budget | Stop::Reset(_)) {
+        let brownout = self.elec.advance(now, &act);
+        if self.ina219 {
+            self.ina219_follow_supply();
+        }
+        if brownout && matches!(r, Stop::Budget | Stop::Reset(_)) {
             return Stop::Reset(BROWNOUT_RESET);
         }
         r
+    }
+
+    /// INA219 modules sit high-side on the board's USB 5 V input (`--power ext` only moves the servo off it)
+    fn ina219_follow_supply(&mut self) {
+        let (v, i) = (self.elec.now.v5, self.elec.now.i_usb);
+        self.i2c_each::<Ina219>(|d| d.set_load(v, i));
     }
 
     /// Native USB (S3 only)
@@ -629,6 +646,7 @@ impl Machine {
             Some(d) => {
                 self.i2c0().attach(d);
                 self.elec.add_module(kind);
+                self.ina219 |= kind == "ina219";
                 true
             }
             None => false,
@@ -652,6 +670,7 @@ impl Machine {
         };
         b.attach(d);
         self.elec.add_module(kind);
+        self.ina219 |= kind == "ina219";
         true
     }
 
@@ -705,6 +724,9 @@ impl Machine {
         self.i2c_each::<Sht3x>(|d| (d.temp_c, d.humidity) = (t, h));
         self.i2c_each::<Sht4x>(|d| (d.temp_c, d.humidity) = (t, h));
         self.i2c_each::<Qmp6988>(|d| (d.temp_c, d.pressure_pa) = (t, p));
+        self.i2c_each::<Aht20>(|d| (d.temp_c, d.humidity) = (t, h));
+        // DS3231's sensor is on the die: ambient here (self-heating not modelled)
+        self.i2c_each::<Ds3231>(|d| d.temp_c = t);
         // The IMU's on-chip thermometer reads die temperature: use ambient (self-heating not modelled)
         if let Some(d) = self.i2c_dev::<Mpu6050>() {
             d.temp_c = t;
@@ -817,13 +839,16 @@ impl Machine {
         true
     }
 
-    /// PCF85063 / PCF8563 (BM8563) time (UTC epoch seconds) as of now
+    /// PCF85063 / PCF8563 (BM8563) / DS3231 time (UTC epoch seconds) as of now
     pub fn rtc_set(&mut self, epoch: i64) -> bool {
         let now = self.cycles();
         if let Some(d) = self.i2c_dev::<Pcf85063>() {
             d.set_time(now);
             d.set_epoch(epoch);
         } else if let Some(d) = self.i2c_dev::<Pcf8563>() {
+            d.set_time(now);
+            d.set_epoch(epoch);
+        } else if let Some(d) = self.i2c_dev::<Ds3231>() {
             d.set_time(now);
             d.set_epoch(epoch);
         } else {
