@@ -114,7 +114,7 @@
 | Wi-Fi 收发 / 连 AP / HTTP | ✅ | esp32-wifi：开放热点 → IP 192.168.4.100 → tryboard.local 200 / example.com 200（应用层输出与 C3 逐行相同）；网页示例 esp32-wifi（Reviews/ab/C-05.md） | 共用 C3 / S3 的 MAC 模型，寄存器排布 `MacRegs::ESP32`（docs/WIFI.md「经典 ESP32」）；没有 QEMU Wi-Fi 对照（乐鑫 QEMU esp32 无 Wi-Fi MAC），未经真机标定 |
 | Wi-Fi WPA2-PSK + 硬件 SHA / AES | ✅ | esp32-wifi-wpa2：四次握手、硬件 CCMP、HTTP 同上；`cargo test -p tryboard-esp32` SHA FIPS 180 / AES FIPS 197 | SHA-1/256/384/512、AES-128/192/256 ECB；DMA 模式未做 |
 | RMT 发送 + WS2812（M5-11） | ✅ | esp32-ws2812：GPIO27 5 颗 × 2 帧逐颗一致（121 符号 > 64 字块，阈值中断乒乓 + 全局回绕）；单元测试 esp32_layout_wrap_and_decode | 与 C3 / S3 同一 `rmt.rs`，`RmtLayout::ESP32`（8 通道 × 64 字、全局回绕、中断源 47、信号 87..94）；接收 / 载波 / APB FIFO 未做（记 unimpl）；QEMU 的 esp32.rmt 只是占位，无法对照；未在真机校准 |
-| DAC / 霍尔 / 蓝牙以外的其余外设 | ☐ | — | ADC / SPI / I2S / 触摸 / RMT / PSRAM 见下方 M5 批次行；DAC、霍尔未做，选型里标「必须上真机」 |
+| DAC / 霍尔 | ☐ | — | ADC / SPI / I2S / 触摸 / RMT / PSRAM 见下方 M5 批次行；DAC、霍尔未做，选型里标「必须上真机」 |
 | 蓝牙（经典 / BLE） | ☐ | — | 必须上真机 |
 | 网页 | ✅ | 换芯片菜单有 ESP32（hello / blink / wifi 示例）；上传 esp32-blink 台面换成 DevKitC V4、LED 闪、串口有输出（Reviews/ab/C-05.md） | 两排针相距 1″ 的面包板摆放简化见 DECISIONS |
 
