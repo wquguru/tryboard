@@ -65,6 +65,23 @@ function cli(fw, id, flags) {
   return m ? { ok: m[2] === 'PASS', fp: m[3] } : { ok: null, fp: '' };
 }
 
+/** Run the command the page shows (#faultKnobs pre), with app.bin standing for `bin`; the --ref line is used when shown */
+async function shownCli(page, bin) {
+  const lines = await page.$$eval('#faultKnobs pre', (es) => es.map((e) => e.textContent.trim()));
+  const argv = lines[0].split(/\s+/).slice(1).map((a) => (a === 'app.bin' ? bin : a));
+  const m = runCheck(argv);
+  return { ...m, cmd: lines[0] };
+}
+function runCheck(argv) {
+  let out;
+  try {
+    out = execFileSync(path.join(root, 'tools/check.py'), argv, { encoding: 'utf8' });
+  } catch (e) {
+    out = e.stdout;
+  }
+  const m = out.match(/^Checkpoint ([\w-]+) .*: (PASS|FAIL)\s+fingerprint (\S+)/m);
+  return m ? { ok: m[2] === 'PASS', fp: m[3] } : { ok: null, fp: '' };
+}
 const fpOf = (page) => page.$eval('#props .kv .v.fp', (e) => e.textContent.trim()).catch(() => '');
 const verdictOf = (page) => page.$eval('#props .result-card', (e) => e.dataset.verdict).catch(() => '');
 async function pick(page, id) {
@@ -123,6 +140,8 @@ for (const l of levels) {
   const w0 = await runBench(page);
   const c0 = cli(refBin, l.id, found);
   report(`${l.id} as found`, !w0.ok && c0.ok === false && w0.fp === c0.fp, `web ${w0.ok ? 'pass' : 'fail'} ${w0.fp} / CLI ${c0.ok ? 'pass' : 'fail'} ${c0.fp}`);
+  const s0 = await shownCli(page, refBin);
+  report(`${l.id} as found, command shown on the page`, s0.ok === w0.ok && s0.fp === w0.fp, `${s0.cmd} -> ${s0.ok ? 'pass' : 'fail'} ${s0.fp}`);
   // Fixed: the reference bench fix through the switches, or the reference firmware fix dropped in
   let w1, c1;
   if (f.fix) {
@@ -137,6 +156,8 @@ for (const l of levels) {
     c1 = cli(bin, l.id, found);
   }
   report(`${l.id} fixed`, w1.ok && c1.ok && w1.fp === c1.fp, `web ${w1.ok ? 'pass' : 'fail'} ${w1.fp} / CLI ${c1.ok ? 'pass' : 'fail'} ${c1.fp}`);
+  const s1 = await shownCli(page, f.fix ? refBin : path.join(root, `firmware/build/${f.fix_ref}/flash.bin`));
+  report(`${l.id} fixed, command shown on the page`, s1.ok === w1.ok && s1.fp === w1.fp, `${s1.cmd} -> ${s1.ok ? 'pass' : 'fail'} ${s1.fp}`);
   await page.screenshot({ path: path.join(outDir, `faults-${l.id}.png`) });
 }
 // Switches survive a reload (per-viewer convenience) and the shown command carries them

@@ -1160,6 +1160,8 @@
 - **没加新 CLI 开关**：现有 `--i2c-wire`（elec::i2cbus 上升时间）、`--antenna-loss`、`--power` + `--servo`（欠压）足够覆盖四关；不碰 core。
 - **跳过**：上拉电阻故障（要改 soc/i2c.rs，M5 会话正在改）；接错脚（内核不建模 I2C 引脚分配，无法命令行一致）。
 - **新固件 `firmware/s3-adc1-wifi`**：fault-adc 的参考固件修法（ADC1_CH3 / GPIO4）。不发布到网页 fw/（那就是答案），faults.mjs 直接上传本地构建。
+- **页面显示的命令**：有开关的关显示 `--ref --level <id> <开关>`（单次运行）；fault-adc 这类没开关的关只显示 `app.bin` 那行，因为单独的 `--ref --level <id>` 是自检、结论与页面「运行实验台固件」不同。faults.mjs 直接执行页面上显示的命令对比。accept.json 补 s3-adc1-wifi 用例。
+- **check_config 的作品集合**：levels.json 的 `work` 除了 catalog/templates.ts 的模板 id，也接受 app/works.ts 里声明的作品（faults 没有商店模板，实验台回退到空白模板）。
 - **作品 faults 不上首页卡片**：没有采购 / 组装内容，首页作品区下方一行链接进入；开关状态按关存 localStorage（仅本机便利，读写包 try/catch）。
 - 备选：把健康配置写进 args、故障放 fault —— 否，`--ref --all` 就证明不了故障能复现。
 

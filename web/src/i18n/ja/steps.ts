@@ -1099,5 +1099,6 @@ const d: Dict = {
   "Checks run with these switches. The bench firmware is the one that came with the bench, not an answer.": "チェックはこのスイッチ設定で実行します。ベンチのファームウェアは最初から付いていたもので、答えではありません。",
   "The bench is as found. Change a switch or drop your own firmware, then check again.": "ベンチは受け取ったままです。スイッチを変えるか自分のファームウェアをドロップして、もう一度チェックしましょう。",
   "The first line checks the bench firmware with your switches, the second your own firmware; both give the same verdict and run ID as the page.": "1 行目はスイッチ設定でベンチのファームウェアを、2 行目は自分のファームウェアをチェックします。どちらもページと同じ判定と実行 ID になります。",
+  "Checks your own firmware; gives the same verdict and run ID as the page.": "自分のファームウェアをチェックします。判定と実行 ID はページと同じです。",
 };
 export default d;

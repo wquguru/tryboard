@@ -68,9 +68,14 @@ export function FaultKnobs({ l, disabled }: { l: Level; disabled?: boolean }) {
           : t("The bench is as found. Change a switch or drop your own firmware, then check again.")}
       </Note>
       <Sec>{t("Check command")}</Sec>
-      <Code>{faultCommand(l, v, false)}</Code>
+      {/* No switches: `--ref --level <id>` alone is check.py's fault self-check, not the page's run, so only the own-firmware line */}
+      {knobs.length > 0 && <Code>{faultCommand(l, v, false)}</Code>}
       <Code>{faultCommand(l, v, true)}</Code>
-      <Note>{t("The first line checks the bench firmware with your switches, the second your own firmware; both give the same verdict and run ID as the page.")}</Note>
+      <Note>
+        {knobs.length
+          ? t("The first line checks the bench firmware with your switches, the second your own firmware; both give the same verdict and run ID as the page.")
+          : t("Checks your own firmware; gives the same verdict and run ID as the page.")}
+      </Note>
     </div>
   );
 }

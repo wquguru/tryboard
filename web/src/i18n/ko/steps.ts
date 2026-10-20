@@ -1099,5 +1099,6 @@ const d: Dict = {
   "Checks run with these switches. The bench firmware is the one that came with the bench, not an answer.": "검사는 이 스위치 설정으로 실행됩니다. 벤치 펌웨어는 원래 들어 있던 것이고 정답이 아닙니다.",
   "The bench is as found. Change a switch or drop your own firmware, then check again.": "벤치는 받은 그대로입니다. 스위치를 바꾸거나 직접 만든 펌웨어를 놓고 다시 검사하세요.",
   "The first line checks the bench firmware with your switches, the second your own firmware; both give the same verdict and run ID as the page.": "첫 줄은 스위치 설정으로 벤치 펌웨어를, 둘째 줄은 직접 만든 펌웨어를 검사합니다. 둘 다 페이지와 같은 판정과 실행 ID를 냅니다.",
+  "Checks your own firmware; gives the same verdict and run ID as the page.": "직접 만든 펌웨어를 검사합니다. 판정과 실행 ID는 페이지와 같습니다.",
 };
 export default d;

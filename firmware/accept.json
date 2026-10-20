@@ -2423,6 +2423,18 @@
   ]
  },
  {
+  "id": "s3-adc1-wifi",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "qemu": false,
+  "script": "0.0:mv4=1200",
+  "expect": [
+   "Wi-Fi 启动前: ADC1 raw=1434",
+   "Wi-Fi 启动后: ADC1 raw=1429",
+   "TRYBOARD_OK s3-adc1-wifi"
+  ]
+ },
+ {
   "id": "c3-dht11",
   "seconds": 105,
   "qemu": false,
