@@ -130,6 +130,15 @@ function copyIn(e: Exports, data: ArrayBuffer) {
   new Uint8Array(e.memory.buffer, p, data.byteLength).set(new Uint8Array(data));
   return p;
 }
+/** Call f with a UTF-8 copy of s in wasm memory; returns f's result */
+function withStr(e: Exports, s: string, f: (p: number, n: number) => number) {
+  const b = new TextEncoder().encode(s);
+  const p = e.tb_alloc(b.length);
+  new Uint8Array(e.memory.buffer, p, b.length).set(b);
+  const r = f(p, b.length);
+  e.tb_free(p, b.length);
+  return r;
+}
 
 /** PWM duty per pin (-1 = no PWM). */
 function pwmAll(e: Exports) {
@@ -573,7 +582,7 @@ function postPaused(e: Exports) {
 }
 
 /** Boot fields; locale exists so any human text the worker makes follows the page (core errors are English already). */
-type BootMsg = { wasm: WebAssembly.Module; rom?: ArrayBuffer; romId: number; flash?: ArrayBuffer; flashId: number; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean | LcdKind; battery?: Battery; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
+type BootMsg = { wasm: WebAssembly.Module; rom?: ArrayBuffer; romId: number; flash?: ArrayBuffer; flashId: number; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean | LcdKind; battery?: Battery; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; board?: string; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
 const I2S_KIND: Record<string, number> = { max98357a: 0, inmp441: 1 };
 // ROM / firmware bytes by main-thread id (R-23): sent once, then every boot / seek copies them into a fresh instance.
 // ROMs are one per chip; firmware keeps only the latest (live.ts resends bytes whenever the id changes).
@@ -607,6 +616,11 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
     return null;
   }
   simChip = chip;
+  // Board preset first, like CLI board_preset_args; a rejected one stops here as the CLI exits
+  if (m.board && withStr(e, m.board, (p, n) => e.tb_board_preset(p, n)) !== 0) {
+    post({ type: 'error', message: `--board ${m.board}: rejected (unknown id or the firmware is built for another chip than ${chip})` });
+    return null;
+  }
   for (const d of m.i2c ?? []) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
   if (m.env) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
   // Same order as the CLI: I2C devices, touch INT, battery (needs the PMIC), then the screen
@@ -641,7 +655,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   taskChunks = [];
   taskBytes = 0;
   flushIo(e, true);
-  inputLog = { version: 1, chip: simChip, i2c: [...(m.i2c ?? [])], lcd: m.lcd === true || m.lcd === 'gc9a01', ...(m.lcd === 'co5300' ? { spi: 'co5300' as const } : {}), ...(m.battery ? { battery: { ...m.battery } } : {}), ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.dht11 !== undefined ? { dht11: m.dht11 } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
+  inputLog = { version: 1, chip: simChip, i2c: [...(m.i2c ?? [])], lcd: m.lcd === true || m.lcd === 'gc9a01', ...(m.lcd === 'co5300' ? { spi: 'co5300' as const } : {}), ...(m.battery ? { battery: { ...m.battery } } : {}), ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.dht11 !== undefined ? { dht11: m.dht11 } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.board ? { board: m.board } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
   record(e, { kind: 'power', on: true });
   if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
   // Harness applies at power-up and is logged (replay / rewind apply it at cycle 0, same as CLI --i2c-wire).
@@ -804,6 +818,12 @@ function apply(e: Exports, ev: InputAction) {
     case 'pwrkey':
       e.tb_pwrkey?.(ev.long ? 1 : 0);
       break;
+    case 'key': {
+      // Cardputer key (M5-09b): only logged when the preset has a keyboard, as the CLI would refuse it on replay
+      const down = ev.down ? 1 : 0;
+      if (withStr(e, ev.name, (p, n) => e.tb_board_key(p, n, down)) !== 0) return;
+      break;
+    }
     case 'power':
       return;
   }

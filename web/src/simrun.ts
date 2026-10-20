@@ -28,6 +28,8 @@ export interface SimJob {
   power?: 'usb' | 'ext';
   /** Touch INT pin (= CLI --touch-int) */
   touchInt?: number;
+  /** Core board preset (= CLI --board, M5-09b), applied before every other device */
+  board?: string;
   /** Always 1 ms slices (= CLI --inputs): used when replaying an input log exported from a live web run */
   fixedSlice?: boolean;
   /** = CLI --usb-log: the report includes the USB virtual host state and typed keys (P2-12) */
@@ -112,6 +114,11 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
   const r = e.tb_boot(rp, rom.byteLength, fp, flash.byteLength);
   const errText = () => new TextDecoder().decode(new Uint8Array(e.memory.buffer, e.tb_error_ptr(), e.tb_error_len()));
   if (r !== 0) return { stdout: '', report: '', sim: 0, error: errText(), bootError: errText() };
+  if (j.board) {
+    let ok = 1;
+    bytesIn(e, new TextEncoder().encode(j.board), (p, n) => void (ok = e.tb_board_preset(p, n)));
+    if (ok !== 0) return { stdout: '', report: '', sim: 0, error: `--board ${j.board}: rejected`, bootError: `--board ${j.board}: rejected` };
+  }
   for (const d of j.i2c) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
   // DHT11 before env so it takes the readings (CLI parses --dht11 before --env)
   if (j.dht11 !== undefined) e.tb_dht11_attach?.(j.dht11);
@@ -183,6 +190,12 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         const [p, u] = act.slice(4).split(',');
         if (!Number.isNaN(Number(p)) && (u === undefined || u.trim() === 'usb')) e.tb_battery?.(Number(p), u ? 1 : 0);
       } else if (act.startsWith('pwrkey=')) e.tb_pwrkey?.(act.slice(7).trim() === 'long' ? 1 : 0);
+      else if (act.startsWith('key=')) {
+        // Same as CLI board_action: key=<name>[,1|0]
+        const v = act.slice(4), c = v.lastIndexOf(','), lv = c > 0 ? v.slice(c + 1).trim() : '';
+        const [name, down] = lv === '1' || lv === '0' ? [v.slice(0, c), lv === '1'] : [v, true];
+        bytesIn(e, new TextEncoder().encode(name.trim()), (p, n) => void e.tb_board_key(p, n, down ? 1 : 0));
+      }
       else if ((act.startsWith('ble=') || act.startsWith('pc=')) && e.tb_ble_cmd) {
         // pc=… goes to the same phone channel whole, like CLI main.rs
         const cb = e.tb_ble_cmd;

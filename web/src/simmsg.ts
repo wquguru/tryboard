@@ -102,6 +102,8 @@ export type ToWorker =
       dht11?: number;
       /** Touch controller INT GPIO (held low while touched). */
       touchInt?: number;
+      /** Core board preset (M5-09b, = CLI --board), applied right after power-up before other devices */
+      board?: string;
       /** I2S audio devices: 'max98357a' (speaker) / 'inmp441' (mic); pins fixed per chip (board3d I2S_WIRING). */
       i2s?: string[];
       /** WAV the mic hears at power-up (silent if absent) and its file name (logged; replay uses --mic tools/audio/<name>). */
@@ -128,7 +130,7 @@ export type ToWorker =
   /** Ask for the VCD text, answered with vcdText */
   | { type: 'vcdGet' }
   /** Inputs without a dedicated message (imu, touch...): applied as is and logged. */
-  | { type: 'input'; act: Extract<InputAction, { kind: 'imu' | 'touch' | 'bat' | 'pwrkey' }> }
+  | { type: 'input'; act: Extract<InputAction, { kind: 'imu' | 'touch' | 'bat' | 'pwrkey' | 'key' }> }
   /** Mic source: WAV (looped, sampled on sim time, reproducible) / silent / live (micPush browser samples; not reproducible, not logged). */
   | { type: 'mic'; source: 'wav' | 'silence' | 'live'; wav?: ArrayBuffer }
   | { type: 'micPush'; rate: number; data: Float32Array }
@@ -184,6 +186,7 @@ export type ToWorker =
       /** DHT11 data GPIO (open drain; readings follow env) */
       dht11?: number;
       touchInt?: number;
+      board?: string;
       i2s?: string[];
       micWav?: ArrayBuffer;
       micName?: string;

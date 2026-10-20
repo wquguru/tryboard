@@ -52,6 +52,8 @@ export interface LiveOptions {
   onVcd?(s: VcdState | null): void;
   /** GPIO wired to the touch controller INT (P2-02). */
   touchInt?: number;
+  /** Core board preset (M5-09b, = CLI --board) */
+  board?: string;
   /** I2S audio devices (max98357a / inmp441); the WAV the mic hears at power-up and its file name. */
   i2s?: string[];
   micWav?: ArrayBuffer;
@@ -91,6 +93,7 @@ export interface SeekJob {
   sonar?: { trig: number; echo: number };
   dht11?: number;
   touchInt?: number;
+  board?: string;
   i2s?: string[];
   micWav?: ArrayBuffer;
   micName?: string;
@@ -222,7 +225,7 @@ export class LiveSim {
     const rom = await loadRom(imageChip(flash));
     if (gen !== this.startGen) return;
     Object.assign(this.frame, emptyFrame());
-    this.send({ type: 'boot', wasm, ...this.blobs(rom, flash), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, battery: this.o.battery, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName, harness: this.o.harness, dht11: this.o.dht11, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.(), locale });
+    this.send({ type: 'boot', wasm, ...this.blobs(rom, flash), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, battery: this.o.battery, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, board: this.o.board, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName, harness: this.o.harness, dht11: this.o.dht11, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.(), locale });
   }
   reset() {
     return this.start();
@@ -234,7 +237,7 @@ export class LiveSim {
     return this.start();
   }
   /** Swap attached devices (rearranged per list): takes effect on the next start / reset. */
-  configure(p: { i2c: LiveOptions['i2c']; lcd?: boolean | LcdKind; battery?: Battery; servo?: number; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; i2s?: string[] }) {
+  configure(p: { i2c: LiveOptions['i2c']; lcd?: boolean | LcdKind; battery?: Battery; servo?: number; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; i2s?: string[]; board?: string }) {
     this.o.i2c = p.i2c;
     this.o.lcd = p.lcd;
     this.o.battery = p.battery;
@@ -244,6 +247,7 @@ export class LiveSim {
     this.o.dht11 = p.dht11;
     this.o.touchInt = p.touchInt;
     this.o.i2s = p.i2s;
+    this.o.board = p.board;
   }
   private vcdWaiters: ((r: { text: string; state: VcdState | null }) => void)[] = [];
   /** Fine capture (D-04): window [from, from + len] s of sim time, or armed (the next edge at or after `from` opens it). Not logged: observation only. */
@@ -282,6 +286,10 @@ export class LiveSim {
   battery(pct: number, usb: boolean) {
     this.o.battery = { pct: Math.round(Math.min(100, Math.max(0, pct))), usb };
     this.send({ type: 'input', act: { kind: 'bat', ...this.o.battery } });
+  }
+  /** Board keyboard key (M5-09b Cardputer preset, logged key=name,1|0). */
+  boardKey(name: string, down: boolean) {
+    this.send({ type: 'input', act: { kind: 'key', name, down } });
   }
   /** PWR key on the AXP2101 PWRON pin (E-03, logged pwrkey=). */
   pwrkey(long: boolean) {
@@ -431,6 +439,7 @@ export class LiveSim {
     const dl = [...job.events].reverse().find((e) => e.kind === 'dist' && Math.round(e.tMs * 160000) < Math.round(job.untilMs * 160000));
     this.o.sonar = job.sonar ? { ...job.sonar, cm: dl && dl.kind === 'dist' ? dl.cm : (this.o.sonar?.cm ?? 100) } : undefined;
     this.o.touchInt = job.touchInt;
+    this.o.board = job.board;
     const imu = [...job.events].reverse().find((e) => e.kind === 'imu' && Math.round(e.tMs * 160000) < Math.round(job.untilMs * 160000));
     this.pose = imu && imu.kind === 'imu' ? { pitch: imu.pitch, roll: imu.roll, yaw: imu.yaw } : { pitch: 0, roll: 0, yaw: 0 };
     // Supply after a rewind stop = last switch in the log (else the power-up one).
@@ -447,7 +456,7 @@ export class LiveSim {
     Object.assign(this.frame, emptyFrame());
     return new Promise((r) => {
       this.seekWaiter = r;
-      this.send({ type: 'seek', wasm, ...this.blobs(rom, job.flash), i2c: job.i2c, env: job.env, lcd: job.lcd, battery: job.battery, servo: job.servo, power: job.power, encoder: job.encoder, sonar: job.sonar ? { ...job.sonar, cm: NaN } : undefined, touchInt: job.touchInt, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs, dht11: job.dht11, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.() });
+      this.send({ type: 'seek', wasm, ...this.blobs(rom, job.flash), i2c: job.i2c, env: job.env, lcd: job.lcd, battery: job.battery, servo: job.servo, power: job.power, encoder: job.encoder, sonar: job.sonar ? { ...job.sonar, cm: NaN } : undefined, touchInt: job.touchInt, board: job.board, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs, dht11: job.dht11, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.() });
     });
   }
   /** Continue live after a rewind stop: this run counts as in progress again. */

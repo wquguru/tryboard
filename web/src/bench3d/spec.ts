@@ -1,5 +1,5 @@
 // Scene description types: the add-on parts an example declares and the initial camera.
-
+import type { BoardId } from './boarddevs';
 
 
 
@@ -44,8 +44,8 @@ export const imuPart = (s: SceneSpec) => s.parts.find((p): p is Extract<PartSpec
 
 export interface SceneSpec {
   parts: PartSpec[];
-  /** All-in-one board replacing the devboard + breadboard (E-03); its onboard devices come from BOARD_DEVS */
-  board?: 'ws-amoled216';
+  /** All-in-one board replacing the devboard + breadboard (E-03); its onboard devices come from BOARD_DEVS (M5 ids: a core preset, M5-09b) */
+  board?: BoardId;
   /** Initial camera (mm, world coordinates) */
   view?: { position: [number, number, number]; target: [number, number, number] };
 }
