@@ -28,6 +28,7 @@ docs/design-v2/        design v2 source files (inline-styled static HTML; read t
 docs/ARCH.md           architecture, memory map, boot flow, peripheral model conventions
 docs/I18N.md           internationalization and comment rules (U-07)
 docs/LICENSING.md      licensing conclusions and rules (LICENSING_REVIEW.md has the evidence)
+docs/plan-F/           F programme (retention & sharing): evaluation, research, dispatch plan
 docs/DECISIONS.md      autonomous decisions awaiting human review
 docs/STATUS.md         peripheral × chip coverage matrix (updated from test results)
 core/                  Rust workspace

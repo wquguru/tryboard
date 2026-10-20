@@ -78,7 +78,7 @@
 
 按 AGENTS.md §9：一个子代理只做一个 PLAN ID；预计 > 150 次调用就先拆；用全新 `general-purpose` + `isolation: "worktree"`，不用 fork；`model` 显式写；子代理不再派子代理；入口写到 `path:line`（派单前在主会话 grep 好，brief 照 `docs/AGENT_BRIEF.md`）。
 
-**合计约 27 个子代理 session + 4 个主会话批次。**
+**原估合计约 27 个子代理 session + 4 个主会话批次；调研后修订为约 28 个实现 session + 5 个主会话批次，见 §5.4。**
 
 - 研究：6 个，其中 1 个产出给人拍板的材料。
 - P0 实现：9 个。
@@ -87,60 +87,68 @@
 
 新编号用 F 批（"留存与传播"）。人确认后再写进 PLAN.md。
 
-### 5.1 研究（波 0，全部只读，可完全并行）
+### 5.1 研究（波 0，全部只读，可完全并行；☑ 已完成，结论见 README）
 
 | ID | 问题 | 为什么不能直接做 | 模型 | 产出 |
 |---|---|---|---|---|
-| RS-1 | MicroPython 可行性：C3 的 REPL 走 USB-Serial-JTAG（我们是 🟡，第二控制台输出被吞），S3 走 TinyUSB CDC 还是 UART；官方固件的 IDF 版本；文件系统（littlefs）怎么在 flash 镜像里预置和回写 | 决定 O7 走 C3 还是 S3，以及要先补哪个外设；同时确认 MicroPython 固件的许可证和站点上托管哪些二进制（要先进 LICENSING ✅） | 默认 | `docs/RESEARCH_MICROPYTHON.md` + 拆好的 F-07 brief |
-| RS-2 | xiaozhi-esp32：许可证、服务端协议（WebSocket / MQTT + UDP、Opus 帧）、本地 Opus 编解码的 CPU 负载（网页实时倍率目前 0.52×）、需要哪些外设 | 协议和性能决定能不能做、做成什么样；许可证决定能不能放示例 | 默认 | `docs/RESEARCH_XIAOZHI.md` |
-| RS-3 | 兴趣数据：主流教程用哪块板（核实"经典 ESP32 > C6"的判断）；Arduino 最常用的 20 个库；最想要但缺的器件；20 个 Arduino 库逐个查许可证（只进 accept 无妨，编译产物上站点的示例必须 ✅） | O8、O10 的排序都基于未核实的判断 | sonnet（需联网搜索） | 数据表追加到本文件 §6 |
-| RS-4 | 分享与嵌入的技术方案：URL 长度预算（状态压缩后多大）；浏览器端视频编码（WebCodecs / MediaRecorder）和 GIF；二维码自写还是引入依赖（许可、体积）；embed 的 iframe 隔离与 CSP | 决定 F-01 的状态格式，F-02、F-03 都依赖它 | 默认 | `docs/ARCH.md` 新节 + F-01/02/03 的 brief |
-| RS-5 | BLE 签名放宽：其他 IDF 版本（5.1–5.4）的 libbtdm 签名能否靠反汇编特征而非字节签名定位；装其他 IDF 要占多少磁盘（剩约 60 GB） | 可能需要装新工具链，要先评估磁盘和收益 | 默认 | DECISIONS 一条 + 是否做 F-08c |
-| RS-6（拍板材料） | 后端与 HIL：画廊 / remix 最低成本方案（静态存储 vs 小后端、费用、审核）；HIL 买哪 3 块板、测什么、预算 | 涉及花钱、部署，§10 要人决定 | 默认 | `Reviews/decision-gallery-hil.md`，交给人 |
+| RS-1 | MicroPython 可行性：C3 的 REPL 走 USB-Serial-JTAG（我们是 🟡，第二控制台输出被吞），S3 走 TinyUSB CDC 还是 UART；官方固件的 IDF 版本；文件系统（littlefs）怎么在 flash 镜像里预置和回写 | 决定 O7 走 C3 还是 S3，以及要先补哪个外设；同时确认 MicroPython 固件的许可证和站点上托管哪些二进制（要先进 LICENSING ✅） | 默认 | `research/RS-1-micropython.md` + 拆好的 F-07 brief |
+| RS-2 | xiaozhi-esp32：许可证、服务端协议（WebSocket / MQTT + UDP、Opus 帧）、本地 Opus 编解码的 CPU 负载（网页实时倍率目前 0.52×）、需要哪些外设 | 协议和性能决定能不能做、做成什么样；许可证决定能不能放示例 | 默认 | `research/RS-2-xiaozhi.md` |
+| RS-3 | 兴趣数据：主流教程用哪块板（核实"经典 ESP32 > C6"的判断）；Arduino 最常用的 20 个库；最想要但缺的器件；20 个 Arduino 库逐个查许可证（只进 accept 无妨，编译产物上站点的示例必须 ✅） | O8、O10 的排序都基于未核实的判断 | sonnet（需联网搜索） | `research/RS-3-interest.md` |
+| RS-4 | 分享与嵌入的技术方案：URL 长度预算（状态压缩后多大）；浏览器端视频编码（WebCodecs / MediaRecorder）和 GIF；二维码自写还是引入依赖（许可、体积）；embed 的 iframe 隔离与 CSP | 决定 F-01 的状态格式，F-02、F-03 都依赖它 | 默认 | `research/RS-4-share.md`（定稿后摘要进 ARCH.md） |
+| RS-5 | BLE 签名放宽：其他 IDF 版本（5.1–5.4）的 libbtdm 签名能否靠反汇编特征而非字节签名定位；装其他 IDF 要占多少磁盘（剩约 60 GB） | 可能需要装新工具链，要先评估磁盘和收益 | 默认 | `research/RS-5-ble-idf.md` |
+| RS-6（拍板材料） | 后端与 HIL：画廊 / remix 最低成本方案（静态存储 vs 小后端、费用、审核）；HIL 买哪 3 块板、测什么、预算 | 涉及花钱、部署，§10 要人决定 | 默认 | `research/RS-6-gallery-hil.md`，交给人 |
 
-### 5.2 P0 实现（不需要后端）
+### 5.2 P0 实现（不需要后端；2026-10-20 按调研结果修订）
 
 | ID | 内容 | 依赖 | 主要改动区 | 模型 | 预计调用 |
 |---|---|---|---|---|---|
-| F-01 | 台面状态模型：序列化 / 恢复，内置固件进 URL，自带 bin 导出 `.tryboard`，打开顶栏"分享" | RS-4 | `web/src/app/session.ts`、`web/src/app/store.ts`、`web/src/app/topbar.tsx`、`web/src/inputlog.ts` | 默认 | 120–150 |
-| F-02 | 分享卡：6 秒视频 / GIF + 二维码 + 链接 | F-01 | `web/src/app/capture.ts`、新组件 | 默认 | 80 |
-| F-03 | `?embed=` 嵌入模式（只读台面 + 运行） | F-01 | `web/src/app/main.tsx`、`shell.tsx`、布局 | 默认 | 80 |
-| F-04b | SH1106 + ST7789 仿真模型（复用 SSD1306、GC9A01 的驱动骨架）+ CLI 验收 | — | `core/crates/soc/src/devices/`、firmware 新固件 | 默认 | 100 |
-| F-04c | AHT20 + INA219 + DS3231（I2C）+ CLI 验收 | — | 同上 | 默认 | 100 |
-| F-04d | DS18B20 单总线（GPIO 时序）+ CLI 验收 | — | 同上（参考 DHT11 的实现） | 默认 | 100 |
+| F-01a | 台面状态 v1：JSON → deflate-raw → base64url，放 `?s=`（`#` 已被步骤路由占用，`shell.tsx:49`）；内置固件按 id + 10 位内容哈希引用；只存与作品默认值的差异；输入日志存脚本文本；打开链接另存本地副本，不覆盖用户作品；恢复走 `live.ts:419 seek` + 新增脚本文本 → 事件解析。**分享前剥掉 Wi-Fi SSID / 密码和真网回包**（RS-6）。启动 harness、真网开关是否进日志先核实 | RS-4 | `web/src/app/session.ts`、`store.ts`、`topbar.tsx:250`、`web/src/inputlog.ts:158/173`、`web/src/advisor/state.ts` | 默认 | 90 |
+| F-01b | `.tryboard` 文件（头行 + 状态 JSON + 原始 bin）：> 8k 字符或用户自带 bin 时使用；sha256 校验 | F-01a | 同上 + 导入入口 | 默认 | 50 |
+| F-02 | 分享卡：MediaRecorder 录 MP4（不做 GIF、不引 muxer）+ 自写二维码（约 250 行）+ 链接；> 2k 字符的链接二维码里去掉运行记录。顺手修 `capture.ts:104-116` Safari 把 MP4 命名成 `.webm` | F-01a | `web/src/app/capture.ts`、新组件 | 默认 | 90 |
+| F-03 | 独立 `embed.html` 入口：点一下才加载、不写 localStorage、`_headers` 只对 embed 路径设 `frame-ancestors *`（wasm 不用 SAB，不需要 COOP/COEP） | F-01a | `web/` 新入口、`vite.config` | 默认 | 80 |
+| F-03b | 嵌入 / 分享页的实时回放（按时间轴播放输入日志，而不是快进到末尾） | F-03 | `web/src/app/live.ts` | 默认 | 60 |
+| F-04b | ST7789 / ILI9341（C3、S3 的 SPI，复用 GC9A01 骨架）+ SH1106 + CLI 验收 | — | `core/crates/soc/src/devices/`、新固件 | 默认 | 110 |
+| F-04c | DS18B20 单总线（参考 DHT11）+ CLI 验收 | — | 同上 | 默认 | 100 |
+| F-04d | PIR / LDR / 继电器（纯 GPIO、ADC）+ RC522（SPI）+ CLI 验收 | — | 同上 | 默认 | 100 |
 | F-04a | 网页：所有已建模器件可拖放 + 手机元件库 + 3D 外观 | F-04b/c/d 合并后 | `web/src/bench3d/spec.ts`、`modules.ts`、`app/place.ts`、`mobile.tsx` | 默认 | 130 |
-| F-05 | 故障挑战关卡 3–5 个（网页 + `check.py` 一致）。CLI 已有 `--net` / `--net-fault` / `--i2c-wire`，欠压和接线故障的 CLI 开关没找到，派单前确认，缺的先作为子任务补 | — | `firmware/levels.json`、`web/src/views` 关卡页、`tools/check.py` | 默认 | 120 |
-| F-06 | 公开数字自动生成 | — | `tools/`、README 四语言副本、首页数据 | sonnet | 40 |
+| F-05 | 故障挑战关卡 3–5 个（网页 + `check.py` 一致）；欠压、接线故障的 CLI 开关缺的先补 | — | `firmware/levels.json`、`web/src/views` 关卡页、`tools/check.py` | 默认 | 120 |
+| F-06 | 公开数字自动生成（README 现写 91 例 / 44 示例 / 230 KB，实际 125 / 52 / 1.24 MB） | — | `tools/`、README 四语言副本、首页数据 | sonnet | 40 |
 
-### 5.3 P1 实现
+O4 清单按 RS-3 重排：ILI9341 / ST7789、DS18B20、SH1106、PIR / LDR / 继电器、RC522 在前；AHT20、INA219、DS3231 降到 P1 的 F-04e。经典 ESP32 上的 CYD（ILI9341）要等 F-10a。
 
-| ID | 内容 | 依赖 | 模型 |
-|---|---|---|---|
-| F-07a | MicroPython 启动到 REPL（含 RS-1 指出的外设补齐） | RS-1 | 默认 |
-| F-07b | 网页里编辑 main.py，写回文件系统后重跑。这改变了 PRODUCT.md 的定位（"AI 写固件 → 网页跑" 变成也能 "在这里改"），确认时先改 PRODUCT.md 并记 DECISIONS | F-07a、F-01 | 默认 |
-| F-08a | Arduino 库矩阵：显示与传感器类 10 例 | RS-3 | 默认 |
-| F-08b | Arduino 库矩阵：Wi-Fi / BLE / 舵机 / 灯带 10 例 | RS-3 | 默认 |
-| F-08c | BLE 签名放宽到多 IDF 版本 | RS-5 结论为做 | 默认 |
-| F-09a | xiaozhi 虚拟服务端（协议层 + 脚本回放） | RS-2 | 默认 |
-| F-09b | xiaozhi 示例固件 + 网页语音面板 + 验收 | F-09a | 默认 |
-| F-10a–d | 经典 ESP32 的 RMT、ADC、SPI、I2S，每个外设一个 session | RS-3 核实优先级 | 默认 |
-| F-11 | 环境脚本时间轴（先出交互稿再实现） | F-01（时间轴要进作品状态） | 默认 |
+### 5.3 P1 实现（按调研结果修订）
 
-### 5.4 哪些能并行
+| ID | 内容 | 依赖 | 模型 | session |
+|---|---|---|---|---|
+| F-04e | AHT20 + INA219 + DS3231（I2C）+ CLI 验收 | — | 默认 | 1 |
+| F-07a | 修 UART 收超过 127 字节卡住（`soc/src/periph.rs:48` 计数上限、`:61` 清中断后不再拉起）；`--script` 支持 `\xNN`；MicroPython C3 验收用例（文件不在就跳过） | RS-1 | 默认 | 1 |
+| F-07b | 网页 main.py 编辑器 + Ctrl-C / Ctrl-D 按钮；raw-paste 按提示符握手上传；刷新后重发保存的 main.py（暂不做 littlefs 镜像）。先改 PRODUCT.md 定位并记 DECISIONS | F-07a、F-01a、人确认二进制分发方式 | 默认 | 1–2 |
+| F-08a | Arduino 库矩阵：显示与传感器 10 例（RS-3 §2 前 12 个，MIT / BSD 先做） | RS-3 | 默认 | 1 |
+| F-08b | Arduino 库矩阵：Wi-Fi / BLE / 舵机 / 灯带 10 例；GPL 音频库不进 | RS-3 | 默认 | 1 |
+| F-08c | BLE 多 IDF：补 esp32c3-bt-lib 各 commit 的签名变体 + 覆盖自测；osi 表版本放宽到 0x10006–0x1000A（`esp32c3/src/ble.rs:170`、`esp32s3/src/ble.rs:198`）；≤ 0x10006 时跳过 `pll_track` 钩子；用 5.5.1 工具链把旧库链进空 ELF 跑 `ble_sigs.py check` | RS-5 | 默认 | 1–1.5 |
+| F-09a | xiaozhi 虚拟服务端：`tcp.rs` 抽 `Conn` 长连接 + 服务端主动推送；`wifi/ws.rs`（握手、掩码、分片）；`wifi/xiaozhi.rs` 脚本回放预编码 Opus | RS-2 | 默认 | 2 |
+| F-09b | `firmware/s3-xiaozhi-lite`（IDF 5.5.1 + esp_websocket_client + micro-opus + SSD1306，BOOT 键按住说话）+ 网页语音面板 + 3 个 accept 用例。第 0 步先在模拟器里跑 micro-opus benchmark，不行退 libopus 或原始 PCM | F-09a、人拍板 RS-2 四项 | 默认 | 2–3 |
+| F-10a–d | 经典 ESP32：SPI（先，CYD 依赖）、ADC、RMT、I2S，每个外设一个 session | RS-3：保持 P1 并提前 | 默认 | 4 |
+| F-11 | 环境脚本时间轴（先出交互稿再实现） | F-01a | 默认 | 1 |
+
+### 5.4 哪些能并行（修订）
 
 | 波 | 同时跑 | 说明 |
 |---|---|---|
-| 波 0 | RS-1 … RS-6 共 6 个 | 全部只读，互不冲突；RS-3 用 sonnet，其余默认模型 |
-| 波 1 | F-01、F-04b、F-04c、F-04d、F-05、F-06 共 6 个 | F-04b/c/d 只做 Rust 和 CLI，不碰网页，避免和 F-04a 抢 `spec.ts`；三者都会在 `devices/mod.rs` 注册，属于追加式冲突，主会话合并时处理 |
-| 波 2 | F-02、F-03、F-04a；可提前开 F-07a、F-08a、F-08b | F-02、F-03 等 F-01 的状态格式定稿；F-07a、F-08 只碰 core 和 firmware，可以和网页工作并行 |
-| 波 3 | F-07b、F-09a、F-10a + F-10b、F-11 | 经典 ESP32 的四个外设都改 `core/crates/esp32/src/lib.rs`，同一时间最多 2 个，分两轮 |
-| 波 4 | F-09b、F-10c + F-10d、F-08c | 收尾，并按 §2 重新打分 |
+| 波 0 | RS-1 … RS-6 | ☑ 2026-10-20 完成 |
+| 波 1 | F-01a、F-04b、F-04c、F-04d、F-05、F-06 | 同时编 core 的是 F-04b/c/d 三个，到上限；`devices/mod.rs` 追加式冲突由主会话合并 |
+| 波 2 | F-01b、F-02、F-03、F-04a；core 侧 F-07a、F-10a | F-10a 提前（CYD 是教程榜第一）；core 侧最多 2–3 个 |
+| 波 3 | F-03b、F-07b、F-08a、F-08b、F-08c、F-04e | F-08a/b 主要是固件和 accept，F-08c、F-04e 编 core |
+| 波 4 | F-09a、F-10b + F-10c、F-11 | 经典 ESP32 外设都改 `core/crates/esp32/src/lib.rs`，同时最多 2 个 |
+| 波 5 | F-09b、F-10d | 收尾，并按 §2 重新打分 |
+
+**合计（修订）：P0 11 个、P1 约 17 个 session，加 5 个主会话批次**；按每个约 $4，约 $110–170。画廊（O13）和 HIL（O12）不排期，等人拍板（见 README）。
 
 同时跑的 worktree 建议不超过 6 个，再多主会话合并的上下文会膨胀（§9 第 16 条）。
 
-磁盘只剩约 60 GB：每个 worktree 编 Rust、wasm、IDF 固件各要几个 GB。同时编译 core 的 worktree 不超过 3 个（或共用 `CARGO_TARGET_DIR`），合并后立即删除 worktree。
+磁盘只剩约 55 GB：每个 worktree 编 Rust、wasm、IDF 固件各要几个 GB。同时编译 core 的 worktree 不超过 3 个（或共用 `CARGO_TARGET_DIR`），合并后立即删除 worktree。
 
-成本粗估：按 2026-10-19 复盘（top-3 会话 655 M token 共 $253，约 $0.39 / M）和每个子代理约 100 次调用 × 约 100 k 上下文，单个 session 约 $4，27 个约 $100–150，另加主会话。
+成本粗估：按 2026-10-19 复盘（top-3 会话 655 M token 共 $253，约 $0.39 / M）和每个子代理约 100 次调用 × 约 100 k 上下文，单个 session 约 $4，27 个约 $100–150，另加主会话。（原 27 个口径；修订后见上）
 
 ### 5.5 冲突热点（派单时写进 brief）
 
@@ -153,10 +161,12 @@
 
 - **画廊 / remix / 账号**：要后端和部署，先由 RS-6 出方案给人决定。
 - **HIL 标定**：要花钱；RS-6 给板子清单和测试计划。
-- **C6 与 DVP 摄像头**：C6 的 Wi-Fi 6 / 802.15.4 驱动边界、摄像头读 3D 渲染的帧率预算都没调研。等 P1 做完、RS-3 数据出来后再定是否开 RS-7。
+- **C6 与 DVP 摄像头**：C6 的 Wi-Fi 6 / 802.15.4 驱动边界、摄像头读 3D 渲染的帧率预算都没调研。RS-3 结论：保持 P2，教程榜上无 C6；P1 做完后再定是否开 RS-7。
+- **S3 SIMD（PIE / EE.* 指令）**：RS-2 发现小智原版、esp-sr、esp-dsp 都依赖它；工作量大，是否单列待人定。
+- **经典 ESP32 的 BLE**：RS-5 指出完全没覆盖，可能比多 IDF 更重要；需要单独调研（RS-8 候选）。
 - **周期精度 / 缓存模型**：目前明确不做。只有在出现"时序敏感固件跑不对"的真实用例时才重开。
 - **权重本身**：§1 的视角权重是评审判断。上线后若有真实用户数据（漏斗、分享率），应该用数据重定。
 
-## 6. 研究数据（RS-3 回填）
+## 6. 研究产出
 
-（待填）
+见 `research/`（每个 RS 一个文件），汇总在 `README.md`。
