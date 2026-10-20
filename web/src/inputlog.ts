@@ -186,3 +186,92 @@ export function cliArgs(log: InputLog, fw: string, inputsFile: string, seconds?:
   a.push('--inputs', inputsFile);
   return a;
 }
+
+const unesc = (t: string) => t.replaceAll('\\n', '\n');
+const num = (v: string | undefined) => {
+  const n = Number(v);
+  if (v === undefined || v.trim() === '' || !Number.isFinite(n)) throw new Error(`bad number "${v}"`);
+  return n;
+};
+
+/** Inverse of action(): one script action -> event without tMs; throws on an unknown or malformed action */
+export function fromAction(a: string): InputAction {
+  if (a === 'release') return { kind: 'touch', down: false, x: 0, y: 0 };
+  if (a.startsWith('pc=')) return { kind: 'ble', cmd: a };
+  const eq = a.indexOf('=');
+  if (eq < 0) throw new Error(`bad action "${a}"`);
+  const k = a.slice(0, eq);
+  const v = a.slice(eq + 1);
+  const g = /^gpio(\d+)$/.exec(k);
+  if (g) return { kind: 'gpio', pin: Number(g[1]), level: v === 'z' ? -1 : num(v) };
+  const mv = /^mv(\d+)$/.exec(k);
+  if (mv) return { kind: 'pot', pin: Number(mv[1]), mv: num(v) };
+  const p = v.split(',');
+  switch (k) {
+    case 'env':
+      return { kind: 'env', temp: num(p[0]), humidity: num(p[1]), pressure: num(p[2]) };
+    case 'uart':
+    case 'usbcdc':
+      return { kind: k, text: unesc(v) };
+    case 'power':
+      if (v === 'usb' || v === 'ext') return { kind: 'supply', mode: v };
+      break;
+    case 'i2cwire':
+      return { kind: 'i2cwire', cm: num(v) };
+    case 'antenna':
+      return { kind: 'antenna', db: num(v) };
+    case 'enc':
+      return { kind: 'enc', steps: num(v) };
+    case 'encsw':
+      return { kind: 'encsw', down: v === '1' };
+    case 'dist':
+      return { kind: 'dist', cm: num(v) };
+    case 'imu': {
+      const n = p.map(num);
+      if (n.length === 3 || n.length === 6) return { kind: 'imu', pitch: n[0], roll: n[1], yaw: n[2], ...(n.length === 6 ? { rates: [n[3], n[4], n[5]] as [number, number, number] } : {}) };
+      break;
+    }
+    case 'touch':
+      return { kind: 'touch', down: true, x: num(p[0]), y: num(p[1]) };
+    case 'ble':
+      return { kind: 'ble', cmd: v };
+    case 'phone':
+      return { kind: 'phone', cmd: unesc(v) };
+    case 'realnet':
+      return { kind: 'realnet', on: v === '1' };
+    case 'netreply':
+      return { kind: 'netreply', reply: v };
+    case 'seed':
+      return { kind: 'seed', seed: num(v) >>> 0 };
+    case 'net':
+      return { kind: 'net', preset: v };
+    case 'netfault':
+      return { kind: 'netfault', fault: p[0], ...(p.length > 1 ? { dur: num(p[1]) } : {}) };
+    case 'adc':
+      return { kind: 'adc', ideal: v === 'ideal' };
+    case 'bat':
+      return { kind: 'bat', pct: num(p[0]), usb: p[1] === 'usb' };
+    case 'pwrkey':
+      return { kind: 'pwrkey', long: v === 'long' };
+  }
+  throw new Error(`bad action "${a}"`);
+}
+
+/** Inverse of toScript / toScriptBody (one `seconds:action` per line) and toScriptInline (`; `-separated); # lines are skipped */
+export function fromScript(text: string): InputEvent[] {
+  const out: InputEvent[] = [];
+  for (const raw of text.includes('\n') ? text.split('\n') : text.split('; ')) {
+    const line = raw.replace(/\r$/, '');
+    if (!line.trim() || line.startsWith('#')) continue;
+    const c = line.indexOf(':');
+    if (c < 0) throw new Error(`bad script line "${line}"`);
+    // Scripts carry microseconds: rebuild ms from the integer count so values round-trip exactly
+    out.push({ tMs: Math.round(num(line.slice(0, c)) * 1e6) / 1000, ...fromAction(line.slice(c + 1)) } as InputEvent);
+  }
+  return out;
+}
+
+/** Script body without the comment header: one `seconds:action` per line (text payloads escape \n, so a `; ` inside them is safe) */
+export function toScriptBody(events: InputEvent[]): string {
+  return events.flatMap((e) => (action(e) === null ? [] : [`${sec(e.tMs)}:${action(e)}`])).join('\n');
+}

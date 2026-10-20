@@ -311,3 +311,10 @@ web/（Vite + TS）
   - 编码器 40 / 41（A/B 顺序是推断的）。
   - BtnA G42（低有效）。电源保持 G46。
   - 蜂鸣器 G3（I2S 1-bit，尚无模型）。
+
+## 分享状态 v1（F-01a；`web/src/app/sharestate.ts`，页面接入在 `web/src/app/shareopen.ts`）
+- 链接：`/app?s=<base64url(deflate-raw(JSON))>#bench`。导出 `encodeState` / `decodeState`（抛 `ShareDecodeError`，`reason` = `corrupt` | `newer`）、类型 `ShareStateV1`、`captureState`、`shareLink`、`redact`、`shareKey`。
+- 字段：`v`=1；`w` 作品 id（空白作品 `blank:<示例>`）；`sel` 选板地址参数（自定义作品）；`cp` 检查点；`fw` `{ex, h}` 内置示例 + `fw/<ex>/flash.bin` 的 sha256 前 10 位（同 `tools/asset_hashes.py`）；`chip`；`scene` / `ext5v` 和默认不同时才有；`mods` 改线；`harness` 装配线束（和默认不同才有）；`env`、`heat`、`loc`；`run` `{endMs, s}`，`s` 是 `tryboard run --inputs` 正文；`cut` 被剥掉的隐私项（`wifi` / `net`）。
+- 往后加字段只能可选；改语义就升 `v` 并在 `migrate` 里转换。
+- 打开：`readShare` 在会话启动前解码并把作品改成本地副本（`work.key = share:<fnv>`）；`restoreShare` 在开机后换固件、`session.seek` 快进到 `endMs`，然后接着跑。测试钩子：`__tbShare()` 生成链接，`__tbShareRestored` 是快进结果（stdout / report / endMs）。
+- 验收：`node tools/webtest/share.mjs`。
