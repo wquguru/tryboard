@@ -857,5 +857,23 @@ const d: Dict = {
   "Send once": "1 回送信",
   "Last heartbeat sent": "最後に送ったハートビート",
   "Last line from the board": "ボードからの最新の行",
+  // F-01a share link
+  "{title} (shared)": "{title}（共有）",
+  "Parts, wiring and your actions: others open the same bench at the same moment": "部品・配線・操作ごと：開いた人は同じ台の同じ時点から始まります",
+  "This share link was made by a newer TryBoard; reload the page to get the latest version": "この共有リンクは新しい TryBoard で作られています。ページを再読み込みして最新版で開いてください",
+  "This share link is damaged and cannot be opened; showing the default bench instead": "共有リンクが壊れていて開けません。代わりに既定の台を表示します",
+  "Opened a shared bench: this is a local copy, your own work is untouched": "共有された台を開きました：これはローカルのコピーで、あなたの作品はそのままです",
+  "The example firmware has changed since this link was made, so results may differ from the sharer’s": "リンク作成後にサンプルのファームウェアが更新されたため、結果が共有者と異なる場合があります",
+  "Replayed the shared actions up to {t} s; it keeps running from there": "共有された操作を {t} s まで再生しました。そこから実行を続けます",
+  "The sharer’s own firmware is not in the link, so only the bench came along": "共有者自身のファームウェアはリンクに含まれないため、台だけを開きました",
+  "Could not replay the shared actions: {err}": "共有された操作を再生できませんでした：{err}",
+  "Not shared, for privacy: {what}; results that depend on them may differ": "プライバシー保護のため共有していません：{what}。これに依存する結果は異なる場合があります",
+  "Wi-Fi credentials": "Wi-Fi の名前とパスワード",
+  "real-network replies": "実ネットワークの応答",
+  "Your own firmware can’t go in a link yet (file export comes in the next version), so the link carries the bench only": "自分のファームウェアはまだリンクに入れられません（次のバージョンでファイル書き出しに対応）。今回のリンクは台だけです",
+  "Your actions are too long for a link, so it carries the bench only; the next version can export them as a file": "操作記録が長すぎてリンクに入らないため、台だけを含めました。次のバージョンでファイル書き出しに対応します",
+  "Share link copied: it opens this bench and replays your actions": "共有リンクをコピーしました：この台を開いて操作を再生します",
+  "Share link copied: it opens this bench with your parts and wiring": "共有リンクをコピーしました：部品と配線ごとこの台を開きます",
+  "Could not make the share link: {err}": "共有リンクを作れませんでした：{err}",
 };
 export default d;

@@ -857,5 +857,23 @@ const d: Dict = {
   "Send once": "发一次",
   "Last heartbeat sent": "最近发出的心跳",
   "Last line from the board": "板子最近回的一行",
+  // F-01a share link
+  "{title} (shared)": "{title}（分享）",
+  "Parts, wiring and your actions: others open the same bench at the same moment": "器件、接线和你的操作：别人打开就是同一个台面、同一时刻",
+  "This share link was made by a newer TryBoard; reload the page to get the latest version": "这个分享链接来自更新版本的 TryBoard，刷新页面换到最新版再打开",
+  "This share link is damaged and cannot be opened; showing the default bench instead": "分享链接已损坏，打不开；先显示默认台面",
+  "Opened a shared bench: this is a local copy, your own work is untouched": "已打开分享的台面：这是本地副本，你自己的作品没动",
+  "The example firmware has changed since this link was made, so results may differ from the sharer’s": "示例固件在链接生成后更新过，结果可能和分享者的不同",
+  "Replayed the shared actions up to {t} s; it keeps running from there": "已重放分享者的操作到 {t} s，从这里接着跑",
+  "The sharer’s own firmware is not in the link, so only the bench came along": "分享者用的是自己的固件，链接里没有，只带来了台面",
+  "Could not replay the shared actions: {err}": "分享的操作没能重放：{err}",
+  "Not shared, for privacy: {what}; results that depend on them may differ": "为保护隐私没有分享：{what}；依赖它们的结果可能不同",
+  "Wi-Fi credentials": "Wi-Fi 名称和密码",
+  "real-network replies": "真实网络的回包",
+  "Your own firmware can’t go in a link yet (file export comes in the next version), so the link carries the bench only": "自己的固件暂时放不进链接（下个版本支持导出文件），这次链接只带台面",
+  "Your actions are too long for a link, so it carries the bench only; the next version can export them as a file": "操作记录太长放不进链接，这次只带台面；下个版本支持导出文件",
+  "Share link copied: it opens this bench and replays your actions": "分享链接已复制：打开后是这个台面，并重放你的操作",
+  "Share link copied: it opens this bench with your parts and wiring": "分享链接已复制：打开后是这个台面，带着你的器件和接线",
+  "Could not make the share link: {err}": "分享链接没生成出来：{err}",
 };
 export default d;
