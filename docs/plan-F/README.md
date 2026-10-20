@@ -22,6 +22,7 @@
 | 波 2 F-03 嵌入页 | ☑ | 2026-10-20 `/embed?s=` 点击加载、不写 localStorage；embed.mjs 19/19；`_headers` 的 frame-ancestors 需部署后验证；F-03b 原速回放未做；`Reviews/ab/F-03.md` |
 | 波 2 F-04a 器件上台面（第 1 部分） | ◐ | 2026-10-20 DS18B20 / PIR / 光敏 / 继电器 / RC522 上网页（3D、接线、手机、输入日志）+ 3 个示例，parts.mjs 18/18；第 2 部分（ILI9341 / SH1106 等显示屏）等 F-04b |
 | 波 2 F-07a UART + MicroPython | ☑ | 2026-10-20 UART RX 超过一个 FIFO、`\xNN` 串口转义、`mpy-c3-rawpaste` 用例（bin 由 `fetch_third_party.sh --micropython` 可选下载，缺失则跳过） |
+| 波 3 F-08a Arduino 库矩阵（显示与传感器） | ◐ | 2026-10-20 11 个库示例在 C3 上通过（`arduino-lib-*`，矩阵见 STATUS「Arduino 库矩阵」）；OneWire / TFT_eSPI 只进本地 accept；ILI9341 / RTClib 草图已编译，等 F-04b / F-04e 合并后加用例 |
 
 ## 调研结论汇总
 

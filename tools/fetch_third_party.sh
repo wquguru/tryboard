@@ -37,6 +37,30 @@ for pair in M5Unified:35903583211e1f39ca88920714525fbcd1eb714a M5GFX:a8ebd7bdaae
   [ -d "arduino-libs/$name/.git" ] || git clone -q "https://github.com/m5stack/$name" "arduino-libs/$name"
   [ "$(git -C "arduino-libs/$name" rev-parse HEAD)" = "$sha" ] || { git -C "arduino-libs/$name" fetch -q origin && git -C "arduino-libs/$name" checkout -q "$sha"; }
 done
+# F-08a display / sensor library matrix (firmware/arduino/lib-*), default-branch commits pinned 2026-10-20; licences in docs/LICENSING.md.
+# OneWire and TFT_eSPI licences are unverified: local accept only, never shipped (docs/STATUS.md F-08a).
+for spec in \
+  bblanchon/ArduinoJson:1cd478f48e7c4cd142a0bd26ee17d63d70d04e3f \
+  olikraus/U8g2_Arduino:b3a40de8822187c941b40cbbaaa77604a7ab90c7 \
+  adafruit/Adafruit_SSD1306:d94f699451d72286357cba7259055ffff2c2940b \
+  adafruit/Adafruit-GFX-Library:bc85af5aa4802cb85626c188cbc632343e3dae14 \
+  adafruit/Adafruit_BusIO:3b8364267c3ee6e16bad91bc2101aefbd5b5915f \
+  adafruit/Adafruit_Sensor:0a9127a1e886ff1adb4c1b6f5958b24108d55aa6 \
+  adafruit/Adafruit_BME280_Library:ef712e95147de926b4545e379f6296ad271529b5 \
+  adafruit/Adafruit_MPU6050:502a7caccda630a151dfb03ecbdd4b8452809ef7 \
+  adafruit/DHT-sensor-library:f7d625462e6033f373e51f8c67f88fc429535b47 \
+  adafruit/Adafruit_SHT31:5e34a20df62371150f7cb10330919e9393b884b1 \
+  ThingPulse/esp8266-oled-ssd1306:c69cd07db30295428a70d6fa8bb306bbcde64d5b \
+  miguelbalboa/rfid:8894b3aed318314345b075b4d436fee18b2b185b \
+  PaulStoffregen/OneWire:800f26f3ee6eb446a72e013785cac3700e54cc13 \
+  milesburton/Arduino-Temperature-Control-Library:dadbbf7d33f500a5785ac4ae9973b8c9083d0d39 \
+  Bodmer/TFT_eSPI:16e37595040eac69cd628e4bffb56fc30cad6299 \
+  adafruit/RTClib:5298434167b770c4602661d682e3b340d565073f \
+  adafruit/Adafruit_ILI9341:bdd8a0f00b1c66e50c7efdfb5f1835e8df9f50cb; do
+  repo=${spec%%:*}; sha=${spec#*:}; name=${repo#*/}
+  [ -d "arduino-libs/$name/.git" ] || git clone -q "https://github.com/$repo" "arduino-libs/$name"
+  [ "$(git -C "arduino-libs/$name" rev-parse HEAD)" = "$sha" ] || { git -C "arduino-libs/$name" fetch -q origin && git -C "arduino-libs/$name" checkout -q "$sha"; }
+done
 # Optional (--micropython): official MicroPython C3 image for the mpy-c3-rawpaste accept case (F-07a).
 # Never shipped or committed (distribution is a human decision, RS-1); without it the case is skipped.
 if [ "${1:-}" = "--micropython" ]; then

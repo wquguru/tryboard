@@ -1264,3 +1264,13 @@
 - **3D 固定槽位**：五种元件各有固定 x 偏移和离板距离，只按信号脚决定放在面包板哪一侧，避免同时放多个时重叠。
 - **控制放在示例面板**：教学元件的控制同时出现在「这个示例」面板，不必先点开元件卡（回归脚本也靠它）。
 - 备选：每个元件单独做显示面板 —— 否，简报限定不做显示面板。
+
+## 2026-10-20 Arduino 库矩阵（F-08a 显示与传感器）
+- **钉默认分支提交而非发布标签**：17 个库仓库标签命名混杂（有无 `v`、注释标签对象 vs 提交），按 2026-10-20 默认分支 HEAD 钉完整提交，`library.properties` 版本写进 STATUS 矩阵。备选：钉标签 —— 否，各库标签风格不一，统一钉提交更简单。
+- **草图自写**：按各库官方示例的调用顺序自写最小草图，末行打 `TRYBOARD_OK lib-*`，不拷贝示例文件（许可证干净、输出可断言）。
+- **MFRC522 用 Unlicense 版**：Unlicense 等同公有领域，比 MIT 更宽松，视同 ✅。
+- **OneWire、TFT_eSPI 只进本地 accept**：许可证未核，`bin` 不上站点；accept 用例照常跑（只编译不分发）。
+- **TFT_eSPI 配置走 `flags.txt`**：`build_arduino.sh` 新增可选 `flags.txt` → `--build-property compiler.cpp.extra_flags`，用 `USER_SETUP_LOADED` 传面板与引脚，不改钉住的库源码；同一套标记写进 `BUILD_INFO.txt`。
+- **引导跳过填充段**：esptool 给 Arduino 产物插加载地址 0 的填充段，C3 / S3 / ESP32 的 `boot.rs` 改为跳过 0x1000_0000 以下的段（与 IDF 二级引导 `should_load` 行为一致，只读文档理解）；之前这些 bin 直接引导失败。
+- **lvgl Arduino 版不做**：需要库外 `lv_conf.h` + 显示驱动，官方示例依赖 TFT_eSPI（许可证未核）；LVGL 已有 IDF 示例覆盖。
+- **ILI9341 / RTClib 先写草图不加用例**：模型在 F-04b / F-04e，未合并前加用例会让 main 的 accept 变红；合并后由主会话或后续条目补 `arduino-lib-ili9341`（`lcd_min_pixels`）/ `arduino-lib-rtclib` 用例。

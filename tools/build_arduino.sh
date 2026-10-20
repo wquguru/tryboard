@@ -2,7 +2,7 @@
 # Compile sketches in firmware/arduino/<name>/ with arduino-cli (esp32 core 3.x) into firmware/build/arduino-<name>/flash.bin (merged) + app.elf.
 # Usage: tools/build_arduino.sh [name[:variant]...]  (default: all); board defaults to esp32c3, override via board.txt in the sketch dir (e.g. esp32:esp32:esp32s3).
 # boards.txt ("<variant> <fqbn>" per line) builds one output per variant into arduino-<name>-<variant>.
-# libs.txt lists pinned libraries under third_party/arduino-libs (tools/fetch_third_party.sh); BUILD_INFO.txt records licence + sources + config for each bin.
+# libs.txt lists pinned libraries under third_party/arduino-libs (tools/fetch_third_party.sh); BUILD_INFO.txt records licence + sources + config for each bin; optional flags.txt adds C++ defines.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LIBS="$ROOT/third_party/arduino-libs"
@@ -24,6 +24,10 @@ build_one() { # name variant fqbn
     done
     extra=(--libraries "$LIBS")
   fi
+  # flags.txt: extra C++ defines for libraries configured by macros (e.g. TFT_eSPI panel setup), kept out of the pinned sources
+  local flags=""
+  [ -f "$src/flags.txt" ] && flags=$(grep -v -e '^#' -e '^[[:space:]]*$' "$src/flags.txt" | tr '\n' ' ')
+  [ -n "$flags" ] && extra+=(--build-property "compiler.cpp.extra_flags=$flags")
   rm -rf "$out/raw"
   mkdir -p "$out"
   echo "== arduino-$id ($fqbn)"
@@ -37,7 +41,7 @@ build_one() { # name variant fqbn
     for lib in $(each_lib "$src"); do
       echo "library: $lib $(git -C "$LIBS/$lib" rev-parse HEAD) $(git -C "$LIBS/$lib" config remote.origin.url)"
     done
-    echo "config: fqbn=$fqbn; $(arduino-cli version | head -1)"
+    echo "config: fqbn=$fqbn; $(arduino-cli version | head -1)${flags:+; extra flags: $flags}"
   } > "$out/BUILD_INFO.txt"
   ls -la "$out/flash.bin" | awk '{print "   flash.bin", $5, "bytes"}'
 }

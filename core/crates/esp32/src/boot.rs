@@ -229,6 +229,9 @@ impl Esp32 {
                     m.bus.mmu[e] = (data >> 16) + i as u32;
                     m.bus.mmu_app[e] = (data >> 16) + i as u32;
                 }
+            } else if load < 0x1000_0000 {
+                // esptool padding segments use load address 0; the bootloader skips anything below 0x1000_0000
+                continue;
             } else {
                 for i in 0..len {
                     let b = flash[(data + i) as usize] as u32;

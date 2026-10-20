@@ -141,6 +141,30 @@
 | 网页 M5 3D 外壳（M5-09c） | ✅ 参数化外壳（StickC Plus2 / Core2 / CoreS3 / AtomS3 系 / Atom Lite / Dial / Cardputer），屏跟随固件、按键可点、Atom WS2812 与 StickC 红灯 | agent-browser 走查 + m5board / mobile 回归 | Core2 触摸按键区未响应；Dial 旋钮不可转；StickC 侧键需旋转视角；悬停仍显示「开发板」 |
 | 网页 Grove ENV III / IV（M5-09d） | ✅「Grove Port A」下拉；网页 = CLI `--board --grove` 指纹与回放一致（含中途改环境） | m5board.mjs：AtomS3+env4、StickC Plus2+env3 | 无 3D 单元模型 |
 
+## Arduino 库矩阵（F-08a 显示与传感器，C3，2026-10-20）
+
+arduino-cli 1.5.1 + esp32 core 3.3.2，FQBN `esp32:esp32:esp32c3`；草图在 `firmware/arduino/lib-*`（按各库官方示例自写，非逐字拷贝），库在 `tools/fetch_third_party.sh` 钉到提交，`tools/build_arduino.sh lib-<名>` 构建；用例 `arduino-lib-*`（`firmware/accept.json`）。全部是行为模拟，未经真机标定。
+
+| 库（版本） | 许可证 | 示例 / 器件 | 状态 | 验收 | 上站点 |
+|---|---|---|---|---|---|
+| ArduinoJson 7.4.2 | MIT | 解析 + 生成 JSON（纯软件） | ✅ | `arduino-lib-arduinojson`：解析出 sensor / time / 经纬度，生成 51 字节 JSON | 可（三件套） |
+| U8g2 2.37.1 | BSD-2 | SSD1306 硬件 I2C 全缓冲 HelloWorld + 图形 | ✅ | `arduino-lib-u8g2`：亮 2177 像素 | 可（字体许可证上站前再核） |
+| Adafruit SSD1306 2.5.17 + GFX 1.12.6 + BusIO 1.17.4 | BSD / BSD / MIT | 文字、矩形、圆、三角、反色 | ✅ | `arduino-lib-adafruit-ssd1306`：亮 1980 像素 | 可 |
+| ThingPulse esp8266-oled-ssd1306 4.6.2 | MIT | SSD1306Wire 字体 + 进度条 | ✅ | `arduino-lib-oled-thingpulse`：亮 1581 像素 | 可 |
+| DHT sensor library 1.4.7 + Adafruit Unified Sensor 1.1.15 | MIT / Apache-2.0 | DHT11（GPIO5）读温湿度 3 次 | ✅ | `arduino-lib-dht`：3/3 次 23.5 °C / 45.0 %，模型收到 3 帧 | 可 |
+| Adafruit BME280 2.3.0 | BSD | I2C 0x76 温湿压 | ✅ | `arduino-lib-bme280`：芯片 ID 0x60，读数与 `--env` 误差 0 | 可 |
+| Adafruit MPU6050 2.2.9 | BSD | 加速度 / 陀螺 / 温度 | ✅ | `arduino-lib-mpu6050`：静止 z ≈ 9.81 m/s²（误差 ≤ 0.03） | 可 |
+| Adafruit SHT31 2.2.2 | BSD | I2C 0x44 单次测量（模型 sht30） | ✅ | `arduino-lib-sht31`：误差 ≤ 0.01 | 可 |
+| MFRC522（miguelbalboa/rfid 1.4.12） | Unlicense | ReadNUID：放卡 / 移卡 / 换 7 字节卡 | ✅ | `arduino-lib-mfrc522`：版本 0x92，两张卡 UID 与类型正确，unsupported 0 | 可（公有领域，见 DECISIONS） |
+| DallasTemperature 4.0.6 + OneWire 2.3.8 | MIT + **未核** | GPIO4 总线 2 个 DS18B20 | ✅ 仅本地 | `arduino-lib-dallas`：找到 2 个、ROM 与温度正确、未知命令 0 | **否**（OneWire 无 LICENSE 文件） |
+| TFT_eSPI 2.5.44 | **混合，未核** | GC9A01 240×240（C3 SCLK 6 / MOSI 7 / CS 10 / DC 5 / RST 4 / BL 3，`flags.txt` 传 setup） | ✅ 仅本地 | `arduino-lib-tft-espi`：非黑 14673 像素 | **否** |
+| Adafruit ILI9341 1.6.4 | BSD | graphicstest 简化版（CS 10 / DC 1 / RST 0） | ⏳ 已编译 | 等 F-04b ILI9341 模型合并后加 `lcd_min_pixels` 用例；现在没有模型，读回 0xFF（草图不靠读回判断成功，用例必须看像素） | 合并后可 |
+| RTClib 2.1.4 | MIT | DS3231 设时间 → 读时间 / 温度 | ⏳ 已编译 | 等 F-04e DS3231 模型；现在报 `Couldn't find RTC` | 合并后可 |
+| lvgl（Arduino 版） | MIT | — | ✗ 本条目不做 | Arduino 版要在库外放 `lv_conf.h` 并接显示驱动（官方示例用 TFT_eSPI，许可证未核）；LVGL 已由 IDF 示例 s3-lvgl / s3-ai-dash 覆盖 | — |
+
+- 内核修复：esptool 在 Arduino 产物里插入加载地址 0 的填充段，C3 / S3 / 经典 ESP32 的直接引导原先报 `segment 0x00000000 lands in a non-writable region`（ArduinoJson、SHT31 两例触发）；现在与二级引导一样跳过 0x1000_0000 以下的段。
+- 所有用例的 unimpl 前几名都是 0x600ce000 / 0x600ce038 / 0x600ce03c与 0x60043014（Arduino 核心初始化时访问，未建模），不影响这些用例的结果。
+
 ## 电气（`core/crates/elec`，C3 / S3 共用）
 | 模块 | 状态 | 验收 | 备注 |
 |---|---|---|---|
