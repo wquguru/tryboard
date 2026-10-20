@@ -76,9 +76,13 @@ export interface VcdState {
 export type ToWorker =
   | {
       type: 'boot';
-      wasm: ArrayBuffer;
-      rom: ArrayBuffer;
-      flash: ArrayBuffer;
+      /** Compiled once on the main thread (R-23); structured clone shares the code, no recompile. */
+      wasm: WebAssembly.Module;
+      /** ROM / firmware bytes, omitted when the worker already holds that id (cached per worker). */
+      rom?: ArrayBuffer;
+      romId: number;
+      flash?: ArrayBuffer;
+      flashId: number;
       i2c?: { kind: string; addr: number }[];
       env?: Env;
       /** Attach the GC9A01 round LCD (SPI2). */
@@ -156,9 +160,13 @@ export type ToWorker =
   /** Timeline rewind (P0-03): power up, apply the log at original sim times, fast-forward to untilMs and stop (not wall clock); answers seeked. */
   | {
       type: 'seek';
-      wasm: ArrayBuffer;
-      rom: ArrayBuffer;
-      flash: ArrayBuffer;
+      /** Compiled once on the main thread (R-23); structured clone shares the code, no recompile. */
+      wasm: WebAssembly.Module;
+      /** ROM / firmware bytes, omitted when the worker already holds that id (cached per worker). */
+      rom?: ArrayBuffer;
+      romId: number;
+      flash?: ArrayBuffer;
+      flashId: number;
       i2c?: { kind: string; addr: number }[];
       env?: Env;
       lcd?: boolean;

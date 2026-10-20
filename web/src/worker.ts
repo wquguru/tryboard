@@ -569,17 +569,30 @@ function postPaused(e: Exports) {
 }
 
 /** Boot fields; locale exists so any human text the worker makes follows the page (core errors are English already). */
-type BootMsg = { wasm: ArrayBuffer; rom: ArrayBuffer; flash: ArrayBuffer; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
+type BootMsg = { wasm: WebAssembly.Module; rom?: ArrayBuffer; romId: number; flash?: ArrayBuffer; flashId: number; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
 const I2S_KIND: Record<string, number> = { max98357a: 0, inmp441: 1 };
+// ROM / firmware bytes by main-thread id (R-23): sent once, then every boot / seek copies them into a fresh instance.
+// ROMs are one per chip; firmware keeps only the latest (live.ts resends bytes whenever the id changes).
+const roms = new Map<number, ArrayBuffer>();
+let fw: { id: number; bytes: ArrayBuffer } | null = null;
+function cached(m: BootMsg) {
+  if (m.rom) roms.set(m.romId, m.rom);
+  if (m.flash) fw = { id: m.flashId, bytes: m.flash };
+  const rom = roms.get(m.romId);
+  if (!rom || fw?.id !== m.flashId) throw new Error(`worker is missing bytes for rom ${m.romId} / firmware ${m.flashId}`);
+  return { rom, flash: fw.bytes };
+}
 /** Power-up: instantiate wasm, attach devices, set the environment, start a fresh input log. */
 async function bootWasm(m: BootMsg): Promise<Exports | null> {
-  const { instance } = await WebAssembly.instantiate(m.wasm, {});
+  // A fresh instance every time (seek semantics); only the compiled module and the source bytes are reused
+  const instance = await WebAssembly.instantiate(m.wasm, {});
   const e = instance.exports as unknown as Exports;
-  const rp = copyIn(e, m.rom);
-  const fp = copyIn(e, m.flash);
-  const r = e.tb_boot(rp, m.rom.byteLength, fp, m.flash.byteLength);
-  e.tb_free(rp, m.rom.byteLength);
-  e.tb_free(fp, m.flash.byteLength);
+  const { rom, flash } = cached(m);
+  const rp = copyIn(e, rom);
+  const fp = copyIn(e, flash);
+  const r = e.tb_boot(rp, rom.byteLength, fp, flash.byteLength);
+  e.tb_free(rp, rom.byteLength);
+  e.tb_free(fp, flash.byteLength);
   if (r !== 0) {
     post({ type: 'error', message: errorText(e) });
     return null;

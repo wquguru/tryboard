@@ -11,7 +11,8 @@ export const CPU_HZ = 160_000_000;
 export type Ex = WasmExports;
 
 export interface SimJob {
-  wasm: ArrayBuffer | Uint8Array;
+  /** Bytes (npm CLI, tests) or an already compiled Module (web, R-23: no recompile per run) */
+  wasm: ArrayBuffer | Uint8Array | WebAssembly.Module;
   rom: ArrayBuffer | Uint8Array;
   flash: ArrayBuffer | Uint8Array;
   seconds: number;
@@ -99,7 +100,7 @@ function bytesIn(e: Ex, b: Uint8Array, f: (p: number, n: number) => void) {
 
 export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult> {
   const dec = new TextDecoder();
-  const { instance } = await WebAssembly.instantiate(u8(j.wasm), {});
+  const instance = j.wasm instanceof WebAssembly.Module ? await WebAssembly.instantiate(j.wasm, {}) : (await WebAssembly.instantiate(u8(j.wasm), {})).instance;
   const e = instance.exports as unknown as Ex;
   const rom = u8(j.rom), flash = u8(j.flash);
   const rp = e.tb_alloc(rom.byteLength);

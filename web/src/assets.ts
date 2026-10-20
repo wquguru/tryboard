@@ -29,3 +29,6 @@ let wasmP: Promise<ArrayBuffer> | null = null;
 const romP: Partial<Record<ChipId, Promise<ArrayBuffer>>> = {};
 export const loadWasm = () => (wasmP ??= fetchBuf('./wasm/tryboard.wasm'));
 export const loadRom = (chip: ChipId) => (romP[chip] ??= fetchBuf(`./rom/${ROM_FILE[chip]}`));
+let modP: Promise<WebAssembly.Module> | null = null;
+/** The core compiled once per page (R-23): workers get the Module by structured clone, so nothing recompiles. */
+export const loadWasmModule = () => (modP ??= loadWasm().then((b) => WebAssembly.compile(b)));
