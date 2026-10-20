@@ -1,8 +1,6 @@
 #!/bin/bash
-# Compile sketches in firmware/arduino/<name>/ with arduino-cli (esp32 core 3.x) into firmware/build/arduino-<name>/flash.bin (merged) + app.elf.
-# Usage: tools/build_arduino.sh [name[:variant]...]  (default: all); board defaults to esp32c3, override via board.txt in the sketch dir (e.g. esp32:esp32:esp32s3).
-# boards.txt ("<variant> <fqbn>" per line) builds one output per variant into arduino-<name>-<variant>.
-# libs.txt lists pinned libraries under third_party/arduino-libs (tools/fetch_third_party.sh); BUILD_INFO.txt records licence + sources + config for each bin; optional flags.txt adds C++ defines.
+# Build firmware/arduino/<name>/ with arduino-cli into firmware/build/arduino-<name>/{flash.bin,app.elf}. Usage: tools/build_arduino.sh [name[:variant]...]
+# Sketch dir: board.txt (fqbn, default esp32c3), boards.txt ("<variant> <fqbn>"), libs.txt (pinned third_party libs), flags.txt (defines); BUILD_INFO.txt per bin.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LIBS="$ROOT/third_party/arduino-libs"

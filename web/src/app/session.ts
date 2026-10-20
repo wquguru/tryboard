@@ -3,7 +3,7 @@ import { createBench, type SceneSpec } from '../board3d';
 import type { ScenePickApi } from '../scene-api';
 import { LiveSim, type SeekJob } from '../live';
 import type { Snapshot } from '../simmsg';
-import type { InputEvent } from '../inputlog';
+import { pacedMirror } from './pacedui';
 import type { FromWorker, TimingReport, VcdState } from '../simmsg';
 import { saveBom } from './bomstore';
 import { push as pushBom } from './bom';
@@ -65,6 +65,19 @@ async function benchInit(work: WorkDef, opts: SessionOpts) {
 // R-12: levels.json (~13 KB gzip) is its own chunk, fetched while the shell paints and GL starts instead of blocking them
 const levelsJson = import('../../../firmware/levels.json').then((m) => m.default as Level[]);
 
+const lastImu = (text: string) => {
+  let m: RegExpExecArray | null = null;
+  for (const x of text.matchAll(IMU_LINE)) m = x;
+  return m ? { pitch: Number(m[1]), roll: Number(m[2]), gyro: m[3] !== undefined ? ([Number(m[3]), Number(m[4]), Number(m[5])] as [number, number, number]) : null } : null;
+};
+const lastReading = (text: string) => {
+  let m: RegExpExecArray | null = null;
+  for (const x of text.matchAll(READING)) m = x;
+  if (m) return { t: Number(m[1]), h: Number(m[2]), p: Number(m[3]) };
+  for (const x of text.matchAll(DHT_READING)) m = x;
+  return m ? { t: Number(m[1]), h: Number(m[2]), p: NaN } : null;
+};
+
 export async function createSession(stage: HTMLElement, work: WorkDef, store: Store<AppState>, hooks: SessionHooks, opts: SessionOpts = {}): Promise<Session> {
   // GL setup starts now, before the first paint; board and parts follow once examples.json is in (R-16)
   const setup = benchInit(work, opts);
@@ -122,38 +135,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     return [...pins].sort((a, b) => a - b);
   };
   const bumpEdit = () => store.set((st) => ({ editRev: st.editRev + 1 }));
-  const lastImu = (text: string) => {
-    let m: RegExpExecArray | null = null;
-    for (const x of text.matchAll(IMU_LINE)) m = x;
-    return m ? { pitch: Number(m[1]), roll: Number(m[2]), gyro: m[3] !== undefined ? ([Number(m[3]), Number(m[4]), Number(m[5])] as [number, number, number]) : null } : null;
-  };
   let imuTail = '';
-  const lastReading = (text: string) => {
-    let m: RegExpExecArray | null = null;
-    for (const x of text.matchAll(READING)) m = x;
-    if (m) return { t: Number(m[1]), h: Number(m[2]), p: Number(m[3]) };
-    for (const x of text.matchAll(DHT_READING)) m = x;
-    return m ? { t: Number(m[1]), h: Number(m[2]), p: NaN } : null;
-  };
-  // Paced replay (F-03b): the worker applies the log; the page only mirrors what the user would have seen (keys, room temperature, pose)
-  let pacedUi: { evs: InputEvent[]; i: number } | null = null;
-  const mirrorPaced = (simSeconds: number) => {
-    const p = pacedUi!;
-    const sim = s.sim;
-    while (sim && p.i < p.evs.length && p.evs[p.i].tMs <= simSeconds * 1000) {
-      const x = p.evs[p.i++];
-      if (x.kind === 'gpio') bench.showPress(x.pin, x.level === 0, sim.bootPin);
-      else if (x.kind === 'env') {
-        sim.env = { temp: x.temp, humidity: x.humidity, pressure: x.pressure };
-        store.set({ env: { ...sim.env } });
-      } else if (x.kind === 'imu') {
-        sim.pose = { pitch: x.pitch, roll: x.roll, yaw: x.yaw };
-        store.set({ pose: { ...sim.pose } });
-        bench.setPose(s.hasImu() ? sim.pose : null);
-      } else if (x.kind === 'dist') bench.setDistance(x.cm);
-    }
-    if (p.i >= p.evs.length) pacedUi = null;
-  };
+  const paced = pacedMirror(bench, store, () => s.hasImu());
 
   const s: Session = {
     bench,
@@ -222,11 +205,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     mark: () => s.sim?.mark() ?? Promise.resolve(0),
     async seek(job: SeekJob) {
       const sim = s.sim!;
-      pacedUi = job.paced ? { evs: job.events, i: 0 } : null;
-      // Keys shown held by an earlier paced replay end up as the log leaves them at the stop point
-      const held = new Map<number, boolean>();
-      for (const x of job.events) if (x.kind === 'gpio') held.set(x.pin, !job.paced && x.tMs < job.untilMs ? x.level === 0 : (held.get(x.pin) ?? false));
-      for (const [pin, down] of held) bench.showPress(pin, down, sim.bootPin);
+      paced.start(job, sim);
       const snap = await sim.seek({ ...job, i2s: job.i2s ?? i2sOf(s.scene.parts) });
       consoleBuf = snap.stdout.length > 200_000 ? snap.stdout.slice(-150_000) : snap.stdout;
       tail = consoleBuf.slice(-80);
@@ -292,7 +271,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     audio,
     sensorOffset: 0,
     reboot() {
-      pacedUi = null;
+      paced.stop();
       if (!s.sim) return;
       bench.setPowered(true);
       s.sim.reset();
@@ -531,7 +510,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         store.set({ simSeconds: t });
       },
       onTick(m) {
-        if (pacedUi) mirrorPaced(m.simSeconds);
+        paced.tick(s.sim, m.simSeconds);
         taskStore.setNow(Math.round(m.simSeconds * 160_000_000));
         bench.setGpio(m.gpio, m.enable, m.pwm, m.gpioHi, m.enableHi);
         if (m.leds) bench.setRgb(m.leds[0] ?? [0, 0, 0]);

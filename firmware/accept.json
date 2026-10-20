@@ -4564,5 +4564,27 @@
    "TRYBOARD_OK lib-tft-espi"
   ],
   "lcd_min_pixels": 10000
+ },
+ {
+  "id": "arduino-lib-rtclib",
+  "seconds": 3,
+  "args": [
+   "--i2c",
+   "ds3231@0x68",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "expect": [
+   "ds3231 lost power 1",
+   "TRYBOARD_OK lib-rtclib"
+  ],
+  "numeric": [
+   {
+    "name": "DS3231 temperature (C)",
+    "regex": "ds3231 temp ([\\d.-]+) C",
+    "value": 23.5,
+    "tol": 0.25
+   }
+  ]
  }
 ]

@@ -1,6 +1,5 @@
-// F-04e acceptance: AHT20 (0x38) + INA219 (0x40) + DS3231 (0x68) on one I2C bus, SDA=GPIO6, SCL=GPIO7, 100 kHz.
-// Register-level drivers written from the datasheets (no external component). Prints readings once a second and checks:
-// AHT20 CRC and busy bit, INA219 current = shunt / 0.1 ohm, DS3231 seconds follow esp_timer and alarm 1 fires.
+// F-04e acceptance: AHT20 (0x38) + INA219 (0x40) + DS3231 (0x68) on I2C SDA=6 SCL=7, register drivers from the datasheets.
+// Checks AHT20 CRC / busy bit, INA219 current = shunt / 0.1 ohm, DS3231 seconds vs esp_timer and alarm 1 firing.
 #include <stdio.h>
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"

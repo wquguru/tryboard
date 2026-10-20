@@ -1,8 +1,6 @@
 #!/bin/bash
-# BLE signature coverage (F-08c): link every third_party/btlib/<ver>/<chip>/libbtdm_app.a into a bare ELF with the
-# installed IDF 5.5.1 toolchain (real linker relaxation, no bt.c), turn it into an app image and check the signatures.
-# Output: third_party/btlib-cover/<ver>-<chip>/{app.elf,flash.bin,syms.txt} (git-ignored); the Rust test
-# soc::ble::cover reads them to check the generated sigs.rs / sigs_xt.rs. Usage: tools/ble_cover.sh [ver...]
+# BLE signature coverage (F-08c): bare-link each third_party/btlib/<ver>/<chip>/libbtdm_app.a with the IDF 5.5.1 toolchain into
+# third_party/btlib-cover/<ver>-<chip>/{app.elf,flash.bin,syms.txt} for the soc::ble::cover test. Usage: tools/ble_cover.sh [ver...]
 set -uo pipefail
 cd "$(dirname "$0")/.."
 . tools/idf_env.sh
