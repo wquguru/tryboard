@@ -90,7 +90,7 @@ F-10a ──> CYD 示例（F-10a 范围内）
 - web/src/app/shell.tsx:49 stepFromHash —— `#` 已被步骤路由占用，状态放 `?s=`
 - web/src/app/session.ts:67 createSession、web/src/app/store.ts:11 createStore —— 收集与恢复台面状态
 - web/src/inputlog.ts:158 toScript / :173 cliArgs —— 输入日志转脚本文本；需要新增反向的「脚本文本 → 事件」解析
-- web/src/live.ts:419 seek —— 恢复时重新上电并快进
+- web/src/live.ts:446 seek —— 恢复时重新上电并快进
 - web/src/app/topbar.tsx:250 更多菜单 —— 打开「分享」项
 - web/src/advisor/state.ts:1 —— 选型页已有的 URL 分享约定，格式风格对齐
 - web/src/app/bomstore.ts、asmstate.ts —— 台面摆放现在存在 localStorage
@@ -113,10 +113,10 @@ F-10a ──> CYD 示例（F-10a 范围内）
 先读：docs/plan-F/research/RS-3-interest.md §3（器件优先级），docs/STATUS.md 显示屏相关行。
 现状（已核对）：core/crates/soc/src/devices/lcd.rs:27 LcdKind::parse 已有 st7789 / st7789l / ili9342(c/e) / gc9a01 等，ST7789 模型已存在（M5 专项做的）；SH1106、ILI9341 没有。
 入口：
-- core/crates/soc/src/devices/lcd.rs:27 LcdKind —— 加 Ili9341（命令集和 ILI9342C 基本一致，差在分辨率 240×320 竖屏和 MADCTL 默认值，先查清再决定是否共用分支）
+- core/crates/soc/src/devices/dcs.rs:60 起 PanelSpec 常量（M5-01 的参数化 DCS 面板；ILI9342C 在 :129）—— ILI9341 加一个 PanelSpec（240×320 竖屏、MADCTL 默认值、ID），lcd.rs:8 LcdKind / :28 parse 加名字
 - core/crates/soc/src/devices/ssd1306.rs —— SH1106 参照它写（页寻址、132 列 RAM 偏移 2），新文件 sh1106.rs
 - core/crates/soc/src/devices/mod.rs —— 注册（追加式）
-- core/crates/cli/src/main.rs:194 `--i2c`、`--spi` 解析 —— 加名字
+- core/crates/cli/src/main.rs:208 `--i2c`、`--spi` 解析 —— 加名字
 目标：Arduino / IDF 常见用法下，ILI9341、ST7789（240×240 和 240×320）、SH1106 在 C3 和 S3 上能出正确画面。
 范围：
 - 做：模型 + 单元测试；新固件 firmware/c3-ili9341、firmware/s3-st7789、firmware/c3-sh1106（IDF esp_lcd 驱动，ILI9341 用 IDF 组件管理器里 ✅ 的驱动，查不到许可证就自己发命令）；accept.json 各加用例，用 --lcd-ppm / --oled 截图核对画面。
@@ -268,13 +268,46 @@ F-10a ──> CYD 示例（F-10a 范围内）
 验收：cargo test + clippy；tools/oracle_qemu.sh 能对照的部分对照；accept.sh --no-web；unimpl top N 里不再有 SPI2/3 寄存器。
 ```
 
+### 波次调整（2026-10-20，F2 收尾后）
+
+M5 专项已全部合并（M5-01 DCS 面板、M5-10 GP-SPI、M5-11 RMT TX、M5-12 I2S + ADC1/ADC2）。因此：
+- **F-10b、F-10d 不再派**（M5-12 已覆盖，`esp32/src/sens.rs` 含 ADC2）；F-10a 只剩 CYD 示例，改名 F-10a2，等 F-04b 的 ILI9341 合并。
+- 磁盘约 39 GB：同时 worktree ≤ 5，编 core 的 ≤ 3。
+
+| 波 | 条目 | 前提 |
+|---|---|---|
+| 3 | F-04b、F-04e、F-08c、F-08a、F-03b | 无（F-08a 主要跑 arduino-cli，和另外三个 core 条目错开 cargo build） |
+| 4 | F-04a2、F-10a2、F-10c、F-08b、F-09a-1；F-11 第一步（交互稿，出稿即停） | 波 3 合并（F-04a2 / F-10a2 要 F-04b） |
+| 5 | F-09a-2 | F-09a-1 合并 |
+| 需人 | F-07b（MicroPython 分发 / 定位）、F-09b（RS-2 四项）、F-11 第二步（审稿后）、arduino-cli core 3.0.7（F-08c 的 Arduino 3.0.x 部分） | 人拍板后单独派 |
+
+#### F-04a2 显示屏上台面（波 4）
+参数：`model: "opus"`，端口 5186，session `f04a2`。预计 100 次调用。
+```
+条目 F-04a2：把 F-04b 新加的 ILI9341、SH1106 以及已有的 ST7789（240×240 / 240×320）放进网页元件库，可拖放、可接线、手机可用，有 3D 外观和实时画面。
+先读：F-04a 第一部分的做法（web/src/catalog/parts-bench.ts、web/src/partsdev.ts、tools/webtest/parts.mjs）；F-04b 在 docs/STATUS.md 的行（CLI 名字、引脚）。
+入口：web/src/bench3d/spec.ts 器件类型（gc9a01 是屏的参照）、web/src/bench3d/modules.ts、web/src/app/place.ts placeDef、web/src/catalog/parts-bench.ts（新条目加这里，parts.ts 已到 1461 行）。芯片相关常量只能放 web/src/chipid.ts。
+目标：接线后网页传给 wasm 的参数和 CLI `--spi` / `--i2c` 一致；3D 屏上出帧。
+范围：不新增仿真模型；i18n 四语一起加。
+验收：levels.mjs、wiremode.mjs、mobile.mjs、parts.mjs 通过；新增 ≥ 2 个示例进 examples.json（如 ILI9341 + DS18B20 温度屏、SH1106 + PIR），网页与 CLI 指纹一致；agent-browser 每种屏拖一次并截图（含 390×844）。
+```
+
+#### F-10a2 CYD 示例（波 4）
+参数：`model: "opus"`，不需要浏览器。预计 80 次调用。和 F-10c 同时改 `core/crates/esp32`，合并时处理。
+```
+条目 F-10a2：经典 ESP32 上跑通 CYD（ESP32-2432S028，ILI9341 + XPT2046）。
+先读：RS-3-interest.md §1、§6；docs/PLAN.md M5-10 行（GP-SPI + DMA 已做，firmware/esp32-spi-lcd 是参照）；F-04b 的 ILI9341 PanelSpec（core/crates/soc/src/devices/dcs.rs）。
+目标：firmware/esp32-cyd（IDF esp_lcd + ILI9341，CYD 引脚：屏 HSPI 13/14/15/2、背光 21）出正确画面；CYD 板定义可用；XPT2046 触摸作为可选第二步（时间不够就留给后续，汇报里写清）。
+验收：cargo test + clippy；accept.sh --no-web 新用例；--lcd-ppm 截图转 PNG 后 Read 看。
+```
+
 ### 波 3：F-03b、F-07b、F-08a、F-08b、F-08c、F-04e
 
 #### F-03b 实时回放
 参数：`model: "opus"`，端口 5187，session `f03b`。预计 60 次调用。
 ```
 条目 F-03b：分享链接 / 嵌入页可以选「按原速回放」，按时间轴重演输入日志，而不是快进到结尾。
-入口：web/src/live.ts:419 seek（快进路径，参照）；web/src/inputlog.ts 事件时间戳；F-01a 的 sharestate.ts；F-03 的 embed 入口。
+入口：web/src/live.ts:446 seek（快进路径，参照）；web/src/inputlog.ts 事件时间戳；F-01a 的 sharestate.ts；F-03 的 embed 入口。
 目标：回放时按钮、温度变化在 3D 和串口按原时间出现；可暂停、可跳到结尾。
 验收：回放结束时指纹与快进结果一致；agent-browser 在 embed 页走一遍。
 ```
@@ -318,7 +351,7 @@ F-10a ──> CYD 示例（F-10a 范围内）
 参数：`model: "opus"`，不需要浏览器。预计 90 次调用。
 ```
 条目 F-04e：AHT20、INA219、DS3231 三个 I2C 器件模型 + CLI 验收。
-入口：core/crates/soc/src/devices/bme280.rs（I2C 传感器参照）、pcf8563.rs（RTC 参照）、ina3221.rs（电流计参照）；mod.rs 注册；cli main.rs:194 `--i2c` 名字表。
+入口：core/crates/soc/src/devices/bme280.rs（I2C 传感器参照）、pcf8563.rs（RTC 参照）、ina3221.rs（电流计参照）；mod.rs 注册；cli main.rs:208 `--i2c` 名字表。
 目标：`--i2c aht20@0x38,ina219@0x40,ds3231@0x68` 可用，读数跟 `--env` / 电气模型走。
 验收：cargo test + clippy；一个 IDF 固件读三者；accept 用例。
 ```
@@ -339,16 +372,16 @@ F-10a ──> CYD 示例（F-10a 范围内）
 验收：单元测试覆盖脚本时序；CLI 下用一个最小 WebSocket 客户端固件（可先用 IDF esp_websocket_client 示例）跑通一轮。
 ```
 
-#### F-10b / F-10c 经典 ESP32 ADC、RMT
+#### F-10b / F-10c 经典 ESP32 ADC、RMT（F-10b 已由 M5-12 覆盖，只派 F-10c）
 参数：各 `model: "opus"`，不需要浏览器，两个可以同时派（都改 `esp32/src/lib.rs`，合并时处理）。
 ```
 条目 F-10b：经典 ESP32 ADC1 / ADC2 模型。现状（已核对）：core/crates/esp32/src/lib.rs:173 `Adc` 只存电压，"no ADC model yet"。
 目标：IDF adc_oneshot（含校准）读数正确，接上 F-04d 的 LDR 和电气模型；ADC2 与 Wi-Fi 冲突的行为如实模拟或标「必须上真机」。
 验收：固件 esp32-adc + accept；unimpl top N 不再有 SAR ADC 寄存器。
 
-条目 F-10c：经典 ESP32 RMT 收（RX）和载波。现状（已核对）：lib.rs:141 RMT TX 已由 M5-11 实现，RX / 载波 / APB FIFO 记为 unimpl（:80 rmt_unmodelled）。
+条目 F-10c：经典 ESP32 RMT 收（RX）和载波。现状（已核对）：lib.rs:141 RMT TX 已由 M5-11 实现，RX / 载波 / APB FIFO 记为 unimpl（:87 rmt_unmodelled）。
 目标：IR 接收（RMT RX）和 IR 发射（载波）可用，配一个 IR 遥控器器件（脚本动作 `ir=<nec code>`）。
-验收：固件 esp32-ir + accept；lib.rs:82 rmt_unmodelled 范围缩小。
+验收：固件 esp32-ir + accept；lib.rs:87 rmt_unmodelled 范围缩小。
 ```
 
 #### F-11 环境脚本时间轴
@@ -371,7 +404,7 @@ F-10a ──> CYD 示例（F-10a 范围内）
 入口与细节见 RS-2-xiaozhi.md §6。
 ```
 
-#### F-10d 经典 ESP32 I2S
+#### F-10d 经典 ESP32 I2S（已由 M5-12 覆盖，不派）
 参数：`model: "opus"`。
 ```
 条目 F-10d：经典 ESP32 I2S（扬声器 / 麦克风），复用 soc 里 C3 / S3 的 I2S 音频路径（grep -rn "struct I2s" core/crates）。
