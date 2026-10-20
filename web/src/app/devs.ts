@@ -2,6 +2,7 @@
 import type { PartSpec, SceneSpec } from '../bench3d/spec';
 import type { Battery } from '../simmsg';
 import { boardDevs } from '../bench3d/boarddevs';
+import { LDR_LUX_DEFAULT, PIR_HOLD_DEFAULT, partsEmpty, type PartsDevs } from '../partsdev.ts';
 
 /** Live session state the device list depends on */
 export interface DevState {
@@ -34,6 +35,7 @@ export const devsOf = (sc: SceneSpec, st: DevState) => {
     i2s: i2sOf(parts),
     board: bd?.preset,
     grove: bd?.preset ? sc.grove : undefined,
+    parts: partsOf(parts),
   };
 };
 /** First encoder / ultrasonic on the bench, attached to the core at power-on. */
@@ -43,3 +45,15 @@ const sonarOf = (parts: PartSpec[], cm: number) => parts.flatMap((p) => (p.type 
 const dht11Of = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'dht11' ? [p.pin] : []))[0];
 /** Signal pin of the first servo; the power network's servo load hangs on it. */
 export const servoOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'servo' ? [p.pin] : []))[0];
+/** F-04a parts: first of each type (the CLI takes one of each); undefined when none, so the device key stays as before */
+export function partsOf(parts: PartSpec[]): PartsDevs | undefined {
+  const out: PartsDevs = {};
+  for (const p of parts) {
+    if (p.type === 'ds18b20' && !out.ds18b20) out.ds18b20 = { pin: p.pin, n: p.n ?? 1 };
+    if (p.type === 'pir' && !out.pir) out.pir = { pin: p.pin, hold: p.hold ?? PIR_HOLD_DEFAULT };
+    if (p.type === 'relay' && !out.relay) out.relay = { pin: p.pin, ...(p.low ? { low: true } : {}) };
+    if (p.type === 'ldr' && !out.ldr) out.ldr = { pin: p.pin, lux: p.lux ?? LDR_LUX_DEFAULT };
+    if (p.type === 'rc522' && !out.rc522) out.rc522 = p.cs !== undefined ? { cs: p.cs } : {};
+  }
+  return partsEmpty(out) ? undefined : out;
+}

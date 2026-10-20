@@ -105,7 +105,8 @@ export function checkWiring(parts: PartSpec[], wires: BenchWire[]): WireFault[] 
     const own = live.filter((w) => w.part === pid);
     const vcc = own.find((w) => w.pinRole === 'power');
     // Outputs divided down to 3.3 V don't count (HC-SR04 Echo 1 kΩ / 2 kΩ)
-    const sig = own.filter((w) => (w.pinRole === 'bus' || w.pinRole === 'drive') && /^GPIO\d+$/.test(w.a) && w.divider !== true);
+    // HC-SR501 runs off its own 3.3 V regulator, so OUT stays 3.3 V on a 5 V supply (F-04a)
+    const sig = own.filter((w) => (w.pinRole === 'bus' || w.pinRole === 'drive') && /^GPIO\d+$/.test(w.a) && w.divider !== true && typeOf(pid) !== 'pir');
     const v = netVolt(vcc?.a ?? null);
     // Solver: 5 V via module pull-up (I2C 10 kΩ estimate, as W6) or push-pull (driverModel high Ω) into the clamp diode
     const clamp: FaultNet = {

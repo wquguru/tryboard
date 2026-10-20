@@ -62,6 +62,16 @@ export function describe(p: PartSpec, chip: ChipId = 'esp32c3'): string {
       return `HC-SR04 · Trig IO${p.trig} / Echo IO${p.echo}`;
     case 'dht11':
       return `DHT11 · DATA IO${p.pin}`;
+    case 'ds18b20':
+      return `DS18B20${(p.n ?? 1) > 1 ? ` × ${p.n}` : ''} · DQ IO${p.pin}`;
+    case 'pir':
+      return `PIR · OUT IO${p.pin}`;
+    case 'relay':
+      return `${t('Relay')} · IN IO${p.pin}`;
+    case 'ldr':
+      return `${t('Light sensor')} · AO IO${p.pin}`;
+    case 'rc522':
+      return `RC522 · SDA IO${p.cs ?? '-'}`;
     case 'ws2812':
       return `${t('WS2812 strip')} × ${p.n ?? 8} · DIN IO${p.pin}`;
     case 'oled':
@@ -125,6 +135,8 @@ export function conflicts(s: SceneSpec, chip: ChipId = 'esp32c3'): string[] {
       const w = I2S_WIRING[chip].mic;
       const spk = I2S_WIRING[chip].spk;
       for (const pin of [w.sck, w.ws, w.sd]) if (!(s.parts.some((q) => q.type === 'max98357a') && (pin === spk.bclk || pin === spk.lrc))) claim(pin, t('INMP441 microphone'));
+    } else if (p.type === 'rc522') {
+      for (const pin of [p.cs, p.sck, p.mosi, p.miso, p.rst]) if (pin !== undefined) claim(pin, describe(p, chip));
     } else claim(p.pin, describe(p, chip));
   }
   const addrs = s.parts.flatMap((p) => ('addr' in p ? [p.addr] : []));

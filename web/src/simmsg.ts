@@ -1,6 +1,7 @@
 // Worker <-> main-thread message types (R-07): the one place both sides import them from
 import type { InputLog, InputEvent, InputAction } from './inputlog';
 import type { Locale } from './i18n';
+import type { PartsDevs } from './partsdev.ts';
 
 /** Power source (P1-02): usb = servo also draws from USB 5 V; ext = servo on an external 5 V 2 A supply. */
 export type PowerMode = 'usb' | 'ext';
@@ -106,6 +107,8 @@ export type ToWorker =
       board?: string;
       /** Grove unit on the preset's Port A (M5-09d, = CLI --grove: env3 / env4), right after the preset */
       grove?: string;
+      /** F-04a parts (DS18B20 / PIR / relay / LDR / RC522), = CLI --ds18b20 / --pir / --relay / --ldr / --spi rc522 */
+      parts?: PartsDevs;
       /** I2S audio devices: 'max98357a' (speaker) / 'inmp441' (mic); pins fixed per chip (board3d I2S_WIRING). */
       i2s?: string[];
       /** WAV the mic hears at power-up (silent if absent) and its file name (logged; replay uses --mic tools/audio/<name>). */
@@ -132,7 +135,7 @@ export type ToWorker =
   /** Ask for the VCD text, answered with vcdText */
   | { type: 'vcdGet' }
   /** Inputs without a dedicated message (imu, touch...): applied as is and logged. */
-  | { type: 'input'; act: Extract<InputAction, { kind: 'imu' | 'touch' | 'bat' | 'pwrkey' | 'key' }> }
+  | { type: 'input'; act: Extract<InputAction, { kind: 'imu' | 'touch' | 'bat' | 'pwrkey' | 'key' | 'pir' | 'lux' | 'card' }> }
   /** Mic source: WAV (looped, sampled on sim time, reproducible) / silent / live (micPush browser samples; not reproducible, not logged). */
   | { type: 'mic'; source: 'wav' | 'silence' | 'live'; wav?: ArrayBuffer }
   | { type: 'micPush'; rate: number; data: Float32Array }
@@ -191,6 +194,8 @@ export type ToWorker =
       board?: string;
       /** Grove unit on the preset's Port A (M5-09d, = CLI --grove: env3 / env4), right after the preset */
       grove?: string;
+      /** F-04a parts (DS18B20 / PIR / relay / LDR / RC522), = CLI --ds18b20 / --pir / --relay / --ldr / --spi rc522 */
+      parts?: PartsDevs;
       i2s?: string[];
       micWav?: ArrayBuffer;
       micName?: string;

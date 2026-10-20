@@ -5,6 +5,7 @@ import { t } from './i18n/index.ts';
 import { chipAt, pwmDevice, servoDeg, want as wantN } from './ui/say.ts';
 import type { ConfLevel } from './ui/conf.tsx';
 import type { Fault } from './faults.ts';
+import { partsFromArgs } from './partsdev.ts';
 
 export interface Level {
   id: string;
@@ -107,7 +108,8 @@ export function bootOptions(l: Level) {
   const i2cWire = wv === undefined ? undefined : Number(wv);
   const av = val('--antenna-loss');
   const antenna = av === undefined ? undefined : Number(av);
-  return { i2c, env, lcd, servo, power, encoder, sonar, dht11, touchInt, board, grove, usb: a.includes('--usb-log'), i2cLog: a.includes('--i2c-log'), i2cWire, antenna };
+  const parts = partsFromArgs(val);
+  return { i2c, env, lcd, servo, power, encoder, sonar, dht11, touchInt, board, grove, parts, usb: a.includes('--usb-log'), i2cLog: a.includes('--i2c-log'), i2cWire, antenna };
 }
 
 /** Timed input script like the CLI's parse_script: time (simulated s):action, split by `;` or newline, `#` starts a comment */

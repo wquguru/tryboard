@@ -15,6 +15,7 @@ import { type WireRec, wire } from './wires';
 import { type PartSpec, type SceneSpec, DEFAULT_VIEW } from './spec';
 import type { BenchCtx } from './ctx';
 import { AIO_CHIP } from '../chipid';
+import { buildTutorialPart, isTutorialPart, resetPartLamps } from './parts3d';
 
 /** Scene state: rig, breadboard, external-model slots, devboard placement, pick registries and part state. */
 export function* mountState(ctx: BenchCtx): Generator<void> {
@@ -365,6 +366,7 @@ export function mountScene(ctx: BenchCtx): void {
     rig.add(ctx.parts);
     ctx.touchScreen = null;
     ctx.leds = [];
+    resetPartLamps();
     ctx.servos = [];
     ctx.pots = [];
     ctx.buzzers = [];
@@ -415,6 +417,7 @@ export function mountScene(ctx: BenchCtx): void {
       if (p.type === 'ws2812') buildStrip(ctx.parts, p);
       if (p.type === 'hcsr04') buildSonar(ctx.parts, p);
       if (p.type === 'dht11') buildDht(ctx.parts, p);
+      if (isTutorialPart(p)) buildTutorialPart(ctx, ctx.parts, p);
       if (p.type === 'max98357a') buildAmp(ctx.parts, p);
       if (p.type === 'inmp441') buildMic(ctx.parts, p);
       if (p.type === 'oled') {

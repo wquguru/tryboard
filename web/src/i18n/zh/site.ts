@@ -813,5 +813,18 @@ const d: Dict = {
   "Board → PC": "板子 → 电脑",
   "Find the fault": "找故障",
   "Find the fault: four broken benches to repair →": "找故障：四个坏掉的实验台等你修 →",
+  // F-04a tutorial parts (DS18B20 / PIR / relay / LDR / RC522)
+  "Light sensor": "光敏传感器",
+  "HC-SR501 PIR motion sensor module": "HC-SR501 人体红外感应模块",
+  "3.3 V high while motion is seen, held for the delay pot time": "检测到人时输出 3.3 V 高电平，保持时间由延时电位器定",
+  "Needs 5 V on VCC; OUT is 3.3 V, safe for any GPIO. After power-up it settles for about a minute (not simulated). The jumper picks repeatable (H) or single (L) triggering; the simulator models H.": "VCC 要接 5 V；OUT 是 3.3 V，任何 GPIO 都能直接接。上电后要稳定约一分钟（未仿真）。跳线选可重复触发（H）或单次触发（L），仿真按 H。",
+  "1-channel 5 V relay module": "一路 5 V 继电器模块",
+  "High-level trigger by default; some boards have an H / L jumper": "默认高电平触发；有的板子带 H / L 跳线",
+  "The coil runs on 5 V; 3.3 V GPIO is enough for the input on most modules. Mains wiring on the contacts is dangerous: keep the simulation to low-voltage loads.": "线圈用 5 V；多数模块的输入用 3.3 V GPIO 就能驱动。触点接市电很危险：仿真只按低压负载来。",
+  "Photoresistor light sensor module (analog)": "光敏电阻模块（模拟输出）",
+  "Divider output: brighter = higher voltage": "分压输出：越亮电压越高",
+  "Power it from 3V3, not 5 V, so AO never exceeds the ADC range. The reading is a rough light level, not a calibrated lux meter.": "从 3V3 供电而不是 5 V，AO 才不会超出 ADC 量程。读数只是大致亮度，不是标定过的照度计。",
+  "RC522 RFID reader module (13.56 MHz)": "RC522 RFID 读卡模块（13.56 MHz）",
+  "3.3 V only. The simulator reads card UIDs; MIFARE authentication and block reads are not modelled.": "只能 3.3 V。仿真能读卡 UID；MIFARE 认证和读块没有建模。",
 };
 export default d;

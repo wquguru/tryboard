@@ -1,6 +1,7 @@
 // Input log: web actions (buttons, sliders, serial...) stamped in simulated time by the worker, not wall clock (its ratio varies by machine),
 // exported as a `tryboard run --inputs <file>` script that replays cycle for cycle. Format: docs/DECISIONS.md (2026-10-16 input log).
 
+import { partsArgs, rc522Spec, type PartsDevs } from './partsdev.ts';
 export type InputEvent =
   /** Externally driven pin: 0 / 1, -1 = released (high impedance) */
   | { tMs: number; kind: 'gpio'; pin: number; level: number }
@@ -47,7 +48,11 @@ export type InputEvent =
   /** PWR key wired to the AXP2101 PWRON pin (E-03). Action pwrkey=short|long */
   | { tMs: number; kind: 'pwrkey'; long: boolean }
   /** Board keyboard key (M5-09b Cardputer, script-safe name of core keyboard.rs). Action key=<name>,1|0 */
-  | { tMs: number; kind: 'key'; name: string; down: boolean };
+  | { tMs: number; kind: 'key'; name: string; down: boolean }
+  /** F-04a bench parts: PIR motion (pir=1|0), light on the photoresistor (lux=N), card on the RC522 (card=<uid hex>|none) */
+  | { tMs: number; kind: 'pir'; on: boolean }
+  | { tMs: number; kind: 'lux'; lux: number }
+  | { tMs: number; kind: 'card'; uid: string };
 
 /** An event not yet stamped (the worker fills in tMs when applying it) */
 export type InputAction = InputEvent extends infer E ? (E extends unknown ? Omit<E, 'tMs'> : never) : never;
@@ -81,6 +86,8 @@ export interface InputLog {
   /** I2S audio parts at power-up (max98357a / inmp441) and the mic's test WAV (name under tools/audio/): become --i2s / --mic */
   i2s?: string[];
   mic?: string;
+  /** F-04a parts at power-up (DS18B20 / PIR / relay / LDR / RC522): become --ds18b20 / --pir / --relay / --ldr / --spi rc522 */
+  parts?: PartsDevs;
   events: InputEvent[];
   /** Simulated time (ms) when the log was taken: replaying up to here (--seconds) matches what the web showed */
   endMs?: number;
@@ -151,6 +158,12 @@ export function action(e: InputEvent): string | null {
       return `pwrkey=${e.long ? 'long' : 'short'}`;
     case 'key':
       return `key=${e.name},${e.down ? 1 : 0}`;
+    case 'pir':
+      return `pir=${e.on ? 1 : 0}`;
+    case 'lux':
+      return `lux=${e.lux}`;
+    case 'card':
+      return `card=${e.uid}`;
     case 'power':
       return null;
   }
@@ -184,7 +197,9 @@ export function cliArgs(log: InputLog, fw: string, inputsFile: string, seconds?:
   if (log.board) a.push('--board', log.board);
   if (log.grove) a.push('--grove', log.grove);
   if (log.i2c.length) a.push('--i2c', log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(','));
-  if (log.lcd || log.spi) a.push('--spi', log.spi ?? 'gc9a01');
+  const spi = [...(log.lcd || log.spi ? [log.spi ?? 'gc9a01'] : []), ...(rc522Spec(log.parts, log.chip) ? [rc522Spec(log.parts, log.chip)!] : [])];
+  if (spi.length) a.push('--spi', spi.join(','));
+  a.push(...partsArgs(log.parts));
   if (log.battery) a.push('--battery', `${log.battery.pct}${log.battery.usb ? ',usb' : ''}`);
   if (log.servo !== undefined) a.push('--servo', String(log.servo), '--power', log.power ?? 'usb');
   if (log.encoder) a.push('--encoder', [log.encoder.a, log.encoder.b, ...(log.encoder.sw !== undefined ? [log.encoder.sw] : [])].join(','));
@@ -266,6 +281,12 @@ export function fromAction(a: string): InputAction {
     case 'key':
       if (p.length === 2 && (p[1] === '0' || p[1] === '1')) return { kind: 'key', name: p[0], down: p[1] === '1' };
       break;
+    case 'pir':
+      return { kind: 'pir', on: v.trim() === '1' };
+    case 'lux':
+      return { kind: 'lux', lux: num(v) };
+    case 'card':
+      return { kind: 'card', uid: v.trim() };
   }
   throw new Error(`bad action "${a}"`);
 }

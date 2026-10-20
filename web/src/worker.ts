@@ -5,6 +5,7 @@ import { chipFromId, NPINS as CHIP_NPINS, RGB_GPIO, type SimChip } from './chipi
 import { realFetch, type RealReq } from './realfetch';
 import { useWorkerLocale, type Locale } from './i18n';
 import type { WasmExports } from './wasm.gen';
+import { attachParts, partAction, partsEmpty, type PartsDevs } from './partsdev.ts';
 import type { PowerMode, ElecFrame, Env, EncoderSpec, SonarSpec, PinDevFrame, VcdState, ToWorker, AdcSamples, Harness, PwmEvent, PcmBlock, AudioFrame, FromWorker, Snapshot, LcdKind, Battery } from './simmsg';
 
 const CPU_HZ = 160_000_000;
@@ -582,7 +583,7 @@ function postPaused(e: Exports) {
 }
 
 /** Boot fields; locale exists so any human text the worker makes follows the page (core errors are English already). */
-type BootMsg = { wasm: WebAssembly.Module; rom?: ArrayBuffer; romId: number; flash?: ArrayBuffer; flashId: number; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean | LcdKind; battery?: Battery; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; board?: string; grove?: string; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
+type BootMsg = { wasm: WebAssembly.Module; rom?: ArrayBuffer; romId: number; flash?: ArrayBuffer; flashId: number; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean | LcdKind; battery?: Battery; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; board?: string; grove?: string; parts?: PartsDevs; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
 const I2S_KIND: Record<string, number> = { max98357a: 0, inmp441: 1 };
 // ROM / firmware bytes by main-thread id (R-23): sent once, then every boot / seek copies them into a fresh instance.
 // ROMs are one per chip; firmware keeps only the latest (live.ts resends bytes whenever the id changes).
@@ -649,7 +650,13 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   if (m.sonar && e.tb_sonar_attach) e.tb_sonar_attach(m.sonar.trig, m.sonar.echo);
   // DHT11 takes readings from env: set it again once attached (the CLI also parses --dht11 before --env)
   if (m.dht11 !== undefined) e.tb_dht11_attach?.(m.dht11);
-  if (m.env && m.dht11 !== undefined) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
+  // F-04a parts: DS18B20 / PIR / relay / LDR / RC522 (CLI parts_args); DS18B20 reads env, so set it again like DHT11
+  const partsErr = attachParts(e, m.parts, simChip);
+  if (partsErr) {
+    post({ type: 'error', message: partsErr });
+    return null;
+  }
+  if (m.env && (m.dht11 !== undefined || m.parts?.ds18b20)) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
   hasPinDevs = !!(m.encoder || m.sonar || m.dht11 !== undefined);
   timingText = '\u0000';
   vcdKey = '';
@@ -660,7 +667,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   taskChunks = [];
   taskBytes = 0;
   flushIo(e, true);
-  inputLog = { version: 1, chip: simChip, i2c: [...(m.i2c ?? [])], lcd: m.lcd === true || m.lcd === 'gc9a01', ...(m.lcd === 'co5300' ? { spi: 'co5300' as const } : {}), ...(m.battery ? { battery: { ...m.battery } } : {}), ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.dht11 !== undefined ? { dht11: m.dht11 } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.board ? { board: m.board } : {}), ...(m.grove ? { grove: m.grove } : {}), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
+  inputLog = { version: 1, chip: simChip, i2c: [...(m.i2c ?? [])], lcd: m.lcd === true || m.lcd === 'gc9a01', ...(m.lcd === 'co5300' ? { spi: 'co5300' as const } : {}), ...(m.battery ? { battery: { ...m.battery } } : {}), ...(m.servo !== undefined ? { servo: m.servo, power } : {}), ...(m.encoder ? { encoder: { ...m.encoder } } : {}), ...(m.sonar ? { sonar: { trig: m.sonar.trig, echo: m.sonar.echo } } : {}), ...(m.dht11 !== undefined ? { dht11: m.dht11 } : {}), ...(m.touchInt !== undefined ? { touchInt: m.touchInt } : {}), ...(m.board ? { board: m.board } : {}), ...(m.grove ? { grove: m.grove } : {}), ...(partsEmpty(m.parts) ? {} : { parts: structuredClone(m.parts) }), ...(m.i2s?.length ? { i2s: [...m.i2s] } : {}), ...(m.micWav && m.micName ? { mic: m.micName } : {}), events: [] };
   record(e, { kind: 'power', on: true });
   if (m.env) record(e, { kind: 'env', temp: m.env.temp, humidity: m.env.humidity, pressure: m.env.pressure });
   // Harness applies at power-up and is logged (replay / rewind apply it at cycle 0, same as CLI --i2c-wire).
@@ -829,6 +836,12 @@ function apply(e: Exports, ev: InputAction) {
       if (withStr(e, ev.name, (p, n) => e.tb_board_key(p, n, down)) !== 0) return;
       break;
     }
+    case 'pir':
+    case 'lux':
+    case 'card':
+      // Rejected actions (card with no RC522, bad UID) stay out of the log, as the CLI would print an error on replay
+      if (!partAction(e, action({ tMs: 0, ...ev } as InputEvent) ?? '')) return;
+      break;
     case 'power':
       return;
   }

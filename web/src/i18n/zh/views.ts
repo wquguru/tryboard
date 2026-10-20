@@ -78,5 +78,20 @@ const d: Dict = {
   "{name} power": "{name} 供电",
   "{part} · I2C 0x{addr} · SDA IO{sda} SCL IO{scl} · drag to tilt the bench": "{part} · I2C 0x{addr} · SDA IO{sda} SCL IO{scl} · 拖动：倾斜台面",
   "“{part}” can’t go in yet": "还不能装「{part}」",
+  // F-04a tutorial parts (DS18B20 / PIR / relay / LDR / RC522)
+  "DS18B20 power (3.3 V)": "DS18B20 供电（3.3 V）",
+  "DS18B20 1-Wire data (4.7 kΩ pull-up)": "DS18B20 单总线数据（4.7 kΩ 上拉）",
+  "DS18B20 × {n} · DQ IO{pin} · temperature from the slider": "DS18B20 × {n} · DQ IO{pin} · 温度看滑块",
+  "PIR power (5 V)": "人体红外供电（5 V）",
+  "PIR motion output": "人体红外感应输出",
+  "HC-SR501 · OUT IO{pin} · press \"Wave\" to trigger": "HC-SR501 · OUT IO{pin} · 点“挥挥手”触发",
+  "Relay coil power (5 V)": "继电器线圈供电（5 V）",
+  "Relay · IN IO{pin} · red LED = contacts closed": "继电器 · IN IO{pin} · 红灯亮 = 触点吸合",
+  "Light sensor power (3.3 V)": "光敏模块供电（3.3 V）",
+  "Photoresistor · AO IO{pin} · light from the slider": "光敏电阻 · AO IO{pin} · 光照看滑块",
+  "RC522 chip select": "RC522 片选",
+  "RC522 reset": "RC522 复位",
+  "RC522 power (3.3 V only)": "RC522 供电（只能 3.3 V）",
+  "RC522 · SDA IO{pin} · tap a card below": "RC522 · SDA IO{pin} · 在下面刷卡",
 };
 export default d;

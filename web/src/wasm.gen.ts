@@ -124,6 +124,18 @@ export interface WasmExports {
   tb_dht11_attach(pin: number): void;
   /** DHT11 stats: 0 = frames sent, 1 = start pulses too short; NaN = not attached */
   tb_dht11_stat(which: number): number;
+  /** Attach a 1-Wire bus with `count` DS18B20s on `pin` (F-04c, = CLI --ds18b20 pin,count); call tb_env_set afterwards */
+  tb_ds18b20_attach(pin: number, count: number): void;
+  /** Attach an HC-SR501 PIR output on `pin` with `hold_s` seconds of hold (F-04d, = CLI --pir pin,hold) */
+  tb_pir_attach(pin: number, holdS: number): void;
+  /** Attach a relay module IN on `pin`; active_high 0 = closes on a low input (= CLI --relay pin[,low]) */
+  tb_relay_attach(pin: number, activeHigh: number): void;
+  /** Attach a photoresistor divider on ADC pad `pin` at `lux` (= CLI --ldr pin,lux); 0 = ok, 1 = not an ADC pin */
+  tb_ldr_attach(pin: number, lux: number): number;
+  /** # Safety Part script action pir=1|0 / lux=N / card=<uid hex>|none (same parsing as CLI parts_action); 0 ok, 1 rejected. p/len valid UTF-8 */
+  tb_part_action(p: number, len: number): number;
+  /** End-of-run lines for the F-04d parts (PIR / relay / LDR / RC522), newline separated; length, read via tb_report_ptr */
+  tb_parts_report(): number;
   /** Timing-sensitive code report (D-03) as JSON {"line","items":[{pin,kind,n}]} or {}; length, read via tb_report_ptr */
   tb_timing_report(): number;
   /** Start a fine capture (D-04): pin mask as two 32-bit halves, window [t0, t1] in seconds (same rounding as the CLI) */

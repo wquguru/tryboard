@@ -5,6 +5,7 @@ import { chipFromId, type SimChip } from './chipid';
 import { parseScript } from './checks';
 import { realFetch, type RealReq } from './realfetch';
 import type { WasmExports } from './wasm.gen';
+import { attachParts, partAction, partsTimed, type PartsDevs } from './partsdev.ts';
 
 export const CPU_HZ = 160_000_000;
 
@@ -46,6 +47,8 @@ export interface SimJob {
   sonar?: { trig: number; echo: number; cm?: number };
   /** DHT11 data GPIO (= CLI --dht11); attached means 1 ms slices too */
   dht11?: number;
+  /** F-04a parts (= CLI --ds18b20 / --pir / --relay / --ldr / --spi rc522); DS18B20, PIR or relay means 1 ms slices too */
+  parts?: PartsDevs;
   /** Run with the "real network" on (C-03, for checkpoints): the chip's HTTP to the internet is fetched on the spot and the replies are applied and kept in the result; the verdict needs internet and records no run ID */
   realnet?: boolean;
 }
@@ -129,6 +132,8 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
   for (const d of j.i2c) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
   // DHT11 before env so it takes the readings (CLI parses --dht11 before --env)
   if (j.dht11 !== undefined) e.tb_dht11_attach?.(j.dht11);
+  const partsErr = attachParts(e, j.parts, chipFromId(e.tb_chip()) ?? undefined);
+  if (partsErr) return { stdout: '', report: '', sim: 0, error: partsErr, bootError: partsErr };
   if (j.env) e.tb_env_set(j.env.temp, j.env.humidity, j.env.pressure);
   if (j.battery) e.tb_battery?.(j.battery.pct, j.battery.usb ? 1 : 0);
   if (j.lcd === 'co5300') e.tb_lcd_attach_kind?.(1);
@@ -197,6 +202,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         const [p, u] = act.slice(4).split(',');
         if (!Number.isNaN(Number(p)) && (u === undefined || u.trim() === 'usb')) e.tb_battery?.(Number(p), u ? 1 : 0);
       } else if (act.startsWith('pwrkey=')) e.tb_pwrkey?.(act.slice(7).trim() === 'long' ? 1 : 0);
+      else if (/^(pir|lux|card)=/.test(act)) partAction(e, act.trim());
       else if (act.startsWith('key=')) {
         // Same as CLI board_action: key=<name>[,1|0]
         const v = act.slice(4), c = v.lastIndexOf(','), lv = c > 0 ? v.slice(c + 1).trim() : '';
@@ -229,7 +235,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         }
       }
     }
-    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice && !j.realnet && j.servo === undefined && !j.encoder && !j.sonar && j.dht11 === undefined ? CPU_HZ / 100 : CPU_HZ / 1000;
+    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice && !j.realnet && j.servo === undefined && !j.encoder && !j.sonar && j.dht11 === undefined && !partsTimed(j.parts) ? CPU_HZ / 100 : CPU_HZ / 1000;
     const before = e.tb_cycles();
     const stop = e.tb_run(Math.min(slice, total - done));
     done += e.tb_cycles() - before;

@@ -1305,5 +1305,86 @@
   "scene": {
    "parts": []
   }
+ },
+ {
+  "id": "c3-ds18b20",
+  "title": "DS18B20 waterproof probes: 1-Wire bus, ROM search (ESP32-C3)",
+  "about": "Two DS18B20 probes share one 1-Wire bus on GPIO4 (4.7 kΩ pull-up to 3V3). The firmware's own bit-bang driver sends a reset, finds both 64-bit ROM codes with the search algorithm, checks the power mode and reads each probe once a second (750 ms 12-bit conversion). Drag the temperature slider: probe 2 reads 0.5 ℃ higher than probe 1. Open the logic analyzer on GPIO4 to see the reset / presence pulses and the time slots.",
+  "tags": [
+   "✓ Verified in sim",
+   "DS18B20",
+   "1-Wire",
+   "Bit-bang",
+   "ESP-IDF 5.5"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "ds18b20",
+     "pin": 4,
+     "n": 2
+    }
+   ]
+  },
+  "controls": [
+   "env"
+  ],
+  "chip": "esp32c3"
+ },
+ {
+  "id": "c3-pir-relay",
+  "title": "Night light: PIR motion + light sensor drive a relay (ESP32-C3)",
+  "about": "An HC-SR501 PIR on GPIO4, a photoresistor divider on GPIO3 (ADC) and a 5 V relay module on GPIO5. The relay closes only when it is dark and someone moves, and opens again once the PIR output drops. Set the light to Night, then press Wave on the PIR card: the relay LED lights and the serial log prints how long it stayed closed. The run ends after 11 s with a summary line.",
+  "tags": [
+   "✓ Verified in sim",
+   "PIR",
+   "Relay",
+   "Photoresistor",
+   "ADC",
+   "ESP-IDF 5.5"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "pir",
+     "pin": 4,
+     "hold": 2
+    },
+    {
+     "type": "ldr",
+     "pin": 3
+    },
+    {
+     "type": "relay",
+     "pin": 5
+    }
+   ]
+  },
+  "chip": "esp32c3"
+ },
+ {
+  "id": "c3-rc522",
+  "title": "RC522 RFID reader: read card UIDs over SPI (ESP32-C3)",
+  "about": "An MFRC522 reader on SPI2 (SCK GPIO4, MOSI GPIO6, MISO GPIO5, SDA / CS GPIO7, RST GPIO3). The firmware reads the chip version, turns the antenna on and polls for cards: REQA, anticollision and SELECT, then prints the UID, SAK and ATQA. Tap a card on the RC522 card (a 4-byte and a 7-byte UID) and take it away again. MIFARE authentication and block reads are not modelled.",
+  "tags": [
+   "✓ Verified in sim",
+   "RC522",
+   "RFID",
+   "SPI",
+   "ESP-IDF 5.5"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "rc522",
+     "cs": 7,
+     "sck": 4,
+     "mosi": 6,
+     "miso": 5,
+     "rst": 3
+    }
+   ]
+  },
+  "chip": "esp32c3"
  }
 ]

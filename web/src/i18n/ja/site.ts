@@ -813,5 +813,18 @@ const d: Dict = {
   "Board → PC": "ボード → PC",
   "Find the fault": "故障を探せ",
   "Find the fault: four broken benches to repair →": "故障を探せ：壊れたベンチ 4 台を直そう →",
+  // F-04a tutorial parts (DS18B20 / PIR / relay / LDR / RC522)
+  "Light sensor": "光センサー",
+  "HC-SR501 PIR motion sensor module": "HC-SR501 人感（PIR）センサーモジュール",
+  "3.3 V high while motion is seen, held for the delay pot time": "動きを検知すると 3.3 V High、遅延ボリュームの時間だけ保持",
+  "Needs 5 V on VCC; OUT is 3.3 V, safe for any GPIO. After power-up it settles for about a minute (not simulated). The jumper picks repeatable (H) or single (L) triggering; the simulator models H.": "VCC は 5 V が必要。OUT は 3.3 V なのでどの GPIO にも直結できます。電源投入後は約 1 分の安定待ちがあります（未シミュレーション）。ジャンパーで繰り返しトリガー（H）／単発（L）を選び、シミュレーターは H を再現します。",
+  "1-channel 5 V relay module": "1 チャンネル 5 V リレーモジュール",
+  "High-level trigger by default; some boards have an H / L jumper": "既定は High トリガー。H / L ジャンパー付きの基板もあります",
+  "The coil runs on 5 V; 3.3 V GPIO is enough for the input on most modules. Mains wiring on the contacts is dangerous: keep the simulation to low-voltage loads.": "コイルは 5 V 駆動。ほとんどのモジュールは入力を 3.3 V GPIO で駆動できます。接点に商用電源をつなぐのは危険です。シミュレーションは低電圧負荷に限ってください。",
+  "Photoresistor light sensor module (analog)": "フォトレジスター光センサーモジュール（アナログ）",
+  "Divider output: brighter = higher voltage": "分圧出力：明るいほど電圧が高い",
+  "Power it from 3V3, not 5 V, so AO never exceeds the ADC range. The reading is a rough light level, not a calibrated lux meter.": "AO が ADC の範囲を超えないよう、5 V ではなく 3V3 から給電します。読み値はおおよその明るさで、校正済みの照度計ではありません。",
+  "RC522 RFID reader module (13.56 MHz)": "RC522 RFID リーダーモジュール（13.56 MHz）",
+  "3.3 V only. The simulator reads card UIDs; MIFARE authentication and block reads are not modelled.": "3.3 V 専用。シミュレーターはカード UID を読みます。MIFARE 認証とブロック読み出しはモデル化していません。",
 };
 export default d;
