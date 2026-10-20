@@ -24,6 +24,7 @@
 /tools/models/node_modules
 /web/public/audio/
 /web/public/fonts/
+/web/asset-hashes.json
 /tools/fonts/.venv/
 
 # 本地运行时状态：会话锁、worktree 备份

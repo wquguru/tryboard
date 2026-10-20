@@ -1,5 +1,5 @@
-// Performance baseline (R-01): first-load bytes per entry, boot time, frame time, long tasks, sim speed.
-// Usage: node tools/webtest/perf.mjs [dist dir] [--json out.json] [--desktop] [--only home,weather] [--lang zh] [--rtt 150]; desktop 1440×900 and 4× CPU-throttled 390×844.
+// Performance baseline (R-01): first-load bytes per entry, boot time, frame time, long tasks, sim speed; --revisit (R-19) loads each entry twice with cache on (server sends dist/_headers + ETag / 304).
+// Usage: node tools/webtest/perf.mjs [dist dir] [--json out.json] [--desktop] [--only home,weather] [--lang zh] [--rtt 150] [--revisit]; desktop 1440×900 and 4× CPU-throttled 390×844.
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -19,6 +19,16 @@ const rtt = args.includes('--rtt') ? +args[args.indexOf('--rtt') + 1] : 0;
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.png': 'image/png', '.glb': 'model/gltf-binary' };
 // Serve gzip like a static host would, so byte counts reflect what users download.
 import zlib from 'node:zlib';
+// _headers rules (Netlify / Cloudflare Pages syntax): path pattern with * splats -> Cache-Control; unmatched paths get the hosts' default
+const cacheRules = [];
+if (fs.existsSync(path.join(dist, '_headers'))) {
+  let cur = null;
+  for (const line of fs.readFileSync(path.join(dist, '_headers'), 'utf8').split('\n')) {
+    if (/^\//.test(line)) cacheRules.push((cur = { re: new RegExp('^' + line.trim().replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$'), cc: null }));
+    else if (cur && /^\s+Cache-Control:/i.test(line)) cur.cc = line.split(':').slice(1).join(':').trim();
+  }
+}
+const cacheControl = (u) => cacheRules.find((r) => r.cc && r.re.test(u))?.cc ?? 'public, max-age=0, must-revalidate';
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   const f0 = path.join(dist, u === '/' ? 'index.html' : u);
@@ -28,8 +38,15 @@ const server = http.createServer((req, res) => {
     return res.end();
   }
   const ext = path.extname(f);
+  const st = fs.statSync(f);
+  const etag = `"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
+  const cache = { 'Cache-Control': cacheControl(u), ETag: etag };
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, cache);
+    return res.end();
+  }
   const gz = ['.html', '.js', '.css', '.wasm', '.json', '.svg'].includes(ext);
-  res.writeHead(200, { 'Content-Type': types[ext] || 'application/octet-stream', ...(gz ? { 'Content-Encoding': 'gzip' } : {}) });
+  res.writeHead(200, { 'Content-Type': types[ext] || 'application/octet-stream', ...cache, ...(gz ? { 'Content-Encoding': 'gzip' } : {}) });
   const s = fs.createReadStream(f);
   (gz ? s.pipe(zlib.createGzip({ level: 6 })) : s).pipe(res);
 });
@@ -83,12 +100,12 @@ function resKind(url) {
   return 'other';
 }
 
-async function measure(name, url, { mobile = false, ready = null, frameSec = 5, after = null } = {}) {
-  const page = await browser.newPage();
+async function measure(name, url, { mobile = false, ready = null, frameSec = 5, after = null, cache = false, ctx = browser } = {}) {
+  const page = await ctx.newPage();
   await page.setViewport(mobile ? { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { width: 1440, height: 900 });
   const cdp = await page.createCDPSession();
   await cdp.send('Network.enable');
-  await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
+  await cdp.send('Network.setCacheDisabled', { cacheDisabled: !cache });
   if (mobile) await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   if (rtt) await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: rtt, downloadThroughput: 1.25e6, uploadThroughput: 1.25e6 });
   let bytes = 0;
@@ -98,13 +115,17 @@ async function measure(name, url, { mobile = false, ready = null, frameSec = 5, 
   // R-20: when the first dictionary chunk is requested, relative to the HTML request (a waterfall shows up as a late start).
   let docTs = null;
   let dictAt = null;
+  const urlOf = {};
+  const paid = [];
   cdp.on('Network.requestWillBeSent', (e) => {
     kindOf[e.requestId] = resKind(e.request.url);
+    urlOf[e.requestId] = e.request.url;
     if (e.type === 'Document' && docTs === null) docTs = e.timestamp;
     if (kindOf[e.requestId] === 'dict' && dictAt === null && docTs !== null) dictAt = Math.round((e.timestamp - docTs) * 1000);
   });
   cdp.on('Network.loadingFinished', (e) => {
     bytes += e.encodedDataLength;
+    if (e.encodedDataLength > 0) paid.push([e.encodedDataLength, (urlOf[e.requestId] ?? '?').replace(base, '')]);
     const k = kindOf[e.requestId] ?? 'other';
     byKind[k] = (byKind[k] ?? 0) + e.encodedDataLength;
   });
@@ -139,7 +160,7 @@ async function measure(name, url, { mobile = false, ready = null, frameSec = 5, 
     return { fps: +((d.length / sec)).toFixed(1), p50: q(0.5), p95: q(0.95), max: q(1), simRate: s0 === null ? null : +(((s1 - s0) / ((performance.now() - w0) / 1000))).toFixed(3), long: __perf.long, longMs: Math.round(__perf.longMs), tasks: __perf.tasks };
   }, frameSec);
   await page.close();
-  return { name, url, mobile, loadMs, kb: Math.round(loadBytes / 1024), totalKb: Math.round(bytes / 1024), renderMs, dictAt, kindKb: Object.fromEntries(Object.entries(byKind).map(([k, v]) => [k, Math.round(v / 1024)])), readyMs, ...fr, errors: errors.length, firstError: errors[0] ?? '' };
+  return { name, url, mobile, loadMs, kb: Math.round(loadBytes / 1024), totalKb: Math.round(bytes / 1024), renderMs, dictAt, kindKb: Object.fromEntries(Object.entries(byKind).map(([k, v]) => [k, Math.round(v / 1024)])), readyMs, ...fr, errors: errors.length, firstError: errors[0] ?? '', paid: paid.sort((a, b) => b[0] - a[0]) };
 }
 
 const booted = () => (globalThis.__tbApp?.store.get().simSeconds ?? 0) > 0.2;
@@ -158,10 +179,21 @@ const S = [
   ['lab s3-lvgl', '/app?work=blank&example=s3-lvgl#bench', { ready: booted }],
 ];
 const rows = [];
+const REVISIT = args.includes('--revisit');
 for (const mobile of args.includes('--desktop') ? [false] : [false, true]) for (const [n, u, o] of S) {
   if (ONLY && !ONLY.some((x) => n.includes(x))) continue;
-  const r = await measure(n, u, { ...o, mobile });
-  rows.push(r);
+  // Revisit: a fresh profile per entry, shared by its two visits, so "first" really starts with an empty cache
+  const ctx = REVISIT ? await browser.createBrowserContext() : browser;
+  for (const visit of REVISIT ? ['first', 'second'] : [null]) {
+    const r = await measure(n, u, { ...o, mobile, cache: REVISIT, ctx });
+    if (visit) r.visit = visit;
+    rows.push(r);
+    line(mobile, visit ? `${n} (${visit})` : n, r);
+    if (visit === 'second') for (const [b, p] of r.paid) console.log(`[perf]          revisit paid ${String(b).padStart(7)} B  ${p}`);
+  }
+  if (REVISIT) await ctx.close();
+}
+function line(mobile, n, r) {
   console.log(`[perf] ${mobile ? 'mobile4x' : 'desktop '} ${n.padEnd(24)} load ${String(r.loadMs).padStart(5)} ms ${String(r.kb).padStart(5)} KB (total ${r.totalKb}) ready ${r.readyMs ?? '-'} ms render ${r.renderMs} ms dict@ ${r.dictAt ?? '-'} ms  fps ${r.fps} p50 ${r.p50} p95 ${r.p95} max ${r.max}  long ${r.long}/${r.longMs} ms  sim ${r.simRate ?? '-'}x  errors ${r.errors}${r.firstError ? ' (' + r.firstError + ')' : ''}`);
   console.log(`[perf]          bytes by kind (KB): ${Object.entries(r.kindKb).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')}`);
 }

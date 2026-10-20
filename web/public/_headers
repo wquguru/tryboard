@@ -1,0 +1,45 @@
+# R-19 cache policy (Netlify / Cloudflare Pages syntax; hosting notes in docs/ARCH.md "托管缓存"). Only one rule may set
+# Cache-Control for a path: Cloudflare Pages joins duplicate values with a comma (Netlify unverified), so pages and hashed directories never overlap.
+# Vite output (file names carry a hash) and fonts (tools/fonts/subset.py names each woff2 by content hash)
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+# Requested with ?v=<content hash> (tools/asset_hashes.py manifest inlined in every page)
+/wasm/*
+  Cache-Control: public, max-age=31536000, immutable
+/rom/*
+  Cache-Control: public, max-age=31536000, immutable
+/fw/*
+  Cache-Control: public, max-age=31536000, immutable
+/audio/*
+  Cache-Control: public, max-age=31536000, immutable
+# Pages: always revalidate (cheap 304 with the host's ETag); every other path keeps the host default (max-age=0, revalidate)
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/app.html
+  Cache-Control: no-cache
+/select.html
+  Cache-Control: no-cache
+/home.html
+  Cache-Control: no-cache
+/advisor.html
+  Cache-Control: no-cache
+/levels.html
+  Cache-Control: no-cache
+/licenses.html
+  Cache-Control: no-cache
+/app
+  Cache-Control: no-cache
+/select
+  Cache-Control: no-cache
+/home
+  Cache-Control: no-cache
+/advisor
+  Cache-Control: no-cache
+/levels
+  Cache-Control: no-cache
+/licenses
+  Cache-Control: no-cache

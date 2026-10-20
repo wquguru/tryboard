@@ -64,10 +64,29 @@ function dictPreload(): Plugin {
   };
 }
 
+/** R-19: content hashes of wasm / ROM / firmware / fonts.css (tools/asset_hashes.py, run by build_web.sh) inlined into every page,
+ *  so versioned URLs cost no extra request and a wasm-only change leaves JS chunk names alone. Missing file: plain URLs. */
+function assetHashes(): Plugin {
+  const file = fileURLToPath(new URL('./asset-hashes.json', import.meta.url));
+  return {
+    name: 'tb-asset-hashes',
+    // post: after Vite rewrites the public link to ./fonts/fonts.css for base './'
+    transformIndexHtml: { order: 'post', handler(html) {
+      if (!existsSync(file)) return html;
+      const map = JSON.parse(readFileSync(file, 'utf8')) as Record<string, string>;
+      const css = map['fonts/fonts.css'];
+      return {
+        html: css ? html.replace(/href="(\.?\/fonts\/fonts\.css)"/g, `href="$1?v=${css}"`) : html,
+        tags: [{ tag: 'script', children: `window.__TB_ASSETS__=${JSON.stringify(map)}`, injectTo: 'head-prepend' }],
+      };
+    } },
+  };
+}
+
 export default defineConfig({
   base: './',
   worker: { format: 'es', rollupOptions: { output: { chunkFileNames } } },
-  plugins: [react(), tailwindcss(), models(), dictPreload()],
+  plugins: [react(), tailwindcss(), models(), dictPreload(), assetHashes()],
   // Level definitions (firmware/levels.json) live outside web/, so the dev server must allow the parent directory.
   server: { fs: { allow: ['..'] } },
   build: {
