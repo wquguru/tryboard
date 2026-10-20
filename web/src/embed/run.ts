@@ -5,7 +5,7 @@ import '../app/lab.css';
 import { t } from '../i18n';
 import { createSession } from '../app/session';
 import { createStore } from '../app/store';
-import { restoreShare, type OpenedShare } from '../app/shareopen';
+import { restoreShare, shareReplay, type OpenedShare } from '../app/shareopen';
 import { shareKey, type ShareState } from '../app/sharestate';
 import { initialHistory } from '../app/bom';
 import type { AppState, StepCtx, WorkDef, WorkId } from '../app/types';
@@ -17,6 +17,8 @@ export interface EmbedInput {
   work: WorkDef;
   title: string;
   openLink: () => HTMLAnchorElement;
+  /** F-03b: play the shared actions at their original speed instead of fast-forwarding */
+  paced?: boolean;
 }
 
 function button(id: string, label: string): HTMLButtonElement {
@@ -128,6 +130,34 @@ export async function runEmbed(root: HTMLElement, inp: EmbedInput) {
     view.dataset.serial = con.hidden ? 'off' : 'on';
   });
   const ctx = { work, store, session, shell } as unknown as StepCtx;
-  await restoreShare(ctx, shared);
+  await restoreShare(ctx, shared, null, inp.paced);
+  const rep = shareReplay();
+  if (rep) {
+    // Paced replay: progress and "Skip to end" sit in the toolbar until the log's end time is reached
+    const tag = document.createElement('span');
+    tag.id = 'embedReplay';
+    tag.className = 'tb-embed-replay';
+    const end = (rep.endMs / 1000).toFixed(2);
+    const show = (x: number) => (tag.textContent = t('Replaying {t} / {end} s', { t: Math.min(x, rep.endMs / 1000).toFixed(2), end }));
+    show(0);
+    const skip = button('embedSkip', t('Skip to end'));
+    const off = store.subscribe((x) => show(x.simSeconds), ['simSeconds']);
+    const finish = () => {
+      off();
+      tag.remove();
+      skip.remove();
+      delete view.dataset.replay;
+    };
+    skip.addEventListener('click', async () => {
+      skip.disabled = true;
+      await rep.skip();
+      paused = false;
+      sync();
+      finish();
+    });
+    simtime.after(tag, skip);
+    view.dataset.replay = 'on';
+    void rep.done.then(finish);
+  }
   document.body.dataset.state = 'ready';
 }

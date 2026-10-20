@@ -959,5 +959,10 @@ const d: Dict = {
   "Take the card away": "把卡拿开",
   "The reader answers REQA / anticollision / SELECT with the card UID. MIFARE authentication and block reads are not modelled. SPI pins are the firmware's; only SDA (CS) is checked.": "读卡器对 REQA / 防冲突 / SELECT 回应卡 UID。MIFARE 认证和读块没有建模。SPI 引脚由固件决定，只检查 SDA（CS）。",
   "The relay follows IN: the red LED on the module lights while the contacts are closed. Coil and contact bounce are not modelled.": "继电器跟着 IN 走：触点吸合时模块上的红灯亮。线圈和触点抖动没有建模。",
+  // F-03b paced share replay
+  "Replay at original speed": "按原速回放",
+  "Replaying the shared actions at their original speed up to {t} s": "正在按原速回放分享者的操作，到 {t} s 为止",
+  "Replaying {t} / {end} s": "回放中 {t} / {end} s",
+  "Skip to end": "跳到结尾",
 };
 export default d;

@@ -959,5 +959,10 @@ const d: Dict = {
   "Take the card away": "카드 치우기",
   "The reader answers REQA / anticollision / SELECT with the card UID. MIFARE authentication and block reads are not modelled. SPI pins are the firmware's; only SDA (CS) is checked.": "리더는 REQA / 충돌 방지 / SELECT에 카드 UID로 응답합니다. MIFARE 인증과 블록 읽기는 모델링하지 않았습니다. SPI 핀은 펌웨어가 정하며 SDA(CS)만 확인합니다.",
   "The relay follows IN: the red LED on the module lights while the contacts are closed. Coil and contact bounce are not modelled.": "릴레이는 IN을 따릅니다. 접점이 닫혀 있는 동안 모듈의 빨간 LED가 켜집니다. 코일과 접점 바운스는 모델링하지 않았습니다.",
+  // F-03b paced share replay
+  "Replay at original speed": "원래 속도로 재생",
+  "Replaying the shared actions at their original speed up to {t} s": "공유된 조작을 원래 속도로 {t} s까지 재생하는 중입니다",
+  "Replaying {t} / {end} s": "재생 중 {t} / {end} s",
+  "Skip to end": "끝으로 건너뛰기",
 };
 export default d;

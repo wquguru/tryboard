@@ -20,6 +20,7 @@
 | 波 2 F-01b `.tryboard` 文件 | ☑ | 2026-10-20 ⋯「下载 .tryboard 文件」+ 换固件 / 拖到页面打开；自带 bin 带 sha256 校验；share.mjs 17/17；`Reviews/ab/F-01b.md` |
 | 波 2 F-02 分享卡 | ☑ | 2026-10-20 自写 QR（v1–40、ECC M）+ 1080×1350 卡片，MP4 优先、退 webm，另出 PNG；修 Safari 录屏扩展名；sharecard.mjs 15/15；`Reviews/ab/F-02.md` |
 | 波 2 F-03 嵌入页 | ☑ | 2026-10-20 `/embed?s=` 点击加载、不写 localStorage；embed.mjs 19/19；`_headers` 的 frame-ancestors 需部署后验证；F-03b 原速回放未做；`Reviews/ab/F-03.md` |
+| 波 3 F-03b 原速回放 | ☑ | 2026-10-20 `&replay=1` / 嵌入海报勾选框；worker 实时循环按 seekTo 同一规则施加事件，结束串口 + report = 快进；可暂停、跳到结尾；embed.mjs 28/28、share.mjs 全过；`Reviews/ab/F-03b.md` |
 | 波 2 F-04a 器件上台面（第 1 部分） | ◐ | 2026-10-20 DS18B20 / PIR / 光敏 / 继电器 / RC522 上网页（3D、接线、手机、输入日志）+ 3 个示例，parts.mjs 18/18；第 2 部分（ILI9341 / SH1106 等显示屏）等 F-04b |
 | 波 2 F-07a UART + MicroPython | ☑ | 2026-10-20 UART RX 超过一个 FIFO、`\xNN` 串口转义、`mpy-c3-rawpaste` 用例（bin 由 `fetch_third_party.sh --micropython` 可选下载，缺失则跳过） |
 

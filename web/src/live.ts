@@ -110,6 +110,8 @@ export interface SeekJob {
   env: Env;
   events: InputEvent[];
   untilMs: number;
+  /** F-03b: power up and stop at 0; once resumed the events play at their sim times and pacedEnd() resolves at untilMs */
+  paced?: boolean;
 }
 
 // Identity ids for ROM / firmware buffers (treated as immutable everywhere: callers swap buffers, never patch them).
@@ -135,6 +137,7 @@ export class LiveSim {
     this.w.onmessage = (ev: MessageEvent<FromWorker>) => {
       const m = ev.data;
       if (m.type === 'booted') {
+        this.endPaced(null);
         this.bootPin = m.bootPin;
         // Pose is not a boot parameter: apply it as the first input (logged, so replay matches); skip when flat.
         const p = this.pose;
@@ -164,6 +167,8 @@ export class LiveSim {
         o.onTasks?.(m);
       } else if (m.type === 'pcm') {
         o.onPcm?.(m.blocks);
+      } else if (m.type === 'replayed') {
+        this.endPaced(m.snap);
       } else if (m.type === 'seekProgress') {
         o.onSeekProgress?.(m.simSeconds);
       } else if (m.type === 'mark') {
@@ -444,6 +449,7 @@ export class LiveSim {
   }
   /** Rewind: wrap up the current run, re-power per job and fast-forward to untilMs, then pause; resume() continues live from there. */
   async seek(job: SeekJob): Promise<Snapshot> {
+    this.endPaced(null);
     await this.closeRun();
     const [wasm, rom] = [await loadWasmModule(), await loadRom(imageChip(job.flash))];
     this.flash = job.flash;
@@ -455,30 +461,43 @@ export class LiveSim {
     this.o.encoder = job.encoder;
     this.o.dht11 = job.dht11;
     this.o.parts = job.parts;
+    // Paced replay starts from power-up values: later events move them as they play
+    const until = job.paced ? 0 : job.untilMs;
     // Distance after a rewind stop = last dist in the log (initial distance of the next power-up).
-    const dl = [...job.events].reverse().find((e) => e.kind === 'dist' && Math.round(e.tMs * 160000) < Math.round(job.untilMs * 160000));
+    const dl = [...job.events].reverse().find((e) => e.kind === 'dist' && Math.round(e.tMs * 160000) < Math.round(until * 160000));
     this.o.sonar = job.sonar ? { ...job.sonar, cm: dl && dl.kind === 'dist' ? dl.cm : (this.o.sonar?.cm ?? 100) } : undefined;
     this.o.touchInt = job.touchInt;
     this.o.board = job.board;
     this.o.grove = job.grove;
-    const imu = [...job.events].reverse().find((e) => e.kind === 'imu' && Math.round(e.tMs * 160000) < Math.round(job.untilMs * 160000));
+    const imu = [...job.events].reverse().find((e) => e.kind === 'imu' && Math.round(e.tMs * 160000) < Math.round(until * 160000));
     this.pose = imu && imu.kind === 'imu' ? { pitch: imu.pitch, roll: imu.roll, yaw: imu.yaw } : { pitch: 0, roll: 0, yaw: 0 };
     // Supply after a rewind stop = last switch in the log (else the power-up one).
-    const sup = [...job.events].reverse().find((e) => e.kind === 'supply' && Math.round(e.tMs * 160000) < Math.round(job.untilMs * 160000));
+    const sup = [...job.events].reverse().find((e) => e.kind === 'supply' && Math.round(e.tMs * 160000) < Math.round(until * 160000));
     this.o.power = sup && sup.kind === 'supply' ? sup.mode : job.power;
-    const last = [...job.events].reverse().find((e) => e.kind === 'env' && Math.round(e.tMs * 160000) < Math.round(job.untilMs * 160000));
+    const last = [...job.events].reverse().find((e) => e.kind === 'env' && Math.round(e.tMs * 160000) < Math.round(until * 160000));
     this.env = last && last.kind === 'env' ? { temp: last.temp, humidity: last.humidity, pressure: last.pressure } : { ...job.env };
     this.sensorOffset = 0;
     // Harness likewise: last setting in the log after a rewind stop.
-    const before = (k: 'i2cwire' | 'antenna') => [...job.events].reverse().find((e) => e.kind === k && Math.round(e.tMs * 160000) < Math.round(job.untilMs * 160000));
+    const before = (k: 'i2cwire' | 'antenna') => [...job.events].reverse().find((e) => e.kind === k && Math.round(e.tMs * 160000) < Math.round(until * 160000));
     const iw = before('i2cwire');
     const an = before('antenna');
     this.o.harness = { i2cWire: iw && iw.kind === 'i2cwire' ? iw.cm : undefined, antenna: an && an.kind === 'antenna' ? an.db : undefined };
     Object.assign(this.frame, emptyFrame());
     return new Promise((r) => {
       this.seekWaiter = r;
-      this.send({ type: 'seek', wasm, ...this.blobs(rom, job.flash), i2c: job.i2c, env: job.env, lcd: job.lcd, battery: job.battery, servo: job.servo, power: job.power, encoder: job.encoder, sonar: job.sonar ? { ...job.sonar, cm: NaN } : undefined, touchInt: job.touchInt, board: job.board, grove: job.grove, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs, dht11: job.dht11, parts: job.parts, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.() });
+      this.send({ type: 'seek', wasm, ...this.blobs(rom, job.flash), i2c: job.i2c, env: job.env, lcd: job.lcd, battery: job.battery, servo: job.servo, power: job.power, encoder: job.encoder, sonar: job.sonar ? { ...job.sonar, cm: NaN } : undefined, touchInt: job.touchInt, board: job.board, grove: job.grove, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs, dht11: job.dht11, parts: job.parts, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.(), paced: job.paced });
+      if (job.paced) this.pacedRun = new Promise((p) => (this.pacedWaiter = p));
     });
+  }
+  private pacedWaiter: ((s: Snapshot | null) => void) | null = null;
+  private pacedRun: Promise<Snapshot | null> = Promise.resolve(null);
+  /** End of the paced replay started by the last seek (snapshot at untilMs), or null if it was cut short by a power-up / another seek */
+  pacedEnd(): Promise<Snapshot | null> {
+    return this.pacedRun;
+  }
+  private endPaced(snap: Snapshot | null) {
+    this.pacedWaiter?.(snap);
+    this.pacedWaiter = null;
   }
   /** Continue live after a rewind stop: this run counts as in progress again. */
   continueRun() {

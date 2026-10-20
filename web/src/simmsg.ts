@@ -204,6 +204,8 @@ export type ToWorker =
       untilMs: number;
       realnet?: boolean;
       net?: string;
+      /** F-03b paced replay: power up and stop at 0 (answers seeked); the next run applies events at their sim time, answers replayed at untilMs */
+      paced?: boolean;
     }
   /** Mark a point in time: answered with mark (which sim millisecond this step happened at). */
   | { type: 'mark'; id: number }
@@ -302,6 +304,8 @@ export type FromWorker =
   | { type: 'snapshot'; snap: Snapshot | null }
   | { type: 'seekProgress'; simSeconds: number }
   | { type: 'seeked'; snap: Snapshot; bootPin: number }
+  /** Paced replay (F-03b) reached untilMs: same cycle and snapshot as seek's; the run keeps going live */
+  | { type: 'replayed'; snap: Snapshot }
   | { type: 'mark'; id: number; tMs: number }
   /** Logic analyser events (raw tb_io_take records, 16 bytes each); reset = new power-up, earlier ones void. */
   | { type: 'io'; reset: boolean; data: Uint8Array; dropped: number }

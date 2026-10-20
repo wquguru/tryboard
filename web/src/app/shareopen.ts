@@ -4,6 +4,7 @@ import { t, locale } from '../i18n';
 import { fetchBuf } from '../assets';
 import { fromScript, type InputLog } from '../inputlog';
 import type { Snapshot } from '../simmsg';
+import type { SeekJob } from '../live';
 import { captureState, decodeState, fwHash, shareKey, shareLink, ShareDecodeError, type ShareChip, type ShareState } from './sharestate';
 import { defaultCaseHarness, loadCaseHarness, saveCaseHarness, scopeCaseHarness } from './harness';
 import { replayInputs } from './history';
@@ -53,9 +54,34 @@ const waitBoot = (ctx: StepCtx) =>
     }, 20000);
   });
 
-/** After the session is up: wire mods, heat, firmware, then re-power and fast-forward through the shared input log.
+/** Paced replay of a share in progress (F-03b): skip() fast-forwards to the end the usual way; done resolves at endMs (null if cut short) */
+export interface ShareReplay {
+  endMs: number;
+  done: Promise<Snapshot | null>;
+  skip(): Promise<Snapshot>;
+}
+let replaying: ShareReplay | null = null;
+/** The paced replay of the last restoreShare, while it has not ended */
+export const shareReplay = () => replaying;
+
+/** ?replay=1 on /app or /embed: play the shared actions at their original speed instead of fast-forwarding */
+export const wantsPaced = (search: string) => new URLSearchParams(search).get('replay') === '1';
+
+const restored = (snap: Snapshot, endMs: number, paced: boolean) =>
+  ((globalThis as { __tbShareRestored?: unknown }).__tbShareRestored = { stdout: snap.stdout, report: snap.report, endMs, simSeconds: snap.simSeconds, ...(paced ? { paced } : {}) });
+
+/** Fast-forward to the end of the shared log, then keep running live */
+async function fastForward(ctx: StepCtx, job: SeekJob) {
+  const snap = await ctx.session.seek(job);
+  restored(snap, job.untilMs, false);
+  ctx.session.continueRun();
+  return snap;
+}
+
+/** After the session is up: wire mods, heat, firmware, then re-power and fast-forward through the shared input log (paced: play it at its original speed, F-03b).
  * own = the user's bin from a .tryboard file (F-01b, checked against state.bin when the file was opened) */
-export async function restoreShare(ctx: StepCtx, sh: OpenedShare, own?: { buf: ArrayBuffer; name: string } | null): Promise<Snapshot | null> {
+export async function restoreShare(ctx: StepCtx, sh: OpenedShare, own?: { buf: ArrayBuffer; name: string } | null, paced = false): Promise<Snapshot | null> {
+  replaying = null;
   const { session, shell, store } = ctx;
   const st = sh.state;
   const notes: string[] = [t('Opened a shared bench: this is a local copy, your own work is untouched')];
@@ -86,10 +112,30 @@ export async function restoreShare(ctx: StepCtx, sh: OpenedShare, own?: { buf: A
         // Device header comes from this power-up (same scene, same devsOf), so the CLI replay header matches too
         const l: InputLog = await session.sim.inputLog();
         const inputs = replayInputs(fromScript(st.run.s));
-        snap = await session.seek({ flash: buf!, i2c: l.i2c, lcd: l.spi ?? l.lcd, battery: l.battery, servo: l.servo, power: l.power, encoder: l.encoder, sonar: l.sonar, dht11: l.dht11, parts: l.parts, touchInt: l.touchInt, board: l.board, grove: l.grove, env: inputs.env0 ?? store.get().env, events: inputs.events, untilMs: st.run.endMs });
-        (globalThis as { __tbShareRestored?: unknown }).__tbShareRestored = { stdout: snap.stdout, report: snap.report, endMs: st.run.endMs, simSeconds: snap.simSeconds };
-        session.continueRun();
-        notes.push(t('Replayed the shared actions up to {t} s; it keeps running from there', { t: (st.run.endMs / 1000).toFixed(2) }));
+        const job: SeekJob = { flash: buf!, i2c: l.i2c, lcd: l.spi ?? l.lcd, battery: l.battery, servo: l.servo, power: l.power, encoder: l.encoder, sonar: l.sonar, dht11: l.dht11, parts: l.parts, touchInt: l.touchInt, board: l.board, grove: l.grove, env: inputs.env0 ?? store.get().env, events: inputs.events, untilMs: st.run.endMs };
+        const endS = (st.run.endMs / 1000).toFixed(2);
+        if (paced && session.sim) {
+          snap = await session.seek({ ...job, paced: true });
+          const done = session.sim.pacedEnd();
+          const r: ShareReplay = {
+            endMs: job.untilMs,
+            done,
+            skip: () => {
+              replaying = null;
+              return fastForward(ctx, job);
+            },
+          };
+          replaying = r;
+          void done.then((end) => {
+            if (replaying === r) replaying = null;
+            if (end) restored(end, job.untilMs, true);
+          });
+          session.continueRun();
+          notes.push(t('Replaying the shared actions at their original speed up to {t} s', { t: endS }));
+        } else {
+          snap = await fastForward(ctx, job);
+          notes.push(t('Replayed the shared actions up to {t} s; it keeps running from there', { t: endS }));
+        }
       }
     } else if (st.bin && !own) notes.push(t('The firmware of this .tryboard file is no longer stored in this browser, so only the bench came along; open the file again'));
     else if (!st.fw) notes.push(t('The sharer’s own firmware is not in the link, so only the bench came along'));
