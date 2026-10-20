@@ -4,8 +4,9 @@ import type { SceneSpec } from '../bench3d/spec';
 import type { WireMods } from './wiring';
 import type { CaseHarness } from './harness';
 import { fromScript, toScriptBody, type InputEvent, type InputLog } from '../inputlog.ts';
+import { CHIP_ID, type SimChip } from '../chipid.ts';
 
-export type ShareChip = 'esp32' | 'esp32c3' | 'esp32s3';
+export type ShareChip = SimChip;
 export interface ShareEnv {
   temp: number;
   humidity: number;
@@ -108,7 +109,7 @@ function validV1(r: Record<string, unknown>): ShareStateV1 {
   if (r.sel !== undefined && typeof r.sel !== 'string') bad('sel');
   if (r.cp !== undefined && typeof r.cp !== 'string') bad('cp');
   if (r.fw !== undefined && (!isObj(r.fw) || typeof r.fw.ex !== 'string' || !/^[\w.-]+$/.test(r.fw.ex) || typeof r.fw.h !== 'string')) bad('fw');
-  if (r.chip !== undefined && !['esp32', 'esp32c3', 'esp32s3'].includes(r.chip as string)) bad('chip');
+  if (r.chip !== undefined && !Object.hasOwn(CHIP_ID, r.chip as string)) bad('chip');
   if (r.scene !== undefined && (!isObj(r.scene) || !Array.isArray(r.scene.parts))) bad('scene');
   if (r.ext5v !== undefined && typeof r.ext5v !== 'boolean') bad('ext5v');
   if (r.mods !== undefined && !isObj(r.mods)) bad('mods');

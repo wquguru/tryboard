@@ -24,7 +24,8 @@ for c in $CASES; do
   fw=${c%%:*}; lv=${c#*:}; bin="$ROOT/firmware/build/$fw/flash.bin"
   py=$("$ROOT/tools/check.py" "$bin" --level "$lv" 2>&1); prc=$?
   # Run outside the repo the way users do (`npx ./tryboard-*.tgz check ...`) to prove it needs no repo files
-  np=$(cd "$TMP" && npx --yes "$T" check "$bin" --level "$lv" 2>&1); nrc=$?
+  # Private npx cache: parallel accept runs in other worktrees reinstall the shared ~/.npm/_npx copy mid-run
+  np=$(cd "$TMP" && npm_config_cache="$TMP/.npm" npm_config_update_notifier=false npx --yes "$T" check "$bin" --level "$lv" 2>&1); nrc=$?
   fp=$(echo "$np" | head -1 | sed -n 's/.*fingerprint //p')
   verdict() { [ "$1" = 0 ] && echo "PASS" || echo "FAIL ($1)"; }
   if [ "$py" = "$np" ] && [ $prc = $nrc ]; then same='✅'; else same='❌'; bad=1

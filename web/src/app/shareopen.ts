@@ -4,7 +4,7 @@ import { t, locale } from '../i18n';
 import { fetchBuf } from '../assets';
 import { fromScript, type InputLog } from '../inputlog';
 import type { Snapshot } from '../simmsg';
-import { captureState, decodeState, fwHash, shareKey, shareLink, ShareDecodeError, type ShareState } from './sharestate';
+import { captureState, decodeState, fwHash, shareKey, shareLink, ShareDecodeError, type ShareChip, type ShareState } from './sharestate';
 import { defaultCaseHarness, loadCaseHarness, saveCaseHarness, scopeCaseHarness } from './harness';
 import { replayInputs } from './history';
 import { loadExamples } from './examples';
@@ -103,7 +103,7 @@ export async function makeShare(ctx: StepCtx): Promise<{ url: string; notes: str
     cp: sel?.kind === 'checkpoint' ? sel.id : null,
     fwName: session.fwName,
     fwBuf: session.fwBuf,
-    chip: session.chip as 'esp32' | 'esp32c3' | 'esp32s3',
+    chip: session.chip as ShareChip,
     scene: session.scene,
     defaultScene: ctx.custom ? null : (ex?.scene ?? { parts: [] }),
     ext5v: !!session.power?.ext5v,
