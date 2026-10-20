@@ -1,0 +1,3 @@
+# <name> <fqbn>  ->  firmware/build/arduino-m5-env-<name>/  (esp32 core 3.3.2); AtomS3 (S3) and StickC Plus2 (classic ESP32), Port A pins from M5Unified
+atoms3 esp32:esp32:m5stack_atoms3
+stickc_plus2 esp32:esp32:m5stack_stickc_plus2

@@ -30,6 +30,8 @@ export interface SimJob {
   touchInt?: number;
   /** Core board preset (= CLI --board, M5-09b), applied before every other device */
   board?: string;
+  /** Grove unit on Port A (= CLI --grove, M5-09d), right after the preset */
+  grove?: string;
   /** Always 1 ms slices (= CLI --inputs): used when replaying an input log exported from a live web run */
   fixedSlice?: boolean;
   /** = CLI --usb-log: the report includes the USB virtual host state and typed keys (P2-12) */
@@ -118,6 +120,11 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
     let ok = 1;
     bytesIn(e, new TextEncoder().encode(j.board), (p, n) => void (ok = e.tb_board_preset(p, n)));
     if (ok !== 0) return { stdout: '', report: '', sim: 0, error: `--board ${j.board}: rejected`, bootError: `--board ${j.board}: rejected` };
+  }
+  if (j.grove) {
+    let ok = 1;
+    bytesIn(e, new TextEncoder().encode(j.grove), (p, n) => void (ok = e.tb_grove(p, n)));
+    if (ok !== 0) return { stdout: '', report: '', sim: 0, error: `--grove ${j.grove}: rejected`, bootError: `--grove ${j.grove}: rejected` };
   }
   for (const d of j.i2c) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
   // DHT11 before env so it takes the readings (CLI parses --dht11 before --env)

@@ -104,6 +104,8 @@ export type ToWorker =
       touchInt?: number;
       /** Core board preset (M5-09b, = CLI --board), applied right after power-up before other devices */
       board?: string;
+      /** Grove unit on the preset's Port A (M5-09d, = CLI --grove: env3 / env4), right after the preset */
+      grove?: string;
       /** I2S audio devices: 'max98357a' (speaker) / 'inmp441' (mic); pins fixed per chip (board3d I2S_WIRING). */
       i2s?: string[];
       /** WAV the mic hears at power-up (silent if absent) and its file name (logged; replay uses --mic tools/audio/<name>). */
@@ -187,6 +189,8 @@ export type ToWorker =
       dht11?: number;
       touchInt?: number;
       board?: string;
+      /** Grove unit on the preset's Port A (M5-09d, = CLI --grove: env3 / env4), right after the preset */
+      grove?: string;
       i2s?: string[];
       micWav?: ArrayBuffer;
       micName?: string;

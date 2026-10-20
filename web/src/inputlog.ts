@@ -76,6 +76,8 @@ export interface InputLog {
   touchInt?: number;
   /** Core board preset at power-up (M5-09b): becomes --board on replay */
   board?: string;
+  /** Grove unit on the preset's Port A (M5-09d): becomes --grove on replay */
+  grove?: string;
   /** I2S audio parts at power-up (max98357a / inmp441) and the mic's test WAV (name under tools/audio/): become --i2s / --mic */
   i2s?: string[];
   mic?: string;
@@ -180,6 +182,7 @@ export function cliArgs(log: InputLog, fw: string, inputsFile: string, seconds?:
   const a = ['tryboard', 'run', fw];
   if (seconds !== undefined) a.push('--seconds', String(seconds));
   if (log.board) a.push('--board', log.board);
+  if (log.grove) a.push('--grove', log.grove);
   if (log.i2c.length) a.push('--i2c', log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(','));
   if (log.lcd || log.spi) a.push('--spi', log.spi ?? 'gc9a01');
   if (log.battery) a.push('--battery', `${log.battery.pct}${log.battery.usb ? ',usb' : ''}`);

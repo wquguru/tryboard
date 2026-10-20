@@ -1099,5 +1099,9 @@ const d: Dict = {
   "Generic dev board (no preset)": "汎用開発ボード（プリセットなし）",
   "Same as CLI --board {id}: the core attaches this board's screen, I2C devices and buttons. Upload firmware built for it ({chip}).": "CLI の --board {id} と同じ：コアがこのボードの画面、I2C デバイス、ボタンを接続します。このボード向けにビルドしたファームウェアをアップロードしてください（{chip}）。",
   "Keys you type while the bench has focus press the matching Cardputer keys.": "実験台にフォーカスがある間、入力したキーが Cardputer の対応するキーを押します。",
+  "Grove Port A": "Grove ポート A",
+  "Grove unit {name}": "Grove ユニット {name}",
+  "Grove unit removed": "Grove ユニットを外す",
+  "Same as CLI --grove {id}: temperature, humidity and pressure follow the environment controls.": "CLI --grove {id} と同じ：温度・湿度・気圧は環境コントロールに従います。",
 };
 export default d;

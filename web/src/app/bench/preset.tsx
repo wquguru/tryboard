@@ -6,6 +6,7 @@ import { AIO_CHIP } from "../../chipid";
 import { CHIP_SHORT } from "../../chips";
 import { Note, Sec } from "../../ui/panel";
 import type { Session } from "../types";
+import type { GroveId } from "../../bench3d/spec";
 
 export function PresetPick({ ses, onChange }: { ses: Session; onChange: () => void }) {
   const cur = boardDevs(ses.scene.board);
@@ -39,6 +40,42 @@ export function PresetPick({ ses, onChange }: { ses: Session; onChange: () => vo
           {cur.keyboard ? ` ${t("Keys you type while the bench has focus press the matching Cardputer keys.")}` : ""}
         </Note>
       )}
+      {cur?.preset && <GrovePick ses={ses} onChange={onChange} />}
+    </>
+  );
+}
+
+/** Grove units on Port A (M5-09d); "ENV III" / "ENV IV" are product names */
+const GROVE_UNITS: { id: GroveId; name: string; chips: string }[] = [
+  { id: "env3", name: "ENV III", chips: "SHT30 + QMP6988" },
+  { id: "env4", name: "ENV IV", chips: "SHT40 + BMP280" },
+];
+
+/** Port A unit (= CLI --grove); every M5 preset in boards.rs has Port A, so no per-board check. Changing it reboots. */
+function GrovePick({ ses, onChange }: { ses: Session; onChange: () => void }) {
+  const cur = GROVE_UNITS.find((u) => u.id === ses.scene.grove);
+  return (
+    <>
+      <Sec>{t("Grove Port A")}</Sec>
+      <select
+        id="grovePort"
+        aria-label={t("Grove Port A")}
+        defaultValue={ses.scene.grove ?? ""}
+        className="h-9 w-full cursor-pointer rounded-md border border-line bg-surface px-2 text-[13px] text-fg max-md:h-11"
+        onChange={(e) => {
+          const v = e.currentTarget.value as GroveId | "";
+          const { grove: _old, ...rest } = ses.scene;
+          const u = GROVE_UNITS.find((x) => x.id === v);
+          ses.applyScene(v ? { ...rest, grove: v } : rest, ses.power ?? { ext5v: false }, u ? t("Grove unit {name}", { name: u.name }) : t("Grove unit removed"));
+          onChange();
+        }}
+      >
+        <option value="">{t("None")}</option>
+        {GROVE_UNITS.map((u) => (
+          <option key={u.id} value={u.id}>{`${u.name} (${u.chips})`}</option>
+        ))}
+      </select>
+      {cur && <Note>{t("Same as CLI --grove {id}: temperature, humidity and pressure follow the environment controls.", { id: cur.id })}</Note>}
     </>
   );
 }
