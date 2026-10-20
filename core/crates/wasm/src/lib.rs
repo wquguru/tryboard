@@ -451,6 +451,14 @@ pub unsafe extern "C" fn tb_board_key(p: *const u8, len: usize, down: i32) -> i3
     with(1, |m| m.board_key(&s, down != 0).map_or(1, |_| 0))
 }
 
+/// # Safety
+/// Plug a Grove unit ("env3" / "env4", see `Machine::grove_attach`) into Port A after `tb_board_preset`; 0 = ok. p/len valid UTF-8
+#[no_mangle]
+pub unsafe extern "C" fn tb_grove(p: *const u8, len: usize) -> i32 {
+    let s = String::from_utf8_lossy(std::slice::from_raw_parts(p, len)).into_owned();
+    with(1, |m| m.grove_attach(&s).map_or(1, |_| 0))
+}
+
 /// Attached screen: 0 = SPI TFT (any DCS panel), 1 = CO5300, -1 = none
 #[no_mangle]
 pub extern "C" fn tb_lcd_kind() -> i32 {

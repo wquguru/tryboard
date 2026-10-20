@@ -49,6 +49,8 @@ pub struct BoardPreset {
     pub lcd: Option<&'static str>,
     pub i2c: &'static [I2cBus],
     pub touch_int: Option<u32>,
+    /// Grove Port A (SDA, SCL) for `Machine::grove_attach`; M5Unified `port_a_sda` / `port_a_scl` per board
+    pub grove_a: Option<(u32, u32)>,
     /// BMI270 (accel / gyro, then its AUX BMM150) mounting, the inverse of the remap M5Unified applies for this board
     pub imu_mount: Option<(Mount, Mount)>,
     /// Touch INT wired to an AW9523 input (port, bit) whose INTN drives this host GPIO (CoreS3: P1_2 -> G21)
@@ -99,6 +101,7 @@ const NONE: BoardPreset = BoardPreset {
     lcd: None,
     i2c: &[],
     touch_int: None,
+    grove_a: None,
     imu_mount: None,
     touch_int_aw9523: None,
     encoder: None,
@@ -122,6 +125,7 @@ const CORES3_OUTPUTS: &[(&str, u32)] = &[("i2s_mck", 0)];
 pub const BOARDS: &[BoardPreset] = &[
     BoardPreset {
         id: "m5dial",
+        grove_a: Some((13, 15)),
         name: "M5Dial",
         efuse_pkg: Some(0),
         lcd: Some("gc9a01@sclk=6,mosi=5,cs=7,dc=4,rst=8,bl=9"),
@@ -136,6 +140,7 @@ pub const BOARDS: &[BoardPreset] = &[
     },
     BoardPreset {
         id: "m5atoms3",
+        grove_a: Some((2, 1)),
         name: "M5AtomS3",
         efuse_pkg: Some(0),
         lcd: Some("gc9107@sclk=17,mosi=21,cs=15,dc=33,rst=34,bl=16"),
@@ -148,6 +153,7 @@ pub const BOARDS: &[BoardPreset] = &[
     },
     BoardPreset {
         id: "m5atoms3lite",
+        grove_a: Some((2, 1)),
         name: "M5AtomS3Lite",
         efuse_pkg: Some(0),
         buttons: &[btn("A", 41)],
@@ -160,6 +166,7 @@ pub const BOARDS: &[BoardPreset] = &[
     },
     BoardPreset {
         id: "m5atoms3r",
+        grove_a: Some((2, 1)),
         name: "M5AtomS3R",
         efuse_pkg: Some(1),
         psram_mb: 8,
@@ -175,6 +182,7 @@ pub const BOARDS: &[BoardPreset] = &[
     },
     BoardPreset {
         id: "m5cores3",
+        grove_a: Some((2, 1)),
         name: "M5StackCoreS3",
         efuse_pkg: Some(0),
         flash_mb: 16,
@@ -205,6 +213,7 @@ pub const BOARDS: &[BoardPreset] = &[
     },
     BoardPreset {
         id: "m5cores3se",
+        grove_a: Some((2, 1)),
         name: "M5StackCoreS3SE",
         efuse_pkg: Some(0),
         flash_mb: 16,
@@ -233,6 +242,7 @@ pub const BOARDS: &[BoardPreset] = &[
     },
     BoardPreset {
         id: "m5cardputer",
+        grove_a: Some((2, 1)),
         name: "M5Cardputer",
         efuse_pkg: Some(0),
         lcd: Some("st7789l@sclk=36,mosi=35,cs=37,dc=34,rst=33,bl=38"),
@@ -255,6 +265,7 @@ pub const BOARDS: &[BoardPreset] = &[
     },
     BoardPreset {
         id: "m5cardputeradv",
+        grove_a: Some((2, 1)),
         name: "M5CardputerADV",
         efuse_pkg: Some(0),
         lcd: Some("st7789l@sclk=36,mosi=35,cs=37,dc=34,rst=33,bl=38"),
@@ -280,6 +291,7 @@ pub const BOARDS: &[BoardPreset] = &[
     },
     BoardPreset {
         id: "m5stickcplus2",
+        grove_a: Some((32, 33)),
         name: "M5StickCPlus2",
         chip: Chip::Esp32,
         efuse_pkg: Some(6),
@@ -295,6 +307,7 @@ pub const BOARDS: &[BoardPreset] = &[
     },
     BoardPreset {
         id: "m5core2",
+        grove_a: Some((32, 33)),
         name: "M5StackCore2",
         chip: Chip::Esp32,
         efuse_pkg: Some(0),
@@ -318,6 +331,7 @@ pub const BOARDS: &[BoardPreset] = &[
     },
     BoardPreset {
         id: "m5core2v11",
+        grove_a: Some((32, 33)),
         name: "M5StackCore2",
         chip: Chip::Esp32,
         efuse_pkg: Some(0),
@@ -342,6 +356,7 @@ pub const BOARDS: &[BoardPreset] = &[
     },
     BoardPreset {
         id: "m5atomlite",
+        grove_a: Some((26, 32)),
         name: "M5AtomLite",
         chip: Chip::Esp32,
         efuse_pkg: Some(5),
@@ -351,6 +366,27 @@ pub const BOARDS: &[BoardPreset] = &[
         verified: true,
         note: "Lite vs Matrix is told by touch pads 4 / 7 (G13 / G27): equal idle counts read as Lite",
         ..NONE
+    },
+];
+
+/// An M5 Grove I2C unit: the chips it carries (kind, 7-bit address)
+pub struct GroveUnit {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub devices: &'static [(&'static str, u8)],
+}
+
+/// Addresses: docs.m5stack.com product_i2c_addr (Reviews/m5/boards.md "Grove units")
+pub const GROVE_UNITS: &[GroveUnit] = &[
+    GroveUnit {
+        id: "env3",
+        name: "Unit ENV III",
+        devices: &[("sht30", 0x44), ("qmp6988", 0x70)],
+    },
+    GroveUnit {
+        id: "env4",
+        name: "Unit ENV IV",
+        devices: &[("sht40", 0x44), ("bmp280", 0x76)],
     },
 ];
 
@@ -481,6 +517,30 @@ impl Machine {
         Ok(warn)
     }
 
+    /// Plug Grove unit `unit` (see `GROVE_UNITS`) into the current board's Port A; a bus on those pads is added
+    /// (Grove units carry their own pull-ups). Err without a preset / Port A, or on an unknown unit
+    pub fn grove_attach(&mut self, unit: &str) -> Result<(), String> {
+        let u = GROVE_UNITS.iter().find(|u| u.id == unit).ok_or_else(|| {
+            let ids: Vec<_> = GROVE_UNITS.iter().map(|u| u.id).collect();
+            format!("unknown Grove unit {unit} (known: {})", ids.join(", "))
+        })?;
+        let b = self
+            .board
+            .ok_or("Grove units need a board preset (--board)")?;
+        let (sda, scl) = b
+            .grove_a
+            .ok_or_else(|| format!("board {} has no Grove Port A", b.id))?;
+        let bus = self
+            .i2c_bus_add(sda, scl, true)
+            .ok_or_else(|| format!("Port A pads {sda}/{scl} already on a bus"))?;
+        for (kind, addr) in u.devices {
+            if !self.i2c_attach_bus(bus, kind, *addr) {
+                return Err(format!("I2C device {kind} unknown"));
+            }
+        }
+        Ok(())
+    }
+
     /// Preset applied by `board_preset`
     pub fn board(&self) -> Option<&'static BoardPreset> {
         self.board
@@ -527,5 +587,25 @@ mod tests {
             }
         }
         assert!(list().contains("m5dial"));
+        for u in GROVE_UNITS {
+            for (kind, addr) in u.devices {
+                assert!(
+                    tryboard_soc::devices::make_i2c(kind, *addr).is_some(),
+                    "{kind}"
+                );
+            }
+        }
+        // Port A must not reuse an on-board bus pad
+        for b in BOARDS {
+            if let Some((sda, scl)) = b.grove_a {
+                for bus in b.i2c {
+                    assert!(
+                        ![bus.sda, bus.scl].contains(&sda) && ![bus.sda, bus.scl].contains(&scl),
+                        "{}",
+                        b.id
+                    );
+                }
+            }
+        }
     }
 }

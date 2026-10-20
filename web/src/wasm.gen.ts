@@ -93,6 +93,8 @@ export interface WasmExports {
   tb_board_preset(p: number, len: number): number;
   /** # Safety Press (down = 1) / release a board key by legend name (M5-08 Cardputer); 0 ok, 1 no keyboard / unknown key. p/len valid UTF-8 */
   tb_board_key(p: number, len: number, down: number): number;
+  /** # Safety Plug a Grove unit ("env3" / "env4", see `Machine::grove_attach`) into Port A after `tb_board_preset`; 0 = ok. p/len valid UTF-8 */
+  tb_grove(p: number, len: number): number;
   /** Attached screen: 0 = SPI TFT (any DCS panel), 1 = CO5300, -1 = none */
   tb_lcd_kind(): number;
   /** Screen frame width / height in pixels (0 = no screen); `tb_lcd_ptr` holds w × h × 4 bytes */

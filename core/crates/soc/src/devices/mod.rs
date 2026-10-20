@@ -26,7 +26,9 @@ pub mod pcf85063;
 pub mod pcf8563;
 pub mod pins;
 pub mod qmi8658;
+pub mod qmp6988;
 pub mod rc522;
+pub mod sht;
 pub mod ssd1306;
 pub mod tca8418;
 
@@ -61,6 +63,11 @@ pub fn make_i2c(kind: &str, addr: u8) -> Option<Box<dyn I2cDevice>> {
         "ltr553" => Box::new(codec::Codec::ltr553(addr)),
         "gc0308" => Box::new(codec::Codec::gc0308(addr)),
         "aw88298" => Box::new(aw88298::Aw88298::new(addr)),
+        // Grove units (M5-09): ENV III = sht30 + qmp6988, ENV IV = sht40 + bmp280
+        "sht30" | "sht31" | "sht35" => Box::new(sht::Sht3x::new(addr)),
+        "sht40" | "sht41" | "sht45" => Box::new(sht::Sht4x::new(addr)),
+        "qmp6988" => Box::new(qmp6988::Qmp6988::new(addr)),
+        "bmp280" => Box::new(bme280::Bme280::bmp280(addr)),
         _ => return None,
     })
 }

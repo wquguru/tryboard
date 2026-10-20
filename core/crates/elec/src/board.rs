@@ -283,6 +283,9 @@ impl Board {
         match kind {
             // BME280 datasheet: 3.6 uA at 1 Hz T/H/P
             "bme280" => Some(0.000_003_6),
+            // BMP280 datasheet: 2.7 uA at 1 Hz; SHT30 / SHT40 / QMP6988: estimate, uA-level average at 1 Hz polling
+            "bmp280" => Some(0.000_002_7),
+            "sht30" | "sht40" | "qmp6988" => Some(0.000_005),
             // SSD1306: estimate, scales with lit pixels, ~10 mA
             "ssd1306" => Some(0.010),
             // GC9A01 round display: estimate, mostly the 25 mA backlight

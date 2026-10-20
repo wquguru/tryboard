@@ -77,6 +77,12 @@ impl PinBus {
             .find_map(|d| d.as_any_mut().downcast_mut::<T>())
     }
 
+    pub fn devices_of<T: 'static>(&mut self) -> impl Iterator<Item = &mut T> {
+        self.devices
+            .iter_mut()
+            .filter_map(|d| d.as_any_mut().downcast_mut::<T>())
+    }
+
     /// Pad mask of both lines
     pub fn mask(&self) -> u64 {
         (1 << self.sda) | (1 << self.scl)
@@ -267,6 +273,10 @@ impl PinBuses {
 
     pub fn device<T: 'static>(&mut self) -> Option<&mut T> {
         self.buses.iter_mut().find_map(|b| b.device::<T>())
+    }
+
+    pub fn devices_of<T: 'static>(&mut self) -> impl Iterator<Item = &mut T> {
+        self.buses.iter_mut().flat_map(|b| b.devices_of::<T>())
     }
 }
 
