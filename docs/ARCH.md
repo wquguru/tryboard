@@ -114,6 +114,7 @@ web/（Vite + TS）
 ## wasm 接口与 worker 消息（R-07）
 - `web/src/wasm.gen.ts` 由 `tools/gen_wasm_ts.py` 从 `core/crates/wasm/src/lib.rs` 生成，不手改；改了导出就重跑脚本（accept.sh 会查是否过期）。
 - 主线程 ↔ worker 的消息类型只在 `web/src/simmsg.ts` 定义，worker.ts / live.ts / app 各处都从它 import。
+- wasm 只编译一次（R-23）：`assets.ts` `loadWasmModule()` 缓存 `WebAssembly.Module`，`boot` / `seek` / 验收 job 里 `wasm` 是 Module（结构化克隆共享代码）；`boot` / `seek` 的 ROM / 固件带 `romId` / `flashId`（live.ts 按 ArrayBuffer 身份编号），worker 已有该 id 时省略字节（ROM 每芯片一份、固件只留最新）。`simrun.ts` 的 `SimJob.wasm` 字节或 Module 都收（npm CLI 传字节）。
 
 ## 网页 2D 界面（React，2026-10-17 起，见 DECISIONS 同日）
 - 栈：React 19 + Tailwind v4（`@tailwindcss/vite`）+ shadcn 风格组件（Radix 原语），仍是 Vite 多页面构建，不用 Next.js。公共件在 `web/src/ui/`：`tailwind.css`（唯一的颜色变量定义 + `@theme` 映射，亮暗两套）、`cn.ts`、`components.tsx`（Button / Badge / Card / Chip / Checkbox / Collapsible / StatusList / Table / ThemeToggle）。新组件先加到这里，页面里不重复写一套。

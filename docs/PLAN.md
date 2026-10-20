@@ -176,7 +176,7 @@
 | R-20 | 词典不阻塞首屏：按页面拆分（site / select / app），当前语言词典 HTML 里预加载，去掉串行瀑布 | zh 首页词典字节降 ≥ 50%；zh 首页首次渲染不劣化（perf.mjs）；i18n 测试与 lint 全过；四语言走查无缺 key | ☐ |
 | R-21 | ROM ELF 去掉不加载的 `.xt.prop` / `.xt.lit`（Apache-2.0 §4b：NOTICE 写明修改） | S3 ROM ≤ 640 KB；accept.sh、golden 全绿（ROM 符号名不变） | ☐ |
 | R-22 | perf.mjs 记全部字节并按类型拆（font / rom / fw / core / js / css） | 输出每页分类字节；`--only` / `--desktop` 子集 | ☑ 2026-10-19 |
-| R-23 | worker 缓存编译好的 `WebAssembly.Module`（boot / seek / verify 不重复编译、不重复拷贝 wasm 字节） | seek 10 次耗时不劣化且 web 指纹一致；无 console error | ☐ |
+| R-23 | worker 缓存编译好的 `WebAssembly.Module`（boot / seek / verify 不重复编译、不重复拷贝 wasm 字节） | seek 10 次耗时不劣化且 web 指纹一致；无 console error | ☑ 2026-10-20：`seektime.mjs` 短 seek 中位数 62.2 → 45.2 ms（−27%），3 s 整段 141–164 → 109–120 ms；长任务 0 → 0；指纹 / 回归全一致 |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
