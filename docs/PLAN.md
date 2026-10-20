@@ -191,6 +191,25 @@
 | E-07 | 示例固件「AI 网关仪表盘」（S3 + CO5300 + CST9220 + AXP2101 + PCF85063 + BLE NUS，LVGL 4 页：请求 / 上下文 / 会话 / 用量，左右滑翻页） | accept：收到心跳后屏上数值正确（ppm 区域检查）、滑动翻页；网页示例库加入，agent-browser 走查 Reviews/ab/E-07.md | ☑ E-07a 固件：firmware/s3-ai-dash + accept 用例 s3-ai-dash / -swipe / -usage（`lcd_regions` 区域像素检查，DECISIONS 2026-10-20 E-07a）；E-07b 网页：示例库 s3-ai-dash（AMOLED 板，虚拟电脑默认开）、「蓝牙」坞虚拟电脑面板（开关 / 状态 / 心跳编辑 / JSON 行，`pc=` 进输入日志），`tools/webtest/aidash.mjs` 14 项进 accept.sh，走查 Reviews/ab/E-07.md（DECISIONS 2026-10-20 E-07b） |
 | E-08 | （后置）LE 安全连接配对：虚拟电脑手写 P-256 ECDH + AES-CMAC（f4/f5/f6）、配对码输入 | 加密特征值的 NUS 固件配对成功、`sec:true` | ☐ |
 
+## M5 · M5Stack 整机（2026-10-20 人确认「完整实现并验证」；评估见 docs/M5STACK.md，证据 Reviews/m5/）
+验收固件统一用 M5Unified + M5GFX 的 Arduino 草图（`firmware/arduino/m5-*`，`tools/build_arduino.sh`），必须走真实自动识别路径（不预置 NVS 板型）；没有 QEMU 对照，结论标「未经真机标定」。
+| ID | 项 | 验收 | 状态 |
+|---|---|---|---|
+| M5-00 | 授权与构建：LICENSING 补 M5Unified / M5GFX（MIT）、LovyanGFX（BSD-2）、字体声明；build_arduino.sh 支持钉提交的库；探测草图 `m5-probe`（M5.begin 后打印板型 / 屏尺寸 / IMU / RTC / 触摸 / PMIC），按各板 FQBN 编出 | 6 种 FQBN（AtomS3、Dial、CoreS3、Cardputer、StickC Plus2、Core2）都编出 flash.bin；LGPL 三件套（协议、源码提交、构建配置）随 bin | ☐ |
+| M5-01 | SPI 屏底座：面板读回（RDDID 0x04 / RDDST 0x09 / D9h）+ 三线半双工 + dummy 位；通用 DCS 面板模型（分辨率 / GRAM 偏移 / ID / 引脚可配：GC9107、ST7735、ST7789、ILI9342C / E、GC9A01）；S3 SPI3 | 单测：各型号 RDDID 读回正确；现有 gc9a01 / co5300 用例 golden 逐字节不变 | ☐ |
+| M5-02 | I2C 底座：外接器件可挂 I2C1 / 按引脚挂；GPIO 开漏线与 + 外部上拉（软件 I2C 探测能看到器件）；eFuse 封装号可配（S3 / ESP32） | 单测 + 固件：软件 I2C 扫描与硬件 I2C 扫描结果一致；golden 不变 | ☐ |
+| M5-03 | S3 USB-Serial-JTAG 控制台：TX 接 CLI / 网页串口，报主机在线，RX 能输入 | Arduino S3 草图（CDC on boot）`Serial.println` 在 CLI 与网页逐字节一致；输入回显 | ☐ |
+| M5-04 | I2C 器件模型：MPU6886、BMI270(+BMM150 AUX)、BM8563、AW9523、AXP192、LP5562、TCA8418、FT6336U / FT3267 ID、INA3221、LTR-553 / AW88298 应答壳 | 每颗单测（ID、关键寄存器、随环境变化） | ☐ |
+| M5-05 | 核心板预设 `--board <m5-*>`（CLI + wasm）：自动挂板载器件、引脚、封装号；M5Dial 跑通 | m5-probe 在 Dial 上识别为 board_M5Dial；圆屏截图；旋钮 / 触摸 / RTC 输出与脚本一致 | ☐ |
+| M5-06 | AtomS3 / AtomS3 Lite / AtomS3R | 三块识别正确；屏截图；IMU 读数随姿态变化 | ☐ |
+| M5-07 | CoreS3 / CoreS3-SE（摄像头不做，SE 识别靠 GC0308 不应答） | 识别正确；ILI9342 截图；触摸 / IMU / PMIC 电量；喇叭 I2S 有输出 | ☐ |
+| M5-08 | Cardputer / Cardputer-Adv：ST7789、键盘部件（74HC138 矩阵 / TCA8418）、I2S PDM 接收 | 识别正确；脚本按键回显到屏；麦克风读数非零 | ☐ |
+| M5-09 | 网页：M5 板预设（3D 外壳程序生成、板载器件自动出现、Grove 口）+ Grove Unit：ENV III（SHT30 + QMP6988）、ENV IV（SHT40 + BMP280） | agent-browser：选 M5 板 → 示例跑起 → 接 ENV IV → 读数；网页与 CLI 指纹一致；390×844 无横向滚动 | ☐ |
+| M5-10 | 经典 ESP32 GP-SPI（HSPI / VSPI）+ SPI DMA | IDF spi_master 示例与 QEMU 对照 | ☐ |
+| M5-11 | 经典 ESP32 RMT（8 通道、64 字块） | IDF led_strip 示例；WS2812 帧与 C3 一致 | ☐ |
+| M5-12 | 经典 ESP32 I2S（含 PDM RX）+ ADC1 | IDF 示例；麦克风 / 电池电压读数 | ☐ |
+| M5-13 | StickC Plus2、Core2（v1.0 AXP192 / v1.1 AXP2101）、Atom Lite / Matrix | 各板 m5-probe 识别正确；屏截图 | ☐ |
+
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
 

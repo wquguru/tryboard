@@ -65,10 +65,12 @@
 ## 7. 授权
 
 - M5Unified、M5GFX：MIT；M5GFX 内含 LovyanGFX：FreeBSD（BSD-2）；附带字体（Adafruit BSD、IPA）要保留声明；`lgfx_qoi.c` 无许可头，待核。**三者都还不在 `docs/LICENSING.md`**：读源码理解行为可以，链接进验收固件 / 上站前先补 LICENSING 条目并在 DECISIONS 记录。
-- arduino-esp32 核心：混合授权，源文件头分别是 LGPL-2.1（`cores/esp32/Arduino.h`、`Client.h` 等 Arduino 派生文件）和 Apache-2.0，也不在 LICENSING.md。本地编译验收没问题；**用 Arduino 编出的 .bin 放进 `web/public/fw` 当内置示例 = 分发链接了 LGPL 代码的二进制**，要先在 LICENSING 定结论（LGPL 的再链接义务怎么满足），否则内置示例只用路线 A。
+- arduino-esp32 核心：混合授权，源文件头分别是 LGPL-2.1（`cores/esp32/Arduino.h`、`Client.h` 等 Arduino 派生文件）和 Apache-2.0，也不在 LICENSING.md。本地编译验收没问题；**用 Arduino 编出的 .bin 放进 `web/public/fw` 当内置示例 = 分发链接了 LGPL 代码的二进制**，按 LICENSING.md 已有的 LGPL 固件规则处理：每个 bin 旁给协议、精确源码提交与构建配置（三件套，`arduino-blink` 已这样做）。
 - 3D 外壳：M5Stack M5_Hardware（MIT）已是 ✅；去 logo。产品名照常提及，不用 M5 商标做页面品牌。
 
-## 8. 建议的 PLAN 条目（未写入 PLAN，待人确认后再加）
+## 8. PLAN 条目
+
+2026-10-20 人确认「完整实现并验证」，已写进 PLAN「M5」节（编号以 PLAN 为准，下表是评估时的初稿）。
 
 | 建议 ID | 内容 | 验收 |
 |---|---|---|
