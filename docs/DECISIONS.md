@@ -1264,3 +1264,11 @@
 - **3D 固定槽位**：五种元件各有固定 x 偏移和离板距离，只按信号脚决定放在面包板哪一侧，避免同时放多个时重叠。
 - **控制放在示例面板**：教学元件的控制同时出现在「这个示例」面板，不必先点开元件卡（回归脚本也靠它）。
 - 备选：每个元件单独做显示面板 —— 否，简报限定不做显示面板。
+## 2026-10-20 ILI9341 / ST7789 裸屏 + SH1106（F-04b）
+- **裸屏用新名字，不改 `st7789`**：`st7789` 仍是 StickC Plus2 的 135×240 偏移玻璃（M5 预设、esp32-spi-lcd 依赖它）；裸模块用 `st7789-240x240`（1.3"，GRAM 240×320 的 (0,0) 起 240 行）和 `st7789-240x320`。PanelSpec 名字 `ST7789_240` / `ST7789_320` 不带空格，accept.sh 的 `LCD (\w+) non-black` 才匹配得上。备选：`st7789` 加尺寸参数（否：要改已有解析和预设）。
+- **ILI9341 参数**：常白 TN（不 INVON 就是真彩）、BGR 子像素（IDF spi_lcd_touch 示例同样设 BGR）；RDDID 回读 00 93 41（取 ID4 的值，真机 04h 回读未核）。ST7789 裸模块按 RGB、常黑 IPS。
+- **C3 接受全部 DCS 屏**：`lcd_attach` 只拒绝 CO5300，仍用固定 `lcd_pin` 接线（与 GC9A01 相同），不支持 `@pins`；只改了 `esp32c3` 的 `attach_lcd(kind)` 签名（唯一调用方 chip.rs）。
+- **ILI9341 驱动用组件 `espressif/esp_lcd_ili9341` 2.1.0**：核过 license.txt 为 Apache-2.0，LICENSING 加一行；这样验收的是真实的厂商初始化序列（18 条厂商寄存器）。备选：固件里自己发命令（否：不是常见用法）。
+- **SH1106 单独一个模型**（`devices/sh1106.rs`），对外接口与 Ssd1306 相同（`render` 128×64、`ascii`、`lit_pixels`、`display_on`、`version`、`frame`），`Machine::sh1106()` 另给访问器；CLI 摘要行同样以 `OLED lit pixels` 开头，accept 的 `oled_min_pixels` 通用。DC-DC（ADh）上电默认开，SSD1306 的 20h / 21h / 22h / 8Dh 不认、计入 `foreign_cmds`，所以 SSD1306 驱动接 SH1106 会像真机一样错位 2 列、只写一页。
+- **一个 ST7789 固件跑两种玻璃**：s3-st7789 按 240×320 画；240×240 用例（`fw` 字段）只看上 240 行，下边框和白带落在玻璃外，正是真机上"买错尺寸"的样子。
+- **护栏两处顺带改动**：`tools/check_config.py` 收集 `--spi` 设备名的正则从 `\w+` 放宽为 `[\w|-]+` 并按 `|` 拆分（带连字符的裸屏名和 usage 里的 `a|b|c` 写法才认得出）；CLI 的 OLED 摘要挪到新文件 `cli/src/oled.rs`（`report_oled`），`run()` 和 main.rs 不超 lint_size 上限。

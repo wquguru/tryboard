@@ -849,6 +849,11 @@ impl Machine {
         self.i2c_dev::<Ssd1306>()
     }
 
+    /// SH1106 1.3" OLED (F-04b); separate from `oled()` because the RAM layout differs
+    pub fn sh1106(&mut self) -> Option<&mut tryboard_soc::devices::sh1106::Sh1106> {
+        self.i2c_dev::<tryboard_soc::devices::sh1106::Sh1106>()
+    }
+
     /// Attach a screen on SPI2: "gc9a01" (C3 / S3, pins `lcd_pin`) or "co5300" (S3 only, pins `co5300_pin`);
     /// other chips / names return false
     pub fn lcd_attach(&mut self, kind: &str) -> bool {

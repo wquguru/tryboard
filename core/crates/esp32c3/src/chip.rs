@@ -213,10 +213,11 @@ impl Chip for Esp32c3 {
         true
     }
     fn lcd_attach(&mut self, kind: LcdKind) -> bool {
-        if kind != LcdKind::Gc9a01 {
+        // Any 4-wire DCS panel on the fixed `lcd_pin` wiring; the QSPI AMOLED needs pins C3 doesn't route
+        if kind.spec().is_none() {
             return false;
         }
-        self.bus.attach_lcd();
+        self.bus.attach_lcd(kind);
         true
     }
     fn lcd(&mut self) -> Option<&mut Lcd> {

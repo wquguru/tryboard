@@ -44,7 +44,8 @@ def load():
     make = re.search(r"fn make_i2c.*?\n}\n", dev, re.S)
     cfg["i2c_devices"] = set(re.findall(r'"(\w+)"', make.group(0))) if make else set()
     cli = read("core/crates/cli/src/main.rs")
-    cfg["spi_devices"] = set(re.findall(r"--spi (\w+)", cli))
+    # Usage alternatives like "--spi ili9341|st7789-240x240" (F-04b bare panels have hyphenated names)
+    cfg["spi_devices"] = {n for m in re.findall(r"--spi ([\w|-]+)", cli) for n in m.split("|")}
     # Pin-spec panels (only valid with @pins) are listed in the usage text: "(S3 / ESP32 panels gc9a01 ...;"
     cfg["spi_panels"] = {n for m in re.findall(r"panels ([\w ]+)[;)]", cli) for n in m.split()}
     parts = read("web/src/catalog/parts.ts")
