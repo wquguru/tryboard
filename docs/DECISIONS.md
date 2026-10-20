@@ -1246,3 +1246,11 @@
 - **sandbox**：条目要求 `allow-scripts allow-same-origin`；但这样「在 TryBoard 打开」的 `target=_blank` 会被拦。文档给 RS-4 的完整写法（加 `allow-popups allow-popups-to-escape-sandbox`），并注明前两项是能运行的最小集合；测试宿主页用完整写法。
 - **`_headers`**：只给 `/embed`、`/embed.html` 加 `frame-ancestors *`（与 Cache-Control 同块），其它页面不加 `frame-ancestors 'self'`（RS-4 建议的），避免影响现有托管行为，上线前再定。
 - **工具栏尺寸**：鼠标设备且 iframe ≥ 480 px 时按钮 32 px（博客里 iframe 常 < 768 px，台面要留高度）；触屏 / 窄屏保持 44 px。
+
+## 2026-10-20 M5-09（Grove 单元与网页 M5 板）
+- **ENV 单元模型（M5-09a）**：QMP6988 整数补偿、SHT3x / SHT4x 命令集参考 M5Unit-ENV（MIT）与 Sensirion / QST 数据手册重写，未复制；OTP 用一组让多项式在量程内单调的虚构值。Grove 单元挂独立引脚总线（`i2c_bus_add`），不占 I2C0。`env_set` 改为更新所有总线上的环境传感器。
+- **网页板 id 即内核预设 id（M5-09b）**：`BoardDevs.preset`；worker 在 `tb_boot` 后立即 `tb_board_preset`（与 CLI 同序），不匹配就拒绝运行。备选：独立 `scene.preset` 字段（否：一块板两个 id）。`tools/check.py` 指纹对任何 LCD 控制器都保留像素数行（原来只 GC9A01，导致 M5 板网页 / CLI 指纹永不相等）。
+- **Cardputer 键盘**：宿主 `KeyboardEvent.code` → keyboard.rs 键名（Meta → opt），仅实验台有焦点时生效，日志 `key=<name>,1|0`，与 CLI 相同。
+- **3D 外壳（M5-09c）**：一个参数化生成器 + 毫米尺寸表（`web/src/bench3d/m5shell.ts`），不画商标 / logo，不用外部模型。按键松开时主动拉高引脚：经典 ESP32 的 G37 / G39 没有内部上拉，悬空会读成按下。
+- **Grove 单元放在 `SceneSpec.grove`（M5-09d）**：与 board 并列，不作为实验台上的可拖零件；只有 M5 预设时才送进内核。备选：可拖 Grove 零件 + 连线（否：Port A 引脚固定，连线没有可选项）。
+- **撤销 / 重做竞态**：seek 进行中按下的撤销 / 重做不再丢弃，记下目标步，seek 结束后再跳（wiremode.mjs 原先偶发失败，与 M5 合并无关）。m5board.mjs 回放比对改为暂停后一次快照取输入日志与串口，逐字节比较。

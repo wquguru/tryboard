@@ -135,6 +135,10 @@
 | 经典 ESP32 I2S TX / PDM RX / ADC1（M5-12） | ☑ | esp32-i2s-tone（440 Hz）、esp32-pdm-mic（1 kHz，PCM 层）、esp32-adc（五档误差 ≤ 1 mV） | PDM 半字顺序**未解决**（M5Unified 颠倒，见 DECISIONS） |
 | 经典 ESP32 M5 板（M5-13） | StickC Plus2 ✅ · Core2 / v1.1 ✅ · Atom Lite ✅ | 检测 / 屏 / IMU / RTC / 电池 / 按钮 / 麦克风（peak > 0，频率待定）/ 扬声器 2 kHz / WS2812 | 蜂鸣器无模型；Atom Matrix 预设未做；没有网页验收 |
 | 经典 ESP32 四线 PSRAM + flash 容量随镜像头（M5-14） | ✅ 驱动层（esp32-psram，2/4/8MB；4MB 与 QEMU 一致） | 同左 | himem / 时序未建模；C3 / S3 的 flash 容量随头部待做 |
+| Grove ENV III（SHT30 + QMP6988）/ ENV IV（SHT40 + BMP280）（M5-09a） | ✅ 驱动 / 场景：S3 env3 / env4、ESP32 env3（arduino-m5-env3 / env4 / env3-stickc） | CLI `--grove env3\|env4`，wasm `tb_grove` | IIR、加热自热未建模；功耗为估算 |
+| 网页 M5 板预设（M5-09b） | ✅ 12 个预设可选；网页 = CLI `--board` 指纹与输入日志回放一致（m5board.mjs：AtomS3、StickC Plus2、Cardputer 键盘） | tools/webtest/m5board.mjs | M5 Arduino 固件仅本地 |
+| 网页 M5 3D 外壳（M5-09c） | ✅ 参数化外壳（StickC Plus2 / Core2 / CoreS3 / AtomS3 系 / Atom Lite / Dial / Cardputer），屏跟随固件、按键可点、Atom WS2812 与 StickC 红灯 | agent-browser 走查 + m5board / mobile 回归 | Core2 触摸按键区未响应；Dial 旋钮不可转；StickC 侧键需旋转视角；悬停仍显示「开发板」 |
+| 网页 Grove ENV III / IV（M5-09d） | ✅「Grove Port A」下拉；网页 = CLI `--board --grove` 指纹与回放一致（含中途改环境） | m5board.mjs：AtomS3+env4、StickC Plus2+env3 | 无 3D 单元模型 |
 
 ## 电气（`core/crates/elec`，C3 / S3 共用）
 | 模块 | 状态 | 验收 | 备注 |
