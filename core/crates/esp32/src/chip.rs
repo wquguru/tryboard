@@ -3,6 +3,7 @@
 
 use crate::{Esp32, Stop, MMIO_HIGH, MMIO_LOW};
 use std::collections::{HashMap, VecDeque};
+use tryboard_soc::adc::AdcModel;
 use tryboard_soc::chip::{self, Chip};
 use tryboard_soc::devices::audio::Audio;
 use tryboard_soc::devices::lcd::{Lcd, LcdKind, LcdPins};
@@ -151,6 +152,12 @@ impl Chip for Esp32 {
             *p = mv;
         }
     }
+    fn adc_model(&self) -> Option<&AdcModel> {
+        Some(&self.bus.adc.model)
+    }
+    fn adc_model_mut(&mut self) -> Option<&mut AdcModel> {
+        Some(&mut self.bus.adc.model)
+    }
 
     fn i2c0(&mut self) -> &mut I2c {
         &mut self.bus.i2c0
@@ -203,6 +210,14 @@ impl Chip for Esp32 {
     }
     fn audio_mut(&mut self) -> &mut Audio {
         &mut self.bus.audio
+    }
+    fn attach_speaker(&mut self) -> bool {
+        self.bus.attach_speaker();
+        true
+    }
+    fn attach_mic(&mut self) -> bool {
+        self.bus.attach_mic();
+        true
     }
 
     fn iotrace(&mut self) -> &mut IoTrace {

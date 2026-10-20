@@ -660,6 +660,8 @@ pub fn default_efuse() -> [u32; 0x200 / 4] {
     e[3] |= 1 << 15;
     // CHIP_VER_REV2 (BLK0 RDATA5 bit 20); together with APB_CTRL_DATE bit 31 this means revision 3
     e[5] |= 1 << 20;
+    // ADC_VREF (BLK0 bits 136..140) for adc_cali line fitting (M5-12)
+    tryboard_soc::adc::burn_efuse(tryboard_soc::adc::AdcChip::Esp32, &mut e);
     e
 }
 
