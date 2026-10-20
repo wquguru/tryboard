@@ -569,7 +569,7 @@
 - 只做有后端的功能，没有的灰显并写明原因，不造假数据：
   - 「代码」页签灰显：作品只有编译好的固件，没有源码数据。
   - 台面「放零件」工具灰显：零件清单归采购步骤管；左栏零件库只链到采购（#shop）。
-  - 「分享」只复制作品链接：没有服务端，也没有把连线 / 环境编进链接的格式，分享改动不做。
+  - 「分享」只复制作品链接：没有服务端，也没有把连线 / 环境编进链接的格式，分享改动不做。（2026-10-20 被 F-01a 取代：改动编进 `?s=`，见文末）
 - 改接线（W 键 / 接线表）只改台面上的线和接线检查（`WireMods.retarget` + `pick.rewire`），不给模拟器重新上电，改动不跨刷新保存。
   - 理由：重新上电会打断时间线和指纹对拍；接线检查已经能说清「接错会怎样」。
   - 替代：改接后整机复位重跑——更真实，但要改 worker 协议，留给以后。
@@ -1153,3 +1153,15 @@
 - 结论写在 `docs/M5STACK.md`：可行，先做共用底座（SPI 屏读回、通用屏模型、I2C1 挂设备、USB-Serial-JTAG 串口、S3 SPI3、eFuse 封装号），再按 M5Dial → AtomS3 → CoreS3 → Cardputer 接入；经典 ESP32 板等经典 SPI / RMT / I2S 补齐。不做 Tab5（P4）、NanoC6（C6）、PaperS3。
 - 参考了 M5Unified `3590358` / M5GFX `a8ebd7b`（MIT，内含 LovyanGFX BSD-2）的源码来理解自动识别流程，只读、未抄；三者尚未进 LICENSING.md，动手前补。
 - 建议的 M5-00 – M5-10 条目尚未写进 PLAN，等人确认范围。
+
+## 2026-10-20 · F-01a 分享链接（台面状态 v1）
+- 格式：JSON `{v:1, w, sel?, cp?, fw?:{ex,h}, chip?, scene?, ext5v?, mods?, harness?, env?, heat?, loc?, run?:{endMs,s}, cut?}` → `CompressionStream('deflate-raw')` → base64url → `?s=`；编解码在 `web/src/app/sharestate.ts`（纯模块，F-01b / F-02 / F-03 共用）。不加 npm 依赖。
+  - 输入脚本存成 `--inputs` 正文（换行分隔、秒精确到微秒），不用 `toScriptInline`：和 CLI 文件同一格式，Node 里解码后直接写文件就能重放；新增 `inputlog.fromScript / fromAction / toScriptBody` 做反向解析。
+  - 场景只在和示例默认不同（或自定义作品、开了外接 5V）时才写，链接短（weather 按 BOOT + 改温度约 233 字符）。
+  - 版本号比当前新 → 提示刷新；解不开 / 校验不过 → 提示后开默认台面。字段逐个校验，脚本必须能被 `fromScript` 解析。
+- 打开链接：存成本地副本，键 `share:<fnv32(s)>`（`work.key`），BOM、放置、装配线束都走这个键（`scopeCaseHarness`、`loadBom(work, template)` 用原作品的清单做起点），不覆盖自己的作品。看的人保持自己的界面语言（`loc` 只记录不切换）。
+- 恢复：等首次开机 → 必要时换成链接里的内置固件 → 哈希不同就提示「示例固件已更新」→ `session.seek` 重新上电快进到 endMs → 自动接着跑。台面「历史」不记录这一段快进（v1 已知限制）。
+- 隐私：真网开关（`realnet`）和回包（`netreply`）整条丢掉；手机提交的表单里 ssid / pass / password / psk / key 等字段，非演示值（MyHome / 12345678 / wrongpass）换成 `***`；固件热点的 `join` 保留（是固件自己的热点）。被剥的项记进 `cut`，两边都提示。
+- 自带 .bin 不进链接（只带台面，提示下一版导出文件）；超过 8000 字符去掉输入脚本、只留台面和首个环境值，同样提示。
+- 开机时的线束（i2cwire / antenna）、真网开关、网络预设本来就经 worker `apply()` 记进输入日志，不用补。
+- asmstate / caseparams 只读不写；sharestate 里自带一个 fnv32（`custom.ts` 的会带进重依赖）。

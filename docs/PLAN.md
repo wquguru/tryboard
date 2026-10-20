@@ -217,7 +217,7 @@
 
 | ID | 内容 | 验收 | 状态 |
 |---|---|---|---|
-| F-01a | 台面状态 v1 + `?s=` 分享链接（内置固件；剥 Wi-Fi 凭据和真网回包） | share.mjs：链接打开后串口与 CLI 重放逐字节一致 | ◐ |
+| F-01a | 台面状态 v1 + `?s=` 分享链接（内置固件；剥 Wi-Fi 凭据和真网回包） | share.mjs：链接打开后串口与 CLI 重放逐字节一致 | ☑ |
 | F-01b | `.tryboard` 作品文件（> 8k 或自带 bin） | share.mjs 往返用例 | ☐ |
 | F-02 | 分享卡：MP4 + 自写二维码 + 链接；修 Safari 录屏扩展名 | sharecard.mjs 解码二维码 = 链接 | ☐ |
 | F-03 | 独立 embed.html（点击加载、不写 localStorage） | embed.mjs | ☐ |

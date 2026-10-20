@@ -142,6 +142,7 @@
 | 串口输入 | ✅ 示例页右侧串口框回车发送（可选行尾），worker 写进 UART RX FIFO；`webtest.mjs echo`（进 accept.sh）：发 "hello tryboard" → 固件回 "ECHO: hello tryboard"、输入框清空；agent-browser 走查另发 ping → pong（Reviews/ab/P2-13.md）。工作台（app.html）串口抽屉走同一条通路，mobile.mjs 只查发送后清空 |
 | 蜂鸣器出声（P0-14） | ✅ weather GPIO5 无源蜂鸣器：worker 每 1ms 采样 `tb_pin_pwm` / `tb_pin_pwm_freq`，按模拟时刻排进 Web Audio（方波，默认静音，点「声音」开）；agent-browser：35℃ 时 lastFreq 2700.1 Hz、分析节点 2695 Hz，降到 25℃ 停。3D 蜂鸣器模块已画（响时有声波示意）；只出一个声道（多个蜂鸣器取第一个在响的） |
 | 输入日志 / 重放（P0-19） | ✅ worker 按模拟时间记下按键 / 环境 / 电位器 / 串口输入，「导出输入」给出 `tryboard run --inputs` 文本；replay.mjs：鼠标按 3D BOOT + 温度 35 → 网页串口与 CLI 重放逐字节相同（1502 字节），网页重放与 CLI 指纹相同。限制：日志从上电开始，复位即新日志；装配视图 / 元件编辑器改接线不记（会重新上电） |
+| 分享链接（F-01a） | ✅ 实验台 ⋯「复制分享链接」：台面状态 v1（作品、内置固件 id + 哈希、相对示例的器件 / 接线改动、外接 5V、线束、环境、输入脚本 + endMs）→ deflate-raw → base64url 放进 `?s=`；打开后存成本地副本（`share:<fnv>`，不碰自己的作品），重新上电快进到同一时刻再接着跑。Wi-Fi 凭据（非演示值）打码，真网开关和回包不带；超 8000 字符只带台面，提示下一版导出文件。share.mjs：BOOT + 35℃ → 233 字符链接 → 新浏览器上下文打开，串口与分享者、CLI `--inputs` 重放逐字节一致（1498 字节），指纹一致；坏链接提示后开默认台面。agent-browser 桌面 + 390×844 走查无报错（`Reviews/ab/F-01a.md`）。未做：自带固件（F-01b 文件导出）、分享卡片、嵌入；台面「历史」里不出现快进那一段 |
 
 > 2026-10-15 合流：S3 对齐（双核、共享外设、S3 开发板网页）与 USB OTG、Wi-Fi、软件复位、元件编辑器同时可用；S3 软件复位尚未支持（见 DECISIONS）。2026-10-16：S3 软件复位已支持（见上表"软件复位"）。
 
