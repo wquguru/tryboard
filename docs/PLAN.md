@@ -205,6 +205,8 @@
 | M5-07 | CoreS3 / CoreS3-SE（摄像头不做，SE 识别靠 GC0308 不应答） | 识别正确；ILI9342 截图；触摸 / IMU / PMIC 电量；喇叭 I2S 有输出 | ☑ 2026-10-20（CoreS3 / SE 识别、ILI9342C 截图、触摸 / IMU / 电量、喇叭 1 kHz；修 S3 四线 PSRAM 与 I2S 时钟源 1；摄像头只回 ID） |
 | M5-08 | Cardputer / Cardputer-Adv：ST7789、键盘部件（74HC138 矩阵 / TCA8418）、I2S PDM 接收 | 识别正确；脚本按键回显到屏；麦克风读数非零 | ☑ 2026-10-20（两块识别正确（修 S3 下拉读数）；脚本按键回显到屏；PDM 麦克风 RMS 非零；键位表待真机，ADV 喇叭未建模） |
 | M5-09 | 网页：M5 板预设（3D 外壳程序生成、板载器件自动出现、Grove 口）+ Grove Unit：ENV III（SHT30 + QMP6988）、ENV IV（SHT40 + BMP280） | agent-browser：选 M5 板 → 示例跑起 → 接 ENV IV → 读数；网页与 CLI 指纹一致；390×844 无横向滚动 | ☐ |
+| M5-09b | 网页 M5 板预设接线：BoardDevs 加 `preset`（= CLI `--board`，worker 调 `tb_board_preset`），boot / seek / verify / 输入日志（`--board`）全链路透传；实验台可选 M5 板；Cardputer 键盘走 `tb_board_key` | M5 示例在网页跑起；网页与 CLI（`--board`）指纹一致；输入日志回放一致 | ☐ |
+| M5-09c | 网页 M5 3D：程序生成外壳（StickC Plus2 / Core2 / AtomS3 / Dial / Cardputer / CoreS3）、板载屏 / LED 显示、Grove 口 + ENV III / IV 单元（依赖 M5-09a 的 wasm 导出） | agent-browser：选 M5 板 → 示例跑起 → 接 ENV IV → 读数；390×844 无横向滚动 | ☐ |
 | M5-10 | 经典 ESP32 GP-SPI（HSPI / VSPI）+ SPI DMA | IDF spi_master 示例与 QEMU 对照 | ☑ 2026-10-20（esp32-spi-lcd：RDDID 读回、DMA 绘图；StickC Plus2 / Core2 探测跑通；QEMU 无 HSPI/VSPI，只比到 init；从模式未做） |
 | M5-11 | 经典 ESP32 RMT（8 通道、64 字块） | IDF led_strip 示例；WS2812 帧与 C3 一致 | ☑ 2026-10-20（esp32-ws2812；QEMU 无 RMT，该例 QEMU 关闭；RX/载波未建模） |
 | M5-12 | 经典 ESP32 I2S（含 PDM RX）+ ADC1 | IDF 示例；麦克风 / 电池电压读数 | ☑ 2026-10-20（esp32-i2s-tone 440 Hz、esp32-pdm-mic 1 kHz、esp32-adc GPIO38 五档 1%；PDM 按 PCM 层建模；QEMU 无 I2S / ADC） |
