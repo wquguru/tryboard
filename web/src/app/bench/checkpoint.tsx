@@ -7,6 +7,7 @@ import { headline } from "../../ui/say";
 import { VerifyStalled, verifyLevel } from "../../verify";
 import { realnetSwitch } from "../netfeed";
 import { fetchBuf } from "../../assets";
+import { assetUrl } from "../../assetver";
 import { type CheckOutcome } from "../types";
 import { Live } from "../../ui/native";
 import { Brief, Btn, Btns, Code, Drop, Field, Mono, LinkBtn, Note, Ph, Sec, TreeEmpty } from "../../ui/panel";
@@ -185,12 +186,12 @@ export function mountCheckpoint(b: BenchCtx) {
             </Btn>
           )}
           {l.ref && (
-            <LinkBtn id="dlBin" href={`./fw/${l.ref}/flash.bin`} download={`${l.ref}.bin`} title={t("Flash to a real board: esptool.py write_flash 0x0")}>
+            <LinkBtn id="dlBin" href={assetUrl(`./fw/${l.ref}/flash.bin`)} download={`${l.ref}.bin`} title={t("Flash to a real board: esptool.py write_flash 0x0")}>
               {t("Download reference .bin")}
             </LinkBtn>
           )}
           {l.ref && (
-            <LinkBtn id="dlSrc" href={`./fw/${l.ref}/src.zip`} download={`${l.ref}-src.zip`} title={t("ESP-IDF 5.5 project; unzip and run idf.py build")}>
+            <LinkBtn id="dlSrc" href={assetUrl(`./fw/${l.ref}/src.zip`)} download={`${l.ref}-src.zip`} title={t("ESP-IDF 5.5 project; unzip and run idf.py build")}>
               {t("Download source zip")}
             </LinkBtn>
           )}

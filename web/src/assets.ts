@@ -3,6 +3,7 @@ import type { ChipId } from './board3d';
 import { imageChip as chipOf } from './simrun';
 
 import { ROM_FILE } from './chipid';
+import { assetUrl } from './assetver';
 
 export { ROM_FILE };
 
@@ -28,13 +29,14 @@ export async function fetchBuf(url: string) {
   // R-18: binaries ship with a gzip -9 sidecar so wire size doesn't depend on host compression; any failure uses the plain file
   if (!PACKED && /\.(bin|elf|wasm)$/.test(url) && typeof DecompressionStream !== 'undefined') {
     try {
-      const raw = await gunzip(await fetch(url + '.gz'));
+      // R-19: the sidecar carries the plain file's content hash, so both are cacheable as immutable
+      const raw = await gunzip(await fetch(assetUrl(url + '.gz', url)));
       if (raw) return raw;
     } catch {
       // Network error on the sidecar: fall through to the plain file
     }
   }
-  const r =await fetch(packed ? url + '.b64.txt' : url);
+  const r = await fetch(packed ? url + '.b64.txt' : assetUrl(url));
   if (!r.ok) throw new Error(`${url}: ${r.status}`);
   if (!packed) return r.arrayBuffer();
   const bin = atob((await r.text()).trim());

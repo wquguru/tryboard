@@ -184,8 +184,8 @@ const crates = [];
   const rev = exists(path.join(fd, 'REVISION')) ? rd(path.join(fd, 'REVISION')).trim() : '';
   if (!rev) warn.push('third_party/fonts does not exist (run tools/fonts/fetch.sh first): font license texts not attached');
   const fonts = [
-    { name: 'Noto Sans SC', dir: 'notosanssc', file: 'tb-sans-sc-*.woff2 (unicode-range slices)', ofl: 'OFL-NotoSansSC.txt', copy: 'Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name "Source"' },
-    { name: 'JetBrains Mono', dir: 'jetbrainsmono', file: 'tb-mono.woff2', ofl: 'OFL-JetBrainsMono.txt', copy: 'Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)' },
+    { name: 'Noto Sans SC', dir: 'notosanssc', file: 'tb-sans-sc-*.<hash>.woff2 (unicode-range slices)', ofl: 'OFL-NotoSansSC.txt', copy: 'Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name "Source"' },
+    { name: 'JetBrains Mono', dir: 'jetbrainsmono', file: 'tb-mono.<hash>.woff2', ofl: 'OFL-JetBrainsMono.txt', copy: 'Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)' },
   ];
   for (const f of fonts) {
     add({

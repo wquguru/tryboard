@@ -5,6 +5,7 @@ import { t } from "../i18n";
 import { cn } from "../ui/cn";
 import { tokenize, type TokKind } from "./ctoken";
 import { Icon } from "./icons";
+import { assetUrl } from "../assetver";
 
 interface SrcFile {
   path: string;
@@ -20,7 +21,7 @@ const cache = new Map<string, Promise<Got>>();
 function load(id: string): Promise<Got> {
   let p = cache.get(id);
   if (!p) {
-    p = fetch(`./fw/${id}/src.json`)
+    p = fetch(assetUrl(`./fw/${id}/src.json`))
       .then(async (r): Promise<Got> =>
         r.ok
           ? { ok: true, src: (await r.json()) as Src }

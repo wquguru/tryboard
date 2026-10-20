@@ -73,6 +73,8 @@ if [ ! -x "$VENV/bin/python" ]; then
   "$PY312" -m venv "$VENV" && "$VENV/bin/pip" install -q fonttools==4.60.1 brotli==1.1.0 || echo "font subsetting tools failed to install, skipping" >&2
 fi
 if [ -x "$VENV/bin/python" ]; then "$VENV/bin/python" -I "$ROOT/tools/fonts/subset.py" "$ROOT"; else python3 -I "$ROOT/tools/fonts/subset.py" "$ROOT"; fi
+# R-19: content-hash manifest of the fixed-name files above (inlined into each page by vite.config.ts, URLs get ?v=<hash>)
+python3 "$ROOT/tools/asset_hashes.py" "$PUB" "$ROOT/web/asset-hashes.json"
 ls -la "$PUB/wasm/tryboard.wasm" | awk '{print "wasm", $5, "bytes"}'
 if [ "${1:-}" != "--no-vite" ]; then
   (cd "$ROOT/web" && npm run build --silent)

@@ -2,6 +2,7 @@
 // Used for ?work=blank&example=<id> bench/chip (session.ts), the firmware menu and the "This example" card (DESIGN_V2 §6.1).
 import type { SceneSpec } from '../board3d';
 import { lab } from '../ui/links';
+import { assetUrl } from '../assetver';
 
 export type Chip = 'esp32' | 'esp32c3' | 'esp32s3';
 
@@ -29,7 +30,7 @@ export interface Example {
 
 let cache: Promise<Example[]> | null = null;
 export function loadExamples(): Promise<Example[]> {
-  cache ??= fetch('./fw/examples.json')
+  cache ??= fetch(assetUrl('./fw/examples.json'))
     .then((r) => r.json() as Promise<Example[]>)
     .catch(() => []);
   return cache;
