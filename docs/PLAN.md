@@ -187,7 +187,7 @@
 | E-03 | 网页：新板 ESP32-S3-Touch-AMOLED-2.16（方形 AMOLED 3D 模型、按尺寸程序生成）、LCD 分辨率参数化（去掉 240 写死）、480×480 屏触摸映射、电量 / 按键交互 | 示例在网页显示 s3-co5300 画面；点屏 = 触摸，与 CLI 重放一致；390×844 无横向滚动；agent-browser 走查 Reviews/ab/E-03.md | ☐ |
 | E-04 | S3 BLE：Xtensa 版 libbtdm 签名（`tools/ble_sigs.py`）+ S3 接入 VHCI HLE（照 `esp32c3/src/ble.rs`） | 新固件 `s3-ble-hr`（c3-ble-hr 的 S3 版）`--ble-phone` 结果与 C3 相同；S3 其它固件不误认 | ☐ |
 | E-05 | Bluedroid 主机栈：补虚拟控制器缺的 HCI（Arduino-ESP32 默认 BLE 库即 Bluedroid） | Arduino 或 IDF Bluedroid 的 NUS 外设固件（C3 与 S3）：虚拟手机扫到、连接、写 RX、订阅 TX 收到通知 | ☐ |
-| E-06 | 虚拟电脑：BLE 中心按 Buddy 协议推心跳 JSON（MTU 协商、无应答写、长消息分片、TX 通知按 `\n` 重组）；数据源：脚本 / 录制 / 本机 Magpie（经本地代理，可选）；CLI `--desk-pc` 与输入日志 `pc=...` | C3 NUS 固件（E-06 自带）收到完整 JSON 并回 ack；网页「蓝牙」坞显示虚拟电脑；导出输入后 CLI 重放逐字节一致 | ☐ |
+| E-06 | 虚拟电脑：BLE 中心按 Buddy 协议推心跳 JSON（MTU 协商、无应答写、长消息分片、TX 通知按 `\n` 重组）；数据源：脚本 / 录制 / 本机 Magpie（经本地代理，可选）；CLI `--desk-pc` 与输入日志 `pc=...` | C3 NUS 固件（E-06 自带）收到完整 JSON 并回 ack；网页「蓝牙」坞显示虚拟电脑；导出输入后 CLI 重放逐字节一致 | ◐ 内核 / CLI / 固件完成（`soc/src/ble/desk.rs`，`--desk-pc`、`pc=on\|off\|json,…\|hb,…`，新固件 c3-ble-nus 与 accept 用例，`--inputs` 重放逐字节一致）；网页「蓝牙」坞显示虚拟电脑留给 E-07（本批不动 web/src）；录制 / 本机 Magpie 数据源未做（接口见 DECISIONS 2026-10-20 E-06） |
 | E-07 | 示例固件「AI 网关仪表盘」（S3 + CO5300 + CST9220 + AXP2101 + PCF85063 + BLE NUS，LVGL 4 页：请求 / 上下文 / 会话 / 用量，左右滑翻页） | accept：收到心跳后屏上数值正确（ppm 区域检查）、滑动翻页；网页示例库加入，agent-browser 走查 Reviews/ab/E-07.md | ☐ |
 | E-08 | （后置）LE 安全连接配对：虚拟电脑手写 P-256 ECDH + AES-CMAC（f4/f5/f6）、配对码输入 | 加密特征值的 NUS 固件配对成功、`sec:true` | ☐ |
 

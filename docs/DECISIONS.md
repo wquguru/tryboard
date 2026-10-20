@@ -1017,3 +1017,14 @@
 - 用户真实桌面程序连不到网页里的虚拟板（浏览器 Web Bluetooth 只能当中心连真设备，不能当外设），所以「电脑端」由浏览器里的虚拟电脑扮演；接本机 Magpie 走现有 realnet 本地代理思路，作可选项。
 - LE 安全连接配对（E-08）后置：Buddy 协议把加密列为推荐而非必需。
 - 替代：走 Wi-Fi 直接拉 Magpie HTTP（127.0.0.1:3425）——用户判断原作是 BLE 推送，且 realnet 只放 80 端口、需 CORS，否掉作主路径。
+
+## 2026-10-20 E-06 虚拟电脑（Claude Desktop Buddy BLE 中心）
+- 决定：虚拟电脑做成虚拟手机的一种模式（`Phone.desk: Desk`），协议状态单独放 `soc/src/ble/desk.rs`（行缓冲、拆片、心跳生成、ack 解析），GATT 客户端（扫描 / 连接 / MTU / 发现 / 订阅）沿用 phone.rs。`desk.on == false` 时手机所有路径不变，c3-ble-hr / c3-ble-led 输出逐字节不变（golden 校验）。替代：另写一个独立中心——要复制一套 GATT 客户端，否掉。
+- 命令复用手机通道：输入日志 `pc=on|off|json,<base64>|hb,<base64>`，`Ble::phone_cmd` 认 `pc=` 前缀；wasm 不加导出（`tb_ble_cmd("pc=on")` 即可），`gen_wasm_ts.py` 不用跑。CLI `--desk-pc` = 第 0 周期 `pc=on`。
+- 写方式按特征属性选：RX 有 write-without-response 就用 0x52、每连接事件最多 4 片（`WRITES_PER_EVENT`，假设值，真手机 / 电脑的每事件包数因栈而异）；否则 Write Request 一片一事件。拆片长度 = 协商 MTU − 3（phone 原有的 MTU 交换已够用，没再改）。
+- 确定性：时间 = `BASE_EPOCH`（2026-10-20 10:42:00 UTC+8）+ 模拟秒；tokens / running / waiting / entries 只由会话开始后的模拟时间决定（相位 6 s：running 0/1 交替、每 3 相位 waiting=1、entries 8 条滚动，默认心跳约 290–315 字节 > 244，必然分 2 片，用来验收重组）。owner 名固定 `TryBoard`。没有任何墙钟。
+- `pc=hb,<base64>` 设心跳模板，`{tokens}` `{tokens_today}` `{running}` `{time}` 按模拟时间替换；设了模板就不再按相位变化发，只在设置时与 10 s 保活时发。`pc=json` 原样排队发一次（可以超过 4KB，用来测设备丢弃；正常电脑不会发）。
+- 接口留口（未做）：录制回放与本机 Magpie 数据源都落到「往 `Desk` 推行」——网页 / 本地代理把真实心跳转成 `pc=hb,` 或 `pc=json,` 输入日志行即可，重放仍逐字节一致；要更细可在 `Desk` 加 `source` 枚举（Script / Recorded / Live），Live 只在网页侧，CLI 永远读输入日志。
+- 已知小瑕疵：输入在 1 ms 片边界应用，BLE 的连接事件是惰性推进的，所以 `pc=json` 记在 9.000 s 而发出那行标 8.998 s（与 `ble=write` 同样的现有行为，确定性不受影响；改成先推进再应用会让 c3-ble-led 的 golden 变，暂不动）。
+- 固件 c3-ble-nus：NimBLE，广播名 Claude-TB（NUS 128 位 UUID 放扫描响应，31 字节放不下），RX 可写 / 无应答写，行缓冲 4096 字节，JSON 用 IDF 自带 cJSON（json 组件）；status ack 带 bat / sys / stats / fw，故意 > 244 字节以验收电脑侧重组；owner / 未知命令回 ack（未知命令 ok:false）；time 调 `settimeofday`。
+- 授权：协议按公开文档 anthropics/claude-desktop-buddy REFERENCE.md 自写，没有用任何第三方实现代码。

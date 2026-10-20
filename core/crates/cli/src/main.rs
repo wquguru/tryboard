@@ -38,6 +38,8 @@ fn usage() -> ! {
                [--mic <sound.wav>] (INMP441 loops this WAV, attaches the mic automatically) [--audio-wav <speaker output.wav>]
                [--ble-phone] (virtual phone: scan, connect to the first device, read all readable characteristics, subscribe to all notifications; air events on stderr)
                script actions ble=scan|scan off|connect [address|name]|disconnect|read <UUID|0xhandle>|write <UUID|0xhandle> <hex>|sub <UUID>|unsub <UUID>|auto
+               [--desk-pc] (virtual desktop, Claude Desktop Buddy protocol over BLE Nordic UART: connects to a device named Claude*, sends time / owner / heartbeats, polls status every 2 s)
+               script actions pc=on|off|json,<base64 one-line JSON>|hb,<base64 heartbeat template, {{tokens}} {{tokens_today}} {{running}} {{time}} substituted>
   tryboard elec-net <netlist.cir> [--at s,s...] (DC / transient solve, for comparison with ngspice, see tools/elec)
   tryboard riscv-test <test.elf>..."
     );
@@ -488,6 +490,12 @@ fn run(args: &[String]) {
             eprintln!("[tryboard] --ble-phone: {e}");
         }
     }
+    // --desk-pc = input pc=on at cycle 0 (E-06)
+    if args.iter().any(|a| a == "--desk-pc") {
+        if let Err(e) = m.ble_phone("pc=on") {
+            eprintln!("[tryboard] --desk-pc: {e}");
+        }
+    }
     let mut ble_seq = 0u64;
     let mut audio_wav: Option<(String, Vec<i16>)> =
         opt(args, "--audio-wav").map(|p| (p, Vec::new()));
@@ -569,6 +577,11 @@ fn run(args: &[String]) {
                 // Virtual phone action (the web's virtual phone panel)
                 if let Err(e) = m.ble_phone(c.trim()) {
                     eprintln!("[tryboard] {now_s:.3}s phone action failed: {e}");
+                }
+            } else if act.starts_with("pc=") {
+                // Virtual desktop action (E-06), same channel as the virtual phone
+                if let Err(e) = m.ble_phone(act.trim()) {
+                    eprintln!("[tryboard] {now_s:.3}s pc action failed: {e}");
                 }
             } else if let Some(c) = act.strip_prefix("phone=") {
                 // One step on the web virtual phone (C-02)

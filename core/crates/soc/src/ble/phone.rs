@@ -1,6 +1,7 @@
 //! Virtual phone: BLE central + L2CAP + ATT/GATT client, mimicking a minimal nRF Connect-style app:
 //! scan, connect, MTU exchange, discovery, read / write / CCCD subscribe. One ATT request in flight (ATT requires it), at most one per connection event.
 
+use super::desk::{self, Desk};
 use super::{adv_name, adv_uuids, fmt_addr, hex, json_str};
 use std::collections::VecDeque;
 
@@ -76,6 +77,10 @@ enum Op {
     Read(u16),
     Write(u16, Vec<u8>),
     Sub(u16, bool),
+    /// Desk line fragment as Write Request (no log on success)
+    Frag(u16, Vec<u8>),
+    /// Desk line fragment as Write Without Response (never pending)
+    WriteCmd(u16, Vec<u8>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -99,6 +104,8 @@ pub struct Phone {
     want_disc: bool,
     auto: bool,
     auto_done: bool,
+    /// Virtual desktop mode (E-06)
+    pub desk: Desk,
 }
 
 impl Default for Phone {
@@ -125,6 +132,7 @@ impl Phone {
             want_disc: false,
             auto: false,
             auto_done: false,
+            desk: Desk::new(),
         }
     }
 
@@ -203,7 +211,12 @@ impl Phone {
         if log {
             d.last_log_us = t.max(1);
         }
-        if self.auto && self.state == State::Scanning && connectable && self.target.is_none() {
+        let desk_pick = self.desk.on && d.name.starts_with(desk::NAME_PREFIX);
+        if (self.auto || desk_pick)
+            && self.state == State::Scanning
+            && connectable
+            && self.target.is_none()
+        {
             self.target = Some(addr);
             self.state = State::Connecting;
         }
@@ -240,6 +253,11 @@ impl Phone {
         self.ops.clear();
         self.tx.clear();
         self.want_disc = false;
+        self.desk.end();
+        if self.desk.on {
+            // The desktop app keeps looking for its buddy
+            self.start_scan();
+        }
         for s in &mut self.services {
             for c in &mut s.chars {
                 c.notify = false;
@@ -269,6 +287,15 @@ impl Phone {
     /// Resolve the target: 0x prefix is a handle, otherwise a 16-bit hex characteristic UUID
     fn resolve(&self, s: &str) -> Result<u16, String> {
         let s = s.trim();
+        if s.len() == 36 {
+            return self
+                .services
+                .iter()
+                .flat_map(|x| x.chars.iter())
+                .find(|c| c.uuid.eq_ignore_ascii_case(s))
+                .map(|c| c.handle)
+                .ok_or(format!("characteristic {s} not found"));
+        }
         if let Some(h) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
             return u16::from_str_radix(h, 16).map_err(|_| format!("bad handle: {s}"));
         }
@@ -284,7 +311,10 @@ impl Phone {
     }
 
     /// Phone action command (the part after `ble=` in the input log)
-    pub fn command(&mut self, cmd: &str, _now: u64) -> Result<Vec<String>, String> {
+    pub fn command(&mut self, cmd: &str, now: u64) -> Result<Vec<String>, String> {
+        if let Some(c) = cmd.trim().strip_prefix("pc=") {
+            return self.desk_command(c, now);
+        }
         let mut it = cmd.split_whitespace();
         let verb = it.next().unwrap_or("");
         let arg = it.next();
@@ -343,6 +373,7 @@ impl Phone {
                     _ => {}
                 }
                 self.auto = false;
+                self.desk.on = false;
                 out.push("phone: disconnect".into());
             }
             "read" => {
@@ -393,6 +424,27 @@ impl Phone {
                 }
             }
         }
+        if self.desk.active && self.state == State::Connected {
+            self.desk.poll(t);
+            let busy = matches!(self.pending, Some(Pending::Op(Op::Frag(..))))
+                || self
+                    .ops
+                    .iter()
+                    .any(|o| matches!(o, Op::Frag(..) | Op::WriteCmd(..)));
+            if let (false, Some((h, quick))) = (busy, self.desk.rx) {
+                if let Some(line) = self.desk.next_line() {
+                    let frags = desk::fragment(&line, self.mtu);
+                    lines.push(desk::send_log(&line, frags.len()));
+                    for f in frags {
+                        self.ops.push_back(if quick {
+                            Op::WriteCmd(h, f)
+                        } else {
+                            Op::Frag(h, f)
+                        });
+                    }
+                }
+            }
+        }
         if self.state == State::Connected && self.pending.is_none() && !self.want_disc {
             if self.disc != Disc::Ready {
                 let d = self.disc;
@@ -400,8 +452,25 @@ impl Phone {
                     self.pending = Some(Pending::Disc(d));
                     self.tx.push_back((4, req));
                 }
+            } else if matches!(self.ops.front(), Some(Op::WriteCmd(..))) {
+                for _ in 0..desk::WRITES_PER_EVENT {
+                    let Some(Op::WriteCmd(h, v)) = self.ops.front().cloned() else {
+                        break;
+                    };
+                    self.ops.pop_front();
+                    let mut r = vec![0x52];
+                    r.extend_from_slice(&h.to_le_bytes());
+                    r.extend_from_slice(&v);
+                    self.tx.push_back((4, r));
+                }
             } else if let Some(op) = self.ops.pop_front() {
                 let req = match &op {
+                    Op::Frag(h, v) | Op::WriteCmd(h, v) => {
+                        let mut r = vec![0x12];
+                        r.extend_from_slice(&h.to_le_bytes());
+                        r.extend_from_slice(v);
+                        Some(r)
+                    }
                     Op::Read(h) => {
                         lines.push(format!("phone → read {}", self.chr_name(*h)));
                         let mut r = vec![0x0a];
@@ -552,6 +621,9 @@ impl Phone {
                     ));
                 }
             }
+            if self.desk.on {
+                self.desk_attach(lines);
+            }
             if self.auto && !self.auto_done {
                 self.auto_done = true;
                 let all: Vec<(u16, u8, bool)> = self
@@ -624,6 +696,13 @@ impl Phone {
                 let v = p.get(3..).unwrap_or(&[]).to_vec();
                 if op == 0x1d {
                     out.push((4, vec![0x1e]));
+                }
+                if self.desk.active && self.desk.tx == Some(h) {
+                    lines.extend(self.desk.on_notify(&v));
+                    if let Some(c) = self.chr_mut(h) {
+                        c.notes += 1;
+                    }
+                    return;
                 }
                 let name = self.chr_name(h);
                 if let Some(c) = self.chr_mut(h) {
@@ -741,6 +820,14 @@ impl Phone {
                 _ => self.finish_disc(d, lines),
             },
             Pending::Op(o) => match o {
+                Op::Frag(h, _) | Op::WriteCmd(h, _) => {
+                    if let Some(e) = err {
+                        lines.push(format!(
+                            "pc: write {} failed (ATT error 0x{e:02x})",
+                            self.chr_name(h)
+                        ));
+                    }
+                }
                 Op::Read(h) => {
                     let name = self.chr_name(h);
                     if let Some(e) = err {
@@ -786,6 +873,18 @@ impl Phone {
                                 if on && c.sub_at.is_none() {
                                     c.sub_at = Some(t);
                                 }
+                            }
+                            if on && self.desk.on && self.desk.tx == Some(h) && !self.desk.active {
+                                self.desk.start(t);
+                                // Desk lines are reported by the desk, not the phone's notification counter
+                                if let Some(c) = self.chr_mut(h) {
+                                    c.sub_reported = true;
+                                }
+                                lines.push(format!(
+                                    "pc: session up (MTU {}, chunks of {} B)",
+                                    self.mtu,
+                                    self.mtu - 3
+                                ));
                             }
                         }
                     }
@@ -864,8 +963,76 @@ impl Phone {
             }
             s.push_str("]}");
         }
-        s.push_str("]}");
+        s.push_str(&format!("],\"pc\":{}}}", self.desk.json()));
         s
+    }
+
+    /// `pc=on|off|json,<b64>|hb,<b64>` (virtual desktop, E-06)
+    fn desk_command(&mut self, c: &str, now: u64) -> Result<Vec<String>, String> {
+        let (verb, arg) = c.split_once(',').unwrap_or((c, ""));
+        match verb.trim() {
+            "on" => {
+                if self.desk.on {
+                    return Ok(Vec::new());
+                }
+                if self.state == State::Connected {
+                    return Err("phone already connected, disconnect first".into());
+                }
+                self.desk.on = true;
+                self.auto = false;
+                self.start_scan();
+                Ok(vec![format!(
+                    "pc: on, scanning for a device named {}*",
+                    desk::NAME_PREFIX
+                )])
+            }
+            "off" => {
+                self.desk.on = false;
+                self.desk.end();
+                match self.state {
+                    State::Connected => self.want_disc = true,
+                    State::Scanning | State::Connecting => {
+                        self.state = State::Idle;
+                        self.target = None;
+                    }
+                    State::Idle => {}
+                }
+                Ok(vec!["pc: off".into()])
+            }
+            v => self.desk.command(v, arg, now).map(|l| vec![l]),
+        }
+    }
+
+    /// Discovery done in desk mode: find NUS RX / TX and subscribe to TX
+    fn desk_attach(&mut self, lines: &mut Vec<String>) {
+        let find = |u: &str| {
+            self.services
+                .iter()
+                .flat_map(|s| s.chars.iter())
+                .find(|c| c.uuid == u)
+                .map(|c| (c.handle, c.props))
+        };
+        match (find(desk::NUS_RX), find(desk::NUS_TX)) {
+            (Some((rx, props)), Some((tx, _))) => {
+                let quick = props & 0x04 != 0;
+                self.desk.rx = Some((rx, quick));
+                self.desk.tx = Some(tx);
+                lines.push(format!(
+                    "pc: Nordic UART RX 0x{rx:04x} ({}), TX 0x{tx:04x}",
+                    if quick {
+                        "write without response"
+                    } else {
+                        "write request"
+                    }
+                ));
+                self.ops.push_back(Op::Sub(tx, true));
+            }
+            _ => {
+                lines.push("pc: no Nordic UART service on this device, disconnecting".into());
+                self.desk.on = false;
+                self.want_disc = true;
+            }
+        }
     }
 }
 

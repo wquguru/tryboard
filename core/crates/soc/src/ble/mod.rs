@@ -5,6 +5,7 @@
 //! Driven by simulated time (us), no wall clock or RNG, so same firmware + input log gives byte-identical air events.
 //! Behavioural only: range, walls and phone OS differences are not modelled and need real hardware.
 
+pub mod desk;
 pub mod phone;
 pub mod sig;
 pub mod sigs;
@@ -554,7 +555,7 @@ impl Ble {
             let cid = u16::from_le_bytes([f[2], f[3]]);
             let (lines, replies) = self.phone.on_l2cap(t, cid, &f[4..]);
             for s in lines {
-                self.air(t, "att", s);
+                self.air(t, line_kind(&s, "att"), s);
             }
             for r in replies {
                 self.phone.queue_tx(r);
@@ -563,7 +564,7 @@ impl Ble {
         // Phone -> host: queued PDUs go out at every connection event
         let (lines, out) = self.phone.conn_event(t);
         for s in lines {
-            self.air(t, "att", s);
+            self.air(t, line_kind(&s, "att"), s);
         }
         for (cid, payload) in out {
             let mut l2 = Vec::with_capacity(payload.len() + 4);
@@ -596,7 +597,7 @@ impl Ble {
     pub fn phone_cmd(&mut self, cmd: &str, now: u64) -> Result<(), String> {
         let lines = self.phone.command(cmd, now)?;
         for s in lines {
-            self.air(now, "phone", s);
+            self.air(now, line_kind(&s, "phone"), s);
         }
         // When the phone starts scanning, advertising resumes from now (skipped unheard events are not replayed)
         if self.adv.enabled && self.adv.next_us < now {
@@ -643,6 +644,15 @@ impl Ble {
         }
         s.push(']');
         s
+    }
+}
+
+/// Air-log kind: virtual desktop lines ("pc…", "fw → pc …") get their own kind
+fn line_kind(s: &str, dflt: &'static str) -> &'static str {
+    if s.starts_with("pc") || s.starts_with("fw → pc ") {
+        "pc"
+    } else {
+        dflt
     }
 }
 
