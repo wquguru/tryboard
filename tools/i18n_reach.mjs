@@ -57,6 +57,8 @@ export function scan(f) {
     if (ts.isNewExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === 'URL' && n.arguments?.[0] && ts.isStringLiteral(n.arguments[0])) add(r.workers, n.arguments[0].text);
     if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) r.lits.add(n.text);
     if (ts.isJsxText(n)) r.lits.add(n.text.trim());
+    // Template pieces become keys once code splits them, e.g. labelText() on `${x} (I2C SDA / SCL, shared bus)`.
+    if (ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n)) for (const s of n.text.split(/[()]/)) r.lits.add(s.trim());
     ts.forEachChild(n, visit);
   };
   ts.forEachChild(sf, visit);

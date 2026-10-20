@@ -154,9 +154,6 @@ const d: Dict = {
   "{silk} looks like a normal pin but is a strapping pin: {pin} on {part} drives a level onto it, and {why}. Make sure it is high or high-impedance at power-up, or use another pin.": "{silk} は普通のピンに見えますが strapping ピンです。{part} の {pin} がこの線にレベルを出力し、{why}。起動時に High かハイインピーダンスであることを確認するか、別のピンを使ってください。",
   "{who} all use 0x{addr}{bus}: address conflict. {how}{second}.": "{who} はすべて 0x{addr}{bus} です：アドレスが衝突しています。{how}{second}。",
   // Board advisor data, engine and derived text (web/src/advisor).
-  "I2C SDA / SCL, shared bus": "I2C SDA / SCL、共有バス",
-  "I2S BCLK / WS / data": "I2S BCLK / WS / データ",
-  "SPI SCK / MOSI / CS": "SPI SCK / MOSI / CS",
   // Board advisor page (web/src/advisor/App.tsx).
   // Levels (firmware/levels.json display fields).
   "Blink": "Lチカ",

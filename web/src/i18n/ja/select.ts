@@ -2,7 +2,6 @@ import type { Dict } from '../index.ts';
 
 // Select group (R-20): board advisor page (select.html) strings the home page does not need.
 const d: Dict = {
-
   // Catalog wiring rules (web/src/catalog/rules.ts).
   "Classic Bluetooth": "クラシック Bluetooth",
 
@@ -380,5 +379,10 @@ const d: Dict = {
   "Reference price": "参考価格",
   "Simulated": "シミュレーション検証",
   "Suggested": "推奨",
+
+  // Board advisor data, engine and derived text (web/src/advisor).
+  "I2C SDA / SCL, shared bus": "I2C SDA / SCL、共有バス",
+  "I2S BCLK / WS / data": "I2S BCLK / WS / データ",
+  "SPI SCK / MOSI / CS": "SPI SCK / MOSI / CS",
 };
 export default d;
