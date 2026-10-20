@@ -5,7 +5,7 @@
 //! field (`field_ut`, X north, Y west, Z up) at ~0.3 µT / LSB X/Y and ~0.15 µT / LSB Z, **uncompensated** (trim registers read 0, so
 //! Bosch's compensation formula does not apply; M5Unified uses the raw values). Estimate, not calibrated on hardware. (lint: allow-long-comment)
 
-use super::imu::{noise, Pose};
+use super::imu::{mount, noise, Mount, Pose, MOUNT_IDENTITY};
 use crate::i2c::I2cDevice;
 use crate::periph::CPU_HZ;
 use std::any::Any;
@@ -18,6 +18,8 @@ const RHALL: i16 = 6000;
 pub struct Bmm150 {
     pub addr: u8,
     pub pose: Pose,
+    /// Chip axes against the board's (pose) axes
+    pub mount: Mount,
     pub field_ut: [f64; 3],
     regs: [u8; 128],
     ptr: u8,
@@ -36,6 +38,7 @@ impl Bmm150 {
         let mut d = Bmm150 {
             addr,
             pose: Pose::default(),
+            mount: MOUNT_IDENTITY,
             field_ut: EARTH_FIELD_UT,
             regs: [0; 128],
             ptr: 0,
@@ -81,7 +84,7 @@ impl Bmm150 {
     }
 
     fn compute(&self, n: u64) -> [u8; 8] {
-        let b = self.pose.world_to_sensor(self.field_ut);
+        let b = mount(&self.mount, self.pose.world_to_sensor(self.field_ut));
         let q = |v: f64, lsb: f64, max: f64, ch: u64| {
             ((v + 0.3 * noise(n, 20 + ch)) / lsb)
                 .round()

@@ -64,6 +64,15 @@ pub fn noise(sample: u64, ch: u64) -> f64 {
     (x >> 11) as f64 / (1u64 << 52) as f64 - 1.0
 }
 
+/// How a chip sits on its board: sensor axis i reads `sign * board[axis]` for `MOUNT[i] = (axis, sign)`.
+/// Pose is in the board frame; drivers such as M5Unified undo the mounting, so both must agree (AtomS3R BMI270).
+pub type Mount = [(u8, i8); 3];
+pub const MOUNT_IDENTITY: Mount = [(0, 1), (1, 1), (2, 1)];
+
+pub fn mount(m: &Mount, v: [f64; 3]) -> [f64; 3] {
+    m.map(|(axis, sign)| sign as f64 * v[axis as usize])
+}
+
 /// Physical value x sensitivity -> saturated signed 16-bit output
 pub fn to_i16(v: f64) -> i16 {
     v.round().clamp(i16::MIN as f64, i16::MAX as f64) as i16
@@ -72,6 +81,15 @@ pub fn to_i16(v: f64) -> i16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mount_undoes_driver_remap() {
+        // AtomS3R: M5Unified reads (y, -x, z), so the chip must report (-board.y, board.x, board.z)
+        let m: Mount = [(1, -1), (0, 1), (2, 1)];
+        let s = mount(&m, [0.1, 0.2, 0.9]);
+        assert_eq!([s[1], -s[0], s[2]], [0.1, 0.2, 0.9]);
+        assert_eq!(mount(&MOUNT_IDENTITY, [1.0, 2.0, 3.0]), [1.0, 2.0, 3.0]);
+    }
 
     #[test]
     fn gravity_inverts_to_pose() {
