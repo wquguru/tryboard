@@ -10,6 +10,7 @@ pub mod devices;
 pub mod gdma;
 pub mod gpspi;
 pub mod i2c;
+pub mod i2cpins;
 pub mod i2s;
 pub mod iotrace;
 pub mod ledc;

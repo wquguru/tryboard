@@ -160,6 +160,15 @@ web/（Vite + TS）
 - AMOLED 板 I2C 器件（E-02）：`devices/{cst9220,axp2101,pcf85063,codec}.rs`，`make_i2c("cst9220" | "axp2101" | "pcf85063" | "es8311" | "es7210", addr)`。`Machine::touch` 依次找 Cst816s → Ft6236 → Cst9220（16 位大端寄存器，0xD000 报点 + 0xAB 应答）；`battery_set / pwrkey / rtc_set / pmic_unimpl`；CLI `--battery PCT[,usb]`、`--rtc EPOCH`，动作 `bat=pct[,usb]`、`pwrkey=short|long`（`machine::parse_battery`），wasm `tb_battery / tb_pwrkey / tb_rtc_set`。
 - 供电网络：`module_current` 加 mpu6050 3.9 mA、qmi8658 1.7 mA、cst816s 2.5 mA（估算，与 parts.ts 同源）。
 
+## 按引脚的 I2C 总线 + GPIO 位拨（M5-02，`crates/soc/src/i2cpins.rs`，C3 / S3 / ESP32）
+- 两种挂法并存：旧的 `--i2c kind@addr` / `Machine::i2c_attach` 仍直接挂 I2C0 控制器（`I2c::devices`），不看引脚，golden 不变；新的「引脚总线」`PinBus { sda, scl, pullup, devices }` 按 SDA/SCL 焊盘标识，放在各 SocBus 的 `i2c_pins: PinBuses`。
+- 控制器路由：写 I2C0 / I2C1 寄存器时，`PinBuses::routed(func_out, mask, sda_sig, scl_sig)` 找两个焊盘的 GPIO 矩阵输出都选了该控制器 SDA/SCL 信号的那条总线，`I2c::write_with` 把它的器件临时接到控制器器件表后面，写完再拆回。信号号：S3 I2CEXT0 89/90、I2CEXT1 91/92；ESP32 29/30、95/96；C3 53/54。I2C1 没有旧式器件。
+- 位拨：`gpio_changed` 开头调 `i2c_pins_settle`：两个焊盘仍是 GPIO 自己驱动（func_out = 普通 GPIO）时，把焊盘电平喂给 `PinBus::on_lines`，状态机（START / 重复 START / STOP、地址 + 读写位、ACK、读时逐位输出、主机 NACK 后停发）驱动 SDA：拉低走 `ext_driven/ext_in`（线与），释放则回到上拉；最多迭代 4 次直到稳定。焊盘交给外设时状态机复位并放开 SDA。器件对象和控制器路径是同一批，所以位拨与 i2c_master 看到同一份寄存器。
+- 上拉：`pullup = true`（默认）把两个焊盘写进 `board_pullup`，板上上拉胜过内部下拉（M5GFX `_detect_i2c_device` 开下拉读 1 的检测能通过）；`nopull` 时开漏输出 1 仍按 D-03 读 1。
+- 接口：Rust `Machine::i2c_bus_add(sda, scl, pullup) -> Option<usize>`（焊盘已被别的总线占用返回 None）、`Machine::i2c_attach_bus(bus, kind, addr) -> bool`（kind 同 `make_i2c`）；`env_set / imu_set / touch / battery_set / pwrkey / rtc_set / oled` 先找 I2C0 再找引脚总线。CLI `--i2c-bus sda=N,scl=N[,nopull]:kind@addr,...`（可重复）。wasm `tb_i2c_bus_add(sda, scl, pullup) -> i32`（-1 失败）、`tb_i2c_attach_bus(bus, kind, addr) -> i32`。供 M5-05 板预设使用。
+- eFuse 封装号：`Machine::set_efuse_pkg(pkg)` / CLI `--efuse-pkg N` / wasm `tb_efuse_pkg`，默认不变。S3 / C3 写 BLK1 PKG_VERSION（word 0x44/4+3 的 bit 21..23，0..7；S3 0 = QFN56、1 = PICO）；ESP32 写 BLK0 RDATA3 CHIP_PACKAGE（bit 9..11 + 4BIT bit 2，0..15），pkg 5（PICO-D4）同时把 APB_CTRL_DATE bit 31 清零（M5GFX 遇到该位会把 5 当成 6 = PICO-V3-02）。
+- 验收：soc 单元测试 `bitbang_scan_and_register_read`；固件 `s3-i2c-bitbang`（S3，SDA 11 / SCL 12）和 `esp32-i2c-bitbang`（ESP32，21 / 22，同一份 main.c）做上拉检测、位拨扫描 + 读 BME280 ID、I2C1 非默认引脚扫描 + 读 ID、删总线后再位拨扫描。
+
 ## Xtensa LX7 核（ESP32-S3，`core/crates/xtensa`）
 - 配置取自 ESP-IDF `components/xtensa/esp32s3/include/xtensa/config/core-isa.h`：64 个物理 AR、窗口 ABI、16 位密度指令、零开销循环、MUL16/MUL32/MULUH/MULSH/DIV32、NSA/MIN/MAX/SEXT/CLAMPS、布尔寄存器、S32C1I、硬件非对齐访存、VECBASE 复位 0x40000000。
 - 取指按首字节 op0 判长度（8..=13 为 2 字节，否则 3 字节）；`Bus::fetch` 默认逐字节读，SoC 可重写成快路径。

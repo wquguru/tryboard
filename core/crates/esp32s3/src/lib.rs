@@ -21,6 +21,7 @@ use tryboard_soc::devices::audio::{self, Audio, PortIo};
 use tryboard_soc::devices::lcd::Lcd;
 use tryboard_soc::devices::pins::PinDevices;
 use tryboard_soc::gdma::{DmaMem, Gdma, GdmaLayout};
+use tryboard_soc::i2cpins::PinBuses;
 use tryboard_soc::pcnt::{self as pcnt_mod, Pcnt};
 use tryboard_soc::periph::{Systimer, Timg, Uart};
 use tryboard_soc::rmt::{Rmt, RmtLayout, Ws2812};
@@ -152,6 +153,8 @@ pub struct SocBus {
     /// I2C0 (0x60013000) / I2C1 (0x60027000), same model as C3
     pub i2c0: I2c,
     pub i2c1: I2c,
+    /// Buses on fixed SDA / SCL pads (M5-02): reached by the routed controller or by bit-banged GPIO
+    pub i2c_pins: PinBuses,
     /// GP-SPI2 master + GDMA (5 channels), model shared with the C3 family
     pub spi2: GpSpi,
     pub gdma: Gdma,
@@ -234,6 +237,7 @@ impl Default for SocBus {
             pins: PinDevices::default(),
             i2c0: I2c::default(),
             i2c1: I2c::with_port(tryboard_soc::iotrace::i2cbit::PORT1),
+            i2c_pins: PinBuses::default(),
             spi2: GpSpi::default(),
             gdma: Gdma::new(GdmaLayout::S3),
             lcd: None,
@@ -519,12 +523,15 @@ impl SocBus {
                 return self.pcnt.write(off, v);
             }
             0x6001_3000 | 0x6002_7000 => {
-                let bus = if base == 0x6001_3000 {
-                    &mut self.i2c0
+                // I2CEXT0 SDA/SCL out = 90/89, I2CEXT1 = 92/91 (gpio_sig_map.h)
+                let (bus, sda, scl) = if base == 0x6001_3000 {
+                    (&mut self.i2c0, 90, 89)
                 } else {
-                    &mut self.i2c1
+                    (&mut self.i2c1, 92, 91)
                 };
-                bus.write(off, v, now);
+                let routed = self.i2c_pins.routed(&self.gpio.func_out, 0x1ff, sda, scl);
+                let extra = routed.map(|i| &mut self.i2c_pins.buses[i].devices);
+                bus.write_with(off, v, now, extra);
                 if !bus.events.is_empty() {
                     self.iotrace.extend(&mut bus.events);
                 }
@@ -624,6 +631,7 @@ impl SocBus {
     }
 
     pub fn gpio_changed(&mut self, now: u64) {
+        self.i2c_pins_settle(now);
         self.gpio.sense();
         let lv = self.gpio.level();
         self.lcd_pins_changed(lv);
@@ -639,6 +647,31 @@ impl SocBus {
         // Pin levels or GPIO matrix input selects may have changed: resample PCNT / RMT RX inputs now
         self.feed_inputs(now, lv);
         self.irq_dirty = true;
+    }
+
+    /// Let bit-banged pin buses see the pads; a device's SDA drive changes only while SCL is low, so this settles
+    fn i2c_pins_settle(&mut self, now: u64) {
+        if self.i2c_pins.is_empty() {
+            return;
+        }
+        for _ in 0..4 {
+            let lv = self.gpio.level();
+            let fo = &self.gpio.func_out;
+            let gpio = |p: u32| fo[p as usize] & 0x1ff == 0x100;
+            let drives = self.i2c_pins.on_level(now, lv, gpio);
+            if drives.is_empty() {
+                return;
+            }
+            for (pin, low) in drives {
+                let bit = 1u64 << pin;
+                if low {
+                    self.gpio.ext_driven |= bit;
+                    self.gpio.ext_in &= !bit;
+                } else {
+                    self.gpio.ext_driven &= !bit;
+                }
+            }
+        }
     }
 
     /// Current level of GPIO matrix input signal sig (FUNCn_IN_SEL_CFG: sel[5:0], inv[6], via matrix[7]; 0x38 constant 1, 0x3C constant 0)

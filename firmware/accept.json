@@ -2750,5 +2750,45 @@
    "phone: 1 notifications within 3 s of subscribing to 6e400003-b5a3-f393-e0a9-e50e24dcca9e"
   ],
   "qemu": false
+ },
+ {
+  "id": "s3-i2c-bitbang",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--i2c-bus",
+   "sda=11,scl=12:bme280@0x76,ssd1306@0x3c"
+  ],
+  "expect": [
+   "pull test SDA11/SCL12 = 0x03",
+   "pull test SDA4/SCL5 = 0x00",
+   "bitbang scan: 0x3C 0x76",
+   "bitbang BME280 id 0x60",
+   "I2C1 scan: 0x3C 0x76",
+   "I2C1 BME280 id 0x60",
+   "bitbang rescan: 0x3C 0x76",
+   "TRYBOARD_OK i2c-bitbang"
+  ],
+  "qemu": false
+ },
+ {
+  "id": "esp32-i2c-bitbang",
+  "chip": "esp32",
+  "seconds": 3,
+  "args": [
+   "--i2c-bus",
+   "sda=21,scl=22:bme280@0x76,ssd1306@0x3c"
+  ],
+  "expect": [
+   "pull test SDA21/SCL22 = 0x03",
+   "pull test SDA4/SCL5 = 0x00",
+   "bitbang scan: 0x3C 0x76",
+   "bitbang BME280 id 0x60",
+   "I2C1 scan: 0x3C 0x76",
+   "I2C1 BME280 id 0x60",
+   "bitbang rescan: 0x3C 0x76",
+   "TRYBOARD_OK i2c-bitbang"
+  ],
+  "qemu": false
  }
 ]

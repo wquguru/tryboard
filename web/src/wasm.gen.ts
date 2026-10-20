@@ -57,6 +57,12 @@ export interface WasmExports {
   tb_analog_set(pin: number, mv: number): void;
   /** Attach an I2C device. kind: 1 = SSD1306, 2 = BME280, 3 = MPU6050, 4 = QMI8658, 5 = CST816S, 6 = FT6236, 7 = CST9220, 8 = AXP2101, 9 = PCF85063, 10 = ES8311, 11 = ES7210. Returns 0 on success. */
   tb_i2c_attach(kind: number, addr: number): number;
+  /** Add an I2C bus on fixed pads (M5-02; reached by the routed controller or bit-banged GPIO); pullup != 0 = external pull-ups. Returns the bus index, or -1 if a pad is taken / the chip has no pin buses. */
+  tb_i2c_bus_add(sda: number, scl: number, pullup: number): number;
+  /** Attach an I2C device (kind codes as `tb_i2c_attach`) to pin bus `bus`. Returns 0 on success. */
+  tb_i2c_attach_bus(bus: number, kind: number, addr: number): number;
+  /** Package version eFuse (S3 0 = QFN56 / 1 = PICO; ESP32 5 = PICO-D4 / 6 = PICO-V3-02). Returns 0 on success. */
+  tb_efuse_pkg(pkg: number): number;
   /** Set the environment (read by BME280 and other environment sensors) */
   tb_env_set(tempC: number, humidity: number, pressurePa: number): void;
   /** Pose (MPU6050 / QMI8658): Euler angles (deg) + their rates (°/s), same as the script action imu= */

@@ -100,6 +100,8 @@ pub struct SocBus {
     pub gpio: Gpio,
     pub spi1: spiflash::SpiFlash,
     pub i2c0: i2c::I2c,
+    /// Buses on fixed SDA / SCL pads (M5-02): reached by the routed controller or by bit-banged GPIO
+    pub i2c_pins: tryboard_soc::i2cpins::PinBuses,
     pub extmem: Extmem,
     pub analog: hle::Analog,
     pub ledc: ledc::Ledc,
@@ -188,6 +190,7 @@ impl Default for SocBus {
             ws2812: HashMap::new(),
             pins: Default::default(),
             efuse: boot::default_efuse(),
+            i2c_pins: Default::default(),
             from_cpu: 0,
             usj_tx: Vec::new(),
             console: Vec::new(),
@@ -448,7 +451,10 @@ impl SocBus {
                 return;
             }
             0x6001_3000 => {
-                self.i2c0.write(off, v, now);
+                // I2CEXT0 SDA/SCL out = 54/53 (gpio_sig_map.h)
+                let routed = self.i2c_pins.routed(&self.gpio.func_out, 0xff, 54, 53);
+                let extra = routed.map(|i| &mut self.i2c_pins.buses[i].devices);
+                self.i2c0.write_with(off, v, now, extra);
                 if !self.i2c0.events.is_empty() {
                     self.iotrace.extend(&mut self.i2c0.events);
                 }
@@ -532,7 +538,33 @@ impl SocBus {
     }
 
     /// Pin levels may have changed: detect edges, log
+    /// Let bit-banged pin buses see the pads; a device's SDA drive changes only while SCL is low, so this settles
+    fn i2c_pins_settle(&mut self, now: u64) {
+        if self.i2c_pins.is_empty() {
+            return;
+        }
+        for _ in 0..4 {
+            let lv = self.gpio.level() as u64;
+            let fo = &self.gpio.func_out;
+            let gpio = |p: u32| fo.get(p as usize).is_some_and(|f| f & 0xff == 0x80);
+            let drives = self.i2c_pins.on_level(now, lv, gpio);
+            if drives.is_empty() {
+                return;
+            }
+            for (pin, low) in drives {
+                let bit = 1 << pin;
+                if low {
+                    self.gpio.ext_driven |= bit;
+                    self.gpio.ext_in &= !bit;
+                } else {
+                    self.gpio.ext_driven &= !bit;
+                }
+            }
+        }
+    }
+
     pub fn gpio_changed(&mut self, now: u64) {
+        self.i2c_pins_settle(now);
         self.gpio.sense();
         let lv = self.gpio.level();
         if let Some(l) = self.lcd.as_mut() {

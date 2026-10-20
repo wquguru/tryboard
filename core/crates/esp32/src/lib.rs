@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use tryboard_soc::devices::audio::Audio;
 use tryboard_soc::devices::pins::PinDevices;
 use tryboard_soc::i2c::{I2c, I2cLayout};
+use tryboard_soc::i2cpins::PinBuses;
 use tryboard_soc::iotrace::IoTrace;
 use tryboard_soc::periph::Uart;
 use tryboard_soc::rmt::Ws2812;
@@ -121,6 +122,10 @@ pub struct SocBus {
     pub ws2812: HashMap<u32, Ws2812>,
     pub pins: PinDevices,
     pub i2c0: I2c,
+    /// Buses on fixed SDA / SCL pads (M5-02): reached by the routed controller or by bit-banged GPIO
+    pub i2c_pins: PinBuses,
+    /// APB_CTRL_DATE bit 31 (revision v3 marker); cleared for PICO-D4 parts, which M5GFX reads as V3-02 otherwise
+    pub chip_v3: bool,
     pub i2c1: I2c,
     pub adc: Adc,
     pub audio: Audio,
@@ -190,6 +195,8 @@ impl Default for SocBus {
             ws2812: HashMap::new(),
             pins: PinDevices::default(),
             i2c0: I2c::with_layout(I2cLayout::ESP32, 0),
+            i2c_pins: PinBuses::default(),
+            chip_v3: true,
             i2c1: I2c::with_layout(I2cLayout::ESP32, tryboard_soc::iotrace::i2cbit::PORT1),
             adc: Adc::default(),
             audio: Audio::default(),
@@ -374,7 +381,7 @@ impl SocBus {
             return x;
         }
         if a == APB_CTRL_DATE {
-            return 0x8000_0000 | 0x1605_1900;
+            return (self.chip_v3 as u32) << 31 | 0x1605_1900;
         }
         // The RNG register also falls inside the MAC range; check it first
         if MacRegs::ESP32.contains(a) {
@@ -436,12 +443,15 @@ impl SocBus {
                 }
             }
             0x3FF5_3000 | 0x3FF6_7000 => {
-                let bus = if base == 0x3FF5_3000 {
-                    &mut self.i2c0
+                // I2CEXT0 SDA/SCL out = 30/29, I2CEXT1 = 96/95 (gpio_sig_map.h)
+                let (bus, sda, scl) = if base == 0x3FF5_3000 {
+                    (&mut self.i2c0, 30, 29)
                 } else {
-                    &mut self.i2c1
+                    (&mut self.i2c1, 96, 95)
                 };
-                bus.write(off, v, now);
+                let routed = self.i2c_pins.routed(&self.gpio.func_out, 0x1ff, sda, scl);
+                let extra = routed.map(|i| &mut self.i2c_pins.buses[i].devices);
+                bus.write_with(off, v, now, extra);
                 if !bus.events.is_empty() {
                     self.iotrace.extend(&mut bus.events);
                 }
@@ -491,7 +501,36 @@ impl SocBus {
         self.wifi.as_deref_mut().expect("wifi")
     }
 
+    /// Let bit-banged pin buses see the pads; a device's SDA drive changes only while SCL is low, so this settles
+    fn i2c_pins_settle(&mut self, now: u64) {
+        if self.i2c_pins.is_empty() {
+            return;
+        }
+        for _ in 0..4 {
+            let lv = self.gpio.level();
+            let fo = &self.gpio.func_out;
+            let gpio = |p: u32| {
+                fo.get(p as usize)
+                    .is_some_and(|f| f & 0x1ff == SIG_GPIO_OUT)
+            };
+            let drives = self.i2c_pins.on_level(now, lv, gpio);
+            if drives.is_empty() {
+                return;
+            }
+            for (pin, low) in drives {
+                let bit = 1 << pin;
+                if low {
+                    self.gpio.ext_driven |= bit;
+                    self.gpio.ext_in &= !bit;
+                } else {
+                    self.gpio.ext_driven &= !bit;
+                }
+            }
+        }
+    }
+
     pub fn gpio_changed(&mut self, now: u64) {
+        self.i2c_pins_settle(now);
         self.gpio.sense();
         let lv = self.gpio.level();
         if lv != self.last_gpio {
