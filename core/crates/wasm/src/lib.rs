@@ -276,7 +276,45 @@ pub extern "C" fn tb_analog_set(pin: u32, mv: f32) {
 /// 7 = CST9220, 8 = AXP2101, 9 = PCF85063, 10 = ES8311, 11 = ES7210. Returns 0 on success.
 #[no_mangle]
 pub extern "C" fn tb_i2c_attach(kind: u32, addr: u32) -> i32 {
-    let name = match kind {
+    let Some(name) = i2c_kind(kind) else {
+        return 1;
+    };
+    with(1, |m| if m.i2c_attach(name, addr as u8) { 0 } else { 1 })
+}
+
+/// Add an I2C bus on fixed pads (M5-02; reached by the routed controller or bit-banged GPIO); pullup != 0 = external
+/// pull-ups. Returns the bus index, or -1 if a pad is taken / the chip has no pin buses.
+#[no_mangle]
+pub extern "C" fn tb_i2c_bus_add(sda: u32, scl: u32, pullup: u32) -> i32 {
+    with(-1, |m| {
+        m.i2c_bus_add(sda, scl, pullup != 0)
+            .map_or(-1, |i| i as i32)
+    })
+}
+
+/// Attach an I2C device (kind codes as `tb_i2c_attach`) to pin bus `bus`. Returns 0 on success.
+#[no_mangle]
+pub extern "C" fn tb_i2c_attach_bus(bus: u32, kind: u32, addr: u32) -> i32 {
+    let Some(name) = i2c_kind(kind) else {
+        return 1;
+    };
+    with(1, |m| {
+        if m.i2c_attach_bus(bus as usize, name, addr as u8) {
+            0
+        } else {
+            1
+        }
+    })
+}
+
+/// Package version eFuse (S3 0 = QFN56 / 1 = PICO; ESP32 5 = PICO-D4 / 6 = PICO-V3-02). Returns 0 on success.
+#[no_mangle]
+pub extern "C" fn tb_efuse_pkg(pkg: u32) -> i32 {
+    with(1, |m| if m.set_efuse_pkg(pkg) { 0 } else { 1 })
+}
+
+fn i2c_kind(kind: u32) -> Option<&'static str> {
+    Some(match kind {
         1 => "ssd1306",
         2 => "bme280",
         3 => "mpu6050",
@@ -288,9 +326,8 @@ pub extern "C" fn tb_i2c_attach(kind: u32, addr: u32) -> i32 {
         9 => "pcf85063",
         10 => "es8311",
         11 => "es7210",
-        _ => return 1,
-    };
-    with(1, |m| if m.i2c_attach(name, addr as u8) { 0 } else { 1 })
+        _ => return None,
+    })
 }
 
 /// Set the environment (read by BME280 and other environment sensors)

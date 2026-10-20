@@ -617,6 +617,39 @@ impl Machine {
         }
     }
 
+    /// Add an I2C bus on fixed pads (M5-02): whichever controller the GPIO matrix routes to both pads reaches its
+    /// devices, and so does firmware bit-banging the pads; `pullup` = external pull-ups. None if a pad is taken.
+    pub fn i2c_bus_add(&mut self, sda: u32, scl: u32, pullup: bool) -> Option<usize> {
+        self.hw
+            .i2c_bus_add(tryboard_soc::i2cpins::PinBus::new(sda, scl, pullup))
+    }
+
+    /// Attach a device to pin bus `bus` (from `i2c_bus_add`)
+    pub fn i2c_attach_bus(&mut self, bus: usize, kind: &str, addr: u8) -> bool {
+        let Some(d) = tryboard_soc::devices::make_i2c(kind, addr) else {
+            return false;
+        };
+        let Some(b) = self.hw.i2c_pin_buses().and_then(|p| p.buses.get_mut(bus)) else {
+            return false;
+        };
+        b.attach(d);
+        self.elec.add_module(kind);
+        true
+    }
+
+    /// Package version eFuse (S3 0 = QFN56, 1 = PICO; ESP32 5 = PICO-D4, 6 = PICO-V3-02); false if unsupported
+    pub fn set_efuse_pkg(&mut self, pkg: u32) -> bool {
+        self.hw.set_efuse_pkg(pkg)
+    }
+
+    /// First device of type T: legacy I2C0 devices, then pin buses
+    fn i2c_dev<T: 'static>(&mut self) -> Option<&mut T> {
+        if self.hw.i2c0().device::<T>().is_some() {
+            return self.hw.i2c0().device::<T>();
+        }
+        self.hw.i2c_pin_buses()?.device::<T>()
+    }
+
     pub fn i2c_stats(&mut self) -> (u64, u64) {
         let b = self.i2c0();
         (b.transactions, b.nacks)
@@ -625,15 +658,14 @@ impl Machine {
     pub fn env_set(&mut self, env: Env) {
         let t = env.temp_c;
         let h = env.humidity;
-        let bus = self.i2c0();
-        if let Some(b) = bus.device::<Bme280>() {
+        if let Some(b) = self.i2c_dev::<Bme280>() {
             b.env = env;
         }
         // The IMU's on-chip thermometer reads die temperature: use ambient (self-heating not modelled)
-        if let Some(d) = bus.device::<Mpu6050>() {
+        if let Some(d) = self.i2c_dev::<Mpu6050>() {
             d.temp_c = t;
         }
-        if let Some(d) = bus.device::<Qmi8658>() {
+        if let Some(d) = self.i2c_dev::<Qmi8658>() {
             d.temp_c = t;
         }
         for d in &mut self.pins().dhts {
@@ -644,11 +676,10 @@ impl Machine {
 
     /// Pose (applies to MPU6050 / QMI8658 on the bus): Euler angles (deg) + rates (deg/s), see devices/imu.rs
     pub fn imu_set(&mut self, pose: Pose) {
-        let bus = self.i2c0();
-        if let Some(d) = bus.device::<Mpu6050>() {
+        if let Some(d) = self.i2c_dev::<Mpu6050>() {
             d.pose = pose;
         }
-        if let Some(d) = bus.device::<Qmi8658>() {
+        if let Some(d) = self.i2c_dev::<Qmi8658>() {
             d.pose = pose;
         }
     }
@@ -662,20 +693,19 @@ impl Machine {
     /// Finger on the touchscreen (x, y in screen pixels; CST816S clamps to 0..239, FT6236 is 12-bit, CST9220 to its resolution); down = false lifts
     pub fn touch(&mut self, x: u16, y: u16, down: bool) {
         let now = self.cycles();
-        let bus = self.i2c0();
-        if let Some(d) = bus.device::<Cst816s>() {
+        if let Some(d) = self.i2c_dev::<Cst816s>() {
             if down {
                 d.press(x, y, now);
             } else {
                 d.release(now);
             }
-        } else if let Some(d) = bus.device::<Ft6236>() {
+        } else if let Some(d) = self.i2c_dev::<Ft6236>() {
             if down {
                 d.press(x, y);
             } else {
                 d.release();
             }
-        } else if let Some(d) = bus.device::<Cst9220>() {
+        } else if let Some(d) = self.i2c_dev::<Cst9220>() {
             if down {
                 d.press(x, y);
             } else {
@@ -691,7 +721,7 @@ impl Machine {
 
     /// AXP2101 battery level / USB plug (action `bat=pct[,usb]`); false without the PMIC on the bus
     pub fn battery_set(&mut self, percent: u8, usb: bool) -> bool {
-        match self.i2c0().device::<Axp2101>() {
+        match self.i2c_dev::<Axp2101>() {
             Some(d) => {
                 d.set_battery(percent, usb);
                 true
@@ -702,7 +732,7 @@ impl Machine {
 
     /// AXP2101 PWRON key press (action `pwrkey=short|long`)
     pub fn pwrkey(&mut self, long: bool) -> bool {
-        match self.i2c0().device::<Axp2101>() {
+        match self.i2c_dev::<Axp2101>() {
             Some(d) => {
                 d.pwrkey(long);
                 true
@@ -714,7 +744,7 @@ impl Machine {
     /// PCF85063 time (UTC epoch seconds) as of now
     pub fn rtc_set(&mut self, epoch: i64) -> bool {
         let now = self.cycles();
-        match self.i2c0().device::<Pcf85063>() {
+        match self.i2c_dev::<Pcf85063>() {
             Some(d) => {
                 d.set_time(now);
                 d.set_epoch(epoch);
@@ -726,14 +756,13 @@ impl Machine {
 
     /// AXP2101 registers accessed without a model (register, count); empty without the PMIC
     pub fn pmic_unimpl(&mut self) -> Vec<(u8, u64)> {
-        self.i2c0()
-            .device::<Axp2101>()
+        self.i2c_dev::<Axp2101>()
             .map(|d| d.unimpl.iter().map(|(r, n)| (*r, *n)).collect())
             .unwrap_or_default()
     }
 
     pub fn oled(&mut self) -> Option<&mut Ssd1306> {
-        self.i2c0().device::<Ssd1306>()
+        self.i2c_dev::<Ssd1306>()
     }
 
     /// Attach a screen on SPI2: "gc9a01" (C3 / S3, pins `lcd_pin`) or "co5300" (S3 only, pins `co5300_pin`);

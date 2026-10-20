@@ -9,6 +9,7 @@ use tryboard_soc::devices::audio::Audio;
 use tryboard_soc::devices::lcd::{Lcd, LcdKind};
 use tryboard_soc::devices::pins::PinDevices;
 use tryboard_soc::i2c::I2c;
+use tryboard_soc::i2cpins::{PinBus, PinBuses};
 use tryboard_soc::iotrace::IoTrace;
 use tryboard_soc::rmt::Ws2812;
 use tryboard_soc::tasktrace::TaskTrace;
@@ -168,6 +169,26 @@ impl Chip for Esp32s3 {
     }
     fn pins(&mut self) -> &mut PinDevices {
         &mut self.bus.pins
+    }
+    fn i2c_pin_buses(&mut self) -> Option<&mut PinBuses> {
+        Some(&mut self.bus.i2c_pins)
+    }
+    fn i2c_bus_add(&mut self, bus: PinBus) -> Option<usize> {
+        let pull = if bus.pullup { bus.mask() } else { 0 };
+        let i = self.bus.i2c_pins.add(bus)?;
+        self.bus.gpio.board_pullup |= pull;
+        let now = self.cpu.cycles;
+        self.bus.gpio_changed(now);
+        Some(i)
+    }
+    fn set_efuse_pkg(&mut self, pkg: u32) -> bool {
+        if pkg > 7 {
+            return false;
+        }
+        // PKG_VERSION: BLK1 bits 117..119 (RD_MAC_SPI_SYS_3 bits 21..23)
+        let w = &mut self.bus.efuse[0x44 / 4 + 3];
+        *w = *w & !(7 << 21) | pkg << 21;
+        true
     }
     fn lcd_attach(&mut self, kind: LcdKind) -> bool {
         self.bus.attach_lcd(kind);

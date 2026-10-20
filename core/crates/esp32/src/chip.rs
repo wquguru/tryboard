@@ -7,6 +7,7 @@ use tryboard_soc::chip::{self, Chip};
 use tryboard_soc::devices::audio::Audio;
 use tryboard_soc::devices::pins::PinDevices;
 use tryboard_soc::i2c::I2c;
+use tryboard_soc::i2cpins::{PinBus, PinBuses};
 use tryboard_soc::iotrace::IoTrace;
 use tryboard_soc::rmt::Ws2812;
 use tryboard_soc::tasktrace::TaskTrace;
@@ -162,6 +163,28 @@ impl Chip for Esp32 {
     }
     fn pins(&mut self) -> &mut PinDevices {
         &mut self.bus.pins
+    }
+    fn i2c_pin_buses(&mut self) -> Option<&mut PinBuses> {
+        Some(&mut self.bus.i2c_pins)
+    }
+    fn i2c_bus_add(&mut self, bus: PinBus) -> Option<usize> {
+        let pull = if bus.pullup { bus.mask() } else { 0 };
+        let i = self.bus.i2c_pins.add(bus)?;
+        self.bus.gpio.board_pullup |= pull;
+        let now = self.cpu.cycles;
+        self.bus.gpio_changed(now);
+        Some(i)
+    }
+    fn set_efuse_pkg(&mut self, pkg: u32) -> bool {
+        if pkg > 15 {
+            return false;
+        }
+        // CHIP_PACKAGE (BLK0 RDATA3 bits 9..11) + CHIP_PACKAGE_4BIT (bit 2)
+        let w = &mut self.bus.efuse[3];
+        *w = *w & !(7 << 9 | 1 << 2) | (pkg & 7) << 9 | (pkg >> 3) << 2;
+        // PICO-D4 boards (Atom, StickC) are pre-v3 silicon; M5GFX maps PICO-D4 + DATE bit 31 to PICO-V3-02
+        self.bus.chip_v3 = pkg != 5;
+        true
     }
     fn audio(&self) -> &Audio {
         &self.bus.audio

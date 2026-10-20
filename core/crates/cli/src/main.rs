@@ -17,6 +17,8 @@ fn usage() -> ! {
                [--trace-io <events.txt>] [--trace-pins all|4,8,…] (logic analyzer events: GPIO / PWM / WS2812 / I2C transactions, cycle-stamped)
                [--trace-tasks <timeline.json>] (FreeRTOS task switches, one track per core, opens in Perfetto; per-task CPU share printed at the end of stderr)
                [--i2c ssd1306@0x3c,bme280@0x76] [--env temp,humidity,pressure Pa] [--oled] [--i2c-log] (acks per address)
+               [--i2c-bus sda=N,scl=N[,nopull]:kind@addr,...] (repeatable: bus on fixed pads, reached by the routed I2C0/I2C1 or bit-banged GPIO; external pull-ups unless nopull)
+               [--efuse-pkg N] (package version eFuse: S3 0 QFN56 / 1 PICO; ESP32 5 PICO-D4 / 6 PICO-V3-02)
                (more I2C devices: mpu6050@0x68, qmi8658@0x6b, cst816s@0x15, ft6236@0x38, cst9220@0x5a, axp2101@0x34, pcf85063@0x51, es8311@0x18, es7210@0x40) [--battery PCT[,usb]] (AXP2101) [--rtc EPOCH] (PCF85063, UTC) [--touch-int <GPIO>] (touch INT pin: low while pressed)
                script actions imu=pitch,roll,yaw[,their rates in °/s], touch=x,y (screen pixels, press / move), release (lift)
                [--spi gc9a01] (S3: SCLK=12 MOSI=11 CS=10 DC=14 RST=13 BL=15; C3: SCLK=6 MOSI=7 CS=10 DC=5 RST=4 BL=3) [--lcd-ppm <last frame.ppm>]
@@ -173,6 +175,67 @@ fn task_report(
     }
 }
 
+/// `kind@0xNN` list item -> (kind, 7-bit address)
+fn i2c_item(item: &str) -> (&str, u8) {
+    let (kind, addr) = item.split_once('@').unwrap_or((item, "0"));
+    (
+        kind,
+        u8::from_str_radix(addr.trim_start_matches("0x"), 16).unwrap_or(0),
+    )
+}
+
+/// `--i2c` (legacy, I2C0 without pin check), `--i2c-bus` (pin buses, M5-02, repeatable), `--efuse-pkg`
+fn i2c_opts(m: &mut Machine, args: &[String], chip: &str) {
+    if let Some(spec) = opt(args, "--i2c") {
+        for (kind, addr) in spec.split(',').map(i2c_item) {
+            if !m.i2c_attach(kind, addr) {
+                eprintln!("unknown I2C device {kind}");
+                std::process::exit(2)
+            }
+        }
+    }
+    let buses = args.windows(2).filter(|w| w[0] == "--i2c-bus");
+    for spec in buses.map(|w| w[1].as_str()) {
+        if let Err(e) = i2c_bus_spec(m, spec) {
+            eprintln!("--i2c-bus {spec}: {e}");
+            std::process::exit(2)
+        }
+    }
+    if let Some(p) = opt(args, "--efuse-pkg") {
+        if !p.parse().is_ok_and(|n| m.set_efuse_pkg(n)) {
+            eprintln!("--efuse-pkg {p}: unsupported on {chip}");
+            std::process::exit(2)
+        }
+    }
+}
+
+/// `sda=11,scl=12[,nopull]:bme280@0x76,...`: add the bus, then its devices
+fn i2c_bus_spec(m: &mut Machine, spec: &str) -> Result<(), String> {
+    let (pins, devs) = spec.split_once(':').unwrap_or((spec, ""));
+    let (mut sda, mut scl, mut pull) = (None, None, true);
+    for kv in pins.split(',') {
+        match kv.split_once('=') {
+            Some(("sda", v)) => sda = v.parse::<u32>().ok(),
+            Some(("scl", v)) => scl = v.parse::<u32>().ok(),
+            None if kv == "nopull" => pull = false,
+            _ => return Err(format!("bad pin item '{kv}'")),
+        }
+    }
+    let (Some(sda), Some(scl)) = (sda, scl) else {
+        return Err("needs sda=N,scl=N".into());
+    };
+    let bus = m
+        .i2c_bus_add(sda, scl, pull)
+        .ok_or("pad already on a bus, or chip without pin buses")?;
+    for item in devs.split(',').filter(|s| !s.is_empty()) {
+        let (kind, addr) = i2c_item(item);
+        if !m.i2c_attach_bus(bus, kind, addr) {
+            return Err(format!("unknown I2C device {kind}"));
+        }
+    }
+    Ok(())
+}
+
 fn opt(args: &[String], name: &str) -> Option<String> {
     args.iter()
         .position(|a| a == name)
@@ -221,17 +284,7 @@ fn run(args: &[String]) {
     if let Some(s) = opt(args, "--uart-in") {
         m.uart_push(s.replace("\\n", "\n").as_bytes());
     }
-    // External I2C devices: --i2c ssd1306@0x3c,bme280@0x76
-    if let Some(spec) = opt(args, "--i2c") {
-        for item in spec.split(',') {
-            let (kind, addr) = item.split_once('@').unwrap_or((item, "0"));
-            let addr = u8::from_str_radix(addr.trim_start_matches("0x"), 16).unwrap_or(0);
-            if !m.i2c_attach(kind, addr) {
-                eprintln!("unknown I2C device {kind}");
-                std::process::exit(2)
-            }
-        }
-    }
+    i2c_opts(&mut m, args, chip.name());
     // Touch INT pin: --touch-int GPIO
     if let Some(pin) = opt(args, "--touch-int").and_then(|s| s.parse().ok()) {
         m.touch_int_attach(pin);

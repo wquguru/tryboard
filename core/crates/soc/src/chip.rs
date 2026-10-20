@@ -7,6 +7,7 @@ use crate::devices::audio::Audio;
 use crate::devices::lcd::{Lcd, LcdKind};
 use crate::devices::pins::PinDevices;
 use crate::i2c::I2c;
+use crate::i2cpins::{PinBus, PinBuses};
 use crate::iotrace::IoTrace;
 use crate::rmt::Ws2812;
 use crate::tasktrace::TaskTrace;
@@ -127,6 +128,18 @@ pub trait Chip {
     /// I2C controller n (None past the last one)
     fn i2c(&self, n: usize) -> Option<&I2c>;
     fn pins(&mut self) -> &mut PinDevices;
+    /// I2C buses identified by SDA / SCL pads (M5-02); None on chips without them
+    fn i2c_pin_buses(&mut self) -> Option<&mut PinBuses> {
+        None
+    }
+    /// Add a pin bus (its pull-ups join the board pull-ups); None if unsupported or a pad is taken
+    fn i2c_bus_add(&mut self, _bus: PinBus) -> Option<usize> {
+        None
+    }
+    /// Package version eFuse (C3 / S3 PKG_VERSION, ESP32 CHIP_VER_PKG); false if unsupported
+    fn set_efuse_pkg(&mut self, _pkg: u32) -> bool {
+        false
+    }
     /// Attach a screen on SPI2 (pins per chip crate's `lcd_pin` / `co5300_pin`); false when the chip lacks that model
     fn lcd_attach(&mut self, _kind: LcdKind) -> bool {
         false

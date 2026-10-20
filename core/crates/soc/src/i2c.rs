@@ -215,6 +215,30 @@ impl I2c {
         }
     }
 
+    /// Register write with a pin bus's devices (M5-02) appended for this access; own devices keep their indices.
+    /// The chip picks the bus from GPIO matrix routing; a stale device index from another bus is dropped.
+    pub fn write_with(
+        &mut self,
+        off: u32,
+        v: u32,
+        now: u64,
+        extra: Option<&mut Vec<Box<dyn I2cDevice>>>,
+    ) {
+        let n = self.devices.len();
+        let Some(x) = extra else {
+            if self.cur.is_some_and(|i| i >= n) {
+                self.cur = None;
+            }
+            return self.write(off, v, now);
+        };
+        self.devices.append(x);
+        if self.cur.is_some_and(|i| i >= self.devices.len()) {
+            self.cur = None;
+        }
+        self.write(off, v, now);
+        *x = self.devices.split_off(n);
+    }
+
     pub fn write(&mut self, off: u32, v: u32, now: u64) {
         match off {
             0x04 => {
