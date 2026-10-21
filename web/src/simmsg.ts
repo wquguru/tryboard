@@ -2,11 +2,12 @@
 import type { InputLog, InputEvent, InputAction } from './inputlog';
 import type { Locale } from './i18n';
 import type { PartsDevs } from './partsdev.ts';
+import type { TftPanel } from './lcdspec.ts';
 
 /** Power source (P1-02): usb = servo also draws from USB 5 V; ext = servo on an external 5 V 2 A supply. */
 export type PowerMode = 'usb' | 'ext';
 /** Screen model attached at power-up (E-03) */
-export type LcdKind = 'gc9a01' | 'co5300';
+export type LcdKind = 'gc9a01' | 'co5300' | TftPanel;
 /** AXP2101 battery state: percent and whether USB is plugged (E-03) */
 export type Battery = { pct: number; usb: boolean };
 

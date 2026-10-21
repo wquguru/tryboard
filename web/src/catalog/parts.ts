@@ -812,12 +812,13 @@ export const PARTS: Part[] = [
     currentMa: { typ: 12, peak: 25, est: true, source: 'Estimate: same range as SSD1306, larger screen' },
     i2cAddr: { default: 0x3c, alt: [0x3d] },
     i2cPullupK: null,
+    sim: { level: 'verified', model: 'sh1106' },
     price: [12, 22],
     keywords: '1.3寸 OLED SH1106 I2C', // lint: allow-cjk
     supplyNet: '3V3',
     sources: ['Sino Wealth SH1106 datasheet (132×64 frame memory)'],
     todo: ['pins[SCL/SDA].v', 'i2cPullupK', 'sizeMm'],
-    note: 'Looks like an SSD1306 but the driver differs: 132-column memory and no horizontal addressing mode, so an SSD1306 driver shows garbage or a 2-column shift. The simulator has no model for this screen yet.',
+    note: 'Looks like an SSD1306 but the driver differs: 132-column memory and no horizontal addressing mode, so an SSD1306 driver shows garbage or a 2-column shift. The simulator models the 132-column memory (shown from column 2); scrolling and RAM read-back are not modelled.',
   }),
   P({
     id: 'gc9a01',
@@ -864,12 +865,13 @@ export const PARTS: Part[] = [
     pins: [GND(), VCC(), pin('SCL', 'spi-sclk', 3.3, { dir: 'in' }), pin('SDA', 'spi-mosi', 3.3, { dir: 'in' }), pin('RES', 'rst', 3.3, { dir: 'in' }), pin('DC', 'spi-dc', 3.3, { dir: 'in' }), pin('CS', 'spi-cs', 3.3, { dir: 'in' }), pin('BLK', 'backlight', 3.3, { dir: 'in' })],
     voltage: { supply: [3.3, 3.3], logic: 3.3 },
     currentMa: { typ: 25, peak: 50, est: true, source: 'Estimate: mostly the backlight' },
+    sim: { level: 'verified', model: 'st7789-240x240' },
     price: [12, 28],
     keywords: '1.54寸 IPS ST7789 SPI 240x240', // lint: allow-cjk
     supplyNet: '3V3',
     sources: ['Sitronix ST7789V datasheet'],
     todo: ['voltage.supply: some modules have a regulator', 'currentMa', 'sizeMm'],
-    note: 'Some 1.3″ 7-pin versions have no CS pin and need SPI mode 3. The simulator has no ST7789 model yet.',
+    note: 'Some 1.3″ 7-pin versions have no CS pin and need SPI mode 3. The simulator models the 240×240 panel (80-row offset when mirrored) on the fixed SPI2 LCD pins.',
   }),
 
   // ───────── Actuators / lights / sound ─────────

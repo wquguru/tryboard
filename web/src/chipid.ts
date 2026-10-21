@@ -38,3 +38,11 @@ export function chipFromId(id: number): SimChip | null {
   for (const c of Object.keys(CHIP_ID) as SimChip[]) if (CHIP_ID[c] === id) return c;
   return null;
 }
+
+/** Fixed SPI2 LCD wiring per chip (GC9A01 and the F-04a2 TFTs; the core models exactly this wiring, see lcd_pin in core) */
+export const LCD_WIRING: Record<SimChip, { sclk: number; mosi: number; cs: number; dc: number; rst: number; bl: number }> = {
+  esp32s3: { sclk: 12, mosi: 11, cs: 10, dc: 14, rst: 13, bl: 15 },
+  esp32c3: { sclk: 6, mosi: 7, cs: 10, dc: 5, rst: 4, bl: 3 },
+  // The core has no round LCD on ESP32 yet (C-05 covers I2C / LEDC only): common VSPI wiring as a placeholder, unused by examples
+  esp32: { sclk: 18, mosi: 23, cs: 5, dc: 16, rst: 17, bl: 4 },
+};

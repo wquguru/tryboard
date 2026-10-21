@@ -110,13 +110,8 @@ export const BOARD_E32: BoardSpec = makeSpec({
 
 export const BOARDS: Record<ChipId, BoardSpec> = { esp32: BOARD_E32, esp32c3: BOARD_C3, esp32s3: BOARD_S3 };
 
-/** Fixed GC9A01 round-LCD wiring per chip (the core models exactly this wiring, see lcd_pin in core) */
-export const LCD_WIRING: Record<ChipId, { sclk: number; mosi: number; cs: number; dc: number; rst: number; bl: number }> = {
-  esp32s3: { sclk: 12, mosi: 11, cs: 10, dc: 14, rst: 13, bl: 15 },
-  esp32c3: { sclk: 6, mosi: 7, cs: 10, dc: 5, rst: 4, bl: 3 },
-  // The core has no round LCD on ESP32 yet (C-05 covers I2C / LEDC only): common VSPI wiring as a placeholder, unused by examples
-  esp32: { sclk: 18, mosi: 23, cs: 5, dc: 16, rst: 17, bl: 4 },
-};
+// Moved to chipid.ts (F-04a2) so dependency-free modules (place.ts, node tests) can use it
+export { LCD_WIRING } from '../chipid';
 
 
 // ---------------------------------------------------------------- breadboard

@@ -1386,5 +1386,70 @@
    ]
   },
   "chip": "esp32c3"
+ },
+ {
+  "id": "c3-ili9341-temp",
+  "title": "Temperature screen: DS18B20 on a 2.4″ ILI9341 colour TFT (ESP32-C3)",
+  "about": "A bare 2.4″ ILI9341 module on the fixed SPI2 LCD pins (SCLK GPIO6, MOSI GPIO7, CS GPIO10, DC GPIO5, RST GPIO4, backlight GPIO3) and a DS18B20 probe on GPIO1 (GPIO4 is taken by the screen reset). The firmware reads the probe four times a second with its own 1-Wire driver and redraws the 240×320 screen only when the reading changes: big seven-segment digits, blue below 15 ℃, green, red above 28 ℃, and a −10…40 ℃ bar. Drag the temperature slider to watch the screen follow.",
+  "tags": [
+   "✓ Verified in sim",
+   "ILI9341",
+   "DS18B20",
+   "SPI",
+   "1-Wire",
+   "ESP-IDF 5.5"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "tft",
+     "panel": "ili9341",
+     "sclk": 6,
+     "mosi": 7,
+     "cs": 10,
+     "dc": 5,
+     "rst": 4,
+     "bl": 3
+    },
+    {
+     "type": "ds18b20",
+     "pin": 1
+    }
+   ]
+  },
+  "controls": [
+   "env"
+  ],
+  "chip": "esp32c3"
+ },
+ {
+  "id": "c3-sh1106-pir",
+  "title": "Motion monitor: PIR on a 1.3″ SH1106 OLED (ESP32-C3)",
+  "about": "A 1.3″ SH1106 OLED on I2C (0x3C, SDA GPIO6, SCL GPIO7) and an HC-SR501 PIR on GPIO4. The SH1106 has 132 columns of memory with the glass starting at column 2, so the firmware sends each page from column 2 (an SSD1306 driver would shift the picture). Press Wave on the PIR card: the screen flips to an inverted MOTION banner, counts visits and shows how long the last one lasted; the serial log prints each edge.",
+  "tags": [
+   "✓ Verified in sim",
+   "SH1106",
+   "OLED",
+   "PIR",
+   "I2C",
+   "ESP-IDF 5.5"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "oled",
+     "ctl": "sh1106",
+     "addr": 60,
+     "sda": 6,
+     "scl": 7
+    },
+    {
+     "type": "pir",
+     "pin": 4,
+     "hold": 2
+    }
+   ]
+  },
+  "chip": "esp32c3"
  }
 ]

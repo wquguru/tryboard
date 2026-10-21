@@ -335,6 +335,7 @@ fn i2c_kind(kind: u32) -> Option<&'static str> {
         9 => "pcf85063",
         10 => "es8311",
         11 => "es7210",
+        12 => "sh1106",
         _ => return None,
     })
 }
@@ -398,16 +399,23 @@ pub extern "C" fn tb_rtc_set(epoch: f64) -> i32 {
 }
 
 /// OLED frame version: refetch pixels only when it changes. 0 = no OLED.
+/// SSD1306 first, else SH1106 (F-04a2): both render the same 128×64 brightness frame.
 #[no_mangle]
 pub extern "C" fn tb_oled_version() -> u32 {
-    with(0, |m| m.oled().map(|o| o.version).unwrap_or(0))
+    with(0, |m| match m.oled() {
+        Some(o) => o.version,
+        None => m.sh1106().map(|o| o.version).unwrap_or(0),
+    })
 }
 
 /// OLED frame: 128×64 bytes, brightness 0..255 per pixel (display on/off and contrast applied). Null = no OLED.
 #[no_mangle]
 pub extern "C" fn tb_oled_ptr() -> *const u8 {
     with(std::ptr::null(), |m| {
-        m.oled()
+        if let Some(o) = m.oled() {
+            return o.render().as_ptr();
+        }
+        m.sh1106()
             .map(|o| o.render().as_ptr())
             .unwrap_or(std::ptr::null())
     })
@@ -1186,6 +1194,9 @@ pub extern "C" fn tb_report() -> usize {
             }
         }
         if let Some(d) = m.oled() {
+            let _ = writeln!(o, "[tryboard] OLED lit pixels {}", d.lit_pixels());
+        } else if let Some(d) = m.sh1106() {
+            // Same line as the CLI's SH1106 report once check.py strips the bracketed detail
             let _ = writeln!(o, "[tryboard] OLED lit pixels {}", d.lit_pixels());
         }
         if let Some(d) = m.lcd() {

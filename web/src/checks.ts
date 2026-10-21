@@ -6,6 +6,7 @@ import { chipAt, pwmDevice, servoDeg, want as wantN } from './ui/say.ts';
 import type { ConfLevel } from './ui/conf.tsx';
 import type { Fault } from './faults.ts';
 import { partsFromArgs } from './partsdev.ts';
+import { isTftPanel, lcdFromSpi } from './lcdspec.ts';
 
 export interface Level {
   id: string;
@@ -87,7 +88,9 @@ export function bootOptions(l: Level) {
     });
   const e = val('--env')?.split(',').map(Number);
   const env = e ? { temp: e[0], humidity: e[1], pressure: e[2] } : undefined;
-  const lcd = (val('--spi') ?? '').split(',').includes('gc9a01');
+  // F-04a2: a TFT panel name passes through as the screen kind (same text the CLI attaches)
+  const spiLcd = lcdFromSpi(val('--spi'));
+  const lcd = spiLcd === 'gc9a01' ? true : isTftPanel(spiLcd) ? spiLcd : false;
   const sv = val('--servo');
   const servo = sv === undefined ? undefined : Number(sv);
   const power = val('--power') === 'ext' ? ('ext' as const) : ('usb' as const);

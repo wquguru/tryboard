@@ -280,7 +280,7 @@ const d: Dict = {
   "Lens buddy base and screen frame (3D-printed)": "透镜小人底座和屏幕外框（3D 打印）",
   "Lifts 3.3 V data to 5 V for WS2812 strips, one direction only. Tie OE to GND to enable.": "把 3.3 V 数据升到 5 V，给 WS2812 灯带用，单向。OE 接地使能。",
   "Line the dev board native USB port up with the opening at the back. Don't cover the WROOM antenna with a metal plate, or Wi-Fi gets worse (estimate).": "开发板的原生 USB 口要对准背面开孔；别用金属定位板盖住 WROOM 天线，否则 Wi-Fi 信号会变差（估算）。",
-  "Looks like an SSD1306 but the driver differs: 132-column memory and no horizontal addressing mode, so an SSD1306 driver shows garbage or a 2-column shift. The simulator has no model for this screen yet.": "外观和 SSD1306 很像但驱动不同：显存 132 列、没有水平寻址模式，用 SSD1306 驱动会花屏或偏 2 列。模拟器还没有这块屏的模型。",
+  "Looks like an SSD1306 but the driver differs: 132-column memory and no horizontal addressing mode, so an SSD1306 driver shows garbage or a 2-column shift. The simulator models the 132-column memory (shown from column 2); scrolling and RAM read-back are not modelled.": "外观和 SSD1306 很像但驱动不同：显存 132 列、没有水平寻址模式，用 SSD1306 驱动会花屏或偏 2 列。模拟器按 132 列显存建模（从第 2 列开始显示）；滚动和读回显存没有建模。",
   "Loudest on 5 V. Peak current is high and, on top of Wi-Fi, can make USB sag. The simulator has no I2S model yet.": "从 5 V 供电音量最大；峰值电流大，和 Wi-Fi 叠加时 USB 可能掉压。模拟器暂无 I2S 模型。",
   "Low = 0x68, high = 0x69": "低 0x68，高 0x69",
   "Low while touched": "按着拉低",
@@ -350,7 +350,7 @@ const d: Dict = {
   "ST7789 1.54″ IPS LCD module": "ST7789 1.54″ IPS LCD 模块",
   "Same shape as the no-touch version, but display reset is on GPIO14 and backlight on GPIO2 (GPIO12 / 40 on the no-touch one), so firmware pins depend on the version. Only 6 GPIOs on the SH1.0 connector are exposed.": "和无触摸版同一款外形，但屏复位在 GPIO14、背光在 GPIO2（无触摸版是 GPIO12 / 40），固件要按版本改引脚。对外只有 SH1.0 接口上的 6 个 GPIO。",
   "Same size and connector as the SG90, with sturdier gears. The simulator uses the same servo model (torque is not modelled).": "和 SG90 同尺寸同接口，齿轮耐用。模拟器用同一个舵机模型（不区分扭矩）。",
-  "Some 1.3″ 7-pin versions have no CS pin and need SPI mode 3. The simulator has no ST7789 model yet.": "有的 1.3″ 七针版没有 CS 脚，要用 SPI 模式 3。模拟器还没有 ST7789 模型。",
+  "Some 1.3″ 7-pin versions have no CS pin and need SPI mode 3. The simulator models the 240×240 panel (80-row offset when mirrored) on the fixed SPI2 LCD pins.": "有的 1.3″ 七针版没有 CS 脚，要用 SPI 模式 3。模拟器按 240×240 面板建模（镜像时有 80 行偏移），接在固定的 SPI2 LCD 引脚上。",
   "Some batches have VCC and GND swapped, so wire by the silkscreen, not by the picture.": "有的批次 VCC 和 GND 的引脚顺序是对调的，按丝印接，别按图接。",
   "Spinner body and turntable base (3D-printed)": "小黄身体和转台底座（3D 打印）",
   "TMB12A05-style active magnetic buzzer": "TMB12A05 类有源电磁蜂鸣器",
@@ -826,5 +826,13 @@ const d: Dict = {
   "Power it from 3V3, not 5 V, so AO never exceeds the ADC range. The reading is a rough light level, not a calibrated lux meter.": "从 3V3 供电而不是 5 V，AO 才不会超出 ADC 量程。读数只是大致亮度，不是标定过的照度计。",
   "RC522 RFID reader module (13.56 MHz)": "RC522 RFID 读卡模块（13.56 MHz）",
   "3.3 V only. The simulator reads card UIDs; MIFARE authentication and block reads are not modelled.": "只能 3.3 V。仿真能读卡 UID；MIFARE 认证和读块没有建模。",
+  // F-04a2 TFT modules (ILI9341, ST7789 240×320)
+  "2.4″ color display (ILI9341, SPI, 240×320)": "2.4″ 彩屏（ILI9341，SPI，240×320）",
+  "ILI9341 2.4″ TFT module (red 9-pin SPI board, no touch)": "ILI9341 2.4″ TFT 模块（红色 9 针 SPI 板，无触摸）",
+  "Only for reading the panel back; most drivers leave it open": "只用于读回屏幕数据；多数驱动不接",
+  "TN panel with BGR subpixels and no colour inversion. 2.8″ boards with touch add five XPT2046 pins (not modelled). The simulator wires it to the fixed SPI2 LCD pins.": "TN 屏，BGR 子像素，不需要反色。带触摸的 2.8″ 板多出五个 XPT2046 引脚（没有建模）。模拟器把它接在固定的 SPI2 LCD 引脚上。",
+  "2.0″ color display (ST7789, SPI, 240×320)": "2.0″ 彩屏（ST7789，SPI，240×320）",
+  "ST7789V 2.0″ IPS LCD module (8-pin)": "ST7789V 2.0″ IPS 屏模块（8 针）",
+  "IPS panel: most need colour inversion on. The simulator wires it to the fixed SPI2 LCD pins.": "IPS 屏：大多要打开反色。模拟器把它接在固定的 SPI2 LCD 引脚上。",
 };
 export default d;

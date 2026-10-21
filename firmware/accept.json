@@ -4586,5 +4586,79 @@
     "tol": 0.25
    }
   ]
+ },
+ {
+  "id": "c3-ili9341-temp",
+  "chip": "esp32c3",
+  "seconds": 3,
+  "qemu": false,
+  "args": [
+   "--spi",
+   "ili9341",
+   "--ds18b20",
+   "1",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "expect": [
+   "ILI9341 温度屏启动 (SCLK=6 MOSI=7 CS=10 DC=5 RST=4 BL=3)，DS18B20 在 GPIO1",
+   "屏幕显示 23.5 °C（舒适）",
+   "TRYBOARD_OK c3-ili9341-temp"
+  ],
+  "stderr_expect": [
+   "DS18B20 x1 on GPIO1:",
+   "LCD color #39d77b 14574 px",
+   "pixels written 76800, backlight on"
+  ],
+  "lcd_min_pixels": 76800
+ },
+ {
+  "id": "c3-ili9341-temp-hot",
+  "fw": "c3-ili9341-temp",
+  "chip": "esp32c3",
+  "seconds": 3,
+  "qemu": false,
+  "args": [
+   "--spi",
+   "ili9341",
+   "--ds18b20",
+   "1",
+   "--env",
+   "31.2,45,101325"
+  ],
+  "expect": [
+   "屏幕显示 31.2 °C（偏热）",
+   "TRYBOARD_OK c3-ili9341-temp"
+  ],
+  "stderr_expect": [
+   "LCD color #ff4939 14754 px"
+  ],
+  "lcd_min_pixels": 76800
+ },
+ {
+  "id": "c3-sh1106-pir",
+  "chip": "esp32c3",
+  "seconds": 6.5,
+  "qemu": false,
+  "args": [
+   "--i2c",
+   "sh1106@0x3c",
+   "--pir",
+   "4,2",
+   "--script",
+   "1.5:pir=1; 3.0:pir=0"
+  ],
+  "expect": [
+   "SH1106 人体感应屏启动：OLED I2C 0x3C (SDA=6 SCL=7)，PIR 在 GPIO4",
+   "TRYBOARD_OK c3-sh1106-pir",
+   "有人经过，第 1 次",
+   "人已离开，这次持续 3 秒"
+  ],
+  "stderr_expect": [
+   "PIR GPIO4: 1 triggers, output high 3.50 s, now LOW",
+   "NACK 0",
+   "SH1106, non-SH1106 commands 0"
+  ],
+  "oled_min_pixels": 500
  }
 ]

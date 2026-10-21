@@ -280,7 +280,7 @@ const d: Dict = {
   "Lens buddy base and screen frame (3D-printed)": "렌즈 인형 받침과 화면 프레임(3D 프린트)",
   "Lifts 3.3 V data to 5 V for WS2812 strips, one direction only. Tie OE to GND to enable.": "3.3 V 데이터를 5 V로 올려 WS2812 LED 스트립에 씁니다. 단방향입니다. OE를 GND에 연결하면 활성화됩니다.",
   "Line the dev board native USB port up with the opening at the back. Don't cover the WROOM antenna with a metal plate, or Wi-Fi gets worse (estimate).": "개발 보드의 네이티브 USB 포트를 뒷면 구멍에 맞추세요. 금속 보강판으로 WROOM 안테나를 덮으면 Wi-Fi 신호가 약해집니다(추정).",
-  "Looks like an SSD1306 but the driver differs: 132-column memory and no horizontal addressing mode, so an SSD1306 driver shows garbage or a 2-column shift. The simulator has no model for this screen yet.": "외형은 SSD1306과 비슷하지만 드라이버가 다릅니다. 메모리가 132열이고 수평 주소 모드가 없어 SSD1306 드라이버로는 화면이 깨지거나 2열 밀립니다. 시뮬레이터에는 아직 이 화면 모델이 없습니다.",
+  "Looks like an SSD1306 but the driver differs: 132-column memory and no horizontal addressing mode, so an SSD1306 driver shows garbage or a 2-column shift. The simulator models the 132-column memory (shown from column 2); scrolling and RAM read-back are not modelled.": "외형은 SSD1306과 비슷하지만 드라이버가 다릅니다. 메모리가 132열이고 수평 주소 모드가 없어 SSD1306 드라이버로는 화면이 깨지거나 2열 밀립니다. 시뮬레이터는 132열 메모리를 모델링합니다(2열부터 표시). 스크롤과 메모리 읽기는 모델링하지 않습니다.",
   "Loudest on 5 V. Peak current is high and, on top of Wi-Fi, can make USB sag. The simulator has no I2S model yet.": "5 V 전원일 때 음량이 가장 큽니다. 피크 전류가 커서 Wi-Fi와 겹치면 USB 전압이 떨어질 수 있습니다. 시뮬레이터에는 아직 I2S 모델이 없습니다.",
   "Low = 0x68, high = 0x69": "Low면 0x68, High면 0x69",
   "Low while touched": "터치 중 Low",
@@ -350,7 +350,7 @@ const d: Dict = {
   "ST7789 1.54″ IPS LCD module": "ST7789 1.54″ IPS LCD 모듈",
   "Same shape as the no-touch version, but display reset is on GPIO14 and backlight on GPIO2 (GPIO12 / 40 on the no-touch one), so firmware pins depend on the version. Only 6 GPIOs on the SH1.0 connector are exposed.": "터치 없는 버전과 외형은 같지만 화면 리셋은 GPIO14, 백라이트는 GPIO2입니다(터치 없는 버전은 GPIO12 / 40). 펌웨어 핀을 버전에 맞게 바꿔야 합니다. 외부 GPIO는 SH1.0 커넥터의 6개뿐입니다.",
   "Same size and connector as the SG90, with sturdier gears. The simulator uses the same servo model (torque is not modelled).": "SG90과 같은 크기, 같은 커넥터이며 기어가 튼튼합니다. 시뮬레이터는 같은 서보 모델을 씁니다(토크 구분 없음).",
-  "Some 1.3″ 7-pin versions have no CS pin and need SPI mode 3. The simulator has no ST7789 model yet.": "일부 1.3″ 7핀 버전은 CS 핀이 없어 SPI 모드 3을 써야 합니다. 시뮬레이터에는 아직 ST7789 모델이 없습니다.",
+  "Some 1.3″ 7-pin versions have no CS pin and need SPI mode 3. The simulator models the 240×240 panel (80-row offset when mirrored) on the fixed SPI2 LCD pins.": "일부 1.3″ 7핀 버전은 CS 핀이 없어 SPI 모드 3을 써야 합니다. 시뮬레이터는 240×240 패널(미러링 시 80행 오프셋)을 고정 SPI2 LCD 핀에 연결해 모델링합니다.",
   "Some batches have VCC and GND swapped, so wire by the silkscreen, not by the picture.": "일부 배치는 VCC와 GND 핀 순서가 반대이니 그림이 아니라 실크 인쇄대로 연결하세요.",
   "Spinner body and turntable base (3D-printed)": "스피너 몸체와 회전대 받침(3D 프린트)",
   "TMB12A05-style active magnetic buzzer": "TMB12A05 계열 능동 전자기 부저",
@@ -826,5 +826,13 @@ const d: Dict = {
   "Power it from 3V3, not 5 V, so AO never exceeds the ADC range. The reading is a rough light level, not a calibrated lux meter.": "AO가 ADC 범위를 넘지 않도록 5 V가 아닌 3V3에서 전원을 공급하세요. 측정값은 대략적인 밝기일 뿐 보정된 조도계가 아닙니다.",
   "RC522 RFID reader module (13.56 MHz)": "RC522 RFID 리더 모듈(13.56 MHz)",
   "3.3 V only. The simulator reads card UIDs; MIFARE authentication and block reads are not modelled.": "3.3 V 전용입니다. 시뮬레이터는 카드 UID를 읽으며, MIFARE 인증과 블록 읽기는 모델링하지 않았습니다.",
+  // F-04a2 TFT modules (ILI9341, ST7789 240×320)
+  "2.4″ color display (ILI9341, SPI, 240×320)": "2.4″ 컬러 디스플레이(ILI9341, SPI, 240×320)",
+  "ILI9341 2.4″ TFT module (red 9-pin SPI board, no touch)": "ILI9341 2.4″ TFT 모듈(빨간 9핀 SPI 보드, 터치 없음)",
+  "Only for reading the panel back; most drivers leave it open": "패널 읽기 전용이며 대부분의 드라이버는 연결하지 않습니다",
+  "TN panel with BGR subpixels and no colour inversion. 2.8″ boards with touch add five XPT2046 pins (not modelled). The simulator wires it to the fixed SPI2 LCD pins.": "TN 패널, BGR 서브픽셀, 색 반전 없음. 터치가 있는 2.8″ 보드는 XPT2046 핀 5개가 더 있습니다(모델링하지 않음). 시뮬레이터는 고정 SPI2 LCD 핀에 연결합니다.",
+  "2.0″ color display (ST7789, SPI, 240×320)": "2.0″ 컬러 디스플레이(ST7789, SPI, 240×320)",
+  "ST7789V 2.0″ IPS LCD module (8-pin)": "ST7789V 2.0″ IPS LCD 모듈(8핀)",
+  "IPS panel: most need colour inversion on. The simulator wires it to the fixed SPI2 LCD pins.": "IPS 패널: 대부분 색 반전을 켜야 합니다. 시뮬레이터는 고정 SPI2 LCD 핀에 연결합니다.",
 };
 export default d;

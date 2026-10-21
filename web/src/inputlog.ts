@@ -2,6 +2,7 @@
 // exported as a `tryboard run --inputs <file>` script that replays cycle for cycle. Format: docs/DECISIONS.md (2026-10-16 input log).
 
 import { partsArgs, rc522Spec, type PartsDevs } from './partsdev.ts';
+import type { TftPanel } from './lcdspec.ts';
 export type InputEvent =
   /** Externally driven pin: 0 / 1, -1 = released (high impedance) */
   | { tMs: number; kind: 'gpio'; pin: number; level: number }
@@ -66,7 +67,7 @@ export interface InputLog {
   i2c: { kind: string; addr: number }[];
   lcd: boolean;
   /** Screen other than the GC9A01 (E-03): becomes --spi co5300 on replay */
-  spi?: 'co5300';
+  spi?: 'co5300' | TftPanel;
   /** AXP2101 battery at power-up: becomes --battery pct[,usb] on replay */
   battery?: { pct: number; usb: boolean };
   /** Servo (GPIO) and supply at power-up: become --servo / --power on replay */

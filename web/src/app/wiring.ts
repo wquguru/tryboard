@@ -4,6 +4,7 @@ import type { PartSpec } from '../board3d';
 import { BENCH_WIRE_CM } from './harness.ts';
 import { I2S_WIRING } from '../i2spins.ts';
 import { t } from '../i18n/index.ts';
+import { TFT_HEADER, TFT_PX } from '../lcdspec.ts';
 
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
 
@@ -15,7 +16,7 @@ export interface PartInfo {
 }
 
 /** Part type → display name (timeline, hints and build tree all use this so raw type names never leak into the UI) */
-export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: t('Servo'), gc9a01: t('Round screen'), buzzer: t('Buzzer'), pot: t('Potentiometer'), led: 'LED', encoder: t('Encoder'), hcsr04: t('Ultrasonic'), mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: t('Touch'), max98357a: t('Speaker'), inmp441: t('Microphone'), key: t('Button'), ws2812: t('LED strip'), dht11: 'DHT11', ds18b20: 'DS18B20', pir: t('PIR sensor'), relay: t('Relay'), ldr: t('Light sensor'), rc522: 'RC522' };
+export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: t('Servo'), gc9a01: t('Round screen'), tft: t('Color screen'), buzzer: t('Buzzer'), pot: t('Potentiometer'), led: 'LED', encoder: t('Encoder'), hcsr04: t('Ultrasonic'), mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: t('Touch'), max98357a: t('Speaker'), inmp441: t('Microphone'), key: t('Button'), ws2812: t('LED strip'), dht11: 'DHT11', ds18b20: 'DS18B20', pir: t('PIR sensor'), relay: t('Relay'), ldr: t('Light sensor'), rc522: 'RC522' };
 export const partLabel = (type: string) => PART_LABEL[type as PartSpec['type']] ?? t('Part');
 
 export function partId(p: PartSpec) {
@@ -28,7 +29,14 @@ export function partInfo(p: PartSpec, ext5v = false): PartInfo {
     case 'bme280':
       return { name: 'BME280', model: t('Bosch BME280 module (temperature / humidity / pressure)'), iface: i2c(p), power: '3V3' };
     case 'oled':
+      if (p.ctl === 'sh1106') return { name: 'SH1106 OLED', model: t('1.3″ 128×64 monochrome OLED (SH1106, 132-column memory)'), iface: i2c(p), power: '3V3' };
       return { name: 'SSD1306 OLED', model: t('0.96″ 128×64 monochrome OLED (SSD1306)'), iface: i2c(p), power: '3V3' };
+    case 'tft': {
+      const [w, h] = TFT_PX[p.panel];
+      const name = p.panel === 'ili9341' ? t('ILI9341 color screen') : t('ST7789 color screen');
+      const size = p.panel === 'ili9341' ? '2.4″' : p.panel === 'st7789-240x240' ? '1.54″' : '2.0″';
+      return { name, model: t('{size} {w}×{h} RGB TFT module ({ctl}, SPI)', { size, w, h, ctl: p.panel === 'ili9341' ? 'ILI9341' : 'ST7789' }), iface: `SPI2 · SCLK ${p.sclk} · MOSI ${p.mosi} · CS ${p.cs} · DC ${p.dc} · RST ${p.rst} · BL ${p.bl}`, power: '3V3' };
+    }
     case 'servo':
       return { name: t('SG90 servo'), model: t('SG90 9 g micro servo, 50 Hz PWM, 0.5–2.5 ms pulse maps to 0–180°'), iface: t('Signal GPIO{pin}', { pin: p.pin }), power: ext5v ? t('5V (external 5 V 2 A)') : t('5V (straight from USB)') };
     case 'gc9a01':
@@ -155,6 +163,14 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
       add('GND', id, 'GND', R.gnd, 'gnd', C.black);
       add('3V3', id, 'VCC', R.vcc, 'power', C.red);
       for (const [g, n, r] of [[12, 'SCL', 'SPI SCLK'], [11, 'SDA', 'SPI MOSI'], [13, 'RES', 'LCD RST'], [14, 'DC', 'LCD DC'], [10, 'CS', 'LCD CS'], [15, 'BLK', t('LCD backlight')]] as const) add(`GPIO${g}`, id, n, r, 'load', C.orange);
+    } else if (p.type === 'tft') {
+      // Firmware drives SPI2 on the chip's fixed LCD pins; SDO (MISO) stays open, as on most hobby wiring
+      const role = { sclk: 'SPI SCLK', mosi: 'SPI MOSI', rst: 'LCD RST', dc: 'LCD DC', cs: 'LCD CS', bl: t('LCD backlight') } as const;
+      for (const [n, r] of TFT_HEADER[p.panel]) {
+        if (r === 'gnd') add('GND', id, n, R.gnd, 'gnd', C.black);
+        else if (r === 'vcc') add('3V3', id, n, R.vcc, 'power', C.red);
+        else if (r !== 'miso') add(`GPIO${p[r]}`, id, n, role[r], 'load', r === 'cs' ? C.purple : C.orange);
+      }
     } else if (p.type === 'pot') {
       add('3V3', id, 'VCC', R.vcc, 'power', C.red);
       add(`GPIO${p.pin}`, id, 'OUT', t('Analog input (wiper)'), 'drive', C.orange);

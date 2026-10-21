@@ -1,6 +1,8 @@
 // Place parts on the bench (P2-16): only parts with a pin-level device model, so a wired part really reaches the sim;
 // others are greyed out with a reason. Step pins use wiresOf pin names so wire ids match rewiring and the wiring check.
-import type { PartSpec, SceneSpec } from '../board3d.ts';
+import type { ChipId, PartSpec, SceneSpec } from '../board3d.ts';
+import { LCD_WIRING } from '../chipid.ts';
+import { TFT_HEADER, type TftPanel, type TftPinRole } from '../lcdspec.ts';
 import { t } from '../i18n/index.ts';
 import { getPart } from '../catalog/parts.ts';
 import { partId, wiresOf, type WireMods } from './wiring.ts';
@@ -17,20 +19,28 @@ export interface PlaceStep {
   def?: '3V3' | '5V';
   /** May be left unconnected (MPU6050 INT, encoder switch). */
   optional?: boolean;
+  /** Only the chip's fixed LCD pin of this role fits (F-04a2 TFT: the core wires SPI2 to LCD_WIRING) */
+  fixed?: Exclude<TftPinRole, 'gnd' | 'vcc' | 'miso'>;
 }
 export interface PlaceDef {
   partId: string;
   name: string;
   type: PartSpec['type'];
   steps: PlaceStep[];
+  /** TFT panel (type 'tft') / OLED controller (type 'oled'), carried into the scene part */
+  panel?: TftPanel;
+  ctl?: 'sh1106';
 }
 
 const G = (pin: string, label = pin): PlaceStep => ({ pin, label, want: 'gpio' });
 const GND = (label = 'GND'): PlaceStep => ({ pin: 'GND', label, want: 'gnd' });
 const P = (pin: string, def: '3V3' | '5V', label = pin): PlaceStep => ({ pin, label, want: 'power', def });
 const I2C = (vcc: string, vlabel = vcc): PlaceStep[] => [P(vcc, '3V3', vlabel), GND(), G('SCL'), G('SDA')];
+/** TFT header in silkscreen order; SDO (MISO) is skipped: the firmware never reads the panel */
+const TFT = (panel: TftPanel): PlaceStep[] =>
+  TFT_HEADER[panel].flatMap(([n, r]): PlaceStep[] => (r === 'gnd' ? [GND()] : r === 'vcc' ? [P(n, '3V3')] : r === 'miso' ? [] : [{ ...G(n), fixed: r }]));
 
-const DEFS: Record<string, { type: PartSpec['type']; steps: PlaceStep[] }> = {
+const DEFS: Record<string, Omit<PlaceDef, 'partId' | 'name'>> = {
   'led-kit': { type: 'led', steps: [G('IN', t('Long leg + (via 220 Ω)')), GND(t('Short leg −'))] },
   button: { type: 'key', steps: [G('IN', t('Pin A')), GND(t('Pin B'))] },
   'buzzer-module': { type: 'buzzer', steps: [P('VCC', '3V3'), G('I/O'), GND()] },
@@ -39,6 +49,10 @@ const DEFS: Record<string, { type: PartSpec['type']; steps: PlaceStep[] }> = {
   pot: { type: 'pot', steps: [P('VCC', '3V3', t('Pin 1')), G('OUT', t('Pin 2 (wiper)')), GND(t('Pin 3'))] },
   bme280: { type: 'bme280', steps: I2C('VIN', 'VCC') },
   ssd1306: { type: 'oled', steps: I2C('VCC') },
+  sh1106: { type: 'oled', steps: I2C('VCC'), ctl: 'sh1106' },
+  ili9341: { type: 'tft', steps: TFT('ili9341'), panel: 'ili9341' },
+  st7789: { type: 'tft', steps: TFT('st7789-240x240'), panel: 'st7789-240x240' },
+  'st7789-240x320': { type: 'tft', steps: TFT('st7789-240x320'), panel: 'st7789-240x320' },
   mpu6050: { type: 'mpu6050', steps: [...I2C('VCC'), { ...G('INT'), optional: true }] },
   qmi8658: { type: 'qmi8658', steps: I2C('VIN') },
   encoder: { type: 'encoder', steps: [GND(), P('+', '3V3'), G('CLK'), G('DT'), { ...G('SW'), optional: true }] },
@@ -79,9 +93,21 @@ export function pinOk(want: Want, id: string): boolean {
   return id === '3V3' || id === '5V';
 }
 
+/** GPIO a fixed-pin step needs on this chip (bench pin id), or null for a free step */
+export const fixedPin = (step: PlaceStep, chip: ChipId) => (step.fixed ? `GPIO${LCD_WIRING[chip][step.fixed]}` : null);
+/** Step accepts this bench pin: right kind, and the fixed LCD pin when the step has one */
+export const stepOk = (step: PlaceStep, id: string, chip: ChipId) => pinOk(step.want, id) && (!step.fixed || id === fixedPin(step, chip));
+/** Firmware for another chip switches the board: the core wires SPI2 to that chip's LCD pins, so the TFT's wires follow */
+export function retargetTft(scene: SceneSpec, chip: ChipId) {
+  for (const p of scene.parts) if (p.type === 'tft') Object.assign(p, LCD_WIRING[chip]);
+}
+
 /** Conflicts before placing: same single-instance module already present, or I2C address taken. */
 export function placeConflict(def: PlaceDef, scene: SceneSpec): string | null {
   if (def.type === 'led' || def.type === 'key') return null;
+  // The core has one LCD slot: a TFT cannot join the round display (or another TFT)
+  const lcd = def.type === 'tft' && scene.parts.find((p) => p.type === 'gc9a01' || p.type === 'tft');
+  if (lcd) return t('There is already a screen on the bench: the simulator drives one SPI display at a time');
   const same = scene.parts.find((p) => p.type === def.type);
   if (same) return t('There is already a {name} on the bench (one of each module, except LEDs and buttons)', { name: def.name });
   const addr = getPart(def.partId).i2cAddr?.default;
@@ -113,11 +139,18 @@ export function buildPlaced(def: PlaceDef, got: Record<string, string>, ext5v = 
     case 'ws2812':
       spec = { type: 'ws2812', pin: g('DIN')!, ...(def.partId === 'ws2812-strip' ? { n: 60 } : {}) };
       break;
-    case 'bme280':
     case 'oled':
+      spec = { type: 'oled', addr, sda: g('SDA')!, scl: g('SCL')!, ...(def.ctl ? { ctl: def.ctl } : {}) };
+      break;
+    case 'bme280':
     case 'qmi8658':
       spec = { type: def.type, addr, sda: g('SDA')!, scl: g('SCL')! };
       break;
+    case 'tft': {
+      const pin = (r: string) => g(def.steps.find((s) => s.fixed === r)!.pin)!;
+      spec = { type: 'tft', panel: def.panel!, sclk: pin('sclk'), mosi: pin('mosi'), cs: pin('cs'), dc: pin('dc'), rst: pin('rst'), bl: pin('bl') };
+      break;
+    }
     case 'mpu6050': {
       const int = g('INT');
       spec = { type: 'mpu6050', addr, sda: g('SDA')!, scl: g('SCL')!, ...(int !== undefined ? { int } : {}) };

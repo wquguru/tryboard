@@ -88,6 +88,12 @@ function withText(e: Ex, s: string, f: (p: number, n: number) => number): number
   return r;
 }
 
+/** Screen by CLI --spi name (F-04a2 TFT panels; same call as --spi ili9341). Returns an error text or null */
+export function attachLcdSpec(e: Ex, name: string): string | null {
+  if (!e.tb_lcd_attach_spec) return `--spi ${name}: this wasm build has no tb_lcd_attach_spec`;
+  return withText(e, name, (q, n) => e.tb_lcd_attach_spec!(q, n)) === 0 ? null : `--spi ${name}: rejected on this chip`;
+}
+
 /** Attach at power-up, before env_set (CLI order: wire sensors, parts, --env; --spi later). Returns an error text or null */
 export function attachParts(e: Ex, p: PartsDevs | undefined, chip: string | undefined): string | null {
   if (!p) return null;

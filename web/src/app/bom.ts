@@ -151,7 +151,7 @@ export function placement(b: Bom): Placement {
   const raw = toScene(b.picks, tpl.wiring);
   const parts = raw.filter((p) => Object.entries(p).every(([, v]) => v !== undefined));
   const placedTypes = new Set(parts.map((p) => p.type));
-  const SIM = new Set(['oled', 'bme280', 'servo', 'gc9a01', 'led', 'buzzer', 'mpu6050', 'qmi8658', 'cst816s', 'encoder', 'hcsr04', 'ws2812', 'dht11', 'ds18b20', 'pir', 'relay', 'ldr', 'rc522']);
+  const SIM = new Set(['oled', 'bme280', 'servo', 'gc9a01', 'tft', 'led', 'buzzer', 'mpu6050', 'qmi8658', 'cst816s', 'encoder', 'hcsr04', 'ws2812', 'dht11', 'ds18b20', 'pir', 'relay', 'ldr', 'rc522']);
   const skipped = raw.filter((p) => !parts.includes(p)).map((p) => p.type);
   // toScene drops unwired LEDs / buzzers silently; count them as skipped too.
   for (const p of b.picks) {

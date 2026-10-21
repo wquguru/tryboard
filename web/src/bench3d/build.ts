@@ -9,12 +9,15 @@ import { wire } from './wires';
 import type { PartSpec } from './spec';
 import type { BenchCtx } from './ctx';
 import { I2S_WIRING } from '../i2spins.ts';
+import { TFT_HEADER } from '../lcdspec.ts';
+import type { tftModule } from './tft3d';
 
 /** Part builders: LED, round LCD, IMU, I2C modules, servo, pot, key, buzzer. */
 export function mountBuildersA(ctx: BenchCtx): void {
   const { BB_TOP, useSlot, colX, pinCands, boardHole, lift, top, addRole, addWire, jumper, registerPart, registerModulePins, tl, label } = ctx;
   ctx.buildLed = buildLed;
   ctx.buildSpiLcd = buildSpiLcd;
+  ctx.buildSpiTft = buildSpiTft;
   ctx.buildImu = buildImu;
   ctx.buildI2c = buildI2c;
   ctx.buildServo = buildServo;
@@ -91,6 +94,23 @@ export function mountBuildersA(ctx: BenchCtx): void {
       const i = 8 + k;
       moduleWire(grp, pinName, new THREE.Vector3(colX(firstCol + i), top, rowZ(0)), color, `cst816s:${TP_PINS[k]}`, 50 + i * 1.4, i);
       addRole(apiId(pinName), role);
+    });
+  }
+
+  /** Rectangular TFT (F-04a2): one wire per header pin in silkscreen order, SDO left open; pins come from the spec (= LCD_WIRING) */
+  function buildSpiTft(grp: THREE.Group, m: ReturnType<typeof tftModule>, firstCol: number, p: Extract<PartSpec, { type: 'tft' }>) {
+    m.grp.position.set(colX(firstCol + (m.labels.length - 1) / 2), BB_TOP, rowZ(4));
+    m.grp.rotation.x = -0.12;
+    registerPart('tft', m.grp);
+    registerModulePins('tft', m.grp, m.pins, m.labels);
+    grp.add(m.grp);
+    const color = { sclk: WIRE.scl, mosi: WIRE.sda, rst: WIRE.sig, dc: 0x8f5bd6, cs: 0x3f8fd6, bl: 0xd6d6d6 } as const;
+    const role = { sclk: 'SPI SCLK', mosi: 'SPI MOSI', rst: 'LCD RST', dc: 'LCD DC', cs: 'LCD CS', bl: t('LCD backlight') } as const;
+    TFT_HEADER[p.panel].forEach(([label, r], i) => {
+      if (r === 'miso') return;
+      const [pinName, c, text] = r === 'gnd' ? ['GND', WIRE.gnd, t('{name} GND', { name: 'LCD' })] : r === 'vcc' ? ['3V3', WIRE.vcc, t('{name} power', { name: 'LCD' })] : [`IO${p[r]}`, color[r], role[r]];
+      moduleWire(grp, pinName, new THREE.Vector3(colX(firstCol + i), top, rowZ(0)), c, `tft:${label}`, 50 + i * 1.4, i);
+      addRole(apiId(pinName), text);
     });
   }
 

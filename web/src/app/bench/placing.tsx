@@ -3,7 +3,7 @@
 import { t } from "../../i18n";
 import { partId } from "../wiring";
 import { overlay } from "../chrome";
-import { buildPlaced, mergeMods, pinOk, placeConflict, placeDef } from "../place";
+import { buildPlaced, fixedPin, mergeMods, pinOk, placeConflict, placeDef, stepOk } from "../place";
 import { LIB_DRAG, PinRings, PlaceBanner, type RingPin } from "./ui";
 import type { BenchCtx } from "./ctx";
 
@@ -77,7 +77,7 @@ export function mountPlacing(b: BenchCtx) {
     );
     const wires = b.benchWires().filter((x) => !x.missing);
     const pins: RingPin[] = (c.session.pick.listPins?.() ?? [])
-      .filter((x) => pinOk(step.want, x.id))
+      .filter((x) => stepOk(step, x.id, c.session.chip))
       .map((x) => ({
         ...x,
         used: [
@@ -102,6 +102,9 @@ export function mountPlacing(b: BenchCtx) {
     const p = b.placing;
     if (!p) return;
     const step = p.def.steps[p.cur];
+    const fixed = fixedPin(step, c.session.chip);
+    if (pinOk(step.want, id) && fixed && id !== fixed)
+      return c.shell.toast(t("{pin} must go to {gpio}: the firmware drives this screen on fixed SPI2 pins", { pin: step.label, gpio: fixed }));
     if (!pinOk(step.want, id))
       return c.shell.toast(
         step.want === "gnd"

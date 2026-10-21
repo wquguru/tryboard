@@ -2,6 +2,7 @@
 // Wiring matches the scene of the same example in firmware/examples.json (catalog.test.ts compares them).
 import { t } from '../i18n/index.ts';
 import { getPart, type LcdPins, type Part } from './parts.ts';
+import { LCD_WIRING } from '../chipid.ts';
 
 /** One picked part: key tells apart several of the same model (defaults to partId) */
 export interface Pick {
@@ -376,7 +377,9 @@ export function bomTotal(picks: Pick[], board?: string): { lo: number; hi: numbe
 }
 
 /** Part library -> bench scene part type (same names as examples.json scene.parts[].type) */
-const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812', pot: 'pot', dht11: 'dht11' };
+const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812', pot: 'pot', dht11: 'dht11', sh1106: 'oled', st7789: 'tft', 'st7789-240x320': 'tft', ili9341: 'tft' };
+/** Bare SPI TFT catalog part -> panel (= CLI --spi name, F-04a2) */
+const TFT_PANEL: Record<string, string> = { st7789: 'st7789-240x240', 'st7789-240x320': 'st7789-240x320', ili9341: 'ili9341' };
 /** Keycap labels (usbkey: K1–K3 send a / b / c, K4 is the macro key) */
 const KEY_CAPS = ['a', 'b', 'c', 'M'];
 
@@ -405,7 +408,12 @@ export function toScene(picks: Pick[], wiring: Wire[]): { type: string; [k: stri
     const key = p.key ?? p.partId;
     const part = getPart(p.partId);
     if (type === 'oled' || type === 'bme280') {
-      out.push({ type, addr: p.addr ?? part.i2cAddr!.default, sda: gpioOf(key, 'i2c-sda'), scl: gpioOf(key, 'i2c-scl') });
+      out.push({ type, addr: p.addr ?? part.i2cAddr!.default, sda: gpioOf(key, 'i2c-sda'), scl: gpioOf(key, 'i2c-scl'), ...(p.partId === 'sh1106' ? { ctl: 'sh1106' } : {}) });
+    } else if (type === 'tft') {
+      // The core wires SPI2 to the chip's fixed LCD pins: take them from the listed board (no board = unplaced, listed as skipped)
+      const chip = picks.map((x) => getPart(x.partId).board?.chip).find((c) => c !== undefined);
+      const w = chip ? LCD_WIRING[chip] : undefined;
+      out.push({ type, panel: TFT_PANEL[p.partId], sclk: w?.sclk, mosi: w?.mosi, cs: w?.cs, dc: w?.dc, rst: w?.rst, bl: w?.bl });
     } else if (type === 'servo') {
       out.push({ type, pin: gpioOf(key, 'pwm') });
     } else if (type === 'mpu6050' || type === 'qmi8658') {
