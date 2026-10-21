@@ -236,7 +236,7 @@
 | F-07b | 网页 main.py 编辑器（需人定 MicroPython 分发方式与定位） | micropython.mjs | ☐ |
 | F-08a / F-08b | Arduino 库矩阵 2 × 10 例（MIT / BSD 优先） | accept 矩阵写进 STATUS | ◐ F-08a 2026-10-20：12 个显示 / 传感器库示例在 C3 通过（`arduino-lib-*`），Adafruit ILI9341 草图待修；F-08b 2026-10-20：10 个 Wi-Fi / BLE / 舵机 / 灯带示例编译，9 个用例通过，PubSubClient（无 MQTT broker）与 NimBLE-Arduino（0xfc01 厂商命令）待改 core |
 | F-08c | BLE 多 IDF 签名 + osi 版本放宽 + pll_track | 覆盖自测；误匹配 0 | ☑ IDF 5.1.0–5.3.1 部分（2026-10-20）；Arduino 3.0.x 未验（要装 arduino-cli core 3.0.7，待人批） |
-| F-09a | xiaozhi 虚拟服务端（长连接 TCP + WebSocket + 脚本） | 单测 + golden | ◐ F-09a-1 2026-10-20：长连接 TCP + WebSocket（`wifi/ws.rs`，101 握手、掩码、分片、ping、close、半关闭、窗口记账），11 个单测，golden 191/191；F-09a-2 xiaozhi 脚本服务端未开始 |
+| F-09a | xiaozhi 虚拟服务端（长连接 TCP + WebSocket + 脚本） | 单测 + golden | ☑ F-09a-1 2026-10-20：长连接 TCP + WebSocket（`wifi/ws.rs`，101 握手、掩码、分片、ping、close、半关闭、窗口记账），11 个单测，golden 191/191；F-09a-2 2026-10-21：`wifi/xiaozhi.rs` 脚本服务端（OTA / hello / 60 ms 下行节奏、`xz=` 动作、`[xz]` 日志），9 个单测，accept `c3-xz-ws` 端到端；网页与语音示例在 F-09b |
 | F-09b | xiaozhi-lite 示例 + 语音面板（需人拍板 RS-2 四项） | accept 3 例 + xiaozhi.mjs | ☐ |
 | F-10a2 | CYD（ESP32-2432S028：ILI9341 + XPT2046）示例 + 板预设 | esp32-cyd accept（lcd_regions 逐区像素数） | ☑ 2026-10-20 屏：esp32-cyd（HSPI 14/13/15/2、BL 21、RST 接 EN）+ `--board cyd` 通过；XPT2046 触摸（VSPI 25/32/39/33、IRQ 36，`--spi xpt2046`，动作 `touch=` / `release`）esp32-cyd-touch 通过；网页未接 |
 | F-10c | 经典 ESP32 RMT 收 + 载波 + IR 器件 | esp32-ir accept | ☑ |

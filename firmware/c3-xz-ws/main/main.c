@@ -1,6 +1,5 @@
 // Acceptance (F-09a-2): one xiaozhi-style voice turn against the virtual server.
-// OTA POST -> websocket url / token -> WebSocket hello -> listen start, 8 uplink frames, listen stop
-// -> stt / tts start / sentence_start / Opus frames every 60 ms / tts stop.
+// OTA POST -> ws url / token -> hello -> listen, 8 uplink frames, stop -> stt / tts / 60 ms Opus frames.
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"

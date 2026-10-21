@@ -307,7 +307,9 @@ mod tests {
                 .collect();
             let r = locate(&segs);
             n += 1;
-            if name.starts_with("c3-ble-") || name.starts_with("c3-bluedroid-") {
+            // Arduino builds are C3 too; BLE sketches are named arduino-lib-ble-* / arduino-lib-nimble
+            let arduino_ble = name.starts_with("arduino-lib-ble-") || name == "arduino-lib-nimble";
+            if name.starts_with("c3-ble-") || name.starts_with("c3-bluedroid-") || arduino_ble {
                 let h = r
                     .unwrap_or_else(|e| panic!("{name}: {e}"))
                     .expect("BLE should be recognized");
