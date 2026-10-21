@@ -1,0 +1,2 @@
+# directory names under third_party/arduino-libs (pinned by tools/fetch_third_party.sh)
+FastLED

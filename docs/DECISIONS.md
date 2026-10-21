@@ -1331,3 +1331,10 @@
 - **LED 眼睛只在经典 ESP32**：C3 / S3 的 RMT 载波未建模，`--ir` 带 TX 时在这两个芯片上报错，不静默。
 - **不给红外模块加电气电流**：接收头约 1 mA、LED 峰值电流取决于限流电阻，等网页接入、有接线时再加。
 - **编码器**：`firmware/esp32-ir/main/ir_nec_encoder.c/.h` 原样复制自 IDF `ir_nec_transceiver` 示例（Unlicense OR CC0-1.0，保留文件头）。
+## 2026-10-20 Arduino 库矩阵 Wi-Fi / BLE / 舵机 / 灯带（F-08b）
+- **钉发布标签而非默认分支**：与 F-08a 不同，这 6 个库默认分支离发布差很远（NimBLE-Arduino 主分支 3.0.0-dev、FastLED 主分支在 3.10.8 之后），按发布标签对应的提交钉；FastLED 最新 3.10.8 在 C3 编译失败（RISC-V RMT 中断函数 `noexcept` 声明不一致），退到 3.10.3。备选：给 FastLED 打补丁 —— 否，钉住的库源码不改。
+- **10 例 = 6 个第三方 + 4 个核心自带库**：MIT / BSD / Apache 范围内能凑出的 Wi-Fi / BLE / 舵机 / 灯带第三方库只有 FastLED、WiFiManager、PubSubClient、NimBLE-Arduino（ESP32Servo、IRremote 只进本地）；核心 WiFi / HTTPClient / BLE / WebServer 是 Arduino 用户最常用的入口，也顺带补上 E-05 / F-08c「Arduino 产物未实测」的缺口。备选：Adafruit NeoPixel —— 否，LGPL-3.0 不在本条目范围。
+- **PubSubClient 用例断言当前失败行为**：虚拟网络只有 80 端口，用例断言 `mqtt connect failed rc=-2` 并用 `absent` 确认没有误报成功；broker 做好后改成断言发布 / 订阅。备选：不加用例 —— 否，Wi-Fi 连接和 TCP 拒绝这段行为值得回归。
+- **NimBLE-Arduino 不加用例**：运行卡在虚拟控制器对厂商命令 0xfc01 只回状态（主机要 6 字节静态地址，长度不符就重置），本条目不改 core；加了会让 accept 变红。记为 STATUS 遗留。
+- **WebServer 例加 DNSServer**：虚拟手机加入热点后先做连通性探测，固件不答 DNS 时探测一直挂着、后续请求不执行；照核心 CaptivePortal 示例加 `DNSServer` 应答所有名字，比改手机行为更贴近真实配网页。
+- **核心 BLE 在 C3 上是 NimBLE 主机**：arduino-esp32 3.3.2 的 C3 预编译 sdkconfig 开的是 `CONFIG_BT_NIMBLE_ENABLED`，E-05 里「Arduino 默认 BLE = Bluedroid」对 3.3.x / C3 不成立（只记录，不改 E-05 结论）。

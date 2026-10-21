@@ -67,6 +67,19 @@ for spec in \
   [ -d "arduino-libs/$name/.git" ] || git clone -q "https://github.com/$repo" "arduino-libs/$name"
   [ "$(git -C "arduino-libs/$name" rev-parse HEAD)" = "$sha" ] || { git -C "arduino-libs/$name" fetch -q origin && git -C "arduino-libs/$name" checkout -q "$sha"; }
 done
+# F-08b Wi-Fi / BLE / servo / LED-strip matrix, release tags pinned 2026-10-20 (FastLED 3.10.3: 3.10.8 fails to build on C3, RISC-V RMT handler noexcept mismatch).
+# ESP32Servo (no LICENSE file) and IRremote stay local accept only, never shipped (docs/STATUS.md F-08b).
+for spec in \
+  FastLED/FastLED:20667c3a6413ed46a828f78ec95fb57e58d753f8 \
+  tzapu/WiFiManager:d82d0a1b9fca741b9ec44accdf553606a6576dda \
+  knolleary/pubsubclient:2d228f2f862a95846c65a8518c79f48dfc8f188c \
+  h2zero/NimBLE-Arduino:5ae2c43f62c5a588a25c1de68f7d17b6f3b75adb \
+  madhephaestus/ESP32Servo:f7282217605d8bd9a4f3070cf9901d10d13ede1d \
+  Arduino-IRremote/Arduino-IRremote:498dc591b255d8ba2e239c875804bdab2ab0fe91; do
+  repo=${spec%%:*}; sha=${spec#*:}; name=${repo#*/}
+  [ -d "arduino-libs/$name/.git" ] || git clone -q "https://github.com/$repo" "arduino-libs/$name"
+  [ "$(git -C "arduino-libs/$name" rev-parse HEAD)" = "$sha" ] || { git -C "arduino-libs/$name" fetch -q origin && git -C "arduino-libs/$name" checkout -q "$sha"; }
+done
 # Optional (--micropython): official MicroPython C3 image for the mpy-c3-rawpaste accept case (F-07a).
 # Never shipped or committed (distribution is a human decision, RS-1); without it the case is skipped.
 if [ "${1:-}" = "--micropython" ]; then

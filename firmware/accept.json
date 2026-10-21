@@ -4714,5 +4714,173 @@
    "IR LED GPIO18: NEC address=0x0440 command=0x3003 (38.0 kHz carrier)",
    "IR receiver GPIO19: remote sent 3 frames"
   ]
+ },
+ {
+  "id": "arduino-lib-fastled",
+  "seconds": 1.5,
+  "expect": [
+   "fastled frame red",
+   "fastled frame gradient",
+   "fastled frame dot",
+   "TRYBOARD_OK lib-fastled"
+  ],
+  "ws2812": {
+   "pin": 8,
+   "min_frames": 4,
+   "frames": [
+    [
+     "#ff0000",
+     "#ff0000",
+     "#ff0000",
+     "#ff0000",
+     "#ff0000",
+     "#ff0000",
+     "#ff0000",
+     "#ff0000"
+    ],
+    [
+     "#00ff00",
+     "#20df01",
+     "#40bf02",
+     "#609f03",
+     "#807f04",
+     "#a05f05",
+     "#c03f06",
+     "#e01f07"
+    ],
+    [
+     "#000000",
+     "#000000",
+     "#000000",
+     "#ffffff",
+     "#000000",
+     "#000000",
+     "#000000",
+     "#000000"
+    ],
+    [
+     "#000000",
+     "#000000",
+     "#000000",
+     "#000000",
+     "#000000",
+     "#000000",
+     "#000000",
+     "#000000"
+    ]
+   ]
+  }
+ },
+ {
+  "id": "arduino-lib-wifimanager",
+  "seconds": 10,
+  "script": "0.5:phone=join,TryBoard-Setup; 4:phone=post,http://192.168.4.1/wifisave,s=MyHome&p=12345678",
+  "expect": [
+   "portal started ssid=TryBoard-Setup ip=192.168.4.1",
+   "credentials saved",
+   "connected ssid=MyHome ip=192.168.5.100",
+   "TRYBOARD_OK lib-wifimanager"
+  ],
+  "stderr_expect": [
+   "phone got 192.168.4.2 (gateway 192.168.4.1",
+   "GET http://connectivitycheck.gstatic.com/generate_204 → 302 redirect http://192.168.4.1",
+   "POST http://192.168.4.1/wifisave → 200 \"Credentials saved\""
+  ]
+ },
+ {
+  "id": "arduino-lib-pubsubclient",
+  "seconds": 5,
+  "expect": [
+   "wifi connected ip=192.168.4.100",
+   "mqtt connect failed rc=-2"
+  ],
+  "absent": [
+   "TRYBOARD_OK lib-pubsubclient"
+  ]
+ },
+ {
+  "id": "arduino-lib-esp32servo",
+  "seconds": 2.5,
+  "expect": [
+   "servo -> 0 deg",
+   "servo -> 90 deg (1484 us)",
+   "servo -> 180 deg (2500 us)",
+   "TRYBOARD_OK lib-esp32servo"
+  ],
+  "pwm": {
+   "pin": 6,
+   "freq": 50,
+   "min": 0.024,
+   "max": 0.125
+  }
+ },
+ {
+  "id": "arduino-lib-irremote",
+  "seconds": 1,
+  "expect": [
+   "ir sent NEC addr=0x00 cmd=0x36",
+   "TRYBOARD_OK lib-irremote"
+  ],
+  "pwm": {
+   "pin": 4,
+   "freq": 38000,
+   "min": 0.0,
+   "max": 0.3
+  }
+ },
+ {
+  "id": "arduino-lib-wifi-scan",
+  "seconds": 4,
+  "expect": [
+   "scan done, 4 networks",
+   "1: TryBoard-WiFi ch=6 rssi=-42 open",
+   "2: TryBoard-WPA2 ch=1 rssi=-55 secured",
+   "3: CoffeeShop ch=6 rssi=-70 open",
+   "4: Neighbor-5G-Ext ch=11 rssi=-78 secured",
+   "TRYBOARD_OK lib-wifi-scan"
+  ]
+ },
+ {
+  "id": "arduino-lib-httpclient",
+  "seconds": 5,
+  "expect": [
+   "wifi connected ip=192.168.4.100 rssi=-55",
+   "GET http://tryboard.local/hello.txt -> 200 TRYBOARD_HTTP_OK",
+   "GET http://example.com/api/time -> 200 {\"unixtime\":1792123200",
+   "TRYBOARD_OK lib-httpclient"
+  ]
+ },
+ {
+  "id": "arduino-lib-ble-notify",
+  "seconds": 8,
+  "args": [
+   "--ble-phone"
+  ],
+  "expect": [
+   "ble advertising TryBoard-BLE",
+   "ble connected",
+   "ble notify 5",
+   "TRYBOARD_OK lib-ble-notify"
+  ],
+  "stderr_expect": [
+   "CONNECT_IND phone C0:FF:EE:12:34:56",
+   "fw → subscribe beb5483e-36e1-4688-b7f5-ea07361b26a8 ok",
+   "notifications within 3 s of subscribing to beb5483e-36e1-4688-b7f5-ea07361b26a8"
+  ]
+ },
+ {
+  "id": "arduino-lib-webserver",
+  "seconds": 5,
+  "script": "0.5:phone=join,TryBoard-Setup; 3:phone=get,http://192.168.4.1/led?on=1",
+  "expect": [
+   "softap up ip=192.168.4.1",
+   "http 404 /generate_204",
+   "http GET /led on=1",
+   "TRYBOARD_OK lib-webserver"
+  ],
+  "stderr_expect": [
+   "phone DNS connectivitycheck.gstatic.com → 192.168.4.1",
+   "GET http://192.168.4.1/led?on=1 → 200 text: led=1"
+  ]
  }
 ]
