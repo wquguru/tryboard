@@ -239,7 +239,7 @@
 | F-09a | xiaozhi 虚拟服务端（长连接 TCP + WebSocket + 脚本） | 单测 + golden | ☐ |
 | F-09b | xiaozhi-lite 示例 + 语音面板（需人拍板 RS-2 四项） | accept 3 例 + xiaozhi.mjs | ☐ |
 | F-10c | 经典 ESP32 RMT 收 + 载波 + IR 器件 | esp32-ir accept | ☐ |
-| F-11 | 环境脚本时间轴（先交互稿，人确认后实现） | --inputs 重放指纹一致 | ☐ |
+| F-11 | 环境脚本时间轴（先交互稿，人确认后实现） | --inputs 重放指纹一致 | ◐ 交互稿待人审（`docs/plan-F/F-11-timeline.md` + `.html`） |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。

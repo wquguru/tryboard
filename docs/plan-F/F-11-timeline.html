@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F-11 环境脚本原型</title>
+<style>
+:root{--bg:#FFFFFF;--page:#F4F5F7;--fg:#1E1E1E;--muted:#6F6F6F;--line:#E6E6E6;--line-soft:#F0F0F0;--field:#F7F7F7;--accent:#0D99FF;--accent-bg:#E5F4FF;--accent-ink:#0A6FBD;--accent-strong:#0B76C8;--ok:#14AE5C;--ok-ink:#0E7A41;--warn:#E8A317;--warn-ink:#8A5A12;--bad:#F24822;--past:#0000000A;
+--t-temp:#F24822;--t-lux:#E8A317;--t-pir:#14AE5C;--t-btn:#0D99FF;--t-net:#8E5BD9;--t-dist:#0E9AA7}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1E1F22;--page:#141517;--fg:#ECECEC;--muted:#A0A0A0;--line:#33353A;--line-soft:#2A2C30;--field:#26282C;--accent-bg:#0D2A40;--accent-ink:#0D99FF;--ok-ink:#14AE5C;--warn-ink:#E8A317;--past:#FFFFFF0F}}
+:root[data-theme="dark"]{--bg:#1E1F22;--page:#141517;--fg:#ECECEC;--muted:#A0A0A0;--line:#33353A;--line-soft:#2A2C30;--field:#26282C;--accent-bg:#0D2A40;--accent-ink:#0D99FF;--ok-ink:#14AE5C;--warn-ink:#E8A317;--past:#FFFFFF0F}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--fg);font-family:'Noto Sans SC','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;font-size:13px}
+.mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace}
+.wrap{max-width:1320px;margin:0 auto;padding:16px}
+h1{font-size:18px;margin:0 0 4px}
+.lead{color:var(--muted);margin:0 0 16px;line-height:1.6}
+h2{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin:20px 0 8px}
+.frame{background:var(--bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 2px 10px #0000000F;overflow:hidden}
+.scrollx{overflow-x:auto}
+/* desktop */
+.desk{min-width:960px;display:grid;grid-template-rows:44px 1fr}
+.stage{height:120px;background:radial-gradient(120% 90% at 50% 40%,var(--bg),var(--field));display:flex;align-items:center;justify-content:center;gap:24px;color:var(--muted);border-bottom:1px solid var(--line)}
+.top{display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line)}
+.crumb{font-size:13px}.crumb b{font-weight:500}
+.chip{font-size:11px;padding:1px 6px;border-radius:999px;background:var(--line-soft);color:var(--muted)}
+.runpill{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px}
+.dotlive{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.btn{height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:inherit;font-size:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer}
+.btn.primary{background:var(--accent-strong);border-color:var(--accent-strong);color:#fff}
+.dock{display:grid;grid-template-rows:38px 1fr 40px}
+.tabs{display:flex;align-items:center;padding:0 8px;border-bottom:1px solid var(--line-soft)}
+.dtab{height:38px;padding:0 12px;border:0;background:none;font:inherit;font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.dtab.on{font-weight:700;color:var(--accent-ink);box-shadow:inset 0 -2px 0 var(--accent)}
+.pill{font-size:11px;padding:1px 6px;border-radius:999px;background:var(--line-soft);color:var(--muted)}
+.tabs .right{margin-left:auto;display:flex;gap:6px}
+.body{display:grid;grid-template-columns:1fr 300px;min-height:0}
+.tracks{display:grid;grid-template-columns:168px 1fr;border-right:1px solid var(--line-soft)}
+.thead{display:flex;align-items:center;gap:6px;height:40px;padding:0 8px;border-bottom:1px solid var(--line-soft);font-size:13px}
+.thead .sw{width:8px;height:8px;border-radius:2px;flex:none}
+.thead .val{margin-left:auto;font-size:12px;color:var(--muted)}
+.thead.off{opacity:.45}
+.ruler{height:22px;border-bottom:1px solid var(--line-soft);position:relative}
+.lane{height:40px;border-bottom:1px solid var(--line-soft);position:relative}
+svg.tl{display:block;width:100%;height:100%;overflow:visible;touch-action:none}
+.kf{cursor:grab}.kf:active{cursor:grabbing}
+.tip{position:fixed;pointer-events:none;background:var(--fg);color:var(--bg);font-size:11px;padding:3px 6px;border-radius:6px;display:none;z-index:9}
+.foot{display:flex;align-items:center;gap:10px;padding:0 12px;border-top:1px solid var(--line-soft);font-size:12px;color:var(--muted)}
+.foot select,.foot input{font:inherit;font-size:12px;height:26px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);padding:0 6px}
+.foot input{width:84px}
+.out{display:grid;grid-template-rows:30px 1fr;min-height:0}
+.out .h{display:flex;align-items:center;padding:0 10px;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;border-bottom:1px solid var(--line-soft)}
+.out .h span{margin-left:auto;font-weight:400}
+pre{margin:0;padding:8px 10px;font-size:11.5px;line-height:1.6;background:var(--field);color:var(--fg);overflow:auto;max-height:260px}
+.note{font-size:12px;color:var(--muted);line-height:1.6;margin:8px 0 0}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px;font-size:12px;color:var(--muted)}
+/* mobile */
+.phones{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+.phone{width:390px;max-width:100%;height:844px;border-radius:24px;position:relative;display:flex;flex-direction:column;overflow:hidden}
+.mtop{height:52px;display:flex;align-items:center;gap:8px;padding:0 8px;border-bottom:1px solid var(--line)}
+.back{height:44px;min-width:44px;padding:0 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);font:inherit;display:inline-flex;align-items:center}
+.mtitle{flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ib44{width:44px;height:44px;border:0;background:none;color:var(--fg);border-radius:10px;font-size:18px}
+.mstage{flex:1;background:radial-gradient(120% 90% at 50% 40%,var(--bg),var(--field));display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px}
+.drawer{background:var(--bg);border-top:1px solid var(--line);border-radius:16px 16px 0 0;box-shadow:0 -4px 16px #00000014;padding:6px 16px 8px}
+.grip{width:40px;height:4px;border-radius:2px;background:#C9C9C9;margin:2px auto 6px}
+.drow{display:flex;align-items:center;gap:8px;min-height:44px}
+.drow b{font-size:15px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:4px 0 8px;scrollbar-width:none}
+.tchip{flex:none;height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:inherit;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.tchip.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent-ink);font-weight:700}
+.tchip i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.mlane{height:160px;border:1px solid var(--line-soft);border-radius:10px;background:var(--field);position:relative}
+.edit{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px}
+.edit label{display:flex;flex-direction:column;font-size:11px;color:var(--muted);gap:2px}
+.edit input,.edit select{height:44px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);font:inherit;font-size:14px;padding:0 8px;width:100%}
+.acts{display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-top:8px}
+.acts button{height:44px;border-radius:10px;font:inherit;font-size:14px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+.acts .add{background:var(--accent-strong);border-color:var(--accent-strong);color:#fff}
+.tools{height:60px;display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--line);background:var(--bg)}
+.tools button{border:0;background:none;font:inherit;font-size:11px;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:44px}
+.tools button.on{color:var(--accent-ink);font-weight:700}
+.ctl{font-size:11px;color:var(--accent-ink);background:var(--accent-bg);border-radius:8px;padding:8px 10px;margin:8px 0 0;line-height:1.5}
+@media (max-width:767px){.wrap{padding:16px}.phone{border-radius:16px;height:auto;min-height:780px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>F-11 环境脚本（交互稿原型）</h1>
+<p class="lead">静态原型，不接仿真。拖关键帧（横拖改时间，竖拖改值，按住 Shift 只改一个方向），右边和下方的 <span class="mono">--inputs</span> 正文按 F-11-timeline.md §4.2 的规则实时重新编译：整数毫秒、编译时量化、只在量化值变化时发一行且同一轨道两行至少隔 100 ms（关键帧处除外）、env 三元组。桌面和手机共用同一份数据。数值、零件仅为示例。</p>
+
+<h2>桌面 · 底部坞「环境脚本」页签</h2>
+<div class="frame scrollx">
+<div class="desk">
+  <div class="top">
+    <span class="crumb">作品 / <b>温控风扇</b> ▾</span><span class="chip mono">ESP32-C3</span>
+    <span class="runpill"><span class="dotlive"></span>运行中 <span class="mono" id="simT">12.300 s</span></span>
+    <button class="btn">暂停</button><button class="btn">重启</button><button class="btn primary">换固件 ▾</button>
+  </div>
+  <div>
+    <div class="stage"><span>3D 台面（示意）</span><span class="mono" id="stageVals"></span></div>
+    <div class="dock">
+      <div class="tabs">
+        <button class="dtab">串口</button><button class="dtab">代码</button><button class="dtab">逻辑分析仪</button>
+        <button class="dtab">运行记录<span class="pill">3</span></button>
+        <button class="dtab on">环境脚本<span class="pill" style="background:var(--accent-bg);color:var(--accent-ink)">5</span></button>
+        <button class="dtab">检查点<span class="pill">2/6</span></button>
+        <span class="right"><button class="btn">预设 ▾</button><button class="btn">+ 轨道 ▾</button><button class="btn">导出 ▾</button></span>
+      </div>
+      <div class="body">
+        <div class="tracks" id="deskTracks"></div>
+        <div class="out"><div class="h">--inputs 预览<span class="mono" id="lineCount"></span></div><pre class="mono" id="script"></pre></div>
+      </div>
+      <div class="foot">
+        <label><input type="checkbox" checked style="width:auto;height:auto"> 跟随运行</label>
+        <span>缩放 − ＋ 适应</span>
+        <span>吸附 <select id="snap"><option value="1">1 ms</option><option value="100" selected>100 ms</option><option value="1000">1 s</option></select></span>
+        <span id="selInfo" style="margin-left:auto;display:flex;gap:6px;align-items:center"></span>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+<div class="legend">
+  <span>浅灰区 = 播放头之前（已施加，改了要重启才生效）</span><span>蓝竖线 = 播放头（可拖，只看值不倒回仿真）</span><span>菱形 = 关键帧，段的插值挂在左端关键帧</span><span>色块 = 开关 / 按下时长</span>
+</div>
+
+<h2>手机 390×844 · 「更多 → 环境脚本」半屏抽屉</h2>
+<div class="phones">
+  <div class="phone frame">
+    <div class="mtop"><button class="back">‹ 作品</button><span class="mtitle">温控风扇 ▾</span><button class="ib44" aria-label="更多">⋯</button></div>
+    <div class="mstage">3D 台面（示意） <span class="mono" id="mStage" style="margin-left:8px"></span></div>
+    <div class="drawer">
+      <div class="grip"></div>
+      <div class="drow"><b>环境脚本</b><span class="mono" style="color:var(--muted);font-size:12px" id="mTime"></span><span style="margin-left:auto;display:flex;gap:4px"><button class="btn" style="height:44px">预设</button><button class="ib44" aria-label="更多">⋯</button></span></div>
+      <div class="chips" id="mChips"></div>
+      <div class="mlane" id="mLane"></div>
+      <div class="edit" id="mEdit"></div>
+      <div class="acts"><button id="mDel">删除</button><button class="add" id="mAdd"></button></div>
+      <div class="ctl">选中温度传感器时，属性抽屉的滑块上方显示「由环境脚本控制 · 打开」。</div>
+    </div>
+    <div class="tools"><button>选择</button><button>连线</button><button>加零件</button><button>测量</button><button class="on">更多</button></div>
+  </div>
+  <div style="flex:1;min-width:260px;max-width:520px">
+    <p class="note">手机规则：一次只看一条轨道（胶囊切换，胶囊行在自己的容器里横向滑动，页面不横滚）；点关键帧选中，按住 300 ms 再拖（防误触）；数值用下面的数字输入改，步长 = 量化步长；「加关键帧」加在播放头处；所有按钮和关键帧点击区 ≥ 44 px，块两端拖把手 28 px。</p>
+    <p class="note">导出：「导出输入日志」（已施加的手动 + 脚本事件，CLI <span class="mono">--inputs</span> 直接用）、「导出整段脚本」（编译到脚本结尾，头注释带 <span class="mono">--seconds</span>）、「复制脚本源 JSON」。</p>
+  </div>
+</div>
+</div>
+<div class="tip mono" id="tip"></div>
+
+<script>
+// Prototype only: data model + compile rules mirror F-11-timeline.md §4; nothing here talks to the simulator.
+const LEN = 30000, ROOM = { h: 45, p: 101325 }, PLAYHEAD = 12300;
+const S = {
+  tracks: [
+    { k: 'temp', name: '温度', unit: '℃', color: 'var(--t-temp)', q: 0.1, min: 10, max: 40,
+      kf: [[0, 24, 'l'], [8000, 32, 's'], [18000, 32, 'l'], [24000, 24, 'l']] },
+    { k: 'lux', name: '光照', unit: 'lx', color: 'var(--t-lux)', q: 1, min: 0, max: 1000,
+      kf: [[0, 800, 'e'], [10000, 5, 's'], [22000, 5, 'e'], [29000, 800, 'l']] },
+    { k: 'pir', name: '人体感应', color: 'var(--t-pir)', spans: [[13000, 16000]] },
+    { k: 'btn', name: 'BOOT 按钮', pin: 9, color: 'var(--t-btn)', presses: [[5000, 150], [20000, 3000]] },
+    { k: 'net', name: '网络', color: 'var(--t-net)', steps: [[0, 'normal'], [10000, 'flaky'], [26000, 'normal']], faults: [[20000, 'silent', 5]] },
+  ],
+  sel: { t: 0, i: 1 }, mTrack: 0,
+};
+const fmtS = (ms) => (Math.floor(ms * 1000) / 1e6).toFixed(6);
+const qz = (v, q) => { const n = Math.round(v / q) * q; return Number(n.toFixed(q < 1 ? 1 : 0)); };
+function valueAt(tr, t) {
+  const kf = tr.kf;
+  if (t <= kf[0][0]) return kf[0][1];
+  for (let i = 0; i < kf.length - 1; i++) {
+    const [t0, v0, m] = kf[i], [t1, v1] = kf[i + 1];
+    if (t < t1) {
+      if (m === 's') return v0;
+      let u = (t - t0) / (t1 - t0);
+      if (m === 'e') u = u * u * (3 - 2 * u);
+      return v0 + (v1 - v0) * u;
+    }
+  }
+  return kf[kf.length - 1][1];
+}
+// Emit-on-change on a 10 ms grid; env always as the full triple
+function compile() {
+  const ev = [], order = (k) => S.tracks.findIndex((t) => t.k === k);
+  const temp = S.tracks[order('temp')], lux = S.tracks[order('lux')];
+  const kfTimes = (tr) => tr.kf.map((k) => k[0]);
+  const grid = new Set();
+  for (let t = 0; t <= LEN; t += 10) grid.add(t);
+  [...kfTimes(temp), ...kfTimes(lux)].forEach((t) => grid.add(t));
+  const ts = [...grid].sort((a, b) => a - b);
+  // Per-track minimum gap (100 ms) except at keyframes, so a 10 s ramp is ~100 lines, not one per quantum
+  const MIN_GAP = 100, tk = new Set(kfTimes(temp)), lk = new Set(kfTimes(lux));
+  let lt, ll, ltT = -1e9, llT = -1e9;
+  for (const t of ts) {
+    const v = qz(valueAt(temp, t), temp.q);
+    if (v !== lt && (t - ltT >= MIN_GAP || tk.has(t))) { ev.push([t, order('temp'), `env=${v},${ROOM.h},${ROOM.p}`]); lt = v; ltT = t; }
+    const l = qz(valueAt(lux, t), lux.q);
+    if (l !== ll && (t - llT >= MIN_GAP || lk.has(t))) { ev.push([t, order('lux'), `lux=${l}`]); ll = l; llT = t; }
+  }
+  for (const [a, b] of S.tracks[order('pir')].spans) { ev.push([a, order('pir'), 'pir=1']); ev.push([b, order('pir'), 'pir=0']); }
+  const bt = S.tracks[order('btn')];
+  for (const [a, h] of bt.presses) { ev.push([a, order('btn'), `gpio${bt.pin}=0`]); ev.push([a + Math.max(1, h), order('btn'), `gpio${bt.pin}=1`]); }
+  const nt = S.tracks[order('net')];
+  for (const [t, p] of nt.steps) ev.push([t, order('net'), `net=${p}`]);
+  for (const [t, k, d] of nt.faults) ev.push([t, order('net'), `netfault=${k}${d === undefined ? '' : ',' + d}`]);
+  ev.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+  return ev.map(([t, , a]) => `${fmtS(t)}:${a}`);
+}
+const X = (t, w) => (t / LEN) * w, T = (x, w) => (x / w) * LEN;
+const svg = (tag, attrs) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+const tip = document.getElementById('tip');
+function showTip(e, text) { tip.style.display = 'block'; tip.style.left = e.clientX + 12 + 'px'; tip.style.top = e.clientY - 28 + 'px'; tip.textContent = text; }
+function curveSvg(host, tr, ti, w, h, pad, big) {
+  const s = svg('svg', { class: 'tl', viewBox: `0 0 ${w} ${h}`, preserveAspectRatio: 'none' });
+  s.appendChild(svg('rect', { x: 0, y: 0, width: X(PLAYHEAD, w), height: h, fill: 'var(--past)' }));
+  const Y = (v) => h - pad - ((v - tr.min) / (tr.max - tr.min)) * (h - 2 * pad);
+  if (tr.kf) {
+    let d = '';
+    for (let x = 0; x <= w; x += 2) d += (x ? 'L' : 'M') + x + ' ' + Y(valueAt(tr, T(x, w))).toFixed(1);
+    s.appendChild(svg('path', { d, fill: 'none', stroke: tr.color, 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke' }));
+    tr.kf.forEach(([t, v], i) => {
+      const on = S.sel.t === ti && S.sel.i === i, r = big ? (on ? 9 : 7) : (on ? 6 : 4.5);
+      const g = svg('g', { class: 'kf' });
+      g.appendChild(svg('rect', { x: X(t, w) - 22, y: Y(v) - 22, width: 44, height: 44, fill: 'transparent' }));
+      g.appendChild(svg('path', { d: `M${X(t, w)} ${Y(v) - r}l${r} ${r}l${-r} ${r}l${-r} ${-r}z`, fill: on ? 'var(--accent)' : 'var(--bg)', stroke: on ? 'var(--accent)' : tr.color, 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke' }));
+      g.addEventListener('pointerdown', (e) => startDrag(e, s, tr, ti, i, w, h, pad, big));
+      s.appendChild(g);
+    });
+  } else if (tr.spans || tr.presses) {
+    const list = tr.spans ? tr.spans.map(([a, b]) => [a, b - a]) : tr.presses;
+    list.forEach(([a, len]) => s.appendChild(svg('rect', { x: X(a, w), y: h * 0.25, width: Math.max(3, X(len, w)), height: h * 0.5, rx: 3, fill: tr.color, opacity: 0.85 })));
+  } else if (tr.steps) {
+    tr.steps.forEach(([t, p], i) => {
+      const end = i + 1 < tr.steps.length ? tr.steps[i + 1][0] : LEN;
+      s.appendChild(svg('rect', { x: X(t, w), y: h * 0.2, width: X(end - t, w), height: h * 0.6, fill: p === 'normal' ? 'var(--field)' : 'var(--t-net)', opacity: p === 'normal' ? 1 : 0.25 }));
+      const tx = svg('text', { x: X(t, w) + 4, y: h * 0.62, 'font-size': 11, fill: 'var(--muted)', 'font-family': 'JetBrains Mono,monospace' }); tx.textContent = p; s.appendChild(tx);
+    });
+    tr.faults.forEach(([t, k, d]) => {
+      s.appendChild(svg('rect', { x: X(t, w), y: h * 0.15, width: X((d || 8) * 1000, w), height: h * 0.7, fill: 'none', stroke: 'var(--t-net)', 'stroke-dasharray': '3 2' }));
+      const tx = svg('text', { x: X(t, w) + 4, y: h * 0.42, 'font-size': 11, fill: 'var(--t-net)', 'font-family': 'JetBrains Mono,monospace' }); tx.textContent = `${k} ${d}s`; s.appendChild(tx);
+    });
+  }
+  s.appendChild(svg('line', { x1: X(PLAYHEAD, w), x2: X(PLAYHEAD, w), y1: 0, y2: h, stroke: 'var(--accent)', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }));
+  host.appendChild(s);
+}
+function startDrag(e, s, tr, ti, i, w, h, pad, big) {
+  e.preventDefault(); S.sel = { t: ti, i }; S.mTrack = ti;
+  const box = s.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY, [t0, v0] = tr.kf[i];
+  const snap = Number(document.getElementById('snap').value);
+  let armed = !big; const hold = big ? setTimeout(() => { armed = true; }, 300) : 0;
+  const move = (ev) => {
+    if (!armed) return;
+    let dx = ev.clientX - x0, dy = ev.clientY - y0;
+    if (ev.shiftKey) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0; }
+    const lo = i ? tr.kf[i - 1][0] + 1 : 0, hi = i < tr.kf.length - 1 ? tr.kf[i + 1][0] - 1 : LEN;
+    let t = t0 + (dx / box.width) * LEN; t = ev.altKey ? Math.round(t) : Math.round(t / snap) * snap;
+    t = i === 0 ? 0 : Math.min(hi, Math.max(lo, t));
+    let v = v0 - (dy / box.height) * ((tr.max - tr.min) * h / (h - 2 * pad));
+    v = Math.min(tr.max, Math.max(tr.min, qz(v, tr.q)));
+    tr.kf[i] = [t, v, tr.kf[i][2]];
+    showTip(ev, `${(t / 1000).toFixed(3)} s · ${v} ${tr.unit}`);
+    render();
+  };
+  const up = () => { clearTimeout(hold); tip.style.display = 'none'; removeEventListener('pointermove', move); removeEventListener('pointerup', up); render(); };
+  addEventListener('pointermove', move); addEventListener('pointerup', up);
+  render();
+}
+const interpName = { s: '阶跃', l: '线性', e: '平滑' };
+function curVal(tr) {
+  if (tr.kf) return `${qz(valueAt(tr, PLAYHEAD), tr.q)} ${tr.unit}`;
+  if (tr.spans) return tr.spans.some(([a, b]) => PLAYHEAD >= a && PLAYHEAD < b) ? '有人' : '无人';
+  if (tr.presses) return tr.presses.some(([a, l]) => PLAYHEAD >= a && PLAYHEAD < a + l) ? '按下' : '松开';
+  return [...tr.steps].reverse().find(([t]) => t <= PLAYHEAD)[1];
+}
+function render() {
+  const dt = document.getElementById('deskTracks'); dt.innerHTML = '';
+  const hdr = document.createElement('div'); hdr.className = 'thead'; hdr.style.height = '22px'; hdr.style.fontSize = '11px'; hdr.style.color = 'var(--muted)'; hdr.textContent = '轨道';
+  dt.appendChild(hdr);
+  const ru = document.createElement('div'); ru.className = 'ruler mono'; dt.appendChild(ru);
+  for (let s = 0; s <= 30; s += 5) { const sp = document.createElement('span'); sp.textContent = s + 's'; sp.style.cssText = `position:absolute;left:${(s / 30) * 100}%;top:4px;font-size:11px;color:var(--muted);transform:translateX(${s ? (s === 30 ? '-100%' : '-50%') : '2px'})`; ru.appendChild(sp); }
+  S.tracks.forEach((tr, ti) => {
+    const th = document.createElement('div'); th.className = 'thead';
+    th.innerHTML = `<span class="sw" style="background:${tr.color}"></span>${tr.name}<span class="val mono">${curVal(tr)}</span><span style="color:var(--muted)">⋯</span>`;
+    dt.appendChild(th);
+    const ln = document.createElement('div'); ln.className = 'lane'; dt.appendChild(ln);
+    curveSvg(ln, tr, ti, ln.clientWidth || 800, 40, 6, false);
+  });
+  const lines = compile();
+  document.getElementById('script').textContent = `# tryboard scenario, ${(LEN / 1000).toFixed(3)} s (--seconds ${LEN / 1000})\n` + lines.join('\n');
+  document.getElementById('lineCount').textContent = `本次脚本 ${lines.length} 行`;
+  const st = S.tracks[S.sel.t], k = st.kf && st.kf[S.sel.i];
+  document.getElementById('selInfo').innerHTML = k ? `选中：${st.name} <span class="mono">${(k[0] / 1000).toFixed(3)} s = ${k[1]} ${st.unit}</span> <select>${['s', 'l', 'e'].map((m) => `<option ${m === k[2] ? 'selected' : ''}>${interpName[m]}</option>`).join('')}</select>` : '';
+  const vals = `${curVal(S.tracks[0])} · ${curVal(S.tracks[1])} · ${curVal(S.tracks[2])}`;
+  document.getElementById('stageVals').textContent = vals;
+  document.getElementById('mStage').textContent = curVal(S.tracks[0]);
+  document.getElementById('simT').textContent = (PLAYHEAD / 1000).toFixed(3) + ' s';
+  renderMobile();
+}
+function renderMobile() {
+  document.getElementById('mTime').textContent = `${(PLAYHEAD / 1000).toFixed(1)} / ${LEN / 1000} s`;
+  const ch = document.getElementById('mChips'); ch.innerHTML = '';
+  S.tracks.forEach((tr, ti) => {
+    const b = document.createElement('button'); b.className = 'tchip' + (ti === S.mTrack ? ' on' : '');
+    b.innerHTML = `<i style="background:${tr.color}"></i>${tr.name}`;
+    b.onclick = () => { S.mTrack = ti; S.sel = { t: ti, i: 0 }; render(); };
+    ch.appendChild(b);
+  });
+  const tr = S.tracks[S.mTrack], ml = document.getElementById('mLane'); ml.innerHTML = '';
+  curveSvg(ml, tr, S.mTrack, ml.clientWidth || 356, 160, 22, true);
+  const ed = document.getElementById('mEdit'), k = tr.kf && S.sel.t === S.mTrack ? tr.kf[S.sel.i] : null;
+  ed.innerHTML = k ? `<label>时间 s<input class="mono" inputmode="decimal" value="${(k[0] / 1000).toFixed(3)}"></label><label>${tr.name} ${tr.unit}<input class="mono" inputmode="decimal" value="${k[1]}"></label><label>插值<select>${['s', 'l', 'e'].map((m) => `<option ${m === k[2] ? 'selected' : ''}>${interpName[m]}</option>`).join('')}</select></label>`
+    : `<span style="grid-column:1/-1;font-size:12px;color:var(--muted);min-height:44px;display:flex;align-items:center">点一下色块选中；两端 28 px 拖把手改起止</span>`;
+  document.getElementById('mAdd').textContent = `＋ 在 ${(PLAYHEAD / 1000).toFixed(1)} s 加关键帧`;
+}
+document.getElementById('mAdd').onclick = () => {
+  const tr = S.tracks[S.mTrack]; if (!tr.kf || tr.kf.some((k) => k[0] === PLAYHEAD)) return;
+  tr.kf.push([PLAYHEAD, qz(valueAt(tr, PLAYHEAD), tr.q), 'l']); tr.kf.sort((a, b) => a[0] - b[0]);
+  S.sel = { t: S.mTrack, i: tr.kf.findIndex((k) => k[0] === PLAYHEAD) }; render();
+};
+document.getElementById('mDel').onclick = () => {
+  const tr = S.tracks[S.sel.t]; if (!tr.kf || tr.kf.length <= 2 || S.sel.i === 0) return;
+  tr.kf.splice(S.sel.i, 1); S.sel.i = Math.max(0, S.sel.i - 1); render();
+};
+render();
+addEventListener('resize', render);
+</script>
+</body>
+</html>
