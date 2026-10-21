@@ -625,3 +625,102 @@ fn ws_close_handshakes() {
     let want = ws::encode(ws::OP_CLOSE, true, &ws::close_payload(1002, ""), None);
     assert_eq!(p.rx, want);
 }
+
+/// TCP payloads of the frames World queued for the chip (IPv4 header 20 bytes, TCP header 20 bytes)
+fn pending_segs(w: &mut World) -> Segs {
+    std::mem::take(&mut w.net.pending)
+        .into_iter()
+        .map(|e| (e.payload[20..].to_vec(), None))
+        .collect()
+}
+
+/// Split unmasked server frames (no fragments, length < 64 KiB): (opcode, payload)
+fn server_msgs(b: &[u8]) -> Vec<(u8, Vec<u8>)> {
+    let (mut v, mut i) = (Vec::new(), 0);
+    while i + 2 <= b.len() {
+        let (op, l7) = (b[i] & 0x0F, (b[i + 1] & 0x7F) as usize);
+        let (len, h) = if l7 == 126 {
+            (u16::from_be_bytes([b[i + 2], b[i + 3]]) as usize, 4)
+        } else {
+            (l7, 2)
+        };
+        v.push((op, b[i + h..i + h + len].to_vec()));
+        i += h + len;
+    }
+    v
+}
+
+#[test]
+fn xiaozhi_through_world_inbox_and_timer() {
+    use super::xiaozhi;
+    let mut w = World::default();
+    assert_eq!(w.next_timer(), None);
+    w.enable_xz(xiaozhi::Server::default());
+    w.enable_xz(xiaozhi::Server::default());
+    assert_eq!(
+        w.net.tcp.ws_routes,
+        vec![xiaozhi::WS_PATH.to_string()],
+        "idempotent"
+    );
+    // OTA endpoint answers with the WebSocket url
+    let (c, s) = (net::STA_IP, net::GW_IP);
+    let r = w
+        .net
+        .tcp
+        .on_segment(c, s, &chip_seg(500, 0, 0x02, 0xFFFF, &[]), 0);
+    let isn = u32::from_be_bytes([r[0].0[4], r[0].0[5], r[0].0[6], r[0].0[7]]);
+    let req = b"POST /xiaozhi/ota/ HTTP/1.1\r\nHost: tryboard.local\r\nContent-Length: 2\r\n\r\n{}";
+    let r = w
+        .net
+        .tcp
+        .on_segment(c, s, &chip_seg(501, isn + 1, 0x18, 0xFFFF, req), 0);
+    let body = String::from_utf8_lossy(&r[0].0[20..]).into_owned();
+    assert!(body.starts_with("HTTP/1.1 200 OK"), "{body}");
+    assert!(body.contains(xiaozhi::WS_URL));
+    // WebSocket: the open sits in the inbox until World runs the server
+    let (mut p, _) = WsPeer::open(&mut w.net, "/xiaozhi/v1/", 0xFFFF);
+    assert_eq!(w.next_timer(), Some(0), "unread events wake the world");
+    assert!(w.xz_step(1000)[0].starts_with("[xz] open /xiaozhi/v1/ (Authorization Bearer t0k"));
+    assert_eq!(w.next_timer(), None);
+    p.rx.clear();
+    let hello = masked(ws::OP_TEXT, true, br#"{"type":"hello"}"#);
+    p.send(&mut w.net, 0x18, 0xFFFF, &hello);
+    let notes = w.xz_step(2000);
+    assert!(notes
+        .iter()
+        .any(|n| n.contains("hello reply session tb-0001")));
+    p.take(&pending_segs(&mut w));
+    let ev = server_msgs(&std::mem::take(&mut p.rx));
+    assert!(String::from_utf8_lossy(&ev[0].1).contains("\"session_id\":\"tb-0001\""));
+    // A turn: frames go out one per 60 ms as the world is polled at next_timer()
+    let start = br#"{"type":"listen","state":"start","mode":"manual"}"#;
+    p.send(&mut w.net, 0x18, 0xFFFF, &masked(ws::OP_TEXT, true, start));
+    for _ in 0..6 {
+        let f = masked(ws::OP_BINARY, true, &[0x58, 0]);
+        p.send(&mut w.net, 0x18, 0xFFFF, &f);
+    }
+    let stop = br#"{"type":"listen","state":"stop"}"#;
+    p.send(&mut w.net, 0x18, 0xFFFF, &masked(ws::OP_TEXT, true, stop));
+    w.xz_step(10_000);
+    let mut times = Vec::new();
+    while let Some(t) = w.next_timer() {
+        w.xz_step(t);
+        p.take(&pending_segs(&mut w));
+        times.push(t);
+        // The chip ACKs everything
+        p.send(&mut w.net, 0x10, 0xFFFF, &[]);
+    }
+    let ev = server_msgs(&p.rx);
+    let bins = ev.iter().filter(|e| e.0 == ws::OP_BINARY).count();
+    assert_eq!(bins, 20);
+    let t0 = 10_000 + xiaozhi::STT_DELAY_US + xiaozhi::TTS_DELAY_US;
+    assert_eq!(times[0], 10_000 + xiaozhi::STT_DELAY_US);
+    assert_eq!(times[1], t0);
+    assert_eq!(times[2] - times[1], xiaozhi::FRAME_US);
+    assert_eq!(*times.last().unwrap(), t0 + 20 * xiaozhi::FRAME_US);
+    let last = String::from_utf8_lossy(&ev.last().unwrap().1).into_owned();
+    assert!(last.contains("\"state\":\"stop\""), "{last}");
+    w.disable_xz();
+    assert!(w.net.tcp.ws_routes.is_empty() && w.xz.is_none());
+    assert!(w.net.tcp.ws_conns().is_empty(), "open session closed");
+}

@@ -1351,3 +1351,14 @@
 - **示例 c3-ili9341-temp 的 DS18B20 接 GPIO1**：C3 上 GPIO4 是 LCD RST。
 - **商店清单 → 台面放置支持 TFT / SH1106**（`templates.ts`）：手机上主要靠清单放元件，否则 ILI9341 会被静默丢掉。
 - **元件数上限测试 70 → 80**（`catalog.test.ts`）：新增 4 个元件，这是容量上限而非行为断言。
+
+## 2026-10-21 xiaozhi 脚本服务端（F-09a-2）
+- **服务端是纯状态机，World 只做胶水**：`xiaozhi::Server` 不碰 Tcp / Net，单测直接喂 `WsIn` 断言时刻和顺序；`World::xz_step` 取 inbox、发 `Net::ws_send`。备选：服务端直接持有 Net —— 否，时序测试要搭整条 TCP。
+- **xz_step 放在 poll 的 pending 下发之前**：推送当次就走；放后面要多等一次唤醒（`next_timer` 报 0 才发），每帧多一轮。
+- **60 ms 按排程时刻累加**：第 k 帧 = 起点 + k × 60 ms，poll 被信标 / WPA 定时器提前或推迟唤醒都不漂；迟到的 poll 一次补发所有到期帧。
+- **OTA 用 `Tcp::pages`，不改 `response()`**：现有 HTTP 路径一字节不改；代价是精确路径匹配（带查询串的 OTA 地址会 404，xiaozhi 固件不带）。
+- **不校验 token、只建模 Protocol-Version 1**：真固件带的是 NVS 里存的 token，校验只会让换服务端的固件连不上；v2 / v3 帧头留到有固件需要时。
+- **下行 Opus 用合成最小帧（素材待人定）**：RS-2 §8 第 4 项（合成音还是 CC0 录音）没拍板，先用 SILK WB 60 ms TOC + 固定 LCG 字节，不含任何第三方音频；能被解码器接受、但听起来是噪声。F-09b 拿到人定的素材后通过 `Server::frames` 替换。
+- **对话文字用英文**：Rust 输出只用英文（AGENTS §6）；固件 printf 照常中文。
+- **xz 服务端跨复位保留**：和虚拟手机、网络条件一样属于「外部世界」，复位只清会话和队列。
+- **端到端固件用 `espressif/esp_websocket_client` 1.7.0**：Apache-2.0（核组件包 license.txt）；注册表最新 1.8.0 的许可证标为 Custom，未核，不用。只做 accept 固件，不进站点。

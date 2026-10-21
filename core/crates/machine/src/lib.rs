@@ -218,6 +218,8 @@ impl Machine {
         };
         // Network conditions (D-01) belong to the router, not the board: preset, schedule and PRNG state carry over
         let cond = std::mem::take(&mut self.wifi_mut().world.cond);
+        // The xiaozhi server is on the internet too: it outlives the board, its connections do not
+        let xz = self.wifi_mut().world.xz.take();
         self.hw.reboot(reason)?;
         self.apply_harness();
         {
@@ -226,6 +228,10 @@ impl Machine {
             t.next_req = next_req;
         }
         self.wifi_mut().world.cond = cond;
+        if let Some(mut x) = xz {
+            x.chip_reset();
+            self.wifi_mut().world.enable_xz(x);
+        }
         if let Some(mut p) = phone {
             let now = self.wifi_tsf_us();
             p.chip_reset(now);
@@ -295,6 +301,39 @@ impl Machine {
             p.command(c, now);
         }
         self.kick_events();
+    }
+
+    /// Script action xz= (F-09a-2): on / off / script,<name> / say,<text> / min,<frames>; false when unknown
+    pub fn xz_cmd(&mut self, s: &str) -> bool {
+        use tryboard_soc::wifi::xiaozhi::{Cmd, Server};
+        let Some(c) = Cmd::parse(s) else {
+            return false;
+        };
+        let now = self.wifi_tsf_us();
+        let w = &mut self.wifi_mut().world;
+        if c == Cmd::Off {
+            w.disable_xz();
+            return true;
+        }
+        if w.xz.is_none() {
+            w.enable_xz(Server::default());
+        }
+        let Some(x) = w.xz.as_mut() else {
+            return false;
+        };
+        match c {
+            Cmd::Script(n) => match Server::script_by_name(&n) {
+                Some(sc) => x.script = sc,
+                None => return false,
+            },
+            Cmd::Say(t) => {
+                x.say(&t, now);
+            }
+            Cmd::Min(n) => x.min_frames = n,
+            Cmd::On | Cmd::Off => {}
+        }
+        self.kick_events();
+        true
     }
 
     /// "Real network" switch (C-03, script action realnet=1/0): when on, HTTP requests not for tryboard.local go to the outbox

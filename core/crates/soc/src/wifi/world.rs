@@ -7,6 +7,7 @@ use super::netcond::{Change, FaultKind, NetCond, Preset};
 use super::phone::Phone;
 use super::tcp::NetRow;
 use super::wpa::{self, Authenticator};
+use super::xiaozhi;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Auth {
@@ -63,6 +64,8 @@ pub struct World {
     pub cond: NetCond,
     /// AP a router reboot took down (None = all, when the chip was not associated)
     reboot_ap: Option<usize>,
+    /// xiaozhi-style voice server (F-09a-2, script action xz=on); None leaves the world byte-identical
+    pub xz: Option<xiaozhi::Server>,
 }
 
 /// Network summary (D-01): what the CLI prints and the web chip shows
@@ -165,6 +168,7 @@ impl Default for World {
             ap_mac: None,
             cond: NetCond::default(),
             reboot_ap: None,
+            xz: None,
         }
     }
 }
@@ -214,6 +218,60 @@ impl World {
             self.net.sta_ip = ROUTER_STA_IP;
         }
         self.phone = Some(phone);
+    }
+
+    /// Turn the xiaozhi server on (F-09a-2): OTA / activate pages and the WebSocket route; idempotent
+    pub fn enable_xz(&mut self, x: xiaozhi::Server) {
+        let t = &mut self.net.tcp;
+        if !t.ws_routes.iter().any(|r| r == xiaozhi::WS_PATH) {
+            t.ws_routes.push(xiaozhi::WS_PATH.into());
+        }
+        let json = "application/json".to_string();
+        for p in xiaozhi::OTA_PATHS {
+            t.pages
+                .insert(p.into(), (json.clone(), xiaozhi::ota_body().into_bytes()));
+        }
+        for p in xiaozhi::ACTIVATE_PATHS {
+            t.pages.insert(p.into(), (json.clone(), b"{}\n".to_vec()));
+        }
+        self.xz = Some(x);
+    }
+
+    pub fn disable_xz(&mut self) {
+        // Close the server's open sessions so nothing keeps filling an inbox nobody reads
+        for k in self.xz.as_ref().map(|x| x.keys()).unwrap_or_default() {
+            self.net.ws_close(k, 1001, "server off");
+        }
+        self.net.tcp.ws_inbox.clear();
+        let t = &mut self.net.tcp;
+        t.ws_routes.retain(|r| r != xiaozhi::WS_PATH);
+        for p in xiaozhi::OTA_PATHS
+            .iter()
+            .chain(xiaozhi::ACTIVATE_PATHS.iter())
+        {
+            t.pages.remove(*p);
+        }
+        self.xz = None;
+    }
+
+    /// One xiaozhi step: hand inbox events to the server, push what is due into Net::pending; returns `[xz]` notes
+    pub fn xz_step(&mut self, tsf_us: u64) -> Vec<String> {
+        let Some(x) = self.xz.as_mut() else {
+            return vec![];
+        };
+        let mut acts = Vec::new();
+        for ev in std::mem::take(&mut self.net.tcp.ws_inbox) {
+            acts.extend(x.on_ws(ev, tsf_us));
+        }
+        acts.extend(x.poll(tsf_us));
+        let mut notes = Vec::new();
+        for a in acts {
+            match a {
+                xiaozhi::Action::Send { key, op, data } => self.net.ws_send(key, op, true, &data),
+                xiaozhi::Action::Log(l) => notes.push(format!("[xz] {l}")),
+            }
+        }
+        notes
     }
 
     /// Signal of this AP as seen by the chip (dBm): AP RSSI minus antenna blockage
@@ -759,9 +817,21 @@ impl World {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
         };
-        match self.phone.as_ref().and_then(|p| p.next_timer()) {
+        let ap = match self.phone.as_ref().and_then(|p| p.next_timer()) {
             Some(t) => Some(ap.map_or(t, |a| a.min(t))),
             None => ap,
+        };
+        // xiaozhi server: unread WebSocket events now, otherwise the next scheduled push
+        let xz = self.xz.as_ref().and_then(|x| {
+            if self.net.tcp.ws_inbox.is_empty() {
+                x.next_timer()
+            } else {
+                Some(0)
+            }
+        });
+        match (ap, xz) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
         }
     }
 
@@ -779,6 +849,8 @@ impl World {
         let (mut out, mut log) = (Vec::new(), Vec::new());
         self.advance_cond(tsf_us);
         let loss = self.antenna_loss_db;
+        // xiaozhi pushes join pending first so they leave in this same poll
+        log.extend(self.xz_step(tsf_us));
         // Real-network reply (C-03): to the chip via the associated AP (encrypted once WPA2 is up); dropped when not associated
         if !self.net.pending.is_empty() {
             let pend = std::mem::take(&mut self.net.pending);
