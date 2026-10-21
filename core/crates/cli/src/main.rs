@@ -57,7 +57,7 @@ fn usage() -> ! {
                [--spi rc522[@cs=N]] (RC522 RFID on SPI2, CS default C3 GPIO7 / S3 GPIO10; script action card=<uid hex>|none)
                [--ir RX[,TX]] (NEC remote + 38 kHz receiver module output on RX, IR LED on TX aimed at it, '-' = none; LED needs classic ESP32; script action ir=ADDR,CMD (hex)|repeat)
                [--vcd <file.vcd>] [--vcd-pins 5[,..]|all] [--vcd-window <start s>..<end s>] (every edge, 1 ps timescale, 1 cycle = 6250 ps)
-               [--i2s max98357a,inmp441] (S3: speaker BCLK=16 LRC=17 DIN=18, mic SCK=39 WS=40 SD=41; C3: speaker 0/1/2, mic 0/1/3)
+               [--i2s max98357a,inmp441] (S3: speaker BCLK=16 LRC=17 DIN=18, mic SCK=39 WS=40 SD=41; C3: speaker 0/1/2, mic 0/1/3; other pins: max98357a@bclk:ws:din, inmp441@sck:ws:sd)
                [--mic <sound.wav>] (INMP441 loops this WAV, attaches the mic automatically) [--audio-wav <speaker output.wav>]
                [--ble-phone] (virtual phone: scan, connect to the first device, read all readable characteristics, subscribe to all notifications; air events on stderr)
                script actions ble=scan|scan off|connect [address|name]|disconnect|read <UUID|0xhandle>|write <UUID|0xhandle> <hex>|sub <UUID>|unsub <UUID>|auto
@@ -339,9 +339,17 @@ fn run(args: &[String]) {
     spi_args(&mut m, args);
     // I2S audio devices: --i2s max98357a,inmp441; --mic sound.wav
     if let Some(spec) = opt(args, "--i2s") {
-        for kind in spec.split(',') {
-            if !m.i2s_attach(kind) {
-                eprintln!("unsupported I2S device {kind} (available: max98357a, inmp441)");
+        for item in spec.split(',') {
+            // Optional pins kind@bclk:ws:data (e.g. max98357a@15:16:7); without them the chip defaults apply
+            let ok = match item.split_once('@') {
+                Some((kind, pins)) => {
+                    let p: Vec<u32> = pins.split(':').filter_map(|x| x.trim().parse().ok()).collect();
+                    p.len() == 3 && m.i2s_attach_at(kind, p[0], p[1], p[2])
+                }
+                None => m.i2s_attach(item),
+            };
+            if !ok {
+                eprintln!("unsupported I2S device {item} (available: max98357a, inmp441, optional @bclk:ws:data)");
                 std::process::exit(2)
             }
         }
