@@ -28,6 +28,10 @@ export interface Example {
   assembly?: boolean | string;
   /** Virtual PC (E-07b) on from boot: pc=on as the first input */
   pc?: boolean;
+  /** Virtual voice server (F-09b-2) on from boot: xz=on, xz=voice,demo as the first inputs */
+  xz?: boolean;
+  /** WAV under tools/audio/ the mic hears from power-up (= CLI --mic); default sine1k.wav */
+  mic?: string;
 }
 
 let cache: Promise<Example[]> | null = null;

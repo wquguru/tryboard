@@ -35,9 +35,10 @@ export type PartSpec =
   /** CST816S touch layer on the round LCD (P2-02): with gc9a01 the LCD becomes the 12-pin touch version; clicking the screen = touch */
   | { type: 'cst816s'; addr: number; sda: number; scl: number; int: number; rst?: number; label?: string }
   /** MAX98357A I2S amp module + 4 Ω speaker: pins fixed per chip (I2S_WIRING); sound in pcm.ts, the 3D cone follows the volume */
-  | { type: 'max98357a'; label?: string }
-  /** INMP441 I2S digital mic module (L/R to GND = left channel): pins fixed per chip, see I2S_WIRING */
-  | { type: 'inmp441'; label?: string }
+  | { type: 'max98357a'; label?: string; pins?: [number, number, number] }
+  /** INMP441 I2S digital mic module (L/R to GND = left channel): pins fixed per chip, see I2S_WIRING.
+   *  Both I2S parts take optional pins [bclk, ws, data] (= CLI --i2s kind@bclk:ws:data, F-09b-2) */
+  | { type: 'inmp441'; label?: string; pins?: [number, number, number] }
   /** 8-LED WS2812 stick (P2-09 knob lamp): DIN on pin (via 74AHCT125 to 5 V, illustrative), 5V supply; lies on the desk in front, colours from core-decoded frames */
   | { type: 'ws2812'; pin: number; n?: number; label?: string }
   /** DHT11 temperature / humidity module (D-03): 3 pins (VCC 3V3, DATA open drain with 10 kΩ pull-up on the module, GND); single-wire protocol */

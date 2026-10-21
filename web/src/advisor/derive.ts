@@ -152,6 +152,9 @@ export const kindName = (k: string) => KIND_NAME[k] ?? k;
 export const usedPins = (p: Plan) => Array.from(new Set(p.pins.flatMap((a) => a.pins)));
 export const exposedCount = (p: Plan) => p.board.exposed?.length ?? p.chip.gpio;
 
+/** Mic + speaker + Wi-Fi: a networked voice assistant (F-09b-2) */
+export const isVoice = (caps: readonly string[]) => ['wifi', 'audio_in', 'audio_out'].every((c) => caps.includes(c));
+
 /** Confidence per claim: parts by model (none = real board only), chip by simulation, pins / battery estimated, charging and RF real board only */
 export function trustRows(p: Plan, need: Need): [string, Confidence][] {
   const rows: [string, Confidence][] = need.parts.map((id) => {
@@ -168,6 +171,11 @@ export function trustRows(p: Plan, need: Need): [string, Confidence][] {
   if (p.power) rows.push([t('Battery life'), p.power.confidence]);
   if (need.battery) rows.push([t('Li-ion charging, real discharge curve'), '必须上真机']); // lint: allow-cjk
   if (need.caps.some((c) => ['wifi', 'ble', 'bt_classic', 'thread', 'zigbee', 'wifi6'].includes(c))) rows.push([t('Antenna, wireless range'), '必须上真机']); // lint: allow-cjk
+  if (isVoice(need.caps)) {
+    // F-09b-2: the xiaozhi-protocol link runs against a virtual server; on-device speech processing is not modelled
+    rows.push([t('Voice link (device ↔ server protocol)'), '行为模拟']); // lint: allow-cjk
+    rows.push([t('Wake word, echo cancellation (AEC)'), '必须上真机']); // lint: allow-cjk
+  }
   if (need.battery) rows.push([t('Wakes again after deep sleep'), '必须上真机']); // lint: allow-cjk
   return rows;
 }

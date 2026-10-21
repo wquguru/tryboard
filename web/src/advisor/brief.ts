@@ -4,7 +4,7 @@ import { PARTS } from './data.ts';
 import { capName, type Confidence } from './engine.ts';
 import type { Cap } from './data.ts';
 import { PART_MAP } from './catalogmap.ts';
-import { answers, labelIs, labelText, pinFull, pinKind, resolve, yuan, lasts, type Result } from './derive.ts';
+import { answers, isVoice, labelIs, labelText, pinFull, pinKind, resolve, yuan, lasts, type Result } from './derive.ts';
 import type { SelectState } from './state.ts';
 import { t } from '../i18n/index.ts';
 
@@ -29,6 +29,10 @@ export function checkpointsOf(r: Result): Checkpoint[] {
   if (ids.includes('ws2812-strip')) out.push({ name: t('LED strip receives data'), conf: '仿真验证' }); // lint: allow-cjk
   if (ids.includes('sg90')) out.push({ name: t('Servo signal'), conf: '行为模拟' }); // lint: allow-cjk
   if (ids.includes('dht11')) out.push({ name: t('DHT11 reading'), conf: '必须上真机' }); // lint: allow-cjk (busy-wait timed, D-03)
+  if (isVoice(r.need.caps)) {
+    out.push({ name: t('One voice turn against the virtual server (s3-xiaozhi-lite)'), conf: '行为模拟' }); // lint: allow-cjk
+    out.push({ name: t('Wake word, echo cancellation (AEC)'), conf: '必须上真机', manual: true }); // lint: allow-cjk
+  }
   if (r.need.battery) out.push({ name: t('Wakes again after deep sleep'), conf: '必须上真机', manual: true }); // lint: allow-cjk
   return out;
 }

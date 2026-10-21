@@ -395,5 +395,8 @@ const d: Dict = {
   // F-02 share card
   "Make a share card": "生成分享卡",
   "6 s video and image with a QR code, for chats and posts": "6 秒视频和图片，带二维码，发群、发帖用",
+  "Voice link (device ↔ server protocol)": "语音链路（设备 ↔ 服务器协议）",
+  "Wake word, echo cancellation (AEC)": "唤醒词、回声消除（AEC）",
+  "One voice turn against the virtual server (s3-xiaozhi-lite)": "与虚拟服务器完成一轮语音对话（s3-xiaozhi-lite）",
 };
 export default d;

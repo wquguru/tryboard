@@ -111,3 +111,18 @@ export function partAction(e: Ex, act: string): boolean {
   if (!e.tb_part_action) return false;
   return withText(e, act, (q, n) => e.tb_part_action!(q, n)) === 0;
 }
+
+const I2S_KIND: Record<string, number> = { max98357a: 0, inmp441: 1 };
+/** I2S audio parts as CLI --i2s entries: `kind` on the chip's default pins or `kind@bclk:ws:data` (F-09b-2); true if any attached */
+export function attachI2s(e: Partial<Pick<WasmExports, 'tb_i2s_attach' | 'tb_i2s_attach_at'>>, list: string[] | undefined): boolean {
+  let any = false;
+  for (const item of list ?? []) {
+    const [kind, pins = ''] = item.split('@');
+    const k = I2S_KIND[kind];
+    if (k === undefined) continue;
+    const p = pins.split(':').map(Number);
+    const r = pins ? (p.length === 3 && p.every(Number.isInteger) ? e.tb_i2s_attach_at?.(k, p[0], p[1], p[2]) : 1) : e.tb_i2s_attach?.(k);
+    if (r === 0) any = true;
+  }
+  return any;
+}

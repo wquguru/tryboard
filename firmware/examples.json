@@ -1080,6 +1080,48 @@
   }
  },
  {
+  "id": "s3-xiaozhi-lite",
+  "title": "Voice assistant (xiaozhi-protocol compatible)",
+  "about": "An ESP32-S3 voice assistant that speaks the open xiaozhi WebSocket protocol to a virtual server inside the simulator (never the real xiaozhi.me): INMP441 mic on SCK=GPIO5, WS=GPIO4, SD=GPIO6, MAX98357A speaker on BCLK=GPIO15, LRC=GPIO16, DIN=GPIO7, SSD1306 OLED on SDA=GPIO41, SCL=GPIO42. Hold BOOT (in 3D or the Voice tab) to talk: the mic streams a recorded clip as Opus-sized frames, the server answers with what it heard and a spoken reply, the speaker plays it and the OLED shows the subtitle. Tap BOOT while it speaks to interrupt. The voice link is a behavioural model; wake word and echo cancellation need real hardware.",
+  "tags": [
+   "◐ Behaviour model",
+   "I2S",
+   "Wi-Fi",
+   "WebSocket",
+   "SSD1306",
+   "ESP-IDF 5.5"
+  ],
+  "chip": "esp32s3",
+  "xz": true,
+  "mic": "xz_mic.wav",
+  "scene": {
+   "parts": [
+    {
+     "type": "inmp441",
+     "pins": [
+      5,
+      4,
+      6
+     ]
+    },
+    {
+     "type": "max98357a",
+     "pins": [
+      15,
+      16,
+      7
+     ]
+    },
+    {
+     "type": "oled",
+     "addr": 60,
+     "sda": 41,
+     "scl": 42
+    }
+   ]
+  }
+ },
+ {
   "id": "lamp",
   "chip": "esp32s3",
   "title": "Knob lamp: EC11 knob + WS2812 strip",

@@ -10,8 +10,8 @@ export interface DevState {
   distance: number;
 }
 
-/** I2S audio parts (pins fixed per chip): speaker shares the sound toggle; mic hears a 1 kHz test WAV. */
-export const i2sOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'max98357a' || p.type === 'inmp441' ? [p.type] : []));
+/** I2S audio parts as CLI --i2s entries (`kind`, or `kind@bclk:ws:data` with explicit pins): speaker shares the sound toggle; mic hears a test WAV. */
+export const i2sOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'max98357a' || p.type === 'inmp441' ? [p.pins ? `${p.type}@${p.pins.join(':')}` : p.type] : []));
 
 const i2cOf = (parts: PartSpec[]) => {
   const kind: Record<string, string> = { oled: 'ssd1306', bme280: 'bme280', mpu6050: 'mpu6050', qmi8658: 'qmi8658', cst816s: 'cst816s' };

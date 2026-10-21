@@ -69,6 +69,8 @@ export function mountOrientation(b: BenchCtx) {
   const MIC_SOURCES: [string, string][] = [
     ["sine1k.wav", t("1 kHz sine (test WAV)")],
     ["sweep.wav", t("Sweep 200→2000 Hz (test WAV)")],
+    // F-09b-2: the voice assistant's recorded "Hello" clip (= its accept cases' --mic)
+    ["xz_mic.wav", t('Spoken "Hello" clip (voice assistant WAV)')],
     ["silence", t("Silence")],
     ["live", t("Browser microphone (needs permission, play only, not checked)")],
   ];

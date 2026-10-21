@@ -5,7 +5,7 @@ import { chipFromId, NPINS as CHIP_NPINS, RGB_GPIO, type SimChip } from './chipi
 import { realFetch, type RealReq } from './realfetch';
 import { useWorkerLocale, type Locale } from './i18n';
 import type { WasmExports } from './wasm.gen';
-import { attachLcdSpec, attachParts, partAction, partsEmpty, type PartsDevs } from './partsdev.ts';
+import { attachI2s, attachLcdSpec, attachParts, partAction, partsEmpty, type PartsDevs } from './partsdev.ts';
 import { isTftPanel } from './lcdspec.ts';
 import type { PowerMode, ElecFrame, Env, EncoderSpec, SonarSpec, PinDevFrame, VcdState, ToWorker, AdcSamples, Harness, PwmEvent, PcmBlock, AudioFrame, FromWorker, Snapshot, LcdKind, Battery } from './simmsg';
 
@@ -387,6 +387,7 @@ function loopSlice(gen: number) {
   postUsb(e);
   postBle(e);
   postNet(e);
+  postXz(e);
   if (pacedDone && paced) {
     // Serial up to here is already in bootStdout (kept above), so the snapshot matches seek's at the same cycle
     const p = paced;
@@ -482,6 +483,22 @@ function postBle(e: Exports, force = false) {
   post({ type: 'ble', state: st, json, ...(bleReset ? { reset: true } : {}) });
   bleReset = false;
   bleFrom = seq;
+}
+
+// Voice panel (F-09b-2): server state + new [xz] log lines, fetched only when the log length changes
+let xzSeq = -1;
+let xzReset = true;
+function postXz(e: Exports) {
+  if (!e.tb_xz_seq || !e.tb_xz_json || !e.tb_xz_json_ptr) return;
+  const seq = e.tb_xz_seq();
+  if (seq === xzSeq && !xzReset) return;
+  // The log only grows within a power-up; a shorter one (server switched off and on) starts over
+  const from = seq >= xzSeq && !xzReset && xzSeq > 0 ? xzSeq : 0;
+  const n = seq < 0 ? 0 : e.tb_xz_json(from);
+  const json = n ? decoder.decode(new Uint8Array(e.memory.buffer, e.tb_xz_json_ptr(), n)) : '';
+  post({ type: 'xz', json, ...(xzReset || from === 0 ? { reset: true } : {}) });
+  xzSeq = seq;
+  xzReset = false;
 }
 
 // Network tab: shown only after the firmware sent Wi-Fi frames; the phone / request log are each fetched only when their version changed
@@ -597,7 +614,6 @@ function postPaused(e: Exports) {
 
 /** Boot fields; locale exists so any human text the worker makes follows the page (core errors are English already). */
 type BootMsg = { wasm: WebAssembly.Module; rom?: ArrayBuffer; romId: number; flash?: ArrayBuffer; flashId: number; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean | LcdKind; battery?: Battery; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; board?: string; grove?: string; parts?: PartsDevs; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
-const I2S_KIND: Record<string, number> = { max98357a: 0, inmp441: 1 };
 // ROM / firmware bytes by main-thread id (R-23): sent once, then every boot / seek copies them into a fresh instance.
 // ROMs are one per chip; firmware keeps only the latest (live.ts resends bytes whenever the id changes).
 const roms = new Map<number, ArrayBuffer>();
@@ -654,7 +670,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   lcdH = e.tb_lcd_h?.() || 240;
   hasAudio = false;
   pcmOut = [];
-  for (const k of m.i2s ?? []) if (e.tb_i2s_attach && I2S_KIND[k] !== undefined && e.tb_i2s_attach(I2S_KIND[k]) === 0) hasAudio = true;
+  hasAudio = attachI2s(e, m.i2s);
   if (m.micWav) setMic(e, 'wav', m.micWav);
   // Supply network: servo attached, power source (state at power-up; later switches go through power messages and the log)
   power = m.power ?? 'usb';
@@ -709,6 +725,8 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   bleSeq = -1;
   bleFrom = 0;
   bleReset = true;
+  xzSeq = -1;
+  xzReset = true;
   // New power-on: phone / request log start empty (send an empty one so the page clears the previous run)
   netUsed = null;
   phoneVersion = -1;
@@ -740,6 +758,17 @@ function apply(e: Exports, ev: InputAction) {
       if (ev.kind === 'uart') e.tb_uart_push(p, b.length);
       else e.tb_usb_cdc_send(p, b.length);
       e.tb_free(p, b.length);
+      break;
+    }
+    case 'xz': {
+      if (!e.tb_xz_cmd) return;
+      const b = new TextEncoder().encode(ev.cmd);
+      const p = e.tb_alloc(b.length);
+      new Uint8Array(e.memory.buffer, p, b.length).set(b);
+      const bad = e.tb_xz_cmd(p, b.length);
+      e.tb_free(p, b.length);
+      // Refused actions (unknown script / voice) stay out of the log: the CLI refuses them too
+      if (bad) return;
       break;
     }
     case 'ble': {
@@ -995,6 +1024,7 @@ async function handle(m: ToWorker) {
       postLcd(e, true);
       postBle(e, true);
       postNet(e);
+      postXz(e);
       break;
     }
     case 'snapshot':
@@ -1082,6 +1112,11 @@ async function handle(m: ToWorker) {
       if (!ex) return;
       apply(ex, { kind: 'phone', cmd: m.cmd });
       postNet(ex);
+      break;
+    case 'xz':
+      if (!ex) return;
+      apply(ex, { kind: 'xz', cmd: m.cmd });
+      postXz(ex);
       break;
     case 'realnet':
       realnetOn = m.on;

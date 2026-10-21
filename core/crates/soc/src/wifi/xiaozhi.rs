@@ -232,6 +232,11 @@ impl Server {
         SCRIPTS.iter().copied().find(|s| s.name == name)
     }
 
+    /// WebSocket sessions opened so far (web voice panel)
+    pub fn sessions(&self) -> u32 {
+        self.opened
+    }
+
     fn note(&mut self, now: u64, s: String) -> Action {
         self.log.push((now, s.clone()));
         Action::Log(s)

@@ -1110,5 +1110,6 @@ const d: Dict = {
   "Grove unit {name}": "Grove 유닛 {name}",
   "Grove unit removed": "Grove 유닛 분리",
   "Same as CLI --grove {id}: temperature, humidity and pressure follow the environment controls.": "CLI --grove {id}와 같음: 온도, 습도, 기압이 환경 컨트롤을 따릅니다.",
+  "Spoken \"Hello\" clip (voice assistant WAV)": "\"Hello\"라고 말하는 녹음(음성 비서 WAV)",
 };
 export default d;

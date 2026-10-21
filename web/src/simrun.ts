@@ -5,7 +5,7 @@ import { chipFromId, type SimChip } from './chipid';
 import { parseScript } from './checks';
 import { realFetch, type RealReq } from './realfetch';
 import type { WasmExports } from './wasm.gen';
-import { attachLcdSpec, attachParts, partAction, partsTimed, type PartsDevs } from './partsdev.ts';
+import { attachI2s, attachLcdSpec, attachParts, partAction, partsTimed, type PartsDevs } from './partsdev.ts';
 import { isTftPanel } from './lcdspec.ts';
 import type { LcdKind } from './simmsg';
 
@@ -53,6 +53,9 @@ export interface SimJob {
   parts?: PartsDevs;
   /** Run with the "real network" on (C-03, for checkpoints): the chip's HTTP to the internet is fetched on the spot and the replies are applied and kept in the result; the verdict needs internet and records no run ID */
   realnet?: boolean;
+  /** I2S audio parts (= CLI --i2s, entries `kind[@bclk:ws:data]`) and the WAV the mic loops (= CLI --mic) */
+  i2s?: string[];
+  micWav?: ArrayBuffer | Uint8Array;
 }
 
 export interface SimResult {
@@ -143,6 +146,12 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
     const err = attachLcdSpec(e, j.lcd);
     if (err) return { stdout: '', report: '', sim: 0, error: err, bootError: err };
   } else if (j.lcd) e.tb_lcd_attach?.();
+  // Same order as the CLI: screen, then --i2s, then --mic
+  attachI2s(e, j.i2s);
+  if (j.micWav && e.tb_mic_wav) {
+    const cb = e.tb_mic_wav;
+    bytesIn(e, u8(j.micWav), (p, n) => void cb(p, n));
+  }
   // Like the native CLI: at most 50 crash / brownout resets, the 51st stops before resetting (no reboot loop; both sides stop on the same cycle)
   e.tb_reset_limit?.(50);
   if (j.servo !== undefined) e.tb_servo_attach?.(j.servo);
@@ -213,6 +222,10 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         const v = act.slice(4), c = v.lastIndexOf(','), lv = c > 0 ? v.slice(c + 1).trim() : '';
         const [name, down] = lv === '1' || lv === '0' ? [v.slice(0, c), lv === '1'] : [v, true];
         bytesIn(e, new TextEncoder().encode(name.trim()), (p, n) => void e.tb_board_key(p, n, down ? 1 : 0));
+      }
+      else if (act.startsWith('xz=') && e.tb_xz_cmd) {
+        const cb = e.tb_xz_cmd;
+        bytesIn(e, new TextEncoder().encode(act.slice(3)), (p, n) => void cb(p, n));
       }
       else if ((act.startsWith('ble=') || act.startsWith('pc=')) && e.tb_ble_cmd) {
         // pc=… goes to the same phone channel whole, like CLI main.rs

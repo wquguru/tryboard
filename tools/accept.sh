@@ -381,6 +381,10 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/micropython.mjs 2>&1 | grep '^\[micropython\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -qE '^\[micropython\] (PASS \(|SKIP:)' || { echo "- [micropython] script did not finish" >> $REPORT; fail=1; }
+  # Voice panel (F-09b-2): hold-to-talk turn on s3-xiaozhi-lite, speaker analyser non-silent, CLI replay byte for byte, 390×844
+  r=$(node tools/webtest/xiaozhi.mjs 2>&1 | grep '^\[xiaozhi\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[xiaozhi\] PASS (' || { echo "- [xiaozhi] script did not finish" >> $REPORT; fail=1; }
 fi
 echo -e "\nVerdict: $([ $fail = 0 ] && echo 'all passed' || echo 'some items failed')" >> $REPORT
 cat $REPORT

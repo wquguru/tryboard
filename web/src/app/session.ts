@@ -19,6 +19,7 @@ import { IoStore, decodeEvents } from './iotrace';
 import { taskStore } from './tasktrace';
 import type { UsbView } from '../usb3d';
 import { bleFeed } from './blefeed';
+import { xzFeed } from './xzfeed';
 import { netFeed, netPreset, realnetSwitch } from './netfeed';
 import { PoseRate } from '../imupose';
 import { MicInput } from '../micinput';
@@ -301,7 +302,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       s.sim?.pressPin(pin, down);
     },
     // Example preset knob position (analog.value in examples.json controls).
-    micSource: 'sine1k.wav',
+    micSource: ex?.mic ?? 'sine1k.wav',
     async setMicSource(src) {
       s.micSource = src;
       mic.stop();
@@ -359,6 +360,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       s.sim?.pwrkey(long);
     },
     deskPc: !!ex?.pc,
+    xzScript: ex?.xz ? 'hello' : null,
     touch(x, y, down) {
       s.sim?.touch(x, y, down);
       store.set({ touch: { x: Math.round(x), y: Math.round(y), down } });
@@ -450,6 +452,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     scenFeed.set({ lines: evs.length });
   }, ['sc']);
 
+  let micReady: Promise<unknown> = Promise.resolve();
   function makeSim(fw: string | ArrayBuffer) {
     const sim: LiveSim = new LiveSim({
       fw,
@@ -465,6 +468,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         for (const cb of [...usbSubs]) cb(v);
       },
       onNet: (m) => netFeed.update(m),
+      onXz: (m) => xzFeed.update(m),
+      // The mic WAV must be in place at power-up (= CLI --mic), not attached a few slices later
+      prepare: () => micReady,
       realnet: () => realnetSwitch.get(),
       netPreset: () => netPreset.get(),
       scenario: scenCompile,
@@ -515,6 +521,12 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         // Real is the power-up default, so only the ideal choice needs logging again
         if (s.adcIdeal) sim.adcMode(true);
         if (s.deskPc) sim.ble('pc=on'); // Virtual PC (E-07b): a logged input, so --inputs replays it
+        // Voice server (F-09b-2): logged inputs too; the demo voice is the clip the accept cases use
+        if (s.xzScript) {
+          sim.xz('on');
+          sim.xz('voice,demo');
+          if (s.xzScript !== 'hello') sim.xz(`script,${s.xzScript}`);
+        }
         sim.watchAdc(adcPins());
         s.bootCount++;
         imuTail = '';
@@ -592,9 +604,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     // Send watch settings before boot (worker is ordered) so cycle 0 uses the mask, matching CLI --trace-pins.
     sim.watchIo(ioMask[0], ioMask[1]);
     if (s.scene.parts.some((p) => p.type === 'inmp441')) {
-      // Attach the test tone before boot (browser mic waits until onBoot).
-      const wav = s.micSource.endsWith('.wav') ? s.micSource : 'sine1k.wav';
-      void fetchBuf(`./audio/${wav}`)
+      // Attach the test tone before boot (browser mic waits until onBoot); start() awaits micReady.
+      const wav = s.micSource.endsWith('.wav') ? s.micSource : (ex?.mic ?? 'sine1k.wav');
+      micReady = fetchBuf(`./audio/${wav}`)
         .then((b) => (s.micSource === 'silence' ? sim.setMic('silence') : sim.setMic('wav', b, wav)))
         .catch(() => {});
     }

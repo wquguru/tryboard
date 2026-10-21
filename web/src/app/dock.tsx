@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "../ui/cn";
 import { actions, bc, setDock, type DockTab } from "./chrome";
-import { BlePane, CodePane as CodeView, MpyPane, NetPane, PaneLoading, ScenarioPane, TasksPane, UsbPane } from "./panes";
+import { BlePane, CodePane as CodeView, MpyPane, NetPane, PaneLoading, ScenarioPane, TasksPane, UsbPane, VoicePane } from "./panes";
 import { Icon } from "./icons";
 import { useStore } from "./react";
 import { createStore } from "./store";
@@ -522,6 +522,7 @@ function PhoneDock({
     ...(c.ble ? [{ id: "ble" as const, label: t('Bluetooth') }] : []),
     ...(c.net ? [{ id: "net" as const, label: t('Network') }] : []),
     ...(c.mpy ? [{ id: "py" as const, label: "main.py" }] : []),
+    ...(c.voice ? [{ id: "voice" as const, label: t('Voice') }] : []),
   ];
   return (
     <section
@@ -680,6 +681,11 @@ function PhoneDock({
             </div>
           )}
           {cur === "py" && c.mpy && <MpyPane phone />}
+          {cur === "voice" && c.voice && (
+            <div className="flex min-h-0 flex-1 flex-col border-t border-line-soft">
+              <VoicePane />
+            </div>
+          )}
           {cur === "analyzer" && <AnaSheet />}
         </>
       )}
@@ -888,6 +894,9 @@ function DeskDock({
     ...(c.mpy
       ? [{ id: "py" as const, label: "main.py", title: t("Edit MicroPython's main.py and run it on the bench") }]
       : []),
+    ...(c.voice
+      ? [{ id: "voice" as const, label: t('Voice'), title: t('Virtual voice server: conversation, script and [xz] log (behavioural model)') }]
+      : []),
   ];
   return (
     <section
@@ -999,6 +1008,7 @@ function DeskDock({
         )}
         {c.net && cur === "net" && <NetPane />}
         {c.mpy && cur === "py" && <MpyPane />}
+        {c.voice && cur === "voice" && <VoicePane />}
         <div
           hidden={cur !== "runs"}
           className="flex min-h-0 flex-1 items-start overflow-auto px-3 py-2 [&[hidden]]:hidden"

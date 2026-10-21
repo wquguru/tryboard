@@ -1407,3 +1407,11 @@
 - **hello 10 s 超时后 2 s 重连**：重连前先注销旧客户端的事件回调，否则旧连接的关闭事件会被当成新连接断开。
 - **accept.sh `audio` 块 `freq` 改为可选、加 `max_rms`**：语音没有单一主频，改用 RMS 区间（0.1–0.3，实测 0.20）；已有用例都带 freq，判定不变。
 - **CLI `run` 函数不再变长**：`--i2s` 解析挪到 `i2s_args`（结构护栏 R-14：函数 / 文件只缩不涨）。
+
+## 2026-10-21 网页语音面板（F-09b-2，自主决定，待人审）
+- **I2S 引脚放进场景零件**：`max98357a` / `inmp441` 可带 `pins: [bclk, ws, data]`，网页转成 CLI 同款 `kind@b:w:d`，新 wasm 导出 `tb_i2s_attach_at`；不带 pins 时仍用芯片默认脚（旧示例不变）。备选：给示例加专用 I2S 配置字段，弃，因为 3D 接线、接线表、重放都要再读一遍。
+- **麦克风 WAV 在上电前就位**：LiveSim 增加 `prepare()`，`start()` 等它（会话里是 mic WAV 的 fetch），否则 WAV 晚几片才接上，和 CLI `--mic` 不一致；示例可用 `mic` 指定 tools/audio 下的 WAV，构建时复制 xz_mic.wav。
+- **服务器脚本跟会话走**：`session.xzScript` 记住面板里选的脚本，每次上电（含重启、倒带）由 onBoot 重新发 `xz=on`、`xz=voice,demo`、`xz=script,<n>`，全部进输入日志，CLI `--inputs` 可重放。
+- **打断不单设按钮**：按住说话按钮在播报中显示「打断」，本质仍是 BOOT 按下 / 松开（`gpio0=0` / `gpio0=z`，与 accept 脚本一致），固件自己发 abort；面板的「say」文本去掉 `;`、`#`、换行（脚本格式分隔符），最长 200 字。
+- **网页重放补上 I2S 和麦克风**：`replayLog` / simrun 按日志的 `i2s` / `mic` 接件，指纹比对才覆盖 I2S 示例。
+- **选型层**：需求同时含 wifi + audio_in + audio_out 时，信任行加「语音链路（设备 ↔ 服务器协议）= 行为模拟」「唤醒词、回声消除 = 必须上真机」，检查点同理；语音模板示例首推 s3-xiaozhi-lite。

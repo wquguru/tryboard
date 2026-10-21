@@ -221,6 +221,15 @@ export interface WasmExports {
   tb_tasks_json_ptr(): number;
   /** Attach an I2S audio part: 0 = MAX98357A speaker, 1 = INMP441 microphone (pins: ARCH "I2S"). Returns 0 on success */
   tb_i2s_attach(kind: number): number;
+  /** Same as tb_i2s_attach on explicit pins (= CLI --i2s kind@bclk:ws:data, F-09b-2). Returns 0 on success */
+  tb_i2s_attach_at(kind: number, bclk: number, ws: number, data: number): number;
+  /** # Safety p/len must describe a valid buffer. Voice server action (same text as after CLI `xz=`); 0 = accepted, 1 = refused */
+  tb_xz_cmd(p: number, len: number): number;
+  /** Voice server log length, -1 when the server is off: fetch the JSON only when it changes */
+  tb_xz_seq(): number;
+  /** Server state + `[xz]` log lines from index `from` as JSON; length, read via tb_xz_json_ptr (0 = server off) */
+  tb_xz_json(from: number): number;
+  tb_xz_json_ptr(): number;
   /** Take buffered speaker audio, returns the block count. Block: t f64 (sim time of first sample, s) | rate f32 | n u32 | n mono i16 samples, padded to 4 bytes; read via tb_audio_ptr / tb_audio_len */
   tb_audio_take(): number;
   tb_audio_ptr(): number;

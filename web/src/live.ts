@@ -36,6 +36,10 @@ export interface LiveOptions {
   onBle?(u: BleUpdate): void;
   /** Network tab (C-02): whether firmware uses Wi-Fi, phone JSON, request log JSON (unchanged fields omitted) */
   onNet?(m: { used: boolean; phone?: string; rows?: string; replies?: number; replyBytes?: number }): void;
+  /** Voice server (F-09b-2): JSON with new [xz] log lines ("" = server off); reset = new power-up / rewind */
+  onXz?(m: { json: string; reset?: boolean }): void;
+  /** Awaited before every power-up (e.g. the mic WAV must be loaded so it is part of the boot, like CLI --mic) */
+  prepare?(): Promise<unknown>;
   /** Current "real network" toggle (C-03), sent to the worker on boot / rewind */
   realnet?(): boolean;
   /** Current network preset (D-01), sent on boot / rewind */
@@ -189,6 +193,8 @@ export class LiveSim {
         o.onBle?.(parseBle(m.state, m.json, m.reset, m.cmdError));
       } else if (m.type === 'net') {
         o.onNet?.(m);
+      } else if (m.type === 'xz') {
+        o.onXz?.(m);
       } else if (m.type === 'harness') {
         o.onHarness?.(m.text);
       } else if (m.type === 'timing') {
@@ -242,6 +248,7 @@ export class LiveSim {
     const flash = (this.flash ??= typeof fw === 'string' ? await fetchBuf(fw) : fw);
     const wasm = await loadWasmModule();
     const rom = await loadRom(imageChip(flash));
+    await this.o.prepare?.().catch(() => {});
     if (gen !== this.startGen) return;
     Object.assign(this.frame, emptyFrame());
     this.send({ type: 'boot', wasm, ...this.blobs(rom, flash), i2c: this.o.i2c, env: this.sensed(), lcd: this.o.lcd, battery: this.o.battery, servo: this.o.servo, power: this.o.power, encoder: this.o.encoder, sonar: this.o.sonar, touchInt: this.o.touchInt, board: this.o.board, grove: this.o.grove, i2s: this.o.i2s, micWav: this.o.micWav?.slice(0), micName: this.o.micName, harness: this.o.harness, dht11: this.o.dht11, parts: this.o.parts, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.(), locale });
@@ -374,6 +381,10 @@ export class LiveSim {
   /** The virtual PC types into the USB serial port (CDC-ACM). */
   usbCdc(text: string) {
     this.send({ type: 'usbcdc', text });
+  }
+  /** Voice server action (xz=<cmd>, logged; F-09b-2). */
+  xz(cmd: string) {
+    this.send({ type: 'xz', cmd });
   }
   /** Virtual phone action (ble=<cmd>, logged). */
   ble(cmd: string) {

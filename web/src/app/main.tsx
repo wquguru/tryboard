@@ -32,6 +32,7 @@ import { initSaved } from './saved';
 import { serial } from './dock';
 import { usbFeed } from './usbfeed';
 import { bleFeed } from './blefeed';
+import { xzFeed } from './xzfeed';
 import { netFeed } from './netfeed';
 import { initScenario, scenFeed, setScenario } from './scenariofeed';
 import { benchTracks, parseScenario } from './scenario';
@@ -337,6 +338,21 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     setBc({ ble: has });
     if (has) setDock({ tab: 'ble', collapsed: false });
     else if (bc.get().dock.tab === 'ble') setDock({ tab: 'serial' });
+  });
+  // Voice tab (F-09b-2): appears while the virtual voice server is on; the script choice survives reboots (session onBoot)
+  actions.xz = (cmd) => {
+    if (cmd === 'off') session.xzScript = null;
+    else if (cmd.startsWith('script,')) session.xzScript = cmd.slice(7);
+    else if (cmd === 'on' && !session.xzScript) session.xzScript = 'hello';
+    session.sim?.xz(cmd);
+  };
+  actions.talk = (down) => session.pressPin(0, down);
+  xzFeed.subscribe(() => {
+    const has = xzFeed.get().on;
+    if (has === bc.get().voice) return;
+    setBc({ voice: has });
+    if (has) setDock({ tab: 'voice', collapsed: false });
+    else if (bc.get().dock.tab === 'voice') setDock({ tab: 'serial' });
   });
   // main.py tab (F-07b): appears when the user's image is MicroPython; uploads go through the logged serial input
   installMpy(session);

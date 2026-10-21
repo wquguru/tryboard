@@ -22,7 +22,7 @@ TXT
 # Microphone test sounds (our own, synthesized by tools/audio/gen_wav.py; see tools/audio/SOURCES.md)
 mkdir -p "$PUB/audio"
 [ -f "$ROOT/tools/audio/sine1k.wav" ] || python3 "$ROOT/tools/audio/gen_wav.py" >/dev/null
-cp "$ROOT/tools/audio/sine1k.wav" "$ROOT/tools/audio/sweep.wav" "$PUB/audio/"
+cp "$ROOT/tools/audio/sine1k.wav" "$ROOT/tools/audio/sweep.wav" "$ROOT/tools/audio/xz_mic.wav" "$PUB/audio/"
 # Example list: publish only what has been built
 python3 - "$ROOT" <<'PY'
 import json, os, sys

@@ -158,6 +158,8 @@ export type ToWorker =
   | { type: 'usbcdc'; text: string }
   /** Virtual phone action (C-01, logged: ble=<cmd>). */
   | { type: 'ble'; cmd: string }
+  /** Virtual voice server action (F-09b-2, logged as xz=…): on / off / script,<name> / say,<text> / min,N / voice,demo|noise */
+  | { type: 'xz'; cmd: string }
   /** One virtual-phone step (C-02, logged as phone=…): on / join,ssid[,pass] / leave / open / get,url / post,url,body */
   | { type: 'phone'; cmd: string }
   /** "Real network" toggle (C-03): chip HTTP to the internet goes through browser fetch; replies are logged as netreply=… */
@@ -294,6 +296,9 @@ export type FromWorker =
   /** BLE (C-01): state 0 = firmware does not use BLE, 1 = controller running, 2 = VHCI boundary not found (json is {"error"}).
    *  json is {"view", "log"} with new air-log lines only; reset = new power-up / rewind; cmdError = why the last phone command was refused. */
   | { type: 'ble'; state: number; json: string; reset?: boolean; cmdError?: string }
+  /** Voice server (F-09b-2): json is {"script","sessions","turns","up","down","log":[[us,line]]} with new log lines only ("" = server off);
+   *  reset = new power-up / rewind */
+  | { type: 'xz'; json: string; reset?: boolean }
   /** Harness verdict (same text as the CLI: I2C rise time, RSSI after antenna loss), sent on change. */
   | { type: 'harness'; text: string }
   /** Timing-sensitive code report (D-03): JSON {"line","items":[{pin,kind,n}]} or {}; sent on change */

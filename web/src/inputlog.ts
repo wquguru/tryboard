@@ -53,7 +53,9 @@ export type InputEvent =
   /** F-04a bench parts: PIR motion (pir=1|0), light on the photoresistor (lux=N), card on the RC522 (card=<uid hex>|none) */
   | { tMs: number; kind: 'pir'; on: boolean }
   | { tMs: number; kind: 'lux'; lux: number }
-  | { tMs: number; kind: 'card'; uid: string };
+  | { tMs: number; kind: 'card'; uid: string }
+  /** Virtual voice server (F-09b-2): on / off / script,<name> / say,<text> / min,N / voice,demo|noise. Action xz=… */
+  | { tMs: number; kind: 'xz'; cmd: string };
 
 /** An event not yet stamped (the worker fills in tMs when applying it) */
 export type InputAction = InputEvent extends infer E ? (E extends unknown ? Omit<E, 'tMs'> : never) : never;
@@ -178,6 +180,8 @@ export function action(e: InputEvent): string | null {
       return `lux=${e.lux}`;
     case 'card':
       return `card=${e.uid}`;
+    case 'xz':
+      return `xz=${e.cmd}`;
     case 'power':
       return null;
   }
@@ -303,6 +307,8 @@ export function fromAction(a: string): InputAction {
       return { kind: 'lux', lux: num(v) };
     case 'card':
       return { kind: 'card', uid: v.trim() };
+    case 'xz':
+      return { kind: 'xz', cmd: v };
   }
   throw new Error(`bad action "${a}"`);
 }

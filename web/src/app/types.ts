@@ -211,6 +211,8 @@ export interface Session {
   pwrKey(long: boolean): void;
   /** Virtual PC (E-07b) wanted on: pc=on is sent after every boot. From the example's `pc`, then the panel toggle */
   deskPc: boolean;
+  /** Voice server script wanted after every boot (F-09b-2); null = server off. From the example's `xz`, then the voice panel */
+  xzScript: string | null;
   consoleText(): string;
   /** Logic analyzer events since this power-on / rewind replay (P1-05) */
   io: IoStore;

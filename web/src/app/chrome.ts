@@ -6,7 +6,7 @@ import { commit } from './react';
 import { createStore } from './store';
 import type { StepId } from './types';
 
-export type DockTab = 'serial' | 'code' | 'analyzer' | 'runs' | 'scenario' | 'checks' | 'issues' | 'usb' | 'tasks' | 'ble' | 'net' | 'py';
+export type DockTab = 'serial' | 'code' | 'analyzer' | 'runs' | 'scenario' | 'checks' | 'issues' | 'usb' | 'tasks' | 'ble' | 'net' | 'py' | 'voice';
 export type RunState = 'loading' | 'run' | 'pause' | 'seek' | 'busy' | 'idle' | 'nofw';
 
 export interface Issue {
@@ -59,6 +59,8 @@ export interface BenchChrome {
   net: boolean;
   /** The user's MicroPython image is on the bench: the dock gets a main.py tab (F-07b) */
   mpy: boolean;
+  /** The virtual voice server is on: the dock gets a Voice tab (F-09b-2) */
+  voice: boolean;
   /** Bench chip (the firmware menu lists this chip's examples first). */
   chip: 'esp32' | 'esp32c3' | 'esp32s3';
   /** Firmware menu open (from the top bar, empty-stage card or phone ⋯). */
@@ -100,6 +102,7 @@ export const bc = createStore<BenchChrome>({
   ble: false,
   net: false,
   mpy: false,
+  voice: false,
 });
 export const setBc = (p: Partial<BenchChrome>) => commit(() => bc.set(p));
 
@@ -144,6 +147,9 @@ export const actions: {
   usbCdc?: (text: string) => void;
   /** Virtual phone op (ble=<cmd>); goes into the input log. */
   ble?: (cmd: string) => void;
+  /** Voice server action (xz= in the input log, F-09b-2); talk = hold / release the BOOT key (GPIO0) */
+  xz?: (cmd: string) => void;
+  talk?: (down: boolean) => void;
   /** One step on the virtual phone (phone= action, recorded in the input log) */
   phone?: (cmd: string) => void;
   /** One network fault from now (D-01: reboot / dns / silent, netfault= action in the input log) */

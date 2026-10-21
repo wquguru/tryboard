@@ -1,6 +1,6 @@
 // Check a level in the browser: a separate Worker runs it on simulated time, then we judge and fingerprint here.
 import { bootOptions, evaluate, fingerprint, type CheckResult, type Level } from './checks';
-import { imageChip, loadRom, loadWasmModule } from './assets';
+import { fetchBuf, imageChip, loadRom, loadWasmModule } from './assets';
 import type { VerifyJob, VerifyMsg } from './verify-worker';
 import { toScriptInline, type InputLog } from './inputlog';
 import { t } from './i18n/index.ts';
@@ -77,8 +77,9 @@ export async function verifyLevel(l: Level, flash: ArrayBuffer, onProgress?: (si
 // Replay a web input log (P0-19) like `tryboard run <fw> --inputs <log> --seconds S [--pwm-log P] --gpio-log --ws2812-log`:
 // 1 ms slices, inputs at slice start, so serial output and report (fingerprint) match the CLI byte for byte.
 export async function replayLog(flash: ArrayBuffer, log: InputLog, seconds: number, pwmPin?: number) {
-  const [wasm, rom] = await Promise.all([loadWasmModule(), loadRom(imageChip(flash))]);
-  const job: VerifyJob = { wasm, rom: rom.slice(0), flash: flash.slice(0), seconds, i2c: log.i2c, script: toScriptInline(log), pwmPin, lcd: log.spi ?? log.lcd, battery: log.battery, servo: log.servo, power: log.power, encoder: log.encoder, sonar: log.sonar, dht11: log.dht11, touchInt: log.touchInt, board: log.board, grove: log.grove, parts: log.parts, fixedSlice: true };
+  // The mic WAV is named in the log (= CLI --mic tools/audio/<name>); the page serves the same file under ./audio/
+  const [wasm, rom, micWav] = await Promise.all([loadWasmModule(), loadRom(imageChip(flash)), log.mic ? fetchBuf(`./audio/${log.mic}`) : undefined]);
+  const job: VerifyJob = { wasm, rom: rom.slice(0), flash: flash.slice(0), seconds, i2c: log.i2c, script: toScriptInline(log), pwmPin, lcd: log.spi ?? log.lcd, battery: log.battery, servo: log.servo, power: log.power, encoder: log.encoder, sonar: log.sonar, dht11: log.dht11, touchInt: log.touchInt, board: log.board, grove: log.grove, parts: log.parts, ...(log.i2s?.length ? { i2s: log.i2s } : {}), ...(micWav ? { micWav } : {}), fixedSlice: true };
   const msg = await runJob(job);
   return { stdout: msg.stdout, report: msg.report, fingerprint: fingerprint(msg.stdout, msg.report), sim: msg.sim, error: msg.error };
 }

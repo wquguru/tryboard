@@ -411,7 +411,7 @@ export const TEMPLATES: Template[] = [
     niceCaps: ['display_spi', 'ai_accel'],
     parts: ['mic', 'amp', 'tft', 'battery'],
     suggest: ['button'],
-    examples: ['s3-i2s-mic', 's3-i2s-tone'],
+    examples: ['s3-xiaozhi-lite', 's3-i2s-mic', 's3-i2s-tone'],
     risks: ['The LLM API needs a network and an account; only the offline wake word runs on the board', 'Amplifier and Wi-Fi together draw big peaks; the battery must deliver over 1 A'],
   },
   {
