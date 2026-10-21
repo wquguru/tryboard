@@ -4982,5 +4982,104 @@
    "[xz] 20 Opus frames, one every 60 ms",
    "[xz] closed 1005"
   ]
+ },
+ {
+  "id": "s3-xiaozhi-lite",
+  "chip": "esp32s3",
+  "seconds": 7,
+  "args": [
+   "--i2s",
+   "max98357a@15:16:7,inmp441@5:4:6",
+   "--mic",
+   "tools/audio/xz_mic.wav",
+   "--i2c",
+   "ssd1306@0x3c",
+   "--script",
+   "0:xz=on; 0:xz=voice,demo; 2.5:gpio0=0; 3.5:gpio0=z"
+  ],
+  "expect": [
+   "语音助手（兼容 xiaozhi 协议）启动，OLED 在线",
+   "服务端 hello：session_id=tb-0001 下行 16000 Hz 60 ms",
+   "就绪：按住 BOOT 说话",
+   "按下 BOOT：listen start",
+   "首帧编码",
+   "松开 BOOT：listen stop，上行 17 帧",
+   "识别结果：Hello",
+   "tts start",
+   "播报句子：Hi, I am the TryBoard virtual assistant.",
+   "字幕已显示：Hi, I am the TryBoard virtual assistant.",
+   "tts stop",
+   "播放结束：收到 21 帧，播放 21 帧（1.26 秒），丢弃 0 帧",
+   "TRYBOARD_OK s3-xiaozhi-lite turn 1"
+  ],
+  "stderr_expect": [
+   "xiaozhi server: script hello, 1 sessions, 1 turns, 17 uplink frames, 21 downlink frames",
+   "[xz] listen stop after 17 frames",
+   "[xz] 21 Opus frames, one every 60 ms",
+   "I2S mic INMP441 (SCK=GPIO5 WS=GPIO4 SD=GPIO6"
+  ],
+  "audio": {
+   "rate": 16000,
+   "min_rms": 0.1,
+   "max_rms": 0.3
+  },
+  "oled_min_pixels": 400
+ },
+ {
+  "id": "s3-xiaozhi-lite-hello-timeout",
+  "fw": "s3-xiaozhi-lite",
+  "chip": "esp32s3",
+  "seconds": 20,
+  "args": [
+   "--i2s",
+   "max98357a@15:16:7,inmp441@5:4:6",
+   "--mic",
+   "tools/audio/xz_mic.wav",
+   "--i2c",
+   "ssd1306@0x3c",
+   "--script",
+   "0:xz=on; 0:xz=voice,demo; 0:xz=script,silent; 5:xz=script,hello; 16:gpio0=0; 17:gpio0=z"
+  ],
+  "expect": [
+   "服务端 10 秒没回 hello（第 1 次），2 秒后重连",
+   "服务端 hello：session_id=tb-0002 下行 16000 Hz 60 ms",
+   "第 2 次连接成功",
+   "就绪：按住 BOOT 说话",
+   "识别结果：Hello",
+   "TRYBOARD_OK s3-xiaozhi-lite turn 1"
+  ],
+  "stderr_expect": [
+   "[xz] script silent: no hello reply",
+   "[xz] hello reply session tb-0002",
+   "xiaozhi server: script hello, 2 sessions, 1 turns"
+  ]
+ },
+ {
+  "id": "s3-xiaozhi-lite-abort",
+  "fw": "s3-xiaozhi-lite",
+  "chip": "esp32s3",
+  "seconds": 8,
+  "args": [
+   "--i2s",
+   "max98357a@15:16:7,inmp441@5:4:6",
+   "--mic",
+   "tools/audio/xz_mic.wav",
+   "--i2c",
+   "ssd1306@0x3c",
+   "--script",
+   "0:xz=on; 0:xz=voice,demo; 0:xz=script,weather; 2.5:gpio0=0; 3.5:gpio0=z; 4.3:gpio0=0; 4.5:gpio0=z"
+  ],
+  "expect": [
+   "识别结果：What is the weather today?",
+   "播报句子：It is sunny today.",
+   "按键打断，发送 abort",
+   "tts stop",
+   "已打断，回到待机",
+   "TRYBOARD_OK s3-xiaozhi-lite abort"
+  ],
+  "stderr_expect": [
+   "[xz] abort",
+   "[xz] tts stop (aborted)"
+  ]
  }
 ]

@@ -19,6 +19,33 @@ pub const TTS_DELAY_US: u64 = 200_000;
 /// TOC byte: config 11 (SILK-only wideband, 60 ms), mono, one frame (RFC 6716 §3.1)
 pub const TOC_SILK_WB_60MS: u8 = 11 << 3;
 
+/// Built-in downlink clip (F-09b-1): our own formant-synthesized voice, 21 Opus packets (16 kHz, 60 ms, SILK WB),
+/// each prefixed by a u16 LE length; regenerate with tools/audio/gen_xz_voice.py
+pub const VOICE_DEMO: &[u8] = include_bytes!("xz_voice.bin");
+/// Names for `xz=voice,<name>`: `noise` = synthesized LCG frames sized by the sentence (default), `demo` = VOICE_DEMO
+pub const VOICES: [&str; 2] = ["noise", "demo"];
+
+/// Unpack a length-prefixed packet list; None if it is truncated
+pub fn unpack_frames(b: &[u8]) -> Option<Vec<Vec<u8>>> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        let n = u16::from_le_bytes([b[i], *b.get(i + 1)?]) as usize;
+        out.push(b.get(i + 2..i + 2 + n)?.to_vec());
+        i += 2 + n;
+    }
+    Some(out)
+}
+
+/// Downlink frames for a voice name (None = synthesized noise frames); Err for an unknown name
+pub fn voice_frames(name: &str) -> Result<Option<Vec<Vec<u8>>>, String> {
+    match name {
+        "noise" => Ok(None),
+        "demo" => Ok(unpack_frames(VOICE_DEMO)),
+        _ => Err(format!("unknown voice {name}, expected one of {VOICES:?}")),
+    }
+}
+
 /// OTA reply body (RS-2 §2): no `activation` object, so the device counts as activated; firmware version 0.0.0 never upgrades
 pub fn ota_body() -> String {
     format!(
@@ -72,6 +99,8 @@ pub enum Cmd {
     Say(String),
     /// Uplink frames needed before a listen stop gets an answer
     Min(u32),
+    /// Downlink audio, one of VOICES (F-09b-1)
+    Voice(String),
 }
 
 impl Cmd {
@@ -84,6 +113,7 @@ impl Cmd {
             "script" => Some(Cmd::Script(v.trim().to_string())),
             "say" => Some(Cmd::Say(v.to_string())),
             "min" => v.trim().parse().ok().map(Cmd::Min),
+            "voice" => Some(Cmd::Voice(v.trim().to_string())),
             _ => None,
         }
     }
@@ -760,6 +790,30 @@ mod tests {
             Some(Cmd::Script("weather".into()))
         );
         assert_eq!(Cmd::parse("bogus"), None);
+        assert_eq!(Cmd::parse("voice,demo"), Some(Cmd::Voice("demo".into())));
+    }
+
+    #[test]
+    fn demo_voice_is_silk_wb_60ms() {
+        let f = voice_frames("demo").unwrap().unwrap();
+        assert_eq!(f.len(), 21);
+        assert!(f.iter().all(|p| !p.is_empty() && p[0] == TOC_SILK_WB_60MS));
+        assert_eq!(voice_frames("noise"), Ok(None));
+        assert!(voice_frames("x").is_err());
+        assert_eq!(unpack_frames(&[3, 0, 1]), None);
+        // A whole turn with the clip: one sentence = 21 frames, still 60 ms apart
+        let mut s = Server {
+            frames: voice_frames("demo").unwrap(),
+            ..Server::default()
+        };
+        hello(&mut s, K, 0);
+        s.say("hi", 1_000_000);
+        let bins: Vec<_> = drain(&mut s)
+            .into_iter()
+            .filter(|(_, op, _)| *op == OP_BINARY)
+            .collect();
+        assert_eq!(bins.len(), 21);
+        assert_eq!(bins[20].0 - bins[0].0, 20 * FRAME_US);
     }
 
     #[test]

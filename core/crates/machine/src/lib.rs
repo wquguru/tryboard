@@ -303,7 +303,7 @@ impl Machine {
         self.kick_events();
     }
 
-    /// Script action xz= (F-09a-2): on / off / script,<name> / say,<text> / min,<frames>; false when unknown
+    /// Script action xz= (F-09a-2): on / off / script,<name> / say,<text> / min,<frames> / voice,noise|demo; false when unknown
     pub fn xz_cmd(&mut self, s: &str) -> bool {
         use tryboard_soc::wifi::xiaozhi::{Cmd, Server};
         let Some(c) = Cmd::parse(s) else {
@@ -330,6 +330,10 @@ impl Machine {
                 x.say(&t, now);
             }
             Cmd::Min(n) => x.min_frames = n,
+            Cmd::Voice(v) => match tryboard_soc::wifi::xiaozhi::voice_frames(&v) {
+                Ok(f) => x.frames = f,
+                Err(_) => return false,
+            },
             Cmd::On | Cmd::Off => {}
         }
         self.kick_events();
@@ -982,6 +986,24 @@ impl Machine {
         let ok = match kind {
             "max98357a" => self.hw.attach_speaker(),
             "inmp441" => self.hw.attach_mic(),
+            _ => false,
+        };
+        if ok {
+            self.elec.add_module(kind);
+        }
+        ok
+    }
+
+    /// Same as `i2s_attach` on explicit pins (bclk, ws, data), e.g. a breadboard build that doesn't use the chip defaults
+    pub fn i2s_attach_at(&mut self, kind: &str, bclk: u32, ws: u32, data: u32) -> bool {
+        use tryboard_soc::devices::audio::{Inmp441, Pins};
+        let pins = Pins { bclk, ws, data };
+        let ok = match kind {
+            "max98357a" => self.hw.attach_speaker_at(pins),
+            "inmp441" => {
+                self.audio_mut().mic = Some(Box::new(Inmp441::new(pins)));
+                true
+            }
             _ => false,
         };
         if ok {

@@ -1394,3 +1394,16 @@
 - 最小间隔 100 ms 按轨道各算；新加的关键帧继承前一个的插值方式；预设从当前播放头往后放，免得一放就「过期」。
 - 作品脚本按作品存 localStorage `tryboard-scenario:<key>`；分享链接里的 `tl` 只在本次打开时生效，不覆盖本地作品。
 - 暂缓：撤销 / 重做接入、滑块上的「由环境脚本控制」提示、跟随 / 适配缩放、回放中编辑的警告、光照 / 人体传感器值在其它面板显示。备选：一次全做（工具调用预算不够，先交可验收的主干）。
+
+## 2026-10-21 xiaozhi-lite 示例固件（F-09b-1）
+- **下行语音自己合成**：`tools/audio/gen_xz_voice.py` 用共振峰合成（声门脉冲 + 三个 Klatt 共振器，按元音滑动）生成 1.2 s「助手」语音，离线编成 20 个 16 kHz 60 ms Opus 包（`core/crates/soc/src/wifi/xz_voice.bin`，2015 字节，全是 SILK WB TOC 11）；麦克风测试音 `tools/audio/xz_mic.wav` 同法合成。不含录音、不含 TTS 输出。备选 CC0 录音 —— 要核出处，合成足够验证链路。
+- **编码器用 micro-opus 自带的 libopus 在主机上编 `opus_demo`**：同一份 BSD-3 源码（LICENSING 已有 micro-opus 行），不另装 brew opus-tools；生成结果确定（重跑字节一致）。
+- **默认下行不变，新动作 `xz=voice,demo|noise` 切换**：默认仍是 F-09a-2 的合成噪声帧，现有用例 golden 207/207 字节一致；demo 每句播同一段（`Server::frames` 原语义）。
+- **CLI `--i2s kind@bclk:ws:data`**：S3 默认 I2S 引脚（喇叭 16/17/18、麦 39/40/41）和 bread-compact-wifi 不同；加可选引脚写法，不带 `@` 时行为不变。新 `Machine::i2s_attach_at`。
+- **喇叭 16 kHz，不是 bread-compact 的 24 kHz**：下行就是 16 kHz，固件里不重采样，少一层误差；真 xiaozhi 固件的 24 kHz 输出留给以后跑原版固件时再说。
+- **N16R8 配置**：开八线 PSRAM（micro-opus 120 KB 伪栈和编解码状态放这里）+ `PARTITION_TABLE_SINGLE_APP_LARGE`（Wi-Fi + WS + Opus 约 1.2 MB，超 1 MB 默认分区）。
+- **一个音频任务同时管编码和解码，钉在核 1**：半双工按键说话不会同时编解码，一个任务一份伪栈（省 120 KB）；不钉核时「首帧编码」日志会连打两遍（原因未查，留作模拟器待查项），钉核 1 后只打一遍。
+- **按键语义**：播报中再按 BOOT = 发 `abort`（user_interrupted）并丢弃剩余下行帧，回待机；不同时开始新一轮。WebSocket 回调只解析、投递队列，不在回调里发送。
+- **hello 10 s 超时后 2 s 重连**：重连前先注销旧客户端的事件回调，否则旧连接的关闭事件会被当成新连接断开。
+- **accept.sh `audio` 块 `freq` 改为可选、加 `max_rms`**：语音没有单一主频，改用 RMS 区间（0.1–0.3，实测 0.20）；已有用例都带 freq，判定不变。
+- **CLI `run` 函数不再变长**：`--i2s` 解析挪到 `i2s_args`（结构护栏 R-14：函数 / 文件只缩不涨）。
