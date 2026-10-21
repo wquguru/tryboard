@@ -45,6 +45,8 @@ export interface ShareStateV1 {
   cut?: ('wifi' | 'net')[];
   /** .tryboard only (F-01b): the user's own firmware appended after the JSON line; h = full sha256 hex, size in bytes */
   bin?: { name: string; h: string; size: number };
+  /** MicroPython main.py in the editor (F-07b), only while a MicroPython image is on the bench */
+  mpy?: string;
 }
 export type ShareState = ShareStateV1;
 
@@ -128,6 +130,7 @@ function validV1(r: Record<string, unknown>): ShareStateV1 {
     }
   }
   if (r.bin !== undefined && (!isObj(r.bin) || typeof r.bin.name !== 'string' || !/^[^/\\]{1,200}$/.test(r.bin.name) || typeof r.bin.h !== 'string' || !/^[0-9a-f]{64}$/.test(r.bin.h) || typeof r.bin.size !== 'number' || !(r.bin.size > 0))) bad('bin');
+  if (r.mpy !== undefined && (typeof r.mpy !== 'string' || r.mpy.length > 65536)) bad('mpy');
   if (r.cut !== undefined && (!Array.isArray(r.cut) || !r.cut.every((c) => c === 'wifi' || c === 'net'))) bad('cut');
   return r as unknown as ShareStateV1;
 }
@@ -198,6 +201,8 @@ export interface CaptureInput {
   log: InputLog | null;
   /** Keep the run for the user's own firmware too (the .tryboard file carries the bin, F-01b) */
   ownRun?: boolean;
+  /** MicroPython main.py (F-07b) */
+  mpy?: string;
 }
 
 /** Built-in firmware name -> example id; anything else (dropped .bin) is the user's own */
@@ -233,6 +238,7 @@ export async function captureState(c: CaptureInput): Promise<{ state: ShareState
   if (c.harness && !same(c.harness, c.defaultHarness)) state.harness = c.harness;
   if (c.heat) state.heat = c.heat;
   state.loc = c.loc;
+  if (c.mpy) state.mpy = c.mpy;
   // The input log only replays on the firmware it was recorded with
   if (c.log && (state.fw || (c.ownRun && c.fwBuf)) && c.log.endMs !== undefined) {
     const r = redact(c.log.events);

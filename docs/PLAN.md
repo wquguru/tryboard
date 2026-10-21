@@ -233,7 +233,7 @@
 | F-05 | 故障挑战关卡 3–5 个（缺的 CLI 故障开关一并补） | check.py --ref --all；faults.mjs 网页判定一致 | ☑ 4 关（线长 / 供电 / 天线 / ADC2），现有开关够用，未加 CLI 开关 |
 | F-06 | 公开数字自动生成（tools/stats.py；README 标记块 + web/public/stats.json，build_web.sh 调用；首页暂无手写数字） | stats.py --check | ☑ |
 | F-07a | UART > 127 字节修复 + `--script` `\xNN` + MicroPython C3 验收 | golden 字节一致；MicroPython 用例 | ☑ 2026-10-20：golden 173/173 一致，`mpy-c3-rawpaste` 通过（新用例快照待合并后 save） |
-| F-07b | 网页 main.py 编辑器（需人定 MicroPython 分发方式与定位） | micropython.mjs | ☐ |
+| F-07b | 网页 main.py 编辑器（需人定 MicroPython 分发方式与定位） | micropython.mjs | ☑ 2026-10-21：用户自己上传官方 C3 bin → 底部「main.py」标签（textarea 编辑器 + 运行 / Ctrl-C / Ctrl-D）；按提示驱动 raw-paste 写入（不支持则退 raw REPL）后软复位；刷新后重传 bin 自动重发；输入日志 `uart=` 用 `\xNN` 转义，`--inputs` 重放字节一致；站点不托管 bin |
 | F-08a / F-08b | Arduino 库矩阵 2 × 10 例（MIT / BSD 优先） | accept 矩阵写进 STATUS | ◐ F-08a 2026-10-20：12 个显示 / 传感器库示例在 C3 通过（`arduino-lib-*`），Adafruit ILI9341 草图待修；F-08b 2026-10-20：10 个 Wi-Fi / BLE / 舵机 / 灯带示例编译，9 个用例通过，PubSubClient（无 MQTT broker）与 NimBLE-Arduino（0xfc01 厂商命令）待改 core |
 | F-08c | BLE 多 IDF 签名 + osi 版本放宽 + pll_track | 覆盖自测；误匹配 0 | ☑ IDF 5.1.0–5.3.1 部分（2026-10-20）；Arduino 3.0.x ✗（要装 arduino-cli core 3.0.7；2026-10-21 因磁盘不装，见 DECISIONS） |
 | F-09a | xiaozhi 虚拟服务端（长连接 TCP + WebSocket + 脚本） | 单测 + golden | ☑ F-09a-1 2026-10-20：长连接 TCP + WebSocket（`wifi/ws.rs`，101 握手、掩码、分片、ping、close、半关闭、窗口记账），11 个单测，golden 191/191；F-09a-2 2026-10-21：`wifi/xiaozhi.rs` 脚本服务端（OTA / hello / 60 ms 下行节奏、`xz=` 动作、`[xz]` 日志），9 个单测，accept `c3-xz-ws` 端到端；网页与语音示例在 F-09b |

@@ -1374,3 +1374,16 @@
 - **不上线**：公开部署属 AGENTS §10 必须问人，「你决定」不当作上线授权。
 - **LICENSING 行已在**：esp_websocket_client 1.7.0 ✅（LICENSING 第 35 行）；F-08b 前四个 ✅，ESP32Servo / IRremote 维持「只进本地 accept、上站前人核」（第 30 行），不在本次授权内放宽。
 - **F-09b-0 结论（2026-10-21，AI 自主）**：micro-opus 0.4.1 不用 PIE（静态 0 条、动态约 1 万帧无非法指令），按上一条 (2) 不立 PIE 项；F-09b-1 走路线 B，用 micro-opus 定点（显式 `CONFIG_OPUS_FLOATING_POINT=n`，S3 默认是浮点，SILK 编码慢 7.7 倍跑不过实时）+ `CONFIG_OPUS_ENABLE_XTENSA_OPTIMIZATIONS=y` + 编码复杂度 0（模拟中占 18 %）。备选：复杂度 5（47 %，网页墙钟开销翻倍多）、关 Xtensa 优化（慢约 20 %，没必要）、纯 C libopus / 路线 C（不需要）。micro-opus 进仓库前 F-09b-1 要先在 LICENSING.md 加一行（Apache-2.0，内含 libopus BSD-3、micro-ogg-demuxer Apache-2.0）。详见 RS-2 §10。
+
+
+## 2026-10-21 F-07b MicroPython main.py 编辑器
+- **分发与定位**：采用选项 (iii)：站点不托管 MicroPython bin（不进 web/public、不进构建产物），固件菜单只放一行说明 + 官方下载页链接（C3 `ESP32_GENERIC_C3`；S3 只提示「请用 SPIRAM_OCT 版本」，不做重启循环检测）。PRODUCT.md「在这里改代码」段已先改。理由：MIT 许可本可再分发，但托管要跟版本、写 NOTICES；用户自己下载更省事也更清楚来源。备选：站点自带 bin（需人定）、littlefs 镜像预置 main.py（RS-1 推迟）。
+- **识别**：在 `session.fwBuf` 里扫 `MicroPython` 字节串（`web/src/mpy.ts isMicroPython`），开时 `bc.mpy=true` 并切到 dock `py` 标签。备选：看串口横幅（要等启动，切换标签晚）。
+- **写入协议在主线程跑**：`MpyLink` 只靠提示推进（`>>> ` → `raw REPL` → `R\x01`/`R\x00` → `OK` / `\x04` → `\x04>`），没有固定延时；所有字节走 `session.sim.uart`，因此进输入日志、可 `--inputs` 重放。20 s 墙钟超时只用于报错，不影响仿真结果。备选：放 worker 里（要新协议消息，收益小）。
+- **窗口字节**：worker 用非流式 TextDecoder 解串口，`0x80` 到主线程变成 U+FFFD，所以窗口字节 ≥ 0x80 时按 128 处理（MicroPython 默认窗口就是 128）。
+- **raw REPL 退路一次推完**：F-07a 已让 UART RX 排队所有字节，不需要分块等待。
+- **自动重发**：每次上电（不含软复位）第一次出现 `>>> ` 时重发保存的 main.py（等价于没有 littlefs 镜像时的「刷新后恢复」）；打开带 `run` 的分享时暂停自动重发（输入日志里已有那次写入），用户点运行后恢复。
+- **保存位置**：main.py 存 localStorage `tryboard-mpy-main`；从分享打开的文本在用户运行前不覆盖自己的副本。bin 不跨刷新保存（刷新后要重传 bin 或打开 .tryboard），记为已知限制。
+- **分享**：`ShareStateV1.mpy?: string`（≤ 64 KB，可选字段，不升 `v`）。
+- **输入日志转义**：`uart=` / `usbcdc=` 改用 `escUart`：`\n` 外的控制字符、`\`、`;`、`#` 和首尾空格写成 `\xNN`，`unescUart` 只认 `\n` 和严格两位 `\xNN`，与 `cli/src/escape.rs` 一致；`phone=` 维持旧规则。旧日志里的普通文本解码不变。
+- **编辑器**：textarea + 等宽字体，Tab 插 4 空格，Ctrl/Cmd+Enter 运行；不加语法高亮依赖。

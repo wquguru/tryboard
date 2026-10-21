@@ -9,6 +9,7 @@ const loaders = {
   usb: () => import('./usbpane'),
   ble: () => import('./blepane'),
   net: () => import('./netpane'),
+  py: () => import('./mpypane'),
 };
 type Key = keyof typeof loaders;
 type Mod<K extends Key> = Awaited<ReturnType<(typeof loaders)[K]>>;
@@ -66,6 +67,7 @@ export const UsbPane = pane('usb', (m) => m.UsbPane);
 export const BlePane = pane('ble', (m) => m.BlePane);
 export const PhonePanel = pane('ble', (m) => m.PhonePanel);
 export const NetPane = pane('net', (m) => m.NetPane);
+export const MpyPane = pane('py', (m) => m.MpyPane);
 
 /** Fetch every pane chunk; failures are ignored here and surface when the pane is opened. */
 export function prefetchPanes() {

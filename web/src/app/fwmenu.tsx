@@ -32,6 +32,8 @@ export function pushRecent(r: Recent) {
   }
 }
 
+// Official pages only: TryBoard does not host MicroPython images (DECISIONS 2026-10-21, option iii)
+const MPY_URL = { esp32c3: 'https://micropython.org/download/ESP32_GENERIC_C3/', esp32s3: 'https://micropython.org/download/ESP32_GENERIC_S3/' } as const;
 const hhmm = (at: number) => new Date(at).toLocaleTimeString(LOCALES.find((l) => l.id === locale)?.html, { hour: '2-digit', minute: '2-digit' });
 const open = (v: boolean) => setBc({ fwMenu: v });
 
@@ -169,6 +171,21 @@ export function FwMenu({ phone }: { phone?: boolean }) {
           <span className="block text-[11px] text-muted">{t("Runs on the bench and checks the current checkpoint. A full flash image from ESP-IDF / Arduino; dropping it on the bench works too (the file never leaves your browser).")}</span>
         </span>
       </button>
+      {(chip === 'esp32c3' || chip === 'esp32s3') && (
+        <p id="mpyHelp" className="m-0 px-2.5 py-1.5 text-[11px] leading-[1.5] text-muted">
+          {t('MicroPython: download the official {chip} image from micropython.org and upload it here; a main.py editor then opens in the dock.', { chip: CHIP_NAME[chip] })}{' '}
+          <a
+            href={MPY_URL[chip]}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-fw="mpy"
+            className={cn('text-accent-ink', phone && 'inline-flex min-h-11 items-center')}
+          >
+            {t('Official download page')}
+          </a>
+          {chip === 'esp32s3' && <span className="block">{t('S3: use the SPIRAM_OCT build; other S3 builds keep rebooting here.')}</span>}
+        </p>
+      )}
     </div>
   );
   return (

@@ -23,6 +23,7 @@
 | 波 3 F-03b 原速回放 | ☑ | 2026-10-20 `&replay=1` / 嵌入海报勾选框；worker 实时循环按 seekTo 同一规则施加事件，结束串口 + report = 快进；可暂停、跳到结尾；embed.mjs 28/28、share.mjs 全过；`Reviews/ab/F-03b.md` |
 | 波 2 F-04a 器件上台面（第 1 + 2 部分） | ☑ | 2026-10-20 第 1 部分：DS18B20 / PIR / 光敏 / 继电器 / RC522 上网页（3D、接线、手机、输入日志）+ 3 个示例，parts.mjs 18/18；第 2 部分（F-04a2）：ILI9341 / ST7789 240×240 / 240×320 / SH1106 上元件库（固定脚位放置、3D 实时画面、手机商店清单可放置）+ 示例 c3-ili9341-temp / c3-sh1106-pir，parts.mjs 网页与 CLI 指纹一致 |
 | 波 3 F-04e AHT20 / INA219 / DS3231 | ☑ | 2026-10-20 三个 I2C 模型（aht20.rs / ina219.rs / ds3231.rs）；AHT20、DS3231 温度跟 `--env`，INA219 读电气模型 USB 输入；`c3-i2c-trio` 进 accept；网页未接 |
+| 波 2 F-07b 网页 main.py 编辑器 | ☑ | 2026-10-21 底部「main.py」标签，raw-paste 写入 + 软复位，刷新后重传 bin 自动重发；`micropython.mjs` 编辑 → 运行 → CLI `--inputs` 重放字节一致；不托管 bin |
 | 波 2 F-07a UART + MicroPython | ☑ | 2026-10-20 UART RX 超过一个 FIFO、`\xNN` 串口转义、`mpy-c3-rawpaste` 用例（bin 由 `fetch_third_party.sh --micropython` 可选下载，缺失则跳过） |
 | 波 3 F-04b ILI9341 + SH1106 + 裸屏验收 | ☑ | 2026-10-20 DCS 面板新增 ILI9341 / ST7789 240×240 / 240×320（`--spi ili9341` / `st7789-240x240` / `st7789-240x320`，C3 也接受全部 DCS 屏），SH1106 新模型（`--i2c sh1106@0x3c`，132 列 RAM、偏移 2）；固件 c3-ili9341（esp_lcd_ili9341 2.1.0）/ s3-st7789（IDF 内置驱动）/ c3-sh1106，4 个 accept 用例通过；网页拖放与 3D 在 F-04a2 |
 | 波 3 F-08c BLE 多 IDF 签名 | ☑ | 2026-10-20 补 11 个 bt-lib 提交（IDF 5.1.0–5.3.1）：C3 / S3 各加 osi_reg 3 个、init 2 个变体；osi 版本放宽到 0x10006–0x1000A，5.1.0 / 5.1.1 不挂 pll_track；`tools/ble_cover.sh` 裸链接 42 个库，Rust 自测 37 个全中（S3 `_flash` 库 5 个为已知缺口）；62 个已编镜像原始扫描误匹配 0；9 个 BLE 用例 CLI 输出与改前逐字节一致。Arduino 3.0.x 真验收要装 core 3.0.7：✗ 2026-10-21 因磁盘不装 |

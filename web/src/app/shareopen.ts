@@ -1,5 +1,6 @@
 // Share links on the lab page (F-01a): read ?s= before the session starts, restore and fast-forward after it boots, build the link to copy.
 // The format itself lives in sharestate.ts (pure, shared with F-01b / F-02 / F-03).
+import { sharedText, takeShared } from './mpyapp';
 import { t, locale } from '../i18n';
 import { fetchBuf } from '../assets';
 import { fromScript, type InputLog } from '../inputlog';
@@ -85,6 +86,8 @@ export async function restoreShare(ctx: StepCtx, sh: OpenedShare, own?: { buf: A
   const { session, shell, store } = ctx;
   const st = sh.state;
   const notes: string[] = [t('Opened a shared bench: this is a local copy, your own work is untouched')];
+  // main.py rides along (F-07b); a run already holds the upload, so no automatic re-send on top of it
+  takeShared(st.mpy, !!st.run);
   if (st.mods) session.setWireMods(st.mods);
   if (st.heat) session.setHeat(st.heat);
   let snap: Snapshot | null = null;
@@ -172,6 +175,7 @@ export async function captureBench(ctx: StepCtx, ownRun = false) {
     loc: locale,
     log: session.sim ? await session.sim.inputLog() : null,
     ownRun,
+    mpy: sharedText(),
   });
 }
 

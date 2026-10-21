@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "../ui/cn";
 import { actions, bc, setDock, type DockTab } from "./chrome";
-import { BlePane, CodePane as CodeView, NetPane, PaneLoading, TasksPane, UsbPane } from "./panes";
+import { BlePane, CodePane as CodeView, MpyPane, NetPane, PaneLoading, TasksPane, UsbPane } from "./panes";
 import { Icon } from "./icons";
 import { useStore } from "./react";
 import { createStore } from "./store";
@@ -520,6 +520,7 @@ function PhoneDock({
     ...(c.usb ? [{ id: "usb" as const, label: "USB" }] : []),
     ...(c.ble ? [{ id: "ble" as const, label: t('Bluetooth') }] : []),
     ...(c.net ? [{ id: "net" as const, label: t('Network') }] : []),
+    ...(c.mpy ? [{ id: "py" as const, label: "main.py" }] : []),
   ];
   return (
     <section
@@ -672,6 +673,7 @@ function PhoneDock({
               <NetPane mobile />
             </div>
           )}
+          {cur === "py" && c.mpy && <MpyPane phone />}
           {cur === "analyzer" && <AnaSheet />}
         </>
       )}
@@ -871,6 +873,9 @@ function DeskDock({
     ...(c.net
       ? [{ id: "net" as const, label: t("Network"), title: t("Virtual phone provisioning and the requests the chip sends") }]
       : []),
+    ...(c.mpy
+      ? [{ id: "py" as const, label: "main.py", title: t("Edit MicroPython's main.py and run it on the bench") }]
+      : []),
   ];
   return (
     <section
@@ -980,6 +985,7 @@ function DeskDock({
           </div>
         )}
         {c.net && cur === "net" && <NetPane />}
+        {c.mpy && cur === "py" && <MpyPane />}
         <div
           hidden={cur !== "runs"}
           className="flex min-h-0 flex-1 items-start overflow-auto px-3 py-2 [&[hidden]]:hidden"

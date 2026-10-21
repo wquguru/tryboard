@@ -103,6 +103,19 @@ export const cyclesToMs = (cycles: number) => (cycles * 1000) / CPU_HZ;
 // so the CLI applies it at the start of the same slice (see --inputs in cli main.rs).
 const sec = (ms: number) => (Math.floor(ms * 1000) / 1e6).toFixed(6);
 const esc = (t: string) => t.replaceAll('\n', '\\n');
+/** Serial payload escape (F-07b, same as tools/micropython/paste.py): \n stays `\n`; `\`, `;`, `#`, control bytes and edge spaces
+ *  become `\xNN` because the CLI splits scripts on `;` and trims actions. Non-ASCII stays literal (UTF-8 on both sides). */
+export function escUart(t: string): string {
+  let o = '';
+  for (let i = 0; i < t.length; i++) {
+    const c = t.charCodeAt(i);
+    const edge = i === 0 || i === t.length - 1;
+    if (c === 0x0a) o += '\\n';
+    else if (c < 0x20 || c === 0x7f || c === 0x5c || c === 0x3b || c === 0x23 || (c === 0x20 && edge)) o += `\\x${c.toString(16).padStart(2, '0')}`;
+    else o += t[i];
+  }
+  return o;
+}
 
 /** One event -> script action (`gpio0=0`, `env=35,45,101325`, `mv1=1650`...); power has none */
 export function action(e: InputEvent): string | null {
@@ -114,9 +127,9 @@ export function action(e: InputEvent): string | null {
     case 'pot':
       return `mv${e.pin}=${e.mv}`;
     case 'uart':
-      return `uart=${esc(e.text)}`;
+      return `uart=${escUart(e.text)}`;
     case 'usbcdc':
-      return `usbcdc=${esc(e.text)}`;
+      return `usbcdc=${escUart(e.text)}`;
     case 'supply':
       return `power=${e.mode}`;
     case 'i2cwire':
@@ -214,6 +227,8 @@ export function cliArgs(log: InputLog, fw: string, inputsFile: string, seconds?:
 }
 
 const unesc = (t: string) => t.replaceAll('\\n', '\n');
+/** Inverse of escUart, exactly like the CLI (cli/src/escape.rs): `\n` and strict two-hex `\xNN`; any other backslash stays literal */
+export const unescUart = (t: string) => t.replace(/\\n|\\x([0-9a-fA-F]{2})/g, (_m, h: string | undefined) => (h ? String.fromCharCode(parseInt(h, 16)) : '\n'));
 const num = (v: string | undefined) => {
   const n = Number(v);
   if (v === undefined || v.trim() === '' || !Number.isFinite(n)) throw new Error(`bad number "${v}"`);
@@ -238,7 +253,7 @@ export function fromAction(a: string): InputAction {
       return { kind: 'env', temp: num(p[0]), humidity: num(p[1]), pressure: num(p[2]) };
     case 'uart':
     case 'usbcdc':
-      return { kind: k, text: unesc(v) };
+      return { kind: k, text: unescUart(v) };
     case 'power':
       if (v === 'usb' || v === 'ext') return { kind: 'supply', mode: v };
       break;
