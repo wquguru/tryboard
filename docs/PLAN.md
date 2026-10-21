@@ -239,7 +239,7 @@
 | F-09a | xiaozhi 虚拟服务端（长连接 TCP + WebSocket + 脚本） | 单测 + golden | ◐ F-09a-1 2026-10-20：长连接 TCP + WebSocket（`wifi/ws.rs`，101 握手、掩码、分片、ping、close、半关闭、窗口记账），11 个单测，golden 191/191；F-09a-2 xiaozhi 脚本服务端未开始 |
 | F-09b | xiaozhi-lite 示例 + 语音面板（需人拍板 RS-2 四项） | accept 3 例 + xiaozhi.mjs | ☐ |
 | F-10a2 | CYD（ESP32-2432S028：ILI9341 + XPT2046）示例 + 板预设 | esp32-cyd accept（lcd_regions 逐区像素数） | ☑ 2026-10-20 屏：esp32-cyd（HSPI 14/13/15/2、BL 21、RST 接 EN）+ `--board cyd` 通过；XPT2046 触摸（VSPI 25/32/39/33、IRQ 36，`--spi xpt2046`，动作 `touch=` / `release`）esp32-cyd-touch 通过；网页未接 |
-| F-10c | 经典 ESP32 RMT 收 + 载波 + IR 器件 | esp32-ir accept | ☐ |
+| F-10c | 经典 ESP32 RMT 收 + 载波 + IR 器件 | esp32-ir accept | ☑ |
 | F-11 | 环境脚本时间轴（先交互稿，人确认后实现） | --inputs 重放指纹一致 | ☐ |
 
 ## P3 · 以后再说

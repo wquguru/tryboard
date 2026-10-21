@@ -83,13 +83,9 @@ const UART0: u32 = 0x3FF4_0000;
 /// RMT registers; RMTMEM (8 x 64 words) at +0x800 in the same page
 const RMT_BASE: u32 = 0x3FF5_6000;
 
-/// RMT accesses the model doesn't cover, counted as unimpl: APB FIFO data / address registers,
-/// RX enable (CONF1 bit 1) and tx_start with carrier_en (CONF0 bit 28) on
-fn rmt_unmodelled(rmt: &Rmt, off: u32, write: Option<u32>) -> bool {
-    let fifo = off < 0x20 || (0x80..0xa0).contains(&off);
-    let conf1 = (0x20..0x60).contains(&off) && off % 8 == 4;
-    let carrier = |v: u32| v & 1 != 0 && rmt.read(off - 4) & (1 << 28) != 0;
-    fifo || (conf1 && write.is_some_and(|v| v & 2 != 0 || carrier(v)))
+/// RMT accesses the model doesn't cover, counted as unimpl: APB FIFO data / address registers (RX and carrier: F-10c)
+fn rmt_unmodelled(off: u32) -> bool {
+    off < 0x20 || (0x80..0xa0).contains(&off)
 }
 const UART1: u32 = 0x3FF5_0000;
 const UART2: u32 = 0x3FF6_E000;
@@ -422,7 +418,7 @@ impl SocBus {
             0x3FF6_5000 => return self.spi_read(spi_lcd::Host::Vspi, off),
             0x3FF5_9000 => return self.ledc.read(off),
             RMT_BASE => {
-                if rmt_unmodelled(&self.rmt, off, None) {
+                if rmt_unmodelled(off) {
                     *self.unimpl.entry(a).or_insert(0) += 1;
                 }
                 return self.rmt.read(off);
@@ -548,7 +544,7 @@ impl SocBus {
             }
             0x3FF5_9000 => return self.ledc.write(off, v, now),
             RMT_BASE => {
-                if rmt_unmodelled(&self.rmt, off, Some(v)) {
+                if rmt_unmodelled(off) {
                     *self.unimpl.entry(a).or_insert(0) += 1;
                 }
                 return self.rmt.write(off, v, now);
@@ -648,7 +644,24 @@ impl SocBus {
             self.pins.on_level(now, lv);
             self.lcd_pins_changed(lv);
         }
+        self.feed_rmt_rx(now, lv);
         self.irq_dirty = true;
+    }
+
+    /// RMT RX inputs RMT_SIG_IN0..7 = 83..90 (FUNCn_IN_SEL_CFG: pin [5:0], inv [6], via matrix [7]; 0x38 = 1, 0x30 = 0)
+    fn feed_rmt_rx(&mut self, t: u64, lv: u64) {
+        for i in 0..self.rmt.rx_count() {
+            let f = self.gpio.func_in[83 + i];
+            if f & (1 << 7) == 0 {
+                continue;
+            }
+            let v = match f & 0x3f {
+                0x38 => true,
+                p if (p as usize) < NPINS => lv >> p & 1 != 0,
+                _ => false,
+            };
+            self.rmt.rx_input(i, t, v != (f & (1 << 6) != 0));
+        }
     }
 
     /// Apply external pin devices' drive up to now, in time order; returns when to poll them next
@@ -728,6 +741,17 @@ impl SocBus {
                 continue;
             }
             let ch = (sel - l.sig_out0) as u8;
+            if let Some(eye) = self.pins.ir_eye(pin) {
+                edges
+                    .iter()
+                    .filter(|e| e.1 == ch)
+                    .for_each(|e| eye.feed(e.0, e.2));
+            }
+            if self.rmt.carrier(ch as usize).is_some() {
+                // 38 kHz bursts are no WS2812 data
+                self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
+                continue;
+            }
             let dec = self.ws2812.entry(pin).or_default();
             let frames = dec.frames;
             for &(t, c, lv) in &edges {
@@ -781,6 +805,8 @@ impl SocBus {
             self.reset_request = Some(r);
         }
         let n2 = self.ledc.update(now);
+        // Sync RX inputs to the pin level (a channel routed after the pin's last change still sees its idle level)
+        self.feed_rmt_rx(now, self.last_gpio);
         let n2 = n2.min(self.rmt.update(now)).min(self.route_rmt(now));
         let n3 = self.i2c0.update(now).min(self.i2c1.update(now));
         let n3 = n3.min(self.hspi.update(now)).min(self.vspi.update(now));

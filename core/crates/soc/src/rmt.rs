@@ -1,6 +1,7 @@
 //! RMT (IR remote / generic pulse TX+RX). C3: 2 TX (CH0/1) + 2 RX (CH2/3), RAM at base+0x400; S3: 4 TX + 4 RX, RAM at base+0x800; same layout rules (`RmtLayout`,
 //! rmt_reg.h), TX IRQ bits end = ch, err = 4+ch, thres = 8+ch, loop = 12+ch; 48 32-bit items per block. Item: [14:0] dur0, 15 level0, [30:16] dur1, 31 level1; dur 0 = end.
-//! Classic ESP32 (`RmtLayout::ESP32`, M5-11): 8 channels x 64 words, CONF0/CONF1 pairs, IRQ end = 3ch / err = 3ch+2 / thres = 24+ch, global wrap in APB_CONF, TX only.
+//! Classic ESP32 (`RmtLayout::ESP32`, M5-11): 8 channels x 64 words, CONF0/CONF1 pairs, IRQ end = 3ch / err = 3ch+2 / thres = 24+ch, global wrap in APB_CONF.
+//! F-10c: every classic channel also receives (RX channel i = channel i, rx_end = 3i+1, no RX threshold / wrap) and TX modulates a carrier.
 //! TX advances lazily: `update(now)` consumes elapsed half-items, records level edges (`edges`), raises thres / end / err IRQs, returns the next due time.
 //! RX (P2-05): input via GPIO matrix (RMT_SIG_IN0_IDX matches output numbering), fed by the SoC to `rx_input` on pin changes. After rx_en, start at the first
 //! edge, write each level's ticks as a half-item; a level held > idle_thres ticks ends the frame (0-length half-item pads it, RX_END). Filter in `sigin`; rx_lim
@@ -65,8 +66,8 @@ impl RmtLayout {
         block: BLOCK_WORDS,
         classic: false,
     };
-    /// Classic ESP32 (soc/esp32/register/soc/rmt_struct.h): 8 TX-capable channels, CHnCONF0/1 at 0x20 + 8n,
-    /// STATUS 0x60, INT_RAW 0xa0, TX_LIM 0xd0, APB_CONF 0xf0, RAM +0x800; RX not modelled (nrx = 0).
+    /// Classic ESP32 (soc/esp32/register/soc/rmt_struct.h): 8 bidirectional channels, CHnCONF0/1 at 0x20 + 8n,
+    /// STATUS 0x60, INT_RAW 0xa0, CARRIER_DUTY 0xb0, TX_LIM 0xd0, APB_CONF 0xf0, RAM +0x800; nrx = 0 (RX shares the TX channels).
     pub const ESP32: RmtLayout = RmtLayout {
         ntx: 8,
         nrx: 0,
@@ -134,6 +135,9 @@ struct Tx {
     /// Items sent in this transmission (threshold IRQ count)
     sent: u32,
     loops: u32,
+    /// Classic carrier: next toggle within the current half-item and whether the wave is high
+    car_next: Option<u64>,
+    car_hi: bool,
 }
 
 /// RX channel state
@@ -191,7 +195,7 @@ impl Rmt {
                 regs,
                 ram: vec![0; layout.block * n],
                 tx,
-                rx: Vec::new(),
+                rx: vec![Rx::default(); layout.ntx],
                 int_raw: 0,
                 int_ena: 0,
                 level: vec![false; layout.ntx],
@@ -305,6 +309,45 @@ impl Rmt {
         self.cycles_x256((self.conf0(ch) >> 8) & 0xff)
     }
 
+    /// Classic TX carrier when carrier_en (CONF0 [28]): (high, low) in CPU cycles and the modulated level carrier_out_lv [29].
+    /// CARRIER_DUTY_CHn: low [15:0], high [31:16] (0 = 65536) in the channel's base clock (IDF: "group clock").
+    pub fn carrier(&self, ch: usize) -> Option<(u64, u64, bool)> {
+        let l = self.layout;
+        if !l.classic || ch >= l.ntx || self.conf0(ch) & (1 << 28) == 0 {
+            return None;
+        }
+        let d = self.regs[((l.int_raw() + 0x10) / 4) as usize + ch];
+        let src = if self.conf1(ch) & (1 << 17) != 0 {
+            80_000_000
+        } else {
+            1_000_000
+        };
+        let cyc = |t: u32| {
+            let t = if t == 0 { 65536 } else { t as u64 };
+            (t * CPU_HZ / src).max(1)
+        };
+        Some((
+            cyc(d >> 16),
+            cyc(d & 0xffff),
+            self.conf0(ch) & (1 << 29) != 0,
+        ))
+    }
+
+    /// Emit carrier toggles of channel ch due before `upto` (and before the current half-item ends)
+    fn carrier_run(&mut self, ch: usize, upto: u64) {
+        let Some((hi, lo, _)) = self.carrier(ch) else {
+            self.tx[ch].car_next = None;
+            return;
+        };
+        let end = upto.min(self.tx[ch].half_end);
+        while let Some(t) = self.tx[ch].car_next.filter(|t| *t < end) {
+            let h = !self.tx[ch].car_hi;
+            self.tx[ch].car_hi = h;
+            self.emit(ch, t, h);
+            self.tx[ch].car_next = Some(t + if h { hi } else { lo });
+        }
+    }
+
     fn tx_lim(&self, ch: usize) -> u32 {
         self.lim_reg(ch) & 0x1ff
     }
@@ -329,9 +372,16 @@ impl Rmt {
         if l.classic && (0x60..0x80).contains(&off) {
             // CHnSTATUS: mem_waddr_ex[9:0], mem_raddr_ex[19:10], state[22:20] (1 = sending)
             let ch = ((off - 0x60) / 4) as usize;
-            let t = &self.tx[ch];
+            let (t, r) = (&self.tx[ch], &self.rx[ch]);
             let base = (ch * l.block) as u32;
-            return base | (base + t.rd as u32) << 10 | if t.active { 1 << 20 } else { 0 };
+            let state = if t.active {
+                1 << 20
+            } else if r.started {
+                3 << 20
+            } else {
+                0
+            };
+            return (base + r.wr as u32) | (base + t.rd as u32) << 10 | state;
         }
         let st = l.status();
         let ir = l.int_raw();
@@ -373,11 +423,18 @@ impl Rmt {
             }
             // CONF1 pulses read back 0 (IDF read-modify-writes CONF1, a sticky tx_start would retrigger):
             // tx_start, mem_wr_rst, mem_rd_rst, apb_mem_rst, ref_cnt_rst
+            let was = self.regs[off as usize / 4] & 2 != 0;
             self.regs[off as usize / 4] = v & !(1 | 4 | 8 | 16 | 1 << 16);
             if v & 8 != 0 {
                 self.tx[ch].rd = 0;
                 self.tx[ch].half = 0;
             }
+            // RX: mem_wr_rst [2], rx_en [1] (rising edge arms the receiver, as the C3 / S3 path below)
+            if v & 4 != 0 {
+                self.rx[ch].wr = 0;
+                self.rx[ch].half = 0;
+            }
+            self.rx_arm(ch, v & 2 != 0, was);
             if v & 1 != 0 {
                 self.start(ch, now);
             }
@@ -419,16 +476,7 @@ impl Rmt {
                 self.rx[i].wr = 0;
                 self.rx[i].half = 0;
             }
-            let en = v & 1 != 0;
-            if en && !was {
-                // Start RX: wait for the first edge (the idle level before it isn't recorded)
-                let r = &mut self.rx[i];
-                r.started = false;
-                r.items = 0;
-                r.half = 0;
-            } else if !en {
-                self.rx[i].started = false;
-            }
+            self.rx_arm(i, v & 1 != 0, was);
             return;
         }
         if off >= lim && off < lim + 4 * l.ntx as u32 {
@@ -490,7 +538,11 @@ impl Rmt {
                 ((item >> 16) & 0x7fff, item & (1 << 31) != 0)
             };
             if dur != 0 {
-                self.emit(ch, t, lv);
+                // Carrier: the modulated level becomes a high / low wave starting high
+                let car = self.carrier(ch).filter(|c| c.2 == lv);
+                self.emit(ch, t, lv || car.is_some());
+                self.tx[ch].car_next = car.map(|c| t + c.0);
+                self.tx[ch].car_hi = true;
                 let cyc = (dur as u64 * self.tick_cycles_x256(ch))
                     .div_ceil(256)
                     .max(1);
@@ -554,45 +606,101 @@ impl Rmt {
 
     // ------------------------------------------------------------ RX
 
+    /// Number of RX channels (classic: every channel)
+    pub fn rx_count(&self) -> usize {
+        if self.layout.classic {
+            self.layout.ntx
+        } else {
+            self.layout.nrx
+        }
+    }
+
+    /// Hardware channel (RAM block) of RX channel i
+    fn rx_ch(&self, i: usize) -> usize {
+        if self.layout.classic {
+            i
+        } else {
+            self.layout.ntx + i
+        }
+    }
+
+    /// Arm (rising rx_en) or stop RX channel i: wait for the first edge (the idle level before it isn't recorded)
+    fn rx_arm(&mut self, i: usize, en: bool, was: bool) {
+        let r = &mut self.rx[i];
+        if en && !was {
+            r.started = false;
+            r.items = 0;
+            r.half = 0;
+        } else if !en {
+            r.started = false;
+        }
+    }
+
     fn rx_conf(&self, i: usize) -> (u32, u32) {
+        if self.layout.classic {
+            return (self.conf0(i), self.conf1(i));
+        }
         let c = (self.layout.rx_conf0(i) / 4) as usize;
         (self.regs[c], self.regs[c + 1])
     }
 
     fn rx_enabled(&self, i: usize) -> bool {
-        self.rx_conf(i).1 & 1 != 0
+        let bit = if self.layout.classic { 2 } else { 1 };
+        self.rx_conf(i).1 & bit != 0
     }
 
-    /// RX channel i filter threshold (CPU cycles): rx_filter_thres RMT source clocks
+    /// RX channel i filter threshold (CPU cycles): rx_filter_thres RMT source clocks (classic: APB clocks, en [7], thres [15:8])
     fn rx_filter(&self, i: usize) -> u64 {
         let c1 = self.rx_conf(i).1;
-        if c1 & (1 << 4) == 0 {
+        let (en, sh, hz) = if self.layout.classic {
+            (7, 8, 80_000_000)
+        } else {
+            (4, 5, self.src_hz())
+        };
+        if c1 & (1 << en) == 0 {
             return 0;
         }
-        ((c1 >> 5) & 0xff) as u64 * CPU_HZ / self.src_hz()
+        ((c1 >> sh) & 0xff) as u64 * CPU_HZ / hz
     }
 
     fn rx_tick_x256(&self, i: usize) -> u64 {
+        if self.layout.classic {
+            return self.tick_cycles_x256(i);
+        }
         self.cycles_x256(self.rx_conf(i).0 & 0xff)
     }
 
-    /// How long a level must hold to end the frame (CPU cycles)
+    /// How long a level must hold to end the frame (CPU cycles); classic idle_thres is 16 bits
     fn rx_idle(&self, i: usize) -> u64 {
-        let th = ((self.rx_conf(i).0 >> 8) & 0x7fff) as u64;
+        let mask = if self.layout.classic { 0xffff } else { 0x7fff };
+        let th = ((self.rx_conf(i).0 >> 8) & mask) as u64;
         (th * self.rx_tick_x256(i)).div_ceil(256)
     }
 
     fn rx_mem_words(&self, i: usize) -> usize {
         let l = self.layout;
+        if l.classic {
+            return self.mem_words(i);
+        }
         let blocks = ((self.rx_conf(i).0 >> l.rx_mem_shift) & l.rx_mem_mask).max(1) as usize;
         let ch = l.ntx + i;
         (blocks * l.block).min(l.block * (l.n() - ch))
     }
 
+    /// RX interrupt bit of channel i: (end, error, threshold)
+    fn rx_bits(&self, i: usize) -> (u32, u32, u32) {
+        let (l, c) = (self.layout, i as u32);
+        if l.classic {
+            (3 * c + 1, 3 * c + 2, 0)
+        } else {
+            (l.rx_end_bit + c, l.rx_err_bit + c, l.rx_thr_bit + c)
+        }
+    }
+
     /// Write a half-item (ticks, level); on a full item advance the write pointer, handle threshold IRQ / wrap / overflow
     fn rx_put(&mut self, i: usize, ticks: u64, lv: bool) {
         let l = self.layout;
-        let base = (l.ntx + i) * l.block;
+        let base = self.rx_ch(i) * l.block;
         let r = self.rx[i];
         let idx = (base + r.wr) % self.ram.len();
         let half = (ticks.min(0x7fff) as u32) | (lv as u32) << 15;
@@ -605,17 +713,23 @@ impl Rmt {
         self.rx[i].half = 0;
         self.rx[i].wr += 1;
         self.rx[i].items += 1;
-        let wrap = self.rx_conf(i).1 & (1 << 13) != 0;
-        let lim = self.regs[(l.tx_lim() / 4) as usize + l.ntx + i] & 0x1ff;
+        // Classic has no RX ping-pong (no rx_lim, no wrap): a full channel memory is an error
+        let wrap = !l.classic && self.rx_conf(i).1 & (1 << 13) != 0;
+        let (_, err, thr) = self.rx_bits(i);
+        let lim = if wrap {
+            self.regs[(l.tx_lim() / 4) as usize + l.ntx + i] & 0x1ff
+        } else {
+            0
+        };
         if wrap && lim > 0 && self.rx[i].items.is_multiple_of(lim) {
-            self.int_raw |= 1 << (l.rx_thr_bit + i as u32);
+            self.int_raw |= 1 << thr;
         }
         if self.rx[i].wr >= self.rx_mem_words(i) {
             if wrap {
                 self.rx[i].wr = 0;
             } else {
                 // Channel memory full: error and stop this reception
-                self.int_raw |= 1 << (l.rx_err_bit + i as u32);
+                self.int_raw |= 1 << err;
                 self.rx[i].started = false;
             }
         }
@@ -662,7 +776,7 @@ impl Rmt {
                     }
                     self.rx[i].started = false;
                     self.rx[i].frames += 1;
-                    self.int_raw |= 1 << (self.layout.rx_end_bit + i as u32);
+                    self.int_raw |= 1 << self.rx_bits(i).0;
                 }
                 _ => break,
             }
@@ -671,7 +785,7 @@ impl Rmt {
 
     /// Raw level of RX channel i's input at t (the SoC calls it when a pin may have changed; unchanged is fine)
     pub fn rx_input(&mut self, i: usize, t: u64, raw: bool) {
-        if i >= self.layout.nrx {
+        if i >= self.rx_count() {
             return;
         }
         self.rx_advance(i, t);
@@ -697,7 +811,7 @@ impl Rmt {
     /// Advance to now; returns the next cycle to advance at (u64::MAX when not sending).
     pub fn update(&mut self, now: u64) -> u64 {
         let mut next = u64::MAX;
-        for i in 0..self.layout.nrx {
+        for i in 0..self.rx_count() {
             self.rx_advance(i, now);
             next = next.min(self.rx_next(i));
         }
@@ -705,11 +819,18 @@ impl Rmt {
             // Avoid hanging here on a bad config (tiny durations): consume at most 100k half-items per call
             let mut guard = 100_000;
             while self.tx[ch].active && self.tx[ch].half_end <= now && guard > 0 {
+                if self.tx[ch].car_next.is_some() {
+                    self.carrier_run(ch, u64::MAX);
+                }
                 self.end_half(ch);
                 guard -= 1;
             }
             if self.tx[ch].active {
+                if self.tx[ch].car_next.is_some() {
+                    self.carrier_run(ch, now + 1);
+                }
                 next = next.min(self.tx[ch].half_end);
+                next = next.min(self.tx[ch].car_next.unwrap_or(u64::MAX));
             }
         }
         next
@@ -991,5 +1112,65 @@ mod tests {
             3 * 48 + 3,
             "CH3STATUS (rmt_reg.h 0x34)"
         );
+    }
+
+    /// Classic RX on channel 0 (IDF ir_nec_transceiver setup): 1 MHz, 12 ms idle, 1.25 us filter; an NEC frame
+    /// (active low, 9000 / 4500 lead, 32 bits, 560 us stop) is 34 items, STATUS waddr counts them, RX_END is bit 1
+    #[test]
+    fn esp32_rx_nec_frame() {
+        let mut r = Rmt::new(RmtLayout::ESP32);
+        r.write(0x20, 80 | (12000 << 8) | (1 << 24), 0);
+        r.write(0xa8, 1 << 1, 0);
+        let us = CPU_HZ / 1_000_000;
+        r.rx_input(0, 0, true);
+        // ref_always_on, filter 100 APB clocks, owner = receiver, mem_wr_rst + rx_en
+        r.write(0x24, 1 << 17 | 100 << 8 | 1 << 7 | 1 << 5 | 4 | 2, 10);
+        assert_eq!(r.read(0x24) & 4, 0, "mem_wr_rst self-clears");
+        let mut t = 100 * us;
+        let mut seg = |r: &mut Rmt, lv: bool, d: u64| {
+            r.rx_input(0, t, lv);
+            t += d * us;
+        };
+        seg(&mut r, false, 9000);
+        seg(&mut r, true, 4500);
+        for k in 0..32 {
+            seg(&mut r, false, 560);
+            seg(&mut r, true, if k % 3 == 0 { 1690 } else { 560 });
+        }
+        seg(&mut r, false, 560);
+        seg(&mut r, true, 0);
+        r.update(t + 20_000 * us);
+        assert!(r.irq() && r.int_raw & 2 != 0, "RX_END ch0");
+        assert_eq!(r.read(0x60) & 0x3ff, 34, "34 items written");
+        assert_eq!(r.ram[0], 9000 | 4500 << 16 | 1 << 31);
+        assert_eq!(r.ram[1], 560 | 1690 << 16 | 1 << 31);
+        assert_eq!(r.ram[33], 560 | 1 << 31, "stop mark + end");
+        assert_eq!(r.rx_frames(0), 1);
+    }
+
+    /// Classic TX carrier: 38 kHz / 33 % on high levels only; a 560 us mark is ~21 carrier periods, the space stays low
+    #[test]
+    fn esp32_tx_carrier() {
+        let mut r = Rmt::new(RmtLayout::ESP32);
+        r.write(0x800, item(560, 0) | 560 << 16, 0); // mark 560 high, space 560 low
+        r.write(0x804, 0, 0);
+        r.write(0xb0, 694 << 16 | 1411, 0);
+        r.write(0x20, 80 | 1 << 24 | 1 << 28 | 1 << 29, 0);
+        r.write(0x24, 1 << 19 | 1 << 17 | 8 | 1, 0);
+        let mut now = 0;
+        let mut edges = Vec::new();
+        while now < 2 * CPU_HZ / 1000 {
+            let n = r.update(now);
+            edges.append(&mut r.edges);
+            now = n.min(now + CPU_HZ / 10_000);
+        }
+        let rises: Vec<u64> = edges.iter().filter(|e| e.2).map(|e| e.0).collect();
+        let us = CPU_HZ / 1_000_000;
+        assert_eq!(rises.len(), 22, "ceil(560 us / 26.3 us) carrier pulses");
+        assert!(rises.iter().all(|t| *t < 560 * us));
+        let period = (rises[1] - rises[0]) as f64 / CPU_HZ as f64;
+        assert!((1.0 / period - 38_000.0).abs() < 50.0, "{}", 1.0 / period);
+        assert!(r.int_raw & 1 != 0, "TX_END ch0");
+        assert!(!edges.last().unwrap().2, "ends low");
     }
 }

@@ -118,7 +118,8 @@
 | Wi-Fi 初始化（PHY 校准） | ✅ | esp32-wifi-init：wifi_init / start ok | RFPLL 校准完成位由 HLE regi2c 给 |
 | Wi-Fi 收发 / 连 AP / HTTP | ✅ | esp32-wifi：开放热点 → IP 192.168.4.100 → tryboard.local 200 / example.com 200（应用层输出与 C3 逐行相同）；网页示例 esp32-wifi（Reviews/ab/C-05.md） | 共用 C3 / S3 的 MAC 模型，寄存器排布 `MacRegs::ESP32`（docs/WIFI.md「经典 ESP32」）；没有 QEMU Wi-Fi 对照（乐鑫 QEMU esp32 无 Wi-Fi MAC），未经真机标定 |
 | Wi-Fi WPA2-PSK + 硬件 SHA / AES | ✅ | esp32-wifi-wpa2：四次握手、硬件 CCMP、HTTP 同上；`cargo test -p tryboard-esp32` SHA FIPS 180 / AES FIPS 197 | SHA-1/256/384/512、AES-128/192/256 ECB；DMA 模式未做 |
-| RMT 发送 + WS2812（M5-11） | ✅ | esp32-ws2812：GPIO27 5 颗 × 2 帧逐颗一致（121 符号 > 64 字块，阈值中断乒乓 + 全局回绕）；单元测试 esp32_layout_wrap_and_decode | 与 C3 / S3 同一 `rmt.rs`，`RmtLayout::ESP32`（8 通道 × 64 字、全局回绕、中断源 47、信号 87..94）；接收 / 载波 / APB FIFO 未做（记 unimpl）；QEMU 的 esp32.rmt 只是占位，无法对照；未在真机校准 |
+| RMT 发送 + WS2812（M5-11） | ✅ | esp32-ws2812：GPIO27 5 颗 × 2 帧逐颗一致（121 符号 > 64 字块，阈值中断乒乓 + 全局回绕）；单元测试 esp32_layout_wrap_and_decode | 与 C3 / S3 同一 `rmt.rs`，`RmtLayout::ESP32`（8 通道 × 64 字、全局回绕、中断源 47、信号 87..94）；2026-10-20 F-10c 补接收（8 通道都可收，输入信号 83..90 经 GPIO 矩阵、滤波、空闲阈值、STATUS 写指针）和发送载波（CARRIER_DUTY 高低计数、通道基准时钟、carrier_out_lv）；只剩 APB FIFO 未做（记 unimpl）；QEMU 的 esp32.rmt 只是占位，无法对照；未在真机校准 |
+| RMT 接收 + 载波 + NEC 红外（F-10c） | ✅ | esp32-ir：GPIO19 接一体化红外接收头（低有效）、GPIO18 接红外 LED；自发 0440/3003 绕回自收，`ir=` 遥控 2 帧 + 1 个重复码全部解对；LED 侧的「眼睛」解出 38.0 kHz 载波上的 NEC 帧；单元测试 esp32_rx_nec_frame / esp32_tx_carrier / devices::ir | `--ir RX[,TX]`，脚本 / `--inputs` 动作 `ir=ADDR,CMD` / 32 位十六进制 / `repeat`；LED 眼睛只在经典 ESP32（C3 / S3 载波未建模）；网页未接；接收头延迟、载波带宽按典型值，未在真机校准 |
 | DAC / 霍尔 | ☐ | — | ADC / SPI / I2S / 触摸 / RMT / PSRAM 见下方 M5 批次行；DAC、霍尔未做，选型里标「必须上真机」 |
 | 蓝牙（经典 / BLE） | ☐ | — | 必须上真机 |
 | 网页 | ✅ | 换芯片菜单有 ESP32（hello / blink / wifi 示例）；上传 esp32-blink 台面换成 DevKitC V4、LED 闪、串口有输出（Reviews/ab/C-05.md） | 两排针相距 1″ 的面包板摆放简化见 DECISIONS |

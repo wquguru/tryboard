@@ -1324,3 +1324,10 @@
 - **挂在 `GpioParts`、由 SPI 传输钩子交换**：同 RC522 的做法；经典 ESP32 的 `spi_transfer` 只加一行 `rx.or_else(xpt2046_exchange)`，片选按 CS0 信号（矩阵 / IO_MUX）或 GPIO 低判断，lib.rs 只加 `mod spi_touch;`，方便和 F-10c 合并。C3 / S3 暂不接（CYD 只有经典 ESP32）。PENIRQ 由 `Machine::touch` 直接驱动，不走板级 `touch_int`。
 - **板预设加 `spi_touch` 字段**：`BoardPreset` 新增可选 SPI 触摸串，在屏之后接上，触摸区取屏尺寸；其余预设为 None。
 - **worktree 引用主仓库 third_party**：worktree 里建了 git 忽略的 `third_party` 符号链接指向主仓库，用来加载 ROM ELF；不提交。
+## 2026-10-20 F-10c 经典 ESP32 RMT 接收 / 载波 + NEC 红外
+- **`ir=` 格式**：`ADDR,CMD`（两个 16 位十六进制）、单个 32 位十六进制（`cmd<<16 | addr`，与 IDF 示例打印的 scan code 一致）、`repeat` / `rep`（重复码）。备选：只收 8 位地址 + 命令再自动补反码 —— 不做，扩展 NEC 和厂商码都是 16 位，按原样给更通用。
+- **载波时钟**：CARRIER_DUTY 的高 / 低计数按通道基准时钟（ref_always_on=1 用 APB 80 MHz，否则 REF_TICK 1 MHz），不经通道分频；0 当 65536。`carrier_out_lv` 按 IDF 语义：在该电平上调制。依据 TRM 和 IDF `rmt_ll.h`（Apache-2.0），未看 QEMU（其 esp32.rmt 只是占位）。
+- **红外接收头模型**：遥控器直接驱动接收引脚的低有效包络，加 150 µs 接收头延迟；红外 LED 一侧的「眼睛」把间隔 > 60 µs 的脉冲串合成一个 burst，载波 20–60 kHz 才算数（> 25 µs 的单脉冲记为「未调制」不认），15 ms 无脉冲结束一帧并按 ±25 % 解 NEC。`--ir RX,TX` 默认 LED 对着接收头（线或），所以固件能自发自收。备选：按载波逐周期驱动接收引脚 —— 接收头本来就输出解调后的包络，没必要。
+- **LED 眼睛只在经典 ESP32**：C3 / S3 的 RMT 载波未建模，`--ir` 带 TX 时在这两个芯片上报错，不静默。
+- **不给红外模块加电气电流**：接收头约 1 mA、LED 峰值电流取决于限流电阻，等网页接入、有接线时再加。
+- **编码器**：`firmware/esp32-ir/main/ir_nec_encoder.c/.h` 原样复制自 IDF `ir_nec_transceiver` 示例（Unlicense OR CC0-1.0，保留文件头）。
