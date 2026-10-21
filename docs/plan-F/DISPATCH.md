@@ -2,7 +2,7 @@
 
 本文件给主会话照着派子代理用：怎么建 session、每个 session 的提示词、先后约束、每波合并和收尾。计划依据见 `EVAL.md` §5，调研结论见 `README.md`。
 
-**状态：2026-10-20 人确认开工，F 批已写进 `docs/PLAN.md`。** 与 M5 专项的重叠按 PLAN.md F 节处理：F-10a 并入 M5-10、F-10b / F-10d 并入 M5-12（下面这两段提示词保留作参考，不再单独派），F-04b 等 M5-01 合并后再派。下面的行号于 2026-10-20 在 `6c9640f` 上核对（波 3 条目在 `774de94` 上复核）；派单前主会话用 `grep -n` 再确认一遍，行号漂了就改本文件再派。
+**状态：2026-10-20 人确认开工，F 批已写进 `docs/PLAN.md`。** 与 M5 专项的重叠按 PLAN.md F 节处理：F-10a 并入 M5-10、F-10b / F-10d 并入 M5-12（下面这两段提示词保留作参考，不再单独派），F-04b 等 M5-01 合并后再派。下面的行号于 2026-10-20 在 `6c9640f` 上核对（波 3 条目在 `774de94` 上复核，波 4 条目在 `030786c` 上复核）；派单前主会话用 `grep -n` 再确认一遍，行号漂了就改本文件再派。
 
 ## 1. 怎么建一个 session
 
@@ -379,7 +379,7 @@ M5 专项已全部合并（M5-01 DCS 面板、M5-10 GP-SPI、M5-11 RMT TX、M5-1
 目标：IDF adc_oneshot（含校准）读数正确，接上 F-04d 的 LDR 和电气模型；ADC2 与 Wi-Fi 冲突的行为如实模拟或标「必须上真机」。
 验收：固件 esp32-adc + accept；unimpl top N 不再有 SAR ADC 寄存器。
 
-条目 F-10c：经典 ESP32 RMT 收（RX）和载波。现状（已核对）：lib.rs:141 RMT TX 已由 M5-11 实现，RX / 载波 / APB FIFO 记为 unimpl（:87 rmt_unmodelled）。
+条目 F-10c：经典 ESP32 RMT 收（RX）和载波。现状（已核对）：lib.rs:147 `rmt` 字段 / :720 route_rmt，RMT TX 已由 M5-11 实现（模型本体在 soc/src/rmt.rs），RX / 载波 / APB FIFO 记为 unimpl（:87 rmt_unmodelled）。
 目标：IR 接收（RMT RX）和 IR 发射（载波）可用，配一个 IR 遥控器器件（脚本动作 `ir=<nec code>`）。
 验收：固件 esp32-ir + accept；lib.rs:87 rmt_unmodelled 范围缩小。
 ```
