@@ -191,3 +191,23 @@ test('F-02 QR budget: a mid-size run fits the 8000 link but is dropped at the ca
   assert.ok(card.truncated && card.url.length <= 2000, `${card.url.length} chars`);
   assert.deepEqual((await decodeState(card.s)).env, { temp: 22, humidity: 41, pressure: 101100 });
 });
+
+test('F-11 scenario rides as tl: kept when the run is dropped, validated on decode', async () => {
+  const tl = { len: 30000, tracks: [{ k: 'temp' as const, kf: [[0, 24], [8000, 32, 'e']] as [number, number, 'e'?][] }] };
+  const { state } = await captureState({ ...base, scenario: tl });
+  assert.deepEqual(state.tl, tl);
+  assert.deepEqual((await decodeState(await encodeState(state))).tl, tl);
+  assert.equal((await captureState({ ...base, scenario: { len: 30000, tracks: [] } })).state.tl, undefined);
+  // A link too long for the run still carries the scenario
+  let x = 1;
+  const many: InputEvent[] = [];
+  for (let i = 0; i < 3000; i++) {
+    x = (x * 1103515245 + 12345) >>> 0;
+    many.push({ tMs: i * 3.7 + (x % 1000) / 1000, kind: 'pot', pin: 1, mv: x % 3300 });
+  }
+  const big = await captureState({ ...base, scenario: tl, log: { ...LOG, events: many } });
+  const link = await shareLink('http://x/app', big.state);
+  assert.ok(link.truncated);
+  assert.deepEqual((await decodeState(link.s)).tl, tl);
+  await assert.rejects(decodeState(await encodeState({ v: 1, w: 'weather', tl: { len: 1, tracks: [{ k: 'x' }] } } as unknown as ShareState)), (e: unknown) => e instanceof ShareDecodeError && e.reason === 'corrupt');
+});

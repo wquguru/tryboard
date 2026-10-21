@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "../ui/cn";
 import { actions, bc, setDock, type DockTab } from "./chrome";
-import { BlePane, CodePane as CodeView, NetPane, PaneLoading, TasksPane, UsbPane } from "./panes";
+import { BlePane, CodePane as CodeView, NetPane, PaneLoading, ScenarioPane, TasksPane, UsbPane } from "./panes";
 import { Icon } from "./icons";
 import { useStore } from "./react";
 import { createStore } from "./store";
@@ -515,6 +515,7 @@ function PhoneDock({
     },
     { id: "issues", label: nIssue ? t('Issues {n}', { n: nIssue }) : t('Issues') },
     { id: "runs", label: t('Runs {n}', { n: c.runs }) },
+    { id: "scenario", label: t('Script'), title: t('Environment script: change temperature, light, distance, buttons and network on simulated time') },
     { id: "tasks", label: t('Tasks'), title: t('FreeRTOS task timeline: who runs and who waits on each core') },
     ...(actions.analyzer ? [{ id: "analyzer" as const, label: t('Waveform'), title: t('Logic analyzer') }] : []),
     ...(c.usb ? [{ id: "usb" as const, label: "USB" }] : []),
@@ -650,6 +651,11 @@ function PhoneDock({
           {cur === "issues" && (
             <div className="min-h-0 flex-1 overflow-auto border-t border-line-soft">
               <IssueList />
+            </div>
+          )}
+          {cur === "scenario" && (
+            <div className="flex min-h-0 flex-1 flex-col border-t border-line-soft">
+              <ScenarioPane phone />
             </div>
           )}
           {cur === "tasks" && (
@@ -823,6 +829,12 @@ function DeskDock({
       pill: bench ? <span className={pill()}>{c.runs}</span> : undefined,
     },
     {
+      id: "scenario",
+      label: t('Script'),
+      disabled: shop,
+      title: shop ? t('No firmware runs in the Shop step') : t('Environment script: change temperature, light, distance, buttons and network on simulated time'),
+    },
+    {
       id: "checks",
       label: t('Checkpoints'),
       pill: c.checkpoints.length ? (
@@ -963,6 +975,7 @@ function DeskDock({
         </div>
         {cur === "code" && <CodePane toast={toast} />}
         {cur === "tasks" && <TasksPane toast={toast} />}
+        {cur === "scenario" && <ScenarioPane />}
         {c.usb && (
           <div
             hidden={cur !== "usb"}

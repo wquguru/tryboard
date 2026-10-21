@@ -169,6 +169,8 @@ export type ToWorker =
   | { type: 'watchPwm'; pins: number[] }
   /** Request the input log since power-up; answered with an inputlog message. */
   | { type: 'getInputLog' }
+  /** F-11 environment scenario: stamped events applied at their sim times; fresh = right after a power-up / seek, else only future ones replace the queue */
+  | { type: 'scenario'; events: InputEvent[]; fresh: boolean }
   /** Input log + full serial + observations since power-up (for the run fingerprint), answered with snapshot; does not interrupt. */
   | { type: 'snapshot' }
   /** Timeline rewind (P0-03): power up, apply the log at original sim times, fast-forward to untilMs and stop (not wall clock); answers seeked. */

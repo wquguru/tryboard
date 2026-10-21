@@ -324,6 +324,8 @@ function loopSlice(gen: number) {
   let stop = 0;
   let pacedDone = false;
   while (behind > 0 && performance.now() - t0 < 20) {
+    // Scenario events first, then the paced log; live messages land between rounds (the export keeps apply order)
+    if (scen) scenStep(e, scen);
     if (paced && (pacedDone = pacedStep(e, paced))) break;
     // Fixed 1 ms slices (not 'whatever is left'): S3 dual-core interleaving depends on slice starts, so slicing like the CLI keeps replay exact.
     stop = e.tb_run(CPU_HZ / 1000);
@@ -714,6 +716,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   bootGen++;
   replyCache = new Map();
   paced = null;
+  scen = null;
   return e;
 }
 
@@ -884,6 +887,16 @@ function pacedStep(e: Exports, p: Paced) {
   return false;
 }
 
+// ---- Environment scenario (F-11): compiled once on the main thread, applied at slice boundaries like the paced log
+let scen: { evs: { at: number; x: InputEvent }[]; i: number } | null = null;
+function scenStep(e: Exports, q: NonNullable<typeof scen>) {
+  while (q.i < q.evs.length && q.evs[q.i].at <= e.tb_cycles()) {
+    const { tMs: _t, ...act } = q.evs[q.i++].x;
+    apply(e, act as InputAction);
+  }
+  if (q.i >= q.evs.length) scen = null;
+}
+
 /** After a rewind / paced replay: recorded replies, then the present real-network switch and preset win over the log */
 function settleReplay(e: Exports, events: InputEvent[], net?: string) {
   for (const x of events) if (x.kind === 'netreply') replyCache.set(replyId(x.reply), x.reply);
@@ -1011,6 +1024,13 @@ async function handle(m: ToWorker) {
       watchPins = [...m.pins];
       pwmLast = new Map();
       break;
+    case 'scenario': {
+      // An edit mid-run only replaces what has not been applied yet; the past stays in the log
+      const now = ex ? ex.tb_cycles() : 0;
+      const evs = dueList(m.events).filter((x) => m.fresh || x.at > now);
+      scen = evs.length ? { evs, i: 0 } : null;
+      break;
+    }
     case 'getInputLog':
       post({ type: 'inputlog', log: { ...structuredClone(inputLog), endMs: ex ? cyclesToMs(ex.tb_cycles()) : 0 } });
       break;

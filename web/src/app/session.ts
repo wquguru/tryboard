@@ -4,6 +4,8 @@ import type { ScenePickApi } from '../scene-api';
 import { LiveSim, type SeekJob } from '../live';
 import type { Snapshot } from '../simmsg';
 import { pacedMirror } from './pacedui';
+import { benchTracks, compileScenario, trackKey } from './scenario';
+import { scenFeed } from './scenariofeed';
 import type { FromWorker, TimingReport, VcdState } from '../simmsg';
 import { saveBom } from './bomstore';
 import { push as pushBom } from './bom';
@@ -425,6 +427,28 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   realnetSwitch.subscribe(() => s.sim?.realnet(realnetSwitch.get()));
   // Network preset (D-01): same pattern; faults go straight to the running sim (netFault)
   netPreset.subscribe(() => s.sim?.netPreset(netPreset.get()));
+  // Environment scenario (F-11): compiled against the power-up room; tracks without their part are skipped, never faked.
+  // Network tracks always compile: the Network tab only shows after the first Wi-Fi frame, which is after power-up
+  let scenRoom: Env | null = null;
+  const scenBench = () => ({ has: new Set([...benchTracks(s.scene.parts, s.sim?.bootPin ?? BOOT_GPIO[s.chip as SimChip] ?? 9, true, !!s.scene.board).map(trackKey)]) });
+  const scenCompile = (room: Env, fromMs: number) => {
+    const sc = scenFeed.get().sc;
+    scenRoom = room;
+    const evs = sc ? compileScenario(sc, room, scenBench()) : null;
+    paced.script(evs, fromMs);
+    scenFeed.set({ lines: evs?.length ?? 0, stale: false, room });
+    return evs;
+  };
+  scenFeed.subscribe((f) => {
+    const sim = s.sim;
+    if (!sim || !scenRoom) return;
+    // Mid-run edit: only events after now are replaced; earlier keyframe changes wait for a restart (stale)
+    const evs = f.sc ? compileScenario(f.sc, scenRoom, scenBench()) : [];
+    const now = store.get().simSeconds * 1000;
+    sim.setScenario(evs);
+    paced.script(evs, now);
+    scenFeed.set({ lines: evs.length });
+  }, ['sc']);
 
   function makeSim(fw: string | ArrayBuffer) {
     const sim: LiveSim = new LiveSim({
@@ -443,6 +467,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       onNet: (m) => netFeed.update(m),
       realnet: () => realnetSwitch.get(),
       netPreset: () => netPreset.get(),
+      scenario: scenCompile,
       onHarness(text) {
         s.harnessText = text;
         for (const cb of [...harnessSubs]) cb(text);

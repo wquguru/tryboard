@@ -63,6 +63,8 @@ export interface LiveOptions {
   i2s?: string[];
   micWav?: ArrayBuffer;
   micName?: string;
+  /** F-11 scenario events from fromMs on, for this power-up's room (power-up environment); null = none */
+  scenario?(room: Env, fromMs: number): InputEvent[] | null;
   /** Speaker output (with sim time), feed to audio.ts BuzzerAudio.pushPcm. */
   onPcm?(blocks: PcmBlock[]): void;
   onConsole?(text: string): void;
@@ -142,6 +144,8 @@ export class LiveSim {
         // Pose is not a boot parameter: apply it as the first input (logged, so replay matches); skip when flat.
         const p = this.pose;
         if (p.pitch || p.roll || p.yaw) this.send({ type: 'input', act: { kind: 'imu', pitch: p.pitch, roll: p.roll, yaw: p.yaw } });
+        const sc = o.scenario?.(this.sensed(), 0);
+        if (sc?.length) this.send({ type: 'scenario', events: sc, fresh: true });
         this.send({ type: 'run' });
         o.onBoot?.(m.chip);
       } else if (m.type === 'tick') {
@@ -487,6 +491,9 @@ export class LiveSim {
     return new Promise((r) => {
       this.seekWaiter = r;
       this.send({ type: 'seek', wasm, ...this.blobs(rom, job.flash), i2c: job.i2c, env: job.env, lcd: job.lcd, battery: job.battery, servo: job.servo, power: job.power, encoder: job.encoder, sonar: job.sonar ? { ...job.sonar, cm: NaN } : undefined, touchInt: job.touchInt, board: job.board, grove: job.grove, i2s: job.i2s, micWav: job.micWav?.slice(0), micName: job.micName, events: job.events, untilMs: job.untilMs, dht11: job.dht11, parts: job.parts, realnet: this.o.realnet?.() ?? false, net: this.o.netPreset?.(), paced: job.paced });
+      // The log holds the scenario's past (events at untilMs were not applied yet); the rest plays on from there
+      const sc = this.o.scenario?.(job.env, job.untilMs)?.filter((x) => x.tMs >= job.untilMs);
+      if (sc?.length) this.send({ type: 'scenario', events: sc, fresh: true });
       if (job.paced) this.pacedRun = new Promise((p) => (this.pacedWaiter = p));
     });
   }
@@ -499,6 +506,10 @@ export class LiveSim {
   private endPaced(snap: Snapshot | null) {
     this.pacedWaiter?.(snap);
     this.pacedWaiter = null;
+  }
+  /** Replace the not-yet-applied scenario events (edit mid-run; the past is not rewritten) */
+  setScenario(events: InputEvent[]) {
+    this.send({ type: 'scenario', events, fresh: false });
   }
   /** Continue live after a rewind stop: this run counts as in progress again. */
   continueRun() {
