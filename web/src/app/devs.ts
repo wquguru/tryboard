@@ -15,8 +15,10 @@ export const i2sOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'ma
 
 const i2cOf = (parts: PartSpec[]) => {
   const kind: Record<string, string> = { oled: 'ssd1306', bme280: 'bme280', mpu6050: 'mpu6050', qmi8658: 'qmi8658', cst816s: 'cst816s' };
-  return parts.flatMap((p) => ('addr' in p && kind[p.type] ? [{ kind: kind[p.type], addr: p.addr }] : []));
+  return parts.flatMap((p) => ('addr' in p && kind[p.type] ? [{ kind: p.type === 'oled' && p.ctl ? p.ctl : kind[p.type], addr: p.addr }] : []));
 };
+/** Bench screen: a bare TFT panel (F-04a2, = CLI --spi <panel>) or the GC9A01 round LCD (true) */
+const lcdOf = (parts: PartSpec[]) => parts.find((p) => p.type === 'tft')?.panel ?? parts.some((p) => p.type === 'gc9a01');
 /** GPIO wired to touch INT (CST816S on the bench). */
 const touchIntOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'cst816s' ? [p.int] : []))[0];
 /** Simulator devices of a scene: onboard ones of an all-in-one board (E-03) first, then bench parts; M5 boards add only the preset */
@@ -25,7 +27,7 @@ export const devsOf = (sc: SceneSpec, st: DevState) => {
   const parts = sc.parts;
   return {
     i2c: [...(bd?.i2c ?? []), ...i2cOf(parts)],
-    lcd: bd?.lcd ?? parts.some((p) => p.type === 'gc9a01'),
+    lcd: bd?.lcd ?? lcdOf(parts),
     battery: bd?.battery ? (st.battery ?? bd.battery) : undefined,
     servo: servoOf(parts),
     encoder: encoderOf(parts),

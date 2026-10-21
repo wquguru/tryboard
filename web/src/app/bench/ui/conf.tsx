@@ -19,6 +19,7 @@ export const PART_CONF: Record<string, Conf> = {
   bme280: SIMV,
   oled: SIMV,
   gc9a01: SIMV,
+  tft: SIMV,
   pot: SIMV,
   led: SIMV,
   key: SIMV,

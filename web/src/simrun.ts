@@ -5,7 +5,9 @@ import { chipFromId, type SimChip } from './chipid';
 import { parseScript } from './checks';
 import { realFetch, type RealReq } from './realfetch';
 import type { WasmExports } from './wasm.gen';
-import { attachParts, partAction, partsTimed, type PartsDevs } from './partsdev.ts';
+import { attachLcdSpec, attachParts, partAction, partsTimed, type PartsDevs } from './partsdev.ts';
+import { isTftPanel } from './lcdspec.ts';
+import type { LcdKind } from './simmsg';
 
 export const CPU_HZ = 160_000_000;
 
@@ -21,7 +23,7 @@ export interface SimJob {
   env?: { temp: number; humidity: number; pressure: number };
   script?: string;
   pwmPin?: number;
-  lcd?: boolean | 'gc9a01' | 'co5300';
+  lcd?: boolean | LcdKind;
   /** AXP2101 battery at power-up (= CLI --battery) */
   battery?: { pct: number; usb: boolean };
   /** Servo signal pin and supply (= CLI --servo / --power); with a servo, always 1 ms slices like the CLI */
@@ -75,7 +77,7 @@ export interface SimHooks {
   onReset?: (n: number, stopped: boolean) => void;
 }
 
-const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5, ft6236: 6, cst9220: 7, axp2101: 8, pcf85063: 9, es8311: 10, es7210: 11 };
+const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5, ft6236: 6, cst9220: 7, axp2101: 8, pcf85063: 9, es8311: 10, es7210: 11, sh1106: 12 };
 
 /** Which chip an image targets: find the app in the partition table (0x8000), read the ESP header chip ID; throws for chips TryBoard does not simulate */
 export function imageChip(buf: ArrayBuffer | Uint8Array): SimChip {
@@ -137,7 +139,10 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
   if (j.env) e.tb_env_set(j.env.temp, j.env.humidity, j.env.pressure);
   if (j.battery) e.tb_battery?.(j.battery.pct, j.battery.usb ? 1 : 0);
   if (j.lcd === 'co5300') e.tb_lcd_attach_kind?.(1);
-  else if (j.lcd) e.tb_lcd_attach?.();
+  else if (isTftPanel(j.lcd)) {
+    const err = attachLcdSpec(e, j.lcd);
+    if (err) return { stdout: '', report: '', sim: 0, error: err, bootError: err };
+  } else if (j.lcd) e.tb_lcd_attach?.();
   // Like the native CLI: at most 50 crash / brownout resets, the 51st stops before resetting (no reboot loop; both sides stop on the same cycle)
   e.tb_reset_limit?.(50);
   if (j.servo !== undefined) e.tb_servo_attach?.(j.servo);

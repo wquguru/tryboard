@@ -27,6 +27,7 @@ import { wkey } from './works';
 import { BOOT_GPIO, type SimChip } from '../chips';
 import { t } from '../i18n';
 import { devsOf, i2sOf, servoOf } from './devs';
+import { retargetTft } from './place';
 
 /** weather firmware reading line (format set by level 06); accept single or double spaces (bme280 example). */
 const READING = /T=(-?[\d.]+) C\s+H=([\d.]+) %\s+P=([\d.]+) hPa/g;
@@ -282,6 +283,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       s.fwName = name;
       s.fwSize = buf.byteLength;
       s.chip = imageChip(buf);
+      retargetTft(s.scene, s.chip);
       bench.setBoard(s.chip);
       bench.setScene(s.scene);
       bench.setPowered(true);

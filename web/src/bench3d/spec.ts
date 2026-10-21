@@ -1,5 +1,6 @@
 // Scene description types: the add-on parts an example declares and the initial camera.
 import type { BoardId } from './boarddevs';
+import type { TftPanel } from '../lcdspec.ts';
 
 /** Grove units the core models (core/crates/machine/src/boards.rs GROVE_UNITS) */
 export type GroveId = 'env3' | 'env4';
@@ -9,7 +10,8 @@ export type GroveId = 'env3' | 'env4';
 /** Add-on parts declared by an example (scene.parts in examples.json). */
 export type PartSpec =
   | { type: 'led'; pin: number; color?: number; col?: number; label?: string }
-  | { type: 'oled'; addr: number; sda: number; scl: number; label?: string }
+  /** ctl 'sh1106' = 1.3″ SH1106 module (F-04a2, CLI --i2c sh1106@addr); default SSD1306 */
+  | { type: 'oled'; addr: number; sda: number; scl: number; ctl?: 'sh1106'; label?: string }
   /** 1.28″ GC9A01 round LCD (SPI2): pins fixed per chip, see LCD_WIRING (S3: SCLK=12, MOSI=11, CS=10, DC=14, RST=13, BL=15; C3: 6, 7, 10, 5, 4, 3) */
   | { type: 'gc9a01'; spi?: number; label?: string }
   | { type: 'bme280'; addr: number; sda: number; scl: number; label?: string }
@@ -49,7 +51,9 @@ export type PartSpec =
   /** Photoresistor module (GL5528 + 10 kΩ, F-04d): AO on an ADC pin; lux = initial light (= CLI --ldr pin,lux) */
   | { type: 'ldr'; pin: number; lux?: number; label?: string }
   /** RC522 RFID reader (F-04d, SPI2): SDA (CS) is the only pin the model watches; the other wires are drawn as placed (= CLI --spi rc522[@cs=N]) */
-  | { type: 'rc522'; cs?: number; sck?: number; mosi?: number; miso?: number; rst?: number; label?: string };
+  | { type: 'rc522'; cs?: number; sck?: number; mosi?: number; miso?: number; rst?: number; label?: string }
+  /** Bare rectangular SPI TFT (F-04a2, = CLI --spi <panel>): pins are the chip's fixed LCD_WIRING, kept in the spec for wires / labels */
+  | { type: 'tft'; panel: TftPanel; sclk: number; mosi: number; cs: number; dc: number; rst: number; bl: number; label?: string };
 
 
 /** The scene's IMU (bench tilt / drag only works when there is one) */

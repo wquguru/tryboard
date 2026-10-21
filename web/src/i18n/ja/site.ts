@@ -280,7 +280,7 @@ const d: Dict = {
   "Lens buddy base and screen frame (3D-printed)": "レンズ人形のベースと画面フレーム（3D プリント）",
   "Lifts 3.3 V data to 5 V for WS2812 strips, one direction only. Tie OE to GND to enable.": "3.3 V のデータを 5 V に上げて WS2812 LED テープに使います。単方向です。OE を GND につなぐと有効になります。",
   "Line the dev board native USB port up with the opening at the back. Don't cover the WROOM antenna with a metal plate, or Wi-Fi gets worse (estimate).": "開発ボードのネイティブ USB ポートは背面の穴に合わせます。金属プレートで WROOM のアンテナを覆うと Wi-Fi の電波が弱くなります（推定）。",
-  "Looks like an SSD1306 but the driver differs: 132-column memory and no horizontal addressing mode, so an SSD1306 driver shows garbage or a 2-column shift. The simulator has no model for this screen yet.": "見た目は SSD1306 に似ていますがドライバが違います。表示メモリは 132 列で水平アドレッシングモードがないため、SSD1306 のドライバでは表示が乱れたり 2 列ずれたりします。シミュレータにはこの画面のモデルがまだありません。",
+  "Looks like an SSD1306 but the driver differs: 132-column memory and no horizontal addressing mode, so an SSD1306 driver shows garbage or a 2-column shift. The simulator models the 132-column memory (shown from column 2); scrolling and RAM read-back are not modelled.": "見た目は SSD1306 に似ていますがドライバが違います。表示メモリは 132 列で水平アドレッシングモードがないため、SSD1306 のドライバでは表示が乱れたり 2 列ずれたりします。シミュレータは 132 列のメモリをモデル化しています（2 列目から表示）。スクロールとメモリの読み出しはモデル化していません。",
   "Loudest on 5 V. Peak current is high and, on top of Wi-Fi, can make USB sag. The simulator has no I2S model yet.": "5 V 給電で音量が最大になります。ピーク電流が大きく、Wi-Fi と重なると USB の電圧が下がることがあります。シミュレータには I2S モデルがまだありません。",
   "Low = 0x68, high = 0x69": "Low で 0x68、High で 0x69",
   "Low while touched": "タッチ中は Low",
@@ -350,7 +350,7 @@ const d: Dict = {
   "ST7789 1.54″ IPS LCD module": "ST7789 1.54″ IPS LCD モジュール",
   "Same shape as the no-touch version, but display reset is on GPIO14 and backlight on GPIO2 (GPIO12 / 40 on the no-touch one), so firmware pins depend on the version. Only 6 GPIOs on the SH1.0 connector are exposed.": "タッチなし版と同じ形ですが、画面リセットは GPIO14、バックライトは GPIO2 です（タッチなし版は GPIO12 / 40）。ファームウェアのピンは版に合わせて変えてください。外に出ている GPIO は SH1.0 コネクタの 6 本だけです。",
   "Same size and connector as the SG90, with sturdier gears. The simulator uses the same servo model (torque is not modelled).": "SG90 と同じサイズ・同じ端子で、ギアが丈夫です。シミュレータは同じサーボモデルを使います（トルクは区別しません）。",
-  "Some 1.3″ 7-pin versions have no CS pin and need SPI mode 3. The simulator has no ST7789 model yet.": "1.3″ の 7 ピン版には CS ピンがないものがあり、SPI モード 3 を使います。シミュレータには ST7789 のモデルがまだありません。",
+  "Some 1.3″ 7-pin versions have no CS pin and need SPI mode 3. The simulator models the 240×240 panel (80-row offset when mirrored) on the fixed SPI2 LCD pins.": "1.3″ の 7 ピン版には CS ピンがないものがあり、SPI モード 3 を使います。シミュレータは 240×240 パネル（ミラー時は 80 行オフセット）を固定の SPI2 LCD ピンでモデル化しています。",
   "Some batches have VCC and GND swapped, so wire by the silkscreen, not by the picture.": "ロットによって VCC と GND のピン順が逆です。図ではなくシルク印刷に従って配線してください。",
   "Spinner body and turntable base (3D-printed)": "スピナーの本体と回転台ベース（3D プリント）",
   "TMB12A05-style active magnetic buzzer": "TMB12A05 系アクティブ電磁ブザー",
@@ -826,5 +826,13 @@ const d: Dict = {
   "Power it from 3V3, not 5 V, so AO never exceeds the ADC range. The reading is a rough light level, not a calibrated lux meter.": "AO が ADC の範囲を超えないよう、5 V ではなく 3V3 から給電します。読み値はおおよその明るさで、校正済みの照度計ではありません。",
   "RC522 RFID reader module (13.56 MHz)": "RC522 RFID リーダーモジュール（13.56 MHz）",
   "3.3 V only. The simulator reads card UIDs; MIFARE authentication and block reads are not modelled.": "3.3 V 専用。シミュレーターはカード UID を読みます。MIFARE 認証とブロック読み出しはモデル化していません。",
+  // F-04a2 TFT modules (ILI9341, ST7789 240×320)
+  "2.4″ color display (ILI9341, SPI, 240×320)": "2.4″ カラー液晶（ILI9341、SPI、240×320）",
+  "ILI9341 2.4″ TFT module (red 9-pin SPI board, no touch)": "ILI9341 2.4″ TFT モジュール（赤い 9 ピン SPI 基板、タッチなし）",
+  "Only for reading the panel back; most drivers leave it open": "パネルの読み出し専用。多くのドライバは未接続のまま",
+  "TN panel with BGR subpixels and no colour inversion. 2.8″ boards with touch add five XPT2046 pins (not modelled). The simulator wires it to the fixed SPI2 LCD pins.": "TN パネルで BGR サブピクセル、色反転なし。タッチ付きの 2.8″ 基板は XPT2046 のピンが 5 本増えます（モデル化していません）。シミュレータは固定の SPI2 LCD ピンに接続します。",
+  "2.0″ color display (ST7789, SPI, 240×320)": "2.0″ カラー液晶（ST7789、SPI、240×320）",
+  "ST7789V 2.0″ IPS LCD module (8-pin)": "ST7789V 2.0″ IPS 液晶モジュール（8 ピン）",
+  "IPS panel: most need colour inversion on. The simulator wires it to the fixed SPI2 LCD pins.": "IPS パネル：ほとんどは色反転をオンにする必要があります。シミュレータは固定の SPI2 LCD ピンに接続します。",
 };
 export default d;

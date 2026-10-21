@@ -964,5 +964,14 @@ const d: Dict = {
   "Replaying the shared actions at their original speed up to {t} s": "공유된 조작을 원래 속도로 {t} s까지 재생하는 중입니다",
   "Replaying {t} / {end} s": "재생 중 {t} / {end} s",
   "Skip to end": "끝으로 건너뛰기",
+  // F-04a2 TFT / SH1106 on the bench
+  "Color screen": "컬러 화면",
+  "1.3″ 128×64 monochrome OLED (SH1106, 132-column memory)": "1.3″ 128×64 단색 OLED(SH1106, 132열 메모리)",
+  "ILI9341 color screen": "ILI9341 컬러 화면",
+  "ST7789 color screen": "ST7789 컬러 화면",
+  "{size} {w}×{h} RGB TFT module ({ctl}, SPI)": "{size} {w}×{h} RGB TFT 모듈({ctl}, SPI)",
+  "{ctl} {w}×{h} TFT · SPI2 · SCLK IO{sclk} MOSI IO{mosi} CS IO{cs} DC IO{dc}": "{ctl} {w}×{h} TFT · SPI2 · SCLK IO{sclk} MOSI IO{mosi} CS IO{cs} DC IO{dc}",
+  "There is already a screen on the bench: the simulator drives one SPI display at a time": "벤치에 이미 화면이 있습니다. 시뮬레이터는 SPI 디스플레이를 한 번에 하나만 구동합니다",
+  "{pin} must go to {gpio}: the firmware drives this screen on fixed SPI2 pins": "{pin}은(는) {gpio}에 연결해야 합니다. 펌웨어가 이 화면을 고정 SPI2 핀으로 구동합니다",
 };
 export default d;

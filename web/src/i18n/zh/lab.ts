@@ -964,5 +964,14 @@ const d: Dict = {
   "Replaying the shared actions at their original speed up to {t} s": "正在按原速回放分享者的操作，到 {t} s 为止",
   "Replaying {t} / {end} s": "回放中 {t} / {end} s",
   "Skip to end": "跳到结尾",
+  // F-04a2 TFT / SH1106 on the bench
+  "Color screen": "彩屏",
+  "1.3″ 128×64 monochrome OLED (SH1106, 132-column memory)": "1.3″ 128×64 单色 OLED（SH1106，132 列显存）",
+  "ILI9341 color screen": "ILI9341 彩屏",
+  "ST7789 color screen": "ST7789 彩屏",
+  "{size} {w}×{h} RGB TFT module ({ctl}, SPI)": "{size} {w}×{h} RGB TFT 模块（{ctl}，SPI）",
+  "{ctl} {w}×{h} TFT · SPI2 · SCLK IO{sclk} MOSI IO{mosi} CS IO{cs} DC IO{dc}": "{ctl} {w}×{h} TFT · SPI2 · SCLK IO{sclk} MOSI IO{mosi} CS IO{cs} DC IO{dc}",
+  "There is already a screen on the bench: the simulator drives one SPI display at a time": "实验台上已经有一块屏：模拟器一次只驱动一块 SPI 屏",
+  "{pin} must go to {gpio}: the firmware drives this screen on fixed SPI2 pins": "{pin} 必须接 {gpio}：固件在固定的 SPI2 引脚上驱动这块屏",
 };
 export default d;

@@ -1,6 +1,7 @@
 // Data side of the part editor (UI in app/steps/bench.tsx): pin table, part descriptions, conflict checks.
 // Matters most for uploaded firmware: examples carry their wiring, custom firmware wiring is known only to the user.
 import { BOARDS, I2S_WIRING, LCD_WIRING, type ChipId, type PartSpec, type SceneSpec } from './board3d';
+import { TFT_PX } from './lcdspec.ts';
 import { t } from './i18n';
 
 /** ADC1 pins and pin hints per chip (strapping, on-board use, USB, UART, PSRAM); hints are English keys translated in pinLabel. */
@@ -83,6 +84,8 @@ export function describe(p: PartSpec, chip: ChipId = 'esp32c3'): string {
       return `${p.type === 'mpu6050' ? 'MPU6050' : 'QMI8658'} · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl}`;
     case 'cst816s':
       return `${t('CST816S touch')} · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl} / INT IO${p.int}`;
+    case 'tft':
+      return `${p.panel === 'ili9341' ? 'ILI9341' : 'ST7789'} ${TFT_PX[p.panel].join('×')} · SPI2 · SCLK IO${p.sclk} / MOSI IO${p.mosi} / CS IO${p.cs} / DC IO${p.dc} / RST IO${p.rst} / BL IO${p.bl}`;
     case 'gc9a01':
     {
       const w = LCD_WIRING[chip];
@@ -102,7 +105,7 @@ export function describe(p: PartSpec, chip: ChipId = 'esp32c3'): string {
 /** Changing I2C devices / encoder / ultrasonic needs a power cycle (devices attach at power-up). */
 export const needsReboot = (a: SceneSpec, b: SceneSpec) => {
   const i2c = (s: SceneSpec) =>
-    JSON.stringify(s.parts.filter((p) => p.type === 'oled' || p.type === 'bme280' || p.type === 'gc9a01' || p.type === 'encoder' || p.type === 'hcsr04' || p.type === 'mpu6050' || p.type === 'qmi8658' || p.type === 'cst816s' || p.type === 'max98357a' || p.type === 'inmp441').map((p) => (p.type === 'hcsr04' ? { ...p, cm: undefined } : p)));
+    JSON.stringify(s.parts.filter((p) => p.type === 'oled' || p.type === 'bme280' || p.type === 'gc9a01' || p.type === 'tft' || p.type === 'encoder' || p.type === 'hcsr04' || p.type === 'mpu6050' || p.type === 'qmi8658' || p.type === 'cst816s' || p.type === 'max98357a' || p.type === 'inmp441').map((p) => (p.type === 'hcsr04' ? { ...p, cm: undefined } : p)));
   return i2c(a) !== i2c(b);
 };
 
@@ -137,6 +140,8 @@ export function conflicts(s: SceneSpec, chip: ChipId = 'esp32c3'): string[] {
       for (const pin of [w.sck, w.ws, w.sd]) if (!(s.parts.some((q) => q.type === 'max98357a') && (pin === spk.bclk || pin === spk.lrc))) claim(pin, t('INMP441 microphone'));
     } else if (p.type === 'rc522') {
       for (const pin of [p.cs, p.sck, p.mosi, p.miso, p.rst]) if (pin !== undefined) claim(pin, describe(p, chip));
+    } else if (p.type === 'tft') {
+      for (const pin of [p.sclk, p.mosi, p.cs, p.dc, p.rst, p.bl]) claim(pin, describe(p, chip));
     } else claim(p.pin, describe(p, chip));
   }
   const addrs = s.parts.flatMap((p) => ('addr' in p ? [p.addr] : []));

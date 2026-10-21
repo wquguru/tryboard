@@ -13,6 +13,7 @@ import type { ChipId, devboard } from './boards';
 import type { amoledBoard } from './amoled';
 import type { m5Shell } from './m5shell';
 import type { roundLcdModule } from './modules';
+import type { tftModule } from './tft3d';
 import type { WireRec } from './wires';
 import type { PartSpec, SceneSpec } from './spec';
 import type { ExtName } from '../extmodels';
@@ -97,6 +98,7 @@ export interface BenchCtx {
   touchHalf: [number, number];
   buildLed: (grp: THREE.Group, p: Extract<PartSpec, { type: 'led'; }>) => void;
   buildSpiLcd: (grp: THREE.Group, m: ReturnType<typeof roundLcdModule>, firstCol: number, tp?: Extract<PartSpec, { type: 'cst816s'; }>) => void;
+  buildSpiTft: (grp: THREE.Group, m: ReturnType<typeof tftModule>, firstCol: number, p: Extract<PartSpec, { type: 'tft'; }>) => void;
   buildImu: (grp: THREE.Group, p: Extract<PartSpec, { type: 'mpu6050' | 'qmi8658'; }>, firstCol: number) => void;
   buildI2c: (grp: THREE.Group, partId: string, name: string, m: { grp: THREE.Group; pins: THREE.Vector3[]; labels: string[]; }, firstCol: number, sda: number, scl: number, height: number) => void;
   buildServo: (grp: THREE.Group, p: Extract<PartSpec, { type: 'servo'; }>) => void;

@@ -16,6 +16,8 @@ import { type PartSpec, type SceneSpec, DEFAULT_VIEW } from './spec';
 import type { BenchCtx } from './ctx';
 import { AIO_CHIP } from '../chipid';
 import { buildTutorialPart, isTutorialPart, resetPartLamps } from './parts3d';
+import { tftModule } from './tft3d';
+import { TFT_PX } from '../lcdspec.ts';
 
 /** Scene state: rig, breadboard, external-model slots, devboard placement, pick registries and part state. */
 export function* mountState(ctx: BenchCtx): Generator<void> {
@@ -429,7 +431,7 @@ export function mountScene(ctx: BenchCtx): void {
         ctx.oledTex.colorSpace = THREE.SRGBColorSpace;
         ctx.oledTex.needsUpdate = true;
         buildI2c(ctx.parts, 'oled', 'OLED', oledModule(ctx.oledTex), i2cCol, p.sda, p.scl, 40);
-        label(ctx.parts, tl(p.label) ?? `SSD1306 · I2C 0x${p.addr.toString(16).toUpperCase()} · SDA IO${p.sda} SCL IO${p.scl}`, new THREE.Vector3(colX(i2cCol + 1.5), 46, rowZ(0) - 10));
+        label(ctx.parts, tl(p.label) ?? `${p.ctl === 'sh1106' ? 'SH1106' : 'SSD1306'} · I2C 0x${p.addr.toString(16).toUpperCase()} · SDA IO${p.sda} SCL IO${p.scl}`, new THREE.Vector3(colX(i2cCol + 1.5), 46, rowZ(0) - 10));
         i2cCol -= 9;
       }
       if (p.type === 'gc9a01') {
@@ -442,9 +444,17 @@ export function mountScene(ctx: BenchCtx): void {
         const w = LCD_WIRING[ctx.board.spec.chip];
         label(ctx.parts, tl(p.label) ?? t('GC9A01 round LCD · SPI2 · SCLK IO{sclk} MOSI IO{mosi} CS IO{cs} DC IO{dc}', { sclk: w.sclk, mosi: w.mosi, cs: w.cs, dc: w.dc }), new THREE.Vector3(colX(19.5), 52, rowZ(0) - 10));
       }
+      if (p.type === 'tft') {
+        const [w, h] = TFT_PX[p.panel];
+        lcdTexture(w, h);
+        const tm = tftModule(ctx.lcdTex!, p.panel);
+        ctx.buildSpiTft(ctx.parts, tm, 16, p);
+        const ctl = p.panel === 'ili9341' ? 'ILI9341' : 'ST7789';
+        label(ctx.parts, tl(p.label) ?? t('{ctl} {w}×{h} TFT · SPI2 · SCLK IO{sclk} MOSI IO{mosi} CS IO{cs} DC IO{dc}', { ctl, w, h, sclk: p.sclk, mosi: p.mosi, cs: p.cs, dc: p.dc }), new THREE.Vector3(colX(20), tm.height + 12, rowZ(0) - 10));
+      }
       if (p.type === 'mpu6050' || p.type === 'qmi8658') {
         // Sharing the bench with the round LCD (motion figure): the LCD takes column 16 onward, so the IMU moves right of it or it's hidden and undraggable
-        const col = spec.parts.some((x) => x.type === 'gc9a01') ? 27 : i2cCol - 4;
+        const col = spec.parts.some((x) => x.type === 'gc9a01' || x.type === 'tft') ? 27 : i2cCol - 4;
         buildImu(ctx.parts, p, col);
         const imuText = t('{part} · I2C 0x{addr} · SDA IO{sda} SCL IO{scl} · drag to tilt the bench', { part: p.type === 'mpu6050' ? 'MPU6050' : 'QMI8658', addr: p.addr.toString(16), sda: p.sda, scl: p.scl });
         label(ctx.parts, tl(p.label) ?? imuText, new THREE.Vector3(colX(col + 3.5), 30, rowZ(0) - 10));

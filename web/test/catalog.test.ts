@@ -14,8 +14,9 @@ const examples: { id: string; scene: { parts: unknown[] }; pins?: Record<string,
 const clone = (p: Part): Part => structuredClone(p);
 
 // P2-09 added enclosures for three new projects, so the cap went from 60 to 70 (docs/DECISIONS.md 2026-10-16 P2-09)
-test('part library has 40–70 parts with unique ids', () => {
-  assert.ok(PARTS.length >= 40 && PARTS.length <= 70, `now ${PARTS.length} parts`);
+// F-04a2 added the ILI9341 / ST7789 240×320 modules: cap 70 → 80 (docs/DECISIONS.md 2026-10-20 F-04a2)
+test('part library has 40–80 parts with unique ids', () => {
+  assert.ok(PARTS.length >= 40 && PARTS.length <= 80, `now ${PARTS.length} parts`);
   assert.equal(new Set(PARTS.map((p) => p.id)).size, PARTS.length);
   assert.equal(Object.keys(PART_BY_ID).length, PARTS.length);
   assert.ok(BOARDS.length >= 4);
