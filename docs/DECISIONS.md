@@ -1307,3 +1307,9 @@
 - **入口**：嵌入海报在有运行记录时给勾选框（默认不勾，保持 F-03 的快进行为和测试不变），`&replay=1` 预选；实验台 `/app` 只认 `&replay=1`，不加界面开关（实验台已有暂停和时间线）。备选：⋯ 菜单加「复制原速回放链接」—— 先不做，等有人要。
 - **界面同步只做看得见的**：按键（板上按钮 / 面包板按键下沉）、房间温度、姿态、障碍物距离按 tick 的模拟时间跟上；其它输入（串口输入、BLE、网络回复）只在串口 / 面板结果里体现。
 - **回放中不跑 `pumpNet`**：录好的网络回复按原时刻作为事件施加；如果像快进那样预填回复缓存，实时循环会在请求一出现就提前回答，结果就和快进不同。到 endMs 后与 seek 共用 `settleReplay`。
+
+## 2026-10-20 CYD 示例（F-10a2）
+- **复用 `firmware/common/bare_tft.h`**：加 `#elif CONFIG_IDF_TARGET_ESP32` 分支给 CYD 引脚（HSPI = SPI2_HOST：SCLK 14 / MOSI 13 / CS 15 / DC 2，RST 接 EN 记 -1，背光 21），C3 / S3 分支不动；图案与 c3-ili9341 完全相同，accept 直接复用它的 lcd_regions。备选：esp32-cyd 自写一份绘图 —— 否，同一图案两份代码没有收益。
+- **面板驱动沿用 `espressif/esp_lcd_ili9341` 2.1.0**：c3-ili9341 已在用，不引入新依赖；TN 屏按 BGR、不反色（与 IDF spi_lcd_touch 示例一致；真机 CYD 有 ILI9341 / ST7789 两种玻璃，这里只覆盖 ILI9341 版）。
+- **板预设 `cyd` 标 verified**：accept 用例走 `--board cyd`，即端到端跑过；`name` 字段对非 M5 板填产品型号 `ESP32-2432S028`。MISO 12 写进 lcd 引脚串（原理图上有，模型不读）。触摸 / LDR / RGB LED / 喇叭只写在 note / outputs，未接模型。
+- **worktree 引用主仓库 third_party**：worktree 里建了 git 忽略的 `third_party` 符号链接指向主仓库，用来加载 ROM ELF；不提交。

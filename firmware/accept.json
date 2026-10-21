@@ -4586,5 +4586,92 @@
     "tol": 0.25
    }
   ]
+ },
+ {
+  "id": "esp32-cyd",
+  "chip": "esp32",
+  "seconds": 2,
+  "args": [
+   "--board",
+   "cyd"
+  ],
+  "expect": [
+   "CYD ILI9341 240x320 init OK (HSPI, DMA, SCLK=14 MOSI=13 CS=15 DC=2 RST=-1 BL=21)",
+   "pattern drawn in 8 chunks of 40 rows",
+   "TRYBOARD_OK esp32-cyd"
+  ],
+  "lcd_min_pixels": 76800,
+  "lcd_regions": [
+   {
+    "name": "yellow marker top-left",
+    "x": 1,
+    "y": 1,
+    "w": 39,
+    "h": 39,
+    "color": "#ffff00",
+    "min_pixels": 1521,
+    "max_pixels": 1521
+   },
+   {
+    "name": "red band",
+    "x": 1,
+    "y": 40,
+    "w": 238,
+    "h": 39,
+    "color": "#ff0000",
+    "min_pixels": 9282,
+    "max_pixels": 9282
+   },
+   {
+    "name": "green band",
+    "x": 1,
+    "y": 80,
+    "w": 238,
+    "h": 80,
+    "color": "#00ff00",
+    "min_pixels": 19040,
+    "max_pixels": 19040
+   },
+   {
+    "name": "blue band",
+    "x": 1,
+    "y": 160,
+    "w": 238,
+    "h": 80,
+    "color": "#0000ff",
+    "min_pixels": 19040,
+    "max_pixels": 19040
+   },
+   {
+    "name": "white band",
+    "x": 1,
+    "y": 240,
+    "w": 238,
+    "h": 79,
+    "color": "#ffffff",
+    "min_pixels": 18802,
+    "max_pixels": 18802
+   },
+   {
+    "name": "magenta frame top row",
+    "x": 0,
+    "y": 0,
+    "w": 240,
+    "h": 1,
+    "color": "#ff00ff",
+    "min_pixels": 240,
+    "max_pixels": 240
+   },
+   {
+    "name": "magenta frame bottom row",
+    "x": 0,
+    "y": 319,
+    "w": 240,
+    "h": 1,
+    "color": "#ff00ff",
+    "min_pixels": 240,
+    "max_pixels": 240
+   }
+  ]
  }
 ]

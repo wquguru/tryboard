@@ -367,6 +367,25 @@ pub const BOARDS: &[BoardPreset] = &[
         note: "Lite vs Matrix is told by touch pads 4 / 7 (G13 / G27): equal idle counts read as Lite",
         ..NONE
     },
+    // Not an M5 board: `name` is the product code. Pins from the ESP32-2432S028R schematic (F-10a2)
+    BoardPreset {
+        id: "cyd",
+        name: "ESP32-2432S028",
+        chip: Chip::Esp32,
+        flash_mb: 4,
+        lcd: Some("ili9341@sclk=14,mosi=13,miso=12,cs=15,dc=2,rst=-1,bl=21"),
+        buttons: &[btn("BOOT", 0)],
+        outputs: &[
+            ("rgb_r", 4),
+            ("rgb_g", 16),
+            ("rgb_b", 17),
+            ("backlight", 21),
+            ("speaker", 26),
+        ],
+        verified: true,
+        note: "Cheap Yellow Display; XPT2046 touch on CLK 25 / DIN 32 / DO 39 / CS 33 / IRQ 36, LDR on G34, SD on VSPI 18/19/23/5",
+        ..NONE
+    },
 ];
 
 /// An M5 Grove I2C unit: the chips it carries (kind, 7-bit address)
