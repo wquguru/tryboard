@@ -167,6 +167,28 @@ arduino-cli 1.5.1 + esp32 core 3.3.2，FQBN `esp32:esp32:esp32c3`；草图在 `f
 - 内核修复：esptool 在 Arduino 产物里插入加载地址 0 的填充段，C3 / S3 / 经典 ESP32 的直接引导原先报 `segment 0x00000000 lands in a non-writable region`（ArduinoJson、SHT31 两例触发）；现在与二级引导一样跳过 0x1000_0000 以下的段。
 - 所有用例的 unimpl 前几名都是 0x600ce000 / 0x600ce038 / 0x600ce03c与 0x60043014（Arduino 核心初始化时访问，未建模），不影响这些用例的结果。
 
+## Arduino 库矩阵（F-08b Wi-Fi、BLE、舵机、灯带，C3，2026-10-20）
+
+同上工具链与 FQBN；10 个草图在 `firmware/arduino/lib-*`：6 个第三方库（钉发布标签提交，`tools/fetch_third_party.sh` F-08b 块）+ 4 个 arduino-esp32 核心自带库（WiFi / HTTPClient / BLE / WebServer，随核心 3.3.2，LGPL 三件套）。用例 `arduino-lib-*`，主仓库 CLI 跑 9/9 通过（`Reviews/f08b-accept.md`）。全部是行为模拟，未经真机标定。
+
+| 库（版本） | 许可证 | 示例 / 器件 | 状态 | 验收 | 上站点 |
+|---|---|---|---|---|---|
+| FastLED 3.10.3 | MIT | 8 颗 WS2812（GPIO8）：全红 / 渐变 / 单点 / 清空 | ✅ | `arduino-lib-fastled`：解码 4 帧，逐灯颜色一致 | 可 |
+| WiFiManager 2.0.17 | MIT | autoConnect 配网门户（开放热点 TryBoard-Setup） | ✅ | `arduino-lib-wifimanager`：手机加入 → 连通性检查 302 → POST `/wifisave` s=MyHome → 固件连上 MyHome 拿 192.168.5.100 | 可 |
+| PubSubClient 2.8 | MIT | 连 TryBoard-WiFi 后连 `tryboard.local:1883` | ◐ 跑到 MQTT 连接 | `arduino-lib-pubsubclient`：Wi-Fi 连上，`mqtt connect failed rc=-2`（用例断言的是当前行为）；**遗留**：虚拟网络只监听 80 端口，1883 回 RST，要在 core `wifi/tcp.rs` 加虚拟 broker 才能发布 / 订阅 | 可（broker 做完后） |
+| NimBLE-Arduino 2.5.1 | Apache-2.0 | 电量服务 180F / 2A19 通知 | ✗ 编译通过、运行不通 | 无用例。`onSync` 无条件调 `ble_hs_util_ensure_addr(1)` → 厂商命令 0xfc01（读静态地址）；虚拟控制器对未知命令只回状态 0、不带 6 字节地址，主机判「参数长度不符」后 `sched_reset`，12 s 内重置约 2.3 万次、一直不广播。**遗留（改 core `ble/mod.rs`）**：0xfc01 回 6 字节静态地址，或对未实现的厂商命令回 0x01 Unknown Command | 修好后可 |
+| ESP32Servo 3.2.1 | **无 LICENSE 文件** | Sweep 0–180°（GPIO6，500–2500 µs） | ✅ 仅本地 | `arduino-lib-esp32servo`：50 Hz，占空比 0.024..0.125（0° 量化为 488 µs） | **否** |
+| IRremote 4.7.1 | MIT（LICENSE 原文；简报列为未核，先不上站） | SimpleSender 发 3 帧 NEC（GPIO4） | ✅ 仅本地，只验发射 | `arduino-lib-irremote`：载波 37987 Hz、占空比 0..0.297。PWM 日志只记占空比变化，NEC 位时序未解码；**遗留**：无红外接收头模型，接收示例不做 | 待人核 |
+| 核心 WiFi（WiFiScan） | LGPL-2.1（核心） | 扫描 | ✅ | `arduino-lib-wifi-scan`：4 个网络，SSID / 信道 / RSSI / 加密与虚拟世界一致 | 可（三件套） |
+| 核心 HTTPClient | LGPL-2.1（核心） | WPA2 连 TryBoard-WPA2，GET 两个地址 | ✅ | `arduino-lib-httpclient`：`tryboard.local/hello.txt` 与 `example.com/api/time` 均 200 | 可（三件套） |
+| 核心 BLE（Notify） | LGPL-2.1 / Apache-2.0 | 自定义服务通知 5 次 | ✅（启动慢） | `arduino-lib-ble-notify`：`--ble-phone` 连接、订阅、收到通知。核心 3.3.2 的 C3 预编译库是 **NimBLE 主机**（sdkconfig `CONFIG_BT_NIMBLE_ENABLED=y`，不是 E-05 设想的 Bluedroid），同样踩 0xfc01，约 6000 次重置、3.5 s 后才广播（之后正常）；修 0xfc01 后这例会提前约 3.5 s | 可（三件套） |
+| 核心 WebServer + DNSServer | LGPL-2.1（核心） | 固件自建热点 + 强制门户 + `/led?on=1` | ✅ | `arduino-lib-webserver`：手机 DNS 劫持到 192.168.4.1，探测 404，GET `/led?on=1` → 200 | 可（三件套） |
+
+- 构建：FastLED 3.10.8（最新）在 C3 编译失败（`riscv.cpp.hpp` 中断处理函数声明 `noexcept` 不一致），钉 3.10.3；NimBLE-Arduino 主分支是 3.0.0-dev，钉 2.5.1。
+- 虚拟手机：固件热点不跑 DNS 时，手机加入后的连通性探测 DNS 在 5 s 内既不超时也不报错，后续 `phone=get` 一直排在它后面不执行；WebServer 例因此加了 DNSServer（与核心 CaptivePortal 示例一致）。是否该更早超时留给 core（`wifi/phone.rs` `job_tick`）判断。
+- 未做：灯带 Adafruit NeoPixel（LGPL-3.0，不在本条目许可证范围）；音频库 ESP32-audioI2S / ESP8266Audio（GPL）；S3 变体（C3 已全部跑通，无需）。
+- unimpl 前几名同 F-08a（0x600ce000 / 0x600ce038 / 0x600ce03c / 0x60043014），另有 0x60033084、0x60006104（Wi-Fi 例），不影响结果。
+
 ## 电气（`core/crates/elec`，C3 / S3 共用）
 | 模块 | 状态 | 验收 | 备注 |
 |---|---|---|---|

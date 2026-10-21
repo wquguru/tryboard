@@ -27,6 +27,7 @@
 | 波 3 F-04b ILI9341 + SH1106 + 裸屏验收 | ☑ | 2026-10-20 DCS 面板新增 ILI9341 / ST7789 240×240 / 240×320（`--spi ili9341` / `st7789-240x240` / `st7789-240x320`，C3 也接受全部 DCS 屏），SH1106 新模型（`--i2c sh1106@0x3c`，132 列 RAM、偏移 2）；固件 c3-ili9341（esp_lcd_ili9341 2.1.0）/ s3-st7789（IDF 内置驱动）/ c3-sh1106，4 个 accept 用例通过；网页拖放与 3D 在 F-04a2 |
 | 波 3 F-08c BLE 多 IDF 签名 | ☑ | 2026-10-20 补 11 个 bt-lib 提交（IDF 5.1.0–5.3.1）：C3 / S3 各加 osi_reg 3 个、init 2 个变体；osi 版本放宽到 0x10006–0x1000A，5.1.0 / 5.1.1 不挂 pll_track；`tools/ble_cover.sh` 裸链接 42 个库，Rust 自测 37 个全中（S3 `_flash` 库 5 个为已知缺口）；62 个已编镜像原始扫描误匹配 0；9 个 BLE 用例 CLI 输出与改前逐字节一致。Arduino 3.0.x 真验收要装 core 3.0.7，待人批 |
 | 波 3 F-08a Arduino 库矩阵（显示与传感器） | ◐ | 2026-10-20 12 个库示例在 C3 上通过（`arduino-lib-*`，矩阵见 STATUS「Arduino 库矩阵」；RTClib 用例在合并后由主会话加）；OneWire / TFT_eSPI 只进本地 accept；Adafruit ILI9341 草图在 C3 上 0 条命令（草图引脚与 C3 固定 lcd_pin 不符），待修；LICENSING 新增两行待人核 |
+| 波 4 F-08b Arduino 库矩阵（Wi-Fi、BLE、舵机、灯带） | ◐ | 2026-10-20 10 个草图（FastLED / WiFiManager / PubSubClient / NimBLE-Arduino / ESP32Servo / IRremote + 核心 WiFi / HTTPClient / BLE / WebServer）在 C3 编译；9 个 `arduino-lib-*` 用例通过（矩阵见 STATUS「Arduino 库矩阵（F-08b）」）；PubSubClient 缺虚拟 MQTT broker、NimBLE-Arduino 卡在虚拟控制器不答厂商命令 0xfc01，两项都要改 core；ESP32Servo / IRremote 只进本地 accept |
 
 ## 调研结论汇总
 

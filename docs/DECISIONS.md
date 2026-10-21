@@ -1307,3 +1307,11 @@
 - **入口**：嵌入海报在有运行记录时给勾选框（默认不勾，保持 F-03 的快进行为和测试不变），`&replay=1` 预选；实验台 `/app` 只认 `&replay=1`，不加界面开关（实验台已有暂停和时间线）。备选：⋯ 菜单加「复制原速回放链接」—— 先不做，等有人要。
 - **界面同步只做看得见的**：按键（板上按钮 / 面包板按键下沉）、房间温度、姿态、障碍物距离按 tick 的模拟时间跟上；其它输入（串口输入、BLE、网络回复）只在串口 / 面板结果里体现。
 - **回放中不跑 `pumpNet`**：录好的网络回复按原时刻作为事件施加；如果像快进那样预填回复缓存，实时循环会在请求一出现就提前回答，结果就和快进不同。到 endMs 后与 seek 共用 `settleReplay`。
+
+## 2026-10-20 Arduino 库矩阵 Wi-Fi / BLE / 舵机 / 灯带（F-08b）
+- **钉发布标签而非默认分支**：与 F-08a 不同，这 6 个库默认分支离发布差很远（NimBLE-Arduino 主分支 3.0.0-dev、FastLED 主分支在 3.10.8 之后），按发布标签对应的提交钉；FastLED 最新 3.10.8 在 C3 编译失败（RISC-V RMT 中断函数 `noexcept` 声明不一致），退到 3.10.3。备选：给 FastLED 打补丁 —— 否，钉住的库源码不改。
+- **10 例 = 6 个第三方 + 4 个核心自带库**：MIT / BSD / Apache 范围内能凑出的 Wi-Fi / BLE / 舵机 / 灯带第三方库只有 FastLED、WiFiManager、PubSubClient、NimBLE-Arduino（ESP32Servo、IRremote 只进本地）；核心 WiFi / HTTPClient / BLE / WebServer 是 Arduino 用户最常用的入口，也顺带补上 E-05 / F-08c「Arduino 产物未实测」的缺口。备选：Adafruit NeoPixel —— 否，LGPL-3.0 不在本条目范围。
+- **PubSubClient 用例断言当前失败行为**：虚拟网络只有 80 端口，用例断言 `mqtt connect failed rc=-2` 并用 `absent` 确认没有误报成功；broker 做好后改成断言发布 / 订阅。备选：不加用例 —— 否，Wi-Fi 连接和 TCP 拒绝这段行为值得回归。
+- **NimBLE-Arduino 不加用例**：运行卡在虚拟控制器对厂商命令 0xfc01 只回状态（主机要 6 字节静态地址，长度不符就重置），本条目不改 core；加了会让 accept 变红。记为 STATUS 遗留。
+- **WebServer 例加 DNSServer**：虚拟手机加入热点后先做连通性探测，固件不答 DNS 时探测一直挂着、后续请求不执行；照核心 CaptivePortal 示例加 `DNSServer` 应答所有名字，比改手机行为更贴近真实配网页。
+- **核心 BLE 在 C3 上是 NimBLE 主机**：arduino-esp32 3.3.2 的 C3 预编译 sdkconfig 开的是 `CONFIG_BT_NIMBLE_ENABLED`，E-05 里「Arduino 默认 BLE = Bluedroid」对 3.3.x / C3 不成立（只记录，不改 E-05 结论）。
