@@ -48,10 +48,25 @@ pub fn parts_args(m: &mut Machine, args: &[String]) -> bool {
             fail(&format!("--ldr: {e}"));
         }
     }
+    // F-10c: --ir RX[,TX] (receiver module output, IR LED; '-' = none); the LED is aimed at the receiver
+    if let Some(spec) = opt(args, "--ir") {
+        let (rx, tx) = spec.split_once(',').unwrap_or((spec.as_str(), "-"));
+        let pin = |s: &str| match s.trim() {
+            "-" => Some(None),
+            p => gpio(p).map(Some),
+        };
+        let (Some(rx), Some(tx)) = (pin(rx), pin(tx)) else {
+            fail("--ir needs RX[,TX] GPIOs ('-' = none)")
+        };
+        if let Err(e) = m.ir_attach(rx, tx) {
+            fail(&format!("--ir: {e}"));
+        }
+        any = true;
+    }
     any
 }
 
-/// Script actions pir=1|0 (motion / gone), lux=N, card=<uid hex>|none; false when `act` is none of them
+/// Script actions pir=1|0 (motion / gone), lux=N, card=<uid hex>|none, ir=ADDR,CMD|repeat; false when `act` is none of them
 pub fn parts_action(m: &mut Machine, act: &str) -> bool {
     if let Some(v) = act.strip_prefix("pir=") {
         m.pir_motion(v.trim() == "1");
@@ -61,6 +76,10 @@ pub fn parts_action(m: &mut Machine, act: &str) -> bool {
         }
     } else if let Some(v) = act.strip_prefix("card=") {
         if let Err(e) = m.rc522_card(v) {
+            eprintln!("[tryboard] {e}");
+        }
+    } else if let Some(v) = act.strip_prefix("ir=") {
+        if let Err(e) = m.ir_press(v) {
             eprintln!("[tryboard] {e}");
         }
     } else {
@@ -74,6 +93,9 @@ pub fn parts_events(m: &mut Machine) {
     for (t, pin, on) in m.relay_events_take() {
         let s = if on { "ON (closed)" } else { "OFF (open)" };
         eprintln!("[tryboard] {t:.3}s relay GPIO{pin} {s}");
+    }
+    for (t, pin, txt) in m.ir_events_take() {
+        eprintln!("[tryboard] {t:.3}s IR LED GPIO{pin}: {txt}");
     }
 }
 
@@ -90,7 +112,7 @@ pub fn pin_reports(m: &mut Machine) {
         eprintln!("[tryboard] ultrasonic triggers {pings}, echoes {echoes}, last Echo {us:.1} µs");
     }
     crate::report_wire_sensors(m);
-    for l in m.parts_report() {
+    for l in m.parts_report().into_iter().chain(m.ir_report()) {
         eprintln!("[tryboard] {l}");
     }
 }

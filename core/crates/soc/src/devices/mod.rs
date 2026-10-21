@@ -21,6 +21,7 @@ pub mod gpio_parts;
 pub mod imu;
 pub mod ina219;
 pub mod ina3221;
+pub mod ir;
 pub mod keymatrix;
 pub mod lcd;
 pub mod lp5562;

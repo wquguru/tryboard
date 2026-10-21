@@ -156,3 +156,76 @@ impl Machine {
         out
     }
 }
+
+/// IR remote link (F-10c): receiver module output on rx, IR LED eye on tx (classic ESP32 only: its RMT has the carrier)
+impl Machine {
+    pub fn ir_attach(&mut self, rx: Option<u32>, tx: Option<u32>) -> Result<(), String> {
+        if tx.is_some() && self.chip != Chip::Esp32 {
+            return Err(
+                "the IR LED eye needs the classic ESP32 RMT carrier (C3 / S3 not modelled)".into(),
+            );
+        }
+        let now = self.cycles();
+        let l = tryboard_soc::devices::ir::IrLink::new(rx, tx, true, now);
+        self.pins().ir.push(l);
+        self.pins_kick();
+        Ok(())
+    }
+
+    /// The remote sends one code (script action ir=ADDR,CMD | 32-bit hex | repeat)
+    pub fn ir_press(&mut self, code: &str) -> Result<(), String> {
+        let c = tryboard_soc::devices::ir::IrCode::parse(code)?;
+        let now = self.cycles();
+        let l = self
+            .pins()
+            .ir
+            .iter_mut()
+            .find(|l| l.rx_pin.is_some())
+            .ok_or("no IR receiver attached (--ir RX[,TX])")?;
+        l.press(now, c);
+        self.pins_kick();
+        Ok(())
+    }
+
+    /// Frames the eye decoded since the last call: (seconds, LED GPIO, text)
+    pub fn ir_events_take(&mut self) -> Vec<(f64, u32, String)> {
+        let mut out = Vec::new();
+        for l in &mut self.pins().ir {
+            let pin = l.tx_pin.unwrap_or(0);
+            for s in l.seen.drain(..) {
+                let code = s
+                    .code
+                    .map(|c| c.text())
+                    .unwrap_or_else(|| format!("{} bursts, not NEC", s.bursts));
+                let txt = format!("{code} ({:.1} kHz carrier)", s.carrier_hz / 1000.0);
+                out.push((s.t as f64 / CPU_HZ as f64, pin, txt));
+            }
+        }
+        out
+    }
+
+    /// End-of-run IR lines
+    pub fn ir_report(&mut self) -> Vec<String> {
+        let mut out = Vec::new();
+        for l in &self.pins().ir {
+            if let Some(p) = l.rx_pin {
+                out.push(format!(
+                    "IR receiver GPIO{p}: remote sent {} frames",
+                    l.sent
+                ));
+            }
+            if let Some(p) = l.tx_pin {
+                let lb = if l.loopback {
+                    ", aimed at the receiver"
+                } else {
+                    ""
+                };
+                out.push(format!(
+                    "IR LED GPIO{p}: {} NEC frames decoded, {} unmodulated pulses ignored{lb}",
+                    l.decoded, l.unmodulated
+                ));
+            }
+        }
+        out
+    }
+}

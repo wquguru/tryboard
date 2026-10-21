@@ -238,7 +238,7 @@
 | F-08c | BLE 多 IDF 签名 + osi 版本放宽 + pll_track | 覆盖自测；误匹配 0 | ☑ IDF 5.1.0–5.3.1 部分（2026-10-20）；Arduino 3.0.x 未验（要装 arduino-cli core 3.0.7，待人批） |
 | F-09a | xiaozhi 虚拟服务端（长连接 TCP + WebSocket + 脚本） | 单测 + golden | ☐ |
 | F-09b | xiaozhi-lite 示例 + 语音面板（需人拍板 RS-2 四项） | accept 3 例 + xiaozhi.mjs | ☐ |
-| F-10c | 经典 ESP32 RMT 收 + 载波 + IR 器件 | esp32-ir accept | ☐ |
+| F-10c | 经典 ESP32 RMT 收 + 载波 + IR 器件 | esp32-ir accept | ☑ |
 | F-11 | 环境脚本时间轴（先交互稿，人确认后实现） | --inputs 重放指纹一致 | ☐ |
 
 ## P3 · 以后再说

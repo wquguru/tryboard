@@ -4586,5 +4586,26 @@
     "tol": 0.25
    }
   ]
+ },
+ {
+  "id": "esp32-ir",
+  "chip": "esp32",
+  "seconds": 1.6,
+  "args": [
+   "--ir",
+   "19,18"
+  ],
+  "script": "0.8:ir=00FF,E31C; 0.9:ir=repeat; 1.1:ir=0x5AA5807F",
+  "expect": [
+   "IR 收到 自己发的 地址=0440 命令=3003",
+   "IR 收到 遥控器 地址=00FF 命令=E31C",
+   "IR 收到 重复码 地址=00FF 命令=E31C",
+   "IR 收到 遥控器 地址=807F 命令=5AA5",
+   "TRYBOARD_OK esp32-ir"
+  ],
+  "stderr_expect": [
+   "IR LED GPIO18: NEC address=0x0440 command=0x3003 (38.0 kHz carrier)",
+   "IR receiver GPIO19: remote sent 3 frames"
+  ]
  }
 ]

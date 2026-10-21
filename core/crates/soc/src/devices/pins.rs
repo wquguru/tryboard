@@ -337,6 +337,8 @@ pub struct PinDevices {
     pub onewire: Vec<super::ds18b20::OneWireBus>,
     /// PIR / relay / LDR / RC522 chip select (F-04d)
     pub parts: super::gpio_parts::GpioParts,
+    /// IR remote / receiver module / IR LED eye (F-10c)
+    pub ir: Vec<super::ir::IrLink>,
 }
 
 impl PinDevices {
@@ -346,6 +348,7 @@ impl PinDevices {
             && self.dhts.is_empty()
             && self.onewire.is_empty()
             && self.parts.is_empty()
+            && self.ir.is_empty()
     }
 
     pub fn on_level(&mut self, t: u64, level: u64) {
@@ -359,6 +362,11 @@ impl PinDevices {
             b.on_level(t, level);
         }
         self.parts.on_level(t, level);
+    }
+
+    /// IR LED eyes watching `pin` (the SoC passes RMT output edges with their exact times)
+    pub fn ir_eye(&mut self, pin: u32) -> Option<&mut super::ir::IrLink> {
+        self.ir.iter_mut().find(|l| l.tx_pin == Some(pin))
     }
 
     /// Drives due by now (time-ordered) and the next time to ask again
@@ -378,6 +386,9 @@ impl PinDevices {
             next = next.min(b.poll(now, &mut out));
         }
         next = next.min(self.parts.poll(now, &mut out));
+        for l in &mut self.ir {
+            next = next.min(l.poll(now, &mut out));
+        }
         out.sort_by_key(|d| d.0);
         (out, next)
     }
