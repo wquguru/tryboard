@@ -47,6 +47,8 @@ pub struct BoardPreset {
     pub battery_adc: Option<(usize, f32)>,
     /// `Machine::lcd_attach_spec` string
     pub lcd: Option<&'static str>,
+    /// SPI touch controller, also a `Machine::lcd_attach_spec` string (attached after the panel so it takes its size)
+    pub spi_touch: Option<&'static str>,
     pub i2c: &'static [I2cBus],
     pub touch_int: Option<u32>,
     /// Grove Port A (SDA, SCL) for `Machine::grove_attach`; M5Unified `port_a_sda` / `port_a_scl` per board
@@ -99,6 +101,7 @@ const NONE: BoardPreset = BoardPreset {
     psram_quad: false,
     battery_adc: None,
     lcd: None,
+    spi_touch: None,
     i2c: &[],
     touch_int: None,
     grove_a: None,
@@ -374,6 +377,7 @@ pub const BOARDS: &[BoardPreset] = &[
         chip: Chip::Esp32,
         flash_mb: 4,
         lcd: Some("ili9341@sclk=14,mosi=13,miso=12,cs=15,dc=2,rst=-1,bl=21"),
+        spi_touch: Some("xpt2046@cs=33,irq=36"),
         buttons: &[btn("BOOT", 0)],
         outputs: &[
             ("rgb_r", 4),
@@ -383,7 +387,7 @@ pub const BOARDS: &[BoardPreset] = &[
             ("speaker", 26),
         ],
         verified: true,
-        note: "Cheap Yellow Display; XPT2046 touch on CLK 25 / DIN 32 / DO 39 / CS 33 / IRQ 36, LDR on G34, SD on VSPI 18/19/23/5",
+        note: "Cheap Yellow Display; XPT2046 touch on VSPI CLK 25 / DIN 32 / DO 39 / CS 33 / IRQ 36 (raw span estimated), LDR on G34, SD on VSPI 18/19/23/5",
         ..NONE
     },
 ];
@@ -452,6 +456,11 @@ impl Machine {
             }
         }
         if let Some(spec) = b.lcd {
+            if let Err(e) = self.lcd_attach_spec(spec) {
+                warn.push(e);
+            }
+        }
+        if let Some(spec) = b.spi_touch {
             if let Err(e) = self.lcd_attach_spec(spec) {
                 warn.push(e);
             }

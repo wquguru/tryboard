@@ -3,6 +3,7 @@
 
 use super::pins::Drive;
 use super::rc522::Rc522;
+use super::xpt2046::Xpt2046;
 use crate::periph::CPU_HZ;
 
 /// HC-SR501 block time after the output falls: triggers are ignored for ~2.5 s (BISS0001 default)
@@ -164,11 +165,16 @@ pub struct GpioParts {
     pub ldrs: Vec<Ldr>,
     /// RC522 on the SPI bus: the chip's SPI transfer hands it bytes; here only its GPIO chip select is tracked
     pub rc522: Option<Box<Rc522>>,
+    /// XPT2046 touch controller on SPI (CYD), same chip-select tracking as the RC522
+    pub xpt2046: Option<Box<Xpt2046>>,
 }
 
 impl GpioParts {
     pub fn is_empty(&self) -> bool {
-        self.pirs.is_empty() && self.relays.is_empty() && self.rc522.is_none()
+        self.pirs.is_empty()
+            && self.relays.is_empty()
+            && self.rc522.is_none()
+            && self.xpt2046.is_none()
     }
 
     pub fn on_level(&mut self, t: u64, level: u64) {
@@ -179,6 +185,11 @@ impl GpioParts {
         if let Some(r) = &mut self.rc522 {
             if level >> r.cs & 1 != 0 {
                 r.cs_release();
+            }
+        }
+        if let Some(t) = &mut self.xpt2046 {
+            if level >> t.cs & 1 != 0 {
+                t.cs_release();
             }
         }
     }

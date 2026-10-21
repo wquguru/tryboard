@@ -35,6 +35,7 @@ pub mod sh1106;
 pub mod sht;
 pub mod ssd1306;
 pub mod tca8418;
+pub mod xpt2046;
 
 use crate::i2c::I2cDevice;
 

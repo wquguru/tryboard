@@ -1317,7 +1317,7 @@ fn spi_args(m: &mut Machine, args: &[String]) {
     }
     for dev in devs {
         if let Err(e) = m.lcd_attach_spec(&dev) {
-            eprintln!("unsupported SPI device: {e} (gc9a01, rc522 on C3 / S3; gc9107, st7735, st7789, st7789l, ili9342, ili9342e, co5300 on S3; ili9341, st7789-240x240, st7789-240x320 on C3 / S3)");
+            eprintln!("unsupported SPI device: {e} (gc9a01, rc522 on C3 / S3; gc9107, st7735, st7789, st7789l, ili9342, ili9342e, co5300 on S3; ili9341, st7789-240x240, st7789-240x320 on C3 / S3; xpt2046[@cs=,irq=] touch on ESP32)");
             std::process::exit(2)
         }
     }

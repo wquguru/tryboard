@@ -10,6 +10,7 @@ pub mod periph;
 pub mod psram;
 pub mod sens;
 mod spi_lcd;
+mod spi_touch;
 
 use periph::*;
 use std::collections::HashMap;

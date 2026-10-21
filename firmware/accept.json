@@ -4673,5 +4673,25 @@
     "max_pixels": 240
    }
   ]
+ },
+ {
+  "id": "esp32-cyd-touch",
+  "fw": "esp32-cyd",
+  "chip": "esp32",
+  "seconds": 2,
+  "args": [
+   "--board",
+   "cyd"
+  ],
+  "script": "1.0:touch=60,250; 1.3:release",
+  "expect": [
+   "XPT2046 ready (VSPI, CS=33 IRQ=36), idle pressure 0",
+   "touch raw x=1079 y=3030 z=1495 -> pixel 60,250",
+   "touch released, pressure 0",
+   "TRYBOARD_OK esp32-cyd-touch"
+  ],
+  "stderr_expect": [
+   "XPT2046 CS GPIO33: 8 conversions"
+  ]
  }
 ]
