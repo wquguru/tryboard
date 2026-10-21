@@ -180,3 +180,15 @@ PHY / 射频：除前面说的 rf_polls 外，`ram_wait_rfpll_cal_end` 轮询 re
 
 验收：accept.json `esp32-wifi`（开放热点 → IP → tryboard.local 200 17 字节 → example.com 200 → TRYBOARD_OK wifi-http）、`esp32-wifi-wpa2`（同一份源码，TryBoard-WPA2 / tryboard123）。命令行应用层输出与 C3 wifi-http 逐行相同（过滤掉芯片相关的 IDF 日志）；网页示例 esp32-wifi（`tools/accept.sh` 网页冒烟 + Reviews/ab/C-05.md）。
 没做：省电（modem sleep 只走到 pm start）、802.11n 聚合、蓝牙共存、SoftAP（C-02 是 C3 的）。
+
+
+## 阶段 7：长连接 TCP + WebSocket（F-09a-1，仅单测）
+
+为 xiaozhi 式虚拟服务端（F-09a-2）打底。依据 RFC 6455 自写，没有参考任何 GPL 实现。
+
+- **分流**（`tcp.rs`）：收齐请求头后，`GET` + `Upgrade: websocket` + `Sec-WebSocket-Key`，且路径是内置 `/echo` 或以 `Tcp::ws_routes` 里某项开头 → 升级；否则走原来的一次性 HTTP（未登记路径照旧 404 + FIN），所以现有用例字节不变（golden 191/191）。网络页签加一行 `WS ws://host/path 101`，关闭后改成 `Closed <code>`。
+- **长连接记账**（只用于升级后的连接）：`snd_una`（芯片已确认到哪）、`peer_wnd`（芯片每段通告的窗口，没协商窗口缩放）、`sendq`（等窗口的字节）。发送 = 在 `snd_nxt - snd_una < peer_wnd` 内按 MSS 切段；芯片 ACK 推进 `snd_una` 后接着发。没有重传（虚拟网不丢包）；收到乱序 / 重传段只回重复 ACK。
+- **半关闭**：芯片先 FIN → 回 ACK，应用收到 `Closed 1006`（若之前没走 close 握手），队列里剩的照发，排空后带上我方 FIN；双方都 FIN 后删连接。服务端先关（`ws_close`）→ close 帧 + FIN，之后芯片发来的数据照收照 ACK，直到它 FIN。
+- **帧**（`ws.rs`）：`accept_key` 用 `crypto::sha1` + `tcp::b64_encode`；`Decoder` 增量解码，芯片帧必须带掩码（否则 1002）、RSV 必须为 0、7 / 16 / 64 位长度、分片重组（控制帧可夹在分片中间）、控制帧 ≤ 125 字节且不分片、文本须 UTF-8（否则 1007）、单条消息上限 1 MiB（否则 1009）。服务端帧不掩码。ping 自动回 pong；收到 close 原码回显（没带码就回空 close）后 FIN。
+- **给应用的接口**：`Tcp::ws_inbox: Vec<WsIn>`（`Open{key, path, head}` / `Msg{key, op, data}` / `Closed{key, code}`，应用自己取走）；`Tcp::ws_send(key, op, fin, data)`（`fin=false` 发分片，后续用 `OP_CONT`）、`Tcp::ws_close(key, code, reason)`、`Tcp::ws_conns()`；`Net::ws_send / ws_close` 把段放进 `pending`，由 `World::poll` 下一次送出（和 C-03 `real_reply` 一样）。连接用 `tcp::Key`（芯片地址、芯片端口、服务器地址、服务器端口）标识。`/echo` 不进 inbox，直接回显。
+- 没做：TLS（wss）、permessage-deflate 等扩展、子协议协商（`Sec-WebSocket-Protocol` 不回）、HTTP keep-alive（HTTP 仍是 `Connection: close`）、定时推送（节奏由 F-09a-2 在 `World` 侧排定时器）。

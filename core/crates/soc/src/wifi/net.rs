@@ -161,6 +161,30 @@ impl Net {
         }
     }
 
+    /// Queue server -> chip segments for World::poll (late replies, WebSocket pushes)
+    fn queue_segs(&mut self, segs: Vec<(super::tcp::Key, Vec<u8>, Option<String>)>) {
+        let to = self.peer_mac;
+        for ((chip, _, server, _), seg, line) in segs {
+            if let Some(l) = line {
+                self.log.push(l);
+            }
+            let e = self.reply_ip(&to, chip, server, 6, &seg);
+            self.pending.push(e);
+        }
+    }
+
+    /// WebSocket server push (F-09a-1): one message or fragment to an open connection; sent on the next World::poll
+    pub fn ws_send(&mut self, key: super::tcp::Key, op: u8, fin: bool, data: &[u8]) {
+        let segs = self.tcp.ws_send(key, op, fin, data);
+        self.queue_segs(segs);
+    }
+
+    /// WebSocket server-initiated close (close frame + FIN)
+    pub fn ws_close(&mut self, key: super::tcp::Key, code: u16, reason: &str) {
+        let segs = self.tcp.ws_close(key, code, reason);
+        self.queue_segs(segs);
+    }
+
     pub fn on_eth(&mut self, e: &Eth, now_us: u64) -> Vec<Eth> {
         self.tcp.now_us = now_us;
         match e.ethertype {

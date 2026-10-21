@@ -1,7 +1,8 @@
 //! Virtual internet servers: DNS (every name resolves to the gateway), TCP (passive open only), HTTP/1.1 (port 80, Connection: close).
-//! No retransmission or congestion control: the virtual network never drops, so replies go out in one go.
+//! No retransmission: the network never drops. `Upgrade: websocket` on a registered route stays open for server pushes (ws.rs).
 
 use super::net::l4_checksum;
+use super::ws;
 use std::collections::HashMap;
 
 const SYN: u8 = 0x02;
@@ -23,6 +24,51 @@ struct Conn {
     t0: u64,
     /// Real network (C-03): id of the request handed to the browser and still awaiting a reply
     real: Option<u32>,
+    /// Long-lived connections (F-09a-1, WebSocket only; HTTP keeps its one-shot path):
+    /// oldest unacked byte, chip's advertised window, bytes waiting for window space
+    snd_una: u32,
+    peer_wnd: u32,
+    sendq: Vec<u8>,
+    /// Chip sent FIN (half-closed: we may still send) / we owe a FIN once sendq drains
+    peer_fin: bool,
+    fin_pending: bool,
+    ws: Option<Box<WsConn>>,
+}
+
+/// WebSocket state on an upgraded connection
+struct WsConn {
+    dec: ws::Decoder,
+    /// Built-in echo route: messages come straight back instead of going to the inbox
+    echo: bool,
+    close_sent: bool,
+    /// Closed event already reported to the inbox
+    reported: bool,
+    /// Network-tab row of this connection
+    row: usize,
+}
+
+/// Built-in WebSocket route: echoes every text / binary message (smoke tests, no app needed)
+pub const WS_ECHO_PATH: &str = "/echo";
+
+/// What WebSocket apps drain from `Tcp::ws_inbox` (F-09a-2 xiaozhi script and later)
+#[derive(Clone, Debug, PartialEq)]
+pub enum WsIn {
+    /// Upgrade accepted: request path and the full request head (Authorization, Device-Id...)
+    Open {
+        key: Key,
+        path: String,
+        head: String,
+    },
+    Msg {
+        key: Key,
+        op: u8,
+        data: Vec<u8>,
+    },
+    /// Close code from the chip (1006 = TCP gone without a close frame)
+    Closed {
+        key: Key,
+        code: u16,
+    },
 }
 
 /// One network-tab row (C-02 / C-03): a DNS query / HTTP request / blocked connection from the chip
@@ -120,6 +166,10 @@ pub struct Tcp {
     pub silent: bool,
     /// Connections already listed as unanswered (SYN retries make one row, not many)
     silent_seen: std::collections::HashSet<Key>,
+    /// WebSocket routes served by an app (path prefixes); other upgrade requests get the usual HTTP 404
+    pub ws_routes: Vec<String>,
+    /// WebSocket events for the app to drain (open / message / closed)
+    pub ws_inbox: Vec<WsIn>,
 }
 
 /// Guess a protocol name from the port (how a blocked connection is labelled in the network tab)
@@ -476,6 +526,8 @@ impl Tcp {
         let dport = u16::from_be_bytes([s[2], s[3]]);
         let seq = u32::from_be_bytes([s[4], s[5], s[6], s[7]]);
         let flags = s[13];
+        let ackno = u32::from_be_bytes([s[8], s[9], s[10], s[11]]);
+        let wnd = u16::from_be_bytes([s[14], s[15]]) as u32;
         let hl = ((s[12] >> 4) as usize * 4).min(s.len());
         let data = &s[hl..];
         let key = (src, sport, dst, dport);
@@ -498,8 +550,9 @@ impl Tcp {
         let mk = |c: &Conn, fl: u8, opts: &[u8], d: &[u8]| to_chip(&key, c, fl, opts, d);
 
         if flags & RST != 0 {
-            if let Some(c) = self.conns.remove(&key) {
+            if let Some(mut c) = self.conns.remove(&key) {
                 self.abandon(&c);
+                self.ws_gone(&key, &mut c);
             }
             return out;
         }
@@ -538,6 +591,8 @@ impl Tcp {
                 snd_nxt: self.isn,
                 rcv_nxt: seq.wrapping_add(1),
                 t0: now_us,
+                snd_una: self.isn,
+                peer_wnd: wnd,
                 ..Default::default()
             };
             out.push((
@@ -551,6 +606,16 @@ impl Tcp {
         let Some(mut c) = self.conns.remove(&key) else {
             return out;
         };
+        if c.ws.is_some() {
+            return self.on_ws_segment(key, c, seq, flags, ackno, wnd, data);
+        }
+        // Window / ACK bookkeeping (only WebSocket sends use it; the HTTP path below is unchanged)
+        if flags & ACK != 0 {
+            c.peer_wnd = wnd;
+            if ackno.wrapping_sub(c.snd_una) <= c.snd_nxt.wrapping_sub(c.snd_una) {
+                c.snd_una = ackno;
+            }
+        }
         let mut need_ack = false;
         if !data.is_empty() && seq == c.rcv_nxt {
             c.rcv_nxt = c.rcv_nxt.wrapping_add(data.len() as u32);
@@ -564,6 +629,26 @@ impl Tcp {
         }
         let head = c.req.windows(4).position(|w| w == b"\r\n\r\n");
         if let (false, Some(hp)) = (c.responded, head) {
+            if let Some(line) = self.try_upgrade(&key, &mut c, hp, now_us) {
+                // WebSocket (F-09a-1): 101 + anything already due; the connection stays open
+                if peer_fin {
+                    c.peer_fin = true;
+                    c.fin_pending = true;
+                    self.ws_gone(&key, &mut c);
+                }
+                let segs = flush(&key, &mut c);
+                if segs.is_empty() {
+                    out.push((mk(&c, ACK, &[], &[]), Some(line)));
+                } else {
+                    for (i, sg) in segs.into_iter().enumerate() {
+                        out.push((sg, (i == 0).then(|| line.clone())));
+                    }
+                }
+                if !(c.peer_fin && c.fin_sent) {
+                    self.conns.insert(key, c);
+                }
+                return out;
+            }
             if self.realnet && goes_real(&c.req[..hp], dst) {
                 // Real network (C-03): requests with a body wait for the full Content-Length, then go to the web; real_reply answers
                 if body_complete(&c.req, hp) {
@@ -593,6 +678,261 @@ impl Tcp {
         // Both sides sent FIN: connection over
         if !(peer_fin && c.fin_sent) {
             self.conns.insert(key, c);
+        }
+        out
+    }
+}
+
+/// Send what the window allows from sendq (MSS-sized), then the owed FIN once it is empty
+fn flush(k: &Key, c: &mut Conn) -> Vec<Vec<u8>> {
+    let mut out = Vec::new();
+    loop {
+        let inflight = c.snd_nxt.wrapping_sub(c.snd_una) as usize;
+        let room = (c.peer_wnd as usize).saturating_sub(inflight);
+        let n = c.sendq.len().min(MSS).min(room);
+        let fin = c.fin_pending && !c.fin_sent && n == c.sendq.len();
+        if n == 0 && !fin {
+            break;
+        }
+        let d: Vec<u8> = c.sendq.drain(..n).collect();
+        let fl = ACK | if n > 0 { PSH } else { 0 } | if fin { FIN } else { 0 };
+        out.push(to_chip(k, c, fl, &[], &d));
+        c.snd_nxt = c.snd_nxt.wrapping_add(n as u32 + fin as u32);
+        if fin {
+            c.fin_sent = true;
+            break;
+        }
+    }
+    out
+}
+
+impl Tcp {
+    /// `Upgrade: websocket` on the echo route or a registered one: 101 into sendq, the rest of the bytes start the frame stream
+    fn try_upgrade(&mut self, key: &Key, c: &mut Conn, hp: usize, now_us: u64) -> Option<String> {
+        let head = String::from_utf8_lossy(&c.req[..hp]).into_owned();
+        let u = ws::parse_upgrade(&head)?;
+        let echo = u.path == WS_ECHO_PATH;
+        if !echo
+            && !self
+                .ws_routes
+                .iter()
+                .any(|r| u.path.starts_with(r.as_str()))
+        {
+            return None;
+        }
+        let host = header(&head, "host").unwrap_or("?").to_string();
+        self.requests += 1;
+        self.rows.push(NetRow {
+            t_us: c.t0,
+            method: "WS".into(),
+            dest: "Virtual",
+            url: format!("ws://{host}{}", u.path),
+            status: "101".into(),
+            dur_us: Some(now_us.saturating_sub(c.t0)),
+            note: String::new(),
+        });
+        c.responded = true;
+        c.sendq.extend_from_slice(&ws::handshake_response(&u));
+        c.ws = Some(Box::new(WsConn {
+            dec: ws::Decoder::default(),
+            echo,
+            close_sent: false,
+            reported: false,
+            row: self.rows.len() - 1,
+        }));
+        if !echo {
+            self.ws_inbox.push(WsIn::Open {
+                key: *key,
+                path: u.path.clone(),
+                head,
+            });
+        }
+        let rest = c.req.split_off(hp + 4);
+        c.req.clear();
+        let line = format!("WebSocket open ws://{host}{}", u.path);
+        Some(match self.ws_feed(key, c, &rest) {
+            Some(l) => format!("{line}; {l}"),
+            None => line,
+        })
+    }
+
+    /// Chip bytes on an open WebSocket: answer ping / close here, hand messages to the app (or echo them).
+    /// Returns a log line when the WebSocket closed
+    fn ws_feed(&mut self, key: &Key, c: &mut Conn, data: &[u8]) -> Option<String> {
+        let w = c.ws.as_mut()?;
+        let mut line = None;
+        for e in w.dec.feed(data) {
+            match e {
+                ws::Event::Message { op, data } if w.echo => {
+                    if !w.close_sent {
+                        c.sendq.extend(ws::encode(op, true, &data, None));
+                    }
+                }
+                ws::Event::Message { op, data } => self.ws_inbox.push(WsIn::Msg {
+                    key: *key,
+                    op,
+                    data,
+                }),
+                ws::Event::Ping(p) => {
+                    if !w.close_sent {
+                        c.sendq.extend(ws::encode(ws::OP_PONG, true, &p, None));
+                    }
+                }
+                ws::Event::Pong(_) => {}
+                ws::Event::Close { code, .. } | ws::Event::Error(code) => {
+                    // Echo the chip's close code (empty when it sent none), or send ours on a protocol error; then FIN
+                    if !w.close_sent {
+                        let p = match code {
+                            1005 => vec![],
+                            n => ws::close_payload(n, ""),
+                        };
+                        c.sendq.extend(ws::encode(ws::OP_CLOSE, true, &p, None));
+                        w.close_sent = true;
+                    }
+                    c.fin_pending = true;
+                    if !w.reported {
+                        w.reported = true;
+                        if let Some(r) = self.rows.get_mut(w.row) {
+                            r.status = format!("Closed {code}");
+                            self.rev += 1;
+                        }
+                        if !w.echo {
+                            self.ws_inbox.push(WsIn::Closed { key: *key, code });
+                        }
+                        line = Some(format!("WebSocket close {code}"));
+                    }
+                }
+            }
+        }
+        line
+    }
+
+    /// A segment on an upgraded (long-lived) connection: ACK bookkeeping, frames in, queued data out, half-close
+    #[allow(clippy::too_many_arguments)]
+    fn on_ws_segment(
+        &mut self,
+        key: Key,
+        mut c: Conn,
+        seq: u32,
+        flags: u8,
+        ackno: u32,
+        wnd: u32,
+        data: &[u8],
+    ) -> Vec<(Vec<u8>, Option<String>)> {
+        if flags & ACK != 0 {
+            c.peer_wnd = wnd;
+            if ackno.wrapping_sub(c.snd_una) <= c.snd_nxt.wrapping_sub(c.snd_una) {
+                c.snd_una = ackno;
+            }
+        }
+        let mut need_ack = false;
+        let mut line = None;
+        if !data.is_empty() {
+            // In order: take it. Anything else (a retransmit) only earns a duplicate ACK
+            need_ack = true;
+            if seq == c.rcv_nxt && !c.peer_fin {
+                c.rcv_nxt = c.rcv_nxt.wrapping_add(data.len() as u32);
+                line = self.ws_feed(&key, &mut c, data);
+            }
+        }
+        let fin_seq = seq.wrapping_add(data.len() as u32);
+        if flags & FIN != 0 && !c.peer_fin && fin_seq == c.rcv_nxt {
+            // Half-close: the chip is done sending; queued data still goes out, then our FIN
+            c.rcv_nxt = c.rcv_nxt.wrapping_add(1);
+            c.peer_fin = true;
+            c.fin_pending = true;
+            need_ack = true;
+            self.ws_gone(&key, &mut c);
+        }
+        let segs = flush(&key, &mut c);
+        let mut out: Vec<(Vec<u8>, Option<String>)> = segs.into_iter().map(|s| (s, None)).collect();
+        if out.is_empty() && need_ack {
+            out.push((to_chip(&key, &c, ACK, &[], &[]), None));
+        }
+        if let (Some(l), Some(f)) = (line, out.first_mut()) {
+            f.1 = Some(l);
+        }
+        if !(c.peer_fin && c.fin_sent) {
+            self.conns.insert(key, c);
+        }
+        out
+    }
+
+    /// Connection gone without a close handshake (chip FIN / RST): tell the app once
+    fn ws_gone(&mut self, key: &Key, c: &mut Conn) {
+        let Some(w) = c.ws.as_mut().filter(|w| !w.reported) else {
+            return;
+        };
+        w.reported = true;
+        if let Some(r) = self.rows.get_mut(w.row) {
+            r.status = "Closed 1006".into();
+            self.rev += 1;
+        }
+        if !w.echo {
+            self.ws_inbox.push(WsIn::Closed {
+                key: *key,
+                code: 1006,
+            });
+        }
+    }
+
+    /// Open WebSocket connections the server may still push to, sorted
+    pub fn ws_conns(&self) -> Vec<Key> {
+        let mut v: Vec<Key> = self
+            .conns
+            .iter()
+            .filter(|(_, c)| c.ws.as_ref().is_some_and(|w| !w.close_sent) && !c.fin_pending)
+            .map(|(k, _)| *k)
+            .collect();
+        v.sort();
+        v
+    }
+
+    /// Server push (F-09a-1): a whole message, or with `fin` false one fragment (continue with OP_CONT).
+    /// Returns what the chip's window allows now; the rest goes out as it ACKs. Same shape as real_reply
+    pub fn ws_send(
+        &mut self,
+        key: Key,
+        op: u8,
+        fin: bool,
+        data: &[u8],
+    ) -> Vec<(Key, Vec<u8>, Option<String>)> {
+        let Some(c) = self.conns.get_mut(&key) else {
+            return vec![];
+        };
+        if !c.ws.as_ref().is_some_and(|w| !w.close_sent) || c.fin_pending {
+            return vec![];
+        }
+        c.sendq.extend(ws::encode(op, fin, data, None));
+        flush(&key, c).into_iter().map(|s| (key, s, None)).collect()
+    }
+
+    /// Server-initiated close: close frame then FIN; the connection ends when the chip's FIN arrives
+    pub fn ws_close(
+        &mut self,
+        key: Key,
+        code: u16,
+        reason: &str,
+    ) -> Vec<(Key, Vec<u8>, Option<String>)> {
+        let Some(c) = self.conns.get_mut(&key) else {
+            return vec![];
+        };
+        let Some(w) = c.ws.as_mut().filter(|w| !w.close_sent) else {
+            return vec![];
+        };
+        w.close_sent = true;
+        let row = (!w.reported).then_some(w.row);
+        w.reported = true;
+        let p = ws::close_payload(code, reason);
+        c.sendq.extend(ws::encode(ws::OP_CLOSE, true, &p, None));
+        c.fin_pending = true;
+        let mut out: Vec<_> = flush(&key, c).into_iter().map(|s| (key, s, None)).collect();
+        if let Some(r) = row.and_then(|i| self.rows.get_mut(i)) {
+            r.status = format!("Closed {code}");
+            self.rev += 1;
+        }
+        if let Some(f) = out.first_mut() {
+            f.2 = Some(format!("WebSocket close {code} (server)"));
         }
         out
     }

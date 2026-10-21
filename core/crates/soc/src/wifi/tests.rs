@@ -354,3 +354,269 @@ fn silent_server_drops_syn_and_lists_it_once() {
     let r = n.tcp.on_segment(c, s, &syn, 2000);
     assert_eq!(r[0].0[13], 0x12, "SYN-ACK after recovery");
 }
+
+// ---------- F-09a-1 long-lived TCP + WebSocket ----------
+
+use super::tcp::{Key, WsIn, WS_ECHO_PATH};
+use super::ws;
+
+const WS_CONN: Key = (net::STA_IP, 0x3039, net::GW_IP, 80);
+
+type Segs = Vec<(Vec<u8>, Option<String>)>;
+
+/// Chip -> server segment (chip port 0x3039 -> gateway :80)
+fn chip_seg(seq: u32, ack: u32, flags: u8, wnd: u16, data: &[u8]) -> Vec<u8> {
+    let mut t = vec![0x30, 0x39, 0, 80];
+    t.extend_from_slice(&seq.to_be_bytes());
+    t.extend_from_slice(&ack.to_be_bytes());
+    t.extend_from_slice(&[0x50, flags]);
+    t.extend_from_slice(&wnd.to_be_bytes());
+    t.extend_from_slice(&[0, 0, 0, 0]);
+    t.extend_from_slice(data);
+    t
+}
+
+/// The chip's side of one connection: next seq, server bytes received in order (acked up to `acked`)
+struct WsPeer {
+    seq: u32,
+    acked: u32,
+    rx: Vec<u8>,
+}
+
+impl WsPeer {
+    /// SYN + upgrade request to `path`; returns the peer and the server's reply to the request
+    fn open(n: &mut Net, path: &str, wnd: u16) -> (WsPeer, Segs) {
+        let (c, s) = (net::STA_IP, net::GW_IP);
+        let r = n.tcp.on_segment(c, s, &chip_seg(100, 0, 0x02, wnd, &[]), 0);
+        let isn = u32::from_be_bytes([r[0].0[4], r[0].0[5], r[0].0[6], r[0].0[7]]);
+        let req = format!("GET {path} HTTP/1.1\r\nHost: tryboard.local\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nAuthorization: Bearer t0k\r\n\r\n");
+        let mut p = WsPeer {
+            seq: 101,
+            acked: isn + 1,
+            rx: vec![],
+        };
+        let out = p.send(n, 0x18, wnd, req.as_bytes());
+        (p, out)
+    }
+
+    fn send(&mut self, n: &mut Net, flags: u8, wnd: u16, d: &[u8]) -> Segs {
+        let t = chip_seg(self.seq, self.acked, flags, wnd, d);
+        self.seq += d.len() as u32 + (flags & 0x01) as u32;
+        let out = n.tcp.on_segment(net::STA_IP, net::GW_IP, &t, 1000);
+        self.take(&out);
+        out
+    }
+
+    fn take(&mut self, segs: &[(Vec<u8>, Option<String>)]) {
+        for (sg, _) in segs {
+            let sq = u32::from_be_bytes([sg[4], sg[5], sg[6], sg[7]]);
+            assert_eq!(sq, self.acked, "server segments arrive in order");
+            self.rx.extend_from_slice(&sg[20..]);
+            self.acked += (sg.len() - 20) as u32 + (sg[13] & 0x01) as u32;
+        }
+    }
+}
+
+/// Server push results in the on_segment shape
+fn segs(v: Vec<(Key, Vec<u8>, Option<String>)>) -> Segs {
+    v.into_iter().map(|(_, s, l)| (s, l)).collect()
+}
+
+fn masked(op: u8, fin: bool, d: &[u8]) -> Vec<u8> {
+    ws::encode(op, fin, d, Some([0x12, 0x34, 0x56, 0x78]))
+}
+
+#[test]
+fn ws_echo_handshake_mask_fragments_ping() {
+    let mut n = Net::default();
+    let (mut p, out) = WsPeer::open(&mut n, WS_ECHO_PATH, 0x2000);
+    let text = String::from_utf8_lossy(&p.rx).into_owned();
+    assert!(text.starts_with("HTTP/1.1 101 Switching Protocols\r\n"));
+    assert!(text.contains("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"));
+    assert_eq!(out.len(), 1, "101 carries the ACK, no separate pure ACK");
+    assert_eq!(out[0].0[13] & 0x01, 0, "no FIN: the connection stays open");
+    assert!(out[0].1.as_deref().unwrap().contains("WebSocket open"));
+    assert_eq!(n.tcp.rows.last().unwrap().method, "WS");
+    // Fragmented masked text with a ping in the middle: pong first, then the reassembled echo (unmasked)
+    p.rx.clear();
+    let mut s = masked(ws::OP_TEXT, false, "\u{4f60}\u{597d}".as_bytes());
+    s.extend(masked(ws::OP_PING, true, b"hb"));
+    s.extend(masked(ws::OP_CONT, true, b", ws"));
+    p.send(&mut n, 0x18, 0x2000, &s);
+    let mut want = ws::encode(ws::OP_PONG, true, b"hb", None);
+    want.extend(ws::encode(ws::OP_TEXT, true, "\u{4f60}\u{597d}, ws".as_bytes(), None));
+    assert_eq!(p.rx, want);
+    assert!(
+        n.tcp.ws_inbox.is_empty(),
+        "echo route does not use the inbox"
+    );
+    // A frame split across two TCP segments: the first half only earns an ACK
+    p.rx.clear();
+    let f = masked(ws::OP_BINARY, true, &[7; 300]);
+    let ack_only = p.send(&mut n, 0x18, 0x2000, &f[..5]);
+    assert_eq!(ack_only.len(), 1);
+    assert_eq!(ack_only[0].0.len(), 20);
+    p.send(&mut n, 0x18, 0x2000, &f[5..]);
+    assert_eq!(p.rx, ws::encode(ws::OP_BINARY, true, &[7; 300], None));
+    assert_eq!(n.tcp.ws_conns(), vec![WS_CONN]);
+}
+
+#[test]
+fn ws_unregistered_route_stays_http() {
+    let mut n = Net::default();
+    let (p, out) = WsPeer::open(&mut n, "/xz/v1/", 0x2000);
+    assert!(String::from_utf8_lossy(&p.rx).starts_with("HTTP/1.1 404 Not Found"));
+    assert_eq!(
+        out.last().unwrap().0[13] & 0x01,
+        0x01,
+        "old one-shot path: FIN"
+    );
+    assert!(n.tcp.ws_inbox.is_empty());
+}
+
+#[test]
+fn ws_app_inbox_push_and_window() {
+    let mut n = Net::default();
+    n.tcp.ws_routes.push("/xz/".into());
+    let (mut p, _) = WsPeer::open(&mut n, "/xz/v1/", 1000);
+    match &n.tcp.ws_inbox[0] {
+        WsIn::Open { key, path, head } => {
+            assert_eq!((*key, path.as_str()), (WS_CONN, "/xz/v1/"));
+            assert!(head.contains("Authorization: Bearer t0k"));
+        }
+        e => panic!("{e:?}"),
+    }
+    let hello = br#"{"type":"hello"}"#;
+    p.send(&mut n, 0x18, 1000, &masked(ws::OP_TEXT, true, hello));
+    assert_eq!(
+        n.tcp.ws_inbox[1],
+        WsIn::Msg {
+            key: WS_CONN,
+            op: ws::OP_TEXT,
+            data: hello.to_vec()
+        }
+    );
+    // Chip window 1000 bytes: a 3000-byte push goes out only as far as the window allows
+    p.rx.clear();
+    let big: Vec<u8> = (0..3000).map(|i| i as u8).collect();
+    p.take(&segs(n.tcp.ws_send(WS_CONN, ws::OP_BINARY, true, &big)));
+    assert_eq!(p.rx.len(), 1000, "limited by the chip window");
+    // Chip ACKs what it got, window reopens: the rest flows
+    p.send(&mut n, 0x10, 1000, &[]);
+    assert_eq!(p.rx.len(), 2000);
+    p.send(&mut n, 0x10, 0xFFFF, &[]);
+    assert_eq!(p.rx, ws::encode(ws::OP_BINARY, true, &big, None));
+    // Server-initiated fragments
+    p.rx.clear();
+    p.take(&segs(n.tcp.ws_send(WS_CONN, ws::OP_TEXT, false, b"ab")));
+    p.take(&segs(n.tcp.ws_send(WS_CONN, ws::OP_CONT, true, b"c")));
+    let mut want = ws::encode(ws::OP_TEXT, false, b"ab", None);
+    want.extend(ws::encode(ws::OP_CONT, true, b"c", None));
+    assert_eq!(p.rx, want);
+    // Through Net: pushes land in pending for World::poll
+    n.ws_send(WS_CONN, ws::OP_TEXT, true, b"{\"type\":\"tts\"}");
+    assert_eq!(n.pending.len(), 1);
+}
+
+#[test]
+fn ws_half_close_drains_queue_then_fin() {
+    let mut n = Net::default();
+    n.tcp.ws_routes.push("/xz/".into());
+    let (mut p, _) = WsPeer::open(&mut n, "/xz/", 0x2000);
+    p.rx.clear();
+    // Window shut: the push stays queued
+    p.send(&mut n, 0x10, 0, &[]);
+    assert!(n
+        .tcp
+        .ws_send(WS_CONN, ws::OP_BINARY, true, &[1; 100])
+        .is_empty());
+    // Chip half-closes: plain ACK, the app hears 1006, the connection stays for the queued bytes
+    let out = p.send(&mut n, 0x11, 0, &[]);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].0[13], 0x10);
+    assert_eq!(
+        n.tcp.ws_inbox.last(),
+        Some(&WsIn::Closed {
+            key: WS_CONN,
+            code: 1006
+        })
+    );
+    assert!(
+        n.tcp.ws_conns().is_empty(),
+        "no new pushes after the chip's FIN"
+    );
+    // Window reopens: queued frame goes out with our FIN, then the connection is gone
+    let out = p.send(&mut n, 0x10, 0x2000, &[]);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].0[13] & 0x01, 0x01);
+    assert_eq!(p.rx, ws::encode(ws::OP_BINARY, true, &[1; 100], None));
+    assert!(
+        p.send(&mut n, 0x10, 0x2000, &[]).is_empty(),
+        "connection gone"
+    );
+}
+
+#[test]
+fn ws_close_handshakes() {
+    // Chip closes: server echoes the code and FINs; the chip's FIN ends it
+    let mut n = Net::default();
+    let (mut p, _) = WsPeer::open(&mut n, WS_ECHO_PATH, 0x2000);
+    p.rx.clear();
+    let bye = ws::close_payload(1000, "bye");
+    let out = p.send(&mut n, 0x18, 0x2000, &masked(ws::OP_CLOSE, true, &bye));
+    let want = ws::encode(ws::OP_CLOSE, true, &ws::close_payload(1000, ""), None);
+    assert_eq!(p.rx, want);
+    assert_eq!(out.last().unwrap().0[13] & 0x01, 0x01);
+    assert_eq!(n.tcp.rows.last().unwrap().status, "Closed 1000");
+    assert_eq!(
+        p.send(&mut n, 0x11, 0x2000, &[]).len(),
+        1,
+        "ACK of the chip FIN"
+    );
+    assert!(n.tcp.ws_conns().is_empty());
+
+    // Server closes first: close frame + FIN; the chip may still send until its own FIN
+    let mut n = Net::default();
+    n.tcp.ws_routes.push("/xz/".into());
+    let (mut p, _) = WsPeer::open(&mut n, "/xz/", 0x2000);
+    p.rx.clear();
+    let out = segs(n.tcp.ws_close(WS_CONN, 4000, "reboot"));
+    p.take(&out);
+    let want = ws::encode(ws::OP_CLOSE, true, &ws::close_payload(4000, "reboot"), None);
+    assert_eq!(p.rx, want);
+    assert_eq!(out.last().unwrap().0[13] & 0x01, 0x01);
+    assert!(
+        n.tcp.ws_close(WS_CONN, 4000, "again").is_empty(),
+        "close only once"
+    );
+    assert!(n.tcp.ws_send(WS_CONN, ws::OP_TEXT, true, b"x").is_empty());
+    let reply = masked(ws::OP_CLOSE, true, &ws::close_payload(4000, ""));
+    assert_eq!(
+        p.send(&mut n, 0x18, 0x2000, &reply).len(),
+        1,
+        "chip data after our FIN is ACKed"
+    );
+    assert_eq!(p.send(&mut n, 0x11, 0x2000, &[]).len(), 1);
+    assert!(
+        p.send(&mut n, 0x10, 0x2000, &[]).is_empty(),
+        "connection gone"
+    );
+    // Through Net: the close lands in pending
+    let mut n = Net::default();
+    let _ = WsPeer::open(&mut n, WS_ECHO_PATH, 0x2000);
+    n.ws_close(WS_CONN, 1001, "");
+    assert_eq!(n.pending.len(), 1);
+
+    // Unmasked chip frame: protocol error, close 1002 + FIN
+    let mut n = Net::default();
+    let (mut p, _) = WsPeer::open(&mut n, WS_ECHO_PATH, 0x2000);
+    p.rx.clear();
+    p.send(
+        &mut n,
+        0x18,
+        0x2000,
+        &ws::encode(ws::OP_TEXT, true, b"x", None),
+    );
+    let want = ws::encode(ws::OP_CLOSE, true, &ws::close_payload(1002, ""), None);
+    assert_eq!(p.rx, want);
+}

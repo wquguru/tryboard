@@ -11,6 +11,7 @@ pub mod phone;
 pub mod tcp;
 pub mod world;
 pub mod wpa;
+pub mod ws;
 
 use crate::Mem;
 use std::collections::HashMap;
