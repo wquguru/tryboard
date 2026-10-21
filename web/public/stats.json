@@ -3,6 +3,6 @@
  "examples": 58,
  "devices": 23,
  "chips": 3,
- "wasm_bytes": 1539685,
- "wasm_gzip_bytes": 537079
+ "wasm_bytes": 1539717,
+ "wasm_gzip_bytes": 537143
 }

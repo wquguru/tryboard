@@ -22,13 +22,12 @@ import { bleFeed } from './blefeed';
 import { xzFeed } from './xzfeed';
 import { netFeed, netPreset, realnetSwitch } from './netfeed';
 import { PoseRate } from '../imupose';
-import { MicInput } from '../micinput';
+import { micSwitcher, preloadMic, xzBoot } from './micsrc';
 import { chipOf, loadExamples } from './examples';
 
 export { WORKS } from './works';
 import { wkey } from './works';
 import { BOOT_GPIO, type SimChip } from '../chips';
-import { t } from '../i18n';
 import { devsOf, i2sOf, servoOf } from './devs';
 import { retargetTft } from './place';
 
@@ -121,7 +120,6 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const harnessSubs = new Set<(text: string) => void>();
   const timingSubs = new Set<(r: TimingReport | null) => void>();
   const vcdSubs = new Set<(v: VcdState | null) => void>();
-  const mic = new MicInput();
   const usbSubs = new Set<(v: UsbView | null) => void>();
   let ioMask = [0, 0];
   const defaultIoPins = (sc: SceneSpec, c: string) => {
@@ -142,6 +140,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   let imuTail = '';
   const paced = pacedMirror(bench, store, () => s.hasImu());
 
+  let setMic: ReturnType<typeof micSwitcher> | undefined;
   const s: Session = {
     bench,
     pick,
@@ -303,23 +302,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     },
     // Example preset knob position (analog.value in examples.json controls).
     micSource: ex?.mic ?? 'sine1k.wav',
-    async setMicSource(src) {
-      s.micSource = src;
-      mic.stop();
-      if (src === 'live') {
-        const err = await mic.start((rate, data) => s.sim?.micPush(rate, data));
-        if (!err) {
-          s.sim?.setMic('live');
-          return '';
-        }
-        // No permission / device: fall back to the test tone.
-        await s.setMicSource('sine1k.wav');
-        return t('{err}; switched back to the 1 kHz test tone', { err });
-      }
-      if (src === 'silence') s.sim?.setMic('silence');
-      else s.sim?.setMic('wav', await fetchBuf(`./audio/${src}`), src);
-      return '';
-    },
+    setMicSource: (src) => (setMic ??= micSwitcher(s))(src),
     analog: new Map((ex?.controls ?? []).flatMap((c) => (typeof c === 'object' && c.type === 'analog' ? [[c.pin, c.value] as [number, number]] : []))),
     setAnalog(pin, mv) {
       const fresh = !s.analog.has(pin);
@@ -521,12 +504,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         // Real is the power-up default, so only the ideal choice needs logging again
         if (s.adcIdeal) sim.adcMode(true);
         if (s.deskPc) sim.ble('pc=on'); // Virtual PC (E-07b): a logged input, so --inputs replays it
-        // Voice server (F-09b-2): logged inputs too; the demo voice is the clip the accept cases use
-        if (s.xzScript) {
-          sim.xz('on');
-          sim.xz('voice,demo');
-          if (s.xzScript !== 'hello') sim.xz(`script,${s.xzScript}`);
-        }
+        xzBoot(sim, s.xzScript);
         sim.watchAdc(adcPins());
         s.bootCount++;
         imuTail = '';
@@ -603,13 +581,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     });
     // Send watch settings before boot (worker is ordered) so cycle 0 uses the mask, matching CLI --trace-pins.
     sim.watchIo(ioMask[0], ioMask[1]);
-    if (s.scene.parts.some((p) => p.type === 'inmp441')) {
-      // Attach the test tone before boot (browser mic waits until onBoot); start() awaits micReady.
-      const wav = s.micSource.endsWith('.wav') ? s.micSource : (ex?.mic ?? 'sine1k.wav');
-      micReady = fetchBuf(`./audio/${wav}`)
-        .then((b) => (s.micSource === 'silence' ? sim.setMic('silence') : sim.setMic('wav', b, wav)))
-        .catch(() => {});
-    }
+    if (s.scene.parts.some((p) => p.type === 'inmp441')) micReady = preloadMic(sim, s.micSource, ex?.mic ?? 'sine1k.wav');
     return sim;
   }
   bench.onKey((pin, down) => s.pressPin(pin, down));

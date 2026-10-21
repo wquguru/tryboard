@@ -2,7 +2,7 @@
 // Pure, tested by node --test; ids follow scene-api 'wire:<board pin>~<part>:<silkscreen>', same as the 3D bench.
 import type { PartSpec } from '../board3d';
 import { BENCH_WIRE_CM } from './harness.ts';
-import { micPins, spkPins } from '../i2spins.ts';
+import { I2S_WIRING, micPins, spkPins } from '../i2spins.ts';
 import { t } from '../i18n/index.ts';
 import { TFT_HEADER, TFT_PX } from '../lcdspec.ts';
 
@@ -66,7 +66,7 @@ export function partInfo(p: PartSpec, ext5v = false): PartInfo {
     case 'cst816s':
       return { name: t('CST816S touch'), model: t('Capacitive touch layer on the round screen (Hynitron CST816S, single touch and gestures)'), iface: `${i2c(p)} · INT GPIO${p.int}${p.rst !== undefined ? ` · RST GPIO${p.rst}` : ''}`, power: t('3V3 (shared with the round screen)') };
     case 'max98357a': {
-      const w = spkPins('esp32s3', p);
+      const w = spkPins(I2S_WIRING.esp32s3.spk, p);
       return { name: t('MAX98357A amp and speaker'), model: t('MAX98357A I2S class-D amp module (3 W) with a Φ40 4 Ω speaker'), iface: `I2S · BCLK ${w.bclk} · LRC ${w.lrc} · DIN ${w.din}`, power: '5V' };
     }
     case 'ws2812': {
@@ -74,7 +74,7 @@ export function partInfo(p: PartSpec, ext5v = false): PartInfo {
       return { name: t('WS2812 strip × {n}', { n }), model: t('WS2812B-5050 × 8 LED board (GRB, 800 kHz)'), iface: t('DIN GPIO{pin} (RMT transmit, level-shifted to 5 V by a 74AHCT125)', { pin: p.pin }), power: t('5V (about {ma} mA at full white, estimate)', { ma: n * 60 }) };
     }
     case 'inmp441': {
-      const w = micPins('esp32s3', p);
+      const w = micPins(I2S_WIRING.esp32s3.mic, p);
       return { name: t('INMP441 microphone'), model: t('INMP441 I2S digital MEMS microphone module (24-bit, L/R grounded = left channel)'), iface: `I2S · SCK ${w.sck} · WS ${w.ws} · SD ${w.sd}`, power: '3V3' };
     }
     case 'ds18b20':
@@ -216,14 +216,14 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
       add(`GPIO${p.pin}`, id, 'DIN', t('Data (RMT, level-shifted)'), 'load', C.orange);
       add('GND', id, 'GND', R.gnd, 'gnd', C.black);
     } else if (p.type === 'max98357a') {
-      const s = spkPins('esp32s3', p);
+      const s = spkPins(I2S_WIRING.esp32s3.spk, p);
       add('5V', id, 'Vin', t('Power (5 V)'), 'power', C.red);
       add('GND', id, 'GND', R.gnd, 'gnd', C.black);
       add(`GPIO${s.bclk}`, id, 'BCLK', R.bclk, 'load', C.yellow);
       add(`GPIO${s.lrc}`, id, 'LRC', R.lrc, 'load', C.green);
       add(`GPIO${s.din}`, id, 'DIN', t('I2S data (out)'), 'load', C.orange);
     } else if (p.type === 'inmp441') {
-      const s = micPins('esp32s3', p);
+      const s = micPins(I2S_WIRING.esp32s3.mic, p);
       add('3V3', id, 'VDD', R.vcc, 'power', C.red);
       add('GND', id, 'GND', R.gnd, 'gnd', C.black);
       add('GND', id, 'L/R', t('Channel select (grounded = left)'), 'gnd', C.black);

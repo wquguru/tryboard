@@ -10,10 +10,11 @@ export const I2S_WIRING: Record<ChipId, { spk: { bclk: number; lrc: number; din:
   esp32: { spk: { bclk: 26, lrc: 25, din: 22 }, mic: { sck: 32, ws: 25, sd: 33 } },
 };
 
-/** Wiring of one I2S part: its own pins [bclk, ws, data] when the scene gives them (F-09b-2), else the chip default */
-export function spkPins(chip: ChipId, p: { pins?: [number, number, number] }) {
-  return p.pins ? { bclk: p.pins[0], lrc: p.pins[1], din: p.pins[2] } : I2S_WIRING[chip].spk;
+type Wiring = (typeof I2S_WIRING)[ChipId];
+/** Wiring of one I2S part: its own pins [bclk, ws, data] when the scene gives them (F-09b-2), else the chip default `def` */
+export function spkPins(def: Wiring['spk'], p: { pins?: [number, number, number] }) {
+  return p.pins ? { bclk: p.pins[0], lrc: p.pins[1], din: p.pins[2] } : def;
 }
-export function micPins(chip: ChipId, p: { pins?: [number, number, number] }) {
-  return p.pins ? { sck: p.pins[0], ws: p.pins[1], sd: p.pins[2] } : I2S_WIRING[chip].mic;
+export function micPins(def: Wiring['mic'], p: { pins?: [number, number, number] }) {
+  return p.pins ? { sck: p.pins[0], ws: p.pins[1], sd: p.pins[2] } : def;
 }

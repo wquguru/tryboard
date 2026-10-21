@@ -8,7 +8,7 @@ import { TP_PINS, roundLcdModule, imuModule, servoModel, buzzerModule, encoderMo
 import { wire } from './wires';
 import type { PartSpec } from './spec';
 import type { BenchCtx } from './ctx';
-import { micPins, spkPins } from '../i2spins.ts';
+import { I2S_WIRING, micPins, spkPins } from '../i2spins.ts';
 import { TFT_HEADER } from '../lcdspec.ts';
 import type { tftModule } from './tft3d';
 
@@ -484,7 +484,7 @@ export function mountBuildersB(ctx: BenchCtx): void {
 
   function buildAmp(grp: THREE.Group, p: Extract<PartSpec, { type: 'max98357a' }>) {
     // Amp module lies on the desk outside the breadboard near the three I2S pins; the speaker sits further out, red/black wires to the terminal
-    const w = spkPins(ctx.board.spec.chip, p);
+    const w = spkPins(I2S_WIRING[ctx.board.spec.chip].spk, p);
     const root = new THREE.Group();
     registerPart('max98357a', root);
     grp.add(root);
@@ -528,7 +528,7 @@ export function mountBuildersB(ctx: BenchCtx): void {
   }
 
   function buildMic(grp: THREE.Group, p: Extract<PartSpec, { type: 'inmp441' }>) {
-    const w = micPins(ctx.board.spec.chip, p);
+    const w = micPins(I2S_WIRING[ctx.board.spec.chip].mic, p);
     const root = new THREE.Group();
     registerPart('inmp441', root);
     grp.add(root);
@@ -536,7 +536,7 @@ export function mountBuildersB(ctx: BenchCtx): void {
     const sig = pinCands('IO' + w.sd)[0].p;
     const side = Math.sign(sig.z || 1);
     // Offset when on the same side as the speaker so they don't overlap
-    const shareSide = ctx.lastScene.parts.some((q) => q.type === 'max98357a') && Math.sign(pinCands('IO' + spkPins(ctx.board.spec.chip, ctx.lastScene.parts.find((q) => q.type === 'max98357a') ?? {}).din)[0].p.z || 1) === side;
+    const shareSide = ctx.lastScene.parts.some((q) => q.type === 'max98357a') && Math.sign(pinCands('IO' + spkPins(I2S_WIRING[ctx.board.spec.chip].spk, ctx.lastScene.parts.find((q) => q.type === 'max98357a') ?? {}).din)[0].p.z || 1) === side;
     const bx = sig.x + (shareSide ? 30 : -4), bz = side * (BB.D / 2 + 14);
     m.grp.position.set(bx, 0, bz);
     if (bz < 0) m.grp.rotation.y = Math.PI;
