@@ -1362,3 +1362,14 @@
 - **对话文字用英文**：Rust 输出只用英文（AGENTS §6）；固件 printf 照常中文。
 - **xz 服务端跨复位保留**：和虚拟手机、网络条件一样属于「外部世界」，复位只清会话和队列。
 - **端到端固件用 `espressif/esp_websocket_client` 1.7.0**：Apache-2.0（核组件包 license.txt）；注册表最新 1.8.0 的许可证标为 Custom，未核，不用。只做 accept 固件，不进站点。
+
+## 2026-10-21 F 批待拍板事项（人授权 AI 代决：「你决定」）
+人在 F5 汇报后回复「你决定」。以下按研究稿推荐拍板；凡属 AGENTS §10「必须问人」的（上线、花钱、账号）不在授权内，维持不做。
+- **F-07b MicroPython 分发 = (iii) 只给官方下载链接，用户自己上传**（RS-1「需人拍板」1）：不托管、不改 LICENSING，不用处理 berkeley-db BSD-4 广告条款和缺 SBOM。备选 (i) 托管官方 bin + 手写 NOTICE、(ii) 自建 + SBOM —— 等上线前再议。
+- **PRODUCT 定位扩展到「在这里改代码」**（RS-1 2）：只限 MicroPython main.py 编辑 + raw-paste 运行；C / Arduino 仍是「本地编译后上传」。F-07b 开工时改 PRODUCT.md。
+- **S3 第一阶段只支持 SPIRAM_OCT 变体**（RS-1 3）：网页检测到四线 PSRAM 重启循环时提示换 OCT 变体。
+- **F-09b RS-2 §8**：(1) 不装 IDF 6.x（磁盘只剩 28 GB，路线 A 不进验收）；(2) PIE / EE.* 暂不立项，先看 F-09b-0 实测，用到 PIE 就换纯 C libopus 或退路线 C，再决定是否单独立项；(3) 不做网页连 xiaozhi.me 真服务（第三方账号、隐私）；(4) 固件目录 `s3-xiaozhi-lite`，对用户的名字用描述性写法「语音助手（兼容 xiaozhi 协议）」/ "Voice assistant (xiaozhi-protocol compatible)"，不用 xiaozhi 图标；下行语音素材用我们自己脚本合成的音（共振峰 / 音调合成，不含任何第三方录音或 TTS 输出），只提交生成脚本和小文件。备选 CC0 录音 —— 要逐条核来源，收益小。
+- **F-11 第二步按稿子 §9 推荐全部采纳**：Q1「环境脚本」；Q2 方案 A（`run.s` 完整 + 可选 `tl`，不升 v）；Q3 网格 10 ms、最小间隔 100 ms；Q4 最长 600 s、第一版不循环；Q5 a（手动值记为事件，下个脚本值覆盖，提示「由环境脚本控制」）；Q6 不做噪声；Q7 嵌入页显示只读进度条；Q8 手机可编辑；Q9 改房间温度。
+- **arduino-cli core 3.0.7 不装**：约数 GB，磁盘只剩 28 GB（94%），F-08c 的 Arduino 3.0.x 列为 ✗（理由：磁盘），以后磁盘宽裕再议。
+- **不上线**：公开部署属 AGENTS §10 必须问人，「你决定」不当作上线授权。
+- **LICENSING 待核行**（esp_websocket_client 1.7.0、F-08b 6 个库）：都只进 accept 固件、不进站点，由本波收尾时主会话核对并补行。
