@@ -444,7 +444,12 @@ fn ws_echo_handshake_mask_fragments_ping() {
     s.extend(masked(ws::OP_CONT, true, b", ws"));
     p.send(&mut n, 0x18, 0x2000, &s);
     let mut want = ws::encode(ws::OP_PONG, true, b"hb", None);
-    want.extend(ws::encode(ws::OP_TEXT, true, "\u{4f60}\u{597d}, ws".as_bytes(), None));
+    want.extend(ws::encode(
+        ws::OP_TEXT,
+        true,
+        "\u{4f60}\u{597d}, ws".as_bytes(),
+        None,
+    ));
     assert_eq!(p.rx, want);
     assert!(
         n.tcp.ws_inbox.is_empty(),
