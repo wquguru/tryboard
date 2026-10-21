@@ -1375,7 +1375,6 @@
 - **LICENSING 行已在**：esp_websocket_client 1.7.0 ✅（LICENSING 第 35 行）；F-08b 前四个 ✅，ESP32Servo / IRremote 维持「只进本地 accept、上站前人核」（第 30 行），不在本次授权内放宽。
 - **F-09b-0 结论（2026-10-21，AI 自主）**：micro-opus 0.4.1 不用 PIE（静态 0 条、动态约 1 万帧无非法指令），按上一条 (2) 不立 PIE 项；F-09b-1 走路线 B，用 micro-opus 定点（显式 `CONFIG_OPUS_FLOATING_POINT=n`，S3 默认是浮点，SILK 编码慢 7.7 倍跑不过实时）+ `CONFIG_OPUS_ENABLE_XTENSA_OPTIMIZATIONS=y` + 编码复杂度 0（模拟中占 18 %）。备选：复杂度 5（47 %，网页墙钟开销翻倍多）、关 Xtensa 优化（慢约 20 %，没必要）、纯 C libopus / 路线 C（不需要）。micro-opus 进仓库前 F-09b-1 要先在 LICENSING.md 加一行（Apache-2.0，内含 libopus BSD-3、micro-ogg-demuxer Apache-2.0）。详见 RS-2 §10。
 
-
 ## 2026-10-21 F-07b MicroPython main.py 编辑器
 - **分发与定位**：采用选项 (iii)：站点不托管 MicroPython bin（不进 web/public、不进构建产物），固件菜单只放一行说明 + 官方下载页链接（C3 `ESP32_GENERIC_C3`；S3 只提示「请用 SPIRAM_OCT 版本」，不做重启循环检测）。PRODUCT.md「在这里改代码」段已先改。理由：MIT 许可本可再分发，但托管要跟版本、写 NOTICES；用户自己下载更省事也更清楚来源。备选：站点自带 bin（需人定）、littlefs 镜像预置 main.py（RS-1 推迟）。
 - **识别**：在 `session.fwBuf` 里扫 `MicroPython` 字节串（`web/src/mpy.ts isMicroPython`），开时 `bc.mpy=true` 并切到 dock `py` 标签。备选：看串口横幅（要等启动，切换标签晚）。
