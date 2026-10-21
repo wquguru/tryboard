@@ -368,7 +368,7 @@ M5 专项已全部合并（M5-01 DCS 面板、M5-10 GP-SPI、M5-11 RMT TX、M5-1
 验收：单元测试（握手、掩码、分片、半关闭）；golden.py check 现有网络用例字节一致。
 
 条目 F-09a-2（F-09a-1 合并后）：wifi/xiaozhi.rs 脚本服务端。
-目标：OTA / 激活回复、hello 对答；脚本「收到 listen stop 和 N 帧上行 → stt → tts start → sentence_start → 预编码 Opus 帧（60 ms 节奏）→ tts stop」；脚本动作 `xz=on|script,<名>|say,<文本>`，空中日志 `[xz]`；docs/WIFI.md 加「阶段 7」。
+目标：OTA / 激活回复、hello 对答；脚本「收到 listen stop 和 N 帧上行 → stt → tts start → sentence_start → 预编码 Opus 帧（60 ms 节奏）→ tts stop」；脚本动作 `xz=on|script,<名>|say,<文本>`，空中日志 `[xz]`；docs/WIFI.md 加「阶段 8」（阶段 7 已被 F-09a-1 的长连接 TCP + WebSocket 占用）。
 验收：单元测试覆盖脚本时序；CLI 下用一个最小 WebSocket 客户端固件（可先用 IDF esp_websocket_client 示例）跑通一轮。
 ```
 
