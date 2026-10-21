@@ -332,7 +332,7 @@ impl Machine {
             Cmd::Min(n) => x.min_frames = n,
             Cmd::Voice(v) => match tryboard_soc::wifi::xiaozhi::voice_frames(&v) {
                 Ok(f) => x.frames = f,
-                Err(()) => return false,
+                Err(_) => return false,
             },
             Cmd::On | Cmd::Off => {}
         }

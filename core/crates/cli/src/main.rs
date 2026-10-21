@@ -338,22 +338,7 @@ fn run(args: &[String]) {
     board_args(&mut m, args);
     spi_args(&mut m, args);
     // I2S audio devices: --i2s max98357a,inmp441; --mic sound.wav
-    if let Some(spec) = opt(args, "--i2s") {
-        for item in spec.split(',') {
-            // Optional pins kind@bclk:ws:data (e.g. max98357a@15:16:7); without them the chip defaults apply
-            let ok = match item.split_once('@') {
-                Some((kind, pins)) => {
-                    let p: Vec<u32> = pins.split(':').filter_map(|x| x.trim().parse().ok()).collect();
-                    p.len() == 3 && m.i2s_attach_at(kind, p[0], p[1], p[2])
-                }
-                None => m.i2s_attach(item),
-            };
-            if !ok {
-                eprintln!("unsupported I2S device {item} (available: max98357a, inmp441, optional @bclk:ws:data)");
-                std::process::exit(2)
-            }
-        }
-    }
+    i2s_args(&mut m, args);
     if let Some(path) = opt(args, "--mic") {
         let b = std::fs::read(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
         match tryboard_soc::devices::audio::parse_wav(&b) {
@@ -1321,6 +1306,22 @@ fn wav16(rate: u32, x: &[i16]) -> Vec<u8> {
 
 /// Board power / clock chips: --battery PCT[,usb] (AXP2101 / AXP192), --rtc <unix seconds, UTC> (PCF85063 / BM8563)
 /// External SPI devices: --spi gc9a01, --spi ili9342@sclk=36,mosi=37,miso=35,cs=3,dc=35,rst=-1
+fn i2s_args(m: &mut Machine, args: &[String]) {
+    for item in opt(args, "--i2s").iter().flat_map(|s| s.split(',')) {
+        // Optional pins kind@bclk:ws:data (e.g. max98357a@15:16:7); without them the chip defaults apply
+        let (kind, pins) = item.split_once('@').unwrap_or((item, ""));
+        let p: Vec<u32> = pins.split(':').filter_map(|x| x.parse().ok()).collect();
+        let ok = match p[..] {
+            [b, w, d] => m.i2s_attach_at(kind, b, w, d),
+            _ => pins.is_empty() && m.i2s_attach(item),
+        };
+        if !ok {
+            eprintln!("unsupported I2S device {item} (available: max98357a, inmp441, optional @bclk:ws:data)");
+            std::process::exit(2)
+        }
+    }
+}
+
 fn spi_args(m: &mut Machine, args: &[String]) {
     let Some(spec) = opt(args, "--spi") else {
         return;

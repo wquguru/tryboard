@@ -1,7 +1,5 @@
-// Example (F-09b-1): push-to-talk voice assistant speaking the xiaozhi WebSocket protocol, written from the protocol notes
-// (RS-2 section 2), no xiaozhi-esp32 code. Pins follow the bread-compact-wifi board; Opus via esphome/micro-opus.
-// Wi-Fi -> OTA -> WS hello (10 s timeout, reconnect) -> hold BOOT: listen start + Opus uplink -> release: listen stop
-// -> stt / tts / sentence_start -> decode downlink Opus to the speaker, subtitles on the OLED. BOOT while speaking = abort.
+// Push-to-talk voice assistant on the xiaozhi WebSocket protocol, written from the RS-2 notes (no xiaozhi-esp32 code).
+// Pins follow bread-compact-wifi; flow and decisions are in docs/DECISIONS.md (F-09b-1). BOOT while speaking = abort.
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -322,6 +320,7 @@ static void connect_ws(const char *url, const char *token)
                         "\"audio_params\":{\"format\":\"opus\",\"sample_rate\":16000,\"channels\":1,\"frame_duration\":60}}";
     for (int attempt = 1;; attempt++) {
         xEventGroupClearBits(eg, BIT_WS | BIT_HELLO);
+        xEventGroupClearBits(eg, BIT_WS | BIT_HELLO);
         esp_websocket_client_config_t wc = {
             .uri = url,
             .headers = headers,
@@ -344,6 +343,8 @@ static void connect_ws(const char *url, const char *token)
         } else {
             printf("WebSocket 连接超时（第 %d 次）\n", attempt);
         }
+        // Detach first so the old client's close event doesn't show up as a drop on the new link
+        esp_websocket_unregister_events(ws, WEBSOCKET_EVENT_ANY, on_ws);
         esp_websocket_client_close(ws, pdMS_TO_TICKS(2000));
         esp_websocket_client_destroy(ws);
         vTaskDelay(pdMS_TO_TICKS(2000));

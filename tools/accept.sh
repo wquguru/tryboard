@@ -151,7 +151,9 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
         else:
             rate, rms, f = float(m.group(1)), float(m.group(2)), float(m.group(4))
             notes.append(f"speaker {rate:.1f} Hz sample rate, dominant {f:.1f} Hz, RMS {rms:.4f}")
-            if abs(f - au['freq']) > au['tol'] or abs(rate - au['rate']) > 1 or rms < au.get('min_rms', 0):
+            # Speech has no single tone: such cases leave out freq and bound the RMS instead
+            off = 'freq' in au and abs(f - au['freq']) > au['tol']
+            if off or abs(rate - au['rate']) > 1 or not au.get('min_rms', 0) <= rms <= au.get('max_rms', 1e9):
                 missing.append('audio')
     speed = re.search(r'simulated ([\d.]+)s / wall ([\d.]+)s', err)
     if speed: notes.append(f"simulated {speed.group(1)}s in {speed.group(2)}s")

@@ -38,11 +38,11 @@ pub fn unpack_frames(b: &[u8]) -> Option<Vec<Vec<u8>>> {
 }
 
 /// Downlink frames for a voice name (None = synthesized noise frames); Err for an unknown name
-pub fn voice_frames(name: &str) -> Result<Option<Vec<Vec<u8>>>, ()> {
+pub fn voice_frames(name: &str) -> Result<Option<Vec<Vec<u8>>>, String> {
     match name {
         "noise" => Ok(None),
         "demo" => Ok(unpack_frames(VOICE_DEMO)),
-        _ => Err(()),
+        _ => Err(format!("unknown voice {name}, expected one of {VOICES:?}")),
     }
 }
 
@@ -808,7 +808,10 @@ mod tests {
         };
         hello(&mut s, K, 0);
         s.say("hi", 1_000_000);
-        let bins: Vec<_> = drain(&mut s).into_iter().filter(|(_, op, _)| *op == OP_BINARY).collect();
+        let bins: Vec<_> = drain(&mut s)
+            .into_iter()
+            .filter(|(_, op, _)| *op == OP_BINARY)
+            .collect();
         assert_eq!(bins.len(), 21);
         assert_eq!(bins[20].0 - bins[0].0, 20 * FRAME_US);
     }
