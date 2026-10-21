@@ -371,6 +371,14 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/selectv3.mjs 2>&1 | grep '^\[selectv3\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[selectv3\] PASS (0 failed)' || { echo "- [selectv3] script did not finish" >> $REPORT; fail=1; }
+  # Environment script (F-11): keyframes compiled to input actions, web serial and fingerprint = CLI --inputs replay
+  r=$(node tools/webtest/scenario.mjs 2>&1 | grep '^\[scenario\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[scenario\] PASS (' || { echo "- [scenario] script did not finish" >> $REPORT; fail=1; }
+  # MicroPython main.py editor (F-07b): prompt-driven raw-paste, CLI replay byte for byte; SKIP without the official bin
+  r=$(node tools/webtest/micropython.mjs 2>&1 | grep '^\[micropython\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -qE '^\[micropython\] (PASS \(|SKIP:)' || { echo "- [micropython] script did not finish" >> $REPORT; fail=1; }
 fi
 echo -e "\nVerdict: $([ $fail = 0 ] && echo 'all passed' || echo 'some items failed')" >> $REPORT
 cat $REPORT
