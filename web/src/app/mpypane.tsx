@@ -82,9 +82,9 @@ export function MpyPane({ phone }: { phone?: boolean }) {
             if (e.key !== 'Tab' || e.shiftKey) return;
             e.preventDefault();
             const el = e.currentTarget;
-            const a = el.selectionStart;
-            setText(el.value.slice(0, a) + '    ' + el.value.slice(el.selectionEnd));
-            requestAnimationFrame(() => el.setSelectionRange(a + 4, a + 4));
+            // Edit the DOM in place so the caret stays put; React then sees the same value and leaves it
+            el.setRangeText('    ', el.selectionStart, el.selectionEnd, 'end');
+            setText(el.value);
           }}
           onKeyUp={(e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && v.ready && !v.busy) runMain();

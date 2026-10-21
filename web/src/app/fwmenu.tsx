@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { LOCALES, locale, t } from '../i18n/index.ts';
 import { cn } from '../ui/cn';
 import { actions, bc, BLANK, setBc } from './chrome';
+import { MPY_DOWNLOAD } from '../chipid';
 import { CHIP_NAME, chipOf, exampleHref, loadExamples, type Chip, type Example } from './examples';
 import { Icon } from './icons';
 import { useStore } from './react';
@@ -33,7 +34,6 @@ export function pushRecent(r: Recent) {
 }
 
 // Official pages only: TryBoard does not host MicroPython images (DECISIONS 2026-10-21, option iii)
-const MPY_URL = { esp32c3: 'https://micropython.org/download/ESP32_GENERIC_C3/', esp32s3: 'https://micropython.org/download/ESP32_GENERIC_S3/' } as const;
 const hhmm = (at: number) => new Date(at).toLocaleTimeString(LOCALES.find((l) => l.id === locale)?.html, { hour: '2-digit', minute: '2-digit' });
 const open = (v: boolean) => setBc({ fwMenu: v });
 
@@ -66,6 +66,7 @@ export function FwMenu({ phone }: { phone?: boolean }) {
   }, [fwMenu]);
   const running = (e: Example) => fw === `${e.id}/flash.bin`;
   // The running example sorts first so "running" shows even when collapsed.
+  const mpy = MPY_DOWNLOAD[chip];
   const list = exs.filter((e) => chipOf(e) === chip).sort((a, b) => +running(b) - +running(a));
   const shown = all ? list : list.slice(0, 5);
   const recent = recentFw().filter((r) => !(r.kind === 'example' && fw === `${r.id}/flash.bin`));
@@ -171,11 +172,11 @@ export function FwMenu({ phone }: { phone?: boolean }) {
           <span className="block text-[11px] text-muted">{t("Runs on the bench and checks the current checkpoint. A full flash image from ESP-IDF / Arduino; dropping it on the bench works too (the file never leaves your browser).")}</span>
         </span>
       </button>
-      {(chip === 'esp32c3' || chip === 'esp32s3') && (
+      {mpy && (
         <p id="mpyHelp" className="m-0 px-2.5 py-1.5 text-[11px] leading-[1.5] text-muted">
           {t('MicroPython: download the official {chip} image from micropython.org and upload it here; a main.py editor then opens in the dock.', { chip: CHIP_NAME[chip] })}{' '}
           <a
-            href={MPY_URL[chip]}
+            href={mpy.url}
             target="_blank"
             rel="noopener noreferrer"
             data-fw="mpy"
@@ -183,7 +184,7 @@ export function FwMenu({ phone }: { phone?: boolean }) {
           >
             {t('Official download page')}
           </a>
-          {chip === 'esp32s3' && <span className="block">{t('S3: use the SPIRAM_OCT build; other S3 builds keep rebooting here.')}</span>}
+          {mpy.octOnly && <span className="block">{t('S3: use the SPIRAM_OCT build; other S3 builds keep rebooting here.')}</span>}
         </p>
       )}
     </div>

@@ -7,6 +7,11 @@ export const CHIP_ID: Record<SimChip, number> = { esp32: 0, esp32c3: 5, esp32s3:
 export const NPINS: Record<SimChip, number> = { esp32: 40, esp32c3: 22, esp32s3: 49 };
 
 /** GPIO wired to the BOOT button. */
+/** Official MicroPython download pages (F-07b: users upload the bin themselves); S3 only boots the SPIRAM_OCT build here. */
+export const MPY_DOWNLOAD: Partial<Record<SimChip, { url: string; octOnly?: boolean }>> = {
+  esp32c3: { url: 'https://micropython.org/download/ESP32_GENERIC_C3/' },
+  esp32s3: { url: 'https://micropython.org/download/ESP32_GENERIC_S3/', octOnly: true },
+};
 export const BOOT_GPIO: Record<SimChip, number> = { esp32: 0, esp32c3: 9, esp32s3: 0 };
 /** GPIO of the on-board WS2812; DevKitC V4 has none (null). */
 export const RGB_GPIO: Record<SimChip, number | null> = { esp32: null, esp32c3: 8, esp32s3: 48 };
