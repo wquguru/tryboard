@@ -12,6 +12,7 @@ pub mod tcp;
 pub mod world;
 pub mod wpa;
 pub mod ws;
+pub mod xiaozhi;
 
 use crate::Mem;
 use std::collections::HashMap;

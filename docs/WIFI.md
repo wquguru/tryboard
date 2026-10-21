@@ -192,3 +192,17 @@ PHY / 射频：除前面说的 rf_polls 外，`ram_wait_rfpll_cal_end` 轮询 re
 - **帧**（`ws.rs`）：`accept_key` 用 `crypto::sha1` + `tcp::b64_encode`；`Decoder` 增量解码，芯片帧必须带掩码（否则 1002）、RSV 必须为 0、7 / 16 / 64 位长度、分片重组（控制帧可夹在分片中间）、控制帧 ≤ 125 字节且不分片、文本须 UTF-8（否则 1007）、单条消息上限 1 MiB（否则 1009）。服务端帧不掩码。ping 自动回 pong；收到 close 原码回显（没带码就回空 close）后 FIN。
 - **给应用的接口**：`Tcp::ws_inbox: Vec<WsIn>`（`Open{key, path, head}` / `Msg{key, op, data}` / `Closed{key, code}`，应用自己取走）；`Tcp::ws_send(key, op, fin, data)`（`fin=false` 发分片，后续用 `OP_CONT`）、`Tcp::ws_close(key, code, reason)`、`Tcp::ws_conns()`；`Net::ws_send / ws_close` 把段放进 `pending`，由 `World::poll` 下一次送出（和 C-03 `real_reply` 一样）。连接用 `tcp::Key`（芯片地址、芯片端口、服务器地址、服务器端口）标识。`/echo` 不进 inbox，直接回显。
 - 没做：TLS（wss）、permessage-deflate 等扩展、子协议协商（`Sec-WebSocket-Protocol` 不回）、HTTP keep-alive（HTTP 仍是 `Connection: close`）、定时推送（节奏由 F-09a-2 在 `World` 侧排定时器）。
+
+## 阶段 8：xiaozhi 式脚本服务端（F-09a-2：c3-xz-ws ✅）
+
+依据 RS-2 §2 的协议摘要自写（xiaozhi-esp32 是 MIT，只读文档，没有搬代码）。第一次 Wi-Fi → TCP → WebSocket 端到端：固件 `firmware/c3-xz-ws`（IDF `esp_http_client` + 组件 `espressif/esp_websocket_client` 1.7.0）在 CLI 下跑通一轮。
+
+- **代码**：`soc/src/wifi/xiaozhi.rs` 是纯状态机（`WsIn` 事件 + 时间进，`Action::Send / Log` 出，自带到期时间队列）；`World::xz: Option<xiaozhi::Server>`，`World::enable_xz / disable_xz / xz_step`。`World::poll` 先跑 `xz_step`（取走 `Tcp::ws_inbox` 交给服务端，再把到期推送经 `Net::ws_send` 放进 `pending`），所以推送在同一次 poll 发出；`World::next_timer` 在 inbox 非空时报 0、否则报队列最早到期时刻，芯片空闲（WFI）时机器也会按时醒来推帧。
+- **HTTP**：开启时往 `Tcp::pages` 写 `/xiaozhi/ota/`（及不带尾斜杠）和 `/xiaozhi/ota/activate`，`response()` 不改。OTA 回复 `server_time`、`firmware{version:"0.0.0"}`、`websocket{url:"ws://tryboard.local/xiaozhi/v1/", token:"tryboard-virtual-token", version:1}`，不带 `activation`（设备视为已激活）；激活回 200 `{}`。所有域名都解析到网关，所以任何 OTA 地址都能引到这里。注意虚拟 HTTP 在请求头收齐时就回复，不等 POST 正文。
+- **WebSocket**：`ws_routes` 登记 `/xiaozhi/v1/`。不校验 `Authorization`（只记进日志），`Protocol-Version` 只建模 1（裸 Opus），2 / 3 记一行日志、照发裸帧。设备 hello → 立即回 `{"type":"hello","transport":"websocket","session_id":"tb-0001",audio_params 16000 Hz / 60 ms}`（下行宣告 16 kHz，省掉设备重采样）；每条新连接 session_id 加一。
+- **一轮对话**：`listen start` 后计上行二进制帧；`listen stop` 时帧数 ≥ `min_frames`（默认 5）→ +100 ms `stt` 和 `llm{emotion}` → 再 +200 ms `tts start`、每句 `sentence_start` 后跟 Opus 帧，帧间隔严格 60 ms（排程时刻按前一帧 +60 ms，不按 poll 时刻，所以被信标等提前唤醒也不漂）→ 最后一帧后 60 ms `tts stop`。帧数不够只记日志不回答。`abort` 清掉该连接的队列并立刻回 `tts stop`。断开（任意 close 码）丢弃该连接的队列；板子复位时服务端随世界保留（`Machine::reboot` 搬运），会话全清。
+- **下行 Opus 帧**：合成的最小帧——TOC 0x58（config 11 = SILK-only 宽带 60 ms、单声道、一帧，RFC 6716 §3.1）+ 固定 LCG 产生的 40 字节；任何字节串都能被范围解码器接受（解出来是噪声，不报错），输出确定、进 CLI 指纹。每句帧数 = 字数 / 2，夹在 5–50。`Server::frames` 可换成离线预编码的帧（F-09b 用）。
+- **脚本**：`hello`（默认，stt "Hello"，一句回答）、`weather`（两句）、`silent`（不回 hello，给 F-09b 的超时用例）。
+- **脚本动作**：`xz=on|off`、`xz=script,<名>`、`xz=say,<文本>`（对所有已 hello 的会话直接播报，没有就等下一个 hello）、`xz=min,<N>`。日志：每条进 Wi-Fi 空中日志（`--wifi-log` 里是 `AP [xz] …`），CLI 结束时另印 `[tryboard] xiaozhi server: …` 汇总和 `[xz]` 行。
+- **验收**：`cargo test -p tryboard-soc xiaozhi`（hello 字段、顺序、60 ms 节奏、迟到 poll 不漂、N 帧门槛、say 先后、断开后重连换 session、复位、abort、silent、OTA 正文）；accept 用例 `c3-xz-ws`（`--script 0:xz=on`，串口有 hello / stt / tts / 下行 20 帧平均 59 ms，stderr 有 `[xz]` 时序）；现有 41 个网络 / BLE 用例 golden 字节一致。
+- 没做：Protocol-Version 2 / 3 帧头、MQTT + UDP、MCP / `iot` 消息（收到只记「ignored」）、服务端主动 ping、网页面板（F-09b）、真实 Opus 素材（RS-2 §8 第 4 项待人定）。

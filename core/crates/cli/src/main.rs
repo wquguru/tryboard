@@ -44,6 +44,7 @@ fn usage() -> ! {
                [--adc real|ideal] (default real: calibration curve, end bends, noise; ideal: linear, exact); script action adc=real|ideal
                script actions phone=join,ssid[,pass], phone=open, phone=get,URL, phone=post,URL,form, phone=leave
                script actions realnet=1|0 (the web \"real network\" toggle), netreply=id,status,ms,content type|reason,base64 body (real replies recorded on the web; the CLI never goes online)
+               script actions xz=on|off, xz=script,hello|weather|silent, xz=say,<text>, xz=min,<frames> (xiaozhi-style voice server: OTA http://<any>/xiaozhi/ota/ -> ws://tryboard.local/xiaozhi/v1/; log [xz] at the end)
                [--seed N] (session seed, default 7: ADC noise and which frames a weak / flaky network loses) [--net normal|weak|flaky|offline]
                [--net-fault reboot|dns|silent@<start s>[,<duration s>]] (repeatable, duration default 8); script actions seed=N, net=preset, netfault=kind[,s] (starts at the action time)
                [--encoder A,B[,SW]] (EC11 rotary encoder; script actions enc=+N / enc=-N turn N detents, encsw=1|0 press / release)
@@ -665,6 +666,11 @@ fn run(args: &[String]) {
             } else if let Some(v) = act.strip_prefix("realnet=") {
                 // Web "real network" switch (C-03): the CLI never goes online, replies only come from later netreply=
                 m.realnet_set(v.trim() == "1");
+            } else if let Some(v) = act.strip_prefix("xz=") {
+                // xiaozhi-style virtual voice server (F-09a-2)
+                if !m.xz_cmd(v) {
+                    eprintln!("[tryboard] unknown xz action: {act}");
+                }
             } else if let Some(v) = act.strip_prefix("netreply=") {
                 if !m.net_reply(v) {
                     eprintln!("[tryboard] unknown netreply action");
@@ -1051,6 +1057,12 @@ fn run(args: &[String]) {
         );
         for (t, l) in &p.log {
             eprintln!("    {:>9.3}s phone {l}", *t as f64 / 1e6);
+        }
+    }
+    if let Some(x) = m.wifi().world.xz.as_ref() {
+        eprintln!("[tryboard] {}", x.summary());
+        for (t, l) in &x.log {
+            eprintln!("    {:>9.3}s [xz] {l}", *t as f64 / 1e6);
         }
     }
     report_oled(&mut m, args);
