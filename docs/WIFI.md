@@ -186,7 +186,7 @@ PHY / 射频：除前面说的 rf_polls 外，`ram_wait_rfpll_cal_end` 轮询 re
 
 为 xiaozhi 式虚拟服务端（F-09a-2）打底。依据 RFC 6455 自写，没有参考任何 GPL 实现。
 
-- **分流**（`tcp.rs`）：收齐请求头后，`GET` + `Upgrade: websocket` + `Sec-WebSocket-Key`，且路径是内置 `/echo` 或以 `Tcp::ws_routes` 里某项开头 → 升级；否则走原来的一次性 HTTP（未登记路径照旧 404 + FIN），所以现有用例字节不变（golden 191/191）。网络页签加一行 `WS ws://host/path 101`，关闭后改成 `Closed <code>`。
+- **分流**（`tcp.rs`）：收齐请求头后，`GET` + `Upgrade: websocket` + `Sec-WebSocket-Key`，且路径是内置 `/echo` 或以 `Tcp::ws_routes` 里某项开头 → 升级；否则走原来的一次性 HTTP（未登记路径照旧 404 + FIN），所以现有用例字节不变（golden 191/191）。升级判断在真实网络（C-03）判断之前：开关打开时，登记路由上的 WebSocket 不看 `Host`，一律由虚拟服务器接（所有域名本来就解析到网关）。网络页签加一行 `WS ws://host/path 101`，关闭后改成 `Closed <code>`。
 - **长连接记账**（只用于升级后的连接）：`snd_una`（芯片已确认到哪）、`peer_wnd`（芯片每段通告的窗口，没协商窗口缩放）、`sendq`（等窗口的字节）。发送 = 在 `snd_nxt - snd_una < peer_wnd` 内按 MSS 切段；芯片 ACK 推进 `snd_una` 后接着发。没有重传（虚拟网不丢包）；收到乱序 / 重传段只回重复 ACK。
 - **半关闭**：芯片先 FIN → 回 ACK，应用收到 `Closed 1006`（若之前没走 close 握手），队列里剩的照发，排空后带上我方 FIN；双方都 FIN 后删连接。服务端先关（`ws_close`）→ close 帧 + FIN，之后芯片发来的数据照收照 ACK，直到它 FIN。
 - **帧**（`ws.rs`）：`accept_key` 用 `crypto::sha1` + `tcp::b64_encode`；`Decoder` 增量解码，芯片帧必须带掩码（否则 1002）、RSV 必须为 0、7 / 16 / 64 位长度、分片重组（控制帧可夹在分片中间）、控制帧 ≤ 125 字节且不分片、文本须 UTF-8（否则 1007）、单条消息上限 1 MiB（否则 1009）。服务端帧不掩码。ping 自动回 pong；收到 close 原码回显（没带码就回空 close）后 FIN。
