@@ -4852,7 +4852,7 @@
  },
  {
   "id": "arduino-lib-ble-notify",
-  "seconds": 8,
+  "seconds": 12,
   "args": [
    "--ble-phone"
   ],

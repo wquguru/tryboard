@@ -79,7 +79,7 @@ export interface WasmExports {
   tb_pwrkey(long: number): number;
   /** PCF85063 time as of now, UTC unix seconds */
   tb_rtc_set(epoch: number): number;
-  /** OLED frame version: refetch pixels only when it changes. 0 = no OLED. */
+  /** OLED frame version: refetch pixels only when it changes. 0 = no OLED. SSD1306 first, else SH1106 (F-04a2): both render the same 128×64 brightness frame. */
   tb_oled_version(): number;
   /** OLED frame: 128×64 bytes, brightness 0..255 per pixel (display on/off and contrast applied). Null = no OLED. */
   tb_oled_ptr(): number;
