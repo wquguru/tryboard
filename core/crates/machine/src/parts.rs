@@ -3,6 +3,7 @@
 use super::*;
 use tryboard_soc::devices::gpio_parts::{Ldr, Pir, Relay};
 use tryboard_soc::devices::rc522::{parse_uid, uid_text, Rc522};
+use tryboard_soc::devices::xpt2046::Xpt2046;
 
 /// Default RC522 chip select: the Arduino core's SS pin (C3 GPIO7, S3 GPIO10)
 pub fn rc522_default_cs(chip: Chip) -> u32 {
@@ -153,6 +154,52 @@ impl Machine {
                 .unwrap_or_else(|| "none".into());
             out.push(format!("{}, card on reader {card}", r.report()));
         }
+        if let Some(t) = &parts.xpt2046 {
+            out.push(format!(
+                "XPT2046 CS GPIO{}: {} conversions, {}",
+                t.cs,
+                t.conversions,
+                if t.touched() { "touched" } else { "idle" }
+            ));
+        }
         out
+    }
+}
+
+impl Machine {
+    /// `--spi xpt2046[@cs=N,irq=N]` (the part after "xpt2046"), CYD wiring by default (CS 33, PENIRQ 36); classic
+    /// ESP32 only. The touch area takes an attached panel's size, else 240 x 320
+    pub fn xpt2046_attach_spec(&mut self, rest: &str) -> Result<(), String> {
+        if self.chip != Chip::Esp32 {
+            return Err("xpt2046 is only wired up on the classic ESP32".into());
+        }
+        let (mut cs, mut irq) = (33u32, Some(36u32));
+        if let Some(p) = rest.strip_prefix('@') {
+            for kv in p.split(',') {
+                let (k, v) = kv
+                    .split_once('=')
+                    .ok_or_else(|| format!("bad xpt2046 pin {kv}"))?;
+                let n: i64 = v.trim().parse().map_err(|_| format!("bad {k} {v}"))?;
+                match k.trim() {
+                    "cs" if n >= 0 => cs = n as u32,
+                    "irq" => irq = (n >= 0).then_some(n as u32),
+                    _ => return Err(format!("xpt2046 takes cs=<gpio>, irq=<gpio|-1>, got {kv}")),
+                }
+            }
+        } else if !rest.is_empty() {
+            return Err(format!("unknown SPI device xpt2046{rest}"));
+        }
+        let mut t = Xpt2046::new(cs, irq);
+        if let Some(l) = self.hw.lcd() {
+            let (w, h) = l.size();
+            t.width = w as u16;
+            t.height = h as u16;
+        }
+        self.pins().parts.xpt2046 = Some(Box::new(t));
+        if let Some(pin) = irq {
+            self.gpio_drive(pin, 1);
+        }
+        self.elec.add_module("xpt2046");
+        Ok(())
     }
 }

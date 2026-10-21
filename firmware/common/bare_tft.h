@@ -22,6 +22,15 @@
 #define TFT_RST 4
 #define TFT_BL 3
 #define TFT_HOST_NAME "SPI2"
+#elif CONFIG_IDF_TARGET_ESP32
+// CYD (ESP32-2432S028) wiring: HSPI = SPI2_HOST on the classic chip, panel reset tied to EN
+#define TFT_SCLK 14
+#define TFT_MOSI 13
+#define TFT_CS 15
+#define TFT_DC 2
+#define TFT_RST -1
+#define TFT_BL 21
+#define TFT_HOST_NAME "HSPI"
 #else
 #define TFT_SCLK 12
 #define TFT_MOSI 11

@@ -1315,3 +1315,12 @@
 - **不做 HTTP keep-alive**：本条目不需要，加上会改 `Connection: close` 头，所有网络用例的字节都变。
 - **连接用 `tcp::Key` 标识，不另发连接号**：xiaozhi 场景一条连接；四元组本来就唯一，少一张映射表。
 - **服务端不发 ping、不做空闲超时**：xiaozhi 协议靠设备端心跳；需要时 F-09a-2 自己调 `ws_send(OP_PING)`。
+## 2026-10-20 CYD 示例（F-10a2）
+- **复用 `firmware/common/bare_tft.h`**：加 `#elif CONFIG_IDF_TARGET_ESP32` 分支给 CYD 引脚（HSPI = SPI2_HOST：SCLK 14 / MOSI 13 / CS 15 / DC 2，RST 接 EN 记 -1，背光 21），C3 / S3 分支不动；图案与 c3-ili9341 完全相同，accept 直接复用它的 lcd_regions。备选：esp32-cyd 自写一份绘图 —— 否，同一图案两份代码没有收益。
+- **面板驱动沿用 `espressif/esp_lcd_ili9341` 2.1.0**：c3-ili9341 已在用，不引入新依赖；TN 屏按 BGR、不反色（与 IDF spi_lcd_touch 示例一致；真机 CYD 有 ILI9341 / ST7789 两种玻璃，这里只覆盖 ILI9341 版）。
+- **板预设 `cyd` 标 verified**：accept 用例走 `--board cyd`，即端到端跑过；`name` 字段对非 M5 板填产品型号 `ESP32-2432S028`。MISO 12 写进 lcd 引脚串（原理图上有，模型不读）。LDR / RGB LED / 喇叭只写在 note / outputs，未接模型（触摸见下）。
+- **XPT2046 按位流建模**：控制字节（起始位 1）收满 8 位后，下一个时钟出 BUSY，再出 12 / 8 位结果；DOUT 位队列在 CS 保持低时跨 SPI 传输保留，所以三字节全双工、XPT2046_Touchscreen 式「下一条命令塞进 16 位传输低字节」的流水读法、esp_lcd_touch 式「命令相 + 16 位读相」半双工都对。依据数据手册，未读任何 GPL 实现。备选：按字节对齐解析 —— 否，流水读法跨传输就错。
+- **触摸原始值量程是估算**：面板左 / 右边 = X 200 / 3700，上 / 下边 = Y 240 / 3800（RNT 等 CYD 教程的常用标定），按竖屏 240×320 像素线性映射；Z1 600 / Z2 3200（压力 1495，高于常见 300–400 阈值）。真机的轴向、反向、量程未校准，结论标「估算」。
+- **挂在 `GpioParts`、由 SPI 传输钩子交换**：同 RC522 的做法；经典 ESP32 的 `spi_transfer` 只加一行 `rx.or_else(xpt2046_exchange)`，片选按 CS0 信号（矩阵 / IO_MUX）或 GPIO 低判断，lib.rs 只加 `mod spi_touch;`，方便和 F-10c 合并。C3 / S3 暂不接（CYD 只有经典 ESP32）。PENIRQ 由 `Machine::touch` 直接驱动，不走板级 `touch_int`。
+- **板预设加 `spi_touch` 字段**：`BoardPreset` 新增可选 SPI 触摸串，在屏之后接上，触摸区取屏尺寸；其余预设为 None。
+- **worktree 引用主仓库 third_party**：worktree 里建了 git 忽略的 `third_party` 符号链接指向主仓库，用来加载 ROM ELF；不提交。

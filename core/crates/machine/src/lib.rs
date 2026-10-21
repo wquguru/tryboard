@@ -786,6 +786,17 @@ impl Machine {
             } else {
                 d.release();
             }
+        } else if let Some(t) = self.pins().parts.xpt2046.as_mut() {
+            // Resistive panel: PENIRQ is the controller's own pin, not a board-level touch INT
+            if down {
+                t.press(x, y);
+            } else {
+                t.release();
+            }
+            if let Some(pin) = t.irq {
+                self.gpio_drive(pin, if down { 0 } else { 1 });
+            }
+            return;
         } else {
             return;
         }
@@ -890,6 +901,9 @@ impl Machine {
     pub fn lcd_attach_spec(&mut self, spec: &str) -> Result<(), String> {
         if let Some(rest) = spec.strip_prefix("rc522") {
             return self.rc522_attach_spec(rest);
+        }
+        if let Some(rest) = spec.strip_prefix("xpt2046") {
+            return self.xpt2046_attach_spec(rest);
         }
         let (name, pins) = match spec.split_once('@') {
             Some((n, p)) => (n, Some(p)),
