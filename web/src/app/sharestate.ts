@@ -5,6 +5,7 @@ import type { WireMods } from './wiring';
 import type { CaseHarness } from './harness';
 import { fromScript, toScriptBody, type InputEvent, type InputLog } from '../inputlog.ts';
 import { CHIP_ID, type SimChip } from '../chipid.ts';
+import { parseScenario, type ScenarioV1 } from './scenario.ts';
 
 export type ShareChip = SimChip;
 export interface ShareEnv {
@@ -41,6 +42,8 @@ export interface ShareStateV1 {
   loc?: string;
   /** Input log since the last power-up: script body (toScriptBody) and the simulated end time (ms, full precision) */
   run?: { endMs: number; s: string };
+  /** F-11 environment scenario source (re-edit and keep playing); run.s already holds its applied part up to endMs, so old pages lose nothing */
+  tl?: ScenarioV1;
   /** What redaction removed before sharing: wifi = Wi-Fi credentials in provisioning posts, net = real-network replies */
   cut?: ('wifi' | 'net')[];
   /** .tryboard only (F-01b): the user's own firmware appended after the JSON line; h = full sha256 hex, size in bytes */
@@ -129,6 +132,13 @@ function validV1(r: Record<string, unknown>): ShareStateV1 {
       bad(`run.s: ${e}`);
     }
   }
+  if (r.tl !== undefined) {
+    try {
+      r.tl = parseScenario(r.tl);
+    } catch (e) {
+      bad(`tl: ${e}`);
+    }
+  }
   if (r.bin !== undefined && (!isObj(r.bin) || typeof r.bin.name !== 'string' || !/^[^/\\]{1,200}$/.test(r.bin.name) || typeof r.bin.h !== 'string' || !/^[0-9a-f]{64}$/.test(r.bin.h) || typeof r.bin.size !== 'number' || !(r.bin.size > 0))) bad('bin');
   if (r.mpy !== undefined && (typeof r.mpy !== 'string' || r.mpy.length > 65536)) bad('mpy');
   if (r.cut !== undefined && (!Array.isArray(r.cut) || !r.cut.every((c) => c === 'wifi' || c === 'net'))) bad('cut');
@@ -199,6 +209,8 @@ export interface CaptureInput {
   heat: string | null;
   loc: string;
   log: InputLog | null;
+  /** F-11 environment scenario (null = none) */
+  scenario?: ScenarioV1 | null;
   /** Keep the run for the user's own firmware too (the .tryboard file carries the bin, F-01b) */
   ownRun?: boolean;
   /** MicroPython main.py (F-07b) */
@@ -245,6 +257,7 @@ export async function captureState(c: CaptureInput): Promise<{ state: ShareState
     state.run = { endMs: c.log.endMs, s: toScriptBody(r.events) };
     if (r.cut.length) state.cut = r.cut;
   } else state.env = { temp: c.env.temp, humidity: c.env.humidity, pressure: c.env.pressure };
+  if (c.scenario && c.scenario.tracks.length) state.tl = c.scenario;
   return { state, ownFw: !!c.fwBuf && !ex };
 }
 

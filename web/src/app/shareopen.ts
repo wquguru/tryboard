@@ -13,6 +13,7 @@ import { loadExamples } from './examples';
 import { encode } from '../advisor/state';
 import { fwCheck } from './fwcheck';
 import type { StepCtx, WorkId } from './types';
+import { scenFeed, setScenario } from './scenariofeed';
 
 export interface OpenedShare {
   state: ShareState;
@@ -86,6 +87,9 @@ export async function restoreShare(ctx: StepCtx, sh: OpenedShare, own?: { buf: A
   const { session, shell, store } = ctx;
   const st = sh.state;
   const notes: string[] = [t('Opened a shared bench: this is a local copy, your own work is untouched')];
+  // Scenario first: the fast-forward / paced seek below hands its part after endMs to the worker (live.ts seek)
+  // A link without one must not pick up a scenario saved earlier; the link itself is the copy, so nothing is saved here
+  if (st.tl || scenFeed.get().sc) setScenario(st.tl ?? null, { save: false });
   // main.py rides along (F-07b); a run already holds the upload, so no automatic re-send on top of it
   takeShared(st.mpy, !!st.run);
   if (st.mods) session.setWireMods(st.mods);
@@ -139,6 +143,11 @@ export async function restoreShare(ctx: StepCtx, sh: OpenedShare, own?: { buf: A
           snap = await fastForward(ctx, job);
           notes.push(t('Replayed the shared actions up to {t} s; it keeps running from there', { t: endS }));
         }
+      } else if (st.tl) {
+        // Scenario without a run (or the run did not fit the link): play it from power-up
+        const booted = waitBoot(ctx);
+        session.reboot();
+        await booted;
       }
     } else if (st.bin && !own) notes.push(t('The firmware of this .tryboard file is no longer stored in this browser, so only the bench came along; open the file again'));
     else if (!st.fw) notes.push(t('The sharer’s own firmware is not in the link, so only the bench came along'));
@@ -174,6 +183,7 @@ export async function captureBench(ctx: StepCtx, ownRun = false) {
     heat: session.heat,
     loc: locale,
     log: session.sim ? await session.sim.inputLog() : null,
+    scenario: scenFeed.get().sc,
     ownRun,
     mpy: sharedText(),
   });
@@ -185,6 +195,7 @@ export async function makeShare(ctx: StepCtx, max?: number): Promise<{ url: stri
   const link = await shareLink(location.origin + location.pathname, state, max);
   const notes: string[] = [];
   if (ownFw) notes.push(t('Your own firmware can’t go in a link, so it carries the bench only; ⋯ → Download .tryboard file takes the firmware and your actions'));
+  else if (link.truncated && state.tl) notes.push(t('Link too long: only the scenario is included; download the .tryboard file for the full run'));
   else if (link.truncated) notes.push(t('Your actions are too long for a link, so it carries the bench only; ⋯ → Download .tryboard file takes them all'));
   if (state.cut?.length && !link.truncated) notes.push(t('Not shared, for privacy: {what}; results that depend on them may differ', { what: state.cut.map((c) => (c === 'wifi' ? t('Wi-Fi credentials') : t('real-network replies'))).join(', ') }));
   return { url: link.url, notes, s: link.s, run: !!state.run && !link.truncated, truncated: link.truncated };

@@ -58,3 +58,6 @@ body.tb-embed { background: var(--bg); color: var(--fg); font: 13px/1.5 Inter, s
 .tb-embed-replay { font: 12px ui-monospace, Menlo, monospace; color: var(--accent-ink); }
 /* Mouse-driven frames wider than a phone (an iframe is often < 768 px): compact toolbar so the bench keeps its height (phones keep 44 px targets) */
 @media (min-width: 480px) and (pointer: fine) { .tb-embed-btn, .tb-embed-open { min-height: 32px; } .tb-embed-bar { padding: 2px 8px; } }
+/* F-11: read-only scenario progress above the toolbar */
+.tb-embed-scen { height: 3px; background: var(--line-soft); }
+.tb-embed-scen > i { display: block; height: 100%; width: 0; background: var(--accent); }

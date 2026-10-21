@@ -10,6 +10,7 @@ const loaders = {
   ble: () => import('./blepane'),
   net: () => import('./netpane'),
   py: () => import('./mpypane'),
+  scenario: () => import('./scenariopane'),
 };
 type Key = keyof typeof loaders;
 type Mod<K extends Key> = Awaited<ReturnType<(typeof loaders)[K]>>;
@@ -68,6 +69,7 @@ export const BlePane = pane('ble', (m) => m.BlePane);
 export const PhonePanel = pane('ble', (m) => m.PhonePanel);
 export const NetPane = pane('net', (m) => m.NetPane);
 export const MpyPane = pane('py', (m) => m.MpyPane);
+export const ScenarioPane = pane('scenario', (m) => m.ScenarioPane);
 
 /** Fetch every pane chunk; failures are ignored here and surface when the pane is opened. */
 export function prefetchPanes() {

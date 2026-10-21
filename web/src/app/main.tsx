@@ -33,6 +33,8 @@ import { serial } from './dock';
 import { usbFeed } from './usbfeed';
 import { bleFeed } from './blefeed';
 import { netFeed } from './netfeed';
+import { initScenario, scenFeed, setScenario } from './scenariofeed';
+import { benchTracks, parseScenario } from './scenario';
 import { toScript, type InputLog } from '../inputlog';
 import { genLevels } from './genlevels';
 import { registerTemplate } from '../catalog/templates';
@@ -134,6 +136,8 @@ const cmdk = import('./cmdk');
 (async () => {
   try {
     const placed = customPlaced ?? shareIn?.m.sharedPlaced(shared) ?? loadPlaced(wkey(work));
+    // Before the first power-up so a saved scenario plays from t = 0; a shared link's `tl` replaces it in restoreShare
+    initScenario(wkey(work));
     const session = await createSession(shell.stage, work, store, {
         onConsole: log,
         onConsoleReset: (t) => {
@@ -153,6 +157,11 @@ const cmdk = import('./cmdk');
     Object.assign(globalThis, {
       __tbInputLog: () => session.sim?.inputLog(),
       __tbButtonPos: (name: 'BOOT' | 'RST') => session.bench.buttonScreenPos(name),
+      // F-11 (tools/webtest/scenario.mjs): install a scenario; restart = power up again so it plays from t = 0
+      __tbSetScenario: (sc: unknown, restart = true) => {
+        setScenario(sc ? parseScenario(sc) : null);
+        if (restart) session.reboot();
+      },
       __tbReplay: async (l: InputLog, seconds: number, pwmPin?: number) => {
         const { replayLog } = await import('../verify');
         return replayLog(session.fwBuf!, l, seconds, pwmPin);
@@ -340,6 +349,16 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     setBc({ net: used });
     if (!used && bc.get().dock.tab === 'net') setDock({ tab: 'serial' });
   });
+  // Scenario tracks the bench offers (F-11): parts on the bench, BOOT of this chip, network once the firmware uses Wi-Fi
+  store.subscribe((st) => {
+    const ms = Math.round(st.simSeconds * 1000);
+    if (Math.abs(ms - scenFeed.get().now) >= 50 || (ms === 0 && scenFeed.get().now !== 0)) scenFeed.set({ now: ms });
+  }, ['simSeconds']);
+  const offerTracks = () => scenFeed.set({ offered: benchTracks(session.scene.parts, session.sim?.bootPin ?? 9, bc.get().net, !!session.scene.board) });
+  store.subscribe(offerTracks, ['sceneRev']);
+  bc.subscribe(offerTracks, ['net']);
+  session.onBoot(offerTracks);
+  offerTracks();
   // New firmware: check the image header (magic 0xE9, chip id) first; on mismatch don't power up, show a check card
   actions.pickFirmware = async (f) => {
     if (/\.tryboard$/i.test(f.name)) return void (await import('./tryfile')).openFile(f, (m) => shell.toast(m));

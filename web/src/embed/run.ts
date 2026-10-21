@@ -159,5 +159,27 @@ export async function runEmbed(root: HTMLElement, inp: EmbedInput) {
     view.dataset.replay = 'on';
     void rep.done.then(finish);
   }
+  if (st.tl) {
+    // F-11: read-only scenario progress (editing lives in the full lab)
+    const len = st.tl.len;
+    const sc = document.createElement('div');
+    sc.id = 'embedScenario';
+    sc.className = 'tb-embed-scen';
+    sc.setAttribute('role', 'progressbar');
+    sc.setAttribute('aria-label', t('Script'));
+    sc.setAttribute('aria-valuemin', '0');
+    sc.setAttribute('aria-valuemax', String(len / 1000));
+    const fill = document.createElement('i');
+    sc.append(fill);
+    const show = (secs: number) => {
+      const p = Math.min(1, (secs * 1000) / len);
+      fill.style.width = `${(p * 100).toFixed(1)}%`;
+      sc.setAttribute('aria-valuenow', Math.min(secs, len / 1000).toFixed(1));
+      sc.title = t('Script {t} / {len} s', { t: Math.min(secs, len / 1000).toFixed(1), len: (len / 1000).toFixed(0) });
+    };
+    show(store.get().simSeconds);
+    store.subscribe((x) => show(x.simSeconds), ['simSeconds']);
+    bar.before(sc);
+  }
   document.body.dataset.state = 'ready';
 }
