@@ -6,7 +6,7 @@ import { commit } from './react';
 import { createStore } from './store';
 import type { StepId } from './types';
 
-export type DockTab = 'serial' | 'code' | 'analyzer' | 'runs' | 'checks' | 'issues' | 'usb' | 'tasks' | 'ble' | 'net';
+export type DockTab = 'serial' | 'code' | 'analyzer' | 'runs' | 'checks' | 'issues' | 'usb' | 'tasks' | 'ble' | 'net' | 'py';
 export type RunState = 'loading' | 'run' | 'pause' | 'seek' | 'busy' | 'idle' | 'nofw';
 
 export interface Issue {
@@ -57,6 +57,8 @@ export interface BenchChrome {
   ble: boolean;
   /** Firmware uses Wi-Fi: the dock gets a Network tab (phone provisioning, request log; C-02 / C-03) */
   net: boolean;
+  /** The user's MicroPython image is on the bench: the dock gets a main.py tab (F-07b) */
+  mpy: boolean;
   /** Bench chip (the firmware menu lists this chip's examples first). */
   chip: 'esp32' | 'esp32c3' | 'esp32s3';
   /** Firmware menu open (from the top bar, empty-stage card or phone ⋯). */
@@ -97,6 +99,7 @@ export const bc = createStore<BenchChrome>({
   usb: false,
   ble: false,
   net: false,
+  mpy: false,
 });
 export const setBc = (p: Partial<BenchChrome>) => commit(() => bc.set(p));
 

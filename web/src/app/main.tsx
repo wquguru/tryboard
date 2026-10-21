@@ -15,6 +15,7 @@ import { loadBom, loadPlaced } from './bomstore';
 import type { AppState, StepCtx, WorkDef, WorkId } from './types';
 import { wkey } from './works';
 import { loadExamples } from './examples';
+import { installMpy } from './mpyapp';
 import { pushRecent } from './fwmenu';
 import { fetchBuf } from '../assets';
 import { createBenchHistory } from './benchhist';
@@ -328,6 +329,8 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     if (has) setDock({ tab: 'ble', collapsed: false });
     else if (bc.get().dock.tab === 'ble') setDock({ tab: 'serial' });
   });
+  // main.py tab (F-07b): appears when the user's image is MicroPython; uploads go through the logged serial input
+  installMpy(session);
   // Network tab (C-02): appears once the firmware sends its first Wi-Fi frame; phone actions go into the input log
   actions.phone = (cmd) => session.sim?.phone(cmd);
   actions.netFault = (kind) => session.sim?.netFault(kind);
