@@ -128,3 +128,52 @@
 - https://components.espressif.com/components/espressif/esp_xiaozhi/versions/0.1.0/readme
 - https://raw.githubusercontent.com/espressif/esp-protocols/master/components/esp_websocket_client/LICENSE
 - https://deepwiki.com/78/xiaozhi-esp32/8.4-device-activation-and-server-configuration （429，没读到正文）
+
+## 10. F-09b-0 实测（2026-10-21）
+
+**结论：PIE 没有命中。F-09b-1 继续走路线 B，用 micro-opus 定点 + Xtensa 优化（Kconfig 默认），复杂度 0；不需要换纯 C libopus，也不需要退到路线 C。PIE 不立项。**
+
+### 10.1 做法
+- 组件：`idf.py create-project-from-example "esphome/micro-opus=0.4.1:encode_benchmark"`，IDF v5.5.1，目标 esp32s3，`CONFIG_FREERTOS_UNICORE=y`、16 MB flash、八线 PSRAM（示例自带）。工程放在 git-ignored 的 `Reviews/f09b0/`，示例源码、managed_components、构建产物都不提交。
+- 原版示例（20 ms 帧、完整矩阵）跑 20 s 模拟时间；另做 60 ms 变体，只改三处：`FRAME_SIZE = sample_rate * 60 / 1000`；`SPEECH_CONFIGS` 只留 VOIP 16 kbps 复杂度 0 / 5 / 10 和 AUDIO 16 kbps 复杂度 0 / 5；音乐循环关掉（`i < 0`）。输入是示例自带的 30 s 语音（LibriVox 公有领域，SILK 16 kHz），每组 500 帧。
+- 三个构建：fx = 定点 + `OPUS_ENABLE_XTENSA_OPTIMIZATIONS=y`（示例默认）；fxnox = 定点 + 关 Xtensa 优化；fl = 浮点（`OPUS_FLOATING_POINT=y`，micro-opus 在 S3 上的默认值）+ Xtensa 优化。
+- 运行：`tryboard run flash.bin --seconds 150 --expect "All encodes successful"`。帧耗时取 benchmark 自己用 esp_timer 测的值；esp_timer 走模拟时间，所以周期 = µs × 160（模拟器 `CPU_HZ` 固定 160 MHz，见 `soc/periph.rs:4`，固件里设的 240 MHz 不起作用）。
+
+### 10.2 PIE（EE.*）
+- 静态：`xtensa-esp32s3-elf-objdump -d` micro-opus 的 `.a`，四个构建里 EE.* 都是 0。用到的是 MAC16（fx 96 条：`mula.aa.ll`、`mula.dd.*.ldinc` 等，核心已实现，见 `xtensa/src/mac16.rs`）、MULSH、CLAMPS 和 FPU。对整个 app.elf 做 objdump 会数出约 1300 条「ee.*」，全是假的：Xtensa 的 literal 池和对齐填充在可执行段里，被线性反汇编当成指令（例如 `opus_encoder_ctl` 里紧跟 `call8` / `j` 的位置，旁边还有跳到不可能地址的 `l32r`）。
+- 动态：四次运行共编码约 1 万帧（原版 20 ms 4500+，fx 2500，fxnox 2500，fl 1000）（20 ms 和 60 ms、复杂度 0 / 5 / 10、VOIP 和 AUDIO 模式；同时也跑了 Ogg/SILK 解码），没有 IllegalInstruction、没有 EXCCAUSE 0，四次都输出「All encodes successful: YES」。
+- 没覆盖到：CELT 解码（输入是 SILK）、48 kHz 音乐配置。xiaozhi 下行是 16 kHz 语音，F-09b-1 的验收会跑到解码路径，到时候再确认。
+
+### 10.3 每帧周期（16 kHz 单声道，60 ms 帧 = 960 样本，16 kbps）
+
+| 构建 | 模式 | 复杂度 | 平均 µs / 帧 | 周期 / 帧 | 占模拟时间 |
+|---|---|---|---|---|---|
+| fx 定点 + Xtensa | VOIP | 0 | 11 028 | 1.76 M | 18.4 % |
+| fx | VOIP | 5 | 28 017 | 4.48 M | 46.7 % |
+| fx | VOIP | 10 | 42 913 | 6.87 M | 71.5 % |
+| fx | AUDIO | 0 / 5 | 10 869 / 27 945 | 1.74 M / 4.47 M | 18.1 % / 46.6 % |
+| fxnox 定点、关 Xtensa 优化 | VOIP | 0 / 5 / 10 | 13 252 / 34 819 / 56 398 | 2.12 M / 5.57 M / 9.02 M | 22 % / 58 % / 94 % |
+| fl 浮点 + Xtensa | VOIP / AUDIO | 0 | 85 359 / 85 248 | 13.7 M | 142 %（跑不过实时，benchmark 自动跳过更高复杂度） |
+
+- 原版 20 ms 帧（fx 同配置）：复杂度 0、10 kbps 2 242 µs ≈ 36 万周期；16 kbps 3 696 µs ≈ 59 万周期。
+- 和 §4 的估算比：复杂度 0 是 1.76 M 周期 / 帧，比估的 2.9 M 低，占模拟时间 18 % 而不是 30 %；复杂度 5 约 47 %（估 60 %）。
+- 浮点慢 7.7 倍，和 micro-opus README 的说法一致（「SILK 浮点编码比定点慢 4–6 倍，最低复杂度也跑不过实时」），说明不是模拟器的问题。另外浮点构建在示例默认的 16 000 字节主任务栈下会报「stack overflow in task main」并重启循环，栈改成 48 000 才跑通；没有用 QEMU 对照，暂时记作固件侧现象。**F-09b-1 必须显式写 `CONFIG_OPUS_FLOATING_POINT=n`**，因为 S3 上的默认值是浮点。
+- 必须注明：模拟器 IPC 恒为 1、不算 cache 未命中和 PSRAM 延迟，CPU 频率固定 160 MHz，所以上面的周期数和真机（240 MHz、有 cache 停顿）不同，只能用来估模拟负载，不能当真机性能结论。
+
+### 10.4 实时倍率
+- 原生 CLI：原版示例单独跑，CPU 满负荷，20 s 模拟时间用了 23.5 s 墙钟，约 0.85×。三个变体并行跑（同一台 10 核机器，还开了 `--trace-tasks`）时是 0.60–0.79×，有互相干扰，不作数。
+- 网页按 §4 的经验（约为 CLI 的 0.5×）估约 0.43×。
+- `--trace-tasks`：编码期间 main 任务占 100 %（benchmark 不睡），IDLE 0 %。真实固件只在说话时编码，复杂度 0 时编码只占模拟时间约 18 %；如果空闲时间能快进，说话段的墙钟开销主要就是这 18 %（未单独测）。§4 的结论不变：验收和默认演示用测试 WAV，不用实时麦克风。
+- 运行报告「unmodeled registers」共 97 个，最多的是 `0x600030c0` / `0x600030c4`（各 36 次）、`0x60008040`（24 次）、`0x60003008`、`0x600080dc`（各 22 次），都是启动阶段的 SPI0 和 RTC_CNTL 访问，和编码无关。
+
+### 10.5 对 F-09b-1 的建议
+- 用 micro-opus 0.4.1：`CONFIG_OPUS_FLOATING_POINT=n`、`CONFIG_OPUS_ENABLE_XTENSA_OPTIMIZATIONS=y`、编码复杂度 0（下行解码只是 SILK，比编码便宜）。复杂度 5 也能实时（占 47 %），但网页里墙钟开销翻倍多，不值得。
+- 纯 C libopus 不需要：关掉 Xtensa 优化也只慢约 20 %，而且同样没有 PIE。路线 C 不需要。
+- PIE（EE.*）不因 xiaozhi 立项；只有以后要跑 esp-sr / esp-dsp / esp-nn 时再议。
+- 组件进仓库前，要先在 `docs/LICENSING.md` 加 micro-opus 一行（目前没有），并写 DECISIONS。
+
+### 10.6 附录：版本和许可证（从组件包核对）
+- esphome/micro-opus 0.4.1（`idf_component.yml`: `license: Apache-2.0`，url https://github.com/esphome-libs/micro-opus；dependencies.lock component_hash `c4cec51b6e45…`），根目录 `LICENSE` 是 Apache-2.0。
+- 内含 `lib/opus`：`COPYING` 是 Xiph.Org 等的 BSD-3 条款，另有 `LICENSE_PLEASE_READ.txt`（IETF 贡献者 BSD 声明和专利许可指引）。
+- 内含 `lib/micro-ogg-demuxer`：Apache-2.0。
+- 示例测试音频：语音是 LibriVox《孙子兵法》第 1–2 章（Moira Fogarty 朗读，公有领域）；音乐是 Musopen 的贝多芬第三交响曲片段（公有领域）。都只在本地用，不提交。

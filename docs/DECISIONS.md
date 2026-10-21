@@ -1373,3 +1373,4 @@
 - **arduino-cli core 3.0.7 不装**：约数 GB，磁盘只剩 28 GB（94%），F-08c 的 Arduino 3.0.x 列为 ✗（理由：磁盘），以后磁盘宽裕再议。
 - **不上线**：公开部署属 AGENTS §10 必须问人，「你决定」不当作上线授权。
 - **LICENSING 行已在**：esp_websocket_client 1.7.0 ✅（LICENSING 第 35 行）；F-08b 前四个 ✅，ESP32Servo / IRremote 维持「只进本地 accept、上站前人核」（第 30 行），不在本次授权内放宽。
+- **F-09b-0 结论（2026-10-21，AI 自主）**：micro-opus 0.4.1 不用 PIE（静态 0 条、动态约 1 万帧无非法指令），按上一条 (2) 不立 PIE 项；F-09b-1 走路线 B，用 micro-opus 定点（显式 `CONFIG_OPUS_FLOATING_POINT=n`，S3 默认是浮点，SILK 编码慢 7.7 倍跑不过实时）+ `CONFIG_OPUS_ENABLE_XTENSA_OPTIMIZATIONS=y` + 编码复杂度 0（模拟中占 18 %）。备选：复杂度 5（47 %，网页墙钟开销翻倍多）、关 Xtensa 优化（慢约 20 %，没必要）、纯 C libopus / 路线 C（不需要）。micro-opus 进仓库前 F-09b-1 要先在 LICENSING.md 加一行（Apache-2.0，内含 libopus BSD-3、micro-ogg-demuxer Apache-2.0）。详见 RS-2 §10。
