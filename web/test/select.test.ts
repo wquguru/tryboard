@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { briefMarkdown, checkpointsOf } from '../src/advisor/brief.ts';
-import { resolve, changeText, relaxOptions, partRows, sanitize, lasts } from '../src/advisor/derive.ts';
+import { resolve, trustRows, changeText, relaxOptions, partRows, sanitize, lasts } from '../src/advisor/derive.ts';
 import { EMPTY, decode, encode } from '../src/advisor/state.ts';
 
 const W = { ...EMPTY, t: 'weather' };
@@ -87,4 +87,25 @@ test('advisor and shop (custom) agree on parts: both decode from the URL and mus
       const b = selectParts(s).filter((p) => p !== 'battery').sort();
       assert.deepEqual(b, [...new Set(a)].sort(), `${t.id} ${JSON.stringify(extra)}`);
     }
+});
+
+test('every template example id exists in firmware/examples.json', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { TEMPLATES } = await import('../src/advisor/data.ts');
+  const raw = JSON.parse(readFileSync(new URL('../../firmware/examples.json', import.meta.url), 'utf8'));
+  const ids = new Set<string>((Array.isArray(raw) ? raw : (raw.examples ?? Object.values(raw))).map((e: { id: string }) => e.id));
+  for (const t of TEMPLATES) for (const id of t.examples) assert.ok(ids.has(id), `${t.id}: unknown example ${id}`);
+  for (const id of ['rfid', 'irremote', 'mqtt', 'blephone']) assert.ok(TEMPLATES.some((t) => t.id === id), id);
+});
+
+test('classic ESP32 BLE is not a real-board-only row (E-09); Classic Bluetooth still is', () => {
+  const rows = (tpl: string) => {
+    const r = resolve({ ...EMPTY, t: tpl, board: 'esp32-devkitc' });
+    return r.plan?.chip.id === 'esp32' ? trustRows(r.plan, r.need).map((x) => x[0]) : null;
+  };
+  const ble = rows('blephone');
+  assert.ok(ble, 'esp32 board selected');
+  assert.ok(!ble.some((n) => /Bluetooth/.test(n)));
+  const bt = rows('btaudio');
+  assert.ok(bt?.includes('Classic Bluetooth (ESP32)'));
 });

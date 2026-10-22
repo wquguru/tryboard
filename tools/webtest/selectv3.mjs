@@ -217,6 +217,16 @@ const DESK = { width: 1440, height: 900 };
   await page.close();
 }
 
+// ---------------------------------------------------------------- G-01 template examples link into the lab
+{
+  const page = await open('/select?t=rfid', DESK);
+  const href = await page.$eval('[data-testid="tpl-examples"] a[data-example="c3-rc522"]', (e) => e.getAttribute('href')).catch(() => '');
+  report('rfid template: link to c3-rc522 example', /example=c3-rc522/.test(href), href);
+  await page.$eval('a[data-example="c3-rc522"]', (e) => e.click());
+  report('example link opens the lab', await waitFor(page, () => /\/app/.test(location.pathname) && location.search.includes('example=c3-rc522')));
+  await page.close();
+}
+
 report('no errors throughout', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 server.close();

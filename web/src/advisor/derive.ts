@@ -10,7 +10,7 @@ import { t } from '../i18n/index.ts';
 export const MORE_CAPS: Cap[] = ['ble', 'bt_classic', 'thread', 'zigbee', 'wifi6', 'usb_otg', 'camera', 'audio_in', 'audio_out', 'psram', 'display_rgb', 'touch', 'dac', 'ethernet'];
 export const BUDGETS: Budget[] = [0, 60, 120, 200];
 /** Project card order: first 3 are big cards (all have full projects), the rest go under "More" */
-export const TEMPLATE_ORDER = ['weather', 'lights', 'usbkey', 'blink', 'smarthome', 'voice', 'camera', 'btaudio'];
+export const TEMPLATE_ORDER = ['weather', 'lights', 'usbkey', 'blink', 'smarthome', 'rfid', 'irremote', 'mqtt', 'blephone', 'voice', 'camera', 'btaudio'];
 
 const DEFAULT_T = 'weather';
 const NET_CAPS: Cap[] = ['wifi', 'ble'];
@@ -165,7 +165,7 @@ export function trustRows(p: Plan, need: Need): [string, Confidence][] {
   rows.push([t('Pin assignment'), '估算']); // lint: allow-cjk
   if (p.chip.id === 'esp32') {
     // Classic-ESP32-only parts TryBoard does not model (C-05)
-    if (need.caps.some((c) => c === 'ble' || c === 'bt_classic')) rows.push([t('Classic Bluetooth / BLE (ESP32)'), '必须上真机']); // lint: allow-cjk
+    if (need.caps.some((c) => c === 'bt_classic')) rows.push([t('Classic Bluetooth (ESP32)'), '必须上真机']); // lint: allow-cjk
     if (need.caps.some((c) => c === 'dac' || c === 'touch')) rows.push([t('DAC / capacitive touch / Hall sensor (ESP32)'), '必须上真机']); // lint: allow-cjk
   }
   if (p.power) rows.push([t('Battery life'), p.power.confidence]);
