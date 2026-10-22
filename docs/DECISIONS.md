@@ -1467,3 +1467,9 @@
 - **双指 / 滚轮缩放关掉「跟随运行」**：否则运行中的播放头会把视图从手指下拉走；按钮缩放保持原行为（跟随开时把播放头带回视口）。
 - **车道保持 `touch-action: none`，单指平移自己做**：不改成 `pan-x`，因为浏览器一旦接管平移会发 `pointercancel`，双指手势中途被打断。单指在车道空白处拖 = 横向平移（纵向分量交给面板滚动框），落在关键帧上仍是拖关键帧；指针在捕获阶段统计，第二根手指落在关键帧上也算双指，此时关键帧冻结不动。
 - **桌面 ctrl / ⌘ + 滚轮**（触控板捏合也走这个）以光标为锚缩放，用非 passive 的原生 `wheel` 监听才能 `preventDefault` 掉浏览器整页缩放。
+
+## 2026-10-22 F-08d 许可推荐获批（人定）+ 波 9
+- 人在看完波 8 汇报（含 LICENSING_REVIEW §16.4 两条推荐）后回复「可以 go」。解读：同意两条推荐并开下一波。
+- ESP32Servo：按 (b) 上站——挂 LGPL 三件套（与 arduino-esp32 同处理：BUILD_INFO 记库提交、NOTICES 附 LGPL-2.1 + Bennett / Harrington / Margolis 版权与派生说明、给出库源码位置）。落地为 F-08e。
+- IRremote：维持不上站、只进本地 accept。向上游提 issue 属对外发帖，「可以 go」不算对发帖的明确授权，不发；F-08e 把 issue 草稿写进 LICENSING_REVIEW §16 供人自己发。同时先做 (c)：自写基于 RMT 的 NEC 红外发送示例（F-08f），按公开 NEC 时序写，不看、不抄 IRremote 源码结构，可读 ESP-IDF（Apache-2.0）ir_nec 示例。
+- 仍不授权：公网部署、MicroPython 托管、Arduino 3.0.x；真机标定暂缓。
