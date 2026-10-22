@@ -1568,3 +1568,13 @@
 - 理由：.app 在 HSTS 预加载列表里，强制 HTTPS，本站本来就需要（wasm、麦克风、剪贴板）；子域名表达出品方 / 产品层级，以后换独立域名只改一处常量和这些 meta。
 - 未做（需人）：DNS 绑定、托管平台配置、上线部署。
 - 备选：tryboard.indaloop.dev（人不持有 .dev）；tryboard.wqu.guru（个人品牌不像产品，否决）；独立域名 tryboard.app / .dev（未查可注册性，留待用户量起来再议）。
+
+## 2026-10-22 E-09：经典 ESP32（LX6）BLE（自主实现决定）
+- **决定**：照 E-04 的 S3 路线，签名只从 IDF 5.5.1 自带的 `components/bt/controller/lib_esp32/esp32/libbtdm_app.a`（Apache-2.0）生成；HLE 代码与 S3 共用（`esp32s3::ble` 泛化为 `Bus` trait + `Osi` 布局表），经典芯片只提供地址、osi 表布局、签名集合。没有从 espressif/qemu 复制或翻译任何代码。
+- **窄 / 宽规范化**：LX6 链接器把库里的密度指令放宽（`mov.n a10,a2` → `or a10,a2,a2`），S3 的已知缺口方向相反（缩窄）。匹配器对完全精确的单元把 16 位窄形式和对应 24 位宽形式视为相等（`ble_sigs.py xt_same` / `sig_xt::same`）。同一批库下 S3 `gen-xt` 输出与改前逐字节相同；S3 70 个、C3 76 个固件误认单测仍为零。
+- **get_mode 按调用点**：LX6 的 `btdm_controller_get_mode` 与 get_sleep_mode、sleep_enabled 等 5 个函数同形，改为在 `esp_bt_controller_enable` 里 `btdm_controller_enable` 调用前 96 字节内找唯一一个签名匹配的 call 目标。
+- **唤醒路径**：bt.c 在每次 `esp_vhci_host_send_packet` 前后调 `btdm_in_wakeup_requesting_set`，它经控制器内部的 `r_osi_funcs_p` 取信号量；该指针由被钩住的 `btdm_osi_funcs_register` 设置，所以为 NULL（首次 HCI 发送 LoadStoreError）。把它挂成 Nop（复用 `Hooks.pll_track` 槽，LX6 没有 pll_track 钩子），签名在全部经典固件里唯一。备选：直接写控制器全局变量（要从 l32r 字面量反推地址，更脆，否决）。
+- **BR/EDR 命令**：虚拟控制器对 Link Control（除共用的 Disconnect / Read Remote Version）和 Link Policy 命令回 Command Complete 状态 0x01 Unknown HCI Command，单独计数（`Ble::bredr_cmds`，CLI 末尾打印）；现有 C3 / S3 / ESP32 固件都不发这类命令。
+- **覆盖**：third_party/btlib 只有 C3 / S3 的历史库，没有 esp32 的，签名只对 5.5.1 生成并实测；旧 IDF 版本的经典 ESP32 BLE 固件可能认不出（报「没认出」而不是误跑）。
+- **共享源码**：`firmware/c3-bluedroid-nus/main/main.c` 加了 `CONFIG_IDF_TARGET_ESP32` 分支（CHIP_NAME / FW_ID）；C3 / S3 运行输出不变，但行号后移，重编后二进制会变。
+- **网页**：示例库里没有任何板的 BLE 示例入口，按约定不给 esp32-devkitc 加。

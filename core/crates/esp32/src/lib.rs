@@ -1,6 +1,7 @@
 //! Classic ESP32 (dual-core Xtensa LX6) SoC. The core is tryboard-xtensa shared with S3 (LX6 parameters); peripherals
 //! matching C3 / S3 reuse their models, offset-shifted ones (TIMG, SPI1, LEDC) get a shim in periph.rs. Run loop as S3.
 
+pub mod ble;
 pub mod boot;
 mod chip;
 pub mod crypto;
@@ -165,6 +166,8 @@ pub struct SocBus {
     pub wifi: Option<Box<WifiMac>>,
     pub rng: u32,
     pub efuse: [u32; 0x200 / 4],
+    /// BLE VHCI HLE (E-09), or why firmware using BLE can't be simulated
+    pub ble: tryboard_esp32s3::ble::Slot,
     pub console: Vec<u8>,
     pub regs: HashMap<u32, u32>,
     pub unimpl: HashMap<u32, u64>,
@@ -234,6 +237,7 @@ impl Default for SocBus {
             wifi: Some(Box::new(WifiMac::new(WifiLayout::ESP32))),
             rng: 0x2545_f491,
             efuse: default_efuse(),
+            ble: Default::default(),
             console: Vec::new(),
             regs: HashMap::new(),
             unimpl: HashMap::new(),
@@ -1053,6 +1057,7 @@ fn run_core(
             }
             Exit::Hle(pc) => match hle.get(&pc) {
                 Some(kind) => hle::call(*kind, cpu, bus),
+                None if ble::call_at(pc, cpu, bus) => {}
                 None => return Some(Stop::Hle(pc)),
             },
             Exit::Break(v) => return Some(Stop::Break(v)),

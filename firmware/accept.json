@@ -1963,9 +1963,56 @@
   "qemu": false
  },
  {
+  "id": "esp32-ble-hr",
+  "chip": "esp32",
+  "seconds": 4,
+  "args": [
+   "--ble-phone"
+  ],
+  "expect": [
+   "BLE 广播 TryBoard-HR",
+   "连接 成功 status=0",
+   "读电量 87%",
+   "心率订阅 notify=1",
+   "通知 心率 75 bpm rc=0"
+  ],
+  "stderr_expect": [
+   "ADV_IND 02:54:42:00:00:06",
+   "CONNECT_IND phone C0:FF:EE:12:34:56",
+   "service 180D Heart Rate",
+   "service 180F Battery",
+   "service FFE0",
+   "fw → read 2A19 = 57 (87%)",
+   "phone: 3 notifications within 3 s of subscribing to 2A37"
+  ],
+  "qemu": false
+ },
+ {
   "id": "s3-ble-led",
   "chip": "esp32s3",
   "fw": "s3-ble-hr",
+  "seconds": 3,
+  "args": [
+   "--ble-phone"
+  ],
+  "script": "2.0:ble=write ffe1 01",
+  "expect": [
+   "写 LED 01 → 亮",
+   "TRYBOARD_OK c3-ble-hr"
+  ],
+  "stderr_expect": [
+   "fw → write FFE1 ok"
+  ],
+  "gpio_toggles": {
+   "pin": 5,
+   "min": 3
+  },
+  "qemu": false
+ },
+ {
+  "id": "esp32-ble-led",
+  "chip": "esp32",
+  "fw": "esp32-ble-hr",
   "seconds": 3,
   "args": [
    "--ble-phone"
@@ -2933,6 +2980,36 @@
   "qemu": false
  },
  {
+  "id": "esp32-bluedroid-nus",
+  "chip": "esp32",
+  "seconds": 25,
+  "args": [
+   "--desk-pc"
+  ],
+  "expect": [
+   "Bluedroid 已启动",
+   "BLE 广播 Claude-BD",
+   "MTU 247",
+   "TX 订阅 notify=1",
+   "时间 已设置 2026-10-20 10:42:00 (UTC+8)",
+   "主人 TryBoard",
+   "(302 字节 2 片)",
+   "心跳 #1 tokens=184502 running=0",
+   "心跳 #2 tokens=184724 running=1",
+   "status #5 → ack",
+   "TRYBOARD_OK esp32-bluedroid-nus"
+  ],
+  "stderr_expect": [
+   "pc: Nordic UART RX 0x002a (write without response), TX 0x002c",
+   "pc: session up (MTU 247, chunks of 244 B)",
+   "(303 B, 2 writes)",
+   "pc: ack owner #1 ok",
+   "2 notifications)",
+   "pc: ack status #5 ok, battery 87%"
+  ],
+  "qemu": false
+ },
+ {
   "id": "s3-bluedroid-phone",
   "fw": "s3-bluedroid-nus",
   "chip": "esp32s3",
@@ -2949,6 +3026,31 @@
   ],
   "stderr_expect": [
    "ADV_IND 02:54:42:00:00:05",
+   "CONNECT_IND phone C0:FF:EE:12:34:56",
+   "service 6e400001-b5a3-f393-e0a9-e50e24dcca9e",
+   "characteristic 6e400002-b5a3-f393-e0a9-e50e24dcca9e handle 0x002a [write-nr write]",
+   "fw → subscribe 6e400003-b5a3-f393-e0a9-e50e24dcca9e ok",
+   "phone: 1 notifications within 3 s of subscribing to 6e400003-b5a3-f393-e0a9-e50e24dcca9e"
+  ],
+  "qemu": false
+ },
+ {
+  "id": "esp32-bluedroid-phone",
+  "fw": "esp32-bluedroid-nus",
+  "chip": "esp32",
+  "seconds": 5,
+  "args": [
+   "--ble-phone"
+  ],
+  "expect": [
+   "BLE 广播 Claude-BD",
+   "连接 成功 conn_id=0",
+   "MTU 247",
+   "TX 订阅 notify=1",
+   "问候 通知 1 片"
+  ],
+  "stderr_expect": [
+   "ADV_IND 02:54:42:00:00:06",
    "CONNECT_IND phone C0:FF:EE:12:34:56",
    "service 6e400001-b5a3-f393-e0a9-e50e24dcca9e",
    "characteristic 6e400002-b5a3-f393-e0a9-e50e24dcca9e handle 0x002a [write-nr write]",

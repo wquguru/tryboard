@@ -4,6 +4,7 @@
 use crate::{Esp32, Stop, MMIO_HIGH, MMIO_LOW};
 use std::collections::{HashMap, VecDeque};
 use tryboard_soc::adc::AdcModel;
+use tryboard_soc::ble::Ble;
 use tryboard_soc::chip::{self, Chip};
 use tryboard_soc::devices::audio::Audio;
 use tryboard_soc::devices::lcd::{Lcd, LcdKind, LcdPins};
@@ -232,6 +233,19 @@ impl Chip for Esp32 {
     }
     fn wifi_mut(&mut self) -> &mut WifiMac {
         self.bus.wifi_mut()
+    }
+    fn ble(&self) -> Option<&Ble> {
+        self.bus.ble.hle.as_deref().map(|b| &*b.world)
+    }
+    fn ble_mut(&mut self) -> Option<&mut Ble> {
+        self.bus.ble.hle.as_deref_mut().map(|b| &mut *b.world)
+    }
+    fn ble_error(&self) -> Option<String> {
+        self.bus
+            .ble
+            .error
+            .clone()
+            .or_else(|| self.bus.ble.hle.as_ref().and_then(|b| b.error.clone()))
     }
     fn lcd_attach(&mut self, kind: LcdKind) -> bool {
         self.bus.attach_lcd_pins(kind, LcdPins::ESP32_DEFAULT)
