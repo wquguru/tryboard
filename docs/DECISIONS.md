@@ -1578,3 +1578,16 @@
 - **覆盖**：third_party/btlib 只有 C3 / S3 的历史库，没有 esp32 的，签名只对 5.5.1 生成并实测；旧 IDF 版本的经典 ESP32 BLE 固件可能认不出（报「没认出」而不是误跑）。
 - **共享源码**：`firmware/c3-bluedroid-nus/main/main.c` 加了 `CONFIG_IDF_TARGET_ESP32` 分支（CHIP_NAME / FW_ID）；C3 / S3 运行输出不变，但行号后移，重编后二进制会变。
 - **网页**：示例库里没有任何板的 BLE 示例入口，按约定不给 esp32-devkitc 加。
+
+## 2026-10-22 托管与运维入口：Cloudflare Pages + Justfile（人认可推荐）
+- 决定：静态站托管在 Cloudflare Pages（免费套餐，不开 Workers Paid / 不引入 Pages Functions），本机构建后 `wrangler pages deploy` 直传（不走 Pages 的 Git 构建、不建 CI）；仓库根加薄 `Justfile`（只包 `tools/*`，脚本仍是唯一实现），`just --list` 是常用命令入口。
+- 不做配置化：站点无后端、无运行时密钥，构建期只有 `TRYBOARD_SITE_URL`（与 Pages 项目名一起放在 Justfile 顶部变量，`TRYBOARD_PAGES_PROJECT` 可覆盖）；内容配置（accept / levels / examples / catalog）已由 `tools/check_config.py` 校验。不引入 `.env`、`~/.config/tryboard`、env-policy（参考 newshub 的那套是为有状态、有密钥的服务准备的）。
+- 理由：
+  - 费用：Pages 静态请求与带宽不计费；免费套餐超额是拒绝服务而不是扣费；只有引入 Functions / Workers Paid / R2 才有按量计费，届时重新评估（并加限流）。
+  - 不能放 CI：`web/public/{wasm,fw,rom}` 被 git 忽略，干净 checkout 要 ESP-IDF（几 GB）+ ROM 才能构建；仓库也还没有 remote。所以在本机构建，`just deploy` 拒绝脏工作区（`force` 可覆盖），把 commit hash / dirty 标记带进 Pages 部署记录。
+  - 现有约束都满足：`_headers` 本来就按 Pages 语法写；dist 67 MB / 456 个文件、无单文件 > 25 MiB；不用 SharedArrayBuffer，不需要 COOP/COEP。
+- 预览：`just deploy preview` 用 `--branch preview`，构建时 `TRYBOARD_SITE_URL` 设为 `https://preview.<项目>.pages.dev`（canonical / sitemap 不指向正式站；页面里的 og:image 仍是正式域名绝对地址，可接受）；`just smoke` 对 `*.pages.dev` 额外检查 `X-Robots-Tag: noindex`（Pages 对预览部署自动加，首次预览时核实）。
+- 运维 recipe：`doctor`（只查工具链存在性）、`size-check`（wasm 首载 ≤ 2 MB，原始字节）、`deploy [prod|preview] [force]`、`smoke <url>`（页面 200 + no-cache、wasm immutable + application/wasm、robots）、`pages-local`（`wrangler pages dev` 本地模拟 `_headers`；本机 wrangler 4.118 自带 workerd 只支持到 2026-08-06，所以钉 `--compatibility-date 2026-08-01`）、`deployments`（回滚走 Cloudflare 控制台 Deployments → Rollback）。
+- `just lint` 的注释检查默认只查相对 HEAD 改动 / 新增的文件：全仓库仍有 32 条历史问题（accept.sh 不卡它），`just lint all` 查全量。
+- 实测（worktree ops-justfile）：`just smoke http://localhost:8799`（`pages-local` 起主目录的 dist）12 项全过；`size-check` 1,656,361 B / 2,000,000；脏工作区 `just deploy preview` 被拒；`just lint` 里 lint_size 报 `productStep 961 -> 963`，HEAD 上已有，与本改动无关。未做真实部署（正式部署要人点头，AGENTS §10；还需人在 Cloudflare 建 Pages 项目、绑 tryboard.indaloop.app、`wrangler login`）。
+- 备选：部署到自有服务器 hetzner3（cloudflared tunnel + Caddy）——否：那台机器 8 核 16 GB 无 swap、负载约 5.7，跑着 newshub 和 4 个实盘 trader，公开站被刷会拖累交易程序；机房在赫尔辛基，而用户多在中日韩，边缘未命中都要回源；`.wasm` / `.bin` 还得另配 Cache Rules；回滚、预览、证书都得自己维护。以后需要后端（短链、realnet 代理、账号）时，在 hetzner3 起小容器经 tunnel 挂 api 子域名，静态站仍留在 Pages。Netlify / Vercel：功能相近，但 `_headers` 按 Pages 语法写、只在 Pages 上核实过，不换。indaloop.app 的 DNS 是否在 Cloudflare 待人确认（不在则绑自定义域名要加 CNAME）。
