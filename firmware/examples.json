@@ -364,6 +364,47 @@
   "chip": "esp32c3"
  },
  {
+  "id": "arduino-lib-esp32servo",
+  "title": "Arduino: servo sweep with ESP32Servo",
+  "about": "Built with arduino-cli and the ESP32Servo library (LGPL-2.1; the pinned library commit and build info ship with the bin). An SG90 on GPIO6 steps through 0/45/90/135/180° with 0.5–2.5 ms pulses at 50 Hz.",
+  "tags": [
+   "✓ Verified in sim",
+   "Arduino",
+   "PWM"
+  ],
+  "pins": {
+   "servo": 6
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "servo",
+     "pin": 6
+    }
+   ]
+  },
+  "chip": "esp32c3"
+ },
+ {
+  "id": "arduino-lib-irremote",
+  "title": "Arduino: send NEC IR codes with IRremote",
+  "about": "Built with arduino-cli and the IRremote library (MIT). An IR LED on GPIO4 sends three NEC codes on a 38 kHz carrier; the serial log prints each command.",
+  "tags": [
+   "✓ Verified in sim",
+   "Arduino",
+   "PWM"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "led",
+     "pin": 4
+    }
+   ]
+  },
+  "chip": "esp32c3"
+ },
+ {
   "id": "s3-usb-keyboard",
   "title": "S3 native USB: become a keyboard + mouse",
   "about": "The ESP32-S3 uses its built-in USB OTG (TinyUSB) to present itself as a HID keyboard + mouse: 1 second after being plugged into a computer it types a line of text and draws a square with the mouse, then repeats each time you press BOOT. The virtual computer on the left goes through full enumeration (get descriptors, set address, read the report descriptor) and turns the received keystrokes back into text. The USB port on the C3 / C6 can only act as a serial port, so they can't do this.",

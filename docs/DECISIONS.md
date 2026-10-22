@@ -1490,3 +1490,13 @@
   - 这 4 个头只有宏、类型和结构声明、常量，不单独产生目标代码；TinyIR.h 所声明的实现 TinyIRReceiver.hpp 本身是 MIT。
 - 落地：F-08e 一并处理 NOTICES、许可页、BUILD_INFO。请作者统一文件头的英文 issue 草稿保留为可选，不发、不阻塞上站。
 - F-08f（自写 RMT NEC 示例）不再是替代品，作为额外的无库示例保留。
+
+## 2026-10-22 F-08e ESP32Servo 走 LGPL 三件套上站（自主实现决定）
+- 实查发现「arduino-esp32 的 LGPL 那一路」此前只写在文档里：`arduino-blink` 已在 `web/public/fw` 上站，但 `tools/build_web.sh` 只拷 `flash.bin`（`BUILD_INFO.txt` 没放到 bin 旁边），`tools/gen_licenses.mjs` 只读 ESP-IDF `managed_components`，许可页 / NOTICES 里没有 arduino-esp32，仓库里也没有 LGPL-2.1 原文可复用。所以 F-08e 顺手把这条路补齐，arduino-blink 一起受益。
+- 决定：
+  - `tools/fetch_third_party.sh` 取 arduino-esp32 发布标签 3.3.2 的 `LICENSE.md`（LGPL-2.1 全文）到 `third_party/arduino-esp32/LICENSE.md`；arduino-esp32 和 ESP32Servo 共用这一份，NOTICES 按原文去重只出现一次。备选：从 gnu.org 取、或复用 IDF 里 lwip SharpSnmpLib 的 license.txt——前者不是 arduino-esp32 实际分发的那份，后者与本组件无关，不用。
+  - `tools/build_web.sh` 发布 `arduino-*` 示例时把 `BUILD_INFO.txt` 一起拷到 `fw/<id>/`（「每个 bin 旁边」）；`tools/build_arduino.sh` 的 BUILD_INFO 每个库多记许可证和钉提交的源码 URL（`<repo>/tree/<sha>`）。
+  - `tools/gen_licenses.mjs` 新增「Arduino 示例固件」一节：读已发布 `fw/arduino-*/BUILD_INFO.txt`（没有已发布固件时退回 `firmware/build/arduino-*`，与 ESP-IDF 一节同理），列 arduino-esp32 核心 + 每个库（版本 = 钉的提交，链接 = 该提交的源码树）。库许可以 `docs/LICENSING.md` 为准写成白名单表；ESP32Servo 记 `LGPL-2.1-or-later`，版权行写 Bennett / Harrington（ESP32PWM）/ 派生自 Arduino Servo（Margolis 2009）。
+  - 防护：已发布的 Arduino bin 用了白名单外的库（OneWire、TFT_eSPI 等）时 `gen_licenses.mjs` 报错退出 2，与「乐鑫修改版 MIT」那条同一做法；回退列举（未发布时）则跳过这些示例；`web/test/licenses.test.ts` 覆盖。
+  - 同一轮里人又定 IRremote 也上站（决定本身由主会话记在 main 的 DECISIONS）：白名单加 `Arduino-IRremote`（MIT AND BSD-3-Clause），NOTICES 附全部版权人、`digitalWriteFast.h` BSD-3 和 4 个 GPL 头的说明。
+  - `firmware/examples.json` 加 `arduino-lib-esp32servo`（C3，SG90 接 GPIO6）和 `arduino-lib-irremote`（C3，红外 LED 接 GPIO4；暂无红外件，场景里用普通 LED 件代替），让两个库真的上站；标题和说明走 i18n data 字典，zh / ja / ko 一起加。

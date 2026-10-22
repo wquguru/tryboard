@@ -353,6 +353,40 @@ ROM 里的第三方代码见 IDF COPYRIGHT 页 "ROM Source Code Copyrights"：Ne
 - **ESP32Servo → (b)**【需要继续确认】：事实是 LGPL-2.1-or-later（不是「无许可」），义务与已在三件套里的 arduino-esp32 同类，没有 GPL 文件。建议人核后把它从第 30 行的「待人核」改成「挂 LGPL 三件套上站」，NOTICE 写明 Bennett / Harrington / Margolis 派生关系。
 - **IRremote → 暂不上站；人同意后先走 (b) 问上游，问不到再做 (c)**【需要继续确认】：主体 MIT 没问题，但 4 个无条件编入的 GPL-3 头与 MIT 声明矛盾，且 bin 含闭源库，无法以 GPL-3 兜底。(a) 的「宏 / 类型不算派生」论证可以成立，但属于法律判断，不由 AI 定。
 
+#### 16.5 人定（2026-10-22）
+
+- ESP32Servo：人对 §16.4 回复「可以 go」，按 (b) 挂 LGPL 三件套上站（F-08e 落地）。
+- IRremote：人随后又定「我觉得没问题可以上去」，按 MIT 上站（F-08e 同一轮落地）。依据（主会话补查，经协调转来）：
+  - (a) issue #397（2016，z3t0）就是新版本切换到 MIT 的那次改许可，与 README「2.8.0 起 MIT」一致；
+  - (b) ArminJo/Arduino-Utils 和 ArminJo/PWMMotorControl（都是 GPL-3.0）里有同样的 `LongUnion.h` / `LocalDebugLevelStart.h`，说明这 4 个头是版权人本人拷进来的样板文件；
+  - (c) `TinyIR.h` 声明的实现 `TinyIRReceiver.hpp` 是 MIT（与 §16.2 表一致）。
+- NOTICES 写法：MIT 全文 + LICENSE 与各协议文件的全部版权人 + `digitalWriteFast.h` 的 BSD-3 声明 + 一句说明（4 个 GPL 头只含宏、类型 / 结构声明和常量，不产生自身目标代码，所配实现为 MIT），源码位置给钉的提交 `498dc591`。
+
+##### 上游 issue 草稿（可选：请作者统一文件头，不阻塞上站）
+
+向上游提 issue 属对外发帖（AGENTS.md §10），**没有发**，也不要用 `gh` 代发，由人决定。发之前把行号对一下钉的提交 `498dc591`；上游如有回复，回到本节记录链接。
+
+- 仓库：https://github.com/Arduino-IRremote/Arduino-IRremote/issues/new
+- 标题：`License question: four GPL-3.0 headers included by IRremote.hpp (MIT library)`
+
+> Hi Armin, and thanks for maintaining IRremote. It is a great library and we would like to use it in an educational project.
+>
+> We are building TryBoard, a browser-based ESP32 simulator for hobbyists, and would like to ship a small precompiled example (based on `examples/SimpleSender`) that uses IRremote 4.7.1. While preparing the third-party notices we read the license headers of everything under `src/`, and we found a small inconsistency that we hope you can clarify.
+>
+> The repository `LICENSE` and `library.json` say MIT, and almost all source files carry MIT headers. However, four headers that are always compiled in when a sketch includes `IRremote.hpp` carry a GPL-3.0-or-later notice ("part of Arduino-Utils"):
+>
+> - `src/LocalDebugLevelStart.h`
+> - `src/LocalDebugLevelEnd.h`
+> - `src/LongUnion.h` (included unconditionally from `IRremote.hpp`)
+> - `src/TinyIR.h` (included from `ir_FAST.hpp`, which `IRremote.hpp` includes unconditionally)
+>
+> (Checked at commit `498dc591b255d8ba2e239c875804bdab2ab0fe91`.)
+>
+> Because of these headers, it is unclear whether a firmware binary built with IRremote can be distributed under MIT terms alone. As the author of both the library and these files, would you be willing to license these four files under MIT, the same as the repository `LICENSE` (for example by changing their headers in the IRremote copy)? A short comment here confirming your intent would also help.
+>
+> We fully understand if you prefer to keep them as they are. Thank you for your time!
+
+
 ---
 
 ## 三、不能放宽的项及原因

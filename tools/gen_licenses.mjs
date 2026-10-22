@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Builds web/licenses.html, THIRD_PARTY_NOTICES.txt and the SPDX 2.3 SBOM (LICENSING.md rule 8, DESIGN_V2 §7.3 C) from tools/build_web.sh.
-// Exits 2 if shipped firmware has Espressif modified MIT (rule 5). Usage: node tools/gen_licenses.mjs [--out web/licenses.html] [--pub web/public]
+// Exits 2 if shipped firmware has Espressif modified MIT (rule 5) or an Arduino library not allowed by LICENSING.md. Usage: node tools/gen_licenses.mjs [--out web/licenses.html] [--pub web/public] [--fw web/public/fw]
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,6 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (k, d) => (process.argv.indexOf(k) > 0 ? process.argv[process.argv.indexOf(k) + 1] : d);
 const out = path.resolve(root, arg('--out', 'web/licenses.html'));
 const pub = path.resolve(root, arg('--pub', 'web/public'));
+const fwRoot = path.resolve(root, arg('--fw', 'web/public/fw'));
 const web = path.join(root, 'web');
 const rd = (p) => fs.readFileSync(p, 'utf8');
 const exists = (p) => fs.existsSync(p);
@@ -143,7 +144,7 @@ const crates = [];
     url: 'https://github.com/espressif/esp-idf',
     note: 'soc register headers are Apache-2.0 OR MIT; FreeRTOS is MIT; copyrights and licenses of third-party parts such as newlib and lwIP: https://docs.espressif.com/projects/esp-idf/en/v5.5.1/esp32s3/COPYRIGHT.html . The closed-source Wi-Fi / PHY / Bluetooth / coexistence libraries (esp32-wifi-lib, esp-phy-lib, esp32-bt-lib, esp-coex-lib) are Apache-2.0.',
   });
-  const fwDir = path.join(web, 'public/fw');
+  const fwDir = fwRoot;
   const published = exists(fwDir) ? fs.readdirSync(fwDir).filter((n) => exists(path.join(fwDir, n, 'flash.bin'))) : [];
   if (!published.length) warn.push('no published firmware in web/public/fw (run the copy step of tools/build_web.sh first); listing components of every example in firmware/');
   const exList = published.length ? published : fs.readdirSync(path.join(root, 'firmware')).filter((n) => exists(path.join(root, 'firmware', n, 'main')));
@@ -175,6 +176,93 @@ const crates = [];
   if (!comps.size) warn.push('no component-manager components found (firmware/*/managed_components not generated yet)');
   for (const c of [...comps.values()].sort((a, b) => a.name.localeCompare(b.name))) {
     add({ cat: 'Example firmware (ESP-IDF projects, shipped compiled with the site)', name: c.name, version: c.ver, license: c.spdx, copyright: c.copy, url: c.url, text: c.text, note: `Used in: ${c.used.join(' ')}` });
+  }
+}
+
+// ---------------------------------------------------------------- 4b. Example firmware: Arduino sketches (LGPL three-piece, F-08e)
+// Libraries allowed in shipped bins = the ✅ rows of docs/LICENSING.md; null = read the SPDX id from the library's LICENSE file
+const ARDUINO_LIBS = {
+  ArduinoJson: 'MIT', U8g2_Arduino: 'BSD-2-Clause', Adafruit_SSD1306: null, 'Adafruit-GFX-Library': null, Adafruit_BME280_Library: null,
+  Adafruit_MPU6050: null, Adafruit_SHT31: null, Adafruit_ILI9341: null, Adafruit_BusIO: 'MIT', 'DHT-sensor-library': 'MIT', RTClib: 'MIT',
+  Adafruit_Sensor: 'Apache-2.0', 'esp8266-oled-ssd1306': 'MIT', 'Arduino-Temperature-Control-Library': 'MIT', rfid: 'Unlicense',
+  FastLED: 'MIT', WiFiManager: 'MIT', pubsubclient: 'MIT', 'NimBLE-Arduino': 'Apache-2.0', M5Unified: 'MIT', M5GFX: 'MIT AND BSD-2-Clause',
+  ESP32Servo: 'LGPL-2.1-or-later', 'Arduino-IRremote': 'MIT AND BSD-3-Clause',
+};
+// Per-file holders from LICENSING_REVIEW §16.1 / §16.2 (ESP32Servo has no LICENSE file; IRremote files name more authors than LICENSE)
+const ARDUINO_LIB_COPYRIGHT = {
+  ESP32Servo: ['Copyright (c) 2017 John K. Bennett (ESP32Servo)', 'ESP32PWM by Kevin Harrington (hephaestus), 2018', 'Derived from the Arduino Servo library, originally written by Michael Margolis in 2009 (LGPL-2.1-or-later)'],
+  'Arduino-IRremote': [
+    '(c) Copyright 2009 Ken Shirriff; (c) Copyright 2016 Rafi Khan; (c) Copyright 2020-2022 Armin Joachimsmeyer et al.',
+    'Protocol files also by Daniel Wallner, Kristian Lauszus, Darryl Smith, E. Stuart Hicks, Daniel Weidmann and Bengt Martensson (MIT)',
+  ],
+};
+const ARDUINO_LIB_NOTE = {
+  'Arduino-IRremote':
+    'src/digitalWriteFast.h: Watterott electronic, based on https://code.google.com/p/digitalwritefast, BSD 3-Clause License (https://opensource.org/licenses/BSD-3-Clause).\n' +
+    'LocalDebugLevelStart.h, LocalDebugLevelEnd.h, LongUnion.h, TinyIR.h carry GPL-3.0-or-later headers copied from the same author\'s utility repos; they contain only macros, type and struct declarations and constants, contribute no object code of their own, and the implementation they accompany (e.g. TinyIRReceiver.hpp) is MIT.',
+};
+// Never shipped (LICENSING.md): OneWire / TFT_eSPI await review; a published bin using one fails the build
+const ARDUINO_DENY = { OneWire: 'licence awaiting review', TFT_eSPI: 'licence awaiting review' };
+{
+  const fwDir = fwRoot;
+  const lgpl = exists(path.join(root, 'third_party/arduino-esp32/LICENSE.md')) ? rd(path.join(root, 'third_party/arduino-esp32/LICENSE.md')) : '';
+  if (!lgpl) warn.push('third_party/arduino-esp32/LICENSE.md does not exist (run tools/fetch_third_party.sh first): LGPL-2.1 text not attached');
+  const published = exists(fwDir) ? fs.readdirSync(fwDir).filter((n) => n.startsWith('arduino-') && exists(path.join(fwDir, n, 'flash.bin'))) : [];
+  // Nothing published yet: list every built sketch like section 4 does, but skip the ones that may never ship
+  const buildDir = path.join(root, 'firmware/build');
+  const infoOf = (id) => [path.join(fwDir, id, 'BUILD_INFO.txt'), path.join(buildDir, id, 'BUILD_INFO.txt')].find(exists);
+  const ids = published.length ? published : exists(buildDir) ? fs.readdirSync(buildDir).filter((n) => n.startsWith('arduino-') && infoOf(n)) : [];
+  let core = '';
+  const libs = new Map();
+  const denied = [];
+  const coreUsed = [];
+  for (const id of ids) {
+    const f = infoOf(id);
+    if (!f) {
+      warn.push(`${id}: published Arduino firmware has no BUILD_INFO.txt (rebuild with tools/build_arduino.sh)`);
+      continue;
+    }
+    const info = rd(f);
+    const used = [...info.matchAll(/^library: (\S+) ([0-9a-f]{40}) (\S+)/gm)].map((m) => ({ name: m[1], sha: m[2], repo: m[3].replace(/\.git$/, '') }));
+    const bad = used.filter((l) => ARDUINO_DENY[l.name] || !(l.name in ARDUINO_LIBS));
+    if (bad.length) {
+      if (published.length) denied.push(`${id}: ${bad.map((l) => `${l.name} (${ARDUINO_DENY[l.name] ?? 'not a ✅ row in docs/LICENSING.md'})`).join(', ')}`);
+      continue;
+    }
+    core ||= info.match(/^core: esp32:esp32 (\S+)/m)?.[1] ?? '';
+    for (const l of used) {
+      const k = `${l.name}@${l.sha}`;
+      if (!libs.has(k)) libs.set(k, { ...l, used: [] });
+      libs.get(k).used.push(id);
+    }
+    coreUsed.push(id);
+  }
+  if (denied.length) {
+    console.error(`[licenses] published Arduino firmware links libraries that LICENSING.md does not allow on the site: ${denied.join('; ')}`);
+    process.exit(2);
+  }
+  const cat = 'Example firmware (Arduino sketches, shipped compiled with the site)';
+  const relink = 'LGPL-2.1 section 6(a): each bin ships with BUILD_INFO.txt (sketch commit, arduino-esp32 release, pinned library commits, FQBN, arduino-cli version) and its sketch source (fw/<id>/src.json), so you can rebuild and relink it against a modified library.';
+  if (coreUsed.length) {
+    add({ cat, name: 'arduino-esp32', version: core, license: 'LGPL-2.1-or-later AND Apache-2.0', copyright: ['Copyright (c) Espressif Systems and Arduino contributors'], url: `https://github.com/espressif/arduino-esp32/tree/${core}`, text: lgpl, note: `Arduino-derived core files are LGPL-2.1, the rest Apache-2.0 (ESP-IDF libraries as listed above).\n${relink}\nUsed in: ${coreUsed.join(' ')}` });
+  }
+  for (const l of [...libs.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+    const dir = path.join(root, 'third_party/arduino-libs', l.name);
+    const lf = licenseFile(dir);
+    const ftext = lf ? rd(lf) : '';
+    const lgplLib = /^LGPL/.test(ARDUINO_LIBS[l.name] ?? '');
+    const text = lgplLib ? lgpl : ftext;
+    if (!text) warn.push(`Arduino library ${l.name}: no license text found`);
+    add({
+      cat,
+      name: l.name,
+      version: l.sha.slice(0, 12),
+      license: ARDUINO_LIBS[l.name] ?? guessSpdx(ftext),
+      copyright: ARDUINO_LIB_COPYRIGHT[l.name] ?? copyrightLines(ftext),
+      url: `${l.repo}/tree/${l.sha}`,
+      text,
+      note: `${ARDUINO_LIB_NOTE[l.name] ? `${ARDUINO_LIB_NOTE[l.name]}\n` : ''}${lgplLib ? `Library source at the pinned commit above. ${relink}\n` : ''}Used in: ${l.used.join(' ')}`,
+    });
   }
 }
 
@@ -358,9 +446,19 @@ const ACKS = [
   { name: 'React', what: 'Web interface', re: /^react$/ },
   { name: 'TinyUSB', what: 'USB keyboard and serial', re: /^espressif\/tinyusb$/ },
   { name: 'Google Fonts', what: 'Noto Sans SC, JetBrains Mono', re: /^(Noto Sans SC|JetBrains Mono)$/ },
-  { name: 'KiCad and Adafruit', what: 'Buzzer, USB-C and servo 3D models', re: /蜂鸣器|USB-C|舵机|buzzer|servo/i }, // lint: allow-cjk
+  { name: 'KiCad and Adafruit', what: 'Buzzer, USB-C and servo 3D models', re: /^(?!ESP32Servo$).*(蜂鸣器|USB-C|舵机|buzzer|servo)/i }, // lint: allow-cjk
 ].filter((a) => has(a.re) || (warn.push(`special-thanks entry "${a.name}" has no matching component, omitted`), false));
 const modified = models.filter((m) => m.modified);
+// LGPL-2.1 section 6 wants a prominent notice, so Arduino bins get their own list instead of only the NOTICES file
+const arduinoItems = items.filter((it) => it.cat.startsWith('Example firmware (Arduino'));
+const arduinoHtml = arduinoItems.length
+  ? `
+      <h2 id="arduino">Arduino example firmware</h2>
+      <p>Some example firmware is built with the Arduino core for ESP32 and links the components below. The LGPL-licensed parts (${esc(arduinoItems.filter((it) => /LGPL/.test(it.license)).map((it) => it.name).join(', '))}) are under the GNU Lesser General Public License 2.1 or later, whose full text is in the third-party notices. Each such bin ships with <code>BUILD_INFO.txt</code> (sketch commit, core release, pinned library commits, board and arduino-cli version) and its sketch source, so you can rebuild it and relink it against a modified library.</p>
+      <ul>
+        ${arduinoItems.map((it) => `<li><a href="${esc(it.url)}">${esc(it.name)}</a> ${esc(it.version)} · ${esc(it.license)}${it.copyright.length ? ` · ${esc(it.copyright.join('; '))}` : ''}</li>`).join('\n        ')}
+      </ul>`
+  : '';
 
 // Header nav link classes match navLink in web/src/ui/site.tsx (licenses.css @source-scans this file to emit them)
 const NAV_LINK = 'rounded-md px-2.5 py-[5px] text-muted hover:bg-field hover:text-fg';
@@ -434,6 +532,7 @@ const html = `<!doctype html>
 
       <h2>Third-party components</h2>
       <p>The site ships <b id="licCount">${shipped.length}</b> third-party components under ${esc(licSentence)}. Full names, versions, copyright notices and license texts are in the files below.</p>
+${arduinoHtml}
 
       <h2>Special thanks</h2>
       <div class="grid grid-cols-3 gap-3 max-md:grid-cols-1">

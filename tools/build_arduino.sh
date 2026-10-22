@@ -33,11 +33,15 @@ build_one() { # name variant fqbn
   cp "$out/raw/$n.ino.merged.bin" "$out/flash.bin"
   cp "$out/raw/$n.ino.elf" "$out/app.elf"
   {
-    echo "licence: arduino-esp32 LGPL-2.1 (LICENSE.md in the core package); ESP-IDF libs Apache-2.0; see docs/LICENSING.md"
+    echo "licence: arduino-esp32 LGPL-2.1 (LICENSE.md at the release tag); ESP-IDF libs Apache-2.0; libraries per docs/LICENSING.md; notices in THIRD_PARTY_NOTICES.txt"
     echo "sketch: firmware/arduino/$n @ $(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
     echo "core: esp32:esp32 $CORE_VER (arduino-esp32 release tag $CORE_VER)"
     for lib in $(each_lib "$src"); do
-      echo "library: $lib $(git -C "$LIBS/$lib" rev-parse HEAD) $(git -C "$LIBS/$lib" config remote.origin.url)"
+      local sha url
+      sha=$(git -C "$LIBS/$lib" rev-parse HEAD)
+      url=$(git -C "$LIBS/$lib" config remote.origin.url)
+      # Pinned source tree: the "library source" part of the LGPL three-piece (F-08e)
+      echo "library: $lib $sha ${url%.git} source ${url%.git}/tree/$sha"
     done
     echo "config: fqbn=$fqbn; $(arduino-cli version | head -1)${flags:+; extra flags: $flags}"
   } > "$out/BUILD_INFO.txt"
