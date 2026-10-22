@@ -360,6 +360,8 @@ export interface ScenarioEdit {
   sc: ScenarioV1 | null;
   prev: ScenarioV1 | null;
   label: string;
+  /** The edit touched time already run, so the live run needs a restart to match it */
+  stale?: boolean;
 }
 
 /** Scenario in force after step i: the last edit at or before i, else what the first later edit replaced; undefined = never edited */
@@ -367,4 +369,13 @@ export function scenarioAt(ops: { k: string }[], i: number): ScenarioV1 | null |
   for (let j = Math.min(i, ops.length - 1); j >= 0; j--) if (ops[j].k === 'scenario') return (ops[j] as ScenarioEdit).sc;
   for (let j = Math.max(0, i + 1); j < ops.length; j++) if (ops[j].k === 'scenario') return (ops[j] as ScenarioEdit).prev;
   return undefined;
+}
+
+/** Whether step i's scenario needs a restart: the last edit since the run began changed its past */
+export function scenarioStaleAt(ops: { k: string }[], i: number): boolean {
+  for (let j = Math.min(i, ops.length - 1); j >= 0; j--) {
+    if (ops[j].k === 'run') return false;
+    if (ops[j].k === 'scenario') return !!(ops[j] as ScenarioEdit).stale;
+  }
+  return false;
 }

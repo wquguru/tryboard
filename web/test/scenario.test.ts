@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fromScript, toScriptBody, type InputEvent } from '../src/inputlog.ts';
-import { applyPreset, benchTracks, compileScenario, GRID_MS, MIN_GAP_MS, parseScenario, quantize, SCENARIO_MAX_MS, scenarioAt, trackKey, valueAt, type ScenarioV1 } from '../src/app/scenario.ts';
+import { applyPreset, benchTracks, compileScenario, GRID_MS, MIN_GAP_MS, parseScenario, quantize, SCENARIO_MAX_MS, scenarioAt, scenarioStaleAt, trackKey, valueAt, type ScenarioV1 } from '../src/app/scenario.ts';
 import { truncate, type BenchStep } from '../src/app/history.ts';
 
 const ROOM = { temp: 23.5, humidity: 45, pressure: 101325 };
@@ -148,4 +148,9 @@ test('undo / redo walks scenario edits on the bench timeline and keeps the compi
   assert.equal(ops2.length, 4);
   assert.equal(scenarioAt(ops2, 3), C);
   assert.equal(scenarioAt(ops2, 2), A);
+  // Restart banner: the edit's own flag within its run, cleared by a later run
+  const past = { k: 'scenario', sc: C, prev: A, label: 'move', stale: true };
+  assert.equal(scenarioStaleAt([...ops2, past], 4), true);
+  assert.equal(scenarioStaleAt([...ops2, past], 3), false);
+  assert.equal(scenarioStaleAt([...ops2, past, { k: 'run' }], 5), false);
 });

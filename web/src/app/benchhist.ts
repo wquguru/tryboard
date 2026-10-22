@@ -5,8 +5,8 @@ import { t } from '../i18n';
 import type { Snapshot } from '../simmsg';
 import { fold, replayInputs, seekTarget, summarize, truncate, type BenchOp, type BenchStep, type RunRec } from './history';
 import type { TimelineStep } from './timeline';
-import { scenarioAt } from './scenario';
-import { attachScenarioHistory, setScenario } from './scenariofeed';
+import { scenarioAt, scenarioStaleAt } from './scenario';
+import { attachScenarioHistory, scenFeed, setScenario } from './scenariofeed';
 import type { CheckOutcome, StepCtx } from './types';
 
 export interface SeekResult {
@@ -196,7 +196,8 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
     session.setWireMods(f.mods ?? {});
     store.set({ checks: { ...baseChecks, ...f.checks } });
     // Before the seek: live.ts compiles the scenario's part after the rewind point from the feed
-    const sc = scenarioAt(steps.map((s) => s.op), i);
+    const ops = steps.map((s) => s.op);
+    const sc = scenarioAt(ops, i);
     if (sc !== undefined) setScenario(sc, { stale: false });
     const inputs = replayInputs(rec.snap.log.events);
     session.fwName = rec.fwName;
@@ -206,6 +207,8 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
     } finally {
       busy = false;
     }
+    // The re-power cleared the restart banner; a redone edit that touched the past still needs it
+    if (scenarioStaleAt(ops, i)) scenFeed.set({ stale: true });
     const fp = fingerprint(snap.stdout, snap.report);
     const atEnd = Math.round(tgt.untilMs * 160000) === Math.round((rec.snap.log.endMs ?? -1) * 160000);
     const expected = atEnd ? rec.fingerprint : null;

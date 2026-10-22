@@ -42,10 +42,11 @@ export function editScenario(sc: ScenarioV1 | null, label: string, opts: { stale
   if (!hist) return;
   if (opts.drag && gesture) {
     gesture.sc = sc;
+    gesture.stale = scenFeed.get().stale;
     hist.render();
     return;
   }
-  const st = hist.op({ k: 'scenario', sc, prev, label });
+  const st = hist.op({ k: 'scenario', sc, prev, label, stale: scenFeed.get().stale });
   gesture = opts.drag && st.op.k === 'scenario' ? (st.op as ScenarioEdit) : null;
 }
 export const endScenarioGesture = () => void (gesture = null);
