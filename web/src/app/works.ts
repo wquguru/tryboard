@@ -18,8 +18,8 @@ export const WORKS: Record<string, WorkDef> = {
   ruler: { id: 'ruler', title: t('Ultrasonic ruler'), example: 'ruler', checkpoints: ['ruler-1', 'ruler-2', 'ruler-3'], card: { chip: 'ESP32-S3', blurb: t('Ultrasonic ranging with the result on screen; the buzzer beeps faster or slower with distance') } },
   // Read attitude → draw bean on round screen → combine (bean slides downhill when tilted)
   tilt: { id: 'tilt', title: t('Tilt buddy'), example: 'tilt', checkpoints: ['tilt-1', 'tilt-2', 'tilt-3'], card: { chip: 'ESP32-S3', blurb: t('A little bean rolls toward whichever way the screen tilts') } },
-  // G-03 wake reader → whitelist opens → unknown refused → combine (3 refusals lock out); no home card until the product view lands
-  door: { id: 'door', title: t('RFID door lock'), example: 'c3-door', checkpoints: ['door-1', 'door-2', 'door-3', 'door-4'] },
+  // G-03 wake reader → whitelist opens → unknown refused → combine (3 refusals lock out)
+  door: { id: 'door', title: t('RFID door lock'), example: 'c3-door', checkpoints: ['door-1', 'door-2', 'door-3', 'door-4'], card: { chip: 'ESP32-C3', blurb: t('Tap a card on the RC522: the whitelisted one opens the door strike for 3 s, three unknown taps lock the reader') } },
   // P2-01 / P2-04 peripheral benches (no checkpoints; the matching works are the knob lamp and ultrasonic ruler)
   knob: { id: 'knob', title: t('Knob counter (encoder and PCNT)'), example: 's3-encoder', checkpoints: [] },
   sonar: { id: 'sonar', title: t('Ultrasonic ranging (HC-SR04, RMT receive)'), example: 's3-ultrasonic', checkpoints: [] },

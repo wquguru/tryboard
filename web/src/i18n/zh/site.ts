@@ -33,7 +33,6 @@ const d: Dict = {
   "Stop": "停止",
   "Run firmware": "运行固件",
   "Serial: {line}": "串口：{line}",
-  "Starting firmware (ESP32-S3)…": "正在启动固件（ESP32-S3）…",
   "Failed to load: {err}": "加载失败：{err}",
   "TryBoard · Free online lab for AI hardware projects": "试板 TryBoard · 完全免费的线上 AI 智能硬件实验台",
   "Lab · TryBoard": "实验台 · 试板 TryBoard",
@@ -868,5 +867,19 @@ const d: Dict = {
 
   // G-01 templates and parts.
   "RFID door lock": "RFID 门禁",
+  "Tap a card on the RC522: the whitelisted one opens the door strike for 3 s, three unknown taps lock the reader": "在 RC522 上刷卡：白名单卡让电锁开 3 秒，连续 3 张陌生卡会锁住读卡器",
+  "Card reader awake: RC522 version 0x{v}": "读卡器已唤醒：RC522 版本 0x{v}",
+  "Whitelisted card {uid}: door unlocked": "白名单卡 {uid}：门已打开",
+  "Unknown card {uid} refused ({n}/3)": "陌生卡 {uid} 被拒（{n}/3）",
+  "Card ignored: the reader is locked out": "卡被忽略：读卡器锁定中",
+  "Three refusals in a row: reader locked for {n} s": "连续 3 次拒绝：读卡器锁定 {n} 秒",
+  "Lockout over, the reader accepts cards again": "锁定解除，读卡器重新接受刷卡",
+  "Door locked again (held open {s} s)": "已重新上锁（开锁 {s} 秒）",
+  "Product: RFID door lock panel next to a door, with a card reader pad, an OLED and a door strike": "产品：门边的 RFID 门禁面板，带刷卡区、OLED 屏和电锁",
+  "RFID door lock · product · RC522 + SH1106 + relay + door strike": "RFID 门禁 · 产品 · RC522 + SH1106 + 继电器 + 电锁",
+  "Locked out · {n} s left": "锁定中 · 剩 {n} 秒",
+  "Strike open (relay on)": "电锁打开（继电器吸合）",
+  "Locked (relay off)": "已上锁（继电器断开）",
+  "Starting firmware ({chip})…": "正在启动固件（{chip}）…",
 };
 export default d;

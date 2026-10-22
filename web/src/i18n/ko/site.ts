@@ -33,7 +33,6 @@ const d: Dict = {
   "Stop": "정지",
   "Run firmware": "펌웨어 실행",
   "Serial: {line}": "시리얼: {line}",
-  "Starting firmware (ESP32-S3)…": "펌웨어 시작 중(ESP32-S3)…",
   "Failed to load: {err}": "불러오기 실패: {err}",
   "TryBoard · Free online lab for AI hardware projects": "TryBoard · 완전 무료 온라인 AI 하드웨어 실험대",
   "Lab · TryBoard": "실험대 · TryBoard",
@@ -868,5 +867,19 @@ const d: Dict = {
 
   // G-01 templates and parts.
   "RFID door lock": "RFID 출입 통제",
+  "Tap a card on the RC522: the whitelisted one opens the door strike for 3 s, three unknown taps lock the reader": "RC522에 카드를 대면 화이트리스트 카드는 도어 스트라이크를 3초 열고, 미등록 카드 3번이면 리더가 잠깁니다",
+  "Card reader awake: RC522 version 0x{v}": "카드 리더 깨어남: RC522 버전 0x{v}",
+  "Whitelisted card {uid}: door unlocked": "화이트리스트 카드 {uid}: 문 열림",
+  "Unknown card {uid} refused ({n}/3)": "미등록 카드 {uid} 거부 ({n}/3)",
+  "Card ignored: the reader is locked out": "카드 무시: 리더 잠금 중",
+  "Three refusals in a row: reader locked for {n} s": "연속 3회 거부: 리더 {n}초 잠금",
+  "Lockout over, the reader accepts cards again": "잠금 해제, 다시 카드를 받습니다",
+  "Door locked again (held open {s} s)": "다시 잠김 ({s}초 열림)",
+  "Product: RFID door lock panel next to a door, with a card reader pad, an OLED and a door strike": "제품: 문 옆 RFID 도어락 패널(카드 리더, OLED, 도어 스트라이크)",
+  "RFID door lock · product · RC522 + SH1106 + relay + door strike": "RFID 도어락 · 제품 · RC522 + SH1106 + 릴레이 + 도어 스트라이크",
+  "Locked out · {n} s left": "잠금 중 · {n}초 남음",
+  "Strike open (relay on)": "스트라이크 열림 (릴레이 ON)",
+  "Locked (relay off)": "잠김 (릴레이 OFF)",
+  "Starting firmware ({chip})…": "펌웨어 시작 중({chip})…",
 };
 export default d;

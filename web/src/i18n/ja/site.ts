@@ -33,7 +33,6 @@ const d: Dict = {
   "Stop": "停止",
   "Run firmware": "ファームウェアを実行",
   "Serial: {line}": "シリアル：{line}",
-  "Starting firmware (ESP32-S3)…": "ファームウェアを起動中（ESP32-S3）…",
   "Failed to load: {err}": "読み込みに失敗しました：{err}",
   "TryBoard · Free online lab for AI hardware projects": "TryBoard · 完全無料のオンライン AI ハードウェア実験台",
   "Lab · TryBoard": "実験台 · TryBoard",
@@ -868,5 +867,19 @@ const d: Dict = {
 
   // G-01 templates and parts.
   "RFID door lock": "RFID 入退室",
+  "Tap a card on the RC522: the whitelisted one opens the door strike for 3 s, three unknown taps lock the reader": "RC522 にカードをかざす：登録カードで電気錠が 3 秒開き、未登録カード 3 回で読み取りをロック",
+  "Card reader awake: RC522 version 0x{v}": "カードリーダー起動：RC522 バージョン 0x{v}",
+  "Whitelisted card {uid}: door unlocked": "登録カード {uid}：解錠",
+  "Unknown card {uid} refused ({n}/3)": "未登録カード {uid} を拒否（{n}/3）",
+  "Card ignored: the reader is locked out": "カードを無視：読み取りロック中",
+  "Three refusals in a row: reader locked for {n} s": "3 回連続で拒否：{n} 秒間読み取りをロック",
+  "Lockout over, the reader accepts cards again": "ロック解除、再びカードを受け付けます",
+  "Door locked again (held open {s} s)": "再び施錠（{s} 秒間開放）",
+  "Product: RFID door lock panel next to a door, with a card reader pad, an OLED and a door strike": "製品：ドア横の RFID 入退室パネル（カード読み取り部、OLED、電気錠）",
+  "RFID door lock · product · RC522 + SH1106 + relay + door strike": "RFID ドアロック · 製品 · RC522 + SH1106 + リレー + 電気錠",
+  "Locked out · {n} s left": "ロック中 · 残り {n} 秒",
+  "Strike open (relay on)": "電気錠オープン（リレー ON）",
+  "Locked (relay off)": "施錠中（リレー OFF）",
+  "Starting firmware ({chip})…": "ファームウェアを起動中（{chip}）…",
 };
 export default d;
