@@ -142,8 +142,13 @@ export async function runEmbed(root: HTMLElement, inp: EmbedInput) {
     show(0);
     const skip = button('embedSkip', t('Skip to end'));
     const off = store.subscribe((x) => show(x.simSeconds), ['simSeconds']);
+    // Test hook (F-03c): per-tick [sim s, serial chunk, room °C] so checks key on sim time, not wall-clock sampling
+    const trace: [number, string, number][] = [];
+    (globalThis as { __tbEmbed?: object }).__tbEmbed = { store, session, trace };
+    const offTick = session.onTick((m) => trace.length < 20_000 && trace.push([m.simSeconds, m.console, store.get().env.temp]));
     const finish = () => {
       off();
+      offTick();
       tag.remove();
       skip.remove();
       delete view.dataset.replay;
