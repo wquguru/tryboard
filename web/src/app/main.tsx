@@ -16,7 +16,7 @@ import type { AppState, StepCtx, WorkDef, WorkId } from './types';
 import { wkey } from './works';
 import { loadExamples } from './examples';
 import { installMpy } from './mpyapp';
-import { pushRecent } from './fwmenu';
+import { pruneRecent, pushRecent } from './recentfw';
 import { fetchBuf } from '../assets';
 import { createBenchHistory } from './benchhist';
 import { initTheme } from '../theme';
@@ -28,7 +28,7 @@ import { actions, bc, overlay, setBc, setDock, syncDockVar, type CpRow, type Iss
 import { bindVoiceMic } from './micsrc';
 import { CrashCard } from './crash';
 import { FwCheckCard, fwCheck } from './fwcheck';
-import { dropBin, keepBin, keptNow, lastBin, setLastBin, takeBin } from './ownbin';
+import { dropBin, keepBin, keptKeys, keptNow, lastBin, setLastBin, takeBin } from './ownbin';
 import { BrownoutBanner } from './bench/ui';
 import { initSaved } from './saved';
 import { serial } from './dock';
@@ -424,7 +424,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     // If this power-up fails, don't leave the listener for the next one
     setTimeout(fire, 3000);
     session.loadFirmware(buf, f.name);
-    pushRecent({ kind: 'file', name: f.name, at: Date.now() });
+    pushRecent({ kind: 'file', name: f.name, chip: session.chip, at: Date.now() });
     void keepOwn(buf, f.name);
   };
   // F-07c: own bins survive reloads (IndexedDB by sha256); after power-up so storage never delays the bench
@@ -434,7 +434,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     try {
       const h = await keepBin(buf, name);
       setLastBin(wkey(work), h);
-      pushRecent({ kind: 'file', name, h, at: Date.now() });
+      pushRecent({ kind: 'file', name, h, chip: session.chip, at: Date.now() });
       if (session.fwName === name) keptNow.set({ cur: { h, name } });
     } catch {
       setLastBin(wkey(work), null);
@@ -451,6 +451,8 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     const cur = keptNow.get().cur;
     if (!cur) return;
     const ok = await dropBin(cur.h);
+    // F-07d: a forgotten bin can't be run from "Recent" any more, so it leaves the list
+    if (ok) pruneRecent(await keptKeys());
     actions.releaseBin?.();
     shell.toast(ok ? t('Forgot {name}: the copy in this browser is deleted; it keeps running until the next reload', { name: cur.name }) : t('Could not delete the copy of {name} in this browser', { name: cur.name }));
   };

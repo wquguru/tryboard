@@ -63,6 +63,18 @@ export async function takeBin(h: string, idb?: IDBFactory): Promise<KeptBin | nu
   }
 }
 
+/** sha256 of every kept bin, or null when storage is unavailable (callers then keep what they list) */
+export async function keptKeys(idb?: IDBFactory): Promise<Set<string> | null> {
+  try {
+    const db = await openDb(DB, STORE, idb);
+    const v = (await req(db.transaction(STORE).objectStore(STORE).getAllKeys())) as IDBValidKey[];
+    db.close();
+    return new Set(v.map(String));
+  } catch {
+    return null;
+  }
+}
+
 /** Delete this browser's copy; false when storage refused */
 export async function dropBin(h: string, idb?: IDBFactory): Promise<boolean> {
   try {

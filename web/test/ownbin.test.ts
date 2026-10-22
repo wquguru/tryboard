@@ -2,7 +2,7 @@
 // Node has no indexedDB, so a small in-memory fake stands in; requests settle in microtasks, the transaction after them.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dropBin, evictPlan, keepBin, lastBin, MAX_BYTES, setLastBin, takeBin } from '../src/app/ownbin.ts';
+import { dropBin, evictPlan, keepBin, keptKeys, lastBin, MAX_BYTES, setLastBin, takeBin } from '../src/app/ownbin.ts';
 
 type Rec = Record<string, unknown>;
 function fakeIdb(opt: { failOpen?: boolean; failPut?: boolean } = {}): IDBFactory & { data: Map<string, Rec> } {
@@ -46,6 +46,7 @@ function fakeIdb(opt: { failOpen?: boolean; failPut?: boolean } = {}): IDBFactor
           put: (v: Rec, k: string) => request(tx, () => data.set(k, structuredClone(v)), opt.failPut),
           get: (k: string) => request(tx, () => data.get(k)),
           getAll: () => request(tx, () => [...data.values()]),
+          getAllKeys: () => request(tx, () => [...data.keys()]),
           delete: (k: string) => request(tx, () => data.delete(k)),
         }),
       };
@@ -135,4 +136,15 @@ test('per-work pointer: set, clear, and a throwing localStorage', () => {
   const bad = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); }, removeItem: () => {} } as unknown as Storage;
   assert.equal(lastBin('w', bad), null);
   setLastBin('w', 'ab', bad);
+});
+
+test('keptKeys lists kept sha256s (F-07d); null when storage is unavailable', async () => {
+  const idb = fakeIdb();
+  const hs: string[] = [];
+  for (let i = 0; i < 4; i++) hs.push(await keepBin(bin(100, i), `b${i}.bin`, idb, 10 + i));
+  assert.deepEqual([...(await keptKeys(idb))!].sort(), hs.slice(1).sort());
+  await dropBin(hs[3], idb);
+  assert.deepEqual([...(await keptKeys(idb))!].sort(), hs.slice(1, 3).sort());
+  assert.equal(await keptKeys(fakeIdb({ failOpen: true })), null);
+  assert.equal(await keptKeys(), null);
 });

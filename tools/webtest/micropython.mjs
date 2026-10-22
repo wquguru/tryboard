@@ -150,6 +150,8 @@ await page.screenshot({ path: path.join(outDir, 'micropython-reload.png') });
 // ---- 4. Forget the bin: next reload starts with the default firmware; uploading again still works
 await page.click('#swapFw');
 await waitFor(page, () => !!document.querySelector('[data-fw="forget"]'), null, 5000);
+const binName = path.basename(BIN);
+report('before Forget: the kept bin is in "Recent"', await page.evaluate((n) => !!document.querySelector(`[data-recent-file="${n}"]`), binName));
 await page.click('[data-fw="forget"]');
 const gone = await waitFor(page, async () => {
   const db = await new Promise((r) => { const q = indexedDB.open('tryboard-bins', 1); q.onsuccess = () => r(q.result); });
@@ -158,6 +160,14 @@ const gone = await waitFor(page, async () => {
   return n === 0;
 }, null, 5000);
 report('Forget deletes the local copy', gone);
+// F-07d: the forgotten bin leaves "Recent" (stored list and the reopened menu)
+await page.click('#swapFw');
+await waitFor(page, () => !!document.getElementById('fwMenu'), null, 5000);
+await new Promise((r) => setTimeout(r, 300));
+const listed = await page.evaluate((n) => [...document.querySelectorAll('[data-recent-file]')].some((e) => e.dataset.recentFile === n), binName);
+const stored = await page.evaluate((n) => JSON.parse(localStorage.getItem('tryboard-recent-fw') ?? '[]').some((r) => r.name === n), binName);
+report('after Forget: the bin is gone from "Recent"', !stored && !listed, `stored ${stored}, listed ${listed}`);
+await page.keyboard.press('Escape');
 await page.reload({ waitUntil: 'load' });
 await waitFor(page, () => parseFloat(document.getElementById('simtime').textContent) > 1, null, 30000);
 report('after Forget + reload: default firmware, no main.py tab', !(await page.$('[data-dock="py"]')) && !(await fwConsole(page)).includes('MicroPython v'));
