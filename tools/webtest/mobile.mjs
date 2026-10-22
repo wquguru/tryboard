@@ -116,9 +116,42 @@ report('Shop: swap-board drawer closes', await waitFor(page, () => document.quer
 await page.click('#workMenuBtn');
 report('▾ work menu lists the works', await waitFor(page, () => document.querySelectorAll('#workMenu [role=menuitemradio]').length >= 7));
 await page.click('#workMenuBtn');
+// ⋯ is a grouped bottom sheet on phones (DESIGN_V2 §10.1, U-23)
 await page.click('#moreBtn');
-report('⋯ menu has Brief, Change firmware, dark mode', await waitFor(page, () => /Task brief/.test(document.querySelector('#moreMenu')?.textContent) && /Change firmware/.test(document.querySelector('#moreMenu')?.textContent) && /Switch to (dark|light)/.test(document.querySelector('#moreMenu')?.textContent)));
+report('⋯ sheet opens with a scrim', await waitFor(page, () => !!document.querySelector('#moreMenu') && getComputedStyle(document.getElementById('moreScrim')).backgroundColor !== 'rgba(0, 0, 0, 0)'));
+report('⋯ sheet sits at the bottom', await page.evaluate(() => Math.abs(document.getElementById('moreMenu').getBoundingClientRect().bottom - innerHeight) < 1));
+const groups = await page.$$eval('#moreMenu [data-more-group] h3', (l) => l.map((e) => e.textContent));
+report('⋯ sheet has four groups: Share / Firmware / Developer tools / Settings', groups.join('|') === 'Share|Firmware|Developer tools|Settings', groups.join('|'));
+for (const s of ['[data-more="close"]', '[data-more="share-open"]', '[data-more="fw"]', '[data-more="dev"]', '[data-more="theme"] [data-theme-pref="dark"]', '[data-more="lang"] select', '[data-more="licenses"]'])
+  report(`⋯ sheet: ${s} tappable`, (await tappable(s)) === 'ok', await tappable(s));
+report('⋯ sheet rows ≥ 56px', await page.$$eval('#moreMenu [data-more="share-open"], #moreMenu [data-more="fw"], #moreMenu [data-more="dev"]', (l) => l.every((e) => e.getBoundingClientRect().height >= 55.5)));
+report('⋯ sheet keeps the trademark notice', await page.$eval('#moreMenu', (e) => /ESP32 is a trademark of Espressif Systems\. TryBoard is not affiliated with Espressif\./.test(e.textContent)));
+report('⋯ menu has Change firmware', await page.$eval('#moreMenu', (e) => /Change firmware/.test(e.textContent)));
+report('⋯ developer tools start folded', await page.$eval('[data-more="dev"]', (e) => e.getAttribute('aria-expanded') === 'false' && !document.querySelector('[data-more="brief"]')));
+await page.click('[data-more="dev"]');
+report('⋯ developer tools expand: input log, Task brief, real network switch', await waitFor(page, () => !!document.querySelector('[data-more="inputs"]') && /Task brief/.test(document.querySelector('[data-more="brief"]')?.textContent) && document.querySelector('[data-more="realnet"]')?.getAttribute('role') === 'switch', null, 3000));
+report('⋯ real network switch tappable', (await tappable('[data-more="realnet"]')) === 'ok', await tappable('[data-more="realnet"]'));
+const theme0 = await page.evaluate(() => document.documentElement.dataset.theme);
+report('⋯ theme is a three-way switch (system / light / dark)', await page.$$eval('[data-more="theme"] [role=radio]', (l) => l.map((e) => e.dataset.themePref).join() === 'system,light,dark'));
+await page.click('[data-more="theme"] [data-theme-pref="dark"]');
+report('⋯ dark mode applies', await waitFor(page, () => document.documentElement.dataset.theme === 'dark', null, 3000));
+await page.click(`[data-more="theme"] [data-theme-pref="${theme0 === 'dark' ? 'dark' : 'light'}"]`);
+const [msw, miw] = await noHScroll();
+report('⋯ sheet: no horizontal scroll', msw <= miw, `${msw}/${miw}`);
+await page.screenshot({ path: path.join(outDir, 'mobile-more.png') });
+await page.click('[data-more="share-open"]');
+report('⋯ share sub-sheet: three cards', await waitFor(page, () => ['share', 'card', 'file'].every((k) => !!document.querySelector(`#moreMenu [data-more="${k}"]`)), null, 3000));
+for (const s of ['[data-more="back"]', '[data-more="share"]', '[data-more="card"]', '[data-more="file"]', '[data-more="link"]'])
+  report(`⋯ share sub-sheet: ${s} tappable`, (await tappable(s)) === 'ok', await tappable(s));
+await page.screenshot({ path: path.join(outDir, 'mobile-more-share.png') });
+await page.click('[data-more="back"]');
+report('⋯ share sub-sheet: ‹ back returns to the groups', await waitFor(page, () => !!document.querySelector('[data-more="share-open"]') && !document.querySelector('#moreMenu [data-more="card"]'), null, 3000));
+await page.mouse.click(195, 60);
+report('⋯ sheet closes on a scrim tap', await waitFor(page, () => !document.querySelector('#moreMenu'), null, 3000));
 await page.click('#moreBtn');
+await waitFor(page, () => !!document.querySelector('#moreMenu'), null, 3000);
+await page.keyboard.press('Escape');
+report('⋯ sheet closes on Esc', await waitFor(page, () => !document.querySelector('#moreMenu'), null, 3000));
 
 // ---- Bench
 await page.click('#mNext #next');

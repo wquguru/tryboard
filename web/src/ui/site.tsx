@@ -1,12 +1,11 @@
 // Header / footer of document pages (home, board picker). tools/gen_licenses.mjs copies these classes and the logo: keep in sync.
 // Phone (< 768px, DESIGN_V2 §0/§5): nav moves into a full-screen drawer; Radix Dialog handles focus and Esc.
-import { useEffect, useState } from 'react';
 import { Dialog } from 'radix-ui';
 import { cn } from './cn';
 import { ThemeToggle } from './components';
 import { LangSelect } from './lang';
 import { Logo } from './logo';
-import { initTheme, onTheme, setThemePref, themePref, type ThemePref } from '../theme';
+import { ThemeSegment } from './theme-segment';
 import { HOME, LICENSES } from './links';
 import { locale, t } from '../i18n';
 
@@ -28,41 +27,6 @@ function Brand({ subtitle }: { subtitle?: string }) {
       {locale === 'zh' && <span className={cn('font-mono text-[10px] tracking-[0.08em] text-muted', subtitle && 'max-md:hidden')}>TRYBOARD</span>}
       {subtitle && <span className="ml-0.5 hidden text-[13px] text-muted max-md:inline">· {subtitle}</span>}
     </a>
-  );
-}
-
-/** Three-way theme switch for the phone drawer; the desktop header keeps the one-tap light / dark button. */
-export function ThemeSegment() {
-  initTheme();
-  const [pref, setPref] = useState<ThemePref>(themePref);
-  useEffect(() => {
-    const off = onTheme(() => setPref(themePref()));
-    return () => void off();
-  }, []);
-  const opts: [ThemePref, string][] = [
-    ['system', t('System')],
-    ['light', t('Light')],
-    ['dark', t('Dark')],
-  ];
-  return (
-    <div role="radiogroup" aria-label={t('Dark mode')} className="flex rounded-[10px] bg-field p-[3px] text-[13px]">
-      {opts.map(([v, label]) => (
-        <button
-          key={v}
-          type="button"
-          role="radio"
-          aria-checked={pref === v}
-          data-theme-pref={v}
-          onClick={() => {
-            setThemePref(v);
-            setPref(v);
-          }}
-          className={cn('min-h-[38px] cursor-pointer rounded-lg px-3 text-muted max-md:min-h-11', pref === v && 'bg-surface font-medium text-fg shadow-[0_1px_3px_#0000001a] ring-1 ring-line')}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
   );
 }
 

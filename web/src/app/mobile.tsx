@@ -87,7 +87,7 @@ export function MobileTop({
           <WorkMenu name={EXAMPLE_ID ? t('Example · {name}', { name: workName }) : workName} phone />
         </div>
         <NetCondChip phone />
-        <MoreMenu toast={toast} phone />
+        <MoreMenu toast={toast} phone name={EXAMPLE_ID ? t('Example · {name}', { name: workName }) : workName} />
         <FwMenu phone />
         {/* The palette is hidden on narrow screens (max-[1100px]:hidden), but cmdk.ts needs #cmdk at startup */}
         <CmdkBox />
