@@ -55,7 +55,7 @@ export interface WasmExports {
   tb_uart_push(p: number, len: number): void;
   /** Set a pin's analog voltage (mV) for the ADC */
   tb_analog_set(pin: number, mv: number): void;
-  /** Attach an I2C device. kind: 1 = SSD1306, 2 = BME280, 3 = MPU6050, 4 = QMI8658, 5 = CST816S, 6 = FT6236, 7 = CST9220, 8 = AXP2101, 9 = PCF85063, 10 = ES8311, 11 = ES7210. Returns 0 on success. */
+  /** Attach an I2C device. kind: 1 = SSD1306, 2 = BME280, 3 = MPU6050, 4 = QMI8658, 5 = CST816S, 6 = FT6236, 7 = CST9220, 8 = AXP2101, 9 = PCF85063, 10 = ES8311, 11 = ES7210, 12 = SH1106, 13 = AHT20. Returns 0 on success. */
   tb_i2c_attach(kind: number, addr: number): number;
   /** Add an I2C bus on fixed pads (M5-02; reached by the routed controller or bit-banged GPIO); pullup != 0 = external pull-ups. Returns the bus index, or -1 if a pad is taken / the chip has no pin buses. */
   tb_i2c_bus_add(sda: number, scl: number, pullup: number): number;

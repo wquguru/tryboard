@@ -973,5 +973,11 @@ const d: Dict = {
   "Off · about {mA} mA (estimate)": "꺼짐 · 약 {mA} mA(추정)",
   "Last remote code: {code}": "마지막 리모컨 코드: {code}",
   "repeat (key held)": "반복 코드(길게 누름)",
+
+  // G-05 cloud work and template
+  "Temperature and humidity to the cloud": "온습도를 클라우드로",
+  "Acceptance firmware targets the C3; Wi-Fi is built in": "검수 펌웨어는 C3 대상; Wi-Fi 내장",
+  "Temperature and humidity over I2C (SDA GPIO6, SCL GPIO7, address 0x38); power it from 3V3": "I2C로 온습도 측정(SDA GPIO6, SCL GPIO7, 주소 0x38); 3V3에서 전원 공급",
+  "Module header straight to the board": "모듈 핀 헤더를 보드에 바로 연결",
 };
 export default d;

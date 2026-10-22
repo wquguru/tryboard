@@ -973,5 +973,11 @@ const d: Dict = {
   "Off · about {mA} mA (estimate)": "消灯 · 約 {mA} mA（推定）",
   "Last remote code: {code}": "最後のリモコンコード：{code}",
   "repeat (key held)": "リピート（長押し）",
+
+  // G-05 cloud work and template
+  "Temperature and humidity to the cloud": "温湿度をクラウドへ",
+  "Acceptance firmware targets the C3; Wi-Fi is built in": "受け入れファームウェアは C3 向け；Wi-Fi 内蔵",
+  "Temperature and humidity over I2C (SDA GPIO6, SCL GPIO7, address 0x38); power it from 3V3": "I2C で温湿度を測る（SDA GPIO6、SCL GPIO7、アドレス 0x38）；3V3 から給電",
+  "Module header straight to the board": "モジュールのピンヘッダーをボードに直接",
 };
 export default d;

@@ -22,6 +22,8 @@ export const WORKS: Record<string, WorkDef> = {
   door: { id: 'door', title: t('RFID door lock'), example: 'c3-door', checkpoints: ['door-1', 'door-2', 'door-3', 'door-4'], card: { chip: 'ESP32-C3', blurb: t('Tap a card on the RC522: the whitelisted one opens the door strike for 3 s, three unknown taps lock the reader') } },
   // G-04 receive remote codes → digits change colour → hold to ramp brightness → combine (power estimate); no home card yet
   irlamp: { id: 'irlamp', title: t('IR remote night light'), example: 's3-irlamp', checkpoints: ['irlamp-1', 'irlamp-2', 'irlamp-3', 'irlamp-4'], card: { chip: 'ESP32-S3', blurb: t('Point the remote at the lamp: digits pick one of nine colours, VOL+ / VOL- set the brightness, the power key switches it off') } },
+  // G-05 join Wi-Fi → reach the broker → publish on time → combine (cloud command changes the interval); no home card yet
+  cloud: { id: 'cloud', title: t('Temperature and humidity to the cloud'), example: 'c3-cloud', checkpoints: ['cloud-1', 'cloud-2', 'cloud-3', 'cloud-4'] },
   // P2-01 / P2-04 peripheral benches (no checkpoints; the matching works are the knob lamp and ultrasonic ruler)
   knob: { id: 'knob', title: t('Knob counter (encoder and PCNT)'), example: 's3-encoder', checkpoints: [] },
   sonar: { id: 'sonar', title: t('Ultrasonic ranging (HC-SR04, RMT receive)'), example: 's3-ultrasonic', checkpoints: [] },
