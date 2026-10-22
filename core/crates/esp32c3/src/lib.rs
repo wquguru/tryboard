@@ -654,6 +654,7 @@ impl SocBus {
         for pin in 0..self.gpio.func_out.len() {
             let p = self.pin_pwm(pin);
             self.iotrace.pwm(now, pin, p);
+            self.pins.ledc_ir(now, pin as u32, p);
         }
     }
 

@@ -388,16 +388,17 @@
  {
   "id": "arduino-lib-irremote",
   "title": "Arduino: send NEC IR codes with IRremote",
-  "about": "Built with arduino-cli and the IRremote library (MIT). An IR LED on GPIO4 sends three NEC codes on a 38 kHz carrier; the serial log prints each command.",
+  "about": "Built with arduino-cli and the IRremote library (MIT). An IR LED on GPIO4 sends three NEC codes on a 38 kHz LEDC carrier; the serial log prints each command and the IR LED card shows what the eye decodes from the LED.",
   "tags": [
    "✓ Verified in sim",
    "Arduino",
+   "IR",
    "PWM"
   ],
   "scene": {
    "parts": [
     {
-     "type": "led",
+     "type": "irled",
      "pin": 4
     }
    ]

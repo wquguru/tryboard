@@ -143,6 +143,8 @@ pub struct IrLink {
     /// Eye: current burst (start, first rise, last rise, last fall, rises)
     burst: Option<(u64, u64, u64, u64, u64)>,
     hi_since: Option<u64>,
+    /// LEDC carrier envelope switched on at (cycle, Hz); LEDC never toggles the pin per period
+    env: Option<(u64, f64)>,
     frame: Vec<(u64, u64)>,
     last_end: u64,
     car_sum: f64,
@@ -222,6 +224,45 @@ impl IrLink {
         }
     }
 
+    /// A carrier burst from start to end joins the frame when the receiver module would pass it
+    fn end_burst(&mut self, start: u64, end: u64, hz: f64) {
+        if !(20_000.0..=60_000.0).contains(&hz) {
+            return;
+        }
+        self.car_sum += hz;
+        self.car_n += 1;
+        if let Some(p) = self.frame.last_mut() {
+            p.1 = (start - self.last_end) / US;
+        }
+        self.frame.push(((end - start) / US, 0));
+        self.last_end = end;
+    }
+
+    /// LEDC output on the IR LED pin at t: on = a square wave at hz (0 < duty < 1), off = dark or steady
+    pub fn feed_carrier(&mut self, t: u64, on: bool, hz: f64) {
+        self.eye_poll(t);
+        match (self.env, on) {
+            (None, true) => {
+                self.env = Some((t, hz));
+                if self.loopback && (20_000.0..=60_000.0).contains(&hz) {
+                    self.push((t + RX_DELAY_US * US, 1, true));
+                }
+            }
+            (Some((start, hz)), false) => {
+                self.env = None;
+                if !(20_000.0..=60_000.0).contains(&hz) {
+                    self.unmodulated += 1;
+                    return;
+                }
+                if self.loopback {
+                    self.push((t + RX_DELAY_US * US, 1, false));
+                }
+                self.end_burst(start, t, hz);
+            }
+            _ => {}
+        }
+    }
+
     /// Close a burst whose carrier stopped GAP ago, and a frame idle for FRAME_END
     fn eye_poll(&mut self, now: u64) -> u64 {
         let mut next = u64::MAX;
@@ -238,19 +279,11 @@ impl IrLink {
                         self.push(((last_fall + RX_DELAY_US * US).max(now), 1, false));
                     }
                     let hz = (rises - 1) as f64 * CPU_HZ as f64 / (last_rise - first) as f64;
-                    if (20_000.0..=60_000.0).contains(&hz) {
-                        self.car_sum += hz;
-                        self.car_n += 1;
-                        if let Some(p) = self.frame.last_mut() {
-                            p.1 = (start - self.last_end) / US;
-                        }
-                        self.frame.push(((last_fall - start) / US, 0));
-                        self.last_end = last_fall;
-                    }
+                    self.end_burst(start, last_fall, hz);
                 }
             }
         }
-        if !self.frame.is_empty() && self.burst.is_none() {
+        if !self.frame.is_empty() && self.burst.is_none() && self.env.is_none() {
             let end = self.last_end + FRAME_END_US * US;
             if now >= end {
                 let frame = std::mem::take(&mut self.frame);
@@ -317,6 +350,34 @@ mod tests {
             IrCode::decode(&IrCode::Repeat.bursts()),
             Some(IrCode::Repeat)
         );
+    }
+
+    /// LEDC envelope (IRremote SimpleSender): on / off at the NEC mark edges decodes like real carrier toggles
+    #[test]
+    fn ledc_envelope_decodes_nec() {
+        let mut l = IrLink::new(None, Some(4), false, 0);
+        let code = IrCode::parse("0000,0036").unwrap();
+        let mut t = 1000;
+        for (m, s) in code.bursts() {
+            l.feed_carrier(t, true, 37_987.0);
+            l.feed_carrier(t + 10, true, 37_987.0);
+            l.feed_carrier(t + m * US, false, 37_987.0);
+            t += (m + s) * US;
+        }
+        // A 5 kHz tone is not a carrier the receiver module passes
+        l.feed_carrier(t + 20_000 * US, true, 5_000.0);
+        l.feed_carrier(t + 21_000 * US, false, 5_000.0);
+        let mut out = Vec::new();
+        let mut now = 0;
+        while now < CPU_HZ / 10 {
+            let n = l.poll(now, &mut out);
+            now = n.max(now + 1);
+        }
+        assert_eq!(l.seen.len(), 1);
+        assert_eq!(l.seen[0].code, Some(code));
+        assert_eq!(l.seen[0].bursts, 34);
+        assert!((l.seen[0].carrier_hz - 37_987.0).abs() < 1.0);
+        assert_eq!((l.decoded, l.unmodulated), (1, 1));
     }
 
     /// The remote's receiver output: idle high, active low per burst, delayed RX_DELAY

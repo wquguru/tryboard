@@ -1,5 +1,5 @@
 // F-04a tutorial parts: use the bench controls (light / Wave / card) -> export inputs -> web replay and CLI --inputs fingerprints match.
-// Usage: node tools/webtest/parts.mjs [c3-pir-relay c3-rc522 c3-ds18b20 c3-ili9341-temp c3-sh1106-pir esp32-ir arduino-lib-irremote-rx] (after the web build); logs in Reviews/web/parts-*
+// Usage: node tools/webtest/parts.mjs [c3-pir-relay c3-rc522 c3-ds18b20 c3-ili9341-temp c3-sh1106-pir esp32-ir arduino-lib-irremote arduino-lib-irremote-rx] (after the web build); logs in Reviews/web/parts-*
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -24,6 +24,8 @@ const CASES = {
   'c3-ili9341-temp': { clicks: [], wait: '屏幕显示', expect: ['ILI9341 温度屏启动', '屏幕显示 23.5 °C（舒适）', 'TRYBOARD_OK c3-ili9341-temp'], cli: ['--spi', 'ili9341'], tail: 1 },
   // F-08f IR pair: bench remote key -> RMT RX; `seen` = what the IR LED card shows from the eye (wasm tb_ir_events)
   'esp32-ir': { clicks: [['[data-ir="FF00,BA45"]', 'IR 收到 遥控器 地址=FF00 命令=BA45'], ['[data-ir="repeat"]', 'IR 收到 重复码 地址=FF00 命令=BA45']], expect: ['IR 收到 自己发的 地址=0440 命令=3003', 'IR 收到 遥控器 地址=FF00 命令=BA45', 'IR 收到 重复码 地址=FF00 命令=BA45'], seen: 'NEC address=0x0440 command=0x3003', cli: ['--ir', '19,18'], tail: 1 },
+  // F-08h IRremote SimpleSender: LEDC carrier envelope on GPIO4 -> the IR LED card's eye decodes the last of 3 NEC frames
+  'arduino-lib-irremote': { clicks: [], wait: 'TRYBOARD_OK lib-irremote', expect: ['ir sent NEC addr=0x00 cmd=0x34', 'ir sent NEC addr=0x00 cmd=0x36', 'TRYBOARD_OK lib-irremote'], seen: 'NEC address=0xFF00 command=0xC936', cli: ['--ir', '-,4'], tail: 1 },
   'arduino-lib-irremote-rx': { clicks: [['[data-ir="FF00,BA45"]', 'ir NEC addr=0x00 cmd=0x45'], ['[data-ir="repeat"]', 'ir NEC addr=0x00 cmd=0x45 repeat']], expect: ['TRYBOARD_OK lib-irremote-rx ready', 'ir NEC addr=0x00 cmd=0x45', 'ir NEC addr=0x00 cmd=0x45 repeat'], cli: ['--ir', '5'], tail: 1 },
   'c3-sh1106-pir': { clicks: [['[data-pir="wave"]', '有人经过，第 1 次']], expect: ['SH1106 人体感应屏启动', 'TRYBOARD_OK c3-sh1106-pir', '有人经过，第 1 次'], cli: ['--i2c-bus', 'sda=6,scl=7:sh1106@0x3c'], tail: 1 },
 };
