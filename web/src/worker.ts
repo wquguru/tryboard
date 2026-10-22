@@ -7,6 +7,7 @@ import { useWorkerLocale, type Locale } from './i18n';
 import type { WasmExports } from './wasm.gen';
 import { attachI2s, attachLcdSpec, attachParts, partAction, partsEmpty, type PartsDevs } from './partsdev.ts';
 import { isTftPanel } from './lcdspec.ts';
+import { MicRecord, quantize } from './micrec.ts';
 import type { PowerMode, ElecFrame, Env, EncoderSpec, SonarSpec, PinDevFrame, VcdState, ToWorker, AdcSamples, Harness, PwmEvent, PcmBlock, AudioFrame, FromWorker, Snapshot, LcdKind, Battery } from './simmsg';
 
 const CPU_HZ = 160_000_000;
@@ -110,6 +111,8 @@ function strips(e: Exports): Record<number, number[][]> | undefined {
   return out;
 }
 const post = (m: FromWorker) => (self as unknown as Worker).postMessage(m);
+/** Live mic chunks as the core placed them since this power-up (F-09c export) */
+const micRec = new MicRecord();
 
 /** Stop on a core trap and tell the page; the panic hook's message says where in the simulator it broke. */
 function crash(err: unknown) {
@@ -671,6 +674,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   hasAudio = false;
   pcmOut = [];
   hasAudio = attachI2s(e, m.i2s);
+  micRec.clear();
   if (m.micWav) setMic(e, 'wav', m.micWav);
   // Supply network: servo attached, power source (state at power-up; later switches go through power messages and the log)
   power = m.power ?? 'usb';
@@ -1184,11 +1188,20 @@ async function handle(m: ToWorker) {
     case 'micPush': {
       const e = ex;
       if (!e?.tb_mic_push || !m.data.length) return;
+      // 16-bit first, so the exported WAV holds exactly what the core heard (F-09c)
+      const { q, f } = quantize(m.data);
       // tb_alloc is not 4-byte aligned: copy bytewise (the core decodes little-endian f32).
-      const p = e.tb_alloc(m.data.byteLength);
-      new Uint8Array(e.memory.buffer, p, m.data.byteLength).set(new Uint8Array(m.data.buffer, m.data.byteOffset, m.data.byteLength));
-      e.tb_mic_push(p, m.data.length, m.rate);
-      e.tb_free(p, m.data.byteLength);
+      const p = e.tb_alloc(f.byteLength);
+      new Uint8Array(e.memory.buffer, p, f.byteLength).set(new Uint8Array(f.buffer));
+      const at = e.tb_mic_push(p, f.length, m.rate);
+      e.tb_free(p, f.byteLength);
+      if (at >= 0) micRec.add(at, m.rate, q);
+      break;
+    }
+    case 'micRecGet': {
+      const until = ex && micRec.rate ? (ex.tb_cycles() / CPU_HZ + 1) * micRec.rate : 0;
+      const wav = micRec.length && !micRec.full ? micRec.wav(until) : null;
+      (self as unknown as Worker).postMessage({ type: 'micRec', wav, full: micRec.full } satisfies FromWorker, wav ? [wav] : []);
       break;
     }
   }

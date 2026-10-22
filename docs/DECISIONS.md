@@ -1428,3 +1428,11 @@
 - **分享语义不变**：`?s=` 仍不带 bin（也不带 bin 的 sha256）。「打开者本机有同 sha256 的 bin 就直接用」没做：要往链接状态加 `bin {name, h}`，等于把分享者的文件名和哈希放进公开链接，且链接本来就丢掉自带固件的运行记录，收益小；记为遗留。
 - **`sendCtrl` 删除**：mpypane 的 Ctrl-C / Ctrl-D 按钮直接走 `actions.uart`，该导出从未被用。
 - 公共接口：新增 `web/src/app/idb.ts`（`openDb(name, store, idb?)`、`done`、`req`）、`web/src/app/ownbin.ts`（`keepBin` / `takeBin` / `dropBin` / `evictPlan` / `lastBin` / `setLastBin` / `keptNow`）；`actions.releaseBin` / `forgetBin` / `reopenBin`；fwmenu 的 `Recent` 文件项多可选 `h`。
+## 2026-10-21 语音面板真麦克风 + BOOT 电平（F-09c，自主决定，待人审）
+
+- **live 麦克风按模拟时间落样**：原来 `MicSource::Live` 是按 I2S 帧率消费的 FIFO，落点取决于浏览器推送和模拟器步进的相对时序，导出后无法重放。改成和 WAV 同一个网格：样本 i 在模拟时间 i / rate 被听到（与 Wav 模式共用 `grid()`，插值算术位级相同）。每块落在 `max(已排队末尾, 已读高水位, floor(now / CPU_HZ × rate))`，中间补零；超前 now 1 s 以上的块丢弃（模拟暂停 / 慢于实时时不会无限堆积）。`push_live_at` 返回落点，wasm `tb_mic_push` 把它交回 worker。
+- **先量化再推送**：worker 把浏览器的 f32 先量化成 16 bit（q / 32768 在 f32 中精确），推给核心的就是量化后的值，同时按落点记录 Int16。导出的 16 bit 单声道 WAV（采样率 = 浏览器 AudioContext 采样率，未听到的位置为零）经 CLI `--mic` 读回得到完全相同的样本，所以「导出 WAV + 导出输入日志」→ `tryboard run --mic <wav> --inputs <log>` 串口逐字节一致（Rust 单测 + xiaozhi.mjs 第 7 段验证）。
+- **保证的范围（弱于「整段一致」）**：只覆盖切到「我的麦克风」之后的说话。切换之前麦克风听的是示例录音，那部分导出 WAV 里是零；输入日志的 `mic` 仍写示例录音名（不新增日志字段，分享链接不带音频，打开的人退回示例录音），所以倒带、网页内重放（`__tbReplay`）、分享链接都用示例录音，与实时那次不同。I2S 报告的来源行（live / WAV）不同，但不在指纹里。界面提示原样写明这些。录音最长 10 分钟（模拟时间），超过后拒绝导出、重启清零。备选：把音频塞进输入日志（太大，分享链接不能带）；保留 FIFO 只给「近似」承诺（无法回归测试）。
+- **权限只在第一次切换时请求**：切换失败（拒权、无 getUserMedia、非 https）退回该作品自己的示例录音（以前退回 1 kHz 测试音），面板显示「…，已换回示例录音」。台架面板的「麦克风来源」下拉与 Voice 页同步。
+- **BOOT 电平不改**：核查发现网页上 3D BOOT（pick → buttonCb → `session.pressBoot` → `live.press`）和面板按钮（原 `pressPin(0)`）松开时都记 `gpio0=z`，任务描述里的「3D 记 `gpio0=1`」不成立；只有 M5 预设按钮（`pressBoardPin`）和场景轨道 `up:1` 写 1。S3 的 GPIO0 有板上上拉（`esp32s3/src/periph.rs` 的 board_pullup bit 0），`z` 与 `1` 读数相同，`z` 更接近真实按键（松开即悬空、靠上拉）。所以保留 `z`，面板改走 `session.pressBoot`，与 3D 同一路径；accept 脚本、旧日志、golden 都不变（210/210）。
+- **测试用假麦克风**：xiaozhi.mjs 用 `--use-fake-device-for-media-stream --use-fake-ui-for-media-stream --use-file-for-fake-audio-capture=xz_mic.wav`；macOS 上音频服务沙箱读不到文件、只会采到静音，必须加 `--disable-features=AudioServiceSandbox,AudioServiceOutOfProcess`。agent-browser 会主动拒绝麦克风权限（即使用 --args 或 CDP 连接自启 Chrome），所以 agent-browser 走查覆盖拒权退回路径，真麦克风路径由 puppeteer 验证。

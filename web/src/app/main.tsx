@@ -25,6 +25,7 @@ import { loadAnalyzer, onAnalyzer } from './anaload';
 import { prefetchPanes } from './panes';
 import { loadCaseParams } from './caseparams';
 import { actions, bc, overlay, setBc, setDock, syncDockVar, type CpRow, type Issue } from './chrome';
+import { bindVoiceMic } from './micsrc';
 import { CrashCard } from './crash';
 import { FwCheckCard, fwCheck } from './fwcheck';
 import { dropBin, keepBin, keptNow, lastBin, setLastBin, takeBin } from './ownbin';
@@ -366,7 +367,9 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     else if (cmd === 'on' && !session.xzScript) session.xzScript = 'hello';
     session.sim?.xz(cmd);
   };
-  actions.talk = (down) => session.pressPin(0, down);
+  // Same path as the 3D BOOT key: release floats GPIO0 and the board pull-up reads 1 (F-09c)
+  actions.talk = (down) => session.pressBoot(down);
+  bindVoiceMic(actions, session);
   xzFeed.subscribe(() => {
     const has = xzFeed.get().on;
     if (has === bc.get().voice) return;

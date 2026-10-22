@@ -302,7 +302,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     },
     // Example preset knob position (analog.value in examples.json controls).
     micSource: ex?.mic ?? 'sine1k.wav',
-    setMicSource: (src) => (setMic ??= micSwitcher(s))(src),
+    setMicSource: (src) => (setMic ??= micSwitcher(s, ex?.mic ?? 'sine1k.wav'))(src),
     analog: new Map((ex?.controls ?? []).flatMap((c) => (typeof c === 'object' && c.type === 'analog' ? [[c.pin, c.value] as [number, number]] : []))),
     setAnalog(pin, mv) {
       const fresh = !s.analog.has(pin);

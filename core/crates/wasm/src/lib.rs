@@ -1407,9 +1407,9 @@ pub unsafe extern "C" fn tb_mic_wav(ptr: *const u8, len: usize) -> i32 {
 }
 
 /// # Safety
-/// ptr..ptr+4n must be filled tb_alloc memory (no alignment needed): n LE f32 (-1..1) live mic samples at `rate`
+/// ptr..ptr+4n: tb_alloc memory, n LE f32 (-1..1) mic samples at `rate`; returns their grid index (F-09c) or -1
 #[no_mangle]
-pub unsafe extern "C" fn tb_mic_push(ptr: *const u8, n: usize, rate: f64) {
+pub unsafe extern "C" fn tb_mic_push(ptr: *const u8, n: usize, rate: f64) -> f64 {
     let b = std::slice::from_raw_parts(ptr, n * 4);
     let x: Vec<f32> = b
         .as_chunks::<4>()
@@ -1417,7 +1417,7 @@ pub unsafe extern "C" fn tb_mic_push(ptr: *const u8, n: usize, rate: f64) {
         .iter()
         .map(|c| f32::from_le_bytes(*c))
         .collect();
-    with((), |m| m.mic_push(rate, &x))
+    with(-1.0, |m| m.mic_push(rate, &x).map_or(-1.0, |i| i as f64))
 }
 
 /// Return the microphone to silence
