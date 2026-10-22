@@ -9,30 +9,9 @@ import { MPY_DOWNLOAD } from '../chipid';
 import { CHIP_NAME, chipOf, exampleHref, loadExamples, type Chip, type Example } from './examples';
 import { Icon } from './icons';
 import { useStore } from './react';
-import { keptNow } from './ownbin';
+import { keptKeys, keptNow } from './ownbin';
+import { pruneRecent, recentFor, recentFw, type Recent } from './recentfw';
 import { menuItem, menuPanel } from './topbar';
-
-const RECENT_KEY = 'tryboard-recent-fw';
-type Recent = { kind: 'example'; id: string; title: string; at: number } | { kind: 'file'; name: string; at: number; h?: string };
-
-export function recentFw(): Recent[] {
-  try {
-    const v = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]');
-    return Array.isArray(v) ? v.slice(0, 3) : [];
-  } catch {
-    return [];
-  }
-}
-/** Record opened examples/uploads; files keep their name and, once kept in IndexedDB (F-07c), its sha256 to run it again. */
-export function pushRecent(r: Recent) {
-  const key = (x: Recent) => (x.kind === 'example' ? `e:${x.id}` : `f:${x.name}`);
-  const list = [r, ...recentFw().filter((x) => key(x) !== key(r))].slice(0, 3);
-  try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(list));
-  } catch {
-    /* private mode: not recorded */
-  }
-}
 
 // Official pages only: TryBoard does not host MicroPython images (DECISIONS 2026-10-21, option iii)
 const hhmm = (at: number) => new Date(at).toLocaleTimeString(LOCALES.find((l) => l.id === locale)?.html, { hour: '2-digit', minute: '2-digit' });
@@ -47,6 +26,7 @@ export function FwMenu({ phone }: { phone?: boolean }) {
   const [exs, setExs] = useState<Example[]>([]);
   const [chip, setChip] = useState<Chip>(cur);
   const [all, setAll] = useState(false);
+  const [recents, setRecents] = useState<Recent[]>(recentFw);
   useEffect(() => void loadExamples().then(setExs), []);
   // Each open starts from the bench chip.
   useEffect(() => {
@@ -55,6 +35,12 @@ export function FwMenu({ phone }: { phone?: boolean }) {
       setAll(false);
     }
   }, [fwMenu, cur]);
+  // F-07d: bins evicted or forgotten (maybe in another tab) leave "Recent"
+  useEffect(() => {
+    if (!fwMenu) return;
+    setRecents(recentFw());
+    void keptKeys().then((k) => setRecents(pruneRecent(k)));
+  }, [fwMenu]);
   useEffect(() => {
     if (!fwMenu) return;
     const down = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && !(e.target as Element).closest?.('[data-fw-open]') && open(false);
@@ -71,7 +57,7 @@ export function FwMenu({ phone }: { phone?: boolean }) {
   const mpy = MPY_DOWNLOAD[chip];
   const list = exs.filter((e) => chipOf(e) === chip).sort((a, b) => +running(b) - +running(a));
   const shown = all ? list : list.slice(0, 5);
-  const recent = recentFw().filter((r) => !(r.kind === 'example' && fw === `${r.id}/flash.bin`));
+  const recent = recentFor(recents, chip).filter((r) => !(r.kind === 'example' && fw === `${r.id}/flash.bin`));
   const item = cn(menuItem, 'no-underline', phone && 'min-h-11');
   const sec = 'px-2.5 pt-2 pb-1 text-[11px] font-medium text-muted';
   const panel = (
