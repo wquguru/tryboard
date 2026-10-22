@@ -1023,7 +1023,7 @@ pub extern "C" fn tb_realnet_set(on: u32) {
 }
 
 /// # Safety
-/// p/len: script action text seed=N / net=preset / netfault=kind[,s] (D-01); 0 ok, 1 unrecognised
+/// p/len: script action text seed=N / net=preset / netfault=kind[,s] (D-01) / mqtt=pub|pub1|retain,topic,payload (F-08b); 0 ok, 1 unrecognised
 #[no_mangle]
 pub unsafe extern "C" fn tb_net_action(p: *const u8, len: usize) -> u32 {
     let s = String::from_utf8_lossy(std::slice::from_raw_parts(p, len)).into_owned();
@@ -1102,11 +1102,12 @@ pub extern "C" fn tb_net_version() -> f64 {
         let n = &m.wifi().world.net;
         // Rows + rewrites (real-network rows go from "Waiting" to 200 / Timed out): both only grow, so a changed sum means a change
         let c = m.wifi().world.cond.rev;
-        (n.tcp.rows.len() as u64 + n.tcp.rev + c) as f64 + if n.leased { 1e9 } else { 0.0 }
+        let q = n.tcp.mqtt.log.len() as u64;
+        (n.tcp.rows.len() as u64 + n.tcp.rev + c + q) as f64 + if n.leased { 1e9 } else { 0.0 }
     })
 }
 
-/// Network tab: latest 300 rows [time ms, method, dest, url, status, duration ms | null, note], returns the length; read via tb_phone_json_ptr
+/// Network tab: latest 300 rows [time ms, method, dest, url, status, duration ms | null, note] + latest 50 broker lines, returns the length; read via tb_phone_json_ptr
 #[no_mangle]
 pub extern "C" fn tb_net_json() -> usize {
     let j = with(String::new(), |m| {
@@ -1151,10 +1152,17 @@ pub extern "C" fn tb_net_json() -> usize {
                 n.lost_frames
             )
         });
+        // Broker log (F-08g): latest 50 [time ms, line] for the MQTT panel
+        let log = &net.tcp.mqtt.log;
+        let q: Vec<String> = log[log.len().saturating_sub(50)..]
+            .iter()
+            .map(|(t, l)| format!("[{},{}]", *t as f64 / 1000.0, json_str(l)))
+            .collect();
         format!(
-            "{{\"total\":{},\"lease\":{lease},\"realnet\":{},\"cond\":{cond},\"rows\":[{}]}}",
+            "{{\"total\":{},\"lease\":{lease},\"realnet\":{},\"cond\":{cond},\"mqtt\":[{}],\"rows\":[{}]}}",
             rows.len(),
             net.tcp.realnet,
+            q.join(","),
             r.join(",")
         )
     });

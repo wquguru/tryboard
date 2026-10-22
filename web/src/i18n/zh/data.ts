@@ -525,5 +525,7 @@ const d: Dict = {
   "Firmware uses GPIO{fsda} / GPIO{fscl}": "固件用的是 GPIO{fsda} / GPIO{fscl}",
   "{part} ({addr}) has SDA and SCL swapped: the firmware drives SDA on GPIO{fsda} and SCL on GPIO{fscl}, so a scan won't find it. Swap the two wires.": "{part}（{addr}）的 SDA 和 SCL 接反了：固件在 GPIO{fsda} 上出 SDA、在 GPIO{fscl} 上出 SCL，扫描找不到它。把这两根线对调。",
   "{part} ({addr}) is on SDA GPIO{sda} / SCL GPIO{scl}, but the firmware drives I2C on SDA GPIO{fsda} / SCL GPIO{fscl}, so a scan won't find it. Move the wires, or change the pins in the firmware.": "{part}（{addr}）接在 SDA GPIO{sda} / SCL GPIO{scl}，但固件的 I2C 在 SDA GPIO{fsda} / SCL GPIO{fscl}，扫描找不到它。改接线，或者改固件里的引脚。",
+  "Arduino: MQTT publish / subscribe with PubSubClient": "Arduino：用 PubSubClient 做 MQTT 发布 / 订阅",
+  "Built with arduino-cli and the PubSubClient library (MIT). Joins TryBoard-WiFi, connects to the virtual MQTT broker on port 1883, subscribes to tryboard/#, publishes tryboard/hello and prints every message it receives. Open the Network tab's MQTT view to publish your own message from the cloud.": "用 arduino-cli 和 PubSubClient 库（MIT）编译。连上 TryBoard-WiFi，接入 1883 端口的虚拟 MQTT broker，订阅 tryboard/#，发布 tryboard/hello，并打印收到的每条消息。打开网络页签的 MQTT 视图，就能自己从云端发一条消息。",
 };
 export default d;

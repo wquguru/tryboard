@@ -159,6 +159,8 @@ export const actions: {
   phone?: (cmd: string) => void;
   /** One network fault from now (D-01: reboot / dns / silent, netfault= action in the input log) */
   netFault?: (kind: string) => void;
+  /** Publish from the virtual cloud (F-08g): pub|pub1|retain,<topic>,<payload>, logged as mqtt=… */
+  mqttPub?: (cmd: string) => void;
   pickFirmware?: (f: File) => void;
   /** F-07c own bins kept in this browser: stop restoring on reload / delete the running one's copy / run a kept one by sha256 */
   releaseBin?: () => void;

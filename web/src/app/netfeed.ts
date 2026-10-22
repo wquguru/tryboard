@@ -47,7 +47,11 @@ export interface NetView {
   replyBytes: number;
   /** Network conditions summary (D-01); null while preset is normal and no fault was scheduled */
   cond: NetCond | null;
+  /** Latest virtual-broker log lines (F-08g); empty on old cores */
+  mqtt: MqttLine[];
 }
+/** One broker log line: [time ms, text without the [mqtt] prefix] */
+export type MqttLine = [number, string];
 /** The core's network-conditions summary (tb_net_json cond, same numbers as the CLI's "[tryboard] network" line) */
 export interface NetCond {
   preset: string;
@@ -64,7 +68,7 @@ export interface NetCond {
 }
 
 function createNetFeed() {
-  const empty = (): NetView => ({ used: false, phone: null, rows: [], total: 0, lease: null, realnet: false, replies: 0, replyBytes: 0, cond: null });
+  const empty = (): NetView => ({ used: false, phone: null, rows: [], total: 0, lease: null, realnet: false, replies: 0, replyBytes: 0, cond: null, mqtt: [] });
   let view: NetView = empty();
   let timer = 0;
   let last = 0;
@@ -86,12 +90,13 @@ function createNetFeed() {
       const v: NetView = { ...view, used: m.used };
       if (m.phone !== undefined) v.phone = m.phone ? (JSON.parse(m.phone) as PhoneView) : null;
       if (m.rows !== undefined) {
-        const r = m.rows ? (JSON.parse(m.rows) as { total: number; lease: string | null; realnet?: boolean; cond?: NetCond | null; rows: NetRow[] }) : { total: 0, lease: null, rows: [] };
+        const r = m.rows ? (JSON.parse(m.rows) as { total: number; lease: string | null; realnet?: boolean; cond?: NetCond | null; mqtt?: MqttLine[]; rows: NetRow[] }) : { total: 0, lease: null, rows: [] };
         v.rows = r.rows;
         v.total = r.total;
         v.lease = r.lease;
         v.realnet = !!r.realnet;
         v.cond = r.cond ?? null;
+        v.mqtt = r.mqtt ?? [];
         v.replies = m.replies ?? 0;
         v.replyBytes = m.replyBytes ?? 0;
       }

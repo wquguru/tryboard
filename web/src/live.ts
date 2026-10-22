@@ -425,6 +425,10 @@ export class LiveSim {
   netFault(fault: string, dur?: number) {
     this.send({ type: 'netFault', fault, dur });
   }
+  /** Publish from the virtual cloud (F-08g, logged as mqtt=…) */
+  mqttPub(cmd: string) {
+    this.send({ type: 'input', act: { kind: 'mqtt', cmd } });
+  }
   /** ADC model (D-02): ideal = linear and exact, real = calibration curve + bends + noise (logged: adc=). */
   adcMode(ideal: boolean) {
     this.send({ type: 'adcMode', ideal });

@@ -128,5 +128,22 @@ const d: Dict = {
   "Random drop (flaky preset)": "무작위 끊김 (불안정 프리셋)",
   "Injected fault: DNS answers SERVFAIL": "주입된 장애: DNS가 SERVFAIL 응답",
   "Injected fault: the server does not respond": "주입된 장애: 서버가 응답하지 않음",
+  // MQTT panel (F-08g)
+  "QoS 0": "QoS 0",
+  "QoS 1": "QoS 1",
+  "Retain": "보존(retain)",
+  "Publish from the cloud": "클라우드에서 발행",
+  "Virtual broker · port 1883": "가상 브로커 · 포트 1883",
+  "Topic": "토픽",
+  "A topic cannot be empty or contain + # or a comma": "토픽은 비울 수 없고 + # 나 쉼표를 포함할 수 없습니다",
+  "Message": "메시지",
+  "Delivery": "전달 방식",
+  "Kept by the broker and sent to every later subscriber; an empty message clears it.": "브로커가 보관해 이후 구독자 모두에게 보냅니다. 빈 메시지를 보내면 지워집니다.",
+  "The board acknowledges with PUBACK.": "보드가 PUBACK으로 응답합니다.",
+  "Sent once, no acknowledgement.": "한 번만 보내며 응답은 없습니다.",
+  "Sent {n} · in the input log; replay with --inputs on the command line": "{n}건 보냄 · 입력 로그에 기록됨; 명령줄 --inputs로 재생",
+  "Goes into the input log; replay with --inputs on the command line": "입력 로그에 기록됩니다; 명령줄 --inputs로 재생",
+  "Broker log (latest {n})": "브로커 로그(최근 {n}건)",
+  "No MQTT traffic yet: the firmware has not connected to port 1883.": "아직 MQTT 통신이 없습니다: 펌웨어가 1883 포트에 연결하지 않았습니다.",
 };
 export default d;

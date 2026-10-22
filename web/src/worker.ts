@@ -836,7 +836,8 @@ function apply(e: Exports, ev: InputAction) {
       e.tb_realnet_set(ev.on ? 1 : 0);
       break;
     case 'net':
-    case 'netfault': {
+    case 'netfault':
+    case 'mqtt': {
       if (!e.tb_net_action) return;
       const b = new TextEncoder().encode(action({ tMs: 0, ...ev } as InputEvent) ?? '');
       const p = e.tb_alloc(b.length);
