@@ -7,7 +7,7 @@ use tryboard_soc::adc::AdcModel;
 use tryboard_soc::ble::Ble;
 use tryboard_soc::chip::{self, Chip};
 use tryboard_soc::devices::audio::Audio;
-use tryboard_soc::devices::lcd::{Lcd, LcdKind};
+use tryboard_soc::devices::lcd::{Lcd, LcdKind, LcdPins};
 use tryboard_soc::devices::pins::PinDevices;
 use tryboard_soc::i2c::I2c;
 use tryboard_soc::i2cpins::{PinBus, PinBuses};
@@ -219,6 +219,16 @@ impl Chip for Esp32c3 {
         }
         self.bus.attach_lcd(kind);
         true
+    }
+    fn lcd_attach_pins(&mut self, kind: LcdKind, pins: LcdPins) -> bool {
+        if kind.spec().is_none() {
+            return false;
+        }
+        self.bus.attach_lcd_pins(kind, pins);
+        true
+    }
+    fn lcd_default_pins(&self) -> LcdPins {
+        LcdPins::C3_DEFAULT
     }
     fn lcd(&mut self) -> Option<&mut Lcd> {
         self.bus.lcd.as_deref_mut()

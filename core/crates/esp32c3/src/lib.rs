@@ -17,7 +17,7 @@ pub(crate) use tryboard_soc::{
 };
 
 use devices::audio::{Audio, PortIo};
-use devices::lcd::{Lcd, LcdKind};
+use devices::lcd::{Lcd, LcdKind, LcdPins};
 use gdma::{Gdma, GdmaLayout};
 use periph::*;
 use std::collections::HashMap;
@@ -136,6 +136,8 @@ pub struct SocBus {
     pub gdma: Gdma,
     /// Round LCD on SPI2 (CLI `--spi gc9a01` / wasm `tb_lcd_attach`), pins in `lcd_pin`
     pub lcd: Option<Box<Lcd>>,
+    /// CS / DC / RST / backlight GPIOs of `lcd` (`LcdPins::C3_DEFAULT` unless attached with pins); SCLK / MOSI aren't checked
+    pub lcd_pins: LcdPins,
     /// I2S0 (0x6002D000) and the audio devices on it (pins in `i2s_pin`)
     pub i2s0: i2s::I2s,
     pub audio: Audio,
@@ -206,6 +208,7 @@ impl Default for SocBus {
             spi2: Default::default(),
             gdma: Gdma::new(GdmaLayout::C3),
             lcd: None,
+            lcd_pins: LcdPins::C3_DEFAULT,
             i2s0: i2s::I2s::new(0, false),
             audio: Audio::default(),
             rng: 0x2545_f491,
@@ -570,9 +573,9 @@ impl SocBus {
         let lv = self.gpio.level();
         if let Some(l) = self.lcd.as_mut() {
             // RST is active low and only resets when firmware actually drives it low (module has a pull-up); backlight on when high
-            let en = self.gpio.enable;
-            l.set_reset(en >> lcd_pin::RST & 1 != 0 && lv >> lcd_pin::RST & 1 == 0);
-            l.set_backlight(lv >> lcd_pin::BL & 1 != 0);
+            let (en, p) = (self.gpio.enable, self.lcd_pins);
+            l.set_reset(p.rst.is_some_and(|r| en >> r & 1 != 0 && lv >> r & 1 == 0));
+            l.set_backlight(p.bl.is_none_or(|b| lv >> b & 1 != 0));
         }
         if lv != self.last_gpio {
             self.last_gpio = lv;
@@ -842,7 +845,13 @@ impl SocBus {
 
     /// Attach a DCS SPI panel on SPI2 (pins in `lcd_pin`): GC9A01 round LCD or a bare ILI9341 / ST7789 module
     pub fn attach_lcd(&mut self, kind: LcdKind) {
+        self.attach_lcd_pins(kind, LcdPins::C3_DEFAULT);
+    }
+
+    /// Same on CS / DC / RST / BL GPIOs of the caller's choice (`--spi ili9341@cs=10,dc=1,rst=0,bl=-1`)
+    pub fn attach_lcd_pins(&mut self, kind: LcdKind, pins: LcdPins) {
         self.lcd = Some(Box::new(Lcd::new(kind)));
+        self.lcd_pins = pins;
         let now = self.now;
         self.gpio_changed(now);
     }
@@ -850,7 +859,7 @@ impl SocBus {
     /// LCD chip select: if CS is routed via IO_MUX / GPIO matrix to SPI2 CS0, the controller pulls it low during transfers;
     /// otherwise treat it as plain GPIO, selected only when firmware drives it low
     fn lcd_selected(&self) -> bool {
-        let pin = lcd_pin::CS as usize;
+        let pin = self.lcd_pins.cs as usize;
         let via_iomux = (self.gpio.iomux[pin] >> 12) & 7 == IOMUX_FUNC_FSPICS0;
         let via_matrix = self.gpio.func_out[pin] & 0xff == SIG_FSPICS0;
         if via_iomux || via_matrix {
@@ -899,7 +908,7 @@ impl SocBus {
         }
         self.gdma = g;
         let selected = self.lcd_selected();
-        let dc = self.gpio.level() >> lcd_pin::DC & 1 != 0;
+        let dc = self.gpio.level() >> self.lcd_pins.dc & 1 != 0;
         if let (Some(Lcd::Dcs(l)), true) = (self.lcd.as_deref_mut(), selected) {
             for b in bytes {
                 l.byte(dc, b);
@@ -1162,6 +1171,7 @@ impl Esp32c3 {
         m.bus.timing = std::mem::take(&mut self.bus.timing);
         // An external LCD doesn't vanish on chip reset (firmware re-drives its reset pin)
         m.bus.lcd = self.bus.lcd.take();
+        m.bus.lcd_pins = self.bus.lcd_pins;
         m.bus.audio = std::mem::take(&mut self.bus.audio);
         // The virtual phone is outside world: survives reset (connection drops with the chip), air log continues
         if let (Some(old), Some(new)) = (self.bus.ble.as_mut(), m.bus.ble.as_mut()) {
@@ -1182,5 +1192,24 @@ impl Esp32c3 {
 
     pub fn symbol_at(&self, pc: u32) -> Option<&str> {
         self.rom_symbols.get(&pc).map(|s| s.as_str())
+    }
+}
+
+#[cfg(test)]
+mod lcd_pin_tests {
+    use super::*;
+
+    #[test]
+    fn c3_default_lcd_pins_match_lcd_pin() {
+        let p = LcdPins::C3_DEFAULT;
+        let got = [p.sclk, p.mosi, p.cs, p.dc].map(u32::from);
+        assert_eq!(
+            got,
+            [lcd_pin::SCLK, lcd_pin::MOSI, lcd_pin::CS, lcd_pin::DC]
+        );
+        assert_eq!(
+            (p.rst, p.bl),
+            (Some(lcd_pin::RST as u8), Some(lcd_pin::BL as u8))
+        );
     }
 }

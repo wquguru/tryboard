@@ -1,4 +1,4 @@
-// F-08a: Adafruit ILI9341 (BSD), after the library's graphicstest; needs the F-04b ILI9341 model before it can be accepted.
+// F-08a: Adafruit ILI9341 (BSD), after the library's graphicstest; accept runs it with --spi ili9341@cs=10,dc=1,rst=0,bl=-1.
 // C3 SPI default SCK 4 / MOSI 6 / MISO 5; CS 10, DC 1, RST 0.
 #include <SPI.h>
 #include <Adafruit_GFX.h>
