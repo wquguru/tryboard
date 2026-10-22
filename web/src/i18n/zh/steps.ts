@@ -1130,5 +1130,12 @@ const d: Dict = {
   "RC522 version 0x{v}": "RC522 版本 0x{v}",
   "Door lock": "门禁",
   "Appearance only (2D view for now)": "外观示意（暂为 2D 视图）",
+  "With the receiver behind the opaque wall, no remote code reaches the VS1838B.": "接收头被不透光外壳挡住时，遥控码到不了 VS1838B。",
+  "Dome in the IR window: 940 nm light from the remote passes the dark acrylic and every key arrives": "圆头对准红外窗口：遥控器的 940 nm 光穿过深色亚克力，每个键都能收到",
+  "Behind the opaque wall: the remote light never reaches the receiver, no key works, same in the retest (estimate)": "在不透光外壳后面：遥控器的光到不了接收头，哪个键都不灵，复测也一样（估算）",
+  "WS2812 at 5 V wants DIN ≥ 3.5 V; the 74AHCT125 lifts GPIO5 so the first LED does not flicker": "5 V 供电的 WS2812 要求 DIN ≥ 3.5 V；74AHCT125 把 GPIO5 抬上去，第一颗灯才不会闪",
+  "Remote reception": "遥控接收",
+  "No remote code arrives": "收不到遥控码",
+  "Every key arrives": "每个键都能收到",
 };
 export default d;

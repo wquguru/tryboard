@@ -226,7 +226,7 @@ function remainingLines(work: string): BuyLine[] {
 }
 
 /** These projects' products live in works3d.ts (P2-09) */
-const WORK3D = new Set(['lamp', 'ruler', 'tilt', 'door']);
+const WORK3D = new Set(['lamp', 'ruler', 'tilt', 'door', 'irlamp']);
 const COLOR_LABEL: Record<string, string> = { warm: t('Warm white'), red: t('Red'), green: t('Green'), blue: t('Blue'), purple: t('Purple'), white: t('White') };
 
 /** Expression names printed on the lens firmware's serial */
@@ -931,7 +931,7 @@ export function productStep(): StepImpl {
         onDistance: (cm) => applyDistance(cm),
         distance: c.session.distance,
         onPose: (p) => applyPose(p),
-        pose: c.store.get().pose, ...(c.work.id === 'door' ? { onCard: (uid: string) => doorTap(c.session, uid), card: doorOnReader } : {}),
+        pose: c.store.get().pose, onKey: (code) => c.session.sim?.partInput({ kind: 'ir', code }), ...(c.work.id === 'door' ? { onCard: (uid: string) => doorTap(c.session, uid), card: doorOnReader } : {}),
       });
       (window as unknown as { __tbProduct: unknown }).__tbProduct = {
         handlePos: () => work3d!.handleScreenPos(),

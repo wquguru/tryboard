@@ -62,7 +62,16 @@ const RETEST_WHY: Record<string, () => string> = {
   ruler: () => t('With the probe recessed in the hole, HC-SR04 only measures the hole wall.'),
   tilt: () => t('With the IMU reversed, pitch and roll read reversed too.'),
   door: () => t('With the reader on the steel back box, the RC522 never sees a card.'),
+  irlamp: () => t('With the receiver behind the opaque wall, no remote code reaches the VS1838B.'),
 };
+/** Works whose assembly choice changes what the simulated sensors see (the others only change the Product picture) */
+const SIM_FX = new Set(['ruler', 'tilt', 'door', 'irlamp']);
+const fxHow = (id: string) =>
+  id === 'weather'
+    ? t('The heat offset affects the simulation: in the retest and the Product, BME280 reads the raised temperature.')
+    : SIM_FX.has(id)
+      ? t('This affects the simulation: in the retest and the Product, the sensor sees things as assembled.')
+      : t('Only changes the Product view, not the simulation.');
 
 const IMPACT: Record<string, Record<string, string[]>> = {
   weather: {
@@ -100,6 +109,11 @@ const IMPACT: Record<string, Record<string, string[]>> = {
   door: {
     rc522: [t('Against the card zone: a card on the panel is 2–3 mm from the antenna and reads every time'), t('On the steel back box: the steel detunes the antenna and the card is 24 mm away, so no card is read, same in the retest (estimate)')],
     relay: [t('The 12 V strike goes on the relay COM / NO contacts with its own supply; never feed 12 V into the dev board')],
+  },
+  irlamp: {
+    irrx: [t('Dome in the IR window: 940 nm light from the remote passes the dark acrylic and every key arrives'), t('Behind the opaque wall: the remote light never reaches the receiver, no key works, same in the retest (estimate)')],
+    strip: [t('On the light guide: 15 mm from the shade, the light spreads into an even glow on the milky shade'), t('Against the shade wall: a row of 8 glaring hot spots on the shade')],
+    shifter: [t('WS2812 at 5 V wants DIN ≥ 3.5 V; the 74AHCT125 lifts GPIO5 so the first LED does not flicker')],
   },
 };
 
@@ -548,12 +562,8 @@ export function assembleStep(): StepImpl {
     if (fx.sonarBlock !== undefined) row(t('Probe reading'), fx.sonarBlock ? t('Cut off by the hole wall at about {cm} cm', { cm: fx.sonarBlock }) : t('Measures the object in front'), !!fx.sonarBlock);
     if (fx.imuFlip !== undefined) row(t('IMU orientation'), fx.imuFlip ? t('Reversed: pitch and roll both flipped') : t('Correct'), !!fx.imuFlip);
     if (fx.cardBlock !== undefined) row(t('Card reading'), fx.cardBlock ? t('No card is read') : t('Reads cards on the panel'), !!fx.cardBlock);
-    const how =
-      T!.id === 'weather'
-        ? t('The heat offset affects the simulation: in the retest and the Product, BME280 reads the raised temperature.')
-        : T!.id === 'ruler' || T!.id === 'tilt' || T!.id === 'door'
-          ? t('This affects the simulation: in the retest and the Product, the sensor sees things as assembled.')
-          : t('Only changes the Product view, not the simulation.');
+    if (fx.irBlock !== undefined) row(t('Remote reception'), fx.irBlock ? t('No remote code arrives') : t('Every key arrives'), !!fx.irBlock);
+    const how = fxHow(T!.id);
     return rows.length ? (
       <>
         <Sec>

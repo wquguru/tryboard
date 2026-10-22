@@ -31,10 +31,10 @@
  "fn:web/src/app/lcd3d.ts:createLcd3D": 543,
  "fn:web/src/app/product3d.ts:createProduct3D": 432,
  "fn:web/src/app/session.ts:createSession": 536,
- "fn:web/src/app/steps/assemble.tsx:assembleStep": 914,
+ "fn:web/src/app/steps/assemble.tsx:assembleStep": 910,
  "fn:web/src/app/steps/product.tsx:productStep": 954,
  "fn:web/src/app/steps/shop.tsx:shopStep": 675,
- "fn:web/src/app/works3d.ts:createWork3D": 587,
+ "fn:web/src/app/works3d.ts:createWork3D": 520,
  "layer:core/crates/machine/src/lib.rs": 1,
  "size:core/crates/soc/src/wifi/phone.rs": 1588
 }

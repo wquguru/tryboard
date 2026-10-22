@@ -278,6 +278,85 @@ await p2.close();
   await p3.close();
 }
 
+// G-04c IR night light (SVG assembly): receiver behind the opaque wall -> retest receives no remote code and fails; in the IR window ->
+// passes; then a real click on key 3 of the 3D remote sends ir=FF00,A15E and the strip turns blue
+{
+  const p4 = await browser.newPage();
+  await p4.setViewport({ width: 1280, height: 860 });
+  p4.on('pageerror', (e) => errors.push(`irlamp: ${e}`));
+  p4.on('console', (m) => { if (m.type() === 'error') errors.push(`irlamp: ${m.text()}`); });
+  await p4.goto(`${base}/app?work=irlamp#bench`, { waitUntil: 'load' });
+  await p4.evaluate(() => {
+    const c = {};
+    for (const id of ['irlamp-1', 'irlamp-2', 'irlamp-3', 'irlamp-4']) c[id] = { fp: 'test', at: 'preset' };
+    localStorage.setItem('tryboard-app-checks:irlamp', JSON.stringify(c));
+    localStorage.removeItem('tryboard-app-asm:irlamp');
+  });
+  await p4.goto(`${base}/app?work=irlamp#assemble`, { waitUntil: 'load' });
+  await p4.reload({ waitUntil: 'load' });
+  await p4.waitForSelector('.asm-box [data-part]', { timeout: 30000 });
+  const click = async (sel) => {
+    for (let i = 0; i < 20; i++) {
+      try {
+        await p4.waitForSelector(sel, { timeout: 5000 });
+        await p4.click(sel);
+        return;
+      } catch {
+        await sleep(200);
+      }
+    }
+    throw new Error(`cannot click ${sel}`);
+  };
+  const build = async (pick) => {
+    for (const k of ['base', 'board', 'shifter', 'strip', 'irrx', 'shade']) {
+      await click(`.asm-box [data-part="${k}"]`);
+      if (k === 'strip') await click('.asm-box [data-k="choose_strip"] [data-k="pickA"]');
+      if (k === 'irrx') await click(`.asm-box [data-k="choose_irrx"] [data-k="pick${pick}"]`);
+    }
+    await click('#toolbar [data-tool="asm-retest"]');
+    await waitFor(p4, () => /Retesting/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 10000);
+    await waitFor(p4, () => !!document.querySelector('#props .verdict-line') && !/Retesting/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 120000);
+    return {
+      v: await p4.$eval('#props .result-card', (e) => e.dataset.verdict).catch(() => ''),
+      txt: await p4.$eval('#props', (e) => e.textContent),
+      a: await p4.evaluate(() => globalThis.__tbApp.store.get().assembly),
+    };
+  };
+  try {
+    const bad = await build('B');
+    report('irlamp: receiver behind the opaque wall -> no remote code arrives, retest fails', bad.a?.effects?.irBlock === true && (bad.v === 'bad' || bad.v === 'shifted'), `${bad.v} ${(bad.txt.match(/Retest result.{0,200}/) ?? [''])[0]}`);
+    await shot(p4, 'irlamp-bad');
+    await click('#toolbar [data-tool="asm-reset"]');
+    const good = await build('A');
+    report('irlamp: receiver in the IR window -> retest passes, assembly clean', good.a?.effects?.irBlock === false && good.v === 'ok' && /Assembly 6\/6, no warnings/.test(good.txt), `${good.v} ${(good.txt.match(/Retest result.{0,80}/) ?? [''])[0]}`);
+    await shot(p4, 'irlamp-ok');
+    await click('#next');
+    const ready = await waitFor(p4, () => location.hash === '#product' && !!globalThis.__tbProduct?.state && !!document.querySelector('canvas'), null, 30000);
+    // Let the live sim reach the receive loop before pressing a key
+    await sleep(2500);
+    const blue = () => p4.evaluate(() => {
+      const s = globalThis.__tbProduct.strip();
+      return s.length === 8 && s.every((c) => c[2] > 40 && c[2] > 2 * c[0] && c[2] > 2 * c[1]);
+    });
+    let sent = '', turned = false;
+    for (let i = 0; i < 4 && !turned; i++) {
+      const [x, y] = await p4.evaluate(() => globalThis.__tbProduct.handlePos());
+      await p4.mouse.click(x, y);
+      sent = await p4.evaluate(() => globalThis.__tbProduct.state().key);
+      turned = await waitFor(p4, () => {
+        const s = globalThis.__tbProduct.strip();
+        return s.length === 8 && s.every((c) => c[2] > 40 && c[2] > 2 * c[0] && c[2] > 2 * c[1]);
+      }, null, 4000);
+    }
+    await sleep(300);
+    await shot(p4, 'irlamp-3d');
+    report('irlamp: clicking key 3 on the 3D remote sends ir=FF00,A15E and the strip turns blue', ready && sent === 'FF00,A15E' && turned && (await blue()), `ready=${ready} sent=${sent} turned=${turned}`);
+  } catch (e) {
+    report('irlamp: flow finished', false, String(e).slice(0, 200));
+  }
+  await p4.close();
+}
+
 await page.evaluate(() => localStorage.clear());
 await browser.close();
 server.close();

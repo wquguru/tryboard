@@ -1083,7 +1083,7 @@
   "work": "irlamp",
   "title": "Combined: IR night light and its power",
   "goal": "Switch off and on, go to full white, and print the strip current estimate for each frame",
-  "pass": "Power key at 0.3 s and 0.6 s, key 9 at 0.9 s, VOL+ at 1.2 s with 3 repeat codes: 关灯, 电流估算 8 mA, 开灯, 颜色 9 白, 亮度 8/8 and 电流估算 488 mA appear on serial; in the last frame all 8 LEDs are #FFFFFF (±2). The current is an estimate from the frame sent (1 mA idle per LED + 20 mA per channel at 255), not a measurement: about 488 mA at full white, which with the board is more than computer USB gives, so the strip needs its own 5 V",
+  "pass": "Power key at 0.3 s and 0.6 s, key 9 at 0.9 s, VOL+ at 1.2 s with 3 repeat codes: 关灯, 电流估算 8 mA, 开灯, 颜色 9 白, 亮度 8/8 and 电流估算 488 mA appear on serial; in the last frame all 8 LEDs are #FFFFFF (±2). The current is an estimate from the frame sent (1 mA idle per LED + 20 mA per channel at 255), not a measurement: about 488 mA at full white, which with the board is more than computer USB gives, so the strip needs its own 5 V; the web page also requires an assembly with no warnings (geometric estimate, checked on the web page only)",
   "buy": "5 V 2 A supply and DC jack for the strip, 3D-printed lamp base and shade",
   "learn": "Estimating WS2812 current from the colour data; why a strip needs its own supply",
   "brief": "Combine the previous checkpoints into an IR remote night light, ESP32-S3:\n· 8-LED WS2812 strip (same as the knob lamp): DIN to GPIO5 through a 74AHCT125 level shifter, strip powered from an external 5 V, GND shared. GRB order at 800 kHz (0 bit 0.3 µs high / 0.9 µs low, 1 bit 0.9 / 0.3 µs); the RMT transmit driver with rmt_new_bytes_encoder is enough\n· VS1838B-class IR receiver: OUT to GPIO4, VCC to 3V3, GND to GND. OUT is active low (low while a 38 kHz burst is seen). Read it with the RMT receive driver (driver/rmt_rx.h) at 1 MHz, signal_range_min_ns 1250, signal_range_max_ns 12000000\n· NEC frame: 9 ms lead + 4.5 ms space, 32 bits LSB first (address, inverted address, command, inverted command), a bit is a 560 µs burst then a 560 µs (0) or 1690 µs (1) space; accept ±200 µs. A repeat code (the key is still held, every 108 ms) is a 9 ms burst + 2.25 ms space\n· For every frame whose inverted bytes check out print 收到 地址=<AA> 命令=<CC> (two upper-case hex digits each, e.g. 收到 地址=00 命令=0C); for a repeat code print 收到 重复码\n· Light state: on / off, colour number 1–9, brightness level L 1–8. At power-up: on, colour 8 warm white, L=4; send that frame right away. Colours: 1 red #FF2020, 2 green #20FF40, 3 blue #2040FF, 4 yellow #FFC000, 5 cyan #00E0FF, 6 purple #C040FF, 7 pink #FF60A0, 8 warm white #FF9933, 9 white #FFFFFF; all 8 LEDs the same, each channel = colour value × L / 8 (integer division), all zero when off\n· Remote (common 21-key NEC remote, address 0x00): digits 1–9 = commands 0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A pick that colour and print 颜色 <n> <name> (names 红 绿 蓝 黄 青 紫 粉 暖白 白); VOL+ 0x15 / VOL- 0x07 change L by 1 (stop at 1 and 8, print 亮度 <L>/8 only when it changes); 0x45 (CH-, the power key) toggles and prints 关灯 or 开灯. While off, other keys are ignored. A repeat code repeats the last key only if it was VOL+ or VOL-\n· After sending every frame print 电流估算 <I> mA, I = 8 + 8 × (R + G + B) × 20 / 255 with R, G, B the channel values sent (integer division at the end): 1 mA idle per LED plus 20 mA per channel at 255. Off gives 8 mA, full white 488 mA",
@@ -1111,7 +1111,8 @@
     "rgb": "#FFFFFF",
     "tol": 2
    }
-  }
+  },
+  "assembly": "irlamp"
  },
  {
   "id": "fault-wire",

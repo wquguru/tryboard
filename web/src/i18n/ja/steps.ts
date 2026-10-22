@@ -1130,5 +1130,12 @@ const d: Dict = {
   "RC522 version 0x{v}": "RC522 バージョン 0x{v}",
   "Door lock": "ドアロック",
   "Appearance only (2D view for now)": "外観イメージ（現在は 2D 表示）",
+  "With the receiver behind the opaque wall, no remote code reaches the VS1838B.": "受光部が不透明な壁の裏にあると、リモコンのコードは VS1838B に届きません。",
+  "Dome in the IR window: 940 nm light from the remote passes the dark acrylic and every key arrives": "ドームを IR 窓に：リモコンの 940 nm の光が濃色アクリルを通り、どのキーも届く",
+  "Behind the opaque wall: the remote light never reaches the receiver, no key works, same in the retest (estimate)": "不透明な壁の裏：リモコンの光が受光部に届かず、どのキーも効かない。再テストでも同じ（推定）",
+  "WS2812 at 5 V wants DIN ≥ 3.5 V; the 74AHCT125 lifts GPIO5 so the first LED does not flicker": "5 V 駆動の WS2812 は DIN ≥ 3.5 V が必要。74AHCT125 で GPIO5 を持ち上げ、最初の LED がちらつかないようにする",
+  "Remote reception": "リモコン受信",
+  "No remote code arrives": "リモコンのコードが届かない",
+  "Every key arrives": "どのキーも届く",
 };
 export default d;
