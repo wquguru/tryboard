@@ -165,7 +165,7 @@ export function trustRows(p: Plan, need: Need): [string, Confidence][] {
   rows.push([t('Pin assignment'), '估算']); // lint: allow-cjk
   if (p.chip.id === 'esp32') {
     // Classic-ESP32-only parts TryBoard does not model (C-05)
-    if (need.caps.some((c) => c === 'ble' || c === 'bt_classic')) rows.push([t('Classic Bluetooth / BLE (ESP32)'), '必须上真机']); // lint: allow-cjk
+    if (need.caps.some((c) => c === 'bt_classic')) rows.push([t('Classic Bluetooth (ESP32)'), '必须上真机']); // lint: allow-cjk
     if (need.caps.some((c) => c === 'dac' || c === 'touch')) rows.push([t('DAC / capacitive touch / Hall sensor (ESP32)'), '必须上真机']); // lint: allow-cjk
   }
   if (p.power) rows.push([t('Battery life'), p.power.confidence]);

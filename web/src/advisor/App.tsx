@@ -823,6 +823,18 @@ export function App() {
     [t('Deep sleep'), (x) => sleepCurrent(x.board.boardSleepUA)],
     [t('In TryBoard'), (x) => simText(x)],
   ];
+  const tryExamples = r.tpl.examples.length > 0 && (
+    <section id="examples" data-testid="tpl-examples">
+      <h3 className="mb-2.5 text-[16px] font-bold">{t('Examples you can run in the simulator first')}</h3>
+      <div className="flex flex-wrap gap-2">
+        {r.tpl.examples.map((id) => (
+          <a key={id} href={lab('blank', 'bench', { example: id })} data-example={id} className="inline-flex min-h-11 items-center rounded-full border border-line bg-surface px-4 font-mono text-[13px] hover:border-fg">
+            {id}
+          </a>
+        ))}
+      </div>
+    </section>
+  );
   const compare = p && trio.length > 1 && (
     <section id="compare">
       <h3 className="mb-2.5 text-[16px] font-bold">{mobile ? t('Three-board comparison · swipe') : t('Three-board comparison')}</h3>
@@ -933,6 +945,7 @@ export function App() {
           {none}
           {answer}
           {why}
+          {tryExamples}
           {compare}
           {details}
           {brief}
@@ -982,6 +995,7 @@ export function App() {
           )}
           {why}
           {details}
+          {tryExamples}
           {compare}
           {brief}
         </section>

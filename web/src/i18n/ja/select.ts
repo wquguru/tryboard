@@ -133,7 +133,7 @@ const d: Dict = {
   "Because of \"Battery powered\"": "「電池駆動」のため",
   "Best fit": "最適",
   "Cheapest": "最安",
-  "Classic Bluetooth / BLE (ESP32)": "クラシック Bluetooth / BLE（ESP32）",
+  "Classic Bluetooth (ESP32)": "クラシック Bluetooth（ESP32）",
   "Common for {project}": "{project}でよく追加",
   "DAC / capacitive touch / Hall sensor (ESP32)": "DAC / 静電容量タッチ / ホールセンサー（ESP32）",
   "Drop \"{cap}\"": "「{cap}」を外す",
@@ -430,5 +430,6 @@ const d: Dict = {
   "IR transmit LED signal": "赤外線 LED 駆動",
   "RFID reader": "リーダー",
   "RFID SDA / RST": "リーダー SDA / RST",
+  "Examples you can run in the simulator first": "まずシミュレーターで動かせるサンプル",
 };
 export default d;

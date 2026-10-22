@@ -133,7 +133,7 @@ const d: Dict = {
   "Because of \"Battery powered\"": "因为「用电池」",
   "Best fit": "最合适",
   "Cheapest": "最便宜",
-  "Classic Bluetooth / BLE (ESP32)": "经典蓝牙 / BLE（ESP32）",
+  "Classic Bluetooth (ESP32)": "经典蓝牙（ESP32）",
   "Common for {project}": "{project}常加",
   "DAC / capacitive touch / Hall sensor (ESP32)": "DAC / 电容触摸 / 霍尔传感器（ESP32）",
   "Drop \"{cap}\"": "去掉「{cap}」",
@@ -430,5 +430,6 @@ const d: Dict = {
   "IR transmit LED signal": "红外发射管驱动",
   "RFID reader": "读卡器",
   "RFID SDA / RST": "读卡器 SDA / RST",
+  "Examples you can run in the simulator first": "可以先在模拟器里跑的示例",
 };
 export default d;
