@@ -1481,3 +1481,12 @@
 - **不只改测试**：测试等空闲期再武装也挡不住真实用户在帧中点触发；且页面时钟本就落后 worker，测试侧对齐不可靠。判定（> 80 沿、无丢弃、40 位解码）未改。
 - **界面文案**同步：「Next edge from now」→「Next burst from now」、「Waiting for the next edge…」→「Waiting for the next burst…」，zh / ja / ko 一起改。单测：原武装用例把保持长度改成 150 周期（同一触发沿，窗口终点随之变），新增「帧中武装跳过近沿」「连续信号持续一个窗口后开窗」两例。
 - 备选：只对 DHT11 数据脚加 1 ms 安静保持（要新增参数、对其它协议无效，未采用）；固定「武装满一个窗口后任意沿都触发」（武装在帧前 8 ms 时仍会落在帧中，否决）。
+
+## 2026-10-22 IRremote 上站（人定）
+- 人：「IRremote 你研究下吧，我是觉得没问题可以上去」。主会话补查后，人定的结论是可以上站，走 MIT + NOTICE。
+- 补查的事实：
+  - issue #397（2016，z3t0）是新版本从 LGPL 改为 MIT 的公告。
+  - 4 个 GPL-3.0 头（LocalDebugLevelStart.h、LocalDebugLevelEnd.h、LongUnion.h、TinyIR.h）与作者 ArminJo 自己的 GPL 仓库 Arduino-Utils、PWMMotorControl 里的同名文件一致，是版权人本人带进来的通用文件。
+  - 这 4 个头只有宏、类型和结构声明、常量，不单独产生目标代码；TinyIR.h 所声明的实现 TinyIRReceiver.hpp 本身是 MIT。
+- 落地：F-08e 一并处理 NOTICES、许可页、BUILD_INFO。请作者统一文件头的英文 issue 草稿保留为可选，不发、不阻塞上站。
+- F-08f（自写 RMT NEC 示例）不再是替代品，作为额外的无库示例保留。
