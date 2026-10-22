@@ -115,6 +115,15 @@ report('Shop: swap-board drawer closes', await waitFor(page, () => document.quer
 // ---- ▾ work switcher, ⋯ menu
 await page.click('#workMenuBtn');
 report('▾ work menu lists the works', await waitFor(page, () => document.querySelectorAll('#workMenu [role=menuitemradio]').length >= 7));
+// U-25 (DESIGN_V2 §10.3): guided / free groups, blank + my project first in the free group, current work checked
+report('▾ work menu: guided and free group titles', await page.evaluate(() => document.querySelector('#workMenu #wmGuided')?.textContent === 'Guided works' && document.querySelector('#workMenu #wmFree')?.textContent === 'Free lab'));
+report('▾ work menu: blank and my project lead the free group', await page.evaluate(() => {
+  const first = document.querySelector('#workMenu [data-group="free"] [role=menuitemradio]')?.parentElement;
+  return first?.dataset.row === 'free-top' && [...first.querySelectorAll('[role=menuitemradio]')].map((a) => a.dataset.work).join() === 'blank,custom';
+}));
+report('▾ work menu: guided rows show passed/total', await page.evaluate(() => [...document.querySelectorAll('#workMenu [data-group="guided"] [role=menuitemradio]')].every((a) => /^\d+\/\d+$/.test(a.lastElementChild?.textContent ?? ''))));
+report('▾ work menu: current work is checked', await page.evaluate(() => [...document.querySelectorAll('#workMenu [aria-checked="true"]')].map((a) => a.dataset.work).join() === 'weather'));
+report('▾ work menu: items tappable', (await tappable('#workMenu [data-work="blank"]')) === 'ok' && (await tappable('#workMenu [data-work="weather"]')) === 'ok', await tappable('#workMenu [data-work="blank"]'));
 await page.click('#workMenuBtn');
 await page.click('#moreBtn');
 report('⋯ menu has Brief, Change firmware, dark mode', await waitFor(page, () => /Task brief/.test(document.querySelector('#moreMenu')?.textContent) && /Change firmware/.test(document.querySelector('#moreMenu')?.textContent) && /Switch to (dark|light)/.test(document.querySelector('#moreMenu')?.textContent)));
