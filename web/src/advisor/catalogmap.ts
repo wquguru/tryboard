@@ -25,8 +25,8 @@ export const PART_MAP: Record<string, CatalogItem | null> = {
   buzzer: { partId: 'buzzer-module' },
   dht11: { partId: 'dht11' },
   aht20: { partId: 'aht20' },
-  relay: null,
-  rc522: null,
+  relay: { partId: 'relay-1ch' },
+  rc522: { partId: 'rc522' },
   irrx: null,
   irled: null,
   pir: null,
@@ -35,8 +35,6 @@ export const PART_MAP: Record<string, CatalogItem | null> = {
 
 /** Third state: modelled and runnable in an example, not yet placeable on the bench; PART_MAP stays null so shop code skips it */
 export const EXAMPLE_ONLY: Record<string, { example: string; real?: string }> = {
-  rc522: { example: 'c3-rc522' },
-  relay: { example: 'c3-pir-relay', real: 'Relay contacts and the mains side' },
   pir: { example: 'c3-pir-relay' },
   irrx: { example: 'arduino-lib-irremote-rx' },
   irled: { example: 'arduino-lib-irremote' },

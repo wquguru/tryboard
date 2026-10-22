@@ -845,5 +845,28 @@ const d: Dict = {
   "2.0″ color display (ST7789, SPI, 240×320)": "2.0″ カラー液晶（ST7789、SPI、240×320）",
   "ST7789V 2.0″ IPS LCD module (8-pin)": "ST7789V 2.0″ IPS 液晶モジュール（8 ピン）",
   "IPS panel: most need colour inversion on. The simulator wires it to the fixed SPI2 LCD pins.": "IPS パネル：ほとんどは色反転をオンにする必要があります。シミュレータは固定の SPI2 LCD ピンに接続します。",
+
+  // G-03 RFID door checkpoints (firmware/levels.json)
+  "Acceptance firmware targets the C3": "受け入れファームウェアは C3 向け",
+  "Reads card UIDs over SPI (CS GPIO7, RST GPIO3); 3.3 V only": "SPI でカード UID を読む（CS GPIO7、RST GPIO3）。3.3 V 専用",
+  "Shows WELCOME / DENIED and the lockout countdown (SDA GPIO2, SCL GPIO9)": "WELCOME / DENIED とロックアウトのカウントダウンを表示（SDA GPIO2、SCL GPIO9）",
+  "Switches the door strike (IN GPIO10)": "電気錠をオン / オフ（IN GPIO10）",
+  "Short beep to open, long beep to refuse (GPIO1)": "解錠は短いビープ、拒否は長いビープ（GPIO1）",
+  "Red LED blinks on a refused card (GPIO0)": "拒否したカードで赤色 LED が点滅（GPIO0）",
+  "330 Ω in series with the LED": "LED に直列の 330 Ω",
+  "The lock itself, on the relay contacts: needs real hardware": "錠本体。リレー接点につなぐ：実機が必要",
+  "12 V for the strike only, never into the dev board": "12 V は電気錠専用。開発ボードには絶対につながない",
+  "Wall panel: card zone over the reader, screen window above it": "壁パネル：リーダーの上にカードエリア、その上に画面窓",
+  "LED and resistor sit on the breadboard": "LED と抵抗はブレッドボードに挿す",
+  "12 V electric door strike (fail-secure solenoid lock)": "12 V 電気錠（通電時解錠タイプ）",
+  "12 V 1 A power adapter (DC 5.5×2.1)": "12 V 1 A AC アダプター（DC 5.5×2.1）",
+  "RFID door reader enclosure (3D-printed)": "RFID ドアリーダーのケース（3D プリント）",
+  "The coil needs 12 V at up to 0.8 A; the dev board cannot supply it": "コイルには 12 V・最大 0.8 A が必要で、開発ボードからは供給できない",
+  "Wire it through the relay COM / NO contacts with its own 12 V supply and a flyback diode across the coil. The simulator only sees the relay input level: the strike itself needs real hardware.": "リレーの COM / NO 接点経由で配線し、専用の 12 V 電源を使い、コイルにフライバックダイオードを並列に入れます。シミュレーターが見られるのはリレーの入力レベルだけで、電気錠そのものは実機が必要です。",
+  "Only for the door strike, through the relay contacts. Never connect 12 V to the dev board; buy a certified one.": "電気錠専用で、リレー接点を経由します。12 V を開発ボードには絶対につながないでください。認証済みの製品を購入してください。",
+  "Keep metal away from the RC522 antenna and the panel wall over it under about 3 mm, or the read range drops to almost nothing.": "RC522 のアンテナに金属を近づけず、その上のパネルの壁厚は 3 mm 程度以下にしてください。そうしないと読み取り距離がほぼゼロになります。",
+
+  // G-01 templates and parts.
+  "RFID door lock": "RFID 入退室",
 };
 export default d;

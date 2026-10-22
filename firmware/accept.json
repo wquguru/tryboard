@@ -3647,6 +3647,40 @@
   ]
  },
  {
+  "id": "c3-door",
+  "chip": "esp32c3",
+  "seconds": 19,
+  "qemu": false,
+  "args": [
+   "--spi",
+   "rc522",
+   "--relay",
+   "10",
+   "--i2c",
+   "sh1106@0x3c"
+  ],
+  "script": "0.5:card=DEADBEEF; 1.0:card=none; 4.0:card=11223344; 4.3:card=none; 4.6:card=11223344; 4.9:card=none; 5.2:card=11223344; 5.5:card=none; 6.0:card=DEADBEEF; 6.3:card=none; 15.5:card=DEADBEEF",
+  "expect": [
+   "RC522 版本 0x92 天线 开",
+   "TRYBOARD_OK c3-door",
+   "读到卡 UID DE:AD:BE:EF (4 字节) → 欢迎，开锁",
+   "已上锁，开锁 3.0",
+   "读到卡 UID 11:22:33:44 (4 字节) → 拒绝（连续第 3 次）",
+   "连续 3 次拒绝，锁定 10 秒",
+   "读到卡 UID DE:AD:BE:EF (4 字节) → 锁定中，不处理",
+   "锁定倒计时 1 秒",
+   "解除锁定"
+  ],
+  "stderr_expect": [
+   "relay GPIO10 (active high): 4 switches",
+   "RC522 CS=GPIO7",
+   "unsupported 0",
+   "NACK 0",
+   "SH1106, non-SH1106 commands 0"
+  ],
+  "oled_min_pixels": 500
+ },
+ {
   "id": "s3-rc522",
   "chip": "esp32s3",
   "seconds": 5,

@@ -40,7 +40,7 @@ export interface BuyLine {
 }
 
 export interface ProcureTemplate {
-  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'blank' | 'custom';
+  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'door' | 'blank' | 'custom';
   title: string;
   /** Matching level (firmware/levels.json id; level 07 variants are written 07:spin) */
   level: string | null;
@@ -269,6 +269,53 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
     firmware: { wifi: false },
   },
   {
+    id: 'door',
+    title: 'RFID door lock',
+    level: 'door-4',
+    product: 'door',
+    board: 'c3-devkitm1',
+    required: [
+      { partId: 'c3-devkitm1', qty: 1, why: 'Acceptance firmware targets the C3' },
+      { partId: 'rc522', qty: 1, why: 'Reads card UIDs over SPI (CS GPIO7, RST GPIO3); 3.3 V only' },
+      { partId: 'sh1106', qty: 1, why: 'Shows WELCOME / DENIED and the lockout countdown (SDA GPIO2, SCL GPIO9)' },
+      { partId: 'relay-1ch', qty: 1, why: 'Switches the door strike (IN GPIO10)' },
+      { partId: 'buzzer-module', qty: 1, why: 'Short beep to open, long beep to refuse (GPIO1)' },
+      { partId: 'led-kit', qty: 1, why: 'Red LED blinks on a refused card (GPIO0)' },
+      { partId: 'resistor-kit', qty: 1, why: '330 Ω in series with the LED' },
+      { partId: 'door-strike-12v', qty: 1, why: 'The lock itself, on the relay contacts: needs real hardware' },
+      { partId: 'psu-12v1a', qty: 1, why: '12 V for the strike only, never into the dev board' },
+      CABLE,
+      { partId: 'dupont-ff', qty: 1, why: 'Module headers straight to the board' },
+      { partId: 'enclosure-door', qty: 1, why: 'Wall panel: card zone over the reader, screen window above it' },
+    ],
+    suggested: [
+      { partId: 'breadboard-830', qty: 1, checked: true, why: 'LED and resistor sit on the breadboard' },
+      { partId: 'dupont-mm', qty: 1, checked: true, why: 'Jumpers on the breadboard' },
+    ],
+    wiring: [
+      { part: 'rc522', pin: '3.3V', net: '3V3' },
+      { part: 'rc522', pin: 'GND', net: 'GND' },
+      { part: 'rc522', pin: 'SDA', net: 'GPIO7' },
+      { part: 'rc522', pin: 'SCK', net: 'GPIO4' },
+      { part: 'rc522', pin: 'MOSI', net: 'GPIO6' },
+      { part: 'rc522', pin: 'MISO', net: 'GPIO5' },
+      { part: 'rc522', pin: 'RST', net: 'GPIO3' },
+      { part: 'sh1106', pin: 'GND', net: 'GND' },
+      { part: 'sh1106', pin: 'VCC', net: '3V3' },
+      { part: 'sh1106', pin: 'SCL', net: 'GPIO9' },
+      { part: 'sh1106', pin: 'SDA', net: 'GPIO2' },
+      { part: 'relay-1ch', pin: 'VCC', net: '5V' },
+      { part: 'relay-1ch', pin: 'GND', net: 'GND' },
+      { part: 'relay-1ch', pin: 'IN', net: 'GPIO10' },
+      { part: 'buzzer-module', pin: 'VCC', net: '3V3' },
+      { part: 'buzzer-module', pin: 'I/O', net: 'GPIO1' },
+      { part: 'buzzer-module', pin: 'GND', net: 'GND' },
+      { part: 'led-kit', pin: '长脚 +', net: 'GPIO0' }, // lint: allow-cjk
+      { part: 'led-kit', pin: '短脚 -', net: 'GND' }, // lint: allow-cjk
+    ],
+    firmware: { wifi: false },
+  },
+  {
     id: 'usbkey',
     title: 'USB mini keypad',
     level: 'usbkey-3',
@@ -377,7 +424,7 @@ export function bomTotal(picks: Pick[], board?: string): { lo: number; hi: numbe
 }
 
 /** Part library -> bench scene part type (same names as examples.json scene.parts[].type) */
-const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812', pot: 'pot', dht11: 'dht11', sh1106: 'oled', st7789: 'tft', 'st7789-240x320': 'tft', ili9341: 'tft' };
+const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812', pot: 'pot', dht11: 'dht11', sh1106: 'oled', rc522: 'rc522', 'relay-1ch': 'relay', st7789: 'tft', 'st7789-240x320': 'tft', ili9341: 'tft' };
 /** Bare SPI TFT catalog part -> panel (= CLI --spi name, F-04a2) */
 const TFT_PANEL: Record<string, string> = { st7789: 'st7789-240x240', 'st7789-240x320': 'st7789-240x320', ili9341: 'ili9341' };
 /** Keycap labels (usbkey: K1–K3 send a / b / c, K4 is the macro key) */
@@ -435,6 +482,12 @@ export function toScene(picks: Pick[], wiring: Wire[]): { type: string; [k: stri
     } else if (type === 'buzzer') {
       const pin = gpioOf(key, 'pwm');
       if (pin !== undefined) out.push({ type, pin });
+    } else if (type === 'relay') {
+      const pin = gpioOf(key, 'digital-in');
+      if (pin !== undefined) out.push({ type, pin });
+    } else if (type === 'rc522') {
+      const cs = gpioOf(key, 'spi-cs'), sck = gpioOf(key, 'spi-sclk'), mosi = gpioOf(key, 'spi-mosi'), miso = gpioOf(key, 'spi-miso'), rst = gpioOf(key, 'rst');
+      if (cs !== undefined) out.push({ type, cs, sck, mosi, miso, rst });
     } else if (type === 'led') {
       const pin = gpioOf(key, 'io');
       if (pin !== undefined) out.push({ type, pin });

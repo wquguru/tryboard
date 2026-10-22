@@ -48,7 +48,8 @@ def load():
     cfg["spi_devices"] = {n for m in re.findall(r"--spi ([\w|-]+)", cli) for n in m.split("|")}
     # Pin-spec panels (only valid with @pins) are listed in the usage text: "(S3 / ESP32 panels gc9a01 ...;"
     cfg["spi_panels"] = {n for m in re.findall(r"panels ([\w ]+)[;)]", cli) for n in m.split()}
-    parts = read("web/src/catalog/parts.ts")
+    # parts.ts spreads BENCH_PARTS from parts-bench.ts, so both files hold catalog ids
+    parts = read("web/src/catalog/parts.ts") + read("web/src/catalog/parts-bench.ts")
     cfg["part_ids"] = set(re.findall(r"^    id: '([\w.-]+)'", parts, re.M)) | set(re.findall(r"^  id: '([\w.-]+)'", read("web/src/catalog/aioboards.ts"), re.M))
     cfg["part_refs"] = {}
     for f in ("web/src/catalog/templates.ts", "web/src/catalog/rules.ts", "web/src/advisor/data.ts"):

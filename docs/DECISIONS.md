@@ -1606,3 +1606,13 @@
 - 顶栏撤销 / 回放后开关从台面反推（`knobsFromScene`：哪个选项套到当前场景不改线就是哪个），不去拦撤销跨过开关步；二者取简单的
 - 实时台面两条总线共用 8 / 9 号焊盘（OLED 8/9、BME280 9/8），内核 `i2cpins.rs` `add` 拒绝焊盘重叠的第二条总线（worker 里 console.warn「pad already on another bus」，非 error），效果同样是扫不到 0x76；CLI 检查运行里 OLED 无引脚，不受影响
 - 备选：只改检查不改台面（F-05 做法）——否：W8 不会出现，目标要求台面接线视图一致；改用 wireMods 让玩家用接线工具把线换回来——否：接线工具明确不改仿真，修好后实时台面与检查不一致
+
+## 2026-10-22 G-03：RFID 门禁（`door`）的引脚、屏幕文字和新零件（自主实现决定，阶段一）
+- 引脚：RC522 沿用 c3-rc522（SCK4 MISO5 MOSI6 CS7 RST3）；SH1106 只能离开 6 / 7（SPI 占用），也不能用 8（ESP32-C3-DevKitM-1 板载 WS2812，规则 R24 报警），18 / 19（R09 USB）和 20 / 21（R10 日志串口）同样报警，最终 SDA=GPIO2、SCL=GPIO9（两个都是 strapping 脚，但 I2C 上拉保持高电平正好满足启动要求，规则无告警）；继电器 IN GPIO10、无源蜂鸣器 GPIO1（LEDC 2700 Hz）、红 LED GPIO0
+- 屏幕只用 ASCII（WELCOME / DENIED / LOCKED / LOCKOUT + 小字说明）：5×7 字库没有中文；串口 printf 仍是中文，检查点按中文匹配
+- 新零件（parts-bench.ts）：`door-strike-12v`（12 V 电磁锁，无仿真模型，requires `psu-12v1a`）、`psu-12v1a`、`enclosure-door`（86×120×28 mm 估算，sim estimated `assembly:door`）。BOM 信任等级：RC522 读卡 = 行为级（只模拟 UID，不模拟 MIFARE 认证），继电器后面的电磁锁 / 12 V / 市电 = 必须上真机
+- 选型顾问 `PART_MAP`：rc522 → `rc522`、relay → `relay-1ch`（从 EXAMPLE_ONLY 移出），custom.ts `wiresFor` 补两者接线（顾问 SPI 三脚 = SCK / MOSI / 第三脚，RC522 的第三脚给 MISO，SDA / RST 用 gpio 两脚）
+- 顺手修两个工具缺口：`tools/check_config.py` 零件 id 也读 `parts-bench.ts`（parts.ts 用 `...BENCH_PARTS` 展开，原来扫不到）；npm 包 `tryboard check` 关卡运行漏传 `dht11` / `parts`（`--spi rc522` / `--relay` 等），door 四关 npx 与 check.py 指纹原先不一致，补上后一致
+- 示例 id 用 `c3-door`（固件目录名 = 示例 id），作品 `door` 的 `example: 'c3-door'`；catalog.test.ts 的 toScene / 引脚对照按 door → c3-door 查示例
+- 阶段一不给作品加首页卡片（`card`）：首页卡片要 views/templates.ts 的产品视图，没有时会走 showcase 的旧分支出错；产品页对没有 TEMPLATES 的作品已有「没有成品」兜底
+- 备选：SH1106 和 RC522 共用 SPI（SH1106 SPI 版）——否：目录里的 sh1106 是 I2C 模块；换 xiao-c3 板——否：DevKitM-1 引脚多，c3-rc522 已用它
