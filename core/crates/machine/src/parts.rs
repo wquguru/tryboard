@@ -204,14 +204,9 @@ impl Machine {
     }
 }
 
-/// IR remote link (F-10c): receiver module output on rx, IR LED eye on tx (classic ESP32 only: its RMT has the carrier)
+/// IR remote link (F-10c): receiver module output on rx, IR LED eye on tx (RMT carrier: classic ESP32, C3, S3)
 impl Machine {
     pub fn ir_attach(&mut self, rx: Option<u32>, tx: Option<u32>) -> Result<(), String> {
-        if tx.is_some() && self.chip != Chip::Esp32 {
-            return Err(
-                "the IR LED eye needs the classic ESP32 RMT carrier (C3 / S3 not modelled)".into(),
-            );
-        }
         let now = self.cycles();
         let l = tryboard_soc::devices::ir::IrLink::new(rx, tx, true, now);
         self.pins().ir.push(l);

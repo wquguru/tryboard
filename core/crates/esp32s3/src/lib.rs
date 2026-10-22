@@ -806,8 +806,7 @@ impl SocBus {
         l
     }
 
-    /// Route RMT output edges through the GPIO matrix to pins: update pin levels and feed the WS2812 decoders on them.
-    /// Returns when a decoder next needs checking (end-of-frame detection).
+    /// Route RMT edges to pins (levels, IR eyes, WS2812 decoders); returns when a decoder next needs a check (frame end)
     fn route_rmt(&mut self, now: u64) -> u64 {
         let l = self.rmt.layout;
         let mut next = u64::MAX;
@@ -818,6 +817,10 @@ impl SocBus {
                 continue;
             }
             let ch = (sel - l.sig_out0) as u8;
+            self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
+            if self.pins.rmt_ir(&self.rmt, pin, ch, &edges) {
+                continue;
+            }
             let dec = self.ws2812.entry(pin).or_default();
             let frames = dec.frames;
             for &(t, c, lv) in &edges {
@@ -829,12 +832,10 @@ impl SocBus {
             if dec.frames != frames {
                 self.iotrace.ws2812(now, pin, &dec.rgb);
             }
-            self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
         }
         if !edges.is_empty() {
             // Pins driven by RMT TX may also feed PCNT / RMT RX (loopback)
-            let lv = self.gpio.level();
-            self.feed_inputs(now, lv);
+            self.feed_inputs(now, self.gpio.level());
         }
         edges.clear();
         self.rmt.edges = edges;

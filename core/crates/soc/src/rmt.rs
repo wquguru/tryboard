@@ -1,11 +1,11 @@
 //! RMT (IR remote / generic pulse TX+RX). C3: 2 TX (CH0/1) + 2 RX (CH2/3), RAM at base+0x400; S3: 4 TX + 4 RX, RAM at base+0x800; same layout rules (`RmtLayout`,
 //! rmt_reg.h), TX IRQ bits end = ch, err = 4+ch, thres = 8+ch, loop = 12+ch; 48 32-bit items per block. Item: [14:0] dur0, 15 level0, [30:16] dur1, 31 level1; dur 0 = end.
 //! Classic ESP32 (`RmtLayout::ESP32`, M5-11): 8 channels x 64 words, CONF0/CONF1 pairs, IRQ end = 3ch / err = 3ch+2 / thres = 24+ch, global wrap in APB_CONF.
-//! F-10c: every classic channel also receives (RX channel i = channel i, rx_end = 3i+1, no RX threshold / wrap) and TX modulates a carrier.
+//! F-10c: every classic channel also receives (RX channel i = channel i, rx_end = 3i+1, no RX threshold / wrap); TX modulates a carrier (F-08f: C3 / S3 too).
 //! TX advances lazily: `update(now)` consumes elapsed half-items, records level edges (`edges`), raises thres / end / err IRQs, returns the next due time.
 //! RX (P2-05): input via GPIO matrix (RMT_SIG_IN0_IDX matches output numbering), fed by the SoC to `rx_input` on pin changes. After rx_en, start at the first
 //! edge, write each level's ticks as a half-item; a level held > idle_thres ticks ends the frame (0-length half-item pads it, RX_END). Filter in `sigin`; rx_lim
-//! threshold IRQ + wrap serve IDF ping-pong RX. Not modelled: carrier, APB FIFO mode, DMA RX (S3 ch 7), memory-owner errors. (lint: allow-long-comment)
+//! threshold IRQ + wrap serve IDF ping-pong RX. Not modelled: RX demodulation, APB FIFO mode, DMA RX (S3 ch 7), memory-owner errors. (lint: allow-long-comment)
 
 use crate::periph::CPU_HZ;
 use crate::sigin::Deglitch;
@@ -309,27 +309,32 @@ impl Rmt {
         self.cycles_x256((self.conf0(ch) >> 8) & 0xff)
     }
 
-    /// Classic TX carrier when carrier_en (CONF0 [28]): (high, low) in CPU cycles and the modulated level carrier_out_lv [29].
-    /// CARRIER_DUTY_CHn: low [15:0], high [31:16] (0 = 65536) in the channel's base clock (IDF: "group clock").
+    /// TX carrier when carrier_en (classic CONF0 [28], C3 / S3 [21]): (high, low) in CPU cycles and the modulated level
+    /// (out_lv, [29] / [22]). CARRIER_DUTY_CHn: low [15:0], high [31:16] (0 = 65536) in the group clock (classic: channel base clock).
     pub fn carrier(&self, ch: usize) -> Option<(u64, u64, bool)> {
         let l = self.layout;
-        if !l.classic || ch >= l.ntx || self.conf0(ch) & (1 << 28) == 0 {
+        let (en, lv) = if l.classic { (28, 29) } else { (21, 22) };
+        if ch >= l.ntx || self.conf0(ch) & (1 << en) == 0 {
             return None;
         }
         let d = self.regs[((l.int_raw() + 0x10) / 4) as usize + ch];
-        let src = if self.conf1(ch) & (1 << 17) != 0 {
-            80_000_000
-        } else {
-            1_000_000
-        };
         let cyc = |t: u32| {
             let t = if t == 0 { 65536 } else { t as u64 };
-            (t * CPU_HZ / src).max(1)
+            if l.classic {
+                let src = if self.conf1(ch) & (1 << 17) != 0 {
+                    80_000_000
+                } else {
+                    1_000_000
+                };
+                (t * CPU_HZ / src).max(1)
+            } else {
+                (t * self.cycles_x256(1) / 256).max(1)
+            }
         };
         Some((
             cyc(d >> 16),
             cyc(d & 0xffff),
-            self.conf0(ch) & (1 << 29) != 0,
+            self.conf0(ch) & (1 << lv) != 0,
         ))
     }
 
@@ -1157,6 +1162,32 @@ mod tests {
         r.write(0xb0, 694 << 16 | 1411, 0);
         r.write(0x20, 80 | 1 << 24 | 1 << 28 | 1 << 29, 0);
         r.write(0x24, 1 << 19 | 1 << 17 | 8 | 1, 0);
+        let mut now = 0;
+        let mut edges = Vec::new();
+        while now < 2 * CPU_HZ / 1000 {
+            let n = r.update(now);
+            edges.append(&mut r.edges);
+            now = n.min(now + CPU_HZ / 10_000);
+        }
+        let rises: Vec<u64> = edges.iter().filter(|e| e.2).map(|e| e.0).collect();
+        let us = CPU_HZ / 1_000_000;
+        assert_eq!(rises.len(), 22, "ceil(560 us / 26.3 us) carrier pulses");
+        assert!(rises.iter().all(|t| *t < 560 * us));
+        let period = (rises[1] - rises[0]) as f64 / CPU_HZ as f64;
+        assert!((1.0 / period - 38_000.0).abs() < 50.0, "{}", 1.0 / period);
+        assert!(r.int_raw & 1 != 0, "TX_END ch0");
+        assert!(!edges.last().unwrap().2, "ends low");
+    }
+
+    /// C3 TX carrier (F-08f): CONF0 [21] / [22], duty ticks in the group clock (APB / 2 here), 38 kHz / 33 % on marks only
+    #[test]
+    fn c3_tx_carrier() {
+        let mut r = Rmt::new(RmtLayout::C3);
+        r.regs[(RmtLayout::C3.sys_conf() / 4) as usize] = 0x0500_0010;
+        r.write(0x400, item(560, 560), 0);
+        r.write(0x404, 0, 0);
+        r.write(0x48, 347 << 16 | 705, 0);
+        r.write(0x10, 1 << 16 | 40 << 8 | 1 << 21 | 1 << 22 | 1, 0);
         let mut now = 0;
         let mut edges = Vec::new();
         while now < 2 * CPU_HZ / 1000 {
