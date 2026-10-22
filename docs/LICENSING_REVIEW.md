@@ -288,6 +288,71 @@ ROM 里的第三方代码见 IDF COPYRIGHT 页 "ROM Source Code Copyrights"：Ne
 
 **结论**：【明确允许】MIT / BSD 部分，保留版权与许可声明即可。【需要继续确认】无声明的 qoi 与 squix 字体头文件：只是编进固件里（链接时只有被引用的才进 bin），要托管含它们的 bin 前先确认 bin 里是否真有这些符号，有就补查上游（phoboslab/qoi MIT；squix 字体的原字体许可）再写进 NOTICES。IPA 字体仅在用到日文字体时进 bin。
 
+### 16. 2026-10-22 ESP32Servo / IRremote 证据（F-08d）
+
+只整理证据，**结论待人核**；docs/LICENSING.md 第 30 行的「只进本地 accept、未核前不上站」不变。读的是 `third_party/arduino-libs/` 下按 `tools/fetch_third_party.sh` 钉的本地克隆（HEAD 与钉的提交一致），GitHub 元数据用 `gh api repos/<owner>/<repo>` 只读获取。
+
+#### 16.1 ESP32Servo（madhephaestus/ESP32Servo `f7282217605d8bd9a4f3070cf9901d10d13ede1d`，library.properties 3.2.1）
+
+**实查**
+- 仓库根和子目录都没有 LICENSE / COPYING；`library.properties` 没有 `license=` 字段（author=Kevin Harrington, John K. Bennett）；没有 `library.json`。
+- GitHub `license` 字段为 `null`（未识别出许可证）。
+- README.md 第 55–71 行「## License」：「Copyright (c) 2017 John K. Bennett」+ LGPL-2.1-or-later 标准声明。
+- 源码只有 `src/` 下 4 个文件，加 7 个示例：
+
+| 文件 | 许可声明 | 版权人 | 备注 |
+|---|---|---|---|
+| `src/ESP32Servo.h` | LGPL-2.1 或更高（第 24–36 行标准声明） | © 2017 John K. Bennett | 第 6 行「Original Servo.h written by Michael Margolis in 2009」：派生自 Arduino Servo 库（LGPL-2.1+），类注释（第 39 行起）沿用原 Servo.h 的说明文字 |
+| `src/ESP32Servo.cpp` | LGPL-2.1 或更高（第 4–16 行） | © 2017 John K. Bennett | 与 .h 同；实现为 ESP32 LEDC / MCPWM 重写 |
+| `src/ESP32PWM.h` | **无许可声明** | 「Author: hephaestus」（= 维护者 Kevin Harrington），2018 | 文件头只有说明；按 README 的 License 节可读作随库 LGPL-2.1+，但文件内无明示 |
+| `src/ESP32PWM.cpp` | **无许可声明** | 「Author: hephaestus」，2018 | 同上 |
+| `examples/Sweep/Sweep.ino` | 「This example code is in the public domain.」 | — | 其余 6 个示例无声明；我们的 `firmware/arduino/lib-esp32servo` 是参照 Sweep 自写的 sketch（Sweep 为公有领域，无影响） |
+
+**判断**
+- 全库按 LGPL-2.1-or-later 理解最合理：两个主文件有明示头，README 明示，派生源头 Arduino Servo 本身也是 LGPL-2.1+；`ESP32PWM.*` 无头是缺陷，不构成另一种许可。没有 GPL 文件头。「仓库无 LICENSE 文件」≠「无许可」，之前第 30 行的描述只说对了一半。
+- 我们的 bin 静态链接 ESP32Servo。LGPL-2.1 对静态链接的分发义务（§4、§6）：随 bin 显著告知用了该库且受 LGPL 约束并附 LGPL-2.1 原文；提供库的完整源码（或在同一指定位置提供等价访问）；并按 §6(a) 提供应用的源码或目标文件，让用户能用改过的库重新链接；不得禁止为调试而逆向。
+- 这些义务**和 arduino-esp32（LGPL-2.1）完全同类**，本仓库对它已经走「三件套」（LICENSING.md 第 26 行，本文第 172 行）：sketch 源码 + 精确库 / 核心提交 + 构建配置（FQBN、arduino-cli 版本）＝用户能从源码重编重链，满足 §6(a)。所以 ESP32Servo 不新增义务**种类**，只是同一份 NOTICE / 源码清单里多一个 LGPL 组件。「链接到上游 GitHub 是否算 §4 的同一指定位置」与 arduino-esp32 是同一个问题，按那边的处理走，不在此重复讨论。
+
+#### 16.2 IRremote（Arduino-IRremote/Arduino-IRremote `498dc591b255d8ba2e239c875804bdab2ab0fe91`，library.properties 4.7.1）
+
+**实查**
+- 根目录 `LICENSE`：MIT 全文，版权行「(c) 2009 Ken Shirriff / (c) 2016 Rafi Khan / (c) 2020-2022 Armin Joachimsmeyer et al.」。
+- `library.json` 第 28 行 `"license": "MIT"`；`library.properties` 无 `license=` 字段。
+- README.md 第 1320–1327 行：「Up to the version 2.7.0, the License is GPLv2. From the version 2.8.0, the license is the MIT license.」；Copyright 节写「Initially coded 2009 Ken Shirriff」。我们钉的是 4.7.1，在 MIT 段。Shirriff 本人同意改许可的证据只有仓库自述和 LICENSE 里列了他的版权行，**无法独立核实**（没有找到他签字的改许可记录）。
+- GitHub `license` 字段：`{"key":"other","spdx_id":"NOASSERTION"}`——GitHub 没把 LICENSE 认成标准 MIT（推测是 MIT 正文前多了 3 行版权和一个 URL，不影响条款本身）。
+- `src/` 共 39 个文件，逐个看文件头（前 80 行）：
+
+| 文件 | 许可声明 | 版权人 | 备注 |
+|---|---|---|---|
+| `IRremote.hpp`、`IRremoteInt.h`、`IRVersion.h`、`IRProtocol.hpp`、`IRReceive.hpp`、`IRSend.hpp` | MIT | Ken Shirriff、Rafi Khan、Armin Joachimsmeyer（2009/2015–2026） | 历史 Shirriff 代码所在文件，头为 MIT |
+| `IRProtocol.h`、`IRFeedbackLED.hpp`、`private/IRTimer.hpp`、`TinyIRReceiver.hpp`、`TinyIRSender.hpp`、`ac_LG.h/.hpp`、`ir_Denon/FAST/Kaseikyo/Lego/NEC/RC5_RC6/Sony.hpp`、`ir_DistanceWidthProtocol.hpp` | MIT | Armin Joachimsmeyer | |
+| `ir_BangOlufsen.hpp` / `ir_JVC.hpp` / `ir_LG.hpp`、`ir_Samsung.hpp` / `ir_MagiQuest.hpp` / `ir_OpenLASIR.hpp` / `ir_Pronto.hpp` | MIT | 分别加 Daniel Wallner / Kristian Lauszus / Darryl Smith / E. Stuart Hicks / Daniel Weidmann / Bengt Martensson | NOTICE 要列全这些人 |
+| `ir_Template.hpp` | MIT | 「Shuzu Guru」/「Unknown Contributor」 | 模板，不被 `IRremote.hpp` 包含 |
+| `ir_Others.hpp` | MIT 正文 | **无版权行** | |
+| `ir_BoseWave.hpp`、`IRremote.h` | **无许可声明** | — | `IRremote.h` 只是兼容旧版的 stub；BoseWave 被 `IRremote.hpp:278` 无条件包含 |
+| `digitalWriteFast.h` | BSD-3-Clause | 基于 code.google.com/p/digitalwritefast | |
+| **`LocalDebugLevelStart.h`**（第 13–29 行）、**`LocalDebugLevelEnd.h`**（第 5–21 行） | **GPL-3.0 或更高** | © 2024–2026 Armin Joachimsmeyer，「part of Arduino-Utils」 | 只有调试宏；被几乎每个 `ir_*.hpp` 包含（如 `ir_NEC.hpp:37/412`） |
+| **`LongUnion.h`**（第 4–20 行） | **GPL-3.0 或更高** | © 2020–2022 Armin Joachimsmeyer，Arduino-Utils | 只有 union 类型定义；`IRremote.hpp:259` 无条件包含 |
+| **`TinyIR.h`**（第 5–22 行） | **GPL-3.0 或更高** | © 2021–2025 Armin Joachimsmeyer | 常量宏 + 结构体 + 函数声明；`ir_FAST.hpp:36/53` 无条件包含，`ir_FAST.hpp` 又被 `IRremote.hpp:290` 无条件包含 |
+| `IRCommandDispatcher.h/.hpp` | GPL-3.0 或更高 | © 2019–2026 Armin Joachimsmeyer | **不被** `IRremote.hpp` 包含，我们的 sketch 也不用 |
+| `examples/*/PinDefinitionsAndMore.h`（31 个） | GPL-3.0 | Armin Joachimsmeyer | 我们的 `lib-irremote.ino` 参照 `SimpleSender.ino`（文件头 MIT，© 2020–2026 Joachimsmeyer）自写，只 `#include <IRremote.hpp>`，不含 `PinDefinitionsAndMore.h` |
+
+**判断**
+- **MIT 文件头不覆盖全部源文件**：只要 `#include <IRremote.hpp>`，就无条件编入 4 个 GPL-3.0-or-later 头（`LocalDebugLevelStart.h`、`LocalDebugLevelEnd.h`、`LongUnion.h`、`TinyIR.h`）；另有 2 个无声明文件、1 个 BSD-3 文件。
+- 这 4 个 GPL 头只含宏、类型和常量，几乎不在 bin 里留下可受版权保护的表达，技术上可以主张「不构成派生作品」；但保守读法是 GPL-3 头参与了每次编译，而且我们按三件套给出的源码清单本身就会分发 GPL-3 文件。作者与 MIT 主体是同一人（Joachimsmeyer），这些头来自他自己的 GPL 仓库 Arduino-Utils，很可能是上游疏忽，但要作者确认才算数。
+- 把整个 bin 当 GPL-3 分发也走不通：本地 `firmware/build/arduino-lib-irremote/app.elf` 的符号里有 `libcoexist_reversion_git` 和一批 `phy_*` 符号，说明即使红外 sketch 也链接了乐鑫闭源 coexist / PHY 库，给不出 GPL-3 要求的完整对应源码（这一点按符号名推断，没逐个核对来源库）。
+
+#### 16.3 选项
+
+- **(a) 两个都直接上站**。需要的 NOTICE：ESP32Servo——LGPL-2.1 原文 + 「© 2017 John K. Bennett；ESP32PWM by Kevin Harrington；派生自 Arduino Servo（Michael Margolis 2009）」+ 库提交与源码位置（并入 arduino-esp32 的三件套）；IRremote——MIT 原文 + 上表全部版权人 + `digitalWriteFast.h` 的 BSD-3 声明 + 对 4 个 GPL-3 头的处理说明。IRremote 部分的风险在 GPL-3 头，(a) 等于接受「宏 / 类型不构成派生作品」的论证。
+- **(b) 有条件上站**。ESP32Servo：条件是**挂到 LGPL 三件套那一行而不是 MIT / BSD 那一行**（BUILD_INFO 记库提交、NOTICES 附 LGPL-2.1 + 上述版权行、提供库源码），与 arduino-esp32 同样处理。IRremote：条件是上游作者确认（或改许可）那 4 个 GPL-3 头为 MIT；在 GitHub 提 issue 属于对外发帖，按 AGENTS.md §10 要人先同意。
+- **(c) 不上站，自写最小实现替代**。舵机：用 arduino-esp32 的 `ledcAttach` / `ledcWrite` 写 50 Hz 脉宽，约 30–50 行、半天（含 accept）；但舵机原本就靠 LGPL 的 arduino-esp32，替换 ESP32Servo 并不减少义务种类，意义不大。红外：用 arduino-esp32 的 RMT（`rmtWrite`）按公开 NEC 时序（9 ms 头 + 4.5 ms + 560 µs 单位）写发送，约 50–100 行，半天到一天（含 accept 与 web 侧红外接收对拍）；可参考 ESP-IDF `examples/peripherals/rmt/ir_nec_transceiver`（Unlicense OR CC0），IRremote 本身 MIT 可读，但 GPL-3 头不得照抄。代价：DECISIONS 第 1336 行写明 F-08b 是为了展示「热门第三方库能跑」，(c) 会丢掉红外这一项的演示价值。
+
+#### 16.4 推荐（待人核）
+
+- **ESP32Servo → (b)**【需要继续确认】：事实是 LGPL-2.1-or-later（不是「无许可」），义务与已在三件套里的 arduino-esp32 同类，没有 GPL 文件。建议人核后把它从第 30 行的「待人核」改成「挂 LGPL 三件套上站」，NOTICE 写明 Bennett / Harrington / Margolis 派生关系。
+- **IRremote → 暂不上站；人同意后先走 (b) 问上游，问不到再做 (c)**【需要继续确认】：主体 MIT 没问题，但 4 个无条件编入的 GPL-3 头与 MIT 声明矛盾，且 bin 含闭源库，无法以 GPL-3 兜底。(a) 的「宏 / 类型不算派生」论证可以成立，但属于法律判断，不由 AI 定。
+
 ---
 
 ## 三、不能放宽的项及原因
