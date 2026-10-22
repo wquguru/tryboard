@@ -218,9 +218,8 @@ impl Machine {
         };
         // Network conditions (D-01) belong to the router, not the board: preset, schedule and PRNG state carry over
         let cond = std::mem::take(&mut self.wifi_mut().world.cond);
-        // The xiaozhi server is on the internet too: it outlives the board, its connections do not
+        // The xiaozhi server and the MQTT broker's retained store are on the internet too: they outlive the board, its connections do not
         let xz = self.wifi_mut().world.xz.take();
-        // So is the MQTT broker's retained store; client sessions end with the board's TCP connections
         let retained = std::mem::take(&mut self.wifi_mut().world.net.tcp.mqtt.retained);
         self.hw.reboot(reason)?;
         self.apply_harness();
@@ -343,17 +342,6 @@ impl Machine {
         true
     }
 
-    /// Script action mqtt= (F-08b): pub,<topic>,<payload> / pub1,... (QoS 1) / retain,<topic>,<payload> from the virtual cloud
-    pub fn mqtt_cmd(&mut self, s: &str) -> bool {
-        let Some(c) = tryboard_soc::wifi::mqtt::Cmd::parse(s) else {
-            return false;
-        };
-        let now = self.wifi_tsf_us();
-        self.wifi_mut().world.net.mqtt_publish(&c, now);
-        self.kick_events();
-        true
-    }
-
     /// "Real network" switch (C-03, script action realnet=1/0): when on, HTTP requests not for tryboard.local go to the outbox
     pub fn realnet_set(&mut self, on: bool) {
         self.wifi_mut().world.net.tcp.realnet = on;
@@ -422,8 +410,15 @@ impl Machine {
 
     /// Script actions seed= / net= / netfault=kind[,dur] (D-01) and mqtt= (F-08b), shared by CLI and web; None when not one
     pub fn net_action(&mut self, act: &str) -> Option<bool> {
+        // mqtt=pub,<topic>,<payload> / pub1,... (QoS 1) / retain,... from the virtual cloud
         if let Some(v) = act.strip_prefix("mqtt=") {
-            return Some(self.mqtt_cmd(v));
+            let c = tryboard_soc::wifi::mqtt::Cmd::parse(v);
+            if let Some(c) = &c {
+                let now = self.wifi_tsf_us();
+                self.wifi_mut().world.net.mqtt_publish(c, now);
+                self.kick_events();
+            }
+            return Some(c.is_some());
         }
         if let Some(v) = act.strip_prefix("seed=") {
             return Some(v.trim().parse().map(|s| self.set_seed(s)).is_ok());

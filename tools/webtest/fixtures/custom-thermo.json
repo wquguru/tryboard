@@ -12,8 +12,8 @@
     "work": "custom",
     "seconds": 3,
     "args": [
-      "--i2c",
-      "ssd1306@0x3c,bme280@0x76",
+      "--i2c-bus",
+      "sda=6,scl=7:ssd1306@0x3c,bme280@0x76",
       "--i2c-log",
       "--env",
       "23.5,45,101325"
@@ -37,8 +37,8 @@
     "work": "custom",
     "seconds": 3,
     "args": [
-      "--i2c",
-      "ssd1306@0x3c,bme280@0x76",
+      "--i2c-bus",
+      "sda=6,scl=7:ssd1306@0x3c,bme280@0x76",
       "--i2c-log",
       "--env",
       "23.5,45,101325"
@@ -62,8 +62,8 @@
     "work": "custom",
     "seconds": 3,
     "args": [
-      "--i2c",
-      "ssd1306@0x3c,bme280@0x76",
+      "--i2c-bus",
+      "sda=6,scl=7:ssd1306@0x3c,bme280@0x76",
       "--i2c-log",
       "--env",
       "23.5,45,101325"
@@ -82,8 +82,8 @@
     "work": "custom",
     "seconds": 3,
     "args": [
-      "--i2c",
-      "ssd1306@0x3c,bme280@0x76",
+      "--i2c-bus",
+      "sda=6,scl=7:ssd1306@0x3c,bme280@0x76",
       "--i2c-log",
       "--env",
       "23.5,45,101325"
@@ -102,8 +102,8 @@
     "work": "custom",
     "seconds": 3,
     "args": [
-      "--i2c",
-      "ssd1306@0x3c,bme280@0x76",
+      "--i2c-bus",
+      "sda=6,scl=7:ssd1306@0x3c,bme280@0x76",
       "--i2c-log",
       "--env",
       "23.5,45,101325"

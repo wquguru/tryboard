@@ -1,6 +1,5 @@
-// Acceptance (F-10c): classic ESP32 RMT RX + TX carrier with an NEC IR remote, after IDF's ir_nec_transceiver example
-// (CC0; ir_nec_encoder.c / .h copied unchanged). RX GPIO19 = receiver module output, TX GPIO18 = IR LED, 38 kHz 33 %.
-// Sends one frame at start (the LED is aimed at the receiver, so it comes back), then decodes whatever the remote sends.
+// Acceptance (F-10c): classic ESP32 RMT RX + TX 38 kHz NEC IR, after IDF's ir_nec_transceiver (CC0; ir_nec_encoder.c / .h copied unchanged).
+// RX GPIO19 = receiver, TX GPIO18 = IR LED aimed at it: one frame at start comes back, then whatever the remote sends is decoded.
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
