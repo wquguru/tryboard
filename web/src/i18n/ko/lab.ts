@@ -1096,5 +1096,13 @@ const d: Dict = {
   "Each key sends one NEC frame (address 0x00) to the receiver; the input log records it as ir=ADDR,CMD and replays it. Receiver timing uses typical values; not calibrated on real hardware.": "각 키는 수신기로 NEC 프레임 하나(주소 0x00)를 보냅니다. 입력 로그에 ir=ADDR,CMD로 기록되어 재생할 수 있습니다. 수신 타이밍은 대표값이며 실기기로 보정하지 않았습니다.",
   "Decoded from the IR LED": "적외선 LED에서 해독",
   "Nothing sent yet: the eye decodes NEC frames the firmware sends through the LED.": "아직 송신 없음: 펌웨어가 LED로 보낸 NEC 프레임을 여기서 해독합니다.",
+  "Board controls": "보드 조작",
+  "Capture": "기록",
+  "View tools": "보기",
+  "Sound": "소리",
+  "on": "켜짐",
+  "off": "꺼짐",
+  "muted": "음소거",
+  "Real 3D models": "실제 3D 모델",
 };
 export default d;

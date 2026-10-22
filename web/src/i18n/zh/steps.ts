@@ -1111,5 +1111,7 @@ const d: Dict = {
   "Grove unit removed": "拔下 Grove 单元",
   "Same as CLI --grove {id}: temperature, humidity and pressure follow the environment controls.": "等同 CLI --grove {id}：温度、湿度和气压跟随环境控件。",
   "Spoken \"Hello\" clip (voice assistant WAV)": "说 “Hello” 的录音（语音助手 WAV）",
+  "Sound": "声音",
+  "muted": "静音",
 };
 export default d;

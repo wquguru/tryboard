@@ -129,6 +129,44 @@ for (const t of ['select', 'wire', 'lib', 'meter', 'more']) report(`Bench: tool 
 report('Bench: checkpoint banner', (await tappable('#cpGo')) === 'ok', await tappable('#cpGo'));
 await page.screenshot({ path: path.join(outDir, 'mobile-bench.png') });
 
+// More drawer (U-24, DESIGN_V2 §10.2): board controls -> capture -> view, BOOT first, sound tag, switch rows
+await page.click('[data-mtool="more"]');
+await waitFor(page, () => !!document.querySelector('#moreTools'), null, 3000);
+const groupsOrder = await page.$$eval('#moreTools [data-group]', (g) => g.map((x) => x.dataset.group).join(','));
+report('More: groups ordered act, media, view', groupsOrder === 'act,media,view', groupsOrder);
+const titles = await page.$$eval('#moreTools [data-group-title]', (g) => g.map((x) => x.textContent.trim()).join(' | '));
+report('More: group titles shown in order', titles === 'Board controls | Capture | View tools', titles);
+report('More: BOOT is the first button of the first group', await page.evaluate(() => document.querySelector('#moreTools [data-group="act"] [data-tool]')?.dataset.tool === 'button'));
+report('More: BOOT uses the primary colour', await page.$eval('#moreTools [data-tool="button"]', (e) => e.classList.contains('primary')));
+report('More: heater shows a state tag', await page.evaluate(() => !!document.querySelector('#moreTools [data-tool="heat"] [data-state]')));
+for (const id of ['ext', 'orbit']) {
+  const sw = await page.$eval(`#moreTools [data-tool="${id}"]`, (e) => `${e.getAttribute('role')}:${e.getAttribute('aria-checked')}`).catch(() => 'missing');
+  report(`More: ${id} is a switch row`, /^(switch|checkbox):(true|false)$/.test(sw), sw);
+}
+report('More: no state text in the 3D models row', await page.$eval('#moreTools [data-tool="ext"]', (e) => !/: (on|off)/.test(e.textContent)));
+// Toasts still sit over bottom drawers until U-26 lands, so let one fade before tapping drawer rows
+const toastGone = () => waitFor(page, () => document.querySelector('#toast')?.hidden !== false, null, 8000);
+await toastGone();
+for (const id of ['button', 'heat', 'photo', 'rec', 'ext', 'ruler']) report(`More: ${id} tappable`, (await tappable(`#moreTools [data-tool="${id}"]`)) === 'ok', await tappable(`#moreTools [data-tool="${id}"]`));
+const soundState = () => page.$eval('#moreTools [data-tool="sound"] [data-state]', (e) => e.dataset.state).catch(() => 'missing');
+report('More: sound toggle tappable', (await tappable('#moreTools [data-tool="sound"]')) === 'ok', await tappable('#moreTools [data-tool="sound"]'));
+const s0 = await soundState();
+await page.click('#moreTools [data-tool="sound"]');
+const s1ok = await waitFor(page, (s) => document.querySelector('#moreTools [data-tool="sound"] [data-state]')?.dataset.state !== s, s0, 3000);
+const s1 = await soundState();
+report('More: sound toggles mute state', s0 === 'off' && s1ok && s1 === 'on', `${s0} -> ${s1}`);
+await page.click('#moreTools [data-tool="sound"]');
+report('More: sound mutes again', await waitFor(page, () => document.querySelector('#moreTools [data-tool="sound"] [data-state]')?.dataset.state === 'off', null, 3000));
+await toastGone();
+const ext0 = await page.$eval('#moreTools [data-tool="ext"]', (e) => e.getAttribute('aria-checked'));
+await page.click('#moreTools [data-tool="ext"]');
+report('More: 3D models switch flips', await waitFor(page, (v) => document.querySelector('#moreTools [data-tool="ext"]')?.getAttribute('aria-checked') !== v, ext0, 3000));
+await page.click('#moreTools [data-tool="ext"]');
+await waitFor(page, (v) => document.querySelector('#moreTools [data-tool="ext"]')?.getAttribute('aria-checked') === v, ext0, 3000);
+await page.screenshot({ path: path.join(outDir, 'mobile-more.png') });
+await page.click('[data-mtool="more"]');
+report('More: drawer closes', await waitFor(page, () => !document.querySelector('#moreTools'), null, 3000));
+
 // Serial drawer
 const sheet = () => page.$eval('#dock', (e) => e.dataset.sheet);
 report('serial drawer: peek tappable', (await tappable('#sheetPeek')) === 'ok', await tappable('#sheetPeek'));
@@ -266,6 +304,9 @@ const full = () =>
   });
 report('Product: 3D fullscreen', (await full()) === 'ok', await full());
 // BOOT is in the bottom key grid and reacts to pointerdown / up, so it needs a real click, not a synthetic click event
+const prodTitles = await page.$$eval('#toolbar [data-group-title]', (g) => g.map((x) => x.textContent.trim()).join(' | '));
+report('Product: buttons grouped Board controls -> Capture', prodTitles === 'Board controls | Capture', prodTitles);
+report('Product: BOOT and heat in the first group', await page.evaluate(() => ['p-boot', 'p-heat'].every((k) => !!document.querySelector(`#toolbar [data-group="act"] [data-tool="${k}"]`))));
 report('Product: BOOT tappable', (await tappable('#toolbar [data-tool="p-boot"]')) === 'ok', await tappable('#toolbar [data-tool="p-boot"]'));
 await page.click('#toolbar [data-tool="p-boot"]');
 const unitF = await waitFor(page, () => /UNIT F/.test(document.querySelector('#console')?.textContent ?? ''), null, 15000);
@@ -364,6 +405,8 @@ for (const [w, key] of Object.entries(WORKS)) {
   await sleep(1500);
   await stepCheck(`Product ${w}`);
   report(`Product ${w}: 3D fullscreen`, (await full()) === 'ok', await full());
+  // Boot-time toasts (spin: brownout) can sit over the grid until U-26 moves them; wait for them like a user would
+  await waitFor(page, () => document.querySelector('#toast')?.hidden !== false, null, 8000);
   const tools = await page.$$eval('#toolbar [data-tool]', (b) => b.map((x) => x.dataset.tool));
   const bad = [];
   for (const t of tools) {

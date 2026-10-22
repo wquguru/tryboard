@@ -12,6 +12,7 @@ import { CRUMB, MoreMenu, RUN_TEXT, SPEEDS, WorkMenu } from "./topbar";
 import { FwMenu } from "./fwmenu";
 import { NetCondChip } from "./netcond";
 import { STEPS, type StepId } from "./types";
+import type { Tool, ToolGroup } from "./toolbar";
 
 const MQ = "(max-width: 767px)";
 export const isPhone = () =>
@@ -274,12 +275,6 @@ export function MobileStageBar({ wiring }: { wiring: boolean }) {
 }
 
 // ------------------------------------------------------------ Bottom toolbar (bench) and tool grid (other steps)
-export interface PhoneTool {
-  id: string;
-  label: string;
-  primary?: boolean;
-  todo?: boolean;
-}
 const BENCH_MAIN: { id: string; label: string; icon: string }[] = [
   { id: "select", label: t('Select'), icon: "cursor" },
   { id: "wire", label: t('Wire'), icon: "wire" },
@@ -289,58 +284,141 @@ const BENCH_MAIN: { id: string; label: string; icon: string }[] = [
 ];
 // The analyzer isn't drawn on phones (too narrow for waveforms) and Place isn't open yet: keep them out of More
 const NOT_ON_PHONE = new Set(["select", "wire", "meter", "scope", "place"]);
+// More drawer sections, board actions -> capture -> view (DESIGN_V2 §10.2 / §8.4); desktop keeps its own group order
+const SECTION_TITLE: Record<string, string> = {
+  act: t('Board controls'),
+  media: t('Capture'),
+  view: t('View tools'),
+};
+const BENCH_SECTIONS: { id: string; from: string[]; order: string[] }[] = [
+  { id: "act", from: ["act"], order: ["button", "heat", "sound"] },
+  { id: "media", from: ["media"], order: ["photo", "rec"] },
+  { id: "view", from: ["nav", "look", "measure"], order: ["orbit", "ext", "ruler"] },
+];
+const BENCH_ICON: Record<string, string> = {
+  button: "boot",
+  heat: "flame",
+  photo: "camera",
+  orbit: "orbit",
+  ext: "cube",
+  ruler: "ruler",
+};
+const rank = (order: string[], id: string) => {
+  const i = order.indexOf(id);
+  return i < 0 ? order.length : i;
+};
+
+function StateTag({ tool }: { tool: Tool }) {
+  if (tool.kind !== "tag" || !tool.on) return null;
+  const on = tool.on();
+  return (
+    <span
+      data-state={on ? "on" : "off"}
+      className={cn(
+        "rounded-full border px-1.5 text-[11px] leading-[18px] font-medium",
+        on ? "border-accent bg-accent-bg text-accent-ink" : "border-line bg-field text-muted",
+      )}
+    >
+      {on ? t('on') : (tool.offTag ?? t('off'))}
+    </span>
+  );
+}
+
+function SectionTitle({ id, tight }: { id: string; tight?: boolean }) {
+  return SECTION_TITLE[id] ? (
+    <div
+      className={cn("m-group-title px-0.5 text-[12px] text-muted", tight ? "leading-[14px]" : "pt-1")}
+      data-group-title={id}
+    >
+      {SECTION_TITLE[id]}
+    </div>
+  ) : null;
+}
 
 export function PhoneToolbar({
   step,
-  tools,
+  groups,
   active,
   fire,
 }: {
   step: string;
-  tools: PhoneTool[];
+  groups: ToolGroup[];
   active: string | null;
   fire: (id: string) => void;
 }) {
   const ui = useStore(mui);
+  const { sound } = useStore(bc);
   if (step !== "bench") {
-    if (!tools.length) return null;
-    // Other steps: a 44-tall button grid under the 3D view (product: inside the bottom panel, P2-17, no extra card).
-    // The primary button (power-on retest) takes its own 48-tall row, else it strands alone on row two (DESIGN_V2 §9.5)
-    const cols = Math.min(4, Math.max(1, tools.filter((x) => !x.primary).length));
+    const all = groups.flatMap((g) => g.tools);
+    if (!all.length) return null;
+    // Other steps: a 44-tall button grid under the 3D view (product: inside the bottom panel, P2-17, no extra card), titled per
+    // section like the bench More drawer. The primary button (retest) takes its own 48-tall row last (DESIGN_V2 §9.5)
+    const titled = groups.some((g) => SECTION_TITLE[g.id]);
+    const grid = (tools: Tool[]) => {
+      const cols = Math.min(4, Math.max(1, tools.filter((x) => !x.primary).length));
+      return cn(
+        "grid gap-1.5",
+        ["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4 max-[360px]:grid-cols-3"][cols - 1],
+      );
+    };
+    const btn = (tool: Tool) => {
+      const on = tool.on?.();
+      return (
+        <button
+          key={tool.id}
+          type="button"
+          data-tool={tool.id}
+          aria-pressed={tool.id === active || (tool.kind === "tag" && !!on)}
+          onClick={() => fire(tool.id)}
+          className={cn(
+            "tb-btn flex min-h-11 min-w-0 cursor-pointer items-center justify-center gap-1 rounded-[10px] border border-line bg-surface px-1 text-[12.5px] leading-tight text-fg aria-pressed:border-accent aria-pressed:bg-accent-bg aria-pressed:text-accent-ink",
+            tool.primary &&
+              "primary col-span-full min-h-12 border-accent-strong bg-accent-strong text-[15px] font-semibold text-on-accent",
+            tool.todo && "todo text-muted",
+          )}
+        >
+          {tool.icon && <Icon n={tool.icon} size={15} className="shrink-0" />}
+          <span className="min-w-0">{tool.label}</span>
+          <StateTag tool={tool} />
+        </button>
+      );
+    };
     return (
       <div
         id="toolbar"
         role="toolbar"
         aria-label={step === "product" ? t('Product buttons') : undefined}
         className={cn(
-          "toolbar grid gap-1.5",
-          ["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4 max-[360px]:grid-cols-3"][cols - 1],
+          "toolbar",
+          titled ? "flex flex-col gap-1" : grid(all),
           step === "product"
             ? "mt-2"
             : "pnl rounded-(--r) border border-line bg-(--panel) p-2 shadow-panel",
         )}
       >
-        {[...tools.filter((x) => !x.primary), ...tools.filter((x) => x.primary)].map((tool) => (
-          <button
-            key={tool.id}
-            type="button"
-            data-tool={tool.id}
-            aria-pressed={tool.id === active}
-            onClick={() => fire(tool.id)}
-            className={cn(
-              "tb-btn min-h-11 min-w-0 cursor-pointer rounded-[10px] border border-line bg-surface px-1 text-[12.5px] leading-tight text-fg aria-pressed:border-accent aria-pressed:bg-accent-bg aria-pressed:text-accent-ink",
-              tool.primary &&
-                "primary col-span-full min-h-12 border-accent-strong bg-accent-strong text-[15px] font-semibold text-on-accent",
-              tool.todo && "todo text-muted",
-            )}
-          >
-            {tool.label}
-          </button>
-        ))}
+        {titled
+          ? groups.map((g) => {
+              const tools = [...g.tools.filter((x) => !x.primary), ...g.tools.filter((x) => x.primary)];
+              return tools.length ? (
+                <div key={g.id} data-group={g.id} className="flex flex-col gap-0.5">
+                  <SectionTitle id={g.id} tight />
+                  <div className={grid(tools)}>{tools.map(btn)}</div>
+                </div>
+              ) : null;
+            })
+          : [...all.filter((x) => !x.primary), ...all.filter((x) => x.primary)].map(btn)}
       </div>
     );
   }
-  const more = tools.filter((x) => !NOT_ON_PHONE.has(x.id));
+  const soundTool: Tool | null = sound.has
+    ? { id: "sound", label: t('Sound'), icon: sound.on ? "sound" : "mute", kind: "tag", on: () => sound.on, offTag: t('muted') }
+    : null;
+  const sections = BENCH_SECTIONS.map((s) => ({
+    id: s.id,
+    tools: [...groups.filter((g) => s.from.includes(g.id)).flatMap((g) => g.tools), ...(s.id === "act" && soundTool ? [soundTool] : [])]
+      .filter((x) => !NOT_ON_PHONE.has(x.id))
+      .sort((a, b) => rank(s.order, a.id) - rank(s.order, b.id)),
+  })).filter((s) => s.tools.length);
   const onMain = (id: string) => {
     if (id === "lib")
       return setMui({ lib: ui.lib ? null : "lib", more: false, props: false });
@@ -350,34 +428,91 @@ export function PhoneToolbar({
   };
   const on = (id: string) =>
     id === "lib" ? !!ui.lib : id === "more" ? ui.more : id === active;
+  // Switches and sound keep the drawer open so the flip is visible; actions close it (their toast / card shows next)
+  const run = (tool: Tool) => {
+    if (tool.id === "sound") return actions.sound?.();
+    if (tool.id === "orbit") return fire(active === "orbit" ? "select" : "orbit");
+    if (tool.kind !== "switch") setMui({ more: false });
+    fire(tool.id);
+  };
+  const tile = (tool: Tool) => {
+    const boot = tool.id === "button";
+    const icon = tool.icon ?? (tool.id === "rec" ? (tool.on?.() ? "stop" : "record") : BENCH_ICON[tool.id]);
+    return (
+      <button
+        key={tool.id}
+        type="button"
+        data-tool={tool.id}
+        aria-pressed={tool.kind === "tag" ? !!tool.on?.() : tool.id === active}
+        onClick={() => run(tool)}
+        className={cn(
+          "tb-btn flex min-h-12 min-w-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-[10px] border border-line bg-surface px-1 py-1.5 text-[13px] leading-tight text-fg",
+          boot
+            ? "primary border-accent-strong bg-accent-strong font-semibold text-on-accent"
+            : "aria-pressed:border-accent aria-pressed:bg-accent-bg aria-pressed:text-accent-ink",
+        )}
+      >
+        {icon && <Icon n={icon} size={20} />}
+        <span className="flex max-w-full flex-wrap items-center justify-center gap-1">
+          <span className="min-w-0">{tool.label}</span>
+          <StateTag tool={tool} />
+        </span>
+      </button>
+    );
+  };
+  const row = (tool: Tool) => {
+    const sw = tool.kind === "switch";
+    const checked = tool.id === "orbit" ? active === "orbit" : !!tool.on?.();
+    return (
+      <button
+        key={tool.id}
+        type="button"
+        data-tool={tool.id}
+        role={sw ? "switch" : undefined}
+        aria-checked={sw ? checked : undefined}
+        aria-pressed={sw ? undefined : tool.id === active}
+        onClick={() => run(tool)}
+        className="tb-btn flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-[10px] border border-line bg-surface px-3 text-left text-[14px] text-fg aria-pressed:border-accent aria-pressed:bg-accent-bg aria-pressed:text-accent-ink"
+      >
+        <Icon n={tool.icon ?? BENCH_ICON[tool.id] ?? "more"} size={20} className="shrink-0 text-muted" />
+        <span className="min-w-0 flex-1">{tool.phoneLabel ?? tool.label}</span>
+        {sw && (
+          <span
+            aria-hidden="true"
+            className={cn(
+              "relative h-6 w-10 shrink-0 rounded-full transition-colors",
+              checked ? "bg-accent-strong" : "bg-line",
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 size-5 rounded-full bg-surface shadow transition-[left]",
+                checked ? "left-[18px]" : "left-0.5",
+              )}
+            />
+          </span>
+        )}
+      </button>
+    );
+  };
   return (
     <>
       {ui.more && (
         <div
           id="moreTools"
-          role="menu"
+          role="group"
           aria-label={t('More tools')}
-          className="fixed inset-x-0 bottom-(--m-tb) z-26 grid grid-cols-3 gap-1.5 rounded-t-2xl border-t border-line bg-surface p-3 shadow-[0_-8px_24px_#0000001f]"
+          className="fixed inset-x-0 bottom-(--m-tb) z-26 flex max-h-[calc(100dvh-var(--m-tb)-56px)] flex-col gap-1.5 overflow-y-auto rounded-t-2xl border-t border-line bg-surface p-3 shadow-[0_-8px_24px_#0000001f]"
         >
-          {more.map((tool) => (
-            <button
-              key={tool.id}
-              type="button"
-              role="menuitem"
-              data-tool={tool.id}
-              aria-pressed={tool.id === active}
-              onClick={() => {
-                setMui({ more: false });
-                fire(tool.id);
-              }}
-              className={cn(
-                "tb-btn min-h-11 min-w-0 cursor-pointer rounded-[10px] border border-line bg-surface px-1 text-[13px] text-fg aria-pressed:border-accent aria-pressed:bg-accent-bg aria-pressed:text-accent-ink",
-                tool.primary &&
-                  "primary col-span-full min-h-12 border-accent-strong bg-accent-strong text-[15px] font-semibold text-on-accent",
+          {sections.map((s) => (
+            <div key={s.id} data-group={s.id} className="flex flex-col gap-1.5">
+              <SectionTitle id={s.id} />
+              {s.id === "view" ? (
+                <div className="flex flex-col gap-1.5">{s.tools.map(row)}</div>
+              ) : (
+                <div className="grid grid-cols-3 gap-1.5">{s.tools.map(tile)}</div>
               )}
-            >
-              {tool.label}
-            </button>
+            </div>
           ))}
         </div>
       )}

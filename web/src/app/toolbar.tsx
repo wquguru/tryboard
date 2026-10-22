@@ -15,6 +15,12 @@ export interface Tool {
   primary?: boolean;
   /** Not implemented yet: clickable, the caller shows a hint */
   todo?: boolean;
+  /** Phone only (DESIGN_V2 §10.2): icon name, live on/off read at render, how the state shows, label without the state */
+  icon?: string;
+  on?: () => boolean;
+  kind?: 'switch' | 'tag';
+  offTag?: string;
+  phoneLabel?: string;
 }
 export interface ToolGroup {
   id: string;
@@ -64,7 +70,7 @@ export function createToolbar(): Toolbar & { View: (p: { step: string }) => Reac
       return (
         <PhoneToolbar
           step={step}
-          tools={groups.flatMap((g) => g.tools).map((tool) => ({ ...tool, label: labels[tool.id] ?? tool.label }))}
+          groups={groups.map((g) => ({ ...g, tools: g.tools.map((tool) => ({ ...tool, label: labels[tool.id] ?? tool.label })) }))}
           active={active}
           fire={(id) => cbs.forEach((f) => f(id))}
         />

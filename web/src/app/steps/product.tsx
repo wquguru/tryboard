@@ -774,19 +774,21 @@ export function productStep(): StepImpl {
     const w = c.work.id;
     const act: Tool[] =
       w === 'lamp'
-        ? [{ id: 'p-knob-l', label: t('Knob −1') }, { id: 'p-knob-r', label: t('Knob +1') }, { id: 'p-knob', label: t('Press knob') }]
+        ? [{ id: 'p-knob-l', label: t('Knob −1'), icon: 'minus' }, { id: 'p-knob-r', label: t('Knob +1'), icon: 'plus' }, { id: 'p-knob', label: t('Press knob'), icon: 'boot' }]
         : w === 'ruler'
-          ? [{ id: 'p-near', label: t('Board 10 cm closer') }, { id: 'p-far', label: t('Board 10 cm farther') }]
+          ? [{ id: 'p-near', label: t('Board 10 cm closer'), icon: 'down' }, { id: 'p-far', label: t('Board 10 cm farther'), icon: 'up' }]
           : w === 'tilt'
-            ? [{ id: 'p-tilt-r', label: t('Lower the right side') }, { id: 'p-tilt-l', label: t('Lower the front left') }, { id: 'p-level', label: t('Make level') }]
+            ? [{ id: 'p-tilt-r', label: t('Lower the right side'), icon: 'tilt' }, { id: 'p-tilt-l', label: t('Lower the front left'), icon: 'tilt' }, { id: 'p-level', label: t('Make level'), icon: 'minus' }]
             : w === 'usbkey'
-              ? KEYPAD_PINS.map((pin, i) => ({ id: `p-key-${pin}`, label: `K${i + 1} · ${KEYPAD_CAPS[i]}` }))
-              : [{ id: 'p-boot', label: t('Press BOOT') }, ...(w === 'weather' ? [{ id: 'p-heat', label: heat.on ? t('Heat source: on') : t('Heat source: off') }] : [])];
+              ? KEYPAD_PINS.map((pin, i) => ({ id: `p-key-${pin}`, label: `K${i + 1} · ${KEYPAD_CAPS[i]}`, icon: 'key' }))
+              : [{ id: 'p-boot', label: t('Press BOOT'), icon: 'boot' }, ...(w === 'weather' ? [{ id: 'p-heat', label: t('Heater'), icon: 'flame', kind: 'tag' as const, on: () => heat.on }] : [])];
+    // Same verbs as the bench More drawer: board controls (incl. sound) -> capture, then the untitled run row (DESIGN_V2 §10.2)
+    const a = c.session.audio;
+    const snd: Tool[] = a.hasSound ? [{ id: 'p-sound', label: t('Sound'), icon: a.state.muted ? 'mute' : 'sound', kind: 'tag', on: () => !a.state.muted, offTag: t('muted') }] : [];
     return [
-      { id: 'act', tools: act },
-      ...(c.session.audio.hasSound ? [{ id: 'snd', tools: [{ id: 'p-sound', label: c.session.audio.state.muted ? t('Sound: off') : t('Sound: on') }] }] : []),
-      ...(cur3d() ? [{ id: 'media', tools: [{ id: 'p-photo', label: t('Photo') }, { id: 'p-rec', label: rec ? t('Stop recording') : t('Record {n} s', { n: RECORD_SECONDS }) }, { id: 'p-home', label: t('Reset view') }] }] : []),
-      { id: 'run', tools: [{ id: 'p-info', label: t('Details') }, { id: 'p-rerun', label: t('Restart'), primary: true }] },
+      { id: 'act', tools: [...act, ...snd] },
+      ...(cur3d() ? [{ id: 'media', tools: [{ id: 'p-photo', label: t('Photo'), icon: 'camera' }, { id: 'p-rec', label: rec ? t('Stop recording') : t('Record {n} s', { n: RECORD_SECONDS }), icon: rec ? 'stop' : 'record' }] }] : []),
+      { id: 'run', tools: [...(cur3d() ? [{ id: 'p-home', label: t('Reset view'), icon: 'home' }] : []), { id: 'p-info', label: t('Details'), icon: 'info' }, { id: 'p-rerun', label: t('Restart'), primary: true }] },
     ];
   }
 
@@ -794,7 +796,7 @@ export function productStep(): StepImpl {
     const c = ctx!;
     if (isPhone()) {
       c.shell.toolbar.setGroups(phoneGroups());
-      c.shell.toolbar.setActive(rec ? 'p-rec' : heat.on ? 'p-heat' : null);
+      c.shell.toolbar.setActive(rec ? 'p-rec' : null);
       return;
     }
     // ProdCtl option B (DESIGN_V2 §8.4), split by verb: board actions live in the right panel next to readings,
