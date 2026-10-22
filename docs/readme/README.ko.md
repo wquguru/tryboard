@@ -57,8 +57,8 @@ TryBoard가 제대로 동작하는지, 어떤 칩과 부품을 사야 하는지,
 | Wi-Fi(개방형, WPA2-PSK, HTTP) | ✅ | ✅ | 초기화까지만 |
 | BLE 주변장치(NimBLE) + 가상 스마트폰 | ◐ 동작 모델 | — | — |
 
-인수 테스트 근거를 포함한 전체 표는 **[docs/STATUS.md](../STATUS.md)**(중국어)에 있습니다. 매번 <!-- stats:accept -->214<!-- /stats -->개의 인수 테스트,
-<!-- stats:examples -->62<!-- /stats -->개의 예제, 7단계 학습 코스를 실행합니다(`tools/accept.sh`).
+인수 테스트 근거를 포함한 전체 표는 **[docs/STATUS.md](../STATUS.md)**(중국어)에 있습니다. 매번 <!-- stats:accept -->215<!-- /stats -->개의 인수 테스트,
+<!-- stats:examples -->63<!-- /stats -->개의 예제, 7단계 학습 코스를 실행합니다(`tools/accept.sh`).
 
 ## 빠른 시작
 
