@@ -262,6 +262,16 @@
 | F-08h | IRremote SimpleSender（LEDC 开关 38 kHz 载波）的 NEC 码被红外 LED 眼睛解出；网页示例改用红外 LED 件 | cargo test（LEDC 包络单测）+ accept `arduino-lib-irremote --ir -,4` 3 帧 + golden 只此例变 + parts.mjs 指纹一致 + agent-browser | ☑ 2026-10-22：`IrLink::feed_carrier`（包络开 = 以 LEDC 频率的载波 burst，不逐周期生成边沿），C3 / S3 / 经典 ESP32 在 PWM 重扫时喂眼睛；C3 解出 0xCB34 / 0xCA35 / 0xC936（38.0 kHz）；经典 ESP32 草稿构建同样 3 帧。S3 草稿构建当时看到 34 段 38 kHz 但不是 NEC（0 空隙约 713 µs）：原因是模拟按 160 MHz 跑 Arduino 的 240 MHz 代码，E-10 按寄存器计主频后 682 µs、3 帧全解（Reviews/ab/F-08h.md） |
 | F-12 | 静态更新日志页 `/changelog` + Atom 订阅源 `changelog.xml` + `sitemap.xml` + `robots.txt`（SEO），全站页脚加「更新日志」「Atom 订阅」入口；数据 `web/changelog.yaml`，构建期 `tools/gen_changelog.mjs` 生成（与授权页共用页头 / 页脚模块） | `node tools/gen_changelog.mjs` audit 通过、故意改坏 exit 2；`tools/build_web.sh` 全量（含 og.mjs）；agent-browser 桌面 + 390 手机（筛选、暗色、无横滚）；mobile.mjs / levels.mjs 静态路由 | ☑ 2026-10-22：15 条首批条目（10-15 至 10-22，链到真实示例 / 作品）；审核拒绝未知 tag / 芯片、缺字段、超长、Fix 开头、内部术语、站外或跳转页链接、不存在的 example / work（exit 2）；页头 / 抽屉 / 页脚抽到 `tools/static_shell.mjs` 与授权页共用；React 页脚 + 静态页脚加 Changelog / Atom feed（四语）；`_headers` 五条 no-cache；build_web.sh 全量 + og.mjs 10/10 PASS，mobile.mjs 新增 8 项全过，levels.mjs `/changelog` 路由 PASS；agent-browser 桌面 / 筛选 / 暗色 / 390 手机 / 抽屉 / 首页页脚跳转，console 无 error（Reviews/ab/F-12.md）。上线前须设 `TRYBOARD_SITE_URL` |
 
+## G · 新能力进作品（2026-10-22 开工；F / E 批新增的外设只在示例库里，补进选型模板和作品）
+
+| ID | 内容 | 验收 | 状态 |
+|---|---|---|---|
+| G-01 | 选型模板补示例链接（c3-pir-relay、c3-rc522、arduino-lib-pubsubclient、c3-ili9341-temp、c3-sh1106-pir、红外示例等）+ 新模板「RFID 门禁」「红外遥控」「传感器 MQTT 上云」「手机连板子（BLE，C3 / S3 / 经典 ESP32）」，零件映射缺的补上 | `cd web && npm test`；select / mobile webtest；agent-browser 依次选 4 个新模板截图 | ☐ |
+| G-02 | 找故障加「SDA / SCL 接反」（`fault-i2c-swap`）：weather 台面 BME280 的 SDA / SCL 对调（`--i2c-bus sda=9,scl=8:…`），开机扫不到 + 接线检查 W8，修好后通过；faults 作品加这一关，网页开关照 F-05 | `tools/check.py --ref --all`（as found FAIL、修好 PASS）；faults.mjs 网页 / CLI 指纹一致；agent-browser 走一遍 | ☐ |
+| G-03 | 新作品「RFID 门禁」（WorkId `door`）：C3 + RC522 + 继电器（电磁锁）+ 屏 + 蜂鸣器 / LED，固件 `firmware/c3-door`；3–4 个检查点（读到 RC522 版本、白名单卡开锁、陌生卡被拒、连续 3 次拒绝锁定）；作品全套文件照 d7bd418；继电器接市电标「必须上真机」 | build_fw + accept `c3-door`；check.py --ref --all；levels / asm3d / interact / mobile webtest；npm test；agent-browser 首页 → 组装 → 刷卡 → 检查点全绿（桌面 + 手机） | ☐ |
+| G-04 | 新作品「红外遥控小夜灯」（WorkId `irlamp`）：C3 / S3 + 红外接收头 + WS2812，遥控数字键选颜色、+/- 调亮度、电源键开关，复用 lamp 外壳 | 同 G-03；检查点：收到遥控码、按键改颜色（WS2812 帧校验）、重复码连调、功耗估算 | ☐ |
+| G-05 | （2026-10-22 人定：G-04 之后接着做）新作品「温湿度上云」（WorkId `cloud`）：C3 + BME280 / AHT20 + Wi-Fi + MQTT JSON 上报、订阅 `cmd` 改间隔 | 同 G-03；检查点：连 Wi-Fi、连 broker、按时发布、云端下发生效 | ☐ |
+
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
 

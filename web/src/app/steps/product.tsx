@@ -243,6 +243,14 @@ export function referenceAssembly(T: Template): AssemblyState {
   }
   return { placed, choice, total: placed.length, clean: true, effects: T.effects({ placed, choice }), retest: null };
 }
+/** Phone product keys per work (board controls row); works not listed get BOOT (+ heater on weather) */
+const WORK_ACTS: Record<string, () => Tool[]> = {
+  lamp: () => [{ id: 'p-knob-l', label: t('Knob −1'), icon: 'minus' }, { id: 'p-knob-r', label: t('Knob +1'), icon: 'plus' }, { id: 'p-knob', label: t('Press knob'), icon: 'boot' }],
+  ruler: () => [{ id: 'p-near', label: t('Board 10 cm closer'), icon: 'down' }, { id: 'p-far', label: t('Board 10 cm farther'), icon: 'up' }],
+  tilt: () => [{ id: 'p-tilt-r', label: t('Lower the right side'), icon: 'tilt' }, { id: 'p-tilt-l', label: t('Lower the front left'), icon: 'tilt' }, { id: 'p-level', label: t('Make level'), icon: 'minus' }],
+  usbkey: () => KEYPAD_PINS.map((pin, i) => ({ id: `p-key-${pin}`, label: `K${i + 1} · ${KEYPAD_CAPS[i]}`, icon: 'key' })),
+};
+
 export function productStep(): StepImpl {
   let ctx: StepCtx | null = null;
   let storeRef: StepCtx['store'] | null = null;
@@ -772,16 +780,7 @@ export function productStep(): StepImpl {
   function phoneGroups(): ToolGroup[] {
     const c = ctx!;
     const w = c.work.id;
-    const act: Tool[] =
-      w === 'lamp'
-        ? [{ id: 'p-knob-l', label: t('Knob −1'), icon: 'minus' }, { id: 'p-knob-r', label: t('Knob +1'), icon: 'plus' }, { id: 'p-knob', label: t('Press knob'), icon: 'boot' }]
-        : w === 'ruler'
-          ? [{ id: 'p-near', label: t('Board 10 cm closer'), icon: 'down' }, { id: 'p-far', label: t('Board 10 cm farther'), icon: 'up' }]
-          : w === 'tilt'
-            ? [{ id: 'p-tilt-r', label: t('Lower the right side'), icon: 'tilt' }, { id: 'p-tilt-l', label: t('Lower the front left'), icon: 'tilt' }, { id: 'p-level', label: t('Make level'), icon: 'minus' }]
-            : w === 'usbkey'
-              ? KEYPAD_PINS.map((pin, i) => ({ id: `p-key-${pin}`, label: `K${i + 1} · ${KEYPAD_CAPS[i]}`, icon: 'key' }))
-              : [{ id: 'p-boot', label: t('Press BOOT'), icon: 'boot' }, ...(w === 'weather' ? [{ id: 'p-heat', label: t('Heater'), icon: 'flame', kind: 'tag' as const, on: () => heat.on }] : [])];
+    const act: Tool[] = WORK_ACTS[w]?.() ?? [{ id: 'p-boot', label: t('Press BOOT'), icon: 'boot' }, ...(w === 'weather' ? [{ id: 'p-heat', label: t('Heater'), icon: 'flame', kind: 'tag' as const, on: () => heat.on }] : [])];
     // Same verbs as the bench More drawer: board controls (incl. sound) -> capture, then the untitled run row (DESIGN_V2 §10.2)
     const a = c.session.audio;
     const snd: Tool[] = a.hasSound ? [{ id: 'p-sound', label: t('Sound'), icon: a.state.muted ? 'mute' : 'sound', kind: 'tag', on: () => !a.state.muted, offTag: t('muted') }] : [];
