@@ -364,9 +364,21 @@ impl PinDevices {
         self.parts.on_level(t, level);
     }
 
-    /// IR LED eyes watching `pin` (the SoC passes RMT output edges with their exact times)
-    pub fn ir_eye(&mut self, pin: u32) -> Option<&mut super::ir::IrLink> {
-        self.ir.iter_mut().find(|l| l.tx_pin == Some(pin))
+    /// IR LED eyes on `pin` see RMT channel ch's edges (exact times); true when ch modulates a carrier (no WS2812 data then)
+    pub fn rmt_ir(
+        &mut self,
+        rmt: &crate::rmt::Rmt,
+        pin: u32,
+        ch: u8,
+        edges: &[(u64, u8, bool)],
+    ) -> bool {
+        if let Some(eye) = self.ir.iter_mut().find(|l| l.tx_pin == Some(pin)) {
+            edges
+                .iter()
+                .filter(|e| e.1 == ch)
+                .for_each(|e| eye.feed(e.0, e.2));
+        }
+        rmt.carrier(ch as usize).is_some()
     }
 
     /// Drives due by now (time-ordered) and the next time to ask again

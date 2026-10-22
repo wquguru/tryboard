@@ -707,6 +707,10 @@ impl SocBus {
                 continue;
             }
             let ch = (sel - rmt::SIG_OUT0) as u8;
+            if self.pins.rmt_ir(&self.rmt, pin, ch, &edges) {
+                self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
+                continue;
+            }
             let dec = self.ws2812.entry(pin).or_default();
             let frames = dec.frames;
             for &(t, c, lv) in &edges {

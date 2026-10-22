@@ -1473,3 +1473,9 @@
 - ESP32Servo：按 (b) 上站——挂 LGPL 三件套（与 arduino-esp32 同处理：BUILD_INFO 记库提交、NOTICES 附 LGPL-2.1 + Bennett / Harrington / Margolis 版权与派生说明、给出库源码位置）。落地为 F-08e。
 - IRremote：维持不上站、只进本地 accept。向上游提 issue 属对外发帖，「可以 go」不算对发帖的明确授权，不发；F-08e 把 issue 草稿写进 LICENSING_REVIEW §16 供人自己发。同时先做 (c)：自写基于 RMT 的 NEC 红外发送示例（F-08f），按公开 NEC 时序写，不看、不抄 IRremote 源码结构，可读 ESP-IDF（Apache-2.0）ir_nec 示例。
 - 仍不授权：公网部署、MicroPython 托管、Arduino 3.0.x；真机标定暂缓。
+
+## 2026-10-22 F-08f 自写 NEC 红外发送示例 + C3 / S3 RMT 载波
+- 决定：新增 `firmware/arduino/ir-nec-rmt/`，只用 arduino-esp32 核心 RMT API（`rmtInit` 1 MHz tick、`rmtSetCarrier` 38 kHz / 33 %、`rmtWrite` 34 个符号：引导码 9000/4500 µs、32 位 560 + 560/1690 µs 低位先发、560 µs 收尾），地址 0x00、命令 0x36，与 lib-irremote 用例一致。协调方后续告知：人已批准 IRremote 上站，本例不再是替代，作为无第三方库的额外示例；lib-irremote 不动。
+- 参考：公开 NEC 协议时序；arduino-esp32 3.3.2 `esp32-hal-rmt.h` / `.c`（LGPL 核心，只读 API 语义：`rmtSetCarrier` 的 carrier_level=true 实际映射为 `polarity_active_low`，故草图传 false 让高电平段带载波）；ESP-IDF v5.5 `rmt_reg.h`（C3 / S3 CONF0 carrier_en [21]、carrier_out_lv [22]，CARRIER_DUTY 紧跟 INT_CLR）与 `rmt_tx.c` `rmt_apply_carrier`（占空比按组时钟 resolution_hz 计），Apache-2.0。**未打开** third_party/arduino-libs/Arduino-IRremote 的任何文件，也未看 IDF ir_nec_transceiver 示例源码。
+- core：`Rmt::carrier` 不再限经典 ESP32，C3 / S3 按上述位与组时钟（`src_hz / (div_num+1)`）换算；`PinDevices::ir_eye` 换成 `rmt_ir`（喂眼睛 + 返回是否开载波），经典 / C3 / S3 的 `route_rmt` 共用，开载波时不喂 WS2812 解码器（S3 lib.rs 守住 1500 行上限）；`ir_attach` 去掉「LED 眼睛只限经典 ESP32」的限制。C3 复位 CONF0 本就开载波（0x710200），驱动建通道时会关，golden 210/210 不变即佐证。新单元测试 `rmt::tests::c3_tx_carrier`。
+- 备选：用 PWM 日志验 38 kHz（RMT 不走 LEDC，不适用）；改在经典 ESP32 上构建（已有载波，但 Arduino 库示例都在 C3，保持一致）。

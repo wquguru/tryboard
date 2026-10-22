@@ -741,14 +741,7 @@ impl SocBus {
                 continue;
             }
             let ch = (sel - l.sig_out0) as u8;
-            if let Some(eye) = self.pins.ir_eye(pin) {
-                edges
-                    .iter()
-                    .filter(|e| e.1 == ch)
-                    .for_each(|e| eye.feed(e.0, e.2));
-            }
-            if self.rmt.carrier(ch as usize).is_some() {
-                // 38 kHz bursts are no WS2812 data
+            if self.pins.rmt_ir(&self.rmt, pin, ch, &edges) {
                 self.gpio.set_periph_level(pin, self.rmt.level[ch as usize]);
                 continue;
             }
