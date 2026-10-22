@@ -1,4 +1,4 @@
-// F-08b: ESP32Servo (licence unverified: local accept only), after the library's Sweep example; SG90 on GPIO6.
+// F-08b: ESP32Servo (LGPL-2.1+, shipped with LGPL notices since F-08e), after the library's Sweep example; SG90 on GPIO6.
 #include <ESP32Servo.h>
 
 Servo servo;

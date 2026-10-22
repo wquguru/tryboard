@@ -68,7 +68,7 @@ for spec in \
   [ "$(git -C "arduino-libs/$name" rev-parse HEAD)" = "$sha" ] || { git -C "arduino-libs/$name" fetch -q origin && git -C "arduino-libs/$name" checkout -q "$sha"; }
 done
 # F-08b Wi-Fi / BLE / servo / LED-strip matrix, release tags pinned 2026-10-20 (FastLED 3.10.3: 3.10.8 fails to build on C3, RISC-V RMT handler noexcept mismatch).
-# ESP32Servo (no LICENSE file) and IRremote stay local accept only, never shipped (docs/STATUS.md F-08b).
+# ESP32Servo (LGPL-2.1+, ships like the core) and IRremote (MIT, notices per LICENSING_REVIEW §16.5) ship since F-08e.
 for spec in \
   FastLED/FastLED:20667c3a6413ed46a828f78ec95fb57e58d753f8 \
   tzapu/WiFiManager:d82d0a1b9fca741b9ec44accdf553606a6576dda \
@@ -80,6 +80,11 @@ for spec in \
   [ -d "arduino-libs/$name/.git" ] || git clone -q "https://github.com/$repo" "arduino-libs/$name"
   [ "$(git -C "arduino-libs/$name" rev-parse HEAD)" = "$sha" ] || { git -C "arduino-libs/$name" fetch -q origin && git -C "arduino-libs/$name" checkout -q "$sha"; }
 done
+# arduino-esp32 LGPL-2.1 text for shipped Arduino bins (F-08e): the core package has no copy, so take it from the release tag
+ARDUINO_CORE_TAG=3.3.2
+mkdir -p arduino-esp32
+[ -s arduino-esp32/LICENSE.md ] || curl -fsSL --retry 3 "https://raw.githubusercontent.com/espressif/arduino-esp32/$ARDUINO_CORE_TAG/LICENSE.md" -o arduino-esp32/LICENSE.md
+grep -q "GNU LESSER GENERAL PUBLIC LICENSE" arduino-esp32/LICENSE.md || { rm -f arduino-esp32/LICENSE.md; echo "arduino-esp32 LICENSE.md is not LGPL" >&2; exit 1; }
 # Optional (--micropython): official MicroPython C3 image for the mpy-c3-rawpaste accept case (F-07a).
 # Never shipped or committed (distribution is a human decision, RS-1); without it the case is skipped.
 if [ "${1:-}" = "--micropython" ]; then

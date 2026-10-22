@@ -25,13 +25,17 @@ mkdir -p "$PUB/audio"
 cp "$ROOT/tools/audio/sine1k.wav" "$ROOT/tools/audio/sweep.wav" "$ROOT/tools/audio/xz_mic.wav" "$PUB/audio/"
 # Example list: publish only what has been built
 python3 - "$ROOT" <<'PY'
-import json, os, sys
+import json, os, shutil, sys
 root = sys.argv[1]
 def publish(src, d):
     # R-18: drop the erased (0xFF) tail, 4 KB aligned; every SoC boot pads flash back to >= 4 MB with 0xFF
     data = open(src, 'rb').read()
     n = (len(data.rstrip(b'\xff')) + 4095) & ~4095
     open(os.path.join(d, 'flash.bin'), 'wb').write(data[:n])
+    # LGPL three-piece (F-08e): Arduino bins carry their BUILD_INFO.txt (core / library commits, build config)
+    info = os.path.join(os.path.dirname(src), 'BUILD_INFO.txt')
+    if os.path.basename(d).startswith('arduino-') and os.path.exists(info):
+        shutil.copyfile(info, os.path.join(d, 'BUILD_INFO.txt'))
 catalog = json.load(open(os.path.join(root, 'firmware/examples.json')))
 out = []
 for ex in catalog:

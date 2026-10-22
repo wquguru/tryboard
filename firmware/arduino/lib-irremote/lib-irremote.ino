@@ -1,4 +1,4 @@
-// F-08b: IRremote (local accept only), after the library's SimpleSender example; IR LED on GPIO4.
+// F-08b: IRremote (MIT, shipped with notices since F-08e), after the library's SimpleSender example; IR LED on GPIO4.
 #include <Arduino.h>
 #include <IRremote.hpp>
 

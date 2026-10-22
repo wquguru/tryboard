@@ -58,7 +58,7 @@ TryBoard が動くかどうか、どのチップと部品を買うべきか、�
 | BLE ペリフェラル（NimBLE）+ 仮想スマホ | ◐ 振る舞いモデル | — | — |
 
 受け入れテストの根拠を含む完全な表は **[docs/STATUS.md](../STATUS.md)**（中国語）にあります。<!-- stats:accept -->210<!-- /stats --> 件の受け入れテスト、
-<!-- stats:examples -->58<!-- /stats --> 個のサンプル、7 段階の学習コースを毎回実行しています（`tools/accept.sh`）。
+<!-- stats:examples -->60<!-- /stats --> 個のサンプル、7 段階の学習コースを毎回実行しています（`tools/accept.sh`）。
 
 ## クイックスタート
 

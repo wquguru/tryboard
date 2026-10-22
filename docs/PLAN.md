@@ -249,7 +249,7 @@
 | F-03c | embed.mjs 原速回放检查改按模拟时间取样（页面暴露模拟时刻钩子），负载下不再偶发失败；不放宽判定 | embed.mjs 连跑 5 次 + 加压下跑 | ☑ 波 8（嵌入页回放期 `__tbEmbed.trace` 逐 tick 记 [模拟秒, 串口片段, 室温]；5 次 + 3 进程加压 3 次全 PASS） |
 | F-08d | ESP32Servo / IRremote 许可证证据整理（上游提交、文件头、作者声明），写 LICENSING_REVIEW.md；结论待人核 | 文档 | ☑ 波 8（证据已整理，结论待人） |
 | F-03d | vcd.mjs 触发窗口在全量 accept 加压下偶发只录到 45 条边沿（DHT11 帧没落进窗口）；改为按模拟时刻对齐触发 / 等待，不放宽「≥ 80 边沿、无丢失」判定 | vcd.mjs 连跑 5 次 + 加压下跑 | ☐ 波 9 |
-| F-08e | ESP32Servo 按 LGPL 三件套上站：LICENSING.md 第 30 行结论改为获批、NOTICES / 许可页 / BUILD_INFO 带 LGPL-2.1 与版权派生说明；IRremote 上游 issue 草稿写进 LICENSING_REVIEW §16（不发） | lint + licenses 页 agent-browser + accept | ☐ 波 9 |
+| F-08e | ESP32Servo 按 LGPL 三件套上站：LICENSING.md 第 30 行结论改为获批、NOTICES / 许可页 / BUILD_INFO 带 LGPL-2.1 与版权派生说明；IRremote 上游 issue 草稿写进 LICENSING_REVIEW §16（不发） | lint + licenses 页 agent-browser + accept | ☑ 波 9（同轮人定 IRremote 也按 MIT 上站，NOTICES 附全部版权人 + BSD-3 + GPL 头说明，见 LICENSING_REVIEW §16.5；`web/test/licenses.test.ts`） |
 | F-08f | 自写 Arduino 红外 NEC 发送示例（RMT，公开时序，不参考 IRremote 源码）替代 lib-irremote 上站；web / CLI 红外接收对拍 | accept 新用例 + CLI/网页指纹一致 | ☐ 波 9 |
 
 ## P3 · 以后再说
