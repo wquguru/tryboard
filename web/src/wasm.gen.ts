@@ -128,7 +128,7 @@ export interface WasmExports {
   tb_timing_report(): number;
   /** Start a fine capture (D-04): pin mask as two 32-bit halves, window [t0, t1] in seconds (same rounding as the CLI) */
   tb_vcd_start(maskLo: number, maskHi: number, t0: number, t1: number): void;
-  /** Triggered fine capture: from `from` s, the next edge on a captured pin opens a `len` s window */
+  /** Triggered fine capture: from `from` s, the next burst start on a captured pin opens a `len` s window */
   tb_vcd_arm(maskLo: number, maskHi: number, from: number, len: number): void;
   /** The fine capture as VCD text, byte-identical to the CLI's --vcd file; length, read via tb_report_ptr */
   tb_vcd_text(): number;

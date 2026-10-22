@@ -248,7 +248,7 @@
 | F-11d | 环境脚本：双指缩放（手机）+ 手机半屏抽屉点缩放后轨道头不被滚出视野 | scenario.mjs + mobile.mjs + agent-browser | ☑ 波 8（双指以中点为锚连续缩放 1–32×、单指横向平移、ctrl / ⌘ + 滚轮；手机整个面板一起纵向滚动 + 轨道头吸顶；Reviews/ab/F-11d.md） |
 | F-03c | embed.mjs 原速回放检查改按模拟时间取样（页面暴露模拟时刻钩子），负载下不再偶发失败；不放宽判定 | embed.mjs 连跑 5 次 + 加压下跑 | ☑ 波 8（嵌入页回放期 `__tbEmbed.trace` 逐 tick 记 [模拟秒, 串口片段, 室温]；5 次 + 3 进程加压 3 次全 PASS） |
 | F-08d | ESP32Servo / IRremote 许可证证据整理（上游提交、文件头、作者声明），写 LICENSING_REVIEW.md；结论待人核 | 文档 | ☑ 波 8（证据已整理，结论待人） |
-| F-03d | vcd.mjs 触发窗口在全量 accept 加压下偶发只录到 45 条边沿（DHT11 帧没落进窗口）；改为按模拟时刻对齐触发 / 等待，不放宽「≥ 80 边沿、无丢失」判定 | vcd.mjs 连跑 5 次 + 加压下跑 | ☐ 波 9 |
+| F-03d | vcd.mjs 触发窗口在全量 accept 加压下偶发只录到 45 条边沿（DHT11 帧没落进窗口）；改为按模拟时刻对齐触发 / 等待，不放宽「≥ 80 边沿、无丢失」判定 | vcd.mjs 连跑 5 次 + 加压下跑 | ☑ 波 9：原因是产品行为（触发取武装后下一个沿，帧中武装只录半帧），内核改为「安静 ≥ 窗口长或连续沿已满窗口长」才开窗、武装起点钳到 worker 时刻；vcd.mjs 5/5、3 个 yes 加压 3/3 PASS（86 沿） |
 | F-08e | ESP32Servo 按 LGPL 三件套上站：LICENSING.md 第 30 行结论改为获批、NOTICES / 许可页 / BUILD_INFO 带 LGPL-2.1 与版权派生说明；IRremote 上游 issue 草稿写进 LICENSING_REVIEW §16（不发） | lint + licenses 页 agent-browser + accept | ☐ 波 9 |
 | F-08f | 自写 Arduino 红外 NEC 发送示例（RMT，公开时序，不参考 IRremote 源码）替代 lib-irremote 上站；web / CLI 红外接收对拍 | accept 新用例 + CLI/网页指纹一致 | ☐ 波 9 |
 

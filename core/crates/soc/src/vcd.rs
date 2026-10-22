@@ -25,6 +25,9 @@ pub struct VcdCapture {
     pub dropped: u64,
     /// Armed: the window opens at the first edge of a captured pin at or after t0 and lasts this many cycles
     pub arm: Option<u64>,
+    /// Armed holdoff: last rejected edge (or the arm time) and the start of the current run of rejected edges
+    last_edge: u64,
+    busy_since: Option<u64>,
 }
 
 impl VcdCapture {
@@ -38,10 +41,13 @@ impl VcdCapture {
             cap: VCD_CAP,
             dropped: 0,
             arm: None,
+            last_edge: t0,
+            busy_since: None,
         }
     }
 
-    /// Triggered capture: wait from `from` for the next edge on a captured pin, then keep `len` cycles
+    /// Triggered capture: from `from`, the first edge on a captured pin after `len` quiet cycles (or once a run of
+    /// edges has lasted `len`) opens a `len`-cycle window, so arming mid-burst waits for the next burst start
     pub fn armed(mask: u64, from: u64, len: u64) -> VcdCapture {
         VcdCapture {
             t1: u64::MAX,
@@ -63,6 +69,11 @@ impl VcdCapture {
         }
         if let Some(len) = self.arm {
             if (prev ^ level) & self.mask == 0 {
+                return;
+            }
+            let busy = self.busy_since.get_or_insert(now);
+            if now - self.last_edge < len && now - *busy < len {
+                self.last_edge = now;
                 return;
             }
             self.t0 = now;
@@ -149,16 +160,28 @@ $var wire 1 ! GPIO4 $end\n$var wire 1 \" GPIO5 $end\n$upscope $end\n$enddefiniti
         v.cap = 4;
         v.on_gpio(900, 0, 1 << 4);
         assert_eq!(v.dropped, 1);
-        // Armed: other pins do not open the window, the first GPIO5 edge does
-        let mut a = VcdCapture::armed(1 << 5, 100, 1000);
+        // Armed: other pins do not open the window, the first GPIO5 edge after a 150-cycle quiet gap does
+        let mut a = VcdCapture::armed(1 << 5, 100, 150);
         a.on_gpio(50, 0, 1 << 5);
         a.on_gpio(150, 1 << 5, 1 << 5 | 1 << 4);
-        assert_eq!((a.t0, a.arm), (100, Some(1000)));
+        assert_eq!((a.t0, a.arm), (100, Some(150)));
         a.on_gpio(300, 1 << 5 | 1 << 4, 1 << 4);
         a.on_gpio(1400, 1 << 4, 1 << 5);
-        assert_eq!((a.t0, a.t1, a.edges.len()), (300, 1300, 1));
+        assert_eq!((a.t0, a.t1, a.edges.len()), (300, 450, 1));
         assert!(a
             .text(0, 2000)
-            .contains("#1875000\n$dumpvars\n1!\n$end\n#1875000\n0!\n#8125000\n"));
+            .contains("#1875000\n$dumpvars\n1!\n$end\n#1875000\n0!\n#2812500\n"));
+        // Armed mid-burst: edges closer than the holdoff are skipped, the first edge after a quiet gap opens it
+        let mut b = VcdCapture::armed(1, 1000, 500);
+        for (i, t) in [1100u64, 1180, 1260, 1340, 2000].into_iter().enumerate() {
+            b.on_gpio(t, (i & 1) as u64, (!i & 1) as u64);
+        }
+        assert_eq!((b.t0, b.t1, b.arm, b.edges.len()), (2000, 2500, None, 1));
+        // A continuous signal (never quiet for `len`) still opens the window once its run has lasted `len`
+        let mut c = VcdCapture::armed(1, 0, 500);
+        for t in (100u64..1000).step_by(100) {
+            c.on_gpio(t, (t / 100 & 1) ^ 1, t / 100 & 1);
+        }
+        assert_eq!((c.t0, c.t1, c.edges.len()), (600, 1100, 4));
     }
 }

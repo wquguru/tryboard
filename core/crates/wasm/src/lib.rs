@@ -606,7 +606,7 @@ pub extern "C" fn tb_vcd_start(mask_lo: u32, mask_hi: u32, t0: f64, t1: f64) {
     })
 }
 
-/// Triggered fine capture: from `from` s, the next edge on a captured pin opens a `len` s window
+/// Triggered fine capture: from `from` s, the next burst start on a captured pin opens a `len` s window
 #[no_mangle]
 pub extern "C" fn tb_vcd_arm(mask_lo: u32, mask_hi: u32, from: f64, len: f64) {
     let c = tryboard_soc::vcd::VcdCapture::cycles_of;
