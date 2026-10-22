@@ -385,6 +385,10 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/xiaozhi.mjs 2>&1 | grep '^\[xiaozhi\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[xiaozhi\] PASS (' || { echo "- [xiaozhi] script did not finish" >> $REPORT; fail=1; }
+  # Library-free RMT NEC sender (F-08f): uploaded bin, web fingerprint = CLI, CLI IR eye decodes the frame
+  r=$(node tools/webtest/irnec.mjs 2>&1 | grep '^\[irnec\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[irnec\] PASS (' || { echo "- [irnec] script did not finish" >> $REPORT; fail=1; }
 fi
 echo -e "\nVerdict: $([ $fail = 0 ] && echo 'all passed' || echo 'some items failed')" >> $REPORT
 cat $REPORT

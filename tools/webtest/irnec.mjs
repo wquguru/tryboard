@@ -98,4 +98,5 @@ try {
   await browser.close();
   server.close();
 }
+console.log(`[irnec] ${fails ? 'FAIL' : 'PASS'} (${fails} failed, ${errors.length} page errors)`);
 process.exit(fails ? 1 : 0);
