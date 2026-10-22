@@ -960,5 +960,18 @@ const d: Dict = {
   "21-key IR remote (NEC, address 0x00)": "21키 적외선 리모컨(NEC, 주소 0x00)",
   "Common 21-key \"Car MP3\" NEC remote, CR2025 coin cell": "흔한 21키 \"Car MP3\" NEC 리모컨, CR2025 코인 전지",
   "Key codes: power / CH- 0x45, VOL+ 0x15, VOL- 0x07, digits 1–9 0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A. Most VS1838B kits already include one; buy it alone if yours did not.": "키 코드: 전원 / CH- 0x45, VOL+ 0x15, VOL- 0x07, 숫자 1–9는 0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A. VS1838B 키트 대부분에 포함; 없으면 따로 산다.",
+  "Point the remote at the lamp: digits pick one of nine colours, VOL+ / VOL- set the brightness, the power key switches it off": "리모컨을 조명에 겨누세요: 숫자 키로 9가지 색, VOL+ / VOL-로 밝기, 전원 키로 끕니다",
+  "Remote: light on": "리모컨: 켜짐",
+  "Remote: light off": "리모컨: 꺼짐",
+  "Light is off: key ignored (press power first)": "꺼져 있음: 키 무시됨(먼저 전원 키)",
+  "Brightness {level}/8": "밝기 {level}/8",
+  "Colour {n} picked": "색 {n} 선택",
+  "Code from another remote (address {a}) ignored": "다른 리모컨 코드(주소 {a}) 무시",
+  "Product: night light with 8 WS2812 LEDs under a milky shade, an IR receiver on its base and a 21-key remote": "제품: 우윳빛 갓 아래 WS2812 8개가 든 수면등, 받침에 적외선 수신기, 21키 리모컨",
+  "IR night light · product · VS1838B + WS2812 × 8 + NEC remote": "적외선 수면등 · 제품 · VS1838B + WS2812 × 8 + NEC 리모컨",
+  "On · colour {n} · brightness {level}/8 · about {mA} mA (estimate)": "켜짐 · 색 {n} · 밝기 {level}/8 · 약 {mA} mA(추정)",
+  "Off · about {mA} mA (estimate)": "꺼짐 · 약 {mA} mA(추정)",
+  "Last remote code: {code}": "마지막 리모컨 코드: {code}",
+  "repeat (key held)": "반복 코드(길게 누름)",
 };
 export default d;

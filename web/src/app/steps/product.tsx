@@ -10,9 +10,11 @@ import { createLensProduct, createSpinProduct } from '../../views/lcdproducts';
 import { type Template } from '../../views/templates';
 import { workTemplate } from '../../views/worktpl';
 import { doorActs, doorButtons, doorLive, doorOnReader, doorRows, doorSerial, doorTap, doorTool } from './door';
+import { irlampActs, irlampButtons, irlampLive, irlampRows, irlampSend, irlampSerial, irlampTool } from './irlamp';
 import { passedCount } from './bench';
 import { emptyFrame, ledCss, servoAngle, type LiveFrame } from '../../views/common';
-import type { AssemblyState, StepCtx, StepImpl } from '../types';
+import type { AssemblyState, Session, StepCtx, StepImpl } from '../types';
+import type { ReactNode } from 'react';
 import type { TimelineStep } from '../timeline';
 import { createKeypad3D, type Keypad3D } from '../keypad3d';
 import { createKeypadView, KEYPAD_CAPS, KEYPAD_PINS } from '../../views/keypad';
@@ -250,8 +252,16 @@ const WORK_ACTS: Record<string, () => Tool[]> = {
   lamp: () => [{ id: 'p-knob-l', label: t('Knob −1'), icon: 'minus' }, { id: 'p-knob-r', label: t('Knob +1'), icon: 'plus' }, { id: 'p-knob', label: t('Press knob'), icon: 'boot' }],
   ruler: () => [{ id: 'p-near', label: t('Board 10 cm closer'), icon: 'down' }, { id: 'p-far', label: t('Board 10 cm farther'), icon: 'up' }],
   door: doorActs,
+  irlamp: irlampActs,
   tilt: () => [{ id: 'p-tilt-r', label: t('Lower the right side'), icon: 'tilt' }, { id: 'p-tilt-l', label: t('Lower the front left'), icon: 'tilt' }, { id: 'p-level', label: t('Make level'), icon: 'minus' }],
   usbkey: () => KEYPAD_PINS.map((pin, i) => ({ id: `p-key-${pin}`, label: `K${i + 1} · ${KEYPAD_CAPS[i]}`, icon: 'key' })),
+};
+
+/** Per-work Product hooks kept outside productStep (tools/lint_size.py): serial parser, readings, desktop buttons, live rows, toolbar keys */
+type Btns = (id: string, label: string, f: () => void) => ReactNode;
+const HOOKS: Record<string, { serial: typeof doorSerial; rows: typeof doorRows; buttons: (b: Btns, s: Session) => ReactNode[]; live: typeof irlampLive; tool: (id: string, s: Session) => void }> = {
+  door: { serial: doorSerial, rows: doorRows, buttons: doorButtons, live: doorLive, tool: doorTool },
+  irlamp: { serial: irlampSerial, rows: irlampRows, buttons: irlampButtons, live: irlampLive, tool: irlampTool },
 };
 
 export function productStep(): StepImpl {
@@ -331,7 +341,7 @@ export function productStep(): StepImpl {
   function parseLines(lines: string[]) {
     for (const raw of lines) {
       const l = raw.trim();
-      if (ctx?.work.id === 'door') doorSerial(l, event);
+      HOOKS[ctx?.work.id ?? '']?.serial(l, event);
       if (l === 'ALARM ON') {
         alarm = true;
         event('!', t('Alarm: ≥ 30 ℃, buzzer sounding'), 'bad');
@@ -447,7 +457,7 @@ export function productStep(): StepImpl {
               ? [row(t('LED strip'), 'strip'), row(t('Brightness / colour'), 'lampst'), row(t('Knob mode'), 'lampmode'), row(t('Knob'), 'knob')]
               : w === 'ruler'
                 ? [row(t('Board distance'), 'cm'), row(t('Sensor measures'), 'cmfx'), row(t('Firmware reading'), 'rdist'), row(t('Buzzer'), 'buzz')]
-                : w === 'door' ? doorRows(row) : [row(t('Disc pose'), 'tpose'), row(t('IMU reads'), 'tfx'), row(t('Bean'), 'bean')];
+                : HOOKS[w]?.rows(row) ?? [row(t('Disc pose'), 'tpose'), row(t('IMU reads'), 'tfx'), row(t('Bean'), 'bean')];
     const b = (id: string, label: string, f: () => void) => (
       <Btn key={id} id={id} onClick={f}>
         {label}
@@ -460,7 +470,7 @@ export function productStep(): StepImpl {
           ? [b('pNear', t('Board 10 cm closer'), () => moveBoard(-10)), b('pFar', t('Board 10 cm farther'), () => moveBoard(10))]
           : w === 'tilt'
             ? [b('pTiltR', t('Lower the right side'), () => tiltTo({ pitch: 0, roll: 25, yaw: 0 })), b('pTiltL', t('Lower the front left'), () => tiltTo({ pitch: 20, roll: -25, yaw: 0 })), b('pLevel', t('Make level'), () => tiltTo({ pitch: 0, roll: 0, yaw: 0 }))]
-            : w === 'door' ? doorButtons(b, c.session) : w === 'usbkey'
+            : HOOKS[w] ? HOOKS[w].buttons(b, c.session) : w === 'usbkey'
               ? []
               : [
                   <Btn key="pBoot" id="pBoot" onPointerDown={() => pressBoot(true)} onPointerUp={() => pressBoot(false)} onPointerLeave={() => pressBoot(false)}>
@@ -771,7 +781,7 @@ export function productStep(): StepImpl {
       set('tpose', t('Pitch {pitch}° · roll {roll}°', { pitch: rawPose.pitch.toFixed(0), roll: rawPose.roll.toFixed(0) }));
       set('tfx', flip ? t('Pitch {pitch}° · roll {roll}° (mounted backwards)', { pitch: (-rawPose.pitch).toFixed(0), roll: (-rawPose.roll).toFixed(0) }) : t('Matches the disc'), !!flip);
       set('bean', bean.pos ? t('{pos} · edge hits: {n}', { pos: bean.pos, n: bean.edges }) : waiting);
-    } else if (c.work.id === 'door') doorLive(set, waiting);
+    } else HOOKS[c.work.id]?.live(set, waiting, f);
     const pre = el.querySelector<HTMLElement>('[data-live="serial"]');
     if (pre) {
       const lines = c.session.consoleText().split('\n').filter((l) => l.trim());
@@ -863,7 +873,7 @@ export function productStep(): StepImpl {
     else if (id === 'p-photo') void photo();
     else if (id === 'p-rec') record();
     else if (id === 'p-rerun') c.session.reboot();
-    else if (id.startsWith('p-card-')) doorTool(id, c.session);
+    else if (/^p-(card|ir)-/.test(id)) HOOKS[c.work.id]?.tool(id, c.session);
     else if (id === 'p-level') {
       if (WORK3D.has(c.work.id)) tiltTo({ pitch: 0, roll: 0, yaw: 0 });
       else c.session.setPose({ pitch: 0, roll: 0, yaw: 0 });
@@ -965,7 +975,7 @@ export function productStep(): StepImpl {
         typed: () => c.session.usb?.typed ?? '',
         usbState: () => c.session.usb?.state ?? '',
       };
-    } else if (webglOk()) {
+    } else if (webglOk() && c.work.id !== 'irlamp') {
       const w = c.work.id as 'spin' | 'lens';
       lcd3d = createLcd3D(node, {
         kind: w,
@@ -988,7 +998,7 @@ export function productStep(): StepImpl {
       const box = document.createElement('div');
       box.className = 'prod-svg';
       node.appendChild(box);
-      const h = { boot: (d: boolean) => pressBoot(d), temp: () => {} };
+      const h = { boot: (d: boolean) => pressBoot(d), temp: () => {}, ir: (code: string) => irlampSend(c.session, code) };
       svgProduct = c.work.id === 'spin' ? createSpinProduct(box, h, { servoPin: 4 }) : c.work.id === 'lens' ? createLensProduct(box, h) : workTemplate(c.work.id)!.product(box, h, { servoPin: 4 });
       const note = document.createElement('div');
       note.className = 'p3-disclaimer';

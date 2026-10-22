@@ -1137,5 +1137,13 @@ const d: Dict = {
   "Remote reception": "遥控接收",
   "No remote code arrives": "收不到遥控码",
   "Every key arrives": "每个键都能收到",
+  "Pink": "粉",
+  "Hold VOL+": "按住 VOL+",
+  "Remote code": "遥控码",
+  "Strip current (estimate)": "灯带电流（估算）",
+  "{n} received": "共收到 {n} 个",
+  "No key yet": "还没按键",
+  "On · {color} · brightness {level}/8": "开 · {color} · 亮度 {level}/8",
+  "IR night light": "红外小夜灯",
 };
 export default d;

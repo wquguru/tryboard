@@ -448,7 +448,7 @@ report('firmware drawer: Esc closes it', await waitFor(page, () => !document.que
 }
 
 // ---- Every product (preview ?work=X#product): fullscreen, no h-scroll, every key ≥ 44px and tappable, action key raises no error
-const WORKS = { weather: 'p-boot', spin: 'p-boot', lens: 'p-boot', usbkey: 'p-key-4', lamp: 'p-knob-r', ruler: 'p-near', tilt: 'p-tilt-r', imu: 'p-level', door: 'p-card-ok' };
+const WORKS = { weather: 'p-boot', spin: 'p-boot', lens: 'p-boot', usbkey: 'p-key-4', lamp: 'p-knob-r', ruler: 'p-near', tilt: 'p-tilt-r', imu: 'p-level', door: 'p-card-ok', irlamp: 'p-ir-power' };
 for (const [w, key] of Object.entries(WORKS)) {
   await page.goto(`${base}/app?work=${w}#product`, { waitUntil: 'load' });
   const up = await waitFor(page, (k) => globalThis.__tbApp?.store.get().step === 'product' && !!document.querySelector(`#toolbar [data-tool="${k}"]`), key, 30000);
@@ -458,7 +458,9 @@ for (const [w, key] of Object.entries(WORKS)) {
   }
   await sleep(1500);
   await stepCheck(`Product ${w}`);
-  report(`Product ${w}: 3D fullscreen`, (await full()) === 'ok', await full());
+  // G-04b irlamp has only the 2D product view until its 3D lands (G-04c): check it spans the phone width instead
+  if (w === 'irlamp') report('Product irlamp: 2D view spans the width', await page.evaluate(() => (document.querySelector('#mProduct .prod-svg svg')?.getBoundingClientRect().width ?? 0) >= innerWidth - 40));
+  else report(`Product ${w}: 3D fullscreen`, (await full()) === 'ok', await full());
   // Boot-time toasts (spin: brownout) can sit over the grid until U-26 moves them; wait for them like a user would
   await waitFor(page, () => document.querySelector('#toast')?.hidden !== false, null, 8000);
   const tools = await page.$$eval('#toolbar [data-tool]', (b) => b.map((x) => x.dataset.tool));

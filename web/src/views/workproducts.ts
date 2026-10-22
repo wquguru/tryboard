@@ -14,20 +14,20 @@ export interface WorkEffects {
   cardBlock?: boolean;
 }
 
-const BG = `<rect width="1000" height="560" fill="#DCD8D0"/><rect y="390" width="1000" height="170" fill="#CFCAC0"/>
+export const BG = `<rect width="1000" height="560" fill="#DCD8D0"/><rect y="390" width="1000" height="170" fill="#CFCAC0"/>
 <defs><radialGradient id="wp-floor" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#141414" stop-opacity="0.28"/><stop offset="1" stop-color="#141414" stop-opacity="0"/></radialGradient>
 <radialGradient id="wp-glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#FFF" stop-opacity="0.9"/><stop offset="1" stop-color="#FFF" stop-opacity="0"/></radialGradient>
 <clipPath id="wp-round"><circle cx="500" cy="236" r="118"/></clipPath></defs>`;
 
 /** Milky shade lit from inside: mix the shade colour with the LED colour by a */
-function tint(c: number[], a: number) {
+export function tint(c: number[], a: number) {
   const m = Math.max(...c) || 1;
   const base = [244, 241, 234];
   return `rgb(${base.map((b, k) => Math.round(b * (1 - a) + (c[k] / m) * 255 * a)).join(',')})`;
 }
 
 /** Scale LED colour by its brightest channel so it stays visible (firmware often writes low brightness) */
-function css(c: number[] | undefined, k = 1) {
+export function css(c: number[] | undefined, k = 1) {
   if (!c) return '#2A2A28';
   const m = Math.max(...c);
   if (!m) return '#2A2A28';

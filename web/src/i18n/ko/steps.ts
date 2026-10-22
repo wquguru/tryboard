@@ -1137,5 +1137,13 @@ const d: Dict = {
   "Remote reception": "리모컨 수신",
   "No remote code arrives": "리모컨 코드가 오지 않음",
   "Every key arrives": "모든 키가 도착함",
+  "Pink": "분홍",
+  "Hold VOL+": "VOL+ 길게",
+  "Remote code": "리모컨 코드",
+  "Strip current (estimate)": "LED 스트립 전류(추정)",
+  "{n} received": "{n}개 수신",
+  "No key yet": "아직 입력 없음",
+  "On · {color} · brightness {level}/8": "켜짐 · {color} · 밝기 {level}/8",
+  "IR night light": "적외선 수면등",
 };
 export default d;

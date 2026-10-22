@@ -7,6 +7,8 @@ export interface ProductHandlers {
   temp(delta: number): void;
   /** External keys (USB keypad K1–K4): pressed = grounded */
   press?(pin: number, down: boolean): void;
+  /** IR remote key (G-04 night light): one NEC code or 'repeat', same text as the ir= input action */
+  ir?(code: string): void;
 }
 
 export function createProductView(el: HTMLElement, h: ProductHandlers, opts: { servoPin: number }) {

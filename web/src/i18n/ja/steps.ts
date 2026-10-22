@@ -1137,5 +1137,13 @@ const d: Dict = {
   "Remote reception": "リモコン受信",
   "No remote code arrives": "リモコンのコードが届かない",
   "Every key arrives": "どのキーも届く",
+  "Pink": "ピンク",
+  "Hold VOL+": "VOL+ 長押し",
+  "Remote code": "リモコンコード",
+  "Strip current (estimate)": "LED テープ電流（推定）",
+  "{n} received": "受信 {n} 件",
+  "No key yet": "まだキー入力なし",
+  "On · {color} · brightness {level}/8": "点灯 · {color} · 明るさ {level}/8",
+  "IR night light": "赤外線ナイトライト",
 };
 export default d;
