@@ -1080,7 +1080,6 @@ const d: Dict = {
   "The mic hears a sample clip, so every run replays the same.": "マイクが聞くのはサンプル録音なので、毎回同じ結果が再現されます。",
   "The server answers from a script; wake word, echo cancellation and real speech recognition need real hardware.": "サーバーはスクリプトどおりに答えます。ウェイクワード・エコーキャンセル・本物の音声認識は実機が必要です。",
   // F-08f IR bench parts
-  "IR receiver": "赤外線受信モジュール",
   "IR LED": "赤外線 LED",
   "IR receiver OUT": "赤外線受信 OUT",
   "OUT (receiver output)": "OUT（受信出力）",

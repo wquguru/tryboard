@@ -17,22 +17,27 @@ const HOLD_REPEATS = 4;
 /** Send one remote code (NEC 'FF00,..' or 'repeat'); exported for the 3D product's clickable remote */
 export const irlampSend = (s: Session, code: string) => s.sim?.partInput({ kind: 'ir', code });
 
+/** Press a key until the returned release is called (3D remote: pointer down / up) */
+export const irlampPress = (s: Session, cmd: number) => holdKey((code) => irlampSend(s, code), cmd);
+
 /** Press a key and keep it down for n repeat codes, then release */
 export function irlampHold(s: Session, cmd: number, n = HOLD_REPEATS) {
-  const release = holdKey((code) => irlampSend(s, code), cmd);
+  const release = irlampPress(s, cmd);
   setTimeout(release, 110 * (n + 1) - 10);
 }
 
 const KEY: Record<string, number> = { 'p-ir-power': IRLAMP_CMD.power, 'p-ir-1': IRLAMP_CMD.digits[0], 'p-ir-2': IRLAMP_CMD.digits[1], 'p-ir-3': IRLAMP_CMD.digits[2], 'p-ir-up': IRLAMP_CMD.up, 'p-ir-down': IRLAMP_CMD.down };
 
-/** Phone product keys: power, colours 1–3, VOL+ / VOL-, hold VOL+ (repeat codes) */
-export const irlampActs = (): Tool[] => [
+/** All remote verbs: power, colours 1–3, VOL+ / VOL-, hold VOL+ (repeat codes) */
+const allActs = (): Tool[] => [
   { id: 'p-ir-power', label: t('Power'), icon: 'power' },
   ...[1, 2, 3].map((n) => ({ id: `p-ir-${n}`, label: `${n} · ${NAMES()[n - 1]}`, icon: 'sun' })),
   { id: 'p-ir-up', label: 'VOL+', icon: 'plus' },
   { id: 'p-ir-down', label: 'VOL-', icon: 'minus' },
   { id: 'p-ir-hold', label: t('Hold VOL+'), icon: 'up' },
 ];
+// Phone keys: one row (power + colours) keeps the 3D view ≥ 45% of 844 px; VOL+ / VOL- / hold live on the scene's remote
+export const irlampActs = (): Tool[] => allActs().slice(0, 4);
 
 /** Toolbar / button action; ids p-ir-power | p-ir-1..3 | p-ir-up | p-ir-down | p-ir-hold */
 export function irlampTool(id: string, s: Session) {
@@ -42,7 +47,7 @@ export function irlampTool(id: string, s: Session) {
 
 /** Desktop buttons, same verbs as the phone keys */
 export function irlampButtons(b: (id: string, label: string, f: () => void) => ReactNode, s: Session) {
-  return irlampActs().map((a) => b(`pIr-${a.id.slice(5)}`, a.label, () => irlampTool(a.id, s)));
+  return allActs().map((a) => b(`pIr-${a.id.slice(5)}`, a.label, () => irlampTool(a.id, s)));
 }
 
 export const irlampRows = (row: (k: string, live: string) => ReactNode) => [row(t('Remote code'), 'irc'), row(t('Light'), 'ilight'), row(t('LED strip'), 'istrip'), row(t('Strip current (estimate)'), 'ima')];

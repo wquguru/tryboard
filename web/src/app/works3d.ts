@@ -1,4 +1,4 @@
-// (4) P2-09 3D products for lamp (knob lamp), ruler (ultrasonic ruler), tilt (motion figure) and (G-03) door; same stage as product3d.ts, units cm.
+// (4) P2-09 3D products for lamp (knob lamp), ruler (ultrasonic ruler), tilt (motion figure) (G-03) door and (G-04) irlamp; same stage as product3d.ts, units cm.
 // LEDs, OLED, round screen and buzzer come from the live sim; assembly effects (hot spots, blocked probe, flipped IMU) come from the caller.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -15,8 +15,9 @@ import { t } from '../i18n';
 import { shaderWarm } from '../shaderwarm';
 import { onFrame, PRIO } from '../ui/frame';
 import { buildDoor } from './works3d-door';
+import { buildIrlamp, buildLampShell } from './works3d-irlamp';
 
-export type WorkKind = 'lamp' | 'ruler' | 'tilt' | 'door';
+export type WorkKind = 'lamp' | 'ruler' | 'tilt' | 'door' | 'irlamp';
 
 export interface WorkFrame {
   pwm: number[];
@@ -31,7 +32,7 @@ export interface WorkFrame {
 export interface WorkProductOptions {
   kind: WorkKind;
   frame(): WorkFrame;
-  effects(): { glare?: boolean; sonarBlock?: number; imuFlip?: boolean; cardBlock?: boolean };
+  effects(): { glare?: boolean; sonarBlock?: number; imuFlip?: boolean; cardBlock?: boolean; irBlock?: boolean };
   /** Whether the buzzer is sounding now (only for the sound-wave rings) */
   sounding(): boolean;
   /** lamp: knob detents turned (positive = clockwise), pressed / released */
@@ -47,6 +48,8 @@ export interface WorkProductOptions {
   onCard?(uid: string): void;
   /** door: UID currently on the reader ('' = none) */
   card?(): string;
+  /** irlamp: a remote key pressed (NEC command byte); the returned release ends the hold (repeat codes) */
+  onKey?(cmd: number): (() => void) | void;
 }
 
 export interface WorkProduct3D {
@@ -58,19 +61,11 @@ export interface WorkProduct3D {
   /** Page position of the draggable thing (knob / baffle / disc) so tests can drag with a real mouse */
   handleScreenPos(): [number, number] | null;
   /** Current state (tests / panel): knob detents, baffle distance, disc pose */
-  state(): { knob: number; cm: number; pose: Pose; open: boolean };
+  state(): { knob: number; cm: number; pose: Pose; open: boolean; key: string };
   setDistance(cm: number): void;
   setPose(p: Pose): void;
   /** Photo / video capture (P2-10) */
   capture(): Capturable;
-}
-
-const STRIP_PIN = 5;
-
-/** LED colour -> emissive colour (normalised to the max channel; brightness handled separately) */
-function glow(c: number[] | undefined) {
-  const m = c ? Math.max(...c) : 0;
-  return { m, col: new THREE.Color(m ? c![0] / m : 0, m ? c![1] / m : 0, m ? c![2] / m : 0) };
 }
 
 function oledTexture() {
@@ -171,6 +166,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     ruler: { home: new THREE.Vector3(8, 44, 80), target: new THREE.Vector3(17, 1.5, 0), min: 14, max: 120 },
     tilt: { home: new THREE.Vector3(0, 17, 17), target: new THREE.Vector3(0, 2.6, 0), min: 9, max: 40 },
     door: { home: new THREE.Vector3(-12, 30, 62), target: new THREE.Vector3(2, 22, 0), min: 16, max: 130 },
+    irlamp: { home: new THREE.Vector3(20, 17, 40), target: new THREE.Vector3(3, 4, 3), min: 14, max: 70 },
   };
   const V = VIEW[o.kind];
   camera.position.copy(V.home);
@@ -208,62 +204,13 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
   let setDistance = (_: number) => {};
   let setPose = (_: Pose) => {};
   let doorOpen = () => false;
+  let irKey = () => '';
 
   // Buzzer sound-wave rings (ruler)
   const waves: THREE.Mesh[] = [];
 
   if (o.kind === 'lamp') {
-    // Base 8 x 6 x 3.6 cm; light pipe in the middle with 8 LEDs stacked in front; the shade is a lathe
-    const base = new THREE.Mesh(new RoundedBoxGeometry(8, 3.6, 6, 5, 0.6), shellMat('#3A3936'));
-    base.position.y = 1.8;
-    base.castShadow = base.receiveShadow = true;
-    scene.add(base);
-    occluders.push(base);
-    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.6, 5.6, 32), new THREE.MeshPhysicalMaterial({ color: '#F2F0EA', roughness: 0.25, transmission: 0.3, thickness: 0.4 }));
-    pipe.position.set(0, 3.6 + 2.8, 0);
-    scene.add(pipe);
-    const leds: THREE.MeshStandardMaterial[] = [];
-    const ledMeshes: THREE.Mesh[] = [];
-    for (let i = 0; i < 8; i++) {
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.15), new THREE.MeshStandardMaterial({ color: '#F2F0EA', roughness: 0.6 }));
-      frame.position.set(0, 4.0 + i * 0.62, 0.62);
-      scene.add(frame);
-      const m = new THREE.MeshStandardMaterial({ color: '#DEDBD2', emissive: '#000000', emissiveIntensity: 1, roughness: 0.3 });
-      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.19, 20), m);
-      lens.position.set(0, 4.0 + i * 0.62, 0.7);
-      scene.add(lens);
-      leds.push(m);
-      ledMeshes.push(lens);
-    }
-    // Shade: milky PLA bell lathe (base Ø7.0, height 7.6), translucent
-    const prof: THREE.Vector2[] = [];
-    for (let i = 0; i <= 24; i++) {
-      const t = i / 24;
-      prof.push(new THREE.Vector2(3.5 - 1.6 * Math.pow(t, 1.6) - (t > 0.92 ? (t - 0.92) * 18 : 0), 3.7 + t * 7.6));
-    }
-    const shadeMat = new THREE.MeshPhysicalMaterial({ color: '#F4F1EA', roughness: 0.65, transmission: 0.55, thickness: 0.3, transparent: true, opacity: 0.88, emissive: '#000000', emissiveIntensity: 1, side: THREE.DoubleSide });
-    const shade = new THREE.Mesh(new THREE.LatheGeometry(prof, 72), shadeMat);
-    shade.castShadow = true;
-    scene.add(shade);
-    const shadeLight = new THREE.PointLight('#FFFFFF', 0, 40, 1.6);
-    shadeLight.position.set(0, 6.5, 0);
-    scene.add(shadeLight);
-    // Assembly B: strip against the shade wall gives a row of 8 hot spots on the front
-    const spots: THREE.Mesh[] = [];
-    const spotMats: THREE.MeshBasicMaterial[] = [];
-    for (let i = 0; i < 8; i++) {
-      const y = 4.4 + i * 0.75;
-      const t = (y - 3.7) / 7.6;
-      const r = 3.5 - 1.6 * Math.pow(t, 1.6) + 0.02;
-      // Hot spots on the outer surface, drawn last, brightness > 1 so bloom spreads them (glare)
-      const mat = new THREE.MeshBasicMaterial({ color: '#FFFFFF', transparent: true, opacity: 0, toneMapped: false, depthWrite: false });
-      const s = new THREE.Mesh(new THREE.CircleGeometry(0.3, 20), mat);
-      s.renderOrder = 10;
-      s.position.set(0, y, r + 0.03);
-      scene.add(s);
-      spots.push(s);
-      spotMats.push(mat);
-    }
+    const paint = buildLampShell({ scene, shellMat, occluders, tag, tagList, effects: o.effects });
     // Knob: front right of the base, shaft forward (+z); drag / wheel to turn, click to press
     const knob = new THREE.Group();
     const kmat = new THREE.MeshStandardMaterial({ color: '#1B1D21', roughness: 0.45, metalness: 0.3 });
@@ -298,7 +245,6 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     cable.castShadow = true;
     scene.add(cable);
     tagList.push({ el: tag(t('EC11 knob · drag or scroll to turn, click to switch mode'), 'hot'), at: () => new THREE.Vector3(2.3, 0.2, KNOB_Z + 0.4), dy: 16 });
-    tagList.push({ el: tag(t('WS2812 × 8 · milky shade')), at: () => new THREE.Vector3(-3.6, 9.5, 0), dx: -50 });
 
     let angle = 0;
     let press: { x: number; y: number; acc: number; moved: boolean } | null = null;
@@ -340,35 +286,11 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
       turn(dy < 0 ? 1 : -1);
       return true;
     };
-    const avg = new THREE.Color();
     tick = (f, dt, now) => {
-      const strip = (f.running ? f.strips?.[STRIP_PIN] : undefined) ?? [];
-      const glare = !!o.effects().glare;
-      let peak = 0;
-      const sum = [0, 0, 0];
-      leds.forEach((m, i) => {
-        const c = strip[i];
-        const g = glow(c);
-        peak = Math.max(peak, g.m);
-        if (c) c.forEach((v, k) => (sum[k] += v));
-        m.emissive.copy(g.col);
-        // Firmware writes real 0–255 brightness: map it to emissive intensity (no blanket boost like the onboard LED) so dimming shows
-        m.emissiveIntensity = g.m ? 1.5 + (g.m / 255) * 8 : 0;
-        spotMats[i].color.copy(g.col).lerp(new THREE.Color('#FFFFFF'), 0.5).multiplyScalar(1.6 + (g.m / 255) * 2);
-        spotMats[i].opacity = glare && g.m ? 1 : 0;
-      });
-      const sm = Math.max(...sum);
-      avg.setRGB(sm ? sum[0] / sm : 0, sm ? sum[1] / sm : 0, sm ? sum[2] / sm : 0);
-      const k = peak / 255;
-      // Shade lit from inside: emissive (diffused colour) + point light on the desk; hot-spot assembly makes the shade darker and uneven
-      shadeMat.emissive.copy(avg);
-      shadeMat.emissiveIntensity = peak ? (glare ? 0.08 + k * 0.3 : 0.3 + k * 1.4) : 0;
-      shadeLight.color.copy(avg);
-      shadeLight.intensity = k * 110;
+      paint(f);
       angle += ((knobCount * Math.PI) / 10 - angle) * (1 - Math.exp(-dt * 18));
       knob.rotation.z = -angle;
       (hint.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.4 * (0.5 + 0.5 * Math.sin(now / 300));
-      void ledMeshes;
     };
   } else if (o.kind === 'ruler') {
     // Handheld case 9 x 3 x 4.8 cm lying flat; probes toward +x; OLED on top; sound hole on the left
@@ -496,6 +418,9 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
         w.position.y = H + 0.3 + ph * 0.8;
       });
     };
+  } else if (o.kind === 'irlamp') {
+    const d = buildIrlamp({ scene, shellMat, occluders, tag, tagList, hits, onKey: o.onKey, effects: o.effects });
+    ({ tick, onDown, onUp, handle, key: irKey } = d);
   } else if (o.kind === 'door') {
     const d = buildDoor({ scene, shellMat, tag, tagList, hits, occluders, oled: oledTexture(), paintOled, onCard: o.onCard, card: o.card, effects: o.effects });
     tick = (f, dt) => d.tick(f, dt);
@@ -710,7 +635,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
       handle.updateWorldMatrix(true, false);
       return screenPos(new THREE.Vector3().setFromMatrixPosition(handle.matrixWorld));
     },
-    state: () => ({ knob: knobCount, cm, pose: { ...pose }, open: doorOpen() }),
+    state: () => ({ knob: knobCount, cm, pose: { ...pose }, open: doorOpen(), key: irKey() }),
     setDistance: (d) => setDistance(d),
     setPose: (p) => setPose(p),
     capture: () => capturableOf(renderer, scene, composer),

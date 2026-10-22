@@ -5,6 +5,7 @@ import type { LiveFrame } from './common';
 import { createProductView, type ProductHandlers } from './product';
 import { createLensProduct, createSpinProduct } from './lcdproducts';
 import { createDoorProduct } from './doorproduct';
+import { createIrlampProduct } from './irlampproduct';
 import { createLampProduct, createRulerProduct, createTiltProduct, type WorkEffects } from './workproducts';
 import { createKeypadView } from './keypad';
 import { CHIP_HEAT_OFFSET } from './chipheat';
@@ -43,20 +44,23 @@ export interface Effects extends WorkEffects {
   antennaDb?: number;
   /** USB port blocked by the case (usbkey): no cable, so the virtual computer sees no device */
   usbBlocked?: boolean;
+  /** IR receiver behind the opaque base wall (irlamp): no remote code arrives, so ir= inputs are dropped */
+  irBlock?: boolean;
 }
 
 /** Recessed sonar hears the hole wall first, so readings clamp to this many cm (estimate, not calibrated on hardware) */
 export const SONAR_BLOCK_CM = 3;
 
-/** Apply assembly effects to the check inputs so the re-test sees what the installed sensors would:
- *  blocked sonar clamps every dist= to sonarBlock; a flipped IMU negates imu= pitch and roll; a blocked reader turns card= into none. */
+/** Re-test inputs as the installed sensors see them: blocked sonar clamps dist=, a flipped IMU negates imu= pitch / roll,
+ *  a blocked reader turns card= into none, a receiver behind the opaque wall drops every ir= code. */
 export function effectScript(script: string | undefined, fx: Effects): string | undefined {
-  if (!script || (!fx.sonarBlock && !fx.imuFlip && !fx.cardBlock)) return script;
+  if (!script || (!fx.sonarBlock && !fx.imuFlip && !fx.cardBlock && !fx.irBlock)) return script;
   return script
     .split(';')
     .map((e) => {
-      const m = /^(\s*[\d.]+\s*:\s*)(dist|imu|card)=(.*)$/.exec(e);
+      const m = /^(\s*[\d.]+\s*:\s*)(dist|imu|card|ir)=(.*)$/.exec(e);
       if (!m) return e;
+      if (m[2] === 'ir' && fx.irBlock) return '';
       if (m[2] === 'card' && fx.cardBlock) return `${m[1]}card=none`;
       if (m[2] === 'dist' && fx.sonarBlock) {
         const d = Number(m[3]);
@@ -69,6 +73,7 @@ export function effectScript(script: string | undefined, fx: Effects): string | 
       }
       return e;
     })
+    .filter((e) => e !== '')
     .join(';');
 }
 export interface Picked {
@@ -395,4 +400,47 @@ export const DOOR: Template = {
   product: (el) => createDoorProduct(el),
 };
 
-export const TEMPLATES: Record<string, Template> = { weather: WEATHER, spin: SPIN, lens: LENS, usbkey: USBKEY, lamp: LAMP, ruler: RULER, tilt: TILT, door: DOOR };
+// G-04 IR night light: the knob lamp's base 80×60×36 mm and Ø70 mm shade; the knob hole becomes a 12×8 mm IR window
+const IRRX_MINI = '<rect x="38" y="6" width="24" height="26" rx="2" fill="#141416"/><circle cx="50" cy="16" r="8" fill="#26262B"/><path d="M42 32 L42 54 M50 32 L50 54 M58 32 L58 54" stroke="#8A867E" stroke-width="2.5"/>';
+const SHIFTER_MINI = '<rect x="18" y="12" width="64" height="36" rx="3" fill="#1F55B0"/><rect x="34" y="20" width="32" height="20" rx="1" fill="#141414"/><path d="M38 20 L38 14 M46 20 L46 14 M54 20 L54 14 M62 20 L62 14" stroke="#BDB9B0" stroke-width="2"/>';
+
+export const IRLAMP: Template = {
+  id: 'irlamp',
+  caption: t('IR night light · base 80×60×36 mm, shade Ø70 mm, IR window 12×8 mm (estimate)'),
+  intro: [t('Build the night light'), t('Start with the lamp base')],
+  tray: ['shade', 'irrx', 'base', 'strip', 'board', 'shifter'],
+  parts: [
+    { id: 'base', name: t('Lamp base'), short: t('Lamp base'), ghost: [0, 0, 180, 100], okMsg: [t('Lamp base in place'), t('IR window in the front, DC jack on the back')],
+      mini: '<rect x="4" y="14" width="92" height="36" rx="8" fill="#3A3936"/><rect x="40" y="6" width="20" height="10" fill="#E8E5DE"/><rect x="72" y="28" width="12" height="8" rx="1" fill="#3A1418"/>',
+      iso: '<rect width="180" height="100" rx="16" fill="#3A3936" stroke="#141414" stroke-width="1.5"/><rect x="80" y="34" width="20" height="32" rx="3" fill="#E8E5DE"/><rect x="138" y="94" width="28" height="6" rx="1" fill="#3A1418"/>' },
+    { id: 'board', name: t('ESP32-S3 dev board'), short: t('Board'), ghost: [20, 20, 120, 60], okMsg: [t('Board clips into the lamp base'), t('GPIO4 from the receiver · GPIO5 to the level shifter')], mini: BOARD_MINI, iso: BOARD_ISO },
+    { id: 'shifter', name: t('74AHCT125 level shifter'), short: t('Level shifter'), ghost: [146, 16, 28, 30], okMsg: [t('Level shifter next to the board'), t('GPIO5 3.3 V lifted to 5 V for the strip DIN')], mini: SHIFTER_MINI,
+      iso: '<rect x="146" y="16" width="28" height="30" rx="2" fill="#1F55B0"/><rect x="152" y="22" width="16" height="18" fill="#141414"/>' },
+    { id: 'strip', name: t('WS2812 strip'), short: t('LED strip'), spotSize: [96, 18], mini: STRIP_MINI,
+      iso: '<rect width="96" height="18" rx="2" fill="#16181b"/>' + Array.from({ length: 8 }, (_, i) => `<circle cx="${8 + i * 11.4}" cy="9" r="3.4" fill="#FFB060"/>`).join(''),
+      spots: [
+        { key: 'A', label: t('On the light pipe (15 mm from shade)'), at: [42, 41], ok: true, msg: [t('Strip on the light pipe'), t('The shade glows evenly')] },
+        { key: 'B', label: t('Against the inside of the shade'), at: [42, 4], ok: false, msg: [t('LEDs touch the shade'), t('8 glaring hot spots on the shade, uneven light (estimate)')] },
+      ] },
+    { id: 'irrx', name: t('VS1838B IR receiver'), short: t('IR receiver'), spotSize: [20, 16], mini: IRRX_MINI,
+      iso: '<rect width="20" height="16" rx="2" fill="#141416"/><circle cx="10" cy="11" r="5" fill="#26262B"/>',
+      spots: [
+        { key: 'A', label: t('In the IR window'), at: [142, 82], ok: true, msg: [t('Receiver in the IR window'), t('The remote reaches it from across the room')] },
+        { key: 'B', label: t('Behind the solid wall'), at: [142, 52], ok: false, msg: [t('Receiver behind the opaque wall'), t('3 mm of opaque PLA blocks the 940 nm light: no remote code arrives (estimate)')] },
+      ] },
+    { id: 'shade', name: t('Opal shade'), short: t('Shade'), ghost: [0, 0, 180, 100], okMsg: [t('Shade snapped on'), t('Click “Next: product”')],
+      mini: '<path d="M20 56 C14 30 24 6 50 4 C76 6 86 30 80 56 Z" fill="#F4F1EA" stroke="#BDB9B0" stroke-width="2"/>',
+      iso: '<rect width="180" height="100" rx="40" fill="#F4F1EA" stroke="#BDB9B0" stroke-width="1.5" opacity="0.7"/>' },
+  ],
+  checks: (s) => [
+    row(t('IR receiver'), has(s, 'irrx'), s.choice.irrx === 'A', t('Dome in the IR window, in sight of the remote'), t('Behind the opaque wall, no remote code gets through')),
+    row(t('Strip position'), has(s, 'strip'), s.choice.strip === 'A', t('On the light pipe, 15 mm from shade, even light'), t('Against the shade, a row of hot spots')),
+    row(t('Level shifter'), has(s, 'shifter'), true, t('74AHCT125 drives DIN at 5 V logic')),
+    row(t('Power'), has(s, 'base'), true, t('Strip on external 5 V 2 A, up to 488 mA at full white (estimate)')),
+  ],
+  effects: (s) => ({ glare: s.choice.strip === 'B', irBlock: s.choice.irrx === 'B' }),
+  // Same strip on GPIO5 as the knob lamp; G-04b's irlamp product view replaces this after the merge
+  product: (el, h) => createIrlampProduct(el, { pin: 5, send: h.ir }),
+};
+
+export const TEMPLATES: Record<string, Template> = { weather: WEATHER, spin: SPIN, lens: LENS, usbkey: USBKEY, lamp: LAMP, ruler: RULER, tilt: TILT, door: DOOR, irlamp: IRLAMP };
