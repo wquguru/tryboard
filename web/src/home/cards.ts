@@ -7,6 +7,8 @@ import { createLensProduct, createSpinProduct } from '../views/lcdproducts';
 import { createKeypadView } from '../views/keypad';
 import { workTemplate } from '../views/worktpl';
 import { DOOR_CARDS, doorNow, parseDoorLine } from '../views/doorproduct';
+import { IRLAMP_CMD, irlampNow, parseIrlampLine } from '../views/irlampproduct';
+import { irCode } from '../app/irfeed';
 import { emptyFrame, type LiveFrame } from '../views/common';
 import { t } from '../i18n';
 
@@ -45,6 +47,17 @@ const EXTRA: Record<string, Extra> = {
     script: (sim, t) => t % 3 < 0.1 && sim.partInput({ kind: 'card', uid: [DOOR_CARDS.ok, 'none', DOOR_CARDS.bad, 'none'][Math.floor(t / 3) % 4] }),
     line: (l) => parseDoorLine(l, doorNow),
   },
+  irlamp: {
+    fw: 's3-irlamp',
+    live: { i2c: [], parts: { ir: { rx: 4 } } },
+    demo: { strips: { 5: Array.from({ length: 8 }, () => [0x80, 0x4c, 0x19]) } },
+    // Demo: every 1.5 s press the next of digits 1..9 (colour), then VOL- / VOL+ once round the cycle.
+    script: (sim, t) => {
+      const k = [...IRLAMP_CMD.digits, IRLAMP_CMD.down, IRLAMP_CMD.up][Math.floor(t / 1.5) % 11];
+      if (t > 1 && t % 1.5 < 0.1) sim.partInput({ kind: 'ir', code: irCode(k) });
+    },
+    line: (l) => parseIrlampLine(l, irlampNow),
+  },
 };
 
 const SERVO = 4;
@@ -66,7 +79,7 @@ export function showcase(el: HTMLElement, kind: string) {
 /** Run real firmware in the card preview; the last serial line goes straight to the status line (high rate, no React state). Returns stop. */
 export function startLive(kind: string, card: HTMLElement, prev: HTMLElement, status: HTMLElement, onFail: () => void) {
   let sim: LiveSim | null = null;
-  const h = { boot: (d: boolean) => sim?.press(d), temp: (d: number) => sim && sim.setTemp(sim.env.temp + d) };
+  const h = { boot: (d: boolean) => sim?.press(d), temp: (d: number) => sim && sim.setTemp(sim.env.temp + d), ir: (code: string) => sim?.partInput({ kind: 'ir', code }) };
   const x = EXTRA[kind];
   const lcdView = x ? workTemplate(kind)!.product(prev, h, { servoPin: SERVO }) : kind === 'spin' ? createSpinProduct(prev, h, { servoPin: SERVO }) : kind === 'lens' ? createLensProduct(prev, h) : null;
   const wView = kind === 'weather' ? createProductView(prev, h, { servoPin: SERVO }) : null;

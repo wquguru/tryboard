@@ -255,8 +255,9 @@ test('toScene matches the scene in firmware/examples.json', () => {
 
 test('template round display / servo wiring matches examples.json pins', () => {
   const map: Record<string, [string, string]> = { lcd_sclk: ['gc9a01', 'SCL'], lcd_mosi: ['gc9a01', 'SDA'], lcd_cs: ['gc9a01', 'CS'], lcd_dc: ['gc9a01', 'DC'], lcd_rst: ['gc9a01', 'RES'], lcd_bl: ['gc9a01', 'BLK'], servo: ['sg90', '橙 PWM'], buzzer: ['buzzer-module', 'I/O'], strip: ['ws2812-stick8', 'DIN'], a: ['encoder', 'CLK'], b: ['encoder', 'DT'], sw: ['encoder', 'SW'], trig: ['hc-sr04', 'Trig'], echo: ['hc-sr04', 'Echo'] }; // lint: allow-cjk
-  for (const id of ['weather', 'spin', 'lens', 'lamp', 'ruler', 'tilt', 'door']) {
-    const ex = examples.find((e) => e.id === (id === 'door' ? 'c3-door' : id))!;
+  const exId: Record<string, string> = { door: 'c3-door', irlamp: 's3-irlamp' };
+  for (const id of ['weather', 'spin', 'lens', 'lamp', 'ruler', 'tilt', 'door', 'irlamp']) {
+    const ex = examples.find((e) => e.id === (exId[id] ?? id))!;
     const t = PROCURE_TEMPLATES.find((x) => x.id === id)!;
     for (const [k, gpio] of Object.entries(ex.pins ?? {})) {
       const [part, pin] = map[k];

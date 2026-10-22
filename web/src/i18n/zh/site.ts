@@ -937,5 +937,18 @@ const d: Dict = {
   "21-key IR remote (NEC, address 0x00)": "21 键红外遥控器（NEC，地址 0x00）",
   "Common 21-key \"Car MP3\" NEC remote, CR2025 coin cell": "常见 21 键「Car MP3」NEC 遥控器，CR2025 纽扣电池",
   "Key codes: power / CH- 0x45, VOL+ 0x15, VOL- 0x07, digits 1–9 0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A. Most VS1838B kits already include one; buy it alone if yours did not.": "键码：电源 / CH- 0x45，VOL+ 0x15，VOL- 0x07，数字 1–9 为 0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A。多数 VS1838B 套件已经带一个；没带的话单独买。",
+  "Point the remote at the lamp: digits pick one of nine colours, VOL+ / VOL- set the brightness, the power key switches it off": "用遥控器对着灯：数字键选九种颜色，VOL+ / VOL- 调亮度，电源键关灯",
+  "Remote: light on": "遥控：开灯",
+  "Remote: light off": "遥控：关灯",
+  "Light is off: key ignored (press power first)": "灯是关着的：按键被忽略（先按电源键）",
+  "Brightness {level}/8": "亮度 {level}/8",
+  "Colour {n} picked": "选了颜色 {n}",
+  "Code from another remote (address {a}) ignored": "别的遥控器的码（地址 {a}），已忽略",
+  "Product: night light with 8 WS2812 LEDs under a milky shade, an IR receiver on its base and a 21-key remote": "产品：乳白灯罩下 8 颗 WS2812 的小夜灯，底座上有红外接收头，旁边一个 21 键遥控器",
+  "IR night light · product · VS1838B + WS2812 × 8 + NEC remote": "红外小夜灯 · 产品 · VS1838B + WS2812 × 8 + NEC 遥控器",
+  "On · colour {n} · brightness {level}/8 · about {mA} mA (estimate)": "开 · 颜色 {n} · 亮度 {level}/8 · 约 {mA} mA（估算）",
+  "Off · about {mA} mA (estimate)": "关 · 约 {mA} mA（估算）",
+  "Last remote code: {code}": "最近的遥控码：{code}",
+  "repeat (key held)": "重复码（按住不放）",
 };
 export default d;

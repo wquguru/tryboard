@@ -937,5 +937,18 @@ const d: Dict = {
   "21-key IR remote (NEC, address 0x00)": "21 キー赤外線リモコン（NEC、アドレス 0x00）",
   "Common 21-key \"Car MP3\" NEC remote, CR2025 coin cell": "一般的な 21 キー「Car MP3」NEC リモコン、CR2025 コイン電池",
   "Key codes: power / CH- 0x45, VOL+ 0x15, VOL- 0x07, digits 1–9 0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A. Most VS1838B kits already include one; buy it alone if yours did not.": "キーコード：電源 / CH- 0x45、VOL+ 0x15、VOL- 0x07、数字 1–9 は 0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A。VS1838B キットの多くに付属；付いていなければ単品で購入。",
+  "Point the remote at the lamp: digits pick one of nine colours, VOL+ / VOL- set the brightness, the power key switches it off": "リモコンをライトに向けて：数字キーで 9 色から選び、VOL+ / VOL- で明るさ、電源キーで消灯",
+  "Remote: light on": "リモコン：点灯",
+  "Remote: light off": "リモコン：消灯",
+  "Light is off: key ignored (press power first)": "消灯中：キーは無視されます（先に電源キー）",
+  "Brightness {level}/8": "明るさ {level}/8",
+  "Colour {n} picked": "色 {n} を選択",
+  "Code from another remote (address {a}) ignored": "別のリモコンのコード（アドレス {a}）は無視",
+  "Product: night light with 8 WS2812 LEDs under a milky shade, an IR receiver on its base and a 21-key remote": "製品：乳白シェードの下に WS2812 × 8 のナイトライト、台座に赤外線受信モジュール、21 キーのリモコン付き",
+  "IR night light · product · VS1838B + WS2812 × 8 + NEC remote": "赤外線ナイトライト · 製品 · VS1838B + WS2812 × 8 + NEC リモコン",
+  "On · colour {n} · brightness {level}/8 · about {mA} mA (estimate)": "点灯 · 色 {n} · 明るさ {level}/8 · 約 {mA} mA（推定）",
+  "Off · about {mA} mA (estimate)": "消灯 · 約 {mA} mA（推定）",
+  "Last remote code: {code}": "最後のリモコンコード：{code}",
+  "repeat (key held)": "リピート（長押し）",
 };
 export default d;

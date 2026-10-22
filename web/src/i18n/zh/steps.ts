@@ -1130,5 +1130,13 @@ const d: Dict = {
   "RC522 version 0x{v}": "RC522 版本 0x{v}",
   "Door lock": "门禁",
   "Appearance only (2D view for now)": "外观示意（暂为 2D 视图）",
+  "Pink": "粉",
+  "Hold VOL+": "按住 VOL+",
+  "Remote code": "遥控码",
+  "Strip current (estimate)": "灯带电流（估算）",
+  "{n} received": "共收到 {n} 个",
+  "No key yet": "还没按键",
+  "On · {color} · brightness {level}/8": "开 · {color} · 亮度 {level}/8",
+  "IR night light": "红外小夜灯",
 };
 export default d;
