@@ -55,7 +55,9 @@ export type InputEvent =
   | { tMs: number; kind: 'lux'; lux: number }
   | { tMs: number; kind: 'card'; uid: string }
   /** Virtual voice server (F-09b-2): on / off / script,<name> / say,<text> / min,N / voice,demo|noise. Action xz=… */
-  | { tMs: number; kind: 'xz'; cmd: string };
+  | { tMs: number; kind: 'xz'; cmd: string }
+  /** Virtual MQTT cloud (F-08b): pub,<topic>,<payload> / pub1,… / retain,<topic>,<payload>. Action mqtt=… */
+  | { tMs: number; kind: 'mqtt'; cmd: string };
 
 /** An event not yet stamped (the worker fills in tMs when applying it) */
 export type InputAction = InputEvent extends infer E ? (E extends unknown ? Omit<E, 'tMs'> : never) : never;
@@ -182,6 +184,8 @@ export function action(e: InputEvent): string | null {
       return `card=${e.uid}`;
     case 'xz':
       return `xz=${e.cmd}`;
+    case 'mqtt':
+      return `mqtt=${e.cmd}`;
     case 'power':
       return null;
   }
@@ -309,6 +313,8 @@ export function fromAction(a: string): InputAction {
       return { kind: 'card', uid: v.trim() };
     case 'xz':
       return { kind: 'xz', cmd: v };
+    case 'mqtt':
+      return { kind: 'mqtt', cmd: v };
   }
   throw new Error(`bad action "${a}"`);
 }

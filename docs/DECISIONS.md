@@ -1506,3 +1506,9 @@
 - 参考：公开 NEC 协议时序；arduino-esp32 3.3.2 `esp32-hal-rmt.h` / `.c`（LGPL 核心，只读 API 语义：`rmtSetCarrier` 的 carrier_level=true 实际映射为 `polarity_active_low`，故草图传 false 让高电平段带载波）；ESP-IDF v5.5 `rmt_reg.h`（C3 / S3 CONF0 carrier_en [21]、carrier_out_lv [22]，CARRIER_DUTY 紧跟 INT_CLR）与 `rmt_tx.c` `rmt_apply_carrier`（占空比按组时钟 resolution_hz 计），Apache-2.0。**未打开** third_party/arduino-libs/Arduino-IRremote 的任何文件，也未看 IDF ir_nec_transceiver 示例源码。
 - core：`Rmt::carrier` 不再限经典 ESP32，C3 / S3 按上述位与组时钟（`src_hz / (div_num+1)`）换算；`PinDevices::ir_eye` 换成 `rmt_ir`（喂眼睛 + 返回是否开载波），经典 / C3 / S3 的 `route_rmt` 共用，开载波时不喂 WS2812 解码器（S3 lib.rs 守住 1500 行上限）；`ir_attach` 去掉「LED 眼睛只限经典 ESP32」的限制。C3 复位 CONF0 本就开载波（0x710200），驱动建通道时会关，golden 210/210 不变即佐证。新单元测试 `rmt::tests::c3_tx_carrier`。
 - 备选：用 PWM 日志验 38 kHz（RMT 不走 LEDC，不适用）；改在经典 ESP32 上构建（已有载波，但 Arduino 库示例都在 C3，保持一致）。
+
+## 2026-10-22 F-08b 遗留：core 内置虚拟 MQTT 3.1.1 broker
+- 决定：新建 `soc/src/wifi/mqtt.rs`（纯状态机 `Broker`，输出 Send / Close / Status / Log），挂在 `Tcp::mqtt`，1883 端口始终监听（不像 xiaozhi 需要 `xz=on` 开启），复用 WebSocket 的长连接 TCP 记账；跨连接下发经 `Tcp::side` → `Net::pending`。脚本动作 `mqtt=pub|pub1|retain,<topic>,<payload>` 放进 `Machine::net_action`，CLI 与网页（`tb_net_action`，未新增 wasm 导出）共用；CLI 结束报告改由 `World::service_logs` 统一列出 xz / mqtt（守住 main.rs `run` 798 行与 1500 行上限）。PubSubClient 草图改为先订阅 `tryboard/#` 再发布、收满 2 条打印 TRYBOARD_OK，用例改断言成功输出（功能完成后更新预期）。
+- 理由：只有 PubSubClient 一个用例碰 1883，常开不影响其余 210 例（golden 一致）；broker 放在 Tcp 里，同连接回复随 ACK 立刻出去，确定性好；retain 存储算「互联网」状态，复位保留。
+- 参考：OASIS MQTT Version 3.1.1 规范（报文格式、剩余长度、主题通配 4.7、保活 3.1.2.10、retain 3.3.1.3）；PubSubClient 2.8（MIT）只看其行为（CONNACK 第 4 字节为 0 才算连上、15 s PINGREQ）。没有读或参考任何 GPL broker（mosquitto 为 EPL/EDL，也未参考）。
+- 备选：broker 放 World、经 inbox 一次 poll 后再回（xiaozhi 模式，CONNACK 晚一拍，多一套事件类型）；按需 `mqtt=on` 才监听（多一步，PubSubClient 默认场景不直观）；做 QoS 2 / 持久会话（范围外）。

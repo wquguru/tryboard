@@ -199,7 +199,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         const d = Number(act.slice(5));
         if (!Number.isNaN(d)) e.tb_sonar_distance?.(d);
       } else if (act.startsWith('realnet=')) e.tb_realnet_set?.(act.slice(8).trim() === '1' ? 1 : 0);
-      else if (/^(net|netfault)=/.test(act)) bytesIn(e, new TextEncoder().encode(act.trim()), (p, n) => void e.tb_net_action?.(p, n));
+      else if (/^(net|netfault|mqtt)=/.test(act)) bytesIn(e, new TextEncoder().encode(act.trim()), (p, n) => void e.tb_net_action?.(p, n));
       else if (act.startsWith('netreply=')) bytesIn(e, new TextEncoder().encode(act.slice(9).trim()), (p, n) => void e.tb_net_reply?.(p, n));
       else if (act.startsWith('phone=')) bytesIn(e, new TextEncoder().encode(act.slice(6).replaceAll('\\n', '\n')), (p, n) => void e.tb_phone_cmd?.(p, n));
       else if (act.startsWith('usbcdc=')) bytesIn(e, new TextEncoder().encode(act.slice(7).replaceAll('\\n', '\n')), (p, n) => e.tb_usb_cdc_send(p, n));

@@ -724,3 +724,97 @@ fn xiaozhi_through_world_inbox_and_timer() {
     assert!(w.net.tcp.ws_routes.is_empty() && w.xz.is_none());
     assert!(w.net.tcp.ws_conns().is_empty(), "open session closed");
 }
+
+/// Chip -> broker segment from chip port `sp` to the gateway (port `dp`)
+fn mq_seg(sp: u16, dp: u16, seq: u32, ack: u32, flags: u8, d: &[u8]) -> Vec<u8> {
+    let mut t = chip_seg(seq, ack, flags, 8192, d);
+    t[0..2].copy_from_slice(&sp.to_be_bytes());
+    t[2..4].copy_from_slice(&dp.to_be_bytes());
+    t
+}
+
+/// Open an MQTT connection from chip port `sp` and send CONNECT: (next seq, server ack point, bytes received)
+fn mq_open(n: &mut Net, sp: u16, id: &str) -> (u32, u32, Vec<u8>) {
+    let (c, s) = (net::STA_IP, net::GW_IP);
+    let r = n
+        .tcp
+        .on_segment(c, s, &mq_seg(sp, 1883, 100, 0, 0x02, &[]), 0);
+    assert_eq!(r[0].0[13], 0x12, "SYN-ACK");
+    let isn = u32::from_be_bytes([r[0].0[4], r[0].0[5], r[0].0[6], r[0].0[7]]);
+    let mut p = vec![0x10, 0];
+    p.extend_from_slice(&[0, 4, b'M', b'Q', b'T', b'T', 4, 2, 0, 15, 0, id.len() as u8]);
+    p.extend_from_slice(id.as_bytes());
+    p[1] = (p.len() - 2) as u8;
+    let r = n
+        .tcp
+        .on_segment(c, s, &mq_seg(sp, 1883, 101, isn + 1, 0x18, &p), 10);
+    let rx: Vec<u8> = r.iter().flat_map(|(sg, _)| sg[20..].to_vec()).collect();
+    (101 + p.len() as u32, isn + 1 + rx.len() as u32, rx)
+}
+
+#[test]
+fn mqtt_over_tcp_routes_between_connections() {
+    use super::mqtt::{self, Cmd};
+    let mut n = Net::default();
+    let (c, s) = (net::STA_IP, net::GW_IP);
+    let (sa, aa, rx) = mq_open(&mut n, 1000, "a");
+    assert_eq!(rx, vec![0x20, 2, 0, 0]);
+    let row = n.tcp.rows.last().unwrap();
+    assert_eq!(
+        (row.method.as_str(), row.status.as_str()),
+        ("MQTT", "Connected a")
+    );
+    // A subscribes s/+ (SUBACK comes straight back on A)
+    let sub = [0x82, 8, 0, 1, 0, 3, b's', b'/', b'+', 0];
+    let r = n
+        .tcp
+        .on_segment(c, s, &mq_seg(1000, 1883, sa, aa, 0x18, &sub), 20);
+    assert_eq!(&r[0].0[20..], &[0x90, 3, 0, 1, 0]);
+    let (sa, aa) = (sa + sub.len() as u32, aa + 5);
+    // B publishes s/x: only an ACK for B (QoS 0), A's copy goes to `side`
+    let (sb, ab, _) = mq_open(&mut n, 1001, "b");
+    let publ = mqtt::publish("s/x", b"hi", 0, 0, false);
+    let r = n
+        .tcp
+        .on_segment(c, s, &mq_seg(1001, 1883, sb, ab, 0x18, &publ), 30);
+    assert!(r.iter().all(|(sg, _)| sg.len() == 20), "only an ACK for B");
+    let side = std::mem::take(&mut n.tcp.side);
+    assert_eq!(side.len(), 1);
+    assert_eq!(side[0].0 .1, 1000);
+    assert_eq!(&side[0].1[20..], &publ[..]);
+    // Cloud publish reaches A only
+    let segs = n
+        .tcp
+        .mqtt_publish(&Cmd::parse("pub,s/y,cloud").unwrap(), 40);
+    assert_eq!(segs.len(), 1);
+    assert_eq!(
+        &segs[0].1[20..],
+        &mqtt::publish("s/y", b"cloud", 0, 0, false)[..]
+    );
+    assert!(segs[0]
+        .2
+        .as_deref()
+        .unwrap()
+        .starts_with("[mqtt] PUBLISH cloud s/y"));
+    // A resets: session gone, row closed; ports other than 80 / 1883 are still refused
+    let aa = aa + publ.len() as u32 + segs[0].1.len() as u32 - 20;
+    n.tcp
+        .on_segment(c, s, &mq_seg(1000, 1883, sa, aa, 0x04, &[]), 50);
+    assert_eq!(n.tcp.mqtt.clients(), 1);
+    assert_eq!(n.tcp.rows[0].status, "Closed");
+    let r = n
+        .tcp
+        .on_segment(c, s, &mq_seg(1002, 8883, 1, 0, 0x02, &[]), 60);
+    assert_eq!(r[0].0[13] & 0x04, 0x04, "8883 gets RST");
+}
+
+#[test]
+fn mqtt_keepalive_closes_through_world() {
+    let mut w = World::default();
+    let (_, _, rx) = mq_open(&mut w.net, 1000, "k");
+    assert_eq!(rx, vec![0x20, 2, 0, 0]);
+    assert_eq!(w.next_timer(), Some(22_500_010));
+    let _ = w.poll(22_500_010);
+    assert_eq!(w.net.tcp.mqtt.clients(), 0);
+    assert_eq!(w.next_timer(), None);
+}

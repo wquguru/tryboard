@@ -206,3 +206,16 @@ PHY / 射频：除前面说的 rf_polls 外，`ram_wait_rfpll_cal_end` 轮询 re
 - **脚本动作**：`xz=on|off`、`xz=script,<名>`、`xz=say,<文本>`（对所有已 hello 的会话直接播报，没有就等下一个 hello）、`xz=min,<N>`。日志：每条进 Wi-Fi 空中日志（`--wifi-log` 里是 `AP [xz] …`），CLI 结束时另印 `[tryboard] xiaozhi server: …` 汇总和 `[xz]` 行。
 - **验收**：`cargo test -p tryboard-soc xiaozhi`（hello 字段、顺序、60 ms 节奏、迟到 poll 不漂、N 帧门槛、say 先后、断开后重连换 session、复位、abort、silent、OTA 正文）；accept 用例 `c3-xz-ws`（`--script 0:xz=on`，串口有 hello / stt / tts / 下行 20 帧平均 59 ms，stderr 有 `[xz]` 时序）；现有 41 个网络 / BLE 用例 golden 字节一致。
 - 没做：Protocol-Version 2 / 3 帧头、MQTT + UDP、MCP / `iot` 消息（收到只记「ignored」）、服务端主动 ping、网页面板（F-09b）、真实 Opus 素材（RS-2 §8 第 4 项待人定）。
+
+## 阶段 9：虚拟 MQTT broker（F-08b 遗留：arduino-lib-pubsubclient ✅）
+
+依据 OASIS MQTT 3.1.1 规范自写（没有参考任何 broker 实现的代码）。所有域名都解析到网关，所以 `tryboard.local:1883` 或任何主机名的 1883 端口都由它接。
+
+- **监听**（`tcp.rs`）：SYN 到 1883 和 80 一样回 SYN-ACK（其他端口照旧 RST，8883 / TLS 不做）；1883 连接一开就是长连接，走 WebSocket 那套记账（`on_ws_segment`：窗口、重复 ACK、半关闭、排空后 FIN），收到的字节交给 `Tcp::mqtt: mqtt::Broker`。网络页签每条连接一行：`MQTT mqtt://192.168.4.1:1883`，状态 `Connecting` → `Connected <client id>` → `Closed`。
+- **报文**（`mqtt.rs`，纯状态机）：剩余长度变长编码（1–4 字节，超长 / > 1 MiB 断开），报文可跨段、一段可多报文。CONNECT 只收协议名 `MQTT` + 级别 4（否则 CONNACK 1 后断开），按标志位依次跳过遗嘱 / 用户名 / 口令（不校验），空 client id 分配 `auto-N`，同 id 新连接踢掉旧连接；回 `20 02 00 00`。PUBLISH QoS 0 / 1（QoS 1 回 PUBACK；QoS 2 记日志后断开）；SUBSCRIBE（固定标志 0x2）每个过滤器回授予 QoS（请求 2 授予 1，非法过滤器 0x80）；UNSUBSCRIBE / UNSUBACK；PINGREQ / PINGRESP；DISCONNECT 关连接。CONNECT 之前的任何报文、第二个 CONNECT、未知类型都断开。
+- **路由**：同一 broker 内所有客户端共享主题；`+` 单层、`#` 多层（只能在末尾，`a/#` 也匹配 `a`），首层通配不匹配 `$` 开头主题。每个客户端按匹配到的最高授予 QoS 收一份，下发 QoS = min(发布, 订阅)，QoS 1 下发带 broker 自增包号，客户端的 PUBACK 收下不重传（虚拟网不丢包）。发给别的连接的段放进 `Tcp::side`，`Net` 收进 `pending`，下一次 `World::poll` 送出；发给本连接的随 ACK 立刻回。
+- **retain**：带 RETAIN 的发布存下（空负载删除），新订阅匹配时带 RETAIN 位补发；存储随「互联网」保留，板子复位不清（`Machine::reboot` 搬运），客户端会话随 TCP 连接一起没。
+- **保活**：CONNECT 的 keepalive 秒数 × 1.5 内没有任何报文 → 断开（日志 `keepalive expired`）；`World::next_timer` 报最早期限（没有客户端时为 None，其他用例字节不变）。PubSubClient 默认 15 s 发 PINGREQ，40 s 运行不掉线。
+- **脚本动作**（虚拟云端发布，CLI `--script` / `--inputs` 和网页回放共用 `Machine::net_action`）：`mqtt=pub,<topic>,<payload>`（QoS 0）、`mqtt=pub1,<topic>,<payload>`（QoS 1）、`mqtt=retain,<topic>,<payload>`（保留，空负载清除）；负载取第二个逗号之后全部，可含逗号。日志：Wi-Fi 空中日志里是 `[mqtt] …`，CLI 结束时另印 `[tryboard] mqtt broker: …` 汇总和带时间的 `[mqtt]` 行。
+- **验收**：`cargo test -p tryboard-soc mqtt`（剩余长度边界、通配符、跨段 CONNECT + 同段 SUBSCRIBE/PUBLISH 回显、QoS 1 PUBACK 与降级、UNSUBSCRIBE / PING / DISCONNECT、协议错误断开、retain + 云端发布、保活期限、同 id 接管、TCP 层两连接互发 + RST、经 World 保活断开）；accept 用例 `arduino-lib-pubsubclient`（PubSubClient 2.8：连上 → 订阅 `tryboard/#` → 发布 `tryboard/hello` 收到回显 → 3 s 时 `mqtt=pub,tryboard/in,from cloud` 再收一条）；golden 其余 210 例字节一致。
+- 没做：TLS（8883）、QoS 2、持久会话（clean session=0 也当作 1）、遗嘱消息发布、用户名口令校验、真实网络（C-03）下转发到外部 broker、网页上的 MQTT 发布面板（目前只能经输入日志 / 脚本）。

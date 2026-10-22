@@ -117,6 +117,9 @@ pub const SCAN_MIN_DBM: i32 = -92;
 /// Below this auth / association / data fail (estimate: real chips retry and drop often around -80 dBm)
 pub const LINK_MIN_DBM: i32 = -82;
 
+/// One virtual service's end report: summary line, log tag, (time us, line) entries
+pub type ServiceLog<'a> = (String, &'static str, &'a [(u64, String)]);
+
 impl Default for World {
     fn default() -> Self {
         let aps = vec![
@@ -252,6 +255,19 @@ impl World {
             t.pages.remove(*p);
         }
         self.xz = None;
+    }
+
+    /// (summary, log tag, timed lines) of each virtual service that ran, for the CLI end report
+    pub fn service_logs(&self) -> Vec<ServiceLog<'_>> {
+        let mut v = Vec::new();
+        if let Some(x) = self.xz.as_ref() {
+            v.push((x.summary(), "xz", &x.log[..]));
+        }
+        let mq = &self.net.tcp.mqtt;
+        if !mq.log.is_empty() {
+            v.push((mq.summary(), "mqtt", &mq.log[..]));
+        }
+        v
     }
 
     /// One xiaozhi step: hand inbox events to the server, push what is due into Net::pending; returns `[xz]` notes
@@ -829,7 +845,12 @@ impl World {
                 Some(0)
             }
         });
-        match (ap, xz) {
+        let ap = match (ap, xz) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+        // MQTT broker: earliest keepalive deadline (None without clients, so other runs are unchanged)
+        match (ap, self.net.tcp.mqtt.next_timer()) {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
         }
@@ -849,8 +870,11 @@ impl World {
         let (mut out, mut log) = (Vec::new(), Vec::new());
         self.advance_cond(tsf_us);
         let loss = self.antenna_loss_db;
-        // xiaozhi pushes join pending first so they leave in this same poll
+        // xiaozhi pushes and MQTT keepalive closes join pending first so they leave in this same poll
         log.extend(self.xz_step(tsf_us));
+        if self.net.tcp.mqtt.next_timer().is_some_and(|t| t <= tsf_us) {
+            self.net.mqtt_poll(tsf_us);
+        }
         // Real-network reply (C-03): to the chip via the associated AP (encrypted once WPA2 is up); dropped when not associated
         if !self.net.pending.is_empty() {
             let pend = std::mem::take(&mut self.net.pending);

@@ -4790,12 +4790,25 @@
  {
   "id": "arduino-lib-pubsubclient",
   "seconds": 5,
+  "args": [
+   "--script",
+   "3:mqtt=pub,tryboard/in,from cloud"
+  ],
   "expect": [
    "wifi connected ip=192.168.4.100",
-   "mqtt connect failed rc=-2"
+   "mqtt connected",
+   "mqtt message tryboard/hello hello world",
+   "mqtt message tryboard/in from cloud",
+   "TRYBOARD_OK lib-pubsubclient"
   ],
   "absent": [
-   "TRYBOARD_OK lib-pubsubclient"
+   "mqtt connect failed"
+  ],
+  "stderr_expect": [
+   "[mqtt] CONNECT tryboard-c3 keepalive 15s → CONNACK 0",
+   "[mqtt] SUBSCRIBE tryboard-c3 tryboard/# QoS 0",
+   "[mqtt] PUBLISH tryboard-c3 tryboard/hello QoS 0 \"hello world\" (11 bytes) → 1 subscriber(s)",
+   "[mqtt] PUBLISH cloud tryboard/in QoS 0 \"from cloud\" (10 bytes) → 1 subscriber(s)"
   ]
  },
  {

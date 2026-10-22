@@ -5,6 +5,7 @@
 
 pub mod crypto;
 pub mod frame;
+pub mod mqtt;
 pub mod net;
 pub mod netcond;
 pub mod phone;

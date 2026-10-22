@@ -45,6 +45,7 @@ fn usage() -> ! {
                script actions phone=join,ssid[,pass], phone=open, phone=get,URL, phone=post,URL,form, phone=leave
                script actions realnet=1|0 (the web \"real network\" toggle), netreply=id,status,ms,content type|reason,base64 body (real replies recorded on the web; the CLI never goes online)
                script actions xz=on|off, xz=script,hello|weather|silent, xz=say,<text>, xz=min,<frames> (xiaozhi-style voice server: OTA http://<any>/xiaozhi/ota/ -> ws://tryboard.local/xiaozhi/v1/; log [xz] at the end)
+               script actions mqtt=pub,<topic>,<payload>, mqtt=pub1,... (QoS 1), mqtt=retain,<topic>,<payload> (virtual cloud -> MQTT 3.1.1 broker on <any host>:1883; log [mqtt] at the end)
                [--seed N] (session seed, default 7: ADC noise and which frames a weak / flaky network loses) [--net normal|weak|flaky|offline]
                [--net-fault reboot|dns|silent@<start s>[,<duration s>]] (repeatable, duration default 8); script actions seed=N, net=preset, netfault=kind[,s] (starts at the action time)
                [--encoder A,B[,SW]] (EC11 rotary encoder; script actions enc=+N / enc=-N turn N detents, encsw=1|0 press / release)
@@ -669,7 +670,7 @@ fn run(args: &[String]) {
                     eprintln!("[tryboard] unknown netreply action");
                 }
             } else if let Some(ok) = m.net_action(&act) {
-                // Network conditions (D-01): seed=, net=, netfault= (faults start at the action time)
+                // Network conditions (D-01): seed=, net=, netfault= (faults start at the action time); mqtt= cloud publish
                 if !ok {
                     eprintln!("[tryboard] unknown network action: {act}");
                 }
@@ -1052,10 +1053,10 @@ fn run(args: &[String]) {
             eprintln!("    {:>9.3}s phone {l}", *t as f64 / 1e6);
         }
     }
-    if let Some(x) = m.wifi().world.xz.as_ref() {
-        eprintln!("[tryboard] {}", x.summary());
-        for (t, l) in &x.log {
-            eprintln!("    {:>9.3}s [xz] {l}", *t as f64 / 1e6);
+    for (sum, tag, log) in m.wifi().world.service_logs() {
+        eprintln!("[tryboard] {sum}");
+        for (t, l) in log {
+            eprintln!("    {:>9.3}s [{tag}] {l}", *t as f64 / 1e6);
         }
     }
     report_oled(&mut m, args);
