@@ -131,6 +131,77 @@ const web = await page.evaluate((l, s, p) => globalThis.__tbReplay(l, s, p), log
 const c = cliRun(['--seconds', String(SECS), '--gpio-log', '--ws2812-log', '--pwm-log', String(BUZZER), '--i2c', i2c, '--inputs', inputsFile], 'fp');
 report('web replay and CLI replay fingerprints match', web.fingerprint === c.fp && !web.error, `web ${web.fingerprint} / CLI ${c.fp}`);
 
+// ---- 5. Phone (F-11d): two-finger pinch zooms the lane about the midpoint; zoom buttons keep the track header in view
+const mob = await browser.newPage();
+mob.on('pageerror', (e) => errors.push(`phone: ${e}`));
+mob.on('console', (m) => { if (m.type() === 'error') errors.push(`phone: ${m.text()}`); });
+await mob.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+await mob.goto(base + '/app?work=blank&example=weather#bench', { waitUntil: 'load' });
+await waitFor(mob, () => typeof globalThis.__tbSetScenario === 'function' && !!document.querySelector('#sheetPeek'), null, 30000);
+await mob.evaluate((sc) => globalThis.__tbSetScenario(sc, true), SC);
+await mob.click('#sheetPeek');
+await waitFor(mob, () => document.querySelector('#dock')?.dataset.sheet === 'half', null, 5000);
+await mob.click('#dock [data-dock="scenario"]');
+const laneUp = await waitFor(mob, () => !!document.querySelector('#scenPane [data-scroller] [data-lane]'), null, 10000);
+report('phone: scenario lane in the half-screen drawer', laneUp);
+const view = () => mob.evaluate(() => {
+  const sc = document.querySelector('#scenPane [data-scroller]');
+  const box = sc.closest('[data-vscroll]').getBoundingClientRect();
+  const h = document.querySelector('#scenPane [data-track]').getBoundingClientRect();
+  return {
+    zoom: parseFloat(document.getElementById('scenZoom').textContent),
+    sl: sc.scrollLeft, sw: sc.scrollWidth, left: sc.getBoundingClientRect().left,
+    kf: [...document.querySelectorAll('#scenPane [data-kf]')].map((e) => e.getAttribute('aria-label')).join(' / '),
+    pageX: document.documentElement.scrollWidth,
+    headIn: h.top >= box.top - 1 && h.bottom <= box.bottom + 1 && h.height > 20,
+    // Lane pixels left in view below the (sticky) header
+    laneVis: Math.round(Math.min(box.bottom, sc.getBoundingClientRect().bottom) - Math.max(box.top, h.bottom, sc.getBoundingClientRect().top)),
+    // A visible strip of the lane to put fingers on (inside both the drawer box and the lane)
+    y: (Math.max(box.top, sc.getBoundingClientRect().top) + Math.min(box.bottom, sc.getBoundingClientRect().bottom)) / 2,
+  };
+});
+if (laneUp) {
+  const v0 = await view();
+  const cdp = await mob.createCDPSession();
+  const mid = 160;
+  const pts = (d, shift = 0) => [{ x: mid - d + shift, y: v0.y, id: 0 }, { x: mid + d + shift, y: v0.y, id: 1 }];
+  const frac0 = (v0.sl + mid - v0.left) / v0.sw;
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pts(25) });
+  for (let d = 35; d <= 125; d += 10) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pts(d) });
+    await sleep(30);
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await sleep(300);
+  const v1 = await view();
+  const frac1 = (v1.sl + mid - v1.left) / v1.sw;
+  report('phone: pinch out zooms the lane (≈5×)', v1.zoom > 3.5 && v1.zoom < 6.5, `${v0.zoom}× -> ${v1.zoom}×`);
+  report('phone: the moment under the fingers stays put', Math.abs(frac1 - frac0) < 0.01, `lane fraction ${frac0.toFixed(4)} -> ${frac1.toFixed(4)}`);
+  // The right finger lands on the 3 s keyframe: it joins the pinch instead of dragging the keyframe
+  report('phone: pinch adds or moves no keyframe, page never scrolls sideways', v1.kf === v0.kf && v1.pageX <= 390, `kf ${v0.kf} -> ${v1.kf}, page width ${v1.pageX}`);
+  report('phone: track header still visible after pinch', v1.headIn);
+  // One finger pans the lane sideways inside its own box
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 300, y: v0.y, id: 0 }] });
+  for (let x = 280; x >= 120; x -= 20) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: v0.y, id: 0 }] });
+    await sleep(20);
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await sleep(200);
+  const v2 = await view();
+  report('phone: one finger pans the lane', v2.sl > v1.sl + 100 && v2.zoom === v1.zoom && v2.pageX <= 390, `scrollLeft ${v1.sl} -> ${v2.sl}`);
+  // tap() scrolls the button into view first, like a user reaching below the lane: the header must stay
+  await mob.tap('#scenZoomIn');
+  await sleep(300);
+  const v3 = await view();
+  report('phone: zoom button steps to the next power of two, header and lane stay in view', v3.zoom === 8 && v3.headIn && v3.laneVis >= 100 && v3.pageX <= 390, `${v2.zoom}× -> ${v3.zoom}×, header in view ${v3.headIn}, lane ${v3.laneVis} px visible`);
+  await mob.tap('#scenFit');
+  await sleep(300);
+  const v4 = await view();
+  report('phone: Fit returns to 1× with the header in view', v4.zoom === 1 && v4.headIn);
+  await mob.screenshot({ path: path.join(outDir, 'scenario-phone.png') });
+}
+
 await browser.close();
 server.close();
 if (errors.length) console.log('[scenario] page errors:\n  ' + errors.join('\n  '));

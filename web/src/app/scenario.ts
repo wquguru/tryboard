@@ -379,3 +379,34 @@ export function scenarioStaleAt(ops: { k: string }[], i: number): boolean {
   }
   return false;
 }
+
+// ---- Timeline zoom (F-11d): button steps, pinch and ctrl / ⌘ + wheel share these
+export const ZOOMS = [1, 2, 4, 8, 16, 32];
+export const ZOOM_MIN = ZOOMS[0];
+export const ZOOM_MAX = ZOOMS[ZOOMS.length - 1];
+const clampZoom = (z: number) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+
+/** Next button step from a possibly continuous zoom (pinch leaves values between steps); undefined at the end */
+export function zoomStep(z: number, dir: 1 | -1): number | undefined {
+  return dir > 0 ? ZOOMS.find((s) => s > z + 1e-6) : [...ZOOMS].reverse().find((s) => s < z - 1e-6);
+}
+
+/** Pinch: zoom scales with the finger distance, continuous, clamped to 1–32× */
+export function pinchZoom(z0: number, d0: number, d: number): number {
+  return clampZoom((z0 * d) / Math.max(1, d0));
+}
+
+/** Wheel with ctrl / ⌘ (also what trackpad pinches send): one notch of 100 px ≈ ×1.65 */
+export function wheelZoom(z: number, deltaY: number): number {
+  return clampZoom(z * Math.exp(-deltaY * 0.005));
+}
+
+/** scrollLeft that keeps lane fraction `frac` (a moment in the script) under `px` from the viewport's left edge */
+export function anchorScroll(frac: number, laneW: number, px: number, viewW: number): number {
+  return Math.max(0, Math.min(Math.max(0, laneW - viewW), frac * laneW - px));
+}
+
+/** Label for the zoom readout: integers as is, pinch values with one decimal */
+export function zoomLabel(z: number): string {
+  return Math.abs(z - Math.round(z)) < 0.05 ? String(Math.round(z)) : z.toFixed(1);
+}

@@ -245,7 +245,7 @@
 | F-09c | 语音面板接真麦克风（复用 micinput.ts 的 live 源，录下的音可导出 WAV 供 `--mic` 重放）+ 3D BOOT 与面板按钮电平统一 | xiaozhi.mjs + agent-browser | ☑ 2026-10-21 Voice 页「示例录音 / 我的麦克风」切换（无权限 / 不支持自动退回示例录音并提示）、电平条、「导出这段录音（WAV）」；核心 live 麦克风改成按模拟时间网格落样（`push_live_at`），worker 推送前量化 16 bit 并记录，导出 WAV + 输入日志经 `tryboard run --mic --inputs` 逐字节重放切换后的说话；BOOT 两条路径本来都记 `gpio0=z`，面板改走 `session.pressBoot` 与 3D 同路；xiaozhi.mjs 21 项全过（Chrome 假麦克风），golden 210/210 |
 | F-07c | MicroPython bin 刷新后保留（IndexedDB，复用 tryfile.ts）+ S3 帮助行走查 + 清掉未用的 sendCtrl | micropython.mjs + agent-browser | ☑ 2026-10-21：自带 bin 按 sha256 存本机 IndexedDB `tryboard-bins`（最多 3 个 / 共 24 MB），刷新后按作品自动恢复并照常重发 main.py；换固件菜单「忘掉 …」删本机副本，「最近」里存过的 bin 点一下直接再跑；存不了提示一次后回落现状；`?s=` / `.tryboard` 语义不变；micropython.mjs 14/14（新增上传 → 刷新 → 不重传运行、忘掉 → 刷新回默认）；`Reviews/ab/F-07c.md` |
 | F-07d | 换固件菜单「最近」：忘掉的 bin 不再列出（或标出要重新选文件）、按当前芯片过滤自带 bin | micropython.mjs + agent-browser | ☑ 2026-10-22：忘掉或被淘汰（3 个 / 24 MB）的 bin 从「最近」移除（菜单打开时对照 IndexedDB 键清理，忘掉时立即清）；文件条目记下上传时芯片，按菜单当前芯片过滤，旧条目无芯片照常显示；逻辑抽到 `web/src/app/recentfw.ts`（单测 3 条 + `keptKeys` 1 条）；micropython.mjs 16/16（新增忘掉前在 / 忘掉后不在「最近」）；`Reviews/ab/F-07d.md` |
-| F-11d | 环境脚本：双指缩放（手机）+ 手机半屏抽屉点缩放后轨道头不被滚出视野 | scenario.mjs + mobile.mjs + agent-browser | ☐ 波 8 |
+| F-11d | 环境脚本：双指缩放（手机）+ 手机半屏抽屉点缩放后轨道头不被滚出视野 | scenario.mjs + mobile.mjs + agent-browser | ☑ 波 8（双指以中点为锚连续缩放 1–32×、单指横向平移、ctrl / ⌘ + 滚轮；手机整个面板一起纵向滚动 + 轨道头吸顶；Reviews/ab/F-11d.md） |
 | F-03c | embed.mjs 原速回放检查改按模拟时间取样（页面暴露模拟时刻钩子），负载下不再偶发失败；不放宽判定 | embed.mjs 连跑 5 次 + 加压下跑 | ☑ 波 8（嵌入页回放期 `__tbEmbed.trace` 逐 tick 记 [模拟秒, 串口片段, 室温]；5 次 + 3 进程加压 3 次全 PASS） |
 | F-08d | ESP32Servo / IRremote 许可证证据整理（上游提交、文件头、作者声明），写 LICENSING_REVIEW.md；结论待人核 | 文档 | ☑ 波 8（证据已整理，结论待人） |
 
