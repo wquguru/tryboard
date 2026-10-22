@@ -46,7 +46,8 @@ for (const f of fs.readdirSync(dist).filter((x) => x.endsWith('.html')).sort()) 
   const html = fs.readFileSync(path.join(dist, f), 'utf8');
   const miss = NEED.filter((k) => !new RegExp(`<meta[^>]+(?:property|name)="${k}"[^>]+content="[^"]+"`).test(html));
   const img = /<meta[^>]+property="og:image"[^>]+content="([^"]+)"/.exec(html)?.[1];
-  const imgOk = !!img && fs.existsSync(path.join(dist, img));
+  // Absolute on the site domain (crawlers need it); the file itself is checked in dist
+  const imgOk = !!img && img.startsWith('https://tryboard.indaloop.app/') && fs.existsSync(path.join(dist, new URL(img).pathname));
   const large = /name="twitter:card"[^>]+content="summary_large_image"/.test(html);
   const ok = !miss.length && imgOk && large;
   console.log(`[og] ${f}: ${ok ? 'PASS' : 'FAIL'}${miss.length ? `  missing ${miss.join(' ')}` : ''}${imgOk ? '' : `  og:image ${img ?? 'none'} does not exist`}${large ? '' : '  twitter:card is not summary_large_image'}`);

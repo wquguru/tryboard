@@ -39,12 +39,12 @@ export function page({ title, description, css, href, label, main, head = '', sc
     <script>try{var t=localStorage.getItem('tb-theme')}catch(e){}document.documentElement.dataset.theme=t==='dark'||t==='light'?t:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'</script>
     <title>${esc(title)}</title>
     <meta name="description" content="${esc(description)}" />
-    <!-- Share card (DESIGN_V2 §8.5): og.png is rendered at build time by tools/webtest/og.mjs; make og:image absolute once the domain is set -->
+    <!-- Share card (DESIGN_V2 §8.5): og.png is rendered at build time by tools/webtest/og.mjs; og:image is absolute on the site domain (DECISIONS 2026-10-22) -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="TryBoard" />
     <meta property="og:title" content="${esc(title)}" />
     <meta property="og:description" content="${esc(description)}" />
-    <meta property="og:image" content="./og.png" />
+    <meta property="og:image" content="https://tryboard.indaloop.app/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />

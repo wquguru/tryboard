@@ -13,8 +13,8 @@ const out = path.resolve(root, arg('--out', 'web/changelog.html'));
 const pub = path.resolve(root, arg('--pub', 'web/public'));
 const web = path.join(root, 'web');
 const today = new Date().toISOString().slice(0, 10);
-// Domain is not decided yet (DECISIONS 2026-10-22 F-12): set TRYBOARD_SITE_URL before going live
-const SITE = (process.env.TRYBOARD_SITE_URL || 'https://tryboard.example').replace(/\/+$/, '');
+// Site domain decided 2026-10-22 (DECISIONS); TRYBOARD_SITE_URL overrides it, e.g. for a staging host
+const SITE = (process.env.TRYBOARD_SITE_URL || 'https://tryboard.indaloop.app').replace(/\/+$/, '');
 
 // ---- Minimal YAML: `entries:` then `- key: value` items; values are scalars or [a, b] flow lists
 function parseYaml(text) {
@@ -250,5 +250,4 @@ fs.mkdirSync(pub, { recursive: true });
 fs.writeFileSync(path.join(pub, 'changelog.xml'), atom);
 fs.writeFileSync(path.join(pub, 'sitemap.xml'), sitemap);
 fs.writeFileSync(path.join(pub, 'robots.txt'), robots);
-if (!process.env.TRYBOARD_SITE_URL) console.warn(`[changelog] warning: TRYBOARD_SITE_URL is not set; canonical / feed / sitemap use the placeholder ${SITE}`);
 console.log(`[changelog] wrote ${path.relative(root, out)} (${list.length} entries, newest ${newest}), changelog.xml, sitemap.xml (${PUBLIC.length} pages: ${PUBLIC.join(' ')}), robots.txt`);

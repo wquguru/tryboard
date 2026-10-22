@@ -1557,6 +1557,14 @@
 - 审核规则（违规 exit 2 并逐条列出）：未知 tag（new / improve / announce / removed）、缺字段、未知芯片标、日期不是 YYYY-MM-DD、title > 60 字符、desc > 200 字符、标题以 Fix / Fixed / Refactor 开头、出现内部术语（PLAN ID 形如 F-08g / U-07 / M5-09、wasm、worker、HLE、golden、accept、fingerprint、MMIO、VHCI、R-xx 等）、link 不是站内路径、指向不存在的入口、`example=` 不在 `firmware/examples.json`、`work=` 不是 `WorkId`。规则思路借鉴自有项目 newshub 的发布前审核（同一作者，无授权问题，未复制代码）。
 - 公开入口页 = `/`（index.html）、`/select`、`/app`、`/licenses`、`/changelog`；`home` / `advisor` / `levels` 是旧地址跳转页，`embed` 只给 iframe 用，审核拒绝链到它们，sitemap 也不列。lastmod：changelog 取最新条目日期，licenses 取构建日，其余取该 html 在 git 的最后提交日期（取不到用构建日）。
 - 页面只做英文，与授权页一致：I18N.md §1 规定 `tools/*.mjs` 的输出只用英文，构建期生成的静态页没有 `t()` 运行时（授权页同样在页面上注明 "generated in English only"）；页脚入口文案走 `t()` 四语。
-- 站点地址未定：`TRYBOARD_SITE_URL` 环境变量，缺省占位 `https://tryboard.example`；canonical、Atom、sitemap、robots 都用它。**上线前必须设置**（否则搜索引擎拿到的是占位域名）。
+- 站点地址未定：`TRYBOARD_SITE_URL` 环境变量，缺省占位 `https://tryboard.example`；canonical、Atom、sitemap、robots 都用它。**上线前必须设置**（否则搜索引擎拿到的是占位域名）。（2026-10-22 已定域名，缺省改为 `https://tryboard.indaloop.app`，见「站点域名」条）
 - 页头 / 手机抽屉 / 页脚 / 主题脚本抽到 `tools/static_shell.mjs`，授权页与更新日志页共用（各自的 css 都 `@source` 它）；不再复制第三份。
 - 备选：用 js-yaml（多一个依赖，否决）；做成 React 页（首屏要等 JS，SEO 与授权页不一致，否决）；RSS 2.0（Atom 的 id / updated 语义更清楚，否决）。
+
+## 2026-10-22 站点域名 tryboard.indaloop.app（人决定）
+- 决定：站点用 `https://tryboard.indaloop.app`（人已有 indaloop.app；indaloop 为出品方，tryboard 为产品子域名）。个人品牌域名 wqu.guru 不作站点主域名，只用于作者链接 / 开发日志等，链回本站。
+- 代码：`tools/gen_changelog.mjs` 缺省 SITE 改为该域名（`TRYBOARD_SITE_URL` 仍可覆盖，比如预发布地址），去掉“未设置”告警；全部入口页和 `tools/static_shell.mjs` 的 `og:image` 改为绝对地址 `https://tryboard.indaloop.app/og.png`（抓取方多数只认绝对地址）；`tools/webtest/og.mjs` 检查 og:image 必须在该域名下且 dist 里有对应文件。
+- 分享链接、二维码、嵌入页仍用 `location.origin`，不写死域名。
+- 理由：.app 在 HSTS 预加载列表里，强制 HTTPS，本站本来就需要（wasm、麦克风、剪贴板）；子域名表达出品方 / 产品层级，以后换独立域名只改一处常量和这些 meta。
+- 未做（需人）：DNS 绑定、托管平台配置、上线部署。
+- 备选：tryboard.indaloop.dev（人不持有 .dev）；tryboard.wqu.guru（个人品牌不像产品，否决）；独立域名 tryboard.app / .dev（未查可注册性，留待用户量起来再议）。
