@@ -1,0 +1,4 @@
+/* Changelog page (F-12): static HTML from tools/gen_changelog.mjs on the shared shell (tools/static_shell.mjs), same Tailwind theme. */
+@import '../ui/tailwind.css';
+@source '../../../tools/gen_changelog.mjs';
+@source '../../../tools/static_shell.mjs';

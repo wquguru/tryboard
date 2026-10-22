@@ -1,0 +1,121 @@
+# Public changelog (F-12): tools/gen_changelog.mjs turns this into /changelog, changelog.xml and sitemap.xml.
+# Write for readers, newest first: what they can try now, not how it was built. The generator audits every entry.
+# tag: new | improve | announce | removed; chips: C3, S3, ESP32, Arduino; link: an in-site path; cta: link text.
+entries:
+  - date: 2026-10-22
+    tag: new
+    chips: [C3, Arduino]
+    title: MQTT publish panel in the Network tab
+    desc: Send a message to your board as if it came from the cloud, pick QoS 0, QoS 1 or retain, and watch the built-in broker log every subscribe and publish.
+    link: /app?work=blank&example=arduino-lib-pubsubclient#bench
+    cta: Open the MQTT example
+
+  - date: 2026-10-22
+    tag: new
+    chips: [C3, Arduino]
+    title: Receive IR remote codes with IRremote
+    desc: The IRremote receive demo runs on ESP32-C3 with the receiver on GPIO5. Press keys on the bench remote and the sketch prints each decoded NEC code.
+    link: /app?work=blank&example=arduino-lib-irremote-rx#bench
+    cta: Try the receiver sketch
+
+  - date: 2026-10-22
+    tag: new
+    chips: [ESP32, C3, S3]
+    title: IR receiver and IR LED parts with a bench remote
+    desc: Place a VS1838B-style receiver and a 940 nm IR LED on the bench, then press keys on a 21-key remote to send NEC codes to your firmware.
+    link: /app?work=blank&example=esp32-ir#bench
+    cta: Open the IR example
+
+  - date: 2026-10-21
+    tag: new
+    chips: [C3, S3]
+    title: Script the room with an environment timeline
+    desc: Drag keyframes to change temperature, humidity and network quality over time. Edits can be undone, the view follows playback, and you can pinch to zoom.
+    link: /app?work=weather#bench
+    cta: Open the weather station
+
+  - date: 2026-10-21
+    tag: new
+    chips: [S3]
+    title: Talk to a voice assistant example
+    desc: A xiaozhi-compatible voice assistant runs against a scripted voice server. Speak with a sample recording or your own microphone and export the clip.
+    link: /app?work=blank&example=s3-xiaozhi-lite#bench
+    cta: Open the voice assistant
+
+  - date: 2026-10-21
+    tag: new
+    chips: [C3]
+    title: Edit and run MicroPython in the Lab
+    desc: Upload the official MicroPython build for ESP32-C3, edit main.py in the Lab and run it. Your build stays in this browser after a reload.
+    link: /app?work=blank#bench
+    cta: Open the Lab
+
+  - date: 2026-10-20
+    tag: new
+    chips: [ESP32, S3]
+    title: 12 M5Stack boards with 3D cases
+    desc: Pick an M5Stack board preset, such as StickC Plus2, Core2, AtomS3, Dial, Cardputer or CoreS3, and its screen, buttons and LEDs appear on a case drawn to size.
+    link: /app?work=blank#bench
+    cta: Open the Lab
+
+  - date: 2026-10-20
+    tag: new
+    chips: [C3, S3]
+    title: Share links and QR code cards
+    desc: Copy a link that reopens your bench as you left it, or save a short video card with a QR code that points to the same link.
+    link: /app?work=blank#bench
+    cta: Open the Lab
+
+  - date: 2026-10-20
+    tag: new
+    chips: [C3, ESP32]
+    title: Colour TFT screens, plus the CYD board
+    desc: ILI9341 and ST7789 colour screens and the SH1106 OLED work on the bench. The ESP32-2432S028 "Cheap Yellow Display" with touch runs in the command-line simulator.
+    link: /app?work=blank&example=c3-ili9341-temp#bench
+    cta: Open the TFT example
+
+  - date: 2026-10-20
+    tag: improve
+    chips: [S3, ESP32]
+    title: Faster first load for ESP32-S3 and ESP32 projects
+    desc: The chip ROM files the page downloads are about a third smaller (ESP32-S3 went from 950 KB to 620 KB), so S3 and classic ESP32 projects start sooner.
+    link: /app?work=blank&example=s3-blink#bench
+    cta: Open an S3 example
+
+  - date: 2026-10-19
+    tag: new
+    chips: [C3]
+    title: Bluetooth LE with a virtual phone
+    desc: A NimBLE heart-rate strap advertises to a phone in the browser. Scan, connect, read and subscribe, and watch the radio log as it happens.
+    link: /app?work=blank&example=c3-ble-hr#bench
+    cta: Open the Bluetooth example
+
+  - date: 2026-10-19
+    tag: improve
+    title: Clearer board picker results
+    desc: Result cards lead with a plain-language verdict, group checks by part and keep the raw numbers one tap away.
+    link: /select
+    cta: Pick a board
+
+  - date: 2026-10-17
+    tag: announce
+    title: New logo and one header across the site
+    desc: TryBoard has a new logo, and every page now shares the same header, menu and dark mode switch, on desktop and on phones.
+    link: /
+    cta: Visit the home page
+
+  - date: 2026-10-16
+    tag: new
+    chips: [C3, S3]
+    title: Board library with 9 development boards
+    desc: The board picker compares 9 boards, including Seeed XIAO, M5Stack AtomS3 and Waveshare round-LCD boards, and warns where board revisions differ.
+    link: /select
+    cta: Pick a board
+
+  - date: 2026-10-15
+    tag: announce
+    chips: [C3]
+    title: TryBoard runs real ESP32-C3 firmware
+    desc: The simulator boots unmodified ESP-IDF builds for ESP32-C3 and drives a 3D board in your browser. Start with Blink, no board needed.
+    link: /app?work=blank&example=blink#bench
+    cta: Run Blink

@@ -7,6 +7,9 @@ import type { StepId } from '../app/types';
 export const HOME = './';
 export const SELECT = './select';
 export const LICENSES = './licenses';
+/** Static changelog page and its Atom feed (F-12, tools/gen_changelog.mjs) */
+export const CHANGELOG = './changelog';
+export const CHANGELOG_FEED = './changelog.xml';
 
 /** Lab URL for one step of a work; cp selects a checkpoint, example opens a sample on the blank work. */
 export function lab(work: string, step: StepId = 'bench', opt: { cp?: string; example?: string } = {}): string {

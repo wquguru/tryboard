@@ -43,6 +43,17 @@
   Cache-Control: no-cache
 /licenses
   Cache-Control: no-cache
+# F-12 changelog page, Atom feed and crawler files: regenerated every build, so always revalidate
+/changelog.html
+  Cache-Control: no-cache
+/changelog
+  Cache-Control: no-cache
+/changelog.xml
+  Cache-Control: no-cache
+/sitemap.xml
+  Cache-Control: no-cache
+/robots.txt
+  Cache-Control: no-cache
 # F-03 embed page: any site may frame it (other pages keep the host default); one block per path, as above
 /embed.html
   Cache-Control: no-cache

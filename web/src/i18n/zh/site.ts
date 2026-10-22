@@ -13,6 +13,8 @@ const d: Dict = {
   "Current page": "当前页",
   "On a phone you can watch, tweak values and press buttons; wiring and swapping firmware work best on a computer.": "手机上可查看、调参数和按按键；连线和换固件建议用电脑。",
   "Licenses & credits": "授权与致谢",
+  "Changelog": "更新日志",
+  "Atom feed": "Atom 订阅",
   "Projects": "作品",
   "Pick a board": "选板",
   "Make a parts list and check prices; no need to buy yet": "列清单、看参考价，先不用真买",

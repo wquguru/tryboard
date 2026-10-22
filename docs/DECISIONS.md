@@ -1550,3 +1550,13 @@
 - 送达方式做成三选一（QoS 0 / QoS 1 / retain），与 `Cmd::parse` 的 `pub|pub1|retain` 一一对应，而不是 QoS × retain 两个开关（内核 retain 只发 QoS 0）。
 - 备选：照 `tb_ir_events` 另加 `tb_mqtt_log`（多一个导出和一套轮询，且 take 语义不适合可回看的日志，否决）；面板放进「请求」视图左栏（与网络条件挤在一起，手机上太长，否决，改为单独的 MQTT 视图，只在固件连过 1883 后出现）。
 
+
+## 2026-10-22 F-12：静态更新日志页 + Atom + sitemap + robots（自主实现决定）
+- 数据放 `web/changelog.yaml`（进 git，人手写），构建期 `tools/gen_changelog.mjs`（`build_web.sh` 在 `gen_licenses.mjs` 之后调用）生成 `web/changelog.html`、`web/public/changelog.xml`（Atom 1.0）、`web/public/sitemap.xml`、`web/public/robots.txt`，四个都是生成物、不进 git（robots 的 `Sitemap:` 行带站点地址，所以也生成）。
+- YAML 手写最小解析（只认 `entries:` 下的 `- key: value` 列表、`[a, b]` 行内数组、整行 `#` 注释；按第一个 `: ` 切键值，标题里的冒号不受影响；其它写法直接报错），不加 npm 依赖。
+- 审核规则（违规 exit 2 并逐条列出）：未知 tag（new / improve / announce / removed）、缺字段、未知芯片标、日期不是 YYYY-MM-DD、title > 60 字符、desc > 200 字符、标题以 Fix / Fixed / Refactor 开头、出现内部术语（PLAN ID 形如 F-08g / U-07 / M5-09、wasm、worker、HLE、golden、accept、fingerprint、MMIO、VHCI、R-xx 等）、link 不是站内路径、指向不存在的入口、`example=` 不在 `firmware/examples.json`、`work=` 不是 `WorkId`。规则思路借鉴自有项目 newshub 的发布前审核（同一作者，无授权问题，未复制代码）。
+- 公开入口页 = `/`（index.html）、`/select`、`/app`、`/licenses`、`/changelog`；`home` / `advisor` / `levels` 是旧地址跳转页，`embed` 只给 iframe 用，审核拒绝链到它们，sitemap 也不列。lastmod：changelog 取最新条目日期，licenses 取构建日，其余取该 html 在 git 的最后提交日期（取不到用构建日）。
+- 页面只做英文，与授权页一致：I18N.md §1 规定 `tools/*.mjs` 的输出只用英文，构建期生成的静态页没有 `t()` 运行时（授权页同样在页面上注明 "generated in English only"）；页脚入口文案走 `t()` 四语。
+- 站点地址未定：`TRYBOARD_SITE_URL` 环境变量，缺省占位 `https://tryboard.example`；canonical、Atom、sitemap、robots 都用它。**上线前必须设置**（否则搜索引擎拿到的是占位域名）。
+- 页头 / 手机抽屉 / 页脚 / 主题脚本抽到 `tools/static_shell.mjs`，授权页与更新日志页共用（各自的 css 都 `@source` 它）；不再复制第三份。
+- 备选：用 js-yaml（多一个依赖，否决）；做成 React 页（首屏要等 JS，SEO 与授权页不一致，否决）；RSS 2.0（Atom 的 id / updated 语义更清楚，否决）。

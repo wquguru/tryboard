@@ -20,6 +20,10 @@
 /web/licenses.html
 /web/public/THIRD_PARTY_NOTICES.txt
 /web/public/tryboard.spdx.json
+/web/changelog.html
+/web/public/changelog.xml
+/web/public/sitemap.xml
+/web/public/robots.txt
 /assets/models/*/src/
 /tools/models/node_modules
 /web/public/audio/
