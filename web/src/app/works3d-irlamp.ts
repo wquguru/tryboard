@@ -102,8 +102,8 @@ export function buildLampShell(c: LampCtx) {
 
 export interface IrlampCtx extends LampCtx {
   hits: THREE.Object3D[];
-  /** A remote key clicked: NEC script code (FF00,BA45); not called while the receiver sits behind the opaque wall */
-  onKey?(code: string): void;
+  /** A remote key pressed (NEC command byte); returns the release. Not called while the receiver sits behind the opaque wall */
+  onKey?(cmd: number): (() => void) | void;
 }
 
 /** Remote face texture: 400 x 860 px for 4.0 x 8.6 cm, 3 x 7 keys at 1.2 / 1.0 cm pitch below a 1.5 cm head */
@@ -206,14 +206,19 @@ export function buildIrlamp(c: IrlampCtx) {
 
   let lastKey = '';
   let flash = 0;
+  let release: (() => void) | void;
   const onDown = (hit: THREE.Object3D) => {
     const i = keyHits.indexOf(hit as THREE.Mesh);
     if (i < 0) return false;
     lastKey = irCode(IR_KEYS[i][1]);
     press.position.copy(keyHits[i].position).setY(0.71);
     flash = 1;
-    if (!c.effects().irBlock) c.onKey?.(lastKey);
+    if (!c.effects().irBlock) release = c.onKey?.(IR_KEYS[i][1]);
     return true;
+  };
+  const onUp = () => {
+    release?.();
+    release = undefined;
   };
   const tick = (f: WorkFrame, dt: number) => {
     paint(f);
@@ -226,5 +231,5 @@ export function buildIrlamp(c: IrlampCtx) {
     beamMat.opacity = flash * 0.45;
   };
   // Key "3" (blue) is the test handle
-  return { tick, onDown, handle: keyHits[IR_KEYS.findIndex(([l]) => l === '3')], key: () => lastKey };
+  return { tick, onDown, onUp, handle: keyHits[IR_KEYS.findIndex(([l]) => l === '3')], key: () => lastKey };
 }

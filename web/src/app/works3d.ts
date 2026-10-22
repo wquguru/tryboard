@@ -48,8 +48,8 @@ export interface WorkProductOptions {
   onCard?(uid: string): void;
   /** door: UID currently on the reader ('' = none) */
   card?(): string;
-  /** irlamp: a remote key clicked (NEC script code such as FF00,BA45) */
-  onKey?(code: string): void;
+  /** irlamp: a remote key pressed (NEC command byte); the returned release ends the hold (repeat codes) */
+  onKey?(cmd: number): (() => void) | void;
 }
 
 export interface WorkProduct3D {
@@ -420,10 +420,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     };
   } else if (o.kind === 'irlamp') {
     const d = buildIrlamp({ scene, shellMat, occluders, tag, tagList, hits, onKey: o.onKey, effects: o.effects });
-    tick = (f, dt) => d.tick(f, dt);
-    onDown = (hit) => d.onDown(hit);
-    handle = d.handle;
-    irKey = d.key;
+    ({ tick, onDown, onUp, handle, key: irKey } = d);
   } else if (o.kind === 'door') {
     const d = buildDoor({ scene, shellMat, tag, tagList, hits, occluders, oled: oledTexture(), paintOled, onCard: o.onCard, card: o.card, effects: o.effects });
     tick = (f, dt) => d.tick(f, dt);

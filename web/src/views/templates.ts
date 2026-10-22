@@ -5,6 +5,7 @@ import type { LiveFrame } from './common';
 import { createProductView, type ProductHandlers } from './product';
 import { createLensProduct, createSpinProduct } from './lcdproducts';
 import { createDoorProduct } from './doorproduct';
+import { createIrlampProduct } from './irlampproduct';
 import { createLampProduct, createRulerProduct, createTiltProduct, type WorkEffects } from './workproducts';
 import { createKeypadView } from './keypad';
 import { CHIP_HEAT_OFFSET } from './chipheat';
@@ -439,7 +440,7 @@ export const IRLAMP: Template = {
   ],
   effects: (s) => ({ glare: s.choice.strip === 'B', irBlock: s.choice.irrx === 'B' }),
   // Same strip on GPIO5 as the knob lamp; G-04b's irlamp product view replaces this after the merge
-  product: (el) => createLampProduct(el, { pin: 5 }),
+  product: (el, h) => createIrlampProduct(el, { pin: 5, send: h.ir }),
 };
 
 export const TEMPLATES: Record<string, Template> = { weather: WEATHER, spin: SPIN, lens: LENS, usbkey: USBKEY, lamp: LAMP, ruler: RULER, tilt: TILT, door: DOOR, irlamp: IRLAMP };
