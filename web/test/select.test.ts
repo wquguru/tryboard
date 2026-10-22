@@ -88,3 +88,12 @@ test('advisor and shop (custom) agree on parts: both decode from the URL and mus
       assert.deepEqual(b, [...new Set(a)].sort(), `${t.id} ${JSON.stringify(extra)}`);
     }
 });
+
+test('every template example id exists in firmware/examples.json', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { TEMPLATES } = await import('../src/advisor/data.ts');
+  const raw = JSON.parse(readFileSync(new URL('../../firmware/examples.json', import.meta.url), 'utf8'));
+  const ids = new Set<string>((Array.isArray(raw) ? raw : (raw.examples ?? Object.values(raw))).map((e: { id: string }) => e.id));
+  for (const t of TEMPLATES) for (const id of t.examples) assert.ok(ids.has(id), `${t.id}: unknown example ${id}`);
+  for (const id of ['rfid', 'irremote', 'mqtt', 'blephone']) assert.ok(TEMPLATES.some((t) => t.id === id), id);
+});

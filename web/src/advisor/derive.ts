@@ -10,7 +10,7 @@ import { t } from '../i18n/index.ts';
 export const MORE_CAPS: Cap[] = ['ble', 'bt_classic', 'thread', 'zigbee', 'wifi6', 'usb_otg', 'camera', 'audio_in', 'audio_out', 'psram', 'display_rgb', 'touch', 'dac', 'ethernet'];
 export const BUDGETS: Budget[] = [0, 60, 120, 200];
 /** Project card order: first 3 are big cards (all have full projects), the rest go under "More" */
-export const TEMPLATE_ORDER = ['weather', 'lights', 'usbkey', 'blink', 'smarthome', 'voice', 'camera', 'btaudio'];
+export const TEMPLATE_ORDER = ['weather', 'lights', 'usbkey', 'blink', 'smarthome', 'rfid', 'irremote', 'mqtt', 'blephone', 'voice', 'camera', 'btaudio'];
 
 const DEFAULT_T = 'weather';
 const NET_CAPS: Cap[] = ['wifi', 'ble'];
