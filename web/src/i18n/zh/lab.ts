@@ -1100,5 +1100,12 @@ const d: Dict = {
   "Each key sends one NEC frame (address 0x00) to the receiver; the input log records it as ir=ADDR,CMD and replays it. Receiver timing uses typical values; not calibrated on real hardware.": "每个按键向接收头发一帧 NEC（地址 0x00）；输入日志记为 ir=ADDR,CMD，可重放。接收时序取典型值，未经真机校准。",
   "Decoded from the IR LED": "从红外发射管解出",
   "Nothing sent yet: the eye decodes NEC frames the firmware sends through the LED.": "还没有发射：固件通过 LED 发出的 NEC 帧会在这里解出。",
+  "Share": "分享",
+  "Developer tools": "开发者工具",
+  "Settings": "设置",
+  "Share this bench…": "分享这个台面…",
+  "Link, share card or .tryboard file": "链接、分享卡或 .tryboard 文件",
+  "Input log · AI task brief · Real network": "输入日志 · AI 任务书 · 真实网络",
+  "Back": "返回",
 };
 export default d;

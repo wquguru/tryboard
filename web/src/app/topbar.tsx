@@ -9,6 +9,7 @@ import { decode, encode } from '../advisor/state';
 import { FwMenu, openFwMenu } from './fwmenu';
 import { RealnetSwitch, toggleRealnet, useRealnet } from './realnet';
 import { NetCondChip } from './netcond';
+import { MoreSheet } from './moresheet';
 import { CmdkBox } from './cmdkview';
 import { Icon } from './icons';
 import { useStore } from './react';
@@ -280,27 +281,33 @@ function RunGroup({ bench }: { bench: boolean }) {
   );
 }
 
-/** phone: the ⋯ on the right of the phone top bar (44 px button, wide menu, plus theme / language / firmware that don't fit there) */
-export function MoreMenu({ toast, phone }: { toast: (msg: string) => void; phone?: boolean }) {
+/** Copy the plain page URL (work + step only) and report the result in a toast */
+export function copyPageLink(toast: (msg: string) => void) {
+  void navigator.clipboard?.writeText(location.href).then(
+    () => toast(t('Link to this page copied (work and step only; your changes stay on this device)')),
+    () => toast(t('Copy failed: the browser blocked clipboard access')),
+  );
+}
+
+/** phone: grouped bottom sheet (moresheet.tsx, DESIGN_V2 §10.1); desktop: the dropdown below */
+export function MoreMenu({ toast, phone, name }: { toast: (msg: string) => void; phone?: boolean; name?: string }) {
+  return phone ? <MoreSheet toast={toast} name={name} /> : <MoreDropdown toast={toast} />;
+}
+
+function MoreDropdown({ toast }: { toast: (msg: string) => void }) {
   const { open, setOpen, ref } = usePop();
-  const [dark, setDark] = useState(currentTheme() === 'dark');
   const realnet = useRealnet();
-  useEffect(() => {
-    if (!phone) return;
-    const off = onTheme((th) => setDark(th === 'dark'));
-    return () => void off();
-  }, [phone]);
   const go = (fn: () => void) => () => {
     setOpen(false);
     fn();
   };
   return (
     <div ref={ref} className="relative flex-none">
-      <button type="button" id="moreBtn" className={cn(ib, phone && 'size-11')} aria-haspopup="menu" aria-expanded={open} aria-label={t('More: share, export input log, task brief for AI')} title={t('More')} onClick={() => setOpen(!open)}>
+      <button type="button" id="moreBtn" className={ib} aria-haspopup="menu" aria-expanded={open} aria-label={t('More: share, export input log, task brief for AI')} title={t('More')} onClick={() => setOpen(!open)}>
         <Icon n="more" />
       </button>
       {open && (
-        <div role="menu" id="moreMenu" className={cn(menuPanel, 'right-0 w-[280px]', phone && 'fixed top-12 right-2 w-[min(300px,calc(100vw-16px))] [&_button]:min-h-11')}>
+        <div role="menu" id="moreMenu" className={cn(menuPanel, 'right-0 w-[280px]')}>
           <button type="button" role="menuitem" data-more="share" className={menuItem} disabled={!actions.share} onClick={go(() => actions.share?.())}>
             <Icon n="ext" size={15} />
             <span className="flex-1">
@@ -327,12 +334,7 @@ export function MoreMenu({ toast, phone }: { toast: (msg: string) => void; phone
             role="menuitem"
             data-more="link"
             className={menuItem}
-            onClick={go(() => {
-              void navigator.clipboard?.writeText(location.href).then(
-                () => toast(t('Link to this page copied (work and step only; your changes stay on this device)')),
-                () => toast(t('Copy failed: the browser blocked clipboard access')),
-              );
-            })}
+            onClick={go(() => copyPageLink(toast))}
           >
             <Icon n="link" size={15} />
             <span className="flex-1">
@@ -354,13 +356,13 @@ export function MoreMenu({ toast, phone }: { toast: (msg: string) => void; phone
               <span className="block text-[11px] text-muted">{t('Goal, wiring and check command of the current checkpoint')}</span>
             </span>
           </button>
-          {/* Real network (C-03): hidden on narrow desktops (≤ 1100px) and absent on phones, so both enter from ⋯ */}
+          {/* Real network (C-03): hidden on narrow desktops (≤ 1100px), so it enters from ⋯ there */}
           <button
             type="button"
             role="menuitemcheckbox"
             aria-checked={realnet}
             data-more="realnet"
-            className={cn(menuItem, !phone && 'min-[1101px]:hidden')}
+            className={cn(menuItem, 'min-[1101px]:hidden')}
             onClick={go(toggleRealnet)}
           >
             <Icon n="link" size={15} />
@@ -369,14 +371,13 @@ export function MoreMenu({ toast, phone }: { toast: (msg: string) => void; phone
               <span className="block text-[11px] text-muted">{realnet ? t('Tap to go back to the virtual network') : t("The chip's HTTP requests really go out through the browser")}</span>
             </span>
           </button>
-          {/* Firmware: no room on the phone bar, and narrow desktops (≤ 1100px) hide the top-bar menu, so both enter from ⋯ */}
+          {/* Firmware: narrow desktops (≤ 1100px) hide the top-bar menu, so it enters from ⋯ there */}
           <button
             type="button"
             role="menuitem"
-            id={phone ? 'swapFw' : undefined}
             data-more="fw"
             data-fw-open=""
-            className={cn(menuItem, !phone && 'min-[1101px]:hidden')}
+            className={cn(menuItem, 'min-[1101px]:hidden')}
             disabled={!actions.pickFirmware}
             onClick={go(openFwMenu)}
           >
@@ -386,18 +387,6 @@ export function MoreMenu({ toast, phone }: { toast: (msg: string) => void; phone
               <span className="block text-[11px] text-muted">{t('Examples, reference firmware or your own .bin')}</span>
             </span>
           </button>
-          {phone && (
-            <>
-              <button type="button" role="menuitem" data-more="theme" className={cn(menuItem, 'theme-btn')} aria-pressed={dark} onClick={go(() => setTheme(dark ? 'light' : 'dark'))}>
-                <Icon n={dark ? 'moon' : 'sun'} size={15} />
-                <span className="flex-1">{dark ? t('Switch to light') : t('Switch to dark')}</span>
-              </button>
-              <div role="none" data-more="lang" className="flex min-h-11 items-center gap-2 px-2.5 py-1">
-                <span className="flex-1">{t('Language')}</span>
-                <LangSelect className="min-w-[150px] [&_select]:w-full" />
-              </div>
-            </>
-          )}
           <div className="my-1 h-px bg-line" />
           <a role="menuitem" data-more="licenses" href={LICENSES} className={cn(menuItem, 'no-underline')}>
             <Icon n="doc" size={15} />

@@ -252,7 +252,13 @@ const pm = await newPage(390, 844, true);
 await pm.goto(base + '/app?work=blank&example=c3-http-real#bench', { waitUntil: 'load' });
 await hasText(pm, '#console', 'TRYBOARD_OK', 30000);
 await tap(pm, '#moreBtn');
-report('mobile: ⋯ menu has Real network: off', await hasText(pm, '[data-more="realnet"]', 'Real network: off', 5000));
+// Phone ⋯ is a sheet: real network is a switch under the folded Developer tools (U-23)
+await pm.waitForSelector('[data-more="dev"]', { timeout: 5000 }).catch(() => null);
+await tap(pm, '[data-more="dev"]');
+report(
+  'mobile: ⋯ menu has Real network: off',
+  (await hasText(pm, '[data-more="realnet"]', 'Real network', 5000)) && (await pm.$eval('[data-more="realnet"]', (e) => e.getAttribute('role') === 'switch' && e.getAttribute('aria-checked') === 'false')),
+);
 await tap(pm, '[data-more="realnet"]');
 await pm.waitForSelector('#realnetDlg', { timeout: 5000 }).catch(() => null);
 const bh = await pm.$$eval('#realnetDlg button', (l) => Math.min(...l.map((b) => b.getBoundingClientRect().height)));

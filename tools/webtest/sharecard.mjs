@@ -141,6 +141,9 @@ await ph.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: 
 await ph.goto(base + '/app?work=blank&example=weather#bench', { waitUntil: 'load' });
 await waitFor(ph, () => /T=23\.50 C/.test(document.getElementById('console')?.textContent ?? ''), null, 30000);
 await ph.click('#moreBtn');
+// Phone ⋯ is a sheet: the share card sits in its Share sub-sheet (U-23)
+await ph.waitForSelector('[data-more="share-open"]', { timeout: 5000 });
+await ph.click('[data-more="share-open"]');
 await ph.waitForSelector('[data-more="card"]', { timeout: 5000 });
 await ph.click('[data-more="card"]');
 await waitFor(ph, () => !!globalThis.__tbCardLast?.png, null, 20000);
