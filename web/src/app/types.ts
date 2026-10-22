@@ -233,7 +233,7 @@ export interface Session {
   /** Timing-sensitive code found by the core (D-03); null = none. Reset on each power-on */
   timing: TimingReport | null;
   onTiming(cb: (r: TimingReport | null) => void): () => void;
-  /** Fine capture (D-04): state (null = none), start (absolute window or armed on the next edge), VCD text */
+  /** Fine capture (D-04): state (null = none), start (absolute window or armed on the next burst start), VCD text */
   vcd: VcdState | null;
   onVcd(cb: (s: VcdState | null) => void): () => void;
   vcdStart(pins: number[], from: number, len: number, trigger: boolean): void;

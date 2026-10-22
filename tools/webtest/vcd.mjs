@@ -55,7 +55,7 @@ await page.goto(base + '/app?work=blank&example=c3-dht11&debug=1#bench', { waitU
 const booted = await waitFor(page, () => globalThis.__tbApp?.analyzer && globalThis.__tbApp.store.get().simSeconds > 0.2, null, 30000);
 report('c3-dht11 example boots on the bench', booted);
 
-// Fine sampling on GPIO5, triggered by the next edge (the firmware's 20 ms start pulse), 30 ms window
+// Fine sampling on GPIO5, triggered by the next burst start (the firmware's 20 ms start pulse), 30 ms window
 const started = await page.evaluate(() => {
   const a = globalThis.__tbApp.analyzer;
   a.open('GPIO5');

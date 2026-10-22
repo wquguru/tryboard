@@ -18,7 +18,7 @@ export type Channel =
   /** Fine capture row (D-04): every edge of one pin from the core's VCD capture */
   | { id: 'FINE'; kind: 'fine'; pin: number; label: string; role: string };
 
-/** Fine capture settings: pin, window length (s), start = next edge from now (trigger) or an absolute time (s) */
+/** Fine capture settings: pin, window length (s), start = next burst start from now (trigger) or an absolute time (s) */
 export interface FineOpts {
   pin: number;
   len: number;
@@ -156,7 +156,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
       { class: 'ana-fform', 'data-a': 'fform', hidden: '' },
       h('label', {}, t('Pin'), ' ', h('select', { name: 'pin' })),
       h('label', {}, t('Window (ms)'), ' ', h('input', { name: 'ms', type: 'number', min: '0.1', max: '2000', step: 'any', inputmode: 'decimal' })),
-      h('label', {}, t('Start'), ' ', h('select', { name: 'mode' }, h('option', { value: 'edge' }, t('Next edge from now')), h('option', { value: 'at' }, t('At sim time (s)')))),
+      h('label', {}, t('Start'), ' ', h('select', { name: 'mode' }, h('option', { value: 'edge' }, t('Next burst from now')), h('option', { value: 'at' }, t('At sim time (s)')))),
       h('input', { name: 'at', type: 'number', min: '0', step: 'any', inputmode: 'decimal', 'aria-label': t('Start time (s)') }),
       h('button', { type: 'submit', class: 'ana-b ana-go' }, t('Start capture')),
     ),
@@ -501,7 +501,7 @@ export function createAnalyzer(ctx: StepCtx): Analyzer {
     $('fchip').textContent = t('Fine sampling: GPIO{pin} · {ms} ms window · per cycle', { pin: fineOpts.pin, ms });
     const st = fineState;
     const parts: string[] = [];
-    if (!st || st.t0 === null || st.t1 === null) parts.push(fineOpts.at !== undefined ? t('Waiting for {time}', { time: fmtTime(fineOpts.at) }) : t('Waiting for the next edge on GPIO{pin}', { pin: fineOpts.pin }));
+    if (!st || st.t0 === null || st.t1 === null) parts.push(fineOpts.at !== undefined ? t('Waiting for {time}', { time: fmtTime(fineOpts.at) }) : t('Waiting for the next burst on GPIO{pin}', { pin: fineOpts.pin }));
     else {
       const a = st.t0 / CPU_HZ, b = st.t1 / CPU_HZ;
       parts.push(`${a.toFixed(6)} – ${b.toFixed(6)} s`);

@@ -1221,8 +1221,10 @@ impl Machine {
         self.iotrace().vcd = Some(tryboard_soc::vcd::VcdCapture::new(mask, t0, t1));
     }
 
-    /// Triggered fine capture: the window opens at the first edge on `mask` at or after `from` and lasts `len` cycles
+    /// Triggered fine capture: the window opens at the next burst start on `mask` after `from` and lasts `len` cycles
     pub fn vcd_arm(&mut self, mask: u64, from: u64, len: u64) {
+        // The page's clock lags the worker: a stale `from` would count edges already gone as quiet time
+        let from = from.max(self.cycles());
         self.iotrace().vcd = Some(tryboard_soc::vcd::VcdCapture::armed(mask, from, len));
     }
 

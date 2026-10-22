@@ -281,7 +281,7 @@ export class LiveSim {
     this.o.grove = p.grove;
   }
   private vcdWaiters: ((r: { text: string; state: VcdState | null }) => void)[] = [];
-  /** Fine capture (D-04): window [from, from + len] s of sim time, or armed (the next edge at or after `from` opens it). Not logged: observation only. */
+  /** Fine capture (D-04): window [from, from + len] s of sim time, or armed (the next burst start after `from` opens it). Not logged: observation only. */
   vcdStart(pins: number[], from: number, len: number, trigger: boolean) {
     this.send({ type: 'vcdStart', pins, from, len, trigger });
   }
