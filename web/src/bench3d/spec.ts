@@ -53,6 +53,10 @@ export type PartSpec =
   | { type: 'ldr'; pin: number; lux?: number; label?: string }
   /** RC522 RFID reader (F-04d, SPI2): SDA (CS) is the only pin the model watches; the other wires are drawn as placed (= CLI --spi rc522[@cs=N]) */
   | { type: 'rc522'; cs?: number; sck?: number; mosi?: number; miso?: number; rst?: number; label?: string }
+  /** VS1838B-class IR receiver (F-08f): active-low demodulated OUT on pin, the bench remote drives it (= CLI --ir RX) */
+  | { type: 'irrx'; pin: number; label?: string }
+  /** 940 nm IR LED module (F-08f): S on pin; an eye decodes NEC from the carrier, aimed at the receiver (= CLI --ir RX,TX) */
+  | { type: 'irled'; pin: number; label?: string }
   /** Bare rectangular SPI TFT (F-04a2, = CLI --spi <panel>): pins are the chip's fixed LCD_WIRING, kept in the spec for wires / labels */
   | { type: 'tft'; panel: TftPanel; sclk: number; mosi: number; cs: number; dc: number; rst: number; bl: number; label?: string };
 

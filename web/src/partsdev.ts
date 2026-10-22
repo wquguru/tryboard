@@ -1,4 +1,4 @@
-// F-04a: the F-04c / F-04d tutorial parts (DS18B20, PIR, relay, photoresistor, RC522) as one device bundle.
+// F-04a: the F-04c / F-04d tutorial parts (DS18B20, PIR, relay, photoresistor, RC522; IR link F-08f) as one device bundle.
 // Same flags as core/crates/cli/src/parts.rs and main.rs wire_sensor_args; shared by worker, simrun, inputlog and devs.
 import type { WasmExports } from './wasm.gen.ts';
 import { RC522_CS, type SimChip } from './chipid.ts';
@@ -14,6 +14,8 @@ export interface PartsDevs {
   ldr?: { pin: number; lux: number };
   /** --spi rc522[@cs=N]: RC522 on SPI2; cs undefined = the chip default (C3 GPIO7, S3 GPIO10) */
   rc522?: { cs?: number };
+  /** --ir RX[,TX]: IR receiver OUT and / or IR LED pin ('-' = none); the LED faces the receiver (F-08f) */
+  ir?: { rx?: number; tx?: number };
 }
 
 export const PIR_HOLD_DEFAULT = 5;
@@ -22,7 +24,7 @@ export const LDR_LUX_DEFAULT = 300;
 export const rc522DefaultCs = (chip: string | undefined) => RC522_CS[chip as SimChip] ?? 10;
 
 /** True when nothing is attached (keeps logs and boot messages free of an empty object) */
-export const partsEmpty = (p: PartsDevs | undefined) => !p || !(p.ds18b20 || p.pir || p.relay || p.ldr || p.rc522);
+export const partsEmpty = (p: PartsDevs | undefined) => !p || !(p.ds18b20 || p.pir || p.relay || p.ldr || p.rc522 || p.ir);
 
 /** CLI --spi item for the RC522 ('rc522' when CS is the chip default) */
 export function rc522Spec(p: PartsDevs | undefined, chip: string | undefined): string | undefined {
@@ -39,6 +41,7 @@ export function partsArgs(p: PartsDevs | undefined): string[] {
   if (p.pir) a.push('--pir', p.pir.hold === PIR_HOLD_DEFAULT ? String(p.pir.pin) : `${p.pir.pin},${p.pir.hold}`);
   if (p.relay) a.push('--relay', p.relay.low ? `${p.relay.pin},low` : String(p.relay.pin));
   if (p.ldr) a.push('--ldr', p.ldr.lux === LDR_LUX_DEFAULT ? String(p.ldr.pin) : `${p.ldr.pin},${p.ldr.lux}`);
+  if (p.ir) a.push('--ir', p.ir.tx === undefined ? String(p.ir.rx ?? '-') : `${p.ir.rx ?? '-'},${p.ir.tx}`);
   return a;
 }
 
@@ -66,6 +69,12 @@ export function partsFromArgs(val: (flag: string) => string | undefined): PartsD
     const [p, l] = nums(ldr);
     out.ldr = { pin: Number(p), lux: l === undefined ? LDR_LUX_DEFAULT : Number(l) };
   }
+  const ir = val('--ir');
+  if (ir) {
+    const [r, x] = nums(ir);
+    const pin = (s: string | undefined) => (s === undefined || s === '-' ? undefined : Number(s));
+    out.ir = { ...(pin(r) !== undefined ? { rx: pin(r) } : {}), ...(pin(x) !== undefined ? { tx: pin(x) } : {}) };
+  }
   const rc = (val('--spi') ?? '').split(',').find((d) => d.startsWith('rc522'));
   if (rc) {
     const m = /@cs=(\d+)/.exec(rc);
@@ -74,10 +83,10 @@ export function partsFromArgs(val: (flag: string) => string | undefined): PartsD
   return partsEmpty(out) ? undefined : out;
 }
 
-/** PIR or relay or DS18B20 attached: the CLI then runs 1 ms slices (main.rs has_parts / wire_sensors); the LDR alone does not */
-export const partsTimed = (p: PartsDevs | undefined) => !!(p && (p.ds18b20 || p.pir || p.relay));
+/** PIR, relay, DS18B20 or IR attached: the CLI then runs 1 ms slices (main.rs has_parts / wire_sensors); the LDR alone does not */
+export const partsTimed = (p: PartsDevs | undefined) => !!(p && (p.ds18b20 || p.pir || p.relay || p.ir));
 
-type Ex = Pick<WasmExports, 'memory' | 'tb_alloc' | 'tb_free'> & Partial<Pick<WasmExports, 'tb_ds18b20_attach' | 'tb_pir_attach' | 'tb_relay_attach' | 'tb_ldr_attach' | 'tb_lcd_attach_spec' | 'tb_part_action'>>;
+type Ex = Pick<WasmExports, 'memory' | 'tb_alloc' | 'tb_free'> & Partial<Pick<WasmExports, 'tb_ds18b20_attach' | 'tb_pir_attach' | 'tb_relay_attach' | 'tb_ldr_attach' | 'tb_lcd_attach_spec' | 'tb_part_action' | 'tb_ir_attach'>>;
 
 function withText(e: Ex, s: string, f: (p: number, n: number) => number): number {
   const b = new TextEncoder().encode(s);
@@ -101,12 +110,13 @@ export function attachParts(e: Ex, p: PartsDevs | undefined, chip: string | unde
   if (p.pir) e.tb_pir_attach?.(p.pir.pin, p.pir.hold);
   if (p.relay) e.tb_relay_attach?.(p.relay.pin, p.relay.low ? 0 : 1);
   if (p.ldr && e.tb_ldr_attach && e.tb_ldr_attach(p.ldr.pin, p.ldr.lux) !== 0) return `--ldr ${p.ldr.pin}: not an ADC pin on this chip`;
+  if (p.ir) e.tb_ir_attach?.(p.ir.rx ?? -1, p.ir.tx ?? -1);
   const rc = rc522Spec(p, chip);
   if (rc && e.tb_lcd_attach_spec && withText(e, rc, (q, n) => e.tb_lcd_attach_spec!(q, n)) !== 0) return `--spi ${rc}: rejected (C3 / S3 only)`;
   return null;
 }
 
-/** Script action pir= / lux= / card= through the core; true = applied (unknown or rejected actions stay out of the log) */
+/** Script action pir= / lux= / card= / ir= through the core; true = applied (unknown or rejected actions stay out of the log) */
 export function partAction(e: Ex, act: string): boolean {
   if (!e.tb_part_action) return false;
   return withText(e, act, (q, n) => e.tb_part_action!(q, n)) === 0;

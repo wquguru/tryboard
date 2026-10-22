@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build firmware/arduino/<name>/ with arduino-cli into firmware/build/arduino-<name>/{flash.bin,app.elf}. Usage: tools/build_arduino.sh [name[:variant]...]
-# Sketch dir: board.txt (fqbn, default esp32c3), boards.txt ("<variant> <fqbn>"), libs.txt (pinned third_party libs), flags.txt (defines); BUILD_INFO.txt per bin.
+# Sketch dir: board.txt (fqbn, default esp32c3), boards.txt ("<variant> <fqbn>", variant "-" = no suffix), libs.txt (pinned third_party libs), flags.txt (defines); BUILD_INFO.txt per bin.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LIBS="$ROOT/third_party/arduino-libs"
@@ -61,7 +61,7 @@ for spec in "${names[@]}"; do
     while read -r v fqbn; do
       case "$v" in ''|\#*) continue ;; esac
       [ -z "$only" ] || [ "$only" = "$v" ] || continue
-      build_one "$n" "$v" "$fqbn"
+      build_one "$n" "${v#-}" "$fqbn"
     done < "$src/boards.txt"
   else
     build_one "$n" "" "$(cat "$src/board.txt" 2>/dev/null || echo esp32:esp32:esp32c3)"

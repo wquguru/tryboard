@@ -54,6 +54,8 @@ export type InputEvent =
   | { tMs: number; kind: 'pir'; on: boolean }
   | { tMs: number; kind: 'lux'; lux: number }
   | { tMs: number; kind: 'card'; uid: string }
+  /** Bench IR remote (F-08f): one NEC code to the receiver, ADDR,CMD in hex (16-bit, inverses included) or repeat. Action ir=… */
+  | { tMs: number; kind: 'ir'; code: string }
   /** Virtual voice server (F-09b-2): on / off / script,<name> / say,<text> / min,N / voice,demo|noise. Action xz=… */
   | { tMs: number; kind: 'xz'; cmd: string };
 
@@ -89,7 +91,7 @@ export interface InputLog {
   /** I2S audio parts at power-up (max98357a / inmp441) and the mic's test WAV (name under tools/audio/): become --i2s / --mic */
   i2s?: string[];
   mic?: string;
-  /** F-04a parts at power-up (DS18B20 / PIR / relay / LDR / RC522): become --ds18b20 / --pir / --relay / --ldr / --spi rc522 */
+  /** F-04a parts at power-up (DS18B20 / PIR / relay / LDR / RC522 / IR link): become --ds18b20 / --pir / --relay / --ldr / --spi rc522 / --ir */
   parts?: PartsDevs;
   events: InputEvent[];
   /** Simulated time (ms) when the log was taken: replaying up to here (--seconds) matches what the web showed */
@@ -180,6 +182,8 @@ export function action(e: InputEvent): string | null {
       return `lux=${e.lux}`;
     case 'card':
       return `card=${e.uid}`;
+    case 'ir':
+      return `ir=${e.code}`;
     case 'xz':
       return `xz=${e.cmd}`;
     case 'power':
@@ -307,6 +311,8 @@ export function fromAction(a: string): InputAction {
       return { kind: 'lux', lux: num(v) };
     case 'card':
       return { kind: 'card', uid: v.trim() };
+    case 'ir':
+      return { kind: 'ir', code: v.trim() };
     case 'xz':
       return { kind: 'xz', cmd: v };
   }

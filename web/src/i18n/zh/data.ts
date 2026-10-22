@@ -382,6 +382,11 @@ const d: Dict = {
   "Blink built with the Arduino IDE / arduino-cli (esp32 core 3.x); upload the exported merged.bin directly and it runs. LED on GPIO5.": "用 Arduino IDE / arduino-cli（esp32 核心 3.x）编译的 Blink，导出的 merged.bin 直接上传就能跑。GPIO5 接 LED。",
   "Arduino: servo sweep with ESP32Servo": "Arduino：用 ESP32Servo 扫舵机",
   "Built with arduino-cli and the ESP32Servo library (LGPL-2.1; the pinned library commit and build info ship with the bin). An SG90 on GPIO6 steps through 0/45/90/135/180° with 0.5–2.5 ms pulses at 50 Hz.": "用 arduino-cli 和 ESP32Servo 库编译（LGPL-2.1；钉的库提交和构建信息随 bin 一起发布）。GPIO6 上的 SG90 以 50 Hz、0.5–2.5 ms 脉宽依次转到 0/45/90/135/180°。",
+  // F-08f IR examples
+  "IR remote receiver + transmitter on RMT (classic ESP32)": "红外遥控收发：RMT 接收 + 发射（经典 ESP32）",
+  "RMT RX on GPIO19 reads a VS1838B-class receiver, RMT TX on GPIO18 drives an IR LED with a 38 kHz carrier. At start the firmware sends one NEC frame (address 0x0440) that comes back through the receiver, then prints every key you press on the bench remote. The IR LED card shows the frames the eye decodes. Receiver timing uses typical values; not calibrated on real hardware.": "GPIO19 的 RMT 接收读取 VS1838B 类接收头，GPIO18 的 RMT 发射以 38 kHz 载波驱动红外 LED。启动时固件先发一帧 NEC（地址 0x0440），经接收头收回，之后打印你在实验台遥控器上按的每个键。红外发射管卡片显示“眼睛”解出的帧。接收时序取典型值，未经真机校准。",
+  "Arduino: NEC IR sender on RMT, no library": "Arduino：不用库，RMT 发 NEC 红外码",
+  "Built with arduino-cli and the core's RMT API only. An IR LED on GPIO4 sends NEC frames (address 0xFF00, command 0xC936) on a 38 kHz RMT carrier; the IR LED card shows what the eye decodes from the LED.": "用 arduino-cli 编译，只用核心自带的 RMT API。GPIO4 上的红外 LED 以 38 kHz RMT 载波发送 NEC 帧（地址 0xFF00，命令 0xC936）；红外发射管卡片显示“眼睛”从 LED 解出的内容。",
   "Arduino: send NEC IR codes with IRremote": "Arduino：用 IRremote 发 NEC 红外码",
   "Built with arduino-cli and the IRremote library (MIT). An IR LED on GPIO4 sends three NEC codes on a 38 kHz carrier; the serial log prints each command.": "用 arduino-cli 和 IRremote 库编译（MIT）。GPIO4 上的红外 LED 以 38 kHz 载波发出三条 NEC 码，串口逐条打印命令。",
   "S3 native USB: become a keyboard + mouse": "S3 原生 USB：变身键盘 + 鼠标",

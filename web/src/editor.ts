@@ -73,6 +73,10 @@ export function describe(p: PartSpec, chip: ChipId = 'esp32c3'): string {
       return `${t('Light sensor')} · AO IO${p.pin}`;
     case 'rc522':
       return `RC522 · SDA IO${p.cs ?? '-'}`;
+    case 'irrx':
+      return `${t('IR receiver')} · OUT IO${p.pin}`;
+    case 'irled':
+      return `${t('IR LED')} · S IO${p.pin}`;
     case 'ws2812':
       return `${t('WS2812 strip')} × ${p.n ?? 8} · DIN IO${p.pin}`;
     case 'oled':

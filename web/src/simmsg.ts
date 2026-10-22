@@ -136,7 +136,7 @@ export type ToWorker =
   /** Ask for the VCD text, answered with vcdText */
   | { type: 'vcdGet' }
   /** Inputs without a dedicated message (imu, touch...): applied as is and logged. */
-  | { type: 'input'; act: Extract<InputAction, { kind: 'imu' | 'touch' | 'bat' | 'pwrkey' | 'key' | 'pir' | 'lux' | 'card' }> }
+  | { type: 'input'; act: Extract<InputAction, { kind: 'imu' | 'touch' | 'bat' | 'pwrkey' | 'key' | 'pir' | 'lux' | 'card' | 'ir' }> }
   /** Mic source: WAV (looped, sampled on sim time, reproducible) / silent / live (micPush browser samples placed on sim time; not logged, micRecGet exports them for --mic). */
   | { type: 'mic'; source: 'wav' | 'silence' | 'live'; wav?: ArrayBuffer }
   | { type: 'micPush'; rate: number; data: Float32Array }
@@ -298,6 +298,8 @@ export type FromWorker =
   /** BLE (C-01): state 0 = firmware does not use BLE, 1 = controller running, 2 = VHCI boundary not found (json is {"error"}).
    *  json is {"view", "log"} with new air-log lines only; reset = new power-up / rewind; cmdError = why the last phone command was refused. */
   | { type: 'ble'; state: number; json: string; reset?: boolean; cmdError?: string }
+  /** IR LED eye (F-08f): frames decoded since the last message, "seconds\tGPIO\ttext" lines (= CLI stderr) */
+  | { type: 'ir'; text: string }
   /** Voice server (F-09b-2): json is {"script","sessions","turns","up","down","log":[[us,line]]} with new log lines only ("" = server off);
    *  reset = new power-up / rewind */
   | { type: 'xz'; json: string; reset?: boolean }

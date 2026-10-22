@@ -216,7 +216,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         const [p, u] = act.slice(4).split(',');
         if (!Number.isNaN(Number(p)) && (u === undefined || u.trim() === 'usb')) e.tb_battery?.(Number(p), u ? 1 : 0);
       } else if (act.startsWith('pwrkey=')) e.tb_pwrkey?.(act.slice(7).trim() === 'long' ? 1 : 0);
-      else if (/^(pir|lux|card)=/.test(act)) partAction(e, act.trim());
+      else if (/^(pir|lux|card|ir)=/.test(act)) partAction(e, act.trim());
       else if (act.startsWith('key=')) {
         // Same as CLI board_action: key=<name>[,1|0]
         const v = act.slice(4), c = v.lastIndexOf(','), lv = c > 0 ? v.slice(c + 1).trim() : '';

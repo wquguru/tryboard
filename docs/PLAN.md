@@ -250,7 +250,7 @@
 | F-08d | ESP32Servo / IRremote 许可证证据整理（上游提交、文件头、作者声明），写 LICENSING_REVIEW.md；结论待人核 | 文档 | ☑ 波 8（证据已整理，结论待人） |
 | F-03d | vcd.mjs 触发窗口在全量 accept 加压下偶发只录到 45 条边沿（DHT11 帧没落进窗口）；改为按模拟时刻对齐触发 / 等待，不放宽「≥ 80 边沿、无丢失」判定 | vcd.mjs 连跑 5 次 + 加压下跑 | ☑ 波 9：原因是产品行为（触发取武装后下一个沿，帧中武装只录半帧），内核改为「安静 ≥ 窗口长或连续沿已满窗口长」才开窗、武装起点钳到 worker 时刻；vcd.mjs 5/5、3 个 yes 加压 3/3 PASS（86 沿） |
 | F-08e | ESP32Servo 按 LGPL 三件套上站：LICENSING.md 第 30 行结论改为获批、NOTICES / 许可页 / BUILD_INFO 带 LGPL-2.1 与版权派生说明；IRremote 上游 issue 草稿写进 LICENSING_REVIEW §16（不发） | lint + licenses 页 agent-browser + accept | ☑ 波 9（同轮人定 IRremote 也按 MIT 上站，NOTICES 附全部版权人 + BSD-3 + GPL 头说明，见 LICENSING_REVIEW §16.5；`web/test/licenses.test.ts`） |
-| F-08f | 自写 Arduino 红外 NEC 发送示例（RMT，公开时序，不参考 IRremote 源码）替代 lib-irremote 上站；web / CLI 红外接收对拍 | accept 新用例 + CLI/网页指纹一致 | ☑ 波 9（2026-10-22）：额外示例（IRremote 已获准上站）。`arduino-ir-nec-rmt` 只用核心 RMT（rmtInit / rmtSetCarrier / rmtWrite），C3 RMT 补了 TX 载波，`--ir -,4` 的眼睛解出 NEC 0x00 / 0x36（38.0 kHz）；网页上传 bin 与 CLI 指纹一致（tools/webtest/irnec.mjs，Reviews/ab/F-08f.md） |
+| F-08f | 自写 Arduino 红外 NEC 发送示例（RMT，公开时序，不参考 IRremote 源码）替代 lib-irremote 上站；web / CLI 红外接收对拍 | accept 新用例 + CLI/网页指纹一致 | ☑ 波 9（2026-10-22）：额外示例（IRremote 已获准上站）。`arduino-ir-nec-rmt` 只用核心 RMT（rmtInit / rmtSetCarrier / rmtWrite），C3 RMT 补了 TX 载波，`--ir -,4` 的眼睛解出 NEC 0x00 / 0x36（38.0 kHz）；网页上传 bin 与 CLI 指纹一致（tools/webtest/irnec.mjs，Reviews/ab/F-08f.md）。续（同日）：网页红外接收头 / 发射模块 + 遥控器（输入日志 `ir=`），LED 卡片显示眼睛解码；S3 accept 用例 `arduino-ir-nec-rmt-s3`；parts.mjs esp32-ir 指纹一致（Reviews/ab/F-08f-ir.md） |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。

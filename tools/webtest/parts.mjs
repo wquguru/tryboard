@@ -1,5 +1,5 @@
 // F-04a tutorial parts: use the bench controls (light / Wave / card) -> export inputs -> web replay and CLI --inputs fingerprints match.
-// Usage: node tools/webtest/parts.mjs [c3-pir-relay c3-rc522 c3-ds18b20 c3-ili9341-temp c3-sh1106-pir] (after the web build); logs in Reviews/web/parts-*
+// Usage: node tools/webtest/parts.mjs [c3-pir-relay c3-rc522 c3-ds18b20 c3-ili9341-temp c3-sh1106-pir esp32-ir] (after the web build); logs in Reviews/web/parts-*
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -21,6 +21,8 @@ const CASES = {
   'c3-ds18b20': { clicks: [], wait: '设备 2 温度', expect: ['总线上共 2 个 DS18B20', '设备 1 温度 23.5000', '设备 2 温度 24.0000'], tail: 1 },
   // F-04a2 screens: the TFT and SH1106 parts must reach the CLI as --spi ili9341 / --i2c sh1106@0x3c
   'c3-ili9341-temp': { clicks: [], wait: '屏幕显示', expect: ['ILI9341 温度屏启动', '屏幕显示 23.5 °C（舒适）', 'TRYBOARD_OK c3-ili9341-temp'], cli: ['--spi', 'ili9341'], tail: 1 },
+  // F-08f IR pair: bench remote key -> RMT RX; `seen` = what the IR LED card shows from the eye (wasm tb_ir_events)
+  'esp32-ir': { clicks: [['[data-ir="FF00,BA45"]', 'IR 收到 遥控器 地址=FF00 命令=BA45'], ['[data-ir="repeat"]', 'IR 收到 重复码 地址=FF00 命令=BA45']], expect: ['IR 收到 自己发的 地址=0440 命令=3003', 'IR 收到 遥控器 地址=FF00 命令=BA45', 'IR 收到 重复码 地址=FF00 命令=BA45'], seen: 'NEC address=0x0440 command=0x3003', cli: ['--ir', '19,18'], tail: 1 },
   'c3-sh1106-pir': { clicks: [['[data-pir="wave"]', '有人经过，第 1 次']], expect: ['SH1106 人体感应屏启动', 'TRYBOARD_OK c3-sh1106-pir', '有人经过，第 1 次'], cli: ['--i2c', 'sh1106@0x3c'], tail: 1 },
 };
 const ids = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(CASES);
@@ -100,6 +102,7 @@ for (const id of ids) {
     if (ok) await page.click(sel);
     report(`${id}: click ${sel} -> serial "${want}"`, ok && (await hasText(page, want, 15000)));
   }
+  if (c.seen) report(`${id}: IR LED card shows "${c.seen}"`, await waitFor(page, (x) => [...document.querySelectorAll('[data-ir-seen]')].some((e) => e.textContent.includes(x)), c.seen, 15000));
   if (c.wait) report(`${id}: serial "${c.wait}"`, await hasText(page, c.wait, 30000));
   await page.click('#runPause');
   await waitFor(page, () => /Paused/.test(document.getElementById('runState').textContent), null, 5000);
@@ -107,7 +110,7 @@ for (const id of ids) {
   const log = await page.evaluate(() => globalThis.__tbInputLog());
   await page.screenshot({ path: path.join(outDir, `parts-${id}.png`) });
   fs.writeFileSync(path.join(outDir, `parts-${id}-inputs.json`), JSON.stringify(log, null, 1));
-  const kinds = log.events.map((e) => e.kind + (e.kind === 'pir' ? `=${e.on ? 1 : 0}` : e.kind === 'lux' ? `=${e.lux}` : e.kind === 'card' ? `=${e.uid}` : '')).join(' ');
+  const kinds = log.events.map((e) => e.kind + (e.kind === 'pir' ? `=${e.on ? 1 : 0}` : e.kind === 'lux' ? `=${e.lux}` : e.kind === 'card' ? `=${e.uid}` : e.kind === 'ir' ? `=${e.code}` : '')).join(' ');
   report(`${id}: input log carries the parts and their actions`, !!log.parts, `${JSON.stringify(log.parts)}; ${kinds}`);
   const text = await exportInputs(page);
   const inputsFile = path.join(outDir, `parts-${id}-inputs.txt`);
@@ -119,7 +122,8 @@ for (const id of ids) {
   // Same --spi / --i2c derivation as inputlog.ts cliArgs (LCD panel first, then RC522)
   const spi = [...(log.lcd || log.spi ? [log.spi ?? 'gc9a01'] : []), ...(rc522Spec(log.parts ?? {}, log.chip) ? [rc522Spec(log.parts ?? {}, log.chip)] : [])];
   const i2c = (log.i2c ?? []).map((d) => `${d.kind}@0x${d.addr.toString(16)}`);
-  const args = ['--seconds', String(SECS), '--gpio-log', ...(i2c.length ? ['--i2c', i2c.join(',')] : []), ...(spi.length ? ['--spi', spi.join(',')] : []), ...partsArgs(log.parts ?? {}), '--inputs', inputsFile];
+  // The web report always lists WS2812 decoders (an RMT TX pin gets one), so the CLI needs --ws2812-log for the same lines
+  const args = ['--seconds', String(SECS), '--gpio-log', '--ws2812-log', ...(i2c.length ? ['--i2c', i2c.join(',')] : []), ...(spi.length ? ['--spi', spi.join(',')] : []), ...partsArgs(log.parts ?? {}), '--inputs', inputsFile];
   const r = cliRun(fw, args, id);
   report(`${id}: web replay and CLI fingerprints match`, web.fingerprint === r.fp && !web.error && r.code === 0, `web ${web.fingerprint} / CLI ${r.fp}; CLI ${args.join(' ')}`);
   if (c.cli) report(`${id}: CLI args carry ${c.cli.join(' ')}`, args.join(' ').includes(c.cli.join(' ')), args.join(' '));

@@ -392,6 +392,7 @@ function loopSlice(gen: number) {
   if (ui) postLcd(e);
   postUsb(e);
   postBle(e);
+  postIr(e);
   postNet(e);
   postXz(e);
   if (pacedDone && paced) {
@@ -466,6 +467,12 @@ function postUsb(e: Exports) {
   }
   const n = e.tb_usb_json();
   post({ type: 'usb', json: decoder.decode(new Uint8Array(e.memory.buffer, e.tb_usb_json_ptr(), n)) });
+}
+
+/** IR LED eye decodes (F-08f), drained every round so the bench shows them as they happen */
+function postIr(e: Exports) {
+  const n = e.tb_ir_events?.() ?? 0;
+  if (n) post({ type: 'ir', text: decoder.decode(new Uint8Array(e.memory.buffer, e.tb_report_ptr(), n)) });
 }
 
 let bleState = 0;
@@ -894,6 +901,7 @@ function apply(e: Exports, ev: InputAction) {
     case 'pir':
     case 'lux':
     case 'card':
+    case 'ir':
       // Rejected actions (card with no RC522, bad UID) stay out of the log, as the CLI would print an error on replay
       if (!partAction(e, action({ tMs: 0, ...ev } as InputEvent) ?? '')) return;
       break;

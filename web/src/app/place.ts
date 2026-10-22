@@ -65,6 +65,8 @@ const DEFS: Record<string, Omit<PlaceDef, 'partId' | 'name'>> = {
   'relay-1ch': { type: 'relay', steps: [P('VCC', '5V'), G('IN'), GND()] },
   'ldr-module': { type: 'ldr', steps: [P('VCC', '3V3'), G('AO', t('AO (ADC pin)')), GND()] },
   rc522: { type: 'rc522', steps: [P('3.3V', '3V3'), GND(), G('SDA', t('SDA (chip select)')), G('SCK'), G('MOSI'), G('MISO'), { ...G('RST'), optional: true }] },
+  vs1838b: { type: 'irrx', steps: [G('OUT', t('OUT (receiver output)')), GND(), P('VCC', '3V3')] },
+  'ir-led': { type: 'irled', steps: [G('S', t('S (IR LED drive)')), GND()] },
 };
 
 /** Why a part cannot be placed (hint on the greyed-out library entry). */
@@ -177,6 +179,12 @@ export function buildPlaced(def: PlaceDef, got: Record<string, string>, ext5v = 
       break;
     case 'ldr':
       spec = { type: 'ldr', pin: g('AO')! };
+      break;
+    case 'irrx':
+      spec = { type: 'irrx', pin: g('OUT')! };
+      break;
+    case 'irled':
+      spec = { type: 'irled', pin: g('S')! };
       break;
     case 'rc522': {
       const rst = g('RST');

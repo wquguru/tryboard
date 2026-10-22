@@ -252,9 +252,13 @@ export interface WasmExports {
   tb_relay_attach(pin: number, activeHigh: number): void;
   /** Attach a photoresistor divider on ADC pad `pin` at `lux` (= CLI --ldr pin,lux); 0 = ok, 1 = not an ADC pin */
   tb_ldr_attach(pin: number, lux: number): number;
-  /** # Safety Part script action pir=1|0 / lux=N / card=<uid hex>|none (same parsing as CLI parts_action); 0 ok, 1 rejected. p/len valid UTF-8 */
+  /** Attach the IR link (F-10c / F-08f, = CLI --ir RX[,TX]): receiver output on rx, IR LED eye on tx; negative = none */
+  tb_ir_attach(rx: number, tx: number): number;
+  /** Frames the IR LED eye decoded since the last call, one "seconds\tGPIO\ttext" line each (= CLI stderr); length, via tb_report_ptr */
+  tb_ir_events(): number;
+  /** # Safety Part script action pir=1|0 / lux=N / card=<uid hex>|none / ir=ADDR,CMD|repeat (same parsing as CLI parts_action); 0 ok, 1 rejected. p/len valid UTF-8 */
   tb_part_action(p: number, len: number): number;
-  /** End-of-run lines for the F-04d parts (PIR / relay / LDR / RC522), newline separated; length, read via tb_report_ptr */
+  /** End-of-run lines for the F-04d parts (PIR / relay / LDR / RC522) and the IR link, newline separated; length, read via tb_report_ptr */
   tb_parts_report(): number;
   /** Same as tb_i2s_attach on explicit pins (= CLI --i2s kind@bclk:ws:data, F-09b-2). Returns 0 on success */
   tb_i2s_attach_at(kind: number, bclk: number, ws: number, data: number): number;

@@ -1506,3 +1506,12 @@
 - 参考：公开 NEC 协议时序；arduino-esp32 3.3.2 `esp32-hal-rmt.h` / `.c`（LGPL 核心，只读 API 语义：`rmtSetCarrier` 的 carrier_level=true 实际映射为 `polarity_active_low`，故草图传 false 让高电平段带载波）；ESP-IDF v5.5 `rmt_reg.h`（C3 / S3 CONF0 carrier_en [21]、carrier_out_lv [22]，CARRIER_DUTY 紧跟 INT_CLR）与 `rmt_tx.c` `rmt_apply_carrier`（占空比按组时钟 resolution_hz 计），Apache-2.0。**未打开** third_party/arduino-libs/Arduino-IRremote 的任何文件，也未看 IDF ir_nec_transceiver 示例源码。
 - core：`Rmt::carrier` 不再限经典 ESP32，C3 / S3 按上述位与组时钟（`src_hz / (div_num+1)`）换算；`PinDevices::ir_eye` 换成 `rmt_ir`（喂眼睛 + 返回是否开载波），经典 / C3 / S3 的 `route_rmt` 共用，开载波时不喂 WS2812 解码器（S3 lib.rs 守住 1500 行上限）；`ir_attach` 去掉「LED 眼睛只限经典 ESP32」的限制。C3 复位 CONF0 本就开载波（0x710200），驱动建通道时会关，golden 210/210 不变即佐证。新单元测试 `rmt::tests::c3_tx_carrier`。
 - 备选：用 PWM 日志验 38 kHz（RMT 不走 LEDC，不适用）；改在经典 ESP32 上构建（已有载波，但 Arduino 库示例都在 C3，保持一致）。
+
+## 2026-10-22 F-08f 续：网页红外收发件 + 遥控器，S3 载波用例（自主实现决定）
+- 元件：新增零件类型 `irrx`（VS1838B 类接收头，OUT / GND / VCC，3V3 供电）和 `irled`（KY-005 类 940 nm 发射模块，S / GND）；都映射到 CLI `--ir RX[,TX]`（只取第一个），网页与 CLI 一样强制 1 ms 时间片（`partsTimed`）。3D 按实际尺寸程序生成，LED 固定放在接收头镜头一侧、朝向镜头（模块整体转 180° 时两件换边），与内核「LED 对着接收头」（loopback）一致。
+- 遥控器：按常见 21 键「Car MP3」遥控器（地址 0x00，CH- 0x45 … 9 0x4A），每键发 `ir=FF00,<~cmd><cmd>`，另有「重复码」发 `ir=repeat`；进输入日志，`tryboard run --inputs` 重放。键位是公开常见码表，不是从任何库抄的。
+- 解码显示：新 wasm 导出 `tb_ir_attach(rx, tx)`（负数 = 无）、`tb_ir_events()`（把新解出的帧按 `秒\tGPIO\t文本` 写进 REPORT），`tb_part_action` 认 `ir=`，`tb_parts_report` 带上 `ir_report()`；worker 每轮取一次发 `ir` 消息，`irfeed.ts` 存最近 12 条，LED 卡片显示。文本与 CLI 眼睛行相同。
+- esp32-ir 固件：自检后继续监听（`portMAX_DELAY` 循环，TRYBOARD_OK 只打一次），原来 4 秒后停止接收，网页遥控器按晚了没反应。accept 期望不变；golden 只重存 esp32-ir（IDF 镜像带版本 / 编译时间）和新用例。
+- S3：`firmware/arduino/ir-nec-rmt/boards.txt` 加 `s3` 变体（`build_arduino.sh` 支持变体名 `-` = 不加后缀，C3 目录名不变），accept 新用例 `arduino-ir-nec-rmt-s3`。S3 固件直接解出 2 帧，RMT 模型未改。
+- parts.mjs 的 CLI 对拍参数加 `--ws2812-log`：网页报告总列出 WS2812 解码器（RMT TX 脚会挂一个 0 帧的），其它网页测试早已这样做；判定未放宽。
+- 备选：遥控器做成独立的「遥控器」零件（多一种零件、无引脚，放弃，按键放在接收头卡片里）；解码显示走 `tb_parts_report` 轮询（每轮要整份报告，放弃）。
