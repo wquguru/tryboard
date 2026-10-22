@@ -13,6 +13,8 @@ const d: Dict = {
   "Current page": "현재 페이지",
   "On a phone you can watch, tweak values and press buttons; wiring and swapping firmware work best on a computer.": "휴대폰에서는 보기, 값 조정, 버튼 누르기를 할 수 있습니다. 배선과 펌웨어 교체는 컴퓨터를 권장합니다.",
   "Licenses & credits": "라이선스 및 크레딧",
+  "Changelog": "업데이트 내역",
+  "Atom feed": "Atom 피드",
   "Projects": "작품",
   "Pick a board": "보드 고르기",
   "Make a parts list and check prices; no need to buy yet": "부품 목록과 참고 가격을 확인합니다. 아직 살 필요는 없습니다",

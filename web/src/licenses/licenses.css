@@ -2,6 +2,7 @@
    Version C (DESIGN_V2 §7.3) is a single statement page; full texts live in THIRD_PARTY_NOTICES.txt. */
 @import '../ui/tailwind.css';
 @source '../../../tools/gen_licenses.mjs';
+@source '../../../tools/static_shell.mjs';
 
 @layer components {
   .lic h1 { @apply m-0 text-[28px] font-bold max-md:text-[24px]; }

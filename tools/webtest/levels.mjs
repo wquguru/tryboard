@@ -415,6 +415,7 @@ async function toProduct(page) {
     ['/index.html?example=blink', (u) => u.pathname.endsWith('/app') && u.searchParams.get('work') === 'blank' && u.searchParams.get('example') === 'blink' && u.hash === '#bench', () => !!document.getElementById('workName')],
     ['/levels.html#04', (u) => u.pathname.endsWith('/app') && !!u.searchParams.get('work') && u.hash === '#bench', () => !!document.getElementById('workName')],
     ['/licenses.html', (u) => u.pathname.endsWith('/licenses.html'), () => /Licenses (&|and) credits/.test(document.querySelector('h1')?.textContent ?? '')],
+    ['/changelog', (u) => u.pathname.endsWith('/changelog'), () => /What's new/.test(document.querySelector('h1')?.textContent ?? '') && !!document.querySelector('link[rel=alternate][href="./changelog.xml"]')],
     ['/licenses', (u) => u.pathname.endsWith('/licenses'), () => !!document.querySelector('a[href="./THIRD_PARTY_NOTICES.txt"]') && !!document.querySelector('a[href="./tryboard.spdx.json"]')],
   ]) {
     const p = await open(from);

@@ -6,7 +6,7 @@ import { ThemeToggle } from './components';
 import { LangSelect } from './lang';
 import { Logo } from './logo';
 import { ThemeSegment } from './theme-segment';
-import { HOME, LICENSES } from './links';
+import { CHANGELOG, CHANGELOG_FEED, HOME, LICENSES } from './links';
 import { locale, t } from '../i18n';
 
 const navLink = 'rounded-md px-2.5 py-[5px] text-muted hover:bg-field hover:text-fg';
@@ -121,6 +121,12 @@ export function SiteFooter() {
       </span>
       <a className="text-fg hover:text-accent-ink max-md:inline-flex max-md:min-h-11 max-md:items-center" href={LICENSES}>
         {t('Licenses & credits')}
+      </a>
+      <a className="text-fg hover:text-accent-ink max-md:inline-flex max-md:min-h-11 max-md:items-center" href={CHANGELOG}>
+        {t('Changelog')}
+      </a>
+      <a className="text-fg hover:text-accent-ink max-md:inline-flex max-md:min-h-11 max-md:items-center" href={CHANGELOG_FEED} type="application/atom+xml">
+        {t('Atom feed')}
       </a>
       <span className="flex-1" />
       <span lang="en">ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.</span>

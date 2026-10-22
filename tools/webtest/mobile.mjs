@@ -547,6 +547,21 @@ if (await waitFor(page, () => globalThis.__tbApp?.store.get().simSeconds > 0.5, 
   report('D-07: analyzer returns to body when the tab closes', await waitFor(page, () => document.querySelector('#analyzer')?.parentElement === document.body));
 } else report('D-07: wifi example starts', false);
 
+// ---- F-12 changelog (static page): filters scroll inside their row, tap targets, no page-level horizontal scroll
+await page.goto(`${base}/changelog`, { waitUntil: 'load' });
+report('Changelog: filters shown with JS', await waitFor(page, () => !document.getElementById('clFilter')?.hidden));
+for (const f of ['all', 'new', 'improve', 'announce']) {
+  await page.$eval(`[data-filter="${f}"]`, (e) => e.scrollIntoView({ inline: 'nearest', block: 'nearest' }));
+  report(`Changelog: filter ${f} tappable`, (await tappable(`[data-filter="${f}"]`)) === 'ok', await tappable(`[data-filter="${f}"]`));
+}
+await page.click('[data-filter="improve"]');
+const shown = await page.$$eval('article[data-tag]', (l) => l.filter((a) => !a.hidden).map((a) => a.dataset.tag));
+report('Changelog: Improved filter keeps only improve entries', shown.length > 0 && shown.every((t) => t === 'improve'), shown.join(','));
+await stepCheck('Changelog');
+await page.click('[data-filter="all"]');
+report('Changelog: first entry link tappable', (await tappable('article .cl-cta')) === 'ok', await tappable('article .cl-cta'));
+await page.screenshot({ path: path.join(outDir, 'mobile-changelog.png') });
+
 report('no external hosts requested', external.length === 0, external.slice(0, 3).join(' | '));
 report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(`[mobile] ${fails ? 'FAIL' : 'PASS'} (${fails} failed)`);

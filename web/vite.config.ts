@@ -7,6 +7,8 @@ import tailwindcss from '@tailwindcss/vite';
 
 // licenses.html is generated at build time by tools/gen_licenses.mjs (not in git); the build still works without it.
 const licenses = existsSync(new URL('./licenses.html', import.meta.url)) ? { licenses: 'licenses.html' } : {};
+// changelog.html likewise comes from tools/gen_changelog.mjs (web/changelog.yaml, F-12).
+const changelog = existsSync(new URL('./changelog.html', import.meta.url)) ? { changelog: 'changelog.html' } : {};
 const DICT = /\/i18n\/(zh|ja|ko)\/(\w+)\.ts$/;
 // Dictionary chunks are named i18n-<locale>-<group> so perf.mjs and the HTML preload can find them (R-20).
 const chunkFileNames = (c: { facadeModuleId: string | null }) => {
@@ -95,7 +97,7 @@ export default defineConfig({
     // Page files end in .html but site links have no suffix (/app -> app.html via Vite dev / preview and static hosting, DESIGN_V2 §7.2).
     // index.html is home; home / advisor / levels are old-URL redirect pages.
     rollupOptions: {
-      input: { main: 'index.html', select: 'select.html', app: 'app.html', home: 'home.html', advisor: 'advisor.html', levels: 'levels.html', ...licenses, embed: 'embed.html' },
+      input: { main: 'index.html', select: 'select.html', app: 'app.html', home: 'home.html', advisor: 'advisor.html', levels: 'levels.html', ...licenses, ...changelog, embed: 'embed.html' },
       output: { chunkFileNames },
     },
   },
