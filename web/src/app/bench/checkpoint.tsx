@@ -18,12 +18,15 @@ import { CopyBrief } from "./shared";
 import type { BenchCtx } from "./ctx";
 import { FaultKnobs, levelToRun } from "./faultknobs";
 import { faultScene } from "../../faults";
+import { loadExamples } from "../examples";
 
 export function mountCheckpoint(b: BenchCtx) {
   /** Bench-side switches (G-02): move the parts, record it in the timeline, power-cycle so the live sim uses the new pads */
-  function benchSwitch(l: Level, v: Record<string, string>) {
+  async function benchSwitch(l: Level, v: Record<string, string>) {
     const c = b.ctx!;
-    const next = faultScene(c.session.scene, l, v);
+    // Home = the work's default bench, so leaving a moved-wire checkpoint puts the wires back for the next one
+    const home = (await loadExamples()).find((e) => e.id === c.work.example)?.scene;
+    const next = faultScene(c.session.scene, l, v, home ?? c.session.scene);
     if (!next) return;
     c.hist?.op({ k: "wiring", mods: c.session.wireMods, scene: next, label: t("Bench switches") });
     c.session.restoreScene(next, c.session.power);
@@ -208,7 +211,7 @@ export function mountCheckpoint(b: BenchCtx) {
             </LinkBtn>
           )}
         </Btns>
-        {l.fault && <FaultKnobs key={l.id} l={l} disabled={!!s.verifying} onBench={(v) => benchSwitch(l, v)} />}
+        {l.fault && <FaultKnobs key={l.id} l={l} disabled={!!s.verifying} onBench={(v) => void benchSwitch(l, v)} scene={c.session.scene} />}
         {stall}
         {result}
         <Sec>{t("Brief for the AI")}</Sec>

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { faultLevel, faultScene, foundKnobs } from '../src/faults.ts';
+import { faultLevel, faultScene, foundKnobs, knobsFromScene } from '../src/faults.ts';
 import { wiresOf } from '../src/app/wiring.ts';
 import { checkWiring } from '../src/app/wirecheck.ts';
 import { bootOptions, type Level } from '../src/checks.ts';
@@ -38,4 +38,16 @@ test('fixed: the switch puts the wires back, no W8; an unchanged scene returns n
   // Levels without an --i2c-bus switch never touch the bench
   const wire = levels.find((l) => l.id === 'fault-wire')!;
   assert.equal(faultScene(WEATHER, wire, foundKnobs(wire)), null);
+});
+
+test('leaving the swap: any other fault level puts the BME280 back on its home pads; undo reads the switch back', () => {
+  const swapped = faultScene(WEATHER, lv, foundKnobs(lv))!;
+  const wire = levels.find((l) => l.id === 'fault-wire')!;
+  const back = faultScene(swapped, wire, foundKnobs(wire), WEATHER) as never as { parts: { type: string; sda?: number; scl?: number }[] };
+  assert.deepEqual(back.parts.filter((p) => p.type === 'bme280').map((p) => [p.sda, p.scl]), [[8, 9]]);
+  assert.ok(!rules(back as never).includes('W8'));
+  // Switch values follow the bench: swapped scene → as found, home scene → the fix
+  const fix = { '--i2c-bus': lv.fault!.fix![1] };
+  assert.deepEqual(knobsFromScene(swapped, lv, fix), foundKnobs(lv));
+  assert.deepEqual(knobsFromScene(WEATHER, lv, foundKnobs(lv)), fix);
 });

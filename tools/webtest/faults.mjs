@@ -169,6 +169,24 @@ for (const l of levels) {
   report(`${l.id} fixed, command shown on the page`, s1.ok === w1.ok && s1.fp === w1.fp, `${s1.cmd} -> ${s1.ok ? 'pass' : 'fail'} ${s1.fp}`);
   await page.screenshot({ path: path.join(outDir, `faults-${l.id}.png`) });
 }
+// G-02: leaving the swap as found for fault-wire puts the BME280 back on its home pads, so fault-wire fails or passes for its own reason
+{
+  const sw = levels.find((l) => l.id === 'fault-i2c-swap');
+  const wire = levels.find((l) => l.id === 'fault-wire');
+  await pick(page, sw.id);
+  await setKnob(page, '--i2c-bus', sw.fault.args[1]);
+  const w8 = () => page.evaluate(() => (globalThis.__tbApp?.faults?.() ?? []).some((x) => x.rule === 'W8'));
+  const pins = () => page.evaluate(() => globalThis.__tbApp.session.scene.parts.filter((p) => p.type === 'bme280').map((p) => `${p.sda}/${p.scl}`).join(' '));
+  report('swap as found again: W8 shown', await waitFor(page, () => (globalThis.__tbApp?.faults?.() ?? []).some((x) => x.rule === 'W8'), null, 20000), await pins());
+  await pick(page, wire.id);
+  const straight = await waitFor(page, () => globalThis.__tbApp.session.scene.parts.some((p) => p.type === 'bme280' && p.sda === 8 && p.scl === 9), null, 10000);
+  await sleep(3000);
+  report('swap -> fault-wire: BME280 wires back on 8/9, no W8', straight && !(await w8()), `BME280 SDA/SCL ${await pins()}`);
+  const knob = await page.$$eval('#faultKnobs button[aria-pressed="true"]', (es) => es.map((e) => [e.dataset.flag, e.dataset.v]).flat());
+  const w = await runBench(page);
+  const c = cli(path.join(root, `firmware/build/${wire.ref}/flash.bin`), wire.id, knob);
+  report('swap -> fault-wire: verdict and run ID = CLI', w.ok === c.ok && w.fp === c.fp, `${knob.join(' ')}: web ${w.ok ? 'pass' : 'fail'} ${w.fp} / CLI ${c.ok ? 'pass' : 'fail'} ${c.fp}`);
+}
 // Switches survive a reload (per-viewer convenience) and the shown command carries them
 await page.reload({ waitUntil: 'load' });
 await pick(page, 'fault-wire');
