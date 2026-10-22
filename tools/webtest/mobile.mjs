@@ -164,6 +164,18 @@ report('props drawer: tap preset 32°', await clickText('#props button', '32°')
 const t32 = await waitFor(page, () => /T=32\.00/.test(document.querySelector('#sheetPeek')?.textContent ?? ''), null, 15000);
 report('firmware reading becomes 32 °C', t32, await page.$eval('#sheetPeek', (e) => e.textContent.slice(0, 60)));
 await page.screenshot({ path: path.join(outDir, 'mobile-props.png') });
+{
+  // U-26: a toast raised while the props drawer is open must sit above it, not on it
+  await page.evaluate(() => globalThis.__tbApp.toast('Placed from the list: 5 (OLED, BME280, LED, button, buzzer)'));
+  await sleep(600);
+  const r = await page.evaluate(() => {
+    const a = document.querySelector('#toast').getBoundingClientRect();
+    const b = document.querySelector('#props').getBoundingClientRect();
+    return { toastVisible: !document.querySelector('#toast').hidden, toastBottom: a.bottom, propsTop: b.top };
+  });
+  report('toast does not overlap the props drawer', r.toastVisible && r.toastBottom <= r.propsTop + 0.5, JSON.stringify(r));
+  await page.screenshot({ path: path.join(outDir, 'mobile-props-toast.png') });
+}
 await page.click('#propsClose');
 report('props drawer closes', await waitFor(page, () => !document.querySelector('#props') || document.querySelector('#props').getBoundingClientRect().height === 0));
 

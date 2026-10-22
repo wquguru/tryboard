@@ -118,7 +118,7 @@
 | U-23 | 手机 ⋯ 菜单改分组底部抽屉 + 分享二级抽屉（DESIGN_V2 §10.1） | mobile.mjs：⋯ 打开抽屉有遮罩、四组标题、分享二级抽屉三项、开发者折叠展开、商标声明在、触控 ≥ 44px、无横向滚动；原有 ⋯ 断言（Task brief / Change firmware / 主题）改选择器不减；桌面 ⋯ 不变；agent-browser 390×844 截图（Reviews/ab/U-23.md） | ☐ |
 | U-24 | 手机实验台「更多」按 操作 → 记录 → 视图 分组 + 图标 + 开关，补声音开关；成品页按钮同分组（DESIGN_V2 §10.2） | mobile.mjs：组标题顺序、BOOT 在第一组、声音开关可点且静音状态切换、3D 模型为开关；media.mjs / harness.mjs 不减断言全过；agent-browser 截图（Reviews/ab/U-24.md） | ☐ |
 | U-25 | 作品切换 ▾ 分「引导作品 / 自由实验台」两组 + 进度（DESIGN_V2 §10.3） | mobile.mjs：两组标题、空白 / 我的项目在自由组首行、当前作品勾；levels.mjs 不减断言；桌面 + 390 截图（Reviews/ab/U-25.md） | ☐ |
-| U-26 | 手机 toast 不压抽屉（DESIGN_V2 §10.4） | mobile.mjs：属性抽屉打开时触发 toast，toast 矩形与抽屉不重叠；agent-browser 截图（Reviews/ab/U-26.md） | ☐ |
+| U-26 | 手机 toast 不压抽屉（DESIGN_V2 §10.4） | mobile.mjs：属性抽屉打开时触发 toast，toast 矩形与抽屉不重叠；agent-browser 截图（Reviews/ab/U-26.md） | ☑ |
 
 ## C · 竞品调研后（2026-10-19 人已确认 C-01–C-05，依据 RESEARCH_ESP_EMULATOR.md；C-06 涉及授权，仍待确认）
 | ID | 项 | 验收（草案） | 状态 |
