@@ -1107,5 +1107,13 @@ const d: Dict = {
   "Link, share card or .tryboard file": "リンク、共有カード、.tryboard ファイル",
   "Input log · AI task brief · Real network": "入力ログ · AI 指示書 · 実ネットワーク",
   "Back": "戻る",
+  "Board controls": "ボード操作",
+  "Capture": "記録",
+  "View tools": "表示",
+  "Sound": "サウンド",
+  "on": "オン",
+  "off": "オフ",
+  "muted": "ミュート",
+  "Real 3D models": "実物の 3D モデル",
 };
 export default d;

@@ -44,7 +44,7 @@ export function mountVerdict(b: BenchCtx) {
         id: "nav",
         tools: [
           { id: "select", label: t("Select"), key: "V" },
-          { id: "orbit", label: t("Orbit"), key: "H" },
+          { id: "orbit", label: t("Orbit"), key: "H", kind: "switch" },
         ],
       },
       {
@@ -68,6 +68,9 @@ export function mountVerdict(b: BenchCtx) {
           {
             id: "ext",
             label: extModelsOn() ? t("3D models: on") : t("3D models: off"),
+            phoneLabel: t("Real 3D models"),
+            kind: "switch",
+            on: extModelsOn,
           },
         ],
       },
@@ -75,13 +78,13 @@ export function mountVerdict(b: BenchCtx) {
         id: "media",
         tools: [
           { id: "photo", label: t("Photo") },
-          { id: "rec", label: b.benchRec ? t("Stop recording") : t("Record") },
+          { id: "rec", label: b.benchRec ? t("Stop recording") : t("Record"), on: () => !!b.benchRec },
         ],
       },
       {
         id: "act",
         tools: [
-          { id: "heat", label: t("Heater") },
+          { id: "heat", label: t("Heater"), kind: "tag", on: () => !!c.session.heat },
           { id: "button", label: t("Press BOOT") },
         ],
       },

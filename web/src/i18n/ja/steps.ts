@@ -1111,5 +1111,7 @@ const d: Dict = {
   "Grove unit removed": "Grove ユニットを外す",
   "Same as CLI --grove {id}: temperature, humidity and pressure follow the environment controls.": "CLI --grove {id} と同じ：温度・湿度・気圧は環境コントロールに従います。",
   "Spoken \"Hello\" clip (voice assistant WAV)": "「Hello」と話す録音（音声アシスタント WAV）",
+  "Sound": "サウンド",
+  "muted": "ミュート",
 };
 export default d;
