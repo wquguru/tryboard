@@ -425,8 +425,8 @@ export const IRLAMP: Template = {
     { id: 'irrx', name: t('VS1838B IR receiver'), short: t('IR receiver'), spotSize: [20, 16], mini: IRRX_MINI,
       iso: '<rect width="20" height="16" rx="2" fill="#141416"/><circle cx="10" cy="11" r="5" fill="#26262B"/>',
       spots: [
-        { key: 'A', label: t('Dome in the IR window (front of the base)'), at: [142, 82], ok: true, msg: [t('Receiver in the IR window'), t('The remote reaches it from across the room')] },
-        { key: 'B', label: t('Inside the base, 15 mm behind the solid wall'), at: [142, 52], ok: false, msg: [t('Receiver behind the opaque wall'), t('3 mm of opaque PLA blocks the 940 nm light: no remote code arrives (estimate)')] },
+        { key: 'A', label: t('In the IR window'), at: [142, 82], ok: true, msg: [t('Receiver in the IR window'), t('The remote reaches it from across the room')] },
+        { key: 'B', label: t('Behind the solid wall'), at: [142, 52], ok: false, msg: [t('Receiver behind the opaque wall'), t('3 mm of opaque PLA blocks the 940 nm light: no remote code arrives (estimate)')] },
       ] },
     { id: 'shade', name: t('Opal shade'), short: t('Shade'), ghost: [0, 0, 180, 100], okMsg: [t('Shade snapped on'), t('Click “Next: product”')],
       mini: '<path d="M20 56 C14 30 24 6 50 4 C76 6 86 30 80 56 Z" fill="#F4F1EA" stroke="#BDB9B0" stroke-width="2"/>',
