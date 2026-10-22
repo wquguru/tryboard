@@ -1,5 +1,5 @@
 // Voice assistant (F-09b-2): s3-xiaozhi-lite on the web, one turn with the Voice tab's hold-to-talk button and sound on
-// -> speaker analyser non-silent -> export inputs -> CLI --inputs is byte-identical, same fingerprint; 390×844 has no horizontal scroll.
+// -> speaker analyser non-silent -> export inputs -> CLI --inputs is byte-identical, same fingerprint; my microphone (fake device) + 3D BOOT -> exported WAV replays via --mic; 390×844 no h-scroll.
 // Usage: node tools/webtest/xiaozhi.mjs (after tools/build_web.sh); logs in Reviews/web/xiaozhi-*
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
@@ -32,8 +32,11 @@ const base = `http://localhost:${server.address().port}`;
 const browser = await puppeteer.launch({
   executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   headless: 'new',
-  // Web Audio must run without a real gesture so the analyser sees the speaker
-  args: ['--use-angle=metal', '--enable-gpu', '--window-size=1440,1000', '--autoplay-policy=no-user-gesture-required'],
+  // Speaker needs Web Audio without a gesture; the fake capture device plays the sample clip as "my microphone" (F-09c),
+  // and on macOS the sandboxed audio service cannot open that file (silence), hence the AudioService feature flags
+  args: ['--use-angle=metal', '--enable-gpu', '--window-size=1440,1000', '--autoplay-policy=no-user-gesture-required',
+    '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--disable-features=AudioServiceSandbox,AudioServiceOutOfProcess',
+    `--use-file-for-fake-audio-capture=${path.join(root, 'tools/audio/xz_mic.wav')}`],
   defaultViewport: { width: 1440, height: 1000, deviceScaleFactor: 1 },
 });
 const errors = [];
@@ -153,6 +156,81 @@ const c = cliRun(['--seconds', String(SECS), '--gpio-log', '--ws2812-log', ...hw
 report('web replay and CLI replay fingerprints match', web.fingerprint === c.fp && !web.error && c.stdout.includes(DONE), `web ${web.fingerprint} / CLI ${c.fp}`);
 await page.close();
 
+// ---- 7. My microphone (F-09c): fake capture device, hold the 3D BOOT, export the recording + inputs, CLI --mic replays it
+/** Click `sel` with downloads intercepted; resolves to the blob's bytes (base64) or '' */
+const grab = (p, sel) => p.evaluate(async (s) => {
+  let blob = null;
+  const orig = URL.createObjectURL;
+  URL.createObjectURL = (b) => { blob = b; return orig.call(URL, b); };
+  const click = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () {};
+  if (s === 'inputs') {
+    document.getElementById('moreBtn').click();
+    for (let i = 0; i < 20 && !document.querySelector('[data-more="inputs"]'); i++) await new Promise((r) => setTimeout(r, 50));
+    document.querySelector('[data-more="inputs"]').click();
+  } else document.querySelector(s).click();
+  for (let i = 0; i < 50 && !blob; i++) await new Promise((r) => setTimeout(r, 50));
+  URL.createObjectURL = orig;
+  HTMLAnchorElement.prototype.click = click;
+  if (!blob) return '';
+  const u8 = new Uint8Array(await blob.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+  return btoa(bin);
+}, sel);
+const L = await browser.newPage();
+L.on('pageerror', (e) => errors.push(`${e}`));
+L.on('console', (x) => { if (x.type() === 'error') errors.push(x.text()); });
+await L.goto(base + '/app?work=blank&example=s3-xiaozhi-lite#bench', { waitUntil: 'load' });
+await waitFor(L, has, READY, 90000);
+await waitFor(L, () => !!document.getElementById('xzMicLive'), null, 10000);
+await L.click('#xzMicLive');
+const liveOn = await waitFor(L, () => document.getElementById('xzMicLive')?.getAttribute('aria-pressed') === 'true' && !!document.getElementById('xzMicExport'), null, 10000);
+const micMsg = await L.$eval('#xzMicMsg', (e) => e.textContent).catch(() => '');
+report('"My microphone" switches to the live source (fake capture device)', liveOn && !micMsg, micMsg);
+const lv = await waitFor(L, () => Number(document.getElementById('xzMicLevel')?.getAttribute('aria-valuenow')) > 0, null, 10000);
+report('input level meter moves', lv);
+const bpos = await L.evaluate(() => globalThis.__tbButtonPos('BOOT'));
+const t1 = await simNow(L);
+await L.mouse.move(bpos[0], bpos[1]);
+await L.mouse.down();
+await waitFor(L, (t) => parseFloat(document.getElementById('simtime').textContent) > t + 1.2, t1, 30000);
+await L.mouse.up();
+const turn = await waitFor(L, has, DONE, 60000);
+report('hold the 3D BOOT with the live mic: turn completes', turn, bpos ? `BOOT @${bpos.map(Math.round).join(',')}` : 'BOOT not found');
+await sleep(500);
+await L.click('#runPause');
+await waitFor(L, () => /Paused/.test(document.getElementById('runState').textContent), null, 5000);
+await sleep(300);
+const llog = await L.evaluate(() => globalThis.__tbInputLog());
+const lweb = await fwConsole(L);
+await L.screenshot({ path: path.join(outDir, 'xiaozhi-livemic.png') });
+const wav = Buffer.from(await grab(L, '#xzMicExport'), 'base64');
+const wavFile = path.join(outDir, 'xiaozhi-livemic.wav');
+fs.writeFileSync(wavFile, wav);
+const wavOk = wav.length > 44 && wav.toString('latin1', 0, 4) === 'RIFF' && wav.toString('latin1', 8, 12) === 'WAVE' && wav.readUInt16LE(34) === 16;
+let nz = 0;
+for (let i = 44; i + 1 < wav.length; i += 2) if (wav.readInt16LE(i)) nz++;
+report('export recording (WAV): 16-bit RIFF with live samples', wavOk && nz > 1000, `${wav.length} bytes, rate ${wavOk ? wav.readUInt32LE(24) : '?'}, ${nz} non-zero samples`);
+const ltext = Buffer.from(await grab(L, 'inputs'), 'base64').toString('utf8');
+const linFile = path.join(outDir, 'xiaozhi-livemic-inputs.txt');
+fs.writeFileSync(linFile, ltext);
+report('3D BOOT logs the same levels as the pane button (gpio0=0 then gpio0=z)', /:gpio0=0$/m.test(ltext) && /:gpio0=z$/m.test(ltext) && !/:gpio0=1$/m.test(ltext));
+const lcyc = Math.round(llog.endMs * (CPU_HZ / 1000));
+const lhw = ['--i2s', (llog.i2s ?? []).join(','), '--mic', wavFile, '--i2c', llog.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(',')];
+const lr = cliRun(['--seconds', String((lcyc + 0.5) / CPU_HZ), ...lhw, '--inputs', linFile], 'livemic');
+const ltrim = lweb.length < lr.stdout.length;
+const lweb0 = ltrim ? lweb.slice(lweb.indexOf('\n') + 1) : lweb;
+const lrun = lr.stdout.slice(Math.max(0, lr.stdout.length - lweb0.length));
+const lsame = lrun === lweb0 && (ltrim || lweb.startsWith(lr.stdout.split('\n')[0]));
+const ldiff = [...lrun].findIndex((ch, i) => ch !== lweb0[i]);
+report('CLI --mic <exported WAV> --inputs <log> = live-mic web serial (byte for byte)', lsame && lr.code === 0 && lr.stdout.includes(DONE),
+  lsame ? `${lrun.length} bytes` : `differs from byte ${ldiff}: ${JSON.stringify(lrun.slice(ldiff, ldiff + 60))} vs ${JSON.stringify(lweb0.slice(ldiff, ldiff + 60))}`);
+// The log still names the sample clip (share links carry no audio): replaying with it must not reproduce the live talk
+const ls = cliRun(['--seconds', String((lcyc + 0.5) / CPU_HZ), ...lhw.slice(0, 2), '--mic', `tools/audio/${llog.mic}`, ...lhw.slice(4), '--inputs', linFile], 'livemic-sample');
+report('the log alone (sample clip) does not reproduce the live talk, the WAV is needed', llog.mic === 'xz_mic.wav' && ls.stdout !== lr.stdout);
+await L.close();
+
 // ---- 6. Phone 390×844: no horizontal scroll, talk button at least 44 px tall
 const m = await browser.newPage();
 m.on('pageerror', (e) => errors.push(`${e}`));
@@ -167,10 +245,11 @@ report('390×844: drawer opens on the Voice tab', tabOk);
 await sleep(800);
 const geo = await m.evaluate(() => {
   const b = document.getElementById('xzTalk')?.getBoundingClientRect();
-  return { sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, h: b?.height ?? 0, vis: (b?.width ?? 0) > 0 };
+  const mb = document.getElementById('xzMicLive')?.getBoundingClientRect();
+  return { sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, h: b?.height ?? 0, vis: (b?.width ?? 0) > 0, mic: mb?.height ?? 0 };
 });
 await m.screenshot({ path: path.join(outDir, 'xiaozhi-390.png') });
-report('390×844: no horizontal scroll, talk button >= 44 px', geo.sw <= geo.cw && geo.vis && geo.h >= 44, JSON.stringify(geo));
+report('390×844: no horizontal scroll, talk and mic source buttons >= 44 px', geo.sw <= geo.cw && geo.vis && geo.h >= 44 && geo.mic >= 44, JSON.stringify(geo));
 
 await browser.close();
 server.close();

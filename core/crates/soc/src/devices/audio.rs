@@ -193,13 +193,24 @@ pub enum MicSource {
     Silence,
     /// Fixed WAV (looped, sampled by simulated time: the same WAV reads identically every run)
     Wav { rate: f64, data: Vec<f32> },
-    /// Live external input (the browser mic): consumed from a queue at the I2S frame rate, 0 when empty
+    /// Live external input (the browser mic), placed on the simulated-time sample grid and read exactly like `Wav`
+    /// (F-09c): a WAV of the same samples, zeros elsewhere, replays the same frames (see `push_live_at`)
     Live {
         rate: f64,
-        fifo: VecDeque<f32>,
-        pos: f64,
+        /// Absolute sample index of `buf[0]`; indices outside `buf` read 0
+        base: u64,
+        buf: VecDeque<f32>,
+        /// High-water mark: every index below it may have been read, so new audio never lands there
+        hwm: u64,
         underruns: u64,
     },
+}
+
+/// Simulated time -> (sample index, fraction): shared by `Wav` and `Live` so both interpolate bit-identically
+fn grid(t: f64, rate: f64) -> (f64, f32) {
+    let p = t / CPU_HZ as f64 * rate;
+    let i = p.floor();
+    (i, (p - i) as f32)
 }
 
 pub struct Inmp441 {
@@ -226,35 +237,49 @@ impl Inmp441 {
         }
     }
 
-    /// Web page pushes live audio (rate = sample rate of the pushed data). Queue keeps at most 1 s
+    /// Push live audio with no clock (appends after what is queued); see `push_live_at`
     pub fn push_live(&mut self, rate: f64, x: &[f32]) {
+        self.push_live_at(0, rate, x);
+    }
+
+    /// Web page pushes live audio at simulated cycle `now` (rate = sample rate of the pushed data). The chunk lands at
+    /// max(queued end, high-water mark, now's index); it is dropped (None) when that is over 1 s ahead of `now`
+    pub fn push_live_at(&mut self, now: u64, rate: f64, x: &[f32]) -> Option<u64> {
+        let at = (now as f64 / CPU_HZ as f64 * rate).floor() as u64;
         if !matches!(&self.source, MicSource::Live { rate: r, .. } if *r == rate) {
             self.source = MicSource::Live {
                 rate,
-                fifo: VecDeque::new(),
-                pos: 0.0,
+                base: at,
+                buf: VecDeque::new(),
+                hwm: at,
                 underruns: 0,
             };
         }
-        if let MicSource::Live { fifo, .. } = &mut self.source {
-            fifo.extend(x.iter().copied());
-            let cap = rate.max(1.0) as usize;
-            while fifo.len() > cap {
-                fifo.pop_front();
-            }
+        let MicSource::Live { base, buf, hwm, .. } = &mut self.source else {
+            return None;
+        };
+        let end = *base + buf.len() as u64;
+        let start = end.max(*hwm).max(at);
+        if start > at + rate.max(1.0) as u64 {
+            return None;
         }
+        if buf.is_empty() {
+            *base = start;
+        } else {
+            buf.extend(std::iter::repeat_n(0.0, (start - end) as usize));
+        }
+        buf.extend(x.iter().copied());
+        Some(start)
     }
 
-    fn level(&mut self, t: f64, step: f64) -> f32 {
+    fn level(&mut self, t: f64) -> f32 {
         match &mut self.source {
             MicSource::Silence => 0.0,
             MicSource::Wav { rate, data } => {
                 if data.is_empty() {
                     return 0.0;
                 }
-                let p = t / CPU_HZ as f64 * *rate;
-                let i = p.floor();
-                let fr = (p - i) as f32;
+                let (i, fr) = grid(t, *rate);
                 let n = data.len();
                 let a = data[(i as usize) % n];
                 let b = data[(i as usize + 1) % n];
@@ -262,25 +287,32 @@ impl Inmp441 {
             }
             MicSource::Live {
                 rate,
-                fifo,
-                pos,
+                base,
+                buf,
+                hwm,
                 underruns,
             } => {
-                // step: pushed samples per I2S frame
-                let _ = rate;
-                let v = match fifo.front() {
-                    Some(v) => *v,
-                    None => {
-                        *underruns += 1;
+                let (i, fr) = grid(t, *rate);
+                let i = i as u64;
+                let end = *base + buf.len() as u64;
+                if i >= end {
+                    *underruns += 1;
+                }
+                let at = |j: u64| {
+                    if j >= *base && j < end {
+                        buf[(j - *base) as usize]
+                    } else {
                         0.0
                     }
                 };
-                *pos += step;
-                while *pos >= 1.0 {
-                    *pos -= 1.0;
-                    fifo.pop_front();
+                let (a, b) = (at(i), at(i + 1));
+                *hwm = (*hwm).max(i + 2);
+                // Reads only move forward: drop what is behind this frame
+                while *base < i && !buf.is_empty() {
+                    buf.pop_front();
+                    *base += 1;
                 }
-                v
+                a + (b - a) * fr
             }
         }
     }
@@ -288,16 +320,12 @@ impl Inmp441 {
     /// Slot words for n frames: 24-bit two's complement left-aligned (low 8 bits 0); the silent slot is high-Z and reads 0
     pub fn slots(&mut self, t0: u64, rate: f64, n: usize) -> Vec<[i32; 2]> {
         let fc = CPU_HZ as f64 / rate;
-        let step = match &self.source {
-            MicSource::Live { rate: r, .. } => *r / rate,
-            _ => 0.0,
-        };
         let k = self.right as usize;
         self.frames += n as u64;
         (0..n)
             .map(|i| {
                 let x = self
-                    .level(t0 as f64 + i as f64 * fc, step)
+                    .level(t0 as f64 + i as f64 * fc)
                     .clamp(-1.0, 1.0 - 1.0 / 8_388_608.0);
                 let v24 = (x as f64 * 8_388_608.0).round() as i32;
                 // A lone PDM mic's data line keeps its bit through the idle clock phase, so both slots decode it
@@ -567,5 +595,71 @@ mod tests {
         let s = m.slots(0, 16000.0, 3);
         assert!(s[0][0] > 0 && s[1][0] < 0 && s[2][0] == 0);
         assert!(matches!(m.source, MicSource::Live { underruns: 1, .. }));
+    }
+
+    #[test]
+    fn live_mic_record_replays_as_wav() {
+        // F-09c: pushes interleaved with reads (one read past the queued audio, one chunk too far ahead) must
+        // replay frame for frame from a WAV holding each kept chunk at its returned index, zeros elsewhere
+        let pins = || Pins {
+            bclk: 1,
+            ws: 2,
+            data: 3,
+        };
+        let rate = 48000.0;
+        let fc = CPU_HZ / 16000;
+        let mut live = Inmp441::new(pins());
+        let mut kept: Vec<(u64, Vec<f32>)> = Vec::new();
+        let mut reads = Vec::new();
+        let mut out = Vec::new();
+        let mut t = 7_777u64;
+        let mut k = 0u32;
+        for step in 0..60u64 {
+            let now = t + step * 13;
+            let chunk: Vec<f32> = (0..300)
+                .map(|_| {
+                    k += 1;
+                    ((k as f32 * 0.37).sin() * 32767.0).round() / 32768.0
+                })
+                .collect();
+            if step != 7 && step != 8 {
+                if let Some(at) = live.push_live_at(now, rate, &chunk) {
+                    kept.push((at, chunk));
+                }
+            }
+            // Frames run a bit faster than pushes arrive, so the sim catches up and underruns
+            let n = if step % 5 == 0 { 140 } else { 95 };
+            reads.push((t, n));
+            out.extend(live.slots(t, 16000.0, n));
+            t += n as u64 * fc;
+        }
+        // Paused sim, wall clock keeps pushing: the queue stops 1 s ahead of now
+        let mut fed = 0;
+        while let Some(at) = live.push_live_at(t, rate, &[0.25; 1000]) {
+            kept.push((at, vec![0.25; 1000]));
+            fed += 1;
+            assert!(fed < 100, "a chunk over 1 s ahead of now must be dropped");
+        }
+        let MicSource::Live { hwm, underruns, .. } = live.source else {
+            panic!("live source expected");
+        };
+        assert!(
+            underruns > 0,
+            "the test must cover a read past the queued audio"
+        );
+        let end = kept.iter().map(|(a, c)| a + c.len() as u64).max().unwrap();
+        let mut data = vec![0.0f32; end.max(hwm) as usize + 1];
+        for (a, c) in &kept {
+            data[*a as usize..*a as usize + c.len()].copy_from_slice(c);
+        }
+        let mut wav = Inmp441::new(pins());
+        wav.source = MicSource::Wav { rate, data };
+        let again: Vec<_> = reads
+            .iter()
+            .flat_map(|&(t0, n)| wav.slots(t0, 16000.0, n))
+            .collect();
+        assert_eq!(out.len(), again.len());
+        assert!(out.iter().any(|s| s[0] != 0));
+        assert_eq!(out, again);
     }
 }

@@ -137,9 +137,11 @@ export type ToWorker =
   | { type: 'vcdGet' }
   /** Inputs without a dedicated message (imu, touch...): applied as is and logged. */
   | { type: 'input'; act: Extract<InputAction, { kind: 'imu' | 'touch' | 'bat' | 'pwrkey' | 'key' | 'pir' | 'lux' | 'card' }> }
-  /** Mic source: WAV (looped, sampled on sim time, reproducible) / silent / live (micPush browser samples; not reproducible, not logged). */
+  /** Mic source: WAV (looped, sampled on sim time, reproducible) / silent / live (micPush browser samples placed on sim time; not logged, micRecGet exports them for --mic). */
   | { type: 'mic'; source: 'wav' | 'silence' | 'live'; wav?: ArrayBuffer }
   | { type: 'micPush'; rate: number; data: Float32Array }
+  /** Ask for the live mic recording as a 16-bit WAV, answered with micRec (F-09c) */
+  | { type: 'micRecGet' }
   /** USB <-> external 5 V (logged: power=usb|ext). */
   | { type: 'power'; mode: PowerMode }
   | { type: 'analog'; pin: number; mv: number }
@@ -315,6 +317,8 @@ export type FromWorker =
   /** Paced replay (F-03b) reached untilMs: same cycle and snapshot as seek's; the run keeps going live */
   | { type: 'replayed'; snap: Snapshot }
   | { type: 'mark'; id: number; tMs: number }
+  /** Live mic recording since power-up (null = nothing live heard, or over the length cap: full) */
+  | { type: 'micRec'; wav: ArrayBuffer | null; full: boolean }
   /** Logic analyser events (raw tb_io_take records, 16 bytes each); reset = new power-up, earlier ones void. */
   | { type: 'io'; reset: boolean; data: Uint8Array; dropped: number }
   /** FreeRTOS task switches (raw tb_tasks_take records, 16 bytes each) + task table JSON; reset = new power-up. */

@@ -1022,11 +1022,11 @@ impl Machine {
         }
     }
 
-    /// Mic hears live pushed audio (web mic), rate = sample rate of the pushed data
-    pub fn mic_push(&mut self, rate: f64, x: &[f32]) {
-        if let Some(m) = self.audio_mut().mic.as_mut() {
-            m.push_live(rate, x);
-        }
+    /// Mic hears live pushed audio (web mic), rate = sample rate of the pushed data; returns the sample index it
+    /// landed at on the simulated-time grid (None = dropped), so the page can export it as a `--mic` WAV (F-09c)
+    pub fn mic_push(&mut self, rate: f64, x: &[f32]) -> Option<u64> {
+        let now = self.cycles();
+        self.audio_mut().mic.as_mut()?.push_live_at(now, rate, x)
     }
 
     /// Mic back to silence

@@ -150,6 +150,11 @@ export const actions: {
   /** Voice server action (xz= in the input log, F-09b-2); talk = hold / release the BOOT key (GPIO0) */
   xz?: (cmd: string) => void;
   talk?: (down: boolean) => void;
+  /** Voice tab mic source (F-09c): the work's sample clip or the browser mic; resolves to a fallback notice or '' */
+  mic?: (which: 'sample' | 'live') => Promise<string>;
+  micNow?: () => { live: boolean; level: number };
+  /** Download the live mic recording as a `--mic` WAV; resolves to an error or '' */
+  micExport?: () => Promise<string>;
   /** One step on the virtual phone (phone= action, recorded in the input log) */
   phone?: (cmd: string) => void;
   /** One network fault from now (D-01: reboot / dns / silent, netfault= action in the input log) */

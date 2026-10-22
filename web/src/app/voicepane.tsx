@@ -41,6 +41,20 @@ export function VoicePane() {
     const b = box.current;
     if (b && stick.current) b.scrollTop = b.scrollHeight;
   }, [s.log]);
+  const [mic, setMic] = useState(() => actions.micNow?.() ?? { live: false, level: 0 });
+  const [micMsg, setMicMsg] = useState('');
+  // Mic source can also change from the bench panel; the level meter wants ~5 updates a second, not every frame
+  useEffect(() => {
+    const id = setInterval(() => setMic(actions.micNow?.() ?? { live: false, level: 0 }), 200);
+    return () => clearInterval(id);
+  }, []);
+  const pickMic = (which: 'sample' | 'live') => {
+    setMicMsg('');
+    void actions.mic?.(which).then((msg) => {
+      setMicMsg(msg);
+      setMic(actions.micNow?.() ?? { live: false, level: 0 });
+    });
+  };
   const talking = speaking(s.log);
   const chat = bubbles(s.log);
   const talk = (down: boolean) => {
@@ -107,6 +121,52 @@ export function VoicePane() {
         >
           {held ? t('Listening… release to send') : talking ? t('Interrupt (tap BOOT)') : t('Hold to talk (BOOT)')}
         </button>
+        <div role="group" aria-label={t('Microphone source')} className="grid grid-cols-2 gap-x-2 gap-y-1">
+          <span className="col-span-2 text-xs text-muted">{t('Microphone source')}</span>
+          {(['sample', 'live'] as const).map((w) => (
+            <button
+              key={w}
+              type="button"
+              id={w === 'live' ? 'xzMicLive' : 'xzMicSample'}
+              aria-pressed={mic.live === (w === 'live')}
+              onClick={() => pickMic(w)}
+              className={cn(
+                'h-11 min-w-0 truncate rounded-md border px-2 text-sm md:h-8',
+                mic.live === (w === 'live') ? 'border-accent bg-accent-bg font-medium' : 'border-line bg-surface hover:bg-accent-bg',
+              )}
+            >
+              {w === 'live' ? t('My microphone') : t('Sample clip')}
+            </button>
+          ))}
+        </div>
+        {mic.live && (
+          <div className="flex items-center gap-2">
+            <div
+              id="xzMicLevel"
+              role="meter"
+              aria-label={t('Input level')}
+              aria-valuemin={0}
+              aria-valuemax={1}
+              aria-valuenow={Math.min(1, mic.level * 4)}
+              className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-line-soft"
+            >
+              <div className="h-full bg-accent transition-[width]" style={{ width: `${Math.min(100, mic.level * 400)}%` }} />
+            </div>
+            <button
+              type="button"
+              id="xzMicExport"
+              onClick={() => void actions.micExport?.().then(setMicMsg)}
+              className="h-11 flex-none rounded-md border border-line bg-surface px-3 text-sm hover:bg-accent-bg md:h-8"
+            >
+              {t('Export recording (WAV)')}
+            </button>
+          </div>
+        )}
+        {micMsg && (
+          <p id="xzMicMsg" role="status" className="text-xs text-warn-ink">
+            {micMsg}
+          </p>
+        )}
         <form onSubmit={submit} className="flex gap-2">
           <input
             id="xzSay"
@@ -121,7 +181,12 @@ export function VoicePane() {
             {t('Say')}
           </button>
         </form>
-        <p className="text-xs text-muted">{t('The mic hears a recorded clip; wake word, echo cancellation and real speech recognition need real hardware.')}</p>
+        <p id="xzMicNote" className="text-xs text-muted">
+          {mic.live
+            ? t('Your microphone: export the recording and the input log, then tryboard run --mic <recording> --inputs <log> replays talks made after switching byte for byte. Share links carry no audio; others hear the sample clip.')
+            : t('The mic hears a sample clip, so every run replays the same.')}{' '}
+          {t('The server answers from a script; wake word, echo cancellation and real speech recognition need real hardware.')}
+        </p>
         <div id="xzChat" aria-label={t('Conversation')} className="flex flex-col gap-1.5">
           {chat.length === 0 && <div className="text-xs text-muted">{t('No conversation yet')}</div>}
           {chat.map((b, i) => (

@@ -179,6 +179,9 @@ export class LiveSim {
         this.endPaced(m.snap);
       } else if (m.type === 'seekProgress') {
         o.onSeekProgress?.(m.simSeconds);
+      } else if (m.type === 'micRec') {
+        this.micRecWaiter?.(m);
+        this.micRecWaiter = null;
       } else if (m.type === 'mark') {
         this.markWaiters.get(m.id)?.(m.tMs);
         this.markWaiters.delete(m.id);
@@ -338,6 +341,14 @@ export class LiveSim {
   micPush(rate: number, data: Float32Array) {
     this.send({ type: 'micPush', rate, data }, [data.buffer]);
   }
+  /** Live mic audio heard since power-up as a `--mic` WAV (F-09c); wav null when none or over the length cap */
+  micRecording(): Promise<{ wav: ArrayBuffer | null; full: boolean }> {
+    return new Promise((r) => {
+      this.micRecWaiter?.({ wav: null, full: false });
+      this.micRecWaiter = r;
+      this.send({ type: 'micRecGet' });
+    });
+  }
   powerMode(): PowerMode {
     return this.o.power ?? 'usb';
   }
@@ -447,6 +458,7 @@ export class LiveSim {
   private snapWaiters: ((s: Snapshot | null) => void)[] = [];
   private seekWaiter: ((s: Snapshot) => void) | null = null;
   private markWaiters = new Map<number, (tMs: number) => void>();
+  private micRecWaiter: ((m: { wav: ArrayBuffer | null; full: boolean }) => void) | null = null;
   private markId = 0;
   /** Input log + full serial + observations since power-up (does not interrupt the run). */
   snapshot(): Promise<Snapshot | null> {

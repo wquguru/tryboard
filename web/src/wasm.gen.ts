@@ -229,8 +229,8 @@ export interface WasmExports {
   tb_audio_stat(which: number): number;
   /** # Safety ptr..ptr+len must be filled tb_alloc memory. Feeds the microphone a fixed WAV; 0 = ok, 1 = unreadable WAV */
   tb_mic_wav(ptr: number, len: number): number;
-  /** # Safety ptr..ptr+4n must be filled tb_alloc memory (no alignment needed): n LE f32 (-1..1) live mic samples at `rate` */
-  tb_mic_push(ptr: number, n: number, rate: number): void;
+  /** # Safety ptr..ptr+4n must be filled tb_alloc memory (no alignment needed): n LE f32 (-1..1) live mic samples at `rate`. Returns the sample index they landed at (simulated-time grid, F-09c), -1 when dropped or no mic */
+  tb_mic_push(ptr: number, n: number, rate: number): number;
   /** Return the microphone to silence */
   tb_mic_silence(): void;
   /** Same `[tryboard] I2S …` text the CLI prints at exit; returns its length, read via tb_report_ptr */
