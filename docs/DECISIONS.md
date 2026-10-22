@@ -1453,3 +1453,8 @@
 - **从没存进本机的文件条目照旧保留**（无 `h`，点了选文件），行为同 F-07b。
 - **芯片过滤**：文件条目新增可选 `chip`（上传时 `session.chip`，`fwCheck` 已保证 bin 与之相符），按菜单顶部当前选中的芯片过滤（每次打开从台面芯片开始，与示例列表一致）；F-07d 之前写入、没有 `chip` 的条目所有芯片下都显示。示例条目不按芯片过滤（点了会连同台面一起切换，不会跑错芯片）。
 - **代码位置**：`Recent` / `recentFw` / `pushRecent` 从 fwmenu.tsx 移到新文件 `web/src/app/recentfw.ts`（Node 单测不能导入 .tsx），新增纯函数 `liveRecent` / `recentFor` / `pruneRecent`；`ownbin.ts` 新增 `keptKeys(idb?)`。localStorage 键 `tryboard-recent-fw` 和格式兼容旧数据。芯片字面量只在测试里出现。
+
+
+## 2026-10-22 F-03c 原速回放检查改按模拟时刻判定（自主决定，待人审）
+- **钩子放在嵌入页、只在原速回放期间记录**：`web/src/embed/run.ts` 在原速回放（`inp.paced`）时于 `restoreShare` 之前就经 `session.onTick` 逐 tick 记 `[tick 末模拟秒, 该 tick 串口片段, 室温]` 到 `__tbEmbed.trace`，回放结束 / 跳过即停，上限 2 万条；测试只取最后一次模拟时间归零（回放重新上电）之后的部分。只读、不发消息给 worker，不改仿真结果，不进 UI。备选是 store 订阅 `simSeconds`，但 store 每 0.05 s 才更新一次，粒度不够。
+- **判定不放宽**：原条件「首次看到 UNIT F 时 t ≥ 1.1，且有 t > 1.0 的未出现样本」改为「含 UNIT F 的 tick 末时刻 ≥ 1.1，且其前一个 tick（仍未出现）末时刻 > 1.0」，另要求 trace 首条 < 1.0（确实从回放开头记起）；室温检查同理（变 35 °C 的 tick ≥ 1.9，前一 tick > 1.8）。前一 tick 就是最晚的未出现状态，等价于原意图且不靠 100 ms 墙钟取样碰运气。「从 0 起步且有进度标签」等其他检查仍按墙钟取样（与时序无关）。

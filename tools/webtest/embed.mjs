@@ -164,11 +164,11 @@ await waitFor(pp, () => document.body.dataset.state === 'poster', null, 10000);
 report('paced: poster offers "Replay at original speed", preselected by &replay=1', await pp.evaluate(() => document.getElementById('embedPaced')?.checked === true));
 await pp.click('#embedPlay');
 await waitFor(pp, () => document.body.dataset.state === 'ready', null, 60000);
-// Sample (sim seconds, serial, room temperature) until the replay ends; simSeconds is the last tick's, so it can trail the serial by a slice
+// Sample (sim seconds, progress tag) until the replay ends; timing checks below use the page's per-tick trace
 const seen = [];
 const t0 = Date.now();
 while (Date.now() - t0 < 90000) {
-  const o = await pp.evaluate(() => ({ t: globalThis.__tbEmbed.store.get().simSeconds, unitF: document.getElementById('console').textContent.includes('UNIT F'), temp: globalThis.__tbEmbed.store.get().env.temp, tag: !!document.getElementById('embedReplay'), done: !!globalThis.__tbShareRestored }));
+  const o = await pp.evaluate(() => ({ t: globalThis.__tbEmbed.store.get().simSeconds, tag: !!document.getElementById('embedReplay'), done: !!globalThis.__tbShareRestored }));
   seen.push(o);
   if (o.done) break;
   await sleep(100);
@@ -176,10 +176,20 @@ while (Date.now() - t0 < 90000) {
 fs.writeFileSync(path.join(outDir, 'embed-paced-samples.json'), JSON.stringify(seen));
 const first = seen.find((o) => !o.done);
 report('paced: sim time starts near 0 with a progress tag', !!first && first.t < 1.0 && first.tag, first ? `${first.t.toFixed(2)} s` : 'no sample');
-const firstF = seen.find((o) => o.unitF);
-report('paced: UNIT F appears only after the BOOT press at 1.2 s', !!firstF && firstF.t >= 1.1 && seen.some((o) => !o.unitF && o.t > 1.0), firstF ? `first at ${firstF.t.toFixed(2)} s` : 'never');
-const hot = seen.find((o) => o.temp === 35);
-report('paced: room temperature follows the log (35 °C from 2 s)', !!hot && hot.t >= 1.9 && seen.some((o) => o.temp !== 35 && o.t > 1.8), hot ? `at ${hot.t.toFixed(2)} s` : 'never');
+// Per-tick trace from the page (sim seconds at the tick's end, its serial chunk, room °C): exact under load, unlike 100 ms samples
+const raw = await pp.evaluate(() => globalThis.__tbEmbed.trace ?? []);
+// The hook attaches before the paced seek's reboot: keep the ticks after the last sim-time reset
+const trace = raw.slice(Math.max(0, raw.findLastIndex((x, i) => i > 0 && x[0] < raw[i - 1][0])));
+fs.writeFileSync(path.join(outDir, 'embed-paced-trace.json'), JSON.stringify(trace));
+let acc = '';
+const iF = trace.findIndex(([, c]) => (acc += c).includes('UNIT F'));
+const fT = iF >= 0 ? trace[iF][0] : NaN;
+const preF = iF > 0 ? trace[iF - 1][0] : NaN; // last tick end without UNIT F yet
+report('paced: UNIT F appears only after the BOOT press at 1.2 s', trace.length > 0 && trace[0][0] < 1.0 && fT >= 1.1 && preF > 1.0, iF >= 0 ? `first in tick ending ${fT.toFixed(3)} s, previous ${preF.toFixed(3)} s` : 'never');
+const iH = trace.findIndex(([, , temp]) => temp === 35);
+const hT = iH >= 0 ? trace[iH][0] : NaN;
+const preH = iH > 0 ? trace[iH - 1][0] : NaN;
+report('paced: room temperature follows the log (35 °C from 2 s)', hT >= 1.9 && preH > 1.8, iH >= 0 ? `at ${hT.toFixed(3)} s, previous ${preH.toFixed(3)} s` : 'never');
 const pr = await pp.evaluate(() => globalThis.__tbShareRestored ?? {});
 report('paced: end state = fast-forward (serial and report at the same cycle)', pr.paced === true && pr.stdout === es && pr.report === er, pr.stdout === es ? `${es.length} bytes, report ${pr.report === er ? 'same' : 'differs'}` : `differs at ${diff(pr.stdout ?? '', es)}`);
 report('paced: progress tag gone after the end', await waitFor(pp, () => !document.getElementById('embedReplay'), null, 5000));

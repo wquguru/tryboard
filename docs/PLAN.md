@@ -246,7 +246,7 @@
 | F-07c | MicroPython bin 刷新后保留（IndexedDB，复用 tryfile.ts）+ S3 帮助行走查 + 清掉未用的 sendCtrl | micropython.mjs + agent-browser | ☑ 2026-10-21：自带 bin 按 sha256 存本机 IndexedDB `tryboard-bins`（最多 3 个 / 共 24 MB），刷新后按作品自动恢复并照常重发 main.py；换固件菜单「忘掉 …」删本机副本，「最近」里存过的 bin 点一下直接再跑；存不了提示一次后回落现状；`?s=` / `.tryboard` 语义不变；micropython.mjs 14/14（新增上传 → 刷新 → 不重传运行、忘掉 → 刷新回默认）；`Reviews/ab/F-07c.md` |
 | F-07d | 换固件菜单「最近」：忘掉的 bin 不再列出（或标出要重新选文件）、按当前芯片过滤自带 bin | micropython.mjs + agent-browser | ☑ 2026-10-22：忘掉或被淘汰（3 个 / 24 MB）的 bin 从「最近」移除（菜单打开时对照 IndexedDB 键清理，忘掉时立即清）；文件条目记下上传时芯片，按菜单当前芯片过滤，旧条目无芯片照常显示；逻辑抽到 `web/src/app/recentfw.ts`（单测 3 条 + `keptKeys` 1 条）；micropython.mjs 16/16（新增忘掉前在 / 忘掉后不在「最近」）；`Reviews/ab/F-07d.md` |
 | F-11d | 环境脚本：双指缩放（手机）+ 手机半屏抽屉点缩放后轨道头不被滚出视野 | scenario.mjs + mobile.mjs + agent-browser | ☐ 波 8 |
-| F-03c | embed.mjs 原速回放检查改按模拟时间取样（页面暴露模拟时刻钩子），负载下不再偶发失败；不放宽判定 | embed.mjs 连跑 5 次 + 加压下跑 | ☐ 波 8 |
+| F-03c | embed.mjs 原速回放检查改按模拟时间取样（页面暴露模拟时刻钩子），负载下不再偶发失败；不放宽判定 | embed.mjs 连跑 5 次 + 加压下跑 | ☑ 波 8（嵌入页回放期 `__tbEmbed.trace` 逐 tick 记 [模拟秒, 串口片段, 室温]；5 次 + 3 进程加压 3 次全 PASS） |
 | F-08d | ESP32Servo / IRremote 许可证证据整理（上游提交、文件头、作者声明），写 LICENSING_REVIEW.md；结论待人核 | 文档 | ☑ 波 8（证据已整理，结论待人） |
 
 ## P3 · 以后再说
