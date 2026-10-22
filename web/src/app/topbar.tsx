@@ -13,8 +13,9 @@ import { CmdkBox } from './cmdkview';
 import { Icon } from './icons';
 import { useStore } from './react';
 import { savedText } from './saved';
-import { STEPS, type StepId } from './types';
-import { WORKS } from './works';
+import { STEPS, type StepId, type WorkDef } from './types';
+import { WORKS, wkey } from './works';
+import { loadProgress } from './bench/progress';
 import { CHIP_LABEL, type SimChip } from '../chips';
 import { BLANK_LAB, HOME, LICENSES, lab, selectLink } from '../ui/links';
 import { LangSelect } from '../ui/lang';
@@ -44,6 +45,16 @@ export function usePop() {
   return { open, setOpen, ref };
 }
 
+/** Work menu groups (DESIGN_V2 §10.3): works with checkpoints, then the free bench (blank + my project tiles, bench-only examples) */
+const GUIDED = Object.values(WORKS).filter((w) => w.checkpoints.length);
+const BENCH_ONLY = Object.values(WORKS).filter((w) => !w.checkpoints.length && w.id !== 'blank' && w.id !== 'custom');
+const workHref = (id: string) => lab(id, (location.hash.slice(1) || 'bench') as StepId);
+/** Saved checkpoint passes; reference run-throughs count too */
+const passedCount = (w: WorkDef) => {
+  const p = loadProgress(wkey(w));
+  return w.checkpoints.filter((id) => p[id]).length;
+};
+
 /** phone: work name centered in the phone top bar (≥ 44 tall, full-width menu) */
 export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
   const { open, setOpen, ref } = usePop();
@@ -67,21 +78,59 @@ export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
         </button>
       </h1>
       {open && (
-        <div role="menu" aria-label={t('Switch work')} id="workMenu" className={cn(menuPanel, 'left-0 max-h-[70vh] overflow-auto', phone && 'fixed top-12 right-2 left-2 [&_a]:min-h-11')}>
-          {Object.values(WORKS).map((w) => (
-            <a
-              key={w.id}
-              role="menuitemradio"
-              aria-checked={w.id === cur}
-              data-work={w.id}
-              href={lab(w.id, (location.hash.slice(1) || 'bench') as StepId)}
-              className={cn(menuItem, 'no-underline', w.id === cur && 'font-medium')}
-            >
-              <span className="inline-flex w-4 flex-none justify-center text-accent-ink">{w.id === cur && <Icon n="check" size={14} />}</span>
-              <span className="min-w-0 flex-1 truncate">{w.title}</span>
-              <span className="flex-none font-mono text-[11px] text-muted">{w.checkpoints.length ? t('{n} checkpoints', { n: w.checkpoints.length }) : t('Bench only')}</span>
-            </a>
-          ))}
+        <div role="menu" aria-label={t('Switch work')} id="workMenu" className={cn(menuPanel, 'left-0 max-h-[70vh] w-[360px] overflow-auto', phone && 'fixed top-12 right-2 left-2 w-auto [&_a]:min-h-11')}>
+          <div role="group" aria-labelledby="wmGuided" data-group="guided">
+            <div id="wmGuided" className="px-2.5 pt-1.5 pb-1 text-[12px] text-muted">
+              {t('Guided works')}
+            </div>
+            {GUIDED.map((w) => {
+              const done = passedCount(w);
+              const total = w.checkpoints.length;
+              return (
+                <a key={w.id} role="menuitemradio" aria-checked={w.id === cur} data-work={w.id} href={workHref(w.id)} className={cn(menuItem, 'no-underline', w.id === cur && 'bg-accent-bg font-medium hover:bg-accent-bg')}>
+                  <span className="inline-flex w-4 flex-none justify-center text-accent-ink">{w.id === cur && <Icon n="check" size={14} />}</span>
+                  <span className="min-w-0 flex-1 truncate">{w.title}</span>
+                  <span className="h-1 w-10 flex-none overflow-hidden rounded-full bg-line" aria-hidden="true">
+                    <span className="block h-full rounded-full bg-accent" style={{ width: `${(done / total) * 100}%` }} />
+                  </span>
+                  <span className="w-8 flex-none text-right font-mono text-[11px] text-muted tabular-nums" title={t('{done} of {total} checkpoints passed', { done, total })}>
+                    {done}/{total}
+                  </span>
+                </a>
+              );
+            })}
+          </div>
+          <div role="separator" className="mx-1 my-1 h-px bg-line" />
+          <div role="group" aria-labelledby="wmFree" data-group="free">
+            <div id="wmFree" className="px-2.5 pt-1 pb-1 text-[12px] text-muted">
+              {t('Free lab')}
+            </div>
+            <div data-row="free-top" className="grid grid-cols-2 gap-1 px-1 pb-1">
+              {(['blank', 'custom'] as const).map((id) => (
+                <a
+                  key={id}
+                  role="menuitemradio"
+                  aria-checked={id === cur}
+                  data-work={id}
+                  href={workHref(id)}
+                  className={cn(
+                    'flex min-h-10 min-w-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1.5 text-fg no-underline hover:bg-field',
+                    id === 'blank' ? 'border-dashed border-hover-line' : 'border-line',
+                    id === cur && 'border-accent-line bg-accent-bg font-medium hover:bg-accent-bg',
+                  )}
+                >
+                  <span className="inline-flex w-4 flex-none justify-center text-accent-ink">{id === cur ? <Icon n="check" size={14} /> : id === 'blank' && <Icon n="plus" size={14} className="text-muted" />}</span>
+                  <span className="min-w-0 flex-1 truncate">{id === 'blank' ? t('Blank lab') : WORKS.custom.title}</span>
+                </a>
+              ))}
+            </div>
+            {BENCH_ONLY.map((w) => (
+              <a key={w.id} role="menuitemradio" aria-checked={w.id === cur} data-work={w.id} href={workHref(w.id)} className={cn(menuItem, 'no-underline', w.id === cur && 'bg-accent-bg font-medium hover:bg-accent-bg')}>
+                <span className="inline-flex w-4 flex-none justify-center text-accent-ink">{w.id === cur && <Icon n="check" size={14} />}</span>
+                <span className="min-w-0 flex-1 truncate">{w.title}</span>
+              </a>
+            ))}
+          </div>
         </div>
       )}
     </div>

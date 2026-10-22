@@ -117,7 +117,7 @@
 | U-22 | 内置固件走完全程（新人走查 Reviews/ux/report.md P0）：检查点两档（◐ 参考跑通 / ✓ 我的固件），参考跑通也解锁组装 / 成品；每个作品一键「用内置固件走完全程」；选板作品演示固件改记参考；参考固件可下载 flash.bin + 源码 zip（构建期 gen_fw_zip.py，能 idf.py build）；气象站 GPIO5 加 LED，检查点 01 / 02 与台面一致 | levels.mjs / custom.mjs 新断言（参考 ◐、一键全过后组装解锁、旧进度不降级）；解压 zip 用 IDF 5.5.1 build 通过；agent-browser 走气象站 采购→一键→组装→成品，记录 Reviews/ab/U-22.md | ☑ |
 | U-23 | 手机 ⋯ 菜单改分组底部抽屉 + 分享二级抽屉（DESIGN_V2 §10.1） | mobile.mjs：⋯ 打开抽屉有遮罩、四组标题、分享二级抽屉三项、开发者折叠展开、商标声明在、触控 ≥ 44px、无横向滚动；原有 ⋯ 断言（Task brief / Change firmware / 主题）改选择器不减；桌面 ⋯ 不变；agent-browser 390×844 截图（Reviews/ab/U-23.md） | ☐ |
 | U-24 | 手机实验台「更多」按 操作 → 记录 → 视图 分组 + 图标 + 开关，补声音开关；成品页按钮同分组（DESIGN_V2 §10.2） | mobile.mjs：组标题顺序、BOOT 在第一组、声音开关可点且静音状态切换、3D 模型为开关；media.mjs / harness.mjs 不减断言全过；agent-browser 截图（Reviews/ab/U-24.md） | ☐ |
-| U-25 | 作品切换 ▾ 分「引导作品 / 自由实验台」两组 + 进度（DESIGN_V2 §10.3） | mobile.mjs：两组标题、空白 / 我的项目在自由组首行、当前作品勾；levels.mjs 不减断言；桌面 + 390 截图（Reviews/ab/U-25.md） | ☐ |
+| U-25 | 作品切换 ▾ 分「引导作品 / 自由实验台」两组 + 进度（DESIGN_V2 §10.3） | mobile.mjs：两组标题、空白 / 我的项目在自由组首行、当前作品勾；levels.mjs 不减断言；桌面 + 390 截图（Reviews/ab/U-25.md） | ☑ |
 | U-26 | 手机 toast 不压抽屉（DESIGN_V2 §10.4） | mobile.mjs：属性抽屉打开时触发 toast，toast 矩形与抽屉不重叠；agent-browser 截图（Reviews/ab/U-26.md） | ☐ |
 
 ## C · 竞品调研后（2026-10-19 人已确认 C-01–C-05，依据 RESEARCH_ESP_EMULATOR.md；C-06 涉及授权，仍待确认）
