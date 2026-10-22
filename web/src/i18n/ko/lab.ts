@@ -1050,5 +1050,12 @@ const d: Dict = {
   "No conversation yet": "아직 대화가 없습니다",
   "Voice server log": "음성 서버 로그",
   "Waiting for the board to connect": "보드 연결 대기 중",
+  "This browser could not keep a copy of {name} (private mode or storage full): after a reload, upload it again": "이 브라우저에 {name} 사본을 저장하지 못했습니다(시크릿 모드 또는 저장 공간 부족): 새로고침 후 다시 업로드하세요",
+  "Forgot {name}: the copy in this browser is deleted; it keeps running until the next reload": "{name}을(를) 삭제했습니다: 이 브라우저의 사본은 지워졌고, 다음 새로고침까지는 계속 실행됩니다",
+  "Could not delete the copy of {name} in this browser": "이 브라우저에 있는 {name} 사본을 삭제하지 못했습니다",
+  "Restored {name} from this browser (Change firmware → Forget deletes the copy)": "이 브라우저에서 {name}을(를) 복원했습니다(펌웨어 변경 → 삭제로 사본을 지울 수 있음)",
+  "Kept in this browser: click to run it again": "이 브라우저에 저장됨: 클릭하면 다시 실행",
+  "Forget {name}": "{name} 삭제",
+  "Delete the copy kept in this browser; the next reload starts with the default firmware": "이 브라우저에 저장된 사본을 삭제합니다. 다음 새로고침부터는 기본 펌웨어로 시작합니다",
 };
 export default d;

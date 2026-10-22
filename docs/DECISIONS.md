@@ -1415,3 +1415,16 @@
 - **打断不单设按钮**：按住说话按钮在播报中显示「打断」，本质仍是 BOOT 按下 / 松开（`gpio0=0` / `gpio0=z`，与 accept 脚本一致），固件自己发 abort；面板的「say」文本去掉 `;`、`#`、换行（脚本格式分隔符），最长 200 字。
 - **网页重放补上 I2S 和麦克风**：`replayLog` / simrun 按日志的 `i2s` / `mic` 接件，指纹比对才覆盖 I2S 示例。
 - **选型层**：需求同时含 wifi + audio_in + audio_out 时，信任行加「语音链路（设备 ↔ 服务器协议）= 行为模拟」「唤醒词、回声消除 = 必须上真机」，检查点同理；语音模板示例首推 s3-xiaozhi-lite。
+
+
+## 2026-10-21 F-07c 自带 bin 刷新后保留
+- **存哪**：新库 `tryboard-bins`（store `bins`，键 = 完整 sha256），不给 `tryboard-files` 升版本：tryfile.ts 的 onupgradeneeded 不带防重建，升版本要额外迁移代码，没好处。打开 / 事务 / 请求三个小函数抽到 `web/src/app/idb.ts`，两处共用；工厂可传参，Node 单测用手写内存假 IndexedDB（不加依赖）。
+- **上限**：最多 3 个、合计 24 MB（三个 8 MB 整片镜像）；超过 24 MB 的单个 bin 不存。淘汰按最近使用时间，刚存的那个永远不淘汰（`evictPlan` 纯函数，单测覆盖）。MicroPython C3 镜像约 1.7 MB，S3 OCT 约 1.7–2 MB。
+- **恢复哪个**：localStorage `tryboard-ownbin:<作品键>` 记该作品最后跑的自带 bin 的 sha256；刷新（同 URL = 同作品键）后先照常启动默认固件，再取回 bin、过一遍 `fwCheck`、`loadFirmware`，toast 提示可在换固件菜单忘掉。MicroPython 的 main.py 重发走 F-07b 原逻辑（上电 → `>>>` → 自动重发），没改。取不回 / 芯片不对就清掉指针、留在默认固件，不报错。
+- **何时不恢复**：`?s=` 链接和 `?f=` .tryboard 文件都不恢复（它们自己定固件）；点「回到参考固件」、点示例链接（含「最近」里的示例）时清指针，免得刷新又跳回自带 bin。
+- **失败回落**：存不进（隐私模式、配额、超大）时每页只提示一次「刷新后需重新上传」，台面照常跑，行为同 F-07b。
+- **忘掉**：换固件菜单在当前固件是已存 bin 时多一项「忘掉 <文件名>」：删本机副本 + 清指针，当前运行不打断，下次刷新回默认固件。
+- **「最近」**：存过的文件条目带 sha256，点一下从本机副本直接跑（走 `pickFirmware` 同一路径：校验、检查点验证、再存一次刷新时间）；副本已被淘汰 / 忘掉时退回原来的选文件。提示文案相应区分。
+- **分享语义不变**：`?s=` 仍不带 bin（也不带 bin 的 sha256）。「打开者本机有同 sha256 的 bin 就直接用」没做：要往链接状态加 `bin {name, h}`，等于把分享者的文件名和哈希放进公开链接，且链接本来就丢掉自带固件的运行记录，收益小；记为遗留。
+- **`sendCtrl` 删除**：mpypane 的 Ctrl-C / Ctrl-D 按钮直接走 `actions.uart`，该导出从未被用。
+- 公共接口：新增 `web/src/app/idb.ts`（`openDb(name, store, idb?)`、`done`、`req`）、`web/src/app/ownbin.ts`（`keepBin` / `takeBin` / `dropBin` / `evictPlan` / `lastBin` / `setLastBin` / `keptNow`）；`actions.releaseBin` / `forgetBin` / `reopenBin`；fwmenu 的 `Recent` 文件项多可选 `h`。

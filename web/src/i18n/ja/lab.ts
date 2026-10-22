@@ -1050,5 +1050,12 @@ const d: Dict = {
   "No conversation yet": "まだ会話はありません",
   "Voice server log": "音声サーバーログ",
   "Waiting for the board to connect": "ボードの接続を待っています",
+  "This browser could not keep a copy of {name} (private mode or storage full): after a reload, upload it again": "このブラウザーに {name} のコピーを保存できませんでした（プライベートモードまたは容量不足）：再読み込み後はもう一度アップロードしてください",
+  "Forgot {name}: the copy in this browser is deleted; it keeps running until the next reload": "{name} を削除しました：このブラウザーのコピーは消去済み。次の再読み込みまでは動き続けます",
+  "Could not delete the copy of {name} in this browser": "このブラウザーにある {name} のコピーを削除できませんでした",
+  "Restored {name} from this browser (Change firmware → Forget deletes the copy)": "このブラウザーから {name} を復元しました（ファームウェアを変更 → 削除 でコピーを消せます）",
+  "Kept in this browser: click to run it again": "このブラウザーに保存済み：クリックでもう一度実行",
+  "Forget {name}": "{name} を削除",
+  "Delete the copy kept in this browser; the next reload starts with the default firmware": "このブラウザーに保存したコピーを削除します。次の再読み込みからは既定のファームウェアで起動します",
 };
 export default d;

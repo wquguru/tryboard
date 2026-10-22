@@ -4,30 +4,14 @@ import { t } from '../i18n';
 import { captureBench } from './shareopen';
 import { builtinFw, encodeState, packTryfile, shareKey, unpackTryfile, ShareDecodeError } from './sharestate';
 import type { StepCtx } from './types';
+import { done, openDb, req } from './idb';
 
 const DB = 'tryboard-files';
 const STORE = 'files';
 /** Opened files kept for reloads; older ones are pruned */
 const KEEP = 3;
 
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((res, rej) => {
-    const r = indexedDB.open(DB, 1);
-    r.onupgradeneeded = () => r.result.createObjectStore(STORE);
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
-  });
-}
-const done = (tx: IDBTransaction) =>
-  new Promise<void>((res, rej) => {
-    tx.oncomplete = () => res();
-    tx.onerror = tx.onabort = () => rej(tx.error);
-  });
-const req = <T>(r: IDBRequest<T>) =>
-  new Promise<T>((res, rej) => {
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
-  });
+const open = () => openDb(DB, STORE);
 
 interface Stored {
   /** encodeState() of the file's state: the same string a ?s= link carries */
@@ -37,7 +21,7 @@ interface Stored {
 }
 
 async function putFile(key: string, v: Stored) {
-  const db = await openDb();
+  const db = await open();
   const tx = db.transaction(STORE, 'readwrite');
   const st = tx.objectStore(STORE);
   st.put(v, key);
@@ -55,7 +39,7 @@ async function putFile(key: string, v: Stored) {
 /** An opened .tryboard file by its ?f= key: the state string and the own bin, or null when this browser no longer has it */
 export async function takeFile(key: string): Promise<Pick<Stored, 's' | 'own'> | null> {
   try {
-    const db = await openDb();
+    const db = await open();
     const v = (await req(db.transaction(STORE).objectStore(STORE).get(key))) as Stored | undefined;
     db.close();
     return v ? { s: v.s, own: v.own } : null;

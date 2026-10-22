@@ -27,6 +27,7 @@ import { loadCaseParams } from './caseparams';
 import { actions, bc, overlay, setBc, setDock, syncDockVar, type CpRow, type Issue } from './chrome';
 import { CrashCard } from './crash';
 import { FwCheckCard, fwCheck } from './fwcheck';
+import { dropBin, keepBin, keptNow, lastBin, setLastBin, takeBin } from './ownbin';
 import { BrownoutBanner } from './bench/ui';
 import { initSaved } from './saved';
 import { serial } from './dock';
@@ -209,12 +210,31 @@ const cmdk = import('./cmdk');
     if (params.get('f') && !fileIn) shell.toast(t('This .tryboard file is no longer stored in this browser; open the file again'));
     // &replay=1 (F-03b): the shared actions play at their original speed
     if (shared) await shareIn!.m.restoreShare(ctx, shared, fileIn?.own ?? null, shareIn!.m.wantsPaced(location.search));
+    // F-07c: a plain reload brings back the work's last own bin (links and .tryboard files keep their own firmware)
+    else if (!params.get('f')) await restoreOwn(ctx);
   } catch (e) {
     log(`${t('[TryBoard] Failed to load resources: {err}', { err: String(e) })}\n`);
     setBc({ run: 'idle', boot: { text: t('Failed to load resources: {err}', { err: String(e) }), steps: [], loaded: 0, total: 0 } });
     shell.toast(t('Failed to load resources: {err}', { err: String(e) }));
   }
 })();
+
+/** F-07c: run the bin this work's bench had on its last load, if this browser kept it; anything missing just keeps the default */
+async function restoreOwn(ctx: StepCtx) {
+  const { session, shell } = ctx;
+  const h = lastBin(wkey(work));
+  if (!h || !session.sim) return;
+  const k = await takeBin(h);
+  if (!k || !fwCheck(k.buf, session.chip).ok) return actions.releaseBin?.();
+  if (session.bootCount === 0)
+    await new Promise<void>((r) => {
+      const off = session.onBoot(() => (off(), r()));
+      setTimeout(() => (off(), r()), 5000);
+    });
+  session.loadFirmware(k.buf, k.name);
+  keptNow.set({ cur: { h, name: k.name } });
+  shell.toast(t('Restored {name} from this browser (Change firmware → Forget deletes the copy)', { name: k.name }));
+}
 
 /** Data and actions for top bar, dock and bench overlays (U-04): the shell only knows chrome.ts; wire session and timeline here */
 function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSession>>) {
@@ -402,12 +422,50 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
     setTimeout(fire, 3000);
     session.loadFirmware(buf, f.name);
     pushRecent({ kind: 'file', name: f.name, at: Date.now() });
+    void keepOwn(buf, f.name);
   };
+  // F-07c: own bins survive reloads (IndexedDB by sha256); after power-up so storage never delays the bench
+  let warnedKeep = false;
+  const keepOwn = async (buf: ArrayBuffer, name: string) => {
+    keptNow.set({ cur: null });
+    try {
+      const h = await keepBin(buf, name);
+      setLastBin(wkey(work), h);
+      pushRecent({ kind: 'file', name, h, at: Date.now() });
+      if (session.fwName === name) keptNow.set({ cur: { h, name } });
+    } catch {
+      setLastBin(wkey(work), null);
+      if (!warnedKeep) shell.toast(t('This browser could not keep a copy of {name} (private mode or storage full): after a reload, upload it again', { name }));
+      warnedKeep = true;
+    }
+  };
+  /** Built-in firmware from here on: the next load starts with it, not the kept bin */
+  actions.releaseBin = () => {
+    setLastBin(wkey(work), null);
+    keptNow.set({ cur: null });
+  };
+  actions.forgetBin = async () => {
+    const cur = keptNow.get().cur;
+    if (!cur) return;
+    const ok = await dropBin(cur.h);
+    actions.releaseBin?.();
+    shell.toast(ok ? t('Forgot {name}: the copy in this browser is deleted; it keeps running until the next reload', { name: cur.name }) : t('Could not delete the copy of {name} in this browser', { name: cur.name }));
+  };
+  actions.reopenBin = async (h) => {
+    const k = await takeBin(h);
+    if (!k) return false;
+    actions.pickFirmware?.(new File([k.buf], k.name));
+    return true;
+  };
+  session.onBoot(() => {
+    if (keptNow.get().cur && session.fwName !== keptNow.get().cur!.name) keptNow.set({ cur: null });
+  });
   // Back to the work's reference firmware after uploading your own .bin; blank works have none
   if (work.example && !ex)
     actions.loadRef = async () => {
       const buf = await fetchBuf(`./fw/${work.example}/flash.bin`);
       if (store.get().step !== 'bench') location.hash = 'bench';
+      actions.releaseBin?.();
       session.loadFirmware(buf, `${work.example}/flash.bin`);
       shell.toast(t('Back to the reference firmware, powered up again'));
     };
