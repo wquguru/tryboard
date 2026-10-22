@@ -40,6 +40,8 @@ pub struct PanelSpec {
     pub bgr_panel: bool,
     /// Glass mounted landscape: the rendered frame is the window turned 90° (h × w), as seen with M5GFX rotation 1
     pub landscape: bool,
+    /// Module glass bonded with columns reversed against GRAM: upright portrait needs MADCTL.MX=1 (common ILI9341 modules)
+    pub glass_flip_x: bool,
     /// RDDID (04h) bytes in wire order
     pub id: [u8; 3],
     pub variant: Variant,
@@ -69,6 +71,7 @@ pub const GC9A01: PanelSpec = PanelSpec {
     normally_black: true,
     bgr_panel: true,
     landscape: false,
+    glass_flip_x: false,
     id: [0x00, 0x9a, 0x01],
     variant: Variant::Generic,
 };
@@ -85,6 +88,7 @@ pub const GC9107: PanelSpec = PanelSpec {
     normally_black: false,
     bgr_panel: true,
     landscape: false,
+    glass_flip_x: false,
     id: [0x00, 0x91, 0x07],
     variant: Variant::Generic,
 };
@@ -101,6 +105,7 @@ pub const ST7735S: PanelSpec = PanelSpec {
     normally_black: true,
     bgr_panel: true,
     landscape: false,
+    glass_flip_x: false,
     id: [0x7c, 0x89, 0xf0],
     variant: Variant::Generic,
 };
@@ -117,6 +122,7 @@ pub const ST7789: PanelSpec = PanelSpec {
     normally_black: true,
     bgr_panel: true,
     landscape: false,
+    glass_flip_x: false,
     id: [0x85, 0x85, 0x52],
     variant: Variant::Generic,
 };
@@ -138,6 +144,7 @@ pub const ILI9342C: PanelSpec = PanelSpec {
     normally_black: true,
     bgr_panel: true,
     landscape: false,
+    glass_flip_x: false,
     id: [0xe3, 0x00, 0x00],
     variant: Variant::Ili9342c,
 };
@@ -146,7 +153,8 @@ pub const ILI9342E: PanelSpec = PanelSpec {
     variant: Variant::Ili9342e,
     ..ILI9342C
 };
-/// Bare 2.4" / 2.8" TN module (F-04b): 240×320 portrait, normally white (no INVON), BGR (the IDF spi_lcd_touch example sets BGR)
+/// Bare 2.4" / 2.8" TN module (F-04b): 240×320 portrait, normally white (no INVON), BGR, columns reversed on the glass
+/// (Adafruit / TFT_eSPI rotation 0 send MX | BGR, the IDF spi_lcd_touch example always mirrors X)
 pub const ILI9341: PanelSpec = PanelSpec {
     name: "ILI9341",
     mem_w: 240,
@@ -159,6 +167,7 @@ pub const ILI9341: PanelSpec = PanelSpec {
     normally_black: false,
     bgr_panel: true,
     landscape: false,
+    glass_flip_x: true,
     id: [0x00, 0x93, 0x41],
     variant: Variant::Generic,
 };
@@ -593,6 +602,7 @@ impl DcsPanel {
                 } else {
                     (x, y)
                 };
+                let wx = if s.glass_flip_x { s.w - 1 - wx } else { wx };
                 if !self.visible(wx, wy) {
                     self.frame[o..o + 4].copy_from_slice(&[0, 0, 0, 0]);
                     continue;
@@ -795,7 +805,7 @@ mod tests {
         d.set_backlight(true);
         send(&mut d, 0x11, &[]);
         send(&mut d, 0x29, &[]);
-        send(&mut d, 0x36, &[0x08]);
+        send(&mut d, 0x36, &[0x48]);
         send(&mut d, 0x3a, &[0x55]);
         send(&mut d, 0x2a, &[0, 0, 0, 0]);
         send(&mut d, 0x2b, &[0x01, 0x3f, 0x01, 0x3f]);
@@ -806,8 +816,37 @@ mod tests {
         // The rest of GRAM is black and shows black: only one lit pixel
         assert_eq!(d.lit_pixels(), 1);
         // Without BGR the red pixel comes out blue
-        send(&mut d, 0x36, &[0x00]);
+        send(&mut d, 0x36, &[0x40]);
         assert_eq!(&d.render()[o..o + 4], &[0, 0, 255, 255]);
+    }
+
+    /// F-04b: ILI9341 glass columns run opposite to GRAM, so MADCTL 0x48 (Adafruit rotation 0) is upright and 0x08 mirrored;
+    /// ST7789 glass follows GRAM, the other way round
+    #[test]
+    fn ili9341_glass_columns_reversed() {
+        let col0 = |spec: PanelSpec, madctl: u8| {
+            let mut d = DcsPanel::new(spec);
+            d.set_backlight(true);
+            send(&mut d, 0x11, &[]);
+            if spec.normally_black {
+                send(&mut d, 0x21, &[]);
+            }
+            send(&mut d, 0x29, &[]);
+            send(&mut d, 0x36, &[madctl]);
+            send(&mut d, 0x3a, &[0x55]);
+            send(&mut d, 0x2a, &[0, 0, 0, 0]);
+            send(&mut d, 0x2b, &[0, 0, 0, 0]);
+            send(&mut d, 0x2c, &[0xff, 0xff]);
+            assert_eq!(d.lit_pixels(), 1);
+            d.render()[..240 * 4]
+                .chunks(4)
+                .position(|p| p[3] != 0 && p[1] != 0)
+                .unwrap()
+        };
+        assert_eq!(col0(ILI9341, 0x48), 0);
+        assert_eq!(col0(ILI9341, 0x08), 239);
+        assert_eq!(col0(ST7789_320, 0x48), 239);
+        assert_eq!(col0(ST7789_320, 0x08), 0);
     }
 
     /// 240x240 ST7789: glass is GRAM rows 0..239, so MY mirroring moves row 0 to GRAM row 319, off the glass,

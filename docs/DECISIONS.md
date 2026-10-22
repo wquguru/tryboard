@@ -1512,3 +1512,9 @@
 - 理由：不改用户草图也能跑才有意义（选项 a）；golden 211/211 不变，佐证默认接线行为未变。
 - 遗留：Adafruit 竖屏发 MADCTL 0x48（MX | BGR），模型显示为左右镜像文字；真机常见 ILI9341 模块此设置是正向，IDF spi_lcd_touch 示例也无条件 `esp_lcd_panel_mirror(true, false)`，疑为面板模型 MX 约定与常见玻璃相反（会牵连 c3-ili9341 / CYD 用例），按范围不改面板模型，lcd_regions 只取左右对称的区域；C3 SPI2 不把 LCD 读回送 MISO，readcommand8 读回 0xFF，未断言。
 - 备选：草图改成 C3 默认 lcd_pin（DC 5 / RST 4 / 显式 `SPI.begin`）——否，等于为模拟器改用户代码。
+
+## 2026-10-22 F-04b 遗留：ILI9341 玻璃列方向与 GRAM 相反（MADCTL 0x48 为正）
+- 决定：`PanelSpec` 加 `glass_flip_x`（模组玻璃列与 GRAM 列反向绑定），只 ILI9341 为 true；在 `render()` 里把窗口列 `wx` 映射成 `w-1-wx`，GRAM 写入仍按数据手册 MX（列地址顺序）不变，RDDST / 0Bh 回读不受影响。ST7789 / ILI9342C / E / GC9A01 / GC9107 / ST7735S 为 false，行为不变。IDF 验收固件（firmware/common/bare_tft.h 新增 `TFT_MIRROR_X`，c3-ili9341 / c3-ili9341-temp / esp32-cyd 设 1）在 init 后 `esp_lcd_panel_mirror(true, false)`，与 IDF spi_lcd_touch 示例一致；s3-st7789 不设，命令序列字节不变。
+- 依据（三个独立来源一致：竖屏正向需要 MX=1）：Adafruit_ILI9341 1.6.4 `setRotation(0)` = `MADCTL_MX | MADCTL_BGR`（0x48，BSD）；TFT_eSPI `TFT_Drivers/ILI9341_Rotation.h` rotation 0（非 M5STACK）= `TFT_MAD_MX | TFT_MAD_COLOR_ORDER`（M5Stack 的 ILI9342C 用 MY | MV，是另一块屏，故 ILI9342 不改）；ESP-IDF v5.5 `examples/peripherals/lcd/spi_lcd_touch` 对 ILI9341 在 init 后无条件 `esp_lcd_panel_mirror(panel, true, false)`，LVGL 旋转 0 也是 mirror(true, false)。数据手册 MX 只定义 GRAM 列地址顺序，不规定玻璃朝向，所以建成模组属性而非控制器属性。LovyanGFX 的 Panel_ILI9341 本地没有副本，未引用。
+- 影响：arduino-lib-ili9341 文字由镜像变为正（颜色质心 x 由 138.7 变 100.3），lcd_regions 新增两个左右不对称区域钉住方向；c3-ili9341 / esp32-cyd / esp32-cyd-touch / c3-ili9341-temp(-hot) 画面与区域不变（固件多发一条 MADCTL：LCD 命令数 +1、SPI 传输 +2），CYD 触摸 60,250 → 像素 60,250 不变；golden 这 6 例重新 save。
+- 备选：不改固件只改模型——否，IDF 固件发 0x08 会在模型里（也在真机上）镜像，c3-ili9341-temp 数字会反；在 `pixel_byte` 里异或 MX——否，会让 GRAM 内容偏离数据手册。

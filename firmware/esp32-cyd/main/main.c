@@ -4,6 +4,7 @@
 #define TFT_NEW_PANEL esp_lcd_new_panel_ili9341
 #define TFT_BGR 1
 #define TFT_INVERT false
+#define TFT_MIRROR_X 1
 #include "bare_tft.h"
 
 // XPT2046 touch on its own VSPI bus (CYD schematic): CLK 25, DIN 32, DOUT 39, CS 33, PENIRQ 36 (input only, low = pressed)
