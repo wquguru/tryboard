@@ -161,3 +161,20 @@ fn ccount_write_keeps_time() {
     c.step(&mut ram);
     assert_ne!(c.read_sr(sr::INTERRUPT) & (1 << irq::TIMER_LINE[0]), 0);
 }
+
+#[test]
+fn cpu_clock_scales_instruction_time() {
+    // 30 x movi.n a3, 7 on the 160 MHz time base: 240 MHz takes 20 cycles, 80 MHz 60
+    let code = [0x0c, 0x73].repeat(30);
+    for (pll, sel, want) in [(true, 2, 20), (true, 1, 30), (true, 0, 60), (false, 2, 30)] {
+        let mut ram = Ram(vec![0; 4096]);
+        ram.0[..code.len()].copy_from_slice(&code);
+        let mut cpu = Cpu::new();
+        cpu.pc = 0;
+        cpu.cpi3 = cpi3_for(pll, sel);
+        for _ in 0..30 {
+            cpu.step(&mut ram);
+        }
+        assert_eq!((cpu.cycles, cpu.instret), (want, 30));
+    }
+}
