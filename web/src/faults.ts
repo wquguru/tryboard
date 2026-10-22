@@ -1,9 +1,10 @@
 // Fault checkpoints (F-05): a bench that starts broken, plus the switches a player may change to fix it.
 // Same merge rules as merge_args / fault_level in tools/check.py, so web and CLI run identical args (same fingerprint).
 import type { Level } from './checks';
+import type { SceneSpec } from './bench3d/spec';
 
 export interface FaultKnob {
-  /** CLI flag taking one value (--i2c-wire / --antenna-loss / --power / --servo) */
+  /** CLI flag taking one value (--i2c-wire / --antenna-loss / --power / --servo / --i2c-bus) */
   flag: string;
   name: string;
   options: { v: string; label: string }[];
@@ -57,4 +58,43 @@ export function faultLevel(l: Level, values: Record<string, string> = {}): Level
 export function faultCommand(l: Level, values: Record<string, string>, own: boolean): string {
   const k = knobFlags(l, values).join(' ');
   return `tools/check.py ${own ? 'app.bin' : '--ref'} --level ${l.id}${k ? ' ' + k : ''}`;
+}
+
+/** Bench scene for a fault checkpoint (G-02): every pinned I2C part goes back to its pads in `home` (the work's default bench),
+ *  then `--i2c-bus` switches move the listed kind@addr, so wires, W8 and the live sim match this level's check run. null = no change */
+export function faultScene(scene: SceneSpec, l: Level, values: Record<string, string>, home: SceneSpec = scene): SceneSpec | null {
+  const at = new Map<number, { kind: string; sda: number; scl: number }>();
+  for (const k of l.fault?.knobs ?? []) {
+    if (k.flag !== '--i2c-bus' || values[k.flag] === undefined) continue;
+    const [pins, devs = ''] = values[k.flag].split(':');
+    const kv = Object.fromEntries(pins.split(',').map((x) => x.split('=')));
+    for (const d of devs.split(',').filter(Boolean)) {
+      const [kind, addr] = d.split('@');
+      at.set(parseInt(addr, 16), { kind, sda: Number(kv.sda), scl: Number(kv.scl) });
+    }
+  }
+  let moved = false;
+  const parts = scene.parts.map((p) => {
+    if (!('sda' in p) || !('addr' in p)) return p;
+    const m = at.get(p.addr);
+    // Scene type oled carries an SSD1306 / SH1106; other I2C parts use the CLI kind as their type
+    const knob = m && (p.type === m.kind || (p.type === 'oled' && /^(ssd1306|sh1106)$/.test(m.kind))) ? m : undefined;
+    const h = home.parts.find((x) => x.type === p.type && 'addr' in x && x.addr === p.addr && 'sda' in x);
+    const want = knob ?? (h && 'sda' in h ? { sda: h.sda, scl: h.scl } : undefined);
+    if (!want || (p.sda === want.sda && p.scl === want.scl)) return p;
+    moved = true;
+    return { ...p, sda: want.sda, scl: want.scl };
+  });
+  return moved ? { ...scene, parts } : null;
+}
+
+/** Switch values read back from the bench (undo / rewind moved the wires): each `--i2c-bus` knob takes the option the scene matches */
+export function knobsFromScene(scene: SceneSpec, l: Level, values: Record<string, string>): Record<string, string> {
+  const out = { ...values };
+  for (const k of l.fault?.knobs ?? []) {
+    if (k.flag !== '--i2c-bus') continue;
+    const hit = k.options.find((o) => faultScene(scene, l, { [k.flag]: o.v }) === null);
+    if (hit) out[k.flag] = hit.v;
+  }
+  return out;
 }

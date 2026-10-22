@@ -28,7 +28,7 @@ export const WORKS: Record<string, WorkDef> = {
   imu: { id: 'imu', title: t('Inclinometer (MPU6050)'), example: 's3-imu', checkpoints: [] },
   touch: { id: 'touch', title: t('Touch round screen (CST816S)'), example: 's3-touch', checkpoints: [] },
   // F-05: each checkpoint starts with a broken bench; no home card, reached from the link under the works grid
-  faults: { id: 'faults', title: t('Find the fault'), example: 'weather', checkpoints: ['fault-wire', 'fault-power', 'fault-antenna', 'fault-adc'] },
+  faults: { id: 'faults', title: t('Find the fault'), example: 'weather', checkpoints: ['fault-wire', 'fault-power', 'fault-antenna', 'fault-adc', 'fault-i2c-swap'] },
 };
 
 /** localStorage key for a work's data */

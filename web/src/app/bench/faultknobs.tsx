@@ -1,9 +1,10 @@
 // Fault checkpoint (F-05) switches: the bench starts as found; each choice maps to one CLI flag, so a check here
 // runs the same args as `tools/check.py --level <id> <flags>` and gets the same verdict and run ID.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { SceneSpec } from "../../bench3d/spec";
 import { t } from "../../i18n";
 import type { Level } from "../../checks";
-import { faultCommand, faultLevel, foundKnobs } from "../../faults";
+import { faultCommand, faultLevel, foundKnobs, knobsFromScene } from "../../faults";
 import { Code, Note, Sec, Seg, SegB } from "../../ui/panel";
 
 const KEY = "tryboard-fault-knobs:";
@@ -28,11 +29,16 @@ export function knobsOf(l: Level): Record<string, string> {
 /** The level a check runs: fault checkpoints get the bench as found plus the current switches */
 export const levelToRun = (l: Level) => (l.fault ? faultLevel(l, knobsOf(l)) : l);
 
-export function FaultKnobs({ l, disabled }: { l: Level; disabled?: boolean }) {
+/** onBench: switches that change the bench itself (--i2c-bus moves wires, G-02) are applied on open and on every change;
+ *  scene: the bench, read back after undo / rewind so the switches show the wiring actually there */
+export function FaultKnobs({ l, disabled, onBench, scene }: { l: Level; disabled?: boolean; onBench?: (v: Record<string, string>) => void; scene?: SceneSpec }) {
   const [v, setV] = useState(() => knobsOf(l));
+  // Opening the checkpoint lays its switches onto the bench; onBench is a no-op when the scene already matches
+  useEffect(() => {
+    onBench?.(knobsOf(l));
+  }, [l.id]);
   const found = foundKnobs(l);
-  const set = (flag: string, val: string) => {
-    const next = { ...v, [flag]: val };
+  const save = (next: Record<string, string>) => {
     cur[l.id] = next;
     try {
       localStorage.setItem(KEY + l.id, JSON.stringify(next));
@@ -41,6 +47,19 @@ export function FaultKnobs({ l, disabled }: { l: Level; disabled?: boolean }) {
     }
     setV(next);
   };
+  const set = (flag: string, val: string) => {
+    const next = { ...v, [flag]: val };
+    save(next);
+    onBench?.(next);
+  };
+  // Later scene changes (undo, rewind) move the switches; the first render is skipped so opening still applies them
+  const seen = useRef(scene);
+  useEffect(() => {
+    if (!scene || seen.current === scene) return;
+    seen.current = scene;
+    const next = knobsFromScene(scene, l, v);
+    if (Object.keys(next).some((k) => next[k] !== v[k])) save(next);
+  }, [scene]);
   const knobs = l.fault?.knobs ?? [];
   const changed = knobs.some((k) => v[k.flag] !== found[k.flag]);
   return (

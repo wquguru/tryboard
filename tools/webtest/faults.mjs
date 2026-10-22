@@ -122,7 +122,7 @@ const page = await browser.newPage();
 page.on('pageerror', (e) => errors.push(`${e}`));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 // Fresh profile: no saved switches, every bench starts as found
-await page.goto(`${base}/app?work=faults#bench`, { waitUntil: 'load' });
+await page.goto(`${base}/app?work=faults&debug=1#bench`, { waitUntil: 'load' });
 await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith('tryboard-fault-knobs:')) localStorage.removeItem(k); });
 await page.reload({ waitUntil: 'load' });
 for (const l of levels) {
@@ -135,6 +135,11 @@ for (const l of levels) {
   }
   const found = (f.knobs ?? []).flatMap((k) => { const j = merged.indexOf(k.flag); return [k.flag, j >= 0 ? merged[j + 1] : k.options[0].v]; });
   await pick(page, l.id);
+  // G-02: an --i2c-bus switch moves the part's wires on the bench, so the live wiring check (W8) agrees with the check run
+  const busKnob = (f.knobs ?? []).some((k) => k.flag === '--i2c-bus');
+  const benchW8 = () => waitFor(page, () => (globalThis.__tbApp?.faults?.() ?? []).some((x) => x.rule === 'W8'), null, 20000);
+  const bmePins = () => page.evaluate(() => globalThis.__tbApp.session.scene.parts.filter((p) => p.type === 'bme280').map((p) => `${p.sda}/${p.scl}`).join(' '));
+  if (busKnob) report(`${l.id} as found: bench wires swapped, W8 shown`, await benchW8(), `BME280 SDA/SCL ${await bmePins()}`);
   const refBin = path.join(root, `firmware/build/${l.ref}/flash.bin`);
   // As found: fails on both sides with the same run ID
   const w0 = await runBench(page);
@@ -148,6 +153,10 @@ for (const l of levels) {
     for (let i = 0; i + 1 < f.fix.length; i += 2) await setKnob(page, f.fix[i], f.fix[i + 1]);
     const fixed = found.slice();
     for (let i = 0; i + 1 < f.fix.length; i += 2) fixed[fixed.indexOf(f.fix[i]) + 1] = f.fix[i + 1];
+    if (busKnob) {
+      const gone = await waitFor(page, () => !(globalThis.__tbApp?.faults?.() ?? []).some((x) => x.rule === 'W8'), null, 20000);
+      report(`${l.id} switch fixed: wires straight, W8 gone`, gone, `BME280 SDA/SCL ${await bmePins()}`);
+    }
     w1 = await runBench(page);
     c1 = cli(refBin, l.id, fixed);
   } else {
@@ -159,6 +168,24 @@ for (const l of levels) {
   const s1 = await shownCli(page, f.fix ? refBin : path.join(root, `firmware/build/${f.fix_ref}/flash.bin`));
   report(`${l.id} fixed, command shown on the page`, s1.ok === w1.ok && s1.fp === w1.fp, `${s1.cmd} -> ${s1.ok ? 'pass' : 'fail'} ${s1.fp}`);
   await page.screenshot({ path: path.join(outDir, `faults-${l.id}.png`) });
+}
+// G-02: leaving the swap as found for fault-wire puts the BME280 back on its home pads, so fault-wire fails or passes for its own reason
+{
+  const sw = levels.find((l) => l.id === 'fault-i2c-swap');
+  const wire = levels.find((l) => l.id === 'fault-wire');
+  await pick(page, sw.id);
+  await setKnob(page, '--i2c-bus', sw.fault.args[1]);
+  const w8 = () => page.evaluate(() => (globalThis.__tbApp?.faults?.() ?? []).some((x) => x.rule === 'W8'));
+  const pins = () => page.evaluate(() => globalThis.__tbApp.session.scene.parts.filter((p) => p.type === 'bme280').map((p) => `${p.sda}/${p.scl}`).join(' '));
+  report('swap as found again: W8 shown', await waitFor(page, () => (globalThis.__tbApp?.faults?.() ?? []).some((x) => x.rule === 'W8'), null, 20000), await pins());
+  await pick(page, wire.id);
+  const straight = await waitFor(page, () => globalThis.__tbApp.session.scene.parts.some((p) => p.type === 'bme280' && p.sda === 8 && p.scl === 9), null, 10000);
+  await sleep(3000);
+  report('swap -> fault-wire: BME280 wires back on 8/9, no W8', straight && !(await w8()), `BME280 SDA/SCL ${await pins()}`);
+  const knob = await page.$$eval('#faultKnobs button[aria-pressed="true"]', (es) => es.map((e) => [e.dataset.flag, e.dataset.v]).flat());
+  const w = await runBench(page);
+  const c = cli(path.join(root, `firmware/build/${wire.ref}/flash.bin`), wire.id, knob);
+  report('swap -> fault-wire: verdict and run ID = CLI', w.ok === c.ok && w.fp === c.fp, `${knob.join(' ')}: web ${w.ok ? 'pass' : 'fail'} ${w.fp} / CLI ${c.ok ? 'pass' : 'fail'} ${c.fp}`);
 }
 // Switches survive a reload (per-viewer convenience) and the shown command carries them
 await page.reload({ waitUntil: 'load' });
