@@ -1,6 +1,7 @@
 //! Virtual internet servers: DNS (every name resolves to the gateway), TCP (passive open only), HTTP/1.1 (port 80, Connection: close).
-//! No retransmission: the network never drops. `Upgrade: websocket` on a registered route stays open for server pushes (ws.rs).
+//! No retransmission: the network never drops. WebSocket upgrades (ws.rs) and MQTT on 1883 (mqtt.rs) stay open.
 
+use super::mqtt;
 use super::net::l4_checksum;
 use super::ws;
 use std::collections::HashMap;
@@ -33,6 +34,8 @@ struct Conn {
     peer_fin: bool,
     fin_pending: bool,
     ws: Option<Box<WsConn>>,
+    /// MQTT connection (port 1883): its network-tab row
+    mqtt: Option<usize>,
 }
 
 /// WebSocket state on an upgraded connection
@@ -170,6 +173,24 @@ pub struct Tcp {
     pub ws_routes: Vec<String>,
     /// WebSocket events for the app to drain (open / message / closed)
     pub ws_inbox: Vec<WsIn>,
+    /// MQTT broker on port 1883 (F-08b)
+    pub mqtt: mqtt::Broker,
+    /// Segments for connections other than the one being served (MQTT routing); Net queues them
+    pub side: Vec<(Key, Vec<u8>, Option<String>)>,
+    /// Air-log lines not attached to a segment (MQTT client lost); Net drains them
+    pub notes: Vec<String>,
+}
+
+/// The connection a broker request is for: the one being served (removed from the map) or another open one
+fn pick<'a>(
+    conns: &'a mut HashMap<Key, Conn>,
+    cur: &'a mut Option<(&Key, &mut Conn)>,
+    k: &Key,
+) -> Option<&'a mut Conn> {
+    match cur {
+        Some((ck, c)) if *ck == k => Some(&mut **c),
+        _ => conns.get_mut(k),
+    }
 }
 
 /// Guess a protocol name from the port (how a blocked connection is labelled in the network tab)
@@ -552,13 +573,13 @@ impl Tcp {
         if flags & RST != 0 {
             if let Some(mut c) = self.conns.remove(&key) {
                 self.abandon(&c);
-                self.ws_gone(&key, &mut c);
+                self.ws_gone(&key, &mut c, now_us);
             }
             return out;
         }
         if flags & SYN != 0 {
-            if dport != 80 {
-                // Only port 80 listens: RST for other ports
+            if dport != 80 && dport != mqtt::PORT {
+                // Only HTTP (80) and MQTT (1883) listen: RST for other ports
                 let c = Conn {
                     snd_nxt: 0,
                     rcv_nxt: seq.wrapping_add(1),
@@ -600,14 +621,32 @@ impl Tcp {
                 Some(format!("TCP connect :{dport}")),
             ));
             c.snd_nxt = c.snd_nxt.wrapping_add(1);
+            if dport == mqtt::PORT && !self.conns.contains_key(&key) {
+                // MQTT: long-lived from the start; a repeated SYN keeps the first row and session
+                self.rows.push(NetRow {
+                    t_us: now_us,
+                    method: "MQTT".into(),
+                    dest: "Virtual",
+                    url: format!("mqtt://{}.{}.{}.{}:{dport}", dst[0], dst[1], dst[2], dst[3]),
+                    status: "Connecting".into(),
+                    dur_us: None,
+                    note: String::new(),
+                });
+                c.mqtt = Some(self.rows.len() - 1);
+                c.responded = true;
+                self.mqtt.open(key, now_us);
+            } else if let Some(old) = self.conns.get(&key).and_then(|o| o.mqtt) {
+                c.mqtt = Some(old);
+                c.responded = true;
+            }
             self.conns.insert(key, c);
             return out;
         }
         let Some(mut c) = self.conns.remove(&key) else {
             return out;
         };
-        if c.ws.is_some() {
-            return self.on_ws_segment(key, c, seq, flags, ackno, wnd, data);
+        if c.ws.is_some() || c.mqtt.is_some() {
+            return self.on_ws_segment(key, c, seq, flags, ackno, wnd, data, now_us);
         }
         // Window / ACK bookkeeping (only WebSocket sends use it; the HTTP path below is unchanged)
         if flags & ACK != 0 {
@@ -634,7 +673,7 @@ impl Tcp {
                 if peer_fin {
                     c.peer_fin = true;
                     c.fin_pending = true;
-                    self.ws_gone(&key, &mut c);
+                    self.ws_gone(&key, &mut c, now_us);
                 }
                 let segs = flush(&key, &mut c);
                 if segs.is_empty() {
@@ -807,7 +846,7 @@ impl Tcp {
         line
     }
 
-    /// A segment on an upgraded (long-lived) connection: ACK bookkeeping, frames in, queued data out, half-close
+    /// A segment on a long-lived connection (WebSocket / MQTT): ACK bookkeeping, data in, queued data out, half-close
     #[allow(clippy::too_many_arguments)]
     fn on_ws_segment(
         &mut self,
@@ -818,6 +857,7 @@ impl Tcp {
         ackno: u32,
         wnd: u32,
         data: &[u8],
+        now_us: u64,
     ) -> Vec<(Vec<u8>, Option<String>)> {
         if flags & ACK != 0 {
             c.peer_wnd = wnd;
@@ -832,7 +872,12 @@ impl Tcp {
             need_ack = true;
             if seq == c.rcv_nxt && !c.peer_fin {
                 c.rcv_nxt = c.rcv_nxt.wrapping_add(data.len() as u32);
-                line = self.ws_feed(&key, &mut c, data);
+                line = if c.mqtt.is_some() {
+                    let outs = self.mqtt.feed(key, data, now_us);
+                    self.mqtt_apply(Some((&key, &mut c)), outs)
+                } else {
+                    self.ws_feed(&key, &mut c, data)
+                };
             }
         }
         let fin_seq = seq.wrapping_add(data.len() as u32);
@@ -842,7 +887,7 @@ impl Tcp {
             c.peer_fin = true;
             c.fin_pending = true;
             need_ack = true;
-            self.ws_gone(&key, &mut c);
+            self.ws_gone(&key, &mut c, now_us);
         }
         let segs = flush(&key, &mut c);
         let mut out: Vec<(Vec<u8>, Option<String>)> = segs.into_iter().map(|s| (s, None)).collect();
@@ -858,8 +903,21 @@ impl Tcp {
         out
     }
 
-    /// Connection gone without a close handshake (chip FIN / RST): tell the app once
-    fn ws_gone(&mut self, key: &Key, c: &mut Conn) {
+    /// Connection gone without a close handshake (chip FIN / RST): tell the app (or the MQTT broker) once
+    fn ws_gone(&mut self, key: &Key, c: &mut Conn, now_us: u64) {
+        if c.mqtt.is_some() {
+            let outs = self.mqtt.gone(key, now_us);
+            if !outs.is_empty() {
+                if let Some(r) = c.mqtt.and_then(|i| self.rows.get_mut(i)) {
+                    r.status = "Closed".into();
+                    self.rev += 1;
+                }
+            }
+            if let Some(l) = self.mqtt_apply(Some((key, c)), outs) {
+                self.notes.push(l);
+            }
+            return;
+        }
         let Some(w) = c.ws.as_mut().filter(|w| !w.reported) else {
             return;
         };
@@ -874,6 +932,82 @@ impl Tcp {
                 code: 1006,
             });
         }
+    }
+
+    /// Carry out broker requests: the served connection (`cur`) is flushed by the caller, others flush into `side`.
+    /// Returns the `[mqtt]` log lines joined
+    fn mqtt_apply(
+        &mut self,
+        mut cur: Option<(&Key, &mut Conn)>,
+        outs: Vec<mqtt::Out>,
+    ) -> Option<String> {
+        let mut lines = Vec::new();
+        let mut touched: Vec<Key> = Vec::new();
+        for o in outs {
+            match o {
+                mqtt::Out::Log(l) => lines.push(l),
+                mqtt::Out::Send(k, b) => {
+                    if let Some(c) = pick(&mut self.conns, &mut cur, &k).filter(|c| !c.fin_pending)
+                    {
+                        c.sendq.extend(b);
+                        touched.push(k);
+                    }
+                }
+                mqtt::Out::Close(k) => {
+                    if let Some(c) = pick(&mut self.conns, &mut cur, &k) {
+                        c.fin_pending = true;
+                        touched.push(k);
+                    }
+                }
+                mqtt::Out::Status(k, st) => {
+                    let row = pick(&mut self.conns, &mut cur, &k).and_then(|c| c.mqtt);
+                    if let Some(r) = row.and_then(|i| self.rows.get_mut(i)) {
+                        r.status = st;
+                        self.rev += 1;
+                    }
+                }
+            }
+        }
+        touched.sort();
+        touched.dedup();
+        let ck = cur.as_ref().map(|(k, _)| **k);
+        for k in touched.into_iter().filter(|k| Some(*k) != ck) {
+            if let Some(c) = self.conns.get_mut(&k) {
+                self.side
+                    .extend(flush(&k, c).into_iter().map(|s| (k, s, None)));
+            }
+        }
+        (!lines.is_empty()).then(|| lines.join("; "))
+    }
+
+    /// Publish from the virtual cloud (script action mqtt=): segments for every matching subscriber
+    pub fn mqtt_publish(
+        &mut self,
+        c: &mqtt::Cmd,
+        now_us: u64,
+    ) -> Vec<(Key, Vec<u8>, Option<String>)> {
+        let outs = self.mqtt.publish(c, now_us);
+        self.mqtt_out(outs)
+    }
+
+    /// Keepalive check: clients silent for 1.5 x their interval are closed
+    pub fn mqtt_poll(&mut self, now_us: u64) -> Vec<(Key, Vec<u8>, Option<String>)> {
+        let outs = self.mqtt.poll(now_us);
+        if outs.is_empty() {
+            return vec![];
+        }
+        self.mqtt_out(outs)
+    }
+
+    fn mqtt_out(&mut self, outs: Vec<mqtt::Out>) -> Vec<(Key, Vec<u8>, Option<String>)> {
+        let line = self.mqtt_apply(None, outs);
+        let mut segs = std::mem::take(&mut self.side);
+        match (line, segs.first_mut()) {
+            (Some(l), Some(f)) => f.2 = Some(l),
+            (Some(l), None) => self.notes.push(l),
+            _ => {}
+        }
+        segs
     }
 
     /// Open WebSocket connections the server may still push to, sorted

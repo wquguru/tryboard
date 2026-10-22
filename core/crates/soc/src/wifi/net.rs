@@ -185,6 +185,22 @@ impl Net {
         self.queue_segs(segs);
     }
 
+    /// MQTT publish from the virtual cloud (script action mqtt=); sent on the next World::poll
+    pub fn mqtt_publish(&mut self, c: &super::mqtt::Cmd, now_us: u64) {
+        let segs = self.tcp.mqtt_publish(c, now_us);
+        self.queue_segs(segs);
+        let notes = std::mem::take(&mut self.tcp.notes);
+        self.log.extend(notes);
+    }
+
+    /// MQTT keepalive check (closes silent clients)
+    pub fn mqtt_poll(&mut self, now_us: u64) {
+        let segs = self.tcp.mqtt_poll(now_us);
+        self.queue_segs(segs);
+        let notes = std::mem::take(&mut self.tcp.notes);
+        self.log.extend(notes);
+    }
+
     pub fn on_eth(&mut self, e: &Eth, now_us: u64) -> Vec<Eth> {
         self.tcp.now_us = now_us;
         match e.ethertype {
@@ -271,6 +287,11 @@ impl Net {
                     }
                     out.push(self.reply_ip(&e.src, src, dst, 6, &seg));
                 }
+                // MQTT deliveries to other connections leave on the next World::poll
+                let side = std::mem::take(&mut self.tcp.side);
+                self.queue_segs(side);
+                let notes = std::mem::take(&mut self.tcp.notes);
+                self.log.extend(notes);
                 out
             }
             _ => vec![],

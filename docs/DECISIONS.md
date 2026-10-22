@@ -1512,3 +1512,9 @@
 - 理由：不改用户草图也能跑才有意义（选项 a）；golden 211/211 不变，佐证默认接线行为未变。
 - 遗留：Adafruit 竖屏发 MADCTL 0x48（MX | BGR），模型显示为左右镜像文字；真机常见 ILI9341 模块此设置是正向，IDF spi_lcd_touch 示例也无条件 `esp_lcd_panel_mirror(true, false)`，疑为面板模型 MX 约定与常见玻璃相反（会牵连 c3-ili9341 / CYD 用例），按范围不改面板模型，lcd_regions 只取左右对称的区域；C3 SPI2 不把 LCD 读回送 MISO，readcommand8 读回 0xFF，未断言。
 - 备选：草图改成 C3 默认 lcd_pin（DC 5 / RST 4 / 显式 `SPI.begin`）——否，等于为模拟器改用户代码。
+
+## 2026-10-22 F-08b 遗留：core 内置虚拟 MQTT 3.1.1 broker
+- 决定：新建 `soc/src/wifi/mqtt.rs`（纯状态机 `Broker`，输出 Send / Close / Status / Log），挂在 `Tcp::mqtt`，1883 端口始终监听（不像 xiaozhi 需要 `xz=on` 开启），复用 WebSocket 的长连接 TCP 记账；跨连接下发经 `Tcp::side` → `Net::pending`。脚本动作 `mqtt=pub|pub1|retain,<topic>,<payload>` 放进 `Machine::net_action`，CLI 与网页（`tb_net_action`，未新增 wasm 导出）共用；CLI 结束报告改由 `World::service_logs` 统一列出 xz / mqtt（守住 main.rs `run` 798 行与 1500 行上限）。PubSubClient 草图改为先订阅 `tryboard/#` 再发布、收满 2 条打印 TRYBOARD_OK，用例改断言成功输出（功能完成后更新预期）。
+- 理由：只有 PubSubClient 一个用例碰 1883，常开不影响其余 210 例（golden 一致）；broker 放在 Tcp 里，同连接回复随 ACK 立刻出去，确定性好；retain 存储算「互联网」状态，复位保留。
+- 参考：OASIS MQTT Version 3.1.1 规范（报文格式、剩余长度、主题通配 4.7、保活 3.1.2.10、retain 3.3.1.3）；PubSubClient 2.8（MIT）只看其行为（CONNACK 第 4 字节为 0 才算连上、15 s PINGREQ）。没有读或参考任何 GPL broker（mosquitto 为 EPL/EDL，也未参考）。
+- 备选：broker 放 World、经 inbox 一次 poll 后再回（xiaozhi 模式，CONNACK 晚一拍，多一套事件类型）；按需 `mqtt=on` 才监听（多一步，PubSubClient 默认场景不直观）；做 QoS 2 / 持久会话（范围外）。

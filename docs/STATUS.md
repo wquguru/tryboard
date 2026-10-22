@@ -177,13 +177,13 @@ arduino-cli 1.5.1 + esp32 core 3.3.2，FQBN `esp32:esp32:esp32c3`；草图在 `f
 
 ## Arduino 库矩阵（F-08b Wi-Fi、BLE、舵机、灯带，C3，2026-10-20）
 
-同上工具链与 FQBN；10 个草图在 `firmware/arduino/lib-*`：6 个第三方库（钉发布标签提交，`tools/fetch_third_party.sh` F-08b 块）+ 4 个 arduino-esp32 核心自带库（WiFi / HTTPClient / BLE / WebServer，随核心 3.3.2，LGPL 三件套）。用例 `arduino-lib-*`，主仓库 CLI 跑 9/9 通过（`Reviews/f08b-accept.md`）。全部是行为模拟，未经真机标定。
+同上工具链与 FQBN；10 个草图在 `firmware/arduino/lib-*`：6 个第三方库（钉发布标签提交，`tools/fetch_third_party.sh` F-08b 块）+ 4 个 arduino-esp32 核心自带库（WiFi / HTTPClient / BLE / WebServer，随核心 3.3.2，LGPL 三件套）。用例 `arduino-lib-*`，主仓库 CLI 跑 9/9 通过（`Reviews/f08b-accept.md`）；2026-10-22 虚拟 MQTT broker 做完后 `arduino-lib-pubsubclient` 改断言真正收发成功。全部是行为模拟，未经真机标定。
 
 | 库（版本） | 许可证 | 示例 / 器件 | 状态 | 验收 | 上站点 |
 |---|---|---|---|---|---|
 | FastLED 3.10.3 | MIT | 8 颗 WS2812（GPIO8）：全红 / 渐变 / 单点 / 清空 | ✅ | `arduino-lib-fastled`：解码 4 帧，逐灯颜色一致 | 可 |
 | WiFiManager 2.0.17 | MIT | autoConnect 配网门户（开放热点 TryBoard-Setup） | ✅ | `arduino-lib-wifimanager`：手机加入 → 连通性检查 302 → POST `/wifisave` s=MyHome → 固件连上 MyHome 拿 192.168.5.100 | 可 |
-| PubSubClient 2.8 | MIT | 连 TryBoard-WiFi 后连 `tryboard.local:1883` | ◐ 跑到 MQTT 连接 | `arduino-lib-pubsubclient`：Wi-Fi 连上，`mqtt connect failed rc=-2`（用例断言的是当前行为）；**遗留**：虚拟网络只监听 80 端口，1883 回 RST，要在 core `wifi/tcp.rs` 加虚拟 broker 才能发布 / 订阅 | 可（broker 做完后） |
+| PubSubClient 2.8 | MIT | 连 TryBoard-WiFi 后连 `tryboard.local:1883`，订阅 `tryboard/#`、自己发布 `tryboard/hello` | ✅（2026-10-22 虚拟 broker，WIFI.md 阶段 9） | `arduino-lib-pubsubclient`：CONNACK 0 → SUBSCRIBE → 收到自己发布的回显，`--script 3:mqtt=pub,tryboard/in,from cloud` 从虚拟云端再收一条；stderr 有 4 行 `[mqtt]`；`--inputs` 重放同样收到。PINGREQ 保活 40 s 不断。broker 只做 3.1.1 QoS 0 / 1，无 TLS / QoS 2 / 持久会话 | 可 |
 | NimBLE-Arduino 2.5.1 | Apache-2.0 | 电量服务 180F / 2A19 通知 | ✅ | `arduino-lib-nimble`：`--ble-phone` 扫到 TryBoard-NimBLE、连接、读 2A19 = 87%、订阅后 3 条通知（86 / 85 / 84%），0.64 s 内完成。`onSync` 调 `ble_hs_util_ensure_addr(1)` → 厂商命令 0xfc01（读静态随机地址，格式按 NimBLE `ble_hci_vs_rd_static_addr_rp`：状态 + 6 字节）；2026-10-22 虚拟控制器改为回由公共地址最高字节置高两位派生的固定静态地址（C3 默认 C2:54:42:00:00:03），之前只回状态 0 时主机判长度不符反复 `sched_reset`。此后无未答的厂商命令（仍按「plain success」回的只有 0x202d / 0x2029 / 0x2027 / 0x204e 标准 LE 命令） | 可 |
 | ESP32Servo 3.2.1 | LGPL-2.1-or-later（无 LICENSE 文件，见 README / 文件头） | Sweep 0–180°（GPIO6，500–2500 µs） | ✅ 已上站（F-08e） | `arduino-lib-esp32servo`：50 Hz，占空比 0.024..0.125（0° 量化为 488 µs） | 是（LGPL 三件套：BUILD_INFO + NOTICES，F-08e） |
 | IRremote 4.7.1 | MIT（含 BSD-3 文件和 4 个 GPL 头样板，见 LICENSING_REVIEW §16.5） | SimpleSender 发 3 帧 NEC（GPIO4） | ✅ 已上站（F-08e），只验发射 | `arduino-lib-irremote`：载波 37987 Hz、占空比 0..0.297。PWM 日志只记占空比变化，NEC 位时序未解码；**遗留**：无红外接收头模型，接收示例不做；网页场景暂用普通 LED 件代替红外 LED | 是（F-08e，NOTICES 附全部版权人与说明） |
