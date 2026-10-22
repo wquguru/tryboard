@@ -57,6 +57,8 @@ Reviews/               screenshots, traces, reports (git-ignored, regenerated ev
 - Only ~60 GB of disk left: don't install large toolchains casually, don't commit build output
 
 ## 5. Common commands
+`just --list` wraps the everyday rows below (`test`, `lint`, `fw`, `web`, `dev`, `run`, `accept`, `golden`, `webtest`, `doctor`); the scripts stay the implementation, so keep both in step when a command changes.
+
 | Task | Command |
 |---|---|
 | Core unit tests | `cd core && cargo test` |
@@ -65,6 +67,7 @@ Reviews/               screenshots, traces, reports (git-ignored, regenerated ev
 | Run with external parts | `tryboard run <flash.bin> --i2c ssd1306@0x3c,bme280@0x76 --env 23.5,45,101325 --oled` (`--oled` prints the screen as ASCII art); S3 round LCD: `--spi gc9a01 --lcd-ppm Reviews/x.ppm`, then `tools/ppm2png.py Reviews/x.ppm Reviews/x.png` |
 | Wiring estimate (P2-11) | `tryboard run <flash.bin> --i2c ssd1306@0x3c,bme280@0x76 --i2c-wire 60` (I2C cable cm); `--antenna-loss 30` (antenna blockage dB); conclusion at the end of stderr |
 | Full acceptance | `tools/accept.sh [--no-web] [--no-qemu]` (writes `Reviews/accept.md`; cases in `firmware/accept.json`) |
+| Deploy (Cloudflare Pages, DECISIONS 2026-10-22) | `just deploy preview` / `just deploy` (prod: ask a human first, §10), then `just smoke <url>`; local `_headers` check: `just pages-local` + `just smoke http://localhost:8799` |
 | Golden snapshots (R-02) | `tools/golden.py save` on the unchanged tree before a behaviour-preserving refactor, then `tools/golden.py check [ids]` (byte-identical CLI output of every accept case; accept.sh runs it when `Reviews/golden/` exists) |
 | Find hangs / crashes | `tryboard run <flash.bin> --trace 40` (recent jump targets; loads app.elf symbols from the same directory) |
 | Logic-analyzer events | `tryboard run <flash.bin> --trace-io Reviews/io.txt [--trace-pins 4,8]` (GPIO / PWM / WS2812 / I2C transactions stamped by cycle; compare with the web page: `node tools/webtest/traceio.mjs`) |
