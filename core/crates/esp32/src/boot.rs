@@ -247,6 +247,7 @@ impl Esp32 {
         let jedec = jedec_for_size(m.bus.spi1.inner.jedec, size);
         m.bus.spi1.inner.jedec = jedec;
         init_flashchip(&mut m, flash_size(size_code), jedec)?;
+        install_ble(&mut m, &app);
         enter_windowed(&mut m.cpu, &mut m.bus, app.entry, STACK_PRO, SPILL_PRO)?;
         Ok((m, app))
     }
@@ -285,11 +286,50 @@ impl Esp32 {
         let flash = std::mem::take(&mut old.flash);
         let rom = std::mem::take(&mut self.rom_elf);
         let (mut m, _) = Esp32::boot_with(&rom, flash, bus)?;
+        // The virtual phone is outside world: survives reset (connection drops with the chip), air log continues
+        if let (Some(old), Some(new)) = (self.bus.ble.hle.as_mut(), m.bus.ble.hle.as_mut()) {
+            std::mem::swap(&mut old.world, &mut new.world);
+            new.world.chip_reset(crate::ble::now_us(&self.cpu));
+        }
         let t = self.cpu.cycles;
         m.cpu.cycles = t;
         m.bus.now = t;
         m.bus.next_event = 0;
         *self = m;
         Ok(())
+    }
+}
+
+/// BLE (E-09): find the VHCI boundary by signature and, if found, intercept its entries and the magic return slots
+fn install_ble(m: &mut Esp32, app: &AppInfo) {
+    let flash = &m.bus.flash;
+    let segs: Vec<(u32, &[u8])> = app
+        .segments
+        .iter()
+        .filter_map(|&(load, data, len)| {
+            flash
+                .get(data as usize..(data + len) as usize)
+                .map(|b| (load, b))
+        })
+        .collect();
+    match crate::ble::locate(&segs) {
+        Ok(None) => {}
+        Ok(Some(hooks)) => {
+            // BT address = base MAC + 2 (ESP_MAC_BT); MAC_FACTORY keeps mac[5] in the lowest byte of BLK0 word 1
+            let (lo, hi) = (m.bus.efuse[1], m.bus.efuse[2] & 0xffff);
+            let v = ((hi as u64) << 32 | lo as u64) + 2;
+            // HCI byte order is little-endian (least significant byte first)
+            let mut addr = [0u8; 6];
+            addr.copy_from_slice(&v.to_le_bytes()[..6]);
+            let b = crate::ble::BleHle::with_osi(hooks, addr, &crate::ble::OSI_ESP32);
+            let addrs = b.hle_addrs();
+            // Hooked entries are in flash, above the ROM range the HLE check normally covers
+            let top = addrs.iter().copied().max().unwrap_or(0) + 1;
+            m.cpu.hle_hi = m.cpu.hle_hi.max(top);
+            m.cpu.hle_addrs.extend(addrs);
+            m.cpu.hle_addrs.sort_unstable();
+            m.bus.ble.hle = Some(Box::new(b));
+        }
+        Err(e) => m.bus.ble.error = Some(e),
     }
 }

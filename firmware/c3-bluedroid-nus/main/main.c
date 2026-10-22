@@ -23,6 +23,9 @@
 #if CONFIG_IDF_TARGET_ESP32S3
 #define CHIP_NAME "ESP32-S3"
 #define FW_ID "s3-bluedroid-nus"
+#elif CONFIG_IDF_TARGET_ESP32
+#define CHIP_NAME "ESP32"
+#define FW_ID "esp32-bluedroid-nus"
 #else
 #define CHIP_NAME "ESP32-C3"
 #define FW_ID "c3-bluedroid-nus"

@@ -45,6 +45,17 @@ fn reset_answers_command_complete() {
 }
 
 #[test]
+fn bredr_commands_are_refused_and_counted() {
+    let mut b = Ble::new(ADDR);
+    // HCI_Inquiry (0x0401): BR/EDR only -> Command Complete with 0x01 Unknown HCI Command
+    cmd(&mut b, 0x0401, &[0x33, 0x8b, 0x9e, 8, 0], 0);
+    let p = drain(&mut b, 10_000);
+    assert_eq!(p[0][..7], [0x04, 0x0e, 4, 1, 0x01, 0x04, 0x01]);
+    assert_eq!(b.bredr_cmds, [(0x0401, 1)]);
+    assert!(b.unknown_cmds.is_empty());
+}
+
+#[test]
 fn read_bd_addr_is_ours() {
     let mut b = Ble::new(ADDR);
     cmd(&mut b, 0x1009, &[], 0);

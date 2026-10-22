@@ -10,6 +10,7 @@ pub mod phone;
 pub mod sig;
 pub mod sig_xt;
 pub mod sigs;
+pub mod sigs_lx6;
 pub mod sigs_xt;
 
 #[cfg(test)]
@@ -75,6 +76,8 @@ pub struct Ble {
     pub log_seq: u64,
     /// HCI commands from the host (opcode -> count); unimplemented ones still get Command Complete
     pub unknown_cmds: Vec<(u16, u32)>,
+    /// BR/EDR-only commands (opcode -> count), refused with "Unknown HCI Command": the model is a BLE-only controller
+    pub bredr_cmds: Vec<(u16, u32)>,
     /// Whether the firmware has brought up the controller (decides if the web shows the Bluetooth tab)
     pub active: bool,
 }
@@ -96,6 +99,7 @@ impl Ble {
             log: VecDeque::new(),
             log_seq: 0,
             unknown_cmds: Vec::new(),
+            bredr_cmds: Vec::new(),
             active: false,
         }
     }
@@ -392,6 +396,14 @@ impl Ble {
                 } else {
                     self.cmd_status(at, op, 0x02);
                 }
+            }
+            // Link Control (except the shared Disconnect / Read Remote Version, matched above) and Link Policy are BR/EDR only
+            _ if matches!(op >> 10, 0x01 | 0x02) => {
+                match self.bredr_cmds.iter_mut().find(|(o, _)| *o == op) {
+                    Some(e) => e.1 += 1,
+                    None => self.bredr_cmds.push((op, 1)),
+                }
+                self.cmd_complete(at, op, &[0x01]);
             }
             _ => {
                 // Everything else (incl. Espressif vendor commands 0xFCxx and the many 'set' commands) succeeds with no return data

@@ -984,16 +984,14 @@ fn run(args: &[String]) {
         }
     }
     if let Some(b) = m.ble() {
-        if !b.unknown_cmds.is_empty() {
-            let l: Vec<String> = b
-                .unknown_cmds
-                .iter()
-                .map(|(o, n)| format!("0x{o:04x}×{n}"))
-                .collect();
-            eprintln!(
-                "[tryboard] BLE: HCI commands answered with plain success {}",
-                l.join(" ")
-            );
+        for (l, what) in [
+            (&b.unknown_cmds, "HCI commands answered with plain success"),
+            (&b.bredr_cmds, "BR/EDR commands refused (BLE-only model)"),
+        ] {
+            let l: Vec<String> = l.iter().map(|(o, n)| format!("0x{o:04x}×{n}")).collect();
+            if !l.is_empty() {
+                eprintln!("[tryboard] BLE: {what} {}", l.join(" "));
+            }
         }
     }
     if args.iter().any(|a| a == "--usb-log") {

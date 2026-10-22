@@ -3,6 +3,7 @@
 //! a(4n+2..), return address a(4n), result to a(4n+2), PC back past the call with no RETW. To call into firmware we
 //! reuse the caller's CALLn: a(4n) = n<<30 | magic slot, PS.CALLINC = n, PC = f; f's RETW lands on the slot in the
 //! same window. The original return address is kept per caller SP (re-entrant across tasks). Flash is untouched.
+//! The classic ESP32 (LX6, E-09) reuses this through `Bus` + its own `Osi` layout (esp32/src/ble.rs).
 //! lint: allow-long-comment
 
 use crate::SocBus;
@@ -26,15 +27,57 @@ const S_SENT: u32 = 5;
 const SLOTS: u32 = 6;
 pub const MAGIC_END: u32 = MAGIC + 4 * SLOTS;
 
-// osi_funcs_t offsets (S3 builds the same controller/esp32c3/bt.c, IDF 5.1.0-5.5.1)
 const OSI_MAGIC: u32 = 0xFADE_BEAD;
-/// IDF 5.1.0 / 5.1.1 = 0x10006 ... 5.4-5.5.1 = 0x1000A (F-08c: field offsets below checked in each bt.c)
-const OSI_VERSIONS: std::ops::RangeInclusive<u32> = 0x0001_0006..=0x0001_000A;
-const OSI_SEMPHR_CREATE: u32 = 36;
-const OSI_SEMPHR_TAKE: u32 = 52;
-const OSI_SEMPHR_GIVE: u32 = 56;
-const OSI_TASK_CREATE: u32 = 100;
-const OSI_MALLOC_INTERNAL: u32 = 120;
+
+/// osi_funcs_t layout of one bt.c (byte offsets)
+pub struct Osi {
+    pub magic_at: u32,
+    pub version_at: u32,
+    pub versions: std::ops::RangeInclusive<u32>,
+    /// First version whose bt.c calls the extend pll_track setter (must be hooked); None = never
+    pub pll_from: Option<u32>,
+    pub semphr_create: u32,
+    pub semphr_take: u32,
+    pub semphr_give: u32,
+    pub task_create: u32,
+    pub malloc_internal: u32,
+}
+
+/// S3 builds controller/esp32c3/bt.c: IDF 5.1.0 / 5.1.1 = 0x10006 ... 5.4-5.5.1 = 0x1000A (F-08c: offsets checked per bt.c)
+pub const OSI_S3: Osi = Osi {
+    magic_at: 0,
+    version_at: 4,
+    versions: 0x0001_0006..=0x0001_000A,
+    pll_from: Some(0x0001_0007),
+    semphr_create: 36,
+    semphr_take: 52,
+    semphr_give: 56,
+    task_create: 100,
+    malloc_internal: 120,
+};
+
+/// What the HLE needs from a chip's bus
+pub trait Bus {
+    fn rd32(&self, a: u32) -> u32;
+    fn rd8(&self, a: u32) -> u8;
+    fn wr8(&mut self, a: u32, v: u8);
+    fn ble_slot(&mut self) -> &mut Slot;
+}
+
+impl Bus for SocBus {
+    fn rd32(&self, a: u32) -> u32 {
+        self.mem_read(a, 4).unwrap_or(0)
+    }
+    fn rd8(&self, a: u32) -> u8 {
+        self.mem_read(a, 1).unwrap_or(0) as u8
+    }
+    fn wr8(&mut self, a: u32, v: u8) {
+        self.mem_write(a, 1, v as u32);
+    }
+    fn ble_slot(&mut self) -> &mut Slot {
+        &mut self.ble
+    }
+}
 
 /// Stub task stack: the host's receive callback runs on it (windowed frames are larger than on RISC-V)
 const TASK_STACK: u32 = 8192;
@@ -57,6 +100,7 @@ enum Entry {
 
 pub struct BleHle {
     pub hooks: Hooks,
+    layout: &'static Osi,
     osi: u32,
     /// vhci_host_callback_t*: {notify_host_send_available, notify_host_recv}
     cb: u32,
@@ -95,8 +139,13 @@ pub fn locate(segs: &[Seg]) -> Result<Option<Hooks>, String> {
 
 impl BleHle {
     pub fn new(hooks: Hooks, addr: [u8; 6]) -> BleHle {
+        BleHle::with_osi(hooks, addr, &OSI_S3)
+    }
+
+    pub fn with_osi(hooks: Hooks, addr: [u8; 6], layout: &'static Osi) -> BleHle {
         BleHle {
             hooks,
+            layout,
             osi: 0,
             cb: 0,
             sem: 0,
@@ -137,8 +186,8 @@ impl BleHle {
     }
 }
 
-fn rd32(bus: &SocBus, a: u32) -> u32 {
-    bus.mem_read(a, 4).unwrap_or(0)
+fn rd32<B: Bus>(bus: &B, a: u32) -> u32 {
+    bus.rd32(a)
 }
 
 fn callinc(cpu: &Cpu) -> u32 {
@@ -172,8 +221,8 @@ pub fn now_us(cpu: &Cpu) -> u64 {
 }
 
 /// Run the HLE for pc if it is a BLE hook or return slot; false = not ours
-pub fn call_at(pc: u32, cpu: &mut Cpu, bus: &mut SocBus) -> bool {
-    let Some(mut b) = bus.ble.hle.take() else {
+pub fn call_at<B: Bus>(pc: u32, cpu: &mut Cpu, bus: &mut B) -> bool {
+    let Some(mut b) = bus.ble_slot().hle.take() else {
         return false;
     };
     let hit = if (MAGIC..MAGIC_END).contains(&pc) {
@@ -185,11 +234,11 @@ pub fn call_at(pc: u32, cpu: &mut Cpu, bus: &mut SocBus) -> bool {
     } else {
         false
     };
-    bus.ble.hle = Some(b);
+    bus.ble_slot().hle = Some(b);
     hit
 }
 
-fn entry(b: &mut BleHle, e: Entry, cpu: &mut Cpu, bus: &mut SocBus) {
+fn entry<B: Bus>(b: &mut BleHle, e: Entry, cpu: &mut Cpu, bus: &mut B) {
     let n = callinc(cpu);
     if n == 0 {
         // libbtdm and bt.c are windowed code; a CALL0 caller means a mismatched hook
@@ -201,13 +250,13 @@ fn entry(b: &mut BleHle, e: Entry, cpu: &mut Cpu, bus: &mut SocBus) {
     let a = |i: u32| cpu.a(4 * n + 2 + i);
     match e {
         Entry::OsiReg => {
-            let p = a(0);
-            let (magic, ver) = (rd32(bus, p), rd32(bus, p + 4));
-            let err = if magic != OSI_MAGIC || !OSI_VERSIONS.contains(&ver) {
+            let (p, l) = (a(0), b.layout);
+            let (magic, ver) = (rd32(bus, p + l.magic_at), rd32(bus, p + l.version_at));
+            let err = if magic != OSI_MAGIC || !l.versions.contains(&ver) {
                 Some(format!(
                     "unknown bt.c osi function table version (magic {magic:08x} version {ver:08x})"
                 ))
-            } else if ver >= 0x0001_0007 && b.hooks.pll_track == 0 {
+            } else if l.pll_from.is_some_and(|v| ver >= v) && b.hooks.pll_track == 0 {
                 // This bt.c calls the setter, which would write through the sdk_config pointer we never set
                 Some(
                     "no sdk_config_extend_set_pll_track call found before btdm_controller_enable"
@@ -229,7 +278,7 @@ fn entry(b: &mut BleHle, e: Entry, cpu: &mut Cpu, bus: &mut SocBus) {
             b.inited = true;
             b.world.active = true;
             b.frames.insert(cpu.a(1), (ra, n));
-            let f = rd32(bus, b.osi + OSI_MALLOC_INTERNAL);
+            let f = rd32(bus, b.osi + b.layout.malloc_internal);
             call(cpu, n, f, S_NAMED, &[8]);
         }
         Entry::Enable | Entry::Nop => ret(cpu, n, ra, 0),
@@ -242,9 +291,7 @@ fn entry(b: &mut BleHle, e: Entry, cpu: &mut Cpu, bus: &mut SocBus) {
         }
         Entry::Send => {
             let (p, len) = (a(0), a(1) & 0xffff);
-            let pkt: Vec<u8> = (0..len)
-                .map(|i| bus.mem_read(p + i, 1).unwrap_or(0) as u8)
-                .collect();
+            let pkt: Vec<u8> = (0..len).map(|i| bus.rd8(p + i)).collect();
             b.world.host_send(&pkt, now_us(cpu));
             // For every packet the host waits for notify_host_send_available to return its send semaphore
             if b.cb != 0 {
@@ -271,7 +318,7 @@ fn pop_ret0(b: &mut BleHle, cpu: &mut Cpu) {
     }
 }
 
-fn slot(b: &mut BleHle, s: u32, cpu: &mut Cpu, bus: &mut SocBus) {
+fn slot<B: Bus>(b: &mut BleHle, s: u32, cpu: &mut Cpu, bus: &mut B) {
     let n_of = |b: &BleHle, cpu: &Cpu| b.frames.get(&cpu.a(1)).map_or(1, |f| f.1);
     match s {
         S_POP_RET0 => pop_ret0(b, cpu),
@@ -279,10 +326,10 @@ fn slot(b: &mut BleHle, s: u32, cpu: &mut Cpu, bus: &mut SocBus) {
             let n = n_of(b, cpu);
             let p = cpu.a(4 * n + 2);
             for (i, c) in b"btCtrl\0".iter().enumerate() {
-                bus.mem_write(p + i as u32, 1, *c as u32);
+                bus.wr8(p + i as u32, *c);
             }
             // core_id (7th arg) is read from the caller's stack; bt.c maps out-of-range ids to no affinity
-            let f = rd32(bus, b.osi + OSI_TASK_CREATE);
+            let f = rd32(bus, b.osi + b.layout.task_create);
             call(
                 cpu,
                 n,
@@ -294,7 +341,7 @@ fn slot(b: &mut BleHle, s: u32, cpu: &mut Cpu, bus: &mut SocBus) {
         S_SENT => {
             if b.sem != 0 {
                 let n = n_of(b, cpu);
-                let f = rd32(bus, b.osi + OSI_SEMPHR_GIVE);
+                let f = rd32(bus, b.osi + b.layout.semphr_give);
                 call(cpu, n, f, S_POP_RET0, &[b.sem]);
             } else {
                 pop_ret0(b, cpu);
@@ -306,7 +353,7 @@ fn slot(b: &mut BleHle, s: u32, cpu: &mut Cpu, bus: &mut SocBus) {
             let sp = cpu.a(1).wrapping_sub(BUF) & !15;
             cpu.set_a(1, sp);
             b.buf = sp;
-            let f = rd32(bus, b.osi + OSI_SEMPHR_CREATE);
+            let f = rd32(bus, b.osi + b.layout.semphr_create);
             call(cpu, b.task_n, f, S_CREATED, &[1, 0]);
         }
         S_CREATED => {
@@ -318,21 +365,21 @@ fn slot(b: &mut BleHle, s: u32, cpu: &mut Cpu, bus: &mut SocBus) {
     }
 }
 
-fn loop_step(b: &mut BleHle, cpu: &mut Cpu, bus: &mut SocBus) {
+fn loop_step<B: Bus>(b: &mut BleHle, cpu: &mut Cpu, bus: &mut B) {
     let now = now_us(cpu);
     let n = b.task_n;
     if b.cb != 0 {
         if let Some(pkt) = b.world.poll(now) {
             let len = pkt.len().min(BUF as usize);
             for (i, x) in pkt[..len].iter().enumerate() {
-                bus.mem_write(b.buf + i as u32, 1, *x as u32);
+                bus.wr8(b.buf + i as u32, *x);
             }
             let f = rd32(bus, b.cb + 4);
             call(cpu, n, f, S_LOOP, &[b.buf, len as u32]);
             return;
         }
     }
-    let f = rd32(bus, b.osi + OSI_SEMPHR_TAKE);
+    let f = rd32(bus, b.osi + b.layout.semphr_take);
     call(cpu, n, f, S_LOOP, &[b.sem, WAIT_MS]);
 }
 
