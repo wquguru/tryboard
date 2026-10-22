@@ -405,6 +405,18 @@
   "chip": "esp32c3"
  },
  {
+  "id": "arduino-lib-pubsubclient",
+  "title": "Arduino: MQTT publish / subscribe with PubSubClient",
+  "about": "Built with arduino-cli and the PubSubClient library (MIT). Joins TryBoard-WiFi, connects to the virtual MQTT broker on port 1883, subscribes to tryboard/#, publishes tryboard/hello and prints every message it receives. Open the Network tab's MQTT view to publish your own message from the cloud.",
+  "tags": [
+   "✓ Verified in sim",
+   "Arduino",
+   "Wi-Fi",
+   "MQTT"
+  ],
+  "chip": "esp32c3"
+ },
+ {
   "id": "esp32-ir",
   "chip": "esp32",
   "title": "IR remote receiver + transmitter on RMT (classic ESP32)",

@@ -389,6 +389,10 @@ if [ $NO_WEB = 0 ]; then
   r=$(node tools/webtest/irnec.mjs 2>&1 | grep '^\[irnec\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   echo "$r" | tail -1 | grep -q '^\[irnec\] PASS (' || { echo "- [irnec] script did not finish" >> $REPORT; fail=1; }
+  # MQTT publish panel (F-08g): publish from the Network tab, broker log, CLI --inputs replay byte for byte + fingerprint, 390×844
+  r=$(node tools/webtest/mqttpanel.mjs 2>&1 | grep '^\[mqttpanel\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[mqttpanel\] PASS (' || { echo "- [mqttpanel] script did not finish" >> $REPORT; fail=1; }
 fi
 echo -e "\nVerdict: $([ $fail = 0 ] && echo 'all passed' || echo 'some items failed')" >> $REPORT
 cat $REPORT

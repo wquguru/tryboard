@@ -1542,3 +1542,11 @@
 - **手机放置**：手机元件库是盖在台面上的整页抽屉，原来没有「放」入口。每行在 Add / 已在清单旁加 44px「放」按钮（`[data-place]`，只对有放置定义且不缺条件的零件显示）；`startPlace` 在手机上 `setMui({ lib: null })` 收起抽屉，露出针环；针环沿用已有的「按下预览、松开连接」。
 - **体积护栏**：`createSession` 的 harness / i2cFw 两组订阅改用新的 `web/src/subs.ts`（`subs<T>()`，on / emit），函数从 538 行减到 536；S3 `lib.rs` 守住 1500 行上限。
 - 备选：W8 改成看模拟总线是否收到事务（要等固件真的扫描，提示会晚且依赖固件行为，否决）；手机上用长按拖放（与滚动冲突、触屏拖拽 3D 台面难以定位，否决）。
+
+## 2026-10-22 F-08g：网页 MQTT 发布面板（自主实现决定）
+- 决定：broker 日志不新增 wasm 导出，而是并进 `tb_net_json`（多一个 `mqtt: [[ms, 行], …]` 字段，最近 50 条），`tb_net_version` 加上日志条数，网络页签现有的刷新链路（postNet → netFeed）直接带过来；发布走现有 `mqtt=` 动作（`{type: 'input', act: {kind: 'mqtt'}}` → worker `apply` → `tb_net_action`），自动进输入日志。
+- 顺带修了既有缺口：worker `apply()` 没有 `mqtt` 分支，输入日志里的 `mqtt=` 在网页侧只被记录、没送进内核（倒带 / 分享链接重放会丢云端消息）；现与 `net` / `netfault` 同分支，内核拒绝的（非法主题）不进日志。
+- 主题默认值：取 broker 日志里最近一条 SUBSCRIBE 的过滤器；不含通配直接用，`前缀/#` 换成 `前缀/in`，其他情况 `tryboard/in`（发布主题不能含通配，PubSubClient 示例订阅的是 `tryboard/#`）。主题含逗号会被 `mqtt=` 动作切开，面板直接禁用发送；消息里的换行换成空格（输入日志一行一个动作）。
+- 送达方式做成三选一（QoS 0 / QoS 1 / retain），与 `Cmd::parse` 的 `pub|pub1|retain` 一一对应，而不是 QoS × retain 两个开关（内核 retain 只发 QoS 0）。
+- 备选：照 `tb_ir_events` 另加 `tb_mqtt_log`（多一个导出和一套轮询，且 take 语义不适合可回看的日志，否决）；面板放进「请求」视图左栏（与网络条件挤在一起，手机上太长，否决，改为单独的 MQTT 视图，只在固件连过 1883 后出现）。
+

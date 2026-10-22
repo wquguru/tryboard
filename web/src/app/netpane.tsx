@@ -8,6 +8,7 @@ import { actions, bc, setDock } from './chrome';
 import { netFeed, type NetRow, type PhonePage, type PhoneView } from './netfeed';
 import { NetCondPanel, NetCondSummary } from './netcond';
 import { useStore } from './react';
+import { MqttView } from './mqttpanel';
 
 // Virtual router (core world.rs ROUTER_SSID / ROUTER_PASS): the phone only hears the chip's beacon, so the router row is drawn from constants
 const ROUTER_SSID = 'MyHome';
@@ -510,14 +511,16 @@ export function NetRows({ rows, mobile }: { rows: NetRow[]; mobile?: boolean }) 
 /** The "Network" tab: switch between the virtual phone and the requests */
 export function NetPane({ mobile, extra }: { mobile?: boolean; extra?: ReactNode }) {
   const v = useSyncExternalStore(netFeed.subscribe, netFeed.get);
-  const [view, setView] = useState<'auto' | 'phone' | 'reqs'>('auto');
+  const [view, setView] = useState<'auto' | 'phone' | 'reqs' | 'mqtt'>('auto');
+  // The MQTT view (F-08g) appears once the firmware opened port 1883
+  const mqtt = v.mqtt.length > 0 || v.rows.some((r) => r[3].startsWith('mqtt://'));
   // Default: the chip is a client sending requests and the phone is not picked up -> show requests; otherwise the virtual phone
-  const cur = view === 'auto' ? (v.rows.length && !v.phone ? 'reqs' : 'phone') : view;
+  const cur = view === 'auto' ? (v.rows.length && !v.phone ? 'reqs' : 'phone') : view === 'mqtt' && !mqtt ? 'reqs' : view;
   const { dock } = useStore(bc);
   // On desktop the phone's three steps need ~430px and the network-conditions column ~300px: raise a dock that is too short
   useEffect(() => {
     if (mobile || dock.collapsed) return;
-    const want = cur === 'phone' ? Math.min(Math.round(window.innerHeight * 0.62), 520) : Math.min(Math.round(window.innerHeight * 0.45), 320);
+    const want = cur === 'phone' ? Math.min(Math.round(window.innerHeight * 0.62), 520) : Math.min(Math.round(window.innerHeight * 0.45), cur === 'mqtt' ? 400 : 320);
     // The shell setter commits synchronously (flushSync), so it cannot be called straight in an effect: defer to the next tick
     if (dock.h >= want) return;
     const t = window.setTimeout(() => setDock({ h: want }), 0);
@@ -530,6 +533,7 @@ export function NetPane({ mobile, extra }: { mobile?: boolean; extra?: ReactNode
           [
             ['phone', t('Virtual phone')],
             ['reqs', `${t('Requests')} ${v.total}`],
+            ...(mqtt ? ([['mqtt', 'MQTT']] as const) : []),
           ] as const
         ).map(([k, label]) => (
           <button key={k} type="button" data-net={k} aria-pressed={cur === k} onClick={() => setView(k)} className="min-h-8 cursor-pointer rounded-md border-0 bg-transparent px-2.5 text-[13px] text-muted aria-pressed:bg-field aria-pressed:font-medium aria-pressed:text-fg max-md:min-h-11">
@@ -563,6 +567,8 @@ export function NetPane({ mobile, extra }: { mobile?: boolean; extra?: ReactNode
         <div className="min-h-0 flex-1 overflow-auto">
           <PhoneView_ mobile={mobile} />
         </div>
+      ) : cur === 'mqtt' ? (
+        <MqttView mobile={mobile} />
       ) : mobile ? (
         <div className="min-h-0 flex-1 overflow-auto">
           <NetCondPanel mobile />

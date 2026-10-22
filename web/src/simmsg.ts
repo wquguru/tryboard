@@ -137,7 +137,7 @@ export type ToWorker =
   /** Ask for the VCD text, answered with vcdText */
   | { type: 'vcdGet' }
   /** Inputs without a dedicated message (imu, touch...): applied as is and logged. */
-  | { type: 'input'; act: Extract<InputAction, { kind: 'imu' | 'touch' | 'bat' | 'pwrkey' | 'key' | 'pir' | 'lux' | 'card' | 'ir' }> }
+  | { type: 'input'; act: Extract<InputAction, { kind: 'imu' | 'touch' | 'bat' | 'pwrkey' | 'key' | 'pir' | 'lux' | 'card' | 'ir' | 'mqtt' }> }
   /** Mic source: WAV (looped, sampled on sim time, reproducible) / silent / live (micPush browser samples placed on sim time; not logged, micRecGet exports them for --mic). */
   | { type: 'mic'; source: 'wav' | 'silence' | 'live'; wav?: ArrayBuffer }
   | { type: 'micPush'; rate: number; data: Float32Array }

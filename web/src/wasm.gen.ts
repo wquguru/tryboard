@@ -188,7 +188,7 @@ export interface WasmExports {
   tb_phone_cmd(p: number, len: number): number;
   /** "Real network" switch (C-03, script action realnet=1/0) */
   tb_realnet_set(on: number): void;
-  /** # Safety p/len: script action text seed=N / net=preset / netfault=kind[,s] (D-01); 0 ok, 1 unrecognised */
+  /** # Safety p/len: script action text seed=N / net=preset / netfault=kind[,s] (D-01) / mqtt=pub|pub1|retain,topic,payload (F-08b); 0 ok, 1 unrecognised */
   tb_net_action(p: number, len: number): number;
   /** Drain the real-network outbox: [{id, method, url, ctype, body(base64)}], returns the length (0 = none); read via tb_phone_json_ptr */
   tb_net_outbox(): number;
@@ -201,7 +201,7 @@ export interface WasmExports {
   tb_phone_json_ptr(): number;
   /** Number of network-tab rows (fetch the JSON when it changes) */
   tb_net_version(): number;
-  /** Network tab: latest 300 rows [time ms, method, dest, url, status, duration ms | null, note], returns the length; read via tb_phone_json_ptr */
+  /** Network tab: latest 300 rows [time ms, method, dest, url, status, duration ms | null, note] + latest 50 broker lines, returns the length; read via tb_phone_json_ptr */
   tb_net_json(): number;
   /** Observations in the CLI `--gpio-log --ws2812-log` format (GPIO toggles, WS2812 frames, OLED / LCD lit pixels); web checks and tools/accept.sh parse the same text so their verdicts agree. Returns the length, read via tb_report_ptr. */
   tb_report(): number;

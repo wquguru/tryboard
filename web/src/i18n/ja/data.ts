@@ -523,5 +523,7 @@ const d: Dict = {
   "Firmware uses GPIO{fsda} / GPIO{fscl}": "ファームウェアは GPIO{fsda} / GPIO{fscl} を使用",
   "{part} ({addr}) has SDA and SCL swapped: the firmware drives SDA on GPIO{fsda} and SCL on GPIO{fscl}, so a scan won't find it. Swap the two wires.": "{part}（{addr}）の SDA と SCL が逆です：ファームウェアは SDA を GPIO{fsda}、SCL を GPIO{fscl} に出しているので、スキャンで見つかりません。2 本の線を入れ替えてください。",
   "{part} ({addr}) is on SDA GPIO{sda} / SCL GPIO{scl}, but the firmware drives I2C on SDA GPIO{fsda} / SCL GPIO{fscl}, so a scan won't find it. Move the wires, or change the pins in the firmware.": "{part}（{addr}）は SDA GPIO{sda} / SCL GPIO{scl} につながっていますが、ファームウェアの I2C は SDA GPIO{fsda} / SCL GPIO{fscl} なので、スキャンで見つかりません。配線を直すか、ファームウェアのピン設定を変えてください。",
+  "Arduino: MQTT publish / subscribe with PubSubClient": "Arduino：PubSubClient で MQTT の発行 / 購読",
+  "Built with arduino-cli and the PubSubClient library (MIT). Joins TryBoard-WiFi, connects to the virtual MQTT broker on port 1883, subscribes to tryboard/#, publishes tryboard/hello and prints every message it receives. Open the Network tab's MQTT view to publish your own message from the cloud.": "arduino-cli と PubSubClient ライブラリ（MIT）でビルド。TryBoard-WiFi に接続し、ポート 1883 の仮想 MQTT ブローカーにつなぎ、tryboard/# を購読して tryboard/hello を発行、受け取ったメッセージをすべて表示します。ネットワークタブの MQTT ビューを開けば、クラウドから自分でメッセージを送れます。",
 };
 export default d;

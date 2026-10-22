@@ -128,5 +128,22 @@ const d: Dict = {
   "Random drop (flaky preset)": "ランダム切断（不安定プリセット）",
   "Injected fault: DNS answers SERVFAIL": "注入した障害：DNS が SERVFAIL を返す",
   "Injected fault: the server does not respond": "注入した障害：サーバーが応答しない",
+  // MQTT panel (F-08g)
+  "QoS 0": "QoS 0",
+  "QoS 1": "QoS 1",
+  "Retain": "保持（retain）",
+  "Publish from the cloud": "クラウドから発行",
+  "Virtual broker · port 1883": "仮想ブローカー · ポート 1883",
+  "Topic": "トピック",
+  "A topic cannot be empty or contain + # or a comma": "トピックは空にできず、+ # やカンマも使えません",
+  "Message": "メッセージ",
+  "Delivery": "配信方法",
+  "Kept by the broker and sent to every later subscriber; an empty message clears it.": "ブローカーが保持し、後から購読した全員に届きます。空のメッセージで消去します。",
+  "The board acknowledges with PUBACK.": "ボードが PUBACK で応答します。",
+  "Sent once, no acknowledgement.": "1 回だけ送り、応答はありません。",
+  "Sent {n} · in the input log; replay with --inputs on the command line": "{n} 件送信 · 入力ログに記録；コマンドラインの --inputs で再生",
+  "Goes into the input log; replay with --inputs on the command line": "入力ログに記録されます；コマンドラインの --inputs で再生",
+  "Broker log (latest {n})": "ブローカーログ（最新 {n} 件）",
+  "No MQTT traffic yet: the firmware has not connected to port 1883.": "MQTT 通信はまだありません：ファームウェアがポート 1883 に接続していません。",
 };
 export default d;

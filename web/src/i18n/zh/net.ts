@@ -128,5 +128,22 @@ const d: Dict = {
   "Random drop (flaky preset)": "随机断线（不稳定预设）",
   "Injected fault: DNS answers SERVFAIL": "注入的故障：DNS 回 SERVFAIL",
   "Injected fault: the server does not respond": "注入的故障：服务器不回应",
+  // MQTT panel (F-08g)
+  "QoS 0": "QoS 0",
+  "QoS 1": "QoS 1",
+  "Retain": "保留",
+  "Publish from the cloud": "从云端发布",
+  "Virtual broker · port 1883": "虚拟 broker · 端口 1883",
+  "Topic": "主题",
+  "A topic cannot be empty or contain + # or a comma": "主题不能为空，也不能含 + # 或逗号",
+  "Message": "消息",
+  "Delivery": "送达方式",
+  "Kept by the broker and sent to every later subscriber; an empty message clears it.": "broker 会存下，之后每个新订阅者都会收到；发空消息即清除。",
+  "The board acknowledges with PUBACK.": "板子会回 PUBACK 确认。",
+  "Sent once, no acknowledgement.": "只发一次，不需确认。",
+  "Sent {n} · in the input log; replay with --inputs on the command line": "已发 {n} 条 · 已进输入日志；命令行用 --inputs 重放",
+  "Goes into the input log; replay with --inputs on the command line": "会写进输入日志；命令行用 --inputs 重放",
+  "Broker log (latest {n})": "broker 日志（最近 {n} 条）",
+  "No MQTT traffic yet: the firmware has not connected to port 1883.": "还没有 MQTT 通信：固件尚未连接 1883 端口。",
 };
 export default d;

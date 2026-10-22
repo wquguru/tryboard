@@ -54,7 +54,7 @@
 | Wi-Fi（开放网络、WPA2-PSK、HTTP） | ✅ | ✅ | 只到初始化 |
 | BLE 外设（NimBLE）+ 虚拟手机 | ◐ 行为模拟 | — | — |
 
-完整矩阵和验收依据见 **[docs/STATUS.md](../STATUS.md)**。每批都跑 <!-- stats:accept -->214<!-- /stats --> 个验收用例、<!-- stats:examples -->62<!-- /stats --> 个示例和 7 关学习路线（`tools/accept.sh`）。
+完整矩阵和验收依据见 **[docs/STATUS.md](../STATUS.md)**。每批都跑 <!-- stats:accept -->214<!-- /stats --> 个验收用例、<!-- stats:examples -->63<!-- /stats --> 个示例和 7 关学习路线（`tools/accept.sh`）。
 
 ## 快速开始
 
