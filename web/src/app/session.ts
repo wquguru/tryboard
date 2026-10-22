@@ -19,6 +19,7 @@ import { IoStore, decodeEvents } from './iotrace';
 import { taskStore } from './tasktrace';
 import type { UsbView } from '../usb3d';
 import { bleFeed } from './blefeed';
+import { irFeed } from './irfeed';
 import { xzFeed } from './xzfeed';
 import { netFeed, netPreset, realnetSwitch } from './netfeed';
 import { PoseRate } from '../imupose';
@@ -444,7 +445,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       harness: s.harness,
       onPcm: (b) => audio.pushPcm(b),
       env: store.get().env,
-      onBle: (u) => bleFeed.update(u),
+      onBle: (u) => bleFeed.update(u), onIr: irFeed.sink(),
       onUsb(v) {
         s.usb = v;
         bench.setUsb(v);

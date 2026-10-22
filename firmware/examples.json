@@ -405,6 +405,50 @@
   "chip": "esp32c3"
  },
  {
+  "id": "esp32-ir",
+  "chip": "esp32",
+  "title": "IR remote receiver + transmitter on RMT (classic ESP32)",
+  "about": "RMT RX on GPIO19 reads a VS1838B-class receiver, RMT TX on GPIO18 drives an IR LED with a 38 kHz carrier. At start the firmware sends one NEC frame (address 0x0440) that comes back through the receiver, then prints every key you press on the bench remote. The IR LED card shows the frames the eye decodes. Receiver timing uses typical values; not calibrated on real hardware.",
+  "tags": [
+   "✓ Verified in sim",
+   "IR",
+   "RMT",
+   "ESP-IDF 5.5"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "irrx",
+     "pin": 19
+    },
+    {
+     "type": "irled",
+     "pin": 18
+    }
+   ]
+  }
+ },
+ {
+  "id": "arduino-ir-nec-rmt",
+  "chip": "esp32c3",
+  "title": "Arduino: NEC IR sender on RMT, no library",
+  "about": "Built with arduino-cli and the core's RMT API only. An IR LED on GPIO4 sends NEC frames (address 0xFF00, command 0xC936) on a 38 kHz RMT carrier; the IR LED card shows what the eye decodes from the LED.",
+  "tags": [
+   "✓ Verified in sim",
+   "Arduino",
+   "IR",
+   "RMT"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "irled",
+     "pin": 4
+    }
+   ]
+  }
+ },
+ {
   "id": "s3-usb-keyboard",
   "title": "S3 native USB: become a keyboard + mouse",
   "about": "The ESP32-S3 uses its built-in USB OTG (TinyUSB) to present itself as a HID keyboard + mouse: 1 second after being plugged into a computer it types a line of text and draws a square with the mouse, then repeats each time you press BOOT. The virtual computer on the left goes through full enumeration (get descriptors, set address, read the report descriptor) and turns the received keystrokes back into text. The USB port on the C3 / C6 can only act as a serial port, so they can't do this.",

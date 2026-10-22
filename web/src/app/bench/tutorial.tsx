@@ -6,6 +6,7 @@ import { outOf } from "./shared";
 import type { BenchCtx } from "./ctx";
 import { showRc522Card, type TutorialPart } from "../../bench3d/parts3d";
 import { LDR_LUX_DEFAULT } from "../../partsdev.ts";
+import { IrRemote, IrSeenList } from "./irremote";
 
 /** Sample cards: a 4-byte NUID and a 7-byte UID (same as the c3-rc522 accept script) */
 export const RC522_CARDS = ["DEADBEEF", "04A1B2C3D4E5F6"];
@@ -116,6 +117,8 @@ export function tutorialControls(b: BenchCtx, p: TutorialPart) {
       </>
     );
   }
+  if (p.type === "irrx") return <IrRemote send={(code) => sim()?.partInput({ kind: "ir", code })} />;
+  if (p.type === "irled") return <IrSeenList />;
   return (
     <Note>{t("The relay follows IN: the red LED on the module lights while the contacts are closed. Coil and contact bounce are not modelled.")}</Note>
   );

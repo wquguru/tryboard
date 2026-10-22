@@ -1,6 +1,7 @@
 // Acceptance (F-10c): classic ESP32 RMT RX + TX carrier with an NEC IR remote, after IDF's ir_nec_transceiver example
 // (CC0; ir_nec_encoder.c / .h copied unchanged). RX GPIO19 = receiver module output, TX GPIO18 = IR LED, 38 kHz 33 %.
 // Sends one frame at start (the LED is aimed at the receiver, so it comes back), then decodes whatever the remote sends.
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -93,8 +94,10 @@ void app_main(void)
     rmt_transmit_config_t tcfg = {.loop_count = 0};
     ESP_ERROR_CHECK(rmt_transmit(tx, enc, &code, sizeof(code), &tcfg));
     printf("IR 发射 地址=%04X 命令=%04X\n", SELF_ADDR, SELF_CMD);
-    for (int round = 0; round < 40; round++) {
-        if (xQueueReceive(q, &ed, pdMS_TO_TICKS(100)) != pdPASS) {
+    // Keeps listening after the self-check so the web remote works at any time (F-08f)
+    bool done = false;
+    for (;;) {
+        if (xQueueReceive(q, &ed, portMAX_DELAY) != pdPASS) {
             continue;
         }
         uint16_t a, c;
@@ -115,14 +118,11 @@ void app_main(void)
         } else {
             printf("IR 收到 未知帧 %u 个符号\n", (unsigned)ed.num_symbols);
         }
-        if (self_seen && remote >= 2 && repeats) {
+        if (!done && self_seen && remote >= 2 && repeats) {
             printf("IR 自发自收 %d 遥控 %d 重复 %d\n", self_seen, remote, repeats);
             printf("TRYBOARD_OK esp32-ir\n");
-            break;
+            done = true;
         }
         ESP_ERROR_CHECK(rmt_receive(rx, syms, sizeof(syms), &rcv));
-    }
-    while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }

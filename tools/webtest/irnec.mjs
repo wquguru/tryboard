@@ -90,9 +90,13 @@ try {
   fpArgs.splice(fpArgs.indexOf('--inputs'), 0, '--gpio-log', '--ws2812-log');
   const cf = cliRun(fpArgs, 'fp');
   report('web verify fingerprint = CLI fingerprint', wv.fingerprint === cf.fp && !wv.error, `web ${wv.fingerprint} / CLI ${cf.fp}${wv.error ? ' error ' + wv.error : ''}`);
-  // The CLI eye on the IR LED decodes what the same firmware sends (the web has no IR receiver part yet)
+  // The CLI eye on the IR LED decodes what the same firmware sends; the example's IR LED card shows the same decode (wasm tb_ir_events)
+  const NEC = 'NEC address=0xFF00 command=0xC936 (38.0 kHz carrier)';
   const eye = cliRun([BIN, '--seconds', '1', '--ir', '-,4'], 'eye');
-  report('CLI eye decodes NEC 0x00 / 0x36', eye.stderr.includes('IR LED GPIO4: NEC address=0xFF00 command=0xC936 (38.0 kHz carrier)'));
+  report('CLI eye decodes NEC 0x00 / 0x36', eye.stderr.includes('IR LED GPIO4: ' + NEC));
+  await page.goto(`${base}/app?work=blank&example=arduino-ir-nec-rmt#bench`);
+  const seen = await waitFor(page, (x) => [...document.querySelectorAll('[data-ir-seen]')].some((e) => e.textContent.includes(x)), NEC, 40000);
+  report('web IR LED card shows the same decode', seen);
   report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {
   await browser.close();

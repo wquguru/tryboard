@@ -56,6 +56,9 @@ export function partsOf(parts: PartSpec[]): PartsDevs | undefined {
     if (p.type === 'relay' && !out.relay) out.relay = { pin: p.pin, ...(p.low ? { low: true } : {}) };
     if (p.type === 'ldr' && !out.ldr) out.ldr = { pin: p.pin, lux: p.lux ?? LDR_LUX_DEFAULT };
     if (p.type === 'rc522' && !out.rc522) out.rc522 = p.cs !== undefined ? { cs: p.cs } : {};
+    // One IR link (CLI --ir RX,TX): first receiver and first IR LED
+    if (p.type === 'irrx' && out.ir?.rx === undefined) out.ir = { ...out.ir, rx: p.pin };
+    if (p.type === 'irled' && out.ir?.tx === undefined) out.ir = { ...out.ir, tx: p.pin };
   }
   return partsEmpty(out) ? undefined : out;
 }

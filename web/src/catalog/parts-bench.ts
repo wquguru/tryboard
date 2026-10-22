@@ -71,6 +71,41 @@ export const BENCH_PARTS: Part[] = [
     todo: ['sizeMm[2]: depends on the header'],
     note: '3.3 V only. The simulator reads card UIDs; MIFARE authentication and block reads are not modelled.',
   }),
+  // F-08f IR link (core soc/devices/ir.rs): receiver driven by the bench remote, LED watched by the NEC eye
+  P({
+    id: 'vs1838b',
+    name: 'IR receiver VS1838B (38 kHz, with remote)',
+    kind: 'sensor',
+    model: 'VS1838B-class integrated IR receiver (OUT / GND / VCC), sold with a 21-key NEC remote',
+    pins: [pin('OUT', 'digital-out', 'vcc', { dir: 'out', note: 'Demodulated, active low: low while a 38 kHz burst is seen' }), GND(), VCC('VCC')],
+    voltage: { supply: [2.7, 5.5], logic: 3.3 },
+    currentMa: { typ: 0.5, peak: 1.5, est: true, source: 'Estimate: VS1838B-class datasheets give about 0.5–1.5 mA supply current, varies by maker' },
+    sizeMm: [7, 6, 9],
+    sim: { level: 'verified', model: 'ir' },
+    price: [1, 5],
+    keywords: 'VS1838B 红外接收头 38kHz 遥控器 NEC', // lint: allow-cjk
+    supplyNet: '3V3',
+    sources: ['VS1838B-class receiver datasheets', 'NEC IR protocol timing (public)'],
+    todo: ['sizeMm: bare receiver; breakout boards are about 21 × 15 mm', 'currentMa: varies by maker'],
+    note: 'Power it from 3V3 so OUT stays at 3.3 V. Press keys on the bench remote to send NEC codes. Receiver delay and carrier bandwidth use typical values; not calibrated on real hardware.',
+  }),
+  P({
+    id: 'ir-led',
+    name: 'IR LED module (940 nm transmitter)',
+    kind: 'actuator',
+    model: '5 mm 940 nm IR LED with series resistor (KY-005 style, S / GND)',
+    pins: [pin('S', 'digital-in', 3.3, { dir: 'in', loadMa: 20, note: 'High = LED on; the firmware adds the 38 kHz carrier (RMT / LEDC)' }), GND()],
+    voltage: { supply: [3.3, 5], logic: 3.3 },
+    currentMa: { typ: 7, peak: 20, est: true, source: 'Estimate: about 20 mA while lit through the series resistor, about 1/3 duty on the carrier' },
+    sizeMm: [18.5, 15, 9],
+    sim: { level: 'verified', model: 'ir' },
+    price: [1, 4],
+    keywords: '红外发射管 940nm 红外 LED 模块 KY-005', // lint: allow-cjk
+    supplyNet: '3V3',
+    sources: ['NEC IR protocol timing (public)'],
+    todo: ['currentMa: depends on the series resistor; long-range boards add a transistor driver'],
+    note: 'A GPIO drives the LED directly, so the range is short (about 1 m). On the bench the LED faces the receiver and an eye decodes the NEC frames it sends. Not calibrated on real hardware.',
+  }),
   // F-04a2 bare TFT modules (core soc/devices/dcs.rs, F-04b); the 1.54″ ST7789 240×240 entry stays in parts.ts
   P({
     id: 'ili9341',

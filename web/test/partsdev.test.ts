@@ -84,3 +84,20 @@ test('share state keeps the tutorial parts in the scene', async () => {
   const st = { v: 1 as const, w: 'blank:weather', scene };
   assert.deepEqual((await decodeState(await encodeState(st))).scene, scene);
 });
+
+test('F-08f IR receiver / LED: --ir flags, ir= action, placement and bench devices', async () => {
+  const { irCode } = await import('../src/app/irfeed.ts');
+  assert.deepEqual(partsArgs({ ir: { rx: 19, tx: 18 } }), ['--ir', '19,18']);
+  assert.deepEqual(partsArgs({ ir: { tx: 4 } }), ['--ir', '-,4']);
+  assert.deepEqual(partsArgs({ ir: { rx: 19 } }), ['--ir', '19']);
+  for (const p of [{ ir: { rx: 19, tx: 18 } }, { ir: { tx: 4 } }, { ir: { rx: 19 } }]) assert.deepEqual(partsFromArgs(args(partsArgs(p))), p);
+  assert.equal(irCode(0x45), 'FF00,BA45');
+  assert.equal(irCode(0x0d), 'FF00,F20D');
+  const ev: InputEvent[] = [{ tMs: 100, kind: 'ir', code: 'FF00,BA45' }, { tMs: 300, kind: 'ir', code: 'repeat' }];
+  assert.deepEqual(ev.map(action), ['ir=FF00,BA45', 'ir=repeat']);
+  assert.deepEqual(fromScript(toScriptBody(ev)).map(action), ev.map(action));
+  const rx = buildPlaced(placeDef('vs1838b') as PlaceDef, { OUT: 'GPIO19', GND: 'GND', VCC: '3V3' }).spec;
+  const tx = buildPlaced(placeDef('ir-led') as PlaceDef, { S: 'GPIO18', GND: 'GND' }).spec;
+  assert.deepEqual([rx, tx], [{ type: 'irrx', pin: 19 }, { type: 'irled', pin: 18 }]);
+  assert.deepEqual(checkWiring([rx, tx], wiresOf([rx, tx])), []);
+});

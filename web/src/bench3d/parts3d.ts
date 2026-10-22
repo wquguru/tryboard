@@ -1,4 +1,4 @@
-// F-04a: procedural 3D models (real outline sizes in mm) of the tutorial parts: DS18B20, HC-SR501, relay, LDR, RC522.
+// F-04a: procedural 3D models (real outline sizes in mm) of the tutorial parts: DS18B20, HC-SR501, relay, LDR, RC522, IR pair (F-08f).
 // Kept out of modules.ts (shared with the M5 work); build.ts wires them like the DHT11 module.
 import * as THREE from 'three';
 import { t } from '../i18n';
@@ -223,11 +223,47 @@ export function rc522Module(): FlatModule {
   return m;
 }
 
-export type TutorialPart = Extract<PartSpec, { type: 'ds18b20' | 'pir' | 'relay' | 'ldr' | 'rc522' }>;
-export const isTutorialPart = (p: PartSpec): p is TutorialPart => p.type === 'ds18b20' || p.type === 'pir' || p.type === 'relay' || p.type === 'ldr' || p.type === 'rc522';
+/** IR receiver breakout: 15 × 21 mm board, VS1838B body (7 × 6 × 9 mm) with its lens facing -x, toward the IR LED */
+export function irRxModule(): FlatModule {
+  const m = flatPcb(15, 21, '#1f55b0', 0x18458f, ['OUT', 'GND', 'VCC'], (g, cw) => {
+    silk(g, 'VS1838B', cw / 2, 18.5 * S, 1.3);
+  });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(6, 9, 7), MAT.plastic);
+  body.position.set(0, m.pcbTop + 4.5, 5);
+  body.castShadow = true;
+  m.grp.add(body);
+  const lens = new THREE.Mesh(new THREE.SphereGeometry(2.6, 20, 10, 0, Math.PI), new THREE.MeshStandardMaterial({ color: 0x1b1b22, roughness: 0.15 }));
+  lens.rotation.y = -Math.PI / 2;
+  lens.position.set(-3, m.pcbTop + 5, 5);
+  m.grp.add(lens);
+  return m;
+}
 
-/** Desk slot per type (fixed x, distance out from the breadboard on the signal pin's side), so all five fit side by side */
-const SLOT: Record<TutorialPart['type'], { dx: number; out: number }> = { ds18b20: { dx: -25, out: 17 }, pir: { dx: 10, out: 22 }, relay: { dx: -58, out: 34 }, ldr: { dx: 45, out: 24 }, rc522: { dx: 52, out: 76 } };
+/** IR LED module: 15 × 18.5 mm board, 5 mm 940 nm LED bent over to face +x (into the receiver's lens); the lens glows faintly while S is high (as a phone camera sees it) */
+export function irLedModule(pin: number): FlatModule {
+  const m = flatPcb(15, 18.5, '#1a1d24', 0x111318, ['S', 'GND'], (g, cw) => {
+    silk(g, 'IR 940nm', cw / 2, 15.5 * S, 1.3);
+  });
+  const mat = new THREE.MeshStandardMaterial({ color: 0xb9b4d8, emissive: 0x9a6bff, emissiveIntensity: 0, roughness: 0.2, transparent: true, opacity: 0.9 });
+  lamps.push({ pin, mat, on: 1.5 });
+  const led = new THREE.Group();
+  const can = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.5, 5.6, 20), mat);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(2.5, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat);
+  dome.position.y = 2.8;
+  led.add(can, dome);
+  led.rotation.z = -Math.PI / 2;
+  led.position.set(2, m.pcbTop + 3, 4);
+  m.grp.add(led);
+  return m;
+}
+
+export type TutorialPart = Extract<PartSpec, { type: 'ds18b20' | 'pir' | 'relay' | 'ldr' | 'rc522' | 'irrx' | 'irled' }>;
+const TUTORIAL = new Set<PartSpec['type']>(['ds18b20', 'pir', 'relay', 'ldr', 'rc522', 'irrx', 'irled']);
+export const isTutorialPart = (p: PartSpec): p is TutorialPart => TUTORIAL.has(p.type);
+
+/** Desk slot per type (fixed x, distance out from the breadboard on the signal pin's side), so all of them fit side by side.
+ *  The IR LED sits 26 mm on the receiver's lens side (local -x), so it swaps sides when the modules are turned round */
+const SLOT: Record<TutorialPart['type'], { dx: number; out: number }> = { ds18b20: { dx: -25, out: 17 }, pir: { dx: 10, out: 22 }, relay: { dx: -58, out: 34 }, ldr: { dx: 45, out: 24 }, rc522: { dx: 52, out: 76 }, irrx: { dx: 92, out: 16 }, irled: { dx: 66, out: 16 } };
 
 /** Module on the desk + Dupont wires to the board (same routing as the DHT11 builder) */
 export function buildTutorialPart(ctx: BenchCtx, grp: THREE.Group, p: TutorialPart) {
@@ -275,11 +311,21 @@ export function buildTutorialPart(ctx: BenchCtx, grp: THREE.Group, p: TutorialPa
       ];
       text = t('RC522 · SDA IO{pin} · tap a card below', { pin: p.cs ?? '—' });
       break;
+    case 'irrx':
+      m = irRxModule();
+      ends = [[io(p.pin), WIRE.sig, 'OUT', t('IR receiver output (low = burst)')], ['GND', WIRE.gnd, 'GND', t('{name} GND', { name: 'VS1838B' })], ['3V3', WIRE.vcc, 'VCC', t('IR receiver power (3.3 V)')]];
+      text = t('IR receiver · OUT IO{pin} · press remote keys', { pin: p.pin });
+      break;
+    case 'irled':
+      m = irLedModule(p.pin);
+      ends = [[io(p.pin), WIRE.sig, 'S', t('IR LED drive')], ['GND', WIRE.gnd, 'GND', t('{name} GND', { name: t('IR LED') })]];
+      text = t('IR LED · S IO{pin} · faces the receiver', { pin: p.pin });
+      break;
   }
   const sig = sigPin !== undefined ? pinCands('IO' + sigPin)[0]?.p : undefined;
   const slot = SLOT[p.type];
   const side = Math.sign(sig?.z || 1);
-  const bx = slot.dx, bz = side * (BB.D / 2 + slot.out);
+  const bx = p.type === 'irled' && side < 0 ? 2 * SLOT.irrx.dx - slot.dx : slot.dx, bz = side * (BB.D / 2 + slot.out);
   m.grp.position.set(bx, 0, bz);
   if (bz < 0) m.grp.rotation.y = Math.PI;
   root.add(m.grp);

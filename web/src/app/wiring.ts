@@ -16,7 +16,7 @@ export interface PartInfo {
 }
 
 /** Part type → display name (timeline, hints and build tree all use this so raw type names never leak into the UI) */
-export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: t('Servo'), gc9a01: t('Round screen'), tft: t('Color screen'), buzzer: t('Buzzer'), pot: t('Potentiometer'), led: 'LED', encoder: t('Encoder'), hcsr04: t('Ultrasonic'), mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: t('Touch'), max98357a: t('Speaker'), inmp441: t('Microphone'), key: t('Button'), ws2812: t('LED strip'), dht11: 'DHT11', ds18b20: 'DS18B20', pir: t('PIR sensor'), relay: t('Relay'), ldr: t('Light sensor'), rc522: 'RC522' };
+export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: t('Servo'), gc9a01: t('Round screen'), tft: t('Color screen'), buzzer: t('Buzzer'), pot: t('Potentiometer'), led: 'LED', encoder: t('Encoder'), hcsr04: t('Ultrasonic'), mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: t('Touch'), max98357a: t('Speaker'), inmp441: t('Microphone'), key: t('Button'), ws2812: t('LED strip'), dht11: 'DHT11', ds18b20: 'DS18B20', pir: t('PIR sensor'), relay: t('Relay'), ldr: t('Light sensor'), rc522: 'RC522', irrx: t('IR receiver'), irled: t('IR LED') };
 export const partLabel = (type: string) => PART_LABEL[type as PartSpec['type']] ?? t('Part');
 
 export function partId(p: PartSpec) {
@@ -89,6 +89,10 @@ export function partInfo(p: PartSpec, ext5v = false): PartInfo {
       const pins = [p.cs !== undefined ? `SDA GPIO${p.cs}` : '', p.sck !== undefined ? `SCK GPIO${p.sck}` : '', p.mosi !== undefined ? `MOSI GPIO${p.mosi}` : '', p.miso !== undefined ? `MISO GPIO${p.miso}` : ''].filter(Boolean).join(' · ');
       return { name: t('RC522 RFID reader'), model: t('MFRC522 13.56 MHz RFID reader (reads card UIDs, SPI2)'), iface: `SPI2 · ${pins || t('CS on the chip default pin')}`, power: '3V3' };
     }
+    case 'irrx':
+      return { name: t('IR receiver'), model: t('VS1838B-class 38 kHz IR receiver (demodulated, active-low output)'), iface: t('OUT GPIO{pin} (low while a 38 kHz burst is seen)', { pin: p.pin }), power: '3V3' };
+    case 'irled':
+      return { name: t('IR LED'), model: t('940 nm IR LED module (current-limited, faces the receiver)'), iface: t('S GPIO{pin} (high = LED on, 38 kHz carrier from RMT / LEDC)', { pin: p.pin }), power: '—' };
   }
 }
 
@@ -245,6 +249,13 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
     } else if (p.type === 'ldr') {
       add('3V3', id, 'VCC', R.vcc, 'power', C.red);
       add(`GPIO${p.pin}`, id, 'AO', t('Analog light level'), 'drive', C.orange);
+      add('GND', id, 'GND', R.gnd, 'gnd', C.black);
+    } else if (p.type === 'irrx') {
+      add('GPIO' + p.pin, id, 'OUT', t('IR receiver output (low = burst)'), 'drive', C.yellow);
+      add('GND', id, 'GND', R.gnd, 'gnd', C.black);
+      add('3V3', id, 'VCC', R.vcc, 'power', C.red);
+    } else if (p.type === 'irled') {
+      add('GPIO' + p.pin, id, 'S', t('IR LED drive'), 'load', C.orange);
       add('GND', id, 'GND', R.gnd, 'gnd', C.black);
     } else if (p.type === 'rc522') {
       // Only SDA (CS) reaches the model; the bus wires are drawn where they were placed (firmware sets SPI2 pins)

@@ -382,6 +382,11 @@ const d: Dict = {
   "Blink built with the Arduino IDE / arduino-cli (esp32 core 3.x); upload the exported merged.bin directly and it runs. LED on GPIO5.": "Arduino IDE / arduino-cli（esp32 コア 3.x）でビルドした Blink です。エクスポートした merged.bin をそのままアップロードすれば動きます。LED は GPIO5 に接続します。",
   "Arduino: servo sweep with ESP32Servo": "Arduino：ESP32Servo でサーボをスイープ",
   "Built with arduino-cli and the ESP32Servo library (LGPL-2.1; the pinned library commit and build info ship with the bin). An SG90 on GPIO6 steps through 0/45/90/135/180° with 0.5–2.5 ms pulses at 50 Hz.": "arduino-cli と ESP32Servo ライブラリでビルド（LGPL-2.1。固定したライブラリのコミットとビルド情報を bin と一緒に公開）。GPIO6 の SG90 が 50 Hz・0.5–2.5 ms のパルスで 0/45/90/135/180° と順に回ります。",
+  // F-08f IR examples
+  "IR remote receiver + transmitter on RMT (classic ESP32)": "赤外線リモコンの送受信：RMT 受信 + 送信（クラシック ESP32）",
+  "RMT RX on GPIO19 reads a VS1838B-class receiver, RMT TX on GPIO18 drives an IR LED with a 38 kHz carrier. At start the firmware sends one NEC frame (address 0x0440) that comes back through the receiver, then prints every key you press on the bench remote. The IR LED card shows the frames the eye decodes. Receiver timing uses typical values; not calibrated on real hardware.": "GPIO19 の RMT 受信が VS1838B 系受信モジュールを読み、GPIO18 の RMT 送信が 38 kHz キャリアで赤外線 LED を駆動します。起動時に NEC フレームを 1 つ送り（アドレス 0x0440）、受信モジュール経由で受け取ったあと、実験台のリモコンで押したキーをすべて表示します。赤外線 LED のカードには「目」が解読したフレームが出ます。受信タイミングは代表値で、実機では校正していません。",
+  "Arduino: NEC IR sender on RMT, no library": "Arduino：ライブラリなしで RMT から NEC 赤外線送信",
+  "Built with arduino-cli and the core's RMT API only. An IR LED on GPIO4 sends NEC frames (address 0xFF00, command 0xC936) on a 38 kHz RMT carrier; the IR LED card shows what the eye decodes from the LED.": "arduino-cli でビルドし、コア付属の RMT API だけを使います。GPIO4 の赤外線 LED が 38 kHz の RMT キャリアで NEC フレーム（アドレス 0xFF00、コマンド 0xC936）を送ります。赤外線 LED のカードに「目」が LED から解読した内容が出ます。",
   "Arduino: send NEC IR codes with IRremote": "Arduino：IRremote で NEC 赤外線コードを送信",
   "Built with arduino-cli and the IRremote library (MIT). An IR LED on GPIO4 sends three NEC codes on a 38 kHz carrier; the serial log prints each command.": "arduino-cli と IRremote ライブラリでビルド（MIT）。GPIO4 の赤外線 LED が 38 kHz キャリアで NEC コードを 3 つ送り、シリアルにコマンドを 1 つずつ表示します。",
   "S3 native USB: become a keyboard + mouse": "S3 ネイティブ USB：キーボード + マウスに変身",

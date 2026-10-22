@@ -826,6 +826,15 @@ const d: Dict = {
   "Power it from 3V3, not 5 V, so AO never exceeds the ADC range. The reading is a rough light level, not a calibrated lux meter.": "从 3V3 供电而不是 5 V，AO 才不会超出 ADC 量程。读数只是大致亮度，不是标定过的照度计。",
   "RC522 RFID reader module (13.56 MHz)": "RC522 RFID 读卡模块（13.56 MHz）",
   "3.3 V only. The simulator reads card UIDs; MIFARE authentication and block reads are not modelled.": "只能 3.3 V。仿真能读卡 UID；MIFARE 认证和读块没有建模。",
+  // F-08f IR receiver and IR LED
+  "IR receiver VS1838B (38 kHz, with remote)": "红外接收头 VS1838B（38 kHz，带遥控器）",
+  "VS1838B-class integrated IR receiver (OUT / GND / VCC), sold with a 21-key NEC remote": "VS1838B 类一体化红外接收头（OUT / GND / VCC），配 21 键 NEC 遥控器",
+  "Demodulated, active low: low while a 38 kHz burst is seen": "已解调、低电平有效：收到 38 kHz 载波期间输出低",
+  "Power it from 3V3 so OUT stays at 3.3 V. Press keys on the bench remote to send NEC codes. Receiver delay and carrier bandwidth use typical values; not calibrated on real hardware.": "从 3V3 供电，OUT 才保持 3.3 V。按实验台上的遥控器按键发送 NEC 码。接收延迟和载波带宽取典型值，未经真机校准。",
+  "IR LED module (940 nm transmitter)": "红外发射模块（940 nm 发射管）",
+  "5 mm 940 nm IR LED with series resistor (KY-005 style, S / GND)": "5 mm 940 nm 红外发射管 + 限流电阻（KY-005 类，S / GND）",
+  "High = LED on; the firmware adds the 38 kHz carrier (RMT / LEDC)": "高电平点亮；38 kHz 载波由固件加（RMT / LEDC）",
+  "A GPIO drives the LED directly, so the range is short (about 1 m). On the bench the LED faces the receiver and an eye decodes the NEC frames it sends. Not calibrated on real hardware.": "GPIO 直接驱动 LED，距离很短（约 1 m）。实验台上 LED 对着接收头，另有一只“眼睛”解出它发的 NEC 帧。未经真机校准。",
   // F-04a2 TFT modules (ILI9341, ST7789 240×320)
   "2.4″ color display (ILI9341, SPI, 240×320)": "2.4″ 彩屏（ILI9341，SPI，240×320）",
   "ILI9341 2.4″ TFT module (red 9-pin SPI board, no touch)": "ILI9341 2.4″ TFT 模块（红色 9 针 SPI 板，无触摸）",

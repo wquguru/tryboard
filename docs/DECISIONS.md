@@ -1518,3 +1518,12 @@
 - 理由：只有 PubSubClient 一个用例碰 1883，常开不影响其余 210 例（golden 一致）；broker 放在 Tcp 里，同连接回复随 ACK 立刻出去，确定性好；retain 存储算「互联网」状态，复位保留。
 - 参考：OASIS MQTT Version 3.1.1 规范（报文格式、剩余长度、主题通配 4.7、保活 3.1.2.10、retain 3.3.1.3）；PubSubClient 2.8（MIT）只看其行为（CONNACK 第 4 字节为 0 才算连上、15 s PINGREQ）。没有读或参考任何 GPL broker（mosquitto 为 EPL/EDL，也未参考）。
 - 备选：broker 放 World、经 inbox 一次 poll 后再回（xiaozhi 模式，CONNACK 晚一拍，多一套事件类型）；按需 `mqtt=on` 才监听（多一步，PubSubClient 默认场景不直观）；做 QoS 2 / 持久会话（范围外）。
+
+## 2026-10-22 F-08f 续：网页红外收发件 + 遥控器，S3 载波用例（自主实现决定）
+- 元件：新增零件类型 `irrx`（VS1838B 类接收头，OUT / GND / VCC，3V3 供电）和 `irled`（KY-005 类 940 nm 发射模块，S / GND）；都映射到 CLI `--ir RX[,TX]`（只取第一个），网页与 CLI 一样强制 1 ms 时间片（`partsTimed`）。3D 按实际尺寸程序生成，LED 固定放在接收头镜头一侧、朝向镜头（模块整体转 180° 时两件换边），与内核「LED 对着接收头」（loopback）一致。
+- 遥控器：按常见 21 键「Car MP3」遥控器（地址 0x00，CH- 0x45 … 9 0x4A），每键发 `ir=FF00,<~cmd><cmd>`，另有「重复码」发 `ir=repeat`；进输入日志，`tryboard run --inputs` 重放。键位是公开常见码表，不是从任何库抄的。
+- 解码显示：新 wasm 导出 `tb_ir_attach(rx, tx)`（负数 = 无）、`tb_ir_events()`（把新解出的帧按 `秒\tGPIO\t文本` 写进 REPORT），`tb_part_action` 认 `ir=`，`tb_parts_report` 带上 `ir_report()`；worker 每轮取一次发 `ir` 消息，`irfeed.ts` 存最近 12 条，LED 卡片显示。文本与 CLI 眼睛行相同。
+- esp32-ir 固件：自检后继续监听（`portMAX_DELAY` 循环，TRYBOARD_OK 只打一次），原来 4 秒后停止接收，网页遥控器按晚了没反应。accept 期望不变；golden 只重存 esp32-ir（IDF 镜像带版本 / 编译时间）和新用例。
+- S3：`firmware/arduino/ir-nec-rmt/boards.txt` 加 `s3` 变体（`build_arduino.sh` 支持变体名 `-` = 不加后缀，C3 目录名不变），accept 新用例 `arduino-ir-nec-rmt-s3`。S3 固件直接解出 2 帧，RMT 模型未改。
+- parts.mjs 的 CLI 对拍参数加 `--ws2812-log`：网页报告总列出 WS2812 解码器（RMT TX 脚会挂一个 0 帧的），其它网页测试早已这样做；判定未放宽。
+- 备选：遥控器做成独立的「遥控器」零件（多一种零件、无引脚，放弃，按键放在接收头卡片里）；解码显示走 `tb_parts_report` 轮询（每轮要整份报告，放弃）。

@@ -4904,6 +4904,25 @@
   ]
  },
  {
+  "id": "arduino-ir-nec-rmt-s3",
+  "fw": "arduino-ir-nec-rmt-s3",
+  "chip": "esp32s3",
+  "seconds": 1,
+  "args": [
+   "--ir",
+   "-,4"
+  ],
+  "expect": [
+   "ir nec frame: 34 symbols, leader 9000/4500 us, bit 560 us, 38 kHz carrier",
+   "ir sent NEC addr=0x00 cmd=0x36",
+   "TRYBOARD_OK ir-nec-rmt"
+  ],
+  "stderr_expect": [
+   "IR LED GPIO4: NEC address=0xFF00 command=0xC936 (38.0 kHz carrier)",
+   "IR LED GPIO4: 2 NEC frames decoded, 0 unmodulated pulses ignored"
+  ]
+ },
+ {
   "id": "arduino-lib-wifi-scan",
   "seconds": 4,
   "expect": [

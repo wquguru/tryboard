@@ -826,6 +826,15 @@ const d: Dict = {
   "Power it from 3V3, not 5 V, so AO never exceeds the ADC range. The reading is a rough light level, not a calibrated lux meter.": "AO가 ADC 범위를 넘지 않도록 5 V가 아닌 3V3에서 전원을 공급하세요. 측정값은 대략적인 밝기일 뿐 보정된 조도계가 아닙니다.",
   "RC522 RFID reader module (13.56 MHz)": "RC522 RFID 리더 모듈(13.56 MHz)",
   "3.3 V only. The simulator reads card UIDs; MIFARE authentication and block reads are not modelled.": "3.3 V 전용입니다. 시뮬레이터는 카드 UID를 읽으며, MIFARE 인증과 블록 읽기는 모델링하지 않았습니다.",
+  // F-08f IR receiver and IR LED
+  "IR receiver VS1838B (38 kHz, with remote)": "적외선 수신기 VS1838B (38 kHz, 리모컨 포함)",
+  "VS1838B-class integrated IR receiver (OUT / GND / VCC), sold with a 21-key NEC remote": "VS1838B 계열 일체형 적외선 수신기 (OUT / GND / VCC), 21키 NEC 리모컨 동봉",
+  "Demodulated, active low: low while a 38 kHz burst is seen": "복조 출력, 액티브 로우: 38 kHz 버스트를 받는 동안 LOW",
+  "Power it from 3V3 so OUT stays at 3.3 V. Press keys on the bench remote to send NEC codes. Receiver delay and carrier bandwidth use typical values; not calibrated on real hardware.": "OUT이 3.3 V를 유지하도록 3V3에서 전원을 공급하세요. 실험대 리모컨 키를 누르면 NEC 코드를 보냅니다. 수신 지연과 캐리어 대역폭은 대표값이며 실기기로 보정하지 않았습니다.",
+  "IR LED module (940 nm transmitter)": "적외선 LED 모듈 (940 nm 송신)",
+  "5 mm 940 nm IR LED with series resistor (KY-005 style, S / GND)": "5 mm 940 nm 적외선 LED + 직렬 저항 (KY-005 형, S / GND)",
+  "High = LED on; the firmware adds the 38 kHz carrier (RMT / LEDC)": "HIGH = LED 켜짐. 38 kHz 캐리어는 펌웨어가 붙입니다 (RMT / LEDC)",
+  "A GPIO drives the LED directly, so the range is short (about 1 m). On the bench the LED faces the receiver and an eye decodes the NEC frames it sends. Not calibrated on real hardware.": "GPIO가 LED를 직접 구동하므로 도달 거리가 짧습니다(약 1 m). 실험대에서는 LED가 수신기를 향하고, 보낸 NEC 프레임을 '눈'이 해독합니다. 실기기로 보정하지 않았습니다.",
   // F-04a2 TFT modules (ILI9341, ST7789 240×320)
   "2.4″ color display (ILI9341, SPI, 240×320)": "2.4″ 컬러 디스플레이(ILI9341, SPI, 240×320)",
   "ILI9341 2.4″ TFT module (red 9-pin SPI board, no touch)": "ILI9341 2.4″ TFT 모듈(빨간 9핀 SPI 보드, 터치 없음)",

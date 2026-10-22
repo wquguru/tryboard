@@ -34,6 +34,8 @@ export interface LiveOptions {
   onUsb?(v: UsbView | null): void;
   /** BLE (C-01): air-log increments + virtual phone view; firmware without BLE gets one state 0 at power-up. */
   onBle?(u: BleUpdate): void;
+  /** IR LED eye decodes (F-08f): "seconds\tGPIO\ttext" lines */
+  onIr?(text: string): void;
   /** Network tab (C-02): whether firmware uses Wi-Fi, phone JSON, request log JSON (unchanged fields omitted) */
   onNet?(m: { used: boolean; phone?: string; rows?: string; replies?: number; replyBytes?: number }): void;
   /** Voice server (F-09b-2): JSON with new [xz] log lines ("" = server off); reset = new power-up / rewind */
@@ -194,6 +196,8 @@ export class LiveSim {
         o.onUsb?.(m.json ? (JSON.parse(m.json) as UsbView) : null);
       } else if (m.type === 'ble') {
         o.onBle?.(parseBle(m.state, m.json, m.reset, m.cmdError));
+      } else if (m.type === 'ir') {
+        o.onIr?.(m.text);
       } else if (m.type === 'net') {
         o.onNet?.(m);
       } else if (m.type === 'xz') {
@@ -322,8 +326,8 @@ export class LiveSim {
   boardKey(name: string, down: boolean) {
     this.send({ type: 'input', act: { kind: 'key', name, down } });
   }
-  /** F-04a bench parts: PIR motion (pir=), light on the photoresistor (lux=), card on the RC522 (card=); logged like the CLI actions. */
-  partInput(act: { kind: 'pir'; on: boolean } | { kind: 'lux'; lux: number } | { kind: 'card'; uid: string }) {
+  /** F-04a bench parts: PIR motion (pir=), light on the photoresistor (lux=), card on the RC522 (card=), IR remote (ir=); logged like the CLI actions. */
+  partInput(act: { kind: 'pir'; on: boolean } | { kind: 'lux'; lux: number } | { kind: 'card'; uid: string } | { kind: 'ir'; code: string }) {
     this.send({ type: 'input', act });
   }
   /** PWR key on the AXP2101 PWRON pin (E-03, logged pwrkey=). */
