@@ -72,7 +72,7 @@
 
 **RS-6 画廊与 HIL**（`research/RS-6-gallery-hil.md`）
 - 画廊分阶段：S0 作品进 URL + 仓库里的精选 JSON；S1 Cloudflare Pages + GitHub Issues 投稿；S2 Worker + R2 等有需求再上；始终不做账号。微信不认 og:image，动态 OG 收益下调。
-- HIL：先买 C3 + S3 N16R8 + 逻辑分析仪 + 几个外设，约 ¥150–250（价格未核实）；`tools/hil/` runner 3–4 个 session。
+- HIL：先买 C3 + S3 N16R8 + 逻辑分析仪 + 几个外设，约 ¥150–250（价格未核实）；`tools/hil/` runner 3–4 个 session。 **2026-10-22 人定暂缓（现在做不了），见 DECISIONS。**
 - 需人拍板：报告末尾 10 项清单（上线、域名、备案、公开仓库、收用户 bin、账号、微信卡片、OG 依赖、采购、谁来实测）。
 
 ## 下一步要人决定的
