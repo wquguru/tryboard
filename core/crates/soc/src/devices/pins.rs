@@ -381,6 +381,17 @@ impl PinDevices {
         rmt.carrier(ch as usize).is_some()
     }
 
+    /// IR LED eye on `pin` sees the LEDC output there (on every PWM rescan): 0 < duty < 1 is a carrier burst
+    pub fn ledc_ir(&mut self, t: u64, pin: u32, pwm: Option<(f32, f32)>) {
+        let (on, hz) = match pwm {
+            Some((d, f)) if d > 0.0 && d < 1.0 && f > 0.0 => (true, f as f64),
+            _ => (false, 0.0),
+        };
+        if let Some(eye) = self.ir.iter_mut().find(|l| l.tx_pin == Some(pin)) {
+            eye.feed_carrier(t, on, hz);
+        }
+    }
+
     /// Drives due by now (time-ordered) and the next time to ask again
     pub fn poll(&mut self, now: u64) -> (Vec<Drive>, u64) {
         let mut out = Vec::new();

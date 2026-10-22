@@ -4895,9 +4895,19 @@
  {
   "id": "arduino-lib-irremote",
   "seconds": 1,
+  "args": [
+   "--ir",
+   "-,4"
+  ],
   "expect": [
    "ir sent NEC addr=0x00 cmd=0x36",
    "TRYBOARD_OK lib-irremote"
+  ],
+  "stderr_expect": [
+   "IR LED GPIO4: NEC address=0xFF00 command=0xCB34 (38.0 kHz carrier)",
+   "IR LED GPIO4: NEC address=0xFF00 command=0xCA35 (38.0 kHz carrier)",
+   "IR LED GPIO4: NEC address=0xFF00 command=0xC936 (38.0 kHz carrier)",
+   "IR LED GPIO4: 3 NEC frames decoded, 0 unmodulated pulses ignored"
   ],
   "pwm": {
    "pin": 4,

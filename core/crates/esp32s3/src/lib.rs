@@ -852,6 +852,7 @@ impl SocBus {
         for pin in 0..NPINS {
             let p = self.pin_pwm(pin);
             self.iotrace.pwm(now, pin, p);
+            self.pins.ledc_ir(now, pin as u32, p);
         }
     }
 
@@ -862,8 +863,7 @@ impl SocBus {
         let sig = f & 0x1ff;
         if (73..=80).contains(&sig) && self.gpio.enable & (1 << pin) != 0 {
             let (d, hz) = self.ledc.output((sig - 73) as usize)?;
-            let inv = f & (1 << 9) != 0;
-            return Some((if inv { 1.0 - d } else { d }, hz));
+            return Some((if f & (1 << 9) != 0 { 1.0 - d } else { d }, hz));
         }
         None
     }
