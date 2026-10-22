@@ -1,6 +1,5 @@
-// Voice assistant (F-09b-2): s3-xiaozhi-lite on the web, one turn with the Voice tab's hold-to-talk button and sound on
-// -> speaker analyser non-silent -> export inputs -> CLI --inputs is byte-identical, same fingerprint; my microphone (fake device) + 3D BOOT -> exported WAV replays via --mic; 390×844 no h-scroll.
-// Usage: node tools/webtest/xiaozhi.mjs (after tools/build_web.sh); logs in Reviews/web/xiaozhi-*
+// Voice assistant (F-09b-2 / F-09c): one hold-to-talk turn -> CLI --inputs byte-identical; fake mic + 3D BOOT -> WAV replays via --mic.
+// Usage: node tools/webtest/xiaozhi.mjs (after tools/build_web.sh); logs in Reviews/web/xiaozhi-*; also checks 390×844 no h-scroll
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
