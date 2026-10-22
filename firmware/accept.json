@@ -4392,6 +4392,51 @@
   "oled_min_pixels": 1000
  },
  {
+  "id": "arduino-lib-ili9341",
+  "seconds": 2,
+  "args": [
+   "--spi",
+   "ili9341@sclk=4,mosi=6,miso=5,cs=10,dc=1,rst=0,bl=-1"
+  ],
+  "expect": [
+   "ili9341 drawn",
+   "TRYBOARD_OK lib-ili9341"
+  ],
+  "lcd_min_pixels": 24005,
+  "lcd_regions": [
+   {
+    "name": "red rect (mirror-symmetric)",
+    "x": 20,
+    "y": 20,
+    "w": 200,
+    "h": 80,
+    "color": "#ff0000",
+    "min_pixels": 15055,
+    "max_pixels": 15055
+   },
+   {
+    "name": "white text inside red rect",
+    "x": 20,
+    "y": 20,
+    "w": 200,
+    "h": 80,
+    "color": "#ffffff",
+    "min_pixels": 945,
+    "max_pixels": 945
+   },
+   {
+    "name": "blue circle",
+    "x": 60,
+    "y": 140,
+    "w": 120,
+    "h": 120,
+    "color": "#0000ff",
+    "min_pixels": 8005,
+    "max_pixels": 8005
+   }
+  ]
+ },
+ {
   "id": "arduino-lib-oled-thingpulse",
   "seconds": 1.5,
   "args": [

@@ -106,6 +106,17 @@ pub struct LcdPins {
 }
 
 impl LcdPins {
+    /// C3 default wiring (same as the C3 crate's `lcd_pin`, what `--spi gc9a01` means on C3)
+    pub const C3_DEFAULT: LcdPins = LcdPins {
+        sclk: 6,
+        mosi: 7,
+        miso: None,
+        cs: 10,
+        dc: 5,
+        rst: Some(4),
+        bl: Some(3),
+    };
+
     /// Pin-compatible with the ESP-IDF spi_lcd_touch example (what `--spi gc9a01` means on S3)
     pub const S3_DEFAULT: LcdPins = LcdPins {
         sclk: 12,

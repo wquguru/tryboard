@@ -1506,3 +1506,9 @@
 - 参考：公开 NEC 协议时序；arduino-esp32 3.3.2 `esp32-hal-rmt.h` / `.c`（LGPL 核心，只读 API 语义：`rmtSetCarrier` 的 carrier_level=true 实际映射为 `polarity_active_low`，故草图传 false 让高电平段带载波）；ESP-IDF v5.5 `rmt_reg.h`（C3 / S3 CONF0 carrier_en [21]、carrier_out_lv [22]，CARRIER_DUTY 紧跟 INT_CLR）与 `rmt_tx.c` `rmt_apply_carrier`（占空比按组时钟 resolution_hz 计），Apache-2.0。**未打开** third_party/arduino-libs/Arduino-IRremote 的任何文件，也未看 IDF ir_nec_transceiver 示例源码。
 - core：`Rmt::carrier` 不再限经典 ESP32，C3 / S3 按上述位与组时钟（`src_hz / (div_num+1)`）换算；`PinDevices::ir_eye` 换成 `rmt_ir`（喂眼睛 + 返回是否开载波），经典 / C3 / S3 的 `route_rmt` 共用，开载波时不喂 WS2812 解码器（S3 lib.rs 守住 1500 行上限）；`ir_attach` 去掉「LED 眼睛只限经典 ESP32」的限制。C3 复位 CONF0 本就开载波（0x710200），驱动建通道时会关，golden 210/210 不变即佐证。新单元测试 `rmt::tests::c3_tx_carrier`。
 - 备选：用 PWM 日志验 38 kHz（RMT 不走 LEDC，不适用）；改在经典 ESP32 上构建（已有载波，但 Arduino 库示例都在 C3，保持一致）。
+
+## 2026-10-22 F-08a 遗留：C3 的 `--spi` 接受 @pins（Adafruit ILI9341 草图）
+- 决定：C3 的 DCS 屏引脚从固定 `lcd_pin` 改为 `SocBus::lcd_pins`（默认 `LcdPins::C3_DEFAULT`，与 `lcd_pin` 同值并有单元测试守住），实现 `lcd_attach_pins` / `lcd_default_pins`；`--spi kind@...` 在 C3 上认 cs / dc / rst / bl，sclk / mosi / miso 照常解析但不校验（C3 模型本就不看 SCLK / MOSI 路由，SPI2 传输直接送屏）。`--spi` 语法不变。用例 arduino-lib-ili9341 用 `ili9341@sclk=4,mosi=6,miso=5,cs=10,dc=1,rst=0,bl=-1`，sclk / mosi / miso 写的是 Arduino-ESP32 3.3.2 C3 默认（pins_arduino.h：SCK 4、MISO 5、MOSI 6），仅作说明。
+- 理由：不改用户草图也能跑才有意义（选项 a）；golden 211/211 不变，佐证默认接线行为未变。
+- 遗留：Adafruit 竖屏发 MADCTL 0x48（MX | BGR），模型显示为左右镜像文字；真机常见 ILI9341 模块此设置是正向，IDF spi_lcd_touch 示例也无条件 `esp_lcd_panel_mirror(true, false)`，疑为面板模型 MX 约定与常见玻璃相反（会牵连 c3-ili9341 / CYD 用例），按范围不改面板模型，lcd_regions 只取左右对称的区域；C3 SPI2 不把 LCD 读回送 MISO，readcommand8 读回 0xFF，未断言。
+- 备选：草图改成 C3 默认 lcd_pin（DC 5 / RST 4 / 显式 `SPI.begin`）——否，等于为模拟器改用户代码。
