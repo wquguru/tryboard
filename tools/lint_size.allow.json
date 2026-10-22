@@ -24,7 +24,7 @@
  "chip:web/src/live.ts": 3,
  "chip:web/src/simmsg.ts": 3,
  "chip:web/src/worker.ts": 1,
- "fn:core/crates/cli/src/main.rs:run": 805,
+ "fn:core/crates/cli/src/main.rs:run": 798,
  "fn:web/src/advisor/App.tsx:App": 726,
  "fn:web/src/app/analyzer.ts:createAnalyzer": 1092,
  "fn:web/src/app/asm3d.ts:createAssembly3D": 634,
