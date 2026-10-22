@@ -9,7 +9,7 @@ import { gravity } from '../../imupose';
 import { createLensProduct, createSpinProduct } from '../../views/lcdproducts';
 import { type Template } from '../../views/templates';
 import { workTemplate } from '../../views/worktpl';
-import { doorActs, doorButtons, doorLive, doorRows, doorSerial, doorTool } from './door';
+import { doorActs, doorButtons, doorLive, doorOnReader, doorRows, doorSerial, doorTap, doorTool } from './door';
 import { passedCount } from './bench';
 import { emptyFrame, ledCss, servoAngle, type LiveFrame } from '../../views/common';
 import type { AssemblyState, StepCtx, StepImpl } from '../types';
@@ -226,7 +226,7 @@ function remainingLines(work: string): BuyLine[] {
 }
 
 /** These projects' products live in works3d.ts (P2-09) */
-const WORK3D = new Set(['lamp', 'ruler', 'tilt']);
+const WORK3D = new Set(['lamp', 'ruler', 'tilt', 'door']);
 const COLOR_LABEL: Record<string, string> = { warm: t('Warm white'), red: t('Red'), green: t('Green'), blue: t('Blue'), purple: t('Purple'), white: t('White') };
 
 /** Expression names printed on the lens firmware's serial */
@@ -931,7 +931,7 @@ export function productStep(): StepImpl {
         onDistance: (cm) => applyDistance(cm),
         distance: c.session.distance,
         onPose: (p) => applyPose(p),
-        pose: c.store.get().pose,
+        pose: c.store.get().pose, ...(c.work.id === 'door' ? { onCard: (uid: string) => doorTap(c.session, uid), card: doorOnReader } : {}),
       });
       (window as unknown as { __tbProduct: unknown }).__tbProduct = {
         handlePos: () => work3d!.handleScreenPos(),
@@ -965,7 +965,7 @@ export function productStep(): StepImpl {
         typed: () => c.session.usb?.typed ?? '',
         usbState: () => c.session.usb?.state ?? '',
       };
-    } else if (webglOk() && c.work.id !== 'door') {
+    } else if (webglOk()) {
       const w = c.work.id as 'spin' | 'lens';
       lcd3d = createLcd3D(node, {
         kind: w,

@@ -160,6 +160,7 @@ export class LiveSim {
         if (m.console) o.onConsole?.(m.console);
         o.onTick?.(m);
         this.frame.pwm = m.pwm;
+        this.frame.gpio = m.gpio;
         this.frame.running = m.running;
         if (m.leds) this.frame.rgb = m.leds[0] ?? null;
         if (m.strips) this.frame.strips = { ...this.frame.strips, ...m.strips };

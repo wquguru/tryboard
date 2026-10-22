@@ -12,7 +12,8 @@ const LIFT_MS = 400;
 
 (globalThis as unknown as { __tbDoor: unknown }).__tbDoor = doorNow;
 
-function tap(s: Session, uid: string) {
+/** Lay a card on the reader ('' = take it away); exported for the 3D product's clickable cards */
+export function doorTap(s: Session, uid: string) {
   const put = (u: string) => {
     onReader = u;
     s.sim?.partInput({ kind: 'card', uid: u || 'none' });
@@ -22,6 +23,9 @@ function tap(s: Session, uid: string) {
     setTimeout(() => put(uid), LIFT_MS);
   } else put(uid);
 }
+
+/** UID on the reader right now ('' = none) */
+export const doorOnReader = () => onReader;
 
 const ACT: Record<string, string> = { 'p-card-ok': DOOR_CARDS.ok, 'p-card-bad': DOOR_CARDS.bad, 'p-card-off': '' };
 
@@ -34,12 +38,12 @@ export const doorActs = (): Tool[] => [
 
 /** Toolbar / button action; ids p-card-ok | p-card-bad | p-card-off */
 export function doorTool(id: string, s: Session) {
-  if (id in ACT) tap(s, ACT[id]);
+  if (id in ACT) doorTap(s, ACT[id]);
 }
 
 /** Desktop buttons, same verbs as the phone keys */
 export function doorButtons(b: (id: string, label: string, f: () => void) => ReactNode, s: Session) {
-  return [b('pCardOk', t('Tap whitelisted card'), () => tap(s, DOOR_CARDS.ok)), b('pCardBad', t('Tap unknown card'), () => tap(s, DOOR_CARDS.bad)), b('pCardOff', t('Take card away'), () => tap(s, ''))];
+  return [b('pCardOk', t('Tap whitelisted card'), () => doorTap(s, DOOR_CARDS.ok)), b('pCardBad', t('Tap unknown card'), () => doorTap(s, DOOR_CARDS.bad)), b('pCardOff', t('Take card away'), () => doorTap(s, ''))];
 }
 
 export const doorRows = (row: (k: string, live: string) => ReactNode) => [row(t('Card reader'), 'dver'), row(t('Card on the reader'), 'dcard'), row(t('Door strike (relay GPIO10)'), 'dlock'), row(t('Refusals in a row'), 'dfail')];

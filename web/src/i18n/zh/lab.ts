@@ -930,7 +930,6 @@ const d: Dict = {
   "DQ GPIO{pin} (1-Wire, 4.7 kΩ pull-up to 3V3)": "DQ GPIO{pin}（单总线，4.7 kΩ 上拉到 3V3）",
   "HC-SR501 passive infrared motion module (retriggerable, 3.3 V output)": "HC-SR501 被动红外人体感应模块（可重复触发，3.3 V 输出）",
   "OUT GPIO{pin} (high while motion is seen, hold {s} s)": "OUT GPIO{pin}（有人时高电平，保持 {s} 秒）",
-  "Relay module": "继电器模块",
   "1-channel 5 V relay module (SRD-05VDC, optocoupler input)": "一路 5 V 继电器模块（SRD-05VDC，光耦输入）",
   "IN GPIO{pin} (closes when low)": "IN GPIO{pin}（低电平吸合）",
   "IN GPIO{pin} (closes when high)": "IN GPIO{pin}（高电平吸合）",

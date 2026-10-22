@@ -57,6 +57,13 @@ export function unlocked(ctx: StepCtx) {
 }
 
 /** What the assembly choice changes (estimate), per template and part */
+/** Retest explanation per work (weather needs live numbers, so it stays inline) */
+const RETEST_WHY: Record<string, () => string> = {
+  ruler: () => t('With the probe recessed in the hole, HC-SR04 only measures the hole wall.'),
+  tilt: () => t('With the IMU reversed, pitch and roll read reversed too.'),
+  door: () => t('With the reader on the steel back box, the RC522 never sees a card.'),
+};
+
 const IMPACT: Record<string, Record<string, string[]>> = {
   weather: {
     shell: [t('USB-C cutout faces back: the cable exits behind and does not block the dial')],
@@ -89,6 +96,10 @@ const IMPACT: Record<string, Record<string, string[]>> = {
   },
   tilt: {
     imu: [t('Flat on the base, arrow forward: the bean rolls the way you tilt'), t('Rotated 180°: pitch and roll are both reversed, the bean climbs uphill, same in the retest')],
+  },
+  door: {
+    rc522: [t('Against the card zone: a card on the panel is 2–3 mm from the antenna and reads every time'), t('On the steel back box: the steel detunes the antenna and the card is 24 mm away, so no card is read, same in the retest (estimate)')],
+    relay: [t('The 12 V strike goes on the relay COM / NO contacts with its own supply; never feed 12 V into the dev board')],
   },
 };
 
@@ -536,10 +547,11 @@ export function assembleStep(): StepImpl {
     if (fx.glare !== undefined) row(t('Shade hot spots'), fx.glare ? t('Yes: 8 hot spots') : t('None'), !!fx.glare);
     if (fx.sonarBlock !== undefined) row(t('Probe reading'), fx.sonarBlock ? t('Cut off by the hole wall at about {cm} cm', { cm: fx.sonarBlock }) : t('Measures the object in front'), !!fx.sonarBlock);
     if (fx.imuFlip !== undefined) row(t('IMU orientation'), fx.imuFlip ? t('Reversed: pitch and roll both flipped') : t('Correct'), !!fx.imuFlip);
+    if (fx.cardBlock !== undefined) row(t('Card reading'), fx.cardBlock ? t('No card is read') : t('Reads cards on the panel'), !!fx.cardBlock);
     const how =
       T!.id === 'weather'
         ? t('The heat offset affects the simulation: in the retest and the Product, BME280 reads the raised temperature.')
-        : T!.id === 'ruler' || T!.id === 'tilt'
+        : T!.id === 'ruler' || T!.id === 'tilt' || T!.id === 'door'
           ? t('This affects the simulation: in the retest and the Product, the sensor sees things as assembled.')
           : t('Only changes the Product view, not the simulation.');
     return rows.length ? (
@@ -590,11 +602,7 @@ export function assembleStep(): StepImpl {
     const why =
       T!.id === 'weather'
         ? t('BME280 reads the temperature wherever the sensor sits: room {room} ℃, heated high by {d} ℃.', { room: lv ? envOf(lv).temp.toFixed(1) : '—', d: (asm!.effects().sensorOffset ?? 0).toFixed(1) })
-        : T!.id === 'ruler'
-          ? t('With the probe recessed in the hole, HC-SR04 only measures the hole wall.')
-          : T!.id === 'tilt'
-            ? t('With the IMU reversed, pitch and roll read reversed too.')
-            : t('After assembly it reboots and runs the same firmware.');
+        : (RETEST_WHY[T!.id] ?? (() => t('After assembly it reboots and runs the same firmware.')))();
     c.shell.props.render(
       <>
         {/* On a failed retest the "Current" line (e.g. "Next: Product") clashes with the result card, which already says why */}

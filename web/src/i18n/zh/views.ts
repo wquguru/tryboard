@@ -93,5 +93,6 @@ const d: Dict = {
   "RC522 reset": "RC522 复位",
   "RC522 power (3.3 V only)": "RC522 供电（只能 3.3 V）",
   "RC522 · SDA IO{pin} · tap a card below": "RC522 · SDA IO{pin} · 在下面刷卡",
+  "RC522 card zone": "RC522 刷卡区",
 };
 export default d;

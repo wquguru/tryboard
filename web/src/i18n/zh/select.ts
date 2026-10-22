@@ -64,7 +64,6 @@ const d: Dict = {
   "On modules with 8 MB octal PSRAM such as N16R8, GPIO33–37 are taken by the PSRAM": "N16R8 这类带 8MB 八线 PSRAM 的模组，GPIO33–37 被 PSRAM 占用",
   "Only 11 GPIOs broken out": "只引出 11 个 GPIO",
   "PIR sensor": "人体红外",
-  "Relay": "继电器",
   "Small ceramic antenna, weaker than a PCB antenna; leave margin through walls": "陶瓷小天线，信号比 PCB 天线弱，隔墙要留余量",
   "Smart home": "智能家居",
   "Strip data": "灯带数据",

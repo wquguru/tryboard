@@ -930,7 +930,6 @@ const d: Dict = {
   "DQ GPIO{pin} (1-Wire, 4.7 kΩ pull-up to 3V3)": "DQ GPIO{pin}(1-Wire, 3V3로 4.7 kΩ 풀업)",
   "HC-SR501 passive infrared motion module (retriggerable, 3.3 V output)": "HC-SR501 수동 적외선 인체 감지 모듈(재트리거 가능, 3.3 V 출력)",
   "OUT GPIO{pin} (high while motion is seen, hold {s} s)": "OUT GPIO{pin}(감지 중 High, {s}초 유지)",
-  "Relay module": "릴레이 모듈",
   "1-channel 5 V relay module (SRD-05VDC, optocoupler input)": "1채널 5 V 릴레이 모듈(SRD-05VDC, 포토커플러 입력)",
   "IN GPIO{pin} (closes when low)": "IN GPIO{pin}(Low일 때 닫힘)",
   "IN GPIO{pin} (closes when high)": "IN GPIO{pin}(High일 때 닫힘)",

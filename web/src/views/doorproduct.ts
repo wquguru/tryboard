@@ -1,5 +1,5 @@
 // G-03b RFID door lock: flat product (SVG) plus the door state parsed from the c3-door serial log.
-// Screen pixels come from the simulator; strike / lockout state comes from serial lines (the relay GPIO isn't in the frame).
+// Screen pixels come from the simulator; strike / lockout state comes from serial lines (the 3D view reads the relay GPIO from the frame).
 import { t } from '../i18n';
 import { mount, oledImage, type LiveFrame } from './common';
 

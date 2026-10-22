@@ -1,4 +1,4 @@
-// P2-09 flat products (SVG) for the knob lamp, ultrasonic ruler and tilt buddy, the product-step fallback
+// P2-09 flat products (SVG) for the knob lamp, ultrasonic ruler, tilt buddy: the product-step fallback
 // on devices without WebGL. Lamp colours and screen pixels all come from the simulator.
 import { t } from '../i18n';
 import { lcdImage, mount, oledImage, type LiveFrame } from './common';
@@ -10,6 +10,8 @@ export interface WorkEffects {
   sonarBlock?: number;
   /** IMU mounted backwards (180°): pitch and roll both flip sign (fed to the simulator) */
   imuFlip?: boolean;
+  /** RC522 on the steel back box, away from the card zone: no card is ever read (fed to the simulator) */
+  cardBlock?: boolean;
 }
 
 const BG = `<rect width="1000" height="560" fill="#DCD8D0"/><rect y="390" width="1000" height="170" fill="#CFCAC0"/>

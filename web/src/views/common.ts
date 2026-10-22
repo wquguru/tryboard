@@ -13,6 +13,8 @@ export interface LiveFrame {
   rgb: number[] | null;
   /** External WS2812 strips: pin → per-LED [r,g,b] (P2-09 knob lamp) */
   strips?: Record<number, number[][]>;
+  /** GPIO output levels, bit n = GPIOn (the live sim frame carries it; previews may not) */
+  gpio?: number;
   running: boolean;
 }
 

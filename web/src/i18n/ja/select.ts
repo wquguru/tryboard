@@ -64,7 +64,6 @@ const d: Dict = {
   "On modules with 8 MB octal PSRAM such as N16R8, GPIO33–37 are taken by the PSRAM": "N16R8 のような 8MB オクタル PSRAM 付きモジュールでは GPIO33–37 が PSRAM に使われます",
   "Only 11 GPIOs broken out": "GPIO は 11 本しか出ていません",
   "PIR sensor": "人感センサー",
-  "Relay": "リレー",
   "Small ceramic antenna, weaker than a PCB antenna; leave margin through walls": "小さなセラミックアンテナで PCB アンテナより弱いので、壁越しは余裕を見てください",
   "Smart home": "スマートホーム",
   "Strip data": "テープ LED データ",
