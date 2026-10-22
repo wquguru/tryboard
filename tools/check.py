@@ -273,7 +273,7 @@ def inputs_file(path: str) -> str:
 
 
 # Bench switches a player may change (F-05 knobs); each takes one value
-KNOB_FLAGS = ('--i2c-wire', '--antenna-loss', '--power', '--servo')
+KNOB_FLAGS = ('--i2c-wire', '--antenna-loss', '--power', '--servo', '--i2c-bus')
 
 
 def merge_args(base, overlay):

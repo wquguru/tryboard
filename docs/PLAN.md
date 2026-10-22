@@ -267,7 +267,7 @@
 | ID | 内容 | 验收 | 状态 |
 |---|---|---|---|
 | G-01 | 选型模板补示例链接（c3-pir-relay、c3-rc522、arduino-lib-pubsubclient、c3-ili9341-temp、c3-sh1106-pir、红外示例等）+ 新模板「RFID 门禁」「红外遥控」「传感器 MQTT 上云」「手机连板子（BLE，C3 / S3 / 经典 ESP32）」，零件映射缺的补上 | `cd web && npm test`；select / mobile webtest；agent-browser 依次选 4 个新模板截图 | ☐ |
-| G-02 | 找故障加「SDA / SCL 接反」（`fault-i2c-swap`）：weather 台面 BME280 的 SDA / SCL 对调（`--i2c-bus sda=9,scl=8:…`），开机扫不到 + 接线检查 W8，修好后通过；faults 作品加这一关，网页开关照 F-05 | `tools/check.py --ref --all`（as found FAIL、修好 PASS）；faults.mjs 网页 / CLI 指纹一致；agent-browser 走一遍 | ☐ |
+| G-02 | 找故障加「SDA / SCL 接反」（`fault-i2c-swap`）：weather 台面 BME280 的 SDA / SCL 对调（`--i2c-bus sda=9,scl=8:…`），开机扫不到 + 接线检查 W8，修好后通过；faults 作品加这一关，网页开关照 F-05 | `tools/check.py --ref --all`（as found FAIL、修好 PASS）；faults.mjs 网页 / CLI 指纹一致；agent-browser 走一遍 | ☑ 2026-10-22：KNOB_FLAGS / faults.ts 加 `--i2c-bus`；开关同时改台面场景（`faultScene`：BME280 的 sda / scl 跟开关走，3D 线、W8、实时仿真一致，记入时间线并重新上电）；原样扫描只有 0x3C、读芯片 ID NACK 后 abort 重启，修好 PASS 指纹 37ed·80e0（= fault-wire 修好）；`--ref --all` 29 关全过，faults.mjs 含 W8 出现 / 消失 25 项全过（Reviews/ab/G-02.md） |
 | G-03 | 新作品「RFID 门禁」（WorkId `door`）：C3 + RC522 + 继电器（电磁锁）+ 屏 + 蜂鸣器 / LED，固件 `firmware/c3-door`；3–4 个检查点（读到 RC522 版本、白名单卡开锁、陌生卡被拒、连续 3 次拒绝锁定）；作品全套文件照 d7bd418；继电器接市电标「必须上真机」 | build_fw + accept `c3-door`；check.py --ref --all；levels / asm3d / interact / mobile webtest；npm test；agent-browser 首页 → 组装 → 刷卡 → 检查点全绿（桌面 + 手机） | ☐ |
 | G-04 | 新作品「红外遥控小夜灯」（WorkId `irlamp`）：C3 / S3 + 红外接收头 + WS2812，遥控数字键选颜色、+/- 调亮度、电源键开关，复用 lamp 外壳 | 同 G-03；检查点：收到遥控码、按键改颜色（WS2812 帧校验）、重复码连调、功耗估算 | ☐ |
 | G-05 | （2026-10-22 人定：G-04 之后接着做）新作品「温湿度上云」（WorkId `cloud`）：C3 + BME280 / AHT20 + Wi-Fi + MQTT JSON 上报、订阅 `cmd` 改间隔 | 同 G-03；检查点：连 Wi-Fi、连 broker、按时发布、云端下发生效 | ☐ |

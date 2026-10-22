@@ -1598,3 +1598,10 @@
 - `just lint` 的注释检查默认只查相对 HEAD 改动 / 新增的文件：全仓库仍有 32 条历史问题（accept.sh 不卡它），`just lint all` 查全量。
 - 实测（worktree ops-justfile）：`just smoke http://localhost:8799`（`pages-local` 起主目录的 dist）12 项全过；`size-check` 1,656,361 B / 2,000,000；脏工作区 `just deploy preview` 被拒；`just lint` 里 lint_size 报 `productStep 961 -> 963`，HEAD 上已有，与本改动无关。未做真实部署（正式部署要人点头，AGENTS §10；还需人在 Cloudflare 建 Pages 项目、绑 tryboard.indaloop.app、`wrangler login`）。
 - 备选：部署到自有服务器 hetzner3（cloudflared tunnel + Caddy）——否：那台机器 8 核 16 GB 无 swap、负载约 5.7，跑着 newshub 和 4 个实盘 trader，公开站被刷会拖累交易程序；机房在赫尔辛基，而用户多在中日韩，边缘未命中都要回源；`.wasm` / `.bin` 还得另配 Cache Rules；回滚、预览、证书都得自己维护。以后需要后端（短链、realnet 代理、账号）时，在 hetzner3 起小容器经 tunnel 挂 api 子域名，静态站仍留在 Pages。Netlify / Vercel：功能相近，但 `_headers` 按 Pages 语法写、只在 Pages 上核实过，不换。indaloop.app 的 DNS 是否在 Cloudflare 待人确认（不在则绑自定义域名要加 CNAME）。
+
+## 2026-10-22 G-02：故障关「SDA / SCL 接反」的开关改台面（自主实现决定）
+- 决定：开关 flag 用 CLI 已有的 `--i2c-bus`（一关一个值，KNOB_FLAGS / faults.ts 同步）；基础参数里 SSD1306 走无引脚 `--i2c`，BME280 由开关挂到 `sda=9,scl=8`（原样）或 `sda=8,scl=9`（修好）。不改内核、不加 wasm 导出
+- 与 F-05 其他开关不同：`--i2c-bus` 开关同时改台面场景（`faults.ts` `faultScene`：按 kind@addr 改对应零件的 sda / scl），打开这关和每次切换时 `restoreScene` + 时间线记一步 + 重新上电，这样 3D 线、接线检查 W8、实时仿真（引脚总线）和检查运行用的是同一份接线。只走 wireMods.retarget 不行：改线不改仿真（台面会显示接反而实时仿真仍读得到）
+- 离开这关不还原场景：点开导线看 W8 也会切走检查面板，若卸载即还原，玩家一点线问题就消失；没有 `--i2c-bus` 开关的关不动场景
+- 实时台面两条总线共用 8 / 9 号焊盘（OLED 8/9、BME280 9/8），内核 `i2cpins.rs` `add` 拒绝焊盘重叠的第二条总线（worker 里 console.warn「pad already on another bus」，非 error），效果同样是扫不到 0x76；CLI 检查运行里 OLED 无引脚，不受影响
+- 备选：只改检查不改台面（F-05 做法）——否：W8 不会出现，目标要求台面接线视图一致；改用 wireMods 让玩家用接线工具把线换回来——否：接线工具明确不改仿真，修好后实时台面与检查不一致

@@ -24,7 +24,7 @@ Usage:
   tryboard check <flash.bin> --level 05 --servo 4 --power usb
                                                      put an SG90 on the supply network (same as check.py; ext = external 5 V 2 A)
   tryboard check <flash.bin> --level fault-wire --i2c-wire 20
-                                                     fault checkpoint (F-05): bench as found plus your switches (--i2c-wire / --antenna-loss / --power / --servo)
+                                                     fault checkpoint (F-05): bench as found plus your switches (--i2c-wire / --antenna-loss / --power / --servo / --i2c-bus)
   tryboard run <flash.bin> [--seconds 5] [--i2c ssd1306@0x3c,bme280@0x76] [--env 23.5,45,101325]
                [--spi gc9a01] [--inputs log.txt] [--script "0.5:gpio0=0"] [--pwm-log 4] [--servo 4] [--power usb|ext]
                                                      run firmware, serial to stdout, report to stderr
@@ -69,7 +69,7 @@ function supply(a: string[]) {
 }
 
 /** Bench switches given on the command line, as flag/value pairs (same set as KNOB_FLAGS in check.py) */
-const KNOB_FLAGS = ['--i2c-wire', '--antenna-loss', '--power', '--servo'];
+const KNOB_FLAGS = ['--i2c-wire', '--antenna-loss', '--power', '--servo', '--i2c-bus'];
 function knobArgs(a: string[]) {
   return KNOB_FLAGS.flatMap((f) => (opt(a, f) === undefined ? [] : [f, opt(a, f)!]));
 }
