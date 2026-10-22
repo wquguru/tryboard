@@ -1,6 +1,6 @@
 {
- "accept": 220,
- "examples": 65,
+ "accept": 221,
+ "examples": 66,
  "devices": 25,
  "chips": 3,
  "wasm_bytes": 1674486,

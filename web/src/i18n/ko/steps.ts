@@ -1130,5 +1130,13 @@ const d: Dict = {
   "RC522 version 0x{v}": "RC522 버전 0x{v}",
   "Door lock": "도어락",
   "Appearance only (2D view for now)": "외관 예시(현재 2D 보기)",
+  "Pink": "분홍",
+  "Hold VOL+": "VOL+ 길게",
+  "Remote code": "리모컨 코드",
+  "Strip current (estimate)": "LED 스트립 전류(추정)",
+  "{n} received": "{n}개 수신",
+  "No key yet": "아직 입력 없음",
+  "On · {color} · brightness {level}/8": "켜짐 · {color} · 밝기 {level}/8",
+  "IR night light": "적외선 수면등",
 };
 export default d;
