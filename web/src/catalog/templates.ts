@@ -40,7 +40,7 @@ export interface BuyLine {
 }
 
 export interface ProcureTemplate {
-  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'door' | 'blank' | 'custom';
+  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'door' | 'irlamp' | 'blank' | 'custom';
   title: string;
   /** Matching level (firmware/levels.json id; level 07 variants are written 07:spin) */
   level: string | null;
@@ -316,6 +316,40 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
     firmware: { wifi: false },
   },
   {
+    id: 'irlamp',
+    title: 'IR remote night light',
+    level: 'irlamp-4',
+    product: 'irlamp',
+    board: 's3-devkitc1-v10',
+    required: [
+      { partId: 's3-devkitc1-v10', qty: 1, why: 'Acceptance firmware targets the S3' },
+      { partId: 'ws2812-stick8', qty: 1, why: 'Light: 8 WS2812s, DIN on GPIO5' },
+      { partId: 'vs1838b', qty: 1, why: 'Receives the remote: OUT on GPIO4, powered from 3V3' },
+      { partId: 'ir-remote-nec21', qty: 1, why: 'Digits pick a colour, VOL+ / VOL- set brightness, CH- (0x45) switches on and off' },
+      CABLE,
+      { partId: 'dupont-ff', qty: 1, why: 'Module headers straight to the board' },
+      { partId: 'enclosure-lamp', qty: 1, why: 'Lamp base and frosted shade (receiver window in the base)' },
+    ],
+    suggested: [
+      { partId: 'psu-5v2a', qty: 1, checked: true, why: 'Separate strip supply: 8 LEDs at full white take about 480 mA, which with the board exceeds the 500 mA of computer USB' },
+      { partId: 'dc-jack', qty: 1, checked: true, why: 'Takes the power plug onto the breadboard' },
+      { partId: 'level-ahct125', qty: 1, checked: true, why: 'A 5 V strip wants data above 3.5 V; driving it with 3.3 V sometimes garbles colors' },
+      { partId: 'breadboard-830', qty: 1, checked: true, why: 'Get it working before boxing it' },
+      { partId: 'dupont-mm', qty: 1, checked: true, why: 'Jumpers on the breadboard' },
+    ],
+    wiring: [
+      { part: 'ws2812-stick8', pin: '5V', net: 'EXT5V' },
+      { part: 'ws2812-stick8', pin: 'DIN', net: 'GPIO5', via: 'level-shifter' },
+      { part: 'ws2812-stick8', pin: 'GND', net: 'GND' },
+      { part: 'vs1838b', pin: 'OUT', net: 'GPIO4' },
+      { part: 'vs1838b', pin: 'GND', net: 'GND' },
+      { part: 'vs1838b', pin: 'VCC', net: '3V3' },
+      { part: 'dc-jack', pin: '+', net: 'EXT5V' },
+      { part: 'dc-jack', pin: '-', net: 'GND' },
+    ],
+    firmware: { wifi: false },
+  },
+  {
     id: 'usbkey',
     title: 'USB mini keypad',
     level: 'usbkey-3',
@@ -424,7 +458,7 @@ export function bomTotal(picks: Pick[], board?: string): { lo: number; hi: numbe
 }
 
 /** Part library -> bench scene part type (same names as examples.json scene.parts[].type) */
-const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812', pot: 'pot', dht11: 'dht11', sh1106: 'oled', rc522: 'rc522', 'relay-1ch': 'relay', st7789: 'tft', 'st7789-240x320': 'tft', ili9341: 'tft' };
+const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812', pot: 'pot', dht11: 'dht11', sh1106: 'oled', rc522: 'rc522', 'relay-1ch': 'relay', vs1838b: 'irrx', st7789: 'tft', 'st7789-240x320': 'tft', ili9341: 'tft' };
 /** Bare SPI TFT catalog part -> panel (= CLI --spi name, F-04a2) */
 const TFT_PANEL: Record<string, string> = { st7789: 'st7789-240x240', 'st7789-240x320': 'st7789-240x320', ili9341: 'ili9341' };
 /** Keycap labels (usbkey: K1–K3 send a / b / c, K4 is the macro key) */
@@ -488,6 +522,9 @@ export function toScene(picks: Pick[], wiring: Wire[]): { type: string; [k: stri
     } else if (type === 'rc522') {
       const cs = gpioOf(key, 'spi-cs'), sck = gpioOf(key, 'spi-sclk'), mosi = gpioOf(key, 'spi-mosi'), miso = gpioOf(key, 'spi-miso'), rst = gpioOf(key, 'rst');
       if (cs !== undefined) out.push({ type, cs, sck, mosi, miso, rst });
+    } else if (type === 'irrx') {
+      const pin = gpioOf(key, 'digital-out');
+      if (pin !== undefined) out.push({ type, pin });
     } else if (type === 'led') {
       const pin = gpioOf(key, 'io');
       if (pin !== undefined) out.push({ type, pin });

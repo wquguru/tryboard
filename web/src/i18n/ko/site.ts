@@ -928,5 +928,14 @@ const d: Dict = {
   "Strike open (relay on)": "스트라이크 열림 (릴레이 ON)",
   "Locked (relay off)": "잠김 (릴레이 OFF)",
   "Starting firmware ({chip})…": "펌웨어 시작 중({chip})…",
+
+  // G-04 IR night light template and parts
+  "IR remote night light": "적외선 리모컨 무드등",
+  "Receives the remote: OUT on GPIO4, powered from 3V3": "리모컨 수신: OUT은 GPIO4, 3V3 전원",
+  "Digits pick a colour, VOL+ / VOL- set brightness, CH- (0x45) switches on and off": "숫자 키로 색, VOL+ / VOL-로 밝기, CH-(0x45)로 켜고 끄기",
+  "Lamp base and frosted shade (receiver window in the base)": "램프 받침과 반투명 갓(받침에 수신 창)",
+  "21-key IR remote (NEC, address 0x00)": "21키 적외선 리모컨(NEC, 주소 0x00)",
+  "Common 21-key \"Car MP3\" NEC remote, CR2025 coin cell": "흔한 21키 \"Car MP3\" NEC 리모컨, CR2025 코인 전지",
+  "Key codes: power / CH- 0x45, VOL+ 0x15, VOL- 0x07, digits 1–9 0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A. Most VS1838B kits already include one; buy it alone if yours did not.": "키 코드: 전원 / CH- 0x45, VOL+ 0x15, VOL- 0x07, 숫자 1–9는 0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A. VS1838B 키트 대부분에 포함; 없으면 따로 산다.",
 };
 export default d;

@@ -3681,6 +3681,37 @@
   "oled_min_pixels": 500
  },
  {
+  "id": "s3-irlamp",
+  "chip": "esp32s3",
+  "seconds": 2.2,
+  "args": [
+   "--ir",
+   "4"
+  ],
+  "script": "0.3:ir=FF00,E718; 0.6:ir=FF00,EA15; 0.71:ir=repeat; 0.82:ir=repeat; 0.93:ir=repeat; 1.04:ir=repeat; 1.3:ir=FF00,BA45; 1.6:ir=FF00,F807; 1.9:ir=1234,F30C",
+  "expect": [
+   "红外小夜灯 接收 GPIO4 灯带 GPIO5",
+   "TRYBOARD_OK s3-irlamp",
+   "收到 地址=00 命令=18",
+   "颜色 2 绿",
+   "亮度 8/8",
+   "电流估算 228 mA",
+   "收到 地址=00 命令=45",
+   "关灯",
+   "电流估算 8 mA",
+   "关灯中 忽略",
+   "收到 地址=1234 命令=0C 不是本灯遥控器"
+  ],
+  "ws2812": {
+   "pin": 5,
+   "min_frames": 7
+  },
+  "stderr_expect": [
+   "#20ff40 #20ff40 #20ff40 #20ff40 #20ff40 #20ff40 #20ff40 #20ff40",
+   "IR receiver GPIO4: remote sent 9 frames"
+  ]
+ },
+ {
   "id": "s3-rc522",
   "chip": "esp32s3",
   "seconds": 5,
