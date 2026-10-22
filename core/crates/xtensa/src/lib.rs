@@ -189,6 +189,10 @@ pub struct Cpu {
     pub threadptr: u32,
     pub cycles: u64,
     pub instret: u64,
+    /// Time-base cycles per instruction x3 (3 = 160 MHz, 2 = 240, 6 = 80); the SoC sets it from its CPU clock registers
+    pub cpi3: u32,
+    /// Leftover thirds of a cycle while cpi3 != 3
+    cpi_frac: u32,
     pub waiting: bool,
     pub hle_lo: u32,
     pub hle_hi: u32,
@@ -238,6 +242,8 @@ impl Cpu {
             threadptr: 0,
             cycles: 0,
             instret: 0,
+            cpi3: 3,
+            cpi_frac: 0,
             waiting: false,
             hle_lo: 0,
             hle_hi: 0,
@@ -585,7 +591,13 @@ impl Cpu {
                 return Exit::Normal;
             }
         };
-        *cycles += 1;
+        if self.cpi3 == 3 {
+            *cycles += 1;
+        } else {
+            self.cpi_frac += self.cpi3;
+            *cycles += (self.cpi_frac / 3) as u64;
+            self.cpi_frac %= 3;
+        }
         let len = d.len as u32;
         if self.window_check_dec(&d) {
             return Exit::Normal;
@@ -1305,6 +1317,16 @@ impl Cpu {
         self.pc = self.a(0);
         self.instret += 1;
         self.cycles += 1;
+    }
+}
+
+/// `Cpu::cpi3` for a CPU clock: PLL-derived CPUPERIOD_SEL 0 / 1 / 2 = 80 / 160 / 240 MHz on the 160 MHz time base.
+/// XTAL / RC phases keep the old 1 instruction per cycle (not modelled, see ARCH)
+pub fn cpi3_for(pll: bool, period_sel: u32) -> u32 {
+    match (pll, period_sel & 3) {
+        (true, 0) => 6,
+        (true, 2) => 2,
+        _ => 3,
     }
 }
 

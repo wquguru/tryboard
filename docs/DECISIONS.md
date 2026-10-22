@@ -1579,6 +1579,13 @@
 - **共享源码**：`firmware/c3-bluedroid-nus/main/main.c` 加了 `CONFIG_IDF_TARGET_ESP32` 分支（CHIP_NAME / FW_ID）；C3 / S3 运行输出不变，但行号后移，重编后二进制会变。
 - **网页**：示例库里没有任何板的 BLE 示例入口，按约定不给 esp32-devkitc 加。
 
+## 2026-10-22 E-10：Xtensa CPU 主频按寄存器计时（自主实现决定）
+- 起因：S3 版 IRremote SimpleSender 的 NEC 0 空隙 713 µs（+27 %）解不出；C3 679、经典 ESP32 564。差别来自软件开销（反馈灯 RMT 写）：Arduino `initArduino` 调 `setCpuFrequencyMhz(F_CPU)`，S3 / 经典 ESP32 板 `f_cpu=240000000L`，而模拟所有芯片都按 160 MHz、每条指令 1 个周期，240 MHz 代码慢了 1.5 倍。临时把 S3 改成 3 条指令 2 个周期即全解，确认是主频而不是解码容差
+- 决定：时基仍是 160 MHz（`CPU_HZ`、外设、VCD、网页时间都不动），只改指令耗时：SoC 在 CPU 时钟寄存器写入时算 `cpi3`（每条指令的时基周期 ×3，PLL 下 CPUPERIOD_SEL 0 / 1 / 2 = 6 / 3 / 2），每个调度量子拷给两个核；累加余数，3 条 240 MHz 指令 = 2 周期。XTAL / RC 阶段保持原来的 1 周期（启动早期，不建模 40 MHz）
+- 不改：CCOUNT 仍 = 时基周期 + 偏移（每秒 1.6 亿），240 MHz 固件以为每秒 2.4 亿，按 CCOUNT 忙等的代码（`esp_rom_delay_us` 等）在 240 MHz 下仍偏长 1.5 倍——这是原有问题，本项不变；要修需 CCOUNT 按指令数走并换算 CCOMPARE 事件时间，留给以后。WAITI 空转、HLE 返回仍按 1 周期
+- 影响：IDF 验收固件 sdkconfig 全是 160 MHz，行为不变；只有 Arduino 编的 S3 / 经典 ESP32 固件变快（golden 只这些用例变）。CPI 仍为 1，未经真机标定
+- 备选：放宽 NEC 解码容差或加绝对余量（IDF `IR_NEC_DECODE_MARGIN` 200 µs）——否：会掩盖 1.5 倍的计时错误；草图里定义 `NO_LED_FEEDBACK_CODE`——否：改用户代码绕过模拟器问题
+
 ## 2026-10-22 托管与运维入口：Cloudflare Pages + Justfile（人认可推荐）
 - 决定：静态站托管在 Cloudflare Pages（免费套餐，不开 Workers Paid / 不引入 Pages Functions），本机构建后 `wrangler pages deploy` 直传（不走 Pages 的 Git 构建、不建 CI）；仓库根加薄 `Justfile`（只包 `tools/*`，脚本仍是唯一实现），`just --list` 是常用命令入口。
 - 不做配置化：站点无后端、无运行时密钥，构建期只有 `TRYBOARD_SITE_URL`（与 Pages 项目名一起放在 Justfile 顶部变量，`TRYBOARD_PAGES_PROJECT` 可覆盖）；内容配置（accept / levels / examples / catalog）已由 `tools/check_config.py` 校验。不引入 `.env`、`~/.config/tryboard`、env-policy（参考 newshub 的那套是为有状态、有密钥的服务准备的）。

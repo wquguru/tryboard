@@ -171,6 +171,8 @@ pub struct SocBus {
     pub console: Vec<u8>,
     pub regs: HashMap<u32, u32>,
     pub unimpl: HashMap<u32, u64>,
+    /// Instruction cost from the CPU clock registers, copied into both cores (`Cpu::cpi3`)
+    pub cpi3: u32,
     pub irq_dirty: bool,
     pub next_event: u64,
     pub gpio_log: Vec<(u64, u64)>,
@@ -241,6 +243,7 @@ impl Default for SocBus {
             console: Vec::new(),
             regs: HashMap::new(),
             unimpl: HashMap::new(),
+            cpi3: 3,
             irq_dirty: true,
             next_event: 0,
             gpio_log: Vec::new(),
@@ -282,6 +285,12 @@ enum FetchSrc {
 }
 
 impl SocBus {
+    /// CPU clock: RTC_CNTL_CLK_CONF.SOC_CLK_SEL (bits 27-28, 1 = PLL) and DPORT_CPU_PER_CONF.CPUPERIOD_SEL
+    fn clk_update(&mut self) {
+        let pll = (self.regs.get(&(RTC_CNTL + 0x70)).copied().unwrap_or(0) >> 27) & 3 == 1;
+        self.cpi3 = tryboard_xtensa::cpi3_for(pll, self.dport.regs[0x3c / 4]);
+    }
+
     /// Cache window address -> flash offset
     #[inline]
     fn flash_addr(&self, vaddr: u32) -> Option<usize> {
@@ -483,7 +492,10 @@ impl SocBus {
         let (base, off) = (a & !0xfff, a & 0xfff);
         self.irq_dirty = true;
         match base {
-            0x3FF0_0000 => return self.dport.write(off, v),
+            0x3FF0_0000 => {
+                self.dport.write(off, v);
+                return self.clk_update();
+            }
             crypto::AES_BASE => return self.aes.write(off, v),
             crypto::SHA_BASE => return self.sha.write(off, v),
             MMU_PRO if (off as usize) < MMU_ENTRIES * 4 => {
@@ -601,6 +613,9 @@ impl SocBus {
         }
         *self.unimpl.entry(a).or_insert(0) += 1;
         self.regs.insert(a, v);
+        if a == RTC_CNTL + 0x70 {
+            self.clk_update();
+        }
     }
 
     // Infallible: wifi is set at construction and only taken around write/update,
@@ -1072,6 +1087,7 @@ impl Esp32 {
         let end = self.cpu.cycles.saturating_add(budget);
         while self.cpu.cycles < end {
             let q_end = (self.cpu.cycles + QUANTUM).min(end);
+            (self.cpu.cpi3, self.cpu1.cpi3) = (self.bus.cpi3, self.bus.cpi3);
             let both_idle = !self.cpu1_on || self.cpu1.waiting;
             let idle0 = if both_idle { end } else { q_end };
             if let Some(s) = run_core(0, &mut self.cpu, &mut self.bus, &self.hle, q_end, idle0) {

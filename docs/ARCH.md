@@ -196,7 +196,8 @@ web/（Vite + TS）
 - 崩溃检测：落进 ROM 异常向量（VECBASE 仍为 0x40000000 时）停机报 EXCCAUSE / EPC1；app 装了自己的 VECBASE 后，崩溃由固件自己的 panic 处理程序打印（Guru Meditation），CLI 照常转发。
 - 中断：32 条线，级别 / 类型按 core-isa.h（外部电平、外部边沿 10/22/28/30、NMI 14、软件 7/29、定时器 6/15/16、性能计数 11）。`INTERRUPT` = 锁存位（边沿 / NMI / 软件 / 定时器）| 外部电平线。可响应条件：挂起 & INTENABLE 的最高级别 > max(PS.INTLEVEL, EXCM ? 3 : 0)。level 1 走 User/Kernel 向量（EXCCAUSE=4），level n≥2 存 EPC_n / EPS_n、置 INTLEVEL=n 与 EXCM，跳 VECBASE+0x180/0x1C0/0x200/0x240/0x280/0x2C0。
 - SoC 接口：`set_irq_lines(mask)` 驱动外部线；`step()` 遇 WAITI 返回 `Exit::Waiti`，SoC 可把 `cpu.cycles` 直接推到 `next_timer_event()`（及自己外设的下一事件），下一次 step 会补检 CCOMPARE 越过；`Exit::Simcall` 可当空操作；`Bus::rer/wer` 给外部寄存器（默认读 0）。
-- CCOUNT 每条指令 +1（真机 CPI 标定以后做）；写 CCOMPAREn 清对应定时器挂起位。CCOUNT = `cycles` + 偏移：固件写 CCOUNT（IDF 换 CPU 频率时按新旧频率比例改写）只改偏移，`cycles` 是整机模拟时间，不能跳（否则复位后启动时时间会被放大数倍、两核时间错开）。
+- 主频（E-10）：SoC 按 CPU 时钟寄存器（PLL 下 CPUPERIOD_SEL）设 `Cpu::cpi3`，240 / 160 / 80 MHz 每条指令 ⅔ / 1 / 2 个 160 MHz 时基周期；XTAL 阶段按 1。
+- CCOUNT 每条指令 +1（真机 CPI 标定以后做；240 MHz 下仍按时基走，见 DECISIONS E-10）；写 CCOMPAREn 清对应定时器挂起位。CCOUNT = `cycles` + 偏移：固件写 CCOUNT（IDF 换 CPU 频率时按新旧频率比例改写）只改偏移，`cycles` 是整机模拟时间，不能跳（否则复位后启动时时间会被放大数倍、两核时间错开）。
 - FPU（CP0，CPENABLE 位 0 门控，否则 EXCCAUSE 32）：f64 精确值 + 一次舍入实现 4 种舍入模式，非规格数不冲零，FSR 标志累加；NaN 传播与除法 / 开方分步指令的模型见 `fpu.rs` 模块说明与 DECISIONS。
 - MAC16：40 位 ACC、m0..m3、LDINC/LDDEC 与并行装载形式；区域保护 TLB 指令（8 个 512MB 区域属性）；SALT/SALTU。
 - 未实现：PIE（EE.*）指令，按非法指令处理。
