@@ -23,6 +23,7 @@
 设计：页面照 docs/DESIGN.md；任务对应 docs/PLAN.md 的〈ID〉，完成后把状态改成 ☑。
 授权：只能用 docs/LICENSING.md 里 ✅ 的来源；GPL 代码可读不可抄（不复制、不逐行翻译）；新 npm / crate 依赖先写 DECISIONS。
 完成后：在 worktree 分支提交（英文提交信息，末尾加 Co-Authored-By 行）；更新 docs/STATUS.md 与 DECISIONS.md。
+worktree 注意：webtest 前把 web/node_modules、third_party、firmware/build 软链到主仓库，并在 worktree 里 `cargo build -p tryboard-cli --release`；Reviews/ 被 git 忽略，走查记录和截图另拷一份到主仓库 Reviews/ab/（删 worktree 会一起删掉）。
 省 token（AGENTS.md §9 第 6–18 条）：不得再派子代理；单次工具输出 > 2 万字符先重定向到 Reviews/ 再 grep / head；机械改动用脚本抽取 → 整批处理 → 脚本回填，不逐条 Edit；读代码先 `grep -n` 再看命中处 ≤ 60 行，不整文件 cat / `sed -n 1,300p`；查到的位置和签名记在自己的笔记里，压缩后不要重读整文件；工具调用超过约 150 次时先提交阶段性成果并在汇报里说明剩余工作，而不是硬撑到压缩。
 汇报（≤ 300 字）：做了什么、验收结果（贴通过 / 失败的行）、遗留问题、改动了哪些公共接口。不要贴大段日志。
 ```
