@@ -353,3 +353,18 @@ export function applyPreset(sc: ScenarioV1, id: PresetId, at: number, offered: {
 export function scenarioHeader(len: number) {
   return `# tryboard scenario, ${(len / 1000).toFixed(3)} s\n# suggested: --seconds ${len / 1000}\n`;
 }
+
+/** One scenario edit as a bench timeline step (F-11c): before and after, so undo needs no snapshot */
+export interface ScenarioEdit {
+  k: 'scenario';
+  sc: ScenarioV1 | null;
+  prev: ScenarioV1 | null;
+  label: string;
+}
+
+/** Scenario in force after step i: the last edit at or before i, else what the first later edit replaced; undefined = never edited */
+export function scenarioAt(ops: { k: string }[], i: number): ScenarioV1 | null | undefined {
+  for (let j = Math.min(i, ops.length - 1); j >= 0; j--) if (ops[j].k === 'scenario') return (ops[j] as ScenarioEdit).sc;
+  for (let j = Math.max(0, i + 1); j < ops.length; j++) if (ops[j].k === 'scenario') return (ops[j] as ScenarioEdit).prev;
+  return undefined;
+}

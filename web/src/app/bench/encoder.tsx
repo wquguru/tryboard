@@ -6,6 +6,7 @@ import { type BenchStep } from "../history";
 import { Btn, Btns, Kv, KvBox, Slider } from "../../ui/panel";
 import { type NEv, outOf } from "./shared";
 import type { BenchCtx } from "./ctx";
+import { ScenHint } from "./scenhint";
 
 export function mountEncoder(b: BenchCtx) {
   const encRows = () => (
@@ -65,6 +66,7 @@ export function mountEncoder(b: BenchCtx) {
     };
     return (
       <>
+        <ScenHint k="dist" />
         <Slider
           min={2}
           max={400}
@@ -164,16 +166,19 @@ export function mountEncoder(b: BenchCtx) {
   ) => {
     const v = b.ctx!.store.get().env[k];
     return (
-      <Slider
-        min={min}
-        max={max}
-        step={step}
-        defaultValue={v}
-        data-env={k}
-        aria-label={label}
-        out={fmtEnv[k](v)}
-        on={envOn(k)}
-      />
+      <>
+        <ScenHint k={k === "humidity" ? "hum" : k === "pressure" ? "press" : k} />
+        <Slider
+          min={min}
+          max={max}
+          step={step}
+          defaultValue={v}
+          data-env={k}
+          aria-label={label}
+          out={fmtEnv[k](v)}
+          on={envOn(k)}
+        />
+      </>
     );
   };
 

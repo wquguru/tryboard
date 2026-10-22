@@ -5,6 +5,7 @@ import type { InputEvent } from '../inputlog';
 import type { Snapshot } from '../simmsg';
 import type { CheckOutcome, Env } from './types';
 import type { WireMods } from './wiring.ts';
+import type { ScenarioEdit } from './scenario.ts';
 import { t } from '../i18n/index.ts';
 
 export type BenchOp =
@@ -17,6 +18,8 @@ export type BenchOp =
   | { k: 'power'; ext5v: boolean }
   | { k: 'wiring'; mods: WireMods; scene?: SceneSpec; label: string }
   | { k: 'check'; id: string; outcome: CheckOutcome }
+  /** Environment scenario edit (F-11c): one release / add / delete; a rewind restores it via scenarioAt */
+  | ScenarioEdit
   /** Brownout reset (P1-02): reported by the sim, not a user op; rewinding to it lands on the reset moment. */
   | { k: 'brownout'; tSec: number; v3v3: number | null; count?: number };
 

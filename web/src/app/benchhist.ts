@@ -5,6 +5,8 @@ import { t } from '../i18n';
 import type { Snapshot } from '../simmsg';
 import { fold, replayInputs, seekTarget, summarize, truncate, type BenchOp, type BenchStep, type RunRec } from './history';
 import type { TimelineStep } from './timeline';
+import { scenarioAt } from './scenario';
+import { attachScenarioHistory, setScenario } from './scenariofeed';
 import type { CheckOutcome, StepCtx } from './types';
 
 export interface SeekResult {
@@ -53,6 +55,8 @@ const label = (op: BenchOp, runs: RunRec[]): TimelineStep => {
       return { id: '', icon: '⚡', label: op.ext5v ? t('Switch to external 5 V') : t('Back to USB power') };
     case 'wiring':
       return { id: '', icon: '~', label: op.label };
+    case 'scenario':
+      return { id: '', icon: '∿', label: t('Script: {what}', { what: op.label }) };
     case 'check':
       return { id: '', icon: '◎', label: t('Checkpoint {id}', { id: op.id }), status: op.outcome.ok ? 'ok' : 'bad' };
     case 'brownout':
@@ -191,6 +195,9 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
     session.setHeat(f.heat);
     session.setWireMods(f.mods ?? {});
     store.set({ checks: { ...baseChecks, ...f.checks } });
+    // Before the seek: live.ts compiles the scenario's part after the rewind point from the feed
+    const sc = scenarioAt(steps.map((s) => s.op), i);
+    if (sc !== undefined) setScenario(sc, { stale: false });
     const inputs = replayInputs(rec.snap.log.events);
     session.fwName = rec.fwName;
     let snap: Snapshot;
@@ -248,6 +255,7 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
     store.set({ runNo: 1 });
   }
   sync();
+  attachScenarioHistory({ op, render });
 
   return {
     steps: () => steps,
