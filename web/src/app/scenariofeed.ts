@@ -1,7 +1,7 @@
 // Environment scenario state (F-11) shared by the session, the dock pane and share links; kept out of the lazy pane chunk.
 // Saved per work in localStorage like the bench placement; the share link carries it as `tl`.
 import { createStore } from './store';
-import { parseScenario, type ScenarioV1, type TrackKind } from './scenario.ts';
+import { parseScenario, type ScenarioEdit, type ScenarioV1, type TrackKind } from './scenario.ts';
 import { noteSaved } from './saved';
 
 export interface ScenFeed {
@@ -18,8 +18,38 @@ export interface ScenFeed {
   now: number;
   /** Room at the last power-up: the export compiles against it so the file matches what the worker applied */
   room: { temp: number; humidity: number; pressure: number } | null;
+  /** A shared run is replaying at its original speed (F-03b): edits make the result differ from the sharer's */
+  replay: boolean;
+  /** Track the pane should select when it opens (a slider's "Controlled by the scenario" link); rev re-triggers the same key */
+  focus: { key: string; rev: number } | null;
 }
-export const scenFeed = createStore<ScenFeed>({ sc: null, offered: [], lines: 0, stale: false, shown: {}, now: 0, room: null });
+export const scenFeed = createStore<ScenFeed>({ sc: null, offered: [], lines: 0, stale: false, shown: {}, now: 0, room: null, replay: false, focus: null });
+
+/** Bench timeline hook (F-11c): set by benchhist so the lazy pane records undo steps without the lab context */
+interface ScenHist {
+  op(op: ScenarioEdit): { op: { k: string } };
+  render(): void;
+}
+let hist: ScenHist | null = null;
+let gesture: ScenarioEdit | null = null;
+export const attachScenarioHistory = (h: ScenHist) => void (hist = h);
+
+/** A user edit: one timeline step each, except a drag (drag: true) which updates its step until endScenarioGesture */
+export function editScenario(sc: ScenarioV1 | null, label: string, opts: { stale?: boolean; drag?: boolean } = {}) {
+  const prev = scenFeed.get().sc;
+  if (prev === sc) return;
+  setScenario(sc, { stale: opts.stale });
+  if (!hist) return;
+  if (opts.drag && gesture) {
+    gesture.sc = sc;
+    gesture.stale = scenFeed.get().stale;
+    hist.render();
+    return;
+  }
+  const st = hist.op({ k: 'scenario', sc, prev, label, stale: scenFeed.get().stale });
+  gesture = opts.drag && st.op.k === 'scenario' ? (st.op as ScenarioEdit) : null;
+}
+export const endScenarioGesture = () => void (gesture = null);
 
 let key = '';
 export function initScenario(workKey: string) {

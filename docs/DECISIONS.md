@@ -1436,3 +1436,11 @@
 - **权限只在第一次切换时请求**：切换失败（拒权、无 getUserMedia、非 https）退回该作品自己的示例录音（以前退回 1 kHz 测试音），面板显示「…，已换回示例录音」。台架面板的「麦克风来源」下拉与 Voice 页同步。
 - **BOOT 电平不改**：核查发现网页上 3D BOOT（pick → buttonCb → `session.pressBoot` → `live.press`）和面板按钮（原 `pressPin(0)`）松开时都记 `gpio0=z`，任务描述里的「3D 记 `gpio0=1`」不成立；只有 M5 预设按钮（`pressBoardPin`）和场景轨道 `up:1` 写 1。S3 的 GPIO0 有板上上拉（`esp32s3/src/periph.rs` 的 board_pullup bit 0），`z` 与 `1` 读数相同，`z` 更接近真实按键（松开即悬空、靠上拉）。所以保留 `z`，面板改走 `session.pressBoot`，与 3D 同一路径；accept 脚本、旧日志、golden 都不变（210/210）。
 - **测试用假麦克风**：xiaozhi.mjs 用 `--use-fake-device-for-media-stream --use-fake-ui-for-media-stream --use-file-for-fake-audio-capture=xz_mic.wav`；macOS 上音频服务沙箱读不到文件、只会采到静音，必须加 `--disable-features=AudioServiceSandbox,AudioServiceOutOfProcess`。agent-browser 会主动拒绝麦克风权限（即使用 --args 或 CDP 连接自启 Chrome），所以 agent-browser 走查覆盖拒权退回路径，真麦克风路径由 puppeteer 验证。
+## 2026-10-21 F-11c 环境脚本收尾（自主决定，待人审）
+- **撤销步带前后两份脚本**：工作台时间线新增 `{k:'scenario', sc, prev, label}`；`seek(i)` 取 i 之前最后一次脚本编辑的 `sc`，没有则取之后第一次编辑的 `prev`（`scenarioAt`），从未编辑过就不动脚本。备选是记一份初始基线，但 `prev` 不用额外状态、截断后也自洽。
+- **一次拖动 = 一步**：按下后第一次改动记一步，之后只更新这一步，松开结束；双击加关键帧、删除关键帧、预设、加 / 删轨道、导入、改长度、开关轨道各一步。重做时重放到编辑发生的时刻，之前的固件读数仍是旧脚本（与当时实况一致），之后用新脚本。
+- **「由环境脚本控制」提示放在温度 / 湿度 / 气压 / 距离 / 电位器滑块上方**：工作台没有光照滑块，故不加；手动拖仍可用（交互稿 §9 Q5 a）。键用 `Open the track`（`Open` 已在 net 组里，组之间不能重键），中文仍显示「打开」。
+- **缩放用按钮，不做双指缩放**：1 / 2 / 4 / 8 / 16 / 32×，以视口中心为锚；「适应」= 1×。双指和车道拖动手势冲突，先不做。
+- **跟随运行默认开**：播放头放在视口 20% 处；关掉后手动横滚不被拉回。
+- **回放警告覆盖整段按原速回放**：`shareopen.ts` 的 `replaying` 统一经 `setReplaying` 同步到 `scenFeed.replay`，回放结束或跳过即消失；只提示，不阻止编辑。
+- **重启提示随撤销 / 重做恢复**：脚本步记下编辑时的 `stale`（改到了已运行的时间）；倒带重新上电会清掉提示，`seek` 结束后按 `scenarioStaleAt`（本次运行内最后一次脚本编辑的标记，遇到 run 步即为否）补回，重做改过去的编辑仍显示「重启后生效」。

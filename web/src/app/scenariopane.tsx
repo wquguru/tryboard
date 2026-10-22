@@ -1,6 +1,6 @@
 // Dock "Script" tab (F-11, docs/plan-F/F-11-timeline.md §3): one lane per track, keyframes dragged on simulated time.
 // The pane only edits scenFeed.sc; session.ts compiles it and the worker applies it, so the input log stays the single truth.
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { cn } from '../ui/cn';
 import { t } from '../i18n';
 import { toScriptBody } from '../inputlog';
@@ -8,7 +8,7 @@ import { actions } from './chrome';
 import { download } from './capture';
 import { presetName } from './netcond';
 import { useStore } from './react';
-import { scenFeed, setScenario } from './scenariofeed';
+import { editScenario, endScenarioGesture, scenFeed } from './scenariofeed';
 import {
   applyPreset,
   compileScenario,
@@ -166,16 +166,11 @@ interface Sel {
   i: number;
 }
 
-function Lane({ tr, ti, sc, now, h, sel, onSel, edit }: { tr: ScenarioTrack; ti: number; sc: ScenarioV1; now: number; h: number; sel: Sel | null; onSel: (s: Sel | null) => void; edit: (tr: ScenarioTrack, at: number) => void }) {
+type Edit = (tr: ScenarioTrack, at: number, label: string, drag?: boolean) => void;
+
+/** One track's lane, w px wide (the pane's zoom); it sits in a horizontal scroller, so rects already include scrollLeft */
+function Lane({ tr, ti, sc, now, h, w, sel, onSel, edit }: { tr: ScenarioTrack; ti: number; sc: ScenarioV1; now: number; h: number; w: number; sel: Sel | null; onSel: (s: Sel | null) => void; edit: Edit }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [w, setW] = useState(600);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setW(Math.max(80, el.clientWidth)));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
   const drag = useRef<{ i: number; rng: [number, number] } | null>(null);
   const [lo, hi] = drag.current?.rng ?? range(tr);
   const x = (ms: number) => (ms / sc.len) * w;
@@ -201,13 +196,16 @@ function Lane({ tr, ti, sc, now, h, sel, onSel, edit }: { tr: ScenarioTrack; ti:
     if (!d) return;
     const at = msAt(e);
     const next = moveItem(tr, d.i, at, isCont(tr) ? vAt(e) : undefined);
+    if (JSON.stringify(next) === JSON.stringify(tr)) return;
+    const was = items[d.i]?.t ?? at;
     // Sorting may move the dragged keyframe: keep following it by its new time
     if (isCont(next)) d.i = next.kf.findIndex((f) => f[0] === at);
     onSel({ ti, i: d.i });
-    edit(next, Math.min(at, items[d.i]?.t ?? at));
+    edit(next, Math.min(at, was), t('Move keyframe'), true);
   };
   const up = () => {
     drag.current = null;
+    endScenarioGesture();
   };
   let path = '';
   if (isCont(tr) && tr.kf.length) {
@@ -221,11 +219,11 @@ function Lane({ tr, ti, sc, now, h, sel, onSel, edit }: { tr: ScenarioTrack; ti:
     <div
       ref={ref}
       data-lane={trackKey(tr)}
-      className="relative min-w-0 flex-1 touch-none select-none"
-      style={{ height: h }}
+      className="relative flex-none touch-none select-none"
+      style={{ height: h, width: w }}
       onDoubleClick={(e) => {
         const at = msAt(e);
-        edit(addItem(tr, at), at);
+        edit(addItem(tr, at), at, t('Add keyframe'));
       }}
       onPointerDown={(e) => {
         if (e.target === e.currentTarget || (e.target as Element).tagName === 'svg') onSel(null);
@@ -283,7 +281,7 @@ function current(tr: ScenarioTrack, now: number, shown: { pir?: boolean; net?: s
 }
 
 /** Editor row for the selected item: time, value / hold / preset, interpolation, delete */
-function SelRow({ tr, i, phone, sc, set }: { tr: ScenarioTrack; i: number; phone?: boolean; sc: ScenarioV1; set: (tr: ScenarioTrack, at: number) => void }) {
+function SelRow({ tr, i, phone, sc, set }: { tr: ScenarioTrack; i: number; phone?: boolean; sc: ScenarioV1; set: (tr: ScenarioTrack, at: number, label?: string) => void }) {
   const it = itemsOf(tr)[i];
   if (!it) return null;
   const num = (v: number, on: (n: number) => void, step: number, label: string, id: string) => (
@@ -326,7 +324,7 @@ function SelRow({ tr, i, phone, sc, set }: { tr: ScenarioTrack; i: number; phone
           ))}
         </select>
       )}
-      <button type="button" id="scenSelDel" onClick={() => set(deleteItem(tr, i), it.t)} className={cn(ctl(phone), 'text-bad-ink')}>
+      <button type="button" id="scenSelDel" onClick={() => set(deleteItem(tr, i), it.t, t('Delete keyframe'))} className={cn(ctl(phone), 'text-bad-ink')}>
         {t('Delete keyframe')}
       </button>
     </div>
@@ -334,20 +332,65 @@ function SelRow({ tr, i, phone, sc, set }: { tr: ScenarioTrack; i: number; phone
 }
 const QUANTSTEP: Record<string, number> = { temp: 0.1, hum: 1, press: 1, lux: 1, dist: 1, mv: 1 };
 
+const ZOOMS = [1, 2, 4, 8, 16, 32];
+
 export function ScenarioPane({ phone }: { phone?: boolean }) {
   const f = useStore(scenFeed);
   const sc: ScenarioV1 = f.sc ?? { len: SCENARIO_DEFAULT_MS, tracks: [] };
   const [sel, setSel] = useState<Sel | null>(null);
   const [cur, setCur] = useState(0);
   const [msg, setMsg] = useState('');
+  const [zoom, setZoom] = useState(1);
+  const [follow, setFollow] = useState(true);
+  const [hl, setHl] = useState<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const offeredKeys = new Set(f.offered.map(trackKey));
   const now = f.now;
   // Rounded up so a preset or keyframe added "now" lands ahead of the playhead (now lags up to 50 ms) and still plays this run
   const playAt = Math.min(sc.len, Math.ceil((now + 50) / SNAP_MS) * SNAP_MS);
   // An edit before the playhead cannot change the past: it waits for a restart
-  const put = (next: ScenarioV1, at: number) => setScenario(next, { stale: f.stale || at < now });
-  const editTrack = (ti: number) => (tr: ScenarioTrack, at: number) => put({ ...sc, tracks: sc.tracks.map((x, j) => (j === ti ? tr : x)) }, at);
+  const put = (next: ScenarioV1, at: number, label: string, drag?: boolean) => editScenario(next, label, { stale: f.stale || at < now, drag });
+  const editTrack = (ti: number): Edit => (tr, at, label, drag) => put({ ...sc, tracks: sc.tracks.map((x, j) => (j === ti ? tr : x)) }, at, label, drag);
+  // Lanes scroll sideways in their own box (phones never scroll the page); its width is the zoom-1 lane width
+  const scroller = useRef<HTMLDivElement>(null);
+  const [viewW, setViewW] = useState(600);
+  const hasTracks = sc.tracks.length > 0;
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setViewW(Math.max(80, el.clientWidth)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [hasTracks, phone]);
+  const laneW = viewW * zoom;
+  // Zoom keeps the view centre in place, or brings the playhead back when following
+  const anchor = useRef<number | null>(null);
+  const zoomTo = (z: number) => {
+    const el = scroller.current;
+    if (el) anchor.current = (el.scrollLeft + el.clientWidth / 2) / (el.scrollWidth || 1);
+    setZoom(z);
+  };
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const px = (Math.min(now, sc.len) / sc.len) * laneW;
+    if (follow && (anchor.current !== null || px < el.scrollLeft || px > el.scrollLeft + el.clientWidth - 8)) el.scrollLeft = Math.max(0, px - el.clientWidth * 0.2);
+    else if (anchor.current !== null) el.scrollLeft = Math.max(0, anchor.current * laneW - el.clientWidth / 2);
+    anchor.current = null;
+  }, [now, follow, laneW, sc.len]);
+  // A slider's "Controlled by the scenario" link: select that track once the pane is up
+  const focusRev = f.focus?.rev;
+  useEffect(() => {
+    const key = scenFeed.get().focus?.key;
+    if (!key) return;
+    scenFeed.set({ focus: null });
+    const i = sc.tracks.findIndex((tr) => trackKey(tr) === key);
+    if (i < 0) return;
+    setCur(i);
+    setSel(null);
+    setHl(key);
+    document.querySelector(`[data-track="${key}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [focusRev]); // eslint-disable-line react-hooks/exhaustive-deps
   const present = new Set(sc.tracks.map(trackKey));
   const addable: { k: TrackKind; pin?: number; ok: boolean }[] = [];
   for (const k of ['temp', 'hum', 'press', 'lux', 'dist', 'pir', 'net'] as TrackKind[]) addable.push({ k, ok: offeredKeys.has(k) });
@@ -363,29 +406,49 @@ export function ScenarioPane({ phone }: { phone?: boolean }) {
     else if (v === 'import') file.current?.click();
   };
   const ti = phone ? Math.min(cur, sc.tracks.length - 1) : -1;
-  const row = (tr: ScenarioTrack, i: number, h: number, head: ReactNode) => (
-    <div key={trackKey(tr)} data-track={trackKey(tr)} className={cn("flex items-stretch border-b border-line-soft", phone && "flex-col")}>
-      {head}
-      <Lane tr={tr} ti={i} sc={sc} now={now} h={h} sel={sel} onSel={setSel} edit={editTrack(i)} />
+  const lane = (tr: ScenarioTrack, i: number, h: number) => (
+    <div key={trackKey(tr)} className="border-b border-line-soft">
+      <Lane tr={tr} ti={i} sc={sc} now={now} h={h} w={laneW} sel={sel} onSel={setSel} edit={editTrack(i)} />
     </div>
   );
   const missing = (tr: ScenarioTrack) => !offeredKeys.has(trackKey(tr));
   const head = (tr: ScenarioTrack, i: number) => (
-    <div className={cn("flex w-40 flex-none flex-col justify-center gap-0.5 border-r border-line-soft px-2 py-1 text-xs", phone && "w-full border-r-0 text-sm")}>
+    <div key={trackKey(tr)} data-track={trackKey(tr)} style={phone ? undefined : { height: 45 }} className={cn("flex flex-col justify-center gap-0.5 overflow-hidden border-b border-line-soft px-2 py-1 text-xs", phone && "border-b-0 text-sm", hl === trackKey(tr) && "bg-accent-bg")}>
       <div className="flex items-center gap-1.5">
         <span className="size-2 flex-none rounded-full" style={{ background: COLORS[tr.k] }} />
         <span className="min-w-0 flex-1 truncate font-semibold" title={missing(tr) ? t('Part removed: this track will not be exported') : undefined}>
           {trackName(tr as { k: TrackKind; pin?: number })}
         </span>
-        <input type="checkbox" aria-label={t('Enabled')} checked={tr.on !== false} onChange={(e) => editTrack(i)((e.currentTarget.checked ? (({ on: _on, ...r }) => r)(tr) : { ...tr, on: false }) as ScenarioTrack, 0)} className={cn("cursor-pointer", phone && "m-3 size-5")} />
-        <button type="button" aria-label={t('Delete track')} title={t('Delete track')} onClick={() => (setSel(null), put({ ...sc, tracks: sc.tracks.filter((_, j) => j !== i) }, 0))} className={cn("cursor-pointer px-0.5 text-muted hover:text-bad-ink", phone && "size-11 text-lg")}>
+        <input type="checkbox" aria-label={t('Enabled')} checked={tr.on !== false} onChange={(e) => editTrack(i)((e.currentTarget.checked ? (({ on: _on, ...r }) => r)(tr) : { ...tr, on: false }) as ScenarioTrack, 0, t('Edit scenario'))} className={cn("cursor-pointer", phone && "m-3 size-5")} />
+        <button type="button" aria-label={t('Delete track')} title={t('Delete track')} onClick={() => (setSel(null), put({ ...sc, tracks: sc.tracks.filter((_, j) => j !== i) }, 0, t('Delete track')))} className={cn("cursor-pointer px-0.5 text-muted hover:text-bad-ink", phone && "size-11 text-lg")}>
           ×
         </button>
       </div>
-      <span className={cn('font-mono', missing(tr) ? 'text-warn-ink' : 'text-muted')}>{missing(tr) ? t('Part removed: this track will not be exported') : current(tr, now, f.shown)}</span>
+      <span className={cn('truncate font-mono', missing(tr) ? 'text-warn-ink' : 'text-muted')}>{missing(tr) ? t('Part removed: this track will not be exported') : current(tr, now, f.shown)}</span>
+    </div>
+  );
+  const zi = ZOOMS.indexOf(zoom);
+  const viewCtl = (
+    <div id="scenView" className={cn('flex flex-none flex-wrap items-center gap-1.5', phone ? 'px-2 py-1.5' : 'border-t border-line-soft px-3 py-1')}>
+      <button type="button" id="scenFollow" aria-pressed={follow} onClick={() => setFollow(!follow)} className={cn(ctl(phone), 'aria-pressed:border-accent-line aria-pressed:text-accent-ink')}>
+        ▶ {t('Follow run')}
+      </button>
+      <span className="ml-1 text-muted">{t('Zoom')}</span>
+      <button type="button" id="scenZoomOut" aria-label={t('Zoom out')} disabled={zi <= 0} onClick={() => zoomTo(ZOOMS[zi - 1])} className={cn(ctl(phone), phone ? 'w-11' : 'w-7')}>
+        −
+      </button>
+      <span className="w-8 text-center font-mono text-muted">{zoom}×</span>
+      <button type="button" id="scenZoomIn" aria-label={t('Zoom in')} disabled={zi >= ZOOMS.length - 1} onClick={() => zoomTo(ZOOMS[zi + 1])} className={cn(ctl(phone), phone ? 'w-11' : 'w-7')}>
+        ＋
+      </button>
+      <button type="button" id="scenFit" disabled={zoom === 1} onClick={() => zoomTo(1)} className={ctl(phone)}>
+        {t('Fit')}
+      </button>
+      {!phone && <span className="ml-2 min-w-0 truncate text-muted">{t('Double-click a lane to add a keyframe; drag to move it (snaps to {ms} ms)', { ms: SNAP_MS })}</span>}
     </div>
   );
   const selTr = sel ? sc.tracks[sel.ti] : null;
+  const selSet = (tr: ScenarioTrack, at: number, label?: string) => sel && editTrack(sel.ti)(tr, at, label ?? t('Edit keyframe'));
   return (
     <div id="scenPane" className="flex min-h-0 flex-1 flex-col text-xs">
       <div className={cn('flex flex-wrap items-center gap-2 border-b border-line-soft px-3 py-1.5', phone && 'gap-1.5 px-2')}>
@@ -395,7 +458,7 @@ export function ScenarioPane({ phone }: { phone?: boolean }) {
           value=""
           onChange={(e) => {
             const id = e.currentTarget.value as PresetId;
-            if (id) put(applyPreset(sc, id, playAt, f.offered), playAt);
+            if (id) put(applyPreset(sc, id, playAt, f.offered), playAt, presetLabel(id));
           }}
           className={ctl(phone)}
         >
@@ -414,7 +477,7 @@ export function ScenarioPane({ phone }: { phone?: boolean }) {
             const a = addable[Number(e.currentTarget.value)];
             if (!a) return;
             const v0 = a.k === 'temp' ? 24 : a.k === 'hum' ? 45 : a.k === 'press' ? 101325 : a.k === 'lux' ? 300 : a.k === 'dist' ? 100 : 1650;
-            put({ ...sc, tracks: [...sc.tracks, newTrack(a.k, a.pin, v0)] }, sc.len);
+            put({ ...sc, tracks: [...sc.tracks, newTrack(a.k, a.pin, v0)] }, sc.len, t('Add track'));
             setCur(sc.tracks.length);
           }}
           className={ctl(phone)}
@@ -447,7 +510,7 @@ export function ScenarioPane({ phone }: { phone?: boolean }) {
             if (!fl) return;
             try {
               setSel(null);
-              put(parseScenario(JSON.parse(await fl.text())), 0);
+              put(parseScenario(JSON.parse(await fl.text())), 0, t('Import scenario JSON…'));
               setMsg('');
             } catch (err) {
               setMsg(String(err));
@@ -465,7 +528,7 @@ export function ScenarioPane({ phone }: { phone?: boolean }) {
             key={sc.len}
             onBlur={(e) => {
               const s = e.currentTarget.valueAsNumber;
-              if (Number.isFinite(s)) put({ ...sc, len: Math.max(1000, Math.min(SCENARIO_MAX_MS, Math.round(s) * 1000)) }, sc.len);
+              if (Number.isFinite(s)) put({ ...sc, len: Math.max(1000, Math.min(SCENARIO_MAX_MS, Math.round(s) * 1000)) }, sc.len, t('Length (s)'));
             }}
             onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
             className={cn(ctl(phone), 'w-16 cursor-text font-mono')}
@@ -476,6 +539,11 @@ export function ScenarioPane({ phone }: { phone?: boolean }) {
         </span>
         {msg && <span className="text-muted">{msg}</span>}
       </div>
+      {f.replay && (
+        <div role="status" id="scenReplayWarn" className="border-b border-line-soft bg-warn-bg px-3 py-1.5 text-warn-ink">
+          {t("Editing the scenario during a replay makes the result differ from the sharer's")}
+        </div>
+      )}
       {f.stale && (
         <div role="status" className="flex flex-wrap items-center gap-2 border-b border-line-soft bg-warn-bg px-3 py-1.5 text-warn-ink">
           <span className="flex-1">{t('Changes take effect after a restart')}</span>
@@ -496,20 +564,31 @@ export function ScenarioPane({ phone }: { phone?: boolean }) {
               </button>
             ))}
           </div>
-          {sc.tracks[ti] && row(sc.tracks[ti], ti, 160, head(sc.tracks[ti], ti))}
+          {sc.tracks[ti] && head(sc.tracks[ti], ti)}
+          <div ref={scroller} data-scroller="" className="overflow-x-auto overflow-y-hidden border-t border-line-soft">
+            {sc.tracks[ti] && lane(sc.tracks[ti], ti, 160)}
+          </div>
+          {viewCtl}
           <div className="flex flex-wrap items-center gap-2 px-2 py-1.5">
-            <button type="button" id="scenAddKf" onClick={() => sc.tracks[ti] && editTrack(ti)(addItem(sc.tracks[ti], playAt), playAt)} className={ctl(true)}>
+            <button type="button" id="scenAddKf" onClick={() => sc.tracks[ti] && editTrack(ti)(addItem(sc.tracks[ti], playAt), playAt, t('Add keyframe'))} className={ctl(true)}>
               {t('Add keyframe at {t} s', { t: sec(playAt) })}
             </button>
           </div>
-          {selTr && sel!.ti === ti && <SelRow tr={selTr} i={sel!.i} phone sc={sc} set={editTrack(sel!.ti)} />}
+          {selTr && sel!.ti === ti && <SelRow tr={selTr} i={sel!.i} phone sc={sc} set={selSet} />}
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto">
-          {sc.tracks.map((tr, i) => row(tr, i, 44, head(tr, i)))}
-          {selTr && <SelRow tr={selTr} i={sel!.i} sc={sc} set={editTrack(sel!.ti)} />}
-          <p className="m-0 px-3 py-1 text-muted">{t('Double-click a lane to add a keyframe; drag to move it (snaps to {ms} ms)', { ms: SNAP_MS })}</p>
-        </div>
+        <>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="flex">
+              <div className="w-40 flex-none border-r border-line-soft">{sc.tracks.map((tr, i) => head(tr, i))}</div>
+              <div ref={scroller} data-scroller="" className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
+                <div style={{ width: laneW }}>{sc.tracks.map((tr, i) => lane(tr, i, 44))}</div>
+              </div>
+            </div>
+            {selTr && <SelRow tr={selTr} i={sel!.i} sc={sc} set={selSet} />}
+          </div>
+          {viewCtl}
+        </>
       )}
     </div>
   );

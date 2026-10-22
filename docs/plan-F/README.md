@@ -38,7 +38,7 @@
 | 波 4 F-10a2 CYD | ☑ | 2026-10-20 `firmware/esp32-cyd`（esp_lcd_ili9341，HSPI SCLK 14 / MOSI 13 / CS 15 / DC 2，背光 21，RST 接 EN）出四色带 + 角标 + 边框，逐区像素数与 c3-ili9341 相同；板预设 `--board cyd`；XPT2046 触摸模型（`--spi xpt2046[@cs=,irq=]`，经典 ESP32 HSPI / VSPI，全双工 / 半双工 / 跨传输流水读法都对）+ `esp32-cyd-touch` 用例；原始值量程按教程标定估算；网页未接 |
 | 波 4 F-10c 经典 ESP32 RMT 收 + 载波 + 红外 | ☑ | 2026-10-20 `rmt.rs` 经典布局加接收和载波（C3 / S3 不变）；`devices/ir.rs` NEC 遥控 + 红外 LED 眼睛；`--ir RX[,TX]`、动作 `ir=`（脚本和 `--inputs` 都可用）；`esp32-ir` 进 accept；`rmt_unmodelled` 只剩 APB FIFO；golden 22/22 一致；网页未接 |
 | 波 4 F-08b Arduino 库矩阵（Wi-Fi、BLE、舵机、灯带） | ◐ | 2026-10-20 10 个草图（FastLED / WiFiManager / PubSubClient / NimBLE-Arduino / ESP32Servo / IRremote + 核心 WiFi / HTTPClient / BLE / WebServer）在 C3 编译；9 个 `arduino-lib-*` 用例通过（矩阵见 STATUS「Arduino 库矩阵（F-08b）」）；PubSubClient 缺虚拟 MQTT broker、NimBLE-Arduino 卡在虚拟控制器不答厂商命令 0xfc01，两项都要改 core；ESP32Servo / IRremote 只进本地 accept |
-| F-11 环境脚本时间轴（第一步交互稿 ☑；第二步主干 ☑ 2026-10-21，见 Reviews/ab/F-11.md；剩撤销接入等小项） | ◐ | 2026-10-20 交互稿待人审：`F-11-timeline.md` + `F-11-timeline.html`；界面名暂定「环境脚本」（避开时间线 / 运行记录）；只用已有输入动作，CLI 不改；9 个未决问题在稿子 §9 |
+| F-11 环境脚本时间轴（第一步交互稿 ☑；第二步主干 ☑ 2026-10-21，见 Reviews/ab/F-11.md；F-11c 收尾 ☑ 2026-10-21，见 Reviews/ab/F-11c.md） | ☑ | 2026-10-20 交互稿待人审：`F-11-timeline.md` + `F-11-timeline.html`；界面名暂定「环境脚本」（避开时间线 / 运行记录）；只用已有输入动作，CLI 不改；9 个未决问题在稿子 §9 |
 
 ## 调研结论汇总
 

@@ -12,6 +12,7 @@ import type { BenchCtx } from "./ctx";
 import { partInfo } from "../wiring";
 import { isTutorialPart } from "../../bench3d/parts3d";
 import { tutorialControls } from "./tutorial";
+import { ScenHint } from "./scenhint";
 
 export function mountOrientation(b: BenchCtx) {
   const POSE_AXES: ["pitch" | "roll" | "yaw", string, number][] = [
@@ -82,6 +83,7 @@ export function mountOrientation(b: BenchCtx) {
     return (
       <KvBox key={a.pin}>
         <span className="k">{t(a.label)}</span>
+        <ScenHint k={`mv:${a.pin}`} />
         <Slider
           min={0}
           max={a.max_mv}

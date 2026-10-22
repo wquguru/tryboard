@@ -65,6 +65,10 @@ export interface ShareReplay {
 let replaying: ShareReplay | null = null;
 /** The paced replay of the last restoreShare, while it has not ended */
 export const shareReplay = () => replaying;
+const setReplaying = (r: ShareReplay | null) => {
+  replaying = r;
+  scenFeed.set({ replay: !!r });
+};
 
 /** ?replay=1 on /app or /embed: play the shared actions at their original speed instead of fast-forwarding */
 export const wantsPaced = (search: string) => new URLSearchParams(search).get('replay') === '1';
@@ -83,7 +87,7 @@ async function fastForward(ctx: StepCtx, job: SeekJob) {
 /** After the session is up: wire mods, heat, firmware, then re-power and fast-forward through the shared input log (paced: play it at its original speed, F-03b).
  * own = the user's bin from a .tryboard file (F-01b, checked against state.bin when the file was opened) */
 export async function restoreShare(ctx: StepCtx, sh: OpenedShare, own?: { buf: ArrayBuffer; name: string } | null, paced = false): Promise<Snapshot | null> {
-  replaying = null;
+  setReplaying(null);
   const { session, shell, store } = ctx;
   const st = sh.state;
   const notes: string[] = [t('Opened a shared bench: this is a local copy, your own work is untouched')];
@@ -128,13 +132,13 @@ export async function restoreShare(ctx: StepCtx, sh: OpenedShare, own?: { buf: A
             endMs: job.untilMs,
             done,
             skip: () => {
-              replaying = null;
+              setReplaying(null);
               return fastForward(ctx, job);
             },
           };
-          replaying = r;
+          setReplaying(r);
           void done.then((end) => {
-            if (replaying === r) replaying = null;
+            if (replaying === r) setReplaying(null);
             if (end) restored(end, job.untilMs, true);
           });
           session.continueRun();

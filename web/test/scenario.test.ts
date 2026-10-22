@@ -2,7 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fromScript, toScriptBody, type InputEvent } from '../src/inputlog.ts';
-import { applyPreset, benchTracks, compileScenario, GRID_MS, MIN_GAP_MS, parseScenario, quantize, SCENARIO_MAX_MS, trackKey, valueAt, type ScenarioV1 } from '../src/app/scenario.ts';
+import { applyPreset, benchTracks, compileScenario, GRID_MS, MIN_GAP_MS, parseScenario, quantize, SCENARIO_MAX_MS, scenarioAt, scenarioStaleAt, trackKey, valueAt, type ScenarioV1 } from '../src/app/scenario.ts';
+import { truncate, type BenchStep } from '../src/app/history.ts';
 
 const ROOM = { temp: 23.5, humidity: 45, pressure: 101325 };
 const SC: ScenarioV1 = {
@@ -117,4 +118,39 @@ test('presets add tracks the bench offers and grow the length', () => {
   assert.deepEqual(sc.tracks[2], { k: 'btn', pin: 9, presses: [[29000, 3000]] });
   assert.equal(applyPreset(sc, 'sunset', 0, offered).tracks.length, 3);
   assert.deepEqual(parseScenario(sc), sc);
+});
+
+test('undo / redo walks scenario edits on the bench timeline and keeps the compiled events (F-11c)', () => {
+  const A = applyPreset({ len: 30000, tracks: [] }, 'ac', 0, [{ k: 'temp' }]);
+  const B: ScenarioV1 = { ...A, tracks: [...A.tracks, { k: 'pir', spans: [[2000, 3000]] }] };
+  const steps: BenchStep[] = [
+    { op: { k: 'run', n: 1 }, run: 1, tMs: 0 },
+    { op: { k: 'scenario', sc: A, prev: null, label: 'ac' }, run: 1, tMs: 100 },
+    { op: { k: 'env', env: ROOM }, run: 1, tMs: 200 },
+    { op: { k: 'scenario', sc: B, prev: A, label: 'add' }, run: 1, tMs: 300 },
+  ];
+  const ops = steps.map((s) => s.op);
+  // Before the first edit: what that edit replaced; after it: the last edit at or before the step
+  assert.equal(scenarioAt(ops, 0), null);
+  assert.equal(scenarioAt(ops, 1), A);
+  assert.equal(scenarioAt(ops, 2), A);
+  assert.equal(scenarioAt(ops, 3), B);
+  assert.equal(scenarioAt([{ k: 'run' }], 0), undefined);
+  // Undo to step 2 then redo to 3: the restored scenario compiles to the same events, and survives the share JSON
+  const back = scenarioAt(ops, 3)!;
+  assert.deepEqual(compileScenario(back, ROOM), compileScenario(B, ROOM));
+  assert.deepEqual(parseScenario(JSON.parse(JSON.stringify(scenarioAt(ops, 2)))), A);
+  // A new edit after undo drops the redo branch
+  const C: ScenarioV1 = { ...A, len: 40000 };
+  const cut = truncate(steps, [], 2).steps;
+  cut.push({ op: { k: 'scenario', sc: C, prev: A, label: 'len' }, run: 1, tMs: 400 });
+  const ops2 = cut.map((s) => s.op);
+  assert.equal(ops2.length, 4);
+  assert.equal(scenarioAt(ops2, 3), C);
+  assert.equal(scenarioAt(ops2, 2), A);
+  // Restart banner: the edit's own flag within its run, cleared by a later run
+  const past = { k: 'scenario', sc: C, prev: A, label: 'move', stale: true };
+  assert.equal(scenarioStaleAt([...ops2, past], 4), true);
+  assert.equal(scenarioStaleAt([...ops2, past], 3), false);
+  assert.equal(scenarioStaleAt([...ops2, past, { k: 'run' }], 5), false);
 });
