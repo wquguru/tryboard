@@ -106,6 +106,23 @@ export const BENCH_PARTS: Part[] = [
     todo: ['currentMa: depends on the series resistor; long-range boards add a transistor driver'],
     note: 'A GPIO drives the LED directly, so the range is short (about 1 m). On the bench the LED faces the receiver and an eye decodes the NEC frames it sends. Not calibrated on real hardware.',
   }),
+  P({
+    id: 'ir-remote-nec21',
+    name: '21-key IR remote (NEC, address 0x00)',
+    kind: 'input',
+    model: 'Common 21-key "Car MP3" NEC remote, CR2025 coin cell',
+    pins: null,
+    voltage: { supply: [3, 3], logic: null },
+    currentMa: { typ: 0, peak: 0, est: true, source: 'Runs on its own coin cell, draws nothing from the board' },
+    sizeMm: [86, 40, 7],
+    sim: { level: 'verified', model: 'ir' },
+    price: [2, 6],
+    keywords: '红外遥控器 21键 NEC 迷你 MP3 遥控', // lint: allow-cjk
+    sources: ['NEC IR protocol timing (public)', 'Seller listings for 21-key Car MP3 remotes (key codes)'],
+    todo: ['sizeMm: outline varies by seller'],
+    na: ['pins: wireless, no electrical pins', 'voltage.logic: not wired to the board'],
+    note: 'Key codes: power / CH- 0x45, VOL+ 0x15, VOL- 0x07, digits 1–9 0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A. Most VS1838B kits already include one; buy it alone if yours did not.',
+  }),
   // F-04a2 bare TFT modules (core soc/devices/dcs.rs, F-04b); the 1.54″ ST7789 240×240 entry stays in parts.ts
   P({
     id: 'ili9341',

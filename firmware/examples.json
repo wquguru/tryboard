@@ -1596,6 +1596,34 @@
   }
  },
  {
+  "id": "s3-irlamp",
+  "chip": "esp32s3",
+  "title": "IR remote night light: VS1838B + WS2812 strip",
+  "about": "An assembled ESP32-S3 build. A VS1838B-class IR receiver with OUT on GPIO4 is read by RMT receive (1 MHz) and decoded as NEC; the 8-LED WS2812 strip from the knob lamp has DIN on GPIO5 (RMT transmit, level-shifted to 5 V by a 74AHCT125, strip powered from an external 5 V). The common 21-key NEC remote (address 0x00) drives it: digits 1–9 (0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A) pick red, green, blue, yellow, cyan, purple, pink, warm white, white; VOL+ (0x15) / VOL- (0x07) step brightness through 8 levels, and holding them sends repeat codes that keep ramping; CH- (0x45, the power key on remotes that label it so) switches the light on and off. Serial prints every code, the new state and a strip current estimate (1 mA idle per LED + 20 mA per colour channel at full: about 488 mA at full white, an estimate, not measured). Press keys on the bench remote.",
+  "tags": [
+   "✓ Verified in sim",
+   "IR",
+   "RMT",
+   "WS2812",
+   "ESP-IDF 5.5"
+  ],
+  "pins": {
+   "strip": 5
+  },
+  "scene": {
+   "parts": [
+    {
+     "type": "ws2812",
+     "pin": 5
+    },
+    {
+     "type": "irrx",
+     "pin": 4
+    }
+   ]
+  }
+ },
+ {
   "id": "c3-ili9341-temp",
   "title": "Temperature screen: DS18B20 on a 2.4″ ILI9341 colour TFT (ESP32-C3)",
   "about": "A bare 2.4″ ILI9341 module on the fixed SPI2 LCD pins (SCLK GPIO6, MOSI GPIO7, CS GPIO10, DC GPIO5, RST GPIO4, backlight GPIO3) and a DS18B20 probe on GPIO1 (GPIO4 is taken by the screen reset). The firmware reads the probe four times a second with its own 1-Wire driver and redraws the 240×320 screen only when the reading changes: big seven-segment digits, blue below 15 ℃, green, red above 28 ℃, and a −10…40 ℃ bar. Drag the temperature slider to watch the screen follow.",

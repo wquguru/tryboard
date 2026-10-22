@@ -928,5 +928,14 @@ const d: Dict = {
   "Strike open (relay on)": "电锁打开（继电器吸合）",
   "Locked (relay off)": "已上锁（继电器断开）",
   "Starting firmware ({chip})…": "正在启动固件（{chip}）…",
+
+  // G-04 IR night light template and parts
+  "IR remote night light": "红外遥控小夜灯",
+  "Receives the remote: OUT on GPIO4, powered from 3V3": "接收遥控器：OUT 接 GPIO4，由 3V3 供电",
+  "Digits pick a colour, VOL+ / VOL- set brightness, CH- (0x45) switches on and off": "数字键选颜色，VOL+ / VOL- 调亮度，CH-（0x45）开关灯",
+  "Lamp base and frosted shade (receiver window in the base)": "灯座和磨砂灯罩（灯座上开接收窗）",
+  "21-key IR remote (NEC, address 0x00)": "21 键红外遥控器（NEC，地址 0x00）",
+  "Common 21-key \"Car MP3\" NEC remote, CR2025 coin cell": "常见 21 键「Car MP3」NEC 遥控器，CR2025 纽扣电池",
+  "Key codes: power / CH- 0x45, VOL+ 0x15, VOL- 0x07, digits 1–9 0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A. Most VS1838B kits already include one; buy it alone if yours did not.": "键码：电源 / CH- 0x45，VOL+ 0x15，VOL- 0x07，数字 1–9 为 0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A。多数 VS1838B 套件已经带一个；没带的话单独买。",
 };
 export default d;

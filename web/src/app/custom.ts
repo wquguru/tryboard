@@ -116,6 +116,8 @@ function wiresFor(partId: string, pins: number[][]): Wire[] {
       return G(p[0]) ? [...w('VCC', '3V3'), ...w('DATA', G(p[0])), ...w('GND', 'GND')] : [];
     case 'led-kit':
       return G(p[0]) ? [...w('长脚 +', G(p[0])), ...w('短脚 -', 'GND')] : []; // lint: allow-cjk
+    case 'vs1838b':
+      return G(p[0]) ? [...w('OUT', G(p[0])), ...w('GND', 'GND'), ...w('VCC', '3V3')] : [];
     case 'relay-1ch':
       return G(p[0]) ? [...w('VCC', '5V'), ...w('GND', 'GND'), ...w('IN', G(p[0]))] : [];
     case 'rc522': {
@@ -143,7 +145,7 @@ export function customPlan(search: string): CustomPlan {
   const chips = getPart(boardId).chips;
   const chip = chips.includes('esp32s3') ? 'esp32s3' : chips.includes('esp32') ? 'esp32' : 'esp32c3';
 
-  // Only modelled parts get pins (PIR, IR etc. stay off the bench and take no pins).
+  // Only modelled parts get pins (PIR, IR LED etc. stay off the bench and take no pins).
   const modeled = parts.filter((p) => PART_MAP[p] && ADV_PARTS[p].needs.length);
   const pins = pinsByPart(benchAdvisor, modeled);
 

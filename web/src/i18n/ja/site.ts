@@ -928,5 +928,14 @@ const d: Dict = {
   "Strike open (relay on)": "電気錠オープン（リレー ON）",
   "Locked (relay off)": "施錠中（リレー OFF）",
   "Starting firmware ({chip})…": "ファームウェアを起動中（{chip}）…",
+
+  // G-04 IR night light template and parts
+  "IR remote night light": "赤外線リモコンのナイトライト",
+  "Receives the remote: OUT on GPIO4, powered from 3V3": "リモコンを受信：OUT は GPIO4、3V3 給電",
+  "Digits pick a colour, VOL+ / VOL- set brightness, CH- (0x45) switches on and off": "数字キーで色、VOL+ / VOL- で明るさ、CH-（0x45）でオン / オフ",
+  "Lamp base and frosted shade (receiver window in the base)": "ランプ台座とすりガラス調シェード（台座に受信窓）",
+  "21-key IR remote (NEC, address 0x00)": "21 キー赤外線リモコン（NEC、アドレス 0x00）",
+  "Common 21-key \"Car MP3\" NEC remote, CR2025 coin cell": "一般的な 21 キー「Car MP3」NEC リモコン、CR2025 コイン電池",
+  "Key codes: power / CH- 0x45, VOL+ 0x15, VOL- 0x07, digits 1–9 0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A. Most VS1838B kits already include one; buy it alone if yours did not.": "キーコード：電源 / CH- 0x45、VOL+ 0x15、VOL- 0x07、数字 1–9 は 0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A。VS1838B キットの多くに付属；付いていなければ単品で購入。",
 };
 export default d;

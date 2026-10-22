@@ -1616,3 +1616,14 @@
 - 示例 id 用 `c3-door`（固件目录名 = 示例 id），作品 `door` 的 `example: 'c3-door'`；catalog.test.ts 的 toScene / 引脚对照按 door → c3-door 查示例
 - 阶段一不给作品加首页卡片（`card`）：首页卡片要 views/templates.ts 的产品视图，没有时会走 showcase 的旧分支出错；产品页对没有 TEMPLATES 的作品已有「没有成品」兜底
 - 备选：SH1106 和 RC522 共用 SPI（SH1106 SPI 版）——否：目录里的 sh1106 是 I2C 模块；换 xiao-c3 板——否：DevKitM-1 引脚多，c3-rc522 已用它
+
+## 2026-10-22 G-04：红外遥控小夜灯（`irlamp`）的引脚、键码表、功耗检查和零件（自主实现决定，阶段一）
+- 芯片 S3，复用 lamp 的灯带（DIN=GPIO5 经 74AHCT125、外部 5 V）和外壳；红外接收头 OUT=GPIO4（与 lamp 的 5 / 6 / 7 / 15 不冲突，S3 上不是 strapping / USB / 日志脚），VCC 接 3V3 让 OUT 保持 3.3 V
+- 键码表照实验台遥控器（web/src/app/irfeed.ts，常见 21 键「Car MP3」NEC 遥控器，地址 0x00）：数字 1–9 = 0x0C 0x18 0x5E 0x08 0x1C 0x5A 0x42 0x52 0x4A，VOL+ 0x15，VOL- 0x07，开关 0x45。0x45 在 Car MP3 款上印的是 CH-，在另一种 21 键款上印的是电源键（那款 VOL+ / VOL- 是 0x09 / 0x15，与本表冲突，所以只按 Car MP3 款）；阶段二网页需要把这个键标成「电源 / CH-」或在产品页说明
+- 9 色：红 绿 蓝 黄 青 紫 粉 暖白 白；上电 = 开、8 暖白、亮度 4/8；每通道 = 颜色值 × L / 8（满档 = 原色，便于功耗检查用 #FFFFFF）；重复码只对 VOL+ / VOL- 生效
+- 功耗检查（irlamp-4）：现有关卡没有外接灯带电流的检查手段（电气模型不算 WS2812），所以固件每发一帧打印「电流估算 I mA」，I = 8 + 8 × (R+G+B) × 20 / 255（每灯静态 1 mA + 每通道满值 20 mA），关卡用 expect 精确匹配 8 mA / 488 mA，并用 WS2812 最后一帧（8 颗 #FFFFFF）校验这个估算对应的帧确实发出；pass 文案注明是估算。不新增检查类型，免得 check.py / checks.ts 两边改
+- 四个检查点都用同一个参考固件 s3-irlamp（同 door）；不加 STAGE 分阶段构建
+- 零件：接收头沿用已有的 `vs1838b`（不另建 id）；新增 `ir-remote-nec21`（无引脚、自带 CR2025），采购模板 irlamp 把它列为必需，零件说明里提示多数 VS1838B 套件已附带。顾问 `PART_MAP.irrx` → `vs1838b`（移出 EXAMPLE_ONLY），custom.ts `wiresFor` 补接线（OUT / GND / VCC=3V3）；templates.ts `toScene` 认 vs1838b → `irrx` 场景件
+- `--ir` 已经经 partsdev.ts 进 npm 包的 bootOptions，cli.ts / check_config.py 不用改
+- 阶段一不加首页卡片（同 G-03）
+- 备选：C3 版——否：lamp 外壳和灯带模板都是 S3（s3-devkitc1-v10），复用最省；VOL± 用 100+ / 200+——否：实验台遥控器 VOL± 标得清楚
