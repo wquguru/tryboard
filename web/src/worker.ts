@@ -76,6 +76,9 @@ function pinDevFrame(e: Exports): PinDevFrame | undefined {
 let simAnchor = 0; // sim cycle when timing started
 let wallAnchor = 0;
 const decoder = new TextDecoder();
+// Serial bytes arrive per tick; streaming keeps a UTF-8 char split across ticks intact
+let conDec = new TextDecoder();
+const conText = (e: Exports, len: number) => conDec.decode(new Uint8Array(e.memory.buffer, e.tb_console_ptr(), len), { stream: true });
 /** On-board WS2812 pin (C3 GPIO8, S3 GPIO48) and pin count, set per chip after boot. */
 let LED_PIN = 8;
 let NPINS = 22;
@@ -353,7 +356,7 @@ function loopSlice(gen: number) {
     ratioSim = e.tb_cycles();
   }
   const len = e.tb_console_len();
-  const text = len ? decoder.decode(new Uint8Array(e.memory.buffer, e.tb_console_ptr(), len)) : '';
+  const text = len ? conText(e, len) : '';
   e.tb_console_clear();
   keepStdout(text);
   const ui = !pageHidden || stop !== 0 || now - uiPosted >= HIDDEN_POST_MS;
@@ -632,6 +635,7 @@ function cached(m: BootMsg) {
 async function bootWasm(m: BootMsg): Promise<Exports | null> {
   // A fresh instance every time (seek semantics); only the compiled module and the source bytes are reused
   const instance = await WebAssembly.instantiate(m.wasm, {});
+  conDec = new TextDecoder();
   const e = instance.exports as unknown as Exports;
   const { rom, flash } = cached(m);
   const rp = copyIn(e, rom);
@@ -965,7 +969,7 @@ function seekTo(e: Exports, events: InputEvent[], untilMs: number) {
     const stop = e.tb_run(CPU_HZ / 1000);
     drainIo(e);
     const len = e.tb_console_len();
-    if (len) keepStdout(decoder.decode(new Uint8Array(e.memory.buffer, e.tb_console_ptr(), len)));
+    if (len) keepStdout(conText(e, len));
     e.tb_console_clear();
     if (stop !== 0) break;
     const now = performance.now();

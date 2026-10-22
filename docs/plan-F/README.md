@@ -16,7 +16,7 @@
 | 评估 | ☑ | `EVAL.md` |
 | 波 0 调研 RS-1 … RS-6 | ☑ | 2026-10-20 完成，六份报告在 `research/` |
 | 调研汇总 → 改写波次计划 | ☑ | `EVAL.md` §5.2–5.4 已修订：约 28 个实现 session、5 波 |
-| F 批写入 PLAN.md、开工实现 | ◐ | 2026-10-20 人确认开工；波 1 ☑（`Reviews/batch-F1.md`）；波 2 ☑（`Reviews/batch-F2.md`）；波 3 ☑（`Reviews/batch-F3.md`：F-04b、F-04e、F-08c、F-08a、F-03b）；波 4 ☑（`Reviews/batch-F4.md`：F-04a2、F-10a2、F-10c、F-09a-1、F-08b；F-11 交互稿待人审）；波 5 ☑（`Reviews/batch-F5.md`：F-09a-2；2026-10-21 按 EVAL.md §2 复评 3.0 → 3.4，见 §7）；波 6 ☑（`Reviews/batch-F6.md`：F-09b-0、F-07b、F-11 第二步主干、F-09b-1、F-09b-2；人授权 AI 代决；复评 3.4 → 3.5，见 EVAL.md §8）；波 7 ☑（`Reviews/batch-F7.md`：F-07c、F-09c、F-11c，F-11 全部完成） |
+| F 批写入 PLAN.md、开工实现 | ◐ | 2026-10-20 人确认开工；波 1 ☑（`Reviews/batch-F1.md`）；波 2 ☑（`Reviews/batch-F2.md`）；波 3 ☑（`Reviews/batch-F3.md`：F-04b、F-04e、F-08c、F-08a、F-03b）；波 4 ☑（`Reviews/batch-F4.md`：F-04a2、F-10a2、F-10c、F-09a-1、F-08b；F-11 交互稿待人审）；波 5 ☑（`Reviews/batch-F5.md`：F-09a-2；2026-10-21 按 EVAL.md §2 复评 3.0 → 3.4，见 §7）；波 6 ☑（`Reviews/batch-F6.md`：F-09b-0、F-07b、F-11 第二步主干、F-09b-1、F-09b-2；人授权 AI 代决；复评 3.4 → 3.5，见 EVAL.md §8）；波 7 ☑（`Reviews/batch-F7.md`：F-07c、F-09c、F-11c，F-11 全部完成）；波 8 ☑（`Reviews/batch-F8.md`：F-07d、F-11d、F-03c、F-08d；串口 UTF-8 跨 tick 乱码修复） |
 | 波 2 F-01b `.tryboard` 文件 | ☑ | 2026-10-20 ⋯「下载 .tryboard 文件」+ 换固件 / 拖到页面打开；自带 bin 带 sha256 校验；share.mjs 17/17；`Reviews/ab/F-01b.md` |
 | 波 2 F-02 分享卡 | ☑ | 2026-10-20 自写 QR（v1–40、ECC M）+ 1080×1350 卡片，MP4 优先、退 webm，另出 PNG；修 Safari 录屏扩展名；sharecard.mjs 15/15；`Reviews/ab/F-02.md` |
 | 波 2 F-03 嵌入页 | ☑ | 2026-10-20 `/embed?s=` 点击加载、不写 localStorage；embed.mjs 19/19；`_headers` 的 frame-ancestors 需部署后验证；F-03b 原速回放未做；`Reviews/ab/F-03.md` |
