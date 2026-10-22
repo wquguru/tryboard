@@ -40,6 +40,10 @@
 #define TFT_BL 15
 #define TFT_HOST_NAME "SPI2"
 #endif
+// Common ILI9341 modules bond the glass columns reversed: MX=1 is upright portrait (IDF spi_lcd_touch always mirrors X)
+#ifndef TFT_MIRROR_X
+#define TFT_MIRROR_X 0
+#endif
 // 40 lines (19200 bytes) per draw: 8 transfers per frame, small enough for C3 internal RAM
 #define TFT_CHUNK 40
 
@@ -93,6 +97,9 @@ static void tft_init(void)
     ESP_ERROR_CHECK(esp_lcd_panel_reset(tft_panel));
     ESP_ERROR_CHECK(esp_lcd_panel_init(tft_panel));
     ESP_ERROR_CHECK(esp_lcd_panel_invert_color(tft_panel, TFT_INVERT));
+#if TFT_MIRROR_X
+    ESP_ERROR_CHECK(esp_lcd_panel_mirror(tft_panel, true, false));
+#endif
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(tft_panel, true));
     gpio_config_t bl = {.pin_bit_mask = 1ULL << TFT_BL, .mode = GPIO_MODE_OUTPUT};
     ESP_ERROR_CHECK(gpio_config(&bl));

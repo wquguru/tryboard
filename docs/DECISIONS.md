@@ -1527,3 +1527,9 @@
 - S3：`firmware/arduino/ir-nec-rmt/boards.txt` 加 `s3` 变体（`build_arduino.sh` 支持变体名 `-` = 不加后缀，C3 目录名不变），accept 新用例 `arduino-ir-nec-rmt-s3`。S3 固件直接解出 2 帧，RMT 模型未改。
 - parts.mjs 的 CLI 对拍参数加 `--ws2812-log`：网页报告总列出 WS2812 解码器（RMT TX 脚会挂一个 0 帧的），其它网页测试早已这样做；判定未放宽。
 - 备选：遥控器做成独立的「遥控器」零件（多一种零件、无引脚，放弃，按键放在接收头卡片里）；解码显示走 `tb_parts_report` 轮询（每轮要整份报告，放弃）。
+
+## 2026-10-22 F-04b 遗留：ILI9341 玻璃列方向与 GRAM 相反（MADCTL 0x48 为正）
+- 决定：`PanelSpec` 加 `glass_flip_x`（模组玻璃列与 GRAM 列反向绑定），只 ILI9341 为 true；在 `render()` 里把窗口列 `wx` 映射成 `w-1-wx`，GRAM 写入仍按数据手册 MX（列地址顺序）不变，RDDST / 0Bh 回读不受影响。ST7789 / ILI9342C / E / GC9A01 / GC9107 / ST7735S 为 false，行为不变。IDF 验收固件（firmware/common/bare_tft.h 新增 `TFT_MIRROR_X`，c3-ili9341 / c3-ili9341-temp / esp32-cyd 设 1）在 init 后 `esp_lcd_panel_mirror(true, false)`，与 IDF spi_lcd_touch 示例一致；s3-st7789 不设，命令序列字节不变。
+- 依据（三个独立来源一致：竖屏正向需要 MX=1）：Adafruit_ILI9341 1.6.4 `setRotation(0)` = `MADCTL_MX | MADCTL_BGR`（0x48，BSD）；TFT_eSPI `TFT_Drivers/ILI9341_Rotation.h` rotation 0（非 M5STACK）= `TFT_MAD_MX | TFT_MAD_COLOR_ORDER`（M5Stack 的 ILI9342C 用 MY | MV，是另一块屏，故 ILI9342 不改）；ESP-IDF v5.5 `examples/peripherals/lcd/spi_lcd_touch` 对 ILI9341 在 init 后无条件 `esp_lcd_panel_mirror(panel, true, false)`，LVGL 旋转 0 也是 mirror(true, false)。数据手册 MX 只定义 GRAM 列地址顺序，不规定玻璃朝向，所以建成模组属性而非控制器属性。LovyanGFX 的 Panel_ILI9341 本地没有副本，未引用。
+- 影响：arduino-lib-ili9341 文字由镜像变为正（颜色质心 x 由 138.7 变 100.3），lcd_regions 新增两个左右不对称区域钉住方向；c3-ili9341 / esp32-cyd / esp32-cyd-touch / c3-ili9341-temp(-hot) 画面与区域不变（固件多发一条 MADCTL：LCD 命令数 +1、SPI 传输 +2），CYD 触摸 60,250 → 像素 60,250 不变；golden 这 6 例重新 save。
+- 备选：不改固件只改模型——否，IDF 固件发 0x08 会在模型里（也在真机上）镜像，c3-ili9341-temp 数字会反；在 `pixel_byte` 里异或 MX——否，会让 GRAM 内容偏离数据手册。

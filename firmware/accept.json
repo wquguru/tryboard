@@ -4405,7 +4405,7 @@
   "lcd_min_pixels": 24005,
   "lcd_regions": [
    {
-    "name": "red rect (mirror-symmetric)",
+    "name": "red rect",
     "x": 20,
     "y": 20,
     "w": 200,
@@ -4423,6 +4423,26 @@
     "color": "#ffffff",
     "min_pixels": 945,
     "max_pixels": 945
+   },
+   {
+    "name": "text starts at the left (x 20-79, not mirrored)",
+    "x": 20,
+    "y": 20,
+    "w": 60,
+    "h": 80,
+    "color": "#ffffff",
+    "min_pixels": 309,
+    "max_pixels": 309
+   },
+   {
+    "name": "no text right of x 171 (mirrored text would end at x 209)",
+    "x": 171,
+    "y": 20,
+    "w": 49,
+    "h": 80,
+    "color": "#ffffff",
+    "min_pixels": 0,
+    "max_pixels": 0
    },
    {
     "name": "blue circle",

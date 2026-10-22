@@ -4,6 +4,7 @@
 #define TFT_NEW_PANEL esp_lcd_new_panel_ili9341
 #define TFT_BGR 1
 #define TFT_INVERT false
+#define TFT_MIRROR_X 1
 #include "bare_tft.h"
 
 void app_main(void)
