@@ -7,6 +7,7 @@ import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { partsArgs, rc522Spec } from '../../web/src/partsdev.ts';
+import { i2cArgs } from '../../web/src/i2cdevs.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dist = path.join(root, 'web/dist');
@@ -19,11 +20,11 @@ const CASES = {
   'c3-pir-relay': { clicks: [['[data-luxset="2"]', '光线 暗'], ['[data-pir="wave"]', '继电器 吸合']], expect: ['光线 暗', '继电器 吸合'], tail: 3.5 },
   'c3-rc522': { clicks: [['[data-card="DEADBEEF"]', '读到卡 UID DE:AD:BE:EF'], ['[data-card="none"]', '卡已移开'], ['[data-card="04A1B2C3D4E5F6"]', '读到卡 UID 04:A1']], expect: ['RC522 版本 0x92 天线 开', '读到卡 UID DE:AD:BE:EF (4 字节) SAK 08 ATQA 0400', '卡已移开', '读到卡 UID 04:A1:B2:C3:D4:E5:F6 (7 字节)'], tail: 1 },
   'c3-ds18b20': { clicks: [], wait: '设备 2 温度', expect: ['总线上共 2 个 DS18B20', '设备 1 温度 23.5000', '设备 2 温度 24.0000'], tail: 1 },
-  // F-04a2 screens: the TFT and SH1106 parts must reach the CLI as --spi ili9341 / --i2c sh1106@0x3c
+  // F-04a2 screens: the TFT and SH1106 parts must reach the CLI as --spi ili9341 / --i2c-bus ...:sh1106@0x3c (P2-16 wired pads)
   'c3-ili9341-temp': { clicks: [], wait: '屏幕显示', expect: ['ILI9341 温度屏启动', '屏幕显示 23.5 °C（舒适）', 'TRYBOARD_OK c3-ili9341-temp'], cli: ['--spi', 'ili9341'], tail: 1 },
   // F-08f IR pair: bench remote key -> RMT RX; `seen` = what the IR LED card shows from the eye (wasm tb_ir_events)
   'esp32-ir': { clicks: [['[data-ir="FF00,BA45"]', 'IR 收到 遥控器 地址=FF00 命令=BA45'], ['[data-ir="repeat"]', 'IR 收到 重复码 地址=FF00 命令=BA45']], expect: ['IR 收到 自己发的 地址=0440 命令=3003', 'IR 收到 遥控器 地址=FF00 命令=BA45', 'IR 收到 重复码 地址=FF00 命令=BA45'], seen: 'NEC address=0x0440 command=0x3003', cli: ['--ir', '19,18'], tail: 1 },
-  'c3-sh1106-pir': { clicks: [['[data-pir="wave"]', '有人经过，第 1 次']], expect: ['SH1106 人体感应屏启动', 'TRYBOARD_OK c3-sh1106-pir', '有人经过，第 1 次'], cli: ['--i2c', 'sh1106@0x3c'], tail: 1 },
+  'c3-sh1106-pir': { clicks: [['[data-pir="wave"]', '有人经过，第 1 次']], expect: ['SH1106 人体感应屏启动', 'TRYBOARD_OK c3-sh1106-pir', '有人经过，第 1 次'], cli: ['--i2c-bus', 'sda=6,scl=7:sh1106@0x3c'], tail: 1 },
 };
 const ids = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(CASES);
 
@@ -121,9 +122,9 @@ for (const id of ids) {
   fs.writeFileSync(path.join(outDir, `parts-${id}-web.report`), web.report || String(web.error));
   // Same --spi / --i2c derivation as inputlog.ts cliArgs (LCD panel first, then RC522)
   const spi = [...(log.lcd || log.spi ? [log.spi ?? 'gc9a01'] : []), ...(rc522Spec(log.parts ?? {}, log.chip) ? [rc522Spec(log.parts ?? {}, log.chip)] : [])];
-  const i2c = (log.i2c ?? []).map((d) => `${d.kind}@0x${d.addr.toString(16)}`);
+  const i2c = i2cArgs(log.i2c ?? []);
   // The web report always lists WS2812 decoders (an RMT TX pin gets one), so the CLI needs --ws2812-log for the same lines
-  const args = ['--seconds', String(SECS), '--gpio-log', '--ws2812-log', ...(i2c.length ? ['--i2c', i2c.join(',')] : []), ...(spi.length ? ['--spi', spi.join(',')] : []), ...partsArgs(log.parts ?? {}), '--inputs', inputsFile];
+  const args = ['--seconds', String(SECS), '--gpio-log', '--ws2812-log', ...i2c, ...(spi.length ? ['--spi', spi.join(',')] : []), ...partsArgs(log.parts ?? {}), '--inputs', inputsFile];
   const r = cliRun(fw, args, id);
   report(`${id}: web replay and CLI fingerprints match`, web.fingerprint === r.fp && !web.error && r.code === 0, `web ${web.fingerprint} / CLI ${r.fp}; CLI ${args.join(' ')}`);
   if (c.cli) report(`${id}: CLI args carry ${c.cli.join(' ')}`, args.join(' ').includes(c.cli.join(' ')), args.join(' '));

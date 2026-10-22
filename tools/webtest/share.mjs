@@ -9,6 +9,7 @@ import zlib from 'node:zlib';
 // The page's own script parser (no imports, Node strips the types)
 import { fromScript } from '../../web/src/inputlog.ts';
 import { fileURLToPath } from 'node:url';
+import { i2cArgs } from '../../web/src/i2cdevs.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dist = path.join(root, 'web/dist');
@@ -128,8 +129,8 @@ await view.screenshot({ path: path.join(outDir, 'share-viewer.png') });
 const inputsFile = path.join(outDir, 'share-inputs.txt');
 fs.writeFileSync(inputsFile, state.run.s + '\n');
 const cycles = Math.round(state.run.endMs * (CPU_HZ / 1000));
-const i2c = log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(',');
-const a = cliRun(['--seconds', String((cycles + 0.5) / CPU_HZ), '--i2c', i2c, '--inputs', inputsFile], 'cli');
+const i2c = i2cArgs(log.i2c);
+const a = cliRun(['--seconds', String((cycles + 0.5) / CPU_HZ), ...i2c, '--inputs', inputsFile], 'cli');
 report('CLI --inputs replay of the link = viewer serial (byte for byte)', a.code === 0 && a.stdout === vs && vs.includes('ALARM ON') && vs.includes('UNIT F'),
   a.stdout === vs ? `${vs.length} bytes, ${cycles} cycles` : `differs at ${diff(a.stdout, vs)} (CLI ${a.stdout.length} / web ${vs.length})`);
 
@@ -137,7 +138,7 @@ report('CLI --inputs replay of the link = viewer serial (byte for byte)', a.code
 const SECS = Math.max(3, Math.ceil(state.run.endMs / 1000));
 const vlog = await view.evaluate(() => globalThis.__tbInputLog());
 const web = await view.evaluate((l, s2, p) => globalThis.__tbReplay(l, s2, p), { ...vlog, events: fromScript(state.run.s), endMs: state.run.endMs }, SECS, BUZZER);
-const c = cliRun(['--seconds', String(SECS), '--gpio-log', '--ws2812-log', '--pwm-log', String(BUZZER), '--i2c', i2c, '--inputs', inputsFile], 'fp');
+const c = cliRun(['--seconds', String(SECS), '--gpio-log', '--ws2812-log', '--pwm-log', String(BUZZER), ...i2c, '--inputs', inputsFile], 'fp');
 report('viewer replay and CLI replay fingerprints match', web.fingerprint === c.fp && !web.error, `web ${web.fingerprint} / CLI ${c.fp}`);
 
 // ---- 6. A damaged link opens the default bench with a toast, no crash
@@ -211,11 +212,11 @@ async function openFile(buf, how, tag) {
     }, buf.toString('base64'), 'mine.tryboard');
   return { c, p };
 }
-const btnI2c = ownLog.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(',');
+const btnI2c = i2cArgs(ownLog.i2c);
 const ownInputs = path.join(outDir, 'share-own-inputs.txt');
 fs.writeFileSync(ownInputs, fst.run.s + '\n');
 const ownCycles = Math.round(fst.run.endMs * (CPU_HZ / 1000));
-const cliOwn = spawnSync(CLI, ['run', OWN, '--seconds', String((ownCycles + 0.5) / CPU_HZ), ...(btnI2c ? ['--i2c', btnI2c] : []), '--inputs', ownInputs], { maxBuffer: 64 << 20 }).stdout.toString('utf8');
+const cliOwn = spawnSync(CLI, ['run', OWN, '--seconds', String((ownCycles + 0.5) / CPU_HZ), ...btnI2c, '--inputs', ownInputs], { maxBuffer: 64 << 20 }).stdout.toString('utf8');
 fs.writeFileSync(path.join(outDir, 'share-own-cli.stdout'), cliOwn);
 for (const how of ['pick', 'drop']) {
   const { c, p } = await openFile(bytes, how, `file-${how}`);
@@ -249,7 +250,7 @@ bad2[bad2.length - 100] ^= 0xff;
   const longFile = Buffer.concat([Buffer.from(`TRYBOARD 1\n${JSON.stringify(long)}\n`)]);
   const longInputs = path.join(outDir, 'share-long-inputs.txt');
   fs.writeFileSync(longInputs, long.run.s + '\n');
-  const cl = cliRun(['--seconds', String((cycles + 0.5) / CPU_HZ), '--i2c', i2c, '--inputs', longInputs], 'long-cli');
+  const cl = cliRun(['--seconds', String((cycles + 0.5) / CPU_HZ), ...i2c, '--inputs', longInputs], 'long-cli');
   const { c, p } = await openFile(longFile, 'drop', 'file-long');
   const ok = await waitFor(p, () => !!globalThis.__tbShareRestored, null, 60000);
   const r = ok ? await p.evaluate(() => globalThis.__tbShareRestored) : { error: 'timeout' };

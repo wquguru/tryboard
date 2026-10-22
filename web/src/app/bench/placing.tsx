@@ -3,6 +3,7 @@
 import { t } from "../../i18n";
 import { partId } from "../wiring";
 import { overlay } from "../chrome";
+import { isPhone, setMui } from "../mobile";
 import { buildPlaced, fixedPin, mergeMods, pinOk, placeConflict, placeDef, stepOk } from "../place";
 import { LIB_DRAG, PinRings, PlaceBanner, type RingPin } from "./ui";
 import type { BenchCtx } from "./ctx";
@@ -21,6 +22,8 @@ export function mountPlacing(b: BenchCtx) {
     b.closeCard();
     overlay("wrongWire", null);
     b.placing = { def: d, cur: 0, got: {}, skipped: new Set() };
+    // Phone: the library is a full page over the bench; close it so the pin rings can be tapped
+    if (isPhone()) setMui({ lib: null });
     overlay("empty", null);
     c.shell.toolbar.setActive("place");
     placeUi();

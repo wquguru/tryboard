@@ -1,6 +1,7 @@
 // Runs firmware for N simulated seconds (no wall clock), applies inputs at exact simulated times, samples PWM like the CLI.
 // Shared by web checks (verify-worker.ts) and the npm CLI without DOM / Worker, so both match native `tryboard run` / check.py.
 
+import { attachI2c, type I2cDev } from './i2cdevs.ts';
 import { chipFromId, type SimChip } from './chipid';
 import { parseScript } from './checks';
 import { realFetch, type RealReq } from './realfetch';
@@ -19,7 +20,7 @@ export interface SimJob {
   rom: ArrayBuffer | Uint8Array;
   flash: ArrayBuffer | Uint8Array;
   seconds: number;
-  i2c: { kind: string; addr: number }[];
+  i2c: I2cDev[];
   env?: { temp: number; humidity: number; pressure: number };
   script?: string;
   pwmPin?: number;
@@ -80,7 +81,6 @@ export interface SimHooks {
   onReset?: (n: number, stopped: boolean) => void;
 }
 
-const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5, ft6236: 6, cst9220: 7, axp2101: 8, pcf85063: 9, es8311: 10, es7210: 11, sh1106: 12 };
 
 /** Which chip an image targets: find the app in the partition table (0x8000), read the ESP header chip ID; throws for chips TryBoard does not simulate */
 export function imageChip(buf: ArrayBuffer | Uint8Array): SimChip {
@@ -134,7 +134,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
     bytesIn(e, new TextEncoder().encode(j.grove), (p, n) => void (ok = e.tb_grove(p, n)));
     if (ok !== 0) return { stdout: '', report: '', sim: 0, error: `--grove ${j.grove}: rejected`, bootError: `--grove ${j.grove}: rejected` };
   }
-  for (const d of j.i2c) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
+  attachI2c(e, j.i2c);
   // DHT11 before env so it takes the readings (CLI parses --dht11 before --env)
   if (j.dht11 !== undefined) e.tb_dht11_attach?.(j.dht11);
   const partsErr = attachParts(e, j.parts, chipFromId(e.tb_chip()) ?? undefined);

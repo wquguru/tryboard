@@ -111,6 +111,7 @@ export function mountDebug(b: BenchCtx) {
           rule: f.rule,
           wires: f.wires,
           short: f.short,
+          detail: f.detail,
           mA: f.estimate?.mA ?? null,
           est: f.estimate?.text ?? null,
         }));

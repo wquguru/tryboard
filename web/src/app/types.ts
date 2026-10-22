@@ -230,6 +230,9 @@ export interface Session {
   /** Harness verdict text from the sim (rise time / RSSI); empty when unset */
   harnessText: string;
   onHarness(cb: (text: string) => void): () => void;
+  /** Pads the firmware drove its I2C controllers on (P2-16 wiring hint); empty until the first access */
+  i2cFw: { sda: number; scl: number }[];
+  onI2cFw(cb: () => void): () => void;
   /** Timing-sensitive code found by the core (D-03); null = none. Reset on each power-on */
   timing: TimingReport | null;
   onTiming(cb: (r: TimingReport | null) => void): () => void;

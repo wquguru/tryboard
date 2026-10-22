@@ -456,7 +456,7 @@ impl SocBus {
             }
             0x6001_3000 => {
                 // I2CEXT0 SDA/SCL out = 54/53 (gpio_sig_map.h)
-                let routed = self.i2c_pins.routed(&self.gpio.func_out, 0xff, 54, 53);
+                let routed = self.i2c_pins.route(0, &self.gpio.func_out, 0xff, 54, 53);
                 let extra = routed.map(|i| &mut self.i2c_pins.buses[i].devices);
                 self.i2c0.write_with(off, v, now, extra);
                 if !self.i2c0.events.is_empty() {
@@ -1163,6 +1163,8 @@ impl Esp32c3 {
         m.bus.adc.model = self.bus.adc.model.clone();
         // External devices, pin logs and LED strip decoders are part of the outside world and survive reset (as in S3 reboot)
         m.bus.i2c0.devices = std::mem::take(&mut self.bus.i2c0.devices);
+        m.bus.i2c_pins = self.bus.i2c_pins.carry();
+        m.bus.gpio.board_pullup |= m.bus.i2c_pins.pullups() as u32;
         m.bus.ws2812 = std::mem::take(&mut self.bus.ws2812);
         m.bus.pins = std::mem::take(&mut self.bus.pins);
         m.bus.gpio_log = std::mem::take(&mut self.bus.gpio_log);

@@ -17,7 +17,7 @@ export function mountWiringCheck(b: BenchCtx) {
   function recheckWiring() {
     const c = b.ctx!;
     const s3 = c.session.chip === "esp32s3";
-    const fresh = checkWiring(c.session.scene.parts, b.benchWires());
+    const fresh = checkWiring(c.session.scene.parts, b.benchWires(), c.session.i2cFw);
     const cached = applyCached(fresh, s3);
     b.faults = cached.faults;
     const gen = ++faultGen;

@@ -749,6 +749,11 @@ impl Machine {
         self.hw.set_psram_quad(quad)
     }
 
+    /// Pads (SDA, SCL) firmware routed I2C controller `port` to, seen on its last access; None before that or without pin buses
+    pub fn i2c_fw_pads(&mut self, port: usize) -> Option<(u32, u32)> {
+        *self.hw.i2c_pin_buses()?.fw_pads.get(port)?
+    }
+
     /// First device of type T: legacy I2C0 devices, then pin buses
     fn i2c_dev<T: 'static>(&mut self) -> Option<&mut T> {
         if self.hw.i2c0().device::<T>().is_some() {

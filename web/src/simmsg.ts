@@ -1,4 +1,5 @@
 // Worker <-> main-thread message types (R-07): the one place both sides import them from
+import type { I2cDev } from './i2cdevs.ts';
 import type { InputLog, InputEvent, InputAction } from './inputlog';
 import type { Locale } from './i18n';
 import type { PartsDevs } from './partsdev.ts';
@@ -89,7 +90,7 @@ export type ToWorker =
       romId: number;
       flash?: ArrayBuffer;
       flashId: number;
-      i2c?: { kind: string; addr: number }[];
+      i2c?: I2cDev[];
       env?: Env;
       /** Attach a screen: true / 'gc9a01' = GC9A01 round LCD (SPI2), 'co5300' = CO5300 QSPI AMOLED (E-03). */
       lcd?: boolean | LcdKind;
@@ -187,7 +188,7 @@ export type ToWorker =
       romId: number;
       flash?: ArrayBuffer;
       flashId: number;
-      i2c?: { kind: string; addr: number }[];
+      i2c?: I2cDev[];
       env?: Env;
       lcd?: boolean | LcdKind;
       battery?: Battery;
@@ -305,6 +306,8 @@ export type FromWorker =
   | { type: 'xz'; json: string; reset?: boolean }
   /** Harness verdict (same text as the CLI: I2C rise time, RSSI after antenna loss), sent on change. */
   | { type: 'harness'; text: string }
+  /** Pads firmware routed I2C controllers 0 / 1 to (P2-16; empty before any access), sent on change */
+  | { type: 'i2cfw'; pins: { sda: number; scl: number }[] }
   /** Timing-sensitive code report (D-03): JSON {"line","items":[{pin,kind,n}]} or {}; sent on change */
   | { type: 'timing'; json: string }
   /** Fine capture state, sent on change; vcdText answers vcdGet (byte-identical to CLI --vcd) */

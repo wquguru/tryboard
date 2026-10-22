@@ -10,6 +10,7 @@ import type { FromWorker, TimingReport, VcdState } from '../simmsg';
 import { saveBom } from './bomstore';
 import { push as pushBom } from './bom';
 import { BuzzerAudio } from '../audio';
+import { subs } from '../subs';
 import { fetchBuf, imageChip } from '../assets';
 import { expandLevels, type Level } from '../checks';
 import type { AppState, Env, Session, WorkDef } from './types';
@@ -118,7 +119,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   // Logic analyzer: one event store per page (reset on each boot / replay); the analyzer picks watched GPIOs.
   const io = new IoStore();
   const ioSubs = new Set<() => void>();
-  const harnessSubs = new Set<(text: string) => void>();
+  const harnessSubs = subs<string>();
+  const i2cFwSubs = subs<{ sda: number; scl: number }[]>();
   const timingSubs = new Set<(r: TimingReport | null) => void>();
   const vcdSubs = new Set<(v: VcdState | null) => void>();
   const usbSubs = new Set<(v: UsbView | null) => void>();
@@ -376,10 +378,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       bumpEdit();
     },
     harnessText: '',
-    onHarness(cb) {
-      harnessSubs.add(cb);
-      return () => harnessSubs.delete(cb);
-    },
+    i2cFw: [],
+    onI2cFw: i2cFwSubs.on,
+    onHarness: harnessSubs.on,
     timing: null,
     onTiming(cb) {
       timingSubs.add(cb);
@@ -458,10 +459,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       realnet: () => realnetSwitch.get(),
       netPreset: () => netPreset.get(),
       scenario: scenCompile,
-      onHarness(text) {
-        s.harnessText = text;
-        for (const cb of [...harnessSubs]) cb(text);
-      },
+      onI2cFw: (pins) => i2cFwSubs.emit((s.i2cFw = pins)),
+      onHarness: (text) => harnessSubs.emit((s.harnessText = text)),
       onTiming(r) {
         s.timing = r;
         for (const cb of [...timingSubs]) cb(r);

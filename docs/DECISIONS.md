@@ -1533,3 +1533,12 @@
 - 依据（三个独立来源一致：竖屏正向需要 MX=1）：Adafruit_ILI9341 1.6.4 `setRotation(0)` = `MADCTL_MX | MADCTL_BGR`（0x48，BSD）；TFT_eSPI `TFT_Drivers/ILI9341_Rotation.h` rotation 0（非 M5STACK）= `TFT_MAD_MX | TFT_MAD_COLOR_ORDER`（M5Stack 的 ILI9342C 用 MY | MV，是另一块屏，故 ILI9342 不改）；ESP-IDF v5.5 `examples/peripherals/lcd/spi_lcd_touch` 对 ILI9341 在 init 后无条件 `esp_lcd_panel_mirror(panel, true, false)`，LVGL 旋转 0 也是 mirror(true, false)。数据手册 MX 只定义 GRAM 列地址顺序，不规定玻璃朝向，所以建成模组属性而非控制器属性。LovyanGFX 的 Panel_ILI9341 本地没有副本，未引用。
 - 影响：arduino-lib-ili9341 文字由镜像变为正（颜色质心 x 由 138.7 变 100.3），lcd_regions 新增两个左右不对称区域钉住方向；c3-ili9341 / esp32-cyd / esp32-cyd-touch / c3-ili9341-temp(-hot) 画面与区域不变（固件多发一条 MADCTL：LCD 命令数 +1、SPI 传输 +2），CYD 触摸 60,250 → 像素 60,250 不变；golden 这 6 例重新 save。
 - 备选：不改固件只改模型——否，IDF 固件发 0x08 会在模型里（也在真机上）镜像，c3-ili9341-temp 数字会反；在 `pixel_byte` 里异或 MX——否，会让 GRAM 内容偏离数据手册。
+
+## 2026-10-22 P2-16 收尾：台面 I2C 走实际接的针 + 手机元件库放置（自主实现决定）
+- **台面 I2C 器件挂针级总线**：网页 `web/src/i2cdevs.ts`（`attachI2c` / `i2cArgs`）把场景里带 `sda` / `scl` 的 I2C 器件挂到 M5-02 的针级总线（wasm `tb_i2c_bus_add` + `tb_i2c_attach_bus`），没写针的旧器件仍走 I2C0（`--i2c`，不看针）；顺序与 CLI 一致（先 `--i2c` 再 `--i2c-bus`）。输入日志 `cliArgs`、genlevels、checks、各 webtest 的 CLI 对照都改用同一个 `i2cArgs`，网页与 `tryboard run --i2c-bus sda=..,scl=..:dev@addr` 参数一致。关卡和 golden 输出不变（关卡场景的针本来就是固件用的针）。
+- **接线提示 W8**：固件把 I2C 控制器路由到哪两个焊盘由 `PinBuses::route` 在每次事务时记下（`fw_pads[port]`，即使没有总线匹配也记），经 `Machine::i2c_fw_pads` → wasm `tb_i2c_fw_pins` → worker `i2cfw` 消息 → `session.i2cFw` 到接线检查。W8 比对**实际接线**（有效导线）与固件焊盘：SDA/SCL 对调报「SDA / SCL 接反」，接到别的针报「I2C 引脚和固件不一致」。模拟本身按场景器件的 `sda` / `scl` 挂总线（放置时即实际接的针），所以 W8 与「扫得到 / 扫不到」一致。
+- **修了既有 bug：固件软复位丢针级总线**。C3 / S3 / 经典的重启路径重建 SocBus 时只搬了 I2C0/1 器件，`i2c_pins` 被清空，s3-bme280 扫不到设备 abort 重启后台面器件就「消失」。新增 `PinBuses::carry()`：总线和器件（外部世界）保留、线电平重新开始、上拉并回 `board_pullup`；`fw_pads` 也保留，避免崩溃循环的固件让 W8 提示闪烁。
+- **已知缺口**：`Machine::i2c_load()`（P2-11 上升时间估算）只看 I2C0，挂在针级总线上的器件不计入电容，器件多时会低估；不在本项范围，后续把 `PinBus` 器件数并进估算。
+- **手机放置**：手机元件库是盖在台面上的整页抽屉，原来没有「放」入口。每行在 Add / 已在清单旁加 44px「放」按钮（`[data-place]`，只对有放置定义且不缺条件的零件显示）；`startPlace` 在手机上 `setMui({ lib: null })` 收起抽屉，露出针环；针环沿用已有的「按下预览、松开连接」。
+- **体积护栏**：`createSession` 的 harness / i2cFw 两组订阅改用新的 `web/src/subs.ts`（`subs<T>()`，on / emit），函数从 538 行减到 536；S3 `lib.rs` 守住 1500 行上限。
+- 备选：W8 改成看模拟总线是否收到事务（要等固件真的扫描，提示会晚且依赖固件行为，否决）；手机上用长按拖放（与滚动冲突、触屏拖拽 3D 台面难以定位，否决）。

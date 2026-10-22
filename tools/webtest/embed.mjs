@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 // The page's own share format and script parser (Node strips the types)
 import { encodeState, fwHash } from '../../web/src/app/sharestate.ts';
 import { fromScript, toScriptBody } from '../../web/src/inputlog.ts';
+import { i2cArgs } from '../../web/src/i2cdevs.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dist = path.join(root, 'web/dist');
@@ -113,8 +114,8 @@ const log = await frame.evaluate(() => globalThis.__tbEmbed.session.sim.inputLog
 const inputsFile = path.join(outDir, 'embed-inputs.txt');
 fs.writeFileSync(inputsFile, script + '\n');
 const cycles = Math.round(state.run.endMs * (CPU_HZ / 1000));
-const i2c = log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(',');
-const p = spawnSync(CLI, ['run', FW, '--seconds', String((cycles + 0.5) / CPU_HZ), '--i2c', i2c, '--inputs', inputsFile], { maxBuffer: 64 << 20 });
+const i2c = i2cArgs(log.i2c);
+const p = spawnSync(CLI, ['run', FW, '--seconds', String((cycles + 0.5) / CPU_HZ), ...i2c, '--inputs', inputsFile], { maxBuffer: 64 << 20 });
 const cli = p.stdout.toString('utf8');
 fs.writeFileSync(path.join(outDir, 'embed-cli.stdout'), cli);
 report('CLI --inputs replay = embed serial (byte for byte)', p.status === 0 && cli === es, cli === es ? `${es.length} bytes` : `differs at ${diff(cli, es)} (CLI ${cli.length} / embed ${es.length})`);

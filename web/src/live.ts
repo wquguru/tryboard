@@ -1,4 +1,5 @@
 // Live simulation for the home and lab pages: starts worker.ts, runs one firmware and hands each frame to the view.
+import type { I2cDev } from './i2cdevs.ts';
 import type { PartsDevs } from './partsdev.ts';
 import { fetchBuf, imageChip, loadRom, loadWasmModule } from './assets';
 import type { Battery, EncoderSpec, Env, FromWorker, Harness, LcdKind, PcmBlock, PowerMode, PwmEvent, Snapshot, SonarSpec, TimingReport, ToWorker, VcdState } from './simmsg';
@@ -19,7 +20,7 @@ import { emptyFrame, type LiveFrame } from './views/common';
 export interface LiveOptions {
   /** Firmware URL, or an image already read in (user upload). */
   fw: string | ArrayBuffer;
-  i2c: { kind: string; addr: number }[];
+  i2c: I2cDev[];
   env: Env;
   lcd?: boolean | LcdKind;
   /** AXP2101 battery at power-up (E-03) */
@@ -48,6 +49,7 @@ export interface LiveOptions {
   netPreset?(): string;
   /** Harness verdict text (same lines as the CLI), called on change. */
   onHarness?(text: string): void;
+  onI2cFw?(pins: { sda: number; scl: number }[]): void;
   /** Rotary encoder / HC-SR04 (on GPIOs; the core times the waveforms). */
   encoder?: EncoderSpec;
   sonar?: SonarSpec;
@@ -96,7 +98,7 @@ export interface LiveOptions {
 /** Rewind to a moment of some run (P0-03): uses that run's firmware, devices, environment and input log. */
 export interface SeekJob {
   flash: ArrayBuffer;
-  i2c: { kind: string; addr: number }[];
+  i2c: I2cDev[];
   lcd: boolean | LcdKind;
   battery?: Battery;
   servo?: number;
@@ -204,6 +206,8 @@ export class LiveSim {
         o.onXz?.(m);
       } else if (m.type === 'harness') {
         o.onHarness?.(m.text);
+      } else if (m.type === 'i2cfw') {
+        o.onI2cFw?.(m.pins);
       } else if (m.type === 'timing') {
         const r = JSON.parse(m.json) as Partial<TimingReport>;
         o.onTiming?.(r.line ? (r as TimingReport) : null);
