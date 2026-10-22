@@ -973,5 +973,11 @@ const d: Dict = {
   "Off · about {mA} mA (estimate)": "关 · 约 {mA} mA（估算）",
   "Last remote code: {code}": "最近的遥控码：{code}",
   "repeat (key held)": "重复码（按住不放）",
+
+  // G-05 cloud work and template
+  "Temperature and humidity to the cloud": "温湿度上云",
+  "Acceptance firmware targets the C3; Wi-Fi is built in": "验收固件针对 C3；自带 Wi-Fi",
+  "Temperature and humidity over I2C (SDA GPIO6, SCL GPIO7, address 0x38); power it from 3V3": "通过 I2C 测温湿度（SDA GPIO6，SCL GPIO7，地址 0x38）；从 3V3 供电",
+  "Module header straight to the board": "模块排针直接接到开发板",
 };
 export default d;

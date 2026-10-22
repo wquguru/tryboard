@@ -3712,6 +3712,51 @@
   ]
  },
  {
+  "id": "c3-cloud",
+  "chip": "esp32c3",
+  "seconds": 16,
+  "qemu": false,
+  "args": [
+   "--i2c",
+   "aht20@0x38",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "script": "8:mqtt=pub,tryboard/cloud/cmd,interval=2; 11:mqtt=pub,tryboard/cloud/cmd,interval=99; 13:mqtt=pub,tryboard/cloud/cmd,speed=3",
+  "expect": [
+   "温湿度上云：AHT20 SDA=GPIO6 SCL=GPIO7，broker mqtt://192.168.4.1:1883",
+   "AHT20 就绪 状态 0x18",
+   "已连上 Wi-Fi，IP 192.168.4.100 网关 192.168.4.1",
+   "MQTT 已连上 broker（CONNACK）client=tryboard-cloud",
+   "已订阅 tryboard/cloud/cmd",
+   "发布 #1 → tryboard/cloud/data {\"t\":23.5,\"h\":45.0,\"seq\":1}",
+   "发布 #2 → tryboard/cloud/data {\"t\":23.5,\"h\":45.0,\"seq\":2} 距上次 5.00 秒（间隔 5 秒）",
+   "收到命令 tryboard/cloud/cmd \"interval=2\"",
+   "间隔改为 2 秒",
+   "回执 → tryboard/cloud/ack {\"ok\":true,\"interval\":2}",
+   "发布 #3 → tryboard/cloud/data {\"t\":23.5,\"h\":45.0,\"seq\":3} 间隔刚改为 2 秒，立即发一条",
+   "TRYBOARD_OK c3-cloud",
+   "拒绝命令 \"interval=99\"",
+   "回执 → tryboard/cloud/ack {\"ok\":false,\"cmd\":\"interval=99\",\"interval\":2}",
+   "拒绝命令 \"speed=3\"",
+   "距上次 2.00 秒（间隔 2 秒）"
+  ],
+  "absent": [
+   "AHT20 读取失败",
+   "MQTT 断开",
+   "MQTT 出错",
+   "Wi-Fi 断开"
+  ],
+  "stderr_expect": [
+   "[mqtt] CONNECT tryboard-cloud keepalive 120s → CONNACK 0",
+   "[mqtt] SUBSCRIBE tryboard-cloud tryboard/cloud/cmd QoS 0",
+   "[mqtt] PUBLISH tryboard-cloud tryboard/cloud/data QoS 0 \"{\"t\":23.5,\"h\":45.0,\"seq\":1}\" (27 bytes) → 0 subscriber(s)",
+   "[mqtt] PUBLISH cloud tryboard/cloud/cmd QoS 0 \"interval=2\" (10 bytes) → 1 subscriber(s)",
+   "[mqtt] PUBLISH tryboard-cloud tryboard/cloud/ack QoS 0 \"{\"ok\":true,\"interval\":2}\" (24 bytes) → 0 subscriber(s)",
+   "NACK 0"
+  ]
+ },
+ {
   "id": "s3-rc522",
   "chip": "esp32s3",
   "seconds": 5,

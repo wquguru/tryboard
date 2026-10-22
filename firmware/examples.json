@@ -1624,6 +1624,23 @@
   }
  },
  {
+  "id": "c3-cloud",
+  "chip": "esp32c3",
+  "title": "Temperature and humidity to the cloud: AHT20 + Wi-Fi + MQTT (ESP32-C3)",
+  "about": "An ESP32-C3 reads an AHT20 on I2C (SDA GPIO6, SCL GPIO7, 0x38), joins TryBoard-WiFi and connects with ESP-IDF esp-mqtt to the virtual broker at mqtt://192.168.4.1:1883. Every 5 s it publishes {\"t\":23.5,\"h\":45.0,\"seq\":N} to tryboard/cloud/data. Publish interval=<1–60> to tryboard/cloud/cmd to change the period; the board acknowledges on tryboard/cloud/ack and refuses anything else. The broker and network are virtual: real Wi-Fi range, broker login and TLS need real hardware.",
+  "tags": [
+   "✓ Verified in sim",
+   "AHT20",
+   "Wi-Fi",
+   "MQTT",
+   "JSON",
+   "ESP-IDF 5.5"
+  ],
+  "scene": {
+   "parts": []
+  }
+ },
+ {
   "id": "c3-ili9341-temp",
   "title": "Temperature screen: DS18B20 on a 2.4″ ILI9341 colour TFT (ESP32-C3)",
   "about": "A bare 2.4″ ILI9341 module on the fixed SPI2 LCD pins (SCLK GPIO6, MOSI GPIO7, CS GPIO10, DC GPIO5, RST GPIO4, backlight GPIO3) and a DS18B20 probe on GPIO1 (GPIO4 is taken by the screen reset). The firmware reads the probe four times a second with its own 1-Wire driver and redraws the 240×320 screen only when the reading changes: big seven-segment digits, blue below 15 ℃, green, red above 28 ℃, and a −10…40 ℃ bar. Drag the temperature slider to watch the screen follow.",

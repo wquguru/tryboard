@@ -169,7 +169,7 @@ test('schema: board without source URL / bad onboard use / mismatched display pi
 
 // ───────── Shopping templates ─────────
 test('templates: eight of them, required parts in the library, positive quantities', () => {
-  assert.deepEqual(PROCURE_TEMPLATES.map((t) => t.id), ['weather', 'spin', 'lens', 'lamp', 'ruler', 'tilt', 'door', 'irlamp', 'usbkey', 'blank']);
+  assert.deepEqual(PROCURE_TEMPLATES.map((t) => t.id), ['weather', 'spin', 'lens', 'lamp', 'ruler', 'tilt', 'door', 'irlamp', 'cloud', 'usbkey', 'blank']);
   for (const t of PROCURE_TEMPLATES) {
     assert.ok(PART_BY_ID[t.board]?.kind === 'board', t.id);
     for (const l of [...t.required, ...t.suggested]) {
@@ -218,7 +218,7 @@ test('templates: removing BME280 raises a blocker (rule part of P0-07 acceptance
 });
 
 test('templates: each project default list + wiring has no blockers or warnings', () => {
-  for (const id of ['weather', 'spin', 'lens', 'usbkey', 'lamp', 'ruler', 'tilt', 'door', 'irlamp', 'blank']) assert.deepEqual(problems(templateInput(id)), [], id);
+  for (const id of ['weather', 'spin', 'lens', 'usbkey', 'lamp', 'ruler', 'tilt', 'door', 'irlamp', 'cloud', 'blank']) assert.deepEqual(problems(templateInput(id)), [], id);
 });
 
 test('templates: lamp without external supply -> USB-only warning (480 mA strip at full white)', () => {
@@ -245,8 +245,8 @@ test('templates: every wired pin exists in the part library', () => {
 });
 
 test('toScene matches the scene in firmware/examples.json', () => {
-  const exId: Record<string, string> = { door: 'c3-door', irlamp: 's3-irlamp' };
-  for (const id of ['weather', 'spin', 'lens', 'usbkey', 'lamp', 'ruler', 'tilt', 'door', 'irlamp']) {
+  const exId: Record<string, string> = { door: 'c3-door', irlamp: 's3-irlamp', cloud: 'c3-cloud' };
+  for (const id of ['weather', 'spin', 'lens', 'usbkey', 'lamp', 'ruler', 'tilt', 'door', 'irlamp', 'cloud']) {
     const ex = examples.find((e) => e.id === (exId[id] ?? id))!;
     const inp = templateInput(id);
     assert.deepEqual(toScene(inp.parts, inp.wiring), ex.scene.parts, id);
@@ -255,8 +255,8 @@ test('toScene matches the scene in firmware/examples.json', () => {
 
 test('template round display / servo wiring matches examples.json pins', () => {
   const map: Record<string, [string, string]> = { lcd_sclk: ['gc9a01', 'SCL'], lcd_mosi: ['gc9a01', 'SDA'], lcd_cs: ['gc9a01', 'CS'], lcd_dc: ['gc9a01', 'DC'], lcd_rst: ['gc9a01', 'RES'], lcd_bl: ['gc9a01', 'BLK'], servo: ['sg90', '橙 PWM'], buzzer: ['buzzer-module', 'I/O'], strip: ['ws2812-stick8', 'DIN'], a: ['encoder', 'CLK'], b: ['encoder', 'DT'], sw: ['encoder', 'SW'], trig: ['hc-sr04', 'Trig'], echo: ['hc-sr04', 'Echo'] }; // lint: allow-cjk
-  const exId: Record<string, string> = { door: 'c3-door', irlamp: 's3-irlamp' };
-  for (const id of ['weather', 'spin', 'lens', 'lamp', 'ruler', 'tilt', 'door', 'irlamp']) {
+  const exId: Record<string, string> = { door: 'c3-door', irlamp: 's3-irlamp', cloud: 'c3-cloud' };
+  for (const id of ['weather', 'spin', 'lens', 'lamp', 'ruler', 'tilt', 'door', 'irlamp', 'cloud']) {
     const ex = examples.find((e) => e.id === (exId[id] ?? id))!;
     const t = PROCURE_TEMPLATES.find((x) => x.id === id)!;
     for (const [k, gpio] of Object.entries(ex.pins ?? {})) {

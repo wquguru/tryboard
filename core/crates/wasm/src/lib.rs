@@ -277,7 +277,7 @@ pub extern "C" fn tb_analog_set(pin: u32, mv: f32) {
 }
 
 /// Attach an I2C device. kind: 1 = SSD1306, 2 = BME280, 3 = MPU6050, 4 = QMI8658, 5 = CST816S, 6 = FT6236,
-/// 7 = CST9220, 8 = AXP2101, 9 = PCF85063, 10 = ES8311, 11 = ES7210. Returns 0 on success.
+/// 7 = CST9220, 8 = AXP2101, 9 = PCF85063, 10 = ES8311, 11 = ES7210, 12 = SH1106, 13 = AHT20. Returns 0 on success.
 #[no_mangle]
 pub extern "C" fn tb_i2c_attach(kind: u32, addr: u32) -> i32 {
     let Some(name) = i2c_kind(kind) else {
@@ -346,6 +346,7 @@ fn i2c_kind(kind: u32) -> Option<&'static str> {
         10 => "es8311",
         11 => "es7210",
         12 => "sh1106",
+        13 => "aht20",
         _ => return None,
     })
 }

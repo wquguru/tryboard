@@ -1627,3 +1627,14 @@
 - `--ir` 已经经 partsdev.ts 进 npm 包的 bootOptions，cli.ts / check_config.py 不用改
 - 阶段一不加首页卡片（同 G-03）
 - 备选：C3 版——否：lamp 外壳和灯带模板都是 S3（s3-devkitc1-v10），复用最省；VOL± 用 100+ / 200+——否：实验台遥控器 VOL± 标得清楚
+
+## 2026-10-22 G-05：温湿度上云（`cloud`）的引脚、主题、间隔语义和 wasm AHT20（自主实现决定，阶段一）
+- 芯片 C3，传感器选 AHT20（不用 BME280：AHT20 便宜、模块常见，且已有 soc 模型）；I2C SDA=GPIO6、SCL=GPIO7、地址 0x38、100 kHz，避开 GPIO8（板载 RGB / strapping）和 GPIO9（BOOT）
+- 网络：连开放热点 TryBoard-WiFi（192.168.4.100），broker `mqtt://192.168.4.1:1883`，client id `tryboard-cloud`；直接用 ESP-IDF esp-mqtt（MQTT 3.1.1），模拟器无需改内核，不需要手写 MQTT 客户端的退路
+- 主题：`tryboard/cloud/data` 发 `{"t":23.5,"h":45.0,"seq":N}`（一位小数，QoS 0）；`tryboard/cloud/cmd` 收 `interval=<1–60>`；每条命令都在 `tryboard/cloud/ack` 回执 `{"ok":true,"interval":N}` 或 `{"ok":false,"cmd":"…","interval":当前}`
+- 间隔语义：从上一次发布起算；改间隔成功后立刻发一条（打印「间隔刚改为 N 秒，立即发一条」，不打印间隔），新间隔从它起算——否则改后的第一个间隔是「旧周期剩余 + 新周期」的混合值（实测 2.29 s），数值检查没法写
+- AHT20 读法：触发后等 80 ms 再轮询忙位（最多 5 次、每次 10 ms）——vTaskDelay 可能早醒一个 tick，模型正好 80 ms 忙，不轮询会偶发读失败；读失败打印并跳过本次
+- npx 指纹一致：wasm `tb_i2c_attach` 原来没有 aht20 编号，新增 kind 13 = aht20（web/src/i2cdevs.ts `KIND` 同步），之前 npm 包里 AHT20 无应答；golden 不变
+- accept `c3-cloud` `qemu: false`（QEMU 没有虚拟 AP / broker）；四个检查点同一参考固件；阶段一不加首页卡片（同 G-03）
+- 示例 c3-cloud 的 `scene.parts` 暂为空：网页场景还没有 aht20 部件类型（SCENE_TYPE / editor / scene3d），所以网页示例里看不到传感器、读数失败，留给 G-05b
+- 备选：BME280（已有网页部件）——否：PLAN 允许二选一，AHT20 更贴合「温湿度」且便宜；手写 MQTT——否：esp-mqtt 直接能跑

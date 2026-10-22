@@ -40,7 +40,7 @@ export interface BuyLine {
 }
 
 export interface ProcureTemplate {
-  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'door' | 'irlamp' | 'blank' | 'custom';
+  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'door' | 'irlamp' | 'cloud' | 'blank' | 'custom';
   title: string;
   /** Matching level (firmware/levels.json id; level 07 variants are written 07:spin) */
   level: string | null;
@@ -348,6 +348,30 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
       { part: 'dc-jack', pin: '-', net: 'GND' },
     ],
     firmware: { wifi: false },
+  },
+  {
+    id: 'cloud',
+    title: 'Temperature and humidity to the cloud',
+    level: 'cloud-4',
+    product: 'cloud',
+    board: 'c3-devkitm1',
+    required: [
+      { partId: 'c3-devkitm1', qty: 1, why: 'Acceptance firmware targets the C3; Wi-Fi is built in' },
+      { partId: 'aht20', qty: 1, why: 'Temperature and humidity over I2C (SDA GPIO6, SCL GPIO7, address 0x38); power it from 3V3' },
+      CABLE,
+      { partId: 'dupont-ff', qty: 1, why: 'Module header straight to the board' },
+    ],
+    suggested: [
+      { partId: 'breadboard-830', qty: 1, checked: false, why: 'If you want to try it on a breadboard first' },
+      { partId: 'dupont-mm', qty: 1, checked: false, why: 'Jumpers on the breadboard' },
+    ],
+    wiring: [
+      { part: 'aht20', pin: 'VCC', net: '3V3' },
+      { part: 'aht20', pin: 'GND', net: 'GND' },
+      { part: 'aht20', pin: 'SCL', net: 'GPIO7' },
+      { part: 'aht20', pin: 'SDA', net: 'GPIO6' },
+    ],
+    firmware: { wifi: true },
   },
   {
     id: 'usbkey',
