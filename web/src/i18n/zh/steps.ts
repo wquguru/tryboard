@@ -1113,5 +1113,15 @@ const d: Dict = {
   "Spoken \"Hello\" clip (voice assistant WAV)": "说 “Hello” 的录音（语音助手 WAV）",
   "Sound": "声音",
   "muted": "静音",
+  "Tap whitelisted card": "刷白名单卡",
+  "Tap unknown card": "刷陌生卡",
+  "Take card away": "拿开卡",
+  "Card reader": "读卡器",
+  "Card on the reader": "读卡器上的卡",
+  "Door strike (relay GPIO10)": "电锁（继电器 GPIO10）",
+  "Refusals in a row": "连续拒绝次数",
+  "RC522 version 0x{v}": "RC522 版本 0x{v}",
+  "Door lock": "门禁",
+  "Appearance only (2D view for now)": "外观示意（暂为 2D 视图）",
 };
 export default d;

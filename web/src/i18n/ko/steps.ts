@@ -1113,5 +1113,15 @@ const d: Dict = {
   "Spoken \"Hello\" clip (voice assistant WAV)": "\"Hello\"라고 말하는 녹음(음성 비서 WAV)",
   "Sound": "소리",
   "muted": "음소거",
+  "Tap whitelisted card": "화이트리스트 카드 대기",
+  "Tap unknown card": "미등록 카드 대기",
+  "Take card away": "카드 떼기",
+  "Card reader": "카드 리더",
+  "Card on the reader": "리더 위 카드",
+  "Door strike (relay GPIO10)": "도어 스트라이크 (릴레이 GPIO10)",
+  "Refusals in a row": "연속 거부 횟수",
+  "RC522 version 0x{v}": "RC522 버전 0x{v}",
+  "Door lock": "도어락",
+  "Appearance only (2D view for now)": "외관 예시(현재 2D 보기)",
 };
 export default d;

@@ -101,7 +101,7 @@ async function runRef(page, id) {
   fs.writeFileSync(path.join(outDir, `levels-${id}-web.json`), JSON.stringify(raw, null, 1));
   return { ok: (await verdictOf(page)) === 'ok', fp: await fpOf(page), text };
 }
-for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']], ['usbkey', ['usbkey-1', 'usbkey-2', 'usbkey-3']], ['lamp', ['lamp-1', 'lamp-2', 'lamp-3']], ['ruler', ['ruler-1', 'ruler-2', 'ruler-3']], ['tilt', ['tilt-1', 'tilt-2', 'tilt-3']]]) {
+for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']], ['usbkey', ['usbkey-1', 'usbkey-2', 'usbkey-3']], ['lamp', ['lamp-1', 'lamp-2', 'lamp-3']], ['ruler', ['ruler-1', 'ruler-2', 'ruler-3']], ['tilt', ['tilt-1', 'tilt-2', 'tilt-3']], ['door', ['door-1', 'door-2', 'door-3', 'door-4']]]) {
   const page = await open(`/app?work=${work}#bench`);
   for (const id of cps) {
     const r = await runRef(page, id);
@@ -335,8 +335,8 @@ async function toProduct(page) {
 {
   const home = await open('/');
   const cards = await home.$$eval('.wk', (els) => els.map((e) => ({ work: e.dataset.work, go: e.querySelector('[data-go]')?.getAttribute('href'), cps: e.dataset.cps })));
-  // Cards come from web/src/app/works.ts: P2-12 added the USB keypad, P2-09 the knob lamp, ultrasonic ruler and tilt figure
-  report('home: seven project cards (weather / spin / lens / usbkey / lamp / ruler / tilt)', cards.map((c) => c.work).join() === 'weather,spin,lens,usbkey,lamp,ruler,tilt', JSON.stringify(cards.map((c) => c.work)));
+  // Cards come from web/src/app/works.ts: P2-12 added the USB keypad, P2-09 the knob lamp, ultrasonic ruler and tilt figure, G-03 the door lock
+  report('home: eight project cards (weather / spin / lens / usbkey / lamp / ruler / tilt / door)', cards.map((c) => c.work).join() === 'weather,spin,lens,usbkey,lamp,ruler,tilt,door', JSON.stringify(cards.map((c) => c.work)));
   await home.screenshot({ path: path.join(outDir, 'levels-home-0.png') });
   // Weather card runs real firmware: status line shows the serial reading, OLED has a frame; holding BOOT switches to ℉ and redraws
   await home.click('[data-run="weather"]');
@@ -368,6 +368,10 @@ async function toProduct(page) {
   await home.click('[data-run="lamp"]');
   const lamp = await waitFor(home, () => document.querySelector('.wk[data-work="lamp"] [data-k="led0"]')?.getAttribute('fill') !== '#2A2A28', null, 30000);
   report('home: lamp card runs real firmware -> strip lights up', lamp);
+  // G-03 door card: C3 firmware with RC522 + SH1106; the demo taps the whitelisted card, the OLED gets a frame and the strike opens
+  await home.click('[data-run="door"]');
+  const door = await waitFor(home, () => !!document.querySelector('.wk[data-work="door"] image[data-k="oled"][href]') && document.querySelector('.wk[data-work="door"] [data-k="bolt"]')?.getAttribute('x') === '532', null, 30000);
+  report('home: door card runs real firmware -> OLED frame, whitelisted card opens the strike', door, await home.$eval('.wk[data-work="door"] [data-status]', (e) => e.textContent));
   // USB keypad card: the virtual PC enumerates TryBoard Macro Pad; clicking K1 types a
   await home.click('[data-run="usbkey"]');
   const enumd = await waitFor(home, () => /TryBoard Macro Pad/.test(document.querySelector('.wk[data-work="usbkey"] [data-k="dev"]')?.textContent ?? ''), null, 20000);
