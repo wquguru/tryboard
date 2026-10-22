@@ -2,7 +2,7 @@
 // Pure functions, no DOM; .ts import suffixes let node --test run it directly.
 import { BOARDS, PARTS, TEMPLATES, type Board, type Cap, type Template } from './data.ts';
 import { capName, recommend, type Confidence, type Need, type Plan, type Rejected } from './engine.ts';
-import { PART_MAP, ALWAYS } from './catalogmap.ts';
+import { PART_MAP, ALWAYS, exampleOnly } from './catalogmap.ts';
 import type { Budget, SelectState } from './state.ts';
 import { t } from '../i18n/index.ts';
 
@@ -159,8 +159,9 @@ export const isVoice = (caps: readonly string[]) => ['wifi', 'audio_in', 'audio_
 export function trustRows(p: Plan, need: Need): [string, Confidence][] {
   const rows: [string, Confidence][] = need.parts.map((id) => {
     const lv = p.simCoverage.find((x) => x.part === PARTS[id].name)?.level ?? '必须上真机'; // lint: allow-cjk
-    return [t(PARTS[id].name), PART_MAP[id] === null ? '必须上真机' : lv]; // lint: allow-cjk
+    return [t(PARTS[id].name), PART_MAP[id] === null && !exampleOnly(id) ? '必须上真机' : exampleOnly(id) ? '行为模拟' : lv]; // lint: allow-cjk
   });
+  if (need.parts.includes('relay')) rows.push([t('Relay contacts and the mains side'), '必须上真机']); // lint: allow-cjk
   rows.push([t('The {chip} chip itself', { chip: t(p.chip.name) }), simConf(p)]);
   rows.push([t('Pin assignment'), '估算']); // lint: allow-cjk
   if (p.chip.id === 'esp32') {

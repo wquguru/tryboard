@@ -3,7 +3,7 @@
 import { PARTS } from './data.ts';
 import { capName, type Confidence } from './engine.ts';
 import type { Cap } from './data.ts';
-import { PART_MAP } from './catalogmap.ts';
+import { PART_MAP, EXAMPLE_ONLY, exampleOnly, noModelParts } from './catalogmap.ts';
 import { answers, isVoice, labelIs, labelText, pinFull, pinKind, resolve, yuan, lasts, type Result } from './derive.ts';
 import type { SelectState } from './state.ts';
 import { t } from '../i18n/index.ts';
@@ -55,7 +55,8 @@ function wiring(r: Result, partId: string): string {
   }
   const cat = PART_MAP[partId]?.partId;
   if (cat && cat in I2C_ADDR) segs.push(t('address {addr}', { addr: hex(I2C_ADDR[cat]) }));
-  if (PART_MAP[partId] === null) segs.push(t('TryBoard has no model for this part; try it on a real board'));
+  if (exampleOnly(partId)) segs.push(t('simulated in example {id}', { id: EXAMPLE_ONLY[partId].example }));
+  else if (PART_MAP[partId] === null) segs.push(t('TryBoard has no model for this part; try it on a real board'));
   return segs.join(t('; ')) || t('uses no pins');
 }
 
@@ -103,7 +104,7 @@ export function briefMarkdown(s: SelectState): string {
 
   L.push('## ' + t('Acceptance (checkpoints TryBoard generates from the parts)'), '');
   checkpointsOf(r).forEach((c, i) => L.push(`${i + 1}. ${c.name}${c.manual ? t(' (real board only, TryBoard does not judge it)') : ''}`));
-  const noModel = r.need.parts.filter((id) => PART_MAP[id] === null);
+  const noModel = noModelParts(r.need.parts);
   if (noModel.length) L.push('', t('TryBoard has no model for {parts}; that part needs a real board.', { parts: noModel.map((id) => t(PARTS[id].short)).join(t(', ')) }));
   L.push('', t('A failed check reads "got x; want y": fix the code from that line.'), '');
   L.push(t('To run offline, install packages/tryboard locally from the repo'));

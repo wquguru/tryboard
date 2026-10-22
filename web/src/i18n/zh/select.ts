@@ -431,5 +431,11 @@ const d: Dict = {
   "RFID reader": "读卡器",
   "RFID SDA / RST": "读卡器 SDA / RST",
   "Examples you can run in the simulator first": "可以先在模拟器里跑的示例",
+  "simulated in example {id}": "在示例 {id} 里已模拟",
+  " · simulated in example {id}": " · 在示例 {id} 里已模拟",
+  "In an example": "示例里",
+  "Simulated in an example, not yet on the bench": "在示例里已模拟，还不能放上台面",
+  "{parts}: run the example, but the bench catalog cannot place it yet": "{parts}：可运行示例，但台面目录暂时不能放置",
+  "Relay contacts and the mains side": "继电器触点和市电侧",
 };
 export default d;
