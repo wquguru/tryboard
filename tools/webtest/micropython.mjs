@@ -1,5 +1,6 @@
 // F-07b MicroPython main.py editor: upload the official C3 image -> edit main.py -> Run (raw-paste + soft reset) -> serial output
-// -> export the input log -> CLI --inputs replay is byte-identical; reload -> re-upload -> the saved main.py runs again by itself.
+// -> CLI --inputs replay byte-identical; reload restores the kept bin and re-sends main.py (F-07c); Forget -> default firmware.
+
 // Usage: node tools/webtest/micropython.mjs (after tools/build_web.sh and tools/fetch_third_party.sh --micropython; SKIP without the bin)
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
@@ -137,13 +138,30 @@ if (!same) at = Math.max(0, [...cli].findIndex((c, i) => c !== [...mine][i]));
 report('CLI --inputs replay = web serial since the upload (byte for byte)', same && p.status === 0 && cli.includes('mpy tick 2'),
   same ? `${cli.length} chars, ${cycles} cycles` : `differs at ${at}: ${JSON.stringify(cli.slice(at, at + 40))} vs ${JSON.stringify(mine.slice(at, at + 40))}`);
 
-// ---- 3. Reload: main.py is kept in this browser and re-sent by itself once the image boots again
+// ---- 3. Reload (F-07c): the bin and main.py are kept in this browser; no re-upload, main.py is re-sent by itself
 await page.reload({ waitUntil: 'load' });
 const kept = await page.evaluate(() => localStorage.getItem('tryboard-mpy-main'));
 report('main.py kept in this browser', kept === MAIN);
-report('reload + upload again -> main.py tab', await openWithBin(page));
+const restored = await waitFor(page, () => !!document.querySelector('[data-dock="py"]') && document.getElementById('mpyRun') && !document.getElementById('mpyRun').disabled, null, 40000);
+report('reload without re-upload -> bin restored, main.py tab', restored);
 report('saved main.py re-sent automatically after power-up', await consoleHas(page, 'mpy end', 30000));
 await page.screenshot({ path: path.join(outDir, 'micropython-reload.png') });
+
+// ---- 4. Forget the bin: next reload starts with the default firmware; uploading again still works
+await page.click('#swapFw');
+await waitFor(page, () => !!document.querySelector('[data-fw="forget"]'), null, 5000);
+await page.click('[data-fw="forget"]');
+const gone = await waitFor(page, async () => {
+  const db = await new Promise((r) => { const q = indexedDB.open('tryboard-bins', 1); q.onsuccess = () => r(q.result); });
+  const n = await new Promise((r) => { const q = db.transaction('bins').objectStore('bins').count(); q.onsuccess = () => r(q.result); });
+  db.close();
+  return n === 0;
+}, null, 5000);
+report('Forget deletes the local copy', gone);
+await page.reload({ waitUntil: 'load' });
+await waitFor(page, () => parseFloat(document.getElementById('simtime').textContent) > 1, null, 30000);
+report('after Forget + reload: default firmware, no main.py tab', !(await page.$('[data-dock="py"]')) && !(await fwConsole(page)).includes('MicroPython v'));
+report('upload again after Forget -> main.py tab', await openWithBin(page));
 
 await browser.close();
 server.close();

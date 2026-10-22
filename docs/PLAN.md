@@ -243,7 +243,7 @@
 | F-11 | 环境脚本时间轴（先交互稿，人确认后实现） | --inputs 重放指纹一致 | ◐ 第二步主干完成（2026-10-21）：底栏 / 手机抽屉「脚本」页、分享 `tl`、嵌入只读进度条；`tools/webtest/scenario.mjs` 网页 vs CLI 串口逐字节 + 指纹一致（Reviews/ab/F-11.md）；剩：撤销接入、「由环境脚本控制」提示、跟随 / 适配缩放、回放中编辑警告 |
 | F-11c | 环境脚本收尾：撤销接入、「由环境脚本控制」提示、跟随 / 适应缩放、回放中编辑警告（F-11-timeline.md §5–§9） | scenario.test.ts + scenario.mjs + agent-browser | ☐ 波 7 |
 | F-09c | 语音面板接真麦克风（复用 micinput.ts 的 live 源，录下的音可导出 WAV 供 `--mic` 重放）+ 3D BOOT 与面板按钮电平统一 | xiaozhi.mjs + agent-browser | ☐ 波 7 |
-| F-07c | MicroPython bin 刷新后保留（IndexedDB，复用 tryfile.ts）+ S3 帮助行走查 + 清掉未用的 sendCtrl | micropython.mjs + agent-browser | ☐ 波 7 |
+| F-07c | MicroPython bin 刷新后保留（IndexedDB，复用 tryfile.ts）+ S3 帮助行走查 + 清掉未用的 sendCtrl | micropython.mjs + agent-browser | ☑ 2026-10-21：自带 bin 按 sha256 存本机 IndexedDB `tryboard-bins`（最多 3 个 / 共 24 MB），刷新后按作品自动恢复并照常重发 main.py；换固件菜单「忘掉 …」删本机副本，「最近」里存过的 bin 点一下直接再跑；存不了提示一次后回落现状；`?s=` / `.tryboard` 语义不变；micropython.mjs 14/14（新增上传 → 刷新 → 不重传运行、忘掉 → 刷新回默认）；`Reviews/ab/F-07c.md` |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。

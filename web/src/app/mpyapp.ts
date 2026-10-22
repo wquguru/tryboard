@@ -78,9 +78,6 @@ export function runMain() {
   void link.run(mpy.get().text);
 }
 
-/** Ctrl-C / Ctrl-D buttons: raw bytes into the logged serial input */
-export const sendCtrl = (s: Session, key: 'c' | 'd') => s.sim?.uart(key === 'c' ? '\x03' : '\x04');
-
 export function installMpy(session: Session) {
   link = new MpyLink(
     (text) => session.sim?.uart(text),

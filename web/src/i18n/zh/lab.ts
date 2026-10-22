@@ -1050,5 +1050,12 @@ const d: Dict = {
   "No conversation yet": "还没有对话",
   "Voice server log": "语音服务器日志",
   "Waiting for the board to connect": "等待板子连接",
+  "This browser could not keep a copy of {name} (private mode or storage full): after a reload, upload it again": "这个浏览器没能保存 {name} 的副本（隐私模式或空间已满）：刷新后需要重新上传",
+  "Forgot {name}: the copy in this browser is deleted; it keeps running until the next reload": "已忘掉 {name}：本机副本已删除；当前运行到下次刷新为止",
+  "Could not delete the copy of {name} in this browser": "没能删除本机保存的 {name} 副本",
+  "Restored {name} from this browser (Change firmware → Forget deletes the copy)": "已从本机恢复 {name}（换固件 → 忘掉 可删除副本）",
+  "Kept in this browser: click to run it again": "已保存在这个浏览器：点击再次运行",
+  "Forget {name}": "忘掉 {name}",
+  "Delete the copy kept in this browser; the next reload starts with the default firmware": "删除这个浏览器里保存的副本；下次刷新从默认固件启动",
 };
 export default d;

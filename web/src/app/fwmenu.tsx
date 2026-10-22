@@ -9,10 +9,11 @@ import { MPY_DOWNLOAD } from '../chipid';
 import { CHIP_NAME, chipOf, exampleHref, loadExamples, type Chip, type Example } from './examples';
 import { Icon } from './icons';
 import { useStore } from './react';
+import { keptNow } from './ownbin';
 import { menuItem, menuPanel } from './topbar';
 
 const RECENT_KEY = 'tryboard-recent-fw';
-type Recent = { kind: 'example'; id: string; title: string; at: number } | { kind: 'file'; name: string; at: number };
+type Recent = { kind: 'example'; id: string; title: string; at: number } | { kind: 'file'; name: string; at: number; h?: string };
 
 export function recentFw(): Recent[] {
   try {
@@ -22,7 +23,7 @@ export function recentFw(): Recent[] {
     return [];
   }
 }
-/** Record opened examples/uploads; files keep only their name (content can't be re-read), clicking re-picks the file. */
+/** Record opened examples/uploads; files keep their name and, once kept in IndexedDB (F-07c), its sha256 to run it again. */
 export function pushRecent(r: Recent) {
   const key = (x: Recent) => (x.kind === 'example' ? `e:${x.id}` : `f:${x.name}`);
   const list = [r, ...recentFw().filter((x) => key(x) !== key(r))].slice(0, 3);
@@ -40,6 +41,7 @@ const open = (v: boolean) => setBc({ fwMenu: v });
 /** Top-bar button + dropdown/sheet. The file input stays mounted so change still fires after the menu closes. */
 export function FwMenu({ phone }: { phone?: boolean }) {
   const { fwMenu, fw, chip: cur } = useStore(bc);
+  const kept = useStore(keptNow).cur;
   const file = useRef<HTMLInputElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   const [exs, setExs] = useState<Example[]>([]);
@@ -111,7 +113,7 @@ export function FwMenu({ phone }: { phone?: boolean }) {
       {shown.map((e) => {
         const on = running(e);
         return (
-          <a key={e.id} role="menuitem" data-ex={e.id} href={exampleHref(e.id)} aria-current={on || undefined} className={cn(item, on && 'bg-accent-bg')}>
+          <a key={e.id} role="menuitem" data-ex={e.id} href={exampleHref(e.id)} onClick={() => actions.releaseBin?.()} aria-current={on || undefined} className={cn(item, on && 'bg-accent-bg')}>
             <span className="min-w-0 flex-1">
               <span className="block truncate">{t(e.title)}</span>
               <span className="block truncate text-[11px] text-muted">
@@ -151,13 +153,20 @@ export function FwMenu({ phone }: { phone?: boolean }) {
       {recent.length > 0 && <div className={sec}>{t('Recent')}</div>}
       {recent.map((r) =>
         r.kind === 'example' ? (
-          <a key={`e:${r.id}`} role="menuitem" data-recent={r.id} href={exampleHref(r.id)} className={item}>
+          <a key={`e:${r.id}`} role="menuitem" data-recent={r.id} href={exampleHref(r.id)} onClick={() => actions.releaseBin?.()} className={item}>
             <Icon n="restart" size={15} />
             <span className="min-w-0 flex-1 truncate">{t('Example · {title}', { title: t(r.title) })}</span>
             <span className="flex-none font-mono text-[11px] text-muted">{hhmm(r.at)}</span>
           </a>
         ) : (
-          <button key={`f:${r.name}`} type="button" role="menuitem" data-recent-file={r.name} title={t("The browser doesn't keep file contents: click to pick this file again")} className={item} onClick={() => (open(false), file.current?.click())}>
+          <button key={`f:${r.name}`} type="button" role="menuitem" data-recent-file={r.name} title={r.h ? t('Kept in this browser: click to run it again') : t("The browser doesn't keep file contents: click to pick this file again")}
+            className={item}
+            onClick={async () => {
+              open(false);
+              // A kept copy may have been evicted or forgotten since: fall back to picking the file
+              if (!(r.h && (await actions.reopenBin?.(r.h)))) file.current?.click();
+            }}
+          >
             <Icon n="doc" size={15} />
             <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{r.name}</span>
             <span className="flex-none font-mono text-[11px] text-muted">{hhmm(r.at)}</span>
@@ -172,6 +181,15 @@ export function FwMenu({ phone }: { phone?: boolean }) {
           <span className="block text-[11px] text-muted">{t("Runs on the bench and checks the current checkpoint. A full flash image from ESP-IDF / Arduino; dropping it on the bench works too (the file never leaves your browser).")}</span>
         </span>
       </button>
+      {kept && actions.forgetBin && (
+        <button type="button" role="menuitem" data-fw="forget" className={item} onClick={() => (open(false), actions.forgetBin?.())}>
+          <Icon n="trash" size={15} />
+          <span className="min-w-0 flex-1">
+            {t('Forget {name}', { name: kept.name })}
+            <span className="block text-[11px] text-muted">{t('Delete the copy kept in this browser; the next reload starts with the default firmware')}</span>
+          </span>
+        </button>
+      )}
       {mpy && (
         <p id="mpyHelp" className="m-0 px-2.5 py-1.5 text-[11px] leading-[1.5] text-muted">
           {t('MicroPython: download the official {chip} image from micropython.org and upload it here; a main.py editor then opens in the dock.', { chip: CHIP_NAME[chip] })}{' '}

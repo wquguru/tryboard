@@ -155,6 +155,10 @@ export const actions: {
   /** One network fault from now (D-01: reboot / dns / silent, netfault= action in the input log) */
   netFault?: (kind: string) => void;
   pickFirmware?: (f: File) => void;
+  /** F-07c own bins kept in this browser: stop restoring on reload / delete the running one's copy / run a kept one by sha256 */
+  releaseBin?: () => void;
+  forgetBin?: () => void;
+  reopenBin?: (h: string) => Promise<boolean>;
   /** On the bench: verify the selected (or first failing) checkpoint with the upload; returns its id, or null. */
   checkUpload?: (buf: ArrayBuffer, name: string) => string | null;
   /** Switch back to the work's reference firmware (blank works have none). */
