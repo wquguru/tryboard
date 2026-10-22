@@ -4886,6 +4886,27 @@
   ]
  },
  {
+  "id": "arduino-lib-nimble",
+  "seconds": 5,
+  "args": [
+   "--ble-phone"
+  ],
+  "expect": [
+   "nimble advertising TryBoard-NimBLE",
+   "nimble connected c0:ff:ee:12:34:56",
+   "nimble read 2A19 = 87%",
+   "nimble subscribe notify=1",
+   "nimble notify 84% ok=1",
+   "TRYBOARD_OK lib-nimble"
+  ],
+  "stderr_expect": [
+   "CONNECT_IND phone C0:FF:EE:12:34:56",
+   "fw → read 2A19 = 57 (87%)",
+   "fw → subscribe 2A19 ok",
+   "fw → notify 2A19 #3 = 54 (84%)"
+  ]
+ },
+ {
   "id": "arduino-lib-webserver",
   "seconds": 5,
   "script": "0.5:phone=join,TryBoard-Setup; 3:phone=get,http://192.168.4.1/led?on=1",

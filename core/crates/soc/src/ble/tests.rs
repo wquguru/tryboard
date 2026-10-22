@@ -53,6 +53,17 @@ fn read_bd_addr_is_ours() {
 }
 
 #[test]
+fn vendor_read_static_addr_returns_six_bytes() {
+    let mut b = Ble::new(ADDR);
+    cmd(&mut b, 0xfc01, &[], 0);
+    let p = drain(&mut b, 10_000);
+    // Command Complete: plen 10 = ncmd + opcode + status + 6-byte address
+    assert_eq!(p[0][..7], [0x04, 0x0e, 10, 1, 0x01, 0xfc, 0]);
+    assert_eq!(p[0][7..13], [3, 0, 0, 0x42, 0x54, 0xc2]);
+    assert_eq!(p[0][12] & 0xc0, 0xc0);
+}
+
+#[test]
 fn phone_scans_connects_and_starts_att() {
     let mut b = Ble::new(ADDR);
     advertise(&mut b);

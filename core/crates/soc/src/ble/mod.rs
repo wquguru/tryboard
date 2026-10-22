@@ -245,6 +245,12 @@ impl Ble {
                 r.extend_from_slice(&self.addr);
                 self.cmd_complete(at, op, &r);
             }
+            // Vendor Read Static Address (NimBLE ble_hs_util_ensure_addr(1)): status + 6 bytes, top two bits set
+            0xfc01 => {
+                let mut r = vec![0];
+                r.extend_from_slice(&self.static_addr());
+                self.cmd_complete(at, op, &r);
+            }
             0x2002 => {
                 let l = ACL_LEN.to_le_bytes();
                 self.cmd_complete(at, op, &[0, l[0], l[1], ACL_NUM]);
@@ -619,6 +625,13 @@ impl Ble {
             self.adv.next_us = now;
         }
         Ok(())
+    }
+
+    /// Random static address derived from the public one (little-endian, MSB 0b11), stable across runs
+    pub fn static_addr(&self) -> [u8; 6] {
+        let mut a = self.addr;
+        a[5] |= 0xc0;
+        a
     }
 
     pub fn connected(&self) -> bool {
