@@ -148,7 +148,7 @@ const cmdk = import('./cmdk');
           serial.reset(t, store.get().simSeconds);
         },
       }, { placed, ...(plan ? { chip: plan.chip, levels: customLevels } : {}) });
-    (window as unknown as { __tbApp: unknown }).__tbApp = { store, session };
+    (window as unknown as { __tbApp: unknown }).__tbApp = { store, session, toast: (s: string) => shell.toast(s) };
     const ctx: StepCtx = { work, store, session, shell, ...(plan ? { custom: { plan, levels: customLevels } } : {}) };
     if (plan) Object.assign(globalThis, { __tbCustomLevels: customLevels });
     restoreChecks(ctx);

@@ -1,6 +1,6 @@
 // Workbench shell: routing (?work= + #step), step registry, verdict / next, toast. Switching steps only swaps panels;
 // React draws the shell (DECISIONS 2026-10-17), while the three.js canvas and raw serial text bypass React.
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { cn } from "../ui/cn";
 import { t } from "../i18n";
 import {
@@ -157,6 +157,7 @@ const M_ORDER: Record<
 function App() {
   const c = useStore(chrome);
   const m = useStore(mui);
+  const toastLift = useToastLift(c.toast.shown, c.toast.text, m.props);
   const phone = usePhone();
   const { step } = c;
   const bench = step === "bench";
@@ -442,6 +443,7 @@ function App() {
         id="toast"
         role="status"
         hidden={!c.toast.shown}
+        style={phone && toastLift !== null ? { bottom: toastLift } : undefined}
         className={cn(
           "toast fixed z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 rounded-lg bg-fg px-3.5 py-2 text-xs text-(--toast-fg)",
           phone
@@ -453,6 +455,28 @@ function App() {
       </div>
     </div>
   );
+}
+
+/** Phone: keep the toast above the topmost open bottom drawer (DESIGN_V2 §10.4); returns bottom px or null */
+function useToastLift(shown: boolean, text: string, propsOpen: boolean) {
+  const [lift, setLift] = useState<number | null>(null);
+  useEffect(() => {
+    if (!shown) return;
+    const measure = () => {
+      let top = innerHeight;
+      for (const el of document.querySelectorAll<HTMLElement>("#props, #fwMenu, .qcard")) {
+        if (el.id === "props" && !propsOpen) continue;
+        const r = el.getBoundingClientRect();
+        if (r.height > 0 && r.top < innerHeight - 1) top = Math.min(top, r.top);
+      }
+      setLift(top < innerHeight ? innerHeight - top + 8 : null);
+    };
+    measure();
+    // Drawers animate in, so measure again once they settle
+    const id = window.setTimeout(measure, 350);
+    return () => clearTimeout(id);
+  }, [shown, text, propsOpen]);
+  return lift;
 }
 
 let toastTimer = 0;
