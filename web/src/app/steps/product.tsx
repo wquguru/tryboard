@@ -224,7 +224,7 @@ function remainingLines(work: string): BuyLine[] {
 }
 
 /** These projects' products live in works3d.ts (P2-09) */
-const WORK3D = new Set(['lamp', 'ruler', 'tilt']);
+const WORK3D = new Set(['lamp', 'ruler', 'tilt', 'door']);
 const COLOR_LABEL: Record<string, string> = { warm: t('Warm white'), red: t('Red'), green: t('Green'), blue: t('Blue'), purple: t('Purple'), white: t('White') };
 
 /** Expression names printed on the lens firmware's serial */

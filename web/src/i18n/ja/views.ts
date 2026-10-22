@@ -93,5 +93,6 @@ const d: Dict = {
   "RC522 reset": "RC522 リセット",
   "RC522 power (3.3 V only)": "RC522 電源（3.3 V 専用）",
   "RC522 · SDA IO{pin} · tap a card below": "RC522 · SDA IO{pin} · 下でカードをかざす",
+  "RC522 card zone": "RC522 カード読み取り部",
 };
 export default d;

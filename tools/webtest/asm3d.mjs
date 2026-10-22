@@ -203,6 +203,81 @@ const s2 = await p2.evaluate(() => globalThis.__tbApp.store.get().assembly?.plac
 report('?asm=svg fallback: SVG view assembles', svgOk && s2.length >= 1, JSON.stringify(s2));
 await p2.close();
 
+// G-03c RFID door (SVG assembly): reader on the steel back box -> retest reads no card and fails; against the card zone -> passes;
+// then the 3D product's strike follows the relay (a whitelisted card opens it for 3 s)
+{
+  const p3 = await browser.newPage();
+  p3.on('pageerror', (e) => errors.push(`door: ${e}`));
+  p3.on('console', (m) => { if (m.type() === 'error') errors.push(`door: ${m.text()}`); });
+  await p3.goto(`${base}/app?work=door#bench`, { waitUntil: 'load' });
+  await p3.evaluate(() => {
+    const c = {};
+    for (const id of ['door-1', 'door-2', 'door-3', 'door-4']) c[id] = { fp: 'test', at: 'preset' };
+    localStorage.setItem('tryboard-app-checks:door', JSON.stringify(c));
+    localStorage.removeItem('tryboard-app-asm:door');
+  });
+  await p3.goto(`${base}/app?work=door#assemble`, { waitUntil: 'load' });
+  await p3.reload({ waitUntil: 'load' });
+  await p3.waitForSelector('.asm-box [data-part]', { timeout: 30000 });
+  const click = async (sel) => {
+    for (let i = 0; i < 20; i++) {
+      try {
+        await p3.waitForSelector(sel, { timeout: 5000 });
+        await p3.click(sel);
+        return;
+      } catch {
+        await sleep(200);
+      }
+    }
+    throw new Error(`cannot click ${sel}`);
+  };
+  const build = async (pick) => {
+    for (const k of ['back', 'board', 'relay', 'buzzer', 'led', 'oled', 'rc522', 'front']) {
+      await click(`.asm-box [data-part="${k}"]`);
+      if (k === 'rc522') await click(`.asm-box [data-k="pick${pick}"]`);
+    }
+    await click('#toolbar [data-tool="asm-retest"]');
+    await waitFor(p3, () => /Retesting/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 10000);
+    await waitFor(p3, () => !!document.querySelector('#props .verdict-line') && !/Retesting/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 120000);
+    return {
+      v: await p3.$eval('#props .result-card', (e) => e.dataset.verdict).catch(() => ''),
+      txt: await p3.$eval('#props', (e) => e.textContent),
+      a: await p3.evaluate(() => globalThis.__tbApp.store.get().assembly),
+    };
+  };
+  try {
+    const bad = await build('B');
+    report('door: reader on the steel back box -> cards never reach the RC522, retest fails', bad.a?.effects?.cardBlock === true && (bad.v === 'bad' || bad.v === 'shifted'), `${bad.v} ${(bad.txt.match(/Retest result.{0,200}/) ?? [''])[0]}`);
+    await shot(p3, 'door-bad');
+    await click('#toolbar [data-tool="asm-reset"]');
+    const good = await build('A');
+    report('door: reader against the card zone -> retest passes, assembly clean', good.a?.effects?.cardBlock === false && good.v === 'ok' && /Assembly 8\/8, no warnings/.test(good.txt), `${good.v} ${(good.txt.match(/Retest result.{0,80}/) ?? [''])[0]}`);
+    await shot(p3, 'door-ok');
+    await click('#next');
+    const ready = await waitFor(p3, () => location.hash === '#product' && !!globalThis.__tbProduct?.state && !!document.querySelector('canvas'), null, 30000);
+    // Let the live sim reach the card polling loop before tapping
+    await sleep(2500);
+    const closed0 = await p3.evaluate(() => globalThis.__tbProduct.state().open);
+    // The level script may leave a card on the reader or the 10 s lockout running: lift it, then tap and retap until the strike opens
+    const tap = async (uid) => p3.evaluate((u) => globalThis.__tbApp.session.sim.partInput({ kind: 'card', uid: u }), uid);
+    let opened = false;
+    for (let i = 0; i < 8 && !opened; i++) {
+      await tap('none');
+      await sleep(600);
+      await tap('DEADBEEF');
+      opened = await waitFor(p3, () => globalThis.__tbProduct.state().open === true, null, 3000);
+    }
+    await sleep(400);
+    await shot(p3, 'door-open');
+    await p3.evaluate(() => globalThis.__tbApp.session.sim.partInput({ kind: 'card', uid: 'none' }));
+    const reclosed = await waitFor(p3, () => globalThis.__tbProduct.state().open === false, null, 15000);
+    report('door: 3D product strike follows the relay (whitelisted card opens it, closes again after 3 s)', ready && closed0 === false && opened && reclosed, `ready=${ready} closed0=${closed0} opened=${opened} reclosed=${reclosed}`);
+  } catch (e) {
+    report('door: flow finished', false, String(e).slice(0, 200));
+  }
+  await p3.close();
+}
+
 await page.evaluate(() => localStorage.clear());
 await browser.close();
 server.close();

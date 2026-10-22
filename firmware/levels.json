@@ -949,7 +949,7 @@
   "work": "door",
   "title": "Combined: RFID door lock",
   "goal": "Three refusals in a row lock the reader for 10 s with a countdown on the screen",
-  "pass": "Unknown card placed three times (0.5 s, 1.1 s, 1.7 s), then the whitelisted card at 2.5 s: 连续 3 次拒绝，锁定 10 秒 and 锁定中 appear on serial, 锁定倒计时 appears at least 3 times, relay GPIO10 never switches; OLED lights ≥ 300 pixels",
+  "pass": "Unknown card placed three times (0.5 s, 1.1 s, 1.7 s), then the whitelisted card at 2.5 s: 连续 3 次拒绝，锁定 10 秒 and 锁定中 appear on serial, 锁定倒计时 appears at least 3 times, relay GPIO10 never switches; OLED lights ≥ 300 pixels; the web page also requires an assembly with no warnings (geometric estimate, checked on the web page only)",
   "buy": "12 V 1 A power adapter for the door strike, flyback diode (if the relay module has none), enclosure",
   "learn": "A small state machine: open / refused / locked out; why a lockout slows down guessing",
   "brief": "Combine the previous checkpoints into an RFID door lock, ESP32-C3:\n· RC522 module (3.3 V only) on SPI2: SCK=GPIO4, MISO=GPIO5, MOSI=GPIO6, SDA/CS=GPIO7, RST=GPIO3, 4 MHz mode 0. 1.3″ SH1106 OLED (128×64): I2C address 0x3C, SDA=GPIO2, SCL=GPIO9 (GPIO6 / 7 are taken by SPI; GPIO8 is the on-board RGB LED); relay IN GPIO10 (door strike), buzzer GPIO1, red LED GPIO0\n· Whitelisted card DE:AD:BE:EF: 欢迎, relay 3 s, short beep. Unknown card: 拒绝（连续第 N 次）, long beep, red LED blinks\n· After 3 refusals in a row print 连续 3 次拒绝，锁定 10 秒 and ignore every card for 10 s: print a line containing 锁定中 for each card seen meanwhile (even a whitelisted one, and don't switch the relay); once a second print 锁定倒计时 N 秒 and show the seconds left on the screen; when it ends print 解除锁定 and reset the count",
@@ -980,6 +980,8 @@
    "max": 0
   },
   "oled_min_pixels": 300
+,
+  "assembly": "door"
  },
  {
   "id": "fault-wire",

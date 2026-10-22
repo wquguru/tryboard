@@ -40,8 +40,10 @@ export function createAssembly(el: HTMLElement, h: AssemblyHandlers, opts: { ser
   svg.push(`<text data-fit="320" x="28" y="44"><tspan fill="#F7F6F3" font-size="15" font-weight="700">${t('Parts tray')}</tspan><tspan dx="10" fill="#9FBFB0" class="tb-mono" font-size="11">${t('Drag into the case · or just click')}</tspan></text>`);
   T.tray.forEach((k, i) => {
     const p = byId[k];
-    const cx = 28 + (i % 2) * 156, cy = 62 + Math.floor(i / 2) * 120;
-    svg.push(`<g data-k="card_${k}" data-part="${k}" class="as-card" transform="translate(${cx} ${cy})" tabindex="0" role="button" aria-label="${p.name}"><rect data-k="cs_${k}" width="144" height="108" rx="10" fill="#24392F" stroke="#3B5C4F" stroke-width="1.5"/><g transform="translate(22 12)">${p.mini}</g><text data-fit="136" x="72" y="96" fill="#F7F6F3" font-size="12" font-weight="700" text-anchor="middle">${p.name}</text><text data-k="ok_${k}" x="132" y="20" fill="#22C55E" class="tb-mono" font-size="14" font-weight="700" text-anchor="end" opacity="0">✓</text></g>`);
+    // Trays past 6 parts (door: 8) shrink the cards so four rows end above the order hint at y 446
+    const sc = T.tray.length > 6 ? 0.75 : 1;
+    const cx = 28 + (i % 2) * 156 * sc, cy = 62 + Math.floor(i / 2) * 120 * sc;
+    svg.push(`<g data-k="card_${k}" data-part="${k}" class="as-card" transform="translate(${cx} ${cy}) scale(${sc})" tabindex="0" role="button" aria-label="${p.name}"><rect data-k="cs_${k}" width="144" height="108" rx="10" fill="#24392F" stroke="#3B5C4F" stroke-width="1.5"/><g transform="translate(22 12)">${p.mini}</g><text data-fit="136" x="72" y="96" fill="#F7F6F3" font-size="12" font-weight="700" text-anchor="middle">${p.name}</text><text data-k="ok_${k}" x="132" y="20" fill="#22C55E" class="tb-mono" font-size="14" font-weight="700" text-anchor="end" opacity="0">✓</text></g>`);
   });
   svg.push(`<text data-fit="300" x="28" y="446" fill="#9FBFB0" class="tb-mono" font-size="11">${t('Wrong order won’t fit: upper layers cover lower ones')}</text>`);
   svg.push(`<text data-fit="340" x="356" y="44" fill="#C9D6CF" class="tb-mono" font-size="12" font-weight="700">${T.caption}</text>`);

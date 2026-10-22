@@ -868,5 +868,54 @@ const d: Dict = {
 
   // G-01 templates and parts.
   "RFID door lock": "RFID 门禁",
+
+  // F-04a tutorial parts (DS18B20 / PIR / relay / LDR / RC522)
+  "Relay module": "继电器模块",
+
+  // Board advisor data, engine and derived text (web/src/advisor).
+  "Relay": "继电器",
+
+  // F-04a tutorial parts (DS18B20 / PIR / relay / LDR / RC522)
+  "Strike released: door opens": "电锁释放：门可以推开",
+  "Strike locked": "电锁锁住",
+  "Reader on the steel back box: cards are never read": "读卡器贴在钢底盒上：永远读不到卡",
+  "RFID door · wall panel 86×120×28 mm (estimate)": "RFID 门禁 · 墙面面板 86×120×28 mm（估算）",
+  "Build the door reader": "组装门禁读卡面板",
+  "Start with the back box": "先装底盒",
+  "Steel back box": "钢制底盒",
+  "Back box": "底盒",
+  "Back box screwed to the wall": "底盒已固定在墙上",
+  "Cable entry at the bottom": "走线口在下方",
+  "ESP32-C3 dev board": "ESP32-C3 开发板",
+  "Board on standoffs, off the steel": "开发板装在铜柱上，不碰钢板",
+  "SPI to reader · I2C to screen · GPIO10 to relay": "SPI 接读卡器 · I2C 接屏 · GPIO10 接继电器",
+  "Relay module in place": "继电器模块已装好",
+  "Strike on COM / NO, 12 V stays off the board": "电锁接 COM / NO，12 V 不进开发板",
+  "Buzzer behind the sound slots": "蜂鸣器对准出声槽",
+  "GPIO1, 2.7 kHz": "GPIO1，2.7 kHz",
+  "Red LED + 330 Ω": "红色 LED + 330 Ω",
+  "Red LED": "红 LED",
+  "LED pushed into the panel hole": "LED 插进面板小孔",
+  "GPIO0 through 330 Ω": "GPIO0 串 330 Ω",
+  "Screen lined up with the window": "屏幕对准屏幕窗",
+  "Cable 10 cm": "排线 10 cm",
+  "RC522 reader module": "RC522 读卡模块",
+  "Against the card zone, 2 mm behind the front": "贴着刷卡区，离面板正面 2 mm",
+  "Reader against the card zone": "读卡器贴着刷卡区",
+  "Cards read through 2 mm of plastic": "隔着 2 mm 塑料也能读卡",
+  "On the steel back box, 24 mm behind the front": "贴在钢底盒上，离面板正面 24 mm",
+  "Reader on the steel back box": "读卡器贴在钢底盒上",
+  "Steel behind the antenna and 24 mm of air: no card is ever read (estimate)": "天线后面是钢板，又隔了 24 mm：一张卡也读不到（估算）",
+  "Reader position": "读卡器位置",
+  "Against the card zone, reads through 2 mm of plastic": "贴着刷卡区，隔 2 mm 塑料读卡",
+  "On the steel back box, no card is read": "贴在钢底盒上，读不到卡",
+  "Strike wiring": "电锁接线",
+  "12 V strike on COM / NO, never into the board (needs real hardware)": "12 V 电锁接 COM / NO，绝不接进开发板（必须上真机）",
+  "Screen window": "屏幕窗",
+  "1.3″ module lined up, cable 10 cm": "1.3″ 模块已对准，排线 10 cm",
+  "Board mounting": "开发板固定",
+  "On plastic standoffs, 6 mm off the steel": "装在塑料铜柱上，离钢板 6 mm",
+  "Product: wall reader panel with a card zone and a 1.3″ screen next to a door with an electric strike": "成品：门边墙上的读卡面板，带刷卡区和 1.3″ 屏，门框上装电锁",
+  "RFID door · product · RC522 + SH1106 1.3″ + relay + 12 V strike": "RFID 门禁 · 成品 · RC522 + SH1106 1.3″ + 继电器 + 12 V 电锁",
 };
 export default d;

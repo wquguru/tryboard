@@ -4,7 +4,7 @@ import { t } from '../i18n';
 import type { LiveFrame } from './common';
 import { createProductView, type ProductHandlers } from './product';
 import { createLensProduct, createSpinProduct } from './lcdproducts';
-import { createLampProduct, createRulerProduct, createTiltProduct, type WorkEffects } from './workproducts';
+import { createDoorProduct, createLampProduct, createRulerProduct, createTiltProduct, type WorkEffects } from './workproducts';
 import { createKeypadView } from './keypad';
 import { CHIP_HEAT_OFFSET } from './chipheat';
 
@@ -48,14 +48,15 @@ export interface Effects extends WorkEffects {
 export const SONAR_BLOCK_CM = 3;
 
 /** Apply assembly effects to the check inputs so the re-test sees what the installed sensors would:
- *  blocked sonar clamps every dist= to sonarBlock; a flipped IMU negates imu= pitch and roll. Same pass/fail rules apply. */
+ *  blocked sonar clamps every dist= to sonarBlock; a flipped IMU negates imu= pitch and roll; a blocked reader turns card= into none. */
 export function effectScript(script: string | undefined, fx: Effects): string | undefined {
-  if (!script || (!fx.sonarBlock && !fx.imuFlip)) return script;
+  if (!script || (!fx.sonarBlock && !fx.imuFlip && !fx.cardBlock)) return script;
   return script
     .split(';')
     .map((e) => {
-      const m = /^(\s*[\d.]+\s*:\s*)(dist|imu)=(.*)$/.exec(e);
+      const m = /^(\s*[\d.]+\s*:\s*)(dist|imu|card)=(.*)$/.exec(e);
       if (!m) return e;
+      if (m[2] === 'card' && fx.cardBlock) return `${m[1]}card=none`;
       if (m[2] === 'dist' && fx.sonarBlock) {
         const d = Number(m[3]);
         return `${m[1]}dist=${d < 0 || d > fx.sonarBlock ? fx.sonarBlock : d}`;
@@ -348,4 +349,49 @@ export const USBKEY: Template = {
   },
 };
 
-export const TEMPLATES: Record<string, Template> = { weather: WEATHER, spin: SPIN, lens: LENS, usbkey: USBKEY, lamp: LAMP, ruler: RULER, tilt: TILT };
+// G-03 RFID door: wall panel 86×120×28 mm lying on its side (120 mm across), about 1.16 px per mm
+const RC522_MINI = '<rect x="20" y="4" width="60" height="52" rx="3" fill="#1F4FA8"/><rect x="28" y="10" width="44" height="34" rx="6" fill="none" stroke="#E8C547" stroke-width="2.5"/><rect x="34" y="46" width="32" height="6" fill="#E8C547"/>';
+const RC522_ISO = '<rect x="104" y="14" width="46" height="70" rx="3" fill="#1F4FA8"/><rect x="110" y="20" width="34" height="50" rx="6" fill="none" stroke="#E8C547" stroke-width="2.5"/><rect x="146" y="30" width="4" height="34" fill="#E8C547"/>';
+
+export const DOOR: Template = {
+  id: 'door',
+  caption: t('RFID door · wall panel 86×120×28 mm (estimate)'),
+  intro: [t('Build the door reader'), t('Start with the back box')],
+  tray: ['front', 'rc522', 'led', 'oled', 'relay', 'buzzer', 'back', 'board'],
+  parts: [
+    { id: 'back', name: t('Steel back box'), short: t('Back box'), ghost: [0, 0, 180, 100], okMsg: [t('Back box screwed to the wall'), t('Cable entry at the bottom')],
+      mini: '<rect x="8" y="4" width="84" height="52" rx="6" fill="#8A8E94" stroke="#5A5E64" stroke-width="1.5"/><rect x="14" y="10" width="72" height="40" rx="4" fill="#9EA3A9"/><circle cx="50" cy="30" r="5" fill="#5A5E64"/>',
+      iso: '<rect x="20" width="140" height="100" rx="8" fill="#8A8E94" stroke="#5A5E64" stroke-width="1.5"/><rect x="26" y="6" width="128" height="88" rx="5" fill="#9EA3A9"/><circle cx="90" cy="50" r="6" fill="#5A5E64"/>' },
+    { id: 'board', name: t('ESP32-C3 dev board'), short: t('Board'), ghost: [26, 66, 57, 30], okMsg: [t('Board on standoffs, off the steel'), t('SPI to reader · I2C to screen · GPIO10 to relay')], mini: BOARD_MINI,
+      iso: '<rect x="26" y="66" width="57" height="30" rx="3" fill="#141414"/><rect x="56" y="70" width="23" height="22" rx="2" fill="#BDB9B0"/><circle cx="36" cy="72" r="3" fill="#22C55E"/>' },
+    { id: 'relay', name: t('Relay module'), short: t('Relay'), ghost: [26, 2, 58, 30], okMsg: [t('Relay module in place'), t('Strike on COM / NO, 12 V stays off the board')],
+      mini: '<rect x="12" y="10" width="76" height="40" rx="3" fill="#1F55B0"/><rect x="20" y="16" width="34" height="28" rx="2" fill="#2563EB"/><rect x="62" y="18" width="20" height="24" fill="#2E8B57"/>',
+      iso: '<rect x="26" y="2" width="58" height="30" rx="3" fill="#1F55B0"/><rect x="32" y="7" width="26" height="20" rx="2" fill="#2563EB"/><rect x="64" y="8" width="16" height="18" fill="#2E8B57"/>' },
+    { id: 'buzzer', name: t('Passive buzzer module'), short: t('Buzzer'), ghost: [86, 36, 15, 37], okMsg: [t('Buzzer behind the sound slots'), t('GPIO1, 2.7 kHz')],
+      mini: '<rect x="30" y="10" width="40" height="40" rx="3" fill="#1f55b0"/><circle cx="50" cy="30" r="14" fill="#141416"/>',
+      iso: '<rect x="86" y="36" width="15" height="37" rx="2" fill="#1f55b0"/><circle cx="93.5" cy="48" r="6" fill="#141416"/>' },
+    { id: 'led', name: t('Red LED + 330 Ω'), short: t('Red LED'), ghost: [86, 80, 14, 14], okMsg: [t('LED pushed into the panel hole'), t('GPIO0 through 330 Ω')],
+      mini: '<circle cx="50" cy="26" r="12" fill="#E5484D"/><rect x="38" y="26" width="24" height="10" fill="#E5484D"/><path d="M44 36 L44 54 M56 36 L56 50" stroke="#8A867E" stroke-width="2.5"/>',
+      iso: '<rect x="86" y="80" width="14" height="14" rx="2" fill="#2A2A28"/><circle cx="93" cy="87" r="5" fill="#E5484D"/>' },
+    { id: 'oled', name: 'OLED 1.3″ SH1106', short: 'OLED', ghost: [34, 34, 41, 39], okMsg: [t('Screen lined up with the window'), t('Cable 10 cm')], mini: OLED_MINI,
+      iso: '<rect x="34" y="34" width="41" height="39" rx="3" fill="#1C4F86"/><rect x="37" y="42" width="35" height="22" fill="#050608"/>' },
+    { id: 'rc522', name: t('RC522 reader module'), short: 'RC522', ghost: [104, 14, 46, 70], mini: RC522_MINI, iso: RC522_ISO,
+      spots: [
+        { key: 'A', label: t('Against the card zone, 2 mm behind the front'), ok: true, msg: [t('Reader against the card zone'), t('Cards read through 2 mm of plastic')] },
+        { key: 'B', label: t('On the steel back box, 24 mm behind the front'), ok: false, msg: [t('Reader on the steel back box'), t('Steel behind the antenna and 24 mm of air: no card is ever read (estimate)')] },
+      ] },
+    { id: 'front', name: t('Front panel'), short: t('Front panel'), ghost: [0, 0, 180, 100], okMsg: [t('Closed'), t('Click “Next: product”')],
+      mini: '<rect x="8" y="4" width="84" height="52" rx="6" fill="#2F3338"/><rect x="18" y="16" width="26" height="18" rx="2" fill="none" stroke="#F2F2F2" stroke-width="2"/><rect x="56" y="12" width="28" height="36" rx="4" fill="none" stroke="#9AA3AD" stroke-width="2" stroke-dasharray="4 3"/>',
+      iso: '<rect x="20" width="140" height="100" rx="10" fill="#2F3338" stroke="#141414" stroke-width="1.5" opacity="0.72"/><rect x="37" y="42" width="35" height="22" rx="2" fill="none" stroke="#F2F2F2" stroke-width="2"/><rect x="104" y="14" width="46" height="70" rx="6" fill="none" stroke="#9AA3AD" stroke-width="2" stroke-dasharray="5 4"/><circle cx="93" cy="87" r="3" fill="#E5484D"/>' },
+  ],
+  checks: (s) => [
+    row(t('Reader position'), has(s, 'rc522'), s.choice.rc522 === 'A', t('Against the card zone, reads through 2 mm of plastic'), t('On the steel back box, no card is read')),
+    row(t('Strike wiring'), has(s, 'relay'), true, t('12 V strike on COM / NO, never into the board (needs real hardware)')),
+    row(t('Screen window'), has(s, 'oled'), true, t('1.3″ module lined up, cable 10 cm')),
+    row(t('Board mounting'), has(s, 'board'), true, t('On plastic standoffs, 6 mm off the steel')),
+  ],
+  effects: (s) => ({ cardBlock: s.choice.rc522 === 'B' }),
+  product: (el) => createDoorProduct(el),
+};
+
+export const TEMPLATES: Record<string, Template> = { weather: WEATHER, spin: SPIN, lens: LENS, usbkey: USBKEY, lamp: LAMP, ruler: RULER, tilt: TILT, door: DOOR };

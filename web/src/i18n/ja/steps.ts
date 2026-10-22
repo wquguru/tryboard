@@ -1113,5 +1113,12 @@ const d: Dict = {
   "Spoken \"Hello\" clip (voice assistant WAV)": "「Hello」と話す録音（音声アシスタント WAV）",
   "Sound": "サウンド",
   "muted": "ミュート",
+  "Against the card zone: a card on the panel is 2–3 mm from the antenna and reads every time": "読み取り部に密着：パネル上のカードはアンテナから 2–3 mm で、毎回読める",
+  "On the steel back box: the steel detunes the antenna and the card is 24 mm away, so no card is read, same in the retest (estimate)": "鋼製ボックスに付けると：鋼板でアンテナが離調し、カードも 24 mm 離れるので一切読めない。再テストでも同じ（推定）",
+  "The 12 V strike goes on the relay COM / NO contacts with its own supply; never feed 12 V into the dev board": "12 V 電気錠は専用電源でリレーの COM / NO 接点に。12 V を開発ボードに入れてはいけない",
+  "Card reading": "カード読み取り",
+  "No card is read": "カードを読めない",
+  "Reads cards on the panel": "パネル上のカードを読める",
+  "With the reader on the steel back box, the RC522 never sees a card.": "リーダーが鋼製ボックスに付いていると、RC522 はカードを一切検出できない。",
 };
 export default d;

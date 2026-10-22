@@ -1,4 +1,4 @@
-// (4) P2-09 3D products for lamp (knob lamp), ruler (ultrasonic ruler) and tilt (motion figure); same stage as product3d.ts, units cm.
+// (4) P2-09 3D products for lamp (knob lamp), ruler (ultrasonic ruler), tilt (motion figure) and (G-03) door; same stage as product3d.ts, units cm.
 // LEDs, OLED, round screen and buzzer come from the live sim; assembly effects (hot spots, blocked probe, flipped IMU) come from the caller.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -14,21 +14,24 @@ import { capturableOf, type Capturable } from './capture';
 import { t } from '../i18n';
 import { shaderWarm } from '../shaderwarm';
 import { onFrame, PRIO } from '../ui/frame';
+import { buildDoor } from './works3d-door';
 
-export type WorkKind = 'lamp' | 'ruler' | 'tilt';
+export type WorkKind = 'lamp' | 'ruler' | 'tilt' | 'door';
 
 export interface WorkFrame {
   pwm: number[];
   strips?: Record<number, number[][]>;
   oled: Uint8Array | null;
   lcd: Uint8Array | null;
+  /** GPIO output levels, bit n = GPIOn (door: relay and red LED) */
+  gpio?: number;
   running: boolean;
 }
 
 export interface WorkProductOptions {
   kind: WorkKind;
   frame(): WorkFrame;
-  effects(): { glare?: boolean; sonarBlock?: number; imuFlip?: boolean };
+  effects(): { glare?: boolean; sonarBlock?: number; imuFlip?: boolean; cardBlock?: boolean };
   /** Whether the buzzer is sounding now (only for the sound-wave rings) */
   sounding(): boolean;
   /** lamp: knob detents turned (positive = clockwise), pressed / released */
@@ -40,6 +43,8 @@ export interface WorkProductOptions {
   /** tilt: disc pose (degrees); initial pose */
   onPose?(p: Pose): void;
   pose?: Pose;
+  /** door: a card tapped on the reader (UID hex) or taken away ('none'); without it the cards are only scenery */
+  onCard?(uid: string): void;
 }
 
 export interface WorkProduct3D {
@@ -51,7 +56,7 @@ export interface WorkProduct3D {
   /** Page position of the draggable thing (knob / baffle / disc) so tests can drag with a real mouse */
   handleScreenPos(): [number, number] | null;
   /** Current state (tests / panel): knob detents, baffle distance, disc pose */
-  state(): { knob: number; cm: number; pose: Pose };
+  state(): { knob: number; cm: number; pose: Pose; open: boolean };
   setDistance(cm: number): void;
   setPose(p: Pose): void;
   /** Photo / video capture (P2-10) */
@@ -73,6 +78,18 @@ function oledTexture() {
   tex.minFilter = THREE.LinearFilter;
   tex.colorSpace = THREE.SRGBColorSpace;
   return { tex, data };
+}
+/** 1-bit OLED frame -> cyan-on-black texture rows (flipped for DataTexture) */
+function paintOled(px: Uint8Array, data: Uint8Array) {
+  for (let y = 0; y < 64; y++)
+    for (let x = 0; x < 128; x++) {
+      const on = px[y * 128 + x] > 0;
+      const i = ((63 - y) * 128 + x) * 4;
+      data[i] = on ? 200 : 4;
+      data[i + 1] = on ? 236 : 6;
+      data[i + 2] = on ? 255 : 10;
+      data[i + 3] = 255;
+    }
 }
 function lcdTexture() {
   const data = new Uint8Array(240 * 240 * 4);
@@ -131,7 +148,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
   sun.position.set(-8, 16, 10);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
-  const S = o.kind === 'ruler' ? 30 : 14;
+  const S = o.kind === 'ruler' ? 30 : o.kind === 'door' ? 40 : 14;
   Object.assign(sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S });
   sun.shadow.radius = 4;
   sun.shadow.bias = -0.0005;
@@ -151,6 +168,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     lamp: { home: new THREE.Vector3(17, 15, 36), target: new THREE.Vector3(0, 5.2, 0), min: 14, max: 60 },
     ruler: { home: new THREE.Vector3(8, 44, 80), target: new THREE.Vector3(17, 1.5, 0), min: 14, max: 120 },
     tilt: { home: new THREE.Vector3(0, 17, 17), target: new THREE.Vector3(0, 2.6, 0), min: 9, max: 40 },
+    door: { home: new THREE.Vector3(-12, 30, 62), target: new THREE.Vector3(2, 22, 0), min: 16, max: 130 },
   };
   const V = VIEW[o.kind];
   camera.position.copy(V.home);
@@ -187,6 +205,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
   let pose: Pose = { ...(o.pose ?? { pitch: 0, roll: 0, yaw: 0 }) };
   let setDistance = (_: number) => {};
   let setPose = (_: Pose) => {};
+  let doorOpen = () => false;
 
   // Buzzer sound-wave rings (ruler)
   const waves: THREE.Mesh[] = [];
@@ -460,15 +479,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     tick = (f, dt, now) => {
       if (f.oled && f.oled !== lastOled) {
         lastOled = f.oled;
-        for (let y = 0; y < 64; y++)
-          for (let x = 0; x < 128; x++) {
-            const on = f.oled[y * 128 + x] > 0;
-            const i = ((63 - y) * 128 + x) * 4;
-            oData[i] = on ? 200 : 4;
-            oData[i + 1] = on ? 236 : 6;
-            oData[i + 2] = on ? 255 : 10;
-            oData[i + 3] = 255;
-          }
+        paintOled(f.oled, oData);
         oTex.needsUpdate = true;
       }
       // Assembly B: probes recessed 6 mm behind the holes
@@ -483,6 +494,12 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
         w.position.y = H + 0.3 + ph * 0.8;
       });
     };
+  } else if (o.kind === 'door') {
+    const d = buildDoor({ scene, shellMat, tag, tagList, hits, occluders, oled: oledTexture(), paintOled, onCard: o.onCard, effects: o.effects });
+    tick = (f, dt) => d.tick(f, dt);
+    onDown = (hit) => d.onDown(hit);
+    handle = d.handle;
+    doorOpen = d.open;
   } else {
     // Disc case Ø5.6 x 2.6 cm, round screen on top; on a small stand, drag to tilt
     const stand = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.2, 0.8, 48), shellMat('#3A3936'));
@@ -691,7 +708,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
       handle.updateWorldMatrix(true, false);
       return screenPos(new THREE.Vector3().setFromMatrixPosition(handle.matrixWorld));
     },
-    state: () => ({ knob: knobCount, cm, pose: { ...pose } }),
+    state: () => ({ knob: knobCount, cm, pose: { ...pose }, open: doorOpen() }),
     setDistance: (d) => setDistance(d),
     setPose: (p) => setPose(p),
     capture: () => capturableOf(renderer, scene, composer),

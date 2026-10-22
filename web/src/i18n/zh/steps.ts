@@ -1113,5 +1113,12 @@ const d: Dict = {
   "Spoken \"Hello\" clip (voice assistant WAV)": "说 “Hello” 的录音（语音助手 WAV）",
   "Sound": "声音",
   "muted": "静音",
+  "Against the card zone: a card on the panel is 2–3 mm from the antenna and reads every time": "贴着刷卡区：卡放在面板上离天线只有 2–3 mm，每次都能读到",
+  "On the steel back box: the steel detunes the antenna and the card is 24 mm away, so no card is read, same in the retest (estimate)": "贴在钢底盒上：钢板让天线失谐，卡又离了 24 mm，所以一张卡也读不到，复测也一样（估算）",
+  "The 12 V strike goes on the relay COM / NO contacts with its own supply; never feed 12 V into the dev board": "12 V 电锁用独立电源接在继电器 COM / NO 触点上；绝不能把 12 V 接进开发板",
+  "Card reading": "读卡",
+  "No card is read": "读不到卡",
+  "Reads cards on the panel": "能读面板上的卡",
+  "With the reader on the steel back box, the RC522 never sees a card.": "读卡器贴在钢底盒上时，RC522 永远看不到卡。",
 };
 export default d;

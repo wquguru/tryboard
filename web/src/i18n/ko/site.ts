@@ -868,5 +868,54 @@ const d: Dict = {
 
   // G-01 templates and parts.
   "RFID door lock": "RFID 출입 통제",
+
+  // F-04a tutorial parts (DS18B20 / PIR / relay / LDR / RC522)
+  "Relay module": "릴레이 모듈",
+
+  // Board advisor data, engine and derived text (web/src/advisor).
+  "Relay": "릴레이",
+
+  // F-04a tutorial parts (DS18B20 / PIR / relay / LDR / RC522)
+  "Strike released: door opens": "전기 스트라이크 해제: 문이 열림",
+  "Strike locked": "전기 스트라이크 잠김",
+  "Reader on the steel back box: cards are never read": "리더가 강철 백박스에 붙어 있음: 카드를 전혀 읽지 못함",
+  "RFID door · wall panel 86×120×28 mm (estimate)": "RFID 도어락 · 벽면 패널 86×120×28 mm(추정)",
+  "Build the door reader": "도어 리더 조립하기",
+  "Start with the back box": "백박스부터 시작",
+  "Steel back box": "강철 백박스",
+  "Back box": "백박스",
+  "Back box screwed to the wall": "백박스를 벽에 고정함",
+  "Cable entry at the bottom": "케이블 입구는 아래쪽",
+  "ESP32-C3 dev board": "ESP32-C3 개발 보드",
+  "Board on standoffs, off the steel": "보드는 스페이서로 강판에서 띄움",
+  "SPI to reader · I2C to screen · GPIO10 to relay": "SPI는 리더 · I2C는 화면 · GPIO10은 릴레이",
+  "Relay module in place": "릴레이 모듈 장착 완료",
+  "Strike on COM / NO, 12 V stays off the board": "스트라이크는 COM / NO에, 12 V는 보드에 넣지 않음",
+  "Buzzer behind the sound slots": "부저는 소리 구멍 뒤에",
+  "GPIO1, 2.7 kHz": "GPIO1, 2.7 kHz",
+  "Red LED + 330 Ω": "빨간 LED + 330 Ω",
+  "Red LED": "빨간 LED",
+  "LED pushed into the panel hole": "LED를 패널 구멍에 끼움",
+  "GPIO0 through 330 Ω": "GPIO0에서 330 Ω 거쳐",
+  "Screen lined up with the window": "화면을 창에 맞춤",
+  "Cable 10 cm": "케이블 10 cm",
+  "RC522 reader module": "RC522 리더 모듈",
+  "Against the card zone, 2 mm behind the front": "카드 영역에 밀착, 앞면에서 2 mm",
+  "Reader against the card zone": "리더가 카드 영역에 밀착",
+  "Cards read through 2 mm of plastic": "2 mm 플라스틱 너머로 카드를 읽음",
+  "On the steel back box, 24 mm behind the front": "강철 백박스에 부착, 앞면에서 24 mm",
+  "Reader on the steel back box": "리더가 강철 백박스에 붙어 있음",
+  "Steel behind the antenna and 24 mm of air: no card is ever read (estimate)": "안테나 뒤에 강철, 게다가 24 mm 거리: 카드를 전혀 읽지 못함(추정)",
+  "Reader position": "리더 위치",
+  "Against the card zone, reads through 2 mm of plastic": "카드 영역에 밀착, 2 mm 플라스틱 너머로 읽음",
+  "On the steel back box, no card is read": "강철 백박스에 붙어 카드를 읽지 못함",
+  "Strike wiring": "스트라이크 배선",
+  "12 V strike on COM / NO, never into the board (needs real hardware)": "12 V 스트라이크는 COM / NO에, 보드에는 절대 넣지 않음(실제 하드웨어 필요)",
+  "Screen window": "화면 창",
+  "1.3″ module lined up, cable 10 cm": "1.3″ 모듈 정렬됨, 케이블 10 cm",
+  "Board mounting": "보드 고정",
+  "On plastic standoffs, 6 mm off the steel": "플라스틱 스페이서로 강판에서 6 mm 띄움",
+  "Product: wall reader panel with a card zone and a 1.3″ screen next to a door with an electric strike": "완성품: 전기 스트라이크가 달린 문 옆 벽의 리더 패널, 카드 영역과 1.3″ 화면",
+  "RFID door · product · RC522 + SH1106 1.3″ + relay + 12 V strike": "RFID 도어락 · 완성품 · RC522 + SH1106 1.3″ + 릴레이 + 12 V 스트라이크",
 };
 export default d;
