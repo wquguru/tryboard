@@ -130,8 +130,13 @@ export async function runEmbed(root: HTMLElement, inp: EmbedInput) {
     view.dataset.serial = con.hidden ? 'off' : 'on';
   });
   const ctx = { work, store, session, shell } as unknown as StepCtx;
+  // Test hook (F-03c): per-tick [sim s, serial chunk, room °C], attached before the replay starts
+  const trace: [number, string, number][] = [];
+  if (inp.paced) Object.assign((globalThis as unknown as { __tbEmbed: object }).__tbEmbed, { trace });
+  const offTick = inp.paced ? session.onTick((m) => trace.length < 20_000 && trace.push([m.simSeconds, m.console, store.get().env.temp])) : () => {};
   await restoreShare(ctx, shared, null, inp.paced);
   const rep = shareReplay();
+  if (!rep) offTick();
   if (rep) {
     // Paced replay: progress and "Skip to end" sit in the toolbar until the log's end time is reached
     const tag = document.createElement('span');
@@ -142,10 +147,6 @@ export async function runEmbed(root: HTMLElement, inp: EmbedInput) {
     show(0);
     const skip = button('embedSkip', t('Skip to end'));
     const off = store.subscribe((x) => show(x.simSeconds), ['simSeconds']);
-    // Test hook (F-03c): per-tick [sim s, serial chunk, room °C] so checks key on sim time, not wall-clock sampling
-    const trace: [number, string, number][] = [];
-    (globalThis as { __tbEmbed?: object }).__tbEmbed = { store, session, trace };
-    const offTick = session.onTick((m) => trace.length < 20_000 && trace.push([m.simSeconds, m.console, store.get().env.temp]));
     const finish = () => {
       off();
       offTick();

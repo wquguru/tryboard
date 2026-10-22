@@ -177,7 +177,9 @@ fs.writeFileSync(path.join(outDir, 'embed-paced-samples.json'), JSON.stringify(s
 const first = seen.find((o) => !o.done);
 report('paced: sim time starts near 0 with a progress tag', !!first && first.t < 1.0 && first.tag, first ? `${first.t.toFixed(2)} s` : 'no sample');
 // Per-tick trace from the page (sim seconds at the tick's end, its serial chunk, room °C): exact under load, unlike 100 ms samples
-const trace = await pp.evaluate(() => globalThis.__tbEmbed.trace ?? []);
+const raw = await pp.evaluate(() => globalThis.__tbEmbed.trace ?? []);
+// The hook attaches before the paced seek's reboot: keep the ticks after the last sim-time reset
+const trace = raw.slice(Math.max(0, raw.findLastIndex((x, i) => i > 0 && x[0] < raw[i - 1][0])));
 fs.writeFileSync(path.join(outDir, 'embed-paced-trace.json'), JSON.stringify(trace));
 let acc = '';
 const iF = trace.findIndex(([, c]) => (acc += c).includes('UNIT F'));
