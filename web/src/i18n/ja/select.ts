@@ -431,5 +431,11 @@ const d: Dict = {
   "RFID reader": "リーダー",
   "RFID SDA / RST": "リーダー SDA / RST",
   "Examples you can run in the simulator first": "まずシミュレーターで動かせるサンプル",
+  "simulated in example {id}": "サンプル {id} でシミュレーション済み",
+  " · simulated in example {id}": " · サンプル {id} でシミュレーション済み",
+  "In an example": "サンプル内",
+  "Simulated in an example, not yet on the bench": "サンプルでシミュレーション済み（作業台にはまだ置けません）",
+  "{parts}: run the example, but the bench catalog cannot place it yet": "{parts}：サンプルは実行できますが、作業台カタログにはまだ置けません",
+  "Relay contacts and the mains side": "リレー接点と商用電源側",
 };
 export default d;

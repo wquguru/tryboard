@@ -36,7 +36,7 @@ import {
   type Result,
 } from './derive.ts';
 import { briefMarkdown, checkpointsOf } from './brief.ts';
-import { PART_MAP, boardFor } from './catalogmap.ts';
+import { PART_MAP, EXAMPLE_ONLY, exampleOnly, noModelParts, boardFor } from './catalogmap.ts';
 import type { Plan } from './engine.ts';
 import { Conf, ConfBar, ConfIcon, confLabel } from '../ui/conf';
 import { SiteFooter, SiteHeader } from '../ui/site';
@@ -265,6 +265,33 @@ interface Step {
   text: string;
 }
 
+type Why = { big?: ReactNode; chip?: string; t: ReactNode; d?: ReactNode; c: Confidence; tone?: 'warn' | 'ok' };
+
+const exampleRow = (names: string[]): Why => ({ chip: t('In an example'), tone: 'ok', t: t('Simulated in an example, not yet on the bench'), d: t('{parts}: run the example, but the bench catalog cannot place it yet', { parts: names.join(t(', ')) }), c: '行为模拟' }); // lint: allow-cjk
+
+const partsWhy = (ids: string[]): Why[] => {
+  const none = noModelParts(ids);
+  const ex = ids.filter(exampleOnly);
+  const real: Why = { chip: t('Real board'), tone: 'warn', t: t('This part needs a real board'), d: t('No model in TryBoard for {parts}', { parts: none.map(partName).join(t(', ')) }), c: '必须上真机' }; // lint: allow-cjk
+  return [...(none.length ? [real] : []), ...(ex.length ? [exampleRow(ex.map(partName))] : [])];
+};
+
+function TemplateExamples({ ids }: { ids: string[] }) {
+  if (!ids.length) return null;
+  return (
+    <section id="examples" data-testid="tpl-examples">
+      <h3 className="mb-2.5 text-[16px] font-bold">{t('Examples you can run in the simulator first')}</h3>
+      <div className="flex flex-wrap gap-2">
+        {ids.map((id) => (
+          <a key={id} href={lab('blank', 'bench', { example: id })} data-example={id} className="inline-flex min-h-11 items-center rounded-full border border-line bg-surface px-4 font-mono text-[13px] hover:border-fg">
+            {id}
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function App() {
   const mobile = useMobile();
   const [s, setS] = useState<SelectState>(() => ({ ...sanitize(decode(location.search)), have: loadHave() }));
@@ -445,7 +472,7 @@ export function App() {
           <span className={cn('block text-[13px] leading-[1.35]', !row.on && 'text-muted', have && 'line-through decoration-muted')}>{row.name}</span>
           <small className="block text-[11px] text-muted">
             {row.src}
-            {PART_MAP[row.key] === null && t(' · no model in TryBoard')}
+            {exampleOnly(row.key) ? t(' · simulated in example {id}', { id: EXAMPLE_ONLY[row.key].example }) : PART_MAP[row.key] === null && t(' · no model in TryBoard')}
           </small>
         </span>
         <span className="flex-none font-mono text-[11px] text-muted">{yuan(row.price)}</span>
@@ -479,7 +506,7 @@ export function App() {
               <li key={id}>
                 <button type="button" data-add={id} onClick={() => addPart(id)} className="flex min-h-11 w-full cursor-pointer items-center gap-2 px-3 text-left text-[13px] hover:bg-field">
                   <span className="flex-1">{t(PARTS[id].name)}</span>
-                  {PART_MAP[id] === null && <Conf c="必须上真机" size={12} // lint: allow-cjk
+                  {PART_MAP[id] === null && !exampleOnly(id) && <Conf c="必须上真机" size={12} // lint: allow-cjk
                    className="text-[11px] text-muted" />}
                   <span className="font-mono text-[11px] text-muted">{yuan(PARTS[id].priceCNY)}</span>
                 </button>
@@ -635,7 +662,6 @@ export function App() {
 
   // ------------------------------------------------ result: why this one (DESIGN_V2 §9)
   // Number + sentence + small line; yes / no uses a tag, price gap has no sign, total battery life stays on the answer card.
-  type Why = { big?: ReactNode; chip?: string; t: ReactNode; d?: ReactNode; c: Confidence; tone?: 'warn' | 'ok' };
   const num = (v: ReactNode, unit?: string) => (
     <>
       {v}
@@ -684,10 +710,9 @@ export function App() {
     }
     if (r.need.caps.includes('usb_otg')) out.push({ chip: t('Yes'), tone: 'ok', t: t('Plug into a computer and it is a keyboard or flash drive'), d: tj('The chip has {term}', T('原生 USB')), c: simConf(pl) }); // lint: allow-cjk
     if (r.need.caps.includes('psram')) out.push({ big: num(pl.board.psramMB, 'MB'), t: t('Room for audio and images'), d: tj('On-board {term}', T('PSRAM')), c: '估算' }); // lint: allow-cjk
-    const noModel = r.need.parts.filter((id) => PART_MAP[id] === null).map(partName);
     if (pl.chip.simulated === 'none') out.push({ chip: t('Stand-in'), tone: 'warn', t: t('Runs on an ESP32-C3 in TryBoard for now'), d: t('{chip} cannot be simulated yet; treat results as a reference', { chip: t(pl.chip.name) }), c: '必须上真机' }); // lint: allow-cjk
     else out.push({ chip: t('Can run'), tone: 'ok', t: t('Run your firmware in TryBoard before you buy'), d: pl.chip.simulated === 'partial' ? t('{chip}: some peripherals are behaviour models', { chip: t(pl.chip.name) }) : t('{chip}: the web page and the real board run the same firmware', { chip: t(pl.chip.name) }), c: simConf(pl) });
-    if (noModel.length) out.push({ chip: t('Real board'), tone: 'warn', t: t('This part needs a real board'), d: t('No model in TryBoard for {parts}', { parts: noModel.join(t(', ')) }), c: '必须上真机' }); // lint: allow-cjk
+    out.push(...partsWhy(r.need.parts));
     if (cheap === pl) out.push({ chip: t('Cheapest'), tone: 'ok', t: t('Cheapest of the {n} boards that qualify', { n: r.plans.length }), c: '估算' }); // lint: allow-cjk
     else {
       // When it costs more, say what that buys: extra days, else which capability
@@ -823,18 +848,6 @@ export function App() {
     [t('Deep sleep'), (x) => sleepCurrent(x.board.boardSleepUA)],
     [t('In TryBoard'), (x) => simText(x)],
   ];
-  const tryExamples = r.tpl.examples.length > 0 && (
-    <section id="examples" data-testid="tpl-examples">
-      <h3 className="mb-2.5 text-[16px] font-bold">{t('Examples you can run in the simulator first')}</h3>
-      <div className="flex flex-wrap gap-2">
-        {r.tpl.examples.map((id) => (
-          <a key={id} href={lab('blank', 'bench', { example: id })} data-example={id} className="inline-flex min-h-11 items-center rounded-full border border-line bg-surface px-4 font-mono text-[13px] hover:border-fg">
-            {id}
-          </a>
-        ))}
-      </div>
-    </section>
-  );
   const compare = p && trio.length > 1 && (
     <section id="compare">
       <h3 className="mb-2.5 text-[16px] font-bold">{mobile ? t('Three-board comparison · swipe') : t('Three-board comparison')}</h3>
@@ -945,7 +958,7 @@ export function App() {
           {none}
           {answer}
           {why}
-          {tryExamples}
+          <TemplateExamples ids={r.tpl.examples} />
           {compare}
           {details}
           {brief}
@@ -995,7 +1008,7 @@ export function App() {
           )}
           {why}
           {details}
-          {tryExamples}
+          <TemplateExamples ids={r.tpl.examples} />
           {compare}
           {brief}
         </section>

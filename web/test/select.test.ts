@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { briefMarkdown, checkpointsOf } from '../src/advisor/brief.ts';
+import { noModelParts } from '../src/advisor/catalogmap.ts';
 import { resolve, trustRows, changeText, relaxOptions, partRows, sanitize, lasts } from '../src/advisor/derive.ts';
 import { EMPTY, decode, encode } from '../src/advisor/state.ts';
 
@@ -108,4 +109,12 @@ test('classic ESP32 BLE is not a real-board-only row (E-09); Classic Bluetooth s
   assert.ok(!ble.some((n) => /Bluetooth/.test(n)));
   const bt = rows('btaudio');
   assert.ok(bt?.includes('Classic Bluetooth (ESP32)'));
+});
+
+test('rfid template: every part is modelled (example or catalog), none is real-board-only', () => {
+  const r = resolve({ ...EMPTY, t: 'rfid' });
+  assert.deepEqual(noModelParts(r.need.parts), []);
+  assert.deepEqual(noModelParts(['camera']), ['camera']);
+  const rows = trustRows(r.plan!, r.need);
+  assert.ok(rows.some((x) => x[0] === 'Relay contacts and the mains side' && x[1] === '必须上真机')); // lint: allow-cjk
 });

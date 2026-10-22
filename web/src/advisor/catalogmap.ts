@@ -33,6 +33,21 @@ export const PART_MAP: Record<string, CatalogItem | null> = {
   camera: null,
 };
 
+/** Third state: modelled and runnable in an example, not yet placeable on the bench; PART_MAP stays null so shop code skips it */
+export const EXAMPLE_ONLY: Record<string, { example: string; real?: string }> = {
+  rc522: { example: 'c3-rc522' },
+  relay: { example: 'c3-pir-relay', real: 'Relay contacts and the mains side' },
+  pir: { example: 'c3-pir-relay' },
+  irrx: { example: 'arduino-lib-irremote-rx' },
+  irled: { example: 'arduino-lib-irremote' },
+};
+
+/** Parts with no model anywhere in TryBoard (real board only) */
+export const noModelParts = (ids: string[]) => ids.filter((id) => PART_MAP[id] === null && !EXAMPLE_ONLY[id]);
+
+/** Parts simulated in an example only */
+export const exampleOnly = (id: string) => PART_MAP[id] === null && !!EXAMPLE_ONLY[id];
+
 /** Always added: breadboard and jumper wires (often ticked as "I have it") */
 export const ALWAYS = ['breadboard-400', 'dupont-ff'];
 
