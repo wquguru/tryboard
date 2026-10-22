@@ -4,7 +4,8 @@ import { t } from '../i18n';
 import type { LiveFrame } from './common';
 import { createProductView, type ProductHandlers } from './product';
 import { createLensProduct, createSpinProduct } from './lcdproducts';
-import { createDoorProduct, createLampProduct, createRulerProduct, createTiltProduct, type WorkEffects } from './workproducts';
+import { createDoorProduct } from './doorproduct';
+import { createLampProduct, createRulerProduct, createTiltProduct, type WorkEffects } from './workproducts';
 import { createKeypadView } from './keypad';
 import { CHIP_HEAT_OFFSET } from './chipheat';
 

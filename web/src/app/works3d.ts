@@ -43,8 +43,10 @@ export interface WorkProductOptions {
   /** tilt: disc pose (degrees); initial pose */
   onPose?(p: Pose): void;
   pose?: Pose;
-  /** door: a card tapped on the reader (UID hex) or taken away ('none'); without it the cards are only scenery */
+  /** door: a card tapped on the reader (UID hex) or taken away (''); without it the cards are only scenery */
   onCard?(uid: string): void;
+  /** door: UID currently on the reader ('' = none) */
+  card?(): string;
 }
 
 export interface WorkProduct3D {
@@ -495,7 +497,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
       });
     };
   } else if (o.kind === 'door') {
-    const d = buildDoor({ scene, shellMat, tag, tagList, hits, occluders, oled: oledTexture(), paintOled, onCard: o.onCard, effects: o.effects });
+    const d = buildDoor({ scene, shellMat, tag, tagList, hits, occluders, oled: oledTexture(), paintOled, onCard: o.onCard, card: o.card, effects: o.effects });
     tick = (f, dt) => d.tick(f, dt);
     onDown = (hit) => d.onDown(hit);
     handle = d.handle;

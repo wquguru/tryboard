@@ -1120,5 +1120,15 @@ const d: Dict = {
   "No card is read": "카드를 읽지 못함",
   "Reads cards on the panel": "패널 위 카드를 읽음",
   "With the reader on the steel back box, the RC522 never sees a card.": "리더가 강철 백박스에 붙어 있으면 RC522는 카드를 전혀 감지하지 못합니다.",
+  "Tap whitelisted card": "화이트리스트 카드 대기",
+  "Tap unknown card": "미등록 카드 대기",
+  "Take card away": "카드 떼기",
+  "Card reader": "카드 리더",
+  "Card on the reader": "리더 위 카드",
+  "Door strike (relay GPIO10)": "도어 스트라이크 (릴레이 GPIO10)",
+  "Refusals in a row": "연속 거부 횟수",
+  "RC522 version 0x{v}": "RC522 버전 0x{v}",
+  "Door lock": "도어락",
+  "Appearance only (2D view for now)": "외관 예시(현재 2D 보기)",
 };
 export default d;

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { t } from '../i18n';
 import type { WorkFrame } from './works3d';
+import { DOOR_CARDS } from '../views/doorproduct';
 
 export interface DoorCtx {
   scene: THREE.Scene;
@@ -14,7 +15,10 @@ export interface DoorCtx {
   occluders: THREE.Object3D[];
   oled: { tex: THREE.DataTexture; data: Uint8Array };
   paintOled(px: Uint8Array, data: Uint8Array): void;
+  /** Tap a card (uid, '' = take it away); clickable cards only when supplied */
   onCard?(uid: string): void;
+  /** UID the page currently has on the reader, so toolbar taps move the 3D card too */
+  card?(): string;
   effects(): { cardBlock?: boolean };
 }
 
@@ -100,17 +104,15 @@ export function buildDoor(c: DoorCtx) {
     cards.push({ mesh: m, uid, home });
     if (c.onCard) c.hits.push(m);
   };
-  addCard(new RoundedBoxGeometry(5.4, 8.56, 0.2, 2, 0.08), '#F7F6F3', 'DEADBEEF', new THREE.Vector3(PX - 9, PY - 9, 8));
-  addCard(new RoundedBoxGeometry(3.2, 4, 0.6, 3, 0.25), '#2563EB', '11223344', new THREE.Vector3(PX - 2, PY - 12, 9));
+  addCard(new RoundedBoxGeometry(5.4, 8.56, 0.2, 2, 0.08), '#F7F6F3', DOOR_CARDS.ok, new THREE.Vector3(PX - 9, PY - 9, 8));
+  addCard(new RoundedBoxGeometry(3.2, 4, 0.6, 3, 0.25), '#2563EB', DOOR_CARDS.bad, new THREE.Vector3(PX - 2, PY - 12, 9));
   let onPanel: (typeof cards)[number] | null = null;
   const handle = c.onCard ? cards[0].mesh : null;
   const onDown = (hit: THREE.Object3D) => {
     const k = cards.find((x) => x.mesh === hit);
     if (!k) return false;
-    const was = onPanel;
-    onPanel = was === k ? null : k;
-    if (was) c.onCard?.('none');
-    if (onPanel) c.onCard?.(k.uid);
+    onPanel = onPanel === k ? null : k;
+    c.onCard?.(onPanel ? k.uid : '');
     return true;
   };
   const tagLock = c.tag('', 'hot');
@@ -137,6 +139,7 @@ export function buildDoor(c: DoorCtx) {
     const blocked = !!c.effects().cardBlock;
     tagBlock.textContent = blocked ? t('Reader on the steel back box: cards are never read') : '';
     tagBlock.style.visibility = blocked ? '' : 'hidden';
+    if (c.card) onPanel = cards.find((k) => k.uid === c.card!()) ?? null;
     for (const c of cards) c.mesh.position.lerp(onPanel === c ? cardAt : c.home, Math.min(1, dt * 10));
   };
   return { tick, onDown, handle, open: () => open };

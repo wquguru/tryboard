@@ -7,7 +7,9 @@ import { onFrame, PRIO } from '../../ui/frame';
 import { createWork3D, type WorkKind, type WorkProduct3D } from '../works3d';
 import { gravity } from '../../imupose';
 import { createLensProduct, createSpinProduct } from '../../views/lcdproducts';
-import { TEMPLATES, type Template } from '../../views/templates';
+import { type Template } from '../../views/templates';
+import { workTemplate } from '../../views/worktpl';
+import { doorActs, doorButtons, doorLive, doorOnReader, doorRows, doorSerial, doorTap, doorTool } from './door';
 import { passedCount } from './bench';
 import { emptyFrame, ledCss, servoAngle, type LiveFrame } from '../../views/common';
 import type { AssemblyState, StepCtx, StepImpl } from '../types';
@@ -247,6 +249,7 @@ export function referenceAssembly(T: Template): AssemblyState {
 const WORK_ACTS: Record<string, () => Tool[]> = {
   lamp: () => [{ id: 'p-knob-l', label: t('Knob −1'), icon: 'minus' }, { id: 'p-knob-r', label: t('Knob +1'), icon: 'plus' }, { id: 'p-knob', label: t('Press knob'), icon: 'boot' }],
   ruler: () => [{ id: 'p-near', label: t('Board 10 cm closer'), icon: 'down' }, { id: 'p-far', label: t('Board 10 cm farther'), icon: 'up' }],
+  door: doorActs,
   tilt: () => [{ id: 'p-tilt-r', label: t('Lower the right side'), icon: 'tilt' }, { id: 'p-tilt-l', label: t('Lower the front left'), icon: 'tilt' }, { id: 'p-level', label: t('Make level'), icon: 'minus' }],
   usbkey: () => KEYPAD_PINS.map((pin, i) => ({ id: `p-key-${pin}`, label: `K${i + 1} · ${KEYPAD_CAPS[i]}`, icon: 'key' })),
 };
@@ -328,6 +331,7 @@ export function productStep(): StepImpl {
   function parseLines(lines: string[]) {
     for (const raw of lines) {
       const l = raw.trim();
+      if (ctx?.work.id === 'door') doorSerial(l, event);
       if (l === 'ALARM ON') {
         alarm = true;
         event('!', t('Alarm: ≥ 30 ℃, buzzer sounding'), 'bad');
@@ -380,14 +384,14 @@ export function productStep(): StepImpl {
   function assembly(): AssemblyState | null {
     const c = ctx;
     if (!c) return null;
-    const T = TEMPLATES[c.work.id];
+    const T = workTemplate(c.work.id);
     return preview && T ? referenceAssembly(T) : c.store.get().assembly;
   }
 
   function renderTree() {
     const c = ctx!;
     const a = assembly();
-    const T = TEMPLATES[c.work.id];
+    const T = workTemplate(c.work.id);
     const pickPart = (id: string) => {
       sel = sel === id ? '' : id;
       renderTree();
@@ -443,7 +447,7 @@ export function productStep(): StepImpl {
               ? [row(t('LED strip'), 'strip'), row(t('Brightness / colour'), 'lampst'), row(t('Knob mode'), 'lampmode'), row(t('Knob'), 'knob')]
               : w === 'ruler'
                 ? [row(t('Board distance'), 'cm'), row(t('Sensor measures'), 'cmfx'), row(t('Firmware reading'), 'rdist'), row(t('Buzzer'), 'buzz')]
-                : [row(t('Disc pose'), 'tpose'), row(t('IMU reads'), 'tfx'), row(t('Bean'), 'bean')];
+                : w === 'door' ? doorRows(row) : [row(t('Disc pose'), 'tpose'), row(t('IMU reads'), 'tfx'), row(t('Bean'), 'bean')];
     const b = (id: string, label: string, f: () => void) => (
       <Btn key={id} id={id} onClick={f}>
         {label}
@@ -456,7 +460,7 @@ export function productStep(): StepImpl {
           ? [b('pNear', t('Board 10 cm closer'), () => moveBoard(-10)), b('pFar', t('Board 10 cm farther'), () => moveBoard(10))]
           : w === 'tilt'
             ? [b('pTiltR', t('Lower the right side'), () => tiltTo({ pitch: 0, roll: 25, yaw: 0 })), b('pTiltL', t('Lower the front left'), () => tiltTo({ pitch: 20, roll: -25, yaw: 0 })), b('pLevel', t('Make level'), () => tiltTo({ pitch: 0, roll: 0, yaw: 0 }))]
-            : w === 'usbkey'
+            : w === 'door' ? doorButtons(b, c.session) : w === 'usbkey'
               ? []
               : [
                   <Btn key="pBoot" id="pBoot" onPointerDown={() => pressBoot(true)} onPointerUp={() => pressBoot(false)} onPointerLeave={() => pressBoot(false)}>
@@ -767,7 +771,7 @@ export function productStep(): StepImpl {
       set('tpose', t('Pitch {pitch}° · roll {roll}°', { pitch: rawPose.pitch.toFixed(0), roll: rawPose.roll.toFixed(0) }));
       set('tfx', flip ? t('Pitch {pitch}° · roll {roll}° (mounted backwards)', { pitch: (-rawPose.pitch).toFixed(0), roll: (-rawPose.roll).toFixed(0) }) : t('Matches the disc'), !!flip);
       set('bean', bean.pos ? t('{pos} · edge hits: {n}', { pos: bean.pos, n: bean.edges }) : waiting);
-    }
+    } else if (c.work.id === 'door') doorLive(set, waiting);
     const pre = el.querySelector<HTMLElement>('[data-live="serial"]');
     if (pre) {
       const lines = c.session.consoleText().split('\n').filter((l) => l.trim());
@@ -814,7 +818,7 @@ export function productStep(): StepImpl {
     const d = passedCount(c);
     if (d < n) return t('Checkpoints {done}/{total}', { done: d, total: n });
     const a = c.store.get().assembly;
-    return t('Assemble {done}/{total}', { done: a?.placed.length ?? 0, total: a?.total ?? TEMPLATES[c.work.id]?.parts.length ?? 0 });
+    return t('Assemble {done}/{total}', { done: a?.placed.length ?? 0, total: a?.total ?? workTemplate(c.work.id)?.parts.length ?? 0 });
   }
 
   /** In preview, Next leads to the missing checkpoints / Assemble; once assembled this is the last step */
@@ -859,6 +863,7 @@ export function productStep(): StepImpl {
     else if (id === 'p-photo') void photo();
     else if (id === 'p-rec') record();
     else if (id === 'p-rerun') c.session.reboot();
+    else if (id.startsWith('p-card-')) doorTool(id, c.session);
     else if (id === 'p-level') {
       if (WORK3D.has(c.work.id)) tiltTo({ pitch: 0, roll: 0, yaw: 0 });
       else c.session.setPose({ pitch: 0, roll: 0, yaw: 0 });
@@ -926,7 +931,7 @@ export function productStep(): StepImpl {
         onDistance: (cm) => applyDistance(cm),
         distance: c.session.distance,
         onPose: (p) => applyPose(p),
-        pose: c.store.get().pose,
+        pose: c.store.get().pose, ...(c.work.id === 'door' ? { onCard: (uid: string) => doorTap(c.session, uid), card: doorOnReader } : {}),
       });
       (window as unknown as { __tbProduct: unknown }).__tbProduct = {
         handlePos: () => work3d!.handleScreenPos(),
@@ -984,10 +989,10 @@ export function productStep(): StepImpl {
       box.className = 'prod-svg';
       node.appendChild(box);
       const h = { boot: (d: boolean) => pressBoot(d), temp: () => {} };
-      svgProduct = c.work.id === 'spin' ? createSpinProduct(box, h, { servoPin: 4 }) : c.work.id === 'lens' ? createLensProduct(box, h) : TEMPLATES[c.work.id].product(box, h, { servoPin: 4 });
+      svgProduct = c.work.id === 'spin' ? createSpinProduct(box, h, { servoPin: 4 }) : c.work.id === 'lens' ? createLensProduct(box, h) : workTemplate(c.work.id)!.product(box, h, { servoPin: 4 });
       const note = document.createElement('div');
       note.className = 'p3-disclaimer';
-      note.textContent = t("Appearance only (2D: this device doesn't support WebGL)");
+      note.textContent = webglOk() ? t('Appearance only (2D view for now)') : t("Appearance only (2D: this device doesn't support WebGL)");
       node.appendChild(note);
     }
   }
@@ -1080,10 +1085,8 @@ export function productStep(): StepImpl {
         c.session.onConsole((text) => onSerial(text));
         c.store.subscribe((s, prev) => {
           if (s.run > prev.run) {
-            unitF = false;
-            alarm = false;
-            mood = '';
-            look = '';
+            unitF = alarm = false;
+            mood = look = '';
             lamp = { level: 0, mode: '', color: '' };
             ruler = { dist: '', beep: '' };
             bean = { pos: '', edges: 0 };
@@ -1095,7 +1098,7 @@ export function productStep(): StepImpl {
         mountTilt(c);
         return;
       }
-      if (!TEMPLATES[c.work.id]) {
+      if (!workTemplate(c.work.id)) {
         c.shell.layer.render(
           <LockCard role="status">
             <Sec>{t('④ Product')}</Sec>

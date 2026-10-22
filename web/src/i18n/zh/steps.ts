@@ -1120,5 +1120,15 @@ const d: Dict = {
   "No card is read": "读不到卡",
   "Reads cards on the panel": "能读面板上的卡",
   "With the reader on the steel back box, the RC522 never sees a card.": "读卡器贴在钢底盒上时，RC522 永远看不到卡。",
+  "Tap whitelisted card": "刷白名单卡",
+  "Tap unknown card": "刷陌生卡",
+  "Take card away": "拿开卡",
+  "Card reader": "读卡器",
+  "Card on the reader": "读卡器上的卡",
+  "Door strike (relay GPIO10)": "电锁（继电器 GPIO10）",
+  "Refusals in a row": "连续拒绝次数",
+  "RC522 version 0x{v}": "RC522 版本 0x{v}",
+  "Door lock": "门禁",
+  "Appearance only (2D view for now)": "外观示意（暂为 2D 视图）",
 };
 export default d;

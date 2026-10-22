@@ -1,4 +1,4 @@
-// P2-09 flat products (SVG) for the knob lamp, ultrasonic ruler, tilt buddy and (G-03) RFID door, the product-step fallback
+// P2-09 flat products (SVG) for the knob lamp, ultrasonic ruler, tilt buddy: the product-step fallback
 // on devices without WebGL. Lamp colours and screen pixels all come from the simulator.
 import { t } from '../i18n';
 import { lcdImage, mount, oledImage, type LiveFrame } from './common';
@@ -123,44 +123,6 @@ ${BG}
         q('ph').setAttribute('display', 'none');
       }
       q('note').textContent = fx.imuFlip ? t('IMU mounted backwards: pitch and roll are reversed, Bean climbs uphill') : '';
-    },
-  };
-}
-
-/** Door relay IN (strike) and red LED pins of the c3-door firmware */
-export const DOOR_RELAY_PIN = 10;
-export const DOOR_LED_PIN = 0;
-
-export function createDoorProduct(el: HTMLElement) {
-  const q = mount(
-    el,
-    `<div class="tb-view sc-root lp-root"><svg viewBox="0 0 1000 560" role="img" aria-label="${t('Product: wall reader panel with a card zone and a 1.3″ screen next to a door with an electric strike')}">
-${BG}
-<rect x="560" y="40" width="40" height="460" fill="#B9B3A8"/><rect data-k="leaf" x="600" y="40" width="300" height="460" fill="#C8A26B"/>
-<rect x="566" y="250" width="28" height="70" rx="3" fill="#8A8E94"/><rect data-k="keeper" x="572" y="262" width="16" height="46" rx="2" fill="#5A5E64"/>
-<rect x="300" y="150" width="172" height="240" rx="14" fill="#2F3338"/><rect x="306" y="156" width="160" height="228" rx="10" fill="#3A3F45"/>
-<rect x="330" y="180" width="112" height="62" rx="4" fill="#0E0F12"/><image data-k="oled" x="334" y="184" width="104" height="54" preserveAspectRatio="none"/>
-<rect x="336" y="266" width="100" height="92" rx="8" fill="none" stroke="#9AA3AD" stroke-width="3" stroke-dasharray="6 5"/>
-<path d="M370 300 a16 16 0 0 1 32 0 M362 300 a24 24 0 0 1 48 0" fill="none" stroke="#9AA3AD" stroke-width="3"/>
-<circle data-k="led" cx="452" cy="372" r="6" fill="#4A1E1E"/>
-<text data-k="state" x="580" y="530" text-anchor="middle" fill="#3A3936" class="tb-mono" font-size="14" font-weight="700"></text>
-<text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">${t('RFID door · product · RC522 + SH1106 1.3″ + relay + 12 V strike')}</text>
-<text data-k="note" x="24" y="56" fill="#C23A00" class="tb-mono" font-size="12" font-weight="700"></text>
-</svg></div>`,
-  );
-  let last: Uint8Array | null = null;
-  return {
-    update(f: LiveFrame, _room: number, fx: WorkEffects) {
-      if (f.oled && f.oled !== last) {
-        last = f.oled;
-        q('oled').setAttribute('href', oledImage(f.oled));
-      }
-      const open = !!f.gpio && !!(f.gpio & (1 << DOOR_RELAY_PIN));
-      q('leaf').setAttribute('transform', open ? 'translate(18 0)' : '');
-      q('keeper').setAttribute('fill', open ? '#22C55E' : '#5A5E64');
-      q('led').setAttribute('fill', f.gpio && f.gpio & (1 << DOOR_LED_PIN) ? '#FF3B30' : '#4A1E1E');
-      q('state').textContent = open ? t('Strike released: door opens') : t('Strike locked');
-      q('note').textContent = fx.cardBlock ? t('Reader on the steel back box: cards are never read') : '';
     },
   };
 }
