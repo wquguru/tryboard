@@ -180,7 +180,7 @@ $var wire 1 ! GPIO4 $end\n$var wire 1 \" GPIO5 $end\n$upscope $end\n$enddefiniti
         // A continuous signal (never quiet for `len`) still opens the window once its run has lasted `len`
         let mut c = VcdCapture::armed(1, 0, 500);
         for t in (100u64..1000).step_by(100) {
-            c.on_gpio(t, (t / 100 & 1) ^ 1, t / 100 & 1);
+            c.on_gpio(t, ((t / 100) & 1) ^ 1, (t / 100) & 1);
         }
         assert_eq!((c.t0, c.t1, c.edges.len()), (600, 1100, 4));
     }

@@ -4907,6 +4907,24 @@
   }
  },
  {
+  "id": "arduino-lib-irremote-rx",
+  "seconds": 1.2,
+  "args": [
+   "--ir",
+   "5"
+  ],
+  "script": "0.5:ir=FF00,BA45; 0.7:ir=FF00,B946; 0.75:ir=repeat",
+  "expect": [
+   "TRYBOARD_OK lib-irremote-rx ready",
+   "ir NEC addr=0x00 cmd=0x45",
+   "ir NEC addr=0x00 cmd=0x46",
+   "ir NEC addr=0x00 cmd=0x46 repeat"
+  ],
+  "stderr_expect": [
+   "IR receiver GPIO5: remote sent 3 frames"
+  ]
+ },
+ {
   "id": "arduino-ir-nec-rmt",
   "seconds": 1,
   "args": [
