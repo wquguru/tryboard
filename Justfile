@@ -32,7 +32,7 @@ lint scope='changed':
     # The whole tree still has legacy findings (accept.sh doesn't gate on it), so default to what you touched.
     if [ "{{scope}}" = all ]; then python3 tools/lint_comments.py
     else
-        files=$( { git diff --name-only HEAD; git ls-files --others --exclude-standard; } | sort -u | while read -r f; do [ -f "$f" ] && echo "$f"; done)
+        files=$( { git diff --name-only HEAD; git ls-files --others --exclude-standard; } | sort -u | while read -r f; do [ -f "$f" ] && echo "$f" || true; done)
         [ -z "$files" ] || python3 tools/lint_comments.py $files
     fi
     (cd web && node --test test/i18n.test.ts >/dev/null)
