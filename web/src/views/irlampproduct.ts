@@ -72,11 +72,11 @@ export function createIrlampProduct(el: HTMLElement, opts: { pin?: number; send?
   const leds = Array.from({ length: 8 }, (_, i) => `<circle data-k="led${i}" cx="${430 + i * 20}" cy="300" r="7" fill="#2A2A28"/>`).join('');
   const keys = IR_KEYS.map(([label, cmd], i) => {
     const x = 660 + (i % 3) * 68;
-    const y = 96 + Math.floor(i / 3) * 58;
+    const y = 92 + Math.floor(i / 3) * 54;
     const pw = cmd === IRLAMP_CMD.power;
     const fill = pw ? '#C23A3A' : IRLAMP_CMD.digits.includes(cmd) || cmd === IRLAMP_CMD.up || cmd === IRLAMP_CMD.down ? '#3A3D44' : '#2E3036';
-    return `<g data-ir="${irCode(cmd)}" data-cmd="${cmd}" role="button" tabindex="0" aria-label="${label}" style="cursor:${opts.send ? 'pointer' : 'default'}">
-<rect data-key="${cmd}" x="${x}" y="${y}" width="56" height="44" rx="12" fill="${fill}"/><text x="${x + 28}" y="${y + 28}" fill="#F2F2F2" class="tb-mono" font-size="${label.length > 3 ? 12 : 16}" font-weight="700" text-anchor="middle" pointer-events="none">${LABEL[cmd] ?? label}</text></g>`;
+    return `<g data-ir="${irCode(cmd)}" data-cmd="${cmd}" role="button" tabindex="0" aria-label="${pw ? `${label} · ${t('Power')}` : label}" style="cursor:${opts.send ? 'pointer' : 'default'}">
+<rect data-key="${cmd}" x="${x}" y="${y}" width="56" height="42" rx="12" fill="${fill}"/><text x="${x + 28}" y="${y + 27}" fill="#F2F2F2" class="tb-mono" font-size="${label.length > 3 ? 12 : 16}" font-weight="700" text-anchor="middle" pointer-events="none">${LABEL[cmd] ?? label}</text></g>`;
   }).join('');
   const q = mount(
     el,
@@ -91,8 +91,8 @@ ${BG}
 <path data-k="shade" d="M410 380 C390 300 400 170 500 150 C600 170 610 300 590 380 Z" fill="#F4F1EA" fill-opacity="0.82" stroke="#BDB9B0" stroke-width="2"/>
 <g data-k="spots" opacity="0">${Array.from({ length: 8 }, (_, i) => `<circle data-k="spot${i}" cx="${424 + i * 22}" cy="300" r="9" fill="#FFF"/>`).join('')}</g>
 </g>
-<path data-k="beam" d="M738 60 Q 600 250 430 420" fill="none" stroke="#E5484D" stroke-width="3" stroke-dasharray="8 8" opacity="0"/>
-<rect x="640" y="40" width="244" height="490" rx="28" fill="#1E2024"/><circle cx="762" cy="66" r="6" fill="#3A1A1A" data-k="tx"/>
+<path data-k="beam" d="M762 68 Q 600 250 430 420" fill="none" stroke="#E5484D" stroke-width="3" stroke-dasharray="8 8" opacity="0"/>
+<rect x="640" y="44" width="244" height="440" rx="28" fill="#1E2024"/><circle cx="762" cy="68" r="6" fill="#3A1A1A" data-k="tx"/>
 ${keys}
 <text x="24" y="34" fill="#6E6A63" class="tb-mono" font-size="12" font-weight="700">${t('IR night light · product · VS1838B + WS2812 × 8 + NEC remote')}</text>
 <text data-k="state" x="24" y="58" fill="#3A3936" class="tb-mono" font-size="14" font-weight="700"></text>
