@@ -406,7 +406,6 @@ const d: Dict = {
   "IR LED (940 nm) and remote control": "赤外線 LED（940 nm）とリモコン",
   "IR RX module": "赤外線受信",
   "IR TX LED": "赤外線送信 LED",
-  "RFID door lock": "RFID 入退室",
   "RFID access control": "RFID 入退室管理",
   "Swipe a card, the relay opens the lock, the screen shows who and the buzzer beeps. Any chip works; the RC522 needs one SPI bus.": "カードをかざすとリレーが解錠し、画面に誰かを表示してブザーが鳴ります。どのチップでも可。RC522 は SPI を 1 本使います。",
   "The relay switches a lock or mains: it must go on real hardware, with isolation (optocoupler module, enclosed, wired unpowered). The simulator cannot verify the load side": "リレーで電気錠や商用電源を開閉する場合は実機が必須で、絶縁（フォトカプラ式モジュール、ケース収納、電源を切って配線）に注意。負荷側はシミュレーターでは検証できません",

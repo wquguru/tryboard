@@ -406,7 +406,6 @@ const d: Dict = {
   "IR LED (940 nm) and remote control": "红外发射管（940 nm）和遥控器",
   "IR RX module": "红外接收头",
   "IR TX LED": "红外发射管",
-  "RFID door lock": "RFID 门禁",
   "RFID access control": "RFID 门禁",
   "Swipe a card, the relay opens the lock, the screen shows who and the buzzer beeps. Any chip works; the RC522 needs one SPI bus.": "刷卡，继电器开锁，屏幕显示是谁，蜂鸣器提示。任何芯片都行，RC522 要占一路 SPI。",
   "The relay switches a lock or mains: it must go on real hardware, with isolation (optocoupler module, enclosed, wired unpowered). The simulator cannot verify the load side": "继电器接锁或市电：必须上真机，注意隔离（光耦模块、外壳封好、断电接线）。负载侧模拟器验证不了",

@@ -1110,10 +1110,8 @@ const d: Dict = {
   "Board controls": "操作板子",
   "Capture": "记录",
   "View tools": "视图",
-  "Sound": "声音",
   "on": "开",
   "off": "关",
-  "muted": "静音",
   "Real 3D models": "真实 3D 模型",
 };
 export default d;

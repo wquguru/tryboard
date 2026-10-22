@@ -845,5 +845,28 @@ const d: Dict = {
   "2.0″ color display (ST7789, SPI, 240×320)": "2.0″ 彩屏（ST7789，SPI，240×320）",
   "ST7789V 2.0″ IPS LCD module (8-pin)": "ST7789V 2.0″ IPS 屏模块（8 针）",
   "IPS panel: most need colour inversion on. The simulator wires it to the fixed SPI2 LCD pins.": "IPS 屏：大多要打开反色。模拟器把它接在固定的 SPI2 LCD 引脚上。",
+
+  // G-03 RFID door checkpoints (firmware/levels.json)
+  "Acceptance firmware targets the C3": "验收固件针对 C3",
+  "Reads card UIDs over SPI (CS GPIO7, RST GPIO3); 3.3 V only": "通过 SPI 读卡 UID（CS GPIO7，RST GPIO3）；只能接 3.3 V",
+  "Shows WELCOME / DENIED and the lockout countdown (SDA GPIO2, SCL GPIO9)": "显示 WELCOME / DENIED 和锁定倒计时（SDA GPIO2，SCL GPIO9）",
+  "Switches the door strike (IN GPIO10)": "控制电磁锁通断（IN GPIO10）",
+  "Short beep to open, long beep to refuse (GPIO1)": "开门短响，拒绝长响（GPIO1）",
+  "Red LED blinks on a refused card (GPIO0)": "拒绝时红色 LED 闪烁（GPIO0）",
+  "330 Ω in series with the LED": "和 LED 串联的 330 Ω",
+  "The lock itself, on the relay contacts: needs real hardware": "锁本体，接在继电器触点上：必须上真机",
+  "12 V for the strike only, never into the dev board": "12 V 只给电磁锁，绝不能接进开发板",
+  "Wall panel: card zone over the reader, screen window above it": "墙面面板：读卡区盖在读卡器上，屏幕窗口在上方",
+  "LED and resistor sit on the breadboard": "LED 和电阻插在面包板上",
+  "12 V electric door strike (fail-secure solenoid lock)": "12 V 电磁锁（断电上锁型）",
+  "12 V 1 A power adapter (DC 5.5×2.1)": "12 V 1 A 电源适配器（DC 5.5×2.1）",
+  "RFID door reader enclosure (3D-printed)": "RFID 门禁读卡器外壳（3D 打印）",
+  "The coil needs 12 V at up to 0.8 A; the dev board cannot supply it": "线圈需要 12 V、最大 0.8 A，开发板供不了",
+  "Wire it through the relay COM / NO contacts with its own 12 V supply and a flyback diode across the coil. The simulator only sees the relay input level: the strike itself needs real hardware.": "通过继电器 COM / NO 触点接线，用独立的 12 V 电源，线圈两端并一个续流二极管。模拟器只看得到继电器输入电平：电磁锁本身必须上真机。",
+  "Only for the door strike, through the relay contacts. Never connect 12 V to the dev board; buy a certified one.": "只给电磁锁供电，经过继电器触点。绝不要把 12 V 接到开发板上；买有认证的产品。",
+  "Keep metal away from the RC522 antenna and the panel wall over it under about 3 mm, or the read range drops to almost nothing.": "RC522 天线附近不要有金属，盖在上面的面板壁厚控制在 3 mm 左右以内，否则读卡距离几乎降到零。",
+
+  // G-01 templates and parts.
+  "RFID door lock": "RFID 门禁",
 };
 export default d;

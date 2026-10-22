@@ -1110,10 +1110,8 @@ const d: Dict = {
   "Board controls": "보드 조작",
   "Capture": "기록",
   "View tools": "보기",
-  "Sound": "소리",
   "on": "켜짐",
   "off": "꺼짐",
-  "muted": "음소거",
   "Real 3D models": "실제 3D 모델",
 };
 export default d;
