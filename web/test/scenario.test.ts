@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fromScript, toScriptBody, type InputEvent } from '../src/inputlog.ts';
-import { applyPreset, benchTracks, compileScenario, GRID_MS, MIN_GAP_MS, parseScenario, quantize, SCENARIO_MAX_MS, scenarioAt, scenarioStaleAt, trackKey, valueAt, type ScenarioV1 } from '../src/app/scenario.ts';
+import { anchorScroll, applyPreset, benchTracks, pinchZoom, wheelZoom, zoomLabel, zoomStep, ZOOMS, compileScenario, GRID_MS, MIN_GAP_MS, parseScenario, quantize, SCENARIO_MAX_MS, scenarioAt, scenarioStaleAt, trackKey, valueAt, type ScenarioV1 } from '../src/app/scenario.ts';
 import { truncate, type BenchStep } from '../src/app/history.ts';
 
 const ROOM = { temp: 23.5, humidity: 45, pressure: 101325 };
@@ -153,4 +153,36 @@ test('undo / redo walks scenario edits on the bench timeline and keeps the compi
   assert.equal(scenarioStaleAt([...ops2, past], 4), true);
   assert.equal(scenarioStaleAt([...ops2, past], 3), false);
   assert.equal(scenarioStaleAt([...ops2, past, { k: 'run' }], 5), false);
+});
+
+test('timeline zoom (F-11d): anchor keeps the moment under the fingers, steps from continuous zoom, clamps', () => {
+  // Zoom 2 -> 5.5 about px 120 of a 358 px view: the same lane fraction stays at px 120
+  const viewW = 358;
+  const sl0 = 300;
+  const px = 120;
+  const frac = (sl0 + px) / (viewW * 2);
+  const z = pinchZoom(2, 100, 275);
+  assert.equal(z, 5.5);
+  const sl = anchorScroll(frac, viewW * z, px, viewW);
+  assert.ok(Math.abs((sl + px) / (viewW * z) - frac) < 1e-12);
+  // Clamped at both ends: never negative, never past the last viewport
+  assert.equal(anchorScroll(0.01, viewW * 4, 200, viewW), 0);
+  assert.equal(anchorScroll(1, viewW * 4, 10, viewW), viewW * 3);
+  assert.equal(pinchZoom(1, 100, 20), 1);
+  assert.equal(pinchZoom(16, 100, 400), 32);
+  assert.equal(pinchZoom(3, 0, 50), 32);
+  // Buttons step to the next power of two from wherever a pinch left the zoom
+  assert.equal(zoomStep(5.5, 1), 8);
+  assert.equal(zoomStep(5.5, -1), 4);
+  assert.equal(zoomStep(4, 1), 8);
+  assert.equal(zoomStep(4, -1), 2);
+  assert.equal(zoomStep(32, 1), undefined);
+  assert.equal(zoomStep(1, -1), undefined);
+  assert.equal(ZOOMS[0], 1);
+  // Wheel: up zooms in, down zooms out, symmetric
+  assert.ok(wheelZoom(2, -100) > 2 && wheelZoom(2, 100) < 2);
+  assert.ok(Math.abs(wheelZoom(wheelZoom(2, -100), 100) - 2) < 1e-9);
+  assert.equal(zoomLabel(4), '4');
+  assert.equal(zoomLabel(5.5), '5.5');
+  assert.equal(zoomLabel(7.98), '8');
 });

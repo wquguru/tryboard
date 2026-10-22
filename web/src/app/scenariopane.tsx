@@ -10,11 +10,13 @@ import { presetName } from './netcond';
 import { useStore } from './react';
 import { editScenario, endScenarioGesture, scenFeed } from './scenariofeed';
 import {
+  anchorScroll,
   applyPreset,
   compileScenario,
   NET_FAULTS,
   NET_PRESETS,
   newTrack,
+  pinchZoom,
   parseScenario,
   PRESETS,
   quantize,
@@ -23,6 +25,10 @@ import {
   scenarioHeader,
   trackKey,
   valueAt,
+  wheelZoom,
+  zoomLabel,
+  zoomStep,
+  ZOOMS,
   type ContKind,
   type Interp,
   type PresetId,
@@ -168,6 +174,9 @@ interface Sel {
 
 type Edit = (tr: ScenarioTrack, at: number, label: string, drag?: boolean) => void;
 
+// Set while two fingers are on the lanes: a keyframe under one of them stops following it
+const gesture = { pinch: false };
+
 /** One track's lane, w px wide (the pane's zoom); it sits in a horizontal scroller, so rects already include scrollLeft */
 function Lane({ tr, ti, sc, now, h, w, sel, onSel, edit }: { tr: ScenarioTrack; ti: number; sc: ScenarioV1; now: number; h: number; w: number; sel: Sel | null; onSel: (s: Sel | null) => void; edit: Edit }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -193,7 +202,7 @@ function Lane({ tr, ti, sc, now, h, w, sel, onSel, edit }: { tr: ScenarioTrack; 
   };
   const move = (e: ReactPointerEvent) => {
     const d = drag.current;
-    if (!d) return;
+    if (!d || gesture.pinch) return;
     const at = msAt(e);
     const next = moveItem(tr, d.i, at, isCont(tr) ? vAt(e) : undefined);
     if (JSON.stringify(next) === JSON.stringify(tr)) return;
@@ -332,7 +341,6 @@ function SelRow({ tr, i, phone, sc, set }: { tr: ScenarioTrack; i: number; phone
 }
 const QUANTSTEP: Record<string, number> = { temp: 0.1, hum: 1, press: 1, lux: 1, dist: 1, mv: 1 };
 
-const ZOOMS = [1, 2, 4, 8, 16, 32];
 
 export function ScenarioPane({ phone }: { phone?: boolean }) {
   const f = useStore(scenFeed);
@@ -363,21 +371,92 @@ export function ScenarioPane({ phone }: { phone?: boolean }) {
     return () => ro.disconnect();
   }, [hasTracks, phone]);
   const laneW = viewW * zoom;
-  // Zoom keeps the view centre in place, or brings the playhead back when following
-  const anchor = useRef<number | null>(null);
-  const zoomTo = (z: number) => {
+  const zoomNow = useRef(zoom);
+  zoomNow.current = zoom;
+  // Zoom anchor: lane fraction `frac` stays under `px`; `hard` (pinch, wheel) wins over following the playhead
+  const anchor = useRef<{ frac: number; px: number; hard?: boolean } | null>(null);
+  const zoomTo = (z: number, px?: number, hard?: boolean) => {
     const el = scroller.current;
-    if (el) anchor.current = (el.scrollLeft + el.clientWidth / 2) / (el.scrollWidth || 1);
+    if (el) {
+      const at = px ?? el.clientWidth / 2;
+      anchor.current = { frac: (el.scrollLeft + at) / (el.scrollWidth || 1), px: at, hard };
+    }
     setZoom(z);
   };
   useLayoutEffect(() => {
     const el = scroller.current;
+    const a = anchor.current;
+    anchor.current = null;
     if (!el) return;
     const px = (Math.min(now, sc.len) / sc.len) * laneW;
-    if (follow && (anchor.current !== null || px < el.scrollLeft || px > el.scrollLeft + el.clientWidth - 8)) el.scrollLeft = Math.max(0, px - el.clientWidth * 0.2);
-    else if (anchor.current !== null) el.scrollLeft = Math.max(0, anchor.current * laneW - el.clientWidth / 2);
-    anchor.current = null;
+    if (a && (a.hard || !follow)) el.scrollLeft = anchorScroll(a.frac, laneW, a.px, el.clientWidth);
+    else if (follow && (a || px < el.scrollLeft || px > el.scrollLeft + el.clientWidth - 8)) el.scrollLeft = Math.max(0, px - el.clientWidth * 0.2);
   }, [now, follow, laneW, sc.len]);
+  // Touch on the lanes: one finger pans (lanes are touch-none so the page never zooms), two fingers pinch about their midpoint.
+  // Capture phase: a finger that lands on a keyframe still counts towards a pinch
+  const ptrs = useRef(new Map<number, { x: number; y: number; kf: boolean }>());
+  const pinch = useRef<{ d0: number; z0: number; frac: number } | null>(null);
+  const span = () => {
+    const [a, b] = [...ptrs.current.values()];
+    return { d: Math.hypot(a.x - b.x, a.y - b.y), mid: (a.x + b.x) / 2 };
+  };
+  const touchDown = (e: ReactPointerEvent) => {
+    const el = scroller.current;
+    if (e.pointerType === 'mouse' || !el) return;
+    ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY, kf: !!(e.target as Element).closest('[data-kf]') });
+    if (ptrs.current.size !== 2) return;
+    gesture.pinch = true;
+    const { d, mid } = span();
+    pinch.current = { d0: d, z0: zoomNow.current, frac: (el.scrollLeft + mid - el.getBoundingClientRect().left) / (el.scrollWidth || 1) };
+    setFollow(false);
+  };
+  const touchMove = (e: ReactPointerEvent) => {
+    const el = scroller.current;
+    const p = ptrs.current.get(e.pointerId);
+    if (!el || !p) return;
+    const dx = e.clientX - p.x;
+    const dy = e.clientY - p.y;
+    ptrs.current.set(e.pointerId, { ...p, x: e.clientX, y: e.clientY });
+    const pc = pinch.current;
+    if (p.kf && !pc) return;
+    if (!pc) {
+      el.scrollLeft -= dx;
+      // touch-none also stops the drawer scrolling under a finger on the lane: pass the vertical part on
+      const box = el.closest('[data-vscroll]');
+      if (box) box.scrollTop -= dy;
+      return;
+    }
+    const { d, mid } = span();
+    const z = pinchZoom(pc.z0, pc.d0, d);
+    const px = mid - el.getBoundingClientRect().left;
+    if (z === zoomNow.current) el.scrollLeft = anchorScroll(pc.frac, el.scrollWidth, px, el.clientWidth);
+    else {
+      anchor.current = { frac: pc.frac, px, hard: true };
+      zoomNow.current = z;
+      setZoom(z);
+    }
+  };
+  const touchUp = (e: ReactPointerEvent) => {
+    ptrs.current.delete(e.pointerId);
+    if (ptrs.current.size < 2) pinch.current = null;
+    if (!ptrs.current.size) gesture.pinch = false;
+  };
+  // Desktop: ctrl / ⌘ + wheel (and trackpad pinch) zooms about the cursor; React wheel handlers are passive
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const wheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const z = wheelZoom(zoomNow.current, e.deltaY);
+      if (z === zoomNow.current) return;
+      zoomNow.current = z;
+      setFollow(false);
+      zoomTo(z, e.clientX - el.getBoundingClientRect().left, true);
+    };
+    el.addEventListener('wheel', wheel, { passive: false });
+    return () => el.removeEventListener('wheel', wheel);
+  }, [hasTracks, phone]); // eslint-disable-line react-hooks/exhaustive-deps
   // A slider's "Controlled by the scenario" link: select that track once the pane is up
   const focusRev = f.focus?.rev;
   useEffect(() => {
@@ -413,7 +492,7 @@ export function ScenarioPane({ phone }: { phone?: boolean }) {
   );
   const missing = (tr: ScenarioTrack) => !offeredKeys.has(trackKey(tr));
   const head = (tr: ScenarioTrack, i: number) => (
-    <div key={trackKey(tr)} data-track={trackKey(tr)} style={phone ? undefined : { height: 45 }} className={cn("flex flex-col justify-center gap-0.5 overflow-hidden border-b border-line-soft px-2 py-1 text-xs", phone && "border-b-0 text-sm", hl === trackKey(tr) && "bg-accent-bg")}>
+    <div key={trackKey(tr)} data-track={trackKey(tr)} style={phone ? undefined : { height: 45 }} className={cn("flex flex-col justify-center gap-0.5 overflow-hidden border-b border-line-soft px-2 py-1 text-xs", phone && "sticky top-0 z-10 border-b-0 bg-surface text-sm", hl === trackKey(tr) && "bg-accent-bg")}>
       <div className="flex items-center gap-1.5">
         <span className="size-2 flex-none rounded-full" style={{ background: COLORS[tr.k] }} />
         <span className="min-w-0 flex-1 truncate font-semibold" title={missing(tr) ? t('Part removed: this track will not be exported') : undefined}>
@@ -427,21 +506,22 @@ export function ScenarioPane({ phone }: { phone?: boolean }) {
       <span className={cn('truncate font-mono', missing(tr) ? 'text-warn-ink' : 'text-muted')}>{missing(tr) ? t('Part removed: this track will not be exported') : current(tr, now, f.shown)}</span>
     </div>
   );
-  const zi = ZOOMS.indexOf(zoom);
+  const zIn = zoomStep(zoom, 1);
+  const zOut = zoomStep(zoom, -1);
   const viewCtl = (
     <div id="scenView" className={cn('flex flex-none flex-wrap items-center gap-1.5', phone ? 'px-2 py-1.5' : 'border-t border-line-soft px-3 py-1')}>
       <button type="button" id="scenFollow" aria-pressed={follow} onClick={() => setFollow(!follow)} className={cn(ctl(phone), 'aria-pressed:border-accent-line aria-pressed:text-accent-ink')}>
         ▶ {t('Follow run')}
       </button>
       <span className="ml-1 text-muted">{t('Zoom')}</span>
-      <button type="button" id="scenZoomOut" aria-label={t('Zoom out')} disabled={zi <= 0} onClick={() => zoomTo(ZOOMS[zi - 1])} className={cn(ctl(phone), phone ? 'w-11' : 'w-7')}>
+      <button type="button" id="scenZoomOut" aria-label={t('Zoom out')} disabled={zOut === undefined} onClick={() => zOut && zoomTo(zOut)} className={cn(ctl(phone), phone ? 'w-11' : 'w-7')}>
         −
       </button>
-      <span className="w-8 text-center font-mono text-muted">{zoom}×</span>
-      <button type="button" id="scenZoomIn" aria-label={t('Zoom in')} disabled={zi >= ZOOMS.length - 1} onClick={() => zoomTo(ZOOMS[zi + 1])} className={cn(ctl(phone), phone ? 'w-11' : 'w-7')}>
+      <span id="scenZoom" className="w-10 text-center font-mono text-muted">{zoomLabel(zoom)}×</span>
+      <button type="button" id="scenZoomIn" aria-label={t('Zoom in')} disabled={zIn === undefined} onClick={() => zIn && zoomTo(zIn)} className={cn(ctl(phone), phone ? 'w-11' : 'w-7')}>
         ＋
       </button>
-      <button type="button" id="scenFit" disabled={zoom === 1} onClick={() => zoomTo(1)} className={ctl(phone)}>
+      <button type="button" id="scenFit" disabled={zoom === ZOOMS[0]} onClick={() => zoomTo(ZOOMS[0])} className={ctl(phone)}>
         {t('Fit')}
       </button>
       {!phone && <span className="ml-2 min-w-0 truncate text-muted">{t('Double-click a lane to add a keyframe; drag to move it (snaps to {ms} ms)', { ms: SNAP_MS })}</span>}
@@ -449,8 +529,9 @@ export function ScenarioPane({ phone }: { phone?: boolean }) {
   );
   const selTr = sel ? sc.tracks[sel.ti] : null;
   const selSet = (tr: ScenarioTrack, at: number, label?: string) => sel && editTrack(sel.ti)(tr, at, label ?? t('Edit keyframe'));
+  // Phone: the whole pane scrolls as one so the half-screen drawer still fits header + lane + zoom row; the header is sticky
   return (
-    <div id="scenPane" className="flex min-h-0 flex-1 flex-col text-xs">
+    <div id="scenPane" data-vscroll={phone ? '' : undefined} className={cn('flex min-h-0 flex-1 flex-col text-xs', phone && 'overflow-y-auto')}>
       <div className={cn('flex flex-wrap items-center gap-2 border-b border-line-soft px-3 py-1.5', phone && 'gap-1.5 px-2')}>
         <select
           id="scenPreset"
@@ -555,7 +636,7 @@ export function ScenarioPane({ phone }: { phone?: boolean }) {
       {!sc.tracks.length ? (
         <p className="m-0 p-3 text-muted">{t('No tracks yet: pick a preset or add a track, then run the firmware; values change at simulated time and land in the input log.')}</p>
       ) : phone ? (
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div className="flex-none">
           <div role="tablist" className="flex gap-1.5 overflow-x-auto px-2 py-1.5">
             {sc.tracks.map((tr, i) => (
               <button key={trackKey(tr)} type="button" role="tab" aria-selected={i === ti} onClick={() => (setCur(i), setSel(null))} className={cn('flex h-11 flex-none cursor-pointer items-center gap-1.5 rounded-full border px-3 text-sm', i === ti ? 'border-accent-line bg-accent-bg text-accent-ink' : 'border-line bg-surface text-fg')}>
@@ -565,7 +646,7 @@ export function ScenarioPane({ phone }: { phone?: boolean }) {
             ))}
           </div>
           {sc.tracks[ti] && head(sc.tracks[ti], ti)}
-          <div ref={scroller} data-scroller="" className="overflow-x-auto overflow-y-hidden border-t border-line-soft">
+          <div ref={scroller} data-scroller="" onPointerDownCapture={touchDown} onPointerMoveCapture={touchMove} onPointerUpCapture={touchUp} onPointerCancelCapture={touchUp} className="touch-none overflow-x-auto overflow-y-hidden border-t border-line-soft">
             {sc.tracks[ti] && lane(sc.tracks[ti], ti, 160)}
           </div>
           {viewCtl}
@@ -581,7 +662,7 @@ export function ScenarioPane({ phone }: { phone?: boolean }) {
           <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="flex">
               <div className="w-40 flex-none border-r border-line-soft">{sc.tracks.map((tr, i) => head(tr, i))}</div>
-              <div ref={scroller} data-scroller="" className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
+              <div ref={scroller} data-scroller="" onPointerDownCapture={touchDown} onPointerMoveCapture={touchMove} onPointerUpCapture={touchUp} onPointerCancelCapture={touchUp} className="min-w-0 flex-1 touch-none overflow-x-auto overflow-y-hidden">
                 <div style={{ width: laneW }}>{sc.tracks.map((tr, i) => lane(tr, i, 44))}</div>
               </div>
             </div>
