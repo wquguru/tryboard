@@ -464,7 +464,7 @@ function useToastLift(shown: boolean, text: string, propsOpen: boolean) {
     if (!shown) return;
     const measure = () => {
       let top = innerHeight;
-      for (const el of document.querySelectorAll<HTMLElement>("#props, #fwMenu, .qcard")) {
+      for (const el of document.querySelectorAll<HTMLElement>("#props, #fwMenu, #moreMenu, .qcard")) {
         if (el.id === "props" && !propsOpen) continue;
         const r = el.getBoundingClientRect();
         if (r.height > 0 && r.top < innerHeight - 1) top = Math.min(top, r.top);
