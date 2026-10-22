@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { i2cArgs } from '../../web/src/i2cdevs.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dist = path.join(root, 'web/dist');
@@ -190,8 +191,8 @@ if (fs.existsSync(CLI) && fs.existsSync(FW)) {
   const inputs = path.join(outDir, 'interact-run2.inputs');
   fs.writeFileSync(inputs, script + '\n');
   const cycles = Math.round(log.endMs * (CPU_HZ / 1000));
-  const i2c = log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(',');
-  const p = spawnSync(CLI, ['run', FW, '--seconds', String((cycles + 0.5) / CPU_HZ), '--i2c', i2c, '--inputs', inputs, '--gpio-log', '--ws2812-log'], { maxBuffer: 64 << 20 });
+  const i2c = i2cArgs(log.i2c);
+  const p = spawnSync(CLI, ['run', FW, '--seconds', String((cycles + 0.5) / CPU_HZ), ...i2c, '--inputs', inputs, '--gpio-log', '--ws2812-log'], { maxBuffer: 64 << 20 });
   const out = path.join(outDir, 'interact-run2.stdout'), err = path.join(outDir, 'interact-run2.stderr');
   fs.writeFileSync(out, p.stdout);
   fs.writeFileSync(err, p.stderr);

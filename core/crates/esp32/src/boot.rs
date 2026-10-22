@@ -270,6 +270,9 @@ impl Esp32 {
         bus.adc.pin_mv = old.adc.pin_mv;
         bus.i2c0.devices = std::mem::take(&mut old.i2c0.devices);
         bus.i2c1.devices = std::mem::take(&mut old.i2c1.devices);
+        // Pin buses (bench wiring, M5-02) are outside world too; their pull-ups rejoin the board's
+        bus.i2c_pins = old.i2c_pins.carry();
+        bus.gpio.board_pullup |= bus.i2c_pins.pullups();
         bus.gpio_log = std::mem::take(&mut old.gpio_log);
         bus.iotrace = old.iotrace.carry();
         bus.ws2812 = std::mem::take(&mut old.ws2812);

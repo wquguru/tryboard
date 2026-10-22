@@ -172,6 +172,11 @@ export function benchStep(): StepImpl {
         actions.runAllRef?.();
       }
       unsubs = [
+        // Firmware's I2C pads arrive at run time: re-run the wiring check for the SDA / SCL hint (W8)
+        c.session.onI2cFw(() => {
+          b.recheckWiring();
+          b.renderTree();
+        }),
         c.store.subscribe(() => {
           b.renderTree();
           b.renderProps();

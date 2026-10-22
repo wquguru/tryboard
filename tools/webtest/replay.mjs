@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { i2cArgs } from '../../web/src/i2cdevs.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dist = path.join(root, 'web/dist');
@@ -127,8 +128,8 @@ report('export input log button gives --inputs text', /^# TryBoard input log/.te
 // ---- 3. CLI replays to the same simulated time: serial byte-identical to the live web run
 const cycles = Math.round(log.endMs * (CPU_HZ / 1000));
 const seconds = String((cycles + 0.5) / CPU_HZ);
-const i2c = log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(',');
-const a = cliRun(['--seconds', seconds, '--i2c', i2c, '--inputs', inputsFile], 'live');
+const i2c = i2cArgs(log.i2c);
+const a = cliRun(['--seconds', seconds, ...i2c, '--inputs', inputsFile], 'live');
 let same = a.stdout === live;
 let diffAt = -1;
 if (!same) {
@@ -141,7 +142,7 @@ report('CLI --inputs replay = live web serial (byte for byte)', same && a.code =
 // ---- 4. Fingerprint: the web verify worker and the CLI each run the same log for 3 s (GPIO / WS2812 / buzzer PWM observations)
 const SECS = Math.max(3, Math.ceil(log.endMs / 1000));
 const web = await page.evaluate((l, s, p) => globalThis.__tbReplay(l, s, p), log, SECS, BUZZER);
-const c = cliRun(['--seconds', String(SECS), '--gpio-log', '--ws2812-log', '--pwm-log', String(BUZZER), '--i2c', i2c, '--inputs', inputsFile], 'fp');
+const c = cliRun(['--seconds', String(SECS), '--gpio-log', '--ws2812-log', '--pwm-log', String(BUZZER), ...i2c, '--inputs', inputsFile], 'fp');
 fs.writeFileSync(path.join(outDir, 'replay-web-verify.json'), JSON.stringify(web, null, 1));
 report('web replay and CLI replay fingerprints match (serial + observations)', web.fingerprint === c.fp && !web.error, `web ${web.fingerprint} / CLI ${c.fp}`);
 const buzz = /PWM GPIO5: \d+ changes, duty [\d.]+\.\.0\.5\d*, freq 2700/.test(web.report);

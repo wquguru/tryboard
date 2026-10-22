@@ -23,7 +23,7 @@ export interface FaultEstimate {
 }
 
 export interface WireFault {
-  rule: 'W1' | 'W2' | 'W3' | 'W4' | 'W5' | 'W6' | 'W7';
+  rule: 'W1' | 'W2' | 'W3' | 'W4' | 'W5' | 'W6' | 'W7' | 'W8';
   level: 'block' | 'warn';
   title: string;
   /** Wires to highlight (3D bench wire ids) */
@@ -45,6 +45,7 @@ export const WIRE_RULES: Record<WireFault['rule'], { title: string; source: stri
   W4: { title: t('Ground not connected'), source: t('Circuit basics: without a common ground the signal has no reference level'), confidence: '经验规则' }, // lint: allow-cjk
   W5: { title: t('I2C address conflict'), source: t(RULE_BY_ID.R15.source), confidence: RULE_BY_ID.R15.confidence },
   W7: { title: t('Power short'), source: t('Circuit basics: a rail tied straight to ground; current solved by elec (USB port 500 mA limit, onboard LDO; parameters in DECISIONS, electrical model)'), confidence: '估算' }, // lint: allow-cjk
+  W8: { title: t('I2C pins differ from the firmware'), source: t('Simulation: the firmware routed its I2C controller to these pads (GPIO matrix); devices on other pads never see the bus'), confidence: '数据手册' }, // lint: allow-cjk
   W6: { title: t('I2C wire too long'), source: t('I2C spec UM10204 §7.1: t_r = 0.8473·R·C, 300 ns max at 400 kHz; 1 pF/cm wire capacitance and 10 kΩ module pull-ups are estimates'), confidence: '必须上真机' }, // lint: allow-cjk
 };
 
@@ -59,7 +60,8 @@ export function driverModel(type: string | undefined, pin: string, divider?: boo
 
 const hex = (n: number) => '0x' + n.toString(16).toUpperCase().padStart(2, '0');
 
-export function checkWiring(parts: PartSpec[], wires: BenchWire[]): WireFault[] {
+/** `fw`: pads the running firmware drove its I2C controllers on (session.i2cFw); W8 stays silent until it is known */
+export function checkWiring(parts: PartSpec[], wires: BenchWire[], fw: { sda: number; scl: number }[] = []): WireFault[] {
   const out: WireFault[] = [];
   const live = wires.filter((w) => !w.missing);
   const name = (pid: string) => {
@@ -163,6 +165,20 @@ export function checkWiring(parts: PartSpec[], wires: BenchWire[]): WireFault[] 
     const l = i2cLoad(b.wireCm, b.parts.length);
     if (l.verdict === 'ok') continue;
     push('W6', l.verdict === 'fail' ? 'block' : 'warn', b.wires, t('Rise {ns} ns', { ns: l.rise.toFixed(0) }), t('SDA wiring for {parts} totals {cm} cm (estimate, verify on hardware): {verdict}.', { parts: b.parts.map(name).join(', '), cm: b.wireCm.toFixed(0), verdict: i2cText(l) }));
+  }
+  // W8 (P2-16): a part's SDA / SCL wires (after rewiring) aren't the pads the firmware drives; bit-banged buses aren't seen
+  for (const p of fw.length ? parts : []) {
+    if (!('sda' in p) || !('addr' in p)) continue;
+    const own = live.filter((w) => w.part === partId(p) && w.pinRole === 'bus');
+    const at = (pin: string) => Number(/^GPIO(\d+)$/.exec(own.find((w) => w.pin === pin)?.a ?? '')?.[1] ?? NaN);
+    const [sda, scl] = [at('SDA'), at('SCL')];
+    if (Number.isNaN(sda) || Number.isNaN(scl) || fw.some((f) => f.sda === sda && f.scl === scl)) continue;
+    const swapped = fw.find((f) => f.sda === scl && f.scl === sda);
+    const f = swapped ?? fw[0];
+    const args = { part: partInfo(p).name, addr: hex(p.addr), fsda: f.sda, fscl: f.scl, sda, scl };
+    const ws = own.filter((w) => w.pin === 'SDA' || w.pin === 'SCL').map((w) => w.id);
+    if (swapped) push('W8', 'warn', ws, t('SDA / SCL swapped'), t("{part} ({addr}) has SDA and SCL swapped: the firmware drives SDA on GPIO{fsda} and SCL on GPIO{fscl}, so a scan won't find it. Swap the two wires.", args));
+    else push('W8', 'warn', ws, t('Firmware uses GPIO{fsda} / GPIO{fscl}', args), t("{part} ({addr}) is on SDA GPIO{sda} / SCL GPIO{scl}, but the firmware drives I2C on SDA GPIO{fsda} / SCL GPIO{fscl}, so a scan won't find it. Move the wires, or change the pins in the firmware.", args));
   }
   return out;
 }

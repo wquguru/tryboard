@@ -559,12 +559,12 @@ impl SocBus {
             }
             0x6001_3000 | 0x6002_7000 => {
                 // I2CEXT0 SDA/SCL out = 90/89, I2CEXT1 = 92/91 (gpio_sig_map.h)
-                let (bus, sda, scl) = if base == 0x6001_3000 {
-                    (&mut self.i2c0, 90, 89)
+                let (bus, p, sda, scl) = if base == 0x6001_3000 {
+                    (&mut self.i2c0, 0, 90, 89)
                 } else {
-                    (&mut self.i2c1, 92, 91)
+                    (&mut self.i2c1, 1, 92, 91)
                 };
-                let routed = self.i2c_pins.routed(&self.gpio.func_out, 0x1ff, sda, scl);
+                let routed = self.i2c_pins.route(p, &self.gpio.func_out, 0x1ff, sda, scl);
                 let extra = routed.map(|i| &mut self.i2c_pins.buses[i].devices);
                 bus.write_with(off, v, now, extra);
                 if !bus.events.is_empty() {

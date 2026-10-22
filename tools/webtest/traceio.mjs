@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { i2cArgs } from '../../web/src/i2cdevs.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dist = path.join(root, 'web/dist');
@@ -81,10 +82,10 @@ const script = web.log.events.flatMap((e) => (act(e) ? [`${sec(e.tMs)}:${act(e)}
 const inputsFile = path.join(outDir, 'traceio-inputs.txt');
 fs.writeFileSync(inputsFile, script);
 const traceFile = path.join(outDir, 'traceio-cli.txt');
-const i2c = web.log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(',');
+const i2c = i2cArgs(web.log.i2c);
 // Run the CLI 50 ms longer: I2C events logged before the pause but stamped after it (pre-stamped by bit timing) must exist too
 const seconds = String(web.log.endMs / 1000 + 0.05);
-const p = spawnSync(CLI, ['run', FW, '--seconds', seconds, '--i2c', i2c, '--inputs', inputsFile, '--trace-io', traceFile, '--trace-pins', web.pins.join(',')], { maxBuffer: 64 << 20 });
+const p = spawnSync(CLI, ['run', FW, '--seconds', seconds, ...i2c, '--inputs', inputsFile, '--trace-io', traceFile, '--trace-pins', web.pins.join(',')], { maxBuffer: 64 << 20 });
 fs.writeFileSync(path.join(outDir, 'traceio-cli.stderr'), p.stderr);
 const cli = fs.readFileSync(traceFile, 'utf8').split('\n').filter((l) => l && !l.startsWith('#'));
 const wl = web.text.split('\n').filter(Boolean);

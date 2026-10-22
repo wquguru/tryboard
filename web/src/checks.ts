@@ -6,6 +6,7 @@ import { chipAt, pwmDevice, servoDeg, want as wantN } from './ui/say.ts';
 import type { ConfLevel } from './ui/conf.tsx';
 import type { Fault } from './faults.ts';
 import { partsFromArgs } from './partsdev.ts';
+import type { I2cDev } from './i2cdevs.ts';
 import { isTftPanel, lcdFromSpi } from './lcdspec.ts';
 
 export interface Level {
@@ -72,20 +73,25 @@ export interface CheckResult {
   note?: string;
 }
 
-/** Turn --i2c / --env / --spi / --servo / --power / --encoder / --sonar / --touch-int args into boot options (the web has no command line) */
+/** Turn --i2c / --i2c-bus / --env / --spi / --servo / --power / --encoder / --sonar / --touch-int args into boot options (the web has no command line) */
 export function bootOptions(l: Level) {
   const a = l.args ?? [];
   const val = (k: string) => {
     const i = a.indexOf(k);
     return i >= 0 ? a[i + 1] : undefined;
   };
-  const i2c = (val('--i2c') ?? '')
-    .split(',')
-    .filter(Boolean)
-    .map((s) => {
-      const [kind, addr] = s.split('@');
-      return { kind, addr: parseInt(addr, 16) };
-    });
+  const dev = (s: string, pins = {}): I2cDev => {
+    const [kind, addr] = s.split('@');
+    return { kind, addr: parseInt(addr, 16), ...pins };
+  };
+  // --i2c (I2C0, pin-less) then each --i2c-bus sda=N,scl=N:kind@addr,... (P2-16), the CLI's attach order
+  const i2c = (val('--i2c') ?? '').split(',').filter(Boolean).map((s) => dev(s));
+  a.forEach((k, i) => {
+    if (k !== '--i2c-bus') return;
+    const [pins, devs = ''] = (a[i + 1] ?? '').split(':');
+    const kv = Object.fromEntries(pins.split(',').map((x) => x.split('=')));
+    for (const d of devs.split(',').filter(Boolean)) i2c.push(dev(d, { sda: Number(kv.sda), scl: Number(kv.scl) }));
+  });
   const e = val('--env')?.split(',').map(Number);
   const env = e ? { temp: e[0], humidity: e[1], pressure: e[2] } : undefined;
   // F-04a2: a TFT panel name passes through as the screen kind (same text the CLI attaches)

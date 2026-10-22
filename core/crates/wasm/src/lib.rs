@@ -296,6 +296,15 @@ pub extern "C" fn tb_i2c_bus_add(sda: u32, scl: u32, pullup: u32) -> i32 {
     })
 }
 
+/// Pads firmware routed I2C controller `port` to (P2-16 wiring hint): SDA | SCL << 8, or -1 if not seen / no pin buses
+#[no_mangle]
+pub extern "C" fn tb_i2c_fw_pins(port: u32) -> i32 {
+    with(-1, |m| {
+        m.i2c_fw_pads(port as usize)
+            .map_or(-1, |(sda, scl)| (sda | scl << 8) as i32)
+    })
+}
+
 /// Attach an I2C device (kind codes as `tb_i2c_attach`) to pin bus `bus`. Returns 0 on success.
 #[no_mangle]
 pub extern "C" fn tb_i2c_attach_bus(bus: u32, kind: u32, addr: u32) -> i32 {

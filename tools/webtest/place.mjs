@@ -1,4 +1,4 @@
-// Placing parts on the bench (P2-16): drag the LED kit, wire it ring by ring, 3D LED follows GPIO5, serial = CLI, BME280 on 5V -> W2, Esc.
+// Placing parts (P2-16): LED kit ring by ring, 3D LED follows GPIO5, serial = CLI, BME280 on 5V -> W2, Esc, SDA/SCL swapped -> W8 + not found.
 // Usage: node tools/webtest/place.mjs [dist dir, default web/dist]; screenshots in Reviews/web/place-*
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
@@ -50,12 +50,18 @@ async function waitFor(page, fn, arg, ms = 15000) {
 const errors = [];
 const CLI = path.join(root, 'core/target/release/tryboard');
 const FW = path.join(root, 'firmware/build/s3-blink/flash.bin');
-const page = await browser.newPage();
-page.on('pageerror', (e) => errors.push(String(e)));
-page.on('console', (m) => {
-  if (m.type() === 'error') errors.push(m.text());
-});
-await page.evaluateOnNewDocument(() => localStorage.clear());
+let page;
+/** Fresh page (own browser context: the bench project persists across reloads) */
+async function newPage() {
+  const ctx = await browser.createBrowserContext();
+  page = await ctx.newPage();
+  page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text());
+  });
+  await page.evaluateOnNewDocument(() => localStorage.clear());
+}
+await newPage();
 await page.goto(base + '/app?work=blank&debug=1#bench', { waitUntil: 'load' });
 await waitFor(page, () => !!globalThis.__tbApp?.hist, null, 30000);
 await page.evaluate(async () => {
@@ -179,6 +185,53 @@ await page.keyboard.press('Escape');
 await sleep(200);
 const nAfter = (await page.evaluate(() => globalThis.__tbApp.session.scene.parts)).length;
 report('Esc cancels placing, scene unchanged', !(await has('#placeBanner')) && !(await has('#pinRings')) && nAfter === nBefore, `${nBefore} -> ${nAfter}`);
+
+// ---- 6. I2C follows the wired pads (P2-16): s3-bme280 drives SDA GPIO8 / SCL GPIO9; swapped wires -> no 0x76 + W8, right wires -> found
+const BME_FW = path.join(root, 'firmware/build/s3-bme280/flash.bin');
+async function bmeRun(scl, sda) {
+  await page.close();
+  await newPage();
+  await page.goto(base + '/app?work=blank&debug=1#bench', { waitUntil: 'load' });
+  await waitFor(page, () => !!globalThis.__tbApp?.hist, null, 30000);
+  await page.evaluate(async () => {
+    const buf = await (await fetch('./fw/s3-bme280/flash.bin')).arrayBuffer();
+    await globalThis.__tbApp.session.loadFirmware(buf, 's3-bme280/flash.bin');
+  });
+  const scans = () => document.getElementById('console').textContent.split('\n').filter((l) => /^I2C scan .*:/.test(l)).length;
+  await waitFor(page, scans, null, 30000);
+  await page.click('[data-left="lib"]');
+  await waitFor(page, () => !!document.querySelector('#partLib [data-place="bme280"]'));
+  await page.click('#partLib [data-place="bme280"]');
+  for (const [step, ring] of [['VIN', '3V3'], ['GND', 'GND'], ['SCL', scl], ['SDA', sda]]) {
+    await stepIs(step);
+    await clickRing(ring);
+  }
+  const len0 = await page.$eval('#console', (e) => e.textContent.length);
+  await waitFor(page, () => !document.querySelector('#placeBanner'));
+  // Placing reboots the sim; without a device the firmware aborts after its scan and reboots in a loop (pin buses survive it).
+  // Wait for a finished scan printed after placing: one followed by the chip id line or the abort.
+  await waitFor(page, () => globalThis.__tbApp.session.i2cFw.length > 0, null, 30000);
+  await waitFor(page, (l0) => {
+    const t = document.getElementById('console').textContent;
+    const i = t.lastIndexOf('I2C scan');
+    return i >= 0 && (i > l0 || t.length < l0) && /\n(BME280 chip id|abort\(\))/.test(t.slice(i));
+  }, len0, 60000);
+  await sleep(300);
+  const scan = (await page.$eval('#console', (e) => e.textContent)).split('\n').filter((l) => l.startsWith('I2C scan')).pop() ?? '';
+  const faults = await page.evaluate(() => globalThis.__tbApp.faults().map((f) => ({ rule: f.rule, short: f.short, detail: f.detail })));
+  const bme = (await page.evaluate(() => globalThis.__tbApp.session.scene.parts)).find((p) => p.type === 'bme280');
+  // Same pads on the CLI (--i2c-bus, as inputlog cliArgs): the scan line must match
+  const cli = fs.existsSync(CLI) ? spawnSync(CLI, ['run', BME_FW, '--seconds', '1.5', '--i2c-bus', `sda=${bme?.sda},scl=${bme?.scl}:bme280@0x76`], { maxBuffer: 64 << 20 }).stdout.toString('utf8').split('\n').find((l) => l.startsWith('I2C scan')) ?? '' : '';
+  return { scan, faults, bme, cli };
+}
+const sw = await bmeRun('GPIO8', 'GPIO9');
+const w8 = sw.faults.find((f) => f.rule === 'W8');
+report('SDA / SCL swapped -> firmware scan finds nothing, same as the CLI', !!sw.bme && sw.bme.sda === 9 && sw.bme.scl === 8 && !/0x76/.test(sw.scan) && sw.scan === sw.cli, `web ${JSON.stringify(sw.scan)} CLI ${JSON.stringify(sw.cli)}`);
+report('SDA / SCL swapped -> wiring check W8 says swap the wires', !!w8 && /SDA \/ SCL swapped/.test(w8.short) && /GPIO8/.test(w8.detail), JSON.stringify(w8 ?? sw.faults.map((f) => f.rule)));
+await sleep(300);
+await page.screenshot({ path: path.join(outDir, 'place-i2c-swapped.png') });
+const okRun = await bmeRun('GPIO9', 'GPIO8');
+report('SDA / SCL right -> firmware finds 0x76, same as the CLI, no W8', /0x76/.test(okRun.scan) && okRun.scan === okRun.cli && !okRun.faults.some((f) => f.rule === 'W8'), `web ${JSON.stringify(okRun.scan)} CLI ${JSON.stringify(okRun.cli)}; ${okRun.faults.map((f) => f.rule).join(',')}`);
 report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 server.close();

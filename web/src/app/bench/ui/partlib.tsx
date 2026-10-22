@@ -38,7 +38,7 @@ export function PartLib({
 }: {
   chip: "esp32" | "esp32c3" | "esp32s3";
   inBom?: ReadonlySet<string>;
-  /** Desktop: click "Place" or drag onto the bench (P2-16); without it parts can only be added via Shop. */
+  /** Click / tap "Place" or drag onto the bench (P2-16); without it parts can only be added via Shop. */
   onPlace?: (id: string) => void;
 }) {
   const [q, setQ] = useState("");
@@ -87,38 +87,63 @@ export function PartLib({
           )}
         </div>
         <p className="mt-1 mb-2 text-xs text-muted">
-          {t("Parts reach the bench from the shopping list: tap one to tick it in Shop. Prices are hand-picked reference ranges.")}
+          {t(
+            "Parts reach the bench from the shopping list: tap one to tick it in Shop. Prices are hand-picked reference ranges.",
+          )}
         </p>
         {list.map((p) => {
           const has = inBom?.has(p.id);
+          // Phone placing (P2-16): a 44px "Place" next to the row; the row itself still ticks the part in Shop
+          const d = onPlace ? placeDef(p.id) : null;
+          const canPlace = !!d && !("why" in d);
           return (
-            <a
+            <div
               key={p.id}
-              href="#shop"
-              data-lib={p.id}
-              className="flex min-h-14 items-center gap-3 border-b border-line-soft py-1.5 text-fg no-underline"
+              className="flex items-center gap-2 border-b border-line-soft"
             >
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{t(p.name)}</span>
-                <span className="block truncate text-xs text-muted">
-                  {KIND_NAMES[p.kind]} · ¥{p.price.lo}–{p.price.hi} ·{" "}
-                  <span className="inline-flex items-center gap-1 align-[-2px]">
-                    <ConfIcon c={SIM_CONF[p.sim.level]} size={11} />
-                    {SIM_NAMES[p.sim.level]}
+              <a
+                href="#shop"
+                data-lib={p.id}
+                data-placeable={d ? String(canPlace) : undefined}
+                className="flex min-h-14 min-w-0 flex-1 items-center gap-3 py-1.5 text-fg no-underline"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">
+                    {t(p.name)}
+                  </span>
+                  <span className="block truncate text-xs text-muted">
+                    {KIND_NAMES[p.kind]} · ¥{p.price.lo}–{p.price.hi} ·{" "}
+                    <span className="inline-flex items-center gap-1 align-[-2px]">
+                      <ConfIcon c={SIM_CONF[p.sim.level]} size={11} />
+                      {SIM_NAMES[p.sim.level]}
+                    </span>
                   </span>
                 </span>
-              </span>
-              <span
-                className={cn(
-                  "flex-none rounded-full px-3 py-1.5 text-xs",
-                  has
-                    ? "bg-ok-bg text-ok-ink"
-                    : "bg-accent-strong text-on-accent",
-                )}
-              >
-                {has ? t("In list") : t("Add")}
-              </span>
-            </a>
+                <span
+                  className={cn(
+                    "flex-none rounded-full px-3 py-1.5 text-xs",
+                    has
+                      ? "bg-ok-bg text-ok-ink"
+                      : "bg-accent-strong text-on-accent",
+                  )}
+                >
+                  {has ? t("In list") : t("Add")}
+                </span>
+              </a>
+              {canPlace && (
+                <button
+                  type="button"
+                  data-place={p.id}
+                  aria-label={t("Place {part} on the bench", {
+                    part: t(p.name),
+                  })}
+                  onClick={() => onPlace?.(p.id)}
+                  className="h-11 flex-none cursor-pointer rounded-full border border-accent bg-surface px-3.5 text-[13px] font-medium text-accent-ink"
+                >
+                  {t("Place")}
+                </button>
+              )}
+            </div>
           );
         })}
         {!list.length && <p className="text-muted">{t("No matching parts")}</p>}
@@ -136,8 +161,12 @@ export function PartLib({
       />
       <p className="mt-0 mb-2 text-[11px] text-muted">
         {onPlace
-          ? t("Drag onto the bench or click \"Place\", then wire it to the board pin by pin; greyed parts can't be placed (hover for why). Whole kits still come from the shopping list.")
-          : t("Parts reach the bench from the shopping list: click one to tick it in Shop.")}
+          ? t(
+              'Drag onto the bench or click "Place", then wire it to the board pin by pin; greyed parts can\'t be placed (hover for why). Whole kits still come from the shopping list.',
+            )
+          : t(
+              "Parts reach the bench from the shopping list: click one to tick it in Shop.",
+            )}
       </p>
       {kinds.map((k) => (
         <section key={k} className="mb-2">
@@ -159,7 +188,10 @@ export function PartLib({
                     e.dataTransfer.setData(LIB_DRAG, p.id);
                     e.dataTransfer.effectAllowed = "copy";
                   }}
-                  title={why ?? (d ? t("Drag onto the bench, or click \"Place\"") : undefined)}
+                  title={
+                    why ??
+                    (d ? t('Drag onto the bench, or click "Place"') : undefined)
+                  }
                   className={cn(
                     "flex items-center gap-2 rounded-md px-1.5 py-0.5 hover:bg-field",
                     d && !why && "cursor-grab",
@@ -184,9 +216,16 @@ export function PartLib({
                       type="button"
                       data-place={p.id}
                       disabled={!!why}
-                      aria-label={why ? t("{part} can't be placed: {why}", { part: t(p.name), why }) : t("Place {part} on the bench", { part: t(p.name) })}
+                      aria-label={
+                        why
+                          ? t("{part} can't be placed: {why}", {
+                              part: t(p.name),
+                              why,
+                            })
+                          : t("Place {part} on the bench", { part: t(p.name) })
+                      }
                       onClick={() => onPlace?.(p.id)}
-                      className="h-6 flex-none cursor-pointer rounded-md border border-line bg-surface px-2 text-[11px] text-fg hover:border-accent hover:text-accent-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-fg"
+                      className="h-6 flex-none cursor-pointer rounded-md border border-line bg-surface px-2 text-[11px] text-fg max-md:h-11 max-md:px-3 max-md:text-[13px] hover:border-accent hover:text-accent-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-fg"
                     >
                       {t("Place")}
                     </button>

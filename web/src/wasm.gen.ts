@@ -59,6 +59,8 @@ export interface WasmExports {
   tb_i2c_attach(kind: number, addr: number): number;
   /** Add an I2C bus on fixed pads (M5-02; reached by the routed controller or bit-banged GPIO); pullup != 0 = external pull-ups. Returns the bus index, or -1 if a pad is taken / the chip has no pin buses. */
   tb_i2c_bus_add(sda: number, scl: number, pullup: number): number;
+  /** Pads firmware routed I2C controller `port` to (P2-16 wiring hint): SDA | SCL << 8, or -1 if not seen / no pin buses */
+  tb_i2c_fw_pins(port: number): number;
   /** Attach an I2C device (kind codes as `tb_i2c_attach`) to pin bus `bus`. Returns 0 on success. */
   tb_i2c_attach_bus(bus: number, kind: number, addr: number): number;
   /** Package version eFuse (S3 0 = QFN56 / 1 = PICO; ESP32 5 = PICO-D4 / 6 = PICO-V3-02). Returns 0 on success. */

@@ -216,6 +216,8 @@ impl PinBus {
 #[derive(Default)]
 pub struct PinBuses {
     pub buses: Vec<PinBus>,
+    /// Pads (SDA, SCL) each controller drove on its last register access; lets the UI flag wiring that misses them
+    pub fw_pads: [Option<(u32, u32)>; 2],
 }
 
 impl PinBuses {
@@ -232,12 +234,49 @@ impl PinBuses {
         Some(self.buses.len() - 1)
     }
 
+    /// Buses for the chip after a reset: wiring and devices are the outside world, line state starts over;
+    /// last firmware pads stay so a crash-looping firmware's wiring hint doesn't flicker
+    pub fn carry(&mut self) -> PinBuses {
+        let mut buses = std::mem::take(&mut self.buses);
+        buses.iter_mut().for_each(PinBus::detach_pads);
+        PinBuses {
+            buses,
+            fw_pads: self.fw_pads,
+        }
+    }
+
     /// External pull-up mask to OR into the chip's board pull-ups
     pub fn pullups(&self) -> u64 {
         self.buses
             .iter()
             .filter(|b| b.pullup)
             .fold(0, |m, b| m | b.mask())
+    }
+
+    /// `routed` for controller `port`, also noting which pads the firmware routed it to (first pad per signal)
+    pub fn route(
+        &mut self,
+        port: usize,
+        func_out: &[u32],
+        mask: u32,
+        sda_sig: u32,
+        scl_sig: u32,
+    ) -> Option<usize> {
+        if self.buses.is_empty() {
+            return None;
+        }
+        let pad = |sig: u32| {
+            func_out
+                .iter()
+                .position(|v| v & mask == sig)
+                .map(|p| p as u32)
+        };
+        if let (Some(slot), Some(sda), Some(scl)) =
+            (self.fw_pads.get_mut(port), pad(sda_sig), pad(scl_sig))
+        {
+            *slot = Some((sda, scl));
+        }
+        self.routed(func_out, mask, sda_sig, scl_sig)
     }
 
     /// Bus whose pads carry controller signals (FUNCn_OUT_SEL & `mask` == sda_sig / scl_sig on both pads)
@@ -398,5 +437,33 @@ mod tests {
         assert_eq!(m.bus.routed(&fo, 0x1ff, 92, 91), Some(0));
         assert_eq!(m.bus.pullups(), 1 << 11 | 1 << 12);
         assert!(m.bus.add(PinBus::new(12, 13, false)).is_none());
+    }
+
+    #[test]
+    fn carry_keeps_buses_devices_and_firmware_pads() {
+        let mut m = master();
+        let mut fo = [0x100u32; 49];
+        (fo[11], fo[12]) = (92, 91);
+        m.bus.route(1, &fo, 0x1ff, 92, 91);
+        let n = m.bus.buses[0].devices.len();
+        let c = m.bus.carry();
+        assert!(m.bus.is_empty());
+        assert_eq!(
+            (c.buses.len(), c.buses[0].devices.len(), c.fw_pads),
+            (1, n, [None, Some((11, 12))])
+        );
+    }
+
+    #[test]
+    fn route_notes_firmware_pads_even_when_no_bus_matches() {
+        let mut m = master();
+        let mut fo = [0x100u32; 49];
+        (fo[12], fo[11]) = (92, 91);
+        // SDA / SCL swapped against the bus on 11 / 12: no bus, but the pads are noted for the hint
+        assert_eq!(m.bus.route(1, &fo, 0x1ff, 92, 91), None);
+        assert_eq!(m.bus.fw_pads, [None, Some((12, 11))]);
+        (fo[11], fo[12]) = (92, 91);
+        assert_eq!(m.bus.route(1, &fo, 0x1ff, 92, 91), Some(0));
+        assert_eq!(m.bus.fw_pads[1], Some((11, 12)));
     }
 }

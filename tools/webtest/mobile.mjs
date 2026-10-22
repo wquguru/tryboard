@@ -312,6 +312,46 @@ await page.screenshot({ path: path.join(outDir, 'mobile-fwsheet.png') });
 await page.keyboard.press('Escape');
 report('firmware drawer: Esc closes it', await waitFor(page, () => !document.querySelector('#fwMenu')));
 
+// ---- Phone placing (P2-16): library -> 44px Place -> drawer closes -> press-and-release each pin ring -> part on the bench
+{
+  const nParts = await page.evaluate(() => globalThis.__tbApp.session.scene.parts.length);
+  await page.click('[data-mtool="lib"]');
+  await waitFor(page, () => !!document.querySelector('[data-left="lib"]'));
+  await page.click('[data-left="lib"]');
+  await waitFor(page, () => !!document.querySelector('#partLib [data-place="led-kit"]'));
+  // The LED row sits below the fold on a phone; scroll it in like a thumb would
+  await page.$eval('#partLib [data-place="led-kit"]', (e) => e.scrollIntoView({ block: 'center' }));
+  await sleep(200);
+  report('phone placing: library Place is ≥ 44px and uncovered', (await tappable('#partLib [data-place="led-kit"]')) === 'ok', await tappable('#partLib [data-place="led-kit"]'));
+  await page.click('#partLib [data-place="led-kit"]');
+  const closed = await waitFor(page, () => !!document.querySelector('#placeBanner') && (!document.querySelector('#partLib') || document.querySelector('#partLib').getBoundingClientRect().height === 0));
+  report('phone placing: library closes, place banner shows', closed);
+  const pressRing = async (id) => {
+    await waitFor(page, (i) => {
+      const e = document.querySelector(`#pinRings [data-ring="${i}"]`);
+      return e && !e.hidden && e.getBoundingClientRect().width > 0;
+    }, id);
+    const c = await page.$eval(`#pinRings [data-ring="${id}"]`, (e) => {
+      const r = e.getBoundingClientRect();
+      return [r.x + r.width / 2, r.y + r.height / 2];
+    });
+    await page.mouse.move(c[0], c[1]);
+    await page.mouse.down();
+    await sleep(120);
+    await page.mouse.up();
+  };
+  const gpio = await page.$$eval('#pinRings [data-ring]', (r) => r.map((e) => e.dataset.ring).filter((x) => /^GPIO\d+$/.test(x)));
+  const pin = gpio.includes('GPIO4') ? 'GPIO4' : gpio[0];
+  await page.screenshot({ path: path.join(outDir, 'mobile-place.png') });
+  await pressRing(pin);
+  await waitFor(page, () => document.querySelector('#placeBanner')?.dataset.step === 'GND');
+  await pressRing('GND');
+  const placed = await waitFor(page, (n) => !document.querySelector('#placeBanner') && globalThis.__tbApp.session.scene.parts.length === n + 1, nParts);
+  const led = (await page.evaluate(() => globalThis.__tbApp.session.scene.parts)).find((x) => x.type === 'led');
+  report('phone placing: two ring taps place the LED on that pin', placed && led?.pin === +pin.slice(4), `${pin} -> ${JSON.stringify(led ?? null)}`);
+  await stepCheck('Phone placing');
+}
+
 // ---- Every product (preview ?work=X#product): fullscreen, no h-scroll, every key ≥ 44px and tappable, action key raises no error
 const WORKS = { weather: 'p-boot', spin: 'p-boot', lens: 'p-boot', usbkey: 'p-key-4', lamp: 'p-knob-r', ruler: 'p-near', tilt: 'p-tilt-r', imu: 'p-level' };
 for (const [w, key] of Object.entries(WORKS)) {

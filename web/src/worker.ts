@@ -1,5 +1,6 @@
 // The simulator runs in a Worker at real-time pace, posting console output and GPIO state to the main thread.
 // Fixed 1 ms slices (same as CLI `--inputs` replay); inputs apply between slices and are logged on sim time, so the CLI replays cycle-exactly.
+import { attachI2c, fwI2cPins, type I2cDev } from './i2cdevs.ts';
 import { action, cyclesToMs, roundImu, type InputAction, type InputEvent, type InputLog } from './inputlog';
 import { chipFromId, NPINS as CHIP_NPINS, RGB_GPIO, type SimChip } from './chipid';
 import { realFetch, type RealReq } from './realfetch';
@@ -404,6 +405,7 @@ function loopSlice(gen: number) {
   // Mid paced replay, recorded replies arrive as logged netreply events at their own time, never early from the cache or online
   if (!paced) pumpNet(e);
   if (ui) postHarness(e);
+  if (ui) postI2cFw(e);
   if (ui) postTiming(e);
   if (ui) postVcd(e);
   if (stop !== 0) {
@@ -584,6 +586,16 @@ function postHarness(e: Exports, force = false) {
   post({ type: 'harness', text: t });
 }
 
+let i2cFwKey = '';
+/** Pads firmware routed its I2C controllers to (P2-16 wiring hint), sent on change */
+function postI2cFw(e: Exports) {
+  const pins = fwI2cPins(e);
+  const k = JSON.stringify(pins);
+  if (k === i2cFwKey) return;
+  i2cFwKey = k;
+  post({ type: 'i2cfw', pins });
+}
+
 let timingText = '';
 function postTiming(e: Exports) {
   if (!e.tb_timing_report) return;
@@ -612,14 +624,13 @@ function postVcd(e: Exports) {
   post({ type: 'vcd', state: st });
 }
 
-const I2C_KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5, ft6236: 6, cst9220: 7, axp2101: 8, pcf85063: 9, es8311: 10, es7210: 11, sh1106: 12 };
 
 function postPaused(e: Exports) {
   post({ type: 'tick', console: '', leds: leds(e), strips: strips(e), gpio: e.tb_gpio_level(), enable: e.tb_gpio_enable(), gpioHi: e.tb_gpio_level_hi(), enableHi: e.tb_gpio_enable_hi(), pwm: pwmAll(e), pwmFreq: pwmFreqAll(e), pwmEvents: takePwmEvents(), simSeconds: e.tb_cycles() / CPU_HZ, ratio: 0, running, elec: elecFrame(e), brownouts: takeBrownouts(e), pins: pinDevFrame(e), adc: adcFrame(e) });
 }
 
 /** Boot fields; locale exists so any human text the worker makes follows the page (core errors are English already). */
-type BootMsg = { wasm: WebAssembly.Module; rom?: ArrayBuffer; romId: number; flash?: ArrayBuffer; flashId: number; i2c?: { kind: string; addr: number }[]; env?: Env; lcd?: boolean | LcdKind; battery?: Battery; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; board?: string; grove?: string; parts?: PartsDevs; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
+type BootMsg = { wasm: WebAssembly.Module; rom?: ArrayBuffer; romId: number; flash?: ArrayBuffer; flashId: number; i2c?: I2cDev[]; env?: Env; lcd?: boolean | LcdKind; battery?: Battery; servo?: number; power?: PowerMode; encoder?: EncoderSpec; sonar?: SonarSpec; dht11?: number; touchInt?: number; board?: string; grove?: string; parts?: PartsDevs; i2s?: string[]; micWav?: ArrayBuffer; micName?: string; harness?: Harness; realnet?: boolean; locale?: Locale };
 // ROM / firmware bytes by main-thread id (R-23): sent once, then every boot / seek copies them into a fresh instance.
 // ROMs are one per chip; firmware keeps only the latest (live.ts resends bytes whenever the id changes).
 const roms = new Map<number, ArrayBuffer>();
@@ -663,7 +674,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
     post({ type: 'error', message: `--grove ${m.grove}: rejected (unknown unit or no board preset with Port A)` });
     return null;
   }
-  for (const d of m.i2c ?? []) e.tb_i2c_attach(I2C_KIND[d.kind] ?? 0, d.addr);
+  attachI2c(e, m.i2c ?? []);
   if (m.env) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
   // Same order as the CLI: I2C devices, touch INT, battery (needs the PMIC), then the screen
   if (m.touchInt !== undefined) e.tb_touch_int?.(m.touchInt);
@@ -714,6 +725,7 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   if (m.harness?.i2cWire !== undefined) apply(e, { kind: 'i2cwire', cm: m.harness.i2cWire });
   if (m.harness?.antenna !== undefined) apply(e, { kind: 'antenna', db: m.harness.antenna });
   harnessText = '\u0000';
+  i2cFwKey = '\u0000';
   // On rewind replay cm is NaN: the initial distance is the dist entry at time 0, applied by seekTo.
   if (m.sonar && Number.isFinite(m.sonar.cm)) apply(e, { kind: 'dist', cm: m.sonar.cm });
   pwmLast = new Map();

@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { i2cArgs } from '../../web/src/i2cdevs.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dist = path.join(root, 'web/dist');
@@ -115,8 +116,8 @@ report('export input log contains the scenario lines', /^4\.000000:gpio0=0$/m.te
 // ---- 3. CLI --inputs to the same simulated time: serial byte-identical
 const cycles = Math.round(log.endMs * (CPU_HZ / 1000));
 const seconds = String((cycles + 0.5) / CPU_HZ);
-const i2c = log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(',');
-const a = cliRun(['--seconds', seconds, '--i2c', i2c, '--inputs', inputsFile], 'live');
+const i2c = i2cArgs(log.i2c);
+const a = cliRun(['--seconds', seconds, ...i2c, '--inputs', inputsFile], 'live');
 // The console keeps the first power-up's lines above the restart; compare the scripted run (same first line as a cold boot)
 const run = live.slice(Math.max(0, live.length - a.stdout.length));
 const same = a.stdout === run && live.startsWith(a.stdout.split('\n')[0]);
@@ -128,7 +129,7 @@ report('CLI --inputs replay = live web serial (byte for byte)', same && a.code =
 // ---- 4. Fingerprint: web verify worker vs CLI on the same log
 const SECS = Math.max(7, Math.ceil(log.endMs / 1000));
 const web = await page.evaluate((l, s, p) => globalThis.__tbReplay(l, s, p), log, SECS, BUZZER);
-const c = cliRun(['--seconds', String(SECS), '--gpio-log', '--ws2812-log', '--pwm-log', String(BUZZER), '--i2c', i2c, '--inputs', inputsFile], 'fp');
+const c = cliRun(['--seconds', String(SECS), '--gpio-log', '--ws2812-log', '--pwm-log', String(BUZZER), ...i2c, '--inputs', inputsFile], 'fp');
 report('web replay and CLI replay fingerprints match', web.fingerprint === c.fp && !web.error, `web ${web.fingerprint} / CLI ${c.fp}`);
 
 // ---- 5. Phone (F-11d): two-finger pinch zooms the lane about the midpoint; zoom buttons keep the track header in view

@@ -3,6 +3,7 @@
 import type { PartSpec } from '../board3d';
 import { t } from '../i18n';
 import { CHIP_LABEL } from '../chips.ts';
+import { i2cArgs } from '../i2cdevs.ts';
 import type { Level } from '../checks.ts';
 import type { ConfLevel } from '../ui/conf.tsx';
 
@@ -32,9 +33,10 @@ export function genLevels(g: GenInput): Level[] {
   const strip = g.parts.find((p): p is Extract<PartSpec, { type: 'ws2812' }> => p.type === 'ws2812');
   const oled = g.parts.some((p) => p.type === 'oled');
   const dht = g.parts.find((p): p is Extract<PartSpec, { type: 'dht11' }> => p.type === 'dht11');
-  // Every checkpoint carries the bench devices (--i2c, env; bootOptions maps them for the web); servo runs on external 5 V.
+  // Every checkpoint carries the bench devices (--i2c-bus, env; bootOptions maps them for the web); servo runs on external 5 V.
   const args = [
-    ...(i2c.length ? ['--i2c', i2c.map((d) => `${d.kind}@${hex2(d.addr)}`).join(','), '--i2c-log'] : []),
+    // P2-16: devices sit on the wired SDA / SCL pads (--i2c-bus), like the bench
+    ...(i2c.length ? [...i2cArgs(i2c), '--i2c-log'] : []),
     '--env', '23.5,45,101325',
     ...(servo ? ['--servo', String(servo.pin), '--power', 'ext'] : []),
     ...(dht ? ['--dht11', String(dht.pin)] : []),

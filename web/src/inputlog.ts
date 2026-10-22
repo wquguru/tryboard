@@ -1,6 +1,7 @@
 // Input log: web actions (buttons, sliders, serial...) stamped in simulated time by the worker, not wall clock (its ratio varies by machine),
 // exported as a `tryboard run --inputs <file>` script that replays cycle for cycle. Format: docs/DECISIONS.md (2026-10-16 input log).
 
+import { i2cArgs, type I2cDev } from './i2cdevs.ts';
 import { partsArgs, rc522Spec, type PartsDevs } from './partsdev.ts';
 import type { TftPanel } from './lcdspec.ts';
 export type InputEvent =
@@ -66,7 +67,7 @@ export interface InputLog {
   firmware?: string;
   chip?: 'esp32' | 'esp32c3' | 'esp32s3';
   /** Devices attached at power-up: become --i2c / --spi on replay */
-  i2c: { kind: string; addr: number }[];
+  i2c: I2cDev[];
   lcd: boolean;
   /** Screen other than the GC9A01 (E-03): becomes --spi co5300 on replay */
   spi?: 'co5300' | TftPanel;
@@ -214,7 +215,7 @@ export function cliArgs(log: InputLog, fw: string, inputsFile: string, seconds?:
   if (seconds !== undefined) a.push('--seconds', String(seconds));
   if (log.board) a.push('--board', log.board);
   if (log.grove) a.push('--grove', log.grove);
-  if (log.i2c.length) a.push('--i2c', log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(','));
+  a.push(...i2cArgs(log.i2c));
   const spi = [...(log.lcd || log.spi ? [log.spi ?? 'gc9a01'] : []), ...(rc522Spec(log.parts, log.chip) ? [rc522Spec(log.parts, log.chip)!] : [])];
   if (spi.length) a.push('--spi', spi.join(','));
   a.push(...partsArgs(log.parts));

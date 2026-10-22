@@ -1506,3 +1506,12 @@
 - 参考：公开 NEC 协议时序；arduino-esp32 3.3.2 `esp32-hal-rmt.h` / `.c`（LGPL 核心，只读 API 语义：`rmtSetCarrier` 的 carrier_level=true 实际映射为 `polarity_active_low`，故草图传 false 让高电平段带载波）；ESP-IDF v5.5 `rmt_reg.h`（C3 / S3 CONF0 carrier_en [21]、carrier_out_lv [22]，CARRIER_DUTY 紧跟 INT_CLR）与 `rmt_tx.c` `rmt_apply_carrier`（占空比按组时钟 resolution_hz 计），Apache-2.0。**未打开** third_party/arduino-libs/Arduino-IRremote 的任何文件，也未看 IDF ir_nec_transceiver 示例源码。
 - core：`Rmt::carrier` 不再限经典 ESP32，C3 / S3 按上述位与组时钟（`src_hz / (div_num+1)`）换算；`PinDevices::ir_eye` 换成 `rmt_ir`（喂眼睛 + 返回是否开载波），经典 / C3 / S3 的 `route_rmt` 共用，开载波时不喂 WS2812 解码器（S3 lib.rs 守住 1500 行上限）；`ir_attach` 去掉「LED 眼睛只限经典 ESP32」的限制。C3 复位 CONF0 本就开载波（0x710200），驱动建通道时会关，golden 210/210 不变即佐证。新单元测试 `rmt::tests::c3_tx_carrier`。
 - 备选：用 PWM 日志验 38 kHz（RMT 不走 LEDC，不适用）；改在经典 ESP32 上构建（已有载波，但 Arduino 库示例都在 C3，保持一致）。
+
+## 2026-10-22 P2-16 收尾：台面 I2C 走实际接的针 + 手机元件库放置（自主实现决定）
+- **台面 I2C 器件挂针级总线**：网页 `web/src/i2cdevs.ts`（`attachI2c` / `i2cArgs`）把场景里带 `sda` / `scl` 的 I2C 器件挂到 M5-02 的针级总线（wasm `tb_i2c_bus_add` + `tb_i2c_attach_bus`），没写针的旧器件仍走 I2C0（`--i2c`，不看针）；顺序与 CLI 一致（先 `--i2c` 再 `--i2c-bus`）。输入日志 `cliArgs`、genlevels、checks、各 webtest 的 CLI 对照都改用同一个 `i2cArgs`，网页与 `tryboard run --i2c-bus sda=..,scl=..:dev@addr` 参数一致。关卡和 golden 输出不变（关卡场景的针本来就是固件用的针）。
+- **接线提示 W8**：固件把 I2C 控制器路由到哪两个焊盘由 `PinBuses::route` 在每次事务时记下（`fw_pads[port]`，即使没有总线匹配也记），经 `Machine::i2c_fw_pads` → wasm `tb_i2c_fw_pins` → worker `i2cfw` 消息 → `session.i2cFw` 到接线检查。W8 比对**实际接线**（有效导线）与固件焊盘：SDA/SCL 对调报「SDA / SCL 接反」，接到别的针报「I2C 引脚和固件不一致」。模拟本身按场景器件的 `sda` / `scl` 挂总线（放置时即实际接的针），所以 W8 与「扫得到 / 扫不到」一致。
+- **修了既有 bug：固件软复位丢针级总线**。C3 / S3 / 经典的重启路径重建 SocBus 时只搬了 I2C0/1 器件，`i2c_pins` 被清空，s3-bme280 扫不到设备 abort 重启后台面器件就「消失」。新增 `PinBuses::carry()`：总线和器件（外部世界）保留、线电平重新开始、上拉并回 `board_pullup`；`fw_pads` 也保留，避免崩溃循环的固件让 W8 提示闪烁。
+- **已知缺口**：`Machine::i2c_load()`（P2-11 上升时间估算）只看 I2C0，挂在针级总线上的器件不计入电容，器件多时会低估；不在本项范围，后续把 `PinBus` 器件数并进估算。
+- **手机放置**：手机元件库是盖在台面上的整页抽屉，原来没有「放」入口。每行在 Add / 已在清单旁加 44px「放」按钮（`[data-place]`，只对有放置定义且不缺条件的零件显示）；`startPlace` 在手机上 `setMui({ lib: null })` 收起抽屉，露出针环；针环沿用已有的「按下预览、松开连接」。
+- **体积护栏**：`createSession` 的 harness / i2cFw 两组订阅改用新的 `web/src/subs.ts`（`subs<T>()`，on / emit），函数从 538 行减到 536；S3 `lib.rs` 守住 1500 行上限。
+- 备选：W8 改成看模拟总线是否收到事务（要等固件真的扫描，提示会晚且依赖固件行为，否决）；手机上用长按拖放（与滚动冲突、触屏拖拽 3D 台面难以定位，否决）。

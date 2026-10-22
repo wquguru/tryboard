@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { i2cArgs } from '../../web/src/i2cdevs.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dist = path.join(root, 'web/dist');
@@ -128,7 +129,7 @@ const text = await page.evaluate(async () => {
 const inputsFile = path.join(outDir, 'xiaozhi-inputs.txt');
 fs.writeFileSync(inputsFile, text);
 report('exported log has xz= and the BOOT hold', /:xz=on$/m.test(text) && /:xz=voice,demo$/m.test(text) && /:gpio0=0$/m.test(text) && /:gpio0=z$/m.test(text));
-const hw = ['--i2s', (log.i2s ?? []).join(','), '--mic', `tools/audio/${log.mic}`, '--i2c', log.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(',')];
+const hw = ['--i2s', (log.i2s ?? []).join(','), '--mic', `tools/audio/${log.mic}`, ...i2cArgs(log.i2c)];
 report('log carries I2S pins and the mic clip', hw[1].split(',').sort().join(',') === 'inmp441@5:4:6,max98357a@15:16:7' && log.mic === 'xz_mic.wav', hw.join(' '));
 
 // ---- 4. CLI --inputs to the same simulated time: serial byte-identical
@@ -216,7 +217,7 @@ const linFile = path.join(outDir, 'xiaozhi-livemic-inputs.txt');
 fs.writeFileSync(linFile, ltext);
 report('3D BOOT logs the same levels as the pane button (gpio0=0 then gpio0=z)', /:gpio0=0$/m.test(ltext) && /:gpio0=z$/m.test(ltext) && !/:gpio0=1$/m.test(ltext));
 const lcyc = Math.round(llog.endMs * (CPU_HZ / 1000));
-const lhw = ['--i2s', (llog.i2s ?? []).join(','), '--mic', wavFile, '--i2c', llog.i2c.map((d) => `${d.kind}@0x${d.addr.toString(16)}`).join(',')];
+const lhw = ['--i2s', (llog.i2s ?? []).join(','), '--mic', wavFile, ...i2cArgs(llog.i2c)];
 const lr = cliRun(['--seconds', String((lcyc + 0.5) / CPU_HZ), ...lhw, '--inputs', linFile], 'livemic');
 const ltrim = lweb.length < lr.stdout.length;
 const lweb0 = ltrim ? lweb.slice(lweb.indexOf('\n') + 1) : lweb;

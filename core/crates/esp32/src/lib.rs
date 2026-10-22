@@ -534,7 +534,13 @@ impl SocBus {
                 } else {
                     (&mut self.i2c1, 96, 95)
                 };
-                let routed = self.i2c_pins.routed(&self.gpio.func_out, 0x1ff, sda, scl);
+                let routed = self.i2c_pins.route(
+                    (base != 0x3FF5_3000) as usize,
+                    &self.gpio.func_out,
+                    0x1ff,
+                    sda,
+                    scl,
+                );
                 let extra = routed.map(|i| &mut self.i2c_pins.buses[i].devices);
                 bus.write_with(off, v, now, extra);
                 if !bus.events.is_empty() {
