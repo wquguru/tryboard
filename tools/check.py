@@ -187,6 +187,13 @@ def evaluate(t: dict, out: str, report: str):
     for c in t.get('serial_count', []):
         n = out.count(c['text'])
         res.append((n >= c['min'], f"serial \"{c['text']}\" appeared {n} times (need ≥ {c['min']})"))
+    au = t.get('audio')
+    if au:
+        # Same parse as accept.sh; the audio line rides along for judging only, it is not in the fingerprint
+        m = re.search(r'I2S (?:speaker|buzzer).*?RMS ([\d.]+).*?freq ([\d.]+) Hz', report)
+        rms, f = (float(m.group(1)), float(m.group(2))) if m else (0.0, 0.0)
+        ok = m is not None and abs(f - au['freq']) <= au['tol'] and rms >= au.get('min_rms', 0)
+        res.append((ok, f"sound {f:.1f} Hz, RMS {rms:.4f} (need {jsnum(au['freq'])} ± {jsnum(au['tol'])} Hz, RMS ≥ {jsnum(au.get('min_rms', 0))})"))
     u = t.get('usb')
     if u:
         m = re.search(r'USB host: (.+)$', report, re.M)
@@ -341,7 +348,8 @@ def run(fw: str, t: dict, inputs: str = '', extra=()):
     p = subprocess.run(cmd, capture_output=True)
     out, err = p.stdout.decode('utf-8', 'replace'), p.stderr.decode('utf-8', 'replace')
     report = canonical_report(err)
-    res = evaluate(t, out, report)
+    audio = ''.join(l + '\n' for l in err.splitlines() if re.match(r'\[tryboard\] I2S (speaker|buzzer)', l))
+    res = evaluate(t, out, report + audio)
     # The simulator itself failing to start (missing ROM, broken image) is not the firmware's fault
     if p.returncode != 0 or 'boot failed' in err:
         lines = [l for l in err.splitlines() if l.strip()]

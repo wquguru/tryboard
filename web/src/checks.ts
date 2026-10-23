@@ -31,6 +31,8 @@ export interface Level {
   lcd_min_pixels?: number;
   /** Minimum occurrences of a serial text (e.g. the BLINK of a blink) */
   serial_count?: { text: string; min: number }[];
+  /** Dominant frequency (± tol Hz) and minimum RMS of the last second reaching the speaker / buzzer (G-16a) */
+  audio?: { freq: number; tol: number; min_rms?: number };
   /** Pixels of a color (±tol, max channel difference) in the round LCD's last frame, optional centroid ranges: what is drawn and where */
   lcd_colors?: { name: string; rgb: string; min: number; max?: number; tol?: number; cx?: [number, number]; cy?: [number, number] }[];
   /** What the USB virtual host saw (level runs with --usb-log): device state, typed text (P2-12) */
@@ -330,6 +332,18 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
     const v = { text: c.text, n, min: c.min };
     const say = n >= c.min ? t('Serial printed "{text}" {n} times', v) : n ? t('Serial printed "{text}" only {n} times, needs at least {min}', v) : t('Serial did not print "{text}"', v);
     res.push({ ok: n >= c.min, text: `serial "${c.text}" appeared ${n} times (need ≥ ${c.min})`, say, tag: serial, dev: serial });
+  }
+  if (l.audio) {
+    const a = l.audio;
+    const m = report.match(/I2S (?:speaker|buzzer).*?RMS ([\d.]+).*?freq ([\d.]+) Hz/);
+    const rms = m ? Number(m[1]) : 0;
+    const f = m ? Number(m[2]) : 0;
+    const minRms = a.min_rms ?? 0;
+    const ok = !!m && Math.abs(f - a.freq) <= a.tol && rms >= minRms;
+    const spk = t('Audio out');
+    const v = { f: f.toFixed(0), want: a.freq };
+    const say = ok ? t('The speaker sounds at {f} Hz', v) : m && rms >= minRms ? t('The speaker sounds at {f} Hz, should be {want} Hz', v) : t('No sound reached the speaker');
+    res.push({ ok, text: `sound ${f.toFixed(1)} Hz, RMS ${rms.toFixed(4)} (need ${a.freq} ± ${a.tol} Hz, RMS ≥ ${minRms})`, say, tag: spk, dev: spk });
   }
   if (l.usb) {
     const m = report.match(/USB host: (.+)$/m);

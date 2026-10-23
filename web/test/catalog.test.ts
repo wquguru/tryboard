@@ -169,7 +169,7 @@ test('schema: board without source URL / bad onboard use / mismatched display pi
 
 // ───────── Shopping templates ─────────
 test('templates: eight of them, required parts in the library, positive quantities', () => {
-  assert.deepEqual(PROCURE_TEMPLATES.map((t) => t.id), ['weather', 'spin', 'lens', 'lamp', 'ruler', 'tilt', 'door', 'irlamp', 'cloud', 'usbkey', 'blank']);
+  assert.deepEqual(PROCURE_TEMPLATES.map((t) => t.id), ['weather', 'spin', 'lens', 'lamp', 'ruler', 'tilt', 'door', 'irlamp', 'cloud', 'dialtimer', 'usbkey', 'blank']);
   for (const t of PROCURE_TEMPLATES) {
     assert.ok(PART_BY_ID[t.board]?.kind === 'board', t.id);
     for (const l of [...t.required, ...t.suggested]) {
@@ -218,7 +218,7 @@ test('templates: removing BME280 raises a blocker (rule part of P0-07 acceptance
 });
 
 test('templates: each project default list + wiring has no blockers or warnings', () => {
-  for (const id of ['weather', 'spin', 'lens', 'usbkey', 'lamp', 'ruler', 'tilt', 'door', 'irlamp', 'cloud', 'blank']) assert.deepEqual(problems(templateInput(id)), [], id);
+  for (const id of ['weather', 'spin', 'lens', 'usbkey', 'lamp', 'ruler', 'tilt', 'door', 'irlamp', 'cloud', 'dialtimer', 'blank']) assert.deepEqual(problems(templateInput(id)), [], id);
 });
 
 test('templates: lamp without external supply -> USB-only warning (480 mA strip at full white)', () => {

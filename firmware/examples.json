@@ -1808,5 +1808,23 @@
    "env"
   ],
   "chip": "esp32c3"
+ },
+ {
+  "id": "arduino-m5-dial-timer",
+  "chip": "esp32s3",
+  "title": "Dial timer: M5Stack Dial ring, button, touch and buzzer (Arduino)",
+  "about": "The M5Stack Dial as a kitchen timer, Arduino + M5Unified. Turn the ring to set 1–60 minutes (encoder on G40 / G41 read by the pulse counter), press the Dial (BtnA, G42) to start or pause, and the round GC9A01 screen counts down with a ring that shrinks as time runs out. At zero the buzzer on G3 beeps three times at 2 kHz (M5Unified Speaker, 1-bit audio over I2S); tap the screen to cancel a running countdown. Serial prints every setting, the remaining time each second and every beep. The countdown follows simulated time; buzzer loudness is not calibrated on real hardware.",
+  "tags": [
+   "✓ Verified in sim",
+   "M5Dial",
+   "Encoder",
+   "Touch",
+   "Buzzer",
+   "Arduino"
+  ],
+  "scene": {
+   "board": "m5dial",
+   "parts": []
+  }
  }
 ]

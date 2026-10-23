@@ -40,7 +40,7 @@ export interface BuyLine {
 }
 
 export interface ProcureTemplate {
-  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'door' | 'irlamp' | 'cloud' | 'blank' | 'custom';
+  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'door' | 'irlamp' | 'cloud' | 'dialtimer' | 'blank' | 'custom';
   title: string;
   /** Matching level (firmware/levels.json id; level 07 variants are written 07:spin) */
   level: string | null;
@@ -372,6 +372,21 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
       { part: 'aht20', pin: 'SDA', net: 'GPIO6' },
     ],
     firmware: { wifi: true },
+  },
+  // G-16a finished board: everything is inside the M5Dial, so no breadboard, jumpers or wiring (DECISIONS 2026-10-23 G-16a)
+  {
+    id: 'dialtimer',
+    title: 'Dial timer',
+    level: 'dialtimer-4',
+    product: 'dialtimer',
+    board: 'm5-dial',
+    required: [
+      { partId: 'm5-dial', qty: 1, why: 'Round touch screen, rotary ring, press button and buzzer are all built in' },
+      CABLE,
+    ],
+    suggested: [],
+    wiring: [],
+    firmware: { wifi: false },
   },
   {
     id: 'usbkey',

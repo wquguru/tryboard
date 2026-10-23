@@ -24,6 +24,8 @@ export const WORKS: Record<string, WorkDef> = {
   irlamp: { id: 'irlamp', title: t('IR remote night light'), example: 's3-irlamp', checkpoints: ['irlamp-1', 'irlamp-2', 'irlamp-3', 'irlamp-4'], card: { chip: 'ESP32-S3', blurb: t('Point the remote at the lamp: digits pick one of nine colours, VOL+ / VOL- set the brightness, the power key switches it off') } },
   // G-05 join Wi-Fi → reach the broker → publish on time → combine (cloud command changes the interval)
   cloud: { id: 'cloud', title: t('Temperature and humidity to the cloud'), example: 'c3-cloud', checkpoints: ['cloud-1', 'cloud-2', 'cloud-3', 'cloud-4'], card: { chip: 'ESP32-C3', blurb: t('An AHT20 reports temperature and humidity over Wi-Fi to an MQTT broker; the cloud changes how often it reports') } },
+  // G-16a set minutes → countdown → alarm → combine (touch cancels); finished M5Dial, no wiring; no home card yet
+  dialtimer: { id: 'dialtimer', title: t('Dial timer'), example: 'arduino-m5-dial-timer', checkpoints: ['dialtimer-1', 'dialtimer-2', 'dialtimer-3', 'dialtimer-4'], card: { chip: 'M5Dial', blurb: t('Turn the ring to set the minutes, press to start or pause, three beeps at zero, tap the screen to cancel') } },
   // P2-01 / P2-04 peripheral benches (no checkpoints; the matching works are the knob lamp and ultrasonic ruler)
   knob: { id: 'knob', title: t('Knob counter (encoder and PCNT)'), example: 's3-encoder', checkpoints: [] },
   sonar: { id: 'sonar', title: t('Ultrasonic ranging (HC-SR04, RMT receive)'), example: 's3-ultrasonic', checkpoints: [] },

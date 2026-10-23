@@ -1723,3 +1723,13 @@
 - 决定：产品页中途挂载时 Wi-Fi / MQTT 行早已打印过，见到「发布 #N」即视为已连 broker、已订阅，避免误显示「离线」。
 - 决定：产品页线束面板的 Wi-Fi 行按采购模板 `firmware.wifi` 判断，cloud 不再显示「本项目不用 Wi-Fi」。
 - 备选：给 cloud 先做 3D 产品（工作量属 G-05c）；另开 cloud 专用命令通道（会绕过输入日志，不选）。
+
+## 2026-10-23 成品板作品怎么走四步：Dial 计时器（G-16a）
+- 决定：M5Dial 是成品板（屏、触摸、旋钮、按键、RTC、蜂鸣器都在壳里），作品四步照走、只换内容：**采购**只买板子 + USB-C 数据线（模板 `dialtimer`：required = m5-dial + 数据线，suggested / wiring 为空；面包板 / 杜邦线是否仍被 `ALWAYS` 自动加入由 G-16b 处理，阶段一不改采购逻辑）；**台面**直接用板子预设 `--board m5dial`（检查点 args 带它），没有接线步骤；**组装**不是接线，而是桌面支架 / 外壳（关卡 dialtimer-4 的 buy 写"Dial 桌面支架（可选）"），3D 在 G-16c；**产品**页 = 能转能按、能听到蜂鸣的 Dial（G-16b）。
+- 新零件 `m5-dial`（board，sim verified，model m5dial；放在 `catalog/aioboards.ts` 的 `M5DIAL`，芯片取 `AIO_CHIP.m5dial`，因为 parts.ts 已到 lint_size 1500 行上限）：引脚只列 5V / GND 和两个 Grove 口（Port A G13 / G15、Port B G1 / G2），板内 GPIO 进 `onboard`；WS1850S RFID、电池充电、尺寸未核对，写在 todo。顾问 `catalogmap.ts` 不改：顾问板子表里没有 M5 系列，加板子属顾问数据，不在本项。
+- 计时用 `millis()`，不用 BM8563：网页 simrun 不支持 `rtc=` 脚本动作，关卡要两边指纹一致；一分钟倒数在模拟里跑 62.4 s（墙钟约 5.5 s）。同理关卡里按键用 `gpio42=0 / 1`（与 CLI `btn=A` 等价、两边都支持），accept 用例保留 `btn=A`。
+- 新增检查项 `audio {freq, tol, min_rms}`（check.py + web checks.ts，同一套判定）：从 stderr 的 `I2S speaker / buzzer … RMS … freq …` 行读取；这一行只追加给判定，不进指纹，所以已有关卡指纹不变。网页 simrun 读 `tb_audio_report()`（先取长度再读缓冲，否则读到旧内容）。
+- `audio.rs analyze()` 改频率算法：只统计 ≤ 20 ms 的相邻上升过零周期（`freq = 周期数 × 采样率 / 跨度`），不再用"过零数 / 总时长"。原因：间歇蜂鸣（响 200 ms、停 200 ms）把静音段算进时长，2 kHz 读成约 1 kHz。连续音（已有用例）结果不变，新增单测 `analyze_beeps_ignore_gaps`。
+- 顺手修 npm 包 `packages/tryboard` 的 `check --level`：原来没把关卡的 `board` / `grove` 传进 SimJob，板子预设被忽略（所有 M5 板关卡在 npx 下都跑在裸板上）；现在与网页一致。
+- 许可：M5Unified / M5GFX 已在 LICENSING ✅（MIT），build_web 为 arduino-* bin 附 BUILD_INFO；公开部署前仍需核对 M5GFX 字体声明进 NOTICES（同 M5 其他例子）。
+- 备选：用 BM8563 计时——否：网页不支持 rtc=，且计时器不需要日历；只在 CLI 验收、关卡不判声音——否：作品卖点就是"到点会响"，必须可判；把蜂鸣做成连续音以迁就旧算法——否：真实计时器是间歇响。
