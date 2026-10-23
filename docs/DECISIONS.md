@@ -1742,3 +1742,8 @@
 - BLE 对时成功，不需要串口降级：NimBLE 服务 0xFF10、特征 0xFF11（READ | WRITE），写 4 字节小端 epoch 秒，按本地墙钟时间写进 PCF85063（不做时区）；长度不对返回 INVALID_ATTR_VALUE_LEN。虚拟手机 2.5 s 写入即回 `write FF11 ok`，读回同 4 字节。
 - 共享代码：`bootOptions`（web/src/checks.ts）原先把 `--spi co5300` 当成无屏、不解析 `--battery`，npx / 网页跑检查点时屏和电量都与 CLI 不同；改为透传 co5300、解析 `--battery pct[,usb]`，verify.ts 与 npm cli 把 battery 放进 job。已有检查点都不用这两个参数，旧指纹不变。
 - 备选：用 Montserrat 大字号画时间——否：抗锯齿边缘让像素数随字形浮动，判不准；AXP2101 温度——否：见上；`--rtc` / `--ble-phone` 放进检查点参数——否：网页没有这两个开关，改用脚本动作 `ble=scan / connect / write`，CLI 与网页共用。
+
+## 2026-10-23 合并后修复（G3fix）：草稿首页卡片、手机作品菜单被遮挡
+- 首页卡片：`WorkDef.card` 加 `draft?: boolean`，`HOME_WORKS` 过滤掉 draft。dialtimer 的卡片文案（G-16a 已写好并翻译）保留但标 draft，等 G-16b 网页流程完成再去掉；amoclock 没有 card，本来就不上首页。`card` 只被首页和 `relatedWork`（同样走 HOME_WORKS）用到。
+- 手机作品菜单：菜单原本渲染在顶栏里，顶栏 `fixed z-20` 自成层叠上下文，菜单的 z-30 压不过底部面板 / 工具栏（z-24…27）；作品增加后菜单变长，下半部分（空白实验台等）落在面板之下点不到。改为手机端像 FwMenu 一样 portal 到 body（遮罩 z-40、菜单 z-50），高度放到 `100dvh-3.5rem` 并保持可滚动；`usePop` 加 `panelRef`，portal 出去的面板仍算"内部点击"。
+- 备选：抬高顶栏 z-index——否：会盖住 z-30/40 的其它弹层；只缩短 max-h——否：底部面板高度可变，仍会被盖。

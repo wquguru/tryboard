@@ -119,7 +119,7 @@ export interface WorkDef {
   /** Checkpoints: levels.json ids (including sub-levels like 07-spin) */
   checkpoints: string[];
   /** Home-page card; absent = not on the home page (e.g. blank bench) */
-  card?: { chip: string; blurb: string };
+  card?: { chip: string; blurb: string; /** Copy ready, web flow not yet: kept off the home page */ draft?: boolean };
   /** Local save key (default = id); blank:<example> when opened from blank so examples don't overwrite each other */
   key?: string;
 }
