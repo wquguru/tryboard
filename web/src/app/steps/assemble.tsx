@@ -65,9 +65,10 @@ const RETEST_WHY: Record<string, () => string> = {
   door: () => t('With the reader on the steel back box, the RC522 never sees a card.'),
   irlamp: () => t('With the receiver behind the opaque wall, no remote code reaches the VS1838B.'),
   amoclock: () => t('With the steel weight on the board back, the phone never hears the clock, so the time is not set.'),
+  dialtimer: () => t('With the Dial pressed into the cradle, the collar pins the ring and no turn reaches the encoder.'),
 };
 /** Works whose assembly choice changes what the simulated sensors see (the others only change the Product picture) */
-const SIM_FX = new Set(['ruler', 'tilt', 'door', 'irlamp', 'amoclock']);
+const SIM_FX = new Set(['ruler', 'tilt', 'door', 'irlamp', 'dialtimer', 'amoclock']);
 /** Works whose sensor reads the in-case heat offset (env temperature + sensorOffset in the retest and the Product) */
 const HEAT_SENSOR: Record<string, string> = { weather: 'BME280', cloud: 'AHT20' };
 const fxHow = (id: string) =>
@@ -126,6 +127,10 @@ const IMPACT: Record<string, Record<string, string[]>> = {
   amoclock: {
     weight: [t('In the foot: 40 mm of air between steel and antenna, the phone hears the adverts at about -52 dBm'), t('On the board back: steel right behind the S3 antenna loses about {db} dB, adverts arrive near -97 dBm, below the phone’s -92 dBm, so sync fails, same in the retest (estimate)', { db: OBSTACLE_DB.metal })],
     usb: [t('The AMOLED board draws about 60 mA with the screen on; the AXP2101 charges the battery from the same cable (estimate)')],
+  },
+  dialtimer: {
+    dial: [t('On the collar: the 6 mm collar holds the body below the ring, which turns and clicks freely'), t('Pressed into the cradle: the collar reaches the rotary ring and pins it, no turn reaches the encoder, same in the retest (estimate)')],
+    usb: [t('The Dial draws about 120 mA with the screen on; any USB port or 5 V 1 A charger will do (estimate)')],
   },
 };
 
@@ -576,6 +581,7 @@ export function assembleStep(): StepImpl {
     if (fx.cardBlock !== undefined) row(t('Card reading'), fx.cardBlock ? t('No card is read') : t('Reads cards on the panel'), !!fx.cardBlock);
     if (fx.antennaDb !== undefined) row(t('Phone time sync (BLE)'), fx.antennaDb ? t('Antenna blocked {db} dB: the phone cannot find the clock', { db: fx.antennaDb }) : t('The phone finds the clock and sets the time'), !!fx.antennaDb);
     if (fx.irBlock !== undefined) row(t('Remote reception'), fx.irBlock ? t('No remote code arrives') : t('Every key arrives'), !!fx.irBlock);
+    if (fx.ringBlock !== undefined) row(t('Rotary ring'), fx.ringBlock ? t('Pinned by the collar, turns are lost') : t('Turns freely'), !!fx.ringBlock);
     const how = fxHow(T!.id);
     return rows.length ? (
       <>

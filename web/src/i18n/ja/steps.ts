@@ -1187,5 +1187,12 @@ const d: Dict = {
   "Swipe left": "左へスワイプ",
   "Swipe right": "右へスワイプ",
   "Time set {time}": "時刻合わせ済み {time}",
+  "With the Dial pressed into the cradle, the collar pins the ring and no turn reaches the encoder.": "Dial を受けに押し込むと縁がリングを押さえ、回転がエンコーダーに届かない。",
+  "On the collar: the 6 mm collar holds the body below the ring, which turns and clicks freely": "縁の上：6 mm の縁はリングより下の本体だけを支え、リングは自由に回ってクリックする",
+  "Pressed into the cradle: the collar reaches the rotary ring and pins it, no turn reaches the encoder, same in the retest (estimate)": "受けに押し込む：縁が回転リングまで届いて固定し、回転がエンコーダーに届かない。再テストでも同じ（推定）",
+  "The Dial draws about 120 mA with the screen on; any USB port or 5 V 1 A charger will do (estimate)": "Dial は画面点灯時に約 120 mA。どの USB ポートや 5 V 1 A 充電器でも足りる（推定）",
+  "Pinned by the collar, turns are lost": "縁に押さえられ、回転が失われる",
+  "Turns freely": "自由に回る",
+  "The stand collar pins the ring: turning it does nothing (as assembled)": "スタンドの縁がリングを押さえている：回しても反応しない（組立どおり）",
 };
 export default d;

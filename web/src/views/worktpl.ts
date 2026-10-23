@@ -1,20 +1,7 @@
 // Template lookup with a product-only fallback: a work whose assembly template hasn't landed yet still gets its product view.
-// G-05c moved cloud into TEMPLATES; G-16b dialtimer / G-17b amoclock stay here until G-16c / G-17c add their stands, then the `??` never reaches the fallback.
+// G-05c moved cloud, G-16c dialtimer and G-17c amoclock into TEMPLATES, so the fallback is empty until the next such work.
 import { TEMPLATES, type Template } from './templates';
-import { createDialtimerProduct, DIAL_BTN } from './dialtimerproduct';
-import { t } from '../i18n';
 
-const PRODUCT_ONLY: Record<string, Template> = {
-  dialtimer: {
-    id: 'dialtimer',
-    caption: t('Dial timer'),
-    parts: [],
-    tray: [],
-    intro: [t('Dial timer'), ''],
-    checks: () => [],
-    effects: () => ({}),
-    product: (el, h) => createDialtimerProduct(el, { enc: h.enc, touch: h.touch, btn: h.boardBtn && ((d) => h.boardBtn!(DIAL_BTN, d)) }),
-  },
-};
+const PRODUCT_ONLY: Record<string, Template> = {};
 
 export const workTemplate = (id: string): Template | undefined => TEMPLATES[id] ?? PRODUCT_ONLY[id];

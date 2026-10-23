@@ -10,6 +10,7 @@ import { createLampProduct, createRulerProduct, createTiltProduct, type WorkEffe
 import { createKeypadView } from './keypad';
 import { CHIP_HEAT_OFFSET } from './chipheat';
 import { createCloudProduct } from './cloudproduct';
+import { createDialtimerProduct, DIAL_BTN } from './dialtimerproduct';
 import { createAmoclockProduct } from './amoclockproduct';
 // Same as STEEL_DB in app/harness; importing it would pull the harness strings into the home page
 const STEEL_DB = 45;
@@ -50,21 +51,24 @@ export interface Effects extends WorkEffects {
   usbBlocked?: boolean;
   /** IR receiver behind the opaque base wall (irlamp): no remote code arrives, so ir= inputs are dropped */
   irBlock?: boolean;
+  /** Dial pressed down into the stand collar (dialtimer): the collar pins the rotary ring, so enc= turns are dropped */
+  ringBlock?: boolean;
 }
 
 /** Recessed sonar hears the hole wall first, so readings clamp to this many cm (estimate, not calibrated on hardware) */
 export const SONAR_BLOCK_CM = 3;
 
 /** Re-test inputs as the installed sensors see them: blocked sonar clamps dist=, a flipped IMU negates imu= pitch / roll,
- *  a blocked reader turns card= into none, a receiver behind the opaque wall drops every ir= code. */
+ *  a blocked reader turns card= into none, a receiver behind the opaque wall drops every ir= code, a pinned ring drops enc=. */
 export function effectScript(script: string | undefined, fx: Effects): string | undefined {
-  if (!script || (!fx.sonarBlock && !fx.imuFlip && !fx.cardBlock && !fx.irBlock)) return script;
+  if (!script || (!fx.sonarBlock && !fx.imuFlip && !fx.cardBlock && !fx.irBlock && !fx.ringBlock)) return script;
   return script
     .split(';')
     .map((e) => {
-      const m = /^(\s*[\d.]+\s*:\s*)(dist|imu|card|ir)=(.*)$/.exec(e);
+      const m = /^(\s*[\d.]+\s*:\s*)(dist|imu|card|ir|enc)=(.*)$/.exec(e);
       if (!m) return e;
       if (m[2] === 'ir' && fx.irBlock) return '';
+      if (m[2] === 'enc' && fx.ringBlock) return '';
       if (m[2] === 'card' && fx.cardBlock) return `${m[1]}card=none`;
       if (m[2] === 'dist' && fx.sonarBlock) {
         const d = Number(m[3]);
@@ -482,6 +486,37 @@ export const CLOUD: Template = {
   product: (el, h) => createCloudProduct(el, { send: h.mqtt }),
 };
 
+// G-16c Dial timer: M5Dial 45 x 45 x 14 mm in a 3D-printed desk stand (Ø47 mm cradle, 6 mm collar, 30° tilt); top view
+const DIAL_ISO = '<circle cx="28" cy="28" r="27" fill="#E8742A" stroke="#141414" stroke-width="1.5"/><circle cx="28" cy="28" r="20" fill="#06070A"/><circle cx="28" cy="28" r="14" fill="none" stroke="#007D7B" stroke-width="3"/>';
+const DIAL_MINI = '<circle cx="50" cy="30" r="27" fill="#E8742A"/><circle cx="50" cy="30" r="20" fill="#06070A"/><circle cx="50" cy="30" r="14" fill="none" stroke="#007D7B" stroke-width="3"/>';
+
+export const DIALTIMER: Template = {
+  id: 'dialtimer',
+  caption: t('Dial timer · desk stand with Ø47 mm cradle, 6 mm collar, 30° tilt (estimate)'),
+  intro: [t('Build the Dial timer'), t('Start with the desk stand')],
+  tray: ['usb', 'dial', 'stand'],
+  parts: [
+    { id: 'stand', name: t('Desk stand'), short: t('Stand'), ghost: [40, 30, 100, 70], okMsg: [t('Stand on the desk'), t('Cradle tilted 30° towards you, cable slot at the back')],
+      mini: '<path d="M14 54 L30 14 L70 14 L86 54 Z" fill="#D6D1C6" stroke="#8A867E" stroke-width="1.5"/><ellipse cx="50" cy="26" rx="22" ry="9" fill="#BDB9B0"/>',
+      iso: '<path d="M40 100 L56 30 L124 30 L140 100 Z" fill="#D6D1C6" stroke="#8A867E" stroke-width="1.5"/><circle cx="90" cy="64" r="30" fill="#BDB9B0" stroke="#8A867E" stroke-width="1.5"/><rect x="84" y="94" width="12" height="6" fill="#3A3936"/>' },
+    { id: 'dial', name: t('M5Stack Dial'), short: 'M5Dial', spotSize: [56, 56], mini: DIAL_MINI, iso: DIAL_ISO,
+      spots: [
+        { key: 'A', label: t('Seated on the collar, ring above it'), where: t('On the collar'), at: [62, 10], ok: true, msg: [t('Dial seated on the collar'), t('The ring sits 2 mm above the collar and turns freely')] },
+        { key: 'B', label: t('Pressed down into the cradle'), where: t('Inside the collar'), at: [62, 36], ok: false, msg: [t('Dial pressed into the cradle'), t('The 6 mm collar grips the rotary ring: it no longer turns (estimate)')] },
+      ] },
+    { id: 'usb', name: t('USB-C cable'), short: t('USB cable'), ghost: [82, 84, 16, 16], okMsg: [t('USB-C cable plugged in'), t('Click “Next: product”')],
+      mini: '<rect x="8" y="24" width="30" height="12" rx="3" fill="#3A3936"/><path d="M38 30 C60 30 70 10 96 12" fill="none" stroke="#3A3936" stroke-width="5"/>',
+      iso: '<rect x="82" y="84" width="16" height="16" rx="3" fill="#3A3936"/>' },
+  ],
+  checks: (s) => [
+    row(t('Rotary ring'), has(s, 'dial'), s.choice.dial === 'A', t('Clear of the collar, turns freely'), t('Gripped by the collar, the ring cannot turn')),
+    row(t('Buzzer'), has(s, 'dial'), true, t('Sound hole on the side stays open')),
+    row(t('Power'), has(s, 'usb'), true, t('USB-C 5 V, about 120 mA with the screen on (estimate)')),
+  ],
+  effects: (s) => ({ ringBlock: s.choice.dial === 'B' }),
+  product: (el, h) => createDialtimerProduct(el, { enc: h.enc, touch: h.touch, btn: h.boardBtn && ((d) => h.boardBtn!(DIAL_BTN, d)) }),
+};
+
 // G-17 AMOLED clock: tilted desk stand 70×60×55 mm, the Waveshare 2.16" board in front, a steel counterweight keeps it from tipping.
 // The weight in the foot is fine; glued to the board back it sits on the S3 antenna, so the phone never hears the adverts (antenna loss).
 const WEIGHT_MINI = '<rect x="14" y="20" width="72" height="20" rx="3" fill="#8E949C" stroke="#5C6168" stroke-width="1.5"/><path d="M24 26 L76 26" stroke="#C9CDD2" stroke-width="2"/>';
@@ -520,4 +555,4 @@ export const AMOCLOCK: Template = {
   product: (el, h) => createAmoclockProduct(el, h),
 };
 
-export const TEMPLATES: Record<string, Template> = { weather: WEATHER, spin: SPIN, lens: LENS, usbkey: USBKEY, lamp: LAMP, ruler: RULER, tilt: TILT, door: DOOR, irlamp: IRLAMP, cloud: CLOUD, amoclock: AMOCLOCK };
+export const TEMPLATES: Record<string, Template> = { weather: WEATHER, spin: SPIN, lens: LENS, usbkey: USBKEY, lamp: LAMP, ruler: RULER, tilt: TILT, door: DOOR, irlamp: IRLAMP, cloud: CLOUD, dialtimer: DIALTIMER, amoclock: AMOCLOCK };

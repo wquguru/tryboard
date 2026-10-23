@@ -13,7 +13,7 @@ import { doorActs, doorButtons, doorLive, doorOnReader, doorRows, doorSerial, do
 import { cloudActs, cloudButtons, cloudLive, cloudRows, cloudSend, cloudSerial, cloudTool } from './cloud';
 import { amoclockActs, amoclockButtons, amoclockLive, amoclockRows, amoclockSerial, amoclockTool, amoProduct3D, amoSync } from './amoclock';
 import type { Amoclock3D } from '../amoclock3d';
-import { dialHandlers, dialProduct3D, dialtimerActs, dialtimerButtons, dialtimerLive, dialtimerRows, dialtimerSerial, dialtimerTool } from './dialtimer';
+import { dialHandlers, dialProduct3D, dialStandOf, dialtimerActs, dialtimerButtons, dialtimerLive, dialtimerRows, dialtimerSerial, dialtimerTool } from './dialtimer';
 import type { Dial3D } from '../dial3d';
 import { irlampActs, irlampButtons, irlampLive, irlampRows, irlampPress, irlampSend, irlampSerial, irlampTool } from './irlamp';
 import { passedCount } from './bench';
@@ -923,6 +923,7 @@ export function productStep(): StepImpl {
   function build(c: StepCtx) {
     node = document.createElement('div');
     node.className = 'prod-stage';
+    if (c.work.id === 'dialtimer') dialStandOf(assembly());
     if (c.work.id === 'weather') {
       scene3d = createProduct3D(node, {
         frame,
@@ -973,7 +974,7 @@ export function productStep(): StepImpl {
         strip: () => frame().strips?.[5] ?? [],
       };
     } else if (c.work.id === 'dialtimer' && webglOk()) {
-      dial3d = dialProduct3D(node, c.session, frame);
+      dial3d = dialProduct3D(node, c.session, frame, dialStandOf(assembly()));
     } else if (c.work.id === 'amoclock' && webglOk()) {
       amo3d = amoProduct3D(node, c.session, frame, () => assembly()?.effects.antennaDb ?? 0);
     } else if (c.work.id === 'usbkey') {
@@ -1154,6 +1155,7 @@ export function productStep(): StepImpl {
       // Unfinished assembly doesn't lock the page: show the reference product with the Bench's current firmware, labelled, and Next leads on
       preview = !own || own.placed.length < own.total;
       const a = assembly()!;
+      if (c.work.id === 'dialtimer' && dialStandOf(a) !== dial3d?.stand && dial3d) { dial3d.dispose(); dial3d = null; node = null; }
       if (!node) build(c);
       c.shell.layer.render(
         <>

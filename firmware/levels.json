@@ -1634,7 +1634,7 @@
   "work": "dialtimer",
   "title": "Combined: Dial timer",
   "goal": "Tap the screen to cancel a running countdown, then start again",
-  "pass": "Ring +1 at 0.5 s (设定 06:00), BtnA at 1.0 s, a tap at 2.5 s, BtnA again at 3.2 s: 开始 06:00, 剩余 05:59 and 取消 回到 06:00 appear and 开始 06:00 appears twice; the dark-cyan ring is back on the round LCD (≥ 5000 px)",
+  "pass": "Ring +1 at 0.5 s (设定 06:00), BtnA at 1.0 s, a tap at 2.5 s, BtnA again at 3.2 s: 开始 06:00, 剩余 05:59 and 取消 回到 06:00 appear and 开始 06:00 appears twice; the dark-cyan ring is back on the round LCD (≥ 5000 px); the web page also requires an assembly with no warnings (geometric estimate, checked on the web page only)",
   "buy": "A desk stand for the Dial (optional)",
   "learn": "Touch as a second input, going back to a known state",
   "brief": "Combine the previous checkpoints into a Dial timer, M5Stack Dial:\n· Board: M5Stack Dial (ESP32-S3, M5StampS3 inside). Arduino with M5Unified (M5.begin(), M5.update() every loop); no wiring, everything is on the board\n· Round 240×240 GC9A01 screen through M5.Display, FT3267 touch through M5.Touch, press-down button through M5.BtnA (G42), buzzer on G3 through M5.Speaker (setVolume 128)\n· Rotary ring: quadrature encoder A=G40, B=G41; read it with the IDF pulse counter (driver/pulse_cnt.h) in x4 mode (both channels, edge + level actions as in the IDF rotary_encoder example), 4 counts per detent\n· Timer: minutes M from 1 to 60, 5 at power-up. Print 设定 MM:00 at boot and every time M changes; one ring detent = one minute, clamp at 1 and 60 (no print when clamped); the ring only sets M while the timer is not running\n· BtnA: from set or paused, start (print 开始 MM:SS or 继续 MM:SS); while running, pause (print 暂停 MM:SS). Count down with millis(); show remaining whole seconds rounded up, so it reads 05:00 until a full second has gone. While running print 剩余 MM:SS every time the shown value changes\n· Screen: the time MM:SS large in the middle (white, text size 5), state text SET / RUN / PAUSE / TIME UP under it, and a ring at the edge (radius 104–118) whose dark-cyan arc (TFT_DARKCYAN) is the part still to run; orange while paused, red at zero\n· At zero print 时间到, then beep 3 times: M5.Speaker.tone(2000, 200) every 400 ms, printing 嘀 n/3 2000 Hz for each; 400 ms after the third go back to set with the same minutes and print 回到设定 MM:00\n· Touch: a tap on the screen while running or paused cancels and goes back to set with the same minutes, printing 取消 回到 MM:00\n",
@@ -1664,7 +1664,8 @@
     "min": 5000,
     "tol": 8
    }
-  ]
+  ],
+  "assembly": "dialtimer"
  },
  {
   "id": "amoclock-1",

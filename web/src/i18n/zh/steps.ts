@@ -1187,5 +1187,12 @@ const d: Dict = {
   "Swipe left": "向左滑",
   "Swipe right": "向右滑",
   "Time set {time}": "已对时 {time}",
+  "With the Dial pressed into the cradle, the collar pins the ring and no turn reaches the encoder.": "Dial 被按进托座时，围边卡住转环，转动传不到编码器。",
+  "On the collar: the 6 mm collar holds the body below the ring, which turns and clicks freely": "搁在围边上：6 mm 围边只托住转环下面的机身，转环转动、咔哒都正常",
+  "Pressed into the cradle: the collar reaches the rotary ring and pins it, no turn reaches the encoder, same in the retest (estimate)": "按进托座：围边够到转环把它卡死，转动传不到编码器，复测也一样（估算）",
+  "The Dial draws about 120 mA with the screen on; any USB port or 5 V 1 A charger will do (estimate)": "Dial 亮屏时约 120 mA；任何 USB 口或 5 V 1 A 充电头都够（估算）",
+  "Pinned by the collar, turns are lost": "被围边卡住，转动丢失",
+  "Turns freely": "转动自如",
+  "The stand collar pins the ring: turning it does nothing (as assembled)": "支架围边卡住了转环：怎么转都没反应（按组装结果）",
 };
 export default d;

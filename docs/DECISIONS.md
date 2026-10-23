@@ -1782,3 +1782,11 @@
 - **温度页「f C」**：LVGL 的 `lv_snprintf`（`lv_label_set_text_fmt`）默认不支持浮点，`%.1f` 输出成 `f`。改为 newlib `snprintf` 格式化后 `lv_label_set_text`，页面显示 `25.0 C`。新增 accept `amoclock-temp`（滑到第 2 页，温度数字区 #ffb221 像素 1050–1260，新固件 1158，旧固件 452 会判错）与 `amoclock-metal`（`--antenna-loss 45`：广播在、连接 / 对时都没有）。
 - **指纹 / golden**：amoclock 固件变了（多一个 snprintf），amoclock-1..4 指纹随之变为 e80c·480a / 8b84·ee03 / 1904·7215 / 1b23·17ca（npx 与 check.py 一致），判定不变；amoclock* 相关 golden 的 CLI 输出（unimpl 计数、温度页像素、指纹）会变，另多 2 个新用例。firmware/build 不进 git：合并到 main 后先 `tools/build_fw.sh amoclock`（旧固件 amoclock-temp 只有 452 px 会判错），再在 main 上重存 `tools/golden.py save amoclock amoclock-swipe amoclock-off amoclock-temp amoclock-metal`。
 - **3D 成品**（`web/src/app/amoclock3d.ts`，仿 dial3d.ts）：复用台面 `amoledBoard('ws-amoled216')` 立在后仰支架上，屏幕是实时 480×480 帧；点 / 拖屏 = CST9220 触摸（移动 30 ms 节流），PWR 键帽 = 电源键，桌上手机 = BLE 对时（屏上显示搜索中 / 已对时 / 找不到时钟）；配重按装法显示在底座或板背。无 WebGL 时仍走 2D 产品页。
+
+## 2026-10-23 Dial 计时器装法 / 成品（G-16c）
+- 决定：dialtimer 从 worktpl 的 `PRODUCT_ONLY` 移进 `TEMPLATES`（模板 `DIALTIMER`，SVG 装配，不进 `HAS_3D`），零件三件：桌面支架（楔形，托座倾斜 30°、6 mm 围边）→ M5Stack Dial（选择 A 搁在围边上 / B 按进托座）→ USB-C 线；关卡 dialtimer-4 加 `"assembly": "dialtimer"`，pass 文案照 irlamp-4 补"网页另要求装配无警告"。
+- 影响仿真的一处：B 时 `effects.ringBlock = true`，`effectScript` 丢掉复测脚本里的 `enc=`（与 irBlock 丢 `ir=` 同一机制），dialtimer-4 的 `0.5:enc=+1` 没了 → 设定 06:00 / 开始 06:00 等缺失 → 复测判"装进去后变了"。产品页同样生效：3D 拖环、2D 视图、手机 / 桌面 ±1 键都走 `dialtimer.tsx` 的 `ringTurn`，被卡住时不发 enc；3D 视图显示提示，装配改变后重建 Dial 场景（`Dial3D.stand`）。
+- 3D 成品：`dial3d.ts` 的 `dialStand()` 程序化楔形支架 + 围边（B 时围边画到 13 mm 够到转环），镜头随支架后移；无装配时保持 G-16b 的平放样子。
+- 备选：蜂鸣孔朝下贴桌 → 响度降低、dialtimer-3 声音判定失败——否（本项不做）：声音判据只在 dialtimer-3（62 s 关卡），复测关卡是 dialtimer-4；要做得在网页 checks.ts / CLI 两边都对 RMS 加衰减，且没有可依据的衰减数，留作以后；磁吸底座挡住转环——采用同一思路，换成更常见的"打印托座围边太高"。
+- 尺寸：M5Dial 外形取 m5shell（45 × 45 × 14 mm，环 r 22），支架尺寸为设计估算，未核对真机。
+

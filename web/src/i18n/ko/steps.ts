@@ -1187,5 +1187,12 @@ const d: Dict = {
   "Swipe left": "왼쪽으로 스와이프",
   "Swipe right": "오른쪽으로 스와이프",
   "Time set {time}": "시간 맞춤 {time}",
+  "With the Dial pressed into the cradle, the collar pins the ring and no turn reaches the encoder.": "Dial을 받침에 눌러 넣으면 테두리가 링을 고정해 회전이 인코더에 전달되지 않는다.",
+  "On the collar: the 6 mm collar holds the body below the ring, which turns and clicks freely": "테두리 위: 6 mm 테두리가 링 아래 본체만 받쳐 링이 자유롭게 돌고 딸깍거린다",
+  "Pressed into the cradle: the collar reaches the rotary ring and pins it, no turn reaches the encoder, same in the retest (estimate)": "받침에 눌러 넣음: 테두리가 회전 링까지 닿아 고정하고, 회전이 인코더에 전달되지 않는다. 재테스트도 같다(추정)",
+  "The Dial draws about 120 mA with the screen on; any USB port or 5 V 1 A charger will do (estimate)": "Dial은 화면 켜짐 시 약 120 mA; 어떤 USB 포트나 5 V 1 A 충전기도 충분하다(추정)",
+  "Pinned by the collar, turns are lost": "테두리에 고정되어 회전이 사라짐",
+  "Turns freely": "자유롭게 돈다",
+  "The stand collar pins the ring: turning it does nothing (as assembled)": "거치대 테두리가 링을 고정: 돌려도 반응 없음(조립 결과대로)",
 };
 export default d;
