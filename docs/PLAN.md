@@ -282,6 +282,15 @@
 | G-13 | M5Dial 蜂鸣器（G3 1 位 I2S）出声模型，接网页 Web Audio；做不了则在 Dial 结论标「需真机」 | accept 新用例 + analyser 有能量；或 DECISIONS 写明不做原因 | ☑ 2026-10-23（accept `arduino-m5-dial-tone` 2000 Hz / RMS 0.47；m5board.mjs analyser RMS 0.34+；golden 仅 `arduino-m5-dial-demo` 多一行蜂鸣器报告） |
 | G-14 | M5 Grove ENV III / IV 单元 3D（接在外壳 Grove 口，随 `SceneSpec.grove` 出现 / 消失） | m5board.mjs 不减断言；agent-browser 截图 | ☐（在 G-06 之后） |
 | G-15 | 红外自发自收例子：同板 IR LED（F-08h LEDC 载波）→ 接收头（F-08i）回环，或两块板 | accept 新用例 + 网页 / CLI 指纹一致 | ☑ 2026-10-23：`firmware/arduino/lib-irremote-loop`（IRremote 发 + 收，LED GPIO4 / 接收头 GPIO5，地址 0x10 命令 0x41–0x43）。光路沿用已有的 `IrLink` 回环（同时接了 rx / tx 即视为 LED 对准接收头，LEDC 包络也走 `feed_carrier` 回环），内核未改。草图在 `begin()` 后先等 100 ms：库会丢掉 5 ms 内的首个 mark、并把 70 ms 安静期内的帧判成 NEC2 重复（真库行为，不放宽）。accept `arduino-lib-irremote-loop` `--ir 5,4` 3/3；parts.mjs 网页 / CLI 指纹一致；agent-browser 见 Reviews/ab/G-15.md |
+| G-05b | 温湿度上云网页流程：c3-cloud 示例 / 作品场景接 AHT20（G-09 已有网页件），首页卡片、采购、台面、2D 产品页（读数 + 网络页签 MQTT 面板下发 `interval=`，F-08g）；检查点 cloud-1..4 网页 / CLI 指纹一致 | levels / mobile webtest；agent-browser 首页 → 采购 → 台面 → 检查点全绿 → 产品页下发（桌面 + 390） | ☐ |
+| G-05c | 温湿度上云组装 / 3D：组装模板 cloud（传感器靠近板子发热 → 读数偏高的装法影响）+ 3D 成品（读数屏 / 云端曲线） | asm3d / interact webtest；agent-browser | ☐（在 G-05b 之后） |
+| G-05d | 温湿度上云加「手机配网」检查点：固件改为无凭据时开 SoftAP 配网页（复用 c3-softap-prov 做法，C-02 虚拟手机），配网后连路由再上云 | accept 新用例（`--ap-phone --ap-post`）；check.py --ref --all；网页 softap.mjs 式用例 | ☐（在 G-05b 之后） |
+| G-16a | 新作品「Dial 计时器」（WorkId `dialtimer`，M5Dial 成品板）阶段一：Arduino M5Unified 固件（旋钮调分钟、按下开始 / 暂停、到点 G3 蜂鸣、触摸取消），检查点 dialtimer-1..4，作品 / 采购模板 / 示例 / 文案登记 | build + accept；check.py --ref --all；npx 指纹一致 | ☐ |
+| G-16b | Dial 计时器网页流程：首页卡片、采购（成品板，无面包板）、台面（Dial 预设）、产品页（3D Dial 可转可按、蜂鸣可听） | levels / mobile / m5board webtest；agent-browser 桌面 + 390 | ☐（在 G-16a 之后） |
+| G-16c | Dial 计时器装法 / 成品：成品板的「组装」步（支架 / 外壳，至少一处装法影响，如蜂鸣孔被挡 → 响度判定失败）+ 3D 成品 | asm3d webtest；agent-browser | ☐（在 G-16b 之后） |
+| G-17a | 新作品「AMOLED 桌面时钟」（WorkId `amoclock`，ws-amoled216）阶段一：IDF + LVGL 数字 / 跳秒表盘（G-07：不做扫秒针），PCF85063 走时、滑动翻页（时间 / 温度 / 电量）、AXP2101 电量与电源键息屏、BLE 对时（S3 NimBLE，不成则降为串口对时并记 DECISIONS），检查点 amoclock-1..4 | build + accept（lcd_regions 区域检查）；check.py --ref --all；npx 指纹一致 | ☐ |
+| G-17b | AMOLED 时钟网页流程：首页卡片、采购、台面、产品页（点屏滑动、电源键、手机对时按钮） | levels / mobile webtest；agent-browser 桌面 + 390 | ☐（在 G-17a 之后） |
+| G-17c | AMOLED 时钟装法 / 成品：支架 / 外壳装法影响（如天线贴金属底座 → BLE 对时失败）+ 3D 成品 | asm3d webtest；agent-browser | ☐（在 G-17b 之后） |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
