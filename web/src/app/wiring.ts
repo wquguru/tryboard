@@ -1,6 +1,7 @@
 // Bench wiring: derived from the scene declaration (examples.json / scene placed by the BOM), plus "rewires" (injected faults).
 // Pure, tested by node --test; ids follow scene-api 'wire:<board pin>~<part>:<silkscreen>', same as the 3D bench.
 import type { PartSpec } from '../board3d';
+import { isI2cMod } from '../bench3d/spec.ts';
 import { BENCH_WIRE_CM } from './harness.ts';
 import { I2S_WIRING, micPins, spkPins } from '../i2spins.ts';
 import { t } from '../i18n/index.ts';
@@ -16,7 +17,7 @@ export interface PartInfo {
 }
 
 /** Part type → display name (timeline, hints and build tree all use this so raw type names never leak into the UI) */
-export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: t('Servo'), gc9a01: t('Round screen'), tft: t('Color screen'), buzzer: t('Buzzer'), pot: t('Potentiometer'), led: 'LED', encoder: t('Encoder'), hcsr04: t('Ultrasonic'), mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: t('Touch'), max98357a: t('Speaker'), inmp441: t('Microphone'), key: t('Button'), ws2812: t('LED strip'), dht11: 'DHT11', ds18b20: 'DS18B20', pir: t('PIR sensor'), relay: t('Relay'), ldr: t('Light sensor'), rc522: 'RC522', irrx: t('IR receiver'), irled: t('IR LED') };
+export const PART_LABEL: Record<PartSpec['type'], string> = { bme280: 'BME280', oled: 'OLED', servo: t('Servo'), gc9a01: t('Round screen'), tft: t('Color screen'), buzzer: t('Buzzer'), pot: t('Potentiometer'), led: 'LED', encoder: t('Encoder'), hcsr04: t('Ultrasonic'), mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: t('Touch'), max98357a: t('Speaker'), inmp441: t('Microphone'), key: t('Button'), ws2812: t('LED strip'), dht11: 'DHT11', ds18b20: 'DS18B20', pir: t('PIR sensor'), relay: t('Relay'), ldr: t('Light sensor'), rc522: 'RC522', irrx: t('IR receiver'), irled: t('IR LED'), aht20: 'AHT20', ina219: 'INA219', ds3231: 'DS3231' };
 export const partLabel = (type: string) => PART_LABEL[type as PartSpec['type']] ?? t('Part');
 
 export function partId(p: PartSpec) {
@@ -28,6 +29,12 @@ export function partInfo(p: PartSpec, ext5v = false): PartInfo {
   switch (p.type) {
     case 'bme280':
       return { name: 'BME280', model: t('Bosch BME280 module (temperature / humidity / pressure)'), iface: i2c(p), power: '3V3' };
+    case 'aht20':
+      return { name: 'AHT20', model: t('Aosong AHT20 module (temperature / humidity)'), iface: i2c(p), power: '3V3' };
+    case 'ina219':
+      return { name: 'INA219', model: t("TI INA219 module (bus voltage / current, 0.1 Ω shunt): measures the board's USB 5 V rail"), iface: i2c(p), power: '3V3' };
+    case 'ds3231':
+      return { name: t('DS3231 clock'), model: t('ZS-042 DS3231 RTC module (clock + temperature; the AT24C32 EEPROM is not modelled)'), iface: i2c(p), power: '3V3' };
     case 'oled':
       if (p.ctl === 'sh1106') return { name: 'SH1106 OLED', model: t('1.3″ 128×64 monochrome OLED (SH1106, 132-column memory)'), iface: i2c(p), power: '3V3' };
       return { name: 'SSD1306 OLED', model: t('0.96″ 128×64 monochrome OLED (SSD1306)'), iface: i2c(p), power: '3V3' };
@@ -154,7 +161,7 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
   };
   for (const p of parts) {
     const id = partId(p);
-    if (p.type === 'bme280' || p.type === 'oled') {
+    if (p.type === 'bme280' || p.type === 'oled' || isI2cMod(p)) {
       add('GND', id, 'GND', R.gnd, 'gnd', C.black);
       add('3V3', id, p.type === 'bme280' ? 'VIN' : 'VCC', R.vcc, 'power', C.red);
       add(`GPIO${p.scl}`, id, 'SCL', R.scl, 'bus', C.yellow);
@@ -299,7 +306,7 @@ export const emptyMods = (m: WireMods | null | undefined) => !m || (!m.drop?.len
 export function i2cBuses(parts: PartSpec[], wires: BenchWire[]): { key: string; parts: string[]; wireCm: number; wires: string[] }[] {
   const out = new Map<string, { key: string; parts: string[]; wireCm: number; wires: string[] }>();
   for (const p of parts) {
-    if (p.type !== 'oled' && p.type !== 'bme280' && p.type !== 'mpu6050' && p.type !== 'qmi8658') continue;
+    if (p.type !== 'oled' && p.type !== 'bme280' && p.type !== 'mpu6050' && p.type !== 'qmi8658' && !isI2cMod(p)) continue;
     const key = `GPIO${p.sda}/GPIO${p.scl}`;
     const b = out.get(key) ?? { key, parts: [], wireCm: 0, wires: [] };
     const id = partId(p);

@@ -153,4 +153,22 @@ void app_main(void)
     printf("checks: aht20=%d/4 ina219=%d/4 ds3231_time=%d/4 alarm1=%d\n", aht_ok, ina_ok, time_ok, alarm);
     fails += aht_ok != 4 || ina_ok != 4 || time_ok != 4 || !alarm;
     if (!fails) printf("TRYBOARD_OK c3-i2c-trio\n");
+
+    // Keep reporting so a bench temperature change shows up; lower-case names stay clear of the accept regexes,
+    // T= / H= is the bench's reading-line format (session.ts READING) so the environment card follows the AHT20
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        uint8_t trig[3] = {0xac, 0x33, 0x00}, d[7], r[2];
+        ESP_ERROR_CHECK(i2c_master_transmit(aht, trig, 3, 100));
+        vTaskDelay(pdMS_TO_TICKS(80));
+        ESP_ERROR_CHECK(i2c_master_receive(aht, d, 7, 100));
+        uint32_t tr = ((uint32_t)(d[3] & 15) << 16) | (d[4] << 8) | d[5];
+        int32_t t100 = (int32_t)(((int64_t)tr * 20000) >> 20) - 5000, ta = t100 < 0 ? -t100 : t100;
+        uint32_t hr = ((uint32_t)d[1] << 12) | (d[2] << 4) | (d[3] >> 4), h100 = (uint32_t)(((uint64_t)hr * 10000) >> 20);
+        rtc_rd(0x11, r, 2);
+        int q = (int8_t)r[0] * 4 + (r[1] >> 6), qa = q < 0 ? -q : q;
+        int cur = (int16_t)ina_rd(0x04), ca = cur < 0 ? -cur : cur;
+        printf("live: aht20 T=%s%" PRId32 ".%02" PRId32 " C  H=%" PRIu32 ".%02" PRIu32 " %%, ds3231 %s%d.%02d C, ina219 %d mV %s%d.%d mA\n", t100 < 0 ? "-" : "",
+               ta / 100, ta % 100, h100 / 100, h100 % 100, q < 0 ? "-" : "", qa / 4, qa % 4 * 25, (ina_rd(0x02) >> 3) * 4, cur < 0 ? "-" : "", ca / 10, ca % 10);
+    }
 }

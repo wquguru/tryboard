@@ -71,7 +71,7 @@ function defaultChannels(parts: PartSpec[], chip: string): Channel[] {
   const ch: Channel[] = [];
   const bus = parts.find((p): p is Extract<PartSpec, { sda: number }> => 'sda' in p);
   if (bus) {
-    const NAME: Record<string, string> = { bme280: 'BME280', oled: 'OLED', mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: 'CST816S' };
+    const NAME: Record<string, string> = { bme280: 'BME280', oled: 'OLED', mpu6050: 'MPU6050', qmi8658: 'QMI8658', cst816s: 'CST816S', aht20: 'AHT20', ina219: 'INA219', ds3231: 'DS3231' };
     const devs = parts.filter((p) => 'sda' in p).map((p) => `${NAME[p.type] ?? p.type} ${hex((p as { addr: number }).addr)}`);
     ch.push({ id: 'I2C0', kind: 'i2c', port: 0, sda: bus.sda, scl: bus.scl, label: devs.join(' · ') });
   }

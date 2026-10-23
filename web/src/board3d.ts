@@ -18,7 +18,7 @@ import { mountPointer, mountTargets } from './bench3d/pick';
 import { mountInspect } from './bench3d/inspect';
 export { BOARD_C3, BOARD_S3, BOARD_E32, BOARDS, LCD_WIRING } from './bench3d/boards';
 export type { ChipId, BoardSpec } from './bench3d/boards';
-export { imuPart } from './bench3d/spec';
+export { imuPart, isI2cMod } from './bench3d/spec';
 export type { PartSpec, SceneSpec } from './bench3d/spec';
 export { I2S_WIRING } from './i2spins.ts';
 

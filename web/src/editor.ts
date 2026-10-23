@@ -1,6 +1,6 @@
 // Data side of the part editor (UI in app/steps/bench.tsx): pin table, part descriptions, conflict checks.
 // Matters most for uploaded firmware: examples carry their wiring, custom firmware wiring is known only to the user.
-import { BOARDS, I2S_WIRING, LCD_WIRING, type ChipId, type PartSpec, type SceneSpec } from './board3d';
+import { BOARDS, I2S_WIRING, LCD_WIRING, isI2cMod, type ChipId, type PartSpec, type SceneSpec } from './board3d';
 import { TFT_PX } from './lcdspec.ts';
 import { t } from './i18n';
 
@@ -81,6 +81,10 @@ export function describe(p: PartSpec, chip: ChipId = 'esp32c3'): string {
       return `${t('WS2812 strip')} × ${p.n ?? 8} · DIN IO${p.pin}`;
     case 'oled':
       return `OLED · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl}`;
+    case 'aht20':
+    case 'ina219':
+    case 'ds3231':
+      return `${p.type.toUpperCase()} · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl}`;
     case 'bme280':
       return `BME280 · 0x${p.addr.toString(16)} · SDA IO${p.sda} / SCL IO${p.scl}`;
     case 'mpu6050':
@@ -109,7 +113,7 @@ export function describe(p: PartSpec, chip: ChipId = 'esp32c3'): string {
 /** Changing I2C devices / encoder / ultrasonic needs a power cycle (devices attach at power-up). */
 export const needsReboot = (a: SceneSpec, b: SceneSpec) => {
   const i2c = (s: SceneSpec) =>
-    JSON.stringify(s.parts.filter((p) => p.type === 'oled' || p.type === 'bme280' || p.type === 'gc9a01' || p.type === 'tft' || p.type === 'encoder' || p.type === 'hcsr04' || p.type === 'mpu6050' || p.type === 'qmi8658' || p.type === 'cst816s' || p.type === 'max98357a' || p.type === 'inmp441').map((p) => (p.type === 'hcsr04' ? { ...p, cm: undefined } : p)));
+    JSON.stringify(s.parts.filter((p) => p.type === 'oled' || p.type === 'bme280' || p.type === 'gc9a01' || p.type === 'tft' || p.type === 'encoder' || p.type === 'hcsr04' || p.type === 'mpu6050' || p.type === 'qmi8658' || p.type === 'cst816s' || p.type === 'max98357a' || p.type === 'inmp441' || isI2cMod(p)).map((p) => (p.type === 'hcsr04' ? { ...p, cm: undefined } : p)));
   return i2c(a) !== i2c(b);
 };
 
@@ -123,7 +127,7 @@ export function conflicts(s: SceneSpec, chip: ChipId = 'esp32c3'): string[] {
     else used.set(pin, who);
   };
   for (const p of s.parts) {
-    if (p.type === 'oled' || p.type === 'bme280' || p.type === 'mpu6050' || p.type === 'qmi8658' || p.type === 'cst816s') {
+    if (p.type === 'oled' || p.type === 'bme280' || p.type === 'mpu6050' || p.type === 'qmi8658' || p.type === 'cst816s' || isI2cMod(p)) {
       claim(p.sda, 'I2C SDA', true);
       claim(p.scl, 'I2C SCL', true);
       if (p.type === 'cst816s') claim(p.int, t('Touch INT'));

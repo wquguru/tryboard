@@ -1,4 +1,4 @@
-// Bench section (F-04a): controls for DS18B20 / PIR / relay / photoresistor / RC522.
+// Bench section (F-04a): controls for DS18B20 / PIR / relay / photoresistor / RC522 / AHT20 / INA219 / DS3231 (G-09).
 // PIR, light and card go through LiveSim.partInput, so they land in the input log as pir= / lux= / card=.
 import { t } from "../../i18n";
 import { Btn, Btns, Note, Sec, Slider } from "../../ui/panel";
@@ -30,6 +30,22 @@ export function tutorialControls(b: BenchCtx, p: TutorialPart) {
       </>
     );
   }
+  if (p.type === "aht20" || p.type === "ds3231") {
+    return (
+      <>
+        <Sec>{t("Ambient temperature")}</Sec>
+        {b.envSlider("temp", t("Ambient temperature"), -10, 45, 0.5)}
+        {p.type === "aht20" && b.envSlider("humidity", t("Humidity"), 0, 100, 1)}
+        <Note>
+          {p.type === "aht20"
+            ? t("Temperature and humidity come from the environment sliders; a measurement takes 80 ms and the CRC is checked, like the real chip. Confidence: simulation verified; not calibrated on real hardware.")
+            : t("The clock starts at the firmware's time; registers 0x11 / 0x12 give the ambient temperature in 0.25 ℃ steps. Alarms work, the 32K / SQW outputs are not modelled. Confidence: simulation verified; not calibrated on real hardware.")}
+        </Note>
+      </>
+    );
+  }
+  if (p.type === "ina219")
+    return <Note>{t("Reads the board's USB 5 V rail and the current the electrical model estimates for the board and its parts (Vin+ / Vin- are not wired on the bench). Confidence: behaviour model; current is an estimate.")}</Note>;
   if (p.type === "pir") {
     const wave = () => {
       sim()?.partInput({ kind: "pir", on: true });

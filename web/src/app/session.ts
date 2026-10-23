@@ -33,8 +33,8 @@ import { BOOT_GPIO, type SimChip } from '../chips';
 import { devsOf, i2sOf, servoOf } from './devs';
 import { retargetTft } from './place';
 
-/** weather firmware reading line (format set by level 06); accept single or double spaces (bme280 example). */
-const READING = /T=(-?[\d.]+) C\s+H=([\d.]+) %\s+P=([\d.]+) hPa/g;
+/** weather firmware reading line (format set by level 06); accept single or double spaces (bme280 example). P is optional (AHT20, c3-i2c-trio). */
+const READING = /T=(-?[\d.]+) C\s+H=([\d.]+) %(?:\s+P=([\d.]+) hPa)?/g;
 /** c3-dht11 reading line (firmware printf stays Chinese); no pressure, so p is NaN. */
 const DHT_READING = /温度 (-?[\d.]+) 湿度 ([\d.]+)/g; // lint: allow-cjk
 /** s3-imu / s3-qmi8658 reading line. */

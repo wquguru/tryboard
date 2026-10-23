@@ -1116,5 +1116,12 @@ const d: Dict = {
   "Not recognised: Arduino-ESP32 core 3.0.x, ESP-IDF before 5.1, ESP32-S3 builds with the BT controller in flash only": "认不出：Arduino-ESP32 核心 3.0.x、ESP-IDF 5.1 以前、ESP32-S3 选了蓝牙控制器只放 flash 的构建",
   "Rebuild with ESP-IDF 5.5.1 or Arduino-ESP32 core 3.3.2 to simulate Bluetooth. Chip and board advice is unaffected: this is a simulator limit, not a firmware fault.": "用 ESP-IDF 5.5.1 或 Arduino-ESP32 核心 3.3.2 重新编译就能模拟蓝牙。芯片和开发板建议不受影响：这是模拟器的限制，不是固件的错。",
   "Bluetooth not simulated": "蓝牙未模拟",
+  "Aosong AHT20 module (temperature / humidity)": "奥松 AHT20 模块（温度 / 湿度）",
+  "TI INA219 module (bus voltage / current, 0.1 Ω shunt): measures the board's USB 5 V rail": "TI INA219 模块（总线电压 / 电流，0.1 Ω 采样电阻）：测开发板的 USB 5 V 电源轨",
+  "DS3231 clock": "DS3231 时钟",
+  "ZS-042 DS3231 RTC module (clock + temperature; the AT24C32 EEPROM is not modelled)": "ZS-042 DS3231 实时时钟模块（时钟 + 温度；板上 AT24C32 EEPROM 未建模）",
+  "Temperature and humidity come from the environment sliders; a measurement takes 80 ms and the CRC is checked, like the real chip. Confidence: simulation verified; not calibrated on real hardware.": "温度和湿度来自环境滑块；每次测量耗时 80 ms 并校验 CRC，和真芯片一致。可信度：仿真验证；未在真机上校准。",
+  "The clock starts at the firmware's time; registers 0x11 / 0x12 give the ambient temperature in 0.25 ℃ steps. Alarms work, the 32K / SQW outputs are not modelled. Confidence: simulation verified; not calibrated on real hardware.": "时钟从固件写入的时间开始走；寄存器 0x11 / 0x12 以 0.25 ℃ 步进给出环境温度。闹钟可用，32K / SQW 输出未建模。可信度：仿真验证；未在真机上校准。",
+  "Reads the board's USB 5 V rail and the current the electrical model estimates for the board and its parts (Vin+ / Vin- are not wired on the bench). Confidence: behaviour model; current is an estimate.": "读的是开发板的 USB 5 V 电源轨，以及电气模型估算的开发板和外设电流（实验台上 Vin+ / Vin- 没接线）。可信度：行为模拟；电流是估算值。",
 };
 export default d;

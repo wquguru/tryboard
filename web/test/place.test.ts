@@ -13,8 +13,8 @@ const def = (id: string) => {
 };
 
 test('placeable parts have steps, the rest give a reason', () => {
-  for (const id of ['led-kit', 'button', 'bme280', 'ssd1306', 'sg90', 'buzzer-module', 'mpu6050', 'encoder', 'ws2812-stick8', 'hc-sr04', 'pot']) def(id);
-  for (const id of ['gc9a01', 'aht20', 'buzzer-passive', 'max98357a']) {
+  for (const id of ['led-kit', 'button', 'bme280', 'ssd1306', 'sg90', 'buzzer-module', 'mpu6050', 'encoder', 'ws2812-stick8', 'hc-sr04', 'pot', 'aht20', 'ina219', 'ds3231']) def(id);
+  for (const id of ['gc9a01', 'buzzer-passive', 'max98357a']) {
     const d = placeDef(id);
     assert.ok('why' in d && d.why.length > 4, id);
   }

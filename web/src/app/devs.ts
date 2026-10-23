@@ -14,7 +14,7 @@ export interface DevState {
 export const i2sOf = (parts: PartSpec[]) => parts.flatMap((p) => (p.type === 'max98357a' || p.type === 'inmp441' ? [p.pins ? `${p.type}@${p.pins.join(':')}` : p.type] : []));
 
 const i2cOf = (parts: PartSpec[]) => {
-  const kind: Record<string, string> = { oled: 'ssd1306', bme280: 'bme280', mpu6050: 'mpu6050', qmi8658: 'qmi8658', cst816s: 'cst816s' };
+  const kind: Record<string, string> = { oled: 'ssd1306', bme280: 'bme280', mpu6050: 'mpu6050', qmi8658: 'qmi8658', cst816s: 'cst816s', aht20: 'aht20', ina219: 'ina219', ds3231: 'ds3231' };
   return parts.flatMap((p) => ('addr' in p && kind[p.type] ? [{ kind: p.type === 'oled' && p.ctl ? p.ctl : kind[p.type], addr: p.addr, ...('sda' in p ? { sda: p.sda, scl: p.scl } : {}) }] : []));
 };
 /** Bench screen: a bare TFT panel (F-04a2, = CLI --spi <panel>) or the GC9A01 round LCD (true) */

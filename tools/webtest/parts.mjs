@@ -1,5 +1,5 @@
 // F-04a tutorial parts: use the bench controls (light / Wave / card) -> export inputs -> web replay and CLI --inputs fingerprints match.
-// Usage: node tools/webtest/parts.mjs [c3-pir-relay c3-rc522 c3-ds18b20 c3-ili9341-temp c3-sh1106-pir esp32-ir arduino-lib-irremote arduino-lib-irremote-rx] (after the web build); logs in Reviews/web/parts-*
+// Usage: node tools/webtest/parts.mjs [c3-pir-relay c3-rc522 c3-ds18b20 c3-ili9341-temp c3-sh1106-pir esp32-ir arduino-lib-irremote arduino-lib-irremote-rx c3-i2c-trio] (after the web build); logs in Reviews/web/parts-*
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -27,6 +27,8 @@ const CASES = {
   // F-08h IRremote SimpleSender: LEDC carrier envelope on GPIO4 -> the IR LED card's eye decodes the last of 3 NEC frames
   'arduino-lib-irremote': { clicks: [], wait: 'TRYBOARD_OK lib-irremote', expect: ['ir sent NEC addr=0x00 cmd=0x34', 'ir sent NEC addr=0x00 cmd=0x36', 'TRYBOARD_OK lib-irremote'], seen: 'NEC address=0xFF00 command=0xC936', cli: ['--ir', '-,4'], tail: 1 },
   'arduino-lib-irremote-rx': { clicks: [['[data-ir="FF00,BA45"]', 'ir NEC addr=0x00 cmd=0x45'], ['[data-ir="repeat"]', 'ir NEC addr=0x00 cmd=0x45 repeat']], expect: ['TRYBOARD_OK lib-irremote-rx ready', 'ir NEC addr=0x00 cmd=0x45', 'ir NEC addr=0x00 cmd=0x45 repeat'], cli: ['--ir', '5'], tail: 1 },
+  // G-09 I2C trio: the env slider must reach AHT20 / DS3231 (input log env=) and the bench parts the CLI as one pin bus
+  'c3-i2c-trio': { clicks: [['env:temp=31', 'ds3231 31.00 C']], wait: 'TRYBOARD_OK c3-i2c-trio', expect: ['I2C scan (SDA=GPIO6, SCL=GPIO7): 0x38 0x40 0x68', 'checks: aht20=4/4 ina219=4/4 ds3231_time=4/4 alarm1=1', 'TRYBOARD_OK c3-i2c-trio', 'ds3231 31.00 C'], i2c: ['aht20', 'ina219', 'ds3231'], cli: ['--i2c-bus', 'sda=6,scl=7:aht20@0x38,ina219@0x40,ds3231@0x68'], tail: 2 },
   'c3-sh1106-pir': { clicks: [['[data-pir="wave"]', '有人经过，第 1 次']], expect: ['SH1106 人体感应屏启动', 'TRYBOARD_OK c3-sh1106-pir', '有人经过，第 1 次'], cli: ['--i2c-bus', 'sda=6,scl=7:sh1106@0x3c'], tail: 1 },
 };
 const ids = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(CASES);
@@ -102,8 +104,12 @@ for (const id of ids) {
   const booted = await waitFor(page, () => parseFloat(document.getElementById('simtime').textContent) > 0.5, null, 30000);
   report(`${id}: bench boots`, booted);
   for (const [sel, want] of c.clicks) {
-    const ok = await page.waitForSelector(sel, { timeout: 10000 }).then(() => true).catch(() => false);
-    if (ok) await page.click(sel);
+    // 'env:<key>=<v>' drags the example's environment slider instead of clicking
+    const env = /^env:(\w+)=(.+)$/.exec(sel);
+    const css = env ? `input[data-env="${env[1]}"]` : sel;
+    const ok = await page.waitForSelector(css, { timeout: 10000 }).then(() => true).catch(() => false);
+    if (ok && env) await page.$eval(css, (r, v) => { r.value = v; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); }, env[2]);
+    else if (ok) await page.click(sel);
     report(`${id}: click ${sel} -> serial "${want}"`, ok && (await hasText(page, want, 15000)));
   }
   if (c.seen) report(`${id}: IR LED card shows "${c.seen}"`, await waitFor(page, (x) => [...document.querySelectorAll('[data-ir-seen]')].some((e) => e.textContent.includes(x)), c.seen, 15000));
@@ -115,7 +121,9 @@ for (const id of ids) {
   await page.screenshot({ path: path.join(outDir, `parts-${id}.png`) });
   fs.writeFileSync(path.join(outDir, `parts-${id}-inputs.json`), JSON.stringify(log, null, 1));
   const kinds = log.events.map((e) => e.kind + (e.kind === 'pir' ? `=${e.on ? 1 : 0}` : e.kind === 'lux' ? `=${e.lux}` : e.kind === 'card' ? `=${e.uid}` : e.kind === 'ir' ? `=${e.code}` : '')).join(' ');
-  report(`${id}: input log carries the parts and their actions`, !!log.parts, `${JSON.stringify(log.parts)}; ${kinds}`);
+  // I2C modules ride in log.i2c (CLI --i2c-bus), not log.parts (GPIO parts with their own flags)
+  const carried = c.i2c ? c.i2c.every((k) => JSON.stringify(log.i2c ?? []).includes(k)) : !!log.parts;
+  report(`${id}: input log carries the parts and their actions`, carried, `${JSON.stringify(c.i2c ? log.i2c : log.parts)}; ${kinds}`);
   const text = await exportInputs(page);
   const inputsFile = path.join(outDir, `parts-${id}-inputs.txt`);
   fs.writeFileSync(inputsFile, text);

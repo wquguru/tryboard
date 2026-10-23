@@ -1,6 +1,7 @@
 // Bench wiring rules (P0-12): check every actual bench wire (scene-derived + rewired) for burn / no-work faults.
 // Shop rules (catalog/rules.ts) check the list + template wiring; both share voltage conventions and sources. Pure function.
 import type { PartSpec } from '../board3d';
+import { isI2cMod } from '../bench3d/spec.ts';
 import { t } from '../i18n/index.ts';
 import { RULE_BY_ID, netVolt, type Confidence } from '../catalog/rulemeta.ts';
 import { i2cBuses, partId, partInfo, type BenchWire } from './wiring.ts';
@@ -147,7 +148,7 @@ export function checkWiring(parts: PartSpec[], wires: BenchWire[], fw: { sda: nu
 
   // W5: two devices with the same address on one I2C bus
   const buses = new Map<string, { pid: string; addr: number }[]>();
-  for (const p of parts) if (p.type === 'oled' || p.type === 'bme280' || p.type === 'mpu6050' || p.type === 'qmi8658' || p.type === 'cst816s') {
+  for (const p of parts) if (p.type === 'oled' || p.type === 'bme280' || p.type === 'mpu6050' || p.type === 'qmi8658' || p.type === 'cst816s' || isI2cMod(p)) {
     const k = `${p.sda}/${p.scl}`;
     buses.set(k, [...(buses.get(k) ?? []), { pid: partId(p), addr: p.addr }]);
   }

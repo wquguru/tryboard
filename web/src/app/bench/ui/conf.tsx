@@ -32,6 +32,10 @@ export const PART_CONF: Record<string, Conf> = {
   cst816s: BEHV,
   max98357a: BEHV,
   inmp441: BEHV,
+  aht20: SIMV,
+  ds3231: SIMV,
+  // Current comes from the electrical model's estimate of the board draw
+  ina219: BEHV,
 };
 /** Ink icon + level name (U-14: colour is reserved for result status, not confidence). */
 export function ConfBadge({ c }: { c: Conf }) {
