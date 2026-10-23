@@ -1644,3 +1644,4 @@
 - 原因：F-12 的目的是 SEO，需要每种语言独立 URL + `hreflang`；Atom 不能在客户端换文字，必须分文件；`static_shell.mjs` 全用相对链接（`./`、`./select`），放进 `/zh/` 目录会全部断掉，后缀方案不用改链接。
 - 文案位置：页面外壳与授权页说明放构建专用词典 `web/src/i18n/<loc>/static.ts`（不进任何 `data-i18n` 组，不增加 React 页面下载量）；更新日志条目译文直接写在 `web/changelog.yaml` 每条里，审核要求四语齐全。许可证名、SPDX、版权行、THIRD_PARTY_NOTICES.txt、tryboard.spdx.json 是法律原文，不翻译。商标声明保持英文并标 `lang="en"`（同 site.tsx）。
 - 备选：一页内嵌四语、客户端切换——否：搜索引擎只看到英文、Atom 仍要分文件；`/zh/` 目录——否：要把外壳所有相对链接改成绝对路径，并影响 og / smoke 路由。
+- 实现补充（F-12b 完成时）：首屏前语言判定 `?lang` 只管本次访问、不写 `tb-lang`（与 React 页 `detectLocale` 一致）；浏览器语言只在英文（x-default）页触发跳转，已本地化的地址在没有保存选择时原地不动，免得搜索引擎和分享链接被弹走；跳转保留 query（含 `?lang`，不会循环）与 hash。语言选择写 `tb-lang`，写不进（隐私模式）就改用 `?lang=`。`<html lang>`、hreflang、Atom `xml:lang` 中文都用 `zh-CN`。锚点与条目 id 各语言都取英文标题 slug，切换语言保留位置。
