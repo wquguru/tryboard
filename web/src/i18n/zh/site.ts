@@ -1026,5 +1026,48 @@ const d: Dict = {
   // G-17a AMOLED clock work and template
   "AMOLED desk clock": "AMOLED 桌面时钟",
   "Screen, touch, PMU (battery gauge, PWR key) and RTC are all on the board: nothing to wire": "屏幕、触摸、电源管理（电量计、PWR 键）和 RTC 都在板上：不用接线",
+  "A 2.16-inch AMOLED clock board, nothing to wire: swipe for the temperature and battery pages, PWR blanks the screen, a phone sets the time over Bluetooth": "一块 2.16 英寸 AMOLED 时钟板，不用接线：滑动看温度页和电量页，PWR 键息屏，手机通过蓝牙对时",
+  "AMOLED desk clock · product · CO5300 480×480 + CST9220 touch + AXP2101 + PCF85063": "AMOLED 桌面时钟 · 产品 · CO5300 480×480 + CST9220 触摸 + AXP2101 + PCF85063",
+  "Product: a 2.16-inch AMOLED clock board on a desk stand, the phone next to it sets the time over Bluetooth": "产品：桌面支架上的 2.16 英寸 AMOLED 时钟板，旁边的手机通过蓝牙对时",
+  "Already at the end: no more pages that way": "已经到头：这个方向没有更多页了",
+  "Battery {bat}": "电量 {bat}",
+  "Last set from the phone: {time}": "上次手机对时：{time}",
+  "PWR: screen off (brightness 0x51 = 0)": "PWR：息屏（亮度 0x51 = 0）",
+  "PWR: screen on": "PWR：亮屏",
+  "Phone connected over BLE": "手机已通过 BLE 连接",
+  "Phone wrote the wrong length (needs 4 bytes)": "手机写入长度不对（需要 4 字节）",
+  "Screen is off: swipe ignored (press PWR first)": "已息屏：滑动被忽略（先按 PWR）",
+  "Set time": "对时",
+  "Swiped to page {n}/3 · {name}": "滑到第 {n}/3 页 · {name}",
+  "Time set from the phone: {time}": "手机对时完成：{time}",
+  "USB in": "USB 已插",
+  "USB out": "USB 未插",
+  "{time} · page {n}/3 · {name}": "{time} · 第 {n}/3 页 · {name}",
+  "{time} · screen off": "{time} · 已息屏",
+
+  // Moved from lab.ts
+  "Connected": "已连接",
+
+  // F-08f IR bench parts
+  "off": "关",
+  "Dial ring direction (encoder A/B order is inferred)": "旋钮环的方向（编码器 A/B 顺序是推断的）",
+  "Board detection level on G4 (from the M5Unified heuristic, not the schematic)": "G4 上的板型识别电平（来自 M5Unified 的经验判断，不是原理图）",
+  "Key legend map (from the M5Cardputer scan convention, unchecked)": "键位对照表（按 M5Cardputer 扫描约定，未核对）",
+  "IMU address (BMI270 assumed at 0x68)": "IMU 地址（BMI270 假定为 0x68）",
+  "Key map (TCA8418 map assumed)": "键位映射（TCA8418 映射是假定的）",
+  "Touch coordinates (XPT2046 raw span is estimated)": "触摸坐标（XPT2046 原始量程是估算的）",
+
+  // Moved from net.ts
+  "Time": "时间",
+
+  // Board advisor page (web/src/advisor/App.tsx).
+  "Battery": "用电池",
+  "left": "个",
+
+  // Moved from steps.ts
+  "Temperature": "温度",
+
+  // G-05b cloud
+  "Set time from phone": "手机对时",
 };
 export default d;

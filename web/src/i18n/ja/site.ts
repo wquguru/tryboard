@@ -1026,5 +1026,48 @@ const d: Dict = {
   // G-17a AMOLED clock work and template
   "AMOLED desk clock": "AMOLED デスククロック",
   "Screen, touch, PMU (battery gauge, PWR key) and RTC are all on the board: nothing to wire": "画面、タッチ、PMU（残量計、PWR キー）、RTC はすべてボード上：配線不要",
+  "A 2.16-inch AMOLED clock board, nothing to wire: swipe for the temperature and battery pages, PWR blanks the screen, a phone sets the time over Bluetooth": "2.16 インチ AMOLED の時計ボード、配線不要：スワイプで温度・電池ページ、PWR で画面オフ、スマホが Bluetooth で時刻合わせ",
+  "AMOLED desk clock · product · CO5300 480×480 + CST9220 touch + AXP2101 + PCF85063": "AMOLED 卓上時計 · 製品 · CO5300 480×480 + CST9220 タッチ + AXP2101 + PCF85063",
+  "Product: a 2.16-inch AMOLED clock board on a desk stand, the phone next to it sets the time over Bluetooth": "製品：卓上スタンドに載せた 2.16 インチ AMOLED 時計ボード、隣のスマホが Bluetooth で時刻合わせ",
+  "Already at the end: no more pages that way": "端に到達：この方向にはもうページがありません",
+  "Battery {bat}": "電池 {bat}",
+  "Last set from the phone: {time}": "前回スマホで時刻合わせ：{time}",
+  "PWR: screen off (brightness 0x51 = 0)": "PWR：画面オフ（輝度 0x51 = 0）",
+  "PWR: screen on": "PWR：画面オン",
+  "Phone connected over BLE": "スマホが BLE で接続",
+  "Phone wrote the wrong length (needs 4 bytes)": "スマホの書き込み長が不正（4 バイト必要）",
+  "Screen is off: swipe ignored (press PWR first)": "画面オフ：スワイプは無視（先に PWR を押す）",
+  "Set time": "時刻合わせ",
+  "Swiped to page {n}/3 · {name}": "{n}/3 ページへスワイプ · {name}",
+  "Time set from the phone: {time}": "スマホで時刻合わせ完了：{time}",
+  "USB in": "USB 接続",
+  "USB out": "USB 未接続",
+  "{time} · page {n}/3 · {name}": "{time} · {n}/3 ページ · {name}",
+  "{time} · screen off": "{time} · 画面オフ",
+
+  // Moved from lab.ts
+  "Connected": "接続済み",
+
+  // F-08f IR bench parts
+  "off": "オフ",
+  "Dial ring direction (encoder A/B order is inferred)": "ダイヤルリングの回転方向（エンコーダの A/B 順は推定）",
+  "Board detection level on G4 (from the M5Unified heuristic, not the schematic)": "G4 のボード判別レベル（回路図ではなく M5Unified の経験則による）",
+  "Key legend map (from the M5Cardputer scan convention, unchecked)": "キー配列表（M5Cardputer のスキャン規約による、未確認）",
+  "IMU address (BMI270 assumed at 0x68)": "IMU アドレス（BMI270 は 0x68 と仮定）",
+  "Key map (TCA8418 map assumed)": "キーマップ（TCA8418 のマップは仮定）",
+  "Touch coordinates (XPT2046 raw span is estimated)": "タッチ座標（XPT2046 の生値の範囲は推定）",
+
+  // Moved from net.ts
+  "Time": "時刻",
+
+  // Board advisor page (web/src/advisor/App.tsx).
+  "Battery": "電池",
+  "left": "本残り",
+
+  // Moved from steps.ts
+  "Temperature": "温度",
+
+  // G-05b cloud
+  "Set time from phone": "スマホで時刻合わせ",
 };
 export default d;

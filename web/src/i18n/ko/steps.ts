@@ -822,7 +822,6 @@ const d: Dict = {
   "Switching reloads page": "전환 시 새로고침",
   "Tap or drag right on the 3D screen.": "3D 화면을 직접 탭하거나 드래그하세요.",
   "Tap the screen to press, drag to move, release to lift; the chip detects gestures itself: tap, swipe, 1 s long press. Auto-sleep and scan noise of the real chip are not modeled; confirm on real hardware.": "화면을 탭하면 누름, 끌면 이동, 놓으면 떼기입니다. 제스처(탭, 스와이프, 1초 길게 누르기)는 칩이 직접 판정합니다. 실기의 자동 절전과 스캔 노이즈는 모델링하지 않았으므로 실기에서 확인해야 합니다.",
-  "Temperature": "온도",
   "Temperature / humidity / pressure, I2C 0x76. Where it is mounted decides whether it reads room temperature.": "온도 / 습도 / 기압, I2C 0x76. 어디에 다느냐에 따라 실온을 읽는지가 결정됩니다.",
   "The \"2.5 ℃ high next to the chip\" is an estimate; measure it with a thermometer": "\"칩에 붙이면 2.5 ℃ 높음\"은 추정입니다. 온도계로 실측하십시오",
   "The \"I2C scan\" serial line should list 0x3C and 0x76. BME280 with SDO pulled high is 0x77; the chip ID should be 0x60, 0x58 means BMP280 (no humidity).": "시리얼의 \"I2C scan\" 줄에 0x3C와 0x76이 있어야 합니다. BME280의 SDO를 High로 연결하면 0x77입니다. 칩 ID는 0x60이어야 하며, 0x58이면 BMP280(습도 없음)입니다.",
@@ -1162,5 +1161,15 @@ const d: Dict = {
   "Cloud sensor": "클라우드 온습도계",
   "Assembly for this project is not ready yet": "이 프로젝트의 조립은 아직 준비 중입니다",
   "There is no enclosure to build yet. The Product step already shows the finished device in 2D, driven by the same firmware.": "아직 조립할 케이스가 없습니다. 완성품 단계에서 같은 펌웨어로 움직이는 완성품을 2D로 보여 줍니다.",
+  "AMOLED clock": "AMOLED 시계",
+  "Advertising TryBoard-Clock": "TryBoard-Clock 광고 중",
+  "Clock face": "시계 화면",
+  "Off (brightness 0x51 = 0)": "꺼짐 (밝기 0x51 = 0)",
+  "On · page {n}/3 · {name}": "켜짐 · {n}/3 페이지 · {name}",
+  "PWR key": "PWR 키",
+  "Phone (BLE)": "휴대폰 (BLE)",
+  "Swipe left": "왼쪽으로 스와이프",
+  "Swipe right": "오른쪽으로 스와이프",
+  "Time set {time}": "시간 맞춤 {time}",
 };
 export default d;

@@ -69,7 +69,6 @@ const d: Dict = {
   "Enter the home Wi-Fi and submit": "填家里 Wi-Fi，提交",
   "Provisioning steps": "配网步骤",
   "The chip has not sent any DNS / HTTP request yet.": "芯片还没发出 DNS / HTTP 请求。",
-  "Time": "时间",
   "Method": "方法",
   "Destination": "去向",
   "Address": "地址",

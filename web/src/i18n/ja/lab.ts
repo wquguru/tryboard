@@ -150,7 +150,6 @@ const d: Dict = {
   "Commands": "コマンド",
   "Confirm on hardware": "実機で確認",
   "Connect": "接続",
-  "Connected": "接続済み",
   "Connecting": "接続中",
   "Connecting…": "接続中…",
   "Continue from this moment": "この時点から続けて実行します",
@@ -1106,7 +1105,6 @@ const d: Dict = {
   "Capture": "記録",
   "View tools": "表示",
   "on": "オン",
-  "off": "オフ",
   "Real 3D models": "実物の 3D モデル",
   "Bluetooth is not simulated for this firmware": "このファームウェアの Bluetooth はシミュレートできません",
   "The firmware uses Bluetooth, but its Bluetooth library version was not recognised. The rest of the firmware keeps running; Bluetooth stays off.": "ファームウェアは Bluetooth を使っていますが、Bluetooth ライブラリのバージョンを認識できませんでした。ほかの部分はそのまま動き、Bluetooth はオフのままです。",
@@ -1125,11 +1123,5 @@ const d: Dict = {
   "Reads the board's USB 5 V rail and the current the electrical model estimates for the board and its parts (Vin+ / Vin- are not wired on the bench). Confidence: behaviour model; current is an estimate.": "ボードの USB 5 V レールと、電気モデルが見積もったボードと部品の電流を読みます（ベンチでは Vin+ / Vin- は未配線）。信頼度：挙動モデル。電流は推定値です。",
   "Confirm on a real board": "実機で確認が必要",
   "Whole preset: pins and addresses come from docs; no firmware has run it yet": "プリセット全体：ピンとアドレスは資料から取ったもので、まだファームウェアで動かしていません",
-  "Dial ring direction (encoder A/B order is inferred)": "ダイヤルリングの回転方向（エンコーダの A/B 順は推定）",
-  "Board detection level on G4 (from the M5Unified heuristic, not the schematic)": "G4 のボード判別レベル（回路図ではなく M5Unified の経験則による）",
-  "Key legend map (from the M5Cardputer scan convention, unchecked)": "キー配列表（M5Cardputer のスキャン規約による、未確認）",
-  "IMU address (BMI270 assumed at 0x68)": "IMU アドレス（BMI270 は 0x68 と仮定）",
-  "Key map (TCA8418 map assumed)": "キーマップ（TCA8418 のマップは仮定）",
-  "Touch coordinates (XPT2046 raw span is estimated)": "タッチ座標（XPT2046 の生値の範囲は推定）",
 };
 export default d;
