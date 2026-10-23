@@ -1,4 +1,4 @@
-// M5Stack board presets on the web (M5-09b; Grove Port A units + mid-run environment, M5-09d): pick a preset, upload a locally built M5 .bin, compare with `tryboard run --board [--grove]`.
+// M5Stack board presets on the web (M5-09b; Grove Port A units + mid-run environment, M5-09d; CYD screen + XPT2046 touch, G-10): pick a preset, upload a locally built .bin, compare with `tryboard run --board [--grove]`.
 // Usage: node tools/webtest/m5board.mjs (after tools/build_web.sh, cargo build --release -p tryboard-cli and tools/build_arduino.sh for the arduino-m5-* bins; those stay local, see docs/M5STACK.md §7). Screenshots / logs in Reviews/web/m5board-*
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
@@ -71,6 +71,8 @@ const CASES = [
   // G-06: the Dial ring is the encoder (drag / wheel; a tap is BtnA G42); Core2 A / B / C are touches below the panel
   { fw: 'arduino-m5-dial-demo', board: 'm5dial', start: 's3-blink', want: 'DIAL ready board=12 display=240x240 rtc=1 touch=1', done: 'DIAL ready', dial: true },
   { fw: 'arduino-m5-stickc-demo-core2', board: 'm5core2', start: 'esp32-hello', want: 'DEMO ready board=2 display=320x240', done: 'DEMO ready', zones: ['DEMO btnA presses=1', 'DEMO btnB presses=1', 'DEMO btnC'] },
+  // CYD (G-10): the frame must reach the bench texture, then a tap goes through tb_touch -> XPT2046 and is logged as touch= / release
+  { fw: 'esp32-cyd', board: 'cyd', start: 'esp32-hello', want: 'CYD ILI9341 240x320 init OK', done: 'XPT2046 ready', lcd: [240, 320], touch: { x: 60, y: 250, after: 'TRYBOARD_OK esp32-cyd-touch' } },
   { fw: 'arduino-m5-env-stickc_plus2', board: 'm5stickcplus2', grove: 'env3', start: 'esp32-hello', want: 'ENV ready unit=3 port_a=32/33', done: 'ENV3 t=', env: { temp: 30.2, humidity: 60.4, pressure: 99870 }, after: 'ENV3 t=30.2 h=60.4 p=998.7' },
 ];
 
@@ -102,6 +104,24 @@ for (const c of CASES) {
     await page.evaluate((e) => globalThis.__tbApp.session.setEnv(e), c.env);
     const moved = await waitFor(page, (w) => globalThis.__tbApp.session.consoleText().includes(w), c.after, 30000);
     report(`${c.board} + ${c.grove}: reading follows the environment`, moved, moved ? c.after : (await page.evaluate(() => globalThis.__tbApp.session.consoleText())).slice(-200).replace(/\n/g, ' | '));
+  }
+  if (c.lcd) {
+    // Live frame on the 3D screen: panel-sized RGBA and the top-left marker is yellow (accept.json esp32-cyd regions)
+    await waitFor(page, (n) => (globalThis.__tbApp.session.frame.lcd?.length ?? 0) === n, c.lcd[0] * c.lcd[1] * 4, 10000);
+    const px = await page.evaluate(() => {
+      const f = globalThis.__tbApp.session.frame;
+      const i = (20 * (f.lcdW ?? 0) + 20) * 4;
+      return f.lcd ? { w: f.lcdW, h: f.lcdH, p: Array.from(f.lcd.slice(i, i + 3)) } : null;
+    });
+    report(`${c.board}: screen frame ${c.lcd.join('x')} with the yellow marker`, !!px && px.w === c.lcd[0] && px.h === c.lcd[1] && px.p.join() === '255,255,0', JSON.stringify(px));
+  }
+  if (c.touch) {
+    // Real pointer on the 3D panel (pick.ts touchAt -> tb_touch -> XPT2046), held long enough for the 10 ms PENIRQ poll
+    const [x, y] = await page.evaluate((a, b) => globalThis.__tbApp.session.bench.lcdPoint(a, b), c.touch.x, c.touch.y);
+    await page.mouse.click(x, y, { delay: 300 });
+    const rel = await waitFor(page, (w) => globalThis.__tbApp.session.consoleText().includes(w), c.touch.after, 20000);
+    const m = /touch raw x=\d+ y=\d+ z=\d+ -> pixel (\d+),(\d+)/.exec(await page.evaluate(() => globalThis.__tbApp.session.consoleText()));
+    report(`${c.board}: tap the 3D screen at (${c.touch.x}, ${c.touch.y}) -> XPT2046 pixel within 3 px`, rel && !!m && Math.abs(+m[1] - c.touch.x) <= 3 && Math.abs(+m[2] - c.touch.y) <= 3, m?.[0] ?? 'no touch line');
   }
   if (c.keys) {
     // Physical keys on the bench -> Cardputer matrix (logged key=…)

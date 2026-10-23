@@ -40,7 +40,7 @@ export function PresetPick({ ses, onChange }: { ses: Session; onChange: () => vo
           {cur.keyboard ? ` ${t("Keys you type while the bench has focus press the matching Cardputer keys.")}` : ""}
         </Note>
       )}
-      {cur?.preset && <GrovePick ses={ses} onChange={onChange} />}
+      {cur?.preset && !cur.noGrove && <GrovePick ses={ses} onChange={onChange} />}
     </>
   );
 }
@@ -51,7 +51,7 @@ const GROVE_UNITS: { id: GroveId; name: string; chips: string }[] = [
   { id: "env4", name: "ENV IV", chips: "SHT40 + BMP280" },
 ];
 
-/** Port A unit (= CLI --grove); every M5 preset in boards.rs has Port A, so no per-board check. Changing it reboots. */
+/** Port A unit (= CLI --grove); every M5 preset in boards.rs has Port A (the CYD is hidden by noGrove). Changing it reboots. */
 function GrovePick({ ses, onChange }: { ses: Session; onChange: () => void }) {
   const cur = GROVE_UNITS.find((u) => u.id === ses.scene.grove);
   return (

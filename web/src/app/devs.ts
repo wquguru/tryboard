@@ -36,7 +36,7 @@ export const devsOf = (sc: SceneSpec, st: DevState) => {
     touchInt: bd?.touchInt ?? touchIntOf(parts),
     i2s: i2sOf(parts),
     board: bd?.preset,
-    grove: bd?.preset ? sc.grove : undefined,
+    grove: bd?.preset && !bd.noGrove ? sc.grove : undefined,
     parts: partsOf(parts),
   };
 };

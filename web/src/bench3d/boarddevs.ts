@@ -1,8 +1,8 @@
 // Devices of an all-in-one board (E-03) or of a core board preset (M5-09b). No three.js here: session.ts imports it on the main path.
 import type { Battery, LcdKind } from '../simmsg';
 
-/** M5Stack boards run through a core preset (= CLI --board <id>, see core/crates/machine/src/boards.rs) */
-export type M5Id = 'm5dial' | 'm5atoms3' | 'm5atoms3lite' | 'm5atoms3r' | 'm5cores3' | 'm5cores3se' | 'm5cardputer' | 'm5cardputeradv' | 'm5stickcplus2' | 'm5core2' | 'm5core2v11' | 'm5atomlite';
+/** Boards run through a core preset (= CLI --board <id>, see core/crates/machine/src/boards.rs): the M5Stack line plus the CYD (G-10) */
+export type M5Id = 'm5dial' | 'm5atoms3' | 'm5atoms3lite' | 'm5atoms3r' | 'm5cores3' | 'm5cores3se' | 'm5cardputer' | 'm5cardputeradv' | 'm5stickcplus2' | 'm5core2' | 'm5core2v11' | 'm5atomlite' | 'cyd';
 export type BoardId = 'ws-amoled216' | M5Id;
 
 export interface BoardDevs {
@@ -12,6 +12,8 @@ export interface BoardDevs {
   preset?: M5Id;
   /** The preset wires a Cardputer keyboard: lab key presses go to tb_board_key */
   keyboard?: boolean;
+  /** Preset without a Grove Port A (boards.rs grove_a = None): no Grove picker, --grove would be rejected */
+  noGrove?: boolean;
   lcd?: LcdKind;
   i2c: { kind: string; addr: number }[];
   touchInt?: number;
@@ -48,6 +50,7 @@ export const BOARD_DEVS: Record<BoardId, BoardDevs> = {
   m5core2: m5('m5core2', 'M5Stack Core2'),
   m5core2v11: m5('m5core2v11', 'M5Stack Core2 v1.1'),
   m5atomlite: m5('m5atomlite', 'M5Stack Atom Lite'),
+  cyd: { ...m5('cyd', 'Cheap Yellow Display ESP32-2432S028'), noGrove: true },
 };
 
 export const boardDevs = (id: string | undefined): BoardDevs | undefined => (id && id in BOARD_DEVS ? BOARD_DEVS[id as BoardId] : undefined);

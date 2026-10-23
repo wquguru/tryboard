@@ -1466,6 +1466,37 @@
   }
  },
  {
+  "id": "esp32-cyd",
+  "chip": "esp32",
+  "title": "Cheap Yellow Display: 2.8″ ILI9341 screen and XPT2046 touch",
+  "about": "ESP32-2432S028 (\"Cheap Yellow Display\"): an ILI9341 240×320 panel on HSPI (SCLK=GPIO14, MOSI=GPIO13, CS=GPIO15, DC=GPIO2, backlight GPIO21) and an XPT2046 resistive touch controller on VSPI (CLK=GPIO25, DIN=GPIO32, DOUT=GPIO39, CS=GPIO33, PENIRQ=GPIO36). It draws colour bands with a yellow marker in the top-left corner, then waits for a touch: tap the 3D screen and it prints the raw reading and the pixel it maps to. The touch calibration span is estimated, not measured on a real board. The RGB LED, light sensor, speaker and SD slot are not simulated.",
+  "tags": [
+   "✓ Verified in sim",
+   "SPI",
+   "ILI9341",
+   "XPT2046",
+   "Resistive touch",
+   "Touch calibration: estimated",
+   "ESP-IDF 5.5"
+  ],
+  "pins": {
+   "lcd_sclk": 14,
+   "lcd_mosi": 13,
+   "lcd_cs": 15,
+   "lcd_dc": 2,
+   "lcd_bl": 21,
+   "tp_clk": 25,
+   "tp_din": 32,
+   "tp_dout": 39,
+   "tp_cs": 33,
+   "tp_irq": 36
+  },
+  "scene": {
+   "board": "cyd",
+   "parts": []
+  }
+ },
+ {
   "id": "c3-ds18b20",
   "title": "DS18B20 waterproof probes: 1-Wire bus, ROM search (ESP32-C3)",
   "about": "Two DS18B20 probes share one 1-Wire bus on GPIO4 (4.7 kΩ pull-up to 3V3). The firmware's own bit-bang driver sends a reset, finds both 64-bit ROM codes with the search algorithm, checks the power mode and reads each probe once a second (750 ms 12-bit conversion). Drag the temperature slider: probe 2 reads 0.5 ℃ higher than probe 1. Open the logic analyzer on GPIO4 to see the reset / presence pulses and the time slots.",
