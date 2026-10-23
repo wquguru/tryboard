@@ -473,7 +473,9 @@ impl I2s {
                     hw.push(r as u16);
                 }
             }
-            if !msb_right && !pdm {
+            // rx_msb_right = 0 swaps each FIFO halfword pair, PDM included (IDF's PDM / ADC paths clear it,
+            // M5Unified un-swaps on classic ESP32; DECISIONS G-12)
+            if !msb_right {
                 for p in hw.chunks_mut(2) {
                     p.reverse();
                 }
@@ -670,8 +672,7 @@ mod tests {
         assert_eq!(i.read(reg::OUT_LINK) & LINK_START, 0);
     }
 
-    #[test]
-    fn pdm_rx_writes_mono_pcm_and_eof() {
+    fn pdm_run(conf: u32) -> (Ram, I2s, Probe) {
         let mut m = Ram(vec![0; 0x1000]);
         ring(&mut m, 64);
         let mut i = I2s::new(0);
@@ -682,17 +683,27 @@ mod tests {
         i.write(reg::RX_EOF_NUM, 16, 0);
         i.write(reg::INT_ENA, int::IN_SUC_EOF, 0);
         i.write(reg::IN_LINK, (RAM + 0x100) & 0xf_ffff | LINK_START, 0);
-        i.write(reg::CONF, RX_START, 0);
+        i.write(reg::CONF, RX_START | conf, 0);
         let mut io = Probe::default();
         let mut now = 0;
         while now < CPU_HZ / 200 {
             now = i.update(now, &mut m, &mut io).max(now + 1);
         }
+        (m, i, io)
+    }
+
+    #[test]
+    fn pdm_rx_writes_mono_pcm_and_eof() {
+        // IDF's PDM RX setup: rx_msb_right = 0, so samples 1, 2, 3, 4 (left slot) land as 2, 1, 4, 3
+        let (mut m, i, io) = pdm_run(0);
         assert!(io.rx_n >= 64, "{}", io.rx_n);
         assert!(i.irq());
-        // First descriptor: 32 samples 1, 2, 3 ... (left slot), length 64, EOF, owner cleared
+        // First descriptor: 32 samples, length 64, EOF, owner cleared
         assert_eq!(m.rd32(RAM + 0x100) >> 12, 1 << 18 | 64);
-        assert_eq!(m.rd8(RAM + 0x200), 1);
-        assert_eq!(m.rd8(RAM + 0x202), 2);
+        let first: Vec<u8> = (0..4).map(|k| m.rd8(RAM + 0x200 + 2 * k)).collect();
+        assert_eq!(first, [2, 1, 4, 3]);
+        let (mut m, _, _) = pdm_run(RX_MSB_RIGHT);
+        let first: Vec<u8> = (0..4).map(|k| m.rd8(RAM + 0x200 + 2 * k)).collect();
+        assert_eq!(first, [1, 2, 3, 4]);
     }
 }

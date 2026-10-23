@@ -148,8 +148,8 @@
 | Cardputer / Cardputer-Adv（M5-08） | 检测 ✅、ST7789 ✅、键盘 ◐（映射未核对，需真机）、PDM 麦克风 ✅（PCM 层）、Adv 麦克风 ◐、扬声器 ☐ | `arduino-m5-probe-cardputer(adv)`、`arduino-m5-cardputer(adv)-demo` | S3 GPIO 下拉语义改变（DECISIONS） |
 | 经典 ESP32 GP-SPI + DMA + SPI LCD（M5-10） | ✅ 驱动层 | esp32-spi-lcd、StickC Plus2 / Core2 探针 | QEMU 无 SPI 模型 |
 | CYD 板 ESP32-2432S028（F-10a2，网页 G-10） | 屏 ✅ · XPT2046 触摸 ✅（CLI + 网页） | esp32-cyd（`--board cyd`，ILI9341 on HSPI，lcd_regions 逐区像素数精确相等）、esp32-cyd-touch（VSPI 读 Z1/Z2/X/Y，PENIRQ 36） | 触摸原始值量程（X 200–3700、Y 240–3800）按教程标定估算，未在真机校准；位拨读法（XPT2046_Bitbang）不支持；QEMU 无 SPI 模型；网页（G-10）：板预设可选 CYD、3D 黄板 + 屏实时画面、点屏 = `touch=` / `release`，示例 esp32-cyd 上架，m5board.mjs 网页 = CLI `--board cyd --inputs` 串口逐字节 + 指纹一致；RGB 灯 / 光敏 / 喇叭 / SD 网页无模型；示例只等一次触摸 |
-| 经典 ESP32 I2S TX / PDM RX / ADC1（M5-12） | ☑ | esp32-i2s-tone（440 Hz）、esp32-pdm-mic（1 kHz，PCM 层）、esp32-adc（五档误差 ≤ 1 mV） | PDM 半字顺序**未解决**（M5Unified 颠倒，见 DECISIONS） |
-| 经典 ESP32 M5 板（M5-13） | StickC Plus2 ✅ · Core2 / v1.1 ✅ · Atom Lite ✅ | 检测 / 屏 / IMU / RTC / 电池 / 按钮 / 麦克风（peak > 0，频率待定）/ 扬声器 2 kHz / WS2812 | 蜂鸣器无模型；Atom Matrix 预设未做；没有网页验收 |
+| 经典 ESP32 I2S TX / PDM RX / ADC1（M5-12） | ☑ | esp32-i2s-tone（440 Hz）、esp32-pdm-mic（1 kHz，PCM 层）、esp32-adc（五档误差 ≤ 1 mV） | PDM 半字顺序按 rx_msb_right 建模（G-12）：IDF PDM 路径真机上也拿到颠倒样本，例子已换回；「未修正 IDF 程序 = 3005 Hz」未在真机校准 |
+| 经典 ESP32 M5 板（M5-13） | StickC Plus2 ✅ · Core2 / v1.1 ✅ · Atom Lite ✅ | 检测 / 屏 / IMU / RTC / 电池 / 按钮 / 麦克风（1 kHz ± 20；样本顺序 arduino-m5-mic-order 397/400，G-12）/ 扬声器 2 kHz / WS2812 | 蜂鸣器无模型；Atom Matrix 预设未做；没有网页验收 |
 | 经典 ESP32 四线 PSRAM + flash 容量随镜像头（M5-14） | ✅ 驱动层（esp32-psram，2/4/8MB；4MB 与 QEMU 一致） | 同左 | himem / 时序未建模；C3 / S3 的 flash 容量随头部待做 |
 | Grove ENV III（SHT30 + QMP6988）/ ENV IV（SHT40 + BMP280）（M5-09a） | ✅ 驱动 / 场景：S3 env3 / env4、ESP32 env3（arduino-m5-env3 / env4 / env3-stickc） | CLI `--grove env3\|env4`，wasm `tb_grove` | IIR、加热自热未建模；功耗为估算 |
 | 网页 M5 板预设（M5-09b） | ✅ 12 个预设 + CYD（G-10）可选；网页 = CLI `--board` 指纹与输入日志回放一致（m5board.mjs：AtomS3、StickC Plus2、Cardputer 键盘） | tools/webtest/m5board.mjs | M5 Arduino 固件仅本地 |
