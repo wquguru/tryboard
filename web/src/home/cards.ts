@@ -13,6 +13,9 @@ import { cloudCmd, cloudIdle, cloudNow, parseCloudLine } from '../views/cloudpro
 import { emptyFrame, type LiveFrame } from '../views/common';
 import { t } from '../i18n';
 
+// Sim time of the home cloud card's last interval=2 request
+let cloudAsk = -9;
+
 // P2-09 cards: the illustration is the product 2D view fed one demo frame; plus the live device config and demo inputs by sim time.
 // fw: published firmware id when it isn't the work id; line: each serial line (door state for the lock picture); seed: illustration state.
 type LiveCfg = Pick<LiveOptions, 'i2c' | 'lcd' | 'encoder' | 'sonar' | 'parts'>;
@@ -64,9 +67,14 @@ const EXTRA: Record<string, Extra> = {
     chip: 'ESP32-C3',
     live: { i2c: [{ kind: 'aht20', addr: 0x38 }] },
     demo: {},
-    // Demo: the room drifts ±1.5 ℃ and at 6 s the cloud asks for a report every 2 s.
+    // Demo: the room drifts ±1.5 ℃; from 6 s, once subscribed, the cloud asks for a report every 2 s.
+    // Retried every 2 s until the firmware logs it: a slow frame can skip a fixed 0.1 s window (G-05d).
     script: (sim, t) => {
-      if (t > 6 && t < 6.1) sim.mqttPub(cloudCmd('interval=2'));
+      if (t < cloudAsk) cloudAsk = -9;
+      if (t >= 6 && cloudNow.sub && cloudNow.cmds === 0 && t - cloudAsk > 2) {
+        cloudAsk = t;
+        sim.mqttPub(cloudCmd('interval=2'));
+      }
       if (t % 1 < 0.1) sim.setTemp(Math.round((23.5 + 1.5 * Math.sin(t / 5)) * 10) / 10);
     },
     line: (l) => parseCloudLine(l, cloudNow),

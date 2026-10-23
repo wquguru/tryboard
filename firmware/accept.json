@@ -3777,6 +3777,103 @@
   ]
  },
  {
+  "id": "c3-cloud-prov",
+  "fw": "c3-cloud",
+  "chip": "esp32c3",
+  "seconds": 8,
+  "qemu": false,
+  "args": [
+   "--i2c",
+   "aht20@0x38",
+   "--env",
+   "23.5,45,101325",
+   "--ap-phone",
+   "--ap-post",
+   "ssid=MyHome&pass=12345678"
+  ],
+  "expect": [
+   "热点 TryBoard-Setup 已打开，等手机来配网",
+   "给手机分配 IP 192.168.4.2",
+   "DNS 劫持 connectivitycheck.gstatic.com → 192.168.4.1",
+   "HTTP GET /generate_204 → 跳转配网页",
+   "收到 SSID=MyHome（密码 8 位）",
+   "已存进 NVS",
+   "配网完成，关掉热点，去连 MyHome",
+   "已连上 Wi-Fi，IP 192.168.5.100 网关 192.168.5.1",
+   "MQTT 已连上 broker（CONNACK）client=tryboard-cloud",
+   "已订阅 tryboard/cloud/cmd",
+   "发布 #2 → tryboard/cloud/data {\"t\":23.5,\"h\":45.0,\"seq\":2}"
+  ],
+  "absent": [
+   "没有手机来配网",
+   "Wi-Fi 断开",
+   "MQTT 出错"
+  ],
+  "stderr_expect": [
+   "phone got 192.168.4.2 (gateway 192.168.4.1",
+   "sign in to this network (check got 302, not 204)",
+   "POST http://192.168.4.1/save → 200 \"已保存\"",
+   "[mqtt] CONNECT tryboard-cloud keepalive 120s → CONNACK 0"
+  ]
+ },
+ {
+  "id": "c3-cloud-prov-badpass",
+  "fw": "c3-cloud",
+  "chip": "esp32c3",
+  "seconds": 10,
+  "qemu": false,
+  "args": [
+   "--i2c",
+   "aht20@0x38",
+   "--env",
+   "23.5,45,101325",
+   "--ap-phone",
+   "--ap-post",
+   "ssid=MyHome&pass=wrongpass"
+  ],
+  "expect": [
+   "收到 SSID=MyHome（密码 9 位）",
+   "Wi-Fi 断开 reason=15",
+   "连不上 MyHome，清掉配网记录，重启后重新配网",
+   "rst:0xc (RTC_SW_CPU_RST)"
+  ],
+  "absent": [
+   "已连上 Wi-Fi",
+   "MQTT 已连上"
+  ]
+ },
+ {
+  "id": "c3-cloud-reprov",
+  "fw": "c3-cloud",
+  "chip": "esp32c3",
+  "seconds": 12,
+  "qemu": false,
+  "args": [
+   "--i2c",
+   "aht20@0x38",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "script": "4:gpio9=0; 5.2:gpio9=1; 7:phone=join,TryBoard-Setup; 7.5:phone=open; 8:phone=post,,ssid=MyHome&pass=12345678",
+  "expect": [
+   "没有手机来配网，先连出厂网络 TryBoard-WiFi",
+   "已连上 Wi-Fi，IP 192.168.4.100 网关 192.168.4.1",
+   "长按 BOOT：清掉记住的 Wi-Fi，重启进配网",
+   "rst:0xc (RTC_SW_CPU_RST)",
+   "长按 BOOT 后的配网：一直等手机",
+   "收到 SSID=MyHome（密码 8 位）",
+   "已连上 Wi-Fi，IP 192.168.5.100 网关 192.168.5.1",
+   "MQTT 已连上 broker（CONNACK）client=tryboard-cloud"
+  ],
+  "absent": [
+   "Wi-Fi 断开",
+   "MQTT 出错"
+  ],
+  "stderr_expect": [
+   "phone POST http://192.168.4.1/save → 200 \"已保存\""
+  ]
+ },
+ {
   "id": "s3-rc522",
   "chip": "esp32s3",
   "seconds": 5,
