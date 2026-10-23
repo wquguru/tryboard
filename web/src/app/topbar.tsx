@@ -1,6 +1,7 @@
 // Lab v2 top bar (DESIGN_V2 §3, §4): breadcrumb + work switch, saved state, undo / redo, steps, ⌘K, run state, firmware, ⋯ menu.
 // Data comes from chrome.ts (bc); actions are registered by main.tsx / the bench and buttons grey out until they are.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '../ui/cn';
 import { Logo } from '../ui/logo';
 import { currentTheme, onTheme, setTheme } from '../theme';
@@ -32,9 +33,11 @@ export const menuItem = 'flex w-full cursor-pointer items-center gap-2 rounded-m
 export function usePop() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  // A panel portalled out of ref (phone work menu) still counts as inside
+  const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
-    const down = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const down = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && !panelRef.current?.contains(e.target as Node) && setOpen(false);
     const key = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
     document.addEventListener('mousedown', down);
     document.addEventListener('keydown', key);
@@ -43,7 +46,7 @@ export function usePop() {
       document.removeEventListener('keydown', key);
     };
   }, [open]);
-  return { open, setOpen, ref };
+  return { open, setOpen, ref, panelRef };
 }
 
 /** Work menu groups (DESIGN_V2 §10.3): works with checkpoints, then the free bench (blank + my project tiles, bench-only examples) */
@@ -58,11 +61,10 @@ const passedCount = (w: WorkDef) => {
 
 /** phone: work name centered in the phone top bar (≥ 44 tall, full-width menu) */
 export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
-  const { open, setOpen, ref } = usePop();
+  const { open, setOpen, ref, panelRef } = usePop();
   const cur = new URLSearchParams(location.search).get('work') ?? 'weather';
-  return (
-    <div ref={ref} className="relative min-w-0">
-      <h1 className="m-0 min-w-0 text-sm">
+  const button = (
+    <h1 className="m-0 min-w-0 text-sm">
         <button
           id="workMenuBtn"
           type="button"
@@ -77,9 +79,10 @@ export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
           </span>
           <Icon n="down" size={14} className="flex-none text-muted" />
         </button>
-      </h1>
-      {open && (
-        <div role="menu" aria-label={t('Switch work')} id="workMenu" className={cn(menuPanel, 'left-0 max-h-[70vh] w-[360px] overflow-auto', phone && 'fixed top-12 right-2 left-2 w-auto [&_a]:min-h-11')}>
+    </h1>
+  );
+  const panel = open && (
+        <div ref={panelRef} role="menu" aria-label={t('Switch work')} id="workMenu" className={cn(menuPanel, 'left-0 max-h-[70vh] w-[360px] overflow-auto', phone && 'fixed top-12 right-2 left-2 z-50 max-h-[calc(100dvh-3.5rem)] w-auto [&_a]:min-h-11')}>
           <div role="group" aria-labelledby="wmGuided" data-group="guided">
             <div id="wmGuided" className="px-2.5 pt-1.5 pb-1 text-[12px] text-muted">
               {t('Guided works')}
@@ -133,7 +136,20 @@ export function WorkMenu({ name, phone }: { name: string; phone?: boolean }) {
             ))}
           </div>
         </div>
-      )}
+  );
+  return (
+    <div ref={ref} className="relative min-w-0">
+      {button}
+      {/* Phone menu portals to body: the top bar's stacking context (z-20) would put it under the sheet and bottom bar */}
+      {phone && panel
+        ? createPortal(
+            <>
+              <div aria-hidden="true" className="fixed inset-0 z-40 bg-[#0000004d]" />
+              {panel}
+            </>,
+            document.body,
+          )
+        : panel}
     </div>
   );
 }
