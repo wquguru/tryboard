@@ -10,6 +10,7 @@ import { createStore } from "./store";
 import { Grab, mui, phoneProps, setMui, usePhone } from "./mobile";
 import { t } from "../i18n";
 import { afterFrame } from "../ui/frame";
+import { useBle } from "./blefeed";
 
 // Code tab (P2-15): chunk and source load only when opened (or at idle, R-12), not in the first bundle
 function CodePane({ phone, toast }: { phone?: boolean; toast: (msg: string) => void }) {
@@ -493,6 +494,8 @@ function PhoneDock({
   }, []);
   const ok = c.checkpoints.filter((x) => x.state === "ok" || x.state === "ref").length;
   const nIssue = c.issues.length;
+  // G-11: the unrecognised-BLE card lives in a tab the closed sheet hides, so flag it on the peek bar
+  const bleOff = useBle().state === 2;
   const go = (p: Partial<{ sheet: "peek" | "half" | "full" }>) =>
     setMui({ ...p, props: false, more: false, lib: null });
   const tabs: {
@@ -556,6 +559,9 @@ function PhoneDock({
           <b className="font-medium">{t('Serial')}</b>
           {nIssue > 0 && (
             <span className="rounded-full bg-warn-bg px-2 text-[11px] leading-[18px] text-warn-ink">{t('{n} issues', { n: nIssue })}</span>
+          )}
+          {bleOff && (
+            <span id="peekBleOff" className="rounded-full bg-warn-bg px-2 text-[11px] leading-[18px] whitespace-nowrap text-warn-ink">{t('Bluetooth not simulated')}</span>
           )}
           <span className="flex-1" />
           <span className="text-xs text-muted">{t('Swipe up for all')}</span>

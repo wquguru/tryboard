@@ -277,7 +277,7 @@
 | G-08 | 选型可信度核对：只有 CLI 能跑、网页无模型的零件不得标「仿真 / 行为模拟」；板预设里推断的项（Dial 编码器 A/B 顺序、Cardputer 键位）在结论里标「需真机确认」；加一条自动校验 | `cd web && npm test` 新断言；故意把一个仅 CLI 零件标仿真能报出；agent-browser 选含 INA219 的模板截图 | ☐（在 G-09 / G-10 之后） |
 | G-09 | INA219 + DS3231 接进网页：wasm I2C KIND、元件库 + 3D + 手机、输入日志；示例 c3-i2c-trio 网页可跑 | parts.mjs 网页 / CLI 指纹一致；agent-browser | ☐ |
 | G-10 | CYD（esp32-cyd，`--board cyd`）+ XPT2046 触摸接进网页：换板可选 CYD、屏实时画面、点屏 = `touch=`；示例 esp32-cyd / esp32-cyd-touch 上架 | 新 webtest 或 m5board.mjs 扩展：网页 / CLI 指纹一致、触摸重放一致；agent-browser 桌面 + 390 | ☐ |
-| G-11 | 蓝牙未识别提示：`tb_ble_state() == 2`（用了 BLE 但签名没认出，如 Arduino 3.0.x / 旧 IDF）时网页明确提示原因与可用版本，不静默 | 用一个签名不命中的固件（或单测构造）走网页；agent-browser 截图；四语文案 | ☐ |
+| G-11 | 蓝牙未识别提示：`tb_ble_state() == 2`（用了 BLE 但签名没认出，如 Arduino 3.0.x / 旧 IDF）时网页明确提示原因与可用版本，不静默 | 用一个签名不命中的固件（或单测构造）走网页；agent-browser 截图；四语文案 | ☑ 2026-10-22：蓝牙坞卡片改为原因 + 三档可用版本 + 改法，手机 peek 条加「蓝牙未模拟」徽标；复现固件为 c3-ble-hr 破坏签名（Reviews/ab/G-11.md） |
 | G-12 | 查 M5-13 遗留：M5Unified PDM 麦克风样本成对颠倒；定位是模型（`core/crates/esp32/src/i2s.rs` encode_rx）还是草图配置，修好且 esp32-pdm-mic 不回退 | golden 全一致或差异有解释；新增 M5 PDM 用例 | ☐ |
 | G-13 | M5Dial 蜂鸣器（G3 1 位 I2S）出声模型，接网页 Web Audio；做不了则在 Dial 结论标「需真机」 | accept 新用例 + analyser 有能量；或 DECISIONS 写明不做原因 | ☐（在 G-06 之后） |
 | G-14 | M5 Grove ENV III / IV 单元 3D（接在外壳 Grove 口，随 `SceneSpec.grove` 出现 / 消失） | m5board.mjs 不减断言；agent-browser 截图 | ☐（在 G-06 之后） |
