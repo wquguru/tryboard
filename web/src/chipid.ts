@@ -36,6 +36,7 @@ export const AIO_CHIP: Record<string, SimChip> = {
   m5core2: 'esp32',
   m5core2v11: 'esp32',
   m5atomlite: 'esp32',
+  cyd: 'esp32',
 };
 
 /** Chip for a header / tb_chip() id; null when TryBoard does not simulate it. */

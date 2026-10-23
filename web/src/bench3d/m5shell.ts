@@ -1,4 +1,4 @@
-// M5Stack enclosures (M5-09c): one parametric generator over a per-board table (mm, real outside dimensions).
+// M5Stack enclosures (M5-09c) and the bare CYD board (G-10): one parametric generator over a per-board table (mm, real outside dimensions).
 // Procedural only: product names as plain text, no logos or vendor artwork.
 import * as THREE from 'three';
 import type { PickTarget } from '../scene-api';
@@ -36,7 +36,8 @@ interface Shell {
   /** WS2812 under the top key (Atom Lite family) or a plain GPIO LED (lens at x, z) */
   ws2812?: number;
   gpioLed?: { pin: number; x: number; z: number };
-  grove: { side: Side; at: number };
+  /** Grove Port A socket; absent on boards without one (CYD) */
+  grove?: { side: Side; at: number };
   usb: { side: Side; at: number };
   /** Printed touch zones below the panel (Core2 A / B / C, visual only) */
   zones?: number;
@@ -115,6 +116,15 @@ const SHELLS: Record<M5Id, Shell> = {
   },
   m5cardputer: CARD,
   m5cardputeradv: { ...CARD, label: 'Cardputer-Adv' },
+  // ESP32-2432S028: yellow PCB under a 2.8" 240×320 resistive panel (57.6 × 43.2 active), micro-USB on the short edge
+  cyd: {
+    label: 'ESP32-2432S028', W: 50, L: 86, H: 6, r: 1.5, color: 0xf2c81e,
+    lcd: { px: [240, 320], mm: [43.2, 57.6], x: 0, z: -7, glass: [49, 70] },
+    touch: true,
+    buttons: [{ name: 'BOOT', pin: 0, at: 'top', x: 16, z: 36, w: 4, l: 3 }],
+    usb: { side: 'front', at: 0 },
+    text: [-6, 36, 22],
+  },
 };
 
 /** Outward normal (x, z) of a side and the point on that wall at offset `at` along it */
@@ -139,7 +149,7 @@ function textPlate(text: string, w: number, color: string) {
 }
 
 /** Grove HY2.0-4P socket set into a side wall: white housing with a dark mouth */
-function groveSocket(s: Shell, top: number) {
+function groveSocket(s: Shell & { grove: object }, top: number) {
   const g = new THREE.Group();
   const along = s.grove.side === 'left' || s.grove.side === 'right';
   const [x, z] = wall(s, s.grove.side, s.grove.at, 0.4);
@@ -300,7 +310,7 @@ export function m5Shell(id: M5Id) {
     t.position.set(s.text[0], top + 0.03, s.text[1]);
     grp.add(t);
   }
-  grp.add(groveSocket(s, H / 2));
+  if (s.grove) grp.add(groveSocket({ ...s, grove: s.grove }, H / 2));
   // USB-C mouth on the given wall; usbPort is where the bench's virtual cable plugs in
   const along = s.usb.side === 'left' || s.usb.side === 'right';
   const [ux, uz] = wall(s, s.usb.side, s.usb.at, 0.1);
