@@ -627,6 +627,12 @@ impl Ble {
     }
 
     /// Phone action from the web / input log (the part after `ble=`); returns an error text for the caller to show
+    /// Phone action heard through the board antenna: `loss_db` (harness blockage) also drops BLE adverts
+    pub fn phone_cmd_through(&mut self, cmd: &str, now: u64, loss_db: i32) -> Result<(), String> {
+        self.phone.loss_db = loss_db;
+        self.phone_cmd(cmd, now)
+    }
+
     pub fn phone_cmd(&mut self, cmd: &str, now: u64) -> Result<(), String> {
         let lines = self.phone.command(cmd, now)?;
         for s in lines {

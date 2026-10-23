@@ -11,6 +11,9 @@ import { createKeypadView } from './keypad';
 import { CHIP_HEAT_OFFSET } from './chipheat';
 import { createCloudProduct } from './cloudproduct';
 import { createDialtimerProduct, DIAL_BTN } from './dialtimerproduct';
+import { createAmoclockProduct } from './amoclockproduct';
+// Same as STEEL_DB in app/harness; importing it would pull the harness strings into the home page
+const STEEL_DB = 45;
 
 export interface Spot {
   key: string;
@@ -496,7 +499,7 @@ export const DIALTIMER: Template = {
     { id: 'stand', name: t('Desk stand'), short: t('Stand'), ghost: [40, 30, 100, 70], okMsg: [t('Stand on the desk'), t('Cradle tilted 30° towards you, cable slot at the back')],
       mini: '<path d="M14 54 L30 14 L70 14 L86 54 Z" fill="#D6D1C6" stroke="#8A867E" stroke-width="1.5"/><ellipse cx="50" cy="26" rx="22" ry="9" fill="#BDB9B0"/>',
       iso: '<path d="M40 100 L56 30 L124 30 L140 100 Z" fill="#D6D1C6" stroke="#8A867E" stroke-width="1.5"/><circle cx="90" cy="64" r="30" fill="#BDB9B0" stroke="#8A867E" stroke-width="1.5"/><rect x="84" y="94" width="12" height="6" fill="#3A3936"/>' },
-    { id: 'dial', name: t('M5Stack Dial'), short: 'Dial', spotSize: [56, 56], mini: DIAL_MINI, iso: DIAL_ISO,
+    { id: 'dial', name: t('M5Stack Dial'), short: 'M5Dial', spotSize: [56, 56], mini: DIAL_MINI, iso: DIAL_ISO,
       spots: [
         { key: 'A', label: t('Seated on the collar, ring above it'), where: t('On the collar'), at: [62, 10], ok: true, msg: [t('Dial seated on the collar'), t('The ring sits 2 mm above the collar and turns freely')] },
         { key: 'B', label: t('Pressed down into the cradle'), where: t('Inside the collar'), at: [62, 36], ok: false, msg: [t('Dial pressed into the cradle'), t('The 6 mm collar grips the rotary ring: it no longer turns (estimate)')] },
@@ -514,4 +517,42 @@ export const DIALTIMER: Template = {
   product: (el, h) => createDialtimerProduct(el, { enc: h.enc, touch: h.touch, btn: h.boardBtn && ((d) => h.boardBtn!(DIAL_BTN, d)) }),
 };
 
-export const TEMPLATES: Record<string, Template> = { weather: WEATHER, spin: SPIN, lens: LENS, usbkey: USBKEY, lamp: LAMP, ruler: RULER, tilt: TILT, door: DOOR, irlamp: IRLAMP, cloud: CLOUD, dialtimer: DIALTIMER };
+// G-17 AMOLED clock: tilted desk stand 70×60×55 mm, the Waveshare 2.16" board in front, a steel counterweight keeps it from tipping.
+// The weight in the foot is fine; glued to the board back it sits on the S3 antenna, so the phone never hears the adverts (antenna loss).
+const WEIGHT_MINI = '<rect x="14" y="20" width="72" height="20" rx="3" fill="#8E949C" stroke="#5C6168" stroke-width="1.5"/><path d="M24 26 L76 26" stroke="#C9CDD2" stroke-width="2"/>';
+
+export const AMOCLOCK: Template = {
+  id: 'amoclock',
+  caption: t('AMOLED desk clock · stand 70×60×55 mm, 15° tilt (estimate)'),
+  intro: [t('Build the desk clock'), t('Start with the desk stand')],
+  tray: ['bezel', 'weight', 'board', 'usb', 'stand'],
+  parts: [
+    { id: 'stand', name: t('Desk stand'), short: t('Stand'), ghost: [0, 0, 180, 100], okMsg: [t('Stand in place'), t('Foot pocket at the bottom, cable slot on the left')],
+      mini: '<path d="M18 54 L34 8 L66 8 L82 54 Z" fill="#3A3936"/><rect x="24" y="46" width="52" height="8" rx="2" fill="#26252A"/>',
+      iso: '<rect width="180" height="100" rx="12" fill="#3A3936" stroke="#141414" stroke-width="1.5"/><rect x="50" y="72" width="80" height="22" rx="4" fill="#26252A"/><rect y="82" width="10" height="14" fill="#141414"/>' },
+    { id: 'weight', name: t('Steel counterweight'), short: t('Weight'), spotSize: [60, 16], mini: WEIGHT_MINI,
+      iso: '<rect width="60" height="16" rx="3" fill="#8E949C" stroke="#5C6168" stroke-width="1.5"/>',
+      spots: [
+        { key: 'A', label: t('In the foot pocket'), where: t('In the foot'), at: [60, 75], ok: true, msg: [t('Weight in the foot'), t('Steady on the desk, far from the antenna')] },
+        { key: 'B', label: t('Over the antenna'), where: t('On the board back'), at: [60, 14], ok: false, msg: [t('Steel over the antenna'), t('The S3 antenna is detuned: about {db} dB lost, the phone cannot find the clock (estimate)', { db: STEEL_DB })] },
+      ] },
+    { id: 'board', name: t('Waveshare ESP32-S3-Touch-AMOLED-2.16'), short: t('Clock board'), ghost: [36, 8, 108, 62], okMsg: [t('Board clipped into the stand'), t('Screen faces you, PWR key on the right edge')],
+      mini: '<rect x="20" y="4" width="60" height="52" rx="6" fill="#1B1D21"/><rect x="26" y="8" width="48" height="42" rx="3" fill="#050506"/><text x="50" y="34" fill="#40C8FF" font-size="13" font-weight="700" text-anchor="middle">04:00</text>',
+      iso: '<rect x="36" y="8" width="108" height="62" rx="8" fill="#1B1D21"/><rect x="44" y="12" width="92" height="54" rx="4" fill="#050506"/><text x="90" y="46" fill="#40C8FF" font-size="20" font-weight="700" text-anchor="middle">04:00</text><rect x="144" y="26" width="4" height="12" rx="1" fill="#C23A3A"/>' },
+    { id: 'usb', name: t('USB-C cable'), short: t('USB cable'), ghost: [0, 80, 22, 20], okMsg: [t('USB-C cable plugged in'), t('5 V from any phone charger, also charges the battery')],
+      mini: '<rect x="8" y="24" width="30" height="12" rx="3" fill="#3A3936"/><path d="M38 30 C60 30 70 10 96 12" fill="none" stroke="#3A3936" stroke-width="5"/>',
+      iso: '<rect x="0" y="80" width="22" height="16" rx="3" fill="#141414"/>' },
+    { id: 'bezel', name: t('Front bezel'), short: t('Bezel'), ghost: [30, 4, 120, 70], okMsg: [t('Bezel snapped on'), t('Click “Next: product”')],
+      mini: '<rect x="16" y="2" width="68" height="56" rx="10" fill="none" stroke="#2A2C31" stroke-width="7"/>',
+      iso: '<rect x="30" y="4" width="120" height="70" rx="12" fill="none" stroke="#2A2C31" stroke-width="7" opacity="0.85"/>' },
+  ],
+  checks: (s) => [
+    row(t('Counterweight'), has(s, 'weight'), s.choice.weight === 'A', t('In the foot, 40 mm from the antenna, BLE unaffected'), t('Over the antenna, about {db} dB lost: phone time sync fails', { db: STEEL_DB })),
+    row(t('Power'), has(s, 'usb'), true, t('USB-C 5 V; about 60 mA with the screen on (estimate)')),
+    row(t('Screen'), has(s, 'bezel'), true, t('2.16" AMOLED visible through the bezel, touch works through it')),
+  ],
+  effects: (s) => ({ antennaDb: s.choice.weight === 'B' ? STEEL_DB : 0 }),
+  product: (el, h) => createAmoclockProduct(el, h),
+};
+
+export const TEMPLATES: Record<string, Template> = { weather: WEATHER, spin: SPIN, lens: LENS, usbkey: USBKEY, lamp: LAMP, ruler: RULER, tilt: TILT, door: DOOR, irlamp: IRLAMP, cloud: CLOUD, dialtimer: DIALTIMER, amoclock: AMOCLOCK };

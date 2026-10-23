@@ -1776,6 +1776,13 @@
 - **首页卡片演示**：首页 cloud 卡片原来在仿真 6.0–6.1 s 的窗口里发 interval=2；固件晚 1 秒订阅后，帧慢时会错过窗口（levels.mjs 实测失败），改为 6 s 后、已订阅且未收到命令时每 2 s 重发一次。
 - 备选：编译期写死凭据、只靠长按 BOOT 进配网——否：不是「无凭据时配网」（长按 BOOT 只是台面上的补充入口）；预烧 NVS 分区——否：学员自己编的固件没有这一步，网页也得另做。
 
+## 2026-10-23 AMOLED 时钟装法与 3D 成品（G-17c）
+- **装法影响仿真**：模板 `amoclock`（支架 70×60×55 mm、后仰 15°，件：支架 / 钢配重 / 板 / USB-C / 前框）从 worktpl 的 PRODUCT_ONLY 挪进 TEMPLATES（dialtimer 不动，归 G-16c）。钢配重两个位置：A 放底座槽（离天线 40 mm，无影响）；B 粘在板子背面、压在 S3 天线上 → `effects.antennaDb = 45`（同 harness `OBSTACLE_DB.metal`）。asmstate.summarize 与组装复测取 `max(模板, 线束滑块)`，复测按 `--antenna-loss 45` 跑 amoclock-4 → 手机连不上、对时失败。templates.ts 不 import harness（会把线束文案拖进首页的 i18n 分组），写常量 `STEEL_DB = 45` 并注明出处。
+- **BLE 也吃天线损耗**：原来 `--antenna-loss` 只作用于 Wi-Fi。虚拟手机 `loss_db` 由 `Machine::ble_phone` 每次动作时从 harness 带入（`Ble::phone_cmd_through`）；手机听到的 RSSI = 名义 -52 dBm − 损耗，低于 Wi-Fi 同一扫描门限 -92 dBm 就收不到广播（连接报 "no connectable device found yet"），stderr 记一行 `board antenna blocked … (estimate)`。45 dB → -97 dBm 收不到，30 dB（电池）→ -82 dBm 仍能连。是行为估算，门限借用 Wi-Fi 的，未经真机标定。备选：在固件侧停广播——否，固件没变，问题在空中；单独给 BLE 一个门限——暂无依据，先与 Wi-Fi 一致。
+- **温度页「f C」**：LVGL 的 `lv_snprintf`（`lv_label_set_text_fmt`）默认不支持浮点，`%.1f` 输出成 `f`。改为 newlib `snprintf` 格式化后 `lv_label_set_text`，页面显示 `25.0 C`。新增 accept `amoclock-temp`（滑到第 2 页，温度数字区 #ffb221 像素 1050–1260，新固件 1158，旧固件 452 会判错）与 `amoclock-metal`（`--antenna-loss 45`：广播在、连接 / 对时都没有）。
+- **指纹 / golden**：amoclock 固件变了（多一个 snprintf），amoclock-1..4 指纹随之变为 e80c·480a / 8b84·ee03 / 1904·7215 / 1b23·17ca（npx 与 check.py 一致），判定不变；amoclock* 相关 golden 的 CLI 输出（unimpl 计数、温度页像素、指纹）会变，另多 2 个新用例。firmware/build 不进 git：合并到 main 后先 `tools/build_fw.sh amoclock`（旧固件 amoclock-temp 只有 452 px 会判错），再在 main 上重存 `tools/golden.py save amoclock amoclock-swipe amoclock-off amoclock-temp amoclock-metal`。
+- **3D 成品**（`web/src/app/amoclock3d.ts`，仿 dial3d.ts）：复用台面 `amoledBoard('ws-amoled216')` 立在后仰支架上，屏幕是实时 480×480 帧；点 / 拖屏 = CST9220 触摸（移动 30 ms 节流），PWR 键帽 = 电源键，桌上手机 = BLE 对时（屏上显示搜索中 / 已对时 / 找不到时钟）；配重按装法显示在底座或板背。无 WebGL 时仍走 2D 产品页。
+
 ## 2026-10-23 Dial 计时器装法 / 成品（G-16c）
 - 决定：dialtimer 从 worktpl 的 `PRODUCT_ONLY` 移进 `TEMPLATES`（模板 `DIALTIMER`，SVG 装配，不进 `HAS_3D`），零件三件：桌面支架（楔形，托座倾斜 30°、6 mm 围边）→ M5Stack Dial（选择 A 搁在围边上 / B 按进托座）→ USB-C 线；关卡 dialtimer-4 加 `"assembly": "dialtimer"`，pass 文案照 irlamp-4 补"网页另要求装配无警告"。
 - 影响仿真的一处：B 时 `effects.ringBlock = true`，`effectScript` 丢掉复测脚本里的 `enc=`（与 irBlock 丢 `ir=` 同一机制），dialtimer-4 的 `0.5:enc=+1` 没了 → 设定 06:00 / 开始 06:00 等缺失 → 复测判"装进去后变了"。产品页同样生效：3D 拖环、2D 视图、手机 / 桌面 ±1 键都走 `dialtimer.tsx` 的 `ringTurn`，被卡住时不发 enc；3D 视图显示提示，装配改变后重建 Dial 场景（`Dial3D.stand`）。

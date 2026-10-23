@@ -50,7 +50,9 @@ export function summarize(T: Template, places: { id: string; spot?: string }[], 
   const total = T.parts.length;
   const hx = harnessEffects(T.id, h);
   const clean = placed.length === total && hx.ok && T.parts.every((p) => !p.spots || p.spots.find((s) => s.key === choice[p.id])?.ok);
-  const effects = { ...T.effects({ placed, choice }), ...(hx.i2c ? { i2cWireCm: h.i2cCm } : {}), antennaDb: hx.antennaDb };
+  const fx = T.effects({ placed, choice });
+  // A template's own antenna blocker (amoclock's steel weight) and the harness choice: the worse one wins
+  const effects = { ...fx, ...(hx.i2c ? { i2cWireCm: h.i2cCm } : {}), antennaDb: Math.max(fx.antennaDb ?? 0, hx.antennaDb) };
   return { placed, choice, total, clean, effects, retest };
 }
 

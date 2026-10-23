@@ -3,6 +3,7 @@
 
 use super::desk::{self, Desk};
 use super::{adv_name, adv_uuids, fmt_addr, hex, json_str};
+use crate::wifi::world::SCAN_MIN_DBM;
 use std::collections::VecDeque;
 
 /// Connection interval the phone requests (30 ms, near the Android default)
@@ -92,6 +93,8 @@ enum Pending {
 pub struct Phone {
     pub addr: [u8; 6],
     pub rssi: i8,
+    /// Board-side antenna blockage (P2-11 harness, dB): adverts weaker than SCAN_MIN_DBM never reach the phone
+    pub loss_db: i32,
     state: State,
     target: Option<[u8; 6]>,
     pub devices: Vec<Device>,
@@ -120,6 +123,7 @@ impl Phone {
             // Random static address C0:FF:EE:12:34:56 (top two bits 11)
             addr: [0x56, 0x34, 0x12, 0xee, 0xff, 0xc0],
             rssi: -52,
+            loss_db: 0,
             state: State::Idle,
             target: None,
             devices: Vec::new(),
@@ -134,6 +138,22 @@ impl Phone {
             auto_done: false,
             desk: Desk::new(),
         }
+    }
+
+    /// Signal the phone receives (dBm): its nominal RSSI minus the board's antenna blockage (estimate)
+    pub fn heard_dbm(&self) -> i32 {
+        (self.rssi as i32 - self.loss_db).clamp(-127, 0)
+    }
+
+    /// Why a scan will find nothing: the board's adverts arrive below the phone's sensitivity
+    fn blocked_note(&self) -> Option<String> {
+        let dbm = self.heard_dbm();
+        (dbm < SCAN_MIN_DBM).then(|| {
+            format!(
+                "phone: board antenna blocked {} dB, adverts arrive at {dbm} dBm below {SCAN_MIN_DBM} dBm, nothing is heard (estimate)",
+                self.loss_db
+            )
+        })
     }
 
     pub fn wants_adv(&self) -> bool {
@@ -176,9 +196,10 @@ impl Phone {
         data: &[u8],
         _pdu: &str,
     ) -> bool {
-        if !self.wants_adv() {
+        if !self.wants_adv() || self.heard_dbm() < SCAN_MIN_DBM {
             return false;
         }
+        let heard = self.heard_dbm() as i8;
         let name = adv_name(data);
         let uuids = adv_uuids(data);
         let i = match self.devices.iter().position(|d| d.addr == addr) {
@@ -188,7 +209,7 @@ impl Phone {
                     addr,
                     atype,
                     name: String::new(),
-                    rssi: self.rssi,
+                    rssi: heard,
                     uuids: Vec::new(),
                     connectable,
                     last_log_us: 0,
@@ -329,6 +350,7 @@ impl Phone {
                         "phone: scanning (auto: connect to the first connectable device, read every readable characteristic, subscribe to every notification)"
                             .into(),
                     );
+                    out.extend(self.blocked_note());
                 }
             }
             "scan" => match arg {
@@ -344,6 +366,7 @@ impl Phone {
                     }
                     self.start_scan();
                     out.push("phone: scanning".into());
+                    out.extend(self.blocked_note());
                 }
             },
             "connect" => {

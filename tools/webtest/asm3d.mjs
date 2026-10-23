@@ -498,6 +498,88 @@ await p2.close();
   await p6.close();
 }
 
+// G-17c AMOLED clock: steel weight glued over the antenna -> the phone never hears the clock, amoclock-4's time sync retest fails;
+// weight in the foot passes; then a real mouse swipe on the 3D screen turns the page and a click on the 3D phone sets the time
+{
+  const p7 = await browser.newPage();
+  await p7.setViewport({ width: 1280, height: 860 });
+  p7.on('pageerror', (e) => errors.push(`amoclock: ${e}`));
+  p7.on('console', (m) => { if (m.type() === 'error') errors.push(`amoclock: ${m.text()}`); });
+  await p7.goto(`${base}/app?work=amoclock#bench`, { waitUntil: 'load' });
+  await p7.evaluate(() => {
+    const c = {};
+    for (const id of ['amoclock-1', 'amoclock-2', 'amoclock-3', 'amoclock-4']) c[id] = { fp: 'test', at: 'preset' };
+    localStorage.setItem('tryboard-app-checks:amoclock', JSON.stringify(c));
+    localStorage.removeItem('tryboard-app-asm:amoclock');
+  });
+  await p7.goto(`${base}/app?work=amoclock#assemble`, { waitUntil: 'load' });
+  await p7.reload({ waitUntil: 'load' });
+  await p7.waitForSelector('.asm-box [data-part]', { timeout: 30000 });
+  const click = async (sel) => {
+    for (let i = 0; i < 20; i++) {
+      try {
+        await p7.waitForSelector(sel, { timeout: 5000 });
+        await p7.click(sel);
+        return;
+      } catch {
+        await sleep(200);
+      }
+    }
+    throw new Error(`cannot click ${sel}`);
+  };
+  const build = async (pick) => {
+    for (const k of ['stand', 'weight', 'board', 'usb', 'bezel']) {
+      await click(`.asm-box [data-part="${k}"]`);
+      if (k === 'weight') await click(`.asm-box [data-k="choose_weight"] [data-k="pick${pick}"]`);
+    }
+    await click('#toolbar [data-tool="asm-retest"]');
+    await waitFor(p7, () => /Retesting/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 10000);
+    await waitFor(p7, () => !!document.querySelector('#props .verdict-line') && !/Retesting/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 120000);
+    return {
+      v: await p7.$eval('#props .result-card', (e) => e.dataset.verdict).catch(() => ''),
+      txt: await p7.$eval('#props', (e) => e.textContent),
+      a: await p7.evaluate(() => globalThis.__tbApp.store.get().assembly),
+    };
+  };
+  try {
+    const bad = await build('B');
+    report('amoclock: steel weight over the antenna -> phone cannot find the clock, retest fails', bad.a?.effects?.antennaDb > 0 && (bad.v === 'bad' || bad.v === 'shifted'), `${bad.v} db=${bad.a?.effects?.antennaDb} ${(bad.txt.match(/Retest result.{0,200}/) ?? [''])[0]}`);
+    await shot(p7, 'amoclock-bad');
+    await click('#toolbar [data-tool="asm-reset"]');
+    const good = await build('A');
+    report('amoclock: weight in the foot -> retest passes, assembly clean', !good.a?.effects?.antennaDb && good.v === 'ok' && /Assembly 5\/5, no warnings/.test(good.txt), `${good.v} ${(good.txt.match(/Retest result.{0,80}/) ?? [''])[0]}`);
+    await shot(p7, 'amoclock-ok');
+    await click('#next');
+    const ready = await waitFor(p7, () => location.hash === '#product' && !!globalThis.__tbProduct?.clock && !!document.querySelector('canvas'), null, 30000);
+    const clock = () => p7.evaluate(() => globalThis.__tbProduct.clock());
+    await waitFor(p7, () => !!globalThis.__tbProduct.clock().time, null, 20000);
+    // A real mouse drag right to left across the 3D screen = swipe left -> next page
+    let paged = false;
+    for (let i = 0; i < 3 && !paged; i++) {
+      const p0 = (await clock()).page;
+      const pts = await p7.evaluate(() => [400, 330, 260, 190, 120].map((x) => globalThis.__tbProduct.screenPos(x, 240)));
+      await p7.mouse.move(...pts[0]);
+      await p7.mouse.down();
+      for (const pt of pts.slice(1)) {
+        await p7.mouse.move(...pt, { steps: 4 });
+        await sleep(60);
+      }
+      await p7.mouse.up();
+      paged = await waitFor(p7, (q) => globalThis.__tbProduct.clock().page !== q, p0, 4000);
+    }
+    const [px, py] = await p7.evaluate(() => globalThis.__tbProduct.phonePos());
+    await p7.mouse.click(px, py);
+    const synced = await waitFor(p7, () => !!globalThis.__tbProduct.clock().sync, null, 20000);
+    await sleep(300);
+    await shot(p7, 'amoclock-3d');
+    const c = await clock();
+    report('amoclock: swiping the 3D screen turns the page; clicking the 3D phone sets the time over BLE', ready && paged && synced, `ready=${ready} paged=${paged} page=${c.page} sync=${c.sync} phone=${c.phone}`);
+  } catch (e) {
+    report('amoclock: flow finished', false, String(e).slice(0, 200));
+  }
+  await p7.close();
+}
+
 await page.evaluate(() => localStorage.clear());
 await browser.close();
 server.close();

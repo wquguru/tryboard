@@ -5799,6 +5799,31 @@
   ]
  },
  {
+  "id": "amoclock-temp",
+  "fw": "amoclock",
+  "chip": "esp32s3",
+  "seconds": 2.5,
+  "qemu": false,
+  "args": ["--spi", "co5300", "--i2c", "cst9220@0x5a,axp2101@0x34,pcf85063@0x51,es8311@0x18,es7210@0x40", "--touch-int", "11", "--battery", "98,usb"],
+  "script": "1.00:touch=400,240; 1.05:touch=330,240; 1.10:touch=260,240; 1.15:touch=190,240; 1.20:touch=120,240; 1.40:release",
+  "expect": ["温度 芯片 25.0 °C", "页 2/3 温度"],
+  "lcd_regions": [
+   {"name": "temperature 25.0 C (digits drawn, not lv_snprintf's bare f)", "x": 100, "y": 170, "w": 280, "h": 80, "color": "#ffb221", "tol": 8, "min_pixels": 1050, "max_pixels": 1260}
+  ]
+ },
+ {
+  "id": "amoclock-metal",
+  "fw": "amoclock",
+  "chip": "esp32s3",
+  "seconds": 3.0,
+  "qemu": false,
+  "args": ["--spi", "co5300", "--i2c", "cst9220@0x5a,axp2101@0x34,pcf85063@0x51,es8311@0x18,es7210@0x40", "--touch-int", "11", "--battery", "98,usb", "--antenna-loss", "45"],
+  "script": "1.0:ble=scan; 1.5:ble=connect; 2.5:ble=write ff11 ca2bdb6a",
+  "expect": ["BLE 广播 TryBoard-Clock（对时特征 FF11）", "表盘 显示 2026-10-16  Fri 04:00:00"],
+  "absent": ["连接 成功", "对时 收到"],
+  "stderr_expect": ["board antenna blocked 45 dB, adverts arrive at -97 dBm below -92 dBm", "BLE action failed: no connectable device found yet"]
+ },
+ {
   "id": "amoclock-off",
   "fw": "amoclock",
   "chip": "esp32s3",

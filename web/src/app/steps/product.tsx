@@ -11,7 +11,8 @@ import { type Template } from '../../views/templates';
 import { workTemplate } from '../../views/worktpl';
 import { doorActs, doorButtons, doorLive, doorOnReader, doorRows, doorSerial, doorTap, doorTool } from './door';
 import { cloudActs, cloudButtons, cloudLive, cloudRows, cloudSend, cloudSerial, cloudTool } from './cloud';
-import { amoclockActs, amoclockButtons, amoclockLive, amoclockRows, amoclockSerial, amoclockTool, amoSync } from './amoclock';
+import { amoclockActs, amoclockButtons, amoclockLive, amoclockRows, amoclockSerial, amoclockTool, amoProduct3D, amoSync } from './amoclock';
+import type { Amoclock3D } from '../amoclock3d';
 import { dialHandlers, dialProduct3D, dialStandOf, dialtimerActs, dialtimerButtons, dialtimerLive, dialtimerRows, dialtimerSerial, dialtimerTool } from './dialtimer';
 import type { Dial3D } from '../dial3d';
 import { irlampActs, irlampButtons, irlampLive, irlampRows, irlampPress, irlampSend, irlampSerial, irlampTool } from './irlamp';
@@ -26,7 +27,7 @@ import { isPhone, onPhoneChange, setMui } from '../mobile';
 import type { Tool, ToolGroup } from '../toolbar';
 import { HOME_WORKS } from '../works';
 import { RECORD_SECONDS, download, recordCanvas, takePhoto, type Capturable, type Recording } from '../capture';
-import { i2cLoad, i2cSay, i2cText, wifiSay, wifiText } from '../harness';
+import { SCAN_MIN_DBM, i2cLoad, i2cSay, i2cText, wifiSay, wifiText } from '../harness';
 import { I2C_DEVICES } from '../asmstate';
 import { setBc } from '../chrome';
 import { BuyCard } from '../buycard';
@@ -231,9 +232,12 @@ function remainingLines(work: string): BuyLine[] {
     .map((p) => ({ partId: p.partId, qty: p.qty ?? 1, why: lines.find((l) => l.partId === p.partId)?.why ?? bom.extra[p.partId] ?? '' }));
 }
 
+/** BLE-only work (amoclock): the phone hears adverts at -52 dBm minus the loss, below -92 dBm nothing (same rule as the core's ble phone) */
+const bleSay = (db: number) => (-52 - db < SCAN_MIN_DBM ? t('The enclosure blocks the antenna: the phone cannot find the clock over Bluetooth') : t('Bluetooth time sync is unaffected'));
+
 /** These projects' products live in works3d.ts (P2-09) */
 const WORK3D = new Set(['lamp', 'ruler', 'tilt', 'door', 'irlamp', 'cloud']);
-/** Product-only 2D views (worktpl.ts PRODUCT_ONLY) until their 3D lands */
+/** 2D product views: without WebGL amoclock falls back to its SVG (template product) */
 const PRODUCT_2D = new Set(['amoclock']);
 const COLOR_LABEL: Record<string, string> = { warm: t('Warm white'), red: t('Red'), green: t('Green'), blue: t('Blue'), purple: t('Purple'), white: t('White') };
 
@@ -288,6 +292,7 @@ export function productStep(): StepImpl {
   let lcd3d: Lcd3D | null = null;
   let keypad: Keypad3D | null = null;
   let dial3d: Dial3D | null = null;
+  let amo3d: Amoclock3D | null = null;
   let keypadSvg: ReturnType<typeof createKeypadView> | null = null;
   /** The 10 s recording in progress */
   let rec: Recording | null = null;
@@ -631,7 +636,7 @@ export function productStep(): StepImpl {
           </Res>
         )}
         <Res kind={wk} mk={mk(wf.level)}>
-          <Said say={PROCURE_TEMPLATES.find((x) => x.id === c.work.id)?.firmware.wifi ? wifiSay(fx.antennaDb ?? 0) : t("{say} (this project doesn't use Wi-Fi, so it isn't affected for now)", { say: wifiSay(fx.antennaDb ?? 0) })} raw={t('Antenna loss {db} dB, {text}', { db: fx.antennaDb ?? 0, text: wf.text })} />
+          <Said say={c.work.id === 'amoclock' ? bleSay(fx.antennaDb ?? 0) : PROCURE_TEMPLATES.find((x) => x.id === c.work.id)?.firmware.wifi ? wifiSay(fx.antennaDb ?? 0) : t("{say} (this project doesn't use Wi-Fi, so it isn't affected for now)", { say: wifiSay(fx.antennaDb ?? 0) })} raw={t('Antenna loss {db} dB, {text}', { db: fx.antennaDb ?? 0, text: wf.text })} />
         </Res>
         {sim && <Txt as="p" className="note my-2 font-mono text-xs text-muted" data-live="hz" text={simLines(sim)} />}
       </>
@@ -654,7 +659,7 @@ export function productStep(): StepImpl {
 
   // ------------------------------------------------------------ photo / 10 s recording (P2-10)
   function cur3d(): { capture(): Capturable; resetView(): void } | null {
-    return scene3d ?? lcd3d ?? keypad ?? work3d ?? dial3d;
+    return scene3d ?? lcd3d ?? keypad ?? work3d ?? dial3d ?? amo3d;
   }
   async function photo() {
     const c = ctx;
@@ -970,6 +975,8 @@ export function productStep(): StepImpl {
       };
     } else if (c.work.id === 'dialtimer' && webglOk()) {
       dial3d = dialProduct3D(node, c.session, frame, dialStandOf(assembly()));
+    } else if (c.work.id === 'amoclock' && webglOk()) {
+      amo3d = amoProduct3D(node, c.session, frame, () => assembly()?.effects.antennaDb ?? 0);
     } else if (c.work.id === 'usbkey') {
       const press = (pin: number, d: boolean) => {
         c.session.pressPin(pin, d);
@@ -1165,7 +1172,7 @@ export function productStep(): StepImpl {
         const on = a.effects.sensorOffset ? t('Power on · run #{run}, sensor heated {off} ℃ high', { run, off: a.effects.sensorOffset }) : t('Power on · run #{run}', { run });
         event('▶', preview ? t('Reference product · {text}', { text: on }) : on);
       }
-      [scene3d, lcd3d, work3d, dial3d].forEach((x) => x?.start());
+      [scene3d, lcd3d, work3d, dial3d, amo3d].forEach((x) => x?.start());
       // Mounting effects reach the simulator (blocked sensor, reversed IMU); restored to the user's setup when leaving Product
       if (c.work.id === 'ruler') {
         rawCm = c.session.distance < 0 ? 25 : c.session.distance;
@@ -1216,7 +1223,7 @@ export function productStep(): StepImpl {
       tilt?.stop();
       raf?.();
       raf = null;
-      [scene3d, lcd3d, work3d, dial3d].forEach((x) => x?.stop());
+      [scene3d, lcd3d, work3d, dial3d, amo3d].forEach((x) => x?.stop());
       keypad?.stop();
       rec?.stop();
       if (ctx) {

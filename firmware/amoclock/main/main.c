@@ -292,7 +292,12 @@ static void apply_status(void)
         lv_label_set_text(l_chg, bat_chg ? "Charging (USB)" : bat_usb ? "USB, full" : "On battery");
         lv_label_set_text_fmt(l_vbat, "VBAT %d mV", vbat_mv);
     }
-    if (temp_ok) lv_label_set_text_fmt(l_temp, "%.1f C", temp_c);
+    if (temp_ok) {
+        // lv_snprintf has no float support (LV_USE_FLOAT off), so "%.1f" rendered as "f"; newlib snprintf does
+        char tb[16];
+        snprintf(tb, sizeof tb, "%.1f C", temp_c);
+        lv_label_set_text(l_temp, tb);
+    }
     lv_obj_set_style_text_color(l_ble, lv_color_hex(ble_online ? C_BLUE : C_IDLE), 0);
 }
 
