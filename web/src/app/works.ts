@@ -27,8 +27,8 @@ export const WORKS: Record<string, WorkDef> = {
   // G-16a set minutes → countdown → alarm → combine (touch cancels); finished M5Dial, no wiring
   // Card copy is ready but draft: the home page shows it once the G-16b web flow lands
   dialtimer: { id: 'dialtimer', title: t('Dial timer'), example: 'arduino-m5-dial-timer', checkpoints: ['dialtimer-1', 'dialtimer-2', 'dialtimer-3', 'dialtimer-4'], card: { draft: true, chip: 'M5Dial', blurb: t('Turn the ring to set the minutes, press to start or pause, three beeps at zero, tap the screen to cancel') } },
-  // G-17 RTC face → swipe to battery → PWR key blanks the screen → combine (phone sets the time); finished board, no home card yet
-  amoclock: { id: 'amoclock', title: t('AMOLED desk clock'), example: 'amoclock', checkpoints: ['amoclock-1', 'amoclock-2', 'amoclock-3', 'amoclock-4'] },
+  // G-17 RTC face → swipe to battery → PWR key blanks the screen → combine (phone sets the time); finished board, nothing to wire (G-17b: home card)
+  amoclock: { id: 'amoclock', title: t('AMOLED desk clock'), example: 'amoclock', checkpoints: ['amoclock-1', 'amoclock-2', 'amoclock-3', 'amoclock-4'], card: { chip: 'ESP32-S3', blurb: t('A 2.16-inch AMOLED clock board, nothing to wire: swipe for the temperature and battery pages, PWR blanks the screen, a phone sets the time over Bluetooth') } },
   // P2-01 / P2-04 peripheral benches (no checkpoints; the matching works are the knob lamp and ultrasonic ruler)
   knob: { id: 'knob', title: t('Knob counter (encoder and PCNT)'), example: 's3-encoder', checkpoints: [] },
   sonar: { id: 'sonar', title: t('Ultrasonic ranging (HC-SR04, RMT receive)'), example: 's3-ultrasonic', checkpoints: [] },

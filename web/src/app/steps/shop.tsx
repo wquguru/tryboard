@@ -48,7 +48,7 @@ const SIM: Record<Part['sim']['level'], string> = {
 /** Part sim level -> one of the four confidence levels (U-14: shown by icon, not color) */
 const SIM_CONF: Record<Part['sim']['level'], ConfLevel> = { verified: '仿真验证', estimated: '行为模拟', none: '必须上真机' }; // lint: allow-cjk
 const REAL_HW: ConfLevel = '必须上真机'; // lint: allow-cjk
-const TPL_SHORT: Record<string, string> = { weather: t('Weather station'), spin: t('Little Yellow'), lens: t('Lens buddy'), usbkey: t('Mini keypad'), lamp: t('Knob lamp'), ruler: t('Ultrasonic ruler'), tilt: t('Tilt buddy'), door: t('Door lock'), irlamp: t('IR night light'), cloud: t('Cloud sensor'), blank: t('Blank') };
+const TPL_SHORT: Record<string, string> = { weather: t('Weather station'), spin: t('Little Yellow'), lens: t('Lens buddy'), usbkey: t('Mini keypad'), lamp: t('Knob lamp'), ruler: t('Ultrasonic ruler'), tilt: t('Tilt buddy'), door: t('Door lock'), irlamp: t('IR night light'), cloud: t('Cloud sensor'), amoclock: t('AMOLED clock'), blank: t('Blank') };
 
 
 /** Tile glyph: not a real look, just enough to recognise the part category */
