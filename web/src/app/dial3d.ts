@@ -21,6 +21,8 @@ export interface Dial3DOptions {
   touch(x: number, y: number, down: boolean): void;
   /** Buzzer currently audible (Web Audio): the speaker grille glows */
   sounding(): boolean;
+  /** Assembled stand (G-16c): A = Dial seated on the 6 mm collar, B = pressed in so the collar pins the ring; absent = bare on the desk */
+  stand?: 'A' | 'B';
 }
 
 export interface Dial3D {
@@ -37,6 +39,8 @@ export interface Dial3D {
   /** Detents turned in this view so far */
   detents(): number;
   capture(): Capturable;
+  /** Stand this view was built with (Product rebuilds when the assembly changes it) */
+  stand?: 'A' | 'B';
 }
 
 /** Sideways drag per detent, same as the bench encoder */
@@ -81,7 +85,9 @@ export function createDial3D(container: HTMLElement, o: Dial3DOptions): Dial3D {
   const board = m5Shell('m5dial');
   board.grp.position.y = board.T / 2;
   board.grp.traverse((m) => (m.castShadow = true));
-  scene.add(board.grp);
+  const pinned = o.stand === 'B';
+  if (o.stand) scene.add(dialStand(board.grp, pinned));
+  else scene.add(board.grp);
   const lcdData = new Uint8Array(240 * 240 * 4);
   for (let i = 3; i < lcdData.length; i += 4) lcdData[i] = 255;
   const lcdTex = new THREE.DataTexture(lcdData, 240, 240, THREE.RGBAFormat);
@@ -99,10 +105,18 @@ export function createDial3D(container: HTMLElement, o: Dial3DOptions): Dial3D {
   corner.className = 'p3-disclaimer';
   corner.textContent = t('Illustrative look, not an official M5Stack model');
   container.append(corner);
+  if (pinned) {
+    const warn = document.createElement('div');
+    warn.className = 'p3-disclaimer p3-warn';
+    warn.style.top = '36px';
+    warn.textContent = t('The stand collar pins the ring: turning it does nothing (as assembled)');
+    container.append(warn);
+  }
 
   const camera = new THREE.PerspectiveCamera(32, 1, 1, 4000);
-  const HOME = new THREE.Vector3(0, 120, 112);
-  const TARGET = new THREE.Vector3(0, 6, 2);
+  // In the stand the Dial sits ~25 mm up and tilts towards the viewer: back off and look from the front-right so the wedge shows
+  const HOME = o.stand ? new THREE.Vector3(70, 120, 190) : new THREE.Vector3(0, 120, 112);
+  const TARGET = o.stand ? new THREE.Vector3(0, 22, 0) : new THREE.Vector3(0, 6, 2);
   camera.position.copy(HOME);
   const controls = new OrbitControls(camera, el);
   controls.target.copy(TARGET);
@@ -134,7 +148,7 @@ export function createDial3D(container: HTMLElement, o: Dial3DOptions): Dial3D {
     enc.knob.position.y = enc.y0 - (pushed ? 0.4 : 0);
   };
   const turn = (n: number) => {
-    if (!n) return;
+    if (!n || pinned) return;
     pos += n;
     showKnob();
     o.enc(n);
@@ -254,10 +268,54 @@ export function createDial3D(container: HTMLElement, o: Dial3DOptions): Dial3D {
     ringPos: () => toPage(board.grp.localToWorld(new THREE.Vector3(0, enc.y0 + 5, 20))),
     screenPos: () => toPage(screen.getWorldPosition(new THREE.Vector3())),
     turned(n) {
+      if (pinned) return;
       pos += n;
       showKnob();
     },
     detents: () => pos,
     capture: () => capturableOf(renderer, scene, composer),
+    stand: o.stand,
   };
+}
+
+/** 3D-printed wedge stand: 56 x 60 mm footprint, top face tilted 30° towards the viewer, rounded-square collar around the Dial.
+ *  The collar is 6 mm tall (clear of the ring) or 13 mm when the Dial is pressed in (it reaches the ring). */
+function dialStand(dial: THREE.Object3D, pinned: boolean) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: '#D6D1C6', roughness: 0.75 });
+  const TILT = Math.PI / 6, D = 60, W = 56, FRONT = 4, BACK = FRONT + D * Math.tan(TILT);
+  const side = new THREE.Shape([new THREE.Vector2(D / 2, 0), new THREE.Vector2(D / 2, FRONT), new THREE.Vector2(-D / 2, BACK), new THREE.Vector2(-D / 2, 0)]);
+  const wedgeGeo = new THREE.ExtrudeGeometry(side, { depth: W, bevelEnabled: false });
+  wedgeGeo.rotateY(-Math.PI / 2);
+  wedgeGeo.translate(W / 2, 0, 0);
+  const wedge = new THREE.Mesh(wedgeGeo, mat);
+  const mount = new THREE.Group();
+  mount.position.set(0, (FRONT + BACK) / 2, 0);
+  mount.rotation.x = TILT;
+  const rr = (w: number, r: number) => {
+    const sh = new THREE.Shape();
+    const h = w / 2;
+    sh.moveTo(-h + r, -h);
+    sh.lineTo(h - r, -h);
+    sh.quadraticCurveTo(h, -h, h, -h + r);
+    sh.lineTo(h, h - r);
+    sh.quadraticCurveTo(h, h, h - r, h);
+    sh.lineTo(-h + r, h);
+    sh.quadraticCurveTo(-h, h, -h, h - r);
+    sh.lineTo(-h, -h + r);
+    sh.quadraticCurveTo(-h, -h, -h + r, -h);
+    return sh;
+  };
+  const ring = rr(51, 10);
+  ring.holes.push(rr(46, 8.5));
+  const collarGeo = new THREE.ExtrudeGeometry(ring, { depth: pinned ? 13 : 6, bevelEnabled: false });
+  collarGeo.rotateX(-Math.PI / 2);
+  const collar = new THREE.Mesh(collarGeo, mat);
+  mount.add(collar, dial);
+  g.add(wedge, mount);
+  g.traverse((m) => {
+    m.castShadow = true;
+    m.receiveShadow = true;
+  });
+  return g;
 }

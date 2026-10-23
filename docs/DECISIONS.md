@@ -1775,3 +1775,11 @@
 - **台面重新配网（长按 BOOT）**：1 秒窗口过后网页上的手机就搜不到热点了，台面「重新上电」又会把 flash 还原。所以加长按 BOOT（GPIO9）1 秒：清 NVS `prov`、写一个 `wait` 标记后重启，重启后读到标记就开热点**一直等手机**（标记读完即删）。台面 3D BOOT 按住 1 s 或产品步骤的「用手机重新配网（长按 BOOT）」按钮（按住 1.6 s 并打开虚拟手机）触发；accept `c3-cloud-reprov` 用 `gpio9=0/1` 覆盖。重启前先停 MQTT、关掉重连，免得串口出现「Wi-Fi 断开 / MQTT 出错」噪声。
 - **首页卡片演示**：首页 cloud 卡片原来在仿真 6.0–6.1 s 的窗口里发 interval=2；固件晚 1 秒订阅后，帧慢时会错过窗口（levels.mjs 实测失败），改为 6 s 后、已订阅且未收到命令时每 2 s 重发一次。
 - 备选：编译期写死凭据、只靠长按 BOOT 进配网——否：不是「无凭据时配网」（长按 BOOT 只是台面上的补充入口）；预烧 NVS 分区——否：学员自己编的固件没有这一步，网页也得另做。
+
+## 2026-10-23 Dial 计时器装法 / 成品（G-16c）
+- 决定：dialtimer 从 worktpl 的 `PRODUCT_ONLY` 移进 `TEMPLATES`（模板 `DIALTIMER`，SVG 装配，不进 `HAS_3D`），零件三件：桌面支架（楔形，托座倾斜 30°、6 mm 围边）→ M5Stack Dial（选择 A 搁在围边上 / B 按进托座）→ USB-C 线；关卡 dialtimer-4 加 `"assembly": "dialtimer"`，pass 文案照 irlamp-4 补"网页另要求装配无警告"。
+- 影响仿真的一处：B 时 `effects.ringBlock = true`，`effectScript` 丢掉复测脚本里的 `enc=`（与 irBlock 丢 `ir=` 同一机制），dialtimer-4 的 `0.5:enc=+1` 没了 → 设定 06:00 / 开始 06:00 等缺失 → 复测判"装进去后变了"。产品页同样生效：3D 拖环、2D 视图、手机 / 桌面 ±1 键都走 `dialtimer.tsx` 的 `ringTurn`，被卡住时不发 enc；3D 视图显示提示，装配改变后重建 Dial 场景（`Dial3D.stand`）。
+- 3D 成品：`dial3d.ts` 的 `dialStand()` 程序化楔形支架 + 围边（B 时围边画到 13 mm 够到转环），镜头随支架后移；无装配时保持 G-16b 的平放样子。
+- 备选：蜂鸣孔朝下贴桌 → 响度降低、dialtimer-3 声音判定失败——否（本项不做）：声音判据只在 dialtimer-3（62 s 关卡），复测关卡是 dialtimer-4；要做得在网页 checks.ts / CLI 两边都对 RMS 加衰减，且没有可依据的衰减数，留作以后；磁吸底座挡住转环——采用同一思路，换成更常见的"打印托座围边太高"。
+- 尺寸：M5Dial 外形取 m5shell（45 × 45 × 14 mm，环 r 22），支架尺寸为设计估算，未核对真机。
+

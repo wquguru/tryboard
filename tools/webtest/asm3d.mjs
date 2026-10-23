@@ -428,6 +428,76 @@ await p2.close();
   await p5.close();
 }
 
+// G-16c Dial timer (SVG assembly, finished board): Dial pressed into the cradle -> the collar pins the ring, dialtimer-4's enc=+1
+// is dropped and the retest fails; seated on the collar -> passes; then the 3D Dial in its stand turns with a real mouse drag
+{
+  const p6 = await browser.newPage();
+  await p6.setViewport({ width: 1280, height: 860 });
+  p6.on('pageerror', (e) => errors.push(`dialtimer: ${e}`));
+  p6.on('console', (m) => { if (m.type() === 'error') errors.push(`dialtimer: ${m.text()}`); });
+  await p6.goto(`${base}/app?work=dialtimer#bench`, { waitUntil: 'load' });
+  await p6.evaluate(() => {
+    const c = {};
+    for (const id of ['dialtimer-1', 'dialtimer-2', 'dialtimer-3', 'dialtimer-4']) c[id] = { fp: 'test', at: 'preset' };
+    localStorage.setItem('tryboard-app-checks:dialtimer', JSON.stringify(c));
+    localStorage.removeItem('tryboard-app-asm:dialtimer');
+  });
+  await p6.goto(`${base}/app?work=dialtimer#assemble`, { waitUntil: 'load' });
+  await p6.reload({ waitUntil: 'load' });
+  await p6.waitForSelector('.asm-box [data-part]', { timeout: 30000 });
+  const click = async (sel) => {
+    for (let i = 0; i < 20; i++) {
+      try {
+        await p6.waitForSelector(sel, { timeout: 5000 });
+        await p6.click(sel);
+        return;
+      } catch {
+        await sleep(200);
+      }
+    }
+    throw new Error(`cannot click ${sel}`);
+  };
+  const build = async (pick) => {
+    for (const k of ['stand', 'dial', 'usb']) {
+      await click(`.asm-box [data-part="${k}"]`);
+      if (k === 'dial') await click(`.asm-box [data-k="choose_dial"] [data-k="pick${pick}"]`);
+    }
+    await click('#toolbar [data-tool="asm-retest"]');
+    await waitFor(p6, () => /Retesting/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 10000);
+    await waitFor(p6, () => !!document.querySelector('#props .verdict-line') && !/Retesting/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 120000);
+    return {
+      v: await p6.$eval('#props .result-card', (e) => e.dataset.verdict).catch(() => ''),
+      txt: await p6.$eval('#props', (e) => e.textContent),
+      a: await p6.evaluate(() => globalThis.__tbApp.store.get().assembly),
+    };
+  };
+  try {
+    const bad = await build('B');
+    report('dialtimer: Dial pressed into the cradle -> ring pinned, enc= dropped, retest fails', bad.a?.effects?.ringBlock === true && (bad.v === 'bad' || bad.v === 'shifted') && /Dial pressed into the cradle/.test(bad.txt), `${bad.v} ${(bad.txt.match(/Retest result.{0,200}/) ?? [''])[0]}`);
+    await shot(p6, 'dialtimer-bad');
+    await click('#toolbar [data-tool="asm-reset"]');
+    const good = await build('A');
+    report('dialtimer: Dial seated on the collar -> retest passes, assembly clean', good.a?.effects?.ringBlock === false && good.v === 'ok' && /Assembly 3\/3, no warnings/.test(good.txt), `${good.v} ${(good.txt.match(/Retest result.{0,80}/) ?? [''])[0]}`);
+    await shot(p6, 'dialtimer-ok');
+    await click('#next');
+    const ready = await waitFor(p6, () => location.hash === '#product' && !!globalThis.__tbProduct?.ringPos?.() && globalThis.__tbProduct.timer().ready, null, 30000);
+    const m0 = await p6.evaluate(() => globalThis.__tbProduct.timer().minutes);
+    const [x, y] = await p6.evaluate(() => globalThis.__tbProduct.ringPos());
+    await p6.mouse.move(x, y);
+    await p6.mouse.down();
+    for (let i = 1; i <= 8; i++) await p6.mouse.move(x + (44 * i) / 8, y);
+    await p6.mouse.up();
+    const turned = await waitFor(p6, (m) => globalThis.__tbProduct.timer().minutes !== m, m0, 8000);
+    const st = await p6.evaluate(() => ({ m: globalThis.__tbProduct.timer().minutes, d: globalThis.__tbProduct.detents(), pinned: globalThis.__tbProduct.pinned() }));
+    await sleep(300);
+    await shot(p6, 'dialtimer-3d');
+    report('dialtimer: 3D Dial in its stand; dragging the ring changes the minutes', ready && turned && !st.pinned && st.d !== 0, `ready=${ready} m0=${m0} ${JSON.stringify(st)}`);
+  } catch (e) {
+    report('dialtimer: flow finished', false, String(e).slice(0, 200));
+  }
+  await p6.close();
+}
+
 await page.evaluate(() => localStorage.clear());
 await browser.close();
 server.close();

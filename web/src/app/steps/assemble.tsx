@@ -64,9 +64,10 @@ const RETEST_WHY: Record<string, () => string> = {
   tilt: () => t('With the IMU reversed, pitch and roll read reversed too.'),
   door: () => t('With the reader on the steel back box, the RC522 never sees a card.'),
   irlamp: () => t('With the receiver behind the opaque wall, no remote code reaches the VS1838B.'),
+  dialtimer: () => t('With the Dial pressed into the cradle, the collar pins the ring and no turn reaches the encoder.'),
 };
 /** Works whose assembly choice changes what the simulated sensors see (the others only change the Product picture) */
-const SIM_FX = new Set(['ruler', 'tilt', 'door', 'irlamp']);
+const SIM_FX = new Set(['ruler', 'tilt', 'door', 'irlamp', 'dialtimer']);
 /** Works whose sensor reads the in-case heat offset (env temperature + sensorOffset in the retest and the Product) */
 const HEAT_SENSOR: Record<string, string> = { weather: 'BME280', cloud: 'AHT20' };
 const fxHow = (id: string) =>
@@ -121,6 +122,10 @@ const IMPACT: Record<string, Record<string, string[]>> = {
   cloud: {
     aht: [t('On the vent side: room air flows past the AHT20 and the published t is the room'), t('Against the board: the LDO and Wi-Fi bursts warm it, every published t is about {n} ℃ high, same in the retest (estimate)', { n: CHIP_HEAT_OFFSET })],
     usb: [t('C3 with Wi-Fi on averages about 80 mA and peaks near 350 mA while transmitting; a 5 V 1 A charger is plenty (estimate)')],
+  },
+  dialtimer: {
+    dial: [t('On the collar: the 6 mm collar holds the body below the ring, which turns and clicks freely'), t('Pressed into the cradle: the collar reaches the rotary ring and pins it, no turn reaches the encoder, same in the retest (estimate)')],
+    usb: [t('The Dial draws about 120 mA with the screen on; any USB port or 5 V 1 A charger will do (estimate)')],
   },
 };
 
@@ -570,6 +575,7 @@ export function assembleStep(): StepImpl {
     if (fx.imuFlip !== undefined) row(t('IMU orientation'), fx.imuFlip ? t('Reversed: pitch and roll both flipped') : t('Correct'), !!fx.imuFlip);
     if (fx.cardBlock !== undefined) row(t('Card reading'), fx.cardBlock ? t('No card is read') : t('Reads cards on the panel'), !!fx.cardBlock);
     if (fx.irBlock !== undefined) row(t('Remote reception'), fx.irBlock ? t('No remote code arrives') : t('Every key arrives'), !!fx.irBlock);
+    if (fx.ringBlock !== undefined) row(t('Rotary ring'), fx.ringBlock ? t('Pinned by the collar, turns are lost') : t('Turns freely'), !!fx.ringBlock);
     const how = fxHow(T!.id);
     return rows.length ? (
       <>
