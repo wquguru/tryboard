@@ -137,7 +137,7 @@ smoke base=SITE_URL:
     base="{{base}}"; base="${base%/}"; fail=0
     hdr() { curl -sSI --max-time 20 "$1" | tr -d '\r'; }
     check() { if echo "$2" | grep -qi "$3"; then echo "  ✓ $1: $3"; else echo "  ✗ $1: missing $3"; fail=1; fi; }
-    for p in / /app /levels /changelog; do
+    for p in / /app /levels /changelog /changelog.zh; do
         h=$(hdr "$base$p"); check "$p" "$h" '^HTTP/[0-9.]* 200'; check "$p" "$h" 'cache-control: no-cache'
     done
     h=$(hdr "$base/wasm/tryboard.wasm"); check /wasm "$h" '^HTTP/[0-9.]* 200'; check /wasm "$h" 'immutable'

@@ -14,9 +14,9 @@ fs.mkdirSync(outDir, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.txt': 'text/plain' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  // Extensionless paths (/app, /select) map to .html, like Vite preview and static hosting (DESIGN_V2 §7.2)
+  // Extensionless paths (/app, /select) and locale copies (/changelog.zh) map to .html, like Vite preview and static hosting
   const f0 = path.join(dist, u === '/' ? 'index.html' : u);
-  const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
+  const f = (!path.extname(f0) || !fs.existsSync(f0)) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) {
     res.writeHead(404);
     return res.end();
@@ -548,7 +548,8 @@ if (await waitFor(page, () => globalThis.__tbApp?.store.get().simSeconds > 0.5, 
 } else report('D-07: wifi example starts', false);
 
 // ---- F-12 changelog (static page): filters scroll inside their row, tap targets, no page-level horizontal scroll
-await page.goto(`${base}/changelog`, { waitUntil: 'load' });
+// ?lang=en: the static pages pick a locale before paint (F-12b), so pin English whatever the browser language is
+await page.goto(`${base}/changelog?lang=en`, { waitUntil: 'load' });
 report('Changelog: filters shown with JS', await waitFor(page, () => !document.getElementById('clFilter')?.hidden));
 for (const f of ['all', 'new', 'improve', 'announce']) {
   await page.$eval(`[data-filter="${f}"]`, (e) => e.scrollIntoView({ inline: 'nearest', block: 'nearest' }));
@@ -561,6 +562,12 @@ await stepCheck('Changelog');
 await page.click('[data-filter="all"]');
 report('Changelog: first entry link tappable', (await tappable('article .cl-cta')) === 'ok', await tappable('article .cl-cta'));
 await page.screenshot({ path: path.join(outDir, 'mobile-changelog.png') });
+// F-12b: locale copies (longer Japanese / Korean labels, CJK dates) keep the page inside 390 px too
+for (const p of ['/changelog.ja', '/licenses.ko']) {
+  await page.goto(`${base}${p}`, { waitUntil: 'load' });
+  report(`${p}: localized page served`, await page.evaluate(() => document.documentElement.lang !== 'en' && !!document.querySelector('h1')));
+  await stepCheck(p);
+}
 
 report('no external hosts requested', external.length === 0, external.slice(0, 3).join(' | '));
 report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
