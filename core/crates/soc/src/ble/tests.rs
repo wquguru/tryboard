@@ -97,6 +97,26 @@ fn phone_scans_connects_and_starts_att() {
 }
 
 #[test]
+fn blocked_antenna_hides_adverts_from_the_phone() {
+    // 45 dB (metal against the antenna): -52 - 45 = -97 dBm, below the -92 dBm scan floor
+    let mut b = Ble::new(ADDR);
+    advertise(&mut b);
+    b.phone.loss_db = 45;
+    b.phone_cmd("scan", 0).unwrap();
+    drain(&mut b, 500_000);
+    assert!(b.phone.devices.is_empty());
+    assert!(b.phone_cmd("connect", 500_000).is_err());
+    // 30 dB (a battery nearby) still gets through at -82 dBm
+    let mut b = Ble::new(ADDR);
+    advertise(&mut b);
+    b.phone.loss_db = 30;
+    b.phone_cmd("scan", 0).unwrap();
+    drain(&mut b, 500_000);
+    assert_eq!(b.phone.devices.len(), 1);
+    assert_eq!(b.phone.devices[0].rssi, -82);
+}
+
+#[test]
 fn same_inputs_same_air_log() {
     let run = || {
         let mut b = Ble::new(ADDR);

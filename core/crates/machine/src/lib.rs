@@ -566,9 +566,12 @@ impl Machine {
 
     /// Virtual phone action (the part after `ble=` in the input log)
     pub fn ble_phone(&mut self, cmd: &str) -> Result<(), String> {
-        let now = self.cycles() / (CPU_HZ / 1_000_000);
+        let (now, loss) = (
+            self.cycles() / (CPU_HZ / 1_000_000),
+            self.harness.antenna_loss_db,
+        );
         match self.ble_mut() {
-            Some(b) => b.phone_cmd(cmd, now),
+            Some(b) => b.phone_cmd_through(cmd, now, loss),
             None => Err("this firmware has no BLE that can be simulated".into()),
         }
     }

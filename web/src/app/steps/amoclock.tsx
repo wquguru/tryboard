@@ -6,6 +6,8 @@ import type { Session } from '../types';
 import { bleFeed } from '../blefeed';
 import { amoclockNow, parseAmoclockLine, swipePath, syncBytes } from '../../views/amoclockproduct';
 import { t } from '../../i18n';
+import type { LiveFrame } from '../../views/common';
+import { createAmoclock3D, type Amoclock3D } from '../amoclock3d';
 
 (globalThis as unknown as { __tbAmoclock: unknown }).__tbAmoclock = amoclockNow;
 
@@ -18,15 +20,23 @@ export function amoSwipe(s: Session, dir: 'left' | 'right') {
   setTimeout(() => s.touch(swipePath(dir)[4], 240, false), 5 * STEP_MS + 100);
 }
 
+/** Phone-side sync state for the 3D phone and the readings row: searching, or gave up (adverts never heard, e.g. antenna blocked) */
+export const amoPhone: { status: '' | 'search' | 'notfound' } = { status: '' };
+
 /** Virtual phone sets the clock: scan, connect once the board shows up, write FF11 once the GATT table is read */
 export function amoSync(s: Session) {
   const phone = () => bleFeed.get().view?.phone;
-  const write = () => s.sim?.ble(`write ff11 ${syncBytes()}`);
+  const write = () => {
+    amoPhone.status = '';
+    s.sim?.ble(`write ff11 ${syncBytes()}`);
+  };
   const wait = (ok: () => boolean, then: () => void, n = 0) => {
     if (ok()) then();
     else if (n < 60) setTimeout(() => wait(ok, then, n + 1), 150);
+    else amoPhone.status = 'notfound';
   };
   if (phone()?.state === 'connected') return write();
+  amoPhone.status = 'search';
   s.sim?.ble('scan');
   wait(
     () => !!phone()?.devices.some((d) => d.name === 'TryBoard-Clock'),
@@ -65,6 +75,7 @@ export function amoclockLive(set: (k: string, v: string, bad?: boolean) => void,
   set('aface', s.time ? `${s.date} ${s.time}` : waiting);
   set('ascr', s.on ? t('On · page {n}/3 · {name}', { n: s.page, name: PAGE()[s.page - 1] }) : t('Off (brightness 0x51 = 0)'), !s.on);
   set('abat', s.bat || waiting);
+  if (amoPhone.status === 'notfound') return set('able', t('The phone cannot find the clock (antenna blocked?)'), true);
   set('able', s.sync ? t('Time set {time}', { time: s.sync }) : s.ble === 'conn' ? t('Connected') : s.ble === 'adv' ? t('Advertising TryBoard-Clock') : waiting);
 }
 
@@ -72,4 +83,18 @@ export function amoclockLive(set: (k: string, v: string, bad?: boolean) => void,
 export function amoclockSerial(l: string, event: (icon: string, text: string, tone?: 'ok' | 'bad') => void) {
   const e = parseAmoclockLine(l, amoclockNow);
   if (e) event(...e);
+}
+
+/** Mount the 3D desk clock in the Product stage; window.__tbProduct gives tests the screen / PWR / phone page positions */
+export function amoProduct3D(node: HTMLElement, s: Session, frame: () => LiveFrame, antennaDb: () => number): Amoclock3D {
+  const d = createAmoclock3D(node, { frame, touch: (x, y, down) => s.touch(x, y, down), pwrkey: () => s.pwrKey(false), sync: () => amoSync(s), antennaDb });
+  (window as unknown as { __tbProduct: unknown }).__tbProduct = {
+    screenPos: (x?: number, y?: number) => d.screenPos(x, y),
+    pwrPos: () => d.pwrPos(),
+    phonePos: () => d.phonePos(),
+    weight: () => d.weight(),
+    azimuth: () => d.azimuth(),
+    clock: () => ({ ...amoclockNow, phone: amoPhone.status }),
+  };
+  return d;
 }

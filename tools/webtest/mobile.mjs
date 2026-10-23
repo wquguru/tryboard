@@ -458,11 +458,8 @@ for (const [w, key] of Object.entries(WORKS)) {
   }
   await sleep(1500);
   await stepCheck(`Product ${w}`);
-  // G-17b amoclock has no 3D yet (G-17c); its flat view must span the phone width instead
-  if (w === 'amoclock') {
-    const [sw, vw] = await page.evaluate(() => [document.querySelector('#mProduct .prod-svg svg')?.getBoundingClientRect().width ?? 0, innerWidth]);
-    report(`Product ${w}: 2D view spans the width`, sw >= vw - 40, `${sw}/${vw}px`);
-  } else report(`Product ${w}: 3D fullscreen`, (await full()) === 'ok', await full());
+  // G-17c gave amoclock its 3D desk stand, so every work now goes fullscreen
+  report(`Product ${w}: 3D fullscreen`, (await full()) === 'ok', await full());
   // Boot-time toasts (spin: brownout) can sit over the grid until U-26 moves them; wait for them like a user would
   await waitFor(page, () => document.querySelector('#toast')?.hidden !== false, null, 8000);
   const tools = await page.$$eval('#toolbar [data-tool]', (b) => b.map((x) => x.dataset.tool));

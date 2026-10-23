@@ -290,7 +290,7 @@
 | G-16c | Dial 计时器装法 / 成品：成品板的「组装」步（支架 / 外壳，至少一处装法影响，如蜂鸣孔被挡 → 响度判定失败）+ 3D 成品 | asm3d webtest；agent-browser | ☐（在 G-16b 之后） |
 | G-17a | 新作品「AMOLED 桌面时钟」（WorkId `amoclock`，ws-amoled216）阶段一：IDF + LVGL 数字 / 跳秒表盘（G-07：不做扫秒针），PCF85063 走时、滑动翻页（时间 / 温度 / 电量）、AXP2101 电量与电源键息屏、BLE 对时（S3 NimBLE，不成则降为串口对时并记 DECISIONS），检查点 amoclock-1..4 | build + accept（lcd_regions 区域检查）；check.py --ref --all；npx 指纹一致 | ☑ 固件 amoclock + accept amoclock / amoclock-swipe / amoclock-off + 检查点 amoclock-1..4，BLE 对时成功（无需串口降级），见 DECISIONS 2026-10-23 G-17a |
 | G-17b | AMOLED 时钟网页流程：首页卡片、采购、台面、产品页（点屏滑动、电源键、手机对时按钮） | levels / mobile webtest；agent-browser 桌面 + 390 | ☑ 2026-10-23（支架件留 G-17c） |
-| G-17c | AMOLED 时钟装法 / 成品：支架 / 外壳装法影响（如天线贴金属底座 → BLE 对时失败）+ 3D 成品 | asm3d webtest；agent-browser | ☐（在 G-17b 之后） |
+| G-17c | AMOLED 时钟装法 / 成品：支架 / 外壳装法影响（如天线贴金属底座 → BLE 对时失败）+ 3D 成品 | asm3d webtest；agent-browser | ☑ 2026-10-23（钢配重压天线 → BLE 对时复测失败；3D 支架成品；温度页 f C 修复） |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。

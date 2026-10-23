@@ -12,7 +12,7 @@ import type { TimelineStep } from '../timeline';
 import type { Assembly3D } from '../asm3d';
 import { caseFor, layoutFor, layoutKey } from '../casemesh';
 import type { CaseLayout } from '../enclosure';
-import { OBSTACLE_LABEL, i2cSay, i2cText, loadCaseHarness, saveCaseHarness, wifiSay, type CaseHarness, type Obstacle } from '../harness';
+import { OBSTACLE_DB, OBSTACLE_LABEL, i2cSay, i2cText, loadCaseHarness, saveCaseHarness, wifiSay, type CaseHarness, type Obstacle } from '../harness';
 import { harnessEffects, loadEntries, saveEntries, summarize, type Entry } from '../asmstate';
 import { t } from '../../i18n';
 
@@ -64,9 +64,10 @@ const RETEST_WHY: Record<string, () => string> = {
   tilt: () => t('With the IMU reversed, pitch and roll read reversed too.'),
   door: () => t('With the reader on the steel back box, the RC522 never sees a card.'),
   irlamp: () => t('With the receiver behind the opaque wall, no remote code reaches the VS1838B.'),
+  amoclock: () => t('With the steel weight on the board back, the phone never hears the clock, so the time is not set.'),
 };
 /** Works whose assembly choice changes what the simulated sensors see (the others only change the Product picture) */
-const SIM_FX = new Set(['ruler', 'tilt', 'door', 'irlamp']);
+const SIM_FX = new Set(['ruler', 'tilt', 'door', 'irlamp', 'amoclock']);
 /** Works whose sensor reads the in-case heat offset (env temperature + sensorOffset in the retest and the Product) */
 const HEAT_SENSOR: Record<string, string> = { weather: 'BME280', cloud: 'AHT20' };
 const fxHow = (id: string) =>
@@ -121,6 +122,10 @@ const IMPACT: Record<string, Record<string, string[]>> = {
   cloud: {
     aht: [t('On the vent side: room air flows past the AHT20 and the published t is the room'), t('Against the board: the LDO and Wi-Fi bursts warm it, every published t is about {n} ℃ high, same in the retest (estimate)', { n: CHIP_HEAT_OFFSET })],
     usb: [t('C3 with Wi-Fi on averages about 80 mA and peaks near 350 mA while transmitting; a 5 V 1 A charger is plenty (estimate)')],
+  },
+  amoclock: {
+    weight: [t('In the foot: 40 mm of air between steel and antenna, the phone hears the adverts at about -52 dBm'), t('On the board back: steel right behind the S3 antenna loses about {db} dB, adverts arrive near -97 dBm, below the phone’s -92 dBm, so sync fails, same in the retest (estimate)', { db: OBSTACLE_DB.metal })],
+    usb: [t('The AMOLED board draws about 60 mA with the screen on; the AXP2101 charges the battery from the same cable (estimate)')],
   },
 };
 
@@ -569,6 +574,7 @@ export function assembleStep(): StepImpl {
     if (fx.sonarBlock !== undefined) row(t('Probe reading'), fx.sonarBlock ? t('Cut off by the hole wall at about {cm} cm', { cm: fx.sonarBlock }) : t('Measures the object in front'), !!fx.sonarBlock);
     if (fx.imuFlip !== undefined) row(t('IMU orientation'), fx.imuFlip ? t('Reversed: pitch and roll both flipped') : t('Correct'), !!fx.imuFlip);
     if (fx.cardBlock !== undefined) row(t('Card reading'), fx.cardBlock ? t('No card is read') : t('Reads cards on the panel'), !!fx.cardBlock);
+    if (fx.antennaDb !== undefined) row(t('Phone time sync (BLE)'), fx.antennaDb ? t('Antenna blocked {db} dB: the phone cannot find the clock', { db: fx.antennaDb }) : t('The phone finds the clock and sets the time'), !!fx.antennaDb);
     if (fx.irBlock !== undefined) row(t('Remote reception'), fx.irBlock ? t('No remote code arrives') : t('Every key arrives'), !!fx.irBlock);
     const how = fxHow(T!.id);
     return rows.length ? (
@@ -699,7 +705,7 @@ export function assembleStep(): StepImpl {
           if (b) b.textContent = t('Retesting {s} s', { s: sec.toFixed(1) });
         },
         env,
-        { i2cWire: hx.i2c ? hz.i2cCm : undefined, antenna: hx.antennaDb || undefined },
+        { i2cWire: hx.i2c ? hz.i2cCm : undefined, antenna: Math.max(hx.antennaDb, asm.effects().antennaDb ?? 0) || undefined },
       );
       const clean = asm.clean() && hx.ok;
       const rows: Extract<Entry, { kind: 'test' }>['rows'] = v.results.map((x) => ({ ok: x.ok, text: x.text, say: x.say, tag: x.tag, dev: x.dev, conf: x.conf, note: x.note }));
