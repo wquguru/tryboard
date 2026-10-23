@@ -57,9 +57,14 @@ export type PartSpec =
   | { type: 'irrx'; pin: number; label?: string }
   /** 940 nm IR LED module (F-08f): S on pin; an eye decodes NEC from the carrier, aimed at the receiver (= CLI --ir RX,TX) */
   | { type: 'irled'; pin: number; label?: string }
+  /** I2C breakouts lying on the desk (G-09, = CLI --i2c-bus): AHT20 and DS3231 read the environment temperature, INA219 the board's USB 5 V rail */
+  | { type: I2cModType; addr: number; sda: number; scl: number; label?: string }
   /** Bare rectangular SPI TFT (F-04a2, = CLI --spi <panel>): pins are the chip's fixed LCD_WIRING, kept in the spec for wires / labels */
   | { type: 'tft'; panel: TftPanel; sclk: number; mosi: number; cs: number; dc: number; rst: number; bl: number; label?: string };
 
+
+export type I2cModType = 'aht20' | 'ina219' | 'ds3231';
+export const isI2cMod = (p: PartSpec): p is Extract<PartSpec, { type: I2cModType }> => p.type === 'aht20' || p.type === 'ina219' || p.type === 'ds3231';
 
 /** The scene's IMU (bench tilt / drag only works when there is one) */
 export const imuPart = (s: SceneSpec) => s.parts.find((p): p is Extract<PartSpec, { type: 'mpu6050' | 'qmi8658' }> => p.type === 'mpu6050' || p.type === 'qmi8658');

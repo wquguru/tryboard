@@ -7,6 +7,7 @@ import { partId, partInfo, usedPins } from "../wiring";
 import { faultByWire } from "../wirecheck";
 import { BOARD_NAME, CHIP_SHORT } from "../../chips";
 import { boardDevs } from "../../bench3d/boarddevs";
+import { isI2cMod } from "../../bench3d/spec";
 import { type Selection } from "../types";
 import { Bad, Mono, Muted, TnSt, TreeEmpty, TreeGroup, TreeNode } from "../../ui/panel";
 import { CustomPlacedCard } from "../customui";
@@ -76,7 +77,7 @@ export function mountTree(b: BenchCtx) {
         item(
           { kind: "part", id: partId(p) },
           partInfo(p).name,
-          p.type === "bme280" || p.type === "oled"
+          p.type === "bme280" || p.type === "oled" || isI2cMod(p)
             ? hex(p.addr)
             : "pin" in p
               ? `GPIO${p.pin}`

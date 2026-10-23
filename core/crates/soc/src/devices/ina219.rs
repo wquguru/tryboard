@@ -31,6 +31,8 @@ pub struct Ina219 {
     pub shunt_ohm: f64,
     /// Last converted raw values (shunt LSBs, bus LSBs), kept while the ADC is off
     shunt_raw: i16,
+    /// When the latched values were taken: registers of one conversion agree until the next one completes
+    sampled_at: Option<u64>,
     bus_raw: u16,
 }
 
@@ -50,6 +52,7 @@ impl Ina219 {
             current_a: 0.0,
             shunt_ohm: SHUNT_OHM,
             shunt_raw: 0,
+            sampled_at: None,
             bus_raw: 0,
         };
         d.start_conversion();
@@ -93,6 +96,7 @@ impl Ina219 {
 
     fn start_conversion(&mut self) {
         self.cnvr_at = self.adc_on().then(|| self.now + self.conv_time());
+        self.sampled_at = None;
     }
 
     /// Full-scale shunt LSBs for the PGA setting (±40 / 80 / 160 / 320 mV)
@@ -102,9 +106,13 @@ impl Ina219 {
 
     /// Refresh the latched values from the live inputs while the ADC runs
     fn sample(&mut self) {
-        if !self.adc_on() {
+        let fresh = self
+            .sampled_at
+            .is_some_and(|t| self.now < t + self.conv_time());
+        if !self.adc_on() || fresh {
             return;
         }
+        self.sampled_at = Some(self.now);
         let m = self.mode() & 3;
         if m != 2 {
             let lim = self.shunt_limit();
@@ -234,9 +242,9 @@ mod tests {
     #[test]
     fn readings_and_calibration() {
         let mut d = Ina219::new(0x40);
-        assert_eq!(rd16(&mut d, 0x00), CONFIG_RESET);
-        // 5.0 V bus, 120 mA through 0.1 ohm = 12 mV shunt
+        // 5.0 V bus, 120 mA through 0.1 ohm = 12 mV shunt (any read latches the first conversion)
         d.set_load(5.0, 0.120);
+        assert_eq!(rd16(&mut d, 0x00), CONFIG_RESET);
         assert_eq!(rd16(&mut d, 0x01) as i16, 1200);
         assert_eq!(rd16(&mut d, 0x02) >> 3, 1250);
         // Calibration 0 (power-on): current and power read 0
@@ -248,10 +256,24 @@ mod tests {
         assert_eq!(rd16(&mut d, 0x03), 300);
         // Reverse current reads negative; PGA /1 clips at 40 mV
         d.set_load(3.3, -0.05);
+        d.set_time(CPU_HZ);
         assert_eq!(rd16(&mut d, 0x01) as i16, -500);
         wr16(&mut d, 0x00, 0x019f);
         d.set_load(3.3, 1.0);
         assert_eq!(rd16(&mut d, 0x01) as i16, 4000);
+    }
+
+    #[test]
+    fn one_conversion_reads_consistently() {
+        let mut d = Ina219::new(0x40);
+        wr16(&mut d, 0x05, 4096);
+        d.set_load(5.0, 0.0272);
+        assert_eq!(rd16(&mut d, 0x01) as i16, 272);
+        // The load moves mid-burst: current still comes from the latched shunt until a new conversion
+        d.set_load(5.0, 0.0268);
+        assert_eq!(rd16(&mut d, 0x04) as i16, 272);
+        d.set_time(CPU_HZ);
+        assert_eq!(rd16(&mut d, 0x04) as i16, 268);
     }
 
     #[test]

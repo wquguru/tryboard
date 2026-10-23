@@ -1111,5 +1111,12 @@ const d: Dict = {
   "on": "オン",
   "off": "オフ",
   "Real 3D models": "実物の 3D モデル",
+  "Aosong AHT20 module (temperature / humidity)": "Aosong AHT20 モジュール（温度 / 湿度）",
+  "TI INA219 module (bus voltage / current, 0.1 Ω shunt): measures the board's USB 5 V rail": "TI INA219 モジュール（バス電圧 / 電流、0.1 Ω シャント）：ボードの USB 5 V レールを測定",
+  "DS3231 clock": "DS3231 時計",
+  "ZS-042 DS3231 RTC module (clock + temperature; the AT24C32 EEPROM is not modelled)": "ZS-042 DS3231 RTC モジュール（時計 + 温度。AT24C32 EEPROM はモデル化していません）",
+  "Temperature and humidity come from the environment sliders; a measurement takes 80 ms and the CRC is checked, like the real chip. Confidence: simulation verified; not calibrated on real hardware.": "温度と湿度は環境スライダーから取ります。測定は 80 ms かかり CRC もチェックされ、実チップと同じです。信頼度：シミュレーション検証済み。実機では未校正。",
+  "The clock starts at the firmware's time; registers 0x11 / 0x12 give the ambient temperature in 0.25 ℃ steps. Alarms work, the 32K / SQW outputs are not modelled. Confidence: simulation verified; not calibrated on real hardware.": "時計はファームウェアが書いた時刻から進みます。レジスタ 0x11 / 0x12 は周囲温度を 0.25 ℃ 刻みで返します。アラームは動作し、32K / SQW 出力はモデル化していません。信頼度：シミュレーション検証済み。実機では未校正。",
+  "Reads the board's USB 5 V rail and the current the electrical model estimates for the board and its parts (Vin+ / Vin- are not wired on the bench). Confidence: behaviour model; current is an estimate.": "ボードの USB 5 V レールと、電気モデルが見積もったボードと部品の電流を読みます（ベンチでは Vin+ / Vin- は未配線）。信頼度：挙動モデル。電流は推定値です。",
 };
 export default d;

@@ -49,6 +49,9 @@ const DEFS: Record<string, Omit<PlaceDef, 'partId' | 'name'>> = {
   pot: { type: 'pot', steps: [P('VCC', '3V3', t('Pin 1')), G('OUT', t('Pin 2 (wiper)')), GND(t('Pin 3'))] },
   bme280: { type: 'bme280', steps: I2C('VIN', 'VCC') },
   ssd1306: { type: 'oled', steps: I2C('VCC') },
+  aht20: { type: 'aht20', steps: I2C('VCC') },
+  ina219: { type: 'ina219', steps: I2C('VCC') },
+  ds3231: { type: 'ds3231', steps: I2C('VCC') },
   sh1106: { type: 'oled', steps: I2C('VCC'), ctl: 'sh1106' },
   ili9341: { type: 'tft', steps: TFT('ili9341'), panel: 'ili9341' },
   st7789: { type: 'tft', steps: TFT('st7789-240x240'), panel: 'st7789-240x240' },
@@ -146,6 +149,9 @@ export function buildPlaced(def: PlaceDef, got: Record<string, string>, ext5v = 
       break;
     case 'bme280':
     case 'qmi8658':
+    case 'aht20':
+    case 'ina219':
+    case 'ds3231':
       spec = { type: def.type, addr, sda: g('SDA')!, scl: g('SCL')! };
       break;
     case 'tft': {

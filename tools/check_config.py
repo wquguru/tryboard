@@ -39,6 +39,10 @@ def load():
     # The union may move between files during refactors: find it wherever it is declared
     union = next(m.group(1) for p in ts_files() if (m := re.search(r"export type PartSpec =(.*?);\n\n", p.read_text(), re.S)))
     cfg["part_types"] = set(re.findall(r"\{ type: '(\w+)'", union))
+    # Members typed by an alias (`type: I2cModType`) take that alias's literals
+    for alias in re.findall(r"\{ type: ([A-Z]\w+);", union):
+        src = next(m.group(1) for p in ts_files() if (m := re.search(rf"export type {alias} = ([^;]+);", p.read_text())))
+        cfg["part_types"] |= set(re.findall(r"'(\w+)'", src))
     # devices/ is moving from esp32c3 to soc (R-05): search every crate
     dev = "".join(p.read_text() for p in (ROOT / "core/crates").rglob("devices/mod.rs"))
     make = re.search(r"fn make_i2c.*?\n}\n", dev, re.S)

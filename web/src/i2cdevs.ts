@@ -9,7 +9,7 @@ export interface I2cDev {
   scl?: number;
 }
 
-const KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5, ft6236: 6, cst9220: 7, axp2101: 8, pcf85063: 9, es8311: 10, es7210: 11, sh1106: 12, aht20: 13 };
+const KIND: Record<string, number> = { ssd1306: 1, bme280: 2, mpu6050: 3, qmi8658: 4, cst816s: 5, ft6236: 6, cst9220: 7, axp2101: 8, pcf85063: 9, es8311: 10, es7210: 11, sh1106: 12, aht20: 13, ina219: 14, ds3231: 15 };
 const item = (d: I2cDev) => `${d.kind}@0x${d.addr.toString(16)}`;
 const pinned = (d: I2cDev): d is Required<I2cDev> => d.sda !== undefined && d.scl !== undefined;
 

@@ -1704,5 +1704,44 @@
    ]
   },
   "chip": "esp32c3"
+ },
+ {
+  "id": "c3-i2c-trio",
+  "title": "Three I2C breakouts on one bus: AHT20, INA219, DS3231 (ESP32-C3)",
+  "about": "An AHT20 temperature / humidity sensor (0x38), an INA219 current monitor (0x40) and a ZS-042 DS3231 clock (0x68) share one I2C bus on SDA GPIO6 / SCL GPIO7. The firmware scans the bus, checks each chip four times (AHT20 CRC, INA219 shunt and current registers agree, the DS3231 clock ticks and alarm 1 fires), then prints a live line every second. Drag the temperature slider: the AHT20 and the DS3231's own thermometer follow it. The INA219 reads the board's USB 5 V rail and the current the electrical model estimates.",
+  "tags": [
+   "✓ Verified in sim",
+   "AHT20",
+   "INA219",
+   "DS3231",
+   "I2C",
+   "ESP-IDF 5.5"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "aht20",
+     "addr": 56,
+     "sda": 6,
+     "scl": 7
+    },
+    {
+     "type": "ina219",
+     "addr": 64,
+     "sda": 6,
+     "scl": 7
+    },
+    {
+     "type": "ds3231",
+     "addr": 104,
+     "sda": 6,
+     "scl": 7
+    }
+   ]
+  },
+  "controls": [
+   "env"
+  ],
+  "chip": "esp32c3"
  }
 ]

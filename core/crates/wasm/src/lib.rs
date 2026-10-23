@@ -347,6 +347,8 @@ fn i2c_kind(kind: u32) -> Option<&'static str> {
         11 => "es7210",
         12 => "sh1106",
         13 => "aht20",
+        14 => "ina219",
+        15 => "ds3231",
         _ => return None,
     })
 }

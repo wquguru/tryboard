@@ -1,10 +1,10 @@
-// F-04a: procedural 3D models (real outline sizes in mm) of the tutorial parts: DS18B20, HC-SR501, relay, LDR, RC522, IR pair (F-08f).
+// F-04a: procedural 3D models (real outline sizes in mm) of the tutorial parts: DS18B20, HC-SR501, relay, LDR, RC522, IR pair (F-08f), AHT20 / INA219 / DS3231 (G-09).
 // Kept out of modules.ts (shared with the M5 work); build.ts wires them like the DHT11 module.
 import * as THREE from 'three';
 import { t } from '../i18n';
 import { PITCH, MAT, WIRE, canvasTexture, modulePcb, contactShadow, pinHits } from './util';
 import { apiId, BB } from './boards';
-import type { PartSpec } from './spec';
+import { isI2cMod, type PartSpec } from './spec';
 import type { BenchCtx } from './ctx';
 
 export interface FlatModule {
@@ -257,13 +257,55 @@ export function irLedModule(pin: number): FlatModule {
   return m;
 }
 
-export type TutorialPart = Extract<PartSpec, { type: 'ds18b20' | 'pir' | 'relay' | 'ldr' | 'rc522' | 'irrx' | 'irled' }>;
-const TUTORIAL = new Set<PartSpec['type']>(['ds18b20', 'pir', 'relay', 'ldr', 'rc522', 'irrx', 'irled']);
+/** Box on the PCB top: w along x, h up, d along z (module local, z = 0 at the board centre) */
+function onTop(m: FlatModule, w: number, h: number, d: number, x: number, z: number, mat: THREE.Material) {
+  const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  b.position.set(x, m.pcbTop + h / 2, z);
+  b.castShadow = true;
+  m.grp.add(b);
+  return b;
+}
+
+/** AHT20 breakout: 16 × 11 mm purple board, 3 × 3 mm DFN sensor, 4-pin header */
+export function aht20Module(): FlatModule {
+  const m = flatPcb(16, 11, '#5a2a8a', 0x45206b, ['VCC', 'GND', 'SCL', 'SDA'], (g, cw) => silk(g, 'AHT20', cw / 2, 8.6 * S, 1.3));
+  onTop(m, 3, 1, 3, 4.5, 2, new THREE.MeshStandardMaterial({ color: 0xd8d2c4, roughness: 0.5 }));
+  onTop(m, 2.9, 1.1, 1.6, -4.5, 2.4, MAT.chip);
+  return m;
+}
+
+/** INA219 breakout (CJMCU-219 class): 25.6 × 22.3 mm, SOT-23-8 INA219, R100 2512 shunt, 2-pin screw terminal for Vin+ / Vin- */
+export function ina219Module(): FlatModule {
+  const m = flatPcb(25.6, 22.3, '#1f55b0', 0x18458f, ['VCC', 'GND', 'SCL', 'SDA', 'VIN-', 'VIN+'], (g, cw) => silk(g, 'INA219', cw / 2 - 5 * S, 11 * S, 1.4));
+  onTop(m, 3, 1.1, 3, -6, 1.5, MAT.chip);
+  onTop(m, 6.3, 0.6, 3.2, 5, 1.5, new THREE.MeshStandardMaterial({ color: 0x232325, roughness: 0.35 }));
+  const term = onTop(m, 10, 10, 7.5, 0, 6.5, new THREE.MeshStandardMaterial({ color: 0x2f9b4b, roughness: 0.5 }));
+  const screws = new THREE.InstancedMesh(new THREE.CylinderGeometry(1.4, 1.4, 0.6, 12), MAT.steel, 2);
+  const mx = new THREE.Matrix4();
+  for (let i = 0; i < 2; i++) screws.setMatrixAt(i, mx.makeTranslation((i - 0.5) * 5, term.position.y + 5.3, 6.5));
+  m.grp.add(screws);
+  return m;
+}
+
+/** ZS-042 DS3231 board: 22 × 38 mm, SOIC-16 DS3231SN and SOIC-8 AT24C32 on top (CR2032 holder underneath, not drawn), 6-pin header */
+export function ds3231Module(): FlatModule {
+  const m = flatPcb(22, 38, '#1f55b0', 0x18458f, ['32K', 'SQW', 'SCL', 'SDA', 'VCC', 'GND'], (g, cw) => {
+    silk(g, 'DS3231', cw / 2, 23 * S, 1.5);
+    silk(g, 'ZS-042', cw / 2, 34 * S, 1.2);
+  });
+  onTop(m, 7.5, 2.5, 10.3, -3, -4, MAT.chip);
+  onTop(m, 4, 1.5, 5, 6, -5, MAT.chip);
+  onTop(m, 1.6, 0.8, 0.8, 7, 9, new THREE.MeshStandardMaterial({ color: 0xff3030, emissive: 0xff2020, emissiveIntensity: 1.2 }));
+  return m;
+}
+
+export type TutorialPart = Extract<PartSpec, { type: 'ds18b20' | 'pir' | 'relay' | 'ldr' | 'rc522' | 'irrx' | 'irled' | 'aht20' | 'ina219' | 'ds3231' }>;
+const TUTORIAL = new Set<PartSpec['type']>(['ds18b20', 'pir', 'relay', 'ldr', 'rc522', 'irrx', 'irled', 'aht20', 'ina219', 'ds3231']);
 export const isTutorialPart = (p: PartSpec): p is TutorialPart => TUTORIAL.has(p.type);
 
 /** Desk slot per type (fixed x, distance out from the breadboard on the signal pin's side), so all of them fit side by side.
  *  The IR LED sits 26 mm on the receiver's lens side (local -x), so it swaps sides when the modules are turned round */
-const SLOT: Record<TutorialPart['type'], { dx: number; out: number }> = { ds18b20: { dx: -25, out: 17 }, pir: { dx: 10, out: 22 }, relay: { dx: -58, out: 34 }, ldr: { dx: 45, out: 24 }, rc522: { dx: 52, out: 76 }, irrx: { dx: 92, out: 16 }, irled: { dx: 66, out: 16 } };
+const SLOT: Record<TutorialPart['type'], { dx: number; out: number }> = { ds18b20: { dx: -25, out: 17 }, pir: { dx: 10, out: 22 }, relay: { dx: -58, out: 34 }, ldr: { dx: 45, out: 24 }, rc522: { dx: 52, out: 76 }, irrx: { dx: 92, out: 16 }, irled: { dx: 66, out: 16 }, aht20: { dx: -30, out: 56 }, ina219: { dx: -6, out: 56 }, ds3231: { dx: 22, out: 60 } };
 
 /** Module on the desk + Dupont wires to the board (same routing as the DHT11 builder) */
 export function buildTutorialPart(ctx: BenchCtx, grp: THREE.Group, p: TutorialPart) {
@@ -276,7 +318,7 @@ export function buildTutorialPart(ctx: BenchCtx, grp: THREE.Group, p: TutorialPa
   let m: FlatModule;
   let ends: End[];
   let text: string;
-  const sigPin = p.type === 'rc522' ? p.cs : p.pin;
+  const sigPin = p.type === 'rc522' ? p.cs : isI2cMod(p) ? p.sda : p.pin;
   switch (p.type) {
     case 'ds18b20':
       m = ds18b20Probe();
@@ -321,6 +363,21 @@ export function buildTutorialPart(ctx: BenchCtx, grp: THREE.Group, p: TutorialPa
       ends = [[io(p.pin), WIRE.sig, 'S', t('IR LED drive')], ['GND', WIRE.gnd, 'GND', t('{name} GND', { name: t('IR LED') })]];
       text = t('IR LED · S IO{pin} · faces the receiver', { pin: p.pin });
       break;
+    case 'aht20':
+    case 'ina219':
+    case 'ds3231': {
+      const name = p.type.toUpperCase();
+      m = p.type === 'aht20' ? aht20Module() : p.type === 'ina219' ? ina219Module() : ds3231Module();
+      const vcc = m.labels.includes('VIN') ? 'VIN' : 'VCC';
+      ends = [
+        ['3V3', WIRE.vcc, vcc, t('{name} power', { name })],
+        ['GND', WIRE.gnd, 'GND', t('{name} GND', { name })],
+        [io(p.scl), WIRE.scl, 'SCL', 'I2C SCL'],
+        [io(p.sda), WIRE.sda, 'SDA', 'I2C SDA'],
+      ];
+      text = `${name} · I2C 0x${p.addr.toString(16)} · SDA IO${p.sda} SCL IO${p.scl}`;
+      break;
+    }
   }
   const sig = sigPin !== undefined ? pinCands('IO' + sigPin)[0]?.p : undefined;
   const slot = SLOT[p.type];

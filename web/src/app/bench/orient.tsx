@@ -14,6 +14,9 @@ import { isTutorialPart } from "../../bench3d/parts3d";
 import { tutorialControls } from "./tutorial";
 import { ScenHint } from "./scenhint";
 
+/** Parts whose card is just the ambient-temperature slider: one is enough, none when the example shows the env sliders */
+const ENV_PART = new Set(["ds18b20", "aht20", "ds3231"]);
+
 export function mountOrientation(b: BenchCtx) {
   const POSE_AXES: ["pitch" | "roll" | "yaw", string, number][] = [
     ["pitch", t("Pitch"), 90],
@@ -153,7 +156,7 @@ export function mountOrientation(b: BenchCtx) {
             )}
           </div>
         )}
-        {c.session.scene.parts.filter(isTutorialPart).filter((p) => !(p.type === "ds18b20" && ctl.includes("env"))).map((p, i) => (
+        {c.session.scene.parts.filter(isTutorialPart).filter((p, i, all) => !(ENV_PART.has(p.type) && (ctl.includes("env") || all.findIndex((q) => ENV_PART.has(q.type)) < i))).map((p, i) => (
           <div key={`tut${i}`} data-tutorial={p.type}>
             <Sec>{partInfo(p).name}</Sec>
             {tutorialControls(b, p)}

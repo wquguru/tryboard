@@ -275,7 +275,7 @@
 | G-06 | M5Dial 编码器：3D 转环可拖 / 滚轮转（复用台灯编码器交互），屏幕仍是触摸面；板预设带编码器时网页也按 1 ms 分片（现 `simrun.ts:256` 只看 `j.encoder`）；Core2 A/B/C 触摸区接上 | 快转 20 格网页与 CLI `--board m5dial --inputs` 指纹一致；m5board.mjs 加 Dial 转动 / Core2 ABC 用例；agent-browser 桌面 + 390 | ☐ |
 | G-07 | 实测：480×480 AMOLED（s3-ai-dash / s3-co5300）网页实时倍率与卡顿点，给出 AMOLED 时钟作品可行 / 需先优化的结论 | 数字写进 DECISIONS（倍率、帧间隔、对比 GC9A01 240×240）；不改产品代码 | ☐ |
 | G-08 | 选型可信度核对：只有 CLI 能跑、网页无模型的零件不得标「仿真 / 行为模拟」；板预设里推断的项（Dial 编码器 A/B 顺序、Cardputer 键位）在结论里标「需真机确认」；加一条自动校验 | `cd web && npm test` 新断言；故意把一个仅 CLI 零件标仿真能报出；agent-browser 选含 INA219 的模板截图 | ☐（在 G-09 / G-10 之后） |
-| G-09 | INA219 + DS3231 接进网页：wasm I2C KIND、元件库 + 3D + 手机、输入日志；示例 c3-i2c-trio 网页可跑 | parts.mjs 网页 / CLI 指纹一致；agent-browser | ☐ |
+| G-09 | INA219 + DS3231 接进网页：wasm I2C KIND、元件库 + 3D + 手机、输入日志；示例 c3-i2c-trio 网页可跑 | parts.mjs 网页 / CLI 指纹一致；agent-browser | ☑（2026-10-22，Reviews/ab/G-09.md） |
 | G-10 | CYD（esp32-cyd，`--board cyd`）+ XPT2046 触摸接进网页：换板可选 CYD、屏实时画面、点屏 = `touch=`；示例 esp32-cyd / esp32-cyd-touch 上架 | 新 webtest 或 m5board.mjs 扩展：网页 / CLI 指纹一致、触摸重放一致；agent-browser 桌面 + 390 | ☐ |
 | G-11 | 蓝牙未识别提示：`tb_ble_state() == 2`（用了 BLE 但签名没认出，如 Arduino 3.0.x / 旧 IDF）时网页明确提示原因与可用版本，不静默 | 用一个签名不命中的固件（或单测构造）走网页；agent-browser 截图；四语文案 | ☐ |
 | G-12 | 查 M5-13 遗留：M5Unified PDM 麦克风样本成对颠倒；定位是模型（`core/crates/esp32/src/i2s.rs` encode_rx）还是草图配置，修好且 esp32-pdm-mic 不回退 | golden 全一致或差异有解释；新增 M5 PDM 用例 | ☐ |

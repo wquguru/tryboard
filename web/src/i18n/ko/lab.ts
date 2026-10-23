@@ -1111,5 +1111,12 @@ const d: Dict = {
   "on": "켜짐",
   "off": "꺼짐",
   "Real 3D models": "실제 3D 모델",
+  "Aosong AHT20 module (temperature / humidity)": "Aosong AHT20 모듈 (온도 / 습도)",
+  "TI INA219 module (bus voltage / current, 0.1 Ω shunt): measures the board's USB 5 V rail": "TI INA219 모듈 (버스 전압 / 전류, 0.1 Ω 션트): 보드의 USB 5 V 레일을 측정",
+  "DS3231 clock": "DS3231 시계",
+  "ZS-042 DS3231 RTC module (clock + temperature; the AT24C32 EEPROM is not modelled)": "ZS-042 DS3231 RTC 모듈 (시계 + 온도, AT24C32 EEPROM은 모델링하지 않음)",
+  "Temperature and humidity come from the environment sliders; a measurement takes 80 ms and the CRC is checked, like the real chip. Confidence: simulation verified; not calibrated on real hardware.": "온도와 습도는 환경 슬라이더에서 가져옵니다. 측정에 80 ms가 걸리고 CRC를 검사하며 실제 칩과 같습니다. 신뢰도: 시뮬레이션 검증, 실기기 미보정.",
+  "The clock starts at the firmware's time; registers 0x11 / 0x12 give the ambient temperature in 0.25 ℃ steps. Alarms work, the 32K / SQW outputs are not modelled. Confidence: simulation verified; not calibrated on real hardware.": "시계는 펌웨어가 쓴 시각부터 흐릅니다. 레지스터 0x11 / 0x12는 주변 온도를 0.25 ℃ 단위로 줍니다. 알람은 동작하고 32K / SQW 출력은 모델링하지 않았습니다. 신뢰도: 시뮬레이션 검증, 실기기 미보정.",
+  "Reads the board's USB 5 V rail and the current the electrical model estimates for the board and its parts (Vin+ / Vin- are not wired on the bench). Confidence: behaviour model; current is an estimate.": "보드의 USB 5 V 레일과 전기 모델이 추정한 보드와 부품 전류를 읽습니다 (벤치에서 Vin+ / Vin-는 배선하지 않음). 신뢰도: 동작 모델, 전류는 추정값입니다.",
 };
 export default d;
