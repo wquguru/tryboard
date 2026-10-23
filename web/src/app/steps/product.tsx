@@ -11,6 +11,7 @@ import { type Template } from '../../views/templates';
 import { workTemplate } from '../../views/worktpl';
 import { doorActs, doorButtons, doorLive, doorOnReader, doorRows, doorSerial, doorTap, doorTool } from './door';
 import { cloudActs, cloudButtons, cloudLive, cloudRows, cloudSend, cloudSerial, cloudTool } from './cloud';
+import { amoclockActs, amoclockButtons, amoclockLive, amoclockRows, amoclockSerial, amoclockTool, amoSync } from './amoclock';
 import { dialHandlers, dialProduct3D, dialtimerActs, dialtimerButtons, dialtimerLive, dialtimerRows, dialtimerSerial, dialtimerTool } from './dialtimer';
 import type { Dial3D } from '../dial3d';
 import { irlampActs, irlampButtons, irlampLive, irlampRows, irlampPress, irlampSend, irlampSerial, irlampTool } from './irlamp';
@@ -232,6 +233,8 @@ function remainingLines(work: string): BuyLine[] {
 
 /** These projects' products live in works3d.ts (P2-09) */
 const WORK3D = new Set(['lamp', 'ruler', 'tilt', 'door', 'irlamp', 'cloud']);
+/** Product-only 2D views (worktpl.ts PRODUCT_ONLY) until their 3D lands */
+const PRODUCT_2D = new Set(['amoclock']);
 const COLOR_LABEL: Record<string, string> = { warm: t('Warm white'), red: t('Red'), green: t('Green'), blue: t('Blue'), purple: t('Purple'), white: t('White') };
 
 /** Expression names printed on the lens firmware's serial */
@@ -257,6 +260,8 @@ const WORK_ACTS: Record<string, () => Tool[]> = {
   door: doorActs,
   irlamp: irlampActs,
   cloud: cloudActs,
+  amoclock: amoclockActs,
+
   dialtimer: dialtimerActs,
   tilt: () => [{ id: 'p-tilt-r', label: t('Lower the right side'), icon: 'tilt' }, { id: 'p-tilt-l', label: t('Lower the front left'), icon: 'tilt' }, { id: 'p-level', label: t('Make level'), icon: 'minus' }],
   usbkey: () => KEYPAD_PINS.map((pin, i) => ({ id: `p-key-${pin}`, label: `K${i + 1} · ${KEYPAD_CAPS[i]}`, icon: 'key' })),
@@ -268,6 +273,8 @@ const HOOKS: Record<string, { serial: typeof doorSerial; rows: typeof doorRows; 
   door: { serial: doorSerial, rows: doorRows, buttons: doorButtons, live: doorLive, tool: doorTool },
   irlamp: { serial: irlampSerial, rows: irlampRows, buttons: irlampButtons, live: irlampLive, tool: irlampTool },
   cloud: { serial: cloudSerial, rows: cloudRows, buttons: cloudButtons, live: cloudLive, tool: cloudTool },
+  amoclock: { serial: amoclockSerial, rows: amoclockRows, buttons: amoclockButtons, live: amoclockLive, tool: amoclockTool },
+
   dialtimer: { serial: dialtimerSerial, rows: dialtimerRows, buttons: dialtimerButtons, live: dialtimerLive, tool: dialtimerTool },
 };
 
@@ -881,7 +888,7 @@ export function productStep(): StepImpl {
     else if (id === 'p-photo') void photo();
     else if (id === 'p-rec') record();
     else if (id === 'p-rerun') c.session.reboot();
-    else if (/^p-(card|ir|cloud|dial)-/.test(id)) HOOKS[c.work.id]?.tool(id, c.session);
+    else if (/^p-(card|ir|cloud|dial|amo)-/.test(id)) HOOKS[c.work.id]?.tool(id, c.session);
     else if (id === 'p-level') {
       if (WORK3D.has(c.work.id)) tiltTo({ pitch: 0, roll: 0, yaw: 0 });
       else c.session.setPose({ pitch: 0, roll: 0, yaw: 0 });
@@ -985,7 +992,7 @@ export function productStep(): StepImpl {
         typed: () => c.session.usb?.typed ?? '',
         usbState: () => c.session.usb?.state ?? '',
       };
-    } else if (webglOk() && c.work.id !== 'cloud') {
+    } else if (webglOk() && !PRODUCT_2D.has(c.work.id)) {
       const w = c.work.id as 'spin' | 'lens';
       lcd3d = createLcd3D(node, {
         kind: w,
@@ -1008,7 +1015,7 @@ export function productStep(): StepImpl {
       const box = document.createElement('div');
       box.className = 'prod-svg';
       node.appendChild(box);
-      const h = { boot: (d: boolean) => pressBoot(d), temp: () => {}, ir: (code: string) => irlampSend(c.session, code), mqtt: (cmd: string) => void c.session.sim?.mqttPub(cmd), ...dialHandlers(c.session) };
+      const h = { boot: (d: boolean) => pressBoot(d), temp: () => {}, ir: (code: string) => irlampSend(c.session, code), mqtt: (cmd: string) => void c.session.sim?.mqttPub(cmd), ...dialHandlers(c.session), pwrkey: c.session.pwrKey, sync: () => amoSync(c.session) };
       svgProduct = c.work.id === 'spin' ? createSpinProduct(box, h, { servoPin: 4 }) : c.work.id === 'lens' ? createLensProduct(box, h) : workTemplate(c.work.id)!.product(box, h, { servoPin: 4 });
       const note = document.createElement('div');
       note.className = 'p3-disclaimer';

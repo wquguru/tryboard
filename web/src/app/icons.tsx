@@ -29,6 +29,7 @@ const P: Record<string, string> = {
   bolt: 'M13 2 4 14h7l-1 8 9-12h-7z',
   power: 'M12 3v8M7.1 6.3a7 7 0 1 0 9.8 0',
   left: 'M15 18l-6-6 6-6',
+  right: 'M9 18l6-6-6-6',
   cursor: 'M5 3l14 7-6 2-2 6z',
   meter: 'M6 3h12v18H6zM9 7h6v4H9zM10 16h.01M14 16h.01',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',

@@ -448,7 +448,7 @@ report('firmware drawer: Esc closes it', await waitFor(page, () => !document.que
 }
 
 // ---- Every product (preview ?work=X#product): fullscreen, no h-scroll, every key ≥ 44px and tappable, action key raises no error
-const WORKS = { weather: 'p-boot', spin: 'p-boot', lens: 'p-boot', usbkey: 'p-key-4', lamp: 'p-knob-r', ruler: 'p-near', tilt: 'p-tilt-r', imu: 'p-level', door: 'p-card-ok', irlamp: 'p-ir-power', cloud: 'p-cloud-2', dialtimer: 'p-dial-start' };
+const WORKS = { weather: 'p-boot', spin: 'p-boot', lens: 'p-boot', usbkey: 'p-key-4', lamp: 'p-knob-r', ruler: 'p-near', tilt: 'p-tilt-r', imu: 'p-level', door: 'p-card-ok', irlamp: 'p-ir-power', cloud: 'p-cloud-2', dialtimer: 'p-dial-start', amoclock: 'p-amo-left' };
 for (const [w, key] of Object.entries(WORKS)) {
   await page.goto(`${base}/app?work=${w}#product`, { waitUntil: 'load' });
   const up = await waitFor(page, (k) => globalThis.__tbApp?.store.get().step === 'product' && !!document.querySelector(`#toolbar [data-tool="${k}"]`), key, 30000);
@@ -458,7 +458,11 @@ for (const [w, key] of Object.entries(WORKS)) {
   }
   await sleep(1500);
   await stepCheck(`Product ${w}`);
-  report(`Product ${w}: 3D fullscreen`, (await full()) === 'ok', await full());
+  // G-17b amoclock has no 3D yet (G-17c); its flat view must span the phone width instead
+  if (w === 'amoclock') {
+    const [sw, vw] = await page.evaluate(() => [document.querySelector('#mProduct .prod-svg svg')?.getBoundingClientRect().width ?? 0, innerWidth]);
+    report(`Product ${w}: 2D view spans the width`, sw >= vw - 40, `${sw}/${vw}px`);
+  } else report(`Product ${w}: 3D fullscreen`, (await full()) === 'ok', await full());
   // Boot-time toasts (spin: brownout) can sit over the grid until U-26 moves them; wait for them like a user would
   await waitFor(page, () => document.querySelector('#toast')?.hidden !== false, null, 8000);
   const tools = await page.$$eval('#toolbar [data-tool]', (b) => b.map((x) => x.dataset.tool));
@@ -470,6 +474,8 @@ for (const [w, key] of Object.entries(WORKS)) {
   report(`Product ${w}: all ${tools.length} keys ≥ 44px and tappable`, tools.length >= 3 && bad.length === 0, bad.join(' '));
   await page.click(`#toolbar [data-tool="${key}"]`);
   await sleep(800);
+  // G-17b: the swipe key goes through touch= / release and the firmware turns the page
+  if (w === 'amoclock') report('Product amoclock: swipe key turns to page 2/3', await waitFor(page, () => globalThis.__tbAmoclock?.page === 2, null, 15000), JSON.stringify(await page.evaluate(() => globalThis.__tbAmoclock)));
   await page.screenshot({ path: path.join(outDir, `mobile-product-${w}.png`) });
 }
 

@@ -822,7 +822,6 @@ const d: Dict = {
   "Switching reloads page": "换作品会重新加载",
   "Tap or drag right on the 3D screen.": "直接在 3D 屏幕上点或拖。",
   "Tap the screen to press, drag to move, release to lift; the chip detects gestures itself: tap, swipe, 1 s long press. Auto-sleep and scan noise of the real chip are not modeled; confirm on real hardware.": "点屏幕就是按下，拖动就是移动，松开就是抬起；芯片自己判手势：单击、滑动、长按 1 秒。真机的自动睡眠、扫描噪声没模拟，必须上真机确认。",
-  "Temperature": "温度",
   "Temperature / humidity / pressure, I2C 0x76. Where it is mounted decides whether it reads room temperature.": "温度 / 湿度 / 气压，I2C 0x76。装在哪决定它读到的是不是室温。",
   "The \"2.5 ℃ high next to the chip\" is an estimate; measure it with a thermometer": "「贴着芯片偏高 2.5 ℃」是估算，要拿温度计实测",
   "The \"I2C scan\" serial line should list 0x3C and 0x76. BME280 with SDO pulled high is 0x77; the chip ID should be 0x60, 0x58 means BMP280 (no humidity).": "串口「I2C scan」一行应有 0x3C 和 0x76。BME280 的 SDO 接高是 0x77；芯片 ID 应为 0x60，0x58 是 BMP280（没有湿度）。",
@@ -1178,5 +1177,15 @@ const d: Dict = {
   "On the vent side: room air flows past the AHT20 and the published t is the room": "放通风口一侧：房间空气流过 AHT20，发布的 t 就是室温",
   "Against the board: the LDO and Wi-Fi bursts warm it, every published t is about {n} ℃ high, same in the retest (estimate)": "贴着板子：稳压器和 Wi-Fi 发射把它烘热，每条发布的 t 都偏高约 {n} ℃，复测也一样（估算）",
   "C3 with Wi-Fi on averages about 80 mA and peaks near 350 mA while transmitting; a 5 V 1 A charger is plenty (estimate)": "C3 开 Wi-Fi 平均约 80 mA，发射时峰值近 350 mA；5 V 1 A 充电器绰绰有余（估算）",
+  "AMOLED clock": "AMOLED 时钟",
+  "Advertising TryBoard-Clock": "正在广播 TryBoard-Clock",
+  "Clock face": "表盘",
+  "Off (brightness 0x51 = 0)": "熄灭（亮度 0x51 = 0）",
+  "On · page {n}/3 · {name}": "亮 · 第 {n}/3 页 · {name}",
+  "PWR key": "PWR 键",
+  "Phone (BLE)": "手机（BLE）",
+  "Swipe left": "向左滑",
+  "Swipe right": "向右滑",
+  "Time set {time}": "已对时 {time}",
 };
 export default d;

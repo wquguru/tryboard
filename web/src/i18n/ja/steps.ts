@@ -822,7 +822,6 @@ const d: Dict = {
   "Switching reloads page": "切替で再読込",
   "Tap or drag right on the 3D screen.": "3D の画面を直接タップまたはドラッグしてください。",
   "Tap the screen to press, drag to move, release to lift; the chip detects gestures itself: tap, swipe, 1 s long press. Auto-sleep and scan noise of the real chip are not modeled; confirm on real hardware.": "画面をタップすると押下、ドラッグで移動、離すと解除です。ジェスチャー（タップ、スワイプ、1 秒長押し）はチップ自身が判定します。実機の自動スリープとスキャンノイズはモデル化していないため、実機で確認が必要です。",
-  "Temperature": "温度",
   "Temperature / humidity / pressure, I2C 0x76. Where it is mounted decides whether it reads room temperature.": "温度 / 湿度 / 気圧、I2C 0x76。取り付け位置で室温を読めるかどうかが決まります。",
   "The \"2.5 ℃ high next to the chip\" is an estimate; measure it with a thermometer": "「チップに密着すると 2.5 ℃ 高い」は推定です。温度計で実測してください",
   "The \"I2C scan\" serial line should list 0x3C and 0x76. BME280 with SDO pulled high is 0x77; the chip ID should be 0x60, 0x58 means BMP280 (no humidity).": "シリアルの「I2C scan」行に 0x3C と 0x76 があるはずです。BME280 の SDO を High にすると 0x77 です。チップ ID は 0x60 のはずで、0x58 なら BMP280（湿度なし）です。",
@@ -1178,5 +1177,15 @@ const d: Dict = {
   "On the vent side: room air flows past the AHT20 and the published t is the room": "通気口側：部屋の空気が AHT20 を通り、発行される t は室温",
   "Against the board: the LDO and Wi-Fi bursts warm it, every published t is about {n} ℃ high, same in the retest (estimate)": "ボードに密着：LDO と Wi-Fi 送信の熱で温まり、発行される t はどれも約 {n} ℃ 高い、再テストでも同じ（推定）",
   "C3 with Wi-Fi on averages about 80 mA and peaks near 350 mA while transmitting; a 5 V 1 A charger is plenty (estimate)": "Wi-Fi を使う C3 は平均約 80 mA、送信時のピークは 350 mA 近く；5 V 1 A の充電器で十分（推定）",
+  "AMOLED clock": "AMOLED 時計",
+  "Advertising TryBoard-Clock": "TryBoard-Clock をアドバタイズ中",
+  "Clock face": "文字盤",
+  "Off (brightness 0x51 = 0)": "オフ（輝度 0x51 = 0）",
+  "On · page {n}/3 · {name}": "オン · {n}/3 ページ · {name}",
+  "PWR key": "PWR キー",
+  "Phone (BLE)": "スマホ（BLE）",
+  "Swipe left": "左へスワイプ",
+  "Swipe right": "右へスワイプ",
+  "Time set {time}": "時刻合わせ済み {time}",
 };
 export default d;

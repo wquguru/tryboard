@@ -9,6 +9,8 @@ import { workTemplate } from '../views/worktpl';
 import { DOOR_CARDS, doorNow, parseDoorLine } from '../views/doorproduct';
 import { IRLAMP_CMD, irlampNow, parseIrlampLine } from '../views/irlampproduct';
 import { irCode } from '../app/irfeed';
+import { amoclockNow, parseAmoclockLine, swipePath } from '../views/amoclockproduct';
+import { BOARD_DEVS } from '../bench3d/boarddevs';
 import { cloudCmd, cloudIdle, cloudNow, parseCloudLine } from '../views/cloudproduct';
 import { DIAL_BTN, dialtimerNow, parseDialtimerLine } from '../views/dialtimerproduct';
 import { emptyFrame, type LiveFrame } from '../views/common';
@@ -19,7 +21,7 @@ let cloudAsk = -9;
 
 // P2-09 cards: the illustration is the product 2D view fed one demo frame; plus the live device config and demo inputs by sim time.
 // fw: published firmware id when it isn't the work id; line: each serial line (door state for the lock picture); seed: illustration state.
-type LiveCfg = Pick<LiveOptions, 'i2c' | 'lcd' | 'encoder' | 'sonar' | 'parts' | 'board'>;
+type LiveCfg = Pick<LiveOptions, 'i2c' | 'lcd' | 'encoder' | 'sonar' | 'parts' | 'board' | 'touchInt' | 'battery'>;
 type Extra = { live: LiveCfg; demo: Partial<LiveFrame>; script?: (sim: LiveSim, t: number) => void; fw?: string; chip?: string; line?: (l: string) => void; seed?: () => void };
 const EXTRA: Record<string, Extra> = {
   lamp: {
@@ -100,6 +102,21 @@ const EXTRA: Record<string, Extra> = {
   },
 };
 
+const AMO = BOARD_DEVS['ws-amoled216'];
+EXTRA.amoclock = {
+  live: { i2c: AMO.i2c, lcd: AMO.lcd, touchInt: AMO.touchInt, battery: AMO.battery },
+  demo: {},
+  // Demo: every 8 s swipe left at 2 s and 4 s (temperature, battery), right at 6 s and 8 s; one swipe point per 0.1 s tick
+  script: (sim, t) => {
+    const p = t % 8;
+    const k = Math.round((p % 2) * 10);
+    const dir = p < 2 || p >= 6 ? 'right' : 'left';
+    if (t > 1.5 && k < 5) sim.touch(swipePath(dir)[k], 240, true);
+    else if (t > 1.5 && k === 6) sim.touch(swipePath(dir)[4], 240, false);
+  },
+  line: (l) => parseAmoclockLine(l, amoclockNow),
+};
+
 const SERVO = 4;
 const ENV = { temp: 23.5, humidity: 45, pressure: 101325 };
 const FW: Record<ShowKind, { lcd: boolean; i2c: { kind: string; addr: number }[] }> = {
@@ -120,7 +137,7 @@ export function showcase(el: HTMLElement, kind: string) {
 /** Run real firmware in the card preview; the last serial line goes straight to the status line (high rate, no React state). Returns stop. */
 export function startLive(kind: string, card: HTMLElement, prev: HTMLElement, status: HTMLElement, onFail: () => void) {
   let sim: LiveSim | null = null;
-  const h = { boot: (d: boolean) => sim?.press(d), temp: (d: number) => sim && sim.setTemp(sim.env.temp + d), ir: (code: string) => sim?.partInput({ kind: 'ir', code }), mqtt: (cmd: string) => sim?.mqttPub(cmd), boardBtn: (pin: number, d: boolean) => sim?.pressBoardPin(pin, d), enc: (n: number) => sim?.turnEncoder(n), touch: (x: number, y: number, d: boolean) => sim?.touch(x, y, d) };
+  const h = { boot: (d: boolean) => sim?.press(d), temp: (d: number) => sim && sim.setTemp(sim.env.temp + d), ir: (code: string) => sim?.partInput({ kind: 'ir', code }), mqtt: (cmd: string) => sim?.mqttPub(cmd), boardBtn: (pin: number, d: boolean) => sim?.pressBoardPin(pin, d), enc: (n: number) => sim?.turnEncoder(n), touch: (x: number, y: number, d: boolean) => sim?.touch(x, y, d), pwrkey: (l: boolean) => sim?.pwrkey(l) };
   const x = EXTRA[kind];
   const lcdView = x ? workTemplate(kind)!.product(prev, h, { servoPin: SERVO }) : kind === 'spin' ? createSpinProduct(prev, h, { servoPin: SERVO }) : kind === 'lens' ? createLensProduct(prev, h) : null;
   const wView = kind === 'weather' ? createProductView(prev, h, { servoPin: SERVO }) : null;

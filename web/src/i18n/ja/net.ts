@@ -69,7 +69,6 @@ const d: Dict = {
   "Enter the home Wi-Fi and submit": "自宅の Wi-Fi を入力して送信",
   "Provisioning steps": "ネットワーク設定の手順",
   "The chip has not sent any DNS / HTTP request yet.": "チップはまだ DNS / HTTP リクエストを送っていません。",
-  "Time": "時刻",
   "Method": "メソッド",
   "Destination": "宛先",
   "Address": "アドレス",

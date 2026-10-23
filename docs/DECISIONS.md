@@ -1748,6 +1748,12 @@
 - 手机作品菜单：菜单原本渲染在顶栏里，顶栏 `fixed z-20` 自成层叠上下文，菜单的 z-30 压不过底部面板 / 工具栏（z-24…27）；作品增加后菜单变长，下半部分（空白实验台等）落在面板之下点不到。改为手机端像 FwMenu 一样 portal 到 body（遮罩 z-40、菜单 z-50），高度放到 `100dvh-3.5rem` 并保持可滚动；`usePop` 加 `panelRef`，portal 出去的面板仍算"内部点击"。
 - 备选：抬高顶栏 z-index——否：会盖住 z-30/40 的其它弹层；只缩短 max-h——否：底部面板高度可变，仍会被盖。
 
+## 2026-10-23 AMOLED 时钟网页流程（G-17b）
+- 产品页先做 2D（`views/amoclockproduct.ts`，走 worktpl `PRODUCT_ONLY`，同 cloud）：480×480 帧画在屏上，屏幕指针拖动映射成 `touch=` / `release`，侧边 PWR = `pwrkey=short`；3D 成品与支架等 G-17c。采购只放成品板 + 线：件库没有支架件，按 G-17a 的决定留到 G-17c。
+- 手机对时：产品页按钮依次发 `ble=scan`，等看到 `TryBoard-Clock` 再 `ble=connect`，连上且 GATT 读完后 `ble=write ff11 <4 字节小端>`，全部进输入日志，可 `--inputs` 重放。固件用 `gmtime` 无时区，所以手机发的是本地时间当 epoch（`Date.now()/1000 - tzOffset*60`）。
+- 为复用通用接口：`ProductHandlers` 加可选 `touch` / `pwrkey` / `sync`；首页卡片 `LiveCfg` 增加 `touchInt` / `battery`（从 `BOARD_DEVS['ws-amoled216']` 取）。逻辑放在 `steps/amoclock.tsx`，productStep 只加单行钩子（lint_size 不增长）。
+- 备选：直接做 3D 产品页——否：支架 / 外壳在 G-17c 才定，先 2D 保证流程可走通；手机按钮一次只写 FF11——否：未连接时写不进去，按真实手机流程扫描 → 连接 → 写。
+
 ## 2026-10-23 Dial 计时器网页流程（G-16b）
 - 采购 / 台面不改代码：采购模板 `dialtimer` 只列 m5-dial + 数据线，`ALWAYS` 面包板 / 杜邦线没有被加进来（agent-browser 实测只出这两件）；台面直接从示例 scene 加载 m5dial 预设（屏、触摸、旋钮、G3 板载蜂鸣器）。
 - 产品页：还没有装法模板（G-16c 才加支架），照 cloud 的做法在 `views/worktpl.ts` 的 `PRODUCT_ONLY` 里给 dialtimer 一个只有成品视图的模板；G-16c 加进 TEMPLATES 后这条 fallback 不再生效。因此产品页仍显示通用的"参考成品"横幅（与 cloud 相同），等 G-16c 有装法后自然成立。合入 G-05c 后 cloud 已进 TEMPLATES，`PRODUCT_ONLY` 只剩 dialtimer。

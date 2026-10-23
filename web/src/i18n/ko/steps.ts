@@ -822,7 +822,6 @@ const d: Dict = {
   "Switching reloads page": "전환 시 새로고침",
   "Tap or drag right on the 3D screen.": "3D 화면을 직접 탭하거나 드래그하세요.",
   "Tap the screen to press, drag to move, release to lift; the chip detects gestures itself: tap, swipe, 1 s long press. Auto-sleep and scan noise of the real chip are not modeled; confirm on real hardware.": "화면을 탭하면 누름, 끌면 이동, 놓으면 떼기입니다. 제스처(탭, 스와이프, 1초 길게 누르기)는 칩이 직접 판정합니다. 실기의 자동 절전과 스캔 노이즈는 모델링하지 않았으므로 실기에서 확인해야 합니다.",
-  "Temperature": "온도",
   "Temperature / humidity / pressure, I2C 0x76. Where it is mounted decides whether it reads room temperature.": "온도 / 습도 / 기압, I2C 0x76. 어디에 다느냐에 따라 실온을 읽는지가 결정됩니다.",
   "The \"2.5 ℃ high next to the chip\" is an estimate; measure it with a thermometer": "\"칩에 붙이면 2.5 ℃ 높음\"은 추정입니다. 온도계로 실측하십시오",
   "The \"I2C scan\" serial line should list 0x3C and 0x76. BME280 with SDO pulled high is 0x77; the chip ID should be 0x60, 0x58 means BMP280 (no humidity).": "시리얼의 \"I2C scan\" 줄에 0x3C와 0x76이 있어야 합니다. BME280의 SDO를 High로 연결하면 0x77입니다. 칩 ID는 0x60이어야 하며, 0x58이면 BMP280(습도 없음)입니다.",
@@ -1178,5 +1177,15 @@ const d: Dict = {
   "On the vent side: room air flows past the AHT20 and the published t is the room": "통풍구 쪽: 방 공기가 AHT20 을 지나가 발행되는 t 가 실온",
   "Against the board: the LDO and Wi-Fi bursts warm it, every published t is about {n} ℃ high, same in the retest (estimate)": "보드에 붙음: LDO 와 Wi-Fi 송신 열로 데워져 발행되는 t 가 모두 약 {n} ℃ 높음, 재테스트도 같음(추정)",
   "C3 with Wi-Fi on averages about 80 mA and peaks near 350 mA while transmitting; a 5 V 1 A charger is plenty (estimate)": "Wi-Fi 를 켠 C3 는 평균 약 80 mA, 송신 시 최대 350 mA 근처; 5 V 1 A 충전기면 충분(추정)",
+  "AMOLED clock": "AMOLED 시계",
+  "Advertising TryBoard-Clock": "TryBoard-Clock 광고 중",
+  "Clock face": "시계 화면",
+  "Off (brightness 0x51 = 0)": "꺼짐 (밝기 0x51 = 0)",
+  "On · page {n}/3 · {name}": "켜짐 · {n}/3 페이지 · {name}",
+  "PWR key": "PWR 키",
+  "Phone (BLE)": "휴대폰 (BLE)",
+  "Swipe left": "왼쪽으로 스와이프",
+  "Swipe right": "오른쪽으로 스와이프",
+  "Time set {time}": "시간 맞춤 {time}",
 };
 export default d;

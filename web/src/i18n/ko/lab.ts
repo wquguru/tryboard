@@ -150,7 +150,6 @@ const d: Dict = {
   "Commands": "명령",
   "Confirm on hardware": "실기에서 확인",
   "Connect": "연결",
-  "Connected": "연결됨",
   "Connecting": "연결 중",
   "Connecting…": "연결 중…",
   "Continue from this moment": "이 시점부터 이어서 실행합니다",
@@ -1105,7 +1104,6 @@ const d: Dict = {
   "Capture": "기록",
   "View tools": "보기",
   "on": "켜짐",
-  "off": "꺼짐",
   "Real 3D models": "실제 3D 모델",
   "Bluetooth is not simulated for this firmware": "이 펌웨어의 블루투스는 시뮬레이션할 수 없습니다",
   "The firmware uses Bluetooth, but its Bluetooth library version was not recognised. The rest of the firmware keeps running; Bluetooth stays off.": "펌웨어가 블루투스를 사용하지만 블루투스 라이브러리 버전을 인식하지 못했습니다. 나머지 부분은 그대로 동작하고 블루투스는 꺼진 상태로 둡니다.",
@@ -1124,11 +1122,5 @@ const d: Dict = {
   "Reads the board's USB 5 V rail and the current the electrical model estimates for the board and its parts (Vin+ / Vin- are not wired on the bench). Confidence: behaviour model; current is an estimate.": "보드의 USB 5 V 레일과 전기 모델이 추정한 보드와 부품 전류를 읽습니다 (벤치에서 Vin+ / Vin-는 배선하지 않음). 신뢰도: 동작 모델, 전류는 추정값입니다.",
   "Confirm on a real board": "실제 보드로 확인 필요",
   "Whole preset: pins and addresses come from docs; no firmware has run it yet": "프리셋 전체: 핀과 주소는 문서에서 가져왔으며 아직 펌웨어로 실행해 보지 않았습니다",
-  "Dial ring direction (encoder A/B order is inferred)": "다이얼 링 방향(인코더 A/B 순서는 추정)",
-  "Board detection level on G4 (from the M5Unified heuristic, not the schematic)": "G4의 보드 판별 레벨(회로도가 아니라 M5Unified 휴리스틱 기준)",
-  "Key legend map (from the M5Cardputer scan convention, unchecked)": "키 배열표(M5Cardputer 스캔 규칙 기준, 미확인)",
-  "IMU address (BMI270 assumed at 0x68)": "IMU 주소(BMI270은 0x68로 가정)",
-  "Key map (TCA8418 map assumed)": "키 맵(TCA8418 맵은 가정)",
-  "Touch coordinates (XPT2046 raw span is estimated)": "터치 좌표(XPT2046 원시 값 범위는 추정)",
 };
 export default d;

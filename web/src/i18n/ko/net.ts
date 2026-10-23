@@ -69,7 +69,6 @@ const d: Dict = {
   "Enter the home Wi-Fi and submit": "집 Wi-Fi를 입력하고 제출",
   "Provisioning steps": "네트워크 설정 단계",
   "The chip has not sent any DNS / HTTP request yet.": "칩이 아직 DNS / HTTP 요청을 보내지 않았습니다.",
-  "Time": "시간",
   "Method": "메서드",
   "Destination": "목적지",
   "Address": "주소",

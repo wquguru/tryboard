@@ -17,6 +17,9 @@ export interface ProductHandlers {
   enc?(steps: number): void;
   /** Finger on the touch panel in panel pixels, same as touch= / release */
   touch?(x: number, y: number, down: boolean): void;
+  /** AXP2101 PWR key (pwrkey=) and the virtual phone's "set time" (ble= actions) */
+  pwrkey?(long: boolean): void;
+  sync?(): void;
 }
 
 export function createProductView(el: HTMLElement, h: ProductHandlers, opts: { servoPin: number }) {
