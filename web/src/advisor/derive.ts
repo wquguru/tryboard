@@ -5,6 +5,7 @@ import { capName, recommend, type Confidence, type Need, type Plan, type Rejecte
 import { PART_MAP, ALWAYS, exampleOnly } from './catalogmap.ts';
 import type { Budget, SelectState } from './state.ts';
 import { t } from '../i18n/index.ts';
+import { ADVISOR_RUN, capConf } from '../trust.ts';
 
 /** Hard needs listed under "More needs" (Wi-Fi comes from the network question, low power from the battery one) */
 export const MORE_CAPS: Cap[] = ['ble', 'bt_classic', 'thread', 'zigbee', 'wifi6', 'usb_otg', 'camera', 'audio_in', 'audio_out', 'psram', 'display_rgb', 'touch', 'dac', 'ethernet'];
@@ -159,7 +160,10 @@ export const isVoice = (caps: readonly string[]) => ['wifi', 'audio_in', 'audio_
 export function trustRows(p: Plan, need: Need): [string, Confidence][] {
   const rows: [string, Confidence][] = need.parts.map((id) => {
     const lv = p.simCoverage.find((x) => x.part === PARTS[id].name)?.level ?? '必须上真机'; // lint: allow-cjk
-    return [t(PARTS[id].name), PART_MAP[id] === null && !exampleOnly(id) ? '必须上真机' : exampleOnly(id) ? '行为模拟' : lv]; // lint: allow-cjk
+    const c: Confidence = PART_MAP[id] === null && !exampleOnly(id) ? '必须上真机' : exampleOnly(id) ? '行为模拟' : lv; // lint: allow-cjk
+    // G-08: no simulated / behavioural claim without a web model; a CLI-only model says so in the label
+    const on = ADVISOR_RUN[id]?.on ?? 'none';
+    return [on === 'cli' ? t('{part} (the command line can simulate it)', { part: t(PARTS[id].name) }) : t(PARTS[id].name), capConf(c, on)];
   });
   if (need.parts.includes('relay')) rows.push([t('Relay contacts and the mains side'), '必须上真机']); // lint: allow-cjk
   rows.push([t('The {chip} chip itself', { chip: t(p.chip.name) }), simConf(p)]);

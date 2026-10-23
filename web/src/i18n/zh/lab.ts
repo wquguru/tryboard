@@ -1123,5 +1123,13 @@ const d: Dict = {
   "Temperature and humidity come from the environment sliders; a measurement takes 80 ms and the CRC is checked, like the real chip. Confidence: simulation verified; not calibrated on real hardware.": "温度和湿度来自环境滑块；每次测量耗时 80 ms 并校验 CRC，和真芯片一致。可信度：仿真验证；未在真机上校准。",
   "The clock starts at the firmware's time; registers 0x11 / 0x12 give the ambient temperature in 0.25 ℃ steps. Alarms work, the 32K / SQW outputs are not modelled. Confidence: simulation verified; not calibrated on real hardware.": "时钟从固件写入的时间开始走；寄存器 0x11 / 0x12 以 0.25 ℃ 步进给出环境温度。闹钟可用，32K / SQW 输出未建模。可信度：仿真验证；未在真机上校准。",
   "Reads the board's USB 5 V rail and the current the electrical model estimates for the board and its parts (Vin+ / Vin- are not wired on the bench). Confidence: behaviour model; current is an estimate.": "读的是开发板的 USB 5 V 电源轨，以及电气模型估算的开发板和外设电流（实验台上 Vin+ / Vin- 没接线）。可信度：行为模拟；电流是估算值。",
+  "Confirm on a real board": "需真机确认",
+  "Whole preset: pins and addresses come from docs; no firmware has run it yet": "整个预设：引脚和地址来自文档，还没有固件实际跑过",
+  "Dial ring direction (encoder A/B order is inferred)": "旋钮环的方向（编码器 A/B 顺序是推断的）",
+  "Board detection level on G4 (from the M5Unified heuristic, not the schematic)": "G4 上的板型识别电平（来自 M5Unified 的经验判断，不是原理图）",
+  "Key legend map (from the M5Cardputer scan convention, unchecked)": "键位对照表（按 M5Cardputer 扫描约定，未核对）",
+  "IMU address (BMI270 assumed at 0x68)": "IMU 地址（BMI270 假定为 0x68）",
+  "Key map (TCA8418 map assumed)": "键位映射（TCA8418 映射是假定的）",
+  "Touch coordinates (XPT2046 raw span is estimated)": "触摸坐标（XPT2046 原始量程是估算的）",
 };
 export default d;

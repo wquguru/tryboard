@@ -1123,5 +1123,13 @@ const d: Dict = {
   "Temperature and humidity come from the environment sliders; a measurement takes 80 ms and the CRC is checked, like the real chip. Confidence: simulation verified; not calibrated on real hardware.": "温度と湿度は環境スライダーから取ります。測定は 80 ms かかり CRC もチェックされ、実チップと同じです。信頼度：シミュレーション検証済み。実機では未校正。",
   "The clock starts at the firmware's time; registers 0x11 / 0x12 give the ambient temperature in 0.25 ℃ steps. Alarms work, the 32K / SQW outputs are not modelled. Confidence: simulation verified; not calibrated on real hardware.": "時計はファームウェアが書いた時刻から進みます。レジスタ 0x11 / 0x12 は周囲温度を 0.25 ℃ 刻みで返します。アラームは動作し、32K / SQW 出力はモデル化していません。信頼度：シミュレーション検証済み。実機では未校正。",
   "Reads the board's USB 5 V rail and the current the electrical model estimates for the board and its parts (Vin+ / Vin- are not wired on the bench). Confidence: behaviour model; current is an estimate.": "ボードの USB 5 V レールと、電気モデルが見積もったボードと部品の電流を読みます（ベンチでは Vin+ / Vin- は未配線）。信頼度：挙動モデル。電流は推定値です。",
+  "Confirm on a real board": "実機で確認が必要",
+  "Whole preset: pins and addresses come from docs; no firmware has run it yet": "プリセット全体：ピンとアドレスは資料から取ったもので、まだファームウェアで動かしていません",
+  "Dial ring direction (encoder A/B order is inferred)": "ダイヤルリングの回転方向（エンコーダの A/B 順は推定）",
+  "Board detection level on G4 (from the M5Unified heuristic, not the schematic)": "G4 のボード判別レベル（回路図ではなく M5Unified の経験則による）",
+  "Key legend map (from the M5Cardputer scan convention, unchecked)": "キー配列表（M5Cardputer のスキャン規約による、未確認）",
+  "IMU address (BMI270 assumed at 0x68)": "IMU アドレス（BMI270 は 0x68 と仮定）",
+  "Key map (TCA8418 map assumed)": "キーマップ（TCA8418 のマップは仮定）",
+  "Touch coordinates (XPT2046 raw span is estimated)": "タッチ座標（XPT2046 の生値の範囲は推定）",
 };
 export default d;

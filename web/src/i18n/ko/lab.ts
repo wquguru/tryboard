@@ -1123,5 +1123,13 @@ const d: Dict = {
   "Temperature and humidity come from the environment sliders; a measurement takes 80 ms and the CRC is checked, like the real chip. Confidence: simulation verified; not calibrated on real hardware.": "온도와 습도는 환경 슬라이더에서 가져옵니다. 측정에 80 ms가 걸리고 CRC를 검사하며 실제 칩과 같습니다. 신뢰도: 시뮬레이션 검증, 실기기 미보정.",
   "The clock starts at the firmware's time; registers 0x11 / 0x12 give the ambient temperature in 0.25 ℃ steps. Alarms work, the 32K / SQW outputs are not modelled. Confidence: simulation verified; not calibrated on real hardware.": "시계는 펌웨어가 쓴 시각부터 흐릅니다. 레지스터 0x11 / 0x12는 주변 온도를 0.25 ℃ 단위로 줍니다. 알람은 동작하고 32K / SQW 출력은 모델링하지 않았습니다. 신뢰도: 시뮬레이션 검증, 실기기 미보정.",
   "Reads the board's USB 5 V rail and the current the electrical model estimates for the board and its parts (Vin+ / Vin- are not wired on the bench). Confidence: behaviour model; current is an estimate.": "보드의 USB 5 V 레일과 전기 모델이 추정한 보드와 부품 전류를 읽습니다 (벤치에서 Vin+ / Vin-는 배선하지 않음). 신뢰도: 동작 모델, 전류는 추정값입니다.",
+  "Confirm on a real board": "실제 보드로 확인 필요",
+  "Whole preset: pins and addresses come from docs; no firmware has run it yet": "프리셋 전체: 핀과 주소는 문서에서 가져왔으며 아직 펌웨어로 실행해 보지 않았습니다",
+  "Dial ring direction (encoder A/B order is inferred)": "다이얼 링 방향(인코더 A/B 순서는 추정)",
+  "Board detection level on G4 (from the M5Unified heuristic, not the schematic)": "G4의 보드 판별 레벨(회로도가 아니라 M5Unified 휴리스틱 기준)",
+  "Key legend map (from the M5Cardputer scan convention, unchecked)": "키 배열표(M5Cardputer 스캔 규칙 기준, 미확인)",
+  "IMU address (BMI270 assumed at 0x68)": "IMU 주소(BMI270은 0x68로 가정)",
+  "Key map (TCA8418 map assumed)": "키 맵(TCA8418 맵은 가정)",
+  "Touch coordinates (XPT2046 raw span is estimated)": "터치 좌표(XPT2046 원시 값 범위는 추정)",
 };
 export default d;

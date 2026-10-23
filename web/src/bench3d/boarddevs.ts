@@ -19,6 +19,10 @@ export interface BoardDevs {
   touchInt?: number;
   /** AXP2101 state at power-up (the panel slider changes it afterwards) */
   battery?: Battery;
+  /** Preset items boards.rs notes as inferred / assumed (G-08): conclusions that use them need a real board, even when verified */
+  check?: string[];
+  /** boards.rs verified: false: pins and addresses come from docs, no firmware has run the preset yet */
+  unverified?: true;
 }
 
 const m5 = (preset: M5Id, name: string, keyboard?: boolean): BoardDevs => ({ name, preset, i2c: [], ...(keyboard ? { keyboard } : {}) });
@@ -38,19 +42,19 @@ export const BOARD_DEVS: Record<BoardId, BoardDevs> = {
     touchInt: 11,
     battery: { pct: 98, usb: true },
   },
-  m5dial: m5('m5dial', 'M5Stack Dial'),
+  m5dial: { ...m5('m5dial', 'M5Stack Dial'), check: ['Dial ring direction (encoder A/B order is inferred)'] },
   m5atoms3: m5('m5atoms3', 'M5Stack AtomS3'),
-  m5atoms3lite: m5('m5atoms3lite', 'M5Stack AtomS3 Lite'),
+  m5atoms3lite: { ...m5('m5atoms3lite', 'M5Stack AtomS3 Lite'), check: ['Board detection level on G4 (from the M5Unified heuristic, not the schematic)'] },
   m5atoms3r: m5('m5atoms3r', 'M5Stack AtomS3R'),
-  m5cores3: m5('m5cores3', 'M5Stack CoreS3'),
-  m5cores3se: m5('m5cores3se', 'M5Stack CoreS3 SE'),
-  m5cardputer: m5('m5cardputer', 'M5Stack Cardputer', true),
-  m5cardputeradv: m5('m5cardputeradv', 'M5Stack Cardputer-Adv', true),
+  m5cores3: { ...m5('m5cores3', 'M5Stack CoreS3'), unverified: true },
+  m5cores3se: { ...m5('m5cores3se', 'M5Stack CoreS3 SE'), unverified: true },
+  m5cardputer: { ...m5('m5cardputer', 'M5Stack Cardputer', true), check: ['Key legend map (from the M5Cardputer scan convention, unchecked)'] },
+  m5cardputeradv: { ...m5('m5cardputeradv', 'M5Stack Cardputer-Adv', true), check: ['IMU address (BMI270 assumed at 0x68)', 'Key map (TCA8418 map assumed)'] },
   m5stickcplus2: m5('m5stickcplus2', 'M5StickC Plus2'),
   m5core2: m5('m5core2', 'M5Stack Core2'),
   m5core2v11: m5('m5core2v11', 'M5Stack Core2 v1.1'),
   m5atomlite: m5('m5atomlite', 'M5Stack Atom Lite'),
-  cyd: { ...m5('cyd', 'Cheap Yellow Display ESP32-2432S028'), noGrove: true },
+  cyd: { ...m5('cyd', 'Cheap Yellow Display ESP32-2432S028'), noGrove: true, check: ['Touch coordinates (XPT2046 raw span is estimated)'] },
 };
 
 export const boardDevs = (id: string | undefined): BoardDevs | undefined => (id && id in BOARD_DEVS ? BOARD_DEVS[id as BoardId] : undefined);
