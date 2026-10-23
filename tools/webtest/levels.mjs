@@ -14,9 +14,9 @@ fs.mkdirSync(outDir, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  // Extensionless paths (/app, /select) map to .html, like Vite preview and static hosting (DESIGN_V2 §7.2)
+  // Extensionless paths (/app, /select) and locale copies (/changelog.zh) map to .html, like Vite preview and static hosting
   const f0 = path.join(dist, u === '/' ? 'index.html' : u);
-  const f = !path.extname(f0) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
+  const f = (!path.extname(f0) || !fs.existsSync(f0)) && fs.existsSync(f0 + '.html') ? f0 + '.html' : f0;
   if (!f.startsWith(dist) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'application/octet-stream' });
   fs.createReadStream(f).pipe(res);
@@ -422,9 +422,12 @@ async function toProduct(page) {
     ['/advisor.html?t=weather', (u) => u.pathname.endsWith('/select') && u.searchParams.get('t') === 'weather', () => !!document.querySelector('#templates')],
     ['/index.html?example=blink', (u) => u.pathname.endsWith('/app') && u.searchParams.get('work') === 'blank' && u.searchParams.get('example') === 'blink' && u.hash === '#bench', () => !!document.getElementById('workName')],
     ['/levels.html#04', (u) => u.pathname.endsWith('/app') && !!u.searchParams.get('work') && u.hash === '#bench', () => !!document.getElementById('workName')],
-    ['/licenses.html', (u) => u.pathname.endsWith('/licenses.html'), () => /Licenses (&|and) credits/.test(document.querySelector('h1')?.textContent ?? '')],
-    ['/changelog', (u) => u.pathname.endsWith('/changelog'), () => /What's new/.test(document.querySelector('h1')?.textContent ?? '') && !!document.querySelector('link[rel=alternate][href="./changelog.xml"]')],
-    ['/licenses', (u) => u.pathname.endsWith('/licenses'), () => !!document.querySelector('a[href="./THIRD_PARTY_NOTICES.txt"]') && !!document.querySelector('a[href="./tryboard.spdx.json"]')],
+    // Static pages pick a locale before paint (F-12b); ?lang=en pins English whatever the browser language is
+    ['/licenses.html?lang=en', (u) => u.pathname.endsWith('/licenses.html'), () => /Licenses (&|and) credits/.test(document.querySelector('h1')?.textContent ?? '')],
+    ['/changelog?lang=en', (u) => u.pathname.endsWith('/changelog'), () => /What's new/.test(document.querySelector('h1')?.textContent ?? '') && !!document.querySelector('link[rel=alternate][href="./changelog.xml"]')],
+    ['/licenses?lang=en', (u) => u.pathname.endsWith('/licenses'), () => !!document.querySelector('a[href="./THIRD_PARTY_NOTICES.txt"]') && !!document.querySelector('a[href="./tryboard.spdx.json"]')],
+    ['/changelog.zh', (u) => u.pathname.endsWith('/changelog.zh'), () => /^zh/.test(document.documentElement.lang) && /[一-鿿]/.test(document.querySelector('h1')?.textContent ?? '') && !!document.querySelector('link[rel=alternate][href="./changelog.zh.xml"]')],
+    ['/changelog?lang=ja', (u) => u.pathname.endsWith('/changelog.ja') && u.searchParams.get('lang') === 'ja', () => document.documentElement.lang === 'ja'],
   ]) {
     const p = await open(from);
     const ok = await waitFor(p, check, null, 15000);

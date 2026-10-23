@@ -25,6 +25,16 @@ test('all locales define the same keys', () => {
   assert.ok(readdirSync(new URL('../src/i18n/zh', import.meta.url)).length > 1);
 });
 
+// static.ts (build-only dictionary for the static pages, F-12b) is outside index.ts, so it gets its own parity check
+test('static page dictionaries match across locales and keep placeholders', async () => {
+  const names = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
+  const st: Record<string, Record<string, string>> = {};
+  for (const l of ['zh', 'ja', 'ko']) st[l] = (await import(`../src/i18n/${l}/static.ts`)).default;
+  assert.deepEqual(Object.keys(st.ja).sort(), Object.keys(st.zh).sort(), 'ja vs zh');
+  assert.deepEqual(Object.keys(st.ko).sort(), Object.keys(st.zh).sort(), 'ko vs zh');
+  for (const [id, d] of Object.entries(st)) for (const [en, tr] of Object.entries(d)) assert.equal(names(tr), names(en), `${id}: ${en}`);
+});
+
 test('every literal t() key in src has a translation', () => {
   const src = new URL('../src/', import.meta.url);
   const files = (readdirSync(src, { recursive: true }) as string[]).filter((f) => /\.tsx?$/.test(f) && !f.startsWith('i18n'));

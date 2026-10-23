@@ -50,6 +50,37 @@
   Cache-Control: no-cache
 /changelog.xml
   Cache-Control: no-cache
+# F-12b locale copies of the licences / changelog pages and feeds (explicit paths: a splat would also hit the rows above and repeat the header)
+/licenses.zh.html
+  Cache-Control: no-cache
+/licenses.zh
+  Cache-Control: no-cache
+/licenses.ja.html
+  Cache-Control: no-cache
+/licenses.ja
+  Cache-Control: no-cache
+/licenses.ko.html
+  Cache-Control: no-cache
+/licenses.ko
+  Cache-Control: no-cache
+/changelog.zh.html
+  Cache-Control: no-cache
+/changelog.zh
+  Cache-Control: no-cache
+/changelog.ja.html
+  Cache-Control: no-cache
+/changelog.ja
+  Cache-Control: no-cache
+/changelog.ko.html
+  Cache-Control: no-cache
+/changelog.ko
+  Cache-Control: no-cache
+/changelog.zh.xml
+  Cache-Control: no-cache
+/changelog.ja.xml
+  Cache-Control: no-cache
+/changelog.ko.xml
+  Cache-Control: no-cache
 /sitemap.xml
   Cache-Control: no-cache
 /robots.txt

@@ -5,10 +5,22 @@ import path from 'node:path';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-// licenses.html is generated at build time by tools/gen_licenses.mjs (not in git); the build still works without it.
-const licenses = existsSync(new URL('./licenses.html', import.meta.url)) ? { licenses: 'licenses.html' } : {};
-// changelog.html likewise comes from tools/gen_changelog.mjs (web/changelog.yaml, F-12).
-const changelog = existsSync(new URL('./changelog.html', import.meta.url)) ? { changelog: 'changelog.html' } : {};
+// Static pages generated at build time, one file per locale (F-12b: licenses.html, licenses.zh.html, ...; not in git), only those present.
+const staticPages = (base: string) =>
+  Object.fromEntries(['', '.zh', '.ja', '.ko'].map((s) => [base + s.replace('.', '-'), `${base}${s}.html`]).filter(([, f]) => existsSync(new URL(`./${f}`, import.meta.url))));
+// licenses*.html come from tools/gen_licenses.mjs; changelog*.html from tools/gen_changelog.mjs (web/changelog.yaml, F-12)
+const licenses = staticPages('licenses');
+const changelog = staticPages('changelog');
+// /changelog.zh has a dot, so the dev / preview servers' extensionless -> .html fallback skips it; Pages serves it like /changelog
+const LOCALE_PAGE = /^(\/(?:licenses|changelog)\.(?:zh|ja|ko))(\?.*)?$/;
+function localePages(): Plugin {
+  const rewrite = (req: { url?: string }, _res: unknown, next: () => void) => {
+    const m = LOCALE_PAGE.exec(req.url ?? '');
+    if (m) req.url = `${m[1]}.html${m[2] ?? ''}`;
+    next();
+  };
+  return { name: 'tb-locale-pages', configureServer: (s) => void s.middlewares.use(rewrite), configurePreviewServer: (s) => void s.middlewares.use(rewrite) };
+}
 const DICT = /\/i18n\/(zh|ja|ko)\/(\w+)\.ts$/;
 // Dictionary chunks are named i18n-<locale>-<group> so perf.mjs and the HTML preload can find them (R-20).
 const chunkFileNames = (c: { facadeModuleId: string | null }) => {
@@ -88,7 +100,7 @@ function assetHashes(): Plugin {
 export default defineConfig({
   base: './',
   worker: { format: 'es', rollupOptions: { output: { chunkFileNames } } },
-  plugins: [react(), tailwindcss(), models(), dictPreload(), assetHashes()],
+  plugins: [react(), tailwindcss(), models(), dictPreload(), assetHashes(), localePages()],
   // Level definitions (firmware/levels.json) live outside web/, so the dev server must allow the parent directory.
   server: { fs: { allow: ['..'] } },
   build: {

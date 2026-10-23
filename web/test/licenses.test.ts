@@ -22,7 +22,7 @@ function gen(bins: Record<string, string[]>) {
     }
     const r = spawnSync(process.execPath, [script, '--out', join(dir, 'licenses.html'), '--pub', dir, '--fw', join(dir, 'fw')], { encoding: 'utf8' });
     const read = (f: string) => (r.status === 0 ? readFileSync(join(dir, f), 'utf8') : '');
-    return { status: r.status, stderr: r.stderr, html: read('licenses.html'), notices: read('THIRD_PARTY_NOTICES.txt') };
+    return { status: r.status, stderr: r.stderr, html: read('licenses.html'), zh: read('licenses.zh.html'), notices: read('THIRD_PARTY_NOTICES.txt') };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -37,6 +37,11 @@ test('ESP32Servo ships with LGPL-2.1 and its copyright / derivation notes', () =
   assert.match(r.notices, /Kevin Harrington/);
   assert.match(r.notices, /Michael Margolis in 2009/);
   assert.match(r.notices, /madhephaestus\/ESP32Servo\/tree\/f7282217605d8bd9a4f3070cf9901d10d13ede1d/);
+  // F-12b: localized pages translate headings only; component names, versions and SPDX ids stay as published
+  assert.match(r.zh, /<html lang="zh-CN">/);
+  assert.match(r.zh, /<h1>授权与致谢<\/h1>/); // lint: allow-cjk
+  assert.match(r.zh, /ESP32Servo<\/a> f7282217605d · LGPL-2\.1-or-later/);
+  assert.match(r.zh, /<p lang="en">ESP32 is a trademark of Espressif Systems\./);
 });
 
 test('IRremote ships with MIT, all holders, the BSD-3 file and the GPL-header note (LICENSING_REVIEW §16.5)', () => {

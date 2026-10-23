@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Builds web/licenses.html, THIRD_PARTY_NOTICES.txt and the SPDX 2.3 SBOM (LICENSING.md rule 8, DESIGN_V2 §7.3 C) from tools/build_web.sh.
+// Builds web/licenses.html (+ licenses.<zh|ja|ko>.html, F-12b), THIRD_PARTY_NOTICES.txt and the SPDX 2.3 SBOM (LICENSING.md rule 8, DESIGN_V2 §7.3 C) from tools/build_web.sh.
 // Exits 2 if shipped firmware has Espressif modified MIT (rule 5) or an Arduino library not allowed by LICENSING.md. Usage: node tools/gen_licenses.mjs [--out web/licenses.html] [--pub web/public] [--fw web/public/fw]
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { esc, ICON, page } from './static_shell.mjs';
+import { esc, fmtDay, htmlLang, ICON, LOCS, page, translator } from './static_shell.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (k, d) => (process.argv.indexOf(k) > 0 ? process.argv[process.argv.indexOf(k) + 1] : d);
@@ -427,7 +427,8 @@ fs.mkdirSync(pub, { recursive: true });
 fs.writeFileSync(path.join(pub, 'THIRD_PARTY_NOTICES.txt'), '﻿' + noticeTxt);
 fs.writeFileSync(path.join(pub, 'tryboard.spdx.json'), spdxJson);
 
-// ---------------------------------------------------------------- Output 3: licenses.html (one-page notice)
+// ---------------------------------------------------------------- Output 3: licenses.html + licenses.<loc>.html (one-page notice per locale, F-12b)
+// Only headings and explanations are translated; license names, SPDX ids, copyright lines and component names stay as published
 const kb = (s) => `${Math.max(1, Math.round(Buffer.byteLength(s) / 1024))} KB`;
 const LIC_NAME = { 'OFL-1.1': 'SIL OFL 1.1', 'CC-BY-SA-4.0': 'CC BY-SA 4.0' };
 const licIds = [...new Set(shipped.flatMap((it) => it.license.replace(/[()]/g, '').split(/ (?:AND|OR|WITH) /)))].filter((l) => l !== 'NOASSERTION');
@@ -435,7 +436,10 @@ const licIds = [...new Set(shipped.flatMap((it) => it.license.replace(/[()]/g, '
 const licCount = (l) => shipped.filter((it) => it.license.includes(l)).length;
 licIds.sort((a, b) => licCount(b) - licCount(a));
 const licList = licIds.map((l) => LIC_NAME[l] ?? l);
-const licSentence = licList.length > 1 ? `${licList.length} licenses: ${licList.slice(0, -1).join(', ')} and ${licList.at(-1)}` : `the ${licList[0]} license`;
+// English keeps its "A, B and C" wording; other locales use the platform list format (Intl.ListFormat)
+const listOf = (loc, xs) => (loc === 'en' ? (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}` : xs[0]) : new Intl.ListFormat(htmlLang(loc), { type: 'conjunction' }).format(xs));
+// Between translated sentences: Chinese and Japanese run on without a space
+const gap = (loc) => (loc === 'zh' || loc === 'ja' ? '' : ' ');
 if (shipped.some((it) => it.license === 'NOASSERTION')) warn.push(`shipped components with an unrecognised license: ${shipped.filter((it) => it.license === 'NOASSERTION').map((it) => it.name).join(', ')}`);
 const has = (re) => items.some((it) => re.test(it.name));
 // Special thanks lists only what is really used; licenses come from the collected data, never typed by hand
@@ -445,58 +449,73 @@ const ACKS = [
   { name: 'three.js', what: '3D scene rendering', re: /^three$/ },
   { name: 'React', what: 'Web interface', re: /^react$/ },
   { name: 'TinyUSB', what: 'USB keyboard and serial', re: /^espressif\/tinyusb$/ },
-  { name: 'Google Fonts', what: 'Noto Sans SC, JetBrains Mono', re: /^(Noto Sans SC|JetBrains Mono)$/ },
+  { name: 'Google Fonts', what: 'Noto Sans SC, JetBrains Mono', fixed: true, re: /^(Noto Sans SC|JetBrains Mono)$/ },
   { name: 'KiCad and Adafruit', what: 'Buzzer, USB-C and servo 3D models', re: /^(?!ESP32Servo$).*(蜂鸣器|USB-C|舵机|buzzer|servo)/i }, // lint: allow-cjk
 ].filter((a) => has(a.re) || (warn.push(`special-thanks entry "${a.name}" has no matching component, omitted`), false));
 const modified = models.filter((m) => m.modified);
 // LGPL-2.1 section 6 wants a prominent notice, so Arduino bins get their own list instead of only the NOTICES file
 const arduinoItems = items.filter((it) => it.cat.startsWith('Example firmware (Arduino'));
-const arduinoHtml = arduinoItems.length
-  ? `
-      <h2 id="arduino">Arduino example firmware</h2>
-      <p>Some example firmware is built with the Arduino core for ESP32 and links the components below. The LGPL-licensed parts (${esc(arduinoItems.filter((it) => /LGPL/.test(it.license)).map((it) => it.name).join(', '))}) are under the GNU Lesser General Public License 2.1 or later, whose full text is in the third-party notices. Each such bin ships with <code>BUILD_INFO.txt</code> (sketch commit, core release, pinned library commits, board and arduino-cli version) and its sketch source, so you can rebuild it and relink it against a modified library.</p>
+const arduinoHtml = (T) =>
+  arduinoItems.length
+    ? `
+      <h2 id="arduino">${esc(T('Arduino example firmware'))}</h2>
+      <p>${esc(T('Some example firmware is built with the Arduino core for ESP32 and links the components below.'))}${gap(T.loc)}${T.html('The LGPL-licensed parts ({names}) are under the GNU Lesser General Public License 2.1 or later, whose full text is in the third-party notices.', { names: esc(arduinoItems.filter((it) => /LGPL/.test(it.license)).map((it) => it.name).join(', ')) })}${gap(T.loc)}${T.html('Each such bin ships with {file} (sketch commit, core release, pinned library commits, board and arduino-cli version) and its sketch source, so you can rebuild it and relink it against a modified library.', { file: '<code>BUILD_INFO.txt</code>' })}</p>
       <ul>
         ${arduinoItems.map((it) => `<li><a href="${esc(it.url)}">${esc(it.name)}</a> ${esc(it.version)} · ${esc(it.license)}${it.copyright.length ? ` · ${esc(it.copyright.join('; '))}` : ''}</li>`).join('\n        ')}
       </ul>`
-  : '';
+    : '';
 
 const DL = (href, title, sub) => `<a href="${href}" download class="flex min-h-16 items-center gap-3 rounded-[10px] border border-line px-4 text-fg no-underline! transition-colors hover:border-hover-line hover:bg-field"><span class="min-w-0 flex-1"><b class="block text-[13px]">${esc(title)}</b><span class="font-mono text-[11px] text-muted">${esc(sub)}</span></span><span class="text-accent-ink">${ICON('M12 4v12M6 10l6 6 6-6M5 20h14', 18)}</span></a>`;
 
-const html = page({
-  title: 'Licenses & credits · TryBoard',
-  description: 'Open-source software, chip ROM, firmware components, fonts and 3D assets used by TryBoard and their licenses; download the full third-party notices and the SPDX bill of materials.',
-  css: './src/licenses/licenses.css',
-  href: './licenses',
-  label: 'Licenses &amp; credits',
-  main: `<main class="lic mx-auto w-full max-w-[808px] flex-1 px-6 pt-14 pb-16 max-md:px-4 max-md:pt-8 max-md:pb-12">
-      <h1>Licenses &amp; credits</h1>
-      <p class="mt-1.5 text-[12px] text-muted">Updated ${today}</p>
-      <p class="note">This page is generated in English only.</p>
+const render = (loc) => {
+  const T = translator(loc);
+  const ships = licList.length > 1
+    ? T.html('The site ships {count} third-party components under {n} licenses: {list}.', { count: `<b id="licCount">${shipped.length}</b>`, n: licList.length, list: esc(listOf(loc, licList)) })
+    : T.html('The site ships {count} third-party components under the {name} license.', { count: `<b id="licCount">${shipped.length}</b>`, name: esc(licList[0]) });
+  const models3d = modified.map((m) => `<a href="./models/${esc(m.name)}/${esc(m.name)}.glb" download>${esc(m.title.replace(/\s*[（(].*$/, ''))}</a> (${esc(LIC_NAME[m.license] ?? m.license)}, <a href="./models/${esc(m.name)}/SOURCES.md">${esc(T('sources and changes'))}</a>)`);
+  return page({
+    locale: loc,
+    base: 'licenses',
+    title: T('Licenses & credits · TryBoard'),
+    description: T('Open-source software, chip ROM, firmware components, fonts and 3D assets used by TryBoard and their licenses; download the full third-party notices and the SPDX bill of materials.'),
+    css: './src/licenses/licenses.css',
+    label: T('Licenses & credits'),
+    main: `<main class="lic mx-auto w-full max-w-[808px] flex-1 px-6 pt-14 pb-16 max-md:px-4 max-md:pt-8 max-md:pb-12">
+      <h1>${esc(T('Licenses & credits'))}</h1>
+      <p class="mt-1.5 text-[12px] text-muted">${T.html('Updated {date}', { date: `<time datetime="${today}">${esc(fmtDay(loc, today))}</time>` })}</p>
 
-      <h2>TryBoard itself</h2>
-      <p>The simulator core, web pages and acceptance firmware are written by the TryBoard team. ${crates.length ? `The core uses ${crates.length} third-party Rust crates, listed in the full notices.` : 'It has no third-party Rust dependencies.'}</p>
+      <h2>${esc(T('TryBoard itself'))}</h2>
+      <p>${esc(T('The simulator core, web pages and acceptance firmware are written by the TryBoard team.'))}${gap(loc)}${esc(crates.length ? T('The core uses {n} third-party Rust crates, listed in the full notices.', { n: crates.length }) : T('It has no third-party Rust dependencies.'))}</p>
 
-      <h2>Third-party components</h2>
-      <p>The site ships <b id="licCount">${shipped.length}</b> third-party components under ${esc(licSentence)}. Full names, versions, copyright notices and license texts are in the files below.</p>
-${arduinoHtml}
+      <h2>${esc(T('Third-party components'))}</h2>
+      <p>${ships}${gap(loc)}${esc(T('Full names, versions, copyright notices and license texts are in the files below.'))}</p>
+${arduinoHtml(T)}
 
-      <h2>Special thanks</h2>
+      <h2>${esc(T('Special thanks'))}</h2>
       <div class="grid grid-cols-3 gap-3 max-md:grid-cols-1">
-        ${ACKS.map((a) => `<div class="min-w-0 rounded-[10px] border border-line px-3.5 py-3"><b class="text-[13px]">${esc(a.name)}</b><div class="mt-0.5 text-[12px] leading-[1.6] text-muted">${esc(a.what)}</div><div class="mt-1.5 font-mono text-[10.5px] text-muted">${esc(licOf(a.re))}</div></div>`).join('\n        ')}
+        ${ACKS.map((a) => `<div class="min-w-0 rounded-[10px] border border-line px-3.5 py-3"><b class="text-[13px]">${esc(a.name)}</b><div class="mt-0.5 text-[12px] leading-[1.6] text-muted">${esc(a.fixed ? a.what : T(a.what))}</div><div class="mt-1.5 font-mono text-[10.5px] text-muted">${esc(licOf(a.re))}</div></div>`).join('\n        ')}
       </div>
 
-      <h2>Full notices</h2>
+      <h2>${esc(T('Full notices'))}</h2>
       <div class="grid grid-cols-2 gap-3 max-md:grid-cols-1">
-        ${DL('./THIRD_PARTY_NOTICES.txt', 'Third-party notices', `THIRD_PARTY_NOTICES.txt · ${kb(noticeTxt)}`)}
-        ${DL('./tryboard.spdx.json', 'Software bill of materials', `tryboard.spdx.json · ${kb(spdxJson)} · incl. build tools`)}
+        ${DL('./THIRD_PARTY_NOTICES.txt', T('Third-party notices'), `THIRD_PARTY_NOTICES.txt · ${kb(noticeTxt)}`)}
+        ${DL('./tryboard.spdx.json', T('Software bill of materials'), `tryboard.spdx.json · ${kb(spdxJson)} · ${T('incl. build tools')}`)}
       </div>
-      <p class="note">Both files are regenerated on every build from the dependency manifests and asset directories.${modified.length ? ` Modified 3D models are available for download under their original licenses: ${modified.map((m) => `<a href="./models/${esc(m.name)}/${esc(m.name)}.glb" download>${esc(m.title.replace(/\s*[（(].*$/, ''))}</a> (${esc(LIC_NAME[m.license] ?? m.license)}, <a href="./models/${esc(m.name)}/SOURCES.md">sources and changes</a>)`).join(', ')}.` : ''}</p>
+      <p class="note">${esc(T('Both files are regenerated on every build from the dependency manifests and asset directories.'))}${models3d.length ? `${gap(loc)}${T.html('Modified 3D models are available for download under their original licenses: {list}.', { list: models3d.join(', ') })}` : ''}</p>
 
-      <h2>Trademarks</h2>
-      <p>ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.</p>
-      <p class="note">The development boards in the 3D view are visual approximations, not official Espressif models.</p>
+      <h2>${esc(T('Trademarks'))}</h2>
+      <p lang="en">ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.</p>
+      <p class="note">${esc(T('The development boards in the 3D view are visual approximations, not official Espressif models.'))}</p>
     </main>`,
-});
-fs.writeFileSync(out, html);
+  });
+};
+// Locale files sit next to --out: licenses.html, licenses.zh.html, ... (all share one NOTICES / SPDX pair)
+const outFor = (loc) => (loc === 'en' ? out : out.replace(/\.html$/, `.${loc}.html`));
+let html = '';
+for (const loc of LOCS) {
+  const h = render(loc);
+  if (loc === 'en') html = h;
+  fs.writeFileSync(outFor(loc), h);
+}
 for (const w of warn) console.warn(`[licenses] warning: ${w}`);
-console.log(`[licenses] wrote ${path.relative(root, out)} (${(html.length / 1024).toFixed(0)} KB), THIRD_PARTY_NOTICES.txt (${kb(noticeTxt)}), tryboard.spdx.json (${kb(spdxJson)}, ${pkgs.length} packages): ${shipped.length} shipped components, licenses ${licIds.join(' / ')}`);
+console.log(`[licenses] wrote ${LOCS.map((l) => path.relative(root, outFor(l))).join(', ')} (${(html.length / 1024).toFixed(0)} KB each), THIRD_PARTY_NOTICES.txt (${kb(noticeTxt)}), tryboard.spdx.json (${kb(spdxJson)}, ${pkgs.length} packages): ${shipped.length} shipped components, licenses ${licIds.join(' / ')}`);

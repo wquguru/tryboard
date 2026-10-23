@@ -9,7 +9,8 @@ const LOCALES = ['zh', 'ja', 'ko'];
 /** Page that owns each light group: its reach decides the group's keys. */
 const OWNER = { site: ['index.html', ...Object.keys(WORKERS).filter((w) => WORKERS[w])], select: ['select.html'] };
 const GROUP_FILE = { site: 'site.ts', select: 'select.ts' };
-const NOT_AREA = new Set(['index.ts', 'app.ts']);
+// static.ts is build-only (static pages, F-12b): it must keep its keys even when site pages reach the same English text
+const NOT_AREA = new Set(['index.ts', 'app.ts', 'static.ts']);
 /** Old merge order of the area files (later wins); files not listed sort first. */
 const MERGE = ['data.ts', 'checks.ts', 'views.ts', 'site.ts', 'lab.ts', 'steps.ts', 'net.ts', 'select.ts'];
 

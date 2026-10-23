@@ -22,6 +22,10 @@
 /web/public/tryboard.spdx.json
 /web/changelog.html
 /web/public/changelog.xml
+# F-12b locale copies (licenses.zh.html, changelog.ja.html, changelog.ko.xml, ...)
+/web/licenses.*.html
+/web/changelog.*.html
+/web/public/changelog.*.xml
 /web/public/sitemap.xml
 /web/public/robots.txt
 /assets/models/*/src/

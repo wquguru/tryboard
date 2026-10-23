@@ -1,4 +1,5 @@
-# Public changelog (F-12): tools/gen_changelog.mjs turns this into /changelog, changelog.xml and sitemap.xml.
+# Public changelog (F-12, F-12b): tools/gen_changelog.mjs turns this into /changelog (+ .zh / .ja / .ko), changelog*.xml and sitemap.xml.
+# Every entry also carries title_zh / desc_zh / cta_zh and the same for ja and ko; the audit stops the build if one is missing.
 # Write for readers, newest first: what they can try now, not how it was built. The generator audits every entry.
 # tag: new | improve | announce | removed; chips: C3, S3, ESP32, Arduino; link: an in-site path; cta: link text.
 entries:
@@ -9,6 +10,15 @@ entries:
     desc: Send a message to your board as if it came from the cloud, pick QoS 0, QoS 1 or retain, and watch the built-in broker log every subscribe and publish.
     link: /app?work=blank&example=arduino-lib-pubsubclient#bench
     cta: Open the MQTT example
+    title_zh: 网络页新增 MQTT 发布面板
+    desc_zh: 像云端一样给板子发消息，可选 QoS 0、QoS 1 或保留消息，内置 broker 会记下每次订阅和发布。
+    cta_zh: 打开 MQTT 示例
+    title_ja: ネットワークタブに MQTT 送信パネル
+    desc_ja: クラウドから届いたようにボードへメッセージを送れます。QoS 0、QoS 1、retain を選べ、内蔵 broker が購読と送信をすべて記録します。
+    cta_ja: MQTT の例を開く
+    title_ko: 네트워크 탭에 MQTT 발행 패널 추가
+    desc_ko: 클라우드에서 온 것처럼 보드에 메시지를 보냅니다. QoS 0, QoS 1, retain을 고르고 내장 broker가 구독과 발행을 모두 기록합니다.
+    cta_ko: MQTT 예제 열기
 
   - date: 2026-10-22
     tag: new
@@ -17,6 +27,15 @@ entries:
     desc: The IRremote receive demo runs on ESP32-C3 with the receiver on GPIO5. Press keys on the bench remote and the sketch prints each decoded NEC code.
     link: /app?work=blank&example=arduino-lib-irremote-rx#bench
     cta: Try the receiver sketch
+    title_zh: 用 IRremote 接收红外遥控码
+    desc_zh: IRremote 接收示例跑在 ESP32-C3 上，接收头接 GPIO5。按实验台遥控器上的键，程序会打印解出的 NEC 码。
+    cta_zh: 试试接收程序
+    title_ja: IRremote で赤外線リモコンを受信
+    desc_ja: IRremote の受信デモが ESP32-C3 で動きます。受信モジュールは GPIO5。リモコンのキーを押すと、デコードした NEC コードを表示します。
+    cta_ja: 受信スケッチを試す
+    title_ko: IRremote로 적외선 리모컨 코드 수신
+    desc_ko: IRremote 수신 데모가 ESP32-C3에서 실행되며 수신기는 GPIO5에 연결됩니다. 리모컨 키를 누르면 디코딩한 NEC 코드를 출력합니다.
+    cta_ko: 수신 스케치 실행하기
 
   - date: 2026-10-22
     tag: new
@@ -25,6 +44,15 @@ entries:
     desc: Place a VS1838B-style receiver and a 940 nm IR LED on the bench, then press keys on a 21-key remote to send NEC codes to your firmware.
     link: /app?work=blank&example=esp32-ir#bench
     cta: Open the IR example
+    title_zh: 红外接收头、红外灯和实验台遥控器
+    desc_zh: 把 VS1838B 类接收头和 940 nm 红外灯放上实验台，按 21 键遥控器就能给固件发 NEC 码。
+    cta_zh: 打开红外示例
+    title_ja: 赤外線受信モジュール・赤外線 LED とリモコン
+    desc_ja: VS1838B 系の受信モジュールと 940 nm 赤外線 LED を実験台に置き、21 キーのリモコンでファームウェアに NEC コードを送れます。
+    cta_ja: 赤外線の例を開く
+    title_ko: 적외선 수신기, 적외선 LED와 리모컨
+    desc_ko: VS1838B 계열 수신기와 940 nm 적외선 LED를 실험대에 놓고 21키 리모컨을 눌러 펌웨어에 NEC 코드를 보냅니다.
+    cta_ko: 적외선 예제 열기
 
   - date: 2026-10-21
     tag: new
@@ -33,6 +61,15 @@ entries:
     desc: Drag keyframes to change temperature, humidity and network quality over time. Edits can be undone, the view follows playback, and you can pinch to zoom.
     link: /app?work=weather#bench
     cta: Open the weather station
+    title_zh: 用环境时间轴编排房间变化
+    desc_zh: 拖动关键帧，让温度、湿度和网络质量随时间变化。可撤销，视图跟随播放，双指可缩放。
+    cta_zh: 打开气象站
+    title_ja: 環境タイムラインで部屋の変化を演出
+    desc_ja: キーフレームをドラッグして、温度・湿度・ネットワーク品質を時間とともに変えられます。元に戻せ、再生に追従し、ピンチで拡大できます。
+    cta_ja: 気象ステーションを開く
+    title_ko: 환경 타임라인으로 방 상태 연출
+    desc_ko: 키프레임을 끌어 온도, 습도, 네트워크 품질을 시간에 따라 바꿉니다. 실행 취소가 되고 화면이 재생을 따라가며 핀치로 확대할 수 있습니다.
+    cta_ko: 기상 관측소 열기
 
   - date: 2026-10-21
     tag: new
@@ -41,6 +78,15 @@ entries:
     desc: A xiaozhi-compatible voice assistant runs against a scripted voice server. Speak with a sample recording or your own microphone and export the clip.
     link: /app?work=blank&example=s3-xiaozhi-lite#bench
     cta: Open the voice assistant
+    title_zh: 语音助手示例
+    desc_zh: 兼容小智的语音助手连着一个脚本化的语音服务器。用示例录音或自己的麦克风说话，还能导出音频。
+    cta_zh: 打开语音助手
+    title_ja: 音声アシスタントの例
+    desc_ja: xiaozhi 互換の音声アシスタントが台本どおりに応答する音声サーバーにつながります。サンプル音声か自分のマイクで話しかけ、録音を書き出せます。
+    cta_ja: 音声アシスタントを開く
+    title_ko: 음성 비서 예제
+    desc_ko: xiaozhi 호환 음성 비서가 각본대로 응답하는 음성 서버와 연결됩니다. 샘플 녹음이나 내 마이크로 말하고 음성을 내보낼 수 있습니다.
+    cta_ko: 음성 비서 열기
 
   - date: 2026-10-21
     tag: new
@@ -49,6 +95,15 @@ entries:
     desc: Upload the official MicroPython build for ESP32-C3, edit main.py in the Lab and run it. Your build stays in this browser after a reload.
     link: /app?work=blank#bench
     cta: Open the Lab
+    title_zh: 在实验台编辑并运行 MicroPython
+    desc_zh: 上传官方 ESP32-C3 版 MicroPython，在实验台里改 main.py 并运行。刷新后固件仍留在本浏览器。
+    cta_zh: 打开实验台
+    title_ja: 実験台で MicroPython を編集・実行
+    desc_ja: ESP32-C3 用の公式 MicroPython をアップロードし、実験台で main.py を編集して実行できます。再読み込みしてもこのブラウザに残ります。
+    cta_ja: 実験台を開く
+    title_ko: 실험대에서 MicroPython 편집과 실행
+    desc_ko: ESP32-C3용 공식 MicroPython을 올리고 실험대에서 main.py를 고쳐 실행합니다. 새로고침해도 이 브라우저에 남아 있습니다.
+    cta_ko: 실험대 열기
 
   - date: 2026-10-20
     tag: new
@@ -57,6 +112,15 @@ entries:
     desc: Pick an M5Stack board preset, such as StickC Plus2, Core2, AtomS3, Dial, Cardputer or CoreS3, and its screen, buttons and LEDs appear on a case drawn to size.
     link: /app?work=blank#bench
     cta: Open the Lab
+    title_zh: 12 款 M5Stack 板子，带 3D 外壳
+    desc_zh: 选一个 M5Stack 预设，比如 StickC Plus2、Core2、AtomS3、Dial、Cardputer 或 CoreS3，屏幕、按键和灯会出现在按真实尺寸画的外壳上。
+    cta_zh: 打开实验台
+    title_ja: M5Stack 12 機種を 3D ケース付きで
+    desc_ja: StickC Plus2、Core2、AtomS3、Dial、Cardputer、CoreS3 などのプリセットを選ぶと、画面・ボタン・LED が実寸のケースに表示されます。
+    cta_ja: 実験台を開く
+    title_ko: 3D 케이스가 있는 M5Stack 보드 12종
+    desc_ko: StickC Plus2, Core2, AtomS3, Dial, Cardputer, CoreS3 같은 M5Stack 프리셋을 고르면 화면, 버튼, LED가 실제 크기 케이스에 나타납니다.
+    cta_ko: 실험대 열기
 
   - date: 2026-10-20
     tag: new
@@ -65,6 +129,15 @@ entries:
     desc: Copy a link that reopens your bench as you left it, or save a short video card with a QR code that points to the same link.
     link: /app?work=blank#bench
     cta: Open the Lab
+    title_zh: 分享链接和二维码卡片
+    desc_zh: 复制一个链接，打开就是你离开时的实验台；也可以存一段带二维码的短视频卡片，指向同一个链接。
+    cta_zh: 打开实验台
+    title_ja: 共有リンクと QR コードカード
+    desc_ja: 実験台をそのままの状態で開き直せるリンクをコピーできます。同じリンクの QR コード付き短い動画カードも保存できます。
+    cta_ja: 実験台を開く
+    title_ko: 공유 링크와 QR 코드 카드
+    desc_ko: 떠날 때 그대로의 실험대를 다시 여는 링크를 복사하거나, 같은 링크를 가리키는 QR 코드 짧은 영상 카드를 저장합니다.
+    cta_ko: 실험대 열기
 
   - date: 2026-10-20
     tag: new
@@ -73,6 +146,15 @@ entries:
     desc: ILI9341 and ST7789 colour screens and the SH1106 OLED work on the bench. The ESP32-2432S028 "Cheap Yellow Display" with touch runs in the command-line simulator.
     link: /app?work=blank&example=c3-ili9341-temp#bench
     cta: Open the TFT example
+    title_zh: 彩色 TFT 屏，外加 CYD 板
+    desc_zh: ILI9341、ST7789 彩屏和 SH1106 OLED 可以放上实验台。带触摸的 ESP32-2432S028「廉价黄屏」可在命令行模拟器里运行。
+    cta_zh: 打开 TFT 示例
+    title_ja: カラー TFT 画面と CYD ボード
+    desc_ja: ILI9341・ST7789 のカラー画面と SH1106 OLED が実験台で動きます。タッチ付き ESP32-2432S028「Cheap Yellow Display」はコマンドライン版で動きます。
+    cta_ja: TFT の例を開く
+    title_ko: 컬러 TFT 화면과 CYD 보드
+    desc_ko: ILI9341, ST7789 컬러 화면과 SH1106 OLED가 실험대에서 동작합니다. 터치가 있는 ESP32-2432S028 "Cheap Yellow Display"는 명령줄 시뮬레이터에서 실행됩니다.
+    cta_ko: TFT 예제 열기
 
   - date: 2026-10-20
     tag: improve
@@ -81,6 +163,15 @@ entries:
     desc: The chip ROM files the page downloads are about a third smaller (ESP32-S3 went from 950 KB to 620 KB), so S3 and classic ESP32 projects start sooner.
     link: /app?work=blank&example=s3-blink#bench
     cta: Open an S3 example
+    title_zh: ESP32-S3 和 ESP32 项目首次打开更快
+    desc_zh: 页面要下载的芯片 ROM 小了约三分之一（ESP32-S3 从 950 KB 降到 620 KB），S3 和经典 ESP32 项目启动更快。
+    cta_zh: 打开 S3 示例
+    title_ja: ESP32-S3・ESP32 の初回読み込みが高速に
+    desc_ja: ページがダウンロードするチップ ROM が約 3 分の 1 小さくなり（ESP32-S3 は 950 KB から 620 KB）、S3 と従来の ESP32 が早く起動します。
+    cta_ja: S3 の例を開く
+    title_ko: ESP32-S3와 ESP32 프로젝트 첫 로딩 단축
+    desc_ko: 페이지가 내려받는 칩 ROM이 약 3분의 1 작아져(ESP32-S3는 950 KB에서 620 KB로) S3와 기존 ESP32 프로젝트가 더 빨리 시작됩니다.
+    cta_ko: S3 예제 열기
 
   - date: 2026-10-19
     tag: new
@@ -89,6 +180,15 @@ entries:
     desc: A NimBLE heart-rate strap advertises to a phone in the browser. Scan, connect, read and subscribe, and watch the radio log as it happens.
     link: /app?work=blank&example=c3-ble-hr#bench
     cta: Open the Bluetooth example
+    title_zh: 蓝牙 LE 和虚拟手机
+    desc_zh: NimBLE 心率带向浏览器里的手机广播。扫描、连接、读取、订阅，实时看无线电日志。
+    cta_zh: 打开蓝牙示例
+    title_ja: Bluetooth LE と仮想スマホ
+    desc_ja: NimBLE の心拍ベルトがブラウザ内のスマホにアドバタイズします。スキャン・接続・読み取り・購読を行い、無線ログをその場で確認できます。
+    cta_ja: Bluetooth の例を開く
+    title_ko: Bluetooth LE와 가상 휴대폰
+    desc_ko: NimBLE 심박 밴드가 브라우저 속 휴대폰에 광고합니다. 스캔, 연결, 읽기, 구독을 하고 무선 로그를 실시간으로 봅니다.
+    cta_ko: Bluetooth 예제 열기
 
   - date: 2026-10-19
     tag: improve
@@ -96,6 +196,15 @@ entries:
     desc: Result cards lead with a plain-language verdict, group checks by part and keep the raw numbers one tap away.
     link: /select
     cta: Pick a board
+    title_zh: 选板结果更好懂
+    desc_zh: 结果卡片先给一句大白话结论，检查项按零件分组，原始数字点一下就能看。
+    cta_zh: 去选板
+    title_ja: ボード選びの結果がわかりやすく
+    desc_ja: 結果カードは最初にわかりやすい結論を示し、チェック項目を部品ごとにまとめ、元の数値はワンタップで見られます。
+    cta_ja: ボードを選ぶ
+    title_ko: 더 알기 쉬운 보드 선택 결과
+    desc_ko: 결과 카드는 쉬운 말로 된 결론을 먼저 보여 주고 점검 항목을 부품별로 묶으며 원래 수치는 한 번 탭하면 볼 수 있습니다.
+    cta_ko: 보드 고르기
 
   - date: 2026-10-17
     tag: announce
@@ -103,6 +212,15 @@ entries:
     desc: TryBoard has a new logo, and every page now shares the same header, menu and dark mode switch, on desktop and on phones.
     link: /
     cta: Visit the home page
+    title_zh: 新 logo，全站统一页头
+    desc_zh: TryBoard 换了新 logo，所有页面在电脑和手机上都用同一套页头、菜单和深色模式开关。
+    cta_zh: 去首页看看
+    title_ja: 新しいロゴとサイト共通のヘッダー
+    desc_ja: TryBoard のロゴが新しくなり、すべてのページがパソコンでもスマホでも同じヘッダー・メニュー・ダークモード切り替えを使います。
+    cta_ja: ホームページへ
+    title_ko: 새 로고와 사이트 공통 헤더
+    desc_ko: TryBoard의 로고가 바뀌었고, 이제 모든 페이지가 데스크톱과 휴대폰에서 같은 헤더, 메뉴, 다크 모드 스위치를 씁니다.
+    cta_ko: 홈페이지 가기
 
   - date: 2026-10-16
     tag: new
@@ -111,6 +229,15 @@ entries:
     desc: The board picker compares 9 boards, including Seeed XIAO, M5Stack AtomS3 and Waveshare round-LCD boards, and warns where board revisions differ.
     link: /select
     cta: Pick a board
+    title_zh: 板子库收录 9 款开发板
+    desc_zh: 选板会比较 9 款板子，包括 Seeed XIAO、M5Stack AtomS3 和微雪圆屏板，并提示不同版本的差异。
+    cta_zh: 去选板
+    title_ja: 9 種類の開発ボードを収録
+    desc_ja: ボード選びで Seeed XIAO、M5Stack AtomS3、Waveshare の丸型 LCD ボードなど 9 枚を比較し、リビジョン差がある所を警告します。
+    cta_ja: ボードを選ぶ
+    title_ko: 개발 보드 9종 라이브러리
+    desc_ko: 보드 선택기는 Seeed XIAO, M5Stack AtomS3, Waveshare 원형 LCD 보드 등 9종을 비교하고 리비전마다 다른 부분을 경고합니다.
+    cta_ko: 보드 고르기
 
   - date: 2026-10-15
     tag: announce
@@ -119,3 +246,12 @@ entries:
     desc: The simulator boots unmodified ESP-IDF builds for ESP32-C3 and drives a 3D board in your browser. Start with Blink, no board needed.
     link: /app?work=blank&example=blink#bench
     cta: Run Blink
+    title_zh: TryBoard 能跑真实的 ESP32-C3 固件
+    desc_zh: 模拟器直接启动未修改的 ESP-IDF 固件，在浏览器里驱动 3D 板子。从 Blink 开始，不用买板。
+    cta_zh: 运行 Blink
+    title_ja: TryBoard が本物の ESP32-C3 ファームウェアを実行
+    desc_ja: シミュレーターは無改造の ESP-IDF ビルドを起動し、ブラウザ内の 3D ボードを動かします。まずは Blink から。ボードは要りません。
+    cta_ja: Blink を実行
+    title_ko: TryBoard가 실제 ESP32-C3 펌웨어를 실행
+    desc_ko: 시뮬레이터가 수정하지 않은 ESP-IDF 빌드를 부팅하고 브라우저 속 3D 보드를 움직입니다. 보드 없이 Blink부터 시작하세요.
+    cta_ko: Blink 실행

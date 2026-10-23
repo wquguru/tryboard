@@ -67,9 +67,9 @@ gzip -9 -n -k -f "$PUB/wasm/tryboard.wasm" "$PUB"/rom/*.elf "$PUB"/fw/*/flash.bi
 python3 "$ROOT/tools/gen_fw_src.py" "$ROOT" $(ls "$PUB/fw" | grep -v '\.json$')
 # Buildable source zips for checkpoint refs + custom-build demo (U-22, lab "Download source"): fw/<ref>/src.zip
 python3 "$ROOT/tools/gen_fw_zip.py" "$ROOT"
-# Third-party licences page (LICENSING.md rule 8): reads dependency lists, ROMs, published firmware components, SOURCES.md
+# Third-party licences pages, one per locale (LICENSING.md rule 8, F-12b): reads dependency lists, ROMs, published firmware components, SOURCES.md
 node "$ROOT/tools/gen_licenses.mjs"
-# F-12: changelog page, Atom feed, sitemap.xml and robots.txt from web/changelog.yaml (audit failures stop the build)
+# F-12 / F-12b: changelog pages and Atom feeds (en / zh / ja / ko), sitemap.xml, robots.txt from web/changelog.yaml (audit failures stop the build)
 node "$ROOT/tools/gen_changelog.mjs"
 # Self-hosted fonts (P2-19): originals (third_party/fonts) -> WOFF2 subsets via fonttools in a venv (web/public/fonts).
 # Download / venv failures don't block the build: subset.py writes an empty fonts.css and pages fall back to system fonts
