@@ -36,6 +36,7 @@ import { cn } from '../../ui/cn';
 import { Host, Txt } from '../../ui/native';
 import { Btn, Btns, Kv, KvBox, KvT, LinkBtn, LockCard, Mono, Note, Ph, PhT, Res, Sec, Seg, SegB, Slider, TnL, TnM, TnSt, TreeEmpty, TreeGroup, btnClass, tnClass } from '../../ui/panel';
 import { lab } from '../../ui/links';
+import { workTemplate } from '../../views/worktpl';
 import { Conf, type ConfLevel } from '../../ui/conf';
 import { ResultCard, Said, actCls } from '../../ui/result';
 import { groupRows, headline, type Verdict } from '../../ui/say';
@@ -962,6 +963,7 @@ export function assembleStep(): StepImpl {
           seek(i - 1);
         });
       }
+      if (!T && workTemplate(c.work.id)) return mountProductOnly(c);
       if (!T) {
         c.shell.layer.render(
           <LockCard role="status">
@@ -975,15 +977,7 @@ export function assembleStep(): StepImpl {
             </Btns>
           </LockCard>,
         );
-        c.shell.tree.render(<TreeEmpty>{t('No assembly layers')}</TreeEmpty>);
-        c.shell.props.render(
-          <>
-            <Sec>{t('Properties')}</Sec>
-            <TreeEmpty>{t('Nothing to select')}</TreeEmpty>
-          </>,
-        );
-        c.shell.toolbar.setGroups([]);
-        c.shell.timeline.setSteps([]);
+        clearPanels(c);
         c.shell.setNext(t('Product · this project has no assembly template'), null, t('No assembly template'));
         return;
       }
@@ -1026,6 +1020,41 @@ export function assembleStep(): StepImpl {
     },
   };
   return step;
+}
+
+/** Side panels of an Assemble step that has no layers to install */
+function clearPanels(c: StepCtx) {
+  c.shell.tree.render(<TreeEmpty>{t('No assembly layers')}</TreeEmpty>);
+  c.shell.props.render(
+    <>
+      <Sec>{t('Properties')}</Sec>
+      <TreeEmpty>{t('Nothing to select')}</TreeEmpty>
+    </>,
+  );
+  c.shell.toolbar.setGroups([]);
+  c.shell.timeline.setSteps([]);
+}
+
+/** Product-only work (G-05b cloud until G-05c): no enclosure layers yet, the Product step already has its 2D view */
+function mountProductOnly(c: StepCtx) {
+  const open = unlocked(c);
+  c.shell.layer.render(
+    <LockCard role="status">
+      <Sec>{t('③ Assemble')}</Sec>
+      <PhT>{t('Assembly for this project is not ready yet')}</PhT>
+      <p className="my-3 text-muted">{t('There is no enclosure to build yet. The Product step already shows the finished device in 2D, driven by the same firmware.')}</p>
+      {open && (
+        <Btns>
+          <LinkBtn primary href={lab(c.work.id, 'product')}>
+            {t('Next: Product →')}
+          </LinkBtn>
+        </Btns>
+      )}
+    </LockCard>,
+  );
+  clearPanels(c);
+  if (open) c.shell.setNext(t('Next: Product →'), 'product', '', undefined, 'hot');
+  else c.shell.setNext(t('Product · pass the checkpoints before building the enclosure'), null, t('Unlock and finish assembling first'));
 }
 
 /** SVG elements for the ruler annotation (appended imperatively to the assembly SVG) */

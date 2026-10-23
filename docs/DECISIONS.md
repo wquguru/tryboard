@@ -1636,7 +1636,7 @@
 - AHT20 读法：触发后等 80 ms 再轮询忙位（最多 5 次、每次 10 ms）——vTaskDelay 可能早醒一个 tick，模型正好 80 ms 忙，不轮询会偶发读失败；读失败打印并跳过本次
 - npx 指纹一致：wasm `tb_i2c_attach` 原来没有 aht20 编号，新增 kind 13 = aht20（web/src/i2cdevs.ts `KIND` 同步），之前 npm 包里 AHT20 无应答；golden 不变
 - accept `c3-cloud` `qemu: false`（QEMU 没有虚拟 AP / broker）；四个检查点同一参考固件；阶段一不加首页卡片（同 G-03）
-- 示例 c3-cloud 的 `scene.parts` 暂为空：网页场景还没有 aht20 部件类型（SCENE_TYPE / editor / scene3d），所以网页示例里看不到传感器、读数失败，留给 G-05b
+- 示例 c3-cloud 的 `scene.parts` 暂为空：网页场景还没有 aht20 部件类型（SCENE_TYPE / editor / scene3d），所以网页示例里看不到传感器、读数失败，留给 G-05b（G-05b 已解决，见 2026-10-23 条）
 - 备选：BME280（已有网页部件）——否：PLAN 允许二选一，AHT20 更贴合「温湿度」且便宜；手写 MQTT——否：esp-mqtt 直接能跑
 
 ## 2026-10-22 授权页 / 更新日志 / Atom 四语（F-12b）
@@ -1715,3 +1715,11 @@
 - golden 差异（219/224 一致，其余逐条）：esp32-pdm-mic——固件重编，版本串 / 编译时间 / ELF SHA / idle hook 地址变化，RMS 0.3531 → 0.3530；用未改源码在旧模型上重编同样得到 0.3530，属重编产物。arduino-m5-stickc-demo-stickc_plus2 `freq=1040 → 1000`、-core2 `freq=3000 → 1000`：旧值是颠倒样本的过零计数，新值与 1 kHz 测试音一致，两例 accept 加频率数值检查（1000 ± 20）。新用例 arduino-m5-mic-order-stickc_plus2 / -core2 无旧快照。合并后需 `tools/golden.py save` 重存。
 - 备选：只对 rx_chan_mod = 1 颠倒——否：无硬件机制支撑，属对草图特判；保留豁免、改 M5 期望——否：与 M5Unified 真机结论相反；把 esp32-pdm-mic 期望改成 3005 Hz——否：那是未修正程序的输出，不该当正确例子。
 - 遗留：S3（HW v2，`soc/src/i2s.rs`）不受影响，M5Unified 在 S3 上也不换；ESP32-S2 同为 HW v1，无板可验证。
+
+## 2026-10-23 温湿度上云网页流程（G-05b）
+- 决定：`templates.ts` 的 SCENE_TYPE / toScene 加 aht20（与 oled / bme280 同形：addr + sda + scl），c3-cloud 示例 `scene.parts` 填 AHT20 0x38 SDA6 / SCL7 并开 env 控件；目录件 aht20 补 `sim: verified`（G-09 已有网页模型，采购页原显示「需真机」不对）。
+- 决定：作品 cloud 只有产品页、没有组装模板，先用 worktpl 的 PRODUCT_ONLY（同 G-04b 做法）出 2D 产品；组装步对「有产品无模板」的作品显示占位卡片 + 「下一步：产品」，不再提示去气象站。3D 成品 / 组装留 G-05c。
+- 决定：产品页 / 首页卡片的「云端改间隔」都走 `mqttPub('pub,tryboard/cloud/cmd,interval=N')`，和网络页签 MQTT 面板同一路径，所以进输入日志、可 `--inputs` 重放；不另造通道。
+- 决定：产品页中途挂载时 Wi-Fi / MQTT 行早已打印过，见到「发布 #N」即视为已连 broker、已订阅，避免误显示「离线」。
+- 决定：产品页线束面板的 Wi-Fi 行按采购模板 `firmware.wifi` 判断，cloud 不再显示「本项目不用 Wi-Fi」。
+- 备选：给 cloud 先做 3D 产品（工作量属 G-05c）；另开 cloud 专用命令通道（会绕过输入日志，不选）。

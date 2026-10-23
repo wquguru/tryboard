@@ -1145,5 +1145,22 @@ const d: Dict = {
   "No key yet": "まだキー入力なし",
   "On · {color} · brightness {level}/8": "点灯 · {color} · 明るさ {level}/8",
   "IR night light": "赤外線ナイトライト",
+  // G-05b cloud
+  "Interval 2 s": "間隔 2 秒",
+  "Interval 5 s": "間隔 5 秒",
+  "Interval 10 s": "間隔 10 秒",
+  "Send interval=0 (refused)": "interval=0 を送信（拒否される）",
+  "Room +{n} ℃": "室温 +{n} ℃",
+  "Room −{n} ℃": "室温 −{n} ℃",
+  "Last report": "最新の送信",
+  "Report interval": "送信間隔",
+  "Last ack": "最新の応答",
+  "Wi-Fi {ip} · MQTT subscribed": "Wi-Fi {ip} · MQTT 購読済み",
+  "Wi-Fi {ip} · no broker yet": "Wi-Fi {ip} · ブローカー未接続",
+  "{n} s (last gap {g} s)": "{n} 秒（直前の間隔 {g} 秒）",
+  "No command yet": "まだコマンドなし",
+  "Cloud sensor": "クラウド温湿度計",
+  "Assembly for this project is not ready yet": "この作品の組み立てはまだ準備中です",
+  "There is no enclosure to build yet. The Product step already shows the finished device in 2D, driven by the same firmware.": "まだ組み立てるケースはありません。完成品ステップでは、同じファームウェアで動く完成品を 2D で表示します。",
 };
 export default d;

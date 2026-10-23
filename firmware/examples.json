@@ -1692,8 +1692,18 @@
    "ESP-IDF 5.5"
   ],
   "scene": {
-   "parts": []
-  }
+   "parts": [
+    {
+     "type": "aht20",
+     "addr": 56,
+     "sda": 6,
+     "scl": 7
+    }
+   ]
+  },
+  "controls": [
+   "env"
+  ]
  },
  {
   "id": "c3-ili9341-temp",
