@@ -1,0 +1,5 @@
+# Same pinned versions as s3-co5300 / s3-lvgl (licence checks in docs/LICENSING.md; esp_lcd_co5300 2.1+ is not Apache-2.0)
+dependencies:
+  espressif/esp_lcd_co5300: "2.0.3"
+  lvgl/lvgl: "9.2.2"
+  espressif/esp_lvgl_port: "2.6.0"

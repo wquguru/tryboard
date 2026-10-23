@@ -5568,5 +5568,143 @@
    "[xz] abort",
    "[xz] tts stop (aborted)"
   ]
+ },
+ {
+  "id": "amoclock",
+  "chip": "esp32s3",
+  "seconds": 4,
+  "qemu": false,
+  "args": [
+   "--spi",
+   "co5300",
+   "--i2c",
+   "cst9220@0x5a,axp2101@0x34,pcf85063@0x51,es8311@0x18,es7210@0x40",
+   "--touch-int",
+   "11",
+   "--battery",
+   "98,usb"
+  ],
+  "script": "1.0:ble=scan; 1.5:ble=connect; 2.5:ble=write ff11 ca2bdb6a; 3.0:ble=read ff11",
+  "expect": [
+   "AMOLED 时钟 启动",
+   "RTC 时间有效",
+   "表盘 显示 2026-10-16  Fri 04:00:00",
+   "电量 98% USB 已插 充电中 VBAT 4180 mV",
+   "温度 芯片 25.0 °C",
+   "BLE 广播 TryBoard-Clock（对时特征 FF11）",
+   "TRYBOARD_OK amoclock",
+   "连接 成功 status=0",
+   "对时 收到 epoch=1792748490 → 2026-10-23 09:41:30",
+   "RTC 已写入 2026-10-23 09:41:30",
+   "表盘 显示 2026-10-23  Fri 09:41:30"
+  ],
+  "absent": [
+   "对时 长度错误",
+   "温度传感器 启动失败"
+  ],
+  "stderr_expect": [
+   "fw → write FF11 ok",
+   "fw → read FF11 = ca 2b db 6a"
+  ],
+  "lcd_min_pixels": 20000,
+  "lcd_regions": [
+   {
+    "name": "clock digits 09:41",
+    "x": 40,
+    "y": 110,
+    "w": 400,
+    "h": 150,
+    "color": "#42cbff",
+    "min_pixels": 20032,
+    "max_pixels": 20032
+   }
+  ]
+ },
+ {
+  "id": "amoclock-swipe",
+  "fw": "amoclock",
+  "chip": "esp32s3",
+  "seconds": 4.6,
+  "qemu": false,
+  "args": [
+   "--spi",
+   "co5300",
+   "--i2c",
+   "cst9220@0x5a,axp2101@0x34,pcf85063@0x51,es8311@0x18,es7210@0x40",
+   "--touch-int",
+   "11",
+   "--battery",
+   "98,usb"
+  ],
+  "script": "1.00:touch=400,240; 1.05:touch=330,240; 1.10:touch=260,240; 1.15:touch=190,240; 1.20:touch=120,240; 1.40:release; 1.50:touch=400,240; 1.55:touch=330,240; 1.60:touch=260,240; 1.65:touch=190,240; 1.70:touch=120,240; 1.90:release; 2.20:touch=400,240; 2.25:touch=330,240; 2.30:touch=260,240; 2.35:touch=190,240; 2.40:touch=120,240; 2.60:release; 2.0:bat=40; 3.0:pwrkey=short; 3.3:touch=400,240; 3.5:release; 4.0:pwrkey=short",
+  "expect": [
+   "页 2/3 温度",
+   "页 3/3 电量",
+   "滑动 向左：已经是最后一页",
+   "电量 40% USB 未插 放电 VBAT 3750 mV",
+   "电源键 短按 → 息屏（0x51 = 0）",
+   "息屏中 忽略滑动",
+   "电源键 短按 → 亮屏（0x51 = 255）"
+  ],
+  "lcd_min_pixels": 15000,
+  "lcd_regions": [
+   {
+    "name": "battery bar 40 %",
+    "x": 40,
+    "y": 224,
+    "w": 400,
+    "h": 40,
+    "color": "#31d35a",
+    "min_pixels": 6400,
+    "max_pixels": 6400
+   },
+   {
+    "name": "clock page hidden",
+    "x": 40,
+    "y": 110,
+    "w": 400,
+    "h": 150,
+    "color": "#42cbff",
+    "max_pixels": 0
+   }
+  ]
+ },
+ {
+  "id": "amoclock-off",
+  "fw": "amoclock",
+  "chip": "esp32s3",
+  "seconds": 3.0,
+  "qemu": false,
+  "args": [
+   "--spi",
+   "co5300",
+   "--i2c",
+   "cst9220@0x5a,axp2101@0x34,pcf85063@0x51,es8311@0x18,es7210@0x40",
+   "--touch-int",
+   "11",
+   "--battery",
+   "98,usb"
+  ],
+  "script": "2.0:pwrkey=short",
+  "expect": [
+   "TRYBOARD_OK amoclock",
+   "电源键 短按 → 息屏（0x51 = 0）"
+  ],
+  "absent": [
+   "亮屏（0x51 = 255）"
+  ],
+  "stderr_expect": [
+   "brightness 0"
+  ],
+  "lcd_regions": [
+   {
+    "name": "whole screen dark",
+    "x": 0,
+    "y": 0,
+    "w": 480,
+    "h": 480,
+    "max_pixels": 0
+   }
+  ]
  }
 ]
