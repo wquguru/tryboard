@@ -281,7 +281,7 @@
 | G-12 | 查 M5-13 遗留：M5Unified PDM 麦克风样本成对颠倒；定位是模型（`core/crates/esp32/src/i2s.rs` encode_rx）还是草图配置，修好且 esp32-pdm-mic 不回退 | golden 全一致或差异有解释；新增 M5 PDM 用例 | ☐ |
 | G-13 | M5Dial 蜂鸣器（G3 1 位 I2S）出声模型，接网页 Web Audio；做不了则在 Dial 结论标「需真机」 | accept 新用例 + analyser 有能量；或 DECISIONS 写明不做原因 | ☐（在 G-06 之后） |
 | G-14 | M5 Grove ENV III / IV 单元 3D（接在外壳 Grove 口，随 `SceneSpec.grove` 出现 / 消失） | m5board.mjs 不减断言；agent-browser 截图 | ☐（在 G-06 之后） |
-| G-15 | 红外自发自收例子：同板 IR LED（F-08h LEDC 载波）→ 接收头（F-08i）回环，或两块板 | accept 新用例 + 网页 / CLI 指纹一致 | ☐ |
+| G-15 | 红外自发自收例子：同板 IR LED（F-08h LEDC 载波）→ 接收头（F-08i）回环，或两块板 | accept 新用例 + 网页 / CLI 指纹一致 | ☑ 2026-10-23：`firmware/arduino/lib-irremote-loop`（IRremote 发 + 收，LED GPIO4 / 接收头 GPIO5，地址 0x10 命令 0x41–0x43）。光路沿用已有的 `IrLink` 回环（同时接了 rx / tx 即视为 LED 对准接收头，LEDC 包络也走 `feed_carrier` 回环），内核未改。草图在 `begin()` 后先等 100 ms：库会丢掉 5 ms 内的首个 mark、并把 70 ms 安静期内的帧判成 NEC2 重复（真库行为，不放宽）。accept `arduino-lib-irremote-loop` `--ir 5,4` 3/3；parts.mjs 网页 / CLI 指纹一致；agent-browser 见 Reviews/ab/G-15.md |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。

@@ -413,7 +413,7 @@ export const TEMPLATES: Template[] = [
     needCaps: [],
     parts: ['irrx', 'irled'],
     suggest: ['button', 'oled'],
-    examples: ['arduino-lib-irremote-rx', 'arduino-lib-irremote', 'esp32-ir', 'arduino-ir-nec-rmt'],
+    examples: ['arduino-lib-irremote-rx', 'arduino-lib-irremote-loop', 'arduino-lib-irremote', 'esp32-ir', 'arduino-ir-nec-rmt'],
     risks: ['A bare IR LED on a GPIO reaches only a couple of meters; add a transistor driver for room-wide range', 'Air conditioner remotes send long frames of their own protocol; check the protocol is supported before buying'],
   },
   {

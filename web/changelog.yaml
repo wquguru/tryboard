@@ -3,6 +3,23 @@
 # Write for readers, newest first: what they can try now, not how it was built. The generator audits every entry.
 # tag: new | improve | announce | removed; chips: C3, S3, ESP32, Arduino; link: an in-site path; cta: link text.
 entries:
+  - date: 2026-10-23
+    tag: new
+    chips: [C3, Arduino]
+    title: IR loopback on one board
+    desc: One ESP32-C3 sends NEC codes from an IR LED on GPIO4 and reads them back through the receiver on GPIO5, with IRremote on both ends. Watch the sent and received codes line up in the serial log.
+    link: /app?work=blank&example=arduino-lib-irremote-loop#bench
+    cta: Try the IR loopback
+    title_zh: 一块板红外自发自收
+    desc_zh: 一块 ESP32-C3 用 GPIO4 的红外 LED 发 NEC 码，再由 GPIO5 的接收头收回来，两端都用 IRremote。在串口里看发出和收到的码一一对上。
+    cta_zh: 试试红外回环
+    title_ja: 1 枚のボードで赤外線ループバック
+    desc_ja: ESP32-C3 が GPIO4 の赤外線 LED から NEC コードを送り、GPIO5 の受信モジュールで読み戻します。両側とも IRremote。送ったコードと受けたコードがシリアルで揃うのを確認できます。
+    cta_ja: 赤外線ループバックを試す
+    title_ko: 보드 한 개로 적외선 루프백
+    desc_ko: ESP32-C3 하나가 GPIO4의 적외선 LED로 NEC 코드를 보내고 GPIO5의 수신기로 다시 읽습니다. 양쪽 모두 IRremote를 씁니다. 보낸 코드와 받은 코드가 시리얼에서 맞아떨어지는 것을 확인하세요.
+    cta_ko: 적외선 루프백 실행하기
+
   - date: 2026-10-22
     tag: new
     chips: [C3, Arduino]
