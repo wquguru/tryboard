@@ -1747,3 +1747,14 @@
 - 首页卡片：`WorkDef.card` 加 `draft?: boolean`，`HOME_WORKS` 过滤掉 draft。dialtimer 的卡片文案（G-16a 已写好并翻译）保留但标 draft，等 G-16b 网页流程完成再去掉；amoclock 没有 card，本来就不上首页。`card` 只被首页和 `relatedWork`（同样走 HOME_WORKS）用到。
 - 手机作品菜单：菜单原本渲染在顶栏里，顶栏 `fixed z-20` 自成层叠上下文，菜单的 z-30 压不过底部面板 / 工具栏（z-24…27）；作品增加后菜单变长，下半部分（空白实验台等）落在面板之下点不到。改为手机端像 FwMenu 一样 portal 到 body（遮罩 z-40、菜单 z-50），高度放到 `100dvh-3.5rem` 并保持可滚动；`usePop` 加 `panelRef`，portal 出去的面板仍算"内部点击"。
 - 备选：抬高顶栏 z-index——否：会盖住 z-30/40 的其它弹层；只缩短 max-h——否：底部面板高度可变，仍会被盖。
+
+## 2026-10-23 Dial 计时器网页流程（G-16b）
+- 采购 / 台面不改代码：采购模板 `dialtimer` 只列 m5-dial + 数据线，`ALWAYS` 面包板 / 杜邦线没有被加进来（agent-browser 实测只出这两件）；台面直接从示例 scene 加载 m5dial 预设（屏、触摸、旋钮、G3 板载蜂鸣器）。
+- 产品页：还没有装法模板（G-16c 才加支架），照 cloud 的做法在 `views/worktpl.ts` 的 `PRODUCT_ONLY` 里给 dialtimer 一个只有成品视图的模板；G-16c 加进 TEMPLATES 后这条 fallback 不再生效。因此产品页仍显示通用的"参考成品"横幅（与 cloud 相同），等 G-16c 有装法后自然成立。
+- 3D：`app/dial3d.ts` 直接复用台面的 `bench3d/m5shell.ts`（`m5Shell('m5dial')`），屏幕网格换成 240×240 DataTexture 喂 GC9A01 帧；不另建模型。交互：拖动 / 滚轮在橙色环上 = 编码器步进（横向 14 px 一格，与台面一致），环上短按（< 600 ms、无步进）= BtnA（G42，按下 100 ms 再松开，M5.update() 才能看到两个边沿），点屏 = 触摸（uv → 面板像素）；蜂鸣时环上方点光源发亮。无 WebGL 时用 `views/dialtimerproduct.ts` 的 2D 俯视图，同一套输入（环拖动每 15° 一格）。
+- 手机产品键：开始 / 暂停、+1 分钟、−1 分钟、取消（点屏），id `p-dial-*`；桌面右栏同样四个按钮 `pDial-*`。都走台面同一条输入路径（gpio42 / enc / touch），所以进输入日志可回放。
+- 手机产品键一行最多 5 个（`mobile.tsx` PhoneToolbar，原来 4 个）：Dial 是唯一有 4 个产品键 + 声音的作品，换成两行后底部面板变高，3D 视图只剩 333 px（< 屏高 45%，mobile.mjs「3D fullscreen」失败）；其它作品都 ≤ 4 个，不受影响。手机上取消键叫「取消」，桌面按钮仍叫「取消（点屏幕）」。
+- 首页卡片去掉 draft；卡片 demo 12 s 循环：1 s 转一格、2 s 按 BtnA 开始、8 s 点屏取消。
+- 声音验收用 analyser：产品页开声音后 1 分钟倒数（1× 墙钟约 60 s）到点，`__tbAudio.pcm.rms` 峰值 0.47。
+- i18n："Paused" 从 app 组（lab.ts）移到 site 组，因为首页卡片也会显示计时器状态（R-20 分组测试要求）。
+- 备选：产品页用 SVG 平面图——否：brief 要求 3D 可转可按；为产品页单独建 Dial 模型——否：与台面外观会分叉，m5shell 已按实物尺寸生成。

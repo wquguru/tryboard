@@ -10,12 +10,13 @@ import { DOOR_CARDS, doorNow, parseDoorLine } from '../views/doorproduct';
 import { IRLAMP_CMD, irlampNow, parseIrlampLine } from '../views/irlampproduct';
 import { irCode } from '../app/irfeed';
 import { cloudCmd, cloudIdle, cloudNow, parseCloudLine } from '../views/cloudproduct';
+import { DIAL_BTN, dialtimerNow, parseDialtimerLine } from '../views/dialtimerproduct';
 import { emptyFrame, type LiveFrame } from '../views/common';
 import { t } from '../i18n';
 
 // P2-09 cards: the illustration is the product 2D view fed one demo frame; plus the live device config and demo inputs by sim time.
 // fw: published firmware id when it isn't the work id; line: each serial line (door state for the lock picture); seed: illustration state.
-type LiveCfg = Pick<LiveOptions, 'i2c' | 'lcd' | 'encoder' | 'sonar' | 'parts'>;
+type LiveCfg = Pick<LiveOptions, 'i2c' | 'lcd' | 'encoder' | 'sonar' | 'parts' | 'board'>;
 type Extra = { live: LiveCfg; demo: Partial<LiveFrame>; script?: (sim: LiveSim, t: number) => void; fw?: string; chip?: string; line?: (l: string) => void; seed?: () => void };
 const EXTRA: Record<string, Extra> = {
   lamp: {
@@ -73,6 +74,22 @@ const EXTRA: Record<string, Extra> = {
     // Illustration: a dashboard with a few reports already in (replaced by the real run's banner reset)
     seed: () => Object.assign(cloudNow, cloudIdle(), { ip: '192.168.4.100', mqtt: true, sub: true, reports: [23.1, 23.4, 23.6, 23.5].map((v, i) => ({ seq: i, t: v, h: 45, ...(i ? { gap: 5 } : {}) })) }),
   },
+  dialtimer: {
+    fw: 'arduino-m5-dial-timer',
+    chip: 'M5Dial',
+    live: { i2c: [], board: 'm5dial' },
+    demo: {},
+    // Demo, every 12 s: ring +1 / -1 at 1 s, press the Dial at 2 s (countdown runs), tap the screen at 8 s (cancel)
+    script: (sim, t) => {
+      const k = t % 12;
+      if (k >= 1 && k < 1.1) sim.turnEncoder(Math.floor(t / 12) % 2 ? -1 : 1);
+      if (k >= 2 && k < 2.1) sim.pressBoardPin(DIAL_BTN, true);
+      if (k >= 2.2 && k < 2.3) sim.pressBoardPin(DIAL_BTN, false);
+      if (k >= 8 && k < 8.1) sim.touch(120, 120, true);
+      if (k >= 8.2 && k < 8.3) sim.touch(120, 120, false);
+    },
+    line: (l) => parseDialtimerLine(l, dialtimerNow),
+  },
 };
 
 const SERVO = 4;
@@ -95,7 +112,7 @@ export function showcase(el: HTMLElement, kind: string) {
 /** Run real firmware in the card preview; the last serial line goes straight to the status line (high rate, no React state). Returns stop. */
 export function startLive(kind: string, card: HTMLElement, prev: HTMLElement, status: HTMLElement, onFail: () => void) {
   let sim: LiveSim | null = null;
-  const h = { boot: (d: boolean) => sim?.press(d), temp: (d: number) => sim && sim.setTemp(sim.env.temp + d), ir: (code: string) => sim?.partInput({ kind: 'ir', code }), mqtt: (cmd: string) => sim?.mqttPub(cmd) };
+  const h = { boot: (d: boolean) => sim?.press(d), temp: (d: number) => sim && sim.setTemp(sim.env.temp + d), ir: (code: string) => sim?.partInput({ kind: 'ir', code }), mqtt: (cmd: string) => sim?.mqttPub(cmd), boardBtn: (pin: number, d: boolean) => sim?.pressBoardPin(pin, d), enc: (n: number) => sim?.turnEncoder(n), touch: (x: number, y: number, d: boolean) => sim?.touch(x, y, d) };
   const x = EXTRA[kind];
   const lcdView = x ? workTemplate(kind)!.product(prev, h, { servoPin: SERVO }) : kind === 'spin' ? createSpinProduct(prev, h, { servoPin: SERVO }) : kind === 'lens' ? createLensProduct(prev, h) : null;
   const wView = kind === 'weather' ? createProductView(prev, h, { servoPin: SERVO }) : null;

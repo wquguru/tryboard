@@ -1162,5 +1162,17 @@ const d: Dict = {
   "Cloud sensor": "클라우드 온습도계",
   "Assembly for this project is not ready yet": "이 프로젝트의 조립은 아직 준비 중입니다",
   "There is no enclosure to build yet. The Product step already shows the finished device in 2D, driven by the same firmware.": "아직 조립할 케이스가 없습니다. 완성품 단계에서 같은 펌웨어로 움직이는 완성품을 2D로 보여 줍니다.",
+  "+1 min": "+1분",
+  "−1 min": "−1분",
+  "3D product: M5Stack Dial timer; drag or scroll the orange ring to set minutes, tap the ring to start or pause, tap the screen to cancel": "3D 완성품: M5Stack Dial 타이머. 주황색 링을 드래그하거나 스크롤해 분 설정, 링 탭으로 시작 / 일시정지, 화면 탭으로 취소",
+  "Beeping · {n}/3 at 2 kHz": "울리는 중 · {n}/3 · 2 kHz",
+  "Buzzer (G3)": "부저 (G3)",
+  "Cancel (tap screen)": "취소 (화면 탭)",
+  "Illustrative look, not an official M5Stack model": "예시 외형이며 M5Stack 공식 모델이 아닙니다",
+  "Quiet": "조용함",
+  "Quiet · beeps 3 times at zero": "조용함 · 0이 되면 3번 울림",
+  "Set time": "설정 시간",
+  "Start / pause": "시작 / 일시정지",
+  "Timer": "타이머",
 };
 export default d;

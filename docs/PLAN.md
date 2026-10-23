@@ -286,7 +286,7 @@
 | G-05c | 温湿度上云组装 / 3D：组装模板 cloud（传感器靠近板子发热 → 读数偏高的装法影响）+ 3D 成品（读数屏 / 云端曲线） | asm3d / interact webtest；agent-browser | ☐（在 G-05b 之后） |
 | G-05d | 温湿度上云加「手机配网」检查点：固件改为无凭据时开 SoftAP 配网页（复用 c3-softap-prov 做法，C-02 虚拟手机），配网后连路由再上云 | accept 新用例（`--ap-phone --ap-post`）；check.py --ref --all；网页 softap.mjs 式用例 | ☐（在 G-05b 之后） |
 | G-16a | 新作品「Dial 计时器」（WorkId `dialtimer`，M5Dial 成品板）阶段一：Arduino M5Unified 固件（旋钮调分钟、按下开始 / 暂停、到点 G3 蜂鸣、触摸取消），检查点 dialtimer-1..4，作品 / 采购模板 / 示例 / 文案登记 | build + accept；check.py --ref --all；npx 指纹一致 | ☑ |
-| G-16b | Dial 计时器网页流程：首页卡片、采购（成品板，无面包板）、台面（Dial 预设）、产品页（3D Dial 可转可按、蜂鸣可听） | levels / mobile / m5board webtest；agent-browser 桌面 + 390 | ☐（在 G-16a 之后） |
+| G-16b | Dial 计时器网页流程：首页卡片、采购（成品板，无面包板）、台面（Dial 预设）、产品页（3D Dial 可转可按、蜂鸣可听） | levels / mobile / m5board webtest；agent-browser 桌面 + 390 | ☑ |
 | G-16c | Dial 计时器装法 / 成品：成品板的「组装」步（支架 / 外壳，至少一处装法影响，如蜂鸣孔被挡 → 响度判定失败）+ 3D 成品 | asm3d webtest；agent-browser | ☐（在 G-16b 之后） |
 | G-17a | 新作品「AMOLED 桌面时钟」（WorkId `amoclock`，ws-amoled216）阶段一：IDF + LVGL 数字 / 跳秒表盘（G-07：不做扫秒针），PCF85063 走时、滑动翻页（时间 / 温度 / 电量）、AXP2101 电量与电源键息屏、BLE 对时（S3 NimBLE，不成则降为串口对时并记 DECISIONS），检查点 amoclock-1..4 | build + accept（lcd_regions 区域检查）；check.py --ref --all；npx 指纹一致 | ☑ 固件 amoclock + accept amoclock / amoclock-swipe / amoclock-off + 检查点 amoclock-1..4，BLE 对时成功（无需串口降级），见 DECISIONS 2026-10-23 G-17a |
 | G-17b | AMOLED 时钟网页流程：首页卡片、采购、台面、产品页（点屏滑动、电源键、手机对时按钮） | levels / mobile webtest；agent-browser 桌面 + 390 | ☐（在 G-17a 之后） |

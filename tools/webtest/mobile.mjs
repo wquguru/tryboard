@@ -448,7 +448,7 @@ report('firmware drawer: Esc closes it', await waitFor(page, () => !document.que
 }
 
 // ---- Every product (preview ?work=X#product): fullscreen, no h-scroll, every key ≥ 44px and tappable, action key raises no error
-const WORKS = { weather: 'p-boot', spin: 'p-boot', lens: 'p-boot', usbkey: 'p-key-4', lamp: 'p-knob-r', ruler: 'p-near', tilt: 'p-tilt-r', imu: 'p-level', door: 'p-card-ok', irlamp: 'p-ir-power', cloud: 'p-cloud-2' };
+const WORKS = { weather: 'p-boot', spin: 'p-boot', lens: 'p-boot', usbkey: 'p-key-4', lamp: 'p-knob-r', ruler: 'p-near', tilt: 'p-tilt-r', imu: 'p-level', door: 'p-card-ok', irlamp: 'p-ir-power', cloud: 'p-cloud-2', dialtimer: 'p-dial-start' };
 for (const [w, key] of Object.entries(WORKS)) {
   await page.goto(`${base}/app?work=${w}#product`, { waitUntil: 'load' });
   const up = await waitFor(page, (k) => globalThis.__tbApp?.store.get().step === 'product' && !!document.querySelector(`#toolbar [data-tool="${k}"]`), key, 30000);

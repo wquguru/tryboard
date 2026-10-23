@@ -1162,5 +1162,17 @@ const d: Dict = {
   "Cloud sensor": "クラウド温湿度計",
   "Assembly for this project is not ready yet": "この作品の組み立てはまだ準備中です",
   "There is no enclosure to build yet. The Product step already shows the finished device in 2D, driven by the same firmware.": "まだ組み立てるケースはありません。完成品ステップでは、同じファームウェアで動く完成品を 2D で表示します。",
+  "+1 min": "+1 分",
+  "−1 min": "−1 分",
+  "3D product: M5Stack Dial timer; drag or scroll the orange ring to set minutes, tap the ring to start or pause, tap the screen to cancel": "3D 完成品：M5Stack Dial タイマー。オレンジのリングをドラッグ / スクロールで分を設定、リングをタップで開始 / 一時停止、画面をタップで取消",
+  "Beeping · {n}/3 at 2 kHz": "鳴動中 · {n}/3 · 2 kHz",
+  "Buzzer (G3)": "ブザー（G3）",
+  "Cancel (tap screen)": "取消（画面タップ）",
+  "Illustrative look, not an official M5Stack model": "イメージ図です。M5Stack 公式モデルではありません",
+  "Quiet": "静か",
+  "Quiet · beeps 3 times at zero": "静か · ゼロで 3 回鳴る",
+  "Set time": "設定時間",
+  "Start / pause": "開始 / 一時停止",
+  "Timer": "タイマー",
 };
 export default d;

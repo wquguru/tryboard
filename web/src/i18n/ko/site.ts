@@ -1026,5 +1026,22 @@ const d: Dict = {
   // G-17a AMOLED clock work and template
   "AMOLED desk clock": "AMOLED 탁상 시계",
   "Screen, touch, PMU (battery gauge, PWR key) and RTC are all on the board: nothing to wire": "화면, 터치, PMU(잔량계, PWR 키), RTC가 모두 보드에: 배선 불필요",
+  "Alarm done: back to {t}": "알람 끝: {t}(으)로 복귀",
+  "Beep {n}/{of} · {hz} Hz": "삐 {n}/{of} · {hz} Hz",
+  "Beeping": "울리는 중",
+  "Cancelled by a tap: back to {t}": "화면 탭으로 취소: {t}(으)로 복귀",
+  "Countdown started: {t}": "카운트다운 시작: {t}",
+  "Counting down": "카운트다운 중",
+  "Dial timer · product · M5Stack Dial (ESP32-S3, GC9A01, encoder, buzzer)": "다이얼 타이머 · 완성품 · M5Stack Dial (ESP32-S3, GC9A01, 엔코더, 부저)",
+  "Drag or scroll the ring · tap the ring = BtnA · tap the screen = cancel": "링을 드래그하거나 스크롤 · 링 탭 = BtnA · 화면 탭 = 취소",
+  "Paused at {t}": "{t}에서 일시정지",
+  "Product: M5Stack Dial timer seen from above, orange rotary ring around a round touch screen": "완성품: 위에서 본 M5Stack Dial 타이머, 둥근 터치 화면을 둘러싼 주황색 회전 링",
+  "Resumed at {t}": "{t}부터 재개",
+  "Rotary ring: drag or scroll to set the minutes, tap to start or pause": "회전 링: 드래그하거나 스크롤해 분 설정, 탭하면 시작 / 일시정지",
+  "Set to {n} min": "{n}분으로 설정",
+  "Setting": "설정 중",
+  "Time's up": "시간 종료",
+  "{n} min set": "{n}분 설정됨",
+  "Paused": "일시 정지됨",
 };
 export default d;
