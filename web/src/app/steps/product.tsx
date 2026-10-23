@@ -1148,7 +1148,7 @@ export function productStep(): StepImpl {
       // Unfinished assembly doesn't lock the page: show the reference product with the Bench's current firmware, labelled, and Next leads on
       preview = !own || own.placed.length < own.total;
       const a = assembly()!;
-      if (c.work.id === 'dialtimer' && dial3d && dial3d.stand !== dialStandOf(a)) { dial3d.dispose(); dial3d = null; node = null; }
+      if (c.work.id === 'dialtimer' && dialStandOf(a) !== dial3d?.stand && dial3d) { dial3d.dispose(); dial3d = null; node = null; }
       if (!node) build(c);
       c.shell.layer.render(
         <>
