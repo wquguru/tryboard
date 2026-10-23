@@ -1644,6 +1644,7 @@
 - 原因：F-12 的目的是 SEO，需要每种语言独立 URL + `hreflang`；Atom 不能在客户端换文字，必须分文件；`static_shell.mjs` 全用相对链接（`./`、`./select`），放进 `/zh/` 目录会全部断掉，后缀方案不用改链接。
 - 文案位置：页面外壳与授权页说明放构建专用词典 `web/src/i18n/<loc>/static.ts`（不进任何 `data-i18n` 组，不增加 React 页面下载量）；更新日志条目译文直接写在 `web/changelog.yaml` 每条里，审核要求四语齐全。许可证名、SPDX、版权行、THIRD_PARTY_NOTICES.txt、tryboard.spdx.json 是法律原文，不翻译。商标声明保持英文并标 `lang="en"`（同 site.tsx）。
 - 备选：一页内嵌四语、客户端切换——否：搜索引擎只看到英文、Atom 仍要分文件；`/zh/` 目录——否：要把外壳所有相对链接改成绝对路径，并影响 og / smoke 路由。
+- 实现补充（F-12b 完成时）：首屏前语言判定 `?lang` 只管本次访问、不写 `tb-lang`（与 React 页 `detectLocale` 一致）；浏览器语言只在英文（x-default）页触发跳转，已本地化的地址在没有保存选择时原地不动，免得搜索引擎和分享链接被弹走；跳转保留 query（含 `?lang`，不会循环）与 hash。语言选择写 `tb-lang`，写不进（隐私模式）就改用 `?lang=`。`<html lang>`、hreflang、Atom `xml:lang` 中文都用 `zh-CN`。锚点与条目 id 各语言都取英文标题 slug，切换语言保留位置。
 
 ## 2026-10-22 G-07：480×480 AMOLED（ws-amoled216）上做 LVGL 时钟 / 手表作品的可行性（实测结论）
 - 测法：同一台机（负载 4–12，高于 P2-07 的 < 4，倍率偏低几个百分点）；网页 = `tools/build_web.sh` 后 puppeteer 打开 `/app?work=blank&example=<id>#bench`，用 `session.sim.mark()` 取模拟时间 / 墙钟，rAF 里看 `session.frame.lcd` 换引用的间隔，滑动后看页码点区域（x 196–236, y 448–460）的哈希何时变；Node = `tools/bench_wasm.mjs`；CLI = `tryboard run` + `/usr/bin/time`，滑动重画耗时靠不同 `--seconds` 下 `pixels written` 二分。脚本是一次性的，没入库，原始数字在 Reviews/ab/G-07.md。
@@ -1665,4 +1666,3 @@
   - **不建议**：480×480 整屏动画（表盘整体旋转、整屏渐变、页面滑动动画）——按 s3-lvgl 的抗锯齿绘制速率 ≈ 1.9 M 像素/s，整屏 23 万像素一帧约 120 ms 模拟时间，模拟内约 8 FPS、网页约 4 FPS。
 - 若要先优化：只有核心提速（继续 P2-07 的 Xtensa 快路径）能改善第二、三档；传帧不用动。一处低成本点（未动手）：`web/src/worker.ts` `postLcd` 只按 33 ms 节流取整屏，480 屏 40 行一条带地刷（12 条 / 帧），网页可能看到画到一半的帧（撕裂），可改成在一帧最后一条带写完（RAMWR 窗口到底）时再发——对表盘观感比对速度更有用。
 - 备选：另写一个 480×480 整屏动画的 LVGL 基准固件实测第三档——否：任务要求不改产品代码，s3-lvgl 的满负荷像素速率已能估出量级；以后做手表作品时用作品本身的固件再测一次。
-- 实现补充（F-12b 完成时）：首屏前语言判定 `?lang` 只管本次访问、不写 `tb-lang`（与 React 页 `detectLocale` 一致）；浏览器语言只在英文（x-default）页触发跳转，已本地化的地址在没有保存选择时原地不动，免得搜索引擎和分享链接被弹走；跳转保留 query（含 `?lang`，不会循环）与 hash。语言选择写 `tb-lang`，写不进（隐私模式）就改用 `?lang=`。`<html lang>`、hreflang、Atom `xml:lang` 中文都用 `zh-CN`。锚点与条目 id 各语言都取英文标题 slug，切换语言保留位置。
