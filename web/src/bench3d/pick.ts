@@ -115,12 +115,14 @@ export function mountPointer(ctx: BenchCtx): void {
   const hitEncoder = (ev: { clientX: number; clientY: number }) => {
     if (!ctx.encoder) return false;
     ray.setFromCamera(toNdc(ev), camera);
-    return ray.intersectObject(ctx.encoder.hit).length > 0;
+    const { hit, occl } = ctx.encoder;
+    // A ring under a panel (M5Dial) counts only where it is the nearest surface, not through the glass
+    return occl ? ray.intersectObject(occl, true)[0]?.object === hit : ray.intersectObject(hit).length > 0;
   };
   const showKnob = () => {
     if (!ctx.encoder) return;
     ctx.encoder.knob.rotation.y = -(ctx.encoder.pos * Math.PI) / 10;
-    ctx.encoder.knob.position.y = ctx.encoder.y0 - (ctx.encoder.pushed ? 1.2 : 0);
+    ctx.encoder.knob.position.y = ctx.encoder.y0 - (ctx.encoder.pushed ? (ctx.encoder.btn !== undefined ? 0.4 : 1.2) : 0);
   };
   ctx.showKnob = showKnob;
   const turnEncoder = (steps: number) => {
@@ -133,7 +135,8 @@ export function mountPointer(ctx: BenchCtx): void {
     if (!ctx.encoder) return;
     ctx.encoder.pushed = down;
     showKnob();
-    ctx.encSwCb?.(down);
+    if (ctx.encoder.btn !== undefined) ctx.boardBtnCb?.(ctx.encoder.btn, down);
+    else ctx.encSwCb?.(down);
   };
   renderer.domElement.addEventListener('pointerdown', (ev) => {
     if (!hitEncoder(ev)) return;
@@ -251,7 +254,7 @@ export function mountPointer(ctx: BenchCtx): void {
       ray.setFromCamera(toNdc(ev), camera);
       return ray.intersectObject(imu, true).length > 0;
     };
-    const c = pick(ev) ? 'pointer' : pickPot(ev) || dragging || hitEncoder(ev) ? 'ew-resize' : hitObstacle(ev) ? 'grab' : ctx.touchScreen && touchAt(ev) ? 'crosshair' : overImu() ? 'grab' : ctx.pickCb && pickAt(ev) ? 'pointer' : '';
+    const c = pick(ev) ? 'pointer' : pickPot(ev) || dragging || hitEncoder(ev) ? 'ew-resize' : hitObstacle(ev) ? 'grab' : ctx.touchScreen && touchAt(ev) ? 'crosshair' : ctx.touchZones.length && touchZoneAt(ev) ? 'pointer' : overImu() ? 'grab' : ctx.pickCb && pickAt(ev) ? 'pointer' : '';
     renderer.domElement.style.cursor = c;
   });
 
@@ -260,7 +263,7 @@ export function mountPointer(ctx: BenchCtx): void {
   ctx.poseCb = null;
   /** This press was used by a key / touch / IMU drag: don't treat the release as a pick */
   let consumed = false;
-  let touching: { x: number; y: number; t: number } | null = null;
+  let touching: { x: number; y: number; t: number; zone?: boolean } | null = null;
   const finger = new THREE.Mesh(new THREE.RingGeometry(1.6, 2.4, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthTest: false }));
   finger.renderOrder = 22;
   finger.visible = false;
@@ -276,12 +279,31 @@ export function mountPointer(ctx: BenchCtx): void {
     // Circle / rounded-square UV: u = 0.5 + x/w, v = 0.5 + y/h; texture is flipY, row 0 at the top
     return { x: Math.min(ctx.lcdW - 1, Math.max(0, h.uv.x * ctx.lcdW)), y: Math.min(ctx.lcdH - 1, Math.max(0, (1 - h.uv.y) * ctx.lcdH)) };
   };
+  const touchZoneAt = (ev: { clientX: number; clientY: number }) => {
+    if (!ctx.touchZones.length) return null;
+    ray.setFromCamera(toNdc(ev), camera);
+    const h = ray.intersectObjects(ctx.touchZones, false)[0];
+    if (!h) return null;
+    finger.position.copy(h.point);
+    finger.quaternion.copy(h.object.getWorldQuaternion(new THREE.Quaternion()));
+    return h.object.userData.zone as { x: number; y: number };
+  };
   ctx.rotating = null;
   const imuRoot = () => partsById.get('mpu6050') ?? partsById.get('qmi8658');
   ctx.imuRoot = imuRoot;
   renderer.domElement.addEventListener('pointerdown', (ev) => {
     // BOOT / RST presses are actions, not picks: keep the selection (example card, env sliders stay); pressed was set by the earlier listener
-    consumed = !!pressed;
+    consumed = !!pressed || !!(ctx.encDrag && ctx.encoder?.btn !== undefined);
+    const zone = touchZoneAt(ev);
+    if (zone) {
+      // Off-panel key: one stationary touch until release (M5Unified ignores a touch that starts moving)
+      controls.enabled = false;
+      consumed = true;
+      touching = { x: zone.x, y: zone.y, t: performance.now(), zone: true };
+      finger.visible = true;
+      ctx.touchCb?.(zone.x, zone.y, true);
+      return;
+    }
     const tp = touchAt(ev);
     if (tp) {
       controls.enabled = false;
@@ -304,6 +326,7 @@ export function mountPointer(ctx: BenchCtx): void {
   const axis = new THREE.Vector3();
   window.addEventListener('pointermove', (ev) => {
     if (touching) {
+      if (touching.zone) return;
       const tp = touchAt(ev);
       const now = performance.now();
       // Report moves at ~30 Hz (real chips scan ~100 Hz; denser web events would only bloat the input log)

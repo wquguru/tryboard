@@ -181,13 +181,33 @@ export function m5Shell(id: M5Id) {
   body.add(box);
   grp.add(body);
   let top = H / 2;
+  // Dial: the orange ring is the rotary encoder (drag / wheel turns it, a tap presses the key under the panel)
+  let encoder: { knob: THREE.Group; hit: THREE.Mesh; y0: number; btn: number; grab: THREE.Vector3 } | null = null;
   if (s.ring) {
-    const ring = new THREE.Mesh(new THREE.CylinderGeometry(s.ring[0], s.ring[0], s.ring[1], 64), new THREE.MeshStandardMaterial({ color: 0xe86a2a, roughness: 0.45 }));
-    ring.position.y = top + s.ring[1] / 2;
-    // Pressing the knob anywhere off the touch glass presses the key under it
-    ring.userData.pick = { kind: 'button', id: 'A' } satisfies PickTarget;
-    grp.add(ring);
-    top += s.ring[1];
+    const [rr, rh] = s.ring;
+    const knob = new THREE.Group();
+    knob.position.y = top + rh / 2;
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(rr, rr, rh, 64), new THREE.MeshStandardMaterial({ color: 0xe86a2a, roughness: 0.45 }));
+    knob.add(ring);
+    // Grip ribs and a white index dot make each detent visible
+    const ribMat = new THREE.MeshStandardMaterial({ color: 0xb4501c, roughness: 0.6 });
+    for (let i = 0; i < 40; i++) {
+      const a = (i / 40) * Math.PI * 2;
+      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.6, rh * 0.8, 0.5), ribMat);
+      rib.position.set(Math.cos(a) * rr, 0, Math.sin(a) * rr);
+      rib.rotation.y = -a;
+      rib.raycast = () => {};
+      knob.add(rib);
+    }
+    const dot = new THREE.Mesh(new THREE.CircleGeometry(0.9, 16), new THREE.MeshBasicMaterial({ color: 0xf4f2ee }));
+    dot.rotation.x = -Math.PI / 2;
+    dot.position.set(rr - 2, rh / 2 + 0.02, 0);
+    dot.raycast = () => {};
+    knob.add(dot);
+    grp.add(knob);
+    const btn = s.buttons.find((k) => k.at === 'face')?.pin ?? -1;
+    encoder = { knob, hit: ring, y0: knob.position.y, btn, grab: new THREE.Vector3(0, rh / 2, rr - 2) };
+    top += rh;
   }
 
   // Panel: black glass plate (the Atom / Dial key when `face`), emissive screen 0.05 mm above it
@@ -255,11 +275,19 @@ export function m5Shell(id: M5Id) {
     gpioLeds.push({ pin: s.gpioLed.pin, lens, light, now: 0, target: 0 });
   }
 
+  // Core2 A / B / C: printed dots on the glass below the panel; a tap there is a touch at panel y 255 (M5Unified reads y >= 240 as keys)
+  const zones: THREE.Mesh[] = [];
   for (let i = 0; i < (s.zones ?? 0); i++) {
     const dot = new THREE.Mesh(new THREE.CircleGeometry(1.4, 24), new THREE.MeshBasicMaterial({ color: 0xc8ccd2 }));
     dot.rotation.x = -Math.PI / 2;
     dot.position.set((i - 1) * 14, top + 0.02, 21);
     grp.add(dot);
+    const pad = new THREE.Mesh(new THREE.PlaneGeometry(12, 6), MAT.hit);
+    pad.rotation.x = -Math.PI / 2;
+    pad.position.set((i - 1) * 14, top + 0.04, 21);
+    pad.userData = { zone: { x: Math.round((i * 2 + 1) * (320 / 6)), y: 255 }, dot };
+    grp.add(pad);
+    zones.push(pad);
   }
   if (s.camera) {
     const cam = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.3, 24), MAT.chip);
@@ -289,7 +317,7 @@ export function m5Shell(id: M5Id) {
   };
   return {
     grp, buttons, pwrMat, rgbMat, rgbLight, pinPositions: {} as Record<string, THREE.Vector3>, pinRecs: [], usbPort, L, T: H, spec, extSlots: [],
-    screen, boardId: id as BoardId, flat: true as const,
+    screen, boardId: id as BoardId, flat: true as const, encoder, zones,
     lcdPx: s.lcd?.px ?? null, screenMm: s.lcd ? s.lcd.mm : ([0, 0] as [number, number]), touch: !!s.touch, rest: 0, ledPin: s.ws2812 ?? -1, gpioLeds,
   };
 }

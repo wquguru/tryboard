@@ -78,7 +78,8 @@ export interface BenchCtx {
   spkLevel: number;
   micLevel: number;
   potCb: ((pin: number, v: number) => void) | null;
-  encoder: { knob: THREE.Group; hit: THREE.Mesh; pos: number; pushed: boolean; y0: number } | null;
+  /** btn: a press is this board key (M5Dial ring has no encoder switch); grab: knob-local drag point; occl: hit only when nothing in it is in front */
+  encoder: { knob: THREE.Group; hit: THREE.Mesh; pos: number; pushed: boolean; y0: number; btn?: number; grab?: THREE.Vector3; occl?: THREE.Object3D } | null;
   strips: { pin: number; lenses: THREE.MeshStandardMaterial[]; light: THREE.PointLight }[];
   stripLast: Map<number, number[][]>;
   paintStrip: (st: { pin: number; lenses: THREE.MeshStandardMaterial[]; light: THREE.PointLight; }, leds: number[][]) => void;
@@ -88,6 +89,8 @@ export interface BenchCtx {
   distCb: ((cm: number) => void) | null;
   parts: THREE.Group<THREE.Object3DEventMap>;
   touchScreen: THREE.Mesh | null;
+  /** Off-panel touch keys (Core2 A / B / C): userData.zone = touch point in panel pixels */
+  touchZones: THREE.Mesh[];
   oledData: Uint8Array<ArrayBuffer>;
   oledTex: THREE.DataTexture | null;
   lcdData: Uint8Array<ArrayBuffer>;

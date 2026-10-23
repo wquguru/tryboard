@@ -68,6 +68,9 @@ const CASES = [
   { fw: 'arduino-m5-probe-stickc_plus2', board: 'm5stickcplus2', start: 'esp32-hello', want: 'M5PROBE board=M5StickCPlus2 board_id=5', done: 'TRYBOARD_OK m5-probe' },
   { fw: 'arduino-m5-cardputer-demo', board: 'm5cardputer', start: 's3-blink', want: 'CARDPUTER ready board=14 display=240x135 keyboard=74hc138', done: 'CARDPUTER ready', keys: true },
   { fw: 'arduino-m5-env-atoms3', board: 'm5atoms3', grove: 'env4', start: 's3-blink', want: 'ENV ready unit=4 port_a=2/1', done: 'ENV4 t=', env: { temp: 35.6, humidity: 12.9, pressure: 102260 }, after: 'ENV4 t=35.6 h=12.9 p=1022.6' },
+  // G-06: the Dial ring is the encoder (drag / wheel; a tap is BtnA G42); Core2 A / B / C are touches below the panel
+  { fw: 'arduino-m5-dial-demo', board: 'm5dial', start: 's3-blink', want: 'DIAL ready board=12 display=240x240 rtc=1 touch=1', done: 'DIAL ready', dial: true },
+  { fw: 'arduino-m5-stickc-demo-core2', board: 'm5core2', start: 'esp32-hello', want: 'DEMO ready board=2 display=320x240', done: 'DEMO ready', zones: ['DEMO btnA presses=1', 'DEMO btnB presses=1', 'DEMO btnC'] },
   { fw: 'arduino-m5-env-stickc_plus2', board: 'm5stickcplus2', grove: 'env3', start: 'esp32-hello', want: 'ENV ready unit=3 port_a=32/33', done: 'ENV3 t=', env: { temp: 30.2, humidity: 60.4, pressure: 99870 }, after: 'ENV3 t=30.2 h=60.4 p=998.7' },
 ];
 
@@ -109,6 +112,42 @@ for (const c of CASES) {
     }
     const typed = await waitFor(page, () => globalThis.__tbApp.session.consoleText().includes('CARDPUTER line=hi ,'), null, 20000);
     report(`${c.board}: typed keys reach the Cardputer keyboard`, typed, typed ? 'CARDPUTER line=hi ,' : (await page.evaluate(() => globalThis.__tbApp.session.consoleText())).slice(-200).replace(/\n/g, ' | '));
+  }
+  const tail = async () => (await page.evaluate(() => globalThis.__tbApp.session.consoleText())).slice(-200).replace(/\n/g, ' | ');
+  if (c.dial) {
+    // Fast real-mouse drag of 20 detents (14 px each) on the ring, then two wheel notches, then a tap
+    const p0 = await page.evaluate(() => globalThis.__tbApp.session.bench.encoderScreenPos());
+    await page.mouse.move(p0[0], p0[1]);
+    await page.mouse.down();
+    for (let dx = 15; dx <= 290; dx += 25) await page.mouse.move(p0[0] + dx, p0[1]);
+    await page.mouse.up();
+    const turned = await waitFor(page, () => globalThis.__tbApp.session.consoleText().includes('DIAL enc=20\n'), null, 20000);
+    report(`${c.board}: dragging the ring turns the encoder 20 detents`, turned, turned ? 'DIAL enc=20' : await tail());
+    // 20 detents is one full turn: the index dot is back where it started unless the camera moved
+    const p1 = await page.evaluate(() => globalThis.__tbApp.session.bench.encoderScreenPos());
+    report(`${c.board}: ring drag does not orbit the view`, Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) < 3, `(${p0.map(Math.round)}) -> (${p1.map(Math.round)})`);
+    await page.mouse.move(p1[0], p1[1]);
+    for (let i = 0; i < 2; i++) {
+      await page.mouse.wheel({ deltaY: -100 });
+      await sleep(120);
+    }
+    const wheel = await waitFor(page, () => globalThis.__tbApp.session.consoleText().includes('DIAL enc=22\n'), null, 20000);
+    report(`${c.board}: wheel over the ring turns it`, wheel, wheel ? 'DIAL enc=22' : await tail());
+    const p2 = await page.evaluate(() => globalThis.__tbApp.session.bench.encoderScreenPos());
+    await page.mouse.click(p2[0], p2[1]);
+    const pressed = await waitFor(page, () => globalThis.__tbApp.session.consoleText().includes('DIAL btnA presses=1'), null, 20000);
+    report(`${c.board}: tapping the ring presses BtnA`, pressed, pressed ? 'DIAL btnA presses=1' : await tail());
+  }
+  for (const [i, want] of (c.zones ?? []).entries()) {
+    const z = await page.evaluate((k) => globalThis.__tbApp.session.bench.touchZoneScreenPos(k), i);
+    if (z) {
+      await page.mouse.move(z[0], z[1]);
+      await page.mouse.down();
+      await sleep(150);
+      await page.mouse.up();
+    }
+    const hit = z && (await waitFor(page, (w) => globalThis.__tbApp.session.consoleText().includes(w), want, 20000));
+    report(`${c.board}: touch key ${'ABC'[i]} below the panel`, !!hit, hit ? want : z ? await tail() : 'no zone on screen');
   }
   await page.screenshot({ path: path.join(outDir, `m5board-${tag}.png`) });
 

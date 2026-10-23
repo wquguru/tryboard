@@ -246,6 +246,7 @@ export function* mountState(ctx: BenchCtx): Generator<void> {
   rig.add(ctx.parts);
   /** Touch LCD screen mesh (a ray hitting it = finger on the screen) */
   ctx.touchScreen = null;
+  ctx.touchZones = [];
   const oledData = new Uint8Array(128 * 64 * 4);
   ctx.oledData = oledData;
   ctx.oledTex = null;
@@ -367,6 +368,7 @@ export function mountScene(ctx: BenchCtx): void {
     ctx.parts = new THREE.Group();
     rig.add(ctx.parts);
     ctx.touchScreen = null;
+    ctx.touchZones = [];
     ctx.leds = [];
     resetPartLamps();
     ctx.servos = [];
@@ -391,7 +393,12 @@ export function mountScene(ctx: BenchCtx): void {
       if (ctx.board.touch) {
         ctx.touchScreen = ctx.board.screen;
         ctx.touchHalf = [ctx.board.screenMm[0] / 2, ctx.board.screenMm[1] / 2];
+        ctx.touchZones = ctx.board.zones;
       }
+    }
+    if ('flat' in ctx.board && ctx.board.encoder) {
+      const enc = ctx.board.encoder;
+      ctx.encoder = { knob: enc.knob, hit: enc.hit, pos: 0, pushed: false, y0: enc.y0, btn: enc.btn, grab: enc.grab, occl: ctx.board.grp };
     }
     if ('flat' in ctx.board) ctx.leds.push(...ctx.board.gpioLeds);
     ctx.holeUse = new Map();

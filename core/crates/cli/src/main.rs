@@ -711,7 +711,7 @@ fn run(args: &[String]) {
             && servo.is_none()
             && trace_io.is_none()
             && trace_tasks.is_none()
-            && encoder.is_none()
+            && m.encoder_position().is_none() // --encoder or a board preset's (M5Dial)
             && sonar.is_none()
             && !wire_sensors
             && !has_parts

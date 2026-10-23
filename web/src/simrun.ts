@@ -167,6 +167,8 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
   const replies: string[] = [];
   if (j.realnet) e.tb_realnet_set?.(1);
 
+  // --encoder or a board preset's encoder (M5Dial): 1 ms slices, same rule as the CLI
+  const anyEncoder = !Number.isNaN(e.tb_encoder_pos?.() ?? NaN);
   const script = parseScript(j.script);
   let si = 0;
   const total = Math.floor(j.seconds * CPU_HZ);
@@ -253,7 +255,7 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
         }
       }
     }
-    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice && !j.realnet && j.servo === undefined && !j.encoder && !j.sonar && j.dht11 === undefined && !partsTimed(j.parts) ? CPU_HZ / 100 : CPU_HZ / 1000;
+    const slice = si >= script.length && j.pwmPin === undefined && !j.fixedSlice && !j.realnet && j.servo === undefined && !anyEncoder && !j.sonar && j.dht11 === undefined && !partsTimed(j.parts) ? CPU_HZ / 100 : CPU_HZ / 1000;
     const before = e.tb_cycles();
     const stop = e.tb_run(Math.min(slice, total - done));
     done += e.tb_cycles() - before;

@@ -440,9 +440,6 @@ function postOled(e: Exports) {
 
 let lcdVersion = 0;
 let lcdLast = 0;
-/** Attached screen size (touch clamp); 240 without a screen keeps the old CST816S behaviour */
-let lcdW = 240;
-let lcdH = 240;
 /** Screen frame w×h×4 (GC9A01 230 KB, CO5300 900 KB): only on change, at most 30 fps. */
 function postLcd(e: Exports, force = false) {
   if (!e.tb_lcd_version) return;
@@ -691,8 +688,6 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
     const err = attachLcdSpec(e, m.lcd);
     if (err) console.error(err);
   } else if (m.lcd && e.tb_lcd_attach) e.tb_lcd_attach();
-  lcdW = e.tb_lcd_w?.() || 240;
-  lcdH = e.tb_lcd_h?.() || 240;
   hasAudio = false;
   pcmOut = [];
   hasAudio = attachI2s(e, m.i2s);
@@ -715,7 +710,8 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
     return null;
   }
   if (m.env && (m.dht11 !== undefined || m.parts?.ds18b20)) e.tb_env_set(m.env.temp, m.env.humidity, m.env.pressure);
-  hasPinDevs = !!(m.encoder || m.sonar || m.dht11 !== undefined);
+  // A board preset's encoder (M5Dial) counts too, so the 3D knob follows the core position
+  hasPinDevs = !!(m.encoder || m.sonar || m.dht11 !== undefined) || !Number.isNaN(e.tb_encoder_pos?.() ?? NaN);
   timingText = '\u0000';
   vcdKey = '';
   e.tb_io_watch?.(ioLo, ioHi);
@@ -889,9 +885,9 @@ function apply(e: Exports, ev: InputAction) {
       return;
     }
     case 'touch': {
-      // Clamp to the attached screen and log what was applied (the CLI replays these exact pixels)
-      const x = Math.round(Math.min(lcdW - 1, Math.max(0, ev.x)));
-      const y = Math.round(Math.min(lcdH - 1, Math.max(0, ev.y)));
+      // Clamp to the 12-bit touch range like tb_touch (Core2 keys sit below the panel, y >= 240) and log what was applied
+      const x = Math.round(Math.min(4095, Math.max(0, ev.x)));
+      const y = Math.round(Math.min(4095, Math.max(0, ev.y)));
       e.tb_touch?.(x, y, ev.down ? 1 : 0);
       record(e, { ...ev, x, y });
       return;

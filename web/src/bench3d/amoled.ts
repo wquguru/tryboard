@@ -96,7 +96,7 @@ export function amoledBoard(id: BoardId) {
   const rgbLight = new THREE.PointLight(0xffffff, 0, 1, 2);
   return {
     grp, buttons, pwrMat, rgbMat, rgbLight, pinPositions: {} as Record<string, THREE.Vector3>, pinRecs: [], usbPort, L, T, spec: SPEC, extSlots: [],
-    screen: screen as THREE.Mesh | null, boardId: id, flat: true as const,
+    screen: screen as THREE.Mesh | null, boardId: id, flat: true as const, encoder: null, zones: [] as THREE.Mesh[],
     lcdPx: [480, 480] as [number, number] | null, screenMm: [S, S] as [number, number], touch: true, rest: 3.2, ledPin: -1, gpioLeds: [] as LedState[],
   };
 }

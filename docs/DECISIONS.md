@@ -1673,3 +1673,9 @@
 - 没改核心：CLI 末尾那句「app.elf is needed」和 `esp32c3::ble::locate` 注释保持原样（改输出要动 golden）；路线 c 接上时一起改。
 - 复现：`c3-ble-hr/flash.bin` 把 `API_vhci_host_send_packet`（0x4204f9da）起 16 字节取反，CLI 报 `API_vhci_host_send_packet not found`，网页进 state 2。
 - 备选：串口面板上方再放一条横幅（桌面端 state 2 已自动切到蓝牙页，重复）；把 state 2 也算进 Issues（会让选型 / 检查点的问题数变化，不符合「选型结论不受影响」）。
+## 2026-10-22 M5Dial 转环 / Core2 触摸键 / 编码器分片（G-06）
+- 决定：Dial 转环在网页复用台灯编码器交互（`ctx.encoder` 加 `btn` / `grab` / `occl`），按下走板键 A（G42）而不是编码器开关（预设 `sw` 为空，真机按屏即 A）；Core2 A/B/C 点按 = 屏外触摸点 (53 / 160 / 267, 255)。worker 的触摸坐标改为夹到 12 位（与 `tb_touch` / 脚本 `touch=` 相同），各触摸芯片模型自己再夹到屏幕；网页屏幕上的触摸仍在 pick 里按屏幕夹。CLI / simrun 的 1 ms 分片条件由「有 `--encoder`」改为「核心已挂编码器」（含 `--board m5dial`）。
+- 原因：Core2 按键区在 y ≥ 240，原先 worker 夹到 239 就点不到；分片规则以「仿真里有什么」为准，两边同一判断，避免以后板预设编码器在 10 ms 下与网页实时（恒 1 ms）分叉。实测 Dial 演示固件 10 ms / 1 ms 输出一致，现有 accept 期望不变。
+- 参考：M5Unified（MIT）`M5Unified.inl` 触摸按键判定（y ≥ 240 − 按键高度，键号 = x·614 >> 16），只读未抄。
+- 备选：Core2 触摸键单独走 GPIO 事件——否：真机就是触摸芯片报点，固件判定，走触摸才能和 CLI `touch=` 回放一致。
+

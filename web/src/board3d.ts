@@ -67,6 +67,8 @@ export interface Bench extends ScenePickApi {
   pingSonar(): void;
   /** Page position (clientX/Y) of encoder knob / obstacle for automated real-mouse drags; null if not visible */
   encoderScreenPos(): [number, number] | null;
+  /** Page position of off-panel touch key i (Core2 A / B / C); null if the board has none */
+  touchZoneScreenPos(i: number): [number, number] | null;
   obstacleScreenPos(): [number, number] | null;
   setPowered(on: boolean): void;
   /** Onboard WS2812 (C3 GPIO8 / S3 GPIO48) colour, 0–255 */
@@ -252,7 +254,12 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
     },
     encoderScreenPos() {
       if (!ctx.encoder) return null;
-      return screenOf(ctx.encoder.knob.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 8, 0)));
+      const { knob, grab } = ctx.encoder;
+      return screenOf(grab ? knob.localToWorld(grab.clone()) : knob.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 8, 0)));
+    },
+    touchZoneScreenPos(i) {
+      const z = ctx.touchZones[i];
+      return z ? screenOf(z.getWorldPosition(new THREE.Vector3())) : null;
     },
     obstacleScreenPos() {
       if (!ctx.sonar || !ctx.sonar.obstacle.visible) return null;
