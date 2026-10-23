@@ -1638,3 +1638,9 @@
 - accept `c3-cloud` `qemu: false`（QEMU 没有虚拟 AP / broker）；四个检查点同一参考固件；阶段一不加首页卡片（同 G-03）
 - 示例 c3-cloud 的 `scene.parts` 暂为空：网页场景还没有 aht20 部件类型（SCENE_TYPE / editor / scene3d），所以网页示例里看不到传感器、读数失败，留给 G-05b
 - 备选：BME280（已有网页部件）——否：PLAN 允许二选一，AHT20 更贴合「温湿度」且便宜；手写 MQTT——否：esp-mqtt 直接能跑
+
+## 2026-10-22 授权页 / 更新日志 / Atom 四语（F-12b）
+- 决定：静态页构建期按语言各生成一份文件，用后缀而不是目录：`licenses.zh.html` → `/licenses.zh`、`changelog.ja.html`、`changelog.ko.xml`；英文保留原地址（`/licenses`、`/changelog`、`changelog.xml`）。页头语言选择与 React 页同一 `tb-lang` 键；首屏前脚本按 `?lang` > `tb-lang` > 浏览器语言跳到对应版本（只在与当前页语言不同时跳，防循环）。
+- 原因：F-12 的目的是 SEO，需要每种语言独立 URL + `hreflang`；Atom 不能在客户端换文字，必须分文件；`static_shell.mjs` 全用相对链接（`./`、`./select`），放进 `/zh/` 目录会全部断掉，后缀方案不用改链接。
+- 文案位置：页面外壳与授权页说明放构建专用词典 `web/src/i18n/<loc>/static.ts`（不进任何 `data-i18n` 组，不增加 React 页面下载量）；更新日志条目译文直接写在 `web/changelog.yaml` 每条里，审核要求四语齐全。许可证名、SPDX、版权行、THIRD_PARTY_NOTICES.txt、tryboard.spdx.json 是法律原文，不翻译。商标声明保持英文并标 `lang="en"`（同 site.tsx）。
+- 备选：一页内嵌四语、客户端切换——否：搜索引擎只看到英文、Atom 仍要分文件；`/zh/` 目录——否：要把外壳所有相对链接改成绝对路径，并影响 og / smoke 路由。
