@@ -40,7 +40,7 @@ export interface BuyLine {
 }
 
 export interface ProcureTemplate {
-  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'door' | 'irlamp' | 'cloud' | 'blank' | 'custom';
+  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'door' | 'irlamp' | 'cloud' | 'amoclock' | 'blank' | 'custom';
   title: string;
   /** Matching level (firmware/levels.json id; level 07 variants are written 07:spin) */
   level: string | null;
@@ -372,6 +372,21 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
       { part: 'aht20', pin: 'SDA', net: 'GPIO6' },
     ],
     firmware: { wifi: true },
+  },
+  {
+    // Finished board (DECISIONS 2026-10-23 G-17a): nothing to wire, the board preset brings screen, touch, PMU and RTC
+    id: 'amoclock',
+    title: 'AMOLED desk clock',
+    level: 'amoclock-4',
+    product: 'amoclock',
+    board: 'ws-s3-touch-amoled-216',
+    required: [
+      { partId: 'ws-s3-touch-amoled-216', qty: 1, why: 'Screen, touch, PMU (battery gauge, PWR key) and RTC are all on the board: nothing to wire' },
+      CABLE,
+    ],
+    suggested: [],
+    wiring: [],
+    firmware: { wifi: false },
   },
   {
     id: 'usbkey',

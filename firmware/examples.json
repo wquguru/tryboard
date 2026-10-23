@@ -1798,5 +1798,32 @@
    "env"
   ],
   "chip": "esp32c3"
+ },
+ {
+  "id": "amoclock",
+  "chip": "esp32s3",
+  "title": "AMOLED desk clock: RTC face, battery page, set the time from the phone",
+  "about": "The Waveshare 2.16″ AMOLED board as a desk clock, nothing to wire. LVGL draws HH:MM as large seven-segment digits from the PCF85063 RTC (seconds below, refreshed in place); swipe left or right for the chip temperature page (the S3's internal sensor, which reads the die, not the room) and the battery page (AXP2101 level, USB and charging, VBAT). A short press of the PWR key blanks the AMOLED (brightness 0x51 = 0) and wakes it again. Over BLE (NimBLE, advertising as TryBoard-Clock) a phone writes 4-byte little-endian epoch seconds to characteristic FF11 to set the RTC. Battery and USB come from the board panel. The BLE link is a behaviour model; range and pairing need real hardware.",
+  "tags": [
+   "✓ Verified in sim",
+   "BLE",
+   "LVGL",
+   "CO5300",
+   "AMOLED",
+   "Touch",
+   "RTC",
+   "ESP-IDF 5.5"
+  ],
+  "pins": {
+   "lcd_cs": 12,
+   "lcd_clk": 38,
+   "i2c_sda": 15,
+   "i2c_scl": 14,
+   "tp_int": 11
+  },
+  "scene": {
+   "board": "ws-amoled216",
+   "parts": []
+  }
  }
 ]

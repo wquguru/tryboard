@@ -979,5 +979,9 @@ const d: Dict = {
   "Acceptance firmware targets the C3; Wi-Fi is built in": "验收固件针对 C3；自带 Wi-Fi",
   "Temperature and humidity over I2C (SDA GPIO6, SCL GPIO7, address 0x38); power it from 3V3": "通过 I2C 测温湿度（SDA GPIO6，SCL GPIO7，地址 0x38）；从 3V3 供电",
   "Module header straight to the board": "模块排针直接接到开发板",
+
+  // G-17a AMOLED clock work and template
+  "AMOLED desk clock": "AMOLED 桌面时钟",
+  "Screen, touch, PMU (battery gauge, PWR key) and RTC are all on the board: nothing to wire": "屏幕、触摸、电源管理（电量计、PWR 键）和 RTC 都在板上：不用接线",
 };
 export default d;
