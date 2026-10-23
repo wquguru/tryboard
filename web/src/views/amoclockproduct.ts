@@ -132,7 +132,7 @@ ${BG}
       q('state').textContent = !s.time ? '' : s.on ? t('{time} · page {n}/3 · {name}', { time: s.time, n: s.page, name: PAGE()[s.page - 1] }) : t('{time} · screen off', { time: s.time });
       q('bat').textContent = s.bat ? t('Battery {bat}', { bat: s.bat }) : '';
       q('sync').textContent = s.sync ? t('Last set from the phone: {time}', { time: s.sync }) : '';
-      q('ptx').textContent = s.ble === 'conn' ? t('Connected') : s.ble === 'adv' ? t('Set time') : '';
+      q('ptx').textContent = s.ble === 'conn' ? t('Connected') : s.ble === 'adv' ? t('Set the time') : '';
     },
   };
 }

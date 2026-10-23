@@ -1753,3 +1753,25 @@
 - 手机对时：产品页按钮依次发 `ble=scan`，等看到 `TryBoard-Clock` 再 `ble=connect`，连上且 GATT 读完后 `ble=write ff11 <4 字节小端>`，全部进输入日志，可 `--inputs` 重放。固件用 `gmtime` 无时区，所以手机发的是本地时间当 epoch（`Date.now()/1000 - tzOffset*60`）。
 - 为复用通用接口：`ProductHandlers` 加可选 `touch` / `pwrkey` / `sync`；首页卡片 `LiveCfg` 增加 `touchInt` / `battery`（从 `BOARD_DEVS['ws-amoled216']` 取）。逻辑放在 `steps/amoclock.tsx`，productStep 只加单行钩子（lint_size 不增长）。
 - 备选：直接做 3D 产品页——否：支架 / 外壳在 G-17c 才定，先 2D 保证流程可走通；手机按钮一次只写 FF11——否：未连接时写不进去，按真实手机流程扫描 → 连接 → 写。
+
+## 2026-10-23 Dial 计时器网页流程（G-16b）
+- 采购 / 台面不改代码：采购模板 `dialtimer` 只列 m5-dial + 数据线，`ALWAYS` 面包板 / 杜邦线没有被加进来（agent-browser 实测只出这两件）；台面直接从示例 scene 加载 m5dial 预设（屏、触摸、旋钮、G3 板载蜂鸣器）。
+- 产品页：还没有装法模板（G-16c 才加支架），照 cloud 的做法在 `views/worktpl.ts` 的 `PRODUCT_ONLY` 里给 dialtimer 一个只有成品视图的模板；G-16c 加进 TEMPLATES 后这条 fallback 不再生效。因此产品页仍显示通用的"参考成品"横幅（与 cloud 相同），等 G-16c 有装法后自然成立。合入 G-05c 后 cloud 已进 TEMPLATES，`PRODUCT_ONLY` 只剩 dialtimer。
+- 3D：`app/dial3d.ts` 直接复用台面的 `bench3d/m5shell.ts`（`m5Shell('m5dial')`），屏幕网格换成 240×240 DataTexture 喂 GC9A01 帧；不另建模型。交互：拖动 / 滚轮在橙色环上 = 编码器步进（横向 14 px 一格，与台面一致），环上短按（< 600 ms、无步进）= BtnA（G42，按下 100 ms 再松开，M5.update() 才能看到两个边沿），点屏 = 触摸（uv → 面板像素）；蜂鸣时环上方点光源发亮。无 WebGL 时用 `views/dialtimerproduct.ts` 的 2D 俯视图，同一套输入（环拖动每 15° 一格）。
+- 手机产品键：开始 / 暂停、+1 分钟、−1 分钟、取消（点屏），id `p-dial-*`；桌面右栏同样四个按钮 `pDial-*`。都走台面同一条输入路径（gpio42 / enc / touch），所以进输入日志可回放。
+- 手机产品键一行最多 5 个（`mobile.tsx` PhoneToolbar，原来 4 个）：Dial 是唯一有 4 个产品键 + 声音的作品，换成两行后底部面板变高，3D 视图只剩 333 px（< 屏高 45%，mobile.mjs「3D fullscreen」失败）；其它作品都 ≤ 4 个，不受影响。手机上取消键叫「取消」，桌面按钮仍叫「取消（点屏幕）」。
+- 首页卡片去掉 draft；卡片 demo 12 s 循环：1 s 转一格、2 s 按 BtnA 开始、8 s 点屏取消。
+- 声音验收用 analyser：产品页开声音后 1 分钟倒数（1× 墙钟约 60 s）到点，`__tbAudio.pcm.rms` 峰值 0.47。
+- i18n："Paused" 从 app 组（lab.ts）移到 site 组，因为首页卡片也会显示计时器状态（R-20 分组测试要求）。
+- 备选：产品页用 SVG 平面图——否：brief 要求 3D 可转可按；为产品页单独建 Dial 模型——否：与台面外观会分叉，m5shell 已按实物尺寸生成。
+
+## 2026-10-23 温湿度上云加「手机配网」检查点（G-05d）
+- **固件流程**（c3-cloud，配网门户放在 `main/prov.c`，照自家 C-02 固件 c3-softap-prov 写）：开机读 NVS 命名空间 `prov`，有 ssid 就直连；没有就开开放热点 TryBoard-Setup（192.168.4.1，配网页 + DNS 劫持）等 **1 秒**：有手机连上就等表单 POST → 存 NVS → 关热点 → 连 MyHome（192.168.5.100）→ 照旧上 MQTT；1 秒内没手机就关热点、连出厂网络 TryBoard-WiFi（192.168.4.100）。配网得到的网络连续 3 次连不上就清 NVS 并重启，重新开热点。
+- **为什么要「出厂网络」兜底**：cloud-1..4 原判定（3 秒内 192.168.4.100、CONNACK）不变，且这些检查点没有手机、每次都是空 NVS；只按「无凭据就开热点一直等」会让 cloud-1..4 全挂。1 秒窗口是为了让 cloud-2 的 CONNACK 仍在 3 秒内（实测 2.70 s，原来更早）。真产品一般无限期等手机，这里的短窗口是模拟器课程的妥协，新检查点的 brief 写明了。
+- **不用 APSTA**：热点与默认虚拟路由器都在 192.168.4.0/24（DECISIONS C-02），APSTA 会冲突；改 AP 网段要动手机侧地址假设，否掉。broker 仍写 192.168.4.1：虚拟网络对任何目的 IP 的 TCP 都应答（net.rs），配网后从 192.168.5.100 经网关照样连得上，且热点已关、不会被芯片自己的 AP 接口截走。
+- **检查点顺序**：新检查点 id `cloud-prov`，放在 cloud-1 之后、cloud-2 之前（works.ts 与 levels.json 同序）。理由：先学会 station 连网（cloud-1），再学「不写死凭据」的配网，之后的 broker / 发布 / 命令都与网络来源无关；放 cloud-1 之前要先懂 station 才能懂「配完切 station」，不顺。不改名 cloud-2..4，免得进度存档、模板（templates.ts level cloud-4）和 golden 跟着变。
+- **检查点输入**：用脚本动作 `0:phone=join,TryBoard-Setup; 0.5:phone=open; 1:phone=post,,ssid=MyHome&pass=12345678`（网页与 CLI 共用，同 softap-prov-script）；accept 用例 `c3-cloud-prov` / `c3-cloud-prov-badpass` 用 `--ap-phone --ap-post`。
+- **指纹 / golden**：c3-cloud 固件变了，cloud-1..4 指纹与 c3-cloud 相关 golden 随之变化（串口多出热点三行、IP 晚约 1 秒，CONNACK 1.70 → 2.70 s，unimpl 计数随之变），判定不变；golden 229/233 一致，只有 c3-cloud 变（其余是 3 个新用例没有快照），应用层串口除上述三行外逐行相同。新指纹（网页 = CLI）：cloud-1 / cloud-2 ce8e·2bf8，cloud-prov afc2·4bc3，cloud-3 f577·4720，cloud-4 a9ab·c878。
+- **台面重新配网（长按 BOOT）**：1 秒窗口过后网页上的手机就搜不到热点了，台面「重新上电」又会把 flash 还原。所以加长按 BOOT（GPIO9）1 秒：清 NVS `prov`、写一个 `wait` 标记后重启，重启后读到标记就开热点**一直等手机**（标记读完即删）。台面 3D BOOT 按住 1 s 或产品步骤的「用手机重新配网（长按 BOOT）」按钮（按住 1.6 s 并打开虚拟手机）触发；accept `c3-cloud-reprov` 用 `gpio9=0/1` 覆盖。重启前先停 MQTT、关掉重连，免得串口出现「Wi-Fi 断开 / MQTT 出错」噪声。
+- **首页卡片演示**：首页 cloud 卡片原来在仿真 6.0–6.1 s 的窗口里发 interval=2；固件晚 1 秒订阅后，帧慢时会错过窗口（levels.mjs 实测失败），改为 6 s 后、已订阅且未收到命令时每 2 s 重发一次。
+- 备选：编译期写死凭据、只靠长按 BOOT 进配网——否：不是「无凭据时配网」（长按 BOOT 只是台面上的补充入口）；预烧 NVS 分区——否：学员自己编的固件没有这一步，网页也得另做。

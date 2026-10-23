@@ -1026,6 +1026,53 @@ const d: Dict = {
   // G-17a AMOLED clock work and template
   "AMOLED desk clock": "AMOLED デスククロック",
   "Screen, touch, PMU (battery gauge, PWR key) and RTC are all on the board: nothing to wire": "画面、タッチ、PMU（残量計、PWR キー）、RTC はすべてボード上：配線不要",
+  "Alarm done: back to {t}": "アラーム終了：{t} に戻る",
+  "Beep {n}/{of} · {hz} Hz": "ピッ {n}/{of} · {hz} Hz",
+  "Beeping": "鳴動中",
+  "Cancelled by a tap: back to {t}": "画面タップで取消：{t} に戻る",
+  "Countdown started: {t}": "カウントダウン開始：{t}",
+  "Counting down": "カウントダウン中",
+  "Dial timer · product · M5Stack Dial (ESP32-S3, GC9A01, encoder, buzzer)": "ダイヤルタイマー · 完成品 · M5Stack Dial（ESP32-S3、GC9A01、エンコーダー、ブザー）",
+  "Drag or scroll the ring · tap the ring = BtnA · tap the screen = cancel": "リングをドラッグ / スクロール · リングをタップ = BtnA · 画面をタップ = 取消",
+  "Paused at {t}": "{t} で一時停止",
+  "Product: M5Stack Dial timer seen from above, orange rotary ring around a round touch screen": "完成品：上から見た M5Stack Dial タイマー。丸いタッチ画面を囲むオレンジの回転リング",
+  "Resumed at {t}": "{t} から再開",
+  "Rotary ring: drag or scroll to set the minutes, tap to start or pause": "回転リング：ドラッグ / スクロールで分を設定、タップで開始 / 一時停止",
+  "Set to {n} min": "{n} 分に設定",
+  "Setting": "設定中",
+  "Time's up": "時間です",
+  "{n} min set": "{n} 分に設定済み",
+  "Paused": "一時停止中",
+  // G-05c cloud assembly / 3D
+  "Cloud dashboard · click an interval": "クラウドダッシュボード · 間隔をクリック",
+  "AHT20 against the board: reads about {n} ℃ high": "AHT20 がボードに密着：約 {n} ℃ 高く読む",
+  "AHT20 by the vents: reads the room": "AHT20 は通気口のそば：部屋の温度を読む",
+  "Cloud reporter · case 70×50×25 mm, vent slots on the right (estimate)": "温湿度クラウド送信機 · ケース 70×50×25 mm、右側に通気スリット（推定）",
+  "Build the cloud reporter": "温湿度クラウド送信機を組み立てる",
+  "Start with the vented case": "まず通気スリット付きケースから",
+  "Vented case": "通気ケース",
+  "Case": "ケース",
+  "Case in place": "ケースを配置",
+  "Vent slots on the right, USB-C hole on the left": "右に通気スリット、左に USB-C 穴",
+  "SDA GPIO6 · SCL GPIO7 to the AHT20, Wi-Fi to the router": "SDA GPIO6 · SCL GPIO7 を AHT20 へ、Wi-Fi はルーターへ",
+  "AHT20 module": "AHT20 モジュール",
+  "On the vent side, away from the board": "通気口側、ボードから離す",
+  "Sensor in the vent airflow": "センサーは通気の流れの中",
+  "It reads the room air": "部屋の空気を読む",
+  "Against the board, next to the regulator": "ボードに密着、レギュレーターの隣",
+  "On the board": "ボードの上",
+  "Sensor against the board": "センサーがボードに密着",
+  "The LDO and Wi-Fi warm it, reading about {n} ℃ high": "LDO と Wi-Fi の熱で温まり、約 {n} ℃ 高く読む",
+  "USB-C cable": "USB-C ケーブル",
+  "USB cable": "USB ケーブル",
+  "USB-C cable plugged in": "USB-C ケーブルを接続",
+  "5 V from any phone charger": "5 V はスマホ充電器で OK",
+  "In the vent airflow, reads the room": "通気の流れの中、部屋の温度を読む",
+  "Against the board, about {n} ℃ high": "ボードに密着、約 {n} ℃ 高い",
+  "USB-C 5 V, about 80 mA average with Wi-Fi (estimate)": "USB-C 5 V、Wi-Fi 使用時の平均約 80 mA（推定）",
+  "14 / 25 mm used": "14 / 25 mm 使用",
+  "Smoked lid": "スモークの上ぶた",
+  "Top lid": "上ぶた",
   "A 2.16-inch AMOLED clock board, nothing to wire: swipe for the temperature and battery pages, PWR blanks the screen, a phone sets the time over Bluetooth": "2.16 インチ AMOLED の時計ボード、配線不要：スワイプで温度・電池ページ、PWR で画面オフ、スマホが Bluetooth で時刻合わせ",
   "AMOLED desk clock · product · CO5300 480×480 + CST9220 touch + AXP2101 + PCF85063": "AMOLED 卓上時計 · 製品 · CO5300 480×480 + CST9220 タッチ + AXP2101 + PCF85063",
   "Product: a 2.16-inch AMOLED clock board on a desk stand, the phone next to it sets the time over Bluetooth": "製品：卓上スタンドに載せた 2.16 インチ AMOLED 時計ボード、隣のスマホが Bluetooth で時刻合わせ",
@@ -1037,18 +1084,20 @@ const d: Dict = {
   "Phone connected over BLE": "スマホが BLE で接続",
   "Phone wrote the wrong length (needs 4 bytes)": "スマホの書き込み長が不正（4 バイト必要）",
   "Screen is off: swipe ignored (press PWR first)": "画面オフ：スワイプは無視（先に PWR を押す）",
-  "Set time": "時刻合わせ",
   "Swiped to page {n}/3 · {name}": "{n}/3 ページへスワイプ · {name}",
   "Time set from the phone: {time}": "スマホで時刻合わせ完了：{time}",
   "USB in": "USB 接続",
   "USB out": "USB 未接続",
   "{time} · page {n}/3 · {name}": "{time} · {n}/3 ページ · {name}",
   "{time} · screen off": "{time} · 画面オフ",
+  "Set time from phone": "スマホで時刻合わせ",
+  "Set the time": "時刻合わせ",
 
-  // Moved from lab.ts
+  // Moved from steps.ts
+  "Temperature": "温度",
+
+  // G-05c cloud assembly
   "Connected": "接続済み",
-
-  // F-08f IR bench parts
   "off": "オフ",
   "Dial ring direction (encoder A/B order is inferred)": "ダイヤルリングの回転方向（エンコーダの A/B 順は推定）",
   "Board detection level on G4 (from the M5Unified heuristic, not the schematic)": "G4 のボード判別レベル（回路図ではなく M5Unified の経験則による）",
@@ -1056,18 +1105,8 @@ const d: Dict = {
   "IMU address (BMI270 assumed at 0x68)": "IMU アドレス（BMI270 は 0x68 と仮定）",
   "Key map (TCA8418 map assumed)": "キーマップ（TCA8418 のマップは仮定）",
   "Touch coordinates (XPT2046 raw span is estimated)": "タッチ座標（XPT2046 の生値の範囲は推定）",
-
-  // Moved from net.ts
   "Time": "時刻",
-
-  // Board advisor page (web/src/advisor/App.tsx).
   "Battery": "電池",
   "left": "本残り",
-
-  // Moved from steps.ts
-  "Temperature": "温度",
-
-  // G-05b cloud
-  "Set time from phone": "スマホで時刻合わせ",
 };
 export default d;

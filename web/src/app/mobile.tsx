@@ -355,10 +355,11 @@ export function PhoneToolbar({
     // section like the bench More drawer. The primary button (retest) takes its own 48-tall row last (DESIGN_V2 §9.5)
     const titled = groups.some((g) => SECTION_TITLE[g.id]);
     const grid = (tools: Tool[]) => {
-      const cols = Math.min(4, Math.max(1, tools.filter((x) => !x.primary).length));
+      // Up to five across (G-16b Dial: four timer keys + sound), so the 3D view keeps ≥ 45% of the screen
+      const cols = Math.min(5, Math.max(1, tools.filter((x) => !x.primary).length));
       return cn(
         "grid gap-1.5",
-        ["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4 max-[360px]:grid-cols-3"][cols - 1],
+        ["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4 max-[360px]:grid-cols-3", "grid-cols-5 max-[360px]:grid-cols-3"][cols - 1],
       );
     };
     const btn = (tool: Tool) => {

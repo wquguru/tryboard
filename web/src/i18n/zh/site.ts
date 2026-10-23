@@ -1026,6 +1026,53 @@ const d: Dict = {
   // G-17a AMOLED clock work and template
   "AMOLED desk clock": "AMOLED 桌面时钟",
   "Screen, touch, PMU (battery gauge, PWR key) and RTC are all on the board: nothing to wire": "屏幕、触摸、电源管理（电量计、PWR 键）和 RTC 都在板上：不用接线",
+  "Alarm done: back to {t}": "响完了：回到 {t}",
+  "Beep {n}/{of} · {hz} Hz": "嘀 {n}/{of} · {hz} Hz",
+  "Beeping": "正在响",
+  "Cancelled by a tap: back to {t}": "点屏取消：回到 {t}",
+  "Countdown started: {t}": "开始倒计时：{t}",
+  "Counting down": "倒计时中",
+  "Dial timer · product · M5Stack Dial (ESP32-S3, GC9A01, encoder, buzzer)": "旋钮计时器 · 成品 · M5Stack Dial（ESP32-S3、GC9A01、编码器、蜂鸣器）",
+  "Drag or scroll the ring · tap the ring = BtnA · tap the screen = cancel": "拖动或滚动旋钮环 · 点环 = BtnA · 点屏幕 = 取消",
+  "Paused at {t}": "暂停在 {t}",
+  "Product: M5Stack Dial timer seen from above, orange rotary ring around a round touch screen": "成品：俯视的 M5Stack Dial 计时器，橙色旋钮环围着圆形触摸屏",
+  "Resumed at {t}": "从 {t} 继续",
+  "Rotary ring: drag or scroll to set the minutes, tap to start or pause": "旋钮环：拖动或滚动设定分钟，点一下开始或暂停",
+  "Set to {n} min": "设为 {n} 分钟",
+  "Setting": "设定中",
+  "Time's up": "时间到",
+  "{n} min set": "设定 {n} 分钟",
+  "Paused": "已暂停",
+  // G-05c cloud assembly / 3D
+  "Cloud dashboard · click an interval": "云端面板 · 点间隔",
+  "AHT20 against the board: reads about {n} ℃ high": "AHT20 贴着板子：读数偏高约 {n} ℃",
+  "AHT20 by the vents: reads the room": "AHT20 在通风口旁：读的是房间温度",
+  "Cloud reporter · case 70×50×25 mm, vent slots on the right (estimate)": "温湿度上云 · 外壳 70×50×25 mm，右侧通风槽（估算）",
+  "Build the cloud reporter": "组装温湿度上云盒",
+  "Start with the vented case": "先装带通风槽的外壳",
+  "Vented case": "通风外壳",
+  "Case": "外壳",
+  "Case in place": "外壳已放好",
+  "Vent slots on the right, USB-C hole on the left": "右侧通风槽，左侧 USB-C 孔",
+  "SDA GPIO6 · SCL GPIO7 to the AHT20, Wi-Fi to the router": "SDA GPIO6 · SCL GPIO7 接 AHT20，Wi-Fi 连路由器",
+  "AHT20 module": "AHT20 模块",
+  "On the vent side, away from the board": "放通风口一侧，远离板子",
+  "Sensor in the vent airflow": "传感器在通风气流里",
+  "It reads the room air": "读到的是房间空气",
+  "Against the board, next to the regulator": "贴着板子，挨着稳压器",
+  "On the board": "板子上",
+  "Sensor against the board": "传感器贴着板子",
+  "The LDO and Wi-Fi warm it, reading about {n} ℃ high": "稳压器和 Wi-Fi 发热把它烘热，读数偏高约 {n} ℃",
+  "USB-C cable": "USB-C 线",
+  "USB cable": "USB 线",
+  "USB-C cable plugged in": "USB-C 线已插好",
+  "5 V from any phone charger": "任意手机充电器供 5 V",
+  "In the vent airflow, reads the room": "在通风气流里，读的是房间",
+  "Against the board, about {n} ℃ high": "贴着板子，偏高约 {n} ℃",
+  "USB-C 5 V, about 80 mA average with Wi-Fi (estimate)": "USB-C 5 V，开 Wi-Fi 平均约 80 mA（估算）",
+  "14 / 25 mm used": "已用 14 / 25 mm",
+  "Smoked lid": "烟色上盖",
+  "Top lid": "上盖",
   "A 2.16-inch AMOLED clock board, nothing to wire: swipe for the temperature and battery pages, PWR blanks the screen, a phone sets the time over Bluetooth": "一块 2.16 英寸 AMOLED 时钟板，不用接线：滑动看温度页和电量页，PWR 键息屏，手机通过蓝牙对时",
   "AMOLED desk clock · product · CO5300 480×480 + CST9220 touch + AXP2101 + PCF85063": "AMOLED 桌面时钟 · 产品 · CO5300 480×480 + CST9220 触摸 + AXP2101 + PCF85063",
   "Product: a 2.16-inch AMOLED clock board on a desk stand, the phone next to it sets the time over Bluetooth": "产品：桌面支架上的 2.16 英寸 AMOLED 时钟板，旁边的手机通过蓝牙对时",
@@ -1037,18 +1084,20 @@ const d: Dict = {
   "Phone connected over BLE": "手机已通过 BLE 连接",
   "Phone wrote the wrong length (needs 4 bytes)": "手机写入长度不对（需要 4 字节）",
   "Screen is off: swipe ignored (press PWR first)": "已息屏：滑动被忽略（先按 PWR）",
-  "Set time": "对时",
   "Swiped to page {n}/3 · {name}": "滑到第 {n}/3 页 · {name}",
   "Time set from the phone: {time}": "手机对时完成：{time}",
   "USB in": "USB 已插",
   "USB out": "USB 未插",
   "{time} · page {n}/3 · {name}": "{time} · 第 {n}/3 页 · {name}",
   "{time} · screen off": "{time} · 已息屏",
+  "Set time from phone": "手机对时",
+  "Set the time": "对时",
 
-  // Moved from lab.ts
+  // Moved from steps.ts
+  "Temperature": "温度",
+
+  // G-05c cloud assembly
   "Connected": "已连接",
-
-  // F-08f IR bench parts
   "off": "关",
   "Dial ring direction (encoder A/B order is inferred)": "旋钮环的方向（编码器 A/B 顺序是推断的）",
   "Board detection level on G4 (from the M5Unified heuristic, not the schematic)": "G4 上的板型识别电平（来自 M5Unified 的经验判断，不是原理图）",
@@ -1056,18 +1105,8 @@ const d: Dict = {
   "IMU address (BMI270 assumed at 0x68)": "IMU 地址（BMI270 假定为 0x68）",
   "Key map (TCA8418 map assumed)": "键位映射（TCA8418 映射是假定的）",
   "Touch coordinates (XPT2046 raw span is estimated)": "触摸坐标（XPT2046 原始量程是估算的）",
-
-  // Moved from net.ts
   "Time": "时间",
-
-  // Board advisor page (web/src/advisor/App.tsx).
   "Battery": "用电池",
   "left": "个",
-
-  // Moved from steps.ts
-  "Temperature": "温度",
-
-  // G-05b cloud
-  "Set time from phone": "手机对时",
 };
 export default d;

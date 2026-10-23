@@ -438,7 +438,6 @@ const d: Dict = {
   "Pass condition: {pass}": "통과 조건: {pass}",
   "Passive buzzer module (3-pin, transistor, driven by an LEDC square wave)": "패시브 부저 모듈(3핀, 트랜지스터 내장, LEDC 구형파 구동)",
   "Pause": "일시 정지",
-  "Paused": "일시 정지됨",
   "Paused {time}": "일시정지 {time}",
   "Phase A (CLK)": "A상(CLK)",
   "Phase B (DT)": "B상(DT)",

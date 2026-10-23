@@ -67,9 +67,11 @@ const RETEST_WHY: Record<string, () => string> = {
 };
 /** Works whose assembly choice changes what the simulated sensors see (the others only change the Product picture) */
 const SIM_FX = new Set(['ruler', 'tilt', 'door', 'irlamp']);
+/** Works whose sensor reads the in-case heat offset (env temperature + sensorOffset in the retest and the Product) */
+const HEAT_SENSOR: Record<string, string> = { weather: 'BME280', cloud: 'AHT20' };
 const fxHow = (id: string) =>
-  id === 'weather'
-    ? t('The heat offset affects the simulation: in the retest and the Product, BME280 reads the raised temperature.')
+  HEAT_SENSOR[id]
+    ? t('The heat offset affects the simulation: in the retest and the Product, {sensor} reads the raised temperature.', { sensor: HEAT_SENSOR[id] })
     : SIM_FX.has(id)
       ? t('This affects the simulation: in the retest and the Product, the sensor sees things as assembled.')
       : t('Only changes the Product view, not the simulation.');
@@ -115,6 +117,10 @@ const IMPACT: Record<string, Record<string, string[]>> = {
     irrx: [t('Dome in the IR window: 940 nm light from the remote passes the dark acrylic and every key arrives'), t('Behind the opaque wall: the remote light never reaches the receiver, no key works, same in the retest (estimate)')],
     strip: [t('On the light guide: 15 mm from the shade, the light spreads into an even glow on the milky shade'), t('Against the shade wall: a row of 8 glaring hot spots on the shade')],
     shifter: [t('WS2812 at 5 V wants DIN ≥ 3.5 V; the 74AHCT125 lifts GPIO5 so the first LED does not flicker')],
+  },
+  cloud: {
+    aht: [t('On the vent side: room air flows past the AHT20 and the published t is the room'), t('Against the board: the LDO and Wi-Fi bursts warm it, every published t is about {n} ℃ high, same in the retest (estimate)', { n: CHIP_HEAT_OFFSET })],
+    usb: [t('C3 with Wi-Fi on averages about 80 mA and peaks near 350 mA while transmitting; a 5 V 1 A charger is plenty (estimate)')],
   },
 };
 
@@ -584,14 +590,14 @@ export function assembleStep(): StepImpl {
   }
   function retestTitle(e: Extract<Entry, { kind: 'test' }>) {
     if (e.ok) return t('Still works after assembly');
-    if (T!.id === 'weather' && e.offset > 0.05) return t('In the enclosure, temperature reads {d} ℃ high', { d: e.offset.toFixed(1) });
+    if (HEAT_SENSOR[T!.id] && e.offset > 0.05) return t('In the enclosure, temperature reads {d} ℃ high', { d: e.offset.toFixed(1) });
     if (retestVerdict(e) !== 'shifted') return headline(e.rows);
     // Count devices, not time windows (one buzzer split into three windows is one item); the assembly row is a placement warning
     const n = groupRows(e.rows).filter((g) => g.bad.length && g.dev !== ASM_DEV).length;
     return n > 1 ? t('In the enclosure, {n} devices changed', { n }) : t('In the enclosure: {what}', { what: headline(e.rows) });
   }
   function retestWhy(e: Extract<Entry, { kind: 'test' }>, fallback: string) {
-    if (T!.id === 'weather') {
+    if (HEAT_SENSOR[T!.id]) {
       const room = t('Sensor reads {t} ℃, room is {room} ℃.', { t: e.temp.toFixed(1), room: (e.temp - e.offset).toFixed(1) });
       return e.offset > 0.05 ? t('The sensor is too close to the chip and gets heated by it. {reading} Move it next to the vent and test again.', { reading: room }) : room;
     }
@@ -611,8 +617,8 @@ export function assembleStep(): StepImpl {
     const fw = firmwareFor(lv);
     const k = tst && !tst.ok ? culprit() : null;
     const why =
-      T!.id === 'weather'
-        ? t('BME280 reads the temperature wherever the sensor sits: room {room} ℃, heated high by {d} ℃.', { room: lv ? envOf(lv).temp.toFixed(1) : '—', d: (asm!.effects().sensorOffset ?? 0).toFixed(1) })
+      HEAT_SENSOR[T!.id]
+        ? t('{sensor} reads the temperature wherever the sensor sits: room {room} ℃, heated high by {d} ℃.', { sensor: HEAT_SENSOR[T!.id], room: lv ? envOf(lv).temp.toFixed(1) : '—', d: (asm!.effects().sensorOffset ?? 0).toFixed(1) })
         : (RETEST_WHY[T!.id] ?? (() => t('After assembly it reboots and runs the same firmware.')))();
     c.shell.props.render(
       <>

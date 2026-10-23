@@ -101,7 +101,7 @@ async function runRef(page, id) {
   fs.writeFileSync(path.join(outDir, `levels-${id}-web.json`), JSON.stringify(raw, null, 1));
   return { ok: (await verdictOf(page)) === 'ok', fp: await fpOf(page), text };
 }
-for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']], ['usbkey', ['usbkey-1', 'usbkey-2', 'usbkey-3']], ['lamp', ['lamp-1', 'lamp-2', 'lamp-3']], ['ruler', ['ruler-1', 'ruler-2', 'ruler-3']], ['tilt', ['tilt-1', 'tilt-2', 'tilt-3']], ['door', ['door-1', 'door-2', 'door-3', 'door-4']], ['irlamp', ['irlamp-1', 'irlamp-2', 'irlamp-3', 'irlamp-4']], ['cloud', ['cloud-1', 'cloud-2', 'cloud-3', 'cloud-4']], ['amoclock', ['amoclock-1', 'amoclock-2', 'amoclock-3', 'amoclock-4']]]) {
+for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']], ['usbkey', ['usbkey-1', 'usbkey-2', 'usbkey-3']], ['lamp', ['lamp-1', 'lamp-2', 'lamp-3']], ['ruler', ['ruler-1', 'ruler-2', 'ruler-3']], ['tilt', ['tilt-1', 'tilt-2', 'tilt-3']], ['door', ['door-1', 'door-2', 'door-3', 'door-4']], ['irlamp', ['irlamp-1', 'irlamp-2', 'irlamp-3', 'irlamp-4']], ['cloud', ['cloud-1', 'cloud-prov', 'cloud-2', 'cloud-3', 'cloud-4']], ['dialtimer', ['dialtimer-1', 'dialtimer-2', 'dialtimer-3', 'dialtimer-4']], ['amoclock', ['amoclock-1', 'amoclock-2', 'amoclock-3', 'amoclock-4']]]) {
   const page = await open(`/app?work=${work}#bench`);
   for (const id of cps) {
     const r = await runRef(page, id);
@@ -335,8 +335,8 @@ async function toProduct(page) {
 {
   const home = await open('/');
   const cards = await home.$$eval('.wk', (els) => els.map((e) => ({ work: e.dataset.work, go: e.querySelector('[data-go]')?.getAttribute('href'), cps: e.dataset.cps })));
-  // Cards come from web/src/app/works.ts: P2-12 added the USB keypad, P2-09 the knob lamp, ultrasonic ruler and tilt figure, G-03 the door lock, G-04 the IR night light, G-17b the AMOLED clock
-  report('home: eleven project cards (weather / spin / lens / usbkey / lamp / ruler / tilt / door / irlamp / cloud / amoclock)', cards.map((c) => c.work).join() === 'weather,spin,lens,usbkey,lamp,ruler,tilt,door,irlamp,cloud,amoclock', JSON.stringify(cards.map((c) => c.work)));
+  // Cards come from web/src/app/works.ts: P2-12 added the USB keypad, P2-09 the knob lamp, ultrasonic ruler and tilt figure, G-03 the door lock, G-04 the IR night light, G-16b the Dial timer, G-17b the AMOLED clock
+  report('home: twelve project cards (weather / spin / lens / usbkey / lamp / ruler / tilt / door / irlamp / cloud / dialtimer / amoclock)', cards.map((c) => c.work).join() === 'weather,spin,lens,usbkey,lamp,ruler,tilt,door,irlamp,cloud,dialtimer,amoclock', JSON.stringify(cards.map((c) => c.work)));
   await home.screenshot({ path: path.join(outDir, 'levels-home-0.png') });
   // Weather card runs real firmware: status line shows the serial reading, OLED has a frame; holding BOOT switches to ℉ and redraws
   await home.click('[data-run="weather"]');
@@ -380,6 +380,11 @@ async function toProduct(page) {
   await home.click('[data-run="cloud"]');
   const cl = await waitFor(home, () => /every 2 s/.test(document.querySelector('.wk[data-work="cloud"] [data-k="age"]')?.textContent ?? ''), null, 40000);
   report('home: cloud card runs real firmware -> reports arrive, cloud command sets 2 s', cl, await home.$eval('.wk[data-work="cloud"] [data-k="age"]', (e) => e.textContent));
+  // G-16b Dial timer card: M5Dial preset; the demo turns the ring and presses BtnA at 2 s, the round LCD gets a frame and the countdown runs
+  await home.click('[data-run="dialtimer"]');
+  const dial = await waitFor(home, () => !!document.querySelector('.wk[data-work="dialtimer"] image[data-k="lcd"][href]') && /Counting down/.test(document.querySelector('.wk[data-work="dialtimer"] [data-k="state"]')?.textContent ?? ''), null, 30000);
+  report('home: dialtimer card runs real firmware -> round LCD frame, countdown starts', dial, await home.$eval('.wk[data-work="dialtimer"] [data-status]', (e) => e.textContent));
+
   // G-17b AMOLED clock card: the face is drawn from the RTC, then the demo swipes left at 2 s -> temperature page
   await home.click('[data-run="amoclock"]');
   const amo = await waitFor(home, () => !!document.querySelector('.wk[data-work="amoclock"] image[data-k="lcd"][href]') && /页 2\/3/.test(document.querySelector('.wk[data-work="amoclock"] [data-status]')?.textContent ?? ''), null, 40000); // lint: allow-cjk

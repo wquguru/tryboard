@@ -438,7 +438,6 @@ const d: Dict = {
   "Pass condition: {pass}": "通过条件：{pass}",
   "Passive buzzer module (3-pin, transistor, driven by an LEDC square wave)": "无源蜂鸣器模块（三针，带三极管，LEDC 方波驱动）",
   "Pause": "暂停",
-  "Paused": "已暂停",
   "Paused {time}": "暂停 {time}",
   "Phase A (CLK)": "A 相（CLK）",
   "Phase B (DT)": "B 相（DT）",

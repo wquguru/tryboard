@@ -83,8 +83,8 @@ const screenOf = (page, t) => page.evaluate((t) => {
   return p && { x: r.left + p.x, y: r.top + p.y };
 }, t);
 
-// ---- 1. Default wiring has no issues (three works)
-for (const work of ['weather', 'spin', 'lens']) {
+// ---- 1. Default wiring has no issues (four works)
+for (const work of ['weather', 'spin', 'lens', 'cloud']) {
   const page = await open(`/app?work=${work}&debug=1#bench`);
   const f = await page.evaluate(() => globalThis.__tbApp.faults());
   const tree = await page.$eval('details.tg[data-g="wire"] summary', (e) => e.textContent);

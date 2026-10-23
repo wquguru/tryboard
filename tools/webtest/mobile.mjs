@@ -448,7 +448,7 @@ report('firmware drawer: Esc closes it', await waitFor(page, () => !document.que
 }
 
 // ---- Every product (preview ?work=X#product): fullscreen, no h-scroll, every key ≥ 44px and tappable, action key raises no error
-const WORKS = { weather: 'p-boot', spin: 'p-boot', lens: 'p-boot', usbkey: 'p-key-4', lamp: 'p-knob-r', ruler: 'p-near', tilt: 'p-tilt-r', imu: 'p-level', door: 'p-card-ok', irlamp: 'p-ir-power', cloud: 'p-cloud-2', amoclock: 'p-amo-left' };
+const WORKS = { weather: 'p-boot', spin: 'p-boot', lens: 'p-boot', usbkey: 'p-key-4', lamp: 'p-knob-r', ruler: 'p-near', tilt: 'p-tilt-r', imu: 'p-level', door: 'p-card-ok', irlamp: 'p-ir-power', cloud: 'p-cloud-2', dialtimer: 'p-dial-start', amoclock: 'p-amo-left' };
 for (const [w, key] of Object.entries(WORKS)) {
   await page.goto(`${base}/app?work=${w}#product`, { waitUntil: 'load' });
   const up = await waitFor(page, (k) => globalThis.__tbApp?.store.get().step === 'product' && !!document.querySelector(`#toolbar [data-tool="${k}"]`), key, 30000);
@@ -458,8 +458,8 @@ for (const [w, key] of Object.entries(WORKS)) {
   }
   await sleep(1500);
   await stepCheck(`Product ${w}`);
-  // G-05b cloud / G-17b amoclock have no 3D yet (G-05c / G-17c); their flat views must span the phone width instead
-  if (w === 'cloud' || w === 'amoclock') {
+  // G-17b amoclock has no 3D yet (G-17c); its flat view must span the phone width instead
+  if (w === 'amoclock') {
     const [sw, vw] = await page.evaluate(() => [document.querySelector('#mProduct .prod-svg svg')?.getBoundingClientRect().width ?? 0, innerWidth]);
     report(`Product ${w}: 2D view spans the width`, sw >= vw - 40, `${sw}/${vw}px`);
   } else report(`Product ${w}: 3D fullscreen`, (await full()) === 'ok', await full());

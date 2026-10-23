@@ -1026,6 +1026,53 @@ const d: Dict = {
   // G-17a AMOLED clock work and template
   "AMOLED desk clock": "AMOLED 탁상 시계",
   "Screen, touch, PMU (battery gauge, PWR key) and RTC are all on the board: nothing to wire": "화면, 터치, PMU(잔량계, PWR 키), RTC가 모두 보드에: 배선 불필요",
+  "Alarm done: back to {t}": "알람 끝: {t}(으)로 복귀",
+  "Beep {n}/{of} · {hz} Hz": "삐 {n}/{of} · {hz} Hz",
+  "Beeping": "울리는 중",
+  "Cancelled by a tap: back to {t}": "화면 탭으로 취소: {t}(으)로 복귀",
+  "Countdown started: {t}": "카운트다운 시작: {t}",
+  "Counting down": "카운트다운 중",
+  "Dial timer · product · M5Stack Dial (ESP32-S3, GC9A01, encoder, buzzer)": "다이얼 타이머 · 완성품 · M5Stack Dial (ESP32-S3, GC9A01, 엔코더, 부저)",
+  "Drag or scroll the ring · tap the ring = BtnA · tap the screen = cancel": "링을 드래그하거나 스크롤 · 링 탭 = BtnA · 화면 탭 = 취소",
+  "Paused at {t}": "{t}에서 일시정지",
+  "Product: M5Stack Dial timer seen from above, orange rotary ring around a round touch screen": "완성품: 위에서 본 M5Stack Dial 타이머, 둥근 터치 화면을 둘러싼 주황색 회전 링",
+  "Resumed at {t}": "{t}부터 재개",
+  "Rotary ring: drag or scroll to set the minutes, tap to start or pause": "회전 링: 드래그하거나 스크롤해 분 설정, 탭하면 시작 / 일시정지",
+  "Set to {n} min": "{n}분으로 설정",
+  "Setting": "설정 중",
+  "Time's up": "시간 종료",
+  "{n} min set": "{n}분 설정됨",
+  "Paused": "일시 정지됨",
+  // G-05c cloud assembly / 3D
+  "Cloud dashboard · click an interval": "클라우드 대시보드 · 간격 클릭",
+  "AHT20 against the board: reads about {n} ℃ high": "AHT20 이 보드에 붙음: 약 {n} ℃ 높게 읽음",
+  "AHT20 by the vents: reads the room": "AHT20 은 통풍구 옆: 방 온도를 읽음",
+  "Cloud reporter · case 70×50×25 mm, vent slots on the right (estimate)": "온습도 클라우드 리포터 · 케이스 70×50×25 mm, 오른쪽 통풍 슬롯(추정)",
+  "Build the cloud reporter": "온습도 클라우드 리포터 조립",
+  "Start with the vented case": "먼저 통풍 슬롯 케이스부터",
+  "Vented case": "통풍 케이스",
+  "Case": "케이스",
+  "Case in place": "케이스 배치 완료",
+  "Vent slots on the right, USB-C hole on the left": "오른쪽 통풍 슬롯, 왼쪽 USB-C 구멍",
+  "SDA GPIO6 · SCL GPIO7 to the AHT20, Wi-Fi to the router": "SDA GPIO6 · SCL GPIO7 은 AHT20 으로, Wi-Fi 는 공유기로",
+  "AHT20 module": "AHT20 모듈",
+  "On the vent side, away from the board": "통풍구 쪽, 보드에서 떨어지게",
+  "Sensor in the vent airflow": "센서가 통풍 기류 안에 있음",
+  "It reads the room air": "방 공기를 읽음",
+  "Against the board, next to the regulator": "보드에 붙여 레귤레이터 옆",
+  "On the board": "보드 위",
+  "Sensor against the board": "센서가 보드에 붙음",
+  "The LDO and Wi-Fi warm it, reading about {n} ℃ high": "LDO 와 Wi-Fi 열로 데워져 약 {n} ℃ 높게 읽음",
+  "USB-C cable": "USB-C 케이블",
+  "USB cable": "USB 케이블",
+  "USB-C cable plugged in": "USB-C 케이블 연결됨",
+  "5 V from any phone charger": "5 V 는 아무 휴대폰 충전기로",
+  "In the vent airflow, reads the room": "통풍 기류 안, 방 온도를 읽음",
+  "Against the board, about {n} ℃ high": "보드에 붙어 약 {n} ℃ 높음",
+  "USB-C 5 V, about 80 mA average with Wi-Fi (estimate)": "USB-C 5 V, Wi-Fi 사용 시 평균 약 80 mA(추정)",
+  "14 / 25 mm used": "14 / 25 mm 사용",
+  "Smoked lid": "스모크 상단 덮개",
+  "Top lid": "상단 덮개",
   "A 2.16-inch AMOLED clock board, nothing to wire: swipe for the temperature and battery pages, PWR blanks the screen, a phone sets the time over Bluetooth": "2.16인치 AMOLED 시계 보드, 배선 없음: 스와이프로 온도·배터리 페이지, PWR로 화면 끄기, 휴대폰이 블루투스로 시간 맞춤",
   "AMOLED desk clock · product · CO5300 480×480 + CST9220 touch + AXP2101 + PCF85063": "AMOLED 탁상 시계 · 제품 · CO5300 480×480 + CST9220 터치 + AXP2101 + PCF85063",
   "Product: a 2.16-inch AMOLED clock board on a desk stand, the phone next to it sets the time over Bluetooth": "제품: 탁상 거치대 위의 2.16인치 AMOLED 시계 보드, 옆의 휴대폰이 블루투스로 시간을 맞춤",
@@ -1037,18 +1084,20 @@ const d: Dict = {
   "Phone connected over BLE": "휴대폰이 BLE로 연결됨",
   "Phone wrote the wrong length (needs 4 bytes)": "휴대폰이 쓴 길이가 잘못됨 (4바이트 필요)",
   "Screen is off: swipe ignored (press PWR first)": "화면 꺼짐: 스와이프 무시 (먼저 PWR을 누르세요)",
-  "Set time": "시간 맞춤",
   "Swiped to page {n}/3 · {name}": "{n}/3 페이지로 스와이프 · {name}",
   "Time set from the phone: {time}": "휴대폰으로 시간 맞춤 완료: {time}",
   "USB in": "USB 연결됨",
   "USB out": "USB 분리됨",
   "{time} · page {n}/3 · {name}": "{time} · {n}/3 페이지 · {name}",
   "{time} · screen off": "{time} · 화면 꺼짐",
+  "Set time from phone": "휴대폰으로 시간 맞춤",
+  "Set the time": "시간 맞춤",
 
-  // Moved from lab.ts
+  // Moved from steps.ts
+  "Temperature": "온도",
+
+  // G-05c cloud assembly
   "Connected": "연결됨",
-
-  // F-08f IR bench parts
   "off": "꺼짐",
   "Dial ring direction (encoder A/B order is inferred)": "다이얼 링 방향(인코더 A/B 순서는 추정)",
   "Board detection level on G4 (from the M5Unified heuristic, not the schematic)": "G4의 보드 판별 레벨(회로도가 아니라 M5Unified 휴리스틱 기준)",
@@ -1056,18 +1105,8 @@ const d: Dict = {
   "IMU address (BMI270 assumed at 0x68)": "IMU 주소(BMI270은 0x68로 가정)",
   "Key map (TCA8418 map assumed)": "키 맵(TCA8418 맵은 가정)",
   "Touch coordinates (XPT2046 raw span is estimated)": "터치 좌표(XPT2046 원시 값 범위는 추정)",
-
-  // Moved from net.ts
   "Time": "시간",
-
-  // Board advisor page (web/src/advisor/App.tsx).
   "Battery": "배터리",
   "left": "개 남음",
-
-  // Moved from steps.ts
-  "Temperature": "온도",
-
-  // G-05b cloud
-  "Set time from phone": "휴대폰으로 시간 맞춤",
 };
 export default d;
