@@ -2,7 +2,7 @@
 // Kept outside productStep (tools/lint_size.py). Inputs use the bench's paths (gpio42=, enc=, touch=), so they land in the input log.
 import type { ReactNode } from 'react';
 import type { Tool } from '../toolbar';
-import type { Session } from '../types';
+import type { AssemblyState, Session } from '../types';
 import { DIAL_BTN, dialRing, dialtimerNow, mmss, modeText, parseDialtimerLine } from '../../views/dialtimerproduct';
 import type { LiveFrame } from '../../views/common';
 import { createDial3D, type Dial3D } from '../dial3d';
@@ -15,8 +15,18 @@ export function dialPress(s: Session) {
   s.sim?.pressBoardPin(DIAL_BTN, true);
   setTimeout(() => s.sim?.pressBoardPin(DIAL_BTN, false), 100);
 }
+/** Ring pinned by the stand collar (assembly effect ringBlock): every turn path drops it, like the retest drops enc= */
+let ringPinned = false;
+const ringTurn = (s: Session, n: number) => {
+  if (!ringPinned) s.turnEncoder(n);
+};
+/** Stand as assembled (undefined until the Dial is in it); also arms the ring pin for the 2D view and the phone keys */
+export function dialStandOf(a: AssemblyState | null): 'A' | 'B' | undefined {
+  ringPinned = !!a?.effects.ringBlock;
+  return a?.placed.includes('dial') ? (a.choice.dial === 'B' ? 'B' : 'A') : undefined;
+}
 export function dialTurn(s: Session, n: number) {
-  s.turnEncoder(n);
+  ringTurn(s, n);
   dialRing.view?.turned(n);
 }
 /** A short tap in the middle of the screen (the firmware cancels on any touch while running or paused) */
@@ -61,12 +71,12 @@ export function dialtimerSerial(l: string, event: (icon: string, text: string, t
 }
 
 /** 2D view handlers (no WebGL): same inputs as the 3D Dial */
-export const dialHandlers = (s: Session) => ({ boardBtn: (pin: number, d: boolean) => s.sim?.pressBoardPin(pin, d), enc: (n: number) => s.turnEncoder(n), touch: (x: number, y: number, d: boolean) => s.touch(x, y, d) });
+export const dialHandlers = (s: Session) => ({ boardBtn: (pin: number, d: boolean) => s.sim?.pressBoardPin(pin, d), enc: (n: number) => ringTurn(s, n), touch: (x: number, y: number, d: boolean) => s.touch(x, y, d) });
 
 /** Mount the 3D Dial in the Product stage; window.__tbProduct gives tests the ring / screen page positions */
-export function dialProduct3D(node: HTMLElement, s: Session, frame: () => LiveFrame): Dial3D {
-  const d = createDial3D(node, { frame, enc: (n) => s.turnEncoder(n), btn: (down) => s.sim?.pressBoardPin(DIAL_BTN, down), touch: (x, y, down) => s.touch(x, y, down), sounding: () => s.audio.state.sounding });
+export function dialProduct3D(node: HTMLElement, s: Session, frame: () => LiveFrame, stand?: 'A' | 'B'): Dial3D {
+  const d = createDial3D(node, { frame, stand, enc: (n) => ringTurn(s, n), btn: (down) => s.sim?.pressBoardPin(DIAL_BTN, down), touch: (x, y, down) => s.touch(x, y, down), sounding: () => s.audio.state.sounding });
   dialRing.view = d;
-  (window as unknown as { __tbProduct: unknown }).__tbProduct = { ringPos: () => d.ringPos(), screenPos: () => d.screenPos(), azimuth: () => d.azimuth(), detents: () => d.detents(), timer: () => ({ ...dialtimerNow }) };
+  (window as unknown as { __tbProduct: unknown }).__tbProduct = { ringPos: () => d.ringPos(), screenPos: () => d.screenPos(), azimuth: () => d.azimuth(), detents: () => d.detents(), pinned: () => ringPinned, timer: () => ({ ...dialtimerNow }) };
   return d;
 }
