@@ -32,6 +32,7 @@ import { wkey } from './works';
 import { BOOT_GPIO, type SimChip } from '../chips';
 import { devsOf, i2sOf, servoOf } from './devs';
 import { retargetTft } from './place';
+import { boardDevs } from '../bench3d/boarddevs';
 
 /** weather firmware reading line (format set by level 06); accept single or double spaces (bme280 example). P is optional (AHT20, c3-i2c-trio). */
 const READING = /T=(-?[\d.]+) C\s+H=([\d.]+) %(?:\s+P=([\d.]+) hPa)?/g;
@@ -39,6 +40,9 @@ const READING = /T=(-?[\d.]+) C\s+H=([\d.]+) %(?:\s+P=([\d.]+) hPa)?/g;
 const DHT_READING = /温度 (-?[\d.]+) 湿度 ([\d.]+)/g; // lint: allow-cjk
 /** s3-imu / s3-qmi8658 reading line. */
 const IMU_LINE = /(?:IMU|POSE) pitch=(-?[\d.]+) roll=(-?[\d.]+)(?:[^\n]*?gyro=\((-?[\d.]+),(-?[\d.]+),(-?[\d.]+)\))?/g;
+
+/** Something on the scene can play PCM: an I2S speaker part or a board preset's on-board sink (G-13 Dial buzzer). */
+const hasSpeaker = (sc: SceneSpec) => sc.parts.some((p) => p.type === 'max98357a') || !!boardDevs(sc.board)?.sound;
 
 export interface SessionHooks {
   /** New serial text (the shell appends it to the serial view). */
@@ -106,7 +110,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const adcPins = () => [...new Set([...s.analog.keys(), ...s.scene.parts.flatMap((p) => (p.type === 'pot' ? [p.pin] : []))])];
   const buzzerPins = scene.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : []));
   audio.setPins(buzzerPins);
-  audio.setSpeaker(scene.parts.some((p) => p.type === 'max98357a'));
+  audio.setSpeaker(hasSpeaker(scene));
   const poseRate = new PoseRate();
   let poseIdle = 0;
 
@@ -184,7 +188,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       s.power = power;
       s.sim?.configure(devsOf(next, s));
       audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
-      audio.setSpeaker(next.parts.some((p) => p.type === 'max98357a'));
+      audio.setSpeaker(hasSpeaker(next));
       bumpEdit();
     },
     onTick(cb) {
@@ -248,7 +252,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       const hadExt = extBefore;
       if (s.sim && rebootNeeded) {
         s.sim.configure(devsOf(next, s));
-        audio.setSpeaker(next.parts.some((p) => p.type === 'max98357a'));
+        audio.setSpeaker(hasSpeaker(next));
         s.sim.setPower(powerMode());
         s.reboot();
       } else if (s.sim && hadExt !== !!power?.ext5v) s.sim.setPower(powerMode());

@@ -142,7 +142,7 @@
 | I2C 按引脚总线 / GPIO 位拨（M5-02） | ✅ C3 单测 / S3 s3-i2c-bitbang / ESP32 esp32-i2c-bitbang | 同左 | 时钟拉伸、位拨线长未模拟 |
 | USB-Serial-JTAG 控制台 CDC（M5-03/05） | S3 ☑，C3 ☐ | accept `arduino-s3-usbcdc-echo` / `s3-usj-echo` | 去重启发式见 DECISIONS；QEMU 无 |
 | M5 I2C 器件（M5-04） | ◐ | MPU6886 / BMI270+BMM150 / BM8563 / AW9523 / AXP192 / LP5562 / TCA8418 / FT6336U / FT3267 / INA3221 行为模型，LTR-553 / AW88298 壳；单测覆盖 ID / 读写 / 随环境变化 | 地磁默认值为估算 |
-| 板预设 `--board` / `tb_board_preset`（M5-05） | S3：M5Dial ☑；AtomS3 ☑；其余存根 ☐ | accept `arduino-m5-probe-dial` / `arduino-m5-dial-demo` / `arduino-m5-probe-atoms3` | 蜂鸣器无模型 |
+| 板预设 `--board` / `tb_board_preset`（M5-05） | S3：M5Dial ☑；AtomS3 ☑；其余存根 ☐ | accept `arduino-m5-probe-dial` / `arduino-m5-dial-demo` / `arduino-m5-dial-tone` / `arduino-m5-probe-atoms3` | Dial 蜂鸣器 G3（G-13）🟢 行为模拟：`M5.Speaker.tone(2000, 200)` → 48 kHz、2000.0 Hz、RMS 0.47，网页 analyser RMS ≈ 0.47（m5board.mjs）；ΔΣ 密度转 PCM，非逐位波形；响度 / 蜂鸣器谐振未在真机校准 |
 | AtomS3 / Lite / R（M5-06） | ☑ | 同一固件识别为 11 / 137 / 18；`arduino-m5-probe-atoms3{,lite,r,r_opi}`、`arduino-m5-atoms3-imu{,-r,-lite}` | 背光不受 LP5562 控制，ST7735 版未建模 |
 | CoreS3 / CoreS3-SE（M5-07） | ☑ | 识别（GC0308 区分 SE）、ILI9342C 截图、FT6336 触摸、BMI270+BMM150、AXP2101、AW88298 扬声器 1kHz@48kHz；四线 PSRAM 8MB | 功放使能 / 增益未建模，摄像头无图像 |
 | Cardputer / Cardputer-Adv（M5-08） | 检测 ✅、ST7789 ✅、键盘 ◐（映射未核对，需真机）、PDM 麦克风 ✅（PCM 层）、Adv 麦克风 ◐、扬声器 ☐ | `arduino-m5-probe-cardputer(adv)`、`arduino-m5-cardputer(adv)-demo` | S3 GPIO 下拉语义改变（DECISIONS） |

@@ -32,7 +32,7 @@ const base = `http://localhost:${server.address().port}`;
 const browser = await puppeteer.launch({
   executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   headless: 'new',
-  args: ['--use-angle=metal', '--enable-gpu', '--window-size=1440,1000'],
+  args: ['--use-angle=metal', '--enable-gpu', '--window-size=1440,1000', '--autoplay-policy=no-user-gesture-required'],
   defaultViewport: { width: 1440, height: 1000, deviceScaleFactor: 1 },
 });
 const errors = [];
@@ -70,6 +70,8 @@ const CASES = [
   { fw: 'arduino-m5-env-atoms3', board: 'm5atoms3', grove: 'env4', start: 's3-blink', want: 'ENV ready unit=4 port_a=2/1', done: 'ENV4 t=', env: { temp: 35.6, humidity: 12.9, pressure: 102260 }, after: 'ENV4 t=35.6 h=12.9 p=1022.6' },
   // G-06: the Dial ring is the encoder (drag / wheel; a tap is BtnA G42); Core2 A / B / C are touches below the panel
   { fw: 'arduino-m5-dial-demo', board: 'm5dial', start: 's3-blink', want: 'DIAL ready board=12 display=240x240 rtc=1 touch=1', done: 'DIAL ready', dial: true },
+  // G-13: G3 buzzer (I2S 1-bit delta-sigma) -> Web Audio; judged on the speaker analyser, not frame rate
+  { fw: 'arduino-m5-dial-tone', board: 'm5dial', start: 's3-blink', want: 'TONE ready board=12 speaker=1', done: 'TONE ready', sound: true },
   { fw: 'arduino-m5-stickc-demo-core2', board: 'm5core2', start: 'esp32-hello', want: 'DEMO ready board=2 display=320x240', done: 'DEMO ready', zones: ['DEMO btnA presses=1', 'DEMO btnB presses=1', 'DEMO btnC'] },
   // CYD (G-10): the frame must reach the bench texture, then a tap goes through tb_touch -> XPT2046 and is logged as touch= / release
   { fw: 'esp32-cyd', board: 'cyd', start: 'esp32-hello', want: 'CYD ILI9341 240x320 init OK', done: 'XPT2046 ready', lcd: [240, 320], touch: { x: 60, y: 250, after: 'TRYBOARD_OK esp32-cyd-touch' } },
@@ -99,6 +101,15 @@ for (const c of CASES) {
   const up = await waitFor(page, (w) => globalThis.__tbApp.session.consoleText().includes(w), c.done, 60000);
   const out = await page.evaluate(() => globalThis.__tbApp.session.consoleText());
   report(`${c.board}: firmware identifies the board`, up && out.includes(c.want), up ? c.want : out.slice(-200).replace(/\n/g, ' | '));
+  if (c.sound) {
+    await page.click('#sound');
+    const on = await waitFor(page, () => globalThis.__tbAudio && !globalThis.__tbAudio.muted, null, 5000);
+    let peak = 0;
+    for (const tEnd = Date.now() + 15000; Date.now() < tEnd && peak < 0.05; await sleep(100)) {
+      peak = Math.max(peak, await page.evaluate(() => globalThis.__tbAudio?.pcm?.rms ?? 0));
+    }
+    report(`${c.board}: buzzer reaches the speaker analyser`, on && peak > 0.05, `peak RMS ${peak.toFixed(3)} (mode ${await page.evaluate(() => globalThis.__tbAudio?.pcm?.mode)})`);
+  }
   if (c.env) {
     // Environment controls mid-run (logged env=…): the Grove unit's next reading follows
     await page.evaluate((e) => globalThis.__tbApp.session.setEnv(e), c.env);

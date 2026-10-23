@@ -1698,3 +1698,11 @@
 - 决定：板预设 note 含 inferred / assumed / unchecked / heuristic / estimated 的项写进 `BOARD_DEVS[id].check`，`verified: false` 写 `unverified`；板属性面板（预设选择下方）逐条显示「需真机确认」，即使 verified: true。单测读 boards.rs 保证同步。
 - 未改：元件库 `catalog/parts.ts` 的 ina219 / aht20 / ds3231 等 `sim.level = none` 是低报不是夸大；改它会打开 `place.ts` 从元件库放上实验台的路径（还要 SCENE_TYPE 等），另立项。
 - 备选：在 check_config.py 里做校验——否：可信度表都在 TS 里，Python 侧要重写解析；网页运行时读 boards.rs——否：网页拿不到 Rust 源，改由单测保证同步。
+
+## 2026-10-23 M5Dial 蜂鸣器出声（G-13）
+- 结论：M5Unified 在 Dial / DinMeter 上 `spk_cfg.pin_data_out = G3, buzzer = true, magnification = 48`（`M5Unified.inl`、`utility/Speaker_Class.inl`，MIT，只读未抄）：不是 LEDC，而是 I2S std 16 位立体声、只接 DOUT，每个 PCM 样本变成一个 32 位 1 位 ΔΣ 字（两个 16 位槽）。BCLK / WS 不出引脚。
+- 决定：复用 MAX98357A 喇叭汇（`Max98357a.buzzer = true`），每帧两个槽字 popcount 得密度 → 单极性 PCM（密度 × 满量程，管脚低 = 蜂鸣器无电流，静音即 0），采样率就是 I2S 帧率（48 kHz）。CLI `--audio-wav` / 报告行、wasm `tb_audio_*`、网页 Web Audio 全部原样复用；预设新字段 `buzzer: Option<u32>`；电流估算 `BUZZER_I` 30 mA × RMS（估计，无器件手册）。
+- 决定：报告行 `[tryboard] I2S buzzer ...` 只在电平变过（`sounded`）后出现：M5.begin() 起 I2S 就一直发恒定空闲电平，否则所有 Dial 用例的 golden 都会多一行。现有 `arduino-m5-dial-demo` 按 BtnA 时固件本身调 `tone(2000, 100)`，现在真的被听到，golden 多一行报告（唯一差异，已核对）。
+- 决定：网页 `BoardDevs.sound`（目前只有 Dial）控制声音开关；worker 在板预设挂了声源时（`tb_audio_stat(0)` 非 NaN）也取 PCM，CoreS3 的 AW88298 预设因此也会把 PCM 送到主线程，但没开声音开关（CoreS3 不在本项范围，未验收）。
+- 局限：不是逐位波形，ΔΣ 高频噪声与蜂鸣器谐振 / 响度未建模；作品结论标「行为模拟，响度需真机」。
+- 备选：按 I2S 位流逐位输出到 GPIO 电平（`--trace-io` 能看到每一位）——否：48 kHz × 32 位 ≈ 1.5 M 事件 / 秒，开销大且听感一样；做成 LEDC / PWM 蜂鸣器——否：与 M5Unified 实际驱动方式不符。
