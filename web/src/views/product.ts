@@ -11,6 +11,12 @@ export interface ProductHandlers {
   ir?(code: string): void;
   /** Publish from the virtual cloud (G-05b): pub,<topic>,<payload>, same text as the mqtt= input action */
   mqtt?(cmd: string): void;
+  /** Board preset key (G-16b Dial BtnA on G42): pressed drives 0, same as the gpioN= input action */
+  boardBtn?(pin: number, down: boolean): void;
+  /** Rotary encoder detents (G-16b Dial ring), same as enc= */
+  enc?(steps: number): void;
+  /** Finger on the touch panel in panel pixels, same as touch= / release */
+  touch?(x: number, y: number, down: boolean): void;
 }
 
 export function createProductView(el: HTMLElement, h: ProductHandlers, opts: { servoPin: number }) {

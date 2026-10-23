@@ -367,7 +367,7 @@ await p2.close();
   await p5.goto(`${base}/app?work=cloud#bench`, { waitUntil: 'load' });
   await p5.evaluate(() => {
     const c = {};
-    for (const id of ['cloud-1', 'cloud-2', 'cloud-3', 'cloud-4']) c[id] = { fp: 'test', at: 'preset' };
+    for (const id of ['cloud-1', 'cloud-prov', 'cloud-2', 'cloud-3', 'cloud-4']) c[id] = { fp: 'test', at: 'preset' };
     localStorage.setItem('tryboard-app-checks:cloud', JSON.stringify(c));
     localStorage.removeItem('tryboard-app-asm:cloud');
   });

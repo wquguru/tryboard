@@ -11,6 +11,8 @@ import { type Template } from '../../views/templates';
 import { workTemplate } from '../../views/worktpl';
 import { doorActs, doorButtons, doorLive, doorOnReader, doorRows, doorSerial, doorTap, doorTool } from './door';
 import { cloudActs, cloudButtons, cloudLive, cloudRows, cloudSend, cloudSerial, cloudTool } from './cloud';
+import { dialHandlers, dialProduct3D, dialtimerActs, dialtimerButtons, dialtimerLive, dialtimerRows, dialtimerSerial, dialtimerTool } from './dialtimer';
+import type { Dial3D } from '../dial3d';
 import { irlampActs, irlampButtons, irlampLive, irlampRows, irlampPress, irlampSend, irlampSerial, irlampTool } from './irlamp';
 import { passedCount } from './bench';
 import { emptyFrame, ledCss, servoAngle, type LiveFrame } from '../../views/common';
@@ -255,6 +257,7 @@ const WORK_ACTS: Record<string, () => Tool[]> = {
   door: doorActs,
   irlamp: irlampActs,
   cloud: cloudActs,
+  dialtimer: dialtimerActs,
   tilt: () => [{ id: 'p-tilt-r', label: t('Lower the right side'), icon: 'tilt' }, { id: 'p-tilt-l', label: t('Lower the front left'), icon: 'tilt' }, { id: 'p-level', label: t('Make level'), icon: 'minus' }],
   usbkey: () => KEYPAD_PINS.map((pin, i) => ({ id: `p-key-${pin}`, label: `K${i + 1} · ${KEYPAD_CAPS[i]}`, icon: 'key' })),
 };
@@ -265,6 +268,7 @@ const HOOKS: Record<string, { serial: typeof doorSerial; rows: typeof doorRows; 
   door: { serial: doorSerial, rows: doorRows, buttons: doorButtons, live: doorLive, tool: doorTool },
   irlamp: { serial: irlampSerial, rows: irlampRows, buttons: irlampButtons, live: irlampLive, tool: irlampTool },
   cloud: { serial: cloudSerial, rows: cloudRows, buttons: cloudButtons, live: cloudLive, tool: cloudTool },
+  dialtimer: { serial: dialtimerSerial, rows: dialtimerRows, buttons: dialtimerButtons, live: dialtimerLive, tool: dialtimerTool },
 };
 
 export function productStep(): StepImpl {
@@ -276,6 +280,7 @@ export function productStep(): StepImpl {
   let scene3d: ProductScene | null = null;
   let lcd3d: Lcd3D | null = null;
   let keypad: Keypad3D | null = null;
+  let dial3d: Dial3D | null = null;
   let keypadSvg: ReturnType<typeof createKeypadView> | null = null;
   /** The 10 s recording in progress */
   let rec: Recording | null = null;
@@ -641,8 +646,8 @@ export function productStep(): StepImpl {
   }
 
   // ------------------------------------------------------------ photo / 10 s recording (P2-10)
-  function cur3d(): { capture(): Capturable } | null {
-    return scene3d ?? lcd3d ?? keypad ?? work3d;
+  function cur3d(): { capture(): Capturable; resetView(): void } | null {
+    return scene3d ?? lcd3d ?? keypad ?? work3d ?? dial3d;
   }
   async function photo() {
     const c = ctx;
@@ -818,7 +823,7 @@ export function productStep(): StepImpl {
     // ProdCtl option B (DESIGN_V2 §8.4), split by verb: board actions live in the right panel next to readings,
     // the bottom bar keeps only recording (photo / video) next to the view; orbit and restart don't overlap, so they stay
     c.shell.toolbar.setGroups([
-      ...(scene3d || lcd3d || keypad || work3d ? [{ id: 'nav', tools: [{ id: 'p-orbit', label: t('Rotate'), key: t('Drag') }, { id: 'p-home', label: t('Reset view') }] }] : []),
+      ...(cur3d() ? [{ id: 'nav', tools: [{ id: 'p-orbit', label: t('Rotate'), key: t('Drag') }, { id: 'p-home', label: t('Reset view') }] }] : []),
       ...(cur3d() ? [{ id: 'media', tools: [{ id: 'p-photo', label: t('Photo') }, { id: 'p-rec', label: rec ? t('Stop recording') : t('Record {n} s', { n: RECORD_SECONDS }) }] }] : []),
       { id: 'run', tools: [{ id: 'p-rerun', label: t('Restart'), primary: true }] },
     ]);
@@ -872,11 +877,11 @@ export function productStep(): StepImpl {
     if (!c || c.store.get().step !== 'product') return;
     if (id === 'p-sound') toggleSound();
     else if (id === 'p-heat') toggleHeat();
-    else if (id === 'p-home') (scene3d ?? lcd3d ?? keypad ?? work3d)?.resetView();
+    else if (id === 'p-home') cur3d()?.resetView();
     else if (id === 'p-photo') void photo();
     else if (id === 'p-rec') record();
     else if (id === 'p-rerun') c.session.reboot();
-    else if (/^p-(card|ir|cloud)-/.test(id)) HOOKS[c.work.id]?.tool(id, c.session);
+    else if (/^p-(card|ir|cloud|dial)-/.test(id)) HOOKS[c.work.id]?.tool(id, c.session);
     else if (id === 'p-level') {
       if (WORK3D.has(c.work.id)) tiltTo({ pitch: 0, roll: 0, yaw: 0 });
       else c.session.setPose({ pitch: 0, roll: 0, yaw: 0 });
@@ -955,6 +960,8 @@ export function productStep(): StepImpl {
         bean: () => ({ ...bean }),
         strip: () => frame().strips?.[5] ?? [],
       };
+    } else if (c.work.id === 'dialtimer' && webglOk()) {
+      dial3d = dialProduct3D(node, c.session, frame);
     } else if (c.work.id === 'usbkey') {
       const press = (pin: number, d: boolean) => {
         c.session.pressPin(pin, d);
@@ -1001,7 +1008,7 @@ export function productStep(): StepImpl {
       const box = document.createElement('div');
       box.className = 'prod-svg';
       node.appendChild(box);
-      const h = { boot: (d: boolean) => pressBoot(d), temp: () => {}, ir: (code: string) => irlampSend(c.session, code), mqtt: (cmd: string) => void c.session.sim?.mqttPub(cmd) };
+      const h = { boot: (d: boolean) => pressBoot(d), temp: () => {}, ir: (code: string) => irlampSend(c.session, code), mqtt: (cmd: string) => void c.session.sim?.mqttPub(cmd), ...dialHandlers(c.session) };
       svgProduct = c.work.id === 'spin' ? createSpinProduct(box, h, { servoPin: 4 }) : c.work.id === 'lens' ? createLensProduct(box, h) : workTemplate(c.work.id)!.product(box, h, { servoPin: 4 });
       const note = document.createElement('div');
       note.className = 'p3-disclaimer';
@@ -1149,9 +1156,7 @@ export function productStep(): StepImpl {
         const on = a.effects.sensorOffset ? t('Power on · run #{run}, sensor heated {off} ℃ high', { run, off: a.effects.sensorOffset }) : t('Power on · run #{run}', { run });
         event('▶', preview ? t('Reference product · {text}', { text: on }) : on);
       }
-      scene3d?.start();
-      lcd3d?.start();
-      work3d?.start();
+      [scene3d, lcd3d, work3d, dial3d].forEach((x) => x?.start());
       // Mounting effects reach the simulator (blocked sensor, reversed IMU); restored to the user's setup when leaving Product
       if (c.work.id === 'ruler') {
         rawCm = c.session.distance < 0 ? 25 : c.session.distance;
@@ -1202,9 +1207,7 @@ export function productStep(): StepImpl {
       tilt?.stop();
       raf?.();
       raf = null;
-      scene3d?.stop();
-      lcd3d?.stop();
-      work3d?.stop();
+      [scene3d, lcd3d, work3d, dial3d].forEach((x) => x?.stop());
       keypad?.stop();
       rec?.stop();
       if (ctx) {
