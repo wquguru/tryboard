@@ -4089,6 +4089,12 @@
     "regex": "DEMO bat=.* roll=(-?[\\d.]+)",
     "value": -15,
     "tol": 0.6
+   },
+   {
+    "name": "M5Unified mic zero-crossing frequency (Hz)",
+    "regex": "DEMO mic peak=\\d+ freq=(\\d+) Hz",
+    "value": 1000,
+    "tol": 20
    }
   ],
   "pwm": {
@@ -4142,6 +4148,12 @@
     "regex": "DEMO bat=.* roll=(-?[\\d.]+)",
     "value": -15,
     "tol": 0.6
+   },
+   {
+    "name": "M5Unified mic zero-crossing frequency (Hz)",
+    "regex": "DEMO mic peak=\\d+ freq=(\\d+) Hz",
+    "value": 1000,
+    "tol": 20
    }
   ],
   "lcd_regions": [
@@ -4238,6 +4250,62 @@
     ]
    ]
   }
+ },
+ {
+  "id": "arduino-m5-mic-order-stickc_plus2",
+  "chip": "esp32",
+  "seconds": 2,
+  "qemu": false,
+  "args": [
+   "--board",
+   "m5stickcplus2",
+   "--mic",
+   "tools/audio/saw50.wav"
+  ],
+  "expect": [
+   "ORDER board=5 ",
+   "-> in order",
+   "TRYBOARD_OK m5-mic-order"
+  ],
+  "absent": [
+   "pairs swapped"
+  ],
+  "numeric": [
+   {
+    "name": "M5Unified PDM pairs rising on a sawtooth (of 400)",
+    "regex": "ORDER rising pairs=(\\d+)",
+    "value": 397,
+    "tol": 3
+   }
+  ]
+ },
+ {
+  "id": "arduino-m5-mic-order-core2",
+  "chip": "esp32",
+  "seconds": 2,
+  "qemu": false,
+  "args": [
+   "--board",
+   "m5core2",
+   "--mic",
+   "tools/audio/saw50.wav"
+  ],
+  "expect": [
+   "ORDER board=2 ",
+   "-> in order",
+   "TRYBOARD_OK m5-mic-order"
+  ],
+  "absent": [
+   "pairs swapped"
+  ],
+  "numeric": [
+   {
+    "name": "M5Unified PDM pairs rising on a sawtooth (of 400)",
+    "regex": "ORDER rising pairs=(\\d+)",
+    "value": 397,
+    "tol": 3
+   }
+  ]
  },
  {
   "id": "mpy-c3-rawpaste",

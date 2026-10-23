@@ -34,6 +34,13 @@ void app_main(void)
         size_t got = 0;
         ESP_ERROR_CHECK(i2s_channel_read(rx, raw, sizeof(raw), &got, portMAX_DELAY));
         int n = got / sizeof(int16_t);
+        // Classic ESP32 PDM RX leaves rx_msb_right = 0, so the FIFO hands over each sample pair swapped (M5Unified
+        // fixes it the same way); put them back in time order
+        for (int i = 0; i + 1 < n; i += 2) {
+            int16_t t = raw[i];
+            raw[i] = raw[i + 1];
+            raw[i + 1] = t;
+        }
         double sum = 0, mean = 0;
         for (int i = 0; i < n; i++) mean += raw[i];
         mean /= n;

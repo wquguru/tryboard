@@ -3,6 +3,7 @@
 Usage: tools/audio/gen_wav.py [output dir]  (default tools/audio/)
 - sine1k.wav: 1000 Hz sine, amplitude 0.5 (RMS 0.3536), 48 kHz 16-bit mono, 1 s (whole periods, loops seamlessly)
 - sweep.wav: 200 -> 2000 Hz exponential sweep, amplitude 0.5, 48 kHz 16-bit mono, 2 s (10 ms fade in / out)
+- saw50.wav: 50 Hz rising sawtooth, -0.5 -> 0.5, 48 kHz 16-bit mono, 1 s (sample order checks, G-12)
 """
 import math, os, struct, sys, wave
 
@@ -30,6 +31,7 @@ def main():
         g = min(1.0, i / fade, (n - 1 - i) / fade)
         xs.append(0.5 * g * math.sin(ph))
     write(os.path.join(out, 'sweep.wav'), xs)
+    write(os.path.join(out, 'saw50.wav'), [(i % 960) / 960 - 0.5 for i in range(RATE)])
 
 if __name__ == '__main__':
     main()
