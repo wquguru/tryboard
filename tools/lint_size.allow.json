@@ -34,7 +34,7 @@
  "fn:web/src/app/steps/assemble.tsx:assembleStep": 903,
  "fn:web/src/app/steps/product.tsx:productStep": 954,
  "fn:web/src/app/steps/shop.tsx:shopStep": 675,
- "fn:web/src/app/works3d.ts:createWork3D": 517,
+ "fn:web/src/app/works3d.ts:createWork3D": 521,
  "layer:core/crates/machine/src/lib.rs": 1,
  "size:core/crates/soc/src/wifi/phone.rs": 1588
 }

@@ -101,7 +101,7 @@ async function runRef(page, id) {
   fs.writeFileSync(path.join(outDir, `levels-${id}-web.json`), JSON.stringify(raw, null, 1));
   return { ok: (await verdictOf(page)) === 'ok', fp: await fpOf(page), text };
 }
-for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']], ['usbkey', ['usbkey-1', 'usbkey-2', 'usbkey-3']], ['lamp', ['lamp-1', 'lamp-2', 'lamp-3']], ['ruler', ['ruler-1', 'ruler-2', 'ruler-3']], ['tilt', ['tilt-1', 'tilt-2', 'tilt-3']], ['door', ['door-1', 'door-2', 'door-3', 'door-4']], ['irlamp', ['irlamp-1', 'irlamp-2', 'irlamp-3', 'irlamp-4']], ['cloud', ['cloud-1', 'cloud-2', 'cloud-3', 'cloud-4']], ['dialtimer', ['dialtimer-1', 'dialtimer-2', 'dialtimer-3', 'dialtimer-4']]]) {
+for (const [work, cps] of [['weather', ['01', '02', '03', '04', '05', '06']], ['spin', ['spin-1', 'spin-2', '07-spin']], ['lens', ['lens-1', 'lens-2', '07-lens']], ['usbkey', ['usbkey-1', 'usbkey-2', 'usbkey-3']], ['lamp', ['lamp-1', 'lamp-2', 'lamp-3']], ['ruler', ['ruler-1', 'ruler-2', 'ruler-3']], ['tilt', ['tilt-1', 'tilt-2', 'tilt-3']], ['door', ['door-1', 'door-2', 'door-3', 'door-4']], ['irlamp', ['irlamp-1', 'irlamp-2', 'irlamp-3', 'irlamp-4']], ['cloud', ['cloud-1', 'cloud-prov', 'cloud-2', 'cloud-3', 'cloud-4']], ['dialtimer', ['dialtimer-1', 'dialtimer-2', 'dialtimer-3', 'dialtimer-4']]]) {
   const page = await open(`/app?work=${work}#bench`);
   for (const id of cps) {
     const r = await runRef(page, id);

@@ -108,7 +108,7 @@ const d: Dict = {
   "BME280 not installed yet; install it to measure its distance to the chip": "BME280 はまだ未取り付けです。取り付けるとチップまでの距離を測ります",
   "BME280 power moved to 5V": "BME280 の電源を 5V に付け替え",
   "BME280 reads": "BME280 の読み値",
-  "BME280 reads the temperature wherever the sensor sits: room {room} ℃, heated high by {d} ℃.": "BME280 はセンサーを置いた場所の温度を読みます：室温 {room} ℃、発熱による上振れ {d} ℃。",
+  "{sensor} reads the temperature wherever the sensor sits: room {room} ℃, heated high by {d} ℃.": "{sensor} はセンサーを置いた場所の温度を読みます：室温 {room} ℃、発熱による上振れ {d} ℃。",
   "BME280 · temperature / humidity / pressure": "BME280 · 温度 / 湿度 / 気圧",
   "Board 10 cm closer": "板を 10 cm 近づける",
   "Board 10 cm farther": "板を 10 cm 遠ざける",
@@ -837,7 +837,7 @@ const d: Dict = {
   "The dev board can't be removed, only swapped: use \"Swap dev board\" below": "開発ボードは外せず、交換のみできます。下の「開発ボードを交換」を使ってください",
   "The dev board clip position decides where the chip sits: under full load it is the hottest spot in the enclosure": "開発ボードの留め位置でチップの場所が決まります：フル負荷のチップはケース内でいちばん熱くなります",
   "The firmware assumes 343 m/s and the simulator also echoes at 343 m/s": "ファームウェアは 343 m/s で計算し、シミュレーターも 343 m/s でエコーを返します",
-  "The heat offset affects the simulation: in the retest and the Product, BME280 reads the raised temperature.": "発熱による上振れはシミュレーション結果に影響します：起動再テストと完成品では、BME280 は上振れした温度を読みます。",
+  "The heat offset affects the simulation: in the retest and the Product, {sensor} reads the raised temperature.": "発熱による上振れはシミュレーション結果に影響します：起動再テストと完成品では、{sensor} は上振れした温度を読みます。",
   "The knob here gives clean quadrature waveforms; real contacts bounce": "シミュレーターのノブはきれいな直交波形ですが、実機の接点はチャタリングします",
   "The knob shaft must stick out ≥ 6 mm from the panel, or fingers cannot grip or press it": "ノブ軸はパネルから ≥ 6 mm 出す必要があります。短いとつまめず押せません",
   "The list is complete; you can buy from it": "リストはそろいました。このまま購入できます",
@@ -1174,5 +1174,9 @@ const d: Dict = {
   "Set time": "設定時間",
   "Start / pause": "開始 / 一時停止",
   "Timer": "タイマー",
+  // G-05c cloud assembly
+  "On the vent side: room air flows past the AHT20 and the published t is the room": "通気口側：部屋の空気が AHT20 を通り、発行される t は室温",
+  "Against the board: the LDO and Wi-Fi bursts warm it, every published t is about {n} ℃ high, same in the retest (estimate)": "ボードに密着：LDO と Wi-Fi 送信の熱で温まり、発行される t はどれも約 {n} ℃ 高い、再テストでも同じ（推定）",
+  "C3 with Wi-Fi on averages about 80 mA and peaks near 350 mA while transmitting; a 5 V 1 A charger is plenty (estimate)": "Wi-Fi を使う C3 は平均約 80 mA、送信時のピークは 350 mA 近く；5 V 1 A の充電器で十分（推定）",
 };
 export default d;

@@ -108,7 +108,7 @@ const d: Dict = {
   "BME280 not installed yet; install it to measure its distance to the chip": "BME280 还没装，装上后量它到芯片的距离",
   "BME280 power moved to 5V": "BME280 供电改接 5V",
   "BME280 reads": "BME280 读到",
-  "BME280 reads the temperature wherever the sensor sits: room {room} ℃, heated high by {d} ℃.": "传感器放在哪，BME280 就读到哪儿的温度：室温 {room} ℃，受热偏高 {d} ℃。",
+  "{sensor} reads the temperature wherever the sensor sits: room {room} ℃, heated high by {d} ℃.": "传感器放在哪，{sensor} 就读到哪儿的温度：室温 {room} ℃，受热偏高 {d} ℃。",
   "BME280 · temperature / humidity / pressure": "BME280 · 温度 / 湿度 / 气压",
   "Board 10 cm closer": "挡板近 10 cm",
   "Board 10 cm farther": "挡板远 10 cm",
@@ -837,7 +837,7 @@ const d: Dict = {
   "The dev board can't be removed, only swapped: use \"Swap dev board\" below": "开发板不能去掉，只能换：用底部的「换开发板」",
   "The dev board clip position decides where the chip sits: under full load it is the hottest spot in the enclosure": "开发板卡扣位置决定了芯片在哪：芯片满载时是壳里最热的地方",
   "The firmware assumes 343 m/s and the simulator also echoes at 343 m/s": "固件按 343 m/s 算，模拟器也按 343 m/s 出回波",
-  "The heat offset affects the simulation: in the retest and the Product, BME280 reads the raised temperature.": "受热偏高会影响模拟结果：开机复测和成品里，BME280 读到的就是偏高后的温度。",
+  "The heat offset affects the simulation: in the retest and the Product, {sensor} reads the raised temperature.": "受热偏高会影响模拟结果：开机复测和成品里，{sensor} 读到的就是偏高后的温度。",
   "The knob here gives clean quadrature waveforms; real contacts bounce": "模拟器里旋钮是干净的正交波形，真机触点会抖",
   "The knob shaft must stick out ≥ 6 mm from the panel, or fingers cannot grip or press it": "旋钮轴要露出面板 ≥ 6 mm，不然手指捏不住、按不下去",
   "The list is complete; you can buy from it": "清单齐了，可以照着买",
@@ -1174,5 +1174,9 @@ const d: Dict = {
   "Set time": "设定时长",
   "Start / pause": "开始 / 暂停",
   "Timer": "计时",
+  // G-05c cloud assembly
+  "On the vent side: room air flows past the AHT20 and the published t is the room": "放通风口一侧：房间空气流过 AHT20，发布的 t 就是室温",
+  "Against the board: the LDO and Wi-Fi bursts warm it, every published t is about {n} ℃ high, same in the retest (estimate)": "贴着板子：稳压器和 Wi-Fi 发射把它烘热，每条发布的 t 都偏高约 {n} ℃，复测也一样（估算）",
+  "C3 with Wi-Fi on averages about 80 mA and peaks near 350 mA while transmitting; a 5 V 1 A charger is plenty (estimate)": "C3 开 Wi-Fi 平均约 80 mA，发射时峰值近 350 mA；5 V 1 A 充电器绰绰有余（估算）",
 };
 export default d;

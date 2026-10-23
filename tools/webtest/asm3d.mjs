@@ -357,6 +357,77 @@ await p2.close();
   await p4.close();
 }
 
+// G-05c cloud reporter (SVG assembly): AHT20 against the board -> every published t is 2.5 ℃ high, cloud-4's room temperature item
+// fails the retest; by the vents -> passes; then the 3D tablet shows the readings and its interval=2 button changes the interval
+{
+  const p5 = await browser.newPage();
+  await p5.setViewport({ width: 1280, height: 860 });
+  p5.on('pageerror', (e) => errors.push(`cloud: ${e}`));
+  p5.on('console', (m) => { if (m.type() === 'error') errors.push(`cloud: ${m.text()}`); });
+  await p5.goto(`${base}/app?work=cloud#bench`, { waitUntil: 'load' });
+  await p5.evaluate(() => {
+    const c = {};
+    for (const id of ['cloud-1', 'cloud-prov', 'cloud-2', 'cloud-3', 'cloud-4']) c[id] = { fp: 'test', at: 'preset' };
+    localStorage.setItem('tryboard-app-checks:cloud', JSON.stringify(c));
+    localStorage.removeItem('tryboard-app-asm:cloud');
+  });
+  await p5.goto(`${base}/app?work=cloud#assemble`, { waitUntil: 'load' });
+  await p5.reload({ waitUntil: 'load' });
+  await p5.waitForSelector('.asm-box [data-part]', { timeout: 30000 });
+  const click = async (sel) => {
+    for (let i = 0; i < 20; i++) {
+      try {
+        await p5.waitForSelector(sel, { timeout: 5000 });
+        await p5.click(sel);
+        return;
+      } catch {
+        await sleep(200);
+      }
+    }
+    throw new Error(`cannot click ${sel}`);
+  };
+  const build = async (pick) => {
+    for (const k of ['case', 'board', 'aht', 'usb', 'lid']) {
+      await click(`.asm-box [data-part="${k}"]`);
+      if (k === 'aht') await click(`.asm-box [data-k="choose_aht"] [data-k="pick${pick}"]`);
+    }
+    await click('#toolbar [data-tool="asm-retest"]');
+    await waitFor(p5, () => /Retesting/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 10000);
+    await waitFor(p5, () => !!document.querySelector('#props .verdict-line') && !/Retesting/.test(document.querySelector('#retestBtn')?.textContent ?? ''), null, 120000);
+    return {
+      v: await p5.$eval('#props .result-card', (e) => e.dataset.verdict).catch(() => ''),
+      txt: await p5.$eval('#props', (e) => e.textContent),
+      a: await p5.evaluate(() => globalThis.__tbApp.store.get().assembly),
+    };
+  };
+  try {
+    const bad = await build('B');
+    report('cloud: AHT20 against the board -> JSON t reads 2.5 ℃ high, retest fails', bad.a?.effects?.sensorOffset === 2.5 && (bad.v === 'bad' || bad.v === 'shifted') && /JSON temperature \(room, not the board\)/.test(bad.txt) && /Sensor reads 26\.0 ℃/.test(bad.txt), `${bad.v} ${(bad.txt.match(/Retest result.{0,200}/) ?? [''])[0]}`);
+    await shot(p5, 'cloud-bad');
+    await click('#toolbar [data-tool="asm-reset"]');
+    const good = await build('A');
+    report('cloud: AHT20 by the vents -> retest passes, assembly clean', good.a?.effects?.sensorOffset === 0 && good.v === 'ok' && /Assembly 5\/5, no warnings/.test(good.txt), `${good.v} ${(good.txt.match(/Retest result.{0,80}/) ?? [''])[0]}`);
+    await shot(p5, 'cloud-ok');
+    await click('#next');
+    const ready = await waitFor(p5, () => location.hash === '#product' && !!globalThis.__tbProduct?.state && !!document.querySelector('canvas'), null, 30000);
+    const reported = await waitFor(p5, () => (globalThis.__tbCloud?.reports ?? []).length > 0 && globalThis.__tbCloud.sub, null, 30000);
+    let sent = '', changed = false;
+    for (let i = 0; i < 4 && !changed; i++) {
+      const [x, y] = await p5.evaluate(() => globalThis.__tbProduct.handlePos());
+      await p5.mouse.click(x, y);
+      sent = await p5.evaluate(() => globalThis.__tbProduct.state().key);
+      changed = await waitFor(p5, () => globalThis.__tbCloud.interval === 2, null, 6000);
+    }
+    await sleep(300);
+    await shot(p5, 'cloud-3d');
+    const t0 = await p5.evaluate(() => globalThis.__tbCloud.reports.at(-1)?.t);
+    report('cloud: 3D tablet shows readings; clicking interval=2 sends the command and the firmware switches to 2 s', ready && reported && sent === 'interval=2' && changed && Math.abs(t0 - 23.5) < 0.6, `ready=${ready} reported=${reported} sent=${sent} changed=${changed} t=${t0}`);
+  } catch (e) {
+    report('cloud: flow finished', false, String(e).slice(0, 200));
+  }
+  await p5.close();
+}
+
 await page.evaluate(() => localStorage.clear());
 await browser.close();
 server.close();
