@@ -40,7 +40,7 @@ export interface BuyLine {
 }
 
 export interface ProcureTemplate {
-  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'door' | 'irlamp' | 'cloud' | 'dialtimer' | 'blank' | 'custom';
+  id: 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'door' | 'irlamp' | 'cloud' | 'dialtimer' | 'amoclock' | 'blank' | 'custom';
   title: string;
   /** Matching level (firmware/levels.json id; level 07 variants are written 07:spin) */
   level: string | null;
@@ -382,6 +382,21 @@ export const PROCURE_TEMPLATES: ProcureTemplate[] = [
     board: 'm5-dial',
     required: [
       { partId: 'm5-dial', qty: 1, why: 'Round touch screen, rotary ring, press button and buzzer are all built in' },
+      CABLE,
+    ],
+    suggested: [],
+    wiring: [],
+    firmware: { wifi: false },
+  },
+  {
+    // Finished board (DECISIONS 2026-10-23 G-17a): nothing to wire, the board preset brings screen, touch, PMU and RTC
+    id: 'amoclock',
+    title: 'AMOLED desk clock',
+    level: 'amoclock-4',
+    product: 'amoclock',
+    board: 'ws-s3-touch-amoled-216',
+    required: [
+      { partId: 'ws-s3-touch-amoled-216', qty: 1, why: 'Screen, touch, PMU (battery gauge, PWR key) and RTC are all on the board: nothing to wire' },
       CABLE,
     ],
     suggested: [],

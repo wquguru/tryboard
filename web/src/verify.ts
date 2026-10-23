@@ -62,8 +62,8 @@ function runJob(job: VerifyJob, onProgress?: (sim: number) => void) {
 
 export async function verifyLevel(l: Level, flash: ArrayBuffer, onProgress?: (sim: number) => void, envOverride?: { temp: number; humidity: number; pressure: number }, harness?: { i2cWire?: number; antenna?: number }, realnet?: boolean): Promise<VerifyOutcome> {
   const [wasm, rom] = await Promise.all([loadWasmModule(), loadRom(imageChip(flash))]);
-  const { i2c, env, lcd, servo, power, encoder, sonar, dht11, touchInt, board, grove, parts, usb, i2cLog, i2cWire, antenna } = bootOptions(l);
-  const job: VerifyJob = { wasm, rom: rom.slice(0), flash: flash.slice(0), seconds: l.seconds ?? 2, i2c, env: envOverride ?? env, script: l.script, pwmPin: l.pwm?.pin, lcd, servo, power, encoder, sonar, dht11, touchInt, board, grove, parts, usb, i2cLog, i2cWire: harness?.i2cWire ?? i2cWire, antenna: harness?.antenna ?? antenna, ...(realnet ? { realnet: true } : {}) };
+  const { i2c, env, lcd, battery, servo, power, encoder, sonar, dht11, touchInt, board, grove, parts, usb, i2cLog, i2cWire, antenna } = bootOptions(l);
+  const job: VerifyJob = { wasm, rom: rom.slice(0), flash: flash.slice(0), seconds: l.seconds ?? 2, i2c, env: envOverride ?? env, script: l.script, pwmPin: l.pwm?.pin, lcd, battery, servo, power, encoder, sonar, dht11, touchInt, board, grove, parts, usb, i2cLog, i2cWire: harness?.i2cWire ?? i2cWire, antenna: harness?.antenna ?? antenna, ...(realnet ? { realnet: true } : {}) };
   const msg = await runJob(job, onProgress);
   // For automated tests comparing against the CLI: raw output of the latest check
   (globalThis as { __tbLastVerify?: unknown }).__tbLastVerify = { stdout: msg.stdout, report: msg.report, timing: msg.timing };

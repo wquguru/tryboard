@@ -1022,5 +1022,9 @@ const d: Dict = {
   "Press-down button (BtnA, low when pressed)": "按压按键（BtnA，按下为低）",
   "Buzzer (driven as 1-bit audio by M5Unified)": "蜂鸣器（由 M5Unified 当 1-bit 音频驱动）",
   "Power hold": "电源保持",
+
+  // G-17a AMOLED clock work and template
+  "AMOLED desk clock": "AMOLED 桌面时钟",
+  "Screen, touch, PMU (battery gauge, PWR key) and RTC are all on the board: nothing to wire": "屏幕、触摸、电源管理（电量计、PWR 键）和 RTC 都在板上：不用接线",
 };
 export default d;

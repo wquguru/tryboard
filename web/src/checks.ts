@@ -75,7 +75,7 @@ export interface CheckResult {
   note?: string;
 }
 
-/** Turn --i2c / --i2c-bus / --env / --spi / --servo / --power / --encoder / --sonar / --touch-int args into boot options (the web has no command line) */
+/** Turn --i2c / --i2c-bus / --env / --spi / --battery / --servo / --power / --encoder / --sonar / --touch-int args into boot options (the web has no command line) */
 export function bootOptions(l: Level) {
   const a = l.args ?? [];
   const val = (k: string) => {
@@ -98,7 +98,7 @@ export function bootOptions(l: Level) {
   const env = e ? { temp: e[0], humidity: e[1], pressure: e[2] } : undefined;
   // F-04a2: a TFT panel name passes through as the screen kind (same text the CLI attaches)
   const spiLcd = lcdFromSpi(val('--spi'));
-  const lcd = spiLcd === 'gc9a01' ? true : isTftPanel(spiLcd) ? spiLcd : false;
+  const lcd = spiLcd === 'gc9a01' ? true : spiLcd === 'co5300' || isTftPanel(spiLcd) ? spiLcd : false;
   const sv = val('--servo');
   const servo = sv === undefined ? undefined : Number(sv);
   const power = val('--power') === 'ext' ? ('ext' as const) : ('usb' as const);
@@ -120,7 +120,10 @@ export function bootOptions(l: Level) {
   const av = val('--antenna-loss');
   const antenna = av === undefined ? undefined : Number(av);
   const parts = partsFromArgs(val);
-  return { i2c, env, lcd, servo, power, encoder, sonar, dht11, touchInt, board, grove, parts, usb: a.includes('--usb-log'), i2cLog: a.includes('--i2c-log'), i2cWire, antenna };
+  // --battery pct[,usb] (AXP2101 at power-up), same parse as the CLI's parse_battery
+  const [bp, bu] = (val('--battery') ?? '').split(',');
+  const battery = bp && !Number.isNaN(Number(bp)) ? { pct: Number(bp), usb: bu?.trim() === 'usb' } : undefined;
+  return { i2c, env, lcd, battery, servo, power, encoder, sonar, dht11, touchInt, board, grove, parts, usb: a.includes('--usb-log'), i2cLog: a.includes('--i2c-log'), i2cWire, antenna };
 }
 
 /** Timed input script like the CLI's parse_script: time (simulated s):action, split by `;` or newline, `#` starts a comment */

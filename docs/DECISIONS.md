@@ -1733,3 +1733,11 @@
 - 顺手修 npm 包 `packages/tryboard` 的 `check --level`：原来没把关卡的 `board` / `grove` 传进 SimJob，板子预设被忽略（所有 M5 板关卡在 npx 下都跑在裸板上）；现在与网页一致。
 - 许可：M5Unified / M5GFX 已在 LICENSING ✅（MIT），build_web 为 arduino-* bin 附 BUILD_INFO；公开部署前仍需核对 M5GFX 字体声明进 NOTICES（同 M5 其他例子）。
 - 备选：用 BM8563 计时——否：网页不支持 rtc=，且计时器不需要日历；只在 CLI 验收、关卡不判声音——否：作品卖点就是"到点会响"，必须可判；把蜂鸣做成连续音以迁就旧算法——否：真实计时器是间歇响。
+
+## 2026-10-23 AMOLED 桌面时钟（G-17a）：成品板四步、温度源、BLE 对时
+- 成品板作品的四步（第三轮开头要求先记）：采购 = 板子 ws-s3-touch-amoled-216 + USB-C 数据线（件库暂无此板的支架 / 外壳件，留给 G-17c，不硬塞别的外壳）；台面 = 直接用 ws-amoled216 板预设（屏、触摸、PMU、RTC 都在板上），不上面包板，模板 wiring 为空，示例 scene 只有 board；组装 = 支架 / 外壳，归 G-17c；检查点只用串口 expect + `lcd_colors`（已有判据，check.py / checks.ts 都不加新判据）。
+- 表盘用纯色矩形拼七段数码（#40C8FF，LVGL obj 不抗锯齿），不用大字号字体：像素数和重心可精确判（04:00 = 24016 px，09:41 = 20032 px），时间错了就对不上；秒数、日期等文字不参与判定。与 G-07 一致只做跳秒，不做扫秒针。
+- 温度页选 S3 内部温度传感器（esp_driver_tsens），不选 AXP2101：AXP2101 模型的结温寄存器 0x3C 只是占位常数，读数不随任何东西变；TSENS 在 CLI 读数 25.0 °C（静态），页面和示例简介都写明测的是芯片结温，不是室温。
+- BLE 对时成功，不需要串口降级：NimBLE 服务 0xFF10、特征 0xFF11（READ | WRITE），写 4 字节小端 epoch 秒，按本地墙钟时间写进 PCF85063（不做时区）；长度不对返回 INVALID_ATTR_VALUE_LEN。虚拟手机 2.5 s 写入即回 `write FF11 ok`，读回同 4 字节。
+- 共享代码：`bootOptions`（web/src/checks.ts）原先把 `--spi co5300` 当成无屏、不解析 `--battery`，npx / 网页跑检查点时屏和电量都与 CLI 不同；改为透传 co5300、解析 `--battery pct[,usb]`，verify.ts 与 npm cli 把 battery 放进 job。已有检查点都不用这两个参数，旧指纹不变。
+- 备选：用 Montserrat 大字号画时间——否：抗锯齿边缘让像素数随字形浮动，判不准；AXP2101 温度——否：见上；`--rtc` / `--ble-phone` 放进检查点参数——否：网页没有这两个开关，改用脚本动作 `ble=scan / connect / write`，CLI 与网页共用。

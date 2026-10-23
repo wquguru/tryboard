@@ -112,8 +112,8 @@ async function check(a: string[]) {
       continue;
     }
     const flash = readBin(fw);
-    const { i2c, env, lcd, servo, power, encoder, sonar, dht11, parts, touchInt, board, grove, usb, i2cLog, i2cWire, antenna } = bootOptions(l);
-    const job: SimJob = { ...assets(flash), flash, seconds: l.seconds ?? 2, board, grove, i2c, env, lcd, touchInt, servo: sup.servo ?? servo, power: sup.power ?? power, encoder, sonar, dht11, parts, pwmPin: l.pwm?.pin, script: inputs ? inputsScript(inputs) : l.script, fixedSlice: !!inputs, usb, i2cLog, i2cWire, antenna };
+    const { i2c, env, lcd, battery, servo, power, encoder, sonar, dht11, parts, touchInt, board, grove, usb, i2cLog, i2cWire, antenna } = bootOptions(l);
+    const job: SimJob = { ...assets(flash), flash, seconds: l.seconds ?? 2, board, grove, i2c, env, lcd, battery, touchInt, servo: sup.servo ?? servo, power: sup.power ?? power, encoder, sonar, dht11, parts, pwmPin: l.pwm?.pin, script: inputs ? inputsScript(inputs) : l.script, fixedSlice: !!inputs, usb, i2cLog, i2cWire, antenna };
     const r = await runSim(job);
     const res: CheckResult[] = evaluate(l, r.stdout, r.report + (r.audio ?? ''));
     // A simulator that never started is not the firmware's fault (like check.py, listed first)
