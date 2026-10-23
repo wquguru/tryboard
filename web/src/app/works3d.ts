@@ -1,4 +1,4 @@
-// (4) P2-09 3D products for lamp (knob lamp), ruler (ultrasonic ruler), tilt (motion figure) (G-03) door and (G-04) irlamp; same stage as product3d.ts, units cm.
+// (4) P2-09 3D products for lamp (knob lamp), ruler (ultrasonic ruler), tilt (motion figure) (G-03) door, (G-04) irlamp and (G-05) cloud; same stage as product3d.ts, units cm.
 // LEDs, OLED, round screen and buzzer come from the live sim; assembly effects (hot spots, blocked probe, flipped IMU) come from the caller.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -16,8 +16,9 @@ import { shaderWarm } from '../shaderwarm';
 import { onFrame, PRIO } from '../ui/frame';
 import { buildDoor } from './works3d-door';
 import { buildIrlamp, buildLampShell } from './works3d-irlamp';
+import { buildCloud } from './works3d-cloud';
 
-export type WorkKind = 'lamp' | 'ruler' | 'tilt' | 'door' | 'irlamp';
+export type WorkKind = 'lamp' | 'ruler' | 'tilt' | 'door' | 'irlamp' | 'cloud';
 
 export interface WorkFrame {
   pwm: number[];
@@ -32,7 +33,7 @@ export interface WorkFrame {
 export interface WorkProductOptions {
   kind: WorkKind;
   frame(): WorkFrame;
-  effects(): { glare?: boolean; sonarBlock?: number; imuFlip?: boolean; cardBlock?: boolean; irBlock?: boolean };
+  effects(): { glare?: boolean; sonarBlock?: number; imuFlip?: boolean; cardBlock?: boolean; irBlock?: boolean; sensorOffset?: number };
   /** Whether the buzzer is sounding now (only for the sound-wave rings) */
   sounding(): boolean;
   /** lamp: knob detents turned (positive = clockwise), pressed / released */
@@ -50,6 +51,8 @@ export interface WorkProductOptions {
   card?(): string;
   /** irlamp: a remote key pressed (NEC command byte); the returned release ends the hold (repeat codes) */
   onKey?(cmd: number): (() => void) | void;
+  /** cloud: a dashboard button published this payload on the command topic */
+  onCloud?(payload: string): void;
 }
 
 export interface WorkProduct3D {
@@ -167,6 +170,7 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
     tilt: { home: new THREE.Vector3(0, 17, 17), target: new THREE.Vector3(0, 2.6, 0), min: 9, max: 40 },
     door: { home: new THREE.Vector3(-12, 30, 62), target: new THREE.Vector3(2, 22, 0), min: 16, max: 130 },
     irlamp: { home: new THREE.Vector3(20, 17, 40), target: new THREE.Vector3(3, 4, 3), min: 14, max: 70 },
+    cloud: { home: new THREE.Vector3(4, 24, 30), target: new THREE.Vector3(4, 3, -1), min: 12, max: 80 },
   };
   const V = VIEW[o.kind];
   camera.position.copy(V.home);
@@ -421,6 +425,9 @@ export function createWork3D(container: HTMLElement, o: WorkProductOptions): Wor
   } else if (o.kind === 'irlamp') {
     const d = buildIrlamp({ scene, shellMat, occluders, tag, tagList, hits, onKey: o.onKey, effects: o.effects });
     ({ tick, onDown, onUp, handle, key: irKey } = d);
+  } else if (o.kind === 'cloud') {
+    const d = buildCloud({ scene, shellMat, occluders, hits, tag, tagList, effects: o.effects, onCloud: o.onCloud });
+    ({ tick, onDown, handle, key: irKey } = d);
   } else if (o.kind === 'door') {
     const d = buildDoor({ scene, shellMat, tag, tagList, hits, occluders, oled: oledTexture(), paintOled, onCard: o.onCard, card: o.card, effects: o.effects });
     tick = (f, dt) => d.tick(f, dt);

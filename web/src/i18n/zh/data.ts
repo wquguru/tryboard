@@ -619,7 +619,7 @@ const d: Dict = {
   "JSON humidity": "JSON 湿度",
   "Combined: sensor to the cloud": "合体 · 温湿度上云",
   "The cloud changes the reporting interval with a command; the board acknowledges and refuses out-of-range values": "云端用命令改上报间隔；板子回执，越界的值拒绝",
-  "Cloud publishes interval=2 at 8 s and interval=0 at 11 s: serial shows 间隔改为 2 秒, the ok ack, 拒绝命令 and the refusal ack; at least 2 gaps of 2.00 ± 0.1 s afterwards": "云端在 8 秒发布 interval=2、11 秒发布 interval=0：串口出现 间隔改为 2 秒、成功回执、拒绝命令 和拒绝回执；之后至少 2 个 2.00 ± 0.1 秒的间隔",
+  "Cloud publishes interval=2 at 8 s and interval=0 at 11 s: serial shows 间隔改为 2 秒, the ok ack, 拒绝命令 and the refusal ack; at least 2 gaps of 2.00 ± 0.1 s afterwards; every JSON reads t 23.5 ± 0.5 (the room, not the board); the web page also requires an assembly with no warnings (geometric estimate, checked on the web page only)": "云端在 8 秒发布 interval=2、11 秒发布 interval=0：串口出现 间隔改为 2 秒、成功回执、拒绝命令 和拒绝回执；之后至少 2 个 2.00 ± 0.1 秒的间隔；每条 JSON 的 t 都是 23.5 ± 0.5（读的是房间，不是板子）；网页上还要求装配没有警告（几何估算，只在网页上检查）",
   "USB power for the board where it lives (any 5 V 1 A phone charger), enclosure with vents so the sensor reads the room, not the board": "放置处的 USB 供电（任意 5 V 1 A 手机充电器）、带通风孔的外壳，让传感器测的是房间而不是板子",
   "Handling MQTT_EVENT_DATA (topic and data are not NUL-terminated), validating remote commands, acknowledging on a separate topic": "处理 MQTT_EVENT_DATA（topic 和 data 不以 NUL 结尾）、校验远程命令、在单独的主题上回执",
   "Publish gap after the change (s)": "改间隔后的发布间隔(秒)",
