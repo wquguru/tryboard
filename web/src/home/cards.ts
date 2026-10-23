@@ -9,13 +9,14 @@ import { workTemplate } from '../views/worktpl';
 import { DOOR_CARDS, doorNow, parseDoorLine } from '../views/doorproduct';
 import { IRLAMP_CMD, irlampNow, parseIrlampLine } from '../views/irlampproduct';
 import { irCode } from '../app/irfeed';
+import { cloudCmd, cloudIdle, cloudNow, parseCloudLine } from '../views/cloudproduct';
 import { emptyFrame, type LiveFrame } from '../views/common';
 import { t } from '../i18n';
 
 // P2-09 cards: the illustration is the product 2D view fed one demo frame; plus the live device config and demo inputs by sim time.
-// fw: published firmware id when it isn't the work id; line: each serial line (door state for the lock picture).
+// fw: published firmware id when it isn't the work id; line: each serial line (door state for the lock picture); seed: illustration state.
 type LiveCfg = Pick<LiveOptions, 'i2c' | 'lcd' | 'encoder' | 'sonar' | 'parts'>;
-type Extra = { live: LiveCfg; demo: Partial<LiveFrame>; script?: (sim: LiveSim, t: number) => void; fw?: string; chip?: string; line?: (l: string) => void };
+type Extra = { live: LiveCfg; demo: Partial<LiveFrame>; script?: (sim: LiveSim, t: number) => void; fw?: string; chip?: string; line?: (l: string) => void; seed?: () => void };
 const EXTRA: Record<string, Extra> = {
   lamp: {
     live: { i2c: [], encoder: { a: 6, b: 7, sw: 15 } },
@@ -58,6 +59,20 @@ const EXTRA: Record<string, Extra> = {
     },
     line: (l) => parseIrlampLine(l, irlampNow),
   },
+  cloud: {
+    fw: 'c3-cloud',
+    chip: 'ESP32-C3',
+    live: { i2c: [{ kind: 'aht20', addr: 0x38 }] },
+    demo: {},
+    // Demo: the room drifts ±1.5 ℃ and at 6 s the cloud asks for a report every 2 s.
+    script: (sim, t) => {
+      if (t > 6 && t < 6.1) sim.mqttPub(cloudCmd('interval=2'));
+      if (t % 1 < 0.1) sim.setTemp(Math.round((23.5 + 1.5 * Math.sin(t / 5)) * 10) / 10);
+    },
+    line: (l) => parseCloudLine(l, cloudNow),
+    // Illustration: a dashboard with a few reports already in (replaced by the real run's banner reset)
+    seed: () => Object.assign(cloudNow, cloudIdle(), { ip: '192.168.4.100', mqtt: true, sub: true, reports: [23.1, 23.4, 23.6, 23.5].map((v, i) => ({ seq: i, t: v, h: 45, ...(i ? { gap: 5 } : {}) })) }),
+  },
 };
 
 const SERVO = 4;
@@ -73,13 +88,14 @@ const FW: Record<ShowKind, { lcd: boolean; i2c: { kind: string; addr: number }[]
 export function showcase(el: HTMLElement, kind: string) {
   const x = EXTRA[kind];
   if (!x) return createShowcase(el, kind as ShowKind);
+  x.seed?.();
   workTemplate(kind)!.product(el, { boot: () => {}, temp: () => {} }, { servoPin: SERVO }).update({ ...emptyFrame(), running: true, ...x.demo }, ENV.temp, {});
 }
 
 /** Run real firmware in the card preview; the last serial line goes straight to the status line (high rate, no React state). Returns stop. */
 export function startLive(kind: string, card: HTMLElement, prev: HTMLElement, status: HTMLElement, onFail: () => void) {
   let sim: LiveSim | null = null;
-  const h = { boot: (d: boolean) => sim?.press(d), temp: (d: number) => sim && sim.setTemp(sim.env.temp + d), ir: (code: string) => sim?.partInput({ kind: 'ir', code }) };
+  const h = { boot: (d: boolean) => sim?.press(d), temp: (d: number) => sim && sim.setTemp(sim.env.temp + d), ir: (code: string) => sim?.partInput({ kind: 'ir', code }), mqtt: (cmd: string) => sim?.mqttPub(cmd) };
   const x = EXTRA[kind];
   const lcdView = x ? workTemplate(kind)!.product(prev, h, { servoPin: SERVO }) : kind === 'spin' ? createSpinProduct(prev, h, { servoPin: SERVO }) : kind === 'lens' ? createLensProduct(prev, h) : null;
   const wView = kind === 'weather' ? createProductView(prev, h, { servoPin: SERVO }) : null;

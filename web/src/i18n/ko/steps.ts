@@ -1145,5 +1145,22 @@ const d: Dict = {
   "No key yet": "아직 입력 없음",
   "On · {color} · brightness {level}/8": "켜짐 · {color} · 밝기 {level}/8",
   "IR night light": "적외선 수면등",
+  // G-05b cloud
+  "Interval 2 s": "간격 2초",
+  "Interval 5 s": "간격 5초",
+  "Interval 10 s": "간격 10초",
+  "Send interval=0 (refused)": "interval=0 보내기(거부됨)",
+  "Room +{n} ℃": "실내 +{n} ℃",
+  "Room −{n} ℃": "실내 −{n} ℃",
+  "Last report": "최근 보고",
+  "Report interval": "보고 간격",
+  "Last ack": "최근 응답",
+  "Wi-Fi {ip} · MQTT subscribed": "Wi-Fi {ip} · MQTT 구독됨",
+  "Wi-Fi {ip} · no broker yet": "Wi-Fi {ip} · 브로커 미연결",
+  "{n} s (last gap {g} s)": "{n}초(직전 간격 {g}초)",
+  "No command yet": "아직 명령 없음",
+  "Cloud sensor": "클라우드 온습도계",
+  "Assembly for this project is not ready yet": "이 프로젝트의 조립은 아직 준비 중입니다",
+  "There is no enclosure to build yet. The Product step already shows the finished device in 2D, driven by the same firmware.": "아직 조립할 케이스가 없습니다. 완성품 단계에서 같은 펌웨어로 움직이는 완성품을 2D로 보여 줍니다.",
 };
 export default d;

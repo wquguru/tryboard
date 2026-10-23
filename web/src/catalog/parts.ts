@@ -575,6 +575,7 @@ export const PARTS: Part[] = [
     currentMa: { typ: null, peak: 0.98, est: true, source: 'Estimate: AHT20 datasheet measurement current around 980 µA (to be checked word for word)' },
     i2cAddr: { default: 0x38, alt: [] },
     i2cPullupK: null,
+    sim: { level: 'verified', model: 'aht20' },
     price: [3, 8],
     keywords: 'AHT20 温湿度传感器模块 I2C', // lint: allow-cjk
     supplyNet: '3V3',

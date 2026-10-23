@@ -482,7 +482,7 @@ export function bomTotal(picks: Pick[], board?: string): { lo: number; hi: numbe
 }
 
 /** Part library -> bench scene part type (same names as examples.json scene.parts[].type) */
-const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812', pot: 'pot', dht11: 'dht11', sh1106: 'oled', rc522: 'rc522', 'relay-1ch': 'relay', vs1838b: 'irrx', st7789: 'tft', 'st7789-240x320': 'tft', ili9341: 'tft' };
+const SCENE_TYPE: Record<string, string> = { ssd1306: 'oled', bme280: 'bme280', aht20: 'aht20', sg90: 'servo', mg90s: 'servo', gc9a01: 'gc9a01', 'gc9a01-touch': 'gc9a01-touch', 'led-kit': 'led', 'buzzer-module': 'buzzer', 'buzzer-passive': 'buzzer', mpu6050: 'mpu6050', qmi8658: 'qmi8658', button: 'key', encoder: 'encoder', 'hc-sr04': 'hcsr04', 'ws2812-stick8': 'ws2812', 'ws2812-strip': 'ws2812', pot: 'pot', dht11: 'dht11', sh1106: 'oled', rc522: 'rc522', 'relay-1ch': 'relay', vs1838b: 'irrx', st7789: 'tft', 'st7789-240x320': 'tft', ili9341: 'tft' };
 /** Bare SPI TFT catalog part -> panel (= CLI --spi name, F-04a2) */
 const TFT_PANEL: Record<string, string> = { st7789: 'st7789-240x240', 'st7789-240x320': 'st7789-240x320', ili9341: 'ili9341' };
 /** Keycap labels (usbkey: K1–K3 send a / b / c, K4 is the macro key) */
@@ -512,7 +512,7 @@ export function toScene(picks: Pick[], wiring: Wire[]): { type: string; [k: stri
     if (!type) continue;
     const key = p.key ?? p.partId;
     const part = getPart(p.partId);
-    if (type === 'oled' || type === 'bme280') {
+    if (type === 'oled' || type === 'bme280' || type === 'aht20') {
       out.push({ type, addr: p.addr ?? part.i2cAddr!.default, sda: gpioOf(key, 'i2c-sda'), scl: gpioOf(key, 'i2c-scl'), ...(p.partId === 'sh1106' ? { ctl: 'sh1106' } : {}) });
     } else if (type === 'tft') {
       // The core wires SPI2 to the chip's fixed LCD pins: take them from the listed board (no board = unplaced, listed as skipped)

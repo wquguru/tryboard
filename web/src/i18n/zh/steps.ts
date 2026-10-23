@@ -1145,5 +1145,22 @@ const d: Dict = {
   "No key yet": "还没按键",
   "On · {color} · brightness {level}/8": "开 · {color} · 亮度 {level}/8",
   "IR night light": "红外小夜灯",
+  // G-05b cloud
+  "Interval 2 s": "间隔 2 秒",
+  "Interval 5 s": "间隔 5 秒",
+  "Interval 10 s": "间隔 10 秒",
+  "Send interval=0 (refused)": "发 interval=0（会被拒）",
+  "Room +{n} ℃": "室温 +{n} ℃",
+  "Room −{n} ℃": "室温 −{n} ℃",
+  "Last report": "最近上报",
+  "Report interval": "上报间隔",
+  "Last ack": "最近回执",
+  "Wi-Fi {ip} · MQTT subscribed": "Wi-Fi {ip} · MQTT 已订阅",
+  "Wi-Fi {ip} · no broker yet": "Wi-Fi {ip} · 还没连上 broker",
+  "{n} s (last gap {g} s)": "{n} 秒（上次间隔 {g} 秒）",
+  "No command yet": "还没有命令",
+  "Cloud sensor": "温湿度上云",
+  "Assembly for this project is not ready yet": "这个作品的组装还没做好",
+  "There is no enclosure to build yet. The Product step already shows the finished device in 2D, driven by the same firmware.": "暂时还没有外壳可装。成品页已经有 2D 成品，由同一份固件驱动。",
 };
 export default d;

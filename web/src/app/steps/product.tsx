@@ -10,6 +10,7 @@ import { createLensProduct, createSpinProduct } from '../../views/lcdproducts';
 import { type Template } from '../../views/templates';
 import { workTemplate } from '../../views/worktpl';
 import { doorActs, doorButtons, doorLive, doorOnReader, doorRows, doorSerial, doorTap, doorTool } from './door';
+import { cloudActs, cloudButtons, cloudLive, cloudRows, cloudSerial, cloudTool } from './cloud';
 import { irlampActs, irlampButtons, irlampLive, irlampRows, irlampPress, irlampSend, irlampSerial, irlampTool } from './irlamp';
 import { passedCount } from './bench';
 import { emptyFrame, ledCss, servoAngle, type LiveFrame } from '../../views/common';
@@ -30,7 +31,7 @@ import { buildChecklist } from '../checklist';
 import { Checklist } from '../checklistview';
 import { loadBom } from '../bomstore';
 import { replay } from '../bom';
-import { getTemplate, type BuyLine } from '../../catalog/templates';
+import { PROCURE_TEMPLATES, getTemplate, type BuyLine } from '../../catalog/templates';
 import { loadHave } from '../../advisor/state';
 import { PART_MAP } from '../../advisor/catalogmap';
 import { Conf, type ConfLevel } from '../../ui/conf';
@@ -253,6 +254,7 @@ const WORK_ACTS: Record<string, () => Tool[]> = {
   ruler: () => [{ id: 'p-near', label: t('Board 10 cm closer'), icon: 'down' }, { id: 'p-far', label: t('Board 10 cm farther'), icon: 'up' }],
   door: doorActs,
   irlamp: irlampActs,
+  cloud: cloudActs,
   tilt: () => [{ id: 'p-tilt-r', label: t('Lower the right side'), icon: 'tilt' }, { id: 'p-tilt-l', label: t('Lower the front left'), icon: 'tilt' }, { id: 'p-level', label: t('Make level'), icon: 'minus' }],
   usbkey: () => KEYPAD_PINS.map((pin, i) => ({ id: `p-key-${pin}`, label: `K${i + 1} · ${KEYPAD_CAPS[i]}`, icon: 'key' })),
 };
@@ -262,6 +264,7 @@ type Btns = (id: string, label: string, f: () => void) => ReactNode;
 const HOOKS: Record<string, { serial: typeof doorSerial; rows: typeof doorRows; buttons: (b: Btns, s: Session) => ReactNode[]; live: typeof irlampLive; tool: (id: string, s: Session) => void }> = {
   door: { serial: doorSerial, rows: doorRows, buttons: doorButtons, live: doorLive, tool: doorTool },
   irlamp: { serial: irlampSerial, rows: irlampRows, buttons: irlampButtons, live: irlampLive, tool: irlampTool },
+  cloud: { serial: cloudSerial, rows: cloudRows, buttons: cloudButtons, live: cloudLive, tool: cloudTool },
 };
 
 export function productStep(): StepImpl {
@@ -616,7 +619,7 @@ export function productStep(): StepImpl {
           </Res>
         )}
         <Res kind={wk} mk={mk(wf.level)}>
-          <Said say={t("{say} (this project doesn't use Wi-Fi, so it isn't affected for now)", { say: wifiSay(fx.antennaDb ?? 0) })} raw={t('Antenna loss {db} dB, {text}', { db: fx.antennaDb ?? 0, text: wf.text })} />
+          <Said say={PROCURE_TEMPLATES.find((x) => x.id === c.work.id)?.firmware.wifi ? wifiSay(fx.antennaDb ?? 0) : t("{say} (this project doesn't use Wi-Fi, so it isn't affected for now)", { say: wifiSay(fx.antennaDb ?? 0) })} raw={t('Antenna loss {db} dB, {text}', { db: fx.antennaDb ?? 0, text: wf.text })} />
         </Res>
         {sim && <Txt as="p" className="note my-2 font-mono text-xs text-muted" data-live="hz" text={simLines(sim)} />}
       </>
@@ -873,7 +876,7 @@ export function productStep(): StepImpl {
     else if (id === 'p-photo') void photo();
     else if (id === 'p-rec') record();
     else if (id === 'p-rerun') c.session.reboot();
-    else if (/^p-(card|ir)-/.test(id)) HOOKS[c.work.id]?.tool(id, c.session);
+    else if (/^p-(card|ir|cloud)-/.test(id)) HOOKS[c.work.id]?.tool(id, c.session);
     else if (id === 'p-level') {
       if (WORK3D.has(c.work.id)) tiltTo({ pitch: 0, roll: 0, yaw: 0 });
       else c.session.setPose({ pitch: 0, roll: 0, yaw: 0 });
@@ -975,7 +978,7 @@ export function productStep(): StepImpl {
         typed: () => c.session.usb?.typed ?? '',
         usbState: () => c.session.usb?.state ?? '',
       };
-    } else if (webglOk()) {
+    } else if (webglOk() && c.work.id !== 'cloud') {
       const w = c.work.id as 'spin' | 'lens';
       lcd3d = createLcd3D(node, {
         kind: w,
@@ -998,7 +1001,7 @@ export function productStep(): StepImpl {
       const box = document.createElement('div');
       box.className = 'prod-svg';
       node.appendChild(box);
-      const h = { boot: (d: boolean) => pressBoot(d), temp: () => {}, ir: (code: string) => irlampSend(c.session, code) };
+      const h = { boot: (d: boolean) => pressBoot(d), temp: () => {}, ir: (code: string) => irlampSend(c.session, code), mqtt: (cmd: string) => void c.session.sim?.mqttPub(cmd) };
       svgProduct = c.work.id === 'spin' ? createSpinProduct(box, h, { servoPin: 4 }) : c.work.id === 'lens' ? createLensProduct(box, h) : workTemplate(c.work.id)!.product(box, h, { servoPin: 4 });
       const note = document.createElement('div');
       note.className = 'p3-disclaimer';
