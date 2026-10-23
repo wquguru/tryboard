@@ -8,8 +8,8 @@ import { t } from '../i18n';
 import { PITCH, type ExtSlot, disposeTree, canvasTexture, pinHits } from './util';
 import { type ChipId, apiId, BOARD_C3, BOARDS, LCD_WIRING, BB, rowZ, breadboard, devboard } from './boards';
 import { amoledBoard } from './amoled';
-import { m5Shell } from './m5shell';
-import { type BoardId, boardDevs } from './boarddevs';
+import { m5Shell, groveUnit } from './m5shell';
+import { type BoardId, type M5Id, boardDevs } from './boarddevs';
 import { roundLcdModule, oledModule, bmeModule, ledGlow } from './modules';
 import { type WireRec, wire } from './wires';
 import { type PartSpec, type SceneSpec, DEFAULT_VIEW } from './spec';
@@ -383,6 +383,16 @@ export function mountScene(ctx: BenchCtx): void {
     ctx.oledTex = null;
     ctx.lcdTex = null;
     swapBoard(ctx.board.spec.chip, spec.board);
+    // Grove ENV unit on the shell's Port A (G-14): redrawn on every scene so clearing spec.grove removes it
+    const oldUnit = ctx.board.grp.getObjectByName('grove-unit');
+    if (oldUnit) {
+      ctx.board.grp.remove(oldUnit);
+      disposeTree(oldUnit);
+    }
+    if (spec.grove && spec.board && 'flat' in ctx.board && spec.board !== 'ws-amoled216' && spec.board !== 'cyd') {
+      const unit = groveUnit(spec.board as M5Id, spec.grove);
+      if (unit) ctx.board.grp.add(unit);
+    }
     if ('flat' in ctx.board && ctx.board.screen && ctx.board.lcdPx) {
       // On-board panel: frame-sized texture (must equal tb_lcd_w / h or setLcd drops frames); touch panels take the finger ray
       const mat = ctx.board.screen.material as THREE.MeshBasicMaterial;
