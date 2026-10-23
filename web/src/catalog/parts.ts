@@ -1,6 +1,6 @@
 // Part catalog: plain data shared by the shop, the rule engine and "put it on the bench" (P0-06, RESEARCH_PROCURE §1).
 // Datasheet values only (unsure = null + todo); prices are manual estimates; links are search pages only (LICENSING).
-import { AMOLED216 } from './aioboards.ts';
+import { AMOLED216, M5DIAL } from './aioboards.ts';
 import { BENCH_PARTS } from './parts-bench.ts';
 import { GND, P, pin, VCC } from './partdraft.ts';
 
@@ -447,6 +447,7 @@ export const PARTS: Part[] = [
     ],
     note: 'Comes with a case and a 0.85″ display, but exposes only 8 GPIOs (6 on the header + 2 on Grove), and G38 / G39 share I2C with the on-board IMU. You run out fast with several modules.',
   }),
+  P({ ...M5DIAL, currentMa: { typ: null, peak: null, est: true, source: BOARD_CURRENT_NOTE } }),
   P({
     id: 'ws-s3-lcd128',
     name: 'Waveshare ESP32-S3-LCD-1.28 round-display board (no touch)',

@@ -64,6 +64,8 @@ export interface SimResult {
   report: string;
   /** `[tryboard] timing-sensitive: …` line (D-03) or ''; not part of report */
   timing?: string;
+  /** `[tryboard] I2S speaker / buzzer …` line or ''; judged by the audio check, not part of report (fingerprint) */
+  audio?: string;
   sim: number;
   /** Stopped mid-run (CPU exception etc.) */
   error?: string;
@@ -326,5 +328,8 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
       timing = '';
     }
   }
-  return { stdout: out, report, timing, sim: e.tb_cycles() / CPU_HZ, error, ...(j.realnet ? { replies } : {}) };
+  // Length first: the call fills the report buffer, which may move it
+  const an = e.tb_audio_report?.() ?? 0;
+  const audio = an ? dec.decode(new Uint8Array(e.memory.buffer, e.tb_report_ptr(), an)) : '';
+  return { stdout: out, report, timing, audio, sim: e.tb_cycles() / CPU_HZ, error, ...(j.realnet ? { replies } : {}) };
 }

@@ -1493,5 +1493,146 @@
     "tol": 0.02
    }
   ]
+ },
+ {
+  "id": "dialtimer-1",
+  "work": "dialtimer",
+  "title": "Set the minutes",
+  "goal": "The round screen shows 05:00 at power-up and the ring sets the minutes",
+  "pass": "At power-up serial shows 设定 05:00; turning the ring 3 detents clockwise at 1.0 s gives 设定 08:00; the round LCD shows white digits in the middle (≥ 800 px, centroid within 100–140) and the dark-cyan ring (≥ 5000 px)",
+  "buy": "M5Stack Dial and a USB-C data cable",
+  "learn": "Reading a rotary encoder with the pulse counter, drawing on a round screen with M5GFX",
+  "brief": "Write Arduino firmware for the M5Stack Dial:\n· Board: M5Stack Dial (ESP32-S3, M5StampS3 inside). Arduino with M5Unified (M5.begin(), M5.update() every loop); no wiring, everything is on the board\n· Round 240×240 GC9A01 screen through M5.Display, FT3267 touch through M5.Touch, press-down button through M5.BtnA (G42), buzzer on G3 through M5.Speaker (setVolume 128)\n· Rotary ring: quadrature encoder A=G40, B=G41; read it with the IDF pulse counter (driver/pulse_cnt.h) in x4 mode (both channels, edge + level actions as in the IDF rotary_encoder example), 4 counts per detent\n· Timer: minutes M from 1 to 60, 5 at power-up. Print 设定 MM:00 at boot and every time M changes; one ring detent = one minute, clamp at 1 and 60 (no print when clamped); the ring only sets M while the timer is not running\n· BtnA: from set or paused, start (print 开始 MM:SS or 继续 MM:SS); while running, pause (print 暂停 MM:SS). Count down with millis(); show remaining whole seconds rounded up, so it reads 05:00 until a full second has gone. While running print 剩余 MM:SS every time the shown value changes\n· Screen: the time MM:SS large in the middle (white, text size 5), state text SET / RUN / PAUSE / TIME UP under it, and a ring at the edge (radius 104–118) whose dark-cyan arc (TFT_DARKCYAN) is the part still to run; orange while paused, red at zero\n",
+  "ref": "arduino-m5-dial-timer",
+  "seconds": 2.0,
+  "args": [
+   "--board",
+   "m5dial"
+  ],
+  "script": "1.0:enc=+3",
+  "expect": [
+   "设定 05:00",
+   "设定 08:00"
+  ],
+  "lcd_colors": [
+   {
+    "name": "time digits",
+    "rgb": "#FFFFFF",
+    "min": 800,
+    "tol": 8,
+    "cx": [
+     100,
+     140
+    ],
+    "cy": [
+     90,
+     130
+    ]
+   },
+   {
+    "name": "ring",
+    "rgb": "#007D7B",
+    "min": 5000,
+    "tol": 8
+   }
+  ]
+ },
+ {
+  "id": "dialtimer-2",
+  "work": "dialtimer",
+  "title": "Start and pause",
+  "goal": "BtnA starts the countdown, pauses it and carries on from where it stopped",
+  "pass": "BtnA at 1.0 s, 3.6 s and 4.0 s: 开始 05:00, 剩余 04:59, 剩余 04:58, 暂停 04:58, 继续 04:58 and 剩余 04:57 appear on serial (the countdown follows simulated time)",
+  "buy": "Nothing new",
+  "learn": "A state machine for set / run / pause, counting down with millis() without blocking the loop",
+  "brief": "Build on the \"Set the minutes\" checkpoint, M5Stack Dial:\n· Board: M5Stack Dial (ESP32-S3, M5StampS3 inside). Arduino with M5Unified (M5.begin(), M5.update() every loop); no wiring, everything is on the board\n· Round 240×240 GC9A01 screen through M5.Display, FT3267 touch through M5.Touch, press-down button through M5.BtnA (G42), buzzer on G3 through M5.Speaker (setVolume 128)\n· Rotary ring: quadrature encoder A=G40, B=G41; read it with the IDF pulse counter (driver/pulse_cnt.h) in x4 mode (both channels, edge + level actions as in the IDF rotary_encoder example), 4 counts per detent\n· Timer: minutes M from 1 to 60, 5 at power-up. Print 设定 MM:00 at boot and every time M changes; one ring detent = one minute, clamp at 1 and 60 (no print when clamped); the ring only sets M while the timer is not running\n· BtnA: from set or paused, start (print 开始 MM:SS or 继续 MM:SS); while running, pause (print 暂停 MM:SS). Count down with millis(); show remaining whole seconds rounded up, so it reads 05:00 until a full second has gone. While running print 剩余 MM:SS every time the shown value changes\n· Screen: the time MM:SS large in the middle (white, text size 5), state text SET / RUN / PAUSE / TIME UP under it, and a ring at the edge (radius 104–118) whose dark-cyan arc (TFT_DARKCYAN) is the part still to run; orange while paused, red at zero\n",
+  "ref": "arduino-m5-dial-timer",
+  "seconds": 5.0,
+  "args": [
+   "--board",
+   "m5dial"
+  ],
+  "script": "1.0:gpio42=0; 1.1:gpio42=1; 3.6:gpio42=0; 3.7:gpio42=1; 4.0:gpio42=0; 4.1:gpio42=1",
+  "expect": [
+   "开始 05:00",
+   "剩余 04:59",
+   "剩余 04:58",
+   "暂停 04:58",
+   "继续 04:58",
+   "剩余 04:57"
+  ]
+ },
+ {
+  "id": "dialtimer-3",
+  "work": "dialtimer",
+  "title": "Beep at zero",
+  "goal": "Run a one-minute countdown to zero and beep the buzzer three times at 2 kHz",
+  "pass": "Ring 4 detents back at 0.5 s (设定 01:00), BtnA at 1.0 s, run 62.4 s: 剩余 00:01, 时间到, 嘀 3/3 2000 Hz and 回到设定 01:00 appear, 嘀 appears 3 times; the buzzer on G3 sounds at 2000 Hz ± 20 (RMS ≥ 0.1 over the last second)",
+  "buy": "Nothing new",
+  "learn": "Driving the Dial buzzer through M5Unified Speaker, timing beeps without delay()",
+  "brief": "Same firmware as the \"Start and pause\" checkpoint, M5Stack Dial:\n· Board: M5Stack Dial (ESP32-S3, M5StampS3 inside). Arduino with M5Unified (M5.begin(), M5.update() every loop); no wiring, everything is on the board\n· Round 240×240 GC9A01 screen through M5.Display, FT3267 touch through M5.Touch, press-down button through M5.BtnA (G42), buzzer on G3 through M5.Speaker (setVolume 128)\n· Rotary ring: quadrature encoder A=G40, B=G41; read it with the IDF pulse counter (driver/pulse_cnt.h) in x4 mode (both channels, edge + level actions as in the IDF rotary_encoder example), 4 counts per detent\n· Timer: minutes M from 1 to 60, 5 at power-up. Print 设定 MM:00 at boot and every time M changes; one ring detent = one minute, clamp at 1 and 60 (no print when clamped); the ring only sets M while the timer is not running\n· BtnA: from set or paused, start (print 开始 MM:SS or 继续 MM:SS); while running, pause (print 暂停 MM:SS). Count down with millis(); show remaining whole seconds rounded up, so it reads 05:00 until a full second has gone. While running print 剩余 MM:SS every time the shown value changes\n· Screen: the time MM:SS large in the middle (white, text size 5), state text SET / RUN / PAUSE / TIME UP under it, and a ring at the edge (radius 104–118) whose dark-cyan arc (TFT_DARKCYAN) is the part still to run; orange while paused, red at zero\n· At zero print 时间到, then beep 3 times: M5.Speaker.tone(2000, 200) every 400 ms, printing 嘀 n/3 2000 Hz for each; 400 ms after the third go back to set with the same minutes and print 回到设定 MM:00\n",
+  "ref": "arduino-m5-dial-timer",
+  "seconds": 62.4,
+  "args": [
+   "--board",
+   "m5dial"
+  ],
+  "script": "0.5:enc=-4; 1.0:gpio42=0; 1.1:gpio42=1",
+  "expect": [
+   "设定 01:00",
+   "开始 01:00",
+   "剩余 00:01",
+   "时间到",
+   "嘀 3/3 2000 Hz",
+   "回到设定 01:00"
+  ],
+  "serial_count": [
+   {
+    "text": "嘀 ",
+    "min": 3
+   }
+  ],
+  "audio": {
+   "freq": 2000,
+   "tol": 20,
+   "min_rms": 0.1
+  }
+ },
+ {
+  "id": "dialtimer-4",
+  "work": "dialtimer",
+  "title": "Combined: Dial timer",
+  "goal": "Tap the screen to cancel a running countdown, then start again",
+  "pass": "Ring +1 at 0.5 s (设定 06:00), BtnA at 1.0 s, a tap at 2.5 s, BtnA again at 3.2 s: 开始 06:00, 剩余 05:59 and 取消 回到 06:00 appear and 开始 06:00 appears twice; the dark-cyan ring is back on the round LCD (≥ 5000 px)",
+  "buy": "A desk stand for the Dial (optional)",
+  "learn": "Touch as a second input, going back to a known state",
+  "brief": "Combine the previous checkpoints into a Dial timer, M5Stack Dial:\n· Board: M5Stack Dial (ESP32-S3, M5StampS3 inside). Arduino with M5Unified (M5.begin(), M5.update() every loop); no wiring, everything is on the board\n· Round 240×240 GC9A01 screen through M5.Display, FT3267 touch through M5.Touch, press-down button through M5.BtnA (G42), buzzer on G3 through M5.Speaker (setVolume 128)\n· Rotary ring: quadrature encoder A=G40, B=G41; read it with the IDF pulse counter (driver/pulse_cnt.h) in x4 mode (both channels, edge + level actions as in the IDF rotary_encoder example), 4 counts per detent\n· Timer: minutes M from 1 to 60, 5 at power-up. Print 设定 MM:00 at boot and every time M changes; one ring detent = one minute, clamp at 1 and 60 (no print when clamped); the ring only sets M while the timer is not running\n· BtnA: from set or paused, start (print 开始 MM:SS or 继续 MM:SS); while running, pause (print 暂停 MM:SS). Count down with millis(); show remaining whole seconds rounded up, so it reads 05:00 until a full second has gone. While running print 剩余 MM:SS every time the shown value changes\n· Screen: the time MM:SS large in the middle (white, text size 5), state text SET / RUN / PAUSE / TIME UP under it, and a ring at the edge (radius 104–118) whose dark-cyan arc (TFT_DARKCYAN) is the part still to run; orange while paused, red at zero\n· At zero print 时间到, then beep 3 times: M5.Speaker.tone(2000, 200) every 400 ms, printing 嘀 n/3 2000 Hz for each; 400 ms after the third go back to set with the same minutes and print 回到设定 MM:00\n· Touch: a tap on the screen while running or paused cancels and goes back to set with the same minutes, printing 取消 回到 MM:00\n",
+  "ref": "arduino-m5-dial-timer",
+  "seconds": 4.0,
+  "args": [
+   "--board",
+   "m5dial"
+  ],
+  "script": "0.5:enc=+1; 1.0:gpio42=0; 1.1:gpio42=1; 2.5:touch=120,120; 2.7:release; 3.2:gpio42=0; 3.3:gpio42=1",
+  "expect": [
+   "设定 06:00",
+   "开始 06:00",
+   "剩余 05:59",
+   "取消 回到 06:00"
+  ],
+  "serial_count": [
+   {
+    "text": "开始 06:00",
+    "min": 2
+   }
+  ],
+  "lcd_colors": [
+   {
+    "name": "ring",
+    "rgb": "#007D7B",
+    "min": 5000,
+    "tol": 8
+   }
+  ]
  }
 ]

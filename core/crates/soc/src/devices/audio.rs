@@ -43,7 +43,9 @@ pub fn analyze(x: &[f32], rate: f64) -> Analysis {
     let mean = x.iter().map(|v| *v as f64).sum::<f64>() / x.len() as f64;
     let mut sum = 0.0;
     let mut peak: f64 = 0.0;
-    let (mut first, mut last, mut ups) = (-1.0f64, -1.0f64, 0usize);
+    // Periods between rising crossings; gaps over 20 ms (beep pauses, silence) are left out of the frequency
+    let max_period = rate * 0.02;
+    let (mut last, mut periods, mut span) = (-1.0f64, 0usize, 0.0f64);
     let mut prev = 0.0;
     // Hysteresis on zero crossings so rounding noise in silence doesn't count
     let hyst = 1e-4;
@@ -57,17 +59,17 @@ pub fn analyze(x: &[f32], rate: f64) -> Analysis {
         }
         if i > 0 && armed && prev < 0.0 && v >= 0.0 {
             let t = (i - 1) as f64 + prev / (prev - v);
-            if first < 0.0 {
-                first = t;
+            if last >= 0.0 && t - last <= max_period {
+                periods += 1;
+                span += t - last;
             }
             last = t;
-            ups += 1;
             armed = false;
         }
         prev = v;
     }
-    let freq = if ups >= 2 && last > first {
-        (ups - 1) as f64 * rate / (last - first)
+    let freq = if periods >= 1 && span > 0.0 {
+        periods as f64 * rate / span
     } else {
         0.0
     };
@@ -564,6 +566,25 @@ mod tests {
         assert!((a.freq - 440.0).abs() < 0.01, "{}", a.freq);
         assert!((a.rms - 0.5 / 2f64.sqrt()).abs() < 1e-3);
         assert_eq!(analyze(&[0.0; 100], rate).freq, 0.0);
+    }
+
+    #[test]
+    fn analyze_beeps_ignore_gaps() {
+        // Three 200 ms 2 kHz beeps 400 ms apart (G-16a alarm): the pauses must not drag the frequency down
+        let rate = 48000.0;
+        let x: Vec<f32> = (0..48000)
+            .map(|i| {
+                let t = i as f64 / rate;
+                let on = t % 0.4 < 0.2;
+                if on {
+                    0.5 * (2.0 * std::f64::consts::PI * 2000.0 * t).sin() as f32
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        let a = analyze(&x, rate);
+        assert!((a.freq - 2000.0).abs() < 1.0, "{}", a.freq);
     }
 
     #[test]
