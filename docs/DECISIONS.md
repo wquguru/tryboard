@@ -1730,6 +1730,7 @@
 - 计时用 `millis()`，不用 BM8563：网页 simrun 不支持 `rtc=` 脚本动作，关卡要两边指纹一致；一分钟倒数在模拟里跑 62.4 s（墙钟约 5.5 s）。同理关卡里按键用 `gpio42=0 / 1`（与 CLI `btn=A` 等价、两边都支持），accept 用例保留 `btn=A`。
 - 新增检查项 `audio {freq, tol, min_rms}`（check.py + web checks.ts，同一套判定）：从 stderr 的 `I2S speaker / buzzer … RMS … freq …` 行读取；这一行只追加给判定，不进指纹，所以已有关卡指纹不变。网页 simrun 读 `tb_audio_report()`（先取长度再读缓冲，否则读到旧内容）。
 - `audio.rs analyze()` 改频率算法：只统计 ≤ 20 ms 的相邻上升过零周期（`freq = 周期数 × 采样率 / 跨度`），不再用"过零数 / 总时长"。原因：间歇蜂鸣（响 200 ms、停 200 ms）把静音段算进时长，2 kHz 读成约 1 kHz。连续音（已有用例）结果不变，新增单测 `analyze_beeps_ignore_gaps`。
+  - 合并后 golden（G-16a 合并，2026-10-23）：s3-xiaozhi-lite / -hello-timeout / -abort 的 I2S 喇叭 `freq` 读数变化（如 31x → 34x Hz），语音合成音不是连续单音，过零周期统计口径变了；帧数 / RMS / peak 不变，按本项改动 `golden.py save`。
 - 顺手修 npm 包 `packages/tryboard` 的 `check --level`：原来没把关卡的 `board` / `grove` 传进 SimJob，板子预设被忽略（所有 M5 板关卡在 npx 下都跑在裸板上）；现在与网页一致。
 - 许可：M5Unified / M5GFX 已在 LICENSING ✅（MIT），build_web 为 arduino-* bin 附 BUILD_INFO；公开部署前仍需核对 M5GFX 字体声明进 NOTICES（同 M5 其他例子）。
 - 备选：用 BM8563 计时——否：网页不支持 rtc=，且计时器不需要日历；只在 CLI 验收、关卡不判声音——否：作品卖点就是"到点会响"，必须可判；把蜂鸣做成连续音以迁就旧算法——否：真实计时器是间歇响。
