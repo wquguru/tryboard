@@ -14,6 +14,8 @@ export interface BoardDevs {
   keyboard?: boolean;
   /** Preset without a Grove Port A (boards.rs grove_a = None): no Grove picker, --grove would be rejected */
   noGrove?: boolean;
+  /** The preset attaches an on-board sound sink (Dial G3 buzzer): the lab shows the sound switch */
+  sound?: boolean;
   lcd?: LcdKind;
   i2c: { kind: string; addr: number }[];
   touchInt?: number;
@@ -38,7 +40,7 @@ export const BOARD_DEVS: Record<BoardId, BoardDevs> = {
     touchInt: 11,
     battery: { pct: 98, usb: true },
   },
-  m5dial: m5('m5dial', 'M5Stack Dial'),
+  m5dial: { ...m5('m5dial', 'M5Stack Dial'), sound: true },
   m5atoms3: m5('m5atoms3', 'M5Stack AtomS3'),
   m5atoms3lite: m5('m5atoms3lite', 'M5Stack AtomS3 Lite'),
   m5atoms3r: m5('m5atoms3r', 'M5Stack AtomS3R'),

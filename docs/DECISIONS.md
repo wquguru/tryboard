@@ -1685,3 +1685,11 @@
 - 决定：INA219 模型改为按一次转换锁存分流 / 总线读数（`sampled_at`，一个转换时间内的读取都返回同一组值），不再每次读寄存器都重新采样。原因：网页 / `--inputs` 回放时片段更细，电气模型的 USB 电流在读分流和读电流之间变了，固件的 `cur == shunt` 检查 0/4；真片的电流寄存器由同一次转换的分流值算出。单测改为先 `set_load` 再读、换负载后推进时间，另加一条「一次转换内读数一致」。
 - 决定：可信度面板里 INA219 标「行为模拟」（电流来自电气模型估算），AHT20 / DS3231 标「仿真」；元件库 `parts.ts` 的 `sim` 字段不在本项改，留给 G-08 统一核对。
 - 备选：放宽固件 `cur == shunt` 为容差——否：是削弱验收；让网页按大片段跑——否：网页帧节奏固定，且 CLI 回放也会碰到。
+
+## 2026-10-23 M5Dial 蜂鸣器出声（G-13）
+- 结论：M5Unified 在 Dial / DinMeter 上 `spk_cfg.pin_data_out = G3, buzzer = true, magnification = 48`（`M5Unified.inl`、`utility/Speaker_Class.inl`，MIT，只读未抄）：不是 LEDC，而是 I2S std 16 位立体声、只接 DOUT，每个 PCM 样本变成一个 32 位 1 位 ΔΣ 字（两个 16 位槽）。BCLK / WS 不出引脚。
+- 决定：复用 MAX98357A 喇叭汇（`Max98357a.buzzer = true`），每帧两个槽字 popcount 得密度 → 单极性 PCM（密度 × 满量程，管脚低 = 蜂鸣器无电流，静音即 0），采样率就是 I2S 帧率（48 kHz）。CLI `--audio-wav` / 报告行、wasm `tb_audio_*`、网页 Web Audio 全部原样复用；预设新字段 `buzzer: Option<u32>`；电流估算 `BUZZER_I` 30 mA × RMS（估计，无器件手册）。
+- 决定：报告行 `[tryboard] I2S buzzer ...` 只在电平变过（`sounded`）后出现：M5.begin() 起 I2S 就一直发恒定空闲电平，否则所有 Dial 用例的 golden 都会多一行。现有 `arduino-m5-dial-demo` 按 BtnA 时固件本身调 `tone(2000, 100)`，现在真的被听到，golden 多一行报告（唯一差异，已核对）。
+- 决定：网页 `BoardDevs.sound`（目前只有 Dial）控制声音开关；worker 在板预设挂了声源时（`tb_audio_stat(0)` 非 NaN）也取 PCM，CoreS3 的 AW88298 预设因此也会把 PCM 送到主线程，但没开声音开关（CoreS3 不在本项范围，未验收）。
+- 局限：不是逐位波形，ΔΣ 高频噪声与蜂鸣器谐振 / 响度未建模；作品结论标「行为模拟，响度需真机」。
+- 备选：按 I2S 位流逐位输出到 GPIO 电平（`--trace-io` 能看到每一位）——否：48 kHz × 32 位 ≈ 1.5 M 事件 / 秒，开销大且听感一样；做成 LEDC / PWM 蜂鸣器——否：与 M5Unified 实际驱动方式不符。

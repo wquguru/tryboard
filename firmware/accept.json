@@ -3260,6 +3260,26 @@
   ]
  },
  {
+  "id": "arduino-m5-dial-tone",
+  "chip": "esp32s3",
+  "seconds": 3,
+  "args": [
+   "--board",
+   "m5dial"
+  ],
+  "expect": [
+   "TONE ready board=12 speaker=1",
+   "TRYBOARD_OK m5-dial-tone"
+  ],
+  "audio": {
+   "freq": 2000,
+   "tol": 20,
+   "rate": 48000,
+   "min_rms": 0.2,
+   "max_rms": 0.6
+  }
+ },
+ {
   "id": "arduino-m5-atoms3-imu",
   "chip": "esp32s3",
   "seconds": 4.5,

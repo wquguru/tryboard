@@ -145,7 +145,7 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
     # Speaker: the simulator's analysis of PCM reaching the speaker (sample rate, last-second RMS, peak, dominant frequency).
     au = t.get('audio')
     if au:
-        m = re.search(r'I2S speaker.*?sample rate ([\d.]+) Hz.*?RMS ([\d.]+).*?peak ([\d.]+).*?freq ([\d.]+) Hz', err)
+        m = re.search(r'I2S (?:speaker|buzzer).*?sample rate ([\d.]+) Hz.*?RMS ([\d.]+).*?peak ([\d.]+).*?freq ([\d.]+) Hz', err)
         if not m:
             notes.append('speaker received no sound'); missing.append('audio')
         else:

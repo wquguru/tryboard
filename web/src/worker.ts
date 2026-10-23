@@ -690,7 +690,8 @@ async function bootWasm(m: BootMsg): Promise<Exports | null> {
   } else if (m.lcd && e.tb_lcd_attach) e.tb_lcd_attach();
   hasAudio = false;
   pcmOut = [];
-  hasAudio = attachI2s(e, m.i2s);
+  // A board preset's on-board sink (M5Dial buzzer, CoreS3 amp) plays too, not only bench I2S parts
+  hasAudio = attachI2s(e, m.i2s) || (!!m.board && !Number.isNaN(e.tb_audio_stat?.(0) ?? NaN));
   micRec.clear();
   if (m.micWav) setMic(e, 'wav', m.micWav);
   // Supply network: servo attached, power source (state at power-up; later switches go through power messages and the log)

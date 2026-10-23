@@ -61,6 +61,8 @@ pub struct BoardPreset {
     pub encoder: Option<(u32, u32)>,
     /// On-board I2S amplifier input (BCLK, WS, DOUT): the speaker sink listens there
     pub speaker: Option<(u32, u32, u32)>,
+    /// On-board 1-bit buzzer on an I2S DOUT pin (M5Unified `buzzer` mode: delta-sigma words on the data line only)
+    pub buzzer: Option<u32>,
     pub buttons: &'static [Button],
     /// Keyboard part (script action `key=<name>,1|0`)
     pub keyboard: Option<Keyboard>,
@@ -109,6 +111,7 @@ const NONE: BoardPreset = BoardPreset {
     touch_int_aw9523: None,
     encoder: None,
     speaker: None,
+    buzzer: None,
     buttons: &[],
     keyboard: None,
     mic: None,
@@ -136,9 +139,10 @@ pub const BOARDS: &[BoardPreset] = &[
         touch_int: Some(14),
         encoder: Some((40, 41)),
         buttons: &[btn("A", 42)],
+        buzzer: Some(3),
         outputs: &[("buzzer", 3), ("backlight", 9), ("power_hold", 46)],
         verified: true,
-        note: "encoder A/B order inferred; WS1850S RFID (0x28) not modelled; buzzer is I2S 1-bit on G3 (no model)",
+        note: "encoder A/B order inferred; WS1850S RFID (0x28) not modelled; buzzer = I2S 1-bit delta-sigma on G3, loudness not calibrated",
         ..NONE
     },
     BoardPreset {
@@ -500,6 +504,17 @@ impl Machine {
             let pins = tryboard_soc::devices::audio::Pins { bclk, ws, data };
             if !self.hw.attach_speaker_at(pins) {
                 warn.push("speaker sink unsupported".into());
+            }
+        }
+        if let Some(pin) = b.buzzer {
+            let pins = tryboard_soc::devices::audio::Pins {
+                bclk: pin,
+                ws: pin,
+                data: pin,
+            };
+            match self.hw.attach_speaker_at(pins) {
+                true => self.audio_mut().speaker.as_mut().unwrap().buzzer = true,
+                false => warn.push("buzzer sink unsupported".into()),
             }
         }
         for k in b.buttons {

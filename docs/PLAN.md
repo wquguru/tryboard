@@ -279,7 +279,7 @@
 | G-10 | CYD（esp32-cyd，`--board cyd`）+ XPT2046 触摸接进网页：换板可选 CYD、屏实时画面、点屏 = `touch=`；示例 esp32-cyd / esp32-cyd-touch 上架 | 新 webtest 或 m5board.mjs 扩展：网页 / CLI 指纹一致、触摸重放一致；agent-browser 桌面 + 390 | ☑ 2026-10-22 板预设下拉加 CYD（无 Grove 口，隐藏 Grove 下拉）；m5shell.ts 参数化黄板 + 2.8″ 240×320 屏、点屏走 XPT2046；示例 esp32-cyd（屏 + 触摸同一固件，esp32-cyd-touch 是同固件的 accept 用例，不另上架）；m5board.mjs：画面 240×320 黄角标、3D 点 (60,250) → 固件 pixel 60,250、CLI `--board cyd --inputs` 串口逐字节 + 指纹一致；agent-browser 桌面 / 390 / 四语见 Reviews/ab/G-10.md |
 | G-11 | 蓝牙未识别提示：`tb_ble_state() == 2`（用了 BLE 但签名没认出，如 Arduino 3.0.x / 旧 IDF）时网页明确提示原因与可用版本，不静默 | 用一个签名不命中的固件（或单测构造）走网页；agent-browser 截图；四语文案 | ☑ 2026-10-22：蓝牙坞卡片改为原因 + 三档可用版本 + 改法，手机 peek 条加「蓝牙未模拟」徽标；复现固件为 c3-ble-hr 破坏签名（Reviews/ab/G-11.md） |
 | G-12 | 查 M5-13 遗留：M5Unified PDM 麦克风样本成对颠倒；定位是模型（`core/crates/esp32/src/i2s.rs` encode_rx）还是草图配置，修好且 esp32-pdm-mic 不回退 | golden 全一致或差异有解释；新增 M5 PDM 用例 | ☐ |
-| G-13 | M5Dial 蜂鸣器（G3 1 位 I2S）出声模型，接网页 Web Audio；做不了则在 Dial 结论标「需真机」 | accept 新用例 + analyser 有能量；或 DECISIONS 写明不做原因 | ☐（在 G-06 之后） |
+| G-13 | M5Dial 蜂鸣器（G3 1 位 I2S）出声模型，接网页 Web Audio；做不了则在 Dial 结论标「需真机」 | accept 新用例 + analyser 有能量；或 DECISIONS 写明不做原因 | ☑ 2026-10-23（accept `arduino-m5-dial-tone` 2000 Hz / RMS 0.47；m5board.mjs analyser RMS 0.34+；golden 仅 `arduino-m5-dial-demo` 多一行蜂鸣器报告） |
 | G-14 | M5 Grove ENV III / IV 单元 3D（接在外壳 Grove 口，随 `SceneSpec.grove` 出现 / 消失） | m5board.mjs 不减断言；agent-browser 截图 | ☐（在 G-06 之后） |
 | G-15 | 红外自发自收例子：同板 IR LED（F-08h LEDC 载波）→ 接收头（F-08i）回环，或两块板 | accept 新用例 + 网页 / CLI 指纹一致 | ☐ |
 

@@ -88,6 +88,10 @@ const QUEUE_CAP: usize = 1 << 17;
 /// MAX98357A: (L+R)/2 mixed to mono, 9 dB gain (GAIN pin floating), driving a 4 Ω speaker
 pub struct Max98357a {
     pub pins: Pins,
+    /// 1-bit buzzer on the data line (M5Dial G3): each frame's slot bits are a delta-sigma word, its density is the sample
+    pub buzzer: bool,
+    /// The level ever changed (M5.begin() streams a constant idle level from boot; the buzzer report waits for a tone)
+    pub sounded: bool,
     pub queue: VecDeque<Block>,
     queued: usize,
     pub dropped: u64,
@@ -109,11 +113,15 @@ pub const EFFICIENCY: f64 = 0.85;
 pub const AMP_IQ: f64 = 0.0024;
 /// INMP441 operating current (datasheet 1.4 mA)
 pub const MIC_I: f64 = 0.0014;
+/// Magnetic buzzer + driver transistor at full swing (estimate, no datasheet for the M5Dial part)
+pub const BUZZER_I: f64 = 0.03;
 
 impl Max98357a {
     pub fn new(pins: Pins) -> Self {
         Max98357a {
             pins,
+            buzzer: false,
+            sounded: false,
             queue: VecDeque::new(),
             queued: 0,
             dropped: 0,
@@ -131,8 +139,14 @@ impl Max98357a {
         let mut data = Vec::with_capacity(frames.len());
         let mut ms = 0.0;
         for f in frames {
-            let m = ((f[0] as i64 + f[1] as i64) / 2) >> 16;
-            let s = m as i16;
+            let s = if self.buzzer {
+                // Slot words are MSB-aligned (low bits 0), so popcount = density; unipolar since a low pin drives no current
+                let ones = (f[0] as u32).count_ones() + (f[1] as u32).count_ones();
+                (ones as i32 * 1024).min(32767) as i16
+            } else {
+                (((f[0] as i64 + f[1] as i64) / 2) >> 16) as i16
+            };
+            self.sounded |= data.last().or(self.hist.back()).is_some_and(|p| *p != s);
             ms += (s as f64 / 32768.0).powi(2);
             data.push(s);
         }
@@ -182,6 +196,9 @@ impl Max98357a {
 
     /// Current drawn from 5 V (A): quiescent + output power / (efficiency x 5 V)
     pub fn supply_current(&self) -> f64 {
+        if self.buzzer {
+            return BUZZER_I * self.recent_ms.sqrt().min(1.0);
+        }
         let vrms = FS_VRMS * self.recent_ms.sqrt();
         AMP_IQ + vrms * vrms / SPEAKER_OHM / (EFFICIENCY * 5.0)
     }
@@ -428,16 +445,23 @@ impl Audio {
     /// Observation record shared by CLI / web (`[tryboard] I2S ...` lines); text stays Chinese until check.py / checks.ts / fingerprints migrate
     pub fn report(&self) -> String {
         let mut s = String::new();
-        if let Some(sp) = &self.speaker {
+        if let Some(sp) = self.speaker.as_ref().filter(|s| !s.buzzer || s.sounded) {
             let a = sp.analyze(1.0);
             let secs = match sp.first_t {
                 Some(t0) => (sp.last_t - t0) as f64 / CPU_HZ as f64,
                 None => 0.0,
             };
-            s += &format!(
+            if sp.buzzer {
+                s += &format!(
+                    "[tryboard] I2S buzzer (1-bit delta-sigma, DOUT=GPIO{}): got {} frames ({:.2}s), sample rate {:.1} Hz, last 1 s RMS {:.4}, peak {:.4}, freq {:.1} Hz\n",
+                    sp.pins.data, sp.frames, secs, sp.rate, a.rms, a.peak, a.freq
+                );
+            } else {
+                s += &format!(
                 "[tryboard] I2S speaker MAX98357A (BCLK=GPIO{} LRC=GPIO{} DIN=GPIO{}): got {} frames ({:.2}s), sample rate {:.1} Hz, last 1 s RMS {:.4}, peak {:.4}, freq {:.1} Hz\n",
                 sp.pins.bclk, sp.pins.ws, sp.pins.data, sp.frames, secs, sp.rate, a.rms, a.peak, a.freq
             );
+            }
         }
         if let Some(m) = &self.mic {
             let src = match &m.source {
@@ -581,6 +605,22 @@ mod tests {
         assert_eq!(b[0].t, 100);
         assert!(s.take().is_empty());
         assert!(s.supply_current() > AMP_IQ);
+    }
+
+    #[test]
+    fn buzzer_density_to_pcm() {
+        let mut s = Max98357a::new(Pins {
+            bclk: 3,
+            ws: 3,
+            data: 3,
+        });
+        s.buzzer = true;
+        // Slot words carry 16 bits each in their top half: all ones = FS, none = silence, half density = FS / 2
+        let half = [0xff00_0000u32 as i32, 0xff00_0000u32 as i32];
+        s.push(0, 48000.0, &[[-65536, -65536], [0, 0], half]);
+        assert_eq!(s.take()[0].data, vec![32767, 0, 16384]);
+        assert!(s.supply_current() > 0.0 && s.supply_current() <= BUZZER_I);
+        assert!(Audio::default().report().is_empty());
     }
 
     #[test]

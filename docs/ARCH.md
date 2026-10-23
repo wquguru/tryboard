@@ -320,7 +320,7 @@ web/（Vite + TS）
   - 内部 I2C（SDA 11 / SCL 12）：FT3267 0x38、BM8563 0x51。触摸 INT 14。
   - 编码器 40 / 41（A/B 顺序是推断的）。
   - BtnA G42（低有效）。电源保持 G46。
-  - 蜂鸣器 G3（I2S 1-bit，尚无模型）。
+  - 蜂鸣器 G3（G-13）：M5Unified `buzzer` 模式，I2S std 16 位立体声只接 DOUT，每帧 32 位是 1 位 ΔΣ 字。预设字段 `buzzer: Option<u32>` → `attach_speaker_at` 挂 `Max98357a` 并置 `buzzer = true`，`push` 按 popcount 转单极性 PCM（密度 × 满量程）；`sounded` 为假时（M5.begin() 起就流恒定空闲电平）不出报告行。网页：`BoardDevs.sound` 显示声音开关，worker 对带板载声源的预设也取 PCM。
 - Cardputer / Cardputer-Adv（M5-08）：
   - 预设新字段：`keyboard: Option<Keyboard>`（`Hc138 { select, cols }` 或 `Tca8418`）、`mic: Option<Mic>`（`bclk / ws / data / pdm / both`；both = 两个声道同样本，M5Unified 默认读右声道）。挂载顺序在 I2C 之后。
   - 键盘：`crates/machine/src/keyboard.rs` 的 4×14 图例 `KEY_LEGEND`，`key_pos(name)`；Rust `board_key(name, down)`；脚本动作 `key=<名>,1|0`（`,` `;` 等用别名 comma / semicolon …）；wasm `tb_board_key(p, len, down) -> i32`。
