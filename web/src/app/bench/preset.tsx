@@ -1,10 +1,11 @@
 // Board preset picker (M5-09b): the scene's board id becomes the core preset (= CLI --board), which attaches the board's devices.
 // Changing it reboots like any device change; the firmware still comes from "Upload your own .bin".
 import { t } from "../../i18n";
-import { BOARD_DEVS, PRESET_BOARDS, boardDevs, type BoardId } from "../../bench3d/boarddevs";
+import { BOARD_DEVS, PRESET_BOARDS, boardDevs, type BoardDevs, type BoardId } from "../../bench3d/boarddevs";
 import { AIO_CHIP } from "../../chipid";
 import { CHIP_SHORT } from "../../chips";
 import { Note, Sec } from "../../ui/panel";
+import { ConfBadge, REAL } from "./ui";
 import type { Session } from "../types";
 import type { GroveId } from "../../bench3d/spec";
 
@@ -40,8 +41,26 @@ export function PresetPick({ ses, onChange }: { ses: Session; onChange: () => vo
           {cur.keyboard ? ` ${t("Keys you type while the bench has focus press the matching Cardputer keys.")}` : ""}
         </Note>
       )}
+      {cur?.preset && <PresetChecks devs={cur} />}
       {cur?.preset && !cur.noGrove && <GrovePick ses={ses} onChange={onChange} />}
     </>
+  );
+}
+
+/** G-08: preset items that are inferred (or a preset never run) stay "needs real hardware" in every conclusion that uses them */
+function PresetChecks({ devs }: { devs: BoardDevs }) {
+  const rows = [...(devs.unverified ? ["Whole preset: pins and addresses come from docs; no firmware has run it yet"] : []), ...(devs.check ?? [])];
+  if (!rows.length) return null;
+  return (
+    <div data-preset-checks className="mt-2 flex flex-col gap-1.5">
+      <div className="text-[12px] text-muted">{t("Confirm on a real board")}</div>
+      {rows.map((r) => (
+        <div key={r} className="flex items-start gap-2 text-[12px] leading-5 text-fg">
+          <ConfBadge c={REAL} />
+          <span className="min-w-0">{t(r)}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 

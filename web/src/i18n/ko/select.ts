@@ -435,5 +435,7 @@ const d: Dict = {
   "Simulated in an example, not yet on the bench": "예제에서 시뮬레이션됨(작업대에는 아직 못 놓음)",
   "{parts}: run the example, but the bench catalog cannot place it yet": "{parts}: 예제는 실행할 수 있지만 작업대 카탈로그에는 아직 놓을 수 없습니다",
   "Relay contacts and the mains side": "릴레이 접점과 상용 전원 쪽",
+  "{part} (the command line can simulate it)": "{part}(명령줄에서는 시뮬레이션 가능)",
+  "only the command line can simulate this part; confirm on a real board": "이 부품은 명령줄에서만 시뮬레이션할 수 있습니다. 실제 보드로 확인하세요",
 };
 export default d;

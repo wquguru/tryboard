@@ -1685,3 +1685,12 @@
 - 决定：INA219 模型改为按一次转换锁存分流 / 总线读数（`sampled_at`，一个转换时间内的读取都返回同一组值），不再每次读寄存器都重新采样。原因：网页 / `--inputs` 回放时片段更细，电气模型的 USB 电流在读分流和读电流之间变了，固件的 `cur == shunt` 检查 0/4；真片的电流寄存器由同一次转换的分流值算出。单测改为先 `set_load` 再读、换负载后推进时间，另加一条「一次转换内读数一致」。
 - 决定：可信度面板里 INA219 标「行为模拟」（电流来自电气模型估算），AHT20 / DS3231 标「仿真」；元件库 `parts.ts` 的 `sim` 字段不在本项改，留给 G-08 统一核对。
 - 备选：放宽固件 `cur == shunt` 为容差——否：是削弱验收；让网页按大片段跑——否：网页帧节奏固定，且 CLI 回放也会碰到。
+
+## 2026-10-23 G-08 选型可信度核对
+
+- 决定：零件标「仿真验证 / 行为模拟」的前提是网页能跑——wasm 有模型，且有示例或作品在网页可开。网页可跑集合 = `web/src/i2cdevs.ts` KIND ∪ `firmware/examples.json` 场景零件类型 ∪ `boards.rs` 预设 / Grove 器件；只在 `make_i2c` 里的器件（现有 bmm150、pcf8563 别名、sht31/35/41/45 别名）是「仅 CLI」，结论为「必须上真机」，标签加「（命令行可模拟）」。
+- 决定：规则落在 `web/src/trust.ts`：`ADVISOR_RUN`（选板零件 → 网页模型）、`PART_CONF`（实验台表从 `bench/ui/conf.tsx` 移来，纯 .ts 便于单测）、`capConf`（结果卡 trustRows 用）、`trustProblems`（单测用）。`web/test/trust.test.ts` 从仓库源码现算集合，不手写清单；故意把一个 CLI-only 器件标仿真必须报出。注意：单测把 wasm KIND 成员也算网页可跑（ws-amoled216 板经它挂器件），「有示例」这一腿靠 examples.json 场景类型核对——目前 ADVISOR_RUN 的模型都是场景类型。
+- 决定：选板声明不得高于实验台同一零件等级；首跑报出 buzzer、servo（full > 实验台 行为模拟），两者改 partial。
+- 决定：板预设 note 含 inferred / assumed / unchecked / heuristic / estimated 的项写进 `BOARD_DEVS[id].check`，`verified: false` 写 `unverified`；板属性面板（预设选择下方）逐条显示「需真机确认」，即使 verified: true。单测读 boards.rs 保证同步。
+- 未改：元件库 `catalog/parts.ts` 的 ina219 / aht20 / ds3231 等 `sim.level = none` 是低报不是夸大；改它会打开 `place.ts` 从元件库放上实验台的路径（还要 SCENE_TYPE 等），另立项。
+- 备选：在 check_config.py 里做校验——否：可信度表都在 TS 里，Python 侧要重写解析；网页运行时读 boards.rs——否：网页拿不到 Rust 源，改由单测保证同步。

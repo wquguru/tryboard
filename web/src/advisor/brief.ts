@@ -7,6 +7,7 @@ import { PART_MAP, EXAMPLE_ONLY, exampleOnly, noModelParts } from './catalogmap.
 import { answers, isVoice, labelIs, labelText, pinFull, pinKind, resolve, yuan, lasts, type Result } from './derive.ts';
 import type { SelectState } from './state.ts';
 import { t } from '../i18n/index.ts';
+import { ADVISOR_RUN } from '../trust.ts';
 
 /** I2C addresses (catalog part id to 7-bit address), same as the bench `--i2c ssd1306@0x3c,bme280@0x76` */
 const I2C_ADDR: Record<string, number> = { bme280: 0x76, ssd1306: 0x3c };
@@ -56,6 +57,7 @@ function wiring(r: Result, partId: string): string {
   const cat = PART_MAP[partId]?.partId;
   if (cat && cat in I2C_ADDR) segs.push(t('address {addr}', { addr: hex(I2C_ADDR[cat]) }));
   if (exampleOnly(partId)) segs.push(t('simulated in example {id}', { id: EXAMPLE_ONLY[partId].example }));
+  else if (ADVISOR_RUN[partId]?.on === 'cli') segs.push(t('only the command line can simulate this part; confirm on a real board'));
   else if (PART_MAP[partId] === null) segs.push(t('TryBoard has no model for this part; try it on a real board'));
   return segs.join(t('; ')) || t('uses no pins');
 }
