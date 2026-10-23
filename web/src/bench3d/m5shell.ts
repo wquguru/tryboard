@@ -163,6 +163,52 @@ function groveSocket(s: Shell & { grove: object }, top: number) {
   return g;
 }
 
+/**
+ * Grove ENV unit plugged into the shell's Port A (G-14): 32 x 24 x 8 mm white housing (M5 Unit outline), a short cable from the socket.
+ * Lies on the table beside the board; null when the board has no Grove port.
+ */
+export function groveUnit(id: M5Id, unit: 'env3' | 'env4') {
+  const s = SHELLS[id];
+  if (!s?.grove) return null;
+  const g = new THREE.Group();
+  g.name = 'grove-unit';
+  const side = s.grove.side;
+  const along = side === 'left' || side === 'right';
+  const sign = side === 'left' || side === 'back' ? -1 : 1;
+  const y0 = Math.min(0, s.H / 2 - 4);
+  const [sx, sz] = wall(s, side, s.grove.at, 0.4);
+  // Unit axis points away from the wall; its centre sits 12 mm of cable plus half the 32 mm length out
+  const U = { len: 32, wid: 24, h: 8 };
+  const gap = 14;
+  const floor = -s.H / 2;
+  const cy = floor + U.h / 2;
+  const out = (d: number): [number, number] => (along ? [sx + sign * d, sz] : [sx, sz + sign * d]);
+  const [cx, cz] = out(gap + U.len / 2);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(along ? U.len : U.wid, U.h, along ? U.wid : U.len), new THREE.MeshStandardMaterial({ color: 0xf4f2ec, roughness: 0.5 }));
+  body.position.set(cx, cy, cz);
+  const band = new THREE.Mesh(new THREE.BoxGeometry(along ? U.len * 0.98 : U.wid * 0.98, 0.5, along ? U.wid * 0.98 : U.len * 0.98), new THREE.MeshStandardMaterial({ color: unit === 'env4' ? 0x2f7d4f : 0xe2712c, roughness: 0.6 }));
+  band.position.set(cx, cy + U.h / 2 + 0.01, cz);
+  const label = textPlate(unit === 'env4' ? 'ENV IV' : 'ENV III', 18, '#3a3c40');
+  label.position.set(cx, cy + U.h / 2 + 0.3, cz);
+  if (along) label.rotation.z = Math.PI / 2;
+  // Sensor vent: small dark slot at the far end
+  const vent = new THREE.Mesh(new THREE.BoxGeometry(along ? 1 : 10, 0.2, along ? 10 : 1), MAT.plug);
+  const [vx, vz] = out(gap + U.len - 4);
+  vent.position.set(vx, cy + U.h / 2 + 0.3, vz);
+  // Cable: socket mouth -> unit near end, dropping to the unit's mid height
+  const p0 = new THREE.Vector3(sx, y0, sz);
+  const [ex, ez] = out(gap);
+  const p1 = new THREE.Vector3(ex, cy, ez);
+  const [mx, mz] = out(gap * 0.5);
+  const curve = new THREE.CatmullRomCurve3([p0, new THREE.Vector3(mx, (y0 + cy) / 2 - 1, mz), p1]);
+  const cable = new THREE.Mesh(new THREE.TubeGeometry(curve, 16, 0.8, 8), new THREE.MeshStandardMaterial({ color: 0x1c1d20, roughness: 0.7 }));
+  const plug = new THREE.Mesh(new THREE.BoxGeometry(along ? 4 : 8, 4.5, along ? 8 : 4), new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.5 }));
+  plug.position.set(...(along ? [sx + sign * 2, y0, sz] : [sx, y0, sz + sign * 2]) as [number, number, number]);
+  g.add(body, band, label, vent, cable, plug);
+  g.traverse((o) => { o.castShadow = true; });
+  return g;
+}
+
 /** Cardputer key field: 4 rows × 14 caps as one instanced mesh (the host keyboard drives tb_board_key) */
 function keyCaps(s: Shell, top: number) {
   const cols = 14, rows = 4, px = 5.7, pz = 6.1;
