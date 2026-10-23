@@ -1,19 +1,28 @@
-// G-05 work "cloud": AHT20 (I2C SDA=6 SCL=7) readings published as JSON over MQTT every N seconds.
+// G-05 work "cloud": AHT20 (I2C SDA=6 SCL=7) readings published as JSON over MQTT every N seconds.  lint: allow-long-comment
 // Subscribes tryboard/cloud/cmd: "interval=<1..60>" changes the period, each command is acknowledged on tryboard/cloud/ack.
+// G-05d Wi-Fi: NVS "prov" -> join it; else hotspot TryBoard-Setup for PROV_WINDOW_MS, a phone that joins provisions it
+// (prov.c), no phone -> factory network TryBoard-WiFi. Three failed joins of a provisioned network clear NVS and reboot.
+// Holding BOOT (GPIO9) for 1 s clears the saved network and reboots into the portal, which then waits for a phone.
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "driver/i2c_master.h"
+#include "driver/gpio.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "nvs_flash.h"
+#include "nvs.h"
+#include "esp_mac.h"
+#include "esp_system.h"
 #include "mqtt_client.h"
+#include "prov.h"
 
 #define PIN_SDA 6
 #define PIN_SCL 7
@@ -23,14 +32,26 @@
 #define T_CMD "tryboard/cloud/cmd"
 #define T_ACK "tryboard/cloud/ack"
 
+#define FACTORY_SSID "TryBoard-WiFi"
+#define AP_SSID "TryBoard-Setup"
+// Hotspot time before falling back to the factory network; short so cloud-1 still gets an IP within 3 s
+#define PROV_WINDOW_MS 1000
+#define PIN_BOOT 9
+#define HOLD_MS 1000
+
 #define BIT_IP 1
 #define BIT_MQTT 2
+#define BIT_PHONE 4
+#define BIT_SUBMIT 8
 
 static EventGroupHandle_t eg;
 static i2c_master_dev_handle_t aht;
 static esp_mqtt_client_handle_t mq;
 static TaskHandle_t main_task;
 static volatile int s_interval = 5;
+// Credentials picked (factory, NVS or portal): only then do STA events reconnect
+static volatile bool s_sta_on, s_provisioned;
+static int s_fails;
 
 // CRC-8, polynomial 0x31, init 0xFF (AHT20 datasheet)
 static uint8_t crc8(const uint8_t *d, int n)
@@ -95,15 +116,33 @@ static int aht_read(int *t10, int *h10)
 
 static void on_wifi(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
-    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
-    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+    if (base == WIFI_EVENT && id == WIFI_EVENT_AP_START) {
+        printf("热点 " AP_SSID " 已打开，等手机来配网\n");
+    } else if (base == WIFI_EVENT && id == WIFI_EVENT_AP_STACONNECTED) {
+        wifi_event_ap_staconnected_t *e = data;
+        printf("手机连上热点 " MACSTR "\n", MAC2STR(e->mac));
+        xEventGroupSetBits(eg, BIT_PHONE);
+    } else if (base == IP_EVENT && id == IP_EVENT_AP_STAIPASSIGNED) {
+        ip_event_ap_staipassigned_t *e = data;
+        printf("给手机分配 IP " IPSTR "\n", IP2STR(&e->ip));
+    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED && s_sta_on) {
         wifi_event_sta_disconnected_t *d = data;
         printf("Wi-Fi 断开 reason=%d，重连\n", d->reason);
         xEventGroupClearBits(eg, BIT_IP);
+        if (s_provisioned && ++s_fails >= 3) {
+            printf("连不上 %s，清掉配网记录，重启后重新配网\n", prov_ssid);
+            nvs_handle_t h;
+            if (nvs_open("prov", NVS_READWRITE, &h) == ESP_OK) {
+                nvs_erase_all(h);
+                nvs_commit(h);
+                nvs_close(h);
+            }
+            esp_restart();
+        }
         esp_wifi_connect();
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *e = data;
+        s_fails = 0;
         printf("已连上 Wi-Fi，IP " IPSTR " 网关 " IPSTR "\n", IP2STR(&e->ip_info.ip), IP2STR(&e->ip_info.gw));
         xEventGroupSetBits(eg, BIT_IP);
     }
@@ -167,21 +206,123 @@ static void on_mqtt(void *arg, esp_event_base_t base, int32_t id, void *data)
     }
 }
 
+static TaskHandle_t btn_task;
+
+static void IRAM_ATTR boot_isr(void *arg)
+{
+    BaseType_t woke = pdFALSE;
+    vTaskNotifyGiveFromISR(btn_task, &woke);
+    portYIELD_FROM_ISR(woke);
+}
+
+// BOOT held for HOLD_MS: forget the network, flag "wait for a phone" and reboot into the portal
+static void btn_loop(void *arg)
+{
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        int held = 0;
+        while (gpio_get_level(PIN_BOOT) == 0 && held < HOLD_MS) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+            held += 50;
+        }
+        if (held < HOLD_MS) continue;
+        printf("长按 BOOT：清掉记住的 Wi-Fi，重启进配网\n");
+        // Quiet shutdown: no reconnect attempt or MQTT error while Wi-Fi stops for the restart
+        s_sta_on = false;
+        if (mq) esp_mqtt_client_stop(mq);
+        nvs_handle_t h;
+        if (nvs_open("prov", NVS_READWRITE, &h) == ESP_OK) {
+            nvs_erase_all(h);
+            nvs_set_u8(h, "wait", 1);
+            nvs_commit(h);
+            nvs_close(h);
+        }
+        esp_restart();
+    }
+}
+
+static void boot_key_init(void)
+{
+    xTaskCreate(btn_loop, "btn", 3072, NULL, 4, &btn_task);
+    gpio_config_t io = {.pin_bit_mask = 1ULL << PIN_BOOT, .mode = GPIO_MODE_INPUT, .pull_up_en = 1, .intr_type = GPIO_INTR_NEGEDGE};
+    gpio_config(&io);
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(PIN_BOOT, boot_isr, NULL);
+}
+
+static void join(const char *ssid, const char *pass)
+{
+    wifi_config_t wc = {0};
+    strncpy((char *)wc.sta.ssid, ssid, sizeof(wc.sta.ssid));
+    strncpy((char *)wc.sta.password, pass, sizeof(wc.sta.password));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
+    s_sta_on = true;
+    esp_wifi_connect();
+}
+
 static void wifi_start(void)
 {
-    ESP_ERROR_CHECK(nvs_flash_init());
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        nvs_flash_erase();
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();
+    esp_netif_create_default_wifi_ap();
     esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_wifi, NULL);
-    esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_wifi, NULL);
+    esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, on_wifi, NULL);
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    wifi_config_t wc = {0};
-    strcpy((char *)wc.sta.ssid, "TryBoard-WiFi");
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
+
+    nvs_handle_t h;
+    size_t l1 = sizeof(prov_ssid), l2 = sizeof(prov_pass);
+    uint8_t wait = 0;
+    if (nvs_open("prov", NVS_READWRITE, &h) == ESP_OK) {
+        s_provisioned = nvs_get_str(h, "ssid", prov_ssid, &l1) == ESP_OK &&
+                        nvs_get_str(h, "pass", prov_pass, &l2) == ESP_OK && prov_ssid[0];
+        if (nvs_get_u8(h, "wait", &wait) == ESP_OK) {
+            nvs_erase_key(h, "wait");
+            nvs_commit(h);
+        }
+        nvs_close(h);
+    }
+    if (s_provisioned) {
+        printf("NVS 里记着 Wi-Fi：%s，直接连接\n", prov_ssid);
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+        ESP_ERROR_CHECK(esp_wifi_start());
+        join(prov_ssid, prov_pass);
+        return;
+    }
+
+    wifi_config_t ac = {0};
+    strcpy((char *)ac.ap.ssid, AP_SSID);
+    ac.ap.ssid_len = strlen(AP_SSID);
+    ac.ap.channel = 1;
+    ac.ap.max_connection = 1;
+    ac.ap.authmode = WIFI_AUTH_OPEN;
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ac));
     ESP_ERROR_CHECK(esp_wifi_start());
+    prov_start(eg, BIT_SUBMIT);
+    TickType_t window = wait ? portMAX_DELAY : pdMS_TO_TICKS(PROV_WINDOW_MS);
+    if (wait) printf("长按 BOOT 后的配网：一直等手机\n");
+    if (!(xEventGroupWaitBits(eg, BIT_PHONE, false, true, window) & BIT_PHONE)) {
+        prov_stop();
+        printf("没有手机来配网，先连出厂网络 " FACTORY_SSID "\n");
+        join(FACTORY_SSID, "");
+        return;
+    }
+    xEventGroupWaitBits(eg, BIT_SUBMIT, true, true, portMAX_DELAY);
+    // Let the portal reply finish sending before turning off the hotspot
+    vTaskDelay(pdMS_TO_TICKS(500));
+    prov_stop();
+    printf("配网完成，关掉热点，去连 %s\n", prov_ssid);
+    s_provisioned = true;
+    join(prov_ssid, prov_pass);
 }
 
 void app_main(void)
@@ -190,6 +331,7 @@ void app_main(void)
     main_task = xTaskGetCurrentTaskHandle();
     printf("温湿度上云：AHT20 SDA=GPIO%d SCL=GPIO%d，broker " BROKER "\n", PIN_SDA, PIN_SCL);
     aht_init();
+    boot_key_init();
     wifi_start();
     xEventGroupWaitBits(eg, BIT_IP, false, true, portMAX_DELAY);
 

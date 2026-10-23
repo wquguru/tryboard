@@ -1136,6 +1136,30 @@
   ]
  },
  {
+  "id": "cloud-prov",
+  "work": "cloud",
+  "title": "Set up Wi-Fi from a phone",
+  "goal": "With no saved Wi-Fi the board opens its own hotspot; a phone joins, fills in the home network on the board's page, and the board joins it",
+  "pass": "Phone joins TryBoard-Setup at 0 s, opens the page at 0.5 s and submits MyHome / 12345678 at 1 s: within 5 s serial shows 收到 SSID=MyHome, 已连上 Wi-Fi，IP 192.168.5.100 and MQTT 已连上 broker（CONNACK）",
+  "buy": "Nothing new: any phone does the setup (in the simulator a virtual one in the Network tab)",
+  "learn": "SoftAP mode, a captive portal (DNS answering every name, connectivity checks redirected to the page), saving credentials in NVS, switching from hotspot to station",
+  "brief": "Build on the \"Join the Wi-Fi\" checkpoint (same wiring), ESP32-C3:\n· AHT20 module (3.3 V) on I2C: SDA=GPIO6, SCL=GPIO7, address 0x38, 100 kHz (GPIO8 is the on-board RGB LED)\n· MQTT broker: mqtt://192.168.4.1:1883 (ESP-IDF esp-mqtt, MQTT 3.1.1, client id tryboard-cloud)\n· At boot read ssid / pass from NVS namespace prov; if present join that network directly\n· Otherwise open the open hotspot TryBoard-Setup (channel 1, 192.168.4.1) with an HTTP page: GET / returns a form posting ssid and pass to /save, every other GET answers 302 to http://192.168.4.1/, and a DNS server on port 53 answers every name with 192.168.4.1\n· On POST /save print 收到 SSID=<ssid>（密码 N 位）, store both in NVS, reply with a page, then switch to station mode and join that network\n· If no phone joins the hotspot within 1 s, close it and join the factory network TryBoard-WiFi instead, so the other checkpoints still pass\n· On IP_EVENT_STA_GOT_IP print exactly: 已连上 Wi-Fi，IP <ip> 网关 <gateway> (the home network MyHome gives 192.168.5.100), then start MQTT as before",
+  "ref": "c3-cloud",
+  "seconds": 5,
+  "args": [
+   "--i2c",
+   "aht20@0x38",
+   "--env",
+   "23.5,45,101325"
+  ],
+  "script": "0:phone=join,TryBoard-Setup; 0.5:phone=open; 1:phone=post,,ssid=MyHome&pass=12345678",
+  "expect": [
+   "收到 SSID=MyHome（密码 8 位）",
+   "已连上 Wi-Fi，IP 192.168.5.100 网关 192.168.5.1",
+   "MQTT 已连上 broker（CONNACK）"
+  ]
+ },
+ {
   "id": "cloud-2",
   "work": "cloud",
   "title": "Reach the MQTT broker",

@@ -22,14 +22,23 @@ const allActs = (): Tool[] => [
   { id: 'p-cloud-0', label: t('Send interval=0 (refused)'), icon: 'warn' },
   { id: 'p-cloud-warm', label: t('Room +{n} ℃', { n: STEP }), icon: 'flame' },
   { id: 'p-cloud-cool', label: t('Room −{n} ℃', { n: STEP }), icon: 'minus' },
+  { id: 'p-cloud-prov', label: t('Set up Wi-Fi from a phone (hold BOOT)'), icon: 'restart' },
 ];
 // Phone keys: one row of four (two intervals, the refused command, warmer); the dashboard buttons cover the rest
 export const cloudActs = (): Tool[] => [allActs()[0], allActs()[2], allActs()[3], allActs()[4]];
 
-/** Toolbar / button action; ids p-cloud-<seconds> | p-cloud-warm | p-cloud-cool */
+/** BOOT hold in wall ms: the firmware wants 1 s of simulated time, with slack for a slower-than-real-time run */
+const HOLD_MS = 1600;
+
+/** Toolbar / button action; ids p-cloud-<seconds> | p-cloud-warm | p-cloud-cool | p-cloud-prov */
 export function cloudTool(id: string, s: Session) {
   const k = id.slice(8);
-  if (k === 'warm' || k === 'cool') {
+  if (k === 'prov') {
+    // G-05d: the firmware reboots into its portal; the phone is picked up so the Network tab can join it
+    s.pressBoot(true);
+    setTimeout(() => s.pressBoot(false), HOLD_MS);
+    s.sim?.phone('on');
+  } else if (k === 'warm' || k === 'cool') {
     if (s.sim) s.setEnv({ temp: s.sim.env.temp + (k === 'warm' ? STEP : -STEP) });
   } else if (/^\d+$/.test(k)) cloudSend(s, `interval=${k}`);
 }
