@@ -5147,6 +5147,30 @@
   ]
  },
  {
+  "id": "arduino-lib-irremote-loop",
+  "seconds": 1,
+  "args": [
+   "--ir",
+   "5,4"
+  ],
+  "expect": [
+   "TRYBOARD_OK lib-irremote-loop ready",
+   "ir sent NEC addr=0x10 cmd=0x41",
+   "ir got NEC addr=0x10 cmd=0x41",
+   "ir sent NEC addr=0x10 cmd=0x42",
+   "ir got NEC addr=0x10 cmd=0x42",
+   "ir sent NEC addr=0x10 cmd=0x43",
+   "ir got NEC addr=0x10 cmd=0x43",
+   "ir loopback 3/3",
+   "TRYBOARD_OK lib-irremote-loop"
+  ],
+  "stderr_expect": [
+   "IR LED GPIO4: NEC address=0xEF10 command=0xBE41 (38.0 kHz carrier)",
+   "IR LED GPIO4: NEC address=0xEF10 command=0xBC43 (38.0 kHz carrier)",
+   "IR LED GPIO4: 3 NEC frames decoded, 0 unmodulated pulses ignored, aimed at the receiver"
+  ]
+ },
+ {
   "id": "arduino-ir-nec-rmt",
   "seconds": 1,
   "args": [

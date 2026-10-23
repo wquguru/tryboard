@@ -481,6 +481,30 @@
   }
  },
  {
+  "id": "arduino-lib-irremote-loop",
+  "chip": "esp32c3",
+  "title": "Arduino: IR loopback, send and receive NEC on one board",
+  "about": "Built with arduino-cli and the IRremote library (MIT). An IR LED on GPIO4 sends three NEC codes (address 0x10) on a 38 kHz LEDC carrier, and a VS1838B-class receiver on GPIO5, which the bench points the LED at, decodes each one back; the serial log prints both ends and the IR LED card shows what the eye sees. Same-bench light path only, no distance or angle; not calibrated on real hardware.",
+  "tags": [
+   "✓ Verified in sim",
+   "Arduino",
+   "IR",
+   "PWM"
+  ],
+  "scene": {
+   "parts": [
+    {
+     "type": "irled",
+     "pin": 4
+    },
+    {
+     "type": "irrx",
+     "pin": 5
+    }
+   ]
+  }
+ },
+ {
   "id": "s3-usb-keyboard",
   "title": "S3 native USB: become a keyboard + mouse",
   "about": "The ESP32-S3 uses its built-in USB OTG (TinyUSB) to present itself as a HID keyboard + mouse: 1 second after being plugged into a computer it types a line of text and draws a square with the mouse, then repeats each time you press BOOT. The virtual computer on the left goes through full enumeration (get descriptors, set address, read the report descriptor) and turns the received keystrokes back into text. The USB port on the C3 / C6 can only act as a serial port, so they can't do this.",
