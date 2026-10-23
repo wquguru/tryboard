@@ -108,7 +108,7 @@ const d: Dict = {
   "BME280 not installed yet; install it to measure its distance to the chip": "BME280이 아직 장착되지 않았습니다. 장착하면 칩까지의 거리를 잽니다",
   "BME280 power moved to 5V": "BME280 전원을 5V로 다시 연결",
   "BME280 reads": "BME280 측정값",
-  "BME280 reads the temperature wherever the sensor sits: room {room} ℃, heated high by {d} ℃.": "BME280은 센서를 둔 곳의 온도를 읽습니다: 실온 {room} ℃, 열로 인한 상승 {d} ℃.",
+  "{sensor} reads the temperature wherever the sensor sits: room {room} ℃, heated high by {d} ℃.": "{sensor}은 센서를 둔 곳의 온도를 읽습니다: 실온 {room} ℃, 열로 인한 상승 {d} ℃.",
   "BME280 · temperature / humidity / pressure": "BME280 · 온도 / 습도 / 기압",
   "Board 10 cm closer": "판 10 cm 가까이",
   "Board 10 cm farther": "판 10 cm 멀리",
@@ -837,7 +837,7 @@ const d: Dict = {
   "The dev board can't be removed, only swapped: use \"Swap dev board\" below": "개발 보드는 뺄 수 없고 교체만 됩니다. 아래의 '개발 보드 교체'를 사용하십시오",
   "The dev board clip position decides where the chip sits: under full load it is the hottest spot in the enclosure": "개발 보드 고정 위치가 칩 위치를 정합니다: 풀 로드 시 칩이 케이스 안에서 가장 뜨겁습니다",
   "The firmware assumes 343 m/s and the simulator also echoes at 343 m/s": "펌웨어는 343 m/s로 계산하고 시뮬레이터도 343 m/s로 반사파를 냅니다",
-  "The heat offset affects the simulation: in the retest and the Product, BME280 reads the raised temperature.": "열로 인한 상승은 시뮬레이션 결과에 영향을 줍니다: 전원 재테스트와 완성품에서 BME280은 높아진 온도를 읽습니다.",
+  "The heat offset affects the simulation: in the retest and the Product, {sensor} reads the raised temperature.": "열로 인한 상승은 시뮬레이션 결과에 영향을 줍니다: 전원 재테스트와 완성품에서 {sensor}은 높아진 온도를 읽습니다.",
   "The knob here gives clean quadrature waveforms; real contacts bounce": "시뮬레이터의 노브는 깨끗한 직교 파형이지만 실제 접점은 채터링이 있습니다",
   "The knob shaft must stick out ≥ 6 mm from the panel, or fingers cannot grip or press it": "노브 축이 패널 밖으로 ≥ 6 mm 나와야 합니다. 그렇지 않으면 손가락으로 잡거나 누를 수 없습니다",
   "The list is complete; you can buy from it": "목록이 완성되었습니다. 이대로 구매하면 됩니다",
@@ -1162,5 +1162,9 @@ const d: Dict = {
   "Cloud sensor": "클라우드 온습도계",
   "Assembly for this project is not ready yet": "이 프로젝트의 조립은 아직 준비 중입니다",
   "There is no enclosure to build yet. The Product step already shows the finished device in 2D, driven by the same firmware.": "아직 조립할 케이스가 없습니다. 완성품 단계에서 같은 펌웨어로 움직이는 완성품을 2D로 보여 줍니다.",
+  // G-05c cloud assembly
+  "On the vent side: room air flows past the AHT20 and the published t is the room": "통풍구 쪽: 방 공기가 AHT20 을 지나가 발행되는 t 가 실온",
+  "Against the board: the LDO and Wi-Fi bursts warm it, every published t is about {n} ℃ high, same in the retest (estimate)": "보드에 붙음: LDO 와 Wi-Fi 송신 열로 데워져 발행되는 t 가 모두 약 {n} ℃ 높음, 재테스트도 같음(추정)",
+  "C3 with Wi-Fi on averages about 80 mA and peaks near 350 mA while transmitting; a 5 V 1 A charger is plenty (estimate)": "Wi-Fi 를 켠 C3 는 평균 약 80 mA, 송신 시 최대 350 mA 근처; 5 V 1 A 충전기면 충분(추정)",
 };
 export default d;

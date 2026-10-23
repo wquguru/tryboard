@@ -619,7 +619,7 @@ const d: Dict = {
   "JSON humidity": "JSON 湿度",
   "Combined: sensor to the cloud": "合体：センサーをクラウドへ",
   "The cloud changes the reporting interval with a command; the board acknowledges and refuses out-of-range values": "クラウドがコマンドで送信間隔を変える；ボードは応答し、範囲外の値は拒否する",
-  "Cloud publishes interval=2 at 8 s and interval=0 at 11 s: serial shows 间隔改为 2 秒, the ok ack, 拒绝命令 and the refusal ack; at least 2 gaps of 2.00 ± 0.1 s afterwards": "クラウドが 8 秒に interval=2、11 秒に interval=0 を発行：シリアルに 间隔改为 2 秒、成功の応答、拒绝命令 と拒否の応答が出る；その後 2.00 ± 0.1 秒の間隔が 2 回以上",
+  "Cloud publishes interval=2 at 8 s and interval=0 at 11 s: serial shows 间隔改为 2 秒, the ok ack, 拒绝命令 and the refusal ack; at least 2 gaps of 2.00 ± 0.1 s afterwards; every JSON reads t 23.5 ± 0.5 (the room, not the board); the web page also requires an assembly with no warnings (geometric estimate, checked on the web page only)": "クラウドが 8 秒に interval=2、11 秒に interval=0 を発行：シリアルに 间隔改为 2 秒、成功の応答、拒绝命令 と拒否の応答が出る；その後 2.00 ± 0.1 秒の間隔が 2 回以上；すべての JSON の t が 23.5 ± 0.5（ボードではなく部屋の温度）；Web ページでは警告のない組み立ても必要（幾何的な推定、Web ページでのみ確認）",
   "USB power for the board where it lives (any 5 V 1 A phone charger), enclosure with vents so the sensor reads the room, not the board": "設置場所の USB 電源（5 V 1 A のスマホ充電器で可）、センサーがボードではなく部屋を測れるよう通気口付きケース",
   "Handling MQTT_EVENT_DATA (topic and data are not NUL-terminated), validating remote commands, acknowledging on a separate topic": "MQTT_EVENT_DATA の処理（topic と data は NUL 終端でない）、リモートコマンドの検証、別トピックでの応答",
   "Publish gap after the change (s)": "変更後の発行間隔（秒）",

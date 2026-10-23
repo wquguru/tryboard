@@ -9,6 +9,7 @@ import { createIrlampProduct } from './irlampproduct';
 import { createLampProduct, createRulerProduct, createTiltProduct, type WorkEffects } from './workproducts';
 import { createKeypadView } from './keypad';
 import { CHIP_HEAT_OFFSET } from './chipheat';
+import { createCloudProduct } from './cloudproduct';
 
 export interface Spot {
   key: string;
@@ -443,4 +444,39 @@ export const IRLAMP: Template = {
   product: (el, h) => createIrlampProduct(el, { pin: 5, send: h.ir }),
 };
 
-export const TEMPLATES: Record<string, Template> = { weather: WEATHER, spin: SPIN, lens: LENS, usbkey: USBKEY, lamp: LAMP, ruler: RULER, tilt: TILT, door: DOOR, irlamp: IRLAMP };
+// G-05 cloud reporter: vented case 70×50×25 mm, C3 board inside, AHT20 either on the vent side (room air) or against the board's LDO
+const AHT_MINI = '<rect x="30" y="14" width="40" height="28" rx="2" fill="#5A2A8A"/><rect x="45" y="22" width="10" height="10" fill="#C9C6BF"/><path d="M38 42 L38 52 M46 42 L46 52 M54 42 L54 52 M62 42 L62 52" stroke="#E8C547" stroke-width="2"/>';
+
+export const CLOUD: Template = {
+  id: 'cloud',
+  caption: t('Cloud reporter · case 70×50×25 mm, vent slots on the right (estimate)'),
+  intro: [t('Build the cloud reporter'), t('Start with the vented case')],
+  tray: ['lid', 'aht', 'board', 'usb', 'case'],
+  parts: [
+    { id: 'case', name: t('Vented case'), short: t('Case'), ghost: [0, 0, 180, 100], okMsg: [t('Case in place'), t('Vent slots on the right, USB-C hole on the left')],
+      mini: '<rect width="100" height="60" rx="8" fill="#E9E5DC" stroke="#8A867E" stroke-width="1.5"/><rect x="6" y="6" width="88" height="48" rx="5" fill="#D6D1C6"/><path d="M86 16 L92 16 M86 24 L92 24 M86 32 L92 32 M86 40 L92 40" stroke="#8A867E" stroke-width="2"/><rect y="24" width="6" height="12" fill="#3A3936"/>',
+      iso: SHELL_ISO + '<path d="M162 26 L174 26 M162 36 L174 36 M162 46 L174 46 M162 56 L174 56 M162 66 L174 66 M162 76 L174 76" stroke="#8A867E" stroke-width="2.5"/>' },
+    { id: 'board', name: t('ESP32-C3 dev board'), short: t('Board'), ghost: [20, 20, 120, 60], okMsg: [t('Board clipped in'), t('SDA GPIO6 · SCL GPIO7 to the AHT20, Wi-Fi to the router')], mini: BOARD_MINI, iso: BOARD_ISO },
+    { id: 'aht', name: t('AHT20 module'), short: 'AHT20', spotSize: [28, 22], mini: AHT_MINI,
+      iso: '<rect width="28" height="22" rx="2" fill="#5A2A8A"/><rect x="9" y="6" width="10" height="10" fill="#C9C6BF"/>',
+      spots: [
+        { key: 'A', label: t('On the vent side, away from the board'), where: t('By the vent'), at: [146, 39], ok: true, msg: [t('Sensor in the vent airflow'), t('It reads the room air')] },
+        { key: 'B', label: t('Against the board, next to the regulator'), where: t('On the board'), at: [76, 39], ok: false, msg: [t('Sensor against the board'), t('The LDO and Wi-Fi warm it, reading about {n} ℃ high', { n: CHIP_HEAT_OFFSET })] },
+      ] },
+    { id: 'usb', name: t('USB-C cable'), short: t('USB cable'), ghost: [0, 40, 22, 20], okMsg: [t('USB-C cable plugged in'), t('5 V from any phone charger')],
+      mini: '<rect x="8" y="24" width="30" height="12" rx="3" fill="#3A3936"/><path d="M38 30 C60 30 70 10 96 12" fill="none" stroke="#3A3936" stroke-width="5"/>',
+      iso: '<rect x="0" y="42" width="22" height="16" rx="3" fill="#3A3936"/>' },
+    { id: 'lid', name: t('Smoked lid'), short: t('Top lid'), ghost: [0, 0, 180, 100], okMsg: [t('Closed'), t('Click “Next: product”')],
+      mini: '<rect width="100" height="60" rx="8" fill="#F2EFE8" stroke="#8A867E" stroke-width="1.5"/><circle cx="20" cy="18" r="4" fill="#22C55E"/><path d="M60 22 a12 12 0 0 1 20 0 M64 27 a6 6 0 0 1 12 0" fill="none" stroke="#141414" stroke-width="2"/>',
+      iso: '<rect width="180" height="100" rx="10" fill="#F2EFE8" stroke="#8A867E" stroke-width="1.5" opacity="0.7"/><circle cx="40" cy="30" r="5" fill="#22C55E"/>' },
+  ],
+  checks: (s) => [
+    row(t('Sensor position'), has(s, 'aht'), s.choice.aht === 'A', t('In the vent airflow, reads the room'), t('Against the board, about {n} ℃ high', { n: CHIP_HEAT_OFFSET })),
+    row(t('Power'), has(s, 'usb'), true, t('USB-C 5 V, about 80 mA average with Wi-Fi (estimate)')),
+    row(t('Inner height'), has(s, 'lid'), true, t('14 / 25 mm used')),
+  ],
+  effects: (s) => ({ sensorOffset: s.choice.aht === 'B' ? CHIP_HEAT_OFFSET : 0 }),
+  product: (el, h) => createCloudProduct(el, { send: h.mqtt }),
+};
+
+export const TEMPLATES: Record<string, Template> = { weather: WEATHER, spin: SPIN, lens: LENS, usbkey: USBKEY, lamp: LAMP, ruler: RULER, tilt: TILT, door: DOOR, irlamp: IRLAMP, cloud: CLOUD };

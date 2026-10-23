@@ -619,7 +619,7 @@ const d: Dict = {
   "JSON humidity": "JSON 습도",
   "Combined: sensor to the cloud": "합체: 센서를 클라우드로",
   "The cloud changes the reporting interval with a command; the board acknowledges and refuses out-of-range values": "클라우드가 명령으로 보고 간격을 바꿈; 보드는 응답하고 범위 밖 값은 거부",
-  "Cloud publishes interval=2 at 8 s and interval=0 at 11 s: serial shows 间隔改为 2 秒, the ok ack, 拒绝命令 and the refusal ack; at least 2 gaps of 2.00 ± 0.1 s afterwards": "클라우드가 8초에 interval=2, 11초에 interval=0 발행: 시리얼에 间隔改为 2 秒, 성공 응답, 拒绝命令 과 거부 응답 표시; 이후 2.00 ± 0.1초 간격이 2번 이상",
+  "Cloud publishes interval=2 at 8 s and interval=0 at 11 s: serial shows 间隔改为 2 秒, the ok ack, 拒绝命令 and the refusal ack; at least 2 gaps of 2.00 ± 0.1 s afterwards; every JSON reads t 23.5 ± 0.5 (the room, not the board); the web page also requires an assembly with no warnings (geometric estimate, checked on the web page only)": "클라우드가 8초에 interval=2, 11초에 interval=0 발행: 시리얼에 间隔改为 2 秒, 성공 응답, 拒绝命令 과 거부 응답 표시; 이후 2.00 ± 0.1초 간격이 2번 이상; 모든 JSON 의 t 가 23.5 ± 0.5(보드가 아니라 방의 온도); 웹 페이지에서는 경고 없는 조립도 필요(기하학적 추정, 웹 페이지에서만 확인)",
   "USB power for the board where it lives (any 5 V 1 A phone charger), enclosure with vents so the sensor reads the room, not the board": "설치 장소의 USB 전원(아무 5 V 1 A 휴대폰 충전기), 센서가 보드가 아닌 방을 재도록 통풍구 있는 케이스",
   "Handling MQTT_EVENT_DATA (topic and data are not NUL-terminated), validating remote commands, acknowledging on a separate topic": "MQTT_EVENT_DATA 처리(topic과 data는 NUL로 끝나지 않음), 원격 명령 검증, 별도 토픽으로 응답",
   "Publish gap after the change (s)": "변경 후 발행 간격(초)",

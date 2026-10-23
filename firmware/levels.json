@@ -1206,7 +1206,7 @@
   "work": "cloud",
   "title": "Combined: sensor to the cloud",
   "goal": "The cloud changes the reporting interval with a command; the board acknowledges and refuses out-of-range values",
-  "pass": "Cloud publishes interval=2 at 8 s and interval=0 at 11 s: serial shows 间隔改为 2 秒, the ok ack, 拒绝命令 and the refusal ack; at least 2 gaps of 2.00 ± 0.1 s afterwards",
+  "pass": "Cloud publishes interval=2 at 8 s and interval=0 at 11 s: serial shows 间隔改为 2 秒, the ok ack, 拒绝命令 and the refusal ack; at least 2 gaps of 2.00 ± 0.1 s afterwards; every JSON reads t 23.5 ± 0.5 (the room, not the board); the web page also requires an assembly with no warnings (geometric estimate, checked on the web page only)",
   "buy": "USB power for the board where it lives (any 5 V 1 A phone charger), enclosure with vents so the sensor reads the room, not the board",
   "learn": "Handling MQTT_EVENT_DATA (topic and data are not NUL-terminated), validating remote commands, acknowledging on a separate topic",
   "brief": "Combine the previous checkpoints into a temperature / humidity cloud reporter, ESP32-C3:\n· AHT20 module (3.3 V) on I2C: SDA=GPIO6, SCL=GPIO7, address 0x38, 100 kHz (GPIO8 is the on-board RGB LED)\n· Wi-Fi: join the open access point TryBoard-WiFi (DHCP gives 192.168.4.100, gateway 192.168.4.1)\n· MQTT broker: mqtt://192.168.4.1:1883 (ESP-IDF esp-mqtt, MQTT 3.1.1, client id tryboard-cloud)\n· Keep publishing JSON readings to tryboard/cloud/data (default every 5 s, same print format as before)\n· On a message on tryboard/cloud/cmd with payload interval=<seconds>: print 收到命令 tryboard/cloud/cmd \"<payload>\"; if seconds is an integer 1–60 print 间隔改为 N 秒, publish {\"ok\":true,\"interval\":N} to tryboard/cloud/ack and print 回执 → tryboard/cloud/ack <JSON>; then publish one reading at once (print 间隔刚改为 N 秒，立即发一条 instead of the gap) and count the new interval from it\n· Anything else (out of range, not a number, another key): keep the interval, print a line starting 拒绝命令 and ack {\"ok\":false,\"cmd\":\"<payload>\",\"interval\":<current>}",
@@ -1237,8 +1237,15 @@
     "regex": "距上次 (\\d+\\.\\d+) 秒（间隔 2 秒）",
     "value": 2.0,
     "tol": 0.1
+   },
+   {
+    "name": "JSON temperature (room, not the board)",
+    "regex": "\\{\"t\":(-?\\d+\\.\\d),\"h\":\\d+\\.\\d,\"seq\":\\d+\\}",
+    "value": 23.5,
+    "tol": 0.5
    }
-  ]
+  ],
+  "assembly": "cloud"
  },
  {
   "id": "fault-wire",

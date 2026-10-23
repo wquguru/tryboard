@@ -10,7 +10,7 @@ import { createLensProduct, createSpinProduct } from '../../views/lcdproducts';
 import { type Template } from '../../views/templates';
 import { workTemplate } from '../../views/worktpl';
 import { doorActs, doorButtons, doorLive, doorOnReader, doorRows, doorSerial, doorTap, doorTool } from './door';
-import { cloudActs, cloudButtons, cloudLive, cloudRows, cloudSerial, cloudTool } from './cloud';
+import { cloudActs, cloudButtons, cloudLive, cloudRows, cloudSend, cloudSerial, cloudTool } from './cloud';
 import { irlampActs, irlampButtons, irlampLive, irlampRows, irlampPress, irlampSend, irlampSerial, irlampTool } from './irlamp';
 import { passedCount } from './bench';
 import { emptyFrame, ledCss, servoAngle, type LiveFrame } from '../../views/common';
@@ -229,7 +229,7 @@ function remainingLines(work: string): BuyLine[] {
 }
 
 /** These projects' products live in works3d.ts (P2-09) */
-const WORK3D = new Set(['lamp', 'ruler', 'tilt', 'door', 'irlamp']);
+const WORK3D = new Set(['lamp', 'ruler', 'tilt', 'door', 'irlamp', 'cloud']);
 const COLOR_LABEL: Record<string, string> = { warm: t('Warm white'), red: t('Red'), green: t('Green'), blue: t('Blue'), purple: t('Purple'), white: t('White') };
 
 /** Expression names printed on the lens firmware's serial */
@@ -944,7 +944,7 @@ export function productStep(): StepImpl {
         onDistance: (cm) => applyDistance(cm),
         distance: c.session.distance,
         onPose: (p) => applyPose(p),
-        pose: c.store.get().pose, onKey: (cmd) => irlampPress(c.session, cmd), ...(c.work.id === 'door' ? { onCard: (uid: string) => doorTap(c.session, uid), card: doorOnReader } : {}),
+        pose: c.store.get().pose, onKey: (cmd) => irlampPress(c.session, cmd), onCloud: (p) => cloudSend(c.session, p), ...(c.work.id === 'door' ? { onCard: (uid: string) => doorTap(c.session, uid), card: doorOnReader } : {}),
       });
       (window as unknown as { __tbProduct: unknown }).__tbProduct = {
         handlePos: () => work3d!.handleScreenPos(),
