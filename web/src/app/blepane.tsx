@@ -22,7 +22,7 @@ export function BlePane({ send }: { send?: (cmd: string) => void }) {
     const b = box.current;
     if (b && stick.current) b.scrollTop = b.scrollHeight;
   }, [s.log, cur]);
-  if (s.state === 2) return <ElfCard reason={s.error} />;
+  if (s.state === 2) return <BleUnknownCard reason={s.error} />;
   const go = (cmd: string) => {
     bleFeed.clearError();
     send?.(cmd);
@@ -82,15 +82,21 @@ export function BlePane({ send }: { send?: (cmd: string) => void }) {
   );
 }
 
-/** Route a' found no VHCI boundary: explain and point to route c (drop app.elf) */
-function ElfCard({ reason }: { reason: string }) {
+/** BLE used but not recognised (G-11): say why, which versions work (docs/STATUS.md BLE rows) and that selection still stands */
+function BleUnknownCard({ reason }: { reason: string }) {
   return (
-    <div id="bleElf" className="m-3 flex flex-col gap-1.5 rounded-lg border border-line bg-warn-bg px-3 py-2.5 text-[13px] text-fg">
-      <b className="font-medium">{t('BLE needs an app.elf as well')}</b>
-      <span className="text-xs text-muted">
-        {t('The firmware uses Bluetooth, but the Espressif BLE library interface was not found in the .bin ({reason}). Drop in build/<project>.elf from the same build to attach the virtual controller by symbol.', { reason: reason || t('signature mismatch') })}
-      </span>
-      <span className="text-xs text-muted">{t('This step is still in progress: for now only this card shows and Bluetooth stays inactive.')}</span>
+    <div className="min-h-0 flex-1 overflow-auto">
+      <div id="bleUnknown" className="m-3 flex min-w-0 flex-col gap-1.5 rounded-lg border border-line bg-warn-bg px-3 py-2.5 text-[13px] text-fg">
+        <b className="font-medium">{t('Bluetooth is not simulated for this firmware')}</b>
+        <span className="text-xs text-muted">{t('The firmware uses Bluetooth, but its Bluetooth library version was not recognised. The rest of the firmware keeps running; Bluetooth stays off.')}</span>
+        <span className="font-mono text-xs break-words text-muted">{t('Reason: {reason}', { reason: reason || t('signature mismatch') })}</span>
+        <span className="text-xs text-fg">{t('Rebuild with ESP-IDF 5.5.1 or Arduino-ESP32 core 3.3.2 to simulate Bluetooth. Chip and board advice is unaffected: this is a simulator limit, not a firmware fault.')}</span>
+        <ul className="m-0 flex list-disc flex-col gap-0.5 pl-4 text-xs text-muted">
+          <li>{t('Runs in the simulator: ESP-IDF 5.5.1 (ESP32-C3 / ESP32-S3 / classic ESP32); Arduino-ESP32 core 3.3.2 (ESP32-C3)')}</li>
+          <li>{t('Recognised but not yet run: other ESP-IDF 5.1–5.5 releases (ESP32-C3 / ESP32-S3)')}</li>
+          <li>{t('Not recognised: Arduino-ESP32 core 3.0.x, ESP-IDF before 5.1, ESP32-S3 builds with the BT controller in flash only')}</li>
+        </ul>
+      </div>
     </div>
   );
 }
@@ -244,7 +250,7 @@ export function PhonePanel({ send }: { send: (cmd: string) => void }) {
     return (
       <div id="blePhone" data-state={s.state}>
         {head}
-        {s.state === 2 ? <ElfCard reason={s.error} /> : <p className="my-2 text-xs text-muted">{t('The firmware on the bench does not use Bluetooth. Load a NimBLE firmware (e.g. c3-ble-hr) and try again.')}</p>}
+        {s.state === 2 ? <BleUnknownCard reason={s.error} /> : <p className="my-2 text-xs text-muted">{t('The firmware on the bench does not use Bluetooth. Load a NimBLE firmware (e.g. c3-ble-hr) and try again.')}</p>}
         {foot}
       </div>
     );
