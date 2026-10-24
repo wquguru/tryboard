@@ -1306,5 +1306,13 @@ const d: Dict = {
   "Now: on": "いま：点灯",
   "Now: off": "いま：消灯",
   "Part callouts": "部品の説明",
+  // H-07 phone lesson panel
+  "Open the full lesson panel": "レッスンパネルを全部表示",
+  "Lesson": "レッスン",
+  "Collapse the lesson panel": "レッスンパネルを閉じる",
+  "Swipe up for the full lesson panel": "上にスワイプしてレッスンパネルを広げる",
+  "Nothing yet: pin changes show up here once the code runs.": "まだ何もありません。コードを動かすとピンの変化がここに出ます。",
+  "Step {n} · {title}": "ステップ {n} · {title}",
+  "Next: {title}": "次へ：{title}",
 };
 export default d;

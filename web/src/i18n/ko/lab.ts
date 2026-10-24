@@ -1306,5 +1306,13 @@ const d: Dict = {
   "Now: on": "지금: 켜짐",
   "Now: off": "지금: 꺼짐",
   "Part callouts": "부품 설명",
+  // H-07 phone lesson panel
+  "Open the full lesson panel": "레슨 패널 전체 보기",
+  "Lesson": "레슨",
+  "Collapse the lesson panel": "레슨 패널 접기",
+  "Swipe up for the full lesson panel": "위로 밀어 레슨 패널 펼치기",
+  "Nothing yet: pin changes show up here once the code runs.": "아직 없음: 코드를 실행하면 핀 변화가 여기에 나타납니다.",
+  "Step {n} · {title}": "{n}단계 · {title}",
+  "Next: {title}": "다음: {title}",
 };
 export default d;

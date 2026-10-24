@@ -13,6 +13,7 @@ import { afterFrame } from "../ui/frame";
 import { useBle } from "./blefeed";
 import { lessonUi } from "./lesson";
 import { LessonPane, useLessonCode } from "./lessonfeed";
+import { LessonSheet } from "./lessonsheet";
 
 // Code tab (P2-15): chunk and source load only when opened (or at idle, R-12), not in the first bundle
 function CodePane({ phone, toast }: { phone?: boolean; toast: (msg: string) => void }) {
@@ -488,8 +489,13 @@ function PhoneDock({
   const c = useStore(bc);
   const { sheet } = useStore(mui);
   const s = useStore(ui);
-  const cur: DockTab = c.dock.tab === "analyzer" && !actions.analyzer ? "serial" : c.dock.tab;
+  // H-07: a lesson on the bench turns the peek band into its step panel (product only borrows this sheet)
+  const lesson = !!useStore(lessonUi).lesson && document.body.dataset.step === "bench";
+  const cur: DockTab =
+    c.dock.tab === "analyzer" && !actions.analyzer ? "serial" : c.dock.tab === "lesson" && !lesson ? "serial" : c.dock.tab;
   const open = sheet !== "peek";
+  // The lesson band is taller than "half", so lessons go peek <-> full
+  const size = lesson && sheet === "half" ? "full" : sheet;
   const peek = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     const el = peek.current!;
@@ -508,6 +514,7 @@ function PhoneDock({
     disabled?: boolean;
     title?: string;
   }[] = [
+    ...(lesson ? [{ id: "lesson" as const, label: t("Lesson") }] : []),
     { id: "serial", label: t('Serial') },
     {
       id: "code",
@@ -537,25 +544,36 @@ function PhoneDock({
       aria-label={t('Serial sheet')}
       data-tab={cur}
       data-sheet={sheet}
+      data-lesson={lesson ? "" : undefined}
       className={cn(
         "dock fixed inset-x-0 bottom-(--m-tb) z-24 flex flex-col rounded-t-2xl border-t border-line bg-surface shadow-[0_-6px_20px_#0000001a]",
-        sheet === "peek"
+        size === "peek"
           ? "h-(--m-peek)"
-          : sheet === "half"
+          : size === "half"
             ? "h-[52dvh]"
             : "h-[calc(100dvh-var(--top-h)-var(--m-tb))]",
       )}
     >
-      <Grab
-        label={open ? t('Collapse serial sheet') : t('Swipe up for full serial')}
-        onUp={() => go({ sheet: sheet === "peek" ? "half" : "full" })}
-        onDown={() => go({ sheet: sheet === "full" ? "half" : "peek" })}
-        onTap={() => go({ sheet: open ? "peek" : "half" })}
-      />
+      {lesson ? (
+        <Grab
+          label={open ? t("Collapse the lesson panel") : t("Swipe up for the full lesson panel")}
+          onUp={() => go({ sheet: "full" })}
+          onDown={() => go({ sheet: "peek" })}
+          onTap={() => go({ sheet: open ? "peek" : "full" })}
+        />
+      ) : (
+        <Grab
+          label={open ? t('Collapse serial sheet') : t('Swipe up for full serial')}
+          onUp={() => go({ sheet: sheet === "peek" ? "half" : "full" })}
+          onDown={() => go({ sheet: sheet === "full" ? "half" : "peek" })}
+          onTap={() => go({ sheet: open ? "peek" : "half" })}
+        />
+      )}
+      {lesson && !open && <LessonSheet onOpen={() => go({ sheet: "full" })} />}
       <button
         type="button"
         id="sheetPeek"
-        hidden={open}
+        hidden={open || lesson}
         onClick={() => go({ sheet: "half" })}
         className="-mt-1 flex min-h-11 w-full min-w-0 cursor-pointer flex-col gap-0.5 border-0 bg-transparent px-4 pb-1.5 text-left text-fg [&[hidden]]:hidden"
       >
@@ -602,11 +620,12 @@ function PhoneDock({
             </div>
             <button
               type="button"
-              aria-label={sheet === "full" ? t('Half screen') : t('Full screen')}
-              onClick={() => go({ sheet: sheet === "full" ? "half" : "full" })}
+              id="sheetSize"
+              aria-label={lesson ? t("Collapse the lesson panel") : size === "full" ? t('Half screen') : t('Full screen')}
+              onClick={() => go({ sheet: lesson ? "peek" : size === "full" ? "half" : "full" })}
               className="inline-flex size-11 flex-none cursor-pointer items-center justify-center rounded-full border-0 bg-field p-0 text-fg"
             >
-              <Icon n={sheet === "full" ? "down" : "up"} size={16} />
+              <Icon n={size === "full" ? "down" : "up"} size={16} />
             </button>
           </div>
           {cur === "serial" && (
@@ -648,6 +667,11 @@ function PhoneDock({
                 </span>
               </div>
               <SerialInput phone />
+            </div>
+          )}
+          {cur === "lesson" && (
+            <div className="flex min-h-0 flex-1 flex-col border-t border-line-soft pt-2">
+              <LessonSheet full />
             </div>
           )}
           {cur === "code" && (

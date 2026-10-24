@@ -165,6 +165,14 @@ function DelayChips({ chips }: { chips: CodeChips }) {
   );
 }
 
+/** The wire-level half of a feed row: "GPIO5 → high 3.3 V" or "I2C → 0x3C". */
+export const evWhere = (e: FeedItem) =>
+  e.i2c
+    ? t("I2C → {addr}", { addr: hex(e.i2c.addr) })
+    : e.hi
+      ? t("GPIO{pin} → high 3.3 V", { pin: e.pin })
+      : t("GPIO{pin} → low 0 V", { pin: e.pin });
+
 export const fmtSec = (cyc: number) => `${(cyc / CPU_HZ).toFixed(2)} s`;
 
 /** Dock "What happened" list, newest on top. */
@@ -214,11 +222,7 @@ export function LessonFeed({ className }: { className?: string }) {
               <span className={cn("font-medium", e.hi ? "text-fg" : "text-muted")}>{e.text}</span>
               <span className="font-mono text-muted">
                 ·{" "}
-                {e.i2c
-                  ? t("I2C → {addr}", { addr: hex(e.i2c.addr) })
-                  : e.hi
-                    ? t("GPIO{pin} → high 3.3 V", { pin: e.pin })
-                    : t("GPIO{pin} → low 0 V", { pin: e.pin })}
+                {evWhere(e)}
               </span>
             </div>
           ))}

@@ -552,6 +552,47 @@ if (await waitFor(page, () => globalThis.__tbApp?.store.get().simSeconds > 0.5, 
   report('D-07: analyzer returns to body when the tab closes', await waitFor(page, () => document.querySelector('#analyzer')?.parentElement === document.body));
 } else report('D-07: wifi example starts', false);
 
+// ---- H-07 beginner lesson on a phone: 3D on top, step panel below (?beginner=1 overrides the tb-beginner=0 prelude for these visits)
+for (const lang of ['en', 'zh', 'ja', 'ko']) {
+  await page.goto(`${base}/app?work=weather&beginner=1&lang=${lang}#bench`, { waitUntil: 'load' });
+  const up = await waitFor(page, () => !!document.querySelector('#dock[data-lesson] #lessonSheet'), null, 20000);
+  report(`H-07 ${lang}: lesson panel shows in the dock`, up);
+  if (!up) continue;
+  const geo = await page.evaluate(() => {
+    const st = document.getElementById('stage').getBoundingClientRect();
+    const sh = document.getElementById('lessonSheet').getBoundingClientRect();
+    return { stage: Math.round(st.height), sheetTop: Math.round(sh.top), stageBottom: Math.round(st.bottom) };
+  });
+  report(`H-07 ${lang}: 3D stage on top, panel below`, geo.stage >= 240 && geo.sheetTop >= geo.stageBottom - 24, JSON.stringify(geo));
+  for (const s of ['#mLessonPrev', '#mLessonNext', '#mLessonOpen'])
+    report(`H-07 ${lang}: ${s} tappable`, (await tappable(s)) === 'ok', await tappable(s));
+  await waitFor(page, () => !!document.querySelector('#lessonCallouts [data-callout]'), null, 8000);
+  const nCo = await page.$$eval('#lessonCallouts [data-callout]', (l) => l.length);
+  report(`H-07 ${lang}: at most 2 callouts`, nCo >= 1 && nCo <= 2, `${nCo}`);
+  await stepCheck(`H-07 ${lang} panel`);
+  if (lang === 'en') {
+    const st0 = await page.$eval('#lessonSheet', (e) => e.dataset.step);
+    await page.click('#mLessonNext');
+    const fwd = await waitFor(page, (s) => document.querySelector('#lessonSheet')?.dataset.step === String(+s + 1), st0, 3000);
+    report('H-07: next moves one step', fwd, `${st0} -> ${await page.$eval('#lessonSheet', (e) => e.dataset.step)}`);
+    const nCo1 = await page.$$eval('#lessonCallouts [data-callout]', (l) => l.length);
+    report('H-07: still at most 2 callouts after next', nCo1 <= 2, `${nCo1}`);
+    await page.click('#mLessonPrev');
+    report('H-07: previous moves back', await waitFor(page, (s) => document.querySelector('#lessonSheet')?.dataset.step === s, st0, 3000));
+  }
+  // Pull the panel up: Lesson is the first tab and keeps the step (with its to-do list)
+  await page.click(lang === 'en' ? '#sheetGrab' : '#mLessonOpen');
+  const full = await waitFor(page, () => document.querySelector('#dock')?.dataset.sheet === 'full' && !!document.querySelector('#dock #lessonSheet'), null, 3000);
+  const firstTab = await page.$eval('#dock [role="tablist"] [data-dock]', (e) => `${e.dataset.dock}:${e.getAttribute('aria-selected')}`).catch(() => 'none');
+  report(`H-07 ${lang}: panel pulls up full with the Lesson tab first`, full && firstTab === 'lesson:true', firstTab);
+  for (const s of ['#mLessonNext', '#sheetSize']) report(`H-07 ${lang} full: ${s} tappable`, (await tappable(s)) === 'ok', await tappable(s));
+  await stepCheck(`H-07 ${lang} full`);
+  if (lang === 'en') await page.screenshot({ path: path.join(outDir, 'mobile-lesson-full.png') });
+  await page.click('#sheetSize');
+  report(`H-07 ${lang}: collapse returns to the step panel`, await waitFor(page, () => document.querySelector('#dock')?.dataset.sheet === 'peek' && !!document.querySelector('#lessonSheet'), null, 3000));
+  if (lang === 'en') await page.screenshot({ path: path.join(outDir, 'mobile-lesson.png') });
+}
+
 // ---- F-12 changelog (static page): filters scroll inside their row, tap targets, no page-level horizontal scroll
 // ?lang=en: the static pages pick a locale before paint (F-12b), so pin English whatever the browser language is
 await page.goto(`${base}/changelog?lang=en`, { waitUntil: 'load' });

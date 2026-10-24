@@ -1306,5 +1306,13 @@ const d: Dict = {
   "Now: on": "现在：亮",
   "Now: off": "现在：灭",
   "Part callouts": "零件标注",
+  // H-07 phone lesson panel
+  "Open the full lesson panel": "展开完整课程面板",
+  "Lesson": "课程",
+  "Collapse the lesson panel": "收起课程面板",
+  "Swipe up for the full lesson panel": "上拉展开课程面板",
+  "Nothing yet: pin changes show up here once the code runs.": "还没有动静：代码运行后，引脚变化会出现在这里。",
+  "Step {n} · {title}": "第 {n} 步 · {title}",
+  "Next: {title}": "下一步：{title}",
 };
 export default d;

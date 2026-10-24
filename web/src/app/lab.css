@@ -68,6 +68,9 @@ body.app { --dock-h: var(--dock-desk, 200px); }
   body.app:not([data-step='bench']) { --dock-h: calc(72px + env(safe-area-inset-bottom)); }
   /* Product (P2-17): no sticky CTA or toolbar; bottom panel ~200 tall (toast above it), borrowed serial drawer at the bottom */
   body.app[data-step='product'] { --dock-h: 200px; --m-tb: 0px; }
+  /* H-07 lesson: 3D keeps the top ~280px, the step panel (the dock's peek band) takes the rest; the lesson panel replaces the checkpoint banner */
+  body.app[data-step='bench'][data-lesson] { --m-peek: max(300px, calc(100dvh - var(--top-h) - var(--m-tb) - 280px)); }
+  body.app[data-step='bench'][data-lesson] #cpBanner { display: none; }
   /* Slider in the property drawer: track 8, thumb 28 (finger-sized) */
   #props input[type='range'] { -webkit-appearance: none; appearance: none; height: 32px; background: transparent; }
   #props input[type='range']::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: var(--line); }
