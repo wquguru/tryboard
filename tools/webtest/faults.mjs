@@ -119,6 +119,8 @@ async function runOwn(page, bin) {
 const levels = JSON.parse(fs.readFileSync(path.join(root, 'firmware/levels.json'), 'utf8')).filter((l) => l.fault);
 report('3–5 fault checkpoints in levels.json', levels.length >= 3 && levels.length <= 5, levels.map((l) => l.id).join(' '));
 const page = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 page.on('pageerror', (e) => errors.push(`${e}`));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 // Fresh profile: no saved switches, every bench starts as found

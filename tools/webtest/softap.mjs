@@ -61,6 +61,8 @@ async function clickTab(page, name) {
 }
 async function newPage(w, h, mobile) {
   const p = await browser.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await p.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   await p.setViewport({ width: w, height: h, deviceScaleFactor: 1, isMobile: !!mobile, hasTouch: !!mobile });
   p.on('pageerror', (e) => errors.push(`${e}`));
   p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

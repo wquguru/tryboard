@@ -82,6 +82,8 @@ const sampleQr = (page) =>
 
 // ---- 1. Weather bench, press BOOT so the link carries a run record
 const page = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 watch(page, 'card');
 await page.goto(base + '/app?work=blank&example=weather#bench', { waitUntil: 'load' });
 report('bench weather runs live', await waitFor(page, () => /T=23\.50 C/.test(document.getElementById('console').textContent), null, 30000));
@@ -129,6 +131,8 @@ report('Escape closes the dialog', await waitFor(page, () => !document.getElemen
 // ---- 4. The decoded link opens the same bench and replays BOOT
 const ctx2 = await browser.createBrowserContext();
 const p2 = await ctx2.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await p2.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 watch(p2, 'open');
 await p2.goto(decoded.startsWith('http') ? decoded : base + '/app', { waitUntil: 'load' });
 report('decoded link replays BOOT (serial UNIT F)', await waitFor(p2, () => document.getElementById('console')?.textContent.includes('UNIT F'), null, 40000));
@@ -136,6 +140,8 @@ await ctx2.close();
 
 // ---- 5. Phone 390×844: dialog fits, buttons ≥ 44 px
 const ph = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await ph.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 watch(ph, 'phone');
 await ph.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 await ph.goto(base + '/app?work=blank&example=weather#bench', { waitUntil: 'load' });

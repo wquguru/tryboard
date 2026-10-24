@@ -41,6 +41,8 @@ const browser = await puppeteer.launch({
   args: ['--use-angle=metal', '--enable-gpu'],
 });
 const page = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 await page.setViewport({ width: 1440, height: 900 });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e).slice(0, 200)));
@@ -61,6 +63,8 @@ const window5 = async () => {
 };
 const fg = await window5();
 const blank = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await blank.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 await blank.bringToFront();
 await sleep(300);
 const vis = await page.evaluate(() => ({ hidden: document.hidden, state: document.visibilityState }));

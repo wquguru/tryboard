@@ -46,6 +46,8 @@ async function waitFor(page, fn, arg, ms = 30000) {
 }
 async function open(url) {
   const page = await browser.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   page.on('pageerror', (e) => errors.push(`${url}: ${e}`));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`${url}: ${m.text()}`); });
   await page.goto(base + url, { waitUntil: 'load' });

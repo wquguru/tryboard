@@ -48,6 +48,8 @@ async function waitFor(page, fn, arg, ms = 15000) {
 }
 const errors = [];
 const page = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 page.on('pageerror', (e) => errors.push(String(e)));
 // With self-hosted fonts the site must not reach external hosts (fonts.googleapis / gstatic and the like)
 const external = [];

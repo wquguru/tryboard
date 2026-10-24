@@ -24,12 +24,16 @@ const browser = await puppeteer.launch({ executablePath: '/Applications/Google C
 // --prewarm: open and close one lab page first, like perf.mjs's earlier rows
 if (argv.includes('--prewarm')) {
   const p0 = await browser.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await p0.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   await p0.goto(`http://localhost:${server.address().port}/app?work=blank&example=weather#bench`, { waitUntil: 'load' });
   await new Promise((r) => setTimeout(r, +(process.env.PREWARM_MS ?? 4000)));
   await p0.close();
   await new Promise((r) => setTimeout(r, +(process.env.PREWARM_GAP ?? 0)));
 }
 const page = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 await page.setViewport(argv.includes('--mobile') ? { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { width: 1440, height: 900 });
 const cdp = await page.createCDPSession();
 // --mobile: same 390×844 viewport and 4× CPU throttle as perf.mjs's mobile rows

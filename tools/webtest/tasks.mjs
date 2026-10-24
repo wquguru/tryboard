@@ -53,6 +53,8 @@ const us = (c) => {
 
 async function one(example, want, { ready = 'TRYBOARD_OK', args = [] } = {}) {
   const page = await browser.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   page.on('pageerror', (e) => errors.push(`${example}: ${e}`));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`${example}: ${m.text()}`); });
   await page.goto(`${base}/app?work=blank&example=${example}&debug=1#bench`, { waitUntil: 'load' });
@@ -116,6 +118,8 @@ await one('s3-lvgl', (cores) => cores.length === 2 && cores.flat().includes('tas
 // Phone 390×844: the drawer reaches Tasks, no horizontal page scroll
 {
   const page = await browser.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   page.on('pageerror', (e) => errors.push(`phone: ${e}`));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`phone: ${m.text()}`); });

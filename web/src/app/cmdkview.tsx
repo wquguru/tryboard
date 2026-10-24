@@ -11,7 +11,7 @@ export const view = createStore<{ open: boolean; node: ReactNode }>({ open: fals
 export function CmdkBox() {
   const { open } = useStore(view);
   return (
-    <div role="search" className="cmdk flex h-8 w-[200px] flex-none max-[1500px]:w-[160px] items-center rounded-lg border border-line bg-field focus-within:border-accent focus-within:bg-surface max-[1100px]:hidden">
+    <div role="search" className="cmdk flex h-8 w-[200px] flex-none max-[1500px]:w-[100px] items-center rounded-lg border border-line bg-field focus-within:border-accent focus-within:bg-surface max-[1100px]:hidden">
       <input
         id="cmdk"
         type="search"

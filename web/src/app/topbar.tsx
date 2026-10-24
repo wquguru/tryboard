@@ -1,6 +1,6 @@
 // Lab v2 top bar (DESIGN_V2 §3, §4): breadcrumb + work switch, saved state, undo / redo, steps, ⌘K, run state, firmware, ⋯ menu.
 // Data comes from chrome.ts (bc); actions are registered by main.tsx / the bench and buttons grey out until they are.
-import { BeginnerSwitch, LessonHead } from "./lesson";
+import { BeginnerSwitch, LessonHead, lessonUi } from "./lesson";
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '../ui/cn';
@@ -440,6 +440,8 @@ export function TopBar(p: { step: StepId; workName: string; bare?: boolean; righ
   const { undo, redo } = useStore(bc);
   // Shop has its own BOM history too (U-14): undo / redo work on these two steps
   const bench = p.step === 'bench';
+  // A beginner lesson takes the step bar's place and hides search and the network switches (H-01); the Assemble chip still moves on
+  const lesson = useStore(lessonUi).lesson && bench && !p.bare;
   const undoable = bench || p.step === 'shop';
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
   return (
@@ -461,12 +463,14 @@ export function TopBar(p: { step: StepId; workName: string; bare?: boolean; righ
       </div>
       {/* Container query: longer locales squeeze the step bar, so idle step labels drop before anything overlaps */}
       <div className="@container flex min-w-0 flex-1 items-center justify-center-safe overflow-hidden">
-        {bench && !p.bare && <LessonHead />}
-        <StepBar step={p.step} />
+        {lesson ? <LessonHead /> : <StepBar step={p.step} />}
       </div>
-      <CmdkBox />
-      {!p.bare && bench && <NetCondChip />}
-      {!p.bare && bench && <RealnetSwitch />}
+      {/* Hidden, not unmounted: createCmdk binds the #cmdk input once */}
+      <div className={lesson ? 'hidden' : 'contents'}>
+        <CmdkBox />
+      </div>
+      {!p.bare && bench && !lesson && <NetCondChip />}
+      {!p.bare && bench && !lesson && <RealnetSwitch />}
       {!p.bare && <RunGroup bench={bench} />}
       <FwMenu />
       {p.right}

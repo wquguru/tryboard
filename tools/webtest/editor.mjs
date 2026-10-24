@@ -11,9 +11,11 @@ const server = http.createServer((req, res) => { const u = decodeURIComponent(ne
 await new Promise((r) => server.listen(0, r));
 const browser = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', defaultViewport: { width: 1440, height: 900 } });
 const page = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 const errs = []; page.on('pageerror', (e) => errs.push(String(e)));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-await page.evaluateOnNewDocument(() => localStorage.clear());
+await page.evaluateOnNewDocument(() => { localStorage.clear(); localStorage.setItem('tb-beginner', '0'); });
 await page.goto(`http://localhost:${server.address().port}/app?work=blank&example=blink#bench`, { waitUntil: 'load' });
 await page.waitForFunction(() => !!globalThis.__tbApp?.hist, { timeout: 30000 });
 await sleep(1000);

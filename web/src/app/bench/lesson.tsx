@@ -1,5 +1,5 @@
 // Bench section: beginner mode (PLAN H-01). Picks the lesson for the current checkpoint and keeps `lessonUi` in step.
-// Off, or no lesson for this checkpoint: the store is cleared and the bench draws exactly what it drew before.
+// Off, phone (H-07), or no lesson here: the store is cleared and the bench draws exactly what it drew before.
 import { t } from "../../i18n";
 import { type ReactNode } from "react";
 import { type Level } from "../../checks";
@@ -15,9 +15,13 @@ export function mountLesson(b: BenchCtx) {
   /** The left-column lesson card for checkpoint `id`, or null (store cleared) when the normal card should show. */
   function lessonCard(id: string | null, l: Level | undefined): ReactNode | null {
     const c = b.ctx!;
-    const lesson = id && !c.custom && beginnerOn() ? lessonFor(c.work.id, id) : null;
+    const lesson = id && !c.custom && beginnerOn() && !isPhone() ? lessonFor(c.work.id, id) : null;
+    const had = !!lessonUi.get().lesson;
     if (!lesson || !l) {
-      if (lessonUi.get().lesson) setLessonUi({ lesson: null });
+      if (had) {
+        setLessonUi({ lesson: null });
+        b.setToolGroups(c);
+      }
       return null;
     }
     const n = lesson.steps.length;
@@ -44,10 +48,12 @@ export function mountLesson(b: BenchCtx) {
         }),
       openChecks: () => setDock({ tab: "checks", collapsed: false }),
     });
+    // The left card is drawn after the bench's first toolbar pass, so the short toolbar follows from here
+    if (!had) b.setToolGroups(c);
     return <LessonSteps />;
   }
 
-  /** The short beginner toolbar shows while a lesson is up, desktop only (phones keep their bar until H-07). */
-  b.lessonTools = () => !!lessonUi.get().lesson && !isPhone();
+  /** The short beginner toolbar shows while a lesson is up; lessons are desktop only until H-07. */
+  b.lessonTools = () => !!lessonUi.get().lesson;
   b.lessonCard = lessonCard;
 }

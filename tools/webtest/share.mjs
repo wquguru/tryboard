@@ -71,6 +71,8 @@ print(check.fingerprint(out, check.canonical_report(err)))`, out, err], { encodi
 
 // ---- 1. Sharer: act on the web page, then pause
 const page = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 page.on('pageerror', (e) => errors.push(`sharer: ${e}`));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(`sharer: ${m.text()}`); });
 await page.goto(base + '/app?work=blank&example=weather#bench', { waitUntil: 'load' });
@@ -109,6 +111,8 @@ report('link carries v1 state with firmware, run and BOOT / temperature actions'
 // ---- 3. Viewer: open the link in a fresh browser context (no shared storage)
 const ctx2 = await browser.createBrowserContext();
 const view = await ctx2.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await view.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 view.on('pageerror', (e) => errors.push(`viewer: ${e}`));
 view.on('console', (m) => { if (m.type() === 'error') errors.push(`viewer: ${m.text()}`); });
 await view.goto(sh.url, { waitUntil: 'load' });
@@ -143,6 +147,8 @@ report('viewer replay and CLI replay fingerprints match', web.fingerprint === c.
 
 // ---- 6. A damaged link opens the default bench with a toast, no crash
 const bad = await ctx2.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await bad.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 bad.on('pageerror', (e) => errors.push(`bad link: ${e}`));
 await bad.goto(base + '/app?s=AAAA_not-a-link#bench', { waitUntil: 'load' });
 const badToast = await waitFor(bad, () => /damaged/.test(document.getElementById('toast')?.textContent ?? ''), null, 20000);
@@ -153,6 +159,8 @@ await ctx2.close();
 const OWN = path.join(root, 'firmware/build/button/flash.bin');
 const ctx3 = await browser.createBrowserContext();
 const own = await ctx3.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await own.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 own.on('pageerror', (e) => errors.push(`file sharer: ${e}`));
 own.on('console', (m) => { if (m.type() === 'error') errors.push(`file sharer: ${m.text()}`); });
 await own.goto(base + '/app?work=blank&example=weather#bench', { waitUntil: 'load' });
@@ -195,6 +203,8 @@ await ctx3.close();
 async function openFile(buf, how, tag) {
   const c = await browser.createBrowserContext();
   const p = await c.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await p.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   p.on('pageerror', (e) => errors.push(`${tag}: ${e}`));
   p.on('console', (m) => { if (m.type() === 'error') errors.push(`${tag}: ${m.text()}`); });
   await p.goto(base + '/app#bench', { waitUntil: 'load' });

@@ -67,6 +67,8 @@ async function open(url) {
   // A fresh context each time: no progress left in local storage by the previous round
   const ctx = await browser.createBrowserContext();
   const page = await ctx.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   page.on('pageerror', (e) => errors.push(`${url}: ${e}`));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`${url}: ${m.text()}`); });
   await page.goto(base + url, { waitUntil: 'load' });

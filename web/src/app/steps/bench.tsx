@@ -32,7 +32,6 @@ import { mountHeat } from "../bench/heat";
 import { mountCards } from "../bench/cards";
 import { mountDebug } from "../bench/debug";
 import { mountLesson } from "../bench/lesson";
-import { lessonUi } from "../lesson";
 import { onBeginner } from "../../beginner";
 
 export { ownCount, ownFirmware, passedCount, requestAllRef, restoreChecks } from "../bench/progress";
@@ -176,16 +175,13 @@ export function benchStep(): StepImpl {
         actions.runAllRef?.();
       }
       unsubs = [
-        // Beginner mode on / off (H-01): leave hidden tools first, then redraw the left card; the toolbar follows the lesson
+        // Beginner mode on / off (H-01): leave hidden tools first, then redraw the left card and the toolbar
         onBeginner((on) => {
           if (on && (b.meter || b.ruler || b.wiring)) b.onTool("select");
           b.beginnerMore = false;
           b.renderLeft();
           b.setToolGroups(c);
         }),
-        lessonUi.subscribe((s, prev) => {
-          if (!s.lesson !== !prev.lesson) b.setToolGroups(c);
-        }, ["lesson"]),
         // Firmware's I2C pads arrive at run time: re-run the wiring check for the SDA / SCL hint (W8)
         c.session.onI2cFw(() => {
           b.recheckWiring();

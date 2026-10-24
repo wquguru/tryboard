@@ -167,14 +167,14 @@ export function LessonHead() {
   if (!l) return null;
   const n = l.steps.length;
   return (
-    <div id="lessonTitle" className="flex min-w-0 flex-none items-center gap-2.5 pr-2">
+    <div id="lessonTitle" className="flex min-w-0 items-center gap-2.5 px-2">
       <span className="truncate text-[14px] font-bold">{t("Lesson {n} · {title}", { n: l.no, title: l.title })}</span>
-      <span className="flex gap-1" role="img" aria-label={t("Step progress {n}/{total}", { n: Math.min(s.step + 1, n), total: n })}>
+      <span className="flex flex-none gap-1" role="img" aria-label={t("Step progress {n}/{total}", { n: Math.min(s.step + 1, n), total: n })}>
         {l.steps.map((st, i) => (
-          <span key={st.id} className={cn("h-1 w-5 rounded-sm", i <= s.step ? "bg-accent-strong" : "bg-line")} />
+          <span key={st.id} className={cn("h-1 w-3 rounded-sm", i <= s.step ? "bg-accent-strong" : "bg-line")} />
         ))}
       </span>
-      <span className="font-mono text-[12px] text-muted">{`${Math.min(s.step + 1, n)}/${n}`}</span>
+      <span className="flex-none font-mono text-[12px] text-muted">{`${Math.min(s.step + 1, n)}/${n}`}</span>
     </div>
   );
 }
@@ -196,7 +196,7 @@ export function BeginnerSwitch() {
       aria-checked={on}
       title={on ? t("Beginner mode: on (click for the full bench)") : t("Beginner mode: off (click for lesson steps)")}
       onClick={() => setBeginner(!on)}
-      className="flex h-8 flex-none cursor-pointer items-center gap-2 rounded-lg border-0 bg-transparent px-1.5 text-[13px] text-fg hover:bg-field"
+      className="flex h-8 flex-none cursor-pointer items-center gap-2 rounded-lg border-0 bg-transparent px-1.5 text-[13px] text-fg hover:bg-field max-[1500px]:px-0.5"
     >
       <span aria-hidden="true" className={cn("relative inline-block h-5 w-[34px] rounded-full transition-colors", on ? "bg-accent-strong" : "bg-line")}>
         <span className={cn("absolute top-0.5 size-4 rounded-full bg-white transition-[left]", on ? "left-4" : "left-0.5")} />

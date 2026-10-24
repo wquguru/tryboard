@@ -75,6 +75,8 @@ const diff = (a, b) => { const i = [...a].findIndex((c, k) => c !== b[k]); retur
 // ---- 1. Host page loads the poster: no wasm, firmware or three.js yet
 const ctx = await browser.createBrowserContext();
 const page = await ctx.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 const reqs = [];
 page.on('request', (r) => reqs.push(r.url()));
 page.on('pageerror', (e) => errors.push(`host: ${e}`));
@@ -158,6 +160,8 @@ if (app) {
 
 // ---- 7b. F-03b paced replay (&replay=1): sim time starts from 0, BOOT / heat land at their own time, the end state equals the fast-forward
 const pp = await ctx.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await pp.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 pp.on('pageerror', (e) => errors.push(`paced: ${e}`));
 pp.on('console', (m) => { if (m.type() === 'error') errors.push(`paced: ${m.text()}`); });
 await pp.goto(embedUrl + '&replay=1', { waitUntil: 'load' });
@@ -213,12 +217,16 @@ await pp.close();
 
 // ---- 8. Damaged link: message and a link home, no crash
 const bad = await ctx.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await bad.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 bad.on('pageerror', (e) => errors.push(`bad: ${e}`));
 await bad.goto(base + '/embed?s=AAAA_not-a-link', { waitUntil: 'load' });
 report('damaged link -> error message', await waitFor(bad, () => document.body.dataset.state === 'error' && !!document.getElementById('embedOpen'), null, 10000));
 
 // ---- 9. Phone width: no horizontal scroll in the poster or the run view
 const m = await ctx.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await m.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 await m.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
 await m.goto(embedUrl, { waitUntil: 'load' });
 await waitFor(m, () => document.body.dataset.state === 'poster', null, 10000);

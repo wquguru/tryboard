@@ -48,6 +48,8 @@ async function waitFor(page, fn, arg, ms = 30000) {
 const shot = (page, name) => page.screenshot({ path: path.join(outDir, `asm3d-${name}.png`) });
 
 const page = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 page.on('pageerror', (e) => errors.push(`${e}`));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 const cdp = await page.createCDPSession();
@@ -194,6 +196,8 @@ await shot(page, 'rebuilt');
 
 // SVG fallback
 const p2 = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await p2.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 p2.on('pageerror', (e) => errors.push(`svg: ${e}`));
 await p2.goto(`${base}/app?work=weather&asm=svg#assemble`, { waitUntil: 'load' });
 const svgOk = await waitFor(p2, () => !!document.querySelector('.asm-shell svg [data-part="shell"]'), null, 30000);
@@ -207,6 +211,8 @@ await p2.close();
 // then the 3D product's strike follows the relay (a whitelisted card opens it for 3 s)
 {
   const p3 = await browser.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await p3.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   p3.on('pageerror', (e) => errors.push(`door: ${e}`));
   p3.on('console', (m) => { if (m.type() === 'error') errors.push(`door: ${m.text()}`); });
   await p3.goto(`${base}/app?work=door#bench`, { waitUntil: 'load' });
@@ -282,6 +288,8 @@ await p2.close();
 // passes; then a real click on key 3 of the 3D remote sends ir=FF00,A15E and the strip turns blue
 {
   const p4 = await browser.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await p4.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   await p4.setViewport({ width: 1280, height: 860 });
   p4.on('pageerror', (e) => errors.push(`irlamp: ${e}`));
   p4.on('console', (m) => { if (m.type() === 'error') errors.push(`irlamp: ${m.text()}`); });
@@ -361,6 +369,8 @@ await p2.close();
 // fails the retest; by the vents -> passes; then the 3D tablet shows the readings and its interval=2 button changes the interval
 {
   const p5 = await browser.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await p5.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   await p5.setViewport({ width: 1280, height: 860 });
   p5.on('pageerror', (e) => errors.push(`cloud: ${e}`));
   p5.on('console', (m) => { if (m.type() === 'error') errors.push(`cloud: ${m.text()}`); });
@@ -432,6 +442,8 @@ await p2.close();
 // is dropped and the retest fails; seated on the collar -> passes; then the 3D Dial in its stand turns with a real mouse drag
 {
   const p6 = await browser.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await p6.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   await p6.setViewport({ width: 1280, height: 860 });
   p6.on('pageerror', (e) => errors.push(`dialtimer: ${e}`));
   p6.on('console', (m) => { if (m.type() === 'error') errors.push(`dialtimer: ${m.text()}`); });
@@ -502,6 +514,8 @@ await p2.close();
 // weight in the foot passes; then a real mouse swipe on the 3D screen turns the page and a click on the 3D phone sets the time
 {
   const p7 = await browser.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await p7.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   await p7.setViewport({ width: 1280, height: 860 });
   p7.on('pageerror', (e) => errors.push(`amoclock: ${e}`));
   p7.on('console', (m) => { if (m.type() === 'error') errors.push(`amoclock: ${m.text()}`); });
