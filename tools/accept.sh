@@ -73,7 +73,8 @@ for t in json.load(open(f'{root}/firmware/accept.json')):
         m = re.search(rf"GPIO{g['pin']} toggled (\d+) times", err)
         n = int(m.group(1)) if m else 0
         notes.append(f"GPIO{g['pin']} toggled {n} times")
-        if n < g['min']: missing.append('gpio')
+        # max (optional) bounds the toggle rate from above, so a 100 ms vs 1000 ms blink can be told apart
+        if n < g['min'] or n > g.get('max', 10**9): missing.append('gpio')
     pw = t.get('pwm')
     if pw:
         m = re.search(r'PWM GPIO\d+: (\d+) changes, duty ([\d.]+)\.\.([\d.]+), freq ([\d.]+)Hz', err)
