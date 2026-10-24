@@ -94,7 +94,7 @@ export const LESSONS: Lesson[] = [
         body: t('Two jumper wires close the circuit into a loop: GPIO5 → resistor → LED → GND. The LED only lights when current can go all the way round. Turn on "Show current" to see the path.'),
         tasks: [t('Turn on "Show current"'), t('Pull out the black wire and see what happens to the current')],
         callouts: pick('gpio', 'res', 'gnd'),
-        codeLines: [14],
+        codeLines: [18],
       },
       {
         id: 'run',
@@ -103,7 +103,7 @@ export const LESSONS: Lesson[] = [
         body: t('Click "Run": every 0.5 s the code switches GPIO5 between high and low, and the LED blinks along. The highlighted line is the one that just ran.'),
         tasks: [t('Click "Run"'), t('Check: every blink matches one gpio_set_level call')],
         callouts: pick('gpio', 'led'),
-        codeLines: [18],
+        codeLines: [22],
       },
       {
         id: 'tweak',
@@ -112,8 +112,8 @@ export const LESSONS: Lesson[] = [
         body: t('Change the delay from 500 to 100 and the LED blinks faster. Change one number, see the result right away: that is how you will work on your own projects too.'),
         tasks: [t('Change 500 to 100'), t('Try 1000 and watch again')],
         callouts: pick('led'),
-        codeLines: [21],
-        codeChips: { line: 21, values: [100, 500, 1000], current: 500 },
+        codeLines: [25],
+        codeChips: { line: 25, values: [100, 500, 1000], current: 500 },
       },
     ],
   },

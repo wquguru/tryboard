@@ -50,7 +50,13 @@ test('highlighted code lines contain the calls the step talks about', () => {
     for (const s of l.steps) {
       for (const n of s.codeLines ?? []) assert.ok(n >= 1 && n <= lines.length, `${s.id}: line ${n}`);
       if (want[s.id]) assert.ok(s.codeLines?.some((n) => lines[n - 1].includes(want[s.id])), `${s.id}: ${want[s.id]} on ${s.codeLines}`);
-      if (s.codeChips) assert.ok(lines[s.codeChips.line - 1].includes(`(${s.codeChips.current})`), `${s.id}: chip value ${s.codeChips.current}`);
+      // The chip's line holds the delay either as a literal or as BLINK_MS whose default is the current value (H-06)
+      if (s.codeChips) {
+        const ln = lines[s.codeChips.line - 1];
+        const lit = ln.includes(`(${s.codeChips.current})`);
+        const mac = /\b([A-Z_]+_MS)\b/.exec(ln)?.[1];
+        assert.ok(lit || (mac && lines.some((x) => x.trim() === `#define ${mac} ${s.codeChips!.current}`)), `${s.id}: chip value ${s.codeChips.current}`);
+      }
     }
     for (const [id, call] of Object.entries(want)) assert.ok(l.steps.some((s) => s.id === id), `${id} (${call}) step exists`);
   }

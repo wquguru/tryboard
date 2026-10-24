@@ -1,5 +1,6 @@
 // Workbench shell: routing (?work= + #step), step registry, verdict / next, toast. Switching steps only swaps panels;
 // React draws the shell (DECISIONS 2026-10-17), while the three.js canvas and raw serial text bypass React.
+import { LessonCard } from "./lesson";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { cn } from "../ui/cn";
 import { t } from "../i18n";
@@ -366,7 +367,9 @@ function App() {
               id="propsClose"
               onClose={() => setMui({ props: false })}
             />
-          ) : null
+          ) : (
+            <LessonCard step={step} />
+          )
         }
       />
 
