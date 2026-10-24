@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>实验台引导课模式</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0A6FBD}a:hover{color:#08548F}
+@keyframes tbflow{to{stroke-dashoffset:-28}}
+.tb-flow{animation:tbflow .6s linear infinite}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="min-height: 900px; display: flex; flex-direction: column; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', system-ui, sans-serif; font-size: 13px; line-height: 20px">
+
+<header style="height: 56px; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid #E6E6E6; flex-wrap: wrap">
+  <svg width="28" height="28" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="4" width="56" height="56" rx="14" fill="#0B76C8"></rect><circle cx="20" cy="20" r="5" fill="#fff"></circle><circle cx="32" cy="20" r="5" fill="#fff"></circle><circle cx="20" cy="32" r="5" fill="#fff"></circle><circle cx="32" cy="32" r="5" fill="#fff"></circle><circle cx="44" cy="32" r="5" fill="#fff"></circle><circle cx="20" cy="44" r="5" fill="#fff"></circle><circle cx="32" cy="44" r="5" fill="#fff"></circle><circle cx="44" cy="44" r="5" fill="#fff"></circle><circle cx="44" cy="20" r="6" fill="#FFB020"></circle></svg>
+  <div style="display: flex; align-items: baseline; gap: 6px"><a href="#" style="text-decoration: none">作品</a><span style="color: #5E5E5E">/</span><span style="font-weight: 500">桌面气象站</span></div>
+  <div style="flex: 1 1 320px; display: flex; align-items: center; justify-content: center; gap: 12px; min-width: 0">
+    <span style="font-weight: 700; font-size: 15px">第 1 关 · 点亮一颗 LED</span>
+    <div style="display: flex; gap: 4px" aria-label="步骤进度">
+      <sc-for list="{{ steps }}" as="s" hint-placeholder-count="5"><span style="{{ s.barStyle }}"></span></sc-for>
+    </div>
+    <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #5E5E5E">{{ stepNo }}/5</span>
+  </div>
+  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; min-height: 44px">
+    <span style="width: 34px; height: 20px; border-radius: 10px; background: #0B76C8; position: relative; display: inline-block"><span style="position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; border-radius: 8px; background: #fff"></span></span>
+    <span>新手模式</span>
+    <input type="checkbox" defaultChecked="{{ true }}" style="position: absolute; opacity: 0; width: 1px; height: 1px">
+  </label>
+  <button style="height: 32px; padding: 0 12px; border: 1px solid #E6E6E6; background: #fff; border-radius: 8px; color: #1E1E1E">中文</button>
+</header>
+
+<div style="flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 0; min-height: 0">
+
+  <nav aria-label="本关步骤" style="flex: 1 0 232px; max-width: 260px; border-right: 1px solid #E6E6E6; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box">
+    <div style="font-size: 11px; font-weight: 500; color: #5E5E5E; padding: 0 8px 8px">本关 5 步 · 约 8 分钟</div>
+    <sc-for list="{{ steps }}" as="s" hint-placeholder-count="5">
+      <button onClick="{{ s.go }}" style="{{ s.rowStyle }}">
+        <span style="{{ s.dotStyle }}">{{ s.mark }}</span>
+        <span style="display: flex; flex-direction: column; align-items: flex-start; text-align: left"><span style="font-weight: 500">{{ s.title }}</span><span style="font-size: 12px; line-height: 16px; color: #5E5E5E">{{ s.sub }}</span></span>
+      </button>
+    </sc-for>
+    <div style="margin-top: auto; padding: 12px; border-radius: 12px; background: #F7F7F7; display: flex; flex-direction: column; gap: 4px">
+      <span style="font-size: 11px; font-weight: 500; color: #5E5E5E">做完这关</span>
+      <span>解锁第 2 关「按一下就亮」</span>
+      <span style="font-size: 12px; color: #5E5E5E">本关要买：LED、220 Ω 电阻（约 ¥7–18）</span>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; background: radial-gradient(120% 90% at 50% 40%, #FFFFFF, #ECEFF3); position: relative; padding: 16px; box-sizing: border-box; gap: 12px">
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap">
+      <span style="font-size: 12px; color: #5E5E5E">卡片说的是「它是干什么的」；点零件看规格</span>
+      <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #5E5E5E">{{ clock }}</span>
+    </div>
+    <div style="position: relative; width: 100%; max-width: 860px; margin: 0 auto; aspect-ratio: 760 / 540">
+      <svg viewBox="0 0 760 540" style="position: absolute; inset: 0; width: 100%; height: 100%" role="img" aria-label="ESP32-S3 开发板插在面包板上，GPIO5 经 220 欧电阻接 LED，再回到 GND">
+        <defs>
+          <pattern id="holes" width="16" height="16" patternUnits="userSpaceOnUse"><rect x="6" y="6" width="4" height="4" rx="1" fill="#A8A397"></rect></pattern>
+          <radialGradient id="glow"><stop offset="0" stop-color="#FF4D4F" stop-opacity=".9"></stop><stop offset="1" stop-color="#FF4D4F" stop-opacity="0"></stop></radialGradient>
+        </defs>
+        <rect x="60" y="200" width="640" height="220" rx="10" fill="#F4F2EC" stroke="#D8D4CA"></rect>
+        <rect x="72" y="214" width="616" height="84" fill="url(#holes)"></rect>
+        <rect x="72" y="320" width="616" height="84" fill="url(#holes)"></rect>
+        <rect x="60" y="302" width="640" height="14" fill="#E4E0D5"></rect>
+        <rect x="86" y="235" width="304" height="150" rx="6" fill="#1F2328"></rect>
+        <rect x="86" y="268" width="20" height="84" fill="#2C3138"></rect>
+        <rect x="114" y="258" width="124" height="104" rx="3" fill="#C9CDD2" stroke="#9AA1A9"></rect>
+        <text x="176" y="306" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#3D434A">ESP32-S3</text>
+        <text x="176" y="324" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="#5E646B">WROOM-1</text>
+        <rect x="372" y="296" width="30" height="28" rx="4" fill="#9AA1A9"></rect>
+        <rect x="262" y="290" width="40" height="40" rx="3" fill="#2E343B"></rect>
+        <g fill="#D4A72C"><circle cx="120" cy="243" r="3"></circle><circle cx="136" cy="243" r="3"></circle><circle cx="152" cy="243" r="3"></circle><circle cx="168" cy="243" r="3"></circle><circle cx="184" cy="243" r="3"></circle><circle cx="200" cy="243" r="3"></circle><circle cx="216" cy="243" r="3"></circle><circle cx="232" cy="243" r="3"></circle><circle cx="248" cy="243" r="4" fill="#FFB020"></circle><circle cx="264" cy="243" r="3"></circle><circle cx="280" cy="243" r="3"></circle><circle cx="296" cy="243" r="3"></circle><circle cx="312" cy="243" r="3"></circle><circle cx="328" cy="243" r="3"></circle><circle cx="344" cy="243" r="3"></circle><circle cx="360" cy="243" r="3"></circle>
+        <circle cx="120" cy="377" r="3"></circle><circle cx="136" cy="377" r="4" fill="#FFB020"></circle><circle cx="152" cy="377" r="3"></circle><circle cx="168" cy="377" r="3"></circle><circle cx="184" cy="377" r="3"></circle><circle cx="200" cy="377" r="3"></circle><circle cx="216" cy="377" r="3"></circle><circle cx="232" cy="377" r="3"></circle><circle cx="248" cy="377" r="3"></circle><circle cx="264" cy="377" r="3"></circle><circle cx="280" cy="377" r="3"></circle><circle cx="296" cy="377" r="3"></circle><circle cx="312" cy="377" r="3"></circle><circle cx="328" cy="377" r="3"></circle><circle cx="344" cy="377" r="3"></circle><circle cx="360" cy="377" r="3"></circle></g>
+        <text x="248" y="232" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="#3D434A">5</text>
+        <text x="136" y="397" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="#3D434A">G</text>
+        <line x1="440" y1="263" x2="544" y2="263" stroke="#8A8F96" stroke-width="2"></line>
+        <rect x="470" y="256" width="44" height="14" rx="7" fill="#E8D3A8"></rect>
+        <rect x="480" y="256" width="4" height="14" fill="#C4361A"></rect><rect x="489" y="256" width="4" height="14" fill="#C4361A"></rect><rect x="498" y="256" width="4" height="14" fill="#6B3E1E"></rect><rect x="506" y="256" width="3" height="14" fill="#C9A227"></rect>
+        <line x1="594" y1="258" x2="594" y2="292" stroke="#8A8F96" stroke-width="2"></line>
+        <line x1="608" y1="258" x2="608" y2="286" stroke="#8A8F96" stroke-width="2"></line>
+        <circle cx="601" cy="244" r="40" fill="url(#glow)" opacity="{{ glowOp }}"></circle>
+        <path d="M587 258 v-14 a14 14 0 0 1 28 0 v14 z" fill="{{ ledFill }}"></path>
+        <rect x="584" y="256" width="34" height="5" rx="2" fill="{{ ledFill }}"></rect>
+        <path d="M248 243 C 262 165, 420 165, 440 263" fill="none" stroke="#F08C2E" stroke-width="5" stroke-linecap="round"></path>
+        <path d="M544 263 L 594 263 L 594 292" fill="none" stroke="#F08C2E" stroke-width="4" stroke-linecap="round"></path>
+        <path d="M608 286 C 650 470, 180 470, 136 377" fill="none" stroke="#2B2B2B" stroke-width="5" stroke-linecap="round"></path>
+        <g opacity="{{ flowOp }}">
+          <path class="tb-flow" d="M248 243 C 262 165, 420 165, 440 263 L 544 263 L 594 263 L 594 292 M608 286 C 650 470, 180 470, 136 377" fill="none" stroke="#0D99FF" stroke-width="3" stroke-dasharray="8 6" stroke-linecap="round"></path>
+        </g>
+        <g stroke="#0D99FF" stroke-width="1.5" stroke-dasharray="4 4" fill="none">
+          <line x1="105" y1="88" x2="170" y2="300" opacity="{{ op.chip }}"></line>
+          <line x1="300" y1="88" x2="248" y2="238" opacity="{{ op.gpio }}"></line>
+          <line x1="520" y1="88" x2="396" y2="300" opacity="{{ op.usb }}"></line>
+          <line x1="470" y1="164" x2="492" y2="252" opacity="{{ op.res }}"></line>
+          <line x1="660" y1="164" x2="604" y2="226" opacity="{{ op.led }}"></line>
+          <line x1="150" y1="452" x2="136" y2="384" opacity="{{ op.gnd }}"></line>
+        </g>
+        <g fill="#0D99FF">
+          <circle cx="170" cy="300" r="4" opacity="{{ op.chip }}"></circle><circle cx="248" cy="238" r="4" opacity="{{ op.gpio }}"></circle><circle cx="396" cy="300" r="4" opacity="{{ op.usb }}"></circle><circle cx="492" cy="252" r="4" opacity="{{ op.res }}"></circle><circle cx="604" cy="226" r="4" opacity="{{ op.led }}"></circle><circle cx="136" cy="384" r="4" opacity="{{ op.gnd }}"></circle>
+        </g>
+      </svg>
+      <sc-for list="{{ callouts }}" as="c" hint-placeholder-count="3">
+        <div style="{{ c.style }}">
+          <span style="font-weight: 700; font-size: 13px; letter-spacing: .02em">{{ c.title }}</span>
+          <span style="font-size: 12px; line-height: 17px; color: #444">{{ c.body }}</span>
+          <sc-if value="{{ c.hasLive }}" hint-placeholder-val="{{ false }}"><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #0A6FBD">{{ c.live }}</span></sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <div role="toolbar" aria-label="台面" style="margin: 0 auto; display: flex; gap: 8px; align-items: center; padding: 6px; background: rgba(255,255,255,.95); border: 1px solid #E6E6E6; border-radius: 12px; box-shadow: 0 2px 10px #0000000F; flex-wrap: wrap; justify-content: center">
+      <button onClick="{{ toggleRun }}" style="{{ runStyle }}">{{ runLabel }}</button>
+      <button onClick="{{ toggleFlow }}" aria-pressed="{{ flow }}" style="{{ flowStyle }}">看电流</button>
+      <button style="height: 44px; padding: 0 14px; border: 1px solid #E6E6E6; border-radius: 8px; background: #fff; color: #1E1E1E">原理图</button>
+      <button style="height: 44px; padding: 0 14px; border: 1px solid #E6E6E6; border-radius: 8px; background: #fff; color: #1E1E1E">回正视角</button>
+      <a href="#" style="padding: 0 10px; font-size: 12px">更多工具（万用表、示波器…）</a>
+    </div>
+  </main>
+
+  <aside style="flex: 1 1 380px; max-width: 440px; border-left: 1px solid #E6E6E6; padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; background: #fff">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 11px; font-weight: 500; color: #5E5E5E">第 {{ stepNo }} 步</span>
+      <h2 style="margin: 0; font-size: 20px; line-height: 28px">{{ cur.title }}</h2>
+      <p style="margin: 0; font-size: 14px; line-height: 22px; color: #333">{{ cur.body }}</p>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 11px; font-weight: 500; color: #5E5E5E">动手试试</span>
+      <sc-for list="{{ cur.tasks }}" as="t" hint-placeholder-count="2">
+        <div style="display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; background: #F7F7F7">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="#0B76C8" stroke-width="1.6"></circle></svg>
+          <span>{{ t }}</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="border: 1px solid #E6E6E6; border-radius: 12px; overflow: hidden">
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #F7F7F7; border-bottom: 1px solid #E6E6E6">
+        <span style="font-size: 12px; font-weight: 500">main.c</span>
+        <span style="font-size: 12px; color: #5E5E5E">高亮 = 正在执行</span>
+      </div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 20px; padding: 6px 0">
+        <sc-for list="{{ code }}" as="l" hint-placeholder-count="12">
+          <div style="{{ l.style }}">
+            <span style="width: 24px; text-align: right; color: #8C8C8C; flex: 0 0 24px">{{ l.n }}</span>
+            <span style="white-space: pre">{{ l.pre }}</span>
+            <sc-if value="{{ l.chip }}" hint-placeholder-val="{{ false }}">
+              <span style="display: inline-flex; gap: 2px">
+                <sc-for list="{{ delays }}" as="d" hint-placeholder-count="3"><button onClick="{{ d.pick }}" style="{{ d.style }}">{{ d.v }}</button></sc-for>
+              </span>
+            </sc-if>
+            <span style="white-space: pre">{{ l.post }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 11px; font-weight: 500; color: #5E5E5E">代码怎么工作</span>
+      <div style="display: flex; gap: 10px"><span style="flex: 0 0 20px; height: 20px; border-radius: 6px; background: #E5F4FF; color: #0A6FBD; font-size: 12px; text-align: center">1</span><span><code style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #0A6FBD">gpio_set_direction</code> 把 GPIO5 设成「输出」，它才能推动 LED。</span></div>
+      <div style="display: flex; gap: 10px"><span style="flex: 0 0 20px; height: 20px; border-radius: 6px; background: #E5F4FF; color: #0A6FBD; font-size: 12px; text-align: center">2</span><span>循环里 <code style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #0A6FBD">on = !on</code> 每圈翻一次，<code style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #0A6FBD">gpio_set_level</code> 把它写到引脚上。</span></div>
+      <div style="display: flex; gap: 10px"><span style="flex: 0 0 20px; height: 20px; border-radius: 6px; background: #E5F4FF; color: #0A6FBD; font-size: 12px; text-align: center">3</span><span><code style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #0A6FBD">vTaskDelay</code> 等一会儿再翻：这个数就是闪的快慢。100 / 500 / 1000 三个版本已提前编好，点一下就换。</span></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <div style="display: flex; justify-content: space-between"><span style="font-size: 11px; font-weight: 500; color: #5E5E5E">发生了什么</span><a href="#" style="font-size: 12px">看原始串口</a></div>
+      <sc-if value="{{ hasEvents }}" hint-placeholder-val="{{ false }}">
+        <sc-for list="{{ events }}" as="e" hint-placeholder-count="3">
+          <div style="display: flex; gap: 10px; font-size: 12px"><span style="font-family: 'JetBrains Mono', monospace; color: #5E5E5E; flex: 0 0 52px">{{ e.t }}</span><span>{{ e.text }}</span></div>
+        </sc-for>
+      </sc-if>
+      <sc-if value="{{ noEvents }}" hint-placeholder-val="{{ true }}"><span style="font-size: 12px; color: #5E5E5E">还没运行。点台面下方的「运行」。</span></sc-if>
+    </div>
+    <div style="margin-top: auto; display: flex; gap: 8px">
+      <button onClick="{{ prev }}" style="flex: 1; height: 44px; border: 1px solid #E6E6E6; border-radius: 8px; background: #fff; color: #1E1E1E; font-size: 14px">上一步</button>
+      <button onClick="{{ next }}" style="flex: 2; height: 44px; border: 0; border-radius: 8px; background: #0B76C8; color: #fff; font-size: 14px; font-weight: 500">{{ nextLabel }}</button>
+    </div>
+  </aside>
+</div>
+
+<footer style="border-top: 1px solid #E6E6E6; padding: 10px 16px; display: flex; gap: 8px; align-items: center; overflow-x: auto">
+  <span style="font-size: 11px; font-weight: 500; color: #5E5E5E; flex: 0 0 auto; padding-right: 8px">零基础 7 关</span>
+  <sc-for list="{{ lessons }}" as="ls" hint-placeholder-count="7">
+    <a href="#" style="{{ ls.style }}">
+      <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #5E5E5E">{{ ls.n }}</span>
+      <span style="display: flex; flex-direction: column"><span style="font-weight: 500; color: #1E1E1E">{{ ls.title }}</span><span style="font-size: 12px; line-height: 16px; color: #5E5E5E">{{ ls.state }}</span></span>
+    </a>
+  </sc-for>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { step: 2, running: false, on: false, flow: false, delay: 500, hl: 0, t: 0, events: [] };
+    this.timer = null;
+  }
+  componentWillUnmount() { this.stop(); }
+  stop() { if (this.timer) { clearInterval(this.timer); this.timer = null; } }
+  start(delay) {
+    this.stop();
+    this.setState({ running: true, on: true, hl: 8, t: 0, events: [{ t: '0.00 s', text: 'LED 亮 · GPIO5 → 高 3.3 V' }] });
+    this.timer = setInterval(() => {
+      const on = !this.state.on;
+      const t = this.state.t + delay / 1000;
+      const ev = { t: t.toFixed(2) + ' s', text: on ? 'LED 亮 · GPIO5 → 高 3.3 V' : 'LED 灭 · GPIO5 → 低 0 V' };
+      this.setState({ on, t, hl: 8, events: [ev].concat(this.state.events).slice(0, 4) });
+      setTimeout(() => { if (this.state.running) this.setState({ hl: 10 }); }, 160);
+    }, delay);
+  }
+  renderVals() {
+    const S = this.state;
+    const STEPS = [
+      { title: '认识开发板', sub: '芯片、USB 口、引脚', body: '这是 ESP32-S3 开发板。它跨在面包板中间那道槽上，每根针脚都连到旁边一列小孔。这一关只用到 GPIO5 和 GND 两个脚。', tasks: ['点一下芯片，看看它有多少个引脚', '转一下视角，找到 USB-C 口'], show: ['chip', 'usb', 'gpio'] },
+      { title: '放上 LED 和电阻', sub: '长脚是正极', body: 'LED 只能单向导电：长脚（正极）朝电阻，短脚朝 GND。电阻挡住多余的电流，220 Ω 让 LED 亮得刚好又不会烧。', tasks: ['点 LED 换个颜色', '点电阻换成 1 kΩ，看看会不会变暗'], show: ['led', 'res'] },
+      { title: '接成一个圈', sub: 'GPIO5 → 电阻 → LED → GND', body: '用两根杜邦线把电路连成一个圈：GPIO5 → 电阻 → LED → GND。电流只有走完整个圈才会让 LED 亮。打开「看电流」看看它怎么走。', tasks: ['打开「看电流」', '把黑线拔掉，看看电流会怎样'], show: ['gpio', 'res', 'gnd'] },
+      { title: '运行代码', sub: '每 0.5 秒翻一次', body: '点「运行」，代码每 0.5 秒把 GPIO5 在高、低之间切换一次，LED 跟着一亮一灭。右边高亮的就是正在执行的那一行。', tasks: ['点「运行」', '对一下：每次亮灭都对应一次 gpio_set_level'], show: ['gpio', 'led'] },
+      { title: '改一改', sub: '让它闪快一点', body: '把延时从 500 换成 100，LED 会闪得更快。这种「改一个数、马上看结果」的手感，就是以后做自己项目时的工作方式。', tasks: ['把 500 换成 100', '换成 1000 再看一遍'], show: ['led'] }
+    ];
+    const CALL = {
+      chip: { x: 16, y: 24, title: 'ESP32-S3 芯片', body: '你写的代码在这里跑' },
+      gpio: { x: 220, y: 24, title: 'GPIO5 引脚', body: '代码让它输出 3.3 V（高）或 0 V（低）' },
+      usb: { x: 430, y: 24, title: 'USB-C 口', body: '接电脑：供电 + 下载代码' },
+      res: { x: 380, y: 100, title: '220 Ω 电阻', body: '限流。不接的话 LED 可能烧掉' },
+      led: { x: 570, y: 100, title: 'LED', body: '长脚接正极；有电流流过就亮' },
+      gnd: { x: 60, y: 452, title: 'GND（地）', body: '电流从这里流回开发板' }
+    };
+    const cur = STEPS[S.step];
+    const show = cur.show;
+    const op = {};
+    Object.keys(CALL).forEach((k) => { op[k] = show.indexOf(k) >= 0 ? 1 : 0; });
+    const callouts = show.map((k) => {
+      const c = CALL[k];
+      const live = S.running && (k === 'gpio' || k === 'led');
+      return {
+        title: c.title, body: c.body, hasLive: live,
+        live: k === 'gpio' ? (S.on ? '现在：高 3.3 V' : '现在：低 0 V') : (S.on ? '现在：亮' : '现在：灭'),
+        style: 'position:absolute;left:' + (c.x / 7.6) + '%;top:' + (c.y / 5.4) + '%;width:23.7%;box-sizing:border-box;padding:8px 10px;background:rgba(255,255,255,.96);border:1px solid #CFE6FA;border-radius:10px;box-shadow:0 2px 10px #0000000F;display:flex;flex-direction:column;gap:2px'
+      };
+    });
+    const steps = STEPS.map((s, i) => {
+      const done = i < S.step, now = i === S.step;
+      return {
+        title: s.title, sub: s.sub, mark: done ? '✓' : String(i + 1),
+        go: () => this.setState({ step: i }),
+        rowStyle: 'display:flex;gap:10px;align-items:flex-start;padding:8px;min-height:44px;border:0;border-radius:8px;cursor:pointer;color:#1E1E1E;background:' + (now ? '#E5F4FF' : 'transparent'),
+        dotStyle: 'flex:0 0 22px;height:22px;border-radius:11px;font-size:12px;line-height:22px;text-align:center;' + (done ? 'background:#E8F7EE;color:#0E7A41' : now ? 'background:#0B76C8;color:#fff' : 'background:#F0F0F0;color:#5E5E5E'),
+        barStyle: 'width:28px;height:4px;border-radius:2px;background:' + (i <= S.step ? '#0B76C8' : '#E6E6E6')
+      };
+    });
+    const hl = S.running ? S.hl : (S.step === 2 ? 4 : S.step === 3 ? 8 : S.step === 4 ? 10 : 0);
+    const RAW = [
+      ['void app_main(void)', '', ''], ['{', '', ''],
+      ['    gpio_reset_pin(LED_GPIO);   // = 5', '', ''],
+      ['    gpio_set_direction(LED_GPIO, OUTPUT);', '', ''],
+      ['    int on = 0;', '', ''], ['    for (;;) {', '', ''],
+      ['        on = !on;', '', ''],
+      ['        gpio_set_level(LED_GPIO, on);', '', ''],
+      ['        printf("LED %s\\n", on ? "ON" : "OFF");', '', ''],
+      ['        vTaskDelay(pdMS_TO_TICKS(', 'chip', '));'],
+      ['    }', '', ''], ['}', '', '']
+    ];
+    const code = RAW.map((r, i) => {
+      const n = i + 1; const lit = n === hl || (n === 3 && hl === 4);
+      return { n: n, pre: r[0], chip: r[1] === 'chip', post: r[2], style: 'display:flex;gap:10px;align-items:center;padding:0 12px 0 0;min-height:20px;' + (lit ? 'background:#E5F4FF;box-shadow:inset 3px 0 0 #0D99FF' : '') };
+    });
+    const delays = [100, 500, 1000].map((v) => ({
+      v: v, pick: () => { this.setState({ delay: v }); if (this.state.running) this.start(v); },
+      style: 'height:20px;padding:0 6px;border-radius:4px;font-family:JetBrains Mono,monospace;font-size:12px;cursor:pointer;border:1px solid ' + (v === S.delay ? '#0B76C8;background:#0B76C8;color:#fff' : '#CFE6FA;background:#fff;color:#0A6FBD')
+    }));
+    const LESS = [['01', '点亮一颗 LED', '进行中 · ' + (S.step + 1) + '/5'], ['02', '按一下就亮', '未开始'], ['03', '小屏幕写字', '未开始'], ['04', '读温湿度', '未开始'], ['05', '舵机表盘', '未开始'], ['06', '装进外壳', '未开始'], ['07', '毕业作品', '三选一']];
+    const lessons = LESS.map((l, i) => ({ n: l[0], title: l[1], state: l[2], style: 'flex:0 0 auto;display:flex;gap:10px;align-items:center;padding:8px 14px;min-height:44px;box-sizing:border-box;border-radius:10px;text-decoration:none;border:1px solid ' + (i === 0 ? '#0D99FF;background:#E5F4FF' : '#E6E6E6;background:#fff') }));
+    const lit = S.running ? S.on : false;
+    return {
+      steps, cur, callouts, op, code, delays, lessons,
+      stepNo: S.step + 1, flow: S.flow,
+      clock: S.running ? ('运行中 · ' + S.t.toFixed(2) + ' s') : '未运行',
+      ledFill: lit ? '#FF4D4F' : '#B4232A', glowOp: lit ? 1 : 0,
+      flowOp: S.flow ? (S.running && !S.on ? 0.2 : 1) : 0,
+      events: S.events, hasEvents: S.events.length > 0, noEvents: S.events.length === 0,
+      runLabel: S.running ? '■ 停止' : '▶ 运行',
+      runStyle: 'height:44px;padding:0 20px;border:0;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;color:#fff;background:' + (S.running ? '#1E1E1E' : '#0B76C8'),
+      flowStyle: 'height:44px;padding:0 14px;border-radius:8px;cursor:pointer;border:1px solid ' + (S.flow ? '#0D99FF;background:#E5F4FF;color:#0A6FBD' : '#E6E6E6;background:#fff;color:#1E1E1E'),
+      toggleRun: () => { if (this.state.running) { this.stop(); this.setState({ running: false, on: false }); } else { this.start(this.state.delay); } },
+      toggleFlow: () => this.setState({ flow: !this.state.flow }),
+      prev: () => this.setState({ step: Math.max(0, this.state.step - 1) }),
+      next: () => this.setState({ step: Math.min(4, this.state.step + 1) }),
+      nextLabel: S.step === 4 ? '完成第 1 关 ✓' : '下一步'
+    };
+  }
+}
+</script>
+</body>
+</html>

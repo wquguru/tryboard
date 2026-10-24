@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>入门课</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0A6FBD}a:hover{color:#08548F}
+</style>
+</helmet>
+<div style="min-height: 1180px; background: #fff; color: #1E1E1E; font-family: 'Noto Sans SC', system-ui, sans-serif; font-size: 13px; line-height: 20px">
+<header style="min-height: 60px; display: flex; align-items: center; gap: 24px; padding: 0 24px; border-bottom: 1px solid #E6E6E6; flex-wrap: wrap">
+  <span style="display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px"><svg width="24" height="24" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="4" width="56" height="56" rx="14" fill="#0B76C8"></rect><circle cx="20" cy="20" r="5" fill="#fff"></circle><circle cx="32" cy="20" r="5" fill="#fff"></circle><circle cx="20" cy="32" r="5" fill="#fff"></circle><circle cx="32" cy="32" r="5" fill="#fff"></circle><circle cx="44" cy="32" r="5" fill="#fff"></circle><circle cx="20" cy="44" r="5" fill="#fff"></circle><circle cx="32" cy="44" r="5" fill="#fff"></circle><circle cx="44" cy="44" r="5" fill="#fff"></circle><circle cx="44" cy="20" r="6" fill="#FFB020"></circle></svg>TryBoard</span>
+  <nav style="display: flex; gap: 4px; flex-wrap: wrap" aria-label="主导航">
+    <a href="#" style="padding: 10px 12px; color: #0A6FBD; font-weight: 500; text-decoration: none; box-shadow: inset 0 -2px 0 #0D99FF">入门课</a>
+    <a href="#" style="padding: 10px 12px; color: #1E1E1E; text-decoration: none">作品</a>
+    <a href="#" style="padding: 10px 12px; color: #1E1E1E; text-decoration: none">选板子</a>
+    <a href="#" style="padding: 10px 12px; color: #1E1E1E; text-decoration: none">实验台</a>
+  </nav>
+</header>
+<div style="max-width: 1280px; margin: 0 auto; padding: 40px 24px 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 32px">
+  <section style="display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-end">
+    <div style="flex: 999 1 520px; display: flex; flex-direction: column; gap: 12px">
+      <span style="font-size: 12px; color: #0A6FBD; font-weight: 500">零基础 · 不用先买板子</span>
+      <h1 style="margin: 0; font-size: 36px; line-height: 46px; font-weight: 700">7 关，从点亮一颗 LED<br>到一台桌面气象站</h1>
+      <p style="margin: 0; font-size: 15px; line-height: 24px; color: #333; max-width: 620px">每一关都在网页里跑真的 ESP32 固件：先看懂、再动手、改一个数看结果。学完时，你要买的零件清单已经替你列好了。</p>
+      <div style="display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap">
+        <a href="#" style="display: inline-flex; align-items: center; height: 44px; padding: 0 20px; border-radius: 8px; background: #0B76C8; color: #fff; text-decoration: none; font-weight: 500">继续第 1 关 · 第 3 步</a>
+        <a href="#" style="display: inline-flex; align-items: center; height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid #E6E6E6; color: #1E1E1E; text-decoration: none">我有基础，直接选作品</a>
+      </div>
+    </div>
+    <div style="flex: 1 1 300px; padding: 16px; border: 1px solid #E6E6E6; border-radius: 12px; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; justify-content: space-between"><span style="font-size: 11px; font-weight: 500; color: #5E5E5E">你的进度</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px">0 / 7 关</span></div>
+      <div style="height: 6px; border-radius: 3px; background: #F0F0F0"><div style="width: 9%; height: 6px; border-radius: 3px; background: #0B76C8"></div></div>
+      <span style="font-size: 12px; color: #5E5E5E">进度存在这台设备上，不用注册</span>
+    </div>
+  </section>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+    <section style="flex: 999 1 640px; min-width: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px" aria-label="7 关">
+      <sc-for list="{{ lessons }}" as="l" hint-placeholder-count="7">
+        <a href="#" style="{{ l.style }}">
+          <div style="display: flex; justify-content: space-between; align-items: center">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #5E5E5E">第 {{ l.n }} 关</span>
+            <span style="{{ l.badgeStyle }}">{{ l.state }}</span>
+          </div>
+          <span style="font-size: 17px; font-weight: 700; line-height: 24px">{{ l.title }}</span>
+          <span style="color: #333">{{ l.goal }}</span>
+          <div style="display: flex; flex-direction: column; gap: 2px; padding-top: 8px; border-top: 1px solid #F0F0F0; margin-top: auto">
+            <span style="font-size: 12px; color: #5E5E5E">学到：{{ l.learn }}</span>
+            <span style="font-size: 12px; color: #5E5E5E">新零件：{{ l.buy }}</span>
+          </div>
+        </a>
+      </sc-for>
+    </section>
+    <aside style="flex: 1 1 320px; max-width: 400px; border: 1px solid #E6E6E6; border-radius: 12px; padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">
+      <span style="font-size: 11px; font-weight: 500; color: #5E5E5E">学完要买的东西</span>
+      <span style="font-size: 15px; font-weight: 700">跟着 7 关走完，你需要：</span>
+      <sc-for list="{{ bom }}" as="b" hint-placeholder-count="8">
+        <div style="display: flex; justify-content: space-between; gap: 12px; padding: 6px 10px; border-radius: 8px; background: #F7F7F7">
+          <span>{{ b.name }} <span style="font-size: 12px; color: #5E5E5E">· 第 {{ b.at }} 关</span></span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px">{{ b.price }}</span>
+        </div>
+      </sc-for>
+      <div style="display: flex; justify-content: space-between; padding: 8px 10px 0; border-top: 1px solid #E6E6E6"><span style="font-weight: 500">合计</span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 500">¥72–158 <span style="font-size: 12px; color: #8A5A12">估算</span></span></div>
+      <span style="font-size: 12px; color: #5E5E5E">淘宝常见价，未逐个核实，不含运费。外壳可自己 3D 打印。</span>
+      <a href="#" style="display: inline-flex; align-items: center; justify-content: center; height: 44px; border-radius: 8px; border: 1px solid #0B76C8; color: #0A6FBD; text-decoration: none; font-weight: 500">生成采购清单</a>
+    </aside>
+  </div>
+
+  <section style="display: flex; flex-direction: column; gap: 12px">
+    <span style="font-size: 11px; font-weight: 500; color: #5E5E5E">第 7 关可以三选一</span>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px">
+      <div style="padding: 16px; border: 1px solid #E6E6E6; border-radius: 12px; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700">会转身的小黄</span><span style="color: #5E5E5E">圆屏脸 + 舵机转台，按一下转过来看你</span></div>
+      <div style="padding: 16px; border: 1px solid #E6E6E6; border-radius: 12px; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700">透镜里的小人</span><span style="color: #5E5E5E">凸透镜放大圆屏上的脸，按键换表情</span></div>
+      <div style="padding: 16px; border: 1px dashed #CFCFCF; border-radius: 12px; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700">你自己的点子</span><span style="color: #5E5E5E">先写验收条件，再让 AI 写代码</span></div>
+    </div>
+  </section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const L = [
+      ['1', '点亮一颗 LED', '让外接的 LED 每半秒闪一次', 'GPIO 输出、延时', 'LED、220 Ω 电阻', '进行中 3/5'],
+      ['2', '按一下就亮', '每按一次 BOOT，LED 切换一次', 'GPIO 输入、中断、消抖', '不用买', '未开始'],
+      ['3', '小屏幕写字', '在 0.96″ OLED 上显示文字', 'I2C、帧缓冲', '0.96″ OLED', '未开始'],
+      ['4', '读温湿度', '读出温度、湿度和气压', '传感器补偿公式、一条 I2C 挂多个设备', 'BME280 模块', '未开始'],
+      ['5', '舵机表盘', '让舵机从 0° 转到 180°', 'LEDC PWM、脉宽和角度', 'SG90 舵机', '未开始'],
+      ['6', '装进外壳', '拼成桌面气象站并装壳', '把前几关合起来；传感器为什么要离芯片远一点', '3D 打印外壳', '未开始'],
+      ['7', '毕业作品', '三选一，或者做你自己的', '先定验收，再让 AI 写代码', '看你选哪个', '未开始']
+    ];
+    const lessons = L.map((l, i) => ({
+      n: l[0], title: l[1], goal: l[2], learn: l[3], buy: l[4], state: l[5],
+      style: 'display:flex;flex-direction:column;gap:6px;padding:16px;min-height:200px;box-sizing:border-box;border-radius:12px;text-decoration:none;color:#1E1E1E;border:1px solid ' + (i === 0 ? '#0D99FF;box-shadow:0 0 0 3px #E5F4FF' : '#E6E6E6'),
+      badgeStyle: 'font-size:12px;padding:0 8px;border-radius:999px;' + (i === 0 ? 'background:#E5F4FF;color:#0A6FBD' : 'background:#F2F2F2;color:#444')
+    }));
+    const bom = [
+      { name: 'ESP32-S3 开发板', at: '1', price: '¥35–70' },
+      { name: '面包板 830 孔', at: '1', price: '¥5–12' },
+      { name: '杜邦线', at: '1', price: '¥3–8' },
+      { name: '5 mm LED', at: '1', price: '¥2–6' },
+      { name: '电阻包', at: '1', price: '¥5–12' },
+      { name: '0.96″ OLED', at: '3', price: '¥8–15' },
+      { name: 'BME280 模块', at: '4', price: '¥10–25' },
+      { name: 'SG90 舵机', at: '5', price: '¥4–10' }
+    ];
+    return { lessons, bom };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>现在与改成对比</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0A6FBD}a:hover{color:#08548F}
+</style>
+</helmet>
+<div style="min-height: 1180px; background: #fff; color: #1E1E1E; font-family: 'Noto Sans SC', system-ui, sans-serif; font-size: 13px; line-height: 20px">
+<div style="max-width: 1280px; margin: 0 auto; padding: 40px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px">
+  <div style="display: flex; gap: 16px; flex-wrap: wrap; padding: 0 0 8px; border-bottom: 1px solid #E6E6E6">
+    <span style="flex: 0 0 160px; font-size: 11px; font-weight: 500; color: #5E5E5E">哪里</span>
+    <span style="flex: 1 1 380px; font-size: 11px; font-weight: 500; color: #5E5E5E">现在（截自本地 vite preview）</span>
+    <span style="flex: 1 1 380px; font-size: 11px; font-weight: 500; color: #0A6FBD">改成</span>
+  </div>
+  <sc-for list="{{ rows }}" as="r" hint-placeholder-count="6">
+    <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: stretch">
+      <div style="flex: 0 0 160px; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 700; font-size: 15px">{{ r.where }}</span><span style="font-size: 12px; color: #5E5E5E">{{ r.why }}</span></div>
+      <div style="flex: 1 1 380px; padding: 14px 16px; border-radius: 12px; background: #F7F7F7; border: 1px solid #E6E6E6; display: flex; flex-direction: column; gap: 4px">
+        <span style="font-weight: 500">{{ r.nowHead }}</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 18px; color: #444; white-space: pre-line">{{ r.now }}</span>
+      </div>
+      <div style="flex: 1 1 380px; padding: 14px 16px; border-radius: 12px; background: #fff; border: 1px solid #0D99FF; box-shadow: 0 0 0 3px #E5F4FF; display: flex; flex-direction: column; gap: 4px">
+        <span style="font-weight: 700">{{ r.afterHead }}</span>
+        <span style="color: #333; white-space: pre-line">{{ r.after }}</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #5E5E5E; white-space: pre-line">{{ r.afterMono }}</span>
+      </div>
+    </div>
+  </sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const rows = [
+      { where: '检查点文案', why: '先说做什么，再说怎么判', nowHead: '01 Blink', now: 'GPIO5 toggles at least 4 times\nwithin 2.2 s of power-on', afterHead: '第 1 关 · 点亮一颗 LED', after: '让外接的 LED 每半秒闪一次。', afterMono: '通过标准（展开）：开机 2.2 s 内 GPIO5 翻转 ≥ 4 次' },
+      { where: '台面标签', why: '用途在前，规格收起', nowHead: '规格条', now: 'BME280 · I2C 0x76 · SDA IO8 SCL IO9', afterHead: 'BME280 温湿度气压', after: '量房间里的空气；和屏幕共用两根信号线。', afterMono: '点开：I2C 0x76 · SDA IO8 · SCL IO9' },
+      { where: '串口首屏', why: '新人看不懂启动日志', nowHead: 'Serial 标签页', now: '0.000 I (0) cpu_start: Multicore app\n0.000 I (8) cpu_start: Pro cpu start…\n0.000 I (8) app_init: Project name…', afterHead: '「发生了什么」', after: '0.50 s  LED 亮 · GPIO5 → 高 3.3 V\n1.00 s  LED 灭 · GPIO5 → 低 0 V', afterMono: '原始串口一键切换，新手模式关掉后默认显示原始串口' },
+      { where: '工具条', why: '目标没说清，按钮先摆一屏', nowHead: '约 20 个控件', now: 'Select Orbit Place Wire Multimeter Ruler\nScope 3D models Photo Record Heater\nPress BOOT …', afterHead: '新手模式：运行 · 看电流 · 原理图 · 回正视角', after: '其余收进「更多工具」；每一关按需临时出现（第 4 关才出现「热源」）。', afterMono: '' },
+      { where: '演示给我看', why: '现在只是镜头跳转', nowHead: 'Show me', now: '跳到 GPIO5 超近特写\n一条规格 tooltip，无讲解、无下一步', afterHead: '分步编排演示', after: '镜头移动 + 其余变暗 + 讲解卡 + 拖线动画，2/4 进度，可暂停、0.5×，「我自己来接」保留蓝圈提示。', afterMono: '' },
+      { where: '进度反馈', why: '第一次成功要被看见', nowHead: '计数', now: 'Checkpoints 0/6\nCurrent checkpoint 0/6', afterHead: '关卡进度条 + 完成提示', after: '顶栏 5 段进度；做完弹「第 1 关完成 ✓ 解锁：按一下就亮」，并把本关零件加进采购清单。', afterMono: '' }
+    ];
+    return { rows };
+  }
+}
+</script>
+</body>
+</html>

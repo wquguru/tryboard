@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>分步编排演示</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0A6FBD}a:hover{color:#08548F}
+@keyframes tbpulse{0%{r:6;opacity:1}100%{r:20;opacity:0}}
+.tb-pulse{animation:tbpulse 1.2s ease-out infinite}
+@keyframes tbdraw{from{stroke-dashoffset:260}to{stroke-dashoffset:0}}
+.tb-draw{stroke-dasharray:260;animation:tbdraw 2.4s ease-in-out infinite}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="min-height: 900px; display: flex; flex-direction: column; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', system-ui, sans-serif; font-size: 13px; line-height: 20px">
+<header style="min-height: 56px; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid #E6E6E6; flex-wrap: wrap">
+  <span style="font-weight: 700; font-size: 15px">第 1 关 · 点亮一颗 LED</span>
+  <span style="color: #5E5E5E">第 3 步「接成一个圈」</span>
+  <span style="flex: 1"></span>
+  <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #E5F4FF; color: #0A6FBD; font-weight: 500"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 2l7 4-7 4z" fill="#0A6FBD"></path></svg>演示中 · 你的台面不会被改动</span>
+  <button style="height: 44px; padding: 0 16px; border: 1px solid #E6E6E6; border-radius: 8px; background: #fff; color: #1E1E1E">退出演示</button>
+</header>
+<div style="flex: 1 1 auto; display: flex; flex-wrap: wrap">
+  <main style="flex: 999 1 640px; min-width: 0; position: relative; background: radial-gradient(120% 90% at 50% 40%, #FFFFFF, #ECEFF3); padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px">
+    <div style="position: relative; width: 100%; max-width: 900px; margin: 0 auto; aspect-ratio: 760 / 540">
+      <svg viewBox="0 0 760 540" style="position: absolute; inset: 0; width: 100%; height: 100%" role="img" aria-label="演示：橙色线从 GPIO5 拉到电阻左脚那一排，其余部分变暗">
+        <defs>
+          <pattern id="dholes" width="16" height="16" patternUnits="userSpaceOnUse"><rect x="6" y="6" width="4" height="4" rx="1" fill="#A8A397"></rect></pattern>
+          <mask id="spot"><rect x="0" y="0" width="760" height="540" fill="#fff"></rect><ellipse cx="350" cy="225" rx="170" ry="92" fill="#000"></ellipse></mask>
+        </defs>
+        <rect x="60" y="200" width="640" height="220" rx="10" fill="#F4F2EC" stroke="#D8D4CA"></rect>
+        <rect x="72" y="214" width="616" height="84" fill="url(#dholes)"></rect>
+        <rect x="72" y="320" width="616" height="84" fill="url(#dholes)"></rect>
+        <rect x="60" y="302" width="640" height="14" fill="#E4E0D5"></rect>
+        <rect x="86" y="235" width="304" height="150" rx="6" fill="#1F2328"></rect>
+        <rect x="114" y="258" width="124" height="104" rx="3" fill="#C9CDD2" stroke="#9AA1A9"></rect>
+        <text x="176" y="306" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#3D434A">ESP32-S3</text>
+        <rect x="372" y="296" width="30" height="28" rx="4" fill="#9AA1A9"></rect>
+        <g fill="#D4A72C"><circle cx="216" cy="243" r="3"></circle><circle cx="232" cy="243" r="3"></circle><circle cx="248" cy="243" r="4" fill="#FFB020"></circle><circle cx="264" cy="243" r="3"></circle><circle cx="280" cy="243" r="3"></circle><circle cx="136" cy="377" r="4"></circle></g>
+        <line x1="440" y1="263" x2="544" y2="263" stroke="#8A8F96" stroke-width="2"></line>
+        <rect x="470" y="256" width="44" height="14" rx="7" fill="#E8D3A8"></rect>
+        <path d="M587 258 v-14 a14 14 0 0 1 28 0 v14 z" fill="#B4232A"></path>
+        <line x1="594" y1="258" x2="594" y2="292" stroke="#8A8F96" stroke-width="2"></line>
+        <line x1="608" y1="258" x2="608" y2="286" stroke="#8A8F96" stroke-width="2"></line>
+        <path d="M544 263 L 594 263 L 594 292" fill="none" stroke="#F08C2E" stroke-width="4" stroke-linecap="round"></path>
+        <rect x="0" y="0" width="760" height="540" fill="#0F1720" opacity=".45" mask="url(#spot)"></rect>
+        <path class="tb-draw" d="M248 243 C 262 165, 420 165, 440 263" fill="none" stroke="#F08C2E" stroke-width="5" stroke-linecap="round"></path>
+        <circle class="tb-pulse" cx="440" cy="263" r="6" fill="none" stroke="#0D99FF" stroke-width="2"></circle>
+        <circle cx="440" cy="263" r="5" fill="#0D99FF"></circle>
+        <circle cx="248" cy="243" r="7" fill="none" stroke="#0D99FF" stroke-width="2"></circle>
+        <g transform="translate(430 270)"><path d="M0 0 l0 22 l6 -6 l5 10 l4 -2 l-5 -10 l8 0 z" fill="#fff" stroke="#1E1E1E" stroke-width="1.5" stroke-linejoin="round"></path></g>
+        <text x="248" y="270" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#fff">GPIO5</text>
+      </svg>
+      <div style="position: absolute; left: 50%; top: 2%; width: 42%; box-sizing: border-box; padding: 14px 16px; background: #fff; border-radius: 12px; box-shadow: 0 6px 24px #00000026; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 11px; font-weight: 500; color: #5E5E5E">演示 2 / 4</span>
+        <span style="font-weight: 700; font-size: 15px">橙线：从 GPIO5 拉到电阻左脚</span>
+        <span style="font-size: 13px; line-height: 20px; color: #333">面包板同一列的 5 个孔是连通的。所以线不用直接碰电阻，插进电阻左脚<b>同一列</b>的任意一个孔就行。</span>
+        <span style="font-size: 12px; color: #0A6FBD">蓝圈 = 要插的孔</span>
+      </div>
+    </div>
+    <div role="toolbar" aria-label="演示控制" style="margin: 0 auto; width: 100%; max-width: 900px; box-sizing: border-box; display: flex; gap: 12px; align-items: center; padding: 10px 12px; background: #fff; border: 1px solid #E6E6E6; border-radius: 12px; box-shadow: 0 2px 10px #0000000F; flex-wrap: wrap">
+      <button aria-label="上一段" style="width: 44px; height: 44px; border: 1px solid #E6E6E6; border-radius: 8px; background: #fff"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3L5 8l6 5" fill="none" stroke="#1E1E1E" stroke-width="1.8"></path></svg></button>
+      <button aria-label="暂停" style="width: 44px; height: 44px; border: 0; border-radius: 8px; background: #0B76C8"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="3" width="3" height="10" fill="#fff"></rect><rect x="9" y="3" width="3" height="10" fill="#fff"></rect></svg></button>
+      <button aria-label="下一段" style="width: 44px; height: 44px; border: 1px solid #E6E6E6; border-radius: 8px; background: #fff"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3l6 5-6 5" fill="none" stroke="#1E1E1E" stroke-width="1.8"></path></svg></button>
+      <div style="flex: 1 1 320px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px">
+        <div style="display: flex; flex-direction: column; gap: 4px"><span style="height: 4px; border-radius: 2px; background: #0B76C8"></span><span style="font-size: 12px; color: #5E5E5E">找到 GPIO5</span></div>
+        <div style="display: flex; flex-direction: column; gap: 4px"><span style="height: 4px; border-radius: 2px; background: linear-gradient(90deg, #0B76C8 60%, #E6E6E6 60%)"></span><span style="font-size: 12px; font-weight: 500">橙线到电阻</span></div>
+        <div style="display: flex; flex-direction: column; gap: 4px"><span style="height: 4px; border-radius: 2px; background: #E6E6E6"></span><span style="font-size: 12px; color: #5E5E5E">黑线回 GND</span></div>
+        <div style="display: flex; flex-direction: column; gap: 4px"><span style="height: 4px; border-radius: 2px; background: #E6E6E6"></span><span style="font-size: 12px; color: #5E5E5E">看电流成圈</span></div>
+      </div>
+      <button style="height: 44px; padding: 0 12px; border: 1px solid #E6E6E6; border-radius: 8px; background: #fff; color: #1E1E1E; font-family: 'JetBrains Mono', monospace">0.5×</button>
+      <button style="height: 44px; padding: 0 16px; border: 1px solid #0B76C8; border-radius: 8px; background: #fff; color: #0A6FBD; font-weight: 500">我自己来接</button>
+    </div>
+  </main>
+  <aside style="flex: 1 1 320px; max-width: 360px; border-left: 1px solid #E6E6E6; padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px">
+    <span style="font-size: 11px; font-weight: 500; color: #5E5E5E">这段演示做什么</span>
+    <div style="display: flex; gap: 10px"><span style="flex: 0 0 22px; height: 22px; border-radius: 11px; background: #E8F7EE; color: #0E7A41; text-align: center; font-size: 12px">✓</span><span>镜头移到 GPIO5，其他地方变暗</span></div>
+    <div style="display: flex; gap: 10px; padding: 8px; margin: -8px; border-radius: 8px; background: #E5F4FF"><span style="flex: 0 0 22px; height: 22px; border-radius: 11px; background: #0B76C8; color: #fff; text-align: center; font-size: 12px">2</span><span>一只手把橙线拖到目标孔，蓝圈闪</span></div>
+    <div style="display: flex; gap: 10px"><span style="flex: 0 0 22px; height: 22px; border-radius: 11px; background: #F0F0F0; color: #5E5E5E; text-align: center; font-size: 12px">3</span><span>镜头跟着到 LED 短脚，黑线回 GND</span></div>
+    <div style="display: flex; gap: 10px"><span style="flex: 0 0 22px; height: 22px; border-radius: 11px; background: #F0F0F0; color: #5E5E5E; text-align: center; font-size: 12px">4</span><span>打开「看电流」，蓝色虚线绕一圈</span></div>
+    <div style="height: 1px; background: #E6E6E6; margin: 4px 0"></div>
+    <span style="font-size: 11px; font-weight: 500; color: #5E5E5E">点「我自己来接」之后</span>
+    <span style="color: #333">退出演示，台面回到你自己的状态，<b>只保留蓝圈提示</b>。接对了圈变绿 ✓，接错了一列会说「再往右一列」。</span>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
