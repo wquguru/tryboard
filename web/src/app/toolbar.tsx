@@ -89,7 +89,7 @@ export function createToolbar(): Toolbar & { View: (p: { step: string }) => Reac
         {groups.map((g, gi) => (
           <Fragment key={g.id}>
             {gi > 0 && <span className="tb-sep mx-0.5 my-0.5 w-px self-stretch bg-line" />}
-            <div className="tb-group flex gap-0.5" data-group={g.id}>
+            <div className="tb-group flex min-w-0 flex-wrap justify-center gap-0.5" data-group={g.id}>
               {g.tools.map((tool) => (
                 <button
                   key={tool.id}
