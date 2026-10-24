@@ -21,6 +21,9 @@ export interface LessonUi {
   go: (i: number) => void;
   /** Load the lesson's built-in firmware into the bench and run it. */
   run: () => void;
+  /** H-06: chosen delay (ms) of the prebuilt blink variants; `setDelay` loads that firmware and runs it. */
+  delay: number;
+  setDelay: (ms: number) => void;
   openChecks: () => void;
 }
 const noop = () => {};
@@ -31,6 +34,8 @@ export const lessonUi = createStore<LessonUi>({
   next: "",
   go: noop,
   run: noop,
+  delay: 500,
+  setDelay: noop,
   openChecks: noop,
 });
 export const setLessonUi = (p: Partial<LessonUi>) => commit(() => lessonUi.set(p));
