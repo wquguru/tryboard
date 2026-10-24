@@ -7,6 +7,7 @@ import { lessonUi } from "./lesson";
 import type { LessonCallout } from "./lessons";
 import { bit } from "./pinscope";
 import { useStore } from "./react";
+import { usePhone } from "./mobile";
 import type { BenchCtx } from "./bench/ctx";
 
 const GAP = 8;
@@ -14,6 +15,9 @@ const EDGE = 12;
 // Keep clear of the top-left chips / top-right view buttons and the bottom toolbar
 const TOP = 64;
 const BOTTOM = 72;
+/** H-07: a 390px stage has room for two narrow cards (the step's first two); the toolbar sits below the stage there. */
+const PHONE_MAX = 2;
+const PHONE_BOTTOM = 12;
 
 /** GPIO number a callout reports live: pin 'GPIO5' → level, part 'led:5' → on / off; null = no live line. */
 function livePin(c: LessonCallout): { pin: number; led: boolean } | null {
@@ -30,9 +34,12 @@ interface Slot {
 export function LessonCallouts({ b }: { b: BenchCtx }) {
   const ui = useStore(lessonUi);
   const lesson = ui.lesson;
-  const list = lesson && ui.step < lesson.steps.length ? lesson.steps[ui.step].callouts : [];
+  const phone = usePhone();
+  const all = lesson && ui.step < lesson.steps.length ? lesson.steps[ui.step].callouts : [];
+  const list = phone ? all.slice(0, PHONE_MAX) : all;
   const root = useRef<HTMLDivElement>(null);
   const keys = list.map((c) => c.key).join(",");
+  const bottom = phone ? PHONE_BOTTOM : BOTTOM;
 
   useEffect(() => {
     const el = root.current;
@@ -71,7 +78,7 @@ export function LessonCallouts({ b }: { b: BenchCtx }) {
         // Push down past the card above, then back up from the bottom edge
         for (let k = 0; k < ys.length; k++) ys[k] = Math.max(ys[k], TOP, k ? ys[k - 1] + hs[k - 1] + GAP : TOP);
         for (let k = ys.length - 1; k >= 0; k--)
-          ys[k] = Math.min(ys[k], k < ys.length - 1 ? ys[k + 1] - hs[k] - GAP : H - BOTTOM - hs[k]);
+          ys[k] = Math.min(ys[k], k < ys.length - 1 ? ys[k + 1] - hs[k] - GAP : H - bottom - hs[k]);
         ix.forEach((i, k) => {
           const x = side === "L" ? EDGE : W - EDGE - cw;
           const p = pts[i]!;
@@ -113,11 +120,11 @@ export function LessonCallouts({ b }: { b: BenchCtx }) {
     };
     // `keys` stands for `list`: the callouts only change with the lesson step
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keys, b]);
+  }, [keys, b, bottom]);
 
   if (!list.length) return null;
   return (
-    <div id="lessonCallouts" ref={root} aria-label={t("Part callouts")} className="pointer-events-none absolute inset-0 z-2 overflow-hidden max-md:hidden">
+    <div id="lessonCallouts" ref={root} aria-label={t("Part callouts")} className="pointer-events-none absolute inset-0 z-2 overflow-hidden">
       <svg className="pointer-events-none absolute inset-0 size-full" aria-hidden="true">
         {list.map((x) => (
           <g key={x.key}>
@@ -133,10 +140,10 @@ export function LessonCallouts({ b }: { b: BenchCtx }) {
           data-callout={x.key}
           onClick={() => b.select({ kind: x.target.kind, id: x.target.id })}
           style={{ display: "none" }}
-          className="pointer-events-auto absolute top-0 left-0 flex w-[200px] cursor-pointer flex-col gap-0.5 rounded-[10px] border border-[#CFE6FA] bg-(--panel) px-2.5 py-2 text-left text-fg shadow-panel hover:border-[#0D99FF]"
+          className="pointer-events-auto absolute top-0 left-0 flex w-[200px] cursor-pointer max-md:w-[160px] max-md:px-2 max-md:py-1.5 flex-col gap-0.5 rounded-[10px] border border-[#CFE6FA] bg-(--panel) px-2.5 py-2 text-left text-fg shadow-panel hover:border-[#0D99FF]"
         >
           <span className="text-[13px] font-bold tracking-[.02em]">{x.title}</span>
-          <span className="text-[12px] leading-[17px] text-muted">{x.body}</span>
+          <span className="text-[12px] leading-[17px] text-muted max-md:hidden">{x.body}</span>
           {livePin(x) && <span data-live className="font-mono text-[12px] text-[#0A6FBD]" style={{ display: "none" }} />}
         </button>
       ))}

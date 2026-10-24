@@ -1,13 +1,14 @@
 // Bench section: beginner mode (PLAN H-01). Picks the lesson for the current checkpoint and keeps `lessonUi` in step.
-// Off, phone (H-07), or no lesson here: the store is cleared and the bench draws exactly what it drew before.
+// Off or no lesson here: the store is cleared and the bench draws exactly what it drew before (phones: H-07 sheet).
 import { t } from "../../i18n";
 import { type ReactNode } from "react";
 import { type Level } from "../../checks";
 import { fetchBuf } from "../../assets";
 import { beginnerOn, lessonStep, setLessonStep } from "../../beginner";
 import { setDock, actions, bc, overlay } from "../chrome";
+import { afterFrame } from "../../ui/frame";
 import { LessonCallouts } from "../lessoncallouts";
-import { isPhone } from "../mobile";
+import { isPhone, setMui } from "../mobile";
 import { lessonFor } from "../lessons";
 import { LessonSteps, lessonUi, setLessonUi } from "../lesson";
 import { bindLessonFeed } from "../lessonfeed";
@@ -17,7 +18,7 @@ export function mountLesson(b: BenchCtx) {
   /** The left-column lesson card for checkpoint `id`, or null (store cleared) when the normal card should show. */
   function lessonCard(id: string | null, l: Level | undefined): ReactNode | null {
     const c = b.ctx!;
-    const lesson = id && !c.custom && beginnerOn() && !isPhone() ? lessonFor(c.work.id, id) : null;
+    const lesson = id && !c.custom && beginnerOn() ? lessonFor(c.work.id, id) : null;
     const had = !!lessonUi.get().lesson;
     if (!lesson || !l) {
       if (had) {
@@ -26,6 +27,7 @@ export function mountLesson(b: BenchCtx) {
         bindLessonFeed(c.session, null);
         if (bc.get().dock.tab === "lesson") setDock({ tab: "serial" });
       }
+      delete document.body.dataset.lesson;
       if (bc.get().overlays.lessonCallouts) overlay("lessonCallouts", null);
       return null;
     }
@@ -70,12 +72,23 @@ export function mountLesson(b: BenchCtx) {
     // H-03: the dock opens on "What happened" whenever a lesson comes up (the serial log is one click away)
     bindLessonFeed(c.session, lesson);
     if (!had) setDock({ tab: "lesson" });
+    // H-07: on phones the dock's peek band becomes the step panel (lab.css sizes it from body[data-lesson])
+    document.body.dataset.lesson = lesson.checkpoint;
+    if (!had && isPhone()) {
+      setMui({ sheet: "peek" });
+      // The stage just shrank to the top band: frame the board so the lesson's parts aren't specks
+      afterFrame(() => {
+        const v = c.session.bench.view;
+        v?.("fit", { kind: "part", id: "board" });
+        for (let i = 0; i < 3; i++) v?.("out");
+      });
+    }
     // H-02 callouts live in the stage overlays; they follow lessonUi themselves
     if (!bc.get().overlays.lessonCallouts) overlay("lessonCallouts", <LessonCallouts b={b} />);
     return <LessonSteps />;
   }
 
-  /** The short beginner toolbar shows while a lesson is up; lessons are desktop only until H-07. */
-  b.lessonTools = () => !!lessonUi.get().lesson;
+  /** The short beginner toolbar shows while a lesson is up; phones keep their own five-button bar (H-07). */
+  b.lessonTools = () => !!lessonUi.get().lesson && !isPhone();
   b.lessonCard = lessonCard;
 }

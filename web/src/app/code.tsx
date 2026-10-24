@@ -5,35 +5,7 @@ import { t } from "../i18n";
 import { cn } from "../ui/cn";
 import { tokenize, type TokKind } from "./ctoken";
 import { Icon } from "./icons";
-import { assetUrl } from "../assetver";
-
-interface SrcFile {
-  path: string;
-  text: string;
-}
-interface Src {
-  id: string;
-  files: SrcFile[];
-  defines: string;
-}
-type Got = { ok: true; src: Src } | { ok: false; why: string };
-const cache = new Map<string, Promise<Got>>();
-function load(id: string): Promise<Got> {
-  let p = cache.get(id);
-  if (!p) {
-    p = fetch(assetUrl(`./fw/${id}/src.json`))
-      .then(async (r): Promise<Got> =>
-        r.ok
-          ? { ok: true, src: (await r.json()) as Src }
-          : { ok: false, why: t('Example "{id}" has no packed source (firmware/{id}/main was not found at build time).', { id }) },
-      )
-      .catch(() => ({ ok: false, why: t("Couldn't download the source: are you offline?") }));
-    // Failures aren't cached; retry next time the tab opens.
-    p.then((g) => !g.ok && cache.delete(id));
-    cache.set(id, p);
-  }
-  return p;
-}
+import { loadSrc as load, type Got } from "./fwsrc";
 
 /** Example firmware is named "<id>/flash.bin" in a session; uploads keep their file name (no slash). */
 export const exampleOf = (fw: string) => /^([\w-]+)\/flash\.bin$/.exec(fw)?.[1] ?? null;
