@@ -1198,5 +1198,11 @@ const d: Dict = {
   "Fewer tools": "도구 줄이기",
   "Show current": "전류 보기",
   "Not running: shown as if the output were high": "실행 전: 출력 High로 가정해 표시",
+  // H-02 lesson callouts
+  "Now: high 3.3 V": "지금: 높음 3.3 V",
+  "Now: low 0 V": "지금: 낮음 0 V",
+  "Now: on": "지금: 켜짐",
+  "Now: off": "지금: 꺼짐",
+  "Part callouts": "부품 설명",
 };
 export default d;

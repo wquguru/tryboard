@@ -391,16 +391,22 @@ export function mountTargets(ctx: BenchCtx): void {
     }
     if (t.kind === 'wire') {
       const w = ctx.wires.find((w) => w.id === t.id);
-      return w ? w.curve.getPoint(0.5) : null;
+      return w ? w.curve.getPoint(t.anchor ? Number(t.anchor) : 0.5) : null;
     }
     if (t.kind === 'button') {
       const b = ctx.board.buttons.find((b) => b.name === t.id);
       return b ? b.getWorldPosition(new THREE.Vector3()) : null;
     }
-    const o = partsById.get(t.id);
+    let o = partsById.get(t.id);
     if (!o) return null;
+    if (t.id === 'board' && t.anchor === 'usb') return ctx.board.usbPort.clone().applyMatrix4(ctx.board.grp.matrixWorld);
+    if (t.anchor) {
+      const sub = o.getObjectByName(t.anchor);
+      if (!sub) return null;
+      o = sub;
+    }
     // The board measures to the chip (shield can centre)
-    if (t.id === 'board') return new THREE.Vector3(0, ctx.board.T / 2 + 3, ctx.board.L / 2 - ctx.board.spec.module.L / 2).applyMatrix4(ctx.board.grp.matrixWorld);
+    if (t.id === 'board' && !t.anchor) return new THREE.Vector3(0, ctx.board.T / 2 + 3, ctx.board.L / 2 - ctx.board.spec.module.L / 2).applyMatrix4(ctx.board.grp.matrixWorld);
     // Other parts use the box of the visible body, excluding pick boxes, gold pins and contact shadows, so the centre isn't on the header pins
     const box = new THREE.Box3();
     o.updateMatrixWorld(true);

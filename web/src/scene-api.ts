@@ -17,7 +17,12 @@ export const SANS = `Inter, Helvetica, ${CJK[locale] ?? CJK.en}, sans-serif`;
 /** Ids: parts 'board' | 'oled' | 'bme280' | 'servo' | 'gc9a01' | 'pot' | 'led:<pin>' | 'power' | 'mpu6050' | 'qmi8658' (P2-03) | 'cst816s' (P2-02);
  *  pins = board silkscreen ('GPIO4', '3V3') or '<part>:<silk>' ('bme280:SDA'); wires 'wire:<pin>~<pin>'; buttons 'BOOT' | 'RST'. */
 export type PickKind = 'part' | 'pin' | 'wire' | 'button';
-export interface PickTarget { kind: PickKind; id: string }
+export interface PickTarget {
+  kind: PickKind;
+  id: string;
+  /** project() only: a named spot on the thing (board 'usb', LED part 'res' / 'led', wire '0' = board end) */
+  anchor?: string;
+}
 
 export interface ScreenPoint { x: number; y: number }
 

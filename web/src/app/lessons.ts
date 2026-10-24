@@ -6,6 +6,8 @@ import { t } from '../i18n/index.ts';
 export interface LessonTarget {
   kind: 'part' | 'pin' | 'wire' | 'button';
   id: string;
+  /** A named spot on it (PickTarget.anchor): board 'usb', LED part 'res' / 'led', wire '0' = board end. */
+  anchor?: string;
 }
 export interface LessonCallout {
   /** Stable key for H-02 cards (chip, gpio, usb, res, led, gnd). */
@@ -67,10 +69,10 @@ export interface Lesson {
 const CALLOUTS: Record<string, LessonCallout> = {
   chip: { key: 'chip', target: { kind: 'part', id: 'board' }, title: t('ESP32-S3 chip'), body: t('The code you write runs here') },
   gpio: { key: 'gpio', target: { kind: 'pin', id: 'GPIO5' }, title: t('GPIO5 pin'), body: t('The code makes it output 3.3 V (high) or 0 V (low)') },
-  usb: { key: 'usb', target: { kind: 'part', id: 'board' }, title: t('USB-C port'), body: t('Goes to the computer: power + code download') },
-  res: { key: 'res', target: { kind: 'part', id: 'led:5' }, title: t('220 Ω resistor'), body: t('Limits the current. Without it the LED may burn out') },
-  led: { key: 'led', target: { kind: 'part', id: 'led:5' }, title: t('LED'), body: t('Long leg to positive; lights when current flows') },
-  gnd: { key: 'gnd', target: { kind: 'pin', id: 'GND' }, title: t('GND (ground)'), body: t('Current flows back to the board here') },
+  usb: { key: 'usb', target: { kind: 'part', id: 'board', anchor: 'usb' }, title: t('USB-C port'), body: t('Goes to the computer: power + code download') },
+  res: { key: 'res', target: { kind: 'part', id: 'led:5', anchor: 'res' }, title: t('220 Ω resistor'), body: t('Limits the current. Without it the LED may burn out') },
+  led: { key: 'led', target: { kind: 'part', id: 'led:5', anchor: 'led' }, title: t('LED'), body: t('Long leg to positive; lights when current flows') },
+  gnd: { key: 'gnd', target: { kind: 'wire', id: 'wire:GND~led:5:GND', anchor: '0' }, title: t('GND (ground)'), body: t('Current flows back to the board here') },
 };
 const pick = (...k: string[]) => k.map((x) => CALLOUTS[x]);
 

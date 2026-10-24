@@ -5,7 +5,8 @@ import { type ReactNode } from "react";
 import { type Level } from "../../checks";
 import { fetchBuf } from "../../assets";
 import { beginnerOn, lessonStep, setLessonStep } from "../../beginner";
-import { setDock, actions, bc } from "../chrome";
+import { setDock, actions, bc, overlay } from "../chrome";
+import { LessonCallouts } from "../lessoncallouts";
 import { isPhone } from "../mobile";
 import { lessonFor } from "../lessons";
 import { LessonSteps, lessonUi, setLessonUi } from "../lesson";
@@ -25,6 +26,7 @@ export function mountLesson(b: BenchCtx) {
         bindLessonFeed(c.session, null);
         if (bc.get().dock.tab === "lesson") setDock({ tab: "serial" });
       }
+      if (bc.get().overlays.lessonCallouts) overlay("lessonCallouts", null);
       return null;
     }
     const n = lesson.steps.length;
@@ -67,6 +69,8 @@ export function mountLesson(b: BenchCtx) {
     // H-03: the dock opens on "What happened" whenever a lesson comes up (the serial log is one click away)
     bindLessonFeed(c.session, lesson);
     if (!had) setDock({ tab: "lesson" });
+    // H-02 callouts live in the stage overlays; they follow lessonUi themselves
+    if (!bc.get().overlays.lessonCallouts) overlay("lessonCallouts", <LessonCallouts b={b} />);
     return <LessonSteps />;
   }
 

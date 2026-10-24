@@ -1198,5 +1198,11 @@ const d: Dict = {
   "Fewer tools": "ツールを減らす",
   "Show current": "電流を見る",
   "Not running: shown as if the output were high": "未実行：出力 High と仮定して表示",
+  // H-02 lesson callouts
+  "Now: high 3.3 V": "いま：High 3.3 V",
+  "Now: low 0 V": "いま：Low 0 V",
+  "Now: on": "いま：点灯",
+  "Now: off": "いま：消灯",
+  "Part callouts": "部品の説明",
 };
 export default d;
