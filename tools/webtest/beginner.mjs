@@ -156,6 +156,20 @@ report('switch on again', (await cardStep(page)) === '2' && (await tools(page)) 
 await page.screenshot({ path: path.join(outDir, 'beginner-2.png') });
 await page.close();
 
+// 5b. H-08: checkpoints 02 / 03 bring their own lessons (Button, OLED); 03 has no "Show current" loop
+for (const [cp, re, tl] of [
+  ['02', /Lesson 2/, 'run,current,select,orbit,fit,button,more'],
+  ['03', /Lesson 3/, 'run,select,orbit,fit,button,more'],
+]) {
+  const pg = await open(`/app?work=weather&cp=${cp}&debug=1&beginner=1#bench`);
+  await waitFor(pg, () => !!document.querySelector('#lessonTitle'), null, 10000);
+  const tt = await pg.$eval('#lessonTitle', (e) => e.textContent).catch(() => '');
+  const cpText = await pg.$eval('#lessonCp', (e) => e.textContent).catch(() => '');
+  report(`checkpoint ${cp}: lesson in the left column + top bar`, re.test(tt) && (await states(pg)) === 'now,todo,todo,todo,todo' && cpText.includes(`Checkpoint ${cp}`), JSON.stringify(tt));
+  report(`checkpoint ${cp}: short toolbar`, (await tools(pg)) === tl, await tools(pg));
+  await pg.close();
+}
+
 // 6. Other works keep the switch but have no lesson
 const door = await open('/app?work=door&debug=1&beginner=1#bench');
 report('other work: switch, no lesson', (await has(door, '#beginnerBtn')) && !(await has(door, '#lessonSteps')) && (await tools(door)) !== short);

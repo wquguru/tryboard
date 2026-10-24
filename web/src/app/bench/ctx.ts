@@ -134,6 +134,8 @@ export interface BenchCtx extends BenchState {
   // lesson.tsx (H-01)
   lessonTools: () => boolean;
   lessonCard: (id: string | null, l: Level | undefined) => ReactNode | null;
+  /** H-08: the checkpoint last picked (tree / link); its lesson shows instead of the first unpassed one's. */
+  lessonPin?: string;
   // flow.tsx (H-04)
   flowTools: () => Tool[];
   toggleFlow: () => void;

@@ -66,7 +66,11 @@ export function mountLeft(b: BenchCtx) {
         c.work.checkpoints[0];
       const l = c.session.levels.find((x) => x.id === id);
       const tg = cpTarget(l);
-      lesson = b.lessonCard(id, l);
+      // A picked checkpoint keeps its lesson up while the beginner clicks parts on the bench
+      const picked = s.selection?.kind === "checkpoint" ? s.selection.id : null;
+      if (picked && c.work.checkpoints.includes(picked)) b.lessonPin = picked;
+      const lid = b.lessonPin && c.work.checkpoints.includes(b.lessonPin) ? b.lessonPin : id;
+      lesson = b.lessonCard(lid, c.session.levels.find((x) => x.id === lid));
       card = lesson ?? (
         <CheckpointCard
           id={id}
