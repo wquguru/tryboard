@@ -142,6 +142,63 @@ await page.click('#dock [data-dock="code"]');
 await waitFor(page, () => document.querySelector('#codeView')?.dataset.state === 'ok', null, 5000);
 report('off: code pane has no highlight or follow note', !(await page.$('#codeBody tr[data-hl]')) && !(await page.$('#codeFollow')));
 
+// ---- H-08: lessons 02 (BOOT button) and 03 (OLED over I2C), parked on their "Run" step
+async function lessonPage(cp) {
+  const p = await browser.newPage();
+  await p.evaluateOnNewDocument((cp) => {
+    try {
+      localStorage.setItem('tb-beginner', '1');
+      localStorage.setItem('tryboard-app-lesson:weather', JSON.stringify({ [cp]: 3 }));
+    } catch {}
+  }, cp);
+  p.on('pageerror', (e) => errors.push(String(e)));
+  p.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text());
+  });
+  await p.goto(`${base}/app?work=weather&cp=${cp}&debug=1#bench`, { waitUntil: 'load' });
+  await waitFor(p, () => globalThis.__tbApp?.hist && !!document.querySelector('#lessonCard'), null, 30000);
+  return p;
+}
+const simNow = (p) => p.evaluate(() => parseFloat(document.getElementById('simtime')?.textContent ?? '0'));
+const p2 = await lessonPage('02');
+report('02: lesson 2 title + run step', /Lesson 2/.test(await p2.$eval('#lessonTitle', (e) => e.textContent).catch(() => '')) && !!(await p2.$('#lessonRun')));
+await p2.click('#lessonRun');
+await waitFor(p2, () => /s3-button/.test(document.querySelector('#toast')?.textContent ?? ''), null, 8000);
+const t2 = await simNow(p2);
+await waitFor(p2, (t) => parseFloat(document.getElementById('simtime').textContent) > t + 0.5, t2, 15000);
+const bpos = await p2.evaluate(() => globalThis.__tbButtonPos('BOOT'));
+if (bpos) {
+  await p2.mouse.move(bpos[0], bpos[1]);
+  await p2.mouse.down();
+  const t0 = await simNow(p2);
+  await waitFor(p2, (t) => parseFloat(document.getElementById('simtime').textContent) > t + 0.15, t0, 10000);
+  await p2.mouse.up();
+}
+const pressed = await waitFor(p2, () => {
+  const rs = [...document.querySelectorAll('#lessonFeed [data-ev]')].map((r) => `${r.dataset.pin}/${r.dataset.level}`);
+  return rs.includes('0/0') && rs.includes('0/1') && rs.includes('5/1');
+}, null, 10000);
+const rows2 = await p2.$$eval('#lessonFeed [data-ev]', (rs) => rs.map((r) => r.textContent).reverse());
+report('02: BOOT press / release + LED on in the feed', !!bpos && pressed && rows2.some((x) => /BOOT pressed.*GPIO0 → low 0 V/.test(x)), rows2.join(' | ').slice(0, 200));
+await p2.screenshot({ path: path.join(outDir, 'lessonfeed-02.png') });
+await p2.close();
+
+const p3 = await lessonPage('03');
+report('03: lesson 3 title + run step', /Lesson 3/.test(await p3.$eval('#lessonTitle', (e) => e.textContent).catch(() => '')) && !!(await p3.$('#lessonRun')));
+await p3.click('#lessonRun');
+const i2c = await waitFor(p3, () => [...document.querySelectorAll('#lessonFeed [data-i2c="0x3C"]')].filter((r) => Number(r.dataset.bytes) >= 1024).length >= 2, null, 20000);
+await p3.evaluate(() => globalThis.__tbApp.session.sim.pause());
+await sleep(300);
+const rows3 = await p3.$$eval('#lessonFeed [data-ev]', (rs) => rs.map((r) => ({ t: Number(r.dataset.t), a: r.dataset.i2c, n: Number(r.dataset.bytes), text: r.textContent })).reverse());
+// One row per refresh: init + first frame merge (~1 KB), then ~1 s apart, never a row per transaction
+// (the pause may land between a frame's 7-byte window command and its 1 KB of pixels, so the newest row can be short)
+const gaps = rows3.slice(1).map((r, i) => (r.t - rows3[i].t) / CPU_HZ);
+report('03: I2C rows to 0x3C, one per refresh', i2c && rows3.every((r, i) => r.a === '0x3C' && (r.n >= 1024 || i === rows3.length - 1)) && gaps.every((g) => g > 0.9) && /Screen updated: \d+ bytes sent.*I2C → 0x3C/.test(rows3[0]?.text ?? ''), rows3.map((r) => `${(r.t / CPU_HZ).toFixed(2)}s ${r.n}B`).join(', '));
+const hl3 = await p3.$$eval('#codeBody tr[data-hl]', (rs) => rs.map((r) => r.dataset.line).join(','));
+report('03: code follows flush()', hl3 === '69', `hl=${hl3}`);
+await p3.screenshot({ path: path.join(outDir, 'lessonfeed-03.png') });
+await p3.close();
+
 await browser.close();
 server.close();
 if (errors.length) console.log('[lessonfeed] page errors:\n  ' + errors.join('\n  '));
