@@ -6,7 +6,7 @@ import { commit } from './react';
 import { createStore } from './store';
 import type { StepId } from './types';
 
-export type DockTab = 'serial' | 'code' | 'analyzer' | 'runs' | 'scenario' | 'checks' | 'issues' | 'usb' | 'tasks' | 'ble' | 'net' | 'py' | 'voice';
+export type DockTab = 'serial' | 'lesson' | 'code' | 'analyzer' | 'runs' | 'scenario' | 'checks' | 'issues' | 'usb' | 'tasks' | 'ble' | 'net' | 'py' | 'voice';
 export type RunState = 'loading' | 'run' | 'pause' | 'seek' | 'busy' | 'idle' | 'nofw';
 
 export interface Issue {

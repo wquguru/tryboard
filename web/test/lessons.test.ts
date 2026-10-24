@@ -62,9 +62,19 @@ test('highlighted code lines contain the calls the step talks about', () => {
   }
 });
 
+test('event rules point at the line that drives the pin (H-03)', () => {
+  for (const l of LESSONS) {
+    const lines = readFileSync(new URL(l.src, root), 'utf8').split('\n');
+    for (const e of l.events ?? []) {
+      assert.ok(e.pin >= 0 && e.pin < 49 && e.hi && e.lo, `${l.work}/${l.checkpoint}: rule for GPIO${e.pin}`);
+      assert.ok(/gpio_set_level|digitalWrite/.test(lines[e.line - 1] ?? ''), `GPIO${e.pin} line ${e.line}: ${lines[e.line - 1]}`);
+    }
+  }
+});
+
 test('lesson text is translated in zh / ja / ko', () => {
   for (const l of LESSONS) {
-    const strs = [l.title, l.summary, l.buy, ...l.steps.flatMap((s) => [s.title, s.sub, s.body, ...s.tasks, ...s.callouts.flatMap((c) => [c.title, c.body])])];
+    const strs = [l.title, l.summary, l.buy, ...(l.events ?? []).flatMap((e) => [e.hi, e.lo]), ...l.steps.flatMap((s) => [s.title, s.sub, s.body, ...s.tasks, ...s.callouts.flatMap((c) => [c.title, c.body])])];
     for (const [id, d] of Object.entries({ zh, ja, ko })) for (const k of strs) assert.ok(d[k], `${id}: ${k}`);
   }
 });

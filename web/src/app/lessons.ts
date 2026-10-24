@@ -33,6 +33,15 @@ export interface LessonStep {
   codeLines?: number[];
   codeChips?: CodeChips;
 }
+/** H-03: how one pin's edges read in "What happened" and which source line they point at. */
+export interface LessonEvent {
+  pin: number;
+  /** Plain words for high / low, e.g. "LED on" / "LED off". */
+  hi: string;
+  lo: string;
+  /** 1-based line in `Lesson.src` that drives the pin. */
+  line: number;
+}
 export interface Lesson {
   work: string;
   checkpoint: string;
@@ -46,6 +55,8 @@ export interface Lesson {
   /** Built-in firmware the lesson runs (= the level's ref) and its source file. */
   fw: string;
   src: string;
+  /** Pin events the "What happened" feed narrates (H-03). */
+  events?: LessonEvent[];
   steps: LessonStep[];
 }
 
@@ -70,6 +81,7 @@ export const LESSONS: Lesson[] = [
     buy: t('LED, 220 Ω resistor'),
     fw: 's3-blink',
     src: 'firmware/blink/main/main.c',
+    events: [{ pin: 5, hi: t('LED on'), lo: t('LED off'), line: 22 }],
     steps: [
       {
         id: 'board',
