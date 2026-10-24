@@ -39,6 +39,8 @@ export function mountLeft(b: BenchCtx) {
     const n = c.work.checkpoints.length;
     const d = passedCount(c, s);
     let card: ReactNode = null;
+    // Beginner mode swaps the checkpoint card for this lesson's steps (H-01); null keeps the card
+    let lesson: ReactNode | null = null;
     if (c.custom)
       card = (
         <CustomCheckCard
@@ -64,7 +66,8 @@ export function mountLeft(b: BenchCtx) {
         c.work.checkpoints[0];
       const l = c.session.levels.find((x) => x.id === id);
       const tg = cpTarget(l);
-      card = (
+      lesson = b.lessonCard(id, l);
+      card = lesson ?? (
         <CheckpointCard
           id={id}
           title={l?.title ? t(l.title) : ""}
@@ -85,6 +88,7 @@ export function mountLeft(b: BenchCtx) {
         />
       );
     }
+    if (!lesson) b.lessonCard(null, undefined);
     const sel = s.selection?.kind === "wire" ? s.selection.id : null;
     setLeft({
       lib: (

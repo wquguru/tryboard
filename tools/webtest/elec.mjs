@@ -51,6 +51,8 @@ async function waitFor(page, fn, arg, ms = 30000) {
 }
 
 const page = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 page.on('pageerror', (e) => errors.push(`${e}`));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await page.goto(base + '/app?work=weather#bench', { waitUntil: 'load' });
@@ -114,6 +116,8 @@ report('CLI replays the same log: serial byte-identical, same reset count', cli 
 
 // ---- Wiring faults through the network solver (P2-14): inject each, panel / wrong-wire card show the solved current = CLI netlist
 const p2 = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await p2.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 p2.on('pageerror', (e) => errors.push(`${e}`));
 p2.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await p2.goto(base + '/app?work=weather&debug=1#bench', { waitUntil: 'load' });

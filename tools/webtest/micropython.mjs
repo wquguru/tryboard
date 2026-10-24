@@ -75,6 +75,8 @@ async function openWithBin(page) {
 
 // ---- 1. Upload, edit, run
 const page = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 page.on('pageerror', (e) => errors.push(`${e}`));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await page.goto(base + '/app?work=blank&example=hello#bench', { waitUntil: 'load' });

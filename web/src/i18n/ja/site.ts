@@ -1171,5 +1171,8 @@ const d: Dict = {
   "Gripped by the collar, the ring cannot turn": "縁に挟まれてリングが回らない",
   "Sound hole on the side stays open": "側面の放音穴はふさがれていない",
   "USB-C 5 V, about 120 mA with the screen on (estimate)": "USB-C 5 V、画面点灯時 約 120 mA（推定）",
+
+  // Beginner lessons (H-01)
+  "LED": "LED",
 };
 export default d;

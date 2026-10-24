@@ -39,6 +39,22 @@ export function mountVerdict(b: BenchCtx) {
 
   /** Bench toolbar groups (labels follow the 3D-model and recording state). */
   function setToolGroups(c: StepCtx) {
+    // Beginner lesson (H-01): select / orbit / reset view / BOOT, the rest folded behind "More tools"
+    if (b.lessonTools() && !b.beginnerMore)
+      return c.shell.toolbar.setGroups([
+        { id: "run", tools: [{ id: "run", label: t("Run"), primary: true }] },
+        {
+          id: "nav",
+          tools: [
+            { id: "select", label: t("Select"), key: "V" },
+            { id: "orbit", label: t("Orbit"), key: "H", kind: "switch" },
+            { id: "fit", label: t("Reset view") },
+          ],
+        },
+        { id: "act", tools: [{ id: "button", label: t("Press BOOT") }] },
+        { id: "more", tools: [{ id: "more", label: t("More tools (multimeter, scope…)") }] },
+      ]);
+    const less = b.lessonTools() ? [{ id: "more", tools: [{ id: "more", label: t("Fewer tools") }] }] : [];
     c.shell.toolbar.setGroups([
       {
         id: "nav",
@@ -89,6 +105,7 @@ export function mountVerdict(b: BenchCtx) {
         ],
       },
       // Rerun lives in the top bar run group (Reset), so the toolbar does not repeat it (DESIGN_V2 §6.3)
+      ...less,
     ]);
   }
 

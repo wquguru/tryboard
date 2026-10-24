@@ -69,6 +69,8 @@ print(check.fingerprint(out, check.canonical_report(err)))`, out, err], { encodi
 // ---- 1. Install a scenario (temperature ramp crossing the 35 ℃ alarm, one BOOT press) and power up again
 const SC = { len: 6000, tracks: [{ k: 'temp', kf: [[0, 24], [3000, 36]] }, { k: 'btn', pin: 0, presses: [[4000, 150]] }] };
 const page = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 page.on('pageerror', (e) => errors.push(`${e}`));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await page.goto(base + '/app?work=blank&example=weather#bench', { waitUntil: 'load' });
@@ -134,6 +136,8 @@ report('web replay and CLI replay fingerprints match', web.fingerprint === c.fp 
 
 // ---- 5. Phone (F-11d): two-finger pinch zooms the lane about the midpoint; zoom buttons keep the track header in view
 const mob = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await mob.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 mob.on('pageerror', (e) => errors.push(`phone: ${e}`));
 mob.on('console', (m) => { if (m.type() === 'error') errors.push(`phone: ${m.text()}`); });
 await mob.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });

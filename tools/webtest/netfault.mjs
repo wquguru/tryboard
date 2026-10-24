@@ -78,6 +78,8 @@ print(check.fingerprint(out, check.canonical_report(err)))`, out, err], { encodi
 
 // ---- 1. Desktop: router reboot from the Network tab
 const page = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 newPageErrors(page);
 await page.goto(base + '/app?work=blank&example=c3-wifi-resilient#bench', { waitUntil: 'load' });
 report('resilient firmware gets an IP', await hasText(page, '#console', '拿到 IP', 40000)); // lint: allow-cjk (firmware serial)
@@ -151,6 +153,8 @@ await page.close();
 
 // ---- 5. Phone layout (390×844): 2×2 presets of 48px, fault list ≥ 44px, no horizontal scroll
 const pm = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await pm.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 newPageErrors(pm);
 await pm.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 await pm.goto(base + '/app?work=blank&example=c3-wifi-resilient#bench', { waitUntil: 'load' });

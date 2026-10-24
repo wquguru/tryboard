@@ -61,6 +61,8 @@ const ALL_CHUNKS = ['analyzer', 'code', 'shop', 'assemble', 'product', 'tasks', 
 
 async function one(item, { mobile, warm }) {
   const page = await browser.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   await page.setViewport(mobile ? { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { width: 1440, height: 900 });
   const cdp = await page.createCDPSession();
   await cdp.send('Network.enable');

@@ -48,11 +48,13 @@ async function waitFor(page, fn, arg, ms = 15000) {
 }
 const errors = [];
 const page = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => {
   if (m.type() === 'error') errors.push(m.text());
 });
-await page.evaluateOnNewDocument(() => localStorage.clear());
+await page.evaluateOnNewDocument(() => { localStorage.clear(); localStorage.setItem('tb-beginner', '0'); });
 await page.goto(base + '/app?work=weather&debug=1#bench', { waitUntil: 'load' });
 await waitFor(page, () => globalThis.__tbApp?.hist && globalThis.__tbApp.store.get().simSeconds > 0.5, null, 30000);
 

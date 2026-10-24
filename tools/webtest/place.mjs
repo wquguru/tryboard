@@ -55,11 +55,13 @@ let page;
 async function newPage() {
   const ctx = await browser.createBrowserContext();
   page = await ctx.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text());
   });
-  await page.evaluateOnNewDocument(() => localStorage.clear());
+  await page.evaluateOnNewDocument(() => { localStorage.clear(); localStorage.setItem('tb-beginner', '0'); });
 }
 await newPage();
 await page.goto(base + '/app?work=blank&debug=1#bench', { waitUntil: 'load' });

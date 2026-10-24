@@ -40,6 +40,8 @@ export interface BenchState {
   /** The 10-second bench recording in progress (P2-10). */
   benchRec: Recording | null;
   toolbarRef: StepCtx["shell"]["toolbar"] | null;
+  /** Beginner toolbar unfolded with "More tools" (H-01). */
+  beginnerMore: boolean;
 }
 
 /** State plus the functions each section installs for the others (grouped by owning file). */
@@ -128,6 +130,9 @@ export interface BenchCtx extends BenchState {
   // verdict.ts(x)
   syncChrome: () => void;
   setToolGroups: (c: StepCtx) => void;
+  // lesson.tsx (H-01)
+  lessonTools: () => boolean;
+  lessonCard: (id: string | null, l: Level | undefined) => ReactNode | null;
   // heat.ts(x)
   toggleHeat: () => void;
   // cards.ts(x)
@@ -171,6 +176,7 @@ export function createBenchCtx(): BenchCtx {
     placing: null,
     benchRec: null,
     toolbarRef: null,
+    beginnerMore: false,
   };
   return state as BenchCtx;
 }

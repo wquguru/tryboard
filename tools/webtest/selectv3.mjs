@@ -48,6 +48,8 @@ async function waitFor(page, fn, arg, ms = 10000) {
 const errors = [];
 async function open(url, vp) {
   const page = await browser.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   await page.setViewport(vp);
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));

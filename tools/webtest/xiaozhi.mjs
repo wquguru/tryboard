@@ -72,6 +72,8 @@ print(check.fingerprint(out, check.canonical_report(err)))`, out, err], { encodi
 
 // ---- 1. Example opens with the voice server on and the Voice tab shown
 const page = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 page.on('pageerror', (e) => errors.push(`${e}`));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await page.goto(base + '/app?work=blank&example=s3-xiaozhi-lite#bench', { waitUntil: 'load' });
@@ -179,6 +181,8 @@ const grab = (p, sel) => p.evaluate(async (s) => {
   return btoa(bin);
 }, sel);
 const L = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await L.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 L.on('pageerror', (e) => errors.push(`${e}`));
 L.on('console', (x) => { if (x.type() === 'error') errors.push(x.text()); });
 await L.goto(base + '/app?work=blank&example=s3-xiaozhi-lite#bench', { waitUntil: 'load' });
@@ -233,6 +237,8 @@ await L.close();
 
 // ---- 6. Phone 390×844: no horizontal scroll, talk button at least 44 px tall
 const m = await browser.newPage();
+// Beginner mode is on by default (H-01); these checks target the full bench
+await m.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
 m.on('pageerror', (e) => errors.push(`${e}`));
 m.on('console', (x) => { if (x.type() === 'error') errors.push(x.text()); });
 await m.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });

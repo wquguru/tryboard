@@ -102,6 +102,8 @@ function resKind(url) {
 
 async function measure(name, url, { mobile = false, ready = null, frameSec = 5, after = null, cache = false, ctx = browser } = {}) {
   const page = await ctx.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   await page.setViewport(mobile ? { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { width: 1440, height: 900 });
   const cdp = await page.createCDPSession();
   await cdp.send('Network.enable');

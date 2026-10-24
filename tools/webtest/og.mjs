@@ -23,6 +23,8 @@ const browser = await puppeteer.launch({
 let fails = 0;
 try {
   const page = await browser.newPage();
+  // Beginner mode is on by default (H-01); these checks target the full bench
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('tb-beginner', '0'); } catch {} });
   // Local files only: og.html must not make network requests (fonts and images are inline or system)
   await page.setRequestInterception(true);
   page.on('request', (r) => (r.url().startsWith('file:') ? r.continue() : (console.error(`[og] blocked network request ${r.url()}`), fails++, r.abort())));
