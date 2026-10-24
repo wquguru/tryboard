@@ -58,6 +58,14 @@ for lv in json.load(open(os.path.join(root, 'firmware/levels.json'))):
     d = os.path.join(root, 'web/public/fw', ref)
     os.makedirs(d, exist_ok=True)
     publish(src, d)
+# H-06 blink-speed variants: shipped with the page (code panel swaps firmware), but not listed in the example library
+for vid in ('s3-blink-100', 's3-blink-1000'):
+    src = os.path.join(root, 'firmware/build', vid, 'flash.bin')
+    if not os.path.exists(src):
+        print('variant firmware not built:', vid); continue
+    d = os.path.join(root, 'web/public/fw', vid)
+    os.makedirs(d, exist_ok=True)
+    publish(src, d)
 PY
 # R-18: gzip -9 sidecars (fetchBuf inflates with DecompressionStream, falls back to the plain file); -n keeps builds byte-identical
 gzip -9 -n -k -f "$PUB/wasm/tryboard.wasm" "$PUB"/rom/*.elf "$PUB"/fw/*/flash.bin

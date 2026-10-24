@@ -301,7 +301,7 @@
 | H-03 | 「发生了什么」+ 代码行高亮：新手模式下底部默认显示人话事件流（由 GPIO / PWM / I2C 事件按课程模板生成，如「LED 亮 · GPIO5 → 高 3.3 V」），一键切原始串口；代码面板显示本关源码，按事件高亮对应行（课程数据写事件 → 行，不读 DWARF，界面标「跟着事件高亮」） | 事件时间与 `--trace-io` 一致（webtest 对拍）；agent-browser 截图 | ☐ |
 | H-04 | 看电流：GPIO 为高时沿本关回路的导线画流动虚线（GPIO → 电阻 → LED → GND），低时不画；未运行时按「假设输出高」演示并注明 | agent-browser 运行中高 / 低两帧截图 | ☐ |
 | H-05 | 「演示给我看」分步编排：新手模式下替换 Show me：每段 镜头目标 + 其余变暗 + 讲解卡 + 拖线动画，暂停 / 0.5× / 上一段 / 下一段；「我自己来接」退出演示、只留目标孔蓝圈，接对变绿 | agent-browser 逐段截图；wiremode.mjs 不回退 | ☐ |
-| H-06 | 闪烁快慢三档：s3-blink 加 100 / 1000 ms 两个变体（`BLINK_MS` 编译宏，源码共用），代码面板里点 100 / 500 / 1000 换内置固件重跑 | build_fw + accept 新用例（翻转间隔 100 / 1000 ms）；agent-browser | ☐ |
+| H-06 | 闪烁快慢三档：s3-blink 加 100 / 1000 ms 两个变体（`BLINK_MS` 编译宏，源码共用），代码面板里点 100 / 500 / 1000 换内置固件重跑 | build_fw + accept 新用例（翻转间隔 100 / 1000 ms）；agent-browser | ◐ 固件与验收已完成（firmware/s3-blink-100、s3-blink-1000，accept 用例含 `gpio_toggles.max`，web/public/fw 已打包）；代码面板 UI 待 H-01 之后做 |
 | H-07 | 手机：上台面、下可上拉步骤面板，按钮 ≥ 44px，标注卡最多 2 张 | mobile.mjs 新断言 390×844 无横向滚动；agent-browser 390 截图 | ☐ |
 | H-08 | 第 02、03 关课程内容（按钮、OLED）照 H-01 数据格式补齐 | lessons 数据测试；agent-browser 走两关 | ☐ |
 
