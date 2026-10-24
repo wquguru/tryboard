@@ -77,6 +77,18 @@ test('every lesson step is short and complete', () => {
     }
 });
 
+// H-02: each card needs its own spot on the bench, and anchors are the ones bench3d/pick.ts resolves
+test('callouts in a step point at distinct, resolvable spots', () => {
+  const anchors: Record<string, (string | undefined)[]> = { part: [undefined, 'usb', 'res', 'led'], pin: [undefined], wire: [undefined, '0', '1'], button: [undefined] };
+  for (const l of LESSONS)
+    for (const s of l.steps) {
+      const spots = s.callouts.map((c) => `${c.target.kind}:${c.target.id}@${c.target.anchor ?? ''}`);
+      assert.equal(new Set(spots).size, spots.length, `${s.id}: ${spots.join(', ')}`);
+      for (const c of s.callouts) assert.ok(anchors[c.target.kind]?.includes(c.target.anchor), `${s.id} callout ${c.key} anchor ${c.target.anchor}`);
+      assert.equal(new Set(s.callouts.map((c) => c.key)).size, s.callouts.length, `${s.id} keys`);
+    }
+});
+
 test('lesson firmware is the checkpoint reference build', () => {
   for (const l of LESSONS) {
     const lv = levels.find((x) => x.id === l.checkpoint);

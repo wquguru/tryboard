@@ -1,6 +1,6 @@
 // Dock "Code" tab (P2-15): read-only source of the running firmware, from fw/<name>/src.json packed at build time
 // (tools/gen_fw_src.py), fetched and cached per firmware; lazy-loaded by dock.tsx. Uploaded .bin files have no source.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { t } from "../i18n";
 import { cn } from "../ui/cn";
 import { tokenize, type TokKind } from "./ctoken";
@@ -56,6 +56,8 @@ const ib =
 export interface CodeHighlight {
   file: string;
   lines: number[];
+  /** Extra controls drawn at the end of this 1-based line (H-06 delay chips). */
+  chip?: { line: number; node: ReactNode };
 }
 
 export default function CodeView({
@@ -104,6 +106,12 @@ export default function CodeView({
     const top = row.offsetTop;
     if (top < el.scrollTop + 8 || top + row.offsetHeight > el.scrollTop + el.clientHeight - 8)
       el.scrollTop = Math.max(0, top - el.clientHeight / 3);
+    // H-06: the delay chips sit a few lines below the followed line; keep them reachable too
+    const chipRow = el.querySelector<HTMLElement>("tr[data-chips]");
+    if (chipRow && chipRow.offsetTop > row.offsetTop) {
+      const bottom = chipRow.offsetTop + chipRow.offsetHeight + 8;
+      if (bottom > el.scrollTop + el.clientHeight) el.scrollTop = Math.min(row.offsetTop - 4, bottom - el.clientHeight);
+    }
   }, [hlKey, lines]);
 
   let why: string | null = null;
@@ -200,7 +208,7 @@ export default function CodeView({
         <table className="min-w-full border-collapse">
           <tbody>
             {lines.map((l, n) => (
-              <tr key={n} data-line={n + 1} data-hl={hl.has(n + 1) ? "" : undefined} className="data-hl:bg-accent-bg">
+              <tr key={n} data-line={n + 1} data-hl={hl.has(n + 1) ? "" : undefined} data-chips={highlight?.chip?.line === n + 1 ? "" : undefined} className="data-hl:bg-accent-bg">
                 <td
                   className={cn(
                     "sticky left-0 bg-(--scope-bg) pr-3 pl-3 text-right align-top text-muted select-none",
@@ -221,6 +229,7 @@ export default function CodeView({
                         ),
                       )
                     : " "}
+                  {highlight?.chip?.line === n + 1 && <span className="ml-3 inline-flex align-middle font-sans">{highlight.chip.node}</span>}
                 </td>
               </tr>
             ))}

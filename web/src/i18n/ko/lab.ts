@@ -1131,6 +1131,8 @@ const d: Dict = {
   "GPIO{pin} → high 3.3 V": "GPIO{pin} → High 3.3 V",
   "GPIO{pin} → low 0 V": "GPIO{pin} → Low 0 V",
   "Highlight follows events (not step debugging)": "이벤트를 따라 강조 표시(단계별 디버깅 아님)",
+  "Delay in milliseconds": "지연 시간(밀리초)",
+  "Three prebuilt versions (the web page cannot compile yet)": "미리 빌드된 세 가지 버전(웹에서는 아직 컴파일할 수 없습니다)",
   "This lesson's pin changes in plain words, with the code line behind each": "이번 레슨의 핀 변화를 쉬운 말로, 해당 코드 줄과 함께 표시",
   // Beginner lessons (H-01)
   "ESP32-S3 chip": "ESP32-S3 칩",
@@ -1260,5 +1262,11 @@ const d: Dict = {
   "Pick a word of 10 letters or fewer to show": "보여 줄 10글자 이하의 단어를 골라 보세요",
   "Think: how many letters fit on one line at size 1 (6 dots each)?": "생각해 보기: 크기 1(글자당 6점)이면 한 줄에 몇 글자가 들어갈까요?",
   "I2C → {addr}": "I2C → {addr}",
+  // H-02 lesson callouts
+  "Now: high 3.3 V": "지금: 높음 3.3 V",
+  "Now: low 0 V": "지금: 낮음 0 V",
+  "Now: on": "지금: 켜짐",
+  "Now: off": "지금: 꺼짐",
+  "Part callouts": "부품 설명",
 };
 export default d;

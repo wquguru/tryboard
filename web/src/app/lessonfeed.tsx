@@ -1,6 +1,6 @@
 // Beginner "What happened" feed + code highlight (PLAN H-03, DESIGN_V2 §11): io edges narrated by the lesson's event rules.
 // The bench binds it to the session while a lesson is up; lines come from lesson data, not DWARF (DECISIONS 2026-10-23).
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { t } from "../i18n";
 import { cn } from "../ui/cn";
 import { useStore } from "./react";
@@ -8,7 +8,7 @@ import { createStore } from "./store";
 import { bc, setDock } from "./chrome";
 import { lessonUi } from "./lesson";
 import { B_NACK, B_PORT1, B_READ, B_RESTART, CPU_HZ, K, hex, type IoEvent, type IoStore } from "./iotrace";
-import type { Lesson } from "./lessons";
+import type { CodeChips, Lesson } from "./lessons";
 import { CodePane as CodeView } from "./panes";
 
 /** Rows kept; older ones scroll away (a blink makes two per second). */
@@ -126,7 +126,7 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
 }
 
 /** What the code panel should show in beginner mode: the lesson's source and lines to highlight, or null (normal pane). */
-export function useLessonCode(): { fw: string; file: string; lines: number[] } | null {
+export function useLessonCode(): { fw: string; file: string; lines: number[]; chip?: { line: number; node: ReactNode } } | null {
   const s = useStore(lessonUi);
   const { items } = useStore(lessonFeed);
   const { run } = useStore(bc);
@@ -136,7 +136,33 @@ export function useLessonCode(): { fw: string; file: string; lines: number[] } |
   const last = items[items.length - 1];
   // Running: the line behind the latest edge; still: the current step's lines
   const lines = run === "run" && last ? [last.line] : (l.steps[s.step]?.codeLines ?? []);
-  return { fw: `${l.fw}/flash.bin`, file, lines };
+  const chips = l.steps[s.step]?.codeChips;
+  return { fw: `${l.fw}/flash.bin`, file, lines, chip: chips && { line: chips.line, node: <DelayChips chips={chips} /> } };
+}
+
+/** H-06: pick one of the prebuilt delay variants; the click loads that firmware and runs it. */
+function DelayChips({ chips }: { chips: CodeChips }) {
+  const { delay, setDelay } = useStore(lessonUi);
+  return (
+    <span className="inline-flex items-center gap-1.5" role="group" aria-label={t("Delay in milliseconds")}>
+      {chips.values.map((v) => (
+        <button
+          key={v}
+          type="button"
+          data-chip={v}
+          aria-pressed={delay === v}
+          onClick={() => setDelay(v)}
+          className={cn(
+            "h-7 min-w-11 cursor-pointer rounded-md border px-2 font-mono text-[12px]",
+            delay === v ? "border-accent-strong bg-accent-strong text-on-accent" : "border-line bg-surface text-fg hover:bg-field",
+          )}
+        >
+          {v}
+        </button>
+      ))}
+      <span className="font-sans text-[11px] text-muted">{t("Three prebuilt versions (the web page cannot compile yet)")}</span>
+    </span>
+  );
 }
 
 export const fmtSec = (cyc: number) => `${(cyc / CPU_HZ).toFixed(2)} s`;

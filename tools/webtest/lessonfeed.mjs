@@ -104,6 +104,25 @@ await page.click('#lessonSteps [data-step="4"]');
 const step5 = await waitFor(page, () => [...document.querySelectorAll('#codeBody tr[data-hl]')].map((r) => r.dataset.line).join(',') === '25', null, 5000);
 report('paused: highlight follows the step (step 5 -> line 25)', step5, await page.$$eval('#codeBody tr[data-hl]', (rs) => rs.map((r) => r.dataset.line).join(',')));
 
+// H-06: step 5 chips load the prebuilt 100 / 1000 ms variants; adjacent GPIO5 edges follow the chosen delay
+const chipsOk = (await page.$$eval('#codeBody [data-chip]', (bs) => bs.map((b) => `${b.dataset.chip}:${b.getAttribute('aria-pressed')}:${Math.round(b.getBoundingClientRect().height)}`).join(','))) ;
+report('step 5: chips 100/500/1000, 500 pressed, >= 28 px', /^100:false:(\d+),500:true:\d+,1000:false:\d+$/.test(chipsOk) && chipsOk.split(',').every((c) => Number(c.split(':')[2]) >= 28), chipsOk);
+for (const [ms, fw] of [[100, 's3-blink-100'], [1000, 's3-blink-1000']]) {
+  await page.click(`#codeBody [data-chip="${ms}"]`);
+  // fresh rows only: the old firmware's rows reach at most ~1.1 s, so wait for edges past 4 blink periods
+  const ok = await waitFor(page, (cyc) => [...document.querySelectorAll('#lessonFeed [data-ev]')].some((r) => Number(r.dataset.t) > cyc), CPU_HZ * (ms === 100 ? 1.5 : 4.2), 40000);
+  await page.evaluate(() => globalThis.__tbApp.session.sim.pause());
+  await sleep(300);
+  // the first rows are boot-time GPIO init edges (< 50 ms); blink edges start after
+  const ts = (await page.$$eval('#lessonFeed [data-ev]', (rs) => rs.map((r) => Number(r.dataset.t)))).filter((x) => x > CPU_HZ * 0.05).sort((a, b) => a - b);
+  const gaps = ts.slice(1, 5).map((x, i) => (x - ts[i]) / CPU_HZ);
+  const pressed = await page.$eval(`#codeBody [data-chip="${ms}"]`, (b) => b.getAttribute('aria-pressed'));
+  const fwNow = await page.evaluate(() => globalThis.__tbApp.session.fwName ?? '');
+  const want = ms / 1000;
+  report(`chip ${ms}: edge gap ~ ${want.toFixed(2)} s, chip pressed`, ok && gaps.length >= 3 && gaps.every((g) => Math.abs(g - want) < want * 0.06 + 0.005) && pressed === 'true', `ok=${ok} n=${ts.length} gaps=${gaps.map((g) => g.toFixed(3)).join(',')} ${fw} ${fwNow}`);
+  await page.screenshot({ path: path.join(outDir, `lessonfeed-chip${ms}.png`) });
+}
+
 // Raw serial is one click away
 await page.click('#lessonRawSerial');
 await waitFor(page, () => document.querySelector('#dock')?.dataset.tab === 'serial', null, 3000);
@@ -167,13 +186,14 @@ await p2.close();
 const p3 = await lessonPage('03');
 report('03: lesson 3 title + run step', /Lesson 3/.test(await p3.$eval('#lessonTitle', (e) => e.textContent).catch(() => '')) && !!(await p3.$('#lessonRun')));
 await p3.click('#lessonRun');
-const i2c = await waitFor(p3, () => document.querySelectorAll('#lessonFeed [data-i2c="0x3C"]').length >= 2, null, 20000);
+const i2c = await waitFor(p3, () => [...document.querySelectorAll('#lessonFeed [data-i2c="0x3C"]')].filter((r) => Number(r.dataset.bytes) >= 1024).length >= 2, null, 20000);
 await p3.evaluate(() => globalThis.__tbApp.session.sim.pause());
 await sleep(300);
 const rows3 = await p3.$$eval('#lessonFeed [data-ev]', (rs) => rs.map((r) => ({ t: Number(r.dataset.t), a: r.dataset.i2c, n: Number(r.dataset.bytes), text: r.textContent })).reverse());
 // One row per refresh: init + first frame merge (~1 KB), then ~1 s apart, never a row per transaction
+// (the pause may land between a frame's 7-byte window command and its 1 KB of pixels, so the newest row can be short)
 const gaps = rows3.slice(1).map((r, i) => (r.t - rows3[i].t) / CPU_HZ);
-report('03: I2C rows to 0x3C, one per refresh', i2c && rows3.every((r) => r.a === '0x3C' && r.n >= 1024) && gaps.every((g) => g > 0.9) && /Screen updated: \d+ bytes sent.*I2C → 0x3C/.test(rows3[0]?.text ?? ''), rows3.map((r) => `${(r.t / CPU_HZ).toFixed(2)}s ${r.n}B`).join(', '));
+report('03: I2C rows to 0x3C, one per refresh', i2c && rows3.every((r, i) => r.a === '0x3C' && (r.n >= 1024 || i === rows3.length - 1)) && gaps.every((g) => g > 0.9) && /Screen updated: \d+ bytes sent.*I2C → 0x3C/.test(rows3[0]?.text ?? ''), rows3.map((r) => `${(r.t / CPU_HZ).toFixed(2)}s ${r.n}B`).join(', '));
 const hl3 = await p3.$$eval('#codeBody tr[data-hl]', (rs) => rs.map((r) => r.dataset.line).join(','));
 report('03: code follows flush()', hl3 === '69', `hl=${hl3}`);
 await p3.screenshot({ path: path.join(outDir, 'lessonfeed-03.png') });

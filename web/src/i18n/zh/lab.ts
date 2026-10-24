@@ -1131,6 +1131,8 @@ const d: Dict = {
   "GPIO{pin} → high 3.3 V": "GPIO{pin} → 高 3.3 V",
   "GPIO{pin} → low 0 V": "GPIO{pin} → 低 0 V",
   "Highlight follows events (not step debugging)": "跟着事件高亮（不是单步调试）",
+  "Delay in milliseconds": "延时（毫秒）",
+  "Three prebuilt versions (the web page cannot compile yet)": "预先编好的三个版本（网页里还不能编译）",
   "This lesson's pin changes in plain words, with the code line behind each": "本关引脚的变化，用人话说，并标出对应的代码行",
   // Beginner lessons (H-01)
   "ESP32-S3 chip": "ESP32-S3 芯片",
@@ -1260,5 +1262,11 @@ const d: Dict = {
   "Pick a word of 10 letters or fewer to show": "想一个不超过 10 个字母的词来显示",
   "Think: how many letters fit on one line at size 1 (6 dots each)?": "想一想：1 倍字号（每个字母 6 个点）一行能放几个字母？",
   "I2C → {addr}": "I2C → {addr}",
+  // H-02 lesson callouts
+  "Now: high 3.3 V": "现在：高 3.3 V",
+  "Now: low 0 V": "现在：低 0 V",
+  "Now: on": "现在：亮",
+  "Now: off": "现在：灭",
+  "Part callouts": "零件标注",
 };
 export default d;
