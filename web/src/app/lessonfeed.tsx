@@ -101,7 +101,7 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
       if (e.kind === K.GPIO) {
         const r = rules.find((x) => x.pin === e.a);
         if (!r) continue;
-        items.push({ n: n++, t: e.t, pin: e.a, hi: !!e.b, text: e.b ? r.hi : r.lo, line: r.line });
+        items.push({ n: n++, t: e.t, pin: e.a, hi: !!e.b, text: e.b ? r.hi : r.lo, line: e.b ? (r.hiLine ?? r.line) : r.line });
         changed = true;
         continue;
       }

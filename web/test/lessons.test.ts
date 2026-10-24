@@ -125,6 +125,7 @@ test('event rules point at the line that drives the pin (H-03)', () => {
       assert.ok(e.pin >= 0 && e.pin < 49 && e.hi && e.lo, `${l.work}/${l.checkpoint}: rule for GPIO${e.pin}`);
       const re = e.input ? /FromISR|gpio_isr_handler_add|gpio_get_level|digitalRead/ : /gpio_set_level|digitalWrite/;
       assert.ok(re.test(lines[e.line - 1] ?? ''), `GPIO${e.pin} line ${e.line}: ${lines[e.line - 1]}`);
+      if (e.hiLine) assert.ok(/xQueueReceive|gpio_get_level|digitalRead/.test(lines[e.hiLine - 1] ?? ''), `GPIO${e.pin} hiLine ${e.hiLine}: ${lines[e.hiLine - 1]}`);
     }
     for (const r of l.i2c ?? []) {
       assert.ok(r.addr > 0 && r.addr < 0x78 && r.text.includes('{n}'), `I2C rule 0x${r.addr.toString(16)}`);

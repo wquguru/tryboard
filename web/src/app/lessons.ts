@@ -45,6 +45,8 @@ export interface LessonEvent {
   lo: string;
   /** 1-based line in `Lesson.src` that drives the pin (input pins: the line that reacts to it). */
   line: number;
+  /** Line for the high edge when it differs (BOOT released: the loop waiting for the next press, not the ISR). */
+  hiLine?: number;
   /** The pin is read, not driven (H-08 button). */
   input?: boolean;
 }
@@ -163,7 +165,7 @@ export const LESSONS: Lesson[] = [
     fw: 's3-button',
     src: 'firmware/button/main/main.c',
     events: [
-      { pin: 0, hi: t('BOOT released'), lo: t('BOOT pressed'), line: 20, input: true },
+      { pin: 0, hi: t('BOOT released'), lo: t('BOOT pressed'), line: 20, hiLine: 42, input: true },
       { pin: 5, hi: t('LED on'), lo: t('LED off'), line: 46 },
     ],
     circuit: { pin: 5, path: ['wire:GPIO5~led:5:IN', 'led:5', 'wire:GND~led:5:GND'] },
