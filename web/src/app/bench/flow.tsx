@@ -85,4 +85,5 @@ export function mountFlow(b: BenchCtx) {
   b.flowTools = (): Tool[] =>
     lessonUi.get().lesson?.circuit ? [{ id: "current", label: t("Show current"), kind: "switch", on: () => on }] : [];
   b.toggleFlow = toggle;
+  b.flowOn = () => on;
 }

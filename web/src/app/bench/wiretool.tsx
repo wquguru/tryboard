@@ -80,14 +80,17 @@ export function mountWireTool(b: BenchCtx) {
     const w = b.benchWires().find((x) => x.id === wireId);
     if (!w) return;
     const orig = w.from ?? w.a;
-    if (to === w.a) {
+    // An unplugged wire (H-05 "wire it yourself") goes back in wherever the user clicks, its own pin included
+    const plug = !!w.missing && (prev.drop ?? []).includes(wireId);
+    if (to === w.a && !plug) {
       c.shell.toast(t("{wire} is already on {pin}", { wire: w.b, pin: to }));
       return;
     }
     const rt = { ...prev.retarget };
     if (to === orig) delete rt[wireId];
     else rt[wireId] = to;
-    applyMods({ ...prev, retarget: rt }, t("Rewire {wire} to {pin}", { wire: w.b, pin: to }));
+    if (plug) applyMods({ ...prev, retarget: rt, drop: prev.drop!.filter((x) => x !== wireId) }, t("Plug {wire} into {pin}", { wire: w.b, pin: to }));
+    else applyMods({ ...prev, retarget: rt }, t("Rewire {wire} to {pin}", { wire: w.b, pin: to }));
     setWiring(false);
     b.select({ kind: "wire", id: wireId });
     const fs = b.faults.filter((f) => f.wires.includes(wireId));

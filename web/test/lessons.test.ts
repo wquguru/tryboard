@@ -136,7 +136,24 @@ test('event rules point at the line that drives the pin (H-03)', () => {
 
 test('lesson text is translated in zh / ja / ko', () => {
   for (const l of LESSONS) {
-    const strs = [l.title, l.summary, l.buy, ...(l.events ?? []).flatMap((e) => [e.hi, e.lo]), ...(l.i2c ?? []).map((r) => r.text), ...l.steps.flatMap((s) => [s.title, s.sub, s.body, ...s.tasks, ...s.callouts.flatMap((c) => [c.title, c.body])])];
+    const strs = [l.title, l.summary, l.buy, ...(l.events ?? []).flatMap((e) => [e.hi, e.lo]), ...(l.i2c ?? []).map((r) => r.text), ...l.steps.flatMap((s) => [s.title, s.sub, s.body, ...s.tasks, ...s.callouts.flatMap((c) => [c.title, c.body]), ...(s.demo ?? []).flatMap((b) => [b.short, b.title, b.body])])];
     for (const [id, d] of Object.entries({ zh, ja, ko })) for (const k of strs) assert.ok(d[k], `${id}: ${k}`);
   }
+});
+
+test('H-05 demo beats point at wires the bench draws', () => {
+  const demo = lessonFor('weather', '01')?.steps.find((s) => s.id === 'loop')?.demo;
+  assert.ok(demo && demo.length === 4, 'loop step has four beats');
+  assert.equal(demo.at(-1)?.flow, true, 'last beat shows current');
+  for (const l of LESSONS)
+    for (const s of l.steps)
+      for (const b of s.demo ?? []) {
+        assert.ok(b.short && b.title && b.body && b.focus.id, `${s.id}: beat text`);
+        assert.ok(b.body.split(/(?<=[.!?])\s+/).filter(Boolean).length <= 3, `${s.id}: ${b.title} is short`);
+        if (b.focus.kind === 'wire') assert.ok(l.circuit?.path.includes(b.focus.id), `${b.focus.id} is a circuit wire`);
+        if (b.wire) {
+          const ids = [`wire:${b.wire.from}~${b.wire.to}`, `wire:${b.wire.to}~${b.wire.from}`];
+          assert.ok(ids.some((x) => l.circuit?.path.includes(x)), `${b.wire.from} → ${b.wire.to} is a circuit wire`);
+        }
+      }
 });

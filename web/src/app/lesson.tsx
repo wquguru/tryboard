@@ -25,6 +25,10 @@ export interface LessonUi {
   delay: number;
   setDelay: (ms: number) => void;
   openChecks: () => void;
+  /** H-05: "Show me how" playing over the bench, or the "wire it yourself" ring; other overlays step aside. */
+  demo: "play" | "self" | null;
+  /** Open the demo of step `i` (only steps with `demo` beats). */
+  showDemo: (i: number) => void;
 }
 const noop = () => {};
 export const lessonUi = createStore<LessonUi>({
@@ -37,6 +41,8 @@ export const lessonUi = createStore<LessonUi>({
   delay: 500,
   setDelay: noop,
   openChecks: noop,
+  demo: null,
+  showDemo: noop,
 });
 export const setLessonUi = (p: Partial<LessonUi>) => commit(() => lessonUi.set(p));
 
@@ -47,6 +53,8 @@ export function LessonSteps() {
   const s = useStore(lessonUi);
   const l = s.lesson;
   if (!l) return null;
+  // "Show me how" plays the current step's demo, else the first step that has one (#cpGo keeps the checkpoint card's id)
+  const demoAt = l.steps[s.step]?.demo?.length ? s.step : l.steps.findIndex((x) => x.demo?.length);
   return (
     <nav id="lessonSteps" aria-label={t("Lesson steps")} className="flex flex-col gap-0.5 text-xs">
       <div className="px-1 pb-1 text-[11px] font-medium text-muted">
@@ -97,6 +105,11 @@ export function LessonSteps() {
         <button type="button" className="mt-1 cursor-pointer border-0 bg-transparent p-0 text-[12px] text-accent-ink underline" onClick={s.openChecks}>
           {t("All checkpoints")}
         </button>
+        {demoAt >= 0 && (
+          <button type="button" id="cpGo" className={cn(btnBase, "mt-2 w-full border border-accent-strong bg-surface font-medium text-accent-ink hover:bg-accent-bg")} onClick={() => s.showDemo(demoAt)}>
+            {t("Show me how")}
+          </button>
+        )}
       </div>
     </nav>
   );
@@ -140,6 +153,11 @@ export function LessonCard({ step }: { step: string }) {
               ))}
             </ul>
           </div>
+          {!!cur.demo?.length && (
+            <button type="button" id="lessonDemoBtn" className={cn(btnBase, "border border-accent-strong bg-surface font-medium text-accent-ink hover:bg-accent-bg")} onClick={() => s.showDemo(s.step)}>
+              {t("Show me how")}
+            </button>
+          )}
           {cur.id === "run" && (
             <button type="button" id="lessonRun" className={cn(btnBase, "border border-accent-strong bg-surface font-medium text-accent-ink hover:bg-accent-bg")} onClick={s.run}>
               {t("Run this lesson's code")}

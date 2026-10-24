@@ -33,6 +33,7 @@ import { mountCards } from "../bench/cards";
 import { mountDebug } from "../bench/debug";
 import { mountLesson } from "../bench/lesson";
 import { mountFlow } from "../bench/flow";
+import { mountDemo } from "../bench/demo";
 import { onBeginner } from "../../beginner";
 
 export { ownCount, ownFirmware, passedCount, requestAllRef, restoreChecks } from "../bench/progress";
@@ -62,6 +63,7 @@ export function benchStep(): StepImpl {
   mountDebug(b);
   mountLesson(b);
   mountFlow(b);
+  mountDemo(b);
 
   let unsubs: (() => void)[] = [];
   let hooked = false;

@@ -139,6 +139,9 @@ export interface BenchCtx extends BenchState {
   // flow.tsx (H-04)
   flowTools: () => Tool[];
   toggleFlow: () => void;
+  flowOn: () => boolean;
+  // demo.tsx (H-05)
+  openDemo: (step: number) => void;
   // heat.ts(x)
   toggleHeat: () => void;
   // cards.ts(x)

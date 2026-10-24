@@ -162,6 +162,8 @@ export interface BenchCtx {
   setFlow: (path: string[] | null) => number;
   flowSegs: () => number;
   flowTick: (now: number) => void;
+  /** H-05 eased camera move (board3d viewTo), run by the render tick before controls.update(). */
+  camTick: ((now: number) => void) | null;
   measured: [PickTarget, PickTarget] | null;
   measure: (a: PickTarget | null, b?: PickTarget) => number | null;
   usbHost: ReturnType<typeof createUsbHost> | null;
