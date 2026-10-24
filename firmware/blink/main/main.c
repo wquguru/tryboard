@@ -4,6 +4,10 @@
 #include "freertos/task.h"
 #include "driver/gpio.h"
 
+#ifndef BLINK_MS
+#define BLINK_MS 500
+#endif
+
 #ifndef LED_GPIO
 #define LED_GPIO 5
 #endif
@@ -18,6 +22,6 @@ void app_main(void)
         gpio_set_level(LED_GPIO, on);
         printf("LED %s (%d)\n", on ? "ON " : "OFF", n);
         if (n == 3) printf("TRYBOARD_OK blink\n");
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(BLINK_MS));
     }
 }
