@@ -36,11 +36,11 @@ interface FeedSession {
   watchIo(pins: number[]): void;
 }
 
-let bound: { lesson: Lesson; off: () => void } | null = null;
+let bound: { lesson: Lesson; session: FeedSession; off: () => void } | null = null;
 
 /** Follow `session.io` for `lesson`'s event rules (null unbinds); idempotent per lesson. */
 export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
-  if (bound?.lesson === lesson) return;
+  if (bound?.lesson === lesson && bound.session === session) return;
   bound?.off();
   bound = null;
   lessonFeed.set({ items: [] });
@@ -82,7 +82,7 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
     if (add.length) lessonFeed.set({ items: [...lessonFeed.get().items, ...add].slice(-FEED_CAP) });
   };
   pull();
-  bound = { lesson, off: session.onIo(pull) };
+  bound = { lesson, session, off: session.onIo(pull) };
 }
 
 /** What the code panel should show in beginner mode: the lesson's source and lines to highlight, or null (normal pane). */

@@ -1,6 +1,5 @@
-// Beginner "What happened" + code highlight (H-03): lesson 01 step 4 runs s3-blink; the first GPIO5 rows in #lessonFeed
-// carry the same cycle stamps as CLI --trace-io; the code pane follows the gpio_set_level line; off = no lesson tab.
-// Usage: node tools/webtest/lessonfeed.mjs [dist dir, default web/dist]; TB_CLI overrides the CLI path; output in Reviews/web/lessonfeed-*
+// Beginner "What happened" + code highlight (H-03): lesson 01 step 4 runs s3-blink; first GPIO5 rows = CLI --trace-io cycles,
+// code pane follows gpio_set_level, off = no lesson tab. Usage: node tools/webtest/lessonfeed.mjs [dist dir, default web/dist]; TB_CLI overrides the CLI path; output in Reviews/web/lessonfeed-*
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -70,6 +69,8 @@ const dockTab = () => page.$eval('#dock', (e) => e.dataset.tab).catch(() => null
 await waitFor(page, () => !!document.querySelector('#lessonCard'), null, 10000);
 report('lesson up: dock opens on "What happened"', (await dockTab()) === 'lesson' && !!(await page.$('#dock [data-dock="lesson"]')), `tab=${await dockTab()}`);
 report('feed present, step 4 card', !!(await page.$('#lessonFeed')) && (await page.$eval('#lessonCard', (e) => e.dataset.step)) === '3');
+const pre = await page.$eval('#lessonFeed', (e) => `${e.querySelectorAll('[data-ev]').length}|${e.textContent}`);
+report('empty before Run (the weather firmware drives no GPIO5 edges)', /^0\|.*Not run yet/.test(pre), pre.slice(0, 60));
 
 await page.click('#lessonRun');
 const got = await waitFor(page, (n) => document.querySelectorAll('#lessonFeed [data-ev]').length >= n, N + 1, 20000);
