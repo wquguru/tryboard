@@ -5,7 +5,8 @@ import { type ReactNode } from "react";
 import { type Level } from "../../checks";
 import { fetchBuf } from "../../assets";
 import { beginnerOn, lessonStep, setLessonStep } from "../../beginner";
-import { setDock, actions } from "../chrome";
+import { setDock, actions, bc, overlay } from "../chrome";
+import { LessonCallouts } from "../lessoncallouts";
 import { isPhone } from "../mobile";
 import { lessonFor } from "../lessons";
 import { LessonSteps, lessonUi, setLessonUi } from "../lesson";
@@ -22,6 +23,7 @@ export function mountLesson(b: BenchCtx) {
         setLessonUi({ lesson: null });
         b.setToolGroups(c);
       }
+      if (bc.get().overlays.lessonCallouts) overlay("lessonCallouts", null);
       return null;
     }
     const n = lesson.steps.length;
@@ -50,6 +52,8 @@ export function mountLesson(b: BenchCtx) {
     });
     // The left card is drawn after the bench's first toolbar pass, so the short toolbar follows from here
     if (!had) b.setToolGroups(c);
+    // H-02 callouts live in the stage overlays; they follow lessonUi themselves
+    if (!bc.get().overlays.lessonCallouts) overlay("lessonCallouts", <LessonCallouts b={b} />);
     return <LessonSteps />;
   }
 

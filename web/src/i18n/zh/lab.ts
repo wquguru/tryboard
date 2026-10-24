@@ -1184,5 +1184,11 @@ const d: Dict = {
   "Running this lesson's code ({fw})": "正在运行本关代码（{fw}）",
   "More tools (multimeter, scope…)": "更多工具（万用表、示波器…）",
   "Fewer tools": "收起工具",
+  // H-02 lesson callouts
+  "Now: high 3.3 V": "现在：高 3.3 V",
+  "Now: low 0 V": "现在：低 0 V",
+  "Now: on": "现在：亮",
+  "Now: off": "现在：灭",
+  "Part callouts": "零件标注",
 };
 export default d;

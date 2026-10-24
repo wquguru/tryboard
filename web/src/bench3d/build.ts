@@ -33,7 +33,9 @@ export function mountBuildersA(ctx: BenchCtx): void {
     const col = p.col ?? 24;
     l.grp.position.set(colX(col) + 1.27, BB_TOP + 2, rowZ(7));
     root.add(l.grp);
+    l.grp.name = 'led';
     const r = resistor();
+    r.name = 'res';
     r.position.set(colX(col - 2), BB_TOP + 1.5, rowZ(7));
     root.add(r);
     // IO → column of the resistor's left end; LED cathode → GND

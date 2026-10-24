@@ -1184,5 +1184,11 @@ const d: Dict = {
   "Running this lesson's code ({fw})": "このレッスンのコードを実行中（{fw}）",
   "More tools (multimeter, scope…)": "その他のツール（テスター、オシロ…）",
   "Fewer tools": "ツールを減らす",
+  // H-02 lesson callouts
+  "Now: high 3.3 V": "いま：High 3.3 V",
+  "Now: low 0 V": "いま：Low 0 V",
+  "Now: on": "いま：点灯",
+  "Now: off": "いま：消灯",
+  "Part callouts": "部品の説明",
 };
 export default d;

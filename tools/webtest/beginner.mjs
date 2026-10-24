@@ -84,6 +84,37 @@ report('pass criteria folded in details', await page.$eval('#lessonCp details', 
 const short = await tools(page);
 report('short toolbar', short === 'run,select,orbit,fit,button,more', short);
 report('Previous disabled on step 1', await page.$eval('#lessonPrev', (e) => e.disabled));
+// H-02 callouts: cards for the step, inside the viewport, leader end follows the camera
+const callouts = (pg) =>
+  pg.$$eval('#lessonCallouts [data-callout]', (cs) =>
+    cs
+      .filter((c) => c.style.display !== 'none')
+      .map((c) => {
+        const r = c.getBoundingClientRect();
+        return { key: c.dataset.callout, x: +c.dataset.x, y: +c.dataset.y, inView: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && r.width > 0 };
+      }),
+  ).catch(() => []);
+await waitFor(page, () => document.querySelectorAll('#lessonCallouts [data-callout][data-x]').length >= 3, null, 5000);
+const co1 = await callouts(page);
+report('callouts: step 1 has chip / gpio / usb in view', co1.map((c) => c.key).sort().join(',') === 'chip,gpio,usb' && co1.every((c) => c.inView), JSON.stringify(co1));
+const spots = new Set(co1.map((c) => `${Math.round(c.x / 4)},${Math.round(c.y / 4)}`));
+report('callouts: each points at its own spot', spots.size === co1.length);
+await page.click('#toolbar [data-tool="orbit"]');
+const st = await page.$eval('#stage', (e) => { const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
+await page.mouse.move(st[0], st[1]);
+await page.mouse.down();
+for (let i = 1; i <= 10; i++) await page.mouse.move(st[0] + i * 18, st[1] + i * 4);
+await page.mouse.up();
+await sleep(600);
+const co2 = await callouts(page);
+const moved = co1.filter((a) => { const b = co2.find((x) => x.key === a.key); return b && Math.hypot(b.x - a.x, b.y - a.y) > 10; }).length;
+report('callouts: leaders follow the camera', moved >= 2, JSON.stringify(co2));
+await page.click('#toolbar [data-tool="fit"]');
+await page.click('#toolbar [data-tool="select"]');
+await sleep(400);
+await page.click('#lessonCallouts [data-callout="gpio"]');
+const sel = await waitFor(page, () => JSON.stringify(globalThis.__tbApp.store.get().selection) === JSON.stringify({ kind: 'pin', id: 'GPIO5' }), null, 3000);
+report('callouts: clicking a card selects its pin', sel);
 await page.screenshot({ path: path.join(outDir, 'beginner-1.png') });
 
 // 3. Walk the five steps with Next
@@ -91,6 +122,11 @@ for (let i = 1; i < 5; i++) {
   await page.click('#lessonNext');
   await waitFor(page, (n) => document.querySelector('#lessonCard')?.dataset.step === String(n), i, 3000);
   report(`next -> step ${i + 1}`, (await cardStep(page)) === String(i), `card=${await cardStep(page)} states=${await states(page)}`);
+  const want = [3, 2, 3, 2, 1][i];
+  await waitFor(page, (n) => document.querySelectorAll('#lessonCallouts [data-callout]').length === n, want, 3000);
+  await sleep(300);
+  const co = await callouts(page);
+  report(`step ${i + 1}: ${want} callouts projected`, co.length === want && co.every((c) => c.inView), JSON.stringify(co));
 }
 await page.click('#lessonPrev');
 await waitFor(page, () => document.querySelector('#lessonCard')?.dataset.step === '3', null, 3000);
@@ -98,11 +134,14 @@ report('previous goes back', (await cardStep(page)) === '3' && (await has(page, 
 await page.click('#lessonRun');
 const ran = await waitFor(page, () => /s3-blink/.test(document.querySelector('#toast')?.textContent ?? ''), null, 8000);
 report('run loads the lesson firmware', ran);
+const live = await waitFor(page, () => /Now: (high 3\.3 V|low 0 V)/.test(document.querySelector('[data-callout="gpio"] [data-live]')?.textContent ?? ''), null, 8000);
+report('callouts: GPIO card shows the live level', live);
 await page.click('#lessonSteps [data-step="4"]');
 await waitFor(page, () => document.querySelector('#lessonCard')?.dataset.step === '4', null, 3000);
 report('step list is clickable', (await cardStep(page)) === '4' && !(await has(page, '#lessonRun')));
 await page.click('#lessonNext');
 await waitFor(page, () => document.querySelector('#lessonCard')?.dataset.step === 'done', null, 3000);
+report('finished: no callouts', !(await has(page, '#lessonCallouts')));
 report('finish marks all steps done', (await cardStep(page)) === 'done' && (await states(page)) === 'done,done,done,done,done', await states(page));
 const saved = await page.evaluate(() => localStorage.getItem('tryboard-app-lesson:weather'));
 report('progress stored per work', saved === '{"01":5}', saved);
@@ -126,7 +165,7 @@ await waitFor(page, () => !document.querySelector('#lessonSteps') && !!document.
 report('switch off: toolbar == baseline', (await tools(page)) === offTools, await tools(page));
 const left = await page.$eval('#cpCard', (e) => e.textContent).catch(() => null);
 report('switch off: checkpoint card == baseline', left === offLeft);
-report('switch off: no lesson UI', !(await has(page, '#lessonCard')) && !(await has(page, '#lessonTitle')));
+report('switch off: no lesson UI', !(await has(page, '#lessonCard')) && !(await has(page, '#lessonTitle')) && !(await has(page, '#lessonCallouts')));
 // The search box was only hidden during the lesson: the same bound input is back and its list still opens
 await page.click('#cmdk');
 report('switch off: search still works', await waitFor(page, () => !!document.querySelector('#cmdk')?.offsetWidth && !!document.querySelector('#cmdkList')?.offsetHeight, null, 3000));
