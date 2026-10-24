@@ -43,9 +43,9 @@ export function mountDemo(b: BenchCtx) {
     project: (tg) => b.ctx?.session.pick.project?.(tg) ?? null,
     projectWire: (id, n) => b.ctx?.session.bench.projectWire?.(id, n) ?? null,
     wireId,
-    viewTo: (tg, ms) => {
+    viewTo: (tg, ms, wires) => {
       const bench = b.ctx?.session.bench;
-      if (bench?.viewTo) bench.viewTo(tg, ms);
+      if (bench?.viewTo) bench.viewTo(tg, ms, wires);
       else bench?.view("fit", tg);
     },
     setFlow,

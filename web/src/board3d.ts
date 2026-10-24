@@ -101,8 +101,8 @@ export interface Bench extends ScenePickApi {
   stats(): { calls: number; triangles: number; frameMs: number; cpuMs: number; geometries: number; textures: number };
   /** View buttons (U-04): top / front / zoom in / zoom out / fit selection (whole scene if nothing is selected) */
   view(k: 'top' | 'front' | 'in' | 'out' | 'fit', sel?: { kind: string; id: string } | null): void;
-  /** H-05 demo: view('fit', sel) eased over `ms` instead of a jump; dragging the view cancels it. */
-  viewTo?(sel: { kind: string; id: string }, ms: number): void;
+  /** H-05 demo: view('fit', sel) eased over `ms` instead of a jump, framing `wires` whole when given; dragging the view cancels it. */
+  viewTo?(sel: { kind: string; id: string }, ms: number, wires?: string[]): void;
   /** H-05 demo: `n + 1` points along a bench wire, projected to CSS px in the stage (board end first); null if no such wire. */
   projectWire?(id: string, n: number): ScreenPoint[] | null;
   dispose(): void;
@@ -426,7 +426,7 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
       }
       controls.update();
     },
-    viewTo(sel, ms) {
+    viewTo(sel, ms, wires) {
       // Same framing as view('fit'), eased over `ms` from the render tick; a drag or a new call cancels it
       const a: { to: THREE.Vector3 | null; pos: THREE.Vector3 | null } = { to: null, pos: null };
       anim = a;
@@ -434,7 +434,18 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
       anim = null;
       if (!a.to || !a.pos) return;
       const from = { to: controls.target.clone(), pos: camera.position.clone() };
-      const end = { to: a.to, pos: a.pos };
+      // Pull back from the inspector's close-up so the beginner sees the pin's neighbours and breadboard column too
+      const back = a.pos.clone().sub(a.to);
+      let d = back.length() * 2.5;
+      // A wire (or the whole loop) is framed end to end, so the drag's start and target holes are both on screen
+      const ws = (wires ?? (sel.kind === 'wire' ? [sel.id] : [])).map((id) => ctx.wires.find((x) => x.id === id)).filter((w) => !!w);
+      if (ws.length) {
+        const box = new THREE.Box3().setFromPoints(ws.flatMap((w) => w.curve.getPoints(16)));
+        a.to = box.getCenter(new THREE.Vector3());
+        d = (box.getSize(new THREE.Vector3()).length() / 2 / Math.sin((camera.fov * Math.PI) / 360)) * 1.1;
+      }
+      d = Math.min(controls.maxDistance, Math.max(controls.minDistance, d));
+      const end = { to: a.to, pos: a.to.clone().addScaledVector(back.normalize(), d) };
       let t0 = -1;
       ctx.camTick = (now) => {
         if (t0 < 0) t0 = now;

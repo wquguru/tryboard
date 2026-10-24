@@ -13,7 +13,7 @@ export interface DemoApi {
   projectWire: (id: string, n: number) => ScreenPoint[] | null;
   /** Bench wire id for a beat's wire (either end order), or null. */
   wireId: (from: string, to: string) => string | null;
-  viewTo: (t: LessonTarget, ms: number) => void;
+  viewTo: (t: LessonTarget, ms: number, wires?: string[]) => void;
   setFlow: (on: boolean) => void;
 }
 
@@ -60,7 +60,8 @@ export function LessonDemo({
   // A new beat restarts its clock, moves the camera and switches "Show current"
   useEffect(() => {
     live.current.ms = 0;
-    api.viewTo(beat.focus, CAM_MS / (slow ? 0.5 : 1));
+    const wid = beat.wire ? api.wireId(beat.wire.from, beat.wire.to) : null;
+    api.viewTo(beat.focus, CAM_MS / (slow ? 0.5 : 1), beat.flow ? flowWires : wid ? [wid] : undefined);
     api.setFlow(!!beat.flow);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [i]);
@@ -79,8 +80,14 @@ export function LessonDemo({
         }
         const id = b.wire ? api.wireId(b.wire.from, b.wire.to) : null;
         let path = id ? api.projectWire(id, 32) : null;
-        // The bench draws board end first; flip when the beat drags from the part end
-        if (path && id && !id.startsWith(`wire:${b.wire!.from}~`)) path = [...path].reverse();
+        // Wire curves are not always stored board end first: orient by the board pin's projection
+        if (path && id) {
+          const pin = id.slice(5).split("~")[0];
+          const p = api.project({ kind: "pin", id: pin });
+          const d = (q: ScreenPoint) => (p ? Math.hypot(q.x - p.x, q.y - p.y) : 0);
+          const boardFirst = d(path[0]) <= d(path[path.length - 1]);
+          if (boardFirst !== (b.wire!.from === pin)) path = [...path].reverse();
+        }
         const pts: ScreenPoint[] = [];
         const f = api.project(b.focus);
         if (f) pts.push(f);
