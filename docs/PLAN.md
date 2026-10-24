@@ -303,7 +303,7 @@
 | H-05 | 「演示给我看」分步编排：新手模式下替换 Show me：每段 镜头目标 + 其余变暗 + 讲解卡 + 拖线动画，暂停 / 0.5× / 上一段 / 下一段；「我自己来接」退出演示、只留目标孔蓝圈，接对变绿 | agent-browser 逐段截图；wiremode.mjs 不回退 | ☑ |
 | H-06 | 闪烁快慢三档：s3-blink 加 100 / 1000 ms 两个变体（`BLINK_MS` 编译宏，源码共用），代码面板里点 100 / 500 / 1000 换内置固件重跑 | build_fw + accept 新用例（翻转间隔 100 / 1000 ms）；agent-browser | ☑ 固件与验收；网页 UI 完成（DelayChips，lessonfeed.mjs 断言间隔 0.100 / 1.000 s；记录 Reviews/ab/H-06.md） |
 | H-07 | 手机：上台面、下可上拉步骤面板，按钮 ≥ 44px，标注卡最多 2 张 | mobile.mjs 新断言 390×844 无横向滚动；agent-browser 390 截图 | ☐ |
-| H-08 | 第 02、03 关课程内容（按钮、OLED）照 H-01 数据格式补齐 | lessons 数据测试；agent-browser 走两关 | ☐ |
+| H-08 | 第 02、03 关课程内容（按钮、OLED）照 H-01 数据格式补齐 | lessons 数据测试；agent-browser 走两关 |☑ 第 02 课（BOOT 输入 + GPIO5）、第 03 课（OLED 0x3C，I2C 事件模板 100 ms 内合并为一行）；选中的检查点课程不再跳回第一个未过关（记录 Reviews/ab/H-08.md） |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。

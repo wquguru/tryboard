@@ -7,12 +7,14 @@ import { useStore } from "./react";
 import { createStore } from "./store";
 import { bc, setDock } from "./chrome";
 import { lessonUi } from "./lesson";
-import { CPU_HZ, K, type IoEvent, type IoStore } from "./iotrace";
+import { B_NACK, B_PORT1, B_READ, B_RESTART, CPU_HZ, K, hex, type IoEvent, type IoStore } from "./iotrace";
 import type { CodeChips, Lesson } from "./lessons";
 import { CodePane as CodeView } from "./panes";
 
 /** Rows kept; older ones scroll away (a blink makes two per second). */
 export const FEED_CAP = 200;
+/** I2C writes to one address closer than this (100 ms) add up in one row, so a screen refresh is one line. */
+export const I2C_MERGE = CPU_HZ / 10;
 
 export interface FeedItem {
   /** Running number since the last reset (React key, data-ev). */
@@ -23,6 +25,8 @@ export interface FeedItem {
   hi: boolean;
   text: string;
   line: number;
+  /** H-08: an I2C row (address, bytes written so far, time of the last write merged in); pin / hi unused. */
+  i2c?: { addr: number; bytes: number; last: number };
 }
 interface FeedState {
   items: FeedItem[];
@@ -45,10 +49,13 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
   bound = null;
   lessonFeed.set({ items: [] });
   const rules = lesson?.events ?? [];
-  if (!lesson || !rules.length) return;
-  // GPIO edges are only recorded for watched pins; add ours without dropping the analyzer's
+  const i2cRules = lesson?.i2c ?? [];
+  if (!lesson || (!rules.length && !i2cRules.length)) return;
+  // GPIO edges are only recorded for watched pins; add ours without dropping the analyzer's (I2C is always logged)
   const pins = new Set(session.ioPins());
   if (rules.some((r) => !pins.has(r.pin))) session.watchIo([...pins, ...rules.map((r) => r.pin)]);
+  // Open I2C write per port: address rule matched by the ACKed address byte, data bytes counted until STOP
+  const open = new Map<number, { t: number; addr: number; bytes: number }>();
   const io = session.io;
   let raw: IoEvent[] = io.raw;
   let at = 0;
@@ -63,6 +70,7 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
       raw = io.raw;
       at = 0;
       skipT = trimmed ? seenT : -1;
+      open.clear();
       if (!trimmed) {
         seenT = -1;
         n = 0;
@@ -70,16 +78,48 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
       }
     }
     dropped = io.dropped;
-    const add: FeedItem[] = [];
+    const items = lessonFeed.get().items.slice();
+    let changed = false;
+    const close = (port: number) => {
+      const x = open.get(port);
+      open.delete(port);
+      // Zero-byte writes are bus scans / probes, not screen traffic
+      if (!x || !x.bytes) return;
+      const r = i2cRules.find((y) => y.addr === x.addr)!;
+      const prev = items[items.length - 1];
+      changed = true;
+      if (prev?.i2c && prev.i2c.addr === x.addr && x.t - prev.i2c.last < I2C_MERGE) {
+        const bytes = prev.i2c.bytes + x.bytes;
+        items[items.length - 1] = { ...prev, text: r.text.replace("{n}", String(bytes)), i2c: { addr: x.addr, bytes, last: x.t } };
+        return;
+      }
+      items.push({ n: n++, t: x.t, pin: -1, hi: true, text: r.text.replace("{n}", String(x.bytes)), line: r.line, i2c: { addr: x.addr, bytes: x.bytes, last: x.t } });
+    };
     for (; at < raw.length; at++) {
       const e = raw[at];
-      if (e.kind !== K.GPIO || e.t <= skipT) continue;
-      const r = rules.find((x) => x.pin === e.a);
-      if (!r) continue;
-      add.push({ n: n++, t: e.t, pin: e.a, hi: !!e.b, text: e.b ? r.hi : r.lo, line: r.line });
+      if (e.t <= skipT) continue;
+      if (e.kind === K.GPIO) {
+        const r = rules.find((x) => x.pin === e.a);
+        if (!r) continue;
+        items.push({ n: n++, t: e.t, pin: e.a, hi: !!e.b, text: e.b ? r.hi : r.lo, line: r.line });
+        changed = true;
+        continue;
+      }
+      if (!i2cRules.length || e.kind < K.I2C_START || e.kind > K.I2C_STOP) continue;
+      const port = e.b & B_PORT1 ? 1 : 0;
+      if (e.kind === K.I2C_START) {
+        // A repeated START keeps the transaction; a fresh one ends any write left open
+        if (!(e.b & B_RESTART)) close(port);
+      } else if (e.kind === K.I2C_ADDR) {
+        if (!(e.b & (B_READ | B_NACK)) && i2cRules.some((y) => y.addr === e.a)) open.set(port, { t: e.t, addr: e.a, bytes: 0 });
+        else open.delete(port);
+      } else if (e.kind === K.I2C_DATA) {
+        const x = open.get(port);
+        if (x && !(e.b & B_READ)) x.bytes++;
+      } else close(port);
     }
     if (raw.length) seenT = raw[raw.length - 1].t;
-    if (add.length) lessonFeed.set({ items: [...lessonFeed.get().items, ...add].slice(-FEED_CAP) });
+    if (changed) lessonFeed.set({ items: items.slice(-FEED_CAP) });
   };
   pull();
   bound = { lesson, session, off: session.onIo(pull) };
@@ -163,11 +203,22 @@ export function LessonFeed({ className }: { className?: string }) {
           .slice()
           .reverse()
           .map((e) => (
-            <div key={e.n} data-ev={e.n} data-t={e.t} data-pin={e.pin} data-level={e.hi ? 1 : 0} className="flex gap-2.5 py-0.5 leading-5">
+            <div
+              key={e.n}
+              data-ev={e.n}
+              data-t={e.t}
+              {...(e.i2c ? { "data-i2c": hex(e.i2c.addr), "data-bytes": e.i2c.bytes } : { "data-pin": e.pin, "data-level": e.hi ? 1 : 0 })}
+              className="flex gap-2.5 py-0.5 leading-5"
+            >
               <span className="w-[60px] flex-none font-mono text-muted tabular-nums">{fmtSec(e.t)}</span>
               <span className={cn("font-medium", e.hi ? "text-fg" : "text-muted")}>{e.text}</span>
               <span className="font-mono text-muted">
-                · {e.hi ? t("GPIO{pin} → high 3.3 V", { pin: e.pin }) : t("GPIO{pin} → low 0 V", { pin: e.pin })}
+                ·{" "}
+                {e.i2c
+                  ? t("I2C → {addr}", { addr: hex(e.i2c.addr) })
+                  : e.hi
+                    ? t("GPIO{pin} → high 3.3 V", { pin: e.pin })
+                    : t("GPIO{pin} → low 0 V", { pin: e.pin })}
               </span>
             </div>
           ))}
