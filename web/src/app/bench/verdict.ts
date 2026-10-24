@@ -42,7 +42,7 @@ export function mountVerdict(b: BenchCtx) {
     // Beginner lesson (H-01): select / orbit / reset view / BOOT, the rest folded behind "More tools"
     if (b.lessonTools() && !b.beginnerMore)
       return c.shell.toolbar.setGroups([
-        { id: "run", tools: [{ id: "run", label: t("Run"), primary: true }] },
+        { id: "run", tools: [{ id: "run", label: t("Run"), primary: true }, ...b.flowTools()] },
         {
           id: "nav",
           tools: [

@@ -11,6 +11,7 @@ import { type ChipId, apiId } from './bench3d/boards';
 import type { SceneSpec } from './bench3d/spec';
 import type { BenchCtx } from './bench3d/ctx';
 import { mountStage, mountPost, mountLoop } from './bench3d/stage';
+import { mountFlow } from './bench3d/flow';
 import { mountState, mountScene } from './bench3d/scene';
 import { mountBuildersA, mountBuildersB } from './bench3d/build';
 import { paintPartLamps } from './bench3d/parts3d';
@@ -93,6 +94,9 @@ export interface Bench extends ScenePickApi {
   extModels(): string[];
   /** Brightness each external LED should have now (0–1, from GPIO / PWM frames): lets tests check bench LEDs really follow their pins */
   ledLevels(): { pin: number; target: number }[];
+  /** Beginner "Show current" (H-04): dashed flow along wire / part / pin ids, null hides; returns the segments drawn. */
+  setFlow?(path: string[] | null): number;
+  flowSegs?(): number;
   /** Perf baseline: last frame's draw calls, triangles and mean frame interval */
   stats(): { calls: number; triangles: number; frameMs: number; cpuMs: number; geometries: number; textures: number };
   /** View buttons (U-04): top / front / zoom in / zoom out / fit selection (whole scene if nothing is selected) */
@@ -130,6 +134,7 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
   mountPointer(ctx);
   mountTargets(ctx);
   mountInspect(ctx);
+  mountFlow(ctx);
   const {
     applyTheme, partsById, addRole, renderer, scene, camera, controls, overlay, extList, setExt, offExt, offReport, stripLast, paintStrip, oledData,
     placeObstacle, rayDistance, applyPose, setBoard, fitView, setScene, composer, ro, turnPot, showKnob, imuRoot, pinsById, pinWorldPos,
@@ -410,6 +415,8 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
       controls.update();
     },
     ledLevels: () => ctx.leds.map((l) => ({ pin: l.pin, target: l.target })),
+    setFlow: ctx.setFlow,
+    flowSegs: ctx.flowSegs,
     stats() {
       return { ...lastInfo, frameMs: Math.round(ctx.frameMs * 10) / 10, cpuMs: Math.round(ctx.cpuMs * 100) / 100, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures };
     },

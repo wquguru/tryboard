@@ -6,6 +6,7 @@ import { type WireMods, type BenchWire } from "../wiring";
 import { type WireFault } from "../wirecheck";
 import { PinTrace } from "../pinscope";
 import { type Level } from "../../checks";
+import { type Tool } from "../toolbar";
 import { type Selection, type StepCtx, type WorkDef } from "../types";
 import { type Recording } from "../capture";
 import { type AnalogControl, type Example } from "../examples";
@@ -133,6 +134,9 @@ export interface BenchCtx extends BenchState {
   // lesson.tsx (H-01)
   lessonTools: () => boolean;
   lessonCard: (id: string | null, l: Level | undefined) => ReactNode | null;
+  // flow.tsx (H-04)
+  flowTools: () => Tool[];
+  toggleFlow: () => void;
   // heat.ts(x)
   toggleHeat: () => void;
   // cards.ts(x)

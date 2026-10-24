@@ -348,6 +348,7 @@ export function mountCards(b: BenchCtx) {
       b.setToolGroups(c);
     } else if (id === "fit") c.session.bench.view?.("fit");
     else if (id === "run") lessonUi.get().run();
+    else if (id === "current") b.toggleFlow();
     else if (id === "button") {
       c.session.pressBoot(true);
       setTimeout(() => c.session.pressBoot(false), 150);

@@ -158,6 +158,10 @@ export interface BenchCtx {
   heatId: string | null;
   heatBase: number;
   setHeat: (partId: string | null) => void;
+  /** H-04 "Show current" overlay (bench3d/flow.ts). */
+  setFlow: (path: string[] | null) => number;
+  flowSegs: () => number;
+  flowTick: (now: number) => void;
   measured: [PickTarget, PickTarget] | null;
   measure: (a: PickTarget | null, b?: PickTarget) => number | null;
   usbHost: ReturnType<typeof createUsbHost> | null;
