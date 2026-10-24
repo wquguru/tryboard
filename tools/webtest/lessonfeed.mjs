@@ -104,6 +104,25 @@ await page.click('#lessonSteps [data-step="4"]');
 const step5 = await waitFor(page, () => [...document.querySelectorAll('#codeBody tr[data-hl]')].map((r) => r.dataset.line).join(',') === '25', null, 5000);
 report('paused: highlight follows the step (step 5 -> line 25)', step5, await page.$$eval('#codeBody tr[data-hl]', (rs) => rs.map((r) => r.dataset.line).join(',')));
 
+// H-06: step 5 chips load the prebuilt 100 / 1000 ms variants; adjacent GPIO5 edges follow the chosen delay
+const chipsOk = (await page.$$eval('#codeBody [data-chip]', (bs) => bs.map((b) => `${b.dataset.chip}:${b.getAttribute('aria-pressed')}:${Math.round(b.getBoundingClientRect().height)}`).join(','))) ;
+report('step 5: chips 100/500/1000, 500 pressed, >= 28 px', /^100:false:(\d+),500:true:\d+,1000:false:\d+$/.test(chipsOk) && chipsOk.split(',').every((c) => Number(c.split(':')[2]) >= 28), chipsOk);
+for (const [ms, fw] of [[100, 's3-blink-100'], [1000, 's3-blink-1000']]) {
+  await page.click(`#codeBody [data-chip="${ms}"]`);
+  // fresh rows only: the old firmware's rows reach at most ~1.1 s, so wait for edges past 4 blink periods
+  const ok = await waitFor(page, (cyc) => [...document.querySelectorAll('#lessonFeed [data-ev]')].some((r) => Number(r.dataset.t) > cyc), CPU_HZ * (ms === 100 ? 1.5 : 4.2), 40000);
+  await page.evaluate(() => globalThis.__tbApp.session.sim.pause());
+  await sleep(300);
+  // the first rows are boot-time GPIO init edges (< 50 ms); blink edges start after
+  const ts = (await page.$$eval('#lessonFeed [data-ev]', (rs) => rs.map((r) => Number(r.dataset.t)))).filter((x) => x > CPU_HZ * 0.05).sort((a, b) => a - b);
+  const gaps = ts.slice(1, 5).map((x, i) => (x - ts[i]) / CPU_HZ);
+  const pressed = await page.$eval(`#codeBody [data-chip="${ms}"]`, (b) => b.getAttribute('aria-pressed'));
+  const fwNow = await page.evaluate(() => globalThis.__tbApp.session.fwName ?? '');
+  const want = ms / 1000;
+  report(`chip ${ms}: edge gap ~ ${want.toFixed(2)} s, chip pressed`, ok && gaps.length >= 3 && gaps.every((g) => Math.abs(g - want) < want * 0.06 + 0.005) && pressed === 'true', `ok=${ok} n=${ts.length} gaps=${gaps.map((g) => g.toFixed(3)).join(',')} ${fw} ${fwNow}`);
+  await page.screenshot({ path: path.join(outDir, `lessonfeed-chip${ms}.png`) });
+}
+
 // Raw serial is one click away
 await page.click('#lessonRawSerial');
 await waitFor(page, () => document.querySelector('#dock')?.dataset.tab === 'serial', null, 3000);

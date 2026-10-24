@@ -1131,6 +1131,8 @@ const d: Dict = {
   "GPIO{pin} → high 3.3 V": "GPIO{pin} → High 3.3 V",
   "GPIO{pin} → low 0 V": "GPIO{pin} → Low 0 V",
   "Highlight follows events (not step debugging)": "이벤트를 따라 강조 표시(단계별 디버깅 아님)",
+  "Delay in milliseconds": "지연 시간(밀리초)",
+  "Three prebuilt versions (the web page cannot compile yet)": "미리 빌드된 세 가지 버전(웹에서는 아직 컴파일할 수 없습니다)",
   "This lesson's pin changes in plain words, with the code line behind each": "이번 레슨의 핀 변화를 쉬운 말로, 해당 코드 줄과 함께 표시",
   // Beginner lessons (H-01)
   "ESP32-S3 chip": "ESP32-S3 칩",

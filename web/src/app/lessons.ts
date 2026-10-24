@@ -19,6 +19,8 @@ export interface CodeChips {
   line: number;
   values: number[];
   current: number;
+  /** Prebuilt firmware per value (the web page cannot compile yet). */
+  fw: Record<number, string>;
 }
 export interface LessonStep {
   id: string;
@@ -125,7 +127,7 @@ export const LESSONS: Lesson[] = [
         tasks: [t('Change 500 to 100'), t('Try 1000 and watch again')],
         callouts: pick('led'),
         codeLines: [25],
-        codeChips: { line: 25, values: [100, 500, 1000], current: 500 },
+        codeChips: { line: 25, values: [100, 500, 1000], current: 500, fw: { 100: 's3-blink-100', 500: 's3-blink', 1000: 's3-blink-1000' } },
       },
     ],
   },

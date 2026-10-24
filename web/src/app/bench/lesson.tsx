@@ -32,6 +32,12 @@ export function mountLesson(b: BenchCtx) {
     const nextId = ids[ids.indexOf(lesson.checkpoint) + 1];
     const nl = nextId ? c.session.levels.find((x) => x.id === nextId) : undefined;
     const work = c.work.id;
+    const load = (fw: string) =>
+      void fetchBuf(`./fw/${fw}/flash.bin`).then((buf) => {
+        actions.releaseBin?.();
+        c.session.loadFirmware(buf, `${fw}/flash.bin`);
+        c.shell.toast(t("Running this lesson's code ({fw})", { fw }));
+      });
     setLessonUi({
       lesson,
       step: Math.max(0, Math.min(n, lessonStep(work, lesson.checkpoint))),
@@ -43,12 +49,17 @@ export function mountLesson(b: BenchCtx) {
         setLessonUi({ step: s });
         if (s === n) c.shell.toast(t("Lesson {n} done: {title}", { n: lesson.no, title: lesson.title }));
       },
-      run: () =>
-        void fetchBuf(`./fw/${lesson.fw}/flash.bin`).then((buf) => {
-          actions.releaseBin?.();
-          c.session.loadFirmware(buf, `${lesson.fw}/flash.bin`);
-          c.shell.toast(t("Running this lesson's code ({fw})", { fw: lesson.fw }));
-        }),
+      run: () => {
+        setLessonUi({ delay: lesson.steps.find((x) => x.codeChips)?.codeChips?.current ?? 500 });
+        load(lesson.fw);
+      },
+      delay: lessonUi.get().delay,
+      setDelay: (ms) => {
+        const fw = lesson.steps.find((x) => x.codeChips)?.codeChips?.fw[ms];
+        if (!fw) return;
+        setLessonUi({ delay: ms });
+        load(fw);
+      },
       openChecks: () => setDock({ tab: "checks", collapsed: false }),
     });
     // The left card is drawn after the bench's first toolbar pass, so the short toolbar follows from here
