@@ -250,6 +250,7 @@ export function mountLoop(ctx: BenchCtx): void {
       heat.scale.set(ctx.heatBase * k, ctx.heatBase * k, 1);
     }
     ctx.flowTick?.(t0);
+    ctx.camTick?.(t0);
     controls.update();
     // Skip bloom when nothing glows (saves 5 blur levels)
     bloom.enabled = glow;

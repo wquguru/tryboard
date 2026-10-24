@@ -20,6 +20,19 @@ export interface CodeChips {
   values: number[];
   current: number;
 }
+/** H-05 "Show me how": one beat of the scripted demo; it only draws over the bench, never changes its wiring. */
+export interface DemoBeat {
+  /** Short label under the progress bar. */
+  short: string;
+  title: string;
+  body: string;
+  /** Where the camera eases to; everything else dims. */
+  focus: LessonTarget;
+  /** Drag animation from pin `from` to pin `to` (bench wire `wire:<board pin>~<part pin>`, either order). */
+  wire?: { from: string; to: string; color: string };
+  /** Turn on "Show current" for this beat. */
+  flow?: boolean;
+}
 export interface LessonStep {
   id: string;
   title: string;
@@ -32,6 +45,7 @@ export interface LessonStep {
   /** 1-based lines in `Lesson.src` to highlight for this step (H-03 follows events instead while running). */
   codeLines?: number[];
   codeChips?: CodeChips;
+  demo?: DemoBeat[];
 }
 /** H-03: how one pin's edges read in "What happened" and which source line they point at. */
 export interface LessonEvent {
@@ -110,6 +124,35 @@ export const LESSONS: Lesson[] = [
         tasks: [t('Turn on "Show current"'), t('Pull out the black wire and see what happens to the current')],
         callouts: pick('gpio', 'res', 'gnd'),
         codeLines: [18],
+        demo: [
+          {
+            short: t('Find GPIO5'),
+            title: t('Find GPIO5'),
+            body: t('GPIO5 is the pin the code switches on and off. Each pin on the board connects to the column of breadboard holes right beside it.'),
+            focus: { kind: 'pin', id: 'GPIO5' },
+          },
+          {
+            short: t('Orange wire to resistor'),
+            title: t("Orange wire: from GPIO5 to the resistor's left leg"),
+            body: t("The 5 holes in one breadboard column are connected. So the wire doesn't have to touch the resistor: any hole in the same column as its left leg will do."),
+            focus: { kind: 'wire', id: 'wire:GPIO5~led:5:IN' },
+            wire: { from: 'GPIO5', to: 'led:5:IN', color: '#F08C2E' },
+          },
+          {
+            short: t('Black wire to GND'),
+            title: t("Black wire: from the LED's short leg back to GND"),
+            body: t("The short leg is the LED's negative side. A black wire from its column back to a GND pin gives the current a way home to the board."),
+            focus: { kind: 'wire', id: 'wire:GND~led:5:GND' },
+            wire: { from: 'led:5:GND', to: 'GND', color: '#1E1E1E' },
+          },
+          {
+            short: t('Current goes round'),
+            title: t('Show current: one closed loop'),
+            body: t('Now current can leave GPIO5, pass the resistor and the LED, and come back to GND. The blue dashes show that path; break it anywhere and the LED stays dark.'),
+            focus: { kind: 'part', id: 'led:5' },
+            flow: true,
+          },
+        ],
       },
       {
         id: 'run',

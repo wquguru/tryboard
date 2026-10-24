@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { createUsbHost, type UsbView } from './usb3d';
-import type { PinInfo, ScenePickApi } from './scene-api';
+import type { PinInfo, ScenePickApi, ScreenPoint } from './scene-api';
 import { capturableOf, type Capturable } from './app/capture';
 import type { Pose } from './imupose';
 import { t } from './i18n';
@@ -101,6 +101,10 @@ export interface Bench extends ScenePickApi {
   stats(): { calls: number; triangles: number; frameMs: number; cpuMs: number; geometries: number; textures: number };
   /** View buttons (U-04): top / front / zoom in / zoom out / fit selection (whole scene if nothing is selected) */
   view(k: 'top' | 'front' | 'in' | 'out' | 'fit', sel?: { kind: string; id: string } | null): void;
+  /** H-05 demo: view('fit', sel) eased over `ms` instead of a jump; dragging the view cancels it. */
+  viewTo?(sel: { kind: string; id: string }, ms: number): void;
+  /** H-05 demo: `n + 1` points along a bench wire, projected to CSS px in the stage (board end first); null if no such wire. */
+  projectWire?(id: string, n: number): ScreenPoint[] | null;
   dispose(): void;
 }
 
@@ -160,6 +164,9 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
     const r = renderer.domElement.getBoundingClientRect();
     return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height];
   };
+  /** viewTo() borrows view('fit')'s framing: while set, view() fills it instead of moving the camera. */
+  let anim: { to: THREE.Vector3 | null; pos: THREE.Vector3 | null } | null = null;
+  controls.addEventListener('start', () => (ctx.camTick = null));
   const bench: Bench & { _debug: unknown } = {
     setScene,
     setBoard,
@@ -408,11 +415,44 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
         if (!at) fitView({ position: camera.position.toArray() as [number, number, number], target: controls.target.toArray() as [number, number, number] });
         else {
           const d = clampD(Math.max(r, 8) / Math.sin((camera.fov * Math.PI) / 360) * 0.9);
+          if (anim) {
+            anim.to = at.clone();
+            anim.pos = at.clone().addScaledVector(off.normalize(), d);
+            return;
+          }
           controls.target.copy(at);
           camera.position.copy(at).addScaledVector(off.normalize(), d);
         }
       }
       controls.update();
+    },
+    viewTo(sel, ms) {
+      // Same framing as view('fit'), eased over `ms` from the render tick; a drag or a new call cancels it
+      const a: { to: THREE.Vector3 | null; pos: THREE.Vector3 | null } = { to: null, pos: null };
+      anim = a;
+      bench.view('fit', sel);
+      anim = null;
+      if (!a.to || !a.pos) return;
+      const from = { to: controls.target.clone(), pos: camera.position.clone() };
+      const end = { to: a.to, pos: a.pos };
+      let t0 = -1;
+      ctx.camTick = (now) => {
+        if (t0 < 0) t0 = now;
+        const k = ms > 0 ? Math.min(1, (now - t0) / ms) : 1;
+        const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+        controls.target.lerpVectors(from.to, end.to, e);
+        camera.position.lerpVectors(from.pos, end.pos, e);
+        if (k >= 1) ctx.camTick = null;
+      };
+    },
+    projectWire(id, n) {
+      const w = ctx.wires.find((x) => x.id === id);
+      if (!w) return null;
+      const cw = renderer.domElement.clientWidth, ch = renderer.domElement.clientHeight;
+      return w.curve.getPoints(Math.max(1, n)).map((p) => {
+        const v = p.project(camera);
+        return { x: ((v.x + 1) / 2) * cw, y: ((1 - v.y) / 2) * ch };
+      });
     },
     ledLevels: () => ctx.leds.map((l) => ({ pin: l.pin, target: l.target })),
     setFlow: ctx.setFlow,

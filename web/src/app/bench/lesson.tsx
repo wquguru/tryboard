@@ -50,6 +50,7 @@ export function mountLesson(b: BenchCtx) {
           c.shell.toast(t("Running this lesson's code ({fw})", { fw: lesson.fw }));
         }),
       openChecks: () => setDock({ tab: "checks", collapsed: false }),
+      showDemo: (i) => b.openDemo(i),
     });
     // The left card is drawn after the bench's first toolbar pass, so the short toolbar follows from here
     if (!had) b.setToolGroups(c);

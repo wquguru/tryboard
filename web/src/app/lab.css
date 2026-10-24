@@ -82,6 +82,9 @@ body.app { --dock-h: var(--dock-desk, 200px); }
   body.app #props input[type='number'] { font-size: 16px; }
   .bn input { width: 20px; height: 20px; }
 }
+/* H-05: while the lesson demo plays (or the self-wiring ring shows), H-02 callout cards step aside and the fixed toolbar would cover the demo controls */
+#stage[data-lesson-demo] #lessonCallouts { display: none; }
+body:has(#stage[data-lesson-demo="play"]) #toolbar { display: none; }
 /* Hook classes for imperative code (analyzer, SVG views) and live fields (classList.toggle('bad')) */
 .mono { font-family: var(--mono); }
 .muted { color: var(--muted); }
