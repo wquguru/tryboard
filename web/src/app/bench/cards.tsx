@@ -17,6 +17,7 @@ import { AmoledCtrls, sceneBoard } from "./amoled";
 import type { BenchCtx } from "./ctx";
 import { isTutorialPart } from "../../bench3d/parts3d";
 import { tutorialControls } from "./tutorial";
+import { lessonUi } from "../lesson";
 
 export function mountCards(b: BenchCtx) {
   function cardContent(tg: PickTarget): ReactNode | null {
@@ -342,7 +343,12 @@ export function mountCards(b: BenchCtx) {
       } catch (e) {
         c.shell.toast(t("Recording failed: {err}", { err: String(e) }));
       }
-    } else if (id === "button") {
+    } else if (id === "more") {
+      b.beginnerMore = !b.beginnerMore;
+      b.setToolGroups(c);
+    } else if (id === "fit") c.session.bench.view?.("fit");
+    else if (id === "run") lessonUi.get().run();
+    else if (id === "button") {
       c.session.pressBoot(true);
       setTimeout(() => c.session.pressBoot(false), 150);
       c.shell.toast(t("Pressed BOOT once (GPIO{n})", { n: b.bootGpio() }));

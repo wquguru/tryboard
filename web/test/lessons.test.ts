@@ -1,0 +1,64 @@
+// H-01: beginner lesson data matches the firmware it teaches (code lines, reference build) and is translated in every locale.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { LESSONS, lessonFor } from '../src/app/lessons.ts';
+import zh from '../src/i18n/zh/index.ts';
+import ja from '../src/i18n/ja/index.ts';
+import ko from '../src/i18n/ko/index.ts';
+
+const root = new URL('../../', import.meta.url);
+const levels = JSON.parse(readFileSync(new URL('firmware/levels.json', root), 'utf8')) as { id: string; ref?: string }[];
+
+/** What each highlighted line must call, per lesson step (H-03 hangs events on these). */
+const CALLS: Record<string, Record<string, string>> = {
+  'weather/01': { loop: 'gpio_set_direction', run: 'gpio_set_level', tweak: 'vTaskDelay' },
+};
+
+test('weather lesson 01 has the five designed steps', () => {
+  const l = lessonFor('weather', '01');
+  assert.ok(l);
+  assert.deepEqual(l.steps.map((s) => s.id), ['board', 'parts', 'loop', 'run', 'tweak']);
+  assert.equal(lessonFor('weather', '02'), null);
+  assert.equal(lessonFor('spin', '01'), null);
+});
+
+test('every lesson step is short and complete', () => {
+  for (const l of LESSONS)
+    for (const s of l.steps) {
+      const sentences = s.body.split(/(?<=[.!?])\s+/).filter(Boolean);
+      assert.ok(sentences.length <= 3, `${l.work}/${l.checkpoint}/${s.id}: ${sentences.length} sentences`);
+      assert.ok(s.title && s.sub && s.tasks.length >= 1, `${s.id} title / sub / tasks`);
+      for (const c of s.callouts) assert.ok(c.title && c.body && c.target.id, `${s.id} callout ${c.key}`);
+    }
+});
+
+test('lesson firmware is the checkpoint reference build', () => {
+  for (const l of LESSONS) {
+    const lv = levels.find((x) => x.id === l.checkpoint);
+    assert.equal(l.fw, lv?.ref, `${l.work}/${l.checkpoint}`);
+    const cmake = readFileSync(new URL(`firmware/${l.fw}/main/CMakeLists.txt`, root), 'utf8');
+    const own = `firmware/${l.fw}/main/`;
+    assert.ok(l.src.startsWith(own) || cmake.includes(l.src.replace(/^firmware\//, '../../')), `${l.fw} builds ${l.src}`);
+  }
+});
+
+test('highlighted code lines contain the calls the step talks about', () => {
+  for (const l of LESSONS) {
+    const lines = readFileSync(new URL(l.src, root), 'utf8').split('\n');
+    const want = CALLS[`${l.work}/${l.checkpoint}`] ?? {};
+    for (const s of l.steps) {
+      for (const n of s.codeLines ?? []) assert.ok(n >= 1 && n <= lines.length, `${s.id}: line ${n}`);
+      if (want[s.id]) assert.ok(s.codeLines?.some((n) => lines[n - 1].includes(want[s.id])), `${s.id}: ${want[s.id]} on ${s.codeLines}`);
+      if (s.codeChips) assert.ok(lines[s.codeChips.line - 1].includes(`(${s.codeChips.current})`), `${s.id}: chip value ${s.codeChips.current}`);
+    }
+    for (const [id, call] of Object.entries(want)) assert.ok(l.steps.some((s) => s.id === id), `${id} (${call}) step exists`);
+  }
+});
+
+test('lesson text is translated in zh / ja / ko', () => {
+  for (const l of LESSONS) {
+    const strs = [l.title, l.summary, l.buy, ...l.steps.flatMap((s) => [s.title, s.sub, s.body, ...s.tasks, ...s.callouts.flatMap((c) => [c.title, c.body])])];
+    for (const [id, d] of Object.entries({ zh, ja, ko })) for (const k of strs) assert.ok(d[k], `${id}: ${k}`);
+  }
+});
