@@ -1184,5 +1184,7 @@ const d: Dict = {
   "Running this lesson's code ({fw})": "이번 레슨 코드 실행 중({fw})",
   "More tools (multimeter, scope…)": "도구 더 보기(멀티미터, 오실로스코프…)",
   "Fewer tools": "도구 줄이기",
+  "Show current": "전류 보기",
+  "Not running: shown as if the output were high": "실행 전: 출력 High로 가정해 표시",
 };
 export default d;

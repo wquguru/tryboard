@@ -47,6 +47,8 @@ export interface Lesson {
   fw: string;
   src: string;
   steps: LessonStep[];
+  /** H-04 "Show current": the loop drawn while `pin` is high (bench wire / part / pin ids, in current order). */
+  circuit?: { pin: number; path: string[] };
 }
 
 const CALLOUTS: Record<string, LessonCallout> = {
@@ -70,6 +72,7 @@ export const LESSONS: Lesson[] = [
     buy: t('LED, 220 Ω resistor'),
     fw: 's3-blink',
     src: 'firmware/blink/main/main.c',
+    circuit: { pin: 5, path: ['wire:GPIO5~led:5:IN', 'led:5', 'wire:GND~led:5:GND'] },
     steps: [
       {
         id: 'board',

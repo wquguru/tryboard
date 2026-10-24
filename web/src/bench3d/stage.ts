@@ -249,6 +249,7 @@ export function mountLoop(ctx: BenchCtx): void {
       const k = 1 + 0.06 * Math.sin(t0 / 260);
       heat.scale.set(ctx.heatBase * k, ctx.heatBase * k, 1);
     }
+    ctx.flowTick?.(t0);
     controls.update();
     // Skip bloom when nothing glows (saves 5 blur levels)
     bloom.enabled = glow;

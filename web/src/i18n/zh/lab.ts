@@ -1184,5 +1184,7 @@ const d: Dict = {
   "Running this lesson's code ({fw})": "正在运行本关代码（{fw}）",
   "More tools (multimeter, scope…)": "更多工具（万用表、示波器…）",
   "Fewer tools": "收起工具",
+  "Show current": "看电流",
+  "Not running: shown as if the output were high": "未运行：按输出高演示",
 };
 export default d;

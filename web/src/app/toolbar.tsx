@@ -96,7 +96,7 @@ export function createToolbar(): Toolbar & { View: (p: { step: string }) => Reac
                   type="button"
                   data-tool={tool.id}
                   data-key={tool.key}
-                  aria-pressed={tool.id === active}
+                  aria-pressed={tool.kind === 'switch' && tool.on ? tool.on() : tool.id === active}
                   title={toolTitle(tool)}
                   onClick={() => cbs.forEach((f) => f(tool.id))}
                   className={cn(

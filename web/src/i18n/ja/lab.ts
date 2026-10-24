@@ -1184,5 +1184,7 @@ const d: Dict = {
   "Running this lesson's code ({fw})": "このレッスンのコードを実行中（{fw}）",
   "More tools (multimeter, scope…)": "その他のツール（テスター、オシロ…）",
   "Fewer tools": "ツールを減らす",
+  "Show current": "電流を見る",
+  "Not running: shown as if the output were high": "未実行：出力 High と仮定して表示",
 };
 export default d;

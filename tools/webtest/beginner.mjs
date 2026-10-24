@@ -82,7 +82,7 @@ report('switch checked', (await page.$eval('#beginnerBtn', (e) => e.getAttribute
 report('five steps, first current', (await states(page)) === 'now,todo,todo,todo,todo', await states(page));
 report('pass criteria folded in details', await page.$eval('#lessonCp details', (d) => !d.open).catch(() => false));
 const short = await tools(page);
-report('short toolbar', short === 'run,select,orbit,fit,button,more', short);
+report('short toolbar', short === 'run,current,select,orbit,fit,button,more', short);
 report('Previous disabled on step 1', await page.$eval('#lessonPrev', (e) => e.disabled));
 await page.screenshot({ path: path.join(outDir, 'beginner-1.png') });
 
@@ -95,9 +95,24 @@ for (let i = 1; i < 5; i++) {
 await page.click('#lessonPrev');
 await waitFor(page, () => document.querySelector('#lessonCard')?.dataset.step === '3', null, 3000);
 report('previous goes back', (await cardStep(page)) === '3' && (await has(page, '#lessonRun')), `card=${await cardStep(page)}`);
+// H-04 Show current: before the lesson's code runs the loop is drawn as if GPIO5 were high, with a note
+const flow = (page) => page.$eval('#stage', (e) => ({ f: e.dataset.flow ?? null, n: Number(e.dataset.flowSegs ?? 0) }));
+report('current: off by default', (await flow(page)).f === null && !(await has(page, '#flowNote')));
+await page.click('#toolbar [data-tool="current"]');
+await waitFor(page, () => !!document.querySelector('#stage')?.dataset.flow, null, 3000);
+const fa = await flow(page);
+report('current: assumed high before run', fa.f === 'assumed' && fa.n > 0 && (await has(page, '#flowNote')), JSON.stringify(fa));
+report('current: switch pressed', (await page.$eval('#toolbar [data-tool="current"]', (e) => e.getAttribute('aria-pressed'))) === 'true');
 await page.click('#lessonRun');
 const ran = await waitFor(page, () => /s3-blink/.test(document.querySelector('#toast')?.textContent ?? ''), null, 8000);
 report('run loads the lesson firmware', ran);
+const fOn = await waitFor(page, () => { const e = document.querySelector('#stage'); return e?.dataset.flow === 'on' && Number(e.dataset.flowSegs) > 0; }, null, 8000);
+const fOff = await waitFor(page, () => document.querySelector('#stage')?.dataset.flow === 'off', null, 4000);
+const fOn2 = await waitFor(page, () => document.querySelector('#stage')?.dataset.flow === 'on', null, 4000);
+report('current: follows GPIO5 on / off while running', fOn && fOff && fOn2 && !(await has(page, '#flowNote')));
+await page.click('#toolbar [data-tool="current"]');
+await waitFor(page, () => !document.querySelector('#stage')?.dataset.flow, null, 3000);
+report('current: switch off clears', (await flow(page)).f === null);
 await page.click('#lessonSteps [data-step="4"]');
 await waitFor(page, () => document.querySelector('#lessonCard')?.dataset.step === '4', null, 3000);
 report('step list is clickable', (await cardStep(page)) === '4' && !(await has(page, '#lessonRun')));
@@ -113,16 +128,19 @@ report('progress survives reload', (await cardStep(page)) === '2', `card=${await
 
 // 4. More tools expands to the full set and back
 await page.click('#toolbar [data-tool="more"]');
-await waitFor(page, (n) => document.querySelectorAll('#toolbar [data-tool]').length > n, 6, 3000);
+await waitFor(page, (n) => document.querySelectorAll('#toolbar [data-tool]').length > n, 7, 3000);
 const full = await tools(page);
 report('more tools: full set + fewer', full === offTools + ',more', full);
 await page.click('#toolbar [data-tool="more"]');
-await waitFor(page, () => document.querySelectorAll('#toolbar [data-tool]').length === 6, null, 3000);
+await waitFor(page, () => document.querySelectorAll('#toolbar [data-tool]').length === 7, null, 3000);
 report('fewer tools: short again', (await tools(page)) === short);
 
-// 5. Switch off: identical to the baseline, choice remembered
+// 5. Switch off: identical to the baseline, choice remembered (Show current left on is cleared with it)
+await page.click('#toolbar [data-tool="current"]');
+await waitFor(page, () => !!document.querySelector('#stage')?.dataset.flow, null, 3000);
 await page.click('#beginnerBtn');
 await waitFor(page, () => !document.querySelector('#lessonSteps') && !!document.querySelector('#cpCard'), null, 3000);
+report('switch off: no current flow', await waitFor(page, () => !document.querySelector('#stage')?.dataset.flow && !document.querySelector('#flowNote'), null, 3000));
 report('switch off: toolbar == baseline', (await tools(page)) === offTools, await tools(page));
 const left = await page.$eval('#cpCard', (e) => e.textContent).catch(() => null);
 report('switch off: checkpoint card == baseline', left === offLeft);
