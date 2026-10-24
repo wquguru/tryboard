@@ -21,6 +21,9 @@ export interface LessonUi {
   go: (i: number) => void;
   /** Load the lesson's built-in firmware into the bench and run it. */
   run: () => void;
+  /** H-06: chosen delay (ms) of the prebuilt blink variants; `setDelay` loads that firmware and runs it. */
+  delay: number;
+  setDelay: (ms: number) => void;
   openChecks: () => void;
   /** H-05: "Show me how" playing over the bench, or the "wire it yourself" ring; other overlays step aside. */
   demo: "play" | "self" | null;
@@ -35,6 +38,8 @@ export const lessonUi = createStore<LessonUi>({
   next: "",
   go: noop,
   run: noop,
+  delay: 500,
+  setDelay: noop,
   openChecks: noop,
   demo: null,
   showDemo: noop,

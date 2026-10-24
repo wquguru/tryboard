@@ -1131,6 +1131,8 @@ const d: Dict = {
   "GPIO{pin} → high 3.3 V": "GPIO{pin} → High 3.3 V",
   "GPIO{pin} → low 0 V": "GPIO{pin} → Low 0 V",
   "Highlight follows events (not step debugging)": "イベントに合わせてハイライト（ステップ実行ではありません）",
+  "Delay in milliseconds": "遅延（ミリ秒）",
+  "Three prebuilt versions (the web page cannot compile yet)": "あらかじめビルド済みの3つのバージョン（ブラウザ上ではまだコンパイルできません）",
   "This lesson's pin changes in plain words, with the code line behind each": "このレッスンのピンの変化をやさしい言葉で、対応するコード行と一緒に表示",
   // Beginner lessons (H-01)
   "ESP32-S3 chip": "ESP32-S3 チップ",
@@ -1234,5 +1236,11 @@ const d: Dict = {
   "Unplug {wire}": "{wire} を抜く",
   "Plug {wire} into {pin}": "{wire} を {pin} に挿す",
   "Show me how": "やって見せて",
+  // H-02 lesson callouts
+  "Now: high 3.3 V": "いま：High 3.3 V",
+  "Now: low 0 V": "いま：Low 0 V",
+  "Now: on": "いま：点灯",
+  "Now: off": "いま：消灯",
+  "Part callouts": "部品の説明",
 };
 export default d;

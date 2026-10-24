@@ -106,6 +106,7 @@ const up = await waitFor(page, () => document.querySelector('#lessonDemo')?.data
 report('demo opens on beat 1', up && /Find GPIO5/.test(await text(page, '#lessonDemoTitle')), await text(page, '#lessonDemoTitle'));
 report('badge: bench not changed', /bench won't be changed/.test(await text(page, '#lessonDemoBadge')));
 report('stage marks the demo', (await attr(page, '#stage', 'data-lesson-demo')) === 'play');
+report('H-02 callouts and the toolbar step aside', await page.evaluate(() => ['#lessonCallouts', '#toolbar'].every((s) => { const e = document.querySelector(s); return !e || e.getBoundingClientRect().width === 0; })));
 report('control buttons >= 44px', await page.$$eval('#lessonDemo [data-demo]', (bs) => bs.length === 6 && bs.every((b) => b.getBoundingClientRect().height >= 44)));
 await page.click('[data-demo="play"]');
 report('pause', (await attr(page, '#lessonDemo', 'data-paused')) === '1' && (await attr(page, '[data-demo="play"]', 'aria-label')) === 'Resume');
