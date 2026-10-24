@@ -11,12 +11,16 @@ import { Grab, mui, phoneProps, setMui, usePhone } from "./mobile";
 import { t } from "../i18n";
 import { afterFrame } from "../ui/frame";
 import { useBle } from "./blefeed";
+import { lessonUi } from "./lesson";
+import { LessonPane, useLessonCode } from "./lessonfeed";
 
 // Code tab (P2-15): chunk and source load only when opened (or at idle, R-12), not in the first bundle
 function CodePane({ phone, toast }: { phone?: boolean; toast: (msg: string) => void }) {
   const { fw } = useStore(bc);
+  // Beginner lesson up (H-03): show its source with the event-followed line instead
+  const lesson = useLessonCode();
   return (
-    <CodeView fw={fw} phone={phone} toast={toast} />
+    <CodeView fw={lesson?.fw ?? fw} phone={phone} toast={toast} highlight={lesson} />
   );
 }
 
@@ -799,6 +803,7 @@ function DeskDock({
   const c = useStore(bc);
   const { tab, collapsed } = c.dock;
   const bench = step === "bench";
+  const lesson = !!useStore(lessonUi).lesson;
   const shop = step === "shop";
   // Shop has no serial: default to the list's change log
   const cur: DockTab =
@@ -806,7 +811,9 @@ function DeskDock({
       ? "runs"
       : !bench && tab === "analyzer"
         ? "serial"
-        : tab;
+        : tab === "lesson" && !lesson
+          ? "serial"
+          : tab;
   const ok = c.checkpoints.filter((x) => x.state === "ok" || x.state === "ref").length;
   const pick = (t: DockTab) => {
     if (t === "analyzer") actions.analyzer?.(true);
@@ -820,6 +827,9 @@ function DeskDock({
     disabled?: boolean;
     title?: string;
   }[] = [
+    ...(lesson
+      ? [{ id: "lesson" as const, label: t("What happened"), title: t("This lesson's pin changes in plain words, with the code line behind each") }]
+      : []),
     {
       id: "serial",
       label: t('Serial'),
@@ -993,6 +1003,7 @@ function DeskDock({
           <SerialView />
           <SerialInput />
         </div>
+        {cur === "lesson" && <LessonPane toast={toast} />}
         {cur === "code" && <CodePane toast={toast} />}
         {cur === "tasks" && <TasksPane toast={toast} />}
         {cur === "scenario" && <ScenarioPane />}

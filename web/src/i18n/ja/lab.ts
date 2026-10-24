@@ -1122,6 +1122,16 @@ const d: Dict = {
   "Reads the board's USB 5 V rail and the current the electrical model estimates for the board and its parts (Vin+ / Vin- are not wired on the bench). Confidence: behaviour model; current is an estimate.": "ボードの USB 5 V レールと、電気モデルが見積もったボードと部品の電流を読みます（ベンチでは Vin+ / Vin- は未配線）。信頼度：挙動モデル。電流は推定値です。",
   "Confirm on a real board": "実機で確認が必要",
   "Whole preset: pins and addresses come from docs; no firmware has run it yet": "プリセット全体：ピンとアドレスは資料から取ったもので、まだファームウェアで動かしていません",
+  // Beginner "What happened" feed + code highlight (H-03)
+  "What happened": "何が起きたか",
+  "Raw serial": "生のシリアルを見る",
+  "LED on": "LED 点灯",
+  "LED off": "LED 消灯",
+  "Not run yet. Click \"Run\" below the bench.": "まだ実行していません。台の下の「実行」を押してください。",
+  "GPIO{pin} → high 3.3 V": "GPIO{pin} → High 3.3 V",
+  "GPIO{pin} → low 0 V": "GPIO{pin} → Low 0 V",
+  "Highlight follows events (not step debugging)": "イベントに合わせてハイライト（ステップ実行ではありません）",
+  "This lesson's pin changes in plain words, with the code line behind each": "このレッスンのピンの変化をやさしい言葉で、対応するコード行と一緒に表示",
   // Beginner lessons (H-01)
   "ESP32-S3 chip": "ESP32-S3 チップ",
   "The code you write runs here": "あなたが書いたコードはここで動きます",

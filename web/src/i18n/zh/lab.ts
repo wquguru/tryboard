@@ -1122,6 +1122,16 @@ const d: Dict = {
   "Reads the board's USB 5 V rail and the current the electrical model estimates for the board and its parts (Vin+ / Vin- are not wired on the bench). Confidence: behaviour model; current is an estimate.": "读的是开发板的 USB 5 V 电源轨，以及电气模型估算的开发板和外设电流（实验台上 Vin+ / Vin- 没接线）。可信度：行为模拟；电流是估算值。",
   "Confirm on a real board": "需真机确认",
   "Whole preset: pins and addresses come from docs; no firmware has run it yet": "整个预设：引脚和地址来自文档，还没有固件实际跑过",
+  // Beginner "What happened" feed + code highlight (H-03)
+  "What happened": "发生了什么",
+  "Raw serial": "看原始串口",
+  "LED on": "LED 亮",
+  "LED off": "LED 灭",
+  "Not run yet. Click \"Run\" below the bench.": "还没运行。点台面下方的「运行」。",
+  "GPIO{pin} → high 3.3 V": "GPIO{pin} → 高 3.3 V",
+  "GPIO{pin} → low 0 V": "GPIO{pin} → 低 0 V",
+  "Highlight follows events (not step debugging)": "跟着事件高亮（不是单步调试）",
+  "This lesson's pin changes in plain words, with the code line behind each": "本关引脚的变化，用人话说，并标出对应的代码行",
   // Beginner lessons (H-01)
   "ESP32-S3 chip": "ESP32-S3 芯片",
   "The code you write runs here": "你写的代码在这里跑",

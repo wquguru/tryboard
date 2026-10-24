@@ -5,10 +5,11 @@ import { type ReactNode } from "react";
 import { type Level } from "../../checks";
 import { fetchBuf } from "../../assets";
 import { beginnerOn, lessonStep, setLessonStep } from "../../beginner";
-import { setDock, actions } from "../chrome";
+import { setDock, actions, bc } from "../chrome";
 import { isPhone } from "../mobile";
 import { lessonFor } from "../lessons";
 import { LessonSteps, lessonUi, setLessonUi } from "../lesson";
+import { bindLessonFeed } from "../lessonfeed";
 import type { BenchCtx } from "./ctx";
 
 export function mountLesson(b: BenchCtx) {
@@ -21,6 +22,8 @@ export function mountLesson(b: BenchCtx) {
       if (had) {
         setLessonUi({ lesson: null });
         b.setToolGroups(c);
+        bindLessonFeed(c.session, null);
+        if (bc.get().dock.tab === "lesson") setDock({ tab: "serial" });
       }
       return null;
     }
@@ -50,6 +53,9 @@ export function mountLesson(b: BenchCtx) {
     });
     // The left card is drawn after the bench's first toolbar pass, so the short toolbar follows from here
     if (!had) b.setToolGroups(c);
+    // H-03: the dock opens on "What happened" whenever a lesson comes up (the serial log is one click away)
+    bindLessonFeed(c.session, lesson);
+    if (!had) setDock({ tab: "lesson" });
     return <LessonSteps />;
   }
 

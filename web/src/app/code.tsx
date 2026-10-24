@@ -1,6 +1,6 @@
 // Dock "Code" tab (P2-15): read-only source of the running firmware, from fw/<name>/src.json packed at build time
 // (tools/gen_fw_src.py), fetched and cached per firmware; lazy-loaded by dock.tsx. Uploaded .bin files have no source.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n";
 import { cn } from "../ui/cn";
 import { tokenize, type TokKind } from "./ctoken";
@@ -52,30 +52,59 @@ const tokCls: Record<TokKind, string> = {
 const ib =
   "inline-flex size-7 flex-none cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-field hover:text-fg";
 
+/** Beginner lessons (H-03): open `file` (path as packed, relative to firmware/) and mark `lines` (1-based). */
+export interface CodeHighlight {
+  file: string;
+  lines: number[];
+}
+
 export default function CodeView({
   fw,
   phone,
   toast,
+  highlight,
 }: {
   fw: string;
   phone?: boolean;
   toast: (msg: string) => void;
+  highlight?: CodeHighlight | null;
 }) {
   const id = exampleOf(fw);
   const [got, setGot] = useState<Got | null>(null);
   const [file, setFile] = useState(0);
+  const hlFile = highlight?.file;
   useEffect(() => {
     setGot(null);
     setFile(0);
     if (!id) return;
     let live = true;
-    void load(id).then((g) => live && setGot(g));
+    void load(id).then((g) => {
+      if (!live) return;
+      setGot(g);
+      const i = g.ok && hlFile ? g.src.files.findIndex((f) => f.path === hlFile) : -1;
+      if (i >= 0) setFile(i);
+    });
     return () => {
       live = false;
     };
-  }, [id]);
+  }, [id, hlFile]);
   const cur = got?.ok ? got.src.files[file] : null;
   const lines = useMemo(() => (cur ? tokenize(cur.text) : []), [cur]);
+  const hl = useMemo(
+    () => new Set(highlight && cur?.path === highlight.file ? highlight.lines : []),
+    [highlight, cur],
+  );
+  const hlKey = [...hl].join(",");
+  const body = useRef<HTMLDivElement>(null);
+  // Keep the highlighted line in view inside the pane only (scrollIntoView would also move the fixed dock)
+  useEffect(() => {
+    const el = body.current;
+    const row = el?.querySelector<HTMLElement>("tr[data-hl]");
+    if (!el || !row) return;
+    const top = row.offsetTop;
+    if (top < el.scrollTop + 8 || top + row.offsetHeight > el.scrollTop + el.clientHeight - 8)
+      el.scrollTop = Math.max(0, top - el.clientHeight / 3);
+  }, [hlKey, lines]);
 
   let why: string | null = null;
   if (!fw) why = t('No firmware yet: open a project or drop in a .bin.');
@@ -156,17 +185,28 @@ export default function CodeView({
           <Icon n="copy" size={15} />
         </button>
       </div>
+      {highlight && (
+        <div id="codeFollow" className="flex-none border-b border-line-soft px-3 py-1 text-[11px] text-muted">
+          {t("Highlight follows events (not step debugging)")}
+        </div>
+      )}
       <div
         id="codeBody"
+        ref={body}
         tabIndex={0}
         aria-label={t('Source {path}', { path: cur.path })}
         className="min-h-0 flex-1 overflow-auto bg-(--scope-bg) py-1.5 font-mono text-[12.5px] leading-[1.6]"
       >
-        <table className="border-collapse">
+        <table className="min-w-full border-collapse">
           <tbody>
             {lines.map((l, n) => (
-              <tr key={n}>
-                <td className="sticky left-0 bg-(--scope-bg) pr-3 pl-3 text-right align-top text-muted select-none">
+              <tr key={n} data-line={n + 1} data-hl={hl.has(n + 1) ? "" : undefined} className="data-hl:bg-accent-bg">
+                <td
+                  className={cn(
+                    "sticky left-0 bg-(--scope-bg) pr-3 pl-3 text-right align-top text-muted select-none",
+                    hl.has(n + 1) && "bg-accent-bg text-accent-ink shadow-[inset_3px_0_0_var(--accent)]",
+                  )}
+                >
                   {n + 1}
                 </td>
                 <td className="pr-4 whitespace-pre">
