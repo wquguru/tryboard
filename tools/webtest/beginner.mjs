@@ -79,6 +79,15 @@ report('default on: steps / card / title', (await has(page, '#lessonSteps')) && 
 const title = await page.$eval('#lessonTitle', (e) => e.textContent).catch(() => '');
 report('title names lesson 1', /Lesson 1/.test(title) && /Light up an LED/.test(title), JSON.stringify(title));
 report('switch checked', (await page.$eval('#beginnerBtn', (e) => e.getAttribute('aria-checked'))) === 'true');
+// H-11: with a lesson the dock keeps three tabs plus #dockMore; the rest are reachable through it
+const dockTabs = (pg) => pg.$$eval('#dock [role="tab"][data-dock]', (bs) => bs.map((b) => b.dataset.dock).join(','));
+report('H-11 on: dock = lesson,serial,code + #dockMore', (await dockTabs(page)) === 'lesson,serial,code' && (await has(page, '#dockMore')), await dockTabs(page));
+await page.click('#dockMore');
+const moreItems = await page.$$eval('#dockMoreMenu [data-more-tab]', (bs) => bs.map((b) => b.dataset.moreTab));
+report('H-11 on: menu lists checks / issues', moreItems.includes('checks') && moreItems.includes('issues'), moreItems.join(','));
+await page.click('#dockMoreMenu [data-more-tab="checks"]');
+report('H-11 on: picking Checkpoints switches the dock', await waitFor(page, () => document.querySelector('#dock')?.dataset.tab === 'checks' && /More: /.test(document.querySelector('#dockMore')?.textContent || ''), null, 3000));
+await page.click('#dock [data-dock="lesson"]');
 report('five steps, first current', (await states(page)) === 'now,todo,todo,todo,todo', await states(page));
 report('pass criteria folded in details', await page.$eval('#lessonCp details', (d) => !d.open).catch(() => false));
 const short = await tools(page);
@@ -183,6 +192,8 @@ report('switch off: no current flow', await waitFor(page, () => !document.queryS
 report('switch off: toolbar == baseline', (await tools(page)) === offTools, await tools(page));
 const left = await page.$eval('#cpCard', (e) => e.textContent).catch(() => null);
 report('switch off: checkpoint card == baseline', left === offLeft);
+report('H-11 off: dock tabs restored, no #dockMore', (await page.$$eval('#dock [role="tab"][data-dock]', (bs) => bs.length)) > 3 && !(await has(page, '#dockMore')));
+report('H-11 off: top-bar firmware button back', await page.$eval('#swapFw', (e) => !e.hidden).catch(() => false));
 report('switch off: no lesson UI', !(await has(page, '#lessonCard')) && !(await has(page, '#lessonTitle')) && !(await has(page, '#lessonCallouts')));
 // The search box was only hidden during the lesson: the same bound input is back and its list still opens
 await page.click('#cmdk');

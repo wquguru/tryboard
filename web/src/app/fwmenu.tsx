@@ -18,7 +18,7 @@ const hhmm = (at: number) => new Date(at).toLocaleTimeString(LOCALES.find((l) =>
 const open = (v: boolean) => setBc({ fwMenu: v });
 
 /** Top-bar button + dropdown/sheet. The file input stays mounted so change still fires after the menu closes. */
-export function FwMenu({ phone }: { phone?: boolean }) {
+export function FwMenu({ phone, lesson }: { phone?: boolean; lesson?: boolean }) {
   const { fwMenu, fw, chip: cur } = useStore(bc);
   const kept = useStore(keptNow).cur;
   const file = useRef<HTMLInputElement>(null);
@@ -212,6 +212,7 @@ export function FwMenu({ phone }: { phone?: boolean }) {
         <button
           type="button"
           id="swapFw"
+          hidden={lesson}
           data-fw-open=""
           aria-haspopup="menu"
           aria-expanded={fwMenu}

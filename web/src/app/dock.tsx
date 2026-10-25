@@ -219,6 +219,83 @@ ui.subscribe(() => serial.renderAll(), ["filter", "stamps"]);
 
 const dtab =
   "dtab relative inline-flex h-[38px] flex-none cursor-pointer items-center gap-1.5 border-0 bg-transparent px-3 text-[13px] whitespace-nowrap text-muted hover:text-fg aria-selected:font-medium aria-selected:text-accent-ink aria-selected:shadow-[inset_0_-2px_0_var(--accent)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted";
+
+type MoreTab = { id: DockTab; label: string; pill?: ReactNode; disabled?: boolean; title?: string };
+
+/** H-11: with a lesson on screen the dock keeps three tabs; the rest wait behind this menu */
+function MoreTabs({ tabs, cur, pick, phone }: { tabs: MoreTab[]; cur: DockTab; pick: (id: DockTab) => void; phone?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("pointerdown", down);
+    window.addEventListener("keydown", key);
+    return () => {
+      window.removeEventListener("pointerdown", down);
+      window.removeEventListener("keydown", key);
+    };
+  }, [open]);
+  const sel = tabs.find((x) => x.id === cur);
+  return (
+    <div ref={box} className="relative flex-none">
+      <button
+        type="button"
+        id="dockMore"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-selected={!!sel}
+        data-cur={sel?.id}
+        title={t("Other panels: checkpoints, issues, waveform and more")}
+        onClick={() => setOpen(!open)}
+        className={
+          phone
+            ? "inline-flex h-11 cursor-pointer items-center gap-1 rounded-full border border-line bg-surface px-3.5 text-[13px] whitespace-nowrap text-fg aria-selected:border-accent aria-selected:bg-accent-bg aria-selected:font-medium aria-selected:text-accent-ink"
+            : cn(dtab, "gap-1")
+        }
+      >
+        {sel ? `${t("More")}: ${sel.label}` : t("More")}
+        <Icon n="down" size={13} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          id="dockMoreMenu"
+          className={cn(
+            "absolute right-0 z-10 flex min-w-44 flex-col rounded-lg border border-line bg-surface p-1 shadow-[0_6px_20px_#0000001f]",
+            phone ? "top-full mt-1" : "bottom-full mb-1",
+          )}
+        >
+          {tabs.map((x) => (
+            <button
+              key={x.id}
+              type="button"
+              role="menuitem"
+              data-more-tab={x.id}
+              disabled={x.disabled}
+              title={x.title}
+              onClick={() => {
+                setOpen(false);
+                pick(x.id);
+              }}
+              className={cn(
+                "flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border-0 bg-transparent px-3 text-left text-[13px] whitespace-nowrap text-fg hover:bg-field disabled:cursor-not-allowed disabled:text-muted",
+                phone ? "min-h-11" : "min-h-8",
+                x.id === cur && "font-medium text-accent-ink",
+              )}
+            >
+              {x.label}
+              {x.pill}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 const pill = (warn?: boolean) =>
   cn(
     "rounded-full px-1.5 font-mono text-[11px] leading-[18px]",
@@ -538,6 +615,10 @@ function PhoneDock({
     ...(c.mpy ? [{ id: "py" as const, label: "main.py" }] : []),
     ...(c.voice ? [{ id: "voice" as const, label: t('Voice') }] : []),
   ];
+  // H-11: same rule as the desktop dock
+  const LESSON_TABS: DockTab[] = ["lesson", "serial", "code"];
+  const shown = lesson ? tabs.filter((x) => LESSON_TABS.includes(x.id)) : tabs;
+  const more = lesson ? tabs.filter((x) => !LESSON_TABS.includes(x.id)) : [];
   return (
     <section
       id="dock"
@@ -602,7 +683,7 @@ function PhoneDock({
               aria-label={t('Serial sheet')}
               className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pl-3 [scrollbar-width:none]"
             >
-              {tabs.map((t) => (
+              {shown.map((t) => (
                 <button
                   key={t.id}
                   type="button"
@@ -618,6 +699,7 @@ function PhoneDock({
                 </button>
               ))}
             </div>
+            {more.length > 0 && <MoreTabs phone tabs={more} cur={cur} pick={(id) => setDock({ tab: id, collapsed: false })} />}
             <button
               type="button"
               id="sheetSize"
@@ -938,6 +1020,10 @@ function DeskDock({
       ? [{ id: "voice" as const, label: t('Voice'), title: t('Virtual voice server: conversation, script and [xz] log (behavioural model)') }]
       : []),
   ];
+  // H-11: a lesson keeps What happened / Serial / Code; the rest go behind #dockMore
+  const LESSON_TABS: DockTab[] = ["lesson", "serial", "code"];
+  const shown = lesson ? tabs.filter((x) => LESSON_TABS.includes(x.id)) : tabs;
+  const more = lesson ? tabs.filter((x) => !LESSON_TABS.includes(x.id)) : [];
   return (
     <section
       id="dock"
@@ -980,7 +1066,7 @@ function DeskDock({
           aria-label={t('Bottom dock')}
           className="flex min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]"
         >
-          {tabs.map((t) => (
+          {shown.map((t) => (
             <button
               key={t.id}
               type="button"
@@ -997,6 +1083,7 @@ function DeskDock({
             </button>
           ))}
         </div>
+        {more.length > 0 && <MoreTabs tabs={more} cur={cur} pick={pick} />}
         {cur === "serial" && !collapsed && <SerialTools toast={toast} />}
         {/* Sim time stays mounted (replay diffing reads it), shown only on the runs page */}
         <span className={cn("contents", cur !== "runs" && "[&>*]:hidden")}>
