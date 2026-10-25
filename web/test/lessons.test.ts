@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { LESSONS, lessonFor } from '../src/app/lessons.ts';
 import { partId, sceneView } from '../src/app/wiring.ts';
+import { hitText, matchTask, parseDone, taskTarget } from '../src/app/lessontasks.ts';
 import type { SceneSpec } from '../src/bench3d/spec.ts';
 import zh from '../src/i18n/zh/index.ts';
 import ja from '../src/i18n/ja/index.ts';
@@ -138,7 +139,7 @@ test('event rules point at the line that drives the pin (H-03)', () => {
 
 test('lesson text is translated in zh / ja / ko', () => {
   for (const l of LESSONS) {
-    const strs = [l.title, l.summary, l.buy, ...(l.events ?? []).flatMap((e) => [e.hi, e.lo]), ...(l.i2c ?? []).map((r) => r.text), ...l.steps.flatMap((s) => [s.title, s.sub, s.body, ...s.tasks, ...s.callouts.flatMap((c) => [c.title, c.body]), ...(s.demo ?? []).flatMap((b) => [b.short, b.title, b.body])])];
+    const strs = [l.title, l.summary, l.buy, ...(l.events ?? []).flatMap((e) => [e.hi, e.lo]), ...(l.i2c ?? []).map((r) => r.text), ...l.steps.flatMap((s) => [s.title, s.sub, s.body, ...s.tasks.flatMap((x) => [x.text, x.how ?? '', x.answer ?? ''].filter(Boolean)), ...s.callouts.flatMap((c) => [c.title, c.body]), ...(s.demo ?? []).flatMap((b) => [b.short, b.title, b.body])])];
     for (const [id, d] of Object.entries({ zh, ja, ko })) for (const k of strs) assert.ok(d[k], `${id}: ${k}`);
   }
 });
@@ -181,6 +182,10 @@ test('H-09 lesson parts exist in the work scene and cover everything the lesson 
     const refs: string[] = [...(l.circuit?.path ?? [])];
     for (const s of l.steps) {
       for (const c of s.callouts) refs.push(c.target.id);
+      for (const x of s.tasks) {
+        const tg = taskTarget(x.done);
+        if (tg) refs.push(tg.id);
+      }
       for (const b of s.demo ?? []) {
         refs.push(b.focus.id);
         if (b.wire) refs.push(b.wire.from, b.wire.to);
@@ -194,4 +199,51 @@ test('H-09 lesson parts exist in the work scene and cover everything the lesson 
   assert.deepEqual(lessonFor('weather', '03')!.parts, ['led:5', 'oled']);
   const full = sceneOf('weather');
   assert.equal(sceneView(full, null), full, 'no filter = the same scene object');
+});
+
+test('H-10 every task has a valid done signal; reveal tasks carry an answer', () => {
+  for (const l of LESSONS)
+    for (const s of l.steps) {
+      const name = `${l.work}/${l.checkpoint}/${s.id}`;
+      const bootCallout = l.steps.some((x) => x.callouts.some((c) => c.target.id === 'BOOT'));
+      const chips = l.steps.find((x) => x.codeChips)?.codeChips;
+      for (const x of s.tasks) {
+        const d = parseDone(x.done);
+        assert.ok(d, `${name}: "${x.done}" parses`);
+        assert.ok(x.text, `${name}: task text`);
+        if (d.kind === 'reveal') assert.ok(x.answer, `${name}: reveal "${x.text}" has an answer`);
+        else assert.ok(!x.answer, `${name}: only reveal tasks have answers`);
+        if (d.kind === 'chip') assert.ok(chips?.fw[d.v], `${name}: delay ${d.v} has a prebuilt firmware`);
+        if (d.kind === 'press') assert.ok(bootCallout, `${name}: press tasks only where BOOT is pointed at`);
+        if (d.kind === 'run') assert.equal(s.id, 'run', `${name}: run tasks sit on the run step`);
+      }
+    }
+});
+
+test('H-10 signal matching', () => {
+  const c0 = { boots: 0 };
+  assert.deepEqual(matchTask('run', 'run', c0), {});
+  assert.equal(matchTask('run', 'view:current', c0), null);
+  assert.equal(matchTask('reveal', 'run', c0), null, 'reveal only ticks by opening it');
+  assert.deepEqual(matchTask('view:current', 'view:current', c0), {});
+  assert.deepEqual(matchTask('select:led:5', 'select:led:5', c0), { v: 'led:5' });
+  assert.equal(matchTask('select:led:5', 'select:board', c0), null);
+  assert.equal(matchTask('select:led', 'select:led:5', c0), null, 'ids match whole');
+  assert.equal(matchTask('press:boot×3', 'press:boot', { boots: 2 }), null);
+  assert.deepEqual(matchTask('press:boot×3', 'press:boot', { boots: 3 }), { v: '3' });
+  assert.deepEqual(matchTask('press:bootx1', 'press:boot', { boots: 1 }), { v: '1' }, 'x works as ×');
+  assert.equal(matchTask('press:boot×3', 'run', { boots: 5 }), null);
+  assert.deepEqual(matchTask('chip:delay=100', 'chip:delay=100', { boots: 0, from: '500' }), { v: '100', from: '500' });
+  assert.equal(matchTask('chip:delay=100', 'chip:delay=1000', c0), null);
+  assert.deepEqual(matchTask('prop:led:5.ohm=1000', 'prop:led:5.ohm=1000', { boots: 0, from: '220' }), { v: '1000', from: '220' });
+  assert.equal(matchTask('prop:led:5.ohm=1000', 'prop:led:5.ohm=220', c0), null);
+  for (const bad of ['', 'runs', 'press:boot×0', 'press:boot', 'chip:delay=fast', 'prop:led.ohm', 'view:other', 'select:'])
+    assert.equal(parseDone(bad), null, `"${bad}" is malformed`);
+  assert.deepEqual(parseDone('prop:led:5.ohm=1000'), { kind: 'prop', part: 'led:5', key: 'ohm', v: '1000' });
+  assert.deepEqual(taskTarget('select:BOOT'), { kind: 'button', id: 'BOOT' });
+  assert.deepEqual(taskTarget('prop:led:5.ohm=1000'), { kind: 'part', id: 'led:5' });
+  assert.equal(taskTarget('run'), null);
+  assert.match(hitText('press:boot×3', { v: '3' }), /3/);
+  assert.match(hitText('chip:delay=100', { v: '100', from: '500' }), /500.*100/);
+  assert.equal(hitText('reveal', {}), '');
 });

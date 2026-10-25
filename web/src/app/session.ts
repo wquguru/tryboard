@@ -18,6 +18,7 @@ import type { Store } from './store';
 import { currentTheme, onTheme } from '../theme';
 import { IoStore, decodeEvents } from './iotrace';
 import { taskStore } from './tasktrace';
+import { lessonSignal } from './lessontasks';
 import type { UsbView } from '../usb3d';
 import { bleFeed } from './blefeed';
 import { irFeed } from './irfeed';
@@ -313,6 +314,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     },
     pressBoot(down) {
       s.sim?.press(down);
+      // H-10: every caller (3D button, toolbar, pin card, keyboard) lands here, so the lesson counts presses once
+      if (down) lessonSignal('press:boot');
     },
     pressPin(pin, down) {
       s.sim?.pressPin(pin, down);

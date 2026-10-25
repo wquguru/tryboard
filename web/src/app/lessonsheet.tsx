@@ -8,6 +8,7 @@ import { lessonUi } from "./lesson";
 import { evWhere, fmtSec, lessonFeed, useLessonCode } from "./lessonfeed";
 import { loadSrc } from "./fwsrc";
 import { Icon } from "./icons";
+import { StepDoneBar, TaskList, useStepReady } from "./lessontasklist";
 
 /** Source lines `from..to` (1-based) of `file` in firmware `fw`, or null while loading / missing. */
 function useSrcLines(fw: string | undefined, file: string | undefined): string[] | null {
@@ -78,6 +79,7 @@ const btn = "inline-flex min-h-12 cursor-pointer items-center justify-center rou
 /** The panel; `full` (sheet pulled up) adds the step's "Try it" list, `onOpen` draws a 44px pull-up button (the grab is 24px). */
 export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => void }) {
   const s = useStore(lessonUi);
+  const ready = useStepReady();
   const l = s.lesson;
   if (!l) return null;
   const n = l.steps.length;
@@ -120,14 +122,10 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
             <span className="text-[11px] font-medium text-muted">{t("Step {n} · {title}", { n: s.step + 1, title: cur.title })}</span>
             <p className="m-0 text-[14px] leading-[22px]">{cur.body}</p>
             {full && (
-              <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-                {cur.tasks.map((x) => (
-                  <li key={x} className="flex items-center gap-2.5 rounded-lg bg-field px-2.5 py-2 text-[13px]">
-                    <span aria-hidden="true" className="size-3.5 flex-none rounded-full border-[1.6px] border-accent-strong" />
-                    {x}
-                  </li>
-                ))}
-              </ul>
+              <>
+                <TaskList tasks={cur.tasks} />
+                {ready && <StepDoneBar />}
+              </>
             )}
             {cur.id === "run" && (
               <button type="button" id="mLessonRun" className={cn(btn, "flex-none border border-accent-strong bg-surface font-medium text-accent-ink")} onClick={s.run}>
@@ -166,7 +164,12 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
         <button
           type="button"
           id="mLessonNext"
-          className={cn(btn, "min-w-0 flex-2 border-0 bg-accent-strong font-medium text-on-accent")}
+          data-ready={ready ? 1 : 0}
+          className={cn(
+            btn,
+            "min-w-0 flex-2 font-medium",
+            done || ready ? "border-0 bg-accent-strong text-on-accent" : "border border-accent-strong bg-surface text-accent-ink",
+          )}
           onClick={() => s.go(done ? 0 : s.step + 1)}
         >
           <span className="truncate">

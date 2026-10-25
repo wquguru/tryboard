@@ -1830,3 +1830,10 @@
 - 决定：12 课常量 `COURSE` 与状态函数 `courseCard` 放在 `web/src/app/course.ts`，`lessonmap.tsx` 只做按钮和弹层并转导出 `COURSE`；第 1–3 课标题显示 `Lesson.title`（「按一下就亮」「小屏幕写字」），与设计稿的「按一下按钮 / 让屏幕说话」不同，以已写好的课为准。手机按钮放在 `MobileTop`（`LessonHead` 只在桌面顶栏渲染）。
 - 理由：`node --test` 只剥 `.ts` 类型，`.tsx` 不能被数据测试导入；标题两处写会走样。完成判定：当前作品读实时 `bc.checkpoints`（ok / ref，含分享作品的不同存储 key），其他作品读 `tryboard-app-checks:<work>`；参考固件跑通也算完成，与左栏检查点列表一致。「进行中」= 正打开的这课或步骤进度 > 0。
 - 替代：把数组写在 `lessonmap.tsx` 里并让测试解析源码文本（脆）；只在 `LessonHead` 放按钮（手机上没有入口）。
+## 2026-10-25 H-10 动手试试自动打勾的取舍
+- 决定：信号只勾**当前步骤**的任务；`run` / `view:current` 当作状态，进入步骤时再探一次（已在跑本课固件或已开着看电流的，进步骤就勾上），其余（按 BOOT、点 delay、选零件）是动作，只在当前步骤发生才算。BOOT 次数从进入本步骤起算。
+- 理由：任务写在步骤里，学员在别的步骤里误点不该替后面的步骤打勾；但「运行」「看电流」是持续状态，回到该步时要求重新点一遍会显得检测失灵。
+- 没法检测的「Find X in the code」「Think: …」「Rotate the view and find the USB-C port」「Follow the SDA and SCL wires」「Pick a word」统一改 `reveal` + `answer`（答案写出行号或结论）；没做「代码面板点到该行即完成」（代码面板没有行点击事件，留作以后）。「Click the LED to change its colour」先用 `select:led:5`（点到即勾，换颜色归 H-13）；「把电阻换成 1 kΩ」标 `prop:led:5.ohm=1000`，how 文案直说「后续更新才能换阻值，先跳过」，H-13 发信号后改这条文案。
+- 存储：新 key `tryboard-app-lesson-tasks:<work>`，只存原始检测值 `{v, from}`，文字按当前语言渲染；不与步骤进度 key 合并（beginner.mjs 断言后者格式）。
+- 备选：所有步骤都监听信号（误勾多）；完成后自动翻页（设计稿明确不要）。
+

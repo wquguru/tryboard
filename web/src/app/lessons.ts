@@ -37,6 +37,16 @@ export interface DemoBeat {
   /** Turn on "Show current" for this beat. */
   flow?: boolean;
 }
+/** H-10: one "Try it" line; `done` is the signal that ticks it (lessontasks.ts parseDone). */
+export interface LessonTask {
+  text: string;
+  /** One line of "how to do it" under the task while it waits. */
+  how?: string;
+  /** `run` | `reveal` | `view:current` | `select:<id>` | `prop:<part>.<key>=<v>` | `chip:delay=<ms>` | `press:boot×<n>`. */
+  done: string;
+  /** reveal: the answer shown when the learner opens it. */
+  answer?: string;
+}
 export interface LessonStep {
   id: string;
   title: string;
@@ -44,7 +54,7 @@ export interface LessonStep {
   sub: string;
   /** At most three sentences. */
   body: string;
-  tasks: string[];
+  tasks: LessonTask[];
   callouts: LessonCallout[];
   /** 1-based lines in `Lesson.src` to highlight for this step (H-03 follows events instead while running). */
   codeLines?: number[];
@@ -130,7 +140,10 @@ export const LESSONS: Lesson[] = [
         title: t('Meet the dev board'),
         sub: t('Chip, USB port, pins'),
         body: t('This is the ESP32-S3 dev board. It straddles the groove in the middle of the breadboard, and each pin connects to the column of holes beside it. This lesson only uses two pins: GPIO5 and GND.'),
-        tasks: [t('Click the chip and see how many pins it has'), t('Rotate the view and find the USB-C port')],
+        tasks: [
+          { text: t('Click the chip and see how many pins it has'), done: 'select:board', how: t('Click the dev board on the bench: its card lists the pins') },
+          { text: t('Rotate the view and find the USB-C port'), done: 'reveal', answer: t('At one short end of the board, where the "USB-C port" card points. It brings power and code from the computer.') },
+        ],
         callouts: pick('chip', 'usb', 'gpio'),
       },
       {
@@ -138,7 +151,10 @@ export const LESSONS: Lesson[] = [
         title: t('Place the LED and resistor'),
         sub: t('The long leg is positive'),
         body: t('An LED only conducts one way: the long leg (positive) faces the resistor, the short leg faces GND. The resistor holds back extra current. 220 Ω makes the LED bright enough without burning it out.'),
-        tasks: [t('Click the LED to change its colour'), t('Switch the resistor to 1 kΩ and see if it gets dimmer')],
+        tasks: [
+          { text: t('Click the LED to change its colour'), done: 'select:led:5', how: t('Click the LED on the breadboard') },
+          { text: t('Switch the resistor to 1 kΩ and see if it gets dimmer'), done: 'prop:led:5.ohm=1000', how: t('Changing the resistor value comes in a later update: skip this one for now') },
+        ],
         callouts: pick('led', 'res'),
       },
       {
@@ -146,7 +162,10 @@ export const LESSONS: Lesson[] = [
         title: t('Close the loop'),
         sub: t('GPIO5 → resistor → LED → GND'),
         body: t('Two jumper wires close the circuit into a loop: GPIO5 → resistor → LED → GND. The LED only lights when current can go all the way round. Turn on "Show current" to see the path.'),
-        tasks: [t('Turn on "Show current"'), t('While it runs, watch the current: why does the dashed line vanish when the LED is off?')],
+        tasks: [
+          { text: t('Turn on "Show current"'), done: 'view:current', how: t('The "Show current" switch in the toolbar') },
+          { text: t('While it runs, watch the current: why does the dashed line vanish when the LED is off?'), done: 'reveal', answer: t('GPIO5 goes low (0 V): both ends of the loop are at the same voltage, so no current flows.') },
+        ],
         callouts: pick('gpio', 'res', 'gnd'),
         codeLines: [18],
         demo: [
@@ -184,7 +203,10 @@ export const LESSONS: Lesson[] = [
         title: t('Run the code'),
         sub: t('Flips every 0.5 s'),
         body: t('Click "Run": every 0.5 s the code switches GPIO5 between high and low, and the LED blinks along. The highlighted line is the one that just ran.'),
-        tasks: [t('Click "Run"'), t('Check: every blink matches one gpio_set_level call')],
+        tasks: [
+          { text: t('Click "Run"'), done: 'run', how: t('The "Run this lesson\'s code" button below') },
+          { text: t('Check: every blink matches one gpio_set_level call'), done: 'reveal', answer: t('Yes: each "LED on" / "LED off" row in What happened points at line 22, the gpio_set_level call.') },
+        ],
         callouts: pick('gpio', 'led'),
         codeLines: [22],
       },
@@ -193,7 +215,10 @@ export const LESSONS: Lesson[] = [
         title: t('Change it'),
         sub: t('Make it blink faster'),
         body: t('Change the delay from 500 to 100 and the LED blinks faster. Change one number, see the result right away: that is how you will work on your own projects too.'),
-        tasks: [t('Change 500 to 100'), t('Try 1000 and watch again')],
+        tasks: [
+          { text: t('Change 500 to 100'), done: 'chip:delay=100', how: t('Click 100 in the highlighted code line') },
+          { text: t('Try 1000 and watch again'), done: 'chip:delay=1000', how: t('Click 1000 in the highlighted code line') },
+        ],
         callouts: pick('led'),
         codeLines: [25],
         codeChips: { line: 25, values: [100, 500, 1000], current: 500, fw: { 100: 's3-blink-100', 500: 's3-blink', 1000: 's3-blink-1000' } },
@@ -222,7 +247,10 @@ export const LESSONS: Lesson[] = [
         title: t('Meet the BOOT button'),
         sub: t('A button already on the board'),
         body: t('The small BOOT button sits on the dev board, so this lesson needs no new parts. It is wired to GPIO0: the pin reads high (3.3 V) and drops to low (0 V) while you hold the button. The LED from lesson 1 stays on GPIO5.'),
-        tasks: [t('Find the button labelled BOOT on the board'), t('Click it: it is a real button on the bench')],
+        tasks: [
+          { text: t('Find the button labelled BOOT on the board'), done: 'reveal', answer: t('Follow the "BOOT button" card: the small button marked BOOT. Its neighbour RST restarts the chip.') },
+          { text: t('Click it: it is a real button on the bench'), done: 'press:boot×1', how: t('Click BOOT on the board, or the Button tool') },
+        ],
         callouts: pick('boot', 'led'),
       },
       {
@@ -230,7 +258,10 @@ export const LESSONS: Lesson[] = [
         title: t('Input vs output'),
         sub: t('GPIO0 reads, GPIO5 drives'),
         body: t('An output pin is set by the code: GPIO5 pushes 3.3 V into the LED. An input pin is read by the code: GPIO0 only reports whether the button pulls it down to 0 V. The highlighted lines make GPIO5 an output and GPIO0 an input with a pull-up that keeps it high until pressed.'),
-        tasks: [t('Find GPIO_MODE_OUTPUT and GPIO_MODE_INPUT in the code'), t('Think: why does GPIO0 read high when nobody presses?')],
+        tasks: [
+          { text: t('Find GPIO_MODE_OUTPUT and GPIO_MODE_INPUT in the code'), done: 'reveal', answer: t('Line 26 makes GPIO5 (the LED) an output; line 30 makes GPIO0 (BOOT) an input.') },
+          { text: t('Think: why does GPIO0 read high when nobody presses?'), done: 'reveal', answer: t('Line 31 turns on the pull-up: a weak resistor holds GPIO0 at 3.3 V until the button connects it to GND.') },
+        ],
         callouts: pick('boot', 'gpio'),
         codeLines: [26, 30],
       },
@@ -239,7 +270,10 @@ export const LESSONS: Lesson[] = [
         title: t('The lines that read the button'),
         sub: t('An interrupt, not constant checking'),
         body: t('The code does not check the button over and over. It asks the chip to call a small function, on_press, the moment GPIO0 falls from high to low: that is an interrupt. on_press only drops the time into a queue, and the main loop picks it up and flips the LED.'),
-        tasks: [t('Find GPIO_INTR_NEGEDGE: "negative edge" means high to low'), t('Find on_press: the function the interrupt calls')],
+        tasks: [
+          { text: t('Find GPIO_INTR_NEGEDGE: "negative edge" means high to low'), done: 'reveal', answer: t('Line 32: the interrupt fires the moment GPIO0 falls from high to low, that is, when you press.') },
+          { text: t('Find on_press: the function the interrupt calls'), done: 'reveal', answer: t('Line 17 defines it; line 36 hooks it to GPIO0 with gpio_isr_handler_add.') },
+        ],
         callouts: pick('boot'),
         codeLines: [32, 36],
       },
@@ -248,7 +282,10 @@ export const LESSONS: Lesson[] = [
         title: t('Run and press BOOT'),
         sub: t('One press, one flip'),
         body: t('Click "Run", then press BOOT. Each press should flip the LED once, and "What happened" lists the press and the LED change one after the other. Letting go of the button must not flip it again.'),
-        tasks: [t('Click "Run"'), t('Press BOOT three times and count the LED flips')],
+        tasks: [
+          { text: t('Click "Run"'), done: 'run', how: t('The "Run this lesson\'s code" button below') },
+          { text: t('Press BOOT three times and count the LED flips'), done: 'press:boot×3', how: t('Click BOOT on the board, or the Button tool') },
+        ],
         callouts: pick('boot', 'led'),
         codeLines: [46],
       },
@@ -257,7 +294,10 @@ export const LESSONS: Lesson[] = [
         title: t('Think about it'),
         sub: t('Why wait 50 ms?'),
         body: t('A real button bounces: one press can touch and let go several times within a few milliseconds. The highlighted line ignores any press that comes less than 50 ms after the last one, which is called debouncing. Without it, one press could flip the LED two or three times.'),
-        tasks: [t('Find 50000 in the code (microseconds, so 50 ms)'), t('Think: what if the wait were 500 ms and you pressed twice quickly?')],
+        tasks: [
+          { text: t('Find 50000 in the code (microseconds, so 50 ms)'), done: 'reveal', answer: t('Line 43: a press closer than 50 ms to the last one is ignored, so one bouncy press counts once.') },
+          { text: t('Think: what if the wait were 500 ms and you pressed twice quickly?'), done: 'reveal', answer: t('The second press lands inside the 500 ms window and is ignored: the LED flips only once.') },
+        ],
         callouts: pick('boot', 'led'),
         codeLines: [43],
       },
@@ -281,7 +321,10 @@ export const LESSONS: Lesson[] = [
         title: t('Meet the OLED and I2C'),
         sub: t('Two wires: SDA and SCL'),
         body: t('The OLED is a screen of 128 × 64 dots that each light up on their own. It talks to the board over I2C, which needs only two signal wires: SDA (data) on GPIO8 and SCL (clock) on GPIO9. With power and GND that makes four wires.'),
-        tasks: [t('Follow the SDA and SCL wires from the screen to the board'), t('Click the screen to see its specs')],
+        tasks: [
+          { text: t('Follow the SDA and SCL wires from the screen to the board'), done: 'reveal', answer: t('SDA goes to GPIO8 and SCL to GPIO9: the two cards on the board pins mark them.') },
+          { text: t('Click the screen to see its specs'), done: 'select:oled', how: t('Click the OLED screen on the breadboard') },
+        ],
         callouts: pick('oled', 'sda', 'scl'),
         codeLines: [31, 32],
       },
@@ -290,7 +333,10 @@ export const LESSONS: Lesson[] = [
         title: t('Address 0x3C'),
         sub: t('Each I2C part has a number'),
         body: t('Several parts can share the same two I2C wires, so each one has an address. This screen answers to 0x3C, and every message the code sends to it starts with that number. At start-up the code also asks every address in turn and prints the ones that answer.'),
-        tasks: [t('Find OLED_ADDR in the code'), t('Think: what would happen if the code used 0x3D?')],
+        tasks: [
+          { text: t('Find OLED_ADDR in the code'), done: 'reveal', answer: t('Line 24 defines it as 0x3C; line 51 hands it to the I2C driver.') },
+          { text: t('Think: what would happen if the code used 0x3D?'), done: 'reveal', answer: t('Nothing answers at 0x3D: the write gets no ACK, flush() returns an error and the screen stays dark.') },
+        ],
         callouts: pick('oled', 'sda'),
         codeLines: [24, 51],
       },
@@ -299,7 +345,10 @@ export const LESSONS: Lesson[] = [
         title: t('Frame buffer and refresh'),
         sub: t('Draw in memory, then send'),
         body: t('The code first draws the text into a block of memory called the frame buffer: 1024 bytes, one bit per dot. Then flush() sends the whole buffer to the screen in one go. Nothing on the screen changes until that flush.'),
-        tasks: [t('Find the text() lines: they only draw into memory'), t('Find flush(): the line that really talks to the screen')],
+        tasks: [
+          { text: t('Find the text() lines: they only draw into memory'), done: 'reveal', answer: t('Lines 62 to 64 draw into a 1 KB buffer in memory; nothing is sent to the screen yet.') },
+          { text: t('Find flush(): the line that really talks to the screen'), done: 'reveal', answer: t('Line 69: flush() sends the whole buffer over I2C in one go.') },
+        ],
         callouts: pick('oled'),
         codeLines: [60, 62, 69],
       },
@@ -308,7 +357,10 @@ export const LESSONS: Lesson[] = [
         title: t('Run and watch the screen'),
         sub: t('One refresh per second'),
         body: t('Click "Run" and the screen shows TryBoard and a progress bar. Every second the code redraws and sends about 1 KB to 0x3C, and "What happened" shows each send as one row. The bar growing one step per second tells you the refreshes arrive.'),
-        tasks: [t('Click "Run"'), t('Check: one "Screen updated" row per second')],
+        tasks: [
+          { text: t('Click "Run"'), done: 'run', how: t('The "Run this lesson\'s code" button below') },
+          { text: t('Check: one "Screen updated" row per second'), done: 'reveal', answer: t('Yes: the loop redraws, calls flush() and waits 1000 ms (line 73), so each row is one refresh.') },
+        ],
         callouts: pick('oled', 'sda', 'scl'),
         codeLines: [69],
       },
@@ -317,7 +369,10 @@ export const LESSONS: Lesson[] = [
         title: t('Change it'),
         sub: t('Your own words'),
         body: t('The highlighted line writes "TryBoard" at size 2, where each letter is 12 dots wide. Put your own word there and it shows after the next flush. Keep it to 10 letters so it fits across 128 dots.'),
-        tasks: [t('Pick a word of 10 letters or fewer to show'), t('Think: how many letters fit on one line at size 1 (6 dots each)?')],
+        tasks: [
+          { text: t('Pick a word of 10 letters or fewer to show'), done: 'reveal', answer: t('At size 2 each letter is 12 dots wide, so 10 letters use 120 of the 128 dots.') },
+          { text: t('Think: how many letters fit on one line at size 1 (6 dots each)?'), done: 'reveal', answer: t('128 ÷ 6 = 21 letters, with 2 dots to spare.') },
+        ],
         callouts: pick('oled'),
         codeLines: [62],
       },

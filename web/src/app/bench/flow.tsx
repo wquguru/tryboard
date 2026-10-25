@@ -4,6 +4,7 @@ import { t } from "../../i18n";
 import type { Tool } from "../toolbar";
 import { overlay } from "../chrome";
 import { lessonUi } from "../lesson";
+import { lessonSignal } from "../lessontasks";
 import { bit } from "../pinscope";
 import type { BenchCtx } from "./ctx";
 
@@ -69,6 +70,7 @@ export function mountFlow(b: BenchCtx) {
     if (!c) return;
     if (on) return stop();
     on = true;
+    lessonSignal("view:current");
     subs = [
       c.session.onTick((m) => {
         const pin = lessonUi.get().lesson?.circuit?.pin;

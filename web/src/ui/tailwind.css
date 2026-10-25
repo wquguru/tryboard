@@ -74,3 +74,8 @@
 
 /* Running card bar sweeps back and forth: a sim has no reliable total time, so no fake percentage. */
 @keyframes tb-run { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+
+/* H-10: a "Try it" task that just ticked flashes its ring once (li[data-fresh]). */
+@keyframes tb-tick { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 45%, transparent); } 100% { box-shadow: 0 0 0 8px transparent; } }
+li[data-fresh] { animation: tb-tick 0.9s ease-out 2; }
+@media (prefers-reduced-motion: reduce) { li[data-fresh] { animation: none; } }
