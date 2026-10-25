@@ -18,6 +18,7 @@ import type { BenchCtx } from "./ctx";
 import { isTutorialPart } from "../../bench3d/parts3d";
 import { tutorialControls } from "./tutorial";
 import { lessonUi } from "../lesson";
+import { lessonSignal } from "../lessontasks";
 
 export function mountCards(b: BenchCtx) {
   function cardContent(tg: PickTarget): ReactNode | null {
@@ -229,6 +230,7 @@ export function mountCards(b: BenchCtx) {
       return b.select(null);
     }
     b.select({ kind: tg.kind, id: tg.id });
+    lessonSignal(`select:${tg.id}`);
     // Phones open the properties drawer instead of a card, which would cover most of the bench
     if (isPhone()) {
       closeCard();

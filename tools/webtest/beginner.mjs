@@ -151,6 +151,16 @@ report('current: switch pressed', (await page.$eval('#toolbar [data-tool="curren
 await page.click('#lessonRun');
 const ran = await waitFor(page, () => /s3-blink/.test(document.querySelector('#toast')?.textContent ?? ''), null, 8000);
 report('run loads the lesson firmware', ran);
+// H-10: running the lesson's code ticks the run task with what was detected; opening the "Check" answer ticks it too
+const task = (page, i) => page.$eval(`#lessonCard li[data-task="${i}"]`, (e) => ({ done: e.dataset.done, text: e.querySelector('[data-detected]')?.textContent ?? '' })).catch(() => null);
+const ranTick = await waitFor(page, () => document.querySelector('#lessonCard li[data-task="0"]')?.dataset.done === '1', null, 8000);
+report('H-10 run: task ticked with the detected value', ranTick && /Detected/.test((await task(page, 0))?.text), JSON.stringify(await task(page, 0)));
+report('H-10 run: next not ready yet', (await page.$eval('#lessonNext', (e) => e.dataset.ready)) === '0' && !(await has(page, '#lessonStepDone')));
+await page.click('#lessonCard [data-reveal="1"]');
+await waitFor(page, () => document.querySelector('#lessonCard li[data-task="1"]')?.dataset.done === '1', null, 3000);
+report('H-10 reveal: opening the answer ticks it', (await task(page, 1))?.done === '1' && (await has(page, '#lessonCard [data-answer]')));
+report('H-10 step done: next highlighted + green bar', (await page.$eval('#lessonNext', (e) => e.dataset.ready)) === '1' && (await has(page, '#lessonStepDone')) && (await cardStep(page)) === '3');
+await page.screenshot({ path: path.join(outDir, 'beginner-h10-stepdone.png') });
 const fOn = await waitFor(page, () => { const e = document.querySelector('#stage'); return e?.dataset.flow === 'on' && Number(e.dataset.flowSegs) > 0; }, null, 8000);
 const fOff = await waitFor(page, () => document.querySelector('#stage')?.dataset.flow === 'off', null, 4000);
 const fOn2 = await waitFor(page, () => document.querySelector('#stage')?.dataset.flow === 'on', null, 4000);
@@ -163,6 +173,15 @@ report('callouts: GPIO card shows the live level', live);
 await page.click('#lessonSteps [data-step="4"]');
 await waitFor(page, () => document.querySelector('#lessonCard')?.dataset.step === '4', null, 3000);
 report('step list is clickable', (await cardStep(page)) === '4' && !(await has(page, '#lessonRun')));
+// H-10: delay chip 100 ticks "Change 500 to 100" and names both values
+report('H-10 delay: task waiting before the chip', (await task(page, 0))?.done === '0');
+await waitFor(page, () => !!document.querySelector('#codeBody [data-chip="100"]'), null, 8000);
+await page.click('#codeBody [data-chip="100"]');
+await waitFor(page, () => document.querySelector('#lessonCard li[data-task="0"]')?.dataset.done === '1', null, 3000);
+const dt = await task(page, 0);
+report('H-10 delay: chip 100 ticks the task', dt?.done === '1' && /500.*100/.test(dt.text), JSON.stringify(dt));
+const tsaved = await page.evaluate(() => JSON.parse(localStorage.getItem('tryboard-app-lesson-tasks:weather') ?? '{}'));
+report('H-10 ticks stored per work + checkpoint + step', !!tsaved['01']?.['3']?.['0'] && !!tsaved['01']?.['4']?.['0'], JSON.stringify(tsaved));
 await page.click('#lessonNext');
 await waitFor(page, () => document.querySelector('#lessonCard')?.dataset.step === 'done', null, 3000);
 report('finished: no callouts', !(await has(page, '#lessonCallouts')));
@@ -217,6 +236,21 @@ for (const [cp, re, tl] of [
   const cpText = await pg.$eval('#lessonCp', (e) => e.textContent).catch(() => '');
   report(`checkpoint ${cp}: lesson in the left column + top bar`, re.test(tt) && (await states(pg)) === 'now,todo,todo,todo,todo' && cpText.includes(`Checkpoint ${cp}`), JSON.stringify(tt));
   report(`checkpoint ${cp}: short toolbar`, (await tools(pg)) === tl, await tools(pg));
+  if (cp === '02') {
+    // H-10: three BOOT presses on step 4 tick "Press BOOT three times"; two are not enough
+    await pg.click('#lessonSteps [data-step="3"]');
+    await waitFor(pg, () => document.querySelector('#lessonCard')?.dataset.step === '3', null, 3000);
+    const boot = () => pg.$eval('#lessonCard li[data-task="1"]', (e) => ({ done: e.dataset.done, text: e.querySelector('[data-detected]')?.textContent ?? '' }));
+    for (let i = 0; i < 2; i++) {
+      await pg.click('#toolbar [data-tool="button"]');
+      await sleep(300);
+    }
+    report('H-10 BOOT: two presses leave the task open', (await boot()).done === '0');
+    await pg.click('#toolbar [data-tool="button"]');
+    await waitFor(pg, () => document.querySelector('#lessonCard li[data-task="1"]')?.dataset.done === '1', null, 3000);
+    const bt = await boot();
+    report('H-10 BOOT: third press ticks it ("pressed 3 times")', bt.done === '1' && /3/.test(bt.text), JSON.stringify(bt));
+  }
   await pg.close();
 }
 

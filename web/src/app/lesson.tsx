@@ -9,6 +9,7 @@ import { usePhone } from "./mobile";
 import { beginnerOn, onBeginner, setBeginner } from "../beginner";
 import { useEffect, useState } from "react";
 import type { Lesson } from "./lessons";
+import { StepDoneBar, TaskList, useStepReady } from "./lessontasklist";
 
 export interface LessonUi {
   lesson: Lesson | null;
@@ -121,6 +122,7 @@ const btnBase = "inline-flex h-11 cursor-pointer items-center justify-center rou
 export function LessonCard({ step }: { step: string }) {
   const s = useStore(lessonUi);
   const phone = usePhone();
+  const ready = useStepReady();
   const l = s.lesson;
   if (!l || phone || step !== "bench") return null;
   const n = l.steps.length;
@@ -144,14 +146,7 @@ export function LessonCard({ step }: { step: string }) {
           </div>
           <div className="flex flex-col gap-1.5">
             <span className="text-[11px] font-medium text-muted">{t("Try it")}</span>
-            <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-              {cur.tasks.map((x) => (
-                <li key={x} className="flex items-center gap-2.5 rounded-lg bg-field px-2.5 py-2 text-[13px]">
-                  <span aria-hidden="true" className="size-3.5 flex-none rounded-full border-[1.6px] border-accent-strong" />
-                  {x}
-                </li>
-              ))}
-            </ul>
+            <TaskList tasks={cur.tasks} />
           </div>
           {!!cur.demo?.length && (
             <button type="button" id="lessonDemoBtn" className={cn(btnBase, "border border-accent-strong bg-surface font-medium text-accent-ink hover:bg-accent-bg")} onClick={() => s.showDemo(s.step)}>
@@ -165,6 +160,7 @@ export function LessonCard({ step }: { step: string }) {
           )}
         </>
       )}
+      {!done && ready && <StepDoneBar />}
       <div className="flex gap-2">
         <button type="button" id="lessonPrev" className={cn(btnBase, "flex-1 border border-line bg-surface text-fg hover:bg-field disabled:cursor-default disabled:opacity-50")} disabled={s.step === 0} onClick={() => s.go(s.step - 1)}>
           {t("Previous")}
@@ -174,8 +170,14 @@ export function LessonCard({ step }: { step: string }) {
             {t("Start over")}
           </button>
         ) : (
-          <button type="button" id="lessonNext" className={cn(btnBase, "flex-2 border-0 bg-accent-strong font-medium text-on-accent")} onClick={() => s.go(s.step + 1)}>
-            {s.step === n - 1 ? t("Finish lesson {n}", { n: l.no }) : t("Next step")}
+          <button
+            type="button"
+            id="lessonNext"
+            data-ready={ready ? 1 : 0}
+            className={cn(btnBase, "flex-2 font-medium", ready ? "border-0 bg-accent-strong text-on-accent shadow-[0_0_0_4px_var(--color-accent-bg)]" : "border border-accent-strong bg-surface text-accent-ink hover:bg-accent-bg")}
+            onClick={() => s.go(s.step + 1)}
+          >
+            {s.step === n - 1 ? t("Finish lesson {n}", { n: l.no }) : ready ? t("Next step") : t("Skip, next step")}
           </button>
         )}
       </div>

@@ -12,9 +12,28 @@ import { isPhone, setMui } from "../mobile";
 import { lessonFor } from "../lessons";
 import { LessonSteps, lessonUi, setLessonUi } from "../lesson";
 import { bindLessonFeed } from "../lessonfeed";
+import { lessonSignal, setTaskStep, taskUi } from "../lessontasks";
 import type { BenchCtx } from "./ctx";
 
 export function mountLesson(b: BenchCtx) {
+  // H-10: ticks follow the shown step; run / Show current are states, so they are probed on every change too
+  let unsub: (() => void)[] = [];
+  function probe() {
+    const c = b.ctx;
+    const lesson = lessonUi.get().lesson;
+    setTaskStep(lesson, lessonUi.get().step);
+    if (!c || !lesson) return;
+    const fws = [lesson.fw, ...lesson.steps.flatMap((x) => Object.values(x.codeChips?.fw ?? {}))];
+    if (c.store.get().running && fws.some((f) => c.session.fwName === `${f}/flash.bin`)) lessonSignal("run");
+    if (b.flowOn()) lessonSignal("view:current");
+  }
+  function bindTasks(on: boolean) {
+    unsub.forEach((f) => f());
+    unsub = [];
+    if (!on || !b.ctx) return setTaskStep(null, 0);
+    unsub = [b.ctx.store.subscribe(probe, ["running", "run"]), lessonUi.subscribe(probe, ["lesson", "step"])];
+    probe();
+  }
   /** The left-column lesson card for checkpoint `id`, or null (store cleared) when the normal card should show. */
   function lessonCard(id: string | null, l: Level | undefined): ReactNode | null {
     const c = b.ctx!;
@@ -23,6 +42,7 @@ export function mountLesson(b: BenchCtx) {
     if (!lesson || !l) {
       if (had) {
         setLessonUi({ lesson: null });
+        bindTasks(false);
         b.setToolGroups(c);
         bindLessonFeed(c.session, null);
         if (bc.get().dock.tab === "lesson") setDock({ tab: "serial" });
@@ -62,7 +82,9 @@ export function mountLesson(b: BenchCtx) {
       setDelay: (ms) => {
         const fw = lesson.steps.find((x) => x.codeChips)?.codeChips?.fw[ms];
         if (!fw) return;
+        const from = lessonUi.get().delay;
         setLessonUi({ delay: ms });
+        lessonSignal(`chip:delay=${ms}`, String(from));
         load(fw);
       },
       openChecks: () => setDock({ tab: "checks", collapsed: false }),
@@ -70,6 +92,13 @@ export function mountLesson(b: BenchCtx) {
     });
     // The left card is drawn after the bench's first toolbar pass, so the short toolbar follows from here
     if (!had) b.setToolGroups(c);
+    if (!had) bindTasks(true);
+    taskUi.set({
+      goTo: (tg) => {
+        c.session.bench.viewTo?.(tg, 600);
+        c.session.pick.highlight?.(tg);
+      },
+    });
     // H-03: the dock opens on "What happened" whenever a lesson comes up (the serial log is one click away)
     bindLessonFeed(c.session, lesson);
     if (!had) setDock({ tab: "lesson" });
