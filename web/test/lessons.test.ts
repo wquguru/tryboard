@@ -2,8 +2,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { LESSONS, lessonFor } from '../src/app/lessons.ts';
-import { partId, sceneView } from '../src/app/wiring.ts';
+import { LESSONS, ledParamValue, lessonFor } from '../src/app/lessons.ts';
+import { lessonWires, partId, sceneView, wiresOf } from '../src/app/wiring.ts';
+import { LED_VF, ledAmps } from '../src/bench3d/ledparams.ts';
 import { hitText, matchTask, parseDone, taskTarget } from '../src/app/lessontasks.ts';
 import type { SceneSpec } from '../src/bench3d/spec.ts';
 import zh from '../src/i18n/zh/index.ts';
@@ -246,4 +247,72 @@ test('H-10 signal matching', () => {
   assert.match(hitText('press:boot×3', { v: '3' }), /3/);
   assert.match(hitText('chip:delay=100', { v: '100', from: '500' }), /500.*100/);
   assert.equal(hitText('reveal', {}), '');
+});
+
+test('H-14 wiring tab rows = wiresOf of the lesson bench view; notes point at real rows', () => {
+  for (const l of LESSONS) {
+    const name = `${l.work}/${l.checkpoint}`;
+    const scene = sceneOf(l.work);
+    const rows = lessonWires(scene.parts, l.parts ?? null);
+    const want = wiresOf(sceneView(scene, l.parts ?? null).parts);
+    assert.ok(rows.length > 0, `${name}: has wiring rows`);
+    assert.equal(rows.length, want.length, `${name}: row count`);
+    assert.deepEqual(rows.map((w) => w.id), want.map((w) => w.id), `${name}: row ids`);
+    const full = new Set(wiresOf(scene.parts).map((w) => w.id));
+    for (const w of rows) assert.ok(full.has(w.id), `${name}: ${w.id} is a bench wire`);
+    for (const k of Object.keys(l.wireNotes ?? {})) assert.ok(rows.some((w) => w.id === k), `${name}: note for ${k} matches a row`);
+    for (const w of rows) assert.ok(l.wireNotes?.[w.id], `${name}: ${w.id} has beginner words`);
+  }
+  assert.equal(lessonWires(sceneOf('weather').parts, ['led:5']).length, 2, 'lesson 01: GPIO5 + GND');
+  assert.equal(lessonWires(sceneOf('weather').parts, ['led:5', 'oled']).length, 6, 'lesson 03: LED + four OLED wires');
+});
+
+test('H-14 code notes point at real, non-blank source lines', () => {
+  for (const l of LESSONS) {
+    const lines = readFileSync(new URL(l.src, root), 'utf8').split('\n');
+    assert.ok(l.code && l.code.length >= 5, `${l.checkpoint}: has code notes`);
+    for (const c of l.code) {
+      assert.ok(Number.isInteger(c.line) && c.line >= 1 && c.line <= lines.length, `${l.checkpoint}: line ${c.line} in 1..${lines.length}`);
+      assert.ok(lines[c.line - 1].trim() && !/^\s*\/\//.test(lines[c.line - 1]), `${l.checkpoint}: line ${c.line} is code`);
+      assert.ok(c.text, `${l.checkpoint}: line ${c.line} has text`);
+    }
+  }
+  const at = (cp: string, n: number) => readFileSync(new URL(lessonFor('weather', cp)!.src, root), 'utf8').split('\n')[n - 1];
+  assert.match(at('01', 22), /gpio_set_level/);
+  assert.match(at('02', 43), /50000/);
+  assert.match(at('03', 69), /flush\(\)/);
+});
+
+test('H-14 every parameter has a source; LED values follow the H-13 model', () => {
+  const kinds = ['bench', 'code', 'datasheet', 'typical', 'estimate'];
+  for (const l of LESSONS) {
+    assert.ok(l.params && l.params.length >= 4, `${l.checkpoint}: has params`);
+    assert.ok(l.buyTip, `${l.checkpoint}: has a buying tip`);
+    for (const p of l.params) {
+      assert.ok(p.label && p.value, `${l.checkpoint}: param text`);
+      assert.ok(kinds.includes(p.source), `${l.checkpoint}: ${p.label} source ${p.source}`);
+      if (p.source === 'datasheet') assert.ok(p.doc, `${l.checkpoint}: ${p.label} names its datasheet`);
+    }
+    assert.equal(new Set(l.params.map((p) => p.label)).size, l.params.length, `${l.checkpoint}: labels unique`);
+  }
+  const ma = lessonFor('weather', '01')!.params!.find((p) => p.live === 'led-ma')!;
+  assert.equal(ma.source, 'estimate');
+  assert.ok(ma.value.endsWith(`${(ledAmps(220, LED_VF.red) * 1000).toFixed(1)} mA`), ma.value);
+  assert.match(ma.value, /5\.7 mA$/);
+  assert.match(ledParamValue('led-ma', 1000, 'red'), /1\.4 mA$/);
+  assert.match(ledParamValue('led-vf', 220, 'blue'), /2\.8 V/);
+  assert.equal(ledParamValue('led-ohm', 1000, 'red'), '1k Ω');
+});
+
+test('H-14 tab text is translated in zh / ja / ko', () => {
+  const words = /\b[a-z]{4,}\b/;
+  for (const l of LESSONS) {
+    const strs = [
+      l.buyTip ?? '',
+      ...(l.code ?? []).map((c) => c.text),
+      ...Object.values(l.wireNotes ?? {}).flatMap((n) => [n.to, n.why]),
+      ...(l.params ?? []).flatMap((p) => [p.label, p.doc ?? '', p.live || !words.test(p.value) ? '' : p.value]),
+    ].filter(Boolean);
+    for (const [id, d] of Object.entries({ zh, ja, ko })) for (const k of strs) assert.ok(d[k], `${id}: ${k}`);
+  }
 });

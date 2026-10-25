@@ -14,6 +14,8 @@ import { LessonSteps, lessonUi, setLessonUi } from "../lesson";
 import { bindLessonFeed } from "../lessonfeed";
 import { lessonSignal, setTaskStep, taskUi } from "../lessontasks";
 import type { BenchCtx } from "./ctx";
+import { lessonWires, partId } from "../wiring";
+import { ledColor } from "../../bench3d/ledparams";
 
 export function mountLesson(b: BenchCtx) {
   // H-10: ticks follow the shown step; run / Show current are states, so they are probed on every change too
@@ -27,6 +29,16 @@ export function mountLesson(b: BenchCtx) {
     if (c.store.get().running && fws.some((f) => c.session.fwName === `${f}/flash.bin`)) lessonSignal("run");
     if (b.flowOn()) lessonSignal("view:current");
   }
+  setLessonUi({
+    showWire: (id) => {
+      const ses = b.ctx?.session;
+      setLessonUi({ wireSel: id });
+      ses?.bench.viewTo?.({ kind: "wire", id }, 600);
+      ses?.pick.highlight?.({ kind: "wire", id });
+      // Phones: drop the full-screen panel so the lit wire is visible
+      if (isPhone()) setMui({ sheet: "peek" });
+    },
+  });
   taskUi.set({
     goTo: (tg) => {
       b.ctx?.session.bench.viewTo?.(tg, 600);
@@ -96,6 +108,13 @@ export function mountLesson(b: BenchCtx) {
       openChecks: () => setDock({ tab: "checks", collapsed: false }),
       showDemo: (i) => b.openDemo(i),
     });
+    // H-14: this lesson's wiring rows (bench view, rewires included) and the bench LED for the info tabs
+    const ses = c.session;
+    const wires = lessonWires(ses.scene.parts, lesson.parts ?? null, !!ses.power?.ext5v, ses.wireMods);
+    const lp = ses.scene.parts.find((p) => p.type === "led" && (!lesson.parts || lesson.parts.includes(partId(p))));
+    const led = lp?.type === "led" ? { ohm: wires.find((w) => w.part === partId(lp) && w.ohm !== undefined)?.ohm ?? 220, color: ledColor(lp.color) } : null;
+    const prev = lessonUi.get();
+    if (JSON.stringify([prev.wires, prev.led]) !== JSON.stringify([wires, led])) setLessonUi({ wires, led });
     // The left card is drawn after the bench's first toolbar pass, so the short toolbar follows from here
     if (!had) b.setToolGroups(c);
     if (!had) bindTasks(true);

@@ -9,6 +9,9 @@ import { usePhone } from "./mobile";
 import { beginnerOn, onBeginner, setBeginner } from "../beginner";
 import { useEffect, useState } from "react";
 import type { Lesson } from "./lessons";
+import type { BenchWire } from "./wiring";
+import type { LedColor } from "../bench3d/ledparams";
+import { LessonInfo } from "./lessoninfo";
 import { LessonMapBtn } from "./lessonmap";
 import { StepDoneBar, TaskList, useStepReady } from "./lessontasklist";
 
@@ -31,7 +34,14 @@ export interface LessonUi {
   demo: "play" | "self" | null;
   /** Open the demo of step `i` (only steps with `demo` beats). */
   showDemo: (i: number) => void;
+  /** H-14 info tabs: the open tab, this lesson's wiring rows (bench view), the bench LED, and "light up this wire". */
+  info: InfoTab;
+  wires: BenchWire[];
+  led: { ohm: number; color: LedColor } | null;
+  wireSel: string | null;
+  showWire: (id: string) => void;
 }
+export type InfoTab = "overview" | "wiring" | "code" | "params";
 const noop = () => {};
 export const lessonUi = createStore<LessonUi>({
   lesson: null,
@@ -45,6 +55,11 @@ export const lessonUi = createStore<LessonUi>({
   openChecks: noop,
   demo: null,
   showDemo: noop,
+  info: "overview",
+  wires: [],
+  led: null,
+  wireSel: null,
+  showWire: noop,
 });
 export const setLessonUi = (p: Partial<LessonUi>) => commit(() => lessonUi.set(p));
 
@@ -131,6 +146,7 @@ export function LessonCard({ step }: { step: string }) {
   const cur = l.steps[Math.min(s.step, n - 1)];
   return (
     <section id="lessonCard" aria-label={t("Lesson step")} data-step={done ? "done" : s.step} className="-mx-4 mb-3 flex flex-col gap-3 border-b border-line bg-surface px-4 pt-3 pb-4">
+      <LessonInfo />
       {done ? (
         <div className="flex flex-col gap-1.5">
           <span className="text-[11px] font-medium text-ok-ink">{t("Lesson {n} done", { n: l.no })}</span>

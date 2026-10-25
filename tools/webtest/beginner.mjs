@@ -278,6 +278,56 @@ for (const [cp, re, tl] of [
   await pg.close();
 }
 
+// 5d. H-14: info tabs over the step card; wiring rows come from wiring.ts, a row click lights the 3D wire
+{
+  const pg = await open('/app?work=weather&cp=03&debug=1&beginner=1#bench');
+  await waitFor(pg, () => !!document.querySelector('#lessonInfo [role=tab]'), null, 10000);
+  const tabs = await pg.$$eval('#lessonInfo [role=tab]', (bs) => bs.map((b) => b.dataset.infoTab).join(','));
+  report('H-14 four info tabs', tabs === 'overview,wiring,code,params', tabs);
+  const seen = {};
+  for (const k of ['wiring', 'code', 'params', 'overview']) {
+    await pg.click(`#lessonInfo [data-info-tab="${k}"]`);
+    seen[k] = await waitFor(pg, (k) => document.querySelector('#lessonInfo [role=tabpanel]')?.dataset.infoTab === k && document.querySelector(`#lessonInfo [role=tab][data-info-tab="${k}"]`)?.getAttribute('aria-selected') === 'true', k, 2000);
+  }
+  report('H-14 tabs switch', Object.values(seen).every(Boolean), JSON.stringify(seen));
+  await pg.click('#lessonInfo [data-info-tab="code"]');
+  const code = await waitFor(pg, () => document.querySelectorAll('#lessonCodeNotes [data-code-line]').length >= 5 && /flush\(\)/.test(document.querySelector('#lessonCodeNotes [data-code-line="69"]')?.textContent ?? ''), null, 8000);
+  report('H-14 code tab shows the source lines it explains', code);
+  await pg.click('#lessonInfo [data-info-tab="params"]');
+  const ps = await pg.$$eval('#lessonParams [data-param]', (es) => es.map((e) => e.dataset.source));
+  report('H-14 params all carry a source', ps.length >= 4 && ps.every(Boolean), ps.join(','));
+  await pg.click('#lessonInfo [data-info-tab="wiring"]');
+  const rows = await pg.$$eval('#lessonWires tr[data-wire]', (es) => es.map((e) => e.dataset.wire));
+  const bench = await pg.evaluate(() => globalThis.__tbApp.session.bench._debug.wires());
+  report('H-14 wiring rows = lesson wires on the bench (LED + OLED)', rows.length === 6 && rows.every((r) => bench.includes(r)), `${rows.join(' ')} | bench ${bench.length}`);
+  const id = 'wire:GPIO8~oled:SDA';
+  await pg.click(`#lessonWires tr[data-wire="${id}"]`);
+  const lit = await waitFor(pg, (id) => { const h = globalThis.__tbApp.session.bench._debug.hl(); return h?.kind === 'wire' && h.id === id; }, id, 3000);
+  const row = await pg.$eval(`#lessonWires tr[data-wire="${id}"]`, (e) => e.getAttribute('aria-selected')).catch(() => null);
+  report('H-14 clicking a row highlights that wire; the card stays', lit && row === 'true' && (await has(pg, '#lessonCard')), `row=${row}`);
+  await pg.close();
+}
+{
+  const pg = await open('/app?work=weather&cp=01&debug=1&beginner=1#bench', null, { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await waitFor(pg, () => !!document.querySelector('#mLessonOpen'), null, 10000);
+  await pg.tap('#mLessonOpen');
+  const up = await waitFor(pg, () => document.querySelectorAll('#lessonSheet #lessonInfo [role=tab]').length === 4, null, 3000);
+  const m = await pg.evaluate(() => {
+    const tabs = [...document.querySelectorAll('#lessonInfo [role=tab]')].map((e) => e.getBoundingClientRect().height);
+    return { sw: document.documentElement.scrollWidth, minH: Math.min(...tabs) };
+  });
+  report('H-14 phone: four tabs in the full panel, 44px, no horizontal scroll', up && m.sw <= 390 && m.minH >= 44, JSON.stringify(m));
+  await pg.tap('#lessonInfo [data-info-tab="wiring"]');
+  await waitFor(pg, () => !!document.querySelector('#lessonWires tr[data-wire]'), null, 3000);
+  const rh = await pg.$$eval('#lessonWires tr[data-wire]', (es) => es.map((e) => Math.round(e.getBoundingClientRect().height)));
+  const sw = await pg.evaluate(() => document.documentElement.scrollWidth);
+  report('H-14 phone: wiring rows ≥ 44px tall, no horizontal scroll', rh.length === 2 && rh.every((h) => h >= 44) && sw <= 390, `${rh} sw=${sw}`);
+  await pg.tap('#lessonWires tr[data-wire="wire:GPIO5~led:5:IN"]');
+  const lit = await waitFor(pg, () => globalThis.__tbApp.session.bench._debug.hl()?.id === 'wire:GPIO5~led:5:IN', null, 3000);
+  report('H-14 phone: tapping a row highlights the wire', lit);
+  await pg.close();
+}
+
 // 6. Other works keep the switch but have no lesson
 const door = await open('/app?work=door&debug=1&beginner=1#bench');
 report('other work: switch, no lesson', (await has(door, '#beginnerBtn')) && !(await has(door, '#lessonSteps')) && (await tools(door)) !== short);

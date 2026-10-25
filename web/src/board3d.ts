@@ -480,7 +480,7 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
       renderer.dispose();
     },
     // Debug only (camera tuning for screenshots): not part of the interface
-    _debug: { camera, controls, renderer, scene, pos: targetPos, wires: () => ctx.wires.map((w) => w.id) },
+    _debug: { camera, controls, renderer, scene, pos: targetPos, wires: () => ctx.wires.map((w) => w.id), hl: () => ctx.hl },
   };
   return bench;
 }

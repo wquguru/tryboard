@@ -1,31 +1,13 @@
 // Phone lesson panel (PLAN H-07, DESIGN_V2 §11, Mobile.dc.html): the dock's lower band while a lesson is up.
 // Title + progress, the current step, a few highlighted code lines, the last two events, previous / next.
-import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import { cn } from "../ui/cn";
 import { useStore } from "./react";
 import { lessonUi } from "./lesson";
 import { evWhere, fmtSec, lessonFeed, useLessonCode } from "./lessonfeed";
-import { loadSrc } from "./fwsrc";
+import { LessonInfo, useSrcLines } from "./lessoninfo";
 import { Icon } from "./icons";
 import { StepDoneBar, TaskList, useStepReady } from "./lessontasklist";
-
-/** Source lines `from..to` (1-based) of `file` in firmware `fw`, or null while loading / missing. */
-function useSrcLines(fw: string | undefined, file: string | undefined): string[] | null {
-  const [lines, setLines] = useState<string[] | null>(null);
-  useEffect(() => {
-    setLines(null);
-    const id = fw && /^([\w-]+)\/flash\.bin$/.exec(fw)?.[1];
-    if (!id || !file) return;
-    let live = true;
-    void loadSrc(id).then((g) => {
-      const f = g.ok ? g.src.files.find((x) => x.path === file) : undefined;
-      if (live && f) setLines(f.text.split("\n"));
-    });
-    return () => void (live = false);
-  }, [fw, file]);
-  return lines;
-}
 
 /** Up to four rows around the highlighted lines (one line of context each side). */
 function CodeSnip() {
@@ -125,6 +107,7 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
               <>
                 <TaskList tasks={cur.tasks} />
                 {ready && <StepDoneBar />}
+                <LessonInfo phone />
               </>
             )}
             {cur.id === "run" && (
