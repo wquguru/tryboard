@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>手机课程台面</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1F5FD1}a:hover{color:#174BA6}
+button{font-family:inherit}
+.bench{background-color:#F3EFE7;background-image:linear-gradient(#E6E0D4 1px,transparent 1px),linear-gradient(90deg,#E6E0D4 1px,transparent 1px);background-size:24px 24px}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; display: flex; flex-direction: column; background: #F6F3EE; color: #1E2227; font-family: 'Noto Sans SC', system-ui, sans-serif; font-size: 14px; overflow: hidden; position: relative">
+  <header style="height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: #FFFFFF; border-bottom: 1px solid #E4DED3">
+    <button aria-label="课程目录" style="width: 44px; height: 44px; border: 0; border-radius: 10px; background: transparent; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B4148" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+      <b style="font-size: 15px">第 1 课 · 点亮一颗 LED</b>
+      <div style="display: flex; gap: 3px">
+        <span style="flex: 1; height: 4px; border-radius: 2px; background: #17805A"></span>
+        <span style="flex: 1; height: 4px; border-radius: 2px; background: #1F5FD1"></span>
+        <span style="flex: 1; height: 4px; border-radius: 2px; background: #E4DED3"></span>
+        <span style="flex: 1; height: 4px; border-radius: 2px; background: #E4DED3"></span>
+        <span style="flex: 1; height: 4px; border-radius: 2px; background: #E4DED3"></span>
+      </div>
+    </div>
+    <button aria-label="运行" style="width: 44px; height: 44px; border: 0; border-radius: 10px; background: #1F5FD1; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg></button>
+  </header>
+
+  <section class="bench" style="position: relative; height: 380px; flex-shrink: 0">
+    <svg width="390" height="380" viewBox="40 80 720 700" style="position: absolute; left: 0; top: 0" role="img" aria-label="开发板、面包板、电阻和 LED">
+      <defs><pattern id="mh" width="14" height="14" patternUnits="userSpaceOnUse"><circle cx="7" cy="7" r="2" fill="#CFC6B4"/></pattern></defs>
+      <rect x="430" y="168" width="314" height="250" rx="10" fill="#FBF8F2" stroke="#D8D0BF" stroke-width="2"/>
+      <rect x="446" y="212" width="282" height="84" fill="url(#mh)"/>
+      <rect x="446" y="320" width="282" height="84" fill="url(#mh)"/>
+      <rect x="70" y="206" width="320" height="168" rx="12" fill="#23272D"/>
+      <rect x="98" y="236" width="128" height="108" rx="6" fill="#C9CDD2"/>
+      <rect x="46" y="270" width="28" height="40" rx="6" fill="#9AA0A6"/>
+      <path d="M314 215 C 314 110 500 110 520 282" fill="none" stroke="#E07A1F" stroke-width="8" stroke-linecap="round"/>
+      <path d="M344 215 C 344 128 700 128 662 300" fill="none" stroke="#2F343A" stroke-width="8" stroke-linecap="round"/>
+      <line x1="520" y1="282" x2="634" y2="282" stroke="#9AA0A6" stroke-width="4"/>
+      <rect x="534" y="271" width="54" height="22" rx="9" fill="#E9D9B8" stroke="#CDB98F"/>
+      <rect x="544" y="271" width="5" height="22" fill="#7A4A24"/>
+      <rect x="554" y="271" width="5" height="22" fill="#1E2227"/>
+      <rect x="564" y="271" width="5" height="22" fill="#D23B3B"/>
+      <circle cx="641" cy="246" r="44" fill="#E5484D" opacity="0.18"/>
+      <circle cx="641" cy="244" r="15" fill="#E5484D"/>
+      <rect x="626" y="244" width="30" height="16" rx="3" fill="#E5484D"/>
+    </svg>
+    <div style="position: absolute; left: 150px; top: 196px; padding: 4px 8px; border-radius: 8px; background: #FFFFFF; border: 1px solid #E4DED3; font-size: 12px"><b>1 kΩ 电阻</b> · 约 1.5 mA</div>
+    <div style="position: absolute; left: 252px; top: 108px; padding: 4px 8px; border-radius: 8px; background: #FFFFFF; border: 1px solid #E4DED3; font-size: 12px"><b>LED</b> · 变暗了</div>
+    <div style="position: absolute; right: 12px; bottom: 12px; display: flex; gap: 6px">
+      <button style="height: 44px; padding: 0 12px; border: 1px solid #E4DED3; border-radius: 10px; background: #FFFFFF; color: #B5651B; font-weight: 700">看电流</button>
+      <button style="height: 44px; padding: 0 12px; border: 1px solid #E4DED3; border-radius: 10px; background: #FFFFFF; color: #3B4148">更多</button>
+    </div>
+  </section>
+
+  <section style="flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 10px 16px 16px; background: #FFFFFF; border-radius: 18px 18px 0 0; box-shadow: 0 -6px 20px rgba(30,34,39,0.10); margin-top: -12px; position: relative">
+    <div style="align-self: center; width: 40px; height: 4px; border-radius: 2px; background: #D8D0BF"></div>
+    <div style="font-size: 12px; color: #5E646C">第 2 步 / 共 5 步 · 上拉看全文</div>
+    <b style="font-size: 20px">放好 LED 和电阻</b>
+    <div style="display: flex; gap: 12px; padding: 12px; border-radius: 12px; background: #EAF5EF; border: 1px solid #B9DEC9">
+      <span style="width: 22px; height: 22px; border-radius: 50%; background: #17805A; flex-shrink: 0; display: flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span>
+      <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">把电阻换成 1 kΩ</span><span style="font-size: 12px; color: #146B4B">检测到：电流约 1.5 mA，LED 变暗</span></div>
+    </div>
+    <div style="display: flex; gap: 12px; padding: 12px; border-radius: 12px; background: #F6F3EE">
+      <span style="width: 22px; height: 22px; border-radius: 50%; border: 2px solid #1F5FD1; flex-shrink: 0; box-sizing: border-box"></span>
+      <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">点 LED 换个颜色</span><span style="font-size: 12px; color: #5E646C">点台面上的 LED</span></div>
+    </div>
+    <div style="flex: 1"></div>
+    <div style="display: flex; gap: 10px">
+      <button style="height: 48px; padding: 0 16px; border: 1px solid #E4DED3; border-radius: 10px; background: #FFFFFF; color: #3B4148">上一步</button>
+      <button style="flex: 1; height: 48px; border: 1px solid #C9D7F2; border-radius: 10px; background: #F3F7FE; color: #1F5FD1; font-weight: 700; font-size: 15px">跳过，下一步</button>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

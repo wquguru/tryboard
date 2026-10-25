@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>课程信息标签</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1F5FD1}a:hover{color:#174BA6}
+button{font-family:inherit}
+th,td{text-align:left;vertical-align:top}
+</style>
+</helmet>
+<div style="width: 720px; height: 760px; box-sizing: border-box; padding: 28px; display: flex; flex-direction: column; gap: 18px; background: #FFFFFF; color: #1E2227; font-family: 'Noto Sans SC', system-ui, sans-serif; font-size: 14px">
+  <nav style="display: flex; gap: 4px; border-bottom: 1px solid #E4DED3">
+    <button style="height: 44px; padding: 0 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #5E646C; font-size: 15px">概述</button>
+    <button style="height: 44px; padding: 0 14px; border: 0; border-bottom: 2px solid #1F5FD1; background: transparent; color: #1E2227; font-weight: 700; font-size: 15px">接线表</button>
+    <button style="height: 44px; padding: 0 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #5E646C; font-size: 15px">代码讲解</button>
+    <button style="height: 44px; padding: 0 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #5E646C; font-size: 15px">参数</button>
+  </nav>
+
+  <div style="display: flex; flex-direction: column; gap: 10px">
+    <b style="font-size: 18px">这一课怎么接</b>
+    <table style="border-collapse: collapse; width: 100%">
+      <thead>
+        <tr style="font-size: 12px; color: #5E646C">
+          <th style="padding: 8px 10px; border-bottom: 1px solid #E4DED3; font-weight: 500; width: 90px">引脚</th>
+          <th style="padding: 8px 10px; border-bottom: 1px solid #E4DED3; font-weight: 500; width: 200px">接到哪</th>
+          <th style="padding: 8px 10px; border-bottom: 1px solid #E4DED3; font-weight: 500">干什么用</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding: 12px 10px; border-bottom: 1px solid #F0EBE2"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700"><span style="width: 10px; height: 10px; border-radius: 50%; background: #E07A1F"></span>GPIO5</span></td>
+          <td style="padding: 12px 10px; border-bottom: 1px solid #F0EBE2">220 Ω 电阻 → LED 长脚</td>
+          <td style="padding: 12px 10px; border-bottom: 1px solid #F0EBE2; color: #3B4148">代码让它在高（3.3 V）和低（0 V）之间切换</td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 10px; border-bottom: 1px solid #F0EBE2"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700"><span style="width: 10px; height: 10px; border-radius: 50%; background: #2F343A"></span>GND</span></td>
+          <td style="padding: 12px 10px; border-bottom: 1px solid #F0EBE2">LED 短脚</td>
+          <td style="padding: 12px 10px; border-bottom: 1px solid #F0EBE2; color: #3B4148">电流从这里回到板子，回路才算闭合</td>
+        </tr>
+      </tbody>
+    </table>
+    <span style="font-size: 12px; color: #5E646C">点一行，台面上对应的线会亮起来</span>
+  </div>
+
+  <div style="height: 1px; background: #E4DED3"></div>
+
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; justify-content: space-between; align-items: baseline"><b style="font-size: 18px">参数（“参数”标签）</b><span style="font-size: 12px; color: #5E646C">每条都带来源</span></div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <div style="display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 10px; background: #F6F3EE">
+        <span style="font-size: 12px; color: #5E646C">LED</span><b>红色 5 mm，压降约 1.8–2.2 V</b><span style="align-self: flex-start; padding: 2px 6px; border-radius: 4px; background: #FFFFFF; font-size: 11px; color: #3B4148">典型值</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 10px; background: #F6F3EE">
+        <span style="font-size: 12px; color: #5E646C">电阻</span><b>220 Ω（红红棕）</b><span style="align-self: flex-start; padding: 2px 6px; border-radius: 4px; background: #FFFFFF; font-size: 11px; color: #3B4148">本课台面</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 10px; background: #F6F3EE">
+        <span style="font-size: 12px; color: #5E646C">LED 电流</span><b style="font-family: 'JetBrains Mono', monospace; font-weight: 400">(3.3 − 1.8) ÷ 220 ≈ 6.8 mA</b><span style="align-self: flex-start; padding: 2px 6px; border-radius: 4px; background: #FFF0DB; font-size: 11px; color: #8A4B12">估算 · 未在实机校准</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 10px; background: #F6F3EE">
+        <span style="font-size: 12px; color: #5E646C">GPIO 能给多少</span><b>默认驱动约 20 mA</b><span style="align-self: flex-start; padding: 2px 6px; border-radius: 4px; background: #E8F0FD; font-size: 11px; color: #1F4FA8">数据手册</span>
+      </div>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 10px; border: 1px solid #E4DED3; color: #3B4148; line-height: 1.6">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1F5FD1" stroke-width="2" style="flex-shrink: 0; margin-top: 3px" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v5h1"/></svg>
+      <span>买零件时：220 Ω–1 kΩ 都能用，越大越暗。一包 5 mm LED 和一盒电阻就够前 5 课。</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":720,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

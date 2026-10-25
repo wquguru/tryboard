@@ -304,6 +304,16 @@
 | H-06 | 闪烁快慢三档：s3-blink 加 100 / 1000 ms 两个变体（`BLINK_MS` 编译宏，源码共用），代码面板里点 100 / 500 / 1000 换内置固件重跑 | build_fw + accept 新用例（翻转间隔 100 / 1000 ms）；agent-browser | ☑ 固件与验收；网页 UI 完成（DelayChips，lessonfeed.mjs 断言间隔 0.100 / 1.000 s；记录 Reviews/ab/H-06.md） |
 | H-07 | 手机：上台面、下可上拉步骤面板，按钮 ≥ 44px，标注卡最多 2 张 | mobile.mjs 新断言 390×844 无横向滚动；agent-browser 390 截图 | ☑ 2026-10-24（`web/src/app/lessonsheet.tsx` 并入手机 dock：收起时 peek 区即步骤面板，上拉全屏首个 tab 为「课程」；见 DECISIONS 2026-10-24 H-07） |
 | H-08 | 第 02、03 关课程内容（按钮、OLED）照 H-01 数据格式补齐 | lessons 数据测试；agent-browser 走两关 |☑ 第 02 课（BOOT 输入 + GPIO5）、第 03 课（OLED 0x3C，I2C 事件模板 100 ms 内合并为一行）；选中的检查点课程不再跳回第一个未过关（记录 Reviews/ab/H-08.md） |
+| H-09 | 台面只放本课零件：课程数据加 `parts?: string[]`（零件 id 白名单，缺省 = 全部），课程在场时过滤 SceneSpec 调 `setScene`，接线只留两端都在场的；关新手模式 / 离开课程恢复全套；零件 id 不变 | 数据测试；agent-browser 第 01 课只见板 + 面包板 + LED + 电阻，关新手模式恢复全套；levels.mjs / wiremode.mjs 不回退 | ☐ |
+| H-10 | 动手试试自动打勾：`tasks` 改为 `{text, how?, done}`，`done` 为 `run` / `select:<part>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` / `press:boot×n` / `view:current` / `reveal`；检测到即打勾并写出检测值，「想一想」点开答案即完成；全部完成「下一步」高亮，不自动翻页；「带我去」镜头转到目标；完成状态按 work + 检查点存本机 | 数据测试（每条任务都有 done）；webtest 断言 运行 / 点 BOOT / 换 delay 后对应任务 `[data-done]`；agent-browser 截图 | ☐ |
+| H-11 | 新手模式精简：底栏 tab 只留 发生了什么 / 串口 / 代码 + 更多，顶栏收起与课程无关按钮；关掉后与现在一致 | agent-browser 开 / 关对比截图；mobile.mjs 不回退 | ☐ |
+| H-12 | 课程地图与总进度：课程目录弹层（顶栏「≡ 课程目录」）列出已写好的课，状态 已完成 / 进行中 x/5 / 可以开始 / 计划中；完成 = 本课检查点通过；点卡片跳到对应作品 + 检查点 | agent-browser 桌面 + 390 截图；无横向滚动 | ☐ |
+| H-13 | 零件参数卡：LED PartSpec 加 `ohm?`，`wiring.ts` 不再写死 220 Ω；Rust `elec::fault::led` 按颜色取压降（红 1.8 / 绿 2.0 / 蓝 2.8 V）；参数卡改阻值 / 颜色 → 3D 色环、亮度、电流 mA 跟着变，标「估算 · 未在实机校准」 | `cargo test`（elec 新用例）；webtest 改 1 kΩ 后电流 ≈ 1.5 mA；agent-browser | ☐ |
+| H-14 | 课程信息标签 概述 / 接线表 / 代码讲解 / 参数：接线表由 `wiring.ts` 行生成，点行高亮导线；参数每条带来源 | 数据测试；agent-browser 每个 tab 截图 | ☐ |
+| H-15 | 课程层：`course.ts` = 有序 (work, checkpoint) 列表，课号与关号解耦；地图、上一课 / 下一课按课程走 | 数据测试；agent-browser 第 3 课 → 第 4 课跨作品跳转 | ☐ |
+| H-16 | 新课内容：0 认识开发板、4 PWM 呼吸灯、5 WS2812、6 蜂鸣器、7 舵机、8 BME280、9 电位器、10 USB 键盘、11 综合；一课一个代理，缺固件的先补固件 + accept 用例 | 每课：数据测试 + accept 用例 + agent-browser 走一遍 | ☐ |
+| H-17 | 原理图视图：台面工具条「原理图」切 2D 原理图（由 SceneSpec + 接线生成，符号自绘） | agent-browser 第 01 / 03 课截图 | ☐ |
+| H-18 | 暖色主题（稿子 `#F6F3EE` 系）：需人先定是否全站换 | — | ☐ 待人定 |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
