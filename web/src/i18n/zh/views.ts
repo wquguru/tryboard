@@ -41,7 +41,7 @@ const d: Dict = {
   "Key GND": "按键地",
   "Key {cap} (press = GND, internal pull-up)": "按键 {cap}（按下接地，内部上拉）",
   "L/R to GND = left channel": "L/R 接地就是左声道",
-  "LED (220 Ω current limit)": "LED（220Ω 限流）",
+  "LED ({ohm} Ω current limit)": "LED（{ohm}Ω 限流）",
   "MAX98357A amp and 4 Ω speaker · BCLK IO{bclk} LRC IO{lrc} DIN IO{din}": "MAX98357A 功放和 4Ω 喇叭 · BCLK IO{bclk} LRC IO{lrc} DIN IO{din}",
   "Mic GND": "麦克风地",
   "Mic power": "麦克风供电",

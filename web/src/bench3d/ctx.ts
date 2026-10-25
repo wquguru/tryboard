@@ -26,6 +26,8 @@ export interface LedState {
   light: THREE.PointLight;
   now: number;
   target: number;
+  /** Glow gain from the estimated current (H-13 ledBright); target / PWM duty stay untouched. Default 1 */
+  bright?: number;
 }
 
 /** State shared between the bench sections (stage, scene, builders, picking, inspection, loop). */

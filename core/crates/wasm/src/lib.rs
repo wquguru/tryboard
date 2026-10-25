@@ -754,14 +754,14 @@ pub extern "C" fn tb_elec_report() -> usize {
 #[no_mangle]
 pub extern "C" fn tb_fault(kind: u32, s3: u32, a: f64, b: f64, c: f64, d: f64) -> f64 {
     // kind 1: part output (a V via b Ω) vs opposite GPIO level; 2: two parts fight (a V via b Ω vs c V via d Ω)
-    // 3: GPIO high into LED (a Ω series, 0 = none); 4: rail to GND (a: 0 = 3V3, 1 = 5V, 2 = ext 5 V); 5: 5 V via a Ω into GPIO clamp
+    // 3: GPIO high into LED (a Ω series, 0 = none; b = LED knee V, 0 / NaN = red 1.8 V); 4: rail to GND (a: 0 = 3V3, 1 = 5V, 2 = ext 5 V); 5: 5 V via a Ω into GPIO clamp
     use tryboard_elec::board::ChipKind;
     use tryboard_elec::fault::{self, Rail};
     let chip = if s3 == 1 { ChipKind::S3 } else { ChipKind::C3 };
     let o = match kind {
         1 => fault::fight_gpio(a, b),
         2 => fault::fight(a, b, c, d),
-        3 => fault::led(a),
+        3 => fault::led_with(a, if b > 0.0 { b } else { fault::LED_VF }),
         4 => fault::short(
             match a as u32 {
                 1 => Rail::V5,

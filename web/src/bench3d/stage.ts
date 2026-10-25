@@ -197,8 +197,8 @@ export function mountLoop(ctx: BenchCtx): void {
     let glow = ctx.rgbPeak > 0;
     for (const l of ctx.leds) {
       l.now += (l.target - l.now) * 0.55;
-      l.lens.emissiveIntensity = l.now * 6;
-      l.light.intensity = l.now * 60;
+      l.lens.emissiveIntensity = l.now * 6 * (l.bright ?? 1);
+      l.light.intensity = l.now * 60 * (l.bright ?? 1);
       if (l.now > 0.02) glow = true;
     }
     // Servo speed is limited (SG90 ≈ 0.1 s / 60°): the horn chases the target angle

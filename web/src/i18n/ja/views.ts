@@ -41,7 +41,7 @@ const d: Dict = {
   "Key GND": "キー GND",
   "Key {cap} (press = GND, internal pull-up)": "キー {cap}（押すと GND、内部プルアップ）",
   "L/R to GND = left channel": "L/R を GND に接続すると左チャンネル",
-  "LED (220 Ω current limit)": "LED（220Ω 電流制限）",
+  "LED ({ohm} Ω current limit)": "LED（{ohm}Ω 電流制限）",
   "MAX98357A amp and 4 Ω speaker · BCLK IO{bclk} LRC IO{lrc} DIN IO{din}": "MAX98357A アンプと 4Ω スピーカー · BCLK IO{bclk} LRC IO{lrc} DIN IO{din}",
   "Mic GND": "マイク GND",
   "Mic power": "マイク電源",

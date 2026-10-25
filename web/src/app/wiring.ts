@@ -3,6 +3,7 @@
 import type { PartSpec } from '../board3d';
 import { isI2cMod } from '../bench3d/spec.ts';
 import { BENCH_WIRE_CM } from './harness.ts';
+import { LED_OHM_DEFAULT, ohmText } from '../bench3d/ledparams.ts';
 import { I2S_WIRING, micPins, spkPins } from '../i2spins.ts';
 import { t } from '../i18n/index.ts';
 import { TFT_HEADER, TFT_PX } from '../lcdspec.ts';
@@ -56,7 +57,7 @@ export function partInfo(p: PartSpec, ext5v = false): PartInfo {
     case 'pot':
       return { name: t('Potentiometer (GPIO{pin})', { pin: p.pin }), model: t('10 kΩ rotary potentiometer'), iface: t('Wiper GPIO{pin} (ADC)', { pin: p.pin }), power: '3V3' };
     case 'led':
-      return { name: `LED (GPIO${p.pin})`, model: t('5 mm LED with a 220 Ω series resistor'), iface: t('GPIO{pin}, lit when high', { pin: p.pin }), power: t('Via GPIO') };
+      return { name: `LED (GPIO${p.pin})`, model: t('5 mm LED with a {ohm} Ω series resistor', { ohm: ohmText(p.ohm ?? LED_OHM_DEFAULT) }), iface: t('GPIO{pin}, lit when high', { pin: p.pin }), power: t('Via GPIO') };
     case 'key':
       return { name: p.cap ? t('Button {cap} (GPIO{pin})', { cap: p.cap, pin: p.pin }) : t('Button (GPIO{pin})', { pin: p.pin }), model: t('6×6 mm tactile switch with keycap'), iface: t('GPIO{pin}, grounded when pressed (internal pull-up)', { pin: p.pin }), power: t('No power needed') };
     case 'buzzer':
@@ -192,7 +193,7 @@ export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): 
       add(`GPIO${p.pin}`, id, 'OUT', t('Analog input (wiper)'), 'drive', C.orange);
       add('GND', id, 'GND', R.gnd, 'gnd', C.black);
     } else if (p.type === 'led') {
-      add(`GPIO${p.pin}`, id, 'IN', t('Output (through {ohm} Ω)', { ohm: 220 }), 'load', C.orange, { ohm: 220 });
+      add(`GPIO${p.pin}`, id, 'IN', t('Output (through {ohm} Ω)', { ohm: ohmText(p.ohm ?? LED_OHM_DEFAULT) }), 'load', C.orange, { ohm: p.ohm ?? LED_OHM_DEFAULT });
       add('GND', id, 'GND', R.gnd, 'gnd', C.black);
     } else if (p.type === 'key') {
       // A button only pulls the pin to ground when pressed; it never drives high, so it is not "output on output"

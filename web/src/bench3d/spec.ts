@@ -9,7 +9,8 @@ export type GroveId = 'env3' | 'env4';
 
 /** Add-on parts declared by an example (scene.parts in examples.json). */
 export type PartSpec =
-  | { type: 'led'; pin: number; color?: number; col?: number; label?: string }
+  /** ohm = series resistor (default 220, H-13 part card); color = lens hex, see bench3d/ledparams LED_HEX */
+  | { type: 'led'; pin: number; color?: number; ohm?: number; col?: number; label?: string }
   /** ctl 'sh1106' = 1.3″ SH1106 module (F-04a2, CLI --i2c sh1106@addr); default SSD1306 */
   | { type: 'oled'; addr: number; sda: number; scl: number; ctl?: 'sh1106'; label?: string }
   /** 1.28″ GC9A01 round LCD (SPI2): pins fixed per chip, see LCD_WIRING (S3: SCLK=12, MOSI=11, CS=10, DC=14, RST=13, BL=15; C3: 6, 7, 10, 5, 4, 3) */

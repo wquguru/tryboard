@@ -41,7 +41,7 @@ const d: Dict = {
   "Key GND": "키 GND",
   "Key {cap} (press = GND, internal pull-up)": "키 {cap} (누르면 GND, 내부 풀업)",
   "L/R to GND = left channel": "L/R을 GND에 연결하면 왼쪽 채널",
-  "LED (220 Ω current limit)": "LED (220Ω 전류 제한)",
+  "LED ({ohm} Ω current limit)": "LED ({ohm}Ω 전류 제한)",
   "MAX98357A amp and 4 Ω speaker · BCLK IO{bclk} LRC IO{lrc} DIN IO{din}": "MAX98357A 앰프와 4Ω 스피커 · BCLK IO{bclk} LRC IO{lrc} DIN IO{din}",
   "Mic GND": "마이크 GND",
   "Mic power": "마이크 전원",

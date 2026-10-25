@@ -103,14 +103,24 @@ export function applyCached(faults: WireFault[], s3: boolean): { faults: WireFau
   return { faults: out, done };
 }
 
-/** Browser: lazy-load the wasm (same cached file as the simulator) and add estimates to faults with a net. */
-export async function enrichFaults(faults: WireFault[], s3: boolean): Promise<WireFault[]> {
-  if (!faults.some((f) => f.net)) return faults;
+/** Browser: the stateless solver exports (same cached wasm file as the simulator), loaded once. */
+function faultWasm(): Promise<FaultExports> {
   exP ??= import('../assets').then(async ({ loadWasmModule }) => {
     const instance = await WebAssembly.instantiate(await loadWasmModule(), {});
     return instance.exports as unknown as FaultExports;
   });
-  const x = await exP;
+  return exP;
+}
+
+/** Part card (H-13): GPIO-high LED current (A) through `ohm` with knee `vf` (tb_fault kind 3, b = Vf). */
+export async function ledCurrent(ohm: number, vf: number, s3: boolean): Promise<number> {
+  return solveRaw(await faultWasm(), 3, [ohm, vf], s3).i;
+}
+
+/** Browser: lazy-load the wasm (same cached file as the simulator) and add estimates to faults with a net. */
+export async function enrichFaults(faults: WireFault[], s3: boolean): Promise<WireFault[]> {
+  if (!faults.some((f) => f.net)) return faults;
+  const x = await faultWasm();
   for (const f of faults) if (f.net && !cache.has(faultKey(f, s3))) cache.set(faultKey(f, s3), estimateNet(x, f.net, s3));
   return applyCached(faults, s3).faults;
 }
