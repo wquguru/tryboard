@@ -390,3 +390,5 @@ arduino-cli 1.5.1 + esp32 core 3.3.2，FQBN `esp32:esp32:esp32c3`；草图在 `f
 | 选型可信度核对（G-08） | ✅ | `web/test/trust.test.ts` 6 例：选板 / 实验台可信度表对照仓库现算的网页可跑集合无夸大；故意把 CLI-only 器件标仿真能报出；结果卡把 CLI-only 零件降为必须上真机并注「命令行可模拟」；boards.rs 推断 note ↔ 预设「需真机确认」行同步。agent-browser：INA219（c3-i2c-trio）行为模拟、M5Dial 预设「需真机确认」行（1440 + 390，zh/ja/ko 无横向滚动），Reviews/ab/G-08.md | 元件库 parts.ts 的 ina219 / aht20 / ds3231 等 sim 仍为 none（低报，改它涉及元件库上台路径）；未在 3D 旋钮旁加标注，只在板属性面板 |
 
 - R-21（ROM 瘦身）：网页发布的 ROM 去掉 `.xt.prop` / `.xt.lit`（`tools/strip_rom.py`，build_web.sh 调用）：S3 949 552 → 619 788 B，ESP32 857 500 → 596 888 B，C3 不变；可加载段与符号表逐项相同（脚本断言，仅 ELF 头里的 e_shoff / e_shnum / e_shstrndx 变，该头被第一个 PT_LOAD 映射但无人读）；命令行用裁剪 ROM 与原 ROM 跑 weather / esp32-blink / hello / esp32-wifi，stdout 与 stderr（除墙钟）逐字相同；levels.mjs 全过。
+
+- 2026-10-25 已知失败：`tools/webtest/asm3d.mjs`「dialtimer: 3D Dial in its stand; dragging the ring changes the minutes」FAIL（拖 44px 后分钟仍为 5、detents 0）；在批次 H2 之前的 0326bef 干净构建上同样失败，非 H2 引入，待查。
