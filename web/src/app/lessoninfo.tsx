@@ -72,7 +72,7 @@ export function LessonInfo({ phone }: { phone?: boolean }) {
   };
   return (
     <div id="lessonInfo" data-tab={s.info} className="flex flex-none flex-col gap-3">
-      <div role="tablist" aria-label={t("About this lesson")} onKeyDown={onKey} className="flex gap-1 overflow-x-auto border-b border-line">
+      <div role="tablist" aria-label={t("About this lesson")} onKeyDown={onKey} className="flex gap-0.5 border-b border-line">
         {TABS.map(([k, label]) => (
           <button
             key={k}
@@ -85,8 +85,8 @@ export function LessonInfo({ phone }: { phone?: boolean }) {
             tabIndex={s.info === k ? 0 : -1}
             onClick={() => pick(k)}
             className={cn(
-              "-mb-px h-11 flex-none cursor-pointer border-0 border-b-2 bg-transparent whitespace-nowrap",
-              "px-2.5 text-[14px]",
+              "-mb-px min-h-11 min-w-0 flex-1 cursor-pointer border-0 border-b-2 bg-transparent",
+              "px-1 text-[13px] leading-[16px]",
               s.info === k ? "border-accent-strong font-bold text-fg" : "border-transparent text-muted hover:text-fg",
             )}
           >
