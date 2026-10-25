@@ -33,6 +33,7 @@ import { BOOT_GPIO, type SimChip } from '../chips';
 import { devsOf, i2sOf, servoOf } from './devs';
 import { retargetTft } from './place';
 import { boardDevs } from '../bench3d/boarddevs';
+import { sceneView } from './wiring';
 
 /** weather firmware reading line (format set by level 06); accept single or double spaces (bme280 example). P is optional (AHT20, c3-i2c-trio). */
 const READING = /T=(-?[\d.]+) C\s+H=([\d.]+) %(?:\s+P=([\d.]+) hPa)?/g;
@@ -148,6 +149,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const paced = pacedMirror(bench, store, () => s.hasImu());
 
   let setMic: ReturnType<typeof micSwitcher> | undefined;
+  // H-09: every bench.setScene goes through the lesson's part filter; s.scene stays the full scene the sim runs
+  let benchKeep: readonly string[] | null = null;
+  const drawn = (sc: SceneSpec) => sceneView(sc, benchKeep);
   const s: Session = {
     bench,
     pick,
@@ -183,13 +187,19 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       bumpEdit();
     },
     restoreScene(next, power) {
-      if (JSON.stringify(next) !== JSON.stringify(s.scene)) bench.setScene(next);
+      if (JSON.stringify(drawn(next)) !== JSON.stringify(drawn(s.scene))) bench.setScene(drawn(next));
       s.scene = next;
       s.power = power;
       s.sim?.configure(devsOf(next, s));
       audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
       audio.setSpeaker(hasSpeaker(next));
       bumpEdit();
+    },
+    setBenchParts(keep) {
+      const before = JSON.stringify(drawn(s.scene));
+      benchKeep = keep;
+      const after = drawn(s.scene);
+      if (JSON.stringify(after) !== before) bench.setScene(after);
     },
     onTick(cb) {
       tickSubs.add(cb);
@@ -242,11 +252,11 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         return JSON.stringify([d.i2c, d.lcd, d.servo ?? null, d.encoder ?? null, d.sonar?.trig ?? null, d.sonar?.echo ?? null, d.dht11 ?? null, d.touchInt ?? null, d.i2s, d.board ?? null, d.grove ?? null, d.parts ?? null]);
       };
       const rebootNeeded = devs(next) !== devs(s.scene);
-      const same = JSON.stringify(next) === JSON.stringify(s.scene);
+      const same = JSON.stringify(drawn(next)) === JSON.stringify(drawn(s.scene));
       const extBefore = !!s.power?.ext5v;
       s.scene = next;
       s.power = power;
-      if (!same) bench.setScene(next);
+      if (!same) bench.setScene(drawn(next));
       if (!s.hasImu()) bench.setPose(null);
       audio.setPins(next.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : [])));
       const hadExt = extBefore;
@@ -294,7 +304,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       s.chip = imageChip(buf);
       retargetTft(s.scene, s.chip);
       bench.setBoard(s.chip);
-      bench.setScene(s.scene);
+      bench.setScene(drawn(s.scene));
       bench.setPowered(true);
       if (!s.sim) {
         s.sim = makeSim(buf);

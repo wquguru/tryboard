@@ -92,6 +92,8 @@ export interface Lesson {
   steps: LessonStep[];
   /** H-04 "Show current": the loop drawn while `pin` is high (bench wire / part / pin ids, in current order). */
   circuit?: { pin: number; path: string[] };
+  /** H-09: part ids (wiring.ts partId) the bench draws while this lesson is up; missing = the work's full set. Sim devices are untouched. */
+  parts?: string[];
 }
 
 const CALLOUTS: Record<string, LessonCallout> = {
@@ -117,6 +119,7 @@ export const LESSONS: Lesson[] = [
     summary: t('Make the external LED blink every half second.'),
     minutes: 8,
     buy: t('LED, 220 Ω resistor'),
+    parts: ['led:5'],
     fw: 's3-blink',
     src: 'firmware/blink/main/main.c',
     events: [{ pin: 5, hi: t('LED on'), lo: t('LED off'), line: 22 }],
@@ -205,6 +208,7 @@ export const LESSONS: Lesson[] = [
     summary: t('Each press of the BOOT button turns the LED on or off.'),
     minutes: 8,
     buy: t('No new parts needed'),
+    parts: ['led:5'],
     fw: 's3-button',
     src: 'firmware/button/main/main.c',
     events: [
@@ -267,6 +271,7 @@ export const LESSONS: Lesson[] = [
     summary: t('Draw text on the OLED screen over two I2C wires.'),
     minutes: 10,
     buy: t('0.96″ OLED screen (SSD1306, I2C)'),
+    parts: ['led:5', 'oled'],
     fw: 's3-oled',
     src: 'firmware/oled/main/main.c',
     i2c: [{ addr: 0x3c, text: t('Screen updated: {n} bytes sent'), line: 69 }],

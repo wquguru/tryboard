@@ -24,6 +24,11 @@ export function partId(p: PartSpec) {
   return p.type === 'led' || p.type === 'key' ? `${p.type}:${p.pin}` : p.type;
 }
 
+/** H-09 bench view: only the parts in `keep` (null = all). Wires belong to their part, so they go with it; the sim keeps the full scene. */
+export function sceneView<S extends { parts: PartSpec[] }>(spec: S, keep: readonly string[] | null): S {
+  return keep ? { ...spec, parts: spec.parts.filter((p) => keep.includes(partId(p))) } : spec;
+}
+
 export function partInfo(p: PartSpec, ext5v = false): PartInfo {
   const i2c = (x: { addr: number; sda: number; scl: number }) => `I2C ${hex(x.addr)} · SDA GPIO${x.sda} · SCL GPIO${x.scl}`;
   switch (p.type) {
