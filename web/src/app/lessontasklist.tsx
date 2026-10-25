@@ -36,7 +36,7 @@ export function TaskList({ tasks }: { tasks: LessonTask[] }) {
                   data-reveal={i}
                   aria-expanded={open}
                   onClick={() => revealTask(i)}
-                  className="-my-1 flex min-h-9 flex-1 cursor-pointer items-center gap-2.5 border-0 bg-transparent p-0 text-left text-[13px] font-medium text-fg"
+                  className="flex min-h-11 flex-1 md:-my-1 md:min-h-9 cursor-pointer items-center gap-2.5 border-0 bg-transparent p-0 text-left text-[13px] font-medium text-fg"
                 >
                   <Mark done={!!hit} />
                   <span className="flex-1">{x.text}</span>
@@ -58,7 +58,7 @@ export function TaskList({ tasks }: { tasks: LessonTask[] }) {
                       type="button"
                       data-goto={i}
                       onClick={() => s.goTo(tg)}
-                      className="min-h-9 flex-none cursor-pointer self-center rounded-lg border border-accent-line bg-accent-bg px-2.5 text-[13px] text-accent-ink"
+                      className="min-h-11 flex-none cursor-pointer self-center md:min-h-9 rounded-lg border border-accent-line bg-accent-bg px-2.5 text-[13px] text-accent-ink"
                     >
                       {t("Take me there")}
                     </button>

@@ -27,6 +27,12 @@ export function mountLesson(b: BenchCtx) {
     if (c.store.get().running && fws.some((f) => c.session.fwName === `${f}/flash.bin`)) lessonSignal("run");
     if (b.flowOn()) lessonSignal("view:current");
   }
+  taskUi.set({
+    goTo: (tg) => {
+      b.ctx?.session.bench.viewTo?.(tg, 600);
+      b.ctx?.session.pick.highlight?.(tg);
+    },
+  });
   function bindTasks(on: boolean) {
     unsub.forEach((f) => f());
     unsub = [];
@@ -93,12 +99,6 @@ export function mountLesson(b: BenchCtx) {
     // The left card is drawn after the bench's first toolbar pass, so the short toolbar follows from here
     if (!had) b.setToolGroups(c);
     if (!had) bindTasks(true);
-    taskUi.set({
-      goTo: (tg) => {
-        c.session.bench.viewTo?.(tg, 600);
-        c.session.pick.highlight?.(tg);
-      },
-    });
     // H-03: the dock opens on "What happened" whenever a lesson comes up (the serial log is one click away)
     bindLessonFeed(c.session, lesson);
     if (!had) setDock({ tab: "lesson" });
