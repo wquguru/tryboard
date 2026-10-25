@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { LESSONS, lessonFor } from '../src/app/lessons.ts';
+import { partId, sceneView } from '../src/app/wiring.ts';
+import type { SceneSpec } from '../src/bench3d/spec.ts';
 import zh from '../src/i18n/zh/index.ts';
 import ja from '../src/i18n/ja/index.ts';
 import ko from '../src/i18n/ko/index.ts';
@@ -156,4 +158,40 @@ test('H-05 demo beats point at wires the bench draws', () => {
           assert.ok(ids.some((x) => l.circuit?.path.includes(x)), `${b.wire.from} → ${b.wire.to} is a circuit wire`);
         }
       }
+});
+
+/** H-09: each work's bench scene (examples.json via the work's example id in works.ts). */
+const examples = JSON.parse(readFileSync(new URL('firmware/examples.json', root), 'utf8')) as { id: string; scene?: SceneSpec }[];
+const worksSrc = readFileSync(new URL('web/src/app/works.ts', root), 'utf8');
+const sceneOf = (work: string) => {
+  const ex = new RegExp(`\\b${work}: \\{ id: '${work}',[^\\n]*?example: '([^']+)'`).exec(worksSrc)?.[1];
+  return examples.find((e) => e.id === ex)?.scene ?? { parts: [] };
+};
+/** Scene part ids a bench reference (part / pin / wire id, or a wire end) belongs to; board pins belong to none. */
+const owners = (ids: string[], ref: string) =>
+  (ref.startsWith('wire:') ? ref.slice(5).split('~') : [ref]).flatMap((x) => ids.filter((id) => x === id || x.startsWith(id + ':')));
+
+test('H-09 lesson parts exist in the work scene and cover everything the lesson points at', () => {
+  for (const l of LESSONS) {
+    const name = `${l.work}/${l.checkpoint}`;
+    const ids = sceneOf(l.work).parts.map(partId);
+    assert.ok(ids.length > 0, `${name}: work scene found`);
+    if (!l.parts) continue;
+    for (const p of l.parts) assert.ok(ids.includes(p), `${name}: part ${p} is in the scene (${ids.join(', ')})`);
+    const refs: string[] = [...(l.circuit?.path ?? [])];
+    for (const s of l.steps) {
+      for (const c of s.callouts) refs.push(c.target.id);
+      for (const b of s.demo ?? []) {
+        refs.push(b.focus.id);
+        if (b.wire) refs.push(b.wire.from, b.wire.to);
+      }
+    }
+    for (const r of refs) for (const o of owners(ids, r)) assert.ok(l.parts.includes(o), `${name}: ${r} needs part ${o} on the bench`);
+  }
+  const l1 = lessonFor('weather', '01')!;
+  const view = sceneView(sceneOf('weather'), l1.parts ?? null);
+  assert.deepEqual(view.parts.map(partId), ['led:5'], 'lesson 01 bench = board + breadboard + LED (resistor is in the LED group)');
+  assert.deepEqual(lessonFor('weather', '03')!.parts, ['led:5', 'oled']);
+  const full = sceneOf('weather');
+  assert.equal(sceneView(full, null), full, 'no filter = the same scene object');
 });

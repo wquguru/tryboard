@@ -156,6 +156,8 @@ export interface Session {
   setWireMods(m: WireMods): void;
   /** For rewind: swap the scene display without re-powering (seek restores sim state) */
   restoreScene(scene: SceneSpec, power: { ext5v: boolean } | null): void;
+  /** H-09: draw only these part ids on the bench (null = all); `scene` and the sim's devices stay complete. Rebuilds only on change */
+  setBenchParts(keep: readonly string[] | null): void;
   onTick(cb: (m: Extract<FromWorker, { type: 'tick' }>) => void): () => void;
   onBoot(cb: () => void): () => void;
   onRunEnd(cb: (snap: Snapshot) => void): () => void;

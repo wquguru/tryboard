@@ -28,6 +28,7 @@ export function mountLesson(b: BenchCtx) {
         if (bc.get().dock.tab === "lesson") setDock({ tab: "serial" });
       }
       delete document.body.dataset.lesson;
+      c.session.setBenchParts(null);
       if (bc.get().overlays.lessonCallouts) overlay("lessonCallouts", null);
       return null;
     }
@@ -74,6 +75,8 @@ export function mountLesson(b: BenchCtx) {
     if (!had) setDock({ tab: "lesson" });
     // H-07: on phones the dock's peek band becomes the step panel (lab.css sizes it from body[data-lesson])
     document.body.dataset.lesson = lesson.checkpoint;
+    // H-09: the bench shows only this lesson's parts (no-op when the drawn set is unchanged)
+    c.session.setBenchParts(lesson.parts ?? null);
     if (!had && isPhone()) {
       setMui({ sheet: "peek" });
       // The stage just shrank to the top band: frame the board so the lesson's parts aren't specks
