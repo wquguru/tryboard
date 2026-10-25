@@ -11,6 +11,8 @@ import { CmdkBox } from "./cmdkview";
 import { CRUMB, MoreMenu, RUN_TEXT, SPEEDS, WorkMenu } from "./topbar";
 import { FwMenu } from "./fwmenu";
 import { NetCondChip } from "./netcond";
+import { lessonUi } from "./lesson";
+import { LessonMapBtn } from "./lessonmap";
 import { STEPS, type StepId } from "./types";
 import type { Tool, ToolGroup } from "./toolbar";
 
@@ -69,6 +71,7 @@ export function MobileTop({
   workName: string;
   toast: (msg: string) => void;
 }) {
+  const lesson = !!useStore(lessonUi).lesson && step === "bench";
   return (
     <header
       id="topbar"
@@ -84,6 +87,7 @@ export function MobileTop({
           <Icon n="left" size={18} />
           {CRUMB.label}
         </a>
+        {lesson && <LessonMapBtn phone />}
         <div className="flex min-w-0 flex-1 justify-center">
           <WorkMenu name={EXAMPLE_ID ? t('Example · {name}', { name: workName }) : workName} phone />
         </div>

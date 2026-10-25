@@ -9,6 +9,7 @@ import { usePhone } from "./mobile";
 import { beginnerOn, onBeginner, setBeginner } from "../beginner";
 import { useEffect, useState } from "react";
 import type { Lesson } from "./lessons";
+import { LessonMapBtn } from "./lessonmap";
 
 export interface LessonUi {
   lesson: Lesson | null;
@@ -183,7 +184,7 @@ export function LessonCard({ step }: { step: string }) {
   );
 }
 
-/** Top bar: "Lesson 1 · Light up an LED" + one bar per step + n/5. */
+/** Top bar: "≡ Lessons" (H-12 map) + "Lesson 1 · Light up an LED" + one bar per step + n/5. */
 export function LessonHead() {
   const s = useStore(lessonUi);
   const l = s.lesson;
@@ -191,6 +192,7 @@ export function LessonHead() {
   const n = l.steps.length;
   return (
     <div id="lessonTitle" className="flex min-w-0 items-center gap-2.5 px-2">
+      <LessonMapBtn />
       <span className="truncate text-[14px] font-bold">{t("Lesson {n} · {title}", { n: l.no, title: l.title })}</span>
       <span className="flex flex-none gap-1" role="img" aria-label={t("Step progress {n}/{total}", { n: Math.min(s.step + 1, n), total: n })}>
         {l.steps.map((st, i) => (
