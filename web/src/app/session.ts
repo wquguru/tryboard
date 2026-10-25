@@ -252,7 +252,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         return JSON.stringify([d.i2c, d.lcd, d.servo ?? null, d.encoder ?? null, d.sonar?.trig ?? null, d.sonar?.echo ?? null, d.dht11 ?? null, d.touchInt ?? null, d.i2s, d.board ?? null, d.grove ?? null, d.parts ?? null]);
       };
       const rebootNeeded = devs(next) !== devs(s.scene);
-      const same = JSON.stringify(next) === JSON.stringify(s.scene);
+      const same = JSON.stringify(drawn(next)) === JSON.stringify(drawn(s.scene));
       const extBefore = !!s.power?.ext5v;
       s.scene = next;
       s.power = power;
