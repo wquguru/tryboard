@@ -220,6 +220,30 @@ for (const [cp, re, tl] of [
   await pg.close();
 }
 
+// 5c. H-12: course map from the lesson head; 12 cards, 3 written, Esc closes, card 2 jumps to checkpoint 02
+{
+  const pg = await open('/app?work=weather&cp=01&debug=1&beginner=1#bench');
+  await waitFor(pg, () => !!document.querySelector('#lessonMapBtn'), null, 10000);
+  await pg.click('#lessonMapBtn');
+  await waitFor(pg, () => !!document.querySelector('#lessonMap[role=dialog]'), null, 3000);
+  const m = await pg.evaluate(() => ({
+    n: document.querySelectorAll('#lessonMap [data-course]').length,
+    live: [...document.querySelectorAll('#lessonMap [data-course]:not([disabled])')].map((e) => e.dataset.course).join(','),
+    cur: document.querySelector('#lessonMap [data-course="1"]')?.dataset.state,
+    focusIn: !!document.activeElement?.closest('#lessonMap'),
+  }));
+  report('lesson map: 12 cards, lessons 1-3 open, lesson 1 in progress', m.n === 12 && m.live === '1,2,3' && m.cur === 'current' && m.focusIn, JSON.stringify(m));
+  await pg.screenshot({ path: path.join(outDir, 'beginner-map.png') });
+  await pg.keyboard.press('Escape');
+  report('lesson map: Esc closes, focus back on the button', await waitFor(pg, () => !document.querySelector('#lessonMap') && document.activeElement?.id === 'lessonMapBtn', null, 2000));
+  await pg.click('#lessonMapBtn');
+  await waitFor(pg, () => !!document.querySelector('#lessonMap [data-course="2"]'), null, 3000);
+  await pg.click('#lessonMap [data-course="2"]');
+  const ok = await waitFor(pg, () => !document.querySelector('#lessonMap') && /Lesson 2/.test(document.querySelector('#lessonTitle')?.textContent ?? ''), null, 5000);
+  report('lesson map: card 2 opens weather 02', ok, await pg.$eval('#lessonTitle', (e) => e.textContent).catch(() => ''));
+  await pg.close();
+}
+
 // 6. Other works keep the switch but have no lesson
 const door = await open('/app?work=door&debug=1&beginner=1#bench');
 report('other work: switch, no lesson', (await has(door, '#beginnerBtn')) && !(await has(door, '#lessonSteps')) && (await tools(door)) !== short);
@@ -231,6 +255,22 @@ await sleep(800);
 const sw = await ph.evaluate(() => document.documentElement.scrollWidth);
 report('phone: no horizontal scroll', sw <= 390, `scrollWidth=${sw}`);
 report('phone: unchanged until H-07', !(await has(ph, '#lessonSteps')) && !(await has(ph, '#lessonTitle')));
+// H-12: phone map button is 44 px, the map is a full-screen 2-column sheet without horizontal scroll
+const mb = await ph.$eval('#lessonMapBtn', (e) => { const r = e.getBoundingClientRect(); return [r.width, r.height]; }).catch(() => [0, 0]);
+report('phone: lesson map button 44px', mb[0] >= 44 && mb[1] >= 44, JSON.stringify(mb));
+if (mb[0]) {
+  await ph.tap('#lessonMapBtn');
+  await waitFor(ph, () => !!document.querySelector('#lessonMap'), null, 3000);
+  await sleep(200);
+  const pm = await ph.evaluate(() => {
+    const cards = [...document.querySelectorAll('#lessonMap [data-course]')].map((e) => e.getBoundingClientRect());
+    const d = document.querySelector('#lessonMap');
+    return { n: cards.length, cols: new Set(cards.map((r) => Math.round(r.left))).size, sw: Math.max(document.documentElement.scrollWidth, d.scrollWidth), w: Math.round(d.getBoundingClientRect().width) };
+  });
+  report('phone: lesson map full screen, 2 columns, no horizontal scroll', pm.n === 12 && pm.cols === 2 && pm.sw <= 390 && pm.w === 390, JSON.stringify(pm));
+  await ph.screenshot({ path: path.join(outDir, 'beginner-phone-map.png') });
+  await ph.keyboard.press('Escape');
+}
 await ph.screenshot({ path: path.join(outDir, 'beginner-phone.png') });
 await ph.close();
 
