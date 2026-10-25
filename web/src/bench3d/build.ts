@@ -7,6 +7,7 @@ import { apiId, LCD_WIRING, BB, rowZ } from './boards';
 import { TP_PINS, roundLcdModule, imuModule, servoModel, buzzerModule, encoderModule, stickModule, dht11Module, sonarModule, obstacleModel, ampModule, speakerModel, micModule, keySwitch, potModel, led, resistor } from './modules';
 import { wire } from './wires';
 import type { PartSpec } from './spec';
+import { LED_HEX, LED_OHM_DEFAULT, ledBright, ledColor, ohmText } from './ledparams';
 import type { BenchCtx } from './ctx';
 import { I2S_WIRING, micPins, spkPins } from '../i2spins.ts';
 import { TFT_HEADER } from '../lcdspec.ts';
@@ -29,22 +30,23 @@ export function mountBuildersA(ctx: BenchCtx): void {
     const id = `led:${p.pin}`;
     registerPart(id, root);
     grp.add(root);
-    const l = led(p.color ?? 0xff2a1a);
+    const l = led(p.color ?? LED_HEX.red);
+    const ohm = p.ohm ?? LED_OHM_DEFAULT;
     const col = p.col ?? 24;
     l.grp.position.set(colX(col) + 1.27, BB_TOP + 2, rowZ(7));
     root.add(l.grp);
     l.grp.name = 'led';
-    const r = resistor();
+    const r = resistor(ohm);
     r.name = 'res';
     r.position.set(colX(col - 2), BB_TOP + 1.5, rowZ(7));
     root.add(r);
     // IO → column of the resistor's left end; LED cathode → GND
     jumper(grp, 'IO' + p.pin, new THREE.Vector3(colX(col - 4), top, rowZ(9)), WIRE.sig, `${id}:IN`, 30, 6);
     jumper(grp, 'GND', new THREE.Vector3(colX(col + 1), top, rowZ(9)), WIRE.gnd, `${id}:GND`, 24, 10);
-    addRole(apiId('IO' + p.pin), t('LED (220 Ω current limit)'));
+    addRole(apiId('IO' + p.pin), t('LED ({ohm} Ω current limit)', { ohm: ohmText(ohm) }));
     addRole('GND', t('{name} GND', { name: 'LED' }));
-    label(grp, tl(p.label) ?? `GPIO${p.pin} → 220Ω → LED`, new THREE.Vector3(colX(col - 1), 34, rowZ(2) - 6));
-    ctx.leds.push({ pin: p.pin, lens: l.lens, light: l.light, now: 0, target: 0 });
+    label(grp, tl(p.label) ?? `GPIO${p.pin} → ${ohmText(ohm)}Ω → LED`, new THREE.Vector3(colX(col - 1), 34, rowZ(2) - 6));
+    ctx.leds.push({ pin: p.pin, lens: l.lens, light: l.light, now: 0, target: 0, bright: ledBright(ohm, ledColor(p.color)) });
   }
 
   /** Jumper to an upright module: rise over the board, then drop into row a of the same column behind the module so the screen stays clear */

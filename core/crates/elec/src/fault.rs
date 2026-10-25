@@ -14,6 +14,10 @@ pub const GPIO_R_HIGH: f64 = 33.0;
 /// GPIO output-low resistance (ohm): 2 x 0.495 V / 28 mA (I_OL at PAD_DRIVER = 3; the S3 datasheet table matches)
 pub const GPIO_R_LOW: f64 = 35.36;
 pub const LED_VF: f64 = 1.8;
+/// Knees for other 5 mm colours (H-13): typical datasheet V_F at 20 mA is ~2.2 V green (GaP) / ~3.0 V blue (InGaN),
+/// minus the same 10 ohm x 20 mA slope as red. Estimates, not calibrated on real parts.
+pub const LED_VF_GREEN: f64 = 2.0;
+pub const LED_VF_BLUE: f64 = 2.8;
 pub const LED_RD: f64 = 10.0;
 pub const CLAMP_VF: f64 = 0.6;
 pub const CLAMP_RD: f64 = 10.0;
@@ -97,8 +101,13 @@ pub fn fight_gpio(vd: f64, rd: f64) -> FaultOut {
     }
 }
 
-/// GPIO drives an LED high (series ohm, 0 = direct). Node 1 = GPIO internal, 2 = pin, 3 = LED anode
+/// GPIO drives a red LED high (series ohm, 0 = direct). Node 1 = GPIO internal, 2 = pin, 3 = LED anode
 pub fn led_circuit(series: f64) -> Circuit {
+    led_circuit_vf(series, LED_VF)
+}
+
+/// Same circuit with a given LED knee voltage (see LED_VF_GREEN / LED_VF_BLUE)
+pub fn led_circuit_vf(series: f64, vf: f64) -> Circuit {
     let mut c = Circuit::new(3);
     c.add(Elem::V {
         a: 1,
@@ -120,14 +129,19 @@ pub fn led_circuit(series: f64) -> Circuit {
     c.add(Elem::Diode {
         a: 3,
         b: 0,
-        vf: LED_VF,
+        vf,
         rd: LED_RD,
     });
     c
 }
 
 pub fn led(series: f64) -> FaultOut {
-    let s = led_circuit(series).solve(None, &[], &[0.0, VDD, VDD, VDD]);
+    led_with(series, LED_VF)
+}
+
+/// GPIO-high LED current with knee voltage vf (red = LED_VF)
+pub fn led_with(series: f64, vf: f64) -> FaultOut {
+    let s = led_circuit_vf(series, vf).solve(None, &[], &[0.0, VDD, VDD, VDD]);
     FaultOut {
         i: s.i[3],
         v_pin: s.v[2],
@@ -293,6 +307,26 @@ mod tests {
             at(&n, "pin"),
             o2.v_pin
         );
+    }
+
+    #[test]
+    fn led_colours() {
+        // Linear once on: I = (VDD - vf) / (R_high + series + R_d); red 1 kohm ~ 1.44 mA
+        for (vf, want) in [
+            (LED_VF, 1.44e-3),
+            (LED_VF_GREEN, 1.25e-3),
+            (LED_VF_BLUE, 0.48e-3),
+        ] {
+            let o = led_with(1000.0, vf);
+            let exact = (VDD - vf) / (GPIO_R_HIGH + 1000.0 + LED_RD);
+            assert!(near(o.i, exact, 1e-9), "{vf} {o:?}");
+            assert!(near(o.i, want, 0.01e-3), "{vf} {o:?}");
+        }
+        assert!(near(led(1000.0).i, 1.5e-3, 0.1e-3));
+        assert_eq!(led(220.0).i, led_with(220.0, LED_VF).i);
+        // Colour order at 220 ohm: red > green > blue
+        let [r, g, b] = [LED_VF, LED_VF_GREEN, LED_VF_BLUE].map(|v| led_with(220.0, v).i);
+        assert!(r > g && g > b && b > 0.0, "{r} {g} {b}");
     }
 
     #[test]

@@ -13,6 +13,7 @@ import { PresetPick } from "./preset";
 import { boardDevs } from "../../bench3d/boarddevs";
 import { isTutorialPart } from "../../bench3d/parts3d";
 import { tutorialControls } from "./tutorial";
+import { ledControls } from "./ledcard";
 
 export function mountPart(b: BenchCtx) {
   function renderPart(id: string) {
@@ -181,6 +182,8 @@ export function mountPart(b: BenchCtx) {
           </Note>
         </>
       );
+    } else if (p.type === "led") {
+      live = ledControls(b, p);
     } else if (isTutorialPart(p)) {
       live = tutorialControls(b, p);
     }

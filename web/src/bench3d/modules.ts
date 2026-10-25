@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { EXT } from '../extmodels';
+import { resistorBands } from './ledparams';
 import { PITCH, type ExtSlot, ACCENT, MAT, canvasTexture, roundRect, modulePcb, contactShadow } from './util';
 
 // ---------------------------------------------------------------- modules and parts
@@ -1050,15 +1051,14 @@ export function led(color: number) {
   return { grp, lens, light };
 }
 
-export function resistor() {
+export function resistor(ohm = 220) {
   const grp = new THREE.Group();
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(1.1, 4.2, 8, 16), new THREE.MeshStandardMaterial({ color: 0xd9c49a, roughness: 0.6 }));
   body.rotation.z = Math.PI / 2;
   body.position.y = 2.2;
   body.castShadow = true;
   grp.add(body);
-  // 220 Ω: red red brown gold
-  [0xc62828, 0xc62828, 0x6d4c41, 0xc9a227].forEach((c, i) => {
+  resistorBands(ohm).forEach((c, i) => {
     const band = new THREE.Mesh(new THREE.CylinderGeometry(1.16, 1.16, 0.45, 20), new THREE.MeshStandardMaterial({ color: c, roughness: 0.5 }));
     band.rotation.z = Math.PI / 2;
     band.position.set(-1.8 + i * 1.1 + (i === 3 ? 0.4 : 0), 2.2, 0);

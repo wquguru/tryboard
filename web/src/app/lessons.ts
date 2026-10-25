@@ -153,7 +153,7 @@ export const LESSONS: Lesson[] = [
         body: t('An LED only conducts one way: the long leg (positive) faces the resistor, the short leg faces GND. The resistor holds back extra current. 220 Ω makes the LED bright enough without burning it out.'),
         tasks: [
           { text: t('Click the LED to change its colour'), done: 'select:led:5', how: t('Click the LED on the breadboard') },
-          { text: t('Switch the resistor to 1 kΩ and see if it gets dimmer'), done: 'prop:led:5.ohm=1000', how: t('Changing the resistor value comes in a later update: skip this one for now') },
+          { text: t('Switch the resistor to 1 kΩ and see if it gets dimmer'), done: 'prop:led:5.ohm=1000', how: t('Click the LED, then pick 1k Ω under Series resistor in its card') },
         ],
         callouts: pick('led', 'res'),
       },

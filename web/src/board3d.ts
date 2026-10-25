@@ -93,7 +93,7 @@ export interface Bench extends ScenePickApi {
   setExtModels(on: boolean): void;
   extModels(): string[];
   /** Brightness each external LED should have now (0–1, from GPIO / PWM frames): lets tests check bench LEDs really follow their pins */
-  ledLevels(): { pin: number; target: number }[];
+  ledLevels(): { pin: number; target: number; bright: number }[];
   /** Beginner "Show current" (H-04): dashed flow along wire / part / pin ids, null hides; returns the segments drawn. */
   setFlow?(path: string[] | null): number;
   flowSegs?(): number;
@@ -465,7 +465,7 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
         return { x: ((v.x + 1) / 2) * cw, y: ((1 - v.y) / 2) * ch };
       });
     },
-    ledLevels: () => ctx.leds.map((l) => ({ pin: l.pin, target: l.target })),
+    ledLevels: () => ctx.leds.map((l) => ({ pin: l.pin, target: l.target, bright: l.bright ?? 1 })),
     setFlow: ctx.setFlow,
     flowSegs: ctx.flowSegs,
     stats() {
