@@ -1124,6 +1124,7 @@ const d: Dict = {
   "Whole preset: pins and addresses come from docs; no firmware has run it yet": "整个预设：引脚和地址来自文档，还没有固件实际跑过",
   // Beginner "What happened" feed + code highlight (H-03)
   "What happened": "发生了什么",
+  "Other panels: checkpoints, issues, waveform and more": "其它面板：检查点、问题、波形等",
   "Raw serial": "看原始串口",
   "LED on": "LED 亮",
   "LED off": "LED 灭",

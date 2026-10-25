@@ -312,6 +312,8 @@ export function MoreMenu({ toast, phone, name }: { toast: (msg: string) => void;
 }
 
 function MoreDropdown({ toast }: { toast: (msg: string) => void }) {
+  // H-11: the top-bar firmware button hides during a lesson, so this menu always carries it
+  const lessonOn = !!useStore(lessonUi).lesson;
   const { open, setOpen, ref } = usePop();
   const realnet = useRealnet();
   const go = (fn: () => void) => () => {
@@ -379,7 +381,7 @@ function MoreDropdown({ toast }: { toast: (msg: string) => void }) {
             role="menuitemcheckbox"
             aria-checked={realnet}
             data-more="realnet"
-            className={cn(menuItem, 'min-[1101px]:hidden')}
+            className={cn(menuItem, !lessonOn && 'min-[1101px]:hidden')}
             onClick={go(toggleRealnet)}
           >
             <Icon n="link" size={15} />
@@ -472,7 +474,7 @@ export function TopBar(p: { step: StepId; workName: string; bare?: boolean; righ
       {!p.bare && bench && !lesson && <NetCondChip />}
       {!p.bare && bench && !lesson && <RealnetSwitch />}
       {!p.bare && <RunGroup bench={bench} />}
-      <FwMenu />
+      <FwMenu lesson={!!lesson} />
       {p.right}
       <MoreMenu toast={p.toast} />
       {!p.bare && <BeginnerSwitch />}

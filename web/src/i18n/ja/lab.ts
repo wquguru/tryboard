@@ -1124,6 +1124,7 @@ const d: Dict = {
   "Whole preset: pins and addresses come from docs; no firmware has run it yet": "プリセット全体：ピンとアドレスは資料から取ったもので、まだファームウェアで動かしていません",
   // Beginner "What happened" feed + code highlight (H-03)
   "What happened": "何が起きたか",
+  "Other panels: checkpoints, issues, waveform and more": "その他のパネル：チェックポイント、問題、波形など",
   "Raw serial": "生のシリアルを見る",
   "LED on": "LED 点灯",
   "LED off": "LED 消灯",

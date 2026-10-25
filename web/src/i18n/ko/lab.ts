@@ -1124,6 +1124,7 @@ const d: Dict = {
   "Whole preset: pins and addresses come from docs; no firmware has run it yet": "프리셋 전체: 핀과 주소는 문서에서 가져왔으며 아직 펌웨어로 실행해 보지 않았습니다",
   // Beginner "What happened" feed + code highlight (H-03)
   "What happened": "무슨 일이 있었나",
+  "Other panels: checkpoints, issues, waveform and more": "다른 패널: 체크포인트, 문제, 파형 등",
   "Raw serial": "원본 시리얼 보기",
   "LED on": "LED 켜짐",
   "LED off": "LED 꺼짐",
