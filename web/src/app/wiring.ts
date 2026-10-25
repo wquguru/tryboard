@@ -153,6 +153,10 @@ export interface WireMods {
   jumpers?: [string, string][];
 }
 
+/** H-14 lesson wiring tab: the rows of the parts the bench draws for a lesson (`keep` = Lesson.parts, null = all). */
+export const lessonWires = (parts: PartSpec[], keep: readonly string[] | null, ext5v = false, mods: WireMods = {}) =>
+  wiresOf(sceneView({ parts }, keep).parts, ext5v, mods);
+
 export function wiresOf(parts: PartSpec[], ext5v = false, mods: WireMods = {}): BenchWire[] {
   const w: BenchWire[] = [];
   const C = { black: t('Black'), red: t('Red'), yellow: t('Yellow'), green: t('Green'), orange: t('Orange'), purple: t('Purple'), blue: t('Blue'), cyan: t('Cyan'), grey: t('Grey') };

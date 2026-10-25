@@ -1,6 +1,7 @@
 // Beginner lessons (PLAN H): five short steps per checkpoint, shown on the bench while beginner mode is on.
 // Text is English through t() (zh / ja / ko in i18n lab.ts); code lines point at the checkpoint's reference source.
 import { t } from '../i18n/index.ts';
+import { LED_VF, ledAmps, ohmText, type LedColor } from '../bench3d/ledparams.ts';
 
 /** A bench thing a callout points at: same shape as PickTarget (part / pin / wire / button + id). */
 export interface LessonTarget {
@@ -82,6 +83,27 @@ export interface LessonI2c {
   /** 1-based line in `Lesson.src` that sends the bytes. */
   line: number;
 }
+/** H-14 "Code explained": one line of `Lesson.src` in plain words. */
+export interface LessonCodeNote {
+  line: number;
+  text: string;
+}
+/** H-14: where a parameter comes from (the chip shown next to it). */
+export type ParamSource = 'bench' | 'code' | 'datasheet' | 'typical' | 'estimate';
+export interface LessonParam {
+  label: string;
+  value: string;
+  source: ParamSource;
+  /** datasheet: which document (no page numbers). */
+  doc?: string;
+  /** Recomputed from the bench LED, which the H-13 part card can change. */
+  live?: 'led-ohm' | 'led-vf' | 'led-ma';
+}
+/** H-14 wiring tab: beginner words for one wiring.ts row (key = BenchWire.id); `{ohm}` = the row's resistor. */
+export interface LessonWireNote {
+  to: string;
+  why: string;
+}
 export interface Lesson {
   work: string;
   checkpoint: string;
@@ -104,7 +126,33 @@ export interface Lesson {
   circuit?: { pin: number; path: string[] };
   /** H-09: part ids (wiring.ts partId) the bench draws while this lesson is up; missing = the work's full set. Sim devices are untouched. */
   parts?: string[];
+  /** H-14 tabs: explained source lines, parameters with sources, words for wiring rows, a shopping tip. */
+  code?: LessonCodeNote[];
+  params?: LessonParam[];
+  wireNotes?: Record<string, LessonWireNote>;
+  buyTip?: string;
 }
+
+const COLOR_NAME: Record<LedColor, string> = { red: t('Red'), green: t('Green'), blue: t('Blue') };
+/** H-14: a live LED parameter for the LED on the bench (same model as the H-13 card: elec::fault::led). */
+export function ledParamValue(live: NonNullable<LessonParam['live']>, ohm: number, color: LedColor): string {
+  const vf = LED_VF[color];
+  if (live === 'led-ohm') return ohm > 0 ? `${ohmText(ohm)} Ω` : t('None (removed)');
+  if (live === 'led-vf') return t('{color} LED, about {v} V', { color: COLOR_NAME[color], v: vf.toFixed(1) });
+  // 43 Ω = the pin's output resistance (33) + the diode's slope (10), as in ledparams.ledAmps
+  return `(3.3 − ${vf.toFixed(1)}) ÷ (${ohm} + 43 Ω) ≈ ${(ledAmps(ohm, vf) * 1000).toFixed(1)} mA`;
+}
+
+const LED_WIRES: Record<string, LessonWireNote> = {
+  'wire:GPIO5~led:5:IN': { to: t('{ohm} Ω resistor → LED long leg'), why: t('The code switches it between high (3.3 V) and low (0 V)') },
+  'wire:GND~led:5:GND': { to: t('LED short leg'), why: t('Current flows back to the board here, closing the loop') },
+};
+const DS_S3 = t('ESP32-S3 datasheet');
+const LED_PARAMS = (): LessonParam[] => [
+  { label: t('LED'), value: ledParamValue('led-vf', 220, 'red'), source: 'typical', live: 'led-vf' },
+  { label: t('Resistor'), value: ledParamValue('led-ohm', 220, 'red'), source: 'bench', live: 'led-ohm' },
+  { label: t('LED current'), value: ledParamValue('led-ma', 220, 'red'), source: 'estimate', live: 'led-ma' },
+];
 
 const CALLOUTS: Record<string, LessonCallout> = {
   chip: { key: 'chip', target: { kind: 'part', id: 'board' }, title: t('ESP32-S3 chip'), body: t('The code you write runs here') },
@@ -132,6 +180,23 @@ export const LESSONS: Lesson[] = [
     parts: ['led:5'],
     fw: 's3-blink',
     src: 'firmware/blink/main/main.c',
+    wireNotes: LED_WIRES,
+    code: [
+      { line: 8, text: t('Half a second between changes; the delay chips in step 5 swap in builds with 100 or 1000') },
+      { line: 17, text: t('Put GPIO5 back to a plain pin, whatever it did before') },
+      { line: 18, text: t('Make GPIO5 an output: from now on the code decides its level') },
+      { line: 21, text: t('Flip the remembered state: 1 becomes 0, 0 becomes 1') },
+      { line: 22, text: t('Drive the pin: 1 = 3.3 V (LED on), 0 = 0 V (LED off)') },
+      { line: 23, text: t('Print a line in the serial log so you can follow along') },
+      { line: 25, text: t('Wait BLINK_MS, then go round the loop again') },
+    ],
+    params: [
+      ...LED_PARAMS(),
+      { label: t('What a GPIO can supply'), value: t('About 20 mA at the default drive strength'), source: 'datasheet', doc: DS_S3 },
+      { label: t('GPIO high level'), value: '3.3 V', source: 'datasheet', doc: DS_S3 },
+      { label: t('Blink interval'), value: '500 ms', source: 'code' },
+    ],
+    buyTip: t('When buying: anything from 220 Ω to 1 kΩ works, more resistance means a dimmer LED. A bag of 5 mm LEDs and a box of resistors covers the first lessons.'),
     events: [{ pin: 5, hi: t('LED on'), lo: t('LED off'), line: 22 }],
     circuit: { pin: 5, path: ['wire:GPIO5~led:5:IN', 'led:5', 'wire:GND~led:5:GND'] },
     steps: [
@@ -236,6 +301,26 @@ export const LESSONS: Lesson[] = [
     parts: ['led:5'],
     fw: 's3-button',
     src: 'firmware/button/main/main.c',
+    wireNotes: LED_WIRES,
+    code: [
+      { line: 17, text: t('Runs the moment the button pulls GPIO0 low (an interrupt)') },
+      { line: 20, text: t('Hand the press time to the main loop; an interrupt must stay short') },
+      { line: 26, text: t('GPIO5 is an output for the LED, as in lesson 1') },
+      { line: 31, text: t('The internal pull-up keeps GPIO0 high until the button is pressed') },
+      { line: 32, text: t('Fire on the falling edge: high to low is the moment of the press') },
+      { line: 36, text: t('Connect GPIO0 to on_press') },
+      { line: 42, text: t('Sleep until a press arrives, using no CPU meanwhile') },
+      { line: 43, text: t('Ignore presses closer than 50 ms: one press bounces several times') },
+      { line: 46, text: t('Toggle the LED') },
+    ],
+    params: [
+      { label: t('BOOT button'), value: t('GPIO0, low while pressed'), source: 'bench' },
+      { label: t('Internal pull-up'), value: t('About 45 kΩ'), source: 'datasheet', doc: DS_S3 },
+      { label: t('How long a button bounces'), value: t('A few milliseconds'), source: 'typical' },
+      { label: t('Debounce window'), value: '50 ms', source: 'code' },
+      ...LED_PARAMS().slice(1),
+    ],
+    buyTip: t('When buying: nothing new, the BOOT button is on the dev board. A 6 × 6 mm tactile button on any free GPIO works the same way.'),
     events: [
       { pin: 0, hi: t('BOOT released'), lo: t('BOOT pressed'), line: 20, hiLine: 42, input: true },
       { pin: 5, hi: t('LED on'), lo: t('LED off'), line: 46 },
@@ -314,6 +399,34 @@ export const LESSONS: Lesson[] = [
     parts: ['led:5', 'oled'],
     fw: 's3-oled',
     src: 'firmware/oled/main/main.c',
+    wireNotes: {
+      ...LED_WIRES,
+      'wire:GND~oled:GND': { to: t('Screen GND'), why: t('Shared ground for the screen') },
+      'wire:3V3~oled:VCC': { to: t('Screen VCC'), why: t("Powers the screen from the board's 3.3 V") },
+      'wire:GPIO9~oled:SCL': { to: t('Screen SCL'), why: t('Clock wire: one tick per bit') },
+      'wire:GPIO8~oled:SDA': { to: t('Screen SDA'), why: t('Data wire: carries the bytes, one bit at a time') },
+    },
+    code: [
+      { line: 31, text: t('SDA pin: this lesson builds with GPIO8 (the default 6 is for the C3 board)') },
+      { line: 32, text: t('SCL pin: this lesson builds with GPIO9') },
+      { line: 35, text: t("I2C lines need pull-ups: the chip's internal ones are switched on; most modules add their own too") },
+      { line: 51, text: t('0x3C: the address this screen answers to') },
+      { line: 52, text: t('400 kHz: 400 000 clock ticks per second on SCL') },
+      { line: 56, text: t('Wake the screen up and set it to 128 × 64') },
+      { line: 60, text: t('Clear the picture in memory: 1024 bytes, one bit per dot') },
+      { line: 62, text: t('Draw "TryBoard" into memory at double size; nothing is sent yet') },
+      { line: 69, text: t('Send the whole picture over I2C; only now does the screen change') },
+      { line: 73, text: t('Wait a second, then draw the next frame') },
+    ],
+    params: [
+      { label: t('Screen'), value: t('128 × 64 dots, 1 bit each'), source: 'datasheet', doc: t('SSD1306 datasheet') },
+      { label: t('I2C address'), value: '0x3C', source: 'bench' },
+      { label: t('I2C pins'), value: 'SDA GPIO8 · SCL GPIO9', source: 'bench' },
+      { label: t('I2C clock'), value: '400 kHz', source: 'code' },
+      { label: t('One full screen'), value: '128 × 64 ÷ 8 = 1024 B', source: 'code' },
+      { label: t('Screen supply'), value: '3.3 V', source: 'bench' },
+    ],
+    buyTip: t('When buying: get the 4-pin I2C version (GND VCC SCL SDA), not the 7-pin SPI one, and check the pin order printed on the module: it differs between sellers.'),
     i2c: [{ addr: 0x3c, text: t('Screen updated: {n} bytes sent'), line: 69 }],
     steps: [
       {
