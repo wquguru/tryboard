@@ -17,7 +17,10 @@ export type DoneSpec =
   | { kind: 'usb'; what: 'configured' }
   | { kind: 'usb'; what: 'typed'; text: string }
   | { kind: 'env'; key: EnvKey }
-  | { kind: 'adc'; pin: number; op: '<' | '>'; n: number };
+  | { kind: 'adc'; pin: number; op: '<' | '>'; n: number }
+  | { kind: 'oled'; n: number }
+  | { kind: 'follow'; what: 'temp' }
+  | { kind: 'asm' };
 
 export type EnvKey = 'temp' | 'humidity' | 'pressure';
 
@@ -27,7 +30,8 @@ export interface Hit {
   from?: string;
 }
 
-/** `run` / `reveal` / `view:current` / `select:<id>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` / `press:boot×<n>` / `strip:<pin>=<n lit>` / `usb:configured` / `usb:typed=<text>` / `env:<key>` / `adc:<pin><raw` or `>raw`; null = malformed. */
+/** `run` / `reveal` / `view:current` / `select:<id>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` / `press:boot×<n>` / `strip:<pin>=<n lit>` / `usb:configured` / `usb:typed=<text>` / `env:<key>` / `adc:<pin><raw` or `>raw` /
+ *  `oled:<n lit>` / `follow:temp` (a reading matches a temperature changed on this step) / `asm:done` (every part in the case); null = malformed. */
 export function parseDone(d: string): DoneSpec | null {
   if (d === 'run' || d === 'reveal') return { kind: d };
   if (d === 'view:current') return { kind: 'view', what: 'current' };
@@ -49,13 +53,20 @@ export function parseDone(d: string): DoneSpec | null {
   if (m) return { kind: 'env', key: m[1] as EnvKey };
   m = /^adc:(\d+)([<>])(\d+)$/.exec(d);
   if (m) return { kind: 'adc', pin: Number(m[1]), op: m[2] as '<' | '>', n: Number(m[3]) };
+  m = /^oled:(\d+)$/.exec(d);
+  if (m && Number(m[1]) >= 1) return { kind: 'oled', n: Number(m[1]) };
+  if (d === 'follow:temp') return { kind: 'follow', what: 'temp' };
+  if (d === 'asm:done') return { kind: 'asm' };
   return null;
 }
 
-/** Signals: 'run', 'press:boot', 'chip:delay=<ms>' (+ from), 'view:current', 'select:<id>', 'prop:<part>.<key>=<v>', 'strip:<pin>=<lit>', 'usb:configured', 'usb:typed=<all text>', 'env:<key>=<v>' (+ from), 'adc:<pin>=<raw>'. */
+/** Signals: 'run', 'press:boot', 'chip:delay=<ms>' (+ from), 'view:current', 'select:<id>', 'prop:<part>.<key>=<v>', 'strip:<pin>=<lit>', 'usb:configured', 'usb:typed=<all text>', 'env:<key>=<v>' (+ from), 'adc:<pin>=<raw>',
+ *  'oled:<lit>', 'reading:temp=<°C>', 'asm:done=clean|warn'. */
 export interface SigCtx {
   /** BOOT presses (down edges) since this step came up, this one included. */
   boots: number;
+  /** Temperature changes since this step came up (follow:temp only ticks after one). */
+  envs?: number;
   /** Value before a chip / prop change. */
   from?: string;
 }
@@ -102,6 +113,19 @@ export function matchTask(done: string, sig: string, ctx: SigCtx): Hit | null {
       const raw = Number(m[2]);
       return (d.op === '<' ? raw < d.n : raw > d.n) ? { v: m[2] } : null;
     }
+    case 'oled': {
+      const m = /^oled:(\d+)$/.exec(sig);
+      return m && Number(m[1]) >= d.n ? { v: m[1] } : null;
+    }
+    case 'follow': {
+      // A reading line that matches the room only counts once the learner has moved the temperature on this step
+      const m = /^reading:temp=(-?[\d.]+)$/.exec(sig);
+      return m && (ctx.envs ?? 0) >= 1 ? { v: m[1] } : null;
+    }
+    case 'asm': {
+      const m = /^asm:done=(clean|warn)$/.exec(sig);
+      return m ? { v: m[1] } : null;
+    }
   }
 }
 
@@ -127,6 +151,8 @@ const PART_NAMES: Record<string, string> = {
   ws2812: t('the LED strip'),
   bme280: t('the BME280 sensor'),
   pot: t('the potentiometer'),
+  servo: t('the servo'),
+  buzzer: t('the buzzer'),
   'board@usb': t('the USB-C port'),
   'board@chip': t('the main chip'),
   'key:4': t('button K1'),
@@ -152,6 +178,12 @@ export function hitText(done: string, h: Hit): string {
       return d.what === 'configured' ? t('Detected: the PC sees a USB keyboard') : t('Detected: the PC typed "{text}"', { text: h.v ?? d.text });
     case 'adc':
       return t('Detected: GPIO{pin} reads {raw}', { pin: d.pin, raw: h.v ?? d.n });
+    case 'oled':
+      return t('Detected: {n} dots lit on the screen', { n: h.v ?? d.n });
+    case 'follow':
+      return t('Detected: the reading followed to {v} °C', { v: h.v ?? '' });
+    case 'asm':
+      return h.v === 'clean' ? t('Detected: every part is in the case, no warnings') : t('Detected: every part is in the case, with warnings');
     case 'chip':
       return h.from && h.from !== h.v
         ? t('Detected: delay {from} ms → {to} ms', { from: h.from, to: h.v ?? d.v })
@@ -207,12 +239,14 @@ export interface TaskUi {
 }
 export const taskUi = createStore<TaskUi>({ lesson: null, step: 0, hits: {}, fresh: null, open: {}, goTo: () => {} });
 let boots = 0;
+let envs = 0;
 
 /** The bench's lesson / step changed (bench/lesson.tsx): load that step's ticks, restart the BOOT count. */
 export function setTaskStep(lesson: Lesson | null, step: number) {
   const cur = taskUi.get();
   if (cur.lesson === lesson && cur.step === step) return;
   boots = 0;
+  envs = 0;
   taskUi.set({ lesson, step, hits: lesson ? stepHits(lesson.work, lesson.checkpoint, step) : {}, fresh: null, open: {} });
 }
 
@@ -229,10 +263,12 @@ function tick(i: number, h: Hit) {
 export function lessonSignal(sig: string, from?: string) {
   const { lesson, step, hits } = taskUi.get();
   if (sig === 'press:boot') boots++;
+  // Lesson 11 counts any temperature change: session.ts sends 'env:temp', the BME280 card 'env:temp=<v>'
+  if (/^env:temp(=|$)/.test(sig)) envs++;
   const tasks: LessonTask[] = lesson?.steps[step]?.tasks ?? [];
   tasks.forEach((task, i) => {
     if (hits[i]) return;
-    const h = matchTask(task.done, sig, { boots, from });
+    const h = matchTask(task.done, sig, { boots, envs, from });
     if (h) tick(i, h);
   });
 }
@@ -252,7 +288,7 @@ export function stepReady(s: TaskUi = taskUi.get()): boolean {
 }
 
 /** The running build is the current lesson's firmware (or one of its code-chip builds). */
-function lessonFw(fwName: string): boolean {
+export function lessonFw(fwName: string): boolean {
   const l = taskUi.get().lesson;
   const fws = l ? [l.fw, ...l.steps.flatMap((x) => Object.values(x.codeChips?.fw ?? {}))] : [];
   return fws.some((f) => !!f && fwName === `${f}/flash.bin`);
@@ -276,4 +312,18 @@ export function usbSignals(v: { configured: boolean; typed: string } | null, fwN
 export function adcSignals(adc: Record<number, { raw: number[] }>, fwName: string) {
   if (!lessonFw(fwName)) return;
   for (const [pin, a] of Object.entries(adc)) if (a.raw.length) lessonSignal(`adc:${pin}=${a.raw[a.raw.length - 1]}`);
+}
+
+/** OLED frame (128 × 64 bytes, non-zero = lit) as 'oled:<lit>', only while the lesson's own firmware runs. */
+export function oledSignal(px: Uint8Array | null, fwName: string) {
+  if (!px || !taskUi.get().lesson || !lessonFw(fwName)) return;
+  let n = 0;
+  for (const v of px) if (v) n++;
+  lessonSignal(`oled:${n}`);
+}
+
+/** A serial reading of the lesson's own firmware that sits within 0.25 °C of the room (half a slider step): 'reading:temp=<°C>'. */
+export function readingSignal(rd: { t: number } | null, room: number, fwName: string) {
+  if (!rd || Math.abs(rd.t - room) > 0.25 || !taskUi.get().lesson || !lessonFw(fwName)) return;
+  lessonSignal(`reading:temp=${rd.t.toFixed(2)}`);
 }

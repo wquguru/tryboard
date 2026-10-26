@@ -13,7 +13,7 @@ test('written lessons resolve through lessonFor with the same number', () => {
   const written = COURSE.filter((e) => courseLesson(e));
   assert.deepEqual(
     written.map((e) => e.no),
-    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
   );
   for (const e of written) {
     const l = lessonFor(e.work, lessonKey(e));

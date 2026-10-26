@@ -9,6 +9,7 @@ import { ledParamValue, type Lesson, type LessonParam, type ParamSource } from "
 import type { BenchWire } from "./wiring";
 import { ohmText, type LedColor } from "../bench3d/ledparams";
 import { loadSrc } from "./fwsrc";
+import { COURSE, courseLesson } from "./course";
 
 /** Source lines of `file` in firmware `fw` (`<id>/flash.bin`), or null while loading / missing. */
 export function useSrcLines(fw: string | undefined, file: string | undefined): string[] | null {
@@ -228,6 +229,31 @@ function Params({ l, led }: { l: Lesson; led: { ohm: number; color: LedColor } |
           {l.buyTip}
         </p>
       )}
+      {l.buyAll && <BuyAll l={l} />}
     </>
+  );
+}
+
+/** H-16 capstone shopping list: each written course lesson's parts and buy tip, in course order (the BOM lives in the Shop step). */
+function BuyAll({ l }: { l: Lesson }) {
+  const rows = COURSE.map((e) => ({ e, x: courseLesson(e) })).filter(({ x }) => x && x !== l && x.buyTip);
+  return (
+    <div id="lessonBuyAll" className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <b className="text-[15px]">{t("What to buy, lesson by lesson")}</b>
+        <a id="lessonBuyShop" href="#shop" className="text-[12px] font-medium text-accent-strong underline underline-offset-2">
+          {t("Full parts list with prices (Shop step)")}
+        </a>
+      </div>
+      <ol className="m-0 flex list-none flex-col gap-2 p-0">
+        {rows.map(({ e, x }) => (
+          <li key={e.no} data-buy={e.no} className="flex flex-col gap-0.5 rounded-[10px] bg-field px-3 py-2.5 text-[13px] leading-5">
+            <span className="text-[12px] text-muted">{t("Lesson {n} · {title}", { n: e.no, title: x!.title })}</span>
+            <b className="break-words">{x!.buy}</b>
+            <span className="break-words text-muted">{x!.buyTip}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }

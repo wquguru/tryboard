@@ -12,7 +12,7 @@ import { isPhone, setMui } from "../mobile";
 import { lessonFor } from "../lessons";
 import { LessonSteps, lessonUi, setLessonUi } from "../lesson";
 import { bindLessonFeed } from "../lessonfeed";
-import { lessonSignal, setTaskStep, stripSignals, taskUi, usbSignals } from "../lessontasks";
+import { lessonSignal, oledSignal, readingSignal, setTaskStep, stripSignals, taskUi, usbSignals } from "../lessontasks";
 import type { BenchCtx } from "./ctx";
 import { lessonWires, partId } from "../wiring";
 import { ledColor } from "../../bench3d/ledparams";
@@ -31,7 +31,13 @@ export function mountLesson(b: BenchCtx) {
       // Strip frames arrive as edges; a step opened after the strip lit up still sees the last frame
       stripSignals(c.session.frame.strips, c.session.fwName);
       usbSignals(c.session.usb, c.session.fwName);
+      oledSignal(c.session.frame.oled, c.session.fwName);
     }
+    // H-16 lesson 11: readings (follow:temp still needs a temperature change on this step) and the saved assembly are states too
+    const st = c.store.get();
+    if (st.running) readingSignal(st.reading, st.env.temp, c.session.fwName);
+    const a = st.assembly;
+    if (a && a.total > 0 && a.placed.length >= a.total) lessonSignal(`asm:done=${a.clean ? "clean" : "warn"}`);
     if (b.flowOn()) lessonSignal("view:current");
   }
   setLessonUi({
@@ -54,7 +60,7 @@ export function mountLesson(b: BenchCtx) {
     unsub.forEach((f) => f());
     unsub = [];
     if (!on || !b.ctx) return setTaskStep(null, 0);
-    unsub = [b.ctx.store.subscribe(probe, ["running", "run"]), lessonUi.subscribe(probe, ["lesson", "step"])];
+    unsub = [b.ctx.store.subscribe(probe, ["running", "run", "reading", "assembly"]), lessonUi.subscribe(probe, ["lesson", "step"])];
     probe();
   }
   /** The left-column lesson card for checkpoint `id`, or null (store cleared) when the normal card should show. */

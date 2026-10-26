@@ -1921,3 +1921,7 @@
 - 新任务信号 `adc:<pin><N` / `adc:<pin>>N`：worker 每帧已带固件实际读到的 ADC 原始值（`m.adc[pin].raw`，D-02 读数条用的同一份），session 取最新一个发 `adc:<pin>=<raw>`，仅本课固件运行时发（同 `strip:` 的门控）；任务「拧到底：读数 < 100」「拧到顶：读数 > 3500」与固件打印 TRYBOARD_OK 的两端阈值一致。
 - 理由：与 basics 作品同一理由（现有作品里没有对应关）；不并入 basics 是因为 basics 台面来自 s3-blink（只有 LED），第 4 / 6 课在并行改它，换示例会互相冲突。
 - 备选：第 9 课按 lamp-2 改讲旋转编码器（课程内容变成 PCNT，课表里就没有 ADC 了，属课程调整，留给主会话决定）；在 basics 加 `basics-adc` 检查点（要换 basics 台面并加关卡与 4 语言关卡文案，与第 4 / 6 课冲突，没选）。
+## 2026-10-26 H-16 第 11 课（综合：桌面气象站）取舍
+- 决定：(1) lessontasks 新完成类型 `oled:<亮点数>`（session onFrame + probe 补发）、`follow:temp`（setEnv 发 `env:temp` 后，本课固件串口读数与新室温相差 ≤ 0.25 °C 才勾）、`asm:done`（store.assembly 全部放好即发，clean / warn 都算）。(2) `Lesson.buyAll` + lessoninfo `#lessonBuyAll`：参数 tab 汇总已写课程的 buy / buyTip，链接 `#shop`，不另抄 BOM。(3) 电流数字取自 board.rs（芯片 20 mA + 核 12 mA + 板 11 mA）、零件目录 currentMa、ledAmps，测试用正则对照源码防漂移；稳压器 800 mA、GPIO 20 mA 标 datasheet，其余标 estimate。(4) 组装只能在 6 个检查点全过后解锁：课程中 ⋯ 菜单常显「换固件」（原先 >1100px 隐藏、课程又藏了顶栏按钮，无路可达）；left.tsx 全过时若已钉住的检查点有课程，优先显示课程卡（否则解锁组装即被踢出第 11 课）。(5) I2C 叙述 0x76 绑在第 38 行 i2c_master_transmit_receive；固件去抖是 50 ms（brief 写 30 ms，以代码为准）；lab 词条避免裸「OLED」「BME280」键与其它页面冲突，改用「OLED screen」「BME280 sensor」。
+- 理由：复用已有 worker 帧 / 串口 / store 状态，最小新增信号；数字与代码同源，防手抄过期；两处 UI 改动都是课程模式专属的可达性修复。
+- 备选：课程里直接预置检查点解锁组装（绕过判定，没选）；装壳任务只认无警告（BME280 贴芯片的警告恰是教学点，没选，写进遗留）。

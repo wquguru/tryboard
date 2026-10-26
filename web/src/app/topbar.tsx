@@ -391,13 +391,13 @@ function MoreDropdown({ toast }: { toast: (msg: string) => void }) {
               <span className="block text-[11px] text-muted">{realnet ? t('Tap to go back to the virtual network') : t("The chip's HTTP requests really go out through the browser")}</span>
             </span>
           </button>
-          {/* Firmware: narrow desktops (≤ 1100px) hide the top-bar menu, so it enters from ⋯ there */}
+          {/* Firmware: narrow desktops (≤ 1100px) and lessons hide the top-bar button, so it enters from ⋯ there */}
           <button
             type="button"
             role="menuitem"
             data-more="fw"
             data-fw-open=""
-            className={cn(menuItem, 'min-[1101px]:hidden')}
+            className={cn(menuItem, !lessonOn && 'min-[1101px]:hidden')}
             disabled={!actions.pickFirmware}
             onClick={go(openFwMenu)}
           >

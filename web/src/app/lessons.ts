@@ -10,6 +10,7 @@ import { lesson4 } from './lessondata/l4.ts';
 import { L6 } from './lessondata/l6.ts';
 import { L10 } from './lessondata/l10.ts';
 import { L9 } from './lessondata/l9.ts';
+import { L11 } from './lessondata/l11.ts';
 
 /** A bench thing a callout points at: same shape as PickTarget (part / pin / wire / button + id). */
 export interface LessonTarget {
@@ -53,6 +54,7 @@ export interface LessonTask {
   how?: string;
   /** `run` | `reveal` | `view:current` | `select:<id>` | `prop:<part>.<key>=<v>` | `chip:delay=<ms>` | `press:boot×<n>` | `strip:<pin>=<n>` | `usb:configured` | `usb:typed=<text>`. */
   /** `run` | `reveal` | `view:current` | `select:<id>` | `prop:<part>.<key>=<v>` | `chip:delay=<ms>` | `press:boot×<n>` | `strip:<pin>=<n>` | `env:<temp|humidity|pressure>`. */
+  /** `run` | `reveal` | `view:current` | `select:<id>` | `prop:<part>.<key>=<v>` | `chip:delay=<ms>` | `press:boot×<n>` | `oled:<lit dots>` | `follow:temp` | `asm:done`. */
   done: string;
   /** reveal: the answer shown when the learner opens it. */
   answer?: string;
@@ -164,6 +166,8 @@ export interface Lesson {
   params?: LessonParam[];
   wireNotes?: Record<string, LessonWireNote>;
   buyTip?: string;
+  /** H-16 capstone: the parameters tab also lists every written course lesson's parts and buy tip, with a link to the Shop step. */
+  buyAll?: boolean;
 }
 
 const COLOR_NAME: Record<LedColor, string> = { red: t('Red'), green: t('Green'), blue: t('Blue') };
@@ -532,6 +536,7 @@ export const LESSONS: Lesson[] = [
   L10,
   L8,
   L9,
+  L11,
 ];
 
 /** The lesson for this work's checkpoint, if one is written. */
