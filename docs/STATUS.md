@@ -397,3 +397,4 @@ arduino-cli 1.5.1 + esp32 core 3.3.2，FQBN `esp32:esp32:esp32c3`；草图在 `f
 - R-21（ROM 瘦身）：网页发布的 ROM 去掉 `.xt.prop` / `.xt.lit`（`tools/strip_rom.py`，build_web.sh 调用）：S3 949 552 → 619 788 B，ESP32 857 500 → 596 888 B，C3 不变；可加载段与符号表逐项相同（脚本断言，仅 ELF 头里的 e_shoff / e_shnum / e_shstrndx 变，该头被第一个 PT_LOAD 映射但无人读）；命令行用裁剪 ROM 与原 ROM 跑 weather / esp32-blink / hello / esp32-wifi，stdout 与 stderr（除墙钟）逐字相同；levels.mjs 全过。
 
 - 2026-10-25 已知失败：`tools/webtest/asm3d.mjs`「dialtimer: 3D Dial in its stand; dragging the ring changes the minutes」FAIL（拖 44px 后分钟仍为 5、detents 0）；在批次 H2 之前的 0326bef 干净构建上同样失败，非 H2 引入，待查。
+- H-16 第 0 课「认识开发板」（basics，无检查点、无固件，`lessondata/l0.ts`）：三步 / 10 个任务，第 1 步四样东西点 3D 自动打勾（USB-C 与芯片靠新的 `select:board@usb|chip` 区分）；npm test 306/306、tsc、lint_comments、beginner.mjs 全过；agent-browser 走查（地图 → 第 0 课 → 全部打勾 → 跨作品到第 1 课、390×844）无控制台错误，见 Reviews/ab/H-16-l0.md。遗留：第 0 课台面构建树仍列出 basics 的 LED / 2 根线（3D 不画），底部「代码」页签仍显示 basics 的 blink 源码。

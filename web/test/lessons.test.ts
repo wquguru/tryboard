@@ -95,6 +95,7 @@ test('callouts in a step point at distinct, resolvable spots', () => {
 
 test('lesson firmware is the checkpoint reference build', () => {
   for (const l of LESSONS) {
+    if (!l.fw) continue; // lesson 0 runs no firmware (H-16)
     const lv = levels.find((x) => x.id === l.checkpoint);
     assert.equal(l.fw, lv?.ref, `${l.work}/${l.checkpoint}`);
     const cmake = readFileSync(new URL(`firmware/${l.fw}/main/CMakeLists.txt`, root), 'utf8');
@@ -105,6 +106,7 @@ test('lesson firmware is the checkpoint reference build', () => {
 
 test('highlighted code lines contain the calls the step talks about', () => {
   for (const l of LESSONS) {
+    if (!l.fw) continue; // lesson 0 runs no firmware (H-16)
     const lines = readFileSync(new URL(l.src, root), 'utf8').split('\n');
     const want = CALLS[`${l.work}/${l.checkpoint}`] ?? {};
     for (const s of l.steps) {
@@ -124,6 +126,7 @@ test('highlighted code lines contain the calls the step talks about', () => {
 
 test('event rules point at the line that drives the pin (H-03)', () => {
   for (const l of LESSONS) {
+    if (!l.fw) continue; // lesson 0 runs no firmware (H-16)
     const lines = readFileSync(new URL(l.src, root), 'utf8').split('\n');
     for (const e of l.events ?? []) {
       assert.ok(e.pin >= 0 && e.pin < 49 && e.hi && e.lo, `${l.work}/${l.checkpoint}: rule for GPIO${e.pin}`);
@@ -255,6 +258,11 @@ test('H-14 wiring tab rows = wiresOf of the lesson bench view; notes point at re
     const scene = sceneOf(l.work);
     const rows = lessonWires(scene.parts, l.parts ?? null);
     const want = wiresOf(sceneView(scene, l.parts ?? null).parts);
+    // Lesson 0 (H-16) shows the bare board: no parts, no rows
+    if (l.parts?.length === 0) {
+      assert.equal(rows.length, 0, `${name}: no wiring rows`);
+      continue;
+    }
     assert.ok(rows.length > 0, `${name}: has wiring rows`);
     assert.equal(rows.length, want.length, `${name}: row count`);
     assert.deepEqual(rows.map((w) => w.id), want.map((w) => w.id), `${name}: row ids`);
@@ -269,6 +277,7 @@ test('H-14 wiring tab rows = wiresOf of the lesson bench view; notes point at re
 
 test('H-14 code notes point at real, non-blank source lines', () => {
   for (const l of LESSONS) {
+    if (!l.fw) continue; // lesson 0 runs no firmware (H-16)
     const lines = readFileSync(new URL(l.src, root), 'utf8').split('\n');
     assert.ok(l.code && l.code.length >= 5, `${l.checkpoint}: has code notes`);
     for (const c of l.code) {

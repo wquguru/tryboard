@@ -57,7 +57,9 @@ export function mountLesson(b: BenchCtx) {
     const c = b.ctx!;
     const lesson = id && !c.custom && beginnerOn() ? lessonFor(c.work.id, id) : null;
     const had = !!lessonUi.get().lesson;
-    if (!lesson || !l) {
+    // A lesson filed under a checkpoint needs its level; lesson 0 has none (H-16)
+    const free = !!lesson && !c.work.checkpoints.includes(lesson.checkpoint);
+    if (!lesson || (!l && !free)) {
       if (had) {
         setLessonUi({ lesson: null });
         bindTasks(false);
@@ -77,7 +79,7 @@ export function mountLesson(b: BenchCtx) {
     }
     const n = lesson.steps.length;
     const ids = c.work.checkpoints;
-    const nextId = ids[ids.indexOf(lesson.checkpoint) + 1];
+    const nextId = free ? undefined : ids[ids.indexOf(lesson.checkpoint) + 1];
     const nl = nextId ? c.session.levels.find((x) => x.id === nextId) : undefined;
     const work = c.work.id;
     const load = (fw: string) =>
@@ -89,7 +91,7 @@ export function mountLesson(b: BenchCtx) {
     setLessonUi({
       lesson,
       step: Math.max(0, Math.min(n, lessonStep(work, lesson.checkpoint))),
-      cpPass: l.pass ? t(l.pass) : "",
+      cpPass: l?.pass ? t(l.pass) : "",
       next: nl ? t("Next: checkpoint {id} · {title}", { id: nl.id, title: t(nl.title) }) : "",
       go: (i) => {
         const s = Math.max(0, Math.min(n, i));

@@ -10,7 +10,7 @@ import { stepHits, taskUi } from "./lessontasks";
 import { actions, bc } from "./chrome";
 import { Icon } from "./icons";
 import { WORKS } from "./works";
-import { COURSE, courseCard, courseLesson, courseOf, courseStep, type CourseCard, type CourseEntry } from "./course";
+import { COURSE, courseCard, courseLesson, courseOf, courseStep, lessonKey, type CourseCard, type CourseEntry } from "./course";
 
 /** Every entry's card (map state); the open work's checkpoints are live, other works read their stored passes. */
 export function courseCards(): CourseCard[] {
@@ -25,12 +25,9 @@ export function courseCards(): CourseCard[] {
 /** Open lesson `e`: same work switches checkpoint in place, another work reloads the lab (fresh lesson state there). */
 export function goLesson(e: CourseEntry) {
   if (!courseLesson(e)) return;
-  if (lessonUi.get().lesson?.work === e.work) {
-    if (e.cp) actions.selectCheckpoint?.(e.cp);
-    return;
-  }
-  const cp = e.cp ? `&cp=${encodeURIComponent(e.cp)}` : "";
-  location.href = `/app?work=${encodeURIComponent(e.work)}${cp}#bench`;
+  if (lessonUi.get().lesson?.work === e.work && e.cp) return actions.selectCheckpoint?.(e.cp);
+  // A lesson with no checkpoint (lesson 0) is named by its key in the URL; bench/left.tsx pins it on load
+  location.href = `/app?work=${encodeURIComponent(e.work)}&cp=${encodeURIComponent(lessonKey(e))}#bench`;
 }
 
 /** The open lesson's course entry and the per-lesson cards, re-read whenever steps, passes or ticks change. */

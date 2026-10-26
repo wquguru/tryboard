@@ -232,6 +232,8 @@ export function mountCards(b: BenchCtx) {
     }
     b.select({ kind: tg.kind, id: tg.id });
     lessonSignal(`select:${tg.id}`);
+    // H-16: lesson 0 tells the USB port from the chip on the same board part
+    if (tg.spot) lessonSignal(`select:${tg.id}@${tg.spot}`);
     // Phones open the properties drawer instead of a card, which would cover most of the bench
     if (isPhone()) {
       closeCard();

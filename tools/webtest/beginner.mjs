@@ -266,7 +266,7 @@ for (const [cp, re, tl] of [
     cur: document.querySelector('#lessonMap [data-course="1"]')?.dataset.state,
     focusIn: !!document.activeElement?.closest('#lessonMap'),
   }));
-  report('lesson map: 12 cards, lessons 1-3 open, lesson 1 in progress', m.n === 12 && m.live === '1,2,3' && m.cur === 'current' && m.focusIn, JSON.stringify(m));
+  report('lesson map: 12 cards, lessons 0-3 open (H-16 lesson 0 written), lesson 1 in progress', m.n === 12 && m.live === '0,1,2,3' && m.cur === 'current' && m.focusIn, JSON.stringify(m));
   await pg.screenshot({ path: path.join(outDir, 'beginner-map.png') });
   await pg.keyboard.press('Escape');
   report('lesson map: Esc closes, focus back on the button', await waitFor(pg, () => !document.querySelector('#lessonMap') && document.activeElement?.id === 'lessonMapBtn', null, 2000));

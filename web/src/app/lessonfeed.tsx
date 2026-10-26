@@ -131,7 +131,8 @@ export function useLessonCode(): { fw: string; file: string; lines: number[]; ch
   const { items } = useStore(lessonFeed);
   const { run } = useStore(bc);
   const l = s.lesson;
-  if (!l) return null;
+  // Lesson 0 runs no firmware: no source to show or follow
+  if (!l?.fw) return null;
   const file = l.src.replace(/^firmware\//, "");
   const last = items[items.length - 1];
   // Running: the line behind the latest edge; still: the current step's lines

@@ -2,6 +2,7 @@
 // Text is English through t() (zh / ja / ko in i18n lab.ts); code lines point at the checkpoint's reference source.
 import { t } from '../i18n/index.ts';
 import { LED_VF, ledAmps, ohmText, type LedColor } from '../bench3d/ledparams.ts';
+import { LESSON_0 } from './lessondata/l0.ts';
 
 /** A bench thing a callout points at: same shape as PickTarget (part / pin / wire / button + id). */
 export interface LessonTarget {
@@ -491,6 +492,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
+  LESSON_0,
 ];
 
 /** The lesson for this work's checkpoint, if one is written. */

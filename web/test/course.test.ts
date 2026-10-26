@@ -42,10 +42,11 @@ test('prev / next skip unwritten lessons', () => {
   assert.equal(courseStep(9, 1, find), null);
   assert.equal(courseStep(5, -1, find)?.no, 3);
   assert.equal(courseStep(1, -1, find), null);
-  // With today's lessons (1..3) the real lookup stops after lesson 3
+  // With today's lessons (0..3) the real lookup stops after lesson 3 and before lesson 0
   assert.equal(courseStep(1, 1)?.no, 2);
   assert.equal(courseStep(3, 1), null);
-  assert.equal(courseStep(1, -1), null);
+  assert.equal(courseStep(1, -1)?.no, 0);
+  assert.equal(courseStep(0, -1), null);
 });
 
 const fake: Lesson = {
@@ -77,6 +78,9 @@ test('a lesson without a checkpoint is done once every task is ticked', () => {
 });
 
 test('courseCard passes ticks through for cp-less entries', () => {
-  // Lesson 0 is not written yet, so it stays planned whatever the ticks say
-  assert.equal(courseCard(COURSE[0], () => true, () => 0, null, () => ({ 0: 1 })).state, 'plan');
+  // Lesson 0 (H-16) has no checkpoint: passes don't count, only every task of every step ticked does
+  const l0 = courseLesson(COURSE[0])!;
+  const all = (_w: string, _k: string, s: number) => Object.fromEntries(l0.steps[s].tasks.map((_, i) => [i, 1]));
+  assert.equal(courseCard(COURSE[0], () => true, () => 0, null, () => ({ 0: 1 })).state, 'ready');
+  assert.equal(courseCard(COURSE[0], () => false, () => 0, null, all).state, 'done');
 });
