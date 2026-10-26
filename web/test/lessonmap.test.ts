@@ -11,10 +11,8 @@ test('COURSE has 12 lessons numbered 0..11', () => {
 
 test('written lessons resolve through lessonFor with the same number', () => {
   const written = COURSE.filter((e) => courseLesson(e));
-  assert.deepEqual(
-    written.map((e) => e.no),
-    [1, 2, 3],
-  );
+  // H-16 adds lessons in parallel; 1..3 are always there
+  for (const n of [1, 2, 3]) assert.ok(written.some((e) => e.no === n), `lesson ${n} written`);
   for (const e of written) {
     const l = lessonFor(e.work, e.cp);
     assert.ok(l, `lesson ${e.no}`);

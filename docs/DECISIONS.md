@@ -1883,3 +1883,8 @@
 - 决定：(1) 无检查点的课用 `lessonKey(e) = "lesson-<no>"` 作为 `Lesson.checkpoint` 存档键，`lessonFor` 签名不变；完成 = 该课所有步骤的动手任务全部打勾（零任务不算完成）。(2) 下一课按钮 / 上一课按钮跳过未写的课；完成卡优先显示下一节**已写**的课，一节都没有时预览下一节**计划中**的课（黄框照常、开始按钮 disabled），不留空。(3) 跨作品切换走整页跳转 `/app?work=&cp=#bench`，step / wireSel / info / taskUi / benchKeep 随重载归零，不另写重置逻辑；同作品切课在 `bench/lesson.tsx` 清 wireSel、info、3D 高亮。(4) `basics` 用 `WorkDef.courseOnly` 标记，topbar 菜单按它过滤，而不是按空 checkpoints 判断。(5) 顶栏窄屏取舍：12 段进度放在标题下方（两行叠放，不和标题抢宽度），< 2200px 藏「基础课 /」前缀，< 2000px 上一课 / 下一课只剩箭头（aria-label / title 保留全文）；1440 与 1920 宽实测标题完整；手机不在顶栏加按钮（390 宽放不下），课序信息放面板头与完成态。(6) "Lesson {n} done" 的中文从「第 n 关完成」改为「第 n 课完成」（课号与关号已解耦）；"Basics course" 词条从 lab 组移到 site 组（works.ts 被首页引用）。
 - 理由：保持 H-12 地图、H-10 任务存储、H-07 手机面板的现有挂点不动；验收里的「对下一个已写的课走跨作品过渡」在 H-15 时不存在（第 5 课 lamp-1 还没写），预览计划中的课能如实展示设计稿的黄框。
 - 备选：Lesson.checkpoint 改成可选（牵动 lessonStep / taskUi / body[data-lesson] 多处，没选）；完成卡在没有已写下一课时隐藏（看不到过渡设计，没选）。
+
+## 2026-10-26 H-16 第 7 课（舵机）取舍
+- 决定：台面只留 `servo`（05 关判定只看 GPIO4 的 50 Hz 脉宽，固件不碰 GPIO5，不放 LED）；不写 `events`（lessonfeed 不解析 K.PWM，「转到 X°」靠串口日志代替）；脉宽参数分三条来源：代码里 0.5–2.5 ms（code）、SG90 数据手册写的约 1–2 ms 对应 ±90°（datasheet）、实际满 180° 约 0.5–2.5 ms 且两端因个体而异（typical）；电流 0.15 A / 0.7 A 取自 elec::servo 的估算（estimate）；「舵机一动就重启」放在 buyTip 和第 5 步思考题里，指向故障关 fault-power。三个公共测试（course.test.ts courseStep、lessonmap.test.ts 已写课清单、beginner.mjs 课程地图）原来写死「只有 1–3 课」，改成「1–3 必在，其余按 COURSE 推算」，免得每加一课都要改。
+- 理由：零件少、讲解只围绕舵机；数据手册与常见代码对脉宽的说法不一致，分开标来源最诚实；给 lessonfeed 加 PWM 规则会改公共接口（`Lesson` 新字段 + 解析），与第 4 / 6 课（也是 LEDC）并行改同一文件易冲突，留给主会话统一做。
+- 备选：在 lessonfeed 里加 `pwm` 规则把脉宽换成角度（公共接口，没选，写进汇报）；保留 LED 当参照（与本课无关，没选）。
