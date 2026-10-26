@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { L8 } from '../src/app/lessondata/l8.ts';
 import { COURSE, courseLesson } from '../src/app/course.ts';
-import { lessonFor } from '../src/app/lessons.ts';
+import { isLessonFw, lessonFor } from '../src/app/lessons.ts';
 import { lessonWires, partId, sceneView } from '../src/app/wiring.ts';
 import { hitText, matchTask, parseDone, taskTarget } from '../src/app/lessontasks.ts';
 import type { PartSpec } from '../src/bench3d/spec.ts';
@@ -103,4 +103,10 @@ test('env tasks tick on a real change of that value only', () => {
   assert.match(hitText('env:humidity', { v: '60', from: '45' }), /45 % → 60 %/);
   assert.deepEqual(taskTarget('env:temp'), { kind: 'part', id: 'bme280' });
   assert.equal(taskTarget('env:pressure'), null);
+});
+
+test('the feed narrates s3-bme280 only, not the weather build the work opens with', () => {
+  assert.equal(isLessonFw(L8, 's3-bme280/flash.bin'), true);
+  assert.equal(isLessonFw(L8, 'weather/flash.bin'), false);
+  assert.equal(isLessonFw(null, 's3-bme280/flash.bin'), false);
 });

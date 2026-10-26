@@ -541,3 +541,9 @@ export const LESSONS: Lesson[] = [
 export function lessonFor(work: string, checkpoint: string | undefined): Lesson | null {
   return LESSONS.find((l) => l.work === work && l.checkpoint === checkpoint) ?? null;
 }
+
+/** `fwName` ("<id>/flash.bin") is `l`'s own firmware or one of its code-chip builds, not the work's default. */
+export function isLessonFw(l: Lesson | null | undefined, fwName: string): boolean {
+  const fws = l ? [l.fw, ...l.steps.flatMap((x) => Object.values(x.codeChips?.fw ?? {}))] : [];
+  return fws.some((f) => !!f && fwName === `${f}/flash.bin`);
+}

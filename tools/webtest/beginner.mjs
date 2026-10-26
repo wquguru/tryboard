@@ -409,6 +409,26 @@ await ph.close();
   await pg.close();
 }
 
+// H-16 lesson 8 on S3: the feed stays quiet while the work's own build runs, then s3-bme280 reads every 1 s (160 M cycles, as the CLI)
+{
+  const pg = await open('/app?work=weather&cp=04&debug=1&beginner=1#bench');
+  await sleep(1500);
+  const rows = () => pg.$$eval('[data-t]', (xs) => xs.map((x) => Number(x.dataset.t)).sort((a, b) => a - b));
+  const before = (await rows()).length;
+  for (const b of await pg.$$('#lessonSteps [data-step]')) {
+    if (await pg.$('#lessonRun')) break;
+    await b.click();
+    await sleep(300);
+  }
+  await pg.click('#lessonRun');
+  await waitFor(pg, () => document.querySelectorAll('[data-t]').length >= 5, null, 20000);
+  const ts = await rows();
+  const gaps = ts.slice(2).map((t, i) => t - ts[i + 1]);
+  report('lesson 8 S3: no feed rows before the lesson code runs', before === 0, `rows=${before}`);
+  report('lesson 8 S3: sensor reads 1 s apart', gaps.length >= 3 && gaps.every((g) => Math.abs(g - 160_000_000) < 1_600_000), gaps.join(','));
+  await pg.close();
+}
+
 report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 server.close();

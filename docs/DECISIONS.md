@@ -1925,3 +1925,9 @@
 - 决定：(1) lessontasks 新完成类型 `oled:<亮点数>`（session onFrame + probe 补发）、`follow:temp`（setEnv 发 `env:temp` 后，本课固件串口读数与新室温相差 ≤ 0.25 °C 才勾）、`asm:done`（store.assembly 全部放好即发，clean / warn 都算）。(2) `Lesson.buyAll` + lessoninfo `#lessonBuyAll`：参数 tab 汇总已写课程的 buy / buyTip，链接 `#shop`，不另抄 BOM。(3) 电流数字取自 board.rs（芯片 20 mA + 核 12 mA + 板 11 mA）、零件目录 currentMa、ledAmps，测试用正则对照源码防漂移；稳压器 800 mA、GPIO 20 mA 标 datasheet，其余标 estimate。(4) 组装只能在 6 个检查点全过后解锁：课程中 ⋯ 菜单常显「换固件」（原先 >1100px 隐藏、课程又藏了顶栏按钮，无路可达）；left.tsx 全过时若已钉住的检查点有课程，优先显示课程卡（否则解锁组装即被踢出第 11 课）。(5) I2C 叙述 0x76 绑在第 38 行 i2c_master_transmit_receive；固件去抖是 50 ms（brief 写 30 ms，以代码为准）；lab 词条避免裸「OLED」「BME280」键与其它页面冲突，改用「OLED screen」「BME280 sensor」。
 - 理由：复用已有 worker 帧 / 串口 / store 状态，最小新增信号；数字与代码同源，防手抄过期；两处 UI 改动都是课程模式专属的可达性修复。
 - 备选：课程里直接预置检查点解锁组装（绕过判定，没选）；装壳任务只认无警告（BME280 贴芯片的警告恰是教学点，没选，写进遗留）。
+
+## 2026-10-26 H-16「发生了什么」只讲本课固件（第 8 课 0.52 s 之谜）
+- 结论：不是时钟 / 仿真一致性问题。网页与 CLI 的 S3 都按 160 MHz 计周期：s3-bme280 两次读间隔网页 159 999 994–160 000 004 周期、CLI 160 000 004（1 s）；weather 固件网页与 CLI 都是 83 200 002 周期（0.52 s）。0.52 s 来自作品默认固件 weather（打开 weather · 04 时先跑它），在按「运行本课代码」载入 s3-bme280 之前，事件流就按本课规则讲 weather 的 I2C 读，还配本课源码行。
+- 决定：`lessonfeed.tsx` 的 pull 只在 `session.fwName` 是本课固件（`lesson.fw` 或代码芯片变体；新 `isLessonFw` 在 lessons.ts，lessontasks 的 `lessonFw` 改用它）时出行，否则跳过事件、显示「还没运行」提示。
+- 理由：最小改动，与任务信号已有的门控（strip / usb / oled 只认本课固件）一致；拿别的固件的事件配本课代码行会误导。
+- 备选：打开课就自动载入本课固件（改了 H-15 打开即跑作品固件的行为，影响检查点与跨课切换，没选）；CPU_HZ 按芯片取（两边本来一致，不需要）。

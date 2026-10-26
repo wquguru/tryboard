@@ -8,7 +8,7 @@ import { createStore } from "./store";
 import { bc, setDock } from "./chrome";
 import { lessonUi } from "./lesson";
 import { B_NACK, B_PORT1, B_READ, B_RESTART, CPU_HZ, K, hex, type IoEvent, type IoStore } from "./iotrace";
-import type { CodeChips, Lesson } from "./lessons";
+import { isLessonFw, type CodeChips, type Lesson } from "./lessons";
 import { CodePane as CodeView } from "./panes";
 
 /** Rows kept; older ones scroll away (a blink makes two per second). */
@@ -39,6 +39,7 @@ export const lessonFeed = createStore<FeedState>({ items: [] });
 
 interface FeedSession {
   io: IoStore;
+  fwName: string;
   onIo(cb: () => void): () => void;
   ioPins(): number[];
   watchIo(pins: number[]): void;
@@ -90,6 +91,8 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
       }
     }
     dropped = io.dropped;
+    // The work's default build runs until "Run this lesson's code"; narrating it against this lesson's lines misleads
+    if (!isLessonFw(lesson, session.fwName)) return void (at = raw.length);
     const items = lessonFeed.get().items.slice();
     let changed = false;
     const close = (port: number) => {

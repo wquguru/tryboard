@@ -2,7 +2,7 @@
 // current step's tasks and kept per work + checkpoint + step on this machine. No React here: session.ts imports it.
 import { t } from '../i18n/index.ts';
 import { createStore } from './store.ts';
-import type { Lesson, LessonTarget, LessonTask } from './lessons.ts';
+import { isLessonFw, type Lesson, type LessonTarget, type LessonTask } from './lessons.ts';
 
 /** A parsed `LessonTask.done`. */
 export type DoneSpec =
@@ -289,9 +289,7 @@ export function stepReady(s: TaskUi = taskUi.get()): boolean {
 
 /** The running build is the current lesson's firmware (or one of its code-chip builds). */
 export function lessonFw(fwName: string): boolean {
-  const l = taskUi.get().lesson;
-  const fws = l ? [l.fw, ...l.steps.flatMap((x) => Object.values(x.codeChips?.fw ?? {}))] : [];
-  return fws.some((f) => !!f && fwName === `${f}/flash.bin`);
+  return isLessonFw(taskUi.get().lesson, fwName);
 }
 
 /** WS2812 frames (pin → [r, g, b] per LED) as 'strip:<pin>=<lit>' signals, only while the lesson's own firmware runs. */
