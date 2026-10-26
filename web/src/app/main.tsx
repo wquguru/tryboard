@@ -44,6 +44,7 @@ import { registerTemplate } from '../catalog/templates';
 import { initialHistory, placement, replay } from './bom';
 import type { PartSpec } from '../board3d';
 import { t } from '../i18n';
+import { syncCourseUrl } from './coursenav';
 import { boardDevs, cardputerKey } from '../bench3d/boarddevs';
 
 export { registerStep } from './shell';
@@ -532,6 +533,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
         }
       }
     : undefined;
+  if (!shared) syncCourseUrl();
   actions.selectCheckpoint = (id) => {
     if (store.get().step !== 'bench') location.hash = 'bench';
     store.set({ selection: { kind: 'checkpoint', id } });

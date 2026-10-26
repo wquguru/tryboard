@@ -30,6 +30,20 @@ export function goLesson(e: CourseEntry) {
   location.href = `/app?work=${encodeURIComponent(e.work)}&cp=${encodeURIComponent(lessonKey(e))}#bench`;
 }
 
+/** Keep `?cp=` on the open course lesson: same-work switches happen in place, so reload and browser back would land on the old one. */
+export function syncCourseUrl() {
+  lessonUi.subscribe(
+    ({ lesson }) => {
+      const e = courseOf(lesson);
+      const q = new URLSearchParams(location.search);
+      if (!e || q.get('work') !== e.work || q.get('cp') === lessonKey(e)) return;
+      q.set('cp', lessonKey(e));
+      history.replaceState(history.state, '', `${location.pathname}?${q}${location.hash}`);
+    },
+    ['lesson'],
+  );
+}
+
 /** The open lesson's course entry and the per-lesson cards, re-read whenever steps, passes or ticks change. */
 export function useCourse() {
   const ui = useStore(lessonUi);
