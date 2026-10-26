@@ -199,7 +199,10 @@ export function stepReady(s: TaskUi = taskUi.get()): boolean {
   return tasks.length > 0 && tasks.every((_, i) => !!s.hits[i]);
 }
 
-/** WS2812 frames (pin → [r, g, b] per LED) as 'strip:<pin>=<lit>' signals; session.ts calls it per new frame. */
-export function stripSignals(strips: Record<number, number[][]>) {
+/** WS2812 frames (pin → [r, g, b] per LED) as 'strip:<pin>=<lit>' signals, only while the lesson's own firmware runs. */
+export function stripSignals(strips: Record<number, number[][]>, fwName: string) {
+  const l = taskUi.get().lesson;
+  const fws = l ? [l.fw, ...l.steps.flatMap((x) => Object.values(x.codeChips?.fw ?? {}))] : [];
+  if (!fws.some((f) => fwName === `${f}/flash.bin`)) return;
   for (const [pin, leds] of Object.entries(strips)) lessonSignal(`strip:${pin}=${leds.filter((c) => c.some((v) => v > 0)).length}`);
 }

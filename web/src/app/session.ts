@@ -558,7 +558,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         if (m.strips) {
           s.frame.strips = { ...s.frame.strips, ...m.strips };
           for (const [pin, leds] of Object.entries(m.strips)) bench.setStrip(Number(pin), leds);
-          stripSignals(m.strips);
+          stripSignals(m.strips, s.fwName);
         }
         if (m.elec) {
           s.frame.elec = m.elec;

@@ -1882,3 +1882,8 @@
 - 决定：(1) 无检查点的课用 `lessonKey(e) = "lesson-<no>"` 作为 `Lesson.checkpoint` 存档键，`lessonFor` 签名不变；完成 = 该课所有步骤的动手任务全部打勾（零任务不算完成）。(2) 下一课按钮 / 上一课按钮跳过未写的课；完成卡优先显示下一节**已写**的课，一节都没有时预览下一节**计划中**的课（黄框照常、开始按钮 disabled），不留空。(3) 跨作品切换走整页跳转 `/app?work=&cp=#bench`，step / wireSel / info / taskUi / benchKeep 随重载归零，不另写重置逻辑；同作品切课在 `bench/lesson.tsx` 清 wireSel、info、3D 高亮。(4) `basics` 用 `WorkDef.courseOnly` 标记，topbar 菜单按它过滤，而不是按空 checkpoints 判断。(5) 顶栏窄屏取舍：12 段进度放在标题下方（两行叠放，不和标题抢宽度），< 2200px 藏「基础课 /」前缀，< 2000px 上一课 / 下一课只剩箭头（aria-label / title 保留全文）；1440 与 1920 宽实测标题完整；手机不在顶栏加按钮（390 宽放不下），课序信息放面板头与完成态。(6) "Lesson {n} done" 的中文从「第 n 关完成」改为「第 n 课完成」（课号与关号已解耦）；"Basics course" 词条从 lab 组移到 site 组（works.ts 被首页引用）。
 - 理由：保持 H-12 地图、H-10 任务存储、H-07 手机面板的现有挂点不动；验收里的「对下一个已写的课走跨作品过渡」在 H-15 时不存在（第 5 课 lamp-1 还没写），预览计划中的课能如实展示设计稿的黄框。
 - 备选：Lesson.checkpoint 改成可选（牵动 lessonStep / taskUi / body[data-lesson] 多处，没选）；完成卡在没有已写下一课时隐藏（看不到过渡设计，没选）。
+
+## 2026-10-26 H-16 第 5 课（彩色灯带）取舍
+- 决定：(1) 新增任务完成信号 `strip:<pin>=<n>`（亮灯数 ≥ n 即打勾）：session onTick 收到 `m.strips` 帧时发一次（边沿），bench/lesson.tsx 的 probe() 在本课固件运行时用 `session.frame.strips` 补发（状态，步骤晚于点亮打开也能勾）；只在当前固件是本课 `fw`（或步骤 codeChips 固件）时发，lamp 作品默认固件（STAGE 3）同样点亮灯带，不能替本课打勾。(2) 本课不写 `events` / `i2c`：lessonfeed 只叙述 GPIO 边沿和 I2C，GPIO5 由 RMT 驱动，iotrace 虽有 K.WS2812 事件但 feed 不处理，不伪造。(3) 参数文档名用 `Worldsemi WS2812B datasheet`：`WS2812B datasheet` 已作为字面量出现在首页可达的 catalog/parts.ts，i18n 分组测试要求它在 site 组。(4) 「改一改」一步只用揭示答案任务：没有预编译的换色 / 换亮度固件。
+- 理由：最小信号、复用已有 worker 帧数据，不改固件与 wasm；如实标注 feed 能力缺口。
+- 备选：从串口「LAMP ON 8」判完成（只证明固件走到那一行，不证明灯亮，没选）；给 lessonfeed 加 WS2812 叙述（超出本课范围，留作后续）。

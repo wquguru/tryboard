@@ -29,7 +29,7 @@ export function mountLesson(b: BenchCtx) {
     if (c.store.get().running && fws.some((f) => c.session.fwName === `${f}/flash.bin`)) {
       lessonSignal("run");
       // Strip frames arrive as edges; a step opened after the strip lit up still sees the last frame
-      stripSignals(c.session.frame.strips);
+      stripSignals(c.session.frame.strips, c.session.fwName);
     }
     if (b.flowOn()) lessonSignal("view:current");
   }
