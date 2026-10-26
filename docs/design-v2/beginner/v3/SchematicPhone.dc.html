@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>原理图 · 手机</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font-family:inherit}
+.paper{background-color:#FFFFFF;background-image:radial-gradient(#DDE1E6 1px, transparent 1.2px);background-size:20px 20px}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', system-ui, sans-serif; font-size: 14px; overflow: hidden">
+  <header style="height: 56px; flex-shrink: 0; box-sizing: border-box; padding: 0 6px; display: flex; align-items: center; gap: 4px; background: #FFFFFF; border-bottom: 1px solid #E6E6E6">
+    <button aria-label="返回" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer">
+      <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4 6.5 10l6 6" fill="none" stroke="#1E1E1E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </button>
+    <button aria-label="课程目录" style="width: 44px; height: 44px; border: 0; background: transparent; font-size: 18px; color: #3C3C3C; cursor: pointer">≡</button>
+    <b style="flex: 1; font-size: 15px">第 1 课 · 点亮一颗 LED</b>
+  </header>
+
+  <div style="padding: 10px 12px 8px; display: flex">
+    <div role="group" aria-label="台面视图" style="flex: 1; display: flex; padding: 3px; border-radius: 10px; background: #E6E6E6">
+      <button style="flex: 1; height: 40px; border-radius: 8px; border: 0; background: transparent; color: #3C3C3C; font-size: 14px; cursor: pointer">3D 台面</button>
+      <button aria-pressed="true" style="flex: 1; height: 40px; border-radius: 8px; border: 0; background: #FFFFFF; color: #1E1E1E; font-weight: 700; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); cursor: pointer">原理图</button>
+    </div>
+  </div>
+
+  <div class="paper" style="margin: 0 12px; height: 470px; flex-shrink: 0; position: relative; border-radius: 12px; border: 1px solid #E6E6E6; overflow: hidden">
+    <div style="position: absolute; left: 24px; top: 24px; width: 150px; height: 120px; box-sizing: border-box; padding: 12px; border: 2px solid #1E1E1E; border-radius: 6px; background: #FFFFFF; display: flex; flex-direction: column; gap: 2px">
+      <b>U1</b>
+      <span style="font-size: 12px; color: #6F6F6F">ESP32-S3 开发板</span>
+    </div>
+    <span style="position: absolute; left: 108px; top: 118px; font-family: 'JetBrains Mono', monospace; font-size: 12px">GPIO5</span>
+    <span style="position: absolute; left: 30px; top: 118px; font-family: 'JetBrains Mono', monospace; font-size: 12px">GND</span>
+
+    <div style="position: absolute; left: 130px; top: 144px; width: 2px; height: 40px; background: #1E1E1E"></div>
+    <div style="position: absolute; left: 114px; top: 182px; width: 34px; height: 100px; border-radius: 6px; outline: 2px solid #0D99FF; outline-offset: 2px; background: rgba(13,153,255,0.06); display: flex; justify-content: center">
+      <svg width="24" height="100" viewBox="0 0 24 100" aria-hidden="true"><path d="M12 0v14l9 5-18 10 18 10-18 10 18 10-18 10 9 5v16" fill="none" stroke="#1E1E1E" stroke-width="2" stroke-linejoin="round"></path></svg>
+    </div>
+    <b style="position: absolute; left: 160px; top: 218px; font-size: 13px">R1 · 220 Ω</b>
+    <div style="position: absolute; left: 130px; top: 282px; width: 2px; height: 28px; background: #1E1E1E"></div>
+    <svg style="position: absolute; left: 104px; top: 308px" width="56" height="60" viewBox="0 0 56 60" aria-hidden="true">
+      <path d="M8 4h36L26 36z" fill="#FEF2F2" stroke="#1E1E1E" stroke-width="2" stroke-linejoin="round"></path>
+      <path d="M8 38h36M26 38v22" stroke="#1E1E1E" stroke-width="2.4"></path>
+      <path d="M46 14l8-6M46 22l8-6" stroke="#F24822" stroke-width="1.8" stroke-linecap="round"></path>
+    </svg>
+    <b style="position: absolute; left: 160px; top: 326px; font-size: 13px">D1 · 红色 LED</b>
+    <div style="position: absolute; left: 130px; top: 368px; width: 2px; height: 40px; background: #1E1E1E"></div>
+    <svg style="position: absolute; left: 111px; top: 406px" width="40" height="24" viewBox="0 0 40 24" aria-hidden="true"><path d="M2 2h36M9 10h22M16 18h8" stroke="#1E1E1E" stroke-width="2" stroke-linecap="round"></path></svg>
+    <div style="position: absolute; left: 44px; top: 144px; width: 2px; height: 262px; background: #1E1E1E"></div>
+    <svg style="position: absolute; left: 25px; top: 406px" width="40" height="24" viewBox="0 0 40 24" aria-hidden="true"><path d="M2 2h36M9 10h22M16 18h8" stroke="#1E1E1E" stroke-width="2" stroke-linecap="round"></path></svg>
+    <div style="position: absolute; left: 140px; top: 150px; height: 250px; border-left: 3px dashed #0D99FF"></div>
+    <span style="position: absolute; left: 230px; top: 160px; padding: 4px 8px; border-radius: 6px; background: #E5F4FF; color: #0A6FBD; font-size: 12px; font-weight: 500">≈ 5.7 mA · 估算</span>
+  </div>
+
+  <div style="flex: 1"></div>
+  <section aria-label="课程步骤" style="box-sizing: border-box; padding: 10px 16px 16px; display: flex; flex-direction: column; gap: 10px; background: #FFFFFF; border-radius: 16px 16px 0 0; box-shadow: 0 -4px 16px rgba(0,0,0,0.08)">
+    <span style="align-self: center; width: 40px; height: 4px; border-radius: 2px; background: #D9D9D9"></span>
+    <div style="display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; border: 2px solid #0D99FF">
+      <b style="font-size: 13px">R1 · 电阻 220 Ω（红 红 棕）</b>
+      <span style="font-size: 12px; color: #6F6F6F">3D 台面里同一个电阻已高亮</span>
+    </div>
+    <div style="display: flex; gap: 8px">
+      <button style="width: 88px; height: 44px; border-radius: 10px; border: 1px solid #E6E6E6; background: #FFFFFF; color: #3C3C3C; font-size: 14px; cursor: pointer">上一步</button>
+      <button style="flex: 1; height: 44px; border-radius: 10px; border: 0; background: #0B76C8; color: #FFFFFF; font-size: 15px; font-weight: 700; cursor: pointer">下一步 · 3 / 5</button>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

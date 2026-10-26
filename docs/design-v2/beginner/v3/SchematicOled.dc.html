@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>原理图 · 第 3 课 OLED</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.paper{background-color:#FFFFFF;background-image:radial-gradient(#DDE1E6 1px, transparent 1.2px);background-size:20px 20px}
+</style>
+</helmet>
+<div style="width: 960px; height: 620px; box-sizing: border-box; padding: 24px; display: flex; flex-direction: column; gap: 14px; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', system-ui, sans-serif; font-size: 13px">
+  <div style="display: flex; align-items: baseline; gap: 12px">
+    <b style="font-size: 18px">第 3 课 · 让屏幕说话</b>
+    <span style="color: #6F6F6F">4 根线：电源两根，I2C 两根</span>
+  </div>
+
+  <div class="paper" style="flex: 1; position: relative; border-radius: 12px; border: 1px solid #E6E6E6; overflow: hidden">
+    <!-- U1 -->
+    <div style="position: absolute; left: 60px; top: 50px; width: 200px; height: 340px; box-sizing: border-box; padding: 14px; border: 2px solid #1E1E1E; border-radius: 6px; background: #FFFFFF; display: flex; flex-direction: column; gap: 2px">
+      <b>U1</b>
+      <span style="font-size: 13px; color: #6F6F6F">ESP32-S3 开发板</span>
+    </div>
+    <sc-for list="{{u1Pins}}" as="p" hint-placeholder-count="5">
+      <span style="{{p.label}}">{{p.name}}</span>
+      <div style="{{p.stub}}"></div>
+      <span style="{{p.flag}}">{{p.net}}</span>
+    </sc-for>
+
+    <!-- U2 -->
+    <div style="position: absolute; left: 620px; top: 90px; width: 220px; height: 220px; box-sizing: border-box; padding: 14px; border: 2px solid #1E1E1E; border-radius: 6px; background: #FFFFFF; display: flex; flex-direction: column; gap: 2px; align-items: flex-end">
+      <b>U2</b>
+      <span style="font-size: 13px; color: #6F6F6F">SSD1306 OLED · 0x3C</span>
+      <div style="margin-top: 18px; width: 120px; height: 64px; border-radius: 4px; background: #101418; color: #7FD6FF; font-family: 'JetBrains Mono', monospace; font-size: 11px; display: flex; align-items: center; justify-content: center">128 × 64</div>
+    </div>
+    <sc-for list="{{u2Pins}}" as="p" hint-placeholder-count="4">
+      <span style="{{p.label}}">{{p.name}}</span>
+      <div style="{{p.stub}}"></div>
+      <span style="{{p.flag}}">{{p.net}}</span>
+    </sc-for>
+
+    <!-- LED loop, compact -->
+    <div style="position: absolute; left: 260px; top: 330px; width: 60px; height: 2px; background: #1E1E1E"></div>
+    <svg style="position: absolute; left: 318px; top: 320px" width="80" height="24" viewBox="0 0 80 24" aria-hidden="true"><path d="M0 12h10l4-8 8 16 8-16 8 16 8-16 8 16 4-8h22" fill="none" stroke="#1E1E1E" stroke-width="2" stroke-linejoin="round"></path></svg>
+    <span style="position: absolute; left: 326px; top: 296px; font-size: 12px; font-weight: 700">R1 220 Ω</span>
+    <svg style="position: absolute; left: 398px; top: 312px" width="60" height="40" viewBox="0 0 60 40" aria-hidden="true"><path d="M0 20h14M46 20h14" stroke="#1E1E1E" stroke-width="2"></path><path d="M14 8v24l28-12z" fill="#FEF2F2" stroke="#1E1E1E" stroke-width="2" stroke-linejoin="round"></path><path d="M44 7v26" stroke="#1E1E1E" stroke-width="2.4"></path></svg>
+    <span style="position: absolute; left: 410px; top: 290px; font-size: 12px; font-weight: 700">D1</span>
+    <span style="position: absolute; left: 464px; top: 322px; padding: 2px 8px; border: 1.5px solid #1E1E1E; border-radius: 4px; background: #FFFFFF; font-family: 'JetBrains Mono', monospace; font-size: 12px">GND</span>
+
+    <div style="position: absolute; left: 20px; bottom: 16px; right: 20px; display: flex; gap: 20px; align-items: center; font-size: 12px; color: #3C3C3C">
+      <span style="display: flex; align-items: center; gap: 6px"><span style="padding: 1px 6px; border: 1.5px solid #0D99FF; border-radius: 4px; color: #0A6FBD; font-family: 'JetBrains Mono', monospace">SDA</span>同名标签 = 连在一起（不画长线，避免交叉）</span>
+      <span>点任何一个标签，两端同时高亮，3D 里对应的那根线也亮</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":620}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const mono = "font-family: 'JetBrains Mono', monospace; font-size: 12px;";
+    const flagCss = (x, y, net, hl) => `position: absolute; left: ${x}px; top: ${y - 11}px; padding: 2px 8px; border-radius: 4px; background: ${hl ? '#E5F4FF' : '#FFFFFF'}; border: 1.5px solid ${hl ? '#0D99FF' : '#1E1E1E'}; color: ${hl ? '#0A6FBD' : '#1E1E1E'}; ${mono}`;
+    const left = [['3V3', '3V3', 100], ['GPIO8', 'SDA', 150], ['GPIO9', 'SCL', 200], ['GPIO5', '', 330], ['GND', 'GND', 370]];
+    const u1Pins = left.map(([name, net, y]) => ({
+      name, net,
+      label: `position: absolute; left: ${200 - name.length * 4}px; top: ${y - 9}px; ${mono} color: #1E1E1E`,
+      stub: net ? `position: absolute; left: 260px; top: ${y}px; width: 50px; height: 2px; background: ${net === 'SDA' ? '#0D99FF' : '#1E1E1E'}` : 'display: none',
+      flag: net ? flagCss(312, y, net, net === 'SDA') : 'display: none',
+    }));
+    const right = [['VCC', '3V3', 130], ['GND', 'GND', 170], ['SCL', 'SCL', 230], ['SDA', 'SDA', 270]];
+    const u2Pins = right.map(([name, net, y]) => ({
+      name, net,
+      label: `position: absolute; left: 634px; top: ${y - 9}px; ${mono} color: #1E1E1E`,
+      stub: `position: absolute; left: 570px; top: ${y}px; width: 50px; height: 2px; background: ${net === 'SDA' ? '#0D99FF' : '#1E1E1E'}`,
+      flag: flagCss(510, y, net, net === 'SDA'),
+    }));
+    return { u1Pins, u2Pins };
+  }
+}
+</script>
+</body>
+</html>

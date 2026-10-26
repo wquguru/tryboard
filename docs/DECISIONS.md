@@ -1852,3 +1852,22 @@
 - 决定：点接线表行用 `pick.highlight` + `viewTo`，不用 `b.select`：选中会让 shell 把课程卡换成属性面板，用户就看不到表了。手机上点行后面板收到 peek，让出台面。
 - 决定：数据手册类参数只写文档名（ESP32-S3 datasheet / SSD1306 datasheet），不写页码与章节，因为没有逐页核对，不编造。
 - 备选：接线表另写一份静态数据（会与台面实际导线分叉，没选）；tab 用横向滚动（日 / 韩文第四个 tab 被截一半，没选）。
+
+## 2026-10-26 H-15 / H-16 课程映射（课号 → 作品 + 检查点）
+- 决定：12 课的落点如下；课号与关号解耦，`course.ts` 是唯一顺序来源。
+
+  | 课 | 内容 | 作品 · 检查点 | 固件 |
+  |---|---|---|---|
+  | 0 | 认识开发板 | basics · 无检查点（找到四样即完成） | 不跑固件 |
+  | 1–3 | LED / 按键 / OLED | weather · 01 / 02 / 03 | s3-blink / s3-button / s3-oled |
+  | 4 | PWM 呼吸灯 | basics · basics-pwm | 新增 s3-fade（GPIO5 LEDC） |
+  | 5 | WS2812 灯带 | lamp · lamp-1 | lamp-strip |
+  | 6 | 无源蜂鸣器 | basics · basics-buzz | 新增 s3-buzzer（LEDC 方波） |
+  | 7 | 舵机 | weather · 05 | s3-servo |
+  | 8 | BME280 | weather · 04 | s3-bme280 |
+  | 9 | 电位器 | lamp · lamp-2 | lamp-knob |
+  | 10 | USB 键盘 | usbkey · usbkey-1 | usbkey |
+  | 11 | 综合：桌面气象站 | weather · 06 | weather |
+
+- 理由：工作台的关卡 UI、选中状态、通过记录都按 `work.checkpoints` 索引（`main.tsx` 93 / 193 / 584），检查点不能游离于作品外；PWM 和蜂鸣器在现有作品里没有对应关，硬塞进 weather 会改动所有非新手用户的关卡流程，所以新开一个只供课程使用的 `basics` 作品（首页与作品切换菜单不列出）。第 11 课选 06 而不是 07：07 没有参考固件，跑不起来。第 0 课没有检查点，「完成」取该课动手任务全部打勾。
+- 备选：在 weather 里插新关（改变既有用户的关号与进度，没选）；第 0 课也挂一个固件检查点（这一课不接线、不写代码，硬造检查点没有意义，没选）。

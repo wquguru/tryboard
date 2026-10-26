@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>原理图视图 · 第 1 课</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0D99FF}a:hover{color:#0A6FBD}
+button{font-family:inherit}
+.paper{background-color:#FFFFFF;background-image:radial-gradient(#DDE1E6 1px, transparent 1.2px);background-size:20px 20px}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; display: flex; flex-direction: column; background: #FFFFFF; color: #1E1E1E; font-family: 'Noto Sans SC', system-ui, sans-serif; font-size: 13px">
+
+  <header style="height: 56px; flex-shrink: 0; box-sizing: border-box; padding: 0 20px; display: flex; align-items: center; gap: 16px; background: #FFFFFF; border-bottom: 1px solid #E6E6E6">
+    <b style="font-size: 16px">TryBoard</b>
+    <span style="width: 1px; height: 22px; background: #E6E6E6"></span>
+    <span style="color: #6F6F6F">基础课</span>
+    <span style="color: #6F6F6F">/</span>
+    <b>第 1 / 12 课 · 点亮一颗 LED</b>
+    <div style="flex: 1"></div>
+    <button style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #E6E6E6; background: #FFFFFF; color: #3C3C3C; font-size: 13px; cursor: pointer">≡ 课程目录</button>
+  </header>
+
+  <div style="flex: 1; min-height: 0; display: flex">
+    <main style="flex: 1; min-width: 0; box-sizing: border-box; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <div role="group" aria-label="台面视图" style="display: flex; padding: 3px; border-radius: 10px; background: #E6E6E6">
+          <button style="height: 38px; padding: 0 16px; border-radius: 8px; border: 0; background: transparent; color: #3C3C3C; font-size: 14px; cursor: pointer">3D 台面</button>
+          <button aria-pressed="true" style="height: 38px; padding: 0 16px; border-radius: 8px; border: 0; background: #FFFFFF; color: #1E1E1E; font-weight: 700; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); cursor: pointer">原理图</button>
+        </div>
+        <button onClick="{{toggleFlow}}" aria-pressed="{{flowOn}}" style="{{flowBtn}}">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h9M8 4.5 11.5 8 8 11.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          看电流
+        </button>
+        <div style="flex: 1"></div>
+        <span style="font-size: 13px; color: #6F6F6F">由当前接线自动生成 · 点符号与 3D 台面同步选中</span>
+      </div>
+
+      <div class="paper" style="flex: 1; min-height: 0; position: relative; border-radius: 12px; border: 1px solid #E6E6E6; overflow: hidden">
+        <!-- U1 -->
+        <button onClick="{{pickU1}}" aria-label="U1 ESP32-S3 开发板" style="{{u1Style}}">
+          <b style="font-size: 15px">U1</b>
+          <span style="font-size: 13px; color: #6F6F6F">ESP32-S3 开发板</span>
+        </button>
+        <span style="position: absolute; left: 236px; top: 150px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #6F6F6F">3V3</span>
+        <span style="position: absolute; left: 226px; top: 270px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #1E1E1E">GPIO5</span>
+        <span style="position: absolute; left: 236px; top: 390px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #1E1E1E">GND</span>
+        <div style="position: absolute; left: 280px; top: 160px; width: 24px; height: 2px; background: #D9D9D9"></div>
+        <span style="position: absolute; left: 312px; top: 150px; font-size: 12px; color: #6F6F6F">未用</span>
+
+        <!-- GPIO5 net -->
+        <div style="{{w1}}"></div>
+        <span style="position: absolute; left: 300px; top: 252px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #0D99FF">{{netLabel}}</span>
+
+        <!-- R1 -->
+        <button onClick="{{pickR1}}" aria-label="R1 电阻 220 欧" style="{{r1Style}}">
+          <svg width="100" height="24" viewBox="0 0 100 24" aria-hidden="true"><path d="M0 12h14l5-9 10 18 10-18 10 18 10-18 10 18 5-9h16" fill="none" stroke="#1E1E1E" stroke-width="2" stroke-linejoin="round"></path></svg>
+        </button>
+        <span style="position: absolute; left: 420px; top: 226px; font-weight: 700">R1 · 220 Ω</span>
+
+        <div style="position: absolute; left: 512px; top: 280px; width: 70px; height: 2px; background: #1E1E1E"></div>
+
+        <!-- D1 -->
+        <button onClick="{{pickD1}}" aria-label="D1 红色 LED" style="{{d1Style}}">
+          <svg width="80" height="56" viewBox="0 0 80 56" aria-hidden="true">
+            <path d="M0 32h22M58 32h22" stroke="#1E1E1E" stroke-width="2"></path>
+            <path d="M22 18v28l32-14z" fill="#FEF2F2" stroke="#1E1E1E" stroke-width="2" stroke-linejoin="round"></path>
+            <path d="M56 17v30" stroke="#1E1E1E" stroke-width="2.4"></path>
+            <path d="M44 12l8-9M50 15l8-9" stroke="#F24822" stroke-width="1.8" stroke-linecap="round"></path>
+            <path d="M52 3l-4 1 3 3M58 6l-4 1 3 3" fill="none" stroke="#F24822" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+        <span style="position: absolute; left: 586px; top: 212px; font-weight: 700">D1 · 红色 LED</span>
+
+        <!-- to GND -->
+        <div style="position: absolute; left: 662px; top: 280px; width: 80px; height: 2px; background: #1E1E1E"></div>
+        <div style="position: absolute; left: 740px; top: 280px; width: 2px; height: 140px; background: #1E1E1E"></div>
+        <div style="position: absolute; left: 280px; top: 400px; width: 60px; height: 2px; background: #1E1E1E"></div>
+        <div style="position: absolute; left: 338px; top: 400px; width: 2px; height: 20px; background: #1E1E1E"></div>
+        <svg style="position: absolute; left: 319px; top: 418px" width="40" height="24" viewBox="0 0 40 24" aria-hidden="true"><path d="M2 2h36M9 10h22M16 18h8" stroke="#1E1E1E" stroke-width="2" stroke-linecap="round"></path></svg>
+        <svg style="position: absolute; left: 721px; top: 418px" width="40" height="24" viewBox="0 0 40 24" aria-hidden="true"><path d="M2 2h36M9 10h22M16 18h8" stroke="#1E1E1E" stroke-width="2" stroke-linecap="round"></path></svg>
+        <span style="position: absolute; left: 770px; top: 420px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6F6F6F">GND</span>
+
+        <sc-if value="{{flowOn}}" hint-placeholder-val="{{ true }}">
+          <div style="position: absolute; left: 300px; top: 296px; width: 440px; border-top: 3px dashed #0D99FF"></div>
+          <div style="position: absolute; left: 420px; top: 306px; padding: 4px 10px; border-radius: 6px; background: #E5F4FF; color: #0A6FBD; font-size: 13px; font-weight: 500">≈ 5.7 mA → · 估算 · 未在实机校准</div>
+        </sc-if>
+
+        <div style="position: absolute; left: 24px; bottom: 20px; display: flex; gap: 18px; font-size: 12px; color: #6F6F6F">
+          <span>导线颜色不画：原理图只看连接关系</span>
+          <span>两个接地符号是同一个 GND</span>
+        </div>
+      </div>
+    </main>
+
+    <aside style="width: 380px; flex-shrink: 0; box-sizing: border-box; padding: 24px; display: flex; flex-direction: column; gap: 16px; background: #FFFFFF; border-left: 1px solid #E6E6E6">
+      <span style="font-size: 12px; color: #6F6F6F">第 2 步 / 5 · 接线</span>
+      <b style="font-size: 20px">看懂这条回路</b>
+      <span style="color: #3C3C3C; line-height: 1.6">电流从 GPIO5 出发，经过电阻 R1、LED D1，回到 GND。原理图和 3D 台面是同一份接线，换个画法而已。</span>
+
+      <div style="height: 1px; background: #E6E6E6"></div>
+      <span style="font-size: 12px; color: #6F6F6F">选中的符号</span>
+
+      <sc-if value="{{isR1}}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; border: 2px solid #0D99FF">
+          <b>R1 · 电阻 220 Ω</b>
+          <div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #3C3C3C">色环
+            <span style="width: 14px; height: 14px; border-radius: 3px; background: #F24822"></span>
+            <span style="width: 14px; height: 14px; border-radius: 3px; background: #F24822"></span>
+            <span style="width: 14px; height: 14px; border-radius: 3px; background: #7A4A1E"></span>
+            红 红 棕
+          </div>
+          <span style="font-size: 13px; color: #6F6F6F">限流：没有它 LED 电流会过大。3D 台面里同一个电阻已高亮。</span>
+          <button style="height: 44px; border-radius: 8px; border: 1px solid #E6E6E6; background: #F7F7F7; color: #1E1E1E; font-size: 14px; cursor: pointer">打开参数卡（改阻值）</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{isD1}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; border: 2px solid #0D99FF">
+          <b>D1 · 红色 LED</b>
+          <span style="font-size: 13px; color: #3C3C3C">压降 1.8 V · 电流 ≈ 5.7 mA</span>
+          <span style="font-size: 13px; color: #6F6F6F">三角形指向电流方向；竖线一端（短脚）接 GND。</span>
+        </div>
+      </sc-if>
+      <sc-if value="{{isU1}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; border: 2px solid #0D99FF">
+          <b>U1 · ESP32-S3 开发板</b>
+          <span style="font-size: 13px; color: #3C3C3C">本课只用到 GPIO5 和 GND；其余引脚原理图里不画。</span>
+        </div>
+      </sc-if>
+      <sc-if value="{{none}}" hint-placeholder-val="{{ false }}">
+        <span style="font-size: 13px; color: #6F6F6F">点原理图里的任何符号，看看它是什么。</span>
+      </sc-if>
+
+      <div style="flex: 1"></div>
+      <button style="height: 48px; border-radius: 10px; border: 0; background: #0B76C8; color: #FFFFFF; font-size: 16px; font-weight: 700; cursor: pointer">下一步</button>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sel: 'R1', flow: true };
+  }
+  renderVals() {
+    const { sel, flow } = this.state;
+    const ring = (id) => sel === id ? 'outline: 2px solid #0D99FF; outline-offset: 4px; background: rgba(13,153,255,0.06);' : 'outline: none; background: transparent;';
+    const pick = (id) => () => this.setState({ sel: this.state.sel === id ? null : id });
+    return {
+      sel,
+      isR1: sel === 'R1', isD1: sel === 'D1', isU1: sel === 'U1', none: !sel,
+      flowOn: flow,
+      toggleFlow: () => this.setState({ flow: !this.state.flow }),
+      pickR1: pick('R1'), pickD1: pick('D1'), pickU1: pick('U1'),
+      flowBtn: 'height: 38px; padding: 0 14px; display: flex; align-items: center; gap: 6px; border-radius: 10px; font-size: 14px; cursor: pointer; ' + (flow ? 'border: 1px solid #0D99FF; background: #E5F4FF; color: #0A6FBD; font-weight: 500' : 'border: 1px solid #E6E6E6; background: #FFFFFF; color: #3C3C3C'),
+      u1Style: 'position: absolute; left: 80px; top: 120px; width: 200px; height: 320px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; border: 2px solid #1E1E1E; border-radius: 6px; cursor: pointer; text-align: left; font-family: inherit; color: #1E1E1E; ' + ring('U1') + (sel === 'U1' ? '' : 'background: #FFFFFF;'),
+      r1Style: 'position: absolute; left: 400px; top: 266px; width: 112px; height: 32px; padding: 4px 6px; border: 0; border-radius: 6px; cursor: pointer; ' + ring('R1'),
+      d1Style: 'position: absolute; left: 582px; top: 246px; width: 80px; height: 60px; padding: 0; border: 0; border-radius: 6px; cursor: pointer; ' + ring('D1'),
+      w1: 'position: absolute; left: 280px; top: 280px; width: 124px; height: 2px; background: #1E1E1E',
+      netLabel: 'GPIO5',
+    };
+  }
+}
+</script>
+</body>
+</html>
