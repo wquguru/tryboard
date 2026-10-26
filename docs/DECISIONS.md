@@ -1888,3 +1888,7 @@
 - 决定：台面只留 `servo`（05 关判定只看 GPIO4 的 50 Hz 脉宽，固件不碰 GPIO5，不放 LED）；不写 `events`（lessonfeed 不解析 K.PWM，「转到 X°」靠串口日志代替）；脉宽参数分三条来源：代码里 0.5–2.5 ms（code）、SG90 数据手册写的约 1–2 ms 对应 ±90°（datasheet）、实际满 180° 约 0.5–2.5 ms 且两端因个体而异（typical）；电流 0.15 A / 0.7 A 取自 elec::servo 的估算（estimate）；「舵机一动就重启」放在 buyTip 和第 5 步思考题里，指向故障关 fault-power。三个公共测试（course.test.ts courseStep、lessonmap.test.ts 已写课清单、beginner.mjs 课程地图）原来写死「只有 1–3 课」，改成「1–3 必在，其余按 COURSE 推算」，免得每加一课都要改。
 - 理由：零件少、讲解只围绕舵机；数据手册与常见代码对脉宽的说法不一致，分开标来源最诚实；给 lessonfeed 加 PWM 规则会改公共接口（`Lesson` 新字段 + 解析），与第 4 / 6 课（也是 LEDC）并行改同一文件易冲突，留给主会话统一做。
 - 备选：在 lessonfeed 里加 `pwm` 规则把脉宽换成角度（公共接口，没选，写进汇报）；保留 LED 当参照（与本课无关，没选）。
+## 2026-10-26 H-16 第 5 课（彩色灯带）取舍
+- 决定：(1) 新增任务完成信号 `strip:<pin>=<n>`（亮灯数 ≥ n 即打勾）：session onTick 收到 `m.strips` 帧时发一次（边沿），bench/lesson.tsx 的 probe() 在本课固件运行时用 `session.frame.strips` 补发（状态，步骤晚于点亮打开也能勾）；只在当前固件是本课 `fw`（或步骤 codeChips 固件）时发，lamp 作品默认固件（STAGE 3）同样点亮灯带，不能替本课打勾。(2) 本课不写 `events` / `i2c`：lessonfeed 只叙述 GPIO 边沿和 I2C，GPIO5 由 RMT 驱动，iotrace 虽有 K.WS2812 事件但 feed 不处理，不伪造。(3) 参数文档名用 `Worldsemi WS2812B datasheet`：`WS2812B datasheet` 已作为字面量出现在首页可达的 catalog/parts.ts，i18n 分组测试要求它在 site 组。(4) 「改一改」一步只用揭示答案任务：没有预编译的换色 / 换亮度固件。
+- 理由：最小信号、复用已有 worker 帧数据，不改固件与 wasm；如实标注 feed 能力缺口。
+- 备选：从串口「LAMP ON 8」判完成（只证明固件走到那一行，不证明灯亮，没选）；给 lessonfeed 加 WS2812 叙述（超出本课范围，留作后续）。

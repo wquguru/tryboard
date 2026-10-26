@@ -18,7 +18,7 @@ import type { Store } from './store';
 import { currentTheme, onTheme } from '../theme';
 import { IoStore, decodeEvents } from './iotrace';
 import { taskStore } from './tasktrace';
-import { lessonSignal } from './lessontasks';
+import { lessonSignal, stripSignals } from './lessontasks';
 import type { UsbView } from '../usb3d';
 import { bleFeed } from './blefeed';
 import { irFeed } from './irfeed';
@@ -558,6 +558,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         if (m.strips) {
           s.frame.strips = { ...s.frame.strips, ...m.strips };
           for (const [pin, leds] of Object.entries(m.strips)) bench.setStrip(Number(pin), leds);
+          stripSignals(m.strips, s.fwName);
         }
         if (m.elec) {
           s.frame.elec = m.elec;

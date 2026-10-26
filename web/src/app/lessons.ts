@@ -3,6 +3,7 @@
 import { t } from '../i18n/index.ts';
 import { LED_VF, ledAmps, ohmText, type LedColor } from '../bench3d/ledparams.ts';
 import { L7 } from './lessondata/l7.ts';
+import { L5 } from './lessondata/l5.ts';
 
 /** A bench thing a callout points at: same shape as PickTarget (part / pin / wire / button + id). */
 export interface LessonTarget {
@@ -493,6 +494,7 @@ export const LESSONS: Lesson[] = [
     ],
   },
   L7,
+  L5,
 ];
 
 /** The lesson for this work's checkpoint, if one is written. */
