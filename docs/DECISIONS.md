@@ -1896,3 +1896,7 @@
 - 决定：(1) 板上区域用新的 `PickTarget.spot`（`'usb' | 'chip'`，只在 onPick 时由命中点在板局部坐标里判定），卡片额外发 `select:board@usb` / `select:board@chip`，原 `select:board` 照发，第 1 课「点芯片」不受影响；BOOT 点击会被当成按下，所以「找到 BOOT」用 `press:boot×1`。(2) `taskTarget` 认 3V3 / 5V / GND 引脚和 `@spot`。(3) 入口：left.tsx 在作品没有检查点或 URL 带 `cp=lesson-<no>` 时显示无检查点课的卡；课程地图跳无检查点的课一律整页跳转 `/app?work=…&cp=lesson-<no>`（同作品内没有 selectCheckpoint 可用）。(4) 无固件课：代码讲解页签与代码卡显示「本课不跑代码」，检查点框改成「第 N 课 · 打勾完成」；面包板留在台面上（basics 作品本身的场景，parts: [] 只决定本课接线清单）。(5) 芯片参数放参数页签（数据手册来源），不塞进步骤卡。(6) 已有测试里「第 0 课未写」「每课都有固件 / 接线」的假设按新事实更新（lessons / course / lessonmap 测试、beginner.mjs 地图可开卡 0,1,2,3），没有放宽判定。
 - 理由：最小改动地复用 H-10 任务信号与 H-15 课程层；spot 不改已有锚点和投影。
 - 备选：给 USB 口 / 芯片做独立的 PickTarget kind（牵动 scene-api 所有消费方，没选）；第 0 课单独建一个只有开发板的作品（作品列表多一项且与 basics 进度分开，没选）。
+## 2026-10-26 H-16 第 4 课（呼吸灯）实现取舍
+- 决定：(1) s3-fade 用软件分 100 步改 duty（`ledc_set_duty` + `ledc_update_duty` + `vTaskDelay`），不用 LEDC 硬件渐变（`ledc_fade_*`），每步都在 IO 轨迹里留下一个 PWM 事件，check.py 的 `pwm.steps` 和课内事件流都能逐级判；固件为自写，未参考 GPL 代码。(2) 改一改用 `FADE_MS` 宏芯片，变体 s3-fade-1000 / -4000 共用 s3-fade 的 main.c，CMake 里 `FADE_MS=` 编译宏切换，build_web.sh 变体元组加入两者。(3) 事件流新增 `Lesson.pwm`（LessonPwm：pin / text 含 `{pct}` / line / every）：K.PWM 事件在占空比落到 `every`（默认 20 %）整数倍且与上一行不同时出一行，FeedItem 加 `duty`。(4) l4.ts 只从 lessons.ts 引类型，标注 / 连线文案在本文件内写，避免循环引用。(5) course.test / lessonmap.test / beginner.mjs 的「已写课」期望加 4。
+- 理由：软件分步让每级占空比都对应一行源码（第 38 行）和一个确定的事件，便于高亮和判定，硬件渐变在模拟器里的逐级表现未核实；宏芯片沿用第 1 课 `*_MS` 的做法。
+- 备选：ledc_fade_with_time（事件太少，没选）；每个 PWM 事件都出一行（每 20 ms 一行刷屏，没选）。

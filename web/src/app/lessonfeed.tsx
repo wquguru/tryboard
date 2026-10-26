@@ -27,6 +27,8 @@ export interface FeedItem {
   line: number;
   /** H-08: an I2C row (address, bytes written so far, time of the last write merged in); pin / hi unused. */
   i2c?: { addr: number; bytes: number; last: number };
+  /** H-16: a PWM row (duty in whole percent); `hi` = duty above 0. */
+  duty?: number;
 }
 interface FeedState {
   items: FeedItem[];
@@ -50,7 +52,10 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
   lessonFeed.set({ items: [] });
   const rules = lesson?.events ?? [];
   const i2cRules = lesson?.i2c ?? [];
-  if (!lesson || (!rules.length && !i2cRules.length)) return;
+  const pwmRules = lesson?.pwm ?? [];
+  if (!lesson || (!rules.length && !i2cRules.length && !pwmRules.length)) return;
+  // PWM: last duty level narrated per pin (PWM changes are always logged, no watch needed)
+  const pwmLast = new Map<number, number>();
   // GPIO edges are only recorded for watched pins; add ours without dropping the analyzer's (I2C is always logged)
   const pins = new Set(session.ioPins());
   if (rules.some((r) => !pins.has(r.pin))) session.watchIo([...pins, ...rules.map((r) => r.pin)]);
@@ -72,6 +77,7 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
       skipT = trimmed ? seenT : -1;
       open.clear();
       if (!trimmed) {
+        pwmLast.clear();
         seenT = -1;
         n = 0;
         lessonFeed.set({ items: [] });
@@ -102,6 +108,20 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
         const r = rules.find((x) => x.pin === e.a);
         if (!r) continue;
         items.push({ n: n++, t: e.t, pin: e.a, hi: !!e.b, text: e.b ? r.hi : r.lo, line: e.b ? (r.hiLine ?? r.line) : r.line });
+        changed = true;
+        continue;
+      }
+      if (e.kind === K.PWM) {
+        const r = pwmRules.find((x) => x.pin === e.a);
+        if (!r) continue;
+        // Only duties sitting on a multiple of `every` make a row (a fade has hundreds of steps)
+        const duty = e.v ? e.b / 65535 : 0;
+        const every = r.every ?? 0.2;
+        const q = Math.round(duty / every);
+        if (Math.abs(duty - q * every) > 0.005 || pwmLast.get(e.a) === q) continue;
+        pwmLast.set(e.a, q);
+        const pct = Math.round(q * every * 100);
+        items.push({ n: n++, t: e.t, pin: e.a, hi: pct > 0, text: r.text.replace("{pct}", String(pct)), line: r.line, duty: pct });
         changed = true;
         continue;
       }
@@ -170,7 +190,9 @@ function DelayChips({ chips }: { chips: CodeChips }) {
 export const evWhere = (e: FeedItem) =>
   e.i2c
     ? t("I2C → {addr}", { addr: hex(e.i2c.addr) })
-    : e.hi
+    : e.duty !== undefined
+      ? t("GPIO{pin} → PWM duty {pct}%", { pin: e.pin, pct: e.duty })
+      : e.hi
       ? t("GPIO{pin} → high 3.3 V", { pin: e.pin })
       : t("GPIO{pin} → low 0 V", { pin: e.pin });
 
@@ -217,6 +239,7 @@ export function LessonFeed({ className }: { className?: string }) {
               data-ev={e.n}
               data-t={e.t}
               {...(e.i2c ? { "data-i2c": hex(e.i2c.addr), "data-bytes": e.i2c.bytes } : { "data-pin": e.pin, "data-level": e.hi ? 1 : 0 })}
+              {...(e.duty !== undefined && { "data-duty": e.duty })}
               className="flex gap-2.5 py-0.5 leading-5"
             >
               <span className="w-[60px] flex-none font-mono text-muted tabular-nums">{fmtSec(e.t)}</span>
