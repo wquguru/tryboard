@@ -63,6 +63,12 @@ export function mountLesson(b: BenchCtx) {
     unsub = [b.ctx.store.subscribe(probe, ["running", "run", "reading", "assembly"]), lessonUi.subscribe(probe, ["lesson", "step"])];
     probe();
   }
+  /** The build tree follows the lesson's part set; redraw it only when that set changes. */
+  function keepTree(keep: readonly string[] | null) {
+    if ((b.lessonKeep ?? null) === keep) return;
+    b.lessonKeep = keep;
+    b.renderTree();
+  }
   /** The left-column lesson card for checkpoint `id`, or null (store cleared) when the normal card should show. */
   function lessonCard(id: string | null, l: Level | undefined): ReactNode | null {
     const c = b.ctx!;
@@ -80,6 +86,7 @@ export function mountLesson(b: BenchCtx) {
       }
       delete document.body.dataset.lesson;
       c.session.setBenchParts(null);
+      keepTree(null);
       if (bc.get().overlays.lessonCallouts) overlay("lessonCallouts", null);
       return null;
     }
@@ -143,6 +150,7 @@ export function mountLesson(b: BenchCtx) {
     document.body.dataset.lesson = lesson.checkpoint;
     // H-09: the bench shows only this lesson's parts (no-op when the drawn set is unchanged)
     c.session.setBenchParts(lesson.parts ?? null);
+    keepTree(lesson.parts ?? null);
     if (!had && isPhone()) {
       setMui({ sheet: "peek" });
       // The stage just shrank to the top band: frame the board so the lesson's parts aren't specks

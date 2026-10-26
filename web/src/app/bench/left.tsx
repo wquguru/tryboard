@@ -36,7 +36,7 @@ export function mountLeft(b: BenchCtx) {
   function renderLeft() {
     const c = b.ctx!;
     const s = c.store.get();
-    const wires = b.benchWires();
+    const wires = b.shownWires();
     const bad = new Map<string, string>();
     for (const f of b.faults)
       for (const w of f.wires) if (!bad.has(w)) bad.set(w, f.short);

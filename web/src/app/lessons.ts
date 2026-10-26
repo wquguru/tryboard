@@ -112,6 +112,31 @@ export interface LessonTone {
   /** 1-based line in `Lesson.src` that sets the pitch. */
   line: number;
 }
+/** H-16: a servo signal pin; one feed row per new commanded angle (from the LEDC pulse width). */
+export interface LessonServo {
+  pin: number;
+  /** Row text with {deg} = angle, e.g. "Arm turns to {deg}°". */
+  text: string;
+  /** 1-based line in `Lesson.src` that sets the pulse. */
+  line: number;
+}
+/** H-16: a WS2812 strip pin; one feed row each time the number of lit LEDs changes. */
+export interface LessonStrip {
+  pin: number;
+  /** Row text with {n} = LEDs lit, {of} = LEDs in the frame. */
+  text: string;
+  /** 1-based line in `Lesson.src` that sends the frame. */
+  line: number;
+}
+/** H-16: an ADC pin the firmware reads; a feed row when the reading moves by `step` codes (default 200). */
+export interface LessonAdc {
+  pin: number;
+  /** Row text with {raw} = the 0–4095 reading. */
+  text: string;
+  /** 1-based line in `Lesson.src` that reads the ADC. */
+  line: number;
+  step?: number;
+}
 /** H-14 "Code explained": one line of `Lesson.src` in plain words. */
 export interface LessonCodeNote {
   line: number;
@@ -154,6 +179,10 @@ export interface Lesson {
   pwm?: LessonPwm[];
   /** PWM pitch changes the feed narrates (H-16 buzzer). */
   tones?: LessonTone[];
+  /** Servo angles, strip frames and ADC readings the feed narrates (H-16 lessons 7 / 5 / 9). */
+  servo?: LessonServo[];
+  strip?: LessonStrip[];
+  adc?: LessonAdc[];
   steps: LessonStep[];
   /** H-04 "Show current": the loop drawn while `pin` is high (bench wire / part / pin ids, in current order). */
   circuit?: { pin: number; path: string[] };

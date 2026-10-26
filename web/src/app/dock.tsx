@@ -12,7 +12,7 @@ import { t } from "../i18n";
 import { afterFrame } from "../ui/frame";
 import { useBle } from "./blefeed";
 import { lessonUi } from "./lesson";
-import { LessonPane, useLessonCode } from "./lessonfeed";
+import { LessonPane, NoCodeNote, useLessonCode, useNoFwLesson } from "./lessonfeed";
 import { LessonSheet } from "./lessonsheet";
 
 // Code tab (P2-15): chunk and source load only when opened (or at idle, R-12), not in the first bundle
@@ -20,6 +20,8 @@ function CodePane({ phone, toast }: { phone?: boolean; toast: (msg: string) => v
   const { fw } = useStore(bc);
   // Beginner lesson up (H-03): show its source with the event-followed line instead
   const lesson = useLessonCode();
+  // Lesson 0 runs nothing: no stale source from the work's example
+  if (useNoFwLesson()) return <NoCodeNote />;
   return (
     <CodeView fw={lesson?.fw ?? fw} phone={phone} toast={toast} highlight={lesson} />
   );

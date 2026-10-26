@@ -1,5 +1,5 @@
 // Lesson 5 (PLAN H-16): WS2812 colour strip on the knob lamp's first checkpoint (lamp · lamp-1, firmware lamp-strip).
-// No feed events: lessonfeed only narrates GPIO edges and I2C, and the strip pin is driven by RMT (see DECISIONS).
+// The feed counts lit LEDs per frame from worker ticks (the io trace only has the frame length and first colour).
 import { t } from '../../i18n/index.ts';
 import type { Lesson, LessonCallout } from '../lessons.ts';
 
@@ -25,6 +25,7 @@ export const L5: Lesson = {
   parts: ['ws2812'],
   fw: 'lamp-strip',
   src: 'firmware/lamp/main/main.c',
+  strip: [{ pin: 5, text: t('LEDs lit: {n} of {of}'), line: 54 }],
   wireNotes: {
     'wire:5V~ws2812:5V': { to: t('Strip 5V'), why: t('Power for the LEDs from USB 5 V: up to about 60 mA per LED') },
     'wire:GPIO5~ws2812:DIN': { to: t('Strip DIN (through the level shifter)'), why: t('The one data wire: every colour travels down it in turn') },
@@ -117,9 +118,10 @@ export const L5: Lesson = {
       body: t('Line 119 sends WARM (#FF9933) scaled to 64 out of 255, which is why the strip glows a dim warm white. Change WARM to 0x0000FF for blue, or 64 to 255 for full brightness. Brighter means more current, so check the supply first.'),
       tasks: [
         { text: t('Think: what colour is 0x00FF00, and which byte goes out first?'), done: 'reveal', answer: t('Green. In GRB order the three bytes are FF 00 00: the green one is sent first.') },
+        { text: t("Find where the strip's 5 V comes from"), done: 'select:board@usb', how: t('Click one of the two USB-C ports at the short end of the board') },
         { text: t('Think: can USB power a 60-LED strip at full white?'), done: 'reveal', answer: t('60 × 60 mA = 3.6 A, about seven times what a USB 2.0 port gives. It needs its own 5 V supply of 4 A or more, with its GND joined to the board.') },
       ],
-      callouts: pick('strip', 'v5'),
+      callouts: pick('strip', 'v5', 'usb'),
       codeLines: [66, 119],
     },
   ],

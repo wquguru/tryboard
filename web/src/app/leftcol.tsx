@@ -125,7 +125,7 @@ export function LeftColumn({ step, tree }: { step: string; tree: ReactNode }) {
       )}
       <div
         className={cn(
-          "flex min-h-0 flex-1 flex-col",
+          "flex min-h-[132px] flex-1 flex-col overflow-auto",
           cur !== "tree" && "hidden",
         )}
       >
@@ -152,7 +152,8 @@ export function LeftColumn({ step, tree }: { step: string; tree: ReactNode }) {
         </div>
       )}
       {bench && d.card && (
-        <div className="flex-none border-t border-line-soft p-2">{d.card}</div>
+        // Shrinks and scrolls before the tree drops under ~3 rows (long lesson cards on short screens)
+        <div className="min-h-0 shrink overflow-auto border-t border-line-soft p-2">{d.card}</div>
       )}
     </>
   );

@@ -1153,5 +1153,13 @@ const d: Dict = {
   "What to buy, lesson by lesson": "課ごとの買い物リスト",
   "Full parts list with prices (Shop step)": "価格付きの完全な部品リスト（「購入」ステップ）",
   "OLED screen": "OLED 画面",
+  "This lesson runs no code, so nothing shows up here. Click the parts on the bench instead.": "このレッスンはコードを動かさないので、ここには何も出ません。台の上の部品をクリックしてみてください。",
+  "GPIO{pin} → {us} µs pulse": "GPIO{pin} → {us} µs のパルス",
+  "GPIO{pin} → frame for {of} LEDs": "GPIO{pin} → LED {of} 個分のフレーム",
+  "GPIO{pin} ← {v} V into the ADC": "GPIO{pin} ← {v} V を ADC へ",
+  "LEDs lit: {n} of {of}": "点灯：{n} / {of} 個",
+  "Find where the strip's 5 V comes from": "テープの 5 V がどこから来るか探す",
+  "Arm turns to {deg}°": "アームが {deg}° に回る",
+  "Knob reads {raw} of 4095": "つまみの読み取り値 {raw}（最大 4095）",
 };
 export default d;

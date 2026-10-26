@@ -1,6 +1,6 @@
 // Bench section: selection and bench wires (shared by every section).
 // Moved out of benchStep() (R-08); talks to other sections only through BenchCtx.
-import { wiresOf } from "../wiring";
+import { lessonWires, wiresOf } from "../wiring";
 import { type Selection } from "../types";
 import type { BenchCtx } from "./ctx";
 
@@ -23,5 +23,9 @@ export function mountSelect(b: BenchCtx) {
 
   b.select = select;
   b.benchWires = benchWires;
+  b.shownWires = () => {
+    const ses = b.ctx!.session;
+    return lessonWires(ses.scene.parts, b.lessonKeep ?? null, !!ses.power?.ext5v, ses.wireMods);
+  };
 }
 

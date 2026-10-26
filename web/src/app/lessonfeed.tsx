@@ -10,6 +10,7 @@ import { lessonUi } from "./lesson";
 import { B_NACK, B_PORT1, B_READ, B_RESTART, CPU_HZ, K, hex, type IoEvent, type IoStore } from "./iotrace";
 import type { CodeChips, Lesson } from "./lessons";
 import { CodePane as CodeView } from "./panes";
+import { adcMoved, litCount, servoPulse } from "./feedrules";
 
 /** Rows kept; older ones scroll away (a blink makes two per second). */
 export const FEED_CAP = 200;
@@ -31,14 +32,27 @@ export interface FeedItem {
   duty?: number;
   /** H-16: a tone row (PWM frequency in Hz); hi is true. */
   hz?: number;
+  /** H-16: a servo row (commanded angle, pulse width in µs). */
+  servo?: { deg: number; us: number };
+  /** H-16: a strip row (LEDs lit, LEDs in the frame); `hi` = any lit. */
+  strip?: { lit: number; of: number };
+  /** H-16: an ADC row (0–4095 reading, wiper mV). */
+  adc?: { raw: number; mv: number };
 }
 interface FeedState {
   items: FeedItem[];
 }
 export const lessonFeed = createStore<FeedState>({ items: [] });
 
+/** The slice of a worker tick the strip / ADC rules read. */
+interface FeedTick {
+  simSeconds: number;
+  strips?: Record<number, number[][]>;
+  adc?: Record<number, { raw: number[]; mv: number[] }>;
+}
 interface FeedSession {
   io: IoStore;
+  onTick?(cb: (m: FeedTick) => void): () => void;
   onIo(cb: () => void): () => void;
   ioPins(): number[];
   watchIo(pins: number[]): void;
@@ -56,7 +70,12 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
   const i2cRules = lesson?.i2c ?? [];
   const pwmRules = lesson?.pwm ?? [];
   const toneRules = lesson?.tones ?? [];
-  if (!lesson || (!rules.length && !i2cRules.length && !pwmRules.length && !toneRules.length)) return;
+  const servoRules = lesson?.servo ?? [];
+  const tickRules = [...(lesson?.strip ?? []), ...(lesson?.adc ?? [])];
+  if (!lesson || (!rules.length && !i2cRules.length && !pwmRules.length && !toneRules.length && !servoRules.length && !tickRules.length)) return;
+  // Servo: last angle narrated per pin; strip / ADC: last lit count or reading narrated per pin (tick side)
+  const servoLast = new Map<number, number>();
+  const tickLast = new Map<number, number>();
   // PWM: last duty level narrated per pin (PWM changes are always logged, no watch needed)
   const pwmLast = new Map<number, number>();
   // Pitch now sounding per tone pin (0 = silent), so a held note or a silent gap adds no row
@@ -84,6 +103,8 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
       sounding.clear();
       if (!trimmed) {
         pwmLast.clear();
+        servoLast.clear();
+        tickLast.clear();
         seenT = -1;
         n = 0;
         lessonFeed.set({ items: [] });
@@ -131,6 +152,15 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
           changed = true;
           continue;
         }
+        const sv = servoRules.find((x) => x.pin === e.a);
+        if (sv) {
+          const p = servoPulse(e.b, e.v);
+          if (!p || servoLast.get(e.a) === p.deg) continue;
+          servoLast.set(e.a, p.deg);
+          items.push({ n: n++, t: e.t, pin: e.a, hi: true, text: sv.text.replace("{deg}", String(p.deg)), line: sv.line, servo: p });
+          changed = true;
+          continue;
+        }
         const r = toneRules.find((x) => x.pin === e.a);
         if (!r) continue;
         // b = duty × 65535, v = Hz × 1000; a passive buzzer only sounds on a real square wave
@@ -164,7 +194,43 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
     if (changed) lessonFeed.set({ items: items.slice(-FEED_CAP) });
   };
   pull();
-  bound = { lesson, session, off: session.onIo(pull) };
+  const offIo = session.onIo(pull);
+  const offTick = tickRules.length && session.onTick ? session.onTick(onTick) : () => {};
+  bound = { lesson, session, off: () => (offIo(), offTick()) };
+
+  /** Strip frames and ADC readings arrive with worker ticks, stamped with the tick's sim time. */
+  function onTick(m: FeedTick) {
+    const t = Math.round(m.simSeconds * CPU_HZ);
+    const add: FeedItem[] = [];
+    for (const r of lesson!.strip ?? []) {
+      const leds = m.strips?.[r.pin];
+      if (!leds) continue;
+      const lit = litCount(leds);
+      if (tickLast.get(r.pin) === lit) continue;
+      tickLast.set(r.pin, lit);
+      const text = r.text.replace("{n}", String(lit)).replace("{of}", String(leds.length));
+      add.push({ n: n++, t, pin: r.pin, hi: lit > 0, text, line: r.line, strip: { lit, of: leds.length } });
+    }
+    for (const r of lesson!.adc ?? []) {
+      const a = m.adc?.[r.pin];
+      const i = (a?.raw.length ?? 0) - 1;
+      if (!a || i < 0 || !adcMoved(tickLast.get(r.pin), a.raw[i], r.step ?? 200)) continue;
+      tickLast.set(r.pin, a.raw[i]);
+      const adc = { raw: a.raw[i], mv: a.mv[i] ?? 0 };
+      add.push({ n: n++, t, pin: r.pin, hi: adc.raw > 0, text: r.text.replace("{raw}", String(adc.raw)), line: r.line, adc });
+    }
+    if (add.length) lessonFeed.set({ items: [...lessonFeed.get().items, ...add].slice(-FEED_CAP) });
+  }
+}
+
+/** Lesson 0 has no firmware: the feed and code panes say so instead of pointing at a Run button or another work's source. */
+export const noFwFeed = () => t("This lesson runs no code, so nothing shows up here. Click the parts on the bench instead.");
+export const useNoFwLesson = () => {
+  const l = useStore(lessonUi).lesson;
+  return !!l && !l.fw;
+};
+export function NoCodeNote() {
+  return <p className="m-0 p-3 text-[13px] text-muted">{t("This lesson runs no code: it is about the board itself")}</p>;
 }
 
 /** What the code panel should show in beginner mode: the lesson's source and lines to highlight, or null (normal pane). */
@@ -212,6 +278,12 @@ function DelayChips({ chips }: { chips: CodeChips }) {
 export const evWhere = (e: FeedItem) =>
   e.i2c
     ? t("I2C → {addr}", { addr: hex(e.i2c.addr) })
+    : e.servo
+      ? t("GPIO{pin} → {us} µs pulse", { pin: e.pin, us: e.servo.us })
+    : e.strip
+      ? t("GPIO{pin} → frame for {of} LEDs", { pin: e.pin, of: e.strip.of })
+    : e.adc
+      ? t("GPIO{pin} ← {v} V into the ADC", { pin: e.pin, v: (e.adc.mv / 1000).toFixed(2) })
     : e.duty !== undefined
       ? t("GPIO{pin} → PWM duty {pct}%", { pin: e.pin, pct: e.duty })
       : e.hz
@@ -225,6 +297,7 @@ export const fmtSec = (cyc: number) => `${(cyc / CPU_HZ).toFixed(2)} s`;
 /** Dock "What happened" list, newest on top. */
 export function LessonFeed({ className }: { className?: string }) {
   const { items } = useStore(lessonFeed);
+  const noFw = useNoFwLesson();
   const box = useRef<HTMLDivElement>(null);
   const top = items[items.length - 1]?.n ?? -1;
   // New rows land on top: keep the reader at the top unless they scrolled down to read history
@@ -253,7 +326,7 @@ export function LessonFeed({ className }: { className?: string }) {
         data-count={items.length}
         className="min-h-0 flex-1 overflow-auto px-3 py-1.5 text-[12.5px]"
       >
-        {!items.length && <p className="m-0 py-1 text-xs text-muted">{t('Not run yet. Click "Run" below the bench.')}</p>}
+        {!items.length && <p className="m-0 py-1 text-xs text-muted">{noFw ? noFwFeed() : t('Not run yet. Click "Run" below the bench.')}</p>}
         {items
           .slice()
           .reverse()
@@ -264,6 +337,9 @@ export function LessonFeed({ className }: { className?: string }) {
               data-t={e.t}
               {...(e.i2c ? { "data-i2c": hex(e.i2c.addr), "data-bytes": e.i2c.bytes } : { "data-pin": e.pin, "data-level": e.hi ? 1 : 0, ...(e.hz ? { "data-hz": e.hz } : {}) })}
               {...(e.duty !== undefined && { "data-duty": e.duty })}
+              {...(e.servo && { "data-deg": e.servo.deg })}
+              {...(e.strip && { "data-lit": e.strip.lit })}
+              {...(e.adc && { "data-raw": e.adc.raw })}
               className="flex gap-2.5 py-0.5 leading-5"
             >
               <span className="w-[60px] flex-none font-mono text-muted tabular-nums">{fmtSec(e.t)}</span>
@@ -282,11 +358,13 @@ export function LessonFeed({ className }: { className?: string }) {
 /** Dock tab while a lesson is up: what happened (left) beside the lesson source with the followed line (right). */
 export function LessonPane({ toast }: { toast: (msg: string) => void }) {
   const code = useLessonCode();
+  const noFw = useNoFwLesson();
   return (
     <div id="lessonPane" className="flex min-h-0 flex-1">
       <LessonFeed className="w-[min(440px,42%)] flex-none border-r border-line-soft" />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {code && <CodeView fw={code.fw} toast={toast} highlight={code} />}
+        {noFw && <NoCodeNote />}
       </div>
     </div>
   );

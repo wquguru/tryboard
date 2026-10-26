@@ -1,5 +1,5 @@
 // Lesson 7 (PLAN H-16): turn an SG90 servo with 50 Hz LEDC pulses; checkpoint weather 05, reference build s3-servo.
-// Lines point at firmware/servo/main/main.c (s3-servo builds it with SERVO_GPIO=4); the feed has no PWM rows yet.
+// Lines point at firmware/servo/main/main.c (s3-servo builds it with SERVO_GPIO=4); feed rows read the angle off the pulse width.
 import { t } from '../../i18n/index.ts';
 import type { Lesson, LessonCallout } from '../lessons.ts';
 
@@ -29,6 +29,7 @@ export const L7: Lesson = {
   parts: ['servo'],
   fw: 's3-servo',
   src: 'firmware/servo/main/main.c',
+  servo: [{ pin: 4, text: t('Arm turns to {deg}°'), line: 38 }],
   wireNotes: {
     [SIG]: { to: t('Servo orange wire (signal)'), why: t('GPIO4 sends the 50 Hz pulses; the pulse width is the angle') },
     [VCC]: { to: t('Servo red wire (VCC)'), why: t('The motor runs on 5 V and can pull about 0.7 A, far more than 3V3 or a GPIO can give') },

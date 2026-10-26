@@ -73,6 +73,8 @@ export interface BenchCtx {
   leds: LedState[];
   servos: { pin: number; horn: THREE.Group; freq: number; angle: number; target: number; phys?: boolean }[];
   pots: { pin: number; knob: THREE.Group; hit: THREE.Mesh; v: number }[];
+  /** Knob position per pot pin, kept across scene rebuilds (the sim keeps the voltage, so the knob must too). */
+  potV: Map<number, number>;
   buzzers: { pin: number; membrane: THREE.Mesh; waves: THREE.Group; waveMat: THREE.MeshBasicMaterial; on: boolean }[];
   keys: { pin: number; key: THREE.Mesh }[];
   speakers: { cone: THREE.Group; waves: THREE.Group; waveMat: THREE.MeshBasicMaterial }[];
