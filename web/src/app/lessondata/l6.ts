@@ -35,7 +35,7 @@ export const L6: Lesson = {
     { line: 34, text: t('Duty 0: the pin stays low and the buzzer goes quiet') },
     { line: 44, text: t('The LEDC timer starts at 262 Hz (do)') },
     { line: 49, text: t('The LEDC channel sends that wave out on the buzzer pin') },
-    { line: 61, text: t('Print the note on serial, e.g. "音符 do 262 Hz"') },
+    { line: 61, text: t('Print the note on serial, e.g. "音符 do 262 Hz"') }, // lint: allow-cjk (firmware printf stays Chinese)
     { line: 62, text: t('Let the note sound for 270 ms') },
     { line: 64, text: t('A 30 ms rest, so two equal notes in a row are heard as two') },
   ],

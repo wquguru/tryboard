@@ -52,9 +52,7 @@ export interface LessonTask {
   text: string;
   /** One line of "how to do it" under the task while it waits. */
   how?: string;
-  /** `run` | `reveal` | `view:current` | `select:<id>` | `prop:<part>.<key>=<v>` | `chip:delay=<ms>` | `press:boot×<n>` | `strip:<pin>=<n>` | `usb:configured` | `usb:typed=<text>`. */
-  /** `run` | `reveal` | `view:current` | `select:<id>` | `prop:<part>.<key>=<v>` | `chip:delay=<ms>` | `press:boot×<n>` | `strip:<pin>=<n>` | `env:<temp|humidity|pressure>`. */
-  /** `run` | `reveal` | `view:current` | `select:<id>` | `prop:<part>.<key>=<v>` | `chip:delay=<ms>` | `press:boot×<n>` | `oled:<lit dots>` | `follow:temp` | `asm:done`. */
+  /** A task signal spec; the full grammar is `parseDone` in lessontasks.ts (run, reveal, select, prop, chip, press, strip, usb, env, adc, oled, follow, asm). */
   done: string;
   /** reveal: the answer shown when the learner opens it. */
   answer?: string;
