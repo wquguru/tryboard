@@ -12,7 +12,7 @@ import { isPhone, setMui } from "../mobile";
 import { lessonFor } from "../lessons";
 import { LessonSteps, lessonUi, setLessonUi } from "../lesson";
 import { bindLessonFeed } from "../lessonfeed";
-import { lessonSignal, setTaskStep, stripSignals, taskUi } from "../lessontasks";
+import { lessonSignal, setTaskStep, stripSignals, taskUi, usbSignals } from "../lessontasks";
 import type { BenchCtx } from "./ctx";
 import { lessonWires, partId } from "../wiring";
 import { ledColor } from "../../bench3d/ledparams";
@@ -30,6 +30,7 @@ export function mountLesson(b: BenchCtx) {
       lessonSignal("run");
       // Strip frames arrive as edges; a step opened after the strip lit up still sees the last frame
       stripSignals(c.session.frame.strips, c.session.fwName);
+      usbSignals(c.session.usb, c.session.fwName);
     }
     if (b.flowOn()) lessonSignal("view:current");
   }

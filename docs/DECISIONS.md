@@ -1896,3 +1896,8 @@
 - 决定：(1) 板上区域用新的 `PickTarget.spot`（`'usb' | 'chip'`，只在 onPick 时由命中点在板局部坐标里判定），卡片额外发 `select:board@usb` / `select:board@chip`，原 `select:board` 照发，第 1 课「点芯片」不受影响；BOOT 点击会被当成按下，所以「找到 BOOT」用 `press:boot×1`。(2) `taskTarget` 认 3V3 / 5V / GND 引脚和 `@spot`。(3) 入口：left.tsx 在作品没有检查点或 URL 带 `cp=lesson-<no>` 时显示无检查点课的卡；课程地图跳无检查点的课一律整页跳转 `/app?work=…&cp=lesson-<no>`（同作品内没有 selectCheckpoint 可用）。(4) 无固件课：代码讲解页签与代码卡显示「本课不跑代码」，检查点框改成「第 N 课 · 打勾完成」；面包板留在台面上（basics 作品本身的场景，parts: [] 只决定本课接线清单）。(5) 芯片参数放参数页签（数据手册来源），不塞进步骤卡。(6) 已有测试里「第 0 课未写」「每课都有固件 / 接线」的假设按新事实更新（lessons / course / lessonmap 测试、beginner.mjs 地图可开卡 0,1,2,3），没有放宽判定。
 - 理由：最小改动地复用 H-10 任务信号与 H-15 课程层；spot 不改已有锚点和投影。
 - 备选：给 USB 口 / 芯片做独立的 PickTarget kind（牵动 scene-api 所有消费方，没选）；第 0 课单独建一个只有开发板的作品（作品列表多一项且与 basics 进度分开，没选）。
+
+## 2026-10-26 H-16 第 10 课「做个 USB 键盘」：对应 usbkey-2，新增 usb 任务信号
+- 决定：(1) COURSE 第 10 课的检查点由 `usbkey-1` 改为 `usbkey-2`（「按键打出字母」）。usbkey-2 的判定是「枚举成 configured + PC 打出 abc」，正好覆盖本课两件事；usbkey-1 只要求枚举，没按键课就算完成。(2) lessontasks 新增 DoneSpec `usb:configured` 与 `usb:typed=<文本>`（PC 收到的累计文本包含该串即命中）；新导出 `usbSignals(view, fwName)`，由 session.ts 的 onUsb 和 bench/lesson.tsx 的 probe 调用，只在当前固件是本课固件时发信号（和 strip 信号同一个 `lessonFw` 门，门里补了「fw 非空」）。(3) 不新增固件，复用 usbkey；台面只留 K1–K3（key:4/5/6），USB 走已有虚拟 PC 面板。
+- 理由：一课对应一个检查点，课完成 = 检查点通过；信号最小，直接取 UsbView 的 configured / typed。
+- 备选：保留 usbkey-1，把打字当课内任务（课完成早于打字，没选）；把 usbkey-1 和 usbkey-2 都挂到第 10 课（COURSE 一课只有一个 cp，没选）；从串口 `KEY n c` 行判定打字（看不到 PC 端是否真收到，没选）。

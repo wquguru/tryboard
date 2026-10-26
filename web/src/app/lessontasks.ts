@@ -13,7 +13,9 @@ export type DoneSpec =
   | { kind: 'prop'; part: string; key: string; v: string }
   | { kind: 'chip'; key: 'delay'; v: number }
   | { kind: 'press'; what: 'boot'; n: number }
-  | { kind: 'strip'; pin: number; n: number };
+  | { kind: 'strip'; pin: number; n: number }
+  | { kind: 'usb'; what: 'configured' }
+  | { kind: 'usb'; what: 'typed'; text: string };
 
 /** What was detected; raw values only, the words are made at render time in the current locale. */
 export interface Hit {
@@ -21,7 +23,7 @@ export interface Hit {
   from?: string;
 }
 
-/** `run` / `reveal` / `view:current` / `select:<id>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` / `press:boot×<n>` / `strip:<pin>=<n lit>`; null = malformed. */
+/** `run` / `reveal` / `view:current` / `select:<id>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` / `press:boot×<n>` / `strip:<pin>=<n lit>` / `usb:configured` / `usb:typed=<text>`; null = malformed. */
 export function parseDone(d: string): DoneSpec | null {
   if (d === 'run' || d === 'reveal') return { kind: d };
   if (d === 'view:current') return { kind: 'view', what: 'current' };
@@ -36,10 +38,13 @@ export function parseDone(d: string): DoneSpec | null {
   if (m && Number(m[1]) >= 1) return { kind: 'press', what: 'boot', n: Number(m[1]) };
   m = /^strip:(\d+)=(\d+)$/.exec(d);
   if (m && Number(m[2]) >= 1) return { kind: 'strip', pin: Number(m[1]), n: Number(m[2]) };
+  if (d === 'usb:configured') return { kind: 'usb', what: 'configured' };
+  m = /^usb:typed=(.+)$/s.exec(d);
+  if (m) return { kind: 'usb', what: 'typed', text: m[1] };
   return null;
 }
 
-/** Signals: 'run', 'press:boot', 'chip:delay=<ms>' (+ from), 'view:current', 'select:<id>', 'prop:<part>.<key>=<v>', 'strip:<pin>=<lit>'. */
+/** Signals: 'run', 'press:boot', 'chip:delay=<ms>' (+ from), 'view:current', 'select:<id>', 'prop:<part>.<key>=<v>', 'strip:<pin>=<lit>', 'usb:configured', 'usb:typed=<all text>'. */
 export interface SigCtx {
   /** BOOT presses (down edges) since this step came up, this one included. */
   boots: number;
@@ -71,6 +76,12 @@ export function matchTask(done: string, sig: string, ctx: SigCtx): Hit | null {
       const m = /^strip:(\d+)=(\d+)$/.exec(sig);
       return m && Number(m[1]) === d.pin && Number(m[2]) >= d.n ? { v: m[2] } : null;
     }
+    case 'usb': {
+      if (d.what === 'configured') return sig === 'usb:configured' ? {} : null;
+      // The PC's text so far contains the wanted letters (the learner may press other keys in between)
+      const m = /^usb:typed=(.*)$/s.exec(sig);
+      return m && m[1].includes(d.text) ? { v: d.text } : null;
+    }
   }
 }
 
@@ -94,6 +105,9 @@ const PART_NAMES: Record<string, string> = {
   ws2812: t('the LED strip'),
   'board@usb': t('the USB-C port'),
   'board@chip': t('the main chip'),
+  'key:4': t('button K1'),
+  'key:5': t('button K2'),
+  'key:6': t('button K3'),
 };
 
 /** "Detected: …" line for a ticked task; empty for reveal (its answer is the result). */
@@ -110,6 +124,8 @@ export function hitText(done: string, h: Hit): string {
       return t('Detected: BOOT pressed {n} times', { n: h.v ?? d.n });
     case 'strip':
       return t('Detected: {n} LEDs lit on GPIO{pin}', { n: h.v ?? d.n, pin: d.pin });
+    case 'usb':
+      return d.what === 'configured' ? t('Detected: the PC sees a USB keyboard') : t('Detected: the PC typed "{text}"', { text: h.v ?? d.text });
     case 'chip':
       return h.from && h.from !== h.v
         ? t('Detected: delay {from} ms → {to} ms', { from: h.from, to: h.v ?? d.v })
@@ -204,10 +220,22 @@ export function stepReady(s: TaskUi = taskUi.get()): boolean {
   return tasks.length > 0 && tasks.every((_, i) => !!s.hits[i]);
 }
 
-/** WS2812 frames (pin → [r, g, b] per LED) as 'strip:<pin>=<lit>' signals, only while the lesson's own firmware runs. */
-export function stripSignals(strips: Record<number, number[][]>, fwName: string) {
+/** The running build is the current lesson's firmware (or one of its code-chip builds). */
+function lessonFw(fwName: string): boolean {
   const l = taskUi.get().lesson;
   const fws = l ? [l.fw, ...l.steps.flatMap((x) => Object.values(x.codeChips?.fw ?? {}))] : [];
-  if (!fws.some((f) => fwName === `${f}/flash.bin`)) return;
+  return fws.some((f) => !!f && fwName === `${f}/flash.bin`);
+}
+
+/** WS2812 frames (pin → [r, g, b] per LED) as 'strip:<pin>=<lit>' signals, only while the lesson's own firmware runs. */
+export function stripSignals(strips: Record<number, number[][]>, fwName: string) {
+  if (!lessonFw(fwName)) return;
   for (const [pin, leds] of Object.entries(strips)) lessonSignal(`strip:${pin}=${leds.filter((c) => c.some((v) => v > 0)).length}`);
+}
+
+/** Virtual PC state as 'usb:configured' / 'usb:typed=<text>' signals, only while the lesson's own firmware runs. */
+export function usbSignals(v: { configured: boolean; typed: string } | null, fwName: string) {
+  if (!v || !lessonFw(fwName)) return;
+  if (v.configured) lessonSignal('usb:configured');
+  if (v.typed) lessonSignal(`usb:typed=${v.typed}`);
 }
