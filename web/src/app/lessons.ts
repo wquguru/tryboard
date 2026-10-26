@@ -2,6 +2,7 @@
 // Text is English through t() (zh / ja / ko in i18n lab.ts); code lines point at the checkpoint's reference source.
 import { t } from '../i18n/index.ts';
 import { LED_VF, ledAmps, ohmText, type LedColor } from '../bench3d/ledparams.ts';
+import { lesson4 } from './lessondata/l4.ts';
 
 /** A bench thing a callout points at: same shape as PickTarget (part / pin / wire / button + id). */
 export interface LessonTarget {
@@ -75,6 +76,15 @@ export interface LessonEvent {
   /** The pin is read, not driven (H-08 button). */
   input?: boolean;
 }
+/** H-16: LEDC duty on one pin read as feed rows; a row each time the duty lands on a new multiple of `every` (default 0.2). */
+export interface LessonPwm {
+  pin: number;
+  /** Row text with {pct} = duty in whole percent, e.g. "Brightness {pct}%". */
+  text: string;
+  /** 1-based line in `Lesson.src` that sets the duty. */
+  line: number;
+  every?: number;
+}
 /** H-08: writes to one I2C address read as one feed row; transactions closer than 100 ms add to the same row. */
 export interface LessonI2c {
   addr: number;
@@ -121,6 +131,8 @@ export interface Lesson {
   events?: LessonEvent[];
   /** I2C writes the feed narrates (H-08). */
   i2c?: LessonI2c[];
+  /** PWM duty changes the feed narrates (H-16). */
+  pwm?: LessonPwm[];
   steps: LessonStep[];
   /** H-04 "Show current": the loop drawn while `pin` is high (bench wire / part / pin ids, in current order). */
   circuit?: { pin: number; path: string[] };
@@ -491,6 +503,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
+  lesson4,
 ];
 
 /** The lesson for this work's checkpoint, if one is written. */
