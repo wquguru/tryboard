@@ -1,5 +1,6 @@
 // H-17 schematic view: the stage overlay that swaps the 3D bench for a 2D drawing of the same parts and wires.
 // Picks go through the bench selection (b.select), so the 3D highlight, part card and lesson tasks see the same target.
+import { useLayoutEffect, useRef, useState } from "react";
 import { t } from "../../i18n";
 import { useStore } from "../react";
 import { cn } from "../../ui/cn";
@@ -17,7 +18,11 @@ import { schematicOf, type Schematic, type SchFlag, type SchSym } from "./model"
 import { schUi, type BenchView } from "./store";
 
 const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
-const LED_INK: Record<LedColor, string> = { red: "#F24822", green: "#14AE5C", blue: "#0D99FF" };
+const LED_INK: Record<LedColor, string> = {
+  red: "#F24822",
+  green: "#14AE5C",
+  blue: "#0D99FF",
+};
 const ledName = (c: LedColor) => (c === "green" ? t("Green LED") : c === "blue" ? t("Blue LED") : t("Red LED"));
 const mA = (v: number) => v.toFixed(1);
 /** Rough text width for label boxes: CJK glyphs are about twice as wide as Latin at the same size */
@@ -25,8 +30,18 @@ const textW = (s: string, px: number) => [...s].reduce((n, ch) => n + (ch.charCo
 
 /** Toolbar segment: 3D bench | Schematic (both toolbars; phones list it under View tools). */
 export const viewTools = (): Tool[] => [
-  { id: "view3d", label: t("3D bench"), kind: "switch", on: () => schUi.get().view === "3d" },
-  { id: "schematic", label: t("Schematic"), kind: "switch", on: () => schUi.get().view === "schematic" },
+  {
+    id: "view3d",
+    label: t("3D bench"),
+    kind: "switch",
+    on: () => schUi.get().view === "3d",
+  },
+  {
+    id: "schematic",
+    label: t("Schematic"),
+    kind: "switch",
+    on: () => schUi.get().view === "schematic",
+  },
 ];
 
 export function setBenchView(b: BenchCtx, view: BenchView) {
@@ -111,20 +126,7 @@ function SymLed({ s, on }: { s: SchSym; on: boolean }) {
 }
 
 function Ring({ s }: { s: SchSym }) {
-  return (
-    <rect
-      x={s.x - 6}
-      y={s.y - 6}
-      width={s.w + 12}
-      height={s.h + 12}
-      rx={6}
-      fill="var(--accent)"
-      fillOpacity={0.08}
-      stroke="var(--accent)"
-      strokeWidth={2}
-      pointerEvents="none"
-    />
-  );
+  return <rect x={s.x - 6} y={s.y - 6} width={s.w + 12} height={s.h + 12} rx={6} fill="var(--accent)" fillOpacity={0.08} stroke="var(--accent)" strokeWidth={2} pointerEvents="none" />;
 }
 
 function SymBox({ s, on }: { s: SchSym; on: boolean }) {
@@ -165,16 +167,7 @@ function Flag({ f, on, pick }: { f: SchFlag; on: boolean; pick: () => void }) {
     >
       {/* Larger invisible hit box: flags are 22 px tall */}
       <rect x={f.x - 4} y={f.y - 16} width={f.w + 8} height={32} fill="transparent" />
-      <rect
-        x={f.x}
-        y={f.y - 11}
-        width={f.w}
-        height={22}
-        rx={4}
-        fill={on ? "var(--accent-bg)" : "var(--surface)"}
-        stroke={on ? "var(--accent)" : "currentColor"}
-        strokeWidth={1.5}
-      />
+      <rect x={f.x} y={f.y - 11} width={f.w} height={22} rx={4} fill={on ? "var(--accent-bg)" : "var(--surface)"} stroke={on ? "var(--accent)" : "currentColor"} strokeWidth={1.5} />
       <text x={f.x + f.w / 2} y={f.y + 4} textAnchor="middle" className={cn("font-mono text-[12px]", on ? "fill-accent-ink" : "fill-current")}>
         {f.net}
       </text>
@@ -182,20 +175,10 @@ function Flag({ f, on, pick }: { f: SchFlag; on: boolean; pick: () => void }) {
   );
 }
 
-function Sheet({ sch, sel, net, flow, onSym, onNet }: { sch: Schematic; sel: (s: SchSym) => boolean; net: string | null; flow: boolean; onSym: (s: SchSym) => void; onNet: (f: SchFlag) => void }) {
+function Sheet({ sch, scale, vertical, sel, net, flow, onSym, onNet }: { sch: Schematic; scale: number; vertical: boolean; sel: (s: SchSym) => boolean; net: string | null; flow: boolean; onSym: (s: SchSym) => void; onNet: (f: SchFlag) => void }) {
   const lit = new Set(net ? (sch.nets[net] ?? []) : []);
-  const phone = usePhone();
   return (
-    <svg
-      id="schematicSvg"
-      viewBox={`0 0 ${sch.w} ${sch.h}`}
-      width={sch.w}
-      height={sch.h}
-      style={{ width: "100%", maxWidth: sch.w * 1.5 }}
-      className="mx-auto block h-auto text-fg select-none"
-      role="img"
-      aria-label={t("Schematic")}
-    >
+    <svg id="schematicSvg" viewBox={`0 0 ${sch.w} ${sch.h}`} width={Math.round(sch.w * scale)} height={Math.round(sch.h * scale)} data-scale={scale.toFixed(2)} className="m-auto block shrink-0 text-fg select-none" role="img" aria-label={t("Schematic")}>
       {sch.lines.map((l, i) => (
         <polyline
           key={i}
@@ -236,14 +219,23 @@ function Sheet({ sch, sel, net, flow, onSym, onNet }: { sch: Schematic; sel: (s:
       ))}
       {flow &&
         sch.flows.map((f) => {
-          const label = phone
+          const label = vertical
             ? t("{ref} ≈ {ma} mA · estimate", { ref: f.ref, ma: mA(f.mA) })
-            : t("≈ {ma} mA → · estimate · not calibrated on real hardware", { ma: mA(f.mA) });
-          const w = textW(label, 13) + 20;
+            : t("≈ {ma} mA → · estimate · not calibrated on real hardware", {
+                ma: mA(f.mA),
+              });
+          // Vertical columns are narrow, so the calibration note gets its own line
+          const note = vertical ? t("Not calibrated on real hardware") : "";
+          const w = Math.max(textW(label, 13), textW(note, 12)) + 20;
           return (
             <g key={f.part} data-flow={f.part} pointerEvents="none">
               <polyline points={f.pts.join(" ")} fill="none" stroke="var(--accent)" strokeWidth={3} strokeDasharray="8 6" />
-              <rect x={f.x} y={f.y} width={w} height={26} rx={6} fill="var(--accent-bg)" />
+              <rect x={f.x} y={f.y} width={w} height={note ? 42 : 26} rx={6} fill="var(--accent-bg)" />
+              {note && (
+                <text x={f.x + 10} y={f.y + 34} className="fill-accent-ink text-[12px]">
+                  {note}
+                </text>
+              )}
               <text x={f.x + 10} y={f.y + 17} className="fill-accent-ink text-[13px] font-medium">
                 {label}
               </text>
@@ -260,9 +252,7 @@ function Card({ b, sch, sym, net }: { b: BenchCtx; sch: Schematic; sym: SchSym |
     return (
       <div id="schematicCard" data-net={net} className={box}>
         <b>{t("{net} net", { net })}</b>
-        <span className="text-muted">
-          {t("Labels with the same name are connected: both ends are lit, and so is the wire on the 3D bench.")}
-        </span>
+        <span className="text-muted">{t("Labels with the same name are connected: both ends are lit, and so is the wire on the 3D bench.")}</span>
       </div>
     );
   if (!sym)
@@ -301,7 +291,12 @@ function Card({ b, sch, sym, net }: { b: BenchCtx; sch: Schematic; sym: SchSym |
           <b>
             {sym.ref} · {ledName(sym.color ?? "red")}
           </b>
-          <span>{t("Forward drop {vf} V · current ≈ {ma} mA (estimate)", { vf: LED_VF[sym.color ?? "red"], ma: mA(flow?.mA ?? 0) })}</span>
+          <span>
+            {t("Forward drop {vf} V · current ≈ {ma} mA (estimate)", {
+              vf: LED_VF[sym.color ?? "red"],
+              ma: mA(flow?.mA ?? 0),
+            })}
+          </span>
           <span className="text-muted">{t("The triangle points the way current flows; the bar end (short leg) goes to GND.")}</span>
         </>
       )}
@@ -311,7 +306,9 @@ function Card({ b, sch, sym, net }: { b: BenchCtx; sch: Schematic; sym: SchSym |
             {sym.ref} · {sym.sub}
           </b>
           <span className="text-muted">
-            {t("Only the pins this bench uses are drawn: {pins}", { pins: sym.pins.map((p) => p.name).join(", ") })}
+            {t("Only the pins this bench uses are drawn: {pins}", {
+              pins: sym.pins.map((p) => p.name).join(", "),
+            })}
           </span>
         </>
       )}
@@ -324,12 +321,7 @@ function Card({ b, sch, sym, net }: { b: BenchCtx; sch: Schematic; sym: SchSym |
         </>
       )}
       {(sym.kind === "res" || sym.kind === "led" || sym.kind === "box") && (
-        <button
-          type="button"
-          id="schematicOpen"
-          onClick={open}
-          className="mt-1 min-h-11 cursor-pointer rounded-lg border border-line bg-field px-3 text-[14px] text-fg hover:border-hover-line"
-        >
+        <button type="button" id="schematicOpen" onClick={open} className="mt-1 min-h-11 cursor-pointer rounded-lg border border-line bg-field px-3 text-[14px] text-fg hover:border-hover-line">
           {sym.kind === "res" ? t("Open the part card (change the resistor)") : t("Open the part card")}
         </button>
       )}
@@ -346,6 +338,37 @@ function partModel(b: BenchCtx, part: string) {
   }
 }
 
+/** Inner size of the scrolling paper, tracked so the sheet can be scaled to it */
+function usePaperSize(ref: { current: HTMLDivElement | null }) {
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const sync = () => setSize((o) => (o.w === el.clientWidth && o.h === el.clientHeight ? o : { w: el.clientWidth, h: el.clientHeight }));
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return size;
+}
+
+const PAD = 24; // paper padding on both sides, in px
+const MAX_SCALE = 1.6;
+/** Pick the layout that fills the paper best and its scale. Never below 1: sheet text is 12 units, so 12 px is the floor and the paper scrolls instead. */
+export function fitSheet(make: (vertical: boolean) => Schematic, paper: { w: number; h: number }, phone: boolean) {
+  const fit = (s: Schematic) => (paper.w ? Math.min((paper.w - PAD) / s.w, phone ? MAX_SCALE : (paper.h - PAD) / s.h) : 1);
+  const h = phone ? null : make(false);
+  const v = phone || (h && fit(h) < 1) ? make(true) : null;
+  // The horizontal sheet follows the design; the vertical one wins only when it is readable at a larger size
+  const sch = h && (!v || fit(h) >= 1 || fit(h) >= fit(v)) ? h : v!;
+  return {
+    sch,
+    vertical: sch === v,
+    scale: Math.min(MAX_SCALE, Math.max(1, fit(sch))),
+  };
+}
+
 export function SchematicView({ b }: { b: BenchCtx }) {
   const c = b.ctx!;
   const ui = useStore(schUi);
@@ -357,7 +380,10 @@ export function SchematicView({ b }: { b: BenchCtx }) {
   const parts = sceneView(ses.scene, keep).parts;
   const wires = lessonWires(ses.scene.parts, keep, !!ses.power?.ext5v, ses.wireMods);
   const board = boardDevs(ses.scene.board)?.name ?? BOARD_NAME[ses.chip as keyof typeof BOARD_NAME] ?? "ESP32";
-  const sch = schematicOf(parts, wires, { vertical: phone, board });
+  const flowOn = ui.flow === "on" || ui.flow === "assumed";
+  const paperRef = useRef<HTMLDivElement>(null);
+  const paper = usePaperSize(paperRef);
+  const { sch, scale, vertical } = fitSheet((vertical) => schematicOf(parts, wires, { vertical, board, captions: flowOn }), paper, phone);
   const selId = st.selection?.kind === "part" ? st.selection.id : null;
   const symOf = (s: SchSym) => !ui.net && selId === s.part && (!ui.sel || ui.sel === s.ref || !sch.syms.some((x) => x.ref === ui.sel && x.part === selId));
   const picked = ui.net ? null : (sch.syms.find((s) => s.ref === ui.sel && s.part === selId) ?? sch.syms.find((s) => s.part === selId) ?? null);
@@ -375,7 +401,6 @@ export function SchematicView({ b }: { b: BenchCtx }) {
   };
   const flowTool = b.flowTools()[0];
   const shortBar = b.lessonTools() && !b.beginnerMore;
-  const flowOn = ui.flow === "on" || ui.flow === "assumed";
   const seg = (v: BenchView, label: string) => (
     <button
       type="button"
@@ -387,53 +412,56 @@ export function SchematicView({ b }: { b: BenchCtx }) {
       {label}
     </button>
   );
+  // Desktop keeps the notes in the side column: under the paper they sat behind the floating bench toolbar
+  const notes = (
+    <ul id="schematicNotes" className={cn("m-0 flex list-none flex-col gap-1.5 p-0 text-[12px] text-muted", !phone && "mt-4")}>
+      {!phone && <li>{t("Made from the current wiring · click a symbol to select it on the 3D bench too")}</li>}
+      <li>{t("Wire colours aren't drawn: a schematic only shows what connects to what")}</li>
+      {sch.flags.length > 0 && <li>{t("Labels with the same name are connected (no long wires, no crossings)")}</li>}
+      {sch.gnds.length > 1 && <li>{t("Every ground symbol is the same GND")}</li>}
+    </ul>
+  );
   return (
-    <div
-      id="schematic"
-      data-layout={phone ? "phone" : "desktop"}
-      data-flow={flowOn ? "on" : undefined}
-      className={cn("absolute inset-0 z-[5] flex bg-surface", phone ? "flex-col gap-2 overflow-y-auto p-3" : "gap-3 p-4 pb-(--tb-h)")}
-    >
+    <div id="schematic" data-layout={phone ? "phone" : "desktop"} data-flow={flowOn ? "on" : undefined} className={cn("absolute inset-0 z-[5] flex bg-surface", phone ? "flex-col gap-2 overflow-y-auto p-3" : "gap-3 p-4 pb-[calc(var(--tb-h,52px)+16px)]")}>
       <div className={cn("flex min-w-0 flex-col gap-2", phone ? "shrink-0" : "min-h-0 flex-1")}>
-        <div className="flex flex-wrap items-center gap-2">
-          {phone && (
-            <div role="group" aria-label={t("Bench view")} className="flex flex-1 rounded-[10px] bg-line p-[3px]">
-              {seg("3d", t("3D bench"))}
-              {seg("schematic", t("Schematic"))}
-            </div>
-          )}
-          {flowTool && (phone || !shortBar) && (
-            <button
-              type="button"
-              id="schematicFlow"
-              aria-pressed={flowOn}
-              onClick={() => b.toggleFlow()}
-              className="min-h-11 cursor-pointer rounded-[10px] border border-line bg-surface px-3.5 text-[14px] text-fg aria-pressed:border-accent aria-pressed:bg-accent-bg aria-pressed:font-medium aria-pressed:text-accent-ink"
-            >
-              {t("Show current")}
-            </button>
-          )}
-          {!phone && <span className="ml-auto text-[13px] text-muted">{t("Made from the current wiring · click a symbol to select it on the 3D bench too")}</span>}
-        </div>
+        {(phone || (flowTool && !shortBar)) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {phone && (
+              <div role="group" aria-label={t("Bench view")} className="flex flex-1 rounded-[10px] bg-line p-[3px]">
+                {seg("3d", t("3D bench"))}
+                {seg("schematic", t("Schematic"))}
+              </div>
+            )}
+            {flowTool && (phone || !shortBar) && (
+              <button
+                type="button"
+                id="schematicFlow"
+                aria-pressed={flowOn}
+                onClick={() => b.toggleFlow()}
+                className="min-h-11 cursor-pointer rounded-[10px] border border-line bg-surface px-3.5 text-[14px] text-fg aria-pressed:border-accent aria-pressed:bg-accent-bg aria-pressed:font-medium aria-pressed:text-accent-ink"
+              >
+                {t("Show current")}
+              </button>
+            )}
+          </div>
+        )}
         <div
           id="schematicPaper"
-          className={cn("relative overflow-auto rounded-xl border border-line p-3", phone ? "shrink-0" : "min-h-0 flex-1")}
-          style={{ backgroundImage: "radial-gradient(var(--line) 1px, transparent 1.2px)", backgroundSize: "20px 20px" }}
+          ref={paperRef}
+          className={cn("relative flex overflow-auto rounded-xl border border-line p-3", phone ? "shrink-0" : "min-h-0 flex-1")}
+          style={{
+            backgroundImage: "radial-gradient(var(--line) 1px, transparent 1.2px)",
+            backgroundSize: "20px 20px",
+          }}
         >
-          <Sheet sch={sch} sel={symOf} net={ui.net} flow={flowOn} onSym={onSym} onNet={onNet} />
+          <Sheet sch={sch} scale={scale} vertical={vertical} sel={symOf} net={ui.net} flow={flowOn} onSym={onSym} onNet={onNet} />
         </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted">
-          <span>{t("Wire colours aren't drawn: a schematic only shows what connects to what")}</span>
-          {sch.flags.length > 0 && <span>{t("Labels with the same name are connected (no long wires, no crossings)")}</span>}
-          {sch.gnds.length > 1 && <span>{t("Every ground symbol is the same GND")}</span>}
-        </div>
+        {phone && notes}
       </div>
-      <aside
-        aria-label={t("Selected symbol")}
-        className={cn(phone ? "shrink-0 rounded-t-2xl bg-surface p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]" : "w-72 shrink-0 self-start pt-9")}
-      >
+      <aside aria-label={t("Selected symbol")} className={cn(phone ? "shrink-0 rounded-t-2xl bg-surface p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]" : "w-72 shrink-0 self-start")}>
         {!phone && <div className="mb-2 text-[12px] text-muted">{t("Selected symbol")}</div>}
         <Card b={b} sch={sch} sym={picked} net={ui.net} />
+        {!phone && notes}
       </aside>
     </div>
   );

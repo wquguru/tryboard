@@ -1518,5 +1518,6 @@ const d: Dict = {
   "Start lesson {n} →": "{n}강 시작 →",
   "Lesson {n} is still being written": "{n}강은 아직 준비 중입니다",
   "Stay on lesson {n} and go over it again": "{n}강에 머물며 다시 보기",
+  "Not calibrated on real hardware": "실기기 미보정",
 };
 export default d;

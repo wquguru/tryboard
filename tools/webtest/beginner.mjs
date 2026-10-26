@@ -378,6 +378,16 @@ await ph.close();
   const pg = await open('/app?work=weather&cp=03&debug=1&beginner=1#bench');
   await pg.click('#toolbar [data-tool="schematic"]');
   await waitFor(pg, () => !!document.querySelector('#schematicSvg [data-net="SDA"]'), null, 3000);
+  const fit = await pg.evaluate(() => {
+    const svg = document.querySelector('#schematicSvg');
+    const scale = Number(svg.dataset.scale);
+    const min = Math.min(...[...svg.querySelectorAll('text')].map((e) => parseFloat(getComputedStyle(e).fontSize))) * scale;
+    const p = document.querySelector('#schematicPaper');
+    const tb = document.querySelector('#toolbar').getBoundingClientRect();
+    const notes = document.querySelector('#schematicNotes').getBoundingClientRect();
+    return { scale, min, fits: p.scrollWidth <= p.clientWidth + 1 && p.scrollHeight <= p.clientHeight + 1, clear: notes.bottom <= tb.top || notes.left >= tb.right, paperBottom: p.getBoundingClientRect().bottom <= tb.top };
+  });
+  report('H-17 desktop lesson 03: text ≥ 12 px, sheet fits the paper, notes and paper clear of the toolbar', fit.scale >= 1 && fit.min >= 12 && fit.fits && fit.clear && fit.paperBottom, JSON.stringify(fit));
   await pg.click('#schematicSvg [data-net="SDA"]');
   const lit = await waitFor(pg, () => globalThis.__tbApp.session.bench._debug.hl()?.id === 'wire:GPIO8~oled:SDA', null, 3000);
   const ends = await pg.$$eval('#schematicSvg [data-net="SDA"][aria-pressed="true"]', (es) => es.map((e) => e.dataset.end).sort().join(','));

@@ -76,6 +76,8 @@ export interface Schematic {
 export interface SchOpts {
   vertical?: boolean;
   board?: string;
+  /** Vertical sheets reserve room for the two-line current captions only while they are shown (default true) */
+  captions?: boolean;
 }
 
 const order = (n: string) =>
@@ -246,13 +248,14 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
   }
 
   // Phone: board on top with pins along its bottom edge, LED loops hang straight down, other parts stack below
-  const PITCH = 76;
-  const W = Math.max(350, 40 + rows.length * PITCH);
-  const BX = 20, BY = 20, BH = 96;
+  // 64-unit columns keep a five-pin sheet at 336 wide, which fits a 390 px phone at 1:1 (text stays 12 px)
+  const PITCH = 64;
+  const W = Math.max(320, 16 + rows.length * PITCH);
+  const BX = 8, BY = 20, BH = 84;
   const PY = BY + BH;
   let low = PY + 60;
   rows.forEach((row, i) => {
-    const x = BX + PITCH / 2 + 4 + i * PITCH;
+    const x = BX + PITCH / 2 + i * PITCH;
     const n = names[row.a] ?? row.a;
     board.pins.push({ name: row.a, x, y: PY - 10, anchor: 'middle' });
     if (row.led) {
@@ -260,20 +263,20 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
       const wire = L.w?.id;
       let y = PY;
       if (L.ohm > 0) {
-        sch.lines.push({ pts: [x, y, x, y + 30], wire, missing: L.w?.missing });
-        sch.syms.push({ ...L.r, x: x - 14, y: y + 30, w: 28, h: 80, dir: 'v', tx: x + 16, ty: y + 64 });
-        y += 110;
-        sch.lines.push({ pts: [x, y, x, y + 20] });
-      } else sch.lines.push({ pts: [x, y, x, y + 20], wire, missing: L.w?.missing });
-      y += 20;
-      sch.syms.push({ ...L.d, x: x - 26, y, w: 52, h: 56, dir: 'v', tx: x + 16, ty: y + 20 });
+        sch.lines.push({ pts: [x, y, x, y + 20], wire, missing: L.w?.missing });
+        sch.syms.push({ ...L.r, x: x - 14, y: y + 20, w: 28, h: 80, dir: 'v', tx: x + 16, ty: y + 54 });
+        y += 100;
+        sch.lines.push({ pts: [x, y, x, y + 16] });
+      } else sch.lines.push({ pts: [x, y, x, y + 16], wire, missing: L.w?.missing });
+      y += 16;
+      sch.syms.push({ ...L.d, x: x - 26, y, w: 52, h: 56, dir: 'v', tx: x + 30, ty: y + 20 });
       y += 56;
-      sch.lines.push({ pts: [x, y, x, y + 24], wire: L.g?.id, missing: L.g?.missing });
-      sch.gnds.push({ x, y: y + 24 });
+      sch.lines.push({ pts: [x, y, x, y + 18], wire: L.g?.id, missing: L.g?.missing });
+      sch.gnds.push({ x, y: y + 18 });
       if (wire) net(row.a, wire);
       if (L.g) net('GND', L.g.id);
       sch.flows.push({ part: L.id, ref: L.d.ref, pts: [x + 10, PY + 6, x + 10, y + 16], mA: L.mA, x: BX, y: 0 });
-      low = Math.max(low, y + 50);
+      low = Math.max(low, y + 44);
       return;
     }
     const wire = ws.find((w) => w.a === row.a && !w.part.startsWith('led:'))?.id;
@@ -289,32 +292,33 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
   });
   board.x = BX;
   board.y = BY;
-  board.w = W - 40;
+  board.w = W - 16;
   board.h = BH;
   // Current captions go in a list under the loops: columns are too narrow for the text
+  const capH = opts.captions === false ? 0 : 44;
   sch.flows.forEach((f, k) => {
-    f.y = low + k * 26;
+    f.y = low + k * capH;
   });
-  let by = low + sch.flows.length * 26 + 60;
+  let by = low + sch.flows.length * capH + 50;
   let w = W;
   for (const p of others) {
     const b = boxOf(p);
-    const pitch = 76;
-    w = Math.max(w, 40 + b.pw.length * pitch);
+    const pitch = PITCH;
+    w = Math.max(w, 16 + b.pw.length * pitch);
     const pins: SchPin[] = [];
     b.pw.forEach((wr, k) => {
-      const x = BX + pitch / 2 + 4 + k * pitch;
+      const x = BX + pitch / 2 + k * pitch;
       pins.push({ name: wr.pin, x, y: by + 22, anchor: 'middle' });
       sch.lines.push({ pts: [x, by - 26, x, by], wire: wr.id, missing: wr.missing });
       const n = names[wr.a] ?? wr.a;
       const fw = flagW(n);
       flag(n, x - fw / 2, by - 38, wr.id, 'part');
     });
-    const bw = Math.max(W, 40 + b.pw.length * pitch) - 40;
+    const bw = Math.max(W, 16 + b.pw.length * pitch) - 16;
     sch.syms.push({ ref: b.title, kind: 'box', part: b.id, pick: { kind: 'part', id: b.id }, x: BX, y: by, w: bw, h: 90, title: b.title, sub: b.sub, pins, ty: by + 54 });
     by += 90 + 70;
   }
   sch.w = w;
-  sch.h = others.length ? by - 70 + 20 : low + sch.flows.length * 26 + 20;
+  sch.h = others.length ? by - 70 + 14 : low + sch.flows.length * capH + 20;
   return sch;
 }

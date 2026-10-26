@@ -1518,5 +1518,6 @@ const d: Dict = {
   "Start lesson {n} →": "开始第 {n} 课 →",
   "Lesson {n} is still being written": "第 {n} 课还在编写中",
   "Stay on lesson {n} and go over it again": "留在第 {n} 课，再看一遍",
+  "Not calibrated on real hardware": "未在实机校准",
 };
 export default d;
