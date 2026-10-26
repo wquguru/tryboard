@@ -6,6 +6,7 @@ import { extModelsOn } from "../../extmodels";
 import { HOME } from "../../ui/links";
 import { passedCount } from "./progress";
 import type { BenchCtx } from "./ctx";
+import { viewTools } from "../schematic/view";
 
 export function mountVerdict(b: BenchCtx) {
   function syncChrome() {
@@ -52,6 +53,7 @@ export function mountVerdict(b: BenchCtx) {
           ],
         },
         { id: "act", tools: [{ id: "button", label: t("Press BOOT") }] },
+        { id: "view", tools: viewTools() },
         { id: "more", tools: [{ id: "more", label: t("More tools (multimeter, scope…)") }] },
       ]);
     const less = b.lessonTools() ? [{ id: "more", tools: [{ id: "more", label: t("Fewer tools") }] }] : [];
@@ -105,6 +107,7 @@ export function mountVerdict(b: BenchCtx) {
         ],
       },
       // Rerun lives in the top bar run group (Reset), so the toolbar does not repeat it (DESIGN_V2 §6.3)
+      { id: "view", tools: viewTools() },
       ...less,
     ]);
   }

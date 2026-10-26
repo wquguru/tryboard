@@ -7,6 +7,7 @@ import { lessonUi } from "../lesson";
 import { lessonSignal } from "../lessontasks";
 import { bit } from "../pinscope";
 import type { BenchCtx } from "./ctx";
+import { schUi } from "../schematic/store";
 
 type FlowState = "on" | "off" | "assumed";
 
@@ -55,6 +56,7 @@ export function mountFlow(b: BenchCtx) {
       delete el.dataset.flowSegs;
     }
     overlay("flow", next === "assumed" ? <FlowNote /> : null);
+    schUi.set({ flow: next });
   }
 
   function stop() {

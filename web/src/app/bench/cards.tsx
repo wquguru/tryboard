@@ -19,6 +19,7 @@ import { isTutorialPart } from "../../bench3d/parts3d";
 import { tutorialControls } from "./tutorial";
 import { lessonUi } from "../lesson";
 import { lessonSignal } from "../lessontasks";
+import { setBenchView } from "../schematic/view";
 
 export function mountCards(b: BenchCtx) {
   function cardContent(tg: PickTarget): ReactNode | null {
@@ -351,6 +352,7 @@ export function mountCards(b: BenchCtx) {
     } else if (id === "fit") c.session.bench.view?.("fit");
     else if (id === "run") lessonUi.get().run();
     else if (id === "current") b.toggleFlow();
+    else if (id === "view3d" || id === "schematic") setBenchView(b, id === "view3d" ? "3d" : "schematic");
     else if (id === "button") {
       c.session.pressBoot(true);
       setTimeout(() => c.session.pressBoot(false), 150);
