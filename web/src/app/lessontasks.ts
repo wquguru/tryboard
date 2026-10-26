@@ -16,7 +16,8 @@ export type DoneSpec =
   | { kind: 'strip'; pin: number; n: number }
   | { kind: 'usb'; what: 'configured' }
   | { kind: 'usb'; what: 'typed'; text: string }
-  | { kind: 'env'; key: EnvKey };
+  | { kind: 'env'; key: EnvKey }
+  | { kind: 'adc'; pin: number; op: '<' | '>'; n: number };
 
 export type EnvKey = 'temp' | 'humidity' | 'pressure';
 
@@ -26,7 +27,7 @@ export interface Hit {
   from?: string;
 }
 
-/** `run` / `reveal` / `view:current` / `select:<id>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` / `press:boot×<n>` / `strip:<pin>=<n lit>` / `usb:configured` / `usb:typed=<text>` / `env:<key>`; null = malformed. */
+/** `run` / `reveal` / `view:current` / `select:<id>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` / `press:boot×<n>` / `strip:<pin>=<n lit>` / `usb:configured` / `usb:typed=<text>` / `env:<key>` / `adc:<pin><raw` or `>raw`; null = malformed. */
 export function parseDone(d: string): DoneSpec | null {
   if (d === 'run' || d === 'reveal') return { kind: d };
   if (d === 'view:current') return { kind: 'view', what: 'current' };
@@ -46,10 +47,12 @@ export function parseDone(d: string): DoneSpec | null {
   if (m) return { kind: 'usb', what: 'typed', text: m[1] };
   m = /^env:(temp|humidity|pressure)$/.exec(d);
   if (m) return { kind: 'env', key: m[1] as EnvKey };
+  m = /^adc:(\d+)([<>])(\d+)$/.exec(d);
+  if (m) return { kind: 'adc', pin: Number(m[1]), op: m[2] as '<' | '>', n: Number(m[3]) };
   return null;
 }
 
-/** Signals: 'run', 'press:boot', 'chip:delay=<ms>' (+ from), 'view:current', 'select:<id>', 'prop:<part>.<key>=<v>', 'strip:<pin>=<lit>', 'usb:configured', 'usb:typed=<all text>', 'env:<key>=<v>' (+ from). */
+/** Signals: 'run', 'press:boot', 'chip:delay=<ms>' (+ from), 'view:current', 'select:<id>', 'prop:<part>.<key>=<v>', 'strip:<pin>=<lit>', 'usb:configured', 'usb:typed=<all text>', 'env:<key>=<v>' (+ from), 'adc:<pin>=<raw>'. */
 export interface SigCtx {
   /** BOOT presses (down edges) since this step came up, this one included. */
   boots: number;
@@ -92,6 +95,13 @@ export function matchTask(done: string, sig: string, ctx: SigCtx): Hit | null {
       const m = /^env:(\w+)=(.+)$/.exec(sig);
       return m && m[1] === d.key && m[2] !== ctx.from ? { v: m[2], from: ctx.from } : null;
     }
+    case 'adc': {
+      // The raw code the firmware last read on that pin, past the threshold
+      const m = /^adc:(\d+)=(\d+)$/.exec(sig);
+      if (!m || Number(m[1]) !== d.pin) return null;
+      const raw = Number(m[2]);
+      return (d.op === '<' ? raw < d.n : raw > d.n) ? { v: m[2] } : null;
+    }
   }
 }
 
@@ -116,6 +126,7 @@ const PART_NAMES: Record<string, string> = {
   oled: t('the OLED screen'),
   ws2812: t('the LED strip'),
   bme280: t('the BME280 sensor'),
+  pot: t('the potentiometer'),
   'board@usb': t('the USB-C port'),
   'board@chip': t('the main chip'),
   'key:4': t('button K1'),
@@ -139,6 +150,8 @@ export function hitText(done: string, h: Hit): string {
       return t('Detected: {n} LEDs lit on GPIO{pin}', { n: h.v ?? d.n, pin: d.pin });
     case 'usb':
       return d.what === 'configured' ? t('Detected: the PC sees a USB keyboard') : t('Detected: the PC typed "{text}"', { text: h.v ?? d.text });
+    case 'adc':
+      return t('Detected: GPIO{pin} reads {raw}', { pin: d.pin, raw: h.v ?? d.n });
     case 'chip':
       return h.from && h.from !== h.v
         ? t('Detected: delay {from} ms → {to} ms', { from: h.from, to: h.v ?? d.v })
@@ -256,4 +269,11 @@ export function usbSignals(v: { configured: boolean; typed: string } | null, fwN
   if (!v || !lessonFw(fwName)) return;
   if (v.configured) lessonSignal('usb:configured');
   if (v.typed) lessonSignal(`usb:typed=${v.typed}`);
+
+}
+
+/** ADC samples the firmware read (worker tick `adc`, pin → raw codes) as 'adc:<pin>=<latest raw>', lesson firmware only. */
+export function adcSignals(adc: Record<number, { raw: number[] }>, fwName: string) {
+  if (!lessonFw(fwName)) return;
+  for (const [pin, a] of Object.entries(adc)) if (a.raw.length) lessonSignal(`adc:${pin}=${a.raw[a.raw.length - 1]}`);
 }

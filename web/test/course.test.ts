@@ -8,7 +8,7 @@ import { WORKS } from '../src/app/works.ts';
 test('course order and mapping follow DECISIONS 2026-10-26', () => {
   assert.deepEqual(
     COURSE.map((e) => `${e.no}:${e.work}${e.cp ? '·' + e.cp : ''}`),
-    ['0:basics', '1:weather·01', '2:weather·02', '3:weather·03', '4:basics·basics-pwm', '5:lamp·lamp-1', '6:basics·basics-buzz', '7:weather·05', '8:weather·04', '9:lamp·lamp-2', '10:usbkey·usbkey-2', '11:weather·06'],
+    ['0:basics', '1:weather·01', '2:weather·02', '3:weather·03', '4:basics·basics-pwm', '5:lamp·lamp-1', '6:basics·basics-buzz', '7:weather·05', '8:weather·04', '9:adc', '10:usbkey·usbkey-2', '11:weather·06'],
   );
   for (const e of COURSE) assert.ok(WORKS[e.work], `work ${e.work}`);
   // Checkpoints already in a work must be listed there (basics gets its own in H-16)
@@ -42,17 +42,19 @@ test('prev / next skip unwritten lessons', () => {
   assert.equal(courseStep(9, 1, find), null);
   assert.equal(courseStep(5, -1, find)?.no, 3);
   assert.equal(courseStep(1, -1, find), null);
-  // Written lessons today: 0..8, 10 (extend as H-16 lessons merge)
+  // Written lessons today: 0..10 (extend as H-16 lessons merge)
   assert.equal(courseStep(1, 1)?.no, 2);
   assert.equal(courseStep(3, 1)?.no, 4);
   assert.equal(courseStep(4, 1)?.no, 5);
   assert.equal(courseStep(5, 1)?.no, 6);
   assert.equal(courseStep(6, 1)?.no, 7);
   assert.equal(courseStep(7, 1)?.no, 8);
-  assert.equal(courseStep(8, 1)?.no, 10);
+  assert.equal(courseStep(8, 1)?.no, 9);
+  assert.equal(courseStep(9, 1)?.no, 10);
+  assert.equal(courseStep(9, -1)?.no, 8);
   assert.equal(courseStep(8, -1)?.no, 7);
   assert.equal(courseStep(10, 1), null);
-  assert.equal(courseStep(10, -1)?.no, 8);
+  assert.equal(courseStep(10, -1)?.no, 9);
   assert.equal(courseStep(1, -1)?.no, 0);
   assert.equal(courseStep(0, -1), null);
 });

@@ -9,6 +9,7 @@ import { LESSON_0 } from './lessondata/l0.ts';
 import { lesson4 } from './lessondata/l4.ts';
 import { L6 } from './lessondata/l6.ts';
 import { L10 } from './lessondata/l10.ts';
+import { L9 } from './lessondata/l9.ts';
 
 /** A bench thing a callout points at: same shape as PickTarget (part / pin / wire / button + id). */
 export interface LessonTarget {
@@ -530,6 +531,7 @@ export const LESSONS: Lesson[] = [
   L6,
   L10,
   L8,
+  L9,
 ];
 
 /** The lesson for this work's checkpoint, if one is written. */
