@@ -18,7 +18,7 @@ import type { Store } from './store';
 import { currentTheme, onTheme } from '../theme';
 import { IoStore, decodeEvents } from './iotrace';
 import { taskStore } from './tasktrace';
-import { lessonSignal, stripSignals } from './lessontasks';
+import { lessonSignal, oledSignal, readingSignal, stripSignals } from './lessontasks';
 import type { UsbView } from '../usb3d';
 import { bleFeed } from './blefeed';
 import { irFeed } from './irfeed';
@@ -336,8 +336,11 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       s.sim?.adcMode(ideal);
     },
     setEnv(e: Partial<Env>) {
+      const was = store.get().env.temp;
       s.sim?.setEnv(e);
       store.set((st) => ({ env: { ...st.env, ...e, ...(s.sim ? { temp: s.sim.env.temp } : {}) } }));
+      // H-16 lesson 11: every caller (slider, number box, heater, ⌘K) lands here
+      if (store.get().env.temp !== was) lessonSignal('env:temp', String(was));
     },
     hasImu: () => s.scene.parts.some((p) => p.type === 'mpu6050' || p.type === 'qmi8658'),
     setPose(p) {
@@ -495,7 +498,10 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         const buf = tail + text;
         const rd = lastReading(buf);
         tail = buf.slice(-80);
-        if (rd) store.set({ reading: rd });
+        if (rd) {
+          store.set({ reading: rd });
+          readingSignal(rd, store.get().env.temp, s.fwName);
+        }
         // IMU lines may span ticks too: update only on a complete line.
         const ib = imuTail + text;
         const nl = ib.lastIndexOf('\n');
@@ -587,6 +593,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
           lastOled = f.oled;
           s.frame.oled = f.oled;
           bench.setOled(f.oled);
+          oledSignal(f.oled, s.fwName);
         }
         if (f.lcd && f.lcd !== lastLcd) {
           lastLcd = f.lcd;

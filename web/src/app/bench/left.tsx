@@ -67,11 +67,14 @@ export function mountLeft(b: BenchCtx) {
         />
       );
     else if (freeKey && (lesson = b.lessonCard(freeKey, undefined))) card = lesson;
-    else if (n && d === n)
-      card = (
+    else if (n && d === n) {
+      // A pinned lesson outlives "all passed": the capstone (lesson 11) needs assembly, which only unlocks then
+      const lid = b.lessonPin && c.work.checkpoints.includes(b.lessonPin) ? b.lessonPin : null;
+      if (lid) lesson = b.lessonCard(lid, c.session.levels.find((x) => x.id === lid));
+      card = lesson ?? (
         <AllPassedCard total={n} own={ownCount(c, s)} retest={s.assembly?.retest} onNext={() => (location.hash = "assemble")} />
       );
-    else if (n) {
+    } else if (n) {
       const id =
         c.work.checkpoints.find((x) => !s.checks[x]?.ok) ??
         c.work.checkpoints[0];

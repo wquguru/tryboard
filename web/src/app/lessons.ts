@@ -5,6 +5,7 @@ import { LED_VF, ledAmps, ohmText, type LedColor } from '../bench3d/ledparams.ts
 import { L7 } from './lessondata/l7.ts';
 import { L5 } from './lessondata/l5.ts';
 import { LESSON_0 } from './lessondata/l0.ts';
+import { L11 } from './lessondata/l11.ts';
 
 /** A bench thing a callout points at: same shape as PickTarget (part / pin / wire / button + id). */
 export interface LessonTarget {
@@ -46,7 +47,7 @@ export interface LessonTask {
   text: string;
   /** One line of "how to do it" under the task while it waits. */
   how?: string;
-  /** `run` | `reveal` | `view:current` | `select:<id>` | `prop:<part>.<key>=<v>` | `chip:delay=<ms>` | `press:boot×<n>`. */
+  /** `run` | `reveal` | `view:current` | `select:<id>` | `prop:<part>.<key>=<v>` | `chip:delay=<ms>` | `press:boot×<n>` | `oled:<lit dots>` | `follow:temp` | `asm:done`. */
   done: string;
   /** reveal: the answer shown when the learner opens it. */
   answer?: string;
@@ -134,6 +135,8 @@ export interface Lesson {
   params?: LessonParam[];
   wireNotes?: Record<string, LessonWireNote>;
   buyTip?: string;
+  /** H-16 capstone: the parameters tab also lists every written course lesson's parts and buy tip, with a link to the Shop step. */
+  buyAll?: boolean;
 }
 
 const COLOR_NAME: Record<LedColor, string> = { red: t('Red'), green: t('Green'), blue: t('Blue') };
@@ -497,6 +500,7 @@ export const LESSONS: Lesson[] = [
   L7,
   L5,
   LESSON_0,
+  L11,
 ];
 
 /** The lesson for this work's checkpoint, if one is written. */
