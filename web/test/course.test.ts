@@ -42,9 +42,9 @@ test('prev / next skip unwritten lessons', () => {
   assert.equal(courseStep(9, 1, find), null);
   assert.equal(courseStep(5, -1, find)?.no, 3);
   assert.equal(courseStep(1, -1, find), null);
-  // With today's lessons (1..3) the real lookup stops after lesson 3
+  // Real lookup: 1 → 2, and after 3 comes the next written lesson (none while 4..11 are planned)
   assert.equal(courseStep(1, 1)?.no, 2);
-  assert.equal(courseStep(3, 1), null);
+  assert.equal(courseStep(3, 1)?.no, COURSE.find((e) => e.no > 3 && courseLesson(e))?.no);
   assert.equal(courseStep(1, -1), null);
 });
 
