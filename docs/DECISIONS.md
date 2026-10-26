@@ -1884,5 +1884,5 @@
 - 备选：Lesson.checkpoint 改成可选（牵动 lessonStep / taskUi / body[data-lesson] 多处，没选）；完成卡在没有已写下一课时隐藏（看不到过渡设计，没选）。
 ## 2026-10-26 H-16 第 4 课（呼吸灯）实现取舍
 - 决定：(1) s3-fade 用软件分 100 步改 duty（`ledc_set_duty` + `ledc_update_duty` + `vTaskDelay`），不用 LEDC 硬件渐变（`ledc_fade_*`），每步都在 IO 轨迹里留下一个 PWM 事件，check.py 的 `pwm.steps` 和课内事件流都能逐级判；固件为自写，未参考 GPL 代码。(2) 改一改用 `FADE_MS` 宏芯片，变体 s3-fade-1000 / -4000 共用 s3-fade 的 main.c，CMake 里 `FADE_MS=` 编译宏切换，build_web.sh 变体元组加入两者。(3) 事件流新增 `Lesson.pwm`（LessonPwm：pin / text 含 `{pct}` / line / every）：K.PWM 事件在占空比落到 `every`（默认 20 %）整数倍且与上一行不同时出一行，FeedItem 加 `duty`。(4) l4.ts 只从 lessons.ts 引类型，标注 / 连线文案在本文件内写，避免循环引用。(5) course.test / lessonmap.test / beginner.mjs 的「已写课」期望加 4。
-- 理由：硬件渐变在模拟器里只出首尾两个占空比事件，看不到逐级变化；宏芯片沿用第 1 课 `*_MS` 的做法。
+- 理由：软件分步让每级占空比都对应一行源码（第 38 行）和一个确定的事件，便于高亮和判定，硬件渐变在模拟器里的逐级表现未核实；宏芯片沿用第 1 课 `*_MS` 的做法。
 - 备选：ledc_fade_with_time（事件太少，没选）；每个 PWM 事件都出一行（每 20 ms 一行刷屏，没选）。
