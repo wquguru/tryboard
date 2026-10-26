@@ -941,17 +941,7 @@ fn run(args: &[String]) {
             mx,
             freq
         );
-        // Steps as duty@time (neighbours equal to 3 decimals merged); level checks read sequences and settled values from it
-        let mut steps: Vec<String> = Vec::new();
-        let mut last = String::new();
-        for (t, d, _) in &pwm_trace {
-            let k = format!("{d:.3}");
-            if k != last {
-                steps.push(format!("{k}@{t:.3}"));
-                last = k;
-            }
-        }
-        eprintln!("[tryboard] PWM GPIO{p} steps {}", steps.join(" "));
+        parts::pwm_steps(p, &pwm_trace);
     }
     if args.iter().any(|a| a == "--gpio-log") {
         let log = m.gpio_log();

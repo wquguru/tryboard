@@ -1175,5 +1175,8 @@ const d: Dict = {
   // Beginner lessons (H-01)
   "LED": "LED",
   "Basics course": "基础课",
+  // H-16 lesson 6: passive buzzer
+  "Buzzer played {n} different notes": "蜂鸣器唱出了 {n} 个不同的音",
+  "Buzzer played {n} different notes, should be at least {want}": "蜂鸣器只唱出 {n} 个不同的音，至少应有 {want} 个",
 };
 export default d;

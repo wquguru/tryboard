@@ -5890,5 +5890,16 @@
     "max_pixels": 0
    }
   ]
+ },
+ {
+  "id": "s3-buzzer",
+  "seconds": 1.2,
+  "expect": [
+   "蜂鸣器：GPIO6 LEDC 方波，每个音 300 ms",
+   "音符 do 262 Hz",
+   "音符 re 294 Hz",
+   "音符 mi 330 Hz"
+  ],
+  "chip": "esp32s3"
  }
 ]

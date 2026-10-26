@@ -23,7 +23,7 @@ export interface Level {
   script?: string;
   expect?: string[];
   gpio_toggles?: { pin: number; min: number; max?: number };
-  pwm?: { pin: number; freq: number; min: number; max: number; tol?: number; from?: number; steps?: number[]; beeps?: { from: number; to: number; min: number; max: number }[] };
+  pwm?: { pin: number; freq: number; min: number; max: number; tol?: number; from?: number; steps?: number[]; tones?: number; beeps?: { from: number; to: number; min: number; max: number }[] };
   /** last: the last frame LED by LED (count, how many lit, lit color ±tol) */
   ws2812?: { pin: number; min_frames?: number; frames?: string[][]; dominant?: 'r' | 'g' | 'b'; last?: { count: number; lit?: number; rgb: string; tol?: number } };
   numeric?: { name: string; regex: string; value: number; tol: number }[];
@@ -212,12 +212,13 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
         hi = Math.max(...win);
       }
       const tol = pw.tol ?? 0.01;
-      const ok = Math.abs(f - pw.freq) <= pw.freq * 0.01 && Math.abs(lo - pw.min) <= tol && Math.abs(hi - pw.max) <= tol;
+      // A melody (tones) changes pitch on purpose: the tones row judges it, not the note playing at the end
+      const fBad = pw.tones === undefined && Math.abs(f - pw.freq) > pw.freq * 0.01;
+      const ok = !fBad && Math.abs(lo - pw.min) <= tol && Math.abs(hi - pw.max) <= tol;
       const when = pw.from !== undefined ? `, after ${pw.from} s` : '';
       // Pulse width first (what a servo cares about); on failure state the target so nobody has to convert duty by hand
       const span = (a: string, b: string) => (a === b ? a : `${a}–${b}`);
       const ms = (d: number, hz: number) => ((d * 1000) / hz).toFixed(2);
-      const fBad = Math.abs(f - pw.freq) > pw.freq * 0.01;
       const want = ok ? '' : `; need ${span(ms(pw.min, pw.freq), ms(pw.max, pw.freq))} ms${fBad ? `, ${pw.freq} Hz` : ''}`;
       res.push({ ok, text: `GPIO${pw.pin} PWM ${f.toFixed(0)} Hz${when}, pulse ${span(ms(lo, f), ms(hi, f))} ms (duty ${span(lo.toFixed(3), hi.toFixed(3))})${want}`, say: pwmSay(dev, ok, fBad, pw, lo, hi, f), tag: `GPIO${pw.pin}`, dev: name });
       if (pw.steps) {
@@ -234,6 +235,13 @@ export function evaluate(l: Level, out: string, report: string): CheckResult[] {
         const total = pw.steps.length;
         const say = miss.length ? t('{name} missed {n} of {total} positions', { name, n: miss.length, total }) : t('{name} reached all {total} positions in order', { name, total });
         res.push({ ok: !miss.length, text: `pulse widths in order ${pw.steps.map(ms).join(' → ')} ms` + (miss.length ? `: missing ${miss.map(ms).join(', ')} ms` : ''), say, tag: `GPIO${pw.pin}`, dev: name });
+      }
+      if (pw.tones !== undefined) {
+        const tm = report.match(new RegExp(`PWM GPIO${pw.pin} tones (.*)`));
+        const hz = tm ? [...new Set([...tm[1].matchAll(/(\d+)@/g)].map((x) => Number(x[1])))].sort((a, b) => a - b) : [Math.floor(f + 0.5)];
+        const ok = hz.length >= pw.tones;
+        const say = ok ? t('Buzzer played {n} different notes', { n: hz.length }) : t('Buzzer played {n} different notes, should be at least {want}', { n: hz.length, want: pw.tones });
+        res.push({ ok, text: `GPIO${pw.pin} played ${hz.length} different tones: ${hz.map((x) => `${x} Hz`).join(', ')} (need ≥ ${pw.tones})`, say, tag: `GPIO${pw.pin}`, dev: name });
       }
       for (const b of pw.beeps ?? []) {
         // Beeps: times duty goes from 0 (or no output) to > 0 inside the window (buzzer rhythm, "faster when closer")

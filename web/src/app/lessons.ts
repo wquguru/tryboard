@@ -2,6 +2,7 @@
 // Text is English through t() (zh / ja / ko in i18n lab.ts); code lines point at the checkpoint's reference source.
 import { t } from '../i18n/index.ts';
 import { LED_VF, ledAmps, ohmText, type LedColor } from '../bench3d/ledparams.ts';
+import { L6 } from './lessondata/l6.ts';
 
 /** A bench thing a callout points at: same shape as PickTarget (part / pin / wire / button + id). */
 export interface LessonTarget {
@@ -83,6 +84,15 @@ export interface LessonI2c {
   /** 1-based line in `Lesson.src` that sends the bytes. */
   line: number;
 }
+/** H-16: a PWM pin whose pitch the feed narrates (one row per note start; silent gaps add no row). */
+export interface LessonTone {
+  pin: number;
+  /** Row text with {hz} = frequency and {note} = `notes[hz]` (empty when unnamed), e.g. "Buzzer plays {note}". */
+  text: string;
+  notes?: Record<number, string>;
+  /** 1-based line in `Lesson.src` that sets the pitch. */
+  line: number;
+}
 /** H-14 "Code explained": one line of `Lesson.src` in plain words. */
 export interface LessonCodeNote {
   line: number;
@@ -121,6 +131,8 @@ export interface Lesson {
   events?: LessonEvent[];
   /** I2C writes the feed narrates (H-08). */
   i2c?: LessonI2c[];
+  /** PWM pitch changes the feed narrates (H-16 buzzer). */
+  tones?: LessonTone[];
   steps: LessonStep[];
   /** H-04 "Show current": the loop drawn while `pin` is high (bench wire / part / pin ids, in current order). */
   circuit?: { pin: number; path: string[] };
@@ -491,6 +503,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
+  L6,
 ];
 
 /** The lesson for this work's checkpoint, if one is written. */

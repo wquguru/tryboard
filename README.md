@@ -59,7 +59,7 @@ Every conclusion carries a trust label:
 | Wi-Fi (open, WPA2-PSK, HTTP) | ✅ | ✅ | init only |
 | BLE peripheral (NimBLE) + virtual phone | ◐ behavioural | — | — |
 
-Full matrix with acceptance evidence: **[docs/STATUS.md](docs/STATUS.md)**. <!-- stats:accept -->237<!-- /stats --> acceptance cases, <!-- stats:examples -->72<!-- /stats --> examples and a
+Full matrix with acceptance evidence: **[docs/STATUS.md](docs/STATUS.md)**. <!-- stats:accept -->238<!-- /stats --> acceptance cases, <!-- stats:examples -->72<!-- /stats --> examples and a
 7-level learning path run on every batch (`tools/accept.sh`).
 
 ## Quick start

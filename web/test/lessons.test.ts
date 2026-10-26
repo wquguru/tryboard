@@ -7,6 +7,7 @@ import { lessonWires, partId, sceneView, wiresOf } from '../src/app/wiring.ts';
 import { LED_VF, ledAmps } from '../src/bench3d/ledparams.ts';
 import { hitText, matchTask, parseDone, taskTarget } from '../src/app/lessontasks.ts';
 import type { SceneSpec } from '../src/bench3d/spec.ts';
+import { WORKS } from '../src/app/works.ts';
 import zh from '../src/i18n/zh/index.ts';
 import ja from '../src/i18n/ja/index.ts';
 import ko from '../src/i18n/ko/index.ts';
@@ -165,7 +166,9 @@ test('H-05 demo beats point at wires the bench draws', () => {
 /** H-09: each work's bench scene (examples.json via the work's example id in works.ts). */
 const examples = JSON.parse(readFileSync(new URL('firmware/examples.json', root), 'utf8')) as { id: string; scene?: SceneSpec }[];
 const worksSrc = readFileSync(new URL('web/src/app/works.ts', root), 'utf8');
-const sceneOf = (work: string) => {
+const sceneOf = (work: string): SceneSpec => {
+  // H-16: a work's own scene (WorkDef.scene) wins over its example's, as in session.ts benchInit
+  if (WORKS[work]?.scene) return WORKS[work].scene;
   const ex = new RegExp(`\\b${work}: \\{ id: '${work}',[^\\n]*?example: '([^']+)'`).exec(worksSrc)?.[1];
   return examples.find((e) => e.id === ex)?.scene ?? { parts: [] };
 };

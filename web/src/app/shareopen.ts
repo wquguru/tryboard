@@ -178,7 +178,7 @@ export async function captureBench(ctx: StepCtx, ownRun = false) {
     fwBuf: session.fwBuf,
     chip: session.chip as ShareChip,
     scene: session.scene,
-    defaultScene: ctx.custom ? null : (ex?.scene ?? { parts: [] }),
+    defaultScene: ctx.custom ? null : (work.scene ?? ex?.scene ?? { parts: [] }),
     ext5v: !!session.power?.ext5v,
     mods: session.wireMods,
     harness: loadCaseHarness(work.id),

@@ -64,7 +64,7 @@ def canonical_report(err: str) -> str:
     usb = [l for l in lines if re.match(r'\[tryboard\] USB (host: |keyboard typed: )', l)]
     # Acks per address (only with --i2c-log, U-17), same text as wasm tb_i2c_report; old and new spellings
     ack = [l for l in lines if re.match(r'\[tryboard\] I2C 0x[0-9a-f]{2} acked \d+ times$', l)]
-    pwm = [l for l in lines if re.match(r'\[tryboard\] PWM GPIO\d+(:| steps)', l)]
+    pwm = [l for l in lines if re.match(r'\[tryboard\] PWM GPIO\d+(:| steps| tones)', l)]
     return ''.join(l + '\n' for l in gpio + ws + oled + lcd + usb + ack + pwm)
 
 
@@ -113,13 +113,14 @@ def evaluate(t: dict, out: str, report: str):
                 win = before[-1:] + win
                 lo, hi = min(win), max(win)
             tol = pw.get('tol', 0.01)
-            ok = abs(f - pw['freq']) <= pw['freq'] * 0.01 and abs(lo - pw['min']) <= tol and abs(hi - pw['max']) <= tol
+            # A melody (tones) changes pitch on purpose: the tones row judges it, not the note playing at the end
+            f_bad = 'tones' not in pw and abs(f - pw['freq']) > pw['freq'] * 0.01
+            ok = not f_bad and abs(lo - pw['min']) <= tol and abs(hi - pw['max']) <= tol
             # Numbers formatted the JS way (1.0 -> 1) so text matches the web / npm package byte for byte
             when = f", after {jsnum(pw['from'])} s" if 'from' in pw else ''
             # Pulse width first (what a servo cares about); on failure state the target directly
             span = lambda a, b: a if a == b else f"{a}–{b}"
             ms = lambda d, hz: f"{d * 1000 / hz:.2f}"
-            f_bad = abs(f - pw['freq']) > pw['freq'] * 0.01
             want = '' if ok else f"; need {span(ms(pw['min'], pw['freq']), ms(pw['max'], pw['freq']))} ms" + (f", {jsnum(pw['freq'])} Hz" if f_bad else '')
             res.append((ok, f"GPIO{pw['pin']} PWM {f:.0f} Hz{when}, pulse {span(ms(lo, f), ms(hi, f))} ms (duty {span(f'{lo:.3f}', f'{hi:.3f}')}){want}"))
             if 'steps' in pw:
@@ -134,6 +135,10 @@ def evaluate(t: dict, out: str, report: str):
                         i = j + 1
                 ms = lambda d: f'{d * 1000 / pw["freq"]:.1f}'
                 res.append((not miss, f"pulse widths in order {' → '.join(ms(d) for d in pw['steps'])} ms" + (f": missing {', '.join(ms(d) for d in miss)} ms" if miss else '')))
+            if 'tones' in pw:
+                tm = re.search(rf"PWM GPIO{pw['pin']} tones (.*)", report)
+                hz = sorted({int(x) for x in re.findall(r'(\d+)@', tm.group(1))}) if tm else [int(f + 0.5)]
+                res.append((len(hz) >= pw['tones'], f"GPIO{pw['pin']} played {len(hz)} different tones: {', '.join(f'{x} Hz' for x in hz)} (need ≥ {pw['tones']})"))
             for b in pw.get('beeps', []):
                 # Beeps: times duty goes from 0 (or no output) to > 0 inside the window (buzzer rhythm, "faster when closer")
                 n, prev = 0, 0.0
