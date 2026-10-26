@@ -320,9 +320,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       // H-10: every caller (3D button, toolbar, pin card, keyboard) lands here, so the lesson counts presses once
       if (down) lessonSignal('press:boot');
     },
-    pressPin(pin, down) {
-      s.sim?.pressPin(pin, down);
-    },
+    pressPin: (pin, down) => s.sim?.pressPin(pin, down),
     // Example preset knob position (analog.value in examples.json controls).
     micSource: ex?.mic ?? 'sine1k.wav',
     setMicSource: (src) => (setMic ??= micSwitcher(s, ex?.mic ?? 'sine1k.wav'))(src),
@@ -615,6 +613,22 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     if (s.scene.parts.some((p) => p.type === 'inmp441')) micReady = preloadMic(sim, s.micSource, ex?.mic ?? 'sine1k.wav');
     return sim;
   }
+  bindBenchInputs(bench, s, potMax);
+
+  if (ex) {
+    const buf = await fetchBuf(`./fw/${ex.id}/flash.bin`);
+    s.fwBuf = buf;
+    s.fwSize = buf.byteLength;
+    s.chip = imageChip(buf);
+    bench.setPowered(true);
+    s.sim = makeSim(buf);
+    s.sim.start();
+  } else bench.setPowered(false);
+  return s;
+}
+
+/** Bench gestures (keys, encoder, pot, distance, pose, touch, board buttons) → session inputs. */
+function bindBenchInputs(bench: Awaited<ReturnType<typeof createBench>>, s: Session, potMax: (pin: number) => number) {
   bench.onKey((pin, down) => s.pressPin(pin, down));
   bench.onBoardButton((pin, down) => s.sim?.pressBoardPin(pin, down));
   // Dragging/scrolling the encoder or moving the obstacle feeds the sim (input log).
@@ -650,15 +664,4 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       else s.pwrKey(performance.now() - pwrDown >= 1000);
     }
   });
-
-  if (ex) {
-    const buf = await fetchBuf(`./fw/${ex.id}/flash.bin`);
-    s.fwBuf = buf;
-    s.fwSize = buf.byteLength;
-    s.chip = imageChip(buf);
-    bench.setPowered(true);
-    s.sim = makeSim(buf);
-    s.sim.start();
-  } else bench.setPowered(false);
-  return s;
 }
