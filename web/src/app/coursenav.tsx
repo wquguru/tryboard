@@ -53,36 +53,52 @@ export function CourseHead() {
   const prev = courseStep(entry.no, -1);
   const next = courseStep(entry.no, 1);
   const done = cards.filter((c) => c.state === "done").length;
+  const prevLabel = prev ? t("‹ Lesson {n}", { n: prev.no }) : t("‹ Previous lesson");
+  const nextLabel = next ? t("Lesson {n} ›", { n: next.no }) : t("Next lesson ›");
   return (
     <>
-      <span className="flex min-w-0 items-center gap-2 text-[14px]">
-        <span className="flex-none text-muted max-[1300px]:hidden">{t("Basics course")}</span>
-        <span className="flex-none text-muted max-[1300px]:hidden">/</span>
-        <b className="truncate">{t("Lesson {n} / {total} · {title}", { n: entry.no, total: COURSE.length, title: l.title })}</b>
+      {/* Title over the 12-lesson bar so neither squeezes the other out of a crowded top bar */}
+      <span className="flex min-w-0 flex-1 flex-col gap-1 text-[14px] leading-5">
+        <span className="truncate">
+          <span className="text-muted max-[2200px]:hidden">{t("Basics course")} / </span>
+          <b>{t("Lesson {n} / {total} · {title}", { n: entry.no, total: COURSE.length, title: l.title })}</b>
+        </span>
+        <span id="courseBar" className="flex gap-[3px]" role="img" data-done={done} aria-label={t("{n} of {total} lessons done", { n: done, total: COURSE.length })}>
+          {cards.map((c) => (
+            <span
+              key={c.entry.no}
+              data-course-dot={c.entry.no}
+              data-state={c.entry === entry ? "now" : c.state}
+              className={cn("h-1 w-3 rounded-[2px]", c.state === "done" ? "bg-ok" : c.entry === entry ? "bg-accent-strong" : "bg-line")}
+            />
+          ))}
+        </span>
       </span>
-      <span id="courseBar" className="flex flex-none gap-[3px]" role="img" data-done={done} aria-label={t("{n} of {total} lessons done", { n: done, total: COURSE.length })}>
-        {cards.map((c) => (
-          <span
-            key={c.entry.no}
-            data-course-dot={c.entry.no}
-            data-state={c.entry === entry ? "now" : c.state}
-            className={cn("h-1.5 w-3.5 rounded-[3px]", c.state === "done" ? "bg-ok" : c.entry === entry ? "bg-accent-strong" : "bg-line")}
-          />
-        ))}
-      </span>
-      <button type="button" id="coursePrev" data-course={prev?.no} disabled={!prev} onClick={() => prev && goLesson(prev)} className={cn(navBtn, "border-line bg-surface text-fg hover:bg-field")}>
-        {prev ? t("‹ Lesson {n}", { n: prev.no }) : t("‹ Previous lesson")}
+      <button
+        type="button"
+        id="coursePrev"
+        data-course={prev?.no}
+        disabled={!prev}
+        aria-label={prevLabel}
+        title={prevLabel}
+        onClick={() => prev && goLesson(prev)}
+        className={cn(navBtn, "border-line bg-surface text-fg hover:bg-field")}
+      >
+        <Icon n="left" size={14} />
+        <span className="max-[2000px]:hidden">{prevLabel.replace(/^‹\s*/, "")}</span>
       </button>
       <button
         type="button"
         id="courseNext"
         data-course={next?.no}
         disabled={!next}
-        title={next ? undefined : t("The next lessons are still being written")}
+        aria-label={nextLabel}
+        title={next ? nextLabel : t("The next lessons are still being written")}
         onClick={() => next && goLesson(next)}
         className={cn(navBtn, "border-accent-strong bg-accent-bg font-medium text-accent-ink")}
       >
-        {next ? t("Lesson {n} ›", { n: next.no }) : t("Next lesson ›")}
+        <span className="max-[2000px]:hidden">{nextLabel.replace(/\s*›$/, "")}</span>
+        <Icon n="right" size={14} />
       </button>
     </>
   );

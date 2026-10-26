@@ -147,10 +147,10 @@ export function LessonCard({ step }: { step: string }) {
   const cur = l.steps[Math.min(s.step, n - 1)];
   return (
     <section id="lessonCard" aria-label={t("Lesson step")} data-step={done ? "done" : s.step} className="-mx-4 mb-3 flex flex-col gap-3 border-b border-line bg-surface px-4 pt-3 pb-4">
+      {/* Finished: the done panel and the next lesson come first, the info tabs stay below */}
+      {done && <CourseDone />}
       <LessonInfo />
-      {done ? (
-        <CourseDone />
-      ) : (
+      {done ? null : (
         <>
           <div className="flex flex-col gap-1.5">
             <span className="text-[11px] font-medium text-muted">{t("Step {n} of {total}", { n: s.step + 1, total: n })}</span>
