@@ -50,6 +50,8 @@ export interface BenchCtx extends BenchState {
   // select.ts(x)
   select: (sel: Selection | null) => void;
   benchWires: () => BenchWire[];
+  /** The wires the left column lists: a lesson's part set only (H-16), else all of benchWires. */
+  shownWires: () => BenchWire[];
   // wiringcheck.ts(x)
   recheckWiring: () => void;
   // left.ts(x)
@@ -136,6 +138,8 @@ export interface BenchCtx extends BenchState {
   lessonCard: (id: string | null, l: Level | undefined) => ReactNode | null;
   /** H-08: the checkpoint last picked (tree / link); its lesson shows instead of the first unpassed one's. */
   lessonPin?: string;
+  /** H-16: Lesson.parts while a lesson is up (the tree lists only what the bench draws); null = the whole scene. */
+  lessonKeep?: readonly string[] | null;
   // flow.tsx (H-04)
   flowTools: () => Tool[];
   toggleFlow: () => void;

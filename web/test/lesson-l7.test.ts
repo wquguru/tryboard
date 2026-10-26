@@ -79,3 +79,8 @@ test('code lines and numbers match the firmware and checkpoint 05', () => {
   assert.ok(L7.params!.some((p) => p.source === 'typical'));
   assert.ok(L7.params!.some((p) => p.source === 'estimate'));
 });
+
+test('feed servo rows sit on the servo pin and the ledc_set_duty line', () => {
+  assert.deepEqual(L7.servo!.map((r) => r.pin), [4]);
+  for (const r of L7.servo!) assert.ok(src[r.line - 1].includes('ledc_set_duty'), `line ${r.line}`);
+});

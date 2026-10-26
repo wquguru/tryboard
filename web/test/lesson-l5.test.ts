@@ -61,3 +61,12 @@ test('the run step ticks on the strip signal for all LEDs of the checkpoint', ()
   assert.equal(parseDone('strip:5=0'), null);
   assert.match(hitText(task.done, { v: '8' }), /8/);
 });
+
+test('the feed counts lit LEDs off the rmt_transmit line, and the tweak step ticks on the USB port', () => {
+  assert.deepEqual(l.strip!.map((r) => r.pin), [levels.find((x) => x.id === 'lamp-1')!.ws2812!.pin]);
+  for (const r of l.strip!) assert.ok(src[r.line - 1].includes('rmt_transmit'), `line ${r.line}`);
+  const tweak = l.steps.find((s) => s.id === 'tweak')!;
+  const usb = tweak.tasks.find((x) => x.done === 'select:board@usb')!;
+  assert.ok(matchTask(usb.done, 'select:board@usb', { boots: 0 }));
+  assert.ok(tweak.callouts.some((c) => c.key === 'usb'));
+});

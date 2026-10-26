@@ -1153,5 +1153,13 @@ const d: Dict = {
   "What to buy, lesson by lesson": "강의별 구매 목록",
   "Full parts list with prices (Shop step)": "가격이 있는 전체 부품 목록 ('구매' 단계)",
   "OLED screen": "OLED 화면",
+  "This lesson runs no code, so nothing shows up here. Click the parts on the bench instead.": "이 레슨은 코드를 실행하지 않아서 여기에는 아무것도 나오지 않습니다. 작업대의 부품을 클릭해 보세요.",
+  "GPIO{pin} → {us} µs pulse": "GPIO{pin} → {us} µs 펄스",
+  "GPIO{pin} → frame for {of} LEDs": "GPIO{pin} → LED {of}개용 프레임",
+  "GPIO{pin} ← {v} V into the ADC": "GPIO{pin} ← {v} V가 ADC로",
+  "LEDs lit: {n} of {of}": "켜진 LED: {n} / {of}개",
+  "Find where the strip's 5 V comes from": "스트립의 5 V가 어디서 오는지 찾기",
+  "Arm turns to {deg}°": "암이 {deg}°로 회전",
+  "Knob reads {raw} of 4095": "노브 읽음값 {raw} (최대 4095)",
 };
 export default d;

@@ -1153,5 +1153,13 @@ const d: Dict = {
   "What to buy, lesson by lesson": "分课采购清单",
   "Full parts list with prices (Shop step)": "带价格的完整零件清单（「采购」一步）",
   "OLED screen": "OLED 屏",
+  "This lesson runs no code, so nothing shows up here. Click the parts on the bench instead.": "这一课不跑代码，这里不会有动静。去点台面上的零件吧。",
+  "GPIO{pin} → {us} µs pulse": "GPIO{pin} → {us} µs 脉冲",
+  "GPIO{pin} → frame for {of} LEDs": "GPIO{pin} → 发给 {of} 颗灯的一帧",
+  "GPIO{pin} ← {v} V into the ADC": "GPIO{pin} ← {v} V 进 ADC",
+  "LEDs lit: {n} of {of}": "亮灯：{n} / {of} 颗",
+  "Find where the strip's 5 V comes from": "找到灯带的 5 V 从哪来",
+  "Arm turns to {deg}°": "舵机臂转到 {deg}°",
+  "Knob reads {raw} of 4095": "旋钮读数 {raw}（满量程 4095）",
 };
 export default d;

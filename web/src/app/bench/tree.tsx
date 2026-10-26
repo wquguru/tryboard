@@ -3,7 +3,7 @@
 import { t } from "../../i18n";
 import { openFwMenu } from "../fwmenu";
 import { type ReactNode } from "react";
-import { partId, partInfo, usedPins } from "../wiring";
+import { partId, partInfo, sceneView, usedPins } from "../wiring";
 import { faultByWire } from "../wirecheck";
 import { BOARD_NAME, CHIP_SHORT } from "../../chips";
 import { boardDevs } from "../../bench3d/boarddevs";
@@ -27,8 +27,10 @@ export function mountTree(b: BenchCtx) {
     const c = b.ctx!;
     const s = c.store.get();
     const ses = c.session;
-    const parts = ses.scene.parts;
-    const wires = b.benchWires();
+    // A lesson up: only the parts and wires its bench draws (lesson 0 is the board alone)
+    const keep = b.lessonKeep ?? null;
+    const parts = sceneView(ses.scene, keep).parts;
+    const wires = b.shownWires();
     const byWire = faultByWire(b.faults);
     const item = (
       sel: Selection,
@@ -243,7 +245,7 @@ export function mountTree(b: BenchCtx) {
       "empty",
       // Hidden while placing: the guide card would cover the board pins.
       // An all-in-one board already carries its screen and sensors, so no "only a dev board" hint
-      parts.length || b.placing || ses.scene.board ? null : (
+      keep || ses.scene.parts.length || b.placing || ses.scene.board ? null : (
         <EmptyBench
           hasFw={!!ses.fwName}
           onFirmware={openFwMenu}

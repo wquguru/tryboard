@@ -101,6 +101,7 @@ export function mountPointer(ctx: BenchCtx): void {
   };
   const turnPot = (pot: (typeof ctx.pots)[number], v: number) => {
     pot.v = Math.min(1, Math.max(0, v));
+    ctx.potV.set(pot.pin, pot.v);
     pot.knob.rotation.y = -(pot.v - 0.5) * 1.5 * Math.PI;
   };
   ctx.turnPot = turnPot;

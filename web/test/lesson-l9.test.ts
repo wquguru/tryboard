@@ -74,3 +74,8 @@ test('the run step ticks on the ADC reading at both ends, matching the firmware 
   assert.ok(hitText(hi.done, { v: '3778' }).includes('3778'));
   assert.ok(ex.controls?.some((c) => c.type === 'analog' && c.pin === 4));
 });
+
+test('feed ADC rows sit on the pot pin and the adc_oneshot_read line', () => {
+  assert.deepEqual(l.adc!.map((r) => r.pin), [ex.controls!.find((c) => c.type === 'analog')!.pin]);
+  for (const r of l.adc!) assert.ok(src[r.line - 1].includes('adc_oneshot_read'), `line ${r.line}`);
+});

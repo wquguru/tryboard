@@ -212,6 +212,7 @@ export function* mountState(ctx: BenchCtx): Generator<void> {
   ctx.leds = [];
   ctx.servos = [];
   ctx.pots = [];
+  ctx.potV = new Map();
   ctx.buzzers = [];
   ctx.keys = [];
   ctx.speakers = [];

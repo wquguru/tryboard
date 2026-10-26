@@ -6,7 +6,7 @@ import { t } from "../i18n";
 import { cn } from "../ui/cn";
 import { useStore } from "./react";
 import { lessonUi } from "./lesson";
-import { evWhere, fmtSec, lessonFeed, useLessonCode } from "./lessonfeed";
+import { evWhere, noFwFeed, fmtSec, lessonFeed, useLessonCode, useNoFwLesson } from "./lessonfeed";
 import { LessonInfo, useSrcLines } from "./lessoninfo";
 import { Icon } from "./icons";
 import { StepDoneBar, TaskList, useStepReady } from "./lessontasklist";
@@ -41,10 +41,11 @@ function CodeSnip() {
 /** The two latest "What happened" rows, newest first. */
 function LastEvents() {
   const { items } = useStore(lessonFeed);
+  const noFw = useNoFwLesson();
   const last = items.slice(-2).reverse();
   return (
     <div id="lessonLast" role="log" aria-label={t("What happened")} data-count={items.length} className="flex flex-none flex-col gap-0.5 text-[12px]">
-      {!last.length && <p className="m-0 text-muted">{t("Nothing yet: pin changes show up here once the code runs.")}</p>}
+      {!last.length && <p className="m-0 text-muted">{noFw ? noFwFeed() : t("Nothing yet: pin changes show up here once the code runs.")}</p>}
       {last.map((e) => (
         <div key={e.n} data-ev={e.n} data-t={e.t} className="flex min-w-0 gap-2.5 leading-5">
           <span className="min-w-[52px] flex-none font-mono whitespace-nowrap text-muted tabular-nums">{fmtSec(e.t)}</span>

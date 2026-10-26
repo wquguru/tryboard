@@ -236,8 +236,9 @@ export function mountBuildersA(ctx: BenchCtx): void {
       addRole(apiId(pin), role);
     }
     label(grp, tl(p.label) ?? t('Potentiometer · wiper on IO{pin} (ADC) · drag the knob', { pin: p.pin }), new THREE.Vector3(colX(col), 36, rowZ(9) + 6));
-    ctx.pots.push({ pin: p.pin, knob: m.knob, hit: m.hit, v: 0.36 });
-    m.knob.rotation.y = -(0.36 - 0.5) * 1.5 * Math.PI;
+    const v = ctx.potV.get(p.pin) ?? 0.36;
+    ctx.pots.push({ pin: p.pin, knob: m.knob, hit: m.hit, v });
+    m.knob.rotation.y = -(v - 0.5) * 1.5 * Math.PI;
   }
 
   function buildKey(grp: THREE.Group, p: Extract<PartSpec, { type: 'key' }>, col: number) {

@@ -27,6 +27,7 @@ export const L9: Lesson = {
   parts: ['pot', 'led:5'],
   fw: 's3-pot',
   src: 'firmware/pot/main/main.c',
+  adc: [{ pin: 4, text: t('Knob reads {raw} of 4095'), line: 37 }],
   wireNotes: {
     'wire:3V3~pot:VCC': { to: t('Potentiometer end pin 1'), why: t('One end of the resistor track sits at 3.3 V') },
     'wire:GPIO4~pot:OUT': { to: t('Potentiometer middle pin (wiper)'), why: t('The wiper voltage, anywhere from 0 to 3.3 V, goes to the ADC') },
