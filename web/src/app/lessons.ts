@@ -5,6 +5,7 @@ import { LED_VF, ledAmps, ohmText, type LedColor } from '../bench3d/ledparams.ts
 import { L7 } from './lessondata/l7.ts';
 import { L5 } from './lessondata/l5.ts';
 import { LESSON_0 } from './lessondata/l0.ts';
+import { L9 } from './lessondata/l9.ts';
 
 /** A bench thing a callout points at: same shape as PickTarget (part / pin / wire / button + id). */
 export interface LessonTarget {
@@ -497,6 +498,7 @@ export const LESSONS: Lesson[] = [
   L7,
   L5,
   LESSON_0,
+  L9,
 ];
 
 /** The lesson for this work's checkpoint, if one is written. */

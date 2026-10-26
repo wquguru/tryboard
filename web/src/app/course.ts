@@ -33,7 +33,7 @@ export const COURSE: CourseEntry[] = [
   { no: 6, title: t('Make a sound'), part: t('Passive buzzer'), tag: 'BUZ', color: '#5E646C', work: 'basics', cp: 'basics-buzz', bench: t('Dev board + breadboard + passive buzzer') },
   { no: 7, title: t('Turn a servo'), part: t('SG90 servo'), tag: 'SERVO', color: '#2B6CB0', work: 'weather', cp: '05', bench: t('Dev board + breadboard + SG90 servo') },
   { no: 8, title: t('Read temperature and humidity'), part: 'BME280', tag: 'BME', color: '#17805A', work: 'weather', cp: '04', bench: t('Dev board + breadboard + BME280') },
-  { no: 9, title: t('Turn a knob'), part: t('Potentiometer · ADC'), tag: 'ADC', color: '#B5651B', work: 'lamp', cp: 'lamp-2', bench: t('Dev board + LED strip + potentiometer') },
+  { no: 9, title: t('Turn a knob'), part: t('Potentiometer · ADC'), tag: 'ADC', color: '#B5651B', work: 'adc', bench: t('Dev board + breadboard + LED + potentiometer') },
   { no: 10, title: t('Build a USB keyboard'), part: 'USB HID', tag: 'USB', color: '#1E2227', work: 'usbkey', cp: 'usbkey-1', bench: t('Dev board + keys, USB to a virtual PC') },
   { no: 11, title: t('Capstone: desk weather station'), part: t('Everything so far'), tag: 'ALL', color: '#146B4B', work: 'weather', cp: '06', bench: t('Every part of the weather station') },
 ];

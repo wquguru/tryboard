@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { LESSONS, ledParamValue, lessonFor } from '../src/app/lessons.ts';
+import { WORKS } from '../src/app/works.ts';
 import { lessonWires, partId, sceneView, wiresOf } from '../src/app/wiring.ts';
 import { LED_VF, ledAmps } from '../src/bench3d/ledparams.ts';
 import { hitText, matchTask, parseDone, taskTarget } from '../src/app/lessontasks.ts';
@@ -97,7 +98,9 @@ test('lesson firmware is the checkpoint reference build', () => {
   for (const l of LESSONS) {
     if (!l.fw) continue; // lesson 0 runs no firmware (H-16)
     const lv = levels.find((x) => x.id === l.checkpoint);
-    assert.equal(l.fw, lv?.ref, `${l.work}/${l.checkpoint}`);
+    // A lesson without a checkpoint (lesson-<no>, H-16 lesson 9) runs its course-only work's example instead
+    const ref = /^lesson-\d+$/.test(l.checkpoint) ? WORKS[l.work].example : lv?.ref;
+    assert.equal(l.fw, ref, `${l.work}/${l.checkpoint}`);
     const cmake = readFileSync(new URL(`firmware/${l.fw}/main/CMakeLists.txt`, root), 'utf8');
     const own = `firmware/${l.fw}/main/`;
     assert.ok(l.src.startsWith(own) || cmake.includes(l.src.replace(/^firmware\//, '../../')), `${l.fw} builds ${l.src}`);

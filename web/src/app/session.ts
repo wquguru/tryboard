@@ -18,7 +18,7 @@ import type { Store } from './store';
 import { currentTheme, onTheme } from '../theme';
 import { IoStore, decodeEvents } from './iotrace';
 import { taskStore } from './tasktrace';
-import { lessonSignal, stripSignals } from './lessontasks';
+import { adcSignals, lessonSignal, stripSignals } from './lessontasks';
 import type { UsbView } from '../usb3d';
 import { bleFeed } from './blefeed';
 import { irFeed } from './irfeed';
@@ -108,6 +108,8 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   // One buzzer audio per page (muted by default), shared by bench and product.
   const audio = new BuzzerAudio();
 
+  // Full-scale wiper voltage of an analog control (examples.json max_mv; a bare pot spans the 3V3 rail)
+  const potMax = (pin: number) => (ex?.controls ?? []).flatMap((c) => (typeof c === 'object' && c.type === 'analog' && c.pin === pin ? [c.max_mv] : []))[0] ?? 3300;
   // ADC panel pins: knobs the user has touched plus every pot wiper on the bench
   const adcPins = () => [...new Set([...s.analog.keys(), ...s.scene.parts.flatMap((p) => (p.type === 'pot' ? [p.pin] : []))])];
   const buzzerPins = scene.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : []));
@@ -326,6 +328,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     analog: new Map((ex?.controls ?? []).flatMap((c) => (typeof c === 'object' && c.type === 'analog' ? [[c.pin, c.value] as [number, number]] : []))),
     setAnalog(pin, mv) {
       const fresh = !s.analog.has(pin);
+      bench.setPot(pin, mv / potMax(pin));
       s.analog.set(pin, mv);
       s.sim?.analog(pin, mv);
       if (fresh) s.sim?.watchAdc(adcPins());
@@ -560,6 +563,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
           for (const [pin, leds] of Object.entries(m.strips)) bench.setStrip(Number(pin), leds);
           stripSignals(m.strips, s.fwName);
         }
+        if (m.adc) adcSignals(m.adc, s.fwName);
         if (m.elec) {
           s.frame.elec = m.elec;
           // Servo angle uses second-order dynamics (visual only; firmware cannot read it).
@@ -606,6 +610,18 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   bench.onBoardButton((pin, down) => s.sim?.pressBoardPin(pin, down));
   // Dragging/scrolling the encoder or moving the obstacle feeds the sim (input log).
   bench.onEncoder((steps) => s.turnEncoder(steps));
+  // Dragging the 3D pot sets the wiper voltage; the panel slider (if open) follows, and the knob starts at the preset
+  bench.onPot((pin, v) => {
+    const mv = Math.round(Math.min(1, Math.max(0, v)) * potMax(pin));
+    s.setAnalog(pin, mv);
+    if (typeof document === 'undefined') return;
+    for (const el of document.querySelectorAll<HTMLInputElement>(`input[data-analog="${pin}"]`)) {
+      el.value = String(mv);
+      const out = el.parentElement?.querySelector('output');
+      if (out) out.textContent = `${mv} mV`;
+    }
+  });
+  for (const [pin, mv] of s.analog) bench.setPot(pin, mv / potMax(pin));
   bench.onEncoderPress((down) => s.pressEncoder(down));
   bench.onDistance((cm) => {
     if (cm === s.distance) return;

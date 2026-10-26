@@ -13,7 +13,8 @@ export type DoneSpec =
   | { kind: 'prop'; part: string; key: string; v: string }
   | { kind: 'chip'; key: 'delay'; v: number }
   | { kind: 'press'; what: 'boot'; n: number }
-  | { kind: 'strip'; pin: number; n: number };
+  | { kind: 'strip'; pin: number; n: number }
+  | { kind: 'adc'; pin: number; op: '<' | '>'; n: number };
 
 /** What was detected; raw values only, the words are made at render time in the current locale. */
 export interface Hit {
@@ -21,7 +22,7 @@ export interface Hit {
   from?: string;
 }
 
-/** `run` / `reveal` / `view:current` / `select:<id>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` / `press:boot×<n>` / `strip:<pin>=<n lit>`; null = malformed. */
+/** `run` / `reveal` / `view:current` / `select:<id>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` / `press:boot×<n>` / `strip:<pin>=<n lit>` / `adc:<pin><raw` or `>raw`; null = malformed. */
 export function parseDone(d: string): DoneSpec | null {
   if (d === 'run' || d === 'reveal') return { kind: d };
   if (d === 'view:current') return { kind: 'view', what: 'current' };
@@ -36,10 +37,12 @@ export function parseDone(d: string): DoneSpec | null {
   if (m && Number(m[1]) >= 1) return { kind: 'press', what: 'boot', n: Number(m[1]) };
   m = /^strip:(\d+)=(\d+)$/.exec(d);
   if (m && Number(m[2]) >= 1) return { kind: 'strip', pin: Number(m[1]), n: Number(m[2]) };
+  m = /^adc:(\d+)([<>])(\d+)$/.exec(d);
+  if (m) return { kind: 'adc', pin: Number(m[1]), op: m[2] as '<' | '>', n: Number(m[3]) };
   return null;
 }
 
-/** Signals: 'run', 'press:boot', 'chip:delay=<ms>' (+ from), 'view:current', 'select:<id>', 'prop:<part>.<key>=<v>', 'strip:<pin>=<lit>'. */
+/** Signals: 'run', 'press:boot', 'chip:delay=<ms>' (+ from), 'view:current', 'select:<id>', 'prop:<part>.<key>=<v>', 'strip:<pin>=<lit>', 'adc:<pin>=<raw>'. */
 export interface SigCtx {
   /** BOOT presses (down edges) since this step came up, this one included. */
   boots: number;
@@ -71,6 +74,13 @@ export function matchTask(done: string, sig: string, ctx: SigCtx): Hit | null {
       const m = /^strip:(\d+)=(\d+)$/.exec(sig);
       return m && Number(m[1]) === d.pin && Number(m[2]) >= d.n ? { v: m[2] } : null;
     }
+    case 'adc': {
+      // The raw code the firmware last read on that pin, past the threshold
+      const m = /^adc:(\d+)=(\d+)$/.exec(sig);
+      if (!m || Number(m[1]) !== d.pin) return null;
+      const raw = Number(m[2]);
+      return (d.op === '<' ? raw < d.n : raw > d.n) ? { v: m[2] } : null;
+    }
   }
 }
 
@@ -92,6 +102,7 @@ const PART_NAMES: Record<string, string> = {
   'led:5': t('the LED'),
   oled: t('the OLED screen'),
   ws2812: t('the LED strip'),
+  pot: t('the potentiometer'),
   'board@usb': t('the USB-C port'),
   'board@chip': t('the main chip'),
 };
@@ -110,6 +121,8 @@ export function hitText(done: string, h: Hit): string {
       return t('Detected: BOOT pressed {n} times', { n: h.v ?? d.n });
     case 'strip':
       return t('Detected: {n} LEDs lit on GPIO{pin}', { n: h.v ?? d.n, pin: d.pin });
+    case 'adc':
+      return t('Detected: GPIO{pin} reads {raw}', { pin: d.pin, raw: h.v ?? d.n });
     case 'chip':
       return h.from && h.from !== h.v
         ? t('Detected: delay {from} ms → {to} ms', { from: h.from, to: h.v ?? d.v })
@@ -204,10 +217,21 @@ export function stepReady(s: TaskUi = taskUi.get()): boolean {
   return tasks.length > 0 && tasks.every((_, i) => !!s.hits[i]);
 }
 
-/** WS2812 frames (pin → [r, g, b] per LED) as 'strip:<pin>=<lit>' signals, only while the lesson's own firmware runs. */
-export function stripSignals(strips: Record<number, number[][]>, fwName: string) {
+/** Is `fwName` (session.fwName) the current lesson's own firmware, or one of its code-chip variants? */
+function lessonFwRunning(fwName: string): boolean {
   const l = taskUi.get().lesson;
   const fws = l ? [l.fw, ...l.steps.flatMap((x) => Object.values(x.codeChips?.fw ?? {}))] : [];
-  if (!fws.some((f) => fwName === `${f}/flash.bin`)) return;
+  return fws.some((f) => fwName === `${f}/flash.bin`);
+}
+
+/** WS2812 frames (pin → [r, g, b] per LED) as 'strip:<pin>=<lit>' signals, only while the lesson's own firmware runs. */
+export function stripSignals(strips: Record<number, number[][]>, fwName: string) {
+  if (!lessonFwRunning(fwName)) return;
   for (const [pin, leds] of Object.entries(strips)) lessonSignal(`strip:${pin}=${leds.filter((c) => c.some((v) => v > 0)).length}`);
+}
+
+/** ADC samples the firmware read (worker tick `adc`, pin → raw codes) as 'adc:<pin>=<latest raw>', lesson firmware only. */
+export function adcSignals(adc: Record<number, { raw: number[] }>, fwName: string) {
+  if (!lessonFwRunning(fwName)) return;
+  for (const [pin, a] of Object.entries(adc)) if (a.raw.length) lessonSignal(`adc:${pin}=${a.raw[a.raw.length - 1]}`);
 }

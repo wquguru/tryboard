@@ -1896,3 +1896,10 @@
 - 决定：(1) 板上区域用新的 `PickTarget.spot`（`'usb' | 'chip'`，只在 onPick 时由命中点在板局部坐标里判定），卡片额外发 `select:board@usb` / `select:board@chip`，原 `select:board` 照发，第 1 课「点芯片」不受影响；BOOT 点击会被当成按下，所以「找到 BOOT」用 `press:boot×1`。(2) `taskTarget` 认 3V3 / 5V / GND 引脚和 `@spot`。(3) 入口：left.tsx 在作品没有检查点或 URL 带 `cp=lesson-<no>` 时显示无检查点课的卡；课程地图跳无检查点的课一律整页跳转 `/app?work=…&cp=lesson-<no>`（同作品内没有 selectCheckpoint 可用）。(4) 无固件课：代码讲解页签与代码卡显示「本课不跑代码」，检查点框改成「第 N 课 · 打勾完成」；面包板留在台面上（basics 作品本身的场景，parts: [] 只决定本课接线清单）。(5) 芯片参数放参数页签（数据手册来源），不塞进步骤卡。(6) 已有测试里「第 0 课未写」「每课都有固件 / 接线」的假设按新事实更新（lessons / course / lessonmap 测试、beginner.mjs 地图可开卡 0,1,2,3），没有放宽判定。
 - 理由：最小改动地复用 H-10 任务信号与 H-15 课程层；spot 不改已有锚点和投影。
 - 备选：给 USB 口 / 芯片做独立的 PickTarget kind（牵动 scene-api 所有消费方，没选）；第 0 课单独建一个只有开发板的作品（作品列表多一项且与 basics 进度分开，没选）。
+## 2026-10-26 H-16 第 9 课（电位器 · ADC）改挂作品
+- 发现：课程映射把第 9 课「电位器」挂在 lamp · lamp-2（ref lamp-knob），但 lamp-knob 用的是 EC11 旋转编码器（PCNT，GPIO6/7/15），lamp 台面只有 `ws2812` + `encoder`，没有电位器，固件也不碰 ADC。按派单内容（分压、0–4095、ADC1 / ADC2、衰减）写在 lamp-2 上，callout 和任务都无法对应真实台面与固件。
+- 决定：第 9 课改挂新的课程专用作品 `adc`（`courseOnly`，example `s3-pot`：电位器滑片 GPIO4 = ADC1 通道 3、12 dB 衰减，读数作 GPIO5 LED 的 PWM 占空比），不设检查点（`lessonKey` = `lesson-9`，所有任务打勾即完成，同第 0 课规则）。固件、示例场景与 accept 用例 `s3-pot` 都已存在，不写新固件、不加关卡。lamp-2 / lamp-knob / lamp 作品不动。课程表第 9 课的「台面」文案改为「开发板 + 面包板 + LED + 电位器」。
+- 顺带修复：U-07 迁移（5708df9）后 `bench.onPot` 没人注册，3D 里拖电位器不再改模拟电压；session.ts 重新接上（拖 3D → `setAnalog`，滑块 → `setPot` 同步 3D 旋钮，并回写面板滑块）。
+- 新任务信号 `adc:<pin><N` / `adc:<pin>>N`：worker 每帧已带固件实际读到的 ADC 原始值（`m.adc[pin].raw`，D-02 读数条用的同一份），session 取最新一个发 `adc:<pin>=<raw>`，仅本课固件运行时发（同 `strip:` 的门控）；任务「拧到底：读数 < 100」「拧到顶：读数 > 3500」与固件打印 TRYBOARD_OK 的两端阈值一致。
+- 理由：与 basics 作品同一理由（现有作品里没有对应关）；不并入 basics 是因为 basics 台面来自 s3-blink（只有 LED），第 4 / 6 课在并行改它，换示例会互相冲突。
+- 备选：第 9 课按 lamp-2 改讲旋转编码器（课程内容变成 PCNT，课表里就没有 ADC 了，属课程调整，留给主会话决定）；在 basics 加 `basics-adc` 检查点（要换 basics 台面并加关卡与 4 语言关卡文案，与第 4 / 6 课冲突，没选）。
