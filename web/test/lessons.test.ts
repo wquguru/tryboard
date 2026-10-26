@@ -33,7 +33,7 @@ test('weather lesson 01 has the five designed steps', () => {
   const l = lessonFor('weather', '01');
   assert.ok(l);
   assert.deepEqual(l.steps.map((s) => s.id), ['board', 'parts', 'loop', 'run', 'tweak']);
-  assert.equal(lessonFor('weather', '04'), null);
+  assert.equal(lessonFor('weather', '04')?.no, 8);
   assert.equal(lessonFor('spin', '01'), null);
 });
 

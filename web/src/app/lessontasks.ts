@@ -13,7 +13,10 @@ export type DoneSpec =
   | { kind: 'prop'; part: string; key: string; v: string }
   | { kind: 'chip'; key: 'delay'; v: number }
   | { kind: 'press'; what: 'boot'; n: number }
-  | { kind: 'strip'; pin: number; n: number };
+  | { kind: 'strip'; pin: number; n: number }
+  | { kind: 'env'; key: EnvKey };
+
+export type EnvKey = 'temp' | 'humidity' | 'pressure';
 
 /** What was detected; raw values only, the words are made at render time in the current locale. */
 export interface Hit {
@@ -21,7 +24,7 @@ export interface Hit {
   from?: string;
 }
 
-/** `run` / `reveal` / `view:current` / `select:<id>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` / `press:boot×<n>` / `strip:<pin>=<n lit>`; null = malformed. */
+/** `run` / `reveal` / `view:current` / `select:<id>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` / `press:boot×<n>` / `strip:<pin>=<n lit>` / `env:<key>`; null = malformed. */
 export function parseDone(d: string): DoneSpec | null {
   if (d === 'run' || d === 'reveal') return { kind: d };
   if (d === 'view:current') return { kind: 'view', what: 'current' };
@@ -36,10 +39,12 @@ export function parseDone(d: string): DoneSpec | null {
   if (m && Number(m[1]) >= 1) return { kind: 'press', what: 'boot', n: Number(m[1]) };
   m = /^strip:(\d+)=(\d+)$/.exec(d);
   if (m && Number(m[2]) >= 1) return { kind: 'strip', pin: Number(m[1]), n: Number(m[2]) };
+  m = /^env:(temp|humidity|pressure)$/.exec(d);
+  if (m) return { kind: 'env', key: m[1] as EnvKey };
   return null;
 }
 
-/** Signals: 'run', 'press:boot', 'chip:delay=<ms>' (+ from), 'view:current', 'select:<id>', 'prop:<part>.<key>=<v>', 'strip:<pin>=<lit>'. */
+/** Signals: 'run', 'press:boot', 'chip:delay=<ms>' (+ from), 'view:current', 'select:<id>', 'prop:<part>.<key>=<v>', 'strip:<pin>=<lit>', 'env:<key>=<v>' (+ from). */
 export interface SigCtx {
   /** BOOT presses (down edges) since this step came up, this one included. */
   boots: number;
@@ -71,13 +76,20 @@ export function matchTask(done: string, sig: string, ctx: SigCtx): Hit | null {
       const m = /^strip:(\d+)=(\d+)$/.exec(sig);
       return m && Number(m[1]) === d.pin && Number(m[2]) >= d.n ? { v: m[2] } : null;
     }
+    case 'env': {
+      // Any real change of that environment value (slider gesture, number box, preset)
+      const m = /^env:(\w+)=(.+)$/.exec(sig);
+      return m && m[1] === d.key && m[2] !== ctx.from ? { v: m[2], from: ctx.from } : null;
+    }
   }
 }
 
 /** Where "Take me there" points the camera: select / prop tasks only. */
 export function taskTarget(done: string): LessonTarget | null {
   const d = parseDone(done);
-  const sel = d?.kind === 'select' ? d.id : d?.kind === 'prop' ? d.part : null;
+  // The BME280 quick card holds the temperature and humidity sliders; pressure lives under Environment only
+  const env = d?.kind === 'env' && d.key !== 'pressure' ? 'bme280' : null;
+  const sel = d?.kind === 'select' ? d.id : d?.kind === 'prop' ? d.part : env;
   if (!sel) return null;
   // 'board@usb': a spot on a part (lesson 0); the camera goes to the part, the callout anchor marks the spot
   const [id, spot] = sel.split('@');
@@ -92,6 +104,7 @@ const PART_NAMES: Record<string, string> = {
   'led:5': t('the LED'),
   oled: t('the OLED screen'),
   ws2812: t('the LED strip'),
+  bme280: t('the BME280 sensor'),
   'board@usb': t('the USB-C port'),
   'board@chip': t('the main chip'),
 };
@@ -114,6 +127,11 @@ export function hitText(done: string, h: Hit): string {
       return h.from && h.from !== h.v
         ? t('Detected: delay {from} ms → {to} ms', { from: h.from, to: h.v ?? d.v })
         : t('Detected: delay {to} ms', { to: h.v ?? d.v });
+    case 'env': {
+      const what = { temp: t('temperature'), humidity: t('humidity'), pressure: t('pressure') }[d.key];
+      const u = (v: string) => (d.key === 'temp' ? `${v} °C` : d.key === 'humidity' ? `${v} %` : `${(Number(v) / 100).toFixed(1)} hPa`);
+      return h.from !== undefined && h.v !== undefined ? t('Detected: {what} {from} → {to}', { what, from: u(h.from), to: u(h.v) }) : t('Detected: {what} changed', { what });
+    }
     case 'prop':
       return h.from && h.from !== h.v
         ? t('Detected: {key} {from} → {to}', { key: d.key, from: h.from, to: h.v ?? d.v })
