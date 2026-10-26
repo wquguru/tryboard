@@ -1910,3 +1910,7 @@
 - 决定：(1) COURSE 第 10 课的检查点由 `usbkey-1` 改为 `usbkey-2`（「按键打出字母」）。usbkey-2 的判定是「枚举成 configured + PC 打出 abc」，正好覆盖本课两件事；usbkey-1 只要求枚举，没按键课就算完成。(2) lessontasks 新增 DoneSpec `usb:configured` 与 `usb:typed=<文本>`（PC 收到的累计文本包含该串即命中）；新导出 `usbSignals(view, fwName)`，由 session.ts 的 onUsb 和 bench/lesson.tsx 的 probe 调用，只在当前固件是本课固件时发信号（和 strip 信号同一个 `lessonFw` 门，门里补了「fw 非空」）。(3) 不新增固件，复用 usbkey；台面只留 K1–K3（key:4/5/6），USB 走已有虚拟 PC 面板。
 - 理由：一课对应一个检查点，课完成 = 检查点通过；信号最小，直接取 UsbView 的 configured / typed。
 - 备选：保留 usbkey-1，把打字当课内任务（课完成早于打字，没选）；把 usbkey-1 和 usbkey-2 都挂到第 10 课（COURSE 一课只有一个 cp，没选）；从串口 `KEY n c` 行判定打字（看不到 PC 端是否真收到，没选）。
+## 2026-10-26 H-16 第 8 课（BME280）取舍
+- 决定：(1) 台面只留 `bme280`，OLED 仍在模拟场景里（weather 作品与 04 关判定都带 ssd1306@0x3c），所以扫描打印 `0x3C 0x76`；第 2、4 步正文如实说明「第 3 课的 OLED 在模拟器里仍挂在这两根线上」。(2) 新任务完成信号 `env:<temp|humidity|pressure>`：环境滑块手势结束（change）与温度数字框 / 预设（setTempNow）时发 `env:<key>=<值>`，起点是手势开始时的值，值不变不打勾；不限本课固件（任何固件下拖滑块都是真实的环境变化）。(3) `LessonI2c` 加可选 `reads`：重复 START 后对同一地址的读与前面写寄存器号合成一次传输并计读回字节，默认关，第 3 课行为不变；规则行指向 `rd()` 里的 `i2c_master_transmit_receive`（第 23 行），保持 lessons.test 的「I2C 规则指向发送行」不变。(4) BME280 速查卡加湿度滑块（原来只有温度，湿度只在构建树「环境」里，被课程步骤面板挡住）。(5) 数据手册数字（地址、±1 °C、±3 %RH、±1 hPa、量程、chip ID 0x60）只标「BME280 数据手册」，不写页码。
+- 理由：最小改动复用 H-10 任务信号与 H-03 feed；环境滑块是本课唯一的交互，必须能自动打勾；不加 `reads` 时 feed 会丢掉所有寄存器读（只剩启动时的写）。
+- 备选：从串口 `T=` 值变化判完成（要解析串口且固件每秒才打印一次，没选）；把 OLED 从场景里去掉（要改 04 关判定参数，没选）；新写只读 BME280 的固件（简报要求复用 s3-bme280，没选）。

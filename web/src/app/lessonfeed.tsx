@@ -65,7 +65,7 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
   const pins = new Set(session.ioPins());
   if (rules.some((r) => !pins.has(r.pin))) session.watchIo([...pins, ...rules.map((r) => r.pin)]);
   // Open I2C write per port: address rule matched by the ACKed address byte, data bytes counted until STOP
-  const open = new Map<number, { t: number; addr: number; bytes: number }>();
+  const open = new Map<number, { t: number; addr: number; bytes: number; reads: boolean }>();
   const io = session.io;
   let raw: IoEvent[] = io.raw;
   let at = 0;
@@ -149,11 +149,15 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
         // A repeated START keeps the transaction; a fresh one ends any write left open
         if (!(e.b & B_RESTART)) close(port);
       } else if (e.kind === K.I2C_ADDR) {
-        if (!(e.b & (B_READ | B_NACK)) && i2cRules.some((y) => y.addr === e.a)) open.set(port, { t: e.t, addr: e.a, bytes: 0 });
+        const x = open.get(port);
+        // Register read: the address again after a repeated START, now reading; one transaction with the write before it
+        if (x?.reads && x.addr === e.a && e.b & B_READ && !(e.b & B_NACK)) continue;
+        const r = e.b & (B_READ | B_NACK) ? undefined : i2cRules.find((y) => y.addr === e.a);
+        if (r) open.set(port, { t: e.t, addr: e.a, bytes: 0, reads: !!r.reads });
         else open.delete(port);
       } else if (e.kind === K.I2C_DATA) {
         const x = open.get(port);
-        if (x && !(e.b & B_READ)) x.bytes++;
+        if (x && (x.reads || !(e.b & B_READ))) x.bytes++;
       } else close(port);
     }
     if (raw.length) seenT = raw[raw.length - 1].t;

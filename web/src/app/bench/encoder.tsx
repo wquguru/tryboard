@@ -7,6 +7,7 @@ import { Btn, Btns, Kv, KvBox, Slider } from "../../ui/panel";
 import { type NEv, outOf } from "./shared";
 import type { BenchCtx } from "./ctx";
 import { ScenHint } from "./scenhint";
+import { lessonSignal } from "../lessontasks";
 
 export function mountEncoder(b: BenchCtx) {
   const encRows = () => (
@@ -123,6 +124,8 @@ export function mountEncoder(b: BenchCtx) {
 
   /** Env sliders (inspector, quick card): one gesture = one step, recorded on first input and updated until release. */
   const gestures = new WeakMap<HTMLInputElement, BenchStep>();
+  // Value at gesture start, for the lesson "env:<key>" tick on release (H-16 lesson 8)
+  const startOf = new WeakMap<HTMLInputElement, number>();
   const fmtEnv: Record<string, (v: number) => string> = {
     temp: (v) => `${v.toFixed(1)} °C`,
     humidity: (v) => `${v.toFixed(0)} %`,
@@ -137,6 +140,7 @@ export function mountEncoder(b: BenchCtx) {
       const env = { ...c.store.get().env, [k]: v };
       let st = gestures.get(inp);
       if (!st && c.store.get().env[k] === v) return;
+      if (!startOf.has(inp)) startOf.set(inp, c.store.get().env[k]);
       if (!st) {
         st = c.hist?.op({ k: "env", env });
         if (st) gestures.set(inp, st);
@@ -144,7 +148,13 @@ export function mountEncoder(b: BenchCtx) {
       c.session.setEnv({ [k]: v });
       c.hist?.render();
     },
-    change: (e: NEv) => void gestures.delete(e.currentTarget),
+    change: (e: NEv) => {
+      const inp = e.currentTarget;
+      gestures.delete(inp);
+      const from = startOf.get(inp);
+      startOf.delete(inp);
+      if (from !== undefined) lessonSignal(`env:${k}=${b.ctx!.store.get().env[k]}`, String(from));
+    },
   });
   const ENV_ROWS: [
     "temp" | "humidity" | "pressure",
@@ -235,9 +245,11 @@ export function mountEncoder(b: BenchCtx) {
   function setTempNow(v: number) {
     const c = b.ctx!;
     const t = Math.min(45, Math.max(-10, Math.round(v * 10) / 10));
-    if (!Number.isFinite(t) || t === c.store.get().env.temp) return;
+    const from = c.store.get().env.temp;
+    if (!Number.isFinite(t) || t === from) return;
     c.hist?.op({ k: "env", env: { ...c.store.get().env, temp: t } });
     c.session.setEnv({ temp: t });
+    lessonSignal(`env:temp=${t}`, String(from));
     c.hist?.render();
   }
   function TempExact() {

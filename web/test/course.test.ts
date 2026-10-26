@@ -42,15 +42,17 @@ test('prev / next skip unwritten lessons', () => {
   assert.equal(courseStep(9, 1, find), null);
   assert.equal(courseStep(5, -1, find)?.no, 3);
   assert.equal(courseStep(1, -1, find), null);
-  // Written lessons today: 0..7, 10 (extend as H-16 lessons merge)
+  // Written lessons today: 0..8, 10 (extend as H-16 lessons merge)
   assert.equal(courseStep(1, 1)?.no, 2);
   assert.equal(courseStep(3, 1)?.no, 4);
   assert.equal(courseStep(4, 1)?.no, 5);
   assert.equal(courseStep(5, 1)?.no, 6);
   assert.equal(courseStep(6, 1)?.no, 7);
-  assert.equal(courseStep(7, 1)?.no, 10);
+  assert.equal(courseStep(7, 1)?.no, 8);
+  assert.equal(courseStep(8, 1)?.no, 10);
+  assert.equal(courseStep(8, -1)?.no, 7);
   assert.equal(courseStep(10, 1), null);
-  assert.equal(courseStep(10, -1)?.no, 7);
+  assert.equal(courseStep(10, -1)?.no, 8);
   assert.equal(courseStep(1, -1)?.no, 0);
   assert.equal(courseStep(0, -1), null);
 });

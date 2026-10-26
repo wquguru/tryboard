@@ -3,6 +3,7 @@
 import { t } from '../i18n/index.ts';
 import { LED_VF, ledAmps, ohmText, type LedColor } from '../bench3d/ledparams.ts';
 import { L7 } from './lessondata/l7.ts';
+import { L8 } from './lessondata/l8.ts';
 import { L5 } from './lessondata/l5.ts';
 import { LESSON_0 } from './lessondata/l0.ts';
 import { lesson4 } from './lessondata/l4.ts';
@@ -50,6 +51,7 @@ export interface LessonTask {
   /** One line of "how to do it" under the task while it waits. */
   how?: string;
   /** `run` | `reveal` | `view:current` | `select:<id>` | `prop:<part>.<key>=<v>` | `chip:delay=<ms>` | `press:boot×<n>` | `strip:<pin>=<n>` | `usb:configured` | `usb:typed=<text>`. */
+  /** `run` | `reveal` | `view:current` | `select:<id>` | `prop:<part>.<key>=<v>` | `chip:delay=<ms>` | `press:boot×<n>` | `strip:<pin>=<n>` | `env:<temp|humidity|pressure>`. */
   done: string;
   /** reveal: the answer shown when the learner opens it. */
   answer?: string;
@@ -97,6 +99,8 @@ export interface LessonI2c {
   text: string;
   /** 1-based line in `Lesson.src` that sends the bytes. */
   line: number;
+  /** Count bytes read back after a repeated START too (register reads from a sensor, H-16 lesson 8). */
+  reads?: boolean;
 }
 /** H-16: a PWM pin whose pitch the feed narrates (one row per note start; silent gaps add no row). */
 export interface LessonTone {
@@ -525,6 +529,7 @@ export const LESSONS: Lesson[] = [
   lesson4,
   L6,
   L10,
+  L8,
 ];
 
 /** The lesson for this work's checkpoint, if one is written. */

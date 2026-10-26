@@ -30,6 +30,7 @@ export function mountCards(b: BenchCtx) {
           <Sec>{t("BME280 · temperature / humidity / pressure")}</Sec>
           <Kv k={t("Reading")} live="rt" />
           {b.envSlider("temp", t("Ambient temperature"), -10, 45, 0.5)}
+          {b.envSlider("humidity", t("Humidity"), 0, 100, 1)}
           <b.HeatActs />
         </div>
       );
