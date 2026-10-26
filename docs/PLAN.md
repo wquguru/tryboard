@@ -312,7 +312,7 @@
 | H-14 | 课程信息标签 概述 / 接线表 / 代码讲解 / 参数：接线表由 `wiring.ts` 行生成，点行高亮导线；参数每条带来源 | 数据测试；agent-browser 每个 tab 截图 | ☑ 2026-10-25：`lessoninfo.tsx` 四个 tab（role=tablist），桌面在步骤卡上方、手机在全屏面板；接线表 = `lessonWires`（与 `wiresOf` 同源），点行 `pick.highlight` + 镜头飞过去；参数每条带来源 chip（台面 / 代码 / 数据手册 / 典型值 / 估算），LED 电流取 H-13 模型 5.7 mA；第 01–03 课有代码讲解与参数 |
 | H-15 | 课程层：`course.ts` = 有序 (work, checkpoint) 列表，课号与关号解耦；地图、上一课 / 下一课按课程走；跨作品过渡照 `design-v2/beginner/v3/Main.dc.html`（映射见 DECISIONS 2026-10-26） | 数据测试；agent-browser 跨作品跳转（H-15 时对下一个已写的课验；第 4 课合入后批次收尾再走一遍第 3 → 4 课） | ☐ |
 | H-16 | 新课内容：0 认识开发板（`v3/Lesson0.dc.html`）、4 PWM 呼吸灯、5 WS2812、6 蜂鸣器、7 舵机、8 BME280、9 电位器、10 USB 键盘、11 综合；一课一个代理，缺固件的先补固件 + accept 用例 | 每课：数据测试 + accept 用例 + agent-browser 走一遍 | ☐ |
-| H-17 | 原理图视图：台面工具条「原理图」切 2D 原理图（由 SceneSpec + 接线生成，符号自绘；照 `v3/Schematic*.dc.html`） | agent-browser 第 01 / 03 课截图 | ☐ |
+| H-17 | 原理图视图：台面工具条「原理图」切 2D 原理图（由 SceneSpec + 接线生成，符号自绘；照 `v3/Schematic*.dc.html`） | agent-browser 第 01 / 03 课截图 | ☑ 2026-10-26：工具条「3D 台面 \| 原理图」切换段（短 / 完整工具条都有，手机在「更多」里 + 原理图顶部分段控件）；`schematic/model.ts` `schematicOf(parts, wires)` 由 `sceneView` + `lessonWires` 生成 U 方框 / 锯齿电阻 / 三角 LED / 接地符号，I2C 等多线零件用同名网络标签（3V3 / SDA / SCL / GND）；看电流时沿 LED 回路画蓝色虚线 + 「≈ x mA · 估算 · 未在实机校准」（`ledAmps`，随阻值 / 颜色变）；点符号 = 3D 同一 PickTarget，点网络标签两端 + 3D 导线高亮；手机竖排；未知零件画成带引脚名的方框 |
 | H-18 | 暖色主题（稿子 `#F6F3EE` 系）：需人先定是否全站换 | — | ☐ 待人定 |
 
 ## P3 · 以后再说

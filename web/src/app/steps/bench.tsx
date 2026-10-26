@@ -35,6 +35,7 @@ import { mountLesson } from "../bench/lesson";
 import { mountFlow } from "../bench/flow";
 import { mountDemo } from "../bench/demo";
 import { onBeginner } from "../../beginner";
+import { resetBenchView } from "../schematic/view";
 
 export { ownCount, ownFirmware, passedCount, requestAllRef, restoreChecks } from "../bench/progress";
 
@@ -280,6 +281,7 @@ export function benchStep(): StepImpl {
       for (const k of ["wire", "rings", "wrongWire", "meter", "empty", "place", "customPlaced", "buy"])
         overlay(k, null);
       setLeft({ lib: null, wires: null, wireCount: 0, card: null });
+      resetBenchView();
       b.ctx?.session.pick.highlight?.(null);
       actions.checkUpload = undefined;
       actions.openBuy = undefined;

@@ -287,7 +287,7 @@ const BENCH_MAIN: { id: string; label: string; icon: string }[] = [
   { id: "more", label: t('More'), icon: "more" },
 ];
 // The analyzer isn't drawn on phones (too narrow for waveforms) and Place isn't open yet: keep them out of More
-const NOT_ON_PHONE = new Set(["select", "wire", "meter", "scope", "place"]);
+const NOT_ON_PHONE = new Set(["select", "wire", "meter", "scope", "place", "view3d"]);
 // More drawer sections, board actions -> capture -> view (DESIGN_V2 §10.2 / §8.4); desktop keeps its own group order
 const SECTION_TITLE: Record<string, string> = {
   act: t('Board controls'),
@@ -297,7 +297,7 @@ const SECTION_TITLE: Record<string, string> = {
 const BENCH_SECTIONS: { id: string; from: string[]; order: string[] }[] = [
   { id: "act", from: ["act"], order: ["button", "heat", "sound"] },
   { id: "media", from: ["media"], order: ["photo", "rec"] },
-  { id: "view", from: ["nav", "look", "measure"], order: ["orbit", "ext", "ruler"] },
+  { id: "view", from: ["view", "nav", "look", "measure"], order: ["schematic", "orbit", "ext", "ruler"] },
 ];
 const BENCH_ICON: Record<string, string> = {
   button: "boot",
@@ -306,6 +306,7 @@ const BENCH_ICON: Record<string, string> = {
   orbit: "orbit",
   ext: "cube",
   ruler: "ruler",
+  schematic: "wire",
 };
 const rank = (order: string[], id: string) => {
   const i = order.indexOf(id);
