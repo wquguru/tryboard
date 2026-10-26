@@ -1,7 +1,7 @@
 // H-12: the course map lists 12 lessons; written ones resolve to a lesson and get their state from progress + steps.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { COURSE, courseCard } from '../src/app/course.ts';
+import { COURSE, courseCard, courseLesson } from '../src/app/course.ts';
 import { lessonFor } from '../src/app/lessons.ts';
 
 test('COURSE has 12 lessons numbered 0..11', () => {
@@ -10,13 +10,13 @@ test('COURSE has 12 lessons numbered 0..11', () => {
 });
 
 test('written lessons resolve through lessonFor with the same number', () => {
-  const written = COURSE.filter((e) => e.work && e.cp);
+  const written = COURSE.filter((e) => courseLesson(e));
   assert.deepEqual(
     written.map((e) => e.no),
     [1, 2, 3],
   );
   for (const e of written) {
-    const l = lessonFor(e.work!, e.cp!);
+    const l = lessonFor(e.work, e.cp);
     assert.ok(l, `lesson ${e.no}`);
     assert.equal(l.no, e.no);
   }

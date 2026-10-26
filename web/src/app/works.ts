@@ -1,7 +1,7 @@
 // Work definitions: which checkpoints (firmware/levels.json level ids) each work walks, and its home card text.
 // Kept separate so home.ts can build cards without pulling in the lab; each checkpoint adds one thing, the last (with assembly) is the "combine".
 import type { WorkDef } from './types';
-import { t } from '../i18n';
+import { t } from '../i18n/index.ts';
 
 export const WORKS: Record<string, WorkDef> = {
   weather: { id: 'weather', title: t('Desk weather station'), example: 'weather', checkpoints: ['01', '02', '03', '04', '05', '06'], card: { chip: 'ESP32-S3', blurb: t('A screen shows temperature, humidity and pressure, a servo dial points at the temperature, and the RGB LED changes color with hot and cold') } },
@@ -39,6 +39,8 @@ export const WORKS: Record<string, WorkDef> = {
   touch: { id: 'touch', title: t('Touch round screen (CST816S)'), example: 's3-touch', checkpoints: [] },
   // F-05: each checkpoint starts with a broken bench; no home card, reached from the link under the works grid
   faults: { id: 'faults', title: t('Find the fault'), example: 'weather', checkpoints: ['fault-wire', 'fault-power', 'fault-antenna', 'fault-adc', 'fault-i2c-swap'] },
+  // H-15 course-only bench for lessons 0 / 4 / 6 (board + breadboard + LED on GPIO5); H-16 adds basics-pwm / basics-buzz
+  basics: { id: 'basics', title: t('Basics course'), example: 's3-blink', checkpoints: [], courseOnly: true },
 };
 
 /** localStorage key for a work's data */

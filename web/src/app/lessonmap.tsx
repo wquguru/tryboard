@@ -1,15 +1,13 @@
 // Course map (PLAN H-12, DESIGN_V2 §11.1): "≡ Lessons" in the lesson head opens a grid of all 12 lessons with their state.
-// Data and state rules live in course.ts (node tests import it); this file is the button and the dialog.
+// Data and state rules live in course.ts (node tests import it), live state in coursenav.tsx; this is the button and the dialog.
 import { t } from "../i18n";
 import { cn } from "../ui/cn";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { lessonUi } from "./lesson";
-import { lessonStep } from "../beginner";
-import { loadProgress } from "./bench/progress";
-import { actions, bc } from "./chrome";
 import { Icon } from "./icons";
-import { COURSE, courseCard, type CourseCard } from "./course";
+import { COURSE, type CourseCard } from "./course";
+import { courseCards, goLesson } from "./coursenav";
 
 export { COURSE };
 
@@ -40,23 +38,10 @@ export function LessonMapBtn({ phone }: { phone?: boolean }) {
   );
 }
 
-function cards(): CourseCard[] {
-  const ui = lessonUi.get();
-  const open = ui.lesson ? { work: ui.lesson.work, cp: ui.lesson.checkpoint, step: ui.step } : null;
-  // The open work's checkpoints are live (its save key may differ for shared works); other works read their stored passes
-  const live = new Set(bc.get().checkpoints.filter((c) => c.state === "ok" || c.state === "ref").map((c) => c.id));
-  const stored: Record<string, Record<string, unknown>> = {};
-  const passed = (work: string, cp: string) => (open?.work === work ? live.has(cp) : !!(stored[work] ??= loadProgress(work))[cp]);
-  return COURSE.map((e) => courseCard(e, passed, lessonStep, open));
-}
-
 function go(c: CourseCard, close: () => void) {
-  const l = c.lesson;
-  if (!l) return;
-  if (lessonUi.get().lesson?.work === l.work) {
-    close();
-    actions.selectCheckpoint?.(l.checkpoint);
-  } else location.href = `/app?work=${encodeURIComponent(l.work)}&cp=${encodeURIComponent(l.checkpoint)}#bench`;
+  if (!c.lesson) return;
+  if (lessonUi.get().lesson?.work === c.entry.work) close();
+  goLesson(c.entry);
 }
 
 const badgeCls: Record<CourseCard["state"], string> = {
@@ -68,7 +53,7 @@ const badgeCls: Record<CourseCard["state"], string> = {
 
 function LessonMap({ onClose }: { onClose: () => void }) {
   const box = useRef<HTMLDivElement>(null);
-  const [list] = useState(cards);
+  const [list] = useState(courseCards);
   const done = list.filter((c) => c.state === "done").length;
   useEffect(() => {
     const back = document.activeElement as HTMLElement | null;
