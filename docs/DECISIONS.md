@@ -1892,3 +1892,7 @@
 - 决定：(1) 新增任务完成信号 `strip:<pin>=<n>`（亮灯数 ≥ n 即打勾）：session onTick 收到 `m.strips` 帧时发一次（边沿），bench/lesson.tsx 的 probe() 在本课固件运行时用 `session.frame.strips` 补发（状态，步骤晚于点亮打开也能勾）；只在当前固件是本课 `fw`（或步骤 codeChips 固件）时发，lamp 作品默认固件（STAGE 3）同样点亮灯带，不能替本课打勾。(2) 本课不写 `events` / `i2c`：lessonfeed 只叙述 GPIO 边沿和 I2C，GPIO5 由 RMT 驱动，iotrace 虽有 K.WS2812 事件但 feed 不处理，不伪造。(3) 参数文档名用 `Worldsemi WS2812B datasheet`：`WS2812B datasheet` 已作为字面量出现在首页可达的 catalog/parts.ts，i18n 分组测试要求它在 site 组。(4) 「改一改」一步只用揭示答案任务：没有预编译的换色 / 换亮度固件。
 - 理由：最小信号、复用已有 worker 帧数据，不改固件与 wasm；如实标注 feed 能力缺口。
 - 备选：从串口「LAMP ON 8」判完成（只证明固件走到那一行，不证明灯亮，没选）；给 lessonfeed 加 WS2812 叙述（超出本课范围，留作后续）。
+## 2026-10-26 H-16 第 0 课（认识开发板）实现取舍
+- 决定：(1) 板上区域用新的 `PickTarget.spot`（`'usb' | 'chip'`，只在 onPick 时由命中点在板局部坐标里判定），卡片额外发 `select:board@usb` / `select:board@chip`，原 `select:board` 照发，第 1 课「点芯片」不受影响；BOOT 点击会被当成按下，所以「找到 BOOT」用 `press:boot×1`。(2) `taskTarget` 认 3V3 / 5V / GND 引脚和 `@spot`。(3) 入口：left.tsx 在作品没有检查点或 URL 带 `cp=lesson-<no>` 时显示无检查点课的卡；课程地图跳无检查点的课一律整页跳转 `/app?work=…&cp=lesson-<no>`（同作品内没有 selectCheckpoint 可用）。(4) 无固件课：代码讲解页签与代码卡显示「本课不跑代码」，检查点框改成「第 N 课 · 打勾完成」；面包板留在台面上（basics 作品本身的场景，parts: [] 只决定本课接线清单）。(5) 芯片参数放参数页签（数据手册来源），不塞进步骤卡。(6) 已有测试里「第 0 课未写」「每课都有固件 / 接线」的假设按新事实更新（lessons / course / lessonmap 测试、beginner.mjs 地图可开卡 0,1,2,3），没有放宽判定。
+- 理由：最小改动地复用 H-10 任务信号与 H-15 课程层；spot 不改已有锚点和投影。
+- 备选：给 USB 口 / 芯片做独立的 PickTarget kind（牵动 scene-api 所有消费方，没选）；第 0 课单独建一个只有开发板的作品（作品列表多一项且与 basics 进度分开，没选）。

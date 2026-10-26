@@ -42,10 +42,13 @@ test('prev / next skip unwritten lessons', () => {
   assert.equal(courseStep(9, 1, find), null);
   assert.equal(courseStep(5, -1, find)?.no, 3);
   assert.equal(courseStep(1, -1, find), null);
-  // Real lookup: 1 → 2, and after 3 comes the next written lesson (none while 4..11 are planned)
+  // Written lessons today: 0..3, 5, 7 (extend as H-16 lessons merge)
   assert.equal(courseStep(1, 1)?.no, 2);
-  assert.equal(courseStep(3, 1)?.no, COURSE.find((e) => e.no > 3 && courseLesson(e))?.no);
-  assert.equal(courseStep(1, -1), null);
+  assert.equal(courseStep(3, 1)?.no, 5);
+  assert.equal(courseStep(5, 1)?.no, 7);
+  assert.equal(courseStep(7, 1), null);
+  assert.equal(courseStep(1, -1)?.no, 0);
+  assert.equal(courseStep(0, -1), null);
 });
 
 const fake: Lesson = {
@@ -77,6 +80,9 @@ test('a lesson without a checkpoint is done once every task is ticked', () => {
 });
 
 test('courseCard passes ticks through for cp-less entries', () => {
-  // Lesson 0 is not written yet, so it stays planned whatever the ticks say
-  assert.equal(courseCard(COURSE[0], () => true, () => 0, null, () => ({ 0: 1 })).state, 'plan');
+  // Lesson 0 (H-16) has no checkpoint: passes don't count, only every task of every step ticked does
+  const l0 = courseLesson(COURSE[0])!;
+  const all = (_w: string, _k: string, s: number) => Object.fromEntries(l0.steps[s].tasks.map((_, i) => [i, 1]));
+  assert.equal(courseCard(COURSE[0], () => true, () => 0, null, () => ({ 0: 1 })).state, 'ready');
+  assert.equal(courseCard(COURSE[0], () => false, () => 0, null, all).state, 'done');
 });

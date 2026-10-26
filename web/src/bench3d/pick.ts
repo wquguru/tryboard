@@ -22,7 +22,22 @@ export function mountPointer(ctx: BenchCtx): void {
     for (let o: THREE.Object3D | null = h.object; o; o = o.parent) if (o.userData.pick) return o.userData.pick as PickTarget;
     return null;
   };
+  // Board hits name the area they landed on: near a USB mouth, or on the module (chip) at the far end
+  const boardSpot = (h: THREE.Intersection): PickTarget['spot'] => {
+    const b = ctx.board;
+    const p = b.grp.worldToLocal(h.point.clone());
+    const u = b.usbPort;
+    if (Math.hypot(Math.abs(p.x) - Math.abs(u.x), p.z - u.z) < 7) return 'usb';
+    if (b.spec.module && p.z > b.L / 2 - b.spec.module.L - 1 && Math.abs(p.x) < b.spec.module.W / 2 + 1) return 'chip';
+    return undefined;
+  };
   const pickAt = (ev: { clientX: number; clientY: number }): PickTarget | null => {
+    const t = pickRaw(ev);
+    return t?.kind === 'part' && t.id === 'board' && lastHit ? { ...t, spot: boardSpot(lastHit) } : t;
+  };
+  let lastHit: THREE.Intersection | null = null;
+  const pickRaw = (ev: { clientX: number; clientY: number }): PickTarget | null => {
+    lastHit = null;
     ray.setFromCamera(toNdc(ev), camera);
     // A Dupont plug stands right beside its pin and hides it from most angles: if the first hit is a wire and a pin
     // or button lies just behind it (within 15 mm), take the pin the user meant
@@ -31,6 +46,7 @@ export function mountPointer(ctx: BenchCtx): void {
       const t = resolveHit(h);
       if (!t) continue;
       if (!first) {
+        lastHit = h;
         if (t.kind !== 'wire') return t;
         first = { t, d: h.distance };
         continue;

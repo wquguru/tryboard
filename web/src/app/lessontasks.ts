@@ -77,10 +77,13 @@ export function matchTask(done: string, sig: string, ctx: SigCtx): Hit | null {
 /** Where "Take me there" points the camera: select / prop tasks only. */
 export function taskTarget(done: string): LessonTarget | null {
   const d = parseDone(done);
-  const id = d?.kind === 'select' ? d.id : d?.kind === 'prop' ? d.part : null;
-  if (!id) return null;
+  const sel = d?.kind === 'select' ? d.id : d?.kind === 'prop' ? d.part : null;
+  if (!sel) return null;
+  // 'board@usb': a spot on a part (lesson 0); the camera goes to the part, the callout anchor marks the spot
+  const [id, spot] = sel.split('@');
+  if (spot === 'usb') return { kind: 'part', id, anchor: 'usb' };
   if (id === 'BOOT' || id === 'RST') return { kind: 'button', id };
-  if (/^GPIO\d+$/.test(id)) return { kind: 'pin', id };
+  if (/^(GPIO\d+|3V3|5V|GND)$/.test(id)) return { kind: 'pin', id };
   return { kind: 'part', id };
 }
 
@@ -89,6 +92,8 @@ const PART_NAMES: Record<string, string> = {
   'led:5': t('the LED'),
   oled: t('the OLED screen'),
   ws2812: t('the LED strip'),
+  'board@usb': t('the USB-C port'),
+  'board@chip': t('the main chip'),
 };
 
 /** "Detected: …" line for a ticked task; empty for reveal (its answer is the result). */

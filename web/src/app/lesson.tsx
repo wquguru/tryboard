@@ -14,6 +14,7 @@ import type { LedColor } from "../bench3d/ledparams";
 import { LessonInfo } from "./lessoninfo";
 import { LessonMapBtn } from "./lessonmap";
 import { CourseDone, CourseHead } from "./coursenav";
+import { courseOf } from "./course";
 import { StepDoneBar, TaskList, useStepReady } from "./lessontasklist";
 
 export interface LessonUi {
@@ -73,6 +74,8 @@ export function LessonSteps() {
   if (!l) return null;
   // "Show me how" plays the current step's demo, else the first step that has one (#cpGo keeps the checkpoint card's id)
   const demoAt = l.steps[s.step]?.demo?.length ? s.step : l.steps.findIndex((x) => x.demo?.length);
+  // H-16: lesson 0 has no checkpoint; it is done once every "Try it" task is ticked
+  const noCp = !courseOf(l)?.cp && !s.cpPass;
   return (
     <nav id="lessonSteps" aria-label={t("Lesson steps")} className="flex flex-col gap-0.5 text-xs">
       <div className="px-1 pb-1 text-[11px] font-medium text-muted">
@@ -111,18 +114,24 @@ export function LessonSteps() {
         );
       })}
       <div id="lessonCp" className="mt-1.5 rounded-lg bg-field p-2.5">
-        <div className="text-[11px] font-medium text-muted">{t("Checkpoint {id}", { id: l.checkpoint })}</div>
+        <div className="text-[11px] font-medium text-muted">{noCp ? t("Lesson {n}", { n: l.no }) : t("Checkpoint {id}", { id: l.checkpoint })}</div>
         <b className="mt-0.5 block text-[13px]">{l.title}</b>
         <p className="mt-0.5 mb-0">{l.summary}</p>
-        <details className="mt-1">
-          <summary className="cursor-pointer text-[12px] text-accent-ink">{t("Pass criteria")}</summary>
-          <p className="mt-1 mb-0 text-muted">{s.cpPass}</p>
-        </details>
+        {noCp ? (
+          <p className="mt-1 mb-0 text-[12px] text-muted">{t("No checkpoint here: tick every task to finish")}</p>
+        ) : (
+          <details className="mt-1">
+            <summary className="cursor-pointer text-[12px] text-accent-ink">{t("Pass criteria")}</summary>
+            <p className="mt-1 mb-0 text-muted">{s.cpPass}</p>
+          </details>
+        )}
         <p className="mt-1.5 mb-0 text-[12px] text-muted">{t("Parts for this lesson: {parts}", { parts: l.buy })}</p>
         {s.next && <p className="mt-0.5 mb-0 text-[12px] text-muted">{s.next}</p>}
-        <button type="button" className="mt-1 cursor-pointer border-0 bg-transparent p-0 text-[12px] text-accent-ink underline" onClick={s.openChecks}>
-          {t("All checkpoints")}
-        </button>
+        {!noCp && (
+          <button type="button" className="mt-1 cursor-pointer border-0 bg-transparent p-0 text-[12px] text-accent-ink underline" onClick={s.openChecks}>
+            {t("All checkpoints")}
+          </button>
+        )}
         {demoAt >= 0 && (
           <button type="button" id="cpGo" className={cn(btnBase, "mt-2 w-full border border-accent-strong bg-surface font-medium text-accent-ink hover:bg-accent-bg")} onClick={() => s.showDemo(demoAt)}>
             {t("Show me how")}

@@ -22,6 +22,8 @@ export interface PickTarget {
   id: string;
   /** project() only: a named spot on the thing (board 'usb', LED part 'res' / 'led', wire '0' = board end) */
   anchor?: string;
+  /** onPick only: which area of the board the click landed on ('usb' port, 'chip' module), for lesson 0 (H-16) */
+  spot?: 'usb' | 'chip';
 }
 
 export interface ScreenPoint { x: number; y: number }

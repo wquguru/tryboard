@@ -12,8 +12,12 @@ import { setLeft } from "../leftcol";
 import { AllPassedCard, CheckpointCard, PartLib, WireTable } from "./ui";
 import { passedCount, ownCount } from "./progress";
 import type { BenchCtx } from "./ctx";
+import { COURSE, lessonKey } from "../course";
 
 export function mountLeft(b: BenchCtx) {
+  // H-16: a lesson without a checkpoint (lesson 0) has no selection to carry it, so the course link names it (?cp=lesson-0)
+  const urlCp = new URLSearchParams(location.search).get("cp");
+  if (urlCp && COURSE.some((e) => !e.cp && lessonKey(e) === urlCp)) b.lessonPin = urlCp;
   /** What the checkpoint "take me there" targets: the judged pin, else the I2C device. */
   function cpTarget(l: Level | undefined): Selection | null {
     if (!l) return null;
@@ -41,6 +45,12 @@ export function mountLeft(b: BenchCtx) {
     let card: ReactNode = null;
     // Beginner mode swaps the checkpoint card for this lesson's steps (H-01); null keeps the card
     let lesson: ReactNode | null = null;
+    // A picked checkpoint keeps its lesson up while the beginner clicks parts on the bench
+    const picked = s.selection?.kind === "checkpoint" ? s.selection.id : null;
+    if (picked && c.work.checkpoints.includes(picked)) b.lessonPin = picked;
+    // Lessons with no checkpoint in this work: the pinned one, else the first when the work has no checkpoints at all
+    const free = COURSE.filter((e) => e.work === c.work.id && !e.cp).map(lessonKey);
+    const freeKey = b.lessonPin && free.includes(b.lessonPin) ? b.lessonPin : n ? undefined : free[0];
     if (c.custom)
       card = (
         <CustomCheckCard
@@ -56,6 +66,7 @@ export function mountLeft(b: BenchCtx) {
           onBuy={n && d === n ? b.openBuy : null}
         />
       );
+    else if (freeKey && (lesson = b.lessonCard(freeKey, undefined))) card = lesson;
     else if (n && d === n)
       card = (
         <AllPassedCard total={n} own={ownCount(c, s)} retest={s.assembly?.retest} onNext={() => (location.hash = "assemble")} />
@@ -66,9 +77,6 @@ export function mountLeft(b: BenchCtx) {
         c.work.checkpoints[0];
       const l = c.session.levels.find((x) => x.id === id);
       const tg = cpTarget(l);
-      // A picked checkpoint keeps its lesson up while the beginner clicks parts on the bench
-      const picked = s.selection?.kind === "checkpoint" ? s.selection.id : null;
-      if (picked && c.work.checkpoints.includes(picked)) b.lessonPin = picked;
       const lid = b.lessonPin && c.work.checkpoints.includes(b.lessonPin) ? b.lessonPin : id;
       lesson = b.lessonCard(lid, c.session.levels.find((x) => x.id === lid));
       card = lesson ?? (

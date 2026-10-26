@@ -180,6 +180,7 @@ function Wiring({ l, wires, sel, onSel, phone }: { l: Lesson; wires: BenchWire[]
 
 function Code({ l }: { l: Lesson }) {
   const src = useSrcLines(`${l.fw}/flash.bin`, l.src.replace(/^firmware\//, ""));
+  if (!l.fw) return <p className="m-0 text-[13px] text-muted">{t("This lesson runs no code: it is about the board itself")}</p>;
   if (!l.code?.length) return <p className="m-0 text-[13px] text-muted">{t("No notes for this code yet")}</p>;
   return (
     <>
