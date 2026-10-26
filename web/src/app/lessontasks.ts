@@ -12,7 +12,8 @@ export type DoneSpec =
   | { kind: 'select'; id: string }
   | { kind: 'prop'; part: string; key: string; v: string }
   | { kind: 'chip'; key: 'delay'; v: number }
-  | { kind: 'press'; what: 'boot'; n: number };
+  | { kind: 'press'; what: 'boot'; n: number }
+  | { kind: 'strip'; pin: number; n: number };
 
 /** What was detected; raw values only, the words are made at render time in the current locale. */
 export interface Hit {
@@ -20,7 +21,7 @@ export interface Hit {
   from?: string;
 }
 
-/** `run` / `reveal` / `view:current` / `select:<id>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` / `press:boot×<n>`; null = malformed. */
+/** `run` / `reveal` / `view:current` / `select:<id>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` / `press:boot×<n>` / `strip:<pin>=<n lit>`; null = malformed. */
 export function parseDone(d: string): DoneSpec | null {
   if (d === 'run' || d === 'reveal') return { kind: d };
   if (d === 'view:current') return { kind: 'view', what: 'current' };
@@ -33,10 +34,12 @@ export function parseDone(d: string): DoneSpec | null {
   if (m) return { kind: 'chip', key: 'delay', v: Number(m[1]) };
   m = /^press:boot[×x](\d+)$/.exec(d);
   if (m && Number(m[1]) >= 1) return { kind: 'press', what: 'boot', n: Number(m[1]) };
+  m = /^strip:(\d+)=(\d+)$/.exec(d);
+  if (m && Number(m[2]) >= 1) return { kind: 'strip', pin: Number(m[1]), n: Number(m[2]) };
   return null;
 }
 
-/** Signals: 'run', 'press:boot', 'chip:delay=<ms>' (+ from), 'view:current', 'select:<id>', 'prop:<part>.<key>=<v>'. */
+/** Signals: 'run', 'press:boot', 'chip:delay=<ms>' (+ from), 'view:current', 'select:<id>', 'prop:<part>.<key>=<v>', 'strip:<pin>=<lit>'. */
 export interface SigCtx {
   /** BOOT presses (down edges) since this step came up, this one included. */
   boots: number;
@@ -63,6 +66,11 @@ export function matchTask(done: string, sig: string, ctx: SigCtx): Hit | null {
       return sig === `chip:delay=${d.v}` ? { v: String(d.v), from: ctx.from } : null;
     case 'prop':
       return sig === `prop:${d.part}.${d.key}=${d.v}` ? { v: d.v, from: ctx.from } : null;
+    case 'strip': {
+      // At least n LEDs lit in a frame on that pin (the strip lights up one by one, so "all lit" is reached last)
+      const m = /^strip:(\d+)=(\d+)$/.exec(sig);
+      return m && Number(m[1]) === d.pin && Number(m[2]) >= d.n ? { v: m[2] } : null;
+    }
   }
 }
 
@@ -80,6 +88,7 @@ const PART_NAMES: Record<string, string> = {
   board: t('the dev board'),
   'led:5': t('the LED'),
   oled: t('the OLED screen'),
+  ws2812: t('the LED strip'),
 };
 
 /** "Detected: …" line for a ticked task; empty for reveal (its answer is the result). */
@@ -94,6 +103,8 @@ export function hitText(done: string, h: Hit): string {
       return t('Detected: you clicked {what}', { what: PART_NAMES[d.id] ?? d.id });
     case 'press':
       return t('Detected: BOOT pressed {n} times', { n: h.v ?? d.n });
+    case 'strip':
+      return t('Detected: {n} LEDs lit on GPIO{pin}', { n: h.v ?? d.n, pin: d.pin });
     case 'chip':
       return h.from && h.from !== h.v
         ? t('Detected: delay {from} ms → {to} ms', { from: h.from, to: h.v ?? d.v })
@@ -186,4 +197,9 @@ export function revealTask(i: number) {
 export function stepReady(s: TaskUi = taskUi.get()): boolean {
   const tasks = s.lesson?.steps[s.step]?.tasks ?? [];
   return tasks.length > 0 && tasks.every((_, i) => !!s.hits[i]);
+}
+
+/** WS2812 frames (pin → [r, g, b] per LED) as 'strip:<pin>=<lit>' signals; session.ts calls it per new frame. */
+export function stripSignals(strips: Record<number, number[][]>) {
+  for (const [pin, leds] of Object.entries(strips)) lessonSignal(`strip:${pin}=${leds.filter((c) => c.some((v) => v > 0)).length}`);
 }
