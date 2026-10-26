@@ -33,7 +33,7 @@ export const STEPS: { id: StepId; label: string }[] = [
   { id: 'product', label: t('Product') },
 ];
 
-export type WorkId = 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'door' | 'irlamp' | 'dialtimer' | 'cloud' | 'amoclock' | 'knob' | 'sonar' | 'blank' | 'imu' | 'touch' | 'custom' | 'faults';
+export type WorkId = 'weather' | 'spin' | 'lens' | 'usbkey' | 'lamp' | 'ruler' | 'tilt' | 'door' | 'irlamp' | 'dialtimer' | 'cloud' | 'amoclock' | 'knob' | 'sonar' | 'blank' | 'imu' | 'touch' | 'custom' | 'faults' | 'basics';
 
 /** kind maps 1:1 to build-tree groups; pin / wire / button come from bench picking */
 export type SelKind = 'part' | 'wire' | 'power' | 'env' | 'firmware' | 'checkpoint' | 'pin' | 'button' | 'run' | 'tool' | 'ble';
@@ -122,6 +122,8 @@ export interface WorkDef {
   card?: { chip: string; blurb: string; /** Copy ready, web flow not yet: kept off the home page */ draft?: boolean };
   /** Local save key (default = id); blank:<example> when opened from blank so examples don't overwrite each other */
   key?: string;
+  /** Only reached from the basics course (H-15): kept off the home page and the work menu. */
+  courseOnly?: boolean;
 }
 
 /** Live sim + 3D bench: one per page, not rebuilt on step change */

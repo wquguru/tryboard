@@ -1174,5 +1174,6 @@ const d: Dict = {
 
   // Beginner lessons (H-01)
   "LED": "LED",
+  "Basics course": "基础课",
 };
 export default d;

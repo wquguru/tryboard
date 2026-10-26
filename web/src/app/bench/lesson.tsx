@@ -70,6 +70,11 @@ export function mountLesson(b: BenchCtx) {
       if (bc.get().overlays.lessonCallouts) overlay("lessonCallouts", null);
       return null;
     }
+    // H-15: another lesson in the same work starts on the overview tab with no wire lit (H-14 kept the old one)
+    if (had && lessonUi.get().lesson !== lesson) {
+      if (lessonUi.get().wireSel) c.session.pick.highlight?.(null);
+      setLessonUi({ wireSel: null, info: "overview" });
+    }
     const n = lesson.steps.length;
     const ids = c.work.checkpoints;
     const nextId = ids[ids.indexOf(lesson.checkpoint) + 1];

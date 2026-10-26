@@ -51,8 +51,9 @@ export function usePop() {
 }
 
 /** Work menu groups (DESIGN_V2 §10.3): works with checkpoints, then the free bench (blank + my project tiles, bench-only examples) */
-const GUIDED = Object.values(WORKS).filter((w) => w.checkpoints.length);
-const BENCH_ONLY = Object.values(WORKS).filter((w) => !w.checkpoints.length && w.id !== 'blank' && w.id !== 'custom');
+const MENU_WORKS = Object.values(WORKS).filter((w) => !w.courseOnly);
+const GUIDED = MENU_WORKS.filter((w) => w.checkpoints.length);
+const BENCH_ONLY = MENU_WORKS.filter((w) => !w.checkpoints.length && w.id !== 'blank' && w.id !== 'custom');
 const workHref = (id: string) => lab(id, (location.hash.slice(1) || 'bench') as StepId);
 /** Saved checkpoint passes; reference run-throughs count too */
 const passedCount = (w: WorkDef) => {

@@ -1,5 +1,7 @@
 // Phone lesson panel (PLAN H-07, DESIGN_V2 §11, Mobile.dc.html): the dock's lower band while a lesson is up.
 // Title + progress, the current step, a few highlighted code lines, the last two events, previous / next.
+import { CourseDone } from "./coursenav";
+import { COURSE, courseOf } from "./course";
 import { t } from "../i18n";
 import { cn } from "../ui/cn";
 import { useStore } from "./react";
@@ -63,6 +65,7 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
   const s = useStore(lessonUi);
   const ready = useStepReady();
   const l = s.lesson;
+  const entry = courseOf(l);
   if (!l) return null;
   const n = l.steps.length;
   const done = s.step >= n;
@@ -72,7 +75,9 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
     <section id="lessonSheet" aria-label={t("Lesson step")} data-step={done ? "done" : s.step} className="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-3">
       <div id="lessonSheetHead" className="flex flex-none items-center gap-2.5">
         <span className="flex min-w-0 flex-1 flex-col">
-          <b className="truncate text-[14px]">{t("Lesson {n} · {title}", { n: l.no, title: l.title })}</b>
+          <b className="truncate text-[14px]">
+            {entry ? t("Lesson {n} / {total} · {title}", { n: entry.no, total: COURSE.length, title: l.title }) : t("Lesson {n} · {title}", { n: l.no, title: l.title })}
+          </b>
           <span className="mt-1 flex gap-[3px]" role="img" aria-label={t("Step progress {n}/{total}", { n: at, total: n })}>
             {l.steps.map((st, i) => (
               <span key={st.id} className={cn("h-[3px] w-[22px] rounded-sm", i <= s.step ? "bg-accent-strong" : "bg-line")} />
@@ -94,11 +99,7 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain">
         {done ? (
-          <>
-            <span className="text-[11px] font-medium text-ok-ink">{t("Lesson {n} done", { n: l.no })}</span>
-            <p className="m-0 text-[14px] leading-[22px]">{l.summary}</p>
-            {s.next && <p className="m-0 text-[13px] text-muted">{s.next}</p>}
-          </>
+          <CourseDone phone />
         ) : (
           <>
             <span className="text-[11px] font-medium text-muted">{t("Step {n} · {title}", { n: s.step + 1, title: cur.title })}</span>
@@ -140,6 +141,7 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
           </>
         )}
       </div>
+      {!done && (
       <div className="flex flex-none gap-2">
         <button type="button" id="mLessonPrev" className={cn(btn, "flex-1 border border-line bg-surface text-fg disabled:cursor-default disabled:opacity-50")} disabled={s.step === 0} onClick={() => s.go(s.step - 1)}>
           {t("Previous")}
@@ -164,6 +166,7 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
           </span>
         </button>
       </div>
+      )}
     </section>
   );
 }

@@ -13,6 +13,7 @@ import type { BenchWire } from "./wiring";
 import type { LedColor } from "../bench3d/ledparams";
 import { LessonInfo } from "./lessoninfo";
 import { LessonMapBtn } from "./lessonmap";
+import { CourseDone, CourseHead } from "./coursenav";
 import { StepDoneBar, TaskList, useStepReady } from "./lessontasklist";
 
 export interface LessonUi {
@@ -148,12 +149,7 @@ export function LessonCard({ step }: { step: string }) {
     <section id="lessonCard" aria-label={t("Lesson step")} data-step={done ? "done" : s.step} className="-mx-4 mb-3 flex flex-col gap-3 border-b border-line bg-surface px-4 pt-3 pb-4">
       <LessonInfo />
       {done ? (
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[11px] font-medium text-ok-ink">{t("Lesson {n} done", { n: l.no })}</span>
-          <h2 className="m-0 text-[20px] leading-7">{l.title}</h2>
-          <p className="m-0 text-[14px] leading-[22px]">{l.summary}</p>
-          {s.next && <p className="m-0 text-[13px] text-muted">{s.next}</p>}
-        </div>
+        <CourseDone />
       ) : (
         <>
           <div className="flex flex-col gap-1.5">
@@ -178,15 +174,11 @@ export function LessonCard({ step }: { step: string }) {
         </>
       )}
       {!done && ready && <StepDoneBar />}
+      {!done && (
       <div className="flex gap-2">
         <button type="button" id="lessonPrev" className={cn(btnBase, "flex-1 border border-line bg-surface text-fg hover:bg-field disabled:cursor-default disabled:opacity-50")} disabled={s.step === 0} onClick={() => s.go(s.step - 1)}>
           {t("Previous")}
         </button>
-        {done ? (
-          <button type="button" id="lessonNext" className={cn(btnBase, "flex-2 border-0 bg-accent-strong font-medium text-on-accent")} onClick={() => s.go(0)}>
-            {t("Start over")}
-          </button>
-        ) : (
           <button
             type="button"
             id="lessonNext"
@@ -196,28 +188,20 @@ export function LessonCard({ step }: { step: string }) {
           >
             {s.step === n - 1 ? t("Finish lesson {n}", { n: l.no }) : ready ? t("Next step") : t("Skip, next step")}
           </button>
-        )}
       </div>
+      )}
     </section>
   );
 }
 
-/** Top bar: "≡ Lessons" (H-12 map) + "Lesson 1 · Light up an LED" + one bar per step + n/5. */
+/** Top bar (H-15): "≡ Lessons" (H-12 map) + "Basics / Lesson n / 12 · title" + 12 lesson bars + ‹ previous / next › lesson. */
 export function LessonHead() {
-  const s = useStore(lessonUi);
-  const l = s.lesson;
+  const l = useStore(lessonUi).lesson;
   if (!l) return null;
-  const n = l.steps.length;
   return (
     <div id="lessonTitle" className="flex min-w-0 items-center gap-2.5 px-2">
       <LessonMapBtn />
-      <span className="truncate text-[14px] font-bold">{t("Lesson {n} · {title}", { n: l.no, title: l.title })}</span>
-      <span className="flex flex-none gap-1" role="img" aria-label={t("Step progress {n}/{total}", { n: Math.min(s.step + 1, n), total: n })}>
-        {l.steps.map((st, i) => (
-          <span key={st.id} className={cn("h-1 w-3 rounded-sm", i <= s.step ? "bg-accent-strong" : "bg-line")} />
-        ))}
-      </span>
-      <span className="flex-none font-mono text-[12px] text-muted">{`${Math.min(s.step + 1, n)}/${n}`}</span>
+      <CourseHead />
     </div>
   );
 }
