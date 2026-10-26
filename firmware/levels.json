@@ -1865,5 +1865,30 @@
     0
    ]
   }
+ },
+ {
+  "id": "basics-buzz",
+  "work": "basics",
+  "title": "Make a sound",
+  "goal": "A passive buzzer plays do re mi",
+  "pass": "Within 1.2 s the buzzer on GPIO6 gets a square wave (50% duty, silent between notes) at 3 or more different frequencies; 音符 do 262 Hz, 音符 re 294 Hz and 音符 mi 330 Hz appear on serial",
+  "buy": "Passive buzzer module (3-pin)",
+  "learn": "LEDC square waves, frequency = pitch",
+  "brief": "Write ESP32-S3 firmware with ESP-IDF 5.5:\n· A passive 3-pin buzzer module: I/O to GPIO6, VCC to 3V3, GND to GND. A passive buzzer has no oscillator inside, so it only sounds while it gets a square wave, and the wave's frequency is the pitch\n· Drive it with LEDC (driver/ledc.h): low-speed mode, 10-bit duty, duty 512 (half high, half low) while a note sounds, 0 between notes\n· Play do 262 Hz, re 294 Hz, mi 330 Hz in a loop, starting right after power-on: each note sounds 270 ms, then 30 ms of silence (change the pitch with ledc_set_freq)\n· When a note starts, print 音符 <name> <frequency> Hz, e.g. 音符 do 262 Hz",
+  "ref": "s3-buzzer",
+  "seconds": 1.2,
+  "expect": [
+   "音符 do 262 Hz",
+   "音符 re 294 Hz",
+   "音符 mi 330 Hz"
+  ],
+  "pwm": {
+   "pin": 6,
+   "freq": 262,
+   "min": 0.0,
+   "max": 0.5,
+   "tol": 0.01,
+   "tones": 3
+  }
  }
 ]

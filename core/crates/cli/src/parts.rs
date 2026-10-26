@@ -116,3 +116,34 @@ pub fn pin_reports(m: &mut Machine) {
         eprintln!("[tryboard] {l}");
     }
 }
+
+/// `PWM GPIOn steps` (duty@time, neighbours equal to 3 decimals merged) and, when the pitch changes, `PWM GPIOn tones` (Hz@time while sounding, H-16)
+pub fn pwm_steps<P: std::fmt::Display>(p: P, trace: &[(f64, f32, f32)]) {
+    let mut steps: Vec<String> = Vec::new();
+    let mut last = String::new();
+    for (t, d, _) in trace {
+        let k = format!("{d:.3}");
+        if k != last {
+            steps.push(format!("{k}@{t:.3}"));
+            last = k;
+        }
+    }
+    eprintln!("[tryboard] PWM GPIO{p} steps {}", steps.join(" "));
+    // Fixed-pitch runs print no tones line, so their reports and fingerprints stay the same
+    let mut tones: Vec<String> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    last.clear();
+    for (t, d, f) in trace {
+        let k = format!("{f:.0}");
+        if *d > 0.0 && *f > 0.0 && k != last {
+            tones.push(format!("{k}@{t:.3}"));
+            if !seen.contains(&k) {
+                seen.push(k.clone());
+            }
+            last = k;
+        }
+    }
+    if seen.len() > 1 {
+        eprintln!("[tryboard] PWM GPIO{p} tones {}", tones.join(" "));
+    }
+}

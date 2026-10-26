@@ -317,6 +317,19 @@ export async function runSim(j: SimJob, hooks: SimHooks = {}): Promise<SimResult
       last = k;
     }
     report += `[tryboard] PWM GPIO${j.pwmPin} steps ${steps.join(' ')}\n`;
+    // Tones while sounding (H-16 melody), same rule as the CLI: only when the pitch changes
+    const tones: string[] = [];
+    const seen = new Set<string>();
+    last = '';
+    for (const [d, f, t] of trace) {
+      const k = f.toFixed(0);
+      if (d > 0 && f > 0 && k !== last) {
+        tones.push(`${k}@${t.toFixed(3)}`);
+        seen.add(k);
+        last = k;
+      }
+    }
+    if (seen.size > 1) report += `[tryboard] PWM GPIO${j.pwmPin} tones ${tones.join(' ')}\n`;
   }
   // The timing line (D-03) only feeds per-row trust (D-05): kept out of report so fingerprints match check.py
   let timing = '';

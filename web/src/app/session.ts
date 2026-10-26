@@ -67,7 +67,8 @@ async function benchInit(work: WorkDef, opts: SessionOpts) {
   const examples = await loadExamples();
   const ex = work.example ? examples.find((e) => e.id === work.example) : undefined;
   // A placed list supplies the parts; camera stays at the work default.
-  const scene: SceneSpec = opts.placed ? { ...ex?.scene, ...opts.placed.scene } : (ex?.scene ?? { parts: [] });
+  const base = work.scene ?? ex?.scene;
+  const scene: SceneSpec = opts.placed ? { ...base, ...opts.placed.scene } : (base ?? { parts: [] });
   // Examples default to C3; a truly blank work gets an S3 devkit.
   const chip = ex ? chipOf(ex) : (opts.chip ?? 'esp32s3');
   return { ex, scene, chip };

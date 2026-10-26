@@ -39,8 +39,8 @@ export const WORKS: Record<string, WorkDef> = {
   touch: { id: 'touch', title: t('Touch round screen (CST816S)'), example: 's3-touch', checkpoints: [] },
   // F-05: each checkpoint starts with a broken bench; no home card, reached from the link under the works grid
   faults: { id: 'faults', title: t('Find the fault'), example: 'weather', checkpoints: ['fault-wire', 'fault-power', 'fault-antenna', 'fault-adc', 'fault-i2c-swap'] },
-  // H-15 course-only bench for lessons 0 / 4 / 6 (board + breadboard + LED on GPIO5); H-16 adds basics-pwm / basics-buzz
-  basics: { id: 'basics', title: t('Basics course'), example: 's3-blink', checkpoints: ['basics-pwm'], courseOnly: true },
+  // H-15 course-only bench for lessons 0 / 4 / 6 (board + breadboard + LED on GPIO5, buzzer on GPIO6); H-16 adds basics-pwm / basics-buzz
+  basics: { id: 'basics', title: t('Basics course'), example: 's3-blink', checkpoints: ['basics-pwm', 'basics-buzz'], courseOnly: true, scene: { parts: [{ type: 'led', pin: 5 }, { type: 'buzzer', pin: 6 }] } },
 };
 
 /** localStorage key for a work's data */

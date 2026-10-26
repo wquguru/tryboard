@@ -29,6 +29,8 @@ export interface FeedItem {
   i2c?: { addr: number; bytes: number; last: number };
   /** H-16: a PWM row (duty in whole percent); `hi` = duty above 0. */
   duty?: number;
+  /** H-16: a tone row (PWM frequency in Hz); hi is true. */
+  hz?: number;
 }
 interface FeedState {
   items: FeedItem[];
@@ -53,9 +55,12 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
   const rules = lesson?.events ?? [];
   const i2cRules = lesson?.i2c ?? [];
   const pwmRules = lesson?.pwm ?? [];
-  if (!lesson || (!rules.length && !i2cRules.length && !pwmRules.length)) return;
+  const toneRules = lesson?.tones ?? [];
+  if (!lesson || (!rules.length && !i2cRules.length && !pwmRules.length && !toneRules.length)) return;
   // PWM: last duty level narrated per pin (PWM changes are always logged, no watch needed)
   const pwmLast = new Map<number, number>();
+  // Pitch now sounding per tone pin (0 = silent), so a held note or a silent gap adds no row
+  const sounding = new Map<number, number>();
   // GPIO edges are only recorded for watched pins; add ours without dropping the analyzer's (I2C is always logged)
   const pins = new Set(session.ioPins());
   if (rules.some((r) => !pins.has(r.pin))) session.watchIo([...pins, ...rules.map((r) => r.pin)]);
@@ -76,6 +81,7 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
       at = 0;
       skipT = trimmed ? seenT : -1;
       open.clear();
+      sounding.clear();
       if (!trimmed) {
         pwmLast.clear();
         seenT = -1;
@@ -112,16 +118,28 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
         continue;
       }
       if (e.kind === K.PWM) {
-        const r = pwmRules.find((x) => x.pin === e.a);
+        const p = pwmRules.find((x) => x.pin === e.a);
+        if (p) {
+          // Only duties sitting on a multiple of `every` make a row (a fade has hundreds of steps)
+          const duty = e.v ? e.b / 65535 : 0;
+          const every = p.every ?? 0.2;
+          const q = Math.round(duty / every);
+          if (Math.abs(duty - q * every) > 0.005 || pwmLast.get(e.a) === q) continue;
+          pwmLast.set(e.a, q);
+          const pct = Math.round(q * every * 100);
+          items.push({ n: n++, t: e.t, pin: e.a, hi: pct > 0, text: p.text.replace("{pct}", String(pct)), line: p.line, duty: pct });
+          changed = true;
+          continue;
+        }
+        const r = toneRules.find((x) => x.pin === e.a);
         if (!r) continue;
-        // Only duties sitting on a multiple of `every` make a row (a fade has hundreds of steps)
-        const duty = e.v ? e.b / 65535 : 0;
-        const every = r.every ?? 0.2;
-        const q = Math.round(duty / every);
-        if (Math.abs(duty - q * every) > 0.005 || pwmLast.get(e.a) === q) continue;
-        pwmLast.set(e.a, q);
-        const pct = Math.round(q * every * 100);
-        items.push({ n: n++, t: e.t, pin: e.a, hi: pct > 0, text: r.text.replace("{pct}", String(pct)), line: r.line, duty: pct });
+        // b = duty × 65535, v = Hz × 1000; a passive buzzer only sounds on a real square wave
+        const hz = e.b > 0 && e.b < 65535 && e.v > 0 ? Math.round(e.v / 1000) : 0;
+        if (hz === (sounding.get(e.a) ?? 0)) continue;
+        sounding.set(e.a, hz);
+        if (!hz) continue;
+        const text = r.text.replace("{hz}", String(hz)).replace("{note}", r.notes?.[hz] ?? "");
+        items.push({ n: n++, t: e.t, pin: e.a, hi: true, text, line: r.line, hz });
         changed = true;
         continue;
       }
@@ -192,6 +210,8 @@ export const evWhere = (e: FeedItem) =>
     ? t("I2C → {addr}", { addr: hex(e.i2c.addr) })
     : e.duty !== undefined
       ? t("GPIO{pin} → PWM duty {pct}%", { pin: e.pin, pct: e.duty })
+      : e.hz
+      ? t("GPIO{pin} → {hz} Hz square wave", { pin: e.pin, hz: e.hz })
       : e.hi
       ? t("GPIO{pin} → high 3.3 V", { pin: e.pin })
       : t("GPIO{pin} → low 0 V", { pin: e.pin });
@@ -238,7 +258,7 @@ export function LessonFeed({ className }: { className?: string }) {
               key={e.n}
               data-ev={e.n}
               data-t={e.t}
-              {...(e.i2c ? { "data-i2c": hex(e.i2c.addr), "data-bytes": e.i2c.bytes } : { "data-pin": e.pin, "data-level": e.hi ? 1 : 0 })}
+              {...(e.i2c ? { "data-i2c": hex(e.i2c.addr), "data-bytes": e.i2c.bytes } : { "data-pin": e.pin, "data-level": e.hi ? 1 : 0, ...(e.hz ? { "data-hz": e.hz } : {}) })}
               {...(e.duty !== undefined && { "data-duty": e.duty })}
               className="flex gap-2.5 py-0.5 leading-5"
             >

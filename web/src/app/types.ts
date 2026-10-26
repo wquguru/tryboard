@@ -124,6 +124,8 @@ export interface WorkDef {
   key?: string;
   /** Only reached from the basics course (H-15): kept off the home page and the work menu. */
   courseOnly?: boolean;
+  /** Bench parts instead of the example's (H-16: basics adds a buzzer to the s3-blink bench without changing that example). */
+  scene?: SceneSpec;
 }
 
 /** Live sim + 3D bench: one per page, not rebuilt on step change */
