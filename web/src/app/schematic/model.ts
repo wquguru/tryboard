@@ -205,7 +205,7 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
         sch.gnds.push({ x: 660, y: y + 40 });
         if (wire) net(row.a, wire);
         if (L.g) net('GND', L.g.id);
-        sch.flows.push({ part: L.id, ref: L.d.ref, pts: [R + 10, y + 18, 650, y + 18], mA: L.mA, x: R + 30, y: y + 30 });
+        sch.flows.push({ part: L.id, ref: L.d.ref, pts: [R + 10, y + 18, 650, y + 18], mA: L.mA, x: R + 30, y: y + 62 });
         y += 110;
         continue;
       }
@@ -311,8 +311,8 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
       flag(n, x - fw / 2, by - 38, wr.id, 'part');
     });
     const bw = Math.max(W, 40 + b.pw.length * pitch) - 40;
-    sch.syms.push({ ref: b.title, kind: 'box', part: b.id, pick: { kind: 'part', id: b.id }, x: BX, y: by, w: bw, h: 80, title: b.title, sub: b.sub, pins });
-    by += 80 + 70;
+    sch.syms.push({ ref: b.title, kind: 'box', part: b.id, pick: { kind: 'part', id: b.id }, x: BX, y: by, w: bw, h: 90, title: b.title, sub: b.sub, pins, ty: by + 54 });
+    by += 90 + 70;
   }
   sch.w = w;
   sch.h = others.length ? by - 70 + 20 : low + sch.flows.length * 26 + 20;

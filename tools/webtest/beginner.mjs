@@ -91,7 +91,7 @@ await page.click('#dock [data-dock="lesson"]');
 report('five steps, first current', (await states(page)) === 'now,todo,todo,todo,todo', await states(page));
 report('pass criteria folded in details', await page.$eval('#lessonCp details', (d) => !d.open).catch(() => false));
 const short = await tools(page);
-report('short toolbar', short === 'run,current,select,orbit,fit,button,more', short);
+report('short toolbar', short === 'run,current,select,orbit,fit,button,view3d,schematic,more', short);
 report('Previous disabled on step 1', await page.$eval('#lessonPrev', (e) => e.disabled));
 // H-02 callouts: cards for the step, inside the viewport, leader end follows the camera
 const callouts = (pg) =>
@@ -195,11 +195,11 @@ report('progress survives reload', (await cardStep(page)) === '2', `card=${await
 
 // 4. More tools expands to the full set and back
 await page.click('#toolbar [data-tool="more"]');
-await waitFor(page, (n) => document.querySelectorAll('#toolbar [data-tool]').length > n, 7, 3000);
+await waitFor(page, (n) => document.querySelectorAll('#toolbar [data-tool]').length > n, 9, 3000);
 const full = await tools(page);
 report('more tools: full set + fewer', full === offTools + ',more', full);
 await page.click('#toolbar [data-tool="more"]');
-await waitFor(page, () => document.querySelectorAll('#toolbar [data-tool]').length === 7, null, 3000);
+await waitFor(page, () => document.querySelectorAll('#toolbar [data-tool]').length === 9, null, 3000);
 report('fewer tools: short again', (await tools(page)) === short);
 
 // 5. Switch off: identical to the baseline, choice remembered (Show current left on is cleared with it)
@@ -227,8 +227,8 @@ await page.close();
 
 // 5b. H-08: checkpoints 02 / 03 bring their own lessons (Button, OLED); 03 has no "Show current" loop
 for (const [cp, re, tl] of [
-  ['02', /Lesson 2/, 'run,current,select,orbit,fit,button,more'],
-  ['03', /Lesson 3/, 'run,select,orbit,fit,button,more'],
+  ['02', /Lesson 2/, 'run,current,select,orbit,fit,button,view3d,schematic,more'],
+  ['03', /Lesson 3/, 'run,select,orbit,fit,button,view3d,schematic,more'],
 ]) {
   const pg = await open(`/app?work=weather&cp=${cp}&debug=1&beginner=1#bench`);
   await waitFor(pg, () => !!document.querySelector('#lessonTitle'), null, 10000);
@@ -357,6 +357,47 @@ if (mb[0]) {
 }
 await ph.screenshot({ path: path.join(outDir, 'beginner-phone.png') });
 await ph.close();
+
+// H-17 schematic view: symbols pick the same target as 3D, net flags light both ends, current estimate, phone layout
+{
+  const pg = await open('/app?work=weather&cp=01&debug=1&beginner=1#bench');
+  await pg.click('#toolbar [data-tool="schematic"]');
+  const up = await waitFor(pg, () => !!document.querySelector('#schematicSvg [data-ref="R1"]') && document.querySelector('#stage')?.dataset.view === 'schematic', null, 3000);
+  report('H-17 lesson 01: schematic replaces the stage (U1 / R1 / D1)', up && (await pg.$$eval('#schematicSvg [data-ref]', (es) => es.map((e) => e.dataset.ref).join(','))) === 'U1,R1,D1');
+  await pg.click('#schematicSvg [data-ref="R1"]');
+  const lit = await waitFor(pg, () => { const h = globalThis.__tbApp.session.bench._debug.hl(); return h?.kind === 'part' && h.id === 'led:5'; }, null, 3000);
+  report('H-17 clicking R1 selects the LED part on the 3D bench', lit && (await pg.$eval('#schematicCard', (e) => e.dataset.ref).catch(() => null)) === 'R1');
+  await pg.click('#toolbar [data-tool="current"]');
+  const flow = await waitFor(pg, () => /mA/.test(document.querySelector('#schematicSvg [data-flow="led:5"]')?.textContent ?? ''), null, 3000);
+  report('H-17 Show current draws the loop with an mA estimate', flow);
+  await pg.click('#toolbar [data-tool="view3d"]');
+  report('H-17 back to 3D: overlay gone, highlight kept', !(await has(pg, '#schematic')) && (await pg.evaluate(() => globalThis.__tbApp.session.bench._debug.hl()?.id === 'led:5')));
+  await pg.close();
+}
+{
+  const pg = await open('/app?work=weather&cp=03&debug=1&beginner=1#bench');
+  await pg.click('#toolbar [data-tool="schematic"]');
+  await waitFor(pg, () => !!document.querySelector('#schematicSvg [data-net="SDA"]'), null, 3000);
+  await pg.click('#schematicSvg [data-net="SDA"]');
+  const lit = await waitFor(pg, () => globalThis.__tbApp.session.bench._debug.hl()?.id === 'wire:GPIO8~oled:SDA', null, 3000);
+  const ends = await pg.$$eval('#schematicSvg [data-net="SDA"][aria-pressed="true"]', (es) => es.map((e) => e.dataset.end).sort().join(','));
+  report('H-17 lesson 03: clicking SDA lights both flags and the 3D wire', lit && ends.split(',').length === 2, ends);
+  await pg.close();
+}
+{
+  const pg = await open('/app?work=weather&cp=03&debug=1&beginner=1#bench', null, { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await waitFor(pg, () => !!document.querySelector('[data-mtool="more"]'), null, 5000);
+  await pg.tap('[data-mtool="more"]');
+  await waitFor(pg, () => !!document.querySelector('[data-tool="schematic"]'), null, 3000);
+  await pg.tap('[data-tool="schematic"]');
+  const up = await waitFor(pg, () => document.querySelector('#schematic')?.dataset.layout === 'phone', null, 3000);
+  const m = await pg.evaluate(() => {
+    const bs = [...document.querySelectorAll('#schematic button')].filter((e) => e.offsetParent).map((e) => e.getBoundingClientRect().height);
+    return { sw: document.documentElement.scrollWidth, minH: Math.min(...bs), n: bs.length };
+  });
+  report('H-17 phone: vertical schematic, buttons ≥ 44px, no horizontal scroll', up && m.sw <= 390 && m.minH >= 44, JSON.stringify(m));
+  await pg.close();
+}
 
 report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();

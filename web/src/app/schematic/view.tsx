@@ -131,11 +131,11 @@ function SymBox({ s, on }: { s: SchSym; on: boolean }) {
   return (
     <>
       <rect x={s.x} y={s.y} width={s.w} height={s.h} rx={6} fill="var(--surface)" stroke="currentColor" strokeWidth={2} />
-      <text x={s.x + 14} y={s.y + 26} className="fill-current text-[15px] font-bold">
+      <text x={s.x + 14} y={s.ty ?? s.y + 26} className="fill-current text-[15px] font-bold">
         {s.ref}
       </text>
       {s.sub && (
-        <text x={s.x + 14} y={s.y + 46} className="fill-muted text-[13px]">
+        <text x={s.x + 14} y={(s.ty ?? s.y + 26) + 20} className="fill-muted text-[13px]">
           {s.sub}
         </text>
       )}
@@ -191,7 +191,8 @@ function Sheet({ sch, sel, net, flow, onSym, onNet }: { sch: Schematic; sel: (s:
       viewBox={`0 0 ${sch.w} ${sch.h}`}
       width={sch.w}
       height={sch.h}
-      className="mx-auto block h-auto max-w-full text-fg select-none"
+      style={{ width: "100%", maxWidth: sch.w * 1.5 }}
+      className="mx-auto block h-auto text-fg select-none"
       role="img"
       aria-label={t("Schematic")}
     >
@@ -391,9 +392,9 @@ export function SchematicView({ b }: { b: BenchCtx }) {
       id="schematic"
       data-layout={phone ? "phone" : "desktop"}
       data-flow={flowOn ? "on" : undefined}
-      className={cn("absolute inset-0 z-[1] flex bg-surface", phone ? "flex-col gap-2 p-3" : "gap-3 p-4 pt-14")}
+      className={cn("absolute inset-0 z-[5] flex bg-surface", phone ? "flex-col gap-2 overflow-y-auto p-3" : "gap-3 p-4 pb-(--tb-h)")}
     >
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+      <div className={cn("flex min-w-0 flex-col gap-2", phone ? "shrink-0" : "min-h-0 flex-1")}>
         <div className="flex flex-wrap items-center gap-2">
           {phone && (
             <div role="group" aria-label={t("Bench view")} className="flex flex-1 rounded-[10px] bg-line p-[3px]">
@@ -416,7 +417,7 @@ export function SchematicView({ b }: { b: BenchCtx }) {
         </div>
         <div
           id="schematicPaper"
-          className="relative min-h-0 flex-1 overflow-auto rounded-xl border border-line p-3"
+          className={cn("relative overflow-auto rounded-xl border border-line p-3", phone ? "shrink-0" : "min-h-0 flex-1")}
           style={{ backgroundImage: "radial-gradient(var(--line) 1px, transparent 1.2px)", backgroundSize: "20px 20px" }}
         >
           <Sheet sch={sch} sel={symOf} net={ui.net} flow={flowOn} onSym={onSym} onNet={onNet} />
@@ -429,7 +430,7 @@ export function SchematicView({ b }: { b: BenchCtx }) {
       </div>
       <aside
         aria-label={t("Selected symbol")}
-        className={cn(phone ? "rounded-t-2xl bg-surface p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]" : "w-72 shrink-0 self-start pt-9")}
+        className={cn(phone ? "shrink-0 rounded-t-2xl bg-surface p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]" : "w-72 shrink-0 self-start pt-9")}
       >
         {!phone && <div className="mb-2 text-[12px] text-muted">{t("Selected symbol")}</div>}
         <Card b={b} sch={sch} sym={picked} net={ui.net} />
