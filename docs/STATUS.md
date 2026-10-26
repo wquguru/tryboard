@@ -397,3 +397,4 @@ arduino-cli 1.5.1 + esp32 core 3.3.2，FQBN `esp32:esp32:esp32c3`；草图在 `f
 - R-21（ROM 瘦身）：网页发布的 ROM 去掉 `.xt.prop` / `.xt.lit`（`tools/strip_rom.py`，build_web.sh 调用）：S3 949 552 → 619 788 B，ESP32 857 500 → 596 888 B，C3 不变；可加载段与符号表逐项相同（脚本断言，仅 ELF 头里的 e_shoff / e_shnum / e_shstrndx 变，该头被第一个 PT_LOAD 映射但无人读）；命令行用裁剪 ROM 与原 ROM 跑 weather / esp32-blink / hello / esp32-wifi，stdout 与 stderr（除墙钟）逐字相同；levels.mjs 全过。
 
 - 2026-10-25 已知失败：`tools/webtest/asm3d.mjs`「dialtimer: 3D Dial in its stand; dragging the ring changes the minutes」FAIL（拖 44px 后分钟仍为 5、detents 0）；在批次 H2 之前的 0326bef 干净构建上同样失败，非 H2 引入，待查。
+- 2026-10-26 H-16 第 4 课「呼吸灯」（basics · basics-pwm）：新固件 s3-fade（LEDC GPIO5 5 kHz / 13 位，2 s 一呼一吸）+ 变体 s3-fade-1000 / -4000；check.py basics-pwm PASS（3cb3·06cd），accept.sh 三个用例 ✅；事件流按 20 % 占空比出行，3D LED 亮度随占空比变；走查见 Reviews/ab/H-16-l4.md。已知：标注「Now:」在 PWM 下显示数字电平；accept.sh 的 lint_size 报 i18n/{zh,ja,ko}/lab.ts 超 1500 行（基线已 1522，非本课引入，本课 +54）。
