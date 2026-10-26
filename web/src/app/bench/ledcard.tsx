@@ -4,6 +4,7 @@ import { t } from "../../i18n";
 import { useEffect, useState, type ReactNode } from "react";
 import { Kv, KvT, Muted, Note, Sec, Seg, SegB } from "../../ui/panel";
 import { partId } from "../wiring";
+import { isS3 } from "../../chips";
 import { ledCurrent } from "../faultsolve";
 import { lessonSignal } from "../lessontasks";
 import { LED_HEX, LED_OHMS, LED_OHM_DEFAULT, LED_VF, ledColor, ohmText, type LedColor } from "../../bench3d/ledparams";
@@ -75,7 +76,7 @@ export function ledControls(b: BenchCtx, p: LedPart): ReactNode {
       </Seg>
       <Sec>{t("Estimate at GPIO high")}</Sec>
       <Kv k={t("Forward voltage (knee)")} v={`${LED_VF[color].toFixed(1)} V`} />
-      <LedMa ohm={nores ? 0 : ohm} vf={LED_VF[color]} s3={ses.chip === "esp32s3"} />
+      <LedMa ohm={nores ? 0 : ohm} vf={LED_VF[color]} s3={isS3(ses.chip)} />
       {nores && <Muted>{t("The resistor is pulled out on the bench, so the LED sees the pin directly.")}</Muted>}
       <Note>
         {t("Estimate · not calibrated on real hardware. 3.3 V minus the LED drop, divided by the resistor plus the pin's output resistance; brightness on the bench follows this current. More resistance means less current and a dimmer LED; blue needs more voltage, so it gets less current from 3.3 V.")}

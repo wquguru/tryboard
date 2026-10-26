@@ -4,6 +4,7 @@ import { checkWiring, faultByWire } from "../wirecheck";
 import { applyCached, enrichFaults } from "../faultsolve";
 import { bc, setBc, type Issue } from "../chrome";
 import type { BenchCtx } from "./ctx";
+import { isS3 } from "../../chips";
 
 export function mountWiringCheck(b: BenchCtx) {
   let shownFaults = new Set<string>();
@@ -16,7 +17,7 @@ export function mountWiringCheck(b: BenchCtx) {
 
   function recheckWiring() {
     const c = b.ctx!;
-    const s3 = c.session.chip === "esp32s3";
+    const s3 = isS3(c.session.chip);
     const fresh = checkWiring(c.session.scene.parts, b.benchWires(), c.session.i2cFw);
     const cached = applyCached(fresh, s3);
     b.faults = cached.faults;
