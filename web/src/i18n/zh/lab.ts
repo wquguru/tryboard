@@ -1491,5 +1491,6 @@ const d: Dict = {
   "Selected symbol": "选中的符号",
   "The triangle points the way current flows; the bar end (short leg) goes to GND.": "三角形指向电流方向；竖线一端（短脚）接 GND。",
   "Wire colours aren't drawn: a schematic only shows what connects to what": "导线颜色不画：原理图只看连接关系",
+  "Not calibrated on real hardware": "未在实机校准",
 };
 export default d;

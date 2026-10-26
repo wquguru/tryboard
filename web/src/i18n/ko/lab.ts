@@ -1491,5 +1491,6 @@ const d: Dict = {
   "Selected symbol": "선택한 기호",
   "The triangle points the way current flows; the bar end (short leg) goes to GND.": "삼각형은 전류 방향을 가리키고, 막대 쪽(짧은 다리)이 GND에 연결됩니다.",
   "Wire colours aren't drawn: a schematic only shows what connects to what": "선 색은 그리지 않습니다. 회로도는 연결 관계만 보여 줍니다",
+  "Not calibrated on real hardware": "실기기 미보정",
 };
 export default d;

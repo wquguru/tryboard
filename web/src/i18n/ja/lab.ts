@@ -1491,5 +1491,6 @@ const d: Dict = {
   "Selected symbol": "選択中の記号",
   "The triangle points the way current flows; the bar end (short leg) goes to GND.": "三角形は電流の向きを指し、棒の側（短い足）が GND につながります。",
   "Wire colours aren't drawn: a schematic only shows what connects to what": "線の色は描きません。回路図はつながり方だけを示します",
+  "Not calibrated on real hardware": "実機で未校正",
 };
 export default d;
