@@ -1905,3 +1905,8 @@
 - 理由：一课一个新零件且不动其他课与例程；新增报告行只在变调时出现，避免重存 golden。
 - 备选：改 s3-blink 例程的 scene（会影响例程页与其他作品，没选）；在 pwm 判定里解析 steps 行求不同频率（steps 只在 ≤ N 次变化时完整，没选）；蜂鸣器接 GPIO4（离 IO5 另一侧、与蜂鸣器摆位不符，没选）。
 - 补充：CLI 的 steps / tones 两行挪到 `parts::pwm_steps`（main.rs 的 run 函数与文件行数受 R-14 lint_size 限制，不能再长）；GPIO6 标注的「现在」读数在引脚走 PWM 时显示「{hz} Hz 方波，{pct} % 时间为高」（LEDC 路由后 GPIO 输出寄存器恒为低，原来会一直显示低电平）。beginner.mjs 课程目录一项的期望从「只写了 1–3 课」改为「正好 1,2,3,6」。
+
+## 2026-10-26 H-16 第 10 课「做个 USB 键盘」：对应 usbkey-2，新增 usb 任务信号
+- 决定：(1) COURSE 第 10 课的检查点由 `usbkey-1` 改为 `usbkey-2`（「按键打出字母」）。usbkey-2 的判定是「枚举成 configured + PC 打出 abc」，正好覆盖本课两件事；usbkey-1 只要求枚举，没按键课就算完成。(2) lessontasks 新增 DoneSpec `usb:configured` 与 `usb:typed=<文本>`（PC 收到的累计文本包含该串即命中）；新导出 `usbSignals(view, fwName)`，由 session.ts 的 onUsb 和 bench/lesson.tsx 的 probe 调用，只在当前固件是本课固件时发信号（和 strip 信号同一个 `lessonFw` 门，门里补了「fw 非空」）。(3) 不新增固件，复用 usbkey；台面只留 K1–K3（key:4/5/6），USB 走已有虚拟 PC 面板。
+- 理由：一课对应一个检查点，课完成 = 检查点通过；信号最小，直接取 UsbView 的 configured / typed。
+- 备选：保留 usbkey-1，把打字当课内任务（课完成早于打字，没选）；把 usbkey-1 和 usbkey-2 都挂到第 10 课（COURSE 一课只有一个 cp，没选）；从串口 `KEY n c` 行判定打字（看不到 PC 端是否真收到，没选）。

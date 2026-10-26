@@ -18,7 +18,7 @@ import type { Store } from './store';
 import { currentTheme, onTheme } from '../theme';
 import { IoStore, decodeEvents } from './iotrace';
 import { taskStore } from './tasktrace';
-import { lessonSignal, stripSignals } from './lessontasks';
+import { lessonSignal, stripSignals, usbSignals } from './lessontasks';
 import type { UsbView } from '../usb3d';
 import { bleFeed } from './blefeed';
 import { irFeed } from './irfeed';
@@ -468,6 +468,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       onUsb(v) {
         s.usb = v;
         bench.setUsb(v);
+        usbSignals(v, s.fwName);
         for (const cb of [...usbSubs]) cb(v);
       },
       onNet: (m) => netFeed.update(m),

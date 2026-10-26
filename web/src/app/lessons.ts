@@ -7,6 +7,7 @@ import { L5 } from './lessondata/l5.ts';
 import { LESSON_0 } from './lessondata/l0.ts';
 import { lesson4 } from './lessondata/l4.ts';
 import { L6 } from './lessondata/l6.ts';
+import { L10 } from './lessondata/l10.ts';
 
 /** A bench thing a callout points at: same shape as PickTarget (part / pin / wire / button + id). */
 export interface LessonTarget {
@@ -48,7 +49,7 @@ export interface LessonTask {
   text: string;
   /** One line of "how to do it" under the task while it waits. */
   how?: string;
-  /** `run` | `reveal` | `view:current` | `select:<id>` | `prop:<part>.<key>=<v>` | `chip:delay=<ms>` | `press:boot×<n>`. */
+  /** `run` | `reveal` | `view:current` | `select:<id>` | `prop:<part>.<key>=<v>` | `chip:delay=<ms>` | `press:boot×<n>` | `strip:<pin>=<n>` | `usb:configured` | `usb:typed=<text>`. */
   done: string;
   /** reveal: the answer shown when the learner opens it. */
   answer?: string;
@@ -523,6 +524,7 @@ export const LESSONS: Lesson[] = [
   LESSON_0,
   lesson4,
   L6,
+  L10,
 ];
 
 /** The lesson for this work's checkpoint, if one is written. */
