@@ -91,7 +91,11 @@ async function replay(page, fw, re) {
   const has = (re) => waitFor(page, (s) => new RegExp(s).test(globalThis.__tbApp.session.consoleText()), re.source, 5000);
   // Tap at panel pixel (120, 360): the CST9220 must report it within 2 px
   const [x, y] = await page.evaluate(() => globalThis.__tbApp.session.bench.lcdPoint(120, 360));
-  await page.mouse.click(x, y, { delay: 120 });
+  // Same wait-for-press as the second tap: release only after TOUCH DOWN is on the serial console
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await has(/TOUCH DOWN/);
+  await page.mouse.up();
   await has(/TOUCH UP/);
   const down = /TOUCH DOWN x=(\d+) y=(\d+)/.exec(await out());
   report('tap the square screen -> TOUCH at the tapped pixel', !!down && Math.abs(+down[1] - 120) <= 2 && Math.abs(+down[2] - 360) <= 2, down?.[0] ?? 'no TOUCH DOWN');
@@ -119,8 +123,14 @@ async function replay(page, fw, re) {
   report('PWR long press -> PWRON 长按', (await click('pwr-long')) && (await has(/PWRON 长按/))); // lint: allow-cjk
   // Second tap after the board events, so the replay interleaves input kinds
   const [x2, y2] = await page.evaluate(() => globalThis.__tbApp.session.bench.lcdPoint(400, 80));
-  await page.mouse.click(x2, y2, { delay: 120 });
-  report('second tap -> TOUCH near (400, 80)', await has(/TOUCH DOWN x=(39[89]|40[012]) y=(7[89]|8[012])\b/));
+  // Hold the finger until the firmware printed the press: a loaded worker can apply down + up in one slice (0 ms press, no report)
+  await page.mouse.move(x2, y2);
+  await page.mouse.down();
+  const tap2 = await has(/TOUCH DOWN x=(39[89]|40[012]) y=(7[89]|8[012])\b/);
+  const diag = tap2 ? '' : await page.evaluate(async (c) => { const s = globalThis.__tbApp.session; const ev = (await s.sim.inputLog()).events.slice(-3); return JSON.stringify({ c, now: s.bench.lcdPoint(400, 80), ev, out: s.consoleText().split('\n').slice(-6) }); }, [x2, y2]); // failure detail: last inputs + serial tail
+  report('second tap -> TOUCH near (400, 80)', tap2, diag);
+  await page.mouse.up();
+  await has(/TOUCH UP x=(39[89]|40[012]) y=(7[89]|8[012])\b/);
   await sleep(500);
   await page.screenshot({ path: path.join(outDir, 'amoled-i2c.png') });
   const r = await replay(page, 's3-amoled-i2c', /^(TOUCH|PWRON|USB|开始充电|充电完成|变化|发现|RTC|I2C)/); // lint: allow-cjk

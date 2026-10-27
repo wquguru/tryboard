@@ -25,6 +25,8 @@ pub struct Cst9220 {
     report: [u8; REPORT_LEN],
     /// Unacked report waiting (finger moved / lifted since the last ack)
     pending: bool,
+    /// Finger changed after the host last read 0xD000: an ack then covers an older report and must keep `pending`
+    changed: bool,
     pub presses: u64,
     pub acks: u64,
 }
@@ -41,6 +43,7 @@ impl Cst9220 {
             touch: None,
             report: [0; REPORT_LEN],
             pending: false,
+            changed: false,
             presses: 0,
             acks: 0,
         }
@@ -58,18 +61,21 @@ impl Cst9220 {
         }
         self.touch = Some((x, y));
         self.pending = true;
+        self.changed = true;
     }
 
     /// Finger up: one more report with 0 points (event 0), then nothing until the next press
     pub fn release(&mut self) {
         if self.touch.take().is_some() {
             self.pending = true;
+            self.changed = true;
         }
     }
 
     /// Build the report the chip exposes at 0xD000 right now
     fn build_report(&mut self) {
         self.report = [0; REPORT_LEN];
+        self.changed = false;
         // Command mode stops scanning; an acked report reads back as stale (no marker)
         if self.command_mode || !(self.pending || self.touch.is_some()) {
             return;
@@ -145,8 +151,9 @@ impl I2cDevice for Cst9220 {
             }
             _ => {
                 // Report ack: the host consumed this scan's data
+                // A lift landing between the read and this ack is a newer scan: keep it pending, or TOUCH UP is lost (H-26)
                 if self.reg == 0xD000 && b == ACK {
-                    self.pending = false;
+                    self.pending &= self.changed;
                     self.acks += 1;
                 }
                 self.reg = self.reg.wrapping_add(1);
@@ -233,6 +240,15 @@ mod tests {
         // After the release report is acked: stale, no marker
         assert_eq!(rd(&mut d, 0xD000, 7)[6], 0);
         assert_eq!((d.presses, d.acks), (1, 3));
+        // Lift between the read and its ack (web inputs land on 1 ms slice edges): the release report survives the ack
+        d.press(100, 100);
+        assert_eq!(rd(&mut d, 0xD000, 7)[5], 1);
+        d.release();
+        wr(&mut d, &[0xD0, 0x00, ACK]);
+        let r = rd(&mut d, 0xD000, 7);
+        assert_eq!((r[5], r[6]), (0, ACK));
+        wr(&mut d, &[0xD0, 0x00, ACK]);
+        assert_eq!(rd(&mut d, 0xD000, 7)[6], 0);
         // Clamped to the 480x480 panel
         d.press(900, 900);
         assert_eq!(xy(&rd(&mut d, 0xD000, 7)), (479, 479));

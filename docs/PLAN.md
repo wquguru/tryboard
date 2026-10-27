@@ -321,7 +321,7 @@
 | H-23 | 第 5 课：运行 / 重启时第一条灯带 feed 行不丢（tick 先于复位到达时不留旧的 `tickLast`） | beginner.mjs：运行中重启后第一条灯带行出现（连跑 3 次）；feedrules / lessonfeed 单测；Reviews/ab/H-23.md | ☐ |
 | H-24 | 第 6 课蜂鸣器：按 §6.3 用 Web Audio AnalyserNode 数据验证 do / re / mi 三个音（262 / 294 / 330 Hz，±1 个 FFT bin） | 新 webtest（或 beginner.mjs 分段）读 `getFloatFrequencyData` 峰值三次全对；Reviews/ab/H-24.md 记数据 | ☐ |
 | H-25 | 原理图：桌面第 03 课文字实测 ≥ 11 px（不随 viewBox 缩到 7–8 px）；OLED / 按钮 / 蜂鸣器 / 舵机专用符号（照 `docs/design-v2/beginner/v3/Schematic*.dc.html`） | schematic.test.ts 新符号用例；beginner.mjs 1440 宽第 03 课 `getBoundingClientRect` 字高 ≥ 11 px；agent-browser 第 01 / 02 / 03 / 6 / 7 课截图 Reviews/ab/H-25.md | ☐ |
-| H-26 | amoled.mjs「second tap -> TOUCH near (400, 80)」负载下偶发失败：查明时序原因，改成等可观察条件再点（不放宽断言） | 负载下（并行 npm test / 另一 webtest）连跑 ≥ 5 次全过；原因写进 STATUS | ☐ |
+| H-26 | amoled.mjs「second tap -> TOUCH near (400, 80)」负载下偶发失败：查明时序原因，改成等可观察条件再点（不放宽断言） | 负载下（并行 npm test / 另一 webtest）连跑 ≥ 5 次全过；原因写进 STATUS | ☑ 2026-10-27：原因在产品：CST9220 模型的报告 ack 会清掉「读报告后、ack 前」到达的松手（网页输入落在 1 ms 片边界），TOUCH UP 丢失、下一次点按变成 TOUCH MOVE；模型改为只在读后无新变化时 ack 清 pending（+单测），测试改为按下 → 等 TOUCH DOWN → 松开 → 等 TOUCH UP；负载下 修前 2/24 失败 → 修后 12/12 通过（Reviews/ab/H-26.md） |
 | H-27 | 第 4 课：标注「现在」在 PWM 下显示占空比而不是数字电平（核对是否已被 H-16 第 6 课修掉）；顺带清 STATUS 里 H-16 各课已修掉的「遗留 / 缺」 | beginner.mjs 断言第 4 课运行后 GPIO5 标注含 %；STATUS 行更新；Reviews/ab/H-27.md | ☐ |
 | H-28 | 第 5 课「改颜色」：lamp-strip 加预编译颜色变体（代码面板点颜色换固件重跑），任务由「揭示答案」改为自动打勾 | build_fw + accept 新用例（golden save）；lesson-l5.test.ts；beginner.mjs；Reviews/ab/H-28.md | ☐ |
 
