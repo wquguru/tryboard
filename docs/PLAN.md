@@ -333,6 +333,7 @@
 | H-35 | CST9220 accept 用例（H-26 遗留）：覆盖「按下 → 读报告 → 抬起落在读之后、ack 之前」时序 | firmware/accept.json 新用例 ✅（`tools/golden.py save <id>`）；cargo test 过 | ☑ 2026-10-27：新变体固件 s3-amoled-i2c-ackdelay（`ACK_DELAY_MS=50`，有标记的报告读后 50 ms 再 ack）+ accept 用例同名：4.0 按下 → 4.02 抬起（落在读与 ack 之间）→ 4.3 / 4.6 第二次点按，断言两次 DOWN / UP、无 TOUCH MOVE；临时还原 H-26 修复时该用例失败（丢 TOUCH UP、第二次变 TOUCH MOVE x=20 y=470），恢复后通过；golden 已存 |
 | H-36 | 偶发：levels.mjs「assemble · ruler: flow finished」30 s 等不到 `.asm-box [data-part]`：查明原因，修产品或改成等可观察条件（不放宽断言、不加超时） | 负载下（并行 npm test）连跑 levels.mjs ≥ 5 次全过；原因写进 STATUS | ☑ 测试丢上传（面板重挂摘掉旧 input）致 ruler-3 未过、Assemble 锁定；改为重传直到看到运行开始并断言 ✓✓✓，负载下 5/5 过 |
 | H-37 | 偶发：npm_parity.sh 的 `npx tryboard check … --level cloud-4` 卡死：查明原因；每次 check 加超时（超时算失败并打印）；accept.sh 被杀时 trap 清掉子进程 | 人为制造卡住时 accept 超时后报失败并继续；杀掉 accept.sh 后 `pgrep -f npm_parity` 为空；原因写进 STATUS | ☐ |
+| H-38 | 固件上传在面板重绘时丢文件（H-36 查出的产品问题）：属性面板整块重挂载（shell.tsx `createPanel` 的 `<Fragment key={n}>`）让文件对话框打开期间的 `<input type=file>` 失去监听，选的文件被静默丢弃；改成上传 input 不随面板重挂载（或重挂载时保留监听） | 新 webtest / beginner.mjs 断言：选文件前强制面板重绘，上传仍生效（busy → verdict）；levels.mjs 不回归；Reviews/ab/H-38.md | ☐ |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
