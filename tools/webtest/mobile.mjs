@@ -628,6 +628,61 @@ if (await waitFor(page, () => !!document.querySelector('#dock[data-lesson] #less
   report('H-32: back to 3D restores the step panel', back, `${await page.$eval('#stage', (e) => Math.round(e.getBoundingClientRect().height))}`);
 } else report('H-32: lesson panel shows', false);
 
+// ---- H-40 schematic footer: one-line step summary on every step, the run step gets "Run this lesson's code" beside Previous / Next
+for (const lang of ['en', 'zh', 'ja', 'ko']) {
+  await page.goto(`${base}/app?work=weather&cp=03&beginner=1&lang=${lang}#bench`, { waitUntil: 'load' });
+  if (!(await waitFor(page, () => !!document.querySelector('#dock[data-lesson] #lessonSheet'), null, 20000))) {
+    report(`H-40 ${lang}: lesson panel shows`, false);
+    continue;
+  }
+  if (!(await page.$('#schematic'))) {
+    await page.tap('[data-mtool="more"]');
+    await waitFor(page, () => !!document.querySelector('[data-tool="schematic"]'), null, 3000);
+    await page.tap('[data-tool="schematic"]');
+  }
+  await waitFor(page, () => !!document.querySelector('#schematicSvg') && document.querySelector('#lessonSheet')?.hasAttribute('data-footer'), null, 5000);
+  report(`H-40 ${lang}: step summary on step 1`, await visible('#mLessonSum'), await page.$eval('#mLessonSum', (e) => e.textContent).catch(() => 'missing'));
+  report(`H-40 ${lang}: no run button off the run step`, !(await page.$('#mLessonRunFoot')));
+  // Lesson 03: step 4 (index 3) is "run"
+  for (let i = 0; i < 6 && (await page.$eval('#lessonSheet', (e) => e.dataset.step)) !== '3'; i++) {
+    const st = +(await page.$eval('#lessonSheet', (e) => e.dataset.step));
+    await page.tap(st > 3 ? '#mLessonPrev' : '#mLessonNext');
+    await sleep(200);
+  }
+  await sleep(300);
+  const g = await page.evaluate(() => {
+    const s = document.getElementById('schematicSvg').getBoundingClientRect();
+    const p = document.getElementById('schematicPaper').getBoundingClientRect();
+    const top = Math.max(s.top, p.top, 0), bottom = Math.min(s.bottom, p.bottom, innerHeight);
+    const left = Math.max(s.left, p.left, 0), right = Math.min(s.right, p.right, innerWidth);
+    const d = document.getElementById('dock').getBoundingClientRect();
+    const ov = Math.max(0, Math.min(bottom, d.bottom) - Math.max(top, d.top)) * Math.max(0, Math.min(right, d.right) - Math.max(left, d.left));
+    const row = document.getElementById('mLessonNext').getBoundingClientRect();
+    const sh = document.getElementById('lessonSheet');
+    return { step: sh.dataset.step, footer: sh.hasAttribute('data-footer'), h: Math.round(bottom - top), w: Math.round(right - left), overlap: Math.round(ov), rowBottom: Math.round(row.bottom), dockBottom: Math.round(d.bottom), fits: sh.scrollHeight <= sh.clientHeight + 1 };
+  });
+  report(`H-40 ${lang}: run step keeps the footer`, g.step === '3' && g.footer, JSON.stringify(g));
+  report(`H-40 ${lang}: sheet still clear of the panel, ≥ 400 px tall`, g.overlap === 0 && g.h >= 400 && g.w >= 300, JSON.stringify(g));
+  report(`H-40 ${lang}: footer content fits inside the panel`, g.fits && g.rowBottom <= g.dockBottom, JSON.stringify(g));
+  for (const s of ['#mLessonPrev', '#mLessonRunFoot', '#mLessonNext', '#mLessonOpen'])
+    report(`H-40 ${lang}: ${s} tappable`, (await tappable(s)) === 'ok', await tappable(s));
+  const [sw, iw] = await noHScroll();
+  report(`H-40 ${lang}: no horizontal scroll`, sw <= iw, `${sw}/${iw}`);
+  if (lang === 'en') {
+    await page.screenshot({ path: path.join(outDir, 'mobile-lesson-schematic-run.png') });
+    await page.tap('#mLessonRunFoot');
+    const ran = await waitFor(page, () => globalThis.__tbApp?.session.fwName === 's3-oled/flash.bin' && !!globalThis.__tbApp.store.get().running && document.querySelector('#lessonSheet')?.hasAttribute('data-footer'), null, 15000);
+    report('H-40: footer run button starts lesson 03 firmware, footer stays', ran, await page.evaluate(() => globalThis.__tbApp?.session.fwName));
+  }
+  // Leave the lesson on its first step for later runs
+  for (let i = 0; i < 6 && (await page.$eval('#lessonSheet', (e) => e.dataset.step)) !== '0'; i++) {
+    await page.tap('#mLessonPrev');
+    await sleep(150);
+  }
+  await page.tap('[data-view-seg="3d"]');
+  await waitFor(page, () => !document.querySelector('#schematic'), null, 3000);
+}
+
 // ---- F-12 changelog (static page): filters scroll inside their row, tap targets, no page-level horizontal scroll
 // ?lang=en: the static pages pick a locale before paint (F-12b), so pin English whatever the browser language is
 await page.goto(`${base}/changelog?lang=en`, { waitUntil: 'load' });
