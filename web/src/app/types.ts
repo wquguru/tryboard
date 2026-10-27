@@ -184,6 +184,9 @@ export interface Session {
   reboot(): void;
   /** Run another firmware on the bench (user-dropped .bin) */
   loadFirmware(buf: ArrayBuffer, name: string): void;
+  /** H-19: the open lesson runs no code, so the work's firmware stays off (true stops a running one, false powers it up) */
+  held: boolean;
+  hold(on: boolean): void;
   pressBoot(down: boolean): void;
   /** External key (breadboard key, product keypad): pressed = tied to ground */
   pressPin(pin: number, down: boolean): void;

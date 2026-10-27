@@ -45,6 +45,8 @@ import { initialHistory, placement, replay } from './bom';
 import type { PartSpec } from '../board3d';
 import { t } from '../i18n';
 import { syncCourseUrl } from './coursenav';
+import { COURSE, lessonKey } from './course';
+import { beginnerOn } from '../beginner';
 import { boardDevs, cardputerKey } from '../bench3d/boarddevs';
 
 export { registerStep } from './shell';
@@ -78,6 +80,8 @@ const work0: WorkDef = ex
     ? { ...WORKS.custom, title: plan.title, key: plan.wkey, checkpoints: customLevels.filter((l) => !l.manual).map((l) => l.id) }
     : (WORKS[want ?? 'weather'] ?? WORKS.weather);
 const work: WorkDef = shared ? { ...work0, key: shared.key, title: t('{title} (shared)', { title: work0.title }) } : work0;
+// H-19: a course link to a no-code lesson (lesson 0) keeps the firmware off from the start, so no blink boots first
+const holdFw = !plan && !shared && beginnerOn() && COURSE.some((e) => e.noFw && e.work === work.id && lessonKey(e) === params.get('cp'));
 // &cp=04: preselect this checkpoint (old levels.html#04 redirects here); ignored if not in this work
 const cp = shared ? (shared.state.cp ?? null) : params.get('cp');
 if (ex) pushRecent({ kind: 'example', id: ex.id, title: ex.title, at: Date.now() });
@@ -148,7 +152,7 @@ const cmdk = import('./cmdk');
           con.textContent = t;
           serial.reset(t, store.get().simSeconds);
         },
-      }, { placed, ...(plan ? { chip: plan.chip, levels: customLevels } : {}) });
+      }, { placed, hold: holdFw, ...(plan ? { chip: plan.chip, levels: customLevels } : {}) });
     (window as unknown as { __tbApp: unknown }).__tbApp = { store, session, toast: (s: string) => shell.toast(s) };
     const ctx: StepCtx = { work, store, session, shell, ...(plan ? { custom: { plan, levels: customLevels } } : {}) };
     if (plan) Object.assign(globalThis, { __tbCustomLevels: customLevels });
@@ -247,7 +251,7 @@ function wireChrome(ctx: StepCtx, session: Awaited<ReturnType<typeof createSessi
   let paused = false;
   const runState = () => {
     const s = store.get();
-    const run = s.hist.busy ? 'busy' : s.hist.seeked ? 'seek' : paused ? 'pause' : s.running ? 'run' : session.sim ? 'idle' : session.fwName ? 'loading' : 'nofw';
+    const run = s.hist.busy ? 'busy' : s.hist.seeked ? 'seek' : paused ? 'pause' : s.running ? 'run' : session.sim || session.held ? 'idle' : session.fwName ? 'loading' : 'nofw';
     // Undo on the shop step walks the BOM history; elsewhere it walks the bench timeline
     const shop = s.step === 'shop';
     const undo = shop ? s.bom.cur > 0 : !s.hist.busy && s.hist.cur > 0;
