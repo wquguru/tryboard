@@ -480,6 +480,30 @@ await ph.close();
   await pg.close();
 }
 
+// H-21 lesson 11 (weather 06): the feed narrates BME280 reads next to OLED frames; the case task ticks only without warnings
+{
+  const pg = await open('/app?work=weather&cp=06&debug=1&beginner=1#bench');
+  const both = await waitFor(pg, () => !!document.querySelector('[data-i2c="0x76"]') && !!document.querySelector('[data-i2c="0x3C"]'), null, 20000);
+  const rows = await pg.$$eval('[data-i2c]', (xs) => xs.map((x) => `${x.dataset.i2c}:${x.dataset.bytes}`));
+  report('H-21 lesson 11: feed shows BME280 (0x76) and OLED (0x3C) rows', both, rows.slice(-6).join(','));
+  // Register read: 1 register byte written + 8 read back (rd(0xF7, d, 8)); init writes are 2 bytes
+  report('H-21 lesson 11: a 0x76 row counts the bytes read back', rows.some((r) => /^0x76:(9|\d{2,})$/.test(r)), rows.filter((r) => r.startsWith('0x76')).slice(-3).join(','));
+  const last = await pg.$$('#lessonSteps [data-step]');
+  await last[last.length - 1].click();
+  const asmTask = '#lessonCard [data-kind="asm"]';
+  await waitFor(pg, (s) => !!document.querySelector(s), asmTask, 3000);
+  // The bench probe sends asm:done=clean|warn from store.assembly, as the Assemble step does when the last part goes in
+  const fake = (clean) => pg.evaluate((c) => globalThis.__tbApp.store.set({ assembly: { placed: ['case'], choice: {}, total: 1, clean: c, effects: {}, retest: null } }), clean);
+  await fake(false);
+  const warned = await waitFor(pg, (s) => !!document.querySelector(`${s} [data-warn]`), asmTask, 3000);
+  const doneWarn = await pg.$eval(asmTask, (e) => e.dataset.done).catch(() => '');
+  report('H-21 lesson 11: case with warnings does not tick and says why', warned && doneWarn === '0', `done=${doneWarn}`);
+  await fake(true);
+  const ticked = await waitFor(pg, (s) => document.querySelector(s)?.dataset.done === '1', asmTask, 3000);
+  report('H-21 lesson 11: case without warnings ticks', ticked && !(await has(pg, `${asmTask} [data-warn]`)));
+  await pg.close();
+}
+
 report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 server.close();

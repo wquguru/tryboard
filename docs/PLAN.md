@@ -316,7 +316,7 @@
 | H-18 | 暖色主题（稿子 `#F6F3EE` 系）：需人先定是否全站换 | — | ☐ 待人定 |
 | H-19 | 第 0 课不跑固件：课程条目 `noFw` 时打开 / 刷新第 0 课不启动作品固件（顶栏不显示 Running、串口空、不发 `run` 信号）；同作品切到第 4 / 6 课照常启动本课固件（DECISIONS 2026-10-27 H-19） | beginner.mjs：第 0 课打开 + 刷新后未运行且串口为空，切到第 4 课后运行；agent-browser Reviews/ab/H-19.md | ☐ |
 | H-20 | 课程完成规则：任务全勾 **或** 检查点通过都算本课完成；检查点通过另标 ✓（地图卡片 + 右栏完成卡一致）（DECISIONS 2026-10-27 H-20） | `course.test.ts` / `lessonmap.test.ts` 新用例（只勾任务 → done、只过检查点 → done + ✓、都没有 → current）；beginner.mjs 地图断言；agent-browser Reviews/ab/H-20.md | ☐ |
-| H-21 | 第 11 课：「发生了什么」讲 BME280 0x76 的寄存器读（`reads`）；「装壳」任务只在无警告时打勾（`asm:done=clean`），有警告时任务旁说明为什么不勾 | lesson-l11.test.ts；beginner.mjs 或 agent-browser 看到 0x76 行；带警告装配不勾、清掉警告后勾；Reviews/ab/H-21.md | ☐ |
+| H-21 | 第 11 课：「发生了什么」讲 BME280 0x76 的寄存器读（`reads`）；「装壳」任务只在无警告时打勾（`asm:done=clean`），有警告时任务旁说明为什么不勾 | lesson-l11.test.ts；beginner.mjs 或 agent-browser 看到 0x76 行；带警告装配不勾、清掉警告后勾；Reviews/ab/H-21.md | ☑ 2026-10-27：0x76 规则加 `reads`，事件流与 OLED 行交替出「读 BME280：总线上 9 字节」；装壳只认 `asm:done=clean`，BME280 贴板时任务不勾并显示警告提示，挪到通风口后勾（agent-browser 实走组装 + beginner.mjs 全 PASS） |
 | H-22 | 第 9 课：场景重建（切课 / 切视图 / 改零件）后 3D 旋钮停在原位置（数值核对 `ctx.pots[].v` + 截图）；左侧构建树与左栏接线 tab 列出电位器及其 3 根线 | beginner.mjs 断言重建前后旋钮值相同、树和接线 tab 有 pot；Reviews/ab/H-22.md | ☐ |
 | H-23 | 第 5 课：运行 / 重启时第一条灯带 feed 行不丢（tick 先于复位到达时不留旧的 `tickLast`） | beginner.mjs：运行中重启后第一条灯带行出现（连跑 3 次）；feedrules / lessonfeed 单测；Reviews/ab/H-23.md | ☐ |
 | H-24 | 第 6 课蜂鸣器：按 §6.3 用 Web Audio AnalyserNode 数据验证 do / re / mi 三个音（262 / 294 / 330 Hz，±1 个 FFT bin） | 新 webtest（或 beginner.mjs 分段）读 `getFloatFrequencyData` 峰值三次全对；Reviews/ab/H-24.md 记数据 | ☑ 2026-10-27 `tools/webtest/tones.mjs`：产品 analyser（4096 点 / 48 kHz，bin 11.72 Hz）峰值 bin 257.8 / 293.0 / 328.1 Hz，测试另接 8192 点无平滑 tap 插值 261.96 / 294.03 / 330.04 Hz，连跑 3 次全过 |

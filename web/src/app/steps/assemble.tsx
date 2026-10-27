@@ -1026,7 +1026,8 @@ export function assembleStep(): StepImpl {
         c.session.onHarness((txt) => {
           const n = c.shell.props.el.querySelector('[data-k="hzSim"]');
           if (n) n.textContent = simLine(txt.trim());
-          else if (txt.trim() && sel !== 'retest') renderProps();
+          // asm is null while a rebuilt 3D view still loads (rebuildIfStale); a harness line then must not render
+          else if (asm && txt.trim() && sel !== 'retest') renderProps();
         }),
       );
     },

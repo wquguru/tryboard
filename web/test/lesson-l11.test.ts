@@ -6,7 +6,7 @@ import { L11 } from '../src/app/lessondata/l11.ts';
 import { COURSE, courseLesson } from '../src/app/course.ts';
 import { lessonFor } from '../src/app/lessons.ts';
 import { lessonWires, partId, sceneView } from '../src/app/wiring.ts';
-import { parseDone, taskTarget } from '../src/app/lessontasks.ts';
+import { matchTask, parseDone, taskTarget } from '../src/app/lessontasks.ts';
 import { PART_BY_ID } from '../src/catalog/parts.ts';
 import type { PartSpec } from '../src/bench3d/spec.ts';
 
@@ -102,4 +102,15 @@ test('power estimate uses the catalog and the elec board model', () => {
   assert.ok(L11.params!.some((p) => p.live === 'led-ma'));
   assert.ok(L11.params!.some((p) => p.source === 'datasheet' && p.doc));
   for (const p of L11.params!) if (/\d\s*m?A\b/.test(p.value) && p.source !== 'datasheet') assert.equal(p.source, 'estimate', p.label);
+});
+
+test('H-21: the BME280 rule counts register reads; the case task only ticks without warnings', () => {
+  const bme = L11.i2c!.find((r) => r.addr === 0x76)!;
+  assert.equal(bme.reads, true);
+  assert.match(src[bme.line - 1], /i2c_master_transmit_receive/);
+  assert.ok(!L11.i2c!.find((r) => r.addr === 0x3c)!.reads);
+  const ctx = { boots: 0 };
+  assert.equal(matchTask('asm:done', 'asm:done=warn', ctx), null);
+  assert.deepEqual(matchTask('asm:done', 'asm:done=clean', ctx), { v: 'clean' });
+  assert.equal(matchTask('asm:done', 'asm:done=', ctx), null);
 });
