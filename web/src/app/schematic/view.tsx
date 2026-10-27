@@ -14,7 +14,7 @@ import { BOARD_NAME } from "../../chips";
 import { boardDevs } from "../../bench3d/boarddevs";
 import { LED_VF, resistorBands, type LedColor } from "../../bench3d/ledparams";
 import type { BenchCtx } from "../bench/ctx";
-import { schematicOf, type Schematic, type SchFlag, type SchSym } from "./model";
+import { fitSheet, schematicOf, type Schematic, type SchFlag, type SchSym } from "./model";
 import { schUi, type BenchView } from "./store";
 import { LEADED, PartGlyph, zig } from "./glyphs";
 
@@ -468,22 +468,6 @@ function usePaperSize(ref: { current: HTMLDivElement | null }) {
     return () => ro.disconnect();
   }, [ref]);
   return size;
-}
-
-const PAD = 24; // paper padding on both sides, in px
-const MAX_SCALE = 1.6;
-/** Pick the layout that fills the paper best and its scale. Never below 1: sheet text is 12 units, so 12 px is the floor and the paper scrolls instead. */
-export function fitSheet(make: (vertical: boolean) => Schematic, paper: { w: number; h: number }, phone: boolean) {
-  const fit = (s: Schematic) => (paper.w ? Math.min((paper.w - PAD) / s.w, (paper.h - PAD) / s.h) : 1);
-  const h = phone ? null : make(false);
-  const v = phone || (h && fit(h) < 1) ? make(true) : null;
-  // The horizontal sheet follows the design; the vertical one wins only when it is readable at a larger size
-  const sch = h && (!v || fit(h) >= 1 || fit(h) >= fit(v)) ? h : v!;
-  return {
-    sch,
-    vertical: sch === v,
-    scale: Math.min(MAX_SCALE, Math.max(1, fit(sch))),
-  };
 }
 
 export function SchematicView({ b }: { b: BenchCtx }) {

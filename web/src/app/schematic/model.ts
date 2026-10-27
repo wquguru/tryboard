@@ -205,17 +205,18 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
 
   if (!opts.vertical) {
     // Desktop: board on the left, LED loops run right from their pin, other parts stack in a right column
-    const BX = 60, BY = 40, BW = 200, R = BX + BW;
+    // H-41: 20-unit side margins (the paper adds its own padding) keep a module sheet at 976 wide, inside a 1440 px window
+    const BX = 20, BY = 40, BW = 200, R = BX + BW;
     let y = BY + 90;
     for (const row of rows) {
       const n = names[row.a] ?? row.a;
       board.pins.push({ name: row.a, x: R - 12, y, anchor: 'end' });
       if (row.boot) {
         // Inline like an LED loop: pin → normally-open switch → ground
-        sch.lines.push({ pts: [R, y, 380, y] });
-        sch.syms.push({ ...bootSym(), x: 380, y: y - 24, w: 80, h: 48, dir: 'h', tx: 420, ty: y - 34 });
-        sch.lines.push({ pts: [460, y, 520, y, 520, y + 40] });
-        sch.gnds.push({ x: 520, y: y + 40 });
+        sch.lines.push({ pts: [R, y, R + 120, y] });
+        sch.syms.push({ ...bootSym(), x: R + 120, y: y - 24, w: 80, h: 48, dir: 'h', tx: R + 160, ty: y - 34 });
+        sch.lines.push({ pts: [R + 200, y, R + 260, y, R + 260, y + 40] });
+        sch.gnds.push({ x: R + 260, y: y + 40 });
         y += 110;
         continue;
       }
@@ -223,23 +224,23 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
         const L = ledSyms(row.led as Extract<PartSpec, { type: 'led' }>);
         const wire = L.w?.id;
         if (L.ohm > 0) {
-          sch.lines.push({ pts: [R, y, 360, y], wire, missing: L.w?.missing });
-          sch.syms.push({ ...L.r, x: 360, y: y - 16, w: 100, h: 32, dir: 'h', tx: 410, ty: y - 26 });
-          sch.lines.push({ pts: [460, y, 520, y] });
-        } else sch.lines.push({ pts: [R, y, 520, y], wire, missing: L.w?.missing });
-        sch.syms.push({ ...L.d, x: 520, y: y - 28, w: 80, h: 56, dir: 'h', tx: 560, ty: y - 38 });
-        sch.lines.push({ pts: [600, y, 660, y, 660, y + 40], wire: L.g?.id, missing: L.g?.missing });
-        sch.gnds.push({ x: 660, y: y + 40 });
+          sch.lines.push({ pts: [R, y, R + 100, y], wire, missing: L.w?.missing });
+          sch.syms.push({ ...L.r, x: R + 100, y: y - 16, w: 100, h: 32, dir: 'h', tx: R + 150, ty: y - 26 });
+          sch.lines.push({ pts: [R + 200, y, R + 260, y] });
+        } else sch.lines.push({ pts: [R, y, R + 260, y], wire, missing: L.w?.missing });
+        sch.syms.push({ ...L.d, x: R + 260, y: y - 28, w: 80, h: 56, dir: 'h', tx: R + 300, ty: y - 38 });
+        sch.lines.push({ pts: [R + 340, y, R + 400, y, R + 400, y + 40], wire: L.g?.id, missing: L.g?.missing });
+        sch.gnds.push({ x: R + 400, y: y + 40 });
         if (wire) net(row.a, wire);
         if (L.g) net('GND', L.g.id);
-        sch.flows.push({ part: L.id, ref: L.d.ref, pts: [R + 10, y + 18, 650, y + 18], mA: L.mA, x: R + 30, y: y + 62 });
+        sch.flows.push({ part: L.id, ref: L.d.ref, pts: [R + 10, y + 18, R + 390, y + 18], mA: L.mA, x: R + 30, y: y + 62 });
         y += 110;
         continue;
       }
       const wire = ws.find((w) => w.a === row.a && !w.part.startsWith('led:'))?.id;
       if (row.a === 'GND' && !labelled) {
-        sch.lines.push({ pts: [R, y, 320, y, 320, y + 20] });
-        sch.gnds.push({ x: 320, y: y + 20 });
+        sch.lines.push({ pts: [R, y, R + 60, y, R + 60, y + 20] });
+        sch.gnds.push({ x: R + 60, y: y + 20 });
         y += 70;
         continue;
       }
@@ -253,7 +254,7 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
     board.w = BW;
     board.h = Math.max(200, y - 40 + 30 - BY);
     let by = BY;
-    const X = 800;
+    const X = R + 540;
     for (const p of others) {
       const b = boxOf(p);
       const h = 70 + Math.max(1, b.pw.length) * 40;
@@ -267,7 +268,7 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
       sch.syms.push({ ref: b.title, kind: 'box', glyph: b.glyph, part: b.id, pick: { kind: 'part', id: b.id }, x: X, y: by, w: 200, h, title: b.title, sub: b.sub, pins });
       by += h + 30;
     }
-    sch.w = others.length ? X + 240 : leds.length || opts.boot !== undefined ? 720 : R + 160;
+    sch.w = others.length ? X + 216 : leds.length || opts.boot !== undefined ? R + 440 : R + 140;
     sch.h = Math.max(board.y + board.h, by - 30) + 40;
     return sch;
   }
@@ -354,4 +355,22 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
   sch.w = w;
   sch.h = others.length ? by - 70 + 14 : low + sch.flows.length * capH + 20;
   return sch;
+}
+
+const PAD = 24; // paper padding on both sides, in px
+const MAX_SCALE = 1.6;
+/** Pick the layout that fills the paper best and its scale. Never below 1: sheet text is 12 units, so 12 px is the floor and the paper scrolls instead. */
+export function fitSheet(make: (vertical: boolean) => Schematic, paper: { w: number; h: number }, phone: boolean) {
+  const fit = (s: Schematic) => (paper.w ? Math.min((paper.w - PAD) / s.w, (paper.h - PAD) / s.h) : 1);
+  const h = phone ? null : make(false);
+  const v = phone || (h && fit(h) < 1) ? make(true) : null;
+  // The horizontal sheet follows the design: it stays whenever its width fits (a tall one scrolls down at 1×, H-41);
+  // the vertical one wins only when the horizontal one would scroll sideways and the vertical one reads larger
+  const wide = h && (!paper.w || h.w <= paper.w - PAD);
+  const sch = h && (!v || wide || fit(h) >= fit(v)) ? h : v!;
+  return {
+    sch,
+    vertical: sch === v,
+    scale: Math.min(MAX_SCALE, Math.max(1, fit(sch))),
+  };
 }
