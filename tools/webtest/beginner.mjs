@@ -476,6 +476,11 @@ await ph.close();
   // Back on with ?cp=lesson-0 still in the URL: the running firmware is stopped
   await pg.click('#beginnerBtn');
   report('H-19 beginner on again: lesson 0 stops the running firmware', await waitFor(pg, (f) => !globalThis.__tbApp.store.get().running && !globalThis.__tbApp.session.sim && globalThis.__tbApp.session.consoleText() === '' && document.querySelector('#runGroup')?.dataset.run !== 'run', null, 5000), JSON.stringify(await state()));
+  // Undo / rewind with the firmware held off must not touch a missing sim
+  const n0 = errors.length;
+  if (await pg.$eval('#undoBtn', (b) => !b.disabled).catch(() => false)) await pg.click('#undoBtn');
+  await sleep(1500);
+  report('H-19 lesson 0 held: undo raises no page error', errors.length === n0, errors.slice(n0).join(' | '));
   await ctx.close();
 }
 
