@@ -8,7 +8,7 @@ import { createStore } from "./store";
 import { bc, setDock } from "./chrome";
 import { lessonUi } from "./lesson";
 import { B_NACK, B_PORT1, B_READ, B_RESTART, CPU_HZ, K, hex, type IoEvent, type IoStore } from "./iotrace";
-import { chipLabel, chipText, isLessonFw, type CodeChips, type Lesson } from "./lessons";
+import { chipLabel, chipText, isLessonFw, lessonChips, type CodeChips, type Lesson } from "./lessons";
 import { CodePane as CodeView } from "./panes";
 import { adcMoved, litCount, servoPulse, TickLast } from "./feedrules";
 
@@ -253,7 +253,9 @@ export function useLessonCode(): { fw: string; file: string; lines: number[]; ch
   // Running: the line behind the latest edge; still: the current step's lines
   const lines = run === "run" && last ? [last.line] : (l.steps[s.step]?.codeLines ?? []);
   const chips = l.steps[s.step]?.codeChips;
-  return { fw: `${l.fw}/flash.bin`, file, lines, chip: chips && { line: chips.line, node: <DelayChips chips={chips} /> } };
+  // H-34: after a chip swaps in a prebuilt variant, show that build's CMakeLists tab and -D macros, not the default's
+  const fw = lessonChips(l)?.fw[s.delay] ?? l.fw;
+  return { fw: `${fw}/flash.bin`, file, lines, chip: chips && { line: chips.line, node: <DelayChips chips={chips} /> } };
 }
 
 /** H-06: pick one of the prebuilt delay variants; the click loads that firmware and runs it. */

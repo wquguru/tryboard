@@ -142,6 +142,7 @@ export default function CodeView({
         </div>
         {src.defines && (
           <span
+            id="codeDefines"
             className="flex-none truncate font-mono text-[11px] text-muted max-md:hidden"
             title={t("Macros CMakeLists.txt defines for this firmware (only these differ when sharing source with other projects)")}
           >
