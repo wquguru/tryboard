@@ -2012,3 +2012,10 @@
 - 理由：失败是测试丢了上传，不是装配视图没出来。属性面板每次 render 都整块重挂（shell.tsx `createPanel` 的 `<Fragment key={n}>`），NInput 卸载时摘掉 change 监听，旧 input 上的 uploadFile 无声无息；之后两个 waitFor 超时被吞，Assemble 因检查点没过停在锁定卡。上传前人为多点一次检查点即可稳定复现同一 30 s 报错。
 - 未改产品：真实用户打开文件对话框期间若面板重渲染（verify 结束、hist 变化时），选中的文件同样会丢。修法要么让 props 面板不再按 n 整块重挂（影响所有台面面板的非受控输入），要么让 Drop 的 input 脱离重挂；面较大，留作后续。
 - 备选：加大超时（违反要求，且不解决丢上传）；在 Assemble 端等待（视图本身没问题）。
+
+## 2026-10-27 H-38 固件上传在面板重绘时丢文件：Drop 的 file input 改成按 kind 的模块级单例
+- 决定：web/src/ui/panel.tsx 的 `Drop` 不再渲染 `<NInput type="file">`；每个 drop kind（check / bench）懒建一个 `<input type=file>`，挂一个永久 change 监听，事件到达时取该 kind 最新的 onFile。每次渲染在 layout effect 里同步 disabled、登记 onFile，并把这个 input `appendChild` 进当前挂着的 `<label data-drop>`。不改 shell.tsx / card.tsx 的 `<Fragment key={n}>`。
+- 理由：丢的不是 React 子树，而是 input 节点和它的监听；让节点跨重挂存活就够了，改动只在 Drop 一处。input 仍在 `#props [data-drop] input` 下，levels.mjs / faults.mjs / beginner.mjs 的选择器不用改；文件对话框持有的旧节点就是重挂后的同一个节点，change 照常送达。卸载时不清 onFile：对话框打开期间面板重挂正是要覆盖的窗口。
+- 语义：最新者优先。对话框在检查点 01 打开、选文件前面板切到 02，文件交给 02 的校验（与用户眼前的面板一致）。
+- 其他上传入口：fwmenu.tsx `#fwPick`（topbar / mobile）、scenariopane.tsx 导入 JSON、tasks.tsx `#tasksElf`（dock）都在稳定的 React 树里，不经 createPanel / createCard 的 key 重挂，不受影响。拖放：`onDrop` 是 label 上的 React 合成事件，落点时由当时在屏的 label 接收，不持有旧节点，不受影响；重挂只会丢掉拖动中的 `.over` 高亮（外观）。
+- 备选：去掉 createPanel 的 key 强制重挂（影响全部台面面板的非受控输入，风险大）；把 input 放到 body 下由按钮 `.click()`（要改所有测试选择器，label 原生点选也要重写）；用 native.tsx `Host`（会在 label 里塞 div，且卸载时摘掉节点）。

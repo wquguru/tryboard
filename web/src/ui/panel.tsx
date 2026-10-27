@@ -1,6 +1,6 @@
 // Lab panel pieces (DESIGN §2). Hook classes (kv / v / fp / res / ok / bad / sec / tn / tg / drop / busy…) stay for web tests
 // and imperative updates; styling is all Tailwind. Text uses *-ink colours (4.5:1), base colours only for dots and borders.
-import { Children, type ComponentProps, type ReactNode } from 'react';
+import { Children, useLayoutEffect, useRef, type ComponentProps, type ReactNode } from 'react';
 import { cn } from './cn';
 import { Live, NInput, useInitText } from './native';
 
@@ -109,14 +109,44 @@ export function Slider({ out, on, className, outId, ...p }: Omit<ComponentProps<
   );
 }
 
+// H-38: panels remount on every render (shell.tsx createPanel key), and a fresh input would lose a file picked while the
+// dialog was open. One input per drop kind moves into whichever box is mounted and routes to the latest onFile.
+const pickers = new Map<string, HTMLInputElement>();
+const pickHandlers = new Map<string, (f: File) => void>();
+function picker(kind: string) {
+  let inp = pickers.get(kind);
+  if (!inp) {
+    inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = '.bin';
+    inp.className = 'pointer-events-none absolute h-px w-px overflow-hidden opacity-0';
+    inp.addEventListener('change', () => {
+      const f = inp!.files?.[0];
+      inp!.value = '';
+      if (f) pickHandlers.get(kind)?.(f);
+    });
+    pickers.set(kind, inp);
+  }
+  return inp;
+}
+
 /** Firmware drop / pick box; the file input uses a native change listener (fired by tests' uploadFile). */
 export function Drop({ kind, busy, disabled, title, sub, onFile, className }: { kind: string; busy?: boolean; disabled?: boolean; title: ReactNode; sub: ReactNode; onFile?: (f: File) => void; className?: string }) {
+  const box = useRef<HTMLLabelElement>(null);
+  useLayoutEffect(() => {
+    const inp = picker(kind);
+    inp.disabled = !!disabled;
+    if (onFile) pickHandlers.set(kind, onFile);
+    else pickHandlers.delete(kind);
+    if (box.current && inp.parentNode !== box.current) box.current.appendChild(inp);
+  });
   const over = (e: React.DragEvent<HTMLLabelElement>, on: boolean) => {
     e.preventDefault();
     e.currentTarget.classList.toggle('over', on);
   };
   return (
     <label
+      ref={box}
       data-drop={kind}
       className={cn(
         'drop relative mt-1.5 flex cursor-pointer flex-col items-center gap-0.5 rounded-[10px] border-[1.5px] border-dashed border-(--drop-line) bg-(--drop-bg) px-3 py-4 text-center',
@@ -136,22 +166,6 @@ export function Drop({ kind, busy, disabled, title, sub, onFile, className }: { 
           : undefined
       }
     >
-      <NInput
-        type="file"
-        accept=".bin"
-        className="pointer-events-none absolute h-px w-px overflow-hidden opacity-0"
-        disabled={disabled}
-        on={
-          onFile && {
-            change: (e) => {
-              const inp = e.currentTarget;
-              const f = inp.files?.[0];
-              inp.value = '';
-              if (f) onFile(f);
-            },
-          }
-        }
-      />
       <b>{title}</b>
       <span>{sub}</span>
     </label>
