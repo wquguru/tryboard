@@ -359,6 +359,48 @@ for (const [cp, re, tl] of [
     await pg.close();
   }
 }
+// H-42: checkpoints are judged only by a scripted re-run (upload / reference), never by hand presses. Lesson 10 step 4:
+// the hint shows, K1-K3 by hand tick "typed abc" but leave usbkey-2 unjudged; "Open checkpoint" → reference run passes it.
+{
+  const pre = `localStorage.setItem('tb-beginner','1');` + `localStorage.setItem('tryboard-app-lesson:usbkey', '{"usbkey-2":3}');`;
+  const pg = await open('/app?work=usbkey&cp=usbkey-2&debug=1&beginner=1#bench', pre, { width: 1280, height: 720 });
+  await waitFor(pg, () => document.querySelector('#lessonCard')?.dataset.step === '3', null, 10000);
+  const hint = await has(pg, '#lessonCard #cpHow #cpOpen');
+  report('H-42 lesson 10 run step: checkpoint hint with "Open checkpoint" shown', hint);
+  await pg.click('#lessonRun');
+  // Run reloads the firmware: press only once the fresh run has enumerated (the same 1.2 s the level script waits)
+  await waitFor(pg, () => globalThis.__tbApp.store.get().simSeconds < 1, null, 10000);
+  await waitFor(pg, () => globalThis.__tbApp.store.get().simSeconds > 1.5, null, 30000);
+  const up = await waitFor(pg, () => document.querySelector('#lessonCard li[data-task="1"]')?.dataset.done === '1', null, 30000);
+  for (const pin of [4, 5, 6]) {
+    await pg.evaluate((p) => globalThis.__tbApp.session.pressPin(p, true), pin);
+    await sleep(150);
+    await pg.evaluate((p) => globalThis.__tbApp.session.pressPin(p, false), pin);
+    await sleep(250);
+  }
+  const typed = await waitFor(pg, () => document.querySelector('#lessonCard li[data-task="2"]')?.dataset.done === '1', null, 5000);
+  const hand = await pg.evaluate(() => ({ check: globalThis.__tbApp.store.get().checks['usbkey-2'] ?? null, hint: !!document.querySelector('#lessonCard #cpHow') }));
+  report('H-42 K1-K3 by hand: "typed abc" ticked, checkpoint not judged, hint stays', up && typed && hand.check === null && hand.hint, JSON.stringify({ up, typed, ...hand }));
+  await pg.screenshot({ path: path.join(outDir, 'beginner-h42-hand.png') });
+  await pg.click('#cpOpen');
+  const shown = await waitFor(pg, () => {
+    const r = document.querySelector('#props #runRef')?.getBoundingClientRect(), p = document.querySelector('#props').getBoundingClientRect();
+    return !!r && r.top >= p.top && r.bottom <= p.bottom;
+  }, null, 3000);
+  report('H-42 "Open checkpoint" brings the reference run button into view', shown);
+  await pg.click('#props #runRef:not([disabled])');
+  const ok = await waitFor(pg, () => globalThis.__tbApp.store.get().checks['usbkey-2']?.ok === true, null, 90000);
+  const gone = await waitFor(pg, () => !document.querySelector('#cpHow'), null, 3000);
+  report('H-42 reference run passes usbkey-2 and the hint goes away', ok && gone);
+  for (const k of [4, 5]) {
+    await pg.click('#lessonNext');
+    await waitFor(pg, (x) => (x === 5 ? !!document.querySelector('#courseDone') : document.querySelector('#lessonCard')?.dataset.step === String(x)), k, 3000);
+  }
+  const d = await pg.evaluate(() => ({ step: document.querySelector('#lessonCard')?.dataset.step, panel: !!document.querySelector('#courseDone'), badge: !!document.querySelector('#courseDone [data-cp-passed]') }));
+  report('H-42 with the checkpoint passed, finishing lesson 10 shows the done panel and badge', d.step === 'done' && d.panel && d.badge, JSON.stringify(d));
+  await pg.screenshot({ path: path.join(outDir, 'beginner-h42-done.png') });
+  await pg.close();
+}
 
 // 5d. H-14: info tabs over the step card; wiring rows come from wiring.ts, a row click lights the 3D wire
 {

@@ -140,6 +140,11 @@ export function mountLesson(b: BenchCtx) {
         load(fw);
       },
       openChecks: () => setDock({ tab: "checks", collapsed: false }),
+      // The checkpoint panel sits under the lesson card in the same column: bring its upload / reference buttons up
+      openCp: () => {
+        b.select({ kind: "checkpoint", id: lesson.checkpoint });
+        afterFrame(() => document.querySelector("#props #runRef")?.scrollIntoView({ block: "center", behavior: "smooth" }));
+      },
       showDemo: (i) => b.openDemo(i),
     });
     // H-14: this lesson's wiring rows (bench view, rewires included) and the bench LED for the info tabs
