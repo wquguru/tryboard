@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { lessonFor } from '../src/app/lessons.ts';
 import { WORKS } from '../src/app/works.ts';
 import { lessonWires, sceneView, type BenchWire } from '../src/app/wiring.ts';
-import { schematicOf } from '../src/app/schematic/model.ts';
+import { fitSheet, schematicOf } from '../src/app/schematic/model.ts';
 import { LED_HEX, LED_VF, ledAmps } from '../src/bench3d/ledparams.ts';
 import type { PartSpec, SceneSpec } from '../src/bench3d/spec.ts';
 
@@ -163,3 +163,37 @@ test('H-33 a WS2812 after a discrete LED takes the next D number', () => {
   const sch = schematicOf(parts, [], { vertical: false });
   assert.deepEqual(sch.syms.filter((s) => s.kind === 'led' || s.glyph === 'ws2812').map((s) => s.ref), ['D1', 'D2']);
 });
+
+// H-41: #schematicPaper clientWidth × clientHeight measured with agent-browser on the built app (left tree 264 px,
+// right panel 312 px, in-stage "Selected symbol" column 300 px); the same in lesson and lab mode
+const PAPER = { '1280×800': { w: 372, h: 423 }, '1440×900': { w: 532, h: 523 }, '1920×1080': { w: 1012, h: 703 } };
+const sheetOf = (work: string, cp: string | null) => (vertical: boolean) => {
+  const l = cp ? lessonFor(work, cp)! : null;
+  const scene = WORKS[work]?.scene ?? sceneOf(work);
+  const keep = l?.parts ?? null;
+  return schematicOf(sceneView(scene, keep).parts, lessonWires(scene.parts, keep), { vertical });
+};
+const H41: [string, (v: boolean) => ReturnType<typeof schematicOf>][] = [
+  ['weather lesson 03', sheetOf('weather', '03')],
+  ['weather lesson 06', sheetOf('weather', '06')],
+  ['lamp lesson 05', sheetOf('lamp', 'lamp-1')],
+  ['lamp bench', sheetOf('lamp', null)],
+  ['ruler bench', sheetOf('ruler', null)],
+];
+for (const [name, make] of H41) {
+  test(`H-41 ${name}: horizontal from a 1920 px window, vertical at 1440 / 1280 (paper too narrow), never below 1×`, () => {
+    const h = make(false);
+    assert.ok(h.syms.some((s) => s.kind === 'box'), 'has a module column');
+    assert.ok(h.w <= PAPER['1920×1080'].w - 24, `horizontal sheet ${h.w} fits the 1920 paper`);
+    const wide = fitSheet(make, PAPER['1920×1080'], false);
+    assert.equal(wide.vertical, false, 'tall sheets stay horizontal and scroll down');
+    assert.ok(wide.scale >= 1);
+    // DECISIONS 2026-10-27 H-41: the 1440 paper (508 usable) is narrower than any horizontal sheet, even LED-only (660)
+    for (const k of ['1440×900', '1280×800'] as const) {
+      const f = fitSheet(make, PAPER[k], false);
+      assert.equal(f.vertical, true, k);
+      assert.ok(f.scale >= 1, k);
+    }
+    assert.equal(fitSheet(make, { w: 366, h: 533 }, true).vertical, true, 'phone stays vertical (H-32)');
+  });
+}
