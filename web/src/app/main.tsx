@@ -229,7 +229,15 @@ const cmdk = import('./cmdk');
 async function restoreOwn(ctx: StepCtx) {
   const { session, shell } = ctx;
   const h = lastBin(wkey(work));
-  if (!h || !session.sim) return;
+  if (!h) return;
+  // H-29: lesson 0 holds the firmware off; the kept bin comes back on the first power-up after it,
+  // unless another firmware was loaded meanwhile (picker / lesson button set fwName before that boot)
+  const fw0 = session.fwName;
+  if (session.held)
+    await new Promise<void>((r) => {
+      const off = session.onBoot(() => (off(), r()));
+    });
+  if (!session.sim || lastBin(wkey(work)) !== h || session.fwName !== fw0) return;
   const k = await takeBin(h);
   if (!k || !fwCheck(k.buf, session.chip).ok) return actions.releaseBin?.();
   if (session.bootCount === 0)

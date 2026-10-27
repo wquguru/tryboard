@@ -587,6 +587,77 @@ await ph.close();
   await ctx.close();
 }
 
+// H-29 leaving lesson 0 powers the work up again (a kept own bin included); lesson 0's timeline drops earlier runs
+{
+  const ctx = await browser.createBrowserContext();
+  const pg = await ctx.newPage();
+  pg.on('pageerror', (e) => errors.push(String(e)));
+  pg.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const l0 = '/app?work=basics&cp=lesson-0&beginner=1#bench';
+  const st = () =>
+    pg.evaluate(() => {
+      const a = globalThis.__tbApp;
+      return { run: document.querySelector('#runGroup')?.dataset.run ?? null, sim: !!a?.session.sim, fw: a?.session.fwName ?? null, serial: a?.session.consoleText().slice(-40) ?? '', runs: a?.store.get().hist.runs ?? -1, tlRuns: document.querySelectorAll('#timeline [data-id^="run:"]').length, lesson: document.body.dataset.lesson ?? null };
+    });
+  const ready = () => waitFor(pg, () => !!globalThis.__tbApp?.hist && !!document.querySelector('#lessonCard'), null, 30000);
+  // Top bar Running and an LED line on the serial (basics: "LED ON"; weather: "LED=green")
+  const ledLive = () => document.querySelector('#runGroup')?.dataset.run === 'run' && !!globalThis.__tbApp?.store.get().running && /LED/.test(globalThis.__tbApp.session.consoleText());
+  const noRuns = (s) => s.runs === 0 && s.tlRuns === 0 && !s.sim && s.serial === '' && s.run !== 'run';
+  const lesson0 = async () => {
+    await pg.goto(base + l0, { waitUntil: 'load' });
+    await ready();
+    await sleep(2000);
+  };
+  // Lesson 4 runs first; lesson 0 opened after it lists no run
+  await pg.goto(base + '/app?work=basics&cp=basics-pwm&beginner=1#bench', { waitUntil: 'load' });
+  await ready();
+  report('H-29 lesson 4 runs before lesson 0', await waitFor(pg, ledLive, null, 20000), JSON.stringify(await st()));
+  await lesson0();
+  let s = await st();
+  report('H-29 lesson 0 after lesson 4: no run on the timeline', s.lesson === 'lesson-0' && noRuns(s), JSON.stringify(s));
+  // Next lesson (1, weather: a reload into another work) runs its firmware
+  await pg.click('#courseNext');
+  const on1 = await waitFor(pg, () => document.body.dataset.lesson === '01', null, 30000);
+  report('H-29 lesson 0 → lesson 1: Running with an LED line', on1 && (await waitFor(pg, ledLive, null, 20000)), JSON.stringify(await st()));
+  // Same work in page: the lesson map's lesson 4 card
+  await lesson0();
+  await pg.click('#lessonMapBtn');
+  await waitFor(pg, () => !!document.querySelector('#lessonMap [data-course="4"]:not([disabled])'), null, 3000);
+  await pg.click('#lessonMap [data-course="4"]');
+  const on4 = await waitFor(pg, () => document.body.dataset.lesson === 'basics-pwm', null, 5000);
+  report('H-29 lesson 0 → lesson 4 (map, same work): Running with an LED line', on4 && (await waitFor(pg, ledLive, null, 20000)), JSON.stringify(await st()));
+  // Lab (beginner off) runs; back on stops it and the timeline drops that run; off again starts at run #1
+  await lesson0();
+  await pg.click('#beginnerBtn');
+  report('H-29 lesson 0 → lab (beginner off): Running with an LED line', await waitFor(pg, ledLive, null, 20000), JSON.stringify(await st()));
+  await pg.click('#beginnerBtn');
+  const dropped = await waitFor(pg, () => document.querySelectorAll('#timeline [data-id^="run:"]').length === 0 && globalThis.__tbApp.store.get().hist.runs === 0, null, 5000);
+  s = await st();
+  report('H-29 lesson 0 again: the stopped run leaves the timeline', dropped && noRuns(s), JSON.stringify(s));
+  await pg.click('#beginnerBtn');
+  const back = await waitFor(pg, ledLive, null, 20000);
+  s = await st();
+  report('H-29 lab again: runs as run #1', back && s.runs === 1 && s.tlRuns === 1, JSON.stringify(s));
+  await pg.click('#beginnerBtn');
+  await waitFor(pg, () => !globalThis.__tbApp.session.sim, null, 5000);
+  // A bin kept in this browser (F-07c) comes back when lesson 0 is left in page
+  const own = path.join(outDir, 'h29-own.bin');
+  fs.copyFileSync(path.join(root, 'firmware/build/s3-blink-100/flash.bin'), own);
+  await pg.goto(base + '/app?work=basics&cp=basics-pwm&beginner=1#bench', { waitUntil: 'load' });
+  await ready();
+  await waitFor(pg, ledLive, null, 20000);
+  await (await pg.$('#fwPick')).uploadFile(own);
+  // keepOwn stores the bin after the power-up, so wait for this work's pointer (ownbin.ts PTR)
+  const kept = await waitFor(pg, () => globalThis.__tbApp.session.fwName === 'h29-own.bin' && Object.keys(localStorage).some((k) => k.startsWith('tryboard-ownbin:') && k.includes('basics')), null, 10000);
+  await lesson0();
+  s = await st();
+  report('H-29 lesson 0 with a kept bin: still off', kept && noRuns(s), JSON.stringify(s));
+  await pg.evaluate(() => globalThis.__tbApp.store.set({ selection: { kind: 'checkpoint', id: 'basics-pwm' } }));
+  const ownBack = await waitFor(pg, () => globalThis.__tbApp.session.fwName === 'h29-own.bin' && !!globalThis.__tbApp.store.get().running, null, 20000);
+  report('H-29 lesson 0 → lesson 4: the kept bin is restored', ownBack, JSON.stringify(await st()));
+  await pg.close();
+}
+
 // H-23 lesson 5 (lamp-strip, GPIO5): each restart while running brings back the first strip row
 {
   const pg = await open('/app?work=lamp&cp=lamp-1&debug=1&beginner=1#bench');

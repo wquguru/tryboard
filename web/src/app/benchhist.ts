@@ -158,6 +158,17 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
     steps.push({ op: { k: 'run', n }, run: n, tMs: 0 });
     sync();
   });
+  // H-29: a held work (lesson 0) is back to "never powered": its old runs leave the timeline, edits count as pre-power
+  session.onHold((on) => {
+    if (!on) return;
+    steps = steps.filter((s) => s.op.k !== 'run' && s.op.k !== 'brownout');
+    for (const s of steps) Object.assign(s, { run: 1, tMs: 0 });
+    runs = [];
+    seeked = null;
+    cur = -1;
+    store.set({ runNo: 0 });
+    sync();
+  });
   session.onRunEnd((snap) => {
     const r = openRun();
     if (!r) return;
