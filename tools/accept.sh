@@ -3,6 +3,9 @@
 # Writes Reviews/accept.md; any failure gives a non-zero exit. Usage: tools/accept.sh [--no-web] [--no-qemu]
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Re-run under run_bounded.pl: killing accept.sh (INT / TERM / HUP) then also kills npm_parity.sh, npx, node, QEMU, browsers
+# (a bash trap would wait for the running foreground child first, and orphaned loops kept starting npx: H-37)
+[ -n "${ACCEPT_SUPERVISED:-}" ] || ACCEPT_SUPERVISED=1 exec perl "$ROOT/tools/run_bounded.pl" 0 "$ROOT/tools/accept.sh" "$@"
 cd "$ROOT"
 . ~/.cargo/env
 NO_WEB=0; NO_QEMU=0

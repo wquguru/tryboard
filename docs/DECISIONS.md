@@ -2012,3 +2012,9 @@
 - 理由：失败是测试丢了上传，不是装配视图没出来。属性面板每次 render 都整块重挂（shell.tsx `createPanel` 的 `<Fragment key={n}>`），NInput 卸载时摘掉 change 监听，旧 input 上的 uploadFile 无声无息；之后两个 waitFor 超时被吞，Assemble 因检查点没过停在锁定卡。上传前人为多点一次检查点即可稳定复现同一 30 s 报错。
 - 未改产品：真实用户打开文件对话框期间若面板重渲染（verify 结束、hist 变化时），选中的文件同样会丢。修法要么让 props 面板不再按 n 整块重挂（影响所有台面面板的非受控输入），要么让 Drop 的 input 脱离重挂；面较大，留作后续。
 - 备选：加大超时（违反要求，且不解决丢上传）；在 Assemble 端等待（视图本身没问题）。
+
+
+## 2026-10-27 H-37 npm 对照 npx 卡死：离线 + 每项超时 + 被杀时清子孙
+- 决定：npm_parity.sh 的 npx 加 `npm_config_offline=true npm_config_audit=false npm_config_fund=false`；每项 npx check 经新脚本 `tools/run_bounded.pl <秒> cmd…` 运行（`NPM_PARITY_TIMEOUT` 默认 120 s，超时退出 124、表中记 TIMEOUT 并继续；测试钩子 `NPM_PARITY_HANG=<关卡>` 默认关闭）；accept.sh、npm_parity.sh 开头若未被托管就 `exec perl tools/run_bounded.pl 0 自己`，信号到来时由 perl 杀子进程组与按 ppid 找到的全部子孙。
+- 理由：npx 每次都 POST 审计到 registry，网络卡住时至少阻塞 npm 默认 fetch-timeout 300 s，实际卡了 31 min（见 STATUS H-37）；包没有依赖，离线安装本地 tgz 不需要网络，顺带每项省约 1 s。macOS 没有 GNU timeout；bash 的 trap 要等前台子进程结束才执行，所以 `kill -TERM accept.sh` 时纯 bash trap 救不了卡住的 npx，而且只杀 accept.sh 会让 npm_parity.sh 的循环成孤儿继续起 npx。
+- 备选：纯 bash 把每个长步骤改成后台 + `wait` + trap（accept.sh 有几十个步骤，改动面大且容易漏）；node 子进程超时（要再写一个 node 包装，且仍需处理外层信号）；`setsid`（macOS 没有）；把超时加大或不管（不解决孤儿问题）。

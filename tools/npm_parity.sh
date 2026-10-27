@@ -3,10 +3,14 @@
 # compares verdict, full output (with fingerprint), exit code. Markdown table, exit 1 on mismatch. Run tools/build_npm.sh first.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Re-run under run_bounded.pl so INT / TERM / HUP also kill the npx / node children (bash defers traps while one runs)
+[ -n "${NPM_PARITY_SUPERVISED:-}" ] || NPM_PARITY_SUPERVISED=1 exec perl "$ROOT/tools/run_bounded.pl" 0 "$ROOT/tools/npm_parity.sh" "$@"
 command -v node >/dev/null || { [ -s ~/.nvm/nvm.sh ] && . ~/.nvm/nvm.sh >/dev/null; }
 TGZ=$(ls "$ROOT"/packages/tryboard/tryboard-*.tgz 2>/dev/null | head -1)
 [ -n "$TGZ" ] || { echo "no packed package: run tools/build_npm.sh first"; exit 1; }
 TMP="$ROOT/Reviews/npm-parity"; rm -rf "$TMP"; mkdir -p "$TMP"; cp "$TGZ" "$TMP/"; T=./$(basename "$TGZ")
+# NPM_PARITY_TIMEOUT (seconds) bounds each npx check; NPM_PARITY_HANG=<level id> swaps that check for a hang (test hook, off by default)
+TO=${NPM_PARITY_TIMEOUT:-120}
 # firmware:level pairs (reference firmware from levels.json; the last few are deliberately mismatched)
 CASES=$(python3 - "$ROOT" <<'PY'
 import json, sys
@@ -17,7 +21,8 @@ for l in L:
 print('s3-blink:03'); print('s3-oled:04'); print('weather:07-spin')
 PY
 )
-bad=0
+verdict() { [ "$1" = 124 ] && echo "TIMEOUT (${TO} s)" && return; [ "$1" = 0 ] && echo "PASS" || echo "FAIL ($1)"; }
+bad=0; timeouts=''
 echo "| Firmware | Level | check.py | npx tryboard | Fingerprint | Same |"
 echo "|---|---|---|---|---|---|"
 for c in $CASES; do
@@ -25,11 +30,16 @@ for c in $CASES; do
   py=$("$ROOT/tools/check.py" "$bin" --level "$lv" 2>&1); prc=$?
   # Run outside the repo the way users do (`npx ./tryboard-*.tgz check ...`) to prove it needs no repo files
   # Private npx cache: parallel accept runs in other worktrees reinstall the shared ~/.npm/_npx copy mid-run
-  np=$(cd "$TMP" && npm_config_cache="$TMP/.npm" npm_config_update_notifier=false npx --yes "$T" check "$bin" --level "$lv" 2>&1); nrc=$?
+  if [ "${NPM_PARITY_HANG:-}" = "$lv" ]; then run=(bash -c 'sleep 3600 & wait'); else
+    # Offline, no audit: each npx call reinstalls and POSTs an audit to the registry; a stalled one blocks for ~15 min (H-37)
+    run=(env npm_config_cache="$TMP/.npm" npm_config_update_notifier=false npm_config_audit=false npm_config_fund=false
+      npm_config_offline=true npx --yes "$T" check "$bin" --level "$lv"); fi
+  np=$(cd "$TMP" && perl "$ROOT/tools/run_bounded.pl" "$TO" "${run[@]}" </dev/null 2>&1); nrc=$?
   fp=$(echo "$np" | head -1 | sed -n 's/.*fingerprint //p')
-  verdict() { [ "$1" = 0 ] && echo "PASS" || echo "FAIL ($1)"; }
+  [ $nrc = 124 ] && timeouts="$timeouts- npx check timed out after ${TO} s: $fw --level $lv (killed, counted as a mismatch)"$'\n'
   if [ "$py" = "$np" ] && [ $prc = $nrc ]; then same='✅'; else same='❌'; bad=1
     printf '%s\n' "$py" > "$TMP/$fw-$lv.py.txt"; printf '%s\n' "$np" > "$TMP/$fw-$lv.npx.txt"; fi
   echo "| $fw | $lv | $(verdict $prc) | $(verdict $nrc) | $fp | $same |"
 done
+[ -z "$timeouts" ] || printf '\n%s' "$timeouts"
 exit $bad
