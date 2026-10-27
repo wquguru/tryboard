@@ -49,6 +49,8 @@ export function TaskList({ tasks }: { tasks: LessonTask[] }) {
                     <span className="font-medium">{x.text}</span>
                     {hit ? (
                       <span data-detected className="text-[12px] text-ok-ink">{hitText(x.done, hit)}</span>
+                    ) : s.asmWarn && x.done === "asm:done" ? (
+                      <span data-warn className="text-[12px] text-warn-ink">{t("There are warnings: move the parts as the Assemble step suggests; it ticks once none are left")}</span>
                     ) : (
                       x.how && <span className="text-[12px] text-muted">{x.how}</span>
                     )}

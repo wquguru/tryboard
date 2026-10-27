@@ -75,7 +75,8 @@ export const L11: Lesson = {
   events: [{ pin: 0, hi: t('BOOT released'), lo: t('BOOT pressed'), line: 212, hiLine: 267, input: true }],
   i2c: [
     { addr: 0x3c, text: t('Screen updated: {n} bytes sent'), line: 156 },
-    { addr: 0x76, text: t('Asked the BME280 for a reading: {n} bytes sent'), line: 38 },
+    // Register reads come back after a repeated START; without reads the open write is dropped and no row shows
+    { addr: 0x76, text: t('Read the BME280: {n} bytes on the bus'), line: 38, reads: true },
   ],
   params: [
     { label: t('I2C pins (OLED + BME280)'), value: t('SDA GPIO8 · SCL GPIO9'), source: 'bench' },

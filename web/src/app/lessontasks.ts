@@ -31,7 +31,7 @@ export interface Hit {
 }
 
 /** `run` / `reveal` / `view:current` / `select:<id>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` / `press:boot×<n>` / `strip:<pin>=<n lit>` / `usb:configured` / `usb:typed=<text>` / `env:<key>` / `adc:<pin><raw` or `>raw` /
- *  `oled:<n lit>` / `follow:temp` (a reading matches a temperature changed on this step) / `asm:done` (every part in the case); null = malformed. */
+ *  `oled:<n lit>` / `follow:temp` (a reading matches a temperature changed on this step) / `asm:done` (every part in the case, no warnings); null = malformed. */
 export function parseDone(d: string): DoneSpec | null {
   if (d === 'run' || d === 'reveal') return { kind: d };
   if (d === 'view:current') return { kind: 'view', what: 'current' };
@@ -123,8 +123,8 @@ export function matchTask(done: string, sig: string, ctx: SigCtx): Hit | null {
       return m && (ctx.envs ?? 0) >= 1 ? { v: m[1] } : null;
     }
     case 'asm': {
-      const m = /^asm:done=(clean|warn)$/.exec(sig);
-      return m ? { v: m[1] } : null;
+      // H-21: warnings stay on screen as the lesson point, but only a clean case ticks
+      return sig === 'asm:done=clean' ? { v: 'clean' } : null;
     }
   }
 }
@@ -183,7 +183,7 @@ export function hitText(done: string, h: Hit): string {
     case 'follow':
       return t('Detected: the reading followed to {v} °C', { v: h.v ?? '' });
     case 'asm':
-      return h.v === 'clean' ? t('Detected: every part is in the case, no warnings') : t('Detected: every part is in the case, with warnings');
+      return t('Detected: every part is in the case, no warnings');
     case 'chip':
       return h.from && h.from !== h.v
         ? t('Detected: delay {from} ms → {to} ms', { from: h.from, to: h.v ?? d.v })
@@ -234,10 +234,12 @@ export interface TaskUi {
   fresh: number | null;
   /** Reveal tasks opened on this step. */
   open: Record<number, boolean>;
+  /** H-21: every part is in the case but with warnings, so the asm task says why it has not ticked. */
+  asmWarn: boolean;
   /** "Take me there": the bench eases the camera to a target and outlines it (bench/lesson.tsx installs it). */
   goTo: (tg: LessonTarget) => void;
 }
-export const taskUi = createStore<TaskUi>({ lesson: null, step: 0, hits: {}, fresh: null, open: {}, goTo: () => {} });
+export const taskUi = createStore<TaskUi>({ lesson: null, step: 0, hits: {}, fresh: null, open: {}, asmWarn: false, goTo: () => {} });
 let boots = 0;
 let envs = 0;
 
@@ -247,7 +249,7 @@ export function setTaskStep(lesson: Lesson | null, step: number) {
   if (cur.lesson === lesson && cur.step === step) return;
   boots = 0;
   envs = 0;
-  taskUi.set({ lesson, step, hits: lesson ? stepHits(lesson.work, lesson.checkpoint, step) : {}, fresh: null, open: {} });
+  taskUi.set({ lesson, step, hits: lesson ? stepHits(lesson.work, lesson.checkpoint, step) : {}, fresh: null, open: {}, asmWarn: false });
 }
 
 function tick(i: number, h: Hit) {
@@ -265,6 +267,8 @@ export function lessonSignal(sig: string, from?: string) {
   if (sig === 'press:boot') boots++;
   // Lesson 11 counts any temperature change: session.ts sends 'env:temp', the BME280 card 'env:temp=<v>'
   if (/^env:temp(=|$)/.test(sig)) envs++;
+  const warn = sig === 'asm:done=warn';
+  if (sig.startsWith('asm:done=') && taskUi.get().asmWarn !== warn) taskUi.set({ asmWarn: warn });
   const tasks: LessonTask[] = lesson?.steps[step]?.tasks ?? [];
   tasks.forEach((task, i) => {
     if (hits[i]) return;
