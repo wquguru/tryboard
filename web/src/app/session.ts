@@ -125,6 +125,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const tickSubs = new Set<(m: Extract<FromWorker, { type: 'tick' }>) => void>();
   const bootSubs = new Set<() => void>();
   const endSubs = new Set<(snap: Snapshot) => void>();
+  const holdSubs = new Set<(on: boolean) => void>();
   // Logic analyzer: one event store per page (reset on each boot / replay); the analyzer picks watched GPIOs.
   const io = new IoStore();
   const ioSubs = new Set<() => void>();
@@ -216,6 +217,10 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     onRunEnd(cb) {
       endSubs.add(cb);
       return () => endSubs.delete(cb);
+    },
+    onHold(cb) {
+      holdSubs.add(cb);
+      return () => holdSubs.delete(cb);
     },
     onCrash(cb) {
       crashSubs.add(cb);
@@ -317,6 +322,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
         s.sim = makeSim(s.fwBuf);
         s.sim.start();
       }
+      for (const f of holdSubs) f(on);
     },
     loadFirmware(buf, name) {
       s.held = false;

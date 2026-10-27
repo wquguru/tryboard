@@ -187,6 +187,8 @@ export interface Session {
   /** H-19: the open lesson runs no code, so the work's firmware stays off (true stops a running one, false powers it up) */
   held: boolean;
   hold(on: boolean): void;
+  /** H-29: told after each hold change (the bench timeline drops the stopped runs) */
+  onHold(cb: (on: boolean) => void): () => void;
   pressBoot(down: boolean): void;
   /** External key (breadboard key, product keypad): pressed = tied to ground */
   pressPin(pin: number, down: boolean): void;
