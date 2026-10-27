@@ -6,6 +6,7 @@ import { extModelsOn } from "../../extmodels";
 import { HOME } from "../../ui/links";
 import { passedCount } from "./progress";
 import type { BenchCtx } from "./ctx";
+import { lessonUi } from "../lesson";
 import { viewTools } from "../schematic/view";
 
 export function mountVerdict(b: BenchCtx) {
@@ -41,9 +42,11 @@ export function mountVerdict(b: BenchCtx) {
   /** Bench toolbar groups (labels follow the 3D-model and recording state). */
   function setToolGroups(c: StepCtx) {
     // Beginner lesson (H-01): select / orbit / reset view / BOOT, the rest folded behind "More tools"
+    // H-19: lesson 0 runs no code, so it gets no Run button
+    const run = [...(lessonUi.get().lesson?.fw ? [{ id: "run", label: t("Run"), primary: true }] : []), ...b.flowTools()];
     if (b.lessonTools() && !b.beginnerMore)
       return c.shell.toolbar.setGroups([
-        { id: "run", tools: [{ id: "run", label: t("Run"), primary: true }, ...b.flowTools()] },
+        ...(run.length ? [{ id: "run", tools: run }] : []),
         {
           id: "nav",
           tools: [

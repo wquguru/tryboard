@@ -504,6 +504,61 @@ await ph.close();
   await pg.close();
 }
 
+// H-19 lesson 0 runs no code: open / reload keep the basics firmware off; lesson 4 (in-page pick or course link) and beginner off run it
+{
+  const ctx = await browser.createBrowserContext();
+  const pg = await ctx.newPage();
+  pg.on('pageerror', (e) => errors.push(String(e)));
+  pg.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const l0 = '/app?work=basics&cp=lesson-0&beginner=1#bench';
+  const state = () =>
+    pg.evaluate(() => {
+      const a = globalThis.__tbApp;
+      return { run: document.querySelector('#runGroup')?.dataset.run ?? null, running: !!a?.store.get().running, sim: !!a?.session.sim, serial: a?.session.consoleText().slice(-40) ?? null, boots: a?.session.bootCount ?? -1, runs: a?.store.get().hist.runs ?? -1, lesson: document.querySelector('#lessonCard') ? document.body.dataset.lesson : null };
+    });
+  const still = (st) => st.run !== 'run' && !st.running && !st.sim && st.serial === '';
+  const live = () => !!globalThis.__tbApp?.store.get().running && globalThis.__tbApp.session.consoleText().length > 0;
+  for (const how of ['open', 'reload']) {
+    if (how === 'open') await pg.goto(base + l0, { waitUntil: 'load' });
+    else await pg.reload({ waitUntil: 'load' });
+    await waitFor(pg, () => !!globalThis.__tbApp?.hist && !!document.querySelector('#lessonCard'), null, 30000);
+    await sleep(3000);
+    const st = await state();
+    report(`H-19 lesson 0 ${how}: never booted, not running, serial empty`, st.lesson === 'lesson-0' && still(st) && st.boots === 0 && st.runs === 0, JSON.stringify(st));
+    if (how === 'open') report('H-19 lesson 0: no Run button in the lesson toolbar', !(await tools(pg)).split(',').includes('run'), await tools(pg));
+  }
+  // Another step (assemble) and back must not power it up either
+  await pg.evaluate(() => (location.hash = 'assemble'));
+  await sleep(1500);
+  await pg.evaluate(() => (location.hash = 'bench'));
+  await sleep(1500);
+  report('H-19 lesson 0: assemble and back stays off', still(await state()), JSON.stringify(await state()));
+  // In-page: picking lesson 4's checkpoint (basics-pwm) powers the work's firmware up
+  await pg.evaluate(() => globalThis.__tbApp.store.set({ selection: { kind: 'checkpoint', id: 'basics-pwm' } }));
+  const pick = await waitFor(pg, () => document.body.dataset.lesson === 'basics-pwm', null, 5000);
+  report('H-19 lesson 0 → lesson 4 (in page): runs with serial output', pick && (await waitFor(pg, live, null, 20000)), JSON.stringify(await state()));
+  report('H-19 lesson 4 (in page): Run button back', (await tools(pg)).split(',').includes('run'), await tools(pg));
+  // Course link (goLesson) to lesson 4, then back to lesson 0 and switch beginner off
+  await pg.goto(base + '/app?work=basics&cp=basics-pwm&beginner=1#bench', { waitUntil: 'load' });
+  const l4 = await waitFor(pg, () => document.body.dataset.lesson === 'basics-pwm', null, 30000);
+  report('H-19 lesson 4 link: runs with serial output', l4 && (await waitFor(pg, live, null, 20000)), JSON.stringify(await state()));
+  await pg.goto(base + l0, { waitUntil: 'load' });
+  await waitFor(pg, () => !!globalThis.__tbApp?.hist && !!document.querySelector('#lessonCard'), null, 30000);
+  await sleep(1500);
+  report('H-19 lesson 4 → lesson 0: firmware off again', still(await state()), JSON.stringify(await state()));
+  await pg.click('#beginnerBtn');
+  report('H-19 beginner off: the work runs as usual', await waitFor(pg, live, null, 20000), JSON.stringify(await state()));
+  // Back on with ?cp=lesson-0 still in the URL: the running firmware is stopped
+  await pg.click('#beginnerBtn');
+  report('H-19 beginner on again: lesson 0 stops the running firmware', await waitFor(pg, (f) => !globalThis.__tbApp.store.get().running && !globalThis.__tbApp.session.sim && globalThis.__tbApp.session.consoleText() === '' && document.querySelector('#runGroup')?.dataset.run !== 'run', null, 5000), JSON.stringify(await state()));
+  // Undo / rewind with the firmware held off must not touch a missing sim
+  const n0 = errors.length;
+  if (await pg.$eval('#undoBtn', (b) => !b.disabled).catch(() => false)) await pg.click('#undoBtn');
+  await sleep(1500);
+  report('H-19 lesson 0 held: undo raises no page error', errors.length === n0, errors.slice(n0).join(' | '));
+  await ctx.close();
+}
+
 report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 server.close();

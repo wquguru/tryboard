@@ -183,7 +183,8 @@ export function createBenchHistory(ctx: StepCtx, init: { placeLabels: string[]; 
     }
     const tgt = seekTarget(steps, i, (n) => runs.find((r) => r.n === n)?.snap?.log.endMs ?? null);
     const rec = tgt && runs.find((r) => r.n === tgt.run);
-    if (!tgt || !rec || !rec.snap) {
+    // H-19: lesson 0 holds the firmware off (no live sim), so there is nothing to rewind into
+    if (!tgt || !rec || !rec.snap || !session.sim) {
       shell.toast(t('No run record for this step yet, cannot rewind'));
       return null;
     }

@@ -10,6 +10,7 @@ import { afterFrame } from "../../ui/frame";
 import { LessonCallouts } from "../lessoncallouts";
 import { isPhone, setMui } from "../mobile";
 import { lessonFor } from "../lessons";
+import { courseOf } from "../course";
 import { LessonSteps, lessonUi, setLessonUi } from "../lesson";
 import { bindLessonFeed } from "../lessonfeed";
 import { lessonSignal, oledSignal, readingSignal, setTaskStep, stripSignals, taskUi, usbSignals } from "../lessontasks";
@@ -76,6 +77,8 @@ export function mountLesson(b: BenchCtx) {
     const had = !!lessonUi.get().lesson;
     // A lesson filed under a checkpoint needs its level; lesson 0 has none (H-16)
     const free = !!lesson && !c.work.checkpoints.includes(lesson.checkpoint);
+    // H-19: a no-code lesson keeps the work's firmware off; any other lesson (or none) runs it as usual
+    c.session.hold(!!lesson && (!!l || free) && !!courseOf(lesson)?.noFw);
     if (!lesson || (!l && !free)) {
       if (had) {
         setLessonUi({ lesson: null });
@@ -91,7 +94,8 @@ export function mountLesson(b: BenchCtx) {
       return null;
     }
     // H-15: another lesson in the same work starts on the overview tab with no wire lit (H-14 kept the old one)
-    if (had && lessonUi.get().lesson !== lesson) {
+    const swapped = had && lessonUi.get().lesson !== lesson;
+    if (swapped) {
       if (lessonUi.get().wireSel) c.session.pick.highlight?.(null);
       setLessonUi({ wireSel: null, info: "overview" });
     }
@@ -141,7 +145,8 @@ export function mountLesson(b: BenchCtx) {
     const prev = lessonUi.get();
     if (JSON.stringify([prev.wires, prev.led]) !== JSON.stringify([wires, led])) setLessonUi({ wires, led });
     // The left card is drawn after the bench's first toolbar pass, so the short toolbar follows from here
-    if (!had) b.setToolGroups(c);
+    // H-19: a swap to or from the no-code lesson adds or drops the Run button
+    if (!had || swapped) b.setToolGroups(c);
     if (!had) bindTasks(true);
     // H-03: the dock opens on "What happened" whenever a lesson comes up (the serial log is one click away)
     bindLessonFeed(c.session, lesson);

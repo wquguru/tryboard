@@ -60,6 +60,8 @@ export interface SessionOpts {
   chip?: 'esp32' | 'esp32c3' | 'esp32s3';
   /** Per-part checkpoints (custom-<n>, U-17), appended after levels.json. */
   levels?: Level[];
+  /** H-19: open with the work's firmware off (lesson 0); hold(false) powers it up later. */
+  hold?: boolean;
 }
 
 /** Initial board and scene: the work's example (examples.json) or the placed list. */
@@ -116,8 +118,6 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
   const buzzerPins = scene.parts.flatMap((p) => (p.type === 'buzzer' ? [p.pin] : []));
   audio.setPins(buzzerPins);
   audio.setSpeaker(hasSpeaker(scene));
-  const poseRate = new PoseRate();
-  let poseIdle = 0;
 
   const powerMode = () => (s.power?.ext5v ? 'ext' : 'usb') as 'usb' | 'ext';
   const brownSubs = new Set<(tSec: number) => void>();
@@ -300,7 +300,26 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       bench.setPowered(true);
       s.sim.reset();
     },
+    held: false,
+    hold(on) {
+      if (on === s.held) return;
+      s.held = on;
+      if (on) {
+        paced.stop();
+        s.sim?.dispose();
+        s.sim = null;
+        consoleBuf = '';
+        hooks.onConsoleReset?.('');
+        bench.setPowered(false);
+        store.set({ running: false });
+      } else if (!s.sim && s.fwBuf) {
+        bench.setPowered(true);
+        s.sim = makeSim(s.fwBuf);
+        s.sim.start();
+      }
+    },
     loadFirmware(buf, name) {
+      s.held = false;
       s.deskPc = false; // another firmware does not inherit the example's virtual PC
       s.fwBuf = buf;
       s.fwName = name;
@@ -345,38 +364,10 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       if (store.get().env.temp !== was) lessonSignal('env:temp', String(was));
     },
     hasImu: () => s.scene.parts.some((p) => p.type === 'mpu6050' || p.type === 'qmi8658'),
-    setPose(p) {
-      const pose = { pitch: p.pitch, roll: p.roll, yaw: p.yaw };
-      // Drag/slider speed -> gyro rate; 150 ms after stopping, log a zero rate so the gyro settles.
-      const rates = poseRate.push(pose, performance.now());
-      s.sim?.setImu({ ...pose, rates });
-      bench.setPose(pose);
-      store.set({ pose });
-      clearTimeout(poseIdle);
-      if (rates.some((v) => v !== 0))
-        poseIdle = window.setTimeout(() => {
-          poseRate.reset();
-          s.sim?.setImu({ ...pose, rates: [0, 0, 0] });
-        }, 150);
-    },
+    ...bodyInputs(() => s, bench, store),
     battery: null,
-    setBattery(pct, usb) {
-      s.battery = { pct: Math.round(Math.min(100, Math.max(0, pct))), usb };
-      s.sim?.battery(s.battery.pct, usb);
-    },
-    pwrKey(long) {
-      s.sim?.pwrkey(long);
-    },
     deskPc: !!ex?.pc,
     xzScript: ex?.xz ? 'hello' : null,
-    touch(x, y, down) {
-      s.sim?.touch(x, y, down);
-      store.set({ touch: { x: Math.round(x), y: Math.round(y), down } });
-    },
-    setSensorOffset(d) {
-      s.sensorOffset = d;
-      s.sim?.setOffset(d);
-    },
     onConsole(cb) {
       consoleSubs.add(cb);
       return () => consoleSubs.delete(cb);
@@ -620,11 +611,51 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     s.fwBuf = buf;
     s.fwSize = buf.byteLength;
     s.chip = imageChip(buf);
-    bench.setPowered(true);
-    s.sim = makeSim(buf);
-    s.sim.start();
+    s.held = !!opts.hold;
+    bench.setPowered(!s.held);
+    if (!s.held) {
+      s.sim = makeSim(buf);
+      s.sim.start();
+    }
   } else bench.setPowered(false);
   return s;
+}
+
+/** Pose, battery, PWR key, touch and sensor offset: inputs that only forward to the live sim and mirror into the store. */
+function bodyInputs(get: () => Session, bench: Session['bench'], store: Store<AppState>): Pick<Session, 'setPose' | 'setBattery' | 'pwrKey' | 'touch' | 'setSensorOffset'> {
+  const poseRate = new PoseRate();
+  let poseIdle = 0;
+  return {
+    setPose(p) {
+      const pose = { pitch: p.pitch, roll: p.roll, yaw: p.yaw };
+      // Drag/slider speed -> gyro rate; 150 ms after stopping, log a zero rate so the gyro settles.
+      const rates = poseRate.push(pose, performance.now());
+      get().sim?.setImu({ ...pose, rates });
+      bench.setPose(pose);
+      store.set({ pose });
+      clearTimeout(poseIdle);
+      if (rates.some((v) => v !== 0))
+        poseIdle = window.setTimeout(() => {
+          poseRate.reset();
+          get().sim?.setImu({ ...pose, rates: [0, 0, 0] });
+        }, 150);
+    },
+    setBattery(pct, usb) {
+      const b = (get().battery = { pct: Math.round(Math.min(100, Math.max(0, pct))), usb });
+      get().sim?.battery(b.pct, usb);
+    },
+    pwrKey(long) {
+      get().sim?.pwrkey(long);
+    },
+    touch(x, y, down) {
+      get().sim?.touch(x, y, down);
+      store.set({ touch: { x: Math.round(x), y: Math.round(y), down } });
+    },
+    setSensorOffset(d) {
+      get().sensorOffset = d;
+      get().sim?.setOffset(d);
+    },
+  };
 }
 
 /** Bench gestures (keys, encoder, pot, distance, pose, touch, board buttons) → session inputs. */
