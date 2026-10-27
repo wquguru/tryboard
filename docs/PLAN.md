@@ -322,7 +322,7 @@
 | H-24 | 第 6 课蜂鸣器：按 §6.3 用 Web Audio AnalyserNode 数据验证 do / re / mi 三个音（262 / 294 / 330 Hz，±1 个 FFT bin） | 新 webtest（或 beginner.mjs 分段）读 `getFloatFrequencyData` 峰值三次全对；Reviews/ab/H-24.md 记数据 | ☑ 2026-10-27 `tools/webtest/tones.mjs`：产品 analyser（4096 点 / 48 kHz，bin 11.72 Hz）峰值 bin 257.8 / 293.0 / 328.1 Hz，测试另接 8192 点无平滑 tap 插值 261.96 / 294.03 / 330.04 Hz，连跑 3 次全过 |
 | H-25 | 原理图：桌面第 03 课文字实测 ≥ 11 px（不随 viewBox 缩到 7–8 px）；OLED / 按钮 / 蜂鸣器 / 舵机专用符号（照 `docs/design-v2/beginner/v3/Schematic*.dc.html`） | schematic.test.ts 新符号用例；beginner.mjs 1440 宽第 03 课 `getBoundingClientRect` 字高 ≥ 11 px；agent-browser 第 01 / 02 / 03 / 6 / 7 课截图 Reviews/ab/H-25.md | ☐ |
 | H-26 | amoled.mjs「second tap -> TOUCH near (400, 80)」负载下偶发失败：查明时序原因，改成等可观察条件再点（不放宽断言） | 负载下（并行 npm test / 另一 webtest）连跑 ≥ 5 次全过；原因写进 STATUS | ☐ |
-| H-27 | 第 4 课：标注「现在」在 PWM 下显示占空比而不是数字电平（核对是否已被 H-16 第 6 课修掉）；顺带清 STATUS 里 H-16 各课已修掉的「遗留 / 缺」 | beginner.mjs 断言第 4 课运行后 GPIO5 标注含 %；STATUS 行更新；Reviews/ab/H-27.md | ☐ |
+| H-27 | 第 4 课：标注「现在」在 PWM 下显示占空比而不是数字电平（核对是否已被 H-16 第 6 课修掉）；顺带清 STATUS 里 H-16 各课已修掉的「遗留 / 缺」 | beginner.mjs 断言第 4 课运行后 GPIO5 标注含 %；STATUS 行更新；Reviews/ab/H-27.md | ☑ 2026-10-27：LED 卡在 PWM 下显示「亮度 N %（PWM 5000 Hz）」，GPIO5 卡显示方波 + % 高，第 1 课仍亮 / 灭；beginner.mjs 全 PASS（STATUS 其他课的遗留留给主会话清） |
 | H-28 | 第 5 课「改颜色」：lamp-strip 加预编译颜色变体（代码面板点颜色换固件重跑），任务由「揭示答案」改为自动打勾 | build_fw + accept 新用例（golden save）；lesson-l5.test.ts；beginner.mjs；Reviews/ab/H-28.md | ☐ |
 
 ## P3 · 以后再说

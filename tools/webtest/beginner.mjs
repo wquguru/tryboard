@@ -170,6 +170,9 @@ await waitFor(page, () => !document.querySelector('#stage')?.dataset.flow, null,
 report('current: switch off clears', (await flow(page)).f === null);
 const live = await waitFor(page, () => /Now: (high 3\.3 V|low 0 V)/.test(document.querySelector('[data-callout="gpio"] [data-live]')?.textContent ?? ''), null, 8000);
 report('callouts: GPIO card shows the live level', live);
+// H-27: digital blink keeps the LED card on on / off, never a PWM percentage
+const ledLive = await waitFor(page, () => /^Now: (on|off)$/.test(document.querySelector('[data-callout="led"] [data-live]')?.textContent ?? ''), null, 8000);
+report('H-27 lesson 1: LED card shows on / off', ledLive, await page.$eval('[data-callout="led"] [data-live]', (e) => e.textContent).catch(() => 'no card'));
 await page.click('#lessonSteps [data-step="4"]');
 await waitFor(page, () => document.querySelector('#lessonCard')?.dataset.step === '4', null, 3000);
 report('step list is clickable', (await cardStep(page)) === '4' && !(await has(page, '#lessonRun')));
@@ -426,6 +429,30 @@ await ph.close();
   const gaps = ts.slice(2).map((t, i) => t - ts[i + 1]);
   report('lesson 8 S3: no feed rows before the lesson code runs', before === 0, `rows=${before}`);
   report('lesson 8 S3: sensor reads 1 s apart', gaps.length >= 3 && gaps.every((g) => Math.abs(g - 160_000_000) < 1_600_000), gaps.join(','));
+  await pg.close();
+}
+
+// H-27 lesson 4 (s3-fade, LEDC GPIO5): the LED and GPIO5 cards show the duty as a percentage that breathes
+{
+  const pg = await open('/app?work=basics&cp=basics-pwm&debug=1&beginner=1#bench');
+  for (let i = 0; i < 5 && !(await pg.$('#lessonRun')); i++) {
+    await pg.click('#lessonNext');
+    await sleep(300);
+  }
+  await pg.click('#lessonRun');
+  const pctOf = (key) => pg.$eval(`[data-callout="${key}"] [data-live]`, (e) => e.textContent).catch(() => '');
+  const pctRe = /^Now: (\d+) % brightness \(PWM 5000 Hz\)$/;
+  const got = await waitFor(pg, () => /^Now: \d+ % brightness/.test(document.querySelector('[data-callout="led"] [data-live]')?.textContent ?? ''), null, 20000);
+  const a = await pctOf('led');
+  // Wait for the duty to move on rather than sleeping a fixed time
+  const moved = await waitFor(pg, (a0) => { const s = document.querySelector('[data-callout="led"] [data-live]')?.textContent ?? ''; return /^Now: \d+ % brightness/.test(s) && s !== a0; }, a, 8000);
+  const b = await pctOf('led');
+  const va = +(pctRe.exec(a)?.[1] ?? -1);
+  const vb = +(pctRe.exec(b)?.[1] ?? -1);
+  report('H-27 lesson 4: LED card shows the PWM brightness in %', got && va >= 0 && va <= 100, a);
+  report('H-27 lesson 4: brightness changes between samples (0-100)', moved && vb >= 0 && vb <= 100 && va !== vb, `${a} -> ${b}`);
+  const gp = await waitFor(pg, () => /%/.test(document.querySelector('[data-callout="gpio"] [data-live]')?.textContent ?? ''), null, 8000);
+  report('H-27 lesson 4: GPIO5 card shows the duty in %', gp, await pctOf('gpio'));
   await pg.close();
 }
 

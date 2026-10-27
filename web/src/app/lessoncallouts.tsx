@@ -107,12 +107,15 @@ export function LessonCallouts({ b }: { b: BenchCtx }) {
         if (!l.pin || !l.el) continue;
         const out = !!bit(m.enable, m.enableHi, l.pin.pin);
         const hi = !!bit(m.gpio, m.gpioHi, l.pin.pin);
-        // A PWM-routed pin (H-16 buzzer) reads low in the GPIO out register; show the wave instead
+        // A PWM-routed pin reads low in the GPIO out register; show the wave (buzzer) or brightness (LED, H-27)
         const duty = m.pwm[l.pin.pin] ?? -1;
         const hz = m.pwmFreq[l.pin.pin] ?? 0;
-        const wave = !l.pin.led && duty > 0 && duty < 1 && hz > 0;
+        const wave = duty > 0 && duty < 1 && hz > 0;
+        const pct = Math.round(duty * 100);
         const s = wave
-          ? t("Now: {hz} Hz square wave, {pct} % high", { hz: Math.round(hz), pct: Math.round(duty * 100) })
+          ? l.pin.led
+            ? t("Now: {pct} % brightness (PWM {hz} Hz)", { hz: Math.round(hz), pct })
+            : t("Now: {hz} Hz square wave, {pct} % high", { hz: Math.round(hz), pct })
           : !out ? "" : l.pin.led ? (hi ? t("Now: on") : t("Now: off")) : hi ? t("Now: high 3.3 V") : t("Now: low 0 V");
         if (s === l.text) continue;
         l.text = s;
