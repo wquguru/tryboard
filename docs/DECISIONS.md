@@ -1985,3 +1985,10 @@
 - 理由：时间线按下标回放（onSeek(i) → steps[i]），只在渲染时过滤会让点击错位，所以直接改数据；第 0 课本来就不跑代码、串口已清空（H-19），丢掉回放历史与之一致。
 - 说明：任务写「切到第 1 课（同作品）」，实际第 1 课在 weather（跨作品整页重载，原本就会启动）；同作品出口是第 4 / 6 课（页内 selectCheckpoint），「回到实验室」= 关新手模式。验收两条路径都测。
 - 备选：渲染时过滤 run 步骤并做下标映射（改动面更大、撤销 / 回放语义混乱）；hold 时直接把自带 bin 设为 fwBuf、不先 boot 默认固件（要给 loadFirmware 加不上电分支，且和普通刷新路径不一致）。
+
+## 2026-10-27 H-34 第 5 课颜色变体标签：代码面板跟随变体固件
+- 决定：课程模式代码面板加载的 src.json 由 `lesson.fw` 改为当前 chip 值对应的变体（`lessonChips(lesson).fw[lessonUi.delay]`，查不到回落 `lesson.fw`）。变体的 src.json 打包时已含自己的 CMakeLists tab 与 `defines`（如 `STAGE=1 WARM=0x00FF00`），所以不加新文案，也不改 gen_fw_src.py。
+- 理由：显示真实运行的变体名和 `-D WARM=…` 比贴一个「颜色变体」标签更准确，且解释了为什么 main.c 第 66 行仍写 0xFF9933（`#ifndef WARM` 被 -D 覆盖）；手机端 -D 栏隐藏，但 tab 名仍是变体名。`lessonUi.delay` 在进课和「运行本课代码」时都会重置为默认值，与运行固件一致。
+- 代价：点 chip 后代码面板重新取一次 src.json（有缓存），短暂显示加载态；第 4 课 s3-fade 变体也随之显示 `-D FADE_MS=…`（同样是改进）。
+- 备选：在 CodeView 加「颜色变体」徽标（需四语新文案，且仍显示错误的 lamp-strip CMakeLists）——放弃。
+

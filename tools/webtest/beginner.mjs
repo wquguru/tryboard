@@ -756,8 +756,25 @@ await ph.close();
     const ticked = await waitFor(pg, (k) => document.querySelector(`#lessonCard li[data-task="${k}"]`)?.dataset.done === '1', i, 3000);
     const tk = await task(pg, i);
     report(`H-28 lesson 5: chip ${hex} ticks its task`, ticked && !!tk?.text.includes(hex), JSON.stringify(tk));
+    // H-34: the code panel follows the running variant (its CMakeLists tab and -D WARM), not the default build
+    const v = hex === '0x00FF00' ? 'lamp-strip-green' : 'lamp-strip-blue';
+    const shown = await waitFor(pg, ([v, hex]) => {
+      const cv = document.querySelector('#codeView');
+      return cv?.dataset.fw === v && !!cv.querySelector(`[data-file="${v}/main/CMakeLists.txt"]`) && !!document.querySelector('#codeDefines')?.textContent?.includes(`WARM=${hex}`) && !cv.querySelector('[data-file="lamp-strip/main/CMakeLists.txt"]');
+    }, [v, hex], 8000);
+    const lbl = await pg.evaluate(() => JSON.stringify([document.querySelector('#codeView')?.dataset.fw, [...document.querySelectorAll('#codeView [data-file]')].map((b) => b.dataset.file), document.querySelector('#codeDefines')?.textContent]));
+    report(`H-34 lesson 5: chip ${hex} code panel labels ${v}`, shown, lbl);
   }
+  await waitFor(pg, () => !!document.querySelector('#codeBody [data-chip="0x0000FF"]'), null, 8000);
   report('H-28 lesson 5: blue chip is the pressed one', (await pg.$eval('#codeBody [data-chip="0x0000FF"]', (b) => b.getAttribute('aria-pressed'))) === 'true');
+  // H-34: back to the default colour restores the lamp-strip labels
+  await pg.click('#codeBody [data-chip="0xFF9933"]');
+  const back = await waitFor(pg, () => {
+    const cv = document.querySelector('#codeView');
+    return cv?.dataset.fw === 'lamp-strip' && !!cv.querySelector('[data-file="lamp-strip/main/CMakeLists.txt"]') && !document.querySelector('#codeDefines')?.textContent?.includes('WARM') && globalThis.__tbApp.session.fwName === 'lamp-strip/flash.bin';
+  }, null, 20000);
+  const lb = await pg.evaluate(() => JSON.stringify([document.querySelector('#codeView')?.dataset.fw, globalThis.__tbApp.session.fwName, document.querySelector('#codeDefines')?.textContent]));
+  report('H-34 lesson 5: default chip restores lamp-strip labels', back, lb);
   await pg.close();
 }
 
