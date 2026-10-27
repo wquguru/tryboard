@@ -80,6 +80,8 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
   const shown = Math.min(s.step, n - 1);
   const cur = l.steps[shown];
   const at = Math.min(s.step + 1, n);
+  // H-40: on the run step the footer gets the run button, Previous shrinks to an arrow to make room
+  const footRun = footer && cur.id === "run";
   return (
     <section id="lessonSheet" aria-label={t("Lesson step")} data-step={done ? "done" : shown} data-todo={todo ? 1 : undefined} data-footer={footer ? "" : undefined} className="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-3">
       <div id="lessonSheetHead" className="flex flex-none items-center gap-2.5">
@@ -92,6 +94,7 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
               <span key={st.id} className={cn("h-[3px] w-[22px] rounded-sm", i <= shown ? "bg-accent-strong" : "bg-line")} />
             ))}
           </span>
+          {footer && <span id="mLessonSum" className="mt-1 truncate text-[12px] leading-4 text-muted">{t("Step {n} · {title}", { n: shown + 1, title: cur.title })}</span>}
         </span>
         <span className="flex-none font-mono text-[12px] text-muted">{`${at}/${n}`}</span>
         {onOpen && (
@@ -153,9 +156,21 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
       </div>
       {!done && (
       <div className="flex flex-none gap-2">
-        <button type="button" id="mLessonPrev" className={cn(btn, "flex-1 border border-line bg-surface text-fg disabled:cursor-default disabled:opacity-50")} disabled={s.step === 0} onClick={() => s.go(shown - 1)}>
-          {t("Previous")}
+        <button
+          type="button"
+          id="mLessonPrev"
+          aria-label={footRun ? t("Previous") : undefined}
+          className={cn(btn, footRun ? "w-12 flex-none px-0" : "flex-1", "border border-line bg-surface text-fg disabled:cursor-default disabled:opacity-50")}
+          disabled={s.step === 0}
+          onClick={() => s.go(shown - 1)}
+        >
+          {footRun ? <Icon n="left" size={18} /> : t("Previous")}
         </button>
+        {footRun && (
+          <button type="button" id="mLessonRunFoot" className={cn(btn, "min-w-0 flex-1 border border-accent-strong bg-surface text-[14px] leading-[18px] font-medium text-accent-ink")} onClick={s.run}>
+            <span className="line-clamp-2">{t("Run this lesson's code")}</span>
+          </button>
+        )}
         <button
           type="button"
           id="mLessonNext"
@@ -163,7 +178,8 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
           disabled={todo}
           className={cn(
             btn,
-            "min-w-0 flex-2 font-medium",
+            "min-w-0 font-medium",
+            footRun ? "flex-1" : "flex-2",
             todo
               ? "cursor-default gap-1.5 border border-line bg-field text-muted"
               : ready
