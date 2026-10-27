@@ -114,7 +114,7 @@ export const L10: Lesson = {
       id: 'run',
       title: t('Run, then type abc'),
       sub: t('Key down, then all released'),
-      body: t('Click "Run" and watch the USB tab reach "configured": the PC has enumerated the S3 as a keyboard. Every 10 ms the PC asks for news, and on a press the firmware answers with an 8-byte report holding the key code (a = 0x04), then an empty report 12 ms later. Press K1, K2 and K3 in order; the checkpoint passes when the PC types exactly abc.'),
+      body: t('Click "Run" and watch the USB tab reach "configured": the PC has enumerated the S3 as a keyboard. Every 10 ms the PC asks for news, and on a press the firmware answers with an 8-byte report holding the key code (a = 0x04), then an empty report 12 ms later. Press K1, K2 and K3 in order and the PC types abc; the checkpoint presses the same keys by script when it runs.'),
       tasks: [
         { text: t('Click "Run"'), done: 'run', how: t('The "Run this lesson\'s code" button below') },
         { text: t('The PC enumerates the S3 as a keyboard'), done: 'usb:configured', how: t('Wait about a second after Run; the USB tab shows the device state') },

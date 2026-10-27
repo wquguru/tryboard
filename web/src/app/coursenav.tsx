@@ -97,6 +97,22 @@ export function CourseTodo() {
   );
 }
 
+/** How a checkpoint passes (H-42), on a lesson's run and last steps until it does: checks replay the level script
+ *  (same verdict and fingerprint as check.py), so clicks on the bench only tick tasks. */
+export function CpHow() {
+  const s = useStore(lessonUi);
+  const { entry, cards } = useCourse();
+  if (!entry?.cp || cards.find((c) => c.entry === entry)?.cpPassed) return null;
+  return (
+    <p id="cpHow" className="m-0 rounded-lg bg-field px-3 py-2 text-[12px] leading-[18px] text-muted">
+      {t("Your clicks only tick tasks. The checkpoint replays its own script on your uploaded firmware or the reference one.")}{" "}
+      <button type="button" id="cpOpen" className="cursor-pointer border-0 bg-transparent p-0 text-accent-ink underline" onClick={s.openCp}>
+        {t("Open checkpoint")}
+      </button>
+    </p>
+  );
+}
+
 const navBtn = "inline-flex h-8 flex-none cursor-pointer items-center gap-1 rounded-lg border px-2.5 text-[13px] whitespace-nowrap disabled:cursor-default disabled:opacity-50";
 
 /** Top bar: "Basics / Lesson n / 12 · title", one bar per lesson, ‹ previous / next › written lesson. */

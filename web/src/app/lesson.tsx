@@ -13,7 +13,7 @@ import type { BenchWire } from "./wiring";
 import type { LedColor } from "../bench3d/ledparams";
 import { LessonInfo } from "./lessoninfo";
 import { LessonMapBtn } from "./lessonmap";
-import { CourseDone, CourseDoneButtons, CourseHead, CourseTodo, useLessonDone } from "./coursenav";
+import { CourseDone, CourseDoneButtons, CourseHead, CourseTodo, CpHow, useLessonDone } from "./coursenav";
 import { courseOf } from "./course";
 import { StepDoneBar, TaskList, useStepReady } from "./lessontasklist";
 
@@ -32,6 +32,8 @@ export interface LessonUi {
   delay: number;
   setDelay: (ms: number) => void;
   openChecks: () => void;
+  /** H-42: open this lesson's checkpoint (upload / reference run), the only way it is judged. */
+  openCp: () => void;
   /** H-05: "Show me how" playing over the bench, or the "wire it yourself" ring; other overlays step aside. */
   demo: "play" | "self" | null;
   /** Open the demo of step `i` (only steps with `demo` beats). */
@@ -55,6 +57,7 @@ export const lessonUi = createStore<LessonUi>({
   delay: 500,
   setDelay: noop,
   openChecks: noop,
+  openCp: noop,
   demo: null,
   showDemo: noop,
   info: "overview",
@@ -221,6 +224,7 @@ export function LessonCard({ step }: { step: string }) {
               {t("Run this lesson's code")}
             </button>
           )}
+          {(cur.id === "run" || at === n - 1) && <CpHow />}
         </>
       )}
       <LessonInfo />
