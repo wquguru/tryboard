@@ -504,6 +504,30 @@ await ph.close();
   await pg.close();
 }
 
+// H-23 lesson 5 (lamp-strip, GPIO5): each restart while running brings back the first strip row
+{
+  const pg = await open('/app?work=lamp&cp=lamp-1&debug=1&beginner=1#bench');
+  for (let i = 0; i < 6 && !(await pg.$('#lessonRun')); i++) {
+    await pg.click('#lessonNext');
+    await sleep(300);
+  }
+  await pg.click('#lessonRun');
+  const lit = () => !!document.querySelector('[data-lit="8"]');
+  const first = await waitFor(pg, lit, null, 20000);
+  report('H-23 lesson 5: first strip row after running the lesson code', first);
+  const n = Number(process.env.H23_RESTARTS ?? 3);
+  let hits = 0;
+  for (let i = 0; i < n; i++) {
+    // Tag the old run's rows so a restart that never happened cannot pass on them
+    const run0 = await pg.evaluate(() => (document.querySelectorAll('[data-lit]').forEach((x) => (x.dataset.old = '1')), globalThis.__tbApp.store.get().run));
+    await pg.click('#runRestart');
+    const booted = await waitFor(pg, (r) => globalThis.__tbApp.store.get().run > r, run0, 10000);
+    if (booted && (await waitFor(pg, () => !!document.querySelector('[data-lit="8"]:not([data-old])'), null, 8000))) hits++;
+  }
+  report(`H-23 lesson 5: strip row after each of ${n} restarts`, hits === n, `${hits}/${n}`);
+  await pg.close();
+}
+
 report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 server.close();
