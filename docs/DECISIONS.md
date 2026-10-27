@@ -2044,3 +2044,8 @@
 - 决定：npm_parity.sh 的 npx 加 `npm_config_offline=true npm_config_audit=false npm_config_fund=false`；每项 npx check 经新脚本 `tools/run_bounded.pl <秒> cmd…` 运行（`NPM_PARITY_TIMEOUT` 默认 120 s，超时退出 124、表中记 TIMEOUT 并继续；测试钩子 `NPM_PARITY_HANG=<关卡>` 默认关闭）；accept.sh、npm_parity.sh 开头若未被托管就 `exec perl tools/run_bounded.pl 0 自己`，信号到来时由 perl 杀子进程组与按 ppid 找到的全部子孙。
 - 理由：npx 每次都 POST 审计到 registry，网络卡住时至少阻塞 npm 默认 fetch-timeout 300 s，实际卡了 31 min（见 STATUS H-37）；包没有依赖，离线安装本地 tgz 不需要网络，顺带每项省约 1 s。macOS 没有 GNU timeout；bash 的 trap 要等前台子进程结束才执行，所以 `kill -TERM accept.sh` 时纯 bash trap 救不了卡住的 npx，而且只杀 accept.sh 会让 npm_parity.sh 的循环成孤儿继续起 npx。
 - 备选：纯 bash 把每个长步骤改成后台 + `wait` + trap（accept.sh 有几十个步骤，改动面大且容易漏）；node 子进程超时（要再写一个 node 包装，且仍需处理外层信号）；`setsid`（macOS 没有）；把超时加大或不管（不解决孤儿问题）。
+
+## 2026-10-27 H-44 npm 对照卡死诊断：耗时记录 + 超时快照
+- 决定：npm_parity.sh 每项 npx check 用 perl Time::HiRes 计时，写 `Reviews/npm-parity/timings.tsv` 并在表后打印一行汇总（不加列，表格形状不变）；`tools/run_bounded.pl` 新增可选环境变量 `RUN_BOUNDED_PS=<文件>`：超时触发后、杀进程前写 ps 快照（自身读后从子进程环境删除，不传给被包装命令）；npm_parity.sh 只拷本项 check 开始后新写的 npm debug log（以 `.check-start` 标记文件的 mtime 判断），放进 `diag-<fw>-<level>/`。
+- 理由：H-37 的根因没实锤，H-44 基线跑中离线模式下 cloud-4 仍卡满 120 s，只有在卡住那一刻的进程树和 npm 日志才能区分是 npm 安装、node 本身还是 wasm 模拟卡住；`$TMP` 每次运行开头清空，诊断属于本次报告。macOS 的 bash 3.2 没有 `$EPOCHREALTIME`，所以用 perl 计时。
+- 备选：在 bash 里超时后再 ps（此时进程已被杀，看不到现场）；ps 只列子树（看不到同时间争用的其他 npm / 构建进程，所以全表也留着）；把耗时加成表格列（读表更难）。
