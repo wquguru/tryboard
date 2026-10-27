@@ -737,6 +737,7 @@ const d: Dict = {
   "Think: what frequency is the next note up, fa?": "생각해 보기: 다음 음 파의 주파수는?",
   "About 349 Hz. One octave up doubles the frequency: high do is 523 Hz.": "약 349 Hz입니다. 한 옥타브 올라가면 주파수가 두 배: 높은 도는 523 Hz입니다.",
   "Now: {hz} Hz square wave, {pct} % high": "현재: {hz} Hz 구형파, {pct} % High",
+  "Now: {pct} % brightness (PWM {hz} Hz)": "현재: 밝기 {pct} % (PWM {hz} Hz)",
   "ESP32-C3 datasheet": "ESP32-C3 데이터시트",
   "USB HID specification": "USB HID 사양",
   "USB-C port: to the PC": "USB-C 포트: PC로",

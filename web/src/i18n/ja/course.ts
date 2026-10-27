@@ -737,6 +737,7 @@ const d: Dict = {
   "Think: what frequency is the next note up, fa?": "考えてみよう：次の音 ファ の周波数は？",
   "About 349 Hz. One octave up doubles the frequency: high do is 523 Hz.": "約 349 Hz です。1 オクターブ上がると周波数は 2 倍：高いドは 523 Hz です。",
   "Now: {hz} Hz square wave, {pct} % high": "現在：{hz} Hz の方波、{pct} % が High",
+  "Now: {pct} % brightness (PWM {hz} Hz)": "現在：明るさ {pct} %（PWM {hz} Hz）",
   "ESP32-C3 datasheet": "ESP32-C3 データシート",
   "USB HID specification": "USB HID 仕様",
   "USB-C port: to the PC": "USB-C ポート：PC へ",

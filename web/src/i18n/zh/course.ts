@@ -737,6 +737,7 @@ const d: Dict = {
   "Think: what frequency is the next note up, fa?": "想一想：再高一个音 fa 是多少赫兹？",
   "About 349 Hz. One octave up doubles the frequency: high do is 523 Hz.": "约 349 Hz。升高一个八度频率翻倍：高音 do 是 523 Hz。",
   "Now: {hz} Hz square wave, {pct} % high": "现在：{hz} Hz 方波，{pct} % 时间为高",
+  "Now: {pct} % brightness (PWM {hz} Hz)": "现在：亮度 {pct} %（PWM {hz} Hz）",
   "ESP32-C3 datasheet": "ESP32-C3 数据手册",
   "USB HID specification": "USB HID 规范",
   "USB-C port: to the PC": "USB-C 口：接电脑",
