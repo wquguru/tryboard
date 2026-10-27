@@ -16,7 +16,10 @@ export interface SchPin {
 export interface SchSym {
   /** Reference designator: U1 board, R1 / D1 per LED, U2… other parts */
   ref: string;
-  kind: 'mcu' | 'res' | 'led' | 'box';
+  /** sw = the board's own BOOT button drawn inline on its GPIO row (H-25) */
+  kind: 'mcu' | 'res' | 'led' | 'box' | 'sw';
+  /** Box parts with a dedicated symbol drawn inside or instead of the plain box (H-25) */
+  glyph?: Glyph;
   part: string;
   pick: PickTarget;
   x: number;
@@ -34,6 +37,9 @@ export interface SchSym {
   tx?: number;
   ty?: number;
 }
+
+export type Glyph = 'oled' | 'button' | 'buzzer' | 'servo';
+const GLYPH: Partial<Record<PartSpec['type'], Glyph>> = { oled: 'oled', key: 'button', buzzer: 'buzzer', servo: 'servo' };
 
 export interface SchLine {
   pts: number[];
@@ -78,6 +84,8 @@ export interface SchOpts {
   board?: string;
   /** Vertical sheets reserve room for the two-line current captions only while they are shown (default true) */
   captions?: boolean;
+  /** GPIO of the on-board BOOT button when the lesson uses it: drawn as SW1 between that pin and GND */
+  boot?: number;
 }
 
 const order = (n: string) =>
@@ -123,8 +131,9 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
   const ledRow = (p: PartSpec) => ws.find((w) => w.part === partId(p) && w.pin !== 'GND');
   const ledGnd = (p: PartSpec) => ws.find((w) => w.part === partId(p) && w.pin === 'GND');
   // Board pins: one per LED (its loop owns the row) plus one per net the other parts use
-  type Row = { a: string; led?: PartSpec };
+  type Row = { a: string; led?: PartSpec; boot?: boolean };
   const rows: Row[] = [];
+  if (opts.boot !== undefined) rows.push({ a: `GPIO${opts.boot}`, boot: true });
   for (const p of leds) {
     const w = ledRow(p);
     rows.push({ a: w?.a ?? `GPIO${p.pin}`, led: p });
@@ -132,7 +141,7 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
   const flagNets = [...new Set(ws.filter((w) => !w.part.startsWith('led:')).map((w) => w.a))];
   for (const a of flagNets) rows.push({ a });
   const labelled = flagNets.length > 0;
-  if (leds.length && !rows.some((r) => r.a === 'GND' && !r.led)) rows.push({ a: 'GND' });
+  if ((leds.length || opts.boot !== undefined) && !rows.some((r) => r.a === 'GND' && !r.led)) rows.push({ a: 'GND' });
   rows.sort((x, y) => order(x.a) - order(y.a) || (x.led ? 0 : 1) - (y.led ? 0 : 1));
 
   const sch: Schematic = { w: 0, h: 0, syms: [], lines: [], flags: [], gnds: [], flows: [], nets: {} };
@@ -161,6 +170,9 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
   sch.syms.push(board);
   let ledN = 0;
   let boxN = 1;
+  let swN = 0;
+  let bzN = 0;
+  const bootSym = (): Omit<SchSym, 'x' | 'y' | 'w' | 'h'> => ({ ref: `SW${++swN}`, kind: 'sw', part: 'board', pick: { kind: 'button', id: 'BOOT' }, title: `SW${swN}`, sub: 'BOOT', glyph: 'button', pins: [] });
   const ledSyms = (p: Extract<PartSpec, { type: 'led' }>) => {
     ledN++;
     const id = partId(p);
@@ -184,7 +196,10 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
     const pw = ws.filter((w) => w.part === id);
     const i = info(p);
     const addr = 'addr' in p && typeof p.addr === 'number' ? `0x${p.addr.toString(16).toUpperCase()}` : undefined;
-    return { id, pw, title: `U${++boxN}`, sub: [i?.name ?? partLabel(p.type), addr].filter(Boolean).join(' · ') };
+    const glyph = GLYPH[p.type];
+    // Designators follow the usual prefixes: SW for switches, BZ for buzzers, U for modules
+    const title = glyph === 'button' ? `SW${++swN}` : glyph === 'buzzer' ? `BZ${++bzN}` : `U${++boxN}`;
+    return { id, pw, glyph, title, sub: [i?.name ?? partLabel(p.type), addr].filter(Boolean).join(' · ') };
   };
 
   if (!opts.vertical) {
@@ -194,6 +209,15 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
     for (const row of rows) {
       const n = names[row.a] ?? row.a;
       board.pins.push({ name: row.a, x: R - 12, y, anchor: 'end' });
+      if (row.boot) {
+        // Inline like an LED loop: pin → normally-open switch → ground
+        sch.lines.push({ pts: [R, y, 380, y] });
+        sch.syms.push({ ...bootSym(), x: 380, y: y - 24, w: 80, h: 48, dir: 'h', tx: 420, ty: y - 34 });
+        sch.lines.push({ pts: [460, y, 520, y, 520, y + 40] });
+        sch.gnds.push({ x: 520, y: y + 40 });
+        y += 110;
+        continue;
+      }
       if (row.led) {
         const L = ledSyms(row.led as Extract<PartSpec, { type: 'led' }>);
         const wire = L.w?.id;
@@ -239,10 +263,10 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
         sch.lines.push({ pts: [X - 40, py, X, py], wire: w.id, missing: w.missing });
         flag(names[w.a] ?? w.a, X - 44, py, w.id, 'part', true);
       });
-      sch.syms.push({ ref: b.title, kind: 'box', part: b.id, pick: { kind: 'part', id: b.id }, x: X, y: by, w: 200, h, title: b.title, sub: b.sub, pins });
+      sch.syms.push({ ref: b.title, kind: 'box', glyph: b.glyph, part: b.id, pick: { kind: 'part', id: b.id }, x: X, y: by, w: 200, h, title: b.title, sub: b.sub, pins });
       by += h + 30;
     }
-    sch.w = others.length ? X + 240 : leds.length ? 720 : R + 160;
+    sch.w = others.length ? X + 240 : leds.length || opts.boot !== undefined ? 720 : R + 160;
     sch.h = Math.max(board.y + board.h, by - 30) + 40;
     return sch;
   }
@@ -258,6 +282,14 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
     const x = BX + PITCH / 2 + i * PITCH;
     const n = names[row.a] ?? row.a;
     board.pins.push({ name: row.a, x, y: PY - 10, anchor: 'middle' });
+    if (row.boot) {
+      sch.lines.push({ pts: [x, PY, x, PY + 20] });
+      sch.syms.push({ ...bootSym(), x: x - 24, y: PY + 20, w: 48, h: 80, dir: 'v', tx: x, ty: PY + 158 });
+      sch.lines.push({ pts: [x, PY + 100, x, PY + 118] });
+      sch.gnds.push({ x, y: PY + 118 });
+      low = Math.max(low, PY + 172);
+      return;
+    }
     if (row.led) {
       const L = ledSyms(row.led as Extract<PartSpec, { type: 'led' }>);
       const wire = L.w?.id;
@@ -315,7 +347,7 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
       flag(n, x - fw / 2, by - 38, wr.id, 'part');
     });
     const bw = Math.max(W, 16 + b.pw.length * pitch) - 16;
-    sch.syms.push({ ref: b.title, kind: 'box', part: b.id, pick: { kind: 'part', id: b.id }, x: BX, y: by, w: bw, h: 90, title: b.title, sub: b.sub, pins, ty: by + 54 });
+    sch.syms.push({ ref: b.title, kind: 'box', glyph: b.glyph, part: b.id, pick: { kind: 'part', id: b.id }, x: BX, y: by, w: bw, h: 90, title: b.title, sub: b.sub, pins, ty: by + 54 });
     by += 90 + 70;
   }
   sch.w = w;

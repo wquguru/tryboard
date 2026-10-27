@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { lessonFor } from '../src/app/lessons.ts';
+import { WORKS } from '../src/app/works.ts';
 import { lessonWires, sceneView, type BenchWire } from '../src/app/wiring.ts';
 import { schematicOf } from '../src/app/schematic/model.ts';
 import { LED_HEX, LED_VF, ledAmps } from '../src/bench3d/ledparams.ts';
@@ -85,4 +86,52 @@ test('H-17 unknown parts fall back to a box with their pin names', () => {
   }
   const bare = schematicOf([{ type: 'nowires' } as unknown as PartSpec], []);
   assert.equal(bare.syms.length, 2, 'a part with no wires is still drawn');
+});
+
+// H-25: dedicated symbols per lesson (OLED screen, normally-open button incl. the board's BOOT, passive buzzer, servo M)
+const workSch = (work: string, n: string, vertical: boolean, boot?: number) => {
+  const l = lessonFor(work, n)!;
+  const scene = WORKS[work]?.scene ?? sceneOf(work);
+  const parts = sceneView(scene, l.parts ?? null).parts;
+  return schematicOf(parts, lessonWires(scene.parts, l.parts ?? null), { vertical, boot });
+};
+const usesBoot = (work: string, n: string) => lessonFor(work, n)!.steps.some((s) => s.callouts.some((c) => c.target.kind === 'button' && c.target.id === 'BOOT'));
+for (const vertical of [false, true]) {
+  const tag = vertical ? 'phone' : 'desktop';
+  test(`H-25 lesson 02 (${tag}): BOOT is SW1, a normally-open switch from GPIO0 to ground, picked as the 3D button`, () => {
+    assert.ok(usesBoot('weather', '02'));
+    const sch = workSch('weather', '02', vertical, 0);
+    const sw = sch.syms.find((s) => s.kind === 'sw')!;
+    assert.deepEqual([sw.ref, sw.glyph, sw.sub], ['SW1', 'button', 'BOOT']);
+    assert.deepEqual(sw.pick, { kind: 'button', id: 'BOOT' });
+    assert.deepEqual(sch.syms[0].pins.map((p) => p.name), ['GPIO0', 'GPIO5', 'GND']);
+    assert.equal(sch.gnds.length, 3, 'BOOT, LED and board GND each end in a ground glyph');
+    assert.ok(sw.x + sw.w <= sch.w && sw.y + sw.h <= sch.h);
+    assert.equal(workSch('weather', '01', vertical).syms.some((s) => s.kind === 'sw'), false, 'no BOOT unless the lesson uses it');
+  });
+  test(`H-25 lesson 03 (${tag}): the OLED box carries the screen symbol and its 4 pins`, () => {
+    const oled = workSch('weather', '03', vertical).syms.find((s) => s.part === 'oled')!;
+    assert.equal(oled.glyph, 'oled');
+    assert.equal(oled.pins.length, 4);
+  });
+  test(`H-25 lesson 06 (${tag}): passive buzzer is BZ1 with VCC / I/O / GND`, () => {
+    const bz = workSch('basics', 'basics-buzz', vertical).syms.find((s) => s.part === 'buzzer')!;
+    assert.deepEqual([bz.ref, bz.glyph], ['BZ1', 'buzzer']);
+    assert.deepEqual(bz.pins.map((p) => p.name), ['VCC', 'I/O', 'GND']);
+  });
+  test(`H-25 lesson 07 (${tag}): servo is an M symbol with three wires`, () => {
+    const m = workSch('weather', '05', vertical).syms.find((s) => s.part === 'servo')!;
+    assert.equal(m.glyph, 'servo');
+    assert.deepEqual(m.pins.map((p) => p.name), ['PWM', 'VCC', 'GND']);
+  });
+  test(`H-25 lesson 11 (${tag}): the capstone keeps every symbol, BME280 stays a plain box`, () => {
+    const sch = workSch('weather', '06', vertical, usesBoot('weather', '06') ? 0 : undefined);
+    const g = Object.fromEntries(sch.syms.filter((s) => s.kind === 'box').map((s) => [s.part, s.glyph ?? 'box']));
+    assert.deepEqual(g, { oled: 'oled', bme280: 'box', servo: 'servo', buzzer: 'buzzer' });
+    for (const s of sch.syms) assert.ok(s.x >= 0 && s.y >= 0 && s.x + s.w <= sch.w && s.y + s.h <= sch.h, `${s.ref} inside the sheet`);
+  });
+}
+test('H-25 USB keypad buttons are SW1… with IN / GND', () => {
+  const sws = workSch('usbkey', 'usbkey-2', false).syms.filter((s) => s.glyph === 'button');
+  assert.deepEqual(sws.map((s) => `${s.ref}:${s.pins.length}`), ['SW1:2', 'SW2:2', 'SW3:2']);
 });
