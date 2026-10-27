@@ -6,7 +6,8 @@ import { t } from "../i18n";
 import { cn } from "../ui/cn";
 import { useStore } from "./react";
 import { lessonUi } from "./lesson";
-import { evWhere, noFwFeed, fmtSec, lessonFeed, useLessonCode, useNoFwLesson } from "./lessonfeed";
+import { chipLabel, chipText } from "./lessons";
+import { ChipFace, evWhere, noFwFeed, fmtSec, lessonFeed, useLessonCode, useNoFwLesson } from "./lessonfeed";
 import { LessonInfo, useSrcLines } from "./lessoninfo";
 import { Icon } from "./icons";
 import { StepDoneBar, TaskList, useStepReady } from "./lessontasklist";
@@ -118,13 +119,13 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
               </button>
             )}
             {cur.codeChips && (
-              <div id="mLessonChips" role="group" aria-label={t("Delay in milliseconds")} className="flex flex-none flex-wrap items-center gap-2">
-                <span className="text-[12px] text-muted">{t("Delay in milliseconds")}</span>
+              <div id="mLessonChips" role="group" aria-label={chipLabel(cur.codeChips)} className="flex flex-none flex-wrap items-center gap-2">
+                <span className="text-[12px] text-muted">{chipLabel(cur.codeChips)}</span>
                 {cur.codeChips.values.map((v) => (
                   <button
                     key={v}
                     type="button"
-                    data-chip={v}
+                    data-chip={chipText(cur.codeChips!.key, v)}
                     aria-pressed={s.delay === v}
                     onClick={() => s.setDelay(v)}
                     className={cn(
@@ -132,7 +133,7 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
                       s.delay === v ? "border-accent-strong bg-accent-strong text-on-accent" : "border-line bg-surface text-fg",
                     )}
                   >
-                    {v}
+                    <ChipFace chips={cur.codeChips!} v={v} />
                   </button>
                 ))}
               </div>

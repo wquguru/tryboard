@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { COURSE, courseLesson } from '../src/app/course.ts';
-import { lessonFor } from '../src/app/lessons.ts';
+import { chipText, lessonFor } from '../src/app/lessons.ts';
 import { lessonWires, partId, wiresOf } from '../src/app/wiring.ts';
 import { hitText, matchTask, parseDone } from '../src/app/lessontasks.ts';
 import type { SceneSpec } from '../src/bench3d/spec.ts';
@@ -69,4 +69,30 @@ test('the feed counts lit LEDs off the rmt_transmit line, and the tweak step tic
   const usb = tweak.tasks.find((x) => x.done === 'select:board@usb')!;
   assert.ok(matchTask(usb.done, 'select:board@usb', { boots: 0 }));
   assert.ok(tweak.callouts.some((c) => c.key === 'usb'));
+});
+
+test('H-28 colour chips on line 66: every value has a prebuilt WARM build that build_web.sh ships and accept.sh checks', () => {
+  const tweak = l.steps.find((s) => s.id === 'tweak')!;
+  const chips = tweak.codeChips!;
+  assert.equal(chips.key, 'color');
+  assert.equal(src[chips.line - 1], `#define WARM ${chipText(chips.key, chips.current)}`);
+  assert.equal(chips.fw[chips.current], l.fw, 'the current value is the lesson firmware itself');
+  const read = (p: string) => readFileSync(new URL(p, root), 'utf8');
+  const accept = JSON.parse(read('firmware/accept.json')) as { id: string; ws2812?: { frames: string[][] } }[];
+  const ship = read('tools/build_web.sh');
+  for (const v of chips.values) {
+    const fw = chips.fw[v];
+    const c = accept.find((x) => x.id === fw);
+    assert.ok(c, `${fw} in accept.json`);
+    // Lit colour = each channel × 64 ÷ 255, as line 62 scales it
+    const want = '#' + [16, 8, 0].map((s) => Math.floor((((v >> s) & 0xff) * 64) / 255).toString(16).padStart(2, '0')).join('');
+    assert.equal(c.ws2812!.frames[0][0], want, `${fw} first LED`);
+    if (fw === l.fw) continue;
+    assert.ok(ship.includes(`'${fw}'`), `${fw} shipped`);
+    assert.match(read(`firmware/${fw}/main/CMakeLists.txt`), new RegExp(`STAGE=1 WARM=${chipText(chips.key, v)}\\b`));
+  }
+  // Both colour tasks tick off the chip row, not "Show answer"
+  const want = chips.values.filter((v) => v !== chips.current).map((v) => `chip:color=${chipText(chips.key, v)}`);
+  assert.deepEqual(tweak.tasks.filter((x) => x.done.startsWith('chip:')).map((x) => x.done), want);
+  for (const d of want) assert.deepEqual(matchTask(d, d, { boots: 0, from: '0xFF9933' }), { v: d.slice(11), from: '0xFF9933' });
 });

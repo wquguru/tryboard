@@ -611,6 +611,31 @@ await ph.close();
   await pg.close();
 }
 
+// H-28 lesson 5 "Change it": colour chips on line 66 swap in the prebuilt green / blue build and tick their tasks
+{
+  const pg = await open('/app?work=lamp&cp=lamp-1&debug=1&beginner=1#bench');
+  await pg.click('#lessonSteps [data-step="4"]');
+  await waitFor(pg, () => document.querySelector('#lessonCard')?.dataset.step === '4', null, 3000);
+  for (const [i, hex, rgb] of [[0, '0x00FF00', [0, 64, 0]], [1, '0x0000FF', [0, 0, 64]]]) {
+    const sel = `#codeBody [data-chip="${hex}"]`;
+    await waitFor(pg, (s) => !!document.querySelector(s), sel, 8000);
+    await pg.click(sel);
+    // All 8 LEDs in the worker's last strip frame carry the scaled colour of the clicked build
+    const lit = await waitFor(pg, ([fw, want]) => {
+      const s = globalThis.__tbApp.session;
+      const leds = s.frame.strips?.[5] ?? [];
+      return s.fwName === `${fw}/flash.bin` && leds.length === 8 && leds.every((c) => c.join() === want.join());
+    }, [hex === '0x00FF00' ? 'lamp-strip-green' : 'lamp-strip-blue', rgb], 20000);
+    const strip = await pg.evaluate(() => JSON.stringify([globalThis.__tbApp.session.fwName, globalThis.__tbApp.session.frame.strips?.[5]?.[7]]));
+    report(`H-28 lesson 5: chip ${hex} runs its build, strip turns ${rgb.join(',')}`, lit, strip);
+    const ticked = await waitFor(pg, (k) => document.querySelector(`#lessonCard li[data-task="${k}"]`)?.dataset.done === '1', i, 3000);
+    const tk = await task(pg, i);
+    report(`H-28 lesson 5: chip ${hex} ticks its task`, ticked && !!tk?.text.includes(hex), JSON.stringify(tk));
+  }
+  report('H-28 lesson 5: blue chip is the pressed one', (await pg.$eval('#codeBody [data-chip="0x0000FF"]', (b) => b.getAttribute('aria-pressed'))) === 'true');
+  await pg.close();
+}
+
 report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 server.close();

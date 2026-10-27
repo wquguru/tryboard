@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { LESSONS, ledParamValue, lessonFor } from '../src/app/lessons.ts';
+import { LESSONS, chipText, ledParamValue, lessonFor } from '../src/app/lessons.ts';
 import { WORKS } from '../src/app/works.ts';
 import { lessonWires, partId, sceneView, wiresOf } from '../src/app/wiring.ts';
 import { LED_VF, ledAmps } from '../src/bench3d/ledparams.ts';
@@ -115,12 +115,13 @@ test('highlighted code lines contain the calls the step talks about', () => {
     for (const s of l.steps) {
       for (const n of s.codeLines ?? []) assert.ok(n >= 1 && n <= lines.length, `${s.id}: line ${n}`);
       if (want[s.id]) assert.ok(s.codeLines?.some((n) => lines[n - 1].includes(want[s.id])), `${s.id}: ${want[s.id]} on ${s.codeLines}`);
-      // The chip's line holds the delay either as a literal or as BLINK_MS whose default is the current value (H-06)
+      // The chip's line holds the value as a literal or as a macro (BLINK_MS, WARM) whose default is the current value (H-06, H-28)
       if (s.codeChips) {
         const ln = lines[s.codeChips.line - 1];
-        const lit = ln.includes(`(${s.codeChips.current})`);
-        const mac = /\b([A-Z_]+_MS)\b/.exec(ln)?.[1];
-        assert.ok(lit || (mac && lines.some((x) => x.trim() === `#define ${mac} ${s.codeChips!.current}`)), `${s.id}: chip value ${s.codeChips.current}`);
+        const cur = chipText(s.codeChips.key, s.codeChips.current);
+        const lit = ln.includes(`(${cur})`);
+        const mac = /\b([A-Z][A-Z0-9_]+)\b/.exec(ln)?.[1];
+        assert.ok(lit || (mac && lines.some((x) => x.trim() === `#define ${mac} ${cur}`)), `${s.id}: chip value ${cur}`);
       }
     }
     for (const [id, call] of Object.entries(want)) assert.ok(l.steps.some((s) => s.id === id), `${id} (${call}) step exists`);
@@ -222,7 +223,7 @@ test('H-10 every task has a valid done signal; reveal tasks carry an answer', ()
         assert.ok(x.text, `${name}: task text`);
         if (d.kind === 'reveal') assert.ok(x.answer, `${name}: reveal "${x.text}" has an answer`);
         else assert.ok(!x.answer, `${name}: only reveal tasks have answers`);
-        if (d.kind === 'chip') assert.ok(chips?.fw[d.v], `${name}: delay ${d.v} has a prebuilt firmware`);
+        if (d.kind === 'chip') assert.ok(chips?.fw[d.v] && (chips.key ?? 'delay') === d.key, `${name}: ${d.key} ${d.v} has a prebuilt firmware`);
         if (d.kind === 'press') assert.ok(bootCallout, `${name}: press tasks only where BOOT is pointed at`);
         if (d.kind === 'run') assert.equal(s.id, 'run', `${name}: run tasks sit on the run step`);
       }
@@ -254,6 +255,13 @@ test('H-10 signal matching', () => {
   assert.equal(taskTarget('run'), null);
   assert.match(hitText('press:boot×3', { v: '3' }), /3/);
   assert.match(hitText('chip:delay=100', { v: '100', from: '500' }), /500.*100/);
+  // H-28 colour chips: hex in the signal, matched on the same spelling the chip row sends
+  assert.deepEqual(parseDone('chip:color=0x00FF00'), { kind: 'chip', key: 'color', v: 0x00ff00 });
+  assert.deepEqual(matchTask('chip:color=0x00FF00', 'chip:color=0x00FF00', { boots: 0, from: '0xFF9933' }), { v: '0x00FF00', from: '0xFF9933' });
+  assert.equal(matchTask('chip:color=0x00FF00', 'chip:color=0x0000FF', c0), null);
+  assert.equal(matchTask('chip:color=0x00FF00', 'chip:delay=65280', c0), null, 'keys do not cross');
+  for (const bad of ['chip:color=00FF00', 'chip:color=0xFF', 'chip:size=3']) assert.equal(parseDone(bad), null, `"${bad}" is malformed`);
+  assert.match(hitText('chip:color=0x0000FF', { v: '0x0000FF', from: '0xFF9933' }), /0xFF9933.*0x0000FF/);
   assert.equal(hitText('reveal', {}), '');
 });
 

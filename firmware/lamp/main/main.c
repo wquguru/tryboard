@@ -62,9 +62,9 @@ static uint32_t scale(uint32_t c, int k)
     uint32_t r = ((c >> 16) & 0xFF) * k / 255, g = ((c >> 8) & 0xFF) * k / 255, b = (c & 0xFF) * k / 255;
     return r << 16 | g << 8 | b;
 }
-
+#ifndef WARM
 #define WARM 0xFF9933
-
+#endif
 #if STAGE >= 2
 static pcnt_unit_handle_t unit;
 

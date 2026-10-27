@@ -2,7 +2,7 @@
 // current step's tasks and kept per work + checkpoint + step on this machine. No React here: session.ts imports it.
 import { t } from '../i18n/index.ts';
 import { createStore } from './store.ts';
-import { isLessonFw, type Lesson, type LessonTarget, type LessonTask } from './lessons.ts';
+import { chipText, isLessonFw, type ChipKey, type Lesson, type LessonTarget, type LessonTask } from './lessons.ts';
 
 /** A parsed `LessonTask.done`. */
 export type DoneSpec =
@@ -11,7 +11,7 @@ export type DoneSpec =
   | { kind: 'view'; what: 'current' }
   | { kind: 'select'; id: string }
   | { kind: 'prop'; part: string; key: string; v: string }
-  | { kind: 'chip'; key: 'delay'; v: number }
+  | { kind: 'chip'; key: ChipKey; v: number }
   | { kind: 'press'; what: 'boot'; n: number }
   | { kind: 'strip'; pin: number; n: number }
   | { kind: 'usb'; what: 'configured' }
@@ -30,7 +30,7 @@ export interface Hit {
   from?: string;
 }
 
-/** `run` / `reveal` / `view:current` / `select:<id>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` / `press:boot×<n>` / `strip:<pin>=<n lit>` / `usb:configured` / `usb:typed=<text>` / `env:<key>` / `adc:<pin><raw` or `>raw` /
+/** `run` / `reveal` / `view:current` / `select:<id>` / `prop:<part>.<key>=<v>` / `chip:delay=<ms>` or `chip:color=0xRRGGBB` / `press:boot×<n>` / `strip:<pin>=<n lit>` / `usb:configured` / `usb:typed=<text>` / `env:<key>` / `adc:<pin><raw` or `>raw` /
  *  `oled:<n lit>` / `follow:temp` (a reading matches a temperature changed on this step) / `asm:done` (every part in the case, no warnings); null = malformed. */
 export function parseDone(d: string): DoneSpec | null {
   if (d === 'run' || d === 'reveal') return { kind: d };
@@ -40,8 +40,8 @@ export function parseDone(d: string): DoneSpec | null {
   // Part ids may hold colons ('led:5'), so the key is the last dotted word before '='
   m = /^prop:(.+)\.(\w+)=(.+)$/.exec(d);
   if (m) return { kind: 'prop', part: m[1], key: m[2], v: m[3] };
-  m = /^chip:delay=(\d+)$/.exec(d);
-  if (m) return { kind: 'chip', key: 'delay', v: Number(m[1]) };
+  m = /^chip:(?:delay=(\d+)|color=(0x[0-9A-F]{6}))$/.exec(d);
+  if (m) return m[1] ? { kind: 'chip', key: 'delay', v: Number(m[1]) } : { kind: 'chip', key: 'color', v: Number(m[2]) };
   m = /^press:boot[×x](\d+)$/.exec(d);
   if (m && Number(m[1]) >= 1) return { kind: 'press', what: 'boot', n: Number(m[1]) };
   m = /^strip:(\d+)=(\d+)$/.exec(d);
@@ -60,7 +60,7 @@ export function parseDone(d: string): DoneSpec | null {
   return null;
 }
 
-/** Signals: 'run', 'press:boot', 'chip:delay=<ms>' (+ from), 'view:current', 'select:<id>', 'prop:<part>.<key>=<v>', 'strip:<pin>=<lit>', 'usb:configured', 'usb:typed=<all text>', 'env:<key>=<v>' (+ from), 'adc:<pin>=<raw>',
+/** Signals: 'run', 'press:boot', 'chip:delay=<ms>' | 'chip:color=0xRRGGBB' (+ from), 'view:current', 'select:<id>', 'prop:<part>.<key>=<v>', 'strip:<pin>=<lit>', 'usb:configured', 'usb:typed=<all text>', 'env:<key>=<v>' (+ from), 'adc:<pin>=<raw>',
  *  'oled:<lit>', 'reading:temp=<°C>', 'asm:done=clean|warn'. */
 export interface SigCtx {
   /** BOOT presses (down edges) since this step came up, this one included. */
@@ -87,7 +87,7 @@ export function matchTask(done: string, sig: string, ctx: SigCtx): Hit | null {
     case 'press':
       return sig === 'press:boot' && ctx.boots >= d.n ? { v: String(ctx.boots) } : null;
     case 'chip':
-      return sig === `chip:delay=${d.v}` ? { v: String(d.v), from: ctx.from } : null;
+      return sig === `chip:${d.key}=${chipText(d.key, d.v)}` ? { v: chipText(d.key, d.v), from: ctx.from } : null;
     case 'prop':
       return sig === `prop:${d.part}.${d.key}=${d.v}` ? { v: d.v, from: ctx.from } : null;
     case 'strip': {
@@ -185,6 +185,10 @@ export function hitText(done: string, h: Hit): string {
     case 'asm':
       return t('Detected: every part is in the case, no warnings');
     case 'chip':
+      if (d.key === 'color')
+        return h.from && h.from !== h.v
+          ? t('Detected: colour {from} → {to}', { from: h.from, to: h.v ?? chipText(d.key, d.v) })
+          : t('Detected: colour {to}', { to: h.v ?? chipText(d.key, d.v) });
       return h.from && h.from !== h.v
         ? t('Detected: delay {from} ms → {to} ms', { from: h.from, to: h.v ?? d.v })
         : t('Detected: delay {to} ms', { to: h.v ?? d.v });

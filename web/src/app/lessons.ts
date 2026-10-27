@@ -26,14 +26,21 @@ export interface LessonCallout {
   title: string;
   body: string;
 }
-/** Clickable numbers in a code line (H-06: prebuilt delay variants). */
+/** Clickable numbers in a code line (H-06: prebuilt delay variants; H-28: colours). */
 export interface CodeChips {
   line: number;
+  /** What the number is: a delay in ms (default) or a 0xRRGGBB colour. */
+  key?: ChipKey;
   values: number[];
   current: number;
   /** Prebuilt firmware per value (the web page cannot compile yet). */
   fw: Record<number, string>;
 }
+export type ChipKey = 'delay' | 'color';
+/** A chip value as the code spells it: 500, or 0x00FF00 for a colour. */
+export const chipText = (key: ChipKey | undefined, v: number) => (key === 'color' ? `0x${v.toString(16).toUpperCase().padStart(6, '0')}` : String(v));
+export const chipLabel = (c: CodeChips) => (c.key === 'color' ? t('Colour (0xRRGGBB)') : t('Delay in milliseconds'));
+export const lessonChips = (l: Lesson) => l.steps.find((x) => x.codeChips)?.codeChips;
 /** H-05 "Show me how": one beat of the scripted demo; it only draws over the bench, never changes its wiring. */
 export interface DemoBeat {
   /** Short label under the progress bar. */

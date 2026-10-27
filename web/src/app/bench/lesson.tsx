@@ -9,7 +9,7 @@ import { setDock, actions, bc, overlay } from "../chrome";
 import { afterFrame } from "../../ui/frame";
 import { LessonCallouts } from "../lessoncallouts";
 import { isPhone, setMui } from "../mobile";
-import { lessonFor } from "../lessons";
+import { chipText, lessonChips, lessonFor } from "../lessons";
 import { courseOf } from "../course";
 import { LessonSteps, lessonUi, setLessonUi } from "../lesson";
 import { bindLessonFeed } from "../lessonfeed";
@@ -99,6 +99,8 @@ export function mountLesson(b: BenchCtx) {
       if (lessonUi.get().wireSel) c.session.pick.highlight?.(null);
       setLessonUi({ wireSel: null, info: "overview" });
     }
+    // The chip row starts on this lesson's own value, so the first click's "from" is right (H-28)
+    if (!had || swapped) setLessonUi({ delay: lessonChips(lesson)?.current ?? 500 });
     const n = lesson.steps.length;
     const ids = c.work.checkpoints;
     const nextId = free ? undefined : ids[ids.indexOf(lesson.checkpoint) + 1];
@@ -122,16 +124,17 @@ export function mountLesson(b: BenchCtx) {
         if (s === n) c.shell.toast(t("Lesson {n} done: {title}", { n: lesson.no, title: lesson.title }));
       },
       run: () => {
-        setLessonUi({ delay: lesson.steps.find((x) => x.codeChips)?.codeChips?.current ?? 500 });
+        setLessonUi({ delay: lessonChips(lesson)?.current ?? 500 });
         load(lesson.fw);
       },
       delay: lessonUi.get().delay,
-      setDelay: (ms) => {
-        const fw = lesson.steps.find((x) => x.codeChips)?.codeChips?.fw[ms];
+      setDelay: (v) => {
+        const chips = lessonChips(lesson);
+        const fw = chips?.fw[v];
         if (!fw) return;
         const from = lessonUi.get().delay;
-        setLessonUi({ delay: ms });
-        lessonSignal(`chip:delay=${ms}`, String(from));
+        setLessonUi({ delay: v });
+        lessonSignal(`chip:${chips.key ?? "delay"}=${chipText(chips.key, v)}`, chipText(chips.key, from));
         load(fw);
       },
       openChecks: () => setDock({ tab: "checks", collapsed: false }),
