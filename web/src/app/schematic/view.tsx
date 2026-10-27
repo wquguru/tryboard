@@ -16,6 +16,7 @@ import { LED_VF, resistorBands, type LedColor } from "../../bench3d/ledparams";
 import type { BenchCtx } from "../bench/ctx";
 import { schematicOf, type Schematic, type SchFlag, type SchSym } from "./model";
 import { schUi, type BenchView } from "./store";
+import { LEADED, PartGlyph, zig } from "./glyphs";
 
 const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
 const LED_INK: Record<LedColor, string> = {
@@ -62,11 +63,6 @@ export function resetBenchView() {
   schUi.set({ view: "3d", sel: null, net: null });
   overlay("schematic", null);
   delete document.getElementById("stage")?.dataset.view;
-}
-
-function zig(len: number) {
-  const lead = (len - 60) / 2;
-  return `M0 0h${lead}l5-9 10 18 10-18 10 18 10-18 10 18 5-9h${lead}`;
 }
 
 function SymRes({ s, on }: { s: SchSym; on: boolean }) {
@@ -179,6 +175,8 @@ function Ring({ s }: { s: SchSym }) {
 // H-25 dedicated symbols inside a part's box. Desktop pins run down the left edge, so leads go right into the symbol;
 // phone pins sit along the top, so the symbol is a small picture on the right.
 function BoxGlyph({ s, vertical }: { s: SchSym; vertical: boolean }) {
+  const own = PartGlyph({ s, vertical });
+  if (own) return own;
   const pin = (re: RegExp) => s.pins.find((p) => re.test(p.name));
   const sig = pin(/^(IN|I\/O|SIG|S|PWM)$/);
   const gnd = pin(/^GND$/);
@@ -237,8 +235,8 @@ function BoxGlyph({ s, vertical }: { s: SchSym; vertical: boolean }) {
 
 function SymBox({ s, on, vertical }: { s: SchSym; on: boolean; vertical: boolean }) {
   // A bare button is a discrete part, not a module: no outline on desktop, where its leads show the circuit
-  const bare = s.glyph === "button" && !vertical;
-  const above = !vertical && (s.glyph === "button" || s.glyph === "buzzer" || s.glyph === "servo");
+  const bare = (s.glyph === "button" || s.glyph === "pot") && !vertical;
+  const above = !vertical && LEADED.has(s.glyph ?? "");
   return (
     <>
       <rect x={s.x} y={s.y} width={s.w} height={s.h} rx={6} fill={bare ? "transparent" : "var(--surface)"} stroke={bare ? "none" : "currentColor"} strokeWidth={2} />

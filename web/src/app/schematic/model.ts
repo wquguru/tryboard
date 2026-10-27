@@ -38,8 +38,8 @@ export interface SchSym {
   ty?: number;
 }
 
-export type Glyph = 'oled' | 'button' | 'buzzer' | 'servo';
-const GLYPH: Partial<Record<PartSpec['type'], Glyph>> = { oled: 'oled', key: 'button', buzzer: 'buzzer', servo: 'servo' };
+export type Glyph = 'oled' | 'button' | 'buzzer' | 'servo' | 'bme280' | 'pot' | 'ws2812' | 'sonar';
+const GLYPH: Partial<Record<PartSpec['type'], Glyph>> = { oled: 'oled', key: 'button', buzzer: 'buzzer', servo: 'servo', bme280: 'bme280', pot: 'pot', ws2812: 'ws2812', hcsr04: 'sonar' };
 
 export interface SchLine {
   pts: number[];
@@ -172,6 +172,7 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
   let boxN = 1;
   let swN = 0;
   let bzN = 0;
+  let rvN = 0;
   const bootSym = (): Omit<SchSym, 'x' | 'y' | 'w' | 'h'> => ({ ref: `SW${++swN}`, kind: 'sw', part: 'board', pick: { kind: 'button', id: 'BOOT' }, title: `SW${swN}`, sub: 'BOOT', glyph: 'button', pins: [] });
   const ledSyms = (p: Extract<PartSpec, { type: 'led' }>) => {
     ledN++;
@@ -197,8 +198,8 @@ export function schematicOf(parts: PartSpec[], wires: BenchWire[], opts: SchOpts
     const i = info(p);
     const addr = 'addr' in p && typeof p.addr === 'number' ? `0x${p.addr.toString(16).toUpperCase()}` : undefined;
     const glyph = GLYPH[p.type];
-    // Designators follow the usual prefixes: SW for switches, BZ for buzzers, U for modules
-    const title = glyph === 'button' ? `SW${++swN}` : glyph === 'buzzer' ? `BZ${++bzN}` : `U${++boxN}`;
+    // Usual prefixes: SW switch, BZ buzzer, RV pot, D for a WS2812 (shares the LED count), U for modules
+    const title = glyph === 'button' ? `SW${++swN}` : glyph === 'buzzer' ? `BZ${++bzN}` : glyph === 'pot' ? `RV${++rvN}` : glyph === 'ws2812' ? `D${++ledN}` : `U${++boxN}`;
     return { id, pw, glyph, title, sub: [i?.name ?? partLabel(p.type), addr].filter(Boolean).join(' · ') };
   };
 

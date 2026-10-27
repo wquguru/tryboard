@@ -124,14 +124,42 @@ for (const vertical of [false, true]) {
     assert.equal(m.glyph, 'servo');
     assert.deepEqual(m.pins.map((p) => p.name), ['PWM', 'VCC', 'GND']);
   });
-  test(`H-25 lesson 11 (${tag}): the capstone keeps every symbol, BME280 stays a plain box`, () => {
+  test(`H-25 lesson 11 (${tag}): the capstone keeps every symbol (BME280 has its own since H-33)`, () => {
     const sch = workSch('weather', '06', vertical, usesBoot('weather', '06') ? 0 : undefined);
     const g = Object.fromEntries(sch.syms.filter((s) => s.kind === 'box').map((s) => [s.part, s.glyph ?? 'box']));
-    assert.deepEqual(g, { oled: 'oled', bme280: 'box', servo: 'servo', buzzer: 'buzzer' });
+    assert.deepEqual(g, { oled: 'oled', bme280: 'bme280', servo: 'servo', buzzer: 'buzzer' });
     for (const s of sch.syms) assert.ok(s.x >= 0 && s.y >= 0 && s.x + s.w <= sch.w && s.y + s.h <= sch.h, `${s.ref} inside the sheet`);
   });
 }
 test('H-25 USB keypad buttons are SW1… with IN / GND', () => {
   const sws = workSch('usbkey', 'usbkey-2', false).syms.filter((s) => s.glyph === 'button');
   assert.deepEqual(sws.map((s) => `${s.ref}:${s.pins.length}`), ['SW1:2', 'SW2:2', 'SW3:2']);
+});
+
+// H-33: symbols the design sheets lack (BME280, pot, WS2812, HC-SR04); designators, pins and wires stay as before
+const sceneSch = (work: string, vertical: boolean) => {
+  const scene = WORKS[work]?.scene ?? sceneOf(work);
+  return schematicOf(sceneView(scene, null).parts, lessonWires(scene.parts, null), { vertical });
+};
+const H33: [string, () => ReturnType<typeof schematicOf>[], string, string, string, string[], number][] = [
+  ['BME280 (lesson 08)', () => [false, true].map((v) => workSch('weather', '04', v)), 'bme280', 'bme280', 'U2', ['GND', 'VIN', 'SCL', 'SDA'], 8],
+  ['pot (lesson 09)', () => [false, true].map((v) => workSch('adc', 'lesson-9', v)), 'pot', 'pot', 'RV1', ['VCC', 'OUT', 'GND'], 9],
+  ['WS2812 strip (lesson 05)', () => [false, true].map((v) => workSch('lamp', 'lamp-1', v)), 'ws2812', 'ws2812', 'D1', ['5V', 'DIN', 'GND'], 6],
+  ['HC-SR04 (ultrasonic ruler)', () => [false, true].map((v) => sceneSch('ruler', v)), 'hcsr04', 'sonar', 'U2', ['VCC', 'Trig', 'Echo', 'GND'], 19],
+];
+for (const [name, make, part, glyph, ref, pins, lines] of H33) {
+  test(`H-33 ${name}: ${glyph} glyph as ${ref}, pins and wires unchanged`, () => {
+    for (const sch of make()) {
+      const s = sch.syms.find((x) => x.part === part)!;
+      assert.deepEqual([s.kind, s.glyph, s.ref, s.title], ['box', glyph, ref, ref]);
+      assert.deepEqual(s.pins.map((p) => p.name), pins);
+      assert.equal(sch.lines.length, lines);
+      assert.ok(s.x >= 0 && s.y >= 0 && s.x + s.w <= sch.w && s.y + s.h <= sch.h, `${s.ref} inside the sheet`);
+    }
+  });
+}
+test('H-33 a WS2812 after a discrete LED takes the next D number', () => {
+  const parts: PartSpec[] = [{ type: 'led', pin: 5 }, { type: 'ws2812', pin: 8 }];
+  const sch = schematicOf(parts, [], { vertical: false });
+  assert.deepEqual(sch.syms.filter((s) => s.kind === 'led' || s.glyph === 'ws2812').map((s) => s.ref), ['D1', 'D2']);
 });
