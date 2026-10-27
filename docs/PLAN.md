@@ -314,6 +314,16 @@
 | H-16 | 新课内容：0 认识开发板（`v3/Lesson0.dc.html`）、4 PWM 呼吸灯、5 WS2812、6 蜂鸣器、7 舵机、8 BME280、9 电位器、10 USB 键盘、11 综合；一课一个代理，缺固件的先补固件 + accept 用例 | 每课：数据测试 + accept 用例 + agent-browser 走一遍 || ☑ 2026-10-26：第 0、4–11 课全部写完（逐课记录见 STATUS；Reviews/ab/H-16-l*.md），12 课完整走查见 Reviews/ab/H-15.md；遗留见 Reviews/batch-H4.md |
 | H-17 | 原理图视图：台面工具条「原理图」切 2D 原理图（由 SceneSpec + 接线生成，符号自绘；照 `v3/Schematic*.dc.html`） | agent-browser 第 01 / 03 课截图 | ☑ 2026-10-26：工具条「3D 台面 \| 原理图」切换段（短 / 完整工具条都有，手机在「更多」里 + 原理图顶部分段控件）；`schematic/model.ts` `schematicOf(parts, wires)` 由 `sceneView` + `lessonWires` 生成 U 方框 / 锯齿电阻 / 三角 LED / 接地符号，I2C 等多线零件用同名网络标签（3V3 / SDA / SCL / GND）；看电流时沿 LED 回路画蓝色虚线 + 「≈ x mA · 估算 · 未在实机校准」（`ledAmps`，随阻值 / 颜色变）；点符号 = 3D 同一 PickTarget，点网络标签两端 + 3D 导线高亮；手机竖排；未知零件画成带引脚名的方框 |
 | H-18 | 暖色主题（稿子 `#F6F3EE` 系）：需人先定是否全站换 | — | ☐ 待人定 |
+| H-19 | 第 0 课不跑固件：课程条目 `noFw` 时打开 / 刷新第 0 课不启动作品固件（顶栏不显示 Running、串口空、不发 `run` 信号）；同作品切到第 4 / 6 课照常启动本课固件（DECISIONS 2026-10-27 H-19） | beginner.mjs：第 0 课打开 + 刷新后未运行且串口为空，切到第 4 课后运行；agent-browser Reviews/ab/H-19.md | ☐ |
+| H-20 | 课程完成规则：任务全勾 **或** 检查点通过都算本课完成；检查点通过另标 ✓（地图卡片 + 右栏完成卡一致）（DECISIONS 2026-10-27 H-20） | `course.test.ts` / `lessonmap.test.ts` 新用例（只勾任务 → done、只过检查点 → done + ✓、都没有 → current）；beginner.mjs 地图断言；agent-browser Reviews/ab/H-20.md | ☐ |
+| H-21 | 第 11 课：「发生了什么」讲 BME280 0x76 的寄存器读（`reads`）；「装壳」任务只在无警告时打勾（`asm:done=clean`），有警告时任务旁说明为什么不勾 | lesson-l11.test.ts；beginner.mjs 或 agent-browser 看到 0x76 行；带警告装配不勾、清掉警告后勾；Reviews/ab/H-21.md | ☐ |
+| H-22 | 第 9 课：场景重建（切课 / 切视图 / 改零件）后 3D 旋钮停在原位置（数值核对 `ctx.pots[].v` + 截图）；左侧构建树与左栏接线 tab 列出电位器及其 3 根线 | beginner.mjs 断言重建前后旋钮值相同、树和接线 tab 有 pot；Reviews/ab/H-22.md | ☐ |
+| H-23 | 第 5 课：运行 / 重启时第一条灯带 feed 行不丢（tick 先于复位到达时不留旧的 `tickLast`） | beginner.mjs：运行中重启后第一条灯带行出现（连跑 3 次）；feedrules / lessonfeed 单测；Reviews/ab/H-23.md | ☐ |
+| H-24 | 第 6 课蜂鸣器：按 §6.3 用 Web Audio AnalyserNode 数据验证 do / re / mi 三个音（262 / 294 / 330 Hz，±1 个 FFT bin） | 新 webtest（或 beginner.mjs 分段）读 `getFloatFrequencyData` 峰值三次全对；Reviews/ab/H-24.md 记数据 | ☐ |
+| H-25 | 原理图：桌面第 03 课文字实测 ≥ 11 px（不随 viewBox 缩到 7–8 px）；OLED / 按钮 / 蜂鸣器 / 舵机专用符号（照 `docs/design-v2/beginner/v3/Schematic*.dc.html`） | schematic.test.ts 新符号用例；beginner.mjs 1440 宽第 03 课 `getBoundingClientRect` 字高 ≥ 11 px；agent-browser 第 01 / 02 / 03 / 6 / 7 课截图 Reviews/ab/H-25.md | ☐ |
+| H-26 | amoled.mjs「second tap -> TOUCH near (400, 80)」负载下偶发失败：查明时序原因，改成等可观察条件再点（不放宽断言） | 负载下（并行 npm test / 另一 webtest）连跑 ≥ 5 次全过；原因写进 STATUS | ☐ |
+| H-27 | 第 4 课：标注「现在」在 PWM 下显示占空比而不是数字电平（核对是否已被 H-16 第 6 课修掉）；顺带清 STATUS 里 H-16 各课已修掉的「遗留 / 缺」 | beginner.mjs 断言第 4 课运行后 GPIO5 标注含 %；STATUS 行更新；Reviews/ab/H-27.md | ☐ |
+| H-28 | 第 5 课「改颜色」：lamp-strip 加预编译颜色变体（代码面板点颜色换固件重跑），任务由「揭示答案」改为自动打勾 | build_fw + accept 新用例（golden save）；lesson-l5.test.ts；beginner.mjs；Reviews/ab/H-28.md | ☐ |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
