@@ -181,6 +181,10 @@ void app_main(void)
         if (have_tp) {
             uint8_t d[15];
             if (rd16(0xD000, d, sizeof d) == ESP_OK) {
+#ifdef ACK_DELAY_MS
+                // Variant s3-amoled-i2c-ackdelay (H-35): widen the gap after a fresh report so a scripted lift lands before the ack
+                if (d[6] == 0xAB) vTaskDelay(pdMS_TO_TICKS(ACK_DELAY_MS));
+#endif
                 // Ack the report, then use it only if it carries the 0xAB marker
                 uint8_t ack[3] = {0xD0, 0x00, 0xAB};
                 i2c_master_transmit(tp, ack, 3, 100);

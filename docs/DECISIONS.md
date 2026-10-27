@@ -1972,3 +1972,9 @@
 - 关卡：变体跑 lamp-1 判定会失败（关卡要求暖白 #40260C），这是对的（lamp-1 目标就是暖白）。H-20 规定任务全勾或检查点过即算完成，所以停在蓝色版本上也能靠任务完成本课。
 - 已知：代码面板的 CMakeLists / `-D` 标签仍显示本课固件（lamp-strip，STAGE=1），点变体时不跟着换，和 H-06 一样。
 - 备选：做成 `STRIP_COLOR` 新宏（要么改行号、要么保留 WARM 再引用新宏，读起来绕）；亮度也做变体（scope 外，且会让 lamp-1 判定和电流估算同时变）。
+
+## 2026-10-27 H-35 CST9220 读后 ack 前抬起的 accept 用例用变体固件
+- 决定：s3-amoled-i2c/main/main.c 加可选 `ACK_DELAY_MS`（只在读到带 0xAB 标记的报告时，读后延时再 ack）；新目录 firmware/s3-amoled-i2c-ackdelay 只放 CMakeLists（共用源码，`ACK_DELAY_MS=50`），同名 accept 用例脚本 4.0 按下、4.02 抬起。默认构建不定义该宏，s3-amoled-i2c 行为与 golden 不变。
+- 理由：原固件读 0xD000 与写 0xAB 只隔一次 I2C 事务（微秒级），靠脚本时间点卡进去要依赖指令级时序，固件或调度一改就漂；放大到 50 ms 后抬起必然落在窗口内。只对有标记的报告延时，空闲轮询不延时，按下后 INT 立即唤醒读报告，按下本身不会落进上一次空轮询的窗口。
+- 验证：临时把 cst9220.rs 的 `self.pending &= self.changed` 改回 `self.pending = false`，用例输出只剩 TOUCH DOWN x=300 y=450 + TOUCH MOVE x=20 y=470（丢 UP，即 H-26 网页现象），FAIL；恢复后 PASS（还原未提交）。
+- 备选：脚本时间点精确到微秒（脆弱）；CLI 加「在下一次 ack 前抬起」的脚本动作（改公共接口，且只测模型不测固件路径）；只加单测（cst9220.rs 已有，但不覆盖固件 + INT + 调度的端到端）。
